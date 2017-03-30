@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -18,7 +19,7 @@
 #define MAYBE_Stubs Stubs
 #endif
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_Stubs) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(RunExtensionTest("stubs")) << message_;
 
@@ -34,8 +35,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_Stubs) {
 // Tests that all API features that are available to a platform app actually
 // can be used in an app. For example, this test will fail if a developer adds
 // an API feature without providing a schema. http://crbug.com/369318
-// tomas@vivaldi.com - disabled test (VB-7468)
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_StubsApp) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, StubsApp) {
   ASSERT_TRUE(RunPlatformAppTestWithFlags(
       "stubs_app", static_cast<int>(kFlagIgnoreManifestWarnings)))
       << message_;

@@ -5,6 +5,7 @@
 #ifndef DEVICE_SERIAL_SERIAL_SERVICE_IMPL_H_
 #define DEVICE_SERIAL_SERIAL_SERVICE_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -12,7 +13,7 @@
 #include "device/serial/serial.mojom.h"
 #include "device/serial/serial_connection_factory.h"
 #include "device/serial/serial_device_enumerator.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace device {
 

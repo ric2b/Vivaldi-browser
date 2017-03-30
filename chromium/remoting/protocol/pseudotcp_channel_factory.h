@@ -7,13 +7,14 @@
 
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "remoting/protocol/stream_channel_factory.h"
 
 namespace remoting {
 namespace protocol {
 
 class DatagramChannelFactory;
+class P2PDatagramSocket;
 
 // StreamChannelFactory that creates PseudoTCP-based stream channels that run on
 // top of datagram channels created using specified |datagram_channel_factory|.
@@ -30,11 +31,11 @@ class PseudoTcpChannelFactory : public StreamChannelFactory {
   void CancelChannelCreation(const std::string& name) override;
 
  private:
-  typedef std::map<std::string, net::StreamSocket*> PendingSocketsMap;
+  typedef std::map<std::string, P2PStreamSocket*> PendingSocketsMap;
 
   void OnDatagramChannelCreated(const std::string& name,
                                 const ChannelCreatedCallback& callback,
-                                scoped_ptr<net::Socket> socket);
+                                scoped_ptr<P2PDatagramSocket> socket);
   void OnPseudoTcpConnected(const std::string& name,
                             const ChannelCreatedCallback& callback,
                             int result);

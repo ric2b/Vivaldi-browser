@@ -23,6 +23,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -31,7 +32,6 @@
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
-#include "content/browser/gpu/gpu_surface_tracker.h"
 #include "content/browser/host_zoom_map_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/renderer_host/dip_util.h"
@@ -75,13 +75,13 @@
 #include "content/public/common/url_utils.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_util.h"
-#include "net/base/network_change_notifier.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/fileapi/isolated_context.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/base/touch/touch_enabled.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_switches.h"
@@ -92,6 +92,8 @@
 #include "ui/gfx/platform_font_win.h"
 #include "ui/gfx/win/dpi.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 using base::TimeDelta;
 using blink::WebConsoleMessage;
@@ -165,7 +167,7 @@ void GetWindowsSpecificPrefs(RendererPreferences* prefs) {
 }  // namespace
 
 // static
-const int64 RenderViewHostImpl::kUnloadTimeoutMS = 1000;
+const int64_t RenderViewHostImpl::kUnloadTimeoutMS = 1000;
 
 ///////////////////////////////////////////////////////////////////////////////
 // RenderViewHost, public:
@@ -178,8 +180,7 @@ RenderViewHost* RenderViewHost::FromID(int render_process_id,
 
 // static
 RenderViewHost* RenderViewHost::From(RenderWidgetHost* rwh) {
-  DCHECK(rwh->IsRenderView());
-  return static_cast<RenderViewHostImpl*>(RenderWidgetHostImpl::From(rwh));
+  return RenderViewHostImpl::From(rwh);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -190,24 +191,30 @@ RenderViewHostImpl* RenderViewHostImpl::FromID(int render_process_id,
                                                int render_view_id) {
   RenderWidgetHost* widget =
       RenderWidgetHost::FromID(render_process_id, render_view_id);
-  if (!widget || !widget->IsRenderView())
-    return NULL;
-  return static_cast<RenderViewHostImpl*>(RenderWidgetHostImpl::From(widget));
+  if (!widget)
+    return nullptr;
+  return From(widget);
 }
 
-RenderViewHostImpl::RenderViewHostImpl(
-    SiteInstance* instance,
-    RenderViewHostDelegate* delegate,
-    RenderWidgetHostDelegate* widget_delegate,
-    int routing_id,
-    int main_frame_routing_id,
-    bool swapped_out,
-    bool hidden,
-    bool has_initialized_audio_host)
-    : RenderWidgetHostImpl(widget_delegate,
-                           instance->GetProcess(),
-                           routing_id,
-                           hidden),
+// static
+RenderViewHostImpl* RenderViewHostImpl::From(RenderWidgetHost* rwh) {
+  DCHECK(rwh);
+  RenderWidgetHostOwnerDelegate* owner_delegate =
+      RenderWidgetHostImpl::From(rwh)->owner_delegate();
+  if (!owner_delegate)
+    return nullptr;
+  RenderViewHostImpl* rvh = static_cast<RenderViewHostImpl*>(owner_delegate);
+  DCHECK_EQ(rwh, rvh->GetWidget());
+  return rvh;
+}
+
+RenderViewHostImpl::RenderViewHostImpl(SiteInstance* instance,
+                                       scoped_ptr<RenderWidgetHostImpl> widget,
+                                       RenderViewHostDelegate* delegate,
+                                       int32_t main_frame_routing_id,
+                                       bool swapped_out,
+                                       bool has_initialized_audio_host)
+    : render_widget_host_(std::move(widget)),
       frames_ref_count_(0),
       delegate_(delegate),
       instance_(static_cast<SiteInstanceImpl*>(instance)),
@@ -215,6 +222,7 @@ RenderViewHostImpl::RenderViewHostImpl(
       enabled_bindings_(0),
       page_id_(-1),
       is_active_(!swapped_out),
+      is_pending_deletion_(false),
       is_swapped_out_(swapped_out),
       main_frame_routing_id_(main_frame_routing_id),
       is_waiting_for_close_ack_(false),
@@ -223,9 +231,12 @@ RenderViewHostImpl::RenderViewHostImpl(
       virtual_keyboard_requested_(false),
       is_focused_element_editable_(false),
       updating_web_preferences_(false),
+      render_view_ready_on_process_launch_(false),
       weak_factory_(this) {
   DCHECK(instance_.get());
   CHECK(delegate_);  // http://crbug.com/82827
+
+  GetWidget()->set_owner_delegate(this);
 
   GetProcess()->AddObserver(this);
   GetProcess()->EnableSendQueue();
@@ -241,14 +252,11 @@ RenderViewHostImpl::RenderViewHostImpl(
             arh->RenderFrameHasActiveAudio(main_frame_routing_id_);
     }
     BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
+        BrowserThread::IO, FROM_HERE,
         base::Bind(&ResourceDispatcherHostImpl::OnRenderViewHostCreated,
                    base::Unretained(ResourceDispatcherHostImpl::Get()),
-                   GetProcess()->GetID(),
-                   GetRoutingID(),
-                   !is_hidden(),
-                   has_active_audio));
+                   GetProcess()->GetID(), GetRoutingID(),
+                   !GetWidget()->is_hidden(), has_active_audio));
   }
 }
 
@@ -276,7 +284,7 @@ SiteInstanceImpl* RenderViewHostImpl::GetSiteInstance() const {
 bool RenderViewHostImpl::CreateRenderView(
     int opener_frame_route_id,
     int proxy_route_id,
-    int32 max_page_id,
+    int32_t max_page_id,
     const FrameReplicationState& replicated_frame_state,
     bool window_was_created_with_opener) {
   TRACE_EVENT0("renderer_host,navigation",
@@ -291,15 +299,14 @@ bool RenderViewHostImpl::CreateRenderView(
     return false;
   DCHECK(GetProcess()->HasConnection());
   DCHECK(GetProcess()->GetBrowserContext());
+  CHECK(main_frame_routing_id_ != MSG_ROUTING_NONE ||
+        proxy_route_id != MSG_ROUTING_NONE);
 
-  set_renderer_initialized(true);
-
-  GpuSurfaceTracker::Get()->SetSurfaceHandle(
-      surface_id(), GetCompositingSurface());
+  GetWidget()->set_renderer_initialized(true);
 
   // Ensure the RenderView starts with a next_page_id larger than any existing
   // page ID it might be asked to render.
-  int32 next_page_id = 1;
+  int32_t next_page_id = 1;
   if (max_page_id > -1)
     next_page_id = max_page_id + 1;
 
@@ -312,7 +319,13 @@ bool RenderViewHostImpl::CreateRenderView(
   params.web_preferences = GetWebkitPreferences();
   params.view_id = GetRoutingID();
   params.main_frame_routing_id = main_frame_routing_id_;
-  params.surface_id = surface_id();
+  if (main_frame_routing_id_ != MSG_ROUTING_NONE) {
+    RenderFrameHostImpl* main_rfh = RenderFrameHostImpl::FromID(
+        GetProcess()->GetID(), main_frame_routing_id_);
+    DCHECK(main_rfh);
+    RenderWidgetHostImpl* main_rwh = main_rfh->GetRenderWidgetHost();
+    params.main_frame_widget_routing_id = main_rwh->GetRoutingID();
+  }
   params.session_storage_namespace_id =
       delegate_->GetSessionStorageNamespace(instance_.get())->id();
   // Ensure the RenderView sets its opener correctly.
@@ -320,30 +333,29 @@ bool RenderViewHostImpl::CreateRenderView(
   params.swapped_out = !is_active_;
   params.replicated_frame_state = replicated_frame_state;
   params.proxy_routing_id = proxy_route_id;
-  params.hidden = is_hidden();
+  params.hidden = GetWidget()->is_hidden();
   params.never_visible = delegate_->IsNeverVisible();
   params.window_was_created_with_opener = window_was_created_with_opener;
   params.next_page_id = next_page_id;
-  params.enable_auto_resize = auto_resize_enabled();
-  params.min_size = min_size_for_auto_resize();
-  params.max_size = max_size_for_auto_resize();
-  GetResizeParams(&params.initial_size);
+  params.enable_auto_resize = GetWidget()->auto_resize_enabled();
+  params.min_size = GetWidget()->min_size_for_auto_resize();
+  params.max_size = GetWidget()->max_size_for_auto_resize();
+  GetWidget()->GetResizeParams(&params.initial_size);
 
   if (!Send(new ViewMsg_New(params)))
     return false;
-  SetInitialRenderSizeParams(params.initial_size);
+  GetWidget()->SetInitialRenderSizeParams(params.initial_size);
 
   // If the RWHV has not yet been set, the surface ID namespace will get
   // passed down by the call to SetView().
-  if (view_) {
-    Send(new ViewMsg_SetSurfaceIdNamespace(GetRoutingID(),
-                                           view_->GetSurfaceIdNamespace()));
+  if (GetWidget()->GetView()) {
+    Send(new ViewMsg_SetSurfaceIdNamespace(
+        GetRoutingID(), GetWidget()->GetView()->GetSurfaceIdNamespace()));
   }
 
   // If it's enabled, tell the renderer to set up the Javascript bindings for
   // sending messages back to the browser.
-  if (GetProcess()->IsForGuestsOnly() && 
-    !base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
+  if (GetProcess()->IsForGuestsOnly() && !vivaldi::IsVivaldiRunning())
     DCHECK_EQ(0, enabled_bindings_);
   Send(new ViewMsg_AllowBindings(GetRoutingID(), enabled_bindings_));
   // Let our delegate know that we created a RenderView.
@@ -355,12 +367,14 @@ bool RenderViewHostImpl::CreateRenderView(
     RenderFrameHostImpl::FromID(GetProcess()->GetID(), main_frame_routing_id_)
         ->SetRenderFrameCreated(true);
   }
+  GetWidget()->SendScreenRects();
+  PostRenderViewReady();
 
   return true;
 }
 
 bool RenderViewHostImpl::IsRenderViewLive() const {
-  return GetProcess()->HasConnection() && renderer_initialized();
+  return GetProcess()->HasConnection() && GetWidget()->renderer_initialized();
 }
 
 void RenderViewHostImpl::SyncRendererPrefs() {
@@ -381,8 +395,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
   prefs.web_security_enabled =
       !command_line.HasSwitch(switches::kDisableWebSecurity);
-  prefs.java_enabled =
-      !command_line.HasSwitch(switches::kDisableJava);
 
   prefs.remote_fonts_enabled =
       !command_line.HasSwitch(switches::kDisableRemoteFonts);
@@ -430,13 +442,12 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.accelerated_2d_canvas_msaa_sample_count =
       atoi(command_line.GetSwitchValueASCII(
       switches::kAcceleratedCanvas2dMSAASampleCount).c_str());
-  prefs.text_blobs_enabled =
-      !command_line.HasSwitch(switches::kDisableTextBlobs);
+
+  prefs.inert_visual_viewport =
+      command_line.HasSwitch(switches::kInertVisualViewport);
 
   prefs.pinch_overlay_scrollbar_thickness = 10;
   prefs.use_solid_color_scrollbars = ui::IsOverlayScrollbarEnabled();
-  prefs.invert_viewport_scroll_order =
-      command_line.HasSwitch(switches::kInvertViewportScrollOrder);
 
 #if defined(OS_ANDROID)
   // On Android, user gestures are normally required, unless that requirement
@@ -447,11 +458,17 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.user_gesture_required_for_media_playback = !command_line.HasSwitch(
       switches::kDisableGestureRequirementForMediaPlayback) &&
           (autoplay_group_name.empty() || autoplay_group_name != "Enabled");
+
+  // Handle autoplay gesture override experiment.
+  // Note that anything but a well-formed string turns the experiment off.
+  prefs.autoplay_experiment_mode = base::FieldTrialList::FindFullName(
+      "MediaElementGestureOverrideExperiment");
 #endif
 
   prefs.touch_enabled = ui::AreTouchEventsEnabled();
   prefs.device_supports_touch = prefs.touch_enabled &&
-      ui::IsTouchDevicePresent();
+      ui::GetTouchScreensAvailability() ==
+          ui::TouchScreensAvailability::ENABLED;
   prefs.available_pointer_types = ui::GetAvailablePointerTypes();
   prefs.primary_pointer_type = ui::GetPrimaryPointerType();
   prefs.available_hover_types = ui::GetAvailableHoverTypes();
@@ -466,22 +483,9 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.touch_adjustment_enabled =
       !command_line.HasSwitch(switches::kDisableTouchAdjustment);
 
-  const std::string slimming_group =
-      base::FieldTrialList::FindFullName("SlimmingPaint");
-  prefs.slimming_paint_enabled =
-      (command_line.HasSwitch(switches::kEnableSlimmingPaint) ||
-      !command_line.HasSwitch(switches::kDisableSlimmingPaint)) &&
-      (slimming_group != "DisableSlimmingPaint");
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
-  bool default_enable_scroll_animator = true;
-#else
-  bool default_enable_scroll_animator = false;
-#endif
-  prefs.enable_scroll_animator = default_enable_scroll_animator;
-  if (command_line.HasSwitch(switches::kEnableSmoothScrolling))
-    prefs.enable_scroll_animator = true;
-  if (command_line.HasSwitch(switches::kDisableSmoothScrolling))
-    prefs.enable_scroll_animator = false;
+  prefs.enable_scroll_animator =
+      !command_line.HasSwitch(switches::kDisableSmoothScrolling) &&
+      gfx::Animation::ShouldRenderRichAnimation();
 
   // Certain GPU features might have been blacklisted.
   GpuDataManagerImpl::GetInstance()->UpdateRendererWebPrefs(&prefs);
@@ -492,14 +496,7 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
     prefs.javascript_enabled = true;
   }
 
-  prefs.connection_type = net::NetworkChangeNotifier::GetConnectionType();
-  prefs.is_online =
-      prefs.connection_type != net::NetworkChangeNotifier::CONNECTION_NONE;
-
   prefs.number_of_cpu_cores = base::SysInfo::NumberOfProcessors();
-
-  prefs.viewport_meta_enabled =
-      command_line.HasSwitch(switches::kEnableViewportMeta);
 
   prefs.viewport_enabled =
       command_line.HasSwitch(switches::kEnableViewport) ||
@@ -523,6 +520,16 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.strict_powerful_feature_restrictions = command_line.HasSwitch(
       switches::kEnableStrictPowerfulFeatureRestrictions);
 
+  const std::string blockable_mixed_content_group =
+      base::FieldTrialList::FindFullName("BlockableMixedContent");
+  prefs.strictly_block_blockable_mixed_content =
+      blockable_mixed_content_group == "StrictlyBlockBlockableMixedContent";
+
+  const std::string plugin_mixed_content_status =
+      base::FieldTrialList::FindFullName("PluginMixedContentStatus");
+  prefs.block_mixed_plugin_content =
+      plugin_mixed_content_status == "BlockableMixedContent";
+
   prefs.v8_cache_options = GetV8CacheOptions();
 
   GetContentClient()->browser()->OverrideWebkitPrefs(this, &prefs);
@@ -535,13 +542,14 @@ void RenderViewHostImpl::SuppressDialogsUntilSwapOut() {
 
 void RenderViewHostImpl::ClosePage() {
   is_waiting_for_close_ack_ = true;
-  StartHangMonitorTimeout(TimeDelta::FromMilliseconds(kUnloadTimeoutMS));
+  GetWidget()->StartHangMonitorTimeout(
+      TimeDelta::FromMilliseconds(kUnloadTimeoutMS));
 
   if (IsRenderViewLive()) {
     // Since we are sending an IPC message to the renderer, increase the event
     // count to prevent the hang monitor timeout from being stopped by input
     // event acknowledgements.
-    increment_in_flight_event_count();
+    GetWidget()->increment_in_flight_event_count();
 
     // TODO(creis): Should this be moved to Shutdown?  It may not be called for
     // RenderViewHosts that have been swapped out.
@@ -559,7 +567,7 @@ void RenderViewHostImpl::ClosePage() {
 }
 
 void RenderViewHostImpl::ClosePageIgnoringUnloadEvents() {
-  StopHangMonitorTimeout();
+  GetWidget()->StopHangMonitorTimeout();
   is_waiting_for_close_ack_ = false;
 
   sudden_termination_allowed_ = true;
@@ -579,15 +587,21 @@ void RenderViewHostImpl::RequestFindMatchRects(int current_version) {
 }
 #endif
 
+void RenderViewHostImpl::RenderProcessReady(RenderProcessHost* host) {
+  if (render_view_ready_on_process_launch_) {
+    render_view_ready_on_process_launch_ = false;
+    RenderViewReady();
+  }
+}
+
 void RenderViewHostImpl::RenderProcessExited(RenderProcessHost* host,
                                              base::TerminationStatus status,
                                              int exit_code) {
-  if (!renderer_initialized())
+  if (!GetWidget()->renderer_initialized())
     return;
 
-  RenderWidgetHostImpl::RendererExited(status, exit_code);
-  delegate_->RenderViewTerminated(
-      this, static_cast<base::TerminationStatus>(status), exit_code);
+  GetWidget()->RendererExited(status, exit_code);
+  delegate_->RenderViewTerminated(this, status, exit_code);
 }
 
 void RenderViewHostImpl::DragTargetDragEnter(
@@ -722,6 +736,22 @@ void RenderViewHostImpl::DragSourceSystemDragEnded() {
   Send(new DragMsg_SourceSystemDragEnded(GetRoutingID()));
 }
 
+bool RenderViewHostImpl::Send(IPC::Message* msg) {
+  return GetWidget()->Send(msg);
+}
+
+RenderWidgetHostImpl* RenderViewHostImpl::GetWidget() const {
+  return render_widget_host_.get();
+}
+
+RenderProcessHost* RenderViewHostImpl::GetProcess() const {
+  return GetWidget()->GetProcess();
+}
+
+int RenderViewHostImpl::GetRoutingID() const {
+  return GetWidget()->GetRoutingID();
+}
+
 RenderFrameHost* RenderViewHostImpl::GetMainFrame() {
   return RenderFrameHost::FromID(GetProcess()->GetID(), main_frame_routing_id_);
 }
@@ -756,7 +786,7 @@ void RenderViewHostImpl::AllowBindings(int bindings_flags) {
   }
 
   enabled_bindings_ |= bindings_flags;
-  if (renderer_initialized())
+  if (GetWidget()->renderer_initialized())
     Send(new ViewMsg_AllowBindings(GetRoutingID(), enabled_bindings_));
 }
 
@@ -779,22 +809,10 @@ void RenderViewHostImpl::SetWebUIProperty(const std::string& name,
   }
 }
 
-void RenderViewHostImpl::GotFocus() {
-  RenderWidgetHostImpl::GotFocus();  // Notifies the renderer it got focus.
-
+void RenderViewHostImpl::RenderWidgetGotFocus() {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
   if (view)
     view->GotFocus();
-}
-
-void RenderViewHostImpl::LostCapture() {
-  RenderWidgetHostImpl::LostCapture();
-  delegate_->LostCapture();
-}
-
-void RenderViewHostImpl::LostMouseLock() {
-  RenderWidgetHostImpl::LostMouseLock();
-  delegate_->LostMouseLock();
 }
 
 void RenderViewHostImpl::SetInitialFocus(bool reverse) {
@@ -842,7 +860,7 @@ void RenderViewHostImpl::DirectoryEnumerationFinished(
                                               files));
 }
 
-void RenderViewHostImpl::SetIsLoading(bool is_loading) {
+void RenderViewHostImpl::RenderWidgetWillSetIsLoading(bool is_loading) {
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO,
@@ -853,14 +871,13 @@ void RenderViewHostImpl::SetIsLoading(bool is_loading) {
                    GetRoutingID(),
                    is_loading));
   }
-  RenderWidgetHostImpl::SetIsLoading(is_loading);
 }
 
 void RenderViewHostImpl::LoadStateChanged(
     const GURL& url,
     const net::LoadStateWithParam& load_state,
-    uint64 upload_position,
-    uint64 upload_size) {
+    uint64_t upload_position,
+    uint64_t upload_size) {
   delegate_->LoadStateChanged(url, load_state, upload_position, upload_size);
 }
 
@@ -873,7 +890,7 @@ bool RenderViewHostImpl::SuddenTerminationAllowed() const {
 // RenderViewHostImpl, IPC message handlers:
 
 bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
-  if (!BrowserMessageFilter::CheckCanDispatchOnUI(msg, this))
+  if (!BrowserMessageFilter::CheckCanDispatchOnUI(msg, GetWidget()))
     return true;
 
   // Filter out most IPC messages if this renderer is swapped out.
@@ -903,7 +920,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowWidget, OnShowWidget)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowFullscreenWidget,
                         OnShowFullscreenWidget)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_RenderViewReady, OnRenderViewReady)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateState, OnUpdateState)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateTargetURL, OnUpdateTargetURL)
     IPC_MESSAGE_HANDLER(ViewHostMsg_Close, OnClose)
@@ -916,28 +932,24 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnRouteCloseEvent)
     IPC_MESSAGE_HANDLER(DragHostMsg_StartDragging, OnStartDragging)
     IPC_MESSAGE_HANDLER(DragHostMsg_UpdateDragCursor, OnUpdateDragCursor)
-    IPC_MESSAGE_HANDLER(DragHostMsg_TargetDrop_ACK, OnTargetDropACK)
     IPC_MESSAGE_HANDLER(ViewHostMsg_TakeFocus, OnTakeFocus)
     IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeChanged, OnFocusedNodeChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ClosePage_ACK, OnClosePageACK)
     IPC_MESSAGE_HANDLER(ViewHostMsg_DidZoomURL, OnDidZoomURL)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_PageScaleFactorIsOneChanged,
-                        OnPageScaleFactorIsOneChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_RunFileChooser, OnRunFileChooser)
+    IPC_MESSAGE_HANDLER(ViewHostMsg_Focus, OnFocus)
     IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeTouched, OnFocusedNodeTouched)
-    // Have the super handle all other messages.
-    IPC_MESSAGE_UNHANDLED(
-        handled = RenderWidgetHostImpl::OnMessageReceived(msg))
+    IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
   return handled;
 }
 
-void RenderViewHostImpl::Init() {
-  RenderWidgetHostImpl::Init();
+void RenderViewHostImpl::RenderWidgetDidInit() {
+  PostRenderViewReady();
 }
 
-void RenderViewHostImpl::Shutdown() {
+void RenderViewHostImpl::ShutdownAndDestroy() {
   // We can't release the SessionStorageNamespace until our peer
   // in the renderer has wound down.
   if (GetProcess()->HasConnection()) {
@@ -947,10 +959,11 @@ void RenderViewHostImpl::Shutdown() {
         GetRoutingID());
   }
 
-  RenderWidgetHostImpl::Shutdown();
+  GetWidget()->ShutdownAndDestroyWidget(false);
+  delete this;
 }
 
-void RenderViewHostImpl::WasHidden() {
+void RenderViewHostImpl::RenderWidgetWillBeHidden() {
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -958,11 +971,9 @@ void RenderViewHostImpl::WasHidden() {
                    base::Unretained(ResourceDispatcherHostImpl::Get()),
                    GetProcess()->GetID(), GetRoutingID()));
   }
-
-  RenderWidgetHostImpl::WasHidden();
 }
 
-void RenderViewHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
+void RenderViewHostImpl::RenderWidgetWillBeShown() {
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -970,17 +981,12 @@ void RenderViewHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
                    base::Unretained(ResourceDispatcherHostImpl::Get()),
                    GetProcess()->GetID(), GetRoutingID()));
   }
-
-  RenderWidgetHostImpl::WasShown(latency_info);
-}
-
-bool RenderViewHostImpl::IsRenderView() const {
-  return true;
 }
 
 void RenderViewHostImpl::CreateNewWindow(
-    int route_id,
-    int main_frame_route_id,
+    int32_t route_id,
+    int32_t main_frame_route_id,
+    int32_t main_frame_widget_route_id,
     const ViewHostMsg_CreateWindow_Params& params,
     SessionStorageNamespace* session_storage_namespace) {
   ViewHostMsg_CreateWindow_Params validated_params(params);
@@ -988,17 +994,17 @@ void RenderViewHostImpl::CreateNewWindow(
   GetProcess()->FilterURL(false, &validated_params.opener_url);
   GetProcess()->FilterURL(true, &validated_params.opener_security_origin);
 
-  delegate_->CreateNewWindow(
-      GetProcess()->GetID(), route_id, main_frame_route_id, validated_params,
-      session_storage_namespace);
+  delegate_->CreateNewWindow(GetSiteInstance(), route_id, main_frame_route_id,
+                             main_frame_widget_route_id, validated_params,
+                             session_storage_namespace);
 }
 
-void RenderViewHostImpl::CreateNewWidget(int route_id,
-                                     blink::WebPopupType popup_type) {
+void RenderViewHostImpl::CreateNewWidget(int32_t route_id,
+                                         blink::WebPopupType popup_type) {
   delegate_->CreateNewWidget(GetProcess()->GetID(), route_id, popup_type);
 }
 
-void RenderViewHostImpl::CreateNewFullscreenWidget(int route_id) {
+void RenderViewHostImpl::CreateNewFullscreenWidget(int32_t route_id) {
   delegate_->CreateNewFullscreenWidget(GetProcess()->GetID(), route_id);
 }
 
@@ -1006,10 +1012,8 @@ void RenderViewHostImpl::OnShowView(int route_id,
                                     WindowOpenDisposition disposition,
                                     const gfx::Rect& initial_rect,
                                     bool user_gesture) {
-  if (is_active_) {
-    delegate_->ShowCreatedWindow(
-        route_id, disposition, initial_rect, user_gesture);
-  }
+  delegate_->ShowCreatedWindow(route_id, disposition, initial_rect,
+                               user_gesture);
   Send(new ViewMsg_Move_ACK(route_id));
 }
 
@@ -1026,13 +1030,6 @@ void RenderViewHostImpl::OnShowFullscreenWidget(int route_id) {
   Send(new ViewMsg_Move_ACK(route_id));
 }
 
-void RenderViewHostImpl::OnRenderViewReady() {
-  render_view_termination_status_ = base::TERMINATION_STATUS_STILL_RUNNING;
-  SendScreenRects();
-  WasResized();
-  delegate_->RenderViewReady(this);
-}
-
 void RenderViewHostImpl::OnRenderProcessGone(int status, int exit_code) {
   // Do nothing, otherwise RenderWidgetHostImpl will assume it is not a
   // RenderViewHostImpl and destroy itself.
@@ -1040,7 +1037,8 @@ void RenderViewHostImpl::OnRenderProcessGone(int status, int exit_code) {
   // decoupled.
 }
 
-void RenderViewHostImpl::OnUpdateState(int32 page_id, const PageState& state) {
+void RenderViewHostImpl::OnUpdateState(int32_t page_id,
+                                       const PageState& state) {
   // If the following DCHECK fails, you have encountered a tricky edge-case that
   // has evaded reproduction for a very long time. Please report what you were
   // doing on http://crbug.com/407376, whether or not you can reproduce the
@@ -1098,10 +1096,6 @@ void RenderViewHostImpl::OnDidContentsPreferredSizeChange(
   delegate_->UpdatePreferredSize(new_size);
 }
 
-void RenderViewHostImpl::OnRenderAutoResized(const gfx::Size& new_size) {
-  delegate_->ResizeDueToAutoResize(new_size);
-}
-
 void RenderViewHostImpl::OnRouteCloseEvent() {
   // Have the delegate route this to the active RenderViewHost.
   delegate_->RouteCloseEvent(this);
@@ -1155,7 +1149,7 @@ void RenderViewHostImpl::OnStartDragging(
       filtered_data.file_system_files.push_back(drop_data.file_system_files[i]);
   }
 
-  float scale = GetScaleFactorForView(GetView());
+  float scale = GetScaleFactorForView(GetWidget()->GetView());
   gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, scale));
   view->StartDragging(filtered_data, drag_operations_mask, image,
       bitmap_offset_in_dip, event_info);
@@ -1165,13 +1159,6 @@ void RenderViewHostImpl::OnUpdateDragCursor(WebDragOperation current_op) {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
   if (view)
     view->UpdateDragCursor(current_op);
-}
-
-void RenderViewHostImpl::OnTargetDropACK() {
-  NotificationService::current()->Notify(
-      NOTIFICATION_RENDER_VIEW_HOST_DID_RECEIVE_DRAG_TARGET_DROP_ACK,
-      Source<RenderViewHost>(this),
-      NotificationService::NoDetails());
 }
 
 void RenderViewHostImpl::OnTakeFocus(bool reverse) {
@@ -1184,8 +1171,8 @@ void RenderViewHostImpl::OnFocusedNodeChanged(
     bool is_editable_node,
     const gfx::Rect& node_bounds_in_viewport) {
   is_focused_element_editable_ = is_editable_node;
-  if (view_)  //why is this check here and not below?
-    view_->FocusedNodeChanged(is_editable_node);
+  if (GetWidget()->GetView())
+    GetWidget()->GetView()->FocusedNodeChanged(is_editable_node);
 #if defined(OS_WIN)
   if (!is_editable_node && virtual_keyboard_requested_) {
     virtual_keyboard_requested_ = false;
@@ -1197,8 +1184,12 @@ void RenderViewHostImpl::OnFocusedNodeChanged(
   }
 #endif
 
+  // None of the rest makes sense without a view.
+  if (!GetWidget()->GetView())
+    return;
+
   // Convert node_bounds to screen coordinates.
-  gfx::Rect view_bounds_in_screen = view_->GetViewBounds();
+  gfx::Rect view_bounds_in_screen = GetWidget()->GetView()->GetViewBounds();
   gfx::Point origin = node_bounds_in_viewport.origin();
   origin.Offset(view_bounds_in_screen.x(), view_bounds_in_screen.y());
   gfx::Rect node_bounds_in_screen(origin.x(), origin.y(),
@@ -1210,34 +1201,9 @@ void RenderViewHostImpl::OnFocusedNodeChanged(
                                          Details<FocusedNodeDetails>(&details));
 }
 
-void RenderViewHostImpl::OnUserGesture() {
-  delegate_->OnUserGesture();
-}
-
 void RenderViewHostImpl::OnClosePageACK() {
-  decrement_in_flight_event_count();
+  GetWidget()->decrement_in_flight_event_count();
   ClosePageIgnoringUnloadEvents();
-}
-
-void RenderViewHostImpl::NotifyRendererUnresponsive() {
-  delegate_->RendererUnresponsive(this);
-}
-
-void RenderViewHostImpl::NotifyRendererResponsive() {
-  delegate_->RendererResponsive(this);
-}
-
-void RenderViewHostImpl::RequestToLockMouse(bool user_gesture,
-                                            bool last_unlocked_by_target) {
-  delegate_->RequestToLockMouse(user_gesture, last_unlocked_by_target);
-}
-
-bool RenderViewHostImpl::IsFullscreenGranted() const {
-  return delegate_->IsFullscreenForCurrentTab();
-}
-
-blink::WebDisplayMode RenderViewHostImpl::GetDisplayMode() const {
-  return delegate_->GetDisplayMode();
 }
 
 void RenderViewHostImpl::OnFocus() {
@@ -1246,38 +1212,32 @@ void RenderViewHostImpl::OnFocus() {
   delegate_->Activate();
 }
 
-void RenderViewHostImpl::OnBlur() {
-  delegate_->Deactivate();
-}
-
-gfx::Rect RenderViewHostImpl::GetRootWindowResizerRect() const {
-  return delegate_->GetRootWindowResizerRect();
-}
-
-void RenderViewHostImpl::ForwardMouseEvent(
+void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
-  RenderWidgetHostImpl::ForwardMouseEvent(mouse_event);
-  if (mouse_event.type == WebInputEvent::MouseWheel && ignore_input_events())
+  if (mouse_event.type == WebInputEvent::MouseWheel &&
+      GetWidget()->ignore_input_events()) {
     delegate_->OnIgnoredUIEvent();
+  }
 }
 
-void RenderViewHostImpl::ForwardKeyboardEvent(
+bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     const NativeWebKeyboardEvent& key_event) {
-  if (ignore_input_events()) {
+  if (GetWidget()->ignore_input_events()) {
     if (key_event.type == WebInputEvent::RawKeyDown)
       delegate_->OnIgnoredUIEvent();
-    return;
+    return false;
   }
-  RenderWidgetHostImpl::ForwardKeyboardEvent(key_event);
+  return true;
 }
 
 void RenderViewHostImpl::OnTextSurroundingSelectionResponse(
     const base::string16& content,
     size_t start_offset,
     size_t end_offset) {
-  if (!view_)
+  if (!GetWidget()->GetView())
     return;
-  view_->OnTextSurroundingSelectionResponse(content, start_offset, end_offset);
+  GetWidget()->GetView()->OnTextSurroundingSelectionResponse(
+      content, start_offset, end_offset);
 }
 
 WebPreferences RenderViewHostImpl::GetWebkitPreferences() {
@@ -1326,15 +1286,15 @@ void RenderViewHostImpl::EnablePreferredSizeMode() {
 
 void RenderViewHostImpl::EnableAutoResize(const gfx::Size& min_size,
                                           const gfx::Size& max_size) {
-  SetAutoResize(true, min_size, max_size);
+  GetWidget()->SetAutoResize(true, min_size, max_size);
   Send(new ViewMsg_EnableAutoResize(GetRoutingID(), min_size, max_size));
 }
 
 void RenderViewHostImpl::DisableAutoResize(const gfx::Size& new_size) {
-  SetAutoResize(false, gfx::Size(), gfx::Size());
+  GetWidget()->SetAutoResize(false, gfx::Size(), gfx::Size());
   Send(new ViewMsg_DisableAutoResize(GetRoutingID(), new_size));
   if (!new_size.IsEmpty())
-    GetView()->SetSize(new_size);
+    GetWidget()->GetView()->SetSize(new_size);
 }
 
 void RenderViewHostImpl::CopyImageAt(int x, int y) {
@@ -1372,19 +1332,6 @@ void RenderViewHostImpl::OnDidZoomURL(double zoom_level,
                                      GetRoutingID(),
                                      zoom_level,
                                      net::GetHostOrSpecFromURL(url));
-}
-
-void RenderViewHostImpl::OnPageScaleFactorIsOneChanged(bool is_one) {
-  if (!GetSiteInstance())
-    return;
-  HostZoomMapImpl* host_zoom_map =
-      static_cast<HostZoomMapImpl*>(HostZoomMap::Get(GetSiteInstance()));
-  if (!host_zoom_map)
-    return;
-  if (!GetProcess())
-    return;
-  host_zoom_map->SetPageScaleFactorIsOneForView(GetProcess()->GetID(),
-                                                GetRoutingID(), is_one);
 }
 
 void RenderViewHostImpl::OnRunFileChooser(const FileChooserParams& params) {
@@ -1441,16 +1388,20 @@ void RenderViewHostImpl::SelectWordAroundCaret() {
   Send(new ViewMsg_SelectWordAroundCaret(GetRoutingID()));
 }
 
-void RenderViewHostImpl::SetShouldShowImages(bool show_images) {
-  Send(new ViewMsg_SetShouldShowImages(GetRoutingID(), show_images));
+void RenderViewHostImpl::PostRenderViewReady() {
+  if (GetProcess()->IsReady()) {
+    BrowserThread::PostTask(
+        BrowserThread::UI,
+        FROM_HERE,
+        base::Bind(&RenderViewHostImpl::RenderViewReady,
+                   weak_factory_.GetWeakPtr()));
+  } else {
+    render_view_ready_on_process_launch_ = true;
+  }
 }
 
-void RenderViewHostImpl::SetOnlyLoadFromCache(bool only_load_from_cache) {
-  Send(new ViewMsg_SetOnlyLoadFromCache(GetRoutingID(), only_load_from_cache));
-}
-
-void RenderViewHostImpl::SetEnablePlugins(bool enable_plugins) {
-  Send(new ViewMsg_SetPluginsEnabled(GetRoutingID(), enable_plugins));
+void RenderViewHostImpl::RenderViewReady() {
+  delegate_->RenderViewReady(this);
 }
 
 }  // namespace content

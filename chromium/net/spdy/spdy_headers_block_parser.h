@@ -5,32 +5,18 @@
 #ifndef NET_SPDY_SPDY_HEADERS_BLOCK_PARSER_H_
 #define NET_SPDY_SPDY_HEADERS_BLOCK_PARSER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
+#include "net/spdy/spdy_headers_handler_interface.h"
 #include "net/spdy/spdy_prefixed_buffer_reader.h"
 #include "net/spdy/spdy_protocol.h"
 
 namespace net {
-
-// A handler class for SPDY headers.
-class SpdyHeadersHandlerInterface {
- public:
-  virtual ~SpdyHeadersHandlerInterface() {}
-
-  // A callback method which notifies when the parser starts handling a new
-  // SPDY headers block, this method also notifies on the number of headers in
-  // the block.
-  virtual void OnHeaderBlock(uint32_t num_of_headers) = 0;
-
-  // A callback method which notifies on a SPDY header key value pair.
-  virtual void OnHeader(base::StringPiece key, base::StringPiece value) = 0;
-
-  // A callback method which notifies when the parser finishes handling a SPDY
-  // headers block. Also notifies on the total number of bytes in this block.
-  virtual void OnHeaderBlockEnd(size_t header_bytes_parsed) = 0;
-};
 
 namespace test {
 
@@ -78,11 +64,8 @@ class NET_EXPORT_PRIVATE SpdyHeadersBlockParser {
 
   SpdyMajorVersion spdy_version() const { return spdy_version_; }
 
-  // Returns the size in bytes of a length field in a SPDY header.
-  static size_t LengthFieldSizeForVersion(SpdyMajorVersion spdy_version);
-
   // Returns the maximal number of headers in a SPDY headers block.
-  static size_t MaxNumberOfHeadersForVersion(SpdyMajorVersion spdy_version);
+  static size_t MaxNumberOfHeaders();
 
  private:
   typedef SpdyPrefixedBufferReader Reader;
@@ -106,9 +89,6 @@ class NET_EXPORT_PRIVATE SpdyHeadersBlockParser {
     FINISHED_HEADER
   };
   ParserState state_;
-
-  // Size in bytes of a length field in the spdy header.
-  const size_t length_field_size_;
 
   // The maximal number of headers in a SPDY headers block.
   const size_t max_headers_in_block_;

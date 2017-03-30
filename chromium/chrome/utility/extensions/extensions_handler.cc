@@ -4,14 +4,19 @@
 
 #include "chrome/utility/extensions/extensions_handler.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/extensions/chrome_extensions_client.h"
 #include "chrome/common/extensions/chrome_utility_extensions_messages.h"
 #include "chrome/common/media_galleries/metadata_types.h"
 #include "chrome/utility/chrome_content_utility_client.h"
 #include "chrome/utility/media_galleries/image_metadata_extractor.h"
+#include "chrome/utility/media_galleries/ipc_data_source.h"
+#include "chrome/utility/media_galleries/media_metadata_parser.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/utility/utility_thread.h"
 #include "extensions/common/extension.h"
@@ -19,8 +24,11 @@
 #include "extensions/common/extension_utility_messages.h"
 #include "extensions/utility/unpacker.h"
 #include "media/base/media.h"
-#include "media/base/media_file_checker.h"
 #include "ui/base/ui_base_switches.h"
+
+#if !defined(MEDIA_DISABLE_FFMPEG)
+#include "media/base/media_file_checker.h"
+#endif
 
 #if defined(OS_WIN)
 #include "chrome/common/extensions/api/networking_private/networking_private_crypto.h"
@@ -51,9 +59,19 @@ void ReleaseProcessIfNeeded() {
   content::UtilityThread::Get()->ReleaseProcessIfNeeded();
 }
 
+void FinishParseMediaMetadata(
+    metadata::MediaMetadataParser* /* parser */,
+    const extensions::api::media_galleries::MediaMetadata& metadata,
+    const std::vector<metadata::AttachedImage>& attached_images) {
+  Send(new ChromeUtilityHostMsg_ParseMediaMetadata_Finished(
+      true, *metadata.ToValue(), attached_images));
+  ReleaseProcessIfNeeded();
+}
+
 }  // namespace
 
-ExtensionsHandler::ExtensionsHandler() {
+ExtensionsHandler::ExtensionsHandler(ChromeContentUtilityClient* utility_client)
+    : utility_client_(utility_client) {
   ExtensionsClient::Set(ChromeExtensionsClient::GetInstance());
 }
 
@@ -73,6 +91,9 @@ bool ExtensionsHandler::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ExtensionsHandler, message)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_CheckMediaFile, OnCheckMediaFile)
+    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_ParseMediaMetadata,
+                        OnParseMediaMetadata)
+
 #if defined(OS_WIN)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_ParseITunesPrefXml,
                         OnParseITunesPrefXml)
@@ -103,14 +124,30 @@ bool ExtensionsHandler::OnMessageReceived(const IPC::Message& message) {
 }
 
 void ExtensionsHandler::OnCheckMediaFile(
-    int64 milliseconds_of_decoding,
+    int64_t milliseconds_of_decoding,
     const IPC::PlatformFileForTransit& media_file) {
+#if !defined(MEDIA_DISABLE_FFMPEG)
   media::MediaFileChecker checker(
       IPC::PlatformFileForTransitToFile(media_file));
   const bool check_success = checker.Start(
       base::TimeDelta::FromMilliseconds(milliseconds_of_decoding));
   Send(new ChromeUtilityHostMsg_CheckMediaFile_Finished(check_success));
+#else
+  Send(new ChromeUtilityHostMsg_CheckMediaFile_Finished(false));
+#endif
   ReleaseProcessIfNeeded();
+}
+
+void ExtensionsHandler::OnParseMediaMetadata(const std::string& mime_type,
+                                             int64_t total_size,
+                                             bool get_attached_images) {
+  // Only one IPCDataSource may be created and added to the list of handlers.
+  scoped_ptr<metadata::IPCDataSource> source(
+      new metadata::IPCDataSource(total_size));
+  metadata::MediaMetadataParser* parser = new metadata::MediaMetadataParser(
+      source.get(), mime_type, get_attached_images);
+  utility_client_->AddHandler(std::move(source));
+  parser->Start(base::Bind(&FinishParseMediaMetadata, base::Owned(parser)));
 }
 
 #if defined(OS_WIN)
@@ -128,7 +165,7 @@ void ExtensionsHandler::OnParseIPhotoLibraryXmlFile(
     const IPC::PlatformFileForTransit& iphoto_library_file) {
   iphoto::IPhotoLibraryParser parser;
   base::File file = IPC::PlatformFileForTransitToFile(iphoto_library_file);
-  bool result = parser.Parse(iapps::ReadFileAsString(file.Pass()));
+  bool result = parser.Parse(iapps::ReadFileAsString(std::move(file)));
   Send(new ChromeUtilityHostMsg_GotIPhotoLibrary(result, parser.library()));
   ReleaseProcessIfNeeded();
 }
@@ -139,7 +176,7 @@ void ExtensionsHandler::OnParseITunesLibraryXmlFile(
     const IPC::PlatformFileForTransit& itunes_library_file) {
   itunes::ITunesLibraryParser parser;
   base::File file = IPC::PlatformFileForTransitToFile(itunes_library_file);
-  bool result = parser.Parse(iapps::ReadFileAsString(file.Pass()));
+  bool result = parser.Parse(iapps::ReadFileAsString(std::move(file)));
   Send(new ChromeUtilityHostMsg_GotITunesLibrary(result, parser.library()));
   ReleaseProcessIfNeeded();
 }
@@ -162,7 +199,7 @@ void ExtensionsHandler::OnParsePicasaPMPDatabase(
   files.uid_file =
       IPC::PlatformFileForTransitToFile(album_table_files.uid_file);
 
-  picasa::PicasaAlbumTableReader reader(files.Pass());
+  picasa::PicasaAlbumTableReader reader(std::move(files));
   bool parse_success = reader.Init();
   Send(new ChromeUtilityHostMsg_ParsePicasaPMPDatabase_Finished(
       parse_success, reader.albums(), reader.folders()));

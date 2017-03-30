@@ -157,11 +157,16 @@ function FileTransferController(doc,
   this.sourceNotFoundErrorCount_ = 0;
 
   /**
-   * @type {!Element}
-   * @private
+   * @private {!Element}
    * @const
    */
-  this.copyCommand_ = queryRequiredElement(this.document_, 'command#copy');
+  this.copyCommand_ = queryRequiredElement('command#copy', this.document_);
+
+  /**
+   * @private {!Element}
+   * @const
+   */
+  this.cutCommand_ = queryRequiredElement('command#cut', this.document_);
 
   /**
    * @type {DirectoryEntry}
@@ -279,13 +284,17 @@ FileTransferController.prototype.attachTreeDropTarget_ = function(tree) {
  */
 FileTransferController.prototype.attachCopyPasteHandlers_ = function() {
   this.document_.addEventListener('beforecopy',
-                                  this.onBeforeCopy_.bind(this));
+                                  this.onBeforeCutOrCopy_.bind(
+                                      this, false /* not move operation */));
   this.document_.addEventListener('copy',
-                                  this.onCopy_.bind(this));
+                                  this.onCutOrCopy_.bind(
+                                      this, false /* not move operation */));
   this.document_.addEventListener('beforecut',
-                                  this.onBeforeCut_.bind(this));
+                                  this.onBeforeCutOrCopy_.bind(
+                                      this, true /* move operation */));
   this.document_.addEventListener('cut',
-                                  this.onCut_.bind(this));
+                                  this.onCutOrCopy_.bind(
+                                      this, true /* move operation */));
   this.document_.addEventListener('beforepaste',
                                   this.onBeforePaste_.bind(this));
   this.document_.addEventListener('paste',
@@ -302,22 +311,58 @@ FileTransferController.prototype.attachCopyPasteHandlers_ = function() {
  */
 FileTransferController.prototype.cutOrCopy_ =
     function(clipboardData, effectAllowed) {
-  // Existence of the volumeInfo is checked in canXXX methods.
   var volumeInfo = this.volumeManager_.getVolumeInfo(
       this.directoryModel_.getCurrentDirEntry());
+  if (!volumeInfo)
+    return;
+
+  this.appendCutOrCopyInfo_(clipboardData, effectAllowed, volumeInfo,
+      this.selectionHandler_.selection.entries,
+      !this.selectionHandler_.isAvailable());
+  this.appendUriList_(clipboardData,
+      this.selectionHandler_.selection.entries);
+};
+
+/**
+ * Appends copy or cut information of |entries| to |clipboardData|.
+ * @param {!ClipboardData} clipboardData ClipboardData from the event.
+ * @param {string} effectAllowed Value must be valid for the
+ *     |clipboardData.effectAllowed| property.
+ * @param {!VolumeInfo} sourceVolumeInfo
+ * @param {!Array<!Entry>} entries
+ * @param {boolean} missingFileContents
+ * @private
+ */
+FileTransferController.prototype.appendCutOrCopyInfo_ = function(
+    clipboardData, effectAllowed, sourceVolumeInfo, entries,
+    missingFileContents) {
   // Tag to check it's filemanager data.
   clipboardData.setData('fs/tag', 'filemanager-data');
   clipboardData.setData('fs/sourceRootURL',
-                       volumeInfo.fileSystem.root.toURL());
-  var sourceURLs = util.entriesToURLs(this.selectionHandler_.selection.entries);
+                       sourceVolumeInfo.fileSystem.root.toURL());
+
+  var sourceURLs = util.entriesToURLs(entries);
   clipboardData.setData('fs/sources', sourceURLs.join('\n'));
+
   clipboardData.effectAllowed = effectAllowed;
   clipboardData.setData('fs/effectallowed', effectAllowed);
+
   clipboardData.setData('fs/missingFileContents',
-                       (!this.selectionHandler_.isAvailable()).toString());
+      missingFileContents.toString());
+};
+
+/**
+ * Appends uri-list of |entries| to |clipboardData|.
+ * @param {!ClipboardData} clipboardData ClipboardData from the event.
+ * @param {!Array<!Entry>} entries
+ * @private
+ */
+FileTransferController.prototype.appendUriList_ = function(
+    clipboardData, entries) {
   var externalFileUrl;
-  for (var i = 0; i < this.selectionHandler_.selection.entries.length; i++) {
-    var url = this.selectionHandler_.selection.entries[i].toURL();
+
+  for (var i = 0; i < entries.length; i++) {
+    var url = entries[i].toURL();
     if (!this.selectedAsyncData_[url])
       continue;
     if (this.selectedAsyncData_[url].file)
@@ -325,6 +370,7 @@ FileTransferController.prototype.cutOrCopy_ =
     if (!externalFileUrl)
       externalFileUrl = this.selectedAsyncData_[url].externalFileUrl;
   }
+
   if (externalFileUrl)
     clipboardData.setData('text/uri-list', externalFileUrl);
 };
@@ -483,6 +529,7 @@ FileTransferController.prototype.paste =
       /** @type {DirectoryEntry} */ (this.directoryModel_.getCurrentDirEntry());
   var entries = [];
   var failureUrls;
+  var shareEntries;
   var taskId = this.fileOperationManager_.generateTaskId();
 
   FileTransferController.URLsToEntriesWithAccess(sourceURLs)
@@ -529,42 +576,44 @@ FileTransferController.prototype.paste =
           }.bind(this))
       .then(
           /**
-           * @param {!Array<Entry>} shareEntries
+           * @param {!Array<Entry>} inShareEntries
            * @this {FileTransferController}
-           * @return {!Promise<Array<Entry>>|undefined}
+           * @return {!Promise<Array<Entry>>}
            */
-          function(shareEntries) {
+          function(inShareEntries) {
+            shareEntries = inShareEntries;
             if (shareEntries.length === 0)
-              return;
+              return Promise.resolve(null);
             return this.multiProfileShareDialog_.
-                showMultiProfileShareDialog(shareEntries.length > 1).then(
-                    /**
-                     * @param {string} dialogResult
-                     * @this {FileTransferController}
-                     * @return {!Promise<undefined>|undefined}
-                     */
-                    function(dialogResult) {
-                      if (dialogResult === 'cancel')
-                        return Promise.reject('ABORT');
-                      // Do cross share.
-                      // TODO(hirono): Make the loop cancellable.
-                      var requestDriveShare = function(index) {
-                        if (index >= shareEntries.length)
-                          return;
-                        return new Promise(function(fulfill) {
-                          chrome.fileManagerPrivate.requestDriveShare(
-                              shareEntries[index].toURL(),
-                              dialogResult,
-                              function() {
-                                // TODO(hirono): Check chrome.runtime.lastError
-                                // here.
-                                fulfill(undefined);
-                              });
-                        }).then(requestDriveShare.bind(null, index + 1));
-                      };
-                      return requestDriveShare(0);
-                    });
+                showMultiProfileShareDialog(shareEntries.length > 1);
           }.bind(this))
+      .then(
+          /**
+           * @param {?string} dialogResult
+           * @return {!Promise<undefined>|undefined}
+           */
+           function(dialogResult) {
+              if (dialogResult === null)
+                return;  // No dialog was shown, skip this step.
+              if (dialogResult === 'cancel')
+                return Promise.reject('ABORT');
+              // Do cross share.
+              // TODO(hirono): Make the loop cancellable.
+              var requestDriveShare = function(index) {
+                if (index >= shareEntries.length)
+                  return;
+                return new Promise(function(fulfill) {
+                  chrome.fileManagerPrivate.requestDriveShare(
+                      shareEntries[index],
+                      assert(dialogResult),
+                      function() {
+                        // TODO(hirono): Check chrome.runtime.lastError here.
+                        fulfill();
+                      });
+                }).then(requestDriveShare.bind(null, index + 1));
+              };
+              return requestDriveShare(0);
+            })
       .then(
           /**
            * @this {FileTransferController}
@@ -946,30 +995,106 @@ FileTransferController.prototype.isDocumentWideEvent_ = function() {
 };
 
 /**
+ * @param {boolean} isMove True for move operation.
  * @param {!Event} event
  * @private
  */
-FileTransferController.prototype.onCopy_ = function(event) {
+FileTransferController.prototype.onCutOrCopy_ = function(isMove, event) {
   if (!this.isDocumentWideEvent_() ||
-      !this.canCopyOrDrag_()) {
+      !this.canCutOrCopy_(isMove)) {
     return;
   }
+
   event.preventDefault();
-  this.cutOrCopy_(assert(event.clipboardData), 'copy');
+
+  var clipboardData = assert(event.clipboardData);
+  var effectAllowed = isMove ? 'move' : 'copy';
+
+  // If current focus is on DirectoryTree, write selected item of DirectoryTree
+  // to system clipboard.
+  if (document.activeElement instanceof DirectoryTree) {
+    this.cutOrCopyFromDirectoryTree(
+        document.activeElement, clipboardData, effectAllowed);
+    return;
+  }
+
+  // If current focus is not on DirectoryTree, write the current selection in
+  // the list to system clipboard.
+  this.cutOrCopy_(clipboardData, effectAllowed);
   this.blinkSelection_();
 };
 
 /**
+ * Performs cut or copy operation dispatched from directory tree.
+ * @param {!DirectoryTree} directoryTree
+ * @param {!ClipboardData} clipboardData
+ * @param {string} effectAllowed
+ */
+FileTransferController.prototype.cutOrCopyFromDirectoryTree = function(
+    directoryTree, clipboardData, effectAllowed) {
+  var selectedItem = document.activeElement.selectedItem;
+  if (selectedItem === null)
+    return;
+
+  var entry = selectedItem.entry;
+
+  var volumeInfo = this.volumeManager_.getVolumeInfo(entry);
+  if (!volumeInfo)
+    return;
+
+  // When this value is false, we cannot copy between different sources.
+  var missingFileContents =
+      volumeInfo.volumeType === VolumeManagerCommon.VolumeType.DRIVE &&
+      this.volumeManager_.getDriveConnectionState().type ===
+          VolumeManagerCommon.DriveConnectionType.OFFLINE;
+
+  this.appendCutOrCopyInfo_(clipboardData, effectAllowed, volumeInfo, [entry],
+      missingFileContents);
+};
+
+/**
+ * @param {boolean} isMove True for move operation.
  * @param {!Event} event
  * @private
  */
-FileTransferController.prototype.onBeforeCopy_ = function(event) {
+FileTransferController.prototype.onBeforeCutOrCopy_ = function(isMove, event) {
   if (!this.isDocumentWideEvent_())
     return;
 
   // queryCommandEnabled returns true if event.defaultPrevented is true.
-  if (this.canCopyOrDrag_())
+  if (this.canCutOrCopy_(isMove))
     event.preventDefault();
+};
+
+/**
+ * @param {boolean} isMove True for move operation.
+ * @return {boolean}
+ * @private
+ */
+FileTransferController.prototype.canCutOrCopy_ = function(isMove) {
+  var command = isMove ? this.cutCommand_ : this.copyCommand_;
+  command.setHidden(false);
+
+  if (document.activeElement instanceof DirectoryTree) {
+    var selectedItem = document.activeElement.selectedItem;
+    if (!selectedItem)
+      return false;
+
+    if (!CommandUtil.shouldShowMenuItemForEntry(
+        this.volumeManager_, selectedItem.entry)) {
+      command.setHidden(true);
+      return false;
+    }
+
+    if (!isMove)
+      return true;
+
+    // We need to check source volume is writable for move operation.
+    var volumeInfo = this.volumeManager_.getVolumeInfo(selectedItem.entry);
+    return !volumeInfo.isReadOnly;
+  }
+
+  return isMove ? this.canCutOrDrag_() : this.canCopyOrDrag_() ;
 };
 
 /**
@@ -980,32 +1105,6 @@ FileTransferController.prototype.onBeforeCopy_ = function(event) {
 FileTransferController.prototype.canCopyOrDrag_ = function() {
   return this.selectionHandler_.isAvailable() &&
       this.selectionHandler_.selection.entries.length > 0;
-};
-
-/**
- * @param {!Event} event
- * @private
- */
-FileTransferController.prototype.onCut_ = function(event) {
-  if (!this.isDocumentWideEvent_() ||
-      !this.canCutOrDrag_()) {
-    return;
-  }
-  event.preventDefault();
-  this.cutOrCopy_(assert(event.clipboardData), 'move');
-  this.blinkSelection_();
-};
-
-/**
- * @param {!Event} event
- * @private
- */
-FileTransferController.prototype.onBeforeCut_ = function(event) {
-  if (!this.isDocumentWideEvent_())
-    return;
-  // queryCommandEnabled returns true if event.defaultPrevented is true.
-  if (this.canCutOrDrag_())
-    event.preventDefault();
 };
 
 /**
@@ -1089,10 +1188,12 @@ FileTransferController.prototype.canPasteOrDrop_ =
 /**
  * Execute paste command.
  *
+ * @param {DirectoryEntry|FakeEntry} destinationEntry
  * @return {boolean}  Returns true, the paste is success. Otherwise, returns
  *     false.
  */
-FileTransferController.prototype.queryPasteCommandEnabled = function() {
+FileTransferController.prototype.queryPasteCommandEnabled = function(
+    destinationEntry) {
   if (!this.isDocumentWideEvent_()) {
     return false;
   }
@@ -1101,8 +1202,7 @@ FileTransferController.prototype.queryPasteCommandEnabled = function() {
   // should be used.
   var result;
   this.simulateCommand_('paste', function(event) {
-    result = this.canPasteOrDrop_(event.clipboardData,
-                                  this.directoryModel_.getCurrentDirEntry());
+    result = this.canPasteOrDrop_(event.clipboardData, destinationEntry);
   }.bind(this));
   return result;
 };
@@ -1169,7 +1269,8 @@ FileTransferController.prototype.onFileSelectionChangedThrottled_ = function() {
       function(metadataList) {
         // |Copy| is the only menu item affected by allDriveFilesAvailable_.
         // It could be open right now, update its UI.
-        this.copyCommand_.disabled = !this.canCopyOrDrag_();
+        this.copyCommand_.disabled =
+            !this.canCutOrCopy_(false /* not move operation */);
         for (var i = 0; i < entries.length; i++) {
           if (entries[i].isFile) {
             asyncData[entries[i].toURL()].externalFileUrl =

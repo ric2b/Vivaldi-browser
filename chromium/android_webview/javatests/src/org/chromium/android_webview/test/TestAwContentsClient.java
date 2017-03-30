@@ -4,19 +4,15 @@
 
 package org.chromium.android_webview.test;
 
+import android.graphics.Bitmap;
 import android.graphics.Picture;
 import android.net.http.SslError;
-import android.view.ActionMode;
-import android.view.View;
 import android.webkit.ConsoleMessage;
 import android.webkit.ValueCallback;
 
 import org.chromium.android_webview.AwContentsClient.AwWebResourceRequest;
 import org.chromium.android_webview.AwWebResourceResponse;
 import org.chromium.base.ThreadUtils;
-import org.chromium.content.browser.SelectActionMode;
-import org.chromium.content.browser.SelectActionModeCallback;
-import org.chromium.content.browser.SelectActionModeCallback.ActionHandler;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageCommitVisibleHelper;
@@ -25,6 +21,7 @@ import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPage
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnReceivedErrorHelper;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -49,6 +46,8 @@ public class TestAwContentsClient extends NullContentsClient {
     private final ShouldOverrideUrlLoadingHelper mShouldOverrideUrlLoadingHelper;
     private final DoUpdateVisitedHistoryHelper mDoUpdateVisitedHistoryHelper;
     private final OnCreateWindowHelper mOnCreateWindowHelper;
+    private final FaviconHelper mFaviconHelper;
+    private final TouchIconHelper mTouchIconHelper;
 
     public TestAwContentsClient() {
         super(ThreadUtils.getUiThreadLooper());
@@ -69,6 +68,8 @@ public class TestAwContentsClient extends NullContentsClient {
         mShouldOverrideUrlLoadingHelper = new ShouldOverrideUrlLoadingHelper();
         mDoUpdateVisitedHistoryHelper = new DoUpdateVisitedHistoryHelper();
         mOnCreateWindowHelper = new OnCreateWindowHelper();
+        mFaviconHelper = new FaviconHelper();
+        mTouchIconHelper = new TouchIconHelper();
         mAllowSslError = true;
     }
 
@@ -126,6 +127,14 @@ public class TestAwContentsClient extends NullContentsClient {
 
     public OnCreateWindowHelper getOnCreateWindowHelper() {
         return mOnCreateWindowHelper;
+    }
+
+    public FaviconHelper getFaviconHelper() {
+        return mFaviconHelper;
+    }
+
+    public TouchIconHelper getTouchIconHelper() {
+        return mTouchIconHelper;
     }
 
     /**
@@ -219,16 +228,6 @@ public class TestAwContentsClient extends NullContentsClient {
     public void onReceivedSslError(ValueCallback<Boolean> callback, SslError error) {
         callback.onReceiveValue(mAllowSslError);
         mOnReceivedSslErrorHelper.notifyCalled();
-    }
-
-    @Override
-    public SelectActionMode startActionMode(
-            View view, ActionHandler actionHandler, boolean floating) {
-        if (floating) return null;
-        ActionMode.Callback callback =
-                new SelectActionModeCallback(view.getContext(), actionHandler);
-        ActionMode actionMode = view.startActionMode(callback);
-        return actionMode != null ? new SelectActionMode(actionMode) : null;
     }
 
     public void setAllowSslError(boolean allow) {
@@ -446,13 +445,12 @@ public class TestAwContentsClient extends NullContentsClient {
      */
     public static class ShouldOverrideUrlLoadingHelper extends CallbackHelper {
         private String mShouldOverrideUrlLoadingUrl;
-        private String mPreviousShouldOverrideUrlLoadingUrl;
         private boolean mShouldOverrideUrlLoadingReturnValue = false;
+        private boolean mIsRedirect;
+        private boolean mHasUserGesture;
+        private boolean mIsMainFrame;
         void setShouldOverrideUrlLoadingUrl(String url) {
             mShouldOverrideUrlLoadingUrl = url;
-        }
-        void setPreviousShouldOverrideUrlLoadingUrl(String url) {
-            mPreviousShouldOverrideUrlLoadingUrl = url;
         }
         void setShouldOverrideUrlLoadingReturnValue(boolean value) {
             mShouldOverrideUrlLoadingReturnValue = value;
@@ -461,26 +459,35 @@ public class TestAwContentsClient extends NullContentsClient {
             assert getCallCount() > 0;
             return mShouldOverrideUrlLoadingUrl;
         }
-        public String getPreviousShouldOverrideUrlLoadingUrl() {
-            assert getCallCount() > 1;
-            return mPreviousShouldOverrideUrlLoadingUrl;
-        }
         public boolean getShouldOverrideUrlLoadingReturnValue() {
             return mShouldOverrideUrlLoadingReturnValue;
         }
-        public void notifyCalled(String url) {
-            mPreviousShouldOverrideUrlLoadingUrl = mShouldOverrideUrlLoadingUrl;
+        public boolean isRedirect() {
+            return mIsRedirect;
+        }
+        public boolean hasUserGesture() {
+            return mHasUserGesture;
+        }
+        public boolean isMainFrame() {
+            return mIsMainFrame;
+        }
+        public void notifyCalled(
+                String url, boolean isRedirect, boolean hasUserGesture, boolean isMainFrame) {
             mShouldOverrideUrlLoadingUrl = url;
+            mIsRedirect = isRedirect;
+            mHasUserGesture = hasUserGesture;
+            mIsMainFrame = isMainFrame;
             notifyCalled();
         }
     }
 
     @Override
-    public boolean shouldOverrideUrlLoading(String url) {
-        super.shouldOverrideUrlLoading(url);
+    public boolean shouldOverrideUrlLoading(AwWebResourceRequest request) {
+        super.shouldOverrideUrlLoading(request);
         boolean returnValue =
                 mShouldOverrideUrlLoadingHelper.getShouldOverrideUrlLoadingReturnValue();
-        mShouldOverrideUrlLoadingHelper.notifyCalled(url);
+        mShouldOverrideUrlLoadingHelper.notifyCalled(
+                request.url, request.isRedirect, request.hasUserGesture, request.isMainFrame);
         return returnValue;
     }
 
@@ -561,5 +568,54 @@ public class TestAwContentsClient extends NullContentsClient {
     public void onReceivedHttpError(AwWebResourceRequest request, AwWebResourceResponse response) {
         super.onReceivedHttpError(request, response);
         mOnReceivedHttpErrorHelper.notifyCalled(request, response);
+    }
+
+    /**
+     * CallbackHelper for onReceivedIcon.
+     */
+    public static class FaviconHelper extends CallbackHelper {
+        private Bitmap mIcon;
+
+        public void notifyFavicon(Bitmap icon) {
+            mIcon = icon;
+            super.notifyCalled();
+        }
+
+        public Bitmap getIcon() {
+            assert getCallCount() > 0;
+            return mIcon;
+        }
+    }
+
+    @Override
+    public void onReceivedIcon(Bitmap bitmap) {
+        // We don't inform the API client about the URL of the icon.
+        mFaviconHelper.notifyFavicon(bitmap);
+    }
+
+    /**
+     * CallbackHelper for onReceivedTouchIconUrl.
+     */
+    public static class TouchIconHelper extends CallbackHelper {
+        private HashMap<String, Boolean> mTouchIcons = new HashMap<String, Boolean>();
+
+        public void notifyTouchIcon(String url, boolean precomposed) {
+            mTouchIcons.put(url, precomposed);
+            super.notifyCalled();
+        }
+
+        public int getTouchIconsCount() {
+            assert getCallCount() > 0;
+            return mTouchIcons.size();
+        }
+
+        public boolean hasTouchIcon(String url) {
+            return mTouchIcons.get(url);
+        }
+    }
+
+    @Override
+    public void onReceivedTouchIconUrl(String url, boolean precomposed) {
+        mTouchIconHelper.notifyTouchIcon(url, precomposed);
     }
 }

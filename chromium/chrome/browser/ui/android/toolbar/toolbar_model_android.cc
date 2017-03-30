@@ -27,25 +27,29 @@ ToolbarModelAndroid::ToolbarModelAndroid(JNIEnv* env, jobject jdelegate)
 ToolbarModelAndroid::~ToolbarModelAndroid() {
 }
 
-void ToolbarModelAndroid::Destroy(JNIEnv* env, jobject obj) {
+void ToolbarModelAndroid::Destroy(JNIEnv* env,
+                                  const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
-ScopedJavaLocalRef<jstring> ToolbarModelAndroid::GetText(JNIEnv* env,
-                                                         jobject obj) {
+ScopedJavaLocalRef<jstring> ToolbarModelAndroid::GetText(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   return base::android::ConvertUTF16ToJavaString(env,
                                                  toolbar_model_->GetText());
 }
 
 ScopedJavaLocalRef<jstring> ToolbarModelAndroid::GetCorpusChipText(
     JNIEnv* env,
-    jobject obj) {
+    const JavaParamRef<jobject>& obj) {
   return base::android::ConvertUTF16ToJavaString(
       env,
       toolbar_model_->GetCorpusNameForMobile());
 }
 
-jboolean ToolbarModelAndroid::WouldReplaceURL(JNIEnv* env, jobject obj) {
+jboolean ToolbarModelAndroid::WouldReplaceURL(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   return toolbar_model_->WouldReplaceURL();
 }
 
@@ -65,42 +69,9 @@ bool ToolbarModelAndroid::RegisterToolbarModelAndroid(JNIEnv* env) {
 }
 
 // static
-jlong Init(JNIEnv* env, jobject obj, jobject delegate) {
+jlong Init(JNIEnv* env,
+           const JavaParamRef<jobject>& obj,
+           const JavaParamRef<jobject>& delegate) {
   ToolbarModelAndroid* toolbar_model = new ToolbarModelAndroid(env, delegate);
   return reinterpret_cast<intptr_t>(toolbar_model);
-}
-
-// Temporary method to allow us to surface a SHA-1 deprecation string on Android
-// in M42. This duplicates a subset of the logic from
-// ToolbarModelImpl::GetSecurityLevelForWebContents() and
-// WebsiteSettings::Init(), which should really be refactored.
-// This is at the wrong layer, and needs to be refactored (along with desktop):
-// https://crbug.com/471390
-
-// static
-jboolean IsDeprecatedSHA1Present(JNIEnv* env,
-                                 jclass jcaller,
-                                 jobject jweb_contents) {
-  content::WebContents* web_contents =
-      content::WebContents::FromJavaWebContents(jweb_contents);
-  DCHECK(web_contents);
-
-  content::NavigationEntry* entry =
-      web_contents->GetController().GetVisibleEntry();
-  if (!entry)
-    return false;
-
-  const content::SSLStatus& ssl = entry->GetSSL();
-  if (ssl.security_style == content::SECURITY_STYLE_AUTHENTICATED) {
-    scoped_refptr<net::X509Certificate> cert;
-    // NOTE: This constant needs to be kept in sync with
-    // ToolbarModelImpl::GetSecurityLevelForWebContents().
-    static const int64_t kJanuary2016 = INT64_C(13096080000000000);
-    if (content::CertStore::GetInstance()->RetrieveCert(ssl.cert_id, &cert) &&
-        (ssl.cert_status & net::CERT_STATUS_SHA1_SIGNATURE_PRESENT) &&
-        cert->valid_expiry() > base::Time::FromInternalValue(kJanuary2016)) {
-      return true;
-    }
-  }
-  return false;
 }

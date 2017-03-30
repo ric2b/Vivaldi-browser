@@ -5,6 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_INFOBARS_INFOBAR_MANAGER_IMPL_H_
 #define IOS_CHROME_BROWSER_INFOBARS_INFOBAR_MANAGER_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/infobars/core/infobar_manager.h"
 #include "ios/web/public/web_state/web_state_observer.h"
@@ -45,6 +46,9 @@ class InfoBarManagerImpl : public infobars::InfoBarManager,
   void NavigationItemCommitted(
       const web::LoadCommittedDetails& load_details) override;
   void WebStateDestroyed() override;
+
+  // Opens a URL according to the specified |disposition|.
+  void OpenURL(const GURL& url, WindowOpenDisposition disposition) override;
 
   DISALLOW_COPY_AND_ASSIGN(InfoBarManagerImpl);
 };

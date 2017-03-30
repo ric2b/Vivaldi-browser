@@ -6,12 +6,14 @@
 
 #include <errno.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 #include <algorithm>
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner_util.h"
@@ -122,15 +124,13 @@ void ChannelNacl::ReaderThreadRunner::Run() {
 
 ChannelNacl::ChannelNacl(const IPC::ChannelHandle& channel_handle,
                          Mode mode,
-                         Listener* listener,
-                         AttachmentBroker* broker)
+                         Listener* listener)
     : ChannelReader(listener),
       mode_(mode),
       waiting_connect_(true),
       pipe_(-1),
       pipe_name_(channel_handle.name),
-      weak_ptr_factory_(this),
-      broker_(broker) {
+      weak_ptr_factory_(this) {
   if (!CreatePipe(channel_handle)) {
     // The pipe may have been closed already.
     const char *modestr = (mode_ & MODE_SERVER_FLAG) ? "server" : "client";
@@ -140,6 +140,7 @@ ChannelNacl::ChannelNacl(const IPC::ChannelHandle& channel_handle,
 }
 
 ChannelNacl::~ChannelNacl() {
+  CleanUp();
   Close();
 }
 
@@ -211,7 +212,10 @@ bool ChannelNacl::Send(Message* message) {
   Logging::GetInstance()->OnSendMessage(message_ptr.get(), "");
 #endif  // IPC_MESSAGE_LOG_ENABLED
 
-  message->TraceMessageBegin();
+  TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("ipc.flow"),
+                         "ChannelNacl::Send",
+                         message->header()->flags,
+                         TRACE_EVENT_FLAG_FLOW_OUT);
   output_queue_.push_back(linked_ptr<Message>(message_ptr.release()));
   if (!waiting_connect_)
     return ProcessOutgoingMessages();
@@ -220,7 +224,7 @@ bool ChannelNacl::Send(Message* message) {
 }
 
 AttachmentBroker* ChannelNacl::GetAttachmentBroker() {
-  return broker_;
+  return nullptr;
 }
 
 void ChannelNacl::DidRecvMsg(scoped_ptr<MessageContents> contents) {
@@ -283,7 +287,8 @@ bool ChannelNacl::ProcessOutgoingMessages() {
     output_queue_.pop_front();
 
     int fds[MessageAttachmentSet::kMaxDescriptorsPerMessage];
-    const size_t num_fds = msg->attachment_set()->size();
+    const size_t num_fds =
+        msg->attachment_set()->num_non_brokerable_attachments();
     DCHECK(num_fds <= MessageAttachmentSet::kMaxDescriptorsPerMessage);
     msg->attachment_set()->PeekDescriptors(fds);
 
@@ -305,7 +310,7 @@ bool ChannelNacl::ProcessOutgoingMessages() {
                   << msg->size();
       return false;
     } else {
-      msg->attachment_set()->CommitAll();
+      msg->attachment_set()->CommitAllDescriptors();
     }
 
     // Message sent OK!
@@ -350,8 +355,12 @@ ChannelNacl::ReadState ChannelNacl::ReadData(
   return READ_SUCCEEDED;
 }
 
-bool ChannelNacl::WillDispatchInputMessage(Message* msg) {
-  uint16 header_fds = msg->header()->num_fds;
+bool ChannelNacl::ShouldDispatchInputMessage(Message* msg) {
+  return true;
+}
+
+bool ChannelNacl::GetNonBrokeredAttachments(Message* msg) {
+  uint16_t header_fds = msg->header()->num_fds;
   CHECK(header_fds == input_fds_.size());
   if (header_fds == 0)
     return true;  // Nothing to do.
@@ -375,15 +384,23 @@ void ChannelNacl::HandleInternalMessage(const Message& msg) {
   NOTREACHED();
 }
 
+base::ProcessId ChannelNacl::GetSenderPID() {
+  // The untrusted side of the IPC::Channel should never have to worry about
+  // sender's process id.
+  return base::kNullProcessId;
+}
+
+bool ChannelNacl::IsAttachmentBrokerEndpoint() {
+  return is_attachment_broker_endpoint();
+}
+
 // Channel's methods
 
 // static
 scoped_ptr<Channel> Channel::Create(const IPC::ChannelHandle& channel_handle,
                                     Mode mode,
-                                    Listener* listener,
-                                    AttachmentBroker* broker) {
-  return scoped_ptr<Channel>(
-      new ChannelNacl(channel_handle, mode, listener, broker));
+                                    Listener* listener) {
+  return scoped_ptr<Channel>(new ChannelNacl(channel_handle, mode, listener));
 }
 
 }  // namespace IPC

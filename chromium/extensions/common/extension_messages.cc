@@ -4,6 +4,8 @@
 
 #include "extensions/common/extension_messages.h"
 
+#include <stddef.h>
+
 #include "content/public/common/common_param_traits.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
@@ -36,10 +38,10 @@ ExtensionMsg_PermissionSetStruct::ExtensionMsg_PermissionSetStruct(
 ExtensionMsg_PermissionSetStruct::~ExtensionMsg_PermissionSetStruct() {
 }
 
-scoped_refptr<const PermissionSet>
+scoped_ptr<const PermissionSet>
 ExtensionMsg_PermissionSetStruct::ToPermissionSet() const {
-  return new PermissionSet(
-      apis, manifest_permissions, explicit_hosts, scriptable_hosts);
+  return make_scoped_ptr(new PermissionSet(apis, manifest_permissions,
+                                           explicit_hosts, scriptable_hosts));
 }
 
 ExtensionMsg_Loaded_Params::ExtensionMsg_Loaded_Params()
@@ -54,15 +56,14 @@ ExtensionMsg_Loaded_Params::ExtensionMsg_Loaded_Params(
     : manifest(extension->manifest()->value()->DeepCopy()),
       location(extension->location()),
       path(extension->path()),
-      active_permissions(*extension->permissions_data()->active_permissions()),
-      withheld_permissions(
-          *extension->permissions_data()->withheld_permissions()),
+      active_permissions(extension->permissions_data()->active_permissions()),
+      withheld_permissions(extension->permissions_data()
+                               ->withheld_permissions()),
       id(extension->id()),
       creation_flags(extension->creation_flags()) {
   if (include_tab_permissions) {
-    extensions::PermissionsData::TabPermissionsMap tab_permissions =
-        extension->permissions_data()->CopyTabSpecificPermissionsMap();
-    for (const auto& pair : tab_permissions) {
+    for (const auto& pair :
+         extension->permissions_data()->tab_specific_permissions()) {
       tab_specific_permissions[pair.first] =
           ExtensionMsg_PermissionSetStruct(*pair.second);
     }
@@ -80,7 +81,7 @@ scoped_refptr<Extension> ExtensionMsg_Loaded_Params::ConvertToExtension(
                                      withheld_permissions.ToPermissionSet());
     for (const auto& pair : tab_specific_permissions) {
       permissions_data->UpdateTabSpecificPermissions(
-          pair.first, pair.second.ToPermissionSet());
+          pair.first, *pair.second.ToPermissionSet());
     }
   }
   return extension;

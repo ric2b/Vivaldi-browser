@@ -4,8 +4,11 @@
 
 #include "content/renderer/pepper/pepper_media_stream_video_track_host.h"
 
+#include <stddef.h>
+
 #include "base/base64.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/renderer/media/media_stream_video_track.h"
@@ -18,11 +21,6 @@
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/media_stream_buffer.h"
-
-// IS_ALIGNED is also defined in
-// third_party/webrtc/overrides/webrtc/base/basictypes.h
-// TODO(ronghuawu): Avoid undef.
-#undef IS_ALIGNED
 #include "third_party/libyuv/include/libyuv.h"
 
 using media::VideoFrame;
@@ -53,11 +51,11 @@ media::VideoPixelFormat ToPixelFormat(PP_VideoFrame_Format format) {
   }
 }
 
-PP_VideoFrame_Format ToPpapiFormat(VideoFrame::Format format) {
+PP_VideoFrame_Format ToPpapiFormat(media::VideoPixelFormat format) {
   switch (format) {
-    case VideoFrame::YV12:
+    case media::PIXEL_FORMAT_YV12:
       return PP_VIDEOFRAME_FORMAT_YV12;
-    case VideoFrame::I420:
+    case media::PIXEL_FORMAT_I420:
       return PP_VIDEOFRAME_FORMAT_I420;
     default:
       DVLOG(1) << "Unsupported pixel format " << format;
@@ -65,15 +63,15 @@ PP_VideoFrame_Format ToPpapiFormat(VideoFrame::Format format) {
   }
 }
 
-VideoFrame::Format FromPpapiFormat(PP_VideoFrame_Format format) {
+media::VideoPixelFormat FromPpapiFormat(PP_VideoFrame_Format format) {
   switch (format) {
     case PP_VIDEOFRAME_FORMAT_YV12:
-      return VideoFrame::YV12;
+      return media::PIXEL_FORMAT_YV12;
     case PP_VIDEOFRAME_FORMAT_I420:
-      return VideoFrame::I420;
+      return media::PIXEL_FORMAT_I420;
     default:
       DVLOG(1) << "Unsupported pixel format " << format;
-      return VideoFrame::UNKNOWN;
+      return media::PIXEL_FORMAT_UNKNOWN;
   }
 }
 
@@ -95,7 +93,8 @@ void ConvertFromMediaVideoFrame(const scoped_refptr<media::VideoFrame>& src,
                                 PP_VideoFrame_Format dst_format,
                                 const gfx::Size& dst_size,
                                 uint8_t* dst) {
-  CHECK(src->format() == VideoFrame::YV12 || src->format() == VideoFrame::I420);
+  CHECK(src->format() == media::PIXEL_FORMAT_YV12 ||
+        src->format() == media::PIXEL_FORMAT_I420);
   if (dst_format == PP_VIDEOFRAME_FORMAT_BGRA) {
     if (src->visible_rect().size() == dst_size) {
       libyuv::I420ToARGB(src->visible_data(VideoFrame::kYPlane),
@@ -332,21 +331,21 @@ int32_t PepperMediaStreamVideoTrackHost::SendFrameToTrack(int32_t index) {
     ppapi::MediaStreamBuffer::Video* pp_frame =
         &(buffer_manager()->GetBufferPointer(index)->video);
 
-    int32 y_stride = plugin_frame_size_.width();
-    int32 uv_stride = (plugin_frame_size_.width() + 1) / 2;
-    uint8* y_data = static_cast<uint8*>(pp_frame->data);
+    int32_t y_stride = plugin_frame_size_.width();
+    int32_t uv_stride = (plugin_frame_size_.width() + 1) / 2;
+    uint8_t* y_data = static_cast<uint8_t*>(pp_frame->data);
     // Default to I420
-    uint8* u_data = y_data + plugin_frame_size_.GetArea();
-    uint8* v_data = y_data + (plugin_frame_size_.GetArea() * 5 / 4);
+    uint8_t* u_data = y_data + plugin_frame_size_.GetArea();
+    uint8_t* v_data = y_data + (plugin_frame_size_.GetArea() * 5 / 4);
     if (plugin_frame_format_ == PP_VIDEOFRAME_FORMAT_YV12) {
       // Swap u and v for YV12.
-      uint8* tmp = u_data;
+      uint8_t* tmp = u_data;
       u_data = v_data;
       v_data = tmp;
     }
 
-    int64 ts_ms = static_cast<int64>(pp_frame->timestamp *
-                                     base::Time::kMillisecondsPerSecond);
+    int64_t ts_ms = static_cast<int64_t>(pp_frame->timestamp *
+                                         base::Time::kMillisecondsPerSecond);
     scoped_refptr<VideoFrame> frame = media::VideoFrame::WrapExternalYuvData(
         FromPpapiFormat(plugin_frame_format_),
         plugin_frame_size_,
@@ -359,6 +358,8 @@ int32_t PepperMediaStreamVideoTrackHost::SendFrameToTrack(int32_t index) {
         u_data,
         v_data,
         base::TimeDelta::FromMilliseconds(ts_ms));
+    if (!frame)
+      return PP_ERROR_FAILED;
 
     frame_deliverer_->DeliverVideoFrame(frame);
   }
@@ -370,7 +371,7 @@ int32_t PepperMediaStreamVideoTrackHost::SendFrameToTrack(int32_t index) {
 
 void PepperMediaStreamVideoTrackHost::OnVideoFrame(
     const scoped_refptr<VideoFrame>& frame,
-    const base::TimeTicks& estimated_capture_time) {
+    base::TimeTicks estimated_capture_time) {
   DCHECK(frame.get());
   // TODO(penghuang): Check |frame->end_of_stream()| and close the track.
   PP_VideoFrame_Format ppformat = ToPpapiFormat(frame->format());

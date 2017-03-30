@@ -4,8 +4,11 @@
 
 #include "extensions/renderer/script_injection_manager.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "content/public/renderer/render_frame.h"
@@ -17,6 +20,7 @@
 #include "extensions/renderer/extension_frame_helper.h"
 #include "extensions/renderer/extension_injection_host.h"
 #include "extensions/renderer/programmatic_script_injector.h"
+#include "extensions/renderer/renderer_extension_registry.h"
 #include "extensions/renderer/script_injection.h"
 #include "extensions/renderer/scripts_run_info.h"
 #include "extensions/renderer/web_ui_injection_host.h"
@@ -77,7 +81,7 @@ class ScriptInjectionManager::RFOHelper : public content::RenderFrameObserver {
                                           const ExtensionId& extension_id,
                                           int script_id,
                                           const GURL& url);
-  virtual void OnPermitScriptInjection(int64 request_id);
+  virtual void OnPermitScriptInjection(int64_t request_id);
 
   // Tells the ScriptInjectionManager to run tasks associated with
   // document_idle.
@@ -135,6 +139,7 @@ void ScriptInjectionManager::RFOHelper::DidCreateDocumentElement() {
 }
 
 void ScriptInjectionManager::RFOHelper::DidFinishDocumentLoad() {
+  DCHECK(content::RenderThread::Get());
   manager_->StartInjectScripts(render_frame(), UserScript::DOCUMENT_END);
   // We try to run idle in two places: here and DidFinishLoad.
   // DidFinishDocumentLoad() corresponds to completing the document's load,
@@ -143,7 +148,7 @@ void ScriptInjectionManager::RFOHelper::DidFinishDocumentLoad() {
   // particularly slow subresource, so we set a delayed task from here - but if
   // we finish everything before that point (i.e., DidFinishLoad() is
   // triggered), then there's no reason to keep waiting.
-  content::RenderThread::Get()->GetTaskRunner()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
                  weak_factory_.GetWeakPtr()),
@@ -151,8 +156,9 @@ void ScriptInjectionManager::RFOHelper::DidFinishDocumentLoad() {
 }
 
 void ScriptInjectionManager::RFOHelper::DidFinishLoad() {
+  DCHECK(content::RenderThread::Get());
   // Ensure that we don't block any UI progress by running scripts.
-  content::RenderThread::Get()->GetTaskRunner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
                  weak_factory_.GetWeakPtr()));
@@ -190,7 +196,7 @@ void ScriptInjectionManager::RFOHelper::OnExecuteDeclarativeScript(
 }
 
 void ScriptInjectionManager::RFOHelper::OnPermitScriptInjection(
-    int64 request_id) {
+    int64_t request_id) {
   manager_->HandlePermitScriptInjection(request_id);
 }
 
@@ -213,20 +219,22 @@ void ScriptInjectionManager::RFOHelper::InvalidateAndResetFrame() {
 }
 
 ScriptInjectionManager::ScriptInjectionManager(
-    const ExtensionSet* extensions,
     UserScriptSetManager* user_script_set_manager)
-    : extensions_(extensions),
-      user_script_set_manager_(user_script_set_manager),
+    : user_script_set_manager_(user_script_set_manager),
       user_script_set_manager_observer_(this) {
   user_script_set_manager_observer_.Add(user_script_set_manager_);
 }
 
 ScriptInjectionManager::~ScriptInjectionManager() {
+  for (const auto& injection : pending_injections_)
+    injection->invalidate_render_frame();
+  for (const auto& injection : running_injections_)
+    injection->invalidate_render_frame();
 }
 
 void ScriptInjectionManager::OnRenderFrameCreated(
     content::RenderFrame* render_frame) {
-  rfo_helpers_.push_back(new RFOHelper(render_frame, this));
+  rfo_helpers_.push_back(make_scoped_ptr(new RFOHelper(render_frame, this)));
 }
 
 void ScriptInjectionManager::OnExtensionUnloaded(
@@ -244,10 +252,11 @@ void ScriptInjectionManager::OnExtensionUnloaded(
 
 void ScriptInjectionManager::OnInjectionFinished(
     ScriptInjection* injection) {
-  ScopedVector<ScriptInjection>::iterator iter =
-      std::find(running_injections_.begin(),
-                running_injections_.end(),
-                injection);
+  auto iter =
+      std::find_if(running_injections_.begin(), running_injections_.end(),
+                   [injection](const scoped_ptr<ScriptInjection>& mode) {
+                     return injection == mode.get();
+                   });
   if (iter != running_injections_.end())
     running_injections_.erase(iter);
 }
@@ -255,8 +264,7 @@ void ScriptInjectionManager::OnInjectionFinished(
 void ScriptInjectionManager::OnUserScriptsUpdated(
     const std::set<HostID>& changed_hosts,
     const std::vector<UserScript*>& scripts) {
-  for (ScopedVector<ScriptInjection>::iterator iter =
-           pending_injections_.begin();
+  for (auto iter = pending_injections_.begin();
        iter != pending_injections_.end();) {
     if (changed_hosts.count((*iter)->host_id()) > 0)
       iter = pending_injections_.erase(iter);
@@ -266,10 +274,8 @@ void ScriptInjectionManager::OnUserScriptsUpdated(
 }
 
 void ScriptInjectionManager::RemoveObserver(RFOHelper* helper) {
-  for (ScopedVector<RFOHelper>::iterator iter = rfo_helpers_.begin();
-       iter != rfo_helpers_.end();
-       ++iter) {
-    if (*iter == helper) {
+  for (auto iter = rfo_helpers_.begin(); iter != rfo_helpers_.end(); ++iter) {
+    if (iter->get() == helper) {
       rfo_helpers_.erase(iter);
       break;
     }
@@ -281,8 +287,7 @@ void ScriptInjectionManager::InvalidateForFrame(content::RenderFrame* frame) {
   // note it.
   active_injection_frames_.erase(frame);
 
-  for (ScopedVector<ScriptInjection>::iterator iter =
-           pending_injections_.begin();
+  for (auto iter = pending_injections_.begin();
        iter != pending_injections_.end();) {
     if ((*iter)->render_frame() == frame)
       iter = pending_injections_.erase(iter);
@@ -332,13 +337,12 @@ void ScriptInjectionManager::InjectScripts(
     content::RenderFrame* frame,
     UserScript::RunLocation run_location) {
   // Find any injections that want to run on the given frame.
-  ScopedVector<ScriptInjection> frame_injections;
-  for (ScopedVector<ScriptInjection>::iterator iter =
-           pending_injections_.begin();
+  ScriptInjectionVector frame_injections;
+  for (auto iter = pending_injections_.begin();
        iter != pending_injections_.end();) {
     if ((*iter)->render_frame() == frame) {
-      frame_injections.push_back(*iter);
-      iter = pending_injections_.weak_erase(iter);
+      frame_injections.push_back(std::move(*iter));
+      iter = pending_injections_.erase(iter);
     } else {
       ++iter;
     }
@@ -346,21 +350,21 @@ void ScriptInjectionManager::InjectScripts(
 
   // Add any injections for user scripts.
   int tab_id = ExtensionFrameHelper::Get(frame)->tab_id();
-  user_script_set_manager_->GetAllInjections(
-      &frame_injections, frame, tab_id, run_location);
+  user_script_set_manager_->GetAllInjections(&frame_injections, frame, tab_id,
+                                             run_location);
 
   // Note that we are running in |frame|.
   active_injection_frames_.insert(frame);
 
   ScriptsRunInfo scripts_run_info(frame, run_location);
-  std::vector<ScriptInjection*> released_injections;
-  frame_injections.release(&released_injections);
-  for (ScriptInjection* injection : released_injections) {
+  for (auto iter = frame_injections.begin(); iter != frame_injections.end();) {
     // It's possible for the frame to be invalidated in the course of injection
     // (if a script removes its own frame, for example). If this happens, abort.
     if (!active_injection_frames_.count(frame))
       break;
-    TryToInject(make_scoped_ptr(injection), run_location, &scripts_run_info);
+    scoped_ptr<ScriptInjection> injection(std::move(*iter));
+    iter = frame_injections.erase(iter);
+    TryToInject(std::move(injection), run_location, &scripts_run_info);
   }
 
   // We are done running in the frame.
@@ -384,10 +388,10 @@ void ScriptInjectionManager::TryToInject(
       base::Bind(&ScriptInjectionManager::OnInjectionFinished,
                  base::Unretained(this)))) {
     case ScriptInjection::INJECTION_WAITING:
-      pending_injections_.push_back(injection.Pass());
+      pending_injections_.push_back(std::move(injection));
       break;
     case ScriptInjection::INJECTION_BLOCKED:
-      running_injections_.push_back(injection.Pass());
+      running_injections_.push_back(std::move(injection));
       break;
     case ScriptInjection::INJECTION_FINISHED:
       break;
@@ -399,8 +403,7 @@ void ScriptInjectionManager::HandleExecuteCode(
     content::RenderFrame* render_frame) {
   scoped_ptr<const InjectionHost> injection_host;
   if (params.host_id.type() == HostID::EXTENSIONS) {
-    injection_host = ExtensionInjectionHost::Create(params.host_id.id(),
-                                                    extensions_);
+    injection_host = ExtensionInjectionHost::Create(params.host_id.id());
     if (!injection_host)
       return;
   } else if (params.host_id.type() == HostID::WEBUI) {
@@ -411,17 +414,15 @@ void ScriptInjectionManager::HandleExecuteCode(
   scoped_ptr<ScriptInjection> injection(new ScriptInjection(
       scoped_ptr<ScriptInjector>(
           new ProgrammaticScriptInjector(params, render_frame)),
-      render_frame,
-      injection_host.Pass(),
-      static_cast<UserScript::RunLocation>(params.run_at),
-      ExtensionFrameHelper::Get(render_frame)->tab_id()));
+      render_frame, std::move(injection_host),
+      static_cast<UserScript::RunLocation>(params.run_at)));
 
   FrameStatusMap::const_iterator iter = frame_statuses_.find(render_frame);
   UserScript::RunLocation run_location =
       iter == frame_statuses_.end() ? UserScript::UNDEFINED : iter->second;
 
   ScriptsRunInfo scripts_run_info(render_frame, run_location);
-  TryToInject(injection.Pass(), run_location, &scripts_run_info);
+  TryToInject(std::move(injection), run_location, &scripts_run_info);
 }
 
 void ScriptInjectionManager::HandleExecuteDeclarativeScript(
@@ -440,17 +441,15 @@ void ScriptInjectionManager::HandleExecuteDeclarativeScript(
   if (injection.get()) {
     ScriptsRunInfo scripts_run_info(render_frame, UserScript::BROWSER_DRIVEN);
     // TODO(markdittmer): Use return value of TryToInject for error handling.
-    TryToInject(injection.Pass(),
-                UserScript::BROWSER_DRIVEN,
+    TryToInject(std::move(injection), UserScript::BROWSER_DRIVEN,
                 &scripts_run_info);
 
     scripts_run_info.LogRun();
   }
 }
 
-void ScriptInjectionManager::HandlePermitScriptInjection(int64 request_id) {
-  ScopedVector<ScriptInjection>::iterator iter =
-      pending_injections_.begin();
+void ScriptInjectionManager::HandlePermitScriptInjection(int64_t request_id) {
+  auto iter = pending_injections_.begin();
   for (; iter != pending_injections_.end(); ++iter) {
     if ((*iter)->request_id() == request_id) {
       DCHECK((*iter)->host_id().type() == HostID::EXTENSIONS);
@@ -465,15 +464,15 @@ void ScriptInjectionManager::HandlePermitScriptInjection(int64 request_id) {
   // RFOHelper's DidStartProvisionalLoad callback would have caused it to be
   // cleared out).
 
-  scoped_ptr<ScriptInjection> injection(*iter);
-  pending_injections_.weak_erase(iter);
+  scoped_ptr<ScriptInjection> injection(std::move(*iter));
+  pending_injections_.erase(iter);
 
   ScriptsRunInfo scripts_run_info(injection->render_frame(),
                                   UserScript::RUN_DEFERRED);
   ScriptInjection::InjectionResult res = injection->OnPermissionGranted(
       &scripts_run_info);
   if (res == ScriptInjection::INJECTION_BLOCKED)
-    running_injections_.push_back(injection.Pass());
+    running_injections_.push_back(std::move(injection));
   scripts_run_info.LogRun();
 }
 

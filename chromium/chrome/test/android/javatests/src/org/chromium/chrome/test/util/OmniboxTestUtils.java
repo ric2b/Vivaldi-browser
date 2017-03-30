@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 
 /**
  * Utility methods and classes for testing the Omnibox.
@@ -71,9 +70,9 @@ public class OmniboxTestUtils {
         private String mAutocompleteText;
 
         public SuggestionsResultBuilder addGeneratedSuggestion(
-                OmniboxSuggestion.Type type, String text, String url) {
+                int type, String text, String url) {
             mSuggestions.add(new OmniboxSuggestion(
-                    type.nativeType(), 0, 0, text, null, null, null, "", url, url, false, false));
+                    type, false, 0, 0, text, null, null, null, "", url, url, false, false));
             return this;
         }
 
@@ -230,9 +229,9 @@ public class OmniboxTestUtils {
             throws InterruptedException {
         for (int i = 0; i < times; i++) {
             toggleUrlBarFocus(urlBar, true);
-            Assert.assertTrue(waitForFocusAndKeyboardActive(urlBar, true));
+            waitForFocusAndKeyboardActive(urlBar, true);
             toggleUrlBarFocus(urlBar, false);
-            Assert.assertTrue(waitForFocusAndKeyboardActive(urlBar, false));
+            waitForFocusAndKeyboardActive(urlBar, false);
         }
     }
 
@@ -285,11 +284,10 @@ public class OmniboxTestUtils {
      *
      * @param urlBar The UrlBar whose focus is being inspected.
      * @param active Whether the UrlBar is expected to have focus or not.
-     * @return Whether the UrlBar had the requested focus state.
      */
-    public static boolean waitForFocusAndKeyboardActive(final UrlBar urlBar, final boolean active)
+    public static void waitForFocusAndKeyboardActive(final UrlBar urlBar, final boolean active)
             throws InterruptedException {
-        return CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return (doesUrlBarHaveFocus(urlBar) == active)
@@ -302,27 +300,37 @@ public class OmniboxTestUtils {
      * Waits for a non-empty list of omnibox suggestions is shown.
      *
      * @param locationBar The LocationBar who owns the suggestions.
-     * @return Whether the suggestions were shown.
      */
-    public static boolean waitForOmniboxSuggestions(final LocationBarLayout locationBar)
+    public static void waitForOmniboxSuggestions(final LocationBarLayout locationBar)
             throws InterruptedException {
-        return CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                try {
-                    return ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
-                        @Override
-                        public Boolean call() throws Exception {
-                            LocationBarLayout.OmniboxSuggestionsList suggestionsList =
-                                    locationBar.getSuggestionList();
-                            return suggestionsList != null
-                                    && suggestionsList.isShown()
-                                    && suggestionsList.getCount() >= 1;
-                        }
-                    });
-                } catch (ExecutionException e) {
-                    return false;
-                }
+                LocationBarLayout.OmniboxSuggestionsList suggestionsList =
+                        locationBar.getSuggestionList();
+                return suggestionsList != null
+                        && suggestionsList.isShown()
+                        && suggestionsList.getCount() >= 1;
+            }
+        });
+    }
+
+    /**
+     * Waits for a suggestion list to be shown with a specified number of entries.
+     * @param locationBar The LocationBar who owns the suggestions.
+     * @param expectedCount The number of suggestions expected to be shown.
+     */
+    public static void waitForOmniboxSuggestions(
+            final LocationBarLayout locationBar, final int expectedCount)
+            throws InterruptedException {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                LocationBarLayout.OmniboxSuggestionsList suggestionsList =
+                        locationBar.getSuggestionList();
+                return suggestionsList != null
+                        && suggestionsList.isShown()
+                        && suggestionsList.getCount() == expectedCount;
             }
         });
     }

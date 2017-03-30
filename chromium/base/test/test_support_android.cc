@@ -8,6 +8,7 @@
 #include "base/android/path_utils.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_pump_android.h"
@@ -39,9 +40,7 @@ RunState* g_state = NULL;
 // when there are no pending messages.
 class Waitable {
  public:
-   static Waitable* GetInstance() {
-     return Singleton<Waitable>::get();
-   }
+  static Waitable* GetInstance() { return base::Singleton<Waitable>::get(); }
 
    // Signals that there are more work to do.
    void Signal() {
@@ -59,7 +58,7 @@ class Waitable {
    }
 
  private:
-  friend struct DefaultSingletonTraits<Waitable>;
+  friend struct base::DefaultSingletonTraits<Waitable>;
 
   Waitable()
       : waitable_event_(false, false) {

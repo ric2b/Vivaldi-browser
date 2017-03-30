@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
@@ -14,6 +16,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/install_signer.h"
@@ -35,6 +38,9 @@
 namespace extensions {
 
 namespace {
+
+// This should only be set during tests.
+bool g_bypass_for_test = false;
 
 enum VerifyStatus {
   NONE = 0,   // Do not request install signatures, and do not enforce them.
@@ -66,7 +72,11 @@ VerifyStatus GetExperimentStatus() {
     return ENFORCE_STRICT;
   }
 
+#if defined(OS_WIN)
+  VerifyStatus default_status = ENFORCE;
+#else
   VerifyStatus default_status = NONE;
+#endif
 
   if (group == "EnforceStrict")
     return ENFORCE_STRICT;
@@ -103,7 +113,10 @@ VerifyStatus GetCommandLineStatus() {
 }
 
 VerifyStatus GetStatus() {
-  return std::max(GetExperimentStatus(), GetCommandLineStatus());
+  if (g_bypass_for_test)
+    return NONE;
+  else
+    return std::max(GetExperimentStatus(), GetCommandLineStatus());
 }
 
 bool ShouldFetchSignature() {
@@ -229,7 +242,7 @@ void InstallVerifier::Init() {
       LogInitResultHistogram(INIT_INVALID_SIGNATURE);
       DVLOG(1) << "Init - ignoring invalid signature";
     } else {
-      signature_ = signature_from_prefs.Pass();
+      signature_ = std::move(signature_from_prefs);
       LogInitResultHistogram(INIT_VALID_SIGNATURE);
       UMA_HISTOGRAM_COUNTS_100("ExtensionInstallVerifier.InitSignatureCount",
                                signature_->ids.size());
@@ -630,7 +643,7 @@ void InstallVerifier::SignatureCallback(
     // TODO(asargent) - if this was something like a network error, we need to
     // do retries with exponential back off.
   } else {
-    signature_ = signature.Pass();
+    signature_ = std::move(signature);
     SaveToPrefs();
 
     if (!provisional_.empty()) {
@@ -644,6 +657,20 @@ void InstallVerifier::SignatureCallback(
 
   if (!operation_queue_.empty())
     BeginFetch();
+}
+
+ScopedInstallVerifierBypassForTest::ScopedInstallVerifierBypassForTest()
+    : old_value_(ShouldBypass()) {
+  g_bypass_for_test = true;
+}
+
+ScopedInstallVerifierBypassForTest::~ScopedInstallVerifierBypassForTest() {
+  g_bypass_for_test = old_value_;
+}
+
+// static
+bool ScopedInstallVerifierBypassForTest::ShouldBypass() {
+  return g_bypass_for_test;
 }
 
 }  // namespace extensions

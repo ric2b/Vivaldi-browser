@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
@@ -81,6 +82,10 @@ class CertificateManagerModel {
   // Returns a net error code on failure.
   int ImportFromPKCS12(net::CryptoModule* module, const std::string& data,
                        const base::string16& password, bool is_extractable);
+
+  // Import user certificate from DER encoded |data|.
+  // Returns a net error code on failure.
+  int ImportUserCert(const std::string& data);
 
   // Import CA certificates.
   // Tries to import all the certificates given.  The root will be trusted

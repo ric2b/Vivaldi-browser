@@ -2,22 +2,25 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import sys
+import unittest
 
 from telemetry import decorators
 from telemetry.page import page
 from telemetry.testing import options_for_unittests
 from telemetry.testing import page_test_test_case
 from telemetry.util import wpr_modes
+from telemetry.value import scalar
 
 from measurements import smoothness
+
+import mock
 
 
 class FakeTracingController(object):
   def __init__(self):
-    self.category_filter = None
-  def Start(self, options, category_filter):
-    del options  # unused
-    self.category_filter = category_filter
+    self.config = None
+  def StartTracing(self, config):
+    self.config = config
 
   def IsChromeTracingSupported(self):
     return True
@@ -37,8 +40,28 @@ class FakeTab(object):
   def __init__(self):
     self.browser = FakeBrowser()
 
+  def CollectGarbage(self):
+    pass
+
   def ExecuteJavaScript(self, js):
     pass
+
+
+class CustomResultsWrapperUnitTest(unittest.TestCase):
+  def testOnlyOneInteractionRecordPerPage(self):
+    test_page = page.Page('http://dummy', None)
+
+    #pylint: disable=protected-access
+    results_wrapper = smoothness._CustomResultsWrapper()
+    results_wrapper.SetResults(mock.Mock())
+
+    results_wrapper.SetTirLabel('foo')
+    results_wrapper.AddValue(scalar.ScalarValue(test_page, 'num', 'ms', 44))
+
+    results_wrapper.SetTirLabel('bar')
+    with self.assertRaises(AssertionError):
+      results_wrapper.AddValue(scalar.ScalarValue(test_page, 'num', 'ms', 42))
+
 
 class SmoothnessUnitTest(page_test_test_case.PageTestTestCase):
   """Smoke test for smoothness measurement
@@ -47,8 +70,10 @@ class SmoothnessUnitTest(page_test_test_case.PageTestTestCase):
      that all metrics were added to the results. The test is purely functional,
      i.e. it only checks if the metrics are present and non-zero.
   """
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
+  def setUp(self):
+    self._options = options_for_unittests.GetCopy()
+    self._options.browser_options.wpr_mode = wpr_modes.WPR_OFF
+
   def testSyntheticDelayConfiguration(self):
     test_page = page.Page('http://dummy', None)
     test_page.synthetic_delays = {
@@ -69,7 +94,7 @@ class SmoothnessUnitTest(page_test_test_case.PageTestTestCase):
     ])
     tracing_controller = tab.browser.platform.tracing_controller
     actual_synthetic_delay = (
-      tracing_controller.category_filter.synthetic_delays)
+      tracing_controller.config.tracing_category_filter.synthetic_delays)
 
     if expected_synthetic_delay != actual_synthetic_delay:
       sys.stderr.write("Expected category filter: %s\n" %
@@ -78,12 +103,6 @@ class SmoothnessUnitTest(page_test_test_case.PageTestTestCase):
                        repr(actual_synthetic_delay))
     self.assertEquals(expected_synthetic_delay, actual_synthetic_delay)
 
-  def setUp(self):
-    self._options = options_for_unittests.GetCopy()
-    self._options.browser_options.wpr_mode = wpr_modes.WPR_OFF
-
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   @decorators.Disabled('chromeos')  # crbug.com/483212
   def testSmoothness(self):
     ps = self.CreateStorySetFromFileInUnittestDataDir('scrollable_page.html')
@@ -116,8 +135,6 @@ class SmoothnessUnitTest(page_test_test_case.PageTestTestCase):
       self.assertGreater(
           mean_input_event_latency[0].GetRepresentativeNumber(), 0)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   @decorators.Enabled('android')  # SurfaceFlinger is android-only
   def testSmoothnessSurfaceFlingerMetricsCalculated(self):
     ps = self.CreateStorySetFromFileInUnittestDataDir('scrollable_page.html')

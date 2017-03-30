@@ -25,8 +25,6 @@ import org.chromium.android_webview.JsPromptResultReceiver;
 import org.chromium.android_webview.JsResultReceiver;
 import org.chromium.android_webview.permission.AwPermissionRequest;
 import org.chromium.base.ThreadUtils;
-import org.chromium.content.browser.SelectActionMode;
-import org.chromium.content.browser.SelectActionModeCallback.ActionHandler;
 
 import java.security.Principal;
 
@@ -52,7 +50,7 @@ public class NullContentsClient extends AwContentsClient {
     }
 
     @Override
-    public boolean shouldOverrideUrlLoading(String url) {
+    public boolean shouldOverrideUrlLoading(AwContentsClient.AwWebResourceRequest request) {
         return false;
     }
 
@@ -80,17 +78,6 @@ public class NullContentsClient extends AwContentsClient {
 
     @Override
     public boolean shouldOverrideKeyEvent(KeyEvent event) {
-        return false;
-    }
-
-    @Override
-    public SelectActionMode startActionMode(
-            View view, ActionHandler actionHandler, boolean floating) {
-        return null;
-    }
-
-    @Override
-    public boolean supportsFloatingActionMode() {
         return false;
     }
 

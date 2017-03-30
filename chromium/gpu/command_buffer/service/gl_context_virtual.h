@@ -5,17 +5,19 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_GL_CONTEXT_VIRTUAL_H_
 #define GPU_COMMAND_BUFFER_SERVICE_GL_CONTEXT_VIRTUAL_H_
 
-#include "base/compiler_specific.h"
+#include <string>
+#include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "gpu/gpu_export.h"
 #include "ui/gl/gl_context.h"
 
 namespace gfx {
-class Display;
+class GPUPreference;
+class GPUTimingClient;
+class GLShareGroup;
 class GLSurface;
-class GLStateRestorer;
 }
 
 namespace gpu {
@@ -34,7 +36,6 @@ class GPU_EXPORT GLContextVirtual : public gfx::GLContext {
   // Implement GLContext.
   bool Initialize(gfx::GLSurface* compatible_surface,
                   gfx::GpuPreference gpu_preference) override;
-  void Destroy() override;
   bool MakeCurrent(gfx::GLSurface* surface) override;
   void ReleaseCurrent(gfx::GLSurface* surface) override;
   bool IsCurrent(gfx::GLSurface* surface) override;
@@ -42,7 +43,6 @@ class GPU_EXPORT GLContextVirtual : public gfx::GLContext {
   scoped_refptr<gfx::GPUTimingClient> CreateGPUTimingClient() override;
   void OnSetSwapInterval(int interval) override;
   std::string GetExtensions() override;
-  bool GetTotalGpuMemory(size_t* bytes) override;
   void SetSafeToForceGpuSwitch() override;
   bool WasAllocatedUsingRobustnessExtension() override;
   void SetUnbindFboOnMakeCurrent() override;
@@ -53,6 +53,8 @@ class GPU_EXPORT GLContextVirtual : public gfx::GLContext {
   ~GLContextVirtual() override;
 
  private:
+  void Destroy();
+
   scoped_refptr<gfx::GLContext> shared_context_;
   base::WeakPtr<gles2::GLES2Decoder> decoder_;
 

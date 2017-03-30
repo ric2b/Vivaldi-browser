@@ -5,9 +5,11 @@
 #ifndef CC_TEST_SCHEDULER_TEST_COMMON_H_
 #define CC_TEST_SCHEDULER_TEST_COMMON_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "cc/scheduler/compositor_timing_history.h"
@@ -109,6 +111,8 @@ class FakeBeginFrameSource : public BeginFrameSourceBase {
   void DidFinishFrame(size_t remaining_frames) override;
   void AsValueInto(base::trace_event::TracedValue* dict) const override;
 
+  using BeginFrameSourceBase::SetBeginFrameSourcePaused;
+
  private:
   bool remaining_frames_;
 
@@ -150,7 +154,7 @@ class TestSyntheticBeginFrameSource : public SyntheticBeginFrameSource {
         TestDelayBasedTimeSource::Create(now_src, initial_interval,
                                          task_runner);
     return make_scoped_ptr(
-        new TestSyntheticBeginFrameSource(time_source.Pass()));
+        new TestSyntheticBeginFrameSource(std::move(time_source)));
   }
 
  protected:
@@ -169,12 +173,20 @@ class FakeCompositorTimingHistory : public CompositorTimingHistory {
   void SetAllEstimatesTo(base::TimeDelta duration);
 
   void SetBeginMainFrameToCommitDurationEstimate(base::TimeDelta duration);
+  void SetBeginMainFrameQueueDurationCriticalEstimate(base::TimeDelta duration);
+  void SetBeginMainFrameQueueDurationNotCriticalEstimate(
+      base::TimeDelta duration);
+  void SetBeginMainFrameStartToCommitDurationEstimate(base::TimeDelta duration);
   void SetCommitToReadyToActivateDurationEstimate(base::TimeDelta duration);
   void SetPrepareTilesDurationEstimate(base::TimeDelta duration);
   void SetActivateDurationEstimate(base::TimeDelta duration);
   void SetDrawDurationEstimate(base::TimeDelta duration);
 
   base::TimeDelta BeginMainFrameToCommitDurationEstimate() const override;
+  base::TimeDelta BeginMainFrameQueueDurationCriticalEstimate() const override;
+  base::TimeDelta BeginMainFrameQueueDurationNotCriticalEstimate()
+      const override;
+  base::TimeDelta BeginMainFrameStartToCommitDurationEstimate() const override;
   base::TimeDelta CommitToReadyToActivateDurationEstimate() const override;
   base::TimeDelta PrepareTilesDurationEstimate() const override;
   base::TimeDelta ActivateDurationEstimate() const override;
@@ -188,6 +200,9 @@ class FakeCompositorTimingHistory : public CompositorTimingHistory {
       rendering_stats_instrumentation_owned_;
 
   base::TimeDelta begin_main_frame_to_commit_duration_;
+  base::TimeDelta begin_main_frame_queue_duration_critical_;
+  base::TimeDelta begin_main_frame_queue_duration_not_critical_;
+  base::TimeDelta begin_main_frame_start_to_commit_duration_;
   base::TimeDelta commit_to_ready_to_activate_duration_;
   base::TimeDelta prepare_tiles_duration_;
   base::TimeDelta activate_duration_;
@@ -215,21 +230,29 @@ class TestScheduler : public Scheduler {
 
   bool SwapThrottled() const { return state_machine_.SwapThrottled(); }
 
-  bool CanStart() const { return state_machine_.CanStartForTesting(); }
-
-  bool NeedsCommit() const { return state_machine_.needs_commit(); }
+  bool NeedsBeginMainFrame() const {
+    return state_machine_.needs_begin_main_frame();
+  }
 
   BeginFrameSource& frame_source() { return *frame_source_; }
   bool FrameProductionThrottled() { return throttle_frame_production_; }
 
-  bool MainThreadIsInHighLatencyMode() const {
-    return state_machine_.MainThreadIsInHighLatencyMode();
+  bool MainThreadMissedLastDeadline() const {
+    return state_machine_.main_thread_missed_last_deadline();
   }
 
   ~TestScheduler() override;
 
   base::TimeDelta BeginImplFrameInterval() {
     return begin_impl_frame_tracker_.Interval();
+  }
+
+  // Note: This setting will be overriden on the next BeginFrame in the
+  // scheduler. To control the value it gets on the next BeginFrame
+  // Pass in a fake CompositorTimingHistory that indicates BeginMainFrame
+  // to Activation is fast.
+  void SetCriticalBeginMainFrameToActivateIsFast(bool is_fast) {
+    state_machine_.SetCriticalBeginMainFrameToActivateIsFast(is_fast);
   }
 
  protected:

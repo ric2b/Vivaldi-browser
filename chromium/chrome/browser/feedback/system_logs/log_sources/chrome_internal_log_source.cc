@@ -7,17 +7,23 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/prefs/pref_service.h"
 #include "base/sys_info.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/sync/about_sync_util.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/common/chrome_version_info.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "chrome/common/channel_info.h"
+#include "chrome/common/pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/sync_driver/about_sync_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/metrics/chromeos_metrics_provider.h"
+#endif
 
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
@@ -29,11 +35,31 @@ const char kSyncDataKey[] = "about_sync_data";
 const char kExtensionsListKey[] = "extensions";
 const char kDataReductionProxyKey[] = "data_reduction_proxy";
 const char kChromeVersionTag[] = "CHROME VERSION";
-#if !defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
+const char kChromeEnrollmentTag[] = "ENTERPRISE_ENROLLED";
+#else
 const char kOsVersionTag[] = "OS VERSION";
 #endif
 #if defined(OS_WIN)
 const char kUsbKeyboardDetected[] = "usb_keyboard_detected";
+#endif
+
+#if defined(OS_CHROMEOS)
+std::string GetEnrollmentStatusString() {
+  switch (ChromeOSMetricsProvider::GetEnrollmentStatus()) {
+    case ChromeOSMetricsProvider::NON_MANAGED:
+      return "Not managed";
+    case ChromeOSMetricsProvider::MANAGED:
+      return "Managed";
+    case ChromeOSMetricsProvider::UNUSED:
+    case ChromeOSMetricsProvider::ERROR_GETTING_ENROLLMENT_STATUS:
+    case ChromeOSMetricsProvider::ENROLLMENT_STATUS_MAX:
+      return "Error retrieving status";
+  }
+  // For compilers that don't recognize all cases handled above.
+  NOTREACHED();
+  return std::string();
+}
 #endif
 
 }  // namespace
@@ -53,10 +79,11 @@ void ChromeInternalLogSource::Fetch(const SysLogsSourceCallback& callback) {
 
   SystemLogsResponse response;
 
-  chrome::VersionInfo version_info;
-  response[kChromeVersionTag] =  version_info.CreateVersionString();
+  response[kChromeVersionTag] = chrome::GetVersionString();
 
-#if !defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
+  response[kChromeEnrollmentTag] = GetEnrollmentStatusString();
+#else
   // On ChromeOS, this will be pulled in from the LSB_RELEASE.
   std::string os_version = base::SysInfo::OperatingSystemName() + ": " +
                            base::SysInfo::OperatingSystemVersion();
@@ -86,11 +113,12 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
   ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
   scoped_ptr<base::DictionaryValue> sync_logs(
-      sync_ui_util::ConstructAboutInformation(service));
+      sync_driver::sync_ui_util::ConstructAboutInformation(
+          service, service->signin(), chrome::GetChannel()));
 
   // Remove identity section.
   base::ListValue* details = NULL;
-  sync_logs->GetList(kDetailsKey, &details);
+  sync_logs->GetList(sync_driver::sync_ui_util::kDetailsKey, &details);
   if (!details)
     return;
   for (base::ListValue::iterator it = details->begin();
@@ -99,7 +127,7 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
     if ((*it)->GetAsDictionary(&dict)) {
       std::string title;
       dict->GetString("title", &title);
-      if (title == kIdentityTitle) {
+      if (title == sync_driver::sync_ui_util::kIdentityTitle) {
         details->Erase(it, NULL);
         break;
       }
@@ -116,7 +144,7 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
 
 void ChromeInternalLogSource::PopulateExtensionInfoLogs(
     SystemLogsResponse* response) {
-  if (!ChromeMetricsServiceAccessor::IsCrashReportingEnabled())
+  if (!ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled())
     return;
 
   Profile* primary_profile =
@@ -145,10 +173,9 @@ void ChromeInternalLogSource::PopulateExtensionInfoLogs(
 void ChromeInternalLogSource::PopulateDataReductionProxyLogs(
     SystemLogsResponse* response) {
   PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
-  bool is_data_reduction_proxy_enabled = prefs->HasPrefPath(
-          data_reduction_proxy::prefs::kDataReductionProxyEnabled) &&
-      prefs->GetBoolean(
-          data_reduction_proxy::prefs::kDataReductionProxyEnabled);
+  bool is_data_reduction_proxy_enabled =
+      prefs->HasPrefPath(prefs::kDataSaverEnabled) &&
+      prefs->GetBoolean(prefs::kDataSaverEnabled);
   (*response)[kDataReductionProxyKey] = is_data_reduction_proxy_enabled ?
       "enabled" : "disabled";
 }

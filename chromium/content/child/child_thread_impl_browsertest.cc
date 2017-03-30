@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/child/child_thread_impl.h"
+
+#include <stddef.h>
+#include <string.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/discardable_memory.h"
@@ -9,13 +15,13 @@
 #include "base/time/time.h"
 #include "content/child/child_discardable_shared_memory_manager.h"
 #include "content/child/child_gpu_memory_buffer_manager.h"
-#include "content/child/child_thread_impl.h"
 #include "content/common/gpu/client/gpu_memory_buffer_impl.h"
 #include "content/common/host_discardable_shared_memory_manager.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "ui/gfx/buffer_format_util.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -58,8 +64,7 @@ class ChildThreadImplBrowserTest : public ContentBrowserTest {
   ChildDiscardableSharedMemoryManager* child_discardable_shared_memory_manager_;
 };
 
-IN_PROC_BROWSER_TEST_F(ChildThreadImplBrowserTest,
-                       DISABLED_LockDiscardableMemory) {
+IN_PROC_BROWSER_TEST_F(ChildThreadImplBrowserTest, LockDiscardableMemory) {
   const size_t kSize = 1024 * 1024;  // 1MiB.
 
   scoped_ptr<base::DiscardableMemory> memory =
@@ -80,7 +85,7 @@ IN_PROC_BROWSER_TEST_F(ChildThreadImplBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ChildThreadImplBrowserTest,
-                       DISABLED_DiscardableMemoryAddressSpace) {
+                       DiscardableMemoryAddressSpace) {
   const size_t kLargeSize = 4 * 1024 * 1024;   // 4MiB.
   const size_t kNumberOfInstances = 1024 + 1;  // >4GiB total.
 
@@ -93,12 +98,12 @@ IN_PROC_BROWSER_TEST_F(ChildThreadImplBrowserTest,
     void* addr = memory->data();
     ASSERT_NE(nullptr, addr);
     memory->Unlock();
-    instances.push_back(memory.Pass());
+    instances.push_back(std::move(memory));
   }
 }
 
 IN_PROC_BROWSER_TEST_F(ChildThreadImplBrowserTest,
-                       DISABLED_ReleaseFreeDiscardableMemory) {
+                       ReleaseFreeDiscardableMemory) {
   const size_t kSize = 1024 * 1024;  // 1MiB.
 
   scoped_ptr<base::DiscardableMemory> memory =
@@ -129,7 +134,7 @@ enum NativeBufferFlag { kDisableNativeBuffers, kEnableNativeBuffers };
 class ChildThreadImplGpuMemoryBufferBrowserTest
     : public ChildThreadImplBrowserTest,
       public testing::WithParamInterface<
-          ::testing::tuple<NativeBufferFlag, gfx::GpuMemoryBuffer::Format>> {
+          ::testing::tuple<NativeBufferFlag, gfx::BufferFormat>> {
  public:
   // Overridden from BrowserTestBase:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -140,6 +145,7 @@ class ChildThreadImplGpuMemoryBufferBrowserTest
         command_line->AppendSwitch(switches::kEnableNativeGpuMemoryBuffers);
         break;
       case kDisableNativeBuffers:
+        command_line->AppendSwitch(switches::kDisableNativeGpuMemoryBuffers);
         break;
     }
   }
@@ -147,50 +153,43 @@ class ChildThreadImplGpuMemoryBufferBrowserTest
 
 IN_PROC_BROWSER_TEST_P(ChildThreadImplGpuMemoryBufferBrowserTest,
                        DISABLED_Map) {
-  gfx::GpuMemoryBuffer::Format format = ::testing::get<1>(GetParam());
+  gfx::BufferFormat format = ::testing::get<1>(GetParam());
   gfx::Size buffer_size(4, 4);
 
   scoped_ptr<gfx::GpuMemoryBuffer> buffer =
       child_gpu_memory_buffer_manager()->AllocateGpuMemoryBuffer(
-          buffer_size, format, gfx::GpuMemoryBuffer::MAP);
+          buffer_size, format, gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
   ASSERT_TRUE(buffer);
   EXPECT_EQ(format, buffer->GetFormat());
 
-  size_t num_planes =
-      GpuMemoryBufferImpl::NumberOfPlanesForGpuMemoryBufferFormat(format);
-
   // Map buffer planes.
-  scoped_ptr<void* []> planes(new void* [num_planes]);
-  bool rv = buffer->Map(planes.get());
-  ASSERT_TRUE(rv);
-  EXPECT_TRUE(buffer->IsMapped());
-
-  // Get strides.
-  scoped_ptr<int[]> strides(new int[num_planes]);
-  buffer->GetStride(strides.get());
+  ASSERT_TRUE(buffer->Map());
 
   // Write to buffer and check result.
+  size_t num_planes = gfx::NumberOfPlanesForBufferFormat(format);
   for (size_t plane = 0; plane < num_planes; ++plane) {
-    size_t row_size_in_bytes = 0;
-    EXPECT_TRUE(GpuMemoryBufferImpl::RowSizeInBytes(buffer_size.width(), format,
-                                                    plane, &row_size_in_bytes));
+    ASSERT_TRUE(buffer->memory(plane));
+    ASSERT_TRUE(buffer->stride(plane));
+    size_t row_size_in_bytes =
+        gfx::RowSizeForBufferFormat(buffer_size.width(), format, plane);
+    EXPECT_GT(row_size_in_bytes, 0u);
 
     scoped_ptr<char[]> data(new char[row_size_in_bytes]);
     memset(data.get(), 0x2a + plane, row_size_in_bytes);
     size_t height = buffer_size.height() /
-                    GpuMemoryBufferImpl::SubsamplingFactor(format, plane);
+                    gfx::SubsamplingFactorForBufferFormat(format, plane);
     for (size_t y = 0; y < height; ++y) {
       // Copy |data| to row |y| of |plane| and verify result.
-      memcpy(static_cast<char*>(planes[plane]) + y * strides[plane], data.get(),
-             row_size_in_bytes);
-      EXPECT_EQ(memcmp(static_cast<char*>(planes[plane]) + y * strides[plane],
-                       data.get(), row_size_in_bytes),
-                0);
+      memcpy(
+          static_cast<char*>(buffer->memory(plane)) + y * buffer->stride(plane),
+          data.get(), row_size_in_bytes);
+      EXPECT_EQ(0, memcmp(static_cast<char*>(buffer->memory(plane)) +
+                              y * buffer->stride(plane),
+                          data.get(), row_size_in_bytes));
     }
   }
 
   buffer->Unmap();
-  EXPECT_FALSE(buffer->IsMapped());
 }
 
 INSTANTIATE_TEST_CASE_P(
@@ -199,11 +198,11 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Combine(::testing::Values(kDisableNativeBuffers,
                                          kEnableNativeBuffers),
                        // These formats are guaranteed to work on all platforms.
-                       ::testing::Values(gfx::GpuMemoryBuffer::R_8,
-                                         gfx::GpuMemoryBuffer::RGBA_4444,
-                                         gfx::GpuMemoryBuffer::RGBA_8888,
-                                         gfx::GpuMemoryBuffer::BGRA_8888,
-                                         gfx::GpuMemoryBuffer::YUV_420)));
+                       ::testing::Values(gfx::BufferFormat::R_8,
+                                         gfx::BufferFormat::RGBA_4444,
+                                         gfx::BufferFormat::RGBA_8888,
+                                         gfx::BufferFormat::BGRA_8888,
+                                         gfx::BufferFormat::YUV_420)));
 
 }  // namespace
 }  // namespace content

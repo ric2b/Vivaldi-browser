@@ -10,15 +10,21 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/content_client.h"
+#include "net/base/ip_endpoint.h"
 #include "net/cert/x509_certificate.h"
 #include "ppapi/c/private/ppb_net_address_private.h"
 #include "ppapi/shared_impl/private/net_address_private_impl.h"
 #include "ppapi/shared_impl/private/ppb_x509_certificate_private_shared.h"
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/network/firewall_hole.h"
+#endif  // defined(OS_CHROMEOS)
 
 namespace content {
 namespace pepper_socket_utils {
@@ -28,7 +34,7 @@ SocketPermissionRequest CreateSocketPermissionRequest(
     const PP_NetAddress_Private& net_addr) {
   std::string host =
       ppapi::NetAddressPrivateImpl::DescribeNetAddress(net_addr, false);
-  uint16 port = 0;
+  uint16_t port = 0;
   std::vector<unsigned char> address;
   ppapi::NetAddressPrivateImpl::NetAddressToIPEndPoint(
       net_addr, &address, &port);
@@ -43,7 +49,7 @@ bool CanUseSocketAPIs(bool external_plugin,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!external_plugin) {
     // Always allow socket APIs for out-process plugins (other than external
-    // plugins instantiated by the embeeder through
+    // plugins instantiated by the embedder through
     // BrowserPpapiHost::CreateExternalPluginProcess).
     return true;
   }
@@ -81,10 +87,11 @@ bool GetCertificateFields(const net::X509Certificate& cert,
                    new base::StringValue(issuer.country_name));
   fields->SetField(
       PP_X509CERTIFICATE_PRIVATE_ISSUER_ORGANIZATION_NAME,
-      new base::StringValue(JoinString(issuer.organization_names, '\n')));
+      new base::StringValue(base::JoinString(issuer.organization_names, "\n")));
   fields->SetField(
       PP_X509CERTIFICATE_PRIVATE_ISSUER_ORGANIZATION_UNIT_NAME,
-      new base::StringValue(JoinString(issuer.organization_unit_names, '\n')));
+      new base::StringValue(
+          base::JoinString(issuer.organization_unit_names, "\n")));
 
   const net::CertPrincipal& subject = cert.subject();
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_SUBJECT_COMMON_NAME,
@@ -97,10 +104,12 @@ bool GetCertificateFields(const net::X509Certificate& cert,
                    new base::StringValue(subject.country_name));
   fields->SetField(
       PP_X509CERTIFICATE_PRIVATE_SUBJECT_ORGANIZATION_NAME,
-      new base::StringValue(JoinString(subject.organization_names, '\n')));
+      new base::StringValue(
+          base::JoinString(subject.organization_names, "\n")));
   fields->SetField(
       PP_X509CERTIFICATE_PRIVATE_SUBJECT_ORGANIZATION_UNIT_NAME,
-      new base::StringValue(JoinString(subject.organization_unit_names, '\n')));
+      new base::StringValue(
+          base::JoinString(subject.organization_unit_names, "\n")));
 
   const std::string& serial_number = cert.serial_number();
   fields->SetField(PP_X509CERTIFICATE_PRIVATE_SERIAL_NUMBER,
@@ -127,6 +136,70 @@ bool GetCertificateFields(const char* der,
     return false;
   return GetCertificateFields(*cert.get(), fields);
 }
+
+#if defined(OS_CHROMEOS)
+namespace {
+
+const unsigned char kIPv4Empty[] = {0, 0, 0, 0};
+const unsigned char kIPv6Empty[] =
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+const unsigned char kIPv6Loopback[] =
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+
+bool IsLoopbackAddress(const net::IPAddressNumber& address) {
+  if (address.size() == net::kIPv4AddressSize) {
+    // The entire IPv4 subnet 127.0.0.0/8 is for loopback. See RFC3330.
+    return address[0] == 0x7f;
+  } else if (address.size() == net::kIPv6AddressSize) {
+    // ::1 is the only loopback address in ipv6.
+    return std::equal(&kIPv6Loopback[0], &kIPv6Loopback[net::kIPv6AddressSize],
+                      address.begin());
+  }
+  return false;
+}
+
+std::string AddressToFirewallString(const net::IPAddressNumber& address) {
+  if (address.empty()) {
+    return std::string();
+  }
+  if (address.size() == net::kIPv4AddressSize &&
+      std::equal(&kIPv4Empty[0], &kIPv4Empty[net::kIPv4AddressSize],
+                 address.begin())) {
+    return std::string();
+  }
+  if (address.size() == net::kIPv6AddressSize &&
+      std::equal(&kIPv6Empty[0], &kIPv6Empty[net::kIPv6AddressSize],
+                 address.begin())) {
+    return std::string();
+  }
+
+  return net::IPAddressToString(address);
+}
+
+}  // namespace
+
+void OpenFirewallHole(const net::IPEndPoint& address,
+                      chromeos::FirewallHole::PortType type,
+                      FirewallHoleOpenCallback callback) {
+  if (IsLoopbackAddress(address.address())) {
+    callback.Run(nullptr);
+    return;
+  }
+  std::string address_string = AddressToFirewallString(address.address());
+
+  chromeos::FirewallHole::Open(type, address.port(), address_string, callback);
+}
+
+void OpenTCPFirewallHole(const net::IPEndPoint& address,
+                         FirewallHoleOpenCallback callback) {
+  OpenFirewallHole(address, chromeos::FirewallHole::PortType::TCP, callback);
+}
+
+void OpenUDPFirewallHole(const net::IPEndPoint& address,
+                         FirewallHoleOpenCallback callback) {
+  OpenFirewallHole(address, chromeos::FirewallHole::PortType::UDP, callback);
+}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace pepper_socket_utils
 }  // namespace content

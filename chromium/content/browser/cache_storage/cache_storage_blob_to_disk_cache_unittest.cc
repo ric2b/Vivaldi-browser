@@ -5,10 +5,12 @@
 #include "content/browser/cache_storage/cache_storage_blob_to_disk_cache.h"
 
 #include <string>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/null_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -35,14 +37,32 @@ const int kCacheEntryIndex = 1;
 void DoNothingCompletion(int rv) {
 }
 
+class NullURLRequestContextGetter : public net::URLRequestContextGetter {
+ public:
+  NullURLRequestContextGetter() : null_task_runner_(new base::NullTaskRunner) {}
+
+  net::URLRequestContext* GetURLRequestContext() override { return nullptr; }
+
+  scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
+      const override {
+    return null_task_runner_;
+  }
+
+ private:
+  ~NullURLRequestContextGetter() override {}
+
+  scoped_refptr<base::SingleThreadTaskRunner> null_task_runner_;
+};
+
 // Returns a BlobProtocolHandler that uses |blob_storage_context|. Caller owns
 // the memory.
-storage::BlobProtocolHandler* CreateMockBlobProtocolHandler(
+scoped_ptr<storage::BlobProtocolHandler> CreateMockBlobProtocolHandler(
     storage::BlobStorageContext* blob_storage_context) {
   // The FileSystemContext and thread task runner are not actually used but a
   // task runner is needed to avoid a DCHECK in BlobURLRequestJob ctor.
-  return new storage::BlobProtocolHandler(
-      blob_storage_context, nullptr, base::ThreadTaskRunnerHandle::Get().get());
+  return make_scoped_ptr(new storage::BlobProtocolHandler(
+      blob_storage_context, nullptr,
+      base::ThreadTaskRunnerHandle::Get().get()));
 }
 
 // A CacheStorageBlobToDiskCache that can delay reading from blobs.
@@ -151,8 +171,8 @@ class CacheStorageBlobToDiskCacheTest : public testing::Test {
         blob_storage_context_->GetBlobDataFromUUID(blob_handle_->uuid()));
 
     cache_storage_blob_to_disk_cache_->StreamBlobToCache(
-        disk_cache_entry_.Pass(), kCacheEntryIndex, url_request_context_getter_,
-        new_data_handle.Pass(),
+        std::move(disk_cache_entry_), kCacheEntryIndex,
+        url_request_context_getter_, std::move(new_data_handle),
         base::Bind(&CacheStorageBlobToDiskCacheTest::StreamCallback,
                    base::Unretained(this)));
 
@@ -162,7 +182,7 @@ class CacheStorageBlobToDiskCacheTest : public testing::Test {
   }
 
   void StreamCallback(disk_cache::ScopedEntryPtr entry_ptr, bool success) {
-    disk_cache_entry_ = entry_ptr.Pass();
+    disk_cache_entry_ = std::move(entry_ptr);
     callback_success_ = success;
     callback_called_ = true;
   }
@@ -241,6 +261,11 @@ TEST_F(CacheStorageBlobToDiskCacheTest,
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(callback_called_);
   EXPECT_FALSE(callback_success_);
+}
+
+TEST_F(CacheStorageBlobToDiskCacheTest, StreamWithNullContextRequest) {
+  url_request_context_getter_ = new NullURLRequestContextGetter();
+  EXPECT_FALSE(Stream());
 }
 
 }  // namespace

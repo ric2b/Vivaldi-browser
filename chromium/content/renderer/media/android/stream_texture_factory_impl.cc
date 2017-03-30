@@ -4,7 +4,9 @@
 
 #include "content/renderer/media/android/stream_texture_factory_impl.h"
 
+#include "base/macros.h"
 #include "cc/output/context_provider.h"
+#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/gpu/client/gpu_channel_host.h"
 #include "content/common/gpu/gpu_messages.h"
 #include "content/renderer/gpu/stream_texture_host_android.h"
@@ -22,7 +24,7 @@ class StreamTextureProxyImpl : public StreamTextureProxy,
   ~StreamTextureProxyImpl() override;
 
   // StreamTextureProxy implementation:
-  void BindToLoop(int32 stream_id,
+  void BindToLoop(int32_t stream_id,
                   cc::VideoFrameProvider::Client* client,
                   scoped_refptr<base::SingleThreadTaskRunner> loop) override;
   void Release() override;
@@ -32,7 +34,7 @@ class StreamTextureProxyImpl : public StreamTextureProxy,
   void OnMatrixChanged(const float matrix[16]) override;
 
  private:
-  void BindOnThread(int32 stream_id);
+  void BindOnThread(int32_t stream_id);
 
   const scoped_ptr<StreamTextureHost> host_;
 
@@ -66,7 +68,7 @@ void StreamTextureProxyImpl::Release() {
 }
 
 void StreamTextureProxyImpl::BindToLoop(
-    int32 stream_id,
+    int32_t stream_id,
     cc::VideoFrameProvider::Client* client,
     scoped_refptr<base::SingleThreadTaskRunner> loop) {
   DCHECK(loop.get());
@@ -90,7 +92,7 @@ void StreamTextureProxyImpl::BindToLoop(
                             stream_id));
 }
 
-void StreamTextureProxyImpl::BindOnThread(int32 stream_id) {
+void StreamTextureProxyImpl::BindOnThread(int32_t stream_id) {
   host_->BindToCurrentThread(stream_id, this);
 }
 
@@ -110,19 +112,15 @@ void StreamTextureProxyImpl::OnMatrixChanged(const float matrix[16]) {
 
 // static
 scoped_refptr<StreamTextureFactoryImpl> StreamTextureFactoryImpl::Create(
-    const scoped_refptr<cc::ContextProvider>& context_provider,
-    GpuChannelHost* channel,
-    int frame_id) {
-  return new StreamTextureFactoryImpl(context_provider, channel, frame_id);
+    const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
+    GpuChannelHost* channel) {
+  return new StreamTextureFactoryImpl(context_provider, channel);
 }
 
 StreamTextureFactoryImpl::StreamTextureFactoryImpl(
-    const scoped_refptr<cc::ContextProvider>& context_provider,
-    GpuChannelHost* channel,
-    int frame_id)
-    : context_provider_(context_provider),
-      channel_(channel),
-      frame_id_(frame_id) {
+    const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
+    GpuChannelHost* channel)
+    : context_provider_(context_provider), channel_(channel) {
   DCHECK(channel);
 }
 
@@ -134,10 +132,12 @@ StreamTextureProxy* StreamTextureFactoryImpl::CreateProxy() {
   return new StreamTextureProxyImpl(host);
 }
 
-void StreamTextureFactoryImpl::EstablishPeer(int32 stream_id, int player_id) {
+void StreamTextureFactoryImpl::EstablishPeer(int32_t stream_id,
+                                             int player_id,
+                                             int frame_id) {
   DCHECK(channel_.get());
   channel_->Send(
-      new GpuStreamTextureMsg_EstablishPeer(stream_id, frame_id_, player_id));
+      new GpuStreamTextureMsg_EstablishPeer(stream_id, frame_id, player_id));
 }
 
 unsigned StreamTextureFactoryImpl::CreateStreamTexture(
@@ -147,16 +147,16 @@ unsigned StreamTextureFactoryImpl::CreateStreamTexture(
   GLuint stream_id = 0;
   gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
   gl->GenTextures(1, texture_id);
-
-  stream_id = gl->CreateStreamTextureCHROMIUM(*texture_id);
-
+  gl->ShallowFlushCHROMIUM();
+  stream_id = context_provider_->GetCommandBufferProxy()->CreateStreamTexture(
+      *texture_id);
   gl->GenMailboxCHROMIUM(texture_mailbox->name);
   gl->ProduceTextureDirectCHROMIUM(
       *texture_id, texture_target, texture_mailbox->name);
   return stream_id;
 }
 
-void StreamTextureFactoryImpl::SetStreamTextureSize(int32 stream_id,
+void StreamTextureFactoryImpl::SetStreamTextureSize(int32_t stream_id,
                                                     const gfx::Size& size) {
   channel_->Send(new GpuStreamTextureMsg_SetSize(stream_id, size));
 }

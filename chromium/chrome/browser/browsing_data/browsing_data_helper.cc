@@ -4,6 +4,7 @@
 
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 
+#include "app/vivaldi_apptools.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -25,7 +26,7 @@ bool BrowsingDataHelper::IsWebScheme(const std::string& scheme) {
 // Static
 bool BrowsingDataHelper::HasWebScheme(const GURL& origin) {
   if (origin.scheme().compare("chrome-extension") == 0 &&
-    origin.host().compare("mpognobbkildjkofajifpdfhcoklimli") == 0) {
+    vivaldi::IsVivaldiApp(origin.host())) {
     return true;
   }
   return BrowsingDataHelper::IsWebScheme(origin.scheme());

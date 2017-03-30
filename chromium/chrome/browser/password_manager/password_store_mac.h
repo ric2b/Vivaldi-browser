@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_STORE_MAC_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_STORE_MAC_H_
 
+#include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/threading/thread.h"
@@ -77,12 +79,18 @@ class PasswordStoreMac : public password_manager::PasswordStore {
       const autofill::PasswordForm& form) override;
   password_manager::PasswordStoreChangeList RemoveLoginImpl(
       const autofill::PasswordForm& form) override;
+  password_manager::PasswordStoreChangeList RemoveLoginsByOriginAndTimeImpl(
+      const url::Origin& origin,
+      base::Time delete_begin,
+      base::Time delete_end) override;
   password_manager::PasswordStoreChangeList RemoveLoginsCreatedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
   password_manager::PasswordStoreChangeList RemoveLoginsSyncedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
+  bool RemoveStatisticsCreatedBetweenImpl(base::Time delete_begin,
+                                          base::Time delete_end) override;
   ScopedVector<autofill::PasswordForm> FillMatchingLogins(
       const autofill::PasswordForm& form,
       AuthorizationPromptPolicy prompt_policy) override;
@@ -93,7 +101,7 @@ class PasswordStoreMac : public password_manager::PasswordStore {
   void AddSiteStatsImpl(
       const password_manager::InteractionsStats& stats) override;
   void RemoveSiteStatsImpl(const GURL& origin_domain) override;
-  scoped_ptr<password_manager::InteractionsStats> GetSiteStatsImpl(
+  std::vector<scoped_ptr<password_manager::InteractionsStats>> GetSiteStatsImpl(
       const GURL& origin_domain) override;
 
   // Adds the given form to the Keychain if it's something we want to store

@@ -31,13 +31,6 @@ namespace {
 
 CastMetricsHelper* g_instance = NULL;
 
-// Displayed frames are logged in frames per second (but sampling can be over
-// a longer period of time, e.g. 5 seconds).
-const int kDisplayedFramesPerSecondPeriod = 1000000;
-
-// Sample every 5 seconds, represented in microseconds.
-const int kNominalVideoSamplePeriod = 5000000;
-
 const char kMetricsNameAppInfoDelimiter = '#';
 
 }  // namespace
@@ -61,8 +54,9 @@ bool CastMetricsHelper::DecodeAppInfoFromMetricsName(
   if (metrics_name.find(kMetricsNameAppInfoDelimiter) == std::string::npos)
     return false;
 
-  std::vector<std::string> tokens;
-  base::SplitString(metrics_name, kMetricsNameAppInfoDelimiter, &tokens);
+  std::vector<std::string> tokens = base::SplitString(
+      metrics_name, std::string(1, kMetricsNameAppInfoDelimiter),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   DCHECK_EQ(tokens.size(), 4u);
   // The order of tokens should match EncodeAppInfoIntoMetricsName().
   *action_name = tokens[0];
@@ -78,12 +72,14 @@ std::string CastMetricsHelper::EncodeAppInfoIntoMetricsName(
     const std::string& app_id,
     const std::string& session_id,
     const std::string& sdk_version) {
-  std::vector<std::string> parts;
-  parts.push_back(action_name);
-  parts.push_back(app_id);
-  parts.push_back(session_id);
-  parts.push_back(sdk_version);
-  return JoinString(parts, kMetricsNameAppInfoDelimiter);
+  std::string result(action_name);
+  result.push_back(kMetricsNameAppInfoDelimiter);
+  result.append(app_id);
+  result.push_back(kMetricsNameAppInfoDelimiter);
+  result.append(session_id);
+  result.push_back(kMetricsNameAppInfoDelimiter);
+  result.append(sdk_version);
+  return result;
 }
 
 // static
@@ -95,7 +91,9 @@ CastMetricsHelper* CastMetricsHelper::GetInstance() {
 CastMetricsHelper::CastMetricsHelper(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : task_runner_(task_runner),
+      session_id_("00000000000000000000000000000000"),
       metrics_sink_(NULL),
+      logged_first_audio_(false),
       record_action_callback_(base::Bind(&base::RecordComputedAction)) {
   DCHECK(task_runner_.get());
   DCHECK(!g_instance);
@@ -103,7 +101,7 @@ CastMetricsHelper::CastMetricsHelper(
 }
 
 CastMetricsHelper::CastMetricsHelper()
-    : metrics_sink_(NULL) {
+    : metrics_sink_(NULL), logged_first_audio_(false) {
   DCHECK(!g_instance);
   g_instance = this;
 }
@@ -119,6 +117,7 @@ void CastMetricsHelper::UpdateCurrentAppInfo(const std::string& app_id,
   app_id_ = app_id;
   session_id_ = session_id;
   app_start_time_ = base::TimeTicks::Now();
+  logged_first_audio_ = false;
   TagAppStartForGroupedHistograms(app_id_);
   sdk_version_.clear();
 }
@@ -157,6 +156,22 @@ void CastMetricsHelper::LogTimeToFirstPaint() {
   LOG(INFO) << uma_name << " is " << launch_time.InSecondsF() << " seconds.";
 }
 
+void CastMetricsHelper::LogTimeToFirstAudio() {
+  MAKE_SURE_THREAD(LogTimeToFirstAudio);
+  if (logged_first_audio_)
+    return;
+  if (app_id_.empty())
+    return;
+  base::TimeDelta time_to_first_audio =
+      base::TimeTicks::Now() - app_start_time_;
+  const std::string uma_name(
+      GetMetricsNameWithAppName("Startup", "TimeToFirstAudio"));
+  LogMediumTimeHistogramEvent(uma_name, time_to_first_audio);
+  LOG(INFO) << uma_name << " is " << time_to_first_audio.InSecondsF()
+            << " seconds.";
+  logged_first_audio_ = true;
+}
+
 void CastMetricsHelper::LogTimeToBufferAv(BufferingType buffering_type,
                                           base::TimeDelta time) {
   MAKE_SURE_THREAD(LogTimeToBufferAv, buffering_type, time);
@@ -181,57 +196,6 @@ void CastMetricsHelper::LogTimeToBufferAv(BufferingType buffering_type,
       base::TimeDelta::FromMilliseconds(250),
       base::TimeDelta::FromMilliseconds(30000),
       50);
-}
-
-void CastMetricsHelper::ResetVideoFrameSampling() {
-  MAKE_SURE_THREAD(ResetVideoFrameSampling);
-  previous_video_stat_sample_time_ = base::TimeTicks();
-}
-
-void CastMetricsHelper::LogFramesPer5Seconds(int displayed_frames,
-                                             int dropped_frames,
-                                             int delayed_frames,
-                                             int error_frames) {
-  MAKE_SURE_THREAD(LogFramesPer5Seconds, displayed_frames, dropped_frames,
-                   delayed_frames, error_frames);
-  base::TimeTicks sample_time = base::TimeTicks::Now();
-
-  if (!previous_video_stat_sample_time_.is_null()) {
-    base::TimeDelta time_diff = sample_time - previous_video_stat_sample_time_;
-    int value = 0;
-    const int64 rounding = time_diff.InMicroseconds() / 2;
-
-    if (displayed_frames >= 0) {
-      value = (displayed_frames * kDisplayedFramesPerSecondPeriod + rounding) /
-          time_diff.InMicroseconds();
-      LogEnumerationHistogramEvent(
-          GetMetricsNameWithAppName("Media", "DisplayedFramesPerSecond"),
-          value, 50);
-    }
-    if (delayed_frames >= 0) {
-      value = (delayed_frames * kNominalVideoSamplePeriod + rounding) /
-          time_diff.InMicroseconds();
-      LogEnumerationHistogramEvent(
-          GetMetricsNameWithAppName("Media", "DelayedVideoFramesPer5Sec"),
-          value, 50);
-    }
-    if (dropped_frames >= 0) {
-      value = (dropped_frames * kNominalVideoSamplePeriod + rounding) /
-          time_diff.InMicroseconds();
-      LogEnumerationHistogramEvent(
-          GetMetricsNameWithAppName("Media", "DroppedVideoFramesPer5Sec"),
-          value, 50);
-    }
-    if (error_frames >= 0) {
-      value = (error_frames * kNominalVideoSamplePeriod + rounding) /
-          time_diff.InMicroseconds();
-      LogEnumerationHistogramEvent(
-          GetMetricsNameWithAppName("Media", "ErrorVideoFramesPer5Sec"),
-          value, 50);
-    }
-  }
-
-  previous_video_stat_sample_time_ = sample_time;
 }
 
 std::string CastMetricsHelper::GetMetricsNameWithAppName(

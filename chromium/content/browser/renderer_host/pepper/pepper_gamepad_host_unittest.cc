@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <string.h>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "content/browser/gamepad/gamepad_test_helpers.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_test.h"
 #include "content/browser/renderer_host/pepper/pepper_gamepad_host.h"
@@ -120,7 +123,13 @@ TEST_F(PepperGamepadHostTest, ValidateGamepadMatch) {
             AddressDiff(&ppapi_gamepad.buttons, &ppapi_gamepad));
 }
 
-TEST_F(PepperGamepadHostTest, WaitForReply) {
+// crbug.com/147549
+#if defined(OS_ANDROID)
+#define MAYBE_WaitForReply DISABLED_WaitForReply
+#else
+#define MAYBE_WaitForReply WaitForReply
+#endif
+TEST_F(PepperGamepadHostTest, MAYBE_WaitForReply) {
   blink::WebGamepads default_data;
   memset(&default_data, 0, sizeof(blink::WebGamepads));
   default_data.length = 1;

@@ -7,6 +7,7 @@
 
 #include "base/callback_list.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "content/public/browser/notification_observer.h"
@@ -31,7 +32,6 @@ class PrefsTabHelper : public content::NotificationObserver,
  public:
   ~PrefsTabHelper() override;
 
-  static void InitIncognitoUserPrefStore(OverlayUserPrefStore* pref_store);
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
   static void GetServiceInstance();
 
@@ -60,7 +60,7 @@ class PrefsTabHelper : public content::NotificationObserver,
   content::NotificationRegistrar registrar_;
   scoped_ptr<base::CallbackList<void(void)>::Subscription>
       style_sheet_subscription_;
-  scoped_ptr<chrome::ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
+  scoped_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
       default_zoom_level_subscription_;
   base::WeakPtrFactory<PrefsTabHelper> weak_ptr_factory_;
 

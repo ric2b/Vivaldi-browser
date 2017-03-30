@@ -5,31 +5,30 @@
 #include "chrome/browser/chromeos/login/reauth_stats.h"
 
 #include "base/metrics/histogram_macros.h"
-#include "components/user_manager/user_manager.h"
+#include "components/user_manager/known_user.h"
 
 namespace chromeos {
 
-void RecordReauthReason(const std::string& user_id, ReauthReason reason) {
-  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+void RecordReauthReason(const AccountId& account_id, ReauthReason reason) {
   int old_reason;
   // We record only the first value, skipping everything else, except "none"
   // value, which is used to reset the current state.
-  if (!user_manager->FindReauthReason(user_id, &old_reason) ||
+  if (!user_manager::known_user::FindReauthReason(account_id, &old_reason) ||
       (static_cast<ReauthReason>(old_reason) == ReauthReason::NONE &&
        reason != ReauthReason::NONE)) {
-    user_manager->UpdateReauthReason(user_id, static_cast<int>(reason));
+    user_manager::known_user::UpdateReauthReason(account_id,
+                                                 static_cast<int>(reason));
   }
 }
 
-void SendReauthReason(const std::string& user_id) {
-  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+void SendReauthReason(const AccountId& account_id) {
   int reauth_reason;
-  if (user_manager->FindReauthReason(user_id, &reauth_reason) &&
+  if (user_manager::known_user::FindReauthReason(account_id, &reauth_reason) &&
       static_cast<ReauthReason>(reauth_reason) != ReauthReason::NONE) {
     UMA_HISTOGRAM_ENUMERATION("Login.ReauthReason", reauth_reason,
                               NUM_REAUTH_FLOW_REASONS);
-    user_manager->UpdateReauthReason(user_id,
-                                     static_cast<int>(ReauthReason::NONE));
+    user_manager::known_user::UpdateReauthReason(
+        account_id, static_cast<int>(ReauthReason::NONE));
   }
 }
 

@@ -4,15 +4,20 @@
 
 #include "media/midi/midi_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/system_monitor/system_monitor.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
@@ -22,7 +27,8 @@ namespace {
 
 class FakeMidiManager : public MidiManager {
  public:
-  FakeMidiManager() : start_initialization_is_called_(false) {}
+  FakeMidiManager()
+      : start_initialization_is_called_(false), finalize_is_called_(false) {}
   ~FakeMidiManager() override {}
 
   // MidiManager implementation.
@@ -30,9 +36,11 @@ class FakeMidiManager : public MidiManager {
     start_initialization_is_called_ = true;
   }
 
+  void Finalize() override { finalize_is_called_ = true; }
+
   void DispatchSendMidiData(MidiManagerClient* client,
-                            uint32 port_index,
-                            const std::vector<uint8>& data,
+                            uint32_t port_index,
+                            const std::vector<uint8_t>& data,
                             double timestamp) override {}
 
   // Utility functions for testing.
@@ -49,6 +57,7 @@ class FakeMidiManager : public MidiManager {
   }
 
   bool start_initialization_is_called_;
+  bool finalize_is_called_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakeMidiManager);
@@ -63,8 +72,8 @@ class FakeMidiManagerClient : public MidiManagerClient {
   // MidiManagerClient implementation.
   void AddInputPort(const MidiPortInfo& info) override {}
   void AddOutputPort(const MidiPortInfo& info) override {}
-  void SetInputPortState(uint32 port_index, MidiPortState state) override {}
-  void SetOutputPortState(uint32 port_index, MidiPortState state) override {}
+  void SetInputPortState(uint32_t port_index, MidiPortState state) override {}
+  void SetOutputPortState(uint32_t port_index, MidiPortState state) override {}
 
   void CompleteStartSession(Result result) override {
     EXPECT_TRUE(wait_for_result_);
@@ -72,11 +81,12 @@ class FakeMidiManagerClient : public MidiManagerClient {
     wait_for_result_ = false;
   }
 
-  void ReceiveMidiData(uint32 port_index,
-                       const uint8* data,
+  void ReceiveMidiData(uint32_t port_index,
+                       const uint8_t* data,
                        size_t size,
                        double timestamp) override {}
   void AccumulateMidiBytesSent(size_t size) override {}
+  void Detach() override {}
 
   Result result() const { return result_; }
 
@@ -100,7 +110,13 @@ class MidiManagerTest : public ::testing::Test {
   MidiManagerTest()
       : manager_(new FakeMidiManager),
         message_loop_(new base::MessageLoop) {}
-  ~MidiManagerTest() override {}
+  ~MidiManagerTest() override {
+    manager_->Shutdown();
+    base::RunLoop run_loop;
+    run_loop.RunUntilIdle();
+    EXPECT_EQ(manager_->start_initialization_is_called_,
+              manager_->finalize_is_called_);
+  }
 
  protected:
   void StartTheFirstSession(FakeMidiManagerClient* client) {
@@ -204,6 +220,7 @@ TEST_F(MidiManagerTest, TooManyPendingSessions) {
     many_existing_clients[i] = new FakeMidiManagerClient;
     StartTheNthSession(many_existing_clients[i], i + 1);
   }
+  EXPECT_TRUE(manager_->start_initialization_is_called_);
 
   // Push the last client that should be rejected for too many pending requests.
   scoped_ptr<FakeMidiManagerClient> additional_client(
@@ -211,6 +228,7 @@ TEST_F(MidiManagerTest, TooManyPendingSessions) {
   manager_->start_initialization_is_called_ = false;
   manager_->StartSession(additional_client.get());
   EXPECT_FALSE(manager_->start_initialization_is_called_);
+  manager_->start_initialization_is_called_ = true;
   EXPECT_EQ(Result::INITIALIZATION_ERROR, additional_client->result());
 
   // Other clients still should not receive a result.
@@ -267,7 +285,14 @@ TEST_F(MidiManagerTest, CreateMidiManager) {
 #else
   EXPECT_EQ(Result::OK, result);
 #endif
+
+  manager->Shutdown();
+  base::RunLoop run_loop;
+  run_loop.RunUntilIdle();
 }
+
+// TODO(toyoshim): Add multi-threaded unit tests to check races around
+// StartInitialization(), CompleteInitialization(), and Finalize().
 
 }  // namespace
 

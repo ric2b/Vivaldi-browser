@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_METRICS_VARIATIONS_VARIATIONS_REGISTRY_SYNCER_WIN_H_
 #define CHROME_BROWSER_METRICS_VARIATIONS_VARIATIONS_REGISTRY_SYNCER_WIN_H_
 
+#include "base/macros.h"
 #include "base/timer/timer.h"
 
 namespace chrome_variations {
@@ -31,7 +32,7 @@ class VariationsRegistrySyncer {
   // after initial batch of field trials are created, and also to avoid blocking
   // the UI thread. The timer effectively allows this class to batch together
   // update requests, to avoid reading and writing from the registry too much.
-  base::OneShotTimer<VariationsRegistrySyncer> timer_;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(VariationsRegistrySyncer);
 };

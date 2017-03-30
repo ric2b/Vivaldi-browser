@@ -4,9 +4,10 @@
 
 #include "content/browser/compositor/surface_utils.h"
 
+#include "build/build_config.h"
 #include "cc/surfaces/surface_id_allocator.h"
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
 #include "content/browser/renderer_host/compositor_impl_android.h"
 #else
 #include "content/browser/compositor/image_transport_factory.h"
@@ -16,7 +17,7 @@
 namespace content {
 
 scoped_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator() {
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
   return CompositorImpl::CreateSurfaceIdAllocator();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
@@ -25,7 +26,7 @@ scoped_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator() {
 }
 
 cc::SurfaceManager* GetSurfaceManager() {
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
   return CompositorImpl::GetSurfaceManager();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();

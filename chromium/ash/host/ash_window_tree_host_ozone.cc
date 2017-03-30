@@ -4,6 +4,8 @@
 
 #include "ash/host/ash_window_tree_host.h"
 
+#include <utility>
+
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/host/ash_window_tree_host_unified.h"
 #include "ash/host/root_window_transformer.h"
@@ -12,7 +14,8 @@
 #include "base/command_line.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_tree_host_ozone.h"
+#include "ui/aura/window_tree_host_platform.h"
+#include "ui/events/event_processor.h"
 #include "ui/events/null_event_targeter.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/transform.h"
@@ -24,7 +27,7 @@ namespace ash {
 namespace {
 
 class AshWindowTreeHostOzone : public AshWindowTreeHost,
-                               public aura::WindowTreeHostOzone {
+                               public aura::WindowTreeHostPlatform {
  public:
   explicit AshWindowTreeHostOzone(const gfx::Rect& initial_bounds);
   ~AshWindowTreeHostOzone() override;
@@ -48,12 +51,8 @@ class AshWindowTreeHostOzone : public AshWindowTreeHost,
   void DispatchEvent(ui::Event* event) override;
 
   // ui::internal::InputMethodDelegate:
-  bool DispatchKeyEventPostIME(const ui::KeyEvent& event) override;
-
-  // ui::EventSource:
-  ui::EventDispatchDetails DeliverEventToProcessor(ui::Event* event) override {
-    return ui::EventSource::DeliverEventToProcessor(event);
-  }
+  ui::EventDispatchDetails DispatchKeyEventPostIME(
+      ui::KeyEvent* event) override;
 
   // Temporarily disable the tap-to-click feature. Used on CrOS.
   void SetTapToClickPaused(bool state);
@@ -64,7 +63,7 @@ class AshWindowTreeHostOzone : public AshWindowTreeHost,
 };
 
 AshWindowTreeHostOzone::AshWindowTreeHostOzone(const gfx::Rect& initial_bounds)
-    : aura::WindowTreeHostOzone(initial_bounds), transformer_helper_(this) {
+    : aura::WindowTreeHostPlatform(initial_bounds), transformer_helper_(this) {
   transformer_helper_.Init();
 }
 
@@ -88,7 +87,7 @@ void AshWindowTreeHostOzone::UnConfineCursor() {
 
 void AshWindowTreeHostOzone::SetRootWindowTransformer(
     scoped_ptr<RootWindowTransformer> transformer) {
-  transformer_helper_.SetRootWindowTransformer(transformer.Pass());
+  transformer_helper_.SetRootWindowTransformer(std::move(transformer));
   ConfineCursorToRootWindow();
 }
 
@@ -130,7 +129,7 @@ void AshWindowTreeHostOzone::OnCursorVisibilityChangedNative(bool show) {
 }
 
 void AshWindowTreeHostOzone::SetBounds(const gfx::Rect& bounds) {
-  WindowTreeHostOzone::SetBounds(bounds);
+  WindowTreeHostPlatform::SetBounds(bounds);
   ConfineCursorToRootWindow();
 }
 
@@ -141,13 +140,14 @@ void AshWindowTreeHostOzone::DispatchEvent(ui::Event* event) {
   SendEventToProcessor(event);
 }
 
-bool AshWindowTreeHostOzone::DispatchKeyEventPostIME(
-    const ui::KeyEvent& event) {
-  ui::KeyEvent event_copy(event);
+ui::EventDispatchDetails AshWindowTreeHostOzone::DispatchKeyEventPostIME(
+    ui::KeyEvent* event) {
   input_method_handler()->SetPostIME(true);
-  ui::EventSource::DeliverEventToProcessor(&event_copy);
-  input_method_handler()->SetPostIME(false);
-  return event_copy.handled();
+  ui::EventDispatchDetails details =
+      event_processor()->OnEventFromSource(event);
+  if (!details.dispatcher_destroyed)
+    input_method_handler()->SetPostIME(false);
+  return details;
 }
 
 void AshWindowTreeHostOzone::SetTapToClickPaused(bool state) {

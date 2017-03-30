@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CONTENT_BROWSER_PASSWORD_MANAGER_INTERNALS_SERVICE_FACTORY_H_
 #define COMPONENTS_PASSWORD_MANAGER_CONTENT_BROWSER_PASSWORD_MANAGER_INTERNALS_SERVICE_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -16,7 +17,9 @@ namespace password_manager {
 
 class PasswordManagerInternalsService;
 
-// BrowserContextKeyedServiceFactory for PasswordManagerInternalsService.
+// BrowserContextKeyedServiceFactory for PasswordManagerInternalsService. It
+// does not override BrowserContextKeyedServiceFactory::GetBrowserContextToUse,
+// which means that no service is returned in Incognito.
 class PasswordManagerInternalsServiceFactory
     : public BrowserContextKeyedServiceFactory {
  public:
@@ -26,7 +29,8 @@ class PasswordManagerInternalsServiceFactory
   static PasswordManagerInternalsServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<PasswordManagerInternalsServiceFactory>;
+  friend struct base::DefaultSingletonTraits<
+      PasswordManagerInternalsServiceFactory>;
 
   PasswordManagerInternalsServiceFactory();
   ~PasswordManagerInternalsServiceFactory() override;

@@ -5,7 +5,7 @@
 #ifndef CONTENT_PUBLIC_BROWSER_RESOURCE_REQUEST_INFO_H_
 #define CONTENT_PUBLIC_BROWSER_RESOURCE_REQUEST_INFO_H_
 
-#include "base/basictypes.h"
+#include "base/callback_forward.h"
 #include "content/common/content_export.h"
 #include "content/public/common/resource_type.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
@@ -18,6 +18,7 @@ class URLRequest;
 
 namespace content {
 class ResourceContext;
+class WebContents;
 
 // Each URLRequest allocated by the ResourceDispatcherHost has a
 // ResourceRequestInfo instance associated with it.
@@ -39,7 +40,8 @@ class ResourceRequestInfo {
                                                 bool is_main_frame,
                                                 bool parent_is_main_frame,
                                                 bool allow_download,
-                                                bool is_async);
+                                                bool is_async,
+                                                bool is_using_lofi);
 
   // Returns the associated RenderFrame for a given process. Returns false, if
   // there is no associated RenderFrame. This method does not rely on the
@@ -50,24 +52,40 @@ class ResourceRequestInfo {
       int* render_process_id,
       int* render_frame_id);
 
+  // A callback that returns a pointer to a WebContents. The callback can
+  // always be used, but it may return nullptr: if the info used to
+  // instantiate the callback can no longer be used to return a WebContents,
+  // nullptr will be returned instead.
+  // The callback should only run on the UI thread and it should always be
+  // non-null.
+  using WebContentsGetter = base::Callback<WebContents*(void)>;
+
+  // Returns a callback that returns a pointer to the WebContents this request
+  // is associated with, or nullptr if it no longer exists or the request is
+  // not associated with a WebContents. The callback should only run on the UI
+  // thread.
+  // Note: Not all resource requests will be owned by a WebContents. For
+  // example, requests made by a ServiceWorker.
+  virtual WebContentsGetter GetWebContentsGetterForRequest() const = 0;
+
   // Returns the associated ResourceContext.
   virtual ResourceContext* GetContext() const = 0;
 
   // The child process unique ID of the requestor.
+  // To get a WebContents, use GetWebContentsGetterForRequest instead.
   virtual int GetChildID() const = 0;
 
   // The IPC route identifier for this request (this identifies the RenderView
   // or like-thing in the renderer that the request gets routed to).
+  // To get a WebContents, use GetWebContentsGetterForRequest instead.
   virtual int GetRouteID() const = 0;
 
   // The pid of the originating process, if the request is sent on behalf of a
   // another process.  Otherwise it is 0.
   virtual int GetOriginPID() const = 0;
 
-  // Unique identifier (within the scope of the child process) for this request.
-  virtual int GetRequestID() const = 0;
-
   // The IPC route identifier of the RenderFrame.
+  // To get a WebContents, use GetWebContentsGetterForRequest instead.
   // TODO(jam): once all navigation and resource requests are sent between
   // frames and RenderView/RenderViewHost aren't involved we can remove this and
   // just use GetRouteID above.
@@ -76,12 +94,8 @@ class ResourceRequestInfo {
   // True if GetRenderFrameID() represents a main frame in the RenderView.
   virtual bool IsMainFrame() const = 0;
 
-  // True if GetParentRenderFrameID() represents a main frame in the RenderView.
+  // True if the frame's parent represents a main frame in the RenderView.
   virtual bool ParentIsMainFrame() const = 0;
-
-  // Routing ID of parent frame of frame that sent this resource request.
-  // -1 if unknown / invalid.
-  virtual int GetParentRenderFrameID() const = 0;
 
   // Returns the associated resource type.
   virtual ResourceType GetResourceType() const = 0;
@@ -123,6 +137,9 @@ class ResourceRequestInfo {
 
   // Whether this is a download.
   virtual bool IsDownload() const = 0;
+
+  // Whether this request if using Lo-Fi mode.
+  virtual bool IsUsingLoFi() const = 0;
 
  protected:
   virtual ~ResourceRequestInfo() {}

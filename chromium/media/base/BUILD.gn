@@ -56,9 +56,9 @@ source_set("base") {
     "bit_reader.h",
     "bit_reader_core.cc",
     "bit_reader_core.h",
+    "bitstream_buffer.cc",
     "bitstream_buffer.h",
     "buffering_state.h",
-    "buffers.h",
     "byte_queue.cc",
     "byte_queue.h",
     "cdm_callback_promise.cc",
@@ -80,7 +80,6 @@ source_set("base") {
     "channel_mixer.h",
     "channel_mixing_matrix.cc",
     "channel_mixing_matrix.h",
-    "clock.h",
     "data_buffer.cc",
     "data_buffer.h",
     "data_source.cc",
@@ -109,6 +108,8 @@ source_set("base") {
     "key_systems.h",
     "key_systems_support_uma.cc",
     "key_systems_support_uma.h",
+    "loopback_audio_converter.cc",
+    "loopback_audio_converter.h",
     "media.cc",
     "media.h",
     "media_client.cc",
@@ -120,8 +121,12 @@ source_set("base") {
     "media_log_event.h",
     "media_permission.cc",
     "media_permission.h",
+    "media_resources.cc",
+    "media_resources.h",
     "media_switches.cc",
     "media_switches.h",
+    "media_util.cc",
+    "media_util.h",
     "mime_util.cc",
     "mime_util.h",
     "moving_average.cc",
@@ -130,6 +135,7 @@ source_set("base") {
     "multi_channel_resampler.h",
     "null_video_sink.cc",
     "null_video_sink.h",
+    "output_device.h",
     "pipeline.cc",
     "pipeline.h",
     "pipeline_status.h",
@@ -171,12 +177,15 @@ source_set("base") {
     "time_delta_interpolator.cc",
     "time_delta_interpolator.h",
     "time_source.h",
+    "timestamp_constants.h",
     "user_input_monitor.cc",
     "user_input_monitor.h",
     "video_capture_types.cc",
     "video_capture_types.h",
     "video_capturer_source.cc",
     "video_capturer_source.h",
+    "video_codecs.cc",
+    "video_codecs.h",
     "video_decoder.cc",
     "video_decoder.h",
     "video_decoder_config.cc",
@@ -190,6 +199,8 @@ source_set("base") {
     "video_renderer.cc",
     "video_renderer.h",
     "video_rotation.h",
+    "video_types.cc",
+    "video_types.h",
     "video_util.cc",
     "video_util.h",
     "wall_clock_time_source.cc",
@@ -202,35 +213,33 @@ source_set("base") {
   defines = []
   public_deps = []
   deps = [
-    "//ui/events:events_base",
     "//skia",
+    "//ui/events:events_base",
   ]
   libs = []
   configs += [
+    # This target uses the ALLOCATOR_SHIM define.
+    "//base/allocator:allocator_shim_define",
+    "//build/config:precompiled_headers",
     "//media:media_config",
     "//media:media_implementation",
   ]
 
   if (media_use_ffmpeg) {
     sources += [
-      "audio_video_metadata_extractor.cc",
-      "audio_video_metadata_extractor.h",
       "container_names.cc",
       "container_names.h",
-      "media_file_checker.cc",
-      "media_file_checker.h",
     ]
+    if (!is_android) {
+      sources += [
+        "audio_video_metadata_extractor.cc",
+        "audio_video_metadata_extractor.h",
+        "media_file_checker.cc",
+        "media_file_checker.h",
+      ]
+    }
 
     deps += [ "//third_party/ffmpeg" ]
-  }
-
-  if (enable_browser_cdms) {
-    sources += [
-      "browser_cdm.cc",
-      "browser_cdm.h",
-      "browser_cdm_factory.cc",
-      "browser_cdm_factory.h",
-    ]
   }
 
   if (is_android) {
@@ -307,6 +316,8 @@ if (is_ios) {
       "video_frame.h",
       "video_frame_metadata.cc",
       "video_frame_metadata.h",
+      "video_types.cc",
+      "video_types.h",
       "video_util.cc",
       "video_util.h",
       "yuv_convert.cc",
@@ -329,6 +340,10 @@ source_set("test_support") {
     "fake_audio_renderer_sink.h",
     "fake_demuxer_stream.cc",
     "fake_demuxer_stream.h",
+    "fake_media_resources.cc",
+    "fake_media_resources.h",
+    "fake_output_device.cc",
+    "fake_output_device.h",
     "fake_text_track_stream.cc",
     "fake_text_track_stream.h",
     "gmock_callback_support.h",
@@ -338,6 +353,8 @@ source_set("test_support") {
     "mock_demuxer_host.h",
     "mock_filters.cc",
     "mock_filters.h",
+    "mock_media_log.cc",
+    "mock_media_log.h",
     "test_data_util.cc",
     "test_data_util.h",
     "test_helpers.cc",
@@ -345,6 +362,7 @@ source_set("test_support") {
   ]
   configs += [ "//media:media_config" ]
   deps = [
+    "//media:shared_memory_support",
     "//testing/gmock",
   ]
 }
@@ -374,6 +392,7 @@ source_set("unittests") {
     "callback_holder_unittest.cc",
     "channel_mixer_unittest.cc",
     "channel_mixing_matrix_unittest.cc",
+    "container_names_unittest.cc",
     "data_buffer_unittest.cc",
     "decoder_buffer_queue_unittest.cc",
     "decoder_buffer_unittest.cc",
@@ -394,9 +413,11 @@ source_set("unittests") {
     "stream_parser_unittest.cc",
     "text_ranges_unittest.cc",
     "text_renderer_unittest.cc",
+    "time_delta_interpolator_unittest.cc",
     "user_input_monitor_unittest.cc",
     "vector_math_testing.h",
     "vector_math_unittest.cc",
+    "video_decoder_config_unittest.cc",
     "video_frame_pool_unittest.cc",
     "video_frame_unittest.cc",
     "video_util_unittest.cc",
@@ -416,16 +437,16 @@ source_set("unittests") {
     "//testing/gtest",
   ]
 
-  if (media_use_ffmpeg) {
+  # Even if FFmpeg is enabled on Android we don't want these.
+  # TODO(watk): Refactor tests that could be made to run on Android.
+  if (media_use_ffmpeg && !is_android) {
     sources += [
       "audio_video_metadata_extractor_unittest.cc",
       "media_file_checker_unittest.cc",
     ]
   }
 
-  if (!is_android) {
-    sources += [ "container_names_unittest.cc" ]
-  } else {
+  if (is_android) {
     deps += [ "//ui/gl" ]
   }
 
@@ -450,6 +471,7 @@ source_set("perftests") {
     "//media",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/libyuv",
   ]
 
   if (media_use_ffmpeg) {

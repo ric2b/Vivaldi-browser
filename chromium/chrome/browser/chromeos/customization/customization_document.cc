@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/customization/customization_document.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -13,6 +14,7 @@
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
@@ -277,8 +279,9 @@ StartupCustomizationDocument::StartupCustomizationDocument(
 StartupCustomizationDocument::~StartupCustomizationDocument() {}
 
 StartupCustomizationDocument* StartupCustomizationDocument::GetInstance() {
-  return Singleton<StartupCustomizationDocument,
-      DefaultSingletonTraits<StartupCustomizationDocument> >::get();
+  return base::Singleton<
+      StartupCustomizationDocument,
+      base::DefaultSingletonTraits<StartupCustomizationDocument>>::get();
 }
 
 void StartupCustomizationDocument::Init(
@@ -323,14 +326,14 @@ void StartupCustomizationDocument::Init(
   }
 
   // If manifest doesn't exist still apply values from VPD.
-  statistics_provider->GetMachineStatistic(kInitialLocaleAttr,
+  statistics_provider->GetMachineStatistic(system::kInitialLocaleKey,
                                            &initial_locale_);
-  statistics_provider->GetMachineStatistic(kInitialTimezoneAttr,
+  statistics_provider->GetMachineStatistic(system::kInitialTimezoneKey,
                                            &initial_timezone_);
-  statistics_provider->GetMachineStatistic(kKeyboardLayoutAttr,
+  statistics_provider->GetMachineStatistic(system::kKeyboardLayoutKey,
                                            &keyboard_layout_);
-  configured_locales_.resize(0);
-  base::SplitString(initial_locale_, ',', &configured_locales_);
+  configured_locales_ = base::SplitString(
+      initial_locale_, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   // Convert ICU locale to chrome ("en_US" to "en-US", etc.).
   std::for_each(configured_locales_.begin(), configured_locales_.end(),
@@ -427,8 +430,9 @@ ServicesCustomizationDocument* ServicesCustomizationDocument::GetInstance() {
   if (g_test_services_customization_document)
     return g_test_services_customization_document;
 
-  return Singleton<ServicesCustomizationDocument,
-      DefaultSingletonTraits<ServicesCustomizationDocument> >::get();
+  return base::Singleton<
+      ServicesCustomizationDocument,
+      base::DefaultSingletonTraits<ServicesCustomizationDocument>>::get();
 }
 
 // static
@@ -514,7 +518,7 @@ void ServicesCustomizationDocument::StartFetching() {
                                       &customization_id) &&
         !customization_id.empty()) {
       url_ = GURL(base::StringPrintf(
-          kManifestUrl, base::StringToLowerASCII(customization_id).c_str()));
+          kManifestUrl, base::ToLowerASCII(customization_id).c_str()));
     } else {
       // Remember that there is no customization ID in VPD.
       OnCustomizationNotFound();
@@ -710,11 +714,11 @@ ServicesCustomizationDocument::GetDefaultAppsInProviderFormat(
         entry->SetString(extensions::ExternalProviderImpl::kExternalUpdateUrl,
                          extension_urls::GetWebstoreUpdateUrl().spec());
       }
-      prefs->Set(app_id, entry.Pass());
+      prefs->Set(app_id, std::move(entry));
     }
   }
 
-  return prefs.Pass();
+  return prefs;
 }
 
 void ServicesCustomizationDocument::UpdateCachedManifest(Profile* profile) {
@@ -806,13 +810,10 @@ void ServicesCustomizationDocument::StartOEMWallpaperDownload(
   }
 
   wallpaper_downloader_.reset(new CustomizationWallpaperDownloader(
-      g_browser_process->system_request_context(),
-      wallpaper_url,
-      dir,
-      file,
+      g_browser_process->system_request_context(), wallpaper_url, dir, file,
       base::Bind(&ServicesCustomizationDocument::OnOEMWallpaperDownloaded,
                  weak_ptr_factory_.GetWeakPtr(),
-                 base::Passed(applying.Pass()))));
+                 base::Passed(std::move(applying)))));
 
   wallpaper_downloader_->Start();
 }
@@ -857,11 +858,10 @@ void ServicesCustomizationDocument::CheckAndApplyWallpaper() {
       base::Bind(&CheckWallpaperCacheExists,
                  GetCustomizedWallpaperDownloadedFileName(),
                  base::Unretained(exists.get()));
-  base::Closure on_checked_closure =
-      base::Bind(&ServicesCustomizationDocument::OnCheckedWallpaperCacheExists,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 base::Passed(exists.Pass()),
-                 base::Passed(applying.Pass()));
+  base::Closure on_checked_closure = base::Bind(
+      &ServicesCustomizationDocument::OnCheckedWallpaperCacheExists,
+      weak_ptr_factory_.GetWeakPtr(), base::Passed(std::move(exists)),
+      base::Passed(std::move(applying)));
   if (!content::BrowserThread::PostBlockingPoolTaskAndReply(
           FROM_HERE, check_file_exists, on_checked_closure)) {
     LOG(WARNING) << "Failed to start check Wallpaper cache exists.";
@@ -875,7 +875,7 @@ void ServicesCustomizationDocument::OnCheckedWallpaperCacheExists(
   DCHECK(exists);
   DCHECK(applying);
 
-  ApplyWallpaper(*exists, applying.Pass());
+  ApplyWallpaper(*exists, std::move(applying));
 }
 
 void ServicesCustomizationDocument::ApplyWallpaper(
@@ -916,11 +916,11 @@ void ServicesCustomizationDocument::ApplyWallpaper(
   if (GURL(current_url).is_valid() && default_wallpaper_file_exists) {
     VLOG(1)
         << "ServicesCustomizationDocument::ApplyWallpaper() : reuse existing";
-    OnOEMWallpaperDownloaded(applying.Pass(), true, GURL(current_url));
+    OnOEMWallpaperDownloaded(std::move(applying), true, GURL(current_url));
   } else {
     VLOG(1)
         << "ServicesCustomizationDocument::ApplyWallpaper() : start download";
-    StartOEMWallpaperDownload(wallpaper_url, applying.Pass());
+    StartOEMWallpaperDownload(wallpaper_url, std::move(applying));
   }
 }
 

@@ -13,7 +13,7 @@ PassThroughDecoderTexture::~PassThroughDecoderTexture() = default;
 
 AutoReleasedPassThroughDecoderTexture::AutoReleasedPassThroughDecoderTexture(
     scoped_ptr<PassThroughDecoderTexture> texture)
-    : texture_(texture.Pass()) {
+    : texture_(std::move(texture)) {
   DCHECK(texture_);
 }
 
@@ -22,7 +22,7 @@ AutoReleasedPassThroughDecoderTexture::
   // The texture didn't reach its user, it has to be released.
   if (texture_) {
     texture_->mailbox_holder_release_cb.Run(
-        texture_->mailbox_holder->sync_point);
+        texture_->mailbox_holder->sync_token);
   }
 }
 

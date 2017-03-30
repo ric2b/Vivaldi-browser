@@ -16,13 +16,13 @@ testcase.restoreGeometry = function() {
       setupAndWaitUntilReady(null, RootPath.DOWNLOADS, this.next);
     },
     // Resize the window to minimal dimensions.
-    function(inAppId) {
-      appId = inAppId;
+    function(results) {
+      appId = results.windowId;
       remoteCall.callRemoteTestUtil(
           'resizeWindow', appId, [640, 480], this.next);
     },
     // Check the current window's size.
-    function(inAppId) {
+    function() {
       remoteCall.waitForWindowGeometry(appId, 640, 480).then(this.next);
     },
     // Enlarge the window by 10 pixels.
@@ -39,8 +39,8 @@ testcase.restoreGeometry = function() {
       setupAndWaitUntilReady(null, RootPath.DOWNLOADS, this.next);
     },
     // Check the next window's size.
-    function(inAppId) {
-      appId2 = inAppId;
+    function(results) {
+      appId2 = results.windowId;
       remoteCall.waitForWindowGeometry(appId2, 650, 490).then(this.next);
     },
     // Check for errors.
@@ -59,8 +59,8 @@ testcase.restoreGeometryMaximizedState = function() {
       setupAndWaitUntilReady(null, RootPath.DOWNLOADS, this.next);
     },
     // Maximize the window
-    function(inAppId) {
-      appId = inAppId;
+    function(results) {
+      appId = results.windowId;
       remoteCall.callRemoteTestUtil('maximizeWindow', appId, [], this.next);
     },
     // Check that the first window is maximized.
@@ -84,8 +84,8 @@ testcase.restoreGeometryMaximizedState = function() {
       setupAndWaitUntilReady(null, RootPath.DOWNLOADS, this.next);
     },
     // Check that the newly opened window is maximized initially.
-    function(inAppId) {
-      appId2 = inAppId;
+    function(results) {
+      appId2 = results.windowId;
       return repeatUntil(function() {
         return remoteCall.callRemoteTestUtil('isWindowMaximized', appId2, [])
             .then(function(isMaximized) {

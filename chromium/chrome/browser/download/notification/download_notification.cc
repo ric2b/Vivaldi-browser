@@ -4,6 +4,7 @@
 
 #include "chrome/browser/download/notification/download_notification.h"
 
+#include "base/macros.h"
 #include "chrome/browser/download/notification/download_notification_manager.h"
 
 namespace {
@@ -26,7 +27,7 @@ class NotificationWatcher : public NotificationDelegate {
   }
 
   bool HasClickedListener() override {
-    return true;
+    return item_->HasNotificationClickedListener();
   }
 
   void ButtonClick(int button_index) override {
@@ -60,6 +61,17 @@ DownloadNotification::DownloadNotification()
 
 DownloadNotification::~DownloadNotification() {}
 
+bool DownloadNotification::HasNotificationClickedListener() {
+  // True by default.
+  return true;
+}
+
 NotificationDelegate* DownloadNotification::watcher() const {
   return watcher_.get();
+}
+
+void DownloadNotification::InvokeUnsafeForceNotificationFlush(
+    message_center::MessageCenter* message_center, const std::string& id) {
+  DCHECK(message_center);
+  message_center->ForceNotificationFlush(id);
 }

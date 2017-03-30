@@ -9,7 +9,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/renderer/content_renderer_client.h"
-#include "components/content_settings/core/common/content_settings.h"
 
 namespace extensions {
 
@@ -33,8 +32,7 @@ class ShellContentRendererClient : public content::ContentRendererClient {
   bool OverrideCreatePlugin(content::RenderFrame* render_frame,
                             blink::WebLocalFrame* frame,
                             const blink::WebPluginParams& params,
-                            blink::WebPlugin** plugin,
-                            ContentSetting override_action) override;
+                            blink::WebPlugin** plugin) override;
   blink::WebPlugin* CreatePluginReplacement(
       content::RenderFrame* render_frame,
       const base::FilePath& plugin_path) override;

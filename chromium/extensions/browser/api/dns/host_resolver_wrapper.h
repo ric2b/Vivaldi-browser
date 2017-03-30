@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_API_DNS_HOST_RESOLVER_WRAPPER_H_
 #define EXTENSIONS_BROWSER_API_DNS_HOST_RESOLVER_WRAPPER_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 
 namespace content {
@@ -40,7 +41,7 @@ class HostResolverWrapper {
 
  private:
   HostResolverWrapper();
-  friend struct DefaultSingletonTraits<HostResolverWrapper>;
+  friend struct base::DefaultSingletonTraits<HostResolverWrapper>;
 
   net::HostResolver* resolver_;
 

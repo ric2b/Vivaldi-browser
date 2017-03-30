@@ -12,32 +12,35 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/sequential_id_generator.h"
+#include "ui/platform_window/android/android_window_export.h"
+#include "ui/platform_window/android/platform_ime_controller_android.h"
 #include "ui/platform_window/platform_window.h"
 
 struct ANativeWindow;
 
 namespace ui {
 
-class PlatformWindowAndroid : public PlatformWindow {
+class ANDROID_WINDOW_EXPORT PlatformWindowAndroid : public PlatformWindow {
  public:
   static bool Register(JNIEnv* env);
 
   explicit PlatformWindowAndroid(PlatformWindowDelegate* delegate);
   ~PlatformWindowAndroid() override;
 
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void SurfaceCreated(JNIEnv* env,
-                      jobject obj,
-                      jobject jsurface,
+                      const base::android::JavaParamRef<jobject>& obj,
+                      const base::android::JavaParamRef<jobject>& jsurface,
                       float device_pixel_ratio);
-  void SurfaceDestroyed(JNIEnv* env, jobject obj);
+  void SurfaceDestroyed(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
   void SurfaceSetSize(JNIEnv* env,
-                      jobject obj,
+                      const base::android::JavaParamRef<jobject>& obj,
                       jint width,
                       jint height,
                       jfloat density);
   bool TouchEvent(JNIEnv* env,
-                  jobject obj,
+                  const base::android::JavaParamRef<jobject>& obj,
                   jlong time_ms,
                   jint masked_action,
                   jint pointer_id,
@@ -50,10 +53,11 @@ class PlatformWindowAndroid : public PlatformWindow {
                   jfloat h_wheel,
                   jfloat v_wheel);
   bool KeyEvent(JNIEnv* env,
-                jobject obj,
+                const base::android::JavaParamRef<jobject>& obj,
                 bool pressed,
                 jint key_code,
                 jint unicode_character);
+
  private:
   void ReleaseWindow();
 
@@ -63,6 +67,7 @@ class PlatformWindowAndroid : public PlatformWindow {
   void Close() override;
   void SetBounds(const gfx::Rect& bounds) override;
   gfx::Rect GetBounds() override;
+  void SetTitle(const base::string16& title) override;
   void SetCapture() override;
   void ReleaseCapture() override;
   void ToggleFullscreen() override;
@@ -72,6 +77,7 @@ class PlatformWindowAndroid : public PlatformWindow {
   void SetCursor(PlatformCursor cursor) override;
   void MoveCursorTo(const gfx::Point& location) override;
   void ConfineCursorToBounds(const gfx::Rect& bounds) override;
+  PlatformImeController* GetPlatformImeController() override;
 
   PlatformWindowDelegate* delegate_;
 
@@ -80,6 +86,8 @@ class PlatformWindowAndroid : public PlatformWindow {
   ui::SequentialIDGenerator id_generator_;
 
   gfx::Size size_;  // Origin is always (0,0)
+
+  PlatformImeControllerAndroid platform_ime_controller_;
 
   base::WeakPtrFactory<PlatformWindowAndroid> weak_factory_;
 

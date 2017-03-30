@@ -5,9 +5,11 @@
 #ifndef COMPONENTS_POLICY_CORE_COMMON_CLOUD_MOCK_CLOUD_POLICY_CLIENT_H_
 #define COMPONENTS_POLICY_CORE_COMMON_CLOUD_MOCK_CLOUD_POLICY_CLIENT_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -34,6 +36,8 @@ class MockCloudPolicyClient : public CloudPolicyClient {
                void(const enterprise_management::DeviceStatusReportRequest*,
                     const enterprise_management::SessionStatusReportRequest*,
                     const StatusCallback&));
+  MOCK_METHOD2(UpdateGcmId, void(const std::string&, const StatusCallback&));
+
   // Sets the DMToken.
   void SetDMToken(const std::string& token);
 

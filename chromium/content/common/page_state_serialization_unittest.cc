@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <cmath>
 
 #include "base/base64.h"
@@ -11,6 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/common/page_state_serialization.h"
 #include "content/public/common/content_paths.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -71,7 +74,7 @@ void ExpectEquality(const ExplodedFrameState& a, const ExplodedFrameState& b) {
   EXPECT_EQ(a.state_object, b.state_object);
   ExpectEquality(a.document_state, b.document_state);
   EXPECT_EQ(a.scroll_restoration_type, b.scroll_restoration_type);
-  EXPECT_EQ(a.pinch_viewport_scroll_offset, b.pinch_viewport_scroll_offset);
+  EXPECT_EQ(a.visual_viewport_scroll_offset, b.visual_viewport_scroll_offset);
   EXPECT_EQ(a.scroll_offset, b.scroll_offset);
   EXPECT_EQ(a.item_sequence_number, b.item_sequence_number);
   EXPECT_EQ(a.document_sequence_number, b.document_sequence_number);
@@ -102,7 +105,7 @@ class PageStateSerializationTest : public testing::Test {
     frame_state->document_state.push_back(NS16("dev.chromium.org"));
     frame_state->scroll_restoration_type =
         blink::WebHistoryScrollRestorationManual;
-    frame_state->pinch_viewport_scroll_offset = gfx::PointF(10, 15);
+    frame_state->visual_viewport_scroll_offset = gfx::PointF(10, 15);
     frame_state->scroll_offset = gfx::Point(0, 100);
     frame_state->item_sequence_number = 1;
     frame_state->document_sequence_number = 2;
@@ -142,7 +145,7 @@ class PageStateSerializationTest : public testing::Test {
       frame_state->target = NS16("target");
     frame_state->scroll_restoration_type =
         blink::WebHistoryScrollRestorationAuto;
-    frame_state->pinch_viewport_scroll_offset = gfx::PointF(-1, -1);
+    frame_state->visual_viewport_scroll_offset = gfx::PointF(-1, -1);
     frame_state->scroll_offset = gfx::Point(42, -42);
     frame_state->item_sequence_number = 123;
     frame_state->document_sequence_number = 456;

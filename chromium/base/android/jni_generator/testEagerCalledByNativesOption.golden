@@ -29,12 +29,14 @@ jmethodID g_Test_testStaticMethodWithNoParam = NULL;
 }  // namespace
 
 // Step 2: method stubs.
-static jint Method(JNIEnv* env, jobject jcaller,
+static jint Java_org_chromium_example_jni_1generator_Test_nativeMethod(JNIEnv*
+    env,
+    jobject jcaller,
     jlong nativeTest,
     jint arg1) {
   Test* native = reinterpret_cast<Test*>(nativeTest);
   CHECK_NATIVE_PTR(env, jcaller, native, "Method", 0);
-  return native->Method(env, jcaller, arg1);
+  return native->Method(env, JavaParamRef<jobject>(env, jcaller), arg1);
 }
 
 namespace {
@@ -58,12 +60,11 @@ static jdouble testMethodWithNoParam(JNIEnv* env) {
   return ret;
 }
 
-static base::android::ScopedJavaLocalRef<jstring>
-    testStaticMethodWithNoParam(JNIEnv* env) {
+static ScopedJavaLocalRef<jstring> testStaticMethodWithNoParam(JNIEnv* env) {
   jstring ret =
       static_cast<jstring>(env->CallStaticObjectMethod(Test_clazz(env),
       g_Test_testStaticMethodWithNoParam));
-  return base::android::ScopedJavaLocalRef<jstring>(env, ret);
+  return ScopedJavaLocalRef<jstring>(env, ret);
 }
 }  // namespace
 
@@ -75,7 +76,9 @@ static const JNINativeMethod kMethodsTest[] = {
 "J"
 "I"
 ")"
-"I", reinterpret_cast<void*>(Method) },
+"I",
+    reinterpret_cast<void*>(Java_org_chromium_example_jni_1generator_Test_nativeMethod)
+    },
 };
 
 static bool RegisterNativesImpl(JNIEnv* env, jclass clazz) {

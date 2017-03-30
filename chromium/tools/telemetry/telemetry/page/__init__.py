@@ -6,14 +6,14 @@ import logging
 import os
 import urlparse
 
-from telemetry import decorators
 from telemetry import story
 from catapult_base import cloud_storage
-from telemetry.internal.util import path
 from telemetry.page import shared_page_state
+from telemetry.page import action_runner as action_runner_module
 
 
 class Page(story.Story):
+
   def __init__(self, url, page_set=None, base_dir=None, name='',
                credentials_path=None,
                credentials_bucket=cloud_storage.PUBLIC_BUCKET, labels=None,
@@ -40,6 +40,10 @@ class Page(story.Story):
         logging.error('Invalid credentials path: %s' % credentials_path)
         credentials_path = None
     self._credentials_path = credentials_path
+
+    # Whether to collect garbage on the page before navigating & performing
+    # page actions.
+    self._collect_garbage_before_run = True
 
     # These attributes can be set dynamically by the page.
     self.synthetic_delays = dict()
@@ -68,6 +72,20 @@ class Page(story.Story):
       if startup_url_scheme == 'file':
         raise ValueError('startup_url with local file scheme is not supported')
 
+  def Run(self, shared_state):
+    current_tab = shared_state.current_tab
+    # Collect garbage from previous run several times to make the results more
+    # stable if needed.
+    if self._collect_garbage_before_run:
+      for _ in xrange(0, 5):
+        current_tab.CollectGarbage()
+    shared_state.page_test.WillNavigateToPage(self, current_tab)
+    shared_state.page_test.RunNavigateSteps(self, current_tab)
+    shared_state.page_test.DidNavigateToPage(self, current_tab)
+    action_runner = action_runner_module.ActionRunner(
+        current_tab, skip_waits=self.skip_waits)
+    self.RunPageInteractions(action_runner)
+
   def RunNavigateSteps(self, action_runner):
     url = self.file_path_url_with_scheme if self.is_file else self.url
     action_runner.Navigate(
@@ -85,8 +103,8 @@ class Page(story.Story):
   def AsDict(self):
     """Converts a page object to a dict suitable for JSON output."""
     d = {
-      'id': self._id,
-      'url': self._url,
+        'id': self._id,
+        'url': self._url,
     }
     if self._name:
       d['name'] = self._name
@@ -95,7 +113,6 @@ class Page(story.Story):
   @property
   def story_set(self):
     return self._page_set
-
 
   # TODO(nednguyen, aiolos): deprecate this property.
   @property
@@ -144,7 +161,7 @@ class Page(story.Story):
     """Returns the path of the file, stripping the scheme and query string."""
     assert self.is_file
     # Because ? is a valid character in a filename,
-    # we have to treat the url as a non-file by removing the scheme.
+    # we have to treat the URL as a non-file by removing the scheme.
     parsed_url = urlparse.urlparse(self.url[7:])
     return os.path.normpath(os.path.join(
         self._base_dir, parsed_url.netloc + parsed_url.path))
@@ -157,7 +174,8 @@ class Page(story.Story):
   def file_path_url(self):
     """Returns the file path, including the params, query, and fragment."""
     assert self.is_file
-    file_path_url = os.path.normpath(os.path.join(self._base_dir, self.url[7:]))
+    file_path_url = os.path.normpath(
+        os.path.join(self._base_dir, self.url[7:]))
     # Preserve trailing slash or backslash.
     # It doesn't matter in a file path, but it does matter in a URL.
     if self.url.endswith('/'):

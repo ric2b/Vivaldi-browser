@@ -7,7 +7,7 @@ package org.chromium.android_webview.test;
 import android.app.Instrumentation;
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.test.ActivityInstrumentationTestCase2;
+import android.os.Build;
 import android.util.Log;
 
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
@@ -17,13 +17,21 @@ import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.AwSettings;
+import org.chromium.android_webview.AwSwitches;
 import org.chromium.android_webview.test.util.GraphicsTestUtils;
 import org.chromium.android_webview.test.util.JSUtils;
+import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.BaseActivityInstrumentationTestCase;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.InMemorySharedPreferences;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.base.test.util.parameter.Parameter;
+import org.chromium.base.test.util.parameter.ParameterizedTest;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageFinishedHelper;
+import org.chromium.content.common.ContentSwitches;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.test.util.TestWebServer;
 
@@ -33,16 +41,39 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * A base class for android_webview tests.
+ * A base class for android_webview tests. WebView only runs on KitKat and later,
+ * so make sure no one attempts to run the tests on earlier OS releases.
+ *
+ * By default, all tests run both in single-process mode, and with sandboxed renderer.
+ * If a test doesn't yet work with sandboxed renderer, an entire class, or an individual test
+ * method can be marked for single-process testing only by adding the following annotation:
+ *
+ * @ParameterizedTest.Set
  */
+@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
+@ParameterizedTest.Set(tests = {
+            @ParameterizedTest(parameters = {
+                        @Parameter(
+                                tag = CommandLineFlags.Parameter.PARAMETER_TAG)}),
+            @ParameterizedTest(parameters = {
+                        @Parameter(
+                                tag = CommandLineFlags.Parameter.PARAMETER_TAG,
+                                arguments = {
+                                    @Parameter.Argument(
+                                        name = CommandLineFlags.Parameter.ADD_ARG,
+                                        stringArray = {AwSwitches.WEBVIEW_SANDBOXED_RENDERER,
+                                                ContentSwitches.IPC_SYNC_COMPOSITING})
+            })})})
 public class AwTestBase
-        extends ActivityInstrumentationTestCase2<AwTestRunnerActivity> {
+        extends BaseActivityInstrumentationTestCase<AwTestRunnerActivity> {
     public static final long WAIT_TIMEOUT_MS = scaleTimeout(15000);
     public static final int CHECK_INTERVAL = 100;
     private static final String TAG = "AwTestBase";
+
+    // The browser context needs to be a process-wide singleton.
+    private AwBrowserContext mBrowserContext;
 
     public AwTestBase() {
         super(AwTestRunnerActivity.class);
@@ -50,6 +81,9 @@ public class AwTestBase
 
     @Override
     protected void setUp() throws Exception {
+        mBrowserContext = new AwBrowserContext(
+                new InMemorySharedPreferences(), getInstrumentation().getTargetContext());
+
         super.setUp();
         if (needsBrowserProcessStarted()) {
             startBrowserProcess();
@@ -84,7 +118,6 @@ public class AwTestBase
     public <R> R runTestOnUiThreadAndGetResult(Callable<R> callable)
             throws Exception {
         FutureTask<R> task = new FutureTask<R>(callable);
-        getInstrumentation().waitForIdleSync();
         getInstrumentation().runOnMainSync(task);
         return task.get();
     }
@@ -183,8 +216,7 @@ public class AwTestBase
             }
             @Override
             public void run() {
-                awContents.loadUrl(LoadUrlParams.createLoadHttpPostParams(url,
-                        mPostData));
+                awContents.postUrl(url, mPostData);
             }
         }
         getInstrumentation().runOnMainSync(new PostUrl(postData));
@@ -229,8 +261,7 @@ public class AwTestBase
         getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                awContents.loadUrl(LoadUrlParams.createLoadDataParams(
-                        data, mimeType, isBase64Encoded));
+                awContents.loadData(data, mimeType, isBase64Encoded ? "base64" : null);
             }
         });
     }
@@ -251,8 +282,8 @@ public class AwTestBase
         runTestOnUiThread(new Runnable() {
             @Override
             public void run() {
-                awContents.loadUrl(LoadUrlParams.createLoadDataParamsWithBaseUrl(
-                        data, mimeType, isBase64Encoded, baseUrl, historyUrl));
+                awContents.loadDataWithBaseURL(
+                        baseUrl, data, mimeType, isBase64Encoded ? "base64" : null, historyUrl);
             }
         });
     }
@@ -372,10 +403,6 @@ public class AwTestBase
         return testContainerView;
     }
 
-    // The browser context needs to be a process-wide singleton.
-    private AwBrowserContext mBrowserContext =
-            new AwBrowserContext(new InMemorySharedPreferences());
-
     public AwBrowserContext getAwBrowserContext() {
         return mBrowserContext;
     }
@@ -414,16 +441,13 @@ public class AwTestBase
     }
 
     public AwTestContainerView createAwTestContainerViewOnMainSync(
-            final AwContentsClient client, final boolean supportsLegacyQuirks) throws Exception {
-        final AtomicReference<AwTestContainerView> testContainerView =
-                new AtomicReference<AwTestContainerView>();
-        getInstrumentation().runOnMainSync(new Runnable() {
+            final AwContentsClient client, final boolean supportsLegacyQuirks) {
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<AwTestContainerView>() {
             @Override
-            public void run() {
-                testContainerView.set(createAwTestContainerView(client, supportsLegacyQuirks));
+            public AwTestContainerView call() {
+                return createAwTestContainerView(client, supportsLegacyQuirks);
             }
         });
-        return testContainerView.get();
     }
 
     public void destroyAwContentsOnMainSync(final AwContents awContents) {
@@ -471,7 +495,7 @@ public class AwTestBase
      * treats timeouts and exceptions as test failures automatically.
      */
     public static void poll(final Callable<Boolean> callable) throws Exception {
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {
@@ -481,7 +505,7 @@ public class AwTestBase
                     return false;
                 }
             }
-        }, WAIT_TIMEOUT_MS, CHECK_INTERVAL));
+        }, WAIT_TIMEOUT_MS, CHECK_INTERVAL);
     }
 
     /**
@@ -588,7 +612,7 @@ public class AwTestBase
         TestAwContentsClient.OnCreateWindowHelper onCreateWindowHelper =
                 parentAwContentsClient.getOnCreateWindowHelper();
         int currentCallCount = onCreateWindowHelper.getCallCount();
-        parentAwContents.evaluateJavaScript(triggerScript, null);
+        parentAwContents.evaluateJavaScriptForTests(triggerScript, null);
         onCreateWindowHelper.waitForCallback(
                 currentCallCount, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     }

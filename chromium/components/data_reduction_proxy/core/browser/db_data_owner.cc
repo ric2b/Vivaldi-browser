@@ -4,6 +4,8 @@
 
 #include "components/data_reduction_proxy/core/browser/db_data_owner.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "components/data_reduction_proxy/core/browser/data_store.h"
@@ -13,7 +15,7 @@
 namespace data_reduction_proxy {
 
 DBDataOwner::DBDataOwner(scoped_ptr<DataStore> store)
-    : store_(store.Pass()),
+    : store_(std::move(store)),
       data_usage_(new DataUsageStore(store_.get())),
       weak_factory_(this) {
   sequence_checker_.DetachFromSequence();
@@ -29,6 +31,13 @@ void DBDataOwner::InitializeOnDBThread() {
   store_->InitializeOnDBThread();
 }
 
+void DBDataOwner::LoadHistoricalDataUsage(
+    std::vector<DataUsageBucket>* data_usage) {
+  DCHECK(sequence_checker_.CalledOnValidSequencedThread());
+
+  data_usage_->LoadDataUsage(data_usage);
+}
+
 void DBDataOwner::LoadCurrentDataUsageBucket(DataUsageBucket* bucket) {
   DCHECK(sequence_checker_.CalledOnValidSequencedThread());
 
@@ -40,6 +49,19 @@ void DBDataOwner::StoreCurrentDataUsageBucket(
   DCHECK(sequence_checker_.CalledOnValidSequencedThread());
 
   data_usage_->StoreCurrentDataUsageBucket(*current.get());
+}
+
+void DBDataOwner::DeleteHistoricalDataUsage() {
+  DCHECK(sequence_checker_.CalledOnValidSequencedThread());
+
+  data_usage_->DeleteHistoricalDataUsage();
+}
+
+void DBDataOwner::DeleteBrowsingHistory(const base::Time& start,
+                                        const base::Time& end) {
+  DCHECK(sequence_checker_.CalledOnValidSequencedThread());
+
+  data_usage_->DeleteBrowsingHistory(start, end);
 }
 
 base::WeakPtr<DBDataOwner> DBDataOwner::GetWeakPtr() {

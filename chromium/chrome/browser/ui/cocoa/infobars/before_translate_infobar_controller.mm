@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/cocoa/infobars/before_translate_infobar_controller.h"
 
+#include <stddef.h>
+
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_utilities.h"
 #include "grit/components_strings.h"
@@ -46,8 +48,7 @@ NSButton* CreateNSButtonWithResourceIDAndParameter(
 
 - (void)initializeExtraControls {
   translate::TranslateInfoBarDelegate* delegate = [self delegate];
-  const base::string16& language =
-      delegate->language_name_at(delegate->original_language_index());
+  const base::string16& language = delegate->original_language_name();
   neverTranslateButton_.reset(
       CreateNSButtonWithResourceIDAndParameter(
           IDS_TRANSLATE_INFOBAR_NEVER_TRANSLATE, language));

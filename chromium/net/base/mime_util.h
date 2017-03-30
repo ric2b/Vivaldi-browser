@@ -17,6 +17,8 @@
 // All constants in mime_util.cc must be written in lower case, except parameter
 // values, which can be any case.
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -97,6 +99,10 @@ enum CertificateMimeType {
   CERTIFICATE_MIME_TYPE_X509_CA_CERT,
   CERTIFICATE_MIME_TYPE_PKCS12_ARCHIVE,
 };
+
+// Generates a random MIME multipart boundary.
+// The returned string is guaranteed to be at most 70 characters long.
+NET_EXPORT std::string GenerateMimeMultipartBoundary();
 
 // Prepares one value as part of a multi-part upload request.
 NET_EXPORT void AddMultipartValueForUpload(const std::string& value_name,

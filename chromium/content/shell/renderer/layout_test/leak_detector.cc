@@ -24,15 +24,20 @@ namespace content {
 const int kInitialNumberOfLiveAudioNodes = 0;
 const int kInitialNumberOfLiveDocuments = 1;
 const int kInitialNumberOfLiveNodes = 4;
-const int kInitialNumberOfLiveRenderObjects = 3;
+const int kInitialNumberOfLiveLayoutObjects = 3;
 const int kInitialNumberOfLiveResources = 0;
 const int kInitialNumberOfScriptPromises = 0;
 const int kInitialNumberOfLiveFrames = 1;
-const int kInitialNumberOfV8PerContextData = 1;
 
 // In the initial state, there are two ActiveDOMObjects (FontFaceSet created by
 // HTMLDocument and SuspendableTimer created by DocumentLoader).
 const int kInitialNumberOfLiveActiveDOMObject = 2;
+
+// This includes not only about:blank's context but also ScriptRegexp (e.g.
+// created by isValidEmailAddress in EmailInputType.cpp). The leak detector
+// always creates the latter to stabilize the number of V8PerContextData
+// objects.
+const int kInitialNumberOfV8PerContextData = 2;
 
 LeakDetector::LeakDetector(BlinkTestRunner* test_runner)
     : test_runner_(test_runner),
@@ -40,8 +45,8 @@ LeakDetector::LeakDetector(BlinkTestRunner* test_runner)
   previous_result_.numberOfLiveAudioNodes = kInitialNumberOfLiveAudioNodes;
   previous_result_.numberOfLiveDocuments = kInitialNumberOfLiveDocuments;
   previous_result_.numberOfLiveNodes = kInitialNumberOfLiveNodes;
-  previous_result_.numberOfLiveRenderObjects =
-      kInitialNumberOfLiveRenderObjects;
+  previous_result_.numberOfLiveLayoutObjects =
+      kInitialNumberOfLiveLayoutObjects;
   previous_result_.numberOfLiveResources = kInitialNumberOfLiveResources;
   previous_result_.numberOfLiveActiveDOMObjects =
     kInitialNumberOfLiveActiveDOMObject;
@@ -55,7 +60,8 @@ LeakDetector::~LeakDetector() {
 }
 
 void LeakDetector::TryLeakDetection(blink::WebLocalFrame* frame) {
-  web_leak_detector_->collectGarbageAndGetDOMCounts(frame);
+  web_leak_detector_->prepareForLeakDetection();
+  web_leak_detector_->collectGarbageAndReport();
 }
 
 void LeakDetector::onLeakDetectionComplete(
@@ -82,12 +88,12 @@ void LeakDetector::onLeakDetectionComplete(
     list->AppendInteger(result.numberOfLiveNodes);
     detail.Set("numberOfLiveNodes", list);
   }
-  if (previous_result_.numberOfLiveRenderObjects <
-      result.numberOfLiveRenderObjects) {
+  if (previous_result_.numberOfLiveLayoutObjects <
+      result.numberOfLiveLayoutObjects) {
     base::ListValue* list = new base::ListValue();
-    list->AppendInteger(previous_result_.numberOfLiveRenderObjects);
-    list->AppendInteger(result.numberOfLiveRenderObjects);
-    detail.Set("numberOfLiveRenderObjects", list);
+    list->AppendInteger(previous_result_.numberOfLiveLayoutObjects);
+    list->AppendInteger(result.numberOfLiveLayoutObjects);
+    detail.Set("numberOfLiveLayoutObjects", list);
   }
   if (previous_result_.numberOfLiveResources < result.numberOfLiveResources) {
     base::ListValue* list = new base::ListValue();

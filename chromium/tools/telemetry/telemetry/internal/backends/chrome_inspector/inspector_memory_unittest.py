@@ -8,7 +8,6 @@ from telemetry.testing import tab_test_case
 
 class InspectorMemoryTest(tab_test_case.TabTestCase):
 
-  @decorators.Disabled('mac') # TODO Vivaldi Mac disabled
   @decorators.Enabled('has tabs')
   def testGetDOMStats(self):
     # Due to an issue with CrOS, we create a new tab here rather than

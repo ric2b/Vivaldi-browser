@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/android/history_report/data_provider.h"
+
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
@@ -22,6 +25,8 @@
 using bookmarks::BookmarkModel;
 
 namespace {
+static bool g_is_debug = false;
+
 typedef base::hash_map<std::string, BookmarkModel::URLAndTitle*> BookmarkMap;
 
 struct Context {
@@ -45,8 +50,8 @@ void UpdateUrl(Context* context,
   history_report::DeltaFileEntryWithData* entry = &((*urls)[position]);
   if (success) {
     entry->SetData(url);
-  } else {
-    LOG(WARNING) << "No data for url " << entry->Url();
+  } else if (g_is_debug){
+    LOG(WARNING) << "DB not initialized or no data for url " << entry->Url();
   }
   if (position + 1 == urls->size()) {
     context->finished.Signal();
@@ -103,9 +108,9 @@ DataProvider::DataProvider(Profile* profile,
 
 DataProvider::~DataProvider() {}
 
-scoped_ptr<std::vector<DeltaFileEntryWithData> > DataProvider::Query(
-    int64 last_seq_no,
-    int32 limit) {
+scoped_ptr<std::vector<DeltaFileEntryWithData>> DataProvider::Query(
+    int64_t last_seq_no,
+    int32_t limit) {
   if (last_seq_no == 0)
     RecreateLog();
   scoped_ptr<std::vector<DeltaFileEntryWithData> > entries;
@@ -146,7 +151,7 @@ scoped_ptr<std::vector<DeltaFileEntryWithData> > DataProvider::Query(
       if (entry.SeqNo() > last_seq_no) last_seq_no = entry.SeqNo();
     }
   } while (!entries->empty() && valid_entries->empty());
-  return valid_entries.Pass();
+  return valid_entries;
 }
 
 void DataProvider::StartVisitMigrationToUsageBuffer(

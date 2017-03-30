@@ -2,12 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "sync/engine/apply_control_data_updates.h"
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include <string>
+
 #include "base/format_macros.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
-#include "sync/engine/apply_control_data_updates.h"
 #include "sync/engine/syncer.h"
 #include "sync/engine/syncer_util.h"
 #include "sync/internal_api/public/test/test_entry_factory.h"
@@ -327,10 +334,8 @@ TEST_F(ApplyControlDataUpdatesTest,
   other_cryptographer.GetKeys(server_nigori->mutable_encryption_keybag());
   server_nigori->set_encrypt_everything(true);
   server_nigori->set_keybag_is_frozen(true);
-  int64 nigori_handle =
-      entry_factory_->CreateUnappliedNewItem(kNigoriTag,
-                                             server_specifics,
-                                             true);
+  int64_t nigori_handle = entry_factory_->CreateUnappliedNewItem(
+      kNigoriTag, server_specifics, true);
 
   // Initialize the local cryptographer with the local keys.
   cryptographer->AddKey(local_params);
@@ -405,10 +410,8 @@ TEST_F(ApplyControlDataUpdatesTest,
   other_cryptographer.GetKeys(server_nigori->mutable_encryption_keybag());
   server_nigori->set_encrypt_everything(false);
   server_nigori->set_keybag_is_frozen(false);
-  int64 nigori_handle =
-      entry_factory_->CreateUnappliedNewItem(kNigoriTag,
-                                             server_specifics,
-                                             true);
+  int64_t nigori_handle = entry_factory_->CreateUnappliedNewItem(
+      kNigoriTag, server_specifics, true);
 
   // Initialize the local cryptographer with the local keys.
   cryptographer->AddKey(local_params);
@@ -480,10 +483,8 @@ TEST_F(ApplyControlDataUpdatesTest,
   sync_pb::NigoriSpecifics* server_nigori = server_specifics.mutable_nigori();
   cryptographer->GetKeys(server_nigori->mutable_encryption_keybag());
   server_nigori->set_encrypt_everything(true);
-  int64 nigori_handle =
-      entry_factory_->CreateUnappliedNewItem(kNigoriTag,
-                                             server_specifics,
-                                             true);
+  int64_t nigori_handle = entry_factory_->CreateUnappliedNewItem(
+      kNigoriTag, server_specifics, true);
 
   // Add the new keys to the cryptogrpaher
   cryptographer->AddKey(new_params);
@@ -555,10 +556,8 @@ TEST_F(ApplyControlDataUpdatesTest,
   server_nigori->set_passphrase_type(
       sync_pb::NigoriSpecifics::KEYSTORE_PASSPHRASE);
   server_nigori->mutable_keystore_decryptor_token();
-  int64 nigori_handle =
-      entry_factory_->CreateUnappliedNewItem(kNigoriTag,
-                                             server_specifics,
-                                             true);
+  int64_t nigori_handle = entry_factory_->CreateUnappliedNewItem(
+      kNigoriTag, server_specifics, true);
 
   // Add the new keys to the cryptographer.
   cryptographer->AddKey(old_params);
@@ -637,10 +636,8 @@ TEST_F(ApplyControlDataUpdatesTest,
   server_nigori->set_keybag_is_frozen(true);
   server_nigori->set_passphrase_type(
       sync_pb::NigoriSpecifics::CUSTOM_PASSPHRASE);
-  int64 nigori_handle =
-      entry_factory_->CreateUnappliedNewItem(kNigoriTag,
-                                             server_specifics,
-                                             true);
+  int64_t nigori_handle = entry_factory_->CreateUnappliedNewItem(
+      kNigoriTag, server_specifics, true);
 
   // Add the old keys to the cryptographer.
   cryptographer->AddKey(old_params);
@@ -717,10 +714,8 @@ TEST_F(ApplyControlDataUpdatesTest,
   other_cryptographer.GetKeys(server_nigori->mutable_encryption_keybag());
   server_nigori->set_encrypt_everything(true);
   server_nigori->set_keybag_is_frozen(false);
-  int64 nigori_handle =
-      entry_factory_->CreateUnappliedNewItem(kNigoriTag,
-                                             server_specifics,
-                                             true);
+  int64_t nigori_handle = entry_factory_->CreateUnappliedNewItem(
+      kNigoriTag, server_specifics, true);
 
   // Add the old keys to the cryptographer.
   cryptographer->AddKey(old_params);
@@ -799,10 +794,8 @@ TEST_F(ApplyControlDataUpdatesTest,
   server_nigori->set_passphrase_type(
       sync_pb::NigoriSpecifics::KEYSTORE_PASSPHRASE);
   server_nigori->mutable_keystore_decryptor_token();
-  int64 nigori_handle =
-      entry_factory_->CreateUnappliedNewItem(kNigoriTag,
-                                             server_specifics,
-                                             true);
+  int64_t nigori_handle = entry_factory_->CreateUnappliedNewItem(
+      kNigoriTag, server_specifics, true);
 
   // Add the old keys to the cryptographer.
   cryptographer->AddKey(old_params);
@@ -861,8 +854,8 @@ TEST_F(ApplyControlDataUpdatesTest, ControlApply) {
   sync_pb::EntitySpecifics specifics;
   specifics.mutable_experiments()->mutable_keystore_encryption()->
       set_enabled(true);
-  int64 experiment_handle = entry_factory_->CreateUnappliedNewItem(
-      experiment_id, specifics, false);
+  int64_t experiment_handle =
+      entry_factory_->CreateUnappliedNewItem(experiment_id, specifics, false);
   ApplyControlDataUpdates(directory());
 
   EXPECT_FALSE(entry_factory_->GetIsUnappliedForItem(experiment_handle));
@@ -878,10 +871,10 @@ TEST_F(ApplyControlDataUpdatesTest, ControlApplyParentBeforeChild) {
   sync_pb::EntitySpecifics specifics;
   specifics.mutable_experiments()->mutable_keystore_encryption()->
       set_enabled(true);
-  int64 experiment_handle = entry_factory_->CreateUnappliedNewItemWithParent(
+  int64_t experiment_handle = entry_factory_->CreateUnappliedNewItemWithParent(
       experiment_id, specifics, parent_id);
-  int64 parent_handle = entry_factory_->CreateUnappliedNewItem(
-      parent_id, specifics, true);
+  int64_t parent_handle =
+      entry_factory_->CreateUnappliedNewItem(parent_id, specifics, true);
   ApplyControlDataUpdates(directory());
 
   EXPECT_FALSE(entry_factory_->GetIsUnappliedForItem(parent_handle));
@@ -900,8 +893,8 @@ TEST_F(ApplyControlDataUpdatesTest, ControlConflict) {
       set_enabled(true);
   local_specifics.mutable_experiments()->mutable_keystore_encryption()->
       set_enabled(false);
-  int64 experiment_handle = entry_factory_->CreateSyncedItem(
-      experiment_id, EXPERIMENTS, false);
+  int64_t experiment_handle =
+      entry_factory_->CreateSyncedItem(experiment_id, EXPERIMENTS, false);
   entry_factory_->SetServerSpecificsForItem(experiment_handle,
                                             server_specifics);
   entry_factory_->SetLocalSpecificsForItem(experiment_handle,
@@ -912,6 +905,69 @@ TEST_F(ApplyControlDataUpdatesTest, ControlConflict) {
   EXPECT_TRUE(
       entry_factory_->GetLocalSpecificsForItem(experiment_handle).
           experiments().keystore_encryption().enabled());
+}
+
+// Check that applying a EXPERIMENTS update marks the datatype as downloaded.
+TEST_F(ApplyControlDataUpdatesTest, ExperimentsApplyMarksDownloadCompleted) {
+  EXPECT_FALSE(directory()->InitialSyncEndedForType(EXPERIMENTS));
+
+  // Create root node for EXPERIMENTS datatype
+  {
+    syncable::WriteTransaction trans(FROM_HERE, UNITTEST, directory());
+    syncable::ModelNeutralMutableEntry entry(
+        &trans, syncable::CREATE_NEW_TYPE_ROOT, EXPERIMENTS);
+    ASSERT_TRUE(entry.good());
+    entry.PutServerIsDir(true);
+    entry.PutUniqueServerTag(ModelTypeToRootTag(EXPERIMENTS));
+  }
+
+  // Initial sync isn't marked as ended for EXPERIMENTS even though the
+  // root folder exists.
+  EXPECT_FALSE(directory()->InitialSyncEndedForType(EXPERIMENTS));
+
+  std::string experiment_id = "experiment";
+  sync_pb::EntitySpecifics specifics;
+  specifics.mutable_experiments()->mutable_keystore_encryption()->set_enabled(
+      true);
+  entry_factory_->CreateUnappliedNewItem(experiment_id, specifics, false);
+
+  ApplyControlDataUpdates(directory());
+
+  // After applying the updates EXPERIMENTS should be marked as having its
+  // initial sync completed.
+  EXPECT_TRUE(directory()->InitialSyncEndedForType(EXPERIMENTS));
+  // Verify that there is no side effect on another control type.
+  EXPECT_FALSE(directory()->InitialSyncEndedForType(NIGORI));
+}
+
+// Check that applying a NIGORI update marks the datatype as downloaded.
+TEST_F(ApplyControlDataUpdatesTest, NigoriApplyMarksDownloadCompleted) {
+  EXPECT_FALSE(directory()->InitialSyncEndedForType(NIGORI));
+
+  Cryptographer* cryptographer;
+
+  {
+    syncable::ReadTransaction trans(FROM_HERE, directory());
+    cryptographer = directory()->GetCryptographer(&trans);
+  }
+
+  KeyParams params = {"localhost", "dummy", "foobar"};
+  cryptographer->AddKey(params);
+  sync_pb::EntitySpecifics specifics;
+  sync_pb::NigoriSpecifics* nigori = specifics.mutable_nigori();
+  cryptographer->GetKeys(nigori->mutable_encryption_keybag());
+  nigori->set_encrypt_everything(true);
+
+  entry_factory_->CreateUnappliedNewItem(ModelTypeToRootTag(NIGORI), specifics,
+                                         true);
+
+  ApplyControlDataUpdates(directory());
+
+  // After applying the updates NIGORI should be marked as having its
+  // initial sync completed.
+  EXPECT_TRUE(directory()->InitialSyncEndedForType(NIGORI));
+  // Verify that there is no side effect on another control type.
+  EXPECT_FALSE(directory()->InitialSyncEndedForType(EXPERIMENTS));
 }
 
 }  // namespace syncer

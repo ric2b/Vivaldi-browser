@@ -2,9 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/renderers/audio_renderer_impl.h"
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -13,9 +18,9 @@
 #include "media/base/audio_splicer.h"
 #include "media/base/fake_audio_renderer_sink.h"
 #include "media/base/gmock_callback_support.h"
+#include "media/base/media_util.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
-#include "media/renderers/audio_renderer_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::base::TimeDelta;
@@ -53,7 +58,7 @@ static int kInputSamplesPerSecond = 5000;
 static int kOutputSamplesPerSecond = 10000;
 
 ACTION_P(EnterPendingDecoderInitStateAction, test) {
-  test->EnterPendingDecoderInitState(arg1);
+  test->EnterPendingDecoderInitState(arg2);
 }
 
 class AudioRendererImplTest : public ::testing::Test {
@@ -69,8 +74,7 @@ class AudioRendererImplTest : public ::testing::Test {
                                     kSampleFormat,
                                     kChannelLayout,
                                     kInputSamplesPerSecond,
-                                    NULL,
-                                    0,
+                                    EmptyExtraData(),
                                     false);
     demuxer_stream_.set_audio_decoder_config(audio_config);
 
@@ -96,10 +100,8 @@ class AudioRendererImplTest : public ::testing::Test {
     decoders.push_back(decoder_);
     sink_ = new FakeAudioRendererSink();
     renderer_.reset(new AudioRendererImpl(message_loop_.task_runner(),
-                                          sink_.get(),
-                                          decoders.Pass(),
-                                          hardware_config_,
-                                          new MediaLog()));
+                                          sink_.get(), std::move(decoders),
+                                          hardware_config_, new MediaLog()));
     renderer_->tick_clock_.reset(tick_clock_);
     tick_clock_->Advance(base::TimeDelta::FromSeconds(1));
   }
@@ -109,11 +111,14 @@ class AudioRendererImplTest : public ::testing::Test {
   }
 
   void ExpectUnsupportedAudioDecoder() {
-    EXPECT_CALL(*decoder_, Initialize(_, _, _))
-        .WillOnce(DoAll(SaveArg<2>(&output_cb_), RunCallback<1>(false)));
+    EXPECT_CALL(*decoder_, Initialize(_, _, _, _))
+        .WillOnce(DoAll(SaveArg<3>(&output_cb_), RunCallback<2>(false)));
   }
 
-  MOCK_METHOD1(OnStatistics, void(const PipelineStatistics&));
+  void OnStatistics(const PipelineStatistics& stats) {
+    last_statistics_.audio_memory_usage += stats.audio_memory_usage;
+  }
+
   MOCK_METHOD1(OnBufferingStateChange, void(BufferingState));
   MOCK_METHOD1(OnError, void(PipelineStatus));
   MOCK_METHOD0(OnWaitingForDecryptionKey, void(void));
@@ -121,7 +126,7 @@ class AudioRendererImplTest : public ::testing::Test {
   void InitializeRenderer(const PipelineStatusCB& pipeline_status_cb) {
     EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
     renderer_->Initialize(
-        &demuxer_stream_, pipeline_status_cb, SetDecryptorReadyCB(),
+        &demuxer_stream_, pipeline_status_cb, SetCdmReadyCB(),
         base::Bind(&AudioRendererImplTest::OnStatistics,
                    base::Unretained(this)),
         base::Bind(&AudioRendererImplTest::OnBufferingStateChange,
@@ -133,8 +138,8 @@ class AudioRendererImplTest : public ::testing::Test {
   }
 
   void Initialize() {
-    EXPECT_CALL(*decoder_, Initialize(_, _, _))
-        .WillOnce(DoAll(SaveArg<2>(&output_cb_), RunCallback<1>(true)));
+    EXPECT_CALL(*decoder_, Initialize(_, _, _, _))
+        .WillOnce(DoAll(SaveArg<3>(&output_cb_), RunCallback<2>(true)));
     InitializeWithStatus(PIPELINE_OK);
 
     next_timestamp_.reset(new AudioTimestampHelper(kInputSamplesPerSecond));
@@ -152,7 +157,8 @@ class AudioRendererImplTest : public ::testing::Test {
   }
 
   void InitializeAndDestroy() {
-    EXPECT_CALL(*decoder_, Initialize(_, _, _)).WillOnce(RunCallback<1>(true));
+    EXPECT_CALL(*decoder_, Initialize(_, _, _, _))
+        .WillOnce(RunCallback<2>(true));
 
     WaitableMessageLoopEvent event;
     InitializeRenderer(event.GetPipelineStatusCB());
@@ -165,7 +171,7 @@ class AudioRendererImplTest : public ::testing::Test {
   }
 
   void InitializeAndDestroyDuringDecoderInit() {
-    EXPECT_CALL(*decoder_, Initialize(_, _, _))
+    EXPECT_CALL(*decoder_, Initialize(_, _, _, _))
         .WillOnce(EnterPendingDecoderInitStateAction(this));
 
     WaitableMessageLoopEvent event;
@@ -276,6 +282,8 @@ class AudioRendererImplTest : public ::testing::Test {
         base::Bind(base::ResetAndReturn(&decode_cb_), AudioDecoder::kOk));
 
     base::RunLoop().RunUntilIdle();
+    EXPECT_EQ(last_statistics_.audio_memory_usage,
+              renderer_->algorithm_->GetMemoryUsage());
   }
 
   // Delivers frames until |renderer_|'s internal buffer is full and no longer
@@ -359,6 +367,7 @@ class AudioRendererImplTest : public ::testing::Test {
   scoped_refptr<FakeAudioRendererSink> sink_;
   AudioHardwareConfig hardware_config_;
   base::SimpleTestTickClock* tick_clock_;
+  PipelineStatistics last_statistics_;
 
  private:
   void DecodeDecoder(const scoped_refptr<DecoderBuffer>& buffer,
@@ -393,6 +402,7 @@ class AudioRendererImplTest : public ::testing::Test {
   void DeliverBuffer(AudioDecoder::Status status,
                      const scoped_refptr<AudioBuffer>& buffer) {
     CHECK(!decode_cb_.is_null());
+
     if (buffer.get() && !buffer->end_of_stream())
       output_cb_.Run(buffer);
     base::ResetAndReturn(&decode_cb_).Run(status);

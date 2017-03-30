@@ -2,18 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/preferences_private/preferences_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -21,15 +22,18 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/sync/profile_sync_components_factory_mock.h"
-#include "chrome/browser/sync/profile_sync_service.h"
+#include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/sync/supervised_user_signin_manager_wrapper.h"
+#include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/common/bookmark_constants.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/sync_driver/signin_manager_wrapper.h"
+#include "components/sync_driver/sync_api_component_factory_mock.h"
 #include "components/sync_driver/sync_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -45,13 +49,7 @@ namespace {
 class FakeProfileSyncService : public ProfileSyncService {
  public:
   explicit FakeProfileSyncService(Profile* profile)
-      : ProfileSyncService(
-            scoped_ptr<ProfileSyncComponentsFactory>(
-                new ProfileSyncComponentsFactoryMock()),
-            profile,
-            make_scoped_ptr<SupervisedUserSigninManagerWrapper>(NULL),
-            ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
-            browser_sync::MANUAL_START),
+      : ProfileSyncService(CreateProfileSyncServiceParamsForTest(profile)),
         sync_initialized_(true),
         initialized_state_violation_(false) {}
 

@@ -4,6 +4,7 @@
 
 #include "components/test_runner/text_input_controller.h"
 
+#include "base/macros.h"
 #include "gin/arguments.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
@@ -14,6 +15,7 @@
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebRange.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "v8/include/v8.h"
 
 namespace test_runner {
@@ -256,9 +258,15 @@ void TextInputController::SetComposition(const std::string& text) {
   key_down.setKeyIdentifierFromWindowsKeyCode();
   view_->handleInputEvent(key_down);
 
-  blink::WebVector<blink::WebCompositionUnderline> underlines;
-  blink::WebString web_text(blink::WebString::fromUTF8(text));
-  view_->setComposition(web_text, underlines, 0, web_text.length());
+  std::vector<blink::WebCompositionUnderline> underlines;
+  underlines.push_back(blink::WebCompositionUnderline(0, text.length(),
+                                                      SK_ColorBLACK, false,
+                                                      SK_ColorTRANSPARENT));
+  view_->setComposition(
+      blink::WebString::fromUTF8(text),
+      blink::WebVector<blink::WebCompositionUnderline>(underlines),
+      text.length(),
+      text.length());
 }
 
 }  // namespace test_runner

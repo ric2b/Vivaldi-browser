@@ -4,6 +4,7 @@
 
 #include <oleacc.h>
 
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_com_initializer.h"
@@ -13,15 +14,16 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/test/ui_controls.h"
 #include "url/gurl.h"
@@ -208,8 +210,8 @@ IN_PROC_BROWSER_TEST_F(NavigationAccessibilityTest,
   chrome::ExecuteCommand(browser(), IDC_FOCUS_LOCATION);
 
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(test_server()->Start());
-  GURL main_url(test_server()->GetURL("files/english_page.html"));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL main_url(embedded_test_server()->GetURL("/english_page.html"));
 
   OmniboxViewViews* omnibox_view =
       BrowserView::GetBrowserViewForBrowser(browser())->
@@ -237,11 +239,11 @@ IN_PROC_BROWSER_TEST_F(NavigationAccessibilityTest,
               << " name=" << name;
 
     // We should get only focus events.
-    EXPECT_EQ(EVENT_OBJECT_FOCUS, event);
+    EXPECT_EQ(static_cast<DWORD>(EVENT_OBJECT_FOCUS), event);
 
     // We should get only focus events on document objects. (On a page with
     // JavaScript or autofocus, additional focus events would be expected.)
-    EXPECT_EQ(ROLE_SYSTEM_DOCUMENT, role);
+    EXPECT_EQ(static_cast<DWORD>(ROLE_SYSTEM_DOCUMENT), role);
 
     // We shouldn't get any events on the first page because from the time
     // we start monitoring, the user has already initiated a load to the

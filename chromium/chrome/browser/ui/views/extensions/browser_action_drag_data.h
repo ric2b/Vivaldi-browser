@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_EXTENSIONS_BROWSER_ACTION_DRAG_DATA_H_
 #define CHROME_BROWSER_UI_VIEWS_EXTENSIONS_BROWSER_ACTION_DRAG_DATA_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 #if defined(TOOLKIT_VIEWS)
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -27,8 +29,7 @@ class BrowserActionDragData {
   // These mirror the views::View and views::MenuDelegate methods for dropping,
   // and return the appropriate results for being able to drop an extension's
   // BrowserAction view.
-  static bool GetDropFormats(
-      std::set<ui::OSExchangeData::CustomFormat>* custom_formats);
+  static bool GetDropFormats(std::set<ui::Clipboard::FormatType>* format_types);
   static bool AreDropTypesRequired();
   static bool CanDrop(const ui::OSExchangeData& data, const Profile* profile);
 
@@ -45,8 +46,8 @@ class BrowserActionDragData {
   // Restores this data from the clipboard, returning true on success.
   bool Read(const ui::OSExchangeData& data);
 
-  // Returns the Custom Format this class supports (for Browser Actions).
-  static const ui::OSExchangeData::CustomFormat& GetBrowserActionCustomFormat();
+  // Returns the FormatType this class supports (for Browser Actions).
+  static const ui::Clipboard::FormatType& GetBrowserActionFormatType();
 #endif
 
  private:

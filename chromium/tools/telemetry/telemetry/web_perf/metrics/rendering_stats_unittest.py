@@ -86,7 +86,7 @@ def AddSurfaceFlingerStats(mock_timer, thread, first_frame,
       # Add frame_time if this is not the first frame in within the bounds of an
       # action.
       prev_timestamp = ref_stats.frame_timestamps[-1][-1]
-      ref_stats.frame_times[-1].append(round(timestamp - prev_timestamp, 2))
+      ref_stats.frame_times[-1].append(timestamp - prev_timestamp)
     ref_stats.frame_timestamps[-1].append(timestamp)
 
 
@@ -116,7 +116,7 @@ def AddDisplayRenderingStats(mock_timer, thread, first_frame,
     # Add frame_time if this is not the first frame in within the bounds of an
     # action.
     prev_timestamp = ref_stats.frame_timestamps[-1][-1]
-    ref_stats.frame_times[-1].append(round(timestamp - prev_timestamp, 2))
+    ref_stats.frame_times[-1].append(timestamp - prev_timestamp)
   ref_stats.frame_timestamps[-1].append(timestamp)
 
 
@@ -150,7 +150,7 @@ def AddImplThreadRenderingStats(mock_timer, thread, first_frame,
       # Add frame_time if this is not the first frame in within the bounds of an
       # action.
       prev_timestamp = ref_stats.frame_timestamps[-1][-1]
-      ref_stats.frame_times[-1].append(round(timestamp - prev_timestamp, 2))
+      ref_stats.frame_times[-1].append(timestamp - prev_timestamp)
     ref_stats.frame_timestamps[-1].append(timestamp)
 
   ref_stats.approximated_pixel_percentages[-1].append(
@@ -212,7 +212,8 @@ def AddInputLatencyStats(mock_timer, start_thread, end_thread,
       'benchmark', 'InputLatency', timestamp)
 
   scroll_async_sub_slice = async_slice.AsyncSlice(
-      'benchmark', rendering_stats.SCROLL_UPDATE_EVENT_NAME, timestamp)
+      'benchmark', rendering_stats.MAIN_THREAD_SCROLL_UPDATE_EVENT_NAME,
+      timestamp)
   scroll_async_sub_slice.args = {'data': scroll_update_data}
   scroll_async_sub_slice.parent_slice = scroll_async_slice
   scroll_async_sub_slice.start_thread = start_thread
@@ -240,7 +241,7 @@ def AddInputLatencyStats(mock_timer, start_thread, end_thread,
       scroll_update_data[rendering_stats.END_COMP_NAME]['time'] -
       scroll_update_data[rendering_stats.BEGIN_SCROLL_UPDATE_COMP_NAME]['time'])
   ref_latency_stats.input_event_latency.append((
-      rendering_stats.SCROLL_UPDATE_EVENT_NAME,
+      rendering_stats.MAIN_THREAD_SCROLL_UPDATE_EVENT_NAME,
       scroll_update_time / 1000.0))
 
 
@@ -531,11 +532,11 @@ class RenderingStatsUnitTest(unittest.TestCase):
     self.assertEquals(
         perf_tests_helper.FlattenList(stats.input_event_latency),
         [latency for name, latency in ref_latency.input_event_latency
-         if name != rendering_stats.SCROLL_UPDATE_EVENT_NAME])
+         if name != rendering_stats.MAIN_THREAD_SCROLL_UPDATE_EVENT_NAME])
     self.assertEquals(
-        perf_tests_helper.FlattenList(stats.scroll_update_latency),
+        perf_tests_helper.FlattenList(stats.main_thread_scroll_latency),
         [latency for name, latency in ref_latency.input_event_latency
-         if name == rendering_stats.SCROLL_UPDATE_EVENT_NAME])
+         if name == rendering_stats.MAIN_THREAD_SCROLL_UPDATE_EVENT_NAME])
     self.assertEquals(
         perf_tests_helper.FlattenList(stats.gesture_scroll_update_latency),
         [latency for name, latency in ref_latency.input_event_latency

@@ -4,6 +4,7 @@
 
 #include "content/browser/geolocation/location_api_adapter_android.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
@@ -17,20 +18,27 @@ using base::android::CheckException;
 using base::android::ClearException;
 using content::AndroidLocationApiAdapter;
 
-static void NewLocationAvailable(JNIEnv* env, jclass,
+static void NewLocationAvailable(JNIEnv* env,
+                                 const JavaParamRef<jclass>&,
                                  jdouble latitude,
                                  jdouble longitude,
                                  jdouble time_stamp,
-                                 jboolean has_altitude, jdouble altitude,
-                                 jboolean has_accuracy, jdouble accuracy,
-                                 jboolean has_heading, jdouble heading,
-                                 jboolean has_speed, jdouble speed) {
+                                 jboolean has_altitude,
+                                 jdouble altitude,
+                                 jboolean has_accuracy,
+                                 jdouble accuracy,
+                                 jboolean has_heading,
+                                 jdouble heading,
+                                 jboolean has_speed,
+                                 jdouble speed) {
   AndroidLocationApiAdapter::OnNewLocationAvailable(latitude, longitude,
       time_stamp, has_altitude, altitude, has_accuracy, accuracy,
       has_heading, heading, has_speed, speed);
 }
 
-static void NewErrorAvailable(JNIEnv* env, jclass, jstring message) {
+static void NewErrorAvailable(JNIEnv* env,
+                              const JavaParamRef<jclass>&,
+                              const JavaParamRef<jstring>& message) {
   AndroidLocationApiAdapter::OnNewErrorAvailable(env, message);
 }
 
@@ -134,7 +142,7 @@ void AndroidLocationApiAdapter::OnNewErrorAvailable(JNIEnv* env,
 
 // static
 AndroidLocationApiAdapter* AndroidLocationApiAdapter::GetInstance() {
-  return Singleton<AndroidLocationApiAdapter>::get();
+  return base::Singleton<AndroidLocationApiAdapter>::get();
 }
 
 // static

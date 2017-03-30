@@ -2,18 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
-#include "chrome/browser/drive/fake_drive_service.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/signin/fake_signin_manager.h"
+#include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/sync_file_system/drive_backend/sync_engine.h"
 #include "chrome/browser/sync_file_system/local/local_file_sync_service.h"
 #include "chrome/browser/sync_file_system/sync_file_system_service.h"
 #include "chrome/browser/sync_file_system/sync_file_system_service_factory.h"
+#include "components/drive/service/fake_drive_service.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "storage/browser/quota/quota_manager.h"
@@ -39,7 +43,7 @@ class FakeDriveServiceFactory
     scoped_ptr<drive::FakeDriveService> drive_service(
         new drive::FakeDriveService);
     drive_service->AddChangeObserver(change_observer_);
-    return drive_service.Pass();
+    return std::move(drive_service);
   }
 
  private:
@@ -99,18 +103,15 @@ class SyncFileSystemTest : public extensions::PlatformAppBrowserTest,
 
     remote_service_ = new drive_backend::SyncEngine(
         base::ThreadTaskRunnerHandle::Get(),  // ui_task_runner
-        MakeSequencedTaskRunner(),
-        MakeSequencedTaskRunner(),
-        content::BrowserThread::GetBlockingPool(),
-        base_dir_.path(),
+        MakeSequencedTaskRunner(), MakeSequencedTaskRunner(),
+        content::BrowserThread::GetBlockingPool(), base_dir_.path(),
         NULL,  // task_logger
         NULL,  // notification_manager
         extension_service,
         fake_signin_manager_.get(),  // signin_manager
-        NULL,  // token_service
-        NULL,  // request_context
-        drive_service_factory.Pass(),
-        in_memory_env_.get());
+        NULL,                        // token_service
+        NULL,                        // request_context
+        std::move(drive_service_factory), in_memory_env_.get());
     remote_service_->SetSyncEnabled(true);
     factory->set_mock_remote_file_service(
         scoped_ptr<RemoteFileSyncService>(remote_service_));
@@ -159,18 +160,12 @@ class SyncFileSystemTest : public extensions::PlatformAppBrowserTest,
   LocalFileSyncService* local_service_;
   drive_backend::SyncEngine* remote_service_;
 
-  int64 real_minimum_preserved_space_;
+  int64_t real_minimum_preserved_space_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncFileSystemTest);
 };
 
-// TODO: reenable for Vivaldi
-#if defined(OS_WIN)
-#define MAYBE_AuthorizationTest DISABLED_AuthorizationTest
-#else
-#define MAYBE_AuthorizationTest AuthorizationTest
-#endif
-IN_PROC_BROWSER_TEST_F(SyncFileSystemTest, MAYBE_AuthorizationTest) {
+IN_PROC_BROWSER_TEST_F(SyncFileSystemTest, AuthorizationTest) {
   ExtensionTestMessageListener open_failure(
       "checkpoint: Failed to get syncfs", true);
   ExtensionTestMessageListener bar_created(

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_UTILITY_WIFI_WIFI_SERVICE_H_
-#define CHROME_UTILITY_WIFI_WIFI_SERVICE_H_
+#ifndef COMPONENTS_WIFI_WIFI_SERVICE_H_
+#define COMPONENTS_WIFI_WIFI_SERVICE_H_
 
 #include <list>
 #include <set>
@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
@@ -140,4 +141,4 @@ class WIFI_EXPORT WiFiService {
 
 }  // namespace wifi
 
-#endif  // CHROME_UTILITY_WIFI_WIFI_SERVICE_H_
+#endif  // COMPONENTS_WIFI_WIFI_SERVICE_H_

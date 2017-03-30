@@ -9,9 +9,10 @@
 #include <errno.h>    // for errno and strerror_r
 #include <algorithm>
 #include <utility>
-#include <vector>
 
+#include "base/auto_reset.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 
 // Design notes: An efficient implementation of ready list has the following
@@ -221,12 +222,8 @@ void EpollServer::RegisterFD(int fd, CB* cb, int event_mask) {
   cb->OnRegistration(this, fd, event_mask);
 }
 
-int EpollServer::GetFlags(int fd) {
-  return fcntl(fd, F_GETFL, 0);
-}
-
 void EpollServer::SetNonblocking(int fd) {
-  int flags = GetFlags(fd);
+  int flags = fcntl(fd, F_GETFL, 0);
   if (flags == -1) {
     int saved_errno = errno;
     char buf[kErrorBufferSize];
@@ -236,7 +233,7 @@ void EpollServer::SetNonblocking(int fd) {
   }
   if (!(flags & O_NONBLOCK)) {
     int saved_flags = flags;
-    flags = SetFlags(fd, flags | O_NONBLOCK);
+    flags = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     if (flags == -1) {
       // bad.
       int saved_errno = errno;
@@ -338,20 +335,6 @@ void EpollServer::HandleEvent(int fd, int event_mask) {
   AddToReadyList(cb_and_mask);
 }
 
-class TrueFalseGuard {
- public:
-  explicit TrueFalseGuard(bool* guarded_bool) : guarded_bool_(guarded_bool) {
-    DCHECK(guarded_bool_ != NULL);
-    DCHECK(*guarded_bool_ == false);
-    *guarded_bool_ = true;
-  }
-  ~TrueFalseGuard() {
-    *guarded_bool_ = false;
-  }
- private:
-  bool* guarded_bool_;
-};
-
 void EpollServer::WaitForEventsAndExecuteCallbacks() {
   if (in_wait_for_events_and_execute_callbacks_) {
     LOG(DFATAL) <<
@@ -362,7 +345,8 @@ void EpollServer::WaitForEventsAndExecuteCallbacks() {
     // we never see it.
     return;  // COV_NF_LINE
   }
-  TrueFalseGuard recursion_guard(&in_wait_for_events_and_execute_callbacks_);
+  base::AutoReset<bool> recursion_guard(
+      &in_wait_for_events_and_execute_callbacks_, true);
   if (alarm_map_.empty()) {
     // no alarms, this is business as usual.
     WaitForEventsAndCallHandleEvents(timeout_in_us_,
@@ -377,23 +361,23 @@ void EpollServer::WaitForEventsAndExecuteCallbacks() {
   // long-running alarms might install other long-running
   // alarms, etc. By storing it here now, we ensure that
   // a more reasonable amount of work is done here.
-  int64 now_in_us  = NowInUsec();
+  int64_t now_in_us = NowInUsec();
 
   // Get the first timeout from the alarm_map where it is
   // stored in absolute time.
-  int64 next_alarm_time_in_us =  alarm_map_.begin()->first;
+  int64_t next_alarm_time_in_us = alarm_map_.begin()->first;
   VLOG(4) << "next_alarm_time = " << next_alarm_time_in_us
           << " now             = " << now_in_us
           << " timeout_in_us = " << timeout_in_us_;
 
-  int64 wait_time_in_us;
-  int64 alarm_timeout_in_us = next_alarm_time_in_us - now_in_us;
+  int64_t wait_time_in_us;
+  int64_t alarm_timeout_in_us = next_alarm_time_in_us - now_in_us;
 
   // If the next alarm is sooner than the default timeout, or if there is no
   // timeout (timeout_in_us_ == -1), wake up when the alarm should fire.
   // Otherwise use the default timeout.
   if (alarm_timeout_in_us < timeout_in_us_ || timeout_in_us_ < 0) {
-    wait_time_in_us = std::max(alarm_timeout_in_us, static_cast<int64>(0));
+    wait_time_in_us = std::max(alarm_timeout_in_us, static_cast<int64_t>(0));
   } else {
     wait_time_in_us = timeout_in_us_;
   }
@@ -456,9 +440,9 @@ void EpollServer::VerifyReadyList() const {
   CHECK_EQ(ready_list_size_, count) << "Ready list size does not match count";
 }
 
-void EpollServer::RegisterAlarm(int64 timeout_time_in_us, AlarmCB* ac) {
+void EpollServer::RegisterAlarm(int64_t timeout_time_in_us, AlarmCB* ac) {
   CHECK(ac);
-  if (ContainsAlarm(ac)) {
+  if (ContainsKey(all_alarms_, ac)) {
     LOG(FATAL) << "Alarm already exists " << ac;
   }
   VLOG(4) << "RegisteringAlarm at : " << timeout_time_in_us;
@@ -492,11 +476,11 @@ void EpollServer::Wake() {
   DCHECK_EQ(rv, 1);
 }
 
-int64 EpollServer::NowInUsec() const {
-  return base::Time::Now().ToInternalValue();
+int64_t EpollServer::NowInUsec() const {
+  return (base::Time::Now() - base::Time::UnixEpoch()).InMicroseconds();
 }
 
-int64 EpollServer::ApproximateNowInUsec() const {
+int64_t EpollServer::ApproximateNowInUsec() const {
   if (recorded_now_in_us_ != 0) {
     return recorded_now_in_us_;
   }
@@ -628,7 +612,7 @@ void EpollServer::ModifyFD(int fd, int remove_event, int add_event) {
   }
 }
 
-void EpollServer::WaitForEventsAndCallHandleEvents(int64 timeout_in_us,
+void EpollServer::WaitForEventsAndCallHandleEvents(int64_t timeout_in_us,
                                                    struct epoll_event events[],
                                                    int events_size) {
   if (timeout_in_us == 0 || ready_list_.lh_first != NULL) {
@@ -713,7 +697,7 @@ void EpollServer::CallReadyListCallbacks() {
         // UnRegister call will now simply set the cb to NULL instead of
         // invalidating the cb_and_mask object (by deleting the object in the
         // map to which cb_and_mask refers)
-        TrueFalseGuard in_use_guard(&(cb_and_mask->in_use));
+        base::AutoReset<bool> in_use_guard(&(cb_and_mask->in_use), true);
         cb_and_mask->cb->OnEvent(cb_and_mask->fd, &event);
       }
 
@@ -732,7 +716,7 @@ void EpollServer::CallReadyListCallbacks() {
 }
 
 void EpollServer::CallAndReregisterAlarmEvents() {
-  int64 now_in_us = recorded_now_in_us_;
+  int64_t now_in_us = recorded_now_in_us_;
   DCHECK_NE(0, recorded_now_in_us_);
 
   TimeToAlarmCBMap::iterator erase_it;
@@ -755,7 +739,7 @@ void EpollServer::CallAndReregisterAlarmEvents() {
       continue;
     }
     all_alarms_.erase(cb);
-    const int64 new_timeout_time_in_us = cb->OnAlarm();
+    const int64_t new_timeout_time_in_us = cb->OnAlarm();
 
     erase_it = i;
     ++i;
@@ -786,7 +770,7 @@ EpollAlarm::~EpollAlarm() {
   UnregisterIfRegistered();
 }
 
-int64 EpollAlarm::OnAlarm() {
+int64_t EpollAlarm::OnAlarm() {
   registered_ = false;
   return 0;
 }

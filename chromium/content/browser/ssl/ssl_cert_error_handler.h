@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/ssl/ssl_error_handler.h"
 #include "net/ssl/ssl_info.h"
@@ -22,8 +23,6 @@ class SSLCertErrorHandler : public SSLErrorHandler {
   SSLCertErrorHandler(const base::WeakPtr<Delegate>& delegate,
                       ResourceType resource_type,
                       const GURL& url,
-                      int render_process_id,
-                      int render_frame_id,
                       const net::SSLInfo& ssl_info,
                       bool fatal);
 

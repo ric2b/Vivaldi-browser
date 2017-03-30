@@ -2,178 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <deque>
-#include <string>
-
-#include "base/basictypes.h"
-#include "base/gtest_prod_util.h"
-#include "base/test/test_simple_task_runner.h"
 #include "cc/scheduler/begin_frame_source.h"
+
+#include <stdint.h>
+
+#include "base/test/test_simple_task_runner.h"
 #include "cc/test/begin_frame_args_test.h"
+#include "cc/test/begin_frame_source_test.h"
 #include "cc/test/scheduler_test_common.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-// Macros to help set up expected calls on the MockBeginFrameObserver.
-#define EXPECT_BEGIN_FRAME_DROP(obs, frame_time, deadline, interval)       \
-  {                                                                        \
-    ::testing::Expectation exp =                                           \
-        EXPECT_CALL((obs), OnBeginFrame(CreateBeginFrameArgsForTesting(    \
-                               BEGINFRAME_FROM_HERE, frame_time, deadline, \
-                               interval))).InSequence((obs).sequence);     \
-  }
-
-#define EXPECT_BEGIN_FRAME_USED(obs, frame_time, deadline, interval)       \
-  {                                                                        \
-    BeginFrameArgs args = CreateBeginFrameArgsForTesting(                  \
-        BEGINFRAME_FROM_HERE, frame_time, deadline, interval);             \
-    ::testing::Expectation exp =                                           \
-        EXPECT_CALL((obs), OnBeginFrame(args)).InSequence((obs).sequence); \
-    EXPECT_CALL((obs), LastUsedBeginFrameArgs())                           \
-        .Times(::testing::AnyNumber())                                     \
-        .After(exp)                                                        \
-        .WillRepeatedly(::testing::Return(args));                          \
-  }
-
-// Macros to send BeginFrameArgs on a FakeBeginFrameSink (and verify resulting
-// observer behaviour).
-#define SEND_BEGIN_FRAME(args_equal_to, source, frame_time, deadline, \
-                         interval)                                    \
-  {                                                                   \
-    BeginFrameArgs old_args = (source).TestLastUsedBeginFrameArgs();  \
-    BeginFrameArgs new_args = CreateBeginFrameArgsForTesting(         \
-        BEGINFRAME_FROM_HERE, frame_time, deadline, interval);        \
-    ASSERT_FALSE(old_args == new_args);                               \
-    (source).TestOnBeginFrame(new_args);                              \
-    EXPECT_EQ(args_equal_to, (source).TestLastUsedBeginFrameArgs());  \
-  }
-
-// When dropping LastUsedBeginFrameArgs **shouldn't** change.
-#define SEND_BEGIN_FRAME_DROP(source, frame_time, deadline, interval) \
-  SEND_BEGIN_FRAME(old_args, source, frame_time, deadline, interval);
-
-// When used LastUsedBeginFrameArgs **should** be updated.
-#define SEND_BEGIN_FRAME_USED(source, frame_time, deadline, interval) \
-  SEND_BEGIN_FRAME(new_args, source, frame_time, deadline, interval);
+using testing::Mock;
 
 namespace cc {
 namespace {
-
-class MockBeginFrameObserver : public BeginFrameObserver {
- public:
-  MOCK_METHOD1(OnBeginFrame, void(const BeginFrameArgs&));
-  MOCK_CONST_METHOD0(LastUsedBeginFrameArgs, const BeginFrameArgs());
-
-  virtual void AsValueInto(base::trace_event::TracedValue* dict) const {
-    dict->SetString("type", "MockBeginFrameObserver");
-    dict->BeginDictionary("last_begin_frame_args");
-    LastUsedBeginFrameArgs().AsValueInto(dict);
-    dict->EndDictionary();
-  }
-
-  // A value different from the normal default returned by a BeginFrameObserver
-  // so it is easiable traced back here.
-  static const BeginFrameArgs kDefaultBeginFrameArgs;
-
-  MockBeginFrameObserver() {
-    // Set a "default" value returned by LastUsedBeginFrameArgs so that gMock
-    // doesn't fail an assert and instead returns useful information.
-    EXPECT_CALL(*this, LastUsedBeginFrameArgs())
-        .Times(::testing::AnyNumber())
-        .InSequence(sequence)
-        .WillRepeatedly(::testing::Return(kDefaultBeginFrameArgs));
-  }
-  virtual ~MockBeginFrameObserver() {}
-
-  ::testing::Sequence sequence;
-};
-
-TEST(MockBeginFrameObserverTest, ExpectOnBeginFrame) {
-  ::testing::NiceMock<MockBeginFrameObserver> obs;
-  EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
-
-  EXPECT_EQ(obs.LastUsedBeginFrameArgs(),
-            MockBeginFrameObserver::kDefaultBeginFrameArgs);
-
-  obs.OnBeginFrame(CreateBeginFrameArgsForTesting(
-      BEGINFRAME_FROM_HERE, 100, 200,
-      300));  // One call to LastUsedBeginFrameArgs
-  EXPECT_EQ(
-      obs.LastUsedBeginFrameArgs(),
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 100, 200, 300));
-
-  obs.OnBeginFrame(CreateBeginFrameArgsForTesting(
-      BEGINFRAME_FROM_HERE, 400, 600,
-      300));  // Multiple calls to LastUsedBeginFrameArgs
-  EXPECT_EQ(
-      obs.LastUsedBeginFrameArgs(),
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 400, 600, 300));
-  EXPECT_EQ(
-      obs.LastUsedBeginFrameArgs(),
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 400, 600, 300));
-
-  obs.OnBeginFrame(CreateBeginFrameArgsForTesting(
-      BEGINFRAME_FROM_HERE, 700, 900,
-      300));  // No calls to LastUsedBeginFrameArgs
-}
-
-TEST(MockBeginFrameObserverTest, ExpectOnBeginFrameStatus) {
-  ::testing::NiceMock<MockBeginFrameObserver> obs;
-  EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
-  EXPECT_BEGIN_FRAME_DROP(obs, 400, 600, 300);
-  EXPECT_BEGIN_FRAME_DROP(obs, 450, 650, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
-
-  EXPECT_EQ(obs.LastUsedBeginFrameArgs(),
-            MockBeginFrameObserver::kDefaultBeginFrameArgs);
-
-  // Used
-  obs.OnBeginFrame(
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 100, 200, 300));
-  EXPECT_EQ(
-      obs.LastUsedBeginFrameArgs(),
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 100, 200, 300));
-
-  // Dropped
-  obs.OnBeginFrame(
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 400, 600, 300));
-  EXPECT_EQ(
-      obs.LastUsedBeginFrameArgs(),
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 100, 200, 300));
-
-  // Dropped
-  obs.OnBeginFrame(
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 450, 650, 300));
-  EXPECT_EQ(
-      obs.LastUsedBeginFrameArgs(),
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 100, 200, 300));
-
-  // Used
-  obs.OnBeginFrame(
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 700, 900, 300));
-  EXPECT_EQ(
-      obs.LastUsedBeginFrameArgs(),
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 700, 900, 300));
-}
-
-const BeginFrameArgs MockBeginFrameObserver::kDefaultBeginFrameArgs =
-    CreateBeginFrameArgsForTesting(
-#ifdef NDEBUG
-        nullptr,
-#else
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "MockBeginFrameObserver::kDefaultBeginFrameArgs"),
-#endif
-        -1,
-        -1,
-        -1);
 
 // BeginFrameObserverBase testing ---------------------------------------
 class MockMinimalBeginFrameObserverBase : public BeginFrameObserverBase {
  public:
   MOCK_METHOD1(OnBeginFrameDerivedImpl, bool(const BeginFrameArgs&));
+  MOCK_METHOD1(OnBeginFrameSourcePausedChanged, void(bool));
   int64_t dropped_begin_frame_args() const { return dropped_begin_frame_args_; }
 };
 
@@ -227,6 +76,7 @@ TEST(BeginFrameSourceBaseTest, ObserverManipulation) {
   MockBeginFrameObserver otherObs;
   FakeBeginFrameSource source;
 
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
   source.AddObserver(&obs);
   EXPECT_EQ(&obs, source.GetObserver());
 
@@ -246,6 +96,7 @@ TEST(BeginFrameSourceBaseTest, ObserverManipulation) {
 #endif
   source.RemoveObserver(&obs);
 
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(otherObs, false);
   source.AddObserver(&otherObs);
   EXPECT_EQ(&otherObs, source.GetObserver());
   source.RemoveObserver(&otherObs);
@@ -254,6 +105,7 @@ TEST(BeginFrameSourceBaseTest, ObserverManipulation) {
 TEST(BeginFrameSourceBaseTest, Observer) {
   FakeBeginFrameSource source;
   MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
   source.AddObserver(&obs);
   EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
   EXPECT_BEGIN_FRAME_DROP(obs, 400, 600, 300);
@@ -280,6 +132,18 @@ TEST(BeginFrameSourceBaseTest, NeedsBeginFrames) {
   EXPECT_FALSE(source.NeedsBeginFrames());
 }
 
+TEST(BeginFrameSourceBaseTest, SetBeginFrameSourcePaused) {
+  FakeBeginFrameSource source;
+  MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
+  source.AddObserver(&obs);
+
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
+  source.SetBeginFrameSourcePaused(true);
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
+  source.SetBeginFrameSourcePaused(false);
+}
+
 class LoopingBeginFrameObserver : public BeginFrameObserverBase {
  public:
   BeginFrameSource* source_;
@@ -296,6 +160,8 @@ class LoopingBeginFrameObserver : public BeginFrameObserverBase {
   bool OnBeginFrameDerivedImpl(const BeginFrameArgs& args) override {
     return true;
   }
+
+  void OnBeginFrameSourcePausedChanged(bool paused) override {}
 };
 
 TEST(BeginFrameSourceBaseTest, DetectAsValueIntoLoop) {
@@ -350,6 +216,7 @@ class BackToBackBeginFrameSourceTest : public ::testing::Test {
     source_ = TestBackToBackBeginFrameSource::Create(now_src_.get(),
                                                      task_runner_.get());
     obs_ = make_scoped_ptr(new ::testing::StrictMock<MockBeginFrameObserver>());
+    EXPECT_BEGIN_FRAME_SOURCE_PAUSED(*obs_, false);
     source_->AddObserver(obs_.get());
   }
 
@@ -517,6 +384,7 @@ class SyntheticBeginFrameSourceTest : public ::testing::Test {
         now_src_.get(), task_runner_.get(),
         base::TimeDelta::FromMicroseconds(10000));
     obs_ = make_scoped_ptr(new MockBeginFrameObserver());
+    EXPECT_BEGIN_FRAME_SOURCE_PAUSED(*obs_, false);
     source_->AddObserver(obs_.get());
   }
 
@@ -678,6 +546,7 @@ TEST_F(BeginFrameSourceMultiplexerTest, BeginFramesSimple) {
   mux_->SetActiveSource(source1_);
 
   MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
   mux_->AddObserver(&obs);
   EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
   EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
@@ -697,6 +566,7 @@ TEST_F(BeginFrameSourceMultiplexerTest, BeginFramesBackwardsProtection) {
   mux_->AddSource(source2_);
 
   MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
   mux_->AddObserver(&obs);
   EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
   EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
@@ -728,6 +598,7 @@ TEST_F(BeginFrameSourceMultiplexerTest, MinimumIntervalZero) {
   mux_->AddSource(source1_);
 
   MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
   mux_->AddObserver(&obs);
   EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
   EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
@@ -743,6 +614,7 @@ TEST_F(BeginFrameSourceMultiplexerTest, MinimumIntervalBasic) {
   mux_->AddSource(source1_);
 
   MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
   mux_->AddObserver(&obs);
   EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
   EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
@@ -758,6 +630,7 @@ TEST_F(BeginFrameSourceMultiplexerTest, MinimumIntervalWithMultipleSources) {
   mux_->AddSource(source2_);
 
   MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
   mux_->AddObserver(&obs);
   EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
   EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
@@ -773,6 +646,72 @@ TEST_F(BeginFrameSourceMultiplexerTest, MinimumIntervalWithMultipleSources) {
 
   mux_->SetActiveSource(source1_);
   SEND_BEGIN_FRAME_DROP(*source2_, 1100, 1400, 300);
+}
+
+TEST_F(BeginFrameSourceMultiplexerTest, BeginFrameSourcePaused) {
+  mux_->AddSource(source1_);
+  mux_->AddSource(source2_);
+  mux_->SetActiveSource(source1_);
+
+  MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
+  mux_->AddObserver(&obs);
+  Mock::VerifyAndClearExpectations(&obs);
+
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
+  source1_->SetBeginFrameSourcePaused(true);
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
+  source1_->SetBeginFrameSourcePaused(false);
+  Mock::VerifyAndClearExpectations(&obs);
+
+  mux_->SetActiveSource(source2_);
+  Mock::VerifyAndClearExpectations(&obs);
+
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
+  source2_->SetBeginFrameSourcePaused(true);
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
+  source2_->SetBeginFrameSourcePaused(false);
+}
+
+TEST_F(BeginFrameSourceMultiplexerTest,
+       BeginFrameSourcePausedUpdateOnSourceTransition) {
+  mux_->AddSource(source1_);
+  mux_->AddSource(source2_);
+  source1_->SetBeginFrameSourcePaused(true);
+  source2_->SetBeginFrameSourcePaused(false);
+  mux_->SetActiveSource(source1_);
+
+  MockBeginFrameObserver obs;
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
+  mux_->AddObserver(&obs);
+  Mock::VerifyAndClearExpectations(&obs);
+
+  // Paused to not paused.
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
+  mux_->SetActiveSource(source2_);
+  Mock::VerifyAndClearExpectations(&obs);
+
+  // Not paused to paused.
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
+  mux_->SetActiveSource(source1_);
+  Mock::VerifyAndClearExpectations(&obs);
+
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
+  source1_->SetBeginFrameSourcePaused(false);
+  Mock::VerifyAndClearExpectations(&obs);
+
+  // Not paused to not paused.
+  mux_->SetActiveSource(source2_);
+  Mock::VerifyAndClearExpectations(&obs);
+
+  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
+  source2_->SetBeginFrameSourcePaused(true);
+  Mock::VerifyAndClearExpectations(&obs);
+  source1_->SetBeginFrameSourcePaused(true);
+
+  // Paused to paused.
+  mux_->SetActiveSource(source1_);
+  Mock::VerifyAndClearExpectations(&obs);
 }
 
 }  // namespace

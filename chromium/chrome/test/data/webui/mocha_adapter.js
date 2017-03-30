@@ -7,6 +7,11 @@
  * mocha_adapter.js in a WebUIBrowserTest's extraLibraries array.
  */
 
+// NOTE: When defining TEST_F() functions that use Mocha, use 'var self = this'
+// for referencing the Test object within suite() and test() function objects
+// (instead of binding |this|), since |this| within those objects will reference
+// the Mocha Suite or Test instance.
+
 /**
  * Initializes a mocha reporter for the BrowserTest framework, which registers
  * event listeners on the given Runner.
@@ -59,4 +64,8 @@ mocha.setup({
   ui: 'tdd',
   // Use custom reporter to interface with BrowserTests.
   reporter: BrowserTestReporter,
+  // Mocha timeouts are set to 2 seconds initially. This isn't nearly enough for
+  // slower bots (e.g., Dr. Memory). Disable timeouts globally, because the C++
+  // will handle it (and has scaled timeouts for slower bots).
+  enableTimeouts: false,
 });

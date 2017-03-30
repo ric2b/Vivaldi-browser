@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/nacl/config.gni")
+
 component("shared_impl") {
   output_name = "ppapi_shared"
 
@@ -137,20 +139,19 @@ component("shared_impl") {
     ]
   }
 
-  # TODO(GYP) this isn't correct. This should only be specifically for the
-  # nacl_win64 build (cross-compiled for a 32-bit Chrome), rather than the
-  # native 64-bit Chrome build.
+  # This condition is catching the build of nacl64.exe, which is built
+  # in the 64-bit toolchain when the overall build is 32-bit.
   # See also //ppapi/thunk
-  if (is_win && current_cpu == "x64" && current_toolchain != default_toolchain) {
+  if (is_win && target_cpu == "x86" && current_cpu == "x64") {
     sources -= [
       "ppb_audio_shared.cc",
       "ppb_graphics_3d_shared.cc",
       "ppb_opengles2_shared.cc",
       "private/net_address_private_impl.cc",
-      "private/ppb_host_resolver_shared.cc",
     ]
   }
 
+  configs += [ "//build/config:precompiled_headers" ]
   defines = [
     "PPAPI_SHARED_IMPLEMENTATION",
 
@@ -158,20 +159,19 @@ component("shared_impl") {
     "PPAPI_THUNK_IMPLEMENTATION",
   ]
 
+  public_deps = [
+    "//ppapi/c",
+    "//ppapi/thunk",
+  ]
+
   deps = [
     "//base",
-    "//base:i18n",
-    "//base/third_party/dynamic_annotations",
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/client:gles2_cmd_helper",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/common",
     "//ipc",
     "//media:shared_memory_support",
-    "//ppapi/c",
-    "//ppapi/thunk",
-    "//third_party/icu:icuuc",
-    "//url",
   ]
 
   if (!is_nacl) {
@@ -179,6 +179,15 @@ component("shared_impl") {
       "//skia",
       "//ui/events:events_base",
       "//ui/surface",
+    ]
+  }
+
+  if (!is_nacl_nonsfi) {
+    deps += [
+      "//base:i18n",
+      "//base/third_party/dynamic_annotations",
+      "//third_party/icu:icuuc",
+      "//url",
     ]
   }
 

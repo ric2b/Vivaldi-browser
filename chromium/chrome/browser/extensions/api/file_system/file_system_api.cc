@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/file_system/file_system_api.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <vector>
 
@@ -12,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
@@ -20,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/value_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/file_handlers/app_file_handler_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -117,7 +121,9 @@ const char* const kRequestFileSystemComponentWhitelist[] = {
 };
 #endif
 
-namespace file_system = extensions::api::file_system;
+namespace extensions {
+
+namespace file_system = api::file_system;
 namespace ChooseEntry = file_system::ChooseEntry;
 
 namespace {
@@ -149,8 +155,7 @@ bool GetFileTypesFromAcceptOption(
     for (std::vector<std::string>::const_iterator iter = list->begin();
          iter != list->end(); ++iter) {
       std::vector<base::FilePath::StringType> inner;
-      std::string accept_type = *iter;
-      base::StringToLowerASCII(&accept_type);
+      std::string accept_type = base::ToLowerASCII(*iter);
       net::GetExtensionsForMimeType(accept_type, &inner);
       if (inner.empty())
         continue;
@@ -174,8 +179,7 @@ bool GetFileTypesFromAcceptOption(
     std::vector<std::string>* list = accept_option.extensions.get();
     for (std::vector<std::string>::const_iterator iter = list->begin();
          iter != list->end(); ++iter) {
-      std::string extension = *iter;
-      base::StringToLowerASCII(&extension);
+      std::string extension = base::ToLowerASCII(*iter);
 #if defined(OS_WIN)
       extension_set.insert(base::UTF8ToWide(*iter));
 #else
@@ -233,7 +237,7 @@ content::WebContents* GetWebContentsForRenderFrameHost(
       content::WebContents::FromRenderFrameHost(render_frame_host);
   // Check if there is an app window associated with the web contents; if not,
   // return null.
-  return extensions::AppWindowRegistry::Get(profile)
+  return AppWindowRegistry::Get(profile)
                  ->GetAppWindowForWebContents(web_contents)
              ? web_contents
              : nullptr;
@@ -244,23 +248,20 @@ content::WebContents* GetWebContentsForRenderFrameHost(
 // with |app_id|. If not found, then returns NULL.
 content::WebContents* GetWebContentsForAppId(Profile* profile,
                                              const std::string& app_id) {
-  extensions::AppWindowRegistry* const registry =
-      extensions::AppWindowRegistry::Get(profile);
+  AppWindowRegistry* const registry = AppWindowRegistry::Get(profile);
   DCHECK(registry);
-  extensions::AppWindow* const app_window =
-      registry->GetCurrentAppWindowForApp(app_id);
+  AppWindow* const app_window = registry->GetCurrentAppWindowForApp(app_id);
   return app_window ? app_window->web_contents() : nullptr;
 }
 
 // Fills a list of volumes mounted in the system.
-void FillVolumeList(
-    Profile* profile,
-    std::vector<linked_ptr<extensions::api::file_system::Volume>>* result) {
+void FillVolumeList(Profile* profile,
+                    std::vector<linked_ptr<api::file_system::Volume>>* result) {
   using file_manager::VolumeManager;
   VolumeManager* const volume_manager = VolumeManager::Get(profile);
   DCHECK(volume_manager);
 
-  using extensions::api::file_system::Volume;
+  using api::file_system::Volume;
   const auto& volume_list = volume_manager->GetVolumeList();
   // Convert volume_list to result_volume_list.
   for (const auto& volume : volume_list) {
@@ -273,8 +274,6 @@ void FillVolumeList(
 #endif
 
 }  // namespace
-
-namespace extensions {
 
 namespace file_system_api {
 
@@ -315,14 +314,13 @@ void DispatchVolumeListChangeEvent(Profile* profile) {
   if (!event_router)  // Possible on shutdown.
     return;
 
-  extensions::ExtensionRegistry* const registry =
-      extensions::ExtensionRegistry::Get(profile);
+  ExtensionRegistry* const registry = ExtensionRegistry::Get(profile);
   if (!registry)  // Possible on shutdown.
     return;
 
   ConsentProviderDelegate consent_provider_delegate(profile, nullptr);
   ConsentProvider consent_provider(&consent_provider_delegate);
-  extensions::api::file_system::VolumeListChangedEvent event_args;
+  api::file_system::VolumeListChangedEvent event_args;
   FillVolumeList(profile, &event_args.volumes);
   for (const auto& extension : registry->enabled_extensions()) {
     if (!consent_provider.IsGrantable(*extension.get()))
@@ -330,10 +328,9 @@ void DispatchVolumeListChangeEvent(Profile* profile) {
     event_router->DispatchEventToExtension(
         extension->id(),
         make_scoped_ptr(new Event(
-            events::UNKNOWN,
-            extensions::api::file_system::OnVolumeListChanged::kEventName,
-            extensions::api::file_system::OnVolumeListChanged::Create(
-                event_args))));
+            events::FILE_SYSTEM_ON_VOLUME_LIST_CHANGED,
+            api::file_system::OnVolumeListChanged::kEventName,
+            api::file_system::OnVolumeListChanged::Create(event_args))));
   }
 }
 
@@ -346,7 +343,7 @@ ConsentProvider::~ConsentProvider() {
 }
 
 void ConsentProvider::RequestConsent(
-    const extensions::Extension& extension,
+    const Extension& extension,
     const base::WeakPtr<file_manager::Volume>& volume,
     bool writable,
     const ConsentCallback& callback) {
@@ -424,7 +421,7 @@ void ConsentProviderDelegate::SetAutoDialogButtonForTest(
 }
 
 void ConsentProviderDelegate::ShowDialog(
-    const extensions::Extension& extension,
+    const Extension& extension,
     const base::WeakPtr<file_manager::Volume>& volume,
     bool writable,
     const file_system_api::ConsentProvider::ShowDialogCallback& callback) {
@@ -456,22 +453,21 @@ void ConsentProviderDelegate::ShowDialog(
 }
 
 void ConsentProviderDelegate::ShowNotification(
-    const extensions::Extension& extension,
+    const Extension& extension,
     const base::WeakPtr<file_manager::Volume>& volume,
     bool writable) {
   RequestFileSystemNotification::ShowAutoGrantedNotification(
       profile_, extension, volume, writable);
 }
 
-bool ConsentProviderDelegate::IsAutoLaunched(
-    const extensions::Extension& extension) {
+bool ConsentProviderDelegate::IsAutoLaunched(const Extension& extension) {
   chromeos::KioskAppManager::App app_info;
   return chromeos::KioskAppManager::Get()->GetApp(extension.id(), &app_info) &&
          app_info.was_auto_launched_with_zero_delay;
 }
 
 bool ConsentProviderDelegate::IsWhitelistedComponent(
-    const extensions::Extension& extension) {
+    const Extension& extension) {
   for (const auto& whitelisted_id : kRequestFileSystemComponentWhitelist) {
     if (extension.id().compare(whitelisted_id) == 0)
       return true;
@@ -855,22 +851,6 @@ void FileSystemChooseEntryFunction::RegisterTempExternalFileSystemForTest(
       path);
 }
 
-void FileSystemChooseEntryFunction::SetInitialPathOnFileThread(
-    const base::FilePath& suggested_name,
-    const base::FilePath& previous_path) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
-  if (!previous_path.empty() && base::DirectoryExists(previous_path)) {
-    initial_path_ = previous_path.Append(suggested_name);
-  } else {
-    base::FilePath documents_dir;
-    if (PathService::Get(chrome::DIR_USER_DOCUMENTS, &documents_dir)) {
-      initial_path_ = documents_dir.Append(suggested_name);
-    } else {
-      initial_path_ = suggested_name;
-    }
-  }
-}
-
 void FileSystemChooseEntryFunction::FilesSelected(
     const std::vector<base::FilePath>& paths) {
   DCHECK(!paths.empty());
@@ -1052,6 +1032,26 @@ void FileSystemChooseEntryFunction::BuildSuggestion(
   }
 }
 
+void FileSystemChooseEntryFunction::SetInitialPathAndShowPicker(
+    const base::FilePath& previous_path,
+    const base::FilePath& suggested_name,
+    const ui::SelectFileDialog::FileTypeInfo& file_type_info,
+    ui::SelectFileDialog::Type picker_type,
+    bool is_previous_path_directory) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (is_previous_path_directory) {
+    initial_path_ = previous_path.Append(suggested_name);
+  } else {
+    base::FilePath documents_dir;
+    if (PathService::Get(chrome::DIR_USER_DOCUMENTS, &documents_dir)) {
+      initial_path_ = documents_dir.Append(suggested_name);
+    } else {
+      initial_path_ = suggested_name;
+    }
+  }
+  ShowPicker(file_type_info, picker_type);
+}
+
 bool FileSystemChooseEntryFunction::RunAsync() {
   scoped_ptr<ChooseEntry::Params> params(ChooseEntry::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -1110,17 +1110,30 @@ bool FileSystemChooseEntryFunction::RunAsync() {
   base::FilePath previous_path = file_system_api::GetLastChooseEntryDirectory(
       ExtensionPrefs::Get(GetProfile()), extension()->id());
 
-  content::BrowserThread::PostTaskAndReply(
-      content::BrowserThread::FILE,
-      FROM_HERE,
-      base::Bind(&FileSystemChooseEntryFunction::SetInitialPathOnFileThread,
-                 this,
-                 suggested_name,
-                 previous_path),
-      base::Bind(&FileSystemChooseEntryFunction::ShowPicker,
-                 this,
-                 file_type_info,
-                 picker_type));
+  if (previous_path.empty()) {
+    SetInitialPathAndShowPicker(previous_path, suggested_name, file_type_info,
+                                picker_type, false);
+    return true;
+  }
+
+  base::Callback<void(bool)> set_initial_path_callback = base::Bind(
+      &FileSystemChooseEntryFunction::SetInitialPathAndShowPicker, this,
+      previous_path, suggested_name, file_type_info, picker_type);
+
+// Check whether the |previous_path| is a non-native directory.
+#if defined(OS_CHROMEOS)
+  if (file_manager::util::IsUnderNonNativeLocalPath(GetProfile(),
+                                                    previous_path)) {
+    file_manager::util::IsNonNativeLocalPathDirectory(
+        GetProfile(), previous_path, set_initial_path_callback);
+    return true;
+  }
+#endif
+  content::BrowserThread::PostTaskAndReplyWithResult(
+      content::BrowserThread::FILE, FROM_HERE,
+      base::Bind(&base::DirectoryExists, previous_path),
+      set_initial_path_callback);
+
   return true;
 }
 
@@ -1145,8 +1158,7 @@ bool FileSystemRetainEntryFunction::RunAsync() {
     if (!storage::CrackIsolatedFileSystemName(filesystem_name, &filesystem_id))
       return false;
 
-    const GURL site =
-        extensions::util::GetSiteForExtensionId(extension_id(), GetProfile());
+    const GURL site = util::GetSiteForExtensionId(extension_id(), GetProfile());
     storage::FileSystemContext* const context =
         content::BrowserContext::GetStoragePartitionForSite(GetProfile(), site)
             ->GetFileSystemContext();
@@ -1158,19 +1170,16 @@ bool FileSystemRetainEntryFunction::RunAsync() {
             .Append(base::FilePath::FromUTF8Unsafe(filesystem_path)));
 
     content::BrowserThread::PostTask(
-        content::BrowserThread::IO,
-        FROM_HERE,
+        content::BrowserThread::IO, FROM_HERE,
         base::Bind(
             base::IgnoreResult(
                 &storage::FileSystemOperationRunner::GetMetadata),
-            context->operation_runner()->AsWeakPtr(),
-            url,
+            context->operation_runner()->AsWeakPtr(), url,
+            storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY,
             base::Bind(
                 &PassFileInfoToUIThread,
                 base::Bind(&FileSystemRetainEntryFunction::RetainFileEntry,
-                           this,
-                           entry_id,
-                           path))));
+                           this, entry_id, path))));
     return true;
   }
 
@@ -1250,7 +1259,7 @@ bool FileSystemGetObservedEntriesFunction::RunSync() {
 
 #if !defined(OS_CHROMEOS)
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
-  using extensions::api::file_system::RequestFileSystem::Params;
+  using api::file_system::RequestFileSystem::Params;
   const scoped_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1272,7 +1281,7 @@ FileSystemRequestFileSystemFunction::~FileSystemRequestFileSystemFunction() {
 }
 
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
-  using extensions::api::file_system::RequestFileSystem::Params;
+  using api::file_system::RequestFileSystem::Params;
   const scoped_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1303,8 +1312,8 @@ ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   if (!volume.get())
     return RespondNow(Error(kVolumeNotFoundError));
 
-  const GURL site = extensions::util::GetSiteForExtensionId(
-      extension_id(), chrome_details_.GetProfile());
+  const GURL site =
+      util::GetSiteForExtensionId(extension_id(), chrome_details_.GetProfile());
   scoped_refptr<storage::FileSystemContext> file_system_context =
       content::BrowserContext::GetStoragePartitionForSite(
           chrome_details_.GetProfile(), site)->GetFileSystemContext();
@@ -1354,8 +1363,8 @@ void FileSystemRequestFileSystemFunction::OnConsentReceived(
     return;
   }
 
-  const GURL site = extensions::util::GetSiteForExtensionId(
-      extension_id(), chrome_details_.GetProfile());
+  const GURL site =
+      util::GetSiteForExtensionId(extension_id(), chrome_details_.GetProfile());
   scoped_refptr<storage::FileSystemContext> file_system_context =
       content::BrowserContext::GetStoragePartitionForSite(
           chrome_details_.GetProfile(), site)->GetFileSystemContext();
@@ -1376,8 +1385,8 @@ void FileSystemRequestFileSystemFunction::OnConsentReceived(
 
   const storage::FileSystemURL original_url =
       file_system_context->CreateCrackedFileSystemURL(
-          GURL(std::string(extensions::kExtensionScheme) +
-               url::kStandardSchemeSeparator + extension_id()),
+          GURL(std::string(kExtensionScheme) + url::kStandardSchemeSeparator +
+               extension_id()),
           storage::kFileSystemTypeExternal, virtual_path);
 
   // Set a fixed register name, as the automatic one would leak the mount point
@@ -1445,13 +1454,12 @@ ExtensionFunction::ResponseAction FileSystemGetVolumeListFunction::Run() {
 
   if (!consent_provider.IsGrantable(*extension()))
     return RespondNow(Error(kNotSupportedOnNonKioskSessionError));
-  using extensions::api::file_system::Volume;
+  using api::file_system::Volume;
   std::vector<linked_ptr<Volume>> result_volume_list;
   FillVolumeList(chrome_details_.GetProfile(), &result_volume_list);
 
-  return RespondNow(
-      ArgumentList(extensions::api::file_system::GetVolumeList::Results::Create(
-                       result_volume_list).Pass()));
+  return RespondNow(ArgumentList(
+      api::file_system::GetVolumeList::Results::Create(result_volume_list)));
 }
 #endif
 

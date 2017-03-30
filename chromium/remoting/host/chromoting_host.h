@@ -8,6 +8,7 @@
 #include <list>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
@@ -33,8 +34,7 @@ namespace remoting {
 
 namespace protocol {
 class InputStub;
-class SessionConfig;
-class CandidateSessionConfig;
+class TransportContext;
 }  // namespace protocol
 
 class DesktopEnvironmentFactory;
@@ -64,15 +64,13 @@ class DesktopEnvironmentFactory;
 //    incoming connection.
 class ChromotingHost : public base::NonThreadSafe,
                        public ClientSession::EventHandler,
-                       public protocol::SessionManager::Listener,
                        public HostStatusMonitor {
  public:
-  // Both |signal_strategy| and |desktop_environment_factory| should outlive
-  // this object.
+  // |desktop_environment_factory| must outlive this object.
   ChromotingHost(
-      SignalStrategy* signal_strategy,
       DesktopEnvironmentFactory* desktop_environment_factory,
       scoped_ptr<protocol::SessionManager> session_manager,
+      scoped_refptr<protocol::TransportContext> transport_context,
       scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
@@ -96,11 +94,6 @@ class ChromotingHost : public base::NonThreadSafe,
   // Registers a host extension.
   void AddExtension(scoped_ptr<HostExtension> extension);
 
-  // This method may be called only from
-  // HostStatusObserver::OnClientAuthenticated() to reject the new
-  // client.
-  void RejectAuthenticatingClient();
-
   // Sets the authenticator factory to use for incoming
   // connections. Incoming connections are rejected until
   // authenticator factory is set. Must be called on the network
@@ -121,7 +114,7 @@ class ChromotingHost : public base::NonThreadSafe,
   ////////////////////////////////////////////////////////////////////////////
   // ClientSession::EventHandler implementation.
   void OnSessionAuthenticating(ClientSession* client) override;
-  bool OnSessionAuthenticated(ClientSession* client) override;
+  void OnSessionAuthenticated(ClientSession* client) override;
   void OnSessionChannelsConnected(ClientSession* client) override;
   void OnSessionAuthenticationFailed(ClientSession* client) override;
   void OnSessionClosed(ClientSession* session) override;
@@ -129,19 +122,10 @@ class ChromotingHost : public base::NonThreadSafe,
                             const std::string& channel_name,
                             const protocol::TransportRoute& route) override;
 
-  // SessionManager::Listener implementation.
-  void OnSessionManagerReady() override;
+  // Callback for SessionManager to accept incoming sessions.
   void OnIncomingSession(
       protocol::Session* session,
-      protocol::SessionManager::IncomingSessionResponse* response) override;
-
-  // Gets the candidate configuration for the protocol.
-  const protocol::CandidateSessionConfig* protocol_config() const {
-    return protocol_config_.get();
-  }
-
-  // Sets desired configuration for the protocol. Must be called before Start().
-  void set_protocol_config(scoped_ptr<protocol::CandidateSessionConfig> config);
+      protocol::SessionManager::IncomingSessionResponse* response);
 
   // The host uses a pairing registry to generate and store pairing information
   // for clients for PIN-less authentication.
@@ -174,15 +158,13 @@ class ChromotingHost : public base::NonThreadSafe,
   // Parameters specified when the host was created.
   DesktopEnvironmentFactory* desktop_environment_factory_;
   scoped_ptr<protocol::SessionManager> session_manager_;
+  scoped_refptr<protocol::TransportContext> transport_context_;
   scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> input_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
-
-  // Connection objects.
-  SignalStrategy* signal_strategy_;
 
   // Must be used on the network thread only.
   base::ObserverList<HostStatusObserver> status_observers_;
@@ -193,15 +175,8 @@ class ChromotingHost : public base::NonThreadSafe,
   // True if the host has been started.
   bool started_;
 
-  // Configuration of the protocol.
-  scoped_ptr<protocol::CandidateSessionConfig> protocol_config_;
-
   // Login backoff state.
   net::BackoffEntry login_backoff_;
-
-  // Flags used for RejectAuthenticatingClient().
-  bool authenticating_client_;
-  bool reject_authenticating_client_;
 
   // True if the curtain mode is enabled.
   bool enable_curtaining_;

@@ -4,6 +4,8 @@
 
 #include "media/filters/audio_file_reader.h"
 
+#include <stddef.h>
+
 #include <cmath>
 
 #include "base/logging.h"
@@ -12,9 +14,8 @@
 #include "media/ffmpeg/ffmpeg_common.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/base/platform_mime_util.h"
 #include "media/filters/ipc_audio_decoder.h"
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
+#endif
 
 namespace media {
 
@@ -24,8 +25,7 @@ AudioFileReader::AudioFileReader(FFmpegURLProtocol* protocol)
       protocol_(protocol),
       channels_(0),
       sample_rate_(0),
-      av_sample_format_(0),
-      use_ipc_audio_decoder_(false) {
+      av_sample_format_(0) {
 }
 
 AudioFileReader::~AudioFileReader() {
@@ -35,16 +35,20 @@ AudioFileReader::~AudioFileReader() {
 bool AudioFileReader::Open() {
   if (!(OpenDemuxer() && OpenDecoder())) {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+    if (!media::IPCAudioDecoder::IsAvailable())
+      return false;
+
     ipc_audio_decoder_.reset(new IPCAudioDecoder(protocol_));
-    use_ipc_audio_decoder_ = (media::IsPlatformMediaPipelineAvailable(
-                                  media::PlatformMediaCheckType::BASIC) &&
-                              ipc_audio_decoder_->Initialize());
-    if (use_ipc_audio_decoder_) {
-      channels_ = ipc_audio_decoder_->channels();
-      sample_rate_ = ipc_audio_decoder_->sample_rate();
+    if (!ipc_audio_decoder_->Initialize()) {
+      ipc_audio_decoder_.reset();
+      return false;
     }
+
+    channels_ = ipc_audio_decoder_->channels();
+    sample_rate_ = ipc_audio_decoder_->sample_rate();
+#else
+    return false;
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
-    return use_ipc_audio_decoder_;
   }
 
   return true;
@@ -135,7 +139,7 @@ void AudioFileReader::Close() {
 
 int AudioFileReader::Read(AudioBus* audio_bus) {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (use_ipc_audio_decoder_)
+  if (ipc_audio_decoder_)
     return ipc_audio_decoder_->Read(audio_bus);
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
   DCHECK(glue_.get() && codec_context_) <<
@@ -158,7 +162,7 @@ int AudioFileReader::Read(AudioBus* audio_bus) {
   while (current_frame < audio_bus->frames() && continue_decoding &&
          ReadPacket(&packet)) {
     // Make a shallow copy of packet so we can slide packet.data as frames are
-    // decoded from the packet; otherwise av_free_packet() will corrupt memory.
+    // decoded from the packet; otherwise av_packet_unref() will corrupt memory.
     AVPacket packet_temp = packet;
     do {
       // Reset frame to default values.
@@ -243,7 +247,7 @@ int AudioFileReader::Read(AudioBus* audio_bus) {
 
       current_frame += frames_read;
     } while (packet_temp.size > 0);
-    av_free_packet(&packet);
+    av_packet_unref(&packet);
   }
 
   // Zero any remaining frames.
@@ -268,7 +272,7 @@ base::TimeDelta AudioFileReader::GetDuration() const {
 
 int AudioFileReader::GetNumberOfFrames() const {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (use_ipc_audio_decoder_)
+  if (ipc_audio_decoder_)
     return ipc_audio_decoder_->number_of_frames();
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
   return static_cast<int>(ceil(GetDuration().InSecondsF() * sample_rate()));
@@ -283,11 +287,10 @@ bool AudioFileReader::ReadPacketForTesting(AVPacket* output_packet) {
 }
 
 bool AudioFileReader::ReadPacket(AVPacket* output_packet) {
-  while (av_read_frame(glue_->format_context(), output_packet) >= 0 &&
-         av_dup_packet(output_packet) >= 0) {
+  while (av_read_frame(glue_->format_context(), output_packet) >= 0) {
     // Skip packets from other streams.
     if (output_packet->stream_index != stream_index_) {
-      av_free_packet(output_packet);
+      av_packet_unref(output_packet);
       continue;
     }
     return true;

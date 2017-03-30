@@ -4,6 +4,8 @@
 
 #include "media/audio/audio_input_controller.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -12,6 +14,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "media/audio/audio_input_writer.h"
 #include "media/base/user_input_monitor.h"
 
 using base::TimeDelta;
@@ -134,7 +137,8 @@ AudioInputController::AudioInputController(EventHandler* handler,
       log_silence_state_(false),
       silence_state_(SILENCE_STATE_NO_MEASUREMENT),
 #endif
-      prev_key_down_count_(0) {
+      prev_key_down_count_(0),
+      input_writer_(nullptr) {
   DCHECK(creator_task_runner_.get());
 }
 
@@ -432,6 +436,8 @@ void AudioInputController::DoClose() {
   log_silence_state_ = false;
 #endif
 
+  input_writer_ = nullptr;
+
   state_ = CLOSED;
 }
 
@@ -503,8 +509,23 @@ void AudioInputController::DoCheckForNoData() {
 
 void AudioInputController::OnData(AudioInputStream* stream,
                                   const AudioBus* source,
-                                  uint32 hardware_delay_bytes,
+                                  uint32_t hardware_delay_bytes,
                                   double volume) {
+  // |input_writer_| should only be accessed on the audio thread, but as a means
+  // to avoid copying data and posting on the audio thread, we just check for
+  // non-null here.
+  if (input_writer_) {
+    scoped_ptr<AudioBus> source_copy =
+        AudioBus::Create(source->channels(), source->frames());
+    source->CopyTo(source_copy.get());
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(
+            &AudioInputController::WriteInputDataForDebugging,
+            this,
+            base::Passed(&source_copy)));
+  }
+
   // Mark data as active to ensure that the periodic calls to
   // DoCheckForNoData() does not report an error to the event handler.
   SetDataIsActive(true);
@@ -526,8 +547,7 @@ void AudioInputController::OnData(AudioInputStream* stream,
   // Use SharedMemory and SyncSocket if the client has created a SyncWriter.
   // Used by all low-latency clients except WebSpeech.
   if (SharedMemoryAndSyncSocketMode()) {
-    sync_writer_->Write(source, volume, key_pressed);
-    sync_writer_->UpdateRecordedBytes(hardware_delay_bytes);
+    sync_writer_->Write(source, volume, key_pressed, hardware_delay_bytes);
 
 #if defined(AUDIO_POWER_MONITORING)
     // Only do power-level measurements if DoCreate() has been called. It will
@@ -624,6 +644,26 @@ void AudioInputController::OnError(AudioInputStream* stream) {
       &AudioInputController::DoReportError, this));
 }
 
+void AudioInputController::EnableDebugRecording(
+    AudioInputWriter* input_writer) {
+  task_runner_->PostTask(FROM_HERE, base::Bind(
+      &AudioInputController::DoEnableDebugRecording,
+      this,
+      input_writer));
+}
+
+void AudioInputController::DisableDebugRecording(
+    const base::Closure& callback) {
+  DCHECK(creator_task_runner_->BelongsToCurrentThread());
+  DCHECK(!callback.is_null());
+
+  task_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::Bind(&AudioInputController::DoDisableDebugRecording,
+                 this),
+      callback);
+}
+
 void AudioInputController::DoStopCloseAndClearStream() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -675,5 +715,24 @@ void AudioInputController::LogSilenceState(SilenceState value) {
                             SILENCE_STATE_MAX + 1);
 }
 #endif
+
+void AudioInputController::DoEnableDebugRecording(
+    AudioInputWriter* input_writer) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(!input_writer_);
+  input_writer_ = input_writer;
+}
+
+void AudioInputController::DoDisableDebugRecording() {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  input_writer_ = nullptr;
+}
+
+void AudioInputController::WriteInputDataForDebugging(
+    scoped_ptr<AudioBus> data) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  if (input_writer_)
+    input_writer_->Write(std::move(data));
+}
 
 }  // namespace media

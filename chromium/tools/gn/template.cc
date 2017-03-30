@@ -4,6 +4,8 @@
 
 #include "tools/gn/template.h"
 
+#include <utility>
+
 #include "tools/gn/err.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/parse_tree.h"
@@ -17,9 +19,7 @@ Template::Template(const Scope* scope, const FunctionCallNode* def)
 }
 
 Template::Template(scoped_ptr<Scope> scope, const FunctionCallNode* def)
-    : closure_(scope.Pass()),
-      definition_(def) {
-}
+    : closure_(std::move(scope)), definition_(def) {}
 
 Template::~Template() {
 }
@@ -41,9 +41,20 @@ Value Template::Invoke(Scope* scope,
                             invocation->function().value().as_string(),
                             block, args, invocation_scope.get(), err))
     return Value();
-  block->Execute(invocation_scope.get(), err);
-  if (err->has_error())
-    return Value();
+
+  {
+    // Don't allow the block of the template invocation to include other
+    // targets configs, or template invocations. This must only be applied
+    // to the invoker's block rather than the whole function because the
+    // template execution itself must be able to define targets, etc.
+    NonNestableBlock non_nestable(scope, invocation, "template invocation");
+    if (!non_nestable.Enter(err))
+      return Value();
+
+    block->Execute(invocation_scope.get(), err);
+    if (err->has_error())
+      return Value();
+  }
 
   // Set up the scope to run the template and set the current directory for the
   // template (which ScopePerFileProvider uses to base the target-related
@@ -70,7 +81,7 @@ Value Template::Invoke(Scope* scope,
   template_scope.SetValue(kInvoker, Value(nullptr, scoped_ptr<Scope>()),
                           invocation);
   Value* invoker_value = template_scope.GetMutableValue(kInvoker, false);
-  invoker_value->SetScopeValue(invocation_scope.Pass());
+  invoker_value->SetScopeValue(std::move(invocation_scope));
   template_scope.set_source_dir(scope->GetSourceDir());
 
   const base::StringPiece target_name("target_name");

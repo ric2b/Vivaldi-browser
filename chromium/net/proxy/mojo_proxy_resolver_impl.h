@@ -9,6 +9,7 @@
 #include <queue>
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/interfaces/proxy_resolver_service.mojom.h"
@@ -35,7 +36,6 @@ class MojoProxyResolverImpl : public interfaces::ProxyResolver {
 
   scoped_ptr<ProxyResolverV8Tracing> resolver_;
   std::set<Job*> resolve_jobs_;
-  std::map<net::ProxyResolver::RequestHandle, Job*> request_handle_to_job_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoProxyResolverImpl);
 };

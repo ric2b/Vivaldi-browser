@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SIGNIN_INLINE_LOGIN_UI_H_
 #define CHROME_BROWSER_UI_WEBUI_SIGNIN_INLINE_LOGIN_UI_H_
 
+#include "base/macros.h"
 #include "chrome/browser/extensions/signin/scoped_gaia_auth_extension.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
 
@@ -25,6 +26,11 @@ class InlineLoginUI : public ui::WebDialogUI {
   // specified parent origin if |parent_origin| is not empty, and the specified
   // parent frame name.
   static content::RenderFrameHost* GetAuthFrame(
+      content::WebContents* web_contents,
+      const GURL& parent_origin,
+      const std::string& parent_frame_name);
+
+  static content::WebContents* GetAuthFrameWebContents(
       content::WebContents* web_contents,
       const GURL& parent_origin,
       const std::string& parent_frame_name);

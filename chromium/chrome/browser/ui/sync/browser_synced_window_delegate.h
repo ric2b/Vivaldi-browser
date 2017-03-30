@@ -6,8 +6,9 @@
 #define CHROME_BROWSER_UI_SYNC_BROWSER_SYNCED_WINDOW_DELEGATE_H_
 
 #include "base/compiler_specific.h"
-#include "chrome/browser/sync/glue/synced_window_delegate.h"
-#include "components/sessions/session_id.h"
+#include "base/macros.h"
+#include "components/sessions/core/session_id.h"
+#include "components/sync_sessions/synced_window_delegate.h"
 
 class Browser;
 
@@ -21,15 +22,6 @@ class BrowserSyncedWindowDelegate : public browser_sync::SyncedWindowDelegate {
  public:
   explicit BrowserSyncedWindowDelegate(Browser* browser);
   ~BrowserSyncedWindowDelegate() override;
-
-  // Add all BrowserSyncedWindowDelegate instances to the output set.
-  static void GetAllHelper(
-      std::set<const browser_sync::SyncedWindowDelegate*>* delegates);
-
-  // Find the SyncedWindowDelegate for a particular browser window id. Note
-  // that this only considers Browser windows (AppWindow are not considered).
-  static const browser_sync::SyncedWindowDelegate* FindByIdHelper(
-      SessionID::id_type id);
 
   // SyncedWindowDelegate:
   bool HasWindow() const override;

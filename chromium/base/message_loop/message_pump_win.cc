@@ -4,13 +4,14 @@
 
 #include "base/message_loop/message_pump_win.h"
 
-#include <limits>
 #include <math.h>
+#include <stdint.h>
+
+#include <limits>
 
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/process/memory.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/wrapped_window_proc.h"
@@ -132,11 +133,6 @@ void MessagePumpForUI::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
 // static
 LRESULT CALLBACK MessagePumpForUI::WndProcThunk(
     HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440919 MessagePumpForUI::WndProcThunk1"));
-
   switch (message) {
     case kMsgHaveWork:
       reinterpret_cast<MessagePumpForUI*>(wparam)->HandleWorkMessage();
@@ -145,12 +141,6 @@ LRESULT CALLBACK MessagePumpForUI::WndProcThunk(
       reinterpret_cast<MessagePumpForUI*>(wparam)->HandleTimerMessage();
       break;
   }
-
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile2(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440919 MessagePumpForUI::WndProcThunk2"));
-
   return DefWindowProc(hwnd, message, wparam, lparam);
 }
 
@@ -319,7 +309,7 @@ void MessagePumpForUI::RescheduleTimer() {
   //
   // We use a single SetTimer corresponding to the timer that will expire
   // soonest.  As new timers are created and destroyed, we update SetTimer.
-  // Getting a spurrious SetTimer event firing is benign, as we'll just be
+  // Getting a spurious SetTimer event firing is benign, as we'll just be
   // processing an empty timer queue.
   //
   int delay_msec = GetCurrentDelay();
@@ -345,11 +335,6 @@ void MessagePumpForUI::RescheduleTimer() {
 }
 
 bool MessagePumpForUI::ProcessNextWindowsMessage() {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440919 MessagePumpForUI::ProcessNextWindowsMessage1"));
-
   // If there are sent messages in the queue then PeekMessage internally
   // dispatches the message and returns false. We return true in this
   // case to ensure that the message loop peeks again instead of calling
@@ -358,11 +343,6 @@ bool MessagePumpForUI::ProcessNextWindowsMessage() {
   DWORD queue_status = GetQueueStatus(QS_SENDMESSAGE);
   if (HIWORD(queue_status) & QS_SENDMESSAGE)
     sent_messages_in_queue = true;
-
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile2(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440919 MessagePumpForUI::ProcessNextWindowsMessage2"));
 
   MSG msg;
   if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != FALSE)
@@ -390,14 +370,8 @@ bool MessagePumpForUI::ProcessMessageHelper(const MSG& msg) {
     return true;
 
   uint32_t action = MessagePumpDispatcher::POST_DISPATCH_PERFORM_DEFAULT;
-  if (state_->dispatcher) {
-    // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-    tracked_objects::ScopedTracker tracking_profile4(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "440919 MessagePumpForUI::ProcessMessageHelper4"));
-
+  if (state_->dispatcher)
     action = state_->dispatcher->Dispatch(msg);
-  }
   if (action & MessagePumpDispatcher::POST_DISPATCH_QUIT_LOOP)
     state_->should_quit = true;
   if (action & MessagePumpDispatcher::POST_DISPATCH_PERFORM_DEFAULT) {
@@ -614,8 +588,8 @@ bool MessagePumpForIO::GetIOItem(DWORD timeout, IOItem* item) {
 }
 
 bool MessagePumpForIO::ProcessInternalIOItem(const IOItem& item) {
-  if (this == reinterpret_cast<MessagePumpForIO*>(item.context) &&
-      this == reinterpret_cast<MessagePumpForIO*>(item.handler)) {
+  if (reinterpret_cast<void*>(this) == reinterpret_cast<void*>(item.context) &&
+      reinterpret_cast<void*>(this) == reinterpret_cast<void*>(item.handler)) {
     // This is our internal completion.
     DCHECK(!item.bytes_transfered);
     InterlockedExchange(&have_work_, 0);

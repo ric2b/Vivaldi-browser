@@ -7,10 +7,11 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/drive/drive_pref_names.h"
+#include "build/build_config.h"
 #include "chrome/browser/download/download_dir_policy_handler.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/common/pref_names.h"
+#include "components/drive/drive_pref_names.h"
 #include "components/policy/core/browser/configuration_policy_handler_parameters.h"
 #include "components/policy/core/browser/configuration_policy_pref_store.h"
 #include "components/policy/core/browser/configuration_policy_pref_store_test.h"
@@ -20,7 +21,7 @@
 #include "policy/policy_constants.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
+#include "chrome/browser/chromeos/drive/file_system_util.h"
 #endif
 
 namespace {
@@ -72,6 +73,7 @@ TEST_F(DownloadDirPolicyHandlerTest, SetDownloadDirectory) {
   policy.Set(policy::key::kDownloadDirectory,
              policy::POLICY_LEVEL_MANDATORY,
              policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
              new base::StringValue(std::string()),
              NULL);
   UpdateProviderPolicy(policy);
@@ -95,6 +97,7 @@ TEST_F(DownloadDirPolicyHandlerTest, SetDownloadToDrive) {
   policy.Set(policy::key::kDownloadDirectory,
              policy::POLICY_LEVEL_MANDATORY,
              policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
              new base::StringValue(kDriveNamePolicyVariableName),
              NULL);
   UpdateProviderPolicy(policy);
@@ -121,6 +124,7 @@ TEST_F(DownloadDirPolicyHandlerTest, SetDownloadToDrive) {
   policy.Set(policy::key::kDownloadDirectory,
              policy::POLICY_LEVEL_MANDATORY,
              policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
              new base::StringValue(kUserIDHash),
              NULL);
   UpdateProviderPolicy(policy);
@@ -129,6 +133,7 @@ TEST_F(DownloadDirPolicyHandlerTest, SetDownloadToDrive) {
   policy.Set(policy::key::kDownloadDirectory,
              policy::POLICY_LEVEL_RECOMMENDED,
              policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
              new base::StringValue(std::string(kDriveNamePolicyVariableName) +
                                    kRelativeToDriveRoot),
              NULL);
@@ -147,6 +152,7 @@ TEST_F(DownloadDirPolicyHandlerTest, SetDownloadToDrive) {
   policy.Set(policy::key::kDownloadDirectory,
              policy::POLICY_LEVEL_RECOMMENDED,
              policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
              new base::StringValue(kUserIDHash),
              NULL);
   UpdateProviderPolicy(policy);

@@ -5,8 +5,10 @@
 #import "ui/base/cocoa/controls/hover_image_menu_button.h"
 
 #include "base/mac/foundation_util.h"
+#include "base/macros.h"
 #import "testing/gtest_mac.h"
 #import "ui/base/cocoa/controls/hover_image_menu_button_cell.h"
+#include "ui/events/test/cocoa_test_event_utils.h"
 #import "ui/gfx/test/ui_cocoa_test_helper.h"
 
 namespace ui {
@@ -157,13 +159,13 @@ TEST_F(HoverImageMenuButtonTest, SimulateMouseEnterExit) {
   EXPECT_FALSE([menu_button_ needsDisplay]);
   EXPECT_NSEQ(normal_, [[menu_button_ cell] imageToDraw]);
 
-  [menu_button_ mouseEntered:nil];
+  [menu_button_ mouseEntered:cocoa_test_event_utils::EnterEvent()];
   EXPECT_TRUE([menu_button_ needsDisplay]);
   EXPECT_NSEQ(hovered_, [[menu_button_ cell] imageToDraw]);
   [menu_button_ display];
   EXPECT_FALSE([menu_button_ needsDisplay]);
 
-  [menu_button_ mouseExited:nil];
+  [menu_button_ mouseExited:cocoa_test_event_utils::ExitEvent()];
   EXPECT_TRUE([menu_button_ needsDisplay]);
   EXPECT_NSEQ(normal_, [[menu_button_ cell] imageToDraw]);
   [menu_button_ display];

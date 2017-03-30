@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -29,7 +30,7 @@ class BrowserContext;
 
 namespace extensions {
 
-namespace core_api {
+namespace api {
 namespace runtime {
 struct PlatformInfo;
 }
@@ -62,7 +63,7 @@ class RuntimeAPI : public BrowserContextKeyedAPI,
   bool CheckForUpdates(const std::string& extension_id,
                        const RuntimeAPIDelegate::UpdateCheckCallback& callback);
   void OpenURL(const GURL& uninstall_url);
-  bool GetPlatformInfo(core_api::runtime::PlatformInfo* info);
+  bool GetPlatformInfo(api::runtime::PlatformInfo* info);
   bool RestartDevice(std::string* error_message);
   bool OpenOptionsPage(const Extension* extension);
 
@@ -75,7 +76,6 @@ class RuntimeAPI : public BrowserContextKeyedAPI,
   void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
                                   const Extension* extension,
                                   bool is_update,
-                                  bool from_ephemeral,
                                   const std::string& old_name) override;
   void OnExtensionUninstalled(content::BrowserContext* browser_context,
                               const Extension* extension,
@@ -93,6 +93,14 @@ class RuntimeAPI : public BrowserContextKeyedAPI,
 
   // ProcessManagerObserver implementation:
   void OnBackgroundHostStartup(const Extension* extension) override;
+
+  // Pref related functions that deals with info about installed extensions that
+  // has not been loaded yet.
+  // Used to send chrome.runtime.onInstalled event upon loading the extensions.
+  bool ReadPendingOnInstallInfoFromPref(const ExtensionId& extension_id,
+                                        base::Version* previous_version);
+  void RemovePendingOnInstallInfoFromPref(const ExtensionId& extension_id);
+  void StorePendingOnInstallInfoToPref(const Extension* extension);
 
   scoped_ptr<RuntimeAPIDelegate> delegate_;
 
@@ -142,7 +150,7 @@ class RuntimeEventRouter {
   static void DispatchOnRestartRequiredEvent(
       content::BrowserContext* context,
       const std::string& app_id,
-      core_api::runtime::OnRestartRequiredReason reason);
+      api::runtime::OnRestartRequiredReason reason);
 
   // Does any work needed at extension uninstall (e.g. load uninstall url).
   static void OnExtensionUninstalled(content::BrowserContext* context,
@@ -209,15 +217,6 @@ class RuntimeRestartFunction : public UIThreadExtensionFunction {
 
  protected:
   ~RuntimeRestartFunction() override {}
-  ResponseAction Run() override;
-};
-
-class RuntimeExitFunction : public UIThreadExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("runtime.exit", RUNTIME_EXIT)
-
- protected:
-  ~RuntimeExitFunction() override {}
   ResponseAction Run() override;
 };
 

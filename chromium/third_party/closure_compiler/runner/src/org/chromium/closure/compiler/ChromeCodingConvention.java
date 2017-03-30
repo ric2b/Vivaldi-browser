@@ -46,9 +46,9 @@ public class ChromeCodingConvention extends CodingConventions.Proxy {
   }
 
   @Override
-  public void applySingletonGetter(FunctionType functionType,
+  public void applySingletonGetterOld(FunctionType functionType,
       FunctionType getterType, ObjectType objectType) {
-    super.applySingletonGetter(functionType, getterType, objectType);
+    super.applySingletonGetterOld(functionType, getterType, objectType);
     functionType.defineDeclaredProperty("getInstance", getterType,
         functionType.getSource());
     functionType.defineDeclaredProperty("instance_", objectType,
@@ -66,5 +66,11 @@ public class ChromeCodingConvention extends CodingConventions.Proxy {
       new AssertionFunctionSpec("assert"),
       new AssertInstanceofSpec("cr.ui.decorate")
     );
+  }
+
+  @Override
+  public boolean isFunctionCallThatAlwaysThrows(Node n) {
+    return CodingConventions.defaultIsFunctionCallThatAlwaysThrows(
+        n, "assertNotReached");
   }
 }

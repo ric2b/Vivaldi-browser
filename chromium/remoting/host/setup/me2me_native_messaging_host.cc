@@ -3,19 +3,22 @@
 // found in the LICENSE file.
 
 #include "remoting/host/setup/me2me_native_messaging_host.h"
-#include <string>
 
-#include "base/basictypes.h"
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
 #include "google_apis/google_api_keys.h"
 #include "ipc/ipc_channel.h"
@@ -64,7 +67,7 @@ scoped_ptr<base::DictionaryValue> ConfigDictionaryFromMessage(
   } else {
     LOG(ERROR) << "'config' dictionary not found";
   }
-  return result.Pass();
+  return result;
 }
 
 }  // namespace
@@ -82,10 +85,13 @@ Me2MeNativeMessagingHost::Me2MeNativeMessagingHost(
 #if defined(OS_WIN)
       parent_window_handle_(parent_window_handle),
 #endif
-      channel_(channel.Pass()),
+      channel_(std::move(channel)),
+      log_message_handler_(
+          base::Bind(&extensions::NativeMessagingChannel::SendMessage,
+                     base::Unretained(channel_.get()))),
       daemon_controller_(daemon_controller),
       pairing_registry_(pairing_registry),
-      oauth_client_(oauth_client.Pass()),
+      oauth_client_(std::move(oauth_client)),
       weak_factory_(this) {
   weak_ptr_ = weak_factory_.GetWeakPtr();
 }
@@ -133,39 +139,39 @@ void Me2MeNativeMessagingHost::OnMessage(scoped_ptr<base::Value> message) {
   response->SetString("type", type + "Response");
 
   if (type == "hello") {
-    ProcessHello(message_dict.Pass(), response.Pass());
+    ProcessHello(std::move(message_dict), std::move(response));
   } else if (type == "clearPairedClients") {
-    ProcessClearPairedClients(message_dict.Pass(), response.Pass());
+    ProcessClearPairedClients(std::move(message_dict), std::move(response));
   } else if (type == "deletePairedClient") {
-    ProcessDeletePairedClient(message_dict.Pass(), response.Pass());
+    ProcessDeletePairedClient(std::move(message_dict), std::move(response));
   } else if (type == "getHostName") {
-    ProcessGetHostName(message_dict.Pass(), response.Pass());
+    ProcessGetHostName(std::move(message_dict), std::move(response));
   } else if (type == "getPinHash") {
-    ProcessGetPinHash(message_dict.Pass(), response.Pass());
+    ProcessGetPinHash(std::move(message_dict), std::move(response));
   } else if (type == "generateKeyPair") {
-    ProcessGenerateKeyPair(message_dict.Pass(), response.Pass());
+    ProcessGenerateKeyPair(std::move(message_dict), std::move(response));
   } else if (type == "updateDaemonConfig") {
-    ProcessUpdateDaemonConfig(message_dict.Pass(), response.Pass());
+    ProcessUpdateDaemonConfig(std::move(message_dict), std::move(response));
   } else if (type == "getDaemonConfig") {
-    ProcessGetDaemonConfig(message_dict.Pass(), response.Pass());
+    ProcessGetDaemonConfig(std::move(message_dict), std::move(response));
   } else if (type == "getPairedClients") {
-    ProcessGetPairedClients(message_dict.Pass(), response.Pass());
+    ProcessGetPairedClients(std::move(message_dict), std::move(response));
   } else if (type == "getUsageStatsConsent") {
-    ProcessGetUsageStatsConsent(message_dict.Pass(), response.Pass());
+    ProcessGetUsageStatsConsent(std::move(message_dict), std::move(response));
   } else if (type == "startDaemon") {
-    ProcessStartDaemon(message_dict.Pass(), response.Pass());
+    ProcessStartDaemon(std::move(message_dict), std::move(response));
   } else if (type == "stopDaemon") {
-    ProcessStopDaemon(message_dict.Pass(), response.Pass());
+    ProcessStopDaemon(std::move(message_dict), std::move(response));
   } else if (type == "getDaemonState") {
-    ProcessGetDaemonState(message_dict.Pass(), response.Pass());
+    ProcessGetDaemonState(std::move(message_dict), std::move(response));
   } else if (type == "getHostClientId") {
-    ProcessGetHostClientId(message_dict.Pass(), response.Pass());
+    ProcessGetHostClientId(std::move(message_dict), std::move(response));
   } else if (type == "getCredentialsFromAuthCode") {
     ProcessGetCredentialsFromAuthCode(
-        message_dict.Pass(), response.Pass(), true);
+        std::move(message_dict), std::move(response), true);
   } else if (type == "getRefreshTokenFromAuthCode") {
     ProcessGetCredentialsFromAuthCode(
-        message_dict.Pass(), response.Pass(), false);
+        std::move(message_dict), std::move(response), false);
   } else {
     LOG(ERROR) << "Unsupported request type: " << type;
     OnError();
@@ -187,7 +193,7 @@ void Me2MeNativeMessagingHost::ProcessHello(
   supported_features_list->AppendStrings(std::vector<std::string>(
       kSupportedFeatures, kSupportedFeatures + arraysize(kSupportedFeatures)));
   response->Set("supportedFeatures", supported_features_list.release());
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::ProcessClearPairedClients(
@@ -196,8 +202,8 @@ void Me2MeNativeMessagingHost::ProcessClearPairedClients(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (needs_elevation_) {
-    if (!DelegateToElevatedHost(message.Pass()))
-      SendBooleanResult(response.Pass(), false);
+    if (!DelegateToElevatedHost(std::move(message)))
+      SendBooleanResult(std::move(response), false);
     return;
   }
 
@@ -206,7 +212,7 @@ void Me2MeNativeMessagingHost::ProcessClearPairedClients(
         base::Bind(&Me2MeNativeMessagingHost::SendBooleanResult, weak_ptr_,
                    base::Passed(&response)));
   } else {
-    SendBooleanResult(response.Pass(), false);
+    SendBooleanResult(std::move(response), false);
   }
 }
 
@@ -216,8 +222,8 @@ void Me2MeNativeMessagingHost::ProcessDeletePairedClient(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (needs_elevation_) {
-    if (!DelegateToElevatedHost(message.Pass()))
-      SendBooleanResult(response.Pass(), false);
+    if (!DelegateToElevatedHost(std::move(message)))
+      SendBooleanResult(std::move(response), false);
     return;
   }
 
@@ -235,7 +241,7 @@ void Me2MeNativeMessagingHost::ProcessDeletePairedClient(
         client_id, base::Bind(&Me2MeNativeMessagingHost::SendBooleanResult,
                               weak_ptr_, base::Passed(&response)));
   } else {
-    SendBooleanResult(response.Pass(), false);
+    SendBooleanResult(std::move(response), false);
   }
 }
 
@@ -245,7 +251,7 @@ void Me2MeNativeMessagingHost::ProcessGetHostName(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   response->SetString("hostname", net::GetHostName());
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::ProcessGetPinHash(
@@ -266,7 +272,7 @@ void Me2MeNativeMessagingHost::ProcessGetPinHash(
     return;
   }
   response->SetString("hash", MakeHostPinHash(host_id, pin));
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::ProcessGenerateKeyPair(
@@ -277,7 +283,7 @@ void Me2MeNativeMessagingHost::ProcessGenerateKeyPair(
   scoped_refptr<RsaKeyPair> key_pair = RsaKeyPair::Generate();
   response->SetString("privateKey", key_pair->ToString());
   response->SetString("publicKey", key_pair->GetPublicKey());
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::ProcessUpdateDaemonConfig(
@@ -286,20 +292,20 @@ void Me2MeNativeMessagingHost::ProcessUpdateDaemonConfig(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (needs_elevation_) {
-    if (!DelegateToElevatedHost(message.Pass()))
-      SendAsyncResult(response.Pass(), DaemonController::RESULT_FAILED);
+    if (!DelegateToElevatedHost(std::move(message)))
+      SendAsyncResult(std::move(response), DaemonController::RESULT_FAILED);
     return;
   }
 
   scoped_ptr<base::DictionaryValue> config_dict =
-      ConfigDictionaryFromMessage(message.Pass());
+      ConfigDictionaryFromMessage(std::move(message));
   if (!config_dict) {
     OnError();
     return;
   }
 
   daemon_controller_->UpdateConfig(
-      config_dict.Pass(),
+      std::move(config_dict),
       base::Bind(&Me2MeNativeMessagingHost::SendAsyncResult, weak_ptr_,
                  base::Passed(&response)));
 }
@@ -325,7 +331,8 @@ void Me2MeNativeMessagingHost::ProcessGetPairedClients(
                    weak_ptr_, base::Passed(&response)));
   } else {
     scoped_ptr<base::ListValue> no_paired_clients(new base::ListValue);
-    SendPairedClientsResponse(response.Pass(), no_paired_clients.Pass());
+    SendPairedClientsResponse(std::move(response),
+                              std::move(no_paired_clients));
   }
 }
 
@@ -345,8 +352,8 @@ void Me2MeNativeMessagingHost::ProcessStartDaemon(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (needs_elevation_) {
-    if (!DelegateToElevatedHost(message.Pass()))
-      SendAsyncResult(response.Pass(), DaemonController::RESULT_FAILED);
+    if (!DelegateToElevatedHost(std::move(message)))
+      SendAsyncResult(std::move(response), DaemonController::RESULT_FAILED);
     return;
   }
 
@@ -358,14 +365,14 @@ void Me2MeNativeMessagingHost::ProcessStartDaemon(
   }
 
   scoped_ptr<base::DictionaryValue> config_dict =
-      ConfigDictionaryFromMessage(message.Pass());
+      ConfigDictionaryFromMessage(std::move(message));
   if (!config_dict) {
     OnError();
     return;
   }
 
   daemon_controller_->SetConfigAndStart(
-      config_dict.Pass(), consent,
+      std::move(config_dict), consent,
       base::Bind(&Me2MeNativeMessagingHost::SendAsyncResult, weak_ptr_,
                  base::Passed(&response)));
 }
@@ -376,8 +383,8 @@ void Me2MeNativeMessagingHost::ProcessStopDaemon(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (needs_elevation_) {
-    if (!DelegateToElevatedHost(message.Pass()))
-      SendAsyncResult(response.Pass(), DaemonController::RESULT_FAILED);
+    if (!DelegateToElevatedHost(std::move(message)))
+      SendAsyncResult(std::move(response), DaemonController::RESULT_FAILED);
     return;
   }
 
@@ -412,7 +419,7 @@ void Me2MeNativeMessagingHost::ProcessGetDaemonState(
       response->SetString("state", "UNKNOWN");
       break;
   }
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::ProcessGetHostClientId(
@@ -422,7 +429,7 @@ void Me2MeNativeMessagingHost::ProcessGetHostClientId(
 
   response->SetString("clientId", google_apis::GetOAuth2ClientID(
       google_apis::CLIENT_REMOTING_HOST));
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::ProcessGetCredentialsFromAuthCode(
@@ -460,7 +467,7 @@ void Me2MeNativeMessagingHost::SendConfigResponse(
   } else {
     response->Set("config", base::Value::CreateNullValue());
   }
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::SendPairedClientsResponse(
@@ -469,7 +476,7 @@ void Me2MeNativeMessagingHost::SendPairedClientsResponse(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   response->Set("pairedClients", pairings.release());
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::SendUsageStatsConsentResponse(
@@ -480,7 +487,7 @@ void Me2MeNativeMessagingHost::SendUsageStatsConsentResponse(
   response->SetBoolean("supported", consent.supported);
   response->SetBoolean("allowed", consent.allowed);
   response->SetBoolean("setByPolicy", consent.set_by_policy);
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::SendAsyncResult(
@@ -502,7 +509,7 @@ void Me2MeNativeMessagingHost::SendAsyncResult(
       response->SetString("result", "FAILED_DIRECTORY");
       break;
   }
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::SendBooleanResult(
@@ -510,7 +517,7 @@ void Me2MeNativeMessagingHost::SendBooleanResult(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   response->SetBoolean("result", result);
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::SendCredentialsResponse(
@@ -523,7 +530,7 @@ void Me2MeNativeMessagingHost::SendCredentialsResponse(
     response->SetString("userEmail", user_email);
   }
   response->SetString("refreshToken", refresh_token);
-  channel_->SendMessage(response.Pass());
+  channel_->SendMessage(std::move(response));
 }
 
 void Me2MeNativeMessagingHost::OnError() {
@@ -549,7 +556,7 @@ void Me2MeNativeMessagingHost::ElevatedChannelEventHandler::OnMessage(
   DCHECK(parent_->thread_checker_.CalledOnValidThread());
 
   // Simply pass along the response from the elevated host to the client.
-  parent_->channel_->SendMessage(message.Pass());
+  parent_->channel_->SendMessage(std::move(message));
 }
 
 void Me2MeNativeMessagingHost::ElevatedChannelEventHandler::OnDisconnect() {
@@ -564,7 +571,7 @@ bool Me2MeNativeMessagingHost::DelegateToElevatedHost(
 
   // elevated_channel_ will be null if user rejects the UAC request.
   if (elevated_channel_)
-    elevated_channel_->SendMessage(message.Pass());
+    elevated_channel_->SendMessage(std::move(message));
 
   return elevated_channel_ != nullptr;
 }
@@ -585,11 +592,14 @@ void Me2MeNativeMessagingHost::EnsureElevatedHostCreated() {
   }
 
   // Create a security descriptor that gives full access to the caller and
-  // denies access by anyone else.
+  // BUILTIN_ADMINISTRATORS and denies access by anyone else.
+  // Local admins need access because the privileged host process will run
+  // as a local admin which may not be the same user as the current user.
   std::string user_sid_ascii = base::UTF16ToASCII(user_sid);
   std::string security_descriptor =
-      base::StringPrintf("O:%sG:%sD:(A;;GA;;;%s)", user_sid_ascii.c_str(),
-                         user_sid_ascii.c_str(), user_sid_ascii.c_str());
+      base::StringPrintf("O:%sG:%sD:(A;;GA;;;%s)(A;;GA;;;BA)",
+                         user_sid_ascii.c_str(), user_sid_ascii.c_str(),
+                         user_sid_ascii.c_str());
 
   ScopedSd sd = ConvertSddlToSd(security_descriptor);
   if (!sd) {

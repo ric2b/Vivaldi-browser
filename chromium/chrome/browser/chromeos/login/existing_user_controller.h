@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_EXISTING_USER_CONTROLLER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_EXISTING_USER_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -76,7 +78,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
 
   // LoginDisplay::Delegate: implementation
   void CancelPasswordChangedFlow() override;
-  void CreateAccount() override;
   void CompleteLogin(const UserContext& user_context) override;
   base::string16 GetConnectedNetworkName() override;
   bool IsSigninInProgress() const override;
@@ -93,7 +94,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void SetDisplayEmail(const std::string& email) override;
   void ShowWrongHWIDScreen() override;
   void Signout() override;
-  bool IsUserWhitelisted(const std::string& user_id) override;
+  bool IsUserWhitelisted(const AccountId& account_id) override;
 
   // content::NotificationObserver implementation.
   void Observe(int type,
@@ -148,7 +149,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void OnPasswordChangeDetected() override;
   void WhiteListCheckFailed(const std::string& email) override;
   void PolicyLoadFailed() override;
-  void OnOnlineChecked(const std::string& username, bool success) override;
 
   // UserSessionManagerDelegate implementation:
   void OnProfilePrepared(Profile* profile, bool browser_launched) override;
@@ -163,9 +163,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // If |details| string is not empty, it specify additional error text
   // provided by authenticator, it is not localized.
   void ShowError(int error_id, const std::string& details);
-
-  // Shows Gaia page because password change was detected.
-  void ShowGaiaPasswordChanged(const std::string& username);
 
   // Handles result of ownership check and starts enterprise or kiosk enrollment
   // if applicable.
@@ -244,7 +241,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void OnOAuth2TokensFetched(bool success, const UserContext& user_context);
 
   // Public session auto-login timer.
-  scoped_ptr<base::OneShotTimer<ExistingUserController> > auto_login_timer_;
+  scoped_ptr<base::OneShotTimer> auto_login_timer_;
 
   // Public session auto-login timeout, in milliseconds.
   int public_session_auto_login_delay_;
@@ -259,8 +256,8 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Tests can use this to receive authentication status events.
   AuthStatusConsumer* auth_status_consumer_;
 
-  // Username of the last login attempt.
-  std::string last_login_attempt_username_;
+  // AccountId of the last login attempt.
+  AccountId last_login_attempt_account_id_ = EmptyAccountId();
 
   // OOBE/login display host.
   LoginDisplayHost* host_;
@@ -288,14 +285,8 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // The displayed email for the next login attempt set by |SetDisplayEmail|.
   std::string display_email_;
 
-  // Whether offline login attempt failed.
-  bool offline_failed_;
-
   // Whether login attempt is running.
   bool is_login_in_progress_;
-
-  // Whether online login attempt succeeded.
-  std::string online_succeeded_for_;
 
   // True if password has been changed for user who is completing sign in.
   // Set in OnLoginSuccess. Before that use LoginPerformer::password_changed().
@@ -312,7 +303,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   base::Time time_init_;
 
   // Timer for the interval to wait for the reboot after TPM error UI was shown.
-  base::OneShotTimer<ExistingUserController> reboot_timer_;
+  base::OneShotTimer reboot_timer_;
 
   scoped_ptr<login::NetworkStateHelper> network_state_helper_;
 

@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/sad_tab_helper.h"
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/ui/sad_tab.h"
 #include "content/public/browser/web_contents.h"
@@ -21,6 +22,7 @@ chrome::SadTabKind SadTabKindFromTerminationStatus(
       return chrome::SAD_TAB_KIND_KILLED_BY_OOM;
 #endif
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
+    case base::TERMINATION_STATUS_LAUNCH_FAILED:
       return chrome::SAD_TAB_KIND_KILLED;
     default:
       return chrome::SAD_TAB_KIND_CRASHED;

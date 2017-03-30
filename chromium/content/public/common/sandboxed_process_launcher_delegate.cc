@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 
 namespace content {
@@ -12,6 +13,15 @@ bool SandboxedProcessLauncherDelegate::ShouldLaunchElevated() {
 }
 
 bool SandboxedProcessLauncherDelegate::ShouldSandbox() {
+  return true;
+}
+
+bool SandboxedProcessLauncherDelegate::DisableDefaultPolicy() {
+  return false;
+}
+
+bool SandboxedProcessLauncherDelegate::PreSpawnTarget(
+    sandbox::TargetPolicy* policy) {
   return true;
 }
 

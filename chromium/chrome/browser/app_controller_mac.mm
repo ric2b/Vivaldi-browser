@@ -4,6 +4,8 @@
 
 #import "chrome/browser/app_controller_mac.h"
 
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -11,6 +13,7 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
@@ -40,12 +43,10 @@
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_ui_util.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -82,8 +83,10 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/handoff/handoff_manager.h"
 #include "components/handoff/handoff_utility.h"
+#include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/browser_thread.h"
@@ -101,11 +104,8 @@
 
 //vivaldi
 #include "app/vivaldi_commands.h"
-#include "base/values.h"
-#include "base/json/json_reader.h"
-#include "base/bind_helpers.h"
-#include "base/callback.h"
-#import  "third_party/Sparkle-1.9.0/Sparkle.framework/Headers/SUUpdater.h"
+#include "extensions/api/show_menu/show_menu_api.h"
+#import  "third_party/sparkle_lib/Sparkle.framework/Headers/SUUpdater.h"
 
 using apps::AppShimHandler;
 using apps::ExtensionAppShimHandler;
@@ -115,31 +115,6 @@ using content::BrowserThread;
 using content::DownloadManager;
 
 namespace {
-
-// Vivaldi main menu change Observer
-class VivaldiMacObserver : public extensions::SettingsObserver {
-  public:
-    explicit VivaldiMacObserver(AppController* appController)
-    : controller(appController) {}
-
-    // SettingsObserver implementation.
-    void OnSettingsChanged(const std::string& extension_id,
-                   extensions::settings_namespace::Namespace settings_namespace,
-                   const std::string& change_json) override {
-
-    // detect changes to vivaldi main menu on mac
-    if (extension_id == "mpognobbkildjkofajifpdfhcoklimli" &&
-        change_json.find("macMainMenu") != std::string::npos) {
-      // need to rebuild main menu on mac
-      DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-
-      [controller buildVivaldiMenu];
-    }
-  }
-
-  private:
-    AppController* const controller;
-};
 
 // How long we allow a workspace change notification to wait to be
 // associated with a dock activation. The animation lasts 250ms. See
@@ -193,364 +168,11 @@ CFStringRef BaseBundleID_CFString() {
   return base::mac::NSToCFCast(base_bundle_id);
 }
 
-// Assumes all lowercase
-unichar NSFunctionKeyFromString(std::string& string) {
-  // NSXXXFunctionKeys are defined in NSEvent.h
-  unichar keyValue = 0;
-  size_t length = string.length();
-  if (length >= 2 && string[0] == 'f') {
-    if (length == 2) {
-      char value = string[1];
-      if (value == '1')
-        keyValue = NSF1FunctionKey;
-      else if (value == '2')
-        keyValue = NSF2FunctionKey;
-      else if (value == '3')
-        keyValue = NSF3FunctionKey;
-      else if (value == '4')
-        keyValue = NSF4FunctionKey;
-      else if (value == '5')
-        keyValue = NSF5FunctionKey;
-      else if (value == '6')
-        keyValue = NSF6FunctionKey;
-      else if (value == '7')
-        keyValue = NSF7FunctionKey;
-      else if (value == '8')
-        keyValue = NSF8FunctionKey;
-      else if (value == '9')
-        keyValue = NSF9FunctionKey;
-    } else if (length == 3 && string[1] == '1') {
-      char value = string[2];
-      if (value == '0')
-        keyValue = NSF10FunctionKey;
-      else if (value == '1')
-        keyValue = NSF11FunctionKey;
-      else if (value == '2')
-        keyValue = NSF12FunctionKey;
-      else if (value == '3')
-        keyValue = NSF13FunctionKey;
-      else if (value == '4')
-        keyValue = NSF14FunctionKey;
-      else if (value == '5')
-        keyValue = NSF15FunctionKey;
-      else if (value == '6')
-        keyValue = NSF16FunctionKey;
-      else if (value == '7')
-        keyValue = NSF17FunctionKey;
-      else if (value == '8')
-        keyValue = NSF18FunctionKey;
-      else if (value == '9')
-        keyValue = NSF19FunctionKey;
-    } else if (length == 3 && string[1] == '2') {
-      char value = string[2];
-      if (value == '0')
-        keyValue = NSF20FunctionKey;
-      else if (value == '1')
-        keyValue = NSF21FunctionKey;
-      else if (value == '2')
-        keyValue = NSF22FunctionKey;
-      else if (value == '3')
-        keyValue = NSF23FunctionKey;
-      else if (value == '4')
-        keyValue = NSF24FunctionKey;
-      else if (value == '5')
-        keyValue = NSF25FunctionKey;
-      else if (value == '6')
-        keyValue = NSF26FunctionKey;
-      else if (value == '7')
-        keyValue = NSF27FunctionKey;
-      else if (value == '8')
-        keyValue = NSF28FunctionKey;
-      else if (value == '9')
-        keyValue = NSF29FunctionKey;
-    } else if (length == 3 && string[1] == '3') {
-      char value = string[2];
-      if (value == '0')
-        keyValue = NSF30FunctionKey;
-      else if (value == '1')
-        keyValue = NSF31FunctionKey;
-      else if (value == '2')
-        keyValue = NSF32FunctionKey;
-      else if (value == '3')
-        keyValue = NSF33FunctionKey;
-      else if (value == '4')
-        keyValue = NSF34FunctionKey;
-      else if (value == '5')
-        keyValue = NSF35FunctionKey;
-    }
-  }
-  // Not all NSXXXFunctionKey can be used. Every new entry must be verfied.
-  else if (string == "home")
-    keyValue = NSHomeFunctionKey;
-  else if (string == "begin")
-    keyValue = NSBeginFunctionKey;
-  else if (string == "end")
-    keyValue = NSEndFunctionKey;
-  else if (string == "pageup")
-    keyValue = NSPageUpFunctionKey;
-  else if (string == "pagedown")
-    keyValue = NSPageDownFunctionKey;
-  else if (string == "up")
-    keyValue = NSUpArrowFunctionKey;
-  else if (string == "own")
-    keyValue = NSDownArrowFunctionKey;
-  else if (string == "left")
-    keyValue = NSLeftArrowFunctionKey;
-  else if (string == "right")
-    keyValue = NSRightArrowFunctionKey;
-
-  return keyValue;
-}
-
-// Expected format: [modifier[+modifier]+]accelerator
-NSString* acceleratorFromString(std::string& string) {
-  size_t index = string.find_last_of("+");
-  std::string candidate = index == std::string::npos ?
-      string : string.substr(index+1);
-
-  NSString* accelerator = nil;
-  unichar functionKey = NSFunctionKeyFromString(candidate);
-  if (functionKey)
-    accelerator = [NSString stringWithCharacters:&functionKey length:1];
-  else {
-    // Some constants in Menus.h Maybe use that.
-    char menuGlyph = 0;
-    if (candidate == "backspace")
-      menuGlyph = 0x08;
-    else if (candidate == "tab")
-      menuGlyph = 0x09;
-    else if (candidate == "enter")
-      menuGlyph = 0x0D;
-    else if (candidate == "escape")
-      menuGlyph = 0x1B;
-    else if (candidate == "space")
-      menuGlyph = 0x20;
-    else if (candidate == "delete" || candidate == "del")
-      menuGlyph = NSDeleteCharacter;  // Defined in NSText.h
-
-    if (menuGlyph)
-      accelerator = [NSString stringWithFormat:@"%c", menuGlyph];
-    else
-      accelerator = base::SysUTF8ToNSString(candidate);
-  }
-  return accelerator;
-}
-
-// Expected format: [modifier[+modifier]+]accelerator
-// Assumes sanitized format. A broken string like "alshift" will be accepted.
-NSUInteger modifierMaskFromString(std::string& string) {
-  size_t index = string.find_last_of("+");
-  std::string candidate = index == std::string::npos ?
-      "" : string.substr(0, index);
-
-  NSUInteger modifierMask = 0;
-  if (candidate.length() >= 3) {
-    if (candidate.find("cmd") != std::string::npos ||
-        candidate.find("meta") != std::string::npos)
-      modifierMask |= NSCommandKeyMask;
-    if (candidate.find("shift") != std::string::npos)
-      modifierMask |= NSShiftKeyMask;
-    if (candidate.find("alt") != std::string::npos)
-      modifierMask |= NSAlternateKeyMask;
-    if (candidate.find("ctrl") != std::string::npos)
-      modifierMask |= NSControlKeyMask;
-  }
-  return modifierMask;
-}
-
 // This callback synchronizes preferences (under "org.chromium.Chromium" or
 // "com.google.Chrome"), in particular, writes them out to disk.
 void PrefsSyncCallback() {
   if (!CFPreferencesAppSynchronize(BaseBundleID_CFString()))
     LOG(WARNING) << "Error recording application bundle path.";
-}
-
-void vivaldiMenuFromList(base::ListValue* list, NSMenuItem* menuItem) {
-  NSMenu* subMenu;
-  if ([menuItem hasSubmenu]) {
-    subMenu = [menuItem submenu];
-    [subMenu removeAllItems];
-  } else {
-    subMenu = [[[NSMenu alloc] initWithTitle:[menuItem title]] autorelease];
-    [menuItem setSubmenu:subMenu];
-  }
-  DCHECK(subMenu);
-
-  for (size_t i = 0; i < list->GetSize(); ++i) {
-    base::DictionaryValue* dict = NULL;
-    if (!list->GetDictionary(i, &dict))
-      continue;
-
-    // get menuitem title
-    std::string title;
-    dict->GetString("name", &title);
-    if (title == "---") {
-      [subMenu addItem:[NSMenuItem separatorItem]];
-      continue;
-    }
-
-    // get action id
-    int tag;
-    dict->GetInteger("tag", &tag);
-
-    std::string shortcut;
-    dict->GetString("shortcut", &shortcut);
-
-    base::scoped_nsobject<NSMenuItem> item([
-          [NSMenuItem alloc] initWithTitle:base::SysUTF8ToNSString(title)
-          action:nil
-          keyEquivalent:acceleratorFromString(shortcut)]);
-    DCHECK(item);
-    [item setTag:tag];
-    [item setKeyEquivalentModifierMask:modifierMaskFromString(shortcut)];
-
-    // based on the tag, set the correct command
-    // this is needed for the native actions to work correctly, e.g. quit
-    switch ([item tag]) {
-      case IDC_HIDE_APP:
-        [item setAction:@selector(hide:)];
-        break;
-      case IDC_VIV_CHECK_FOR_UPDATES:
-        [item setAction:@selector(checkForUpdates:)];
-        break;
-      case IDC_VIV_HIDE_OTHERS:
-        [item setAction:@selector(hideOtherApplications:)];
-        break;
-      case IDC_EXIT:
-        [item setAction:@selector(terminate:)];
-        break;
-      case IDC_MINIMIZE_WINDOW:
-        [item setAction:@selector(performMiniaturize:)];
-        break;
-      case IDC_MAXIMIZE_WINDOW:
-        [item setAction:@selector(zoom:)];
-        break;
-      case IDC_ALL_WINDOWS_FRONT:
-        [item setAction:@selector(arrangeInFront:)];
-        break;
-      case IDC_CONTENT_CONTEXT_COPY:
-        [item setAction:@selector(copy:)];
-        break;
-      case IDC_CONTENT_CONTEXT_CUT:
-        [item setAction:@selector(cut:)];
-        break;
-      case IDC_CONTENT_CONTEXT_PASTE:
-        [item setAction:@selector(paste:)];
-        break;
-      case IDC_CONTENT_CONTEXT_UNDO:
-        [item setAction:@selector(undo:)];
-        break;
-      case IDC_CONTENT_CONTEXT_REDO:
-        [item setAction:@selector(redo:)];
-        break;
-      case IDC_CONTENT_CONTEXT_DELETE:
-        [item setAction:@selector(delete:)];
-        break;
-      case IDC_CONTENT_CONTEXT_SELECTALL:
-        [item setAction:@selector(selectAll:)];
-        break;
-      case IDC_CONTENT_CONTEXT_SPEECH_MENU:
-        [item setAction:@selector(submenuAction:)];
-        break;
-      case IDC_CONTENT_CONTEXT_SPEECH_START_SPEAKING:
-        [item setAction:@selector(startSpeaking:)];
-        break;
-      case IDC_CONTENT_CONTEXT_SPEECH_STOP_SPEAKING:
-        [item setAction:@selector(stopSpeaking:)];
-        break;
-
-      default:
-        [item setAction:@selector(commandDispatch:)];
-        break;
-    }
-
-    // check if menuitem should have submenu
-    base::ListValue* itemList = nil;
-    dict->GetList("items",&itemList);
-    if (itemList && itemList->GetSize() > 0)
-      vivaldiMenuFromList(itemList, item);
-
-    [subMenu addItem:item];
-  }
-}
-
-void vivaldiBuildMenuFromStorage(base::DictionaryValue* dictionary_value) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-
-  base::ListValue* toplevelMenuItemList;
-  dictionary_value->GetList("macMainMenu", &toplevelMenuItemList);
-
-  NSMenu* mainMenu = [NSApp mainMenu];
-
-  for (size_t i = 0; i < toplevelMenuItemList->GetSize(); ++i) {
-    base::DictionaryValue* dict = NULL;
-    if (!toplevelMenuItemList->GetDictionary(i, &dict))
-      continue;
-
-    // get menuitem title
-    std::string toplevelItemName;
-    dict->GetString("name",&toplevelItemName);
-
-    // get action id
-    int toplevelItemTag;
-    dict->GetInteger("tag",&toplevelItemTag);
-
-    NSMenuItem* toplevelMenuItem = [mainMenu itemWithTag:toplevelItemTag];
-    if (!toplevelMenuItem) {
-      // tomas@vivaldi.com: if top level item from JS side does not exist in
-      // template menu, we create it.
-      toplevelMenuItem = [[NSMenuItem alloc]
-                          initWithTitle:base::SysUTF8ToNSString(toplevelItemName)
-                          action:nil
-                          keyEquivalent:@""];
-      [toplevelMenuItem setTag:toplevelItemTag];
-      [mainMenu addItem: toplevelMenuItem];
-    }
-
-    base::ListValue* subMenuItemList;
-    dict->GetList("items",&subMenuItemList);
-
-    if (subMenuItemList->GetSize()>0) {
-      vivaldiMenuFromList(subMenuItemList,toplevelMenuItem);
-    }
-    [[mainMenu itemWithTag:toplevelItemTag] setTitle:
-         [NSString stringWithUTF8String:toplevelItemName.c_str()]];
-    [toplevelMenuItem setHidden:NO];
-
-    if (toplevelItemTag!=IDC_CHROME_MENU) {
-      //update toplevel menu title for all except Vivaldi menu
-      //doing it like this keeps the vivaldi menu font bold
-      NSString* title = [NSString stringWithUTF8String:toplevelItemName.c_str()];
-      [[toplevelMenuItem submenu] setTitle:title];
-    }
-    if (toplevelItemTag==IDC_WINDOW_MENU) {
-      //set the native window menu
-      [NSApp setWindowsMenu:[toplevelMenuItem submenu]];
-    }
-  }
-  [[NSApp delegate] activateVivaldiMenu:[NSApp mainMenu]];
-}
-
-void vivaldiMenuCallback(ValueStore* storage) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
-
-  if (storage) {
-    ValueStore::ReadResult result = storage->Get("macMainMenu");
-
-    if (!result)
-      return;
-
-    base::DictionaryValue* dictionary_value = new base::DictionaryValue;
-    dictionary_value->Swap(&result->settings());
-
-    if (dictionary_value->empty())
-      return;
-
-    BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&vivaldiBuildMenuFromStorage, dictionary_value));
-  }
 }
 
 // Record the location of the application bundle (containing the main framework)
@@ -561,7 +183,7 @@ void RecordLastRunAppBundlePath() {
   // real, user-visible app bundle directory. (The alternatives give either the
   // framework's path or the initial app's path, which may be an app mode shim
   // or a unit test.)
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   base::FilePath app_bundle_path =
       chrome::GetVersionedDirectory().DirName().DirName().DirName();
@@ -598,7 +220,6 @@ bool IsProfileSignedOut(Profile* profile) {
 - (void)initMenuState;
 - (void)initProfileMenu;
 - (void)updateConfirmToQuitPrefMenuItem:(NSMenuItem*)item;
-- (void)updateDisplayMessageCenterPrefMenuItem:(NSMenuItem*)item;
 - (void)registerServicesMenuTypesTo:(NSApplication*)app;
 - (void)getUrl:(NSAppleEventDescriptor*)event
      withReply:(NSAppleEventDescriptor*)reply;
@@ -717,9 +338,6 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 }
 
 - (void)dealloc {
-  if ([vivaldiMenuTimer_ isValid])
-    [vivaldiMenuTimer_ invalidate];
-
   [[closeTabMenuItem_ menu] setDelegate:nil];
   [super dealloc];
 }
@@ -772,14 +390,12 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
              name:NSWorkspaceWillPowerOffNotification
            object:nil];
 
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
-    [self initVivaldiMenuState];
-  } else {
-    // Set up the command updater for when there are no windows open
-    [self initMenuState];
+  // Set up the command updater for when there are no windows open
+  [self initMenuState];
 
-    // Initialize the Profile menu.
-    [self initProfileMenu];
+  if (!vivaldi::IsVivaldiRunning()) {
+  // Initialize the Profile menu.
+  [self initProfileMenu];
   }
 }
 
@@ -966,7 +582,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 - (void)menuNeedsUpdate:(NSMenu*)menu {
   // tomas@vivaldi.com: vivaldi does not have close tab/window menuitems.
   // If we add them we need to revisit this code.
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
+  if (vivaldi::IsVivaldiRunning())
     return;
   DCHECK(menu == [closeTabMenuItem_ menu]);
 
@@ -1136,7 +752,6 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   // main menu item titles are not yet initialized in awakeFromNib.
   [self initAppShimMenuController];
 
-
   // If enabled, keep Chrome alive when apps are open instead of quitting all
   // apps.
   quitWithAppsController_ = new QuitWithAppsController();
@@ -1144,7 +759,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   // Dynamically update shortcuts for "Close Window" and "Close Tab" menu items.
   [[closeTabMenuItem_ menu] setDelegate:self];
 
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (!vivaldi::IsVivaldiRunning()) {
   // Build up the encoding menu, the order of the items differs based on the
   // current locale (see http://crbug.com/7647 for details).
   // We need a valid g_browser_process to get the profile which is why we can't
@@ -1159,7 +774,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   // notified when a profile is deleted.
   profileInfoCacheObserver_.reset(new AppControllerProfileObserver(
       g_browser_process->profile_manager(), self));
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (!vivaldi::IsVivaldiRunning()) {
   // Since Chrome is localized to more languages than the OS, tell Cocoa which
   // menu is the Help so it can add the search item to it.
   [NSApp setHelpMenu:helpMenu_];
@@ -1196,11 +811,6 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 
   handoff_active_url_observer_bridge_.reset(
       new HandoffActiveURLObserverBridge(self));
-
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
-    [self setupVivaldiStorageObserver];
-    [self buildVivaldiMenu];
-  }
 }
 
 // This is called after profiles have been loaded and preferences registered.
@@ -1283,7 +893,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 // Checks with the TabRestoreService to see if there's anything there to
 // restore and returns YES if so.
 - (BOOL)canRestoreTab {
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile([self lastProfile]);
   return service && !service->entries().empty();
 }
@@ -1393,6 +1003,16 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
                    ![self keyWindowIsModal] : NO;
       }
     }
+
+    // "Show as tab" should only appear when the current window is a popup.
+    // Since |validateUserInterfaceItem:| is called only when there are no
+    // key windows, we should just hide this.
+    // This is handled outside of the switch statement because we want to hide
+    // this regardless if the command is supported or not.
+    if (tag == IDC_SHOW_AS_TAB) {
+      NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item);
+      [menuItem setHidden:YES];
+    }
   } else if (action == @selector(terminate:)) {
     enable = YES;
   } else if (action == @selector(showPreferences:)) {
@@ -1403,10 +1023,6 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
     enable = YES;
   } else if (action == @selector(toggleConfirmToQuit:)) {
     [self updateConfirmToQuitPrefMenuItem:static_cast<NSMenuItem*>(item)];
-    enable = YES;
-  } else if (action == @selector(toggleDisplayMessageCenter:)) {
-    NSMenuItem* menuItem = static_cast<NSMenuItem*>(item);
-    [self updateDisplayMessageCenterPrefMenuItem:menuItem];
     enable = YES;
   } else if (action == @selector(executeApplication:)) {
     enable = YES;
@@ -1465,24 +1081,40 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
     return;
   }
 
-  // tomas@vivaldi.com: hack to fix VB-5133
-  if ([[NSApp currentEvent] type] == NSKeyDown) {
+  // Vivaldi executes its own shortcuts from the javascript side. Mac will in
+  // addition execute shortcuts that are displayed in the menu so we must stop
+  // those. First step is to only allow proper mouse and keyboard events. We
+  // have observed during rapid keypresses that other events are the current
+  // event when commandDisptach fires (see VB-10837).
+  NSEventType eventType = [[NSApp currentEvent] type];
+  if (eventType != NSKeyDown &&
+      eventType != NSLeftMouseUp &&
+      eventType != NSRightMouseUp) {
+    return;
+  }
+
+  if (eventType == NSKeyDown) {
+    // Additional test for key presses. Allow those that are sent from the
+    // menu by selecting an entry and pressing space/enter and even a shortcut
+    // if there is no browser window (in that case vivaldi will not execute its
+    // own).
     auto key = [[NSApp currentEvent] characters];
     if ([key characterAtIndex:0] != NSCarriageReturnCharacter &&
         [key characterAtIndex:0] != NSNewlineCharacter &&
         [key characterAtIndex:0] != NSEnterCharacter &&
         ![key isEqual:@" "]) {
-      // The command is coming from the keyboard and it is not space/enter.
-      // This code should only handle menu clicks from the mouse or selecting
-      // a menu item with enter/space.
-      // The Vivaldi JS app handles keyboard shortcuts, so we do nothing here.
-      return;
+      Browser* browser = chrome::FindLastActiveWithProfile(
+          lastProfile->IsGuestSession() ?
+              lastProfile->GetOffTheRecordProfile() : lastProfile,
+          chrome::HOST_DESKTOP_TYPE_NATIVE);
+      if (browser)
+        return;
     }
   }
 
   switch (tag) {
     case IDC_NEW_TAB:
-      if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+      if (vivaldi::IsVivaldiRunning()) {
         if(menuState_->IsCommandEnabled(tag)) {
           if (Browser* browser = ActivateBrowser(lastProfile)) {
             chrome::ExecuteCommand(browser, IDC_VIV_NEW_TAB);
@@ -1491,16 +1123,16 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
           // Else fall through to create new window.
         }
       } else {
-        // Create a new tab in an existing browser window (which we activate) if
-        // possible.
-        if (Browser* browser = ActivateBrowser(lastProfile)) {
-          chrome::ExecuteCommand(browser, IDC_NEW_TAB);
-          break;
-        }
-        // Else fall through to create new window.
+      // Create a new tab in an existing browser window (which we activate) if
+      // possible.
+      if (Browser* browser = ActivateBrowser(lastProfile)) {
+        chrome::ExecuteCommand(browser, IDC_NEW_TAB);
+        break;
+      }
+      // Else fall through to create new window.
       }
     case IDC_NEW_WINDOW:
-      if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+      if (vivaldi::IsVivaldiRunning()) {
         if (Browser* browser = ActivateBrowser(lastProfile)) {
           chrome::ExecuteCommand(browser, IDC_VIV_NEW_WINDOW);
         } else {
@@ -1509,7 +1141,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
           CreateBrowser(lastProfile);
         }
       } else {
-        CreateBrowser(lastProfile);
+      CreateBrowser(lastProfile);
       }
       break;
     case IDC_FOCUS_LOCATION:
@@ -1583,10 +1215,11 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
       break;
     case IDC_SHOW_SYNC_SETUP:
       if (Browser* browser = ActivateBrowser(lastProfile)) {
-        chrome::ShowBrowserSigninOrSettings(browser,
-                                            signin_metrics::SOURCE_MENU);
+        chrome::ShowBrowserSigninOrSettings(
+            browser, signin_metrics::AccessPoint::ACCESS_POINT_MENU);
       } else {
-        chrome::OpenSyncSetupWindow(lastProfile, signin_metrics::SOURCE_MENU);
+        chrome::OpenSyncSetupWindow(
+            lastProfile, signin_metrics::AccessPoint::ACCESS_POINT_MENU);
       }
       break;
     case IDC_TASK_MANAGER:
@@ -1598,7 +1231,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
     case IDC_ABOUT:
       if(menuState_->IsCommandEnabled(tag)) {
         if (Browser* browser = ActivateBrowser(lastProfile)) {
-          if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+          if (vivaldi::IsVivaldiRunning()) {
             chrome::ExecuteCommand(browser, IDC_VIV_ABOUT);
           } else {
             chrome::ExecuteCommand(browser, tag);
@@ -1607,10 +1240,23 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
       }
       break;
 
+      case IDC_VIV_ACTIVATE_TAB:
+      if (Browser* browser = ActivateBrowser(lastProfile)) {
+        // NOTE(espen@vivaldi.com): We call the api directly because
+        // chrome::ExecuteCommand does not support a parameter. We avoid
+        // modifying several layers of chrome code.
+        std::string parameter =
+            base::SysNSStringToUTF8([sender representedObject]);
+        extensions::ShowMenuAPI::GetFactoryInstance()
+            ->Get(browser->profile())->CommandExecuted(tag, parameter);
+      }
+      break;
+
     default:
-      if(menuState_->IsCommandEnabled(tag)) {
-        if (Browser* browser = ActivateBrowser(lastProfile))
+      if (menuState_->IsCommandEnabled(tag)) {
+        if (Browser* browser = ActivateBrowser(lastProfile)) {
           chrome::ExecuteCommand(browser, tag);
+        }
       }
   }
 }
@@ -1659,7 +1305,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   // recently minimized window if no windows in the set are visible.
   // If there are any, return here. Otherwise, the windows are panels or
   // notifications so we still need to open a new window.
-  if (hasVisibleWindows  || base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (hasVisibleWindows  || vivaldi::IsVivaldiRunning()) {
     std::set<NSWindow*> browserWindows;
     for (chrome::BrowserIterator iter; !iter.done(); iter.Next()) {
       Browser* browser = *iter;
@@ -1742,6 +1388,10 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 
 - (void)initMenuState {
   menuState_.reset(new CommandUpdater(NULL));
+
+  if (vivaldi::IsVivaldiRunning())
+    return;
+
   menuState_->UpdateCommandEnabled(IDC_NEW_TAB, true);
   menuState_->UpdateCommandEnabled(IDC_NEW_WINDOW, true);
   menuState_->UpdateCommandEnabled(IDC_NEW_INCOGNITO_WINDOW, true);
@@ -1763,63 +1413,66 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   menuState_->UpdateCommandEnabled(IDC_TASK_MANAGER, true);
 }
 
-- (void)setupVivaldiStorageObserver {
-  // tomas@vivaldi.com - add observer to monitor storage
-  Profile* lastProfile = [self lastProfile];
-
-  extensions::StorageFrontend* frontend =
-      extensions::StorageFrontend::Get(lastProfile);
-
-  vivaldi_settings_observer_.reset(new VivaldiMacObserver(self));
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  frontend->GetObservers()->AddObserver(vivaldi_settings_observer_.get());
-}
-
-- (void)buildVivaldiMenu {
-  // Combine rapid updates. The menu state is changed quite frequently on
-  // startup. On timeout the menu is build from the most recent state.
-  if (![vivaldiMenuTimer_ isValid]) {
-    vivaldiMenuTimer_ =
-        [NSTimer scheduledTimerWithTimeInterval:0.1 // 100 ms
-                                         target:self
-                                       selector:@selector(updateVivaldiMenu)
-                                       userInfo:nil
-                                        repeats:NO];
-  }
-}
-
-- (void)updateVivaldiMenu {
-  vivaldiMenuTimer_ = nil;
-
-  // tomas@vivaldi.com - call storage frontend to get local storage data
-  Profile* lastProfile = [self lastProfile];
-
-  const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(lastProfile)->
-          GetExtensionById("mpognobbkildjkofajifpdfhcoklimli",
-                           extensions::ExtensionRegistry::EVERYTHING);
-  DCHECK(extension);
-
-  extensions::StorageFrontend* frontend =
-    extensions::StorageFrontend::Get(lastProfile);
-  // the callback will happen on the FILE thread
-  frontend->RunWithStorage(extension,
-                           extensions::settings_namespace::LOCAL,
-                           base::Bind(&vivaldiMenuCallback));
-
-}
-
-- (void)activateVivaldiMenu:(NSMenu*)menu {
-  for (NSMenuItem* item in [menu itemArray]) {
-    menuState_->UpdateCommandEnabled([item tag],true);
-    if ([item hasSubmenu]) {
-      [self activateVivaldiMenu:[item submenu]];
+- (void)setVivaldiMenuItemAction:(NSMenuItem*)item {
+    // based on the tag, set the correct command
+    // this is needed for the native actions to work correctly, e.g. quit
+    menuState_->UpdateCommandEnabled([item tag], true);
+    switch ([item tag]) {
+      case IDC_HIDE_APP:
+        [item setAction:@selector(hide:)];
+        break;
+      case IDC_VIV_CHECK_FOR_UPDATES:
+        [item setAction:@selector(checkForUpdates:)];
+        break;
+      case IDC_VIV_HIDE_OTHERS:
+        [item setAction:@selector(hideOtherApplications:)];
+        break;
+      case IDC_EXIT:
+        [item setAction:@selector(terminate:)];
+        break;
+      case IDC_MINIMIZE_WINDOW:
+        [item setAction:@selector(performMiniaturize:)];
+        break;
+      case IDC_MAXIMIZE_WINDOW:
+        [item setAction:@selector(zoom:)];
+        break;
+      case IDC_ALL_WINDOWS_FRONT:
+        [item setAction:@selector(arrangeInFront:)];
+        break;
+      case IDC_CONTENT_CONTEXT_COPY:
+        [item setAction:@selector(copy:)];
+        break;
+      case IDC_CONTENT_CONTEXT_CUT:
+        [item setAction:@selector(cut:)];
+        break;
+      case IDC_CONTENT_CONTEXT_PASTE:
+        [item setAction:@selector(paste:)];
+        break;
+      case IDC_CONTENT_CONTEXT_UNDO:
+        [item setAction:@selector(undo:)];
+        break;
+      case IDC_CONTENT_CONTEXT_REDO:
+        [item setAction:@selector(redo:)];
+        break;
+      case IDC_CONTENT_CONTEXT_DELETE:
+        [item setAction:@selector(delete:)];
+        break;
+      case IDC_CONTENT_CONTEXT_SELECTALL:
+        [item setAction:@selector(selectAll:)];
+        break;
+      case IDC_CONTENT_CONTEXT_SPEECH_MENU:
+        [item setAction:@selector(submenuAction:)];
+        break;
+      case IDC_CONTENT_CONTEXT_SPEECH_START_SPEAKING:
+        [item setAction:@selector(startSpeaking:)];
+        break;
+      case IDC_CONTENT_CONTEXT_SPEECH_STOP_SPEAKING:
+        [item setAction:@selector(stopSpeaking:)];
+        break;
+      default:
+        [item setAction:@selector(commandDispatch:)];
+        break;
     }
-  }
-}
-
-- (void)initVivaldiMenuState {
-  menuState_.reset(new CommandUpdater(NULL));
 }
 
 // Conditionally adds the Profile menu to the main menu bar.
@@ -1852,14 +1505,6 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   const PrefService* prefService = g_browser_process->local_state();
   bool enabled = prefService->GetBoolean(prefs::kConfirmToQuitEnabled);
   [item setState:enabled ? NSOnState : NSOffState];
-}
-
-- (void)updateDisplayMessageCenterPrefMenuItem:(NSMenuItem*)item {
-  const PrefService* prefService = g_browser_process->local_state();
-  bool enabled = prefService->GetBoolean(prefs::kMessageCenterShowIcon);
-  // The item should be checked if "show icon" is false, since the text reads
-  // "Hide notification center icon."
-  [item setState:enabled ? NSOffState : NSOnState];
 }
 
 - (void)registerServicesMenuTypesTo:(NSApplication*)app {
@@ -1916,7 +1561,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 
   Browser* browser = chrome::GetLastActiveBrowser();
 
-  if (!browser && base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (!browser && vivaldi::IsVivaldiRunning()) {
     // We get here before the app is run, so we dont have any browser.
     base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
     chrome::startup::IsFirstRun first_run = first_run::IsChromeFirstRun() ?
@@ -2009,12 +1654,6 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   prefService->SetBoolean(prefs::kConfirmToQuitEnabled, !enabled);
 }
 
-- (IBAction)toggleDisplayMessageCenter:(id)sender {
-  PrefService* prefService = g_browser_process->local_state();
-  bool enabled = prefService->GetBoolean(prefs::kMessageCenterShowIcon);
-  prefService->SetBoolean(prefs::kMessageCenterShowIcon, !enabled);
-}
-
 // Explicitly bring to the foreground when creating new windows from the dock.
 - (void)commandFromDock:(id)sender {
   [NSApp activateIgnoringOtherApps:YES];
@@ -2044,19 +1683,20 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 
   // |profile| can be NULL during unit tests.
   // TODO gisli@vivaldi.com, enable incognito.
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
-    if (!profile ||
-        IncognitoModePrefs::GetAvailability(profile->GetPrefs()) !=
-            IncognitoModePrefs::DISABLED) {
-      titleStr = l10n_util::GetNSStringWithFixup(IDS_NEW_INCOGNITO_WINDOW_MAC);
-      item.reset([[NSMenuItem alloc] initWithTitle:titleStr
-                              action:@selector(commandFromDock:)
-                              keyEquivalent:@""]);
-      [item setTarget:self];
-      [item setTag:IDC_NEW_INCOGNITO_WINDOW];
-      [item setEnabled:[self validateUserInterfaceItem:item]];
-      [dockMenu addItem:item];
-    }
+  if (!vivaldi::IsVivaldiRunning()) {
+  if (!profile ||
+      IncognitoModePrefs::GetAvailability(profile->GetPrefs()) !=
+          IncognitoModePrefs::DISABLED) {
+    titleStr = l10n_util::GetNSStringWithFixup(IDS_NEW_INCOGNITO_WINDOW_MAC);
+    item.reset(
+        [[NSMenuItem alloc] initWithTitle:titleStr
+                                   action:@selector(commandFromDock:)
+                            keyEquivalent:@""]);
+    [item setTarget:self];
+    [item setTag:IDC_NEW_INCOGNITO_WINDOW];
+    [item setEnabled:[self validateUserInterfaceItem:item]];
+    [dockMenu addItem:item];
+  }
   }
 
   // TODO(rickcam): Mock out BackgroundApplicationListModel, then add unit
@@ -2126,22 +1766,30 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   if (historyMenuBridge_)
     historyMenuBridge_->ResetMenu();
 
-  // Rebuild the menus with the new profile.
+  // Rebuild the menus with the new profile. The bookmarks submenu is cached to
+  // avoid slowdowns when switching between profiles with large numbers of
+  // bookmarks. Before caching, store whether it is hidden, make the menu item
+  // visible, and restore its original hidden state after resetting the submenu.
+  // This works around an apparent AppKit bug where setting a *different* NSMenu
+  // submenu on a *hidden* menu item forces the item to become visible.
+  // See https://crbug.com/497813 for more details.
+  NSMenuItem* bookmarkItem = [[NSApp mainMenu] itemWithTag:IDC_BOOKMARKS_MENU];
+  BOOL hidden = [bookmarkItem isHidden];
+  [bookmarkItem setHidden:NO];
   lastProfile_ = profile;
 
   auto it = profileBookmarkMenuBridgeMap_.find(profile->GetPath());
   if (it == profileBookmarkMenuBridgeMap_.end()) {
-    base::scoped_nsobject<NSMenu> submenu(
-        [[[[NSApp mainMenu] itemWithTag:IDC_BOOKMARKS_MENU] submenu] copy]);
+    base::scoped_nsobject<NSMenu> submenu([[bookmarkItem submenu] copy]);
     bookmarkMenuBridge_ = new BookmarkMenuBridge(profile, submenu);
     profileBookmarkMenuBridgeMap_[profile->GetPath()] = bookmarkMenuBridge_;
   } else {
     bookmarkMenuBridge_ = it->second;
   }
 
-  [[[NSApp mainMenu] itemWithTag:IDC_BOOKMARKS_MENU] setSubmenu:
-      bookmarkMenuBridge_->BookmarkMenu()];
   // No need to |BuildMenu| here.  It is done lazily upon menu access.
+  [bookmarkItem setSubmenu:bookmarkMenuBridge_->BookmarkMenu()];
+  [bookmarkItem setHidden:hidden];
 
   historyMenuBridge_.reset(new HistoryMenuBridge(lastProfile_));
   historyMenuBridge_->BuildMenu();

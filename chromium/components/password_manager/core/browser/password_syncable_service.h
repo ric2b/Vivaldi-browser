@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "components/password_manager/core/browser/password_store_change.h"
@@ -17,6 +18,9 @@
 #include "sync/api/syncable_service.h"
 #include "sync/protocol/password_specifics.pb.h"
 #include "sync/protocol/sync.pb.h"
+
+template <typename T>
+class ScopedVector;
 
 namespace autofill {
 struct PasswordForm;

@@ -2,22 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/remote_producer_data_pipe_impl.h"
+#include "third_party/mojo/src/mojo/edk/system/remote_producer_data_pipe_impl.h"
 
 #include <string.h>
-
 #include <algorithm>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/channel_endpoint.h"
-#include "mojo/edk/system/configuration.h"
-#include "mojo/edk/system/data_pipe.h"
-#include "mojo/edk/system/message_in_transit.h"
-#include "mojo/edk/system/message_in_transit_queue.h"
-#include "mojo/edk/system/remote_consumer_data_pipe_impl.h"
-#include "mojo/edk/system/remote_data_pipe_ack.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/configuration.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit_queue.h"
+#include "third_party/mojo/src/mojo/edk/system/remote_consumer_data_pipe_impl.h"
+#include "third_party/mojo/src/mojo/edk/system/remote_data_pipe_ack.h"
 
 namespace mojo {
 namespace system {
@@ -72,7 +72,7 @@ RemoteProducerDataPipeImpl::RemoteProducerDataPipeImpl(
     size_t start_index,
     size_t current_num_bytes)
     : channel_endpoint_(channel_endpoint),
-      buffer_(buffer.Pass()),
+      buffer_(std::move(buffer)),
       start_index_(start_index),
       current_num_bytes_(current_num_bytes) {
   DCHECK(buffer_ || !current_num_bytes);
@@ -109,7 +109,7 @@ bool RemoteProducerDataPipeImpl::ProcessMessagesFromIncomingEndpoint(
     }
   }
 
-  *buffer = new_buffer.Pass();
+  *buffer = std::move(new_buffer);
   *buffer_num_bytes = current_num_bytes;
   return true;
 }
@@ -132,8 +132,7 @@ MojoResult RemoteProducerDataPipeImpl::ProducerWriteData(
 
 MojoResult RemoteProducerDataPipeImpl::ProducerBeginWriteData(
     UserPointer<void*> /*buffer*/,
-    UserPointer<uint32_t> /*buffer_num_bytes*/,
-    uint32_t /*min_num_bytes_to_write*/) {
+    UserPointer<uint32_t> /*buffer_num_bytes*/) {
   NOTREACHED();
   return MOJO_RESULT_INTERNAL;
 }
@@ -249,16 +248,8 @@ MojoResult RemoteProducerDataPipeImpl::ConsumerQueryData(
 
 MojoResult RemoteProducerDataPipeImpl::ConsumerBeginReadData(
     UserPointer<const void*> buffer,
-    UserPointer<uint32_t> buffer_num_bytes,
-    uint32_t min_num_bytes_to_read) {
+    UserPointer<uint32_t> buffer_num_bytes) {
   size_t max_num_bytes_to_read = GetMaxNumBytesToRead();
-  if (min_num_bytes_to_read > max_num_bytes_to_read) {
-    // Don't return "should wait" since you can't wait for a specified amount of
-    // data.
-    return producer_open() ? MOJO_RESULT_OUT_OF_RANGE
-                           : MOJO_RESULT_FAILED_PRECONDITION;
-  }
-
   // Don't go into a two-phase read if there's no data.
   if (max_num_bytes_to_read == 0) {
     return producer_open() ? MOJO_RESULT_SHOULD_WAIT
@@ -348,14 +339,19 @@ bool RemoteProducerDataPipeImpl::ConsumerEndSerialize(
 
 bool RemoteProducerDataPipeImpl::OnReadMessage(unsigned /*port*/,
                                                MessageInTransit* message) {
-  // Always take ownership of the message. (This means that we should always
-  // return true.)
-  scoped_ptr<MessageInTransit> msg(message);
-
   if (!producer_open()) {
+    // This will happen only on the rare occasion that the call to
+    // |OnReadMessage()| is racing with us calling
+    // |ChannelEndpoint::ReplaceClient()|, in which case we reject the message,
+    // and the |ChannelEndpoint| can retry (calling the new client's
+    // |OnReadMessage()|).
     DCHECK(!channel_endpoint_);
-    return true;
+    return false;
   }
+
+  // Otherwise, we take ownership of the message. (This means that we should
+  // always return true below.)
+  scoped_ptr<MessageInTransit> msg(message);
 
   if (!ValidateIncomingMessage(element_num_bytes(), capacity_num_bytes(),
                                current_num_bytes_, msg.get())) {
@@ -448,7 +444,7 @@ void RemoteProducerDataPipeImpl::MarkDataAsConsumed(size_t num_bytes) {
       MessageInTransit::Type::ENDPOINT_CLIENT,
       MessageInTransit::Subtype::ENDPOINT_CLIENT_DATA_PIPE_ACK,
       static_cast<uint32_t>(sizeof(ack_data)), &ack_data));
-  if (!channel_endpoint_->EnqueueMessage(message.Pass()))
+  if (!channel_endpoint_->EnqueueMessage(std::move(message)))
     Disconnect();
 }
 
@@ -462,12 +458,8 @@ void RemoteProducerDataPipeImpl::Disconnect() {
   // buffer around. Currently, we won't free it even if it empties later. (We
   // could do this -- requiring a check on every read -- but that seems to be
   // optimizing for the uncommon case.)
-  if (!consumer_open() || !current_num_bytes_) {
-    // Note: There can only be a two-phase *read* (by the consumer) if we still
-    // have data.
-    DCHECK(!consumer_in_two_phase_read());
+  if (!consumer_open() || !current_num_bytes_)
     DestroyBuffer();
-  }
 }
 
 }  // namespace system

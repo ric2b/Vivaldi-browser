@@ -2,7 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/libgtk2ui/select_file_dialog_impl_gtk2.h"
+
 #include <gtk/gtk.h>
+#include <stddef.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <map>
 #include <set>
 #include <vector>
@@ -32,7 +39,8 @@ namespace {
 // Makes sure that .jpg also shows .JPG.
 gboolean FileFilterCaseInsensitive(const GtkFileFilterInfo* file_info,
                                    std::string* file_extension) {
-  return base::EndsWith(file_info->filename, *file_extension, false);
+  return base::EndsWith(file_info->filename, *file_extension,
+                        base::CompareCase::INSENSITIVE_ASCII);
 }
 
 // Deletes |data| when gtk_file_filter_add_custom() is done with it.
@@ -43,122 +51,6 @@ void OnFileFilterDataDestroyed(std::string* file_extension) {
 }  // namespace
 
 namespace libgtk2ui {
-
-// Implementation of SelectFileDialog that shows a Gtk common dialog for
-// choosing a file or folder. This acts as a modal dialog.
-class SelectFileDialogImplGTK : public SelectFileDialogImpl,
-                                public aura::WindowObserver {
- public:
-  explicit SelectFileDialogImplGTK(Listener* listener,
-                                   ui::SelectFilePolicy* policy);
-
- protected:
-  ~SelectFileDialogImplGTK() override;
-
-  // BaseShellDialog implementation:
-  bool IsRunning(gfx::NativeWindow parent_window) const override;
-
-  // SelectFileDialog implementation.
-  // |params| is user data we pass back via the Listener interface.
-  void SelectFileImpl(Type type,
-                      const base::string16& title,
-                      const base::FilePath& default_path,
-                      const FileTypeInfo* file_types,
-                      int file_type_index,
-                      const base::FilePath::StringType& default_extension,
-                      gfx::NativeWindow owning_window,
-                      void* params) override;
-
- private:
-  bool HasMultipleFileTypeChoicesImpl() override;
-
-  // Overridden from aura::WindowObserver:
-  void OnWindowDestroying(aura::Window* window) override;
-
-  // Add the filters from |file_types_| to |chooser|.
-  void AddFilters(GtkFileChooser* chooser);
-
-  // Notifies the listener that a single file was chosen.
-  void FileSelected(GtkWidget* dialog, const base::FilePath& path);
-
-  // Notifies the listener that multiple files were chosen.
-  void MultiFilesSelected(GtkWidget* dialog,
-                          const std::vector<base::FilePath>& files);
-
-  // Notifies the listener that no file was chosen (the action was canceled).
-  // Dialog is passed so we can find that |params| pointer that was passed to
-  // us when we were told to show the dialog.
-  void FileNotSelected(GtkWidget* dialog);
-
-  GtkWidget* CreateSelectFolderDialog(
-      Type type,
-      const std::string& title,
-      const base::FilePath& default_path,
-      gfx::NativeWindow parent);
-
-  GtkWidget* CreateFileOpenDialog(const std::string& title,
-      const base::FilePath& default_path, gfx::NativeWindow parent);
-
-  GtkWidget* CreateMultiFileOpenDialog(const std::string& title,
-      const base::FilePath& default_path, gfx::NativeWindow parent);
-
-  GtkWidget* CreateSaveAsDialog(const std::string& title,
-      const base::FilePath& default_path, gfx::NativeWindow parent);
-
-  // Removes and returns the |params| associated with |dialog| from
-  // |params_map_|.
-  void* PopParamsForDialog(GtkWidget* dialog);
-
-  // Take care of internal data structures when a file dialog is destroyed.
-  void FileDialogDestroyed(GtkWidget* dialog);
-
-  // Check whether response_id corresponds to the user cancelling/closing the
-  // dialog. Used as a helper for the below callbacks.
-  bool IsCancelResponse(gint response_id);
-
-  // Common function for OnSelectSingleFileDialogResponse and
-  // OnSelectSingleFolderDialogResponse.
-  void SelectSingleFileHelper(GtkWidget* dialog,
-                              gint response_id,
-                              bool allow_folder);
-
-  // Common function for CreateFileOpenDialog and CreateMultiFileOpenDialog.
-  GtkWidget* CreateFileOpenHelper(const std::string& title,
-                                  const base::FilePath& default_path,
-                                  gfx::NativeWindow parent);
-
-  // Callback for when the user responds to a Save As or Open File dialog.
-  CHROMEGTK_CALLBACK_1(SelectFileDialogImplGTK, void,
-                       OnSelectSingleFileDialogResponse, int);
-
-  // Callback for when the user responds to a Select Folder dialog.
-  CHROMEGTK_CALLBACK_1(SelectFileDialogImplGTK, void,
-                       OnSelectSingleFolderDialogResponse, int);
-
-  // Callback for when the user responds to a Open Multiple Files dialog.
-  CHROMEGTK_CALLBACK_1(SelectFileDialogImplGTK, void,
-                       OnSelectMultiFileDialogResponse, int);
-
-  // Callback for when the file chooser gets destroyed.
-  CHROMEGTK_CALLBACK_0(SelectFileDialogImplGTK, void, OnFileChooserDestroy);
-
-  // Callback for when we update the preview for the selection.
-  CHROMEGTK_CALLBACK_0(SelectFileDialogImplGTK, void, OnUpdatePreview);
-
-  // A map from dialog windows to the |params| user data associated with them.
-  std::map<GtkWidget*, void*> params_map_;
-
-  // The GtkImage widget for showing previews of selected images.
-  GtkWidget* preview_;
-
-  // All our dialogs.
-  std::set<GtkWidget*> dialogs_;
-
-  // The set of all parent windows for which we are currently running dialogs.
-  std::set<aura::Window*> parents_;
-
-  DISALLOW_COPY_AND_ASSIGN(SelectFileDialogImplGTK);
-};
 
 // The size of the preview we display for selected image files. We set height
 // larger than width because generally there is more free space vertically
@@ -319,7 +211,8 @@ void SelectFileDialogImplGTK::AddFilters(GtkFileChooser* chooser) {
       // the extensions themselves if the description is blank.
       std::vector<std::string> fallback_labels_vector(fallback_labels.begin(),
                                                       fallback_labels.end());
-      std::string fallback_label = JoinString(fallback_labels_vector, ',');
+      std::string fallback_label =
+          base::JoinString(fallback_labels_vector, ",");
       gtk_file_filter_set_name(filter, fallback_label.c_str());
     }
 
@@ -384,8 +277,8 @@ GtkWidget* SelectFileDialogImplGTK::CreateFileOpenHelper(
   GtkWidget* dialog =
       gtk_file_chooser_dialog_new(title.c_str(), NULL,
                                   GTK_FILE_CHOOSER_ACTION_OPEN,
-                                  GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-                                  GTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT,
+                                  "_Cancel", GTK_RESPONSE_CANCEL,
+                                  "_Open", GTK_RESPONSE_ACCEPT,
                                   NULL);
   SetGtkTransientForAura(dialog, parent);
   AddFilters(GTK_FILE_CHOOSER(dialog));
@@ -420,12 +313,12 @@ GtkWidget* SelectFileDialogImplGTK::CreateSelectFolderDialog(
   }
   std::string accept_button_label = (type == SELECT_UPLOAD_FOLDER) ?
       l10n_util::GetStringUTF8(IDS_SELECT_UPLOAD_FOLDER_DIALOG_UPLOAD_BUTTON) :
-      GTK_STOCK_OPEN;
+      "_Open";
 
   GtkWidget* dialog =
       gtk_file_chooser_dialog_new(title_string.c_str(), NULL,
                                   GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
-                                  GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+                                  "_Cancel", GTK_RESPONSE_CANCEL,
                                   accept_button_label.c_str(),
                                   GTK_RESPONSE_ACCEPT,
                                   NULL);
@@ -480,20 +373,27 @@ GtkWidget* SelectFileDialogImplGTK::CreateSaveAsDialog(const std::string& title,
   GtkWidget* dialog =
       gtk_file_chooser_dialog_new(title_string.c_str(), NULL,
                                   GTK_FILE_CHOOSER_ACTION_SAVE,
-                                  GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-                                  GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT,
+                                  "_Cancel", GTK_RESPONSE_CANCEL,
+                                  "_Save", GTK_RESPONSE_ACCEPT,
                                   NULL);
   SetGtkTransientForAura(dialog, parent);
 
   AddFilters(GTK_FILE_CHOOSER(dialog));
   if (!default_path.empty()) {
-    // Since the file may not already exist, we use
-    // set_current_folder() followed by set_current_name(), as per the
-    // recommendation of the GTK docs.
-    gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),
-        default_path.DirName().value().c_str());
-    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),
-        default_path.BaseName().value().c_str());
+    if (CallDirectoryExistsOnUIThread(default_path)) {
+      // If this is an existing directory, navigate to that directory, with no
+      // filename.
+      gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),
+                                          default_path.value().c_str());
+    } else {
+      // The default path does not exist, or is an existing file. We use
+      // set_current_folder() followed by set_current_name(), as per the
+      // recommendation of the GTK docs.
+      gtk_file_chooser_set_current_folder(
+          GTK_FILE_CHOOSER(dialog), default_path.DirName().value().c_str());
+      gtk_file_chooser_set_current_name(
+          GTK_FILE_CHOOSER(dialog), default_path.BaseName().value().c_str());
+    }
   } else if (!last_saved_path_->empty()) {
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),
                                         last_saved_path_->value().c_str());
@@ -619,8 +519,22 @@ void SelectFileDialogImplGTK::OnFileChooserDestroy(GtkWidget* dialog) {
 void SelectFileDialogImplGTK::OnUpdatePreview(GtkWidget* chooser) {
   gchar* filename = gtk_file_chooser_get_preview_filename(
       GTK_FILE_CHOOSER(chooser));
-  if (!filename)
+  if (!filename) {
+    gtk_file_chooser_set_preview_widget_active(GTK_FILE_CHOOSER(chooser),
+                                               FALSE);
     return;
+  }
+
+  // Don't attempt to open anything which isn't a regular file. If a named pipe,
+  // this may hang. See https://crbug.com/534754.
+  struct stat stat_buf;
+  if (stat(filename, &stat_buf) != 0 || !S_ISREG(stat_buf.st_mode)) {
+    g_free(filename);
+    gtk_file_chooser_set_preview_widget_active(GTK_FILE_CHOOSER(chooser),
+                                               FALSE);
+    return;
+  }
+
   // This will preserve the image's aspect ratio.
   GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file_at_size(filename, kPreviewWidth,
                                                        kPreviewHeight, NULL);

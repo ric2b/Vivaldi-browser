@@ -4,9 +4,10 @@
 
 #include "ppapi/proxy/ppb_instance_proxy.h"
 
+#include <utility>
+
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "media/base/limits.h"
 #include "ppapi/c/pp_errors.h"
@@ -151,8 +152,6 @@ bool PPB_Instance_Proxy::OnMessageReceived(const IPC::Message& msg) {
                         OnHostMsgRequestInputEvents)
     IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBInstance_ClearInputEvents,
                         OnHostMsgClearInputEvents)
-    IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBInstance_StartTrackingLatency,
-                        OnHostMsgStartTrackingLatency)
     IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBInstance_LockMouse,
                         OnHostMsgLockMouse)
     IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBInstance_UnlockMouse,
@@ -480,11 +479,6 @@ void PPB_Instance_Proxy::ClearInputEventRequest(PP_Instance instance,
       API_ID_PPB_INSTANCE, instance, event_classes));
 }
 
-void PPB_Instance_Proxy::StartTrackingLatency(PP_Instance instance) {
-  dispatcher()->Send(new PpapiHostMsg_PPBInstance_StartTrackingLatency(
-      API_ID_PPB_INSTANCE, instance));
-}
-
 PP_Var PPB_Instance_Proxy::GetDocumentURL(PP_Instance instance,
                                           PP_URLComponents_Dev* components) {
   ReceiveSerializedVarReturnValue result;
@@ -552,13 +546,13 @@ PP_Var PPB_Instance_Proxy::GetPluginReferrerURL(
 }
 
 void PPB_Instance_Proxy::PromiseResolved(PP_Instance instance,
-                                         uint32 promise_id) {
+                                         uint32_t promise_id) {
   dispatcher()->Send(new PpapiHostMsg_PPBInstance_PromiseResolved(
       API_ID_PPB_INSTANCE, instance, promise_id));
 }
 
 void PPB_Instance_Proxy::PromiseResolvedWithSession(PP_Instance instance,
-                                                    uint32 promise_id,
+                                                    uint32_t promise_id,
                                                     PP_Var session_id_var) {
   dispatcher()->Send(new PpapiHostMsg_PPBInstance_PromiseResolvedWithSession(
       API_ID_PPB_INSTANCE, instance, promise_id,
@@ -566,9 +560,9 @@ void PPB_Instance_Proxy::PromiseResolvedWithSession(PP_Instance instance,
 }
 
 void PPB_Instance_Proxy::PromiseRejected(PP_Instance instance,
-                                         uint32 promise_id,
+                                         uint32_t promise_id,
                                          PP_CdmExceptionCode exception_code,
-                                         uint32 system_code,
+                                         uint32_t system_code,
                                          PP_Var error_description_var) {
   dispatcher()->Send(new PpapiHostMsg_PPBInstance_PromiseRejected(
       API_ID_PPB_INSTANCE,
@@ -640,7 +634,7 @@ void PPB_Instance_Proxy::SessionClosed(PP_Instance instance,
 void PPB_Instance_Proxy::LegacySessionError(PP_Instance instance,
                                             PP_Var session_id_var,
                                             PP_CdmExceptionCode exception_code,
-                                            uint32 system_code,
+                                            uint32_t system_code,
                                             PP_Var error_description_var) {
   dispatcher()->Send(new PpapiHostMsg_PPBInstance_LegacySessionError(
       API_ID_PPB_INSTANCE, instance,
@@ -796,7 +790,7 @@ int32_t PPB_Instance_Proxy::RegisterMessageHandler(
   scoped_ptr<MessageHandler> message_handler = MessageHandler::Create(
       instance, handler, user_data, message_loop, &result);
   if (message_handler)
-    data->message_handler = message_handler.Pass();
+    data->message_handler = std::move(message_handler);
   return result;
 }
 
@@ -1078,12 +1072,6 @@ void PPB_Instance_Proxy::OnHostMsgClearInputEvents(PP_Instance instance,
     enter.functions()->ClearInputEventRequest(instance, event_classes);
 }
 
-void PPB_Instance_Proxy::OnHostMsgStartTrackingLatency(PP_Instance instance) {
-  EnterInstanceNoLock enter(instance);
-  if (enter.succeeded())
-    enter.functions()->StartTrackingLatency(instance);
-}
-
 void PPB_Instance_Proxy::OnHostMsgPostMessage(
     PP_Instance instance,
     SerializedVarReceiveInput message) {
@@ -1268,7 +1256,7 @@ void PPB_Instance_Proxy::OnHostMsgSessionKeysChange(
     enter.functions()->SessionKeysChange(
         instance, session_id_var.get(), has_additional_usable_key,
         base::checked_cast<uint32_t>(key_information.size()),
-        vector_as_array(&key_information));
+        key_information.data());
   }
 }
 

@@ -7,11 +7,14 @@
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "media/base/media_switches.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/audio/cras_audio_handler.h"
@@ -25,14 +28,15 @@ namespace content {
 
 void WebRtcContentBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
-  // Assume this is set by the content test launcher.
-  ASSERT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kUseFakeUIForMediaStream));
   ASSERT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kUseFakeDeviceForMediaStream));
 
-  // Always include loopback interface in network list, in case the test device
-  // doesn't have other interfaces available.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnforceWebRtcIPPermissionCheck);
+
+  // Loopback interface is the non-default local address. They should only be in
+  // the candidate list if the ip handling policy is "default" AND the media
+  // permission is granted.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kAllowLoopbackInPeerConnection);
 }
@@ -53,6 +57,11 @@ void WebRtcContentBrowserTest::TearDown() {
 #endif
 }
 
+void WebRtcContentBrowserTest::AppendUseFakeUIForMediaStreamFlag() {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kUseFakeUIForMediaStream);
+}
+
 // Executes |javascript|. The script is required to use
 // window.domAutomationController.send to send a string value back to here.
 std::string WebRtcContentBrowserTest::ExecuteJavascriptAndReturnResult(
@@ -62,6 +71,16 @@ std::string WebRtcContentBrowserTest::ExecuteJavascriptAndReturnResult(
       shell()->web_contents(), javascript, &result))
           << "Failed to execute javascript " << javascript << ".";
   return result;
+}
+
+void WebRtcContentBrowserTest::MakeTypicalCall(const std::string& javascript,
+                                               const std::string& html_file) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL url(embedded_test_server()->GetURL(html_file));
+  NavigateToURL(shell(), url);
+
+  ExecuteJavascriptAndWaitForOk(javascript);
 }
 
 void WebRtcContentBrowserTest::ExecuteJavascriptAndWaitForOk(

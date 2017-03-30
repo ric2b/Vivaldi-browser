@@ -5,7 +5,12 @@
 #ifndef SYNC_ENGINE_COMMIT_H_
 #define SYNC_ENGINE_COMMIT_H_
 
-#include "base/containers/scoped_ptr_map.h"
+#include <stddef.h>
+
+#include <map>
+#include <string>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/base/sync_export.h"
 #include "sync/engine/commit_contribution.h"
@@ -34,10 +39,9 @@ class Syncer;
 // been acceptable to let this class be a dumb container object, it turns out
 // that there was no other convenient place to put the Init() and
 // PostAndProcessCommitResponse() functions.  So they ended up here.
-class SYNC_EXPORT_PRIVATE Commit {
+class SYNC_EXPORT Commit {
  public:
-  typedef base::ScopedPtrMap<ModelType, scoped_ptr<CommitContribution>>
-      ContributionMap;
+  typedef std::map<ModelType, scoped_ptr<CommitContribution>> ContributionMap;
 
   Commit(ContributionMap contributions,
          const sync_pb::ClientToServerMessage& message,
@@ -73,6 +77,8 @@ class SYNC_EXPORT_PRIVATE Commit {
 
   // Debug only flag used to indicate if it's safe to destruct the object.
   bool cleaned_up_;
+
+  DISALLOW_COPY_AND_ASSIGN(Commit);
 };
 
 }  // namespace syncer

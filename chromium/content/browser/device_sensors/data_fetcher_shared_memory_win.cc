@@ -10,6 +10,7 @@
 #include <Sensors.h>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/win/iunknown_impl.h"
 #include "base/win/windows_version.h"
@@ -293,6 +294,9 @@ bool DataFetcherSharedMemory::Start(ConsumerType consumer_type, void* buffer) {
         SetBufferAvailableState(consumer_type, true);
       }
       break;
+    case CONSUMER_TYPE_ORIENTATION_ABSOLUTE:
+      NOTIMPLEMENTED();
+      break;
     case CONSUMER_TYPE_MOTION:
       {
         motion_buffer_ = static_cast<DeviceMotionHardwareBuffer*>(buffer);
@@ -346,6 +350,9 @@ bool DataFetcherSharedMemory::Stop(ConsumerType consumer_type) {
       SetBufferAvailableState(consumer_type, false);
       orientation_buffer_ = nullptr;
       return true;
+    case CONSUMER_TYPE_ORIENTATION_ABSOLUTE:
+      NOTIMPLEMENTED();
+      break;
     case CONSUMER_TYPE_MOTION:
       SetBufferAvailableState(consumer_type, false);
       motion_buffer_ = nullptr;
@@ -418,6 +425,9 @@ void DataFetcherSharedMemory::DisableSensors(ConsumerType consumer_type) {
         sensor_inclinometer_->SetEventSink(nullptr);
         sensor_inclinometer_.Release();
       }
+      break;
+    case CONSUMER_TYPE_ORIENTATION_ABSOLUTE:
+      NOTIMPLEMENTED();
       break;
     case CONSUMER_TYPE_MOTION:
       if (sensor_accelerometer_.get()) {

@@ -4,7 +4,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import fnmatch
 import optparse
 import os
 import shutil
@@ -55,81 +54,23 @@ def ColorJavacOutput(output):
 
 
 ERRORPRONE_OPTIONS = [
-  '-Xepdisable:'
-  # Something in chrome_private_java makes this check crash.
-  'com.google.errorprone.bugpatterns.ClassCanBeStatic,'
   # These crash on lots of targets.
-  'com.google.errorprone.bugpatterns.WrongParameterPackage,'
-  'com.google.errorprone.bugpatterns.GuiceOverridesGuiceInjectableMethod,'
-  'com.google.errorprone.bugpatterns.GuiceOverridesJavaxInjectableMethod,'
-  'com.google.errorprone.bugpatterns.ElementsCountedInLoop'
+  '-Xep:ParameterPackage:OFF',
+  '-Xep:OverridesGuiceInjectableMethod:OFF',
+  '-Xep:OverridesJavaxInjectableMethod:OFF',
 ]
 
-def DoJavac(
-    bootclasspath, classpath, classes_dir, chromium_code,
-    use_errorprone_path, java_files):
-  """Runs javac.
 
-  Builds |java_files| with the provided |classpath| and puts the generated
-  .class files into |classes_dir|. If |chromium_code| is true, extra lint
-  checking will be enabled.
-  """
-
-  jar_inputs = []
-  for path in classpath:
-    if os.path.exists(path + '.TOC'):
-      jar_inputs.append(path + '.TOC')
-    else:
-      jar_inputs.append(path)
-
-  javac_args = [
-      '-g',
-      # Chromium only allows UTF8 source files.  Being explicit avoids
-      # javac pulling a default encoding from the user's environment.
-      '-encoding', 'UTF-8',
-      '-source', '1.7',
-      '-target', '1.7',
-      '-classpath', ':'.join(classpath),
-      '-d', classes_dir]
-
-  if bootclasspath:
-    javac_args.extend(['-bootclasspath', ':'.join(bootclasspath)])
-
-  if chromium_code:
-    # TODO(aurimas): re-enable '-Xlint:deprecation' checks once they are fixed.
-    javac_args.extend(['-Xlint:unchecked'])
-  else:
-    # XDignore.symbol.file makes javac compile against rt.jar instead of
-    # ct.sym. This means that using a java internal package/class will not
-    # trigger a compile warning or error.
-    javac_args.extend(['-XDignore.symbol.file'])
-
-  if use_errorprone_path:
-    javac_cmd = [use_errorprone_path] + ERRORPRONE_OPTIONS
-  else:
-    javac_cmd = ['javac']
-
-  javac_cmd = javac_cmd + javac_args + java_files
-
-  def Compile():
-    build_utils.CheckOutput(
-        javac_cmd,
-        print_stdout=chromium_code,
-        stderr_filter=ColorJavacOutput)
-
-  record_path = os.path.join(classes_dir, 'javac.md5.stamp')
-  md5_check.CallAndRecordIfStale(
-      Compile,
-      record_path=record_path,
-      input_paths=java_files + jar_inputs,
-      input_strings=javac_cmd)
+def _FilterJavaFiles(paths, filters):
+  return [f for f in paths
+          if not filters or build_utils.MatchesGlob(f, filters)]
 
 
 _MAX_MANIFEST_LINE_LEN = 72
 
 
-def CreateManifest(manifest_path, classpath, main_class=None,
-                   manifest_entries=None):
+def _CreateManifest(manifest_path, classpath, main_class=None,
+                    manifest_entries=None):
   """Creates a manifest file with the given parameters.
 
   This generates a manifest file that compiles with the spec found at
@@ -168,11 +109,175 @@ def CreateManifest(manifest_path, classpath, main_class=None,
     f.write(output)
 
 
-def main(argv):
-  colorama.init()
+def _ExtractClassFiles(jar_path, dest_dir, java_files):
+  """Extracts all .class files not corresponding to |java_files|."""
+  # Two challenges exist here:
+  # 1. |java_files| have prefixes that are not represented in the the jar paths.
+  # 2. A single .java file results in multiple .class files when it contains
+  #    nested classes.
+  # Here's an example:
+  #   source path: ../../base/android/java/src/org/chromium/Foo.java
+  #   jar paths: org/chromium/Foo.class, org/chromium/Foo$Inner.class
+  # To extract only .class files not related to the given .java files, we strip
+  # off ".class" and "$*.class" and use a substring match against java_files.
+  def extract_predicate(path):
+    if not path.endswith('.class'):
+      return False
+    path_without_suffix = re.sub(r'(?:\$|\.)[^/]+class$', '', path)
+    partial_java_path = path_without_suffix + '.java'
+    return not any(p.endswith(partial_java_path) for p in java_files)
 
-  argv = build_utils.ExpandFileArgs(argv)
+  build_utils.ExtractAll(jar_path, path=dest_dir, predicate=extract_predicate)
+  for path in build_utils.FindInDirectory(dest_dir, '*.class'):
+    shutil.copystat(jar_path, path)
 
+
+def _ConvertToJMakeArgs(javac_cmd, pdb_path):
+  new_args = ['bin/jmake', '-pdb', pdb_path]
+  if javac_cmd[0] != 'javac':
+    new_args.extend(('-jcexec', new_args[0]))
+  if md5_check.PRINT_EXPLANATIONS:
+    new_args.append('-Xtiming')
+
+  do_not_prefix = ('-classpath', '-bootclasspath')
+  skip_next = False
+  for arg in javac_cmd[1:]:
+    if not skip_next and arg not in do_not_prefix:
+      arg = '-C' + arg
+    new_args.append(arg)
+    skip_next = arg in do_not_prefix
+
+  return new_args
+
+
+def _FixTempPathsInIncrementalMetadata(pdb_path, temp_dir):
+  # The .pdb records absolute paths. Fix up paths within /tmp (srcjars).
+  if os.path.exists(pdb_path):
+    # Although its a binary file, search/replace still seems to work fine.
+    with open(pdb_path) as fileobj:
+      pdb_data = fileobj.read()
+    with open(pdb_path, 'w') as fileobj:
+      fileobj.write(re.sub(r'/tmp/[^/]*', temp_dir, pdb_data))
+
+
+def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
+                runtime_classpath):
+  with build_utils.TempDir() as temp_dir:
+    srcjars = options.java_srcjars
+    # The .excluded.jar contains .class files excluded from the main jar.
+    # It is used for incremental compiles.
+    excluded_jar_path = options.jar_path.replace('.jar', '.excluded.jar')
+
+    classes_dir = os.path.join(temp_dir, 'classes')
+    os.makedirs(classes_dir)
+
+    changed_paths = None
+    # jmake can handle deleted files, but it's a rare case and it would
+    # complicate this script's logic.
+    if options.incremental and changes.AddedOrModifiedOnly():
+      changed_paths = set(changes.IterChangedPaths())
+      # Do a full compile if classpath has changed.
+      # jmake doesn't seem to do this on its own... Might be that ijars mess up
+      # its change-detection logic.
+      if any(p in changed_paths for p in classpath_inputs):
+        changed_paths = None
+
+    if options.incremental:
+      # jmake is a compiler wrapper that figures out the minimal set of .java
+      # files that need to be rebuilt given a set of .java files that have
+      # changed.
+      # jmake determines what files are stale based on timestamps between .java
+      # and .class files. Since we use .jars, .srcjars, and md5 checks,
+      # timestamp info isn't accurate for this purpose. Rather than use jmake's
+      # programatic interface (like we eventually should), we ensure that all
+      # .class files are newer than their .java files, and convey to jmake which
+      # sources are stale by having their .class files be missing entirely
+      # (by not extracting them).
+      pdb_path = options.jar_path + '.pdb'
+      javac_cmd = _ConvertToJMakeArgs(javac_cmd, pdb_path)
+      if srcjars:
+        _FixTempPathsInIncrementalMetadata(pdb_path, temp_dir)
+
+    if srcjars:
+      java_dir = os.path.join(temp_dir, 'java')
+      os.makedirs(java_dir)
+      for srcjar in options.java_srcjars:
+        if changed_paths:
+          changed_paths.update(os.path.join(java_dir, f)
+                               for f in changes.IterChangedSubpaths(srcjar))
+        build_utils.ExtractAll(srcjar, path=java_dir, pattern='*.java')
+      jar_srcs = build_utils.FindInDirectory(java_dir, '*.java')
+      jar_srcs = _FilterJavaFiles(jar_srcs, options.javac_includes)
+      java_files.extend(jar_srcs)
+      if changed_paths:
+        # Set the mtime of all sources to 0 since we use the absense of .class
+        # files to tell jmake which files are stale.
+        for path in jar_srcs:
+          os.utime(path, (0, 0))
+
+    if java_files:
+      if changed_paths:
+        changed_java_files = [p for p in java_files if p in changed_paths]
+        if os.path.exists(options.jar_path):
+          _ExtractClassFiles(options.jar_path, classes_dir, changed_java_files)
+        if os.path.exists(excluded_jar_path):
+          _ExtractClassFiles(excluded_jar_path, classes_dir, changed_java_files)
+        # Add the extracted files to the classpath. This is required because
+        # when compiling only a subset of files, classes that haven't changed
+        # need to be findable.
+        classpath_idx = javac_cmd.index('-classpath')
+        javac_cmd[classpath_idx + 1] += ':' + classes_dir
+
+      # Don't include the output directory in the initial set of args since it
+      # being in a temp dir makes it unstable (breaks md5 stamping).
+      cmd = javac_cmd + ['-d', classes_dir] + java_files
+
+      # JMake prints out some diagnostic logs that we want to ignore.
+      # This assumes that all compiler output goes through stderr.
+      stdout_filter = lambda s: ''
+      if md5_check.PRINT_EXPLANATIONS:
+        stdout_filter = None
+
+      attempt_build = lambda: build_utils.CheckOutput(
+          cmd,
+          print_stdout=options.chromium_code,
+          stdout_filter=stdout_filter,
+          stderr_filter=ColorJavacOutput)
+      try:
+        attempt_build()
+      except build_utils.CalledProcessError as e:
+        # Work-around for a bug in jmake (http://crbug.com/551449).
+        if 'project database corrupted' not in e.output:
+          raise
+        print ('Applying work-around for jmake project database corrupted '
+               '(http://crbug.com/551449).')
+        os.unlink(pdb_path)
+        attempt_build()
+
+    if options.main_class or options.manifest_entry:
+      entries = []
+      if options.manifest_entry:
+        entries = [e.split(':') for e in options.manifest_entry]
+      manifest_file = os.path.join(temp_dir, 'manifest')
+      _CreateManifest(manifest_file, runtime_classpath, options.main_class,
+                      entries)
+    else:
+      manifest_file = None
+
+    glob = options.jar_excluded_classes
+    inclusion_predicate = lambda f: not build_utils.MatchesGlob(f, glob)
+    exclusion_predicate = lambda f: not inclusion_predicate(f)
+
+    jar.JarDirectory(classes_dir,
+                     options.jar_path,
+                     manifest_file=manifest_file,
+                     predicate=inclusion_predicate)
+    jar.JarDirectory(classes_dir,
+                     excluded_jar_path,
+                     predicate=exclusion_predicate)
+
+
+def _ParseOptions(argv):
   parser = optparse.OptionParser()
   build_utils.AddDepfileOption(parser)
 
@@ -196,7 +301,17 @@ def main(argv):
       help='Classpath for javac. If this is specified multiple times, they '
       'will all be appended to construct the classpath.')
   parser.add_option(
+      '--use-ijars',
+      action='store_true',
+      help='Whether to use interface jars (.interface.jar) when compiling')
+  parser.add_option(
+      '--incremental',
+      action='store_true',
+      help='Whether to re-use .class files rather than recompiling them '
+           '(when possible).')
+  parser.add_option(
       '--javac-includes',
+      default='',
       help='A list of file patterns. If provided, only java files that match'
       'one of the patterns will be compiled.')
   parser.add_option(
@@ -214,9 +329,6 @@ def main(argv):
       '--use-errorprone-path',
       help='Use the Errorprone compiler at this path.')
 
-  parser.add_option(
-      '--classes-dir',
-      help='Directory for compiled .class files.')
   parser.add_option('--jar-path', help='Jar output path.')
   parser.add_option(
       '--main-class',
@@ -229,91 +341,117 @@ def main(argv):
   parser.add_option('--stamp', help='Path to touch on success.')
 
   options, args = parser.parse_args(argv)
-
-  if options.main_class and not options.jar_path:
-    parser.error('--main-class requires --jar-path')
+  build_utils.CheckOptions(options, parser, required=('jar_path',))
 
   bootclasspath = []
   for arg in options.bootclasspath:
     bootclasspath += build_utils.ParseGypList(arg)
+  options.bootclasspath = bootclasspath
 
   classpath = []
   for arg in options.classpath:
     classpath += build_utils.ParseGypList(arg)
+  options.classpath = classpath
 
   java_srcjars = []
   for arg in options.java_srcjars:
     java_srcjars += build_utils.ParseGypList(arg)
+  options.java_srcjars = java_srcjars
 
-  java_files = args
   if options.src_gendirs:
-    src_gendirs = build_utils.ParseGypList(options.src_gendirs)
-    java_files += build_utils.FindInDirectories(src_gendirs, '*.java')
+    options.src_gendirs = build_utils.ParseGypList(options.src_gendirs)
 
-  input_files = bootclasspath + classpath + java_srcjars + java_files
-  with build_utils.TempDir() as temp_dir:
-    classes_dir = os.path.join(temp_dir, 'classes')
-    os.makedirs(classes_dir)
-    if java_srcjars:
-      java_dir = os.path.join(temp_dir, 'java')
-      os.makedirs(java_dir)
-      for srcjar in java_srcjars:
-        build_utils.ExtractAll(srcjar, path=java_dir, pattern='*.java')
-      java_files += build_utils.FindInDirectory(java_dir, '*.java')
+  options.javac_includes = build_utils.ParseGypList(options.javac_includes)
+  options.jar_excluded_classes = (
+      build_utils.ParseGypList(options.jar_excluded_classes))
+  return options, args
 
-    if options.javac_includes:
-      javac_includes = build_utils.ParseGypList(options.javac_includes)
-      filtered_java_files = []
-      for f in java_files:
-        for include in javac_includes:
-          if fnmatch.fnmatch(f, include):
-            filtered_java_files.append(f)
-            break
-      java_files = filtered_java_files
 
-    if len(java_files) != 0:
-      DoJavac(
-          bootclasspath,
-          classpath,
-          classes_dir,
-          options.chromium_code,
-          options.use_errorprone_path,
-          java_files)
+def main(argv):
+  colorama.init()
 
-    if options.jar_path:
-      if options.main_class or options.manifest_entry:
-        if options.manifest_entry:
-          entries = map(lambda e: e.split(":"), options.manifest_entry)
-        else:
-          entries = []
-        manifest_file = os.path.join(temp_dir, 'manifest')
-        CreateManifest(manifest_file, classpath, options.main_class, entries)
+  argv = build_utils.ExpandFileArgs(argv)
+  options, java_files = _ParseOptions(argv)
+
+  if options.src_gendirs:
+    java_files += build_utils.FindInDirectories(options.src_gendirs, '*.java')
+
+  java_files = _FilterJavaFiles(java_files, options.javac_includes)
+
+  runtime_classpath = options.classpath
+  compile_classpath = runtime_classpath
+  if options.use_ijars:
+    ijar_re = re.compile(r'\.jar$')
+    compile_classpath = (
+        [ijar_re.sub('.interface.jar', p) for p in runtime_classpath])
+
+  javac_cmd = ['javac']
+  if options.use_errorprone_path:
+    javac_cmd = [options.use_errorprone_path] + ERRORPRONE_OPTIONS
+
+  javac_cmd.extend((
+      '-g',
+      # Chromium only allows UTF8 source files.  Being explicit avoids
+      # javac pulling a default encoding from the user's environment.
+      '-encoding', 'UTF-8',
+      '-classpath', ':'.join(compile_classpath),
+      # Prevent compiler from compiling .java files not listed as inputs.
+      # See: http://blog.ltgt.net/most-build-tools-misuse-javac/
+      '-sourcepath', ''
+  ))
+
+  if options.bootclasspath:
+    javac_cmd.extend([
+        '-bootclasspath', ':'.join(options.bootclasspath),
+        '-source', '1.7',
+        '-target', '1.7',
+        ])
+
+  if options.chromium_code:
+    javac_cmd.extend(['-Xlint:unchecked', '-Xlint:deprecation'])
+  else:
+    # XDignore.symbol.file makes javac compile against rt.jar instead of
+    # ct.sym. This means that using a java internal package/class will not
+    # trigger a compile warning or error.
+    javac_cmd.extend(['-XDignore.symbol.file'])
+
+  classpath_inputs = options.bootclasspath
+  # TODO(agrieve): Remove this .TOC heuristic once GYP is no more.
+  if options.use_ijars:
+    classpath_inputs.extend(compile_classpath)
+  else:
+    for path in compile_classpath:
+      if os.path.exists(path + '.TOC'):
+        classpath_inputs.append(path + '.TOC')
       else:
-        manifest_file = None
-      jar.JarDirectory(classes_dir,
-                       build_utils.ParseGypList(options.jar_excluded_classes),
-                       options.jar_path,
-                       manifest_file=manifest_file)
+        classpath_inputs.append(path)
 
-    if options.classes_dir:
-      # Delete the old classes directory. This ensures that all .class files in
-      # the output are actually from the input .java files. For example, if a
-      # .java file is deleted or an inner class is removed, the classes
-      # directory should not contain the corresponding old .class file after
-      # running this action.
-      build_utils.DeleteDirectory(options.classes_dir)
-      shutil.copytree(classes_dir, options.classes_dir)
+  # Compute the list of paths that when changed, we need to rebuild.
+  input_paths = classpath_inputs + options.java_srcjars + java_files
 
-  if options.depfile:
-    build_utils.WriteDepfile(
-        options.depfile,
-        input_files + build_utils.GetPythonDependencies())
+  output_paths = [
+      options.jar_path,
+      options.jar_path.replace('.jar', '.excluded.jar'),
+  ]
+  if options.incremental:
+    output_paths.append(options.jar_path + '.pdb')
 
-  if options.stamp:
-    build_utils.Touch(options.stamp)
+  # An escape hatch to be able to check if incremental compiles are causing
+  # problems.
+  force = int(os.environ.get('DISABLE_INCREMENTAL_JAVAC', 0))
+
+  # List python deps in input_strings rather than input_paths since the contents
+  # of them does not change what gets written to the depsfile.
+  build_utils.CallAndWriteDepfileIfStale(
+      lambda changes: _OnStaleMd5(changes, options, javac_cmd, java_files,
+                                  classpath_inputs, runtime_classpath),
+      options,
+      input_paths=input_paths,
+      input_strings=javac_cmd,
+      output_paths=output_paths,
+      force=force,
+      pass_changes=True)
 
 
 if __name__ == '__main__':
   sys.exit(main(sys.argv[1:]))
-
-

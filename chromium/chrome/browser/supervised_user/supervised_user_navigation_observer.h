@@ -5,72 +5,70 @@
 #ifndef CHROME_BROWSER_SUPERVISED_USER_SUPERVISED_USER_NAVIGATION_OBSERVER_H_
 #define CHROME_BROWSER_SUPERVISED_USER_SUPERVISED_USER_NAVIGATION_OBSERVER_H_
 
-#include <set>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
-#include "base/values.h"
+#include "chrome/browser/supervised_user/supervised_user_service_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 #include "chrome/browser/supervised_user/supervised_users.h"
-#include "content/public/browser/web_contents_observer.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
+#include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 class SupervisedUserService;
-class SupervisedUserURLFilter;
 
 namespace content {
 class NavigationEntry;
-}
-
-namespace infobars {
-class InfoBar;
+class WebContents;
 }
 
 class SupervisedUserNavigationObserver
-    : public content::WebContentsObserver,
-      public content::WebContentsUserData<SupervisedUserNavigationObserver> {
+    : public content::WebContentsUserData<SupervisedUserNavigationObserver>,
+      public SupervisedUserServiceObserver {
  public:
   ~SupervisedUserNavigationObserver() override;
 
-  // Sets the specific infobar as dismissed.
-  void WarnInfoBarDismissed();
-
-  const std::vector<const content::NavigationEntry*>*
-      blocked_navigations() const {
+  const std::vector<const sessions::SerializedNavigationEntry*>*
+  blocked_navigations() const {
     return &blocked_navigations_.get();
   }
 
   // Called when a network request to |url| is blocked.
   static void OnRequestBlocked(
-      int render_process_host_id,
-      int render_view_id,
+      const content::ResourceRequestInfo::WebContentsGetter&
+          web_contents_getter,
       const GURL& url,
       SupervisedUserURLFilter::FilteringBehaviorReason reason,
       const base::Callback<void(bool)>& callback);
+
+  // SupervisedUserServiceObserver implementation.
+  void OnURLFilterChanged() override;
+
+  void URLFilterCheckCallback(
+      const GURL& url,
+      SupervisedUserURLFilter::FilteringBehavior behavior,
+      SupervisedUserURLFilter::FilteringBehaviorReason reason,
+      bool uncertain);
 
  private:
   friend class content::WebContentsUserData<SupervisedUserNavigationObserver>;
 
   explicit SupervisedUserNavigationObserver(content::WebContents* web_contents);
 
-  // content::WebContentsObserver implementation.
-  void DidCommitProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) override;
-
   void OnRequestBlockedInternal(const GURL& url);
 
-  // Owned by the profile, so outlives us.
-  SupervisedUserService* supervised_user_service_;
+  content::WebContents* web_contents_;
 
   // Owned by SupervisedUserService.
   const SupervisedUserURLFilter* url_filter_;
 
-  // Owned by the InfoBarService, which has the same lifetime as this object.
-  infobars::InfoBar* warn_infobar_;
+  // Owned by SupervisedUserServiceFactory (lifetime of Profile).
+  SupervisedUserService* supervised_user_service_;
 
-  ScopedVector<const content::NavigationEntry> blocked_navigations_;
+  ScopedVector<const sessions::SerializedNavigationEntry> blocked_navigations_;
+
+  base::WeakPtrFactory<SupervisedUserNavigationObserver> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SupervisedUserNavigationObserver);
 };

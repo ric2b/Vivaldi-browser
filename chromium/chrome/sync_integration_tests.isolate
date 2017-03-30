@@ -36,7 +36,8 @@
     ['OS=="linux" or OS=="win"', {
       'variables': {
         'files': [
-          '<(PRODUCT_DIR)/vivaldi_100_percent.pak',
+          '<(PRODUCT_DIR)/chrome_100_percent.pak',
+          '<(PRODUCT_DIR)/chrome_200_percent.pak',
           '<(PRODUCT_DIR)/locales/en-US.pak',
         ],
       },
@@ -52,7 +53,6 @@
           '../third_party/tlslite/',
           '<(PRODUCT_DIR)/pyproto/',
           '<(PRODUCT_DIR)/resources.pak',
-          '<(PRODUCT_DIR)/sync_integration_tests<(EXECUTABLE_SUFFIX)',
         ],
       },
     }],
@@ -75,7 +75,8 @@
     ['OS=="win"', {
       'variables': {
         'files': [
-          '<(PRODUCT_DIR)/vivaldi_elf.dll',
+          '<(PRODUCT_DIR)/chrome_elf.dll',
+          '<(PRODUCT_DIR)/crashpad_handler.exe',
         ],
       },
     }],
@@ -111,6 +112,6 @@
   'includes': [
     '../base/base.isolate',
     '../gin/v8.isolate',
-    '../third_party/angle/angle.isolate',
+    '../ui/gl/gl.isolate',
   ],
 }

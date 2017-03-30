@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
@@ -9,12 +11,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
 #include "chrome/browser/chrome_elf_init_win.h"
+#include "chrome/common/chrome_version.h"
 #include "chrome_elf/blacklist/blacklist.h"
 #include "chrome_elf/chrome_elf_constants.h"
 #include "chrome_elf/dll_hash/dll_hash.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
-#include "version.h"  // NOLINT
 
 const char kBrowserBlacklistTrialName[] = "BrowserBlacklist";
 const char kBrowserBlacklistTrialDisabledGroupName[] = "NoBlacklist";
@@ -99,7 +101,7 @@ void InitializeChromeElf() {
   // Report all successful blacklist interceptions.
   ReportSuccessfulBlocks();
 
-  // Schedule another task to report all sucessful interceptions later.
+  // Schedule another task to report all successful interceptions later.
   // This time delay should be long enough to catch any dlls that attempt to
   // inject after Chrome has started up.
   content::BrowserThread::PostDelayedTask(

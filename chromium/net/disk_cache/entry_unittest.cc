@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/threading/platform_thread.h"
@@ -1638,8 +1640,11 @@ TEST_F(DiskCacheEntryTest, MemoryOnlyEnumerationWithSparseEntries) {
 }
 
 // Writes |buf_1| to offset and reads it back as |buf_2|.
-void VerifySparseIO(disk_cache::Entry* entry, int64 offset,
-                    net::IOBuffer* buf_1, int size, net::IOBuffer* buf_2) {
+void VerifySparseIO(disk_cache::Entry* entry,
+                    int64_t offset,
+                    net::IOBuffer* buf_1,
+                    int size,
+                    net::IOBuffer* buf_2) {
   net::TestCompletionCallback cb;
 
   memset(buf_2->data(), 0, size);
@@ -1657,7 +1662,9 @@ void VerifySparseIO(disk_cache::Entry* entry, int64 offset,
 
 // Reads |size| bytes from |entry| at |offset| and verifies that they are the
 // same as the content of the provided |buffer|.
-void VerifyContentSparseIO(disk_cache::Entry* entry, int64 offset, char* buffer,
+void VerifyContentSparseIO(disk_cache::Entry* entry,
+                           int64_t offset,
+                           char* buffer,
                            int size) {
   net::TestCompletionCallback cb;
 
@@ -1754,7 +1761,7 @@ void DiskCacheEntryTest::GetAvailableRange() {
   EXPECT_EQ(kSize, WriteSparseData(entry, 0x20F4400, buf.get(), kSize));
 
   // We stop at the first empty block.
-  int64 start;
+  int64_t start;
   net::TestCompletionCallback cb;
   int rv = entry->GetAvailableRange(
       0x20F0000, kSize * 2, &start, cb.callback());
@@ -1791,6 +1798,15 @@ void DiskCacheEntryTest::GetAvailableRange() {
   EXPECT_EQ(1, cb.GetResult(rv));
   EXPECT_EQ(0x20F0000, start);
 
+  // Use very small ranges. Write at offset 50.
+  const int kTinyLen = 10;
+  EXPECT_EQ(kTinyLen, WriteSparseData(entry, 50, buf.get(), kTinyLen));
+
+  start = -1;
+  rv = entry->GetAvailableRange(kTinyLen * 2, kTinyLen, &start, cb.callback());
+  EXPECT_EQ(0, cb.GetResult(rv));
+  EXPECT_EQ(kTinyLen * 2, start);
+
   entry->Close();
 }
 
@@ -1824,7 +1840,7 @@ TEST_F(DiskCacheEntryTest, SparseWriteDropped) {
   int offset = 1024 - 500;
   int rv = 0;
   net::TestCompletionCallback cb;
-  int64 start;
+  int64_t start;
   for (int i = 0; i < 5; i++) {
     // Check result of last GetAvailableRange.
     EXPECT_EQ(0, rv);
@@ -1878,8 +1894,8 @@ TEST_F(DiskCacheEntryTest, SparseSquentialWriteNotDropped) {
   // Any starting offset is fine as long as it is 1024-bytes aligned.
   int rv = 0;
   net::TestCompletionCallback cb;
-  int64 start;
-  int64 offset = 1024 * 11;
+  int64_t start;
+  int64_t offset = 1024 * 11;
   for (; offset < 20000; offset += kSize) {
     rv = entry->WriteSparseData(offset, buf_1.get(), kSize, cb.callback());
     EXPECT_EQ(kSize, cb.GetResult(rv));
@@ -2016,7 +2032,7 @@ TEST_F(DiskCacheEntryTest, MemoryOnlyMisalignedGetAvailableRange) {
             entry->WriteSparseData(
                 50000, buf.get(), 8192, net::CompletionCallback()));
 
-  int64 start;
+  int64_t start;
   net::TestCompletionCallback cb;
   // Test that we stop at a discontinuous child at the second block.
   int rv = entry->GetAvailableRange(0, 10000, &start, cb.callback());
@@ -2108,7 +2124,7 @@ void DiskCacheEntryTest::DoomSparseEntry() {
   scoped_refptr<net::IOBuffer> buf(new net::IOBuffer(kSize));
   CacheTestFillBuffer(buf->data(), kSize, false);
 
-  int64 offset = 1024;
+  int64_t offset = 1024;
   // Write to a bunch of ranges.
   for (int i = 0; i < 12; i++) {
     EXPECT_EQ(kSize, WriteSparseData(entry1, offset, buf.get(), kSize));
@@ -2170,8 +2186,7 @@ TEST_F(DiskCacheEntryTest, MemoryOnlyDoomSparseEntry) {
 class SparseTestCompletionCallback: public net::TestCompletionCallback {
  public:
   explicit SparseTestCompletionCallback(scoped_ptr<disk_cache::Backend> cache)
-      : cache_(cache.Pass()) {
-  }
+      : cache_(std::move(cache)) {}
 
  private:
   void SetResult(int result) override {
@@ -2196,7 +2211,7 @@ TEST_F(DiskCacheEntryTest, DoomSparseEntry2) {
   scoped_refptr<net::IOBuffer> buf(new net::IOBuffer(kSize));
   CacheTestFillBuffer(buf->data(), kSize, false);
 
-  int64 offset = 1024;
+  int64_t offset = 1024;
   // Write to a bunch of ranges.
   for (int i = 0; i < 12; i++) {
     EXPECT_EQ(kSize,
@@ -2208,7 +2223,7 @@ TEST_F(DiskCacheEntryTest, DoomSparseEntry2) {
 
   entry->Close();
   disk_cache::Backend* cache = cache_.get();
-  SparseTestCompletionCallback cb(cache_.Pass());
+  SparseTestCompletionCallback cb(std::move(cache_));
   int rv = cache->DoomEntry(key, cb.callback());
   EXPECT_EQ(net::ERR_IO_PENDING, rv);
   EXPECT_EQ(net::OK, cb.WaitForResult());
@@ -2254,7 +2269,7 @@ void DiskCacheEntryTest::PartialSparseEntry() {
   EXPECT_EQ(0, ReadSparseData(entry, 99, buf2.get(), kSize));
 
   int rv;
-  int64 start;
+  int64_t start;
   net::TestCompletionCallback cb;
   if (memory_only_ || simple_cache_mode_) {
     rv = entry->GetAvailableRange(0, 600, &start, cb.callback());
@@ -2386,7 +2401,7 @@ TEST_F(DiskCacheEntryTest, CancelSparseIO) {
       1024 * 1024 - 4096, buf.get(), kSize, cb1.callback());
   EXPECT_EQ(net::ERR_IO_PENDING, rv);
 
-  int64 offset = 0;
+  int64_t offset = 0;
   rv = entry->GetAvailableRange(offset, kSize, &offset, cb5.callback());
   rv = cb5.GetResult(rv);
   if (!cb1.have_result()) {
@@ -2628,7 +2643,7 @@ bool DiskCacheEntryTest::SimpleCacheMakeBadChecksumEntry(const std::string& key,
   if (!entry_file0.IsValid())
     return false;
 
-  int64 file_offset =
+  int64_t file_offset =
       sizeof(disk_cache::SimpleFileHeader) + key.size() + kDataSize - 2;
   EXPECT_EQ(1, entry_file0.Write(file_offset, "X", 1));
   *data_size = kDataSize;
@@ -2681,7 +2696,7 @@ TEST_F(DiskCacheEntryTest, SimpleCacheErrorThenDoom) {
   entry->Doom();  // Should not crash.
 }
 
-bool TruncatePath(const base::FilePath& file_path, int64 length)  {
+bool TruncatePath(const base::FilePath& file_path, int64_t length) {
   base::File file(file_path, base::File::FLAG_WRITE | base::File::FLAG_OPEN);
   if (!file.IsValid())
     return false;
@@ -2709,10 +2724,10 @@ TEST_F(DiskCacheEntryTest, SimpleCacheNoEOF) {
 
   // Truncate the file such that the length isn't sufficient to have an EOF
   // record.
-  int kTruncationBytes = -implicit_cast<int>(sizeof(disk_cache::SimpleFileEOF));
+  int kTruncationBytes = -static_cast<int>(sizeof(disk_cache::SimpleFileEOF));
   const base::FilePath entry_path = cache_path_.AppendASCII(
       disk_cache::simple_util::GetFilenameFromKeyAndFileIndex(key, 0));
-  const int64 invalid_size =
+  const int64_t invalid_size =
       disk_cache::simple_util::GetFileSizeFromKeyAndDataSize(key,
                                                              kTruncationBytes);
   EXPECT_TRUE(TruncatePath(entry_path, invalid_size));
@@ -4135,6 +4150,17 @@ TEST_F(DiskCacheEntryTest, SimpleCacheTruncateLargeSparseFile) {
   // Make sure the first range was removed when the second was written.
   ret = entry->ReadSparseData(0, buffer.get(), kSize, callback.callback());
   EXPECT_EQ(0, callback.GetResult(ret));
+
+  // Close and reopen the entry and make sure the first entry is still absent
+  // and the second entry is still present.
+  entry->Close();
+  ASSERT_EQ(net::OK, OpenEntry(key, &entry));
+
+  ret = entry->ReadSparseData(0, buffer.get(), kSize, callback.callback());
+  EXPECT_EQ(0, callback.GetResult(ret));
+
+  ret = entry->ReadSparseData(kSize, buffer.get(), kSize, callback.callback());
+  EXPECT_EQ(kSize, callback.GetResult(ret));
 
   entry->Close();
 }

@@ -65,6 +65,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
     // UI State
     private float mWidth;
     private final float mHeight;
+    private int mOrientation;
     private final CompositorButton mModelSelectorButton;
 
     private TabStripSceneLayer mTabStripTreeProvider;
@@ -130,8 +131,10 @@ public class StripLayoutHelperManager implements SceneOverlay {
     }
 
     @Override
-    public void onSizeChanged(float width, float height, float visibleViewportOffsetY) {
+    public void onSizeChanged(
+            float width, float height, float visibleViewportOffsetY, int orientation) {
         mWidth = width;
+        mOrientation = orientation;
         mModelSelectorButton.setX(
                 mWidth - MODEL_SELECTOR_BUTTON_WIDTH_DP - MODEL_SELECTOR_BUTTON_RIGHT_PADDING_DP);
         mNormalHelper.onSizeChanged(mWidth, mHeight);
@@ -155,8 +158,25 @@ public class StripLayoutHelperManager implements SceneOverlay {
         getActiveStripLayoutHelper().getVirtualViews(views);
     }
 
-    public float getStripBrightness() {
-        return getActiveStripLayoutHelper().getStripBrightness();
+    /**
+     * @return The brightness of background tabs in the tabstrip.
+     */
+    public float getBackgroundTabBrightness() {
+        return getActiveStripLayoutHelper().getBackgroundTabBrightness();
+    }
+
+    /**
+     * @param brightness Sets the brightness for the entire tabstrip.
+     */
+    public void setBrightness(float brightness) {
+        getActiveStripLayoutHelper().setBrightness(brightness);
+    }
+
+    /**
+     * @return The brightness of the entire tabstrip.
+     */
+    public float getBrightness() {
+        return getActiveStripLayoutHelper().getBrightness();
     }
 
     /**
@@ -191,6 +211,10 @@ public class StripLayoutHelperManager implements SceneOverlay {
         return mWidth;
     }
 
+    public int getOrientation() {
+        return mOrientation;
+    }
+
     public float getBorderOpacity() {
         return mIsIncognito ? BORDER_OPACITY_INCOGNITO : BORDER_OPACITY;
     }
@@ -208,6 +232,11 @@ public class StripLayoutHelperManager implements SceneOverlay {
     public boolean updateOverlay(long time, long dt) {
         getInactiveStripLayoutHelper().finishAnimation();
         return getActiveStripLayoutHelper().updateLayout(time, dt);
+    }
+
+    @Override
+    public void tabStateInitialized() {
+        updateModelSwitcherButton();
     }
 
     @Override
@@ -312,13 +341,15 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     /**
      * Called on onDown event.
-     * @param time The time stamp in millisecond of the event.
-     * @param x    The x position of the event.
-     * @param y    The y position of the event.
+     * @param time      The time stamp in millisecond of the event.
+     * @param x         The x position of the event.
+     * @param y         The y position of the event.
+     * @param fromMouse Whether the event originates from a mouse.
+     * @param buttons   State of all buttons that are pressed.
      */
-    public void onDown(long time, float x, float y) {
+    public void onDown(long time, float x, float y, boolean fromMouse, int buttons) {
         if (mModelSelectorButton.onDown(x, y)) return;
-        getActiveStripLayoutHelper().onDown(time, x, y);
+        getActiveStripLayoutHelper().onDown(time, x, y, fromMouse, buttons);
     }
 
     /**
@@ -333,18 +364,20 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     /**
      * Called on click. This is called before the onUpOrCancel event.
-     * @param time The current time of the app in ms.
-     * @param x    The x coordinate of the position of the click.
-     * @param y    The y coordinate of the position of the click.
+     * @param time      The current time of the app in ms.
+     * @param x         The x coordinate of the position of the click.
+     * @param y         The y coordinate of the position of the click.
+     * @param fromMouse Whether the event originates from a mouse.
+     * @param buttons   State of all buttons that were pressed when onDown was invoked.
      */
-    public void click(long time, float x, float y) {
+    public void click(long time, float x, float y, boolean fromMouse, int buttons) {
         if (mModelSelectorButton.click(x, y) && mTabModelSelector != null) {
             getActiveStripLayoutHelper().finishAnimation();
             if (!mModelSelectorButton.isVisible()) return;
             mTabModelSelector.selectModel(!mTabModelSelector.isIncognitoSelected());
             return;
         }
-        getActiveStripLayoutHelper().click(time, x, y);
+        getActiveStripLayoutHelper().click(time, x, y, fromMouse, buttons);
     }
 
     /**

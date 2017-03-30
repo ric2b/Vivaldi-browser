@@ -12,6 +12,7 @@
 #include <X11/Xlib.h>
 
 #include "base/callback.h"
+#include "base/macros.h"
 
 namespace remoting {
 
@@ -57,6 +58,11 @@ class ScopedXGrabServer {
 
   DISALLOW_COPY_AND_ASSIGN(ScopedXGrabServer);
 };
+
+
+// Make a connection to the X Server impervious to X Server grabs. Returns
+// true if successful or false if the required XTEST extension is not present.
+bool IgnoreXServerGrabs(Display* display, bool ignore);
 
 }  // namespace remoting
 

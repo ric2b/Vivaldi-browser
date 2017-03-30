@@ -8,14 +8,14 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Rect;
 
-import org.chromium.base.JNINamespace;
+import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.Layout.Orientation;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.tab.ChromeTab;
 import org.chromium.ui.resources.ResourceManager;
 
 /**
@@ -73,10 +73,9 @@ public class TabListSceneLayer extends SceneLayer {
             nativePutLayer(mNativePtr, t.getId(), R.id.control_container, closeBtnResource,
                     R.drawable.tabswitcher_border_frame_shadow,
                     R.drawable.tabswitcher_border_frame_decoration, R.drawable.logo_card_back,
-                    borderResource, t.canUseLiveTexture(),
-                    (t.getFallbackThumbnailId() == ChromeTab.NTP_TAB_ID), t.getBackgroundColor(),
-                    context.getResources().getColor(R.color.tab_switcher_background),
-                    res.getColor(borderColorResource), t.isIncognito(),
+                    borderResource, t.canUseLiveTexture(), t.getBackgroundColor(),
+                    getTabListBackgroundColor(context),
+                    ApiCompatibilityUtils.getColor(res, borderColorResource), t.isIncognito(),
                     layout.getOrientation() == Orientation.PORTRAIT, t.getRenderX() * dpToPx,
                     t.getRenderY() * dpToPx, t.getScaledContentWidth() * dpToPx,
                     t.getScaledContentHeight() * dpToPx, t.getOriginalContentWidth() * dpToPx,
@@ -91,11 +90,20 @@ public class TabListSceneLayer extends SceneLayer {
                     t.getBorderCloseButtonAlpha() * decoration,
                     LayoutTab.CLOSE_BUTTON_WIDTH_DP * dpToPx, t.getStaticToViewBlend(),
                     t.getBorderScale(), t.getSaturation(), t.getBrightness(), t.showToolbar(),
-                    t.anonymizeToolbar(), t.getToolbarAlpha(), t.getToolbarYOffset() * dpToPx,
-                    t.getSideBorderScale(), true, t.insetBorderVertical(), layerTitleCache,
-                    tabContentManager, resourceManager);
+                    t.getToolbarBackgroundColor(), t.anonymizeToolbar(), R.drawable.textbox,
+                    t.getTextBoxBackgroundColor(), t.getTextBoxAlpha(), t.getToolbarAlpha(),
+                    t.getToolbarYOffset() * dpToPx, t.getSideBorderScale(), true,
+                    t.insetBorderVertical(), layerTitleCache, tabContentManager, resourceManager);
         }
         nativeFinishBuildingFrame(mNativePtr);
+    }
+
+    /**
+     * @return The background color
+     */
+    protected int getTabListBackgroundColor(Context context) {
+        return ApiCompatibilityUtils.getColor(
+                context.getResources(), R.color.tab_switcher_background);
     }
 
     @Override
@@ -122,16 +130,17 @@ public class TabListSceneLayer extends SceneLayer {
     private native void nativePutLayer(long nativeTabListSceneLayer, int id, int toolbarResourceId,
             int closeButtonResourceId, int shadowResourceId, int contourResourceId,
             int backLogoResourceId, int borderResourceId, boolean canUseLiveLayer,
-            boolean canUseNtpFallback, int tabBackgroundColor, int backgroundColor,
-            int backLogoColor, boolean incognito, boolean isPortrait, float x, float y, float width,
-            float height, float contentWidth, float contentHeight, float visibleContentHeight,
-            float viewportX, float viewportY, float viewportWidth, float viewportHeight,
-            float shadowX, float shadowY, float shadowWidth, float shadowHeight, float pivotX,
-            float pivotY, float rotationX, float rotationY, float alpha, float borderAlpha,
-            float contourAlpha, float shadowAlpha, float closeAlpha, float closeBtnWidth,
-            float staticToViewBlend, float borderScale, float saturation, float brightness,
-            boolean showToolbar, boolean anonymizeToolbar, float toolbarAlpha, float toolbarYOffset,
-            float sideBorderScale, boolean attachContent, boolean insetVerticalBorder,
-            LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
-            ResourceManager resourceManager);
+            int tabBackgroundColor, int backgroundColor, int backLogoColor, boolean incognito,
+            boolean isPortrait, float x, float y, float width, float height, float contentWidth,
+            float contentHeight, float visibleContentHeight, float viewportX, float viewportY,
+            float viewportWidth, float viewportHeight, float shadowX, float shadowY,
+            float shadowWidth, float shadowHeight, float pivotX, float pivotY, float rotationX,
+            float rotationY, float alpha, float borderAlpha, float contourAlpha, float shadowAlpha,
+            float closeAlpha, float closeBtnWidth, float staticToViewBlend, float borderScale,
+            float saturation, float brightness, boolean showToolbar, int toolbarBackgroundColor,
+            boolean anonymizeToolbar, int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
+            float toolbarTextBoxAlpha, float toolbarAlpha,
+            float toolbarYOffset, float sideBorderScale, boolean attachContent,
+            boolean insetVerticalBorder, LayerTitleCache layerTitleCache,
+            TabContentManager tabContentManager, ResourceManager resourceManager);
 }

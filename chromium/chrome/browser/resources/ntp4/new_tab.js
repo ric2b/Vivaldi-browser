@@ -332,33 +332,16 @@ cr.define('ntp', function() {
   }
 
   /**
-   * @param {boolean=} opt_hasAttribution
+   * Called when the theme has changed.
+   * @param {Object=} opt_themeData Not used; only exists to match equivalent
+   *     function in incognito NTP.
    */
-  function themeChanged(opt_hasAttribution) {
+  function themeChanged(opt_themeData) {
     $('themecss').href = 'chrome://theme/css/new_tab_theme.css?' + Date.now();
-
-    if (typeof opt_hasAttribution != 'undefined') {
-      document.documentElement.setAttribute('hasattribution',
-                                            opt_hasAttribution);
-    }
-
-    updateAttribution();
   }
 
   function setBookmarkBarAttached(attached) {
     document.documentElement.setAttribute('bookmarkbarattached', attached);
-  }
-
-  /**
-   * Attributes the attribution image at the bottom left.
-   */
-  function updateAttribution() {
-    var attribution = $('attribution');
-    if (document.documentElement.getAttribute('hasattribution') == 'true') {
-      attribution.hidden = false;
-    } else {
-      attribution.hidden = true;
-    }
   }
 
   /**

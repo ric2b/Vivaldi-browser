@@ -5,9 +5,12 @@
 #ifndef ASH_TEST_ASH_TEST_BASE_H_
 #define ASH_TEST_ASH_TEST_BASE_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -101,7 +104,7 @@ class AshTestBase : public testing::Test {
   };
 
   // Returns the rotation currentl active for the display |id|.
-  static gfx::Display::Rotation GetActiveDisplayRotation(int64 id);
+  static gfx::Display::Rotation GetActiveDisplayRotation(int64_t id);
 
   // Returns the rotation currently active for the internal display.
   static gfx::Display::Rotation GetCurrentInternalDisplayRotation();
@@ -149,10 +152,6 @@ class AshTestBase : public testing::Test {
   scoped_ptr<AshTestHelper> ash_test_helper_;
   scoped_ptr<ui::test::EventGenerator> event_generator_;
 #if defined(OS_WIN)
-  // Note that the order is important here as ipc_thread_ should be destroyed
-  // after metro_viewer_host_->channel_.
-  scoped_ptr<base::Thread> ipc_thread_;
-  scoped_ptr<TestMetroViewerProcessHost> metro_viewer_host_;
   ui::ScopedOleInitializer ole_initializer_;
 #endif
 

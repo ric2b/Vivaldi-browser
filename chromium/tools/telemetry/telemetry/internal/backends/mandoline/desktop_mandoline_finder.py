@@ -4,14 +4,15 @@
 """Finds desktop mandoline browsers that can be controlled by telemetry."""
 
 import os
+import logging
 import sys
 
 from telemetry.core import exceptions
 from telemetry.core import platform as platform_module
-from telemetry.core.platform import desktop_device
 from telemetry.internal.backends.mandoline import desktop_mandoline_backend
 from telemetry.internal.browser import browser
 from telemetry.internal.browser import possible_browser
+from telemetry.internal.platform import desktop_device
 from telemetry.internal.util import path
 
 
@@ -39,7 +40,7 @@ class PossibleDesktopMandolineBrowser(possible_browser.PossibleBrowser):
 
     self._platform = platform_module.GetHostPlatform()
 
-    # pylint: disable=W0212
+    # pylint: disable=protected-access
     self._platform_backend = self._platform._platform_backend
 
   def Create(self, finder_options):
@@ -83,8 +84,10 @@ def CanPossiblyHandlePath(target_path):
 
 def FindAllBrowserTypes(_):
   return [
+      'exact',
       'mandoline-debug',
       'mandoline-debug_x64',
+      'mandoline-default',
       'mandoline-release',
       'mandoline-release_x64',]
 
@@ -98,12 +101,6 @@ def FindAllAvailableBrowsers(finder_options, device):
   if not CanFindAvailableBrowsers():
     return []
 
-  # Look for a browser in the standard chrome build locations.
-  if finder_options.chrome_root:
-    chrome_root = finder_options.chrome_root
-  else:
-    chrome_root = path.GetChromiumSrcDir()
-
   if sys.platform.startswith('linux'):
     mandoline_app_name = 'mandoline'
   elif sys.platform.startswith('win'):
@@ -114,20 +111,32 @@ def FindAllAvailableBrowsers(finder_options, device):
   # Add the explicit browser executable if given and we can handle it.
   if (finder_options.browser_executable and
       CanPossiblyHandlePath(finder_options.browser_executable)):
-    normalized_executable = os.path.expanduser(
-        finder_options.browser_executable)
-    if path.IsExecutable(normalized_executable):
-      browser_directory = os.path.dirname(finder_options.browser_executable)
-      browsers.append(PossibleDesktopMandolineBrowser('exact', finder_options,
-                                                      normalized_executable,
-                                                      browser_directory))
-    else:
-      raise exceptions.PathMissingError(
-          '%s specified by --browser-executable does not exist',
-          normalized_executable)
+    app_name = os.path.basename(finder_options.browser_executable)
+
+    # It is okay if the executable name doesn't match any of known chrome
+    # browser executables, since it may be of a different browser (say,
+    # chrome).
+    if app_name == mandoline_app_name:
+      normalized_executable = os.path.expanduser(
+          finder_options.browser_executable)
+      if path.IsExecutable(normalized_executable):
+        browser_directory = os.path.dirname(finder_options.browser_executable)
+        browsers.append(PossibleDesktopMandolineBrowser('exact', finder_options,
+                                                        normalized_executable,
+                                                        browser_directory))
+      else:
+        raise exceptions.PathMissingError(
+            '%s specified by --browser-executable does not exist',
+            normalized_executable)
+
+  if not finder_options.chrome_root:
+    logging.warning('Chrome build directory is not specified. Skip looking for'
+                    'for madonline build in the chrome build directories.')
+    return browsers
 
   def AddIfFound(browser_type, build_dir, type_dir, app_name):
-    browser_directory = os.path.join(chrome_root, build_dir, type_dir)
+    browser_directory = os.path.join(
+        finder_options.chrome_root, build_dir, type_dir)
     app = os.path.join(browser_directory, app_name)
     if path.IsExecutable(app):
       browsers.append(PossibleDesktopMandolineBrowser(

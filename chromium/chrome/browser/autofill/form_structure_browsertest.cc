@@ -7,9 +7,11 @@
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -130,6 +132,8 @@ std::string FormStructureBrowserTest::FormStructuresToString(
 }
 
 IN_PROC_BROWSER_TEST_P(FormStructureBrowserTest, DataDrivenHeuristics) {
+  // Prints the path of the test to be executed.
+  LOG(INFO) << GetParam().MaybeAsASCII();
   RunOneDataDrivenTest(GetParam(), GetOutputDirectory(kTestName));
 }
 

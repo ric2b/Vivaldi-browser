@@ -8,12 +8,14 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
+#include "chromecast/base/pref_names.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/devtools/cast_dev_tools_delegate.h"
 #include "chromecast/common/cast_content_client.h"
-#include "chromecast/common/pref_names.h"
 #include "components/devtools_http_handler/devtools_http_handler.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -36,7 +38,7 @@ namespace {
 
 const char kFrontEndURL[] =
     "https://chrome-devtools-frontend.appspot.com/serve_rev/%s/inspector.html";
-const uint16 kDefaultRemoteDebuggingPort = 9222;
+const uint16_t kDefaultRemoteDebuggingPort = 9222;
 
 const int kBackLog = 10;
 
@@ -68,9 +70,8 @@ class UnixDomainServerSocketFactory
 class TCPServerSocketFactory
     : public DevToolsHttpHandler::ServerSocketFactory {
  public:
-  TCPServerSocketFactory(const std::string& address, uint16 port)
-      : address_(address), port_(port) {
-  }
+  TCPServerSocketFactory(const std::string& address, uint16_t port)
+      : address_(address), port_(port) {}
 
  private:
   // devtools_http_handler::DevToolsHttpHandler::ServerSocketFactory.
@@ -84,14 +85,14 @@ class TCPServerSocketFactory
   }
 
   std::string address_;
-  uint16 port_;
+  uint16_t port_;
 
   DISALLOW_COPY_AND_ASSIGN(TCPServerSocketFactory);
 };
 #endif
 
-scoped_ptr<DevToolsHttpHandler::ServerSocketFactory>
-CreateSocketFactory(uint16 port) {
+scoped_ptr<DevToolsHttpHandler::ServerSocketFactory> CreateSocketFactory(
+    uint16_t port) {
 #if defined(OS_ANDROID)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   std::string socket_name = "cast_shell_devtools_remote";
@@ -113,7 +114,7 @@ std::string GetFrontendUrl() {
 
 }  // namespace
 
-RemoteDebuggingServer::RemoteDebuggingServer()
+RemoteDebuggingServer::RemoteDebuggingServer(bool start_immediately)
     : port_(kDefaultRemoteDebuggingPort) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   pref_enabled_.Init(prefs::kEnableRemoteDebugging,
@@ -127,7 +128,7 @@ RemoteDebuggingServer::RemoteDebuggingServer()
   if (!port_str.empty()) {
     int port = kDefaultRemoteDebuggingPort;
     if (base::StringToInt(port_str, &port)) {
-      port_ = static_cast<uint16>(port);
+      port_ = static_cast<uint16_t>(port);
     } else {
       port_ = kDefaultRemoteDebuggingPort;
     }
@@ -135,7 +136,7 @@ RemoteDebuggingServer::RemoteDebuggingServer()
 
   // Starts new dev tools, clearing port number saved in config.
   // Remote debugging in production must be triggered only by config server.
-  pref_enabled_.SetValue(ShouldStartImmediately() && port_ != 0);
+  pref_enabled_.SetValue(start_immediately && port_ != 0);
   OnEnabledChanged();
 }
 

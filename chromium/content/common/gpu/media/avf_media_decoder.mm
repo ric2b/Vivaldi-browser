@@ -18,10 +18,10 @@
 #include "content/common/gpu/media/avf_audio_tap.h"
 #import "content/common/gpu/media/data_source_loader.h"
 #include "media/base/bind_to_current_loop.h"
-#include "media/base/buffers.h"
 #include "media/base/data_buffer.h"
 #include "media/base/mac/avfoundation_glue.h"
 #include "media/base/mac/framework_type_conversions.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/filters/platform_media_pipeline_types_mac.h"
 #include "net/base/mime_util.h"
@@ -178,7 +178,7 @@ scoped_refptr<media::DataBuffer> GetVideoFrame(
     DVLOG(7) << "strides[" << plane << "] = " << strides[plane];
 
     plane_sizes[plane] = strides[plane] * media::VideoFrame::PlaneSize(
-          media::VideoFrame::YV12,
+          media::PIXEL_FORMAT_YV12,
           video_frame_planes[plane],
           coded_size).height();
   }

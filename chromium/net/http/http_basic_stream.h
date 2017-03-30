@@ -9,9 +9,11 @@
 #ifndef NET_HTTP_HTTP_BASIC_STREAM_H_
 #define NET_HTTP_HTTP_BASIC_STREAM_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/http/http_basic_state.h"
 #include "net/http/http_stream.h"
 
@@ -56,15 +58,15 @@ class HttpBasicStream : public HttpStream {
 
   bool IsResponseBodyComplete() const override;
 
-  bool CanFindEndOfResponse() const override;
-
   bool IsConnectionReused() const override;
 
   void SetConnectionReused() override;
 
-  bool IsConnectionReusable() const override;
+  bool CanReuseConnection() const override;
 
-  int64 GetTotalReceivedBytes() const override;
+  int64_t GetTotalReceivedBytes() const override;
+
+  int64_t GetTotalSentBytes() const override;
 
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
 
@@ -72,9 +74,11 @@ class HttpBasicStream : public HttpStream {
 
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
 
-  bool IsSpdyHttpStream() const override;
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
 
   void Drain(HttpNetworkSession* session) override;
+
+  void PopulateNetErrorDetails(NetErrorDetails* details) override;
 
   void SetPriority(RequestPriority priority) override;
 

@@ -4,10 +4,13 @@
 
 #include "components/omnibox/browser/bookmark_provider.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
@@ -128,8 +131,8 @@ std::string TestBookmarkPositionsAsString(
        i != positions.end(); ++i) {
     if (i != positions.begin())
       position_string += ", ";
-    position_string += "{" + base::IntToString(i->begin) + ", " +
-        base::IntToString(i->end) + "}";
+    position_string += "{" + base::SizeTToString(i->begin) + ", " +
+        base::SizeTToString(i->end) + "}";
   }
   position_string += "}\n";
   return position_string;
@@ -262,8 +265,8 @@ TEST_F(BookmarkProviderTest, Positions) {
     {"frankly frankly",       1, {{{0, 7}, {8, 15}, {0, 0}}}},
     {"foobar foo",            1, {{{0, 6}, {7, 13}, {0, 0}}}},
     {"foo foobar",            1, {{{0, 6}, {7, 13}, {0, 0}}}},
-    // This ensures that leading whitespace in the title is removed.
-    {"hello",                 1, {{{0, 5}, {7, 12}, {0, 0}}}},
+    // This ensures that leading whitespace in the title is not removed.
+    {"hello",                 1, {{{1, 6}, {9, 14}, {0, 0}}}},
     // This ensures that empty titles yield empty classifications.
     {"emptytitle",            1, {}},
   };
@@ -372,7 +375,7 @@ TEST_F(BookmarkProviderTest, Rankings) {
         continue;
       EXPECT_EQ(query_data[i].matches[j],
                 base::UTF16ToUTF8(matches[j].description))
-          << "    Mismatch at [" << base::IntToString(j) << "] for query '"
+          << "    Mismatch at [" << base::SizeTToString(j) << "] for query '"
           << query_data[i].query << "'.";
     }
   }
@@ -461,14 +464,14 @@ TEST_F(BookmarkProviderTest, StripHttpAndAdjustOffsets) {
     const AutocompleteMatch& match = matches[0];
     EXPECT_EQ(base::ASCIIToUTF16(query_data[i].expected_contents),
               match.contents) << description;
-    std::vector<std::string> class_strings;
-    base::SplitString(
-        query_data[i].expected_contents_class, ',', &class_strings);
+    std::vector<std::string> class_strings = base::SplitString(
+        query_data[i].expected_contents_class, ",",
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     ASSERT_EQ(class_strings.size(), match.contents_class.size())
         << description;
     for (size_t i = 0; i < class_strings.size(); ++i) {
-      std::vector<std::string> chunks;
-      base::SplitString(class_strings[i], ':', &chunks);
+      std::vector<std::string> chunks = base::SplitString(
+          class_strings[i], ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       ASSERT_EQ(2U, chunks.size()) << description;
       size_t offset;
       EXPECT_TRUE(base::StringToSizeT(chunks[0], &offset)) << description;

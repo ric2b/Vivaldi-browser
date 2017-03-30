@@ -6,10 +6,6 @@
   background-color: lightgrey;
 }
 
-#detailsItem {
-  margin-bottom: 10px;
-}
-
 #buttons {
   align-items: center;
 }
@@ -18,11 +14,20 @@
   visibility: hidden;
 }
 
+paper-spinner {
+  margin-left: 20px;
+}
+
 #deviceEnabledButton {
-  margin: 0 10px;
+  margin-left: 10px;
+}
+
+#listDiv {
+  -webkit-margin-end: 10px;
+  -webkit-margin-start: 40px;
 }
 
 #networkList {
-  margin: 0 70px 10px 40px;
+  margin: 5px 0 10px 0;
   max-height: 400px;
 }

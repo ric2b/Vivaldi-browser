@@ -5,7 +5,9 @@
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/focus_client.h"
@@ -211,7 +213,8 @@ class DesktopNativeWidgetAuraWindowTreeClient :
 
 class FocusManagerEventHandler : public ui::EventHandler {
  public:
-  FocusManagerEventHandler(DesktopNativeWidgetAura* desktop_native_widget_aura)
+  explicit FocusManagerEventHandler(
+      DesktopNativeWidgetAura* desktop_native_widget_aura)
       : desktop_native_widget_aura_(desktop_native_widget_aura) {}
 
   // Implementation of ui::EventHandler:
@@ -219,7 +222,7 @@ class FocusManagerEventHandler : public ui::EventHandler {
     Widget* widget = desktop_native_widget_aura_->GetWidget();
     if (widget && widget->GetFocusManager()->GetFocusedView() &&
         !widget->GetFocusManager()->OnKeyEvent(*event)) {
-      event->SetHandled();
+      event->StopPropagation();
     }
   }
 
@@ -542,6 +545,8 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   window_reorderer_.reset(new WindowReorderer(content_window_,
       GetWidget()->GetRootView()));
 }
+
+void DesktopNativeWidgetAura::OnWidgetInitDone() {}
 
 NonClientFrameView* DesktopNativeWidgetAura::CreateNonClientFrameView() {
   return ShouldUseNativeFrame() ? new NativeFrameView(GetWidget()) : NULL;
@@ -1046,12 +1051,6 @@ void DesktopNativeWidgetAura::OnKeyEvent(ui::KeyEvent* event) {
     return;
 
   native_widget_delegate_->OnKeyEvent(event);
-  if (event->handled())
-    return;
-
-  if (GetWidget()->HasFocusManager() &&
-      !GetWidget()->GetFocusManager()->OnKeyEvent(*event))
-    event->SetHandled();
 }
 
 void DesktopNativeWidgetAura::OnMouseEvent(ui::MouseEvent* event) {

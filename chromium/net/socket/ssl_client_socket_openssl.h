@@ -7,13 +7,16 @@
 
 #include <openssl/base.h>
 #include <openssl/ssl.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 #include <vector>
 
-#include "base/compiler_specific.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/cert/cert_verifier.h"
@@ -27,13 +30,17 @@
 #include "net/ssl/ssl_config_service.h"
 #include "net/ssl/ssl_failure_state.h"
 
+namespace base {
+class FilePath;
+class SequencedTaskRunner;
+}
+
 namespace net {
 
 class CertVerifier;
 class CTVerifier;
 class SSLCertRequestInfo;
 class SSLInfo;
-class SSLPrivateKey;
 
 // An SSL client socket implemented with OpenSSL.
 class SSLClientSocketOpenSSL : public SSLClientSocket {
@@ -52,6 +59,14 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   const std::string& ssl_session_cache_shard() const {
     return ssl_session_cache_shard_;
   }
+
+#if !defined(OS_NACL)
+  // Log SSL key material to |path| on |task_runner|. Must be called before any
+  // SSLClientSockets are created.
+  static void SetSSLKeyLogFile(
+      const base::FilePath& path,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+#endif
 
   // SSLClientSocket implementation.
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
@@ -83,6 +98,7 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
+  int64_t GetTotalReceivedBytes() const override;
 
   // Socket implementation.
   int Read(IOBuffer* buf,
@@ -91,8 +107,8 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   int Write(IOBuffer* buf,
             int buf_len,
             const CompletionCallback& callback) override;
-  int SetReceiveBufferSize(int32 size) override;
-  int SetSendBufferSize(int32 size) override;
+  int SetReceiveBufferSize(int32_t size) override;
+  int SetSendBufferSize(int32_t size) override;
 
  private:
   class PeerCertificateChain;
@@ -191,7 +207,6 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
 
   // Callbacks for operations with the private key.
   int PrivateKeyTypeCallback();
-  int PrivateKeySupportsDigestCallback(const EVP_MD* md);
   size_t PrivateKeyMaxSignatureLenCallback();
   ssl_private_key_result_t PrivateKeySignCallback(uint8_t* out,
                                                   size_t* out_len,
@@ -205,6 +220,13 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
 
   void OnPrivateKeySignComplete(Error error,
                                 const std::vector<uint8_t>& signature);
+
+  int TokenBindingAdd(const uint8_t** out,
+                      size_t* out_len,
+                      int* out_alert_value);
+  int TokenBindingParse(const uint8_t* contents,
+                        size_t contents_len,
+                        int* out_alert_value);
 
   bool transport_send_busy_;
   bool transport_recv_busy_;
@@ -277,6 +299,8 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
 
   // The service for retrieving Channel ID keys.  May be NULL.
   ChannelIDService* channel_id_service_;
+  bool tb_was_negotiated_;
+  TokenBindingParam tb_negotiated_param_;
 
   // OpenSSL stuff
   SSL* ssl_;
@@ -300,6 +324,10 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
     STATE_VERIFY_CERT_COMPLETE,
   };
   State next_handshake_state_;
+
+  // True if the socket has been disconnected.
+  bool disconnected_;
+
   NextProtoStatus npn_status_;
   std::string npn_proto_;
   // Written by the |channel_id_service_|.
@@ -316,13 +344,12 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   ChannelIDService::Request channel_id_request_;
   SSLFailureState ssl_failure_state_;
 
-  scoped_ptr<SSLPrivateKey> private_key_;
   int signature_result_;
   std::vector<uint8_t> signature_;
 
   TransportSecurityState* transport_security_state_;
 
-  CertPolicyEnforcer* const policy_enforcer_;
+  CTPolicyEnforcer* const policy_enforcer_;
 
   // pinning_failure_log contains a message produced by
   // TransportSecurityState::CheckPublicKeyPins in the event of a

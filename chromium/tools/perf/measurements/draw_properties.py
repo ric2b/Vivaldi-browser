@@ -4,8 +4,7 @@
 
 from telemetry.page import page_test
 from telemetry.timeline import model
-from telemetry.timeline import tracing_category_filter
-from telemetry.timeline import tracing_options
+from telemetry.timeline import tracing_config
 from telemetry.value import scalar
 
 
@@ -19,11 +18,11 @@ class DrawProperties(page_test.PageTest):
     ])
 
   def WillNavigateToPage(self, page, tab):
-    options = tracing_options.TracingOptions()
-    options.enable_chrome_trace = True
-    category_filter = tracing_category_filter.TracingCategoryFilter(
+    config = tracing_config.TracingConfig()
+    config.tracing_category_filter.AddDisabledByDefault(
         'disabled-by-default-cc.debug.cdp-perf')
-    tab.browser.platform.tracing_controller.Start(options, category_filter)
+    config.enable_chrome_trace = True
+    tab.browser.platform.tracing_controller.StartTracing(config)
 
   def ComputeAverageOfDurations(self, timeline_model, name):
     events = timeline_model.GetAllEventsOfName(name)
@@ -36,7 +35,7 @@ class DrawProperties(page_test.PageTest):
     return duration_avg
 
   def ValidateAndMeasurePage(self, page, tab, results):
-    timeline_data = tab.browser.platform.tracing_controller.Stop()
+    timeline_data = tab.browser.platform.tracing_controller.StopTracing()
     timeline_model = model.TimelineModel(timeline_data)
 
     pt_avg = self.ComputeAverageOfDurations(
@@ -47,7 +46,7 @@ class DrawProperties(page_test.PageTest):
         results.current_page, 'PT_avg_cost', 'ms', pt_avg,
         description='Average time spent processing property trees'))
 
-  def CleanUpAfterPage(self, page, tab):
-    tracing_controller = tab.browser.platform.tracing_controller
+  def DidRunPage(self, platform):
+    tracing_controller = platform.tracing_controller
     if tracing_controller.is_tracing_running:
-      tracing_controller.Stop()
+      tracing_controller.StopTracing()

@@ -17,6 +17,7 @@
     "input",
     "inputMethodPrivate",
     "metricsPrivate",
+    "system.display",
     "tabs",
     "tts",
     "unlimitedStorage",
@@ -208,6 +209,38 @@
       "options_page": "hmm_options.html?code=xkb:us:colemak:eng"
     },
     {
+      "name": "__MSG_keyboard_us_workman__",
+      "type": "ime",
+      "id": "xkb:us:workman:eng",
+      "indicator": "WM",
+      "description": "",
+      "language": [
+        "en",
+        "en-US"
+      ],
+      "layouts": [
+        "us(workman)"
+      ],
+      "input_view": "inputview.html#id=us-workman&language=en-US&passwordLayout=us-workman&name=keyboard_us_workman",
+      "options_page": "hmm_options.html?code=xkb:us:workman:eng"
+    },
+    {
+      "name": "__MSG_keyboard_us_workman_international__",
+      "type": "ime",
+      "id": "xkb:us:workman-intl:eng",
+      "indicator": "WMI",
+      "description": "",
+      "language": [
+        "en",
+        "en-US"
+      ],
+      "layouts": [
+        "us(workman-intl)"
+      ],
+      "input_view": "inputview.html#id=us-workman-intl&language=en-US&passwordLayout=us-workman-intl&name=keyboard_us_workman_international",
+      "options_page": "hmm_options.html?code=xkb:us:workman-intl:eng"
+    },
+    {
       "name": "__MSG_keyboard_belgian__",
       "type": "ime",
       "id": "xkb:be::nld",
@@ -231,10 +264,25 @@
         "fr-FR"
       ],
       "layouts": [
-        "fr"
+        "fr(oss)"
       ],
       "input_view": "inputview.html#id=fr.compact.qwerty&language=fr&passwordLayout=fr.compact.qwerty&name=keyboard_french",
       "options_page": "hmm_options.html?code=xkb:fr::fra"
+    },
+    {
+      "name": "__MSG_keyboard_french_bepo__",
+      "type": "ime",
+      "id": "xkb:fr:bepo:fra",
+      "description": "",
+      "language": [
+        "fr",
+        "fr-FR"
+      ],
+      "layouts": [
+        "fr(bepo)"
+      ],
+      "input_view": "inputview.html#id=fr-bepo&language=fr&passwordLayout=fr-bepo&name=keyboard_french_bepo",
+      "options_page": "hmm_options.html?code=xkb:fr:bepo:fra"
     },
     {
       "name": "__MSG_keyboard_belgian__",
@@ -249,6 +297,20 @@
       ],
       "input_view": "inputview.html#id=be&language=fr&passwordLayout=be&name=keyboard_belgian",
       "options_page": "hmm_options.html?code=xkb:be::fra"
+    },
+    {
+      "name": "__MSG_keyboard_faroese__",
+      "type": "ime",
+      "id": "xkb:fo::fao",
+      "description": "",
+      "language": [
+        "fo"
+      ],
+      "layouts": [
+        "fo"
+      ],
+      "input_view": "inputview.html#id=fo&language=fo&passwordLayout=fo&name=keyboard_faroese",
+      "options_page": "hmm_options.html?code=xkb:fo::fao"
     },
     {
       "name": "__MSG_keyboard_canadian_french__",
@@ -688,6 +750,20 @@
       "options_page": "hmm_options.html?code=xkb:hu::hun"
     },
     {
+      "name": "__MSG_keyboard_hungarian_qwerty__",
+      "type": "ime",
+      "id": "xkb:hu:qwerty:hun",
+      "description": "",
+      "language": [
+        "hu"
+      ],
+      "layouts": [
+        "hu(qwerty)"
+      ],
+      "input_view": "inputview.html#id=hu-qwerty&language=hu&passwordLayout=hu-qwerty&name=keyboard_hungarian_qwerty",
+      "options_page": "hmm_options.html?code=xkb:hu:qwerty:hun"
+    },
+    {
       "name": "__MSG_keyboard_italian__",
       "type": "ime",
       "id": "xkb:it::ita",
@@ -804,7 +880,7 @@
       "options_page": "hmm_options.html?code=xkb:se::swe"
     },
     {
-      "name": "__MSG_keyboard_slovakian__",
+      "name": "__MSG_keyboard_slovak__",
       "type": "ime",
       "id": "xkb:sk::slo",
       "description": "",
@@ -858,6 +934,20 @@
       ],
       "input_view": "inputview.html#id=tr&language=tr&passwordLayout=tr&name=keyboard_turkish",
       "options_page": "hmm_options.html?code=xkb:tr::tur"
+    },
+    {
+      "name": "__MSG_keyboard_turkish_f__",
+      "type": "ime",
+      "id": "xkb:tr:f:tur",
+      "description": "",
+      "language": [
+        "tr"
+      ],
+      "layouts": [
+        "tr(f)"
+      ],
+      "input_view": "inputview.html#id=tr-f&language=tr&passwordLayout=tr-f&name=keyboard_turkish_f",
+      "options_page": "hmm_options.html?code=xkb:tr:f:tur"
     },
     {
       "name": "__MSG_keyboard_ukrainian__",
@@ -956,6 +1046,34 @@
       ],
       "input_view": "inputview.html#id=mt&language=mt&passwordLayout=mt&name=keyboard_maltese",
       "options_page": "hmm_options.html?code=xkb:mt::mlt"
+    },
+    {
+      "name": "__MSG_keyboard_macedonian__",
+      "type": "ime",
+      "id": "xkb:mk::mkd",
+      "description": "",
+      "language": [
+        "mk"
+      ],
+      "layouts": [
+        "mk"
+      ],
+      "input_view": "inputview.html#id=mk&language=mk&passwordLayout=us-ltr&name=keyboard_macedonian",
+      "options_page": "hmm_options.html?code=xkb:mk::mkd"
+    },
+    {
+      "name": "__MSG_keyboard_kazakh__",
+      "type": "ime",
+      "id": "xkb:kz::kaz",
+      "description": "",
+      "language": [
+        "kk"
+      ],
+      "layouts": [
+        "kz"
+      ],
+      "input_view": "inputview.html#id=kz&language=kk&passwordLayout=us-ltr&name=keyboard_kazakh",
+      "options_page": "hmm_options.html?code=xkb:kz::kaz"
     }
   ],
   "manifest_version": 2

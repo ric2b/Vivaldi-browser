@@ -9,7 +9,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/quic/quic_client_session_base.h"
 #include "net/quic/quic_crypto_client_stream.h"
 #include "net/quic/quic_protocol.h"
@@ -23,6 +23,10 @@ class ReliableQuicStream;
 
 namespace tools {
 
+// The maximum time a promises stream can be reserved without being
+// claimed by a client request.
+const int64_t kPushPromiseTimeoutSecs = 60;
+
 class QuicClientSession : public QuicClientSessionBase {
  public:
   QuicClientSession(const QuicConfig& config,
@@ -30,10 +34,13 @@ class QuicClientSession : public QuicClientSessionBase {
                     const QuicServerId& server_id,
                     QuicCryptoClientConfig* crypto_config);
   ~QuicClientSession() override;
+  // Set up the QuicClientSession. Must be called prior to use.
+  void Initialize() override;
 
   // QuicSession methods:
-  QuicSpdyClientStream* CreateOutgoingDynamicStream() override;
-  QuicCryptoClientStream* GetCryptoStream() override;
+  QuicSpdyClientStream* CreateOutgoingDynamicStream(
+      SpdyPriority priority) override;
+  QuicCryptoClientStreamBase* GetCryptoStream() override;
 
   // QuicClientSessionBase methods:
   void OnProofValid(const QuicCryptoClientConfig::CachedState& cached) override;
@@ -54,7 +61,10 @@ class QuicClientSession : public QuicClientSessionBase {
 
  protected:
   // QuicSession methods:
-  QuicDataStream* CreateIncomingDynamicStream(QuicStreamId id) override;
+  QuicSpdyStream* CreateIncomingDynamicStream(QuicStreamId id) override;
+
+  // Create the crypto stream. Called by Initialize()
+  virtual QuicCryptoClientStreamBase* CreateQuicCryptoStream();
 
   // Unlike CreateOutgoingDynamicStream, which applies a bunch of sanity checks,
   // this simply returns a new QuicSpdyClientStream. This may be used by
@@ -62,8 +72,14 @@ class QuicClientSession : public QuicClientSessionBase {
   // but wish to use the sanity checks in CreateOutgoingDynamicStream.
   virtual QuicSpdyClientStream* CreateClientStream();
 
+  const QuicServerId& server_id() { return server_id_; }
+  QuicCryptoClientConfig* crypto_config() { return crypto_config_; }
+
  private:
-  scoped_ptr<QuicCryptoClientStream> crypto_stream_;
+  bool ShouldCreateIncomingDynamicStream(QuicStreamId id);
+  scoped_ptr<QuicCryptoClientStreamBase> crypto_stream_;
+  QuicServerId server_id_;
+  QuicCryptoClientConfig* crypto_config_;
 
   // If this is set to false, the client will ignore server GOAWAYs and allow
   // the creation of streams regardless of the high chance they will fail.

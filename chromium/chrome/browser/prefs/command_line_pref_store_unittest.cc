@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 #include <gtest/gtest.h>
+#include <stddef.h>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -12,6 +14,8 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/ssl_config/ssl_config_prefs.h"
 #include "ui/base/ui_base_switches.h"
 
 namespace {
@@ -32,7 +36,7 @@ class TestCommandLinePrefStore : public CommandLinePrefStore {
 
   void VerifyProxyMode(ProxyPrefs::ProxyMode expected_mode) {
     const base::Value* value = NULL;
-    ASSERT_TRUE(GetValue(prefs::kProxy, &value));
+    ASSERT_TRUE(GetValue(proxy_config::prefs::kProxy, &value));
     ASSERT_EQ(base::Value::TYPE_DICTIONARY, value->GetType());
     ProxyConfigDictionary dict(
         static_cast<const base::DictionaryValue*>(value));
@@ -44,7 +48,7 @@ class TestCommandLinePrefStore : public CommandLinePrefStore {
   void VerifySSLCipherSuites(const char* const* ciphers,
                              size_t cipher_count) {
     const base::Value* value = NULL;
-    ASSERT_TRUE(GetValue(prefs::kCipherSuiteBlacklist, &value));
+    ASSERT_TRUE(GetValue(ssl_config::prefs::kCipherSuiteBlacklist, &value));
     ASSERT_EQ(base::Value::TYPE_LIST, value->GetType());
     const base::ListValue* list_value =
         static_cast<const base::ListValue*>(value);
@@ -114,7 +118,7 @@ TEST(CommandLinePrefStoreTest, MultipleSwitches) {
   store->VerifyProxyMode(ProxyPrefs::MODE_FIXED_SERVERS);
 
   const base::Value* value = NULL;
-  ASSERT_TRUE(store->GetValue(prefs::kProxy, &value));
+  ASSERT_TRUE(store->GetValue(proxy_config::prefs::kProxy, &value));
   ASSERT_EQ(base::Value::TYPE_DICTIONARY, value->GetType());
   ProxyConfigDictionary dict(static_cast<const base::DictionaryValue*>(value));
 

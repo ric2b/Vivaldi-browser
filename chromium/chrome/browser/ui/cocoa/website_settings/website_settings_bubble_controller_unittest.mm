@@ -4,6 +4,10 @@
 
 #import "chrome/browser/ui/cocoa/website_settings/website_settings_bubble_controller.h"
 
+#include <stddef.h>
+
+#include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/cocoa/cocoa_test_helper.h"
 #include "testing/gtest_mac.h"
@@ -149,7 +153,7 @@ class WebsiteSettingsBubbleControllerTest : public CocoaTest {
   // Creates a new website settings bubble, with the given default width.
   // If |default_width| is 0, the *default* default width will be used.
   void CreateBubbleWithWidth(CGFloat default_width) {
-    bridge_ = new WebsiteSettingsUIBridge();
+    bridge_ = new WebsiteSettingsUIBridge(nullptr);
 
     // The controller cleans up after itself when the window closes.
     controller_ = [WebsiteSettingsBubbleControllerForTesting alloc];
@@ -175,9 +179,15 @@ class WebsiteSettingsBubbleControllerTest : public CocoaTest {
     EXPECT_EQ(1U, [window_subviews count]);
     NSArray* subviews = [[window_subviews lastObject] subviews];
 
-    // Expect 4 views: the identity, identity status, the segmented control
-    // (which implements the tab strip), and the tab view.
-    EXPECT_EQ(4U, [subviews count]);
+    /**
+     *Expect 4 views:
+     * - the identity
+     * - identity status
+     * - security details link
+     * -  segmented control (which implements the tab strip),
+     * - and the tab view.
+     */
+    EXPECT_EQ(5U, [subviews count]);
 
     bool desired_result = match_type == TEXT_EQUAL;
 
@@ -206,7 +216,7 @@ class WebsiteSettingsBubbleControllerTest : public CocoaTest {
     // possible settings:
     // - [allow, block, ask] by default
     // - [block, allow] * [by user, by policy, by extension]
-    PermissionInfoList list;
+    PermissionInfoList permission_info_list;
     WebsiteSettingsUI::PermissionInfo info;
     for (size_t i = 0; i < arraysize(kTestPermissionTypes); ++i) {
       info.type = kTestPermissionTypes[i];
@@ -214,9 +224,11 @@ class WebsiteSettingsBubbleControllerTest : public CocoaTest {
       if (info.setting == CONTENT_SETTING_DEFAULT)
         info.default_setting = kTestDefaultSettings[i];
       info.source = kTestSettingSources[i];
-      list.push_back(info);
+      info.is_incognito = false;
+      permission_info_list.push_back(info);
     }
-    bridge_->SetPermissionInfo(list);
+    ChosenObjectInfoList chosen_object_info_list;
+    bridge_->SetPermissionInfo(permission_info_list, chosen_object_info_list);
   }
 
   WebsiteSettingsBubbleControllerForTesting* controller_;  // Weak, owns self.
@@ -366,21 +378,38 @@ TEST_F(WebsiteSettingsBubbleControllerTest, SetSelectedTab) {
 }
 
 TEST_F(WebsiteSettingsBubbleControllerTest, WindowWidth) {
-  // Try creating a window that is obviously too small.
-  CreateBubbleWithWidth(30.0);
+  const CGFloat kBigEnoughBubbleWidth = 310;
+  // Creating a window that should fit everything.
+  CreateBubbleWithWidth(kBigEnoughBubbleWidth);
   SetTestPermissions();
 
   CGFloat window_width = NSWidth([[controller_ window] frame]);
 
   // Check the window was made bigger to fit the content.
-  EXPECT_LT(30.0, window_width);
+  EXPECT_EQ(kBigEnoughBubbleWidth, window_width);
 
   // Check that the window is wider than the right edge of all the permission
-  // popup buttons.
+  // popup buttons (LTR locales) or wider than the left edge (RTL locales).
+  bool is_rtl = base::i18n::IsRTL();
   for (NSView* view in [[controller_ permissionsView] subviews]) {
-    if ([view isKindOfClass:[NSPopUpButton class]]) {
-      NSPopUpButton* button = static_cast<NSPopUpButton*>(view);
-      EXPECT_LT(NSMaxX([button frame]), window_width);
+    if (is_rtl) {
+      if ([view isKindOfClass:[NSPopUpButton class]]) {
+        NSPopUpButton* button = static_cast<NSPopUpButton*>(view);
+        EXPECT_GT(NSMinX([button frame]), 0);
+      }
+      if ([view isKindOfClass:[NSImageView class]]) {
+        NSImageView* icon = static_cast<NSImageView*>(view);
+        EXPECT_LT(NSMaxX([icon frame]), window_width);
+      }
+    } else {
+      if ([view isKindOfClass:[NSImageView class]]) {
+        NSImageView* icon = static_cast<NSImageView*>(view);
+        EXPECT_GT(NSMinX([icon frame]), 0);
+      }
+      if ([view isKindOfClass:[NSPopUpButton class]]) {
+        NSPopUpButton* button = static_cast<NSPopUpButton*>(view);
+        EXPECT_LT(NSMaxX([button frame]), window_width);
+      }
     }
   }
 }

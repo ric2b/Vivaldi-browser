@@ -11,6 +11,7 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
@@ -269,6 +270,28 @@ TEST_F(ImmersiveModeControllerAshTest, TabAndBrowserFullscreen) {
   ASSERT_FALSE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_VISIBLE, shelf->visibility_state());
   EXPECT_TRUE(controller()->ShouldHideTabIndicators());
+}
+
+// Ensure the circular tab-loading throbbers are not painted as layers in
+// immersive fullscreen, since the tab strip may animate in or out without
+// moving the layers.
+TEST_F(ImmersiveModeControllerAshTest, LayeredSpinners) {
+  AddTab(browser(), GURL("about:blank"));
+
+  TabStrip* tabstrip = browser_view()->tabstrip();
+
+  // Immersive fullscreen starts out disabled; layers are OK.
+  EXPECT_FALSE(browser_view()->GetWidget()->IsFullscreen());
+  EXPECT_FALSE(controller()->IsEnabled());
+  EXPECT_TRUE(tabstrip->CanPaintThrobberToLayer());
+
+  ToggleFullscreen();
+  EXPECT_TRUE(browser_view()->GetWidget()->IsFullscreen());
+  EXPECT_TRUE(controller()->IsEnabled());
+  EXPECT_FALSE(tabstrip->CanPaintThrobberToLayer());
+
+  ToggleFullscreen();
+  EXPECT_TRUE(tabstrip->CanPaintThrobberToLayer());
 }
 
 class ImmersiveModeControllerAshTestHostedApp

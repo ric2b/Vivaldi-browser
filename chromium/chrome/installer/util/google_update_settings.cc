@@ -4,6 +4,8 @@
 
 #include "chrome/installer/util/google_update_settings.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 
@@ -24,7 +26,6 @@
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/channel_info.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/google_update_experiment_util.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/product.h"
@@ -187,6 +188,7 @@ bool GetChromeChannelInternal(bool system_install,
   return true;
 }
 
+#if defined(GOOGLE_CHROME_BUILD)
 // Populates |update_policy| with the UpdatePolicy enum value corresponding to a
 // DWORD read from the registry and returns true if |value| is within range.
 // If |value| is out of range, returns false without modifying |update_policy|.
@@ -205,6 +207,7 @@ bool GetUpdatePolicyFromDword(
   }
   return false;
 }
+#endif  // defined(GOOGLE_CHROME_BUILD)
 
 // Convenience routine: GoogleUpdateSettings::UpdateDidRunStateForApp()
 // specialized for Chrome Binaries.
@@ -393,7 +396,7 @@ int GoogleUpdateSettings::GetLastRunTime() {
   base::string16 time_s;
   if (!ReadGoogleUpdateStrKey(google_update::kRegLastRunTimeField, &time_s))
     return -1;
-  int64 time_i;
+  int64_t time_i;
   if (!base::StringToInt64(time_s, &time_i))
     return -1;
   base::TimeDelta td =
@@ -402,7 +405,7 @@ int GoogleUpdateSettings::GetLastRunTime() {
 }
 
 bool GoogleUpdateSettings::SetLastRunTime() {
-  int64 time = base::Time::NowFromSystemTime().ToInternalValue();
+  int64_t time = base::Time::NowFromSystemTime().ToInternalValue();
   return WriteGoogleUpdateStrKey(google_update::kRegLastRunTimeField,
                                  base::Int64ToString16(time));
 }

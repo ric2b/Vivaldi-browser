@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/views/view.h"
@@ -64,8 +65,17 @@ class NetworkStateHelper {
   // Ethernet > WiFi > Cellular. Same for connecting network.
   virtual base::string16 GetCurrentNetworkName() const;
 
-  // Add a network configuration.
-  virtual void CreateNetworkFromOnc(const std::string& onc_spec) const;
+  // Get current connected Wifi network configuration. Used in shark/remora
+  // mode. Note currently only unsecured Wifi network configuration can be
+  // gotten since there is no way to get password for a secured Wifi newwork
+  // in Cros for security reasons.
+  virtual void GetConnectedWifiNetwork(std::string* out_onc_spec);
+
+  // Add and apply a network configuration. Used in shark/remora mode.
+  virtual void CreateAndConnectNetworkFromOnc(
+      const std::string& onc_spec,
+      const base::Closure& success_callback,
+      const base::Closure& error_callback) const;
 
   // Returns true if the default network is in connected state.
   virtual bool IsConnected() const;
@@ -74,8 +84,11 @@ class NetworkStateHelper {
   virtual bool IsConnecting() const;
 
  private:
-  void OnCreateConfiguration(const std::string& service_path) const;
-  void OnCreateConfigurationFailed(
+  void OnCreateConfiguration(const base::Closure& success_callback,
+                             const base::Closure& error_callback,
+                             const std::string& service_path) const;
+  void OnCreateOrConnectNetworkFailed(
+      const base::Closure& error_callback,
       const std::string& error_name,
       scoped_ptr<base::DictionaryValue> error_data) const;
 

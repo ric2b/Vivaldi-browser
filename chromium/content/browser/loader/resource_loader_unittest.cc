@@ -4,16 +4,24 @@
 
 #include "content/browser/loader/resource_loader.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/loader/redirect_to_file_resource_handler.h"
 #include "content/browser/loader/resource_loader_delegate.h"
+#include "content/common/ssl_status_serialization.h"
+#include "content/public/browser/cert_store.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_paths.h"
@@ -30,12 +38,17 @@
 #include "net/base/mock_file_stream.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
+#include "net/base/test_data_directory.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
+#include "net/ssl/ssl_private_key.h"
+#include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/url_request.h"
+#include "net/url_request/url_request_filter.h"
+#include "net/url_request/url_request_interceptor.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_job.h"
@@ -98,27 +111,40 @@ class LoaderDestroyingCertStore : public net::ClientCertStore {
   // Creates a client certificate store which, when looked up, posts a task to
   // reset |loader| and then call the callback. The caller is responsible for
   // ensuring the pointers remain valid until the process is complete.
-  explicit LoaderDestroyingCertStore(scoped_ptr<ResourceLoader>* loader)
-      : loader_(loader) {}
+  LoaderDestroyingCertStore(scoped_ptr<ResourceLoader>* loader,
+                            const base::Closure& on_loader_deleted_callback)
+      : loader_(loader),
+        on_loader_deleted_callback_(on_loader_deleted_callback) {
+  }
 
   // net::ClientCertStore:
   void GetClientCerts(const net::SSLCertRequestInfo& cert_request_info,
                       net::CertificateList* selected_certs,
-                      const base::Closure& callback) override {
+                      const base::Closure& cert_selected_callback) override {
     // Don't destroy |loader_| while it's on the stack.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&LoaderDestroyingCertStore::DoCallback,
-                              base::Unretained(loader_), callback));
+                              base::Unretained(loader_),
+                              cert_selected_callback,
+                              on_loader_deleted_callback_));
   }
 
  private:
+  // This needs to be static because |loader| owns the
+  // LoaderDestroyingCertStore (ClientCertStores are actually handles, and not
+  // global cert stores).
   static void DoCallback(scoped_ptr<ResourceLoader>* loader,
-                         const base::Closure& callback) {
+                         const base::Closure& cert_selected_callback,
+                         const base::Closure& on_loader_deleted_callback) {
     loader->reset();
-    callback.Run();
+    cert_selected_callback.Run();
+    on_loader_deleted_callback.Run();
   }
 
   scoped_ptr<ResourceLoader>* loader_;
+  base::Closure on_loader_deleted_callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(LoaderDestroyingCertStore);
 };
 
 // A mock URLRequestJob which simulates an SSL client auth request.
@@ -126,7 +152,8 @@ class MockClientCertURLRequestJob : public net::URLRequestTestJob {
  public:
   MockClientCertURLRequestJob(net::URLRequest* request,
                               net::NetworkDelegate* network_delegate)
-      : net::URLRequestTestJob(request, network_delegate) {}
+      : net::URLRequestTestJob(request, network_delegate),
+        weak_factory_(this) {}
 
   static std::vector<std::string> test_authorities() {
     return std::vector<std::string>(1, "dummy");
@@ -140,15 +167,18 @@ class MockClientCertURLRequestJob : public net::URLRequestTestJob {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&MockClientCertURLRequestJob::NotifyCertificateRequested,
-                   this, cert_request_info));
+                   weak_factory_.GetWeakPtr(), cert_request_info));
   }
 
-  void ContinueWithCertificate(net::X509Certificate* cert) override {
+  void ContinueWithCertificate(net::X509Certificate* cert,
+                               net::SSLPrivateKey* private_key) override {
     net::URLRequestTestJob::Start();
   }
 
  private:
   ~MockClientCertURLRequestJob() override {}
+
+  base::WeakPtrFactory<MockClientCertURLRequestJob> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MockClientCertURLRequestJob);
 };
@@ -162,6 +192,73 @@ class MockClientCertJobProtocolHandler
       net::NetworkDelegate* network_delegate) const override {
     return new MockClientCertURLRequestJob(request, network_delegate);
   }
+};
+
+// Set up dummy values to use in test HTTPS requests.
+
+scoped_refptr<net::X509Certificate> GetTestCert() {
+  return net::ImportCertFromFile(net::GetTestCertsDirectory(),
+                                 "test_mail_google_com.pem");
+}
+
+const net::CertStatus kTestCertError = net::CERT_STATUS_DATE_INVALID;
+const int kTestSecurityBits = 256;
+// SSL3 TLS_DHE_RSA_WITH_AES_256_CBC_SHA
+const int kTestConnectionStatus = 0x300039;
+
+// A mock URLRequestJob which simulates an HTTPS request.
+class MockHTTPSURLRequestJob : public net::URLRequestTestJob {
+ public:
+  MockHTTPSURLRequestJob(net::URLRequest* request,
+                         net::NetworkDelegate* network_delegate,
+                         const std::string& response_headers,
+                         const std::string& response_data,
+                         bool auto_advance)
+      : net::URLRequestTestJob(request,
+                               network_delegate,
+                               response_headers,
+                               response_data,
+                               auto_advance) {}
+
+  // net::URLRequestTestJob:
+  void GetResponseInfo(net::HttpResponseInfo* info) override {
+    // Get the original response info, but override the SSL info.
+    net::URLRequestJob::GetResponseInfo(info);
+    info->ssl_info.cert = GetTestCert();
+    info->ssl_info.cert_status = kTestCertError;
+    info->ssl_info.security_bits = kTestSecurityBits;
+    info->ssl_info.connection_status = kTestConnectionStatus;
+  }
+
+ private:
+  ~MockHTTPSURLRequestJob() override {}
+
+  DISALLOW_COPY_AND_ASSIGN(MockHTTPSURLRequestJob);
+};
+
+const char kRedirectHeaders[] =
+    "HTTP/1.1 302 Found\n"
+    "Location: https://example.test\n"
+    "\n";
+
+class MockHTTPSJobURLRequestInterceptor : public net::URLRequestInterceptor {
+ public:
+  MockHTTPSJobURLRequestInterceptor(bool redirect) : redirect_(redirect) {}
+  ~MockHTTPSJobURLRequestInterceptor() override {}
+
+  // net::URLRequestInterceptor:
+  net::URLRequestJob* MaybeInterceptRequest(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate) const override {
+    std::string headers =
+        redirect_ ? std::string(kRedirectHeaders, arraysize(kRedirectHeaders))
+                  : net::URLRequestTestJob::test_headers();
+    return new MockHTTPSURLRequestJob(request, network_delegate, headers,
+                                      "dummy response", true);
+  }
+
+ private:
+  bool redirect_;
 };
 
 // Arbitrary read buffer size.
@@ -181,9 +278,8 @@ class ResourceHandlerStub : public ResourceHandler {
         received_on_will_read_(false),
         received_eof_(false),
         received_response_completed_(false),
-        total_bytes_downloaded_(0),
-        upload_position_(0) {
-  }
+        received_request_redirected_(false),
+        total_bytes_downloaded_(0) {}
 
   // If true, defers the resource load in OnWillStart.
   void set_defer_request_on_will_start(bool defer_request_on_will_start) {
@@ -204,8 +300,14 @@ class ResourceHandlerStub : public ResourceHandler {
 
   const GURL& start_url() const { return start_url_; }
   ResourceResponse* response() const { return response_.get(); }
+  ResourceResponse* redirect_response() const {
+    return redirect_response_.get();
+  }
   bool received_response_completed() const {
     return received_response_completed_;
+  }
+  bool received_request_redirected() const {
+    return received_request_redirected_;
   }
   const net::URLRequestStatus& status() const { return status_; }
   int total_bytes_downloaded() const { return total_bytes_downloaded_; }
@@ -214,35 +316,15 @@ class ResourceHandlerStub : public ResourceHandler {
     controller()->Resume();
   }
 
-  // Waits until OnUploadProgress is called and returns the upload position.
-  uint64 WaitForUploadProgress() {
-    wait_for_progress_loop_.reset(new base::RunLoop());
-    wait_for_progress_loop_->Run();
-    wait_for_progress_loop_.reset();
-    return upload_position_;
-  }
-
-  // ResourceHandler implementation:
-  bool OnUploadProgress(uint64 position, uint64 size) override {
-    EXPECT_LE(position, size);
-    EXPECT_GT(position, upload_position_);
-    upload_position_ = position;
-    if (wait_for_progress_loop_)
-      wait_for_progress_loop_->Quit();
-    return true;
-  }
-
   bool OnRequestRedirected(const net::RedirectInfo& redirect_info,
                            ResourceResponse* response,
                            bool* defer) override {
-    NOTREACHED();
+    redirect_response_ = response;
+    received_request_redirected_ = true;
     return true;
   }
 
-  bool OnResponseStarted(ResourceResponse* response,
-                                 bool* defer,
-                                 bool open_when_done,
-                                 bool ask_for_target) override {
+  bool OnResponseStarted(ResourceResponse* response, bool* defer) override {
     EXPECT_FALSE(response_.get());
     response_ = response;
     return true;
@@ -251,7 +333,10 @@ class ResourceHandlerStub : public ResourceHandler {
   bool OnWillStart(const GURL& url, bool* defer) override {
     EXPECT_TRUE(start_url_.is_empty());
     start_url_ = url;
-    *defer = defer_request_on_will_start_;
+    if (defer_request_on_will_start_) {
+      *defer = true;
+      deferred_run_loop_.Quit();
+    }
     return true;
   }
 
@@ -283,6 +368,7 @@ class ResourceHandlerStub : public ResourceHandler {
       if (defer_eof_) {
         defer_eof_ = false;
         *defer = true;
+        deferred_run_loop_.Quit();
       }
     }
 
@@ -301,11 +387,24 @@ class ResourceHandlerStub : public ResourceHandler {
 
     received_response_completed_ = true;
     status_ = status;
+    response_completed_run_loop_.Quit();
   }
 
   void OnDataDownloaded(int bytes_downloaded) override {
     EXPECT_FALSE(expect_reads_);
     total_bytes_downloaded_ += bytes_downloaded;
+  }
+
+  // Waits for the the first deferred step to run, if there is one.
+  void WaitForDeferredStep() {
+    DCHECK(defer_request_on_will_start_ || defer_eof_);
+    deferred_run_loop_.Run();
+  }
+
+  // Waits until the response has completed.
+  void WaitForResponseComplete() {
+    response_completed_run_loop_.Run();
+    EXPECT_TRUE(received_response_completed_);
   }
 
  private:
@@ -318,13 +417,16 @@ class ResourceHandlerStub : public ResourceHandler {
 
   GURL start_url_;
   scoped_refptr<ResourceResponse> response_;
+  scoped_refptr<ResourceResponse> redirect_response_;
   bool received_on_will_read_;
   bool received_eof_;
   bool received_response_completed_;
+  bool received_request_redirected_;
   net::URLRequestStatus status_;
   int total_bytes_downloaded_;
-  scoped_ptr<base::RunLoop> wait_for_progress_loop_;
-  uint64 upload_position_;
+  base::RunLoop deferred_run_loop_;
+  base::RunLoop response_completed_run_loop_;
+  scoped_ptr<base::RunLoop> wait_for_progress_run_loop_;
 };
 
 // Test browser client that captures calls to SelectClientCertificates and
@@ -333,13 +435,24 @@ class SelectCertificateBrowserClient : public TestContentBrowserClient {
  public:
   SelectCertificateBrowserClient() : call_count_(0) {}
 
+  // Waits until the first call to SelectClientCertificate.
+  void WaitForSelectCertificate() {
+    select_certificate_run_loop_.Run();
+    // Process any pending messages - just so tests can check if
+    // SelectClientCertificate was called more than once.
+    base::RunLoop().RunUntilIdle();
+  }
+
   void SelectClientCertificate(
       WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
       scoped_ptr<ClientCertificateDelegate> delegate) override {
+    EXPECT_FALSE(delegate_.get());
+
     ++call_count_;
     passed_certs_ = cert_request_info->client_certs;
-    delegate_ = delegate.Pass();
+    delegate_ = std::move(delegate);
+    select_certificate_run_loop_.Quit();
   }
 
   int call_count() { return call_count_; }
@@ -356,6 +469,10 @@ class SelectCertificateBrowserClient : public TestContentBrowserClient {
   net::CertificateList passed_certs_;
   int call_count_;
   scoped_ptr<ClientCertificateDelegate> delegate_;
+
+  base::RunLoop select_certificate_run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(SelectCertificateBrowserClient);
 };
 
 class ResourceContextStub : public MockResourceContext {
@@ -364,11 +481,11 @@ class ResourceContextStub : public MockResourceContext {
       : MockResourceContext(test_request_context) {}
 
   scoped_ptr<net::ClientCertStore> CreateClientCertStore() override {
-    return dummy_cert_store_.Pass();
+    return std::move(dummy_cert_store_);
   }
 
   void SetClientCertStore(scoped_ptr<net::ClientCertStore> store) {
-    dummy_cert_store_ = store.Pass();
+    dummy_cert_store_ = std::move(store);
   }
 
  private:
@@ -379,7 +496,7 @@ class ResourceContextStub : public MockResourceContext {
 // progress reporting.
 class NonChunkedUploadDataStream : public net::UploadDataStream {
  public:
-  explicit NonChunkedUploadDataStream(uint64 size)
+  explicit NonChunkedUploadDataStream(uint64_t size)
       : net::UploadDataStream(false, 0), stream_(0), size_(size) {}
 
   void AppendData(const char* data) {
@@ -403,7 +520,7 @@ class NonChunkedUploadDataStream : public net::UploadDataStream {
   void ResetInternal() override { stream_.Reset(); }
 
   net::ChunkedUploadDataStream stream_;
-  uint64 size_;
+  uint64_t size_;
 
   DISALLOW_COPY_AND_ASSIGN(NonChunkedUploadDataStream);
 };
@@ -437,25 +554,15 @@ class ResourceLoaderTest : public testing::Test,
     return net::URLRequestTestJob::test_data_1();
   }
 
-  // Waits until upload progress reaches |target_position|
-  void WaitForUploadProgress(uint64 target_position) {
-    while (true) {
-      uint64 position = raw_ptr_resource_handler_->WaitForUploadProgress();
-      EXPECT_LE(position, target_position);
-      loader_->OnUploadProgressACK();
-      if (position == target_position)
-        break;
-    }
-  }
-
-  virtual net::URLRequestJobFactory::ProtocolHandler* CreateProtocolHandler() {
+  virtual scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
+  CreateProtocolHandler() {
     return net::URLRequestTestJob::CreateProtocolHandler();
   }
 
   virtual scoped_ptr<ResourceHandler> WrapResourceHandler(
       scoped_ptr<ResourceHandlerStub> leaf_handler,
       net::URLRequest* request) {
-    return leaf_handler.Pass();
+    return std::move(leaf_handler);
   }
 
   // Replaces loader_ with a new one for |request|.
@@ -468,13 +575,13 @@ class ResourceLoaderTest : public testing::Test,
         rfh->GetProcess()->GetID(), rfh->GetRenderViewHost()->GetRoutingID(),
         rfh->GetRoutingID(), true /* is_main_frame */,
         false /* parent_is_main_frame */, true /* allow_download */,
-        false /* is_async */);
+        false /* is_async */, false /* is_using_lofi_ */);
     scoped_ptr<ResourceHandlerStub> resource_handler(
         new ResourceHandlerStub(request.get()));
     raw_ptr_resource_handler_ = resource_handler.get();
     loader_.reset(new ResourceLoader(
-        request.Pass(),
-        WrapResourceHandler(resource_handler.Pass(), raw_ptr_to_request_),
+        std::move(request),
+        WrapResourceHandler(std::move(resource_handler), raw_ptr_to_request_),
         this));
   }
 
@@ -492,7 +599,7 @@ class ResourceLoaderTest : public testing::Test,
             test_url(),
             net::DEFAULT_PRIORITY,
             nullptr /* delegate */));
-    SetUpResourceLoader(request.Pass());
+    SetUpResourceLoader(std::move(request));
   }
 
   void TearDown() override {
@@ -536,9 +643,46 @@ class ResourceLoaderTest : public testing::Test,
 
 class ClientCertResourceLoaderTest : public ResourceLoaderTest {
  protected:
-  net::URLRequestJobFactory::ProtocolHandler* CreateProtocolHandler() override {
-    return new MockClientCertJobProtocolHandler;
+  scoped_ptr<net::URLRequestJobFactory::ProtocolHandler> CreateProtocolHandler()
+      override {
+    return make_scoped_ptr(new MockClientCertJobProtocolHandler);
   }
+};
+
+// A ResourceLoaderTest that intercepts https://example.test and
+// https://example-redirect.test URLs and sets SSL info on the
+// responses. The latter serves a Location: header in the response.
+class HTTPSSecurityInfoResourceLoaderTest : public ResourceLoaderTest {
+ public:
+  HTTPSSecurityInfoResourceLoaderTest()
+      : ResourceLoaderTest(),
+        test_https_url_("https://example.test"),
+        test_https_redirect_url_("https://example-redirect.test") {}
+
+  ~HTTPSSecurityInfoResourceLoaderTest() override {}
+
+  const GURL& test_https_url() const { return test_https_url_; }
+  const GURL& test_https_redirect_url() const {
+    return test_https_redirect_url_;
+  }
+
+ protected:
+  void SetUp() override {
+    ResourceLoaderTest::SetUp();
+    net::URLRequestFilter::GetInstance()->ClearHandlers();
+    net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
+        "https", "example.test",
+        scoped_ptr<net::URLRequestInterceptor>(
+            new MockHTTPSJobURLRequestInterceptor(false /* redirect */)));
+    net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
+        "https", "example-redirect.test",
+        scoped_ptr<net::URLRequestInterceptor>(
+            new MockHTTPSJobURLRequestInterceptor(true /* redirect */)));
+  }
+
+ private:
+  const GURL test_https_url_;
+  const GURL test_https_redirect_url_;
 };
 
 // Tests that client certificates are requested with ClientCertStore lookup.
@@ -550,7 +694,7 @@ TEST_F(ClientCertResourceLoaderTest, WithStoreLookup) {
       new net::X509Certificate("test", "test", base::Time(), base::Time())));
   scoped_ptr<ClientCertStoreStub> test_store(new ClientCertStoreStub(
       dummy_certs, &store_request_count, &store_requested_authorities));
-  resource_context_.SetClientCertStore(test_store.Pass());
+  resource_context_.SetClientCertStore(std::move(test_store));
 
   // Plug in test content browser client.
   SelectCertificateBrowserClient test_client;
@@ -558,7 +702,7 @@ TEST_F(ClientCertResourceLoaderTest, WithStoreLookup) {
 
   // Start the request and wait for it to pause.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  test_client.WaitForSelectCertificate();
 
   EXPECT_FALSE(raw_ptr_resource_handler_->received_response_completed());
 
@@ -573,9 +717,8 @@ TEST_F(ClientCertResourceLoaderTest, WithStoreLookup) {
   EXPECT_EQ(dummy_certs, test_client.passed_certs());
 
   // Continue the request.
-  test_client.ContinueWithCertificate(dummy_certs[0].get());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
+  test_client.ContinueWithCertificate(nullptr);
+  raw_ptr_resource_handler_->WaitForResponseComplete();
   EXPECT_EQ(net::OK, raw_ptr_resource_handler_->status().error());
 
   // Restore the original content browser client.
@@ -591,7 +734,7 @@ TEST_F(ClientCertResourceLoaderTest, WithNullStore) {
 
   // Start the request and wait for it to pause.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  test_client.WaitForSelectCertificate();
 
   // Check if the SelectClientCertificate was called on the content browser
   // client.
@@ -599,11 +742,8 @@ TEST_F(ClientCertResourceLoaderTest, WithNullStore) {
   EXPECT_EQ(net::CertificateList(), test_client.passed_certs());
 
   // Continue the request.
-  scoped_refptr<net::X509Certificate> cert(
-      new net::X509Certificate("test", "test", base::Time(), base::Time()));
-  test_client.ContinueWithCertificate(cert.get());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
+  test_client.ContinueWithCertificate(nullptr);
+  raw_ptr_resource_handler_->WaitForResponseComplete();
   EXPECT_EQ(net::OK, raw_ptr_resource_handler_->status().error());
 
   // Restore the original content browser client.
@@ -618,7 +758,7 @@ TEST_F(ClientCertResourceLoaderTest, CancelSelection) {
 
   // Start the request and wait for it to pause.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  test_client.WaitForSelectCertificate();
 
   // Check if the SelectClientCertificate was called on the content browser
   // client.
@@ -627,8 +767,7 @@ TEST_F(ClientCertResourceLoaderTest, CancelSelection) {
 
   // Cancel the request.
   test_client.CancelCertificateSelection();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
+  raw_ptr_resource_handler_->WaitForResponseComplete();
   EXPECT_EQ(net::ERR_SSL_CLIENT_AUTH_CERT_NEEDED,
             raw_ptr_resource_handler_->status().error());
 
@@ -645,13 +784,12 @@ TEST_F(ClientCertResourceLoaderTest, NoWebContents) {
   SelectCertificateBrowserClient test_client;
   ContentBrowserClient* old_client = SetBrowserClientForTesting(&test_client);
 
-  // Start the request and wait for it to pause.
+  // Start the request and wait for it to complete.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
 
   // Check that SelectClientCertificate wasn't called and the request aborted.
   EXPECT_EQ(0, test_client.call_count());
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
   EXPECT_EQ(net::ERR_SSL_CLIENT_AUTH_CERT_NEEDED,
             raw_ptr_resource_handler_->status().error());
 
@@ -662,12 +800,15 @@ TEST_F(ClientCertResourceLoaderTest, NoWebContents) {
 // Verifies that ClientCertStore's callback doesn't crash if called after the
 // loader is destroyed.
 TEST_F(ClientCertResourceLoaderTest, StoreAsyncCancel) {
-  scoped_ptr<LoaderDestroyingCertStore> test_store(
-      new LoaderDestroyingCertStore(&loader_));
-  resource_context_.SetClientCertStore(test_store.Pass());
+  base::RunLoop loader_destroyed_run_loop;
+  LoaderDestroyingCertStore* test_store =
+      new LoaderDestroyingCertStore(&loader_,
+                                    loader_destroyed_run_loop.QuitClosure());
+  resource_context_.SetClientCertStore(
+      make_scoped_ptr(test_store));
 
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  loader_destroyed_run_loop.Run();
   EXPECT_FALSE(loader_);
 
   // Pump the event loop to ensure nothing asynchronous crashes either.
@@ -688,10 +829,9 @@ TEST_F(ResourceLoaderTest, CancelOnReadCompleted) {
   raw_ptr_resource_handler_->set_cancel_on_read_completed(true);
 
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
 
   EXPECT_EQ(test_url(), raw_ptr_resource_handler_->start_url());
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
   EXPECT_EQ(net::URLRequestStatus::CANCELED,
             raw_ptr_resource_handler_->status().status());
 }
@@ -701,50 +841,15 @@ TEST_F(ResourceLoaderTest, DeferEOF) {
   raw_ptr_resource_handler_->set_defer_eof(true);
 
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForDeferredStep();
 
   EXPECT_EQ(test_url(), raw_ptr_resource_handler_->start_url());
   EXPECT_FALSE(raw_ptr_resource_handler_->received_response_completed());
 
   raw_ptr_resource_handler_->Resume();
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
+  raw_ptr_resource_handler_->WaitForResponseComplete();
   EXPECT_EQ(net::URLRequestStatus::SUCCESS,
             raw_ptr_resource_handler_->status().status());
-}
-
-// Tests that progress is reported correctly while uploading.
-// TODO(andresantoso): Add test for the redirect case.
-TEST_F(ResourceLoaderTest, UploadProgress) {
-  // Set up a test server.
-  net::test_server::EmbeddedTestServer server;
-  ASSERT_TRUE(server.InitializeAndWaitUntilReady());
-  base::FilePath path;
-  PathService::Get(content::DIR_TEST_DATA, &path);
-  server.ServeFilesFromDirectory(path);
-
-  scoped_ptr<net::URLRequest> request(
-      resource_context_.GetRequestContext()->CreateRequest(
-          server.GetURL("/title1.html"),
-          net::DEFAULT_PRIORITY,
-          nullptr /* delegate */));
-
-  // Start an upload.
-  auto stream = new NonChunkedUploadDataStream(10);
-  request->set_upload(make_scoped_ptr(stream));
-
-  SetUpResourceLoader(request.Pass());
-  loader_->StartRequest();
-
-  stream->AppendData("xx");
-  WaitForUploadProgress(2);
-
-  stream->AppendData("yyy");
-  WaitForUploadProgress(5);
-
-  stream->AppendData("zzzzz");
-  WaitForUploadProgress(10);
 }
 
 class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
@@ -754,6 +859,18 @@ class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
         redirect_to_file_resource_handler_(NULL) {
   }
 
+  ~ResourceLoaderRedirectToFileTest() override {
+    // Releasing the loader should result in destroying the file asynchronously.
+    file_stream_ = nullptr;
+    deletable_file_ = nullptr;
+    loader_.reset();
+
+    // Wait for the task to delete the file to run, and make sure the file is
+    // cleaned up.
+    base::RunLoop().RunUntilIdle();
+    EXPECT_FALSE(base::PathExists(temp_path()));
+  }
+
   base::FilePath temp_path() const { return temp_path_; }
   ShareableFileReference* deletable_file() const {
     return deletable_file_.get();
@@ -761,12 +878,6 @@ class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
   net::testing::MockFileStream* file_stream() const { return file_stream_; }
   RedirectToFileResourceHandler* redirect_to_file_resource_handler() const {
     return redirect_to_file_resource_handler_;
-  }
-
-  void ReleaseLoader() {
-    file_stream_ = NULL;
-    deletable_file_ = NULL;
-    loader_.reset();
   }
 
   scoped_ptr<ResourceHandler> WrapResourceHandler(
@@ -783,7 +894,7 @@ class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
 
     // Create mock file streams and a ShareableFileReference.
     scoped_ptr<net::testing::MockFileStream> file_stream(
-        new net::testing::MockFileStream(file.Pass(),
+        new net::testing::MockFileStream(std::move(file),
                                          base::ThreadTaskRunnerHandle::Get()));
     file_stream_ = file_stream.get();
     deletable_file_ = ShareableFileReference::GetOrCreate(
@@ -794,13 +905,13 @@ class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
 
     // Inject them into the handler.
     scoped_ptr<RedirectToFileResourceHandler> handler(
-        new RedirectToFileResourceHandler(leaf_handler.Pass(), request));
+        new RedirectToFileResourceHandler(std::move(leaf_handler), request));
     redirect_to_file_resource_handler_ = handler.get();
     handler->SetCreateTemporaryFileStreamFunctionForTesting(
         base::Bind(&ResourceLoaderRedirectToFileTest::PostCallback,
                    base::Unretained(this),
                    base::Passed(&file_stream)));
-    return handler.Pass();
+    return std::move(handler);
   }
 
  private:
@@ -824,13 +935,12 @@ class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
 TEST_F(ResourceLoaderRedirectToFileTest, Basic) {
   // Run it to completion.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
 
   // Check that the handler forwarded all information to the downstream handler.
   EXPECT_EQ(temp_path(),
             raw_ptr_resource_handler_->response()->head.download_file_path);
   EXPECT_EQ(test_url(), raw_ptr_resource_handler_->start_url());
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
   EXPECT_EQ(net::URLRequestStatus::SUCCESS,
             raw_ptr_resource_handler_->status().status());
   EXPECT_EQ(test_data().size(), static_cast<size_t>(
@@ -840,12 +950,6 @@ TEST_F(ResourceLoaderRedirectToFileTest, Basic) {
   std::string contents;
   ASSERT_TRUE(base::ReadFileToString(temp_path(), &contents));
   EXPECT_EQ(test_data(), contents);
-
-  // Release the loader and the saved reference to file. The file should be gone
-  // now.
-  ReleaseLoader();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(base::PathExists(temp_path()));
 }
 
 // Tests that RedirectToFileResourceHandler handles errors in creating the
@@ -858,10 +962,9 @@ TEST_F(ResourceLoaderRedirectToFileTest, CreateTemporaryError) {
 
   // Run it to completion.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
 
   // To downstream, the request was canceled.
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
   EXPECT_EQ(net::URLRequestStatus::CANCELED,
             raw_ptr_resource_handler_->status().status());
   EXPECT_EQ(0, raw_ptr_resource_handler_->total_bytes_downloaded());
@@ -873,22 +976,16 @@ TEST_F(ResourceLoaderRedirectToFileTest, WriteError) {
 
   // Run it to completion.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
 
   // To downstream, the request was canceled sometime after it started, but
   // before any data was written.
   EXPECT_EQ(temp_path(),
             raw_ptr_resource_handler_->response()->head.download_file_path);
   EXPECT_EQ(test_url(), raw_ptr_resource_handler_->start_url());
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
   EXPECT_EQ(net::URLRequestStatus::CANCELED,
             raw_ptr_resource_handler_->status().status());
   EXPECT_EQ(0, raw_ptr_resource_handler_->total_bytes_downloaded());
-
-  // Release the loader. The file should be gone now.
-  ReleaseLoader();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(base::PathExists(temp_path()));
 }
 
 // Tests that RedirectToFileResourceHandler handles asynchronous write errors.
@@ -897,22 +994,16 @@ TEST_F(ResourceLoaderRedirectToFileTest, WriteErrorAsync) {
 
   // Run it to completion.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
 
   // To downstream, the request was canceled sometime after it started, but
   // before any data was written.
   EXPECT_EQ(temp_path(),
             raw_ptr_resource_handler_->response()->head.download_file_path);
   EXPECT_EQ(test_url(), raw_ptr_resource_handler_->start_url());
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
   EXPECT_EQ(net::URLRequestStatus::CANCELED,
             raw_ptr_resource_handler_->status().status());
   EXPECT_EQ(0, raw_ptr_resource_handler_->total_bytes_downloaded());
-
-  // Release the loader. The file should be gone now.
-  ReleaseLoader();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(base::PathExists(temp_path()));
 }
 
 // Tests that RedirectToFileHandler defers completion if there are outstanding
@@ -941,18 +1032,12 @@ TEST_F(ResourceLoaderRedirectToFileTest, DeferCompletion) {
 
   // Now, release the floodgates.
   file_stream()->ReleaseCallbacks();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
 
   // Although the URLRequest was successful, the leaf handler sees a failure
   // because the write never completed.
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
   EXPECT_EQ(net::URLRequestStatus::CANCELED,
             raw_ptr_resource_handler_->status().status());
-
-  // Release the loader. The file should be gone now.
-  ReleaseLoader();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(base::PathExists(temp_path()));
 }
 
 // Tests that a RedirectToFileResourceHandler behaves properly when the
@@ -963,7 +1048,7 @@ TEST_F(ResourceLoaderRedirectToFileTest, DownstreamDeferStart) {
 
   // Run as far as we'll go.
   loader_->StartRequest();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForDeferredStep();
 
   // The request should have stopped at OnWillStart.
   EXPECT_EQ(test_url(), raw_ptr_resource_handler_->start_url());
@@ -973,13 +1058,12 @@ TEST_F(ResourceLoaderRedirectToFileTest, DownstreamDeferStart) {
 
   // Now resume the request. Now we complete.
   raw_ptr_resource_handler_->Resume();
-  base::RunLoop().RunUntilIdle();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
 
   // Check that the handler forwarded all information to the downstream handler.
   EXPECT_EQ(temp_path(),
             raw_ptr_resource_handler_->response()->head.download_file_path);
   EXPECT_EQ(test_url(), raw_ptr_resource_handler_->start_url());
-  EXPECT_TRUE(raw_ptr_resource_handler_->received_response_completed());
   EXPECT_EQ(net::URLRequestStatus::SUCCESS,
             raw_ptr_resource_handler_->status().status());
   EXPECT_EQ(test_data().size(), static_cast<size_t>(
@@ -989,11 +1073,84 @@ TEST_F(ResourceLoaderRedirectToFileTest, DownstreamDeferStart) {
   std::string contents;
   ASSERT_TRUE(base::ReadFileToString(temp_path(), &contents));
   EXPECT_EQ(test_data(), contents);
+}
 
-  // Release the loader. The file should be gone now.
-  ReleaseLoader();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(base::PathExists(temp_path()));
+// Test that an HTTPS resource has the expected security info attached
+// to it.
+TEST_F(HTTPSSecurityInfoResourceLoaderTest, SecurityInfoOnHTTPSResource) {
+  // Start the request and wait for it to finish.
+  scoped_ptr<net::URLRequest> request(
+      resource_context_.GetRequestContext()->CreateRequest(
+          test_https_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */));
+  SetUpResourceLoader(std::move(request));
+
+  // Send the request and wait until it completes.
+  loader_->StartRequest();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
+  ASSERT_EQ(net::URLRequestStatus::SUCCESS,
+            raw_ptr_to_request_->status().status());
+
+  ResourceResponse* response = raw_ptr_resource_handler_->response();
+  ASSERT_TRUE(response);
+
+  // Deserialize the security info from the response and check that it
+  // is as expected.
+  SSLStatus deserialized;
+  ASSERT_TRUE(
+      DeserializeSecurityInfo(response->head.security_info, &deserialized));
+
+  // Expect a BROKEN security style because the cert status has errors.
+  EXPECT_EQ(content::SECURITY_STYLE_AUTHENTICATION_BROKEN,
+            deserialized.security_style);
+  scoped_refptr<net::X509Certificate> cert;
+  ASSERT_TRUE(
+      CertStore::GetInstance()->RetrieveCert(deserialized.cert_id, &cert));
+  EXPECT_TRUE(cert->Equals(GetTestCert().get()));
+
+  EXPECT_EQ(kTestCertError, deserialized.cert_status);
+  EXPECT_EQ(kTestConnectionStatus, deserialized.connection_status);
+  EXPECT_EQ(kTestSecurityBits, deserialized.security_bits);
+}
+
+// Test that an HTTPS redirect response has the expected security info
+// attached to it.
+TEST_F(HTTPSSecurityInfoResourceLoaderTest,
+       SecurityInfoOnHTTPSRedirectResource) {
+  // Start the request and wait for it to finish.
+  scoped_ptr<net::URLRequest> request(
+      resource_context_.GetRequestContext()->CreateRequest(
+          test_https_redirect_url(), net::DEFAULT_PRIORITY,
+          nullptr /* delegate */));
+  SetUpResourceLoader(std::move(request));
+
+  // Send the request and wait until it completes.
+  loader_->StartRequest();
+  raw_ptr_resource_handler_->WaitForResponseComplete();
+  ASSERT_EQ(net::URLRequestStatus::SUCCESS,
+            raw_ptr_to_request_->status().status());
+  ASSERT_TRUE(raw_ptr_resource_handler_->received_request_redirected());
+
+  ResourceResponse* redirect_response =
+      raw_ptr_resource_handler_->redirect_response();
+  ASSERT_TRUE(redirect_response);
+
+  // Deserialize the security info from the redirect response and check
+  // that it is as expected.
+  SSLStatus deserialized;
+  ASSERT_TRUE(DeserializeSecurityInfo(redirect_response->head.security_info,
+                                      &deserialized));
+
+  // Expect a BROKEN security style because the cert status has errors.
+  EXPECT_EQ(content::SECURITY_STYLE_AUTHENTICATION_BROKEN,
+            deserialized.security_style);
+  scoped_refptr<net::X509Certificate> cert;
+  ASSERT_TRUE(
+      CertStore::GetInstance()->RetrieveCert(deserialized.cert_id, &cert));
+  EXPECT_TRUE(cert->Equals(GetTestCert().get()));
+
+  EXPECT_EQ(kTestCertError, deserialized.cert_status);
+  EXPECT_EQ(kTestConnectionStatus, deserialized.connection_status);
+  EXPECT_EQ(kTestSecurityBits, deserialized.security_bits);
 }
 
 }  // namespace content

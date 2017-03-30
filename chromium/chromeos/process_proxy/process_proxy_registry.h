@@ -6,11 +6,13 @@
 #define CHROMEOS_PROCESS_PROXY_PROCESS_PROXY_REGISTRY_H_
 
 #include <map>
+#include <string>
 
 #include "base/callback.h"
 #include "base/lazy_instance.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/threading/thread.h"
 #include "chromeos/chromeos_export.h"
@@ -18,19 +20,18 @@
 
 namespace chromeos {
 
-typedef base::Callback<void(pid_t, const std::string&, const std::string&)>
-      ProcessOutputCallbackWithPid;
-
 // Keeps track of all created ProcessProxies. It is created lazily and should
 // live on a single thread (where all methods must be called).
 class CHROMEOS_EXPORT ProcessProxyRegistry : public base::NonThreadSafe {
  public:
+  using OutputCallback = base::Callback<void(int terminal_id,
+                                             const std::string& output_type,
+                                             const std::string& output_data)>;
+
   // Info we need about a ProcessProxy instance.
   struct ProcessProxyInfo {
     scoped_refptr<ProcessProxy> proxy;
-    scoped_ptr<base::Thread> watcher_thread;
-    ProcessOutputCallbackWithPid callback;
-    pid_t process_id;
+    OutputCallback callback;
 
     ProcessProxyInfo();
     // This is to make map::insert happy, we don't init anything.
@@ -41,17 +42,20 @@ class CHROMEOS_EXPORT ProcessProxyRegistry : public base::NonThreadSafe {
   static ProcessProxyRegistry* Get();
 
   // Starts new ProcessProxy (which starts new process).
-  bool OpenProcess(const std::string& command, pid_t* pid,
-                   const ProcessOutputCallbackWithPid& callback);
-  // Sends data to the process with id |pid|.
-  bool SendInput(pid_t pid, const std::string& data);
-  // Stops the process with id |pid|.
-  bool CloseProcess(pid_t pid);
+  // Returns ID used for the created process. Returns -1 on failure.
+  int OpenProcess(const std::string& command, const OutputCallback& callback);
+  // Sends data to the process identified by |id|.
+  bool SendInput(int id, const std::string& data);
+  // Stops the process identified by |id|.
+  bool CloseProcess(int id);
   // Reports terminal resize to process proxy.
-  bool OnTerminalResize(pid_t pid, int width, int height);
+  bool OnTerminalResize(int id, int width, int height);
+  // Notifies process proxy identified by |id| that previously reported output
+  // has been handled.
+  void AckOutput(int id);
 
-  // Currently used for testing.
-  void SetOutputCallback(const ProcessOutputCallback& callback);
+  // Shuts down registry, closing all associated processed.
+  void ShutDown();
 
  private:
   friend struct ::base::DefaultLazyInstanceTraits<ProcessProxyRegistry>;
@@ -60,12 +64,14 @@ class CHROMEOS_EXPORT ProcessProxyRegistry : public base::NonThreadSafe {
   ~ProcessProxyRegistry();
 
   // Gets called when output gets detected.
-  void OnProcessOutput(pid_t pid,
-                       ProcessOutputType type,
-                       const std::string& data);
+  void OnProcessOutput(int id, ProcessOutputType type, const std::string& data);
+
+  bool EnsureWatcherThreadStarted();
 
   // Map of all existing ProcessProxies.
-  std::map<pid_t, ProcessProxyInfo> proxy_map_;
+  std::map<int, ProcessProxyInfo> proxy_map_;
+
+  scoped_ptr<base::Thread> watcher_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(ProcessProxyRegistry);
 };

@@ -16,6 +16,11 @@ gypi_values = exec_script("//build/gypi_to_gn.py",
 sources = gypi_values.main_schema_files
 if (is_chromeos) {
   sources += gypi_values.chromeos_schema_files
+} else if (is_linux || is_win) {
+  sources += gypi_values.input_ime_schema_file
+}
+if (enable_service_discovery) {
+  sources += gypi_values.service_discovery_schema_files
 }
 if (enable_webrtc) {
   sources += gypi_values.webrtc_schema_files
@@ -24,6 +29,5 @@ if (enable_webrtc) {
 uncompiled_sources = gypi_values.main_non_compiled_schema_files
 
 root_namespace = "extensions::api::%(namespace)s"
-schema_include_rules =
-    "extensions/common/api:extensions::core_api::%(namespace)s"
+schema_include_rules = "extensions/common/api:extensions::api::%(namespace)s"
 schema_dependencies = [ "//extensions/common/api" ]

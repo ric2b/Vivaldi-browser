@@ -8,33 +8,18 @@
 
     <output filename="remoting/resources/am.pak" lang="am" type="data_package"/>
     <output filename="remoting/resources/ar.pak" lang="ar" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/ast.pak" type="data_package" lang="ast" />
-    </if>
     <output filename="remoting/resources/bg.pak" lang="bg" type="data_package"/>
     <output filename="remoting/resources/bn.pak" lang="bn" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/bs.pak" lang="bs" type="data_package"/>
-    </if>
     <output filename="remoting/resources/ca.pak" lang="ca" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/ca@valencia.pak" type="data_package" lang="ca@valencia" />
-    </if>
     <output filename="remoting/resources/cs.pak" lang="cs" type="data_package"/>
     <output filename="remoting/resources/da.pak" lang="da" type="data_package"/>
     <output filename="remoting/resources/de.pak" lang="de" type="data_package"/>
     <output filename="remoting/resources/el.pak" lang="el" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/en-AU.pak" lang="en-AU" type="data_package"/>
-    </if>
     <output filename="remoting/resources/en-GB.pak" lang="en-GB" type="data_package"/>
     <if expr="chromeos or is_ios">
       <output filename="remoting/resources/en-US.pak" lang="en" type="data_package"/>
     </if>
     <output filename="remoting/resources/en.pak" lang="en" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/eo.pak" lang="eo" type="data_package"/>
-    </if>
     <if expr="is_ios">
       <!-- iOS uses es-MX for es-419 -->
       <output filename="remoting/resources/es-MX.pak" lang="es-419" type="data_package"/>
@@ -42,38 +27,21 @@
     <output filename="remoting/resources/es-419.pak" lang="es-419" type="data_package"/>
     <output filename="remoting/resources/es.pak" lang="es" type="data_package"/>
     <output filename="remoting/resources/et.pak" lang="et" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/eu.pak" lang="eu" type="data_package"/>
-    </if>
     <output filename="remoting/resources/fa.pak" lang="fa" type="data_package"/>
     <output filename="remoting/resources/fake-bidi.pak" lang="fake-bidi" type="data_package"/>
     <output filename="remoting/resources/fi.pak" lang="fi" type="data_package"/>
     <output filename="remoting/resources/fil.pak" lang="fil" type="data_package"/>
     <output filename="remoting/resources/fr.pak" lang="fr" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/gl.pak" lang="gl" type="data_package"/>
-    </if>
     <output filename="remoting/resources/gu.pak" lang="gu" type="data_package"/>
     <output filename="remoting/resources/he.pak" lang="he" type="data_package"/>
     <output filename="remoting/resources/hi.pak" lang="hi" type="data_package"/>
     <output filename="remoting/resources/hr.pak" lang="hr" type="data_package"/>
     <output filename="remoting/resources/hu.pak" lang="hu" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/hy.pak" lang="hy" type="data_package"/>
-      <output filename="remoting/resources/ia.pak" lang="ia" type="data_package"/>
-    </if>
     <output filename="remoting/resources/id.pak" lang="id" type="data_package"/>
     <output filename="remoting/resources/it.pak" lang="it" type="data_package"/>
     <output filename="remoting/resources/ja.pak" lang="ja" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/ka.pak" lang="ka" type="data_package"/>
-    </if>
     <output filename="remoting/resources/kn.pak" lang="kn" type="data_package"/>
     <output filename="remoting/resources/ko.pak" lang="ko" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/ku.pak" lang="ku" type="data_package"/>
-      <output filename="remoting/resources/kw.pak" lang="kw" type="data_package"/>
-    </if>
     <output filename="remoting/resources/lt.pak" lang="lt" type="data_package"/>
     <output filename="remoting/resources/lv.pak" lang="lv" type="data_package"/>
     <output filename="remoting/resources/ml.pak" lang="ml" type="data_package"/>
@@ -100,9 +68,6 @@
     <output filename="remoting/resources/te.pak" lang="te" type="data_package"/>
     <output filename="remoting/resources/th.pak" lang="th" type="data_package"/>
     <output filename="remoting/resources/tr.pak" lang="tr" type="data_package"/>
-    <if expr="use_third_party_translations">
-      <output filename="remoting/resources/ug.pak" lang="ug" type="data_package"/>
-    </if>
     <output filename="remoting/resources/uk.pak" lang="uk" type="data_package"/>
     <output filename="remoting/resources/vi.pak" lang="vi" type="data_package"/>
     <output filename="remoting/resources/zh-CN.pak" lang="zh-CN" type="data_package"/>
@@ -182,12 +147,12 @@
       <output filename="remoting/android/res/values-fi/remoting_strings.xml" lang="fi" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-tl/remoting_strings.xml" lang="fil" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-fr/remoting_strings.xml" lang="fr" type="android" context="android_java"/>
-      <output filename="remoting/android/res/values-he/remoting_strings.xml" lang="he" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-hi/remoting_strings.xml" lang="hi" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-hr/remoting_strings.xml" lang="hr" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-hu/remoting_strings.xml" lang="hu" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-in/remoting_strings.xml" lang="id" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-it/remoting_strings.xml" lang="it" type="android" context="android_java"/>
+      <output filename="remoting/android/res/values-iw/remoting_strings.xml" lang="he" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-ja/remoting_strings.xml" lang="ja" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-ko/remoting_strings.xml" lang="ko" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-lt/remoting_strings.xml" lang="lt" type="android" context="android_java"/>
@@ -215,9 +180,10 @@
 
   </outputs>
   <translations>
-    <!-- TODO(kelvinp): Add a file entry for each of the newly added locales once the xtb files are checked-in (See crbug.com/427712). -->
+    <file lang="am" path="remoting_strings_am.xtb"/>
     <file lang="ar" path="remoting_strings_ar.xtb"/>
     <file lang="bg" path="remoting_strings_bg.xtb"/>
+    <file lang="bn" path="remoting_strings_bn.xtb"/>
     <file lang="ca" path="remoting_strings_ca.xtb"/>
     <file lang="cs" path="remoting_strings_cs.xtb"/>
     <file lang="da" path="remoting_strings_da.xtb"/>
@@ -227,9 +193,11 @@
     <file lang="es" path="remoting_strings_es.xtb"/>
     <file lang="es-419" path="remoting_strings_es-419.xtb"/>
     <file lang="et" path="remoting_strings_et.xtb"/>
+    <file lang="fa" path="remoting_strings_fa.xtb"/>
     <file lang="fi" path="remoting_strings_fi.xtb"/>
     <file lang="fil" path="remoting_strings_fil.xtb"/>
     <file lang="fr" path="remoting_strings_fr.xtb"/>
+    <file lang="gu" path="remoting_strings_gu.xtb"/>
     <!-- The translation console uses 'iw' for Hebrew, but we use 'he'. -->
     <file lang="he" path="remoting_strings_iw.xtb"/>
     <file lang="hi" path="remoting_strings_hi.xtb"/>
@@ -238,9 +206,13 @@
     <file lang="id" path="remoting_strings_id.xtb"/>
     <file lang="it" path="remoting_strings_it.xtb"/>
     <file lang="ja" path="remoting_strings_ja.xtb"/>
+    <file lang="kn" path="remoting_strings_kn.xtb"/>
     <file lang="ko" path="remoting_strings_ko.xtb"/>
     <file lang="lt" path="remoting_strings_lt.xtb"/>
     <file lang="lv" path="remoting_strings_lv.xtb"/>
+    <file lang="ml" path="remoting_strings_ml.xtb"/>
+    <file lang="mr" path="remoting_strings_mr.xtb"/>
+    <file lang="ms" path="remoting_strings_ms.xtb"/>
     <file lang="no" path="remoting_strings_no.xtb"/>
     <file lang="nl" path="remoting_strings_nl.xtb"/>
     <file lang="pl" path="remoting_strings_pl.xtb"/>
@@ -252,6 +224,9 @@
     <file lang="sl" path="remoting_strings_sl.xtb"/>
     <file lang="sr" path="remoting_strings_sr.xtb"/>
     <file lang="sv" path="remoting_strings_sv.xtb"/>
+    <file lang="sw" path="remoting_strings_sw.xtb"/>
+    <file lang="ta" path="remoting_strings_ta.xtb"/>
+    <file lang="te" path="remoting_strings_te.xtb"/>
     <file lang="th" path="remoting_strings_th.xtb"/>
     <file lang="tr" path="remoting_strings_tr.xtb"/>
     <file lang="uk" path="remoting_strings_uk.xtb"/>
@@ -284,7 +259,7 @@
         <message desc="Error displayed if authentication fails. This can be caused by stale credentials, in which logging out of the web-app and retrying can fix the problem." name="IDS_ERROR_AUTHENTICATION_FAILED" formatter_data="android_java">
           Authentication failed. Please sign in to Chrome again.
         </message>
-        <message desc="Error displayed when the computer has a policy that only users in a particular domain may use it as a Chrome Remote Desktop host, and a user in a different domain is trying to use it as a Chrome Remote Desktop host." name="IDS_ERROR_INVALID_HOST_DOMAIN">
+        <message desc="Error displayed when the computer has a policy that only users in a particular domain may use it as a Chrome Remote Desktop host, but a user in a different domain is trying to use it as a Chrome Remote Desktop host. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer)." name="IDS_ERROR_INVALID_HOST_DOMAIN">
           Policy settings do not permit sharing this computer as a Chrome Remote Desktop host. Contact your system administrator for assistance.
         </message>
         <message desc="Error displayed when an operation is attempted that requires a signed-in user, but no-one is currently signed in." name="IDS_ERROR_NOT_AUTHENTICATED">
@@ -308,7 +283,13 @@
         <message desc="Message displayed next to the checkbox that the user can select to allow crash dump collection and reporting." name="IDS_HOST_SETUP_CRASH_REPORTING_MESSAGE">
           Help us improve Chrome Remote Desktop by allowing us to collect usage statistics and crash reports.
         </message>
-        <message desc="Message shown when user is asked to manually install the Host components." name="IDS_HOST_SETUP_INSTALL">
+        <message desc="Title of the dialog used to download and install the Chrome Remote Desktop host component. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer)." name="IDS_INSTALLER_DOWNLOAD">
+          Download Chrome Remote Desktop Host Installer
+        </message>
+        <message desc="Message shown to inform the user that the product is governed by Google's terms of service and to include a link to view them. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer)." name="IDS_HOST_SETUP_TERMS_OF_SERVICE">
+          By downloading the Chrome Remote Desktop Host Installer, you are agreeing to the Google <ph name="LINK_BEGIN">$1<ex>&lt;a href="http://www.google.com/intl/en/policies/terms"&gt;</ex></ph>Terms of Service<ph name="LINK_END">$4<ex>&lt;/a&gt;</ex></ph>.
+        </message>
+        <message desc="Message shown when user is asked to manually install the Host components. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer)." name="IDS_HOST_SETUP_INSTALL">
           Chrome is downloading the Chrome Remote Desktop Host installer.  Once the download is complete, please run the installer before continuing.
         </message>
         <message desc="Message displayed when the client or host has disconnected." name="IDS_MESSAGE_SESSION_FINISHED">
@@ -341,19 +322,19 @@
         <message name="IDS_SERVICE_DESCRIPTION" desc="The description of the Windows service installed by Chrome Remote Desktop.">
           This service enables incoming connections from Chrome Remote Desktop clients.
         </message>
-        <message name="IDS_CONTROLLER_NAME" desc="The name of the component to be elevated shown on the UAC prompt when enabling or disabling Chrome Remote Desktop Host.">
+        <message name="IDS_CONTROLLER_NAME" desc="The name of the component to be elevated shown on the UAC prompt when enabling or disabling Chrome Remote Desktop Host. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
           Chrome Remote Desktop Host Controller
         </message>
         <message name="IDS_VERIFY_PIN_DIALOG_MESSAGE" desc="The message displayed by the PIN verification dialog.">
           Please confirm your account and PIN below to allow access by Chrome Remote Desktop.
         </message>
-        <message name="IDS_MAC_PREFPANE_BUNDLE_NAME" desc="The bundle name specified in the property list of Chrome Remote Desktop Host Preferences bundle on MacOS.">
+        <message name="IDS_MAC_PREFPANE_BUNDLE_NAME" desc="The bundle name specified in the property list of Chrome Remote Desktop Host Preferences bundle on MacOS. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
           Chrome Remote Desktop Host Preferences
         </message>
-        <message name="IDS_MAC_PREFPANE_ICON_LABEL" desc="The name of Chrome Remote Desktop Host icon in Preference Pane on MacOS. The carriage return makes sure that the label is not truncated.">
+        <message name="IDS_MAC_PREFPANE_ICON_LABEL" desc="The name of Chrome Remote Desktop Host icon in Preference Pane on MacOS. The carriage return makes sure that the label is not truncated. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
           Chrome Remote&#x0a;Desktop Host
         </message>
-        <message name="IDS_MAC_UNINSTALLER_BUNDLE_NAME" desc="The bundle name specified in the property list of Chrome Remote Desktop Host Uninstaller bundle on MacOS.">
+        <message name="IDS_MAC_UNINSTALLER_BUNDLE_NAME" desc="The bundle name specified in the property list of Chrome Remote Desktop Host Uninstaller bundle on MacOS. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
           Chrome Remote Desktop Host Uninstaller
         </message>
       </if>  <!-- _google_chrome -->
@@ -380,7 +361,7 @@
         <message desc="Error displayed if authentication fails. This can be caused by stale credentials, in which logging out of the web-app and retrying can fix the problem." name="IDS_ERROR_AUTHENTICATION_FAILED" formatter_data="android_java">
           Authentication failed. Please sign in to Chromium again.
         </message>
-        <message desc="Error displayed when the computer has a policy that only users in a particular domain may use it as a Chromoting host, and a user in a different domain is trying to use it as a Chromoting host." name="IDS_ERROR_INVALID_HOST_DOMAIN">
+        <message desc="Error displayed when the computer has a policy that only users in a particular domain may use it as a Chromoting host, but a user in a different domain is trying to use it as a Chromoting host. The Chromoting host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer)." name="IDS_ERROR_INVALID_HOST_DOMAIN">
           Policy settings do not permit sharing this computer as a Chromoting host. Contact your system administrator for assistance.
         </message>
         <message desc="Error displayed when an operation is attempted that requires a signed-in user, but no-one is currently signed in." name="IDS_ERROR_NOT_AUTHENTICATED">
@@ -403,6 +384,12 @@
         </message>
         <message desc="Message displayed next to the checkbox that the user can select to allow crash dump collection and reporting." name="IDS_HOST_SETUP_CRASH_REPORTING_MESSAGE">
           Help us improve Chromoting by allowing us to collect usage statistics and crash reports.
+        </message>
+        <message desc="Title of the dialog used to download and install the Chromoting host component. The Chromoting host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer)." name="IDS_INSTALLER_DOWNLOAD">
+          Download Chromoting Host Installer
+        </message>
+        <message desc="Message shown to inform the user that the product is governed by Google's terms of service and to include a link to view them." name="IDS_HOST_SETUP_TERMS_OF_SERVICE">
+          By downloading the Chromoting Host Installer, you are agreeing to the Google <ph name="LINK_BEGIN">$1<ex>&lt;a href="http://www.google.com/intl/en/policies/terms"&gt;</ex></ph>Terms of Service<ph name="LINK_END">$4<ex>&lt;/a&gt;</ex></ph>.
         </message>
         <message desc="Message shown when user is asked to manually install the Host components." name="IDS_HOST_SETUP_INSTALL">
           Chrome is downloading the Chromoting Host installer.  Once the download is complete, please run the installer before continuing.
@@ -465,6 +452,12 @@
       </message>
       <message desc="Error displayed if the client plugin fails to load." name="IDS_ERROR_MISSING_PLUGIN">
         Some required components are missing. Please make sure you're running the latest version of Chrome and try again.
+      </message>
+      <message desc="Error displayed if the client plugin crashes." name="IDS_ERROR_NACL_PLUGIN_CRASHED">
+        A required component has stopped working. Please report this problem to the developers.
+      </message>
+      <message desc="Error displayed if Native Client is not enabled." name="IDS_ERROR_NACL_DISABLED">
+        Some required components are missing. Please go to chrome://plugins and make sure Native Client is enabled.
       </message>
       <message desc="Message shown if the user is not authorized to perform the requested action." name="IDS_ERROR_NOT_AUTHORIZED">
         You do not have permission to perform that action.
@@ -571,14 +564,29 @@
       </message>
 
       <if expr="is_android or is_ios">
+        <message desc="Pressing this button switches the view of the remote desktop to a Virtual Reality representation which is compatible with Google Cardboard." name="IDS_SHOW_CARDBOARD" formatter_data="android_java">
+          Show Cardboard view
+        </message>
+        <message desc="This message is shown in a dialog to warn the user they are about to switch to a Virtual Reality view which will not function properly unless the user has a Google Cardboard compatible device." name="IDS_CARDBOARD_WARNING_MESSAGE" formatter_data="android_java">
+          You have enabled Google Cardboard integration mode. To use this mode, insert your device into a Google Cardboard-compatible viewer.
+        </message>
         <message desc="Button to show or hide the on-screen keyboard." name="IDS_SHOW_HIDE_KEYBOARD" formatter_data="android_java">
           Show/hide keyboard.
         </message>
-        <message desc="Message displayed to the user if there are no hosts registered to their account" name="IDS_HOST_LIST_EMPTY_ANDROID" formatter_data="android_java">
-          You have no computers registered.
+        <message desc="Menu item to select the Touch input mode. In this mode, there is no visible mouse pointer and the user must tap on the screen to simulate a left-click." name="IDS_SELECT_TOUCH_MODE" formatter_data="android_java">
+          Touch mode
         </message>
-        <message desc="Message displayed to the user if there are no hosts registered to their account. This is styled to look like a hyperlink. When a user activates the link, they are taken to a web page that explains how to set up a Chromoting host." name="IDS_HOST_SETUP_LINK_ANDROID" formatter_data="android_java">
-          Learn how to set up a computer for remote access.
+        <message desc="Menu item to select the Trackpad input mode. In this mode, the mouse cursor is visible and the screen acts as a laptop's trackpad." name="IDS_SELECT_TRACKPAD_MODE" formatter_data="android_java">
+          Trackpad mode
+        </message>
+        <message desc="Message displayed in the Android application if the user has not setup any computers for remote access." name="IDS_HOST_LIST_EMPTY_ANDROID" formatter_data="android_java">
+          There's nothing to connect to.
+        </message>
+        <message desc="Instruction displayed in the Android application if the user has not setup any computers for remote access. It appears after some larger text which states that the user has no computers to connect to." name="IDS_HOST_LIST_EMPTY_INSTRUCTIONS_ANDROID" formatter_data="android_java">
+          You need to first setup your computer for remote access.
+        </message>
+        <message desc="This button appears below some text which explains that the user needs to setup a computer for remote access. When a user activates the button, they are taken to a web page that explains how to set up a Chromoting host." name="IDS_HOST_SETUP_LINK_ANDROID" formatter_data="android_java">
+          Learn how
         </message>
         <message desc="Title of the authentication dialog" name="IDS_TITLE_AUTHENTICATE" formatter_data="android_java">
           Authenticate to host
@@ -646,8 +654,9 @@ Remote computers with non US-English keyboards may receive incorrect text input.
 For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj) and the Chrome Privacy Policy (http://goo.gl/0uXE5d).
         </message>
         <message name="IDS_PLAY_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for Android. [CHAR-LIMIT=500] [NAME=play_store_changes]">
-• Added Credits screen.
-• Fixed a problem when going full-screen with the keyboard visible.
+• Material Design UI updates.
+• Third-party licensing credits.
+• Information shown for remote computers that are offline.
         </message>
       </if>  <!-- is_android or is_ios -->
 
@@ -663,12 +672,6 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
         </message>
         <message desc="Subtitle shown in the host list when host is offline. Indicates when host was last seen online." name ="IDS_LAST_ONLINE_SUBTITLE">
           last online <ph name="DATE">$1<ex>1/6/13</ex></ph>
-        </message>
-        <message desc="Menu item to select the Touch input mode. In this mode, there is not visible mouse pointer and the user must tap on the screen to simulate a left-click." name ="IDS_SELECT_TOUCH_MODE">
-          Touch mode
-        </message>
-        <message desc="Menu item to select the Trackpad input mode. In this mode, the mouse cursor is visible and the screen acts as a laptop's trackpad." name ="IDS_SELECT_TRACKPAD_MODE">
-          Trackpad mode
         </message>
       </if> <!-- is_ios -->
 
@@ -721,7 +724,7 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
         You are currently sharing this machine with another user. Do you want to continue sharing?
       </message>
       <message desc="Description for the client app. This is shown to the client user above the access code entry box before the connection is started. Note that the 'Share Now' quote should be copied verbatim from the corresponding translation." name="IDS_DESCRIPTION_CONNECT">
-        Ask the user whose computer you wish to access to click ‘Share Now’ and give you the access code.
+        Ask the user whose computer you wish to access to click “<ph name="SHARE">$1<ex>Share</ex></ph>” and give you the access code.
       </message>
       <message desc="Label for the 'yes' response to the dialog asking the user to confirm whether or not they want to disable remote access to a host." name="IDS_DISABLE_HOST">
         Disable
@@ -735,6 +738,13 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Error that is shown on the client side when the host is blocking all connections due to failed authentication attempts." name="IDS_ERROR_HOST_OVERLOAD" formatter_data="android_java">
         Connections to the remote computer are temporarily blocked because somebody was trying to connect to it with invalid PIN. Please try again later.
       </message>
+      <message desc="Error that is shown on the client side after the host has terminated connection that lasted more than maximum allowed duration." name="IDS_ERROR_MAX_SESSION_LENGTH" formatter_data="android_java">
+        The remote session has expired.
+      </message>
+      <message desc="Error that is shown on the client side the host has failed to accept the connection due to a configuration issue." name="IDS_ERROR_HOST_CONFIGURATION_ERROR" formatter_data="android_java">
+        The remote computer has failed to initialize the session. If problem persist please try to configure the host again.
+      </message>
+
       <message desc="Error that is shown on the client side when we don't get a response from the host." name="IDS_ERROR_HOST_IS_OFFLINE" formatter_data="android_java">
         The remote computer is not responding to connection requests. Please verify that it is online and try again.
       </message>
@@ -894,12 +904,28 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Label for general-purpose OK buttons." name="IDS_OK">
         OK
       </message>
-      <message desc="Modified version of the host name shown for hosts that are not currently accessible and for which no last-online status is available." name="IDS_OFFLINE">
-        <ph name="HOSTNAME">$1<ex>My Linux desktop</ex></ph> (offline)
-      </message>
-      <message desc="Modified version of the host name shown for hosts that are not currently accessible." name="IDS_LAST_ONLINE">
-        <ph name="HOSTNAME">$1<ex>My Linux desktop</ex></ph> (last online <ph name="DATE_OR_TIME">$2<ex>1/6/2013 or 11:23:32 AM</ex></ph>)
-      </message>
+      <if expr="is_android">
+        <message desc="This string represents a host status line, which is shown below the host name for offline hosts.  The status line consists of 1) a host offline status (i.e. a specific 'Host failed to read the policy.' or 'Invalid host owner.' or a generic 'Host if offline.') and 2) statement when the host was last seen online (i.e. 'Last seen online 20 minutes ago.')."
+                 name="IDS_HOST_STATUS_LINE" formatter_data="android_java">
+          <ph name="OPTIONAL_OFFLINE_REASON">%2$s<ex>Host failed to read the policy.</ex></ph>  Last seen online <ph name="RELATIVE_TIMESTAMP">%1$s<ex>yesterday</ex></ph>.
+        </message>
+        <message desc="Content description (used for accessibility) of a host icon representing an online host."
+                 name="IDS_HOST_ICON_ONLINE_DESCRIPTION" formatter_data="android_java">
+          Online.
+        </message>
+        <message desc="Content description (used for accessibility) of a host icon representing an offline host."
+                 name="IDS_HOST_ICON_OFFLINE_DESCRIPTION" formatter_data="android_java">
+          Offline.
+        </message>
+      </if>
+      <if expr="not is_android">
+        <message desc="Modified version of the host name shown for hosts that are not currently accessible and for which no last-online status is available." name="IDS_OFFLINE">
+          <ph name="HOSTNAME">$1<ex>My Linux desktop</ex></ph> (offline)
+        </message>
+        <message desc="Modified version of the host name shown for hosts that are not currently accessible." name="IDS_LAST_ONLINE">
+          <ph name="HOSTNAME">$1<ex>My Linux desktop</ex></ph> (last online <ph name="DATE_OR_TIME">$2<ex>1/6/2013 or 11:23:32 AM</ex></ph>)
+        </message>
+      </if>
       <message desc="Error message indicating that the host is offline, because the host failed to initialize (i.e. failed to generate a host certificate, run out of memory early during startup, failed to set up inter-process communication, etc.)."
                name="IDS_OFFLINE_REASON_INITIALIZATION_FAILED" formatter_data="android_java">
         Host initialization failed.
@@ -1060,7 +1086,7 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message name="IDS_REMOTING_REMOTE_ASSISTANCE_HOST_DESCRIPTION" desc="The file description specified in the version information of remote_assistance_host.exe.">
         Native messaging host for remote assistance
       </message>
-      <message name="IDS_REMOTING_HOST_COMMAND_DESCRIPTION" desc="The file description specified in the version information of remoting_host_command.exe.">
+      <message name="IDS_REMOTING_HOST_COMMAND_DESCRIPTION" desc="The file description specified in the version information of remoting_host_command.exe. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
         Application to issue commands to Chrome remote desktop host.
       </message>
       <message name="IDS_VERIFY_PIN_DIALOG_EMAIL_LABEL" desc="The message displayed by the PIN verification dialog.">
@@ -1140,6 +1166,15 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       </message>
       <message desc="Text shown in tooltip to inform the user that a setting is managed by domain policy." name="IDS_SETTING_MANAGED_BY_POLICY">
         This setting is managed by your domain policy.
+      </message>
+      <message desc="Platform-specific text indicating that a component is for the Windows OS." name="IDS_FOR_PLATFORM_WINDOWS">
+        For Windows (XP and above)
+      </message>
+      <message desc="Platform-specific text indicating that a component is for the Mac OS." name="IDS_FOR_PLATFORM_MAC">
+        For Mac (OS X 10.6 and above)
+      </message>
+      <message desc="Text for the button the user clicks to indicate that they agree to the terms of service and want to proceed with downloading the installer." name="IDS_ACCEPT_AND_INSTALL">
+        Accept and Install
       </message>
 
     </messages>

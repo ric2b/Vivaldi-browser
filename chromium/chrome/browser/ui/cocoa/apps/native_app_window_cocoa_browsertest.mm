@@ -8,8 +8,10 @@
 
 #import "base/mac/foundation_util.h"
 #import "base/mac/mac_util.h"
+#import "base/mac/scoped_cftyperef.h"
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/sdk_forward_declarations.h"
+#include "base/macros.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/apps/app_shim/extension_app_shim_handler_mac.h"
 #include "chrome/browser/apps/app_shim/test/app_shim_host_manager_test_api_mac.h"
@@ -17,15 +19,16 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#import "chrome/browser/ui/test/scoped_fake_nswindow_main_status.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/constants.h"
+#include "skia/ext/skia_utils_mac.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #import "testing/gtest_mac.h"
 #import "ui/base/test/nswindow_fullscreen_notification_waiter.h"
+#import "ui/base/test/scoped_fake_nswindow_focus.h"
 #import "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #import "ui/base/test/windowed_nsnotification_observer.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
@@ -273,8 +276,7 @@ IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, Fullscreen) {
 }
 
 // Test Minimize, Restore combinations with their native equivalents.
-// todo: re-enable in vivaldi.
-IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, DISABLED_Minimize) {
+IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, Minimize) {
   SetUpAppWithWindows(1);
   AppWindow* app_window = GetFirstAppWindow();
   extensions::NativeAppWindow* window = app_window->GetBaseWindow();
@@ -404,8 +406,7 @@ IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, MaximizeConstrained) {
 }
 
 // Test Minimize, Maximize, Restore combinations with their native equivalents.
-//Disabled in vivaldi
-IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, DISABLED_MinimizeMaximize) {
+IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, MinimizeMaximize) {
   SetUpAppWithWindows(1);
   AppWindow* app_window = GetFirstAppWindow();
   extensions::NativeAppWindow* window = app_window->GetBaseWindow();
@@ -457,6 +458,10 @@ IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, DISABLED_MinimizeMaximiz
 // Test Maximize, Fullscreen, Restore combinations.
 IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, MaximizeFullscreen) {
   if (base::mac::IsOSSnowLeopard())
+    return;
+
+  // This test is flaky on 10.11. Disable it as per http://crbug.com/560602.
+  if (base::mac::IsOSElCapitan())
     return;
 
   ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
@@ -560,11 +565,19 @@ void TestControls(AppWindow* app_window) {
   BOOL can_fullscreen =
       ![NSStringFromClass([ns_window class]) isEqualTo:@"AppFramelessNSWindow"];
   // The window can fullscreen and maximize.
-  if (base::mac::IsOSLionOrLater())
+  if (base::mac::IsOSLionOrLater()) {
     EXPECT_EQ(can_fullscreen, !!([ns_window collectionBehavior] &
                                  NSWindowCollectionBehaviorFullScreenPrimary));
-  EXPECT_EQ(can_fullscreen,
-            [[ns_window standardWindowButton:NSWindowZoomButton] isEnabled]);
+  }
+
+  // In OSX 10.10+, the zoom button performs the zoom action rather than the
+  // fullscreen action. The above check that collectionBehavior does not include
+  // NSWindowCollectionBehaviorFullScreenPrimary is sufficient to determine that
+  // the window can't be fullscreened.
+  if (base::mac::IsOSMavericksOrEarlier()) {
+    EXPECT_EQ(can_fullscreen,
+              [[ns_window standardWindowButton:NSWindowZoomButton] isEnabled]);
+  }
 
   // Set a maximum size.
   app_window->SetContentSizeConstraints(gfx::Size(), gfx::Size(200, 201));
@@ -626,37 +639,83 @@ IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, ControlsFrameless) {
   TestControls(CreateTestAppWindow("{\"frame\": \"none\"}"));
 }
 
+namespace {
+
+// Convert a color constant to an NSColor that can be compared with |bitmap|.
+NSColor* ColorInBitmapColorSpace(SkColor color, NSBitmapImageRep* bitmap) {
+  return [skia::SkColorToSRGBNSColor(color)
+      colorUsingColorSpace:[bitmap colorSpace]];
+}
+
+// Take a screenshot of the window, including its native frame.
+NSBitmapImageRep* ScreenshotNSWindow(NSWindow* window) {
+  // When building with 10.10 SDK and running on 10.9, -[NSView
+  // cacheDisplayInRect] does not seem to capture subviews. This seems related
+  // to the frame view having a layer with 10.10 SDK, but is probably a bug
+  // since it doesn't manifest on 10.10. See http://crbug.com/508722.
+  // In this case, take a screenshot using the CGWindowList API instead. The
+  // bitmap is now in the display's color space, so expected colors need to be
+  // converted.
+  // TODO(jackhou): Update this if it is fixed in AppKit, or if other
+  // platform/SDK combinations need it.
+  // NOTE: This doesn't work with Views, but the regular test does, so use that.
+  bool mac_views = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableMacViewsNativeAppWindows);
+  if (base::mac::IsOSMavericks() && !mac_views) {
+    // -[NSView setNeedsDisplay:YES] doesn't synchronously display the view, it
+    // gets drawn by another event in the queue, so let that run first.
+    content::RunAllPendingInMessageLoop();
+    base::ScopedCFTypeRef<CGImageRef> cg_image(CGWindowListCreateImage(
+        CGRectNull, kCGWindowListOptionIncludingWindow, [window windowNumber],
+        kCGWindowImageBoundsIgnoreFraming));
+    return [[[NSBitmapImageRep alloc] initWithCGImage:cg_image] autorelease];
+  }
+
+  NSView* frame_view = [[window contentView] superview];
+  NSRect bounds = [frame_view bounds];
+  NSBitmapImageRep* bitmap =
+      [frame_view bitmapImageRepForCachingDisplayInRect:bounds];
+  [frame_view cacheDisplayInRect:bounds toBitmapImageRep:bitmap];
+  return bitmap;
+}
+
+}  // namespace
+
 // Test that the colored frames have the correct color when active and inactive.
-// TODO(tapted): Fix this test. http://crbug.com/508722
-IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, DISABLED_FrameColor) {
+IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, FrameColor) {
   // The hex values indicate an RGB color. When we get the NSColor later, the
   // components are CGFloats in the range [0, 1].
   extensions::AppWindow* app_window = CreateTestAppWindow(
       "{\"frame\": {\"color\": \"#FF0000\", \"inactiveColor\": \"#0000FF\"}}");
   NSWindow* ns_window = app_window->GetNativeWindow();
-  // Disable color correction so we can read unmodified values from the bitmap.
+  // No color correction in the default case.
   [ns_window setColorSpace:[NSColorSpace sRGBColorSpace]];
 
-  NSView* frame_view = [[ns_window contentView] superview];
-  NSRect bounds = [frame_view bounds];
-  NSBitmapImageRep* bitmap =
-      [frame_view bitmapImageRepForCachingDisplayInRect:bounds];
+  int half_width = NSWidth([ns_window frame]) / 2;
 
-  [frame_view cacheDisplayInRect:bounds toBitmapImageRep:bitmap];
-  NSColor* color = [bitmap colorAtX:NSMidX(bounds) y:5];
+  NSBitmapImageRep* bitmap = ScreenshotNSWindow(ns_window);
   // The window is currently inactive so it should be blue (#0000FF).
-  EXPECT_EQ(0, [color redComponent]);
-  EXPECT_EQ(0, [color greenComponent]);
-  EXPECT_EQ(1, [color blueComponent]);
+  NSColor* expected_color = ColorInBitmapColorSpace(0xFF0000FF, bitmap);
+  NSColor* color = [bitmap colorAtX:half_width y:5];
+  CGFloat expected_components[4], color_components[4];
+  [expected_color getComponents:expected_components];
+  [color getComponents:color_components];
+  EXPECT_NEAR(expected_components[0], color_components[0], 0.01);
+  EXPECT_NEAR(expected_components[1], color_components[1], 0.01);
+  EXPECT_NEAR(expected_components[2], color_components[2], 0.01);
 
-  ScopedFakeNSWindowMainStatus fake_main(ns_window);
+  ui::test::ScopedFakeNSWindowFocus fake_focus;
+  [ns_window makeMainWindow];
 
-  [frame_view cacheDisplayInRect:bounds toBitmapImageRep:bitmap];
-  color = [bitmap colorAtX:NSMidX(bounds) y:5];
+  bitmap = ScreenshotNSWindow(ns_window);
   // The window is now active so it should be red (#FF0000).
-  EXPECT_EQ(1, [color redComponent]);
-  EXPECT_EQ(0, [color greenComponent]);
-  EXPECT_EQ(0, [color blueComponent]);
+  expected_color = ColorInBitmapColorSpace(0xFFFF0000, bitmap);
+  color = [bitmap colorAtX:half_width y:5];
+  [expected_color getComponents:expected_components];
+  [color getComponents:color_components];
+  EXPECT_NEAR(expected_components[0], color_components[0], 0.01);
+  EXPECT_NEAR(expected_components[1], color_components[1], 0.01);
+  EXPECT_NEAR(expected_components[2], color_components[2], 0.01);
 }
 
 INSTANTIATE_TEST_CASE_P(NativeAppWindowCocoaBrowserTestInstance,

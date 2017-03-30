@@ -5,8 +5,12 @@
 #ifndef CHROME_BROWSER_UI_TABS_TAB_STRIP_MODEL_H_
 #define CHROME_BROWSER_UI_TABS_TAB_STRIP_MODEL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -100,8 +104,7 @@ class TabStripModel {
 
     // New tab was opened using the menu command - either through the keyboard
     // shortcut, or by opening the menu and selecting the command. Applies to
-    // both Wrench menu and the menu bar's File menu (on platforms that have
-    // one).
+    // both app menu and the menu bar's File menu (on platforms that have one).
     NEW_TAB_COMMAND,
 
     // New tab was opened through the context menu on the tab strip.
@@ -175,7 +178,7 @@ class TabStripModel {
   // WebContents was closed immediately, false if it was not closed (we
   // may be waiting for a response from an onunload handler, or waiting for the
   // user to confirm closure).
-  bool CloseWebContentsAt(int index, uint32 close_types);
+  bool CloseWebContentsAt(int index, uint32_t close_types);
 
   // Replaces the WebContents at |index| with |new_contents|. The
   // WebContents that was at |index| is returned and its ownership returns
@@ -183,12 +186,6 @@ class TabStripModel {
   content::WebContents* ReplaceWebContentsAt(
       int index,
       content::WebContents* new_contents);
-
-  // Destroys the WebContents at the specified index, but keeps the tab
-  // visible in the tab strip. Used to free memory in low-memory conditions,
-  // especially on Chrome OS. The tab reloads if the user clicks on it.
-  // Returns the new empty WebContents, used only for testing.
-  content::WebContents* DiscardWebContentsAt(int index);
 
   // Detaches the WebContents at the specified index from this strip. The
   // WebContents is not destroyed, just removed from display. The caller
@@ -320,10 +317,6 @@ class TabStripModel {
 
   // Returns true if the tab at |index| is blocked by a tab modal dialog.
   bool IsTabBlocked(int index) const;
-
-  // Returns true if the WebContents at |index| has been discarded to
-  // save memory.  See DiscardWebContentsAt() for details.
-  bool IsTabDiscarded(int index) const;
 
   // Returns the index of the first tab that is not a pinned tab. This returns
   // |count()| if all of the tabs are pinned tabs, and 0 if none of the tabs are
@@ -472,8 +465,7 @@ class TabStripModel {
   //
   // Returns true if the WebContentses were closed immediately, false if we
   // are waiting for the result of an onunload handler.
-  bool InternalCloseTabs(const std::vector<int>& indices,
-                         uint32 close_types);
+  bool InternalCloseTabs(const std::vector<int>& indices, uint32_t close_types);
 
   // Invoked from InternalCloseTabs and when an extension is removed for an app
   // tab. Notifies observers of TabClosingAt and deletes |contents|. If

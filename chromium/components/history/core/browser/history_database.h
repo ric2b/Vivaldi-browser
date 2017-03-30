@@ -5,9 +5,11 @@
 #ifndef COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_DATABASE_H_
 #define COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_DATABASE_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "components/history/core/browser/download_database.h"
 #include "components/history/core/browser/history_types.h"
@@ -87,7 +89,7 @@ class HistoryDatabase : public DownloadDatabase,
 
   // Computes the |num_hosts| most-visited hostnames in the past 30 days. See
   // history_service.h for details.
-  TopHostsList TopHosts(int num_hosts);
+  TopHostsList TopHosts(size_t num_hosts);
 
   // Call to set the mode on the database to exclusive. The default locking mode
   // is "normal" but we want to run in exclusive mode for slightly better

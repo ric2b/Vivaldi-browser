@@ -4,16 +4,23 @@
 
 #include "chrome/browser/profile_resetter/profile_resetter.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/json/json_string_value_serializer.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_path_override.h"
+#include "build/build_config.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profile_resetter/brandcode_config_fetcher.h"
+#include "chrome/browser/profile_resetter/profile_reset_report.pb.h"
 #include "chrome/browser/profile_resetter/profile_resetter_test_base.h"
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -24,7 +31,10 @@
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "components/content_settings/core/browser/content_settings_info.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_client.h"
 #include "content/public/browser/web_contents.h"
@@ -254,7 +264,7 @@ scoped_ptr<BrandcodeConfigFetcher> ConfigParserTest::WaitForRequest(
   EXPECT_FALSE(fetcher->IsActive());
   // Look for the brand code in the request.
   EXPECT_NE(std::string::npos, request_listener_.upload_data.find("ABCD"));
-  return fetcher.Pass();
+  return fetcher;
 }
 
 scoped_ptr<net::FakeURLFetcher> ConfigParserTest::CreateFakeURLFetcher(
@@ -271,7 +281,7 @@ scoped_ptr<net::FakeURLFetcher> ConfigParserTest::CreateFakeURLFetcher(
       new net::HttpResponseHeaders("");
   download_headers->AddHeader("Content-Type: text/xml");
   fetcher->set_response_headers(download_headers);
-  return fetcher.Pass();
+  return fetcher;
 }
 
 // A helper class to create/delete/check a Chrome desktop shortcut on Windows.
@@ -481,22 +491,21 @@ TEST_F(ProfileResetterTest, ResetHomepagePartially) {
 
 TEST_F(ProfileResetterTest, ResetContentSettings) {
   HostContentSettingsMap* host_content_settings_map =
-      profile()->GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(profile());
   ContentSettingsPattern pattern =
       ContentSettingsPattern::FromString("[*.]example.org");
   std::map<ContentSettingsType, ContentSetting> default_settings;
 
-  for (int type = 0; type < CONTENT_SETTINGS_NUM_TYPES; ++type) {
-    ContentSettingsType content_type = static_cast<ContentSettingsType>(type);
-    if (content_type == CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE ||
-        content_type == CONTENT_SETTINGS_TYPE_MIXEDSCRIPT ||
+  // TODO(raymes): Clean up this test so that we don't have such ugly iteration
+  // over the content settings.
+  content_settings::ContentSettingsRegistry* registry =
+      content_settings::ContentSettingsRegistry::GetInstance();
+  for (const content_settings::ContentSettingsInfo* info : *registry) {
+    ContentSettingsType content_type = info->website_settings_info()->type();
+    if (content_type == CONTENT_SETTINGS_TYPE_MIXEDSCRIPT ||
         content_type == CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS) {
       // These types are excluded because one can't call
       // GetDefaultContentSetting() for them.
-      continue;
-    }
-    if (content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM) {
-      // This has been deprecated so we can neither set nor get it's value.
       continue;
     }
     ContentSetting default_setting =
@@ -508,14 +517,11 @@ TEST_F(ProfileResetterTest, ResetContentSettings) {
     ContentSetting site_setting = default_setting == CONTENT_SETTING_ALLOW
                                       ? CONTENT_SETTING_ALLOW
                                       : CONTENT_SETTING_BLOCK;
-    if (HostContentSettingsMap::IsSettingAllowedForType(
-            profile()->GetPrefs(), wildcard_setting, content_type)) {
+    if (info->IsSettingValid(wildcard_setting)) {
       host_content_settings_map->SetDefaultContentSetting(content_type,
                                                           wildcard_setting);
     }
-    if (!HostContentSettingsMap::ContentTypeHasCompoundValue(content_type) &&
-        HostContentSettingsMap::IsSettingAllowedForType(
-            profile()->GetPrefs(), site_setting, content_type)) {
+    if (info->IsSettingValid(site_setting)) {
       host_content_settings_map->SetContentSetting(
           pattern, ContentSettingsPattern::Wildcard(), content_type,
           std::string(), site_setting);
@@ -528,12 +534,9 @@ TEST_F(ProfileResetterTest, ResetContentSettings) {
 
   ResetAndWait(ProfileResetter::CONTENT_SETTINGS);
 
-  for (int type = 0; type < CONTENT_SETTINGS_NUM_TYPES; ++type) {
-    ContentSettingsType content_type = static_cast<ContentSettingsType>(type);
-    if (HostContentSettingsMap::ContentTypeHasCompoundValue(content_type) ||
-        content_type == CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE ||
-        content_type == CONTENT_SETTINGS_TYPE_MIXEDSCRIPT ||
-        content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM ||
+  for (const content_settings::ContentSettingsInfo* info : *registry) {
+    ContentSettingsType content_type = info->website_settings_info()->type();
+    if (content_type == CONTENT_SETTINGS_TYPE_MIXEDSCRIPT ||
         content_type == CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS)
       continue;
     ContentSetting default_setting =
@@ -541,15 +544,9 @@ TEST_F(ProfileResetterTest, ResetContentSettings) {
                                                               NULL);
     EXPECT_TRUE(default_settings.count(content_type));
     EXPECT_EQ(default_settings[content_type], default_setting);
-    if (!HostContentSettingsMap::ContentTypeHasCompoundValue(content_type)) {
-      ContentSetting site_setting =
-          host_content_settings_map->GetContentSetting(
-              GURL("example.org"),
-              GURL(),
-              content_type,
-              std::string());
-      EXPECT_EQ(default_setting, site_setting);
-    }
+    ContentSetting site_setting = host_content_settings_map->GetContentSetting(
+        GURL("example.org"), GURL(), content_type, std::string());
+    EXPECT_EQ(default_setting, site_setting);
 
     ContentSettingsForOneType host_settings;
     host_content_settings_map->GetSettingsForOneType(
@@ -746,18 +743,18 @@ TEST_F(PinnedTabsResetTest, ResetPinnedTabs) {
   tab_strip_model->AppendWebContents(contents1.get(), true);
   tab_strip_model->SetTabPinned(3, true);
 
-  EXPECT_EQ(contents2, tab_strip_model->GetWebContentsAt(0));
-  EXPECT_EQ(contents1, tab_strip_model->GetWebContentsAt(1));
-  EXPECT_EQ(contents4, tab_strip_model->GetWebContentsAt(2));
-  EXPECT_EQ(contents3, tab_strip_model->GetWebContentsAt(3));
+  EXPECT_EQ(contents2.get(), tab_strip_model->GetWebContentsAt(0));
+  EXPECT_EQ(contents1.get(), tab_strip_model->GetWebContentsAt(1));
+  EXPECT_EQ(contents4.get(), tab_strip_model->GetWebContentsAt(2));
+  EXPECT_EQ(contents3.get(), tab_strip_model->GetWebContentsAt(3));
   EXPECT_EQ(2, tab_strip_model->IndexOfFirstNonPinnedTab());
 
   ResetAndWait(ProfileResetter::PINNED_TABS);
 
-  EXPECT_EQ(contents2, tab_strip_model->GetWebContentsAt(0));
-  EXPECT_EQ(contents1, tab_strip_model->GetWebContentsAt(1));
-  EXPECT_EQ(contents4, tab_strip_model->GetWebContentsAt(2));
-  EXPECT_EQ(contents3, tab_strip_model->GetWebContentsAt(3));
+  EXPECT_EQ(contents2.get(), tab_strip_model->GetWebContentsAt(0));
+  EXPECT_EQ(contents1.get(), tab_strip_model->GetWebContentsAt(1));
+  EXPECT_EQ(contents4.get(), tab_strip_model->GetWebContentsAt(2));
+  EXPECT_EQ(contents3.get(), tab_strip_model->GetWebContentsAt(3));
   EXPECT_EQ(0, tab_strip_model->IndexOfFirstNonPinnedTab());
 }
 
@@ -985,10 +982,63 @@ TEST_F(ProfileResetterTest, FeedbackSerializationTest) {
   }
 }
 
+TEST_F(ProfileResetterTest, FeedbackSerializationAsProtoTest) {
+  // Reset to non organic defaults.
+  ResetAndWait(ProfileResetter::DEFAULT_SEARCH_ENGINE |
+               ProfileResetter::HOMEPAGE |
+               ProfileResetter::STARTUP_PAGES,
+               kDistributionConfig);
+
+  scoped_refptr<Extension> ext = CreateExtension(
+      base::ASCIIToUTF16("example"),
+      base::FilePath(FILE_PATH_LITERAL("//nonexistent")),
+      Manifest::INVALID_LOCATION,
+      extensions::Manifest::TYPE_EXTENSION,
+      false);
+  ASSERT_TRUE(ext.get());
+  service_->AddExtension(ext.get());
+
+  ShortcutHandler shortcut;
+  ShortcutCommand command_line = shortcut.CreateWithArguments(
+      base::ASCIIToUTF16("chrome.lnk"),
+      base::ASCIIToUTF16("--profile-directory=Default foo.com"));
+
+  ResettableSettingsSnapshot nonorganic_snap(profile());
+  nonorganic_snap.RequestShortcuts(base::Closure());
+  // Let it enumerate shortcuts on the FILE thread.
+  base::MessageLoop::current()->RunUntilIdle();
+
+  static_assert(ResettableSettingsSnapshot::ALL_FIELDS == 31,
+                "this test needs to be expanded");
+  for (int field_mask = 0; field_mask <= ResettableSettingsSnapshot::ALL_FIELDS;
+       ++field_mask) {
+    scoped_ptr<reset_report::ChromeResetReport> report =
+        SerializeSettingsReportToProto(nonorganic_snap, field_mask);
+
+    EXPECT_EQ(!!(field_mask & ResettableSettingsSnapshot::STARTUP_MODE),
+              report->startup_url_path_size() > 0);
+    EXPECT_EQ(!!(field_mask & ResettableSettingsSnapshot::STARTUP_MODE),
+              report->has_startup_type());
+    EXPECT_EQ(!!(field_mask & ResettableSettingsSnapshot::HOMEPAGE),
+              report->has_homepage_path());
+    EXPECT_EQ(!!(field_mask & ResettableSettingsSnapshot::HOMEPAGE),
+              report->has_homepage_is_new_tab_page());
+    EXPECT_EQ(!!(field_mask & ResettableSettingsSnapshot::HOMEPAGE),
+              report->has_show_home_button());
+    EXPECT_EQ(!!(field_mask & ResettableSettingsSnapshot::DSE_URL),
+              report->has_default_search_engine_path());
+    EXPECT_EQ(!!(field_mask & ResettableSettingsSnapshot::EXTENSIONS),
+              report->enabled_extensions_size() > 0);
+    EXPECT_EQ(!!(field_mask & ResettableSettingsSnapshot::SHORTCUTS) &&
+                  ShortcutHandler::IsSupported(),
+              report->shortcuts_size() > 0);
+  }
+}
+
 struct FeedbackCapture {
   void SetFeedback(Profile* profile,
                    const ResettableSettingsSnapshot& snapshot) {
-    list_ = GetReadableFeedbackForSnapshot(profile, snapshot).Pass();
+    list_ = GetReadableFeedbackForSnapshot(profile, snapshot);
     OnUpdatedList();
   }
 
@@ -1041,7 +1091,7 @@ TEST_F(ProfileResetterTest, GetReadableFeedback) {
   ::testing::Mock::VerifyAndClearExpectations(&capture);
   // The homepage and the startup page are in punycode. They are unreadable.
   // Trying to find the extension name.
-  scoped_ptr<base::ListValue> list = capture.list_.Pass();
+  scoped_ptr<base::ListValue> list = std::move(capture.list_);
   ASSERT_TRUE(list);
   bool checked_extensions = false;
   bool checked_shortcuts = false;

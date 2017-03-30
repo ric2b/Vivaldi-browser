@@ -7,13 +7,16 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/keyed_service/content/refcounted_browser_context_keyed_service_factory.h"
 
 class Profile;
 
+namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
+}
 
 namespace history {
 struct PrepopulatedPage;
@@ -39,7 +42,7 @@ class TopSitesFactory : public RefcountedBrowserContextKeyedServiceFactory {
       const std::vector<history::PrepopulatedPage>& prepopulated_page_list);
 
  private:
-  friend struct DefaultSingletonTraits<TopSitesFactory>;
+  friend struct base::DefaultSingletonTraits<TopSitesFactory>;
 
   TopSitesFactory();
   ~TopSitesFactory() override;

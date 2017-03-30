@@ -5,11 +5,14 @@
 #ifndef CONTENT_BROWSER_INDEXED_DB_INDEXED_DB_TRANSACTION_H_
 #define CONTENT_BROWSER_INDEXED_DB_INDEXED_DB_TRANSACTION_H_
 
+#include <stdint.h>
+
 #include <queue>
 #include <set>
 #include <stack>
 
-#include "base/basictypes.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
@@ -38,14 +41,6 @@ class CONTENT_EXPORT IndexedDBTransaction
     FINISHED,    // Either aborted or committed.
   };
 
-  IndexedDBTransaction(
-      int64 id,
-      scoped_refptr<IndexedDBDatabaseCallbacks> callbacks,
-      const std::set<int64>& object_store_ids,
-      blink::WebIDBTransactionMode,
-      IndexedDBDatabase* db,
-      IndexedDBBackingStore::Transaction* backing_store_transaction);
-
   virtual void Abort();
   leveldb::Status Commit();
   void Abort(const IndexedDBDatabaseError& error);
@@ -54,7 +49,7 @@ class CONTENT_EXPORT IndexedDBTransaction
   void Start();
 
   blink::WebIDBTransactionMode mode() const { return mode_; }
-  const std::set<int64>& scope() const { return object_store_ids_; }
+  const std::set<int64_t>& scope() const { return object_store_ids_; }
 
   void ScheduleTask(Operation task) {
     ScheduleTask(blink::WebIDBTaskTypeNormal, task);
@@ -71,7 +66,7 @@ class CONTENT_EXPORT IndexedDBTransaction
   IndexedDBBackingStore::Transaction* BackingStoreTransaction() {
     return transaction_.get();
   }
-  int64 id() const { return id_; }
+  int64_t id() const { return id_; }
 
   IndexedDBDatabase* database() const { return database_.get(); }
   IndexedDBDatabaseCallbacks* connection() const { return callbacks_.get(); }
@@ -88,18 +83,34 @@ class CONTENT_EXPORT IndexedDBTransaction
 
   const Diagnostics& diagnostics() const { return diagnostics_; }
 
+ protected:
+  // Test classes may derive, but most creation should be done via
+  // IndexedDBClassFactory.
+  IndexedDBTransaction(
+      int64_t id,
+      scoped_refptr<IndexedDBDatabaseCallbacks> callbacks,
+      const std::set<int64_t>& object_store_ids,
+      blink::WebIDBTransactionMode mode,
+      IndexedDBDatabase* db,
+      IndexedDBBackingStore::Transaction* backing_store_transaction);
+  virtual ~IndexedDBTransaction();
+
+  // May be overridden in tests.
+  virtual base::TimeDelta GetInactivityTimeout() const;
+
  private:
   friend class BlobWriteCallbackImpl;
+  friend class IndexedDBClassFactory;
+  friend class base::RefCounted<IndexedDBTransaction>;
 
   FRIEND_TEST_ALL_PREFIXES(IndexedDBTransactionTestMode, AbortPreemptive);
-  FRIEND_TEST_ALL_PREFIXES(IndexedDBTransactionTest, Timeout);
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBTransactionTestMode, AbortTasks);
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBTransactionTest, NoTimeoutReadOnly);
   FRIEND_TEST_ALL_PREFIXES(IndexedDBTransactionTest,
                            SchedulePreemptiveTask);
   FRIEND_TEST_ALL_PREFIXES(IndexedDBTransactionTestMode,
                            ScheduleNormalTask);
-
-  friend class base::RefCounted<IndexedDBTransaction>;
-  virtual ~IndexedDBTransaction();
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBTransactionTest, Timeout);
 
   void RunTasksIfStarted();
 
@@ -112,8 +123,8 @@ class CONTENT_EXPORT IndexedDBTransaction
   leveldb::Status CommitPhaseTwo();
   void Timeout();
 
-  const int64 id_;
-  const std::set<int64> object_store_ids_;
+  const int64_t id_;
+  const std::set<int64_t> object_store_ids_;
   const blink::WebIDBTransactionMode mode_;
 
   bool used_;
@@ -167,7 +178,7 @@ class CONTENT_EXPORT IndexedDBTransaction
   // This timer is started after requests have been processed. If no subsequent
   // requests are processed before the timer fires, assume the script is
   // unresponsive and abort to unblock the transaction queue.
-  base::OneShotTimer<IndexedDBTransaction> timeout_timer_;
+  base::OneShotTimer timeout_timer_;
 
   Diagnostics diagnostics_;
 };

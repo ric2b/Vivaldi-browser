@@ -8,7 +8,12 @@
 #import <Cocoa/Cocoa.h>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/memory/scoped_ptr.h"
 #import "ui/base/cocoa/tracking_area.h"
+
+namespace ui {
+struct NinePartImageIds;
+}
 
 // Sent when a user-initiated drag to resize the container is initiated.
 extern NSString* const kBrowserActionGrippyDragStartedNotification;
@@ -72,13 +77,14 @@ class BrowserActionsContainerViewSizeDelegate {
   // Whether the container is currently being resized by the user.
   BOOL userIsResizing_;
 
-  // Whether the user can resize this at all. Resizing is disabled in incognito
-  // mode since any changes done in incognito mode are not saved anyway, and
-  // also to avoid a crash. http://crbug.com/42848
+  // Whether the user can resize the container; this is disabled for overflow
+  // (where it would make no sense) and during highlighting, since this is a
+  // temporary and entirely browser-driven sequence in order to warn the user
+  // about potentially dangerous items.
   BOOL resizable_;
 
   // Whether or not the container is the overflow container, and is shown in the
-  // wrench menu.
+  // app menu.
   BOOL isOverflow_;
 
   // Whether the user is allowed to drag the grippy to the left. NO if all
@@ -96,9 +102,8 @@ class BrowserActionsContainerViewSizeDelegate {
   // to large.
   BOOL grippyPinned_;
 
-  // Whether the toolbar is currently highlighting its actions (in which case it
-  // is drawn with an orange background).
-  BOOL isHighlighting_;
+  // The nine-grid of the highlight to paint, if any.
+  scoped_ptr<ui::NinePartImageIds> highlight_;
 
   // A tracking area to receive mouseEntered events, if tracking is enabled.
   ui::ScopedCrTrackingArea trackingArea_;
@@ -113,11 +118,17 @@ class BrowserActionsContainerViewSizeDelegate {
 // Sets whether or not tracking (for mouseEntered events) is enabled.
 - (void)setTrackingEnabled:(BOOL)enabled;
 
+// Returns true if tracking is currently enabled.
+- (BOOL)trackingEnabled;
+
 // Sets whether or not the container is the overflow container.
 - (void)setIsOverflow:(BOOL)isOverflow;
 
 // Sets whether or not the container is highlighting.
-- (void)setIsHighlighting:(BOOL)isHighlighting;
+- (void)setHighlight:(scoped_ptr<ui::NinePartImageIds>)highlight;
+
+// Reeturns true if the container is currently highlighting.
+- (BOOL)isHighlighting;
 
 // Resizes the container to the given ideal width, optionally animating.
 - (void)resizeToWidth:(CGFloat)width animate:(BOOL)animate;

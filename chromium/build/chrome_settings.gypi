@@ -8,6 +8,8 @@
   'variables': {
     # TODO: remove this helper when we have loops in GYP
     'apply_locales_cmd': ['python', '<(DEPTH)/build/apply_locales.py'],
+    'grit_defines': ['-D', 'version=<(version_full)'],
+    'includes': ['util/version.gypi'],
 
     'conditions': [
       ['OS=="mac"', {
@@ -18,10 +20,14 @@
             # The policy .grd file also needs the bundle id.
             'grit_defines': ['-D', 'mac_bundle_id=com.google.Chrome'],
           }, {  # else: branding!="Chrome"
+            'conditions': [
+              ['branding!="vivaldi"', { # Needed to prevent dup grit_defines
             'mac_bundle_id': 'org.chromium.Chromium',
             'mac_creator': 'Cr24',
             # The policy .grd file also needs the bundle id.
             'grit_defines': ['-D', 'mac_bundle_id=org.chromium.Chromium'],
+              }],
+            ],
           }],  # branding
           ['branding=="vivaldi"', {
             'mac_bundle_id': 'com.vivaldi.Vivaldi',

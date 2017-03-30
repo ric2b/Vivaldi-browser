@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/search_engines_private/search_engines_private_api.h"
 
+#include <stddef.h>
+
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -251,7 +253,7 @@ SearchEnginesPrivateGetHotwordStateFunction::Run() {
   // in, audio history is meaningless. This is only displayed if always-on
   // hotwording is available.
   if (authenticated && always_on) {
-    std::string user_display_name = signin->GetAuthenticatedUsername();
+    std::string user_display_name = signin->GetAuthenticatedAccountInfo().email;
     HotwordService* hotword_service =
         HotwordServiceFactory::GetForProfile(profile);
     if (hotword_service) {

@@ -4,27 +4,29 @@
 
 #include "chrome/browser/prefs/pref_metrics_service.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_shutdown.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
+#include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
-#include "chrome/browser/prefs/synced_pref_change_registrar.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/rappor/rappor_utils.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/syncable_prefs/synced_pref_change_registrar.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "crypto/hmac.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -56,8 +58,10 @@ PrefMetricsService::PrefMetricsService(Profile* profile)
       weak_factory_(this) {
   RecordLaunchPrefs();
 
-  PrefServiceSyncable* prefs = PrefServiceSyncable::FromProfile(profile_);
-  synced_pref_change_registrar_.reset(new SyncedPrefChangeRegistrar(prefs));
+  syncable_prefs::PrefServiceSyncable* prefs =
+      PrefServiceSyncableFromProfile(profile_);
+  synced_pref_change_registrar_.reset(
+      new syncable_prefs::SyncedPrefChangeRegistrar(prefs));
 
   RegisterSyncedPrefObservers();
 }
@@ -178,7 +182,8 @@ void PrefMetricsService::OnPrefChanged(
     const LogHistogramValueCallback& callback,
     const std::string& path,
     bool from_sync) {
-  PrefServiceSyncable* prefs = PrefServiceSyncable::FromProfile(profile_);
+  syncable_prefs::PrefServiceSyncable* prefs =
+      PrefServiceSyncableFromProfile(profile_);
   const PrefService::Preference* pref = prefs->FindPreference(path.c_str());
   DCHECK(pref);
   std::string source_name(
@@ -214,7 +219,7 @@ void PrefMetricsService::LogIntegerPrefChange(int boundary_value,
 
 // static
 PrefMetricsService::Factory* PrefMetricsService::Factory::GetInstance() {
-  return Singleton<PrefMetricsService::Factory>::get();
+  return base::Singleton<PrefMetricsService::Factory>::get();
 }
 
 // static

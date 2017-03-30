@@ -11,13 +11,15 @@
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_result_codes.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/env_vars.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "content/public/common/content_switches.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -32,8 +34,8 @@
 #endif
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_IOS)
-#include "chrome/browser/crash_upload_list.h"
-#include "chrome/common/chrome_version_info_values.h"
+#include "components/upload_list/crash_upload_list.h"
+#include "components/version_info/version_info_values.h"
 #endif
 
 #if defined(OS_POSIX)
@@ -45,11 +47,10 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/common/channel_info.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/version_info/version_info.h"
 #endif
-
-namespace chrome {
 
 namespace {
 
@@ -135,8 +136,8 @@ bool ChromeCrashReporterClient::ShouldShowRestartDialog(base::string16* title,
   // The CHROME_RESTART var contains the dialog strings separated by '|'.
   // See ChromeBrowserMainPartsWin::PrepareRestartOnCrashEnviroment()
   // for details.
-  std::vector<std::string> dlg_strings;
-  base::SplitString(restart_info, '|', &dlg_strings);
+  std::vector<std::string> dlg_strings = base::SplitString(
+      restart_info, "|", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   if (dlg_strings.size() < 3)
     return false;
@@ -279,6 +280,11 @@ base::FilePath ChromeCrashReporterClient::GetReporterLogFilename() {
 
 bool ChromeCrashReporterClient::GetCrashDumpLocation(
     base::FilePath* crash_dir) {
+#if defined(OS_WIN)
+  // TODO(scottmg): Consider supporting --user-data-dir. See
+  // https://crbug.com/565446.
+  return chrome::GetDefaultCrashDumpLocation(crash_dir);
+#else
   // By setting the BREAKPAD_DUMP_LOCATION environment variable, an alternate
   // location to write breakpad crash dumps can be set.
   scoped_ptr<base::Environment> env(base::Environment::Create());
@@ -290,20 +296,11 @@ bool ChromeCrashReporterClient::GetCrashDumpLocation(
   }
 
   return PathService::Get(chrome::DIR_CRASH_DUMPS, crash_dir);
+#endif
 }
 
 size_t ChromeCrashReporterClient::RegisterCrashKeys() {
-  // Note: On Windows this only affects the EXE. A separate invocation from
-  // child_process_logging_win.cc registers crash keys for Chrome.dll.
-#if defined(OS_WIN) && defined(COMPONENT_BUILD)
-  // On Windows, this is not called in a component build, as in that case a
-  // single copy of 'base' is shared by the EXE and the various DLLs, and that
-  // copy is configured by child_process_logging_win.cc.
-  NOTREACHED();
-  return 0;
-#else
   return crash_keys::RegisterChromeCrashKeys();
-#endif
 }
 
 bool ChromeCrashReporterClient::IsRunningUnattended() {
@@ -322,7 +319,7 @@ bool ChromeCrashReporterClient::GetCollectStatsConsent() {
   bool is_guest_session = base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kGuestSession);
   bool is_stable_channel =
-      chrome::VersionInfo::GetChannel() == chrome::VersionInfo::CHANNEL_STABLE;
+      chrome::GetChannel() == version_info::Channel::STABLE;
 
   if (is_guest_session && is_stable_channel)
     return false;
@@ -353,5 +350,3 @@ bool ChromeCrashReporterClient::EnableBreakpadForProcess(
          process_type == switches::kZygoteProcess ||
          process_type == switches::kGpuProcess;
 }
-
-}  // namespace chrome

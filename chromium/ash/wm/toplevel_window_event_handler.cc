@@ -166,11 +166,11 @@ ToplevelWindowEventHandler::ToplevelWindowEventHandler()
       in_gesture_drag_(false),
       drag_reverted_(false),
       destroyed_(NULL) {
-  Shell::GetInstance()->display_controller()->AddObserver(this);
+  Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
 }
 
 ToplevelWindowEventHandler::~ToplevelWindowEventHandler() {
-  Shell::GetInstance()->display_controller()->RemoveObserver(this);
+  Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
   if (destroyed_)
     *destroyed_ = true;
 }
@@ -395,7 +395,6 @@ aura::client::WindowMoveResult ToplevelWindowEventHandler::RunMoveLoop(
   DCHECK(!in_move_loop_);  // Can only handle one nested loop at a time.
   aura::Window* root_window = source->GetRootWindow();
   DCHECK(root_window);
-  // TODO(tdresser): Use gfx::PointF. See crbug.com/337824.
   gfx::Point drag_location;
   if (move_source == aura::client::WINDOW_MOVE_SOURCE_TOUCH &&
       aura::Env::GetInstance()->is_touch_down()) {
@@ -583,8 +582,12 @@ void ToplevelWindowEventHandler::HandleMouseExited(
 }
 
 void ToplevelWindowEventHandler::HandleCaptureLost(ui::LocatedEvent* event) {
-  if (event->phase() == ui::EP_PRETARGET)
-    CompleteDrag(DRAG_REVERT);
+  if (event->phase() == ui::EP_PRETARGET) {
+    // We complete the drag instead of reverting it, as reverting it will result
+    // in a weird behavior when a dragged tab produces a modal dialog while the
+    // drag is in progress. crbug.com/558201.
+    CompleteDrag(DRAG_COMPLETE);
+  }
 }
 
 void ToplevelWindowEventHandler::SetWindowStateTypeFromGesture(

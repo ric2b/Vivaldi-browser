@@ -11,7 +11,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_local.h"
 #include "content/child/permissions/permission_dispatcher.h"
-#include "content/child/worker_task_runner.h"
+#include "content/public/child/worker_thread.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/modules/permissions/WebPermissionObserver.h"
 
@@ -37,8 +37,8 @@ PermissionDispatcherThreadProxy::GetThreadInstance(
   PermissionDispatcherThreadProxy* instance =
       new PermissionDispatcherThreadProxy(main_thread_task_runner,
                                         permission_dispatcher);
-  DCHECK(WorkerTaskRunner::Instance()->CurrentWorkerId());
-  WorkerTaskRunner::Instance()->AddStopObserver(instance);
+  DCHECK(WorkerThread::GetCurrentId());
+  WorkerThread::AddObserver(instance);
   return instance;
 }
 
@@ -57,15 +57,45 @@ PermissionDispatcherThreadProxy::~PermissionDispatcherThreadProxy() {
 void PermissionDispatcherThreadProxy::queryPermission(
     blink::WebPermissionType type,
     const blink::WebURL& origin,
-    blink::WebPermissionQueryCallback* callback) {
+    blink::WebPermissionCallback* callback) {
   main_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&PermissionDispatcher::QueryPermissionForWorker,
-                 base::Unretained(permission_dispatcher_),
-                 type,
-                 origin.string().utf8(),
-                 base::Unretained(callback),
-                 WorkerTaskRunner::Instance()->CurrentWorkerId()));
+      FROM_HERE, base::Bind(&PermissionDispatcher::QueryPermissionForWorker,
+                            base::Unretained(permission_dispatcher_), type,
+                            origin.string().utf8(), base::Unretained(callback),
+                            WorkerThread::GetCurrentId()));
+}
+
+void PermissionDispatcherThreadProxy::requestPermission(
+    blink::WebPermissionType type,
+    const blink::WebURL& origin,
+    blink::WebPermissionCallback* callback) {
+  main_thread_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&PermissionDispatcher::RequestPermissionForWorker,
+                            base::Unretained(permission_dispatcher_), type,
+                            origin.string().utf8(), base::Unretained(callback),
+                            WorkerThread::GetCurrentId()));
+}
+
+void PermissionDispatcherThreadProxy::requestPermissions(
+    const blink::WebVector<blink::WebPermissionType>& types,
+    const blink::WebURL& origin,
+    blink::WebPermissionsCallback* callback) {
+  main_thread_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&PermissionDispatcher::RequestPermissionsForWorker,
+                            base::Unretained(permission_dispatcher_), types,
+                            origin.string().utf8(), base::Unretained(callback),
+                            WorkerThread::GetCurrentId()));
+}
+
+void PermissionDispatcherThreadProxy::revokePermission(
+    blink::WebPermissionType type,
+    const blink::WebURL& origin,
+    blink::WebPermissionCallback* callback) {
+  main_thread_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&PermissionDispatcher::RevokePermissionForWorker,
+                            base::Unretained(permission_dispatcher_), type,
+                            origin.string().utf8(), base::Unretained(callback),
+                            WorkerThread::GetCurrentId()));
 }
 
 void PermissionDispatcherThreadProxy::startListening(
@@ -77,16 +107,14 @@ void PermissionDispatcherThreadProxy::startListening(
 
   RegisterObserver(observer);
 
-  main_thread_task_runner_->PostTask(FROM_HERE,
-      base::Bind(&PermissionDispatcher::StartListeningForWorker,
-          base::Unretained(permission_dispatcher_),
-          type,
-          origin.string().utf8(),
-          WorkerTaskRunner::Instance()->CurrentWorkerId(),
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(
+          &PermissionDispatcher::StartListeningForWorker,
+          base::Unretained(permission_dispatcher_), type,
+          origin.string().utf8(), WorkerThread::GetCurrentId(),
           base::Bind(&PermissionDispatcherThreadProxy::OnPermissionChanged,
-                     base::Unretained(this),
-                     type,
-                     origin.string().utf8(),
+                     base::Unretained(this), type, origin.string().utf8(),
                      base::Unretained(observer))));
 }
 
@@ -105,21 +133,18 @@ void PermissionDispatcherThreadProxy::OnPermissionChanged(
 
   observer->permissionChanged(type, status);
 
-  main_thread_task_runner_->PostTask(FROM_HERE,
-      base::Bind(&PermissionDispatcher::GetNextPermissionChangeForWorker,
-          base::Unretained(permission_dispatcher_),
-          type,
-          origin,
-          status,
-          WorkerTaskRunner::Instance()->CurrentWorkerId(),
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(
+          &PermissionDispatcher::GetNextPermissionChangeForWorker,
+          base::Unretained(permission_dispatcher_), type, origin, status,
+          WorkerThread::GetCurrentId(),
           base::Bind(&PermissionDispatcherThreadProxy::OnPermissionChanged,
-                     base::Unretained(this),
-                     type,
-                     origin,
+                     base::Unretained(this), type, origin,
                      base::Unretained(observer))));
 }
 
-void PermissionDispatcherThreadProxy::OnWorkerRunLoopStopped() {
+void PermissionDispatcherThreadProxy::WillStopCurrentWorkerThread() {
   delete this;
 }
 

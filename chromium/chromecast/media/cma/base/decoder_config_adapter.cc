@@ -26,6 +26,10 @@ AudioCodec ToAudioCodec(const ::media::AudioCodec audio_codec) {
       return kCodecPCM_S16BE;
     case ::media::kCodecVorbis:
       return kCodecVorbis;
+    case ::media::kCodecOpus:
+      return kCodecOpus;
+    case ::media::kCodecFLAC:
+      return kCodecFLAC;
     default:
       LOG(ERROR) << "Unsupported audio codec " << audio_codec;
   }
@@ -40,6 +44,8 @@ SampleFormat ToSampleFormat(const ::media::SampleFormat sample_format) {
       return kSampleFormatU8;
     case ::media::kSampleFormatS16:
       return kSampleFormatS16;
+    case ::media::kSampleFormatS24:
+      return kSampleFormatS24;
     case ::media::kSampleFormatS32:
       return kSampleFormatS32;
     case ::media::kSampleFormatF32:
@@ -65,6 +71,8 @@ VideoCodec ToVideoCodec(const ::media::VideoCodec video_codec) {
       return kCodecVP8;
     case ::media::kCodecVP9:
       return kCodecVP9;
+    case ::media::kCodecHEVC:
+      return kCodecHEVC;
     default:
       LOG(ERROR) << "Unsupported video codec " << video_codec;
   }
@@ -125,6 +133,8 @@ VideoProfile ToVideoProfile(const ::media::VideoCodecProfile codec_profile) {
       return ::media::kSampleFormatU8;
     case kSampleFormatS16:
       return ::media::kSampleFormatS16;
+    case kSampleFormatS24:
+      return ::media::kSampleFormatS24;
     case kSampleFormatS32:
       return ::media::kSampleFormatS32;
     case kSampleFormatF32:
@@ -158,6 +168,8 @@ VideoProfile ToVideoProfile(const ::media::VideoCodecProfile codec_profile) {
       return ::media::kCodecVorbis;
     case kCodecOpus:
       return ::media::kCodecOpus;
+    case kCodecFLAC:
+      return ::media::kCodecFLAC;
     default:
       return ::media::kUnknownAudioCodec;
   }
@@ -170,9 +182,8 @@ AudioConfig DecoderConfigAdapter::ToCastAudioConfig(
     StreamId id,
     const ::media::AudioDecoderConfig& config) {
   AudioConfig audio_config;
-  if (!config.IsValidConfig()) {
+  if (!config.IsValidConfig())
     return audio_config;
-  }
 
   audio_config.id = id;
   audio_config.codec = ToAudioCodec(config.codec());
@@ -181,9 +192,7 @@ AudioConfig DecoderConfigAdapter::ToCastAudioConfig(
   audio_config.channel_number =
       ::media::ChannelLayoutToChannelCount(config.channel_layout()),
   audio_config.samples_per_second = config.samples_per_second();
-  audio_config.extra_data =
-      (config.extra_data_size() > 0) ? config.extra_data() : nullptr;
-  audio_config.extra_data_size = config.extra_data_size();
+  audio_config.extra_data = config.extra_data();
   audio_config.is_encrypted = config.is_encrypted();
   return audio_config;
 }
@@ -195,7 +204,7 @@ AudioConfig DecoderConfigAdapter::ToCastAudioConfig(
       ToMediaAudioCodec(config.codec),
       ToMediaSampleFormat(config.sample_format),
       ToMediaChannelLayout(config.channel_number), config.samples_per_second,
-      config.extra_data, config.extra_data_size, config.is_encrypted);
+      config.extra_data, config.is_encrypted);
 }
 
 // static
@@ -210,9 +219,7 @@ VideoConfig DecoderConfigAdapter::ToCastVideoConfig(
   video_config.id = id;
   video_config.codec = ToVideoCodec(config.codec());
   video_config.profile = ToVideoProfile(config.profile());
-  video_config.extra_data = (config.extra_data_size() > 0) ?
-      config.extra_data() : nullptr;
-  video_config.extra_data_size = config.extra_data_size();
+  video_config.extra_data = config.extra_data();
   video_config.is_encrypted = config.is_encrypted();
   return video_config;
 }

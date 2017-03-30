@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "content/public/browser/resource_request_details.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -55,7 +56,7 @@ IN_PROC_BROWSER_TEST_F(CrossSiteRedirectorBrowserTest,
                        VerifyCrossSiteRedirectURL) {
   // Map all hosts to localhost and setup the EmbeddedTestServer for redirects.
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   SetupCrossSiteRedirector(embedded_test_server());
 
   // Navigate to http://localhost:<port>/cross-site/foo.com/title2.html and

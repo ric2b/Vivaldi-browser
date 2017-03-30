@@ -44,18 +44,18 @@
 //   void OnIOError(IOError err) { DCHECK(CalledOnValidThread(); ... }
 // };
 
-#ifndef SYNC_UTIL_WEAK_HANDLE_H_
-#define SYNC_UTIL_WEAK_HANDLE_H_
+#ifndef SYNC_INTERNAL_API_PUBLIC_UTIL_WEAK_HANDLE_H_
+#define SYNC_INTERNAL_API_PUBLIC_UTIL_WEAK_HANDLE_H_
 
 #include <cstddef>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -373,4 +373,4 @@ WeakHandle<T> MakeWeakHandle(const base::WeakPtr<T>& ptr) {
 
 }  // namespace syncer
 
-#endif  // SYNC_UTIL_WEAK_HANDLE_H_
+#endif  // SYNC_INTERNAL_API_PUBLIC_UTIL_WEAK_HANDLE_H_

@@ -5,9 +5,12 @@
 #ifndef UI_OZONE_COMMON_DISPLAY_UTIL_H_
 #define UI_OZONE_COMMON_DISPLAY_UTIL_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
+#include "ui/ozone/ozone_base_export.h"
 
 namespace base {
 class FilePath;
@@ -30,7 +33,8 @@ class FindDisplayById {
   int64_t display_id_;
 };
 
-DisplayMode_Params GetDisplayModeParams(const DisplayMode& mode);
+DisplayMode_Params OZONE_BASE_EXPORT
+GetDisplayModeParams(const DisplayMode& mode);
 DisplaySnapshot_Params GetDisplaySnapshotParams(const DisplaySnapshot& display);
 
 // Create a display using the Ozone command line parameters.

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_AUTOCOMPLETE_CHROME_AUTOCOMPLETE_PROVIDER_CLIENT_H_
 #define CHROME_BROWSER_AUTOCOMPLETE_CHROME_AUTOCOMPLETE_PROVIDER_CLIENT_H_
 
+#include "base/macros.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
@@ -39,7 +40,6 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   std::vector<base::string16> GetBuiltinsToProvideAsUserTypes() override;
   bool IsOffTheRecord() const override;
   bool SearchSuggestEnabled() const override;
-  bool BookmarkBarIsVisible() const override;
   bool TabSyncEnabledAndUnencrypted() const override;
   void Classify(
       const base::string16& text,

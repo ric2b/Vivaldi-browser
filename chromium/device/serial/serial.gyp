@@ -29,6 +29,12 @@
       'target_name': 'device_serial',
       'type': 'static_library',
       'conditions': [
+        ['chromeos==1', {
+          'dependencies': [
+            '../../chromeos/chromeos.gyp:chromeos',
+            '../../dbus/dbus.gyp:dbus',
+          ],
+        }],
         ['use_udev == 1', {
           'dependencies': [
             '../udev_linux/udev.gyp:udev_linux',
@@ -44,6 +50,8 @@
         'device_serial_mojo',
         '../../net/net.gyp:net',
         '../../third_party/mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../../third_party/re2/re2.gyp:re2',
+        '../core/core.gyp:device_core',
       ],
       'export_dependent_settings': [
         'device_serial_mojo',

@@ -30,10 +30,13 @@
     "extension_types": ["platform_app"],
     "min_manifest_version": 2,
     "whitelist": [
-      "nckgahadagoaajjgafhacjanaoiihapd",  // Google Talk prod
-      "eggnbpckecmjlblplehfpjjdhhidfdoj",  // Google Talk beta
-      "ppleadejekpmccmnpjdimmlfljlkdfej",  // Google Talk alpha
-      "ljclpkphhpbpinifbeabbhlfddcpfdde",   // Google Talk debug
+      // Keep this list in sync with extensions_misc::kHangoutsExtensionIds but
+      // omit the Packaged App ids.
+      "nckgahadagoaajjgafhacjanaoiihapd",  // Hangouts Production.
+      "ljclpkphhpbpinifbeabbhlfddcpfdde",  // Hangouts Debug.
+      "ppleadejekpmccmnpjdimmlfljlkdfej",  // Hangouts Alpha.
+      "eggnbpckecmjlblplehfpjjdhhidfdoj",  // Hangouts Beta.
+
       "lphgohfeebnhcpiohjndkgbhhkoapkjc", // Apps Debugger
       "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
     ]
@@ -94,7 +97,25 @@
       "950D13BB9B4794F4CA2A68D3597E5DFAA47C88AE",  // Drive
       "0EEB39B7A9A52CAAE6A072F83320435749B184A4",  // http://crbug.com/481210
       "D4AF239830E1E038C9B60DA365B1EC9CB3BC5658",  // http://crbug.com/481210
-      "4895B1DBB92D52488F8D9FFDF9CC7B95C7258C9A"   // http://crbug.com/505532
+      "4895B1DBB92D52488F8D9FFDF9CC7B95C7258C9A",  // http://crbug.com/505532
+      "A3880AA78DB0004DE841CC980959D8443F3A8E40",  // http://crbug.com/521615
+      "C8B53B3C2CC39CB504B19D990165684FF0CE880C"   // http://crbug.com/521615
+    ]
+  }, {
+    "channel": "beta",
+    "extension_types": ["extension"],
+    "whitelist": [
+      "4895B1DBB92D52488F8D9FFDF9CC7B95C7258C9A",  // https://crbug.com/570337
+      "A3880AA78DB0004DE841CC980959D8443F3A8E40",  // https://crbug.com/570337
+      "C8B53B3C2CC39CB504B19D990165684FF0CE880C"   // https://crbug.com/570337
+    ]
+  }, {
+    "channel": "dev",
+    "extension_types": ["extension"],
+    "whitelist": [
+      "4895B1DBB92D52488F8D9FFDF9CC7B95C7258C9A",  // https://crbug.com/570337
+      "A3880AA78DB0004DE841CC980959D8443F3A8E40",  // https://crbug.com/570337
+      "C8B53B3C2CC39CB504B19D990165684FF0CE880C"   // https://crbug.com/570337
     ]
   }, {
     "channel": "canary",
@@ -169,7 +190,14 @@
     ]
   },
   "kiosk_only": {
-    "channel": "dev",
+    "channel": "stable",
+    "extension_types": [
+      "platform_app"
+    ],
+    "platforms": ["chromeos"]
+  },
+  "kiosk_secondary_apps": {
+    "channel": "stable",
     "extension_types": [
       "platform_app"
     ]
@@ -247,7 +275,8 @@
       // TODO(joaodasilva): remove these two once we have the new policy to
       // grant auto approval by ID. http://crbug.com/399392
       "A8208CCC87F8261AFAEB6B85D5E8D47372DDEA6B",
-      "A4577D8C2AF4CF26F40CBCA83FFA4251D6F6C8F8"
+      "A4577D8C2AF4CF26F40CBCA83FFA4251D6F6C8F8",
+      "EFCF5358672FEE04789FD2EC3638A67ADEDB6C8C"  // http://crbug.com/514696
     ]
   },
   "offline_enabled": {

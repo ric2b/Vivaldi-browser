@@ -4,7 +4,9 @@
 
 #include "tools/gn/functions.h"
 
+#include <stddef.h>
 #include <iostream>
+#include <utility>
 
 #include "base/environment.h"
 #include "base/strings/string_util.h"
@@ -19,6 +21,8 @@
 #include "tools/gn/template.h"
 #include "tools/gn/token.h"
 #include "tools/gn/value.h"
+#include "tools/gn/value_extractors.h"
+#include "tools/gn/variables.h"
 
 namespace {
 
@@ -131,6 +135,42 @@ Label MakeLabelForScope(const Scope* scope,
                toolchain_label.name());
 }
 
+// static
+const int NonNestableBlock::kKey = 0;
+
+NonNestableBlock::NonNestableBlock(
+    Scope* scope,
+    const FunctionCallNode* function,
+    const char* type_description)
+    : scope_(scope),
+      function_(function),
+      type_description_(type_description),
+      key_added_(false) {
+}
+
+NonNestableBlock::~NonNestableBlock() {
+  if (key_added_)
+    scope_->SetProperty(&kKey, nullptr);
+}
+
+bool NonNestableBlock::Enter(Err* err) {
+  void* scope_value = scope_->GetProperty(&kKey, nullptr);
+  if (scope_value) {
+    // Existing block.
+    const NonNestableBlock* existing =
+        reinterpret_cast<const NonNestableBlock*>(scope_value);
+    *err = Err(function_, "Can't nest these things.",
+        std::string("You are trying to nest a ") + type_description_ +
+        " inside a " + existing->type_description_ + ".");
+    err->AppendSubErr(Err(existing->function_, "The enclosing block."));
+    return false;
+  }
+
+  scope_->SetProperty(&kKey, this);
+  key_added_ = true;
+  return true;
+}
+
 namespace functions {
 
 // assert ----------------------------------------------------------------------
@@ -223,14 +263,17 @@ const char kConfig_Help[] =
     "   4. All dependent configs from a breadth-first traversal of the\n"
     "      dependency tree in the order that the targets appear in \"deps\".\n"
     "\n"
-    "Variables valid in a config definition:\n"
+    "Variables valid in a config definition\n"
+    "\n"
     CONFIG_VALUES_VARS_HELP
+    "  Nested configs: configs\n"
     "\n"
-    "Variables on a target used to apply configs:\n"
-    "  all_dependent_configs, configs, public_configs,\n"
-    "  forward_dependent_configs_from\n"
+    "Variables on a target used to apply configs\n"
     "\n"
-    "Example:\n"
+    "  all_dependent_configs, configs, public_configs\n"
+    "\n"
+    "Example\n"
+    "\n"
     "  config(\"myconfig\") {\n"
     "    includes = [ \"include/common\" ]\n"
     "    defines = [ \"ENABLE_DOOM_MELON\" ]\n"
@@ -244,6 +287,10 @@ Value RunConfig(const FunctionCallNode* function,
                 const std::vector<Value>& args,
                 Scope* scope,
                 Err* err) {
+  NonNestableBlock non_nestable(scope, function, "config");
+  if (!non_nestable.Enter(err))
+    return Value();
+
   if (!EnsureSingleStringArg(function, args, err) ||
       !EnsureNotProcessingImport(function, scope, err))
     return Value();
@@ -259,10 +306,20 @@ Value RunConfig(const FunctionCallNode* function,
   if (!Visibility::FillItemVisibility(config.get(), scope, err))
     return Value();
 
-  // Fill it.
+  // Fill the flags and such.
   const SourceDir& input_dir = scope->GetSourceDir();
-  ConfigValuesGenerator gen(&config->config_values(), scope, input_dir, err);
+  ConfigValuesGenerator gen(&config->own_values(), scope, input_dir, err);
   gen.Run();
+  if (err->has_error())
+    return Value();
+
+  // Read sub-configs.
+  const Value* configs_value = scope->GetValue(variables::kConfigs, true);
+  if (configs_value) {
+    ExtractListOfUniqueLabels(*configs_value, scope->GetSourceDir(),
+                              ToolchainLabelForScope(scope),
+                              &config->configs(), err);
+  }
   if (err->has_error())
     return Value();
 
@@ -292,7 +349,46 @@ const char kDeclareArgs_Help[] =
     "\n"
     "  See also \"gn help buildargs\" for an overview.\n"
     "\n"
-    "Example:\n"
+    "  The precise behavior of declare args is:\n"
+    "\n"
+    "   1. The declare_arg block executes. Any variables in the enclosing\n"
+    "      scope are available for reading.\n"
+    "\n"
+    "   2. At the end of executing the block, any variables set within that\n"
+    "      scope are saved globally as build arguments, with their current\n"
+    "      values being saved as the \"default value\" for that argument.\n"
+    "\n"
+    "   3. User-defined overrides are applied. Anything set in \"gn args\"\n"
+    "      now overrides any default values. The resulting set of variables\n"
+    "      is promoted to be readable from the following code in the file.\n"
+    "\n"
+    "  This has some ramifications that may not be obvious:\n"
+    "\n"
+    "    - You should not perform difficult work inside a declare_args block\n"
+    "      since this only sets a default value that may be discarded. In\n"
+    "      particular, don't use the result of exec_script() to set the\n"
+    "      default value. If you want to have a script-defined default, set\n"
+    "      some default \"undefined\" value like [], \"\", or -1, and after\n"
+    "      the declare_args block, call exec_script if the value is unset by\n"
+    "      the user.\n"
+    "\n"
+    "    - Any code inside of the declare_args block will see the default\n"
+    "      values of previous variables defined in the block rather than\n"
+    "      the user-overridden value. This can be surprising because you will\n"
+    "      be used to seeing the overridden value. If you need to make the\n"
+    "      default value of one arg dependent on the possibly-overridden\n"
+    "      value of another, write two separate declare_args blocks:\n"
+    "\n"
+    "        declare_args() {\n"
+    "          enable_foo = true\n"
+    "        }\n"
+    "        declare_args() {\n"
+    "          # Bar defaults to same user-overridden state as foo.\n"
+    "          enable_bar = enable_foo\n"
+    "        }\n"
+    "\n"
+    "Example\n"
+    "\n"
     "  declare_args() {\n"
     "    enable_teleporter = true\n"
     "    enable_doom_melon = false\n"
@@ -308,6 +404,10 @@ Value RunDeclareArgs(Scope* scope,
                      const std::vector<Value>& args,
                      BlockNode* block,
                      Err* err) {
+  NonNestableBlock non_nestable(scope, function, "declare_args");
+  if (!non_nestable.Enter(err))
+    return Value();
+
   Scope block_scope(scope);
   block->Execute(&block_scope, err);
   if (err->has_error())
@@ -573,7 +673,7 @@ Value RunSetSourcesAssignmentFilter(Scope* scope,
     scoped_ptr<PatternList> f(new PatternList);
     f->SetFromValue(args[0], err);
     if (!err->has_error())
-      scope->set_sources_assignment_filter(f.Pass());
+      scope->set_sources_assignment_filter(std::move(f));
   }
   return Value();
 }
@@ -706,9 +806,11 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(Copy, true)
     INSERT_FUNCTION(Executable, true)
     INSERT_FUNCTION(Group, true)
+    INSERT_FUNCTION(LoadableModule, true)
     INSERT_FUNCTION(SharedLibrary, true)
     INSERT_FUNCTION(SourceSet, true)
     INSERT_FUNCTION(StaticLibrary, true)
+    INSERT_FUNCTION(Target, true)
 
     INSERT_FUNCTION(Assert, false)
     INSERT_FUNCTION(Config, false)
@@ -716,6 +818,7 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(Defined, false)
     INSERT_FUNCTION(ExecScript, false)
     INSERT_FUNCTION(ForEach, false)
+    INSERT_FUNCTION(ForwardVariablesFrom, false)
     INSERT_FUNCTION(GetEnv, false)
     INSERT_FUNCTION(GetLabelInfo, false)
     INSERT_FUNCTION(GetPathInfo, false)
@@ -769,10 +872,9 @@ Value RunFunction(Scope* scope,
   }
 
   if (found_function->second.self_evaluating_args_runner) {
-    // Self evaluating args functions are special weird built-ins. Currently,
-    // only foreach() takes a block following it. Rather than force them all to
-    // check that they have a block or no block and risk bugs for new additions,
-    // check a whitelist here.
+    // Self evaluating args functions are special weird built-ins like foreach.
+    // Rather than force them all to check that they have a block or no block
+    // and risk bugs for new additions, check a whitelist here.
     if (found_function->second.self_evaluating_args_runner != &RunForEach) {
       if (!VerifyNoBlockForFunctionCall(function, block, err))
         return Value();

@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <map>
+#include <utility>
 
 #include "base/values.h"
 #include "chrome/browser/extensions/active_script_controller.h"
@@ -11,6 +14,7 @@
 #include "chrome/browser/extensions/extension_sync_service_factory.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/permissions_updater.h"
+#include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -98,18 +102,19 @@ ActiveScriptControllerUnitTest::~ActiveScriptControllerUnitTest() {
 
 const Extension* ActiveScriptControllerUnitTest::AddExtension() {
   const std::string kId = crx_file::id_util::GenerateId("all_hosts_extension");
-  extension_ = ExtensionBuilder()
-                   .SetManifest(
-                       DictionaryBuilder()
-                           .Set("name", "all_hosts_extension")
-                           .Set("description", "an extension")
-                           .Set("manifest_version", 2)
-                           .Set("version", "1.0.0")
-                           .Set("permissions",
-                                ListBuilder().Append(kAllHostsPermission)))
-                   .SetLocation(Manifest::INTERNAL)
-                   .SetID(kId)
-                   .Build();
+  extension_ =
+      ExtensionBuilder()
+          .SetManifest(std::move(
+              DictionaryBuilder()
+                  .Set("name", "all_hosts_extension")
+                  .Set("description", "an extension")
+                  .Set("manifest_version", 2)
+                  .Set("version", "1.0.0")
+                  .Set("permissions",
+                       std::move(ListBuilder().Append(kAllHostsPermission)))))
+          .SetLocation(Manifest::INTERNAL)
+          .SetID(kId)
+          .Build();
 
   ExtensionRegistry::Get(profile())->AddEnabled(extension_);
   PermissionsUpdater(profile()).InitializePermissions(extension_.get());
@@ -384,7 +389,9 @@ TEST_F(ActiveScriptControllerUnitTest, TestAlwaysRun) {
   EXPECT_EQ(0u, GetExecutionCountForExtension(extension->id()));
 
   // Allow the extension to always run on this origin.
-  controller()->AlwaysRunOnVisibleOrigin(extension);
+  ScriptingPermissionsModifier modifier(profile(), extension);
+  modifier.GrantHostPermission(web_contents()->GetLastCommittedURL());
+  controller()->OnClicked(extension);
 
   // The extension should execute, and the extension shouldn't want to run.
   EXPECT_EQ(1u, GetExecutionCountForExtension(extension->id()));

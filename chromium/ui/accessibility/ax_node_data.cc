@@ -4,6 +4,9 @@
 
 #include "ui/accessibility/ax_node_data.h"
 
+#include <stddef.h>
+
+#include <algorithm>
 #include <set>
 
 #include "base/strings/string_number_conversions.h"
@@ -177,17 +180,17 @@ bool AXNodeData::HasIntListAttribute(AXIntListAttribute attribute) const {
   return iter != intlist_attributes.end();
 }
 
-const std::vector<int32>& AXNodeData::GetIntListAttribute(
+const std::vector<int32_t>& AXNodeData::GetIntListAttribute(
     AXIntListAttribute attribute) const {
-  CR_DEFINE_STATIC_LOCAL(std::vector<int32>, empty_vector, ());
+  CR_DEFINE_STATIC_LOCAL(std::vector<int32_t>, empty_vector, ());
   auto iter = FindInVectorOfPairs(attribute, intlist_attributes);
   if (iter != intlist_attributes.end())
     return iter->second;
   return empty_vector;
 }
 
-bool AXNodeData::GetIntListAttribute(
-    AXIntListAttribute attribute, std::vector<int32>* value) const {
+bool AXNodeData::GetIntListAttribute(AXIntListAttribute attribute,
+                                     std::vector<int32_t>* value) const {
   auto iter = FindInVectorOfPairs(attribute, intlist_attributes);
   if (iter != intlist_attributes.end()) {
     *value = iter->second;
@@ -239,16 +242,16 @@ void AXNodeData::AddBoolAttribute(
   bool_attributes.push_back(std::make_pair(attribute, value));
 }
 
-void AXNodeData::AddIntListAttribute(
-    AXIntListAttribute attribute, const std::vector<int32>& value) {
+void AXNodeData::AddIntListAttribute(AXIntListAttribute attribute,
+                                     const std::vector<int32_t>& value) {
   intlist_attributes.push_back(std::make_pair(attribute, value));
 }
 
-void AXNodeData::SetName(std::string name) {
+void AXNodeData::SetName(const std::string& name) {
   string_attributes.push_back(std::make_pair(AX_ATTR_NAME, name));
 }
 
-void AXNodeData::SetValue(std::string value) {
+void AXNodeData::SetValue(const std::string& value) {
   string_attributes.push_back(std::make_pair(AX_ATTR_VALUE, value));
 }
 
@@ -264,6 +267,8 @@ std::string AXNodeData::ToString() const {
     result += " CHECKED";
   if (state & (1 << AX_STATE_COLLAPSED))
     result += " COLLAPSED";
+  if (state & (1 << AX_STATE_EDITABLE))
+    result += " EDITABLE";
   if (state & (1 << AX_STATE_EXPANDED))
     result += " EXPANDED";
   if (state & (1 << AX_STATE_FOCUSABLE))
@@ -274,8 +279,6 @@ std::string AXNodeData::ToString() const {
     result += " HASPOPUP";
   if (state & (1 << AX_STATE_HOVERED))
     result += " HOVERED";
-  if (state & (1 << AX_STATE_INDETERMINATE))
-    result += " INDETERMINATE";
   if (state & (1 << AX_STATE_INVISIBLE))
     result += " INVISIBLE";
   if (state & (1 << AX_STATE_LINKED))
@@ -292,6 +295,8 @@ std::string AXNodeData::ToString() const {
     result += " READONLY";
   if (state & (1 << AX_STATE_REQUIRED))
     result += " REQUIRED";
+  if (state & (1 << AX_STATE_RICHLY_EDITABLE))
+    result += " RICHLY_EDITABLE";
   if (state & (1 << AX_STATE_SELECTABLE))
     result += " SELECTABLE";
   if (state & (1 << AX_STATE_SELECTED))
@@ -385,14 +390,16 @@ std::string AXNodeData::ToString() const {
             break;
         }
         break;
-      case AX_ATTR_TITLE_UI_ELEMENT:
-        result += " title_elem=" + value;
+      case AX_ATTR_NAME_FROM:
+        result += " name_from=" + ui::ToString(
+            static_cast<ui::AXNameFrom>(int_attributes[i].second));
+        break;
+      case AX_ATTR_DESCRIPTION_FROM:
+        result += " description_from=" + ui::ToString(
+            static_cast<ui::AXDescriptionFrom>(int_attributes[i].second));
         break;
       case AX_ATTR_ACTIVEDESCENDANT_ID:
         result += " activedescendant=" + value;
-        break;
-      case AX_ATTR_TREE_ID:
-        result += " tree_id=" + value;
         break;
       case AX_ATTR_CHILD_TREE_ID:
         result += " child_tree_id=" + value;
@@ -423,22 +430,23 @@ std::string AXNodeData::ToString() const {
             result += " text_direction=btt";
             break;
         }
-        case AX_ATTR_TEXT_STYLE: {
-          unsigned int text_style = int_attributes[i].second;
-          if (text_style == AX_TEXT_STYLE_NONE)
-            break;
-          std::string text_style_value(" text_style=");
-          if (text_style & AX_TEXT_STYLE_BOLD)
-            text_style_value += "bold,";
-          if (text_style & AX_TEXT_STYLE_ITALIC)
-            text_style_value += "italic,";
-          if (text_style & AX_TEXT_STYLE_UNDERLINE)
-            text_style_value += "underline,";
-          if (text_style & AX_TEXT_STYLE_LINE_THROUGH)
-            text_style_value += "line-through,";
-          result += text_style_value.substr(0, text_style_value.size() - 1);;
-        }
         break;
+      case AX_ATTR_TEXT_STYLE: {
+        unsigned int text_style = int_attributes[i].second;
+        if (text_style == AX_TEXT_STYLE_NONE)
+          break;
+        std::string text_style_value(" text_style=");
+        if (text_style & AX_TEXT_STYLE_BOLD)
+          text_style_value += "bold,";
+        if (text_style & AX_TEXT_STYLE_ITALIC)
+          text_style_value += "italic,";
+        if (text_style & AX_TEXT_STYLE_UNDERLINE)
+          text_style_value += "underline,";
+        if (text_style & AX_TEXT_STYLE_LINE_THROUGH)
+          text_style_value += "line-through,";
+        result += text_style_value.substr(0, text_style_value.size() - 1);
+        break;
+      }
       case AX_ATTR_SET_SIZE:
         result += " setsize=" + value;
         break;
@@ -472,18 +480,6 @@ std::string AXNodeData::ToString() const {
   for (size_t i = 0; i < string_attributes.size(); ++i) {
     std::string value = string_attributes[i].second;
     switch (string_attributes[i].first) {
-      case AX_ATTR_DOC_URL:
-        result += " doc_url=" + value;
-        break;
-      case AX_ATTR_DOC_TITLE:
-        result += " doc_title=" + value;
-        break;
-      case AX_ATTR_DOC_MIMETYPE:
-        result += " doc_mimetype=" + value;
-        break;
-      case AX_ATTR_DOC_DOCTYPE:
-        result += " doc_doctype=" + value;
-        break;
       case AX_ATTR_ACCESS_KEY:
         result += " access_key=" + value;
         break;
@@ -498,9 +494,6 @@ std::string AXNodeData::ToString() const {
         break;
       case AX_ATTR_DISPLAY:
         result += " display=" + value;
-        break;
-      case AX_ATTR_HELP:
-        result += " help=" + value;
         break;
       case AX_ATTR_HTML_TAG:
         result += " html_tag=" + value;
@@ -521,7 +514,7 @@ std::string AXNodeData::ToString() const {
         result += " container_live=" + value;
         break;
       case AX_ATTR_PLACEHOLDER:
-        result += "placeholder" + value;
+        result += " placeholder=" + value;
         break;
       case AX_ATTR_ROLE:
         result += " role=" + value;
@@ -546,9 +539,6 @@ std::string AXNodeData::ToString() const {
   for (size_t i = 0; i < float_attributes.size(); ++i) {
     std::string value = DoubleToString(float_attributes[i].second);
     switch (float_attributes[i].first) {
-      case AX_ATTR_DOC_LOADING_PROGRESS:
-        result += " doc_progress=" + value;
-        break;
       case AX_ATTR_VALUE_FOR_RANGE:
         result += " value_for_range=" + value;
         break;
@@ -569,10 +559,7 @@ std::string AXNodeData::ToString() const {
   for (size_t i = 0; i < bool_attributes.size(); ++i) {
     std::string value = bool_attributes[i].second ? "true" : "false";
     switch (bool_attributes[i].first) {
-      case AX_ATTR_DOC_LOADED:
-        result += " doc_loaded=" + value;
-        break;
-      case AX_ATTR_BUTTON_MIXED:
+      case AX_ATTR_STATE_MIXED:
         result += " mixed=" + value;
         break;
       case AX_ATTR_LIVE_ATOMIC:
@@ -599,16 +586,13 @@ std::string AXNodeData::ToString() const {
       case AX_ATTR_CANVAS_HAS_FALLBACK:
         result += " has_fallback=" + value;
         break;
-      case AX_ATTR_IS_AX_TREE_HOST:
-        result += " is_ax_tree_host=" + value;
-        break;
       case AX_BOOL_ATTRIBUTE_NONE:
         break;
     }
   }
 
   for (size_t i = 0; i < intlist_attributes.size(); ++i) {
-    const std::vector<int32>& values = intlist_attributes[i].second;
+    const std::vector<int32_t>& values = intlist_attributes[i].second;
     switch (intlist_attributes[i].first) {
       case AX_ATTR_INDIRECT_CHILD_IDS:
         result += " indirect_child_ids=" + IntVectorToString(values);
@@ -624,9 +608,6 @@ std::string AXNodeData::ToString() const {
         break;
       case AX_ATTR_LABELLEDBY_IDS:
         result += " labelledby_ids=" + IntVectorToString(values);
-        break;
-      case AX_ATTR_OWNS_IDS:
-        result += " owns_ids=" + IntVectorToString(values);
         break;
       case AX_ATTR_LINE_BREAKS:
         result += " line_breaks=" + IntVectorToString(values);
@@ -655,6 +636,15 @@ std::string AXNodeData::ToString() const {
     result += " child_ids=" + IntVectorToString(child_ids);
 
   return result;
+}
+
+bool AXNodeData::IsRoot() const {
+  return (role == AX_ROLE_ROOT_WEB_AREA ||
+          role == AX_ROLE_DESKTOP);
+}
+
+void AXNodeData::SetRoot() {
+  role = AX_ROLE_ROOT_WEB_AREA;
 }
 
 }  // namespace ui

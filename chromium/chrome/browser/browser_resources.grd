@@ -17,8 +17,7 @@
       <if expr="is_win">
         <structure name="IDR_ABOUT_MEMORY_HTML" file="resources\about_memory.html" flattenhtml="true" type="chrome_html" />
       </if>
-      <structure name="IDR_ABOUT_MEMORY_CSS" file="resources\about_memory.css" type="chrome_html" />
-      <structure name="IDR_ABOUT_VERSION_HTML" file="resources\about_version.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
+      <structure name="IDR_ABOUT_MEMORY_CSS" file="resources\about_memory.css" flattenhtml="true" type="chrome_html" />
       <if expr="enable_app_list">
         <structure name="IDR_APP_LIST_START_PAGE_CSS" file="resources\app_list\start_page.css" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_APP_LIST_START_PAGE_HTML" file="resources\app_list\start_page.html" flattenhtml="true" type="chrome_html" />
@@ -26,10 +25,18 @@
       </if>
       <if expr="not is_android">
         <structure name="IDR_DOWNLOADS_DOWNLOADS_HTML" file="resources\downloads\downloads.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
-        <structure name="IDR_MD_DOWNLOADS_DOWNLOADS_HTML" file="resources\md_downloads\downloads.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
+        <if expr="use_vulcanize">
+          <then>
+            <structure name="IDR_MD_DOWNLOADS_VULCANIZED_HTML" file="resources\md_downloads\vulcanized.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
+          </then>
+          <else>
+            <structure name="IDR_MD_DOWNLOADS_DOWNLOADS_HTML" file="resources\md_downloads\downloads.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
+          </else>
+        </if>
       </if>
       <if expr="enable_extensions">
         <structure name="IDR_EXTENSIONS_HTML" file="resources\extensions\extensions.html" flattenhtml="true" type="chrome_html" />
+        <structure name="IDR_MD_EXTENSIONS_EXTENSIONS_HTML" file="resources\md_extensions\extensions.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
       </if>
       <if expr="chromeos">
         <structure name="IDR_FIRST_RUN_HTML" file="resources\chromeos\first_run\first_run.html" flattenhtml="true" type="chrome_html"/>
@@ -61,9 +68,6 @@
         <structure name="IDR_OOBE_ENROLLMENT_HTML" file="resources\chromeos\login\oobe_screen_oauth_enrollment.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_OOBE_ENROLLMENT_CSS" file="resources\chromeos\login\oobe_screen_oauth_enrollment.css" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_OOBE_ENROLLMENT_JS" file="resources\chromeos\login\oobe_screen_oauth_enrollment.js" flattenhtml="true" type="chrome_html" />
-        <structure name="IDR_OOBE_ENROLLMENT_WEBVIEW_HTML" file="resources\chromeos\login\oobe_screen_oauth_enrollment_webview.html" flattenhtml="true" type="chrome_html" />
-        <structure name="IDR_OOBE_ENROLLMENT_WEBVIEW_CSS" file="resources\chromeos\login\oobe_screen_oauth_enrollment_webview.css" flattenhtml="true" type="chrome_html" />
-        <structure name="IDR_OOBE_ENROLLMENT_WEBVIEW_JS" file="resources\chromeos\login\oobe_screen_oauth_enrollment_webview.js" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_KEYBOARD_UTILS_JS" file="resources\chromeos\keyboard\keyboard_utils.js" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_CUSTOM_ELEMENTS_OOBE_HTML" file="resources\chromeos\login\custom_elements_oobe.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_CUSTOM_ELEMENTS_OOBE_JS" file="resources\chromeos\login\custom_elements_oobe.js" flattenhtml="true" type="chrome_html" />
@@ -71,11 +75,8 @@
         <structure name="IDR_CUSTOM_ELEMENTS_LOGIN_JS" file="resources\chromeos\login\custom_elements_login.js" flattenhtml="true" type="chrome_html" />
       </if>
       <structure name="IDR_READER_OUT_OF_DATE_HTML" file="resources\reader_out_of_date.html" flattenhtml="true" type="chrome_html" />
-      <structure name="IDR_SECURITY_INTERSTITIAL_UI_HTML" file="resources\security_warnings\interstitial_ui.html" flattenhtml="true" type="chrome_html" />
-      <structure name="IDR_SECURITY_INTERSTITIAL_HTML" file="resources\security_warnings\interstitial_v2.html" flattenhtml="true" type="chrome_html" />
     </structures>
     <includes>
-      <include name="VIVALDI_MAINFEST_JS" file="../../../vivapp/src/manifest.json" type="BINDATA" />
       <if expr="is_win">
         <include name="IDR_ABOUT_CONFLICTS_HTML" file="resources\about_conflicts.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_ABOUT_CONFLICTS_JS" file="resources\about_conflicts.js" type="BINDATA" />
@@ -93,10 +94,6 @@
       <if expr="not is_android">
         <include name="IDR_ABOUT_SYS_HTML" file="resources\about_sys\about_sys.html" flattenhtml="true" type="BINDATA" />
       </if>
-      <include name="IDR_ABOUT_VERSION_JS" file="resources\about_version.js" type="BINDATA" />
-      <include name="IDR_ABOUT_VERSION_CSS" file="resources\about_version.css" type="BINDATA" />
-      <include name="IDR_ABOUT_VOICESEARCH_HTML" file="resources\about_voicesearch.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
-      <include name="IDR_ABOUT_VOICESEARCH_JS" file="resources\about_voicesearch.js" type="BINDATA" />
       <include name="IDR_AD_NETWORK_HASHES" file="resources\ad_networks.dat" type="BINDATA" />
       <include name="IDR_BOOKMARKS_MANIFEST" file="resources\bookmark_manager\manifest.json" type="BINDATA" />
       <if expr="is_posix and not is_macosx and not is_ios">
@@ -115,10 +112,6 @@
       <if expr="enable_printing">
         <include name="IDR_CLOUDPRINT_MANIFEST" file="resources\cloud_print_app\manifest.json" type="BINDATA" />
       </if>
-      <include name="IDR_CRASHES_HTML" file="resources\crashes.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
-      <include name="IDR_CRASHES_JS" file="resources\crashes.js" type="BINDATA" />
-      <include name="IDR_CREDITS_HTML" file="${about_credits_file}" use_base_dir="false" type="BINDATA" />
-      <include name="IDR_CREDITS_JS" file="resources\about_credits.js" type="BINDATA" />
       <if expr="not is_ios">
         <include name="IDR_DEVTOOLS_DISCOVERY_PAGE_HTML" file="devtools\frontend\devtools_discovery_page.html" type="BINDATA"/>
       </if>
@@ -133,21 +126,67 @@
         <include name="IDR_DOWNLOADS_MANAGER_JS" file="resources\downloads\manager.js" type="BINDATA" />
         <include name="IDR_DOWNLOADS_THROTTLED_ICON_LOADER_HTML" file="resources\downloads\throttled_icon_loader.html" type="BINDATA" />
         <include name="IDR_DOWNLOADS_THROTTLED_ICON_LOADER_JS" file="resources\downloads\throttled_icon_loader.js" type="BINDATA" />
-        <include name="IDR_MD_DOWNLOADS_DOWNLOADS_CSS" file="resources\md_downloads\downloads.css" type="BINDATA" />
-        <include name="IDR_MD_DOWNLOADS_ITEM_VIEW_HTML" file="resources\md_downloads\item_view.html" type="BINDATA" />
-        <include name="IDR_MD_DOWNLOADS_ITEM_VIEW_JS" file="resources\md_downloads\item_view.js" type="BINDATA" />
-        <include name="IDR_MD_DOWNLOADS_MANAGER_HTML" file="resources\md_downloads\manager.html" type="BINDATA" />
-        <include name="IDR_MD_DOWNLOADS_MANAGER_JS" file="resources\md_downloads\manager.js" type="BINDATA" />
-        <include name="IDR_MD_DOWNLOADS_STRINGS_HTML" file="resources\md_downloads\strings.html" type="BINDATA" />
+        <include name="IDR_MD_DOWNLOADS_1X_INCOGNITO_MARKER_PNG" file="resources\md_downloads\1x\incognito_marker.png" type="BINDATA" />
+        <include name="IDR_MD_DOWNLOADS_2X_INCOGNITO_MARKER_PNG" file="resources\md_downloads\2x\incognito_marker.png" type="BINDATA" />
+        <include name="IDR_MD_DOWNLOADS_1X_NO_DOWNLOADS_PNG" file="resources\md_downloads\1x\no_downloads.png" type="BINDATA" />
+        <include name="IDR_MD_DOWNLOADS_2X_NO_DOWNLOADS_PNG" file="resources\md_downloads\2x\no_downloads.png" type="BINDATA" />
+        <if expr="use_vulcanize">
+          <then>
+            <include name="IDR_MD_DOWNLOADS_CRISPER_JS" file="resources\md_downloads\crisper.js" flattenhtml="true" type="BINDATA" />
+          </then>
+          <else>
+            <include name="IDR_MD_DOWNLOADS_ACTION_SERVICE_HTML" file="resources\md_downloads\action_service.html" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_ACTION_SERVICE_JS" file="resources\md_downloads\action_service.js" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_CONSTANTS_HTML" file="resources\md_downloads\constants.html" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_CONSTANTS_JS" file="resources\md_downloads\constants.js" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_DOWNLOADS_JS" file="resources\md_downloads\downloads.js" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_I18N_SETUP_HTML" file="resources\md_downloads\i18n_setup.html" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_ITEM_CSS" file="resources\md_downloads\item.css" type="BINDATA" flattenhtml="true" />
+            <include name="IDR_MD_DOWNLOADS_ITEM_HTML" file="resources\md_downloads\item.html" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_ITEM_JS" file="resources\md_downloads\item.js" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_MANAGER_CSS" file="resources\md_downloads\manager.css" type="BINDATA" flattenhtml="true" />
+            <include name="IDR_MD_DOWNLOADS_MANAGER_HTML" file="resources\md_downloads\manager.html" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_MANAGER_JS" file="resources\md_downloads\manager.js" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_SHARED_STYLE_CSS" file="resources\md_downloads\shared_style.css" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_TOOLBAR_CSS" file="resources\md_downloads\toolbar.css" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_TOOLBAR_HTML" file="resources\md_downloads\toolbar.html" type="BINDATA" />
+            <include name="IDR_MD_DOWNLOADS_TOOLBAR_JS" file="resources\md_downloads\toolbar.js" type="BINDATA" />
+          </else>
+        </if>
       </if>
       <if expr="enable_extensions">
         <include name="IDR_EXTENSION_COMMAND_LIST_JS" file="resources\extensions\extension_command_list.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_EXTENSION_LIST_JS" file="resources\extensions\extension_list.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_EXTENSIONS_JS" file="resources\extensions\extensions.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_MANAGER_CSS" file="resources\md_extensions\manager.css" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_MANAGER_HTML" file="resources\md_extensions\manager.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_MANAGER_JS" file="resources\md_extensions\manager.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ICONS_HTML" file="resources\md_extensions\icons.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ITEM_CSS" file="resources\md_extensions\item.css" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ITEM_HTML" file="resources\md_extensions\item.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ITEM_JS" file="resources\md_extensions\item.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ITEM_LIST_CSS" file="resources\md_extensions\item_list.css" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ITEM_LIST_HTML" file="resources\md_extensions\item_list.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ITEM_LIST_JS" file="resources\md_extensions\item_list.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_SERVICE_HTML" file="resources\md_extensions\service.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_SERVICE_JS" file="resources\md_extensions\service.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_SIDEBAR_CSS" file="resources\md_extensions\sidebar.css" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_SIDEBAR_HTML" file="resources\md_extensions\sidebar.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_SIDEBAR_JS" file="resources\md_extensions\sidebar.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_TOOLBAR_CSS" file="resources\md_extensions\toolbar.css" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_TOOLBAR_HTML" file="resources\md_extensions\toolbar.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_TOOLBAR_JS" file="resources\md_extensions\toolbar.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_STRINGS_HTML" file="resources\md_extensions\strings.html" type="BINDATA" />
       </if>
       <include name="IDR_FEEDBACK_MANIFEST" file="resources\feedback\manifest.json" type="BINDATA" />
-      <include name="IDR_FLAGS_HTML" file="resources\flags.html" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_FLAGS_JS" file="resources\flags.js" type="BINDATA" />
+      <if expr="is_android">
+        <include name="IDR_POPULAR_SITES_INTERNALS_HTML" file="resources\popular_sites_internals.html" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_POPULAR_SITES_INTERNALS_CSS" file="resources\popular_sites_internals.css" type="BINDATA" />
+        <include name="IDR_POPULAR_SITES_INTERNALS_JS" file="resources\popular_sites_internals.js" type="BINDATA" />
+      </if>
+      <include name="IDR_SUPERVISED_USER_INTERNALS_HTML" file="resources\supervised_user_internals.html" allowexternalscript="true" type="BINDATA" />
+      <include name="IDR_SUPERVISED_USER_INTERNALS_CSS" file="resources\supervised_user_internals.css" type="BINDATA" />
+      <include name="IDR_SUPERVISED_USER_INTERNALS_JS" file="resources\supervised_user_internals.js" type="BINDATA" />
       <if expr="_google_chrome or enable_hangout_services_extension">
         <!-- Hangout Services extension, included in Google Chrome builds only. -->
         <include name="IDR_HANGOUT_SERVICES_MANIFEST" file="resources\hangout_services\manifest.json" type="BINDATA" />
@@ -161,6 +200,11 @@
       </if>
       <include name="IDR_HISTORY_HTML" file="resources\history\history.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_HISTORY_JS" file="resources\history\history.js" flattenhtml="true" type="BINDATA" />
+
+      <if expr="not is_ios">
+        <include name="IDR_MD_HISTORY_HISTORY_HTML" file="resources\md_history\history.html" type="BINDATA" />
+      </if>
+
       <include name="IDR_OTHER_DEVICES_JS" file="resources\history\other_devices.js" flattenhtml="true" type="BINDATA" />
       <include name="IDR_IDENTITY_API_SCOPE_APPROVAL_MANIFEST" file="resources\identity_scope_approval_dialog\manifest.json" type="BINDATA" />
       <include name="IDR_NEW_INLINE_LOGIN_HTML" file="resources\inline_login\new_inline_login.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
@@ -175,8 +219,6 @@
       <include name="IDR_INSTANT_CSS" file="resources\instant\instant.css" flattenhtml="true" type="BINDATA" />
       <include name="IDR_INSTANT_HTML" file="resources\instant\instant.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_INSTANT_JS" file="resources\instant\instant.js" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_NET_EXPORT_HTML" file="resources\net_export\net_export.html" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_NET_EXPORT_JS" file="resources\net_export\net_export.js" flattenhtml="true" type="BINDATA" />
       <include name="IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST" file="resources\network_speech_synthesis\manifest.json" type="BINDATA" />
       <include name="IDR_PREDICTORS_HTML" file="resources\predictors\predictors.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_PREDICTORS_JS" file="resources\predictors\predictors.js" flattenhtml="true" type="BINDATA" />
@@ -196,7 +238,7 @@
 
       <include name="IDR_INSTANT_IFRAME_VALIDATION_JS" file="resources\local_ntp\instant_iframe_validation.js" type="BINDATA" />
       <include name="IDR_LOCAL_NTP_HTML" file="resources\local_ntp\local_ntp.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
-      <include name="IDR_LOCAL_NTP_CSS" file="resources\local_ntp\local_ntp.css" type="BINDATA" />
+      <include name="IDR_LOCAL_NTP_CSS" file="resources\local_ntp\local_ntp.css" flattenhtml="true" type="BINDATA" />
       <include name="IDR_LOCAL_NTP_JS" file="resources\local_ntp\local_ntp.js" flattenhtml="true" type="BINDATA" />
       <include name="IDR_LOCAL_NTP_UTIL_JS" file="resources\local_ntp\local_ntp_util.js" flattenhtml="true" type="BINDATA" />
       <include name="IDR_LOCAL_STATE_HTML" file="resources\local_state\local_state.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
@@ -216,8 +258,8 @@
       <include name="IDR_OMNIBOX_HTML" file="resources\omnibox\omnibox.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_OMNIBOX_CSS" file="resources\omnibox\omnibox.css" type="BINDATA" />
       <include name="IDR_OMNIBOX_JS" file="resources\omnibox\omnibox.js" type="BINDATA" />
-      <include name="IDR_OMNIBOX_MOJO_JS" file="${omnibox_mojom_file}" use_base_dir="false" type="BINDATA"/>
-      <if expr="not is_android">
+      <include name="IDR_OMNIBOX_MOJO_JS" file="${root_gen_dir}\chrome\browser\ui\webui\omnibox\omnibox.mojom.js" use_base_dir="false" type="BINDATA"/>
+      <if expr="enable_plugins">
         <include name="IDR_PLUGINS_HTML" file="resources\plugins.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_PLUGINS_JS" file="resources\plugins.js" type="BINDATA" />
       </if>
@@ -233,6 +275,8 @@
         <include name="IDR_PLUGIN_DB_JSON" file="resources\plugin_metadata\plugins_mac.json" type="BINDATA" />
       </if>
       <if expr="chromeos">
+        <include name="IDR_ABOUT_VOICESEARCH_HTML" file="resources\about_voicesearch.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_ABOUT_VOICESEARCH_JS" file="resources\about_voicesearch.js" type="BINDATA" />
         <include name="IDR_PLUGIN_DB_JSON" file="resources\plugin_metadata\plugins_chromeos.json" type="BINDATA" />
       </if>
       <if expr="desktop_linux or (is_android and enable_plugins)">
@@ -249,6 +293,7 @@
       <if expr="enable_print_preview">
         <include name="IDR_PRINT_PREVIEW_HTML" file="resources\print_preview\print_preview.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_PRINT_PREVIEW_JS" file="resources\print_preview\print_preview.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_PRINT_PREVIEW_PDF_PREVIEW_HTML" file="resources\print_preview\pdf_preview.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_PRINT_PREVIEW_IMAGES_PRINTER"
                  file="resources\print_preview\images\printer.png" type="BINDATA" />
         <include name="IDR_PRINT_PREVIEW_IMAGES_PRINTER_SHARED"
@@ -274,6 +319,12 @@
       <if expr="enable_google_now">
         <include name="IDR_GOOGLE_NOW_MANIFEST" file="resources\google_now\manifest.json" type="BINDATA" />
       </if>
+      <include name="IDR_SITE_ENGAGEMENT_HTML" file="resources\engagement\site_engagement.html" flattenhtml="true" type="BINDATA" />
+      <include name="IDR_SITE_ENGAGEMENT_JS" file="resources\engagement\site_engagement.js" flattenhtml="true" type="BINDATA" />
+      <include name="IDR_SITE_ENGAGEMENT_MOJO_JS" file="${root_gen_dir}\chrome\browser\ui\webui\engagement\site_engagement.mojom.js" use_base_dir="false" type="BINDATA"/>
+      <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_CSS" file="resources\engagement\engagement_table.css" type="BINDATA" />
+      <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_HTML" file="resources\engagement\engagement_table.html" type="BINDATA" />
+      <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_JS" file="resources\engagement\engagement_table.js" type="BINDATA" />
       <include name="IDR_UBER_HTML" file="resources\uber\uber.html" flattenhtml="true" type="BINDATA" />
       <include name="IDR_UBER_JS" file="resources\uber\uber.js" type="BINDATA" />
       <include name="IDR_UBER_FRAME_HTML" file="resources\uber\uber_frame.html" flattenhtml="true" type="BINDATA" />
@@ -302,7 +353,6 @@
         <include name="IDR_DRIVE_INTERNALS_HTML" file="resources\chromeos\drive_internals.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_DRIVE_INTERNALS_JS" file="resources\chromeos\drive_internals.js" type="BINDATA" />
          <include name="IDR_GUEST_SESSION_TAB_HTML" file="resources\chromeos\guest_session_tab.html" flattenhtml="true" type="BINDATA" />
-        <include name="IDR_IMAGEBURNER_HTML" file="resources\chromeos\image_burner.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_KEYBOARD_OVERLAY_CSS" file="resources\chromeos\keyboard_overlay.css" flattenhtml="true" type="BINDATA" />
         <include name="IDR_KEYBOARD_OVERLAY_HTML" file="resources\chromeos\keyboard_overlay.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_KEYBOARD_OVERLAY_JS" file="resources\chromeos\keyboard_overlay.js" flattenhtml="true" type="BINDATA" />
@@ -313,7 +363,6 @@
         <include name="IDR_NFC_DEBUG_CSS" file="resources\chromeos\nfc_debug.css" type="BINDATA" />
         <include name="IDR_NFC_DEBUG_JS" file="resources\chromeos\nfc_debug.js" type="BINDATA" />
         <include name="IDR_ECHO_MANIFEST" file="resources\chromeos\echo\manifest.json" type="BINDATA" />
-        <include name="IDR_OFFLINE_NET_LOAD_HTML" file="resources\chromeos\offline_net_load.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MERGE_SESSION_LOAD_HTML" file="resources\chromeos\merge_session_load.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_OS_CREDITS_HTML" file="resources\chromeos\about_os_credits.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_PROXY_SETTINGS_HTML" file="resources\chromeos\proxy_settings.html" flattenhtml="true" type="BINDATA" />
@@ -328,23 +377,10 @@
         <include name="IDR_WALLPAPERMANAGER_MANIFEST" file="resources\chromeos\wallpaper_manager\manifest.json" type="BINDATA" />
         <include name="IDR_FIRST_RUN_DIALOG_MANIFEST" file="resources\chromeos\first_run\app/manifest.json" type="BINDATA" />
       </if>
-      <if expr="chromeos">
-        <include name="IDR_NETWORK_CONFIGURATION_MANIFEST" file="resources\chromeos\network_configuration\manifest.json" type="BINDATA" />
-      </if>
       <if expr="chromeos and _google_chrome">
         <include name="IDR_GENIUS_APP_MANIFEST" file="resources\chromeos\genius_app\manifest.json" type="BINDATA" />
         <include name="IDR_HELP_MANIFEST" file="resources\help_app\manifest.json" type="BINDATA" />
         <include name="IDR_QUICKOFFICE_MANIFEST" file="resources\chromeos\quickoffice\manifest.json" type="BINDATA" />
-      </if>
-      <if expr="chromeos">
-        <include name="IDR_SALSA_CSS" file="resources\chromeos\salsa.css" type="BINDATA" />
-        <include name="IDR_SALSA_HTML" file="resources\chromeos\salsa.html" type="BINDATA" />
-        <include name="IDR_SALSA_JS" file="resources\chromeos\salsa.js" type="BINDATA" />
-      </if>
-      <if expr="use_ash">
-        <include name="IDR_GESTURE_CONFIG_CSS" file="resources\gesture_config.css" type="BINDATA" />
-        <include name="IDR_GESTURE_CONFIG_HTML" file="resources\gesture_config.html" type="BINDATA" />
-        <include name="IDR_GESTURE_CONFIG_JS" file="resources\gesture_config.js" type="BINDATA" />
       </if>
       <if expr="is_win">
         <include name="IDR_SET_AS_DEFAULT_BROWSER_JS" file="resources\set_as_default_browser.js" flattenhtml="true" type="BINDATA" />
@@ -358,7 +394,9 @@
       <include name="IDR_PROFILE_SIGNIN_CONFIRMATION_HTML" file="resources\profile_signin_confirmation.html" type="BINDATA" />
       <include name="IDR_PROFILE_SIGNIN_CONFIRMATION_JS" file="resources\profile_signin_confirmation.js" type="BINDATA" />
       <include name="IDR_PROFILE_SIGNIN_CONFIRMATION_CSS" file="resources\profile_signin_confirmation.css" type="BINDATA" />
-      <include name="IDR_RECENTLY_CLOSED_WINDOW" file="resources\ntp4\images\closed_window.png" type="BINDATA" />
+      <if expr="is_macosx">
+        <include name="IDR_RECENTLY_CLOSED_WINDOW" file="resources\ntp4\images\closed_window.png" type="BINDATA" />
+      </if>
       <if expr="not is_android">
         <include name="IDR_IDENTITY_INTERNALS_HTML" file="resources\identity_internals.html" type="BINDATA" />
         <include name="IDR_IDENTITY_INTERNALS_CSS" file="resources\identity_internals.css" type="BINDATA" />
@@ -374,10 +412,6 @@
       </if>
       <if expr="_google_chrome">
         <include name="IDR_PREF_HASH_SEED_BIN" file="resources\settings_internal\pref_hash_seed.bin" type="BINDATA" />
-        <include name="IDR_AUTOMATIC_PROFILE_RESET_RULES" file="internal\resources\profile_reset\automatic_profile_reset_rules.dat" type="BINDATA" />
-        <include name="IDR_AUTOMATIC_PROFILE_RESET_RULES_DRY" file="internal\resources\profile_reset\automatic_profile_reset_rules_dry.dat" type="BINDATA" />
-        <include name="IDR_AUTOMATIC_PROFILE_RESET_HASH_SEED" file="internal\resources\profile_reset\automatic_profile_reset_rules.seed" type="BINDATA" />
-        <include name="IDR_AUTOMATIC_PROFILE_RESET_HASH_SEED_DRY" file="internal\resources\profile_reset\automatic_profile_reset_rules_dry.seed" type="BINDATA" />
         <include name="IDR_ADDITIONAL_MODULE_IDS" file="${additional_modules_list_file}" use_base_dir="false" type="BINDATA" />
       </if>
       <if expr="chromeos">
@@ -402,10 +436,14 @@
         <include name="IDR_DEVICE_EMULATOR_HTML" file="resources\chromeos\emulator\device_emulator.html" type="BINDATA" />
         <include name="IDR_DEVICE_EMULATOR_CSS" file="resources\chromeos\emulator\device_emulator.css" type="BINDATA" />
         <include name="IDR_DEVICE_EMULATOR_JS" file="resources\chromeos\emulator\device_emulator.js" type="BINDATA" />
+        <include name="IDR_DEVICE_EMULATOR_SHARED_STYLES_CSS" file="resources\chromeos\emulator\shared_styles.css" type="BINDATA" />
+        <include name="IDR_AUDIO_SETTINGS_HTML" file="resources\chromeos\emulator\audio_settings.html" type="BINDATA" />
+        <include name="IDR_AUDIO_SETTINGS_JS" file="resources\chromeos\emulator\audio_settings.js" type="BINDATA" />
+        <include name="IDR_BATTERY_SETTINGS_HTML" file="resources\chromeos\emulator\battery_settings.html" type="BINDATA" />
+        <include name="IDR_BATTERY_SETTINGS_JS" file="resources\chromeos\emulator\battery_settings.js" type="BINDATA" />
+        <include name="IDR_BLUETOOTH_SETTINGS_HTML" file="resources\chromeos\emulator\bluetooth_settings.html" type="BINDATA" />
+        <include name="IDR_BLUETOOTH_SETTINGS_JS" file="resources\chromeos\emulator\bluetooth_settings.js" type="BINDATA" />
       </if>
-      <include name="IDR_GCM_INTERNALS_HTML" file="resources\gcm_internals.html" type="BINDATA" />
-      <include name="IDR_GCM_INTERNALS_CSS" file="resources\gcm_internals.css" type="BINDATA" />
-      <include name="IDR_GCM_INTERNALS_JS" file="resources\gcm_internals.js" type="BINDATA" />
       <include name="IDR_EASY_UNLOCK_MANIFEST" file="resources\easy_unlock\manifest.json" type="BINDATA" />
       <include name="IDR_EASY_UNLOCK_MANIFEST_SIGNIN" file="resources\easy_unlock\manifest_signin.json" type="BINDATA" />
       <if expr="chromeos">
@@ -430,8 +468,6 @@
         <include name="IDR_BRAILLE_MANIFEST" file="resources\chromeos\braille_ime\manifest.json" type="BINDATA" />
       </if>
       <include name="IDR_WHISPERNET_PROXY_MANIFEST" file="resources\whispernet_proxy\manifest.json" type="BINDATA" />
-      <include name="IDR_MD_SETTINGS_UI_HTML" file="resources\md_settings\md_settings.html" type="BINDATA" />
-      <include name="IDR_MD_SETTINGS_UI_CSS" file="resources\md_settings\md_settings.css" type="BINDATA" />
       <if expr="enable_media_router">
         <part file="media_router_resources.grdp" />
       </if>

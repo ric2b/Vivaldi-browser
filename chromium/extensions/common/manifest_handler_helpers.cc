@@ -4,6 +4,8 @@
 
 #include "extensions/common/manifest_handler_helpers.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -12,7 +14,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest_constants.h"
-
 
 namespace extensions {
 
@@ -32,29 +33,23 @@ bool NormalizeAndValidatePath(std::string* path) {
 }
 
 bool LoadIconsFromDictionary(const base::DictionaryValue* icons_value,
-                             const int* icon_sizes,
-                             size_t num_icon_sizes,
                              ExtensionIconSet* icons,
                              base::string16* error) {
   DCHECK(icons);
-  for (size_t i = 0; i < num_icon_sizes; ++i) {
-    std::string key = base::IntToString(icon_sizes[i]);
-    if (icons_value->HasKey(key)) {
-      std::string icon_path;
-      if (!icons_value->GetString(key, &icon_path)) {
-        *error = ErrorUtils::FormatErrorMessageUTF16(
-            errors::kInvalidIconPath, key);
-        return false;
-      }
-
-      if (!NormalizeAndValidatePath(&icon_path)) {
-        *error = ErrorUtils::FormatErrorMessageUTF16(
-            errors::kInvalidIconPath, key);
-        return false;
-      }
-
-      icons->Add(icon_sizes[i], icon_path);
+  DCHECK(error);
+  for (base::DictionaryValue::Iterator iterator(*icons_value);
+       !iterator.IsAtEnd(); iterator.Advance()) {
+    int size = 0;
+    std::string icon_path;
+    if (!base::StringToInt(iterator.key(), &size) ||
+        !iterator.value().GetAsString(&icon_path) ||
+        !NormalizeAndValidatePath(&icon_path)) {
+      *error = ErrorUtils::FormatErrorMessageUTF16(errors::kInvalidIconPath,
+                                                   iterator.key());
+      return false;
     }
+
+    icons->Add(size, icon_path);
   }
   return true;
 }

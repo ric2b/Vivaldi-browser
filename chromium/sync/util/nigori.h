@@ -5,6 +5,8 @@
 #ifndef SYNC_UTIL_NIGORI_H_
 #define SYNC_UTIL_NIGORI_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/memory/scoped_ptr.h"
@@ -24,7 +26,7 @@ namespace syncer {
 // for your secret (basically a map key), and |Encrypt| and |Decrypt| to store
 // and retrieve the secret.
 //
-// TODO: Link to doc.
+// https://www.cl.cam.ac.uk/~drt24/nigori/nigori-overview.pdf
 class SYNC_EXPORT Nigori {
  public:
   enum Type {

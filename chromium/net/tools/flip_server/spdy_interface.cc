@@ -9,11 +9,11 @@
 
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_protocol.h"
-#include "net/tools/dump_cache/url_utilities.h"
 #include "net/tools/flip_server/constants.h"
 #include "net/tools/flip_server/flip_config.h"
 #include "net/tools/flip_server/http_interface.h"
 #include "net/tools/flip_server/spdy_util.h"
+#include "net/tools/flip_server/url_utilities.h"
 
 namespace net {
 
@@ -93,7 +93,7 @@ SMInterface* SpdySM::FindOrMakeNewSMConnectionInterface(
     const std::string& server_ip,
     const std::string& server_port) {
   SMInterface* sm_http_interface;
-  int32 server_idx;
+  int32_t server_idx;
   if (unused_server_interface_list.empty()) {
     sm_http_interface = NewConnectionInterface();
     server_idx = server_interface_list.size();
@@ -139,39 +139,19 @@ int SpdySM::SpdyHandleNewStream(SpdyStreamId stream_id,
 
   std::string path_string, host_string, version_string;
 
-  if (spdy_version() == SPDY2) {
-    url = headers.find("url");
-    method = headers.find("method");
-    version = headers.find("version");
-    scheme = headers.find("scheme");
-    if (url == headers.end() || method == headers.end() ||
-        version == headers.end() || scheme == headers.end()) {
-      VLOG(2) << ACCEPTOR_CLIENT_IDENT << "SpdySM: A mandatory header is "
-              << "missing. Not creating stream";
-      return 0;
-    }
-    // url->second here only ever seems to contain just the path. When this
-    // path contains a query string with a http:// in one of its values,
-    // UrlUtilities::GetUrlPath will fail and always return a / breaking
-    // the request. GetUrlPath assumes the absolute URL is being passed in.
-    path_string = UrlUtilities::GetUrlPath(url->second);
-    host_string = UrlUtilities::GetUrlHost(url->second);
-    version_string = version->second;
-  } else {
-    method = headers.find(":method");
-    host = headers.find(":host");
-    path = headers.find(":path");
-    scheme = headers.find(":scheme");
-    if (method == headers.end() || host == headers.end() ||
-        path == headers.end() || scheme == headers.end()) {
-      VLOG(2) << ACCEPTOR_CLIENT_IDENT << "SpdySM: A mandatory header is "
-              << "missing. Not creating stream";
-      return 0;
-    }
-    host_string = host->second;
-    path_string = path->second;
-    version_string = "HTTP/1.1";
+  method = headers.find(":method");
+  host = headers.find(":host");
+  path = headers.find(":path");
+  scheme = headers.find(":scheme");
+  if (method == headers.end() || host == headers.end() ||
+      path == headers.end() || scheme == headers.end()) {
+    VLOG(2) << ACCEPTOR_CLIENT_IDENT << "SpdySM: A mandatory header is "
+            << "missing. Not creating stream";
+    return 0;
   }
+  host_string = host->second.as_string();
+  path_string = path->second.as_string();
+  version_string = "HTTP/1.1";
 
   if (scheme->second.compare("https") == 0) {
     *is_https_scheme = true;
@@ -180,13 +160,12 @@ int SpdySM::SpdyHandleNewStream(SpdyStreamId stream_id,
   if (acceptor_->flip_handler_type_ == FLIP_HANDLER_SPDY_SERVER) {
     VLOG(1) << ACCEPTOR_CLIENT_IDENT << "Request: " << method->second
             << " " << path_string;
-    std::string filename = EncodeURL(path_string,
-                                     host_string,
-                                     method->second);
+    std::string filename =
+        EncodeURL(path_string, host_string, method->second.as_string());
     NewStream(stream_id, priority, filename);
   } else {
-    http_data +=
-        method->second + " " + path_string + " " + version_string + "\r\n";
+    http_data += method->second.as_string() + " " + path_string + " " +
+                 version_string + "\r\n";
     VLOG(1) << ACCEPTOR_CLIENT_IDENT << "Request: " << method->second << " "
             << path_string << " " << version_string;
     http_data += "Host: " + (*is_https_scheme ?
@@ -204,9 +183,9 @@ int SpdySM::SpdyHandleNewStream(SpdyStreamId stream_id,
           i == url) {
         // Ignore the entry.
       } else {
-        http_data += i->first + ": " + i->second + "\r\n";
-        VLOG(2) << ACCEPTOR_CLIENT_IDENT << i->first.c_str() << ":"
-                << i->second.c_str();
+        http_data +=
+            i->first.as_string() + ": " + i->second.as_string() + "\r\n";
+        VLOG(2) << ACCEPTOR_CLIENT_IDENT << i->first << ":" << i->second;
       }
     }
     if (forward_ip_header_.length()) {
@@ -243,6 +222,18 @@ void SpdySM::OnStreamFrameData(SpdyStreamId stream_id,
 void SpdySM::OnStreamPadding(SpdyStreamId stream_id, size_t len) {
   VLOG(2) << ACCEPTOR_CLIENT_IDENT << "SpdySM: StreamPadding(" << stream_id
           << ", [" << len << "])";
+}
+
+SpdyHeadersHandlerInterface* SpdySM::OnHeaderFrameStart(
+    SpdyStreamId stream_id) {
+  LOG(FATAL) << ACCEPTOR_CLIENT_IDENT
+             << "SpdySM::OnHeaderFrameStart() not implemented.";
+  return nullptr;
+}
+
+void SpdySM::OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) {
+  LOG(FATAL) << ACCEPTOR_CLIENT_IDENT
+             << "SpdySM::OnHeaderFrameEnd() not implemented.";
 }
 
 void SpdySM::OnSynStream(SpdyStreamId stream_id,
@@ -332,7 +323,7 @@ const char* SpdySM::ErrorAsString() const {
   return SpdyFramer::ErrorCodeToString(buffered_spdy_framer_->error_code());
 }
 
-void SpdySM::ResetForNewInterface(int32 server_idx) {
+void SpdySM::ResetForNewInterface(int32_t server_idx) {
   VLOG(2) << ACCEPTOR_CLIENT_IDENT << "SpdySM: Reset for new interface: "
           << "server_idx: " << server_idx;
   unused_server_interface_list.push_back(server_idx);
@@ -360,8 +351,8 @@ int SpdySM::PostAcceptHook() {
   return 1;
 }
 
-void SpdySM::NewStream(uint32 stream_id,
-                       uint32 priority,
+void SpdySM::NewStream(uint32_t stream_id,
+                       uint32_t priority,
                        const std::string& filename) {
   MemCacheIter mci;
   mci.stream_id = stream_id;
@@ -386,37 +377,39 @@ void SpdySM::AddToOutputOrder(const MemCacheIter& mci) {
   client_output_ordering_.AddToOutputOrder(mci);
 }
 
-void SpdySM::SendEOF(uint32 stream_id) { SendEOFImpl(stream_id); }
+void SpdySM::SendEOF(uint32_t stream_id) {
+  SendEOFImpl(stream_id);
+}
 
-void SpdySM::SendErrorNotFound(uint32 stream_id) {
+void SpdySM::SendErrorNotFound(uint32_t stream_id) {
   SendErrorNotFoundImpl(stream_id);
 }
 
-size_t SpdySM::SendSynStream(uint32 stream_id, const BalsaHeaders& headers) {
+size_t SpdySM::SendSynStream(uint32_t stream_id, const BalsaHeaders& headers) {
   return SendSynStreamImpl(stream_id, headers);
 }
 
-size_t SpdySM::SendSynReply(uint32 stream_id, const BalsaHeaders& headers) {
+size_t SpdySM::SendSynReply(uint32_t stream_id, const BalsaHeaders& headers) {
   return SendSynReplyImpl(stream_id, headers);
 }
 
-void SpdySM::SendDataFrame(uint32 stream_id,
+void SpdySM::SendDataFrame(uint32_t stream_id,
                            const char* data,
-                           int64 len,
-                           uint32 flags,
+                           int64_t len,
+                           uint32_t flags,
                            bool compress) {
   SpdyDataFlags spdy_flags = static_cast<SpdyDataFlags>(flags);
   SendDataFrameImpl(stream_id, data, len, spdy_flags, compress);
 }
 
-void SpdySM::SendEOFImpl(uint32 stream_id) {
+void SpdySM::SendEOFImpl(uint32_t stream_id) {
   SendDataFrame(stream_id, NULL, 0, DATA_FLAG_FIN, false);
   VLOG(2) << ACCEPTOR_CLIENT_IDENT << "SpdySM: Sending EOF: " << stream_id;
   KillStream(stream_id);
   stream_to_smif_.erase(stream_id);
 }
 
-void SpdySM::SendErrorNotFoundImpl(uint32 stream_id) {
+void SpdySM::SendErrorNotFoundImpl(uint32_t stream_id) {
   BalsaHeaders my_headers;
   my_headers.SetFirstlineFromStringPieces("HTTP/1.1", "404", "Not Found");
   SendSynReplyImpl(stream_id, my_headers);
@@ -424,7 +417,7 @@ void SpdySM::SendErrorNotFoundImpl(uint32 stream_id) {
   client_output_ordering_.RemoveStreamId(stream_id);
 }
 
-void SpdySM::KillStream(uint32 stream_id) {
+void SpdySM::KillStream(uint32_t stream_id) {
   client_output_ordering_.RemoveStreamId(stream_id);
 }
 
@@ -455,35 +448,21 @@ void SpdySM::CopyHeaders(SpdyHeaderBlock& dest, const BalsaHeaders& headers) {
   dest.erase("X-Original-Url");        // TODO(mbelshe): case-sensitive
 }
 
-size_t SpdySM::SendSynStreamImpl(uint32 stream_id,
+size_t SpdySM::SendSynStreamImpl(uint32_t stream_id,
                                  const BalsaHeaders& headers) {
   SpdyHeaderBlock block;
   CopyHeaders(block, headers);
-  if (spdy_version() == SPDY2) {
-    block["method"] = headers.request_method().as_string();
-    if (!headers.HasHeader("version"))
-      block["version"] = headers.request_version().as_string();
-    if (headers.HasHeader("X-Original-Url")) {
-      std::string original_url =
-          headers.GetHeader("X-Original-Url").as_string();
-      block["url"] = UrlUtilities::GetUrlPath(original_url);
-    } else {
-      block["url"] = headers.request_uri().as_string();
-    }
+  block[":method"] = headers.request_method().as_string();
+  block[":version"] = headers.request_version().as_string();
+  if (headers.HasHeader("X-Original-Url")) {
+    std::string original_url = headers.GetHeader("X-Original-Url").as_string();
+    block[":path"] = UrlUtilities::GetUrlPath(original_url);
+    block[":host"] = UrlUtilities::GetUrlPath(original_url);
   } else {
-    block[":method"] = headers.request_method().as_string();
-    block[":version"] = headers.request_version().as_string();
-    if (headers.HasHeader("X-Original-Url")) {
-      std::string original_url =
-          headers.GetHeader("X-Original-Url").as_string();
-      block[":path"] = UrlUtilities::GetUrlPath(original_url);
-      block[":host"] = UrlUtilities::GetUrlPath(original_url);
-    } else {
-      block[":path"] = headers.request_uri().as_string();
-      if (block.find("host") != block.end()) {
-        block[":host"] = headers.GetHeader("Host").as_string();
-        block.erase("host");
-      }
+    block[":path"] = headers.request_uri().as_string();
+    if (block.find("host") != block.end()) {
+      block[":host"] = headers.GetHeader("Host").as_string();
+      block.erase("host");
     }
   }
 
@@ -498,18 +477,13 @@ size_t SpdySM::SendSynStreamImpl(uint32 stream_id,
   return df_size;
 }
 
-size_t SpdySM::SendSynReplyImpl(uint32 stream_id, const BalsaHeaders& headers) {
+size_t SpdySM::SendSynReplyImpl(uint32_t stream_id,
+                                const BalsaHeaders& headers) {
   SpdyHeaderBlock block;
   CopyHeaders(block, headers);
-  if (spdy_version() == SPDY2) {
-    block["status"] = headers.response_code().as_string() + " " +
-        headers.response_reason_phrase().as_string();
-    block["version"] = headers.response_version().as_string();
-  } else {
-    block[":status"] = headers.response_code().as_string() + " " +
-        headers.response_reason_phrase().as_string();
-    block[":version"] = headers.response_version().as_string();
-  }
+  block[":status"] = headers.response_code().as_string() + " " +
+                     headers.response_reason_phrase().as_string();
+  block[":version"] = headers.response_version().as_string();
 
   DCHECK(buffered_spdy_framer_);
   SpdyFrame* fsrcf = buffered_spdy_framer_->CreateSynReply(
@@ -522,9 +496,9 @@ size_t SpdySM::SendSynReplyImpl(uint32 stream_id, const BalsaHeaders& headers) {
   return df_size;
 }
 
-void SpdySM::SendDataFrameImpl(uint32 stream_id,
+void SpdySM::SendDataFrameImpl(uint32_t stream_id,
                                const char* data,
-                               int64 len,
+                               int64_t len,
                                SpdyDataFlags flags,
                                bool compress) {
   DCHECK(buffered_spdy_framer_);
@@ -541,7 +515,7 @@ void SpdySM::SendDataFrameImpl(uint32 stream_id,
   // Chop data frames into chunks so that one stream can't monopolize the
   // output channel.
   while (len > 0) {
-    int64 size = std::min(len, static_cast<int64>(kSpdySegmentSize));
+    int64_t size = std::min(len, static_cast<int64_t>(kSpdySegmentSize));
     SpdyDataFlags chunk_flags = flags;
 
     // If we chunked this block, and the FIN flag was set, there is more

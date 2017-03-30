@@ -4,16 +4,18 @@
 
 #include "ui/views/widget/desktop_aura/x11_topmost_window_finder.h"
 
-#include <algorithm>
-#include <vector>
+#include <stddef.h>
 #include <X11/extensions/shape.h>
 #include <X11/Xlib.h>
 #include <X11/Xregion.h>
+#include <algorithm>
+#include <vector>
 
 // Get rid of X11 macros which conflict with gtest.
 #undef Bool
 #undef None
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "third_party/skia/include/core/SkRect.h"
@@ -26,7 +28,7 @@
 #include "ui/gfx/path.h"
 #include "ui/gfx/path_x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
-#include "ui/gl/gl_surface.h"
+#include "ui/gl/test/gl_surface_test_support.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/x11_property_change_waiter.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
@@ -128,7 +130,7 @@ class X11TopmostWindowFinderTest : public ViewsTestBase {
     params.remove_standard_frame = true;
     toplevel->Init(params);
     toplevel->Show();
-    return toplevel.Pass();
+    return toplevel;
   }
 
   // Creates and shows an X window with |bounds|.
@@ -194,7 +196,7 @@ class X11TopmostWindowFinderTest : public ViewsTestBase {
   }
 
   static void SetUpTestCase() {
-    gfx::GLSurface::InitializeOneOffForTests();
+    gfx::GLSurfaceTestSupport::InitializeOneOff();
     ui::RegisterPathProvider();
     base::FilePath ui_test_pak_path;
     ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));

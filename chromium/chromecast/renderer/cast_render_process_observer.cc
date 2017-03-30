@@ -4,6 +4,7 @@
 
 #include "chromecast/renderer/cast_render_process_observer.h"
 
+#include "build/build_config.h"
 #include "chromecast/renderer/media/capabilities_message_filter.h"
 #include "chromecast/renderer/media/cma_message_filter_proxy.h"
 #include "content/public/renderer/render_thread.h"
@@ -11,10 +12,7 @@
 namespace chromecast {
 namespace shell {
 
-CastRenderProcessObserver::CastRenderProcessObserver(
-    const std::vector<scoped_refptr<IPC::MessageFilter>>&
-        platform_message_filters)
-    : platform_message_filters_(platform_message_filters) {
+CastRenderProcessObserver::CastRenderProcessObserver() {
   content::RenderThread* thread = content::RenderThread::Get();
   thread->AddObserver(this);
   CreateCustomFilters();
@@ -34,9 +32,6 @@ void CastRenderProcessObserver::CreateCustomFilters() {
 #endif  // !defined(OS_ANDROID)
   capabilities_message_filter_ = new CapabilitiesMessageFilter;
   thread->AddFilter(capabilities_message_filter_.get());
-  for (const auto& filter : platform_message_filters_) {
-    thread->AddFilter(filter.get());
-  }
 }
 
 void CastRenderProcessObserver::OnRenderProcessShutdown() {
@@ -51,13 +46,6 @@ void CastRenderProcessObserver::OnRenderProcessShutdown() {
     thread->RemoveFilter(capabilities_message_filter_.get());
     capabilities_message_filter_ = nullptr;
   }
-  for (auto& filter : platform_message_filters_) {
-    if (filter.get()) {
-      thread->RemoveFilter(filter.get());
-      filter = nullptr;
-    }
-  }
-  platform_message_filters_.clear();
 }
 
 }  // namespace shell

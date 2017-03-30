@@ -4,6 +4,7 @@
 
 #include "components/scheduler/child/webthread_impl_for_worker_scheduler.h"
 
+#include "base/macros.h"
 #include "base/synchronization/waitable_event.h"
 #include "components/scheduler/child/web_scheduler_impl.h"
 #include "components/scheduler/child/worker_scheduler_impl.h"
@@ -19,14 +20,14 @@ using testing::Invoke;
 namespace scheduler {
 namespace {
 
-class NopTask : public blink::WebThread::Task {
+class NopTask : public blink::WebTaskRunner::Task {
  public:
   ~NopTask() override {}
 
-  void run() {}
+  void run() override {}
 };
 
-class MockTask : public blink::WebThread::Task {
+class MockTask : public blink::WebTaskRunner::Task {
  public:
   ~MockTask() override {}
 
@@ -54,7 +55,7 @@ class TestObserver : public blink::WebThread::TaskObserver {
   std::string* calls_;  // NOT OWNED
 };
 
-class TestTask : public blink::WebThread::Task {
+class TestTask : public blink::WebTaskRunner::Task {
  public:
   explicit TestTask(std::string* calls) : calls_(calls) {}
 
@@ -92,6 +93,7 @@ class WebThreadImplForWorkerSchedulerTest : public testing::Test {
 
   void SetUp() override {
     thread_.reset(new WebThreadImplForWorkerScheduler("test thread"));
+    thread_->Init();
   }
 
   void RunOnWorkerThread(const tracked_objects::Location& from_here,
@@ -124,7 +126,7 @@ TEST_F(WebThreadImplForWorkerSchedulerTest, TestDefaultTask) {
   ON_CALL(*task, run())
       .WillByDefault(Invoke([&completion]() { completion.Signal(); }));
 
-  thread_->postTask(blink::WebTraceLocation(), task.release());
+  thread_->taskRunner()->postTask(blink::WebTraceLocation(), task.release());
   completion.Wait();
 }
 
@@ -137,7 +139,7 @@ TEST_F(WebThreadImplForWorkerSchedulerTest,
   ON_CALL(*task, run())
       .WillByDefault(Invoke([&completion]() { completion.Signal(); }));
 
-  thread_->postTask(blink::WebTraceLocation(), task.release());
+  thread_->taskRunner()->postTask(blink::WebTraceLocation(), task.release());
   thread_.reset();
 }
 
@@ -151,7 +153,8 @@ TEST_F(WebThreadImplForWorkerSchedulerTest, TestIdleTask) {
 
   thread_->postIdleTask(blink::WebTraceLocation(), task.release());
   // We need to post a wakeup task or idle work will never happen.
-  thread_->postDelayedTask(blink::WebTraceLocation(), new NopTask(), 50ul);
+  thread_->taskRunner()->postDelayedTask(blink::WebTraceLocation(),
+                                         new NopTask(), 50ll);
 
   completion.Wait();
 }
@@ -162,7 +165,8 @@ TEST_F(WebThreadImplForWorkerSchedulerTest, TestTaskObserver) {
 
   RunOnWorkerThread(FROM_HERE,
                     base::Bind(&addTaskObserver, thread_.get(), &observer));
-  thread_->postTask(blink::WebTraceLocation(), new TestTask(&calls));
+  thread_->taskRunner()->postTask(blink::WebTraceLocation(),
+                                  new TestTask(&calls));
   RunOnWorkerThread(FROM_HERE,
                     base::Bind(&removeTaskObserver, thread_.get(), &observer));
 
@@ -182,8 +186,9 @@ TEST_F(WebThreadImplForWorkerSchedulerTest, TestShutdown) {
   EXPECT_CALL(*delayed_task, run()).Times(0);
 
   RunOnWorkerThread(FROM_HERE, base::Bind(&shutdownOnThread, thread_.get()));
-  thread_->postTask(blink::WebTraceLocation(), task.release());
-  thread_->postDelayedTask(blink::WebTraceLocation(), task.release(), 50ul);
+  thread_->taskRunner()->postTask(blink::WebTraceLocation(), task.release());
+  thread_->taskRunner()->postDelayedTask(blink::WebTraceLocation(),
+                                         task.release(), 50ll);
   thread_.reset();
 }
 

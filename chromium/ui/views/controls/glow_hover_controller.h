@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_CONTROLS_GLOW_HOVER_CONTROLLER_H_
 #define UI_VIEWS_CONTROLS_GLOW_HOVER_CONTROLLER_H_
 
+#include "base/macros.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/views/views_export.h"
@@ -44,6 +45,8 @@ class VIEWS_EXPORT GlowHoverController : public gfx::AnimationDelegate {
   // constructor.
   void SetLocation(const gfx::Point& location);
 
+  const gfx::Point& location() const { return location_; }
+
   // Initiates showing the hover.
   void Show(Style style);
 
@@ -56,13 +59,11 @@ class VIEWS_EXPORT GlowHoverController : public gfx::AnimationDelegate {
   // Returns the value of the animation.
   double GetAnimationValue() const;
 
+  SkAlpha GetAlpha() const;
+
   // Returns true if there is something to be drawn. Use this instead of
   // invoking Draw() if creating |mask_image| is expensive.
   bool ShouldDraw() const;
-
-  // If the hover is currently visible it is drawn to the supplied canvas.
-  // |mask_image| is used to determine what parts of the canvas to draw on.
-  void Draw(gfx::Canvas* canvas, const gfx::ImageSkia& mask_image) const;
 
   // gfx::AnimationDelegate overrides:
   void AnimationEnded(const gfx::Animation* animation) override;

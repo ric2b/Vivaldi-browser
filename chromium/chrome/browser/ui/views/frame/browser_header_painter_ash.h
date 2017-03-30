@@ -6,8 +6,8 @@
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_HEADER_PAINTER_ASH_H_
 
 #include "ash/frame/header_painter.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"  // override
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/gfx/animation/animation_delegate.h"
 
@@ -81,8 +81,9 @@ class BrowserHeaderPainterAsh : public ash::HeaderPainter,
   // browser windows and for hosted app windows which show the toolbar.
   gfx::ImageSkia GetFrameImageForNonTabbedBrowser(Mode mode) const;
 
-  // Updates the images used for the minimize, restore and close buttons.
-  void UpdateCaptionButtonImages();
+  // Updates the size and icons used for the minimize, restore, and close
+  // buttons.
+  void UpdateCaptionButtons();
 
   // Returns bounds of the region in |view_| which is painted with the header
   // images. The region is assumed to start at the top left corner of |view_|

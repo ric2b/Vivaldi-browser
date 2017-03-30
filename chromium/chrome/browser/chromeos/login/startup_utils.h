@@ -11,6 +11,10 @@
 
 class PrefRegistrySimple;
 
+namespace base {
+class TimeDelta;
+}
+
 namespace chromeos {
 
 // Static utility methods used at startup time to get/change bits of device
@@ -32,6 +36,9 @@ class StartupUtils {
   // Stores the next pending OOBE screen in case it will need to be resumed.
   static void SaveOobePendingScreen(const std::string& screen);
 
+  // Returns the time since the Oobe flag file was created.
+  static base::TimeDelta GetTimeSinceOobeFlagFileCreation();
+
   // Returns device registration completion status, i.e. second part of OOBE.
   static bool IsDeviceRegistered();
 
@@ -49,10 +56,6 @@ class StartupUtils {
 
   // Returns true if webview based signin flow has been activated.
   static bool IsWebviewSigninEnabled();
-
-  // Set enabled state for webview based signin flow if allowed. Returns true if
-  // it is allowed to activate webview based signin flow.
-  static bool EnableWebviewSignin(bool is_enabled);
 
   // Registers OOBE preferences.
   static void RegisterPrefs(PrefRegistrySimple* registry);

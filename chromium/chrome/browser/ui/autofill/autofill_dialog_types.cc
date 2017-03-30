@@ -4,9 +4,12 @@
 
 #include "chrome/browser/ui/autofill/autofill_dialog_types.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "ui/gfx/color_palette.h"
 
 namespace {
 
@@ -28,13 +31,14 @@ DialogNotification::DialogNotification(Type type,
       display_text_(display_text),
       checked_(false) {
   // If there's a range separated by bars, mark that as the anchor text.
-  std::vector<base::string16> pieces;
-  base::SplitStringDontTrim(display_text, kRangeSeparator, &pieces);
+  std::vector<base::string16> pieces = base::SplitString(
+      display_text, base::string16(1, kRangeSeparator),
+      base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
   if (pieces.size() > 1) {
     size_t start = pieces[0].size();
     size_t end = start + pieces[1].size();
     link_range_ = gfx::Range(start, end);
-    display_text_ = JoinString(pieces, base::string16());
+    display_text_ = base::JoinString(pieces, base::StringPiece16());
   }
 }
 
@@ -100,7 +104,7 @@ bool DialogNotification::HasCheckbox() const {
   return type_ == DialogNotification::WALLET_USAGE_CONFIRMATION;
 }
 
-SkColor const kWarningColor = SkColorSetRGB(0xd3, 0x2f, 0x2f);
+SkColor const kWarningColor = gfx::kGoogleRed700;
 SkColor const kLightShadingColor = SkColorSetARGB(7, 0, 0, 0);
 SkColor const kSubtleBorderColor = SkColorSetARGB(10, 0, 0, 0);
 

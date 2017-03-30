@@ -19,26 +19,28 @@
 
 namespace nacl_io {
 
-SocketNode::SocketNode(Filesystem* filesystem)
+SocketNode::SocketNode(int type, Filesystem* filesystem)
     : StreamNode(filesystem),
       socket_resource_(0),
       local_addr_(0),
       remote_addr_(0),
       socket_flags_(0),
       last_errno_(0),
-      keep_alive_(false) {
+      keep_alive_(false),
+      so_type_(type) {
   memset(&linger_, 0, sizeof(linger_));
   SetType(S_IFSOCK);
 }
 
-SocketNode::SocketNode(Filesystem* filesystem, PP_Resource socket)
+SocketNode::SocketNode(int type, Filesystem* filesystem, PP_Resource socket)
     : StreamNode(filesystem),
       socket_resource_(socket),
       local_addr_(0),
       remote_addr_(0),
       socket_flags_(0),
       last_errno_(0),
-      keep_alive_(false) {
+      keep_alive_(false),
+      so_type_(type) {
   memset(&linger_, 0, sizeof(linger_));
   SetType(S_IFSOCK);
   filesystem_->ppapi()->AddRefResource(socket_resource_);
@@ -110,37 +112,43 @@ PP_Resource SocketNode::SockAddrToResource(const struct sockaddr* addr,
     return 0;
 
   if (AF_INET == addr->sa_family) {
-    PP_NetAddress_IPv4 addr4;
     const sockaddr_in* sin = reinterpret_cast<const sockaddr_in*>(addr);
-
-    if (len != sizeof(sockaddr_in))
-      return 0;
-
-    memset(&addr4, 0, sizeof(addr4));
-
-    addr4.port = sin->sin_port;
-    memcpy(addr4.addr, &sin->sin_addr, sizeof(addr4.addr));
-    return filesystem_->ppapi()
-        ->GetNetAddressInterface()
-        ->CreateFromIPv4Address(filesystem_->ppapi()->GetInstance(), &addr4);
+    return SockAddrInToResource(sin, len);
   }
 
   if (AF_INET6 == addr->sa_family) {
-    PP_NetAddress_IPv6 addr6;
     const sockaddr_in6* sin = reinterpret_cast<const sockaddr_in6*>(addr);
-
-    if (len != sizeof(sockaddr_in6))
-      return 0;
-
-    memset(&addr6, 0, sizeof(addr6));
-
-    addr6.port = sin->sin6_port;
-    memcpy(addr6.addr, &sin->sin6_addr, sizeof(addr6.addr));
-    return filesystem_->ppapi()
-        ->GetNetAddressInterface()
-        ->CreateFromIPv6Address(filesystem_->ppapi()->GetInstance(), &addr6);
+    return SockAddrIn6ToResource(sin, len);
   }
   return 0;
+}
+
+PP_Resource SocketNode::SockAddrInToResource(const sockaddr_in* sin,
+                                             socklen_t len) {
+  if (len != sizeof(sockaddr_in))
+    return 0;
+
+  PP_NetAddress_IPv4 addr4;
+  memset(&addr4, 0, sizeof(addr4));
+
+  addr4.port = sin->sin_port;
+  memcpy(addr4.addr, &sin->sin_addr, sizeof(addr4.addr));
+  return filesystem_->ppapi()->GetNetAddressInterface()->CreateFromIPv4Address(
+      filesystem_->ppapi()->GetInstance(), &addr4);
+}
+
+PP_Resource SocketNode::SockAddrIn6ToResource(const sockaddr_in6* sin,
+                                              socklen_t len) {
+  if (len != sizeof(sockaddr_in6))
+    return 0;
+
+  PP_NetAddress_IPv6 addr6;
+  memset(&addr6, 0, sizeof(addr6));
+
+  addr6.port = sin->sin6_port;
+  memcpy(addr6.addr, &sin->sin6_addr, sizeof(addr6.addr));
+  return filesystem_->ppapi()->GetNetAddressInterface()->CreateFromIPv6Address(
+      filesystem_->ppapi()->GetInstance(), &addr6);
 }
 
 socklen_t SocketNode::ResourceToSockAddr(PP_Resource addr,
@@ -242,6 +250,10 @@ Error SocketNode::GetSockOpt(int lvl,
       value_ptr = &value;
       value_len = sizeof(value);
       break;
+    case SO_TYPE:
+      value_ptr = &so_type_;
+      value_len = sizeof(so_type_);
+      break;
     case SO_LINGER:
       value_ptr = &linger_;
       value_len = sizeof(linger_);
@@ -270,13 +282,31 @@ Error SocketNode::SetSockOpt(int lvl,
                              int optname,
                              const void* optval,
                              socklen_t len) {
-  size_t buflen = static_cast<size_t>(len);
-
-  if (lvl != SOL_SOCKET)
-    return ENOPROTOOPT;
-
   AUTO_LOCK(node_lock_);
 
+  switch (lvl) {
+    case SOL_SOCKET: {
+      return SetSockOptSocket(optname, optval, len);
+    }
+    case IPPROTO_TCP: {
+      return SetSockOptTCP(optname, optval, len);
+    }
+    case IPPROTO_IP: {
+      return SetSockOptIP(optname, optval, len);
+    }
+    case IPPROTO_IPV6: {
+      return SetSockOptIPV6(optname, optval, len);
+    }
+    default: { break; }
+  }
+
+  return ENOPROTOOPT;
+}
+
+Error SocketNode::SetSockOptSocket(int optname,
+                                   const void* optval,
+                                   socklen_t len) {
+  size_t buflen = static_cast<size_t>(len);
   switch (optname) {
     case SO_REUSEADDR: {
       // SO_REUSEADDR is effectivly always on since we can't
@@ -315,6 +345,22 @@ Error SocketNode::SetSockOpt(int lvl,
   return ENOPROTOOPT;
 }
 
+Error SocketNode::SetSockOptTCP(int optname,
+                                const void* optval,
+                                socklen_t len) {
+  return ENOPROTOOPT;
+}
+
+Error SocketNode::SetSockOptIP(int optname, const void* optval, socklen_t len) {
+  return ENOPROTOOPT;
+}
+
+Error SocketNode::SetSockOptIPV6(int optname,
+                                 const void* optval,
+                                 socklen_t len) {
+  return ENOPROTOOPT;
+}
+
 Error SocketNode::Bind(const struct sockaddr* addr, socklen_t len) {
   return EINVAL;
 }
@@ -335,6 +381,8 @@ Error SocketNode::RecvFrom(const HandleAttr& attr,
                            socklen_t* addrlen,
                            int* out_len) {
   PP_Resource addr = 0;
+  if (0 == socket_resource_)
+    return EBADF;
   Error err = RecvHelper(attr, buf, len, flags, &addr, out_len);
   if (0 == err && 0 != addr) {
     if (src_addr)
@@ -352,14 +400,6 @@ Error SocketNode::RecvHelper(const HandleAttr& attr,
                              int flags,
                              PP_Resource* addr,
                              int* out_len) {
-  if (0 == socket_resource_)
-    return EBADF;
-
-  if (TestStreamFlags(SSF_RECV_ENDOFSTREAM)) {
-    *out_len = 0;
-    return 0;
-  }
-
   int ms = read_timeout_;
   if ((flags & MSG_DONTWAIT) || !attr.IsBlocking())
     ms = 0;
@@ -389,6 +429,11 @@ Error SocketNode::Send(const HandleAttr& attr,
                        size_t len,
                        int flags,
                        int* out_len) {
+  if (0 == socket_resource_)
+    return EBADF;
+
+  if (0 == remote_addr_)
+    return ENOTCONN;
   return SendHelper(attr, buf, len, flags, remote_addr_, out_len);
 }
 
@@ -406,6 +451,9 @@ Error SocketNode::SendTo(const HandleAttr& attr,
   if (0 == addr)
     return EINVAL;
 
+  if (0 == socket_resource_)
+    return EBADF;
+
   Error err = SendHelper(attr, buf, len, flags, addr, out_len);
   filesystem_->ppapi()->ReleaseResource(addr);
   return err;
@@ -417,12 +465,6 @@ Error SocketNode::SendHelper(const HandleAttr& attr,
                              int flags,
                              PP_Resource addr,
                              int* out_len) {
-  if (0 == socket_resource_)
-    return EBADF;
-
-  if (0 == addr)
-    return ENOTCONN;
-
   int ms = write_timeout_;
   if ((flags & MSG_DONTWAIT) || !attr.IsBlocking())
     ms = 0;

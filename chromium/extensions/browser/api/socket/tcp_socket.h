@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_BROWSER_API_SOCKET_TCP_SOCKET_H_
 #define EXTENSIONS_BROWSER_API_SOCKET_TCP_SOCKET_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "extensions/browser/api/socket/socket.h"
@@ -23,7 +25,7 @@ namespace extensions {
 class TCPSocket : public Socket {
  public:
   explicit TCPSocket(const std::string& owner_extension_id);
-  TCPSocket(net::TCPClientSocket* tcp_client_socket,
+  TCPSocket(scoped_ptr<net::TCPClientSocket> tcp_client_socket,
             const std::string& owner_extension_id,
             bool is_connected = false);
 
@@ -32,7 +34,7 @@ class TCPSocket : public Socket {
   void Connect(const net::AddressList& address,
                const CompletionCallback& callback) override;
   void Disconnect() override;
-  int Bind(const std::string& address, uint16 port) override;
+  int Bind(const std::string& address, uint16_t port) override;
   void Read(int count, const ReadCompletionCallback& callback) override;
   void RecvFrom(int count, const RecvFromCompletionCallback& callback) override;
   void SendTo(scoped_refptr<net::IOBuffer> io_buffer,
@@ -42,7 +44,7 @@ class TCPSocket : public Socket {
   bool SetKeepAlive(bool enable, int delay) override;
   bool SetNoDelay(bool no_delay) override;
   int Listen(const std::string& address,
-             uint16 port,
+             uint16_t port,
              int backlog,
              std::string* error_msg) override;
   void Accept(const AcceptCompletionCallback& callback) override;
@@ -60,11 +62,11 @@ class TCPSocket : public Socket {
   Socket::SocketType GetSocketType() const override;
 
   static TCPSocket* CreateSocketForTesting(
-      net::TCPClientSocket* tcp_client_socket,
+      scoped_ptr<net::TCPClientSocket> tcp_client_socket,
       const std::string& owner_extension_id,
       bool is_connected = false);
   static TCPSocket* CreateServerSocketForTesting(
-      net::TCPServerSocket* tcp_server_socket,
+      scoped_ptr<net::TCPServerSocket> tcp_server_socket,
       const std::string& owner_extension_id);
 
   // Returns NULL if GetSocketType() isn't TYPE_TCP or if the connection
@@ -85,7 +87,7 @@ class TCPSocket : public Socket {
   void OnReadComplete(scoped_refptr<net::IOBuffer> io_buffer, int result);
   void OnAccept(int result);
 
-  TCPSocket(net::TCPServerSocket* tcp_server_socket,
+  TCPSocket(scoped_ptr<net::TCPServerSocket> tcp_server_socket,
             const std::string& owner_extension_id);
 
   scoped_ptr<net::TCPClientSocket> socket_;
@@ -108,9 +110,10 @@ class TCPSocket : public Socket {
 class ResumableTCPSocket : public TCPSocket {
  public:
   explicit ResumableTCPSocket(const std::string& owner_extension_id);
-  explicit ResumableTCPSocket(net::TCPClientSocket* tcp_client_socket,
-                              const std::string& owner_extension_id,
-                              bool is_connected);
+  explicit ResumableTCPSocket(
+      scoped_ptr<net::TCPClientSocket> tcp_client_socket,
+      const std::string& owner_extension_id,
+      bool is_connected);
 
   // Overriden from ApiResource
   bool IsPersistent() const override;

@@ -4,7 +4,10 @@
 
 #include "chrome/browser/download/download_query.h"
 
+#include <stdint.h>
+
 #include <algorithm>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -25,10 +28,10 @@
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/download_item.h"
-#include "net/base/net_util.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 #include "url/gurl.h"
 
 using content::DownloadDangerType;
@@ -69,40 +72,11 @@ template<> bool GetAs(const base::Value& in, std::vector<base::string16>* out) {
 // The next several functions are helpers for making Callbacks that access
 // DownloadItem fields.
 
-static bool MatchesQuery(
-    const std::vector<base::string16>& query_terms,
-    const DownloadItem& item) {
-  DCHECK(!query_terms.empty());
-  base::string16 url_raw(base::UTF8ToUTF16(item.GetOriginalUrl().spec()));
-  base::string16 url_formatted = url_raw;
-  if (item.GetBrowserContext()) {
-    Profile* profile = Profile::FromBrowserContext(item.GetBrowserContext());
-    url_formatted = net::FormatUrl(
-        item.GetOriginalUrl(),
-        profile->GetPrefs()->GetString(prefs::kAcceptLanguages));
-  }
-  base::string16 path(item.GetTargetFilePath().LossyDisplayName());
-
-  for (std::vector<base::string16>::const_iterator it = query_terms.begin();
-       it != query_terms.end(); ++it) {
-    base::string16 term = base::i18n::ToLower(*it);
-    if (!base::i18n::StringSearchIgnoringCaseAndAccents(
-            term, url_raw, NULL, NULL) &&
-        !base::i18n::StringSearchIgnoringCaseAndAccents(
-            term, url_formatted, NULL, NULL) &&
-        !base::i18n::StringSearchIgnoringCaseAndAccents(
-            term, path, NULL, NULL)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-static int64 GetStartTimeMsEpoch(const DownloadItem& item) {
+static int64_t GetStartTimeMsEpoch(const DownloadItem& item) {
   return (item.GetStartTime() - base::Time::UnixEpoch()).InMilliseconds();
 }
 
-static int64 GetEndTimeMsEpoch(const DownloadItem& item) {
+static int64_t GetEndTimeMsEpoch(const DownloadItem& item) {
   return (item.GetEndTime() - base::Time::UnixEpoch()).InMilliseconds();
 }
 
@@ -237,12 +211,39 @@ static ComparisonType Compare(
 
 }  // anonymous namespace
 
-DownloadQuery::DownloadQuery()
-  : limit_(kuint32max) {
+// static
+bool DownloadQuery::MatchesQuery(const std::vector<base::string16>& query_terms,
+                                 const DownloadItem& item) {
+  if (query_terms.empty())
+    return true;
+
+  base::string16 url_raw(base::UTF8ToUTF16(item.GetOriginalUrl().spec()));
+  base::string16 url_formatted = url_raw;
+  if (item.GetBrowserContext()) {
+    Profile* profile = Profile::FromBrowserContext(item.GetBrowserContext());
+    url_formatted = url_formatter::FormatUrl(
+        item.GetOriginalUrl(),
+        profile->GetPrefs()->GetString(prefs::kAcceptLanguages));
+  }
+  base::string16 path(item.GetTargetFilePath().LossyDisplayName());
+
+  for (std::vector<base::string16>::const_iterator it = query_terms.begin();
+       it != query_terms.end(); ++it) {
+    base::string16 term = base::i18n::ToLower(*it);
+    if (!base::i18n::StringSearchIgnoringCaseAndAccents(
+            term, url_raw, NULL, NULL) &&
+        !base::i18n::StringSearchIgnoringCaseAndAccents(
+            term, url_formatted, NULL, NULL) &&
+        !base::i18n::StringSearchIgnoringCaseAndAccents(
+            term, path, NULL, NULL)) {
+      return false;
+    }
+  }
+  return true;
 }
 
-DownloadQuery::~DownloadQuery() {
-}
+DownloadQuery::DownloadQuery() : limit_(std::numeric_limits<uint32_t>::max()) {}
+DownloadQuery::~DownloadQuery() {}
 
 // AddFilter() pushes a new FilterCallback to filters_. Most FilterCallbacks are
 // Callbacks to FieldMatches<>(). Search() iterates over given DownloadItems,
@@ -390,10 +391,11 @@ void DownloadQuery::AddSorter(DownloadQuery::SortType type,
                               DownloadQuery::SortDirection direction) {
   switch (type) {
     case SORT_END_TIME:
-      sorters_.push_back(Sorter::Build<int64>(direction, &GetEndTimeMsEpoch));
+      sorters_.push_back(Sorter::Build<int64_t>(direction, &GetEndTimeMsEpoch));
       break;
     case SORT_START_TIME:
-      sorters_.push_back(Sorter::Build<int64>(direction, &GetStartTimeMsEpoch));
+      sorters_.push_back(
+          Sorter::Build<int64_t>(direction, &GetStartTimeMsEpoch));
       break;
     case SORT_URL:
       sorters_.push_back(Sorter::Build<std::string>(direction, &GetUrl));
@@ -432,11 +434,13 @@ void DownloadQuery::AddSorter(DownloadQuery::SortType type,
 }
 
 void DownloadQuery::FinishSearch(DownloadQuery::DownloadVector* results) const {
-  if (!sorters_.empty())
+ if (!sorters_.empty()) {
     std::partial_sort(results->begin(),
                       results->begin() + std::min(limit_, results->size()),
                       results->end(),
                       DownloadComparator(sorters_));
+  }
+
   if (results->size() > limit_)
     results->resize(limit_);
 }

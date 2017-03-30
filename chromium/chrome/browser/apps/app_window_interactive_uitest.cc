@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/browser_iterator.h"
@@ -296,7 +298,6 @@ IN_PROC_BROWSER_TEST_F(AppWindowInteractiveTest,
 // This test is duplicated from ESCDoesNotLeaveFullscreenWindow.
 // It runs the same test, but uses the old permission names: 'fullscreen'
 // and 'overrideEscFullscreen'.
-
 IN_PROC_BROWSER_TEST_F(AppWindowInteractiveTest,
                        ESCDoesNotLeaveFullscreenOldPermission) {
 // This test is flaky on MacOS 10.6.

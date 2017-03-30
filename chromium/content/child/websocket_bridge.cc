@@ -17,18 +17,18 @@
 #include "content/common/websocket_messages.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
-#include "third_party/WebKit/public/platform/WebSerializedOrigin.h"
-#include "third_party/WebKit/public/platform/WebSocketHandle.h"
-#include "third_party/WebKit/public/platform/WebSocketHandleClient.h"
-#include "third_party/WebKit/public/platform/WebSocketHandshakeRequestInfo.h"
-#include "third_party/WebKit/public/platform/WebSocketHandshakeResponseInfo.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/WebKit/public/platform/modules/websockets/WebSocketHandle.h"
+#include "third_party/WebKit/public/platform/modules/websockets/WebSocketHandleClient.h"
+#include "third_party/WebKit/public/platform/modules/websockets/WebSocketHandshakeRequestInfo.h"
+#include "third_party/WebKit/public/platform/modules/websockets/WebSocketHandshakeResponseInfo.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
-using blink::WebSerializedOrigin;
+using blink::WebSecurityOrigin;
 using blink::WebSocketHandle;
 using blink::WebSocketHandleClient;
 using blink::WebString;
@@ -203,11 +203,10 @@ void WebSocketBridge::DidStartClosingHandshake() {
   // |this| can be deleted here.
 }
 
-void WebSocketBridge::connect(
-    const WebURL& url,
-    const WebVector<WebString>& protocols,
-    const WebSerializedOrigin& origin,
-    WebSocketHandleClient* client) {
+void WebSocketBridge::connect(const WebURL& url,
+                              const WebVector<WebString>& protocols,
+                              const WebSecurityOrigin& origin,
+                              WebSocketHandleClient* client) {
   DCHECK_EQ(kInvalidChannelId, channel_id_);
   WebSocketDispatcher* dispatcher =
       ChildThreadImpl::current()->websocket_dispatcher();
@@ -217,14 +216,13 @@ void WebSocketBridge::connect(
   std::vector<std::string> protocols_to_pass;
   for (size_t i = 0; i < protocols.size(); ++i)
     protocols_to_pass.push_back(protocols[i].utf8());
-  url::Origin origin_to_pass(origin);
 
   DVLOG(1) << "Bridge#" << channel_id_ << " Connect(" << url << ", ("
-           << JoinString(protocols_to_pass, ", ") << "), "
-           << origin_to_pass.string() << ")";
+           << base::JoinString(protocols_to_pass, ", ") << "), "
+           << origin.toString().utf8() << ")";
 
   ChildThreadImpl::current()->Send(new WebSocketHostMsg_AddChannelRequest(
-      channel_id_, url, protocols_to_pass, origin_to_pass, render_frame_id_));
+      channel_id_, url, protocols_to_pass, origin, render_frame_id_));
 }
 
 void WebSocketBridge::send(bool fin,

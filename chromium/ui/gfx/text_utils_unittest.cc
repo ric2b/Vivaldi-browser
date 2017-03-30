@@ -4,7 +4,11 @@
 
 #include "ui/gfx/text_utils.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/font_list.h"
 
@@ -61,7 +65,7 @@ TEST(TextUtilsTest, RemoveAcceleratorChar) {
 }
 
 // Disabled on Ozone since there are no fonts: crbug.com/320050
-#if defined(USE_OZONE)
+#if defined(USE_OZONE) || defined(OS_ANDROID)
 #define MAYBE_GetStringWidth DISABLED_GetStringWidth
 #else
 #define MAYBE_GetStringWidth GetStringWidth

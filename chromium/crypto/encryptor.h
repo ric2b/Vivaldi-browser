@@ -5,16 +5,17 @@
 #ifndef CRYPTO_ENCRYPTOR_H_
 #define CRYPTO_ENCRYPTOR_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "crypto/crypto_export.h"
 
-#if defined(USE_NSS_CERTS) || \
-    (!defined(USE_OPENSSL) && (defined(OS_WIN) || defined(OS_MACOSX)))
+#if !defined(USE_OPENSSL)
 #include "crypto/scoped_nss_types.h"
 #endif
 
@@ -48,8 +49,8 @@ class CRYPTO_EXPORT Encryptor {
 
    private:
     union {
-      uint32 components32[4];
-      uint64 components64[2];
+      uint32_t components32[4];
+      uint64_t components64[2];
     } counter_;
   };
 
@@ -103,7 +104,7 @@ class CRYPTO_EXPORT Encryptor {
   //
   // Returns false if this call failed.
   bool GenerateCounterMask(size_t plaintext_len,
-                           uint8* mask,
+                           uint8_t* mask,
                            size_t* mask_len);
 
   // Mask the |plaintext| message using |mask|. The output will be written to
@@ -125,7 +126,7 @@ class CRYPTO_EXPORT Encryptor {
                 const base::StringPiece& input,
                 std::string* output);
   std::string iv_;
-#elif defined(USE_NSS_CERTS) || defined(OS_WIN) || defined(OS_MACOSX)
+#else
   bool Crypt(PK11Context* context,
              const base::StringPiece& input,
              std::string* output);

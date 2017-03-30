@@ -6,14 +6,35 @@
 
 #include <windows.h>
 #include <psapi.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <winternl.h>
+
+#include <algorithm>
 
 #include "base/logging.h"
 #include "base/sys_info.h"
 
 namespace base {
+namespace {
 
 // System pagesize. This value remains constant on x86/64 architectures.
 const int PAGESIZE_KB = 4;
+
+typedef NTSTATUS(WINAPI* NTQUERYSYSTEMINFORMATION)(
+    SYSTEM_INFORMATION_CLASS SystemInformationClass,
+    PVOID SystemInformation,
+    ULONG SystemInformationLength,
+    PULONG ReturnLength);
+
+}  // namespace
+
+SystemMemoryInfoKB::SystemMemoryInfoKB() {
+  total = 0;
+  free = 0;
+  swap_total = 0;
+  swap_free = 0;
+}
 
 ProcessMetrics::~ProcessMetrics() { }
 
@@ -187,7 +208,7 @@ bool ProcessMetrics::GetWorkingSetKBytes(WorkingSetKBytes* ws_usage) const {
   return true;
 }
 
-static uint64 FileTimeToUTC(const FILETIME& ftime) {
+static uint64_t FileTimeToUTC(const FILETIME& ftime) {
   LARGE_INTEGER li;
   li.LowPart = ftime.dwLowDateTime;
   li.HighPart = ftime.dwHighDateTime;
@@ -207,8 +228,9 @@ double ProcessMetrics::GetCPUUsage() {
     // not yet received the notification.
     return 0;
   }
-  int64 system_time = (FileTimeToUTC(kernel_time) + FileTimeToUTC(user_time)) /
-                        processor_count_;
+  int64_t system_time =
+      (FileTimeToUTC(kernel_time) + FileTimeToUTC(user_time)) /
+      processor_count_;
   TimeTicks time = TimeTicks::Now();
 
   if (last_system_time_ == 0) {
@@ -218,9 +240,9 @@ double ProcessMetrics::GetCPUUsage() {
     return 0;
   }
 
-  int64 system_time_delta = system_time - last_system_time_;
+  int64_t system_time_delta = system_time - last_system_time_;
   // FILETIME is in 100-nanosecond units, so this needs microseconds times 10.
-  int64 time_delta = (time - last_cpu_time_).InMicroseconds() * 10;
+  int64_t time_delta = (time - last_cpu_time_).InMicroseconds() * 10;
   DCHECK_NE(0U, time_delta);
   if (time_delta == 0)
     return 0;
@@ -283,6 +305,26 @@ size_t GetSystemCommitCharge() {
 
 size_t GetPageSize() {
   return PAGESIZE_KB * 1024;
+}
+
+// This function uses the following mapping between MEMORYSTATUSEX and
+// SystemMemoryInfoKB:
+//   ullTotalPhys ==> total
+//   ullAvailPhys ==> free
+//   ullTotalPageFile ==> swap_total
+//   ullAvailPageFile ==> swap_free
+bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
+  MEMORYSTATUSEX mem_status;
+  mem_status.dwLength = sizeof(mem_status);
+  if (!::GlobalMemoryStatusEx(&mem_status))
+    return false;
+
+  meminfo->total = mem_status.ullTotalPhys / 1024;
+  meminfo->free = mem_status.ullAvailPhys / 1024;
+  meminfo->swap_total = mem_status.ullTotalPageFile / 1024;
+  meminfo->swap_free = mem_status.ullAvailPageFile / 1024;
+
+  return true;
 }
 
 }  // namespace base

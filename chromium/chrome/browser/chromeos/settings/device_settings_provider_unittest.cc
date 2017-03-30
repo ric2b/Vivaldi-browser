@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/test/scoped_path_override.h"
 #include "base/values.h"
@@ -99,6 +100,30 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     Mock::VerifyAndClearExpectations(this);
   }
 
+  // Helper routine to enable/disable log upload settings in policy.
+  void SetLogUploadSettings(bool enable_system_log_upload) {
+    EXPECT_CALL(*this, SettingChanged(_)).Times(AtLeast(1));
+    em::DeviceLogUploadSettingsProto* proto =
+        device_policy_.payload().mutable_device_log_upload_settings();
+    proto->set_system_log_upload_enabled(enable_system_log_upload);
+    device_policy_.Build();
+    device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
+    ReloadDeviceSettings();
+    Mock::VerifyAndClearExpectations(this);
+  }
+
+  // Helper routine to enable/disable metrics report upload settings in policy.
+  void SetMetricsReportingSettings(bool enable_metrics_reporting) {
+    EXPECT_CALL(*this, SettingChanged(_)).Times(AtLeast(1));
+    em::MetricsEnabledProto* proto =
+        device_policy_.payload().mutable_metrics_enabled();
+    proto->set_metrics_enabled(enable_metrics_reporting);
+    device_policy_.Build();
+    device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
+    ReloadDeviceSettings();
+    Mock::VerifyAndClearExpectations(this);
+  }
+
   // Helper routine to ensure all heartbeat policies have been correctly
   // decoded.
   void VerifyHeartbeatSettings(bool expected_enable_state,
@@ -138,6 +163,14 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     const base::FundamentalValue expected_frequency_value(expected_frequency);
     EXPECT_TRUE(base::Value::Equals(provider_->Get(kReportUploadFrequency),
                                     &expected_frequency_value));
+  }
+
+  // Helper routine to ensure log upload policy has been correctly
+  // decoded.
+  void VerifyLogUploadSettings(bool expected_enable_state) {
+    const base::FundamentalValue expected_enabled_value(expected_enable_state);
+    EXPECT_TRUE(base::Value::Equals(provider_->Get(kSystemLogUploadEnabled),
+                                    &expected_enabled_value));
   }
 
   // Helper routine to set LoginScreenDomainAutoComplete policy.
@@ -221,6 +254,8 @@ TEST_F(DeviceSettingsProviderTest, InitializationTestUnowned) {
 }
 
 TEST_F(DeviceSettingsProviderTest, SetPrefFailed) {
+  SetMetricsReportingSettings(false);
+
   // If we are not the owner no sets should work.
   base::FundamentalValue value(true);
   EXPECT_CALL(*this, SettingChanged(kStatsReportingPref)).Times(1);
@@ -242,7 +277,8 @@ TEST_F(DeviceSettingsProviderTest, SetPrefFailed) {
 
 TEST_F(DeviceSettingsProviderTest, SetPrefSucceed) {
   owner_key_util_->SetPrivateKey(device_policy_.GetSigningKey());
-  InitOwner(device_policy_.policy_data().username(), true);
+  InitOwner(AccountId::FromUserEmail(device_policy_.policy_data().username()),
+            true);
   FlushDeviceSettings();
 
   base::FundamentalValue value(true);
@@ -270,7 +306,8 @@ TEST_F(DeviceSettingsProviderTest, SetPrefSucceed) {
 
 TEST_F(DeviceSettingsProviderTest, SetPrefTwice) {
   owner_key_util_->SetPrivateKey(device_policy_.GetSigningKey());
-  InitOwner(device_policy_.policy_data().username(), true);
+  InitOwner(AccountId::FromUserEmail(device_policy_.policy_data().username()),
+            true);
   FlushDeviceSettings();
 
   EXPECT_CALL(*this, SettingChanged(_)).Times(AnyNumber());
@@ -344,26 +381,6 @@ TEST_F(DeviceSettingsProviderTest, PolicyLoadNotification) {
   Mock::VerifyAndClearExpectations(this);
 }
 
-TEST_F(DeviceSettingsProviderTest, StatsReportingMigration) {
-  // Create the legacy consent file.
-  base::FilePath consent_file;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_USER_DATA, &consent_file));
-  consent_file = consent_file.AppendASCII("Consent To Send Stats");
-  ASSERT_EQ(1, base::WriteFile(consent_file, "0", 1));
-
-  // This should trigger migration because the metrics policy isn't in the blob.
-  device_settings_test_helper_.set_policy_blob(std::string());
-  FlushDeviceSettings();
-  EXPECT_EQ(std::string(), device_settings_test_helper_.policy_blob());
-
-  // Verify that migration has kicked in.
-  const base::Value* saved_value = provider_->Get(kStatsReportingPref);
-  ASSERT_TRUE(saved_value);
-  bool bool_value;
-  EXPECT_TRUE(saved_value->GetAsBoolean(&bool_value));
-  EXPECT_FALSE(bool_value);
-}
-
 TEST_F(DeviceSettingsProviderTest, LegacyDeviceLocalAccounts) {
   EXPECT_CALL(*this, SettingChanged(_)).Times(AnyNumber());
   em::DeviceLocalAccountInfoProto* account =
@@ -390,7 +407,8 @@ TEST_F(DeviceSettingsProviderTest, LegacyDeviceLocalAccounts) {
 
 TEST_F(DeviceSettingsProviderTest, OwnerIsStillSetWhenDeviceIsConsumerManaged) {
   owner_key_util_->SetPrivateKey(device_policy_.GetSigningKey());
-  InitOwner(device_policy_.policy_data().username(), true);
+  InitOwner(AccountId::FromUserEmail(device_policy_.policy_data().username()),
+            true);
   device_policy_.policy_data().set_management_mode(
       em::PolicyData::CONSUMER_MANAGED);
   device_policy_.policy_data().set_request_token("test request token");
@@ -478,4 +496,11 @@ TEST_F(DeviceSettingsProviderTest, DecodeDomainAutoComplete) {
   VerifyDomainAutoComplete(&domain_value);
 }
 
+TEST_F(DeviceSettingsProviderTest, DecodeLogUploadSettings) {
+  SetLogUploadSettings(true);
+  VerifyLogUploadSettings(true);
+
+  SetLogUploadSettings(false);
+  VerifyLogUploadSettings(false);
+}
 } // namespace chromeos

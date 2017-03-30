@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/declarative/declarative_api.h"
 
+#include <stddef.h>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -23,12 +25,11 @@
 #include "extensions/common/extension_api.h"
 #include "extensions/common/permissions/permissions_data.h"
 
-using extensions::core_api::events::Rule;
+using extensions::api::events::Rule;
 
-namespace AddRules = extensions::core_api::events::Event::AddRules;
-namespace GetRules = extensions::core_api::events::Event::GetRules;
-namespace RemoveRules = extensions::core_api::events::Event::RemoveRules;
-
+namespace AddRules = extensions::api::events::Event::AddRules;
+namespace GetRules = extensions::api::events::Event::GetRules;
+namespace RemoveRules = extensions::api::events::Event::RemoveRules;
 
 namespace extensions {
 

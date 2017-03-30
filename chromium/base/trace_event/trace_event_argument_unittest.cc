@@ -3,6 +3,11 @@
 // found in the LICENSE file.
 
 #include "base/trace_event/trace_event_argument.h"
+
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -19,6 +24,19 @@ TEST(TraceEventArgumentTest, FlatDictionary) {
   value->AppendAsTraceFormat(&json);
   EXPECT_EQ(
       "PREFIX{\"bool\":true,\"double\":0.0,\"int\":2014,\"string\":\"string\"}",
+      json);
+}
+
+TEST(TraceEventArgumentTest, NoDotPathExpansion) {
+  scoped_refptr<TracedValue> value = new TracedValue();
+  value->SetInteger("in.t", 2014);
+  value->SetDouble("doub.le", 0.0);
+  value->SetBoolean("bo.ol", true);
+  value->SetString("str.ing", "str.ing");
+  std::string json;
+  value->AppendAsTraceFormat(&json);
+  EXPECT_EQ(
+      "{\"bo.ol\":true,\"doub.le\":0.0,\"in.t\":2014,\"str.ing\":\"str.ing\"}",
       json);
 }
 
@@ -93,11 +111,11 @@ TEST(TraceEventArgumentTest, PassBaseValue) {
   list_value->AppendBoolean(false);
   list_value->AppendInteger(1);
   list_value->AppendString("in_list");
-  list_value->Append(dict_value.Pass());
+  list_value->Append(std::move(dict_value));
 
   scoped_refptr<TracedValue> value = new TracedValue();
   value->BeginDictionary("outer_dict");
-  value->SetValue("inner_list", list_value.Pass());
+  value->SetValue("inner_list", std::move(list_value));
   value->EndDictionary();
 
   dict_value.reset();

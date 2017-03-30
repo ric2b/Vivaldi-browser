@@ -5,6 +5,7 @@
 #include "content/browser/notifications/notification_event_dispatcher_impl.h"
 
 #include "base/callback.h"
+#include "build/build_config.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -28,6 +29,14 @@ void NotificationClickEventFinished(
     const scoped_refptr<ServiceWorkerRegistration>& service_worker_registration,
     ServiceWorkerStatusCode service_worker_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+#if defined(OS_ANDROID)
+  // This LOG(INFO) deliberately exists to help track down the cause of
+  // https://crbug.com/534537, where notifications sometimes do not react to
+  // the user clicking on them. It should be removed once that's fixed.
+  LOG(INFO) << "The notificationclick event has finished: "
+            << service_worker_status;
+#endif
 
   PersistentNotificationStatus status = PERSISTENT_NOTIFICATION_STATUS_SUCCESS;
   switch (service_worker_status) {
@@ -53,13 +62,13 @@ void NotificationClickEventFinished(
     case SERVICE_WORKER_ERROR_SCRIPT_EVALUATE_FAILED:
     case SERVICE_WORKER_ERROR_DISK_CACHE:
     case SERVICE_WORKER_ERROR_REDUNDANT:
+    case SERVICE_WORKER_ERROR_DISALLOWED:
     case SERVICE_WORKER_ERROR_MAX_VALUE:
       status = PERSISTENT_NOTIFICATION_STATUS_SERVICE_WORKER_ERROR;
       break;
   }
 
-  BrowserThread::PostTask(BrowserThread::UI,
-                          FROM_HERE,
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::Bind(dispatch_complete_callback, status));
 }
 
@@ -67,22 +76,29 @@ void NotificationClickEventFinished(
 // registration was available. Must be called on the IO thread.
 void DispatchNotificationClickEventOnRegistration(
     const NotificationDatabaseData& notification_database_data,
+    int action_index,
     const NotificationClickDispatchCompleteCallback& dispatch_complete_callback,
     ServiceWorkerStatusCode service_worker_status,
     const scoped_refptr<ServiceWorkerRegistration>&
         service_worker_registration) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+#if defined(OS_ANDROID)
+  // This LOG(INFO) deliberately exists to help track down the cause of
+  // https://crbug.com/534537, where notifications sometimes do not react to
+  // the user clicking on them. It should be removed once that's fixed.
+  LOG(INFO) << "Trying to dispatch notification for SW with status: "
+            << service_worker_status << " action_index: " << action_index;
+#endif
   if (service_worker_status == SERVICE_WORKER_OK) {
     base::Callback<void(ServiceWorkerStatusCode)> dispatch_event_callback =
-        base::Bind(&NotificationClickEventFinished,
-                   dispatch_complete_callback,
+        base::Bind(&NotificationClickEventFinished, dispatch_complete_callback,
                    service_worker_registration);
 
-    service_worker_registration->active_version()->
-        DispatchNotificationClickEvent(
-            dispatch_event_callback,
-            notification_database_data.notification_id,
-            notification_database_data.notification_data);
+    DCHECK(service_worker_registration->active_version());
+    service_worker_registration->active_version()
+        ->DispatchNotificationClickEvent(
+            dispatch_event_callback, notification_database_data.notification_id,
+            notification_database_data.notification_data, action_index);
     return;
   }
 
@@ -107,6 +123,7 @@ void DispatchNotificationClickEventOnRegistration(
     case SERVICE_WORKER_ERROR_SCRIPT_EVALUATE_FAILED:
     case SERVICE_WORKER_ERROR_DISK_CACHE:
     case SERVICE_WORKER_ERROR_REDUNDANT:
+    case SERVICE_WORKER_ERROR_DISALLOWED:
     case SERVICE_WORKER_ERROR_MAX_VALUE:
       status = PERSISTENT_NOTIFICATION_STATUS_SERVICE_WORKER_ERROR;
       break;
@@ -115,8 +132,7 @@ void DispatchNotificationClickEventOnRegistration(
       break;
   }
 
-  BrowserThread::PostTask(BrowserThread::UI,
-                          FROM_HERE,
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::Bind(dispatch_complete_callback, status));
 }
 
@@ -124,25 +140,32 @@ void DispatchNotificationClickEventOnRegistration(
 // |service_worker_registration_id|. Must be called on the IO thread.
 void FindServiceWorkerRegistration(
     const GURL& origin,
+    int action_index,
     const NotificationClickDispatchCompleteCallback& dispatch_complete_callback,
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
     bool success,
     const NotificationDatabaseData& notification_database_data) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+#if defined(OS_ANDROID)
+  // This LOG(INFO) deliberately exists to help track down the cause of
+  // https://crbug.com/534537, where notifications sometimes do not react to
+  // the user clicking on them. It should be removed once that's fixed.
+  LOG(INFO) << "Lookup for ServiceWoker Registration: success:" << success
+            << " action_index: " << action_index;
+#endif
   if (!success) {
     BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
+        BrowserThread::UI, FROM_HERE,
         base::Bind(dispatch_complete_callback,
                    PERSISTENT_NOTIFICATION_STATUS_DATABASE_ERROR));
     return;
   }
 
-  service_worker_context->FindRegistrationForId(
-      notification_database_data.service_worker_registration_id,
-      origin,
+  service_worker_context->FindReadyRegistrationForId(
+      notification_database_data.service_worker_registration_id, origin,
       base::Bind(&DispatchNotificationClickEventOnRegistration,
-                 notification_database_data,
+                 notification_database_data, action_index,
                  dispatch_complete_callback));
 }
 
@@ -151,15 +174,15 @@ void FindServiceWorkerRegistration(
 void ReadNotificationDatabaseData(
     int64_t persistent_notification_id,
     const GURL& origin,
+    int action_index,
     const NotificationClickDispatchCompleteCallback& dispatch_complete_callback,
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
     scoped_refptr<PlatformNotificationContextImpl> notification_context) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   notification_context->ReadNotificationData(
-      persistent_notification_id,
-      origin,
-      base::Bind(&FindServiceWorkerRegistration,
-                 origin, dispatch_complete_callback, service_worker_context));
+      persistent_notification_id, origin,
+      base::Bind(&FindServiceWorkerRegistration, origin, action_index,
+                 dispatch_complete_callback, service_worker_context));
 }
 
 }  // namespace
@@ -172,7 +195,7 @@ NotificationEventDispatcher* NotificationEventDispatcher::GetInstance() {
 NotificationEventDispatcherImpl*
 NotificationEventDispatcherImpl::GetInstance() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return Singleton<NotificationEventDispatcherImpl>::get();
+  return base::Singleton<NotificationEventDispatcherImpl>::get();
 }
 
 NotificationEventDispatcherImpl::NotificationEventDispatcherImpl() {}
@@ -183,6 +206,7 @@ void NotificationEventDispatcherImpl::DispatchNotificationClickEvent(
     BrowserContext* browser_context,
     int64_t persistent_notification_id,
     const GURL& origin,
+    int action_index,
     const NotificationClickDispatchCompleteCallback&
         dispatch_complete_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -200,14 +224,10 @@ void NotificationEventDispatcherImpl::DispatchNotificationClickEvent(
           partition->GetPlatformNotificationContext());
 
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&ReadNotificationDatabaseData,
-                 persistent_notification_id,
-                 origin,
-                 dispatch_complete_callback,
-                 service_worker_context,
-                 notification_context));
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&ReadNotificationDatabaseData, persistent_notification_id,
+                 origin, action_index, dispatch_complete_callback,
+                 service_worker_context, notification_context));
 }
 
 }  // namespace content

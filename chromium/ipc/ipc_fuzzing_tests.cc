@@ -2,14 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
 #include <stdio.h>
-#include <string>
+
+#include <limits>
 #include <sstream>
+#include <string>
 
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "ipc/ipc_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -38,7 +42,7 @@ namespace {
 
 TEST(IPCMessageIntegrity, ReadBeyondBufferStr) {
   // This was BUG 984408.
-  uint32 v1 = kuint32max - 1;
+  uint32_t v1 = std::numeric_limits<uint32_t>::max() - 1;
   int v2 = 666;
   IPC::Message m(0, 1, IPC::Message::PRIORITY_NORMAL);
   EXPECT_TRUE(m.WriteInt(v1));
@@ -51,7 +55,7 @@ TEST(IPCMessageIntegrity, ReadBeyondBufferStr) {
 
 TEST(IPCMessageIntegrity, ReadBeyondBufferStr16) {
   // This was BUG 984408.
-  uint32 v1 = kuint32max - 1;
+  uint32_t v1 = std::numeric_limits<uint32_t>::max() - 1;
   int v2 = 777;
   IPC::Message m(0, 1, IPC::Message::PRIORITY_NORMAL);
   EXPECT_TRUE(m.WriteInt(v1));
@@ -88,7 +92,12 @@ TEST(IPCMessageIntegrity, ReadVectorNegativeSize) {
   EXPECT_FALSE(ReadParam(&m, &iter, &vec));
 }
 
-TEST(IPCMessageIntegrity, ReadVectorTooLarge1) {
+#if defined(OS_ANDROID)
+#define MAYBE_ReadVectorTooLarge1 DISABLED_ReadVectorTooLarge1
+#else
+#define MAYBE_ReadVectorTooLarge1 ReadVectorTooLarge1
+#endif
+TEST(IPCMessageIntegrity, MAYBE_ReadVectorTooLarge1) {
   // This was BUG 1006367. This is the large but positive length case. Again
   // we try to hit the non-specialized case vector<P>.
   IPC::Message m(0, 1, IPC::Message::PRIORITY_NORMAL);
@@ -96,7 +105,7 @@ TEST(IPCMessageIntegrity, ReadVectorTooLarge1) {
   EXPECT_TRUE(m.WriteInt64(1));
   EXPECT_TRUE(m.WriteInt64(2));
 
-  std::vector<int64> vec;
+  std::vector<int64_t> vec;
   base::PickleIterator iter(m);
   EXPECT_FALSE(ReadParam(&m, &iter, &vec));
 }
@@ -110,7 +119,7 @@ TEST(IPCMessageIntegrity, ReadVectorTooLarge2) {
   EXPECT_TRUE(m.WriteInt64(1));
   EXPECT_TRUE(m.WriteInt64(2));
 
-  std::vector<int64> vec;
+  std::vector<int64_t> vec;
   base::PickleIterator iter(m);
   EXPECT_FALSE(ReadParam(&m, &iter, &vec));
 }
@@ -165,7 +174,7 @@ class FuzzerServerListener : public SimpleListener {
     Cleanup();
   }
 
-  bool RoundtripAckReply(int routing, uint32 type_id, int reply) {
+  bool RoundtripAckReply(int routing, uint32_t type_id, int reply) {
     IPC::Message* message = new IPC::Message(routing, type_id,
                                              IPC::Message::PRIORITY_NORMAL);
     message->WriteInt(reply + 1);
@@ -177,10 +186,10 @@ class FuzzerServerListener : public SimpleListener {
     --message_count_;
     --pending_messages_;
     if (0 == message_count_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
-  void ReplyMsgNotHandled(uint32 type_id) {
+  void ReplyMsgNotHandled(uint32_t type_id) {
     RoundtripAckReply(FUZZER_ROUTING_ID, MsgUnhandled::ID, type_id);
     Cleanup();
   }
@@ -204,11 +213,11 @@ class FuzzerClientListener : public SimpleListener {
 
   bool OnMessageReceived(const IPC::Message& msg) override {
     last_msg_ = new IPC::Message(msg);
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     return true;
   }
 
-  bool ExpectMessage(int value, uint32 type_id) {
+  bool ExpectMessage(int value, uint32_t type_id) {
     if (!MsgHandlerInternal(type_id))
       return false;
     int msg_value1 = 0;
@@ -228,12 +237,12 @@ class FuzzerClientListener : public SimpleListener {
     return true;
   }
 
-  bool ExpectMsgNotHandled(uint32 type_id) {
+  bool ExpectMsgNotHandled(uint32_t type_id) {
     return ExpectMessage(type_id, MsgUnhandled::ID);
   }
 
  private:
-  bool MsgHandlerInternal(uint32 type_id) {
+  bool MsgHandlerInternal(uint32_t type_id) {
     base::MessageLoop::current()->Run();
     if (NULL == last_msg_)
       return false;
@@ -251,7 +260,7 @@ MULTIPROCESS_IPC_TEST_CLIENT_MAIN(FuzzServerClient) {
   base::MessageLoopForIO main_message_loop;
   FuzzerServerListener listener;
   scoped_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
-      IPCTestBase::GetChannelName("FuzzServerClient"), &listener, nullptr));
+      IPCTestBase::GetChannelName("FuzzServerClient"), &listener));
   CHECK(channel->Connect());
   listener.Init(channel.get());
   base::MessageLoop::current()->Run();
@@ -261,9 +270,14 @@ MULTIPROCESS_IPC_TEST_CLIENT_MAIN(FuzzServerClient) {
 class IPCFuzzingTest : public IPCTestBase {
 };
 
+#if defined(OS_ANDROID)
+#define MAYBE_SanityTest DISABLED_SanityTest
+#else
+#define MAYBE_SanityTest SanityTest
+#endif
 // This test makes sure that the FuzzerClientListener and FuzzerServerListener
 // are working properly by generating two well formed IPC calls.
-TEST_F(IPCFuzzingTest, SanityTest) {
+TEST_F(IPCFuzzingTest, MAYBE_SanityTest) {
   Init("FuzzServerClient");
 
   FuzzerClientListener listener;
@@ -286,12 +300,17 @@ TEST_F(IPCFuzzingTest, SanityTest) {
   DestroyChannel();
 }
 
+#if defined(OS_ANDROID)
+#define MAYBE_MsgBadPayloadShort DISABLED_MsgBadPayloadShort
+#else
+#define MAYBE_MsgBadPayloadShort MsgBadPayloadShort
+#endif
 // This test uses a payload that is smaller than expected. This generates an
 // error while unpacking the IPC buffer which in debug trigger an assertion and
 // in release is ignored (!). Right after we generate another valid IPC to make
 // sure framing is working properly.
 #if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
-TEST_F(IPCFuzzingTest, MsgBadPayloadShort) {
+TEST_F(IPCFuzzingTest, MAYBE_MsgBadPayloadShort) {
   Init("FuzzServerClient");
 
   FuzzerClientListener listener;
@@ -315,11 +334,16 @@ TEST_F(IPCFuzzingTest, MsgBadPayloadShort) {
 }
 #endif
 
+#if defined(OS_ANDROID)
+#define MAYBE_MsgBadPayloadArgs DISABLED_MsgBadPayloadArgs
+#else
+#define MAYBE_MsgBadPayloadArgs MsgBadPayloadArgs
+#endif
 // This test uses a payload that has too many arguments, but so the payload size
 // is big enough so the unpacking routine does not generate an error as in the
 // case of MsgBadPayloadShort test. This test does not pinpoint a flaw (per se)
 // as by design we don't carry type information on the IPC message.
-TEST_F(IPCFuzzingTest, MsgBadPayloadArgs) {
+TEST_F(IPCFuzzingTest, MAYBE_MsgBadPayloadArgs) {
   Init("FuzzServerClient");
 
   FuzzerClientListener listener;

@@ -4,10 +4,14 @@
 
 #include "content/browser/media/capture/desktop_capture_device.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 #include <algorithm>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
@@ -57,25 +61,27 @@ const uint8_t kFakePixelValueFirst = 2;
 class MockDeviceClient : public media::VideoCaptureDevice::Client {
  public:
   MOCK_METHOD5(OnIncomingCapturedData,
-               void(const uint8* data,
+               void(const uint8_t* data,
                     int length,
                     const media::VideoCaptureFormat& frame_format,
                     int rotation,
                     const base::TimeTicks& timestamp));
   MOCK_METHOD9(OnIncomingCapturedYuvData,
-               void (const uint8* y_data,
-                     const uint8* u_data,
-                     const uint8* v_data,
-                     size_t y_stride,
-                     size_t u_stride,
-                     size_t v_stride,
-                     const media::VideoCaptureFormat& frame_format,
-                     int clockwise_rotation,
-                     const base::TimeTicks& timestamp));
+               void(const uint8_t* y_data,
+                    const uint8_t* u_data,
+                    const uint8_t* v_data,
+                    size_t y_stride,
+                    size_t u_stride,
+                    size_t v_stride,
+                    const media::VideoCaptureFormat& frame_format,
+                    int clockwise_rotation,
+                    const base::TimeTicks& timestamp));
   MOCK_METHOD0(DoReserveOutputBuffer, void(void));
   MOCK_METHOD0(DoOnIncomingCapturedBuffer, void(void));
   MOCK_METHOD0(DoOnIncomingCapturedVideoFrame, void(void));
-  MOCK_METHOD1(OnError, void(const std::string& reason));
+  MOCK_METHOD2(OnError,
+               void(const tracked_objects::Location& from_here,
+                    const std::string& reason));
 
   // Trampoline methods to workaround GMOCK problems with scoped_ptr<>.
   scoped_ptr<Buffer> ReserveOutputBuffer(
@@ -106,7 +112,7 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
 // kFakePixelValueFirst, and the rest of the bytes set to kFakePixelValue, for
 // UnpackedFrame and InvertedFrame verification.
 webrtc::BasicDesktopFrame* CreateBasicFrame(const webrtc::DesktopSize& size) {
-  webrtc::BasicDesktopFrame* frame = new webrtc::BasicDesktopFrame(size);;
+  webrtc::BasicDesktopFrame* frame = new webrtc::BasicDesktopFrame(size);
   DCHECK_EQ(frame->size().width() * webrtc::DesktopFrame::kBytesPerPixel,
             frame->stride());
   memset(frame->data(),
@@ -162,6 +168,7 @@ class UnpackedDesktopFrame : public webrtc::DesktopFrame {
     delete[] data_;
   }
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(UnpackedDesktopFrame);
 };
 
@@ -196,7 +203,7 @@ class FakeScreenCapturer : public webrtc::ScreenCapturer {
     }
     frame_index_++;
 
-    webrtc::DesktopFrame* frame = CreateBasicFrame(size);;
+    webrtc::DesktopFrame* frame = CreateBasicFrame(size);
 
     if (generate_inverted_frames_) {
       frame = new InvertedDesktopFrame(frame);
@@ -248,8 +255,8 @@ class FormatChecker {
 class DesktopCaptureDeviceTest : public testing::Test {
  public:
   void CreateScreenCaptureDevice(scoped_ptr<webrtc::DesktopCapturer> capturer) {
-    capture_device_.reset(
-        new DesktopCaptureDevice(capturer.Pass(), DesktopMediaID::TYPE_SCREEN));
+    capture_device_.reset(new DesktopCaptureDevice(
+        std::move(capturer), DesktopMediaID::TYPE_SCREEN));
   }
 
   void CopyFrame(const uint8_t* frame, int size,
@@ -276,14 +283,14 @@ TEST_F(DesktopCaptureDeviceTest, MAYBE_Capture) {
   scoped_ptr<webrtc::DesktopCapturer> capturer(
       webrtc::ScreenCapturer::Create(
           webrtc::DesktopCaptureOptions::CreateDefault()));
-  CreateScreenCaptureDevice(capturer.Pass());
+  CreateScreenCaptureDevice(std::move(capturer));
 
   media::VideoCaptureFormat format;
   base::WaitableEvent done_event(false, false);
   int frame_size;
 
   scoped_ptr<MockDeviceClient> client(new MockDeviceClient());
-  EXPECT_CALL(*client, OnError(_)).Times(0);
+  EXPECT_CALL(*client, OnError(_, _)).Times(0);
   EXPECT_CALL(*client, OnIncomingCapturedData(_, _, _, _, _)).WillRepeatedly(
       DoAll(SaveArg<1>(&frame_size),
             SaveArg<2>(&format),
@@ -293,7 +300,7 @@ TEST_F(DesktopCaptureDeviceTest, MAYBE_Capture) {
   capture_params.requested_format.frame_size.SetSize(640, 480);
   capture_params.requested_format.frame_rate = kFrameRate;
   capture_params.requested_format.pixel_format = media::PIXEL_FORMAT_I420;
-  capture_device_->AllocateAndStart(capture_params, client.Pass());
+  capture_device_->AllocateAndStart(capture_params, std::move(client));
   EXPECT_TRUE(done_event.TimedWait(TestTimeouts::action_max_timeout()));
   capture_device_->StopAndDeAllocate();
 
@@ -317,7 +324,7 @@ TEST_F(DesktopCaptureDeviceTest, ScreenResolutionChangeConstantResolution) {
   base::WaitableEvent done_event(false, false);
 
   scoped_ptr<MockDeviceClient> client(new MockDeviceClient());
-  EXPECT_CALL(*client, OnError(_)).Times(0);
+  EXPECT_CALL(*client, OnError(_, _)).Times(0);
   EXPECT_CALL(*client, OnIncomingCapturedData(_, _, _, _, _)).WillRepeatedly(
       DoAll(WithArg<2>(Invoke(&format_checker,
                               &FormatChecker::ExpectAcceptableSize)),
@@ -331,7 +338,7 @@ TEST_F(DesktopCaptureDeviceTest, ScreenResolutionChangeConstantResolution) {
   capture_params.resolution_change_policy =
       media::RESOLUTION_POLICY_FIXED_RESOLUTION;
 
-  capture_device_->AllocateAndStart(capture_params, client.Pass());
+  capture_device_->AllocateAndStart(capture_params, std::move(client));
 
   // Capture at least two frames, to ensure that the source frame size has
   // changed to two different sizes while capturing.  The mock for
@@ -357,7 +364,7 @@ TEST_F(DesktopCaptureDeviceTest, ScreenResolutionChangeFixedAspectRatio) {
   base::WaitableEvent done_event(false, false);
 
   scoped_ptr<MockDeviceClient> client(new MockDeviceClient());
-  EXPECT_CALL(*client, OnError(_)).Times(0);
+  EXPECT_CALL(*client, OnError(_,_)).Times(0);
   EXPECT_CALL(*client, OnIncomingCapturedData(_, _, _, _, _)).WillRepeatedly(
       DoAll(WithArg<2>(Invoke(&format_checker,
                               &FormatChecker::ExpectAcceptableSize)),
@@ -375,8 +382,7 @@ TEST_F(DesktopCaptureDeviceTest, ScreenResolutionChangeFixedAspectRatio) {
   capture_params.resolution_change_policy =
       media::RESOLUTION_POLICY_FIXED_ASPECT_RATIO;
 
-  capture_device_->AllocateAndStart(
-      capture_params, client.Pass());
+  capture_device_->AllocateAndStart(capture_params, std::move(client));
 
   // Capture at least three frames, to ensure that the source frame size has
   // changed to two different sizes while capturing.  The mock for
@@ -402,7 +408,7 @@ TEST_F(DesktopCaptureDeviceTest, ScreenResolutionChangeVariableResolution) {
   base::WaitableEvent done_event(false, false);
 
   scoped_ptr<MockDeviceClient> client(new MockDeviceClient());
-  EXPECT_CALL(*client, OnError(_)).Times(0);
+  EXPECT_CALL(*client, OnError(_,_)).Times(0);
   EXPECT_CALL(*client, OnIncomingCapturedData(_, _, _, _, _)).WillRepeatedly(
       DoAll(WithArg<2>(Invoke(&format_checker,
                               &FormatChecker::ExpectAcceptableSize)),
@@ -420,8 +426,7 @@ TEST_F(DesktopCaptureDeviceTest, ScreenResolutionChangeVariableResolution) {
   capture_params.resolution_change_policy =
       media::RESOLUTION_POLICY_ANY_WITHIN_LIMIT;
 
-  capture_device_->AllocateAndStart(
-      capture_params, client.Pass());
+  capture_device_->AllocateAndStart(capture_params, std::move(client));
 
   // Capture at least three frames, to ensure that the source frame size has
   // changed to two different sizes while capturing.  The mock for
@@ -449,7 +454,7 @@ TEST_F(DesktopCaptureDeviceTest, UnpackedFrame) {
       webrtc::DesktopSize(kTestFrameWidth1, kTestFrameHeight1)));
 
   scoped_ptr<MockDeviceClient> client(new MockDeviceClient());
-  EXPECT_CALL(*client, OnError(_)).Times(0);
+  EXPECT_CALL(*client, OnError(_,_)).Times(0);
   EXPECT_CALL(*client, OnIncomingCapturedData(_, _, _, _, _)).WillRepeatedly(
       DoAll(Invoke(this, &DesktopCaptureDeviceTest::CopyFrame),
             SaveArg<1>(&frame_size),
@@ -459,9 +464,10 @@ TEST_F(DesktopCaptureDeviceTest, UnpackedFrame) {
   capture_params.requested_format.frame_size.SetSize(kTestFrameWidth1,
                                                      kTestFrameHeight1);
   capture_params.requested_format.frame_rate = kFrameRate;
-  capture_params.requested_format.pixel_format = media::PIXEL_FORMAT_I420;
+  capture_params.requested_format.pixel_format =
+      media::PIXEL_FORMAT_I420;
 
-  capture_device_->AllocateAndStart(capture_params, client.Pass());
+  capture_device_->AllocateAndStart(capture_params, std::move(client));
 
   EXPECT_TRUE(done_event.TimedWait(TestTimeouts::action_max_timeout()));
   done_event.Reset();
@@ -491,7 +497,7 @@ TEST_F(DesktopCaptureDeviceTest, InvertedFrame) {
       webrtc::DesktopSize(kTestFrameWidth1, kTestFrameHeight1)));
 
   scoped_ptr<MockDeviceClient> client(new MockDeviceClient());
-  EXPECT_CALL(*client, OnError(_)).Times(0);
+  EXPECT_CALL(*client, OnError(_,_)).Times(0);
   EXPECT_CALL(*client, OnIncomingCapturedData(_, _, _, _, _)).WillRepeatedly(
       DoAll(Invoke(this, &DesktopCaptureDeviceTest::CopyFrame),
             SaveArg<1>(&frame_size),
@@ -503,7 +509,7 @@ TEST_F(DesktopCaptureDeviceTest, InvertedFrame) {
   capture_params.requested_format.frame_rate = kFrameRate;
   capture_params.requested_format.pixel_format = media::PIXEL_FORMAT_I420;
 
-  capture_device_->AllocateAndStart(capture_params, client.Pass());
+  capture_device_->AllocateAndStart(capture_params, std::move(client));
 
   EXPECT_TRUE(done_event.TimedWait(TestTimeouts::action_max_timeout()));
   done_event.Reset();

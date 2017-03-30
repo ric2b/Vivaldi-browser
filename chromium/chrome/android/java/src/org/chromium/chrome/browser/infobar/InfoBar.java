@@ -7,9 +7,10 @@ package org.chromium.chrome.browser.infobar;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.view.View;
+import android.widget.TextView;
 
-import org.chromium.base.CalledByNative;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
 
 /**
@@ -20,49 +21,22 @@ import org.chromium.chrome.R;
 public abstract class InfoBar implements InfoBarView {
     private static final String TAG = "InfoBar";
 
-    /**
-     * Possible labels of all the infobar buttons.
-     *
-     * Make sure this set of values is aligned with the C++ correspondent in
-     * infobar_android.h
-     */
-    public static final int ACTION_TYPE_NONE = 0;
-
-    // Confirm infobar
-    public static final int ACTION_TYPE_OK = 1;
-    public static final int ACTION_TYPE_CANCEL = 2;
-
-    // Translate infobar
-    public static final int ACTION_TYPE_TRANSLATE = 3;
-    public static final int ACTION_TYPE_TRANSLATE_SHOW_ORIGINAL = 4;
-
-    // Download Overwrite InfoBar
-    public static final int ACTION_TYPE_OVERWRITE = 5;
-    public static final int ACTION_TYPE_CREATE_NEW_FILE = 6;
-
     private final int mIconDrawableId;
     private final Bitmap mIconBitmap;
     private final CharSequence mMessage;
 
     private InfoBarListeners.Dismiss mListener;
-    private ContentWrapperView mContentView;
     private InfoBarContainer mContainer;
+    private View mView;
     private Context mContext;
 
     private boolean mExpireOnNavigation;
     private boolean mIsDismissed;
-    private boolean mControlsEnabled;
+    private boolean mControlsEnabled = true;
     private boolean mIsJavaOnlyInfoBar = true;
 
     // This points to the InfoBarAndroid class not any of its subclasses.
     private long mNativeInfoBarPtr;
-
-    // Used by tests to reference infobars.
-    private final int mId;
-    private static int sIdCounter = 0;
-    private static int generateId() {
-        return sIdCounter++;
-    }
 
     /**
      * @param listener Listens to when buttons have been clicked on the InfoBar.
@@ -72,7 +46,6 @@ public abstract class InfoBar implements InfoBarView {
     public InfoBar(InfoBarListeners.Dismiss listener, int iconDrawableId, Bitmap iconBitmap,
             CharSequence message) {
         mListener = listener;
-        mId = generateId();
         mIconDrawableId = iconDrawableId;
         mIconBitmap = iconBitmap;
         mMessage = message;
@@ -140,7 +113,33 @@ public abstract class InfoBar implements InfoBarView {
                 new InfoBarLayout(mContext, this, mIconDrawableId, mIconBitmap, mMessage);
         createContent(layout);
         layout.onContentCreated();
-        return layout;
+        mView = layout;
+        return mView;
+    }
+
+    /**
+     * Replaces the View currently shown in the infobar with the given View. Triggers the swap
+     * animation via the InfoBarContainer.
+     */
+    protected void replaceView(View newView) {
+        mView = newView;
+        mContainer.notifyInfoBarViewChanged();
+    }
+
+    /**
+     * Returns the View shown in this infobar. Only valid after createView() has been called.
+     */
+    @Override
+    public View getView() {
+        return mView;
+    }
+
+    @Override
+    public CharSequence getAccessibilityText() {
+        if (mView == null) return "";
+        TextView messageView = (TextView) mView.findViewById(R.id.infobar_message);
+        if (messageView == null) return "";
+        return messageView.getText() + mContext.getString(R.string.infobar_screen_position);
     }
 
     /**
@@ -169,30 +168,11 @@ public abstract class InfoBar implements InfoBarView {
         return false;
     }
 
-    protected ContentWrapperView getContentWrapper(boolean createIfNotFound) {
-        if (mContentView == null && createIfNotFound) {
-            mContentView = new ContentWrapperView(getContext(), this, createView());
-            mContentView.setFocusable(false);
-        }
-        return mContentView;
-    }
-
-    protected InfoBarContainer getInfoBarContainer() {
-        return mContainer;
-    }
-
-    /**
-     * @return The content view for the info bar.
-     */
-    @VisibleForTesting
-    public ContentWrapperView getContentWrapper() {
-        return getContentWrapper(true);
-    }
-
     void setInfoBarContainer(InfoBarContainer container) {
         mContainer = container;
     }
 
+    @Override
     public boolean areControlsEnabled() {
         return mControlsEnabled;
     }
@@ -200,18 +180,6 @@ public abstract class InfoBar implements InfoBarView {
     @Override
     public void setControlsEnabled(boolean state) {
         mControlsEnabled = state;
-
-        // Disable all buttons on the infobar.
-        if (mContentView != null) {
-            View closeButton = mContentView.findViewById(R.id.infobar_close_button);
-            View primaryButton = mContentView.findViewById(R.id.button_primary);
-            View secondaryButton = mContentView.findViewById(R.id.button_secondary);
-            View tertiaryButton = mContentView.findViewById(R.id.button_tertiary);
-            if (closeButton != null) closeButton.setEnabled(state);
-            if (primaryButton != null) primaryButton.setEnabled(state);
-            if (secondaryButton != null) secondaryButton.setEnabled(state);
-            if (tertiaryButton != null) tertiaryButton.setEnabled(state);
-        }
     }
 
     @Override
@@ -225,12 +193,10 @@ public abstract class InfoBar implements InfoBarView {
 
     /**
      * Performs some action related to the button being clicked.
-     *
      * @param action The type of action defined as ACTION_* in this class.
-     * @param actionValue An additional string associated with the action if any. "" if none.
      */
-    protected void onButtonClicked(int action, String actionValue) {
-        if (mNativeInfoBarPtr != 0) nativeOnButtonClicked(mNativeInfoBarPtr, action, actionValue);
+    protected void onButtonClicked(int action) {
+        if (mNativeInfoBarPtr != 0) nativeOnButtonClicked(mNativeInfoBarPtr, action);
     }
 
     @Override
@@ -246,25 +212,12 @@ public abstract class InfoBar implements InfoBarView {
     public void createContent(InfoBarLayout layout) {
     }
 
-    /**
-     * Returns the id of the tab this infobar is showing into.
-     */
-    public int getTabId() {
-        return mContainer.getTabId();
-    }
-
-    @VisibleForTesting
-    public int getId() {
-        return mId;
-    }
-
     @VisibleForTesting
     public void setDismissedListener(InfoBarListeners.Dismiss listener) {
         mListener = listener;
     }
 
     private native void nativeOnLinkClicked(long nativeInfoBarAndroid);
-    private native void nativeOnButtonClicked(
-            long nativeInfoBarAndroid, int action, String actionValue);
+    private native void nativeOnButtonClicked(long nativeInfoBarAndroid, int action);
     private native void nativeOnCloseButtonClicked(long nativeInfoBarAndroid);
 }

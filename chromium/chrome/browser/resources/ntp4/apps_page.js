@@ -50,7 +50,7 @@ cr.define('ntp', function() {
       menu.appendChild(cr.ui.MenuItem.createSeparator());
       this.launchRegularTab_ = this.appendMenuItem_('applaunchtyperegular');
       this.launchPinnedTab_ = this.appendMenuItem_('applaunchtypepinned');
-      if (loadTimeData.getBoolean('enableNewBookmarkApps') || !cr.isMac)
+      if (loadTimeData.getBoolean('canHostedAppsOpenInWindows'))
         this.launchNewWindow_ = this.appendMenuItem_('applaunchtypewindow');
       this.launchFullscreen_ = this.appendMenuItem_('applaunchtypefullscreen');
 
@@ -136,16 +136,25 @@ cr.define('ntp', function() {
       this.launch_.textContent = app.appData.title;
 
       var launchTypeWindow = this.launchNewWindow_;
+      var hasLaunchType = false;
       this.forAllLaunchTypes_(function(launchTypeButton, id) {
         launchTypeButton.disabled = false;
         launchTypeButton.checked = app.appData.launch_type == id;
-        // If bookmark apps are enabled, only show the "Open as window" button.
+        // There are three cases when a launch type is hidden:
+        //  1. packaged apps hide all launch types
+        //  2. canHostedAppsOpenInWindows is false and type is launchTypeWindow
+        //  3. enableNewBookmarkApps is true and type is anything except
+        //     launchTypeWindow
         launchTypeButton.hidden = app.appData.packagedApp ||
+            (!loadTimeData.getBoolean('canHostedAppsOpenInWindows') &&
+             launchTypeButton == launchTypeWindow) ||
             (loadTimeData.getBoolean('enableNewBookmarkApps') &&
              launchTypeButton != launchTypeWindow);
+        if (!launchTypeButton.hidden) hasLaunchType = true;
       });
 
-      this.launchTypeMenuSeparator_.hidden = app.appData.packagedApp;
+      this.launchTypeMenuSeparator_.hidden =
+          app.appData.packagedApp || !hasLaunchType;
 
       this.options_.disabled = !app.appData.optionsUrl || !app.appData.enabled;
       if (this.details_)
@@ -286,7 +295,7 @@ cr.define('ntp', function() {
 
       this.addEventListener('mousedown', this.onMousedown_, true);
       this.addEventListener('keydown', this.onKeydown_);
-      this.addEventListener('keyup', this.onKeyup_);
+      this.addEventListener('blur', this.onBlur_);
     },
 
     /**
@@ -369,6 +378,11 @@ cr.define('ntp', function() {
       this.style.top = toCssPx(y);
     },
 
+    onBlur_: function(e) {
+      this.classList.remove('click-focus');
+      this.appContents_.classList.remove('suppress-active');
+    },
+
     /**
      * Invoked when an app is clicked.
      * @param {Event} e The click event.
@@ -400,33 +414,6 @@ cr.define('ntp', function() {
                      0, e.altKey, e.ctrlKey, e.metaKey, e.shiftKey]);
         e.preventDefault();
         e.stopPropagation();
-      }
-      this.onKeyboardUsed_(e.keyCode);
-    },
-
-    /**
-     * Invoked when the user releases a key while the app is focused.
-     * @param {Event} e The key event.
-     * @private
-     */
-    onKeyup_: function(e) {
-      this.onKeyboardUsed_(e.keyCode);
-    },
-
-    /**
-     * Called when the keyboard has been used (key down or up). The .click-focus
-     * hack is removed if the user presses a key that can change focus.
-     * @param {number} keyCode The key code of the keyboard event.
-     * @private
-     */
-    onKeyboardUsed_: function(keyCode) {
-      switch (keyCode) {
-        case 9:  // Tab.
-        case 37:  // Left arrow.
-        case 38:  // Up arrow.
-        case 39:  // Right arrow.
-        case 40:  // Down arrow.
-          this.classList.remove('click-focus');
       }
     },
 

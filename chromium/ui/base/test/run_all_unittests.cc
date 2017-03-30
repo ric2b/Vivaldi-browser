@@ -4,6 +4,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
@@ -48,7 +49,7 @@ void UIBaseTestSuite::Initialize() {
   base::TestSuite::Initialize();
 
 #if defined(OS_WIN)
-  gfx::InitDeviceScaleFactor(1.0);
+  gfx::SetDefaultDeviceScaleFactor(1.0);
 #endif
 
 #if defined(OS_ANDROID)

@@ -13,7 +13,6 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/net/proxy_config_handler.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/network/network_profile.h"
 #include "chromeos/network/network_profile_handler.h"
@@ -21,9 +20,11 @@
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_prefs.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace chromeos {
 
@@ -50,8 +51,10 @@ bool GetProxyConfig(const PrefService* profile_prefs,
 
 ProxyConfigServiceImpl::ProxyConfigServiceImpl(PrefService* profile_prefs,
                                                PrefService* local_state_prefs)
-    : PrefProxyConfigTrackerImpl(profile_prefs ? profile_prefs
-                                               : local_state_prefs),
+    : PrefProxyConfigTrackerImpl(
+          profile_prefs ? profile_prefs : local_state_prefs,
+          content::BrowserThread::GetMessageLoopProxyForThread(
+              content::BrowserThread::IO)),
       active_config_state_(ProxyPrefs::CONFIG_UNSET),
       profile_prefs_(profile_prefs),
       local_state_prefs_(local_state_prefs),
@@ -114,6 +117,13 @@ void ProxyConfigServiceImpl::DefaultNetworkChanged(
   DetermineEffectiveConfigFromDefaultNetwork();
 }
 
+void ProxyConfigServiceImpl::OnShuttingDown() {
+  // Ownership of this class is complicated. Stop observing NetworkStateHandler
+  // when the class shuts down.
+  NetworkHandler::Get()->network_state_handler()->RemoveObserver(this,
+                                                                 FROM_HERE);
+}
+
 // static
 bool ProxyConfigServiceImpl::IgnoreProxy(const PrefService* profile_prefs,
                                          const std::string network_profile_path,
@@ -148,12 +158,9 @@ bool ProxyConfigServiceImpl::IgnoreProxy(const PrefService* profile_prefs,
     return false;
   }
   if (onc_source == ::onc::ONC_SOURCE_DEVICE_POLICY) {
-    policy::BrowserPolicyConnectorChromeOS* connector =
-        g_browser_process->platform_part()->browser_policy_connector_chromeos();
     const user_manager::User* logged_in_user =
         user_manager::UserManager::Get()->GetLoggedInUser();
-    if (connector->GetUserAffiliation(logged_in_user->email()) ==
-        policy::USER_AFFILIATION_MANAGED) {
+    if (logged_in_user->IsAffiliated()) {
       VLOG(1) << "Respecting proxy for network, as logged-in user belongs to "
               << "the domain the device is enrolled to.";
       return false;
@@ -167,6 +174,9 @@ bool ProxyConfigServiceImpl::IgnoreProxy(const PrefService* profile_prefs,
 }
 
 void ProxyConfigServiceImpl::DetermineEffectiveConfigFromDefaultNetwork() {
+  if (!NetworkHandler::IsInitialized())
+    return;
+
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
   const NetworkState* network = handler->DefaultNetwork();
 

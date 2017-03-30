@@ -5,10 +5,14 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_HISTORY_URL_PROVIDER_H_
 #define COMPONENTS_OMNIBOX_BROWSER_HISTORY_URL_PROVIDER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/synchronization/cancellation_flag.h"
 #include "base/threading/thread_checker.h"
 #include "components/history/core/browser/history_match.h"
@@ -331,6 +335,15 @@ class HistoryURLProvider : public HistoryProvider {
   // parameter itself is freed once it's no longer needed.  The only reason we
   // keep this member is so we can set the cancel bit on it.
   HistoryURLProviderParams* params_;
+
+  // Whether to query the history URL database to match.  Even if false, we
+  // still use the URL database to decide if the URL-what-you-typed was visited
+  // before or not.  If false, the only possible result that HistoryURL provider
+  // can return is URL-what-you-typed.  This variable is not part of params_
+  // because it never changes after the HistoryURLProvider is initialized.
+  // It's used to aid the possible transition to get all URLs from history to
+  // be scored in the HistoryQuick provider only.
+  bool search_url_database_;
 
   // Params controlling experimental behavior of this provider.
   HUPScoringParams scoring_params_;

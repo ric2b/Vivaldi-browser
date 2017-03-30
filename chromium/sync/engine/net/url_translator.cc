@@ -7,7 +7,6 @@
 
 #include "sync/engine/net/url_translator.h"
 
-#include "base/basictypes.h"
 #include "net/base/escape.h"
 
 using std::string;
@@ -24,7 +23,7 @@ const char kClientName[] = "Google Chrome";
 #else
 const char kClientName[] = "Chromium";
 #endif  // defined(GOOGLE_CHROME_BUILD)
-}
+}  // namespace
 
 // Convenience wrappers around CgiEscapePath().
 string CgiEscapeString(const char* src) {

@@ -5,11 +5,14 @@
 #ifndef CONTENT_BROWSER_CACHE_STORAGE_CACHE_STORAGE_H_
 #define CONTENT_BROWSER_CACHE_STORAGE_CACHE_STORAGE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/cache_storage/cache_storage_cache.h"
@@ -94,7 +97,7 @@ class CONTENT_EXPORT CacheStorage {
 
   // The size of all of the origin's contents in memory. Returns 0 if the cache
   // backend is not a memory backend. Runs synchronously.
-  int64 MemoryBackedSize() const;
+  int64_t MemoryBackedSize() const;
 
   // The functions below are for tests to verify that the operations run
   // serially.
@@ -102,6 +105,8 @@ class CONTENT_EXPORT CacheStorage {
   void CompleteAsyncOperationForTesting();
 
  private:
+  friend class TestCacheStorage;
+
   class MemoryLoader;
   class SimpleCacheLoader;
   class CacheLoader;
@@ -112,6 +117,12 @@ class CONTENT_EXPORT CacheStorage {
   // CacheStorageCache has been deleted, creates a new one.
   scoped_refptr<CacheStorageCache> GetLoadedCache(
       const std::string& cache_name);
+
+  // Holds a reference to a cache for thirty seconds.
+  void TemporarilyPreserveCache(const scoped_refptr<CacheStorageCache>& cache);
+  virtual void SchedulePreservedCacheRemoval(
+      const base::Closure& callback);  // Virtual for testing.
+  void RemovePreservedCache(const CacheStorageCache* cache);
 
   // Initializer and its callback are below.
   void LazyInit();
@@ -216,6 +227,11 @@ class CONTENT_EXPORT CacheStorage {
 
   // Performs backend specific operations (memory vs disk).
   scoped_ptr<CacheLoader> cache_loader_;
+
+  // Holds ref pointers to recently opened caches so that they can be reused
+  // without having the open the cache again.
+  std::map<const CacheStorageCache*, scoped_refptr<CacheStorageCache>>
+      preserved_caches_;
 
   base::WeakPtrFactory<CacheStorage> weak_factory_;
 

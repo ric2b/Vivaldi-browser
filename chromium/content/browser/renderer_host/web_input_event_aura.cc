@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/web_input_event_aura.h"
 
+#include "build/build_config.h"
 #include "content/browser/renderer_host/input/web_input_event_util.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -12,13 +13,9 @@
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/events/keycodes/keyboard_code_conversion.h"
 
-// NOTE(daniel@vivaldi): Headers for linux keycode conversion
-#if defined(USE_X11)
-#include "ui/events/keycodes/keyboard_code_conversion_x.h"
-#include <X11/Xlib.h>
-#include <ctype.h>
-#endif
+#include "browser/keycode_translation.h"
 
 namespace content {
 
@@ -40,17 +37,37 @@ gfx::Point GetScreenLocationFromEvent(const ui::LocatedEvent& event) {
   return screen_location;
 }
 
+blink::WebPointerProperties::PointerType EventPointerTypeToWebPointerType(
+    ui::EventPointerType pointer_type) {
+  switch (pointer_type) {
+    case ui::EventPointerType::POINTER_TYPE_UNKNOWN:
+      return blink::WebPointerProperties::PointerType::Unknown;
+    case ui::EventPointerType::POINTER_TYPE_MOUSE:
+      return blink::WebPointerProperties::PointerType::Mouse;
+    case ui::EventPointerType::POINTER_TYPE_PEN:
+      return blink::WebPointerProperties::PointerType::Pen;
+    case ui::EventPointerType::POINTER_TYPE_TOUCH:
+      return blink::WebPointerProperties::PointerType::Touch;
+  }
+  NOTREACHED() << "Unexpected EventPointerType";
+  return blink::WebPointerProperties::PointerType::Unknown;
+}
+
 }  // namespace
 
 #if defined(OS_WIN)
 blink::WebMouseEvent MakeUntranslatedWebMouseEventFromNativeEvent(
-    const base::NativeEvent& native_event);
+    const base::NativeEvent& native_event,
+    const base::TimeDelta& time_stamp);
 blink::WebMouseWheelEvent MakeUntranslatedWebMouseWheelEventFromNativeEvent(
-    const base::NativeEvent& native_event);
+    const base::NativeEvent& native_event,
+    const base::TimeDelta& time_stamp);
 blink::WebKeyboardEvent MakeWebKeyboardEventFromNativeEvent(
-    const base::NativeEvent& native_event);
+    const base::NativeEvent& native_event,
+    const base::TimeDelta& time_stamp);
 blink::WebGestureEvent MakeWebGestureEventFromNativeEvent(
-    const base::NativeEvent& native_event);
+    const base::NativeEvent& native_event,
+    const base::TimeDelta& time_stamp);
 #endif
 
 blink::WebKeyboardEvent MakeWebKeyboardEventFromAuraEvent(
@@ -58,20 +75,8 @@ blink::WebKeyboardEvent MakeWebKeyboardEventFromAuraEvent(
   blink::WebKeyboardEvent webkit_event;
 
   webkit_event.timeStampSeconds = event.time_stamp().InSecondsF();
-  webkit_event.modifiers = ui::EventFlagsToWebEventModifiers(event.flags());
-  switch (ui::KeycodeConverter::DomCodeToLocation(event.code())) {
-    case ui::DomKeyLocation::LEFT:
-      webkit_event.modifiers |= blink::WebInputEvent::IsLeft;
-      break;
-    case ui::DomKeyLocation::RIGHT:
-      webkit_event.modifiers |= blink::WebInputEvent::IsRight;
-      break;
-    case ui::DomKeyLocation::NUMPAD:
-      webkit_event.modifiers |= blink::WebInputEvent::IsKeyPad;
-      break;
-    case ui::DomKeyLocation::STANDARD:
-      break;
-  }
+  webkit_event.modifiers = ui::EventFlagsToWebEventModifiers(event.flags()) |
+                           DomCodeToWebInputEventModifiers(event.code());
 
   switch (event.type()) {
     case ui::ET_KEY_PRESSED:
@@ -88,35 +93,23 @@ blink::WebKeyboardEvent MakeWebKeyboardEventFromAuraEvent(
   if (webkit_event.modifiers & blink::WebInputEvent::AltKey)
     webkit_event.isSystemKey = true;
 
-  webkit_event.windowsKeyCode = event.GetLocatedWindowsKeyboardCode();
+  // TODO(dtapuska): crbug.com/570388. Ozone appears to deliver
+  // key_code events that aren't "located" for the keypad like
+  // Windows and X11 do and blink expects.
+  webkit_event.windowsKeyCode =
+      ui::NonLocatedToLocatedKeypadKeyboardCode(event.key_code(), event.code());
   webkit_event.nativeKeyCode =
     ui::KeycodeConverter::DomCodeToNativeKeycode(event.code());
   webkit_event.domCode = static_cast<int>(event.code());
+  webkit_event.domKey = static_cast<int>(event.GetDomKey());
   webkit_event.unmodifiedText[0] = event.GetUnmodifiedText();
   webkit_event.text[0] = event.GetText();
 
   // NOTE(daniel@vivaldi): Keycode conversion for linux
 #if defined(USE_X11)
-  uint16 keyId = webkit_event.windowsKeyCode;
-  
-  // NOTE(daniel@vivaldi): Don't convert numbers
-  // (in the case of the 'azerty' layout this would be wrong).
-  if (keyId >= '0' && keyId <= '9') {
-    webkit_event.setKeyIdentifierFromWindowsKeyCode();
-    return webkit_event;
-  }
-
-  if(blink::WebInputEvent::RawKeyDown && event.native_event() != NULL) {
-    XEvent xev = *event.native_event();
-
-    // Holding down ctrl changes the character for some reason.
-    // We release all modifiers and get what was really pressed
-    xev.xkey.state = 0;
-
-    keyId = ui::GetCharacterFromXEvent(&xev);
-    base::snprintf(webkit_event.keyIdentifier,
-        sizeof(webkit_event.keyIdentifier), "U+%04X", toupper(keyId));
-  }
+  ::vivaldi::setKeyIdentifierFromXEvent(event,
+    webkit_event.keyIdentifier,
+    webkit_event.windowsKeyCode);
 #endif
   webkit_event.setKeyIdentifierFromWindowsKeyCode();
 
@@ -214,13 +207,14 @@ blink::WebMouseEvent MakeWebMouseEvent(const ui::MouseEvent& event) {
   // Construct an untranslated event from the platform event data.
   blink::WebMouseEvent webkit_event =
 #if defined(OS_WIN)
-  // On Windows we have WM_ events comming from desktop and pure aura
-  // events comming from metro mode.
-  event.native_event().message ?
-      MakeUntranslatedWebMouseEventFromNativeEvent(event.native_event()) :
-      MakeWebMouseEventFromAuraEvent(event);
+      // On Windows we have WM_ events comming from desktop and pure aura
+      // events comming from metro mode.
+      event.native_event().message && (event.type() != ui::ET_MOUSE_EXITED)
+          ? MakeUntranslatedWebMouseEventFromNativeEvent(event.native_event(),
+                                                         event.time_stamp())
+          : MakeWebMouseEventFromAuraEvent(event);
 #else
-  MakeWebMouseEventFromAuraEvent(event);
+      MakeWebMouseEventFromAuraEvent(event);
 #endif
   // Replace the event's coordinate fields with translated position data from
   // |event|.
@@ -242,9 +236,11 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
     const ui::MouseWheelEvent& event) {
 #if defined(OS_WIN)
   // Construct an untranslated event from the platform event data.
-  blink::WebMouseWheelEvent webkit_event = event.native_event().message ?
-      MakeUntranslatedWebMouseWheelEventFromNativeEvent(event.native_event()) :
-      MakeWebMouseWheelEventFromAuraEvent(event);
+  blink::WebMouseWheelEvent webkit_event =
+      event.native_event().message
+          ? MakeUntranslatedWebMouseWheelEventFromNativeEvent(
+                event.native_event(), event.time_stamp())
+          : MakeWebMouseWheelEventFromAuraEvent(event);
 #else
   blink::WebMouseWheelEvent webkit_event =
       MakeWebMouseWheelEventFromAuraEvent(event);
@@ -273,9 +269,11 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
 blink::WebMouseWheelEvent MakeWebMouseWheelEvent(const ui::ScrollEvent& event) {
 #if defined(OS_WIN)
   // Construct an untranslated event from the platform event data.
-  blink::WebMouseWheelEvent webkit_event = event.native_event().message ?
-      MakeUntranslatedWebMouseWheelEventFromNativeEvent(event.native_event()) :
-      MakeWebMouseWheelEventFromAuraEvent(event);
+  blink::WebMouseWheelEvent webkit_event =
+      event.native_event().message
+          ? MakeUntranslatedWebMouseWheelEventFromNativeEvent(
+                event.native_event(), event.time_stamp())
+          : MakeWebMouseWheelEventFromAuraEvent(event);
 #else
   blink::WebMouseWheelEvent webkit_event =
       MakeWebMouseWheelEventFromAuraEvent(event);
@@ -303,9 +301,11 @@ blink::WebKeyboardEvent MakeWebKeyboardEvent(const ui::KeyEvent& event) {
 #if defined(OS_WIN)
   if (event.HasNativeEvent()) {
     // Key events require no translation by the aura system.
-    blink::WebKeyboardEvent webkit_event(
-        MakeWebKeyboardEventFromNativeEvent(event.native_event()));
+    blink::WebKeyboardEvent webkit_event(MakeWebKeyboardEventFromNativeEvent(
+        event.native_event(), event.time_stamp()));
+    webkit_event.modifiers |= DomCodeToWebInputEventModifiers(event.code());
     webkit_event.domCode = static_cast<int>(event.code());
+    webkit_event.domKey = static_cast<int>(event.GetDomKey());
     return webkit_event;
   }
 #endif
@@ -316,7 +316,8 @@ blink::WebGestureEvent MakeWebGestureEvent(const ui::GestureEvent& event) {
   blink::WebGestureEvent gesture_event;
 #if defined(OS_WIN)
   if (event.HasNativeEvent())
-    gesture_event = MakeWebGestureEventFromNativeEvent(event.native_event());
+    gesture_event = MakeWebGestureEventFromNativeEvent(event.native_event(),
+                                                       event.time_stamp());
   else
     gesture_event = MakeWebGestureEventFromUIEvent(event);
 #else
@@ -337,7 +338,8 @@ blink::WebGestureEvent MakeWebGestureEvent(const ui::ScrollEvent& event) {
   blink::WebGestureEvent gesture_event;
 
 #if defined(OS_WIN)
-  gesture_event = MakeWebGestureEventFromNativeEvent(event.native_event());
+  gesture_event = MakeWebGestureEventFromNativeEvent(event.native_event(),
+                                                     event.time_stamp());
 #else
   gesture_event = MakeWebGestureEventFromAuraEvent(event);
 #endif
@@ -405,6 +407,12 @@ blink::WebMouseEvent MakeWebMouseEventFromAuraEvent(
       break;
   }
 
+  webkit_event.tiltX = roundf(event.pointer_details().tilt_x());
+  webkit_event.tiltY = roundf(event.pointer_details().tilt_y());
+  webkit_event.force = event.pointer_details().force();
+  webkit_event.pointerType =
+      EventPointerTypeToWebPointerType(event.pointer_details().pointer_type());
+
   return webkit_event;
 }
 
@@ -427,6 +435,12 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEventFromAuraEvent(
 
   webkit_event.wheelTicksX = webkit_event.deltaX / kPixelsPerTick;
   webkit_event.wheelTicksY = webkit_event.deltaY / kPixelsPerTick;
+
+  webkit_event.tiltX = roundf(event.pointer_details().tilt_x());
+  webkit_event.tiltY = roundf(event.pointer_details().tilt_y());
+  webkit_event.force = event.pointer_details().force();
+  webkit_event.pointerType =
+      EventPointerTypeToWebPointerType(event.pointer_details().pointer_type());
 
   return webkit_event;
 }

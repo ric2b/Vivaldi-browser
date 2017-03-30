@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -46,7 +47,8 @@ struct ShortcutInfo {
   // and the launch url will be detected at start-up. In this case, |url|
   // is still used to generate the app id (windows app id, not chrome app id).
   std::string extension_id;
-  bool is_platform_app;
+  bool is_platform_app = false;
+  bool from_bookmark = false;
   base::string16 title;
   base::string16 description;
   base::FilePath extension_path;
@@ -77,7 +79,7 @@ struct ShortcutInfo {
 enum ApplicationsMenuLocation {
   APP_MENU_LOCATION_NONE,
   APP_MENU_LOCATION_ROOT,
-  APP_MENU_LOCATION_SUBDIR_CHROME,
+  APP_MENU_LOCATION_SUBDIR_CHROME_DEPRECATED,  // TODO(bcwhite) remove this
   APP_MENU_LOCATION_SUBDIR_CHROMEAPPS,
   APP_MENU_LOCATION_HIDDEN,
 };
@@ -200,12 +202,15 @@ void CreateShortcuts(ShortcutCreationReason reason,
 // extension.
 void DeleteAllShortcuts(Profile* profile, const extensions::Extension* app);
 
-// Updates shortcuts for web application based on given shortcut data. This
-// refreshes existing shortcuts and their icons, but does not create new ones.
+// Updates shortcuts for |app|, but does not create new ones if shortcuts are
+// not present in user-facing locations. Some platforms may still (re)create
+// hidden shortcuts to interact correctly with the system shelf.
 // |old_app_title| contains the title of the app prior to this update.
+// |callback| is invoked once the FILE thread tasks have completed.
 void UpdateAllShortcuts(const base::string16& old_app_title,
                         Profile* profile,
-                        const extensions::Extension* app);
+                        const extensions::Extension* app,
+                        const base::Closure& callback);
 
 // Updates shortcuts for all apps in this profile. This is expected to be called
 // on the UI thread.

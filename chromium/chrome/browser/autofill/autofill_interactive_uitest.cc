@@ -4,9 +4,9 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/rand_util.h"
@@ -15,15 +15,16 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/render_messages.h"
+#include "chrome/browser/ui/translate/translate_bubble_test_utils.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/test_switches.h"
@@ -35,8 +36,7 @@
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/validation.h"
-#include "components/infobars/core/infobar.h"
-#include "components/translate/core/browser/translate_infobar_delegate.h"
+#include "components/translate/core/browser/translate_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -46,11 +46,14 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
+#include "content/public/test/test_utils.h"
 #include "net/base/net_errors.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_status.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 using base::ASCIIToUTF16;
@@ -88,14 +91,26 @@ static const char kTestFormString[] =
     "<label for=\"phone\">Phone number:</label>"
     " <input type=\"text\" id=\"phone\"><br>"
     "</form>";
-
+static const char kTestPasswordFormString[] =
+    "<form>"
+    "<label for=\"user\">User:</label>"
+    " <input id=\"user\" type=\"text\" name=\"name\""
+             "onfocus=\"domAutomationController.send(true)\">"
+    "<br>"
+    "<label for=\"password\">Password:</label>"
+    " <input id=\"password\" type=\"password\" name=\"password\""
+             "onfocus=\"domAutomationController.send(true)\">"
+    "<br>"
+    "<input type=\"submit\" value=\"Submit\">"
+    "</form>";
 
 // AutofillManagerTestDelegateImpl --------------------------------------------
 
 class AutofillManagerTestDelegateImpl
     : public autofill::AutofillManagerTestDelegate {
  public:
-  AutofillManagerTestDelegateImpl() {}
+  AutofillManagerTestDelegateImpl()
+      : waiting_for_text_change_(false) {}
   ~AutofillManagerTestDelegateImpl() override {}
 
   // autofill::AutofillManagerTestDelegate:
@@ -114,6 +129,14 @@ class AutofillManagerTestDelegateImpl
     loop_runner_->Quit();
   }
 
+  void OnTextFieldChanged() override {
+    if (!waiting_for_text_change_)
+      return;
+    waiting_for_text_change_ = false;
+    ASSERT_TRUE(loop_runner_->loop_running());
+    loop_runner_->Quit();
+  }
+
   void Reset() {
     loop_runner_ = new content::MessageLoopRunner();
   }
@@ -122,8 +145,14 @@ class AutofillManagerTestDelegateImpl
     loop_runner_->Run();
   }
 
+  void WaitForTextChange() {
+    waiting_for_text_change_ = true;
+    loop_runner_->Run();
+  }
+
  private:
   scoped_refptr<content::MessageLoopRunner> loop_runner_;
+  bool waiting_for_text_change_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillManagerTestDelegateImpl);
 };
@@ -157,6 +186,9 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
     gfx::Point reset_mouse(GetWebContents()->GetContainerBounds().origin());
     reset_mouse = gfx::Point(reset_mouse.x() + 5, reset_mouse.y() + 5);
     ASSERT_TRUE(ui_test_utils::SendMouseMoveSync(reset_mouse));
+
+    ASSERT_TRUE(embedded_test_server()->Start());
+    InProcessBrowserTest::SetUpOnMainThread();
   }
 
   void TearDownOnMainThread() override {
@@ -207,7 +239,7 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
         "window.domAutomationController.send("
         "    document.getElementById('" + field_name + "').value);",
         &value));
-    EXPECT_EQ(expected_value, value);
+    EXPECT_EQ(expected_value, value) << "for field " << field_name;
   }
 
   void GetFieldBackgroundColor(const std::string& field_name,
@@ -257,6 +289,18 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
     fetcher->set_response_code(success ? 200 : 500);
     fetcher->SetResponseString(script);
     fetcher->delegate()->OnURLFetchComplete(fetcher);
+  }
+
+  void FocusFieldByName(const std::string& name) {
+    bool result = false;
+    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+        GetRenderViewHost(),
+        "if (document.readyState === 'complete')"
+        "  document.getElementById('" + name + "').focus();"
+        "else"
+        "  domAutomationController.send(false);",
+        &result));
+    ASSERT_TRUE(result);
   }
 
   void FocusFirstNameField() {
@@ -329,6 +373,16 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
     test_delegate_.Wait();
   }
 
+  void PasteStringAndWait(const std::string& pastedata) {
+    {
+      ui::ScopedClipboardWriter writer(ui::CLIPBOARD_TYPE_COPY_PASTE);
+      writer.WriteText(base::ASCIIToUTF16(pastedata));
+    }
+    test_delegate_.Reset();
+    GetWebContents()->Paste();
+    test_delegate_.WaitForTextChange();
+  }
+
   bool HandleKeyPressEvent(const content::NativeWebKeyboardEvent& event) {
     return true;
   }
@@ -341,10 +395,12 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
     test_delegate_.Reset();
     // Install the key press event sink to ensure that any events that are not
     // handled by the installed callbacks do not end up crashing the test.
-    GetRenderViewHost()->AddKeyPressEventCallback(key_press_event_sink_);
-    GetRenderViewHost()->ForwardKeyboardEvent(event);
+    GetRenderViewHost()->GetWidget()->AddKeyPressEventCallback(
+        key_press_event_sink_);
+    GetRenderViewHost()->GetWidget()->ForwardKeyboardEvent(event);
     test_delegate_.Wait();
-    GetRenderViewHost()->RemoveKeyPressEventCallback(key_press_event_sink_);
+    GetRenderViewHost()->GetWidget()->RemoveKeyPressEventCallback(
+        key_press_event_sink_);
   }
 
   // Datalist does not support autofill preview. There is no need to start
@@ -356,9 +412,11 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
     event.type = blink::WebKeyboardEvent::RawKeyDown;
     // Install the key press event sink to ensure that any events that are not
     // handled by the installed callbacks do not end up crashing the test.
-    GetRenderViewHost()->AddKeyPressEventCallback(key_press_event_sink_);
-    GetRenderViewHost()->ForwardKeyboardEvent(event);
-    GetRenderViewHost()->RemoveKeyPressEventCallback(key_press_event_sink_);
+    GetRenderViewHost()->GetWidget()->AddKeyPressEventCallback(
+        key_press_event_sink_);
+    GetRenderViewHost()->GetWidget()->ForwardKeyboardEvent(event);
+    GetRenderViewHost()->GetWidget()->RemoveKeyPressEventCallback(
+        key_press_event_sink_);
   }
 
   void TryBasicFormFill() {
@@ -448,7 +506,13 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillViaDownArrow) {
   ExpectFilledTestForm();
 }
 
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillSelectViaTab) {
+// crbug.com/516052
+#if defined(OS_CHROMEOS)
+#define MAYBE_AutofillSelectViaTab DISABLED_AutofillSelectViaTab
+#else
+#define MAYBE_AutofillSelectViaTab AutofillSelectViaTab
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillSelectViaTab) {
   CreateTestProfile();
 
   // Load the test page.
@@ -473,7 +537,13 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillSelectViaTab) {
   ExpectFilledTestForm();
 }
 
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillViaClick) {
+// crbug.com/516052
+#if defined(OS_CHROMEOS)
+#define MAYBE_AutofillViaClick DISABLED_AutofillViaClick
+#else
+#define MAYBE_AutofillViaClick AutofillViaClick
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillViaClick) {
   CreateTestProfile();
 
   // Load the test page.
@@ -682,7 +752,13 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, OnInputAfterAutofill) {
 }
 
 // Test that a JavaScript onchange event is fired after auto-filling a form.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, OnChangeAfterAutofill) {
+// Flaky on CrOS only.  http://crbug.com/578095
+#if defined(OS_CHROMEOS)
+#define MAYBE_OnChangeAfterAutofill DISABLED_OnChangeAfterAutofill
+#else
+#define MAYBE_OnChangeAfterAutofill OnChangeAfterAutofill
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_OnChangeAfterAutofill) {
   CreateTestProfile();
 
   const char kOnChangeScript[] =
@@ -832,8 +908,14 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, InputFiresBeforeChange) {
 }
 
 // Test that we can autofill forms distinguished only by their |id| attribute.
+// Flaky on CrOS only.  http://crbug.com/578095
+#if defined(OS_CHROMEOS)
+#define MAYBE_AutofillFormsDistinguishedById DISABLED_AutofillFormsDistinguishedById
+#else
+#define MAYBE_AutofillFormsDistinguishedById AutofillFormsDistinguishedById
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       AutofillFormsDistinguishedById) {
+                       MAYBE_AutofillFormsDistinguishedById) {
   CreateTestProfile();
 
   // Load the test page.
@@ -1051,16 +1133,22 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillAfterReload) {
   TryBasicFormFill();
 }
 
-//Disabled on mac in vivaldi
-#if defined(OS_MACOSX)
+// Test fails on Linux ASAN, see http://crbug.com/532737
+#if defined(ADDRESS_SANITIZER)
 #define MAYBE_AutofillAfterTranslate DISABLED_AutofillAfterTranslate
 #else
 #define MAYBE_AutofillAfterTranslate AutofillAfterTranslate
-#endif
+#endif  // ADDRESS_SANITIZER
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
-  // TODO(port): Test corresponding bubble translate UX: http://crbug.com/383235
-  if (TranslateService::IsTranslateBubbleEnabled())
-    return;
+// TODO(groby): Remove once the bubble is enabled by default everywhere.
+// http://crbug.com/507442
+#if defined(OS_MACOSX)
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      ::switches::kEnableTranslateNewUX);
+#endif
+  ASSERT_TRUE(TranslateService::IsTranslateBubbleEnabled());
+
+  translate::TranslateManager::SetIgnoreMissingKeyForTesting(true);
 
   CreateTestProfile();
 
@@ -1100,25 +1188,27 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
                "我々は重要な、興味深いものになるが、時折状況が発生するため苦労や痛みは"
                "彼にいくつかの素晴らしいを調達することができます。それから、いくつかの利");
 
-  content::WindowedNotificationObserver infobar_observer(
-      chrome::NOTIFICATION_TAB_CONTENTS_INFOBAR_ADDED,
-      content::NotificationService::AllSources());
+  // Set up an observer to be able to wait for the bubble to be shown.
+  content::Source<content::WebContents> source(GetWebContents());
+  content::WindowedNotificationObserver language_detected_signal(
+      chrome::NOTIFICATION_TAB_LANGUAGE_DETERMINED, source);
+
   ASSERT_NO_FATAL_FAILURE(
       ui_test_utils::NavigateToURL(browser(), url));
 
-  // Wait for the translation bar to appear and get it.
-  infobar_observer.Wait();
-  InfoBarService* infobar_service =
-      InfoBarService::FromWebContents(GetWebContents());
-  translate::TranslateInfoBarDelegate* delegate =
-      infobar_service->infobar_at(0)->delegate()->AsTranslateInfoBarDelegate();
-  ASSERT_TRUE(delegate);
-  EXPECT_EQ(translate::TRANSLATE_STEP_BEFORE_TRANSLATE,
-            delegate->translate_step());
+  // Wait for the translate bubble to appear.
+  language_detected_signal.Wait();
 
-  // Simulate translation button press.
-  delegate->Translate();
+  // Verify current translate step.
+  const TranslateBubbleModel* model =
+      translate::test_utils::GetCurrentModel(browser());
+  ASSERT_NE(nullptr, model);
+  EXPECT_EQ(TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE,
+            model->GetViewState());
 
+  translate::test_utils::PressTranslate(browser());
+
+  // Wait for translation.
   content::WindowedNotificationObserver translation_observer(
       chrome::NOTIFICATION_PAGE_TRANSLATED,
       content::NotificationService::AllSources());
@@ -1138,14 +1228,13 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
 // field, invoke the autofill popup list, select the first profile within the
 // list, and commit to the profile to populate the form.
 // Flakily times out on windows. http://crbug.com/390564
-#if defined(OS_WIN)
+// Flaky on the official cros-trunk crbug.com/516052
+#if defined(OS_WIN) || defined(OFFICIAL_BUILD)
 #define MAYBE_ComparePhoneNumbers DISABLED_ComparePhoneNumbers
 #else
 #define MAYBE_ComparePhoneNumbers ComparePhoneNumbers
-#endif
+#endif  // defined(OS_WIN) || defined(OFFICIAL_BUILD)
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_ComparePhoneNumbers) {
-  ASSERT_TRUE(test_server()->Start());
-
   AutofillProfile profile;
   profile.SetRawInfo(NAME_FIRST, ASCIIToUTF16("Bob"));
   profile.SetRawInfo(NAME_LAST, ASCIIToUTF16("Smith"));
@@ -1156,7 +1245,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_ComparePhoneNumbers) {
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("1-408-555-4567"));
   SetTestProfile(browser(), profile);
 
-  GURL url = test_server()->GetURL("files/autofill/form_phones.html");
+  GURL url = embedded_test_server()->GetURL("/autofill/form_phones.html");
   ui_test_utils::NavigateToURL(browser(), url);
   PopulateForm("NAME_FIRST");
 
@@ -1180,10 +1269,14 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_ComparePhoneNumbers) {
 }
 
 // Test that Autofill does not fill in read-only fields.
+// Flaky on the official cros-trunk. crbug.com/516052
+#if defined(OFFICIAL_BUILD)
+#define MAYBE_NoAutofillForReadOnlyFields DISABLED_NoAutofillForReadOnlyFields
+#else
+#define MAYBE_NoAutofillForReadOnlyFields NoAutofillForReadOnlyFields
+#endif  // defined(OFFICIAL_BUILD)
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       NoAutofillForReadOnlyFields) {
-  ASSERT_TRUE(test_server()->Start());
-
+                       MAYBE_NoAutofillForReadOnlyFields) {
   std::string addr_line1("1234 H St.");
 
   AutofillProfile profile;
@@ -1198,7 +1291,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("408-871-4567"));
   SetTestProfile(browser(), profile);
 
-  GURL url = test_server()->GetURL("files/autofill/read_only_field_test.html");
+  GURL url =
+      embedded_test_server()->GetURL("/autofill/read_only_field_test.html");
   ui_test_utils::NavigateToURL(browser(), url);
   PopulateForm("firstname");
 
@@ -1213,11 +1307,10 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 //   3. Fill form using a saved profile.
 // Flakily times out: http://crbug.com/270341
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, DISABLED_FormFillableOnReset) {
-  ASSERT_TRUE(test_server()->Start());
-
   CreateTestProfile();
 
-  GURL url = test_server()->GetURL("files/autofill/autofill_test_form.html");
+  GURL url =
+      embedded_test_server()->GetURL("/autofill/autofill_test_form.html");
   ui_test_utils::NavigateToURL(browser(), url);
   PopulateForm("NAME_FIRST");
 
@@ -1241,12 +1334,10 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, DISABLED_FormFillableOnReset) {
 // Flakily times out: http://crbug.com/270341
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
                        DISABLED_DistinguishMiddleInitialWithinName) {
-  ASSERT_TRUE(test_server()->Start());
-
   CreateTestProfile();
 
-  GURL url = test_server()->GetURL(
-      "files/autofill/autofill_middleinit_form.html");
+  GURL url =
+      embedded_test_server()->GetURL("/autofill/autofill_middleinit_form.html");
   ui_test_utils::NavigateToURL(browser(), url);
   PopulateForm("NAME_FIRST");
 
@@ -1258,8 +1349,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 // Flakily times out: http://crbug.com/270341
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
                        DISABLED_MultipleEmailFilledByOneUserGesture) {
-  ASSERT_TRUE(test_server()->Start());
-
   std::string email("bsmith@gmail.com");
 
   AutofillProfile profile;
@@ -1269,8 +1358,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("4088714567"));
   SetTestProfile(browser(), profile);
 
-  GURL url = test_server()->GetURL(
-      "files/autofill/autofill_confirmemail_form.html");
+  GURL url = embedded_test_server()->GetURL(
+      "/autofill/autofill_confirmemail_form.html");
   ui_test_utils::NavigateToURL(browser(), url);
   PopulateForm("NAME_FIRST");
 
@@ -1285,8 +1374,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 // Flakily times out: http://crbug.com/281527
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
                        DISABLED_FormFillLatencyAfterSubmit) {
-  ASSERT_TRUE(test_server()->Start());
-
   std::vector<std::string> cities;
   cities.push_back("San Jose");
   cities.push_back("San Francisco");
@@ -1327,8 +1414,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   LOG(INFO) << "Created " << kNumProfiles << " profiles in " <<
                (base::Time::Now() - start_time).InSeconds() << " seconds.";
 
-  GURL url = test_server()->GetURL(
-      "files/autofill/latency_after_submit_test.html");
+  GURL url = embedded_test_server()->GetURL(
+      "/autofill/latency_after_submit_test.html");
   ui_test_utils::NavigateToURL(browser(), url);
   PopulateForm("NAME_FIRST");
 
@@ -1369,6 +1456,17 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   // Press the down arrow to select the suggestion and attempt to preview the
   // autofilled form.
   SendKeyToPopupAndWait(ui::VKEY_DOWN);
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
+                       PastedPasswordIsSaved) {
+  ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(browser(),
+      GURL(std::string(kDataURIPrefix) + kTestPasswordFormString)));
+  ASSERT_TRUE(content::ExecuteScript(
+      GetRenderViewHost(),
+      "document.getElementById('user').value = 'user';"));
+  FocusFieldByName("password");
+  PasteStringAndWait("foobar");
 }
 
 }  // namespace autofill

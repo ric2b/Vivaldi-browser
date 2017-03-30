@@ -10,17 +10,20 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "components/invalidation/impl/invalidation_state_tracker.h"
 #include "components/invalidation/impl/invalidator.h"
 #include "components/invalidation/impl/non_blocking_invalidator.h"
 #include "components/invalidation/public/invalidation_handler.h"
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/invalidation/public/object_id_invalidation_map.h"
+#include "components/sync_driver/invalidation_helper.h"
 #include "jingle/notifier/base/notification_method.h"
 #include "jingle/notifier/base/notifier_options.h"
 #include "net/base/host_port_pair.h"
@@ -29,7 +32,6 @@
 #include "net/http/transport_security_state.h"
 #include "net/url_request/url_request_test_util.h"
 #include "sync/internal_api/public/base/model_type.h"
-#include "sync/tools/invalidation_helper.h"
 #include "sync/tools/null_invalidation_state_tracker.h"
 
 #if defined(OS_MACOSX)
@@ -81,7 +83,7 @@ class MyTestURLRequestContext : public net::TestURLRequestContext {
     context_storage_.set_host_resolver(
         net::HostResolver::CreateDefaultResolver(NULL));
     context_storage_.set_transport_security_state(
-        new net::TransportSecurityState());
+        make_scoped_ptr(new net::TransportSecurityState()));
     Init();
   }
 
@@ -136,7 +138,6 @@ notifier::NotifierOptions ParseNotifierOptions(
 }
 
 int SyncListenNotificationsMain(int argc, char* argv[]) {
-  using namespace syncer;
 #if defined(OS_MACOSX)
   base::mac::ScopedNSAutoreleasePool pool;
 #endif

@@ -11,25 +11,15 @@
   position: relative;
 }
 
-#backButton {
-  color: white;
-  left: 10px;
-  position: absolute;
-  top: 10px;
-  z-index: 1;
-}
-
-:host-context(html[dir=rtl]) #backButton {
-  left: auto;
-  right: 10px;
-  transform: scaleX(-1);
-}
-
 paper-dialog {
   --paper-dialog-title: {
     font-size: 15px;
   };
 
   width: 384px;
+}
+
+#forgotPasswordDlg .buttons {
+  padding: 15px 24px 24px;
 }
 

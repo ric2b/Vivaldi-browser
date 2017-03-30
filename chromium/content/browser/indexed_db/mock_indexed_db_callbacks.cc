@@ -4,6 +4,8 @@
 
 #include "content/browser/indexed_db/mock_indexed_db_callbacks.h"
 
+#include <utility>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -19,8 +21,7 @@ MockIndexedDBCallbacks::~MockIndexedDBCallbacks() {
 
 void MockIndexedDBCallbacks::OnSuccess() {}
 
-void MockIndexedDBCallbacks::OnSuccess(int64 result) {
-}
+void MockIndexedDBCallbacks::OnSuccess(int64_t result) {}
 
 void MockIndexedDBCallbacks::OnSuccess(const std::vector<base::string16>&) {}
 
@@ -29,7 +30,7 @@ void MockIndexedDBCallbacks::OnSuccess(const IndexedDBKey& key) {}
 void MockIndexedDBCallbacks::OnSuccess(
     scoped_ptr<IndexedDBConnection> connection,
     const IndexedDBDatabaseMetadata& metadata) {
-  connection_ = connection.Pass();
+  connection_ = std::move(connection);
 }
 
 }  // namespace content

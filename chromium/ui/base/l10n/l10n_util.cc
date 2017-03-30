@@ -13,9 +13,11 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_util.h"
 #include "base/i18n/file_util_icu.h"
+#include "base/i18n/message_formatter.h"
 #include "base/i18n/rtl.h"
 #include "base/i18n/string_compare.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -27,7 +29,6 @@
 #include "third_party/icu/source/common/unicode/rbbi.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "ui/base/l10n/l10n_util_collator.h"
-#include "ui/base/l10n/l10n_util_plurals.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 
@@ -201,11 +202,12 @@ bool IsDuplicateName(const std::string& locale_name) {
   };
 
   // Skip all the es_Foo other than es_419 for now.
-  if (base::StartsWithASCII(locale_name, "es_", false))
-    return !base::EndsWith(locale_name, "419", true);
+  if (base::StartsWith(locale_name, "es_",
+                       base::CompareCase::INSENSITIVE_ASCII))
+    return !base::EndsWith(locale_name, "419", base::CompareCase::SENSITIVE);
 
   for (size_t i = 0; i < arraysize(kDuplicateNames); ++i) {
-    if (base::strcasecmp(kDuplicateNames[i], locale_name.c_str()) == 0)
+    if (base::EqualsCaseInsensitiveASCII(kDuplicateNames[i], locale_name))
       return true;
   }
   return false;
@@ -539,7 +541,7 @@ base::string16 GetDisplayNameForLocale(const std::string& locale,
   // zh-Hant because the current Android Java API doesn't support scripts.
   // TODO(wangxianzhu): remove the special handling of zh-Hans and zh-Hant once
   // Android Java API supports scripts.
-  if (!base::StartsWithASCII(locale_code, "zh-Han", true)) {
+  if (!base::StartsWith(locale_code, "zh-Han", base::CompareCase::SENSITIVE)) {
     display_name = GetDisplayNameForLocale(locale_code, display_locale);
   } else
 #endif
@@ -707,7 +709,7 @@ base::string16 GetStringFUTF16(int message_id,
   }
 #endif
 
-  base::string16 formatted = ReplaceStringPlaceholders(
+  base::string16 formatted = base::ReplaceStringPlaceholders(
       format_string, replacements, offsets);
   AdjustParagraphDirectionality(&formatted);
 
@@ -819,28 +821,23 @@ base::string16 GetStringFUTF16Int(int message_id, int a) {
   return GetStringFUTF16(message_id, base::UTF8ToUTF16(base::IntToString(a)));
 }
 
-base::string16 GetStringFUTF16Int(int message_id, int64 a) {
+base::string16 GetStringFUTF16Int(int message_id, int64_t a) {
   return GetStringFUTF16(message_id, base::UTF8ToUTF16(base::Int64ToString(a)));
 }
 
 base::string16 GetPluralStringFUTF16(int message_id, int number) {
-  base::string16 pattern = GetStringUTF16(message_id);
-  UErrorCode err = U_ZERO_ERROR;
-  icu::MessageFormat format(
-      icu::UnicodeString(FALSE, pattern.data(), pattern.length()), err);
-  icu::UnicodeString result_unistring;
-  FormatNumberInPlural(format, number, &result_unistring, &err);
-  int capacity = result_unistring.length() + 1;
-  DCHECK_GT(capacity, 1);
-  base::string16 result;
-  result_unistring.extract(
-      static_cast<UChar*>(base::WriteInto(&result, capacity)), capacity, err);
-  DCHECK(U_SUCCESS(err));
-  return result;
+  return base::i18n::MessageFormatter::FormatWithNumberedArgs(
+      GetStringUTF16(message_id), number);
 }
 
 std::string GetPluralStringFUTF8(int message_id, int number) {
   return base::UTF16ToUTF8(GetPluralStringFUTF16(message_id, number));
+}
+
+base::string16 GetSingleOrMultipleStringUTF16(int message_id,
+                                               bool is_multiple) {
+  return base::i18n::MessageFormatter::FormatWithNumberedArgs(
+      GetStringUTF16(message_id), is_multiple ? "multiple" : "single");
 }
 
 void SortStrings16(const std::string& locale,

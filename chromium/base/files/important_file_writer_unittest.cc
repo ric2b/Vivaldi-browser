@@ -11,6 +11,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -145,8 +146,9 @@ TEST_F(ImportantFileWriterTest, BasicWithSuccessfulWriteObserver) {
 }
 
 TEST_F(ImportantFileWriterTest, ScheduleWrite) {
-  ImportantFileWriter writer(file_, ThreadTaskRunnerHandle::Get());
-  writer.set_commit_interval(TimeDelta::FromMilliseconds(25));
+  ImportantFileWriter writer(file_,
+                             ThreadTaskRunnerHandle::Get(),
+                             TimeDelta::FromMilliseconds(25));
   EXPECT_FALSE(writer.HasPendingWrite());
   DataSerializer serializer("foo");
   writer.ScheduleWrite(&serializer);
@@ -177,8 +179,9 @@ TEST_F(ImportantFileWriterTest, DoScheduledWrite) {
 }
 
 TEST_F(ImportantFileWriterTest, BatchingWrites) {
-  ImportantFileWriter writer(file_, ThreadTaskRunnerHandle::Get());
-  writer.set_commit_interval(TimeDelta::FromMilliseconds(25));
+  ImportantFileWriter writer(file_,
+                             ThreadTaskRunnerHandle::Get(),
+                             TimeDelta::FromMilliseconds(25));
   DataSerializer foo("foo"), bar("bar"), baz("baz");
   writer.ScheduleWrite(&foo);
   writer.ScheduleWrite(&bar);

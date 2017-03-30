@@ -8,9 +8,6 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/chromeos/drive/file_errors.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
@@ -18,6 +15,9 @@
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/drive/file_errors.h"
+#include "components/drive/file_system_core_util.h"
+#include "components/drive/file_system_interface.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/drive/task_util.h"
@@ -51,11 +51,11 @@ void GetMimeTypeAfterGetMetadataForProvidedFileSystem(
     base::File::Error result) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (result != base::File::FILE_OK || metadata->mime_type.empty()) {
+  if (result != base::File::FILE_OK || !metadata->mime_type.get()) {
     callback.Run(false, std::string());
     return;
   }
-  callback.Run(true, metadata->mime_type);
+  callback.Run(true, *metadata->mime_type);
 }
 
 // Helper function to converts a callback that takes boolean value to that takes
@@ -176,7 +176,7 @@ void GetNonNativeLocalPathMimeType(
     parser.file_system()->GetMetadata(
         parser.file_path(),
         chromeos::file_system_provider::ProvidedFileSystemInterface::
-            METADATA_FIELD_DEFAULT,
+            METADATA_FIELD_MIME_TYPE,
         base::Bind(&GetMimeTypeAfterGetMetadataForProvidedFileSystem,
                    callback));
     return;

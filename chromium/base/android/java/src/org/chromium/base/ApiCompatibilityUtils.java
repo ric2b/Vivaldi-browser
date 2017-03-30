@@ -12,11 +12,13 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.Resources.NotFoundException;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.PowerManager;
@@ -339,31 +341,16 @@ public class ApiCompatibilityUtils {
      * @param activity Activity that should get the task description update.
      * @param title Title of the activity.
      * @param icon Icon of the activity.
-     * @param color Color of the activity.
+     * @param color Color of the activity. It must be a fully opaque color.
      */
     public static void setTaskDescription(Activity activity, String title, Bitmap icon, int color) {
+        // TaskDescription requires an opaque color.
+        assert Color.alpha(color) == 255;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             ActivityManager.TaskDescription description =
                     new ActivityManager.TaskDescription(title, icon, color);
             activity.setTaskDescription(description);
-        }
-    }
-
-    /**
-     * @see android.view.Window#setStatusBarColor(int color).
-     * TODO(ianwen): remove this method after downstream rolling.
-     */
-    public static void setStatusBarColor(Activity activity, int statusBarColor) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            // If both system bars are black, we can remove these from our layout,
-            // removing or shrinking the SurfaceFlinger overlay required for our views.
-            Window window = activity.getWindow();
-            if (statusBarColor == Color.BLACK && window.getNavigationBarColor() == Color.BLACK) {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            } else {
-                window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            }
-            window.setStatusBarColor(statusBarColor);
         }
     }
 
@@ -428,5 +415,55 @@ public class ApiCompatibilityUtils {
             drawable = packageManager.getUserBadgedIcon(drawable, Process.myUserHandle());
         }
         return drawable;
+    }
+
+    /**
+     * @see android.content.pm.PackageManager#getUserBadgedDrawableForDensity(Drawable drawable,
+     * UserHandle user, Rect badgeLocation, int badgeDensity).
+     */
+    public static Drawable getUserBadgedDrawableForDensity(
+            Context context, Drawable drawable, Rect badgeLocation, int density) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            PackageManager packageManager = context.getPackageManager();
+            return packageManager.getUserBadgedDrawableForDensity(
+                    drawable, Process.myUserHandle(), badgeLocation, density);
+        }
+        return drawable;
+    }
+
+    /**
+     * @see android.content.res.Resources#getColor(int id).
+     */
+    @SuppressWarnings("deprecation")
+    public static int getColor(Resources res, int id) throws NotFoundException {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return res.getColor(id, null);
+        } else {
+            return res.getColor(id);
+        }
+    }
+
+    /**
+     * @see android.content.res.Resources#getColorStateList(int id).
+     */
+    @SuppressWarnings("deprecation")
+    public static ColorStateList getColorStateList(Resources res, int id) throws NotFoundException {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return res.getColorStateList(id, null);
+        } else {
+            return res.getColorStateList(id);
+        }
+    }
+
+    /**
+     * @see android.widget.TextView#setTextAppearance(int id).
+     */
+    @SuppressWarnings("deprecation")
+    public static void setTextAppearance(TextView view, int id) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            view.setTextAppearance(id);
+        } else {
+            view.setTextAppearance(view.getContext(), id);
+        }
     }
 }

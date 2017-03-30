@@ -7,8 +7,8 @@ package org.chromium.chrome.browser;
 import android.content.Context;
 import android.view.ViewGroup.LayoutParams;
 
-import org.chromium.base.JNINamespace;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.content.browser.ContentViewCore;
@@ -92,7 +92,8 @@ public class SwipeRefreshHandler implements OverscrollRefreshHandler {
                             contentViewCore.getContext().getResources().getString(resId);
                 }
                 mSwipeRefreshLayout.announceForAccessibility(mAccessibilityRefreshString);
-                contentViewCore.getWebContents().getNavigationController().reload(true);
+                contentViewCore.getWebContents().getNavigationController().reloadToRefreshContent(
+                        true);
                 RecordUserAction.record("MobilePullGestureReload");
             }
         });

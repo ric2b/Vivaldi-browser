@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -57,7 +58,7 @@ class SslHmacChannelAuthenticator : public ChannelAuthenticator,
   ~SslHmacChannelAuthenticator() override;
 
   // ChannelAuthenticator interface.
-  void SecureAndAuthenticate(scoped_ptr<net::StreamSocket> socket,
+  void SecureAndAuthenticate(scoped_ptr<P2PStreamSocket> socket,
                              const DoneCallback& done_callback) override;
 
  private:

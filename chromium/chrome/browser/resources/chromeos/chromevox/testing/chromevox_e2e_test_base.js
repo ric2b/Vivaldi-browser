@@ -73,7 +73,8 @@ ChromeVoxE2ETest.prototype = {
   /**
    * Launches the given document in a new tab.
    * @param {function() : void} doc Snippet wrapped inside of a function.
-   * @param {function()} opt_callback Called once the document is created.
+   * @param {function(url: string)} opt_callback Called once the
+   *     document is created.
    */
   runWithTab: function(doc, opt_callback) {
     var docString = TestUtils.extractHtmlFromCommentEncodedString(doc);
@@ -84,7 +85,10 @@ ChromeVoxE2ETest.prototype = {
       active: true,
       url: url
     };
-    chrome.tabs.create(createParams, opt_callback);
+    chrome.tabs.create(createParams, function(tab) {
+      if (opt_callback)
+        opt_callback(tab.url);
+    });
   },
 
   /**
@@ -118,20 +122,3 @@ ChromeVoxE2ETest.prototype = {
     return this.callbackHelper_.wrap(opt_callback);
   }
 };
-
-/**
- * Similar to |TEST_F|. Generates a test for the given |testFixture|,
- * |testName|, and |testFunction|.
- * Used this variant when an |isAsync| fixture wants to temporarily mix in an
- * sync test.
- * @param {string} testFixture Fixture name.
- * @param {string} testName Test name.
- * @param {function} testFunction The test impl.
- */
-function SYNC_TEST_F(testFixture, testName, testFunction) {
-  var wrappedTestFunction = function() {
-    testFunction.call(this);
-    testDone([true, '']);
-  };
-  TEST_F(testFixture, testName, wrappedTestFunction);
-}

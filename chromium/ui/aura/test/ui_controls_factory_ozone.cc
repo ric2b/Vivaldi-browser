@@ -4,6 +4,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/aura_test_utils.h"
@@ -205,7 +206,7 @@ class UIControlsOzone : public ui_controls::UIControlsAura {
   }
 
   void PostMouseEvent(ui::EventType type,
-                      const gfx::PointF& host_location,
+                      const gfx::Point& host_location,
                       int flags,
                       int changed_button_flags) {
     base::MessageLoop::current()->PostTask(
@@ -215,7 +216,7 @@ class UIControlsOzone : public ui_controls::UIControlsAura {
   }
 
   void PostMouseEventTask(ui::EventType type,
-                          const gfx::PointF& host_location,
+                          const gfx::Point& host_location,
                           int flags,
                           int changed_button_flags) {
     ui::MouseEvent mouse_event(type, host_location, host_location,

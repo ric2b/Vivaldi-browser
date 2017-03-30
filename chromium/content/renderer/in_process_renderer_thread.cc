@@ -4,9 +4,14 @@
 
 #include "content/renderer/in_process_renderer_thread.h"
 
+#include "build/build_config.h"
 #include "content/renderer/render_process.h"
 #include "content/renderer/render_process_impl.h"
 #include "content/renderer/render_thread_impl.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/jni_android.h"
+#endif
 
 namespace content {
 
@@ -20,8 +25,15 @@ InProcessRendererThread::~InProcessRendererThread() {
 }
 
 void InProcessRendererThread::Init() {
+  // Call AttachCurrentThreadWithName, before any other AttachCurrentThread()
+  // calls. The latter causes Java VM to assign Thread-??? to the thread name.
+  // Please note calls to AttachCurrentThreadWithName after AttachCurrentThread
+  // will not change the thread name kept in Java VM.
+#if defined(OS_ANDROID)
+  base::android::AttachCurrentThreadWithName(thread_name());
+#endif
   render_process_.reset(new RenderProcessImpl());
-  new RenderThreadImpl(params_);
+  RenderThreadImpl::Create(params_);
 }
 
 void InProcessRendererThread::CleanUp() {

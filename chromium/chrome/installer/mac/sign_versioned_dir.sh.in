@@ -48,42 +48,55 @@ versioned_dir="${app_path}/Contents/Versions/@VERSION@"
 framework="${versioned_dir}/@MAC_PRODUCT_NAME@ Framework.framework"
 crashpad_handler="${framework}/Helpers/crashpad_handler"
 helper_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper.app"
-helper_eh_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper EH.app"
-helper_np_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper NP.app"
+app_mode_loader_app="${framework}/Resources/app_mode_loader.app"
+app_mode_loader="${app_mode_loader_app}/Contents/MacOS/app_mode_loader"
 sparkle_framework="${app_path}/Contents/Frameworks/Sparkle.framework"
 
 requirement_suffix="\
 "
 
+enforcement_flags="restrict"
+
 codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
     "${crashpad_handler}" \
     -r="designated => identifier \"crashpad_handler\" \
+${requirement_suffix}" --options "${enforcement_flags}"
+
+# The app mode loader bundle is modified dynamically at runtime. Just sign the
+# executable, which shouldn't change. In order to do this, the executable needs
+# to be copied out of the bundle, signed, and then copied back in. The resulting
+# bundle's signature won't validate normally, but if the executable file is
+# verified in isolation or with --ignore-resources, it will. Because the
+# bundle's signature won't validate on its own, don't set any of the enforcement
+# flags.
+app_mode_loader_tmp="$(mktemp -t app_mode_loader)"
+cp "${app_mode_loader}" "${app_mode_loader_tmp}"
+codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
+    "${app_mode_loader_tmp}" \
+    -r="designated => identifier \"app_mode_loader\" \
 ${requirement_suffix}"
+cp "${app_mode_loader_tmp}" "${app_mode_loader}"
+rm -f "${app_mode_loader_tmp}"
+
 codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
     "${framework}" \
     -r="designated => identifier \"com.vivaldi.Vivaldi.framework\" \
 ${requirement_suffix}"
+
 codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
     "${helper_app}" \
     -r="designated => identifier \"com.vivaldi.Vivaldi.helper\" \
-${requirement_suffix}"
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${helper_eh_app}" \
-    -r="designated => identifier \"com.vivaldi.Vivaldi.helper.EH\" \
-${requirement_suffix}"
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${helper_np_app}" \
-    -r="designated => identifier \"com.vivaldi.Vivaldi.helper.NP\" \
-${requirement_suffix}"
+${requirement_suffix}" --options "${enforcement_flags}"
 codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
     "${sparkle_framework}" \
-    -r="designated => identifier \"org.andymatuschak.Sparkle\" \
+    -r="designated => identifier \"org.sparkle-project.Sparkle\" \
 ${requirement_suffix}"
 
 # Verify everything. Don't use --deep on the framework because Keystone's
-# signature is in a transitional state (radar 18474911).
+# signature is in a transitional state (radar 18474911). Don't verify
+# app_mode_loader independently because --ignore-resources is unrecognized
+# before 10.11 (bug 565859).
 codesign --verify --deep "${crashpad_handler}"
+# codesign --verify --ignore-resources "${app_mode_loader}"
 codesign --verify "${framework}"
 codesign --verify --deep "${helper_app}"
-codesign --verify --deep "${helper_eh_app}"
-codesign --verify --deep "${helper_np_app}"

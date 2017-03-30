@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -82,7 +83,7 @@ void LoginAttemptObserver::WaitForAttempt() {
 void LoginAttemptObserver::LoginAttempted() {
   login_attempted_ = true;
   if (waiting_)
-    base::MessageLoopForUI::current()->Quit();
+    base::MessageLoopForUI::current()->QuitWhenIdle();
 }
 
 }  // anyonymous namespace
@@ -118,7 +119,7 @@ class WebUIScreenLockerTester : public ScreenLockerTester {
 };
 
 void WebUIScreenLockerTester::SetPassword(const std::string& password) {
-  webui()->GetWebContents()->GetMainFrame()->ExecuteJavaScript(
+  webui()->GetWebContents()->GetMainFrame()->ExecuteJavaScriptForTests(
       base::ASCIIToUTF16(base::StringPrintf(
           "$('pod-row').pods[0].passwordElement.value = '%s';",
           password.c_str())));

@@ -5,8 +5,8 @@
 #ifndef CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_
 #define CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/test_download_shelf.h"
 #include "chrome/browser/ui/browser.h"
@@ -62,19 +62,14 @@ class TestBrowserWindow : public BrowserWindow {
   void Maximize() override {}
   void Minimize() override {}
   void Restore() override {}
-  void EnterFullscreen(const GURL& url,
-                       ExclusiveAccessBubbleType type,
-                       bool with_toolbar) override {}
-  void ExitFullscreen() override {}
-  void UpdateExclusiveAccessExitBubbleContent(
-      const GURL& url,
-      ExclusiveAccessBubbleType bubble_type) override {}
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
   bool SupportsFullscreenWithToolbar() const override;
   void UpdateFullscreenWithToolbar(bool with_toolbar) override;
+  void ToggleFullscreenToolbar() override;
   bool IsFullscreenWithToolbar() const override;
+  bool ShouldHideFullscreenToolbar() const override;
 #if defined(OS_WIN)
   void SetMetroSnapMode(bool enable) override {}
   bool IsInMetroSnapMode() const override;
@@ -85,6 +80,7 @@ class TestBrowserWindow : public BrowserWindow {
   void UpdateToolbar(content::WebContents* contents) override {}
   void ResetToolbarTabState(content::WebContents* contents) override {}
   void FocusToolbar() override {}
+  ToolbarActionsBar* GetToolbarActionsBar() override;
   void ToolbarSizeChanged(bool is_animating) override {}
   void FocusAppMenu() override {}
   void FocusBookmarksToolbar() override {}
@@ -108,14 +104,14 @@ class TestBrowserWindow : public BrowserWindow {
   void ShowBookmarkAppBubble(
       const WebApplicationInfo& web_app_info,
       const ShowBookmarkAppBubbleCallback& callback) override {}
+  autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
+      content::WebContents* contents,
+      autofill::SaveCardBubbleController* controller,
+      bool user_gesture) override;
   void ShowTranslateBubble(content::WebContents* contents,
                            translate::TranslateStep step,
                            translate::TranslateErrors::Type error_type,
                            bool is_user_gesture) override {}
-  bool ShowSessionCrashedBubble() override;
-  bool IsProfileResetBubbleSupported() const override;
-  GlobalErrorBubbleViewBase* ShowProfileResetBubble(
-      const base::WeakPtr<ProfileResetGlobalError>& global_error) override;
 #if defined(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninBubble(
       OneClickSigninBubbleType type,
@@ -131,10 +127,12 @@ class TestBrowserWindow : public BrowserWindow {
       bool app_modal,
       const base::Callback<void(bool)>& callback) override {}
   void UserChangedTheme() override {}
-  void ShowWebsiteSettings(Profile* profile,
-                           content::WebContents* web_contents,
-                           const GURL& url,
-                           const content::SSLStatus& ssl) override {}
+  void ShowWebsiteSettings(
+      Profile* profile,
+      content::WebContents* web_contents,
+      const GURL& url,
+      const security_state::SecurityStateModel::SecurityInfo& security_info)
+      override {}
   void CutCopyPaste(int command_id) override {}
   WindowOpenDisposition GetDispositionForPopupBounds(
       const gfx::Rect& bounds) override;
@@ -143,7 +141,12 @@ class TestBrowserWindow : public BrowserWindow {
       override;
   void ShowAvatarBubbleFromAvatarButton(
       AvatarBubbleMode mode,
-      const signin::ManageAccountsParams& manage_accounts_params) override {}
+      const signin::ManageAccountsParams& manage_accounts_params,
+      signin_metrics::AccessPoint access_point) override {}
+  void ShowModalSigninWindow(
+      AvatarBubbleMode mode,
+      signin_metrics::AccessPoint access_point) override {}
+  void CloseModalSigninWindow() override {}
   int GetRenderViewHeightInsetWithDetachedBookmarkBar() override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;
@@ -168,13 +171,13 @@ class TestBrowserWindow : public BrowserWindow {
     void FocusSearch() override {}
     void UpdateContentSettingsIcons() override {}
     void UpdateManagePasswordsIconAndBubble() override {}
+    void UpdateSaveCreditCardIcon() override {}
     void UpdatePageActions() override {}
     void UpdateBookmarkStarVisibility() override {}
     void UpdateLocationBarVisibility(bool visible, bool animate) override {}
     bool ShowPageActionPopup(const extensions::Extension* extension,
                              bool grant_active_tab) override;
     void UpdateOpenPDFInReaderPrompt() override {}
-    void UpdateGeneratedCreditCardView() override {}
     void SaveStateToContents(content::WebContents* contents) override {}
     void Revert() override {}
     const OmniboxView* GetOmniboxView() const override;
@@ -191,10 +194,26 @@ class TestBrowserWindow : public BrowserWindow {
   DISALLOW_COPY_AND_ASSIGN(TestBrowserWindow);
 };
 
+// Handles destroying a TestBrowserWindow when the Browser it is attached to is
+// destroyed.
+class TestBrowserWindowOwner : public chrome::BrowserListObserver {
+ public:
+  explicit TestBrowserWindowOwner(TestBrowserWindow* window);
+  ~TestBrowserWindowOwner() override;
+
+ private:
+  // Overridden from BrowserListObserver:
+  void OnBrowserRemoved(Browser* browser) override;
+  scoped_ptr<TestBrowserWindow> window_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestBrowserWindowOwner);
+};
+
 namespace chrome {
 
 // Helper that handle the lifetime of TestBrowserWindow instances.
-Browser* CreateBrowserWithTestWindowForParams(Browser::CreateParams* params);
+scoped_ptr<Browser> CreateBrowserWithTestWindowForParams(
+    Browser::CreateParams* params);
 
 }  // namespace chrome
 

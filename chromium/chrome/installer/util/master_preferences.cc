@@ -4,16 +4,21 @@
 
 #include "chrome/installer/util/master_preferences.h"
 
+#include <stddef.h>
+
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/common/env_vars.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/util_constants.h"
+#include "components/variations/pref_names.h"
 
 namespace {
 
@@ -90,16 +95,7 @@ MasterPreferences::MasterPreferences(const base::FilePath& prefs_path)
       preferences_read_from_file_(false),
       chrome_(true),
       multi_install_(false) {
-  std::string json_data;
-  // Failure to read the file is ignored as |json_data| will be the empty string
-  // and the remainder of this MasterPreferences object should still be
-  // initialized as best as possible.
-  if (base::PathExists(prefs_path) &&
-      !base::ReadFileToString(prefs_path, &json_data)) {
-    LOG(ERROR) << "Failed to read preferences from " << prefs_path.value();
-  }
-  if (InitializeFromString(json_data))
-    preferences_read_from_file_ = true;
+  InitializeFromFilePath(prefs_path);
 }
 
 MasterPreferences::MasterPreferences(const std::string& prefs)
@@ -119,7 +115,7 @@ void MasterPreferences::InitializeFromCommandLine(
   if (cmd_line.HasSwitch(installer::switches::kInstallerData)) {
     base::FilePath prefs_path(cmd_line.GetSwitchValuePath(
         installer::switches::kInstallerData));
-    this->MasterPreferences::MasterPreferences(prefs_path);
+    InitializeFromFilePath(prefs_path);
   } else {
     master_dictionary_.reset(new base::DictionaryValue());
   }
@@ -133,8 +129,6 @@ void MasterPreferences::InitializeFromCommandLine(
     const char* cmd_line_switch;
     const char* distribution_switch;
   } translate_switches[] = {
-    { installer::switches::kAutoLaunchChrome,
-      installer::master_preferences::kAutoLaunchChrome },
     { installer::switches::kChrome,
       installer::master_preferences::kChrome },
     { installer::switches::kDisableLogging,
@@ -156,7 +150,7 @@ void MasterPreferences::InitializeFromCommandLine(
   };
 
   std::string name(installer::master_preferences::kDistroDict);
-  for (int i = 0; i < arraysize(translate_switches); ++i) {
+  for (size_t i = 0; i < arraysize(translate_switches); ++i) {
     if (cmd_line.HasSwitch(translate_switches[i].cmd_line_switch)) {
       name.assign(installer::master_preferences::kDistroDict);
       name.append(".").append(translate_switches[i].distribution_switch);
@@ -193,6 +187,20 @@ void MasterPreferences::InitializeFromCommandLine(
 
   InitializeProductFlags();
 #endif
+}
+
+void MasterPreferences::InitializeFromFilePath(
+    const base::FilePath& prefs_path) {
+  std::string json_data;
+  // Failure to read the file is ignored as |json_data| will be the empty string
+  // and the remainder of this MasterPreferences object should still be
+  // initialized as best as possible.
+  if (base::PathExists(prefs_path) &&
+      !base::ReadFileToString(prefs_path, &json_data)) {
+    LOG(ERROR) << "Failed to read preferences from " << prefs_path.value();
+  }
+  if (InitializeFromString(json_data))
+    preferences_read_from_file_ = true;
 }
 
 bool MasterPreferences::InitializeFromString(const std::string& json_data) {
@@ -245,19 +253,6 @@ void MasterPreferences::EnforceLegacyPreferences() {
     distribution_->SetBoolean(
         installer::master_preferences::kDoNotCreateQuickLaunchShortcut, true);
   }
-
-  // If there is no entry for kURLsToRestoreOnStartup and there is one for
-  // kURLsToRestoreOnStartupOld, copy the old to the new.
-  const base::ListValue* startup_urls_list = NULL;
-  if (master_dictionary_ &&
-      !master_dictionary_->GetList(prefs::kURLsToRestoreOnStartup, NULL) &&
-      master_dictionary_->GetList(prefs::kURLsToRestoreOnStartupOld,
-                                  &startup_urls_list) &&
-      startup_urls_list) {
-    base::ListValue* new_startup_urls_list = startup_urls_list->DeepCopy();
-    master_dictionary_->Set(prefs::kURLsToRestoreOnStartup,
-                            new_startup_urls_list);
-  }
 }
 
 bool MasterPreferences::GetBool(const std::string& name, bool* value) const {
@@ -293,15 +288,15 @@ bool MasterPreferences::GetExtensionsBlock(
 }
 
 std::string MasterPreferences::GetCompressedVariationsSeed() const {
-  return ExtractPrefString(prefs::kVariationsCompressedSeed);
+  return ExtractPrefString(variations::prefs::kVariationsCompressedSeed);
 }
 
 std::string MasterPreferences::GetVariationsSeed() const {
-  return ExtractPrefString(prefs::kVariationsSeed);
+  return ExtractPrefString(variations::prefs::kVariationsSeed);
 }
 
 std::string MasterPreferences::GetVariationsSeedSignature() const {
-  return ExtractPrefString(prefs::kVariationsSeedSignature);
+  return ExtractPrefString(variations::prefs::kVariationsSeedSignature);
 }
 
 std::string MasterPreferences::ExtractPrefString(

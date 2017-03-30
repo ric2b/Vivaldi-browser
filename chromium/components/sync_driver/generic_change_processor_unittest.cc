@@ -4,12 +4,18 @@
 
 #include "components/sync_driver/generic_change_processor.h"
 
+#include <stddef.h>
+#include <string>
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "components/sync_driver/data_type_error_handler_mock.h"
+#include "components/sync_driver/fake_sync_client.h"
+#include "components/sync_driver/local_device_info_provider.h"
 #include "components/sync_driver/sync_api_component_factory.h"
 #include "sync/api/attachments/attachment_id.h"
 #include "sync/api/attachments/attachment_store.h"
@@ -50,15 +56,14 @@ class MockAttachmentService : public syncer::AttachmentServiceImpl {
 
 MockAttachmentService::MockAttachmentService(
     scoped_ptr<syncer::AttachmentStoreForSync> attachment_store)
-    : AttachmentServiceImpl(attachment_store.Pass(),
+    : AttachmentServiceImpl(std::move(attachment_store),
                             scoped_ptr<syncer::AttachmentUploader>(
                                 new syncer::FakeAttachmentUploader),
                             scoped_ptr<syncer::AttachmentDownloader>(
                                 new syncer::FakeAttachmentDownloader),
                             NULL,
                             base::TimeDelta(),
-                            base::TimeDelta()) {
-}
+                            base::TimeDelta()) {}
 
 MockAttachmentService::~MockAttachmentService() {
 }
@@ -80,11 +85,32 @@ class MockSyncApiComponentFactory : public SyncApiComponentFactory {
  public:
   MockSyncApiComponentFactory() {}
 
-  base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
-      syncer::ModelType type) override {
-    // Shouldn't be called for this test.
-    NOTREACHED();
-    return base::WeakPtr<syncer::SyncableService>();
+  // SyncApiComponentFactory implementation.
+  void RegisterDataTypes(
+      sync_driver::SyncService* sync_service,
+      const RegisterDataTypesMethod& register_platform_types_method) override {}
+  sync_driver::DataTypeManager* CreateDataTypeManager(
+      const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
+          debug_info_listener,
+      const sync_driver::DataTypeController::TypeMap* controllers,
+      const sync_driver::DataTypeEncryptionHandler* encryption_handler,
+      browser_sync::SyncBackendHost* backend,
+      sync_driver::DataTypeManagerObserver* observer) override{
+    return nullptr;
+  };
+  browser_sync::SyncBackendHost* CreateSyncBackendHost(
+      const std::string& name,
+      invalidation::InvalidationService* invalidator,
+      const base::WeakPtr<sync_driver::SyncPrefs>& sync_prefs,
+      const base::FilePath& sync_folder) override {
+    return nullptr;
+  }
+  scoped_ptr<sync_driver::LocalDeviceInfoProvider>
+      CreateLocalDeviceInfoProvider() override { return nullptr; }
+  SyncComponents CreateBookmarkSyncComponents(
+      sync_driver::SyncService* sync_service,
+      sync_driver::DataTypeErrorHandler* error_handler) override {
+    return SyncComponents(nullptr, nullptr);
   }
 
   scoped_ptr<syncer::AttachmentService> CreateAttachmentService(
@@ -94,13 +120,13 @@ class MockSyncApiComponentFactory : public SyncApiComponentFactory {
       syncer::ModelType model_type,
       syncer::AttachmentService::Delegate* delegate) override {
     scoped_ptr<MockAttachmentService> attachment_service(
-        new MockAttachmentService(attachment_store.Pass()));
+        new MockAttachmentService(std::move(attachment_store)));
     // GenericChangeProcessor takes ownership of the AttachmentService, but we
     // need to have a pointer to it so we can see that it was used properly.
     // Take a pointer and trust that GenericChangeProcessor does not prematurely
     // destroy it.
     mock_attachment_service_ = attachment_service.get();
-    return attachment_service.Pass();
+    return std::move(attachment_service);
   }
 
   MockAttachmentService* GetMockAttachmentService() {
@@ -119,7 +145,8 @@ class SyncGenericChangeProcessorTest : public testing::Test {
 
   SyncGenericChangeProcessorTest()
       : syncable_service_ptr_factory_(&fake_syncable_service_),
-        mock_attachment_service_(NULL) {}
+        mock_attachment_service_(NULL),
+        sync_client_(&sync_factory_) {}
 
   void SetUp() override {
     // Use kType by default, but allow test cases to re-initialize with whatever
@@ -157,24 +184,21 @@ class SyncGenericChangeProcessorTest : public testing::Test {
   }
 
   void ConstructGenericChangeProcessor(syncer::ModelType type) {
-    MockSyncApiComponentFactory sync_factory;
     scoped_ptr<syncer::AttachmentStore> attachment_store =
         syncer::AttachmentStore::CreateInMemoryStore();
     change_processor_.reset(new GenericChangeProcessor(
         type, &data_type_error_handler_,
         syncable_service_ptr_factory_.GetWeakPtr(),
         merge_result_ptr_factory_->GetWeakPtr(), test_user_share_->user_share(),
-        &sync_factory, attachment_store->CreateAttachmentStoreForSync()));
-    mock_attachment_service_ = sync_factory.GetMockAttachmentService();
+        &sync_client_, attachment_store->CreateAttachmentStoreForSync()));
+    mock_attachment_service_ = sync_factory_.GetMockAttachmentService();
   }
 
   void BuildChildNodes(syncer::ModelType type, int n) {
     syncer::WriteTransaction trans(FROM_HERE, user_share());
-    syncer::ReadNode root(&trans);
-    ASSERT_EQ(syncer::BaseNode::INIT_OK, root.InitTypeRoot(type));
     for (int i = 0; i < n; ++i) {
       syncer::WriteNode node(&trans);
-      node.InitUniqueByCreation(type, root, base::StringPrintf("node%05d", i));
+      node.InitUniqueByCreation(type, base::StringPrintf("node%05d", i));
     }
   }
 
@@ -209,6 +233,8 @@ class SyncGenericChangeProcessorTest : public testing::Test {
   DataTypeErrorHandlerMock data_type_error_handler_;
   scoped_ptr<syncer::TestUserShare> test_user_share_;
   MockAttachmentService* mock_attachment_service_;
+  FakeSyncClient sync_client_;
+  MockSyncApiComponentFactory sync_factory_;
 
   scoped_ptr<GenericChangeProcessor> change_processor_;
 };

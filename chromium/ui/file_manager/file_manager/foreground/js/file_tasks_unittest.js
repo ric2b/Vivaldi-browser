@@ -13,7 +13,7 @@ window.chrome = {
         }
       ]), 0);
     },
-    executeTask: function(taskId, urls, onViewFiles) {
+    executeTask: function(taskId, entries, onViewFiles) {
       onViewFiles('failed');
     }
   },
@@ -25,11 +25,12 @@ window.metrics = {
 };
 
 loadTimeData.data = {
-  NO_ACTION_FOR_EXECUTABLE: 'NO_ACTION_FOR_EXECUTABLE',
-  NO_ACTION_FOR_FILE_URL: 'NO_ACTION_FOR_FILE_URL',
-  NO_ACTION_FOR_DMG: 'NO_ACTION_FOR_DMG',
-  NO_ACTION_FOR_CRX: 'NO_ACTION_FOR_CRX',
-  NO_ACTION_FOR_CRX_TITLE: 'NO_ACTION_FOR_CRX_TITLE'
+  NO_TASK_FOR_EXECUTABLE: 'NO_TASK_FOR_EXECUTABLE',
+  NO_TASK_FOR_FILE_URL: 'NO_TASK_FOR_FILE_URL',
+  NO_TASK_FOR_FILE: 'NO_TASK_FOR_FILE',
+  NO_TASK_FOR_DMG: 'NO_TASK_FOR_DMG',
+  NO_TASK_FOR_CRX: 'NO_TASK_FOR_CRX',
+  NO_TASK_FOR_CRX_TITLE: 'NO_TASK_FOR_CRX_TITLE'
 };
 
 /**
@@ -38,12 +39,14 @@ loadTimeData.data = {
  */
 function getMockFileManager() {
   return {
-    isOnDrive: function() {
-      return false;
-    },
     volumeManager: {
       getDriveConnectionState: function() {
         return VolumeManagerCommon.DriveConnectionType.ONLINE;
+      },
+      getVolumeInfo: function() {
+        return {
+          volumeType: VolumeManagerCommon.VolumeType.DRIVE
+        }
       }
     },
     ui: {
@@ -51,11 +54,8 @@ function getMockFileManager() {
         showHtml: function(title, text, onOk, onCancel, onShow) {}
       }
     },
-    taskController: {
-      openSuggestAppsDialog: function(
-          entry, onSuccess, onCancelled, onFailure) {}
-    },
-    getMetadataModel: function() {}
+    metadataModel: {},
+    directoryModel: {}
   };
 }
 
@@ -68,8 +68,7 @@ function getMockFileManager() {
  * @param {string} expectedText An expected text.
  * @return {!Promise}
  */
-function showHtmlOfAlertDialogIsCalled(
-    entries, expectedTitle, expectedText) {
+function showHtmlOfAlertDialogIsCalled(entries, expectedTitle, expectedText) {
   return new Promise(function(resolve, reject) {
     var fileManager = getMockFileManager();
     fileManager.ui.alertDialog.showHtml =
@@ -79,10 +78,12 @@ function showHtmlOfAlertDialogIsCalled(
           resolve();
         };
 
-    var fileTasks = new FileTasks(fileManager);
-    fileTasks.init(entries).then(function() {
-      fileTasks.executeDefault();
-    });
+    FileTasks.create(
+        fileManager.volumeManager, fileManager.metadataModel,
+        fileManager.directoryModel, fileManager.ui, entries, [null]).
+      then(function(tasks) {
+        tasks.executeDefault();
+      });
   });
 }
 
@@ -90,20 +91,24 @@ function showHtmlOfAlertDialogIsCalled(
  * Returns a promise which is resolved when openSuggestAppsDialog is called.
  *
  * @param {!Array<!Entry>} entries Entries.
+ * @param {!Array<?string>} mimeTypes Mime types.
  * @return {!Promise}
  */
-function openSuggestAppsDialogIsCalled(entries) {
+function openSuggestAppsDialogIsCalled(entries, mimeTypes) {
   return new Promise(function(resolve, reject) {
     var fileManager = getMockFileManager();
-    fileManager.taskController.openSuggestAppsDialog =
-        function(entry, onSuccess, onCancelled, onFailure) {
-          resolve();
-        };
+    fileManager.ui.suggestAppsDialog = {
+      showByExtensionAndMime: function(extension, mimeType, onDialogClosed) {
+        resolve();
+      }
+    };
 
-    var fileTasks = new FileTasks(fileManager);
-    fileTasks.init(entries).then(function() {
-      fileTasks.executeDefault();
-    });
+    FileTasks.create(
+        fileManager.volumeManager, fileManager.metadataModel,
+        fileManager.directoryModel, fileManager.ui, entries, mimeTypes)
+        .then(function(tasks) {
+          tasks.executeDefault();
+        });
   });
 }
 
@@ -112,7 +117,7 @@ function testToOpenExeFile(callback) {
   var mockEntry = new MockFileEntry(mockFileSystem, '/test.exe');
 
   reportPromise(showHtmlOfAlertDialogIsCalled(
-      [mockEntry], 'test.exe', 'NO_ACTION_FOR_EXECUTABLE'), callback);
+      [mockEntry], 'test.exe', 'NO_TASK_FOR_EXECUTABLE'), callback);
 }
 
 function testToOpenDmgFile(callback) {
@@ -120,7 +125,7 @@ function testToOpenDmgFile(callback) {
   var mockEntry = new MockFileEntry(mockFileSystem, '/test.dmg');
 
   reportPromise(showHtmlOfAlertDialogIsCalled(
-      [mockEntry], 'test.dmg', 'NO_ACTION_FOR_DMG'), callback);
+      [mockEntry], 'test.dmg', 'NO_TASK_FOR_DMG'), callback);
 }
 
 function testToOpenCrxFile(callback) {
@@ -128,12 +133,87 @@ function testToOpenCrxFile(callback) {
   var mockEntry = new MockFileEntry(mockFileSystem, '/test.crx');
 
   reportPromise(showHtmlOfAlertDialogIsCalled(
-      [mockEntry], 'NO_ACTION_FOR_CRX_TITLE', 'NO_ACTION_FOR_CRX'), callback);
+      [mockEntry], 'NO_TASK_FOR_CRX_TITLE', 'NO_TASK_FOR_CRX'), callback);
 }
 
 function testToOpenRtfFile(callback) {
   var mockFileSystem = new MockFileSystem('volumeId');
   var mockEntry = new MockFileEntry(mockFileSystem, '/test.rtf');
 
-  reportPromise(openSuggestAppsDialogIsCalled([mockEntry]), callback);
+  reportPromise(openSuggestAppsDialogIsCalled(
+      [mockEntry], ['application/rtf']), callback);
+}
+
+/**
+ * Test case for openSuggestAppsDialog with an entry which has external type of
+ * metadata.
+ */
+function testOpenSuggestAppsDialogWithMetadata(callback) {
+  var showByExtensionAndMimeIsCalled = new Promise(function(resolve, reject) {
+    var fileSystem = new MockFileSystem('volumeId');
+    var entry = new MockFileEntry(fileSystem, '/test.rtf');
+
+    FileTasks.create(
+        {
+          getDriveConnectionState: function() {
+            return VolumeManagerCommon.DriveConnectionType.ONLINE;
+          }
+        },
+        {},
+        {},
+        {
+          taskMenuButton: document.createElement('button'),
+          fileContextMenu: {
+            defaultActionMenuItem: document.createElement('div')
+          },
+          suggestAppsDialog: {
+            showByExtensionAndMime: function(
+                extension, mimeType, onDialogClosed) {
+              assertEquals('.rtf', extension);
+              assertEquals('application/rtf', mimeType);
+              resolve();
+            }
+          }
+        },
+        [entry],
+        ['application/rtf']).then(function(tasks) {
+          tasks.openSuggestAppsDialog(
+              function() {}, function() {}, function() {});
+        });
+  });
+
+  reportPromise(showByExtensionAndMimeIsCalled, callback);
+}
+
+/**
+ * Test case for openSuggestAppsDialog with an entry which doesn't have
+ * extension. Since both extension and MIME type are required for
+ * openSuggestAppsDialogopen, onFalure should be called for this test case.
+ */
+function testOpenSuggestAppsDialogFailure(callback) {
+  var onFailureIsCalled = new Promise(function(resolve, reject) {
+    var fileSystem = new MockFileSystem('volumeId');
+    var entry = new MockFileEntry(fileSystem, '/test');
+
+    FileTasks.create(
+        {
+          getDriveConnectionState: function() {
+            return VolumeManagerCommon.DriveConnectionType.ONLINE;
+          }
+        },
+        {},
+        {},
+        {
+          taskMenuButton: document.createElement('button'),
+          fileContextMenu: {
+            defaultActionMenuItem: document.createElement('div')
+          }
+        },
+        [entry],
+        [null]).then(function(tasks) {
+          tasks.openSuggestAppsDialog(function() {}, function() {}, resolve);
+        });
+  });
+
+  reportPromise(onFailureIsCalled, callback);
 }

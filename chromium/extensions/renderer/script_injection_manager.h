@@ -5,13 +5,15 @@
 #ifndef EXTENSIONS_RENDERER_SCRIPT_INJECTION_MANAGER_H_
 #define EXTENSIONS_RENDERER_SCRIPT_INJECTION_MANAGER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
-#include "base/memory/scoped_vector.h"
-#include "base/memory/shared_memory.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "extensions/common/user_script.h"
 #include "extensions/renderer/script_injection.h"
@@ -25,7 +27,6 @@ class RenderFrame;
 
 namespace extensions {
 class Extension;
-class ExtensionSet;
 
 // The ScriptInjectionManager manages extensions injecting scripts into frames
 // via both content/user scripts and tabs.executeScript(). It is responsible for
@@ -33,8 +34,8 @@ class ExtensionSet;
 // load point, and injecting them when ready.
 class ScriptInjectionManager : public UserScriptSetManager::Observer {
  public:
-  ScriptInjectionManager(const ExtensionSet* extensions,
-                         UserScriptSetManager* user_script_set_manager);
+  explicit ScriptInjectionManager(
+      UserScriptSetManager* user_script_set_manager);
   virtual ~ScriptInjectionManager();
 
   // Notifies that a new render view has been created.
@@ -51,6 +52,8 @@ class ScriptInjectionManager : public UserScriptSetManager::Observer {
 
   using FrameStatusMap =
       std::map<content::RenderFrame*, UserScript::RunLocation>;
+
+  using ScriptInjectionVector = std::vector<scoped_ptr<ScriptInjection>>;
 
   // Notifies that an injection has been finished.
   void OnInjectionFinished(ScriptInjection* injection);
@@ -90,10 +93,7 @@ class ScriptInjectionManager : public UserScriptSetManager::Observer {
                                       const GURL& url);
 
   // Handle the GrantInjectionPermission extension message.
-  void HandlePermitScriptInjection(int64 request_id);
-
-  // Extensions metadata, owned by Dispatcher (which owns this object).
-  const ExtensionSet* extensions_;
+  void HandlePermitScriptInjection(int64_t request_id);
 
   // The map of active web frames to their corresponding statuses. The
   // RunLocation of the frame corresponds to the last location that has ran.
@@ -103,17 +103,17 @@ class ScriptInjectionManager : public UserScriptSetManager::Observer {
   std::set<content::RenderFrame*> active_injection_frames_;
 
   // The collection of RFOHelpers.
-  ScopedVector<RFOHelper> rfo_helpers_;
+  std::vector<scoped_ptr<RFOHelper>> rfo_helpers_;
 
   // The set of UserScripts associated with extensions. Owned by the Dispatcher.
   UserScriptSetManager* user_script_set_manager_;
 
   // Pending injections which are waiting for either the proper run location or
   // user consent.
-  ScopedVector<ScriptInjection> pending_injections_;
+  ScriptInjectionVector pending_injections_;
 
   // Running injections which are waiting for async callbacks from blink.
-  ScopedVector<ScriptInjection> running_injections_;
+  ScriptInjectionVector running_injections_;
 
   ScopedObserver<UserScriptSetManager, UserScriptSetManager::Observer>
       user_script_set_manager_observer_;

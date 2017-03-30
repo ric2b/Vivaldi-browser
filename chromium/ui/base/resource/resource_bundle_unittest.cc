@@ -4,14 +4,19 @@
 
 #include "ui/base/resource/resource_bundle.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/base_paths.h"
 #include "base/big_endian.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -105,16 +110,16 @@ void AddCustomChunk(const base::StringPiece& custom_chunk,
       kPngMagic));
   std::vector<unsigned char>::iterator ihdr_start =
       bitmap_data->begin() + arraysize(kPngMagic);
-  char ihdr_length_data[sizeof(uint32)];
-  for (size_t i = 0; i < sizeof(uint32); ++i)
+  char ihdr_length_data[sizeof(uint32_t)];
+  for (size_t i = 0; i < sizeof(uint32_t); ++i)
     ihdr_length_data[i] = *(ihdr_start + i);
-  uint32 ihdr_chunk_length = 0;
+  uint32_t ihdr_chunk_length = 0;
   base::ReadBigEndian(reinterpret_cast<char*>(ihdr_length_data),
                       &ihdr_chunk_length);
-  EXPECT_TRUE(std::equal(
-      ihdr_start + sizeof(uint32),
-      ihdr_start + sizeof(uint32) + sizeof(kPngIHDRChunkType),
-      kPngIHDRChunkType));
+  EXPECT_TRUE(
+      std::equal(ihdr_start + sizeof(uint32_t),
+                 ihdr_start + sizeof(uint32_t) + sizeof(kPngIHDRChunkType),
+                 kPngIHDRChunkType));
 
   bitmap_data->insert(ihdr_start + kPngChunkMetadataSize + ihdr_chunk_length,
                       custom_chunk.begin(), custom_chunk.end());
@@ -136,7 +141,7 @@ void CreateDataPackWithSingleBitmap(const base::FilePath& path,
   if (custom_chunk.size() > 0)
     AddCustomChunk(custom_chunk, &bitmap_data);
 
-  std::map<uint16, base::StringPiece> resources;
+  std::map<uint16_t, base::StringPiece> resources;
   resources[3u] = base::StringPiece(
       reinterpret_cast<const char*>(&bitmap_data[0]), bitmap_data.size());
   DataPack::WritePack(path, resources, ui::DataPack::BINARY);
@@ -188,9 +193,8 @@ TEST_F(ResourceBundleTest, DelegateGetPathForResourcePack) {
   resource_bundle->AddDataPackFromPath(pack_path, pack_scale_factor);
 }
 
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_LINUX)
 // Fails consistently on Linux: crbug.com/161902
-// TODO: Re-enable for Vivaldi VB-29 (Mac)
 #define MAYBE_DelegateGetPathForLocalePack DISABLED_DelegateGetPathForLocalePack
 #else
 #define MAYBE_DelegateGetPathForLocalePack DelegateGetPathForLocalePack
@@ -393,13 +397,7 @@ TEST_F(ResourceBundleTest, FontListReload) {
 }
 #endif
 
-#if defined(OS_MACOSX)
-// TODO: Re-enable for Vivaldi VB-29 (Mac)
-#define MAYBE_LocaleDataPakExists DISABLED_LocaleDataPakExists
-#else
-#define MAYBE_LocaleDataPakExists LocaleDataPakExists
-#endif
-TEST_F(ResourceBundleTest, MAYBE_LocaleDataPakExists) {
+TEST_F(ResourceBundleTest, LocaleDataPakExists) {
   ResourceBundle* resource_bundle = CreateResourceBundle(NULL);
 
   // Check that ResourceBundle::LocaleDataPakExists returns the correct results.
@@ -523,7 +521,7 @@ TEST_F(ResourceBundleImageTest, GetRawDataResource) {
 // via ResourceBundle::GetImageNamed().
 TEST_F(ResourceBundleImageTest, GetImageNamed) {
 #if defined(OS_WIN)
-  gfx::InitDeviceScaleFactor(2.0);
+  gfx::SetDefaultDeviceScaleFactor(2.0);
 #endif
   std::vector<ScaleFactor> supported_factors;
   supported_factors.push_back(SCALE_FACTOR_100P);
@@ -625,9 +623,11 @@ TEST_F(ResourceBundleImageTest, DataPackSearchOrder) {
   // Create two .pak files, each containing a single image with the
   // same asset ID but different sizes (note that the images must be
   // different sizes in this test in order to correctly determine
-  // from which data pack the asset was pulled).
+  // from which data pack the asset was pulled). Note also that the value
+  // of |material_size| was chosen to be divisible by 3, since iOS may
+  // use this scale factor.
   const int default_size = 10;
-  const int material_size = 16;
+  const int material_size = 48;
   ASSERT_NE(default_size, material_size);
   base::FilePath default_path = dir_path().AppendASCII("default.pak");
   base::FilePath material_path = dir_path().AppendASCII("material.pak");
@@ -640,14 +640,15 @@ TEST_F(ResourceBundleImageTest, DataPackSearchOrder) {
 
   ScaleFactor scale_factor = SCALE_FACTOR_100P;
   int expected_size = material_size;
+  ResourceBundle* resource_bundle = CreateResourceBundleWithEmptyLocalePak();
+
 #if defined(OS_IOS)
   // iOS retina devices do not use 100P scaling. See crbug.com/298406.
-  scale_factor = SCALE_FACTOR_200P;
-  expected_size = material_size / 2;
+  scale_factor = resource_bundle->GetMaxScaleFactor();
+  expected_size = material_size / GetScaleForScaleFactor(scale_factor);
 #endif
 
   // Load the 'material' data pack into ResourceBundle first.
-  ResourceBundle* resource_bundle = CreateResourceBundleWithEmptyLocalePak();
   resource_bundle->AddMaterialDesignDataPackFromPath(material_path,
                                                      scale_factor);
   resource_bundle->AddDataPackFromPath(default_path, scale_factor);

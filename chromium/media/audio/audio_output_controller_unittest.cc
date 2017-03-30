@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/environment.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -51,7 +53,8 @@ class MockAudioOutputControllerSyncReader
  public:
   MockAudioOutputControllerSyncReader() {}
 
-  MOCK_METHOD1(UpdatePendingBytes, void(uint32 bytes));
+  MOCK_METHOD2(UpdatePendingBytes,
+               void(uint32_t bytes, uint32_t frames_skipped));
   MOCK_METHOD1(Read, void(AudioBus* dest));
   MOCK_METHOD0(Close, void());
 
@@ -132,8 +135,7 @@ class AudioOutputControllerTest : public testing::Test {
 
     // During playback, the mock pretends to provide audio data rendered and
     // sent from the render process.
-    EXPECT_CALL(mock_sync_reader_, UpdatePendingBytes(_))
-        .Times(AtLeast(1));
+    EXPECT_CALL(mock_sync_reader_, UpdatePendingBytes(_, _)).Times(AtLeast(1));
     EXPECT_CALL(mock_sync_reader_, Read(_))
         .WillRepeatedly(DoAll(PopulateBuffer(),
                               SignalEvent(&read_event_)));
@@ -190,7 +192,7 @@ class AudioOutputControllerTest : public testing::Test {
     scoped_ptr<AudioBus> dest = AudioBus::Create(params_);
     ASSERT_TRUE(mock_stream_.callback());
     const int frames_read =
-        mock_stream_.callback()->OnMoreData(dest.get(), 0);
+        mock_stream_.callback()->OnMoreData(dest.get(), 0, 0);
     EXPECT_LT(0, frames_read);
     EXPECT_EQ(kBufferNonZeroData, dest->channel(0)[0]);
   }
@@ -217,14 +219,14 @@ class AudioOutputControllerTest : public testing::Test {
           .WillOnce(SignalEvent(&play_event_));
     }
 
-    controller_->SwitchOutputDevice(AudioManagerBase::kDefaultDeviceName,
+    controller_->SwitchOutputDevice(AudioManager::GetDefaultDeviceName(),
                                     base::Bind(&base::DoNothing));
   }
 
   void Close() {
     EXPECT_CALL(mock_sync_reader_, Close());
 
-    controller_->Close(base::MessageLoop::QuitClosure());
+    controller_->Close(base::MessageLoop::QuitWhenIdleClosure());
     base::MessageLoop::current()->Run();
   }
 

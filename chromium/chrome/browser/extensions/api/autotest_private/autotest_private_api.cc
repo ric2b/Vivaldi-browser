@@ -6,6 +6,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -37,7 +38,7 @@ base::ListValue* GetHostPermissions(const Extension* ext, bool effective_perm) {
   const PermissionsData* permissions_data = ext->permissions_data();
   const URLPatternSet& pattern_set =
       effective_perm ? permissions_data->GetEffectiveHostPermissions()
-                     : permissions_data->active_permissions()->explicit_hosts();
+                     : permissions_data->active_permissions().explicit_hosts();
 
   base::ListValue* permissions = new base::ListValue;
   for (URLPatternSet::const_iterator perm = pattern_set.begin();
@@ -52,7 +53,7 @@ base::ListValue* GetHostPermissions(const Extension* ext, bool effective_perm) {
 base::ListValue* GetAPIPermissions(const Extension* ext) {
   base::ListValue* permissions = new base::ListValue;
   std::set<std::string> perm_list =
-      ext->permissions_data()->active_permissions()->GetAPIsAsStrings();
+      ext->permissions_data()->active_permissions().GetAPIsAsStrings();
   for (std::set<std::string>::const_iterator perm = perm_list.begin();
        perm != perm_list.end(); ++perm) {
     permissions->Append(new base::StringValue(perm->c_str()));

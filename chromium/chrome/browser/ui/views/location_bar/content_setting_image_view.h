@@ -5,7 +5,10 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_CONTENT_SETTING_IMAGE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_CONTENT_SETTING_IMAGE_VIEW_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "chrome/browser/ui/content_settings/content_setting_image_model.h"
+#include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -32,14 +35,14 @@ class Label;
 // The ContentSettingImageView displays an icon and optional text label for
 // various content settings affordances in the location bar (i.e. plugin
 // blocking, geolocation).
-class ContentSettingImageView : public gfx::AnimationDelegate,
-                                public views::View,
+class ContentSettingImageView : public IconLabelBubbleView,
+                                public gfx::AnimationDelegate,
                                 public views::WidgetObserver {
  public:
-  ContentSettingImageView(ContentSettingsType content_type,
+  // ContentSettingImageView takes ownership of its |image_model|.
+  ContentSettingImageView(ContentSettingImageModel* image_model,
                           LocationBarView* parent,
                           const gfx::FontList& font_list,
-                          SkColor text_color,
                           SkColor parent_background_color);
   ~ContentSettingImageView() override;
 
@@ -55,12 +58,11 @@ class ContentSettingImageView : public gfx::AnimationDelegate,
   // intervening "stay open" period.
   static const int kAnimationDurationMS;
 
-  // Amount of padding at the edges of the bubble.  If |by_icon| is true, this
-  // is the padding next to the icon; otherwise it's the padding next to the
-  // label.  (We increase padding next to the label by the amount of padding
-  // "built in" to the icon in order to make the bubble appear to have
-  // symmetrical padding.)
-  static int GetBubbleOuterPadding(bool by_icon);
+  // IconLabelBubbleView:
+  SkColor GetTextColor() const override;
+  SkColor GetBorderColor() const override;
+  bool ShouldShowBackground() const override;
+  double WidthMultiplier() const override;
 
   // gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;
@@ -68,29 +70,21 @@ class ContentSettingImageView : public gfx::AnimationDelegate,
   void AnimationCanceled(const gfx::Animation* animation) override;
 
   // views::View:
-  gfx::Size GetPreferredSize() const override;
-  void Layout() override;
   const char* GetClassName() const override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-  void OnPaintBackground(gfx::Canvas* canvas) override;
+  void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
 
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
-  bool background_showing() const {
-    return slide_animator_.is_animating() || pause_animation_;
-  }
-
-  int GetTotalSpacingWhileAnimating() const;
   void OnClick();
+
+  void UpdateImage();
 
   LocationBarView* parent_;  // Weak, owns us.
   scoped_ptr<ContentSettingImageModel> content_setting_image_model_;
-  scoped_ptr<views::Painter> background_painter_;
-  views::ImageView* icon_;
-  views::Label* text_label_;
   gfx::SlideAnimation slide_animator_;
   bool pause_animation_;
   double pause_animation_state_;

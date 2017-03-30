@@ -98,3 +98,7 @@ Modifications:
 - Changed DEFINE_foo macros to ignore envname unless ENABLE_PROFILING is defined
 - Changed DEFINE_string to define const char*s instead of strings
 - Disabled HEAPPROFILE envvar unless ENABLE_PROFILING is defined
+- Add "ARMv8-a" to the supporting list of ARM architecture
+- Add generic.total_physical_bytes property to MallocExtension
+- Conditionally define HAVE_VDSO_SUPPORT only on linux_x86 to avoid static initializers
+- Add TC_MALLOPT_IS_OVERRIDDEN_BY_TCMALLOC mallopt() arg

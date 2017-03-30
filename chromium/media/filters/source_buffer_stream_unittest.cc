@@ -4,21 +4,31 @@
 
 #include "media/filters/source_buffer_stream.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "media/base/data_buffer.h"
 #include "media/base/media_log.h"
+#include "media/base/media_util.h"
+#include "media/base/mock_media_log.h"
 #include "media/base/test_helpers.h"
 #include "media/base/text_track_config.h"
+#include "media/base/timestamp_constants.h"
 #include "media/filters/webvtt_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using ::testing::HasSubstr;
+using ::testing::InSequence;
+using ::testing::StrictMock;
 
 namespace media {
 
@@ -26,19 +36,53 @@ typedef StreamParser::BufferQueue BufferQueue;
 
 static const int kDefaultFramesPerSecond = 30;
 static const int kDefaultKeyframesPerSecond = 6;
-static const uint8 kDataA = 0x11;
-static const uint8 kDataB = 0x33;
+static const uint8_t kDataA = 0x11;
+static const uint8_t kDataB = 0x33;
 static const int kDataSize = 1;
+
+// Matchers for verifying common media log entry strings.
+MATCHER(ContainsMissingKeyframeLog, "") {
+  return CONTAINS_STRING(arg,
+                         "Media segment did not begin with key frame. Support "
+                         "for such segments will be available in a future "
+                         "version. Please see https://crbug.com/229412.");
+}
+
+MATCHER(ContainsSameTimestampAt30MillisecondsLog, "") {
+  return CONTAINS_STRING(arg,
+                         "Unexpected combination of buffers with the same "
+                         "timestamp detected at 0.03");
+}
+
+MATCHER_P(ContainsTrackBufferExhaustionSkipLog, skip_milliseconds, "") {
+  return CONTAINS_STRING(arg,
+                         "Media append that overlapped current playback "
+                         "position caused time gap in playing VIDEO stream "
+                         "because the next keyframe is " +
+                             base::IntToString(skip_milliseconds) +
+                             "ms beyond last overlapped frame. Media may "
+                             "appear temporarily frozen.");
+}
+
+MATCHER_P2(ContainsGeneratedSpliceLog,
+           duration_microseconds,
+           time_microseconds,
+           "") {
+  return CONTAINS_STRING(arg, "Generated splice of overlap duration " +
+                                  base::IntToString(duration_microseconds) +
+                                  "us into new buffer at " +
+                                  base::IntToString(time_microseconds) + "us.");
+}
 
 class SourceBufferStreamTest : public testing::Test {
  protected:
-  SourceBufferStreamTest() {
+  SourceBufferStreamTest() : media_log_(new StrictMock<MockMediaLog>()) {
     video_config_ = TestVideoConfig::Normal();
     SetStreamInfo(kDefaultFramesPerSecond, kDefaultKeyframesPerSecond);
-    stream_.reset(new SourceBufferStream(video_config_, log_cb(), true));
+    stream_.reset(new SourceBufferStream(video_config_, media_log_, true));
   }
 
-  void SetMemoryLimit(int buffers_of_data) {
+  void SetMemoryLimit(size_t buffers_of_data) {
     stream_->set_memory_limit(buffers_of_data * kDataSize);
   }
 
@@ -51,7 +95,7 @@ class SourceBufferStreamTest : public testing::Test {
   void SetTextStream() {
     video_config_ = TestVideoConfig::Invalid();
     TextTrackConfig config(kTextSubtitles, "", "", "");
-    stream_.reset(new SourceBufferStream(config, log_cb(), true));
+    stream_.reset(new SourceBufferStream(config, media_log_, true));
     SetStreamInfo(2, 2);
   }
 
@@ -61,13 +105,11 @@ class SourceBufferStreamTest : public testing::Test {
                              kSampleFormatPlanarF32,
                              CHANNEL_LAYOUT_STEREO,
                              1000,
-                             NULL,
-                             0,
-                             false,
+                             EmptyExtraData(),
                              false,
                              base::TimeDelta(),
                              0);
-    stream_.reset(new SourceBufferStream(audio_config_, log_cb(), true));
+    stream_.reset(new SourceBufferStream(audio_config_, media_log_, true));
 
     // Equivalent to 2ms per frame.
     SetStreamInfo(500, 500);
@@ -78,8 +120,9 @@ class SourceBufferStreamTest : public testing::Test {
                   base::TimeDelta(), true, &kDataA, kDataSize);
   }
 
-  void NewSegmentAppend(int starting_position, int number_of_buffers,
-                        const uint8* data) {
+  void NewSegmentAppend(int starting_position,
+                        int number_of_buffers,
+                        const uint8_t* data) {
     AppendBuffers(starting_position, number_of_buffers, true,
                   base::TimeDelta(), true, data, kDataSize);
   }
@@ -102,8 +145,9 @@ class SourceBufferStreamTest : public testing::Test {
                   base::TimeDelta(), true, &kDataA, kDataSize);
   }
 
-  void AppendBuffers(int starting_position, int number_of_buffers,
-                     const uint8* data) {
+  void AppendBuffers(int starting_position,
+                     int number_of_buffers,
+                     const uint8_t* data) {
     AppendBuffers(starting_position, number_of_buffers, false,
                   base::TimeDelta(), true, data, kDataSize);
   }
@@ -145,6 +189,12 @@ class SourceBufferStreamTest : public testing::Test {
     stream_->Seek(base::TimeDelta::FromMilliseconds(timestamp_ms));
   }
 
+  bool GarbageCollectWithPlaybackAtBuffer(int position, int newDataBuffers) {
+    return stream_->GarbageCollectIfNeeded(
+        DecodeTimestamp::FromPresentationTime(position * frame_duration_),
+        newDataBuffers * kDataSize);
+  }
+
   void RemoveInMs(int start, int end, int duration) {
     Remove(base::TimeDelta::FromMilliseconds(start),
            base::TimeDelta::FromMilliseconds(end),
@@ -174,8 +224,8 @@ class SourceBufferStreamTest : public testing::Test {
     std::stringstream ss;
     ss << "{ ";
     for (size_t i = 0; i < r.size(); ++i) {
-      int64 start = (r.start(i) / frame_duration_);
-      int64 end = (r.end(i) / frame_duration_) - 1;
+      int64_t start = (r.start(i) / frame_duration_);
+      int64_t end = (r.end(i) / frame_duration_) - 1;
       ss << "[" << start << "," << end << ") ";
     }
     ss << "}";
@@ -188,8 +238,8 @@ class SourceBufferStreamTest : public testing::Test {
     std::stringstream ss;
     ss << "{ ";
     for (size_t i = 0; i < r.size(); ++i) {
-      int64 start = r.start(i).InMilliseconds();
-      int64 end = r.end(i).InMilliseconds();
+      int64_t start = r.start(i).InMilliseconds();
+      int64_t end = r.end(i).InMilliseconds();
       ss << "[" << start << "," << end << ") ";
     }
     ss << "}";
@@ -207,22 +257,26 @@ class SourceBufferStreamTest : public testing::Test {
                          NULL, 0);
   }
 
-  void CheckExpectedBuffers(
-      int starting_position, int ending_position, const uint8* data) {
+  void CheckExpectedBuffers(int starting_position,
+                            int ending_position,
+                            const uint8_t* data) {
     CheckExpectedBuffers(starting_position, ending_position, false, data,
                          kDataSize);
   }
 
-  void CheckExpectedBuffers(
-      int starting_position, int ending_position, const uint8* data,
-      bool expect_keyframe) {
+  void CheckExpectedBuffers(int starting_position,
+                            int ending_position,
+                            const uint8_t* data,
+                            bool expect_keyframe) {
     CheckExpectedBuffers(starting_position, ending_position, expect_keyframe,
                          data, kDataSize);
   }
 
-  void CheckExpectedBuffers(
-      int starting_position, int ending_position, bool expect_keyframe,
-      const uint8* expected_data, int expected_size) {
+  void CheckExpectedBuffers(int starting_position,
+                            int ending_position,
+                            bool expect_keyframe,
+                            const uint8_t* expected_data,
+                            int expected_size) {
     int current_position = starting_position;
     for (; current_position <= ending_position; current_position++) {
       scoped_refptr<StreamParserBuffer> buffer;
@@ -236,7 +290,7 @@ class SourceBufferStreamTest : public testing::Test {
         EXPECT_TRUE(buffer->is_key_frame());
 
       if (expected_data) {
-        const uint8* actual_data = buffer->data();
+        const uint8_t* actual_data = buffer->data();
         const int actual_size = buffer->data_size();
         EXPECT_EQ(expected_size, actual_size);
         for (int i = 0; i < std::min(actual_size, expected_size); i++) {
@@ -252,8 +306,8 @@ class SourceBufferStreamTest : public testing::Test {
   }
 
   void CheckExpectedBuffers(const std::string& expected) {
-    std::vector<std::string> timestamps;
-    base::SplitString(expected, ' ', &timestamps);
+    std::vector<std::string> timestamps = base::SplitString(
+        expected, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     std::stringstream ss;
     const SourceBufferStream::Type type = stream_->GetType();
     base::TimeDelta active_splice_timestamp = kNoTimestamp();
@@ -306,7 +360,7 @@ class SourceBufferStreamTest : public testing::Test {
       }
 
       // Handle preroll buffers.
-      if (base::EndsWith(timestamps[i], "P", true)) {
+      if (base::EndsWith(timestamps[i], "P", base::CompareCase::SENSITIVE)) {
         ASSERT_TRUE(buffer->is_key_frame());
         scoped_refptr<StreamParserBuffer> preroll_buffer;
         preroll_buffer.swap(buffer);
@@ -370,13 +424,12 @@ class SourceBufferStreamTest : public testing::Test {
         << "\nActual: " << actual.AsHumanReadableString();
   }
 
-  const LogCB log_cb() { return base::Bind(&AddLogEntryForTest); }
-
   base::TimeDelta frame_duration() const { return frame_duration_; }
 
   scoped_ptr<SourceBufferStream> stream_;
   VideoDecoderConfig video_config_;
   AudioDecoderConfig audio_config_;
+  scoped_refptr<StrictMock<MockMediaLog>> media_log_;
 
  private:
   base::TimeDelta ConvertToFrameDuration(int frames_per_second) {
@@ -389,7 +442,7 @@ class SourceBufferStreamTest : public testing::Test {
                      bool begin_media_segment,
                      base::TimeDelta first_buffer_offset,
                      bool expect_success,
-                     const uint8* data,
+                     const uint8_t* data,
                      int size) {
     if (begin_media_segment)
       stream_->OnNewMediaSegment(DecodeTimestamp::FromPresentationTime(
@@ -486,8 +539,8 @@ class SourceBufferStreamTest : public testing::Test {
   // id to use for that and subsequent preroll appends is incremented by one.
   // The config id for non-splice frame appends will not be affected.
   BufferQueue StringToBufferQueue(const std::string& buffers_to_append) {
-    std::vector<std::string> timestamps;
-    base::SplitString(buffers_to_append, ' ', &timestamps);
+    std::vector<std::string> timestamps = base::SplitString(
+        buffers_to_append, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
     CHECK_GT(timestamps.size(), 0u);
 
@@ -502,40 +555,42 @@ class SourceBufferStreamTest : public testing::Test {
       bool is_duration_estimated = false;
 
       // Handle splice frame starts.
-      if (base::StartsWithASCII(timestamps[i], "S(", true)) {
+      if (base::StartsWith(timestamps[i], "S(", base::CompareCase::SENSITIVE)) {
         CHECK(!splice_frame);
         splice_frame = true;
         // Remove the "S(" off of the token.
         timestamps[i] = timestamps[i].substr(2, timestamps[i].length());
       }
-      if (splice_frame && base::EndsWith(timestamps[i], ")", true)) {
+      if (splice_frame &&
+          base::EndsWith(timestamps[i], ")", base::CompareCase::SENSITIVE)) {
         splice_frame = false;
         last_splice_frame = true;
         // Remove the ")" off of the token.
         timestamps[i] = timestamps[i].substr(0, timestamps[i].length() - 1);
       }
       // Handle config changes within the splice frame.
-      if (splice_frame && base::EndsWith(timestamps[i], "C", true)) {
+      if (splice_frame &&
+          base::EndsWith(timestamps[i], "C", base::CompareCase::SENSITIVE)) {
         splice_config_id++;
         CHECK(splice_config_id < stream_->audio_configs_.size() ||
               splice_config_id < stream_->video_configs_.size());
         // Remove the "C" off of the token.
         timestamps[i] = timestamps[i].substr(0, timestamps[i].length() - 1);
       }
-      if (base::EndsWith(timestamps[i], "K", true)) {
+      if (base::EndsWith(timestamps[i], "K", base::CompareCase::SENSITIVE)) {
         is_keyframe = true;
         // Remove the "K" off of the token.
         timestamps[i] = timestamps[i].substr(0, timestamps[i].length() - 1);
       }
       // Handle preroll buffers.
-      if (base::EndsWith(timestamps[i], "P", true)) {
+      if (base::EndsWith(timestamps[i], "P", base::CompareCase::SENSITIVE)) {
         is_keyframe = true;
         has_preroll = true;
         // Remove the "P" off of the token.
         timestamps[i] = timestamps[i].substr(0, timestamps[i].length() - 1);
       }
 
-      if (base::EndsWith(timestamps[i], "E", true)) {
+      if (base::EndsWith(timestamps[i], "E", base::CompareCase::SENSITIVE)) {
         is_duration_estimated = true;
         // Remove the "E" off of the token.
         timestamps[i] = timestamps[i].substr(0, timestamps[i].length() - 1);
@@ -549,8 +604,8 @@ class SourceBufferStreamTest : public testing::Test {
         timestamps[i] = timestamps[i].substr(0, duration_pos);
       }
 
-      std::vector<std::string> buffer_timestamps;
-      base::SplitString(timestamps[i], '|', &buffer_timestamps);
+      std::vector<std::string> buffer_timestamps = base::SplitString(
+          timestamps[i], "|", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
       if (buffer_timestamps.size() == 1)
         buffer_timestamps.push_back(buffer_timestamps[0]);
@@ -726,6 +781,8 @@ TEST_F(SourceBufferStreamTest, Append_AdjacentRanges) {
 }
 
 TEST_F(SourceBufferStreamTest, Append_DoesNotBeginWithKeyframe) {
+  EXPECT_MEDIA_LOG(ContainsMissingKeyframeLog()).Times(2);
+
   // Append fails because the range doesn't begin with a keyframe.
   NewSegmentAppend_ExpectFailure(3, 2);
 
@@ -747,6 +804,8 @@ TEST_F(SourceBufferStreamTest, Append_DoesNotBeginWithKeyframe) {
 }
 
 TEST_F(SourceBufferStreamTest, Append_DoesNotBeginWithKeyframe_Adjacent) {
+  EXPECT_MEDIA_LOG(ContainsMissingKeyframeLog());
+
   // Append 8 buffers at positions 0 through 7.
   NewSegmentAppend(0, 8);
 
@@ -1008,8 +1067,8 @@ TEST_F(SourceBufferStreamTest, Complete_Overlap_Selected_EdgeCase) {
 }
 
 TEST_F(SourceBufferStreamTest, Complete_Overlap_Selected_Multiple) {
-  static const uint8 kDataC = 0x55;
-  static const uint8 kDataD = 0x77;
+  static const uint8_t kDataC = 0x55;
+  static const uint8_t kDataD = 0x77;
 
   // Append 5 buffers at positions 5 through 9.
   NewSegmentAppend(5, 5, &kDataA);
@@ -1412,6 +1471,8 @@ TEST_F(SourceBufferStreamTest, End_Overlap_Selected_NoKeyframeAfterNew) {
 // after: |A a a a a A|       |B b b b b B|
 // track:                                 |a|
 TEST_F(SourceBufferStreamTest, End_Overlap_Selected_NoKeyframeAfterNew2) {
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(133));
+
   // Append 7 buffers at positions 10 through 16.
   NewSegmentAppend(10, 7, &kDataA);
 
@@ -1676,6 +1737,8 @@ TEST_F(SourceBufferStreamTest, Overlap_OneByOne_BetweenMediaSegments) {
 // new  : 0K   30   60   90   120K
 // after: 0K   30   60   90  *120K*   130K
 TEST_F(SourceBufferStreamTest, Overlap_OneByOne_TrackBuffer) {
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(50));
+
   NewSegmentAppendOneByOne("10K 40 70 100K 125 130D30K");
   CheckExpectedRangesByTimestamp("{ [10,160) }");
 
@@ -1706,6 +1769,8 @@ TEST_F(SourceBufferStreamTest, Overlap_OneByOne_TrackBuffer) {
 // new  :                     110K    130
 // after: 0K   30   60   90  *110K*   130
 TEST_F(SourceBufferStreamTest, Overlap_OneByOne_TrackBuffer2) {
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(40));
+
   NewSegmentAppendOneByOne("10K 40 70 100K 125 130D30K");
   CheckExpectedRangesByTimestamp("{ [10,160) }");
 
@@ -1736,6 +1801,8 @@ TEST_F(SourceBufferStreamTest, Overlap_OneByOne_TrackBuffer2) {
 // after: 0K   30   50K   80   110   140 * (waiting for keyframe)
 // track:             70
 TEST_F(SourceBufferStreamTest, Overlap_OneByOne_TrackBuffer3) {
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(80));
+
   NewSegmentAppendOneByOne("10K 40 70 100K 125 130D30K");
   CheckExpectedRangesByTimestamp("{ [10,160) }");
 
@@ -1831,6 +1898,8 @@ TEST_F(SourceBufferStreamTest, Overlap_OneByOne_TrackBuffer5) {
 // after: 0K   30   60   90  *120K*   130K ... 200K 230 260K 290
 // track:             70
 TEST_F(SourceBufferStreamTest, Overlap_OneByOne_TrackBuffer6) {
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(50));
+
   NewSegmentAppendOneByOne("10K 40 70 100K 125 130D30K");
   NewSegmentAppendOneByOne("200K 230");
   CheckExpectedRangesByTimestamp("{ [10,160) [200,260) }");
@@ -2359,8 +2428,8 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteFront) {
   for (int i = 1; i < 20; i++)
     AppendBuffers(i, 1, &kDataA);
 
-  // None of the buffers should trigger garbage collection, so all data should
-  // be there as expected.
+  // GC should be a no-op, since we are just under memory limit.
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(0, 0));
   CheckExpectedRanges("{ [0,19) }");
   Seek(0);
   CheckExpectedBuffers(0, 19, &kDataA);
@@ -2368,14 +2437,44 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteFront) {
   // Seek to the middle of the stream.
   Seek(10);
 
+  // We are about to append 5 new buffers and current playback position is 10,
+  // so the GC algorithm should be able to delete some old data from the front.
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(10, 5));
+  CheckExpectedRanges("{ [5,19) }");
+
   // Append 5 buffers to the end of the stream.
   AppendBuffers(20, 5, &kDataA);
-
-  // GC should have deleted the first 5 buffers.
   CheckExpectedRanges("{ [5,24) }");
+
   CheckExpectedBuffers(10, 24, &kDataA);
   Seek(5);
   CheckExpectedBuffers(5, 9, &kDataA);
+}
+
+TEST_F(SourceBufferStreamTest,
+       GarbageCollection_DeleteFront_PreserveSeekedGOP) {
+  // Set memory limit to 15 buffers.
+  SetMemoryLimit(15);
+
+  NewSegmentAppend("0K 10 20 30 40 50K 60 70 80 90");
+  NewSegmentAppend("1000K 1010 1020 1030 1040");
+
+  // GC should be a no-op, since we are just under memory limit.
+  EXPECT_TRUE(stream_->GarbageCollectIfNeeded(DecodeTimestamp(), 0));
+  CheckExpectedRangesByTimestamp("{ [0,100) [1000,1050) }");
+
+  // Seek to the near the end of the first range
+  SeekToTimestampMs(95);
+
+  // We are about to append 7 new buffers and current playback position is at
+  // the end of the last GOP in the first range, so the GC algorithm should be
+  // able to delete some old data from the front, but must not collect the last
+  // GOP in that first range. Neither can it collect the last appended GOP
+  // (which is the entire second range), so GC should return false since it
+  // couldn't collect enough.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(95), 7));
+  CheckExpectedRangesByTimestamp("{ [50,100) [1000,1050) }");
 }
 
 TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteFrontGOPsAtATime) {
@@ -2387,8 +2486,10 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteFrontGOPsAtATime) {
 
   // Seek to position 10.
   Seek(10);
+  CheckExpectedRanges("{ [0,19) }");
 
   // Add one buffer to put the memory over the cap.
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(10, 1));
   AppendBuffers(20, 1, &kDataA);
 
   // GC should have deleted the first 5 buffers so that the range still begins
@@ -2403,14 +2504,19 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteBack) {
   // Set memory limit to 5 buffers.
   SetMemoryLimit(5);
 
+  // Append 5 buffers at positions 15 through 19.
+  NewSegmentAppend(15, 5, &kDataA);
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(0, 0));
+
+  // Append 5 buffers at positions 0 through 4.
+  NewSegmentAppend(0, 5, &kDataA);
+  CheckExpectedRanges("{ [0,4) [15,19) }");
+
   // Seek to position 0.
   Seek(0);
-
-  // Append 20 buffers at positions 0 through 19.
-  NewSegmentAppend(0, 20, &kDataA);
-
-  // Should leave the first 5 buffers from 0 to 4 and the last GOP appended.
-  CheckExpectedRanges("{ [0,4) [15,19) }");
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(0, 0));
+  // Should leave the first 5 buffers from 0 to 4.
+  CheckExpectedRanges("{ [0,4) }");
   CheckExpectedBuffers(0, 4, &kDataA);
 }
 
@@ -2423,10 +2529,16 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteFrontAndBack) {
 
   // Append 40 buffers at positions 0 through 39.
   NewSegmentAppend(0, 40, &kDataA);
+  // GC will try to keep data between current playback position and last append
+  // position. This will ensure that the last append position is 19 and will
+  // allow GC algorithm to collect data outside of the range [15,19)
+  NewSegmentAppend(15, 5, &kDataA);
+  CheckExpectedRanges("{ [0,39) }");
 
-  // Should leave the GOP containing the seek position and the last GOP
-  // appended.
-  CheckExpectedRanges("{ [15,19) [35,39) }");
+  // Should leave the GOP containing the current playback position 15 and the
+  // last append position 19. GC returns false, since we are still above limit.
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(15, 0));
+  CheckExpectedRanges("{ [15,19) }");
   CheckExpectedBuffers(15, 19, &kDataA);
   CheckNoNextBuffer();
 }
@@ -2441,43 +2553,49 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteSeveralRanges) {
   // Append 5 buffers at positions 20 through 24.
   NewSegmentAppend(20, 5);
 
-  // Append 5 buffers at positions 30 through 34.
-  NewSegmentAppend(30, 5);
+  // Append 5 buffers at positions 40 through 44.
+  NewSegmentAppend(40, 5);
 
-  CheckExpectedRanges("{ [0,4) [10,14) [20,24) [30,34) }");
+  CheckExpectedRanges("{ [0,4) [10,14) [20,24) [40,44) }");
 
-  // Seek to position 21.
+  // Seek to position 20.
   Seek(20);
   CheckExpectedBuffers(20, 20);
 
   // Set memory limit to 1 buffer.
   SetMemoryLimit(1);
 
-  // Append 5 buffers at positions 40 through 44. This will trigger GC.
-  NewSegmentAppend(40, 5);
+  // Append 5 buffers at positions 30 through 34.
+  NewSegmentAppend(30, 5);
 
-  // Should delete everything except the GOP containing the current buffer and
-  // the last GOP appended.
-  CheckExpectedRanges("{ [20,24) [40,44) }");
+  // We will have more than 1 buffer left, GC will fail
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(20, 0));
+
+  // Should have deleted all buffer ranges before the current buffer and after
+  // last GOP
+  CheckExpectedRanges("{ [20,24) [30,34) }");
   CheckExpectedBuffers(21, 24);
   CheckNoNextBuffer();
 
   // Continue appending into the last range to make sure it didn't break.
-  AppendBuffers(45, 10);
-  // Should only save last GOP appended.
-  CheckExpectedRanges("{ [20,24) [50,54) }");
+  AppendBuffers(35, 10);
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(20, 0));
+  // Should save everything between read head and last appended
+  CheckExpectedRanges("{ [20,24) [30,44) }");
 
   // Make sure appending before and after the ranges didn't somehow break.
   SetMemoryLimit(100);
   NewSegmentAppend(0, 10);
-  CheckExpectedRanges("{ [0,9) [20,24) [50,54) }");
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(20, 0));
+  CheckExpectedRanges("{ [0,9) [20,24) [30,44) }");
   Seek(0);
   CheckExpectedBuffers(0, 9);
 
   NewSegmentAppend(90, 10);
-  CheckExpectedRanges("{ [0,9) [20,24) [50,54) [90,99) }");
-  Seek(50);
-  CheckExpectedBuffers(50, 54);
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(0, 0));
+  CheckExpectedRanges("{ [0,9) [20,24) [30,44) [90,99) }");
+  Seek(30);
+  CheckExpectedBuffers(30, 44);
   CheckNoNextBuffer();
   Seek(90);
   CheckExpectedBuffers(90, 99);
@@ -2494,6 +2612,8 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteAfterLastAppend) {
   // Append 2 GOPs starting at 490ms, 30ms apart.
   NewSegmentAppend("490K 520 550 580K 610 640");
 
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(0, 0));
+
   CheckExpectedRangesByTimestamp("{ [310,400) [490,670) }");
 
   // Seek to the GOP at 580ms.
@@ -2502,6 +2622,9 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteAfterLastAppend) {
   // Append 2 GOPs before the existing ranges.
   // So the ranges before GC are "{ [100,280) [310,400) [490,670) }".
   NewSegmentAppend("100K 130 160 190K 220 250K");
+
+  EXPECT_TRUE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(580), 0));
 
   // Should save the newly appended GOPs.
   CheckExpectedRangesByTimestamp("{ [100,280) [580,670) }");
@@ -2521,6 +2644,9 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_DeleteAfterLastAppendMerged) {
   // range.  So the range before GC is "{ [220,670) }".
   NewSegmentAppend("220K 250 280 310K 340 370");
 
+  EXPECT_TRUE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(580), 0));
+
   // Should save the newly appended GOPs.
   CheckExpectedRangesByTimestamp("{ [220,400) [580,670) }");
 }
@@ -2532,7 +2658,13 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_NoSeek) {
   // Append 25 buffers at positions 0 through 24.
   NewSegmentAppend(0, 25, &kDataA);
 
-  // GC deletes the first 5 buffers to keep the memory limit within cap.
+  // If playback is still in the first GOP (starting at 0), GC should fail.
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(2, 0));
+  CheckExpectedRanges("{ [0,24) }");
+
+  // As soon as playback position moves past the first GOP, it should be removed
+  // and after removing the first GOP we are under memory limit.
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(5, 0));
   CheckExpectedRanges("{ [5,24) }");
   CheckNoNextBuffer();
   Seek(5);
@@ -2549,7 +2681,6 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_PendingSeek) {
   // Seek to position 15.
   Seek(15);
   CheckNoNextBuffer();
-
   CheckExpectedRanges("{ [0,9) [25,29) }");
 
   // Set memory limit to 5 buffers.
@@ -2557,6 +2688,8 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_PendingSeek) {
 
   // Append 5 buffers as positions 30 to 34 to trigger GC.
   AppendBuffers(30, 5, &kDataA);
+
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(30, 0));
 
   // The current algorithm will delete from the beginning until the memory is
   // under cap.
@@ -2566,6 +2699,7 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_PendingSeek) {
   SetMemoryLimit(100);
 
   // Append data to fulfill seek.
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(30, 5));
   NewSegmentAppend(15, 5, &kDataA);
 
   // Check to make sure all is well.
@@ -2584,25 +2718,32 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_NeedsMoreData) {
 
   // Advance next buffer position to 10.
   Seek(0);
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(0, 0));
   CheckExpectedBuffers(0, 9, &kDataA);
   CheckNoNextBuffer();
 
   // Append 20 buffers at positions 15 through 34.
   NewSegmentAppend(15, 20, &kDataA);
+  CheckExpectedRanges("{ [0,9) [15,34) }");
 
-  // GC should have saved the keyframe before the current seek position and the
-  // data closest to the current seek position. It will also save the last GOP
-  // appended.
-  CheckExpectedRanges("{ [5,9) [15,19) [30,34) }");
+  // GC should save the keyframe before the next buffer position and the data
+  // closest to the next buffer position. It will also save all buffers from
+  // next buffer to the last GOP appended, which overflows limit and leads to
+  // failure.
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(5, 0));
+  CheckExpectedRanges("{ [5,9) [15,34) }");
 
   // Now fulfill the seek at position 10. This will make GC delete the data
   // before position 10 to keep it within cap.
   NewSegmentAppend(10, 5, &kDataA);
-  CheckExpectedRanges("{ [10,19) [30,34) }");
-  CheckExpectedBuffers(10, 19, &kDataA);
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(10, 0));
+  CheckExpectedRanges("{ [10,24) }");
+  CheckExpectedBuffers(10, 24, &kDataA);
 }
 
 TEST_F(SourceBufferStreamTest, GarbageCollection_TrackBuffer) {
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(99));
+
   // Set memory limit to 3 buffers.
   SetMemoryLimit(3);
 
@@ -2612,14 +2753,20 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_TrackBuffer) {
   // Append 18 buffers at positions 0 through 17.
   NewSegmentAppend(0, 18, &kDataA);
 
+  EXPECT_TRUE(GarbageCollectWithPlaybackAtBuffer(15, 0));
+
   // Should leave GOP containing seek position.
   CheckExpectedRanges("{ [15,17) }");
 
-  // Seek ahead to position 16.
+  // Move next buffer position to 16.
   CheckExpectedBuffers(15, 15, &kDataA);
 
   // Completely overlap the existing buffers.
   NewSegmentAppend(0, 20, &kDataB);
+
+  // Final GOP [15,19) contains 5 buffers, which is more than memory limit of
+  // 3 buffers set at the beginning of the test, so GC will fail.
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(15, 0));
 
   // Because buffers 16 and 17 are not keyframes, they are moved to the track
   // buffer upon overlap. The source buffer (i.e. not the track buffer) is now
@@ -2631,11 +2778,72 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_TrackBuffer) {
   // Now add a keyframe at position 20.
   AppendBuffers(20, 5, &kDataB);
 
+  // 5 buffers in final GOP, GC will fail
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(20, 0));
+
   // Should garbage collect such that there are 5 frames remaining, starting at
   // the keyframe.
   CheckExpectedRanges("{ [20,24) }");
   CheckExpectedBuffers(20, 24, &kDataB);
   CheckNoNextBuffer();
+}
+
+// Test GC preserves data starting at first GOP containing playback position.
+TEST_F(SourceBufferStreamTest, GarbageCollection_SaveDataAtPlaybackPosition) {
+  // Set memory limit to 30 buffers = 1 second of data.
+  SetMemoryLimit(30);
+  // And append 300 buffers = 10 seconds of data.
+  NewSegmentAppend(0, 300, &kDataA);
+  CheckExpectedRanges("{ [0,299) }");
+
+  // Playback position at 0, all data must be preserved.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(0), 0));
+  CheckExpectedRanges("{ [0,299) }");
+
+  // Playback position at 1 sec, the first second of data [0,29) should be
+  // collected, since we are way over memory limit.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(1000), 0));
+  CheckExpectedRanges("{ [30,299) }");
+
+  // Playback position at 1.1 sec, no new data can be collected, since the
+  // playback position is still in the first GOP of buffered data.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(1100), 0));
+  CheckExpectedRanges("{ [30,299) }");
+
+  // Playback position at 5.166 sec, just at the very end of GOP corresponding
+  // to buffer range 150-155, which should be preserved.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(5166), 0));
+  CheckExpectedRanges("{ [150,299) }");
+
+  // Playback position at 5.167 sec, just past the end of GOP corresponding to
+  // buffer range 150-155, it should be garbage collected now.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(5167), 0));
+  CheckExpectedRanges("{ [155,299) }");
+
+  // Playback at 9.0 sec, we can now successfully collect all data except the
+  // last second and we are back under memory limit of 30 buffers, so GCIfNeeded
+  // should return true.
+  EXPECT_TRUE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(9000), 0));
+  CheckExpectedRanges("{ [270,299) }");
+
+  // Playback at 9.999 sec, GC succeeds, since we are under memory limit even
+  // without removing any data.
+  EXPECT_TRUE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(9999), 0));
+  CheckExpectedRanges("{ [270,299) }");
+
+  // Playback at 15 sec, this should never happen during regular playback in
+  // browser, since this position has no data buffered, but it should still
+  // cause no problems to GC algorithm, so test it just in case.
+  EXPECT_TRUE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(15000), 0));
+  CheckExpectedRanges("{ [270,299) }");
 }
 
 // Test saving the last GOP appended when this GOP is the only GOP in its range.
@@ -2644,33 +2852,36 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_SaveAppendGOP) {
   // collected.
   SetMemoryLimit(3);
   NewSegmentAppend("0K 30 60 90");
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(0, 0));
   CheckExpectedRangesByTimestamp("{ [0,120) }");
 
   // Make sure you can continue appending data to this GOP; again, GC should not
   // wipe out anything.
   AppendBuffers("120D30");
+  EXPECT_FALSE(GarbageCollectWithPlaybackAtBuffer(0, 0));
   CheckExpectedRangesByTimestamp("{ [0,150) }");
 
-  // Set memory limit to 100 and append a 2nd range after this without
-  // triggering GC.
-  SetMemoryLimit(100);
+  // Append a 2nd range after this without triggering GC.
   NewSegmentAppend("200K 230 260 290K 320 350");
   CheckExpectedRangesByTimestamp("{ [0,150) [200,380) }");
 
   // Seek to 290ms.
   SeekToTimestampMs(290);
 
-  // Now set memory limit to 3 and append a GOP in a separate range after the
-  // selected range. Because it is after 290ms, this tests that the GOP is saved
-  // when deleting from the back.
-  SetMemoryLimit(3);
+  // Now append a GOP in a separate range after the selected range and trigger
+  // GC. Because it is after 290ms, this tests that the GOP is saved when
+  // deleting from the back.
   NewSegmentAppend("500K 530 560 590");
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(290), 0));
 
-  // Should save GOP with 290ms and last GOP appended.
+  // Should save GOPs between 290ms and the last GOP appended.
   CheckExpectedRangesByTimestamp("{ [290,380) [500,620) }");
 
   // Continue appending to this GOP after GC.
   AppendBuffers("620D30");
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(290), 0));
   CheckExpectedRangesByTimestamp("{ [290,380) [500,650) }");
 }
 
@@ -2686,34 +2897,39 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_SaveAppendGOP_Middle) {
   SetMemoryLimit(1);
   NewSegmentAppend("80K 110 140");
 
-  // This whole GOP should be saved, and should be able to continue appending
-  // data to it.
+  // This whole GOP should be saved after GC, which will fail due to GOP being
+  // larger than 1 buffer
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(80), 0));
   CheckExpectedRangesByTimestamp("{ [80,170) }");
+  // We should still be able to continue appending data to GOP
   AppendBuffers("170D30");
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(80), 0));
   CheckExpectedRangesByTimestamp("{ [80,200) }");
 
-  // Set memory limit to 100 and append a 2nd range after this without
-  // triggering GC.
-  SetMemoryLimit(100);
+  // Append a 2nd range after this range, without triggering GC.
   NewSegmentAppend("400K 430 460 490K 520 550 580K 610 640");
   CheckExpectedRangesByTimestamp("{ [80,200) [400,670) }");
 
   // Seek to 80ms to make the first range the selected range.
   SeekToTimestampMs(80);
 
-  // Now set memory limit to 3 and append a GOP in the middle of the second
-  // range. Because it is after the selected range, this tests that the GOP is
-  // saved when deleting from the back.
-  SetMemoryLimit(3);
+  // Now append a GOP in the middle of the second range and trigger GC. Because
+  // it is after the selected range, this tests that the GOP is saved when
+  // deleting from the back.
   NewSegmentAppend("500K 530 560 590");
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(80), 0));
 
-  // Should save the GOP containing the seek point and GOP that was last
-  // appended.
-  CheckExpectedRangesByTimestamp("{ [80,200) [500,620) }");
+  // Should save the GOPs between the seek point and GOP that was last appended
+  CheckExpectedRangesByTimestamp("{ [80,200) [400,620) }");
 
   // Continue appending to this GOP after GC.
   AppendBuffers("620D30");
-  CheckExpectedRangesByTimestamp("{ [80,200) [500,650) }");
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(80), 0));
+  CheckExpectedRangesByTimestamp("{ [80,200) [400,650) }");
 }
 
 // Test saving the last GOP appended when the GOP containing the next buffer is
@@ -2730,7 +2946,10 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_SaveAppendGOP_Selected1) {
   SetMemoryLimit(1);
   NewSegmentAppend("0K 30 60");
 
-  // Should save the GOP at 0ms and 90ms.
+  // GC should save the GOP at 0ms and 90ms, and will fail since GOP larger
+  // than 1 buffer
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(90), 0));
   CheckExpectedRangesByTimestamp("{ [0,180) }");
 
   // Seek to 0 and check all buffers.
@@ -2743,6 +2962,8 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_SaveAppendGOP_Selected1) {
   NewSegmentAppend("180K 210 240");
 
   // Should save the GOP at 90ms and the GOP at 180ms.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(90), 0));
   CheckExpectedRangesByTimestamp("{ [90,270) }");
   CheckExpectedBuffers("90K 120 150 180K 210 240");
   CheckNoNextBuffer();
@@ -2763,22 +2984,24 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_SaveAppendGOP_Selected2) {
   SetMemoryLimit(1);
   NewSegmentAppend("90K 120 150");
 
-  // Should save the GOP at 90ms and the GOP at 270ms.
-  CheckExpectedRangesByTimestamp("{ [90,180) [270,360) }");
+  // GC will save data in the range where the most recent append has happened
+  // [0; 180) and the range where the next read position is [270;360)
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(270), 0));
+  CheckExpectedRangesByTimestamp("{ [0,180) [270,360) }");
 
-  // Set memory limit to 100 and add 3 GOPs to the end of the selected range
-  // at 360ms, 450ms, and 540ms.
-  SetMemoryLimit(100);
+  // Add 3 GOPs to the end of the selected range at 360ms, 450ms, and 540ms.
   NewSegmentAppend("360K 390 420 450K 480 510 540K 570 600");
-  CheckExpectedRangesByTimestamp("{ [90,180) [270,630) }");
+  CheckExpectedRangesByTimestamp("{ [0,180) [270,630) }");
 
-  // Constrain the memory limit again and overlap the GOP at 450ms to test
-  // deleting from the back.
-  SetMemoryLimit(1);
+  // Overlap the GOP at 450ms and garbage collect to test deleting from the
+  // back.
   NewSegmentAppend("450K 480 510");
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(270), 0));
 
-  // Should save GOP at 270ms and the GOP at 450ms.
-  CheckExpectedRangesByTimestamp("{ [270,360) [450,540) }");
+  // Should save GOPs from GOP at 270ms to GOP at 450ms.
+  CheckExpectedRangesByTimestamp("{ [270,540) }");
 }
 
 // Test saving the last GOP appended when it is the same as the GOP containing
@@ -2796,8 +3019,10 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_SaveAppendGOP_Selected3) {
   SetMemoryLimit(1);
   NewSegmentAppend("0K 30");
 
-  // Should save the newly appended GOP, which is also the next GOP that will be
-  // returned from the seek request.
+  // GC should save the newly appended GOP, which is also the next GOP that
+  // will be returned from the seek request.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(0), 0));
   CheckExpectedRangesByTimestamp("{ [0,60) }");
 
   // Check the buffers in the range.
@@ -2807,8 +3032,10 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_SaveAppendGOP_Selected3) {
   // Continue appending to this buffer.
   AppendBuffers("60 90");
 
-  // Should still save the rest of this GOP and should be able to fulfill the
-  // read.
+  // GC should still save the rest of this GOP and should be able to fulfill
+  // the read.
+  EXPECT_FALSE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(0), 0));
   CheckExpectedRangesByTimestamp("{ [0,120) }");
   CheckExpectedBuffers("60 90");
   CheckNoNextBuffer();
@@ -2866,6 +3093,54 @@ TEST_F(SourceBufferStreamTest, GarbageCollection_Performance) {
     AppendBuffers(buffers_appended, kBuffersToAppend);
     buffers_appended += kBuffersToAppend;
   }
+}
+
+TEST_F(SourceBufferStreamTest, GarbageCollection_MediaTimeAfterLastAppendTime) {
+  // Set memory limit to 10 buffers.
+  SetMemoryLimit(10);
+
+  // Append 12 buffers. The duration of the last buffer is 30
+  NewSegmentAppend("0K 30 60 90 120K 150 180 210K 240 270 300K 330D30");
+  CheckExpectedRangesByTimestamp("{ [0,360) }");
+
+  // Do a garbage collection with the media time higher than the timestamp of
+  // the last appended buffer (330), but still within buffered ranges, taking
+  // into account the duration of the last frame (timestamp of the last frame is
+  // 330, duration is 30, so the latest valid buffered position is 330+30=360).
+  EXPECT_TRUE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(360), 0));
+
+  // GC should collect one GOP from the front to bring us back under memory
+  // limit of 10 buffers.
+  CheckExpectedRangesByTimestamp("{ [120,360) }");
+}
+
+TEST_F(SourceBufferStreamTest,
+       GarbageCollection_MediaTimeOutsideOfStreamBufferedRange) {
+  // Set memory limit to 10 buffers.
+  SetMemoryLimit(10);
+
+  // Append 12 buffers.
+  NewSegmentAppend("0K 30 60 90 120K 150 180 210K 240 270 300K 330");
+  CheckExpectedRangesByTimestamp("{ [0,360) }");
+
+  // Seek in order to set the stream read position to 330 an ensure that the
+  // stream selects the buffered range.
+  SeekToTimestampMs(330);
+
+  // Do a garbage collection with the media time outside the buffered ranges
+  // (this might happen when there's both audio and video streams, audio stream
+  // buffered range is longer than the video stream buffered range, since
+  // media::Pipeline uses audio stream as a time source in that case, it might
+  // return a media_time that is slightly outside of video buffered range). In
+  // those cases the GC algorithm should clamp the media_time value to the
+  // buffered ranges to work correctly (see crbug.com/563292).
+  EXPECT_TRUE(stream_->GarbageCollectIfNeeded(
+      DecodeTimestamp::FromMilliseconds(361), 0));
+
+  // GC should collect one GOP from the front to bring us back under memory
+  // limit of 10 buffers.
+  CheckExpectedRangesByTimestamp("{ [120,360) }");
 }
 
 TEST_F(SourceBufferStreamTest, GetRemovalRange_BytesToFree) {
@@ -3352,12 +3627,16 @@ TEST_F(SourceBufferStreamTest, SameTimestamp_Video_TwoAppends) {
 // Verify that a non-keyframe followed by a keyframe with the same timestamp
 // is not allowed.
 TEST_F(SourceBufferStreamTest, SameTimestamp_Video_Invalid_1) {
+  EXPECT_MEDIA_LOG(ContainsSameTimestampAt30MillisecondsLog());
+
   Seek(0);
   NewSegmentAppend("0K 30");
   AppendBuffers_ExpectFailure("30K 60");
 }
 
 TEST_F(SourceBufferStreamTest, SameTimestamp_Video_Invalid_2) {
+  EXPECT_MEDIA_LOG(ContainsSameTimestampAt30MillisecondsLog());
+
   Seek(0);
   NewSegmentAppend_ExpectFailure("0K 30 30K 60");
 }
@@ -3407,17 +3686,19 @@ TEST_F(SourceBufferStreamTest, SameTimestamp_Video_Overlap_3) {
 // Test all the valid same timestamp cases for audio.
 TEST_F(SourceBufferStreamTest, SameTimestamp_Audio) {
   AudioDecoderConfig config(kCodecMP3, kSampleFormatF32, CHANNEL_LAYOUT_STEREO,
-                            44100, NULL, 0, false);
-  stream_.reset(new SourceBufferStream(config, log_cb(), true));
+                            44100, EmptyExtraData(), false);
+  stream_.reset(new SourceBufferStream(config, media_log_, true));
   Seek(0);
   NewSegmentAppend("0K 0K 30K 30 60 60");
   CheckExpectedBuffers("0K 0K 30K 30 60 60");
 }
 
 TEST_F(SourceBufferStreamTest, SameTimestamp_Audio_Invalid_1) {
+  EXPECT_MEDIA_LOG(ContainsSameTimestampAt30MillisecondsLog());
+
   AudioDecoderConfig config(kCodecMP3, kSampleFormatF32, CHANNEL_LAYOUT_STEREO,
-                            44100, NULL, 0, false);
-  stream_.reset(new SourceBufferStream(config, log_cb(), true));
+                            44100, EmptyExtraData(), false);
+  stream_.reset(new SourceBufferStream(config, media_log_, true));
   Seek(0);
   NewSegmentAppend_ExpectFailure("0K 30 30K 60");
 }
@@ -3894,6 +4175,8 @@ TEST_F(SourceBufferStreamTest,
 }
 
 TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_Basic) {
+  EXPECT_MEDIA_LOG(ContainsGeneratedSpliceLog(3000, 11000));
+
   SetAudioStream();
   Seek(0);
   NewSegmentAppend("0K 2K 4K 6K 8K 10K 12K");
@@ -3903,6 +4186,10 @@ TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_Basic) {
 }
 
 TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_NoExactSplices) {
+  EXPECT_MEDIA_LOG(
+      HasSubstr("Skipping splice frame generation: first new buffer at 10000us "
+                "begins at or before existing buffer at 10000us."));
+
   SetAudioStream();
   Seek(0);
   NewSegmentAppend("0K 2K 4K 6K 8K 10K 12K");
@@ -3913,6 +4200,12 @@ TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_NoExactSplices) {
 
 // Do not allow splices on top of splices.
 TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_NoDoubleSplice) {
+  InSequence s;
+  EXPECT_MEDIA_LOG(ContainsGeneratedSpliceLog(3000, 11000));
+  EXPECT_MEDIA_LOG(
+      HasSubstr("Skipping splice frame generation: overlapped buffers at "
+                "10000us are in a previously buffered splice."));
+
   SetAudioStream();
   Seek(0);
   NewSegmentAppend("0K 2K 4K 6K 8K 10K 12K");
@@ -3944,6 +4237,8 @@ TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_NoSplice) {
 }
 
 TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_CorrectMediaSegmentStartTime) {
+  EXPECT_MEDIA_LOG(ContainsGeneratedSpliceLog(5000, 1000));
+
   SetAudioStream();
   Seek(0);
   NewSegmentAppend("0K 2K 4K");
@@ -3957,14 +4252,12 @@ TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_CorrectMediaSegmentStartTime) {
 }
 
 TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_ConfigChange) {
+  EXPECT_MEDIA_LOG(ContainsGeneratedSpliceLog(3000, 5000));
+
   SetAudioStream();
 
-  AudioDecoderConfig new_config(kCodecVorbis,
-                                kSampleFormatPlanarF32,
-                                CHANNEL_LAYOUT_MONO,
-                                1000,
-                                NULL,
-                                0,
+  AudioDecoderConfig new_config(kCodecVorbis, kSampleFormatPlanarF32,
+                                CHANNEL_LAYOUT_MONO, 1000, EmptyExtraData(),
                                 false);
   ASSERT_NE(new_config.channel_layout(), audio_config_.channel_layout());
 
@@ -3980,6 +4273,10 @@ TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_ConfigChange) {
 
 // Ensure splices are not created if there are not enough frames to crossfade.
 TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_NoTinySplices) {
+  EXPECT_MEDIA_LOG(HasSubstr(
+      "Skipping splice frame generation: not enough samples for splicing new "
+      "buffer at 1000us. Have 1000us, but need 2000us."));
+
   SetAudioStream();
   Seek(0);
 
@@ -3996,11 +4293,15 @@ TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_NoTinySplices) {
 }
 
 TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_NoMillisecondSplices) {
+  EXPECT_MEDIA_LOG(
+      HasSubstr("Skipping splice frame generation: not enough samples for "
+                "splicing new buffer at 1250us. Have 750us, but need 1000us."));
+
   video_config_ = TestVideoConfig::Invalid();
   audio_config_.Initialize(kCodecVorbis, kSampleFormatPlanarF32,
-                           CHANNEL_LAYOUT_STEREO, 4000, NULL, 0, false, false,
+                           CHANNEL_LAYOUT_STEREO, 4000, EmptyExtraData(), false,
                            base::TimeDelta(), 0);
-  stream_.reset(new SourceBufferStream(audio_config_, log_cb(), true));
+  stream_.reset(new SourceBufferStream(audio_config_, media_log_, true));
   // Equivalent to 0.5ms per frame.
   SetStreamInfo(2000, 2000);
   Seek(0);
@@ -4023,6 +4324,8 @@ TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_NoMillisecondSplices) {
 }
 
 TEST_F(SourceBufferStreamTest, Audio_SpliceFrame_Preroll) {
+  EXPECT_MEDIA_LOG(ContainsGeneratedSpliceLog(3000, 11000));
+
   SetAudioStream();
   Seek(0);
   NewSegmentAppend("0K 2K 4K 6K 8K 10K 12K");
@@ -4283,6 +4586,64 @@ TEST_F(SourceBufferStreamTest, ConfigChange_ReSeek) {
   CheckExpectedBuffers("2030K 2040 2050D10");
   CheckNoNextBuffer();
   CheckVideoConfig(new_config);
+}
+
+TEST_F(SourceBufferStreamTest, TrackBuffer_ExhaustionWithSkipForward) {
+  NewSegmentAppend("0K 10 20 30 40");
+
+  // Read the first 4 buffers, so next buffer is at time 40.
+  Seek(0);
+  CheckExpectedRangesByTimestamp("{ [0,50) }");
+  CheckExpectedBuffers("0K 10 20 30");
+
+  // Overlap-append, populating track buffer with timestamp 40 from original
+  // append. Confirm there could be a large jump in time until the next key
+  // frame after exhausting the track buffer.
+  NewSegmentAppend(
+      "31K 41 51 61 71 81 91 101 111 121 "
+      "131K 141");
+  CheckExpectedRangesByTimestamp("{ [0,151) }");
+
+  // Confirm the large jump occurs and warning log is generated.
+  // If this test is changed, update
+  // TrackBufferExhaustion_ImmediateNewTrackBuffer accordingly.
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(91));
+
+  CheckExpectedBuffers("40 131K 141");
+  CheckNoNextBuffer();
+}
+
+TEST_F(SourceBufferStreamTest,
+       TrackBuffer_ExhaustionAndImmediateNewTrackBuffer) {
+  NewSegmentAppend("0K 10 20 30 40");
+
+  // Read the first 4 buffers, so next buffer is at time 40.
+  Seek(0);
+  CheckExpectedRangesByTimestamp("{ [0,50) }");
+  CheckExpectedBuffers("0K 10 20 30");
+
+  // Overlap-append
+  NewSegmentAppend(
+      "31K 41 51 61 71 81 91 101 111 121 "
+      "131K 141");
+  CheckExpectedRangesByTimestamp("{ [0,151) }");
+
+  // Exhaust the track buffer, but don't read any of the overlapping append yet.
+  CheckExpectedBuffers("40");
+
+  // Selected range's next buffer is now the 131K buffer from the overlapping
+  // append. (See TrackBuffer_ExhaustionWithSkipForward for that verification.)
+  // Do another overlap-append to immediately create another track buffer and
+  // verify both track buffer exhaustions skip forward and emit log warnings.
+  NewSegmentAppend("22K 32 42 52 62 72 82 92 102 112 122K 132 142 152K 162");
+  CheckExpectedRangesByTimestamp("{ [0,172) }");
+
+  InSequence s;
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(91));
+  EXPECT_MEDIA_LOG(ContainsTrackBufferExhaustionSkipLog(11));
+
+  CheckExpectedBuffers("131K 141 152K 162");
+  CheckNoNextBuffer();
 }
 
 // TODO(vrk): Add unit tests where keyframes are unaligned between streams.

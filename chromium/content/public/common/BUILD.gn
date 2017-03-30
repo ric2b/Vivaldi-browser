@@ -2,9 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
 import("//content/common/common.gni")
-import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 
 # See //content/BUILD.gn for how this works.
 group("common") {
@@ -27,6 +28,47 @@ source_set("result_codes") {
   ]
 }
 
+# This target allows other targets to depend on content_descriptors.h which is
+# a header-only dependency, without bringing in all of content.
+source_set("content_descriptors") {
+  sources = [
+    "content_descriptors.h",
+  ]
+  public_configs = [ "//v8:external_startup_data" ]
+}
+
+# Forces static linking for targets using the static_switches constants, even
+# in the component build. This config makes it impossible to use the static
+# switches target and use the rest of content at the same time, because the
+# component export flags won't be consistent.
+config("static_switches_defines") {
+  defines = [ "COMPILE_CONTENT_STATICALLY" ]
+}
+
+# Set in GN builds, triggering behavior in content when run from an external
+# Mojo shell.
+config("mojo_shell_client") {
+  # This configuration has only been tested on these platforms.
+  if ((is_win || is_linux || is_chromeos) && !is_chromecast) {
+    defines = [ "MOJO_SHELL_CLIENT" ]
+  }
+}
+
+# This target allows you to use the content_switches constants and statically
+# link to it, without depending on the rest of content. This is only for use
+# without content, or you will get multiply defined symbols.
+source_set("static_switches") {
+  public = [
+    "content_switches.h",
+  ]
+  sources = [
+    "//content/common/content_export.h",
+    "content_switches.cc",
+  ]
+
+  public_configs = [ ":static_switches_defines" ]
+}
+
 source_set("common_sources") {
   visibility = [ "//content/*" ]
 
@@ -34,11 +76,16 @@ source_set("common_sources") {
                         ".",
                         "//content")
 
-  configs += [ "//content:content_implementation" ]
+  configs += [
+    "//build/config:precompiled_headers",
+    "//content:content_implementation",
+  ]
+
+  public_configs = [ "//v8:external_startup_data" ]
 
   public_deps = [
     "//content/common",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//mojo/public/cpp/bindings",
   ]
   deps = [
     "//net",
@@ -55,6 +102,13 @@ source_set("common_sources") {
       "pepper_plugin_info.h",
     ]
   }
+
+  if (enable_webrtc) {
+    sources += [
+      "webrtc_ip_handling_policy.cc",
+      "webrtc_ip_handling_policy.h",
+    ]
+  }
 }
 
 mojom("mojo_bindings") {
@@ -62,5 +116,6 @@ mojom("mojo_bindings") {
     "background_sync.mojom",
     "mojo_geoposition.mojom",
     "permission_status.mojom",
+    "service_worker_event_status.mojom",
   ]
 }

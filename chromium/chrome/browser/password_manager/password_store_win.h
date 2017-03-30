@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_STORE_WIN_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_STORE_WIN_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "components/password_manager/core/browser/password_store_default.h"
 
 class PasswordWebDataService;
@@ -33,14 +33,14 @@ class PasswordStoreWin : public password_manager::PasswordStoreDefault {
       const scoped_refptr<PasswordWebDataService>& web_data_service);
 
   // PasswordStore:
-  void Shutdown() override;
+  void ShutdownOnUIThread() override;
 
  private:
   class DBHandler;
 
   ~PasswordStoreWin() override;
 
-  // Invoked from Shutdown, but run on the DB thread.
+  // Invoked from ShutdownOnUIThread, but run on the DB thread.
   void ShutdownOnDBThread();
 
   // password_manager::PasswordStore:

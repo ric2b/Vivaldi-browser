@@ -12,12 +12,12 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.SystemClock;
 
-import org.chromium.base.CalledByNative;
 import org.chromium.base.CommandLine;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.Log;
 import org.chromium.base.PackageUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.metrics.RecordHistogram;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,7 +40,7 @@ import javax.annotation.Nullable;
  */
 @JNINamespace("base::android")
 public class LibraryLoader {
-    private static final String TAG = "cr.library_loader";
+    private static final String TAG = "LibraryLoader";
 
     // Set to true to enable debug logs.
     private static final boolean DEBUG = false;
@@ -170,36 +170,73 @@ public class LibraryLoader {
      * detrimental to the startup time.
      */
     public void asyncPrefetchLibrariesToMemory() {
-        if (!mPrefetchLibraryHasBeenCalled.compareAndSet(false, true)) return;
+        final boolean coldStart = mPrefetchLibraryHasBeenCalled.compareAndSet(false, true);
         new AsyncTask<Void, Void, Void>() {
             @Override
             protected Void doInBackground(Void... params) {
                 TraceEvent.begin("LibraryLoader.asyncPrefetchLibrariesToMemory");
-                boolean success = nativeForkAndPrefetchNativeLibrary();
-                if (!success) {
-                    Log.w(TAG, "Forking a process to prefetch the native library failed.");
+                int percentage = nativePercentageOfResidentNativeLibraryCode();
+                boolean success = false;
+                if (coldStart) {
+                    success = nativeForkAndPrefetchNativeLibrary();
+                    if (!success) {
+                        Log.w(TAG, "Forking a process to prefetch the native library failed.");
+                    }
                 }
-                RecordHistogram.recordBooleanHistogram("LibraryLoader.PrefetchStatus", success);
+                // As this runs in a background thread, it can be called before histograms are
+                // initialized. In this instance, histograms are dropped.
+                RecordHistogram.initialize();
+                if (coldStart) {
+                    RecordHistogram.recordBooleanHistogram("LibraryLoader.PrefetchStatus", success);
+                }
+                if (percentage != -1) {
+                    String histogram = "LibraryLoader.PercentageOfResidentCodeBeforePrefetch"
+                            + (coldStart ? "_ColdStartup" : "_WarmStartup");
+                    RecordHistogram.recordPercentageHistogram(histogram, percentage);
+                }
                 TraceEvent.end("LibraryLoader.asyncPrefetchLibrariesToMemory");
                 return null;
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
-    // Invoke System.loadLibrary(...), triggering JNI_OnLoad in native code
+    // Helper for loadAlreadyLocked(). Load a native shared library with the Chromium linker.
+    // Sets UMA flags depending on the results of loading.
+    private void loadLibrary(Linker linker, @Nullable String zipFilePath, String libFilePath) {
+        if (linker.isUsingBrowserSharedRelros()) {
+            // If the browser is set to attempt shared RELROs then we try first with shared
+            // RELROs enabled, and if that fails then retry without.
+            mIsUsingBrowserSharedRelros = true;
+            try {
+                linker.loadLibrary(zipFilePath, libFilePath);
+            } catch (UnsatisfiedLinkError e) {
+                Log.w(TAG, "Failed to load native library with shared RELRO, retrying without");
+                mLoadAtFixedAddressFailed = true;
+                linker.loadLibraryNoFixedAddress(zipFilePath, libFilePath);
+            }
+        } else {
+            // No attempt to use shared RELROs in the browser, so load as normal.
+            linker.loadLibrary(zipFilePath, libFilePath);
+        }
+
+        // Loaded successfully, so record if we loaded directly from an APK.
+        if (zipFilePath != null) {
+            mLibraryWasLoadedFromApk = true;
+        }
+    }
+
+    // Invoke either Linker.loadLibrary(...) or System.loadLibrary(...), triggering
+    // JNI_OnLoad in native code
     private void loadAlreadyLocked(Context context) throws ProcessInitException {
         try {
             if (!mLoaded) {
                 assert !mInitialized;
 
                 long startTime = SystemClock.uptimeMillis();
-                Linker linker = Linker.getInstance();
-                boolean useChromiumLinker = linker.isUsed();
 
-                if (useChromiumLinker) {
-                    // Determine the APK file path.
-                    String apkFilePath = getLibraryApkPath(context);
+                if (Linker.isUsed()) {
                     // Load libraries using the Chromium linker.
+                    Linker linker = Linker.getInstance();
                     linker.prepareLibraryLoad();
 
                     for (String library : NativeLibraries.LIBRARIES) {
@@ -214,33 +251,17 @@ public class LibraryLoader {
                         // Determine where the library should be loaded from.
                         String zipFilePath = null;
                         String libFilePath = System.mapLibraryName(library);
-                        if (linker.isInZipFile()) {
+                        if (Linker.isInZipFile()) {
                             // Load directly from the APK.
-                            zipFilePath = apkFilePath;
-                            Log.i(TAG,
-                                    "Loading " + library + " directly from within " + apkFilePath);
+                            zipFilePath = getLibraryApkPath(context);
+                            Log.i(TAG, "Loading " + library + " from within " + zipFilePath);
                         } else {
                             // The library is in its own file.
                             Log.i(TAG, "Loading " + library);
                         }
 
-                        // Load the library.
-                        boolean isLoaded = false;
-                        if (linker.isUsingBrowserSharedRelros()) {
-                            mIsUsingBrowserSharedRelros = true;
-                            try {
-                                loadLibrary(zipFilePath, libFilePath);
-                                isLoaded = true;
-                            } catch (UnsatisfiedLinkError e) {
-                                Log.w(TAG, "Failed to load native library with shared RELRO, "
-                                        + "retrying without");
-                                linker.disableSharedRelros();
-                                mLoadAtFixedAddressFailed = true;
-                            }
-                        }
-                        if (!isLoaded) {
-                            loadLibrary(zipFilePath, libFilePath);
-                        }
+                        // Load the library using this Linker. May throw UnsatisfiedLinkError.
+                        loadLibrary(linker, zipFilePath, libFilePath);
                     }
 
                     linker.finishLibraryLoad();
@@ -297,15 +318,6 @@ public class LibraryLoader {
             }
         }
         return appInfo.sourceDir;
-    }
-
-    // Load a native shared library with the Chromium linker. If the zip file
-    // path is not null, the library is loaded directly from the zip file.
-    private void loadLibrary(@Nullable String zipFilePath, String libFilePath) {
-        Linker.getInstance().loadLibrary(zipFilePath, libFilePath);
-        if (zipFilePath != null) {
-            mLibraryWasLoadedFromApk = true;
-        }
     }
 
     // The WebView requires the Command Line to be switched over before
@@ -454,4 +466,8 @@ public class LibraryLoader {
     // process to prefetch these pages and waits for it. The new process then
     // terminates. This is blocking.
     private static native boolean nativeForkAndPrefetchNativeLibrary();
+
+    // Returns the percentage of the native library code page that are currently reseident in
+    // memory.
+    private static native int nativePercentageOfResidentNativeLibraryCode();
 }

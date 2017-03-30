@@ -36,7 +36,7 @@ void CacheStorageContextImpl::Init(
   base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> cache_task_runner =
       pool->GetSequencedTaskRunnerWithShutdownBehavior(
-          BrowserThread::GetBlockingPool()->GetSequenceToken(),
+          base::SequencedWorkerPool::GetSequenceToken(),
           base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
 
   // This thread-hopping antipattern is needed here for some unit tests, where
@@ -79,6 +79,26 @@ void CacheStorageContextImpl::SetBlobParametersForCache(
     cache_manager_->SetBlobParametersForCache(
         request_context_getter, blob_storage_context->context()->AsWeakPtr());
   }
+}
+
+void CacheStorageContextImpl::GetAllOriginsInfo(
+    const CacheStorageContext::GetUsageInfoCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (!cache_manager_) {
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(callback, std::vector<CacheStorageUsageInfo>()));
+    return;
+  }
+
+  cache_manager_->GetAllOriginsUsage(callback);
+}
+
+void CacheStorageContextImpl::DeleteForOrigin(const GURL& origin) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (cache_manager_)
+    cache_manager_->DeleteOriginData(origin);
 }
 
 void CacheStorageContextImpl::CreateCacheStorageManager(

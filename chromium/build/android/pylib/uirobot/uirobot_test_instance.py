@@ -2,13 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import os
 import json
 import logging
 
-from pylib import constants
+from devil.android import apk_helper
 from pylib.base import test_instance
-from pylib.utils import apk_helper
 
 class UirobotTestInstance(test_instance.TestInstance):
 

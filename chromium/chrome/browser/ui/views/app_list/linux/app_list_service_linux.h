@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_APP_LIST_LINUX_APP_LIST_SERVICE_LINUX_H_
 #define CHROME_BROWSER_UI_VIEWS_APP_LIST_LINUX_APP_LIST_SERVICE_LINUX_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/app_list/app_list_service_views.h"
 #include "ui/app_list/views/app_list_view_observer.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 // AppListServiceLinux manages global resources needed for the app list to
 // operate, and controls when the app list is opened and closed.
@@ -26,7 +29,7 @@ class AppListServiceLinux : public AppListServiceViews,
   void OnActivationChanged(views::Widget* widget, bool active) override;
 
  private:
-  friend struct DefaultSingletonTraits<AppListServiceLinux>;
+  friend struct base::DefaultSingletonTraits<AppListServiceLinux>;
 
   // AppListShowerDelegate overrides:
   void OnViewCreated() override;

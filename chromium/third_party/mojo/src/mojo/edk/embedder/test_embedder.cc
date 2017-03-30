@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/embedder/test_embedder.h"
+#include "third_party/mojo/src/mojo/edk/embedder/test_embedder.h"
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/embedder_internal.h"
-#include "mojo/edk/embedder/simple_platform_support.h"
-#include "mojo/edk/system/channel_manager.h"
-#include "mojo/edk/system/core.h"
-#include "mojo/edk/system/handle_table.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder_internal.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_support.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_manager.h"
+#include "third_party/mojo/src/mojo/edk/system/core.h"
+#include "third_party/mojo/src/mojo/edk/system/handle_table.h"
+#include "../../../../../../mojo/edk/system/core.h"
+#include "../../../../../../mojo/edk/embedder/embedder_internal.h"
+#include "../../../../../../mojo/edk/embedder/simple_platform_support.h"
 
 namespace mojo {
 
@@ -40,10 +43,6 @@ bool ShutdownCheckNoLeaks(Core* core) {
 namespace embedder {
 namespace test {
 
-void InitWithSimplePlatformSupport() {
-  Init(make_scoped_ptr(new SimplePlatformSupport()));
-}
-
 bool Shutdown() {
   // If |InitIPCSupport()| was called, then |ShutdownIPCSupport()| must have
   // been called first.
@@ -57,6 +56,16 @@ bool Shutdown() {
   CHECK(internal::g_platform_support);
   delete internal::g_platform_support;
   internal::g_platform_support = nullptr;
+
+
+  // TODO(use_chrome_edk): temporary to match mojo::embedder::Init
+  CHECK(mojo::edk::internal::g_core);
+  delete mojo::edk::internal::g_core;
+  mojo::edk::internal::g_core = nullptr;
+
+  CHECK(mojo::edk::internal::g_platform_support);
+  delete mojo::edk::internal::g_platform_support;
+  mojo::edk::internal::g_platform_support = nullptr;
 
   return rv;
 }

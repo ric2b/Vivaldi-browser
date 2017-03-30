@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/test_with_scope.h"
@@ -110,6 +111,10 @@ TEST_F(GetPathInfoTest, GenDir) {
   EXPECT_EQ("//out/Debug/gen/src/foo", Call(".", "gen_dir"));
   EXPECT_EQ("//out/Debug/gen/src/foo", Call("bar", "gen_dir"));
   EXPECT_EQ("//out/Debug/gen/foo", Call("//foo/bar.txt", "gen_dir"));
-  // System paths go into the root obj directory.
-  EXPECT_EQ("//out/Debug/gen", Call("/foo/bar.txt", "gen_dir"));
+  // System paths go into the ABS_PATH gen directory
+  EXPECT_EQ("//out/Debug/gen/ABS_PATH/foo", Call("/foo/bar.txt", "gen_dir"));
+#if defined(OS_WIN)
+  EXPECT_EQ("//out/Debug/gen/ABS_PATH/C/foo",
+            Call("/C:/foo/bar.txt", "gen_dir"));
+#endif
 }

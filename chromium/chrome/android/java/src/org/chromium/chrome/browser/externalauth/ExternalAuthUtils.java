@@ -12,10 +12,11 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Binder;
+import android.os.StrictMode;
 import android.text.TextUtils;
 
 import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.common.GoogleApiAvailability;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Log;
@@ -34,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ExternalAuthUtils {
     public static final int FLAG_SHOULD_BE_GOOGLE_SIGNED = 1 << 0;
     public static final int FLAG_SHOULD_BE_SYSTEM = 1 << 1;
-    private static final String TAG = "cr.ExternalAuthUtils";
+    private static final String TAG = "ExternalAuthUtils";
     private static final String CONNECTION_RESULT_HISTOGRAM_NAME =
             "GooglePlayServices.ConnectionResult";
 
@@ -195,6 +196,30 @@ public class ExternalAuthUtils {
     }
 
     /**
+     * Same as {@link #canUseGooglePlayServices(Context, UserRecoverableErrorHandler)}
+     * but also with the constraint that first-party APIs must be available. This check is
+     * implemented by verifying that the package is Google-signed; if not, first-party APIs will
+     * be unavailable at runtime.
+     * Nuance: The check on whether or not the package is Google-signed itself requires access to
+     * Google Play Services, so this method first checks for "normal" (non-first-party) access and,
+     * if successful, makes a second call to Google Play Services to determine the state of the
+     * package signature. The failure handling policy only applies to the first check, since Google
+     * Play Services provides "canned" ways to deal with failures; there is no special handling of
+     * the case where the Google Play Services check succeeds and the Google-signed package check
+     * fails (the method will simply return false).
+     * @param context The current context.
+     * @param userRecoverableErrorHandler How to handle user-recoverable errors from Google
+     * Play Services; must be non-null.
+     * @return true if and only if first-party Google Play Services can be used
+     */
+    public boolean canUseFirstPartyGooglePlayServices(
+            Context context, UserRecoverableErrorHandler userRecoverableErrorHandler) {
+        ExternalAuthUtils authUtils = ExternalAuthUtils.getInstance();
+        return authUtils.canUseGooglePlayServices(context, userRecoverableErrorHandler)
+                && authUtils.isGoogleSigned(context.getPackageManager(), context.getPackageName());
+    }
+
+    /**
      * Record the result of a connection attempt. The default implementation records via a UMA
      * histogram.
      * @param resultCode the result from {@link #checkGooglePlayServicesAvailable(Context)}
@@ -214,7 +239,14 @@ public class ExternalAuthUtils {
      * @return The code produced by calling the external code
      */
     protected int checkGooglePlayServicesAvailable(final Context context) {
-        return GooglePlayServicesUtil.isGooglePlayServicesAvailable(context);
+        // Temporarily allowing disk access. TODO: Fix. See http://crbug.com/577190
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        StrictMode.allowThreadDiskWrites();
+        try {
+            return GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
     }
 
     /**
@@ -235,7 +267,7 @@ public class ExternalAuthUtils {
      * @return true If the code represents a user-recoverable error
      */
     protected boolean isUserRecoverableError(final int errorCode) {
-        return GooglePlayServicesUtil.isUserRecoverableError(errorCode);
+        return GoogleApiAvailability.getInstance().isUserResolvableError(errorCode);
     }
 
     /**
@@ -245,7 +277,7 @@ public class ExternalAuthUtils {
      * @return a textual description of the error code
      */
     protected String describeError(final int errorCode) {
-        return GooglePlayServicesUtil.getErrorString(errorCode);
+        return GoogleApiAvailability.getInstance().getErrorString(errorCode);
     }
 
     /**
@@ -255,7 +287,7 @@ public class ExternalAuthUtils {
      * @param context The current context
      */
     public void showErrorNotification(final int errorCode, final Context context) {
-        GooglePlayServicesUtil.showErrorNotification(errorCode, context);
+        GoogleApiAvailability.getInstance().showErrorNotification(context, errorCode);
     }
 
     /**
@@ -271,9 +303,9 @@ public class ExternalAuthUtils {
      */
     public void showErrorDialog(final int errorCode, final Activity activity, final int requestCode,
             final OnCancelListener onCancelListener) {
-        final Dialog dialog = GooglePlayServicesUtil.getErrorDialog(
-                errorCode, activity, requestCode, onCancelListener);
-        if (dialog != null) {
+        final Dialog dialog = GoogleApiAvailability.getInstance().getErrorDialog(
+                activity, errorCode, requestCode, onCancelListener);
+        if (dialog != null) { // This can happen if errorCode is ConnectionResult.SERVICE_INVALID
             dialog.show();
         }
     }

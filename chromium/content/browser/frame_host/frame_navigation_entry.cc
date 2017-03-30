@@ -13,41 +13,61 @@ FrameNavigationEntry::FrameNavigationEntry(int frame_tree_node_id)
 }
 
 FrameNavigationEntry::FrameNavigationEntry(int frame_tree_node_id,
-                                           int64 item_sequence_number,
-                                           int64 document_sequence_number,
+                                           const std::string& frame_unique_name,
+                                           int64_t item_sequence_number,
+                                           int64_t document_sequence_number,
                                            SiteInstanceImpl* site_instance,
                                            const GURL& url,
                                            const Referrer& referrer)
     : frame_tree_node_id_(frame_tree_node_id),
+      frame_unique_name_(frame_unique_name),
       item_sequence_number_(item_sequence_number),
       document_sequence_number_(document_sequence_number),
       site_instance_(site_instance),
       url_(url),
-      referrer_(referrer) {
-}
+      referrer_(referrer) {}
 
 FrameNavigationEntry::~FrameNavigationEntry() {
 }
 
 FrameNavigationEntry* FrameNavigationEntry::Clone() const {
   FrameNavigationEntry* copy = new FrameNavigationEntry(frame_tree_node_id_);
-  copy->UpdateEntry(item_sequence_number_, document_sequence_number_,
-                    site_instance_.get(), url_, referrer_, page_state_);
+  copy->UpdateEntry(frame_unique_name_, item_sequence_number_,
+                    document_sequence_number_, site_instance_.get(), url_,
+                    referrer_, page_state_);
   return copy;
 }
 
-void FrameNavigationEntry::UpdateEntry(int64 item_sequence_number,
-                                       int64 document_sequence_number,
+void FrameNavigationEntry::UpdateEntry(const std::string& frame_unique_name,
+                                       int64_t item_sequence_number,
+                                       int64_t document_sequence_number,
                                        SiteInstanceImpl* site_instance,
                                        const GURL& url,
                                        const Referrer& referrer,
                                        const PageState& page_state) {
+  frame_unique_name_ = frame_unique_name;
   item_sequence_number_ = item_sequence_number;
   document_sequence_number_ = document_sequence_number;
   site_instance_ = site_instance;
   url_ = url;
   referrer_ = referrer;
   page_state_ = page_state;
+}
+
+void FrameNavigationEntry::set_item_sequence_number(
+    int64_t item_sequence_number) {
+  // Once assigned, the item sequence number shouldn't change.
+  DCHECK(item_sequence_number_ == -1 ||
+         item_sequence_number_ == item_sequence_number);
+  item_sequence_number_ = item_sequence_number;
+}
+
+void FrameNavigationEntry::set_document_sequence_number(
+    int64_t document_sequence_number) {
+  // Once assigned, the document sequence number shouldn't change.
+  DCHECK(document_sequence_number_ == -1 ||
+         document_sequence_number_ == document_sequence_number);
+  document_sequence_number_ = document_sequence_number;
 }
 
 }  // namespace content

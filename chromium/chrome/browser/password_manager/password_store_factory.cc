@@ -4,34 +4,35 @@
 
 #include "chrome/browser/password_manager/password_store_factory.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/environment.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/prefs/pref_service.h"
+#include "base/rand_util.h"
 #include "base/thread_task_runner_handle.h"
-#include "chrome/browser/password_manager/sync_metrics.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/web_data_service_factory.h"
-#include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/os_crypt/os_crypt_switches.h"
-#include "components/password_manager/core/browser/affiliated_match_helper.h"
-#include "components/password_manager/core/browser/affiliation_service.h"
-#include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/login_database.h"
-#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_default.h"
+#include "components/password_manager/core/browser/password_store_factory_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "content/public/browser/browser_thread.h"
 
 #if defined(OS_WIN)
+#include "chrome/browser/password_manager/password_manager_util_win.h"
 #include "chrome/browser/password_manager/password_store_win.h"
 #include "components/password_manager/core/browser/webdata/password_web_data_service_win.h"
 #elif defined(OS_MACOSX)
@@ -46,7 +47,6 @@
 #include "chrome/browser/password_manager/native_backend_gnome_x.h"
 #endif
 #if defined(USE_LIBSECRET)
-#include "base/metrics/field_trial.h"
 #include "chrome/browser/password_manager/native_backend_libsecret.h"
 #endif
 #include "chrome/browser/password_manager/native_backend_kwallet_x.h"
@@ -62,117 +62,25 @@ const LocalProfileId kInvalidLocalProfileId =
     static_cast<LocalProfileId>(0);
 #endif
 
-#if defined(USE_LIBSECRET)
-const char kLibsecretFieldTrialName[] = "Libsecret";
-const char kLibsecretFieldTrialDisabledGroupName[] = "Disabled";
-#endif
-
-void ReportOsPassword(password_manager_util::OsPasswordStatus status) {
-  UMA_HISTOGRAM_ENUMERATION("PasswordManager.OsPasswordStatus",
-                            status,
-                            password_manager_util::MAX_PASSWORD_STATUS);
-}
-
-void DelayReportOsPassword() {
-  // Avoid checking OS password until later on in browser startup
-  // since it calls a few Windows APIs.
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&password_manager_util::GetOsPasswordStatus,
-                 base::Bind(&ReportOsPassword)),
-      base::TimeDelta::FromSeconds(40));
-}
-
-base::FilePath GetAffiliationDatabasePath(Profile* profile) {
-  DCHECK(profile);
-  return profile->GetPath().Append(chrome::kAffiliationDatabaseFileName);
-}
-
-bool ShouldAffiliationBasedMatchingBeActive(Profile* profile) {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (!password_manager::IsAffiliationBasedMatchingEnabled(*command_line))
-    return false;
-
-  DCHECK(profile);
-  ProfileSyncService* profile_sync_service =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
-  return profile_sync_service &&
-         profile_sync_service->CanSyncStart() &&
-         profile_sync_service->IsSyncActive() &&
-         profile_sync_service->GetPreferredDataTypes().Has(syncer::PASSWORDS) &&
-         !profile_sync_service->IsUsingSecondaryPassphrase();
-}
-
-bool ShouldPropagatingPasswordChangesToWebCredentialsBeEnabled() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return password_manager::IsPropagatingPasswordChangesToWebCredentialsEnabled(
-      *command_line);
-}
-
-void ActivateAffiliationBasedMatching(PasswordStore* password_store,
-                                      Profile* profile) {
-  DCHECK(password_store);
-  DCHECK(profile);
-
-  // The PasswordStore is so far the only consumer of the AffiliationService,
-  // therefore the service is owned by the AffiliatedMatchHelper, which in
-  // turn is owned by the PasswordStore.
-  // TODO(engedy): Double-check which request context we want.
-  scoped_refptr<base::SingleThreadTaskRunner> db_thread_runner(
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::DB));
-  scoped_ptr<password_manager::AffiliationService> affiliation_service(
-      new password_manager::AffiliationService(db_thread_runner));
-  affiliation_service->Initialize(profile->GetRequestContext(),
-                                  GetAffiliationDatabasePath(profile));
-  scoped_ptr<password_manager::AffiliatedMatchHelper> affiliated_match_helper(
-      new password_manager::AffiliatedMatchHelper(password_store,
-                                                  affiliation_service.Pass()));
-  affiliated_match_helper->Initialize();
-  password_store->SetAffiliatedMatchHelper(affiliated_match_helper.Pass());
-  password_store->enable_propagating_password_changes_to_web_credentials(
-      ShouldPropagatingPasswordChangesToWebCredentialsBeEnabled());
-}
-
 }  // namespace
-
-
-PasswordStoreService::PasswordStoreService(
-    scoped_refptr<PasswordStore> password_store)
-    : password_store_(password_store) {}
-
-PasswordStoreService::~PasswordStoreService() {}
-
-scoped_refptr<PasswordStore> PasswordStoreService::GetPasswordStore() {
-  return password_store_;
-}
-
-void PasswordStoreService::Shutdown() {
-  if (password_store_.get())
-    password_store_->Shutdown();
-}
 
 // static
 scoped_refptr<PasswordStore> PasswordStoreFactory::GetForProfile(
     Profile* profile,
-    ServiceAccessType sat) {
-  if (sat == ServiceAccessType::IMPLICIT_ACCESS && profile->IsOffTheRecord()) {
-    NOTREACHED() << "This profile is OffTheRecord";
+    ServiceAccessType access_type) {
+  // |profile| gets always redirected to a non-Incognito profile below, so
+  // Incognito & IMPLICIT_ACCESS means that incognito browsing session would
+  // result in traces in the normal profile without the user knowing it.
+  if (access_type == ServiceAccessType::IMPLICIT_ACCESS &&
+      profile->IsOffTheRecord())
     return nullptr;
-  }
-
-  PasswordStoreFactory* factory = GetInstance();
-  PasswordStoreService* service = static_cast<PasswordStoreService*>(
-      factory->GetServiceForBrowserContext(profile, true));
-  if (!service)
-    return nullptr;
-  return service->GetPasswordStore();
+  return make_scoped_refptr(static_cast<password_manager::PasswordStore*>(
+      GetInstance()->GetServiceForBrowserContext(profile, true).get()));
 }
 
 // static
 PasswordStoreFactory* PasswordStoreFactory::GetInstance() {
-  return Singleton<PasswordStoreFactory>::get();
+  return base::Singleton<PasswordStoreFactory>::get();
 }
 
 // static
@@ -182,36 +90,31 @@ void PasswordStoreFactory::OnPasswordsSyncedStatePotentiallyChanged(
       GetForProfile(profile, ServiceAccessType::EXPLICIT_ACCESS);
   if (!password_store)
     return;
+  sync_driver::SyncService* sync_service =
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
+  net::URLRequestContextGetter* request_context_getter =
+      profile->GetRequestContext();
 
-  if (ShouldAffiliationBasedMatchingBeActive(profile) &&
-      !password_store->HasAffiliatedMatchHelper()) {
-    ActivateAffiliationBasedMatching(password_store.get(), profile);
-  } else if (!ShouldAffiliationBasedMatchingBeActive(profile) &&
-             password_store->HasAffiliatedMatchHelper()) {
-    password_store->SetAffiliatedMatchHelper(
-        make_scoped_ptr<password_manager::AffiliatedMatchHelper>(nullptr));
-  }
+  password_manager::ToggleAffiliationBasedMatchingBasedOnPasswordSyncedState(
+      password_store.get(), sync_service, request_context_getter,
+      profile->GetPath(), content::BrowserThread::GetMessageLoopProxyForThread(
+                              content::BrowserThread::DB));
 }
 
 // static
 void PasswordStoreFactory::TrimOrDeleteAffiliationCache(Profile* profile) {
   scoped_refptr<PasswordStore> password_store =
       GetForProfile(profile, ServiceAccessType::EXPLICIT_ACCESS);
-  if (password_store && password_store->HasAffiliatedMatchHelper()) {
-    password_store->TrimAffiliationCache();
-  } else {
-    scoped_refptr<base::SingleThreadTaskRunner> db_thread_runner(
-        content::BrowserThread::GetMessageLoopProxyForThread(
-            content::BrowserThread::DB));
-    password_manager::AffiliationService::DeleteCache(
-        GetAffiliationDatabasePath(profile), db_thread_runner.get());
-  }
+  password_manager::TrimOrDeleteAffiliationCacheForStoreAndPath(
+      password_store.get(), profile->GetPath(),
+      content::BrowserThread::GetMessageLoopProxyForThread(
+          content::BrowserThread::DB));
 }
 
 PasswordStoreFactory::PasswordStoreFactory()
-    : BrowserContextKeyedServiceFactory(
-        "PasswordStore",
-        BrowserContextDependencyManager::GetInstance()) {
+    : RefcountedBrowserContextKeyedServiceFactory(
+          "PasswordStore",
+          BrowserContextDependencyManager::GetInstance()) {
   DependsOn(WebDataServiceFactory::GetInstance());
 }
 
@@ -228,10 +131,9 @@ LocalProfileId PasswordStoreFactory::GetLocalProfileId(
     // that it would be repeated twice on a single machine. It is still possible
     // for that to occur though, so the potential results of it actually
     // happening should be considered when using this value.
-    static const LocalProfileId kLocalProfileIdMask =
-        static_cast<LocalProfileId>((1 << 24) - 1);
+    static const int kLocalProfileIdMask = (1 << 24) - 1;
     do {
-      id = rand() & kLocalProfileIdMask;
+      id = base::RandInt(0, kLocalProfileIdMask);
       // TODO(mdm): scan other profiles to make sure they are not using this id?
     } while (id == kInvalidLocalProfileId);
     prefs->SetInteger(password_manager::prefs::kLocalProfileId, id);
@@ -240,17 +142,16 @@ LocalProfileId PasswordStoreFactory::GetLocalProfileId(
 }
 #endif
 
-KeyedService* PasswordStoreFactory::BuildServiceInstanceFor(
+scoped_refptr<RefcountedKeyedService>
+PasswordStoreFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  DelayReportOsPassword();
+#if defined(OS_WIN)
+  password_manager_util_win::DelayReportOsPassword();
+#endif
   Profile* profile = static_cast<Profile*>(context);
 
-  // Given that LoginDatabase::Init() takes ~100ms on average; it will be called
-  // by PasswordStore::Init() on the background thread to avoid UI jank.
-  base::FilePath login_db_file_path = profile->GetPath();
-  login_db_file_path = login_db_file_path.Append(chrome::kLoginDataFileName);
   scoped_ptr<password_manager::LoginDatabase> login_db(
-      new password_manager::LoginDatabase(login_db_file_path));
+      password_manager::CreateLoginDatabase(profile->GetPath()));
 
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner(
       base::ThreadTaskRunnerHandle::Get());
@@ -270,13 +171,13 @@ KeyedService* PasswordStoreFactory::BuildServiceInstanceFor(
           os_crypt::switches::kUseMockKeychain)
           ? new crypto::MockAppleKeychain()
           : new crypto::AppleKeychain());
-  ps = new PasswordStoreProxyMac(main_thread_runner, keychain.Pass(),
-                                 login_db.Pass(), profile->GetPrefs());
+  ps = new PasswordStoreProxyMac(main_thread_runner, std::move(keychain),
+                                 std::move(login_db), profile->GetPrefs());
 #elif defined(OS_CHROMEOS) || defined(OS_ANDROID)
   // For now, we use PasswordStoreDefault. We might want to make a native
   // backend for PasswordStoreX (see below) in the future though.
   ps = new password_manager::PasswordStoreDefault(
-      main_thread_runner, db_thread_runner, login_db.Pass());
+      main_thread_runner, db_thread_runner, std::move(login_db));
 #elif defined(USE_X11)
   // On POSIX systems, we try to use the "native" password management system of
   // the desktop environment currently running, allowing GNOME Keyring in XFCE.
@@ -289,6 +190,8 @@ KeyedService* PasswordStoreFactory::BuildServiceInstanceFor(
   LinuxBackendUsed used_backend = PLAINTEXT;
   if (store_type == "kwallet") {
     used_desktop_env = base::nix::DESKTOP_ENVIRONMENT_KDE4;
+  } else if (store_type == "kwallet5") {
+    used_desktop_env = base::nix::DESKTOP_ENVIRONMENT_KDE5;
   } else if (store_type == "gnome") {
     used_desktop_env = base::nix::DESKTOP_ENVIRONMENT_GNOME;
   } else if (store_type == "basic") {
@@ -305,10 +208,11 @@ KeyedService* PasswordStoreFactory::BuildServiceInstanceFor(
   LocalProfileId id = GetLocalProfileId(prefs);
 
   scoped_ptr<PasswordStoreX::NativeBackend> backend;
-  if (used_desktop_env == base::nix::DESKTOP_ENVIRONMENT_KDE4) {
+  if (used_desktop_env == base::nix::DESKTOP_ENVIRONMENT_KDE4 ||
+      used_desktop_env == base::nix::DESKTOP_ENVIRONMENT_KDE5) {
     // KDE3 didn't use DBus, which our KWallet store uses.
     VLOG(1) << "Trying KWallet for password storage.";
-    backend.reset(new NativeBackendKWallet(id));
+    backend.reset(new NativeBackendKWallet(id, used_desktop_env));
     if (backend->Init()) {
       VLOG(1) << "Using KWallet for password storage.";
       used_backend = KWALLET;
@@ -319,16 +223,13 @@ KeyedService* PasswordStoreFactory::BuildServiceInstanceFor(
              used_desktop_env == base::nix::DESKTOP_ENVIRONMENT_UNITY ||
              used_desktop_env == base::nix::DESKTOP_ENVIRONMENT_XFCE) {
 #if defined(USE_LIBSECRET)
-    if (base::FieldTrialList::FindFullName(kLibsecretFieldTrialName) !=
-        kLibsecretFieldTrialDisabledGroupName) {
-      VLOG(1) << "Trying libsecret for password storage.";
-      backend.reset(new NativeBackendLibsecret(id));
-      if (backend->Init()) {
-        VLOG(1) << "Using libsecret keyring for password storage.";
-        used_backend = LIBSECRET;
-      } else {
-        backend.reset();
-      }
+    VLOG(1) << "Trying libsecret for password storage.";
+    backend.reset(new NativeBackendLibsecret(id));
+    if (backend->Init()) {
+      VLOG(1) << "Using libsecret keyring for password storage.";
+      used_backend = LIBSECRET;
+    } else {
+      backend.reset();
     }
 #endif  // defined(USE_LIBSECRET)
     if (!backend.get()) {
@@ -351,8 +252,8 @@ KeyedService* PasswordStoreFactory::BuildServiceInstanceFor(
         "more information about password storage options.";
   }
 
-  ps = new PasswordStoreX(main_thread_runner, db_thread_runner, login_db.Pass(),
-                          backend.release());
+  ps = new PasswordStoreX(main_thread_runner, db_thread_runner,
+                          std::move(login_db), backend.release());
   RecordBackendStatistics(desktop_env, store_type, used_backend);
 #elif defined(USE_OZONE)
   ps = new password_manager::PasswordStoreDefault(
@@ -360,14 +261,15 @@ KeyedService* PasswordStoreFactory::BuildServiceInstanceFor(
 #else
   NOTIMPLEMENTED();
 #endif
-  if (!ps.get() ||
-      !ps->Init(
+  DCHECK(ps);
+  if (!ps->Init(
           sync_start_util::GetFlareForSyncableService(profile->GetPath()))) {
-    NOTREACHED() << "Could not initialize password manager.";
+    // TODO(crbug.com/479725): Remove the LOG once this error is visible in the
+    // UI.
+    LOG(WARNING) << "Could not initialize password store.";
     return nullptr;
   }
-
-  return new PasswordStoreService(ps);
+  return ps;
 }
 
 void PasswordStoreFactory::RegisterProfilePrefs(
@@ -400,7 +302,8 @@ void PasswordStoreFactory::RecordBackendStatistics(
     const std::string& command_line_flag,
     LinuxBackendUsed used_backend) {
   LinuxBackendUsage usage = OTHER_PLAINTEXT;
-  if (desktop_env == base::nix::DESKTOP_ENVIRONMENT_KDE4) {
+  if (desktop_env == base::nix::DESKTOP_ENVIRONMENT_KDE4 ||
+      desktop_env == base::nix::DESKTOP_ENVIRONMENT_KDE5) {
     if (command_line_flag == "kwallet") {
       usage = used_backend == KWALLET ? KDE_KWALLETFLAG_KWALLET
                                       : KDE_KWALLETFLAG_PLAINTEXT;

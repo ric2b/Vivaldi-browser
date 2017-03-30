@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#include <stddef.h>
 #include <X11/extensions/shape.h>
 #include <X11/Xlib.h>
 
@@ -15,6 +16,7 @@
 #undef None
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "ui/aura/window.h"
@@ -23,6 +25,7 @@
 #include "ui/base/x/x11_util.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/platform/x11/x11_event_source.h"
+#include "ui/events/test/platform_event_source_test_api.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/path.h"
@@ -148,7 +151,7 @@ scoped_ptr<Widget> CreateWidget(WidgetDelegate* delegate) {
   params.native_widget = new DesktopNativeWidgetAura(widget.get());
   params.bounds = gfx::Rect(100, 100, 100, 100);
   widget->Init(params);
-  return widget.Pass();
+  return widget;
 }
 
 // Returns the list of rectangles which describe |xid|'s bounding region via the
@@ -486,6 +489,48 @@ TEST_F(DesktopWindowTreeHostX11Test, ChildWindowDestructionDuringTearDown) {
   EXPECT_TRUE(DesktopWindowTreeHostX11::GetAllOpenWindows().empty());
 }
 
+// A Widget that allows setting the min/max size for the widget.
+class CustomSizeWidget : public Widget {
+ public:
+  CustomSizeWidget() {}
+  ~CustomSizeWidget() override {}
+
+  void set_min_size(const gfx::Size& size) { min_size_ = size; }
+  void set_max_size(const gfx::Size& size) { max_size_ = size; }
+
+  // Widget:
+  gfx::Size GetMinimumSize() const override { return min_size_; }
+  gfx::Size GetMaximumSize() const override { return max_size_; }
+
+ private:
+  gfx::Size min_size_;
+  gfx::Size max_size_;
+
+  DISALLOW_COPY_AND_ASSIGN(CustomSizeWidget);
+};
+
+TEST_F(DesktopWindowTreeHostX11Test, SetBoundsWithMinMax) {
+  CustomSizeWidget widget;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.native_widget = new DesktopNativeWidgetAura(&widget);
+  params.bounds = gfx::Rect(200, 100);
+  widget.Init(params);
+  widget.Show();
+  ui::X11EventSource::GetInstance()->DispatchXEvents();
+
+  EXPECT_EQ(gfx::Size(200, 100).ToString(),
+            widget.GetWindowBoundsInScreen().size().ToString());
+  widget.SetBounds(gfx::Rect(300, 200));
+  EXPECT_EQ(gfx::Size(300, 200).ToString(),
+            widget.GetWindowBoundsInScreen().size().ToString());
+
+  widget.set_min_size(gfx::Size(100, 100));
+  widget.SetBounds(gfx::Rect(50, 500));
+  EXPECT_EQ(gfx::Size(100, 500).ToString(),
+            widget.GetWindowBoundsInScreen().size().ToString());
+}
+
 class MouseEventRecorder : public ui::EventHandler {
  public:
   MouseEventRecorder() {}
@@ -508,25 +553,11 @@ class MouseEventRecorder : public ui::EventHandler {
   DISALLOW_COPY_AND_ASSIGN(MouseEventRecorder);
 };
 
-// A custom event-source that can be used to directly dispatch synthetic X11
-// events.
-class CustomX11EventSource : public ui::X11EventSource {
- public:
-  CustomX11EventSource() : X11EventSource(gfx::GetXDisplay()) {}
-  ~CustomX11EventSource() override {}
-
-  void DispatchSingleEvent(XEvent* xevent) {
-    PlatformEventSource::DispatchEvent(xevent);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CustomX11EventSource);
-};
-
 class DesktopWindowTreeHostX11HighDPITest
     : public DesktopWindowTreeHostX11Test {
  public:
-  DesktopWindowTreeHostX11HighDPITest() {}
+  DesktopWindowTreeHostX11HighDPITest()
+      : event_source_(ui::PlatformEventSource::GetInstance()) {}
   ~DesktopWindowTreeHostX11HighDPITest() override {}
 
   void DispatchSingleEventToWidget(XEvent* event, Widget* widget) {
@@ -535,7 +566,7 @@ class DesktopWindowTreeHostX11HighDPITest
         static_cast<XIDeviceEvent*>(event->xcookie.data);
     device_event->event =
         widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget();
-    event_source_.DispatchSingleEvent(event);
+    event_source_.Dispatch(event);
   }
 
   void PretendCapture(views::Widget* capture_widget) {
@@ -560,7 +591,7 @@ class DesktopWindowTreeHostX11HighDPITest
     DesktopWindowTreeHostX11Test::SetUp();
   }
 
-  CustomX11EventSource event_source_;
+  ui::test::PlatformEventSourceTestAPI event_source_;
   DISALLOW_COPY_AND_ASSIGN(DesktopWindowTreeHostX11HighDPITest);
 };
 

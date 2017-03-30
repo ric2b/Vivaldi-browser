@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_DEVTOOLS_DEVTOOLS_WINDOW_H_
 #define CHROME_BROWSER_DEVTOOLS_DEVTOOLS_WINDOW_H_
 
+#include "base/macros.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
 #include "chrome/browser/devtools/devtools_ui_bindings.h"
@@ -19,6 +20,7 @@ class DevToolsEventForwarder;
 namespace content {
 class DevToolsAgentHost;
 struct NativeWebKeyboardEvent;
+class RenderFrameHost;
 class RenderViewHost;
 }
 
@@ -108,9 +110,14 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
       Profile* profile,
       const scoped_refptr<content::DevToolsAgentHost>& worker_agent);
 
-  static void InspectElement(content::WebContents* inspected_web_contents,
+  static void InspectElement(content::RenderFrameHost* inspected_frame_host,
                              int x,
                              int y);
+
+  // Creates and opens the front-end API channel to applicable front-end in a
+  // form of devtools agent host.
+  static content::DevToolsExternalAgentProxyDelegate*
+      CreateWebSocketAPIChannel(const std::string& path);
 
   // Sets closure to be called after load is done. If already loaded, calls
   // closure immediately.
@@ -119,10 +126,16 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // Forwards an unhandled keyboard event to the DevTools frontend.
   bool ForwardKeyboardEvent(const content::NativeWebKeyboardEvent& event);
 
-  // content::WebContentsDelegate overrides.
+  // Reloads inspected web contents as if it was triggered from DevTools.
+  // Returns true if it has successfully handled reload, false if the caller
+  // is to proceed reload without DevTools interception.
+  bool ReloadInspectedWebContents(bool ignore_cache);
+
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
       const content::OpenURLParams& params) override;
+
+  void ShowCertificateViewer(int certificate_id);
 
   // BeforeUnload interception ////////////////////////////////////////////////
 

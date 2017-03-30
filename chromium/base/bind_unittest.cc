@@ -4,10 +4,15 @@
 
 #include "base/bind.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -24,11 +29,11 @@ class NoRef {
  public:
   NoRef() {}
 
-  MOCK_METHOD0(VoidMethod0, void(void));
-  MOCK_CONST_METHOD0(VoidConstMethod0, void(void));
+  MOCK_METHOD0(VoidMethod0, void());
+  MOCK_CONST_METHOD0(VoidConstMethod0, void());
 
-  MOCK_METHOD0(IntMethod0, int(void));
-  MOCK_CONST_METHOD0(IntConstMethod0, int(void));
+  MOCK_METHOD0(IntMethod0, int());
+  MOCK_CONST_METHOD0(IntConstMethod0, int());
 
  private:
   // Particularly important in this test to ensure no copies are made.
@@ -39,8 +44,8 @@ class HasRef : public NoRef {
  public:
   HasRef() {}
 
-  MOCK_CONST_METHOD0(AddRef, void(void));
-  MOCK_CONST_METHOD0(Release, bool(void));
+  MOCK_CONST_METHOD0(AddRef, void());
+  MOCK_CONST_METHOD0(Release, bool());
 
  private:
   // Particularly important in this test to ensure no copies are made.
@@ -57,8 +62,8 @@ static const int kChildValue = 2;
 
 class Parent {
  public:
-  void AddRef(void) const {}
-  void Release(void) const {}
+  void AddRef() const {}
+  void Release() const {}
   virtual void VirtualSet() { value = kParentValue; }
   void NonVirtualSet() { value = kParentValue; }
   int value;
@@ -150,7 +155,7 @@ class DeleteCounter {
 
 template <typename T>
 T PassThru(T scoper) {
-  return scoper.Pass();
+  return scoper;
 }
 
 // Some test functions that we can Bind to.
@@ -159,9 +164,10 @@ T PolymorphicIdentity(T t) {
   return t;
 }
 
-template <typename T>
-void VoidPolymorphic1(T t) {
-}
+template <typename... Ts>
+struct VoidPolymorphic {
+  static void Run(Ts... t) {}
+};
 
 int Identity(int n) {
   return n;
@@ -226,11 +232,11 @@ class BindTest : public ::testing::Test {
   virtual ~BindTest() {
   }
 
-  static void VoidFunc0(void) {
+  static void VoidFunc0() {
     static_func_mock_ptr->VoidMethod0();
   }
 
-  static int IntFunc0(void) { return static_func_mock_ptr->IntMethod0(); }
+  static int IntFunc0() { return static_func_mock_ptr->IntMethod0(); }
 
  protected:
   StrictMock<NoRef> no_ref_;
@@ -250,7 +256,7 @@ StrictMock<NoRef>* BindTest::static_func_mock_ptr;
 
 // Sanity check that we can instantiate a callback for each arity.
 TEST_F(BindTest, ArityTest) {
-  Callback<int(void)> c0 = Bind(&Sum, 32, 16, 8, 4, 2, 1);
+  Callback<int()> c0 = Bind(&Sum, 32, 16, 8, 4, 2, 1);
   EXPECT_EQ(63, c0.Run());
 
   Callback<int(int)> c1 = Bind(&Sum, 32, 16, 8, 4, 2);
@@ -292,7 +298,7 @@ TEST_F(BindTest, CurryingTest) {
   Callback<int(int)> c1 = Bind(c2, 2);
   EXPECT_EQ(75, c1.Run(13));
 
-  Callback<int(void)> c0 = Bind(c1, 1);
+  Callback<int()> c0 = Bind(c1, 1);
   EXPECT_EQ(63, c0.Run());
 }
 
@@ -333,7 +339,7 @@ TEST_F(BindTest, FunctionTypeSupport) {
   EXPECT_CALL(has_ref_, VoidConstMethod0()).Times(2);
 
   Closure normal_cb = Bind(&VoidFunc0);
-  Callback<NoRef*(void)> normal_non_refcounted_cb =
+  Callback<NoRef*()> normal_non_refcounted_cb =
       Bind(&PolymorphicIdentity<NoRef*>, &no_ref_);
   normal_cb.Run();
   EXPECT_EQ(&no_ref_, normal_non_refcounted_cb.Run());
@@ -375,11 +381,11 @@ TEST_F(BindTest, ReturnValues) {
       .WillOnce(Return(41337))
       .WillOnce(Return(51337));
 
-  Callback<int(void)> normal_cb = Bind(&IntFunc0);
-  Callback<int(void)> method_cb = Bind(&HasRef::IntMethod0, &has_ref_);
-  Callback<int(void)> const_method_nonconst_obj_cb =
+  Callback<int()> normal_cb = Bind(&IntFunc0);
+  Callback<int()> method_cb = Bind(&HasRef::IntMethod0, &has_ref_);
+  Callback<int()> const_method_nonconst_obj_cb =
       Bind(&HasRef::IntConstMethod0, &has_ref_);
-  Callback<int(void)> const_method_const_obj_cb =
+  Callback<int()> const_method_const_obj_cb =
       Bind(&HasRef::IntConstMethod0, const_has_ref_ptr_);
   EXPECT_EQ(1337, normal_cb.Run());
   EXPECT_EQ(31337, method_cb.Run());
@@ -443,46 +449,46 @@ TEST_F(BindTest, IgnoreResult) {
 TEST_F(BindTest, ArgumentBinding) {
   int n = 2;
 
-  Callback<int(void)> bind_primitive_cb = Bind(&Identity, n);
+  Callback<int()> bind_primitive_cb = Bind(&Identity, n);
   EXPECT_EQ(n, bind_primitive_cb.Run());
 
-  Callback<int*(void)> bind_primitive_pointer_cb =
+  Callback<int*()> bind_primitive_pointer_cb =
       Bind(&PolymorphicIdentity<int*>, &n);
   EXPECT_EQ(&n, bind_primitive_pointer_cb.Run());
 
-  Callback<int(void)> bind_int_literal_cb = Bind(&Identity, 3);
+  Callback<int()> bind_int_literal_cb = Bind(&Identity, 3);
   EXPECT_EQ(3, bind_int_literal_cb.Run());
 
-  Callback<const char*(void)> bind_string_literal_cb =
+  Callback<const char*()> bind_string_literal_cb =
       Bind(&CStringIdentity, "hi");
   EXPECT_STREQ("hi", bind_string_literal_cb.Run());
 
-  Callback<int(void)> bind_template_function_cb =
+  Callback<int()> bind_template_function_cb =
       Bind(&PolymorphicIdentity<int>, 4);
   EXPECT_EQ(4, bind_template_function_cb.Run());
 
   NoRefParent p;
   p.value = 5;
-  Callback<int(void)> bind_object_cb = Bind(&UnwrapNoRefParent, p);
+  Callback<int()> bind_object_cb = Bind(&UnwrapNoRefParent, p);
   EXPECT_EQ(5, bind_object_cb.Run());
 
   IncompleteType* incomplete_ptr = reinterpret_cast<IncompleteType*>(123);
-  Callback<IncompleteType*(void)> bind_incomplete_ptr_cb =
+  Callback<IncompleteType*()> bind_incomplete_ptr_cb =
       Bind(&PolymorphicIdentity<IncompleteType*>, incomplete_ptr);
   EXPECT_EQ(incomplete_ptr, bind_incomplete_ptr_cb.Run());
 
   NoRefChild c;
   c.value = 6;
-  Callback<int(void)> bind_promotes_cb = Bind(&UnwrapNoRefParent, c);
+  Callback<int()> bind_promotes_cb = Bind(&UnwrapNoRefParent, c);
   EXPECT_EQ(6, bind_promotes_cb.Run());
 
   c.value = 7;
-  Callback<int(void)> bind_pointer_promotes_cb =
+  Callback<int()> bind_pointer_promotes_cb =
       Bind(&UnwrapNoRefParentPtr, &c);
   EXPECT_EQ(7, bind_pointer_promotes_cb.Run());
 
   c.value = 8;
-  Callback<int(void)> bind_const_reference_promotes_cb =
+  Callback<int()> bind_const_reference_promotes_cb =
       Bind(&UnwrapNoRefParentConstRef, c);
   EXPECT_EQ(8, bind_const_reference_promotes_cb.Run());
 }
@@ -496,17 +502,20 @@ TEST_F(BindTest, ArgumentBinding) {
 //   - Unbound sized array.
 //   - Unbound array-of-arrays.
 TEST_F(BindTest, UnboundArgumentTypeSupport) {
-  Callback<void(int)> unbound_value_cb = Bind(&VoidPolymorphic1<int>);
-  Callback<void(int*)> unbound_pointer_cb = Bind(&VoidPolymorphic1<int*>);
-  Callback<void(int&)> unbound_ref_cb = Bind(&VoidPolymorphic1<int&>);
+  Callback<void(int)> unbound_value_cb = Bind(&VoidPolymorphic<int>::Run);
+  Callback<void(int*)> unbound_pointer_cb = Bind(&VoidPolymorphic<int*>::Run);
+  Callback<void(int&)> unbound_ref_cb = Bind(&VoidPolymorphic<int&>::Run);
   Callback<void(const int&)> unbound_const_ref_cb =
-      Bind(&VoidPolymorphic1<const int&>);
+      Bind(&VoidPolymorphic<const int&>::Run);
   Callback<void(int[])> unbound_unsized_array_cb =
-      Bind(&VoidPolymorphic1<int[]>);
+      Bind(&VoidPolymorphic<int[]>::Run);
   Callback<void(int[2])> unbound_sized_array_cb =
-      Bind(&VoidPolymorphic1<int[2]>);
+      Bind(&VoidPolymorphic<int[2]>::Run);
   Callback<void(int[][2])> unbound_array_of_arrays_cb =
-      Bind(&VoidPolymorphic1<int[][2]>);
+      Bind(&VoidPolymorphic<int[][2]>::Run);
+
+  Callback<void(int&)> unbound_ref_with_bound_arg =
+      Bind(&VoidPolymorphic<int, int&>::Run, 1);
 }
 
 // Function with unbound reference parameter.
@@ -526,12 +535,12 @@ TEST_F(BindTest, ReferenceArgumentBinding) {
   int& ref_n = n;
   const int& const_ref_n = n;
 
-  Callback<int(void)> ref_copies_cb = Bind(&Identity, ref_n);
+  Callback<int()> ref_copies_cb = Bind(&Identity, ref_n);
   EXPECT_EQ(n, ref_copies_cb.Run());
   n++;
   EXPECT_EQ(n - 1, ref_copies_cb.Run());
 
-  Callback<int(void)> const_ref_copies_cb = Bind(&Identity, const_ref_n);
+  Callback<int()> const_ref_copies_cb = Bind(&Identity, const_ref_n);
   EXPECT_EQ(n, const_ref_copies_cb.Run());
   n++;
   EXPECT_EQ(n - 1, const_ref_copies_cb.Run());
@@ -544,10 +553,10 @@ TEST_F(BindTest, ArrayArgumentBinding) {
   int array[4] = {1, 1, 1, 1};
   const int (*const_array_ptr)[4] = &array;
 
-  Callback<int(void)> array_cb = Bind(&ArrayGet, array, 1);
+  Callback<int()> array_cb = Bind(&ArrayGet, array, 1);
   EXPECT_EQ(1, array_cb.Run());
 
-  Callback<int(void)> const_array_cb = Bind(&ArrayGet, *const_array_ptr, 1);
+  Callback<int()> const_array_cb = Bind(&ArrayGet, *const_array_ptr, 1);
   EXPECT_EQ(1, const_array_cb.Run());
 
   array[1] = 3;
@@ -585,15 +594,15 @@ TEST_F(BindTest, Unretained) {
   EXPECT_CALL(no_ref_, VoidMethod0());
   EXPECT_CALL(no_ref_, VoidConstMethod0()).Times(2);
 
-  Callback<void(void)> method_cb =
+  Callback<void()> method_cb =
       Bind(&NoRef::VoidMethod0, Unretained(&no_ref_));
   method_cb.Run();
 
-  Callback<void(void)> const_method_cb =
+  Callback<void()> const_method_cb =
       Bind(&NoRef::VoidConstMethod0, Unretained(&no_ref_));
   const_method_cb.Run();
 
-  Callback<void(void)> const_method_const_ptr_cb =
+  Callback<void()> const_method_const_ptr_cb =
       Bind(&NoRef::VoidConstMethod0, Unretained(const_no_ref_ptr_));
   const_method_const_ptr_cb.Run();
 }
@@ -645,8 +654,8 @@ TEST_F(BindTest, WeakPtr) {
 TEST_F(BindTest, ConstRef) {
   int n = 1;
 
-  Callback<int(void)> copy_cb = Bind(&Identity, n);
-  Callback<int(void)> const_ref_cb = Bind(&Identity, ConstRef(n));
+  Callback<int()> copy_cb = Bind(&Identity, n);
+  Callback<int()> const_ref_cb = Bind(&Identity, ConstRef(n));
   EXPECT_EQ(n, copy_cb.Run());
   EXPECT_EQ(n, const_ref_cb.Run());
   n++;
@@ -656,7 +665,7 @@ TEST_F(BindTest, ConstRef) {
   int copies = 0;
   int assigns = 0;
   CopyCounter counter(&copies, &assigns);
-  Callback<int(void)> all_const_ref_cb =
+  Callback<int()> all_const_ref_cb =
       Bind(&GetCopies, ConstRef(counter));
   EXPECT_EQ(0, all_const_ref_cb.Run());
   EXPECT_EQ(0, copies);
@@ -673,7 +682,7 @@ TEST_F(BindTest, ScopedRefptr) {
 
   const scoped_refptr<StrictMock<HasRef> > refptr(&has_ref_);
 
-  Callback<int(void)> scoped_refptr_const_ref_cb =
+  Callback<int()> scoped_refptr_const_ref_cb =
       Bind(&FunctionWithScopedRefptrFirstParam, base::ConstRef(refptr), 1);
   EXPECT_EQ(1, scoped_refptr_const_ref_cb.Run());
 }
@@ -685,7 +694,7 @@ TEST_F(BindTest, Owned) {
 
   // If we don't capture, delete happens on Callback destruction/reset.
   // return the same value.
-  Callback<DeleteCounter*(void)> no_capture_cb =
+  Callback<DeleteCounter*()> no_capture_cb =
       Bind(&PolymorphicIdentity<DeleteCounter*>, Owned(counter));
   ASSERT_EQ(counter, no_capture_cb.Run());
   ASSERT_EQ(counter, no_capture_cb.Run());
@@ -714,7 +723,7 @@ TEST_F(BindTest, ScopedPtr) {
 
   // Tests the Passed() function's support for pointers.
   scoped_ptr<DeleteCounter> ptr(new DeleteCounter(&deletes));
-  Callback<scoped_ptr<DeleteCounter>(void)> unused_callback =
+  Callback<scoped_ptr<DeleteCounter>()> unused_callback =
       Bind(&PassThru<scoped_ptr<DeleteCounter> >, Passed(&ptr));
   EXPECT_FALSE(ptr.get());
   EXPECT_EQ(0, deletes);
@@ -726,7 +735,7 @@ TEST_F(BindTest, ScopedPtr) {
   // Tests the Passed() function's support for rvalues.
   deletes = 0;
   DeleteCounter* counter = new DeleteCounter(&deletes);
-  Callback<scoped_ptr<DeleteCounter>(void)> callback =
+  Callback<scoped_ptr<DeleteCounter>()> callback =
       Bind(&PassThru<scoped_ptr<DeleteCounter> >,
            Passed(scoped_ptr<DeleteCounter>(counter)));
   EXPECT_FALSE(ptr.get());
@@ -749,7 +758,50 @@ TEST_F(BindTest, ScopedPtr) {
   Callback<scoped_ptr<DeleteCounter>(scoped_ptr<DeleteCounter>)> cb_unbound =
       Bind(&PassThru<scoped_ptr<DeleteCounter> >);
   ptr.reset(new DeleteCounter(&deletes));
-  cb_unbound.Run(ptr.Pass());
+  cb_unbound.Run(std::move(ptr));
+}
+
+TEST_F(BindTest, UniquePtr) {
+  int deletes = 0;
+
+  // Tests the Passed() function's support for pointers.
+  std::unique_ptr<DeleteCounter> ptr(new DeleteCounter(&deletes));
+  Callback<std::unique_ptr<DeleteCounter>()> unused_callback =
+      Bind(&PassThru<std::unique_ptr<DeleteCounter>>, Passed(&ptr));
+  EXPECT_FALSE(ptr.get());
+  EXPECT_EQ(0, deletes);
+
+  // If we never invoke the Callback, it retains ownership and deletes.
+  unused_callback.Reset();
+  EXPECT_EQ(1, deletes);
+
+  // Tests the Passed() function's support for rvalues.
+  deletes = 0;
+  DeleteCounter* counter = new DeleteCounter(&deletes);
+  Callback<std::unique_ptr<DeleteCounter>()> callback =
+      Bind(&PassThru<std::unique_ptr<DeleteCounter>>,
+           Passed(std::unique_ptr<DeleteCounter>(counter)));
+  EXPECT_FALSE(ptr.get());
+  EXPECT_EQ(0, deletes);
+
+  // Check that ownership can be transferred back out.
+  std::unique_ptr<DeleteCounter> result = callback.Run();
+  ASSERT_EQ(counter, result.get());
+  EXPECT_EQ(0, deletes);
+
+  // Resetting does not delete since ownership was transferred.
+  callback.Reset();
+  EXPECT_EQ(0, deletes);
+
+  // Ensure that we actually did get ownership.
+  result.reset();
+  EXPECT_EQ(1, deletes);
+
+  // Test unbound argument forwarding.
+  Callback<std::unique_ptr<DeleteCounter>(std::unique_ptr<DeleteCounter>)>
+      cb_unbound = Bind(&PassThru<std::unique_ptr<DeleteCounter>>);
+  ptr.reset(new DeleteCounter(&deletes));
+  cb_unbound.Run(std::move(ptr));
 }
 
 // Argument Copy-constructor usage for non-reference parameters.
@@ -763,15 +815,15 @@ TEST_F(BindTest, ArgumentCopies) {
 
   CopyCounter counter(&copies, &assigns);
 
-  Callback<void(void)> copy_cb =
-      Bind(&VoidPolymorphic1<CopyCounter>, counter);
+  Callback<void()> copy_cb =
+      Bind(&VoidPolymorphic<CopyCounter>::Run, counter);
   EXPECT_GE(1, copies);
   EXPECT_EQ(0, assigns);
 
   copies = 0;
   assigns = 0;
   Callback<void(CopyCounter)> forward_cb =
-      Bind(&VoidPolymorphic1<CopyCounter>);
+      Bind(&VoidPolymorphic<CopyCounter>::Run);
   forward_cb.Run(counter);
   EXPECT_GE(1, copies);
   EXPECT_EQ(0, assigns);
@@ -780,7 +832,7 @@ TEST_F(BindTest, ArgumentCopies) {
   assigns = 0;
   DerivedCopyCounter derived(&copies, &assigns);
   Callback<void(CopyCounter)> coerce_cb =
-      Bind(&VoidPolymorphic1<CopyCounter>);
+      Bind(&VoidPolymorphic<CopyCounter>::Run);
   coerce_cb.Run(CopyCounter(derived));
   EXPECT_GE(2, copies);
   EXPECT_EQ(0, assigns);
@@ -805,10 +857,10 @@ int __stdcall StdCallFunc(int n) {
 //   - Can bind a __fastcall function.
 //   - Can bind a __stdcall function.
 TEST_F(BindTest, WindowsCallingConventions) {
-  Callback<int(void)> fastcall_cb = Bind(&FastCallFunc, 1);
+  Callback<int()> fastcall_cb = Bind(&FastCallFunc, 1);
   EXPECT_EQ(1, fastcall_cb.Run());
 
-  Callback<int(void)> stdcall_cb = Bind(&StdCallFunc, 2);
+  Callback<int()> stdcall_cb = Bind(&StdCallFunc, 2);
   EXPECT_EQ(2, stdcall_cb.Run());
 }
 #endif

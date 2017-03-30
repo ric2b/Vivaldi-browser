@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_DEVTOOLS_DEVTOOLS_FRONTEND_HOST_IMPL_H_
 #define CONTENT_BROWSER_DEVTOOLS_DEVTOOLS_FRONTEND_HOST_IMPL_H_
 
+#include "base/macros.h"
 #include "content/public/browser/devtools_frontend_host.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -13,8 +14,9 @@ namespace content {
 class DevToolsFrontendHostImpl : public DevToolsFrontendHost,
                                  public WebContentsObserver {
  public:
-  DevToolsFrontendHostImpl(RenderFrameHost* frontend_main_frame,
-                           DevToolsFrontendHost::Delegate* delegate);
+  DevToolsFrontendHostImpl(
+      RenderFrameHost* frontend_main_frame,
+      const HandleMessageCallback& handle_message_callback);
   ~DevToolsFrontendHostImpl() override;
 
   void BadMessageRecieved() override;
@@ -24,10 +26,9 @@ class DevToolsFrontendHostImpl : public DevToolsFrontendHost,
   bool OnMessageReceived(const IPC::Message& message,
                          RenderFrameHost* render_frame_host) override;
 
-  void OnDispatchOnInspectorBackend(const std::string& message);
   void OnDispatchOnEmbedder(const std::string& message);
 
-  DevToolsFrontendHost::Delegate* delegate_;
+  HandleMessageCallback handle_message_callback_;
   DISALLOW_COPY_AND_ASSIGN(DevToolsFrontendHostImpl);
 };
 

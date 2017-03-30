@@ -19,9 +19,11 @@
 #ifndef MEDIA_RENDERERS_AUDIO_RENDERER_IMPL_H_
 #define MEDIA_RENDERERS_AUDIO_RENDERER_IMPL_H_
 
+#include <stdint.h>
+
 #include <deque>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
@@ -79,7 +81,7 @@ class MEDIA_EXPORT AudioRendererImpl
   // AudioRenderer implementation.
   void Initialize(DemuxerStream* stream,
                   const PipelineStatusCB& init_cb,
-                  const SetDecryptorReadyCB& set_decryptor_ready_cb,
+                  const SetCdmReadyCB& set_cdm_ready_cb,
                   const StatisticsCB& statistics_cb,
                   const BufferingStateCB& buffering_state_cb,
                   const base::Closure& ended_cb,
@@ -158,7 +160,9 @@ class MEDIA_EXPORT AudioRendererImpl
   // timestamp in the pipeline will be ahead of the actual audio playback. In
   // this case |audio_delay_milliseconds| should be used to indicate when in the
   // future should the filled buffer be played.
-  int Render(AudioBus* audio_bus, int audio_delay_milliseconds) override;
+  int Render(AudioBus* audio_bus,
+             uint32_t audio_delay_milliseconds,
+             uint32_t frames_skipped) override;
   void OnRenderError() override;
 
   // Helper methods that schedule an asynchronous read from the decoder as long
@@ -222,12 +226,17 @@ class MEDIA_EXPORT AudioRendererImpl
   BufferingStateCB buffering_state_cb_;
   base::Closure ended_cb_;
   PipelineStatusCB error_cb_;
+  StatisticsCB statistics_cb_;
 
   // Callback provided to Flush().
   base::Closure flush_cb_;
 
   // Overridable tick clock for testing.
   scoped_ptr<base::TickClock> tick_clock_;
+
+  // Memory usage of |algorithm_| recorded during the last
+  // HandleSplicerBuffer_Locked() call.
+  int64_t last_audio_memory_usage_;
 
   // After Initialize() has completed, all variables below must be accessed
   // under |lock_|. ------------------------------------------------------------

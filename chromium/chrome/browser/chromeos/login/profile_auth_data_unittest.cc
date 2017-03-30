@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/login/profile_auth_data.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -175,12 +176,12 @@ void ProfileAuthDataTest::VerifyUserCookies(
   net::CookieList user_cookies = GetUserCookies();
   ASSERT_EQ(2u, user_cookies.size());
   net::CanonicalCookie* cookie = &user_cookies[0];
-  EXPECT_EQ(kSAMLIdPCookieURL, cookie->Source());
+  EXPECT_EQ(GURL(kSAMLIdPCookieURL), cookie->Source());
   EXPECT_EQ(kCookieName, cookie->Name());
   EXPECT_EQ(expected_saml_idp_cookie_value, cookie->Value());
   EXPECT_EQ(kSAMLIdPCookieDomain, cookie->Domain());
   cookie = &user_cookies[1];
-  EXPECT_EQ(kGAIACookieURL, cookie->Source());
+  EXPECT_EQ(GURL(kGAIACookieURL), cookie->Source());
   EXPECT_EQ(kCookieName, cookie->Name());
   EXPECT_EQ(expected_gaia_cookie_value, cookie->Value());
   EXPECT_EQ(kGAIACookieDomain, cookie->Domain());
@@ -229,7 +230,8 @@ void ProfileAuthDataTest::PopulateBrowserContext(
 
   GetChannelIDs(browser_context)
       ->SetChannelID(make_scoped_ptr(new net::ChannelIDStore::ChannelID(
-          kChannelIDServerIdentifier, base::Time(), channel_id_key.Pass())));
+          kChannelIDServerIdentifier, base::Time(),
+          std::move(channel_id_key))));
 }
 
 net::URLRequestContext* ProfileAuthDataTest::GetRequestContext(

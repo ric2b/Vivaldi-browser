@@ -4,11 +4,14 @@
 
 #include "components/policy/core/browser/configuration_policy_handler.h"
 
+#include <stddef.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_value_map.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -148,8 +151,9 @@ bool IntRangePolicyHandlerBase::EnsureInRange(const base::Value* input,
 // StringMappingListPolicyHandler implementation -----------------------------
 
 StringMappingListPolicyHandler::MappingEntry::MappingEntry(
-    const char* policy_value, scoped_ptr<base::Value> map)
-    : enum_value(policy_value), mapped_value(map.Pass()) {}
+    const char* policy_value,
+    scoped_ptr<base::Value> map)
+    : enum_value(policy_value), mapped_value(std::move(map)) {}
 
 StringMappingListPolicyHandler::MappingEntry::~MappingEntry() {}
 
@@ -179,7 +183,7 @@ void StringMappingListPolicyHandler::ApplyPolicySettings(
   const base::Value* value = policies.GetValue(policy_name());
   scoped_ptr<base::ListValue> list(new base::ListValue());
   if (value && Convert(value, list.get(), NULL))
-    prefs->SetValue(pref_path_, list.Pass());
+    prefs->SetValue(pref_path_, std::move(list));
 }
 
 bool StringMappingListPolicyHandler::Convert(const base::Value* input,
@@ -238,7 +242,7 @@ scoped_ptr<base::Value> StringMappingListPolicyHandler::Map(
       break;
     }
   }
-  return return_value.Pass();
+  return return_value;
 }
 
 // IntRangePolicyHandler implementation ----------------------------------------
@@ -433,9 +437,8 @@ void SimpleSchemaValidatingPolicyHandler::ApplyPolicySettings(
 LegacyPoliciesDeprecatingPolicyHandler::LegacyPoliciesDeprecatingPolicyHandler(
     ScopedVector<ConfigurationPolicyHandler> legacy_policy_handlers,
     scoped_ptr<SchemaValidatingPolicyHandler> new_policy_handler)
-    : legacy_policy_handlers_(legacy_policy_handlers.Pass()),
-      new_policy_handler_(new_policy_handler.Pass()) {
-}
+    : legacy_policy_handlers_(std::move(legacy_policy_handlers)),
+      new_policy_handler_(std::move(new_policy_handler)) {}
 
 LegacyPoliciesDeprecatingPolicyHandler::
     ~LegacyPoliciesDeprecatingPolicyHandler() {

@@ -16,10 +16,9 @@ ScrollbarImpl::ScrollbarImpl(
     scoped_ptr<WebScrollbar> scrollbar,
     blink::WebScrollbarThemePainter painter,
     scoped_ptr<blink::WebScrollbarThemeGeometry> geometry)
-    : scrollbar_(scrollbar.Pass()),
+    : scrollbar_(std::move(scrollbar)),
       painter_(painter),
-      geometry_(geometry.Pass()) {
-}
+      geometry_(std::move(geometry)) {}
 
 ScrollbarImpl::~ScrollbarImpl() {
 }
@@ -62,6 +61,16 @@ int ScrollbarImpl::ThumbLength() const {
 
 gfx::Rect ScrollbarImpl::TrackRect() const {
   return geometry_->trackRect(scrollbar_.get());
+}
+
+float ScrollbarImpl::ThumbOpacity() const {
+  return painter_.thumbOpacity();
+}
+
+bool ScrollbarImpl::NeedsPaintPart(cc::ScrollbarPart part) const {
+  if (part == cc::THUMB)
+    return painter_.thumbNeedsRepaint();
+  return painter_.trackNeedsRepaint();
 }
 
 void ScrollbarImpl::PaintPart(SkCanvas* canvas,

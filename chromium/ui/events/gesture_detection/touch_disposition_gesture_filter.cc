@@ -4,6 +4,8 @@
 
 #include "ui/events/gesture_detection/touch_disposition_gesture_filter.h"
 
+#include <stddef.h>
+
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "ui/events/gesture_event_details.h"
@@ -166,21 +168,26 @@ TouchDispositionGestureFilter::OnGesturePacket(
     return SUCCESS;
   }
 
-  // Check the packet's unique_touch_event_id is valid and unique.
+  // Check the packet's unique_touch_event_id is valid and unique with the
+  // exception of TOUCH_TIMEOUT packets which have the unique_touch_event_id_
+  // of 0. |TOUCH_TIMEOUT| packets don't wait for an ack, they are dispatched
+  // as soon as they reach the head of the queue, in |SendAckedEvents|.
   if (!Tail().empty()) {
-    DCHECK_NE(packet.unique_touch_event_id(),
-              Tail().back().unique_touch_event_id());
+    DCHECK((packet.gesture_source() == GestureEventDataPacket::TOUCH_TIMEOUT)
+            || (packet.unique_touch_event_id() !=
+                    Tail().back().unique_touch_event_id()));
   }
   if (!Head().empty()) {
     DCHECK_NE(packet.unique_touch_event_id(),
               Head().front().unique_touch_event_id());
+
   }
 
   Tail().push(packet);
   return SUCCESS;
 }
 
-void TouchDispositionGestureFilter::OnTouchEventAck(uint32 unique_event_id,
+void TouchDispositionGestureFilter::OnTouchEventAck(uint32_t unique_event_id,
                                                     bool event_consumed) {
   // Spurious asynchronous acks should not trigger a crash.
   if (IsEmpty() || (Head().empty() && sequences_.size() == 1))

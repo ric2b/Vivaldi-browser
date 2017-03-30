@@ -4,195 +4,232 @@
 
 #include "content/browser/media/media_web_contents_observer.h"
 
+#include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/stl_util.h"
-#include "content/browser/media/cdm/browser_cdm_manager.h"
-#include "content/browser/renderer_host/render_process_host_impl.h"
+#include "build/build_config.h"
+#include "content/browser/media/audible_metrics.h"
+#include "content/browser/media/audio_stream_monitor.h"
+#include "content/browser/power_save_blocker_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/frame_messages.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ipc/ipc_message_macros.h"
 
-#if defined(OS_ANDROID)
-#include "content/browser/android/media_players_observer.h"
-#include "content/browser/media/android/browser_media_player_manager.h"
-#include "content/common/media/media_player_messages_android.h"
-#include "media/base/android/media_player_android.h"
-#endif  // defined(OS_ANDROID)
-
 namespace content {
 
-MediaWebContentsObserver::MediaWebContentsObserver(
-    WebContents* web_contents)
-    : WebContentsObserver(web_contents)
-{
-}
+namespace {
 
-MediaWebContentsObserver::~MediaWebContentsObserver() {
+static base::LazyInstance<AudibleMetrics>::Leaky g_audible_metrics =
+    LAZY_INSTANCE_INITIALIZER;
+
+}  // anonymous namespace
+
+MediaWebContentsObserver::MediaWebContentsObserver(WebContents* web_contents)
+    : WebContentsObserver(web_contents) {}
+
+MediaWebContentsObserver::~MediaWebContentsObserver() {}
+
+void MediaWebContentsObserver::WebContentsDestroyed() {
+  g_audible_metrics.Get().UpdateAudibleWebContentsState(web_contents(), false);
 }
 
 void MediaWebContentsObserver::RenderFrameDeleted(
     RenderFrameHost* render_frame_host) {
-#if defined(OS_ANDROID)
-  uintptr_t key = reinterpret_cast<uintptr_t>(render_frame_host);
-  // Always destroy the media players before CDMs because we do not support
-  // detaching CDMs from media players yet. See http://crbug.com/330324
-  media_player_managers_.erase(key);
-
-  MediaPlayersObserver* audio_observer = GetMediaPlayersObserver();
-  if (audio_observer)
-    audio_observer->RenderFrameDeleted(render_frame_host);
-#endif
-  // TODO(xhwang): Currently MediaWebContentsObserver, BrowserMediaPlayerManager
-  // and BrowserCdmManager all run on browser UI thread. So this call is okay.
-  // In the future we need to support the case where MediaWebContentsObserver
-  // get notified on browser UI thread, but BrowserMediaPlayerManager and
-  // BrowserCdmManager run on a different thread.
-  BrowserCdmManager* browser_cdm_manager =
-      BrowserCdmManager::FromProcess(render_frame_host->GetProcess()->GetID());
-  if (browser_cdm_manager)
-    browser_cdm_manager->RenderFrameDeleted(render_frame_host->GetRoutingID());
+  ClearPowerSaveBlockers(render_frame_host);
 }
 
-#if defined(OS_ANDROID)
+void MediaWebContentsObserver::MaybeUpdateAudibleState() {
+  if (!AudioStreamMonitor::monitoring_available())
+    return;
+
+  AudioStreamMonitor* audio_stream_monitor =
+      static_cast<WebContentsImpl*>(web_contents())->audio_stream_monitor();
+
+  if (audio_stream_monitor->WasRecentlyAudible()) {
+    if (!audio_power_save_blocker_)
+      CreateAudioPowerSaveBlocker();
+  } else {
+    audio_power_save_blocker_.reset();
+  }
+
+  g_audible_metrics.Get().UpdateAudibleWebContentsState(
+      web_contents(), audio_stream_monitor->IsCurrentlyAudible());
+}
 
 bool MediaWebContentsObserver::OnMessageReceived(
     const IPC::Message& msg,
     RenderFrameHost* render_frame_host) {
-  if (OnMediaPlayerMessageReceived(msg, render_frame_host))
-    return true;
-
-  if (OnMediaPlayerSetCdmMessageReceived(msg, render_frame_host))
-    return true;
-
-  return false;
-}
-
-bool MediaWebContentsObserver::OnMediaPlayerMessageReceived(
-    const IPC::Message& msg,
-    RenderFrameHost* render_frame_host) {
   bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(MediaWebContentsObserver, msg)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_EnterFullscreen,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnEnterFullscreen)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_Initialize,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnInitialize)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_Start,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnStart)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_Seek,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnSeek)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_Pause,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnPause)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_SetVolume,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnSetVolume)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_SetPoster,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnSetPoster)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_Release,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnReleaseResources)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_DestroyMediaPlayer,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnDestroyPlayer)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_RequestRemotePlayback,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnRequestRemotePlayback)
-    IPC_MESSAGE_FORWARD(
-        MediaPlayerHostMsg_RequestRemotePlaybackControl,
-        GetMediaPlayerManager(render_frame_host),
-        BrowserMediaPlayerManager::OnRequestRemotePlaybackControl)
-#if defined(VIDEO_HOLE)
-    IPC_MESSAGE_FORWARD(MediaPlayerHostMsg_NotifyExternalSurface,
-                        GetMediaPlayerManager(render_frame_host),
-                        BrowserMediaPlayerManager::OnNotifyExternalSurface)
-#endif  // defined(VIDEO_HOLE)
+  // TODO(dalecurtis): These should no longer be FrameHostMsg.
+  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(MediaWebContentsObserver, msg,
+                                   render_frame_host)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_MediaPlayingNotification,
+                        OnMediaPlayingNotification)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_MediaPausedNotification,
+                        OnMediaPausedNotification)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
 }
 
-bool MediaWebContentsObserver::OnMediaPlayerSetCdmMessageReceived(
-    const IPC::Message& msg,
+void MediaWebContentsObserver::OnMediaPlayingNotification(
+    RenderFrameHost* render_frame_host,
+    int64_t player_cookie,
+    bool has_video,
+    bool has_audio,
+    bool is_remote) {
+  // Ignore the videos playing remotely and don't hold the wake lock for the
+  // screen. TODO(dalecurtis): Is this correct? It means observers will not
+  // receive play and pause messages.
+  if (is_remote)
+    return;
+
+  const MediaPlayerId id(render_frame_host, player_cookie);
+  if (has_audio) {
+    AddMediaPlayerEntry(id, &active_audio_players_);
+
+    // If we don't have audio stream monitoring, allocate the audio power save
+    // blocker here instead of during NotifyNavigationStateChanged().
+    if (!audio_power_save_blocker_ &&
+        !AudioStreamMonitor::monitoring_available()) {
+      CreateAudioPowerSaveBlocker();
+    }
+  }
+
+  if (has_video) {
+    AddMediaPlayerEntry(id, &active_video_players_);
+
+    // If we're not hidden and have just created a player, create a blocker.
+    if (!video_power_save_blocker_ &&
+        !static_cast<WebContentsImpl*>(web_contents())->IsHidden()) {
+      CreateVideoPowerSaveBlocker();
+    }
+  }
+
+  // Notify observers of the new player.
+  DCHECK(has_audio || has_video);
+  static_cast<WebContentsImpl*>(web_contents())->MediaStartedPlaying(id);
+}
+
+void MediaWebContentsObserver::OnMediaPausedNotification(
+    RenderFrameHost* render_frame_host,
+    int64_t player_cookie) {
+  const MediaPlayerId id(render_frame_host, player_cookie);
+  const bool removed_audio = RemoveMediaPlayerEntry(id, &active_audio_players_);
+  const bool removed_video = RemoveMediaPlayerEntry(id, &active_video_players_);
+  MaybeReleasePowerSaveBlockers();
+
+  if (removed_audio || removed_video) {
+    // Notify observers the player has been "paused".
+    static_cast<WebContentsImpl*>(web_contents())->MediaStoppedPlaying(id);
+  }
+}
+
+void MediaWebContentsObserver::ClearPowerSaveBlockers(
     RenderFrameHost* render_frame_host) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(
-      MediaWebContentsObserver, msg, render_frame_host)
-    IPC_MESSAGE_HANDLER(MediaPlayerHostMsg_SetCdm, OnSetCdm)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
+  std::set<MediaPlayerId> removed_players;
+  RemoveAllMediaPlayerEntries(render_frame_host, &active_audio_players_,
+                              &removed_players);
+  RemoveAllMediaPlayerEntries(render_frame_host, &active_video_players_,
+                              &removed_players);
+  MaybeReleasePowerSaveBlockers();
+
+  // Notify all observers the player has been "paused".
+  WebContentsImpl* wci = static_cast<WebContentsImpl*>(web_contents());
+  for (const auto& id : removed_players)
+    wci->MediaStoppedPlaying(id);
 }
 
-void MediaWebContentsObserver::OnSetCdm(RenderFrameHost* render_frame_host,
-                                        int player_id,
-                                        int cdm_id) {
-  media::MediaPlayerAndroid* media_player =
-      GetMediaPlayerManager(render_frame_host)->GetPlayer(player_id);
-  if (!media_player) {
-    NOTREACHED() << "OnSetCdm: MediaPlayer not found for " << player_id;
+void MediaWebContentsObserver::CreateAudioPowerSaveBlocker() {
+  DCHECK(!audio_power_save_blocker_);
+  audio_power_save_blocker_ = PowerSaveBlocker::Create(
+      PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
+      PowerSaveBlocker::kReasonAudioPlayback, "Playing audio");
+}
+
+void MediaWebContentsObserver::CreateVideoPowerSaveBlocker() {
+  DCHECK(!video_power_save_blocker_);
+  DCHECK(!active_video_players_.empty());
+  video_power_save_blocker_ = PowerSaveBlocker::Create(
+      PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
+      PowerSaveBlocker::kReasonVideoPlayback, "Playing video");
+// TODO(mfomitchev): Support PowerSaveBlocker on Aura - crbug.com/546718.
+#if defined(OS_ANDROID) && !defined(USE_AURA)
+  static_cast<PowerSaveBlockerImpl*>(video_power_save_blocker_.get())
+      ->InitDisplaySleepBlocker(web_contents());
+#endif
+}
+
+void MediaWebContentsObserver::WasShown() {
+  // Restore power save blocker if there are active video players running.
+  if (!active_video_players_.empty() && !video_power_save_blocker_)
+    CreateVideoPowerSaveBlocker();
+}
+
+void MediaWebContentsObserver::WasHidden() {
+  // If there are entities capturing screenshots or video (e.g., mirroring),
+  // don't release the power save blocker.
+  if (!web_contents()->GetCapturerCount())
+    video_power_save_blocker_.reset();
+}
+
+void MediaWebContentsObserver::MaybeReleasePowerSaveBlockers() {
+  // If there are no more audio players and we don't have audio stream
+  // monitoring, release the audio power save blocker here instead of during
+  // NotifyNavigationStateChanged().
+  if (active_audio_players_.empty() &&
+      !AudioStreamMonitor::monitoring_available()) {
+    audio_power_save_blocker_.reset();
+  }
+
+  // If there are no more video players, clear the video power save blocker.
+  if (active_video_players_.empty())
+    video_power_save_blocker_.reset();
+}
+
+void MediaWebContentsObserver::AddMediaPlayerEntry(
+    const MediaPlayerId& id,
+    ActiveMediaPlayerMap* player_map) {
+  DCHECK(std::find((*player_map)[id.first].begin(),
+                   (*player_map)[id.first].end(),
+                   id.second) == (*player_map)[id.first].end());
+  (*player_map)[id.first].push_back(id.second);
+}
+
+bool MediaWebContentsObserver::RemoveMediaPlayerEntry(
+    const MediaPlayerId& id,
+    ActiveMediaPlayerMap* player_map) {
+  auto it = player_map->find(id.first);
+  if (it == player_map->end())
+    return false;
+
+  // Remove the player.
+  auto player_for_removal =
+      std::remove(it->second.begin(), it->second.end(), id.second);
+  if (player_for_removal == it->second.end())
+    return false;
+  it->second.erase(player_for_removal);
+
+  // If there are no players left, remove the map entry.
+  if (it->second.empty())
+    player_map->erase(it);
+
+  return true;
+}
+
+void MediaWebContentsObserver::RemoveAllMediaPlayerEntries(
+    RenderFrameHost* render_frame_host,
+    ActiveMediaPlayerMap* player_map,
+    std::set<MediaPlayerId>* removed_players) {
+  auto it = player_map->find(render_frame_host);
+  if (it == player_map->end())
     return;
-  }
 
-  // MediaPlayerAndroid runs on the same thread as BrowserCdmManager.
-  BrowserCdmManager* browser_cdm_manager =
-      BrowserCdmManager::FromProcess(render_frame_host->GetProcess()->GetID());
-  if (!browser_cdm_manager) {
-    NOTREACHED() << "OnSetCdm: CDM not found for " << cdm_id;
-    return;
-  }
+  for (int64_t player_cookie : it->second)
+    removed_players->insert(MediaPlayerId(render_frame_host, player_cookie));
 
-  media::BrowserCdm* cdm =
-      browser_cdm_manager->GetCdm(render_frame_host->GetRoutingID(), cdm_id);
-  if (!cdm) {
-    NOTREACHED() << "OnSetCdm: CDM not found for " << cdm_id;
-    return;
-  }
-
-  // TODO(xhwang): This could possibly fail. In that case we should reject the
-  // promise.
-  media_player->SetCdm(cdm);
+  player_map->erase(it);
 }
-
-BrowserMediaPlayerManager* MediaWebContentsObserver::GetMediaPlayerManager(
-    RenderFrameHost* render_frame_host) {
-  uintptr_t key = reinterpret_cast<uintptr_t>(render_frame_host);
-  if (!media_player_managers_.contains(key)) {
-    media_player_managers_.set(
-        key,
-        make_scoped_ptr(BrowserMediaPlayerManager::Create(
-            render_frame_host, GetMediaPlayersObserver())));
-  }
-  return media_player_managers_.get(key);
-}
-
-MediaPlayersObserver*
-MediaWebContentsObserver::GetMediaPlayersObserver() const {
-  AudioStateProvider* provider =
-      static_cast<WebContentsImpl*>(web_contents())->audio_state_provider();
-
-  MediaPlayersObserver* audio_observer =
-      static_cast<MediaPlayersObserver*>(provider);
-
-  DCHECK(audio_observer);
-  return audio_observer;
-}
-
-#if defined(VIDEO_HOLE)
-void MediaWebContentsObserver::OnFrameInfoUpdated() {
-  for (MediaPlayerManagerMap::iterator iter = media_player_managers_.begin();
-      iter != media_player_managers_.end(); ++iter) {
-    BrowserMediaPlayerManager* manager = iter->second;
-    manager->OnFrameInfoUpdated();
-  }
-}
-#endif  // defined(VIDEO_HOLE)
-
-#endif  // defined(OS_ANDROID)
 
 }  // namespace content

@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <sstream>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
@@ -14,8 +16,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/thread_task_runner_handle.h"
-#include "components/dom_distiller/content/distiller_javascript_utils.h"
-#include "components/dom_distiller/content/distiller_page_web_contents.h"
+#include "components/dom_distiller/content/browser/distiller_javascript_utils.h"
+#include "components/dom_distiller/content/browser/distiller_page_web_contents.h"
 #include "components/dom_distiller/core/article_entry.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "components/dom_distiller/core/distiller.h"
@@ -56,10 +58,10 @@ class TestDistillerFactoryImpl : public DistillerFactory {
       scoped_ptr<DistillerURLFetcherFactory> distiller_url_fetcher_factory,
       const dom_distiller::proto::DomDistillerOptions& dom_distiller_options,
       const FileToUrlMap& file_to_url_map)
-      : distiller_url_fetcher_factory_(distiller_url_fetcher_factory.Pass()),
+      : distiller_url_fetcher_factory_(
+            std::move(distiller_url_fetcher_factory)),
         dom_distiller_options_(dom_distiller_options),
-        file_to_url_map_(file_to_url_map) {
-  }
+        file_to_url_map_(file_to_url_map) {}
 
   ~TestDistillerFactoryImpl() override {}
 
@@ -72,7 +74,7 @@ class TestDistillerFactoryImpl : public DistillerFactory {
     }
     scoped_ptr<DistillerImpl> distiller(new DistillerImpl(
         *distiller_url_fetcher_factory_, options));
-    return distiller.Pass();
+    return std::move(distiller);
   }
 
  private:
@@ -112,6 +114,9 @@ const char* kOriginalUrl = "original-url";
 // "kUrlsSwitch".
 const char* kOriginalUrls = "original-urls";
 
+// The pagination algorithm to use, one of "next", "pagenum".
+const char* kPaginationAlgo = "pagination-algo";
+
 // Maximum number of concurrent started extractor requests.
 const int kMaxExtractorTasks = 8;
 
@@ -129,7 +134,7 @@ scoped_ptr<DomDistillerService> CreateDomDistillerService(
       new leveldb_proto::ProtoDatabaseImpl<ArticleEntry>(
           background_task_runner));
   scoped_ptr<DomDistillerStore> dom_distiller_store(
-      new DomDistillerStore(db.Pass(), db_path));
+      new DomDistillerStore(std::move(db), db_path));
 
   scoped_ptr<DistillerPageFactory> distiller_page_factory(
       new DistillerPageWebContentsFactory(context));
@@ -148,10 +153,18 @@ scoped_ptr<DomDistillerService> CreateDomDistillerService(
           &debug_level)) {
     options.set_debug_level(debug_level);
   }
-  scoped_ptr<DistillerFactory> distiller_factory(
-      new TestDistillerFactoryImpl(distiller_url_fetcher_factory.Pass(),
-                                   options,
-                                   file_to_url_map));
+  // Options for pagination algorithm:
+  // - "next": detect anchors with "next" text
+  // - "pagenum": detect anchors with numeric page numbers
+  // Default is "next".
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kPaginationAlgo)) {
+      options.set_pagination_algo(
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              kPaginationAlgo));
+  }
+
+  scoped_ptr<DistillerFactory> distiller_factory(new TestDistillerFactoryImpl(
+      std::move(distiller_url_fetcher_factory), options, file_to_url_map));
 
   // Setting up PrefService for DistilledPagePrefs.
   user_prefs::TestingPrefServiceSyncable* pref_service =
@@ -159,9 +172,8 @@ scoped_ptr<DomDistillerService> CreateDomDistillerService(
   DistilledPagePrefs::RegisterProfilePrefs(pref_service->registry());
 
   return scoped_ptr<DomDistillerService>(new DomDistillerService(
-      dom_distiller_store.Pass(),
-      distiller_factory.Pass(),
-      distiller_page_factory.Pass(),
+      std::move(dom_distiller_store), std::move(distiller_factory),
+      std::move(distiller_page_factory),
       scoped_ptr<DistilledPagePrefs>(new DistilledPagePrefs(pref_service))));
 }
 
@@ -248,8 +260,8 @@ class ContentExtractionRequest : public ViewRequestDelegate {
       }
     } else if (command_line.HasSwitch(kUrlsSwitch)) {
       std::string urls_string = command_line.GetSwitchValueASCII(kUrlsSwitch);
-      std::vector<std::string> urls;
-      base::SplitString(urls_string, ' ', &urls);
+      std::vector<std::string> urls = base::SplitString(
+          urls_string, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       // Check for original-urls switch, which must exactly pair up with
       // |kUrlsSwitch| i.e. number of original urls must be same as that of
       // urls.
@@ -257,8 +269,11 @@ class ContentExtractionRequest : public ViewRequestDelegate {
       if (command_line.HasSwitch(kOriginalUrls)) {
         std::string original_urls_string =
             command_line.GetSwitchValueASCII(kOriginalUrls);
-        base::SplitString(original_urls_string, ' ', &original_urls);
-        if (original_urls.size() != urls.size()) original_urls.clear();
+        original_urls = base::SplitString(
+            original_urls_string, " ",
+            base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+        if (original_urls.size() != urls.size())
+          original_urls.clear();
       }
       for (size_t i = 0; i < urls.size(); ++i) {
         GURL url(urls[i]);
@@ -277,7 +292,7 @@ class ContentExtractionRequest : public ViewRequestDelegate {
       ADD_FAILURE() << "No valid url provided";
     }
 
-    return requests.Pass();
+    return requests;
   }
 
  private:

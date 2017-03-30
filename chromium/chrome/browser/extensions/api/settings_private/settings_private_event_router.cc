@@ -4,11 +4,13 @@
 
 #include "chrome/browser/extensions/api/settings_private/settings_private_event_router.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/settings_private.h"
@@ -139,9 +141,9 @@ void SettingsPrivateEventRouter::OnPreferenceChanged(
       api::settings_private::OnPrefsChanged::Create(prefs));
 
   scoped_ptr<Event> extension_event(new Event(
-      events::UNKNOWN, api::settings_private::OnPrefsChanged::kEventName,
-      args.Pass()));
-  event_router->BroadcastEvent(extension_event.Pass());
+      events::SETTINGS_PRIVATE_ON_PREFS_CHANGED,
+      api::settings_private::OnPrefsChanged::kEventName, std::move(args)));
+  event_router->BroadcastEvent(std::move(extension_event));
 }
 
 SettingsPrivateEventRouter* SettingsPrivateEventRouter::Create(

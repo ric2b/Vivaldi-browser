@@ -262,16 +262,7 @@ TEST_F('NetInternalsTest',
  * Same as above, but it truncates the log to simulate the case of a crash when
  * creating a log.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsLogUtilImportNetLogFileTruncated ' +
-    'DISABLED_netInternalsLogUtilImportNetLogFileTruncated');
-GEN('#else');
-GEN('#define MAYBE_netInternalsLogUtilImportNetLogFileTruncated ' +
-    'netInternalsLogUtilImportNetLogFileTruncated');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest',
-    'MAYBE_netInternalsLogUtilImportNetLogFileTruncated',
+TEST_F('NetInternalsTest', 'netInternalsLogUtilImportNetLogFileTruncated',
     function() {
   var taskQueue = new NetInternalsTest.TaskQueue(true);
   taskQueue.addTask(new GetNetLogFileContentsAndLoadLogTask(20));

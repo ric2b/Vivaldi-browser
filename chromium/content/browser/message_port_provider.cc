@@ -4,7 +4,6 @@
 
 #include "content/public/browser/message_port_provider.h"
 
-#include "base/basictypes.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/message_port_message_filter.h"
 #include "content/browser/message_port_service.h"
@@ -28,13 +27,6 @@ void MessagePortProvider::PostMessageToFrame(
   FrameMsg_PostMessage_Params params;
   params.is_data_raw_string = true;
   params.data = data;
-  // Blink requires a source frame to transfer ports. This is why a
-  // source routing id is set here. See WebDOMMessageEvent::initMessageEvent()
-  // TODO(alexmos, sgurun): Clean this up once crbug.com/473258 is fixed.
-  // Once message ports can work with a null source frame,
-  // source_view_routing_id can be removed, and this can just pass in
-  // MSG_ROUTING_NONE for the source frame.
-  params.source_view_routing_id = web_contents->GetRoutingID();
   params.source_routing_id = MSG_ROUTING_NONE;
   params.source_origin = source_origin;
   params.target_origin = target_origin;

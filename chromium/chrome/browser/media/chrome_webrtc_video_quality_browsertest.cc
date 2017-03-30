@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/environment.h"
@@ -15,9 +17,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/media/media_stream_infobar_delegate.h"
 #include "chrome/browser/media/webrtc_browsertest_base.h"
 #include "chrome/browser/media/webrtc_browsertest_common.h"
 #include "chrome/browser/profiles/profile.h"
@@ -68,7 +70,7 @@ static const struct VideoQualityTestConfig {
   { "360p", 640, 360,
     test::kReferenceFileName360p,
     WebRtcTestBase::kAudioVideoCallConstraints360p },
-  { "720p", 1280, 720,
+    { "720p", 1280, 720,
     test::kReferenceFileName720p,
     WebRtcTestBase::kAudioVideoCallConstraints720p },
 };
@@ -300,14 +302,11 @@ INSTANTIATE_TEST_CASE_P(
 
 IN_PROC_BROWSER_TEST_P(WebRtcVideoQualityBrowserTest,
                        MANUAL_TestVideoQuality) {
-  if (OnWinXp())
-    return;  // Fails on XP. http://crbug.com/353078.
-
   ASSERT_GE(TestTimeouts::action_max_timeout().InSeconds(), 150) <<
       "This is a long-running test; you must specify "
       "--ui-test-action-max-timeout to have a value of at least 150000.";
   ASSERT_TRUE(test::HasReferenceFilesInCheckout());
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   content::WebContents* left_tab =
       OpenPageAndGetUserMediaInNewTabWithConstraints(

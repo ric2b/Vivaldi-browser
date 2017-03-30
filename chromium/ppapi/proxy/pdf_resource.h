@@ -5,8 +5,8 @@
 #ifndef PPAPI_PROXY_PDF_RESOURCE_H_
 #define PPAPI_PROXY_PDF_RESOURCE_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ppapi/c/pp_instance.h"
 #include "ppapi/c/pp_var.h"
 #include "ppapi/proxy/connection.h"
@@ -35,7 +35,6 @@ class PPAPI_PROXY_EXPORT PDFResource
   thunk::PPB_PDF_API* AsPPB_PDF_API() override;
 
   // PPB_PDF_API implementation.
-  PP_Var GetLocalizedString(PP_ResourceString string_id) override;
   void SearchString(const unsigned short* input_string,
                     const unsigned short* input_term,
                     bool case_sensitive,

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_APPS_APP_INFO_DIALOG_APP_INFO_HEADER_PANEL_H_
 #define CHROME_BROWSER_UI_VIEWS_APPS_APP_INFO_DIALOG_APP_INFO_HEADER_PANEL_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/views/apps/app_info_dialog/app_info_panel.h"
 #include "ui/views/controls/link_listener.h"
@@ -22,6 +23,10 @@ namespace views {
 class ImageView;
 }
 
+namespace test {
+class AppInfoDialogTestApi;
+}
+
 // A small summary panel with the app's name, icon, version, and various links
 // that is displayed at the top of the app info dialog.
 class AppInfoHeaderPanel : public AppInfoPanel,
@@ -32,6 +37,8 @@ class AppInfoHeaderPanel : public AppInfoPanel,
   ~AppInfoHeaderPanel() override;
 
  private:
+  friend class test::AppInfoDialogTestApi;
+
   void CreateControls();
 
   // Overridden from views::LinkListener:

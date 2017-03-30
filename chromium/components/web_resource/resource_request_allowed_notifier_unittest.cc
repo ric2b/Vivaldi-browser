@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/prefs/testing_pref_service.h"
 #include "components/web_resource/eula_accepted_notifier.h"
 #include "components/web_resource/resource_request_allowed_notifier_test_util.h"
@@ -23,7 +24,8 @@ class TestNetworkChangeNotifier : public net::NetworkChangeNotifier {
   void SimulateNetworkConnectionChange(
       net::NetworkChangeNotifier::ConnectionType type) {
     connection_type_to_return_ = type;
-    net::NetworkChangeNotifier::NotifyObserversOfConnectionTypeChange();
+    net::NetworkChangeNotifier::NotifyObserversOfConnectionTypeChangeForTests(
+        connection_type_to_return_);
     base::MessageLoop::current()->RunUntilIdle();
   }
 

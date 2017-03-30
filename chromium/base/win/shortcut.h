@@ -6,6 +6,7 @@
 #define BASE_WIN_SHORTCUT_H_
 
 #include <windows.h>
+#include <stdint.h>
 
 #include "base/base_export.h"
 #include "base/files/file_path.h"
@@ -113,7 +114,7 @@ struct BASE_EXPORT ShortcutProperties {
   bool dual_mode;
   // Bitfield made of IndividualProperties. Properties set in |options| will be
   // set on the shortcut, others will be ignored.
-  uint32 options;
+  uint32_t options;
 };
 
 // This method creates (or updates) a shortcut link at |shortcut_path| using the
@@ -138,7 +139,7 @@ BASE_EXPORT bool CreateOrUpdateShortcutLink(
 // properties are successfully read. Otherwise some reads have failed and
 // intermediate values written to |properties| should be ignored.
 BASE_EXPORT bool ResolveShortcutProperties(const FilePath& shortcut_path,
-                                           uint32 options,
+                                           uint32_t options,
                                            ShortcutProperties* properties);
 
 // Resolves Windows shortcut (.LNK file).
@@ -152,15 +153,19 @@ BASE_EXPORT bool ResolveShortcut(const FilePath& shortcut_path,
                                  FilePath* target_path,
                                  string16* args);
 
-// Pins a shortcut to the Windows 7 taskbar. The shortcut file must already
-// exist and be a shortcut that points to an executable. The app id of the
-// shortcut is used to group windows and must be set correctly.
-BASE_EXPORT bool TaskbarPinShortcutLink(const FilePath& shortcut);
+// Pin to taskbar is only supported on Windows 7 and Windows 8. Returns true on
+// those platforms.
+BASE_EXPORT bool CanPinShortcutToTaskbar();
 
-// Unpins a shortcut from the Windows 7 taskbar. The shortcut must exist and
+// Pins a shortcut to the taskbar on Windows 7 and 8. The |shortcut| file must
+// already exist and be a shortcut that points to an executable. The app id of
+// the shortcut is used to group windows and must be set correctly.
+BASE_EXPORT bool PinShortcutToTaskbar(const FilePath& shortcut);
+
+// Unpins a shortcut from the Windows 7+ taskbar. The |shortcut| must exist and
 // already be pinned to the taskbar. The app id of the shortcut is used as the
 // identifier for the taskbar item to remove and must be set correctly.
-BASE_EXPORT bool TaskbarUnpinShortcutLink(const FilePath& shortcut);
+BASE_EXPORT bool UnpinShortcutFromTaskbar(const FilePath& shortcut);
 
 }  // namespace win
 }  // namespace base

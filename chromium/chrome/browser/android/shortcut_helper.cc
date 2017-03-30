@@ -6,16 +6,15 @@
 
 #include <jni.h>
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
-#include "base/basictypes.h"
-#include "base/location.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/banners/app_banner_settings_helper.h"
+#include "chrome/browser/manifest/manifest_icon_downloader.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/manifest.h"
 #include "jni/ShortcutHelper_jni.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/color_analysis.h"
@@ -23,130 +22,61 @@
 
 using content::Manifest;
 
-jlong Initialize(JNIEnv* env, jobject obj, jobject java_web_contents) {
-  content::WebContents* web_contents =
-      content::WebContents::FromJavaWebContents(java_web_contents);
-  ShortcutHelper* shortcut_helper = new ShortcutHelper(env, obj, web_contents);
-  return reinterpret_cast<intptr_t>(shortcut_helper);
-}
+namespace {
 
-ShortcutHelper::ShortcutHelper(JNIEnv* env,
-                               jobject obj,
-                               content::WebContents* web_contents)
-    : add_shortcut_pending_(false),
-      data_fetcher_(new ShortcutDataFetcher(web_contents, this)) {
-  java_ref_.Reset(env, obj);
-}
+static int kIdealHomescreenIconSize = -1;
+static int kMinimumHomescreenIconSize = -1;
+static int kIdealSplashImageSize = -1;
+static int kMinimumSplashImageSize = -1;
 
-ShortcutHelper::~ShortcutHelper() {
-  data_fetcher_->set_weak_observer(nullptr);
-  data_fetcher_ = nullptr;
-}
+static int kDefaultRGBIconValue = 145;
 
-void ShortcutHelper::OnTitleAvailable(const base::string16& title) {
+// Retrieves and caches the ideal and minimum sizes of the Home screen icon
+// and the splash screen image.
+void GetHomescreenIconAndSplashImageSizes() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jstring> j_title =
-      base::android::ConvertUTF16ToJavaString(env, title);
-  Java_ShortcutHelper_onTitleAvailable(env,
-                                       java_ref_.obj(),
-                                       j_title.obj());
+  ScopedJavaLocalRef<jintArray> java_size_array =
+      Java_ShortcutHelper_getHomeScreenIconAndSplashImageSizes(env,
+          base::android::GetApplicationContext());
+  std::vector<int> sizes;
+  base::android::JavaIntArrayToIntVector(
+      env, java_size_array.obj(), &sizes);
+
+  // Check that the size returned is what is expected.
+  DCHECK(sizes.size() == 4);
+
+  // This ordering must be kept up to date with the Java ShortcutHelper.
+  kIdealHomescreenIconSize = sizes[0];
+  kMinimumHomescreenIconSize = sizes[1];
+  kIdealSplashImageSize = sizes[2];
+  kMinimumSplashImageSize = sizes[3];
+
+  // Try to ensure that the data returned is sane.
+  DCHECK(kMinimumHomescreenIconSize <= kIdealHomescreenIconSize);
+  DCHECK(kMinimumSplashImageSize <= kIdealSplashImageSize);
 }
 
-void ShortcutHelper::OnDataAvailable(const ShortcutInfo& info,
-                                     const SkBitmap& icon) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> java_bitmap;
-  if (icon.getSize())
-    java_bitmap = gfx::ConvertToJavaBitmap(&icon);
-
-  Java_ShortcutHelper_onIconAvailable(env,
-                                      java_ref_.obj(),
-                                      java_bitmap.obj());
-
-  if (add_shortcut_pending_)
-    AddShortcut(info, icon);
-}
-
-void ShortcutHelper::Destroy(JNIEnv* env, jobject obj) {
-  delete this;
-}
-
-SkBitmap ShortcutHelper::FinalizeLauncherIcon(const SkBitmap& bitmap,
-                                              const GURL& url) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-
-  // Determine a single color to use for the favicon if the favicon that is
-  // returned it is too low quality.
-  SkColor color = color_utils::CalculateKMeanColorOfBitmap(bitmap);
-  int dominant_red = SkColorGetR(color);
-  int dominant_green = SkColorGetG(color);
-  int dominant_blue = SkColorGetB(color);
-
-  // Make the icon acceptable for the Android launcher.
-  JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jstring> java_url =
-      base::android::ConvertUTF8ToJavaString(env, url.spec());
-  ScopedJavaLocalRef<jobject> java_bitmap;
-  if (bitmap.getSize())
-    java_bitmap = gfx::ConvertToJavaBitmap(&bitmap);
-
-  base::android::ScopedJavaLocalRef<jobject> ref =
-      Java_ShortcutHelper_finalizeLauncherIcon(env,
-                                               java_url.obj(),
-                                               java_bitmap.obj(),
-                                               dominant_red,
-                                               dominant_green,
-                                               dominant_blue);
-  return gfx::CreateSkBitmapFromJavaBitmap(gfx::JavaBitmap(ref.obj()));
-}
-
-void ShortcutHelper::AddShortcut(JNIEnv* env, jobject obj, jstring jtitle) {
-  add_shortcut_pending_ = true;
-
-  base::string16 title = base::android::ConvertJavaStringToUTF16(env, jtitle);
-  if (!title.empty())
-    data_fetcher_->shortcut_info().title = title;
-
-  if (data_fetcher_->is_ready()) {
-    // If the fetcher isn't ready yet, the shortcut will be added when it is
-    // via OnDataAvailable();
-    AddShortcut(data_fetcher_->shortcut_info(), data_fetcher_->shortcut_icon());
-  }
-}
-
-void ShortcutHelper::AddShortcut(const ShortcutInfo& info,
-                                 const SkBitmap& icon) {
-  DCHECK(add_shortcut_pending_);
-  if (!add_shortcut_pending_)
-    return;
-  add_shortcut_pending_ = false;
-
-  RecordAddToHomescreen();
-
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&ShortcutHelper::AddShortcutInBackgroundWithSkBitmap,
-                 info,
-                 icon));
-}
-
-bool ShortcutHelper::RegisterShortcutHelper(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
+} // anonymous namespace
 
 // static
 void ShortcutHelper::AddShortcutInBackgroundWithSkBitmap(
     const ShortcutInfo& info,
+    const std::string& webapp_id,
     const SkBitmap& icon_bitmap) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   // Send the data to the Java side to create the shortcut.
   JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> java_webapp_id =
+      base::android::ConvertUTF8ToJavaString(env, webapp_id);
   ScopedJavaLocalRef<jstring> java_url =
       base::android::ConvertUTF8ToJavaString(env, info.url.spec());
-  ScopedJavaLocalRef<jstring> java_title =
-      base::android::ConvertUTF16ToJavaString(env, info.title);
+  ScopedJavaLocalRef<jstring> java_user_title =
+      base::android::ConvertUTF16ToJavaString(env, info.user_title);
+  ScopedJavaLocalRef<jstring> java_name =
+      base::android::ConvertUTF16ToJavaString(env, info.name);
+  ScopedJavaLocalRef<jstring> java_short_name =
+      base::android::ConvertUTF16ToJavaString(env, info.short_name);
   ScopedJavaLocalRef<jobject> java_bitmap;
   if (icon_bitmap.getSize())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
@@ -154,24 +84,121 @@ void ShortcutHelper::AddShortcutInBackgroundWithSkBitmap(
   Java_ShortcutHelper_addShortcut(
       env,
       base::android::GetApplicationContext(),
+      java_webapp_id.obj(),
       java_url.obj(),
-      java_title.obj(),
+      java_user_title.obj(),
+      java_name.obj(),
+      java_short_name.obj(),
       java_bitmap.obj(),
-      info.display == content::Manifest::DISPLAY_MODE_STANDALONE,
+      info.display == blink::WebDisplayModeStandalone,
       info.orientation,
-      info.source);
+      info.source,
+      info.theme_color,
+      info.background_color,
+      info.is_icon_generated);
 }
 
-void ShortcutHelper::RecordAddToHomescreen() {
-  // Record that the shortcut has been added, so no banners will be shown
-  // for this app.
-  content::WebContents* web_contents = data_fetcher_->web_contents();
-  if (!web_contents)
+int ShortcutHelper::GetIdealHomescreenIconSizeInDp() {
+  if (kIdealHomescreenIconSize == -1)
+    GetHomescreenIconAndSplashImageSizes();
+  return kIdealHomescreenIconSize;
+}
+
+int ShortcutHelper::GetMinimumHomescreenIconSizeInDp() {
+  if (kMinimumHomescreenIconSize == -1)
+    GetHomescreenIconAndSplashImageSizes();
+  return kMinimumHomescreenIconSize;
+}
+
+int ShortcutHelper::GetIdealSplashImageSizeInDp() {
+  if (kIdealSplashImageSize == -1)
+    GetHomescreenIconAndSplashImageSizes();
+  return kIdealSplashImageSize;
+}
+
+int ShortcutHelper::GetMinimumSplashImageSizeInDp() {
+  if (kMinimumSplashImageSize == -1)
+    GetHomescreenIconAndSplashImageSizes();
+  return kMinimumSplashImageSize;
+}
+
+// static
+void ShortcutHelper::FetchSplashScreenImage(
+    content::WebContents* web_contents,
+    const GURL& image_url,
+    const int ideal_splash_image_size_in_dp,
+    const int minimum_splash_image_size_in_dp,
+    const std::string& webapp_id) {
+  // This is a fire and forget task. It is not vital for the splash screen image
+  // to be downloaded so if the downloader returns false there is no fallback.
+  ManifestIconDownloader::Download(
+      web_contents,
+      image_url,
+      ideal_splash_image_size_in_dp,
+      minimum_splash_image_size_in_dp,
+      base::Bind(&ShortcutHelper::StoreWebappData, webapp_id));
+}
+
+// static
+void ShortcutHelper::StoreWebappData(
+    const std::string& webapp_id,
+    const SkBitmap& splash_image) {
+  if (splash_image.drawsNothing())
     return;
 
-  AppBannerSettingsHelper::RecordBannerEvent(
-      web_contents, web_contents->GetURL(),
-      data_fetcher_->shortcut_info().url.spec(),
-      AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN,
-      base::Time::Now());
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> java_webapp_id =
+      base::android::ConvertUTF8ToJavaString(env, webapp_id);
+  ScopedJavaLocalRef<jobject> java_splash_image =
+      gfx::ConvertToJavaBitmap(&splash_image);
+
+  Java_ShortcutHelper_storeWebappData(
+      env,
+      base::android::GetApplicationContext(),
+      java_webapp_id.obj(),
+      java_splash_image.obj());
+}
+
+// static
+SkBitmap ShortcutHelper::FinalizeLauncherIcon(const SkBitmap& bitmap,
+                                              const GURL& url,
+                                              bool* is_generated) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> result;
+  *is_generated = false;
+
+  if (!bitmap.isNull()) {
+    if (Java_ShortcutHelper_isIconLargeEnoughForLauncher(
+            env, base::android::GetApplicationContext(), bitmap.width(),
+            bitmap.height())) {
+      ScopedJavaLocalRef<jobject> java_bitmap =
+          gfx::ConvertToJavaBitmap(&bitmap);
+      result = Java_ShortcutHelper_createHomeScreenIconFromWebIcon(
+          env, base::android::GetApplicationContext(), java_bitmap.obj());
+    }
+  }
+
+  if (result.is_null()) {
+    ScopedJavaLocalRef<jstring> java_url =
+        base::android::ConvertUTF8ToJavaString(env, url.spec());
+    SkColor mean_color = SkColorSetRGB(
+        kDefaultRGBIconValue, kDefaultRGBIconValue, kDefaultRGBIconValue);
+
+    if (!bitmap.isNull())
+      mean_color = color_utils::CalculateKMeanColorOfBitmap(bitmap);
+
+    *is_generated = true;
+    result = Java_ShortcutHelper_generateHomeScreenIcon(
+        env, base::android::GetApplicationContext(), java_url.obj(),
+        SkColorGetR(mean_color), SkColorGetG(mean_color),
+        SkColorGetB(mean_color));
+  }
+
+  return gfx::CreateSkBitmapFromJavaBitmap(gfx::JavaBitmap(result.obj()));
+}
+
+bool ShortcutHelper::RegisterShortcutHelper(JNIEnv* env) {
+  return RegisterNativesImpl(env);
 }

@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -113,7 +113,7 @@ void swap(syncer::SpecializationToken& t1,
   t1.Swap(&t2);
 }
 
-}  // namespace
+}  // namespace std
 
 namespace syncer {
 namespace {

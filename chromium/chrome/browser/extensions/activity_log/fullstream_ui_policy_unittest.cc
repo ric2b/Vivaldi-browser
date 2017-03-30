@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/activity_log/fullstream_ui_policy.h"
+
+#include <stdint.h>
+#include <utility>
+
 #include "base/cancelable_callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -13,8 +18,8 @@
 #include "base/test/simple_test_clock.h"
 #include "base/test/test_timeouts.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
-#include "chrome/browser/extensions/activity_log/fullstream_ui_policy.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/common/chrome_constants.h"
@@ -92,15 +97,9 @@ class FullStreamUIPolicyTest : public testing::Test {
     // checker function when results are available.  This will happen on the
     // database thread.
     policy->ReadFilteredData(
-        extension_id,
-        type,
-        api_name,
-        page_url,
-        arg_url,
-        days_ago,
-        base::Bind(&FullStreamUIPolicyTest::CheckWrapper,
-                   checker,
-                   base::MessageLoop::current()->QuitClosure()));
+        extension_id, type, api_name, page_url, arg_url, days_ago,
+        base::Bind(&FullStreamUIPolicyTest::CheckWrapper, checker,
+                   base::MessageLoop::current()->QuitWhenIdleClosure()));
 
     // Set up a timeout for receiving results; if we haven't received anything
     // when the timeout triggers then assume that the test is broken.
@@ -120,7 +119,7 @@ class FullStreamUIPolicyTest : public testing::Test {
       const base::Callback<void(scoped_ptr<Action::ActionVector>)>& checker,
       const base::Closure& done,
       scoped_ptr<Action::ActionVector> results) {
-    checker.Run(results.Pass());
+    checker.Run(std::move(results));
     done.Run();
   }
 
@@ -297,9 +296,8 @@ class FullStreamUIPolicyTest : public testing::Test {
   // deletion.
   void CheckRemoveActions(
       ActivityLogDatabasePolicy* policy,
-      const std::vector<int64>& action_ids,
+      const std::vector<int64_t>& action_ids,
       const base::Callback<void(scoped_ptr<Action::ActionVector>)>& checker) {
-
     // Use a mock clock to ensure that events are not recorded on the wrong day
     // when the test is run close to local midnight.
     base::SimpleTestClock* mock_clock = new base::SimpleTestClock();
@@ -459,10 +457,10 @@ TEST_F(FullStreamUIPolicyTest, Construct) {
   policy->Init();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
   scoped_ptr<base::ListValue> args(new base::ListValue());
@@ -470,7 +468,7 @@ TEST_F(FullStreamUIPolicyTest, Construct) {
                                             base::Time::Now(),
                                             Action::ACTION_API_CALL,
                                             "tabs.testMethod");
-  action->set_args(args.Pass());
+  action->set_args(std::move(args));
   policy->ProcessAction(action);
   policy->Close();
 }
@@ -480,10 +478,10 @@ TEST_F(FullStreamUIPolicyTest, LogAndFetchActions) {
   policy->Init();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
   GURL gurl("http://www.google.com");
@@ -518,10 +516,10 @@ TEST_F(FullStreamUIPolicyTest, LogAndFetchFilteredActions) {
   policy->Init();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
   GURL gurl("http://www.google.com");
@@ -616,10 +614,10 @@ TEST_F(FullStreamUIPolicyTest, LogWithArguments) {
   policy->Init();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
 
@@ -630,7 +628,7 @@ TEST_F(FullStreamUIPolicyTest, LogWithArguments) {
                                             base::Time::Now(),
                                             Action::ACTION_API_CALL,
                                             "extension.connect");
-  action->set_args(args.Pass());
+  action->set_args(std::move(args));
 
   policy->ProcessAction(action);
   CheckReadData(policy,
@@ -935,10 +933,8 @@ TEST_F(FullStreamUIPolicyTest, CapReturns) {
 
   policy->Flush();
   BrowserThread::PostTaskAndReply(
-      BrowserThread::DB,
-      FROM_HERE,
-      base::Bind(&base::DoNothing),
-      base::MessageLoop::current()->QuitClosure());
+      BrowserThread::DB, FROM_HERE, base::Bind(&base::DoNothing),
+      base::MessageLoop::current()->QuitWhenIdleClosure());
   base::MessageLoop::current()->Run();
 
   CheckReadFilteredData(
@@ -959,10 +955,10 @@ TEST_F(FullStreamUIPolicyTest, DeleteDatabase) {
   policy->Init();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
   GURL gurl("http://www.google.com");
@@ -1010,7 +1006,7 @@ TEST_F(FullStreamUIPolicyTest, RemoveActions) {
   ActivityLogDatabasePolicy* policy = new FullStreamUIPolicy(profile_.get());
   policy->Init();
 
-  std::vector<int64> action_ids;
+  std::vector<int64_t> action_ids;
 
   CheckRemoveActions(policy,
                      action_ids,

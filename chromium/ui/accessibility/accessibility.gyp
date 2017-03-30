@@ -36,10 +36,11 @@
         'ax_text_utils.h',
         'ax_tree.cc',
         'ax_tree.h',
+        'ax_tree_data.cc',
+        'ax_tree_data.h',
         'ax_tree_serializer.cc',
         'ax_tree_serializer.h',
         'ax_tree_source.h',
-        'ax_tree_update.cc',
         'ax_tree_update.h',
         'ax_view_state.cc',
         'ax_view_state.h',
@@ -109,34 +110,34 @@
         'tree_generator.h',
       ]
     },
-    #{
-    #  'target_name': 'accessibility_unittests',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../../base/base.gyp:base',
-    #    '../../base/base.gyp:run_all_unittests',
-    #    '../../testing/gtest.gyp:gtest',
-    #    '../gfx/gfx.gyp:gfx',
-    #    '../gfx/gfx.gyp:gfx_geometry',
-    #    'accessibility',
-    #    'accessibility_test_support',
-    #    'ax_gen',
-    #  ],
-    #  'sources': [
-    #    'ax_generated_tree_unittest.cc',
-    #    'ax_text_utils_unittest.cc',
-    #    'ax_tree_serializer_unittest.cc',
-    #    'ax_tree_unittest.cc',
-    #    'platform/ax_platform_node_win_unittest.cc'
-    #  ],
-    #  'conditions': [
-    #    ['OS=="win"', {
-    #      'dependencies': [
-    #        '../../third_party/iaccessible2/iaccessible2.gyp:iaccessible2'
-    #      ],
-    #    }],
-    #  ],
-    #},
+    {
+      'target_name': 'accessibility_unittests',
+      'type': 'executable',
+      'dependencies': [
+        '../../base/base.gyp:base',
+        '../../base/base.gyp:run_all_unittests',
+        '../../testing/gtest.gyp:gtest',
+        '../gfx/gfx.gyp:gfx',
+        '../gfx/gfx.gyp:gfx_geometry',
+        'accessibility',
+        'accessibility_test_support',
+        'ax_gen',
+      ],
+      'sources': [
+        'ax_generated_tree_unittest.cc',
+        'ax_text_utils_unittest.cc',
+        'ax_tree_serializer_unittest.cc',
+        'ax_tree_unittest.cc',
+        'platform/ax_platform_node_win_unittest.cc'
+      ],
+      'conditions': [
+        ['OS=="win"', {
+          'dependencies': [
+            '../../third_party/iaccessible2/iaccessible2.gyp:iaccessible2'
+          ],
+        }],
+      ],
+    },
     {
       'target_name': 'ax_gen',
       'type': 'static_library',
@@ -167,7 +168,7 @@
     },
   ],
   'conditions': [
-    ['test_isolation_mode != "noop" and 0', {
+    ['test_isolation_mode != "noop"', {
       'targets': [
         {
           'target_name': 'accessibility_unittests_run',

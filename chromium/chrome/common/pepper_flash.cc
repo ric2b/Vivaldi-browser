@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/strings/string_split.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/common/pepper_flash.h"
 #include "chrome/common/ppapi_utils.h"
 #include "ppapi/c/private/ppb_pdf.h"
@@ -12,10 +15,9 @@
 
 namespace chrome {
 
-const int32 kPepperFlashPermissions = ppapi::PERMISSION_DEV |
-                                      ppapi::PERMISSION_PRIVATE |
-                                      ppapi::PERMISSION_BYPASS_USER_GESTURE |
-                                      ppapi::PERMISSION_FLASH;
+const int32_t kPepperFlashPermissions =
+    ppapi::PERMISSION_DEV | ppapi::PERMISSION_PRIVATE |
+    ppapi::PERMISSION_BYPASS_USER_GESTURE | ppapi::PERMISSION_FLASH;
 namespace {
 
 // File name of the Pepper Flash component manifest on different platforms.
@@ -56,10 +58,10 @@ bool SupportsPepperInterface(const char* interface_name) {
 // Returns true if this browser implements one of the interfaces given in
 // |interface_string|, which is a '|'-separated string of interface names.
 bool CheckPepperFlashInterfaceString(const std::string& interface_string) {
-  std::vector<std::string> interface_names;
-  base::SplitString(interface_string, '|', &interface_names);
-  for (size_t i = 0; i < interface_names.size(); i++) {
-    if (SupportsPepperInterface(interface_names[i].c_str()))
+  for (const std::string& name : base::SplitString(
+           interface_string, "|",
+           base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    if (SupportsPepperInterface(name.c_str()))
       return true;
   }
   return false;

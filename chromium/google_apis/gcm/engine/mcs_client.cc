@@ -4,13 +4,15 @@
 
 #include "google_apis/gcm/engine/mcs_client.h"
 
+#include <stddef.h>
 #include <set>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -85,12 +87,12 @@ class CollapseKey {
 
   std::string token() const { return token_; }
   std::string app_id() const { return app_id_; }
-  int64 device_user_id() const { return device_user_id_; }
+  int64_t device_user_id() const { return device_user_id_; }
 
  private:
   const std::string token_;
   const std::string app_id_;
-  const int64 device_user_id_;
+  const int64_t device_user_id_;
 };
 
 CollapseKey::CollapseKey(const mcs_proto::DataMessageStanza& message)
@@ -118,13 +120,13 @@ struct ReliablePacketInfo {
   ~ReliablePacketInfo();
 
   // The stream id with which the message was sent.
-  uint32 stream_id;
+  uint32_t stream_id;
 
   // If reliable delivery was requested, the persistent id of the message.
   std::string persistent_id;
 
   // The type of message itself (for easier lookup).
-  uint8 tag;
+  uint8_t tag;
 
   // The protobuf of the message itself.
   MCSProto protobuf;
@@ -226,12 +228,12 @@ void MCSClient::Initialize(
   restored_unackeds_server_ids_ = load_result->incoming_messages;
 
   // First go through and order the outgoing messages by recency.
-  std::map<uint64, google::protobuf::MessageLite*> ordered_messages;
+  std::map<uint64_t, google::protobuf::MessageLite*> ordered_messages;
   std::vector<PersistentId> expired_ttl_ids;
   for (GCMStore::OutgoingMessageMap::iterator iter =
            load_result->outgoing_messages.begin();
        iter != load_result->outgoing_messages.end(); ++iter) {
-    uint64 timestamp = 0;
+    uint64_t timestamp = 0;
     if (!base::StringToUint64(iter->first, &timestamp)) {
       LOG(ERROR) << "Invalid restored message.";
       // TODO(fgorski): Error: data unreadable
@@ -258,8 +260,8 @@ void MCSClient::Initialize(
 
   // Now go through and add the outgoing messages to the send queue in their
   // appropriate order (oldest at front, most recent at back).
-  for (std::map<uint64, google::protobuf::MessageLite*>::iterator
-           iter = ordered_messages.begin();
+  for (std::map<uint64_t, google::protobuf::MessageLite*>::iterator iter =
+           ordered_messages.begin();
        iter != ordered_messages.end(); ++iter) {
     ReliablePacketInfo* packet_info = new ReliablePacketInfo();
     packet_info->protobuf.reset(iter->second);
@@ -284,7 +286,7 @@ void MCSClient::Initialize(
   heartbeat_manager_.SetClientHeartbeatIntervalMs(min_interval_ms);
 }
 
-void MCSClient::Login(uint64 android_id, uint64 security_token) {
+void MCSClient::Login(uint64_t android_id, uint64_t security_token) {
   DCHECK_EQ(state_, LOADED);
   DCHECK(android_id_ == 0 || android_id_ == android_id);
   DCHECK(security_token_ == 0 || security_token_ == security_token);
@@ -332,7 +334,7 @@ void MCSClient::SendMessage(const MCSMessage& message) {
       ReliablePacketInfo* original_packet = collapse_key_map_[collapse_key];
       DVLOG(1) << "Found matching collapse key, Reusing persistent id of "
                << original_packet->persistent_id;
-      original_packet->protobuf = packet_info->protobuf.Pass();
+      original_packet->protobuf = std::move(packet_info->protobuf);
       SetPersistentId(original_packet->persistent_id,
                       original_packet->protobuf.get());
       gcm_store_->OverwriteOutgoingMessage(
@@ -377,7 +379,7 @@ void MCSClient::SendMessage(const MCSMessage& message) {
 }
 
 void MCSClient::UpdateHeartbeatTimer(scoped_ptr<base::Timer> timer) {
-  heartbeat_manager_.UpdateHeartbeatTimer(timer.Pass());
+  heartbeat_manager_.UpdateHeartbeatTimer(std::move(timer));
 }
 
 void MCSClient::AddHeartbeatInterval(const std::string& scope,
@@ -544,7 +546,7 @@ void MCSClient::MaybeSendMessage() {
         packet->persistent_id,
         base::Bind(&MCSClient::OnGCMUpdateFinished,
                    weak_ptr_factory_.GetWeakPtr()));
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
             FROM_HERE,
             base::Bind(&MCSClient::MaybeSendMessage,
                        weak_ptr_factory_.GetWeakPtr()));
@@ -565,7 +567,7 @@ void MCSClient::SendPacketToWire(ReliablePacketInfo* packet_info) {
     mcs_proto::DataMessageStanza* data_message =
         reinterpret_cast<mcs_proto::DataMessageStanza*>(
             packet_info->protobuf.get());
-    uint64 sent = data_message->sent();
+    uint64_t sent = data_message->sent();
     DCHECK_GT(sent, 0U);
     int queued = (clock_->Now().ToInternalValue() /
         base::Time::kMicrosecondsPerSecond) - sent;
@@ -630,7 +632,7 @@ void MCSClient::HandleMCSDataMesssage(
   }
 
   if (send) {
-    SendMessage(MCSMessage(kDataMessageStanzaTag, response.Pass()));
+    SendMessage(MCSMessage(kDataMessageStanzaTag, std::move(response)));
   }
 }
 
@@ -638,7 +640,7 @@ void MCSClient::HandlePacketFromWire(
     scoped_ptr<google::protobuf::MessageLite> protobuf) {
   if (!protobuf.get())
     return;
-  uint8 tag = GetMCSProtoTag(*protobuf);
+  uint8_t tag = GetMCSProtoTag(*protobuf);
   PersistentId persistent_id = GetPersistentId(*protobuf);
   StreamId last_stream_id_received = GetLastStreamIdReceived(*protobuf);
 
@@ -680,8 +682,9 @@ void MCSClient::HandlePacketFromWire(
            << ", stream id " << stream_id_in_ << " and last stream id received "
            << last_stream_id_received;
 
-  if (unacked_server_ids_.size() > 0 &&
-      unacked_server_ids_.size() % kUnackedMessageBeforeStreamAck == 0) {
+  if ((unacked_server_ids_.size() > 0 &&
+       unacked_server_ids_.size() % kUnackedMessageBeforeStreamAck == 0) ||
+      IsImmediateAckRequested(*protobuf)) {
     SendMessage(MCSMessage(kIqStanzaTag, BuildStreamAck()));
   }
 
@@ -717,14 +720,13 @@ void MCSClient::HandlePacketFromWire(
       DCHECK_EQ(1U, stream_id_out_);
 
       // Pass the login response on up.
-      base::MessageLoop::current()->PostTask(
-          FROM_HERE,
-          base::Bind(message_received_callback_,
-                     MCSMessage(tag, protobuf.Pass())));
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::Bind(message_received_callback_,
+                                MCSMessage(tag, std::move(protobuf))));
 
       // If there are pending messages, attempt to send one.
       if (!to_send_.empty()) {
-        base::MessageLoop::current()->PostTask(
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
             FROM_HERE,
             base::Bind(&MCSClient::MaybeSendMessage,
                        weak_ptr_factory_.GetWeakPtr()));
@@ -783,15 +785,14 @@ void MCSClient::HandlePacketFromWire(
       mcs_proto::DataMessageStanza* data_message =
           reinterpret_cast<mcs_proto::DataMessageStanza*>(protobuf.get());
       if (data_message->category() == kMCSCategory) {
-        HandleMCSDataMesssage(protobuf.Pass());
+        HandleMCSDataMesssage(std::move(protobuf));
         return;
       }
 
       DCHECK(protobuf.get());
-      base::MessageLoop::current()->PostTask(
-          FROM_HERE,
-          base::Bind(message_received_callback_,
-                     MCSMessage(tag, protobuf.Pass())));
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::Bind(message_received_callback_,
+                                MCSMessage(tag, std::move(protobuf))));
       return;
     }
     default:
@@ -896,7 +897,7 @@ void MCSClient::HandleSelectiveAck(const PersistentIdList& id_list) {
     to_send_.push_front(to_resend_.back());
     to_resend_.pop_back();
   }
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&MCSClient::MaybeSendMessage,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -923,7 +924,7 @@ void MCSClient::HandleServerConfirmedReceipt(StreamId device_stream_id) {
 }
 
 MCSClient::PersistentId MCSClient::GetNextPersistentId() {
-  return base::Uint64ToString(base::TimeTicks::Now().ToInternalValue());
+  return base::Int64ToString(base::TimeTicks::Now().ToInternalValue());
 }
 
 void MCSClient::OnConnectionResetByHeartbeat(

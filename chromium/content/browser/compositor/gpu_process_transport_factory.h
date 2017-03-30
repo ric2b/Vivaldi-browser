@@ -5,13 +5,17 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_GPU_PROCESS_TRANSPORT_FACTORY_H_
 #define CONTENT_BROWSER_COMPOSITOR_GPU_PROCESS_TRANSPORT_FACTORY_H_
 
+#include <stdint.h>
+
 #include <map>
 
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/common/gpu/client/gpu_channel_host.h"
 #include "ui/compositor/compositor.h"
@@ -22,6 +26,7 @@ class Thread;
 }
 
 namespace cc {
+class SingleThreadTaskGraphRunner;
 class SoftwareOutputDevice;
 class SurfaceManager;
 }
@@ -53,8 +58,8 @@ class GpuProcessTransportFactory
   void RemoveCompositor(ui::Compositor* compositor) override;
   scoped_refptr<cc::ContextProvider> SharedMainThreadContextProvider() override;
   bool DoesCreateTestContexts() override;
-  uint32 GetImageTextureTarget(gfx::GpuMemoryBuffer::Format format,
-                               gfx::GpuMemoryBuffer::Usage usage) override;
+  uint32_t GetImageTextureTarget(gfx::BufferFormat format,
+                                 gfx::BufferUsage usage) override;
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
@@ -64,13 +69,15 @@ class GpuProcessTransportFactory
 
   // ImageTransportFactory implementation.
   ui::ContextFactory* GetContextFactory() override;
-  gfx::GLSurfaceHandle GetSharedSurfaceHandle() override;
   cc::SurfaceManager* GetSurfaceManager() override;
   GLHelper* GetGLHelper() override;
   void AddObserver(ImageTransportFactoryObserver* observer) override;
   void RemoveObserver(ImageTransportFactoryObserver* observer) override;
 #if defined(OS_MACOSX)
-  void OnSurfaceDisplayed(int surface_id) override;
+  void OnGpuSwapBuffersCompleted(
+      int surface_id,
+      const std::vector<ui::LatencyInfo>& latency_info,
+      gfx::SwapResult result) override;
   void SetCompositorSuspendedForRecycle(ui::Compositor* compositor,
                                         bool suspended) override;
   bool SurfaceShouldNotShowFramesAfterSuspendForRecycle(
@@ -100,8 +107,8 @@ class GpuProcessTransportFactory
   base::ObserverList<ImageTransportFactoryObserver> observer_list_;
   scoped_ptr<cc::SurfaceManager> surface_manager_;
   uint32_t next_surface_id_namespace_;
-  scoped_ptr<cc::TaskGraphRunner> task_graph_runner_;
-  scoped_ptr<base::SimpleThread> raster_thread_;
+  scoped_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
+  scoped_refptr<ContextProviderCommandBuffer> shared_worker_context_provider_;
 
 #if defined(OS_WIN)
   scoped_ptr<OutputDeviceBacking> software_backing_;

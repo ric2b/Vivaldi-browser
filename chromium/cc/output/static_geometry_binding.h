@@ -5,6 +5,7 @@
 #ifndef CC_OUTPUT_STATIC_GEOMETRY_BINDING_H_
 #define CC_OUTPUT_STATIC_GEOMETRY_BINDING_H_
 
+#include "base/macros.h"
 #include "cc/output/geometry_binding.h"
 
 using gpu::gles2::GLES2Interface;
@@ -18,6 +19,10 @@ class StaticGeometryBinding {
   ~StaticGeometryBinding();
 
   void PrepareForDraw();
+
+  enum {
+    NUM_QUADS = 9,
+  };
 
  private:
   gpu::gles2::GLES2Interface* gl_;

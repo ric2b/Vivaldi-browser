@@ -5,6 +5,7 @@
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
@@ -132,7 +133,7 @@ PortalDetectorStrategy::PortalDetectorStrategy(Delegate* delegate)
 PortalDetectorStrategy::~PortalDetectorStrategy() {
 }
 
-// statc
+// static
 scoped_ptr<PortalDetectorStrategy> PortalDetectorStrategy::CreateById(
     StrategyId id,
     Delegate* delegate) {
@@ -148,7 +149,7 @@ scoped_ptr<PortalDetectorStrategy> PortalDetectorStrategy::CreateById(
     default:
       NOTREACHED();
       return scoped_ptr<PortalDetectorStrategy>(
-          static_cast<PortalDetectorStrategy*>(NULL));
+          static_cast<PortalDetectorStrategy*>(nullptr));
   }
 }
 
@@ -176,10 +177,6 @@ void PortalDetectorStrategy::SetPolicyAndReset(
 
 void PortalDetectorStrategy::OnDetectionCompleted() {
   backoff_entry_->InformOfRequest(false);
-}
-
-base::TimeDelta PortalDetectorStrategy::GetNextAttemptTimeoutImpl() {
-  return base::TimeDelta();
 }
 
 }  // namespace chromeos

@@ -52,7 +52,7 @@ namespace ash {
 
 // static
 TouchUMA* TouchUMA::GetInstance() {
-  return Singleton<TouchUMA>::get();
+  return base::Singleton<TouchUMA>::get();
 }
 
 void TouchUMA::RecordGestureEvent(aura::Window* target,
@@ -81,8 +81,10 @@ void TouchUMA::RecordGestureAction(GestureActionType action) {
 
 void TouchUMA::RecordTouchEvent(aura::Window* target,
                                 const ui::TouchEvent& event) {
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Ash.TouchRadius",
-      static_cast<int>(std::max(event.radius_x(), event.radius_y())),
+  UMA_HISTOGRAM_CUSTOM_COUNTS(
+      "Ash.TouchRadius",
+      static_cast<int>(std::max(event.pointer_details().radius_x(),
+                                event.pointer_details().radius_y())),
       1, 500, 100);
 
   UpdateTouchState(event);
@@ -106,8 +108,8 @@ void TouchUMA::RecordTouchEvent(aura::Window* target,
   // Prefer raw event location (when available) over calibrated location.
   if (event.HasNativeEvent()) {
     position = ui::EventLocationFromNative(event.native_event());
-    position = gfx::ToFlooredPoint(
-        gfx::ScalePoint(position, 1. / target->layer()->device_scale_factor()));
+    position = gfx::ScaleToFlooredPoint(
+        position, 1.f / target->layer()->device_scale_factor());
   }
 
   position.set_x(std::min(bounds.width() - 1, std::max(0, position.x())));

@@ -9,18 +9,21 @@
 
 #include "ash/shell_observer.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/prefs/pref_member.h"
 #include "chrome/browser/chromeos/language_preferences.h"
-#include "chrome/browser/prefs/pref_service_syncable_observer.h"
+#include "components/syncable_prefs/pref_service_syncable_observer.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
 class PrefRegistrySimple;
 class PrefService;
-class PrefServiceSyncable;
-
 class TracingManager;
+
+namespace syncable_prefs {
+class PrefServiceSyncable;
+}
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -39,7 +42,7 @@ class InputMethodSyncer;
 // is first initialized, it will initialize the OS settings to what's stored in
 // the preferences. These include touchpad settings, etc.
 // When the preferences change, we change the settings to reflect the new value.
-class Preferences : public PrefServiceSyncableObserver,
+class Preferences : public syncable_prefs::PrefServiceSyncableObserver,
                     public ash::ShellObserver,
                     public user_manager::UserManager::UserSessionStateObserver {
  public:
@@ -57,7 +60,7 @@ class Preferences : public PrefServiceSyncableObserver,
   void Init(Profile* profile, const user_manager::User* user);
 
   void InitUserPrefsForTesting(
-      PrefServiceSyncable* prefs,
+      syncable_prefs::PrefServiceSyncable* prefs,
       const user_manager::User* user,
       scoped_refptr<input_method::InputMethodManager::State> ime_state);
   void SetInputMethodListForTesting();
@@ -70,15 +73,15 @@ class Preferences : public PrefServiceSyncableObserver,
   };
 
   // Initializes all member prefs.
-  void InitUserPrefs(PrefServiceSyncable* prefs);
+  void InitUserPrefs(syncable_prefs::PrefServiceSyncable* prefs);
 
   // Callback method for preference changes.
   void OnPreferenceChanged(const std::string& pref_name);
 
-  // This will set the OS settings when the preference changed or user owning
-  // these preferences became active. Also this method is called on
-  // initialization. The reason of call is stored in |reason| parameter.
-  // |pref_name| keeps name of changed preference in |reason| is
+  // This will set the OS settings when the preference changed or the user
+  // owning these preferences became active. Also this method is called on
+  // initialization. The reason of the call is stored as the |reason| parameter.
+  // |pref_name| is the name of the changed preference if the |reason| is
   // |REASON_PREF_CHANGED|, otherwise it is empty.
   void ApplyPreferences(ApplyReason reason,
                         const std::string& pref_name);
@@ -101,7 +104,7 @@ class Preferences : public PrefServiceSyncableObserver,
   // on the cmd line.
   void ForceNaturalScrollDefault();
 
-  // PrefServiceSyncableObserver implementation.
+  // syncable_prefs::PrefServiceSyncableObserver implementation.
   void OnIsSyncingChanged() override;
 
   // Overriden from ash::ShellObserver.
@@ -112,7 +115,7 @@ class Preferences : public PrefServiceSyncableObserver,
 
   void ActivateInputMethods(const user_manager::User* active_user);
 
-  PrefServiceSyncable* prefs_;
+  syncable_prefs::PrefServiceSyncable* prefs_;
 
   input_method::InputMethodManager* input_method_manager_;
   scoped_ptr<TracingManager> tracing_manager_;
@@ -121,6 +124,7 @@ class Preferences : public PrefServiceSyncableObserver,
   BooleanPrefMember tap_to_click_enabled_;
   BooleanPrefMember tap_dragging_enabled_;
   BooleanPrefMember three_finger_click_enabled_;
+  BooleanPrefMember unified_desktop_enabled_by_default_;
   BooleanPrefMember natural_scroll_;
   BooleanPrefMember vert_edge_scroll_enabled_;
   IntegerPrefMember speed_factor_;
@@ -135,12 +139,13 @@ class Preferences : public PrefServiceSyncableObserver,
   StringPrefMember current_input_method_;
   StringPrefMember previous_input_method_;
   StringPrefMember enabled_extension_imes_;
+  BooleanPrefMember ime_menu_activated_;
 
   BooleanPrefMember xkb_auto_repeat_enabled_;
   IntegerPrefMember xkb_auto_repeat_delay_pref_;
   IntegerPrefMember xkb_auto_repeat_interval_pref_;
 
-  BooleanPrefMember wake_on_wifi_ssid_;
+  BooleanPrefMember wake_on_wifi_darkconnect_;
 
   PrefChangeRegistrar pref_change_registrar_;
 

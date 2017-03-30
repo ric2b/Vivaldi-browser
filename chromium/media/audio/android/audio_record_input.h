@@ -5,7 +5,10 @@
 #ifndef MEDIA_AUDIO_ANDROID_AUDIO_RECORD_INPUT_H_
 #define MEDIA_AUDIO_ANDROID_AUDIO_RECORD_INPUT_H_
 
+#include <stdint.h>
+
 #include "base/android/jni_android.h"
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_parameters.h"
@@ -45,11 +48,17 @@ class MEDIA_EXPORT AudioRecordInputStream : public AudioInputStream {
   static bool RegisterAudioRecordInput(JNIEnv* env);
 
   // Called from Java when data is available.
-  void OnData(JNIEnv* env, jobject obj, jint size, jint hardware_delay_bytes);
+  void OnData(JNIEnv* env,
+              const base::android::JavaParamRef<jobject>& obj,
+              jint size,
+              jint hardware_delay_bytes);
 
   // Called from Java so that we can cache the address of the Java-managed
   // |byte_buffer| in |direct_buffer_address_|.
-  void CacheDirectBufferAddress(JNIEnv* env, jobject obj, jobject byte_buffer);
+  void CacheDirectBufferAddress(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& byte_buffer);
 
  private:
   base::ThreadChecker thread_checker_;
@@ -64,7 +73,7 @@ class MEDIA_EXPORT AudioRecordInputStream : public AudioInputStream {
   AudioInputCallback* callback_;
 
   // Owned by j_audio_record_.
-  uint8* direct_buffer_address_;
+  uint8_t* direct_buffer_address_;
 
   scoped_ptr<media::AudioBus> audio_bus_;
   int bytes_per_sample_;

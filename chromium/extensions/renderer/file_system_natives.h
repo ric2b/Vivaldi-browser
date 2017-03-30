@@ -6,6 +6,7 @@
 #define EXTENSIONS_RENDERER_FILE_SYSTEM_NATIVES_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "extensions/renderer/object_backed_native_handler.h"
 
 namespace extensions {
@@ -21,8 +22,6 @@ class FileSystemNatives : public ObjectBackedNativeHandler {
   void GetIsolatedFileSystem(const v8::FunctionCallbackInfo<v8::Value>& args);
   void CrackIsolatedFileSystemName(
       const v8::FunctionCallbackInfo<v8::Value>& args);
-  // Constructs a DOMError object to be used in JavaScript.
-  void GetDOMError(const v8::FunctionCallbackInfo<v8::Value>& args);
 
   DISALLOW_COPY_AND_ASSIGN(FileSystemNatives);
 };

@@ -6,6 +6,8 @@
 #define UI_GFX_SCREEN_WIN_H_
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/gfx/display_change_notifier.h"
 #include "ui/gfx/gfx_export.h"
@@ -18,6 +20,12 @@ class GFX_EXPORT ScreenWin : public Screen {
  public:
   ScreenWin();
   ~ScreenWin() override;
+
+  // Returns the HWND associated with the NativeView.
+  virtual HWND GetHWNDFromNativeView(NativeView window) const;
+
+  // Returns the NativeView associated with the HWND.
+  virtual NativeWindow GetNativeWindowFromHWND(HWND hwnd) const;
 
  protected:
   // Overridden from gfx::Screen:
@@ -33,14 +41,14 @@ class GFX_EXPORT ScreenWin : public Screen {
   void AddObserver(DisplayObserver* observer) override;
   void RemoveObserver(DisplayObserver* observer) override;
 
-  // Returns the HWND associated with the NativeView.
-  virtual HWND GetHWNDFromNativeView(NativeView window) const;
-
-  // Returns the NativeView associated with the HWND.
-  virtual NativeWindow GetNativeWindowFromHWND(HWND hwnd) const;
-
  private:
+  FRIEND_TEST_ALL_PREFIXES(ScreenWinTest, SingleDisplay1x);
+  FRIEND_TEST_ALL_PREFIXES(ScreenWinTest, SingleDisplay2x);
+
   void OnWndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
+
+  static std::vector<gfx::Display> GetDisplaysForMonitorInfos(
+      const std::vector<MONITORINFOEX>& monitor_infos);
 
   // Helper implementing the DisplayObserver handling.
   gfx::DisplayChangeNotifier change_notifier_;

@@ -4,7 +4,10 @@
 
 #include "chrome/browser/safe_browsing/incident_reporting/download_metadata_manager.h"
 
+#include <limits.h>
+#include <stdint.h>
 #include <list>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -56,30 +59,20 @@ const base::FilePath::CharType kDownloadMetadataBasename[] =
 // it is in progress.
 class DownloadItemData : public base::SupportsUserData::Data {
  public:
-  // Returns the data for a given DownloadItem or null if there is none.
-  static DownloadItemData* GetData(content::DownloadItem* item);
+  // Sets the ClientDownloadRequest for a given DownloadItem.
+  static void SetRequestForDownload(content::DownloadItem* item,
+                                    scoped_ptr<ClientDownloadRequest> request);
 
-  // Returns the data for a given DownloadItem, creating one if one does not
-  // already exist.
-  static DownloadItemData* GetOrCreateData(content::DownloadItem* item);
-
-  // Removes the data associated with a given DownloadItem. The data is
-  // destroyed.
-  static void RemoveData(content::DownloadItem* item);
-
-  // Sets the download request for the item.
-  void set_request(scoped_ptr<ClientDownloadRequest> request) {
-    request_ = request.Pass();
-  }
-
-  // Returns ownership of the item's download request.
-  scoped_ptr<ClientDownloadRequest> TakeRequest() { return request_.Pass(); }
+  // Returns the ClientDownloadRequest for a download or null if there is none.
+  static scoped_ptr<ClientDownloadRequest> TakeRequestForDownload(
+      content::DownloadItem* item);
 
  private:
   // A unique id for associating metadata with a content::DownloadItem.
   static const void* const kKey_;
 
-  DownloadItemData() {}
+  explicit DownloadItemData(scoped_ptr<ClientDownloadRequest> request)
+      : request_(std::move(request)) {}
   ~DownloadItemData() override {}
 
   scoped_ptr<ClientDownloadRequest> request_;
@@ -92,24 +85,22 @@ class DownloadItemData : public base::SupportsUserData::Data {
 const void* const DownloadItemData::kKey_ = &DownloadItemData::kKey_;
 
 // static
-DownloadItemData* DownloadItemData::GetData(content::DownloadItem* item) {
-  return static_cast<DownloadItemData*>(item->GetUserData(&kKey_));
+void DownloadItemData::SetRequestForDownload(
+    content::DownloadItem* item,
+    scoped_ptr<ClientDownloadRequest> request) {
+  item->SetUserData(&kKey_, new DownloadItemData(std::move(request)));
 }
 
 // static
-DownloadItemData* DownloadItemData::GetOrCreateData(
+scoped_ptr<ClientDownloadRequest> DownloadItemData::TakeRequestForDownload(
     content::DownloadItem* item) {
-  DownloadItemData* data = GetData(item);
-  if (!data) {
-    data = new DownloadItemData();
-    item->SetUserData(&kKey_, data);
-  }
-  return data;
-}
-
-// static
-void DownloadItemData::RemoveData(content::DownloadItem* item) {
+  DownloadItemData* data =
+      static_cast<DownloadItemData*>(item->GetUserData(&kKey_));
+  if (!data)
+    return nullptr;
+  scoped_ptr<ClientDownloadRequest> request = std::move(data->request_);
   item->RemoveUserData(&kKey_);
+  return request;
 }
 
 
@@ -199,7 +190,7 @@ void ReturnResults(
   if (!download_metadata->has_download_id())
     callback.Run(scoped_ptr<ClientIncidentReport_DownloadDetails>());
   else
-    callback.Run(make_scoped_ptr(download_metadata->release_download()).Pass());
+    callback.Run(make_scoped_ptr(download_metadata->release_download()));
 }
 
 }  // namespace
@@ -372,7 +363,9 @@ DownloadMetadataManager::~DownloadMetadataManager() {
 
 void DownloadMetadataManager::AddDownloadManager(
     content::DownloadManager* download_manager) {
-  DCHECK_EQ(contexts_.count(download_manager), 0U);
+  // Nothing to do if this download manager is already being observed.
+  if (contexts_.count(download_manager))
+    return;
   download_manager->AddObserver(this);
   contexts_[download_manager] =
       new ManagerContext(read_runner_, write_runner_, download_manager);
@@ -380,12 +373,12 @@ void DownloadMetadataManager::AddDownloadManager(
 
 void DownloadMetadataManager::SetRequest(content::DownloadItem* item,
                                          const ClientDownloadRequest* request) {
+  DCHECK(request);
   content::DownloadManager* download_manager =
       GetDownloadManagerForBrowserContext(item->GetBrowserContext());
   DCHECK_EQ(contexts_.count(download_manager), 1U);
   contexts_[download_manager]->SetRequest(
-      item,
-      request ? make_scoped_ptr(new ClientDownloadRequest(*request)) : nullptr);
+      item, make_scoped_ptr(new ClientDownloadRequest(*request)));
 }
 
 void DownloadMetadataManager::GetDownloadDetails(
@@ -485,14 +478,13 @@ void DownloadMetadataManager::ManagerContext::OnDownloadCreated(
 void DownloadMetadataManager::ManagerContext::SetRequest(
     content::DownloadItem* download,
     scoped_ptr<ClientDownloadRequest> request) {
+  DCHECK(request);
   // Hold on to the request for completion time if the download is in progress.
-  // Otherwise, either commit the request or remove metadata, as appropriate.
+  // Otherwise, commit the request.
   if (download->GetState() == content::DownloadItem::IN_PROGRESS)
-    DownloadItemData::GetOrCreateData(download)->set_request(request.Pass());
-  else if (request)
-    CommitRequest(download, request.Pass());
+    DownloadItemData::SetRequestForDownload(download, std::move(request));
   else
-    RemoveMetadata();
+    CommitRequest(download, std::move(request));
 }
 
 void DownloadMetadataManager::ManagerContext::GetDownloadDetails(
@@ -509,22 +501,13 @@ void DownloadMetadataManager::ManagerContext::GetDownloadDetails(
 
 void DownloadMetadataManager::ManagerContext::OnDownloadUpdated(
     content::DownloadItem* download) {
-  const content::DownloadItem::DownloadState state = download->GetState();
-  if (state == content::DownloadItem::IN_PROGRESS) {
-    // Make sure that ItemData exists for this download so that decisions
-    // regarding its metadata can be made upon completion.
-    ignore_result(DownloadItemData::GetOrCreateData(download));
-  } else if (state == content::DownloadItem::COMPLETE) {
-    // Persist metadata for this download if it has just completed.
-    DownloadItemData* data = DownloadItemData::GetData(download);
-    if (!data)
-      return;
-    SetRequest(download, data->TakeRequest());
-    // RemoveData below will delete |data|, so clear the pointer to it.
-    data = nullptr;
-    // Drop the data from the download item so that subsequent updates will do
-    // nothing.
-    DownloadItemData::RemoveData(download);
+  // Persist metadata for this download if it has just completed.
+  if (download->GetState() == content::DownloadItem::COMPLETE) {
+    // Ignore downloads we don't have a ClientDownloadRequest for.
+    scoped_ptr<ClientDownloadRequest> request =
+        DownloadItemData::TakeRequestForDownload(download);
+    if (request)
+      CommitRequest(download, std::move(request));
   }
 }
 
@@ -644,7 +627,7 @@ void DownloadMetadataManager::ManagerContext::OnMetadataReady(
   // Note that any available data has been read.
   state_ = LOAD_COMPLETE;
   if (download_metadata->has_download_id())
-    download_metadata_ = download_metadata.Pass();
+    download_metadata_ = std::move(download_metadata);
   else
     download_metadata_.reset();
 

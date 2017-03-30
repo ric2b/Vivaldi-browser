@@ -7,7 +7,7 @@
 
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_base_factory.h"
@@ -85,7 +85,7 @@ class UserCloudPolicyManagerFactory : public BrowserContextKeyedBaseFactory {
 
  private:
   class ManagerWrapper;
-  friend struct DefaultSingletonTraits<UserCloudPolicyManagerFactory>;
+  friend struct base::DefaultSingletonTraits<UserCloudPolicyManagerFactory>;
 
   UserCloudPolicyManagerFactory();
   ~UserCloudPolicyManagerFactory() override;

@@ -5,9 +5,11 @@
 #include "chrome/browser/devtools/device/port_forwarding_controller.h"
 
 #include <map>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
@@ -53,14 +55,14 @@ class SocketTunnel : public base::NonThreadSafe {
                           int result,
                           scoped_ptr<net::StreamSocket> socket) {
     if (result == net::OK)
-      new SocketTunnel(socket.Pass(), host, port);
+      new SocketTunnel(std::move(socket), host, port);
   }
 
  private:
   SocketTunnel(scoped_ptr<net::StreamSocket> socket,
                const std::string& host,
                int port)
-      : remote_socket_(socket.Pass()),
+      : remote_socket_(std::move(socket)),
         pending_writes_(0),
         pending_destruction_(false) {
     host_resolver_ = net::HostResolver::CreateDefaultResolver(nullptr);
@@ -335,7 +337,7 @@ void PortForwardingController::Connection::SendCommand(
   }
 
   web_socket_->SendFrame(
-      DevToolsProtocol::SerializeCommand(id, method, params.Pass()));
+      DevToolsProtocol::SerializeCommand(id, method, std::move(params)));
 }
 
 bool PortForwardingController::Connection::ProcessResponse(

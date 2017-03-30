@@ -5,8 +5,10 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_TEST_NO_TRANSPORT_IMAGE_TRANSPORT_FACTORY_H_
 #define CONTENT_BROWSER_COMPOSITOR_TEST_NO_TRANSPORT_IMAGE_TRANSPORT_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "content/browser/compositor/image_transport_factory.h"
 
 namespace cc {
@@ -23,13 +25,15 @@ class NoTransportImageTransportFactory : public ImageTransportFactory {
 
   // ImageTransportFactory implementation.
   ui::ContextFactory* GetContextFactory() override;
-  gfx::GLSurfaceHandle GetSharedSurfaceHandle() override;
   cc::SurfaceManager* GetSurfaceManager() override;
   GLHelper* GetGLHelper() override;
   void AddObserver(ImageTransportFactoryObserver* observer) override;
   void RemoveObserver(ImageTransportFactoryObserver* observer) override;
 #if defined(OS_MACOSX)
-  void OnSurfaceDisplayed(int surface_id) override {}
+  void OnGpuSwapBuffersCompleted(
+      int surface_id,
+      const std::vector<ui::LatencyInfo>& latency_info,
+      gfx::SwapResult result) override {}
   void SetCompositorSuspendedForRecycle(ui::Compositor* compositor,
                                         bool suspended) override {}
   bool SurfaceShouldNotShowFramesAfterSuspendForRecycle(

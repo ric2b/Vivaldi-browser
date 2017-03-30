@@ -4,10 +4,13 @@
 
 #include "google_apis/gcm/engine/unregistration_request.h"
 
+#include <utility>
+
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "google_apis/gcm/base/gcm_util.h"
 #include "google_apis/gcm/monitoring/gcm_stats_recorder.h"
@@ -34,13 +37,10 @@ const char kLoginHeader[] = "AidLogin";
 
 }  // namespace
 
-UnregistrationRequest::RequestInfo::RequestInfo(
-    uint64 android_id,
-    uint64 security_token,
-    const std::string& app_id)
-    : android_id(android_id),
-      security_token(security_token),
-      app_id(app_id) {
+UnregistrationRequest::RequestInfo::RequestInfo(uint64_t android_id,
+                                                uint64_t security_token,
+                                                const std::string& app_id)
+    : android_id(android_id), security_token(security_token), app_id(app_id) {
   DCHECK(android_id != 0UL);
   DCHECK(security_token != 0UL);
 }
@@ -63,7 +63,7 @@ UnregistrationRequest::UnregistrationRequest(
     const std::string& source_to_record)
     : callback_(callback),
       request_info_(request_info),
-      custom_request_handler_(custom_request_handler.Pass()),
+      custom_request_handler_(std::move(custom_request_handler)),
       registration_url_(registration_url),
       backoff_entry_(&backoff_policy),
       request_context_getter_(request_context_getter),
@@ -146,34 +146,26 @@ UnregistrationRequest::Status UnregistrationRequest::ParseResponse(
   return custom_request_handler_->ParseResponse(source);
 }
 
-void UnregistrationRequest::RetryWithBackoff(bool update_backoff) {
-  if (update_backoff) {
-    DCHECK_GT(retries_left_, 0);
-    --retries_left_;
-    url_fetcher_.reset();
-    backoff_entry_.InformOfRequest(false);
-  }
+void UnregistrationRequest::RetryWithBackoff() {
+  DCHECK_GT(retries_left_, 0);
+  --retries_left_;
+  url_fetcher_.reset();
+  backoff_entry_.InformOfRequest(false);
 
-  if (backoff_entry_.ShouldRejectRequest()) {
-    DVLOG(1) << "Delaying GCM unregistration of app: "
-             << request_info_.app_id << ", for "
-             << backoff_entry_.GetTimeUntilRelease().InMilliseconds()
-             << " milliseconds.";
-    recorder_->RecordUnregistrationRetryDelayed(
-        request_info_.app_id,
-        source_to_record_,
-        backoff_entry_.GetTimeUntilRelease().InMilliseconds(),
-        retries_left_ + 1);
-    base::MessageLoop::current()->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&UnregistrationRequest::RetryWithBackoff,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   false),
-        backoff_entry_.GetTimeUntilRelease());
-    return;
-  }
-
-  Start();
+  DVLOG(1) << "Delaying GCM unregistration of app: "
+           << request_info_.app_id << ", for "
+           << backoff_entry_.GetTimeUntilRelease().InMilliseconds()
+           << " milliseconds.";
+  recorder_->RecordUnregistrationRetryDelayed(
+      request_info_.app_id,
+      source_to_record_,
+      backoff_entry_.GetTimeUntilRelease().InMilliseconds(),
+      retries_left_ + 1);
+  DCHECK(!weak_ptr_factory_.HasWeakPtrs());
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&UnregistrationRequest::Start, weak_ptr_factory_.GetWeakPtr()),
+      backoff_entry_.GetTimeUntilRelease());
 }
 
 void UnregistrationRequest::OnURLFetchComplete(const net::URLFetcher* source) {
@@ -198,7 +190,7 @@ void UnregistrationRequest::OnURLFetchComplete(const net::URLFetcher* source) {
       status == INCORRECT_APP_ID ||
       status == RESPONSE_PARSING_FAILED) {
     if (retries_left_ > 0) {
-      RetryWithBackoff(true);
+      RetryWithBackoff();
       return;
     }
 

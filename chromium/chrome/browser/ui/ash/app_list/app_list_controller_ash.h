@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_UI_ASH_APP_LIST_APP_LIST_CONTROLLER_ASH_H_
 #define CHROME_BROWSER_UI_ASH_APP_LIST_APP_LIST_CONTROLLER_ASH_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
 
@@ -24,7 +24,7 @@ class AppListControllerDelegateAsh : public AppListControllerDelegate {
   bool IsAppPinned(const std::string& extension_id) override;
   void PinApp(const std::string& extension_id) override;
   void UnpinApp(const std::string& extension_id) override;
-  Pinnable GetPinnable() override;
+  Pinnable GetPinnable(const std::string& extension_id) override;
   void OnShowChildDialog() override;
   void OnCloseChildDialog() override;
   bool CanDoCreateShortcutsFlow() override;

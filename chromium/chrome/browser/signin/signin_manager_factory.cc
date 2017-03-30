@@ -5,16 +5,16 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 
 #include "base/prefs/pref_registry_simple.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/account_fetcher_service_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "chrome/browser/signin/local_auth.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/signin_manager.h"
 
 SigninManagerFactory::SigninManagerFactory()
@@ -24,6 +24,7 @@ SigninManagerFactory::SigninManagerFactory()
   DependsOn(ChromeSigninClientFactory::GetInstance());
   DependsOn(GaiaCookieManagerServiceFactory::GetInstance());
   DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
+  DependsOn(AccountFetcherServiceFactory::GetInstance());
   DependsOn(AccountTrackerServiceFactory::GetInstance());
 }
 
@@ -76,40 +77,18 @@ const SigninManager* SigninManagerFactory::GetForProfileIfExists(
 
 // static
 SigninManagerFactory* SigninManagerFactory::GetInstance() {
-  return Singleton<SigninManagerFactory>::get();
+  return base::Singleton<SigninManagerFactory>::get();
 }
 
 void SigninManagerFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterStringPref(prefs::kGoogleServicesHostedDomain,
-                               std::string());
-  registry->RegisterStringPref(prefs::kGoogleServicesLastUsername,
-                               std::string());
-  registry->RegisterInt64Pref(
-      prefs::kGoogleServicesRefreshTokenAnnotateScheduledTime,
-      base::Time().ToInternalValue());
-  registry->RegisterStringPref(prefs::kGoogleServicesSigninScopedDeviceId,
-                               std::string());
-  registry->RegisterStringPref(prefs::kGoogleServicesAccountId, std::string());
-  registry->RegisterStringPref(prefs::kGoogleServicesUserAccountId,
-                               std::string());
-  registry->RegisterBooleanPref(prefs::kAutologinEnabled, true);
-  registry->RegisterBooleanPref(prefs::kReverseAutologinEnabled, true);
-  registry->RegisterListPref(prefs::kReverseAutologinRejectedEmailList,
-                             new base::ListValue);
-  registry->RegisterInt64Pref(prefs::kSignedInTime,
-                              base::Time().ToInternalValue());
-
+  SigninManagerBase::RegisterProfilePrefs(registry);
   LocalAuth::RegisterLocalAuthPrefs(registry);
-
-  // Deprecated prefs: will be removed in a future release.
-  registry->RegisterStringPref(prefs::kGoogleServicesUsername, std::string());
 }
 
 // static
 void SigninManagerFactory::RegisterPrefs(PrefRegistrySimple* registry) {
-  registry->RegisterStringPref(prefs::kGoogleServicesUsernamePattern,
-                               std::string());
+  SigninManagerBase::RegisterPrefs(registry);
 }
 
 void SigninManagerFactory::AddObserver(Observer* observer) {
@@ -141,6 +120,7 @@ KeyedService* SigninManagerFactory::BuildServiceInstanceFor(
       ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
       AccountTrackerServiceFactory::GetForProfile(profile),
       GaiaCookieManagerServiceFactory::GetForProfile(profile));
+  AccountFetcherServiceFactory::GetForProfile(profile);
 #endif
   service->Initialize(g_browser_process->local_state());
   FOR_EACH_OBSERVER(Observer, observer_list_, SigninManagerCreated(service));

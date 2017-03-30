@@ -5,90 +5,108 @@
 #ifndef COMPONENTS_HTML_VIEWER_BLINK_PLATFORM_IMPL_H_
 #define COMPONENTS_HTML_VIEWER_BLINK_PLATFORM_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_local_storage.h"
 #include "base/timer/timer.h"
 #include "cc/blink/web_compositor_support_impl.h"
-#include "components/html_viewer/blink_resource_map.h"
 #include "components/html_viewer/mock_web_blob_registry_impl.h"
 #include "components/html_viewer/web_mime_registry_impl.h"
 #include "components/html_viewer/web_notification_manager_impl.h"
 #include "components/html_viewer/web_theme_engine_impl.h"
 #include "components/webcrypto/webcrypto_impl.h"
-#include "mojo/services/network/public/interfaces/network_service.mojom.h"
 #include "mojo/services/network/public/interfaces/url_loader_factory.mojom.h"
+#include "mojo/services/network/public/interfaces/web_socket_factory.mojom.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebScrollbarBehavior.h"
+
+namespace mojo {
+class ApplicationImpl;
+}
 
 namespace scheduler {
 class RendererScheduler;
 class WebThreadImplForRendererScheduler;
 }
 
-namespace mojo {
-class ApplicationImpl;
-}
-
 namespace html_viewer {
 
+class GlobalState;
 class WebClipboardImpl;
 class WebCookieJarImpl;
 
 class BlinkPlatformImpl : public blink::Platform {
  public:
   // |app| may be null in tests.
-  BlinkPlatformImpl(mojo::ApplicationImpl* app,
+  BlinkPlatformImpl(GlobalState* global_state,
+                    mojo::ApplicationImpl* app,
                     scheduler::RendererScheduler* renderer_scheduler);
-  virtual ~BlinkPlatformImpl();
+  ~BlinkPlatformImpl() override;
 
   // blink::Platform methods:
-  virtual blink::WebCookieJar* cookieJar();
-  virtual blink::WebClipboard* clipboard();
-  virtual blink::WebMimeRegistry* mimeRegistry();
-  virtual blink::WebThemeEngine* themeEngine();
-  virtual blink::WebString defaultLocale();
-  virtual blink::WebBlobRegistry* blobRegistry();
-  virtual double currentTime();
-  virtual double monotonicallyIncreasingTime();
-  virtual void cryptographicallyRandomValues(unsigned char* buffer,
-                                             size_t length);
-  virtual bool isThreadedCompositingEnabled();
-  virtual blink::WebCompositorSupport* compositorSupport();
+  blink::WebCookieJar* cookieJar() override;
+  blink::WebClipboard* clipboard() override;
+  blink::WebMimeRegistry* mimeRegistry() override;
+  blink::WebThemeEngine* themeEngine() override;
+  blink::WebString defaultLocale() override;
+  blink::WebBlobRegistry* blobRegistry() override;
+  double currentTimeSeconds() override;
+  double monotonicallyIncreasingTimeSeconds() override;
+  bool isThreadedCompositingEnabled() override;
+  blink::WebCompositorSupport* compositorSupport() override;
   uint32_t getUniqueIdForProcess() override;
   void createMessageChannel(blink::WebMessagePortChannel** channel1,
                             blink::WebMessagePortChannel** channel2) override;
-  virtual blink::WebURLLoader* createURLLoader();
-  virtual blink::WebSocketHandle* createWebSocketHandle();
-  virtual blink::WebString userAgent();
-  virtual blink::WebData parseDataURL(
-      const blink::WebURL& url, blink::WebString& mime_type,
-      blink::WebString& charset);
-  virtual bool isReservedIPAddress(const blink::WebString& host) const;
-  virtual blink::WebURLError cancelledError(const blink::WebURL& url) const;
-  virtual blink::WebThread* createThread(const char* name);
-  virtual blink::WebThread* currentThread();
-  virtual void yieldCurrentThread();
-  virtual blink::WebWaitableEvent* createWaitableEvent();
-  virtual blink::WebWaitableEvent* waitMultipleEvents(
-      const blink::WebVector<blink::WebWaitableEvent*>& events);
-  virtual blink::WebScrollbarBehavior* scrollbarBehavior();
-  virtual const unsigned char* getTraceCategoryEnabledFlag(
-      const char* category_name);
-  virtual blink::WebData loadResource(const char* name);
-  virtual blink::WebGestureCurve* createFlingAnimationCurve(
+  blink::WebURLLoader* createURLLoader() override;
+  blink::WebSocketHandle* createWebSocketHandle() override;
+  blink::WebString userAgent() override;
+  blink::WebData parseDataURL(const blink::WebURL& url,
+                              blink::WebString& mime_type,
+                              blink::WebString& charset) override;
+  bool isReservedIPAddress(const blink::WebString& host) const override;
+  blink::WebURLError cancelledError(const blink::WebURL& url) const override;
+  blink::WebThread* createThread(const char* name) override;
+  blink::WebThread* currentThread() override;
+  void yieldCurrentThread() override;
+  blink::WebWaitableEvent* createWaitableEvent(
+      blink::WebWaitableEvent::ResetPolicy policy,
+      blink::WebWaitableEvent::InitialState state) override;
+  blink::WebWaitableEvent* waitMultipleEvents(
+      const blink::WebVector<blink::WebWaitableEvent*>& events) override;
+  blink::WebScrollbarBehavior* scrollbarBehavior() override;
+  const unsigned char* getTraceCategoryEnabledFlag(
+      const char* category_name) override;
+  blink::WebGraphicsContext3D* createOffscreenGraphicsContext3D(
+      const blink::WebGraphicsContext3D::Attributes& attributes,
+      blink::WebGraphicsContext3D* share_context) override;
+  blink::WebGraphicsContext3D* createOffscreenGraphicsContext3D(
+      const blink::WebGraphicsContext3D::Attributes& attributes,
+      blink::WebGraphicsContext3D* share_context,
+      blink::WebGraphicsContext3D::WebGraphicsInfo* gl_info) override;
+  blink::WebGraphicsContext3D* createOffscreenGraphicsContext3D(
+      const blink::WebGraphicsContext3D::Attributes& attributes) override;
+  blink::WebGraphicsContext3DProvider*
+  createSharedOffscreenGraphicsContext3DProvider() override;
+  blink::WebData loadResource(const char* name) override;
+  blink::WebGestureCurve* createFlingAnimationCurve(
       blink::WebGestureDevice device_source,
       const blink::WebFloatPoint& velocity,
-      const blink::WebSize& cumulative_scroll);
-  virtual blink::WebCrypto* crypto();
-  virtual blink::WebNotificationManager* notificationManager();
+      const blink::WebSize& cumulative_scroll) override;
+  blink::WebCrypto* crypto() override;
+  blink::WebNotificationManager* notificationManager() override;
 
  private:
   void UpdateWebThreadTLS(blink::WebThread* thread);
 
   static void DestroyCurrentThread(void*);
 
+  GlobalState* global_state_;
+  mojo::ApplicationImpl* app_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
-  scoped_ptr<scheduler::WebThreadImplForRendererScheduler> main_thread_;
+  scoped_ptr<blink::WebThread> main_thread_;
   base::ThreadLocalStorage::Slot current_thread_slot_;
   cc_blink::WebCompositorSupportImpl compositor_support_;
   WebThemeEngineImpl theme_engine_;
@@ -96,8 +114,7 @@ class BlinkPlatformImpl : public blink::Platform {
   webcrypto::WebCryptoImpl web_crypto_;
   WebNotificationManagerImpl web_notification_manager_;
   blink::WebScrollbarBehavior scrollbar_behavior_;
-  BlinkResourceMap blink_resource_map_;
-  mojo::NetworkServicePtr network_service_;
+  mojo::WebSocketFactoryPtr web_socket_factory_;
   mojo::URLLoaderFactoryPtr url_loader_factory_;
   MockWebBlobRegistryImpl blob_registry_;
   scoped_ptr<WebCookieJarImpl> cookie_jar_;

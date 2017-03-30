@@ -4,6 +4,8 @@
 
 package org.chromium.base;
 
+import org.chromium.base.annotations.CalledByNative;
+
 import java.util.Locale;
 
 /**
@@ -17,12 +19,11 @@ public class LocaleUtils {
     }
 
     /**
-     * @return the default locale, translating Android deprecated
-     * language codes into the modern ones used by Chromium.
+     * @return the string for the given locale, translating
+     * Android deprecated language codes into the modern ones
+     * used by Chromium.
      */
-    @CalledByNative
-    public static String getDefaultLocale() {
-        Locale locale = Locale.getDefault();
+    public static String getLocale(Locale locale) {
         String language = locale.getLanguage();
         String country = locale.getCountry();
 
@@ -38,6 +39,15 @@ public class LocaleUtils {
             language = "fil";
         }
         return country.isEmpty() ? language : language + "-" + country;
+    }
+
+    /**
+     * @return the default locale, translating Android deprecated
+     * language codes into the modern ones used by Chromium.
+     */
+    @CalledByNative
+    public static String getDefaultLocale() {
+        return getLocale(Locale.getDefault());
     }
 
     /**

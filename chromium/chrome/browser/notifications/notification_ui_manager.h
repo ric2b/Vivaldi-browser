@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 typedef void* ProfileID;
 
@@ -41,7 +41,17 @@ class NotificationUIManager {
   virtual ~NotificationUIManager() {}
 
   // Creates an initialized UI manager.
+  // TODO(dewittj): Remove the PrefService argument which is unused. See
+  // crbug.com/530376
   static NotificationUIManager* Create(PrefService* local_state);
+
+  // Some platforms can integrate notifications with their own
+  // notification center. In those cases it will return a pointer
+  // to the object dealing with OS specific notifications which will
+  // be owned by the caller.
+  // Otherwise it will return null and chrome notifications will be
+  // used instead.
+  static NotificationUIManager* CreateNativeNotificationManager();
 
   // Adds a notification to be displayed. Virtual for unit test override.
   virtual void Add(const Notification& notification, Profile* profile) = 0;

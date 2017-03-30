@@ -4,28 +4,27 @@
 
 #include "chrome/browser/task_management/providers/web_contents/devtools_task.h"
 
+#include "content/public/browser/web_contents.h"
+
 namespace task_management {
 
 DevToolsTask::DevToolsTask(content::WebContents* web_contents)
     : RendererTask(RendererTask::GetTitleFromWebContents(web_contents),
                    RendererTask::GetFaviconFromWebContents(web_contents),
-                   web_contents) {
+                   web_contents,
+                   web_contents->GetRenderProcessHost()) {
 }
 
 DevToolsTask::~DevToolsTask() {
 }
 
 // task_management::RendererTask:
-void DevToolsTask::OnTitleChanged(content::NavigationEntry* entry) {
-  // In the case of a devtools tab, this won't happen so we ignore it.
-  // TODO(afakhry): Confirm that it doesn't happen in practice.
-  NOTREACHED();
+void DevToolsTask::UpdateTitle() {
+  // In the case of a devtools tab, we just ignore this event.
 }
 
-void DevToolsTask::OnFaviconChanged() {
-  // In the case of a devtools tab, this won't happen so we ignore it.
-  // TODO(afakhry): Confirm that it doesn't happen in practice.
-  NOTREACHED();
+void DevToolsTask::UpdateFavicon() {
+  // In the case of a devtools tab, we just ignore this event.
 }
 
 }  // namespace task_management

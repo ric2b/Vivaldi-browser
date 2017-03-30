@@ -5,13 +5,17 @@
 #ifndef NET_QUIC_QUIC_HTTP_STREAM_H_
 #define NET_QUIC_QUIC_HTTP_STREAM_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/io_buffer.h"
 #include "net/http/http_stream.h"
-#include "net/quic/quic_client_session.h"
-#include "net/quic/quic_reliable_client_stream.h"
+#include "net/quic/quic_chromium_client_session.h"
+#include "net/quic/quic_chromium_client_stream.h"
 
 namespace net {
 
@@ -20,14 +24,15 @@ class QuicHttpStreamPeer;
 }  // namespace test
 
 // The QuicHttpStream is a QUIC-specific HttpStream subclass.  It holds a
-// non-owning pointer to a QuicReliableClientStream which it uses to
+// non-owning pointer to a QuicChromiumClientStream which it uses to
 // send and receive data.
-class NET_EXPORT_PRIVATE QuicHttpStream :
-      public QuicClientSession::Observer,
-      public QuicReliableClientStream::Delegate,
+class NET_EXPORT_PRIVATE QuicHttpStream
+    : public QuicChromiumClientSession::Observer,
+      public QuicChromiumClientStream::Delegate,
       public HttpStream {
  public:
-  explicit QuicHttpStream(const base::WeakPtr<QuicClientSession>& session);
+  explicit QuicHttpStream(
+      const base::WeakPtr<QuicChromiumClientSession>& session);
 
   ~QuicHttpStream() override;
 
@@ -47,26 +52,28 @@ class NET_EXPORT_PRIVATE QuicHttpStream :
   void Close(bool not_reusable) override;
   HttpStream* RenewStreamForAuth() override;
   bool IsResponseBodyComplete() const override;
-  bool CanFindEndOfResponse() const override;
   bool IsConnectionReused() const override;
   void SetConnectionReused() override;
-  bool IsConnectionReusable() const override;
-  int64 GetTotalReceivedBytes() const override;
+  bool CanReuseConnection() const override;
+  int64_t GetTotalReceivedBytes() const override;
+  int64_t GetTotalSentBytes() const override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
   void GetSSLInfo(SSLInfo* ssl_info) override;
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
-  bool IsSpdyHttpStream() const override;
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
   void Drain(HttpNetworkSession* session) override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) override;
   void SetPriority(RequestPriority priority) override;
 
-  // QuicReliableClientStream::Delegate implementation
-  void OnHeadersAvailable(StringPiece headers) override;
-  int OnDataReceived(const char* data, int length) override;
+  // QuicChromiumClientStream::Delegate implementation
+  void OnHeadersAvailable(const SpdyHeaderBlock& headers,
+                          size_t frame_len) override;
+  void OnDataAvailable() override;
   void OnClose(QuicErrorCode error) override;
   void OnError(int error) override;
   bool HasSendHeadersComplete() override;
 
-  // QuicClientSession::Observer implementation
+  // QuicChromiumClientSession::Observer implementation
   void OnCryptoHandshakeConfirmed() override;
   void OnSessionClosed(int error) override;
 
@@ -98,19 +105,19 @@ class NET_EXPORT_PRIVATE QuicHttpStream :
   int DoReadResponseHeaders();
   int DoReadResponseHeadersComplete(int rv);
 
-  int ParseResponseHeaders(StringPiece headers);
+  int ProcessResponseHeaders(const SpdyHeaderBlock& headers);
 
-  void BufferResponseBody(const char* data, int length);
+  int ReadAvailableData(IOBuffer* buf, int buf_len);
 
-  SpdyMajorVersion GetSpdyVersion();
+  void ResetStream();
 
   State next_state_;
 
-  base::WeakPtr<QuicClientSession> session_;
-  int session_error_;  // Error code from the connection shutdown.
+  base::WeakPtr<QuicChromiumClientSession> session_;
+  int session_error_;             // Error code from the connection shutdown.
   bool was_handshake_confirmed_;  // True if the crypto handshake succeeded.
-  QuicClientSession::StreamRequest stream_request_;
-  QuicReliableClientStream* stream_;  // Non-owning.
+  QuicChromiumClientSession::StreamRequest stream_request_;
+  QuicChromiumClientStream* stream_;  // Non-owning.
 
   // The following three fields are all owned by the caller and must
   // outlive this object, according to the HttpStream contract.
@@ -140,12 +147,15 @@ class NET_EXPORT_PRIVATE QuicHttpStream :
   // Serialized HTTP request.
   std::string request_;
 
-  // We buffer the response body as it arrives asynchronously from the stream.
-  // TODO(rch): This is infinite buffering, which is bad.
-  std::list<scoped_refptr<IOBufferWithSize> > response_body_;
+  // Number of bytes received by the headers stream on behalf of this stream.
+  int64_t headers_bytes_received_;
+  // Number of bytes sent by the headers stream on behalf of this stream.
+  int64_t headers_bytes_sent_;
 
   // Number of bytes received when the stream was closed.
-  int64 closed_stream_received_bytes_;
+  int64_t closed_stream_received_bytes_;
+  // Number of bytes sent when the stream was closed.
+  int64_t closed_stream_sent_bytes_;
 
   // The caller's callback to be used for asynchronous operations.
   CompletionCallback callback_;
@@ -160,6 +170,8 @@ class NET_EXPORT_PRIVATE QuicHttpStream :
   scoped_refptr<DrainableIOBuffer> request_body_buf_;
 
   BoundNetLog stream_net_log_;
+
+  QuicErrorCode quic_connection_error_;
 
   base::WeakPtrFactory<QuicHttpStream> weak_factory_;
 

@@ -5,16 +5,17 @@
 #ifndef PDF_DOCUMENT_LOADER_H_
 #define PDF_DOCUMENT_LOADER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "pdf/chunk_stream.h"
 #include "ppapi/cpp/url_loader.h"
 #include "ppapi/utility/completion_callback_factory.h"
-
-#define kDefaultRequestSize 32768u
 
 namespace chrome_pdf {
 
@@ -47,7 +48,7 @@ class DocumentLoader {
             const std::string& url,
             const std::string& headers);
 
-  // Data access interface. Return true is sucessful.
+  // Data access interface. Return true is successful.
   bool GetBlock(uint32_t position, uint32_t size, void* buf) const;
 
   // Data availability interface. Return true data avaialble.
@@ -81,14 +82,26 @@ class DocumentLoader {
   void LoadFullDocument();
   // Download pending requests.
   void DownloadPendingRequests();
+  // Remove completed ranges.
+  void RemoveCompletedRanges();
+  // Returns true if we are already in progress satisfying the request, or just
+  // about ready to start. This helps us avoid expensive jumping around, and
+  // even worse leaving tiny gaps in the byte stream that might have to be
+  // filled later.
+  bool SatisfyingRequest(size_t pos, size_t size) const;
   // Called when we complete server request and read all data from it.
   void ReadComplete();
   // Creates request to download size byte of data data starting from position.
   pp::URLRequestInfo GetRequest(uint32_t position, uint32_t size) const;
-  // Returns current request size in bytes.
-  uint32_t GetRequestSize() const;
+  // Updates the rendering by the Client.
+  void UpdateRendering();
 
-  Client* client_;
+  // Document below size will be downloaded in one chunk.
+  static const uint32_t kMinFileSize = 64 * 1024;
+  // Number was chosen in crbug.com/78264#c8
+  enum { kDefaultRequestSize = 65536 };
+
+  Client* const client_;
   std::string url_;
   pp::URLLoader loader_;
   pp::CompletionCallbackFactory<DocumentLoader> loader_factory_;
@@ -97,6 +110,15 @@ class DocumentLoader {
   bool request_pending_;
   typedef std::list<std::pair<size_t, size_t> > PendingRequests;
   PendingRequests pending_requests_;
+  // The starting position of the HTTP request currently being processed.
+  size_t current_request_offset_;
+  // The size of the byte range the current HTTP request must download before
+  // being cancelled.
+  size_t current_request_size_;
+  // The actual byte range size of the current HTTP request. This may be larger
+  // than |current_request_size_| and the request may be cancelled before
+  // reaching |current_request_offset_| + |current_request_extended_size_|.
+  size_t current_request_extended_size_;
   char buffer_[kDefaultRequestSize];
   uint32_t current_pos_;
   uint32_t current_chunk_size_;
@@ -106,7 +128,7 @@ class DocumentLoader {
   bool is_multipart_;
   std::string multipart_boundary_;
   uint32_t requests_count_;
-  std::list<std::vector<unsigned char> > chunk_buffer_;
+  std::vector<std::vector<unsigned char> > chunk_buffer_;
 };
 
 }  // namespace chrome_pdf

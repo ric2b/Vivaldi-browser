@@ -5,10 +5,12 @@
 #include "net/cert_net/nss_ocsp.h"
 
 #include <string>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -90,8 +92,8 @@ class NssHttpTest : public ::testing::Test {
         new AiaResponseHandler(kAiaHeaders, file_contents));
     handler_ = handler.get();
 
-    URLRequestFilter::GetInstance()->AddHostnameInterceptor(
-        "http", kAiaHost, handler.Pass());
+    URLRequestFilter::GetInstance()->AddHostnameInterceptor("http", kAiaHost,
+                                                            std::move(handler));
 
     SetURLRequestContextForNSSHttpIO(&context_);
     EnsureNSSHttpIOInit();

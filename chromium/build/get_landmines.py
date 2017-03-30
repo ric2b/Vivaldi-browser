@@ -73,6 +73,12 @@ def print_landmines():
   print 'Remove NaCl toolchains from the output dir (crbug.com/456902)'
   if platform() == 'ios':
     print 'Clobber iOS to workaround Xcode deps bug (crbug.com/485435)'
+  if platform() == 'win':
+    print 'Clobber to delete stale generated files (crbug.com/510086)'
+  if platform() == 'android' and gyp_defines().get('target_arch') == 'arm64':
+    print 'Clobber to support new location/infra for chrome_sync_shell_apk'
+  if platform() == 'mac':
+    print 'Clobber to get rid of evil libsqlite3.dylib (crbug.com/526208)'
 
 
 def main():

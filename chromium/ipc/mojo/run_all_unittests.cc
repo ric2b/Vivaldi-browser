@@ -6,37 +6,22 @@
 #include "base/bind.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
-#include "third_party/mojo/src/mojo/edk/embedder/test_embedder.h"
+#include "build/build_config.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_android.h"
 #include "base/test/test_file_util.h"
 #endif
 
-namespace {
-
-class NoAtExitBaseTestSuite : public base::TestSuite {
- public:
-  NoAtExitBaseTestSuite(int argc, char** argv)
-      : base::TestSuite(argc, argv, false) {
-  }
-};
-
-int RunTestSuite(int argc, char** argv) {
-  return NoAtExitBaseTestSuite(argc, argv).Run();
-}
-
-}  // namespace
-
 int main(int argc, char** argv) {
-  mojo::embedder::test::InitWithSimplePlatformSupport();
 #if defined(OS_ANDROID)
   JNIEnv* env = base::android::AttachCurrentThread();
   base::RegisterContentUriTestUtils(env);
-#else
-  base::AtExitManager at_exit;
 #endif
-  return base::LaunchUnitTestsSerially(argc,
-                                       argv,
-                                       base::Bind(&RunTestSuite, argc, argv));
+  base::TestSuite test_suite(argc, argv);
+  mojo::embedder::Init();
+  return base::LaunchUnitTestsSerially(
+      argc, argv,
+      base::Bind(&base::TestSuite::Run, base::Unretained(&test_suite)));
 }

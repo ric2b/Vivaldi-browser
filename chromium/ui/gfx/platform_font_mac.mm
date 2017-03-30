@@ -4,9 +4,10 @@
 
 #include "ui/gfx/platform_font_mac.h"
 
+#include <cmath>
+
 #include <Cocoa/Cocoa.h>
 
-#include "base/basictypes.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -98,19 +99,19 @@ Font PlatformFontMac::DeriveFont(int size_delta, int style) const {
   return Font(new PlatformFontMac(font_name_, font_size_ + size_delta, style));
 }
 
-int PlatformFontMac::GetHeight() const {
+int PlatformFontMac::GetHeight() {
   return height_;
 }
 
-int PlatformFontMac::GetBaseline() const {
+int PlatformFontMac::GetBaseline() {
   return ascent_;
 }
 
-int PlatformFontMac::GetCapHeight() const {
+int PlatformFontMac::GetCapHeight() {
   return cap_height_;
 }
 
-int PlatformFontMac::GetExpectedTextWidth(int length) const {
+int PlatformFontMac::GetExpectedTextWidth(int length) {
   return length * average_width_;
 }
 
@@ -118,7 +119,7 @@ int PlatformFontMac::GetStyle() const {
   return font_style_;
 }
 
-std::string PlatformFontMac::GetFontName() const {
+const std::string& PlatformFontMac::GetFontName() const {
   return font_name_;
 }
 
@@ -166,11 +167,18 @@ void PlatformFontMac::CalculateMetricsAndInitRenderParams() {
     return;
   }
 
-  base::scoped_nsobject<NSLayoutManager> layout_manager(
-      [[NSLayoutManager alloc] init]);
-  height_ = SkScalarCeilToInt([layout_manager defaultLineHeightForFont:font]);
-  ascent_ = SkScalarCeilToInt([font ascender]);
-  cap_height_ = SkScalarCeilToInt([font capHeight]);
+  ascent_ = ceil([font ascender]);
+  cap_height_ = ceil([font capHeight]);
+
+  // PlatformFontMac once used -[NSLayoutManager defaultLineHeightForFont:] to
+  // initialize |height_|. However, it has a silly rounding bug. Essentially, it
+  // gives round(ascent) + round(descent). E.g. Helvetica Neue at size 16 gives
+  // ascent=15.4634, descent=3.38208 -> 15 + 3 = 18. When the height should be
+  // at least 19. According to the OpenType specification, these values should
+  // simply be added, so do that. Note this uses the already-rounded |ascent_|
+  // to ensure GetBaseline() + descender fits within GetHeight() during layout.
+  height_ = ceil(ascent_ + std::abs([font descender]) + [font leading]);
+
   average_width_ =
       NSWidth([font boundingRectForGlyph:[font glyphWithName:@"x"]]);
 

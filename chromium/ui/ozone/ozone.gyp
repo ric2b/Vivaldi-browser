@@ -16,6 +16,13 @@
     'internal_ozone_platforms': [],
     'internal_ozone_platform_deps': [],
     'internal_ozone_platform_unittest_deps': [],
+
+    # This enables memory-mapped access to accelerated graphics buffers via
+    # the VGEM ("virtual GEM") driver. This is currently only available on
+    # Chrome OS kernels and affects code in the GBM ozone platform.
+    # TODO(dshwang): remove this flag when all gbm hardware supports vgem map.
+    # crbug.com/519587
+    'use_vgem_map%': 0,
   },
   'targets': [
     {
@@ -24,23 +31,49 @@
       'type': '<(component)',
       'dependencies': [
         '<(DEPTH)/base/base.gyp:base',
+        '<(DEPTH)/ipc/ipc.gyp:ipc',
         '<(DEPTH)/skia/skia.gyp:skia',
+        '<(DEPTH)/ui/display/display.gyp:display_types',
+        '<(DEPTH)/ui/display/display.gyp:display_util',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
+        '<(DEPTH)/ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
       ],
       'defines': [
         'OZONE_BASE_IMPLEMENTATION',
       ],
       'sources': [
+        'common/display_mode_proxy.cc',
+        'common/display_mode_proxy.h',
+        'common/display_snapshot_proxy.cc',
+        'common/display_snapshot_proxy.h',
+        'common/display_util.cc',
+        'common/display_util.h',
+        'common/egl_util.cc',
+        'common/egl_util.h',
+        'common/gpu/ozone_gpu_message_generator.cc',
+        'common/gpu/ozone_gpu_message_generator.h',
+        'common/gpu/ozone_gpu_message_params.cc',
+        'common/gpu/ozone_gpu_message_params.h',
+        'common/gpu/ozone_gpu_messages.h',
+        'common/native_display_delegate_ozone.cc',
+        'common/native_display_delegate_ozone.h',
+        'common/stub_overlay_manager.cc',
+        'common/stub_overlay_manager.h',
+        'public/client_native_pixmap.h',
         'public/cursor_factory_ozone.cc',
         'public/cursor_factory_ozone.h',
         'public/gpu_platform_support.cc',
         'public/gpu_platform_support.h',
         'public/gpu_platform_support_host.cc',
         'public/gpu_platform_support_host.h',
+        'public/input_controller.cc',
+        'public/input_controller.h',
         'public/native_pixmap.h',
         'public/overlay_candidates_ozone.cc',
         'public/overlay_candidates_ozone.h',
         'public/overlay_manager_ozone.h',
+        'public/ozone_switches.cc',
+        'public/ozone_switches.h',
         'public/surface_factory_ozone.cc',
         'public/surface_factory_ozone.h',
         'public/surface_ozone_canvas.h',
@@ -60,6 +93,7 @@
         '<(DEPTH)/ui/display/display.gyp:display_types',
         '<(DEPTH)/ui/display/display.gyp:display_util',
         '<(DEPTH)/ui/events/events.gyp:events',
+        '<(DEPTH)/ui/events/devices/events_devices.gyp:events_devices',
         '<(DEPTH)/ui/events/ozone/events_ozone.gyp:events_ozone',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
@@ -89,33 +123,16 @@
         '<(platform_list_h_file)',
         '<(constructor_list_cc_file)',
 
-        'common/display_mode_proxy.cc',
-        'common/display_mode_proxy.h',
-        'common/display_snapshot_proxy.cc',
-        'common/display_snapshot_proxy.h',
-        'common/display_util.cc',
-        'common/display_util.h',
-        'common/egl_util.cc',
-        'common/egl_util.h',
-        'common/gpu/ozone_gpu_message_generator.cc',
-        'common/gpu/ozone_gpu_message_generator.h',
-        'common/gpu/ozone_gpu_message_params.cc',
-        'common/gpu/ozone_gpu_message_params.h',
-        'common/gpu/ozone_gpu_messages.h',
-        'common/native_display_delegate_ozone.cc',
-        'common/native_display_delegate_ozone.h',
-        'common/stub_overlay_manager.cc',
-        'common/stub_overlay_manager.h',
+        'common/stub_client_native_pixmap_factory.cc',
+        'common/stub_client_native_pixmap_factory.h',
         'platform_selection.cc',
         'platform_selection.h',
-        'public/input_controller.cc',
-        'public/input_controller.h',
+        'public/client_native_pixmap_factory.cc',
+        'public/client_native_pixmap_factory.h',
         'public/ozone_gpu_test_helper.cc',
         'public/ozone_gpu_test_helper.h',
         'public/ozone_platform.cc',
         'public/ozone_platform.h',
-        'public/ozone_switches.cc',
-        'public/ozone_switches.h',
         '<@(external_ozone_platform_files)',
       ],
       'actions': [
@@ -163,7 +180,9 @@
             '--output_cc=<(constructor_list_cc_file)',
             '--namespace=ui',
             '--typename=OzonePlatform',
-            '--include="ui/ozone/public/ozone_platform.h"'
+            '--typename=ClientNativePixmapFactory',
+            '--include="ui/ozone/public/ozone_platform.h"',
+            '--include="ui/ozone/public/client_native_pixmap_factory.h"'
           ],
         },
       ],
@@ -191,6 +210,19 @@
         '<@(internal_ozone_platform_unittest_deps)',
       ],
     },
+    {
+      'target_name': 'vgem_map',
+      'type': 'none',
+      'conditions': [
+        ['use_vgem_map==1', {
+          'direct_dependent_settings': {
+            'defines': [
+              'USE_VGEM_MAP',
+            ],
+          },
+        }],
+      ],
+    },
   ],
   'conditions': [
     ['<(ozone_platform_caca) == 1', {
@@ -203,11 +235,6 @@
         'platform/cast/cast.gypi',
       ],
     }],
-    ['<(ozone_platform_dri) == 1 or <(ozone_platform_drm) == 1 or <(ozone_platform_gbm) == 1', {
-      'includes': [
-        'platform/drm/drm.gypi',
-      ],
-    }],
     ['<(ozone_platform_egltest) == 1', {
       'includes': [
         'platform/egltest/egltest.gypi',
@@ -218,9 +245,9 @@
         'platform/drm/gbm.gypi',
       ],
     }],
-    ['<(ozone_platform_test) == 1', {
+    ['<(ozone_platform_headless) == 1', {
       'includes': [
-        'platform/test/test.gypi',
+        'platform/headless/headless.gypi',
       ],
     }],
   ],

@@ -4,6 +4,8 @@
 
 #include "storage/browser/fileapi/file_system_dir_url_request_job.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
@@ -13,9 +15,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "net/base/directory_listing.h"
 #include "net/base/io_buffer.h"
-#include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/url_request/url_request.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_operation_runner.h"
@@ -44,15 +45,14 @@ FileSystemDirURLRequestJob::FileSystemDirURLRequestJob(
 FileSystemDirURLRequestJob::~FileSystemDirURLRequestJob() {
 }
 
-bool FileSystemDirURLRequestJob::ReadRawData(net::IOBuffer* dest, int dest_size,
-                                             int *bytes_read) {
-  int count = std::min(dest_size, static_cast<int>(data_.size()));
+int FileSystemDirURLRequestJob::ReadRawData(net::IOBuffer* dest,
+                                            int dest_size) {
+  int count = std::min(dest_size, base::checked_cast<int>(data_.size()));
   if (count > 0) {
     memcpy(dest->data(), data_.data(), count);
     data_.erase(0, count);
   }
-  *bytes_read = count;
-  return true;
+  return count;
 }
 
 void FileSystemDirURLRequestJob::Start() {
@@ -98,13 +98,12 @@ void FileSystemDirURLRequestJob::StartAsync() {
                        false);
       return;
     }
-    NotifyDone(URLRequestStatus(URLRequestStatus::FAILED,
-                                net::ERR_FILE_NOT_FOUND));
+    NotifyStartError(URLRequestStatus::FromError(net::ERR_FILE_NOT_FOUND));
     return;
   }
   file_system_context_->operation_runner()->ReadDirectory(
-      url_,
-      base::Bind(&FileSystemDirURLRequestJob::DidReadDirectory, this));
+      url_, base::Bind(&FileSystemDirURLRequestJob::DidReadDirectory,
+                       weak_factory_.GetWeakPtr()));
 }
 
 void FileSystemDirURLRequestJob::DidAttemptAutoMount(base::File::Error result) {
@@ -112,8 +111,7 @@ void FileSystemDirURLRequestJob::DidAttemptAutoMount(base::File::Error result) {
       file_system_context_->CrackURL(request_->url()).is_valid()) {
     StartAsync();
   } else {
-    NotifyDone(URLRequestStatus(URLRequestStatus::FAILED,
-                                net::ERR_FILE_NOT_FOUND));
+    NotifyStartError(URLRequestStatus::FromError(net::ERR_FILE_NOT_FOUND));
   }
 }
 
@@ -125,7 +123,7 @@ void FileSystemDirURLRequestJob::DidReadDirectory(
     int rv = net::ERR_FILE_NOT_FOUND;
     if (result == base::File::FILE_ERROR_INVALID_URL)
       rv = net::ERR_INVALID_URL;
-    NotifyDone(URLRequestStatus(URLRequestStatus::FAILED, rv));
+    NotifyStartError(URLRequestStatus::FromError(rv));
     return;
   }
 
@@ -142,15 +140,54 @@ void FileSystemDirURLRequestJob::DidReadDirectory(
     data_.append(net::GetDirectoryListingHeader(title));
   }
 
-  typedef std::vector<DirectoryEntry>::const_iterator EntryIterator;
-  for (EntryIterator it = entries.begin(); it != entries.end(); ++it) {
-    const base::string16& name = base::FilePath(it->name).LossyDisplayName();
-    data_.append(net::GetDirectoryListingEntry(
-        name, std::string(), it->is_directory, it->size,
-        it->last_modified_time));
-  }
+  entries_.insert(entries_.end(), entries.begin(), entries.end());
 
   if (!has_more) {
+    if (entries_.size()) {
+      GetMetadata(0);
+    } else {
+      set_expected_content_size(data_.size());
+      NotifyHeadersComplete();
+    }
+  }
+}
+
+void FileSystemDirURLRequestJob::GetMetadata(size_t index) {
+  const DirectoryEntry& entry = entries_[index];
+  const FileSystemURL url = file_system_context_->CreateCrackedFileSystemURL(
+      url_.origin(), url_.type(),
+      url_.path().Append(base::FilePath(entry.name)));
+  DCHECK(url.is_valid());
+  file_system_context_->operation_runner()->GetMetadata(
+      url, FileSystemOperation::GET_METADATA_FIELD_SIZE |
+               FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
+      base::Bind(&FileSystemDirURLRequestJob::DidGetMetadata,
+                 weak_factory_.GetWeakPtr(), index));
+}
+
+void FileSystemDirURLRequestJob::DidGetMetadata(
+    size_t index,
+    base::File::Error result,
+    const base::File::Info& file_info) {
+  if (result != base::File::FILE_OK) {
+    int rv = net::ERR_FILE_NOT_FOUND;
+    if (result == base::File::FILE_ERROR_INVALID_URL)
+      rv = net::ERR_INVALID_URL;
+    NotifyStartError(URLRequestStatus(URLRequestStatus::FAILED, rv));
+  }
+
+  if (!request_)
+    return;
+
+  const DirectoryEntry& entry = entries_[index];
+  const base::string16& name = base::FilePath(entry.name).LossyDisplayName();
+  data_.append(net::GetDirectoryListingEntry(name, std::string(),
+                                             entry.is_directory, file_info.size,
+                                             file_info.last_modified));
+
+  if (index < entries_.size() - 1) {
+    GetMetadata(index + 1);
+  } else {
     set_expected_content_size(data_.size());
     NotifyHeadersComplete();
   }

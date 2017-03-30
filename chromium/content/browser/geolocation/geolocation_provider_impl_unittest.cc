@@ -5,6 +5,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -64,7 +65,7 @@ class AsyncMockGeolocationObserver : public MockGeolocationObserver {
  public:
   void OnLocationUpdate(const Geoposition& position) override {
     MockGeolocationObserver::OnLocationUpdate(position);
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 };
 
@@ -144,7 +145,7 @@ bool GeolocationProviderTest::ProvidersStarted() {
   provider_->task_runner()->PostTaskAndReply(
       FROM_HERE, base::Bind(&GeolocationProviderTest::GetProvidersStarted,
                             base::Unretained(this), &started),
-      base::MessageLoop::QuitClosure());
+      base::MessageLoop::QuitWhenIdleClosure());
   message_loop_.Run();
   return started;
 }

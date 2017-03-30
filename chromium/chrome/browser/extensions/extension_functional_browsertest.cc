@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "build/build_config.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -13,6 +16,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/test_extension_registry_observer.h"
 
 namespace extensions {
 
@@ -26,9 +30,7 @@ class ExtensionFunctionalTest : public ExtensionBrowserTest {
 
     base::FilePath path = test_data_dir_.AppendASCII(filename);
 
-    content::WindowedNotificationObserver extension_loaded_observer(
-        extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
-        content::NotificationService::AllSources());
+    extensions::TestExtensionRegistryObserver extension_observer(registry);
 
     scoped_refptr<extensions::CrxInstaller> installer(
         extensions::CrxInstaller::CreateSilent(service));
@@ -48,7 +50,7 @@ class ExtensionFunctionalTest : public ExtensionBrowserTest {
     size_t num_after = registry->enabled_extensions().size();
     EXPECT_EQ(num_before + 1, num_after);
 
-    extension_loaded_observer.Wait();
+    extension_observer.WaitForExtensionLoaded();
     const Extension* extension =
         registry->enabled_extensions().GetByID(last_loaded_extension_id());
     EXPECT_TRUE(extension);

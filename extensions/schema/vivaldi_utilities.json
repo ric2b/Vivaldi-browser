@@ -1,0 +1,129 @@
+// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
+
+[
+  {
+    "namespace": "utilities",
+    "description": "Vivaldi general support api.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+    },
+    "types": [
+      {
+        "id": "EncodingItem",
+        "type": "object",
+        "description": "EncodingItem. Object that keeps track of information about encoding properties",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Encoding display name."
+          },
+          "encoding": {
+            "type": "string",
+            "description": "Encoding."
+          }
+        }
+      },
+      {
+        "id": "UrlValidResults",
+        "type": "object",
+        "description": "Object that describes the validitity of a given url.",
+        "properties": {
+          "urlValid": {
+            "type": "boolean",
+            "description": "The url is a correctly formatted url. This might be true even if the protocol is not valid."
+          },
+          "schemeValid": {
+            "type": "boolean",
+            "description": "The protocol scheme is known and one we can show directly."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "isTabInLastSession",
+        "type": "function",
+        "description": "Checks whether a given tab is part of the last loaded session",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "string",
+            "description": "The tab id to check if part of the session"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "isInSession",
+                "type": "boolean",
+                "description": "true if the given tabId is loaded from the session and has since not been navigated in, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "isUrlValid",
+        "type": "function",
+        "description": "Validates given URL. Returns UrlValidResults with the results.",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The URL to validate",
+            "name": "url"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "$ref": "UrlValidResults"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "clearAllRecentlyClosedSessions",
+        "type": "function",
+        "description": "Clears the list of recently closed tabs and/or windows.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "result",
+                "description": "A boolean variable stating if removing recently closed tabs and/or windows call was successfull or not"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getAvailablePageEncodings",
+        "type": "function",
+        "description": "Returns a list of available page charset encoding.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "type": "array",
+                "name": "encodings",
+                "description": "Array of available encodings",
+                "items": {"$ref": "EncodingItem"}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

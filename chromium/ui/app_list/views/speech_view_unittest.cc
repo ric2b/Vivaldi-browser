@@ -4,6 +4,7 @@
 
 #include "ui/app_list/views/speech_view.h"
 
+#include "base/macros.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/button/image_button.h"
@@ -37,8 +38,8 @@ class SpeechViewTest : public views::test::WidgetTest,
   SpeechView* view() { return view_; }
   views::Widget* widget() { return widget_; }
 
-  int GetToggleSpeechRecognitionCountAndReset() {
-    return view_delegate_.GetToggleSpeechRecognitionCountAndReset();
+  int GetStopSpeechRecognitionCountAndReset() {
+    return view_delegate_.GetStopSpeechRecognitionCountAndReset();
   }
 
  private:
@@ -50,10 +51,10 @@ class SpeechViewTest : public views::test::WidgetTest,
 };
 
 // Tests that clicking within the circular hit-test mask of MicButton invokes
-// SpeechView::ToggleSpeechRecognition() and clicking outside of the
+// SpeechView::StopSpeechRecognition() and clicking outside of the
 // hit-test mask does not.
 TEST_F(SpeechViewTest, ClickMicButton) {
-  EXPECT_EQ(0, GetToggleSpeechRecognitionCountAndReset());
+  EXPECT_EQ(0, GetStopSpeechRecognitionCountAndReset());
   gfx::Rect screen_bounds(view()->mic_button()->GetBoundsInScreen());
 
   // Simulate a mouse click in the center of the MicButton.
@@ -65,7 +66,7 @@ TEST_F(SpeechViewTest, ClickMicButton) {
                          ui::EF_LEFT_MOUSE_BUTTON, 0);
   widget()->OnMouseEvent(&press);
   widget()->OnMouseEvent(&release);
-  EXPECT_EQ(1, GetToggleSpeechRecognitionCountAndReset());
+  EXPECT_EQ(1, GetStopSpeechRecognitionCountAndReset());
 
   // Simulate a mouse click in the bottom right-hand corner of the
   // MicButton's view bounds (which would fall outside of its
@@ -78,7 +79,7 @@ TEST_F(SpeechViewTest, ClickMicButton) {
                            ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0);
   widget()->OnMouseEvent(&press);
   widget()->OnMouseEvent(&release);
-  EXPECT_EQ(0, GetToggleSpeechRecognitionCountAndReset());
+  EXPECT_EQ(0, GetStopSpeechRecognitionCountAndReset());
 }
 
 }  // namespace test

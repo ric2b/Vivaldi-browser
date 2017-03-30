@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_UI_ANDROID_AUTOFILL_AUTOFILL_POPUP_VIEW_ANDROID_H_
 
 #include <jni.h>
+#include <stddef.h>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 
 namespace gfx {
@@ -27,13 +29,19 @@ class AutofillPopupViewAndroid : public AutofillPopupView {
   // Methods called from Java via JNI
   // --------------------------------------------------------------------------
   // Called when an autofill item was selected.
-  void SuggestionSelected(JNIEnv* env, jobject obj, jint list_index);
+  void SuggestionSelected(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          jint list_index);
 
-  void DeletionRequested(JNIEnv* env, jobject obj, jint list_index);
+  void DeletionRequested(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj,
+                         jint list_index);
 
-  void DeletionConfirmed(JNIEnv* env, jobject obj);
+  void DeletionConfirmed(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj);
 
-  void PopupDismissed(JNIEnv* env, jobject obj);
+  void PopupDismissed(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj);
 
   static bool RegisterAutofillPopupViewAndroid(JNIEnv* env);
 

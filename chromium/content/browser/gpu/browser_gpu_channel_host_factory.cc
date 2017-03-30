@@ -5,24 +5,29 @@
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/gpu/gpu_surface_tracker.h"
+#include "content/browser/gpu/shader_disk_cache.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/gpu/gpu_messages.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/common/content_client.h"
+#include "gpu/command_buffer/service/gpu_switches.h"
 #include "ipc/ipc_channel_handle.h"
-#include "ipc/ipc_forwarding_message_filter.h"
 #include "ipc/message_filter.h"
 
 namespace content {
@@ -30,7 +35,7 @@ namespace content {
 BrowserGpuChannelHostFactory* BrowserGpuChannelHostFactory::instance_ = NULL;
 
 struct BrowserGpuChannelHostFactory::CreateRequest {
-  CreateRequest(int32 route_id)
+  CreateRequest(int32_t route_id)
       : event(true, false),
         gpu_host_id(0),
         route_id(route_id),
@@ -38,7 +43,7 @@ struct BrowserGpuChannelHostFactory::CreateRequest {
   ~CreateRequest() {}
   base::WaitableEvent event;
   int gpu_host_id;
-  int32 route_id;
+  int32_t route_id;
   CreateCommandBufferResult result;
 };
 
@@ -47,6 +52,7 @@ class BrowserGpuChannelHostFactory::EstablishRequest
  public:
   static scoped_refptr<EstablishRequest> Create(CauseForGpuLaunch cause,
                                                 int gpu_client_id,
+                                                uint64_t gpu_client_tracing_id,
                                                 int gpu_host_id);
   void Wait();
   void Cancel();
@@ -59,6 +65,7 @@ class BrowserGpuChannelHostFactory::EstablishRequest
   friend class base::RefCountedThreadSafe<EstablishRequest>;
   explicit EstablishRequest(CauseForGpuLaunch cause,
                             int gpu_client_id,
+                            uint64_t gpu_client_tracing_id,
                             int gpu_host_id);
   ~EstablishRequest() {}
   void EstablishOnIO();
@@ -70,6 +77,7 @@ class BrowserGpuChannelHostFactory::EstablishRequest
   base::WaitableEvent event_;
   CauseForGpuLaunch cause_for_gpu_launch_;
   const int gpu_client_id_;
+  const uint64_t gpu_client_tracing_id_;
   int gpu_host_id_;
   bool reused_gpu_process_;
   IPC::ChannelHandle channel_handle_;
@@ -79,11 +87,13 @@ class BrowserGpuChannelHostFactory::EstablishRequest
 };
 
 scoped_refptr<BrowserGpuChannelHostFactory::EstablishRequest>
-BrowserGpuChannelHostFactory::EstablishRequest::Create(CauseForGpuLaunch cause,
-                                                       int gpu_client_id,
-                                                       int gpu_host_id) {
-  scoped_refptr<EstablishRequest> establish_request =
-      new EstablishRequest(cause, gpu_client_id, gpu_host_id);
+BrowserGpuChannelHostFactory::EstablishRequest::Create(
+    CauseForGpuLaunch cause,
+    int gpu_client_id,
+    uint64_t gpu_client_tracing_id,
+    int gpu_host_id) {
+  scoped_refptr<EstablishRequest> establish_request = new EstablishRequest(
+      cause, gpu_client_id, gpu_client_tracing_id, gpu_host_id);
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
   // PostTask outside the constructor to ensure at least one reference exists.
@@ -97,10 +107,12 @@ BrowserGpuChannelHostFactory::EstablishRequest::Create(CauseForGpuLaunch cause,
 BrowserGpuChannelHostFactory::EstablishRequest::EstablishRequest(
     CauseForGpuLaunch cause,
     int gpu_client_id,
+    uint64_t gpu_client_tracing_id,
     int gpu_host_id)
     : event_(false, false),
       cause_for_gpu_launch_(cause),
       gpu_client_id_(gpu_client_id),
+      gpu_client_tracing_id_(gpu_client_tracing_id),
       gpu_host_id_(gpu_host_id),
       reused_gpu_process_(false),
       finished_(false),
@@ -137,10 +149,13 @@ void BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO() {
     reused_gpu_process_ = true;
   }
 
+  bool preempts = true;
+  bool preempted = false;
+  bool allow_future_sync_points = true;
+  bool allow_real_time_streams = true;
   host->EstablishGpuChannel(
-      gpu_client_id_,
-      true,
-      true,
+      gpu_client_id_, gpu_client_tracing_id_, preempts, preempted,
+      allow_future_sync_points, allow_real_time_streams,
       base::Bind(
           &BrowserGpuChannelHostFactory::EstablishRequest::OnEstablishedOnIO,
           this));
@@ -225,10 +240,25 @@ void BrowserGpuChannelHostFactory::Terminate() {
 
 BrowserGpuChannelHostFactory::BrowserGpuChannelHostFactory()
     : gpu_client_id_(ChildProcessHostImpl::GenerateChildProcessUniqueId()),
+      gpu_client_tracing_id_(ChildProcessHost::kBrowserTracingProcessId),
       shutdown_event_(new base::WaitableEvent(true, false)),
       gpu_memory_buffer_manager_(
-          new BrowserGpuMemoryBufferManager(gpu_client_id_)),
+          new BrowserGpuMemoryBufferManager(gpu_client_id_,
+                                            gpu_client_tracing_id_)),
       gpu_host_id_(0) {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableGpuShaderDiskCache)) {
+    DCHECK(GetContentClient());
+    base::FilePath cache_dir =
+        GetContentClient()->browser()->GetShaderDiskCacheDirectory();
+    if (!cache_dir.empty()) {
+      GetIOThreadTaskRunner()->PostTask(
+          FROM_HERE,
+          base::Bind(
+              &BrowserGpuChannelHostFactory::InitializeShaderDiskCacheOnIO,
+              gpu_client_id_, cache_dir));
+    }
+  }
 }
 
 BrowserGpuChannelHostFactory::~BrowserGpuChannelHostFactory() {
@@ -258,12 +288,12 @@ BrowserGpuChannelHostFactory::AllocateSharedMemory(size_t size) {
   scoped_ptr<base::SharedMemory> shm(new base::SharedMemory());
   if (!shm->CreateAnonymous(size))
     return scoped_ptr<base::SharedMemory>();
-  return shm.Pass();
+  return shm;
 }
 
 void BrowserGpuChannelHostFactory::CreateViewCommandBufferOnIO(
     CreateRequest* request,
-    int32 surface_id,
+    int32_t surface_id,
     const GPUCreateCommandBufferConfig& init_params) {
   GpuProcessHost* host = GpuProcessHost::FromID(gpu_host_id_);
   if (!host) {
@@ -276,16 +306,11 @@ void BrowserGpuChannelHostFactory::CreateViewCommandBufferOnIO(
 
   host->CreateViewCommandBuffer(
       surface,
-      surface_id,
       gpu_client_id_,
       init_params,
       request->route_id,
       base::Bind(&BrowserGpuChannelHostFactory::CommandBufferCreatedOnIO,
                  request));
-}
-
-IPC::AttachmentBroker* BrowserGpuChannelHostFactory::GetAttachmentBroker() {
-  return content::ChildProcessHost::GetAttachmentBroker();
 }
 
 // static
@@ -296,9 +321,9 @@ void BrowserGpuChannelHostFactory::CommandBufferCreatedOnIO(
 }
 
 CreateCommandBufferResult BrowserGpuChannelHostFactory::CreateViewCommandBuffer(
-      int32 surface_id,
-      const GPUCreateCommandBufferConfig& init_params,
-      int32 route_id) {
+    int32_t surface_id,
+    const GPUCreateCommandBufferConfig& init_params,
+    int32_t route_id) {
   CreateRequest request(route_id);
   GetIOThreadTaskRunner()->PostTask(
       FROM_HERE,
@@ -348,7 +373,9 @@ void BrowserGpuChannelHostFactory::EstablishGpuChannel(
   if (!gpu_channel_.get() && !pending_request_.get()) {
     // We should only get here if the context was lost.
     pending_request_ = EstablishRequest::Create(
-        cause_for_gpu_launch, gpu_client_id_, gpu_host_id_);
+        cause_for_gpu_launch, gpu_client_id_,
+        gpu_client_tracing_id_,
+        gpu_host_id_);
   }
 
   if (!callback.is_null()) {
@@ -379,8 +406,9 @@ void BrowserGpuChannelHostFactory::GpuChannelEstablished() {
             "466866 BrowserGpuChannelHostFactory::GpuChannelEstablished1"));
     GetContentClient()->SetGpuInfo(pending_request_->gpu_info());
     gpu_channel_ = GpuChannelHost::Create(
-        this, pending_request_->gpu_info(), pending_request_->channel_handle(),
-        shutdown_event_.get(), gpu_memory_buffer_manager_.get());
+        this, gpu_client_id_, pending_request_->gpu_info(),
+        pending_request_->channel_handle(), shutdown_event_.get(),
+        gpu_memory_buffer_manager_.get());
   }
   gpu_host_id_ = pending_request_->gpu_host_id();
   pending_request_ = NULL;
@@ -406,6 +434,13 @@ void BrowserGpuChannelHostFactory::AddFilterOnIO(
   GpuProcessHost* host = GpuProcessHost::FromID(host_id);
   if (host)
     host->AddFilter(filter.get());
+}
+
+// static
+void BrowserGpuChannelHostFactory::InitializeShaderDiskCacheOnIO(
+    int gpu_client_id,
+    const base::FilePath& cache_dir) {
+  ShaderCacheFactory::GetInstance()->SetCacheInfo(gpu_client_id, cache_dir);
 }
 
 }  // namespace content

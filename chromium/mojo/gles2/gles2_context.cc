@@ -4,6 +4,11 @@
 
 #include "mojo/gles2/gles2_context.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/transfer_buffer.h"
@@ -19,14 +24,17 @@ const size_t kDefaultMinTransferBufferSize = 1 * 256 * 1024;
 const size_t kDefaultMaxTransferBufferSize = 16 * 1024 * 1024;
 }
 
-GLES2Context::GLES2Context(const MojoAsyncWaiter* async_waiter,
+GLES2Context::GLES2Context(const std::vector<int32_t>& attribs,
+                           const MojoAsyncWaiter* async_waiter,
                            mojo::ScopedMessagePipeHandle command_buffer_handle,
                            MojoGLES2ContextLost lost_callback,
                            void* closure)
-    : command_buffer_(this, async_waiter, command_buffer_handle.Pass()),
+    : command_buffer_(this,
+                      attribs,
+                      async_waiter,
+                      std::move(command_buffer_handle)),
       lost_callback_(lost_callback),
-      closure_(closure) {
-}
+      closure_(closure) {}
 
 GLES2Context::~GLES2Context() {}
 

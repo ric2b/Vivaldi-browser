@@ -4,11 +4,16 @@
 
 #include "remoting/host/token_validator_factory_impl.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -91,7 +96,7 @@ void TokenValidatorImpl::StartValidateRequest(const std::string& token) {
       new net::UploadBytesElementReader(
           post_body_.data(), post_body_.size()));
   request_->set_upload(
-      net::ElementsUploadDataStream::CreateWithReader(reader.Pass(), 0));
+      net::ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
   request_->Start();
 }
 

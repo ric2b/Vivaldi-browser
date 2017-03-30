@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.firstrun;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.Gravity;
@@ -25,8 +26,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.ImageCarousel.ImageCarouselPositionChangeListener;
 import org.chromium.chrome.browser.profiles.ProfileDownloader;
 import org.chromium.chrome.browser.signin.SigninManager;
-import org.chromium.chrome.browser.widget.ButtonCompat;
 import org.chromium.sync.signin.AccountManagerHelper;
+import org.chromium.ui.widget.ButtonCompat;
 
 import java.util.List;
 
@@ -183,6 +184,23 @@ public class AccountFirstRunView extends FrameLayout
         mArrayAdapter.setDropDownViewResource(R.layout.fre_spinner_dropdown);
         mSpinner.setAdapter(mArrayAdapter);
         mSpinner.setOnItemSelectedListener(new SpinnerOnItemSelectedListener());
+
+        // Only set the spinner's content description right before the accessibility action is going
+        // to be performed. Otherwise, the the content description is read when the
+        // AccountFirstRunView is created because setting the spinner's adapter causes a
+        // TYPE_VIEW_SELECTED event. ViewPager loads the next and previous pages according to
+        // it's off-screen page limit, which is one by default, so without this the content
+        // description ends up being read when the card before this one shown.
+        mSpinner.setAccessibilityDelegate(new AccessibilityDelegate() {
+            @Override
+            public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                if (mSpinner.getContentDescription() == null) {
+                    mSpinner.setContentDescription(getResources().getString(
+                            R.string.accessibility_fre_account_spinner));
+                }
+                return super.performAccessibilityAction(host, action, args);
+            }
+        });
     }
 
     @Override
@@ -245,7 +263,7 @@ public class AccountFirstRunView extends FrameLayout
                 R.dimen.sign_in_promo_padding_bottom));
 
         ButtonCompat positiveButton = new ButtonCompat(getContext(),
-                getResources().getColor(R.color.light_active_color));
+                ApiCompatibilityUtils.getColor(getResources(), R.color.light_active_color));
         positiveButton.setTextColor(Color.WHITE);
         positiveButton.setLayoutParams(new LinearLayout.LayoutParams(
                 LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
@@ -276,7 +294,7 @@ public class AccountFirstRunView extends FrameLayout
 
             ImageView illustrationView = new ImageView(getContext());
             illustrationView.setImageResource(R.drawable.signin_promo_illustration);
-            illustrationView.setBackgroundColor(getResources().getColor(
+            illustrationView.setBackgroundColor(ApiCompatibilityUtils.getColor(getResources(),
                     R.color.illustration_background_color));
 
             LinearLayout linearLayout = (LinearLayout) findViewById(R.id.fre_account_linear_layout);

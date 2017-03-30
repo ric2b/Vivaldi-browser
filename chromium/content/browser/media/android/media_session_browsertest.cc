@@ -4,9 +4,15 @@
 
 #include "content/browser/media/android/media_session.h"
 
+#include <stddef.h>
+
 #include <list>
 #include <vector>
 
+#include "base/macros.h"
+#include "base/metrics/histogram_samples.h"
+#include "base/test/histogram_tester.h"
+#include "base/test/simple_test_clock.h"
 #include "content/browser/media/android/media_session_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -18,6 +24,7 @@ using content::WebContents;
 using content::WebContentsObserver;
 using content::MediaSession;
 using content::MediaSessionObserver;
+using content::MediaSessionUmaHelper;
 
 using ::testing::Expectation;
 
@@ -138,11 +145,10 @@ class MediaSessionBrowserTest : public content::ContentBrowserTest {
     media_session_->RemovePlayers(media_session_observer);
   }
 
-  void OnSuspendSession(bool isTemporary) {
-    media_session_->OnSuspend(nullptr, nullptr, isTemporary);
+  void OnPlayerPaused(MockMediaSessionObserver* media_session_observer,
+                      int player_id) {
+    media_session_->OnPlayerPaused(media_session_observer, player_id);
   }
-
-  void OnResumeSession() { media_session_->OnResume(nullptr, nullptr); }
 
   bool HasAudioFocus() { return media_session_->IsActiveForTest(); }
 
@@ -155,25 +161,31 @@ class MediaSessionBrowserTest : public content::ContentBrowserTest {
   bool IsSuspended() { return media_session_->IsSuspended(); }
 
   void UIResume() {
-    media_session_->OnResumeInternal(content::MediaSession::SuspendType::UI);
+    media_session_->Resume();
   }
 
   void SystemResume() {
-    media_session_->OnResumeInternal(
-        content::MediaSession::SuspendType::SYSTEM);
+    media_session_->OnResume(nullptr, nullptr);
   }
 
   void UISuspend() {
-    media_session_->OnSuspendInternal(content::MediaSession::SuspendType::UI);
+    media_session_->Suspend();
   }
 
-  void SystemSuspend() {
-    media_session_->OnSuspendInternal(
-        content::MediaSession::SuspendType::SYSTEM);
+  void SystemSuspend(bool temporary) {
+    media_session_->OnSuspend(nullptr, nullptr, temporary);
   }
 
   MockWebContentsObserver* mock_web_contents_observer() {
     return mock_web_contents_observer_.get();
+  }
+
+  scoped_ptr<MediaSession> CreateDummyMediaSession() {
+      return scoped_ptr<MediaSession>(new MediaSession(nullptr));
+  }
+
+  MediaSessionUmaHelper* GetMediaSessionUMAHelper() {
+    return media_session_->uma_helper_for_test();
   }
 
  protected:
@@ -225,7 +237,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
 
-  OnSuspendSession(true);
+  SystemSuspend(true);
 
   EXPECT_FALSE(media_session_observer->IsPlaying(0));
   EXPECT_FALSE(media_session_observer->IsPlaying(1));
@@ -241,8 +253,8 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
 
-  OnSuspendSession(true);
-  OnResumeSession();
+  SystemSuspend(true);
+  SystemResume();
 
   EXPECT_TRUE(media_session_observer->IsPlaying(0));
   EXPECT_TRUE(media_session_observer->IsPlaying(1));
@@ -258,7 +270,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
 
   EXPECT_TRUE(media_session_observer->IsPlaying(0));
 
-  OnSuspendSession(true);
+  SystemSuspend(true);
 
   EXPECT_FALSE(media_session_observer->IsPlaying(0));
 
@@ -293,7 +305,18 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, SuspendGivesAwayAudioFocus) {
 
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
 
-  OnSuspendSession(true);
+  SystemSuspend(true);
+
+  EXPECT_FALSE(HasAudioFocus());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, StopGivesAwayAudioFocus) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+
+  media_session_->Stop();
 
   EXPECT_FALSE(HasAudioFocus());
 }
@@ -304,8 +327,8 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, ResumeGivesBackAudioFocus) {
 
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
 
-  OnSuspendSession(true);
-  OnResumeSession();
+  SystemSuspend(true);
+  SystemResume();
 
   EXPECT_TRUE(HasAudioFocus());
 }
@@ -392,10 +415,10 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
   EXPECT_EQ(0, media_session_observer->received_suspend_calls());
   EXPECT_EQ(0, media_session_observer->received_resume_calls());
 
-  OnSuspendSession(true);
+  SystemSuspend(true);
   EXPECT_EQ(3, media_session_observer->received_suspend_calls());
 
-  OnResumeSession();
+  SystemResume();
   EXPECT_EQ(3, media_session_observer->received_resume_calls());
 }
 
@@ -419,10 +442,10 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
   EXPECT_EQ(0, media_session_observer->received_suspend_calls());
   EXPECT_EQ(0, media_session_observer->received_resume_calls());
 
-  OnSuspendSession(true);
+  SystemSuspend(true);
   EXPECT_EQ(3, media_session_observer->received_suspend_calls());
 
-  OnResumeSession();
+  SystemResume();
   EXPECT_EQ(3, media_session_observer->received_resume_calls());
 }
 
@@ -462,7 +485,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, MediaSessionType) {
   EXPECT_TRUE(media_session_observer->IsPlaying(2));
   EXPECT_TRUE(media_session_observer->IsPlaying(3));
 
-  OnSuspendSession(true);
+  SystemSuspend(true);
 
   EXPECT_FALSE(media_session_observer->IsPlaying(0));
   EXPECT_FALSE(media_session_observer->IsPlaying(1));
@@ -471,7 +494,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, MediaSessionType) {
 
   EXPECT_EQ(MediaSession::Type::Content, GetSessionType());
 
-  OnResumeSession();
+  SystemResume();
 
   EXPECT_TRUE(media_session_observer->IsPlaying(0));
   EXPECT_TRUE(media_session_observer->IsPlaying(1));
@@ -583,7 +606,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
-                       ControlsHideWhenTheLastPlayerIsStopped) {
+                       ControlsHideWhenTheLastPlayerIsRemoved) {
   Expectation showControls = EXPECT_CALL(*mock_web_contents_observer(),
                                          MediaSessionStateChanged(true, false));
   EXPECT_CALL(*mock_web_contents_observer(),
@@ -627,6 +650,31 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       ControlsNotHideWhenTheLastPlayerIsPaused) {
+  Expectation showControls = EXPECT_CALL(*mock_web_contents_observer(),
+                                         MediaSessionStateChanged(true, false));
+  EXPECT_CALL(*mock_web_contents_observer(),
+              MediaSessionStateChanged(true, true))
+      .After(showControls);
+
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+
+  OnPlayerPaused(media_session_observer.get(), 0);
+
+  EXPECT_TRUE(IsControllable());
+  EXPECT_FALSE(IsSuspended());
+
+  OnPlayerPaused(media_session_observer.get(), 1);
+
+  EXPECT_TRUE(IsControllable());
+  EXPECT_TRUE(IsSuspended());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
                        SuspendTemporaryUpdatesControls) {
   Expectation showControls = EXPECT_CALL(*mock_web_contents_observer(),
                                          MediaSessionStateChanged(true, false));
@@ -639,7 +687,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
 
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
 
-  OnSuspendSession(true);
+  SystemSuspend(true);
 
   EXPECT_TRUE(IsControllable());
   EXPECT_TRUE(IsSuspended());
@@ -659,8 +707,8 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, ControlsUpdatedWhenResumed) {
       new MockMediaSessionObserver);
 
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
-  OnSuspendSession(true);
-  OnResumeSession();
+  SystemSuspend(true);
+  SystemResume();
 
   EXPECT_TRUE(IsControllable());
   EXPECT_FALSE(IsSuspended());
@@ -679,7 +727,29 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
 
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
 
-  OnSuspendSession(false);
+  SystemSuspend(false);
+
+  EXPECT_FALSE(IsControllable());
+  EXPECT_TRUE(IsSuspended());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       ConstrolsHideWhenSessionStops) {
+  Expectation showControls = EXPECT_CALL(*mock_web_contents_observer(),
+                                         MediaSessionStateChanged(true, false));
+  Expectation pauseControls = EXPECT_CALL(*mock_web_contents_observer(),
+                                          MediaSessionStateChanged(true, true))
+                                  .After(showControls);
+  EXPECT_CALL(*mock_web_contents_observer(),
+              MediaSessionStateChanged(false, true))
+      .After(pauseControls);
+
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+
+  media_session_->Stop();
 
   EXPECT_FALSE(IsControllable());
   EXPECT_TRUE(IsSuspended());
@@ -700,7 +770,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
       new MockMediaSessionObserver);
 
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
-  OnSuspendSession(true);
+  SystemSuspend(true);
 
   // This should reset the session and change it to a transient, so
   // hide the controls.
@@ -725,7 +795,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
       new MockMediaSessionObserver);
 
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
-  OnSuspendSession(true);
+  SystemSuspend(true);
 
   // This should reset the session and update the controls.
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
@@ -749,7 +819,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
       new MockMediaSessionObserver);
 
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
-  OnSuspendSession(true);
+  SystemSuspend(true);
 
   // This should resume the session and update the controls.
   AddPlayer(media_session_observer.get(), 0, MediaSession::Type::Content);
@@ -759,9 +829,11 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
-                       ControlsNotUpdatedDueToResumeSessionAction) {
-  EXPECT_CALL(*mock_web_contents_observer(),
+                       ControlsUpdatedDueToResumeSessionAction) {
+  Expectation showControls = EXPECT_CALL(*mock_web_contents_observer(),
               MediaSessionStateChanged(true, false));
+  EXPECT_CALL(*mock_web_contents_observer(),
+              MediaSessionStateChanged(true, true)).After(showControls);
 
   scoped_ptr<MockMediaSessionObserver> media_session_observer(
       new MockMediaSessionObserver);
@@ -774,9 +846,15 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
-                       ControlsNotUpdatedDueToSuspendSessionAction) {
+                       ControlsUpdatedDueToSuspendSessionAction) {
+  Expectation showControls = EXPECT_CALL(*mock_web_contents_observer(),
+                                         MediaSessionStateChanged(true, false));
+  Expectation pauseControls = EXPECT_CALL(*mock_web_contents_observer(),
+                                          MediaSessionStateChanged(true, true))
+                                  .After(showControls);
   EXPECT_CALL(*mock_web_contents_observer(),
-              MediaSessionStateChanged(true, false));
+              MediaSessionStateChanged(true, false))
+      .After(pauseControls);
 
   scoped_ptr<MockMediaSessionObserver> media_session_observer(
       new MockMediaSessionObserver);
@@ -810,7 +888,7 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
       new MockMediaSessionObserver);
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
 
-  SystemSuspend();
+  SystemSuspend(true);
   EXPECT_TRUE(IsControllable());
   EXPECT_TRUE(IsSuspended());
 
@@ -838,11 +916,310 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, ResumeSuspendFromSystem) {
       new MockMediaSessionObserver);
   StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
 
-  SystemSuspend();
+  SystemSuspend(true);
   EXPECT_TRUE(IsControllable());
   EXPECT_TRUE(IsSuspended());
 
   SystemResume();
   EXPECT_TRUE(IsControllable());
   EXPECT_FALSE(IsSuspended());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, UMA_Suspended_SystemTransient) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  SystemSuspend(true);
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.Suspended"));
+  EXPECT_EQ(1, samples->TotalCount());
+  EXPECT_EQ(1, samples->GetCount(0)); // System Transient
+  EXPECT_EQ(0, samples->GetCount(1)); // System Permanent
+  EXPECT_EQ(0, samples->GetCount(2)); // UI
+}
+
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       UMA_Suspended_SystemPermantent) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  SystemSuspend(false);
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.Suspended"));
+  EXPECT_EQ(1, samples->TotalCount());
+  EXPECT_EQ(0, samples->GetCount(0)); // System Transient
+  EXPECT_EQ(1, samples->GetCount(1)); // System Permanent
+  EXPECT_EQ(0, samples->GetCount(2)); // UI
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, UMA_Suspended_UI) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  UISuspend();
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.Suspended"));
+  EXPECT_EQ(1, samples->TotalCount());
+  EXPECT_EQ(0, samples->GetCount(0)); // System Transient
+  EXPECT_EQ(0, samples->GetCount(1)); // System Permanent
+  EXPECT_EQ(1, samples->GetCount(2)); // UI
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, UMA_Suspended_Multiple) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+
+  UISuspend();
+  UIResume();
+
+  SystemSuspend(true);
+  SystemResume();
+
+  UISuspend();
+  UIResume();
+
+  SystemSuspend(false);
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.Suspended"));
+  EXPECT_EQ(4, samples->TotalCount());
+  EXPECT_EQ(1, samples->GetCount(0)); // System Transient
+  EXPECT_EQ(1, samples->GetCount(1)); // System Permanent
+  EXPECT_EQ(2, samples->GetCount(2)); // UI
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, UMA_Suspended_Crossing) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+
+  UISuspend();
+  SystemSuspend(true);
+  SystemSuspend(false);
+  UIResume();
+
+  SystemSuspend(true);
+  SystemSuspend(true);
+  SystemSuspend(false);
+  SystemResume();
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.Suspended"));
+  EXPECT_EQ(2, samples->TotalCount());
+  EXPECT_EQ(1, samples->GetCount(0)); // System Transient
+  EXPECT_EQ(0, samples->GetCount(1)); // System Permanent
+  EXPECT_EQ(1, samples->GetCount(2)); // UI
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, UMA_Suspended_Stop) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+      new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  media_session_->Stop();
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.Suspended"));
+  EXPECT_EQ(1, samples->TotalCount());
+  EXPECT_EQ(0, samples->GetCount(0)); // System Transient
+  EXPECT_EQ(0, samples->GetCount(1)); // System Permanent
+  EXPECT_EQ(1, samples->GetCount(2)); // UI
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, UMA_ActiveTime_NoActivation) {
+  base::HistogramTester tester;
+
+  scoped_ptr<MediaSession> media_session = CreateDummyMediaSession();
+  media_session.reset();
+
+  // A MediaSession that wasn't active doesn't register an active time.
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.ActiveTime"));
+  EXPECT_EQ(0, samples->TotalCount());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       UMA_ActiveTime_SimpleActivation) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+    new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  MediaSessionUmaHelper* media_session_uma_helper = GetMediaSessionUMAHelper();
+  base::SimpleTestClock* clock = new base::SimpleTestClock();
+  clock->SetNow(base::Time::Now());
+  media_session_uma_helper->SetClockForTest(
+      scoped_ptr<base::SimpleTestClock>(clock));
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+
+  clock->Advance(base::TimeDelta::FromMilliseconds(1000));
+  media_session_->Stop();
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.ActiveTime"));
+  EXPECT_EQ(1, samples->TotalCount());
+  EXPECT_EQ(1, samples->GetCount(1000));
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       UMA_ActiveTime_ActivationWithUISuspension) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+    new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  MediaSessionUmaHelper* media_session_uma_helper = GetMediaSessionUMAHelper();
+  base::SimpleTestClock* clock = new base::SimpleTestClock();
+  clock->SetNow(base::Time::Now());
+  media_session_uma_helper->SetClockForTest(
+      scoped_ptr<base::SimpleTestClock>(clock));
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+
+  clock->Advance(base::TimeDelta::FromMilliseconds(1000));
+  UISuspend();
+
+  clock->Advance(base::TimeDelta::FromMilliseconds(2000));
+  UIResume();
+
+  clock->Advance(base::TimeDelta::FromMilliseconds(1000));
+  media_session_->Stop();
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.ActiveTime"));
+  EXPECT_EQ(1, samples->TotalCount());
+  EXPECT_EQ(1, samples->GetCount(2000));
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       UMA_ActiveTime_ActivationWithSystemSuspension) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+    new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  MediaSessionUmaHelper* media_session_uma_helper = GetMediaSessionUMAHelper();
+  base::SimpleTestClock* clock = new base::SimpleTestClock();
+  clock->SetNow(base::Time::Now());
+  media_session_uma_helper->SetClockForTest(
+      scoped_ptr<base::SimpleTestClock>(clock));
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+
+  clock->Advance(base::TimeDelta::FromMilliseconds(1000));
+  SystemSuspend(true);
+
+  clock->Advance(base::TimeDelta::FromMilliseconds(2000));
+  SystemResume();
+
+  clock->Advance(base::TimeDelta::FromMilliseconds(1000));
+  media_session_->Stop();
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.ActiveTime"));
+  EXPECT_EQ(1, samples->TotalCount());
+  EXPECT_EQ(1, samples->GetCount(2000));
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       UMA_ActiveTime_ActivateSuspendedButNotStopped) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+    new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  MediaSessionUmaHelper* media_session_uma_helper = GetMediaSessionUMAHelper();
+  base::SimpleTestClock* clock = new base::SimpleTestClock();
+  clock->SetNow(base::Time::Now());
+  media_session_uma_helper->SetClockForTest(
+      scoped_ptr<base::SimpleTestClock>(clock));
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  clock->Advance(base::TimeDelta::FromMilliseconds(500));
+  SystemSuspend(true);
+
+  {
+    scoped_ptr<base::HistogramSamples> samples(
+        tester.GetHistogramSamplesSinceCreation("Media.Session.ActiveTime"));
+    EXPECT_EQ(0, samples->TotalCount());
+  }
+
+  SystemResume();
+  clock->Advance(base::TimeDelta::FromMilliseconds(5000));
+  UISuspend();
+
+  {
+    scoped_ptr<base::HistogramSamples> samples(
+        tester.GetHistogramSamplesSinceCreation("Media.Session.ActiveTime"));
+    EXPECT_EQ(0, samples->TotalCount());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       UMA_ActiveTime_ActivateSuspendStopTwice) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+    new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  MediaSessionUmaHelper* media_session_uma_helper = GetMediaSessionUMAHelper();
+  base::SimpleTestClock* clock = new base::SimpleTestClock();
+  clock->SetNow(base::Time::Now());
+  media_session_uma_helper->SetClockForTest(
+      scoped_ptr<base::SimpleTestClock>(clock));
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  clock->Advance(base::TimeDelta::FromMilliseconds(500));
+  SystemSuspend(true);
+  media_session_->Stop();
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  clock->Advance(base::TimeDelta::FromMilliseconds(5000));
+  SystemResume();
+  media_session_->Stop();
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.ActiveTime"));
+  EXPECT_EQ(2, samples->TotalCount());
+  EXPECT_EQ(1, samples->GetCount(500));
+  EXPECT_EQ(1, samples->GetCount(5000));
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest,
+                       UMA_ActiveTime_MultipleActivations) {
+  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+    new MockMediaSessionObserver);
+  base::HistogramTester tester;
+
+  MediaSessionUmaHelper* media_session_uma_helper = GetMediaSessionUMAHelper();
+  base::SimpleTestClock* clock = new base::SimpleTestClock();
+  clock->SetNow(base::Time::Now());
+  media_session_uma_helper->SetClockForTest(
+      scoped_ptr<base::SimpleTestClock>(clock));
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  clock->Advance(base::TimeDelta::FromMilliseconds(10000));
+  RemovePlayer(media_session_observer.get(), 0);
+
+  StartNewPlayer(media_session_observer.get(), MediaSession::Type::Content);
+  clock->Advance(base::TimeDelta::FromMilliseconds(1000));
+  media_session_->Stop();
+
+  scoped_ptr<base::HistogramSamples> samples(
+      tester.GetHistogramSamplesSinceCreation("Media.Session.ActiveTime"));
+  EXPECT_EQ(2, samples->TotalCount());
+  EXPECT_EQ(1, samples->GetCount(1000));
+  EXPECT_EQ(1, samples->GetCount(10000));
 }

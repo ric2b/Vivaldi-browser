@@ -5,13 +5,17 @@
 #ifndef UI_VIEWS_FOCUS_VIEW_STORAGE_H_
 #define UI_VIEWS_FOCUS_VIEW_STORAGE_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "ui/views/views_export.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 // This class is a simple storage place for storing/retrieving views.  It is
 // used for example in the FocusManager to store/restore focused views when the
@@ -49,7 +53,7 @@ class VIEWS_EXPORT ViewStorage {
   size_t view_count() const { return view_to_ids_.size(); }
 
  private:
-  friend struct DefaultSingletonTraits<ViewStorage>;
+  friend struct base::DefaultSingletonTraits<ViewStorage>;
 
   ViewStorage();
   ~ViewStorage();

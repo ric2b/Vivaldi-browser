@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_CHROMEOS_DRIVE_DOWNLOAD_HANDLER_H_
 #define CHROME_BROWSER_CHROMEOS_DRIVE_DOWNLOAD_HANDLER_H_
 
+#include <stdint.h>
+
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/chromeos/drive/file_errors.h"
 #include "chrome/browser/download/all_download_item_notifier.h"
+#include "components/drive/file_errors.h"
 #include "content/public/browser/download_manager_delegate.h"
 
 class Profile;
@@ -73,6 +76,21 @@ class DownloadHandler : public AllDownloadItemNotifier::Observer {
       const content::DownloadItem* download,
       const content::CheckForFileExistenceCallback& callback);
 
+  // Calculates request space for |downloads|.
+  int64_t CalculateRequestSpace(
+      const content::DownloadManager::DownloadVector& downloads);
+
+  // Checks available storage space and free disk space if necessary. Actual
+  // execution is delayed and rate limited.
+  void FreeDiskSpaceIfNeeded();
+
+  // Checks available storage space and free disk space if necessary. This is
+  // executed immediately.
+  void FreeDiskSpaceIfNeededImmediately();
+
+  // Sets free disk space delay for testing.
+  void SetFreeDiskSpaceDelayForTesting(const base::TimeDelta& delay);
+
  private:
   // AllDownloadItemNotifier::Observer overrides:
   void OnDownloadCreated(content::DownloadManager* manager,
@@ -104,12 +122,18 @@ class DownloadHandler : public AllDownloadItemNotifier::Observer {
   content::DownloadManager* GetDownloadManager(void* manager_id);
 
   FileSystemInterface* file_system_;  // Owned by DriveIntegrationService.
+
   // Observe the DownloadManager for new downloads.
   scoped_ptr<AllDownloadItemNotifier> notifier_;
   scoped_ptr<AllDownloadItemNotifier> notifier_incognito_;
 
   // Temporary download location directory.
   base::FilePath drive_tmp_download_path_;
+
+  // True if there is pending FreeDiskSpaceIfNeeded call.
+  bool has_pending_free_disk_space_;
+
+  base::TimeDelta free_disk_space_delay_;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

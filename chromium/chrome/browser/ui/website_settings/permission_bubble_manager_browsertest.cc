@@ -5,10 +5,10 @@
 #include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/website_settings/mock_permission_bubble_view.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -24,13 +24,8 @@ class PermissionBubbleManagerBrowserTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override {
     PermissionBubbleManager* manager = GetPermissionBubbleManager();
     MockPermissionBubbleView::SetFactory(manager, true);
-    manager->DisplayPendingRequests(browser());
+    manager->DisplayPendingRequests();
     InProcessBrowserTest::SetUpOnMainThread();
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kEnablePermissionsBubbles);
-    InProcessBrowserTest::SetUpCommandLine(command_line);
   }
 
   PermissionBubbleManager* GetPermissionBubbleManager() {
@@ -50,8 +45,10 @@ class PermissionBubbleManagerBrowserTest : public InProcessBrowserTest {
 };
 
 // Requests before the load event should be bundled into one bubble.
-IN_PROC_BROWSER_TEST_F(PermissionBubbleManagerBrowserTest, RequestsBeforeLoad) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+// http://crbug.com/512849 flaky
+IN_PROC_BROWSER_TEST_F(PermissionBubbleManagerBrowserTest,
+                       DISABLED_RequestsBeforeLoad) {
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(),
@@ -66,7 +63,7 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleManagerBrowserTest, RequestsBeforeLoad) {
 // Requests before the load should not be bundled with a request after the load.
 IN_PROC_BROWSER_TEST_F(PermissionBubbleManagerBrowserTest,
                        RequestsBeforeAfterLoad) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(),
@@ -79,9 +76,65 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleManagerBrowserTest,
   EXPECT_EQ(1, bubble_view()->requests_count());
 }
 
+// Navigating twice to the same URL should be equivalent to refresh. This means
+// showing the bubbles twice.
+// http://crbug.com/512849 flaky
+#if defined(OS_WIN)
+#define MAYBE_NavTwice DISABLED_NavTwice
+#else
+#define MAYBE_NavTwice NavTwice
+#endif
+IN_PROC_BROWSER_TEST_F(PermissionBubbleManagerBrowserTest, MAYBE_NavTwice) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+      browser(),
+      embedded_test_server()->GetURL("/permissions/requests-before-load.html"),
+      1);
+  WaitForPermissionBubble();
+
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+      browser(),
+      embedded_test_server()->GetURL("/permissions/requests-before-load.html"),
+      1);
+  WaitForPermissionBubble();
+
+  EXPECT_EQ(2, bubble_view()->show_count());
+  EXPECT_EQ(4, bubble_view()->requests_count());
+}
+
+// Navigating twice to the same URL with a hash should be navigation within the
+// page. This means the bubble is only shown once.
+// http://crbug.com/512849 flaky
+#if defined(OS_WIN)
+#define MAYBE_NavTwiceWithHash DISABLED_NavTwiceWithHash
+#else
+#define MAYBE_NavTwiceWithHash NavTwiceWithHash
+#endif
+IN_PROC_BROWSER_TEST_F(PermissionBubbleManagerBrowserTest,
+                       MAYBE_NavTwiceWithHash) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+      browser(),
+      embedded_test_server()->GetURL("/permissions/requests-before-load.html"),
+      1);
+  WaitForPermissionBubble();
+
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+      browser(),
+      embedded_test_server()->GetURL(
+          "/permissions/requests-before-load.html#0"),
+      1);
+  WaitForPermissionBubble();
+
+  EXPECT_EQ(1, bubble_view()->show_count());
+  EXPECT_EQ(2, bubble_view()->requests_count());
+}
+
 // Bubble requests should be shown after in-page navigation.
 IN_PROC_BROWSER_TEST_F(PermissionBubbleManagerBrowserTest, InPageNavigation) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(),

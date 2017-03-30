@@ -18,6 +18,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "components/login/localized_values_builder.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -76,13 +77,15 @@ void SupervisedUserCreationScreenHandler::DeclareLocalizedValues(
                IDS_CREATE_SUPERVISED_INTRO_TEXT_2);
   builder->AddF("createSupervisedUserIntroText3",
                IDS_CREATE_SUPERVISED_INTRO_TEXT_3,
-               base::UTF8ToUTF16(chrome::kSupervisedUserManagementDisplayURL));
+               base::UTF8ToUTF16(
+                   chrome::kLegacySupervisedUserManagementDisplayURL));
 
   builder->Add("createSupervisedUserPickManagerTitle",
                IDS_CREATE_SUPERVISED_USER_CREATE_PICK_MANAGER_TITLE);
   builder->AddF("createSupervisedUserPickManagerTitleExplanation",
                IDS_CREATE_SUPERVISED_USER_CREATE_PICK_MANAGER_EXPLANATION,
-               base::UTF8ToUTF16(chrome::kSupervisedUserManagementDisplayURL));
+               base::UTF8ToUTF16(
+                   chrome::kLegacySupervisedUserManagementDisplayURL));
   builder->Add("createSupervisedUserManagerPasswordHint",
                IDS_CREATE_SUPERVISED_USER_CREATE_MANAGER_PASSWORD_HINT);
   builder->Add("createSupervisedUserWrongManagerPasswordText",
@@ -125,21 +128,24 @@ void SupervisedUserCreationScreenHandler::DeclareLocalizedValues(
                IDS_CREATE_SUPERVISED_USER_CREATED_1_TEXT_3);
 
   builder->Add("importExistingSupervisedUserTitle",
-               IDS_IMPORT_EXISTING_SUPERVISED_USER_TITLE);
-  builder->Add("importExistingSupervisedUserText",
-               IDS_IMPORT_EXISTING_SUPERVISED_USER_TEXT);
-  builder->Add("supervisedUserCreationFlowImportButtonTitle",
-               IDS_IMPORT_EXISTING_SUPERVISED_USER_OK);
+               IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TITLE);
   builder->Add("importSupervisedUserLink",
-               IDS_PROFILES_IMPORT_EXISTING_SUPERVISED_USER_LINK);
+               IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TITLE);
+  builder->Add("importExistingSupervisedUserText",
+               IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TEXT);
+  builder->Add("supervisedUserCreationFlowImportButtonTitle",
+               IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_OK);
   builder->Add("createSupervisedUserLink",
-               IDS_CREATE_NEW_USER_LINK);
-  builder->Add("importBubbleText", IDS_SUPERVISED_USER_IMPORT_BUBBLE_TEXT);
-  builder->Add("importUserExists", IDS_SUPERVISED_USER_IMPORT_USER_EXIST);
+               IDS_CREATE_NEW_LEGACY_SUPERVISED_USER_LINK);
+  builder->Add("importBubbleText",
+               IDS_SUPERVISED_USER_IMPORT_BUBBLE_TEXT);
+  builder->Add("importUserExists",
+               IDS_SUPERVISED_USER_IMPORT_USER_EXIST);
   builder->Add("importUsernameExists",
                IDS_SUPERVISED_USER_IMPORT_USERNAME_EXIST);
 
-  builder->Add("managementURL", chrome::kSupervisedUserManagementDisplayURL);
+  builder->Add("managementURL",
+               chrome::kLegacySupervisedUserManagementDisplayURL);
 
   // TODO(antrim) : this is an explicit code duplications with UserImageScreen.
   // It should be removed by issue 251179.
@@ -293,14 +299,14 @@ void SupervisedUserCreationScreenHandler::
 }
 
 void SupervisedUserCreationScreenHandler::HandleManagerSelected(
-    const std::string& manager_id) {
+    const AccountId& manager_id) {
   if (!delegate_)
     return;
   WallpaperManager::Get()->SetUserWallpaperNow(manager_id);
 }
 
 void SupervisedUserCreationScreenHandler::HandleImportUserSelected(
-    const std::string& user_id) {
+    const AccountId& account_id) {
   if (!delegate_)
     return;
 }
@@ -363,53 +369,54 @@ void SupervisedUserCreationScreenHandler::HandleCreateSupervisedUser(
 }
 
 void SupervisedUserCreationScreenHandler::HandleImportSupervisedUser(
-    const std::string& user_id) {
+    const AccountId& account_id) {
   if (!delegate_)
     return;
 
   ShowStatusMessage(true /* progress */, l10n_util::GetStringUTF16(
       IDS_CREATE_SUPERVISED_USER_CREATION_CREATION_PROGRESS_MESSAGE));
 
-  delegate_->ImportSupervisedUser(user_id);
+  delegate_->ImportSupervisedUser(account_id.GetUserEmail());
 }
 
 void SupervisedUserCreationScreenHandler::
-    HandleImportSupervisedUserWithPassword(
-        const std::string& user_id,
-        const std::string& password) {
+    HandleImportSupervisedUserWithPassword(const AccountId& account_id,
+                                           const std::string& password) {
   if (!delegate_)
     return;
 
   ShowStatusMessage(true /* progress */, l10n_util::GetStringUTF16(
       IDS_CREATE_SUPERVISED_USER_CREATION_CREATION_PROGRESS_MESSAGE));
 
-  delegate_->ImportSupervisedUserWithPassword(user_id, password);
+  delegate_->ImportSupervisedUserWithPassword(account_id.GetUserEmail(),
+                                              password);
 }
 
 void SupervisedUserCreationScreenHandler::HandleAuthenticateManager(
-    const std::string& raw_manager_username,
+    const AccountId& manager_raw_account_id,
     const std::string& manager_password) {
-  const std::string manager_username =
-      gaia::SanitizeEmail(raw_manager_username);
-  delegate_->AuthenticateManager(manager_username, manager_password);
+  const AccountId manager_account_id = AccountId::FromUserEmailGaiaId(
+      gaia::SanitizeEmail(manager_raw_account_id.GetUserEmail()),
+      manager_raw_account_id.GetGaiaId());
+  delegate_->AuthenticateManager(manager_account_id, manager_password);
 }
 
 // TODO(antrim) : this is an explicit code duplications with UserImageScreen.
 // It should be removed by issue 251179.
 void SupervisedUserCreationScreenHandler::HandleGetImages() {
   base::ListValue image_urls;
-  for (int i = user_manager::kFirstDefaultImageIndex;
-       i < user_manager::kDefaultImagesCount;
-       ++i) {
+  for (int i = default_user_image::kFirstDefaultImageIndex;
+       i < default_user_image::kDefaultImagesCount; ++i) {
     scoped_ptr<base::DictionaryValue> image_data(new base::DictionaryValue);
-    image_data->SetString("url", user_manager::GetDefaultImageUrl(i));
-    image_data->SetString(
-        "author",
-        l10n_util::GetStringUTF16(user_manager::kDefaultImageAuthorIDs[i]));
-    image_data->SetString(
-        "website",
-        l10n_util::GetStringUTF16(user_manager::kDefaultImageWebsiteIDs[i]));
-    image_data->SetString("title", user_manager::GetDefaultImageDescription(i));
+    image_data->SetString("url", default_user_image::GetDefaultImageUrl(i));
+    image_data->SetString("author",
+                          l10n_util::GetStringUTF16(
+                              default_user_image::kDefaultImageAuthorIDs[i]));
+    image_data->SetString("website",
+                          l10n_util::GetStringUTF16(
+                              default_user_image::kDefaultImageWebsiteIDs[i]));
+    image_data->SetString("title",
+                          default_user_image::GetDefaultImageDescription(i));
     image_urls.Append(image_data.release());
   }
   CallJS("setDefaultImages", image_urls);

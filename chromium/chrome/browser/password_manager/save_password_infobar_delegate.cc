@@ -4,14 +4,16 @@
 
 #include "chrome/browser/password_manager/save_password_infobar_delegate.h"
 
+#include <utility>
+
 #include "base/metrics/histogram.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/infobars/core/infobar.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -19,32 +21,26 @@
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
-namespace {
-
-int GetCancelButtonText(password_manager::CredentialSourceType source_type) {
-  return source_type ==
-      password_manager::CredentialSourceType::CREDENTIAL_SOURCE_API
-      ? IDS_PASSWORD_MANAGER_SAVE_PASSWORD_SMART_LOCK_NO_THANKS_BUTTON
-      : IDS_PASSWORD_MANAGER_BLACKLIST_BUTTON;
-}
-
-}  // namespace
-
 // static
 void SavePasswordInfoBarDelegate::Create(
     content::WebContents* web_contents,
     scoped_ptr<password_manager::PasswordFormManager> form_to_save,
-    const std::string& uma_histogram_suffix,
-    password_manager::CredentialSourceType source_type) {
+    const std::string& uma_histogram_suffix) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  sync_driver::SyncService* sync_service =
+      ProfileSyncServiceFactory::GetForProfile(profile);
+  bool is_smartlock_branding_enabled =
+      password_bubble_experiment::IsSmartLockBrandingEnabled(sync_service);
+  bool should_show_first_run_experience =
+      password_bubble_experiment::ShouldShowSavePromptFirstRunExperience(
+          sync_service, profile->GetPrefs());
   InfoBarService::FromWebContents(web_contents)
       ->AddInfoBar(CreateSavePasswordInfoBar(
           make_scoped_ptr(new SavePasswordInfoBarDelegate(
-              web_contents, form_to_save.Pass(), uma_histogram_suffix,
-              source_type,
-              password_bubble_experiment::IsSmartLockBrandingEnabled(
-                  ProfileSyncServiceFactory::GetForProfile(profile))))));
+              web_contents, std::move(form_to_save), uma_histogram_suffix,
+              is_smartlock_branding_enabled,
+              should_show_first_run_experience))));
 }
 
 SavePasswordInfoBarDelegate::~SavePasswordInfoBarDelegate() {
@@ -70,52 +66,55 @@ SavePasswordInfoBarDelegate::~SavePasswordInfoBarDelegate() {
             uma_histogram_suffix_,
         timer_.Elapsed() < kMinimumPromptDisplayTime);
   }
+  if (should_show_first_run_experience_) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+    password_bubble_experiment::RecordSavePromptFirstRunExperienceWasShown(
+        profile->GetPrefs());
+  }
 }
 
 SavePasswordInfoBarDelegate::SavePasswordInfoBarDelegate(
     content::WebContents* web_contents,
     scoped_ptr<password_manager::PasswordFormManager> form_to_save,
     const std::string& uma_histogram_suffix,
-    password_manager::CredentialSourceType source_type,
-    bool is_smartlock_branding_enabled)
-    : ConfirmInfoBarDelegate(),
-      form_to_save_(form_to_save.Pass()),
+    bool is_smartlock_branding_enabled,
+    bool should_show_first_run_experience)
+    : PasswordManagerInfoBarDelegate(),
+      form_to_save_(std::move(form_to_save)),
       infobar_response_(password_manager::metrics_util::NO_RESPONSE),
       uma_histogram_suffix_(uma_histogram_suffix),
-      source_type_(source_type) {
+      should_show_first_run_experience_(should_show_first_run_experience),
+      web_contents_(web_contents) {
   if (!uma_histogram_suffix_.empty()) {
     password_manager::metrics_util::LogUMAHistogramBoolean(
         "PasswordManager.SavePasswordPromptDisplayed_" + uma_histogram_suffix_,
         true);
   }
-  title_link_range_ = gfx::Range();
+  base::string16 message;
+  gfx::Range message_link_range = gfx::Range();
+  PasswordTittleType type =
+      form_to_save_->pending_credentials().federation_url.is_empty()
+      ? PasswordTittleType::SAVE_PASSWORD
+      : PasswordTittleType::UPDATE_PASSWORD;
   GetSavePasswordDialogTitleTextAndLinkRange(
       web_contents->GetVisibleURL(), form_to_save_->observed_form().origin,
-      is_smartlock_branding_enabled, &title_, &title_link_range_);
+      is_smartlock_branding_enabled, type,
+      &message, &message_link_range);
+  SetMessage(message);
+  SetMessageLinkRange(message_link_range);
 }
 
-bool SavePasswordInfoBarDelegate::ShouldShowMoreButton() {
-  return source_type_ ==
-         password_manager::CredentialSourceType::CREDENTIAL_SOURCE_API;
+base::string16 SavePasswordInfoBarDelegate::GetFirstRunExperienceMessage() {
+  return should_show_first_run_experience_
+             ? l10n_util::GetStringUTF16(
+                   IDS_PASSWORD_MANAGER_SAVE_PROMPT_FIRST_RUN_EXPERIENCE)
+             : base::string16();
 }
 
-infobars::InfoBarDelegate::Type
-SavePasswordInfoBarDelegate::GetInfoBarType() const {
-  return PAGE_ACTION_TYPE;
-}
-
-infobars::InfoBarDelegate::InfoBarAutomationType
-SavePasswordInfoBarDelegate::GetInfoBarAutomationType() const {
-  return PASSWORD_INFOBAR;
-}
-
-int SavePasswordInfoBarDelegate::GetIconID() const {
-  return IDR_INFOBAR_SAVE_PASSWORD;
-}
-
-bool SavePasswordInfoBarDelegate::ShouldExpire(
-    const NavigationDetails& details) const {
-  return !details.is_redirect && ConfirmInfoBarDelegate::ShouldExpire(details);
+infobars::InfoBarDelegate::InfoBarIdentifier
+SavePasswordInfoBarDelegate::GetIdentifier() const {
+  return SAVE_PASSWORD_INFOBAR_DELEGATE;
 }
 
 void SavePasswordInfoBarDelegate::InfoBarDismissed() {
@@ -123,15 +122,11 @@ void SavePasswordInfoBarDelegate::InfoBarDismissed() {
   infobar_response_ = password_manager::metrics_util::INFOBAR_DISMISSED;
 }
 
-base::string16 SavePasswordInfoBarDelegate::GetMessageText() const {
-  return title_;
-}
-
 base::string16 SavePasswordInfoBarDelegate::GetButtonLabel(
     InfoBarButton button) const {
   return l10n_util::GetStringUTF16((button == BUTTON_OK)
                                        ? IDS_PASSWORD_MANAGER_SAVE_BUTTON
-                                       : GetCancelButtonText(source_type_));
+                                       : IDS_PASSWORD_MANAGER_BLACKLIST_BUTTON);
 }
 
 bool SavePasswordInfoBarDelegate::Accept() {
@@ -143,24 +138,7 @@ bool SavePasswordInfoBarDelegate::Accept() {
 
 bool SavePasswordInfoBarDelegate::Cancel() {
   DCHECK(form_to_save_.get());
-  if (source_type_ ==
-      password_manager::CredentialSourceType::CREDENTIAL_SOURCE_API) {
-    InfoBarDismissed();
-  } else {
-    form_to_save_->PermanentlyBlacklist();
-    infobar_response_ = password_manager::metrics_util::NEVER_REMEMBER_PASSWORD;
-  }
-  return true;
-}
-
-bool SavePasswordInfoBarDelegate::LinkClicked(
-    WindowOpenDisposition disposition) {
-  InfoBarService::WebContentsFromInfoBar(infobar())
-      ->OpenURL(content::OpenURLParams(
-          GURL(l10n_util::GetStringUTF16(
-              IDS_PASSWORD_MANAGER_SMART_LOCK_PAGE)),
-          content::Referrer(),
-          (disposition == CURRENT_TAB) ? NEW_FOREGROUND_TAB : disposition,
-          ui::PAGE_TRANSITION_LINK, false));
+  form_to_save_->PermanentlyBlacklist();
+  infobar_response_ = password_manager::metrics_util::NEVER_REMEMBER_PASSWORD;
   return true;
 }

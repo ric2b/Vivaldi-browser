@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 if (!is_android) {
+  import("//build/config/features.gni")
   import("//tools/grit/grit_rule.gni")
 }
 
@@ -36,6 +37,8 @@ static_library("devtools") {
     "devtools_network_conditions.h",
     "devtools_network_controller.cc",
     "devtools_network_controller.h",
+    "devtools_network_controller_handle.cc",
+    "devtools_network_controller_handle.h",
     "devtools_network_interceptor.cc",
     "devtools_network_interceptor.h",
     "devtools_network_protocol_handler.cc",
@@ -44,6 +47,8 @@ static_library("devtools") {
     "devtools_network_transaction.h",
     "devtools_network_transaction_factory.cc",
     "devtools_network_transaction_factory.h",
+    "devtools_network_upload_data_stream.cc",
+    "devtools_network_upload_data_stream.h",
     "devtools_protocol.cc",
     "devtools_protocol.h",
   ]
@@ -52,6 +57,7 @@ static_library("devtools") {
   configs += [
     "//build/config/compiler:no_size_t_to_int_warning",
     "//build/config/compiler:wexit_time_destructors",
+    "//build/config:precompiled_headers",
     "//third_party/WebKit/public:debug_devtools",
   ]
 
@@ -64,18 +70,17 @@ static_library("devtools") {
 
   if (!is_android) {
     deps += [
-      "//chrome/app/theme:theme_resources",
-      "//chrome/common/extensions/api",
       "//chrome:extra_resources",
       "//chrome:resources",
       "//chrome:strings",
+      "//chrome/app/theme:theme_resources",
+      "//chrome/common/extensions/api",
       "//components/devtools_http_handler",
       "//net:http_server",
       "//skia",
       "//third_party/icu",
       "//third_party/leveldatabase",
       "//third_party/libusb",
-      ":webrtc_device_provider_resources",
     ]
     sources += [
       "chrome_devtools_discovery_provider.cc",
@@ -102,14 +107,6 @@ static_library("devtools") {
       "device/usb/android_usb_socket.h",
       "device/usb/usb_device_provider.cc",
       "device/usb/usb_device_provider.h",
-      "device/webrtc/devtools_bridge_client.cc",
-      "device/webrtc/devtools_bridge_client.h",
-      "device/webrtc/devtools_bridge_instances_request.cc",
-      "device/webrtc/devtools_bridge_instances_request.h",
-      "device/webrtc/send_command_request.cc",
-      "device/webrtc/send_command_request.h",
-      "device/webrtc/webrtc_device_provider.cc",
-      "device/webrtc/webrtc_device_provider.h",
       "devtools_contents_resizing_strategy.cc",
       "devtools_contents_resizing_strategy.h",
       "devtools_embedder_message_dispatcher.cc",
@@ -118,6 +115,8 @@ static_library("devtools") {
       "devtools_file_helper.h",
       "devtools_file_system_indexer.cc",
       "devtools_file_system_indexer.h",
+      "devtools_file_watcher.cc",
+      "devtools_file_watcher.h",
       "devtools_target_impl.cc",
       "devtools_target_impl.h",
       "devtools_targets_ui.cc",
@@ -128,22 +127,16 @@ static_library("devtools") {
       "devtools_ui_bindings.h",
       "devtools_window.cc",
       "devtools_window.h",
+      "global_confirm_info_bar.cc",
+      "global_confirm_info_bar.h",
       "remote_debugging_server.cc",
       "remote_debugging_server.h",
     ]
-  }
-}
-
-if (!is_android) {
-  # GYP version: chrome/browser/devtools/webrtc_device_provider_resources.gyp:webrtc_device_provider_resources
-  grit("webrtc_device_provider_resources") {
-    source = "device/webrtc/resources.grd"
-    output_dir = "$root_gen_dir/chrome"
-    outputs = [
-      "grit/webrtc_device_provider_resources.h",
-      "grit/webrtc_device_provider_resources_map.cc",
-      "grit/webrtc_device_provider_resources_map.h",
-      "webrtc_device_provider_resources.pak",
-    ]
+    if (enable_service_discovery) {
+      sources += [
+        "device/cast_device_provider.cc",
+        "device/cast_device_provider.h",
+      ]
+    }
   }
 }

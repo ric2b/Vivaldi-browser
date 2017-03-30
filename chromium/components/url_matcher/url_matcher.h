@@ -5,12 +5,14 @@
 #ifndef COMPONENTS_URL_MATCHER_URL_MATCHER_H_
 #define COMPONENTS_URL_MATCHER_URL_MATCHER_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "components/url_matcher/regex_set_matcher.h"
 #include "components/url_matcher/substring_set_matcher.h"
 #include "components/url_matcher/url_matcher_export.h"
@@ -310,6 +312,7 @@ class URL_MATCHER_EXPORT URLMatcherPortFilter {
 class URL_MATCHER_EXPORT URLMatcherConditionSet
     : public base::RefCounted<URLMatcherConditionSet> {
  public:
+  // Valid IDs will be >= 0.
   typedef int ID;
   typedef std::set<URLMatcherCondition> Conditions;
   typedef std::set<URLQueryElementMatcherCondition> QueryConditions;

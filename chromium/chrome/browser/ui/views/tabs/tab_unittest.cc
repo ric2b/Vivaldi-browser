@@ -4,11 +4,16 @@
 
 #include "chrome/browser/ui/views/tabs/tab.h"
 
+#include <stddef.h>
+
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/tabs/media_indicator_button.h"
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
+#include "grit/theme_resources.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/views/controls/button/image_button.h"
@@ -20,14 +25,15 @@ using views::Widget;
 
 class FakeTabController : public TabController {
  public:
-  FakeTabController() : immersive_style_(false), active_tab_(false) {
-  }
-  ~FakeTabController() override {}
+  FakeTabController() {}
 
   void set_immersive_style(bool value) { immersive_style_ = value; }
   void set_active_tab(bool value) { active_tab_ = value; }
+  void set_paint_throbber_to_layer(bool value) {
+    paint_throbber_to_layer_ = value;
+  }
 
-  const ui::ListSelectionModel& GetSelectionModel() override {
+  const ui::ListSelectionModel& GetSelectionModel() const override {
     return selection_model_;
   }
   bool SupportsMultipleSelection() override { return false; }
@@ -59,14 +65,22 @@ class FakeTabController : public TabController {
   void OnMouseEventInTab(views::View* source,
                          const ui::MouseEvent& event) override {}
   bool ShouldPaintTab(const Tab* tab, gfx::Rect* clip) override { return true; }
+  bool CanPaintThrobberToLayer() const override {
+    return paint_throbber_to_layer_;
+  }
   bool IsImmersiveStyle() const override { return immersive_style_; }
+  int GetBackgroundResourceId(bool* custom_image) const override {
+    *custom_image = false;
+    return IDR_THEME_TAB_BACKGROUND;
+  }
   void UpdateTabAccessibilityState(const Tab* tab,
                                    ui::AXViewState* state) override{};
 
  private:
   ui::ListSelectionModel selection_model_;
-  bool immersive_style_;
-  bool active_tab_;
+  bool immersive_style_ = false;
+  bool active_tab_ = false;
+  bool paint_throbber_to_layer_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(FakeTabController);
 };
@@ -92,6 +106,22 @@ class TabTest : public views::ViewsTestBase,
     if (testing_for_rtl_locale())
       base::i18n::SetICUDefaultLocale(original_locale_);
   }
+
+  static views::ImageButton* GetCloseButton(const Tab& tab) {
+    return tab.close_button_;
+  }
+
+  static views::View* GetThrobberView(const Tab& tab) {
+    // Reinterpret to keep the definition encapsulated (which works so long as
+    // multiple inheritance isn't involved).
+    return reinterpret_cast<views::View*>(tab.throbber_);
+  }
+
+  static gfx::Rect GetFaviconBounds(const Tab& tab) {
+    return tab.favicon_bounds_;
+  }
+
+  static void LayoutTab(Tab* tab) { tab->Layout(); }
 
   static void CheckForExpectedLayoutAndVisibilityOfElements(const Tab& tab) {
     // Check whether elements are visible when they are supposed to be, given
@@ -197,10 +227,24 @@ class TabTest : public views::ViewsTestBase,
                   tab.close_button_->bounds().x() +
                       tab.close_button_->GetInsets().left());
       }
-      EXPECT_LE(tab.close_button_->bounds().right(), contents_bounds.right());
-      EXPECT_LE(contents_bounds.y(), tab.close_button_->bounds().y());
-      EXPECT_LE(tab.close_button_->bounds().bottom(), contents_bounds.bottom());
+      // We need to use the close button contents bounds instead of its bounds,
+      // since it has an empty border around it to extend its clickable area for
+      // touch.
+      // Note: The close button right edge can be outside the nominal contents
+      // bounds, but shouldn't leave the local bounds.
+      const gfx::Rect close_bounds = tab.close_button_->GetContentsBounds();
+      EXPECT_LE(close_bounds.right(), tab.GetLocalBounds().right());
+      EXPECT_LE(contents_bounds.y(), close_bounds.y());
+      EXPECT_LE(close_bounds.bottom(), contents_bounds.bottom());
     }
+  }
+
+ protected:
+  void InitWidget(Widget* widget) {
+    Widget::InitParams params(CreateParams(Widget::InitParams::TYPE_WINDOW));
+    params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+    params.bounds.SetRect(10, 20, 300, 400);
+    widget->Init(params);
   }
 
  private:
@@ -222,23 +266,23 @@ TEST_P(TabTest, HitTestTopPixel) {
   }
 
   Widget widget;
-  Widget::InitParams params(CreateParams(Widget::InitParams::TYPE_WINDOW));
-  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.bounds.SetRect(10, 20, 300, 400);
-  widget.Init(params);
+  InitWidget(&widget);
 
   FakeTabController tab_controller;
   Tab tab(&tab_controller);
   widget.GetContentsView()->AddChildView(&tab);
   tab.SetBoundsRect(gfx::Rect(gfx::Point(0, 0), Tab::GetStandardSize()));
 
-  // Tabs have some shadow in the top, so by default we don't hit the tab there.
-  int middle_x = tab.width() / 2;
-  EXPECT_FALSE(tab.HitTestPoint(gfx::Point(middle_x, 0)));
-
   // Tabs are slanted, so a click halfway down the left edge won't hit it.
   int middle_y = tab.height() / 2;
   EXPECT_FALSE(tab.HitTestPoint(gfx::Point(0, middle_y)));
+
+  // Normally, tabs should not be hit if we click in the exclusion region, only
+  // if we click below it.
+  const int exclusion = GetLayoutConstant(TAB_TOP_EXCLUSION_HEIGHT);
+  int middle_x = tab.width() / 2;
+  EXPECT_FALSE(tab.HitTestPoint(gfx::Point(middle_x, exclusion - 1)));
+  EXPECT_TRUE(tab.HitTestPoint(gfx::Point(middle_x, exclusion)));
 
   // If the window is maximized, however, we want clicks in the top edge to
   // select the tab.
@@ -261,8 +305,12 @@ TEST_P(TabTest, LayoutAndVisibilityOfElements) {
     TAB_MEDIA_STATE_AUDIO_PLAYING, TAB_MEDIA_STATE_AUDIO_MUTING
   };
 
+  Widget widget;
+  InitWidget(&widget);
+
   FakeTabController controller;
   Tab tab(&controller);
+  widget.GetContentsView()->AddChildView(&tab);
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(16, 16);
@@ -294,8 +342,8 @@ TEST_P(TabTest, LayoutAndVisibilityOfElements) {
           bounds.set_width(Tab::GetPinnedWidth());
           min_width = Tab::GetPinnedWidth();
         } else {
-          min_width = is_active_tab ? Tab::GetMinimumSelectedSize().width() :
-              Tab::GetMinimumUnselectedSize().width();
+          min_width = is_active_tab ? Tab::GetMinimumActiveSize().width()
+                                    : Tab::GetMinimumInactiveSize().width();
         }
         while (bounds.width() >= min_width) {
           SCOPED_TRACE(::testing::Message() << "bounds=" << bounds.ToString());
@@ -317,8 +365,12 @@ TEST_P(TabTest, TooltipProvidedByTab) {
     return;
   }
 
+  Widget widget;
+  InitWidget(&widget);
+
   FakeTabController controller;
   Tab tab(&controller);
+  widget.GetContentsView()->AddChildView(&tab);
   tab.SetBoundsRect(gfx::Rect(Tab::GetStandardSize()));
 
   SkBitmap bitmap;
@@ -374,17 +426,78 @@ TEST_P(TabTest, CloseButtonLayout) {
   FakeTabController tab_controller;
   Tab tab(&tab_controller);
   tab.SetBounds(0, 0, 100, 50);
-  tab.Layout();
-  gfx::Insets close_button_insets = tab.close_button_->GetInsets();
-  tab.Layout();
-  gfx::Insets close_button_insets_2 = tab.close_button_->GetInsets();
+  LayoutTab(&tab);
+  gfx::Insets close_button_insets = GetCloseButton(tab)->GetInsets();
+  LayoutTab(&tab);
+  gfx::Insets close_button_insets_2 = GetCloseButton(tab)->GetInsets();
   EXPECT_EQ(close_button_insets.top(), close_button_insets_2.top());
   EXPECT_EQ(close_button_insets.left(), close_button_insets_2.left());
   EXPECT_EQ(close_button_insets.bottom(), close_button_insets_2.bottom());
   EXPECT_EQ(close_button_insets.right(), close_button_insets_2.right());
 
   // Also make sure the close button is sized as large as the tab.
-  EXPECT_EQ(50, tab.close_button_->bounds().height());
+  EXPECT_EQ(50, GetCloseButton(tab)->bounds().height());
+}
+
+// Tests expected changes to the ThrobberView state when the WebContents loading
+// state changes or the animation timer (usually in BrowserView) triggers.
+TEST_P(TabTest, LayeredThrobber) {
+  if (testing_for_rtl_locale() && !base::i18n::IsRTL()) {
+    LOG(WARNING) << "Testing of RTL locale not supported on current platform.";
+    return;
+  }
+
+  Widget widget;
+  InitWidget(&widget);
+
+  FakeTabController tab_controller;
+  Tab tab(&tab_controller);
+  widget.GetContentsView()->AddChildView(&tab);
+  tab.SetBoundsRect(gfx::Rect(Tab::GetStandardSize()));
+
+  views::View* throbber = GetThrobberView(tab);
+  EXPECT_FALSE(throbber->visible());
+  EXPECT_EQ(TabRendererData::NETWORK_STATE_NONE, tab.data().network_state);
+  EXPECT_EQ(throbber->bounds(), GetFaviconBounds(tab));
+
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_NONE);
+  EXPECT_FALSE(throbber->visible());
+
+  // Simulate a "normal" tab load: should paint to a layer.
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_WAITING);
+  EXPECT_TRUE(tab_controller.CanPaintThrobberToLayer());
+  EXPECT_TRUE(throbber->visible());
+  EXPECT_TRUE(throbber->layer());
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_LOADING);
+  EXPECT_TRUE(throbber->visible());
+  EXPECT_TRUE(throbber->layer());
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_NONE);
+  EXPECT_FALSE(throbber->visible());
+
+  // Simulate a drag started and stopped during a load: layer painting stops
+  // temporarily.
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_WAITING);
+  EXPECT_TRUE(throbber->visible());
+  EXPECT_TRUE(throbber->layer());
+  tab_controller.set_paint_throbber_to_layer(false);
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_WAITING);
+  EXPECT_TRUE(throbber->visible());
+  EXPECT_FALSE(throbber->layer());
+  tab_controller.set_paint_throbber_to_layer(true);
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_WAITING);
+  EXPECT_TRUE(throbber->visible());
+  EXPECT_TRUE(throbber->layer());
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_NONE);
+  EXPECT_FALSE(throbber->visible());
+
+  // Simulate a tab load starting and stopping during tab dragging (or with
+  // stacked tabs): no layer painting.
+  tab_controller.set_paint_throbber_to_layer(false);
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_WAITING);
+  EXPECT_TRUE(throbber->visible());
+  EXPECT_FALSE(throbber->layer());
+  tab.UpdateLoadingAnimation(TabRendererData::NETWORK_STATE_NONE);
+  EXPECT_FALSE(throbber->visible());
 }
 
 // Test in both a LTR and a RTL locale.  Note: The fact that the UI code is

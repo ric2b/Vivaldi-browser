@@ -26,7 +26,10 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 
 namespace network_hints {
@@ -36,7 +39,7 @@ namespace network_hints {
 class DnsQueue {
  public:
   // BufferSize is a signed type used for indexing into a buffer.
-  typedef int32 BufferSize;
+  typedef int32_t BufferSize;
 
   enum PushResult { SUCCESSFUL_PUSH, OVERFLOW_PUSH, REDUNDANT_PUSH };
 
@@ -63,7 +66,7 @@ class DnsQueue {
   // Returns true for success, false for failure (nothing written).
   PushResult Push(const char* source, const size_t length);
 
-  PushResult Push(std::string source) {
+  PushResult Push(const std::string& source) {
     return Push(source.c_str(), source.length());
   }
 

@@ -14,17 +14,20 @@
 
 namespace ui {
 
+base::FilePath GetInputPathInSys(const base::FilePath& path) {
+  return base::MakeAbsoluteFilePath(
+      base::FilePath("/sys/class/input").Append(path.BaseName()));
+}
+
 InputDeviceType GetInputDeviceTypeFromPath(const base::FilePath& path) {
   DCHECK(!base::MessageLoopForUI::IsCurrent());
   std::string event_node = path.BaseName().value();
-  if (event_node.empty() || !base::StartsWithASCII(event_node, "event", false))
+  if (event_node.empty() ||
+      !base::StartsWith(event_node, "event",
+                        base::CompareCase::INSENSITIVE_ASCII))
     return InputDeviceType::INPUT_DEVICE_UNKNOWN;
 
-  // Find sysfs device path for this device.
-  base::FilePath sysfs_path =
-      base::FilePath(FILE_PATH_LITERAL("/sys/class/input"));
-  sysfs_path = sysfs_path.Append(path.BaseName());
-  sysfs_path = base::MakeAbsoluteFilePath(sysfs_path);
+  base::FilePath sysfs_path = GetInputPathInSys(path);
 
   // Device does not exist.
   if (sysfs_path.empty())

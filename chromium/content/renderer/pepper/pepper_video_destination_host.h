@@ -5,11 +5,14 @@
 #ifndef CONTENT_RENDERER_PEPPER_PEPPER_VIDEO_DESTINATION_HOST_H_
 #define CONTENT_RENDERER_PEPPER_PEPPER_VIDEO_DESTINATION_HOST_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
-#include "content/renderer/media/webrtc/video_destination_handler.h"
+#include "content/renderer/media/pepper_to_video_track_adapter.h"
 #include "ppapi/c/pp_time.h"
 #include "ppapi/host/resource_host.h"
 

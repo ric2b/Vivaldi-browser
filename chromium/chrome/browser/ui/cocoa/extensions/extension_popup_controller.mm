@@ -5,8 +5,10 @@
 #import "chrome/browser/ui/cocoa/extensions/extension_popup_controller.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_view_host.h"
 #include "chrome/browser/extensions/extension_view_host_factory.h"
@@ -15,7 +17,7 @@
 #import "chrome/browser/ui/cocoa/extensions/extension_view_mac.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
 #include "chrome/common/url_constants.h"
-#include "components/web_modal/popup_manager.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/notification_details.h"
@@ -41,6 +43,8 @@ ExtensionPopupController* gPopup;
 CGFloat Clamp(CGFloat value, CGFloat min, CGFloat max) {
   return std::max(min, std::min(max, value));
 }
+
+BOOL gAnimationsEnabled = true;
 
 }  // namespace
 
@@ -179,6 +183,8 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
     beingInspected_ = devMode;
     ignoreWindowDidResignKey_ = NO;
     [[self bubble] setArrowLocation:arrowLocation];
+    if (!gAnimationsEnabled)
+      [window setAllowedAnimations:info_bubble::kAnimateNone];
   }
   return self;
 }
@@ -197,12 +203,11 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
   if (host_) {
     // TODO(gbillock): Change this API to say directly if the current popup
     // should block tab close? This is a bit over-reaching.
-    web_modal::PopupManager* popup_manager =
-        web_modal::PopupManager::FromWebContents(host_->host_contents());
-    if (popup_manager && popup_manager->IsWebModalDialogActive(
-            host_->host_contents())) {
+    const web_modal::WebContentsModalDialogManager* manager =
+        web_modal::WebContentsModalDialogManager::FromWebContents(
+            host_->host_contents());
+    if (manager && manager->IsDialogActive())
       return;
-    }
   }
   [super close];
 }
@@ -223,11 +228,10 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
     // it steals key-ness from the popup. Don't close the popup when this
     // happens. There's an extra windowDidResignKey: notification after the
     // modal dialog closes that should also be ignored.
-    web_modal::PopupManager* popupManager =
-        web_modal::PopupManager::FromWebContents(
+    const web_modal::WebContentsModalDialogManager* manager =
+        web_modal::WebContentsModalDialogManager::FromWebContents(
             host_->host_contents());
-    if (popupManager &&
-        popupManager->IsWebModalDialogActive(host_->host_contents())) {
+    if (manager && manager->IsDialogActive()) {
       ignoreWindowDidResignKey_ = YES;
       return;
     }
@@ -273,7 +277,7 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
                 anchoredAt:anchoredAt
              arrowLocation:arrowLocation
                    devMode:devMode];
-  [gPopup setExtensionViewHost:host.Pass()];
+  [gPopup setExtensionViewHost:std::move(host)];
   return gPopup;
 }
 
@@ -420,6 +424,11 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
 
 - (void)windowDidMove:(NSNotification*)notification {
   [self onWindowChanged];
+}
+
+// Private (TestingAPI)
++ (void)setAnimationsEnabledForTesting:(BOOL)enabled {
+  gAnimationsEnabled = enabled;
 }
 
 // Private (TestingAPI)

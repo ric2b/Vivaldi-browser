@@ -3,13 +3,18 @@
  * found in the LICENSE file. */
 
 body {
-  font-family: sans-serif;
+  font-family: Roboto;
   font-size: 0.75em;
   margin: 0;
 }
 
 #media-router-container {
-  background-color: rgb(246, 246, 246);
+  -webkit-margin-start: 1px;
+  box-shadow: 0 3px 4px 0 rgba(0, 0, 0, 0.14),
+              0 1px 8px 0 rgba(0, 0, 0, 0.12),
+              0 3px 3px -2px rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
+  margin-bottom: 1px;
+  width: calc(100% - 2px);
 }

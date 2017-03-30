@@ -19,7 +19,8 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="?attr/colorPrimary"/>
+            android:background="?attr/colorPrimary"
+            android:elevation="4dp"/>
         <FrameLayout
             android:layout_height="match_parent"
             android:layout_width="match_parent">
@@ -38,6 +39,7 @@
                     android:layout_height="wrap_content"
                     android:layout_width="wrap_content"
                     android:src="@drawable/empty_host_list"
+                    android:padding="16dp"
                     android:contentDescription="@null"/>
                 <TextView
                     android:gravity="center"
@@ -46,10 +48,16 @@
                     android:text="@string/host_list_empty_android"
                     style="@style/EmptyStateText"/>
                 <TextView
-                    android:id="@+id/host_setup_link_android"
                     android:gravity="center"
                     android:layout_height="wrap_content"
                     android:layout_width="match_parent"
+                    android:text="@string/host_list_empty_instructions_android"
+                    style="@style/EmptyStateText.Detail"/>
+                <Button
+                    android:id="@+id/host_setup_link_android"
+                    android:gravity="center"
+                    android:layout_height="wrap_content"
+                    android:layout_width="wrap_content"
                     android:text="@string/host_setup_link_android"
                     style="@style/EmptyStateText.Hyperlink"/>
             </LinearLayout>
@@ -62,22 +70,15 @@
                 style="@android:style/Widget.Holo.ProgressBar.Large"/>
         </FrameLayout>
     </LinearLayout>
-    <!-- The navigation drawer. -->
+    <!-- The navigation drawer. The account-switcher and navigation menu will be programmatically
+         added to this view. -->
     <LinearLayout
-        android:layout_width="240dp"
+        android:id="@+id/navigation_drawer"
+        android:layout_width="300dp"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:layout_gravity="start"
-        android:padding="16dp"
-        android:background="@android:color/background_light">
-        <Spinner
-            android:id="@+id/accounts_spinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-        <ListView
-            android:id="@+id/navigation_menu"
-            android:layout_height="match_parent"
-            android:layout_width="match_parent"
-            android:choiceMode="singleChoice"/>
+        android:background="@android:color/background_light"
+        android:fitsSystemWindows="true">
     </LinearLayout>
 </android.support.v4.widget.DrawerLayout>

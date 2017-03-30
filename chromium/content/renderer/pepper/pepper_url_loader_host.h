@@ -5,8 +5,11 @@
 #ifndef CONTENT_RENDERER_PEPPER_PEPPER_URL_LOADER_HOST_H_
 #define CONTENT_RENDERER_PEPPER_PEPPER_URL_LOADER_HOST_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
@@ -34,7 +37,7 @@ class PepperURLLoaderHost : public ppapi::host::ResourceHost,
                       bool main_document_loader,
                       PP_Instance instance,
                       PP_Resource resource);
-  virtual ~PepperURLLoaderHost();
+  ~PepperURLLoaderHost() override;
 
   // ResourceHost implementation.
   int32_t OnResourceMessageReceived(
@@ -42,26 +45,26 @@ class PepperURLLoaderHost : public ppapi::host::ResourceHost,
       ppapi::host::HostMessageContext* context) override;
 
   // blink::WebURLLoaderClient implementation.
-  virtual void willSendRequest(blink::WebURLLoader* loader,
-                               blink::WebURLRequest& new_request,
-                               const blink::WebURLResponse& redir_response);
-  virtual void didSendData(blink::WebURLLoader* loader,
-                           unsigned long long bytes_sent,
-                           unsigned long long total_bytes_to_be_sent);
-  virtual void didReceiveResponse(blink::WebURLLoader* loader,
-                                  const blink::WebURLResponse& response);
-  virtual void didDownloadData(blink::WebURLLoader* loader,
-                               int data_length,
-                               int encoded_data_length);
-  virtual void didReceiveData(blink::WebURLLoader* loader,
-                              const char* data,
-                              int data_length,
-                              int encoded_data_length);
-  virtual void didFinishLoading(blink::WebURLLoader* loader,
-                                double finish_time,
-                                int64_t total_encoded_data_length);
-  virtual void didFail(blink::WebURLLoader* loader,
-                       const blink::WebURLError& error);
+  void willFollowRedirect(blink::WebURLLoader* loader,
+                          blink::WebURLRequest& new_request,
+                          const blink::WebURLResponse& redir_response) override;
+  void didSendData(blink::WebURLLoader* loader,
+                   unsigned long long bytes_sent,
+                   unsigned long long total_bytes_to_be_sent) override;
+  void didReceiveResponse(blink::WebURLLoader* loader,
+                          const blink::WebURLResponse& response) override;
+  void didDownloadData(blink::WebURLLoader* loader,
+                       int data_length,
+                       int encoded_data_length) override;
+  void didReceiveData(blink::WebURLLoader* loader,
+                      const char* data,
+                      int data_length,
+                      int encoded_data_length) override;
+  void didFinishLoading(blink::WebURLLoader* loader,
+                        double finish_time,
+                        int64_t total_encoded_data_length) override;
+  void didFail(blink::WebURLLoader* loader,
+               const blink::WebURLError& error) override;
 
  private:
   // ResourceHost protected overrides.

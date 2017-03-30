@@ -10,6 +10,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/extensions/api/preference/preference_api.h"
@@ -57,7 +58,7 @@ class ProxyEventRouter {
                         const base::string16& error);
 
  private:
-  friend struct DefaultSingletonTraits<ProxyEventRouter>;
+  friend struct base::DefaultSingletonTraits<ProxyEventRouter>;
 
   ProxyEventRouter();
   ~ProxyEventRouter();

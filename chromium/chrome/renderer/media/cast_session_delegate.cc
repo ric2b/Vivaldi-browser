@@ -4,15 +4,18 @@
 
 #include "chrome/renderer/media/cast_session_delegate.h"
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
-#include "chrome/common/chrome_version_info.h"
+#include "build/build_config.h"
 #include "chrome/renderer/media/cast_threads.h"
 #include "chrome/renderer/media/cast_transport_sender_ipc.h"
+#include "components/version_info/version_info.h"
 #include "content/public/renderer/render_thread.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
@@ -64,7 +67,7 @@ void CastSessionDelegateBase::StartUDP(
   // thread hopping for incoming video frames and outgoing network packets.
   // TODO(hubbe): Create cast environment in ctor instead.
   cast_environment_ = new CastEnvironment(
-      scoped_ptr<base::TickClock>(new base::DefaultTickClock()).Pass(),
+      scoped_ptr<base::TickClock>(new base::DefaultTickClock()),
       base::ThreadTaskRunnerHandle::Get(),
       g_cast_threads.Get().GetAudioEncodeMessageLoopProxy(),
       g_cast_threads.Get().GetVideoEncodeMessageLoopProxy());
@@ -72,15 +75,13 @@ void CastSessionDelegateBase::StartUDP(
   // Rationale for using unretained: The callback cannot be called after the
   // destruction of CastTransportSenderIPC, and they both share the same thread.
   cast_transport_.reset(new CastTransportSenderIPC(
-      local_endpoint,
-      remote_endpoint,
-      options.Pass(),
+      local_endpoint, remote_endpoint, std::move(options),
       base::Bind(&CastSessionDelegateBase::ReceivePacket,
                  base::Unretained(this)),
       base::Bind(&CastSessionDelegateBase::StatusNotificationCB,
                  base::Unretained(this), error_callback),
-      base::Bind(&CastSessionDelegateBase::LogRawEvents,
-                 base::Unretained(this))));
+      base::Bind(&media::cast::LogEventDispatcher::DispatchBatchOfEvents,
+                 base::Unretained(cast_environment_->logger()))));
 }
 
 void CastSessionDelegateBase::StatusNotificationCB(
@@ -162,10 +163,8 @@ void CastSessionDelegate::StartUDP(
     scoped_ptr<base::DictionaryValue> options,
     const ErrorCallback& error_callback) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
-  CastSessionDelegateBase::StartUDP(local_endpoint,
-                                    remote_endpoint,
-                                    options.Pass(),
-                                    error_callback);
+  CastSessionDelegateBase::StartUDP(local_endpoint, remote_endpoint,
+                                    std::move(options), error_callback);
   event_subscribers_.reset(
       new media::cast::RawEventSubscriberBundle(cast_environment_));
 
@@ -190,14 +189,14 @@ void CastSessionDelegate::GetEventLogsAndReset(
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   if (!event_subscribers_.get()) {
-    callback.Run(make_scoped_ptr(new base::BinaryValue).Pass());
+    callback.Run(make_scoped_ptr(new base::BinaryValue));
     return;
   }
 
   media::cast::EncodingEventSubscriber* subscriber =
       event_subscribers_->GetEncodingEventSubscriber(is_audio);
   if (!subscriber) {
-    callback.Run(make_scoped_ptr(new base::BinaryValue).Pass());
+    callback.Run(make_scoped_ptr(new base::BinaryValue));
     return;
   }
 
@@ -211,10 +210,9 @@ void CastSessionDelegate::GetEventLogsAndReset(
     metadata.set_extra_data(extra_data);
   media::cast::proto::GeneralDescription* gen_desc =
       metadata.mutable_general_description();
-  chrome::VersionInfo version_info;
-  gen_desc->set_product(version_info.Name());
-  gen_desc->set_product_version(version_info.Version());
-  gen_desc->set_os(version_info.OSType());
+  gen_desc->set_product(version_info::GetProductName());
+  gen_desc->set_product_version(version_info::GetVersionNumber());
+  gen_desc->set_os(version_info::GetOSType());
 
   scoped_ptr<char[]> serialized_log(new char[media::cast::kMaxSerializedBytes]);
   int output_bytes;
@@ -228,15 +226,15 @@ void CastSessionDelegate::GetEventLogsAndReset(
 
   if (!success) {
     DVLOG(2) << "Failed to serialize event log.";
-    callback.Run(make_scoped_ptr(new base::BinaryValue).Pass());
+    callback.Run(make_scoped_ptr(new base::BinaryValue));
     return;
   }
 
   DVLOG(2) << "Serialized log length: " << output_bytes;
 
   scoped_ptr<base::BinaryValue> blob(
-      new base::BinaryValue(serialized_log.Pass(), output_bytes));
-  callback.Run(blob.Pass());
+      new base::BinaryValue(std::move(serialized_log), output_bytes));
+  callback.Run(std::move(blob));
 }
 
 void CastSessionDelegate::GetStatsAndReset(bool is_audio,
@@ -244,21 +242,21 @@ void CastSessionDelegate::GetStatsAndReset(bool is_audio,
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   if (!event_subscribers_.get()) {
-    callback.Run(make_scoped_ptr(new base::DictionaryValue).Pass());
+    callback.Run(make_scoped_ptr(new base::DictionaryValue));
     return;
   }
 
   media::cast::StatsEventSubscriber* subscriber =
       event_subscribers_->GetStatsEventSubscriber(is_audio);
   if (!subscriber) {
-    callback.Run(make_scoped_ptr(new base::DictionaryValue).Pass());
+    callback.Run(make_scoped_ptr(new base::DictionaryValue));
     return;
   }
 
   scoped_ptr<base::DictionaryValue> stats = subscriber->GetStats();
   subscriber->Reset();
 
-  callback.Run(stats.Pass());
+  callback.Run(std::move(stats));
 }
 
 void CastSessionDelegate::OnOperationalStatusChange(
@@ -313,45 +311,4 @@ void CastSessionDelegate::OnOperationalStatusChange(
 void CastSessionDelegate::ReceivePacket(
     scoped_ptr<media::cast::Packet> packet) {
   // Do nothing (frees packet)
-}
-
-void CastSessionDelegate::LogRawEvents(
-    const std::vector<media::cast::PacketEvent>& packet_events,
-    const std::vector<media::cast::FrameEvent>& frame_events) {
-  DCHECK(io_task_runner_->BelongsToCurrentThread());
-
-  for (std::vector<media::cast::PacketEvent>::const_iterator it =
-           packet_events.begin();
-       it != packet_events.end();
-       ++it) {
-    cast_environment_->Logging()->InsertPacketEvent(it->timestamp,
-                                                    it->type,
-                                                    it->media_type,
-                                                    it->rtp_timestamp,
-                                                    it->frame_id,
-                                                    it->packet_id,
-                                                    it->max_packet_id,
-                                                    it->size);
-  }
-  for (std::vector<media::cast::FrameEvent>::const_iterator it =
-           frame_events.begin();
-       it != frame_events.end();
-       ++it) {
-    if (it->type == media::cast::FRAME_PLAYOUT) {
-      cast_environment_->Logging()->InsertFrameEventWithDelay(
-          it->timestamp,
-          it->type,
-          it->media_type,
-          it->rtp_timestamp,
-          it->frame_id,
-          it->delay_delta);
-    } else {
-      cast_environment_->Logging()->InsertFrameEvent(
-          it->timestamp,
-          it->type,
-          it->media_type,
-          it->rtp_timestamp,
-          it->frame_id);
-    }
-  }
 }

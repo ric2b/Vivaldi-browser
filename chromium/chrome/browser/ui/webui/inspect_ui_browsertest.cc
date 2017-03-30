@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "chrome/browser/devtools/device/adb/adb_device_provider.h"
 #include "chrome/browser/devtools/device/adb/mock_adb_server.h"
 #include "chrome/browser/devtools/device/devtools_android_bridge.h"
@@ -13,15 +14,14 @@
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 using content::WebContents;
 
 namespace {
 
-const char kSharedWorkerTestPage[] =
-    "files/workers/workers_ui_shared_worker.html";
-const char kSharedWorkerJs[] =
-    "files/workers/workers_ui_shared_worker.js";
+const char kSharedWorkerTestPage[] = "/workers/workers_ui_shared_worker.html";
+const char kSharedWorkerJs[] = "/workers/workers_ui_shared_worker.js";
 
 class InspectUITest : public WebUIBrowserTest {
  public:
@@ -46,8 +46,8 @@ IN_PROC_BROWSER_TEST_F(InspectUITest, InspectUIPage) {
 }
 
 IN_PROC_BROWSER_TEST_F(InspectUITest, SharedWorker) {
-  ASSERT_TRUE(test_server()->Start());
-  GURL url = test_server()->GetURL(kSharedWorkerTestPage);
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL(kSharedWorkerTestPage);
   ui_test_utils::NavigateToURL(browser(), url);
 
   ui_test_utils::NavigateToURLWithDisposition(
@@ -69,7 +69,8 @@ IN_PROC_BROWSER_TEST_F(InspectUITest, SharedWorker) {
       new base::StringValue(kSharedWorkerTestPage)));
 }
 
-IN_PROC_BROWSER_TEST_F(InspectUITest, AndroidTargets) {
+// Flaky due to failure to bind a hardcoded port. crbug.com/566057
+IN_PROC_BROWSER_TEST_F(InspectUITest, DISABLED_AndroidTargets) {
   DevToolsAndroidBridge* android_bridge =
       DevToolsAndroidBridge::Factory::GetForProfile(browser()->profile());
   AndroidDeviceManager::DeviceProviders providers;
@@ -86,7 +87,7 @@ IN_PROC_BROWSER_TEST_F(InspectUITest, AndroidTargets) {
 }
 
 IN_PROC_BROWSER_TEST_F(InspectUITest, ReloadCrash) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIInspectURL));
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIInspectURL));
 }

@@ -9,6 +9,7 @@
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/test_password_generation_agent.h"
+#include "components/autofill/core/common/password_form_generation_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFormElement.h"
@@ -29,34 +30,21 @@ void SetNotBlacklistedMessage(TestPasswordGenerationAgent* generation_agent,
 void SetAccountCreationFormsDetectedMessage(
     TestPasswordGenerationAgent* generation_agent,
     blink::WebDocument document,
-    int form_index) {
+    int form_index,
+    int field_index) {
   blink::WebVector<blink::WebFormElement> web_forms;
   document.forms(web_forms);
 
   autofill::FormData form_data;
-  WebFormElementToFormData(web_forms[form_index],
-                           blink::WebFormControlElement(),
-                           EXTRACT_NONE,
-                           &form_data,
-                           nullptr /* FormFieldData */);
+  WebFormElementToFormData(
+      web_forms[form_index], blink::WebFormControlElement(),
+      form_util::EXTRACT_NONE, &form_data, nullptr /* FormFieldData */);
 
-  std::vector<autofill::FormData> forms;
-  forms.push_back(form_data);
-  AutofillMsg_AccountCreationFormsDetected msg(0, forms);
+  std::vector<autofill::PasswordFormGenerationData> forms;
+  forms.push_back(autofill::PasswordFormGenerationData{
+      form_data.name, form_data.action, form_data.fields[field_index]});
+  AutofillMsg_FoundFormsEligibleForGeneration msg(0, forms);
   generation_agent->OnMessageReceived(msg);
-}
-
-void ExpectPasswordGenerationAvailable(
-    TestPasswordGenerationAgent* password_generation,
-    bool available) {
-  if (available) {
-    ASSERT_EQ(1u, password_generation->messages().size());
-    EXPECT_EQ(AutofillHostMsg_ShowPasswordGenerationPopup::ID,
-              password_generation->messages()[0]->type());
-  } else {
-    EXPECT_TRUE(password_generation->messages().empty());
-  }
-  password_generation->clear_messages();
 }
 
 }  // namespace autofill

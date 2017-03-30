@@ -6,11 +6,10 @@
   'targets': [
     {
       # GN version: //remoting:test_support
-      'target_name': 'remoting_test_common',
+      'target_name': 'remoting_test_support',
       'type': 'static_library',
       'dependencies': [
         '../base/base.gyp:base',
-        '../components/components.gyp:policy_component_test_support',
         '../net/net.gyp:net_test_support',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
@@ -22,23 +21,31 @@
       ],
       'sources': [
         # Note: sources list duplicated in GN build.
-        'host/fake_desktop_capturer.cc',
-        'host/fake_desktop_capturer.h',
         'host/fake_desktop_environment.cc',
         'host/fake_desktop_environment.h',
+        'host/fake_host_extension.cc',
+        'host/fake_host_extension.h',
         'host/fake_host_status_monitor.h',
         'host/fake_mouse_cursor_monitor.cc',
         'host/fake_mouse_cursor_monitor.h',
+        'host/fake_oauth_token_getter.cc',
+        'host/fake_oauth_token_getter.h',
         'protocol/fake_authenticator.cc',
         'protocol/fake_authenticator.h',
+        'protocol/fake_connection_to_client.cc',
+        'protocol/fake_connection_to_client.h',
         'protocol/fake_connection_to_host.cc',
         'protocol/fake_connection_to_host.h',
         'protocol/fake_datagram_socket.cc',
         'protocol/fake_datagram_socket.h',
+        'protocol/fake_desktop_capturer.cc',
+        'protocol/fake_desktop_capturer.h',
         'protocol/fake_session.cc',
         'protocol/fake_session.h',
         'protocol/fake_stream_socket.cc',
         'protocol/fake_stream_socket.h',
+        'protocol/fake_video_renderer.cc',
+        'protocol/fake_video_renderer.h',
         'protocol/protocol_mock_objects.cc',
         'protocol/protocol_mock_objects.h',
         'protocol/test_event_matchers.h',
@@ -52,27 +59,34 @@
         'test/app_remoting_report_issue_request.h',
         'test/app_remoting_service_urls.cc',
         'test/app_remoting_service_urls.h',
-        'test/app_remoting_test_driver_environment.cc',
-        'test/app_remoting_test_driver_environment_app_details.cc',
-        'test/app_remoting_test_driver_environment.h',
-        'test/host_info.cc',
-        'test/host_info.h',
-        'test/host_list_fetcher.cc',
-        'test/host_list_fetcher.h',
+        'test/chromoting_test_driver_environment.cc',
+        'test/chromoting_test_driver_environment.h',
+        'test/connection_setup_info.cc',
+        'test/connection_setup_info.h',
+        'test/connection_time_observer.cc',
+        'test/connection_time_observer.h',
         'test/fake_access_token_fetcher.cc',
         'test/fake_access_token_fetcher.h',
         'test/fake_app_remoting_report_issue_request.cc',
         'test/fake_app_remoting_report_issue_request.h',
+        'test/fake_host_list_fetcher.cc',
+        'test/fake_host_list_fetcher.h',
         'test/fake_network_dispatcher.cc',
         'test/fake_network_dispatcher.h',
         'test/fake_network_manager.cc',
         'test/fake_network_manager.h',
         'test/fake_port_allocator.cc',
         'test/fake_port_allocator.h',
+        'test/fake_refresh_token_store.cc',
+        'test/fake_refresh_token_store.h',
         'test/fake_remote_host_info_fetcher.cc',
         'test/fake_remote_host_info_fetcher.h',
         'test/fake_socket_factory.cc',
         'test/fake_socket_factory.h',
+        'test/host_info.cc',
+        'test/host_info.h',
+        'test/host_list_fetcher.cc',
+        'test/host_list_fetcher.h',
         'test/leaky_bucket.cc',
         'test/leaky_bucket.h',
         'test/mock_access_token_fetcher.cc',
@@ -85,10 +99,14 @@
         'test/remote_host_info.h',
         'test/remote_host_info_fetcher.cc',
         'test/remote_host_info_fetcher.h',
+        'test/rgb_value.cc',
+        'test/rgb_value.h',
         'test/test_chromoting_client.cc',
         'test/test_chromoting_client.h',
         'test/test_video_renderer.cc',
         'test/test_video_renderer.h',
+        'test/video_frame_writer.cc',
+        'test/video_frame_writer.h',
       ],
       'conditions': [
         ['enable_remoting_host == 0', {
@@ -99,55 +117,26 @@
             ['exclude', '^host/'],
           ]
         }],
+        ['configuration_policy == 1', {
+          'dependencies': [
+            '../components/components.gyp:policy_component_test_support',
+          ],
+        }],
       ],
     },
     {
-      'target_name': 'remoting_test_driver_common',
-      'type': 'static_library',
-      'dependencies': [
-        '../base/base.gyp:base',
-        '../base/base.gyp:test_support_base',
-        '../google_apis/google_apis.gyp:google_apis',
-        '../net/net.gyp:net',
-        '../remoting/remoting.gyp:remoting_base',
-        '../remoting/remoting.gyp:remoting_client',
-        '../remoting/remoting.gyp:remoting_protocol',
-        '../testing/gtest.gyp:gtest',
-      ],
-      'defines': [
-        'VERSION=<(version_full)',
-      ],
-      'sources': [
-        'test/access_token_fetcher.cc',
-        'test/access_token_fetcher.h',
-        'test/refresh_token_store.cc',
-        'test/refresh_token_store.h',
-        'test/remote_connection_observer.h',
-        'test/test_chromoting_client.cc',
-        'test/test_chromoting_client.h',
-        'test/test_video_renderer.cc',
-        'test/test_video_renderer.h',
-      ],
-    }, # end of target 'remoting_test_driver_common'
-    {
-      # A chromoting version of remoting_test_driver_common
       'target_name': 'chromoting_test_driver',
       'type': '<(gtest_target_type)',
       'dependencies': [
-        'remoting_test_driver_common',
-      ],
-      'defines': [
-        'VERSION=<(version_full)',
+        '../remoting/proto/chromotocol.gyp:chromotocol_proto_lib',
+        '../testing/gtest.gyp:gtest',
+        'remoting_test_support',
       ],
       'sources': [
-        'test/host_info.cc',
-        'test/host_info.h',
-        'test/host_list_fetcher.cc',
-        'test/host_list_fetcher.h',
         'test/chromoting_test_driver.cc',
-      ],
-      'include_dirs': [
-        '../testing/gtest/include',
+        'test/chromoting_test_driver_tests.cc',
+        'test/chromoting_test_fixture.cc',
+        'test/chromoting_test_fixture.h',
       ],
     }, # end of target 'chromoting_test_driver'
     {
@@ -155,11 +144,9 @@
       'type': 'static_library',
       'dependencies': [
         '../remoting/proto/chromotocol.gyp:chromotocol_proto_lib',
-        '<(DEPTH)/third_party/webrtc/modules/modules.gyp:desktop_capture',
-        'remoting_test_driver_common',
-      ],
-      'defines': [
-        'VERSION=<(version_full)',
+        '../testing/gtest.gyp:gtest',
+        '../third_party/webrtc/modules/modules.gyp:desktop_capture',
+        'remoting_test_support',
       ],
       'sources': [
         'test/app_remoting_connected_client_fixture.cc',
@@ -168,20 +155,8 @@
         'test/app_remoting_connection_helper.h',
         'test/app_remoting_latency_test_fixture.cc',
         'test/app_remoting_latency_test_fixture.h',
-        'test/app_remoting_report_issue_request.cc',
-        'test/app_remoting_report_issue_request.h',
-        'test/app_remoting_service_urls.cc',
-        'test/app_remoting_service_urls.h',
         'test/app_remoting_test_driver_environment.cc',
         'test/app_remoting_test_driver_environment.h',
-        'test/remote_application_details.h',
-        'test/remote_host_info.cc',
-        'test/remote_host_info.h',
-        'test/remote_host_info_fetcher.cc',
-        'test/remote_host_info_fetcher.h',
-      ],
-      'include_dirs': [
-        '../testing/gtest/include',
       ],
     },  # end of target 'ar_test_driver_common'
     {
@@ -190,16 +165,11 @@
       'type': '<(gtest_target_type)',
       'dependencies': [
         'ar_test_driver_common',
-      ],
-      'defines': [
-        'VERSION=<(version_full)',
+        '../testing/gtest.gyp:gtest',
       ],
       'sources': [
         'test/app_remoting_test_driver.cc',
-        'test/app_remoting_test_driver_environment_app_details.cc',
-      ],
-      'include_dirs': [
-        '../testing/gtest/include',
+        'test/app_remoting_sample_test_driver_environment.cc',
       ],
     },  # end of target 'ar_sample_test_driver'
 
@@ -214,7 +184,6 @@
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
         '../base/base.gyp:test_support_base',
-        '../components/components.gyp:policy',
         '../ipc/ipc.gyp:ipc',
         '../net/net.gyp:net_test_support',
         '../ppapi/ppapi.gyp:ppapi_cpp',
@@ -225,17 +194,17 @@
         '../ui/base/ui_base.gyp:ui_base',
         '../ui/gfx/gfx.gyp:gfx',
         '../ui/gfx/gfx.gyp:gfx_geometry',
+        'ar_test_driver_common',
         'remoting_base',
         'remoting_breakpad',
         'remoting_client',
-        'remoting_client_plugin',
         'remoting_host',
         'remoting_host_setup_base',
         'remoting_it2me_host_static',
         'remoting_native_messaging_base',
         'remoting_protocol',
         'remoting_resources',
-        'remoting_test_common',
+        'remoting_test_support',
       ],
       'defines': [
         'VERSION=<(version_full)',
@@ -252,7 +221,6 @@
         'base/capabilities_unittest.cc',
         'base/compound_buffer_unittest.cc',
         'base/rate_counter_unittest.cc',
-        'base/resources_unittest.cc',
         'base/rsa_key_pair_unittest.cc',
         'base/run_all_unittests.cc',
         'base/running_average_unittest.cc',
@@ -261,12 +229,14 @@
         'base/util_unittest.cc',
         'client/audio_player_unittest.cc',
         'client/client_status_logger_unittest.cc',
+        'client/empty_cursor_filter_unittest.cc',
         'client/key_event_mapper_unittest.cc',
-        'client/plugin/empty_cursor_filter_unittest.cc',
-        'client/plugin/normalizing_input_filter_cros_unittest.cc',
-        'client/plugin/normalizing_input_filter_mac_unittest.cc',
-        'client/plugin/touch_input_scaler_unittest.cc',
+        'client/normalizing_input_filter_cros_unittest.cc',
+        'client/normalizing_input_filter_mac_unittest.cc',
+        'client/normalizing_input_filter_win_unittest.cc',
         'client/server_log_entry_client_unittest.cc',
+        'client/software_video_renderer_unittest.cc',
+        'client/touch_input_scaler_unittest.cc',
         'codec/audio_encoder_opus_unittest.cc',
         'codec/codec_test.cc',
         'codec/codec_test.h',
@@ -279,7 +249,6 @@
         'host/backoff_timer_unittest.cc',
         'host/branding.cc',
         'host/branding.h',
-        'host/capture_scheduler_unittest.cc',
         'host/chromeos/aura_desktop_capturer_unittest.cc',
         'host/chromeos/clipboard_aura_unittest.cc',
         'host/chromoting_host_context_unittest.cc',
@@ -289,13 +258,6 @@
         'host/daemon_process_unittest.cc',
         'host/desktop_process_unittest.cc',
         'host/desktop_shape_tracker_unittest.cc',
-        'host/fake_desktop_capturer.cc',
-        'host/fake_desktop_capturer.h',
-        'host/fake_host_extension.cc',
-        'host/fake_host_extension.h',
-        'host/fake_host_status_monitor.h',
-        'host/fake_oauth_token_getter.cc',
-        'host/fake_oauth_token_getter.h',
         'host/gcd_rest_client_unittest.cc',
         'host/gcd_state_updater_unittest.cc',
         'host/gnubby_auth_handler_posix_unittest.cc',
@@ -322,10 +284,9 @@
         'host/register_support_host_request_unittest.cc',
         'host/remote_input_filter_unittest.cc',
         'host/resizing_host_observer_unittest.cc',
+        'host/resources_unittest.cc',
         'host/screen_resolution_unittest.cc',
         'host/server_log_entry_host_unittest.cc',
-        'host/setup/mock_oauth_client.cc',
-        'host/setup/mock_oauth_client.h',
         'host/setup/me2me_native_messaging_host.cc',
         'host/setup/me2me_native_messaging_host.h',
         'host/setup/me2me_native_messaging_host_unittest.cc',
@@ -337,7 +298,6 @@
         'host/third_party_auth_config_unittest.cc',
         'host/token_validator_factory_impl_unittest.cc',
         'host/touch_injector_win_unittest.cc',
-        'host/video_frame_pump_unittest.cc',
         'host/video_frame_recorder_unittest.cc',
         'host/win/rdp_client_unittest.cc',
         'host/win/worker_process_launcher.cc',
@@ -345,6 +305,7 @@
         'host/win/worker_process_launcher_unittest.cc',
         'protocol/authenticator_test_base.cc',
         'protocol/authenticator_test_base.h',
+        'protocol/capture_scheduler_unittest.cc',
         'protocol/channel_multiplexer_unittest.cc',
         'protocol/channel_socket_adapter_unittest.cc',
         'protocol/chromium_socket_factory_unittest.cc',
@@ -353,8 +314,9 @@
         'protocol/clipboard_filter_unittest.cc',
         'protocol/connection_tester.cc',
         'protocol/connection_tester.h',
-        'protocol/connection_to_client_unittest.cc',
+        'protocol/connection_unittest.cc',
         'protocol/content_description_unittest.cc',
+        'protocol/ice_transport_unittest.cc',
         'protocol/input_event_tracker_unittest.cc',
         'protocol/input_filter_unittest.cc',
         'protocol/jingle_messages_unittest.cc',
@@ -368,9 +330,12 @@
         'protocol/port_range_unittest.cc',
         'protocol/ppapi_module_stub.cc',
         'protocol/pseudotcp_adapter_unittest.cc',
+        'protocol/session_config_unittest.cc',
         'protocol/ssl_hmac_channel_authenticator_unittest.cc',
         'protocol/third_party_authenticator_unittest.cc',
         'protocol/v2_authenticator_unittest.cc',
+        'protocol/video_frame_pump_unittest.cc',
+        'protocol/webrtc_transport_unittest.cc',
         'signaling/iq_sender_unittest.cc',
         'signaling/jid_util_unittest.cc',
         'signaling/log_to_server_unittest.cc',
@@ -378,11 +343,13 @@
         'signaling/server_log_entry_unittest.cc',
         'signaling/server_log_entry_unittest.h',
         'signaling/xmpp_login_handler_unittest.cc',
-        'signaling/xmpp_stream_parser_unittest.cc',
         'signaling/xmpp_signal_strategy_unittest.cc',
+        'signaling/xmpp_stream_parser_unittest.cc',
         'test/access_token_fetcher_unittest.cc',
         'test/app_remoting_report_issue_request_unittest.cc',
         'test/app_remoting_test_driver_environment_unittest.cc',
+        'test/chromoting_test_driver_environment_unittest.cc',
+        'test/connection_time_observer_unittest.cc',
         'test/host_list_fetcher_unittest.cc',
         'test/remote_host_info_fetcher_unittest.cc',
         'test/test_chromoting_client_unittest.cc',
@@ -404,21 +371,12 @@
           },
         }],
         [ 'OS=="android"', {
-          'dependencies!': [
-            'remoting_client_plugin',
-          ],
-          'sources/': [
-            ['exclude', '^client/plugin/'],
-          ]
-        }],
-        [ 'OS=="android"', {
           'dependencies': [
             '../testing/android/native_test.gyp:native_test_native_code',
           ],
         }],
         [ 'chromeos==0', {
           'sources!': [
-            'client/plugin/normalizing_input_filter_cros_unittest.cc',
             'host/chromeos/aura_desktop_capturer_unittest.cc',
             'host/clipboard_aura_unittest.cc',
           ],
@@ -443,7 +401,6 @@
           'sources/': [
             ['exclude', '^codec/'],
             ['exclude', '^host/'],
-            ['exclude', '^base/resources_unittest\\.cc$'],
           ]
         }],
         [ 'OS == "linux" and use_allocator!="none"', {
@@ -451,9 +408,15 @@
             '../base/allocator/allocator.gyp:allocator',
           ],
         }],
+        ['configuration_policy == 1', {
+          'dependencies': [
+            '../components/components.gyp:policy',
+          ],
+        }],
       ],  # end of 'conditions'
     },  # end of target 'remoting_unittests'
     {
+      # GN version: //remoting/webapp:browser_test_resources
       'target_name': 'remoting_browser_test_resources',
       'type': 'none',
       'copies': [
@@ -495,6 +458,7 @@
       ],  # end of actions
     },  # end of target 'remoting_webapp_browser_test_html'
     {
+      # GN version: //remoting/webapp:unit_tests
       'target_name': 'remoting_webapp_unittests',
       'type': 'none',
       'variables': {
@@ -507,6 +471,7 @@
       },
       'copies': [
         {
+          # GN version: //remoting/webapp:qunit
           'destination': '<(output_dir)/qunit',
           'files': [
             '../third_party/qunit/src/browser_test_harness.js',
@@ -515,6 +480,7 @@
           ],
         },
         {
+          # GN version: //remoting/webapp:blanketjs
           'destination': '<(output_dir)/blanketjs',
           'files': [
             '../third_party/blanketjs/src/blanket.js',
@@ -522,6 +488,7 @@
           ],
         },
         {
+          # GN version: //remoting/webapp:sinonjs
           'destination': '<(output_dir)/sinonjs',
           'files': [
             '../third_party/sinonjs/src/sinon.js',
@@ -529,6 +496,7 @@
           ],
         },
         {
+          # GN version: //remoting/webapp:js_files
           'destination': '<(output_dir)',
           'files': [
             '<@(webapp_js_files)',
@@ -579,7 +547,7 @@
             '../third_party/webrtc/modules/modules.gyp:desktop_capture',
             '../third_party/libjingle/libjingle.gyp:libjingle',
             'remoting_base',
-            'remoting_test_common',
+            'remoting_test_support',
           ],
           'defines': [
             'VERSION=<(version_full)',
@@ -624,7 +592,7 @@
           'variables': {
             'output_dir': '<(PRODUCT_DIR)/remoting/remoting.webapp.browsertest.v2',
             'zip_path': '<(PRODUCT_DIR)/remoting-webapp.browsertest.v2.zip',
-            'webapp_type': 'v2_pnacl',
+            'webapp_type': 'v2',
             'main_html_file': '<(SHARED_INTERMEDIATE_DIR)/browser_test/main.html',
             'extra_files': [
               'webapp/crd/remoting_client_pnacl.nmf.jinja2',

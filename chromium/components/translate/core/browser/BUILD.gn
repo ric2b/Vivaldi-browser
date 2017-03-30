@@ -2,12 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/ui.gni")
+
 source_set("browser") {
   sources = [
     "language_state.cc",
     "language_state.h",
-    "options_menu_model.cc",
-    "options_menu_model.h",
     "page_translated_details.h",
     "translate_accept_languages.cc",
     "translate_accept_languages.h",
@@ -20,8 +20,8 @@ source_set("browser") {
     "translate_error_details.h",
     "translate_event_details.cc",
     "translate_event_details.h",
-    "translate_infobar_delegate.cc",
-    "translate_infobar_delegate.h",
+    "translate_experiment.cc",
+    "translate_experiment.h",
     "translate_language_list.cc",
     "translate_language_list.h",
     "translate_manager.cc",
@@ -41,13 +41,53 @@ source_set("browser") {
 
   deps = [
     "//base",
+    "//base:i18n",
+    "//base:prefs",
+    "//components/data_use_measurement/core",
     "//components/language_usage_metrics",
+    "//components/pref_registry",
     "//components/resources:components_resources",
     "//components/strings",
     "//components/translate/core/common",
+    "//google_apis",
     "//net",
     "//third_party/icu",
     "//ui/base",
     "//url",
+  ]
+
+  if (!use_aura) {
+    sources += [
+      "translate_infobar_delegate.cc",
+      "translate_infobar_delegate.h",
+    ]
+    deps += [ "//components/infobars/core" ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "options_menu_model.cc",
+      "options_menu_model.h",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "language_state_unittest.cc",
+    "translate_browser_metrics_unittest.cc",
+    "translate_language_list_unittest.cc",
+    "translate_prefs_unittest.cc",
+    "translate_script_unittest.cc",
+  ]
+  deps = [
+    ":browser",
+    "//base",
+    "//base:prefs",
+    "//components/pref_registry:test_support",
+    "//components/translate/core/common",
+    "//net:test_support",
+    "//testing/gtest",
   ]
 }

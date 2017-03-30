@@ -10,11 +10,13 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "content/public/browser/utility_process_host.h"
 #include "content/public/browser/utility_process_host_client.h"
 
@@ -150,7 +152,7 @@ class ImageDecoder : public content::UtilityProcessHostClient {
 
   // Calls StopBatchMode() after |kBatchModeTimeoutSeconds| have elapsed,
   // unless a new decoding request resets the timer.
-  scoped_ptr<base::DelayTimer<ImageDecoder>> batch_mode_timer_;
+  scoped_ptr<base::DelayTimer> batch_mode_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ImageDecoder);
 };

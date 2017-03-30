@@ -7,8 +7,8 @@
 
 #include <windows.h>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -90,7 +90,7 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierWin
   base::win::ObjectWatcher addr_watcher_;
   OVERLAPPED addr_overlapped_;
 
-  base::OneShotTimer<NetworkChangeNotifierWin> timer_;
+  base::OneShotTimer timer_;
 
   // Number of times WatchForAddressChange has failed in a row.
   int sequential_failures_;

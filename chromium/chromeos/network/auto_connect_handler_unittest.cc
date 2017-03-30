@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -120,7 +121,8 @@ class AutoConnectHandlerTest : public testing::Test {
     managed_config_handler_.reset(new ManagedNetworkConfigurationHandlerImpl());
     managed_config_handler_->Init(
         network_state_handler_.get(), network_profile_handler_.get(),
-        network_config_handler_.get(), nullptr /* network_device_handler */);
+        network_config_handler_.get(), nullptr /* network_device_handler */,
+        nullptr /* prohibited_technologies_handler */);
 
     client_cert_resolver_.reset(new ClientCertResolver());
     client_cert_resolver_->Init(network_state_handler_.get(),
@@ -214,13 +216,14 @@ class AutoConnectHandlerTest : public testing::Test {
     scoped_ptr<base::ListValue> network_configs(new base::ListValue);
     if (!network_configs_json.empty()) {
       std::string error;
-      base::Value* network_configs_value =
-          base::JSONReader::DeprecatedReadAndReturnError(
-              network_configs_json, base::JSON_ALLOW_TRAILING_COMMAS, nullptr,
-              &error);
+      scoped_ptr<base::Value> network_configs_value =
+          base::JSONReader::ReadAndReturnError(network_configs_json,
+                                               base::JSON_ALLOW_TRAILING_COMMAS,
+                                               nullptr, &error);
       ASSERT_TRUE(network_configs_value) << error;
       base::ListValue* network_configs_list = nullptr;
       ASSERT_TRUE(network_configs_value->GetAsList(&network_configs_list));
+      ignore_result(network_configs_value.release());
       network_configs.reset(network_configs_list);
     }
 
@@ -405,6 +408,43 @@ TEST_F(AutoConnectHandlerTest, DisconnectOnPolicyLoading) {
   // Because no best service is set, the fake implementation of
   // ConnectToBestServices will be a no-op.
   SetupPolicy(kPolicy, global_config, false /* load as device policy */);
+
+  // Should not trigger any change until user policy is loaded
+  EXPECT_EQ(shill::kStateOnline, GetServiceState("wifi0"));
+  EXPECT_EQ(shill::kStateIdle, GetServiceState("wifi1"));
+
+  SetupPolicy(std::string(), base::DictionaryValue(), true);
+  EXPECT_EQ(shill::kStateIdle, GetServiceState("wifi0"));
+  EXPECT_EQ(shill::kStateIdle, GetServiceState("wifi1"));
+}
+
+TEST_F(AutoConnectHandlerTest,
+       DisconnectOnPolicyLoadingAllowOnlyPolicyNetworksToConnect) {
+  EXPECT_TRUE(Configure(kConfigUnmanagedSharedConnected));
+  EXPECT_TRUE(Configure(kConfigManagedSharedConnectable));
+
+  // User login and certificate loading shouldn't trigger any change until the
+  // policy is loaded.
+  LoginToRegularUser();
+  StartCertLoader();
+  EXPECT_EQ(shill::kStateOnline, GetServiceState("wifi0"));
+  EXPECT_EQ(shill::kStateIdle, GetServiceState("wifi1"));
+
+  base::DictionaryValue global_config;
+  global_config.SetBooleanWithoutPathExpansion(
+      ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect, true);
+
+  // Applying the policy which restricts autoconnect should disconnect from the
+  // shared, unmanaged network.
+  // Because no best service is set, the fake implementation of
+  // ConnectToBestServices will be a no-op.
+  SetupPolicy(kPolicy, global_config, false /* load as device policy */);
+
+  // Should not trigger any change until user policy is loaded
+  EXPECT_EQ(shill::kStateOnline, GetServiceState("wifi0"));
+  EXPECT_EQ(shill::kStateIdle, GetServiceState("wifi1"));
+
+  SetupPolicy(std::string(), base::DictionaryValue(), true);
   EXPECT_EQ(shill::kStateIdle, GetServiceState("wifi0"));
   EXPECT_EQ(shill::kStateIdle, GetServiceState("wifi1"));
 }

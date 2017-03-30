@@ -10,8 +10,8 @@ import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 
 import java.util.ArrayList;
 
@@ -47,14 +47,9 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
     private static final float VERTICAL_DETERMINATION_BOOST = 1.25f;
 
     /**
-     * The shared state of the UI.
+     * Manager to get the active OverlayPanel from.
      */
-    private ContextualSearchPanel mSearchPanel;
-
-    /**
-     * The delegate to talk to ContextualSearchManager.
-     */
-    private ContextualSearchManagementDelegate mManagementDelegate;
+    private OverlayPanelManager mPanelManager;
 
     /**
      * The {@link GestureDetector} used to distinguish tap and scroll gestures.
@@ -141,13 +136,17 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
 
     /**
      * Creates a {@link GestureEventFilter} with offset touch events.
+     * @param context The {@link Context} for Android.
+     * @param host The {@link EventFilterHost} for this event filter.
+     * @param handler The {@link GestureHandler} for this event filter.
+     * @param panelManager The {@link OverlayPanelManager} responsible for showing panels.
      */
     public ContextualSearchEventFilter(Context context, EventFilterHost host,
-            GestureHandler handler, ContextualSearchPanel contextualSearchPanel) {
+            GestureHandler handler, OverlayPanelManager panelManager) {
         super(context, host, handler, false, false);
 
         mGestureDetector = new GestureDetector(context, new InternalGestureDetector());
-        mSearchPanel = contextualSearchPanel;
+        mPanelManager = panelManager;
 
         // Store the square of the platform touch slop in pixels to use in the scroll detection.
         // See {@link ContextualSearchEventFilter#isDistanceGreaterThanTouchSlop}.
@@ -158,21 +157,16 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
     }
 
     /**
-     * Sets the {@code ContextualSearchManagementDelegate} associated with this Event Filter.
-     * @param delegate The {@code ContextualSearchManagementDelegate}.
-     */
-    public void setManagementDelegate(ContextualSearchManagementDelegate delegate) {
-        mManagementDelegate = delegate;
-    }
-
-    /**
      * Gets the Search Content View's vertical scroll position. If the Search Content View
      * is not available it returns -1.
      * @return The Search Content View scroll position.
      */
     @VisibleForTesting
     protected float getSearchContentViewVerticalScroll() {
-        return mManagementDelegate.getSearchContentViewVerticalScroll();
+        OverlayPanel panel = mPanelManager.getActivePanel();
+        if (panel == null) return 0;
+
+        return panel.getContentVerticalScroll();
     }
 
     @Override
@@ -181,7 +175,9 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
 
         if (!mIsDeterminingEventTarget && action == MotionEvent.ACTION_DOWN) {
             mInitialEventY = e.getY();
-            if (mSearchPanel.isYCoordinateInsideSearchContentView(mInitialEventY * mPxToDp)) {
+            OverlayPanel panel = mPanelManager.getActivePanel();
+            if (panel != null && panel.isCoordinateInsideContent(
+                    e.getX() * mPxToDp, mInitialEventY * mPxToDp)) {
                 // If the DOWN event happened inside the Search Content View, we'll need
                 // to wait until the user has moved the finger beyond a certain threshold,
                 // so we can determine the gesture's orientation and consequently be able
@@ -250,6 +246,9 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
      * @param e The {@link MotionEvent} to be propagated after resuming the pending events.
      */
     private void resumeAndPropagateEvent(MotionEvent e) {
+        OverlayPanel panel = mPanelManager.getActivePanel();
+        if (panel == null) return;
+
         if (mIsRecordingEvents) {
             resumeRecordedEvents();
         }
@@ -268,8 +267,7 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
             // happening. See {@link ContextualSearchEventFilter#propagateEventToSearchContentView}.
             mWasActionDownEventSynthetic = true;
             mSyntheticActionDownX = syntheticActionDownEvent.getX();
-            mSyntheticActionDownY = syntheticActionDownEvent.getY()
-                    - mSearchPanel.getSearchContentViewOffsetY() / mPxToDp;
+            mSyntheticActionDownY = syntheticActionDownEvent.getY() - panel.getContentY() / mPxToDp;
 
             propagateAndRecycleEvent(syntheticActionDownEvent, mEventTarget);
 
@@ -325,11 +323,13 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
      */
     @VisibleForTesting
     protected void propagateEventToSearchContentView(MotionEvent e) {
+        OverlayPanel panel = mPanelManager.getActivePanel();
+        if (panel == null) return;
+
         MotionEvent event = e;
         int action = event.getActionMasked();
         boolean isSyntheticEvent = false;
-        if (mGestureOrientation == GestureOrientation.HORIZONTAL
-                && !mSearchPanel.isMaximized()) {
+        if (mGestureOrientation == GestureOrientation.HORIZONTAL && !panel.isMaximized()) {
             // Ignores multitouch events to prevent the Search Result Page from from scrolling.
             if (action == MotionEvent.ACTION_POINTER_UP
                     || action == MotionEvent.ACTION_POINTER_DOWN) {
@@ -357,10 +357,11 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
             isSyntheticEvent = true;
         }
 
-        float searchContentViewOffsetYPx = mSearchPanel.getSearchContentViewOffsetY() / mPxToDp;
+        final float contentViewOffsetXPx = panel.getContentX() / mPxToDp;
+        final float contentViewOffsetYPx = panel.getContentY() / mPxToDp;
 
         // Adjust the offset to be relative to the Search Contents View.
-        event.offsetLocation(0.f, -searchContentViewOffsetYPx);
+        event.offsetLocation(-contentViewOffsetXPx, -contentViewOffsetYPx);
 
         boolean wasEventCanceled = false;
         if (mWasActionDownEventSynthetic && action == MotionEvent.ACTION_UP) {
@@ -376,7 +377,7 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
                 wasEventCanceled = true;
             }
         } else if (action == MotionEvent.ACTION_DOWN) {
-            mSearchPanel.onTouchSearchContentViewAck();
+            panel.onTouchSearchContentViewAck();
         }
 
         // Propagate the event to the appropriate view
@@ -404,9 +405,12 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
      * @return Whether the event has been consumed.
      */
     private boolean handleSingleTapUp(MotionEvent e) {
-        setEventTarget(mSearchPanel.isYCoordinateInsideSearchContentView(e.getY() * mPxToDp)
-                ? EventTarget.SEARCH_CONTENT_VIEW : EventTarget.SEARCH_PANEL);
-
+        OverlayPanel panel = mPanelManager.getActivePanel();
+        if (panel != null) {
+            setEventTarget(panel.isCoordinateInsideContent(
+                    e.getX() * mPxToDp, e.getY() * mPxToDp)
+                    ? EventTarget.SEARCH_CONTENT_VIEW : EventTarget.SEARCH_PANEL);
+        }
         return false;
     }
 
@@ -463,7 +467,8 @@ public class ContextualSearchEventFilter extends GestureEventFilter {
         boolean isVertical = mGestureOrientation == GestureOrientation.VERTICAL;
 
         boolean shouldPropagateEventsToSearchPanel;
-        if (mSearchPanel.isMaximized()) {
+        OverlayPanel panel = mPanelManager.getActivePanel();
+        if (panel != null && panel.isMaximized()) {
             // Allow overscroll in the Search Content View to move the Search Panel instead
             // of scrolling the Search Result Page.
             boolean isMovingDown = distanceY < 0;

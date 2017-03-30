@@ -4,11 +4,15 @@
 
 #include "content/browser/loader/navigation_url_loader_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/trace_event/trace_event.h"
 #include "content/browser/frame_host/navigation_request_info.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "content/browser/loader/navigation_url_loader_impl_core.h"
+#include "content/browser/service_worker/service_worker_navigation_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/stream_handle.h"
@@ -17,19 +21,29 @@ namespace content {
 
 NavigationURLLoaderImpl::NavigationURLLoaderImpl(
     BrowserContext* browser_context,
-    int frame_tree_node_id,
     scoped_ptr<NavigationRequestInfo> request_info,
+    ServiceWorkerNavigationHandle* service_worker_handle,
     NavigationURLLoaderDelegate* delegate)
-    : delegate_(delegate),
-      weak_factory_(this) {
+    : delegate_(delegate), weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   core_ = new NavigationURLLoaderImplCore(weak_factory_.GetWeakPtr());
+
+  // TODO(carlosk): extend this trace to support non-PlzNavigate navigations.
+  // For the trace below we're using the NavigationURLLoaderImplCore as the
+  // async trace id, |navigation_start| as the timestamp and reporting the
+  // FrameTreeNode id as a parameter.
+  TRACE_EVENT_ASYNC_BEGIN_WITH_TIMESTAMP1(
+      "navigation", "Navigation timeToResponseStarted", core_,
+      request_info->common_params.navigation_start.ToInternalValue(),
+      "FrameTreeNode id", request_info->frame_tree_node_id);
+  ServiceWorkerNavigationHandleCore* service_worker_handle_core =
+      service_worker_handle ? service_worker_handle->core() : nullptr;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&NavigationURLLoaderImplCore::Start, base::Unretained(core_),
-                 browser_context->GetResourceContext(), frame_tree_node_id,
-                 base::Passed(&request_info)));
+                 browser_context->GetResourceContext(),
+                 service_worker_handle_core, base::Passed(&request_info)));
 }
 
 NavigationURLLoaderImpl::~NavigationURLLoaderImpl() {
@@ -61,7 +75,7 @@ void NavigationURLLoaderImpl::NotifyResponseStarted(
     scoped_ptr<StreamHandle> body) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  delegate_->OnResponseStarted(response, body.Pass());
+  delegate_->OnResponseStarted(response, std::move(body));
 }
 
 void NavigationURLLoaderImpl::NotifyRequestFailed(bool in_cache,

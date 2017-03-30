@@ -8,12 +8,15 @@
 #include <map>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/process/process_handle.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/performance_monitor/process_metrics_history.h"
 
+namespace base {
 template <typename Type>
 struct DefaultSingletonTraits;
+}  // namespace base
 
 namespace content {
 struct ChildProcessData;
@@ -36,7 +39,7 @@ class PerformanceMonitor {
  private:
   typedef std::map<base::ProcessHandle, ProcessMetricsHistory> MetricsMap;
 
-  friend struct DefaultSingletonTraits<PerformanceMonitor>;
+  friend struct base::DefaultSingletonTraits<PerformanceMonitor>;
 
   PerformanceMonitor();
   virtual ~PerformanceMonitor();
@@ -65,7 +68,7 @@ class PerformanceMonitor {
   MetricsMap metrics_map_;
 
   // The timer to signal PerformanceMonitor to perform its timed collections.
-  base::OneShotTimer<PerformanceMonitor> repeating_timer_;
+  base::OneShotTimer repeating_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(PerformanceMonitor);
 };

@@ -5,9 +5,15 @@
 #ifndef COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_STORAGE_H_
 #define COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_STORAGE_H_
 
+#include <stdint.h>
+
+#include <string>
+#include <vector>
+
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/files/important_file_writer.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
@@ -29,7 +35,7 @@ typedef ScopedVector<BookmarkPermanentNode> BookmarkPermanentNodeList;
 // A callback that generates a BookmarkPermanentNodeList, given a max ID to
 // use. The max ID argument will be updated after any new nodes have been
 // created and assigned IDs.
-typedef base::Callback<BookmarkPermanentNodeList(int64*)> LoadExtraCallback;
+typedef base::Callback<BookmarkPermanentNodeList(int64_t*)> LoadExtraCallback;
 
 // BookmarkLoadDetails is used by BookmarkStorage when loading bookmarks.
 // BookmarkModel creates a BookmarkLoadDetails and passes it (including
@@ -44,9 +50,10 @@ class BookmarkLoadDetails {
   BookmarkLoadDetails(BookmarkPermanentNode* bb_node,
                       BookmarkPermanentNode* other_folder_node,
                       BookmarkPermanentNode* mobile_folder_node,
+                      BookmarkPermanentNode* trash_folder_node,
                       const LoadExtraCallback& load_extra_callback,
                       BookmarkIndex* index,
-                      int64 max_id);
+                      int64_t max_id);
   ~BookmarkLoadDetails();
 
   void LoadExtraNodes();
@@ -55,6 +62,12 @@ class BookmarkLoadDetails {
   BookmarkPermanentNode* release_bb_node() { return bb_node_.release(); }
   BookmarkPermanentNode* mobile_folder_node() {
     return mobile_folder_node_.get();
+  }
+  BookmarkPermanentNode* trash_folder_node() {
+    return trash_folder_node_.get();
+  }
+  BookmarkPermanentNode* release_trash_folder_node() {
+    return trash_folder_node_.release();
   }
   BookmarkPermanentNode* release_mobile_folder_node() {
     return mobile_folder_node_.release();
@@ -81,16 +94,16 @@ class BookmarkLoadDetails {
     model_meta_info_map_ = meta_info_map;
   }
 
-  int64 model_sync_transaction_version() const {
+  int64_t model_sync_transaction_version() const {
     return model_sync_transaction_version_;
   }
-  void set_model_sync_transaction_version(int64 sync_transaction_version) {
+  void set_model_sync_transaction_version(int64_t sync_transaction_version) {
     model_sync_transaction_version_ = sync_transaction_version;
   }
 
   // Max id of the nodes.
-  void set_max_id(int64 max_id) { max_id_ = max_id; }
-  int64 max_id() const { return max_id_; }
+  void set_max_id(int64_t max_id) { max_id_ = max_id; }
+  int64_t max_id() const { return max_id_; }
 
   // Computed checksum.
   void set_computed_checksum(const std::string& value) {
@@ -115,12 +128,13 @@ class BookmarkLoadDetails {
   scoped_ptr<BookmarkPermanentNode> bb_node_;
   scoped_ptr<BookmarkPermanentNode> other_folder_node_;
   scoped_ptr<BookmarkPermanentNode> mobile_folder_node_;
+  scoped_ptr<BookmarkPermanentNode> trash_folder_node_;
   LoadExtraCallback load_extra_callback_;
   BookmarkPermanentNodeList extra_nodes_;
   scoped_ptr<BookmarkIndex> index_;
   BookmarkNode::MetaInfoMap model_meta_info_map_;
-  int64 model_sync_transaction_version_;
-  int64 max_id_;
+  int64_t model_sync_transaction_version_;
+  int64_t max_id_;
   std::string computed_checksum_;
   std::string stored_checksum_;
   bool ids_reassigned_;
@@ -164,15 +178,35 @@ class BookmarkStorage : public base::ImportantFileWriter::DataSerializer {
   bool SerializeData(std::string* output) override;
 
  private:
+  // The state of the bookmark file backup. We lazily backup this file in order
+  // to reduce disk writes until absolutely necessary. Will also leave the
+  // backup unchanged if the browser starts & quits w/o changing bookmarks.
+  enum BackupState {
+    // No attempt has yet been made to backup the bookmarks file.
+    BACKUP_NONE,
+    // A request to backup the bookmarks file has been posted, but not yet
+    // fulfilled.
+    BACKUP_DISPATCHED,
+    // The bookmarks file has been backed up (or at least attempted).
+    BACKUP_ATTEMPTED
+  };
+
   // Serializes the data and schedules save using ImportantFileWriter.
   // Returns true on successful serialization.
   bool SaveNow();
+
+  // Callback from backend after creation of backup file.
+  void OnBackupFinished();
 
   // The model. The model is NULL once BookmarkModelDeleted has been invoked.
   BookmarkModel* model_;
 
   // Helper to write bookmark data safely.
   base::ImportantFileWriter writer_;
+
+  // The state of the backup file creation which is created lazily just before
+  // the first scheduled save.
+  BackupState backup_state_ = BACKUP_NONE;
 
   // Sequenced task runner where file I/O operations will be performed at.
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;

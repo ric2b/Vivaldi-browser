@@ -41,11 +41,11 @@ TouchHandleOrientation ToTouchHandleOrientation(SelectionBound::Type type) {
 }  // namespace
 
 TouchSelectionController::Config::Config()
-    : tap_timeout(base::TimeDelta::FromMilliseconds(100)),
+    : max_tap_duration(base::TimeDelta::FromMilliseconds(300)),
       tap_slop(8),
+      enable_adaptive_handle_orientation(false),
       enable_longpress_drag_selection(false),
-      show_on_tap_for_empty_editable(false) {
-}
+      show_on_tap_for_empty_editable(false) {}
 
 TouchSelectionController::Config::~Config() {
 }
@@ -80,6 +80,25 @@ void TouchSelectionController::OnSelectionBoundsChanged(
   if (!force_next_update_ && start == start_ && end_ == end)
     return;
 
+  // Notify if selection bounds have just been established or dissolved.
+  if (start.type() != SelectionBound::EMPTY &&
+      start_.type() == SelectionBound::EMPTY) {
+    client_->OnSelectionEvent(SELECTION_ESTABLISHED);
+  } else if (start.type() == SelectionBound::EMPTY &&
+             start_.type() != SelectionBound::EMPTY) {
+    client_->OnSelectionEvent(SELECTION_DISSOLVED);
+  }
+
+  // Swap the Handles when the start and end selection points cross each other.
+  if (active_status_ == SELECTION_ACTIVE) {
+    if ((start_selection_handle_->IsActive() &&
+         end_.edge_bottom() == start.edge_bottom()) ||
+        (end_selection_handle_->IsActive() &&
+         end.edge_bottom() == start_.edge_bottom())) {
+      start_selection_handle_.swap(end_selection_handle_);
+    }
+  }
+
   start_ = start;
   end_ = end;
   start_orientation_ = ToTouchHandleOrientation(start_.type());
@@ -107,10 +126,6 @@ void TouchSelectionController::OnSelectionBoundsChanged(
 
   // It's possible that the bounds temporarily overlap while a selection handle
   // is being dragged, incorrectly reporting a CENTER orientation.
-  // TODO(jdduke): This safeguard is racy, as it's possible the delayed response
-  // from handle positioning occurs *after* the handle dragging has ceased.
-  // Instead, prevent selection -> insertion transitions without an intervening
-  // action or selection clearing of some sort, crbug.com/392696.
   if (is_selection_dragging) {
     if (start_orientation_ == TouchHandleOrientation::CENTER)
       start_orientation_ = start_selection_handle_->orientation();
@@ -133,6 +148,32 @@ void TouchSelectionController::OnSelectionBoundsChanged(
   }
 
   HideAndDisallowShowingAutomatically();
+}
+
+void TouchSelectionController::OnViewportChanged(
+    const gfx::RectF viewport_rect) {
+  // Trigger a force update if the viewport is changed, so that
+  // it triggers a call to change the mirror values if required.
+  if (viewport_rect_ == viewport_rect)
+    return;
+
+  viewport_rect_ = viewport_rect;
+
+  if (active_status_ == INACTIVE)
+    return;
+
+  if (active_status_ == INSERTION_ACTIVE) {
+    DCHECK(insertion_handle_);
+    insertion_handle_->SetViewportRect(viewport_rect);
+  } else if (active_status_ == SELECTION_ACTIVE) {
+    DCHECK(start_selection_handle_);
+    DCHECK(end_selection_handle_);
+    start_selection_handle_->SetViewportRect(viewport_rect);
+    end_selection_handle_->SetViewportRect(viewport_rect);
+  }
+
+  // Update handle layout after setting the new Viewport size.
+  UpdateHandleLayoutIfNecessary();
 }
 
 bool TouchSelectionController::WillHandleTouchEvent(const MotionEvent& event) {
@@ -166,13 +207,19 @@ bool TouchSelectionController::WillHandleTouchEvent(const MotionEvent& event) {
   return false;
 }
 
-bool TouchSelectionController::WillHandleTapEvent(const gfx::PointF& location) {
+bool TouchSelectionController::WillHandleTapEvent(const gfx::PointF& location,
+                                                  int tap_count) {
   if (WillHandleTapOrLongPress(location))
     return true;
 
-  response_pending_input_event_ = TAP;
-  if (active_status_ != SELECTION_ACTIVE)
-    activate_selection_automatically_ = false;
+  if (tap_count > 1) {
+    response_pending_input_event_ = REPEATED_TAP;
+    ShowSelectionHandlesAutomatically();
+  } else {
+    response_pending_input_event_ = TAP;
+    if (active_status_ != SELECTION_ACTIVE)
+      activate_selection_automatically_ = false;
+  }
   ShowInsertionHandleAutomatically();
   if (selection_empty_ && !config_.show_on_tap_for_empty_editable)
     DeactivateInsertion();
@@ -192,6 +239,24 @@ bool TouchSelectionController::WillHandleLongPressEvent(
   ShowInsertionHandleAutomatically();
   ForceNextUpdateIfInactive();
   return false;
+}
+
+void TouchSelectionController::OnScrollBeginEvent() {
+  // When there is an active selection, if the user performs a long-press that
+  // does not trigger a new selection (e.g. a long-press on an empty area) and
+  // then scrolls, the scroll will move the selection. In this case we will
+  // think incorrectly that the selection change was due to the long-press and
+  // will activate touch selection and start long-press drag gesture (see
+  // ActivateInsertionIfNecessary()). To prevent this, we need to reset the
+  // state of touch selection controller and long-press drag selector.
+  // TODO(mohsen): Remove this workaround when we have enough information about
+  // the cause of a selection change (see https://crbug.com/571897).
+  longpress_drag_selector_.OnScrollBeginEvent();
+  response_pending_input_event_ = INPUT_EVENT_TYPE_NONE;
+  if (active_status_ == INACTIVE) {
+    activate_insertion_automatically_ = false;
+    activate_selection_automatically_ = false;
+  }
 }
 
 void TouchSelectionController::AllowShowingFromCurrentSelection() {
@@ -296,7 +361,7 @@ void TouchSelectionController::OnDragBegin(
     const gfx::PointF& drag_position) {
   if (&draggable == insertion_handle_.get()) {
     DCHECK_EQ(active_status_, INSERTION_ACTIVE);
-    client_->OnSelectionEvent(INSERTION_DRAG_STARTED);
+    client_->OnSelectionEvent(INSERTION_HANDLE_DRAG_STARTED);
     anchor_drag_to_selection_start_ = true;
     return;
   }
@@ -324,7 +389,7 @@ void TouchSelectionController::OnDragBegin(
   // When moving the handle we want to move only the extent point. Before doing
   // so we must make sure that the base point is set correctly.
   client_->SelectBetweenCoordinates(base, extent);
-  client_->OnSelectionEvent(SELECTION_DRAG_STARTED);
+  client_->OnSelectionEvent(SELECTION_HANDLE_DRAG_STARTED);
 }
 
 void TouchSelectionController::OnDragUpdate(
@@ -345,9 +410,9 @@ void TouchSelectionController::OnDragUpdate(
 void TouchSelectionController::OnDragEnd(
     const TouchSelectionDraggable& draggable) {
   if (&draggable == insertion_handle_.get())
-    client_->OnSelectionEvent(INSERTION_DRAG_STOPPED);
+    client_->OnSelectionEvent(INSERTION_HANDLE_DRAG_STOPPED);
   else
-    client_->OnSelectionEvent(SELECTION_DRAG_STOPPED);
+    client_->OnSelectionEvent(SELECTION_HANDLE_DRAG_STOPPED);
 }
 
 bool TouchSelectionController::IsWithinTapSlop(
@@ -358,7 +423,7 @@ bool TouchSelectionController::IsWithinTapSlop(
 
 void TouchSelectionController::OnHandleTapped(const TouchHandle& handle) {
   if (insertion_handle_ && &handle == insertion_handle_.get())
-    client_->OnSelectionEvent(INSERTION_TAPPED);
+    client_->OnSelectionEvent(INSERTION_HANDLE_TAPPED);
 }
 
 void TouchSelectionController::SetNeedsAnimate() {
@@ -369,8 +434,12 @@ scoped_ptr<TouchHandleDrawable> TouchSelectionController::CreateDrawable() {
   return client_->CreateDrawable();
 }
 
-base::TimeDelta TouchSelectionController::GetTapTimeout() const {
-  return config_.tap_timeout;
+base::TimeDelta TouchSelectionController::GetMaxTapDuration() const {
+  return config_.max_tap_duration;
+}
+
+bool TouchSelectionController::IsAdaptiveHandleOrientationEnabled() const {
+  return config_.enable_adaptive_handle_orientation;
 }
 
 void TouchSelectionController::OnLongPressDragActiveStateChanged() {
@@ -420,8 +489,9 @@ bool TouchSelectionController::WillHandleTapOrLongPress(
 void TouchSelectionController::OnInsertionChanged() {
   DeactivateSelection();
 
-  if (response_pending_input_event_ == TAP && selection_empty_ &&
-      !config_.show_on_tap_for_empty_editable) {
+  if ((response_pending_input_event_ == TAP ||
+       response_pending_input_event_ == REPEATED_TAP) &&
+      selection_empty_ && !config_.show_on_tap_for_empty_editable) {
     HideAndDisallowShowingAutomatically();
     return;
   }
@@ -432,10 +502,13 @@ void TouchSelectionController::OnInsertionChanged() {
   const bool activated = ActivateInsertionIfNecessary();
 
   const TouchHandle::AnimationStyle animation = GetAnimationStyle(!activated);
+  insertion_handle_->SetFocus(start_.edge_top(), start_.edge_bottom());
   insertion_handle_->SetVisible(GetStartVisible(), animation);
-  insertion_handle_->SetPosition(GetStartPosition());
 
-  client_->OnSelectionEvent(activated ? INSERTION_SHOWN : INSERTION_MOVED);
+  UpdateHandleLayoutIfNecessary();
+
+  client_->OnSelectionEvent(activated ? INSERTION_HANDLE_SHOWN
+                                      : INSERTION_HANDLE_MOVED);
 }
 
 void TouchSelectionController::OnSelectionChanged() {
@@ -447,12 +520,20 @@ void TouchSelectionController::OnSelectionChanged() {
   const bool activated = ActivateSelectionIfNecessary();
 
   const TouchHandle::AnimationStyle animation = GetAnimationStyle(!activated);
+
+  start_selection_handle_->SetFocus(start_.edge_top(), start_.edge_bottom());
+  end_selection_handle_->SetFocus(end_.edge_top(), end_.edge_bottom());
+
+  start_selection_handle_->SetOrientation(start_orientation_);
+  end_selection_handle_->SetOrientation(end_orientation_);
+
   start_selection_handle_->SetVisible(GetStartVisible(), animation);
   end_selection_handle_->SetVisible(GetEndVisible(), animation);
-  start_selection_handle_->SetPosition(GetStartPosition());
-  end_selection_handle_->SetPosition(GetEndPosition());
 
-  client_->OnSelectionEvent(activated ? SELECTION_SHOWN : SELECTION_MOVED);
+  UpdateHandleLayoutIfNecessary();
+
+  client_->OnSelectionEvent(activated ? SELECTION_HANDLES_SHOWN
+                                      : SELECTION_HANDLES_MOVED);
 }
 
 bool TouchSelectionController::ActivateInsertionIfNecessary() {
@@ -460,12 +541,13 @@ bool TouchSelectionController::ActivateInsertionIfNecessary() {
 
   if (!insertion_handle_) {
     insertion_handle_.reset(
-        new TouchHandle(this, TouchHandleOrientation::CENTER));
+        new TouchHandle(this, TouchHandleOrientation::CENTER, viewport_rect_));
   }
 
   if (active_status_ == INACTIVE) {
     active_status_ = INSERTION_ACTIVE;
     insertion_handle_->SetEnabled(true);
+    insertion_handle_->SetViewportRect(viewport_rect_);
     return true;
   }
   return false;
@@ -477,31 +559,35 @@ void TouchSelectionController::DeactivateInsertion() {
   DCHECK(insertion_handle_);
   active_status_ = INACTIVE;
   insertion_handle_->SetEnabled(false);
-  client_->OnSelectionEvent(INSERTION_CLEARED);
+  client_->OnSelectionEvent(INSERTION_HANDLE_CLEARED);
 }
 
 bool TouchSelectionController::ActivateSelectionIfNecessary() {
   DCHECK_NE(INSERTION_ACTIVE, active_status_);
 
   if (!start_selection_handle_) {
-    start_selection_handle_.reset(new TouchHandle(this, start_orientation_));
+    start_selection_handle_.reset(
+        new TouchHandle(this, start_orientation_, viewport_rect_));
   } else {
     start_selection_handle_->SetEnabled(true);
-    start_selection_handle_->SetOrientation(start_orientation_);
+    start_selection_handle_->SetViewportRect(viewport_rect_);
   }
 
   if (!end_selection_handle_) {
-    end_selection_handle_.reset(new TouchHandle(this, end_orientation_));
+    end_selection_handle_.reset(
+        new TouchHandle(this, end_orientation_, viewport_rect_));
   } else {
     end_selection_handle_->SetEnabled(true);
-    end_selection_handle_->SetOrientation(end_orientation_);
+    end_selection_handle_->SetViewportRect(viewport_rect_);
   }
 
   // As a long press received while a selection is already active may trigger
   // an entirely new selection, notify the client but avoid sending an
-  // intervening SELECTION_CLEARED update to avoid unnecessary state changes.
+  // intervening SELECTION_HANDLES_CLEARED update to avoid unnecessary state
+  // changes.
   if (active_status_ == INACTIVE ||
-      response_pending_input_event_ == LONG_PRESS) {
+      response_pending_input_event_ == LONG_PRESS ||
+      response_pending_input_event_ == REPEATED_TAP) {
     if (active_status_ == SELECTION_ACTIVE) {
       // The active selection session finishes with the start of the new one.
       LogSelectionEnd();
@@ -526,7 +612,7 @@ void TouchSelectionController::DeactivateSelection() {
   start_selection_handle_->SetEnabled(false);
   end_selection_handle_->SetEnabled(false);
   active_status_ = INACTIVE;
-  client_->OnSelectionEvent(SELECTION_CLEARED);
+  client_->OnSelectionEvent(SELECTION_HANDLES_CLEARED);
 }
 
 void TouchSelectionController::ForceNextUpdateIfInactive() {
@@ -540,6 +626,18 @@ void TouchSelectionController::ForceNextUpdateIfInactive() {
   }
 }
 
+void TouchSelectionController::UpdateHandleLayoutIfNecessary() {
+  if (active_status_ == INSERTION_ACTIVE) {
+    DCHECK(insertion_handle_);
+    insertion_handle_->UpdateHandleLayout();
+  } else if (active_status_ == SELECTION_ACTIVE) {
+    DCHECK(start_selection_handle_);
+    DCHECK(end_selection_handle_);
+    start_selection_handle_->UpdateHandleLayout();
+    end_selection_handle_->UpdateHandleLayout();
+  }
+}
+
 void TouchSelectionController::RefreshHandleVisibility() {
   TouchHandle::AnimationStyle animation_style = GetAnimationStyle(true);
   if (active_status_ == SELECTION_ACTIVE) {
@@ -548,6 +646,9 @@ void TouchSelectionController::RefreshHandleVisibility() {
   }
   if (active_status_ == INSERTION_ACTIVE)
     insertion_handle_->SetVisible(GetStartVisible(), animation_style);
+
+  // Update handle layout if handle visibility is explicitly changed.
+  UpdateHandleLayoutIfNecessary();
 }
 
 gfx::Vector2dF TouchSelectionController::GetStartLineOffset() const {

@@ -12,6 +12,7 @@
 #include "ui/views/controls/button/blue_button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/view.h"
@@ -20,7 +21,6 @@ using base::ASCIIToUTF16;
 
 namespace {
 const char kLabelButton[] = "Label Button";
-const char kMultiLineText[] = "Multi-Line\nButton Text Is Here To Stay!\n123";
 const char kLongText[] = "Start of Really Really Really Really Really Really "
                          "Really Really Really Really Really Really Really "
                          "Really Really Really Really Really Long Button Text";
@@ -44,11 +44,18 @@ ButtonExample::~ButtonExample() {
 
 void ButtonExample::CreateExampleView(View* container) {
   container->set_background(Background::CreateSolidBackground(SK_ColorWHITE));
-  container->SetLayoutManager(new BoxLayout(BoxLayout::kVertical, 10, 10, 10));
+  BoxLayout* layout = new BoxLayout(BoxLayout::kVertical, 10, 10, 10);
+  layout->set_cross_axis_alignment(BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
+  container->SetLayoutManager(layout);
 
   label_button_ = new LabelButton(this, ASCIIToUTF16(kLabelButton));
   label_button_->SetFocusable(true);
   container->AddChildView(label_button_);
+
+  LabelButton* styled_button =
+      new LabelButton(this, ASCIIToUTF16("Styled Button"));
+  styled_button->SetStyle(Button::STYLE_BUTTON);
+  container->AddChildView(styled_button);
 
   LabelButton* disabled_button =
       new LabelButton(this, ASCIIToUTF16("Disabled Button"));
@@ -57,6 +64,9 @@ void ButtonExample::CreateExampleView(View* container) {
   container->AddChildView(disabled_button);
 
   container->AddChildView(new BlueButton(this, ASCIIToUTF16("Blue Button")));
+
+  container->AddChildView(
+      new MdTextButton(nullptr, base::ASCIIToUTF16("Material design")));
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   image_button_ = new ImageButton(this);
@@ -74,23 +84,18 @@ void ButtonExample::LabelButtonPressed(const ui::Event& event) {
   PrintStatus("Label Button Pressed! count: %d", ++count_);
   if (event.IsControlDown()) {
     if (event.IsShiftDown()) {
-      if (event.IsAltDown()) {
-        label_button_->SetTextMultiLine(!label_button_->GetTextMultiLine());
-        label_button_->SetText(ASCIIToUTF16(
-            label_button_->GetTextMultiLine() ? kMultiLineText : kLabelButton));
-      } else {
-        label_button_->SetText(ASCIIToUTF16(
-            label_button_->GetText().empty() ? kLongText :
-                label_button_->GetText().length() > 50 ? kLabelButton : ""));
-      }
+      label_button_->SetText(ASCIIToUTF16(
+          label_button_->GetText().empty()
+              ? kLongText
+              : label_button_->GetText().length() > 50 ? kLabelButton : ""));
     } else if (event.IsAltDown()) {
       label_button_->SetImage(Button::STATE_NORMAL,
           label_button_->GetImage(Button::STATE_NORMAL).isNull() ?
           *icon_ : gfx::ImageSkia());
     } else {
+      static int alignment = 0;
       label_button_->SetHorizontalAlignment(
-          static_cast<gfx::HorizontalAlignment>(
-              (label_button_->GetHorizontalAlignment() + 1) % 3));
+          static_cast<gfx::HorizontalAlignment>(++alignment % 3));
     }
   } else if (event.IsShiftDown()) {
     if (event.IsAltDown()) {

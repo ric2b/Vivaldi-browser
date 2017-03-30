@@ -4,6 +4,8 @@
 
 #include "content/browser/media/capture/desktop_capture_device_aura.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/timer/timer.h"
 #include "content/browser/media/capture/aura_window_capture_machine.h"
@@ -19,7 +21,8 @@ void SetCaptureSource(AuraWindowCaptureMachine* machine,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   aura::Window* window = DesktopMediaID::GetAuraWindowById(source);
-  machine->SetWindow(window);
+  if (window)
+    machine->SetWindow(window);
 }
 
 }  // namespace
@@ -39,16 +42,19 @@ DesktopCaptureDeviceAura::~DesktopCaptureDeviceAura() {
 }
 
 // static
-media::VideoCaptureDevice* DesktopCaptureDeviceAura::Create(
+scoped_ptr<media::VideoCaptureDevice> DesktopCaptureDeviceAura::Create(
     const DesktopMediaID& source) {
-  return new DesktopCaptureDeviceAura(source);
+  if (source.aura_id == DesktopMediaID::kNullId)
+    return nullptr;
+  return scoped_ptr<media::VideoCaptureDevice>(
+      new DesktopCaptureDeviceAura(source));
 }
 
 void DesktopCaptureDeviceAura::AllocateAndStart(
     const media::VideoCaptureParams& params,
     scoped_ptr<Client> client) {
   DVLOG(1) << "Allocating " << params.requested_format.frame_size.ToString();
-  core_->AllocateAndStart(params, client.Pass());
+  core_->AllocateAndStart(params, std::move(client));
 }
 
 void DesktopCaptureDeviceAura::StopAndDeAllocate() {

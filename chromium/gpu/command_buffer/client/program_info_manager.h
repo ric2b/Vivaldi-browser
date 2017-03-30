@@ -6,6 +6,7 @@
 #define GPU_COMMAND_BUFFER_CLIENT_PROGRAM_INFO_MANAGER_H_
 
 #include <GLES3/gl3.h>
+#include <stdint.h>
 
 #include <string>
 #include <vector>
@@ -37,6 +38,10 @@ class GLES2_IMPL_EXPORT ProgramInfoManager {
 
   GLint GetUniformLocation(
       GLES2Implementation* gl, GLuint program, const char* name);
+
+  GLint GetFragDataIndex(GLES2Implementation* gl,
+                         GLuint program,
+                         const char* name);
 
   GLint GetFragDataLocation(
       GLES2Implementation* gl, GLuint program, const char* name);
@@ -166,6 +171,9 @@ class GLES2_IMPL_EXPORT ProgramInfoManager {
     bool GetUniformsiv(
         GLsizei count, const GLuint* indices, GLenum pname, GLint* params);
 
+    GLint GetFragDataIndex(const std::string& name) const;
+    void CacheFragDataIndex(const std::string& name, GLint index);
+
     GLint GetFragDataLocation(const std::string& name) const;
     void CacheFragDataLocation(const std::string& name, GLint loc);
 
@@ -181,16 +189,16 @@ class GLES2_IMPL_EXPORT ProgramInfoManager {
         GLuint index) const;
 
     // Updates the ES2 only program info after a successful link.
-    void UpdateES2(const std::vector<int8>& result);
+    void UpdateES2(const std::vector<int8_t>& result);
 
     // Updates the ES3 UniformBlock info after a successful link.
-    void UpdateES3UniformBlocks(const std::vector<int8>& result);
+    void UpdateES3UniformBlocks(const std::vector<int8_t>& result);
 
     // Updates the ES3 Uniformsiv info after a successful link.
-    void UpdateES3Uniformsiv(const std::vector<int8>& result);
+    void UpdateES3Uniformsiv(const std::vector<int8_t>& result);
 
     // Updates the ES3 TransformFeedbackVaryings info after a successful link.
-    void UpdateES3TransformFeedbackVaryings(const std::vector<int8>& result);
+    void UpdateES3TransformFeedbackVaryings(const std::vector<int8_t>& result);
 
     bool IsCached(ProgramInfoType type) const;
 
@@ -222,6 +230,7 @@ class GLES2_IMPL_EXPORT ProgramInfoManager {
     bool cached_es3_transform_feedback_varyings_;
 
     uint32_t transform_feedback_varying_max_length_;
+    GLenum transform_feedback_buffer_mode_;
 
     // TransformFeedback varyings by index.
     std::vector<TransformFeedbackVarying> transform_feedback_varyings_;
@@ -231,6 +240,7 @@ class GLES2_IMPL_EXPORT ProgramInfoManager {
     std::vector<UniformES3> uniforms_es3_;
 
     base::hash_map<std::string, GLint> frag_data_locations_;
+    base::hash_map<std::string, GLint> frag_data_indices_;
   };
 
   Program* GetProgramInfo(

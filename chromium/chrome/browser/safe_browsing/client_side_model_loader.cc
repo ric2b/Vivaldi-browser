@@ -12,6 +12,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "chrome/browser/safe_browsing/protocol_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/safe_browsing/client_model.pb.h"
 #include "chrome/common/safe_browsing/csd.pb.h"
@@ -37,6 +38,8 @@ const char ModelLoader::kClientModelFinchExperiment[] =
     "ClientSideDetectionModel";
 const char ModelLoader::kClientModelFinchParam[] =
     "ModelNum";
+const char kUmaModelDownloadResponseMetricName[] =
+    "SBClientPhishing.ClientModelDownloadResponseOrErrorCode";
 
 
 // static
@@ -90,7 +93,7 @@ ModelLoader::ModelLoader(base::Closure update_renderers_callback,
 
 // For testing only
 ModelLoader::ModelLoader(base::Closure update_renderers_callback,
-                         const std::string model_name)
+                         const std::string& model_name)
     : name_(model_name),
       url_(kClientModelUrlPrefix + name_),
       update_renderers_callback_(update_renderers_callback),
@@ -116,13 +119,16 @@ void ModelLoader::StartFetch() {
 }
 
 void ModelLoader::OnURLFetchComplete(const net::URLFetcher* source) {
-  DCHECK_EQ(fetcher_, source);
+  DCHECK_EQ(fetcher_.get(), source);
   DCHECK_EQ(url_, source->GetURL());
 
   std::string data;
   source->GetResponseAsString(&data);
-  const bool is_success = source->GetStatus().is_success();
+  net::URLRequestStatus status = source->GetStatus();
+  const bool is_success = status.is_success();
   const int response_code = source->GetResponseCode();
+  SafeBrowsingProtocolManager::RecordHttpResponseOrErrorCode(
+      kUmaModelDownloadResponseMetricName, status, response_code);
 
   // max_age is valid iff !0.
   base::TimeDelta max_age;
@@ -181,7 +187,7 @@ void ModelLoader::EndFetch(ClientModelStatus status, base::TimeDelta max_age) {
   ScheduleFetch(delay_ms);
 }
 
-void ModelLoader::ScheduleFetch(int64 delay_ms) {
+void ModelLoader::ScheduleFetch(int64_t delay_ms) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSbDisableAutoUpdate))
     return;

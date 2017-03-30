@@ -18,11 +18,13 @@ class GpuSurfacelessBrowserCompositorOutputSurface
  public:
   GpuSurfacelessBrowserCompositorOutputSurface(
       const scoped_refptr<ContextProviderCommandBuffer>& context,
+      const scoped_refptr<ContextProviderCommandBuffer>& worker_context,
       int surface_id,
       const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
       scoped_ptr<BrowserCompositorOverlayCandidateValidator>
           overlay_candidate_validator,
-      unsigned internalformat,
+      unsigned int target,
+      unsigned int internalformat,
       BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager);
   ~GpuSurfacelessBrowserCompositorOutputSurface() override;
 
@@ -31,10 +33,14 @@ class GpuSurfacelessBrowserCompositorOutputSurface
   void SwapBuffers(cc::CompositorFrame* frame) override;
   void OnSwapBuffersComplete() override;
   void BindFramebuffer() override;
-  void Reshape(const gfx::Size& size, float scale_factor) override;
+  void Reshape(const gfx::Size& size, float scale_factor, bool alpha) override;
+  bool IsDisplayedAsOverlayPlane() const override;
+  unsigned GetOverlayTextureId() const override;
 
-  void OnSwapBuffersCompleted(const std::vector<ui::LatencyInfo>& latency_info,
-                              gfx::SwapResult result) override;
+  // BrowserCompositorOutputSurface implementation.
+  void OnGpuSwapBuffersCompleted(
+      const std::vector<ui::LatencyInfo>& latency_info,
+      gfx::SwapResult result) override;
 
   unsigned int internalformat_;
   scoped_ptr<GLHelper> gl_helper_;

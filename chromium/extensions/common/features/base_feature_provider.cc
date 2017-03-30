@@ -4,6 +4,8 @@
 
 #include "extensions/common/features/base_feature_provider.h"
 
+#include <stddef.h>
+
 #include <stack>
 #include <utility>
 
@@ -52,8 +54,8 @@ BaseFeatureProvider::BaseFeatureProvider(const base::DictionaryValue& root,
     if (iter.value().GetType() == base::Value::TYPE_DICTIONARY) {
       linked_ptr<SimpleFeature> feature((*factory_)());
 
-      std::vector<std::string> split;
-      base::SplitString(iter.key(), '.', &split);
+      std::vector<std::string> split = base::SplitString(
+          iter.key(), ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
       // Push parent features on the stack, starting with the current feature.
       // If one of the features has "noparent" set, stop pushing features on
@@ -62,7 +64,7 @@ BaseFeatureProvider::BaseFeatureProvider(const base::DictionaryValue& root,
       std::stack<std::pair<std::string, const base::DictionaryValue*> >
           parse_stack;
       while (!split.empty()) {
-        std::string parent_name = JoinString(split, '.');
+        std::string parent_name = base::JoinString(split, ".");
         split.pop_back();
         if (root.HasKey(parent_name)) {
           const base::DictionaryValue* parent = nullptr;
@@ -128,10 +130,11 @@ BaseFeatureProvider::BaseFeatureProvider(const base::DictionaryValue& root,
                           feature.get()))
           continue;
 
-        features->push_back(feature.Pass());
+        features->push_back(std::move(feature));
       }
 
-      linked_ptr<ComplexFeature> feature(new ComplexFeature(features.Pass()));
+      linked_ptr<ComplexFeature> feature(
+          new ComplexFeature(std::move(features)));
       feature->set_name(iter.key());
 
       features_[iter.key()] = feature;
@@ -171,12 +174,12 @@ Feature* BaseFeatureProvider::GetParent(Feature* feature) const {
   if (feature->no_parent())
     return nullptr;
 
-  std::vector<std::string> split;
-  base::SplitString(feature->name(), '.', &split);
+  std::vector<std::string> split = base::SplitString(
+      feature->name(), ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (split.size() < 2)
     return nullptr;
   split.pop_back();
-  return GetFeature(JoinString(split, '.'));
+  return GetFeature(base::JoinString(split, "."));
 }
 
 // Children of a given API are named starting with parent.name()+".", which

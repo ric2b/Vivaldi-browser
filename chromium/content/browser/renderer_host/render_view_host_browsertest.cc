@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -62,7 +64,7 @@ class RenderViewHostTestWebContentsObserver : public WebContentsObserver {
 };
 
 IN_PROC_BROWSER_TEST_F(RenderViewHostTest, FrameNavigateSocketAddress) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   RenderViewHostTestWebContentsObserver observer(shell()->web_contents());
 
   GURL test_url = embedded_test_server()->GetURL("/simple_page.html");
@@ -75,7 +77,7 @@ IN_PROC_BROWSER_TEST_F(RenderViewHostTest, FrameNavigateSocketAddress) {
 }
 
 IN_PROC_BROWSER_TEST_F(RenderViewHostTest, BaseURLParam) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   RenderViewHostTestWebContentsObserver observer(shell()->web_contents());
 
   // Base URL is not set if it is the same as the URL.
@@ -96,7 +98,7 @@ IN_PROC_BROWSER_TEST_F(RenderViewHostTest, BaseURLParam) {
 // This test ensures a RenderFrameHost object is created for the top level frame
 // in each RenderViewHost.
 IN_PROC_BROWSER_TEST_F(RenderViewHostTest, BasicRenderFrameHost) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL test_url = embedded_test_server()->GetURL("/simple_page.html");
   NavigateToURL(shell(), test_url);
@@ -117,7 +119,7 @@ IN_PROC_BROWSER_TEST_F(RenderViewHostTest, BasicRenderFrameHost) {
 }
 
 IN_PROC_BROWSER_TEST_F(RenderViewHostTest, IsFocusedElementEditable) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL test_url = embedded_test_server()->GetURL("/touch_selection.html");
   NavigateToURL(shell(), test_url);
@@ -128,8 +130,14 @@ IN_PROC_BROWSER_TEST_F(RenderViewHostTest, IsFocusedElementEditable) {
   EXPECT_TRUE(rvh->IsFocusedElementEditable());
 }
 
-IN_PROC_BROWSER_TEST_F(RenderViewHostTest, ReleaseSessionOnCloseACK) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+// Flaky on Linux (https://crbug.com/559192).
+#if defined(OS_LINUX)
+#define MAYBE_ReleaseSessionOnCloseACK DISABLED_ReleaseSessionOnCloseACK
+#else
+#define MAYBE_ReleaseSessionOnCloseACK ReleaseSessionOnCloseACK
+#endif
+IN_PROC_BROWSER_TEST_F(RenderViewHostTest, MAYBE_ReleaseSessionOnCloseACK) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL test_url = embedded_test_server()->GetURL(
       "/access-session-storage.html");
   NavigateToURL(shell(), test_url);

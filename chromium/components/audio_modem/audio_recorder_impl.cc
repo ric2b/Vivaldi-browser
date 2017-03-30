@@ -5,6 +5,7 @@
 #include "components/audio_modem/audio_recorder_impl.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -42,7 +43,7 @@ void ProcessSamples(
     scoped_ptr<media::AudioBus> bus,
     const AudioRecorderImpl::RecordedSamplesCallback& callback) {
   std::string samples;
-  AudioBusToString(bus.Pass(), &samples);
+  AudioBusToString(std::move(bus), &samples);
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE, base::Bind(callback, samples));
 }
@@ -102,12 +103,7 @@ void AudioRecorderImpl::InitializeOnAudioThread() {
   } else {
     params = media::AudioManager::Get()->GetInputStreamParameters(
         media::AudioManagerBase::kDefaultDeviceId);
-    params = media::AudioParameters(params.format(),
-                                    params.channel_layout(),
-                                    params.sample_rate(),
-                                    params.bits_per_sample(),
-                                    params.frames_per_buffer(),
-                                    media::AudioParameters::NO_EFFECTS);
+    params.set_effects(media::AudioParameters::NO_EFFECTS);
   }
 
   total_buffer_frames_ = kProcessIntervalMs * params.sample_rate() / 1000;
@@ -168,7 +164,7 @@ void AudioRecorderImpl::FinalizeOnAudioThread() {
 
 void AudioRecorderImpl::OnData(media::AudioInputStream* stream,
                                const media::AudioBus* source,
-                               uint32 /* hardware_delay_bytes */,
+                               uint32_t /* hardware_delay_bytes */,
                                double /* volume */) {
   // source->frames() == source_params.frames_per_buffer(), so we only have
   // one chunk of data in the source; correspondingly set the destination
@@ -182,7 +178,7 @@ void AudioRecorderImpl::OnData(media::AudioInputStream* stream,
 
   // Buffer full, send it for processing.
   if (buffer_->frames() == buffer_frame_index_) {
-    ProcessSamples(buffer_.Pass(), decode_callback_);
+    ProcessSamples(std::move(buffer_), decode_callback_);
     buffer_ = media::AudioBus::Create(source->channels(), total_buffer_frames_);
     buffer_frame_index_ = 0;
 

@@ -4,8 +4,12 @@
 
 #include "extensions/browser/api/web_request/web_request_api_helpers.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -51,9 +55,15 @@ static const char* kResourceTypeStrings[] = {
   "stylesheet",
   "script",
   "image",
+  "font",
   "object",
+  "script",
+  "script",
+  "image",
   "xmlhttprequest",
-  "other",
+  "ping",
+  "script",
+  "object",
   "other",
 };
 
@@ -65,15 +75,16 @@ static ResourceType kResourceTypeValues[] = {
   content::RESOURCE_TYPE_STYLESHEET,
   content::RESOURCE_TYPE_SCRIPT,
   content::RESOURCE_TYPE_IMAGE,
+  content::RESOURCE_TYPE_FONT_RESOURCE,
   content::RESOURCE_TYPE_OBJECT,
+  content::RESOURCE_TYPE_WORKER,
+  content::RESOURCE_TYPE_SHARED_WORKER,
+  content::RESOURCE_TYPE_FAVICON,
   content::RESOURCE_TYPE_XHR,
+  content::RESOURCE_TYPE_PING,
+  content::RESOURCE_TYPE_SERVICE_WORKER,
+  content::RESOURCE_TYPE_PLUGIN_RESOURCE,
   content::RESOURCE_TYPE_LAST_TYPE,  // represents "other"
-  // TODO(jochen): We duplicate the last entry, so the array's size is not a
-  // power of two. If it is, this triggers a bug in gcc 4.4 in Release builds
-  // (http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43949). Once we use a version
-  // of gcc with this bug fixed, or the array is changed so this duplicate
-  // entry is no longer required, this should be removed.
-  content::RESOURCE_TYPE_LAST_TYPE,
 };
 
 const size_t kResourceTypeValuesLength = arraysize(kResourceTypeValues);
@@ -85,7 +96,7 @@ void ClearCacheOnNavigationOnUI() {
 }
 
 bool ParseCookieLifetime(net::ParsedCookie* cookie,
-                         int64* seconds_till_expiry) {
+                         int64_t* seconds_till_expiry) {
   // 'Max-Age' is processed first because according to:
   // http://tools.ietf.org/html/rfc6265#section-5.3 'Max-Age' attribute
   // overrides 'Expires' attribute.
@@ -125,6 +136,33 @@ bool NullableEquals(const std::string* a, const std::string* b) {
 }
 
 }  // namespace
+
+bool ExtraInfoSpec::InitFromValue(const base::ListValue& value,
+                                  int* extra_info_spec) {
+  *extra_info_spec = 0;
+  for (size_t i = 0; i < value.GetSize(); ++i) {
+    std::string str;
+    if (!value.GetString(i, &str))
+      return false;
+
+    if (str == "requestHeaders")
+      *extra_info_spec |= REQUEST_HEADERS;
+    else if (str == "responseHeaders")
+      *extra_info_spec |= RESPONSE_HEADERS;
+    else if (str == "blocking")
+      *extra_info_spec |= BLOCKING;
+    else if (str == "asyncBlocking")
+      *extra_info_spec |= ASYNC_BLOCKING;
+    else if (str == "requestBody")
+      *extra_info_spec |= REQUEST_BODY;
+    else
+      return false;
+  }
+  // BLOCKING and ASYNC_BLOCKING are mutually exclusive.
+  if ((*extra_info_spec & BLOCKING) && (*extra_info_spec & ASYNC_BLOCKING))
+    return false;
+  return true;
+}
 
 RequestCookie::RequestCookie() {}
 RequestCookie::~RequestCookie() {}
@@ -240,7 +278,7 @@ scoped_ptr<base::Value> NetLogModificationCallback(
     deleted_headers->Append(new base::StringValue(*key));
   }
   dict->Set("deleted_headers", deleted_headers);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 bool InDecreasingExtensionInstallationTimeOrder(
@@ -344,14 +382,12 @@ EventResponseDelta* CalculateOnHeadersReceivedDelta(
     std::string name;
     std::string value;
     while (old_response_headers->EnumerateHeaderLines(&iter, &name, &value)) {
-      std::string name_lowercase(name);
-      base::StringToLowerASCII(&name_lowercase);
+      std::string name_lowercase = base::ToLowerASCII(name);
 
       bool header_found = false;
-      for (ResponseHeaders::const_iterator i = new_response_headers->begin();
-           i != new_response_headers->end(); ++i) {
-        if (base::LowerCaseEqualsASCII(i->first, name_lowercase.c_str()) &&
-            value == i->second) {
+      for (const auto& i : *new_response_headers) {
+        if (base::LowerCaseEqualsASCII(i.first, name_lowercase) &&
+            value == i.second) {
           header_found = true;
           break;
         }
@@ -363,17 +399,21 @@ EventResponseDelta* CalculateOnHeadersReceivedDelta(
 
   // Find added headers (header keys are treated case insensitively).
   {
-    for (ResponseHeaders::const_iterator i = new_response_headers->begin();
-         i != new_response_headers->end(); ++i) {
-      void* iter = NULL;
+    for (const auto& i : *new_response_headers) {
+      std::string name_lowercase = base::ToLowerASCII(i.first);
+      void* iter = nullptr;
+      std::string name;
       std::string value;
       bool header_found = false;
-      while (old_response_headers->EnumerateHeader(&iter, i->first, &value) &&
-             !header_found) {
-        header_found = (value == i->second);
+      while (old_response_headers->EnumerateHeaderLines(&iter, &name, &value)) {
+        if (base::LowerCaseEqualsASCII(name, name_lowercase) &&
+            value == i.second) {
+          header_found = true;
+          break;
+        }
       }
       if (!header_found)
-        result->added_response_headers.push_back(*i);
+        result->added_response_headers.push_back(i);
     }
   }
 
@@ -650,7 +690,8 @@ static std::string FindSetRequestHeader(
     net::HttpRequestHeaders::Iterator modification(
         (*delta)->modified_request_headers);
     while (modification.GetNext()) {
-      if (key == modification.name() && value == modification.value())
+      if (base::EqualsCaseInsensitiveASCII(key, modification.name()) &&
+          value == modification.value())
         return (*delta)->extension_id;
     }
   }
@@ -668,7 +709,7 @@ static std::string FindRemoveRequestHeader(
     for (i = (*delta)->deleted_request_headers.begin();
          i != (*delta)->deleted_request_headers.end();
          ++i) {
-      if (*i == key)
+      if (base::EqualsCaseInsensitiveASCII(*i, key))
         return (*delta)->extension_id;
     }
   }
@@ -880,7 +921,7 @@ static bool DoesResponseCookieMatchFilter(net::ParsedCookie* cookie,
     return false;
   if (filter->age_upper_bound || filter->age_lower_bound ||
       (filter->session_cookie && *filter->session_cookie)) {
-    int64 seconds_to_expiry;
+    int64_t seconds_to_expiry;
     bool lifetime_parsed = ParseCookieLifetime(cookie, &seconds_to_expiry);
     if (filter->age_upper_bound && seconds_to_expiry > *filter->age_upper_bound)
       return false;
@@ -1019,9 +1060,7 @@ void MergeCookiesInOnHeadersReceivedResponses(
 
 // Converts the key of the (key, value) pair to lower case.
 static ResponseHeader ToLowerCase(const ResponseHeader& header) {
-  std::string lower_key(header.first);
-  base::StringToLowerASCII(&lower_key);
-  return ResponseHeader(lower_key, header.second);
+  return ResponseHeader(base::ToLowerASCII(header.first), header.second);
 }
 
 // Returns the extension ID of the first extension in |deltas| that removes the
@@ -1029,14 +1068,11 @@ static ResponseHeader ToLowerCase(const ResponseHeader& header) {
 static std::string FindRemoveResponseHeader(
     const EventResponseDeltas& deltas,
     const std::string& key) {
-  std::string lower_key = base::StringToLowerASCII(key);
-  EventResponseDeltas::const_iterator delta;
-  for (delta = deltas.begin(); delta != deltas.end(); ++delta) {
-    ResponseHeaders::const_iterator i;
-    for (i = (*delta)->deleted_response_headers.begin();
-         i != (*delta)->deleted_response_headers.end(); ++i) {
-      if (base::StringToLowerASCII(i->first) == lower_key)
-        return (*delta)->extension_id;
+  std::string lower_key = base::ToLowerASCII(key);
+  for (const auto& delta : deltas) {
+    for (const auto& deleted_hdr : delta->deleted_response_headers) {
+      if (base::ToLowerASCII(deleted_hdr.first) == lower_key)
+        return delta->extension_id;
     }
   }
   return std::string();
@@ -1251,8 +1287,6 @@ base::DictionaryValue* CreateHeaderDictionary(
   }
   return header;
 }
-
-#define ARRAYEND(array) (array + arraysize(array))
 
 bool IsRelevantResourceType(ResourceType type) {
   ResourceType* iter =

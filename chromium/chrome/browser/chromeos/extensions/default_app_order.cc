@@ -4,11 +4,14 @@
 
 #include "chrome/browser/chromeos/extensions/default_app_order.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -34,7 +37,6 @@ const char kImportDefaultOrderAttr[] = "import_default_order";
 const char* const kDefaultAppOrder[] = {
     extension_misc::kChromeAppId,
     extensions::kWebStoreAppId,
-    extension_misc::kGoogleSearchAppId,
     extension_misc::kYoutubeAppId,
     extension_misc::kGmailAppId,
     "ejjicmeblgpmajnghnpcppodonldlgfn",  // Calendar
@@ -45,7 +47,7 @@ const char* const kDefaultAppOrder[] = {
     extension_misc::kGoogleSheetsAppId,
     extension_misc::kGoogleSlidesAppId,
     "dlppkpafhbajpcmmoheippocdidnckmm",  // Google+
-    "kbpgddbgniojgndnhlkjbkpknjhppkbk",  // Google+ Hangouts
+    "hcglmfcclpfgljeaiahehebeoaiicbko",  // Google Photos
     "hhaomjibdihmijegdhdafkllkbggdgoj",  // Files
     extension_misc::kGooglePlayMusicAppId,
     "mmimngoggfoobjdlefbcabngfnmieonb",  // Play Books
@@ -59,25 +61,26 @@ const char* const kDefaultAppOrder[] = {
 // Reads external ordinal json file and returned the parsed value. Returns NULL
 // if the file does not exist or could not be parsed properly. Caller takes
 // ownership of the returned value.
-base::ListValue* ReadExternalOrdinalFile(const base::FilePath& path) {
+scoped_ptr<base::ListValue> ReadExternalOrdinalFile(
+    const base::FilePath& path) {
   if (!base::PathExists(path))
     return NULL;
 
   JSONFileValueDeserializer deserializer(path);
   std::string error_msg;
-  base::Value* value = deserializer.Deserialize(NULL, &error_msg);
+  scoped_ptr<base::Value> value = deserializer.Deserialize(NULL, &error_msg);
   if (!value) {
     LOG(WARNING) << "Unable to deserialize default app ordinals json data:"
         << error_msg << ", file=" << path.value();
     return NULL;
   }
 
-  base::ListValue* ordinal_list_value = NULL;
-  if (value->GetAsList(&ordinal_list_value))
-    return ordinal_list_value;
+  scoped_ptr<base::ListValue> ordinal_list_value =
+      base::ListValue::From(std::move(value));
+  if (!ordinal_list_value)
+    LOG(WARNING) << "Expect a JSON list in file " << path.value();
 
-  LOG(WARNING) << "Expect a JSON list in file " << path.value();
-  return NULL;
+  return ordinal_list_value;
 }
 
 std::string GetLocaleSpecificStringImpl(
@@ -151,8 +154,8 @@ void ExternalLoader::Load() {
   base::FilePath ordinals_file;
   CHECK(PathService::Get(chromeos::FILE_DEFAULT_APP_ORDER, &ordinals_file));
 
-  scoped_ptr<base::ListValue> ordinals_value(
-      ReadExternalOrdinalFile(ordinals_file));
+  scoped_ptr<base::ListValue> ordinals_value =
+      ReadExternalOrdinalFile(ordinals_file);
   if (ordinals_value) {
     std::string locale = g_browser_process->GetApplicationLocale();
     for (size_t i = 0; i < ordinals_value->GetSize(); ++i) {

@@ -5,15 +5,21 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_BUTTON_H_
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_BUTTON_H_
 
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/label_button.h"
+
+class Profile;
 
 namespace ui {
 class MenuModel;
 }
 
 namespace views {
+class InkDropDelegate;
 class MenuRunner;
 }
 
@@ -24,7 +30,9 @@ class ToolbarButton : public views::LabelButton,
  public:
   // Takes ownership of the |model|, which can be null if no menu
   // is to be shown.
-  ToolbarButton(views::ButtonListener* listener, ui::MenuModel* model);
+  ToolbarButton(Profile* profile,
+                views::ButtonListener* listener,
+                ui::MenuModel* model);
   ~ToolbarButton() override;
 
   // Set up basic mouseover border behavior.
@@ -46,6 +54,8 @@ class ToolbarButton : public views::LabelButton,
   void OnGestureEvent(ui::GestureEvent* event) override;
   void GetAccessibleState(ui::AXViewState* state) override;
   scoped_ptr<views::LabelButtonBorder> CreateDefaultBorder() const override;
+  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
+  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
 
   // views::ContextMenuController:
   void ShowContextMenuForView(View* source,
@@ -53,12 +63,6 @@ class ToolbarButton : public views::LabelButton,
                               ui::MenuSourceType source_type) override;
 
  protected:
-  // Overridden from CustomButton. Returns true if the button should become
-  // pressed when a user holds the mouse down over the button. For this
-  // implementation, both left and right mouse buttons can trigger a change
-  // to the PUSHED state.
-  bool ShouldEnterPushedState(const ui::Event& event) override;
-
   // Returns if menu should be shown. Override this to change default behavior.
   virtual bool ShouldShowMenu();
 
@@ -69,17 +73,23 @@ class ToolbarButton : public views::LabelButton,
   // views::LabelButton:
   const char* GetClassName() const override;
 
+  // The associated profile. The browser theme affects rendering.
+  Profile* profile_;
+
   // The model that populates the attached menu.
   scoped_ptr<ui::MenuModel> model_;
 
   // Indicates if menu is currently showing.
   bool menu_showing_;
 
-  // Y position of mouse when left mouse button is pressed
+  // Y position of mouse when left mouse button is pressed.
   int y_position_on_lbuttondown_;
 
   // Menu runner to display drop down menu.
   scoped_ptr<views::MenuRunner> menu_runner_;
+
+  // Controls the visual feedback for the button state.
+  scoped_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   // A factory for tasks that show the dropdown context menu for the button.
   base::WeakPtrFactory<ToolbarButton> show_menu_factory_;

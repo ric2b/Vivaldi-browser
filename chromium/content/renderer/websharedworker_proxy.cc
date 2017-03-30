@@ -4,6 +4,8 @@
 
 #include "content/renderer/websharedworker_proxy.h"
 
+#include <stddef.h>
+
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/message_router.h"
 #include "content/common/view_messages.h"
@@ -14,14 +16,9 @@
 namespace content {
 
 WebSharedWorkerProxy::WebSharedWorkerProxy(MessageRouter* router,
-                                           unsigned long long document_id,
-                                           int route_id,
-                                           int render_frame_route_id)
+                                           int route_id)
     : route_id_(route_id),
-      render_frame_route_id_(render_frame_route_id),
       router_(router),
-      document_id_(document_id),
-      pending_route_id_(route_id),
       connect_listener_(NULL),
       created_(false) {
   router_->AddRoute(route_id_, this);

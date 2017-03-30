@@ -15,7 +15,6 @@
 #include "base/version.h"
 #include "chrome/browser/devtools/device/devtools_android_bridge.h"
 #include "chrome/browser/devtools/devtools_target_impl.h"
-#include "chrome/common/chrome_version_info.h"
 #include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
@@ -294,18 +293,19 @@ AdbTargetsUIHandler::AdbTargetsUIHandler(const Callback& callback,
       profile_(profile),
       android_bridge_(
           DevToolsAndroidBridge::Factory::GetForProfile(profile_)) {
-  DCHECK(android_bridge_);
-  android_bridge_->AddDeviceListListener(this);
+  if (android_bridge_)
+    android_bridge_->AddDeviceListListener(this);
 }
 
 AdbTargetsUIHandler::~AdbTargetsUIHandler() {
-  android_bridge_->RemoveDeviceListListener(this);
+  if (android_bridge_)
+    android_bridge_->RemoveDeviceListListener(this);
 }
 
 void AdbTargetsUIHandler::Open(const std::string& browser_id,
                                const std::string& url) {
   RemoteBrowsers::iterator it = remote_browsers_.find(browser_id);
-  if (it != remote_browsers_.end())
+  if (it != remote_browsers_.end() && android_bridge_)
     android_bridge_->OpenRemotePage(it->second, url);
 }
 
@@ -313,8 +313,8 @@ scoped_refptr<content::DevToolsAgentHost>
 AdbTargetsUIHandler::GetBrowserAgentHost(
     const std::string& browser_id) {
   RemoteBrowsers::iterator it = remote_browsers_.find(browser_id);
-  if (it == remote_browsers_.end())
-    return NULL;
+  if (it == remote_browsers_.end() || !android_bridge_)
+    return nullptr;
 
   return android_bridge_->GetBrowserAgentHost(it->second);
 }
@@ -323,6 +323,8 @@ void AdbTargetsUIHandler::DeviceListChanged(
     const DevToolsAndroidBridge::RemoteDevices& devices) {
   remote_browsers_.clear();
   STLDeleteValues(&targets_);
+  if (!android_bridge_)
+    return;
 
   base::ListValue device_list;
   for (DevToolsAndroidBridge::RemoteDevices::const_iterator dit =

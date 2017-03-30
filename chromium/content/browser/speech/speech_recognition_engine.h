@@ -5,9 +5,10 @@
 #ifndef CONTENT_BROWSER_SPEECH_SPEECH_RECOGNITION_ENGINE_H_
 #define CONTENT_BROWSER_SPEECH_SPEECH_RECOGNITION_ENGINE_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/speech_recognition_session_preamble.h"
 #include "content/public/common/speech_recognition_grammar.h"
@@ -38,6 +39,7 @@ class SpeechRecognitionEngine {
     // implementations).
     virtual void OnSpeechRecognitionEngineResults(
         const SpeechRecognitionResults& results) = 0;
+    virtual void OnSpeechRecognitionEngineEndOfUtterance() = 0;
     virtual void OnSpeechRecognitionEngineError(
         const SpeechRecognitionError& error) = 0;
 
@@ -55,7 +57,7 @@ class SpeechRecognitionEngine {
     bool filter_profanities;
     bool continuous;
     bool interim_results;
-    uint32 max_hypotheses;
+    uint32_t max_hypotheses;
     std::string hardware_info;
     std::string origin_url;
     int audio_sample_rate;

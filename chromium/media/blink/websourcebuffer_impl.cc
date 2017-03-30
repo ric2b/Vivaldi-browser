@@ -4,12 +4,15 @@
 
 #include "media/blink/websourcebuffer_impl.h"
 
+#include <stdint.h>
+
 #include <cmath>
 #include <limits>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "media/base/timestamp_constants.h"
 #include "media/filters/chunk_demuxer.h"
 #include "third_party/WebKit/public/platform/WebSourceBufferClient.h"
 
@@ -24,7 +27,8 @@ static base::TimeDelta DoubleToTimeDelta(double time) {
 
   // Don't use base::TimeDelta::Max() here, as we want the largest finite time
   // delta.
-  base::TimeDelta max_time = base::TimeDelta::FromInternalValue(kint64max - 1);
+  base::TimeDelta max_time = base::TimeDelta::FromInternalValue(
+      std::numeric_limits<int64_t>::max() - 1);
   double max_time_in_seconds = max_time.InSecondsF();
 
   if (time >= max_time_in_seconds)
@@ -81,6 +85,14 @@ blink::WebTimeRanges WebSourceBufferImpl::buffered() {
   return result;
 }
 
+bool WebSourceBufferImpl::evictCodedFrames(double currentPlaybackTime,
+                                           size_t newDataSize) {
+  return demuxer_->EvictCodedFrames(
+      id_,
+      base::TimeDelta::FromSecondsD(currentPlaybackTime),
+      newDataSize);
+}
+
 void WebSourceBufferImpl::append(
     const unsigned char* data,
     unsigned length,
@@ -101,13 +113,13 @@ void WebSourceBufferImpl::append(
     *timestamp_offset = timestamp_offset_.InSecondsF();
 }
 
-void WebSourceBufferImpl::abort() {
-  demuxer_->Abort(id_,
-                  append_window_start_, append_window_end_,
-                  &timestamp_offset_);
+void WebSourceBufferImpl::resetParserState() {
+  demuxer_->ResetParserState(id_,
+                             append_window_start_, append_window_end_,
+                             &timestamp_offset_);
 
-  // TODO(wolenetz): abort should be able to modify the caller timestamp offset
-  // (just like WebSourceBufferImpl::append).
+  // TODO(wolenetz): resetParserState should be able to modify the caller
+  // timestamp offset (just like WebSourceBufferImpl::append).
   // See http://crbug.com/370229 for further details.
 }
 

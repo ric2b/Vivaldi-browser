@@ -72,7 +72,7 @@ public class MockResourcesForLayout extends MockResources {
         mFloats.put(R.dimen.tabswitcher_border_frame_transparent_side, 2.f);
         mBooleans.put(org.chromium.chrome.R.bool.compositor_tab_title_fake_bold_text, true);
         mStrings.put(R.string.tab_loading_default_title, "Loading...");
-        mFloats.put(org.chromium.chrome.R.dimen.contextual_search_bar_height, 64.f);
+        mFloats.put(org.chromium.chrome.R.dimen.contextual_search_bar_height, 56.f);
         mFloats.put(org.chromium.chrome.R.dimen.control_container_height, 56.0f);
     }
 
@@ -122,6 +122,11 @@ public class MockResourcesForLayout extends MockResources {
 
     @Override
     public int getColor(int id) {
+        return getInteger(id);
+    }
+
+    @Override
+    public int getColor(int id, Theme theme) {
         return getInteger(id);
     }
 

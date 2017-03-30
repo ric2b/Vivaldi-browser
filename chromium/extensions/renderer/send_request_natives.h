@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_RENDERER_SEND_REQUEST_NATIVES_H_
 #define EXTENSIONS_RENDERER_SEND_REQUEST_NATIVES_H_
 
+#include "base/macros.h"
 #include "extensions/renderer/object_backed_native_handler.h"
 #include "v8/include/v8.h"
 
@@ -19,8 +20,6 @@ class SendRequestNatives : public ObjectBackedNativeHandler {
   SendRequestNatives(RequestSender* request_sender, ScriptContext* context);
 
  private:
-  void GetNextRequestId(const v8::FunctionCallbackInfo<v8::Value>& args);
-
   // Starts an API request to the browser, with an optional callback.  The
   // callback will be dispatched to EventBindings::HandleResponse.
   void StartRequest(const v8::FunctionCallbackInfo<v8::Value>& args);

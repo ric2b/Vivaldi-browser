@@ -4,7 +4,9 @@
 
 #include "content/renderer/pepper/pepper_webplugin_impl.h"
 
+#include <stddef.h>
 #include <cmath>
+#include <utility>
 
 #include "base/debug/crash_logging.h"
 #include "base/message_loop/message_loop.h"
@@ -62,9 +64,10 @@ PepperWebPluginImpl::PepperWebPluginImpl(
     scoped_ptr<PluginInstanceThrottlerImpl> throttler)
     : init_data_(new InitData()),
       full_frame_(params.loadManually),
-      throttler_(throttler.Pass()),
+      throttler_(std::move(throttler)),
       instance_object_(PP_MakeUndefined()),
-      container_(NULL) {
+      container_(NULL),
+      weak_factory_(this) {
   DCHECK(plugin_module);
   init_data_->module = plugin_module;
   init_data_->render_frame = render_frame;
@@ -97,24 +100,51 @@ bool PepperWebPluginImpl::initialize(WebPluginContainer* container) {
   // Enable script objects for this plugin.
   container->allowScriptObjects();
 
+  auto weak_this = weak_factory_.GetWeakPtr();
   bool success =
       instance_->Initialize(init_data_->arg_names, init_data_->arg_values,
-                            full_frame_, throttler_.Pass());
+                            full_frame_, std::move(throttler_));
+  // The above call to Initialize can result in re-entrancy and destruction of
+  // the plugin instance. In this case it's quite unclear whether this object
+  // could also have been destroyed. We could return false here, but it would be
+  // better if this object was guaranteed to outlast the recursive call.
+  // Otherwise, the caller of this function would also have to take care that,
+  // in the case of the object being deleted, we never access it again, and we
+  // would just keep passing that responsibility further up the call stack.
+  // Classes tend not to be written with this possibility in mind so it's best
+  // to make this assumption as far down the call stack (as close to the
+  // re-entrant call) as possible. Also take care not to access the plugin
+  // instance again in that case. crbug.com/487146.
+  CHECK(weak_this);
+
   if (!success) {
-    instance_->Delete();
-    instance_ = NULL;
+    if (instance_) {
+      instance_->Delete();
+      instance_ = NULL;
+    }
 
     blink::WebPlugin* replacement_plugin =
         GetContentClient()->renderer()->CreatePluginReplacement(
             init_data_->render_frame, init_data_->module->path());
-    if (!replacement_plugin || !replacement_plugin->initialize(container))
+    if (!replacement_plugin)
       return false;
 
+    // Since we are setting the container to own the replacement plugin, we must
+    // schedule ourselves for deletion.
+    destroy();
     container->setPlugin(replacement_plugin);
+    if (!replacement_plugin->initialize(container)) {
+      CHECK(replacement_plugin->container() == nullptr);
+      return false;
+    }
+
+    CHECK(container->plugin() == replacement_plugin);
+    CHECK(replacement_plugin->container() == container);
     return true;
   }
 
   init_data_.reset();
+  CHECK(container->plugin() == this);
   container_ = container;
   return true;
 }
@@ -123,6 +153,8 @@ void PepperWebPluginImpl::destroy() {
   // Tell |container_| to clear references to this plugin's script objects.
   if (container_)
     container_->clearScriptObjects();
+
+  container_ = nullptr;
 
   if (instance_.get()) {
     ppapi::PpapiGlobals::Get()->GetVarTracker()->ReleaseVar(instance_object_);
@@ -194,11 +226,14 @@ void PepperWebPluginImpl::updateVisibility(bool visible) {}
 
 bool PepperWebPluginImpl::acceptsInputEvents() { return true; }
 
-bool PepperWebPluginImpl::handleInputEvent(const blink::WebInputEvent& event,
-                                           blink::WebCursorInfo& cursor_info) {
+blink::WebInputEventResult PepperWebPluginImpl::handleInputEvent(
+    const blink::WebInputEvent& event,
+    blink::WebCursorInfo& cursor_info) {
   if (instance_->FlashIsFullscreenOrPending())
-    return false;
-  return instance_->HandleInputEvent(event, &cursor_info);
+    return blink::WebInputEventResult::NotHandled;
+  return instance_->HandleInputEvent(event, &cursor_info)
+             ? blink::WebInputEventResult::HandledApplication
+             : blink::WebInputEventResult::NotHandled;
 }
 
 void PepperWebPluginImpl::didReceiveResponse(
@@ -225,14 +260,6 @@ void PepperWebPluginImpl::didFailLoading(const blink::WebURLError& error) {
   if (document_loader)
     document_loader->didFail(NULL, error);
 }
-
-void PepperWebPluginImpl::didFinishLoadingFrameRequest(const blink::WebURL& url,
-                                                       void* notify_data) {}
-
-void PepperWebPluginImpl::didFailLoadingFrameRequest(
-    const blink::WebURL& url,
-    void* notify_data,
-    const blink::WebURLError& error) {}
 
 bool PepperWebPluginImpl::hasSelection() const {
   return !selectionAsText().isEmpty();

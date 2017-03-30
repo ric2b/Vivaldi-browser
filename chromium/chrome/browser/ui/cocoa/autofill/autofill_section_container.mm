@@ -4,6 +4,8 @@
 
 #import "chrome/browser/ui/cocoa/autofill/autofill_section_container.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/mac/foundation_util.h"
@@ -22,6 +24,7 @@
 #import "chrome/browser/ui/cocoa/menu_button.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "content/public/browser/native_web_keyboard_event.h"
+#include "grit/components_scaled_resources.h"
 #include "grit/theme_resources.h"
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -61,11 +64,7 @@ bool ShouldOverwriteComboboxes(autofill::DialogSection section,
     return false;
   }
 
-  if (section == autofill::SECTION_CC) {
-    return true;
-  }
-
-  return section == autofill::SECTION_CC_BILLING;
+  return section == autofill::SECTION_CC;
 }
 
 }  // namespace
@@ -109,9 +108,6 @@ bool ShouldOverwriteComboboxes(autofill::DialogSection section,
 
 // Refresh all field icons based on |delegate_| status.
 - (void)updateFieldIcons;
-
-// Refresh the enabled/disabled state of all input fields.
-- (void)updateEditability;
 
 @end
 
@@ -287,7 +283,6 @@ bool ShouldOverwriteComboboxes(autofill::DialogSection section,
   delegate_->FocusMoved();
   [validationDelegate_ hideErrorBubble];
   [self validateFor:autofill::VALIDATE_EDIT];
-  [self updateEditability];
 }
 
 - (void)updateSuggestionState {
@@ -414,7 +409,7 @@ bool ShouldOverwriteComboboxes(autofill::DialogSection section,
       [[field window] convertBaseToScreen:textFrameInScreen.origin];
 
   // And adjust for gfx::Rect being flipped compared to OSX coordinates.
-  NSScreen* screen = [[NSScreen screens] objectAtIndex:0];
+  NSScreen* screen = [[NSScreen screens] firstObject];
   textFrameInScreen.origin.y =
       NSMaxY([screen frame]) - NSMaxY(textFrameInScreen);
   gfx::Rect textFrameRect(NSRectToCGRect(textFrameInScreen));
@@ -453,7 +448,6 @@ bool ShouldOverwriteComboboxes(autofill::DialogSection section,
   // Update the icon if necessary.
   if (delegate_->FieldControlsIcons(type))
     [self updateFieldIcons];
-  [self updateEditability];
 }
 
 - (autofill::ServerFieldType)fieldTypeForControl:(NSControl*)control {
@@ -532,13 +526,11 @@ bool ShouldOverwriteComboboxes(autofill::DialogSection section,
     [self updateFieldIcons];
   }
 
-  [self updateEditability];
   [self modelChanged];
 }
 
 - (BOOL)isCreditCardSection {
-  return section_ == autofill::SECTION_CC ||
-      section_ == autofill::SECTION_CC_BILLING;
+  return section_ == autofill::SECTION_CC;
 }
 
 - (MenuButton*)makeSuggestionButton {
@@ -733,16 +725,6 @@ bool ShouldOverwriteComboboxes(autofill::DialogSection section,
     AutofillTextField* textfield = base::mac::ObjCCastStrict<AutofillTextField>(
         [inputs_ viewWithTag:iter->first]);
     [[textfield cell] setIcon:iter->second.ToNSImage()];
-  }
-}
-
-- (void)updateEditability {
-  base::scoped_nsobject<NSMutableArray> controls([[NSMutableArray alloc] init]);
-  [self addInputsToArray:controls];
-  for (NSControl<AutofillInputField>* control in controls.get()) {
-    autofill::ServerFieldType type = [self fieldTypeForControl:control];
-    const autofill::DetailInput* input = [self detailInputForType:type];
-    [control setEnabled:delegate_->InputIsEditable(*input, section_)];
   }
 }
 

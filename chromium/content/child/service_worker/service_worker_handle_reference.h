@@ -5,28 +5,31 @@
 #ifndef CONTENT_CHILD_SERVICE_WORKER_SERVICE_WORKER_HANDLE_REFERENCE_H_
 #define CONTENT_CHILD_SERVICE_WORKER_SERVICE_WORKER_HANDLE_REFERENCE_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_types.h"
 
 namespace content {
 
 class ThreadSafeSender;
 
-// Automatically increments and decrements ServiceWorkerHandle's ref-count
-// (in the browser side) in ctor and dtor.
-class ServiceWorkerHandleReference {
+// Represents an interprocess reference to ServiceWorkerHandle managed in the
+// browser process. The constructor and destructor sends a message to increment
+// or decrement the reference count to the browser process.
+class CONTENT_EXPORT ServiceWorkerHandleReference {
  public:
-  // Creates a new ServiceWorkerHandleReference and increments ref-count.
+  // Creates a new ServiceWorkerHandleReference and increments ref-count. If
+  // the handle id is kInvalidServiceWorkerHandleId, returns null instead.
   static scoped_ptr<ServiceWorkerHandleReference> Create(
       const ServiceWorkerObjectInfo& info,
       ThreadSafeSender* sender);
 
-  // Creates a new ServiceWorkerHandleReference by adopting a
-  // ref-count. ServiceWorkerHandleReferences created this way must
-  // have a matching
-  // ServiceWorkerDispatcherHost::RegisterServiceWorkerHandle call on
-  // the browser side.
+  // Creates a new ServiceWorkerHandleReference by adopting a ref-count. If
+  // the handle id is kInvalidServiceWorkerHandleId, returns null instead.
   static scoped_ptr<ServiceWorkerHandleReference> Adopt(
       const ServiceWorkerObjectInfo& info,
       ThreadSafeSender* sender);
@@ -37,8 +40,7 @@ class ServiceWorkerHandleReference {
   int handle_id() const { return info_.handle_id; }
   const GURL& url() const { return info_.url; }
   blink::WebServiceWorkerState state() const { return info_.state; }
-  void set_state(blink::WebServiceWorkerState state) { info_.state = state; }
-  int64 version_id() const { return info_.version_id; }
+  int64_t version_id() const { return info_.version_id; }
 
  private:
   ServiceWorkerHandleReference(const ServiceWorkerObjectInfo& info,

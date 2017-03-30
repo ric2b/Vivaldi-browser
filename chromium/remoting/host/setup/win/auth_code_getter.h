@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/timer/timer.h"
 #include "base/win/scoped_comptr.h"
@@ -44,7 +45,7 @@ class AuthCodeGetter : public base::NonThreadSafe {
   // The browser through which the user requests an authorization code.
   base::win::ScopedComPtr<IWebBrowser2, &IID_IWebBrowser2> browser_;
   // A timer used to poll the browser's URL.
-  base::OneShotTimer<AuthCodeGetter> timer_;
+  base::OneShotTimer timer_;
   // The interval at which the timer fires.
   base::TimeDelta timer_interval_;
 

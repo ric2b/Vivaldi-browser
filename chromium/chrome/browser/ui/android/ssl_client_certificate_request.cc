@@ -4,15 +4,17 @@
 
 #include "chrome/browser/ui/android/ssl_client_certificate_request.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "chrome/browser/ssl/ssl_client_certificate_selector.h"
-#include "chrome/browser/ui/android/window_android_helper.h"
+#include "chrome/browser/ui/android/view_android_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "crypto/scoped_openssl_types.h"
@@ -24,6 +26,7 @@
 #include "net/ssl/openssl_client_key_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_client_cert_type.h"
+#include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 
 namespace chrome {
@@ -121,10 +124,10 @@ namespace android {
 // the user didn't select a certificate.
 static void OnSystemRequestCompletion(
     JNIEnv* env,
-    jclass clazz,
+    const JavaParamRef<jclass>& clazz,
     jlong request_id,
-    jobjectArray encoded_chain_ref,
-    jobject private_key_ref) {
+    const JavaParamRef<jobjectArray>& encoded_chain_ref,
+    const JavaParamRef<jobject>& private_key_ref) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Take back ownership of the delegate object.
@@ -179,7 +182,9 @@ static void NotifyClientCertificatesChanged() {
   net::CertDatabase::GetInstance()->OnAndroidKeyStoreChanged();
 }
 
-static void NotifyClientCertificatesChangedOnIOThread(JNIEnv* env, jclass) {
+static void NotifyClientCertificatesChangedOnIOThread(
+    JNIEnv* env,
+    const JavaParamRef<jclass>&) {
   if (content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
     NotifyClientCertificatesChanged();
   } else {
@@ -200,11 +205,11 @@ void ShowSSLClientCertificateSelector(
     content::WebContents* contents,
     net::SSLCertRequestInfo* cert_request_info,
     scoped_ptr<content::ClientCertificateDelegate> delegate) {
-  ui::WindowAndroid* window =
-      WindowAndroidHelper::FromWebContents(contents)->GetWindowAndroid();
+  ui::WindowAndroid* window = ViewAndroidHelper::FromWebContents(contents)
+      ->GetViewAndroid()->GetWindowAndroid();
   DCHECK(window);
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  StartClientCertificateRequest(cert_request_info, window, delegate.Pass());
+  StartClientCertificateRequest(cert_request_info, window, std::move(delegate));
 }
 
 }  // namespace chrome

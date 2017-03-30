@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_COPRESENCE_TIMED_MAP_H_
 #define COMPONENTS_COPRESENCE_TIMED_MAP_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <queue>
 #include <utility>
@@ -65,7 +67,7 @@ class TimedMap {
   }
 
   void set_clock_for_testing(scoped_ptr<base::TickClock> clock) {
-    clock_ = clock.Pass();
+    clock_ = std::move(clock);
   }
 
  private:
@@ -96,7 +98,7 @@ class TimedMap {
   const ValueType kEmptyValue;
 
   scoped_ptr<base::TickClock> clock_;
-  base::RepeatingTimer<TimedMap> timer_;
+  base::RepeatingTimer timer_;
   const base::TimeDelta lifetime_;
   const size_t max_elements_;
   std::map<KeyType, ValueType> map_;

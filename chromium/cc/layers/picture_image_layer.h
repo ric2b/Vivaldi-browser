@@ -5,11 +5,16 @@
 #ifndef CC_LAYERS_PICTURE_IMAGE_LAYER_H_
 #define CC_LAYERS_PICTURE_IMAGE_LAYER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer.h"
-#include "third_party/skia/include/core/SkBitmap.h"
+#include "skia/ext/refptr.h"
 #include "ui/gfx/geometry/size.h"
+
+class SkImage;
 
 namespace cc {
 
@@ -17,20 +22,18 @@ class CC_EXPORT PictureImageLayer : public PictureLayer, ContentLayerClient {
  public:
   static scoped_refptr<PictureImageLayer> Create(const LayerSettings& settings);
 
-  void SetBitmap(const SkBitmap& image);
+  void SetImage(skia::RefPtr<const SkImage> image);
 
   // Layer implementation.
   scoped_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
 
+  gfx::Rect PaintableRegion() override;
+
   // ContentLayerClient implementation.
-  void PaintContents(
-      SkCanvas* canvas,
-      const gfx::Rect& clip,
-      ContentLayerClient::PaintingControlSetting painting_control) override;
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      const gfx::Rect& clip,
       ContentLayerClient::PaintingControlSetting painting_control) override;
   bool FillsBoundsCompletely() const override;
+  size_t GetApproximateUnsharedMemoryUsage() const override;
 
  protected:
   bool HasDrawableContent() const override;
@@ -39,7 +42,7 @@ class CC_EXPORT PictureImageLayer : public PictureLayer, ContentLayerClient {
   explicit PictureImageLayer(const LayerSettings& settings);
   ~PictureImageLayer() override;
 
-  SkBitmap bitmap_;
+  skia::RefPtr<const SkImage> image_;
 
   DISALLOW_COPY_AND_ASSIGN(PictureImageLayer);
 };

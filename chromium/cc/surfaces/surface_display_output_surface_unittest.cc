@@ -36,6 +36,7 @@ class FakeOnscreenDisplayClient : public OnscreenDisplayClient {
     // to it now for future reference.
     fake_output_surface_ =
         static_cast<FakeOutputSurface*>(output_surface_.get());
+    fake_output_surface_->set_max_frames_pending(2);
   }
 
   FakeOutputSurface* output_surface() { return fake_output_surface_; }
@@ -60,7 +61,8 @@ class SurfaceDisplayOutputSurfaceTest : public testing::Test {
         context_provider_(TestContextProvider::Create()),
         surface_display_output_surface_(&surface_manager_,
                                         &allocator_,
-                                        context_provider_) {
+                                        context_provider_,
+                                        nullptr) {
     output_surface_ = display_client_.output_surface();
     display_client_.set_surface_output_surface(
         &surface_display_output_surface_);
@@ -81,10 +83,10 @@ class SurfaceDisplayOutputSurfaceTest : public testing::Test {
                         gfx::Transform());
 
     scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
-    frame_data->render_pass_list.push_back(render_pass.Pass());
+    frame_data->render_pass_list.push_back(std::move(render_pass));
 
     CompositorFrame frame;
-    frame.delegated_frame_data = frame_data.Pass();
+    frame.delegated_frame_data = std::move(frame_data);
 
     surface_display_output_surface_.SwapBuffers(&frame);
   }

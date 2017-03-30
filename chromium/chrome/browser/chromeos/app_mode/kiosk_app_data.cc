@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
@@ -147,10 +148,9 @@ class KioskAppData::CrxLoader : public extensions::SandboxedUnpackerClient {
 
     scoped_refptr<extensions::SandboxedUnpacker> unpacker(
         new extensions::SandboxedUnpacker(
-            extensions::CRXFileInfo(crx_file_), extensions::Manifest::INTERNAL,
-            extensions::Extension::NO_FLAGS, temp_dir_.path(),
-            task_runner_.get(), this));
-    unpacker->Start();
+            extensions::Manifest::INTERNAL, extensions::Extension::NO_FLAGS,
+            temp_dir_.path(), task_runner_.get(), this));
+    unpacker->StartWithCrx(extensions::CRXFileInfo(crx_file_));
   }
 
   void NotifyFinishedOnBlockingPool() {

@@ -352,8 +352,8 @@ fileOperationUtil.listEntries = function(directory, callback) {
  * - The progress callback is supported.
  * - The cancellation is supported.
  *
- * @param {Entry} source The entry to be copied.
- * @param {DirectoryEntry} parent The entry of the destination directory.
+ * @param {!Entry} source The entry to be copied.
+ * @param {!DirectoryEntry} parent The entry of the destination directory.
  * @param {string} newName The name of copied file.
  * @param {function(string, Entry)} entryChangedCallback
  *     Callback invoked when an entry is created with the source URL and
@@ -372,7 +372,9 @@ fileOperationUtil.listEntries = function(directory, callback) {
 fileOperationUtil.copyTo = function(
     source, parent, newName, entryChangedCallback, progressCallback,
     successCallback, errorCallback) {
-  var copyId = null;
+
+  /** @type {number|undefined} */
+  var copyId;
   var pendingCallbacks = [];
 
   // Makes the callback called in order they were invoked.
@@ -443,7 +445,8 @@ fileOperationUtil.copyTo = function(
           console.error('Unknown progress type: ' + status.type);
           chrome.fileManagerPrivate.onCopyProgress.removeListener(
               onCopyProgress);
-          chrome.fileManagerPrivate.cancelCopy(copyId);
+          chrome.fileManagerPrivate.cancelCopy(
+              assert(copyId), util.checkAPIError);
           errorCallback(util.createDOMError(
               util.FileError.INVALID_STATE_ERR));
           callback();
@@ -456,9 +459,8 @@ fileOperationUtil.copyTo = function(
   chrome.fileManagerPrivate.onCopyProgress.addListener(onCopyProgress);
 
   // Then starts the copy.
-  // TODO(mtomasz): Convert URL to Entry in custom bindings.
   chrome.fileManagerPrivate.startCopy(
-      source.toURL(), parent.toURL(), newName, function(startCopyId) {
+      source, parent, newName, function(startCopyId) {
         // last error contains the FileError code on error.
         if (chrome.runtime.lastError) {
           // Unsubscribe the progress listener.
@@ -477,14 +479,15 @@ fileOperationUtil.copyTo = function(
 
   return function() {
     // If copyId is not yet available, wait for it.
-    if (copyId == null) {
+    if (copyId === undefined) {
       pendingCallbacks.push(function() {
-        chrome.fileManagerPrivate.cancelCopy(copyId);
+        chrome.fileManagerPrivate.cancelCopy(
+            assert(copyId), util.checkAPIError);
       });
       return;
     }
 
-    chrome.fileManagerPrivate.cancelCopy(copyId);
+    chrome.fileManagerPrivate.cancelCopy(copyId, util.checkAPIError);
   };
 };
 
@@ -492,8 +495,8 @@ fileOperationUtil.copyTo = function(
  * Thin wrapper of chrome.fileManagerPrivate.zipSelection to adapt its
  * interface similar to copyTo().
  *
- * @param {Array<Entry>} sources The array of entries to be archived.
- * @param {DirectoryEntry} parent The entry of the destination directory.
+ * @param {!Array<!Entry>} sources The array of entries to be archived.
+ * @param {!DirectoryEntry} parent The entry of the destination directory.
  * @param {string} newName The name of the archive to be created.
  * @param {function(FileEntry)} successCallback Callback invoked when the
  *     operation is successfully done with the entry of the created archive.
@@ -502,11 +505,9 @@ fileOperationUtil.copyTo = function(
  */
 fileOperationUtil.zipSelection = function(
     sources, parent, newName, successCallback, errorCallback) {
-  // TODO(mtomasz): Move conversion from entry to url to custom bindings.
-  // crbug.com/345527.
   chrome.fileManagerPrivate.zipSelection(
-      parent.toURL(),
-      util.entriesToURLs(sources),
+      parent,
+      sources,
       newName, function(success) {
         if (!success) {
           // Failed to create a zip archive.
@@ -870,8 +871,8 @@ fileOperationUtil.CopyTask.prototype.run = function(
 /**
  * Copies the source entry to the target directory.
  *
- * @param {Entry} sourceEntry An entry to be copied.
- * @param {DirectoryEntry} destinationEntry The entry which will contain the
+ * @param {!Entry} sourceEntry An entry to be copied.
+ * @param {!DirectoryEntry} destinationEntry The entry which will contain the
  *     copied entry.
  * @param {function(string, Entry)} entryChangedCallback
  *     Callback invoked when an entry is created with the source URL and
@@ -1044,9 +1045,9 @@ fileOperationUtil.MoveTask.processEntry_ = function(
  * Task to create a zip archive.
  *
  * @param {string} taskId A unique ID for identifying this task.
- * @param {Array<Entry>} sourceEntries Array of source entries.
- * @param {DirectoryEntry} targetDirEntry Target directory.
- * @param {DirectoryEntry} zipBaseDirEntry Base directory dealt as a root
+ * @param {!Array<!Entry>} sourceEntries Array of source entries.
+ * @param {!DirectoryEntry} targetDirEntry Target directory.
+ * @param {!DirectoryEntry} zipBaseDirEntry Base directory dealt as a root
  *     in ZIP archive.
  * @constructor
  * @extends {fileOperationUtil.Task}

@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -77,7 +78,7 @@ class UpdateScreen : public UpdateModel,
   // Skip update UI, usually used only in debug builds/tests.
   void CancelUpdate();
 
-  base::OneShotTimer<UpdateScreen>& GetErrorMessageTimerForTesting();
+  base::OneShotTimer& GetErrorMessageTimerForTesting();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(UpdateScreenTest, TestBasic);
@@ -126,7 +127,7 @@ class UpdateScreen : public UpdateModel,
 
   // Timer for the interval to wait for the reboot.
   // If reboot didn't happen - ask user to reboot manually.
-  base::OneShotTimer<UpdateScreen> reboot_timer_;
+  base::OneShotTimer reboot_timer_;
 
   // Returns a static InstanceSet.
   typedef std::set<UpdateScreen*> InstanceSet;
@@ -181,7 +182,7 @@ class UpdateScreen : public UpdateModel,
   // Timer for the captive portal detector to show portal login page.
   // If redirect did not happen during this delay, error message is shown
   // instead.
-  base::OneShotTimer<UpdateScreen> error_message_timer_;
+  base::OneShotTimer error_message_timer_;
 
   ErrorScreen::ConnectRequestCallbackSubscription connect_request_subscription_;
 

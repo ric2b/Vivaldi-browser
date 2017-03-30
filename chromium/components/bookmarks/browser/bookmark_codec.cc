@@ -4,39 +4,46 @@
 
 #include "components/bookmarks/browser/bookmark_codec.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_resources.h"
+
 using base::Time;
 
 namespace bookmarks {
 
-const char* BookmarkCodec::kRootsKey = "roots";
-const char* BookmarkCodec::kRootFolderNameKey = "bookmark_bar";
-const char* BookmarkCodec::kOtherBookmarkFolderNameKey = "other";
+const char BookmarkCodec::kRootsKey[] = "roots";
+const char BookmarkCodec::kRootFolderNameKey[] = "bookmark_bar";
+const char BookmarkCodec::kOtherBookmarkFolderNameKey[] = "other";
+const char BookmarkCodec::kTrashBookmarkFolderNameKey[] = "trash";
 // The value is left as 'synced' for historical reasons.
-const char* BookmarkCodec::kMobileBookmarkFolderNameKey = "synced";
-const char* BookmarkCodec::kVersionKey = "version";
-const char* BookmarkCodec::kChecksumKey = "checksum";
-const char* BookmarkCodec::kIdKey = "id";
-const char* BookmarkCodec::kTypeKey = "type";
-const char* BookmarkCodec::kNameKey = "name";
-const char* BookmarkCodec::kDateAddedKey = "date_added";
-const char* BookmarkCodec::kURLKey = "url";
-const char* BookmarkCodec::kDateModifiedKey = "date_modified";
-const char* BookmarkCodec::kChildrenKey = "children";
-const char* BookmarkCodec::kMetaInfo = "meta_info";
-const char* BookmarkCodec::kSyncTransactionVersion = "sync_transaction_version";
-const char* BookmarkCodec::kTypeURL = "url";
-const char* BookmarkCodec::kTypeFolder = "folder";
+const char BookmarkCodec::kMobileBookmarkFolderNameKey[] = "synced";
+const char BookmarkCodec::kVersionKey[] = "version";
+const char BookmarkCodec::kChecksumKey[] = "checksum";
+const char BookmarkCodec::kIdKey[] = "id";
+const char BookmarkCodec::kTypeKey[] = "type";
+const char BookmarkCodec::kNameKey[] = "name";
+const char BookmarkCodec::kDateAddedKey[] = "date_added";
+const char BookmarkCodec::kURLKey[] = "url";
+const char BookmarkCodec::kDateModifiedKey[] = "date_modified";
+const char BookmarkCodec::kChildrenKey[] = "children";
+const char BookmarkCodec::kMetaInfo[] = "meta_info";
+const char BookmarkCodec::kSyncTransactionVersion[] =
+    "sync_transaction_version";
+const char BookmarkCodec::kTypeURL[] = "url";
+const char BookmarkCodec::kTypeFolder[] = "folder";
 
 // Current version of the file.
 static const int kCurrentVersion = 1;
@@ -55,6 +62,7 @@ base::Value* BookmarkCodec::Encode(BookmarkModel* model) {
   return Encode(model->bookmark_bar_node(),
                 model->other_node(),
                 model->mobile_node(),
+                model->trash_node(),
                 model->root_node()->GetMetaInfoMap(),
                 model->root_node()->sync_transaction_version());
 }
@@ -63,6 +71,7 @@ base::Value* BookmarkCodec::Encode(
     const BookmarkNode* bookmark_bar_node,
     const BookmarkNode* other_folder_node,
     const BookmarkNode* mobile_folder_node,
+    const BookmarkNode* trash_folder_node,
     const BookmarkNode::MetaInfoMap* model_meta_info_map,
     int64_t sync_transaction_version) {
   ids_reassigned_ = false;
@@ -71,6 +80,8 @@ base::Value* BookmarkCodec::Encode(
   roots->Set(kRootFolderNameKey, EncodeNode(bookmark_bar_node));
   roots->Set(kOtherBookmarkFolderNameKey, EncodeNode(other_folder_node));
   roots->Set(kMobileBookmarkFolderNameKey, EncodeNode(mobile_folder_node));
+  if (trash_folder_node)
+    roots->Set(kTrashBookmarkFolderNameKey, EncodeNode(trash_folder_node));
   if (model_meta_info_map)
     roots->Set(kMetaInfo, EncodeMetaInfo(*model_meta_info_map));
   if (sync_transaction_version !=
@@ -92,6 +103,7 @@ base::Value* BookmarkCodec::Encode(
 bool BookmarkCodec::Decode(BookmarkNode* bb_node,
                            BookmarkNode* other_folder_node,
                            BookmarkNode* mobile_folder_node,
+                           BookmarkNode* trash_folder_node,
                            int64_t* max_id,
                            const base::Value& value) {
   ids_.clear();
@@ -101,12 +113,13 @@ bool BookmarkCodec::Decode(BookmarkNode* bb_node,
   stored_checksum_.clear();
   InitializeChecksum();
   bool success = DecodeHelper(bb_node, other_folder_node, mobile_folder_node,
-                              value);
+                              trash_folder_node, value);
   FinalizeChecksum();
   // If either the checksums differ or some IDs were missing/not unique,
   // reassign IDs.
   if (!ids_valid_ || computed_checksum() != stored_checksum())
-    ReassignIDs(bb_node, other_folder_node, mobile_folder_node);
+    ReassignIDs(bb_node, other_folder_node, mobile_folder_node,
+                trash_folder_node);
   *max_id = maximum_id_ + 1;
   return success;
 }
@@ -160,6 +173,7 @@ base::Value* BookmarkCodec::EncodeMetaInfo(
 bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
                                  BookmarkNode* other_folder_node,
                                  BookmarkNode* mobile_folder_node,
+                                 BookmarkNode* trash_folder_node,
                                  const base::Value& value) {
   const base::DictionaryValue* d_value = nullptr;
   if (!value.GetAsDictionary(&d_value))
@@ -215,6 +229,20 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
     if (ids_valid_)
       ReassignIDsHelper(mobile_folder_node);
   }
+  // NOTE(pettern@vivaldi): Fail silently if trash is missing, older versions
+  // didn't have it.
+  if (trash_folder_node) {
+    const base::Value* trash_folder_value;
+    const base::DictionaryValue* trash_folder_d_value = nullptr;
+    if (roots_d_value->Get(kTrashBookmarkFolderNameKey, &trash_folder_value) &&
+        trash_folder_value->GetAsDictionary(&trash_folder_d_value)) {
+      DecodeNode(*trash_folder_d_value, nullptr, trash_folder_node);
+    } else {
+      // Reassign id. See comment above.
+      if (ids_valid_)
+        ReassignIDsHelper(trash_folder_node);
+    }
+  }
 
   if (!DecodeMetaInfo(*roots_d_value, &model_meta_info_map_,
                       &model_sync_transaction_version_))
@@ -233,11 +261,16 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
   bb_node->set_type(BookmarkNode::BOOKMARK_BAR);
   other_folder_node->set_type(BookmarkNode::OTHER_NODE);
   mobile_folder_node->set_type(BookmarkNode::MOBILE);
+  if (trash_folder_node)
+    trash_folder_node->set_type(BookmarkNode::TRASH);
   bb_node->SetTitle(l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_FOLDER_NAME));
   other_folder_node->SetTitle(
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_OTHER_FOLDER_NAME));
   mobile_folder_node->SetTitle(
         l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_MOBILE_FOLDER_NAME));
+  if (trash_folder_node)
+    trash_folder_node->SetTitle(
+        l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME));
 
   return true;
 }
@@ -387,7 +420,7 @@ bool BookmarkCodec::DecodeMetaInfo(const base::DictionaryValue& value,
     std::string meta_info_str;
     meta_info->GetAsString(&meta_info_str);
     JSONStringValueDeserializer deserializer(meta_info_str);
-    deserialized_holder.reset(deserializer.Deserialize(nullptr, nullptr));
+    deserialized_holder = deserializer.Deserialize(nullptr, nullptr);
     if (!deserialized_holder)
       return false;
     meta_info = deserialized_holder.get();
@@ -433,11 +466,14 @@ void BookmarkCodec::DecodeMetaInfoHelper(
 
 void BookmarkCodec::ReassignIDs(BookmarkNode* bb_node,
                                 BookmarkNode* other_node,
-                                BookmarkNode* mobile_node) {
+                                BookmarkNode* mobile_node,
+                                BookmarkNode* trash_node) {
   maximum_id_ = 0;
   ReassignIDsHelper(bb_node);
   ReassignIDsHelper(other_node);
   ReassignIDsHelper(mobile_node);
+  if(trash_node)
+    ReassignIDsHelper(trash_node);
   ids_reassigned_ = true;
 }
 

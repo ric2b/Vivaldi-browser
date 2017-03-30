@@ -4,7 +4,11 @@
 
 #include "net/base/sdch_manager.h"
 
-#include "base/base64.h"
+#include <limits.h>
+
+#include <utility>
+
+#include "base/base64url.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -37,9 +41,6 @@ void StripTrailingDot(GURL* gurl) {
 }  // namespace
 
 namespace net {
-
-// static
-bool SdchManager::g_sdch_enabled_ = true;
 
 SdchManager::DictionarySet::DictionarySet() {}
 
@@ -103,17 +104,11 @@ void SdchManager::SdchErrorRecovery(SdchProblemCode problem) {
                             SDCH_MAX_PROBLEM_CODE);
 }
 
-// static
-void SdchManager::EnableSdchSupport(bool enabled) {
-  g_sdch_enabled_ = enabled;
-}
-
 void SdchManager::BlacklistDomain(const GURL& url,
                                   SdchProblemCode blacklist_reason) {
   SetAllowLatencyExperiment(url, false);
 
-  BlacklistInfo* blacklist_info =
-      &blacklisted_domains_[base::StringToLowerASCII(url.host())];
+  BlacklistInfo* blacklist_info = &blacklisted_domains_[url.host()];
 
   if (blacklist_info->count > 0)
     return;  // Domain is already blacklisted.
@@ -133,8 +128,7 @@ void SdchManager::BlacklistDomainForever(const GURL& url,
                                          SdchProblemCode blacklist_reason) {
   SetAllowLatencyExperiment(url, false);
 
-  BlacklistInfo* blacklist_info =
-      &blacklisted_domains_[base::StringToLowerASCII(url.host())];
+  BlacklistInfo* blacklist_info = &blacklisted_domains_[url.host()];
   blacklist_info->count = INT_MAX;
   blacklist_info->exponential_count = INT_MAX;
   blacklist_info->reason = blacklist_reason;
@@ -145,14 +139,14 @@ void SdchManager::ClearBlacklistings() {
 }
 
 void SdchManager::ClearDomainBlacklisting(const std::string& domain) {
-  BlacklistInfo* blacklist_info = &blacklisted_domains_[
-      base::StringToLowerASCII(domain)];
+  BlacklistInfo* blacklist_info =
+      &blacklisted_domains_[base::ToLowerASCII(domain)];
   blacklist_info->count = 0;
   blacklist_info->reason = SDCH_OK;
 }
 
 int SdchManager::BlackListDomainCount(const std::string& domain) {
-  std::string domain_lower(base::StringToLowerASCII(domain));
+  std::string domain_lower(base::ToLowerASCII(domain));
 
   if (blacklisted_domains_.end() == blacklisted_domains_.find(domain_lower))
     return 0;
@@ -160,7 +154,7 @@ int SdchManager::BlackListDomainCount(const std::string& domain) {
 }
 
 int SdchManager::BlacklistDomainExponential(const std::string& domain) {
-  std::string domain_lower(base::StringToLowerASCII(domain));
+  std::string domain_lower(base::ToLowerASCII(domain));
 
   if (blacklisted_domains_.end() == blacklisted_domains_.find(domain_lower))
     return 0;
@@ -169,14 +163,10 @@ int SdchManager::BlacklistDomainExponential(const std::string& domain) {
 
 SdchProblemCode SdchManager::IsInSupportedDomain(const GURL& url) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (!g_sdch_enabled_ )
-    return SDCH_DISABLED;
-
   if (blacklisted_domains_.empty())
     return SDCH_OK;
 
-  DomainBlacklistInfo::iterator it =
-      blacklisted_domains_.find(base::StringToLowerASCII(url.host()));
+  auto it = blacklisted_domains_.find(url.host());
   if (blacklisted_domains_.end() == it || it->second.count == 0)
     return SDCH_OK;
 
@@ -228,8 +218,8 @@ SdchProblemCode SdchManager::CanFetchDictionary(
    */
   // Item (1) above implies item (2). Spec should be updated.
   // I take "host name match" to be "is identical to"
-  if (referring_url.host() != dictionary_url.host() ||
-      referring_url.scheme() != dictionary_url.scheme())
+  if (referring_url.host_piece() != dictionary_url.host_piece() ||
+      referring_url.scheme_piece() != dictionary_url.scheme_piece())
     return SDCH_DICTIONARY_LOAD_ATTEMPT_FROM_DIFFERENT_HOST;
 
   // TODO(jar): Remove this failsafe conservative hack which is more restrictive
@@ -260,10 +250,8 @@ SdchManager::GetDictionarySet(const GURL& target_url) {
     return NULL;
 
   UMA_HISTOGRAM_COUNTS("Sdch3.Advertisement_Count", count);
-  UMA_HISTOGRAM_BOOLEAN("Sdch3.AdvertisedWithSecureScheme",
-                        target_url.SchemeIsSecure());
 
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<SdchManager::DictionarySet>
@@ -276,15 +264,15 @@ SdchManager::GetDictionarySetByHash(
   *problem_code = SDCH_DICTIONARY_HASH_NOT_FOUND;
   const auto& it = dictionaries_.find(server_hash);
   if (it == dictionaries_.end())
-    return result.Pass();
+    return result;
 
   *problem_code = it->second->data.CanUse(target_url);
   if (*problem_code != SDCH_OK)
-    return result.Pass();
+    return result;
 
   result.reset(new DictionarySet);
   result->AddDictionary(it->first, it->second);
-  return result.Pass();
+  return result;
 }
 
 // static
@@ -293,10 +281,14 @@ void SdchManager::GenerateHash(const std::string& dictionary_text,
   char binary_hash[32];
   crypto::SHA256HashString(dictionary_text, binary_hash, sizeof(binary_hash));
 
-  std::string first_48_bits(&binary_hash[0], 6);
-  std::string second_48_bits(&binary_hash[6], 6);
-  UrlSafeBase64Encode(first_48_bits, client_hash);
-  UrlSafeBase64Encode(second_48_bits, server_hash);
+  base::StringPiece first_48_bits(&binary_hash[0], 6);
+  base::StringPiece second_48_bits(&binary_hash[6], 6);
+
+  base::Base64UrlEncode(
+      first_48_bits, base::Base64UrlEncodePolicy::INCLUDE_PADDING, client_hash);
+  base::Base64UrlEncode(second_48_bits,
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        server_hash);
 
   DCHECK_EQ(server_hash->length(), 8u);
   DCHECK_EQ(client_hash->length(), 8u);
@@ -374,7 +366,7 @@ SdchProblemCode SdchManager::AddSdchDictionary(
         break;
       std::string name(dictionary_text, line_start, colon_index - line_start);
       std::string value(dictionary_text, value_start, line_end - value_start);
-      name = base::StringToLowerASCII(name);
+      name = base::ToLowerASCII(name);
       if (name == "domain") {
         domain = value;
       } else if (name == "path") {
@@ -443,23 +435,13 @@ SdchProblemCode SdchManager::RemoveSdchDictionary(
 // static
 scoped_ptr<SdchManager::DictionarySet>
 SdchManager::CreateEmptyDictionarySetForTesting() {
-  return scoped_ptr<DictionarySet>(new DictionarySet).Pass();
-}
-
-// static
-void SdchManager::UrlSafeBase64Encode(const std::string& input,
-                                      std::string* output) {
-  // Since this is only done during a dictionary load, and hashes are only 8
-  // characters, we just do the simple fixup, rather than rewriting the encoder.
-  base::Base64Encode(input, output);
-  std::replace(output->begin(), output->end(), '+', '-');
-  std::replace(output->begin(), output->end(), '/', '_');
+  return scoped_ptr<DictionarySet>(new DictionarySet);
 }
 
 scoped_ptr<base::Value> SdchManager::SdchInfoToValue() const {
   scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
 
-  value->SetBoolean("sdch_enabled", sdch_enabled());
+  value->SetBoolean("sdch_enabled", true);
 
   scoped_ptr<base::ListValue> entry_list(new base::ListValue());
   for (const auto& entry: dictionaries_) {
@@ -474,11 +456,11 @@ scoped_ptr<base::Value> SdchManager::SdchInfoToValue() const {
          port_it != entry.second->data.ports().end(); ++port_it) {
       port_list->AppendInteger(*port_it);
     }
-    entry_dict->Set("ports", port_list.Pass());
+    entry_dict->Set("ports", std::move(port_list));
     entry_dict->SetString("server_hash", entry.first);
-    entry_list->Append(entry_dict.Pass());
+    entry_list->Append(std::move(entry_dict));
   }
-  value->Set("dictionaries", entry_list.Pass());
+  value->Set("dictionaries", std::move(entry_list));
 
   entry_list.reset(new base::ListValue());
   for (DomainBlacklistInfo::const_iterator it = blacklisted_domains_.begin();
@@ -490,11 +472,11 @@ scoped_ptr<base::Value> SdchManager::SdchInfoToValue() const {
     if (it->second.count != INT_MAX)
       entry_dict->SetInteger("tries", it->second.count);
     entry_dict->SetInteger("reason", it->second.reason);
-    entry_list->Append(entry_dict.Pass());
+    entry_list->Append(std::move(entry_dict));
   }
-  value->Set("blacklisted", entry_list.Pass());
+  value->Set("blacklisted", std::move(entry_list));
 
-  return value.Pass();
+  return std::move(value);
 }
 
 }  // namespace net

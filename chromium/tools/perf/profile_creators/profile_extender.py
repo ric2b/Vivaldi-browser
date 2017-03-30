@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import copy
+
 from telemetry.core import platform
 from telemetry.util import wpr_modes
 from telemetry.internal.browser import browser_finder
@@ -26,7 +28,10 @@ class ProfileExtender(object):
       then a new profile is created. Otherwise, the existing profile is
       appended on to.
     """
-    self._finder_options = finder_options
+    self._finder_options = copy.deepcopy(finder_options)
+    # Since profile extenders are not supported on remote platforms,
+    # this should be the same as target platform.
+    self._os_name = platform.GetHostPlatform().GetOSName()
 
     # A reference to the browser that will be performing all of the tab
     # navigations.
@@ -58,6 +63,21 @@ class ProfileExtender(object):
   def browser(self):
     return self._browser
 
+  @property
+  def os_name(self):
+    """Name of OS that extender is currently running on."""
+    return self._os_name
+
+  def EnabledOSList(self):
+    """Returns a list of OSes that this extender can run on.
+
+    Can be overridden by subclasses.
+
+    Returns:
+        List of OS ('win', 'mac', or 'linux') that this extender can run on.
+    """
+    return ["win", "mac", "linux"]
+
   def SetUpBrowser(self):
     """Finds and starts the browser.
 
@@ -69,10 +89,15 @@ class ProfileExtender(object):
     method, the subclass must also call TearDownBrowser().
     """
     possible_browser = self._GetPossibleBrowser(self.finder_options)
-
+    enabled_os_list = self.EnabledOSList()
+    if self._os_name not in enabled_os_list:
+      raise NotImplementedError(
+        'This profile extender on %s is not yet supported'
+        % self._os_name)
+    if possible_browser.IsRemote():
+      raise NotImplementedError(
+        'Profile extenders are not yet supported on remote platforms.')
     assert possible_browser.supports_tab_control
-    assert (platform.GetHostPlatform().GetOSName() in
-        ["win", "mac", "linux"])
 
     self._SetUpWebPageReplay(self.finder_options, possible_browser)
     self._browser = possible_browser.Create(self.finder_options)

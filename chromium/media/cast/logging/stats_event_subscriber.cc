@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <cmath>
-
 #include "media/cast/logging/stats_event_subscriber.h"
+
+#include <algorithm>
+#include <cmath>
 
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -34,9 +35,9 @@ bool IsReceiverEvent(CastLoggingEvent event) {
 
 }  // namespace
 
-StatsEventSubscriber::SimpleHistogram::SimpleHistogram(int64 min,
-                                                       int64 max,
-                                                       int64 width)
+StatsEventSubscriber::SimpleHistogram::SimpleHistogram(int64_t min,
+                                                       int64_t max,
+                                                       int64_t width)
     : min_(min), max_(max), width_(width), buckets_((max - min) / width + 2) {
   CHECK_GT(buckets_.size(), 2u);
   CHECK_EQ(0, (max_ - min_) % width_);
@@ -45,7 +46,7 @@ StatsEventSubscriber::SimpleHistogram::SimpleHistogram(int64 min,
 StatsEventSubscriber::SimpleHistogram::~SimpleHistogram() {
 }
 
-void StatsEventSubscriber::SimpleHistogram::Add(int64 sample) {
+void StatsEventSubscriber::SimpleHistogram::Add(int64_t sample) {
   if (sample < min_) {
     ++buckets_.front();
   } else if (sample >= max_) {
@@ -77,8 +78,8 @@ StatsEventSubscriber::SimpleHistogram::GetHistogram() const {
     if (!buckets_[i])
       continue;
     bucket.reset(new base::DictionaryValue);
-    int64 lower = min_ + (i - 1) * width_;
-    int64 upper = lower + width_ - 1;
+    int64_t lower = min_ + (i - 1) * width_;
+    int64_t upper = lower + width_ - 1;
     bucket->SetInteger(
         base::StringPrintf("%" PRId64 "-%" PRId64, lower, upper),
         buckets_[i]);
@@ -91,7 +92,7 @@ StatsEventSubscriber::SimpleHistogram::GetHistogram() const {
                        buckets_.back());
     histo->Append(bucket.release());
   }
-  return histo.Pass();
+  return histo;
 }
 
 StatsEventSubscriber::StatsEventSubscriber(
@@ -246,7 +247,7 @@ scoped_ptr<base::DictionaryValue> StatsEventSubscriber::GetStats() const {
   ret->Set(event_media_type_ == AUDIO_EVENT ? "audio" : "video",
            stats.release());
 
-  return ret.Pass();
+  return ret;
 }
 
 void StatsEventSubscriber::Reset() {
@@ -483,7 +484,7 @@ bool StatsEventSubscriber::GetReceiverOffset(base::TimeDelta* offset) {
   return true;
 }
 
-void StatsEventSubscriber::MaybeInsertFrameInfo(RtpTimestamp rtp_timestamp,
+void StatsEventSubscriber::MaybeInsertFrameInfo(RtpTimeTicks rtp_timestamp,
                                                 const FrameInfo& frame_info) {
   // No need to insert if |rtp_timestamp| is the smaller than every key in the
   // map as it is just going to get erased anyway.
@@ -595,7 +596,7 @@ void StatsEventSubscriber::UpdateLastResponseTime(
 
 void StatsEventSubscriber::ErasePacketSentTime(
     const PacketEvent& packet_event) {
-  std::pair<RtpTimestamp, uint16> key(
+  std::pair<RtpTimeTicks, uint16_t> key(
       std::make_pair(packet_event.rtp_timestamp, packet_event.packet_id));
   packet_sent_times_.erase(key);
 }
@@ -621,7 +622,7 @@ void StatsEventSubscriber::RecordPacketRelatedLatencies(
   if (!GetReceiverOffset(&receiver_offset))
     return;
 
-  std::pair<RtpTimestamp, uint16> key(
+  std::pair<RtpTimeTicks, uint16_t> key(
       std::make_pair(packet_event.rtp_timestamp, packet_event.packet_id));
   PacketEventTimeMap::iterator it = packet_sent_times_.find(key);
   if (it == packet_sent_times_.end()) {

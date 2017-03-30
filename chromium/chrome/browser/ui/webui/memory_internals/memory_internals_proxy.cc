@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -31,7 +32,7 @@
 #include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/webui/memory_internals/memory_internals_handler.h"
-#include "chrome/common/render_messages.h"
+#include "chrome/common/features.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_process_host.h"
@@ -83,7 +84,7 @@ base::DictionaryValue* FindProcessFromPid(base::ListValue* processes,
 
 void GetAllWebContents(std::set<content::WebContents*>* web_contents) {
   // Add all the existing WebContentses.
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   for (TabModelList::const_iterator iter = TabModelList::begin();
        iter != TabModelList::end(); ++iter) {
     TabModel* model = *iter;
@@ -152,7 +153,8 @@ class RendererDetails {
     if (service_registry)
       service_registry->ConnectToRemoteService(mojo::GetProxy(&service));
     resource_usage_reporters_.insert(std::make_pair(
-        content, make_linked_ptr(new ProcessResourceUsage(service.Pass()))));
+        content,
+        make_linked_ptr(new ProcessResourceUsage(std::move(service)))));
     DCHECK_EQ(web_contents_.size(), resource_usage_reporters_.size());
   }
 
@@ -224,7 +226,7 @@ MemoryInternalsProxy::~MemoryInternalsProxy() {}
 void MemoryInternalsProxy::RequestRendererDetails() {
   renderer_details_->Clear();
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   for (TabModelList::const_iterator iter = TabModelList::begin();
        iter != TabModelList::end(); ++iter) {
     TabModel* model = *iter;
@@ -349,7 +351,7 @@ void MemoryInternalsProxy::ConvertTabsInformation(
 }
 
 void MemoryInternalsProxy::FinishCollection() {
-  information_->SetInteger("uptime", base::SysInfo::Uptime());
+  information_->SetInteger("uptime", base::SysInfo::Uptime().InMilliseconds());
   information_->SetString("os", base::SysInfo::OperatingSystemName());
   information_->SetString("os_version",
                           base::SysInfo::OperatingSystemVersion());

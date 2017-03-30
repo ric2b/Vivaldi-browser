@@ -6,13 +6,13 @@
 #define CHROME_BROWSER_PERMISSIONS_PERMISSION_BUBBLE_REQUEST_IMPL_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "components/content_settings/core/common/content_settings_types.h"
+#include "content/public/browser/permission_type.h"
 
 class GURL;
-
 class PermissionContextBase;
 
 // Default implementation of PermissionBubbleRequest, it is assumed that the
@@ -25,7 +25,7 @@ class PermissionBubbleRequestImpl : public PermissionBubbleRequest {
   PermissionBubbleRequestImpl(
       const GURL& request_origin,
       bool user_gesture,
-      ContentSettingsType type,
+      content::PermissionType permission_type,
       const std::string& display_languages,
       const PermissionDecidedCallback& permission_decided_callback,
       const base::Closure delete_callback);
@@ -33,7 +33,8 @@ class PermissionBubbleRequestImpl : public PermissionBubbleRequest {
   ~PermissionBubbleRequestImpl() override;
 
   // PermissionBubbleRequest:
-  int GetIconID() const override;
+  gfx::VectorIconId GetVectorIconId() const override;
+  int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
   bool HasUserGesture() const override;
@@ -54,7 +55,7 @@ class PermissionBubbleRequestImpl : public PermissionBubbleRequest {
  private:
   GURL request_origin_;
   bool user_gesture_;
-  ContentSettingsType type_;
+  content::PermissionType permission_type_;
   std::string display_languages_;
 
   // Called once a decision is made about the permission.

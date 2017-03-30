@@ -9,11 +9,13 @@
 #include "base/files/file_path.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread.h"
 #include "extensions/browser/extension_prefs.h"
@@ -58,6 +60,7 @@ class FakeThemeService : public ThemeService {
   FakeThemeService() :
     using_system_theme_(false),
     using_default_theme_(false),
+    distinct_from_default_theme_(false),
     theme_extension_(NULL),
     is_dirty_(false) {}
 
@@ -81,6 +84,14 @@ class FakeThemeService : public ThemeService {
     using_system_theme_ = true;
     using_default_theme_ = false;
     theme_extension_ = NULL;
+  }
+
+  bool IsSystemThemeDistinctFromDefaultTheme() const override {
+    return distinct_from_default_theme_;
+  }
+
+  void set_distinct_from_default_theme(bool is_distinct) {
+    distinct_from_default_theme_ = is_distinct;
   }
 
   bool UsingDefaultTheme() const override { return using_default_theme_; }
@@ -109,6 +120,7 @@ class FakeThemeService : public ThemeService {
  private:
   bool using_system_theme_;
   bool using_default_theme_;
+  bool distinct_from_default_theme_;
   scoped_refptr<const extensions::Extension> theme_extension_;
   bool is_dirty_;
 };
@@ -150,6 +162,11 @@ class ThemeSyncableServiceTest : public testing::Test {
   ~ThemeSyncableServiceTest() override {}
 
   void SetUp() override {
+    // Setting a matching update URL is necessary to make the test theme
+    // considered syncable.
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kAppsGalleryUpdateURL, kCustomThemeUrl);
+
     profile_.reset(new TestingProfile);
     fake_theme_service_ = BuildForProfile(profile_.get());
     theme_sync_service_.reset(new ThemeSyncableService(profile_.get(),
@@ -180,14 +197,9 @@ class ThemeSyncableServiceTest : public testing::Test {
                                           kCustomThemeName,
                                           GetThemeLocation(),
                                           kCustomThemeUrl);
-    extensions::APIPermissionSet empty_set;
-    extensions::ManifestPermissionSet empty_manifest_permissions;
-    extensions::URLPatternSet empty_extent;
-    scoped_refptr<extensions::PermissionSet> permissions =
-        new extensions::PermissionSet(empty_set, empty_manifest_permissions,
-                                      empty_extent, empty_extent);
     extensions::ExtensionPrefs::Get(profile_.get())
-        ->AddGrantedPermissions(theme_extension_->id(), permissions.get());
+        ->AddGrantedPermissions(theme_extension_->id(),
+                                extensions::PermissionSet());
     service->AddExtension(theme_extension_.get());
     extensions::ExtensionRegistry* registry =
         extensions::ExtensionRegistry::Get(profile_.get());
@@ -306,7 +318,8 @@ TEST_F(ThemeSyncableServiceTest, SetCurrentThemeDefaultTheme) {
                     new syncer::SyncErrorFactoryMock()))
           .error();
   EXPECT_FALSE(error.IsSet()) << error.message();
-  EXPECT_TRUE(fake_theme_service_->UsingDefaultTheme());
+  EXPECT_FALSE(fake_theme_service_->UsingDefaultTheme());
+  EXPECT_EQ(fake_theme_service_->theme_extension(), theme_extension_.get());
 }
 
 TEST_F(ThemeSyncableServiceTest, SetCurrentThemeSystemTheme) {
@@ -327,7 +340,8 @@ TEST_F(ThemeSyncableServiceTest, SetCurrentThemeSystemTheme) {
                     new syncer::SyncErrorFactoryMock()))
           .error();
   EXPECT_FALSE(error.IsSet()) << error.message();
-  EXPECT_TRUE(fake_theme_service_->UsingSystemTheme());
+  EXPECT_FALSE(fake_theme_service_->UsingSystemTheme());
+  EXPECT_EQ(fake_theme_service_->theme_extension(), theme_extension_.get());
 }
 
 TEST_F(ThemeSyncableServiceTest, SetCurrentThemeCustomTheme) {
@@ -565,9 +579,9 @@ TEST_F(ThemeSyncableServiceTest, RestoreSystemThemeBitWhenChangeToCustomTheme) {
   EXPECT_TRUE(change_specifics.use_system_theme_by_default());
 }
 
-#if defined(TOOLKIT_GTK)
-TEST_F(ThemeSyncableServiceTest,
-       GtkUpdateSystemThemeBitWhenChangeBetweenSystemAndDefault) {
+TEST_F(ThemeSyncableServiceTest, DistinctSystemTheme) {
+  fake_theme_service_->set_distinct_from_default_theme(true);
+
   // Initialize to use native theme.
   fake_theme_service_->UseSystemTheme();
   fake_theme_service_->MarkClean();
@@ -610,11 +624,10 @@ TEST_F(ThemeSyncableServiceTest,
                   .theme()
                   .use_system_theme_by_default());
 }
-#endif
 
-#ifndef TOOLKIT_GTK
-TEST_F(ThemeSyncableServiceTest,
-       NonGtkPreserveSystemThemeBitWhenChangeToDefaultTheme) {
+TEST_F(ThemeSyncableServiceTest, SystemThemeSameAsDefaultTheme) {
+  fake_theme_service_->set_distinct_from_default_theme(false);
+
   // Set up theme service to use default theme.
   fake_theme_service_->UseDefaultTheme();
 
@@ -649,7 +662,6 @@ TEST_F(ThemeSyncableServiceTest,
   EXPECT_FALSE(change_specifics.use_custom_theme());
   EXPECT_TRUE(change_specifics.use_system_theme_by_default());
 }
-#endif
 
 TEST_F(PolicyInstalledThemeTest, InstallThemeByPolicy) {
   // Set up theme service to use custom theme that was installed by policy.

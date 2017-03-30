@@ -14,7 +14,7 @@
 #include "content/common/gpu/gpu_channel.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
-#include "media/base/android/media_codec_bridge.h"
+#include "media/base/android/media_codec_util.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/limits.h"
 #include "media/video/picture.h"
@@ -22,7 +22,6 @@
 #include "ui/gl/android/scoped_java_surface.h"
 #include "ui/gl/gl_bindings.h"
 
-using media::MediaCodecBridge;
 using media::VideoCodecBridge;
 using media::VideoFrame;
 
@@ -83,7 +82,7 @@ static bool GetSupportedColorFormatForMime(const std::string& mime,
   if (mime.empty())
     return false;
 
-  std::set<int> formats = MediaCodecBridge::GetEncoderColorFormats(mime);
+  std::set<int> formats = media::MediaCodecUtil::GetEncoderColorFormats(mime);
   if (formats.count(COLOR_FORMAT_YUV420_SEMIPLANAR) > 0)
     *pixel_format = COLOR_FORMAT_YUV420_SEMIPLANAR;
   else if (formats.count(COLOR_FORMAT_YUV420_PLANAR) > 0)
@@ -143,10 +142,10 @@ AndroidVideoEncodeAccelerator::GetSupportedProfiles() {
 }
 
 bool AndroidVideoEncodeAccelerator::Initialize(
-    VideoFrame::Format format,
+    media::VideoPixelFormat format,
     const gfx::Size& input_visible_size,
     media::VideoCodecProfile output_profile,
-    uint32 initial_bitrate,
+    uint32_t initial_bitrate,
     Client* client) {
   DVLOG(3) << __PRETTY_FUNCTION__ << " format: " << format
            << ", input_visible_size: " << input_visible_size.ToString()
@@ -157,8 +156,8 @@ bool AndroidVideoEncodeAccelerator::Initialize(
 
   client_ptr_factory_.reset(new base::WeakPtrFactory<Client>(client));
 
-  if (!(media::MediaCodecBridge::SupportsSetParameters() &&
-        format == VideoFrame::I420)) {
+  if (!(media::MediaCodecUtil::SupportsSetParameters() &&
+        format == media::PIXEL_FORMAT_I420)) {
     DLOG(ERROR) << "Unexpected combo: " << format << ", " << output_profile;
     return false;
   }
@@ -237,9 +236,8 @@ void AndroidVideoEncodeAccelerator::Encode(
     bool force_keyframe) {
   DVLOG(3) << __PRETTY_FUNCTION__ << ": " << force_keyframe;
   DCHECK(thread_checker_.CalledOnValidThread());
-  RETURN_ON_FAILURE(frame->format() == VideoFrame::I420,
-                    "Unexpected format",
-                    kInvalidArgumentError);
+  RETURN_ON_FAILURE(frame->format() == media::PIXEL_FORMAT_I420,
+                    "Unexpected format", kInvalidArgumentError);
 
   // MediaCodec doesn't have a way to specify stride for non-Packed formats, so
   // we insist on being called with packed frames and no cropping :(
@@ -270,8 +268,8 @@ void AndroidVideoEncodeAccelerator::UseOutputBitstreamBuffer(
 }
 
 void AndroidVideoEncodeAccelerator::RequestEncodingParametersChange(
-    uint32 bitrate,
-    uint32 framerate) {
+    uint32_t bitrate,
+    uint32_t framerate) {
   DVLOG(3) << __PRETTY_FUNCTION__ << ": bitrate: " << bitrate
            << ", framerate: " << framerate;
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -331,20 +329,21 @@ void AndroidVideoEncodeAccelerator::QueueInput() {
   }
   scoped_refptr<VideoFrame> frame = base::get<0>(input);
 
-  uint8* buffer = NULL;
+  uint8_t* buffer = NULL;
   size_t capacity = 0;
   media_codec_->GetInputBuffer(input_buf_index, &buffer, &capacity);
 
   size_t queued_size =
-      VideoFrame::AllocationSize(VideoFrame::I420, frame->coded_size());
+      VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420, frame->coded_size());
   RETURN_ON_FAILURE(capacity >= queued_size,
                     "Failed to get input buffer: " << input_buf_index,
                     kPlatformFailureError);
 
-  uint8* dst_y = buffer;
+  uint8_t* dst_y = buffer;
   int dst_stride_y = frame->stride(VideoFrame::kYPlane);
-  uint8* dst_uv = buffer + frame->stride(VideoFrame::kYPlane) *
-                               frame->rows(VideoFrame::kYPlane);
+  uint8_t* dst_uv =
+      buffer +
+      frame->stride(VideoFrame::kYPlane) * frame->rows(VideoFrame::kYPlane);
   int dst_stride_uv = frame->stride(VideoFrame::kUPlane) * 2;
   // Why NV12?  Because COLOR_FORMAT_YUV420_SEMIPLANAR.  See comment at other
   // mention of that constant.
@@ -395,7 +394,7 @@ void AndroidVideoEncodeAccelerator::DequeueOutput() {
     return;
   }
 
-  int32 buf_index = 0;
+  int32_t buf_index = 0;
   size_t offset = 0;
   size_t size = 0;
   bool key_frame = false;

@@ -9,6 +9,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/wm/immersive_revealed_lock.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/events/event_handler.h"
@@ -259,7 +260,7 @@ class ASH_EXPORT ImmersiveFullscreenController
   int revealed_lock_count_;
 
   // Timer to track cursor being held at the top edge of the screen.
-  base::OneShotTimer<ImmersiveFullscreenController> top_edge_hover_timer_;
+  base::OneShotTimer top_edge_hover_timer_;
 
   // The cursor x position in screen coordinates when the cursor first hit the
   // top edge of the screen.

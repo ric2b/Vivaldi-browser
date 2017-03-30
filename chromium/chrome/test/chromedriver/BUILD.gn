@@ -101,8 +101,8 @@ source_set("automation_client_lib") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//net",
-    "//third_party/zlib:zip",
     "//third_party/zlib:minizip",
+    "//third_party/zlib:zip",
     "//ui/accessibility:ax_gen",
     "//ui/base",
     "//ui/gfx",
@@ -157,12 +157,15 @@ source_set("lib") {
     ":embed_version_in_cpp",
     "//base",
     "//base/third_party/dynamic_annotations",
+    "//chrome/common:version_header",
     "//crypto",
     "//net",
     "//net:http_server",
     "//third_party/zlib",
     "//ui/base",
+    "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
+    "//ui/events/ozone:events_ozone_layout",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -183,6 +186,16 @@ executable("chromedriver") {
 
   deps = [
     ":lib",
+    "//build/config/sanitizers:deps",
+  ]
+}
+
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("chromedriver_unittests_run") {
+  testonly = true
+  deps = [
+    ":chromedriver_unittests",
   ]
 }
 
@@ -194,6 +207,10 @@ test("chromedriver_unittests") {
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  data = [
+    "//chrome/test/data/chromedriver/",
+  ]
 
   deps = [
     ":lib",

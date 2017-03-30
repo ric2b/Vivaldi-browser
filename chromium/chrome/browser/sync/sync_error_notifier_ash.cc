@@ -7,8 +7,10 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/system/system_notifier.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
@@ -20,8 +22,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "grit/theme_resources.h"
-#include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/notification.h"
@@ -166,20 +168,18 @@ void SyncErrorNotifier::OnErrorChanged() {
       kProfileSyncNotificationId);
 
   // Set |profile_id| for multi-user notification blocker.
-  notifier_id.profile_id = multi_user_util::GetUserIDFromProfile(profile_);
+  notifier_id.profile_id =
+      multi_user_util::GetAccountIdFromProfile(profile_).GetUserEmail();
 
   // Add a new notification.
   Notification notification(
       message_center::NOTIFICATION_TYPE_SIMPLE,
-      GURL(notification_id_),
       l10n_util::GetStringUTF16(IDS_SYNC_ERROR_BUBBLE_VIEW_TITLE),
       l10n_util::GetStringUTF16(IDS_SYNC_PASSPHRASE_ERROR_BUBBLE_VIEW_MESSAGE),
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(
           IDR_NOTIFICATION_ALERT),
       notifier_id,
       base::string16(),  // display_source
-      notification_id_,
-      data,
-      delegate);
+      GURL(notification_id_), notification_id_, data, delegate);
   notification_ui_manager->Add(notification, profile_);
 }

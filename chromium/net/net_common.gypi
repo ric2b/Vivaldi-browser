@@ -15,6 +15,7 @@
     '../third_party/protobuf/protobuf.gyp:protobuf_lite',
     '../third_party/zlib/zlib.gyp:zlib',
     'net_derived_sources',
+    'net_features',
     'net_quic_proto',
     'net_resources',
   ],
@@ -86,31 +87,17 @@
         'disk_cache/blockfile/mapped_file_avoid_mmap_posix.cc',
       ],
     }],
-    ['disable_file_support==1', {
+    ['disable_file_support!=1', {
       # TODO(mmenke):  Should probably get rid of the dependency on
       # net_resources in this case (It's used in net_util, to format
       # directory listings.  Also used outside of net/).
-      'sources!': [
-        'base/directory_lister.cc',
-        'base/directory_lister.h',
-        'url_request/file_protocol_handler.cc',
-        'url_request/file_protocol_handler.h',
-        'url_request/url_request_file_dir_job.cc',
-        'url_request/url_request_file_dir_job.h',
-        'url_request/url_request_file_job.cc',
-        'url_request/url_request_file_job.h',
-      ],
+      'sources': ['<@(net_file_support_sources)']
     }],
-    ['disable_ftp_support==1', {
-      'sources/': [
-        ['exclude', '^ftp/'],
-      ],
-      'sources!': [
-        'url_request/ftp_protocol_handler.cc',
-        'url_request/ftp_protocol_handler.h',
-        'url_request/url_request_ftp_job.cc',
-        'url_request/url_request_ftp_job.h',
-      ],
+    ['disable_ftp_support!=1', {
+      'sources': ['<@(net_ftp_support_sources)']
+    }],
+    ['enable_bidirectional_stream==1', {
+      'sources': ['<@(net_bidirectional_stream_sources)']
     }],
     ['enable_built_in_dns==1', {
       'defines': [
@@ -131,7 +118,6 @@
           'cert/ct_objects_extractor_nss.cc',
           'cert/jwk_serializer_nss.cc',
           'cert/scoped_nss_types.h',
-          'cert/sha256_legacy_support_nss_win.cc',
           'cert/x509_util_nss.cc',
           'quic/crypto/aead_base_decrypter_nss.cc',
           'quic/crypto/aead_base_encrypter_nss.cc',
@@ -139,8 +125,11 @@
           'quic/crypto/aes_128_gcm_12_encrypter_nss.cc',
           'quic/crypto/chacha20_poly1305_decrypter_nss.cc',
           'quic/crypto/chacha20_poly1305_encrypter_nss.cc',
+          'quic/crypto/chacha20_poly1305_rfc7539_decrypter_nss.cc',
+          'quic/crypto/chacha20_poly1305_rfc7539_encrypter_nss.cc',
           'quic/crypto/channel_id_nss.cc',
           'quic/crypto/p256_key_exchange_nss.cc',
+          'quic/crypto/proof_source_chromium_nss.cc',
           'socket/nss_ssl_util.cc',
           'socket/nss_ssl_util.h',
           'socket/ssl_client_socket_nss.cc',
@@ -157,7 +146,6 @@
           'cert/ct_log_verifier_openssl.cc',
           'cert/ct_objects_extractor_openssl.cc',
           'cert/jwk_serializer_openssl.cc',
-          'cert/sha256_legacy_support_openssl_win.cc',
           'cert/x509_util_openssl.cc',
           'cert/x509_util_openssl.h',
           'quic/crypto/aead_base_decrypter_openssl.cc',
@@ -166,20 +154,29 @@
           'quic/crypto/aes_128_gcm_12_encrypter_openssl.cc',
           'quic/crypto/chacha20_poly1305_decrypter_openssl.cc',
           'quic/crypto/chacha20_poly1305_encrypter_openssl.cc',
+          'quic/crypto/chacha20_poly1305_rfc7539_decrypter_openssl.cc',
+          'quic/crypto/chacha20_poly1305_rfc7539_encrypter_openssl.cc',
           'quic/crypto/channel_id_openssl.cc',
           'quic/crypto/p256_key_exchange_openssl.cc',
+          'quic/crypto/proof_source_chromium_openssl.cc',
           'quic/crypto/scoped_evp_aead_ctx.cc',
           'quic/crypto/scoped_evp_aead_ctx.h',
           'socket/ssl_client_socket_openssl.cc',
           'socket/ssl_client_socket_openssl.h',
           'socket/ssl_server_socket_openssl.cc',
           'socket/ssl_server_socket_openssl.h',
+          'ssl/client_key_store.cc',
+          'ssl/client_key_store.h',
           'ssl/openssl_ssl_util.cc',
           'ssl/openssl_ssl_util.h',
           'ssl/ssl_client_session_cache_openssl.cc',
           'ssl/ssl_client_session_cache_openssl.h',
+          'ssl/ssl_key_logger.cc',
+          'ssl/ssl_key_logger.h',
           'ssl/ssl_platform_key.h',
           'ssl/ssl_platform_key_nss.cc',
+          'ssl/ssl_platform_key_task_runner.cc',
+          'ssl/ssl_platform_key_task_runner.h',
           'ssl/threaded_ssl_private_key.cc',
           'ssl/threaded_ssl_private_key.h',
         ],
@@ -220,13 +217,6 @@
           'cert/x509_certificate_openssl.cc',
           'ssl/openssl_client_key_store.cc',
           'ssl/openssl_client_key_store.h',
-        ],
-    }, {
-        'sources!': [
-          # TODO(davidben): Remove these exclusions when use_openssl_certs
-          # builds also use the SSLPrivateKey machinery.
-          'ssl/threaded_ssl_private_key.cc',
-          'ssl/threaded_ssl_private_key.h',
         ],
     }],
     [ 'use_glib == 1', {
@@ -276,10 +266,10 @@
           'cert/x509_util_nss_certs.cc',
           'cert_net/nss_ocsp.cc',
           'cert_net/nss_ocsp.h',
-          'ssl/client_cert_store_chromeos.cc',
-          'ssl/client_cert_store_chromeos.h',
           'ssl/client_cert_store_nss.cc',
           'ssl/client_cert_store_nss.h',
+          'ssl/client_key_store.cc',
+          'ssl/client_key_store.h',
           'ssl/ssl_platform_key_nss.cc',
           'third_party/mozilla_security_manager/nsKeygenHandler.cpp',
           'third_party/mozilla_security_manager/nsKeygenHandler.h',
@@ -298,10 +288,8 @@
           'third_party/nss/ssl/cmpcert.c',
         ],
     }],
-    [ 'enable_websockets != 1', {
-        'sources/': [
-          ['exclude', '^websockets/'],
-        ],
+    [ 'enable_websockets == 1', {
+        'sources': ['<@(net_websockets_sources)']
     }],
     [ 'enable_mdns != 1', {
         'sources!' : [
@@ -320,12 +308,6 @@
     [ 'OS == "win"', {
         'sources!': [
           'http/http_auth_handler_ntlm_portable.cc',
-          'socket/socket_libevent.cc',
-          'socket/socket_libevent.h',
-          'socket/tcp_socket_libevent.cc',
-          'socket/tcp_socket_libevent.h',
-          'udp/udp_socket_libevent.cc',
-          'udp/udp_socket_libevent.h',
         ],
          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
         'msvs_disabled_warnings': [4267, ],

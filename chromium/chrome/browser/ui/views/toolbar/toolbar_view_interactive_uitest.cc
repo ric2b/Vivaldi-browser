@@ -5,14 +5,16 @@
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_controller_interactive_uitest.h"
+#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
+#include "chrome/browser/ui/views/toolbar/extension_toolbar_menu_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/toolbar/wrench_toolbar_button.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "extensions/common/feature_switch.h"
 
@@ -105,10 +107,13 @@ void ToolbarViewInteractiveUITest::DoDragAndDrop(const gfx::Point& start,
                             end.x(), end.y()),
       base::TimeDelta::FromMilliseconds(200));
   runner->Run();
+
+  // The app menu should have closed once the drag-and-drop completed.
+  EXPECT_FALSE(toolbar_view()->app_menu_button()->IsMenuShowing());
 }
 
 void ToolbarViewInteractiveUITest::TestWhileInDragOperation() {
-  EXPECT_TRUE(toolbar_view()->IsWrenchMenuShowing());
+  EXPECT_TRUE(toolbar_view()->app_menu_button()->IsMenuShowing());
 }
 
 void ToolbarViewInteractiveUITest::FinishDragAndDrop(
@@ -128,11 +133,12 @@ void ToolbarViewInteractiveUITest::SetUpCommandLine(
   feature_override_.reset(new extensions::FeatureSwitch::ScopedOverride(
       extensions::FeatureSwitch::extension_action_redesign(), true));
   ToolbarActionsBar::disable_animations_for_testing_ = true;
-  WrenchToolbarButton::g_open_wrench_immediately_for_testing = true;
+  AppMenuButton::g_open_app_immediately_for_testing = true;
 }
 
 void ToolbarViewInteractiveUITest::SetUpOnMainThread() {
   ExtensionBrowserTest::SetUpOnMainThread();
+  ExtensionToolbarMenuView::set_close_menu_delay_for_testing(0);
 
   toolbar_view_ = BrowserView::GetBrowserViewForBrowser(browser())->toolbar();
   browser_actions_ = toolbar_view_->browser_actions();
@@ -140,11 +146,11 @@ void ToolbarViewInteractiveUITest::SetUpOnMainThread() {
 
 void ToolbarViewInteractiveUITest::TearDownOnMainThread() {
   ToolbarActionsBar::disable_animations_for_testing_ = false;
-  WrenchToolbarButton::g_open_wrench_immediately_for_testing = false;
+  AppMenuButton::g_open_app_immediately_for_testing = false;
 }
 
 IN_PROC_BROWSER_TEST_F(ToolbarViewInteractiveUITest,
-                       MAYBE(TestWrenchMenuOpensOnDrag)) {
+                       MAYBE(TestAppMenuOpensOnDrag)) {
   // Load an extension that has a browser action.
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII("api_test")
                                           .AppendASCII("browser_action")
@@ -157,10 +163,10 @@ IN_PROC_BROWSER_TEST_F(ToolbarViewInteractiveUITest,
   ASSERT_TRUE(view);
 
   gfx::Point browser_action_view_loc = test::GetCenterInScreenCoordinates(view);
-  gfx::Point wrench_button_loc =
-      test::GetCenterInScreenCoordinates(toolbar_view()->app_menu());
+  gfx::Point app_button_loc =
+      test::GetCenterInScreenCoordinates(toolbar_view()->app_menu_button());
 
-  // Perform a drag and drop from the browser action view to the wrench button,
-  // which should open the wrench menu.
-  DoDragAndDrop(browser_action_view_loc, wrench_button_loc);
+  // Perform a drag and drop from the browser action view to the app button,
+  // which should open the app menu.
+  DoDragAndDrop(browser_action_view_loc, app_button_loc);
 }

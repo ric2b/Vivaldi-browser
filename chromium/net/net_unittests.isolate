@@ -26,11 +26,9 @@
           '../third_party/pyftpdlib/',
           '../third_party/pywebsocket/',
           '../third_party/tlslite/',
-          '<(PRODUCT_DIR)/net_unittests<(EXECUTABLE_SUFFIX)',
           '<(PRODUCT_DIR)/pyproto/google/',
           'tools/testserver/',
         ],
-        'read_only': 1,
       },
     }],
     ['OS=="mac" and asan==1 and fastbuild==0', {

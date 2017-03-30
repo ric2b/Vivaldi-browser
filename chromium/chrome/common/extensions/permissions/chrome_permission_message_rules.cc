@@ -4,11 +4,11 @@
 
 #include "chrome/common/extensions/permissions/chrome_permission_message_rules.h"
 
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/grit/generated_resources.h"
-#include "extensions/common/permissions/api_permission_set.h"
-#include "extensions/common/permissions/coalesced_permission_message.h"
 #include "grit/extensions_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -25,16 +25,16 @@ class DefaultPermissionMessageFormatter
       : message_id_(message_id) {}
   ~DefaultPermissionMessageFormatter() override {}
 
-  CoalescedPermissionMessage GetPermissionMessage(
-      PermissionIDSet permissions) const override {
-    return CoalescedPermissionMessage(l10n_util::GetStringUTF16(message_id_),
-                                      permissions);
+  PermissionMessage GetPermissionMessage(
+      const PermissionIDSet& permissions) const override {
+    return PermissionMessage(l10n_util::GetStringUTF16(message_id_),
+                             permissions);
   }
 
  private:
   int message_id_;
 
-  // DISALLOW_COPY_AND_ASSIGN(DefaultPermissionMessageFormatter);
+  DISALLOW_COPY_AND_ASSIGN(DefaultPermissionMessageFormatter);
 };
 
 // A formatter that substitutes the parameter into the message using string
@@ -45,19 +45,21 @@ class SingleParameterFormatter : public ChromePermissionMessageFormatter {
   explicit SingleParameterFormatter(int message_id) : message_id_(message_id) {}
   ~SingleParameterFormatter() override {}
 
-  CoalescedPermissionMessage GetPermissionMessage(
-      PermissionIDSet permissions) const override {
+  PermissionMessage GetPermissionMessage(
+      const PermissionIDSet& permissions) const override {
     DCHECK(permissions.size() > 0);
     std::vector<base::string16> parameters =
         permissions.GetAllPermissionParameters();
     DCHECK_EQ(1U, parameters.size())
         << "Only one message with each ID can be parameterized.";
-    return CoalescedPermissionMessage(
+    return PermissionMessage(
         l10n_util::GetStringFUTF16(message_id_, parameters[0]), permissions);
   }
 
  private:
   int message_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(SingleParameterFormatter);
 };
 
 // Adds each parameter to a growing list, with the given |root_message_id| as
@@ -68,16 +70,18 @@ class SimpleListFormatter : public ChromePermissionMessageFormatter {
       : root_message_id_(root_message_id) {}
   ~SimpleListFormatter() override {}
 
-  CoalescedPermissionMessage GetPermissionMessage(
-      PermissionIDSet permissions) const override {
+  PermissionMessage GetPermissionMessage(
+      const PermissionIDSet& permissions) const override {
     DCHECK(permissions.size() > 0);
-    return CoalescedPermissionMessage(
-        l10n_util::GetStringUTF16(root_message_id_), permissions,
-        permissions.GetAllPermissionParameters());
+    return PermissionMessage(l10n_util::GetStringUTF16(root_message_id_),
+                             permissions,
+                             permissions.GetAllPermissionParameters());
   }
 
  private:
   int root_message_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(SimpleListFormatter);
 };
 
 // Creates a space-separated list of permissions with the given PermissionID.
@@ -93,14 +97,14 @@ class SpaceSeparatedListFormatter : public ChromePermissionMessageFormatter {
         message_id_for_multiple_hosts_(message_id_for_multiple_hosts) {}
   ~SpaceSeparatedListFormatter() override {}
 
-  CoalescedPermissionMessage GetPermissionMessage(
-      PermissionIDSet permissions) const override {
+  PermissionMessage GetPermissionMessage(
+      const PermissionIDSet& permissions) const override {
     DCHECK(permissions.size() > 0);
     std::vector<base::string16> hostnames =
         permissions.GetAllPermissionParameters();
-    base::string16 hosts_string = JoinString(
-        std::vector<base::string16>(hostnames.begin(), hostnames.end()), ' ');
-    return CoalescedPermissionMessage(
+    base::string16 hosts_string =
+        base::JoinString(hostnames, base::ASCIIToUTF16(" "));
+    return PermissionMessage(
         l10n_util::GetStringFUTF16(hostnames.size() == 1
                                        ? message_id_for_one_host_
                                        : message_id_for_multiple_hosts_,
@@ -111,6 +115,8 @@ class SpaceSeparatedListFormatter : public ChromePermissionMessageFormatter {
  private:
   int message_id_for_one_host_;
   int message_id_for_multiple_hosts_;
+
+  DISALLOW_COPY_AND_ASSIGN(SpaceSeparatedListFormatter);
 };
 
 // Creates a comma-separated list of permissions with the given PermissionID.
@@ -118,7 +124,7 @@ class SpaceSeparatedListFormatter : public ChromePermissionMessageFormatter {
 // of 1-3 permissions, and the other for the case where there are 4 or more
 // permissions. In the case of 4 or more permissions, rather than insert the
 // list into the message, the permissions are displayed as submessages in the
-// resultant CoalescedPermissionMessage.
+// resultant PermissionMessage.
 class CommaSeparatedListFormatter : public ChromePermissionMessageFormatter {
  public:
   CommaSeparatedListFormatter(int message_id_for_one_host,
@@ -131,20 +137,20 @@ class CommaSeparatedListFormatter : public ChromePermissionMessageFormatter {
         message_id_for_many_hosts_(message_id_for_many_hosts) {}
   ~CommaSeparatedListFormatter() override {}
 
-  CoalescedPermissionMessage GetPermissionMessage(
-      PermissionIDSet permissions) const override {
+  PermissionMessage GetPermissionMessage(
+      const PermissionIDSet& permissions) const override {
     DCHECK(permissions.size() > 0);
     std::vector<base::string16> hostnames =
         permissions.GetAllPermissionParameters();
-    CoalescedPermissionMessages messages;
+    PermissionMessages messages;
     if (hostnames.size() <= 3) {
-      return CoalescedPermissionMessage(
+      return PermissionMessage(
           l10n_util::GetStringFUTF16(message_id_for_hosts(hostnames.size()),
                                      hostnames, NULL),
           permissions);
     }
 
-    return CoalescedPermissionMessage(
+    return PermissionMessage(
         l10n_util::GetStringUTF16(message_id_for_many_hosts_), permissions,
         hostnames);
   }
@@ -167,26 +173,115 @@ class CommaSeparatedListFormatter : public ChromePermissionMessageFormatter {
   int message_id_for_two_hosts_;
   int message_id_for_three_hosts_;
   int message_id_for_many_hosts_;
+
+  DISALLOW_COPY_AND_ASSIGN(CommaSeparatedListFormatter);
+};
+
+class USBDevicesFormatter : public ChromePermissionMessageFormatter {
+ public:
+  USBDevicesFormatter() {}
+  ~USBDevicesFormatter() override {}
+
+  PermissionMessage GetPermissionMessage(
+      const PermissionIDSet& permissions) const override {
+    DCHECK(permissions.size() > 0);
+    return permissions.size() == 1 ? GetItemMessage(permissions)
+                                   : GetMultiItemMessage(permissions);
+  }
+
+ private:
+  PermissionMessage GetItemMessage(const PermissionIDSet& permissions) const {
+    DCHECK(permissions.size() == 1);
+    const PermissionID& permission = *permissions.begin();
+    base::string16 msg;
+    switch (permission.id()) {
+      case APIPermission::kUsbDevice:
+        msg = l10n_util::GetStringFUTF16(
+            IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE, permission.parameter());
+        break;
+      case APIPermission::kUsbDeviceUnknownProduct:
+        msg = l10n_util::GetStringFUTF16(
+            IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_UNKNOWN_PRODUCT,
+            permission.parameter());
+        break;
+      case APIPermission::kUsbDeviceUnknownVendor:
+        msg = l10n_util::GetStringUTF16(
+            IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_UNKNOWN_VENDOR);
+        break;
+      default:
+        NOTREACHED();
+    }
+    return PermissionMessage(msg, permissions);
+  }
+
+  PermissionMessage GetMultiItemMessage(
+      const PermissionIDSet& permissions) const {
+    DCHECK(permissions.size() > 1);
+    // Put all the individual items into submessages.
+    std::vector<base::string16> submessages =
+        permissions.GetAllPermissionsWithID(APIPermission::kUsbDevice)
+            .GetAllPermissionParameters();
+    std::vector<base::string16> vendors =
+        permissions.GetAllPermissionsWithID(
+                       APIPermission::kUsbDeviceUnknownProduct)
+            .GetAllPermissionParameters();
+    for (const base::string16& vendor : vendors) {
+      submessages.push_back(l10n_util::GetStringFUTF16(
+          IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST_ITEM_UNKNOWN_PRODUCT,
+          vendor));
+    }
+    if (permissions.ContainsID(APIPermission::kUsbDeviceUnknownVendor)) {
+      submessages.push_back(l10n_util::GetStringUTF16(
+          IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST_ITEM_UNKNOWN_VENDOR));
+    }
+
+    return PermissionMessage(
+        l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST),
+        permissions, submessages);
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(USBDevicesFormatter);
 };
 
 }  // namespace
 
+// Convenience constructors to allow inline initialization of the permission
+// ID sets.
+// TODO(treib): Once we're allowed to use uniform initialization (and
+// std::initializer_list), get rid of this helper.
+class ChromePermissionMessageRule::PermissionIDSetInitializer
+    : public std::set<APIPermission::ID> {
+ public:
+  template <typename... IDs>
+  PermissionIDSetInitializer(IDs... ids) {
+    // This effectively calls insert() with each of the ids.
+    ExpandHelper(insert(ids)...);
+  }
+
+  virtual ~PermissionIDSetInitializer() {}
+
+ private:
+  template <typename... Args>
+  void ExpandHelper(Args&&...) {}
+};
+
 ChromePermissionMessageRule::ChromePermissionMessageRule(
     int message_id,
-    PermissionIDSetInitializer required,
-    PermissionIDSetInitializer optional)
-    : required_permissions_(required),
-      optional_permissions_(optional),
-      formatter_(new DefaultPermissionMessageFormatter(message_id)) {
-}
+    const PermissionIDSetInitializer& required,
+    const PermissionIDSetInitializer& optional)
+    : ChromePermissionMessageRule(
+          new DefaultPermissionMessageFormatter(message_id),
+          required,
+          optional) {}
 
 ChromePermissionMessageRule::ChromePermissionMessageRule(
     ChromePermissionMessageFormatter* formatter,
-    PermissionIDSetInitializer required,
-    PermissionIDSetInitializer optional)
+    const PermissionIDSetInitializer& required,
+    const PermissionIDSetInitializer& optional)
     : required_permissions_(required),
       optional_permissions_(optional),
       formatter_(formatter) {
+  DCHECK(!required_permissions_.empty());
 }
 
 ChromePermissionMessageRule::~ChromePermissionMessageRule() {
@@ -200,15 +295,16 @@ std::set<APIPermission::ID> ChromePermissionMessageRule::optional_permissions()
     const {
   return optional_permissions_;
 }
-ChromePermissionMessageFormatter* ChromePermissionMessageRule::formatter()
-    const {
-  return formatter_.get();
-}
 
 std::set<APIPermission::ID> ChromePermissionMessageRule::all_permissions()
     const {
   return base::STLSetUnion<std::set<APIPermission::ID>>(required_permissions(),
                                                         optional_permissions());
+}
+
+PermissionMessage ChromePermissionMessageRule::GetPermissionMessage(
+    const PermissionIDSet& permissions) const {
+  return formatter_->GetPermissionMessage(permissions);
 }
 
 // static
@@ -239,31 +335,98 @@ ChromePermissionMessageRule::GetAllRules() {
   // enough that rules like this should not occur; the visibility of the rules
   // system should allow us to design a system that is simple enough to explain
   // yet powerful enough to encapsulate all the messages we want to display.
-  //
-  // TODO(sashab): Once existing message sites are deprecated, reorder this list
-  // to better describe the rules generated, rather than the callsites they are
-  // migrated from.
   ChromePermissionMessageRule rules_arr[] = {
-      // Full url access permission messages.
+      // Full access permission messages.
       {IDS_EXTENSION_PROMPT_WARNING_DEBUGGER, {APIPermission::kDebugger}, {}},
       {IDS_EXTENSION_PROMPT_WARNING_FULL_ACCESS,
        {APIPermission::kPlugin},
-       {APIPermission::kFullAccess,
-        APIPermission::kHostsAll,
-        APIPermission::kHostsAllReadOnly,
-        APIPermission::kDeclarativeWebRequest,
-        APIPermission::kTopSites,
-        APIPermission::kTab}},
+       {APIPermission::kDeclarativeWebRequest, APIPermission::kFavicon,
+        APIPermission::kFullAccess, APIPermission::kHostsAll,
+        APIPermission::kHostsAllReadOnly, APIPermission::kProcesses,
+        APIPermission::kTab, APIPermission::kTopSites,
+        APIPermission::kWebNavigation}},
       {IDS_EXTENSION_PROMPT_WARNING_FULL_ACCESS,
        {APIPermission::kFullAccess},
-       {APIPermission::kHostsAll,
-        APIPermission::kHostsAllReadOnly,
-        APIPermission::kDeclarativeWebRequest,
-        APIPermission::kTopSites,
-        APIPermission::kTab}},
+       {APIPermission::kDeclarativeWebRequest, APIPermission::kFavicon,
+        APIPermission::kHostsAll, APIPermission::kHostsAllReadOnly,
+        APIPermission::kProcesses, APIPermission::kTab,
+        APIPermission::kTopSites, APIPermission::kWebNavigation}},
 
-      // Parameterized permission messages:
+      // Hosts permission messages.
+      // Full host access already allows DeclarativeWebRequest, reading the list
+      // of most frequently visited sites, and tab access.
+      // The warning message for declarativeWebRequest permissions speaks about
+      // blocking parts of pages, which is a subset of what the "<all_urls>"
+      // access allows. Therefore we display only the "<all_urls>" warning
+      // message if both permissions are required.
+      {IDS_EXTENSION_PROMPT_WARNING_ALL_HOSTS,
+       {APIPermission::kHostsAll},
+       {APIPermission::kDeclarativeWebRequest, APIPermission::kFavicon,
+        APIPermission::kHostsAllReadOnly, APIPermission::kHostReadOnly,
+        APIPermission::kHostReadWrite, APIPermission::kProcesses,
+        APIPermission::kTab, APIPermission::kTopSites,
+        APIPermission::kWebNavigation}},
+      {IDS_EXTENSION_PROMPT_WARNING_ALL_HOSTS_READ_ONLY,
+       {APIPermission::kHostsAllReadOnly},
+       {APIPermission::kFavicon, APIPermission::kHostReadOnly,
+        APIPermission::kProcesses, APIPermission::kTab,
+        APIPermission::kTopSites, APIPermission::kWebNavigation}},
+
+      {new CommaSeparatedListFormatter(IDS_EXTENSION_PROMPT_WARNING_1_HOST,
+                                       IDS_EXTENSION_PROMPT_WARNING_2_HOSTS,
+                                       IDS_EXTENSION_PROMPT_WARNING_3_HOSTS,
+                                       IDS_EXTENSION_PROMPT_WARNING_HOSTS_LIST),
+       {APIPermission::kHostReadWrite},
+       {}},
+      {new CommaSeparatedListFormatter(
+           IDS_EXTENSION_PROMPT_WARNING_1_HOST_READ_ONLY,
+           IDS_EXTENSION_PROMPT_WARNING_2_HOSTS_READ_ONLY,
+           IDS_EXTENSION_PROMPT_WARNING_3_HOSTS_READ_ONLY,
+           IDS_EXTENSION_PROMPT_WARNING_HOSTS_LIST_READ_ONLY),
+       {APIPermission::kHostReadOnly},
+       {}},
+
+      // History-related permission messages.
+      // History already allows reading favicons, tab access and accessing the
+      // list of most frequently visited sites.
+      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_WRITE_AND_SESSIONS,
+       {APIPermission::kHistory, APIPermission::kSessions},
+       {APIPermission::kFavicon, APIPermission::kProcesses, APIPermission::kTab,
+        APIPermission::kTopSites, APIPermission::kWebNavigation}},
+      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ_AND_SESSIONS,
+       {APIPermission::kTab, APIPermission::kSessions},
+       {APIPermission::kFavicon, APIPermission::kProcesses,
+        APIPermission::kTopSites, APIPermission::kWebNavigation}},
+      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_WRITE,
+       {APIPermission::kHistory},
+       {APIPermission::kFavicon, APIPermission::kProcesses, APIPermission::kTab,
+        APIPermission::kTopSites, APIPermission::kWebNavigation}},
+      // Note: kSessions allows reading history from other devices only if kTab
+      // is also present. Therefore, there are no _AND_SESSIONS versions of
+      // the other rules that generate the HISTORY_READ warning.
+      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ,
+       {APIPermission::kTab},
+       {APIPermission::kFavicon, APIPermission::kProcesses,
+        APIPermission::kTopSites, APIPermission::kWebNavigation}},
+      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ,
+       {APIPermission::kProcesses},
+       {APIPermission::kFavicon, APIPermission::kTopSites,
+        APIPermission::kWebNavigation}},
+      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ,
+       {APIPermission::kWebNavigation},
+       {APIPermission::kFavicon, APIPermission::kTopSites}},
+      {IDS_EXTENSION_PROMPT_WARNING_FAVICON, {APIPermission::kFavicon}, {}},
+      {IDS_EXTENSION_PROMPT_WARNING_TOPSITES, {APIPermission::kTopSites}, {}},
+
+      {IDS_EXTENSION_PROMPT_WARNING_DECLARATIVE_WEB_REQUEST,
+       {APIPermission::kDeclarativeWebRequest},
+       {}},
+
       // Messages generated by the sockets permission.
+      {IDS_EXTENSION_PROMPT_WARNING_SOCKET_ANY_HOST,
+       {APIPermission::kSocketAnyHost},
+       {APIPermission::kSocketDomainHosts,
+        APIPermission::kSocketSpecificHosts}},
       {new SpaceSeparatedListFormatter(
            IDS_EXTENSION_PROMPT_WARNING_SOCKET_HOSTS_IN_DOMAIN,
            IDS_EXTENSION_PROMPT_WARNING_SOCKET_HOSTS_IN_DOMAINS),
@@ -275,145 +438,120 @@ ChromePermissionMessageRule::GetAllRules() {
        {APIPermission::kSocketSpecificHosts},
        {}},
 
-      // Messages generated by host permissions.
-      {new CommaSeparatedListFormatter(
-           IDS_EXTENSION_PROMPT_WARNING_1_HOST_READ_ONLY,
-           IDS_EXTENSION_PROMPT_WARNING_2_HOSTS_READ_ONLY,
-           IDS_EXTENSION_PROMPT_WARNING_3_HOSTS_READ_ONLY,
-           IDS_EXTENSION_PROMPT_WARNING_HOSTS_LIST_READ_ONLY),
-       {APIPermission::kHostReadOnly},
-       {}},
-      {new CommaSeparatedListFormatter(IDS_EXTENSION_PROMPT_WARNING_1_HOST,
-                                       IDS_EXTENSION_PROMPT_WARNING_2_HOSTS,
-                                       IDS_EXTENSION_PROMPT_WARNING_3_HOSTS,
-                                       IDS_EXTENSION_PROMPT_WARNING_HOSTS_LIST),
-       {APIPermission::kHostReadWrite},
-       {}},
-
-      // USB Device Permission rules:
-      // TODO(sashab, reillyg): Rework the permission message logic for USB
-      // devices to generate more meaningful messages and better fit the current
-      // rules system. Maybe model it similarly to host or socket permissions
-      // above.
-      {new SingleParameterFormatter(IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE),
+      // Devices-related messages.
+      // USB Device Permission rules. Think of these three rules as a single one
+      // that applies when any of the three kUsb* IDs is there, and pulls them
+      // all into a single formatter.
+      {new USBDevicesFormatter,
        {APIPermission::kUsbDevice},
-       {}},
-      {new SingleParameterFormatter(
-           IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_UNKNOWN_PRODUCT),
+       {APIPermission::kUsbDeviceUnknownProduct,
+        APIPermission::kUsbDeviceUnknownVendor}},
+      {new USBDevicesFormatter,
        {APIPermission::kUsbDeviceUnknownProduct},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_UNKNOWN_VENDOR,
-       {APIPermission::kUsbDeviceUnknownVendor},
-       {}},
-      {new SimpleListFormatter(IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST),
-       {APIPermission::kUsbDeviceList},
-       {}},
-
-      // Coalesced message rules taken from
-      // ChromePermissionMessageProvider::GetWarningMessages():
-
+       {APIPermission::kUsbDeviceUnknownVendor}},
+      {new USBDevicesFormatter, {APIPermission::kUsbDeviceUnknownVendor}, {}},
       // Access to users' devices should provide a single warning message
       // specifying the transport method used; serial and/or Bluetooth.
       {IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH_SERIAL,
        {APIPermission::kBluetooth, APIPermission::kSerial},
        {APIPermission::kBluetoothDevices}},
+      {IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH,
+       {APIPermission::kBluetooth},
+       {APIPermission::kBluetoothDevices}},
+      {IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH_DEVICES,
+       {APIPermission::kBluetoothDevices},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH_PRIVATE,
+       {APIPermission::kBluetoothPrivate},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_SERIAL, {APIPermission::kSerial}, {}},
+      // Universal 2nd Factor devices.
+      {IDS_EXTENSION_PROMPT_WARNING_U2F_DEVICES,
+       {APIPermission::kU2fDevices},
+       {}},
 
+      // Accessibility features.
       {IDS_EXTENSION_PROMPT_WARNING_ACCESSIBILITY_FEATURES_READ_MODIFY,
        {APIPermission::kAccessibilityFeaturesModify,
         APIPermission::kAccessibilityFeaturesRead},
        {}},
+      {IDS_EXTENSION_PROMPT_WARNING_ACCESSIBILITY_FEATURES_MODIFY,
+       {APIPermission::kAccessibilityFeaturesModify},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_ACCESSIBILITY_FEATURES_READ,
+       {APIPermission::kAccessibilityFeaturesRead},
+       {}},
 
-      // TODO(sashab): Add the missing combinations of media galleries
-      // permissions so a valid permission is generated for all combinations.
+      // Media galleries permissions. We don't have strings for every possible
+      // combination, e.g. we don't bother with a special string for "write, but
+      // not read" - just show the "read and write" string instead, etc.
       {IDS_EXTENSION_PROMPT_WARNING_MEDIA_GALLERIES_READ_WRITE_DELETE,
        {APIPermission::kMediaGalleriesAllGalleriesCopyTo,
-        APIPermission::kMediaGalleriesAllGalleriesDelete,
-        APIPermission::kMediaGalleriesAllGalleriesRead},
-       {}},
+        APIPermission::kMediaGalleriesAllGalleriesDelete},
+       {APIPermission::kMediaGalleriesAllGalleriesRead}},
       {IDS_EXTENSION_PROMPT_WARNING_MEDIA_GALLERIES_READ_WRITE,
-       {APIPermission::kMediaGalleriesAllGalleriesCopyTo,
-        APIPermission::kMediaGalleriesAllGalleriesRead},
-       {}},
+       {APIPermission::kMediaGalleriesAllGalleriesCopyTo},
+       {APIPermission::kMediaGalleriesAllGalleriesRead}},
       {IDS_EXTENSION_PROMPT_WARNING_MEDIA_GALLERIES_READ_DELETE,
-       {APIPermission::kMediaGalleriesAllGalleriesDelete,
-        APIPermission::kMediaGalleriesAllGalleriesRead},
-       {}},
+       {APIPermission::kMediaGalleriesAllGalleriesDelete},
+       {APIPermission::kMediaGalleriesAllGalleriesRead}},
       {IDS_EXTENSION_PROMPT_WARNING_MEDIA_GALLERIES_READ,
        {APIPermission::kMediaGalleriesAllGalleriesRead},
        {}},
 
-      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_WRITE_AND_SESSIONS,
-       {APIPermission::kSessions, APIPermission::kHistory},
-       {APIPermission::kFavicon,
-        APIPermission::kProcesses,
-        APIPermission::kTab,
-        APIPermission::kTopSites,
-        APIPermission::kWebNavigation}},
-      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ_AND_SESSIONS,
-       {APIPermission::kSessions, APIPermission::kTab},
-       {APIPermission::kFavicon,
-        APIPermission::kProcesses,
-        APIPermission::kTopSites,
-        APIPermission::kWebNavigation}},
+      // The permission string for "fileSystem" is only shown when
+      // "write" or "directory" is present. Read-only access is only
+      // granted after the user has been shown a file or directory
+      // chooser dialog and selected a file or directory. Selecting
+      // the file or directory is considered consent to read it.
+      {IDS_EXTENSION_PROMPT_WARNING_FILE_SYSTEM_WRITE_DIRECTORY,
+       {APIPermission::kFileSystemWrite, APIPermission::kFileSystemDirectory},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_FILE_SYSTEM_DIRECTORY,
+       {APIPermission::kFileSystemDirectory},
+       {}},
 
-      // Suppression list taken from
-      // ChromePermissionMessageProvider::GetPermissionMessages():
-      // Some warnings are more generic and/or powerful and supercede other
-      // warnings. In that case, the first message suppresses the second one.
-      {IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH,
-       {APIPermission::kBluetooth},
-       {APIPermission::kBluetoothDevices}},
+      // Video and audio capture.
+      {IDS_EXTENSION_PROMPT_WARNING_AUDIO_AND_VIDEO_CAPTURE,
+       {APIPermission::kAudioCapture, APIPermission::kVideoCapture},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_AUDIO_CAPTURE,
+       {APIPermission::kAudioCapture},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_VIDEO_CAPTURE,
+       {APIPermission::kVideoCapture},
+       {}},
+
+      // Network-related permissions.
+      {IDS_EXTENSION_PROMPT_WARNING_NETWORKING_PRIVATE,
+       {APIPermission::kNetworkingPrivate},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_NETWORKING_CONFIG,
+       {APIPermission::kNetworkingConfig},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_NETWORK_STATE,
+       {APIPermission::kNetworkState},
+       {}},
+      {IDS_EXTENSION_PROMPT_WARNING_VPN, {APIPermission::kVpnProvider}, {}},
+      {IDS_EXTENSION_PROMPT_WARNING_WEB_CONNECTABLE,
+       {APIPermission::kWebConnectable},
+       {}},
+      {new SingleParameterFormatter(
+           IDS_EXTENSION_PROMPT_WARNING_HOME_PAGE_SETTING_OVERRIDE),
+       {APIPermission::kHomepage},
+       {}},
+      {new SingleParameterFormatter(
+           IDS_EXTENSION_PROMPT_WARNING_SEARCH_SETTINGS_OVERRIDE),
+       {APIPermission::kSearchProvider},
+       {}},
+      {new SingleParameterFormatter(
+           IDS_EXTENSION_PROMPT_WARNING_START_PAGE_SETTING_OVERRIDE),
+       {APIPermission::kStartupPages},
+       {}},
+
       {IDS_EXTENSION_PROMPT_WARNING_BOOKMARKS,
        {APIPermission::kBookmark},
        {APIPermission::kOverrideBookmarksUI}},
-      // History already allows reading favicons, tab access and accessing the
-      // list of most frequently visited sites.
-      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_WRITE,
-       {APIPermission::kHistory},
-       {APIPermission::kFavicon,
-        APIPermission::kProcesses,
-        APIPermission::kTab,
-        APIPermission::kTopSites,
-        APIPermission::kWebNavigation}},
-      // A special hack: If kFileSystemWriteDirectory would be displayed, hide
-      // kFileSystemDirectory as the write directory message implies it.
-      // TODO(sashab): Remove kFileSystemWriteDirectory; it's no longer needed
-      // since this rules system can represent the rule. See crbug.com/284849.
-      {IDS_EXTENSION_PROMPT_WARNING_FILE_SYSTEM_WRITE_DIRECTORY,
-       {APIPermission::kFileSystemWrite, APIPermission::kFileSystemDirectory},
-       {APIPermission::kFileSystemWriteDirectory}},
-      // Full access already allows DeclarativeWebRequest, reading the list of
-      // most frequently visited sites, and tab access.
-      // The warning message for declarativeWebRequest
-      // permissions speaks about blocking parts of pages, which is a
-      // subset of what the "<all_urls>" access allows. Therefore we
-      // display only the "<all_urls>" warning message if both permissions
-      // are required.
-      {IDS_EXTENSION_PROMPT_WARNING_ALL_HOSTS,
-       {APIPermission::kHostsAll},
-       {APIPermission::kDeclarativeWebRequest,
-        APIPermission::kTopSites,
-        APIPermission::kTab,
-        APIPermission::kFavicon,
-        APIPermission::kTopSites,
-        APIPermission::kHostsAllReadOnly}},
-      // AutomationManifestPermission:
-      {IDS_EXTENSION_PROMPT_WARNING_ALL_HOSTS_READ_ONLY,
-       {APIPermission::kHostsAllReadOnly},
-       {}},
-      // Tabs already allows reading favicons and reading the list of most
-      // frequently visited sites.
-      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ,
-       {APIPermission::kTab},
-       {APIPermission::kFavicon,
-        APIPermission::kProcesses,
-        APIPermission::kTopSites,
-        APIPermission::kWebNavigation}},
-
-      // Individual message rules taken from
-      // ChromeAPIPermissions::GetAllPermissions():
-      // Permission messages for all extension types:
-
       {IDS_EXTENSION_PROMPT_WARNING_CLIPBOARD,
        {APIPermission::kClipboardRead},
        {}},
@@ -430,15 +568,10 @@ ChromePermissionMessageRule::GetAllRules() {
       {IDS_EXTENSION_PROMPT_WARNING_GEOLOCATION,
        {APIPermission::kGeolocation},
        {}},
+      {IDS_EXTENSION_PROMPT_WARNING_GEOLOCATION,
+       {APIPermission::kLocation},
+       {}},
 
-      // Permission messages for extensions:
-      {IDS_EXTENSION_PROMPT_WARNING_ACCESSIBILITY_FEATURES_MODIFY,
-       {APIPermission::kAccessibilityFeaturesModify},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_ACCESSIBILITY_FEATURES_READ,
-       {APIPermission::kAccessibilityFeaturesRead},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_BOOKMARKS, {APIPermission::kBookmark}, {}},
       {IDS_EXTENSION_PROMPT_WARNING_CONTENT_SETTINGS,
        {APIPermission::kContentSettings},
        {}},
@@ -448,13 +581,7 @@ ChromePermissionMessageRule::GetAllRules() {
       {IDS_EXTENSION_PROMPT_WARNING_DOCUMENT_SCAN,
        {APIPermission::kDocumentScan},
        {}},
-      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_WRITE,
-       {APIPermission::kHistory},
-       {}},
       {IDS_EXTENSION_PROMPT_WARNING_INPUT, {APIPermission::kInput}, {}},
-      {IDS_EXTENSION_PROMPT_WARNING_GEOLOCATION,
-       {APIPermission::kLocation},
-       {}},
       {IDS_EXTENSION_PROMPT_WARNING_MANAGEMENT,
        {APIPermission::kManagement},
        {}},
@@ -463,29 +590,23 @@ ChromePermissionMessageRule::GetAllRules() {
        {APIPermission::kNativeMessaging},
        {}},
       {IDS_EXTENSION_PROMPT_WARNING_PRIVACY, {APIPermission::kPrivacy}, {}},
-      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ,
-       {APIPermission::kProcesses},
-       {}},
       {IDS_EXTENSION_PROMPT_WARNING_SIGNED_IN_DEVICES,
        {APIPermission::kSignedInDevices},
        {}},
       {IDS_EXTENSION_PROMPT_WARNING_SYNCFILESYSTEM,
        {APIPermission::kSyncFileSystem},
        {}},
-      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ, {APIPermission::kTab}, {}},
-      {IDS_EXTENSION_PROMPT_WARNING_TOPSITES, {APIPermission::kTopSites}, {}},
       {IDS_EXTENSION_PROMPT_WARNING_TTS_ENGINE,
        {APIPermission::kTtsEngine},
        {}},
       {IDS_EXTENSION_PROMPT_WARNING_WALLPAPER, {APIPermission::kWallpaper}, {}},
-      {IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ,
-       {APIPermission::kWebNavigation},
-       {}},
       {IDS_EXTENSION_PROMPT_WARNING_PLATFORMKEYS,
        {APIPermission::kPlatformKeys},
        {}},
+      {IDS_EXTENSION_PROMPT_WARNING_CERTIFICATEPROVIDER,
+       {APIPermission::kCertificateProvider},
+       {}},
 
-      // Permission messages for private permissions:
       {IDS_EXTENSION_PROMPT_WARNING_SCREENLOCK_PRIVATE,
        {APIPermission::kScreenlockPrivate},
        {}},
@@ -494,9 +615,6 @@ ChromePermissionMessageRule::GetAllRules() {
        {}},
       {IDS_EXTENSION_PROMPT_WARNING_EXPERIENCE_SAMPLING_PRIVATE,
        {APIPermission::kExperienceSamplingPrivate},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_NETWORKING_PRIVATE,
-       {APIPermission::kNetworkingPrivate},
        {}},
       {IDS_EXTENSION_PROMPT_WARNING_MUSIC_MANAGER_PRIVATE,
        {APIPermission::kMusicManagerPrivate},
@@ -516,165 +634,13 @@ ChromePermissionMessageRule::GetAllRules() {
       {IDS_EXTENSION_PROMPT_WARNING_USERS_PRIVATE,
        {APIPermission::kUsersPrivate},
        {}},
-
-      // Platform-app permission messages.
-
-      // The permission string for "fileSystem" is only shown when
-      // "write" or "directory" is present. Read-only access is only
-      // granted after the user has been shown a file or directory
-      // chooser dialog and selected a file or directory. Selecting
-      // the file or directory is considered consent to read it.
-      {IDS_EXTENSION_PROMPT_WARNING_FILE_SYSTEM_DIRECTORY,
-       {APIPermission::kFileSystemDirectory},
+      {IDS_EXTENSION_PROMPT_WARNING_DISPLAY_SOURCE,
+       {APIPermission::kDisplaySource},
        {}},
-      {IDS_EXTENSION_PROMPT_WARNING_FILE_SYSTEM_WRITE_DIRECTORY,
-       {APIPermission::kFileSystemWriteDirectory},
-       {}},
-
-      // Because warning messages for the "mediaGalleries" permission
-      // vary based on the permissions parameters, no message ID or
-      // message text is specified here.  The message ID and text used
-      // will be determined at run-time in the
-      // |MediaGalleriesPermission| class.
-
-      {IDS_EXTENSION_PROMPT_WARNING_INTERCEPT_ALL_KEYS,
-       {APIPermission::kInterceptAllKeys},
-       {}},
-
-      {IDS_EXTENSION_PROMPT_WARNING_AUDIO_AND_VIDEO_CAPTURE,
-       {APIPermission::kAudioCapture, APIPermission::kVideoCapture},
-       {}},
-
-      // Individual message rules taken from
-      // ExtensionsAPIPermissions::GetAllPermissions():
-      {IDS_EXTENSION_PROMPT_WARNING_AUDIO_CAPTURE,
-       {APIPermission::kAudioCapture},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH_PRIVATE,
-       {APIPermission::kBluetoothPrivate},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_DECLARATIVE_WEB_REQUEST,
-       {APIPermission::kDeclarativeWebRequest},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_SERIAL, {APIPermission::kSerial}, {}},
-
-      // Because warning messages for the "socket" permission vary based
-      // on the permissions parameters, no message ID or message text is
-      // specified here.  The message ID and text used will be
-      // determined at run-time in the |SocketPermission| class.
-      {IDS_EXTENSION_PROMPT_WARNING_U2F_DEVICES,
-       {APIPermission::kU2fDevices},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_VIDEO_CAPTURE,
-       {APIPermission::kVideoCapture},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_VPN, {APIPermission::kVpnProvider}, {}},
-      {IDS_EXTENSION_PROMPT_WARNING_WEB_CONNECTABLE,
-       {APIPermission::kWebConnectable},
-       {}},
-
-      // Rules from ManifestPermissions:
-      // BluetoothManifestPermission:
-      {IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH, {APIPermission::kBluetooth}, {}},
-      {IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH_DEVICES,
-       {APIPermission::kBluetoothDevices},
-       {}},
-
-      // SocketsManifestPermission:
-      {IDS_EXTENSION_PROMPT_WARNING_SOCKET_ANY_HOST,
-       {APIPermission::kSocketAnyHost},
-       {}},
-      {IDS_EXTENSION_PROMPT_WARNING_NETWORK_STATE,
-       {APIPermission::kNetworkState},
-       {}},
-
-      // API permission rules:
-      // SettingsOverrideAPIPermission:
-      {new SingleParameterFormatter(
-           IDS_EXTENSION_PROMPT_WARNING_HOME_PAGE_SETTING_OVERRIDE),
-       {APIPermission::kHomepage},
-       {}},
-      {new SingleParameterFormatter(
-           IDS_EXTENSION_PROMPT_WARNING_SEARCH_SETTINGS_OVERRIDE),
-       {APIPermission::kSearchProvider},
-       {}},
-      {new SingleParameterFormatter(
-           IDS_EXTENSION_PROMPT_WARNING_START_PAGE_SETTING_OVERRIDE),
-       {APIPermission::kStartupPages},
-       {}},
-
-      // Other rules:
-      // From ChromeExtensionsClient::FilterHostPermissions():
-      {IDS_EXTENSION_PROMPT_WARNING_FAVICON, {APIPermission::kFavicon}, {}},
   };
 
-  std::vector<ChromePermissionMessageRule> rules;
-  for (size_t i = 0; i < arraysize(rules_arr); i++) {
-    rules.push_back(rules_arr[i]);
-  }
-  return rules;
-}
-
-ChromePermissionMessageRule::PermissionIDSetInitializer::
-    PermissionIDSetInitializer() {
-}
-ChromePermissionMessageRule::PermissionIDSetInitializer::
-    PermissionIDSetInitializer(APIPermission::ID permission_one) {
-  insert(permission_one);
-}
-ChromePermissionMessageRule::PermissionIDSetInitializer::
-    PermissionIDSetInitializer(APIPermission::ID permission_one,
-                               APIPermission::ID permission_two) {
-  insert(permission_one);
-  insert(permission_two);
-}
-ChromePermissionMessageRule::PermissionIDSetInitializer::
-    PermissionIDSetInitializer(APIPermission::ID permission_one,
-                               APIPermission::ID permission_two,
-                               APIPermission::ID permission_three) {
-  insert(permission_one);
-  insert(permission_two);
-  insert(permission_three);
-}
-ChromePermissionMessageRule::PermissionIDSetInitializer::
-    PermissionIDSetInitializer(APIPermission::ID permission_one,
-                               APIPermission::ID permission_two,
-                               APIPermission::ID permission_three,
-                               APIPermission::ID permission_four) {
-  insert(permission_one);
-  insert(permission_two);
-  insert(permission_three);
-  insert(permission_four);
-}
-ChromePermissionMessageRule::PermissionIDSetInitializer::
-    PermissionIDSetInitializer(APIPermission::ID permission_one,
-                               APIPermission::ID permission_two,
-                               APIPermission::ID permission_three,
-                               APIPermission::ID permission_four,
-                               APIPermission::ID permission_five) {
-  insert(permission_one);
-  insert(permission_two);
-  insert(permission_three);
-  insert(permission_four);
-  insert(permission_five);
-}
-ChromePermissionMessageRule::PermissionIDSetInitializer::
-    PermissionIDSetInitializer(APIPermission::ID permission_one,
-                               APIPermission::ID permission_two,
-                               APIPermission::ID permission_three,
-                               APIPermission::ID permission_four,
-                               APIPermission::ID permission_five,
-                               APIPermission::ID permission_six) {
-  insert(permission_one);
-  insert(permission_two);
-  insert(permission_three);
-  insert(permission_four);
-  insert(permission_five);
-  insert(permission_six);
-}
-
-ChromePermissionMessageRule::PermissionIDSetInitializer::
-    ~PermissionIDSetInitializer() {
+  return std::vector<ChromePermissionMessageRule>(
+      rules_arr, rules_arr + arraysize(rules_arr));
 }
 
 }  // namespace extensions

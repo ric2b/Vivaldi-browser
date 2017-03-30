@@ -6,6 +6,7 @@
 #define MEDIA_FILTERS_OPUS_AUDIO_DECODER_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/demuxer_stream.h"
@@ -33,6 +34,7 @@ class MEDIA_EXPORT OpusAudioDecoder : public AudioDecoder {
   // AudioDecoder implementation.
   std::string GetDisplayName() const override;
   void Initialize(const AudioDecoderConfig& config,
+                  const SetCdmReadyCB& set_cdm_ready_cb,
                   const InitCB& init_cb,
                   const OutputCB& output_cb) override;
   void Decode(const scoped_refptr<DecoderBuffer>& buffer,
@@ -56,11 +58,6 @@ class MEDIA_EXPORT OpusAudioDecoder : public AudioDecoder {
   AudioDecoderConfig config_;
   OutputCB output_cb_;
   OpusMSDecoder* opus_decoder_;
-
-  // When the input timestamp is |start_input_timestamp_| the decoder needs to
-  // drop |config_.codec_delay()| frames.
-  base::TimeDelta start_input_timestamp_;
-
   scoped_ptr<AudioDiscardHelper> discard_helper_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(OpusAudioDecoder);

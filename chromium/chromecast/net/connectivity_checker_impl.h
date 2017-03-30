@@ -6,6 +6,7 @@
 #define CHROMECAST_NET_CONNECTIVITY_CHECKER_IMPL_H_
 
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "chromecast/net/connectivity_checker.h"
 #include "net/base/network_change_notifier.h"
 #include "net/url_request/url_request.h"
@@ -56,6 +57,8 @@ class ConnectivityCheckerImpl
   void OnNetworkChanged(
       net::NetworkChangeNotifier::ConnectionType type) override;
 
+  void OnNetworkChangedInternal();
+
   // Cancels current connectivity checking in progress.
   void Cancel();
 
@@ -73,8 +76,13 @@ class ConnectivityCheckerImpl
   scoped_ptr<net::URLRequest> url_request_;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   bool connected_;
+  net::NetworkChangeNotifier::ConnectionType connection_type_;
   // Number of connectivity check errors.
   unsigned int check_errors_;
+  bool network_changed_pending_;
+  // Timeout handler for connectivity checks.
+  // Note: Cancelling this timeout can cause the destructor for this class to be
+  //       to be called.
   base::CancelableCallback<void()> timeout_;
 
   DISALLOW_COPY_AND_ASSIGN(ConnectivityCheckerImpl);

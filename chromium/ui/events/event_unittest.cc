@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -181,18 +186,18 @@ TEST(EventTest, KeyEvent) {
   static const struct {
     KeyboardCode key_code;
     int flags;
-    uint16 character;
+    uint16_t character;
   } kTestData[] = {
     { VKEY_A, 0, 'a' },
     { VKEY_A, EF_SHIFT_DOWN, 'A' },
-    { VKEY_A, EF_CAPS_LOCK_DOWN, 'A' },
-    { VKEY_A, EF_SHIFT_DOWN | EF_CAPS_LOCK_DOWN, 'a' },
+    { VKEY_A, EF_CAPS_LOCK_ON, 'A' },
+    { VKEY_A, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, 'a' },
     { VKEY_A, EF_CONTROL_DOWN, 0x01 },
     { VKEY_A, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x01' },
     { VKEY_Z, 0, 'z' },
     { VKEY_Z, EF_SHIFT_DOWN, 'Z' },
-    { VKEY_Z, EF_CAPS_LOCK_DOWN, 'Z' },
-    { VKEY_Z, EF_SHIFT_DOWN | EF_CAPS_LOCK_DOWN, 'z' },
+    { VKEY_Z, EF_CAPS_LOCK_ON, 'Z' },
+    { VKEY_Z, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, 'z' },
     { VKEY_Z, EF_CONTROL_DOWN, '\x1A' },
     { VKEY_Z, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1A' },
 
@@ -212,12 +217,12 @@ TEST(EventTest, KeyEvent) {
 
     { VKEY_0, 0, '0' },
     { VKEY_0, EF_SHIFT_DOWN, ')' },
-    { VKEY_0, EF_SHIFT_DOWN | EF_CAPS_LOCK_DOWN, ')' },
+    { VKEY_0, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, ')' },
     { VKEY_0, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
 
     { VKEY_9, 0, '9' },
     { VKEY_9, EF_SHIFT_DOWN, '(' },
-    { VKEY_9, EF_SHIFT_DOWN | EF_CAPS_LOCK_DOWN, '(' },
+    { VKEY_9, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, '(' },
     { VKEY_9, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
 
     { VKEY_NUMPAD0, EF_CONTROL_DOWN, '\0' },
@@ -226,7 +231,8 @@ TEST(EventTest, KeyEvent) {
     { VKEY_NUMPAD9, EF_CONTROL_DOWN, '\0' },
     { VKEY_NUMPAD9, EF_SHIFT_DOWN, '9' },
 
-    { VKEY_TAB, EF_CONTROL_DOWN, '\0' },
+    { VKEY_TAB, EF_NONE, '\t' },
+    { VKEY_TAB, EF_CONTROL_DOWN, '\t' },
     { VKEY_TAB, EF_SHIFT_DOWN, '\t' },
 
     { VKEY_MULTIPLY, EF_CONTROL_DOWN, '\0' },
@@ -350,7 +356,7 @@ TEST(EventTest, KeyEventCode) {
   const char kCodeForSpace[] = "Space";
   ASSERT_EQ(kDomCodeForSpace,
             ui::KeycodeConverter::CodeStringToDomCode(kCodeForSpace));
-  const uint16 kNativeCodeSpace =
+  const uint16_t kNativeCodeSpace =
       ui::KeycodeConverter::DomCodeToNativeKeycode(kDomCodeForSpace);
   ASSERT_NE(ui::KeycodeConverter::InvalidNativeKeycode(), kNativeCodeSpace);
   ASSERT_EQ(kNativeCodeSpace,
@@ -395,7 +401,7 @@ TEST(EventTest, KeyEventCode) {
   }
   {
     const char kCodeForHome[]  = "Home";
-    const uint16 kNativeCodeHome  = 0xe047;
+    const uint16_t kNativeCodeHome = 0xe047;
 
     // 'Home' is an extended key with 0xe000 bits.
     ASSERT_NE((kNativeCodeHome & 0xFF), kNativeCodeHome);
@@ -433,10 +439,10 @@ void AdvanceKeyEventTimestamp(MSG& msg) {
 
 #if defined(USE_X11) || defined(OS_WIN)
 TEST(EventTest, AutoRepeat) {
-  const uint16 kNativeCodeA =
-      ui::KeycodeConverter::DomCodeToNativeKeycode(DomCode::KEY_A);
-  const uint16 kNativeCodeB =
-      ui::KeycodeConverter::DomCodeToNativeKeycode(DomCode::KEY_B);
+  const uint16_t kNativeCodeA =
+      ui::KeycodeConverter::DomCodeToNativeKeycode(DomCode::US_A);
+  const uint16_t kNativeCodeB =
+      ui::KeycodeConverter::DomCodeToNativeKeycode(DomCode::US_B);
 #if defined(USE_X11)
   ScopedXI2Event native_event_a_pressed;
   native_event_a_pressed.InitKeyEvent(ET_KEY_PRESSED, VKEY_A, kNativeCodeA);
@@ -471,72 +477,77 @@ TEST(EventTest, AutoRepeat) {
 
   {
     KeyEvent key_a1(native_event_a_pressed);
-    EXPECT_FALSE(key_a1.IsRepeat());
-
-    KeyEvent key_a1_with_same_event(native_event_a_pressed);
-    EXPECT_FALSE(key_a1_with_same_event.IsRepeat());
+    EXPECT_FALSE(key_a1.is_repeat());
 
     KeyEvent key_a1_released(native_event_a_released);
-    EXPECT_FALSE(key_a1_released.IsRepeat());
+    EXPECT_FALSE(key_a1_released.is_repeat());
 
     KeyEvent key_a2(native_event_a_pressed);
-    EXPECT_FALSE(key_a2.IsRepeat());
+    EXPECT_FALSE(key_a2.is_repeat());
 
     AdvanceKeyEventTimestamp(native_event_a_pressed);
     KeyEvent key_a2_repeated(native_event_a_pressed);
-    EXPECT_TRUE(key_a2_repeated.IsRepeat());
+    EXPECT_TRUE(key_a2_repeated.is_repeat());
 
     KeyEvent key_a2_released(native_event_a_released);
-    EXPECT_FALSE(key_a2_released.IsRepeat());
+    EXPECT_FALSE(key_a2_released.is_repeat());
   }
 
   // Interleaved with different key press.
   {
     KeyEvent key_a3(native_event_a_pressed);
-    EXPECT_FALSE(key_a3.IsRepeat());
+    EXPECT_FALSE(key_a3.is_repeat());
 
     KeyEvent key_b(native_event_b_pressed);
-    EXPECT_FALSE(key_b.IsRepeat());
+    EXPECT_FALSE(key_b.is_repeat());
 
     AdvanceKeyEventTimestamp(native_event_a_pressed);
     KeyEvent key_a3_again(native_event_a_pressed);
-    EXPECT_FALSE(key_a3_again.IsRepeat());
+    EXPECT_FALSE(key_a3_again.is_repeat());
 
     AdvanceKeyEventTimestamp(native_event_a_pressed);
     KeyEvent key_a3_repeated(native_event_a_pressed);
-    EXPECT_TRUE(key_a3_repeated.IsRepeat());
+    EXPECT_TRUE(key_a3_repeated.is_repeat());
 
     AdvanceKeyEventTimestamp(native_event_a_pressed);
     KeyEvent key_a3_repeated2(native_event_a_pressed);
-    EXPECT_TRUE(key_a3_repeated2.IsRepeat());
+    EXPECT_TRUE(key_a3_repeated2.is_repeat());
 
     KeyEvent key_a3_released(native_event_a_released);
-    EXPECT_FALSE(key_a3_released.IsRepeat());
+    EXPECT_FALSE(key_a3_released.is_repeat());
   }
 
   // Hold the key longer than max auto repeat timeout.
   {
     KeyEvent key_a4_0(native_event_a_pressed);
-    EXPECT_FALSE(key_a4_0.IsRepeat());
+    EXPECT_FALSE(key_a4_0.is_repeat());
 
     KeyEvent key_a4_1500(native_event_a_pressed_1500);
-    EXPECT_TRUE(key_a4_1500.IsRepeat());
+    EXPECT_TRUE(key_a4_1500.is_repeat());
 
     KeyEvent key_a4_3000(native_event_a_pressed_3000);
-    EXPECT_TRUE(key_a4_3000.IsRepeat());
+    EXPECT_TRUE(key_a4_3000.is_repeat());
 
     KeyEvent key_a4_released(native_event_a_released);
-    EXPECT_FALSE(key_a4_released.IsRepeat());
+    EXPECT_FALSE(key_a4_released.is_repeat());
   }
 
 #if defined(USE_X11)
   {
     KeyEvent key_a4_pressed(native_event_a_pressed);
-    EXPECT_FALSE(key_a4_pressed.IsRepeat());
+    EXPECT_FALSE(key_a4_pressed.is_repeat());
 
     KeyEvent key_a4_pressed_nonstandard_state(
         native_event_a_pressed_nonstandard_state);
-    EXPECT_FALSE(key_a4_pressed_nonstandard_state.IsRepeat());
+    EXPECT_FALSE(key_a4_pressed_nonstandard_state.is_repeat());
+  }
+
+  {
+    KeyEvent key_a1(native_event_a_pressed);
+    EXPECT_FALSE(key_a1.is_repeat());
+
+    KeyEvent key_a1_with_same_event(native_event_a_pressed);
+    EXPECT_FALSE(key_a1_with_same_event.is_repeat());
   }
 #endif
 }
@@ -549,13 +560,13 @@ TEST(EventTest, TouchEventRadiusDefaultsToOtherAxis) {
 
   TouchEvent event1(ui::ET_TOUCH_PRESSED, gfx::Point(0, 0), 0, 0, time,
                     non_zero_length1, 0, 0, 0);
-  EXPECT_EQ(non_zero_length1, event1.radius_x());
-  EXPECT_EQ(non_zero_length1, event1.radius_y());
+  EXPECT_EQ(non_zero_length1, event1.pointer_details().radius_x());
+  EXPECT_EQ(non_zero_length1, event1.pointer_details().radius_y());
 
   TouchEvent event2(ui::ET_TOUCH_PRESSED, gfx::Point(0, 0), 0, 0, time,
                     0, non_zero_length2, 0, 0);
-  EXPECT_EQ(non_zero_length2, event2.radius_x());
-  EXPECT_EQ(non_zero_length2, event2.radius_y());
+  EXPECT_EQ(non_zero_length2, event2.pointer_details().radius_x());
+  EXPECT_EQ(non_zero_length2, event2.pointer_details().radius_y());
 }
 
 TEST(EventTest, TouchEventRotationAngleFixing) {
@@ -604,6 +615,91 @@ TEST(EventTest, TouchEventRotationAngleFixing) {
                     radius_x, radius_y, angle_too_big, 0);
     EXPECT_FLOAT_EQ(400 - 360, event.rotation_angle());
   }
+}
+
+TEST(EventTest, PointerEventDetailsTouch) {
+  ui::TouchEvent touch_event_plain(ET_TOUCH_PRESSED, gfx::Point(0, 0), 0,
+                                   ui::EventTimeForNow());
+
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_TOUCH,
+            touch_event_plain.pointer_details().pointer_type());
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().radius_x());
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().radius_y());
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().force());
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().tilt_x());
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().tilt_y());
+
+  ui::TouchEvent touch_event_with_details(ET_TOUCH_PRESSED, gfx::Point(0, 0), 0,
+                                          0, ui::EventTimeForNow(), 10.0f, 5.0f,
+                                          0.0f, 15.0f);
+
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_TOUCH,
+            touch_event_with_details.pointer_details().pointer_type());
+  EXPECT_EQ(10.0f, touch_event_with_details.pointer_details().radius_x());
+  EXPECT_EQ(5.0f, touch_event_with_details.pointer_details().radius_y());
+  EXPECT_EQ(15.0f, touch_event_with_details.pointer_details().force());
+  EXPECT_EQ(0.0f, touch_event_with_details.pointer_details().tilt_x());
+  EXPECT_EQ(0.0f, touch_event_with_details.pointer_details().tilt_y());
+
+  ui::TouchEvent touch_event_copy(touch_event_with_details);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_TOUCH,
+            touch_event_copy.pointer_details().pointer_type());
+  EXPECT_EQ(10.0f, touch_event_copy.pointer_details().radius_x());
+  EXPECT_EQ(5.0f, touch_event_copy.pointer_details().radius_y());
+  EXPECT_EQ(15.0f, touch_event_copy.pointer_details().force());
+  EXPECT_EQ(0.0f, touch_event_copy.pointer_details().tilt_x());
+  EXPECT_EQ(0.0f, touch_event_copy.pointer_details().tilt_y());
+}
+
+TEST(EventTest, PointerEventDetailsMouse) {
+  ui::MouseEvent mouse_event(ET_MOUSE_PRESSED, gfx::Point(0, 0),
+                             gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
+
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_MOUSE,
+            mouse_event.pointer_details().pointer_type());
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().radius_x());
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().radius_y());
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().force());
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().tilt_x());
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().tilt_y());
+
+  ui::MouseEvent mouse_event_copy(mouse_event);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_MOUSE,
+            mouse_event_copy.pointer_details().pointer_type());
+  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().radius_x());
+  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().radius_y());
+  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().force());
+  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().tilt_x());
+  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().tilt_y());
+}
+
+TEST(EventTest, PointerEventDetailsStylus) {
+  ui::MouseEvent stylus_event(ET_MOUSE_PRESSED, gfx::Point(0, 0),
+                              gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
+  ui::PointerDetails pointer_details(EventPointerType::POINTER_TYPE_PEN,
+      /* radius_x */ 0.0f,
+      /* radius_y */ 0.0f,
+      /* force */ 21.0f,
+      /* tilt_x */ 45.0f,
+      /* tilt_y */ -45.0f);
+
+  stylus_event.set_pointer_details(pointer_details);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
+            stylus_event.pointer_details().pointer_type());
+  EXPECT_EQ(21.0f, stylus_event.pointer_details().force());
+  EXPECT_EQ(45.0f, stylus_event.pointer_details().tilt_x());
+  EXPECT_EQ(-45.0f, stylus_event.pointer_details().tilt_y());
+  EXPECT_EQ(0.0f, stylus_event.pointer_details().radius_x());
+  EXPECT_EQ(0.0f, stylus_event.pointer_details().radius_y());
+
+  ui::MouseEvent stylus_event_copy(stylus_event);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
+            stylus_event_copy.pointer_details().pointer_type());
+  EXPECT_EQ(21.0f, stylus_event_copy.pointer_details().force());
+  EXPECT_EQ(45.0f, stylus_event_copy.pointer_details().tilt_x());
+  EXPECT_EQ(-45.0f, stylus_event_copy.pointer_details().tilt_y());
+  EXPECT_EQ(0.0f, stylus_event_copy.pointer_details().radius_x());
+  EXPECT_EQ(0.0f, stylus_event_copy.pointer_details().radius_y());
 }
 
 }  // namespace ui

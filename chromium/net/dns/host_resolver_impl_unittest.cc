@@ -6,12 +6,15 @@
 
 #include <algorithm>
 #include <string>
+#include <tuple>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -61,8 +64,8 @@ class MockHostResolverProc : public HostResolverProc {
     ResolveKey(const std::string& hostname, AddressFamily address_family)
         : hostname(hostname), address_family(address_family) {}
     bool operator<(const ResolveKey& other) const {
-      return address_family < other.address_family ||
-          (address_family == other.address_family && hostname < other.hostname);
+      return std::tie(address_family, hostname) <
+             std::tie(other.address_family, other.hostname);
     }
     std::string hostname;
     AddressFamily address_family;
@@ -184,8 +187,9 @@ class MockHostResolverProc : public HostResolverProc {
   DISALLOW_COPY_AND_ASSIGN(MockHostResolverProc);
 };
 
-bool AddressListContains(const AddressList& list, const std::string& address,
-                         uint16 port) {
+bool AddressListContains(const AddressList& list,
+                         const std::string& address,
+                         uint16_t port) {
   IPAddressNumber ip;
   bool rv = ParseIPLiteralToNumber(address, &ip);
   DCHECK(rv);
@@ -253,7 +257,7 @@ class Request {
   bool completed() const { return result_ != ERR_IO_PENDING; }
   bool pending() const { return handle_ != NULL; }
 
-  bool HasAddress(const std::string& address, uint16 port) const {
+  bool HasAddress(const std::string& address, uint16_t port) const {
     return AddressListContains(list_, address, port);
   }
 
@@ -262,7 +266,7 @@ class Request {
     return list_.size();
   }
 
-  bool HasOneAddress(const std::string& address, uint16 port) const {
+  bool HasOneAddress(const std::string& address, uint16_t port) const {
     return HasAddress(address, port) && (NumberOfAddresses() == 1u);
   }
 
@@ -270,7 +274,7 @@ class Request {
   int WaitForResult() {
     if (completed())
       return result_;
-    base::CancelableClosure closure(base::MessageLoop::QuitClosure());
+    base::CancelableClosure closure(base::MessageLoop::QuitWhenIdleClosure());
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, closure.callback(), TestTimeouts::action_max_timeout());
     quit_on_complete_ = true;
@@ -298,7 +302,7 @@ class Request {
     if (handler_)
       handler_->Handle(this);
     if (quit_on_complete_) {
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
       quit_on_complete_ = false;
     }
   }
@@ -480,7 +484,7 @@ class HostResolverImplTest : public testing::Test {
     Request* CreateRequest(const std::string& hostname) {
       return test->CreateRequest(hostname);
     }
-    ScopedVector<Request>& requests() { return test->requests_; }
+    std::vector<scoped_ptr<Request>>& requests() { return test->requests_; }
 
     void DeleteResolver() { test->resolver_.reset(); }
 
@@ -509,10 +513,9 @@ class HostResolverImplTest : public testing::Test {
   // not start until released by |proc_->SignalXXX|.
   Request* CreateRequest(const HostResolver::RequestInfo& info,
                          RequestPriority priority) {
-    Request* req = new Request(
-        info, priority, requests_.size(), resolver_.get(), handler_.get());
-    requests_.push_back(req);
-    return req;
+    requests_.push_back(make_scoped_ptr(new Request(
+        info, priority, requests_.size(), resolver_.get(), handler_.get())));
+    return requests_.back().get();
   }
 
   Request* CreateRequest(const std::string& hostname,
@@ -564,7 +567,7 @@ class HostResolverImplTest : public testing::Test {
 
   scoped_refptr<MockHostResolverProc> proc_;
   scoped_ptr<HostResolverImpl> resolver_;
-  ScopedVector<Request> requests_;
+  std::vector<scoped_ptr<Request>> requests_;
 
   scoped_ptr<Handler> handler_;
 };
@@ -847,7 +850,7 @@ TEST_F(HostResolverImplTest, DeleteWithinCallback) {
       // Quit after returning from OnCompleted (to give it a chance at
       // incorrectly running the cancelled tasks).
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::MessageLoop::QuitClosure());
+          FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     }
   };
   set_handler(new MyHandler());
@@ -873,7 +876,7 @@ TEST_F(HostResolverImplTest, DeleteWithinAbortedCallback) {
       // Quit after returning from OnCompleted (to give it a chance at
       // incorrectly running the cancelled tasks).
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::MessageLoop::QuitClosure());
+          FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     }
   };
   set_handler(new MyHandler());
@@ -951,7 +954,7 @@ TEST_F(HostResolverImplTest, BypassCache) {
                   CreateRequest(info, DEFAULT_PRIORITY)->Resolve());
       } else if (71 == req->info().port()) {
         // Test is done.
-        base::MessageLoop::current()->Quit();
+        base::MessageLoop::current()->QuitWhenIdle();
       } else {
         FAIL() << "Unexpected request";
       }
@@ -1473,7 +1476,7 @@ class HostResolverImplDnsTest : public HostResolverImplTest {
 
   // Adds a rule to |dns_rules_|. Must be followed by |CreateResolver| to apply.
   void AddDnsRule(const std::string& prefix,
-                  uint16 qtype,
+                  uint16_t qtype,
                   MockDnsClientRule::Result result,
                   bool delay) {
     dns_rules_.push_back(MockDnsClientRule(prefix, qtype, result, delay));

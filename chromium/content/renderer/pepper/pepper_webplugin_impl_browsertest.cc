@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
@@ -164,9 +166,7 @@ class PepperWebPluginImplBrowserTest
     bool OverrideCreatePlugin(RenderFrame* render_frame,
                               blink::WebLocalFrame* frame,
                               const blink::WebPluginParams& params,
-                              blink::WebPlugin** plugin,
-                              ContentSetting override_action = 
-                                  CONTENT_SETTING_DEFAULT) override {
+                              blink::WebPlugin** plugin) override {
       current_test_->throttler_ = new PluginInstanceThrottlerImpl;
       current_test_->throttler_->AddObserver(current_test_);
       *plugin = render_frame->CreatePlugin(frame,

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
@@ -170,7 +173,7 @@ scoped_ptr<developer::ProfileInfo> CreateProfileInfo(Profile* profile) {
   info->can_load_unpacked =
       !ExtensionManagementFactory::GetForBrowserContext(profile)
           ->BlacklistedByDefault();
-  return info.Pass();
+  return info;
 }
 
 }  // namespace
@@ -223,6 +226,13 @@ DeveloperPrivateEventRouter::DeveloperPrivateEventRouter(Profile* profile)
   extension_management_observer_.Add(
       ExtensionManagementFactory::GetForBrowserContext(profile));
   command_service_observer_.Add(CommandService::Get(profile));
+  pref_change_registrar_.Init(profile->GetPrefs());
+  // The unretained is safe, since the PrefChangeRegistrar unregisters the
+  // callback on destruction.
+  pref_change_registrar_.Add(
+      prefs::kExtensionsUIDeveloperMode,
+      base::Bind(&DeveloperPrivateEventRouter::OnProfilePrefChanged,
+                 base::Unretained(this)));
 }
 
 DeveloperPrivateEventRouter::~DeveloperPrivateEventRouter() {
@@ -341,15 +351,24 @@ void DeveloperPrivateEventRouter::OnExtensionManagementSettingsChanged() {
   scoped_ptr<base::ListValue> args(new base::ListValue());
   args->Append(CreateProfileInfo(profile_)->ToValue());
   scoped_ptr<Event> event(
-      new Event(events::UNKNOWN, developer::OnProfileStateChanged::kEventName,
-                args.Pass()));
-  event_router_->BroadcastEvent(event.Pass());
+      new Event(events::DEVELOPER_PRIVATE_ON_PROFILE_STATE_CHANGED,
+                developer::OnProfileStateChanged::kEventName, std::move(args)));
+  event_router_->BroadcastEvent(std::move(event));
 }
 
 void DeveloperPrivateEventRouter::ExtensionWarningsChanged(
     const ExtensionIdSet& affected_extensions) {
   for (const ExtensionId& id : affected_extensions)
     BroadcastItemStateChanged(developer::EVENT_TYPE_WARNINGS_CHANGED, id);
+}
+
+void DeveloperPrivateEventRouter::OnProfilePrefChanged() {
+  scoped_ptr<base::ListValue> args(new base::ListValue());
+  args->Append(CreateProfileInfo(profile_)->ToValue());
+  scoped_ptr<Event> event(
+      new Event(events::DEVELOPER_PRIVATE_ON_PROFILE_STATE_CHANGED,
+                developer::OnProfileStateChanged::kEventName, std::move(args)));
+  event_router_->BroadcastEvent(std::move(event));
 }
 
 void DeveloperPrivateEventRouter::BroadcastItemStateChanged(
@@ -361,10 +380,8 @@ void DeveloperPrivateEventRouter::BroadcastItemStateChanged(
   info_generator_weak->CreateExtensionInfo(
       extension_id,
       base::Bind(&DeveloperPrivateEventRouter::BroadcastItemStateChangedHelper,
-                 weak_factory_.GetWeakPtr(),
-                 event_type,
-                 extension_id,
-                 base::Passed(info_generator.Pass())));
+                 weak_factory_.GetWeakPtr(), event_type, extension_id,
+                 base::Passed(std::move(info_generator))));
 }
 
 void DeveloperPrivateEventRouter::BroadcastItemStateChangedHelper(
@@ -390,9 +407,10 @@ void DeveloperPrivateEventRouter::BroadcastItemStateChangedHelper(
 
   scoped_ptr<base::ListValue> args(new base::ListValue());
   args->Append(dict.release());
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, developer::OnItemStateChanged::kEventName, args.Pass()));
-  event_router_->BroadcastEvent(event.Pass());
+  scoped_ptr<Event> event(
+      new Event(events::DEVELOPER_PRIVATE_ON_ITEM_STATE_CHANGED,
+                developer::OnItemStateChanged::kEventName, std::move(args)));
+  event_router_->BroadcastEvent(std::move(event));
 }
 
 void DeveloperPrivateAPI::SetLastUnpackedDirectory(const base::FilePath& path) {

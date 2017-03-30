@@ -5,6 +5,7 @@
 #include "ash/system/tray/default_system_tray_delegate.h"
 
 #include <string>
+#include <utility>
 
 #include "ash/networking_config_delegate.h"
 #include "ash/session/session_state_delegate.h"
@@ -30,7 +31,7 @@ user::LoginStatus DefaultSystemTrayDelegate::GetUserLoginStatus() const {
   return user::LOGGED_IN_USER;
 }
 
-const std::string DefaultSystemTrayDelegate::GetSupervisedUserManager() const {
+std::string DefaultSystemTrayDelegate::GetSupervisedUserManager() const {
   if (!IsUserSupervised())
     return std::string();
   return "manager@chrome.com";
@@ -82,7 +83,7 @@ VolumeControlDelegate* DefaultSystemTrayDelegate::GetVolumeControlDelegate()
 
 void DefaultSystemTrayDelegate::SetVolumeControlDelegate(
     scoped_ptr<VolumeControlDelegate> delegate) {
-  volume_control_delegate_ = delegate.Pass();
+  volume_control_delegate_ = std::move(delegate);
 }
 
 int DefaultSystemTrayDelegate::GetSystemTrayMenuWidth() {

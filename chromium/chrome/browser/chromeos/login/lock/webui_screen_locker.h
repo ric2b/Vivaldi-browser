@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_LOCK_WEBUI_SCREEN_LOCKER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_LOCK_WEBUI_SCREEN_LOCKER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "ash/shell_delegate.h"
 #include "ash/wm/lock_state_observer.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -20,6 +23,7 @@
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/display_observer.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
 #include "ui/views/widget/widget.h"
@@ -54,7 +58,8 @@ class WebUIScreenLocker : public WebUILoginView,
                           public PowerManagerClient::Observer,
                           public ash::VirtualKeyboardStateObserver,
                           public keyboard::KeyboardControllerObserver,
-                          public gfx::DisplayObserver {
+                          public gfx::DisplayObserver,
+                          public content::WebContentsObserver {
  public:
   explicit WebUIScreenLocker(ScreenLocker* screen_locker);
 
@@ -75,7 +80,6 @@ class WebUIScreenLocker : public WebUILoginView,
 
   // LoginDisplay::Delegate:
   void CancelPasswordChangedFlow() override;
-  void CreateAccount() override;
   void CompleteLogin(const UserContext& user_context) override;
   base::string16 GetConnectedNetworkName() override;
   bool IsSigninInProgress() const override;
@@ -92,7 +96,7 @@ class WebUIScreenLocker : public WebUILoginView,
   void ResyncUserData() override;
   void SetDisplayEmail(const std::string& email) override;
   void Signout() override;
-  bool IsUserWhitelisted(const std::string& user_id) override;
+  bool IsUserWhitelisted(const AccountId& account_id) override;
 
   // LockWindow::Observer:
   void OnLockWindowReady() override;

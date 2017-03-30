@@ -34,8 +34,6 @@ cr.define('options', function() {
       Page.prototype.initializePage.call(this);
       this.createDeviceList_();
 
-      BluetoothOptions.updateDiscoveryState(true);
-
       $('bluetooth-add-device-cancel-button').onclick = function(event) {
         PageManager.closeOverlay();
       };
@@ -45,11 +43,8 @@ cr.define('options', function() {
         chrome.send('coreOptionsUserMetricsAction',
                     ['Options_BluetoothConnectNewDevice']);
         var device = self.deviceList_.selectedItem;
-        var address = device.address;
         PageManager.closeOverlay();
-        device.pairing = 'bluetoothStartConnecting';
-        options.BluetoothPairing.showDialog(device);
-        chrome.send('updateBluetoothDevice', [address, 'connect']);
+        options.BluetoothPairing.connect(device, true);
       };
 
       $('bluetooth-unpaired-devices-list').addEventListener('change',
@@ -72,8 +67,30 @@ cr.define('options', function() {
     },
 
     /** @override */
+    didShowPage: function() {
+      chrome.bluetooth.startDiscovery(function() {
+        if (chrome.runtime.lastError) {
+          console.error(
+              'Unexpected error calling bluetooth.startDiscovery: ' +
+              chrome.runtime.lastError.message);
+        }
+      });
+      BluetoothOptions.updateDiscoveryState(true);
+    },
+
+    /** @override */
     didClosePage: function() {
-      chrome.send('stopBluetoothDeviceDiscovery');
+      chrome.bluetooth.stopDiscovery(function() {
+        // The page may get closed before discovery started, so ignore any
+        // 'Failed to stop discovery' errors.
+        if (chrome.runtime.lastError &&
+            chrome.runtime.lastError.message != 'Failed to stop discovery') {
+          console.log(
+              'Unexpected error calling bluetooth.stopDiscovery: ' +
+                  chrome.runtime.lastError.message);
+
+        }
+      });
     },
 
     /**
@@ -86,16 +103,6 @@ cr.define('options', function() {
       this.deviceList_ = assertInstanceof(deviceList,
                                           options.DeletableItemList);
     }
-  };
-
-  /**
-   * Automatically start the device discovery process if the
-   * "Add device" dialog is visible.
-   */
-  BluetoothOptions.startDeviceDiscovery = function() {
-    var page = BluetoothOptions.getInstance();
-    if (page && page.visible)
-      chrome.send('findBluetoothDevices');
   };
 
   /**

@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
+#include "build/build_config.h"
 #include "content/public/renderer/media_stream_audio_sink.h"
 #include "content/renderer/media/media_stream_audio_source.h"
 #include "content/renderer/media/mock_media_constraint_factory.h"
@@ -113,6 +115,7 @@ class MockCapturerSource : public media::AudioCapturerSource {
     audio_thread_.reset();
     OnStop();
   }
+
  protected:
   ~MockCapturerSource() override {}
 
@@ -152,7 +155,7 @@ class WebRtcLocalAudioTrackTest : public ::testing::Test {
  protected:
   void SetUp() override {
     params_.Reset(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                  media::CHANNEL_LAYOUT_STEREO, 2, 48000, 16, 480);
+                  media::CHANNEL_LAYOUT_STEREO, 48000, 16, 480);
     MockMediaConstraintFactory constraint_factory;
     blink_source_.initialize("dummy", blink::WebMediaStreamSource::TypeAudio,
                              "dummy",
@@ -387,16 +390,16 @@ TEST_F(WebRtcLocalAudioTrackTest, StartAndStopAudioTracks) {
   capturer_->Stop();
 }
 
-// Contains data races reported by tsan: crbug.com/404133
-#if defined(THREAD_SANITIZER)
-  #define DISABLE_ON_TSAN(function) DISABLED_##function
-#else
-  #define DISABLE_ON_TSAN(function) function
-#endif
-
 // Create a new capturer with new source, connect it to a new audio track.
-TEST_F(WebRtcLocalAudioTrackTest,
-       DISABLE_ON_TSAN(ConnectTracksToDifferentCapturers)) {
+#if defined(THREAD_SANITIZER)
+// Fails under TSan, see https://crbug.com/576634.
+#define MAYBE_ConnectTracksToDifferentCapturers \
+    DISABLED_ConnectTracksToDifferentCapturers
+#else
+#define MAYBE_ConnectTracksToDifferentCapturers \
+    ConnectTracksToDifferentCapturers
+#endif
+TEST_F(WebRtcLocalAudioTrackTest, MAYBE_ConnectTracksToDifferentCapturers) {
   // Setup the first audio track and start it.
   scoped_refptr<WebRtcLocalAudioTrackAdapter> adapter_1(
       WebRtcLocalAudioTrackAdapter::Create(std::string(), NULL));

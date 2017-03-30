@@ -4,6 +4,8 @@
 
 #include "content/browser/message_port_service.h"
 
+#include <stddef.h>
+
 #include "content/common/message_port_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/message_port_delegate.h"
@@ -50,7 +52,7 @@ struct MessagePortService::MessagePort {
 };
 
 MessagePortService* MessagePortService::GetInstance() {
-  return Singleton<MessagePortService>::get();
+  return base::Singleton<MessagePortService>::get();
 }
 
 MessagePortService::MessagePortService()

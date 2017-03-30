@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_API_SOCKETS_TCP_SERVER_SOCKETS_TCP_SERVER_API_H_
 #define EXTENSIONS_BROWSER_API_SOCKETS_TCP_SERVER_SOCKETS_TCP_SERVER_API_H_
 
+#include "base/gtest_prod_util.h"
 #include "extensions/browser/api/socket/socket_api.h"
 #include "extensions/common/api/sockets_tcp_server.h"
 
@@ -13,7 +14,7 @@ class ResumableTCPServerSocket;
 }
 
 namespace extensions {
-namespace core_api {
+namespace api {
 
 class TCPServerSocketAsyncApiFunction : public SocketAsyncApiFunction {
  protected:
@@ -172,7 +173,7 @@ class SocketsTcpServerGetSocketsFunction
   void Work() override;
 };
 
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_SOCKETS_TCP_SERVER_SOCKETS_TCP_SERVER_API_H_

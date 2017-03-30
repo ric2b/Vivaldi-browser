@@ -6,6 +6,8 @@
 #define UI_VIEWS_CONTROLS_MENU_MENU_HOST_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
 
@@ -15,6 +17,13 @@ class NativeWidget;
 class SubmenuView;
 class View;
 class Widget;
+
+namespace internal {
+
+// This class is internal to views.
+class PreMenuEventDispatchHandler;
+
+}  // internal
 
 // SubmenuView uses a MenuHost to house the SubmenuView.
 //
@@ -71,6 +80,11 @@ class MenuHost : public Widget {
 
   // If true and capture is lost we don't notify the delegate.
   bool ignore_capture_lost_;
+
+#if !defined(OS_MACOSX)
+  // Handles raw touch events at the moment.
+  scoped_ptr<internal::PreMenuEventDispatchHandler> pre_dispatch_handler_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(MenuHost);
 };

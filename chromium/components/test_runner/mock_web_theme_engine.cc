@@ -7,9 +7,12 @@
 #if !defined(OS_MACOSX)
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
+#include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRect.h"
 
 using blink::WebCanvas;
@@ -485,9 +488,9 @@ void MockWebThemeEngine::paint(blink::WebCanvas* canvas,
         irect.fRight = extraParams->menuList.arrowX + 12;
 
       irect.fTop = extraParams->menuList.arrowY -
-                   (extraParams->menuList.arrowHeight) / 2;
+                   (extraParams->menuList.arrowSize) / 2;
       irect.fBottom = extraParams->menuList.arrowY +
-                      (extraParams->menuList.arrowHeight - 1) / 2;
+                      (extraParams->menuList.arrowSize - 1) / 2;
       halfWidth = irect.width() / 2;
       quarterWidth = irect.width() / 4;
 

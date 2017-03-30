@@ -9,7 +9,7 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "cc/layers/layer.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -36,7 +36,8 @@ class SceneLayer {
   virtual void OnDetach();
 
   // Java SceneLayer can use this method to destroy its native-side counterpart.
-  virtual void Destroy(JNIEnv* env, jobject jobj);
+  virtual void Destroy(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& jobj);
 
   // Returns cc::Layer object that this SceneLayer contains.
   scoped_refptr<cc::Layer> layer() { return layer_; }

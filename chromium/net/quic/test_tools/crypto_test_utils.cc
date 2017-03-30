@@ -32,15 +32,10 @@ namespace test {
 
 namespace {
 
-const char kServerHostname[] = "test.example.com";
-const uint16 kServerPort = 80;
-
 // CryptoFramerVisitor is a framer visitor that records handshake messages.
 class CryptoFramerVisitor : public CryptoFramerVisitorInterface {
  public:
-  CryptoFramerVisitor()
-      : error_(false) {
-  }
+  CryptoFramerVisitor() : error_(false) {}
 
   void OnError(CryptoFramer* framer) override { error_ = true; }
 
@@ -48,67 +43,18 @@ class CryptoFramerVisitor : public CryptoFramerVisitorInterface {
     messages_.push_back(message);
   }
 
-  bool error() const {
-    return error_;
-  }
+  bool error() const { return error_; }
 
-  const vector<CryptoHandshakeMessage>& messages() const {
-    return messages_;
-  }
+  const vector<CryptoHandshakeMessage>& messages() const { return messages_; }
 
  private:
   bool error_;
   vector<CryptoHandshakeMessage> messages_;
 };
 
-// MovePackets parses crypto handshake messages from packet number
-// |*inout_packet_index| through to the last packet (or until a packet fails to
-// decrypt) and has |dest_stream| process them. |*inout_packet_index| is updated
-// with an index one greater than the last packet processed.
-void MovePackets(PacketSavingConnection* source_conn,
-                 size_t *inout_packet_index,
-                 QuicCryptoStream* dest_stream,
-                 PacketSavingConnection* dest_conn) {
-  SimpleQuicFramer framer(source_conn->supported_versions());
-  CryptoFramer crypto_framer;
-  CryptoFramerVisitor crypto_visitor;
-
-  // In order to properly test the code we need to perform encryption and
-  // decryption so that the crypters latch when expected. The crypters are in
-  // |dest_conn|, but we don't want to try and use them there. Instead we swap
-  // them into |framer|, perform the decryption with them, and then swap them
-  // back.
-  QuicConnectionPeer::SwapCrypters(dest_conn, framer.framer());
-
-  crypto_framer.set_visitor(&crypto_visitor);
-
-  size_t index = *inout_packet_index;
-  for (; index < source_conn->encrypted_packets_.size(); index++) {
-    if (!framer.ProcessPacket(*source_conn->encrypted_packets_[index])) {
-      // The framer will be unable to decrypt forward-secure packets sent after
-      // the handshake is complete. Don't treat them as handshake packets.
-      break;
-    }
-
-    for (const QuicStreamFrame& stream_frame : framer.stream_frames()) {
-      ASSERT_TRUE(crypto_framer.ProcessInput(stream_frame.data));
-      ASSERT_FALSE(crypto_visitor.error());
-    }
-  }
-  *inout_packet_index = index;
-
-  QuicConnectionPeer::SwapCrypters(dest_conn, framer.framer());
-
-  ASSERT_EQ(0u, crypto_framer.InputBytesRemaining());
-
-  for (const CryptoHandshakeMessage& message : crypto_visitor.messages()) {
-    dest_stream->OnHandshakeMessage(message);
-  }
-}
-
 // HexChar parses |c| as a hex character. If valid, it sets |*value| to the
 // value of the hex character and returns true. Otherwise it returns false.
-bool HexChar(char c, uint8* value) {
+bool HexChar(char c, uint8_t* value) {
   if (c >= '0' && c <= '9') {
     *value = c - '0';
     return true;
@@ -169,25 +115,30 @@ class AsyncTestChannelIDSource : public ChannelIDSource,
 
 }  // anonymous namespace
 
+CryptoTestUtils::FakeServerOptions::FakeServerOptions()
+    : token_binding_enabled(false) {}
+
 CryptoTestUtils::FakeClientOptions::FakeClientOptions()
-    : dont_verify_certs(false),
-      channel_id_enabled(false),
-      channel_id_source_async(false) {
-}
+    : channel_id_enabled(false),
+      channel_id_source_async(false),
+      token_binding_enabled(false) {}
 
 // static
 int CryptoTestUtils::HandshakeWithFakeServer(
+    MockConnectionHelper* helper,
     PacketSavingConnection* client_conn,
-    QuicCryptoClientStream* client) {
+    QuicCryptoClientStream* client,
+    const FakeServerOptions& options) {
   PacketSavingConnection* server_conn = new PacketSavingConnection(
-      Perspective::IS_SERVER, client_conn->supported_versions());
+      helper, Perspective::IS_SERVER, client_conn->supported_versions());
 
   QuicConfig config = DefaultQuicConfig();
   QuicCryptoServerConfig crypto_config(QuicCryptoServerConfig::TESTING,
-                                       QuicRandom::GetInstance());
+                                       QuicRandom::GetInstance(),
+                                       ProofSourceForTesting());
   SetupCryptoServerConfigForTest(server_conn->clock(),
                                  server_conn->random_generator(), &config,
-                                 &crypto_config);
+                                 &crypto_config, options);
 
   TestQuicSpdyServerSession server_session(server_conn, config, &crypto_config);
 
@@ -196,7 +147,6 @@ int CryptoTestUtils::HandshakeWithFakeServer(
 
   CommunicateHandshakeMessages(client_conn, client, server_conn,
                                server_session.GetCryptoStream());
-
   CompareClientAndServerKeys(client, server_session.GetCryptoStream());
 
   return client->num_sent_client_hellos();
@@ -204,20 +154,19 @@ int CryptoTestUtils::HandshakeWithFakeServer(
 
 // static
 int CryptoTestUtils::HandshakeWithFakeClient(
+    MockConnectionHelper* helper,
     PacketSavingConnection* server_conn,
     QuicCryptoServerStream* server,
+    const QuicServerId& server_id,
     const FakeClientOptions& options) {
   PacketSavingConnection* client_conn =
-      new PacketSavingConnection(Perspective::IS_CLIENT);
+      new PacketSavingConnection(helper, Perspective::IS_CLIENT);
   // Advance the time, because timers do not like uninitialized times.
   client_conn->AdvanceTime(QuicTime::Delta::FromSeconds(1));
 
-  QuicCryptoClientConfig crypto_config;
-  bool is_https = false;
+  QuicCryptoClientConfig crypto_config(ProofVerifierForTesting());
   AsyncTestChannelIDSource* async_channel_id_source = nullptr;
   if (options.channel_id_enabled) {
-    is_https = true;
-
     ChannelIDSource* source = ChannelIDSourceForTesting();
     if (options.channel_id_source_async) {
       async_channel_id_source = new AsyncTestChannelIDSource(source);
@@ -225,12 +174,8 @@ int CryptoTestUtils::HandshakeWithFakeClient(
     }
     crypto_config.SetChannelIDSource(source);
   }
-  QuicServerId server_id(kServerHostname, kServerPort, is_https,
-                         PRIVACY_MODE_DISABLED);
-  if (!options.dont_verify_certs) {
-    // TODO(wtc): replace this with ProofVerifierForTesting() when we have
-    // a working ProofSourceForTesting().
-    crypto_config.SetProofVerifier(FakeProofVerifierForTesting());
+  if (options.token_binding_enabled) {
+    crypto_config.tb_key_params.push_back(kP256);
   }
   TestQuicSpdyClientSession client_session(client_conn, DefaultQuicConfig(),
                                            server_id, &crypto_config);
@@ -247,7 +192,7 @@ int CryptoTestUtils::HandshakeWithFakeClient(
   if (options.channel_id_enabled) {
     scoped_ptr<ChannelIDKey> channel_id_key;
     QuicAsyncStatus status = crypto_config.channel_id_source()->GetChannelIDKey(
-        kServerHostname, &channel_id_key, nullptr);
+        server_id.host(), &channel_id_key, nullptr);
     EXPECT_EQ(QUIC_SUCCESS, status);
     EXPECT_EQ(channel_id_key->SerializeKey(),
               server->crypto_negotiated_params().channel_id);
@@ -264,9 +209,11 @@ void CryptoTestUtils::SetupCryptoServerConfigForTest(
     const QuicClock* clock,
     QuicRandom* rand,
     QuicConfig* config,
-    QuicCryptoServerConfig* crypto_config) {
+    QuicCryptoServerConfig* crypto_config,
+    const FakeServerOptions& fake_options) {
   QuicCryptoServerConfig::ConfigOptions options;
   options.channel_id_enabled = true;
+  options.token_binding_enabled = fake_options.token_binding_enabled;
   scoped_ptr<CryptoHandshakeMessage> scfg(
       crypto_config->AddDefaultConfig(rand, clock, options));
 }
@@ -341,18 +288,15 @@ string CryptoTestUtils::GetValueForTag(const CryptoHandshakeMessage& message,
 
 class MockCommonCertSets : public CommonCertSets {
  public:
-  MockCommonCertSets(StringPiece cert, uint64 hash, uint32 index)
-      : cert_(cert.as_string()),
-        hash_(hash),
-        index_(index) {
-  }
+  MockCommonCertSets(StringPiece cert, uint64_t hash, uint32_t index)
+      : cert_(cert.as_string()), hash_(hash), index_(index) {}
 
   StringPiece GetCommonHashes() const override {
     CHECK(false) << "not implemented";
     return StringPiece();
   }
 
-  StringPiece GetCert(uint64 hash, uint32 index) const override {
+  StringPiece GetCert(uint64_t hash, uint32_t index) const override {
     if (hash == hash_ && index == index_) {
       return cert_;
     }
@@ -361,18 +305,18 @@ class MockCommonCertSets : public CommonCertSets {
 
   bool MatchCert(StringPiece cert,
                  StringPiece common_set_hashes,
-                 uint64* out_hash,
-                 uint32* out_index) const override {
+                 uint64_t* out_hash,
+                 uint32_t* out_index) const override {
     if (cert != cert_) {
       return false;
     }
 
-    if (common_set_hashes.size() % sizeof(uint64) != 0) {
+    if (common_set_hashes.size() % sizeof(uint64_t) != 0) {
       return false;
     }
     bool client_has_set = false;
-    for (size_t i = 0; i < common_set_hashes.size(); i += sizeof(uint64)) {
-      uint64 hash;
+    for (size_t i = 0; i < common_set_hashes.size(); i += sizeof(uint64_t)) {
+      uint64_t hash;
       memcpy(&hash, common_set_hashes.data() + i, sizeof(hash));
       if (hash == hash_) {
         client_has_set = true;
@@ -391,14 +335,48 @@ class MockCommonCertSets : public CommonCertSets {
 
  private:
   const string cert_;
-  const uint64 hash_;
-  const uint32 index_;
+  const uint64_t hash_;
+  const uint32_t index_;
 };
 
 CommonCertSets* CryptoTestUtils::MockCommonCertSets(StringPiece cert,
-                                                    uint64 hash,
-                                                    uint32 index) {
+                                                    uint64_t hash,
+                                                    uint32_t index) {
   return new class MockCommonCertSets(cert, hash, index);
+}
+
+// static
+void CryptoTestUtils::FillInDummyReject(CryptoHandshakeMessage* rej,
+                                        bool reject_is_stateless) {
+  if (reject_is_stateless) {
+    rej->set_tag(kSREJ);
+  } else {
+    rej->set_tag(kREJ);
+  }
+
+  // Minimum SCFG that passes config validation checks.
+  // clang-format off
+  unsigned char scfg[] = {
+    // SCFG
+    0x53, 0x43, 0x46, 0x47,
+    // num entries
+    0x01, 0x00,
+    // padding
+    0x00, 0x00,
+    // EXPY
+    0x45, 0x58, 0x50, 0x59,
+    // EXPY end offset
+    0x08, 0x00, 0x00, 0x00,
+    // Value
+    '1',  '2',  '3',  '4',
+    '5',  '6',  '7',  '8'
+  };
+  // clang-format on
+  rej->SetValue(kSCFG, scfg);
+  rej->SetStringPiece(kServerNonceTag, "SERVER_NONCE");
+  vector<QuicTag> reject_reasons;
+  reject_reasons.push_back(CLIENT_NONCE_INVALID_FAILURE);
+  rej->SetVector(kRREJ, reject_reasons);
 }
 
 void CryptoTestUtils::CompareClientAndServerKeys(
@@ -455,38 +433,31 @@ void CryptoTestUtils::CompareClientAndServerKeys(
   StringPiece server_subkey_secret =
       server->crypto_negotiated_params().subkey_secret;
 
-
   const char kSampleLabel[] = "label";
   const char kSampleContext[] = "context";
   const size_t kSampleOutputLength = 32;
   string client_key_extraction;
   string server_key_extraction;
-  EXPECT_TRUE(client->ExportKeyingMaterial(kSampleLabel,
-                                           kSampleContext,
+  EXPECT_TRUE(client->ExportKeyingMaterial(kSampleLabel, kSampleContext,
                                            kSampleOutputLength,
                                            &client_key_extraction));
-  EXPECT_TRUE(server->ExportKeyingMaterial(kSampleLabel,
-                                           kSampleContext,
+  EXPECT_TRUE(server->ExportKeyingMaterial(kSampleLabel, kSampleContext,
                                            kSampleOutputLength,
                                            &server_key_extraction));
 
-  CompareCharArraysWithHexError("client write key",
-                                client_encrypter_key.data(),
+  CompareCharArraysWithHexError("client write key", client_encrypter_key.data(),
                                 client_encrypter_key.length(),
                                 server_decrypter_key.data(),
                                 server_decrypter_key.length());
-  CompareCharArraysWithHexError("client write IV",
-                                client_encrypter_iv.data(),
+  CompareCharArraysWithHexError("client write IV", client_encrypter_iv.data(),
                                 client_encrypter_iv.length(),
                                 server_decrypter_iv.data(),
                                 server_decrypter_iv.length());
-  CompareCharArraysWithHexError("server write key",
-                                server_encrypter_key.data(),
+  CompareCharArraysWithHexError("server write key", server_encrypter_key.data(),
                                 server_encrypter_key.length(),
                                 client_decrypter_key.data(),
                                 client_decrypter_key.length());
-  CompareCharArraysWithHexError("server write IV",
-                                server_encrypter_iv.data(),
+  CompareCharArraysWithHexError("server write IV", server_encrypter_iv.data(),
                                 server_encrypter_iv.length(),
                                 client_decrypter_iv.data(),
                                 client_decrypter_iv.length());
@@ -510,16 +481,14 @@ void CryptoTestUtils::CompareClientAndServerKeys(
                                 server_forward_secure_encrypter_iv.length(),
                                 client_forward_secure_decrypter_iv.data(),
                                 client_forward_secure_decrypter_iv.length());
-  CompareCharArraysWithHexError("subkey secret",
-                                client_subkey_secret.data(),
+  CompareCharArraysWithHexError("subkey secret", client_subkey_secret.data(),
                                 client_subkey_secret.length(),
                                 server_subkey_secret.data(),
                                 server_subkey_secret.length());
-  CompareCharArraysWithHexError("sample key extraction",
-                                client_key_extraction.data(),
-                                client_key_extraction.length(),
-                                server_key_extraction.data(),
-                                server_key_extraction.length());
+  CompareCharArraysWithHexError(
+      "sample key extraction", client_key_extraction.data(),
+      client_key_extraction.length(), server_key_extraction.data(),
+      server_key_extraction.length());
 }
 
 // static
@@ -530,13 +499,13 @@ QuicTag CryptoTestUtils::ParseTag(const char* tagstr) {
   QuicTag tag = 0;
 
   if (tagstr[0] == '#') {
-    CHECK_EQ(static_cast<size_t>(1 + 2*4), len);
+    CHECK_EQ(static_cast<size_t>(1 + 2 * 4), len);
     tagstr++;
 
     for (size_t i = 0; i < 8; i++) {
       tag <<= 4;
 
-      uint8 v = 0;
+      uint8_t v = 0;
       CHECK(HexChar(tagstr[i], &v));
       tag |= v;
     }
@@ -548,7 +517,7 @@ QuicTag CryptoTestUtils::ParseTag(const char* tagstr) {
   for (size_t i = 0; i < 4; i++) {
     tag >>= 8;
     if (i < len) {
-      tag |= static_cast<uint32>(tagstr[i]) << 24;
+      tag |= static_cast<uint32_t>(tagstr[i]) << 24;
     }
   }
 
@@ -560,14 +529,6 @@ CryptoHandshakeMessage CryptoTestUtils::Message(const char* message_tag, ...) {
   va_list ap;
   va_start(ap, message_tag);
 
-  CryptoHandshakeMessage message = BuildMessage(message_tag, ap);
-  va_end(ap);
-  return message;
-}
-
-// static
-CryptoHandshakeMessage CryptoTestUtils::BuildMessage(const char* message_tag,
-                                                     va_list ap) {
   CryptoHandshakeMessage msg;
   msg.set_tag(ParseTag(message_tag));
 
@@ -599,18 +560,18 @@ CryptoHandshakeMessage CryptoTestUtils::BuildMessage(const char* message_tag,
       len--;
 
       CHECK_EQ(0u, len % 2);
-      scoped_ptr<uint8[]> buf(new uint8[len/2]);
+      scoped_ptr<uint8_t[]> buf(new uint8_t[len / 2]);
 
-      for (size_t i = 0; i < len/2; i++) {
-        uint8 v = 0;
-        CHECK(HexChar(valuestr[i*2], &v));
+      for (size_t i = 0; i < len / 2; i++) {
+        uint8_t v = 0;
+        CHECK(HexChar(valuestr[i * 2], &v));
         buf[i] = v << 4;
-        CHECK(HexChar(valuestr[i*2 + 1], &v));
+        CHECK(HexChar(valuestr[i * 2 + 1], &v));
         buf[i] |= v;
       }
 
       msg.SetStringPiece(
-          tag, StringPiece(reinterpret_cast<char*>(buf.get()), len/2));
+          tag, StringPiece(reinterpret_cast<char*>(buf.get()), len / 2));
       continue;
     }
 
@@ -624,7 +585,51 @@ CryptoHandshakeMessage CryptoTestUtils::BuildMessage(const char* message_tag,
       CryptoFramer::ParseMessage(bytes->AsStringPiece()));
   CHECK(parsed.get());
 
+  va_end(ap);
   return *parsed;
+}
+
+// static
+void CryptoTestUtils::MovePackets(PacketSavingConnection* source_conn,
+                                  size_t* inout_packet_index,
+                                  QuicCryptoStream* dest_stream,
+                                  PacketSavingConnection* dest_conn) {
+  SimpleQuicFramer framer(source_conn->supported_versions());
+  CryptoFramer crypto_framer;
+  CryptoFramerVisitor crypto_visitor;
+
+  // In order to properly test the code we need to perform encryption and
+  // decryption so that the crypters latch when expected. The crypters are in
+  // |dest_conn|, but we don't want to try and use them there. Instead we swap
+  // them into |framer|, perform the decryption with them, and then swap ther
+  // back.
+  QuicConnectionPeer::SwapCrypters(dest_conn, framer.framer());
+
+  crypto_framer.set_visitor(&crypto_visitor);
+
+  size_t index = *inout_packet_index;
+  for (; index < source_conn->encrypted_packets_.size(); index++) {
+    if (!framer.ProcessPacket(*source_conn->encrypted_packets_[index])) {
+      // The framer will be unable to decrypt forward-secure packets sent after
+      // the handshake is complete. Don't treat them as handshake packets.
+      break;
+    }
+
+    for (const QuicStreamFrame* stream_frame : framer.stream_frames()) {
+      ASSERT_TRUE(crypto_framer.ProcessInput(
+          StringPiece(stream_frame->frame_buffer, stream_frame->frame_length)));
+      ASSERT_FALSE(crypto_visitor.error());
+    }
+  }
+  *inout_packet_index = index;
+
+  QuicConnectionPeer::SwapCrypters(dest_conn, framer.framer());
+
+  ASSERT_EQ(0u, crypto_framer.InputBytesRemaining());
+
+  for (const CryptoHandshakeMessage& message : crypto_visitor.messages()) {
+    dest_stream->OnHandshakeMessage(message);
+  }
 }
 
 }  // namespace test

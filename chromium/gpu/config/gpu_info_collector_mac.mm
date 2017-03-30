@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/mac/scoped_ioobject.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -22,6 +23,8 @@
 #import <Cocoa/Cocoa.h>
 #import <Foundation/Foundation.h>
 #import <IOKit/IOKitLib.h>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace gpu {
 
@@ -75,8 +78,9 @@ CollectInfoResult CollectPCIVideoCardInfo(GPUInfo* gpu_info) {
   if (IOServiceGetMatchingServices(kIOMasterPortDefault,
                                    match_dictionary,
                                    &entry_iterator) == kIOReturnSuccess) {
-    io_registry_entry_t entry;
-    while ((entry = IOIteratorNext(entry_iterator))) {
+
+    base::mac::ScopedIOObject<io_registry_entry_t> entry;
+    while (entry.reset(IOIteratorNext(entry_iterator)), entry) {
       GPUInfo::GPUDevice gpu;
       if (GetEntryProperty(entry, CFSTR("class-code")) != 0x30000) {
         // 0x30000 : DISPLAY_VGA
@@ -173,7 +177,7 @@ CollectInfoResult CollectContextGraphicsInfo(GPUInfo* gpu_info) {
   return result;
 }
 
-CollectInfoResult CollectGpuID(uint32* vendor_id, uint32* device_id) {
+CollectInfoResult CollectGpuID(uint32_t* vendor_id, uint32_t* device_id) {
   DCHECK(vendor_id && device_id);
 
   GPUInfo::GPUDevice gpu = GetActiveGPU();
@@ -188,7 +192,7 @@ CollectInfoResult CollectGpuID(uint32* vendor_id, uint32* device_id) {
 CollectInfoResult CollectBasicGraphicsInfo(GPUInfo* gpu_info) {
   DCHECK(gpu_info);
 
-  int32 model_major = 0, model_minor = 0;
+  int32_t model_major = 0, model_minor = 0;
   base::mac::ParseModelIdentifier(base::mac::GetModelIdentifier(),
                                   &gpu_info->machine_model_name,
                                   &model_major, &model_minor);

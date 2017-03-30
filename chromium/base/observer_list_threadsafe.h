@@ -8,10 +8,10 @@
 #include <algorithm>
 #include <map>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/observer_list.h"
@@ -67,9 +67,8 @@ template <class T, class Method, class Params>
 class UnboundMethod {
  public:
   UnboundMethod(Method m, const Params& p) : m_(m), p_(p) {
-    COMPILE_ASSERT(
-        (internal::ParamsUseScopedRefptrCorrectly<Params>::value),
-        badunboundmethodparams);
+    static_assert((internal::ParamsUseScopedRefptrCorrectly<Params>::value),
+                  "bad unbound method params");
   }
   void Run(T* obj) const {
     DispatchToMethod(obj, m_, p_);

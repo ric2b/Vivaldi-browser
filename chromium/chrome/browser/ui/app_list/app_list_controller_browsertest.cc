@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
@@ -35,13 +39,7 @@
 typedef InProcessBrowserTest AppListControllerBrowserTest;
 
 // Test the CreateNewWindow function of the controller delegate.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_CreateNewWindow DISABLED_CreateNewWindow
-#else
-#define MAYBE_CreateNewWindow CreateNewWindow
-#endif
-IN_PROC_BROWSER_TEST_F(AppListControllerBrowserTest, MAYBE_CreateNewWindow) {
+IN_PROC_BROWSER_TEST_F(AppListControllerBrowserTest, CreateNewWindow) {
   const chrome::HostDesktopType desktop = chrome::GetActiveDesktop();
   AppListService* service = test::GetAppListService();
   AppListControllerDelegate* controller(service->GetControllerDelegate());
@@ -57,50 +55,6 @@ IN_PROC_BROWSER_TEST_F(AppListControllerBrowserTest, MAYBE_CreateNewWindow) {
   controller->CreateNewWindow(browser()->profile(), true);
   EXPECT_EQ(1U, chrome::GetBrowserCount(
       browser()->profile()->GetOffTheRecordProfile(), desktop));
-}
-
-// Test creating the app list for an incognito version of the current profile.
-IN_PROC_BROWSER_TEST_F(AppListControllerBrowserTest, RegularThenIncognito) {
-  AppListService* service = test::GetAppListService();
-  // On Ash, the app list always has a profile.
-  if (chrome::GetActiveDesktop() == chrome::HOST_DESKTOP_TYPE_ASH)
-    EXPECT_TRUE(service->GetCurrentAppListProfile());
-  else
-    EXPECT_FALSE(service->GetCurrentAppListProfile());
-
-  service->ShowForProfile(browser()->profile());
-  EXPECT_EQ(browser()->profile(), service->GetCurrentAppListProfile());
-
-  AppListControllerDelegate* controller = service->GetControllerDelegate();
-  service->ShowForProfile(browser()->profile()->GetOffTheRecordProfile());
-
-  // Should be showing the same profile.
-  EXPECT_EQ(browser()->profile(), service->GetCurrentAppListProfile());
-
-  // Should not have been reconstructed.
-  EXPECT_EQ(controller, service->GetControllerDelegate());
-
-  // Same set of tests using ShowForAppInstall, which the webstore uses and was
-  // traditionally where issues with incognito-mode app launchers started. Pass
-  // true for start_discovery_tracking to emulate what the webstore does on the
-  // first app install, to cover AppListServiceImpl::CreateForProfile().
-  service->ShowForAppInstall(
-      browser()->profile()->GetOffTheRecordProfile(), "", true);
-  EXPECT_EQ(browser()->profile(), service->GetCurrentAppListProfile());
-  EXPECT_EQ(controller, service->GetControllerDelegate());
-}
-
-// Test creating the initial app list for incognito profile.
-IN_PROC_BROWSER_TEST_F(AppListControllerBrowserTest, Incognito) {
-  AppListService* service = test::GetAppListService();
-  if (chrome::GetActiveDesktop() == chrome::HOST_DESKTOP_TYPE_ASH)
-    EXPECT_TRUE(service->GetCurrentAppListProfile());
-  else
-    EXPECT_FALSE(service->GetCurrentAppListProfile());
-
-  service->ShowForProfile(browser()->profile()->GetOffTheRecordProfile());
-  // Initial load should have picked the non-incongito profile.
-  EXPECT_EQ(browser()->profile(), service->GetCurrentAppListProfile());
 }
 
 // Browser Test for AppListController that observes search result changes.

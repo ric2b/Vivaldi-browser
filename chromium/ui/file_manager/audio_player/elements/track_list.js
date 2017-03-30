@@ -2,22 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/**
+ * @typedef {?{
+ *   url: string,
+ *   title: string,
+ *   artist: string,
+ *   artwork: Object,
+ *   active: boolean
+ * }}
+ */
+var TrackInfo;
+
 (function() {
   'use strict';
 
-  /**
-   * @constructor
-   * @extends {PolymerElement}
-   */
-  var TrackListElement = function() {};
-
-  TrackListElement.prototype = {
+  Polymer({
     is: 'track-list',
 
     properties: {
       /**
        * List of tracks.
-       * @type {Array<AudioPlayer.TrackInfo>}
        */
       tracks: {
         type: Array,
@@ -52,24 +56,7 @@
      * element is ready.
      */
     ready: function() {
-      this.observeTrackList();
-
       window.addEventListener('resize', this.onWindowResize_.bind(this));
-    },
-
-    observeTrackList: function() {
-      // Unobserve the previous track list.
-      if (this.unobserveTrackList_)
-        this.unobserveTrackList_();
-
-      // Observe the new track list.
-      var observer = this.tracksValueChanged_.bind(this);
-      Array.observe(this.tracks, observer);
-
-      // Set the function to unobserve it.
-      this.unobserveTrackList_ = function(tracks, observer) {
-        Array.unobserve(tracks, observer);
-      }.bind(null, this.tracks, observer);
     },
 
     /**
@@ -119,15 +106,12 @@
 
     /**
      * Invoked when 'tracks' property is changed.
-     * @param {Array<AudioPlayer.TrackInfo>} newValue New value.
-     * @param {Array<AudioPlayer.TrackInfo>} oldValue Old value.
+     * @param {Array<!TrackInfo>} newValue New value.
+     * @param {Array<!TrackInfo>} oldValue Old value.
      */
     tracksChanged: function(newValue, oldValue) {
       // Note: Sometimes both oldValue and newValue are null though the actual
       // values are not null. Maybe it's a bug of Polymer.
-
-      // Re-register the observer of 'this.tracks'.
-      this.observeTrackList();
 
       if (this.tracks.length !== 0) {
         // Restore the active track.
@@ -142,17 +126,6 @@
         this.playOrder = [];
         this.currentTrackIndex = -1;
       }
-    },
-
-    /**
-     * Invoked when the value in the 'tracks' is changed.
-     * @param {Array<Object>} changes The detail of the change.
-     */
-    tracksValueChanged_: function(changes) {
-      if (this.tracks.length === 0)
-        this.currentTrackIndex = -1;
-      else
-        this.set('tracks.' + this.currentTrackIndex + '.active', true);
     },
 
     /**
@@ -180,8 +153,7 @@
      * @private
      */
     ensureTrackInViewport_: function(trackIndex) {
-      var trackSelector = '::shadow .track[index="' + trackIndex + '"]';
-      var trackElement = this.querySelector(trackSelector);
+      var trackElement = this.$$('.track[index="' + trackIndex + '"]');
       if (trackElement) {
         var viewTop = this.scrollTop;
         var viewHeight = this.clientHeight;
@@ -244,7 +216,7 @@
 
     /**
      * Sets the current track.
-     * @param {AudioPlayer.TrackInfo} track TrackInfo to be set as the current
+     * @param {!TrackInfo} track TrackInfo to be set as the current
      *     track.
      */
     selectTrack: function(track) {
@@ -256,24 +228,18 @@
         }
       }
       if (index >= 0) {
-        // TODO(yoshiki): Clean up the flow and the code around here.
-        if (this.currentTrackIndex == index)
-          this.replayCurrentTrack();
-        else
+        if (this.currentTrackIndex === index) {
+          this.fire('replay');
+        } else {
           this.currentTrackIndex = index;
+          this.fire('play');
+        }
       }
     },
 
     /**
-     * Request to replay the current music.
-     */
-    replayCurrentTrack: function() {
-      this.fire('replay');
-    },
-
-    /**
      * Returns the current track.
-     * @return {AudioPlayer.TrackInfo} track TrackInfo of the current track.
+     * @return {TrackInfo} track TrackInfo of the current track.
      */
     getCurrentTrack: function() {
       if (this.tracks.length === 0)
@@ -317,7 +283,5 @@
 
       return newTrackIndex;
     },
-  };  // TrackListElement.prototype for 'track-list'
-
-  Polymer(TrackListElement.prototype);
+  });
 })();  // Anonymous closure

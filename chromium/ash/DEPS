@@ -2,6 +2,7 @@ include_rules = [
   "+device/bluetooth",
   "+cc/debug",
   "+chromeos",
+  "+components/signin/core/account_id",
   "+components/user_manager",
   "+components/wallpaper",
   "+gpu/config",
@@ -15,6 +16,7 @@ include_rules = [
   "+ui",
   "+win8",
   "-ash/host",
+  "-content",
 ]
 
 specific_include_rules = {

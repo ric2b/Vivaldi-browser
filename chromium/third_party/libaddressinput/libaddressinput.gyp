@@ -32,9 +32,11 @@
         'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/third_party/libaddressinput/',
         'grit_grd_file': '../../chrome/app/address_input_strings.grd',
       },
+      'dependencies': [ '<(VIVALDI)/app/vivaldi_resources.gyp:libaddressinput_strings' ],
       'actions': [
         {
           'action_name': 'libaddressinput_strings',
+          'disabled': 1,
           'variables': {
           },
           'includes': [
@@ -60,15 +62,6 @@
       ],
       'sources!': [
         'src/cpp/src/util/json.cc',
-      ],
-      'conditions': [
-        ['OS=="mac" or OS=="ios"', {
-          # localization.cc in libaddressinput_util_files includes
-          # grit-generated en_messages.cc, which does not have a newline.
-          'xcode_settings': {
-            'GCC_WARN_ABOUT_MISSING_NEWLINE': 'NO',
-          },
-        }],
       ],
       'include_dirs': [
         'chromium/override/',

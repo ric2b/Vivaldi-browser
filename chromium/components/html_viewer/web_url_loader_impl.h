@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/html_viewer/mock_web_blob_registry_impl.h"
-#include "mojo/common/handle_watcher.h"
+#include "mojo/message_pump/handle_watcher.h"
 #include "mojo/services/network/public/interfaces/url_loader.mojom.h"
 #include "third_party/WebKit/public/platform/WebBlobData.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
@@ -25,7 +25,7 @@ namespace html_viewer {
 class WebURLRequestExtraData : public blink::WebURLRequest::ExtraData {
  public:
   WebURLRequestExtraData();
-  virtual ~WebURLRequestExtraData();
+  ~WebURLRequestExtraData() override;
 
   mojo::URLResponsePtr synthetic_response;
 };
@@ -36,17 +36,18 @@ class WebURLLoaderImpl : public blink::WebURLLoader {
                             MockWebBlobRegistryImpl* web_blob_registry);
 
  private:
-  virtual ~WebURLLoaderImpl();
+  ~WebURLLoaderImpl() override;
 
   // blink::WebURLLoader methods:
-  virtual void loadSynchronously(const blink::WebURLRequest& request,
-                                 blink::WebURLResponse& response,
-                                 blink::WebURLError& error,
-                                 blink::WebData& data);
-  virtual void loadAsynchronously(const blink::WebURLRequest&,
-                                  blink::WebURLLoaderClient* client);
-  virtual void cancel();
-  virtual void setDefersLoading(bool defers_loading);
+  void loadSynchronously(const blink::WebURLRequest& request,
+                         blink::WebURLResponse& response,
+                         blink::WebURLError& error,
+                         blink::WebData& data) override;
+  void loadAsynchronously(const blink::WebURLRequest&,
+                          blink::WebURLLoaderClient* client) override;
+  void cancel() override;
+  void setDefersLoading(bool defers_loading) override;
+  void setLoadingTaskRunner(blink::WebTaskRunner* web_task_runner) override;
 
   void OnReceivedResponse(const blink::WebURLRequest& request,
                           mojo::URLResponsePtr response);

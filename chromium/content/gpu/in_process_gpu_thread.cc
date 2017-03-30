@@ -4,18 +4,34 @@
 
 #include "content/gpu/in_process_gpu_thread.h"
 
+#include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/common/gpu/gpu_memory_buffer_factory.h"
 #include "content/gpu/gpu_child_thread.h"
 #include "content/gpu/gpu_process.h"
+#include "gpu/command_buffer/service/sync_point_manager.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/jni_android.h"
+#endif
 
 namespace content {
 
-InProcessGpuThread::InProcessGpuThread(const InProcessChildThreadParams& params)
+InProcessGpuThread::InProcessGpuThread(
+    const InProcessChildThreadParams& params,
+    gpu::SyncPointManager* sync_point_manager_override)
     : base::Thread("Chrome_InProcGpuThread"),
       params_(params),
       gpu_process_(NULL),
-      gpu_memory_buffer_factory_(GpuMemoryBufferFactory::Create(
-          GpuChildThread::GetGpuMemoryBufferFactoryType())) {
+      sync_point_manager_override_(sync_point_manager_override),
+      gpu_memory_buffer_factory_(
+          GpuMemoryBufferFactory::GetNativeType() != gfx::EMPTY_BUFFER
+              ? GpuMemoryBufferFactory::CreateNativeType()
+              : nullptr) {
+  if (!sync_point_manager_override_) {
+    sync_point_manager_.reset(new gpu::SyncPointManager(false));
+    sync_point_manager_override_ = sync_point_manager_.get();
+  }
 }
 
 InProcessGpuThread::~InProcessGpuThread() {
@@ -23,11 +39,26 @@ InProcessGpuThread::~InProcessGpuThread() {
 }
 
 void InProcessGpuThread::Init() {
+  // Call AttachCurrentThreadWithName, before any other AttachCurrentThread()
+  // calls. The latter causes Java VM to assign Thread-??? to the thread name.
+  // Please note calls to AttachCurrentThreadWithName after AttachCurrentThread
+  // will not change the thread name kept in Java VM.
+#if defined(OS_ANDROID)
+  base::android::AttachCurrentThreadWithName(thread_name());
+#endif
+
   gpu_process_ = new GpuProcess();
+
   // The process object takes ownership of the thread object, so do not
   // save and delete the pointer.
-  gpu_process_->set_main_thread(
-      new GpuChildThread(params_, gpu_memory_buffer_factory_.get()));
+  GpuChildThread* child_thread = new GpuChildThread(
+      params_, gpu_memory_buffer_factory_.get(), sync_point_manager_override_);
+
+  // Since we are in the browser process, use the thread start time as the
+  // process start time.
+  child_thread->Init(base::Time::Now());
+
+  gpu_process_->set_main_thread(child_thread);
 }
 
 void InProcessGpuThread::CleanUp() {
@@ -37,7 +68,7 @@ void InProcessGpuThread::CleanUp() {
 
 base::Thread* CreateInProcessGpuThread(
     const InProcessChildThreadParams& params) {
-  return new InProcessGpuThread(params);
+  return new InProcessGpuThread(params, nullptr);
 }
 
 }  // namespace content

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerPromptResult.h"
@@ -21,17 +22,19 @@ class AppBannerClient : public content::RenderFrameObserver,
                         public blink::WebAppBannerClient {
  public:
   explicit AppBannerClient(content::RenderFrame* render_frame);
-  virtual ~AppBannerClient();
+  ~AppBannerClient() override;
 
  private:
   // content::RenderFrame::Observer implementation.
+  void OnDestruct() override;
+
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // WebAppBannerClient implementation.
   void registerBannerCallbacks(int request_id,
                                blink::WebAppBannerCallbacks*) override;
 
-  void showAppBanner(int request_id);
+  void showAppBanner(int request_id) override;
 
   void ResolveEvent(int request_id,
                     const std::string& platform,

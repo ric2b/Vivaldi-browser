@@ -31,8 +31,6 @@ class DomDistillerRequestViewTest : public testing::Test {
 };
 
 TEST_F(DomDistillerRequestViewTest, TestTitleEscaped) {
-  const std::string no_title =
-      l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_VIEWER_NO_DATA_TITLE);
   const std::string valid_title = "valid title";
   const std::string has_quotes = "\"" + valid_title + "\"";
   const std::string escaped_quotes = "\\\"" + valid_title + "\\\"";
@@ -71,8 +69,6 @@ TEST_F(DomDistillerRequestViewTest, TestTitleEscaped) {
 }
 
 TEST_F(DomDistillerRequestViewTest, TestTitleNeverEmpty) {
-  const std::string no_title =
-      l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_VIEWER_NO_DATA_TITLE);
   const std::string valid_title = "valid title";
 
   TestRequestViewHandle handle(distilled_page_prefs_.get());
@@ -86,7 +82,6 @@ TEST_F(DomDistillerRequestViewTest, TestTitleNeverEmpty) {
     handle.OnArticleReady(article_proto.get());
 
     EXPECT_THAT(handle.GetJavaScriptBuffer(), HasSubstr(valid_title));
-    EXPECT_THAT(handle.GetJavaScriptBuffer(), Not(HasSubstr(no_title)));
     handle.ClearJavaScriptBuffer();
   }
 
@@ -98,7 +93,6 @@ TEST_F(DomDistillerRequestViewTest, TestTitleNeverEmpty) {
 
     handle.OnArticleReady(article_proto.get());
 
-    EXPECT_THAT(handle.GetJavaScriptBuffer(), HasSubstr(no_title));
     EXPECT_THAT(handle.GetJavaScriptBuffer(), Not(HasSubstr(valid_title)));
     handle.ClearJavaScriptBuffer();
   }
@@ -110,7 +104,6 @@ TEST_F(DomDistillerRequestViewTest, TestTitleNeverEmpty) {
 
     handle.OnArticleReady(article_proto.get());
 
-    EXPECT_THAT(handle.GetJavaScriptBuffer(), HasSubstr(no_title));
     EXPECT_THAT(handle.GetJavaScriptBuffer(), Not(HasSubstr(valid_title)));
     handle.ClearJavaScriptBuffer();
   }
@@ -217,10 +210,6 @@ TEST_F(DomDistillerRequestViewTest, TestLoadingIndicator) {
 
   TestRequestViewHandle handle(distilled_page_prefs_.get());
   handle.TakeViewerHandle(NULL);
-
-  // The loading indicator should show before any content is displayed.
-  EXPECT_THAT(handle.GetJavaScriptBuffer(), HasSubstr(show_loader));
-  handle.ClearJavaScriptBuffer();
 
   std::vector<scoped_refptr<ArticleDistillationUpdate::RefCountedPageProto>>
       pages;

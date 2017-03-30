@@ -1,0 +1,41 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+component("blimp_common") {
+  sources = [
+    "blimp_common_export.h",
+    "compositor/blimp_task_graph_runner.cc",
+    "compositor/blimp_task_graph_runner.h",
+    "create_blimp_message.cc",
+    "create_blimp_message.h",
+    "protocol_version.h",
+  ]
+
+  defines = [ "BLIMP_COMMON_IMPLEMENTATION=1" ]
+
+  deps = [
+    "//base",
+    "//blimp/common/proto",
+    "//cc",
+    "//skia",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "create_blimp_message_unittest.cc",
+  ]
+
+  deps = [
+    ":blimp_common",
+    "//blimp/common/proto",
+    "//testing/gtest",
+  ]
+}

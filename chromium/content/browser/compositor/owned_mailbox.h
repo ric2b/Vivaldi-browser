@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_OWNED_MAILBOX_H_
 #define CONTENT_BROWSER_COMPOSITOR_OWNED_MAILBOX_H_
 
+#include <stdint.h>
+
 #include "base/memory/ref_counted.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/common/content_export.h"
@@ -24,10 +26,12 @@ class CONTENT_EXPORT OwnedMailbox : public base::RefCounted<OwnedMailbox>,
 
   const gpu::MailboxHolder& holder() const { return mailbox_holder_; }
   const gpu::Mailbox& mailbox() const { return mailbox_holder_.mailbox; }
-  uint32 texture_id() const { return texture_id_; }
-  uint32 target() const { return mailbox_holder_.texture_target; }
-  uint32 sync_point() const { return mailbox_holder_.sync_point; }
-  void UpdateSyncPoint(uint32 sync_point);
+  const gpu::SyncToken& sync_token() const {
+    return mailbox_holder_.sync_token;
+  }
+  uint32_t texture_id() const { return texture_id_; }
+  uint32_t target() const { return mailbox_holder_.texture_target; }
+  void UpdateSyncToken(const gpu::SyncToken& sync_token);
   void Destroy();
 
  protected:
@@ -39,7 +43,7 @@ class CONTENT_EXPORT OwnedMailbox : public base::RefCounted<OwnedMailbox>,
  private:
   friend class base::RefCounted<OwnedMailbox>;
 
-  uint32 texture_id_;
+  uint32_t texture_id_;
   gpu::MailboxHolder mailbox_holder_;
   GLHelper* gl_helper_;
 };

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/chromeos/extensions/external_cache.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -27,6 +30,16 @@
 #include "net/url_request/url_request_context_getter.h"
 
 namespace chromeos {
+
+namespace {
+
+void FlushFile(const base::FilePath& path) {
+  base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_WRITE);
+  file.Flush();
+  file.Close();
+}
+
+}  // namespace
 
 ExternalCache::ExternalCache(const base::FilePath& cache_dir,
                              net::URLRequestContextGetter* request_context,
@@ -58,7 +71,7 @@ void ExternalCache::Shutdown(const base::Closure& callback) {
 
 void ExternalCache::UpdateExtensionsList(
     scoped_ptr<base::DictionaryValue> prefs) {
-  extensions_ = prefs.Pass();
+  extensions_ = std::move(prefs);
 
   if (extensions_->empty()) {
     // If list of know extensions is empty, don't init cache on disk. It is
@@ -318,6 +331,11 @@ void ExternalCache::OnPutExtension(const std::string& id,
     // Copy entry to don't modify it inside extensions_.
     LOG(ERROR) << "Can't find installed extension in cache " << id;
     return;
+  }
+
+  if (flush_on_put_) {
+    backend_task_runner_->PostTask(FROM_HERE,
+                                   base::Bind(&FlushFile, file_path));
   }
 
   std::string update_url;

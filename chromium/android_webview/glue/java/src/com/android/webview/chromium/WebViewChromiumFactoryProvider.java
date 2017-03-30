@@ -39,15 +39,16 @@ import org.chromium.android_webview.AwResource;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.R;
 import org.chromium.base.CommandLine;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.MemoryPressureListener;
 import org.chromium.base.PathService;
 import org.chromium.base.PathUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.content.app.ContentMain;
 import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.ui.base.ResourceBundle;
 
@@ -106,6 +107,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         initialize(WebViewDelegateFactory.createProxyDelegate(delegate));
     }
 
+    @SuppressFBWarnings("DMI_HARDCODED_ABSOLUTE_FILENAME")
     private void initialize(WebViewDelegate webViewDelegate) {
         mWebViewDelegate = webViewDelegate;
         if (isBuildDebuggable()) {
@@ -242,9 +244,12 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         PathService.override(DIR_RESOURCE_PAKS_ANDROID, "/system/framework/webview/paks");
 
         // Make sure that ResourceProvider is initialized before starting the browser process.
-        setUpResources(context);
+        final String webViewPackageName = WebViewFactory.getLoadedPackageInfo().packageName;
+        setUpResources(webViewPackageName, context);
         ResourceBundle.initializeLocalePaks(context, R.array.locale_paks);
         initPlatSupportLibrary();
+        final int extraBindFlags = 0;
+        AwBrowserProcess.configureChildProcessLauncher(webViewPackageName, extraBindFlags);
         AwBrowserProcess.start(context);
 
         if (isBuildDebuggable()) {
@@ -303,7 +308,8 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         assert Thread.holdsLock(mLock);
         assert mStarted;
         if (mBrowserContext == null) {
-            mBrowserContext = new AwBrowserContext(mWebViewPrefs);
+            mBrowserContext =
+                    new AwBrowserContext(mWebViewPrefs, getWrappedCurrentApplicationContext());
         }
         return mBrowserContext;
     }
@@ -320,13 +326,11 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         mDevToolsServer.setRemoteDebuggingEnabled(enable);
     }
 
-    private void setUpResources(Context context) {
-        final String packageName = WebViewFactory.getLoadedPackageInfo().packageName;
+    private void setUpResources(String webViewPackageName, Context context) {
         ResourceRewriter.rewriteRValues(
-                mWebViewDelegate.getPackageId(context.getResources(), packageName));
+                mWebViewDelegate.getPackageId(context.getResources(), webViewPackageName));
 
         AwResource.setResources(context.getResources());
-        AwResource.setErrorPageResources(android.R.raw.loaderror, android.R.raw.nodomain);
         AwResource.setConfigKeySystemUuidMapping(android.R.array.config_keySystemUuidMapping);
     }
 
@@ -421,7 +425,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                     // will bring up just the parts it needs to make this work on a temporary
                     // basis until Chromium is started for real. The temporary cookie manager
                     // needs the application context to have been set.
-                    ContentMain.initApplicationContext(getWrappedCurrentApplicationContext());
+                    ContextUtils.initApplicationContext(getWrappedCurrentApplicationContext());
                 }
                 mCookieManager = new CookieManagerAdapter(new AwCookieManager());
             }

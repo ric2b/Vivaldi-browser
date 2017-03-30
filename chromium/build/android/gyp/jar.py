@@ -4,13 +4,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import fnmatch
 import optparse
 import os
 import sys
 
 from util import build_utils
-from util import md5_check
 
 
 def Jar(class_files, classes_dir, jar_path, manifest_file=None):
@@ -27,27 +25,18 @@ def Jar(class_files, classes_dir, jar_path, manifest_file=None):
     jar_cmd.append(os.path.abspath(manifest_file))
   jar_cmd.extend(class_files_rel)
 
-  with build_utils.TempDir() as temp_dir:
-    empty_file = os.path.join(temp_dir, '.empty')
+  if not class_files_rel:
+    empty_file = os.path.join(classes_dir, '.empty')
     build_utils.Touch(empty_file)
     jar_cmd.append(os.path.relpath(empty_file, jar_cwd))
-    record_path = '%s.md5.stamp' % jar_path
-    md5_check.CallAndRecordIfStale(
-        lambda: build_utils.CheckOutput(jar_cmd, cwd=jar_cwd),
-        record_path=record_path,
-        input_paths=class_files,
-        input_strings=jar_cmd,
-        force=not os.path.exists(jar_path),
-        )
-
-    build_utils.Touch(jar_path, fail_if_missing=True)
+  build_utils.CheckOutput(jar_cmd, cwd=jar_cwd)
+  build_utils.Touch(jar_path, fail_if_missing=True)
 
 
-def JarDirectory(classes_dir, excluded_classes, jar_path, manifest_file=None):
+def JarDirectory(classes_dir, jar_path, manifest_file=None, predicate=None):
   class_files = build_utils.FindInDirectory(classes_dir, '*.class')
-  for exclude in excluded_classes:
-    class_files = filter(
-        lambda f: not fnmatch.fnmatch(f, exclude), class_files)
+  if predicate:
+    class_files = [f for f in class_files if predicate(f)]
 
   Jar(class_files, classes_dir, jar_path, manifest_file=manifest_file)
 
@@ -62,13 +51,12 @@ def main():
 
   options, _ = parser.parse_args()
 
+  predicate = None
   if options.excluded_classes:
     excluded_classes = build_utils.ParseGypList(options.excluded_classes)
-  else:
-    excluded_classes = []
-  JarDirectory(options.classes_dir,
-               excluded_classes,
-               options.jar_path)
+    predicate = lambda f: not build_utils.MatchesGlob(f, excluded_classes)
+
+  JarDirectory(options.classes_dir, options.jar_path, predicate=predicate)
 
   if options.stamp:
     build_utils.Touch(options.stamp)

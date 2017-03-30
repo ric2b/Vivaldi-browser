@@ -60,8 +60,8 @@ net::URLRequestJob* ServiceWorkerContextRequestHandler::MaybeCreateJob(
         context_->GetLiveRegistration(version_->registration_id());
     DCHECK(registration);  // We're registering or updating so must be there.
 
-    int64 response_id = context_->storage()->NewResourceId();
-    if (response_id == kInvalidServiceWorkerResponseId)
+    int64_t resource_id = context_->storage()->NewResourceId();
+    if (resource_id == kInvalidServiceWorkerResourceId)
       return NULL;
 
     // Bypass the browser cache for initial installs and update
@@ -78,20 +78,21 @@ net::URLRequestJob* ServiceWorkerContextRequestHandler::MaybeCreateJob(
     ServiceWorkerVersion* stored_version = registration->waiting_version()
                                                ? registration->waiting_version()
                                                : registration->active_version();
-    int64 incumbent_response_id = kInvalidServiceWorkerResourceId;
+    int64_t incumbent_resource_id = kInvalidServiceWorkerResourceId;
     if (stored_version && stored_version->script_url() == request->url()) {
-      incumbent_response_id =
+      incumbent_resource_id =
           stored_version->script_cache_map()->LookupResourceId(request->url());
     }
     return new ServiceWorkerWriteToCacheJob(
         request, network_delegate, resource_type_, context_, version_.get(),
-        extra_load_flags, response_id, incumbent_response_id);
+        extra_load_flags, resource_id, incumbent_resource_id);
   }
 
-  int64 response_id = kInvalidServiceWorkerResponseId;
-  if (ShouldReadFromScriptCache(request->url(), &response_id)) {
-    return new ServiceWorkerReadFromCacheJob(
-        request, network_delegate, context_, version_, response_id);
+  int64_t resource_id = kInvalidServiceWorkerResourceId;
+  if (ShouldReadFromScriptCache(request->url(), &resource_id)) {
+    return new ServiceWorkerReadFromCacheJob(request, network_delegate,
+                                             resource_type_, context_, version_,
+                                             resource_id);
   }
 
   // NULL means use the network.
@@ -115,17 +116,18 @@ bool ServiceWorkerContextRequestHandler::ShouldAddToScriptCache(
     return false;
   }
   return version_->script_cache_map()->LookupResourceId(url) ==
-         kInvalidServiceWorkerResponseId;
+         kInvalidServiceWorkerResourceId;
 }
 
 bool ServiceWorkerContextRequestHandler::ShouldReadFromScriptCache(
-    const GURL& url, int64* response_id_out) {
+    const GURL& url,
+    int64_t* resource_id_out) {
   // We don't read from the script cache until the version is INSTALLED.
   if (version_->status() == ServiceWorkerVersion::NEW ||
       version_->status() == ServiceWorkerVersion::INSTALLING)
     return false;
-  *response_id_out = version_->script_cache_map()->LookupResourceId(url);
-  return *response_id_out != kInvalidServiceWorkerResponseId;
+  *resource_id_out = version_->script_cache_map()->LookupResourceId(url);
+  return *resource_id_out != kInvalidServiceWorkerResourceId;
 }
 
 }  // namespace content

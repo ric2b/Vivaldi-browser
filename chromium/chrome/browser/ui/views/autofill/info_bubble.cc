@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/autofill/info_bubble.h"
 
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -36,7 +37,7 @@ class InfoBubbleFrame : public views::BubbleFrameView {
       : views::BubbleFrameView(content_margins) {}
   ~InfoBubbleFrame() override {}
 
-  gfx::Rect GetAvailableScreenBounds(const gfx::Rect& rect) override {
+  gfx::Rect GetAvailableScreenBounds(const gfx::Rect& rect) const override {
     return available_bounds_;
   }
 

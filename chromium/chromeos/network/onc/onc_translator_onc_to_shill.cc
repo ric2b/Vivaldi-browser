@@ -8,17 +8,18 @@
 // - The local translation of an object depending on the associated signature
 //     see LocalTranslator::TranslateFields
 
-#include "chromeos/network/onc/onc_translator.h"
-
 #include <string>
+#include <utility>
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chromeos/network/onc/onc_signature.h"
 #include "chromeos/network/onc/onc_translation_tables.h"
+#include "chromeos/network/onc/onc_translator.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/shill_property_util.h"
 #include "components/onc/onc_constants.h"
@@ -174,7 +175,7 @@ void LocalTranslator::TranslateOpenVPN() {
       // Shill wants all Provider/VPN fields to be strings.
       translated = ConvertValueToString(it.value());
     }
-    AddValueAccordingToSignature(it.key(), translated.Pass());
+    AddValueAccordingToSignature(it.key(), std::move(translated));
   }
 }
 
@@ -220,6 +221,10 @@ void LocalTranslator::TranslateWiFi() {
                                                  &security)) {
     TranslateWithTableAndSet(security, kWiFiSecurityTable,
                              shill::kSecurityClassProperty);
+    if (security == ::onc::wifi::kWEP_8021X) {
+      shill_dictionary_->SetStringWithoutPathExpansion(
+          shill::kEapKeyMgmtProperty, shill::kKeyManagementIEEE8021X);
+    }
   }
 
   // We currently only support managed and no adhoc networks.
@@ -416,7 +421,7 @@ scoped_ptr<base::DictionaryValue> TranslateONCObjectToShill(
   CHECK(onc_signature != NULL);
   scoped_ptr<base::DictionaryValue> shill_dictionary(new base::DictionaryValue);
   TranslateONCHierarchy(*onc_signature, onc_object, shill_dictionary.get());
-  return shill_dictionary.Pass();
+  return shill_dictionary;
 }
 
 }  // namespace onc

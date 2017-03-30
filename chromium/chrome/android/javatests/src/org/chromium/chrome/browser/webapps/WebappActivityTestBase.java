@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.webapps;
 
 import android.content.Intent;
 import android.net.Uri;
+import android.view.ViewGroup;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.ShortcutHelper;
@@ -25,6 +26,41 @@ import java.util.concurrent.TimeoutException;
  */
 public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<WebappActivity0> {
     static final String WEBAPP_ID = "webapp_id";
+    static final String WEBAPP_NAME = "webapp name";
+    static final String WEBAPP_SHORT_NAME = "webapp short name";
+
+    // Empty 192x192 image generated with:
+    // ShortcutHelper.encodeBitmapAsString(Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_4444));
+    protected static final String TEST_ICON =
+            "iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAABHNCSVQICAgIfAhkiAAAAKZJREFU"
+            + "eJztwTEBAAAAwqD1T20JT6AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD4GQN4AAe3mX6IA"
+            + "AAAASUVORK5CYII=";
+
+    // Empty 512x512 image generated with:
+    // ShortcutHelper.encodeBitmapAsString(Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_4444));
+    protected static final String TEST_SPLASH_ICON =
+            "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAABHNCSVQICAgIfAhkiAAABA9JREFU"
+            + "eJztwTEBAAAAwqD1T20Hb6AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAOA3AvAAAdln8YgAAAAASUVORK5CYII=";
 
     TestWebContentsObserver mTestObserver;
 
@@ -32,18 +68,44 @@ public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<
         super(WebappActivity0.class);
     }
 
-    @Override
-    protected void setUp() throws Exception {
-        super.setUp();
-
-        // Default to a webapp that just loads about:blank to avoid a network load.  This results
-        // in the URL bar showing since {@link UrlUtils} cannot parse this type of URL.
+    /**
+     * Creates the Intent that starts the WebAppActivity. This is meant to be overriden by other
+     * tests in order for them to pass some specific values, but it defaults to a web app that just
+     * loads about:blank to avoid a network load.  This results in the URL bar showing because
+     * {@link UrlUtils} cannot parse this type of URL.
+     */
+    protected Intent createIntent() {
         Intent intent = new Intent(getInstrumentation().getTargetContext(), WebappActivity0.class);
         intent.setData(Uri.parse(WebappActivity.WEBAPP_SCHEME + "://" + WEBAPP_ID));
         intent.putExtra(ShortcutHelper.EXTRA_ID, WEBAPP_ID);
         intent.putExtra(ShortcutHelper.EXTRA_URL, "about:blank");
-        setActivityIntent(intent);
+        intent.putExtra(ShortcutHelper.EXTRA_NAME, WEBAPP_NAME);
+        intent.putExtra(ShortcutHelper.EXTRA_SHORT_NAME, WEBAPP_SHORT_NAME);
+        return intent;
+    }
 
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+
+        // Register the webapp so when the data storage is opened, the test doesn't crash. There is
+        // no race condition with the retrival as AsyncTasks are run sequentially on the background
+        // thread.
+        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_ID);
+    }
+
+    /**
+     * Starts up the WebappActivity and sets up the test observer.
+     */
+    protected final void startWebappActivity() throws Exception {
+        startWebappActivity(createIntent());
+    }
+
+    /**
+     * Starts up the WebappActivity with a specific Intent and sets up the test observer.
+     */
+    protected final void startWebappActivity(Intent intent) throws Exception {
+        setActivityIntent(intent);
         waitUntilIdle();
 
         // TODO(yfriedman): Change callers to be executed on the UI thread. Unfortunately this is
@@ -64,13 +126,13 @@ public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<
     protected void waitUntilIdle() {
         getInstrumentation().waitForIdleSync();
         try {
-            assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+            CriteriaHelper.pollForCriteria(new Criteria() {
                     @Override
                     public boolean isSatisfied() {
                         return getActivity().getActivityTab() != null
                                 && !getActivity().getActivityTab().isLoading();
                     }
-                }));
+                });
         } catch (InterruptedException exception) {
             fail();
         }
@@ -115,7 +177,38 @@ public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<
     }
 
     @Override
-    public void startMainActivity() throws InterruptedException {
-        // Do nothing
+    public final void startMainActivity() throws InterruptedException {
+        // Do nothing; the WebappActivity may not have been completely set up, yet.
+    }
+
+    /**
+     * Waits for the splash screen to be hidden.
+     */
+    protected void waitUntilSplashscreenHides() throws InterruptedException {
+        CriteriaHelper.pollForCriteria(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return !getActivity().isSplashScreenVisibleForTests();
+            }
+        });
+    }
+
+    protected ViewGroup waitUntilSplashScreenAppears() {
+        try {
+            CriteriaHelper.pollForCriteria(new Criteria() {
+                @Override
+                public boolean isSatisfied() {
+                    return getActivity().getSplashScreenForTests() != null;
+                }
+            });
+        } catch (InterruptedException e) {
+            fail();
+        }
+
+        ViewGroup splashScreen = getActivity().getSplashScreenForTests();
+        if (splashScreen == null) {
+            fail("No splash screen available.");
+        }
+        return splashScreen;
     }
 }

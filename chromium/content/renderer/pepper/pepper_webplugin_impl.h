@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner_helpers.h"
@@ -40,55 +41,49 @@ class PepperWebPluginImpl : public blink::WebPlugin {
   PepperPluginInstanceImpl* instance() { return instance_.get(); }
 
   // blink::WebPlugin implementation.
-  virtual blink::WebPluginContainer* container() const;
-  virtual bool initialize(blink::WebPluginContainer* container);
-  virtual void destroy();
-  virtual v8::Local<v8::Object> v8ScriptableObject(
-      v8::Isolate* isolate) override;
-  virtual bool getFormValue(blink::WebString& value);
-  virtual void layoutIfNeeded() override { }
-  virtual void paint(blink::WebCanvas* canvas, const blink::WebRect& rect);
-  virtual void updateGeometry(
-      const blink::WebRect& window_rect,
-      const blink::WebRect& clip_rect,
-      const blink::WebRect& unobscured_rect,
-      const blink::WebVector<blink::WebRect>& cut_outs_rects,
-      bool is_visible);
-  virtual void updateFocus(bool focused, blink::WebFocusType focus_type);
-  virtual void updateVisibility(bool visible);
-  virtual bool acceptsInputEvents();
-  virtual bool handleInputEvent(const blink::WebInputEvent& event,
-                                blink::WebCursorInfo& cursor_info);
-  virtual void didReceiveResponse(const blink::WebURLResponse& response);
-  virtual void didReceiveData(const char* data, int data_length);
-  virtual void didFinishLoading();
-  virtual void didFailLoading(const blink::WebURLError&);
-  virtual void didFinishLoadingFrameRequest(const blink::WebURL& url,
-                                            void* notify_data);
-  virtual void didFailLoadingFrameRequest(const blink::WebURL& url,
-                                          void* notify_data,
-                                          const blink::WebURLError& error);
-  virtual bool hasSelection() const;
-  virtual blink::WebString selectionAsText() const;
-  virtual blink::WebString selectionAsMarkup() const;
-  virtual blink::WebURL linkAtPosition(const blink::WebPoint& position) const;
-  virtual bool getPrintPresetOptionsFromDocument(
-      blink::WebPrintPresetOptions* preset_options);
-  virtual bool startFind(const blink::WebString& search_text,
-                         bool case_sensitive,
-                         int identifier);
-  virtual void selectFindResult(bool forward);
-  virtual void stopFind();
-  virtual bool supportsPaginatedPrint() override;
-  virtual bool isPrintScalingDisabled() override;
+  blink::WebPluginContainer* container() const override;
+  bool initialize(blink::WebPluginContainer* container) override;
+  void destroy() override;
+  v8::Local<v8::Object> v8ScriptableObject(v8::Isolate* isolate) override;
+  bool getFormValue(blink::WebString& value) override;
+  void updateAllLifecyclePhases() override {}
+  void paint(blink::WebCanvas* canvas, const blink::WebRect& rect) override;
+  void updateGeometry(const blink::WebRect& window_rect,
+                      const blink::WebRect& clip_rect,
+                      const blink::WebRect& unobscured_rect,
+                      const blink::WebVector<blink::WebRect>& cut_outs_rects,
+                      bool is_visible) override;
+  void updateFocus(bool focused, blink::WebFocusType focus_type) override;
+  void updateVisibility(bool visible) override;
+  bool acceptsInputEvents() override;
+  blink::WebInputEventResult handleInputEvent(
+      const blink::WebInputEvent& event,
+      blink::WebCursorInfo& cursor_info) override;
+  void didReceiveResponse(const blink::WebURLResponse& response) override;
+  void didReceiveData(const char* data, int data_length) override;
+  void didFinishLoading() override;
+  void didFailLoading(const blink::WebURLError&) override;
+  bool hasSelection() const override;
+  blink::WebString selectionAsText() const override;
+  blink::WebString selectionAsMarkup() const override;
+  blink::WebURL linkAtPosition(const blink::WebPoint& position) const override;
+  bool getPrintPresetOptionsFromDocument(
+      blink::WebPrintPresetOptions* preset_options) override;
+  bool startFind(const blink::WebString& search_text,
+                 bool case_sensitive,
+                 int identifier) override;
+  void selectFindResult(bool forward) override;
+  void stopFind() override;
+  bool supportsPaginatedPrint() override;
+  bool isPrintScalingDisabled() override;
 
-  virtual int printBegin(const blink::WebPrintParams& print_params) override;
+  int printBegin(const blink::WebPrintParams& print_params) override;
   void printPage(int page_number, blink::WebCanvas* canvas) override;
-  virtual void printEnd() override;
+  void printEnd() override;
 
-  virtual bool canRotateView() override;
-  virtual void rotateView(RotationType type) override;
-  virtual bool isPlaceholder() override;
+  bool canRotateView() override;
+  void rotateView(RotationType type) override;
+  bool isPlaceholder() override;
 
  private:
   friend class base::DeleteHelper<PepperWebPluginImpl>;
@@ -105,6 +100,7 @@ class PepperWebPluginImpl : public blink::WebPlugin {
   gfx::Rect plugin_rect_;
   PP_Var instance_object_;
   blink::WebPluginContainer* container_;
+  base::WeakPtrFactory<PepperWebPluginImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PepperWebPluginImpl);
 };

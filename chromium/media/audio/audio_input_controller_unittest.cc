@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
@@ -25,22 +25,23 @@ static const int kBitsPerSample = 16;
 static const ChannelLayout kChannelLayout = CHANNEL_LAYOUT_STEREO;
 static const int kSamplesPerPacket = kSampleRate / 10;
 
-// Posts base::MessageLoop::QuitClosure() on specified message loop.
+// Posts base::MessageLoop::QuitWhenIdleClosure() on specified message loop.
 ACTION_P(QuitMessageLoop, loop_or_proxy) {
-  loop_or_proxy->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  loop_or_proxy->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
-// Posts base::MessageLoop::QuitClosure() on specified message loop after a
-// certain number of calls given by |limit|.
+// Posts base::MessageLoop::QuitWhenIdleClosure() on specified message loop
+// after a certain number of calls given by |limit|.
 ACTION_P3(CheckCountAndPostQuitTask, count, limit, loop_or_proxy) {
   if (++*count >= limit) {
-    loop_or_proxy->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+    loop_or_proxy->PostTask(FROM_HERE,
+                            base::MessageLoop::QuitWhenIdleClosure());
   }
 }
 
 // Closes AudioOutputController synchronously.
 static void CloseAudioController(AudioInputController* controller) {
-  controller->Close(base::MessageLoop::QuitClosure());
+  controller->Close(base::MessageLoop::QuitWhenIdleClosure());
   base::MessageLoop::current()->Run();
 }
 
@@ -254,10 +255,10 @@ TEST_F(AudioInputControllerTest, CloseTwice) {
 
   controller->Record();
 
-  controller->Close(base::MessageLoop::QuitClosure());
+  controller->Close(base::MessageLoop::QuitWhenIdleClosure());
   base::MessageLoop::current()->Run();
 
-  controller->Close(base::MessageLoop::QuitClosure());
+  controller->Close(base::MessageLoop::QuitWhenIdleClosure());
   base::MessageLoop::current()->Run();
 }
 

@@ -4,13 +4,16 @@
 
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
-#include "media/video/capture/fake_video_capture_device.h"
+#include "media/capture/video/fake_video_capture_device.h"
 
 namespace content {
 
@@ -129,7 +132,7 @@ void MediaStreamUIProxy::Core::ProcessAccessRequestResponse(
     scoped_ptr<MediaStreamUI> stream_ui) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  ui_ = stream_ui.Pass();
+  ui_ = std::move(stream_ui);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&MediaStreamUIProxy::ProcessAccessRequestResponse,

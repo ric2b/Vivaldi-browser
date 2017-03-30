@@ -11,17 +11,20 @@
 
 namespace cc {
 
+namespace proto {
+class DisplayItemListSettings;
+}
+
 class CC_EXPORT DisplayItemListSettings {
  public:
   DisplayItemListSettings();
+  explicit DisplayItemListSettings(const proto::DisplayItemListSettings& proto);
   ~DisplayItemListSettings();
+
+  void ToProtobuf(proto::DisplayItemListSettings* proto) const;
 
   // If set, a picture will be cached inside the DisplayItemList.
   bool use_cached_picture;
-
-  // Settings that control sidecar data.
-  size_t max_sidecar_size;
-  void (*sidecar_destroyer)(void* sidecar);
 };
 
 }  // namespace cc

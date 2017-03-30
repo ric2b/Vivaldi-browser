@@ -2,9 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <windows.h>
-
 #include "device/serial/serial_io_handler_win.h"
+
+#include <windows.h>
+#include <setupapi.h>
+
+#include "base/bind.h"
+#include "base/macros.h"
+#include "base/scoped_observer.h"
+#include "base/threading/thread_checker.h"
+#include "device/core/device_info_query_win.h"
+#include "device/core/device_monitor_win.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace device {
 
@@ -130,6 +139,12 @@ serial::StopBits StopBitsConstantToEnum(int stop_bits) {
   }
 }
 
+// Searches for the COM port in the device's friendly name, assigns its value to
+// com_port, and returns whether the operation was successful.
+bool GetCOMPort(const std::string friendly_name, std::string* com_port) {
+  return RE2::PartialMatch(friendly_name, ".* \\((COM[0-9]+)\\)", com_port);
+}
+
 }  // namespace
 
 // static
@@ -137,6 +152,82 @@ scoped_refptr<SerialIoHandler> SerialIoHandler::Create(
     scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner) {
   return new SerialIoHandlerWin(file_thread_task_runner, ui_thread_task_runner);
+}
+
+class SerialIoHandlerWin::UiThreadHelper final
+    : public DeviceMonitorWin::Observer {
+ public:
+  UiThreadHelper(
+      base::WeakPtr<SerialIoHandlerWin> io_handler,
+      scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner)
+      : device_observer_(this),
+        io_handler_(io_handler),
+        io_thread_task_runner_(io_thread_task_runner) {}
+
+  ~UiThreadHelper() { DCHECK(thread_checker_.CalledOnValidThread()); }
+
+  static void Start(UiThreadHelper* self) {
+    self->thread_checker_.DetachFromThread();
+    DeviceMonitorWin* device_monitor = DeviceMonitorWin::GetForAllInterfaces();
+    if (device_monitor)
+      self->device_observer_.Add(device_monitor);
+  }
+
+ private:
+  // DeviceMonitorWin::Observer
+  void OnDeviceRemoved(const GUID& class_guid,
+                       const std::string& device_path) override {
+    DCHECK(thread_checker_.CalledOnValidThread());
+    io_thread_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&SerialIoHandlerWin::OnDeviceRemoved, io_handler_,
+                              device_path));
+  }
+
+  base::ThreadChecker thread_checker_;
+  ScopedObserver<DeviceMonitorWin, DeviceMonitorWin::Observer> device_observer_;
+
+  // This weak pointer is only valid when checked on this task runner.
+  base::WeakPtr<SerialIoHandlerWin> io_handler_;
+  scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(UiThreadHelper);
+};
+
+void SerialIoHandlerWin::OnDeviceRemoved(const std::string& device_path) {
+  DCHECK(CalledOnValidThread());
+
+  DeviceInfoQueryWin device_info_query;
+  if (!device_info_query.device_info_list_valid()) {
+    DVPLOG(1) << "Failed to create a device information set";
+    return;
+  }
+
+  // This will add the device so we can query driver info.
+  if (!device_info_query.AddDevice(device_path.c_str())) {
+    DVPLOG(1) << "Failed to get device interface data for " << device_path;
+    return;
+  }
+
+  if (!device_info_query.GetDeviceInfo()) {
+    DVPLOG(1) << "Failed to get device info for " << device_path;
+    return;
+  }
+
+  std::string friendly_name;
+  if (!device_info_query.GetDeviceStringProperty(SPDRP_FRIENDLYNAME,
+                                                 &friendly_name)) {
+    DVPLOG(1) << "Failed to get device service property";
+    return;
+  }
+
+  std::string com_port;
+  if (!GetCOMPort(friendly_name, &com_port)) {
+    DVPLOG(1) << "Failed to get port name from \"" << friendly_name << "\".";
+    return;
+  }
+
+  if (port() == com_port)
+    CancelRead(serial::RECEIVE_ERROR_DEVICE_LOST);
 }
 
 bool SerialIoHandlerWin::PostOpen() {
@@ -159,6 +250,13 @@ bool SerialIoHandlerWin::PostOpen() {
   write_context_->handler = this;
   memset(&write_context_->overlapped, 0, sizeof(write_context_->overlapped));
 
+  scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner =
+      base::ThreadTaskRunnerHandle::Get();
+  helper_ =
+      new UiThreadHelper(weak_factory_.GetWeakPtr(), io_thread_task_runner);
+  ui_thread_task_runner()->PostTask(
+      FROM_HERE, base::Bind(&UiThreadHelper::Start, helper_));
+
   // A ReadIntervalTimeout of MAXDWORD will cause async reads to complete
   // immediately with any data that's available, even if there is none.
   // This is OK because we never issue a read request until WaitCommEvent
@@ -177,14 +275,6 @@ void SerialIoHandlerWin::ReadImpl() {
   DCHECK(CalledOnValidThread());
   DCHECK(pending_read_buffer());
   DCHECK(file().IsValid());
-
-  DWORD errors;
-  COMSTAT status;
-  if (!ClearCommError(file().GetPlatformFile(), &errors, &status) ||
-      errors != 0) {
-    QueueReadCompleted(0, serial::RECEIVE_ERROR_SYSTEM_ERROR);
-    return;
-  }
 
   if (!SetCommMask(file().GetPlatformFile(), EV_RXCHAR)) {
     VPLOG(1) << "Failed to set serial event flags";
@@ -238,7 +328,7 @@ bool SerialIoHandlerWin::ConfigurePortImpl() {
 
   // Set up some sane default options that are not configurable.
   config.fBinary = TRUE;
-  config.fParity = FALSE;
+  config.fParity = TRUE;
   config.fAbortOnError = TRUE;
   config.fOutxDsrFlow = FALSE;
   config.fDtrControl = DTR_CONTROL_ENABLE;
@@ -279,10 +369,12 @@ SerialIoHandlerWin::SerialIoHandlerWin(
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner)
     : SerialIoHandler(file_thread_task_runner, ui_thread_task_runner),
       event_mask_(0),
-      is_comm_pending_(false) {
-}
+      is_comm_pending_(false),
+      helper_(nullptr),
+      weak_factory_(this) {}
 
 SerialIoHandlerWin::~SerialIoHandlerWin() {
+  ui_thread_task_runner()->DeleteSoon(FROM_HERE, helper_);
 }
 
 void SerialIoHandlerWin::OnIOCompleted(
@@ -290,7 +382,27 @@ void SerialIoHandlerWin::OnIOCompleted(
     DWORD bytes_transferred,
     DWORD error) {
   DCHECK(CalledOnValidThread());
-  if (context == comm_context_) {
+  if (context == comm_context_.get()) {
+    DWORD errors;
+    COMSTAT status;
+    if (!ClearCommError(file().GetPlatformFile(), &errors, &status) ||
+        errors != 0) {
+      if (errors & CE_BREAK) {
+        ReadCompleted(0, serial::RECEIVE_ERROR_BREAK);
+      } else if (errors & CE_FRAME) {
+        ReadCompleted(0, serial::RECEIVE_ERROR_FRAME_ERROR);
+      } else if (errors & CE_OVERRUN) {
+        ReadCompleted(0, serial::RECEIVE_ERROR_OVERRUN);
+      } else if (errors & CE_RXOVER) {
+        ReadCompleted(0, serial::RECEIVE_ERROR_BUFFER_OVERFLOW);
+      } else if (errors & CE_RXPARITY) {
+        ReadCompleted(0, serial::RECEIVE_ERROR_PARITY_ERROR);
+      } else {
+        ReadCompleted(0, serial::RECEIVE_ERROR_SYSTEM_ERROR);
+      }
+      return;
+    }
+
     if (read_canceled()) {
       ReadCompleted(bytes_transferred, read_cancel_reason());
     } else if (error != ERROR_SUCCESS && error != ERROR_OPERATION_ABORTED) {
@@ -306,7 +418,7 @@ void SerialIoHandlerWin::OnIOCompleted(
         ReadCompleted(0, serial::RECEIVE_ERROR_SYSTEM_ERROR);
       }
     }
-  } else if (context == read_context_) {
+  } else if (context == read_context_.get()) {
     if (read_canceled()) {
       ReadCompleted(bytes_transferred, read_cancel_reason());
     } else if (error != ERROR_SUCCESS && error != ERROR_OPERATION_ABORTED) {
@@ -317,7 +429,7 @@ void SerialIoHandlerWin::OnIOCompleted(
                         ? serial::RECEIVE_ERROR_NONE
                         : serial::RECEIVE_ERROR_SYSTEM_ERROR);
     }
-  } else if (context == write_context_) {
+  } else if (context == write_context_.get()) {
     DCHECK(pending_write_buffer());
     if (write_canceled()) {
       WriteCompleted(0, write_cancel_reason());
@@ -365,7 +477,7 @@ serial::DeviceControlSignalsPtr SerialIoHandlerWin::GetControlSignals() const {
   signals->cts = (status & MS_CTS_ON) != 0;
   signals->dsr = (status & MS_DSR_ON) != 0;
   signals->ri = (status & MS_RING_ON) != 0;
-  return signals.Pass();
+  return signals;
 }
 
 bool SerialIoHandlerWin::SetControlSignals(
@@ -400,7 +512,7 @@ serial::ConnectionInfoPtr SerialIoHandlerWin::GetPortInfo() const {
   info->parity_bit = ParityBitConstantToEnum(config.Parity);
   info->stop_bits = StopBitsConstantToEnum(config.StopBits);
   info->cts_flow_control = config.fOutxCtsFlow != 0;
-  return info.Pass();
+  return info;
 }
 
 bool SerialIoHandlerWin::SetBreak() {

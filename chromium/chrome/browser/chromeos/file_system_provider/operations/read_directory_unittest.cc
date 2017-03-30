@@ -5,10 +5,12 @@
 #include "chrome/browser/chromeos/file_system_provider/operations/read_directory.h"
 
 #include <string>
+#include <utility>
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
@@ -90,7 +92,7 @@ void CreateRequestValueFromJSON(const std::string& json,
   ASSERT_TRUE(value->GetAsList(&value_as_list));
   scoped_ptr<Params> params(Params::Create(*value_as_list));
   ASSERT_TRUE(params.get());
-  *result = RequestValue::CreateForReadDirectorySuccess(params.Pass());
+  *result = RequestValue::CreateForReadDirectorySuccess(std::move(params));
   ASSERT_TRUE(result->get());
 }
 
@@ -185,11 +187,7 @@ TEST_F(FileSystemProviderOperationsReadDirectoryTest, OnSuccess) {
       "  [\n"
       "    {\n"
       "      \"isDirectory\": false,\n"
-      "      \"name\": \"blueberries.txt\",\n"
-      "      \"size\": 4096,\n"
-      "      \"modificationTime\": {\n"
-      "        \"value\": \"Thu Apr 24 00:46:52 UTC 2014\"\n"
-      "      }\n"
+      "      \"name\": \"blueberries.txt\"\n"
       "    }\n"
       "  ],\n"
       "  false,\n"  // has_more
@@ -199,7 +197,7 @@ TEST_F(FileSystemProviderOperationsReadDirectoryTest, OnSuccess) {
   ASSERT_NO_FATAL_FAILURE(CreateRequestValueFromJSON(input, &request_value));
 
   const bool has_more = false;
-  read_directory.OnSuccess(kRequestId, request_value.Pass(), has_more);
+  read_directory.OnSuccess(kRequestId, std::move(request_value), has_more);
 
   ASSERT_EQ(1u, callback_logger.events().size());
   CallbackLogger::Event* event = callback_logger.events()[0];
@@ -209,11 +207,6 @@ TEST_F(FileSystemProviderOperationsReadDirectoryTest, OnSuccess) {
   const storage::DirectoryEntry entry = event->entry_list()[0];
   EXPECT_FALSE(entry.is_directory);
   EXPECT_EQ("blueberries.txt", entry.name);
-  EXPECT_EQ(4096, entry.size);
-  base::Time expected_time;
-  EXPECT_TRUE(
-      base::Time::FromString("Thu Apr 24 00:46:52 UTC 2014", &expected_time));
-  EXPECT_EQ(expected_time, entry.last_modified_time);
 }
 
 TEST_F(FileSystemProviderOperationsReadDirectoryTest,
@@ -241,11 +234,7 @@ TEST_F(FileSystemProviderOperationsReadDirectoryTest,
       "  [\n"
       "    {\n"
       "      \"isDirectory\": false,\n"
-      "      \"name\": \"blue/berries.txt\",\n"
-      "      \"size\": 4096,\n"
-      "      \"modificationTime\": {\n"
-      "        \"value\": \"Thu Apr 24 00:46:52 UTC 2014\"\n"
-      "      }\n"
+      "      \"name\": \"blue/berries.txt\"\n"
       "    }\n"
       "  ],\n"
       "  false,\n"  // has_more
@@ -255,7 +244,7 @@ TEST_F(FileSystemProviderOperationsReadDirectoryTest,
   ASSERT_NO_FATAL_FAILURE(CreateRequestValueFromJSON(input, &request_value));
 
   const bool has_more = false;
-  read_directory.OnSuccess(kRequestId, request_value.Pass(), has_more);
+  read_directory.OnSuccess(kRequestId, std::move(request_value), has_more);
 
   ASSERT_EQ(1u, callback_logger.events().size());
   CallbackLogger::Event* event = callback_logger.events()[0];

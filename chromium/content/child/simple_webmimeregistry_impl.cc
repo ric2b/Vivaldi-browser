@@ -17,10 +17,11 @@ using blink::WebMimeRegistry;
 
 namespace content {
 
-//static
+// static
 std::string SimpleWebMimeRegistryImpl::ToASCIIOrEmpty(const WebString& string) {
-  return base::IsStringASCII(string) ? base::UTF16ToASCII(string)
-                                     : std::string();
+  return base::IsStringASCII(string)
+      ? base::UTF16ToASCII(base::StringPiece16(string))
+      : std::string();
 }
 
 WebMimeRegistry::SupportsType SimpleWebMimeRegistryImpl::supportsMIMEType(
@@ -42,7 +43,8 @@ WebMimeRegistry::SupportsType
     const WebString& mime_type) {
     std::string ascii_mime_type = ToASCIIOrEmpty(mime_type);
     return (mime_util::IsSupportedImageMimeType(ascii_mime_type) ||
-            (base::StartsWithASCII(ascii_mime_type, "image/", true) &&
+            (base::StartsWith(ascii_mime_type, "image/",
+                              base::CompareCase::SENSITIVE) &&
              mime_util::IsSupportedNonImageMimeType(ascii_mime_type)))
                ? WebMimeRegistry::IsSupported
                : WebMimeRegistry::IsNotSupported;
@@ -94,14 +96,6 @@ WebString SimpleWebMimeRegistryImpl::wellKnownMimeTypeForExtension(
   std::string mime_type;
   net::GetWellKnownMimeTypeFromExtension(
       base::FilePath::FromUTF16Unsafe(file_extension).value(), &mime_type);
-  return WebString::fromUTF8(mime_type);
-}
-
-WebString SimpleWebMimeRegistryImpl::mimeTypeFromFile(
-    const WebString& file_path) {
-  std::string mime_type;
-  net::GetMimeTypeFromFile(base::FilePath::FromUTF16Unsafe(file_path),
-                           &mime_type);
   return WebString::fromUTF8(mime_type);
 }
 

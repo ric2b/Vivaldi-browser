@@ -7,9 +7,12 @@
 
 #include "ipc/ipc_channel.h"
 
+#include <stdint.h>
+
 #include <queue>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -30,8 +33,7 @@ class ChannelWin : public Channel,
   // |broker| must outlive the newly created object.
   ChannelWin(const IPC::ChannelHandle& channel_handle,
              Mode mode,
-             Listener* listener,
-             AttachmentBroker* broker);
+             Listener* listener);
   ~ChannelWin() override;
 
   // Channel implementation
@@ -48,17 +50,31 @@ class ChannelWin : public Channel,
  private:
   // ChannelReader implementation.
   ReadState ReadData(char* buffer, int buffer_len, int* bytes_read) override;
-  bool WillDispatchInputMessage(Message* msg) override;
+  bool ShouldDispatchInputMessage(Message* msg) override;
+  bool GetNonBrokeredAttachments(Message* msg) override;
   bool DidEmptyInputBuffers() override;
   void HandleInternalMessage(const Message& msg) override;
+  base::ProcessId GetSenderPID() override;
+  bool IsAttachmentBrokerEndpoint() override;
 
   static const base::string16 PipeName(const std::string& channel_id,
-                                       int32* secret);
+                                       int32_t* secret);
   bool CreatePipe(const IPC::ChannelHandle &channel_handle, Mode mode);
 
   bool ProcessConnection();
   bool ProcessOutgoingMessages(base::MessageLoopForIO::IOContext* context,
                                DWORD bytes_written);
+
+  // Returns |false| on channel error.
+  // If |message| has brokerable attachments, those attachments are passed to
+  // the AttachmentBroker (which in turn invokes Send()), so this method must
+  // be re-entrant.
+  // Adds |message| to |output_queue_| and calls ProcessOutgoingMessages().
+  bool ProcessMessageForDelivery(Message* message);
+
+  // Moves all messages from |prelim_queue_| to |output_queue_| by calling
+  // ProcessMessageForDelivery().
+  void FlushPrelimQueue();
 
   // MessageLoop::IOHandler implementation.
   void OnIOCompleted(base::MessageLoopForIO::IOContext* context,
@@ -80,8 +96,18 @@ class ChannelWin : public Channel,
 
   base::ProcessId peer_pid_;
 
+  // Messages not yet ready to be sent are queued here. Messages removed from
+  // this queue are placed in the output_queue_. The double queue is
+  // unfortunate, but is necessary because messages with brokerable attachments
+  // can generate multiple messages to be sent (possibly from other channels).
+  // Some of these generated messages cannot be sent until |peer_pid_| has been
+  // configured.
+  // As soon as |peer_pid| has been configured, there is no longer any need for
+  // |prelim_queue_|. All messages are flushed, and no new messages are added.
+  std::queue<Message*> prelim_queue_;
+
   // Messages to be sent are queued here.
-  std::queue<Message*> output_queue_;
+  std::queue<OutputElement*> output_queue_;
 
   // In server-mode, we have to wait for the client to connect before we
   // can begin reading.  We make use of the input_state_ when performing
@@ -97,18 +123,15 @@ class ChannelWin : public Channel,
   bool validate_client_;
 
   // Tracks the lifetime of this object, for debugging purposes.
-  uint32 debug_flags_;
+  uint32_t debug_flags_;
 
   // This is a unique per-channel value used to authenticate the client end of
   // a connection. If the value is non-zero, the client passes it in the hello
   // and the host validates. (We don't send the zero value fto preserve IPC
   // compatability with existing clients that don't validate the channel.)
-  int32 client_secret_;
+  int32_t client_secret_;
 
   scoped_ptr<base::ThreadChecker> thread_check_;
-
-  // |broker_| must outlive this instance.
-  AttachmentBroker* broker_;
 
   base::WeakPtrFactory<ChannelWin> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(ChannelWin);

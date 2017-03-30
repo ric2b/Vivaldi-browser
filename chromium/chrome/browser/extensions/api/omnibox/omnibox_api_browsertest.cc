@@ -10,13 +10,13 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
-#include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "extensions/test/result_catcher.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -31,7 +31,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, DISABLED_Basic) {
   // The results depend on the TemplateURLService being loaded. Make sure it is
   // loaded so that the autocomplete results are consistent.
   Profile* profile = browser()->profile();
-  ui_test_utils::WaitForTemplateURLServiceToLoad(
+  search_test_utils::WaitForTemplateURLServiceToLoad(
       TemplateURLServiceFactory::GetForProfile(profile));
 
   AutocompleteController* autocomplete_controller =
@@ -149,7 +149,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, DISABLED_Basic) {
     OmniboxView* omnibox_view = location_bar->GetOmniboxView();
     omnibox_view->OnBeforePossibleChange();
     omnibox_view->SetUserText(ASCIIToUTF16("keyword command"));
-    omnibox_view->OnAfterPossibleChange();
+    omnibox_view->OnAfterPossibleChange(true);
     location_bar->AcceptInput();
     // This checks that the keyword provider (via javascript)
     // gets told to navigate to the string "command".
@@ -161,7 +161,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, DISABLED_Basic) {
 IN_PROC_BROWSER_TEST_F(OmniboxApiTest, OnInputEntered) {
   ASSERT_TRUE(RunExtensionTest("omnibox")) << message_;
   Profile* profile = browser()->profile();
-  ui_test_utils::WaitForTemplateURLServiceToLoad(
+  search_test_utils::WaitForTemplateURLServiceToLoad(
       TemplateURLServiceFactory::GetForProfile(profile));
 
   LocationBar* location_bar = GetLocationBar(browser());
@@ -171,7 +171,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, OnInputEntered) {
       GetAutocompleteController(browser());
   omnibox_view->OnBeforePossibleChange();
   omnibox_view->SetUserText(ASCIIToUTF16("keyword command"));
-  omnibox_view->OnAfterPossibleChange();
+  omnibox_view->OnAfterPossibleChange(true);
 
   autocomplete_controller->Start(AutocompleteInput(
       ASCIIToUTF16("keyword command"), base::string16::npos, std::string(),
@@ -184,7 +184,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, OnInputEntered) {
 
   omnibox_view->OnBeforePossibleChange();
   omnibox_view->SetUserText(ASCIIToUTF16("keyword newtab"));
-  omnibox_view->OnAfterPossibleChange();
+  omnibox_view->OnAfterPossibleChange(true);
   WaitForAutocompleteDone(autocomplete_controller);
   EXPECT_TRUE(autocomplete_controller->done());
 
@@ -216,7 +216,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, DISABLED_IncognitoSplitMode) {
 
   // The results depend on the TemplateURLService being loaded. Make sure it is
   // loaded so that the autocomplete results are consistent.
-  ui_test_utils::WaitForTemplateURLServiceToLoad(
+  search_test_utils::WaitForTemplateURLServiceToLoad(
       TemplateURLServiceFactory::GetForProfile(browser()->profile()));
 
   LocationBar* location_bar = GetLocationBar(incognito_browser);

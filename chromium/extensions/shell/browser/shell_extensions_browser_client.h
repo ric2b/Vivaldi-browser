@@ -6,6 +6,8 @@
 #define EXTENSIONS_SHELL_BROWSER_SHELL_EXTENSIONS_BROWSER_CLIENT_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "extensions/browser/extensions_browser_client.h"
 
 class PrefService;
@@ -66,8 +68,8 @@ class ShellExtensionsBrowserClient : public ExtensionsBrowserClient {
   scoped_ptr<ExtensionHostDelegate> CreateExtensionHostDelegate() override;
   bool DidVersionUpdate(content::BrowserContext* context) override;
   void PermitExternalProtocolHandler() override;
-  scoped_ptr<AppSorting> CreateAppSorting() override;
   bool IsRunningInForcedAppMode() override;
+  bool IsLoggedInAsPublicAccount() override;
   ApiActivityMonitor* GetApiActivityMonitor(
       content::BrowserContext* context) override;
   ExtensionSystemProvider* GetExtensionSystemFactory() override;
@@ -79,7 +81,8 @@ class ShellExtensionsBrowserClient : public ExtensionsBrowserClient {
       content::BrowserContext* context) const override;
   const ComponentExtensionResourceManager*
   GetComponentExtensionResourceManager() override;
-  void BroadcastEventToRenderers(const std::string& event_name,
+  void BroadcastEventToRenderers(events::HistogramValue histogram_value,
+                                 const std::string& event_name,
                                  scoped_ptr<base::ListValue> args) override;
   net::NetLog* GetNetLog() override;
   ExtensionCache* GetExtensionCache() override;

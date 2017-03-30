@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,7 +30,8 @@ namespace {
 scoped_ptr<net::test_server::HttpResponse> HandleEchoTitleRequest(
     const std::string& echotitle_path,
     const net::test_server::HttpRequest& request) {
-  if (!base::StartsWithASCII(request.relative_url, echotitle_path, true))
+  if (!base::StartsWith(request.relative_url, echotitle_path,
+                        base::CompareCase::SENSITIVE))
     return scoped_ptr<net::test_server::HttpResponse>();
 
   scoped_ptr<net::test_server::BasicHttpResponse> http_response(
@@ -38,7 +41,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleEchoTitleRequest(
       base::StringPrintf(
           "<html><head><title>%s</title></head></html>",
           request.content.c_str()));
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 }  // namespace
@@ -48,7 +51,7 @@ class SessionHistoryTest : public ContentBrowserTest {
   SessionHistoryTest() {}
 
   void SetUpOnMainThread() override {
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
     embedded_test_server()->RegisterRequestHandler(
         base::Bind(&HandleEchoTitleRequest, "/echotitle"));
 
@@ -56,14 +59,14 @@ class SessionHistoryTest : public ContentBrowserTest {
   }
 
   // Simulate clicking a link.  Only works on the frames.html testserver page.
-  void ClickLink(std::string node_id) {
+  void ClickLink(const std::string& node_id) {
     GURL url("javascript:clickLink('" + node_id + "')");
     NavigateToURL(shell(), url);
   }
 
   // Simulate filling in form data.  Only works on the frames.html page with
   // subframe = form.html, and on form.html itself.
-  void FillForm(std::string node_id, std::string value) {
+  void FillForm(const std::string& node_id, const std::string& value) {
     GURL url("javascript:fillForm('" + node_id + "', '" + value + "')");
     // This will return immediately, but since the JS executes synchronously
     // on the renderer, it will complete before the next navigate message is
@@ -73,13 +76,13 @@ class SessionHistoryTest : public ContentBrowserTest {
 
   // Simulate submitting a form.  Only works on the frames.html page with
   // subframe = form.html, and on form.html itself.
-  void SubmitForm(std::string node_id) {
+  void SubmitForm(const std::string& node_id) {
     GURL url("javascript:submitForm('" + node_id + "')");
     NavigateToURL(shell(), url);
   }
 
   // Navigate session history using history.go(distance).
-  void JavascriptGo(std::string distance) {
+  void JavascriptGo(const std::string& distance) {
     GURL url("javascript:history.go('" + distance + "')");
     NavigateToURL(shell(), url);
   }
@@ -92,7 +95,7 @@ class SessionHistoryTest : public ContentBrowserTest {
     return shell()->web_contents()->GetLastCommittedURL();
   }
 
-  GURL GetURL(const std::string file) {
+  GURL GetURL(const std::string& file) {
     return embedded_test_server()->GetURL(
         std::string("/session_history/") + file);
   }

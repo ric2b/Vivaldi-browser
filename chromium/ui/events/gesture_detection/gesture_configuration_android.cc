@@ -4,6 +4,8 @@
 
 #include "ui/events/gesture_detection/gesture_configuration.h"
 
+#include "base/android/build_info.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "ui/gfx/android/view_configuration.h"
 #include "ui/gfx/screen.h"
@@ -12,13 +14,13 @@ using gfx::ViewConfiguration;
 
 namespace ui {
 namespace {
-// This was the minimum tap/press size used on Android before the new gesture
-// detection pipeline.
-const float kMinGestureBoundsLengthDips = 24.f;
 
-// This value is somewhat arbitrary, but provides a reasonable maximum
-// approximating a large thumb depression.
-const float kMaxGestureBoundsLengthDips = kMinGestureBoundsLengthDips * 4.f;
+// Touch radii on Android can be both noisy and inaccurate. The old Java
+// gesture detection pipeline used a fixed value of 24 as the gesture bounds.
+// We relax that value somewhat, but not by much; there's a fairly small window
+// within which gesture bounds are useful for features like touch adjustment.
+const float kMinGestureBoundsLengthDips = 20.f;
+const float kMaxGestureBoundsLengthDips = 32.f;
 
 class GestureConfigurationAndroid : public GestureConfiguration {
  public:
@@ -26,14 +28,21 @@ class GestureConfigurationAndroid : public GestureConfiguration {
   }
 
   static GestureConfigurationAndroid* GetInstance() {
-    return Singleton<GestureConfigurationAndroid>::get();
+    return base::Singleton<GestureConfigurationAndroid>::get();
   }
 
  private:
   GestureConfigurationAndroid() : GestureConfiguration() {
     set_double_tap_enabled(true);
     set_double_tap_timeout_in_ms(ViewConfiguration::GetDoubleTapTimeoutInMs());
+    // TODO(jdduke): Enable this on Android M after the implicit conflict with
+    // stylus selection is resolved.
+    set_stylus_scale_enabled(false);
+#if defined(USE_AURA)
+    set_gesture_begin_end_types_enabled(true);
+#else
     set_gesture_begin_end_types_enabled(false);
+#endif
     set_long_press_time_in_ms(ViewConfiguration::GetLongPressTimeoutInMs());
     set_max_distance_between_taps_for_double_tap(
         ViewConfiguration::GetDoubleTapSlopInDips());
@@ -60,7 +69,7 @@ class GestureConfigurationAndroid : public GestureConfiguration {
         ViewConfiguration::GetLongPressTimeoutInMs());
   }
 
-  friend struct DefaultSingletonTraits<GestureConfigurationAndroid>;
+  friend struct base::DefaultSingletonTraits<GestureConfigurationAndroid>;
   DISALLOW_COPY_AND_ASSIGN(GestureConfigurationAndroid);
 };
 

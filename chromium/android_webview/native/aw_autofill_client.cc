@@ -68,6 +68,10 @@ PrefService* AwAutofillClient::GetPrefs() {
       AwContentBrowserClient::GetAwBrowserContext());
 }
 
+sync_driver::SyncService* AwAutofillClient::GetSyncService() {
+  return nullptr;
+}
+
 IdentityProvider* AwAutofillClient::GetIdentityProvider() {
   return nullptr;
 }
@@ -177,11 +181,6 @@ void AwAutofillClient::OnFirstUserGestureObserved() {
   NOTIMPLEMENTED();
 }
 
-void AwAutofillClient::LinkClicked(const GURL& url,
-                                   WindowOpenDisposition disposition) {
-  NOTIMPLEMENTED();
-}
-
 bool AwAutofillClient::IsContextSecure(const GURL& form_origin) {
   content::SSLStatus ssl_status;
   content::NavigationEntry* navigation_entry =
@@ -193,13 +192,13 @@ bool AwAutofillClient::IsContextSecure(const GURL& form_origin) {
   // Note: The implementation below is a copy of the one in
   // ChromeAutofillClient::IsContextSecure, and should be kept in sync
   // until crbug.com/505388 gets implemented.
-  return ssl_status.security_style ==
-      content::SECURITY_STYLE_AUTHENTICATED &&
-      ssl_status.content_status == content::SSLStatus::NORMAL_CONTENT;
+  return ssl_status.security_style == content::SECURITY_STYLE_AUTHENTICATED &&
+         !(ssl_status.content_status &
+           content::SSLStatus::RAN_INSECURE_CONTENT);
 }
 
 void AwAutofillClient::SuggestionSelected(JNIEnv* env,
-                                          jobject object,
+                                          const JavaParamRef<jobject>& object,
                                           jint position) {
   if (delegate_) {
     delegate_->DidAcceptSuggestion(suggestions_[position].value,
@@ -222,12 +221,25 @@ void AwAutofillClient::ShowUnmaskPrompt(
   NOTIMPLEMENTED();
 }
 
-void AwAutofillClient::OnUnmaskVerificationResult(GetRealPanResult result) {
+void AwAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {
   NOTIMPLEMENTED();
 }
 
-void AwAutofillClient::ConfirmSaveCreditCard(
-    const base::Closure& save_card_callback) {
+void AwAutofillClient::ConfirmSaveCreditCardLocally(
+    const autofill::CreditCard& card,
+    const base::Closure& callback) {
+  NOTIMPLEMENTED();
+}
+
+void AwAutofillClient::ConfirmSaveCreditCardToCloud(
+    const autofill::CreditCard& card,
+    scoped_ptr<base::DictionaryValue> legal_message,
+    const base::Closure& callback) {
+  NOTIMPLEMENTED();
+}
+
+void AwAutofillClient::LoadRiskData(
+    const base::Callback<void(const std::string&)>& callback) {
   NOTIMPLEMENTED();
 }
 

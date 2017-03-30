@@ -1,0 +1,5 @@
+This folder contain images that are not normally used by Vivaldi, but which
+are needed for the project to build successfully, normally because the file
+is referenced with a variable in the URL. In such cases the URL can be
+modified and point into this directory to indicate that the resource is not
+maintained.

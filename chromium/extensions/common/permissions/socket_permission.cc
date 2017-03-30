@@ -41,16 +41,8 @@ SocketPermission::~SocketPermission() {}
 PermissionIDSet SocketPermission::GetPermissions() const {
   PermissionIDSet ids;
   SocketPermissionEntrySet entries = ExtractSocketEntries(data_set_);
-  SocketsManifestPermission::AddSocketHostPermissions(entries, &ids, NULL);
+  SocketsManifestPermission::AddSocketHostPermissions(entries, &ids);
   return ids;
-}
-
-PermissionMessages SocketPermission::GetMessages() const {
-  DCHECK(HasMessages());
-  PermissionMessages messages;
-  SocketPermissionEntrySet entries = ExtractSocketEntries(data_set_);
-  SocketsManifestPermission::AddSocketHostPermissions(entries, NULL, &messages);
-  return messages;
 }
 
 }  // namespace extensions

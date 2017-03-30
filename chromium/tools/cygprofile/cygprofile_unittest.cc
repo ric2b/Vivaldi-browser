@@ -4,9 +4,10 @@
 
 #include "tools/cygprofile/cygprofile.h"
 
-#include <vector>
-
+#include <stdint.h>
 #include <sys/time.h>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -46,12 +47,12 @@ TEST(CygprofileTest, ThreadLogBasic) {
   ASSERT_EQ(2U, entries.size());
   // The entries should appear in their insertion order.
   const LogEntry& first_entry = entries[0];
-  ASSERT_EQ(reinterpret_cast<uintptr_t>(first_entry.address), 2);
+  ASSERT_EQ(reinterpret_cast<uintptr_t>(first_entry.address), 2U);
   ASSERT_EQ(getpid(), first_entry.pid);
   ASSERT_LT(0, first_entry.tid);
 
   const LogEntry& second_entry = entries[1];
-  ASSERT_EQ(1, reinterpret_cast<uintptr_t>(second_entry.address));
+  ASSERT_EQ(1U, reinterpret_cast<uintptr_t>(second_entry.address));
   ASSERT_EQ(first_entry.pid, second_entry.pid);
   ASSERT_EQ(first_entry.tid, second_entry.tid);
 
@@ -77,7 +78,7 @@ TEST(CygprofileTest, ManagerBasic) {
 
   // This should make the manager spawn its internal flush thread which will
   // wait for a notification before it starts doing some work.
-  manager.AddLog(thread_log.Pass());
+  manager.AddLog(std::move(thread_log));
 
   EXPECT_EQ(0U, entries.size());
   // This will wake up the internal thread.
@@ -87,8 +88,8 @@ TEST(CygprofileTest, ManagerBasic) {
 
   // The flush should have moved the data to the local vector of entries.
   EXPECT_EQ(2U, entries.size());
-  ASSERT_EQ(2, reinterpret_cast<uintptr_t>(entries[0].address));
-  ASSERT_EQ(3, reinterpret_cast<uintptr_t>(entries[1].address));
+  ASSERT_EQ(2U, reinterpret_cast<uintptr_t>(entries[0].address));
+  ASSERT_EQ(3U, reinterpret_cast<uintptr_t>(entries[1].address));
 }
 
 }  // namespace

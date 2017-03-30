@@ -4,6 +4,8 @@
 
 #include "chrome/common/importer/firefox_importer_utils.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <map>
 #include <string>
@@ -16,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/ini_parser.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -116,7 +119,8 @@ bool ComposeMacAppPath(const std::string& path_from_file,
   // append Contents/MacOS.
   for (size_t i = 1; i < path_components.size(); ++i) {
     *output = output->Append(path_components[i]);
-    if (base::EndsWith(path_components[i], ".app", true)) {
+    if (base::EndsWith(path_components[i], ".app",
+                       base::CompareCase::SENSITIVE)) {
       *output = output->Append("Contents");
       *output = output->Append("MacOS");
       return true;
@@ -137,11 +141,9 @@ bool GetFirefoxVersionAndPathFromProfile(const base::FilePath& profile_path,
   std::string content;
   base::ReadFileToString(compatibility_file, &content);
   base::ReplaceSubstringsAfterOffset(&content, 0, "\r\n", "\n");
-  std::vector<std::string> lines;
-  base::SplitString(content, '\n', &lines);
 
-  for (size_t i = 0; i < lines.size(); ++i) {
-    const std::string& line = lines[i];
+  for (const std::string& line : base::SplitString(
+           content, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
     if (line.empty() || line[0] == '#' || line[0] == ';')
       continue;
     size_t equal = line.find('=');
@@ -241,11 +243,10 @@ bool IsDefaultHomepage(const GURL& homepage, const base::FilePath& app_path) {
     return homepage.spec() == GURL(default_homepages).spec();
 
   // Crack the string into separate homepage urls.
-  std::vector<std::string> urls;
-  base::SplitString(default_homepages, '|', &urls);
-
-  for (size_t i = 0; i < urls.size(); ++i) {
-    if (homepage.spec() == GURL(urls[i]).spec())
+  for (const std::string& url : base::SplitString(
+           default_homepages, "|",
+           base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    if (homepage.spec() == GURL(url).spec())
       return true;
   }
 
@@ -302,19 +303,18 @@ base::string16 GetFirefoxImporterName(const base::FilePath& app_path) {
   if (base::PathExists(app_ini_file)) {
     std::string content;
     base::ReadFileToString(app_ini_file, &content);
-    std::vector<std::string> lines;
-    base::SplitString(content, '\n', &lines);
+
     const std::string name_attr("Name=");
     bool in_app_section = false;
-    for (size_t i = 0; i < lines.size(); ++i) {
-      base::TrimWhitespace(lines[i], base::TRIM_ALL, &lines[i]);
-      if (lines[i] == "[App]") {
+    for (const base::StringPiece& line : base::SplitStringPiece(
+             content, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+      if (line == "[App]") {
         in_app_section = true;
       } else if (in_app_section) {
-        if (lines[i].find(name_attr) == 0) {
-          branding_name = lines[i].substr(name_attr.size());
+        if (line.find(name_attr) == 0) {
+          line.substr(name_attr.size()).CopyToString(&branding_name);
           break;
-        } else if (lines[i].length() > 0 && lines[i][0] == '[') {
+        } else if (line.length() > 0 && line[0] == '[') {
           // No longer in the [App] section.
           break;
         }
@@ -322,7 +322,7 @@ base::string16 GetFirefoxImporterName(const base::FilePath& app_path) {
     }
   }
 
-  base::StringToLowerASCII(&branding_name);
+  branding_name = base::ToLowerASCII(branding_name);
   if (branding_name.find("iceweasel") != std::string::npos)
     return l10n_util::GetStringUTF16(IDS_IMPORT_FROM_ICEWEASEL);
   return l10n_util::GetStringUTF16(IDS_IMPORT_FROM_FIREFOX);

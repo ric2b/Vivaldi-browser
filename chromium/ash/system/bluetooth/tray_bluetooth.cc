@@ -200,7 +200,7 @@ class BluetoothDetailedView : public TrayDetailsView,
     throbber_ = new ThrobberView;
     throbber_->SetTooltipText(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BLUETOOTH_DISCOVERING));
-    footer()->AddThrobber(throbber_);
+    footer()->AddView(throbber_, false /* separator */);
 
     // Do not allow toggling bluetooth in the lock screen.
     ash::SystemTrayDelegate* delegate =
@@ -266,7 +266,6 @@ class BluetoothDetailedView : public TrayDetailsView,
     }
 
     scroll_content()->SizeToPreferredSize();
-    static_cast<views::View*>(scroller())->Layout();
   }
 
   void AppendSameTypeDevicesToScrollList(const BluetoothDeviceList& list,
@@ -339,7 +338,8 @@ class BluetoothDetailedView : public TrayDetailsView,
 
   // Updates UI of the clicked bluetooth device to show it is being connected
   // or disconnected if such an operation is going to be performed underway.
-  void UpdateClickedDevice(std::string device_id, views::View* item_container) {
+  void UpdateClickedDevice(const std::string& device_id,
+                           views::View* item_container) {
     base::string16 display_name;
     if (FoundDevice(device_id, paired_not_connected_devices_,
                            &display_name)) {
@@ -375,7 +375,7 @@ class BluetoothDetailedView : public TrayDetailsView,
       find = device_map_.find(sender);
       if (find == device_map_.end())
         return;
-      std::string device_id = find->second;
+      const std::string device_id = find->second;
       if (FoundDevice(device_id, connecting_devices_, NULL))
         return;
       UpdateClickedDevice(device_id, sender);

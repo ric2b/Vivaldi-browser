@@ -4,6 +4,8 @@
 
 #include "content/public/common/webplugininfo.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
@@ -83,8 +85,8 @@ void WebPluginInfo::CreateVersionFromString(
 
   // Remove leading zeros from each of the version components.
   std::string no_leading_zeros_version;
-  std::vector<std::string> numbers;
-  base::SplitString(version, '.', &numbers);
+  std::vector<std::string> numbers = base::SplitString(
+      version, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   for (size_t i = 0; i < numbers.size(); ++i) {
     size_t n = numbers[i].size();
     size_t j = 0;

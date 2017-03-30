@@ -4,15 +4,18 @@
 
 #include "content/browser/webui/web_ui_data_source_impl.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_util.h"
 #include "content/grit/content_resources.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
-#include "third_party/mojo/src/mojo/public/js/constants.h"
+#include "mojo/public/js/constants.h"
 #include "ui/base/webui/jstemplate_builder.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -21,31 +24,6 @@ namespace content {
 // static
 WebUIDataSource* WebUIDataSource::Create(const std::string& source_name) {
   return new WebUIDataSourceImpl(source_name);
-}
-
-// static
-WebUIDataSource* WebUIDataSource::AddMojoDataSource(
-    BrowserContext* browser_context) {
-  WebUIDataSource* mojo_source = Create("mojo");
-
-  static const struct {
-    const char* path;
-    int id;
-  } resources[] = {
-    { mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS },
-    { mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS },
-    { mojo::kCodecModuleName, IDR_MOJO_CODEC_JS },
-    { mojo::kConnectionModuleName, IDR_MOJO_CONNECTION_JS },
-    { mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS },
-    { mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS },
-    { mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS },
-    { mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS },
-  };
-  for (size_t i = 0; i < arraysize(resources); ++i)
-    mojo_source->AddResourcePath(resources[i].path, resources[i].id);
-
-  URLDataManager::AddWebUIDataSource(browser_context, mojo_source);
-  return mojo_source;
 }
 
 // static
@@ -161,6 +139,24 @@ void WebUIDataSourceImpl::SetRequestFilter(
   filter_callback_ = callback;
 }
 
+void WebUIDataSourceImpl::AddMojoResources() {
+  static const struct {
+    const char* path;
+    int id;
+  } resources[] = {
+      {mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS},
+      {mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS},
+      {mojo::kCodecModuleName, IDR_MOJO_CODEC_JS},
+      {mojo::kConnectionModuleName, IDR_MOJO_CONNECTION_JS},
+      {mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS},
+      {mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS},
+      {mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS},
+      {mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS},
+  };
+  for (size_t i = 0; i < arraysize(resources); ++i)
+    AddResourcePath(resources[i].path, resources[i].id);
+}
+
 void WebUIDataSourceImpl::DisableReplaceExistingSource() {
   replace_existing_source_ = false;
 }
@@ -190,16 +186,22 @@ std::string WebUIDataSourceImpl::GetSource() const {
 }
 
 std::string WebUIDataSourceImpl::GetMimeType(const std::string& path) const {
-  if (base::EndsWith(path, ".js", false))
+  // Remove the query string for to determine the mime type.
+  std::string file_path = path.substr(0, path.find_first_of('?'));
+
+  if (base::EndsWith(file_path, ".css", base::CompareCase::INSENSITIVE_ASCII))
+    return "text/css";
+
+  if (base::EndsWith(file_path, ".js", base::CompareCase::INSENSITIVE_ASCII))
     return "application/javascript";
 
-  if (base::EndsWith(path, ".json", false))
+  if (base::EndsWith(file_path, ".json", base::CompareCase::INSENSITIVE_ASCII))
     return "application/json";
 
-  if (base::EndsWith(path, ".pdf", false))
+  if (base::EndsWith(file_path, ".pdf", base::CompareCase::INSENSITIVE_ASCII))
     return "application/pdf";
 
-  if (base::EndsWith(path, ".svg", false))
+  if (base::EndsWith(file_path, ".svg", base::CompareCase::INSENSITIVE_ASCII))
     return "image/svg+xml";
 
   return "text/html";
@@ -222,7 +224,9 @@ void WebUIDataSourceImpl::StartDataRequest(
 
   int resource_id = default_resource_;
   std::map<std::string, int>::iterator result;
-  result = path_to_idr_map_.find(path);
+  // Remove the query string for named resource lookups.
+  std::string file_path = path.substr(0, path.find_first_of('?'));
+  result = path_to_idr_map_.find(file_path);
   if (result != path_to_idr_map_.end())
     resource_id = result->second;
   DCHECK_NE(resource_id, -1);

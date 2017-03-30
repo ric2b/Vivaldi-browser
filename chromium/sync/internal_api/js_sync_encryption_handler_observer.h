@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/sync_encryption_handler.h"
 #include "sync/internal_api/public/util/weak_handle.h"
@@ -24,7 +24,7 @@ class JsEventDetails;
 class JsEventHandler;
 
 // Routes SyncEncryptionHandler events to a JsEventHandler.
-class SYNC_EXPORT_PRIVATE JsSyncEncryptionHandlerObserver
+class SYNC_EXPORT JsSyncEncryptionHandlerObserver
     : public SyncEncryptionHandler::Observer {
  public:
   JsSyncEncryptionHandlerObserver();

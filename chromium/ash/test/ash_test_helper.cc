@@ -6,9 +6,11 @@
 
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/ash_switches.h"
+#include "ash/display/display_info.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
 #include "ash/test/ash_test_views_delegate.h"
+#include "ash/test/content/test_shell_content_state.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_screenshot_delegate.h"
@@ -16,6 +18,7 @@
 #include "ash/test/test_shell_delegate.h"
 #include "ash/test/test_system_tray_delegate.h"
 #include "base/run_loop.h"
+#include "content/public/browser/browser_thread.h"
 #include "ui/aura/env.h"
 #include "ui/aura/input_state_lookup.h"
 #include "ui/aura/test/env_test_helper.h"
@@ -29,6 +32,7 @@
 #if defined(OS_CHROMEOS)
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #endif
 
 #if defined(OS_WIN)
@@ -44,11 +48,14 @@ namespace test {
 
 AshTestHelper::AshTestHelper(base::MessageLoopForUI* message_loop)
     : message_loop_(message_loop),
-      test_shell_delegate_(NULL),
-      test_screenshot_delegate_(NULL) {
+      test_shell_delegate_(nullptr),
+      test_screenshot_delegate_(nullptr),
+      content_state_(nullptr),
+      test_shell_content_state_(nullptr) {
   CHECK(message_loop_);
 #if defined(OS_CHROMEOS)
   dbus_thread_manager_initialized_ = false;
+  bluez_dbus_manager_initialized_ = false;
 #endif
 #if defined(USE_X11)
   aura::test::SetUseOverrideRedirectWindowByDefault(true);
@@ -60,6 +67,7 @@ AshTestHelper::~AshTestHelper() {
 }
 
 void AshTestHelper::SetUp(bool start_session) {
+  ResetDisplayIdForTest();
   views_delegate_.reset(new AshTestViewsDelegate);
 
   // Disable animations during tests.
@@ -85,13 +93,30 @@ void AshTestHelper::SetUp(bool start_session) {
     chromeos::DBusThreadManager::Initialize();
     dbus_thread_manager_initialized_ = true;
   }
+
+  if (!bluez::BluezDBusManager::IsInitialized()) {
+    bluez::BluezDBusManager::Initialize(
+        chromeos::DBusThreadManager::Get()->GetSystemBus(),
+        chromeos::DBusThreadManager::Get()->IsUsingStub(
+            chromeos::DBusClientBundle::BLUETOOTH));
+    bluez_dbus_manager_initialized_ = true;
+  }
+
   // Create CrasAudioHandler for testing since g_browser_process is not
   // created in AshTestBase tests.
   chromeos::CrasAudioHandler::InitializeForTesting();
 #endif
+  ShellContentState* content_state = content_state_;
+  if (!content_state) {
+    test_shell_content_state_ = new TestShellContentState;
+    content_state = test_shell_content_state_;
+  }
+  ShellContentState::SetInstance(content_state);
+
   ShellInitParams init_params;
   init_params.delegate = test_shell_delegate_;
   init_params.context_factory = context_factory;
+  init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
   ash::Shell::CreateInstance(init_params);
   aura::test::EnvTestHelper(aura::Env::GetInstance()).SetInputStateLookup(
       scoped_ptr<aura::InputStateLookup>());
@@ -102,9 +127,8 @@ void AshTestHelper::SetUp(bool start_session) {
     GetTestSessionStateDelegate()->SetHasActiveUser(true);
   }
 
-  test::DisplayManagerTestApi(shell->display_manager()).
-      DisableChangeDisplayUponHostResize();
-  ShellTestApi(shell).DisableDisplayConfiguratorAnimation();
+  test::DisplayManagerTestApi().DisableChangeDisplayUponHostResize();
+  ShellTestApi(shell).DisableDisplayAnimator();
 
   test_screenshot_delegate_ = new TestScreenshotDelegate();
   shell->accelerator_controller()->SetScreenshotDelegate(
@@ -114,6 +138,8 @@ void AshTestHelper::SetUp(bool start_session) {
 void AshTestHelper::TearDown() {
   // Tear down the shell.
   Shell::DeleteInstance();
+  ShellContentState::DestroyInstance();
+
   test_screenshot_delegate_ = NULL;
 
   // Remove global message center state.
@@ -121,13 +147,16 @@ void AshTestHelper::TearDown() {
 
 #if defined(OS_CHROMEOS)
   chromeos::CrasAudioHandler::Shutdown();
+  if (bluez_dbus_manager_initialized_) {
+    bluez::BluezDBusManager::Shutdown();
+    bluez_dbus_manager_initialized_ = false;
+  }
   if (dbus_thread_manager_initialized_) {
     chromeos::DBusThreadManager::Shutdown();
     dbus_thread_manager_initialized_ = false;
   }
 #endif
 
-  aura::Env::DeleteInstance();
   ui::TerminateContextFactoryForTests();
 
   // Need to reset the initial login status.
@@ -143,7 +172,6 @@ void AshTestHelper::TearDown() {
 
 void AshTestHelper::RunAllPendingInMessageLoop() {
   DCHECK(base::MessageLoopForUI::current() == message_loop_);
-  aura::Env::CreateInstance(true);
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
 }

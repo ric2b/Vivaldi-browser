@@ -4,14 +4,24 @@
 
 #include "media/mojo/services/mojo_cdm_factory.h"
 
+#include <utility>
+
+#include "base/bind.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
+#include "base/thread_task_runner_handle.h"
+#include "media/base/key_systems.h"
+#include "media/cdm/aes_decryptor.h"
+#include "media/mojo/interfaces/service_factory.mojom.h"
 #include "media/mojo/services/mojo_cdm.h"
-#include "mojo/application/public/cpp/connect.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/shell/public/cpp/connect.h"
 
 namespace media {
 
-MojoCdmFactory::MojoCdmFactory(mojo::ServiceProvider* service_provider)
-    : service_provider_(service_provider) {
-  DCHECK(service_provider_);
+MojoCdmFactory::MojoCdmFactory(interfaces::ServiceFactory* service_factory)
+    : service_factory_(service_factory) {
+  DCHECK(service_factory_);
 }
 
 MojoCdmFactory::~MojoCdmFactory() {
@@ -28,12 +38,27 @@ void MojoCdmFactory::Create(
     const SessionExpirationUpdateCB& session_expiration_update_cb,
     const CdmCreatedCB& cdm_created_cb) {
   DVLOG(2) << __FUNCTION__ << ": " << key_system;
-  DCHECK(service_provider_);
+  DCHECK(service_factory_);
 
-  mojo::ContentDecryptionModulePtr cdm_ptr;
-  mojo::ConnectToService(service_provider_, &cdm_ptr);
+  if (!security_origin.is_valid()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(cdm_created_cb, nullptr, "Invalid origin."));
+    return;
+  }
 
-  MojoCdm::Create(key_system, security_origin, cdm_config, cdm_ptr.Pass(),
+  if (CanUseAesDecryptor(key_system)) {
+    scoped_refptr<MediaKeys> cdm(
+        new AesDecryptor(security_origin, session_message_cb, session_closed_cb,
+                         session_keys_change_cb));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(cdm_created_cb, cdm, ""));
+    return;
+  }
+
+  interfaces::ContentDecryptionModulePtr cdm_ptr;
+  service_factory_->CreateCdm(mojo::GetProxy(&cdm_ptr));
+
+  MojoCdm::Create(key_system, security_origin, cdm_config, std::move(cdm_ptr),
                   session_message_cb, session_closed_cb,
                   legacy_session_error_cb, session_keys_change_cb,
                   session_expiration_update_cb, cdm_created_cb);

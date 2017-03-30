@@ -7,6 +7,7 @@
 #include "base/compiler_specific.h"
 #include "base/containers/mru_cache.h"
 #include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_delegate.h"
@@ -63,12 +64,10 @@ class BitmapFetcherService : public KeyedService,
  protected:
   // Create a bitmap fetcher for the given |url| and start it. Virtual method
   // so tests can override this for different behavior.
-  virtual chrome::BitmapFetcher* CreateFetcher(const GURL& url);
+  virtual scoped_ptr<chrome::BitmapFetcher> CreateFetcher(const GURL& url);
 
  private:
   friend class BitmapFetcherServiceTest;
-
-  typedef ScopedVector<chrome::BitmapFetcher> BitmapFetchers;
 
   // Gets the existing fetcher for |url| or constructs a new one if it doesn't
   // exist.
@@ -85,7 +84,7 @@ class BitmapFetcherService : public KeyedService,
   void OnFetchComplete(const GURL& url, const SkBitmap* bitmap) override;
 
   // Currently active image fetchers.
-  BitmapFetchers active_fetchers_;
+  std::vector<scoped_ptr<chrome::BitmapFetcher>> active_fetchers_;
 
   // Currently active requests.
   ScopedVector<BitmapFetcherRequest> requests_;

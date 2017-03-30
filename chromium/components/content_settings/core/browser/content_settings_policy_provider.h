@@ -9,7 +9,7 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/synchronization/lock.h"
 #include "components/content_settings/core/browser/content_settings_observable_provider.h"
@@ -31,9 +31,10 @@ class PolicyProvider : public ObservableProvider {
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // ProviderInterface implementations.
-  RuleIterator* GetRuleIterator(ContentSettingsType content_type,
-                                const ResourceIdentifier& resource_identifier,
-                                bool incognito) const override;
+  scoped_ptr<RuleIterator> GetRuleIterator(
+      ContentSettingsType content_type,
+      const ResourceIdentifier& resource_identifier,
+      bool incognito) const override;
 
   bool SetWebsiteSetting(const ContentSettingsPattern& primary_pattern,
                          const ContentSettingsPattern& secondary_pattern,
@@ -46,6 +47,10 @@ class PolicyProvider : public ObservableProvider {
   void ShutdownOnUIThread() override;
 
  private:
+  struct PrefsForManagedDefaultMapEntry;
+
+  static const PrefsForManagedDefaultMapEntry kPrefsForManagedDefault[];
+
   // Reads the policy managed default settings.
   void ReadManagedDefaultSettings();
 
@@ -53,7 +58,7 @@ class PolicyProvider : public ObservableProvider {
   void OnPreferenceChanged(const std::string& pref_name);
 
   // Reads the policy controlled default settings for a specific content type.
-  void UpdateManagedDefaultSetting(ContentSettingsType content_type);
+  void UpdateManagedDefaultSetting(const PrefsForManagedDefaultMapEntry& entry);
 
   void ReadManagedContentSettings(bool overwrite);
 

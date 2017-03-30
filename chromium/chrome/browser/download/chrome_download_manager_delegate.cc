@@ -6,11 +6,11 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/prefs/pref_member.h"
 #include "base/prefs/pref_service.h"
 #include "base/rand_util.h"
@@ -20,6 +20,7 @@
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_completion_blocker.h"
 #include "chrome/browser/download/download_crx_util.h"
@@ -38,8 +39,10 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "content/public/browser/download_item.h"
@@ -49,14 +52,14 @@
 #include "net/base/filename_util.h"
 #include "net/base/mime_util.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/android/download/chrome_download_manager_overwrite_infobar_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #endif
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/drive/download_handler.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
+#include "chrome/browser/chromeos/drive/file_system_util.h"
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
@@ -191,13 +194,12 @@ ChromeDownloadManagerDelegate::~ChromeDownloadManagerDelegate() {
 void ChromeDownloadManagerDelegate::SetDownloadManager(DownloadManager* dm) {
   download_manager_ = dm;
 
-#if defined(FULL_SAFE_BROWSING) || defined(MOBILE_SAFE_BROWSING)
-  SafeBrowsingService* sb_service = g_browser_process->safe_browsing_service();
+  safe_browsing::SafeBrowsingService* sb_service =
+      g_browser_process->safe_browsing_service();
   if (sb_service && !profile_->IsOffTheRecord()) {
     // Include this download manager in the set monitored by safe browsing.
     sb_service->AddDownloadManager(dm);
   }
-#endif
 }
 
 void ChromeDownloadManagerDelegate::Shutdown() {
@@ -212,7 +214,7 @@ ChromeDownloadManagerDelegate::GetDownloadIdReceiverCallback() {
                     weak_ptr_factory_.GetWeakPtr());
 }
 
-void ChromeDownloadManagerDelegate::SetNextId(uint32 next_id) {
+void ChromeDownloadManagerDelegate::SetNextId(uint32_t next_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!profile_->IsOffTheRecord());
   DCHECK_NE(content::DownloadItem::kInvalidId, next_id);
@@ -322,7 +324,8 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
     // In case the service was disabled between the download starting and now,
     // we need to restore the danger state.
     content::DownloadDangerType danger_type = item->GetDangerType();
-    if (DownloadItemModel(item).IsDangerousFileBasedOnType() &&
+    if (DownloadItemModel(item).GetDangerLevel() !=
+            download_util::NOT_DANGEROUS &&
         (danger_type == content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS ||
          danger_type ==
              content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT)) {
@@ -330,8 +333,8 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
                << "() SB service disabled. Marking download as DANGEROUS FILE";
       item->OnContentCheckCompleted(
           content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE);
-      content::BrowserThread::PostTask(
-          content::BrowserThread::UI, FROM_HERE, internal_complete_callback);
+      content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
+                                       internal_complete_callback);
       return false;
     }
   } else if (!state->is_complete()) {
@@ -345,7 +348,7 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
 }
 
 void ChromeDownloadManagerDelegate::ShouldCompleteDownloadInternal(
-    uint32 download_id,
+    uint32_t download_id,
     const base::Closure& user_complete_callback) {
   DownloadItem* item = download_manager_->GetDownload(download_id);
   if (!item)
@@ -466,7 +469,12 @@ void ChromeDownloadManagerDelegate::OpenDownload(DownloadItem* download) {
       NEW_FOREGROUND_TAB,
       ui::PAGE_TRANSITION_LINK,
       false);
-  browser->OpenURL(params);
+
+  if (download->GetMimeType() == "application/x-x509-user-cert")
+    chrome::ShowSettingsSubPage(browser, "certificates");
+  else
+    browser->OpenURL(params);
+
   RecordDownloadOpenMethod(DOWNLOAD_OPEN_METHOD_DEFAULT_BROWSER);
 #else
   // ShouldPreferOpeningInBrowser() should never be true on Android.
@@ -518,7 +526,8 @@ DownloadProtectionService*
     ChromeDownloadManagerDelegate::GetDownloadProtectionService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 #if defined(FULL_SAFE_BROWSING)
-  SafeBrowsingService* sb_service = g_browser_process->safe_browsing_service();
+  safe_browsing::SafeBrowsingService* sb_service =
+      g_browser_process->safe_browsing_service();
   if (sb_service && sb_service->download_protection_service() &&
       profile_->GetPrefs()->GetBoolean(prefs::kSafeBrowsingEnabled)) {
     return sb_service->download_protection_service();
@@ -579,7 +588,7 @@ void ChromeDownloadManagerDelegate::PromptUserForDownloadPath(
     const base::FilePath& suggested_path,
     const DownloadTargetDeterminerDelegate::FileSelectedCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   chrome::android::ChromeDownloadManagerOverwriteInfoBarDelegate::Create(
       InfoBarService::FromWebContents(download->GetWebContents()),
       suggested_path, callback);
@@ -641,7 +650,7 @@ void ChromeDownloadManagerDelegate::GetFileMimeType(
 
 #if defined(FULL_SAFE_BROWSING)
 void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
-    uint32 download_id,
+    uint32_t download_id,
     DownloadProtectionService::DownloadCheckResult result) {
   DownloadItem* item = download_manager_->GetDownload(download_id);
   if (!item || (item->GetState() != DownloadItem::IN_PROGRESS))
@@ -659,11 +668,17 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
     switch (result) {
       case DownloadProtectionService::UNKNOWN:
         // The check failed or was inconclusive.
-        if (DownloadItemModel(item).IsDangerousFileBasedOnType())
+        if (DownloadItemModel(item).GetDangerLevel() !=
+            download_util::NOT_DANGEROUS)
           danger_type = content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE;
         break;
       case DownloadProtectionService::SAFE:
-        // Do nothing.
+        // If this file type require explicit consent, then set the danger type
+        // to DANGEROUS_FILE so that the user be required to manually vet
+        // whether the download is intended or not.
+        if (DownloadItemModel(item).GetDangerLevel() ==
+            download_util::DANGEROUS)
+          danger_type = content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE;
         break;
       case DownloadProtectionService::DANGEROUS:
         danger_type = content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT;
@@ -678,6 +693,8 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
         danger_type = content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED;
         break;
     }
+    DCHECK_NE(danger_type,
+              content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT);
 
     if (danger_type != content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS)
       item->OnContentCheckCompleted(danger_type);
@@ -709,7 +726,7 @@ void ChromeDownloadManagerDelegate::Observe(
 }
 
 void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
-    int32 download_id,
+    int32_t download_id,
     const content::DownloadTargetCallback& callback,
     scoped_ptr<DownloadTargetInfo> target_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -720,8 +737,12 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
         target_info->is_filetype_handled_safely)
       DownloadItemModel(item).SetShouldPreferOpeningInBrowser(true);
 
-    if (target_info->is_dangerous_file)
-      DownloadItemModel(item).SetIsDangerousFileBasedOnType(true);
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+    if (item->GetOriginalMimeType() == "application/x-x509-user-cert")
+      DownloadItemModel(item).SetShouldPreferOpeningInBrowser(true);
+#endif
+
+    DownloadItemModel(item).SetDangerLevel(target_info->danger_level);
   }
   callback.Run(target_info->target_path,
                target_info->target_disposition,

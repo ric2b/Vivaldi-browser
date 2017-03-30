@@ -15,6 +15,7 @@
 
 #include <string>
 
+#include "media/base/audio_decoder_config.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -24,11 +25,12 @@ namespace media {
 // Windows version is chosen.  The functions can be called many times per
 // process and return the same value throughout the lifetime of the process.
 MEDIA_EXPORT bool LoadMFCommonLibraries();
-MEDIA_EXPORT bool LoadMFAudioDecoderLibraries();
+MEDIA_EXPORT void LoadMFAudioDecoderLibraries();
+bool LoadMFAudioDecoderLibrary(AudioCodec codec);
 MEDIA_EXPORT bool LoadMFVideoDecoderLibraries();
 bool LoadMFSourceReaderLibraries();
 
-std::string GetMFAudioDecoderLibraryName();
+std::string GetMFAudioDecoderLibraryName(AudioCodec codec);
 std::string GetMFVideoDecoderLibraryName();
 
 MEDIA_EXPORT FARPROC

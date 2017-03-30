@@ -4,9 +4,9 @@
 
 #include <stdio.h>
 #include <string>
+#include <utility>
 
 #include "base/at_exit.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/command_line.h"
@@ -57,7 +57,7 @@ bool StringToIPEndPoint(const std::string& ip_address_and_port,
   if (!net::ParseIPLiteralToNumber(ip, &ip_number))
     return false;
 
-  *ip_end_point = net::IPEndPoint(ip_number, static_cast<uint16>(port));
+  *ip_end_point = net::IPEndPoint(ip_number, static_cast<uint16_t>(port));
   return true;
 }
 
@@ -152,7 +152,7 @@ bool LoadReplayLog(const base::FilePath& file_path, ReplayLog* replay_log) {
       continue;
     }
 
-    int64 delta_in_milliseconds;
+    int64_t delta_in_milliseconds;
     if (!base::StringToInt64(time_and_name[0], &delta_in_milliseconds)) {
       fprintf(
           stderr,
@@ -401,7 +401,7 @@ void GDig::Finish(Result result) {
   DCHECK_NE(RESULT_PENDING, result);
   result_ = result;
   if (base::MessageLoop::current())
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void GDig::OnDnsConfig(const DnsConfig& dns_config_const) {
@@ -432,8 +432,8 @@ void GDig::OnDnsConfig(const DnsConfig& dns_config_const) {
   options.max_retry_attempts = 1u;
   scoped_ptr<HostResolverImpl> resolver(
       new HostResolverImpl(options, log_.get()));
-  resolver->SetDnsClient(dns_client.Pass());
-  resolver_ = resolver.Pass();
+  resolver->SetDnsClient(std::move(dns_client));
+  resolver_ = std::move(resolver);
 
   start_time_ = base::Time::Now();
 

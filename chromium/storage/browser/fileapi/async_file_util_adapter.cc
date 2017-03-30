@@ -4,9 +4,13 @@
 
 #include "storage/browser/fileapi/async_file_util_adapter.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_runner_util.h"
 #include "base/thread_task_runner_handle.h"
@@ -72,7 +76,7 @@ class GetFileInfoHelper {
   void ReplySnapshotFile(
       const AsyncFileUtil::CreateSnapshotFileCallback& callback) {
     callback.Run(error_, file_info_, platform_path_,
-                  ShareableFileReference::GetOrCreate(scoped_file_.Pass()));
+                 ShareableFileReference::GetOrCreate(std::move(scoped_file_)));
   }
 
  private:
@@ -116,8 +120,6 @@ void ReadDirectoryHelper(FileSystemFileUtil* file_util,
     DirectoryEntry entry;
     entry.is_directory = file_enum->IsDirectory();
     entry.name = VirtualPath::BaseName(current).value();
-    entry.size = file_enum->Size();
-    entry.last_modified_time = file_enum->LastModifiedTime();
     entries.push_back(entry);
 
     if (entries.size() == kResultChunkSize) {
@@ -136,7 +138,7 @@ void RunCreateOrOpenCallback(
     FileSystemOperationContext* context,
     const AsyncFileUtil::CreateOrOpenCallback& callback,
     base::File file) {
-  callback.Run(file.Pass(), base::Closure());
+  callback.Run(std::move(file), base::Closure());
 }
 
 }  // namespace
@@ -197,6 +199,7 @@ void AsyncFileUtilAdapter::CreateDirectory(
 void AsyncFileUtilAdapter::GetFileInfo(
     scoped_ptr<FileSystemOperationContext> context,
     const FileSystemURL& url,
+    int /* fields */,
     const GetFileInfoCallback& callback) {
   FileSystemOperationContext* context_ptr = context.release();
   GetFileInfoHelper* helper = new GetFileInfoHelper;
@@ -240,7 +243,7 @@ void AsyncFileUtilAdapter::Touch(
 void AsyncFileUtilAdapter::Truncate(
     scoped_ptr<FileSystemOperationContext> context,
     const FileSystemURL& url,
-    int64 length,
+    int64_t length,
     const StatusCallback& callback) {
   FileSystemOperationContext* context_ptr = context.release();
   const bool success = base::PostTaskAndReplyWithResult(

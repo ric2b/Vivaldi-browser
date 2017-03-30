@@ -16,7 +16,6 @@ EncodedFrame::EncodedFrame()
     : dependency(UNKNOWN_DEPENDENCY),
       frame_id(0),
       referenced_frame_id(0),
-      rtp_timestamp(0),
       new_playout_delay_ms(0) {}
 
 EncodedFrame::~EncodedFrame() {}
@@ -28,12 +27,12 @@ void EncodedFrame::CopyMetadataTo(EncodedFrame* dest) const {
   dest->referenced_frame_id = this->referenced_frame_id;
   dest->rtp_timestamp = this->rtp_timestamp;
   dest->reference_time = this->reference_time;
+  dest->new_playout_delay_ms = this->new_playout_delay_ms;
 }
 
 RtcpSenderInfo::RtcpSenderInfo()
     : ntp_seconds(0),
       ntp_fraction(0),
-      rtp_timestamp(0),
       send_packet_count(0),
       send_octet_count(0) {}
 RtcpSenderInfo::~RtcpSenderInfo() {}

@@ -5,6 +5,10 @@
 #ifndef SYNC_TEST_NULL_DIRECTORY_CHANGE_DELEGATE_H_
 #define SYNC_TEST_NULL_DIRECTORY_CHANGE_DELEGATE_H_
 
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/compiler_specific.h"
 #include "sync/syncable/directory_change_delegate.h"
 
@@ -19,11 +23,11 @@ class NullDirectoryChangeDelegate : public DirectoryChangeDelegate {
   void HandleCalculateChangesChangeEventFromSyncApi(
       const ImmutableWriteTransactionInfo& write_transaction_info,
       BaseTransaction* trans,
-      std::vector<int64>* entries_changed) override;
+      std::vector<int64_t>* entries_changed) override;
   void HandleCalculateChangesChangeEventFromSyncer(
       const ImmutableWriteTransactionInfo& write_transaction_info,
       BaseTransaction* trans,
-      std::vector<int64>* entries_changed) override;
+      std::vector<int64_t>* entries_changed) override;
   ModelTypeSet HandleTransactionEndingChangeEvent(
       const ImmutableWriteTransactionInfo& write_transaction_info,
       BaseTransaction* trans) override;

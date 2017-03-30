@@ -6,8 +6,10 @@
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_MANAGER_CLIENT_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/password_store.h"
 
 class PrefService;
@@ -19,6 +21,7 @@ class AutofillManager;
 namespace password_manager {
 
 struct CredentialInfo;
+class LogManager;
 class PasswordFormManager;
 class PasswordManager;
 class PasswordManagerDriver;
@@ -49,40 +52,37 @@ class PasswordManagerClient {
   // The default return value is false.
   virtual bool IsAutomaticPasswordSavingEnabled() const;
 
-  // If the password manager should work for the current page. Default
-  // always returns true.
-  virtual bool IsPasswordManagementEnabledForCurrentPage() const;
+  // Is saving new data for password autofill and filling of saved data enabled
+  // for the current profile and page? For example, saving is disabled in
+  // Incognito mode.
+  virtual bool IsSavingAndFillingEnabledForCurrentPage() const;
 
-  // Is saving new data for password autofill enabled for the current profile
-  // and page? For example, saving new data is disabled in Incognito mode,
-  // whereas filling data is not. Also, saving data is disabled in the presence
-  // of SSL errors on a page.
-  virtual bool IsSavingEnabledForCurrentPage() const;
+  // Checks if filling is enabled for the current page. Filling is disabled when
+  // password manager is disabled, or in the presence of SSL errors on a page.
+  virtual bool IsFillingEnabledForCurrentPage() const;
 
-  // Return true if |form| should not be available for autofill.
-  virtual bool ShouldFilterAutofillResult(
-      const autofill::PasswordForm& form) = 0;
-
-  // Return the username that the user is syncing with. Should return an empty
-  // string if sync is not enabled for passwords.
-  virtual std::string GetSyncUsername() const = 0;
-
-  // Returns true if |username| and |origin| correspond to the account which is
-  // syncing.
-  virtual bool IsSyncAccountCredential(const std::string& username,
-                                       const std::string& origin) const = 0;
-
-  // Called when all autofill results have been computed. Client can use
-  // this signal to report statistics. Default implementation is a noop.
-  virtual void AutofillResultsComputed();
-
-  // Informs the embedder of a password form that can be saved if the user
-  // allows it. The embedder is not required to prompt the user if it decides
-  // that this form doesn't need to be saved.
-  // Returns true if the prompt was indeed displayed.
-  virtual bool PromptUserToSavePassword(
+  // Informs the embedder of a password form that can be saved or updated in
+  // password store if the user allows it. The embedder is not required to
+  // prompt the user if it decides that this form doesn't need to be saved or
+  // updated. Returns true if the prompt was indeed displayed.
+  // There are 3 different cases when |update_password| == true:
+  // 1.A change password form was submitted and the user has only one stored
+  // credential. Then form_to_save.pending_credentials() should correspond to
+  // the unique element from |form_to_save.best_matches_|.
+  // 2.A change password form was submitted and the user has more than one
+  // stored credential. Then we shouldn't expect anything from
+  // form_to_save.pending_credentials() except correct origin, since we don't
+  // know which credentials should be updated.
+  // 3.A sign-in password form was submitted with a password different from
+  // the stored one. In this case form_to_save.password_overridden() == true
+  // and form_to_save.pending_credentials() should correspond to the credential
+  // that was overidden.
+  // TODO(crbug.com/576747): Analyze usefulness of the |type| parameter, make a
+  // decision if it should be kept or removed.
+  virtual bool PromptUserToSaveOrUpdatePassword(
       scoped_ptr<PasswordFormManager> form_to_save,
-      CredentialSourceType type) = 0;
+      CredentialSourceType type,
+      bool update_password) = 0;
 
   // Informs the embedder of a password forms that the user should choose from.
   // Returns true if the prompt is indeed displayed. If the prompt is not
@@ -112,17 +112,12 @@ class PasswordManagerClient {
 
   // Called when a password is autofilled. |best_matches| contains the
   // PasswordForm into which a password was filled: the client may choose to
-  // save this to the PasswordStore, for example. Default implementation is a
+  // save this to the PasswordStore, for example. |origin| is the origin of the
+  // form into which a password was filled. Default implementation is a
   // noop.
   virtual void PasswordWasAutofilled(
-      const autofill::PasswordFormMap& best_matches) const;
-
-  // Called when password autofill is blocked by the blacklist. |best_matches|
-  // contains the PasswordForm that flags the current site as being on the
-  // blacklist. The client may choose to remove this from the PasswordStore in
-  // order to unblacklist a site, for example. Default implementation is a noop.
-  virtual void PasswordAutofillWasBlocked(
-      const autofill::PasswordFormMap& best_matches) const;
+      const autofill::PasswordFormMap& best_matches,
+      const GURL& origin) const;
 
   // Gets prefs associated with this embedder.
   virtual PrefService* GetPrefs() = 0;
@@ -132,20 +127,8 @@ class PasswordManagerClient {
 
   // Reports whether and how passwords are synced in the embedder. The default
   // implementation always returns NOT_SYNCING_PASSWORDS.
+  // TODO(vabr): Factor this out of the client to the sync layer.
   virtual PasswordSyncState GetPasswordSyncState() const;
-
-  // Only for clients which registered with a LogRouter: If called with
-  // |router_can_be_used| set to false, the client may no longer use the
-  // LogRouter. If |router_can_be_used| is true, the LogRouter can be used after
-  // the return from OnLogRouterAvailabilityChanged.
-  virtual void OnLogRouterAvailabilityChanged(bool router_can_be_used);
-
-  // Forward |text| for display to the LogRouter (if registered with one).
-  virtual void LogSavePasswordProgress(const std::string& text) const;
-
-  // Returns true if logs recorded via LogSavePasswordProgress will be
-  // displayed, and false otherwise.
-  virtual bool IsLoggingActive() const;
 
   // Returns true if last navigation page had HTTP error i.e 5XX or 4XX
   virtual bool WasLastNavigationHTTPError() const;
@@ -162,14 +145,27 @@ class PasswordManagerClient {
   // If this browsing session should not be persisted.
   virtual bool IsOffTheRecord() const;
 
-  // Returns the PasswordManager associated with this client.
-  virtual PasswordManager* GetPasswordManager();
+  // Returns the PasswordManager associated with this client. The non-const
+  // version calls the const one.
+  PasswordManager* GetPasswordManager();
+  virtual const PasswordManager* GetPasswordManager() const;
 
   // Returns the AutofillManager for the main frame.
   virtual autofill::AutofillManager* GetAutofillManagerForMainFrame();
 
   // Returns the main frame URL.
   virtual const GURL& GetMainFrameURL() const;
+
+  // Returns true if the UI for confirmation of update password is enabled.
+  virtual bool IsUpdatePasswordUIEnabled() const;
+
+  virtual const GURL& GetLastCommittedEntryURL() const = 0;
+
+  // Use this to filter credentials before handling them in password manager.
+  virtual const CredentialsFilter* GetStoreResultFilter() const = 0;
+
+  // Returns a LogManager instance.
+  virtual const LogManager* GetLogManager() const;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerClient);

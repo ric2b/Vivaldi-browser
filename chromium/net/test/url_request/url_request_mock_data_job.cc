@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -15,6 +16,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
+#include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_filter.h"
 
 namespace net {
@@ -47,16 +49,25 @@ int GetRepeatCountFromRequest(const URLRequest& request) {
   return repeat_count;
 }
 
+// Gets the requestcert flag from URL.
+bool GetRequestClientCertificate(const URLRequest& request) {
+  std::string ignored_value;
+  return GetValueForKeyInQuery(request.url(), "requestcert", &ignored_value);
+}
+
 GURL GetMockUrl(const std::string& scheme,
                 const std::string& hostname,
                 const std::string& data,
-                int data_repeat_count) {
+                int data_repeat_count,
+                bool request_client_certificate) {
   DCHECK_GT(data_repeat_count, 0);
   std::string url(scheme + "://" + hostname + "/");
   url.append("?data=");
   url.append(data);
   url.append("&repeat=");
   url.append(base::IntToString(data_repeat_count));
+  if (request_client_certificate)
+    url += "&requestcert=1";
   return GURL(url);
 }
 
@@ -71,7 +82,8 @@ class MockJobInterceptor : public URLRequestInterceptor {
       NetworkDelegate* network_delegate) const override {
     return new URLRequestMockDataJob(request, network_delegate,
                                      GetDataFromRequest(*request),
-                                     GetRepeatCountFromRequest(*request));
+                                     GetRepeatCountFromRequest(*request),
+                                     GetRequestClientCertificate(*request));
   }
 
  private:
@@ -83,9 +95,11 @@ class MockJobInterceptor : public URLRequestInterceptor {
 URLRequestMockDataJob::URLRequestMockDataJob(URLRequest* request,
                                              NetworkDelegate* network_delegate,
                                              const std::string& data,
-                                             int data_repeat_count)
+                                             int data_repeat_count,
+                                             bool request_client_certificate)
     : URLRequestJob(request, network_delegate),
       data_offset_(0),
+      request_client_certificate_(request_client_certificate),
       weak_factory_(this) {
   DCHECK_GT(data_repeat_count, 0);
   for (int i = 0; i < data_repeat_count; ++i) {
@@ -104,21 +118,25 @@ void URLRequestMockDataJob::Start() {
 URLRequestMockDataJob::~URLRequestMockDataJob() {
 }
 
-bool URLRequestMockDataJob::ReadRawData(IOBuffer* buf,
-                                        int buf_size,
-                                        int* bytes_read) {
-  DCHECK(bytes_read);
-  *bytes_read = static_cast<int>(
-      std::min(static_cast<size_t>(buf_size), data_.length() - data_offset_));
-  memcpy(buf->data(), data_.c_str() + data_offset_, *bytes_read);
-  data_offset_ += *bytes_read;
-  return true;
+int URLRequestMockDataJob::ReadRawData(IOBuffer* buf, int buf_size) {
+  int bytes_read =
+      std::min(static_cast<size_t>(buf_size), data_.length() - data_offset_);
+  memcpy(buf->data(), data_.c_str() + data_offset_, bytes_read);
+  data_offset_ += bytes_read;
+  return bytes_read;
 }
 
 int URLRequestMockDataJob::GetResponseCode() const {
   HttpResponseInfo info;
   GetResponseInfoConst(&info);
   return info.headers->response_code();
+}
+
+void URLRequestMockDataJob::ContinueWithCertificate(
+    X509Certificate* client_cert,
+    SSLPrivateKey* client_private_key) {
+  DCHECK(request_client_certificate_);
+  NotifyHeadersComplete();
 }
 
 // Public virtual version.
@@ -145,6 +163,11 @@ void URLRequestMockDataJob::StartAsync() {
     return;
 
   set_expected_content_size(data_.length());
+  if (request_client_certificate_) {
+    scoped_refptr<SSLCertRequestInfo> request_all(new SSLCertRequestInfo());
+    NotifyCertificateRequested(request_all.get());
+    return;
+  }
   NotifyHeadersComplete();
 }
 
@@ -176,12 +199,16 @@ GURL URLRequestMockDataJob::GetMockHttpsUrl(const std::string& data,
   return GetMockHttpsUrlForHostname(kMockHostname, data, repeat_count);
 }
 
+GURL URLRequestMockDataJob::GetMockUrlForClientCertificateRequest() {
+  return GetMockUrl("https", kMockHostname, "data", 1, true);
+}
+
 // static
 GURL URLRequestMockDataJob::GetMockHttpUrlForHostname(
     const std::string& hostname,
     const std::string& data,
     int repeat_count) {
-  return GetMockUrl("http", hostname, data, repeat_count);
+  return GetMockUrl("http", hostname, data, repeat_count, false);
 }
 
 // static
@@ -189,7 +216,7 @@ GURL URLRequestMockDataJob::GetMockHttpsUrlForHostname(
     const std::string& hostname,
     const std::string& data,
     int repeat_count) {
-  return GetMockUrl("https", hostname, data, repeat_count);
+  return GetMockUrl("https", hostname, data, repeat_count, false);
 }
 
 }  // namespace net

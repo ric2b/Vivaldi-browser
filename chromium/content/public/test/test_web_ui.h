@@ -22,6 +22,9 @@ class TestWebUI : public WebUI {
   ~TestWebUI() override;
 
   void ClearTrackedCalls();
+  void set_web_contents(WebContents* web_contents) {
+    web_contents_ = web_contents;
+  }
 
   // WebUI overrides.
   WebContents* GetWebContents() const override;
@@ -34,8 +37,8 @@ class TestWebUI : public WebUI {
   void SetLinkTransitionType(ui::PageTransition type) override {}
   int GetBindings() const override;
   void SetBindings(int bindings) override {}
-  void OverrideJavaScriptFrame(const std::string& frame_name) override {}
-  void AddMessageHandler(WebUIMessageHandler* handler) override {}
+  bool HasRenderFrame() override;
+  void AddMessageHandler(WebUIMessageHandler* handler) override;
   void RegisterMessageCallback(const std::string& message,
                                const MessageCallback& callback) override {}
   void ProcessWebUIMessage(const GURL& source_url,
@@ -82,7 +85,9 @@ class TestWebUI : public WebUI {
 
  private:
   ScopedVector<CallData> call_data_;
+  ScopedVector<WebUIMessageHandler> handlers_;
   base::string16 temp_string_;
+  WebContents* web_contents_;
 };
 
 }  // namespace content

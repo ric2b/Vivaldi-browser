@@ -14,6 +14,10 @@ namespace base {
 class DictionaryValue;
 }  // namespace base
 
+namespace content {
+class WebContents;
+}  // namespace content
+
 namespace guest_view {
 
 class GuestViewBase;
@@ -28,6 +32,9 @@ class GuestViewManagerDelegate {
  public:
   GuestViewManagerDelegate();
   virtual ~GuestViewManagerDelegate();
+
+  // Invoked after |guest_web_contents| is added.
+  virtual void OnGuestAdded(content::WebContents* guest_web_contents) const {}
 
   // Dispatches the event with |name| with the provided |args| to the embedder
   // of the given |guest| with |instance_id| for routing.

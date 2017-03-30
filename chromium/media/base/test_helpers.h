@@ -5,8 +5,10 @@
 #ifndef MEDIA_BASE_TEST_HELPERS_H_
 #define MEDIA_BASE_TEST_HELPERS_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_log.h"
 #include "media/base/pipeline_status.h"
@@ -143,11 +145,6 @@ class CallbackPairChecker {
  private:
   bool expecting_b_;
 };
-
-// Test implementation of a media log LogCB that sends media log messages to
-// DVLOG(1).
-void AddLogEntryForTest(MediaLog::MediaLogLevel level,
-                        const std::string& message);
 
 }  // namespace media
 

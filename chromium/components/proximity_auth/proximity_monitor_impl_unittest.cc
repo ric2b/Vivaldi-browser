@@ -4,10 +4,11 @@
 
 #include "components/proximity_auth/proximity_monitor_impl.h"
 
+#include <utility>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_simple_task_runner.h"
@@ -30,15 +31,17 @@ using testing::SaveArg;
 namespace proximity_auth {
 namespace {
 
+const char kRemoteDeviceUserId[] = "example@gmail.com";
 const char kBluetoothAddress[] = "AA:BB:CC:DD:EE:FF";
+const char kRemoteDevicePublicKey[] = "Remote Public Key";
 const char kRemoteDeviceName[] = "LGE Nexus 5";
+const char kPersistentSymmetricKey[] = "PSK";
 
 class TestProximityMonitorImpl : public ProximityMonitorImpl {
  public:
   explicit TestProximityMonitorImpl(const RemoteDevice& remote_device,
-                                    scoped_ptr<base::TickClock> clock,
-                                    ProximityMonitorObserver* observer)
-      : ProximityMonitorImpl(remote_device, clock.Pass(), observer) {}
+                                    scoped_ptr<base::TickClock> clock)
+      : ProximityMonitorImpl(remote_device, std::move(clock)) {}
   ~TestProximityMonitorImpl() override {}
 
   using ProximityMonitorImpl::SetStrategy;
@@ -81,15 +84,21 @@ class ProximityAuthProximityMonitorImplTest : public testing::Test {
                                  kBluetoothAddress,
                                  false /* paired */,
                                  true /* connected */),
-        monitor_({kRemoteDeviceName, kBluetoothAddress},
-                 make_scoped_ptr(clock_),
-                 &observer_),
+        monitor_(RemoteDevice(kRemoteDeviceUserId,
+                              kRemoteDeviceName,
+                              kRemoteDevicePublicKey,
+                              RemoteDevice::BLUETOOTH_CLASSIC,
+                              kBluetoothAddress,
+                              kPersistentSymmetricKey,
+                              std::string()),
+                 make_scoped_ptr(clock_)),
         task_runner_(new base::TestSimpleTaskRunner()),
         thread_task_runner_handle_(task_runner_) {
     ON_CALL(*bluetooth_adapter_, GetDevice(kBluetoothAddress))
         .WillByDefault(Return(&remote_bluetooth_device_));
     ON_CALL(remote_bluetooth_device_, GetConnectionInfo(_))
         .WillByDefault(SaveArg<0>(&connection_info_callback_));
+    monitor_.AddObserver(&observer_);
   }
   ~ProximityAuthProximityMonitorImplTest() override {}
 
@@ -528,9 +537,16 @@ TEST_F(ProximityAuthProximityMonitorImplTest,
 
 TEST_F(ProximityAuthProximityMonitorImplTest,
        RecordProximityMetricsOnAuthSuccess_UnknownValues) {
-  RemoteDevice unnamed_remote_device = {kBluetoothAddress, kBluetoothAddress};
+  // Note: A device without a recorded name will have its Bluetooth address as
+  // its name.
+  RemoteDevice unnamed_remote_device(
+      kRemoteDeviceUserId, kBluetoothAddress, kRemoteDevicePublicKey,
+      RemoteDevice::BLUETOOTH_CLASSIC, kBluetoothAddress,
+      kPersistentSymmetricKey, std::string());
+
   scoped_ptr<base::TickClock> clock(new base::SimpleTestTickClock());
-  ProximityMonitorImpl monitor(unnamed_remote_device, clock.Pass(), &observer_);
+  ProximityMonitorImpl monitor(unnamed_remote_device, std::move(clock));
+  monitor.AddObserver(&observer_);
   monitor.Start();
   ProvideConnectionInfo({127, 127, 127});
 

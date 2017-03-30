@@ -4,6 +4,8 @@
 
 #include "chrome/browser/profiles/profile_downloader.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -23,6 +25,7 @@
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/signin/core/browser/account_fetcher_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_client.h"
@@ -76,8 +79,9 @@ const int kPhotoVersionPathComponentIndex = 3;
 //   https://example.com/--Abc/AAAAAAAAAAI/AAAAAAAAACQ/Efg/s256-c/photo.jpg
 bool GetImageURLWithSize(const GURL& old_url, int size, GURL* new_url) {
   DCHECK(new_url);
-  std::vector<std::string> components;
-  base::SplitString(old_url.path(), kURLPathSeparator, &components);
+  std::vector<std::string> components = base::SplitString(
+      old_url.path(), std::string(1, kURLPathSeparator),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (components.size() == 0)
     return false;
 
@@ -125,10 +129,9 @@ bool ProfileDownloader::IsDefaultProfileImageURL(const std::string& url) {
   GURL image_url_object(url);
   DCHECK(image_url_object.is_valid());
   VLOG(1) << "URL to check for default image: " << image_url_object.spec();
-  std::vector<std::string> path_components;
-  base::SplitString(image_url_object.path(),
-                    kURLPathSeparator,
-                    &path_components);
+  std::vector<std::string> path_components = base::SplitString(
+      image_url_object.path(), std::string(1, kURLPathSeparator),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   if (path_components.size() < kProfileImageURLPathComponentsCount)
     return false;
@@ -228,10 +231,14 @@ void ProfileDownloader::StartFetchingImage() {
         ->FetchUserInfoBeforeSignin(account_id_);
   }
 
-  if (account_info_.IsValid())
+  if (account_info_.IsValid()) {
+    // FetchImageData might call the delegate's OnProfileDownloadSuccess
+    // synchronously, causing |this| to be deleted so there should not be more
+    // code after it.
     FetchImageData();
-  else
+  } else {
     waiting_for_account_info_ = true;
+  }
 }
 
 void ProfileDownloader::StartFetchingOAuth2AccessToken() {
@@ -285,6 +292,9 @@ void ProfileDownloader::FetchImageData() {
   VLOG(1) << "Fetching profile image from " << image_url_with_size;
   profile_image_fetcher_ = net::URLFetcher::Create(
       GURL(image_url_with_size), net::URLFetcher::GET, this);
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      profile_image_fetcher_.get(),
+      data_use_measurement::DataUseUserData::PROFILE_DOWNLOADER);
   profile_image_fetcher_->SetRequestContext(
       delegate_->GetBrowserProfile()->GetRequestContext());
   profile_image_fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
@@ -374,16 +384,18 @@ void ProfileDownloader::OnGetTokenFailure(
       this, ProfileDownloaderDelegate::TOKEN_ERROR);
 }
 
-void ProfileDownloader::OnAccountUpdated(
-    const AccountTrackerService::AccountInfo& info) {
+void ProfileDownloader::OnAccountUpdated(const AccountInfo& info) {
   if (info.account_id == account_id_ && info.IsValid()) {
     account_info_ = info;
 
     // If the StartFetchingImage was called before we had valid info, the
     // downloader has been waiting so we need to fetch the image data now.
     if (waiting_for_account_info_) {
-      FetchImageData();
       waiting_for_account_info_ = false;
+      // FetchImageData might call the delegate's OnProfileDownloadSuccess
+      // synchronously, causing |this| to be deleted so there should not be more
+      // code after it.
+      FetchImageData();
     }
   }
 }

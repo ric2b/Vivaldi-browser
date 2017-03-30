@@ -4,13 +4,8 @@
 
 #include "sandbox/linux/seccomp-bpf/sandbox_bpf.h"
 
-// Some headers on Android are missing cdefs: crbug.com/172337.
-// (We can't use OS_ANDROID here since build_config.h is not included).
-#if defined(ANDROID)
-#include <sys/cdefs.h>
-#endif
-
 #include <errno.h>
+#include <stdint.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -22,6 +17,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/third_party/valgrind/valgrind.h"
+#include "sandbox/linux/bpf_dsl/bpf_dsl.h"
 #include "sandbox/linux/bpf_dsl/codegen.h"
 #include "sandbox/linux/bpf_dsl/policy.h"
 #include "sandbox/linux/bpf_dsl/policy_compiler.h"
@@ -113,6 +109,14 @@ uint64_t EscapePC() {
     return 0;
   }
   return static_cast<uint64_t>(static_cast<uintptr_t>(rv));
+}
+
+intptr_t SandboxPanicTrap(const struct arch_seccomp_data&, void* aux) {
+  SANDBOX_DIE(static_cast<const char*>(aux));
+}
+
+bpf_dsl::ResultExpr SandboxPanic(const char* error) {
+  return bpf_dsl::Trap(SandboxPanicTrap, error);
 }
 
 }  // namespace
@@ -214,18 +218,15 @@ intptr_t SandboxBPF::ForwardSyscall(const struct arch_seccomp_data& args) {
       static_cast<intptr_t>(args.args[5]));
 }
 
-scoped_ptr<CodeGen::Program> SandboxBPF::AssembleFilter(
-    bool force_verification) {
-#if !defined(NDEBUG)
-  force_verification = true;
-#endif
+CodeGen::Program SandboxBPF::AssembleFilter() {
   DCHECK(policy_);
 
   bpf_dsl::PolicyCompiler compiler(policy_.get(), Trap::Registry());
   if (Trap::SandboxDebuggingAllowedByUser()) {
     compiler.DangerousSetEscapePC(EscapePC());
   }
-  return compiler.Compile(force_verification);
+  compiler.SetPanicFunc(SandboxPanic);
+  return compiler.Compile();
 }
 
 void SandboxBPF::InstallFilter(bool must_sync_threads) {
@@ -240,13 +241,13 @@ void SandboxBPF::InstallFilter(bool must_sync_threads) {
   // installed the BPF filter program in the kernel. Depending on the
   // system memory allocator that is in effect, these operators can result
   // in system calls to things like munmap() or brk().
-  CodeGen::Program* program = AssembleFilter(false).release();
+  CodeGen::Program program = AssembleFilter();
 
-  struct sock_filter bpf[program->size()];
-  const struct sock_fprog prog = {static_cast<unsigned short>(program->size()),
+  struct sock_filter bpf[program.size()];
+  const struct sock_fprog prog = {static_cast<unsigned short>(program.size()),
                                   bpf};
-  memcpy(bpf, &(*program)[0], sizeof(bpf));
-  delete program;
+  memcpy(bpf, &program[0], sizeof(bpf));
+  CodeGen::Program().swap(program);  // vector swap trick
 
   // Make an attempt to release memory that is no longer needed here, rather
   // than in the destructor. Try to avoid as much as possible to presume of

@@ -7,13 +7,13 @@
 
 #include "android_webview/browser/jni_dependency_factory.h"
 #include "android_webview/common/aw_content_client.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/app/content_main_delegate.h"
 
 namespace content {
 class BrowserMainRunner;
-class ExternalVideoSurfaceContainel;
 }
 
 namespace android_webview {
@@ -32,7 +32,6 @@ class AwMainDelegate : public content::ContentMainDelegate,
   // content::ContentMainDelegate implementation:
   bool BasicStartupComplete(int* exit_code) override;
   void PreSandboxStartup() override;
-  void SandboxInitialized(const std::string& process_type) override;
   int RunProcess(
       const std::string& process_type,
       const content::MainFunctionParams& main_function_params) override;
@@ -47,6 +46,7 @@ class AwMainDelegate : public content::ContentMainDelegate,
       content::WebContents* web_contents) override;
   AwWebPreferencesPopulater* CreateWebPreferencesPopulater() override;
   AwMessagePortService* CreateAwMessagePortService() override;
+  AwLocaleManager* CreateAwLocaleManager() override;
 #if defined(VIDEO_HOLE)
   content::ExternalVideoSurfaceContainer* CreateExternalVideoSurfaceContainer(
       content::WebContents* web_contents) override;

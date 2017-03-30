@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/extensions/echo_private_api.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/ui/echo_dialog_view.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/extensions/api/echo_private.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/system/statistics_provider.h"
@@ -48,9 +50,9 @@ void RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kEchoCheckedOffers);
 }
 
-} // namespace echo_offer
+}  // namespace echo_offer
 
-} // namespace chromeos
+}  // namespace chromeos
 
 EchoPrivateGetRegistrationCodeFunction::
     EchoPrivateGetRegistrationCodeFunction() {}
@@ -102,7 +104,7 @@ bool EchoPrivateSetOfferInfoFunction::RunSync() {
 
   PrefService* local_state = g_browser_process->local_state();
   DictionaryPrefUpdate offer_update(local_state, prefs::kEchoCheckedOffers);
-  offer_update->SetWithoutPathExpansion("echo." + service_id, dict.Pass());
+  offer_update->SetWithoutPathExpansion("echo." + service_id, std::move(dict));
   return true;
 }
 
@@ -189,8 +191,8 @@ EchoPrivateGetUserConsentFunction::CreateForTest(
 EchoPrivateGetUserConsentFunction::~EchoPrivateGetUserConsentFunction() {}
 
 bool EchoPrivateGetUserConsentFunction::RunAsync() {
-   CheckRedeemOffersAllowed();
-   return true;
+  CheckRedeemOffersAllowed();
+  return true;
 }
 
 void EchoPrivateGetUserConsentFunction::OnAccept() {

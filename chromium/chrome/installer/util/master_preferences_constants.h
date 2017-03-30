@@ -15,15 +15,8 @@ namespace master_preferences {
 // is specified in master preference as well as command line, the command line
 // value takes precedence.
 
-// Boolean. Use alternate text for the shortcut. Cmd line override present.
-extern const char kAltShortcutText[];
-// Boolean. Whether to instruct the installer to auto-launch chrome on computer
-// startup. The default (if not provided) is |false|.
-extern const char kAutoLaunchChrome[];
 // Boolean. This is to be a Chrome install. (When using MultiInstall)
 extern const char kChrome[];
-// Integer. Icon index from chrome.exe to use for shortcuts.
-extern const char kChromeShortcutIconIndex[];
 // Boolean. This is a legacy preference and should no longer be used; it is
 // kept around so that old master_preferences which specify
 // "create_all_shortcuts":false still enforce the new
@@ -45,8 +38,6 @@ extern const char kDistroImportHistoryPref[];
 extern const char kDistroImportHomePagePref[];
 // Boolean pref that triggers silent import of the default search engine.
 extern const char kDistroImportSearchPref[];
-// Boolean pref that triggers silent import of the default browser notes.
-extern const char kDistroImportNotes[];
 // Integer. RLZ ping delay in seconds.
 extern const char kDistroPingDelay[];
 // String of Chrome version for which the "set as default browser" infobar will
@@ -83,6 +74,9 @@ extern const char kMakeChromeDefault[];
 extern const char kMakeChromeDefaultForUser[];
 // Boolean. Expect to be run by an MSI installer. Cmd line override present.
 extern const char kMsi[];
+// String. The MSI Product ID under which the MSI stores its information.  This
+// is used to update the DisplayVersion to match Chrome's version number.
+extern const char kMsiProductId[];
 // Boolean. Support installing multiple products at once.
 extern const char kMultiInstall[];
 // Boolean. Show EULA dialog before install.

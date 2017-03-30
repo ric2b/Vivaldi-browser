@@ -4,7 +4,7 @@
 
 #include "media/base/android/media_player_android.h"
 
-#include "base/android/jni_android.h"
+#include "base/android/context_utils.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -16,13 +16,12 @@ namespace media {
 MediaPlayerAndroid::MediaPlayerAndroid(
     int player_id,
     MediaPlayerManager* manager,
-    const RequestMediaResourcesCB& request_media_resources_cb,
+    const OnDecoderResourcesReleasedCB& on_decoder_resources_released_cb,
     const GURL& frame_url)
-    : request_media_resources_cb_(request_media_resources_cb),
+    : on_decoder_resources_released_cb_(on_decoder_resources_released_cb),
       player_id_(player_id),
       manager_(manager),
       frame_url_(frame_url),
-      is_audible_(false),
       weak_factory_(this) {
   listener_.reset(new MediaPlayerListener(base::ThreadTaskRunnerHandle::Get(),
                                           weak_factory_.GetWeakPtr()));
@@ -43,7 +42,7 @@ GURL MediaPlayerAndroid::GetFirstPartyForCookies() {
   return GURL();
 }
 
-void MediaPlayerAndroid::SetCdm(BrowserCdm* /* cdm */) {
+void MediaPlayerAndroid::SetCdm(const scoped_refptr<MediaKeys>& /* cdm */) {
   // Players that support EME should override this.
   LOG(ERROR) << "EME not supported on base MediaPlayerAndroid class.";
   return;
@@ -89,13 +88,6 @@ void MediaPlayerAndroid::DetachListener() {
 void MediaPlayerAndroid::DestroyListenerOnUIThread() {
   weak_factory_.InvalidateWeakPtrs();
   listener_.reset();
-}
-
-void MediaPlayerAndroid::SetAudible(bool is_audible) {
-  if (is_audible_ != is_audible) {
-    is_audible_ = is_audible;
-    manager_->OnAudibleStateChanged(player_id(), is_audible_);
-  }
 }
 
 base::WeakPtr<MediaPlayerAndroid> MediaPlayerAndroid::WeakPtrForUIThread() {

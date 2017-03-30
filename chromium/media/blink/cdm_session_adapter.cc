@@ -4,9 +4,13 @@
 
 #include "media/blink/cdm_session_adapter.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/metrics/histogram.h"
 #include "base/stl_util.h"
+#include "base/trace_event/trace_event.h"
 #include "media/base/cdm_factory.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/cdm_promise.h"
@@ -19,9 +23,10 @@ namespace media {
 
 const char kMediaEME[] = "Media.EME.";
 const char kDot[] = ".";
+const char kTimeToCreateCdmUMAName[] = "CreateCdmTime";
 
-CdmSessionAdapter::CdmSessionAdapter() : weak_ptr_factory_(this) {
-}
+CdmSessionAdapter::CdmSessionAdapter()
+    : trace_id_(0), weak_ptr_factory_(this) {}
 
 CdmSessionAdapter::~CdmSessionAdapter() {}
 
@@ -31,13 +36,18 @@ void CdmSessionAdapter::CreateCdm(
     const GURL& security_origin,
     const CdmConfig& cdm_config,
     scoped_ptr<blink::WebContentDecryptionModuleResult> result) {
+  TRACE_EVENT_ASYNC_BEGIN0("media", "CdmSessionAdapter::CreateCdm",
+                           ++trace_id_);
+
+  base::TimeTicks start_time = base::TimeTicks::Now();
+
   // Note: WebContentDecryptionModuleImpl::Create() calls this method without
   // holding a reference to the CdmSessionAdapter. Bind OnCdmCreated() with
   // |this| instead of |weak_this| to prevent |this| from being destructed.
   base::WeakPtr<CdmSessionAdapter> weak_this = weak_ptr_factory_.GetWeakPtr();
 
   DCHECK(!cdm_created_result_);
-  cdm_created_result_ = result.Pass();
+  cdm_created_result_ = std::move(result);
 
   cdm_factory->Create(
       key_system, security_origin, cdm_config,
@@ -46,13 +56,14 @@ void CdmSessionAdapter::CreateCdm(
       base::Bind(&CdmSessionAdapter::OnLegacySessionError, weak_this),
       base::Bind(&CdmSessionAdapter::OnSessionKeysChange, weak_this),
       base::Bind(&CdmSessionAdapter::OnSessionExpirationUpdate, weak_this),
-      base::Bind(&CdmSessionAdapter::OnCdmCreated, this, key_system));
+      base::Bind(&CdmSessionAdapter::OnCdmCreated, this, key_system,
+                 start_time));
 }
 
 void CdmSessionAdapter::SetServerCertificate(
     const std::vector<uint8_t>& certificate,
     scoped_ptr<SimpleCdmPromise> promise) {
-  cdm_->SetServerCertificate(certificate, promise.Pass());
+  cdm_->SetServerCertificate(certificate, std::move(promise));
 }
 
 WebContentDecryptionModuleSessionImpl* CdmSessionAdapter::CreateSession() {
@@ -81,29 +92,29 @@ void CdmSessionAdapter::InitializeNewSession(
     MediaKeys::SessionType session_type,
     scoped_ptr<NewSessionCdmPromise> promise) {
   cdm_->CreateSessionAndGenerateRequest(session_type, init_data_type, init_data,
-                                        promise.Pass());
+                                        std::move(promise));
 }
 
 void CdmSessionAdapter::LoadSession(MediaKeys::SessionType session_type,
                                     const std::string& session_id,
                                     scoped_ptr<NewSessionCdmPromise> promise) {
-  cdm_->LoadSession(session_type, session_id, promise.Pass());
+  cdm_->LoadSession(session_type, session_id, std::move(promise));
 }
 
 void CdmSessionAdapter::UpdateSession(const std::string& session_id,
                                       const std::vector<uint8_t>& response,
                                       scoped_ptr<SimpleCdmPromise> promise) {
-  cdm_->UpdateSession(session_id, response, promise.Pass());
+  cdm_->UpdateSession(session_id, response, std::move(promise));
 }
 
 void CdmSessionAdapter::CloseSession(const std::string& session_id,
                                      scoped_ptr<SimpleCdmPromise> promise) {
-  cdm_->CloseSession(session_id, promise.Pass());
+  cdm_->CloseSession(session_id, std::move(promise));
 }
 
 void CdmSessionAdapter::RemoveSession(const std::string& session_id,
                                       scoped_ptr<SimpleCdmPromise> promise) {
-  cdm_->RemoveSession(session_id, promise.Pass());
+  cdm_->RemoveSession(session_id, std::move(promise));
 }
 
 CdmContext* CdmSessionAdapter::GetCdmContext() {
@@ -115,14 +126,22 @@ const std::string& CdmSessionAdapter::GetKeySystem() const {
 }
 
 const std::string& CdmSessionAdapter::GetKeySystemUMAPrefix() const {
+  DCHECK(!key_system_uma_prefix_.empty());
   return key_system_uma_prefix_;
 }
 
-void CdmSessionAdapter::OnCdmCreated(
-    const std::string& key_system,
-    scoped_ptr<MediaKeys> cdm,
-    const std::string& error_message) {
-  DVLOG(2) << __FUNCTION__;
+void CdmSessionAdapter::OnCdmCreated(const std::string& key_system,
+                                     base::TimeTicks start_time,
+                                     const scoped_refptr<MediaKeys>& cdm,
+                                     const std::string& error_message) {
+  DVLOG(2) << __FUNCTION__ << ": "
+           << (cdm ? "success" : "failure (" + error_message + ")");
+  DCHECK(!cdm_);
+
+  TRACE_EVENT_ASYNC_END2("media", "CdmSessionAdapter::CreateCdm", trace_id_,
+                         "success", (cdm ? "true" : "false"), "error_message",
+                         error_message);
+
   if (!cdm) {
     cdm_created_result_->completeWithError(
         blink::WebContentDecryptionModuleExceptionNotSupportedError, 0,
@@ -134,7 +153,11 @@ void CdmSessionAdapter::OnCdmCreated(
   key_system_ = key_system;
   key_system_uma_prefix_ =
       kMediaEME + GetKeySystemNameForUMA(key_system) + kDot;
-  cdm_ = cdm.Pass();
+
+  // Only report time for successful CDM creation.
+  ReportTimeToCreateCdmUMA(base::TimeTicks::Now() - start_time);
+
+  cdm_ = cdm;
 
   cdm_created_result_->completeWithContentDecryptionModule(
       new WebContentDecryptionModuleImpl(this));
@@ -161,7 +184,8 @@ void CdmSessionAdapter::OnSessionKeysChange(const std::string& session_id,
   DLOG_IF(WARNING, !session) << __FUNCTION__ << " for unknown session "
                              << session_id;
   if (session)
-    session->OnSessionKeysChange(has_additional_usable_key, keys_info.Pass());
+    session->OnSessionKeysChange(has_additional_usable_key,
+                                 std::move(keys_info));
 }
 
 void CdmSessionAdapter::OnSessionExpirationUpdate(
@@ -198,6 +222,16 @@ WebContentDecryptionModuleSessionImpl* CdmSessionAdapter::GetSession(
   // We can not tell if the CDM is firing events at sessions that never existed.
   SessionMap::iterator session = sessions_.find(session_id);
   return (session != sessions_.end()) ? session->second.get() : NULL;
+}
+
+void CdmSessionAdapter::ReportTimeToCreateCdmUMA(base::TimeDelta time) const {
+  // Note: This leaks memory, which is expected behavior.
+  base::HistogramBase* histogram = base::Histogram::FactoryTimeGet(
+      GetKeySystemUMAPrefix() + kTimeToCreateCdmUMAName,
+      base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromSeconds(10),
+      50, base::HistogramBase::kUmaTargetedHistogramFlag);
+
+  histogram->AddTime(time);
 }
 
 }  // namespace media

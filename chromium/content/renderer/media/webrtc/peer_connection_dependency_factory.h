@@ -7,13 +7,12 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "content/common/content_export.h"
 #include "content/public/renderer/render_process_observer.h"
-#include "content/renderer/media/aec_dump_message_filter.h"
 #include "content/renderer/media/webrtc/stun_field_trial.h"
 #include "content/renderer/p2p/socket_dispatcher.h"
 #include "ipc/ipc_platform_file.h"
@@ -23,6 +22,10 @@
 
 namespace base {
 class WaitableEvent;
+}
+
+namespace media {
+class GpuVideoAcceleratorFactories;
 }
 
 namespace rtc {
@@ -86,9 +89,13 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   virtual WebRtcVideoCapturerAdapter* CreateVideoCapturer(
       bool is_screen_capture);
 
-  // Create an instance of WebRtcLocalAudioTrack and store it
+  // Creates an instance of WebRtcLocalAudioTrack and stores it
   // in the extraData field of |track|.
   void CreateLocalAudioTrack(const blink::WebMediaStreamTrack& track);
+
+  // Creates an instance of MediaStreamRemoteAudioTrack and associates with the
+  // |track| object.
+  void CreateRemoteAudioTrack(const blink::WebMediaStreamTrack& track);
 
   // Asks the PeerConnection factory to create a Local VideoTrack object.
   virtual scoped_refptr<webrtc::VideoTrackInterface>
@@ -124,8 +131,15 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
       int sdp_mline_index,
       const std::string& sdp);
 
+  // Starts recording an RTC event log.
+  virtual bool StartRtcEventLog(base::PlatformFile file);
+
+  // Starts recording an RTC event log.
+  virtual void StopRtcEventLog();
+
   WebRtcAudioDeviceImpl* GetWebRtcAudioDevice();
 
+  void EnsureInitialized();
   scoped_refptr<base::SingleThreadTaskRunner> GetWebRtcWorkerThread() const;
   scoped_refptr<base::SingleThreadTaskRunner> GetWebRtcSignalingThread() const;
 
@@ -182,7 +196,7 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   void CreatePeerConnectionFactory();
 
   void InitializeSignalingThread(
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& gpu_factories,
+      media::GpuVideoAcceleratorFactories* gpu_factories,
       base::WaitableEvent* event);
 
   void InitializeWorkerThread(rtc::Thread** thread,
@@ -205,7 +219,7 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   scoped_refptr<P2PSocketDispatcher> p2p_socket_dispatcher_;
   scoped_refptr<WebRtcAudioDeviceImpl> audio_device_;
 
-  scoped_ptr<stunprober::StunProber> stun_prober_;
+  scoped_ptr<StunProberTrial> stun_trial_;
 
   // PeerConnection threads. signaling_thread_ is created from the
   // "current" chrome thread.

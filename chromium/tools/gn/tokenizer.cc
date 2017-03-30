@@ -74,7 +74,7 @@ Tokenizer::Tokenizer(const InputFile* input_file, Err* err)
       err_(err),
       cur_(0),
       line_number_(1),
-      char_in_line_(1) {
+      column_number_(1) {
 }
 
 Tokenizer::~Tokenizer() {
@@ -126,9 +126,11 @@ std::vector<Token> Tokenizer::Run() {
           (tokens_.empty() || tokens_.back().type() != Token::SUFFIX_COMMENT ||
            tokens_.back().location().line_number() + 1 !=
                location.line_number() ||
-           tokens_.back().location().char_offset() != location.char_offset())) {
+           tokens_.back().location().column_number() !=
+               location.column_number())) {
         type = Token::LINE_COMMENT;
-        Advance();  // The current \n.
+        if (!at_end())  // Could be EOF.
+          Advance();  // The current \n.
         // If this comment is separated from the next syntax element, then we
         // want to tag it as a block comment. This will become a standalone
         // statement at the parser level to keep this comment separate, rather
@@ -179,6 +181,16 @@ bool Tokenizer::IsNewline(const base::StringPiece& buffer, size_t offset) {
   return buffer[offset] == '\n';
 }
 
+// static
+bool Tokenizer::IsIdentifierFirstChar(char c) {
+  return base::IsAsciiAlpha(c) || c == '_';
+}
+
+// static
+bool Tokenizer::IsIdentifierContinuingChar(char c) {
+  // Also allow digits after the first char.
+  return IsIdentifierFirstChar(c) || base::IsAsciiDigit(c);
+}
 
 void Tokenizer::AdvanceToNextToken() {
   while (!at_end() && IsCurrentWhitespace())
@@ -363,16 +375,16 @@ void Tokenizer::Advance() {
   DCHECK(cur_ < input_.size());
   if (IsCurrentNewline()) {
     line_number_++;
-    char_in_line_ = 1;
+    column_number_ = 1;
   } else {
-    char_in_line_++;
+    column_number_++;
   }
   cur_++;
 }
 
 Location Tokenizer::GetCurrentLocation() const {
   return Location(
-      input_file_, line_number_, char_in_line_, static_cast<int>(cur_));
+      input_file_, line_number_, column_number_, static_cast<int>(cur_));
 }
 
 Err Tokenizer::GetErrorForInvalidToken(const Location& location) const {

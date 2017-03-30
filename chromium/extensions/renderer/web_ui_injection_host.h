@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_RENDERER_WEBUI_INJECTION_HOST_H_
 #define EXTENSIONS_RENDERER_WEBUI_INJECTION_HOST_H_
 
+#include "base/macros.h"
 #include "extensions/renderer/injection_host.h"
 
 class WebUIInjectionHost : public InjectionHost {
@@ -22,7 +23,6 @@ class WebUIInjectionHost : public InjectionHost {
       content::RenderFrame* render_frame,
       int tab_id,
       bool is_declarative) const override;
-  bool ShouldNotifyBrowserOfInjection() const override;
 
  private:
   GURL url_;

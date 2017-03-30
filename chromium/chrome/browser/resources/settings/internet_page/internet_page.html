@@ -1,12 +1,46 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
+<link rel="import" href="chrome://resources/cr_elements/network/cr_onc_types.html">
+<link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
+<link rel="import" href="chrome://md-settings/settings_page/settings_subheader.html">
+<link rel="import" href="internet_detail_page.html">
+<link rel="import" href="internet_known_networks_page.html">
 <link rel="import" href="network_summary.html">
 
-<dom-module id="cr-settings-internet-page">
-  <link rel="import" type="css" href="chrome://md-settings/settings_page/settings_page.css">
+<dom-module id="settings-internet-page">
+  <link rel="import" type="css"
+      href="chrome://md-settings/settings_shared.css">
   <template>
-    <paper-material class="layout vertical">
-      <network-summary></network-summary>
-    </paper-material>
+    <settings-animated-pages id="pages" current-route="{{currentRoute}}"
+        section="internet">
+      <neon-animatable id="main">
+        <network-summary on-show-detail="onShowDetail_"
+            default-network="{{defaultNetwork}}"
+            on-show-known-networks="onShowKnownNetworks_"
+            networking-private="[[networkingPrivate]]">
+        </network-summary>
+      </neon-animatable>
+      <neon-animatable id="network-detail">
+        <settings-subheader i18n-values="page-title:internetDetailPageTitle">
+        </settings-subheader>
+        <settings-internet-detail-page
+            guid="[[detailGuid]]"
+            default-network="[[defaultNetwork]]"
+            on-close="onBackTap_"
+            networking-private="[[networkingPrivate]]">
+        </settings-internet-detail-page>
+      </neon-animatable>
+      <neon-animatable id="known-networks">
+        <settings-subheader
+            i18n-values="page-title:internetKnownNetworksPageTitle">
+        </settings-subheader>
+        <settings-internet-known-networks-page
+            network-type="[[knownNetworksType]]"
+            on-show-detail="onShowDetail_"
+            networking-private="[[networkingPrivate]]">
+        </settings-internet-known-networks-page>
+      </neon-animatable>
+    </settings-animated-pages>
   </template>
   <script src="internet_page.js"></script>
 </dom-module>

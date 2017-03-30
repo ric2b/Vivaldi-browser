@@ -44,6 +44,7 @@ def CallJavap(classpath, classes):
       # -verbose is required to get constant values (which can be inlined in
       # dependents).
       '-verbose',
+      '-J-XX:NewSize=4m',
       '-classpath', classpath
       ] + classes
   return build_utils.CheckOutput(javap_cmd)
@@ -52,11 +53,13 @@ def CallJavap(classpath, classes):
 def ExtractToc(disassembled_classes):
   # javap output is structured by indent (2-space) levels.
   good_patterns = [
-      '^[^ ]', # This includes all class/function/member signatures.
+      '^[^ ]', # This includes all class signatures.
       '^  SourceFile:',
       '^  minor version:',
       '^  major version:',
       '^  Constant value:',
+      '^  public ',
+      '^  protected ',
       ]
   bad_patterns = [
       '^const #', # Matches the constant pool (i.e. literals used in the class).

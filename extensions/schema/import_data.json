@@ -1,0 +1,443 @@
+// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "importData",
+    "description": "Use the <code>vivaldi.importData.getProfiles</code> to display installed browsers.",
+    "types": [
+      {
+        "id": "UserProfileItem",
+        "type": "object",
+        "description": "UserProfileItem. Contains info for userprofile",
+        "properties": {
+          "profileDisplayName": {
+            "type": "string",
+            "description": "The profile display name."
+          },
+          "profileName": {
+            "type": "string",
+            "description": "The profile name."
+          }
+        }
+      },
+      {
+        "id": "ProfileItem",
+        "type": "object",
+        "description": "ProfileItem.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Import item name."
+          },
+          "index": {
+            "type": "integer",
+            "description": "The profile item index."
+          },
+          "history": {
+            "type": "boolean",
+            "description": "Does profile support history."
+          },
+          "favorites": {
+            "type": "boolean",
+            "description": "Does profile support favorites."
+          },
+          "passwords": {
+            "type": "boolean",
+            "description": "Does profile support passwords."
+          },
+          "supportsMasterPassword": {
+            "type": "boolean",
+            "description": "Does profile support a master password to decode passwords."
+          },
+          "search": {
+            "type": "boolean",
+            "description": "Does profile support search."
+          },
+          "notes": {
+            "type": "boolean",
+            "description": "Does profile support notes."
+          },
+          "supportsStandaloneImport": {
+            "type": "boolean",
+            "description": "Does profile support standalone import with a dialog."
+          },
+          "hasDefaultInstall": {
+            "type": "boolean",
+            "description": "Is a default installation detected (for Opera 12 and Vivaldi)."
+          },
+          "willShowDialogType": {
+            "type": "string",
+            "description": "When import starts and custom profile or file import is selected, this returns what dialog will be shown, if any. Possible values are 'file', 'folder' and 'none'."
+          },
+          "profilePath": {
+            "type": "string",
+            "description": "Is the path on disk to the detected profile"
+          },
+          "UserProfiles": {
+            "name": "Profiles",
+            "type": "array",
+            "items": {
+              "$ref": "UserProfileItem"
+            }
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getProfiles",
+        "type": "function",
+        "description": "Retrieves import data profiles.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": {"$ref": "ProfileItem"}
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "startImport",
+        "type": "function",
+        "description": "Start import process.",
+        "parameters": [
+          {
+            "name": "itemsToImport",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "serialized_type": "int64"
+            }
+          },
+          {
+            "name": "masterPassword",
+            "type": "string",
+            "optional": true
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setVivaldiAsDefaultBrowser",
+        "type": "function",
+        "description": "Set Vivaldi as the default browser.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "isVivaldiDefaultBrowser",
+        "type": "function",
+        "description": "Is Vivaldi the default browser.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "launchNetworkSettings",
+        "type": "function",
+        "description": "Launch network settings.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "savePage",
+        "type": "function",
+        "description": "Saves web page.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "openPage",
+        "type": "function",
+        "description": "Open web page.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setVivaldiLanguage",
+        "type": "function",
+        "description": "Set Vivaldi language settings.",
+        "parameters": [
+          {
+            "name": "locale",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setDefaultContentSettings",
+        "type": "function",
+        "description": "Set Vivaldi default content settings.",
+        "parameters": [
+          {
+            "name": "contentSetting",
+            "type": "string"
+          },
+          {
+            "name": "value",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getDefaultContentSettings",
+        "type": "function",
+        "description": "Set Vivaldi default content settings.",
+        "parameters": [
+          {
+            "name": "contentSetting",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setBlockThirdPartyCookies",
+        "type": "function",
+        "description": "Set Vivaldi default content settings.",
+        "parameters": [
+          {
+            "name": "block3rdParty",
+            "type": "boolean"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getBlockThirdPartyCookies",
+        "type": "function",
+        "description": "Set Vivaldi default content settings.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "blockThirdParty",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "openTaskManager",
+        "type": "function",
+        "description": "Opens Vivaldi task manager dialog.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "showDevTools",
+        "type": "function",
+        "description": "Open developer tools.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getStartupAction",
+        "type": "function",
+        "description": "Returns the startup action.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setStartupAction",
+        "type": "function",
+        "description": "Returns the startup action.",
+        "parameters": [
+          {
+            "name": "startup",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onImportStarted",
+        "type": "function",
+        "description": "Fired when a import session has started.",
+        "parameters": []
+      },
+      {
+        "name": "onImportEnded",
+        "type": "function",
+        "description": "Fired when a import session has ended.",
+        "parameters": [
+          {
+            "name": "error_count",
+            "type": "integer",
+            "description": "Number of data types that failed to import."
+          }
+        ]
+      },
+      {
+        "name": "onImportItemStarted",
+        "type": "function",
+        "description": "Fired when a import session for a data type has started.",
+        "parameters": [
+          {
+            "name": "item",
+            "type": "string",
+            "description": "Name of data type."
+          }
+        ]
+      },
+      {
+        "name": "onImportItemEnded",
+        "type": "function",
+        "description": "Fired when a import session for a data type has ended.",
+        "parameters": [
+          {
+            "name": "item",
+            "type": "string",
+            "description": "Name of data type."
+          }
+        ]
+      }
+    ]
+  }
+]

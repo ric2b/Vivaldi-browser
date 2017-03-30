@@ -8,10 +8,11 @@
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/android/history_report/usage_report_util.h"
 #include "chrome/browser/android/proto/delta_file.pb.h"
-#include "third_party/leveldatabase/src/include/leveldb/comparator.h"
+#include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
@@ -38,8 +39,11 @@ bool UsageReportsBufferBackend::Init() {
   std::string path = db_file_name_.value();
   leveldb::DB* db = NULL;
   leveldb::Status status = leveldb::DB::Open(options, path, &db);
+  UMA_HISTOGRAM_ENUMERATION("LevelDB.Open.UsageReportsBufferBackend",
+                            leveldb_env::GetLevelDBStatusUMAValue(status),
+                            leveldb_env::LEVELDB_STATUS_MAX);
   if (status.IsCorruption()) {
-    LOG(WARNING) << "Deleting possibly-corrupt database";
+    LOG(ERROR) << "Deleting corrupt database";
     base::DeleteFile(db_file_name_, true);
     status = leveldb::DB::Open(options, path, &db);
   }
@@ -54,8 +58,8 @@ bool UsageReportsBufferBackend::Init() {
 }
 
 void UsageReportsBufferBackend::AddVisit(const std::string& id,
-    int64 timestamp_ms,
-    bool typed_visit) {
+                                         int64_t timestamp_ms,
+                                         bool typed_visit) {
   if (!db_.get()) {
     LOG(WARNING) << "AddVisit db not initilized.";
     return;
@@ -77,7 +81,7 @@ scoped_ptr<std::vector<UsageReport> >
 UsageReportsBufferBackend::GetUsageReportsBatch(int batch_size) {
   scoped_ptr<std::vector<UsageReport> > reports(new std::vector<UsageReport>());
   if (!db_.get()) {
-    return reports.Pass();
+    return reports;
   }
   reports->reserve(batch_size);
   leveldb::ReadOptions options;
@@ -92,7 +96,7 @@ UsageReportsBufferBackend::GetUsageReportsBatch(int batch_size) {
     }
     db_iter->Next();
   }
-  return reports.Pass();
+  return reports;
 }
 
 void UsageReportsBufferBackend::Remove(

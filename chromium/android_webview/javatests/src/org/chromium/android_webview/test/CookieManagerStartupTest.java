@@ -5,7 +5,6 @@
 package org.chromium.android_webview.test;
 
 import android.content.Context;
-import android.os.Build;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 
@@ -15,16 +14,14 @@ import org.chromium.android_webview.AwCookieManager;
 import org.chromium.android_webview.AwWebResourceResponse;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.CookieUtils;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.content.app.ContentMain;
 import org.chromium.net.test.util.TestWebServer;
 
 
 /**
  * Tests for CookieManager/Chromium startup ordering weirdness.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class CookieManagerStartupTest extends AwTestBase {
 
     private TestAwContentsClient mContentsClient;
@@ -33,7 +30,7 @@ public class CookieManagerStartupTest extends AwTestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        ContentMain.initApplicationContext(getActivity().getApplicationContext());
+        ContextUtils.initApplicationContext(getActivity().getApplicationContext());
     }
 
     @Override

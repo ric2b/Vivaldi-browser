@@ -4,7 +4,11 @@
 
 #include "ui/ozone/platform/cast/ozone_platform_cast.h"
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "chromecast/public/cast_egl_platform.h"
 #include "chromecast/public/cast_egl_platform_shlib.h"
 #include "ui/ozone/common/native_display_delegate_ozone.h"
@@ -15,13 +19,16 @@
 #include "ui/ozone/public/cursor_factory_ozone.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
-#include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/ozone_platform.h"  // nogncheck
 #include "ui/ozone/public/system_input_injector.h"
 
 using chromecast::CastEglPlatform;
 
 namespace ui {
 namespace {
+
+base::LazyInstance<scoped_ptr<GpuPlatformSupport>> g_gpu_platform_support =
+    LAZY_INSTANCE_INITIALIZER;
 
 // Ozone platform implementation for Cast.  Implements functionality
 // common to all Cast implementations:
@@ -33,7 +40,7 @@ namespace {
 class OzonePlatformCast : public OzonePlatform {
  public:
   explicit OzonePlatformCast(scoped_ptr<CastEglPlatform> egl_platform)
-      : egl_platform_(egl_platform.Pass()) {}
+      : egl_platform_(std::move(egl_platform)) {}
   ~OzonePlatformCast() override {}
 
   // OzonePlatform implementation:
@@ -50,7 +57,7 @@ class OzonePlatformCast : public OzonePlatform {
     return input_controller_.get();
   }
   GpuPlatformSupport* GetGpuPlatformSupport() override {
-    return gpu_platform_support_.get();
+    return g_gpu_platform_support.Get().get();
   }
   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
     return gpu_platform_support_host_.get();
@@ -67,17 +74,25 @@ class OzonePlatformCast : public OzonePlatform {
   scoped_ptr<NativeDisplayDelegate> CreateNativeDisplayDelegate() override {
     return make_scoped_ptr(new NativeDisplayDelegateOzone());
   }
+  base::ScopedFD OpenClientNativePixmapDevice() const override {
+    return base::ScopedFD();
+  }
 
   void InitializeUI() override {
     overlay_manager_.reset(new OverlayManagerCast());
     cursor_factory_.reset(new CursorFactoryOzone());
     input_controller_ = CreateStubInputController();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
+
+    // Enable dummy software rendering support if GPU process disabled
+    // Note: switch is kDisableGpu from content/public/common/content_switches.h
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch("disable-gpu"))
+      surface_factory_.reset(new SurfaceFactoryCast());
   }
   void InitializeGPU() override {
-    surface_factory_.reset(new SurfaceFactoryCast(egl_platform_.Pass()));
-    gpu_platform_support_.reset(
-        new GpuPlatformSupportCast(surface_factory_.get()));
+    surface_factory_.reset(new SurfaceFactoryCast(std::move(egl_platform_)));
+    g_gpu_platform_support.Get() =
+        make_scoped_ptr(new GpuPlatformSupportCast(surface_factory_.get()));
   }
 
  private:
@@ -85,7 +100,6 @@ class OzonePlatformCast : public OzonePlatform {
   scoped_ptr<SurfaceFactoryCast> surface_factory_;
   scoped_ptr<CursorFactoryOzone> cursor_factory_;
   scoped_ptr<InputController> input_controller_;
-  scoped_ptr<GpuPlatformSupportCast> gpu_platform_support_;
   scoped_ptr<GpuPlatformSupportHost> gpu_platform_support_host_;
   scoped_ptr<OverlayManagerOzone> overlay_manager_;
 
@@ -99,7 +113,7 @@ OzonePlatform* CreateOzonePlatformCast() {
       base::CommandLine::ForCurrentProcess()->argv();
   scoped_ptr<chromecast::CastEglPlatform> platform(
       chromecast::CastEglPlatformShlib::Create(argv));
-  return new OzonePlatformCast(platform.Pass());
+  return new OzonePlatformCast(std::move(platform));
 }
 
 }  // namespace ui

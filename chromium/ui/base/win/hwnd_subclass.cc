@@ -7,8 +7,10 @@
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/singleton.h"
+#include "base/stl_util.h"
 #include "ui/gfx/win/dpi.h"
 #include "ui/gfx/win/hwnd_util.h"
 
@@ -55,8 +57,9 @@ namespace ui {
 class HWNDSubclass::HWNDSubclassFactory {
  public:
   static HWNDSubclassFactory* GetInstance() {
-    return Singleton<HWNDSubclassFactory,
-        LeakySingletonTraits<HWNDSubclassFactory> >::get();
+    return base::Singleton<
+        HWNDSubclassFactory,
+        base::LeakySingletonTraits<HWNDSubclassFactory>>::get();
   }
 
   // Returns a non-null HWNDSubclass corresponding to the HWND |target|. Creates
@@ -77,7 +80,7 @@ class HWNDSubclass::HWNDSubclassFactory {
   }
 
  private:
-  friend struct DefaultSingletonTraits<HWNDSubclassFactory>;
+  friend struct base::DefaultSingletonTraits<HWNDSubclassFactory>;
 
   HWNDSubclassFactory() {}
 
@@ -108,7 +111,7 @@ HWNDSubclass* HWNDSubclass::GetHwndSubclassForTarget(HWND target) {
 
 void HWNDSubclass::AddFilter(HWNDMessageFilter* filter) {
   DCHECK(filter);
-  if (std::find(filters_.begin(), filters_.end(), filter) == filters_.end())
+  if (!ContainsValue(filters_, filter))
     filters_.push_back(filter);
 }
 

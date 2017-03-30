@@ -138,6 +138,14 @@ Value RunForEach(Scope* scope,
                  const ListNode* args_list,
                  Err* err);
 
+extern const char kForwardVariablesFrom[];
+extern const char kForwardVariablesFrom_HelpShort[];
+extern const char kForwardVariablesFrom_Help[];
+Value RunForwardVariablesFrom(Scope* scope,
+                              const FunctionCallNode* function,
+                              const ListNode* args_list,
+                              Err* err);
+
 extern const char kGetEnv[];
 extern const char kGetEnv_HelpShort[];
 extern const char kGetEnv_Help[];
@@ -186,6 +194,15 @@ Value RunImport(Scope* scope,
                 const FunctionCallNode* function,
                 const std::vector<Value>& args,
                 Err* err);
+
+extern const char kLoadableModule[];
+extern const char kLoadableModule_HelpShort[];
+extern const char kLoadableModule_Help[];
+Value RunLoadableModule(Scope* scope,
+                        const FunctionCallNode* function,
+                        const std::vector<Value>& args,
+                        BlockNode* block,
+                        Err* err);
 
 extern const char kPrint[];
 extern const char kPrint_HelpShort[];
@@ -270,6 +287,15 @@ Value RunStaticLibrary(Scope* scope,
                        const std::vector<Value>& args,
                        BlockNode* block,
                        Err* err);
+
+extern const char kTarget[];
+extern const char kTarget_HelpShort[];
+extern const char kTarget_Help[];
+Value RunTarget(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err);
 
 extern const char kTemplate[];
 extern const char kTemplate_HelpShort[];
@@ -412,5 +438,33 @@ const Label& ToolchainLabelForScope(const Scope* scope);
 Label MakeLabelForScope(const Scope* scope,
                         const FunctionCallNode* function,
                         const std::string& name);
+
+// Some tyesp of blocks can't be nested inside other ones. For such cases,
+// instantiate this object upon entering the block and Enter() will fail if
+// there is already another non-nestable block on the stack.
+class NonNestableBlock {
+ public:
+  // type_description is a string that will be used in error messages
+  // describing the type of the block, for example, "template" or "config".
+  NonNestableBlock(Scope* scope,
+                   const FunctionCallNode* function,
+                   const char* type_description);
+  ~NonNestableBlock();
+
+  bool Enter(Err* err);
+
+ private:
+  // Used as a void* key for the Scope to track our property. The actual value
+  // is never used.
+  static const int kKey;
+
+  Scope* scope_;
+  const FunctionCallNode* function_;
+  const char* type_description_;
+
+  // Set to true when the key is added to the scope so we don't try to
+  // delete nonexistant keys which will cause assertions.
+  bool key_added_;
+};
 
 #endif  // TOOLS_GN_FUNCTIONS_H_

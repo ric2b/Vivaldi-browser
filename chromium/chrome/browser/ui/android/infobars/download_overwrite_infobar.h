@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_UI_ANDROID_INFOBARS_DOWNLOAD_OVERWRITE_INFOBAR_H_
 
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/android/infobars/infobar_android.h"
 
 namespace chrome {
@@ -30,7 +30,7 @@ class DownloadOverwriteInfoBar : public InfoBarAndroid {
   // InfoBarAndroid:
   base::android::ScopedJavaLocalRef<jobject> CreateRenderInfoBar(
       JNIEnv* env) override;
-  void ProcessButton(int action, const std::string& action_value) override;
+  void ProcessButton(int action) override;
 
   chrome::android::DownloadOverwriteInfoBarDelegate* GetDelegate();
 

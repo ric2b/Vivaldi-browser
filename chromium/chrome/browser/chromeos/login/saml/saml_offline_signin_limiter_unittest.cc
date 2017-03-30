@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter.h"
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/testing_pref_service.h"
@@ -46,6 +47,9 @@ class SAMLOfflineSigninLimiterTest : public testing::Test {
   void CreateLimiter();
 
   void SetUpUserManager();
+
+  const AccountId test_account_id_ = AccountId::FromUserEmail(kTestUser);
+
   TestingPrefServiceSimple* GetTestingLocalState();
 
   scoped_refptr<base::TestSimpleTaskRunner> runner_;
@@ -69,8 +73,7 @@ SAMLOfflineSigninLimiterTest::SAMLOfflineSigninLimiterTest()
       runner_handle_(runner_),
       user_manager_(new MockUserManager),
       user_manager_enabler_(user_manager_),
-      limiter_(NULL) {
-}
+      limiter_(NULL) {}
 
 SAMLOfflineSigninLimiterTest::~SAMLOfflineSigninLimiterTest() {
   DestroyLimiter();
@@ -103,7 +106,7 @@ void SAMLOfflineSigninLimiterTest::SetUp() {
   profile_.reset(new TestingProfile);
 
   SAMLOfflineSigninLimiterFactory::SetClockForTesting(&clock_);
-  user_manager_->AddUser(kTestUser);
+  user_manager_->AddUser(test_account_id_);
   profile_->set_profile_name(kTestUser);
   clock_.Advance(base::TimeDelta::FromHours(1));
 
@@ -129,8 +132,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLDefaultLimit) {
   // Authenticate against GAIA without SAML. Verify that the flag enforcing
   // online login and the time of last login with SAML are cleared.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML);
 
   const PrefService::Preference* pref =
@@ -149,8 +154,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLDefaultLimit) {
   CreateLimiter();
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_OFFLINE);
 
   pref = prefs->FindPreference(prefs::kSAMLLastGAIASignInTime);
@@ -174,8 +181,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLNoLimit) {
   // Authenticate against GAIA without SAML. Verify that the flag enforcing
   // online login and the time of last login with SAML are cleared.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML);
 
   const PrefService::Preference* pref =
@@ -194,8 +203,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLNoLimit) {
   CreateLimiter();
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_OFFLINE);
 
   pref = prefs->FindPreference(prefs::kSAMLLastGAIASignInTime);
@@ -219,8 +230,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLZeroLimit) {
   // Authenticate against GAIA without SAML. Verify that the flag enforcing
   // online login and the time of last login with SAML are cleared.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML);
 
   const PrefService::Preference* pref =
@@ -239,8 +252,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLZeroLimit) {
   CreateLimiter();
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_OFFLINE);
 
   pref = prefs->FindPreference(prefs::kSAMLLastGAIASignInTime);
@@ -264,8 +279,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLSetLimitWhileLoggedIn) {
   // Authenticate against GAIA without SAML. Verify that the flag enforcing
   // online login and the time of last login with SAML are cleared.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML);
 
   const PrefService::Preference* pref =
@@ -293,8 +310,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLRemoveLimitWhileLoggedIn) {
   // Authenticate against GAIA without SAML. Verify that the flag enforcing
   // online login and the time of last login with SAML are cleared.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML);
 
   const PrefService::Preference* pref =
@@ -325,8 +344,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, NoSAMLLogInWithExpiredLimit) {
   // Authenticate against GAIA without SAML. Verify that the flag enforcing
   // online login and the time of last login with SAML are cleared.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML);
 
   const PrefService::Preference* pref =
@@ -344,8 +365,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLDefaultLimit) {
   // Authenticate against GAIA with SAML. Verify that the flag enforcing online
   // login is cleared and the time of last login with SAML is set.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITH_SAML);
 
   base::Time last_gaia_signin_time = base::Time::FromInternalValue(
@@ -366,8 +389,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLDefaultLimit) {
   CreateLimiter();
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITH_SAML);
 
   last_gaia_signin_time = base::Time::FromInternalValue(
@@ -389,8 +414,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLDefaultLimit) {
   CreateLimiter();
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_OFFLINE);
 
   last_gaia_signin_time = base::Time::FromInternalValue(
@@ -407,8 +434,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLDefaultLimit) {
   // set.
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(1);
   runner_->RunPendingTasks();
 }
 
@@ -421,8 +450,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLNoLimit) {
   // Authenticate against GAIA with SAML. Verify that the flag enforcing online
   // login is cleared and the time of last login with SAML is set.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITH_SAML);
 
   base::Time last_gaia_signin_time = base::Time::FromInternalValue(
@@ -443,8 +474,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLNoLimit) {
   CreateLimiter();
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITH_SAML);
 
   last_gaia_signin_time = base::Time::FromInternalValue(
@@ -466,8 +499,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLNoLimit) {
   CreateLimiter();
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_OFFLINE);
 
   last_gaia_signin_time = base::Time::FromInternalValue(
@@ -489,10 +524,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLZeroLimit) {
   // last login with SAML is set.
   CreateLimiter();
   Sequence sequence;
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false))
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
       .Times(1)
       .InSequence(sequence);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true))
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
       .Times(1)
       .InSequence(sequence);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITH_SAML);
@@ -511,8 +546,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLSetLimitWhileLoggedIn) {
   // Authenticate against GAIA with SAML. Verify that the flag enforcing online
   // login is cleared and the time of last login with SAML is set.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITH_SAML);
 
   const base::Time last_gaia_signin_time = base::Time::FromInternalValue(
@@ -525,8 +562,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLSetLimitWhileLoggedIn) {
   // Set a zero time limit. Verify that the flag enforcing online login is set.
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(1);
   prefs->SetInteger(prefs::kSAMLOfflineSigninTimeLimit, 0);
 }
 
@@ -536,8 +575,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLRemoveLimit) {
   // Authenticate against GAIA with SAML. Verify that the flag enforcing online
   // login is cleared and the time of last login with SAML is set.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITH_SAML);
 
   const base::Time last_gaia_signin_time = base::Time::FromInternalValue(
@@ -554,8 +595,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLRemoveLimit) {
   // changed.
   Mock::VerifyAndClearExpectations(user_manager_);
   SetUpUserManager();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   runner_->RunUntilIdle();
 }
 
@@ -572,8 +615,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLLogInWithExpiredLimit) {
   // Authenticate against GAIA with SAML. Verify that the flag enforcing online
   // login is cleared and the time of last login with SAML is updated.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(1);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(0);
   limiter_->SignedIn(UserContext::AUTH_FLOW_GAIA_WITH_SAML);
 
   const base::Time last_gaia_signin_time = base::Time::FromInternalValue(
@@ -598,8 +643,10 @@ TEST_F(SAMLOfflineSigninLimiterTest, SAMLLogInOfflineWithExpiredLimit) {
   // Authenticate offline. Verify that the flag enforcing online login is
   // set and the time of last login with SAML is not changed.
   CreateLimiter();
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, false)).Times(0);
-  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(kTestUser, true)).Times(1);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, false))
+      .Times(0);
+  EXPECT_CALL(*user_manager_, SaveForceOnlineSignin(test_account_id_, true))
+      .Times(1);
   limiter_->SignedIn(UserContext::AUTH_FLOW_OFFLINE);
 
   const base::Time last_gaia_signin_time = base::Time::FromInternalValue(

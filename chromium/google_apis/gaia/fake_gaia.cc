@@ -4,6 +4,7 @@
 
 #include "google_apis/gaia/fake_gaia.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/base_paths.h"
@@ -66,22 +67,20 @@ const char kAuthHeaderOAuth[] = "OAuth ";
 const char kListAccountsResponseFormat[] =
     "[\"gaia.l.a.r\",[[\"gaia.l.a\",1,\"\",\"%s\",\"\",1,1,0,0,1,\"12345\"]]]";
 
+const char kDummySAMLContinuePath[] = "DummySAMLContinue";
+
 typedef std::map<std::string, std::string> CookieMap;
 
 // Parses cookie name-value map our of |request|.
 CookieMap GetRequestCookies(const HttpRequest& request) {
   CookieMap result;
-  std::map<std::string, std::string>::const_iterator iter =
-           request.headers.find("Cookie");
+  auto iter = request.headers.find("Cookie");
   if (iter != request.headers.end()) {
-    std::vector<std::string> cookie_nv_pairs;
-    base::SplitString(iter->second, ' ', &cookie_nv_pairs);
-    for(std::vector<std::string>::const_iterator cookie_line =
-            cookie_nv_pairs.begin();
-        cookie_line != cookie_nv_pairs.end();
-        ++cookie_line) {
-      std::vector<std::string> name_value;
-      base::SplitString(*cookie_line, '=', &name_value);
+    for (const std::string& cookie_line :
+         base::SplitString(iter->second, " ", base::TRIM_WHITESPACE,
+                           base::SPLIT_WANT_ALL)) {
+      std::vector<std::string> name_value = base::SplitString(
+          cookie_line, "=", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       if (name_value.size() != 2)
         continue;
 
@@ -99,11 +98,10 @@ CookieMap GetRequestCookies(const HttpRequest& request) {
 bool GetAccessToken(const HttpRequest& request,
                     const char* auth_token_prefix,
                     std::string* access_token) {
-  std::map<std::string, std::string>::const_iterator auth_header_entry =
-      request.headers.find("Authorization");
+  auto auth_header_entry = request.headers.find("Authorization");
   if (auth_header_entry != request.headers.end()) {
-    if (base::StartsWithASCII(auth_header_entry->second, auth_token_prefix,
-                              true)) {
+    if (base::StartsWith(auth_header_entry->second, auth_token_prefix,
+                         base::CompareCase::SENSITIVE)) {
       *access_token = auth_header_entry->second.substr(
           strlen(auth_token_prefix));
       return true;
@@ -267,6 +265,10 @@ void FakeGaia::Initialize() {
   // Handles /SSO GAIA call (not GAIA, made up for SAML tests).
   REGISTER_PATH_RESPONSE_HANDLER("/SSO", HandleSSO);
 
+  REGISTER_RESPONSE_HANDLER(
+      gaia_urls->gaia_url().Resolve(kDummySAMLContinuePath),
+      HandleDummySAMLContinue);
+
   // Handles /oauth2/v4/token GAIA call.
   REGISTER_RESPONSE_HANDLER(
       gaia_urls->oauth2_token_url(), HandleAuthToken);
@@ -307,7 +309,7 @@ scoped_ptr<HttpResponse> FakeGaia::HandleRequest(const HttpRequest& request) {
     return scoped_ptr<HttpResponse>();      // Request not understood.
   }
 
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 void FakeGaia::IssueOAuthToken(const std::string& auth_token,
@@ -351,21 +353,24 @@ void FakeGaia::HandleMergeSession(const HttpRequest& request,
     return;
   }
 
+  GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
+  std::string request_query = request_url.query();
+
   std::string uber_token;
-  if (!GetQueryParameter(request.content, "uberauth", &uber_token) ||
+  if (!GetQueryParameter(request_query, "uberauth", &uber_token) ||
       uber_token != merge_session_params_.gaia_uber_token) {
     LOG(ERROR) << "Missing or invalid 'uberauth' param in /MergeSession call";
     return;
   }
 
   std::string continue_url;
-  if (!GetQueryParameter(request.content, "continue", &continue_url)) {
+  if (!GetQueryParameter(request_query, "continue", &continue_url)) {
     LOG(ERROR) << "Missing or invalid 'continue' param in /MergeSession call";
     return;
   }
 
   std::string source;
-  if (!GetQueryParameter(request.content, "source", &source)) {
+  if (!GetQueryParameter(request_query, "source", &source)) {
     LOG(ERROR) << "Missing or invalid 'source' param in /MergeSession call";
     return;
   }
@@ -441,8 +446,8 @@ const FakeGaia::AccessTokenInfo* FakeGaia::FindAccessTokenInfo(
   if (auth_token.empty() || client_id.empty())
     return NULL;
 
-  std::vector<std::string> scope_list;
-  base::SplitString(scope_string, ' ', &scope_list);
+  std::vector<std::string> scope_list = base::SplitString(
+      scope_string, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   ScopeSet scopes(scope_list.begin(), scope_list.end());
 
   for (AccessTokenInfoMap::const_iterator entry(
@@ -480,6 +485,18 @@ void FakeGaia::HandleServiceLogin(const HttpRequest& request,
 
 void FakeGaia::HandleEmbeddedSetupChromeos(const HttpRequest& request,
                                            BasicHttpResponse* http_response) {
+  GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
+
+  std::string client_id;
+  if (!GetQueryParameter(request_url.query(), "client_id", &client_id) ||
+      GaiaUrls::GetInstance()->oauth2_chrome_client_id() != client_id) {
+    LOG(ERROR) << "Missing or invalid param 'client_id' in "
+                  "/embedded/setup/chromeos call";
+    return;
+  }
+
+  GetQueryParameter(request_url.query(), "Email", &prefilled_email_);
+
   http_response->set_code(net::HTTP_OK);
   http_response->set_content(embedded_setup_chromeos_response_);
   http_response->set_content_type("text/html");
@@ -575,9 +592,11 @@ void FakeGaia::HandleEmbeddedLookupAccountLookup(
 
   GURL url(saml_account_idp_map_[email]);
   url = net::AppendQueryParameter(url, "SAMLRequest", "fake_request");
-  url = net::AppendQueryParameter(
-      url, "RelayState",
-      "chrome-extension://mfffpogegjflfpflabcdkioaeobkgjik/success.html");
+  url = net::AppendQueryParameter(url, "RelayState",
+                                  GaiaUrls::GetInstance()
+                                      ->gaia_url()
+                                      .Resolve(kDummySAMLContinuePath)
+                                      .spec());
   std::string redirect_url = url.spec();
   http_response->AddCustomHeader("Google-Accounts-SAML", "Start");
 
@@ -621,6 +640,12 @@ void FakeGaia::HandleSSO(const HttpRequest& request,
 
   if (issue_oauth_code_cookie_)
     SetOAuthCodeCookie(http_response);
+}
+
+void FakeGaia::HandleDummySAMLContinue(const HttpRequest& request,
+                                       BasicHttpResponse* http_response) {
+  http_response->set_content("");
+  http_response->set_code(net::HTTP_OK);
 }
 
 void FakeGaia::HandleAuthToken(const HttpRequest& request,
@@ -708,7 +733,7 @@ void FakeGaia::HandleTokenInfo(const HttpRequest& request,
     response_dict.SetString("user_id", token_info->user_id);
     std::vector<std::string> scope_vector(token_info->scopes.begin(),
                                           token_info->scopes.end());
-    response_dict.SetString("scope", JoinString(scope_vector, " "));
+    response_dict.SetString("scope", base::JoinString(scope_vector, " "));
     response_dict.SetInteger("expires_in", token_info->expires_in);
     response_dict.SetString("email", token_info->email);
     FormatJSONResponse(response_dict, http_response);

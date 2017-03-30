@@ -5,10 +5,14 @@
 #ifndef UI_ACCESSIBILITY_AX_TREE_H_
 #define UI_ACCESSIBILITY_AX_TREE_H_
 
+#include <stdint.h>
+
 #include <set>
 
 #include "base/containers/hash_tables.h"
 #include "ui/accessibility/ax_export.h"
+#include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/ax_tree_update.h"
 
 namespace ui {
@@ -36,6 +40,9 @@ class AX_EXPORT AXTreeDelegate {
  public:
   AXTreeDelegate();
   virtual ~AXTreeDelegate();
+
+  // Called when tree data changes.
+  virtual void OnTreeDataChanged(AXTree* tree) = 0;
 
   // Called just before a node is deleted. Its id and data will be valid,
   // but its links to parents and children are invalid. This is called
@@ -95,13 +102,17 @@ class AX_EXPORT AXTree {
 
   AXNode* root() const { return root_; }
 
+  const AXTreeData& data() const { return data_; }
+
   // Returns the AXNode with the given |id| if it is part of this AXTree.
-  AXNode* GetFromId(int32 id) const;
+  AXNode* GetFromId(int32_t id) const;
 
   // Returns true on success. If it returns false, it's a fatal error
   // and this tree should be destroyed, and the source of the tree update
   // should not be trusted any longer.
   virtual bool Unserialize(const AXTreeUpdate& update);
+
+  virtual void UpdateData(const AXTreeData& data);
 
   // Return a multi-line indented string representation, for logging.
   std::string ToString() const;
@@ -113,7 +124,7 @@ class AX_EXPORT AXTree {
   int size() { return static_cast<int>(id_map_.size()); }
 
  private:
-  AXNode* CreateNode(AXNode* parent, int32 id, int32 index_in_parent);
+  AXNode* CreateNode(AXNode* parent, int32_t id, int32_t index_in_parent);
 
   // This is called from within Unserialize(), it returns true on success.
   bool UpdateNode(const AXNodeData& src, AXTreeUpdateState* update_state);
@@ -132,7 +143,7 @@ class AX_EXPORT AXTree {
   // child and its subtree if its id is not in |new_child_ids|. Returns
   // true on success, false on fatal error.
   bool DeleteOldChildren(AXNode* node,
-                         const std::vector<int32>& new_child_ids,
+                         const std::vector<int32_t>& new_child_ids,
                          AXTreeUpdateState* update_state);
 
   // Iterate over |new_child_ids| and populate |new_children| with
@@ -141,14 +152,15 @@ class AX_EXPORT AXTree {
   // if the id already exists as the child of another node, that's an
   // error. Returns true on success, false on fatal error.
   bool CreateNewChildVector(AXNode* node,
-                            const std::vector<int32>& new_child_ids,
+                            const std::vector<int32_t>& new_child_ids,
                             std::vector<AXNode*>* new_children,
                             AXTreeUpdateState* update_state);
 
   AXTreeDelegate* delegate_;
   AXNode* root_;
-  base::hash_map<int32, AXNode*> id_map_;
+  base::hash_map<int32_t, AXNode*> id_map_;
   std::string error_;
+  AXTreeData data_;
 };
 
 }  // namespace ui

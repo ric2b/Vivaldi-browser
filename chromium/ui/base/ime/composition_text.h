@@ -5,6 +5,8 @@
 #ifndef UI_BASE_IME_COMPOSITION_TEXT_H_
 #define UI_BASE_IME_COMPOSITION_TEXT_H_
 
+#include <stddef.h>
+
 #include "base/strings/string16.h"
 #include "ui/base/ime/composition_underline.h"
 #include "ui/base/ime/ui_base_ime_export.h"
@@ -34,6 +36,8 @@ struct UI_BASE_IME_EXPORT CompositionText {
   }
 
   void Clear();
+
+  void CopyFrom(const CompositionText& obj);
 
   // Content of the composition text.
   base::string16 text;

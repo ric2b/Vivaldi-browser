@@ -5,8 +5,12 @@
 #ifndef MEDIA_FILTERS_DECRYPTING_VIDEO_DECODER_H_
 #define MEDIA_FILTERS_DECRYPTING_VIDEO_DECODER_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "media/base/cdm_context.h"
 #include "media/base/decryptor.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_decoder_config.h"
@@ -30,7 +34,6 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
   DecryptingVideoDecoder(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       const scoped_refptr<MediaLog>& media_log,
-      const SetDecryptorReadyCB& set_decryptor_ready_cb,
       const base::Closure& waiting_for_decryption_key_cb);
   ~DecryptingVideoDecoder() override;
 
@@ -38,6 +41,7 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
   std::string GetDisplayName() const override;
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
+                  const SetCdmReadyCB& set_cdm_ready_cb,
                   const InitCB& init_cb,
                   const OutputCB& output_cb) override;
   void Decode(const scoped_refptr<DecoderBuffer>& buffer,
@@ -61,10 +65,9 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
     kError
   };
 
-  // Callback for DecryptorHost::RequestDecryptor(). |decryptor_attached_cb| is
-  // called when the decryptor has been completely attached to the pipeline.
-  void SetDecryptor(Decryptor* decryptor,
-                    const DecryptorAttachedCB& decryptor_attached_cb);
+  // Callback to set CDM. |cdm_attached_cb| is called when the decryptor in the
+  // CDM has been completely attached to the pipeline.
+  void SetCdm(CdmContext* cdm_context, const CdmAttachedCB& cdm_attached_cb);
 
   // Callback for Decryptor::InitializeVideoDecoder() during initialization.
   void FinishInitialization(bool success);
@@ -97,8 +100,8 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
 
   VideoDecoderConfig config_;
 
-  // Callback to request/cancel decryptor creation notification.
-  SetDecryptorReadyCB set_decryptor_ready_cb_;
+  // Callback to request/cancel CDM ready notification.
+  SetCdmReadyCB set_cdm_ready_cb_;
 
   Decryptor* decryptor_;
 
@@ -114,7 +117,7 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
 
   // A unique ID to trace Decryptor::DecryptAndDecodeVideo() call and the
   // matching DecryptCB call (in DoDeliverFrame()).
-  uint32 trace_id_;
+  uint32_t trace_id_;
 
   base::WeakPtr<DecryptingVideoDecoder> weak_this_;
   base::WeakPtrFactory<DecryptingVideoDecoder> weak_factory_;

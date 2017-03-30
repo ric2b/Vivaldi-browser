@@ -9,7 +9,6 @@
 #include "cc/output/compositor_frame_ack.h"
 #include "cc/output/filter_operation.h"
 #include "cc/output/viewport_selection_bound.h"
-#include "cc/quads/checkerboard_draw_quad.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/io_surface_draw_quad.h"
@@ -111,14 +110,6 @@ struct CONTENT_EXPORT ParamTraits<cc::DelegatedFrameData> {
 };
 
 template <>
-struct CONTENT_EXPORT ParamTraits<cc::SoftwareFrameData> {
-  typedef cc::SoftwareFrameData param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, base::PickleIterator* iter, param_type* p);
-  static void Log(const param_type& p, std::string* l);
-};
-
-template <>
 struct CONTENT_EXPORT ParamTraits<cc::DrawQuad::Resources> {
   typedef cc::DrawQuad::Resources param_type;
   static void Write(Message* m, const param_type& p);
@@ -184,12 +175,6 @@ IPC_STRUCT_TRAITS_BEGIN(cc::DrawQuad)
   IPC_STRUCT_TRAITS_MEMBER(visible_rect)
   IPC_STRUCT_TRAITS_MEMBER(needs_blending)
   IPC_STRUCT_TRAITS_MEMBER(resources)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(cc::CheckerboardDrawQuad)
-  IPC_STRUCT_TRAITS_PARENT(cc::DrawQuad)
-  IPC_STRUCT_TRAITS_MEMBER(color)
-  IPC_STRUCT_TRAITS_MEMBER(scale)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(cc::DebugBorderDrawQuad)
@@ -281,14 +266,13 @@ IPC_STRUCT_TRAITS_BEGIN(cc::TransferableResource)
   IPC_STRUCT_TRAITS_MEMBER(size)
   IPC_STRUCT_TRAITS_MEMBER(mailbox_holder)
   IPC_STRUCT_TRAITS_MEMBER(read_lock_fences_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(is_repeated)
   IPC_STRUCT_TRAITS_MEMBER(is_software)
-  IPC_STRUCT_TRAITS_MEMBER(allow_overlay)
+  IPC_STRUCT_TRAITS_MEMBER(is_overlay_candidate)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(cc::ReturnedResource)
   IPC_STRUCT_TRAITS_MEMBER(id)
-  IPC_STRUCT_TRAITS_MEMBER(sync_point)
+  IPC_STRUCT_TRAITS_MEMBER(sync_token)
   IPC_STRUCT_TRAITS_MEMBER(count)
   IPC_STRUCT_TRAITS_MEMBER(lost)
 IPC_STRUCT_TRAITS_END()
@@ -330,14 +314,16 @@ IPC_STRUCT_TRAITS_BEGIN(cc::CompositorFrameMetadata)
   IPC_STRUCT_TRAITS_MEMBER(root_overflow_y_hidden)
   IPC_STRUCT_TRAITS_MEMBER(location_bar_offset)
   IPC_STRUCT_TRAITS_MEMBER(location_bar_content_translation)
+  IPC_STRUCT_TRAITS_MEMBER(root_background_color)
   IPC_STRUCT_TRAITS_MEMBER(selection)
   IPC_STRUCT_TRAITS_MEMBER(latency_info)
   IPC_STRUCT_TRAITS_MEMBER(satisfies_sequences)
+  IPC_STRUCT_TRAITS_MEMBER(referenced_surfaces)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(cc::GLFrameData)
   IPC_STRUCT_TRAITS_MEMBER(mailbox)
-  IPC_STRUCT_TRAITS_MEMBER(sync_point)
+  IPC_STRUCT_TRAITS_MEMBER(sync_token)
   IPC_STRUCT_TRAITS_MEMBER(size)
   IPC_STRUCT_TRAITS_MEMBER(sub_buffer_rect)
 IPC_STRUCT_TRAITS_END()

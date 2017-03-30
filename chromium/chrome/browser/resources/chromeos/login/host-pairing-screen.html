@@ -4,7 +4,7 @@
 
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-iconset-svg/iron-iconset-svg.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/device-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/animations/fade-in-animation.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/animations/fade-out-animation.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable-behavior.html">
@@ -12,16 +12,6 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-icon-item.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
-
-<iron-iconset-svg name="host-pairing-icons" size="48">
-  <svg>
-    <defs>
-      <g id="cast">
-        <include src="../../../../app/theme/cast_icon.svg">
-      </g>
-    </defs>
-  </svg>
-</iron-iconset-svg>
 
 <dom-module name="host-pairing-page">
 
@@ -45,22 +35,45 @@
     <neon-animated-pages attr-for-selected="name" selected="[[C.page]]"
         entry-animation="fade-in-animation" exit-animation="fade-out-animation">
       <host-pairing-page name="welcome">
-        <div class="title" i18n-content="login_HostPairingScreen_welcomeTitle">
+        <div class="title" i18n-content="loginHostPairingScreenWelcomeTitle">
         </div>
-        <div i18n-content="login_HostPairingScreen_welcomeText"></div>
+        <div i18n-content="loginHostPairingScreenWelcomeText"></div>
+      </host-pairing-page>
+      <host-pairing-page name="initialization-error">
+        <div class="title"
+            i18n-content="loginHostPairingScreenInitializationErrorTitle">
+        </div>
+        <div i18n-content="loginHostPairingScreenErrorNeedRestartText"></div>
       </host-pairing-page>
       <host-pairing-page name="code-confirmation">
         <div class="title"
-            i18n-content="login_HostPairingScreen_confirmationTitle">
+            i18n-content="loginHostPairingScreenConfirmationTitle">
         </div>
         <div id="code">{{C.code}}</div>
       </host-pairing-page>
+      <host-pairing-page name="connection-error">
+        <div class="title"
+            i18n-content="loginHostPairingScreenConnectionErrorTitle">
+        </div>
+        <div i18n-content="loginHostPairingScreenErrorNeedRestartText"></div>
+      </host-pairing-page>
+      <host-pairing-page name="setup-basic-configuration">
+        <div class="title"
+            i18n-content="loginHostPairingScreenSetupBasicConfigTitle">
+        </div>
+      </host-pairing-page>
+      <host-pairing-page name="setup-network-error">
+        <div class="title"
+            i18n-content="loginHostPairingScreenSetupNetworkErrorTitle">
+        </div>
+        <div i18n-content="loginHostPairingScreenErrorNeedRestartText"></div>
+      </host-pairing-page>
       <host-pairing-page name="update">
-        <div class="title" i18n-content="login_HostPairingScreen_updatingTitle">
+        <div class="title" i18n-content="loginHostPairingScreenUpdatingTitle">
         </div>
       </host-pairing-page>
       <host-pairing-page name="enrollment-introduction">
-        <div class="title" i18n-content="login_HostPairingScreen_enrollTitle">
+        <div class="title" i18n-content="loginHostPairingScreenEnrollTitle">
         </div>
       </host-pairing-page>
       <host-pairing-page name="enrollment">
@@ -73,18 +86,18 @@
       </host-pairing-page>
       <host-pairing-page name="enrollment-error">
         <div class="title"
-            i18n-content="login_HostPairingScreen_enrollmentErrorTitle">
+            i18n-content="loginHostPairingScreenEnrollmentErrorTitle">
         </div>
-        <div i18n-content="login_HostPairingScreen_errorNeedsRestart"></div>
+        <div i18n-content="loginHostPairingScreenErrorNeedRestartText"></div>
       </host-pairing-page>
       <host-pairing-page name="pairing-done">
-        <div class="title" i18n-content="login_HostPairingScreen_doneTitle">
+        <div class="title" i18n-content="loginHostPairingScreenDoneTitle">
         </div>
-        <div i18n-content="login_HostPairingScreen_doneText"></div>
+        <div i18n-content="loginHostPairingScreenDoneText"></div>
       </host-pairing-page>
     </neon-animated-pages>
     <paper-icon-item id="device-indicator">
-      <iron-icon icon="host-pairing-icons:cast" item-icon></iron-icon>
+      <iron-icon icon="device:bluetooth"></iron-icon>
       <div id="device-label">{{C.deviceName}}</div>
     </paper-icon-item>
     <div id="illustration"></div>

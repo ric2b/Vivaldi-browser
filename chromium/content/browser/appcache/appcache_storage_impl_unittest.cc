@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/appcache/appcache_storage_impl.h"
+
+#include <stdint.h>
 #include <stack>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -10,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
@@ -24,7 +29,6 @@
 #include "content/browser/appcache/appcache_interceptor.h"
 #include "content/browser/appcache/appcache_request_handler.h"
 #include "content/browser/appcache/appcache_service_impl.h"
-#include "content/browser/appcache/appcache_storage_impl.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
@@ -100,16 +104,16 @@ class MockHttpServer {
                               std::string* headers,
                               std::string* body) {
     const char manifest_headers[] =
-        "HTTP/1.1 200 OK\0"
-        "Content-type: text/cache-manifest\0"
-        "\0";
+        "HTTP/1.1 200 OK\n"
+        "Content-type: text/cache-manifest\n"
+        "\n";
     const char page_headers[] =
-        "HTTP/1.1 200 OK\0"
-        "Content-type: text/html\0"
-        "\0";
+        "HTTP/1.1 200 OK\n"
+        "Content-type: text/html\n"
+        "\n";
     const char not_found_headers[] =
-        "HTTP/1.1 404 NOT FOUND\0"
-        "\0";
+        "HTTP/1.1 404 NOT FOUND\n"
+        "\n";
 
     if (path == "/manifest") {
       (*headers) = std::string(manifest_headers, arraysize(manifest_headers));
@@ -129,9 +133,8 @@ class MockHttpServerJobFactory
     : public net::URLRequestJobFactory::ProtocolHandler {
  public:
   MockHttpServerJobFactory(
-     scoped_ptr<net::URLRequestInterceptor> appcache_start_interceptor)
-     : appcache_start_interceptor_(appcache_start_interceptor.Pass()) {
-  }
+      scoped_ptr<net::URLRequestInterceptor> appcache_start_interceptor)
+      : appcache_start_interceptor_(std::move(appcache_start_interceptor)) {}
 
   net::URLRequestJob* MaybeCreateJob(
       net::URLRequest* request,
@@ -163,10 +166,9 @@ class IOThread : public base::Thread {
     scoped_ptr<net::URLRequestJobFactoryImpl> factory(
         new net::URLRequestJobFactoryImpl());
     factory->SetProtocolHandler(
-        "http",
-        new MockHttpServerJobFactory(
-            make_scoped_ptr(new AppCacheInterceptor())));
-    job_factory_ = factory.Pass();
+        "http", make_scoped_ptr(new MockHttpServerJobFactory(
+                    make_scoped_ptr(new AppCacheInterceptor()))));
+    job_factory_ = std::move(factory);
     request_context_.reset(new net::TestURLRequestContext());
     request_context_->set_job_factory(job_factory_.get());
   }
@@ -196,7 +198,7 @@ class AppCacheStorageImplTest : public testing::Test {
           found_cache_id_(kAppCacheNoCacheId), test_(test) {
     }
 
-    void OnCacheLoaded(AppCache* cache, int64 cache_id) override {
+    void OnCacheLoaded(AppCache* cache, int64_t cache_id) override {
       loaded_cache_ = cache;
       loaded_cache_id_ = cache_id;
       test_->ScheduleNextTask();
@@ -233,8 +235,8 @@ class AppCacheStorageImplTest : public testing::Test {
                              const AppCacheEntry& entry,
                              const GURL& namespace_entry_url,
                              const AppCacheEntry& fallback_entry,
-                             int64 cache_id,
-                             int64 group_id,
+                             int64_t cache_id,
+                             int64_t group_id,
                              const GURL& manifest_url) override {
       found_url_ = url;
       found_entry_ = entry;
@@ -247,7 +249,7 @@ class AppCacheStorageImplTest : public testing::Test {
     }
 
     scoped_refptr<AppCache> loaded_cache_;
-    int64 loaded_cache_id_;
+    int64_t loaded_cache_id_;
     scoped_refptr<AppCacheGroup> loaded_group_;
     GURL loaded_manifest_url_;
     scoped_refptr<AppCache> loaded_groups_newest_cache_;
@@ -260,8 +262,8 @@ class AppCacheStorageImplTest : public testing::Test {
     AppCacheEntry found_entry_;
     GURL found_namespace_entry_url_;
     AppCacheEntry found_fallback_entry_;
-    int64 found_cache_id_;
-    int64 found_group_id_;
+    int64_t found_cache_id_;
+    int64_t found_group_id_;
     GURL found_manifest_url_;
     AppCacheStorageImplTest* test_;
   };
@@ -322,7 +324,7 @@ class AppCacheStorageImplTest : public testing::Test {
     void NotifyStorageModified(storage::QuotaClient::ID client_id,
                                const GURL& origin,
                                storage::StorageType type,
-                               int64 delta) override {
+                               int64_t delta) override {
       EXPECT_EQ(storage::QuotaClient::kAppcache, client_id);
       EXPECT_EQ(storage::kStorageTypeTemporary, type);
       ++notify_storage_modified_count_;
@@ -392,8 +394,7 @@ class AppCacheStorageImplTest : public testing::Test {
 
   // Test harness --------------------------------------------------
 
-  AppCacheStorageImplTest() {
-  }
+  AppCacheStorageImplTest() { request_delegate_.set_quit_on_complete(false); }
 
   template <class Method>
   void RunTestOnIOThread(Method method) {
@@ -494,7 +495,7 @@ class AppCacheStorageImplTest : public testing::Test {
 
     // Setup some preconditions. Make an 'unstored' cache for
     // us to load. The ctor should put it in the working set.
-    int64 cache_id = storage()->NewCacheId();
+    int64_t cache_id = storage()->NewCacheId();
     scoped_refptr<AppCache> cache(new AppCache(storage(), cache_id));
 
     // Conduct the test.
@@ -765,7 +766,7 @@ class AppCacheStorageImplTest : public testing::Test {
 
     // Setup some preconditions. Create a group and newest cache that
     // appear to be "unstored" and big enough to exceed the 5M limit.
-    const int64 kTooBig = 10 * 1024 * 1024;  // 10M
+    const int64_t kTooBig = 10 * 1024 * 1024;  // 10M
     group_ = new AppCacheGroup(
         storage(), kManifestUrl, storage()->NewGroupId());
     cache_ = new AppCache(storage(), storage()->NewCacheId());
@@ -1766,7 +1767,7 @@ class AppCacheStorageImplTest : public testing::Test {
       AppCacheHost* host2 = backend_->GetHost(2);
       GURL manifest_url = MockHttpServer::GetMockUrl("manifest");
       request_ = service()->request_context()->CreateRequest(
-          manifest_url, net::DEFAULT_PRIORITY, NULL);
+          manifest_url, net::DEFAULT_PRIORITY, &request_delegate_);
       AppCacheInterceptor::SetExtraRequestInfo(
           request_.get(), service_.get(),
           backend_->process_id(), host2->host_id(),
@@ -1838,9 +1839,10 @@ class AppCacheStorageImplTest : public testing::Test {
     return delegate_.get();
   }
 
-  void MakeCacheAndGroup(
-      const GURL& manifest_url, int64 group_id, int64 cache_id,
-      bool add_to_database) {
+  void MakeCacheAndGroup(const GURL& manifest_url,
+                         int64_t group_id,
+                         int64_t cache_id,
+                         bool add_to_database) {
     AppCacheEntry default_entry(
         AppCacheEntry::EXPLICIT, cache_id + kDefaultEntryIdOffset,
         kDefaultEntrySize);
@@ -1891,6 +1893,7 @@ class AppCacheStorageImplTest : public testing::Test {
   scoped_ptr<MockServiceObserver> observer_;
   MockAppCacheFrontend frontend_;
   scoped_ptr<AppCacheBackendImpl> backend_;
+  net::TestDelegate request_delegate_;
   scoped_ptr<net::URLRequest> request_;
 };
 

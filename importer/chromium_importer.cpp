@@ -8,47 +8,40 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
+#include "base/path_service.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/string_tokenizer.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_tokenizer.h"
-#include "base/path_service.h"
 #include "chrome/common/ini_parser.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/browser/shell_integration.h"
-#include "grit/generated_resources.h"
-#include "ui/base/l10n/l10n_util.h"
-
-
-#include "base/strings/utf_string_conversions.h"
-#include "base/path_service.h"
-#include "base/json/json_reader.h"
-#include "base/values.h"
-#include "importer/chrome_importer_utils.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/os_crypt/os_crypt.h"
+#include "grit/generated_resources.h"
+#include "importer/chrome_importer_utils.h"
 #include "sql/connection.h"
 #include "sql/statement.h"
-#include "components/os_crypt/os_crypt.h"
+#include "ui/base/l10n/l10n_util.h"
 
-ChromiumImporter::ChromiumImporter(){
+ChromiumImporter::ChromiumImporter() {
+}
+
+ChromiumImporter::~ChromiumImporter() {
 }
 
 
-ChromiumImporter::~ChromiumImporter()
-{
-}
-
-
-ChromiumImporter::ChromiumImporter(const importer::ImportConfig &import_config)
-{
+ChromiumImporter::ChromiumImporter(const importer::ImportConfig &import_config) {
 }
 
 void ChromiumImporter::StartImport(
     const importer::SourceProfile& source_profile,
-    uint16 items,
+    uint16_t items,
     ImporterBridge* bridge) {
   bridge_ = bridge;
   std::string name = source_profile.selected_profile_name;

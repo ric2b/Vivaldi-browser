@@ -5,9 +5,12 @@
 #include "sandbox/win/src/broker_services.h"
 
 #include <AclAPI.h>
+#include <stddef.h>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/stl_util.h"
 #include "base/threading/platform_thread.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_process_information.h"
@@ -15,8 +18,8 @@
 #include "base/win/windows_version.h"
 #include "sandbox/win/src/app_container.h"
 #include "sandbox/win/src/process_mitigations.h"
-#include "sandbox/win/src/sandbox_policy_base.h"
 #include "sandbox/win/src/sandbox.h"
+#include "sandbox/win/src/sandbox_policy_base.h"
 #include "sandbox/win/src/target_process.h"
 #include "sandbox/win/src/win2k_threadpool.h"
 #include "sandbox/win/src/win_utils.h"
@@ -55,22 +58,47 @@ enum {
 // Helper structure that allows the Broker to associate a job notification
 // with a job object and with a policy.
 struct JobTracker {
-  HANDLE job;
-  sandbox::PolicyBase* policy;
-  JobTracker(HANDLE cjob, sandbox::PolicyBase* cpolicy)
-      : job(cjob), policy(cpolicy) {
+  JobTracker(base::win::ScopedHandle job, sandbox::PolicyBase* policy)
+      : job(job.Pass()), policy(policy) {
   }
+  ~JobTracker() {
+    FreeResources();
+  }
+
+  // Releases the Job and notifies the associated Policy object to release its
+  // resources as well.
+  void FreeResources();
+
+  base::win::ScopedHandle job;
+  sandbox::PolicyBase* policy;
 };
+
+void JobTracker::FreeResources() {
+  if (policy) {
+    BOOL res = ::TerminateJobObject(job.Get(), sandbox::SBOX_ALL_OK);
+    DCHECK(res);
+    // Closing the job causes the target process to be destroyed so this needs
+    // to happen before calling OnJobEmpty().
+    HANDLE stale_job_handle = job.Get();
+    job.Close();
+
+    // In OnJobEmpty() we don't actually use the job handle directly.
+    policy->OnJobEmpty(stale_job_handle);
+    policy->Release();
+    policy = NULL;
+  }
+}
 
 // Helper structure that allows the broker to track peer processes
 struct PeerTracker {
+  PeerTracker(DWORD process_id, HANDLE broker_job_port)
+      : wait_object(NULL), id(process_id), job_port(broker_job_port) {
+  }
+
   HANDLE wait_object;
   base::win::ScopedHandle process;
   DWORD id;
   HANDLE job_port;
-  PeerTracker(DWORD process_id, HANDLE broker_job_port)
-      : wait_object(NULL), id(process_id), job_port(broker_job_port) {
-  }
 };
 
 void DeregisterPeerTracker(PeerTracker* peer) {
@@ -82,72 +110,30 @@ void DeregisterPeerTracker(PeerTracker* peer) {
   }
 }
 
-// Utility function to determine whether a token for the specified policy can
-// be cached.
-bool IsTokenCacheable(const sandbox::PolicyBase* policy) {
-  const sandbox::AppContainerAttributes* app_container =
-      policy->GetAppContainer();
-
-  // We cannot cache tokens with an app container or lowbox.
-  if (app_container || policy->GetLowBoxSid())
-    return false;
-
-  return true;
-}
-
-// Utility function to pack token values into a key for the cache map.
-uint32_t GenerateTokenCacheKey(const sandbox::PolicyBase* policy) {
-  const size_t kTokenShift = 3;
-  uint32_t key;
-
-  DCHECK(IsTokenCacheable(policy));
-
-  // Make sure our token values aren't too large to pack into the key.
-  static_assert(sandbox::USER_LAST <= (1 << kTokenShift),
-                "TokenLevel too large");
-  static_assert(sandbox::INTEGRITY_LEVEL_LAST <= (1 << kTokenShift),
-                "IntegrityLevel too large");
-  static_assert(sizeof(key) < (kTokenShift * 3),
-                "Token key type too small");
-
-  // The key is the enum values shifted to avoid overlap and OR'd together.
-  key = policy->GetInitialTokenLevel();
-  key <<= kTokenShift;
-  key |= policy->GetLockdownTokenLevel();
-  key <<= kTokenShift;
-  key |= policy->GetIntegrityLevel();
-
-  return key;
-}
-
 }  // namespace
 
 namespace sandbox {
 
-BrokerServicesBase::BrokerServicesBase()
-    : job_port_(NULL),
-      no_targets_(NULL),
-      job_thread_(NULL),
-      thread_pool_(NULL) {
+BrokerServicesBase::BrokerServicesBase() : thread_pool_(NULL) {
 }
 
 // The broker uses a dedicated worker thread that services the job completion
 // port to perform policy notifications and associated cleanup tasks.
 ResultCode BrokerServicesBase::Init() {
-  if ((NULL != job_port_) || (NULL != thread_pool_))
+  if (job_port_.IsValid() || (NULL != thread_pool_))
     return SBOX_ERROR_UNEXPECTED_CALL;
 
   ::InitializeCriticalSection(&lock_);
 
-  job_port_ = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-  if (NULL == job_port_)
+  job_port_.Set(::CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0));
+  if (!job_port_.IsValid())
     return SBOX_ERROR_GENERIC;
 
-  no_targets_ = ::CreateEventW(NULL, TRUE, FALSE, NULL);
+  no_targets_.Set(::CreateEventW(NULL, TRUE, FALSE, NULL));
 
-  job_thread_ = ::CreateThread(NULL, 0,  // Default security and stack.
-                               TargetEventsThread, this, NULL, NULL);
-  if (NULL == job_thread_)
+  job_thread_.Set(::CreateThread(NULL, 0,  // Default security and stack.
+                                 TargetEventsThread, this, NULL, NULL));
+  if (!job_thread_.IsValid())
     return SBOX_ERROR_GENERIC;
 
   return SBOX_ALL_OK;
@@ -160,31 +146,24 @@ ResultCode BrokerServicesBase::Init() {
 // wait for threads here.
 BrokerServicesBase::~BrokerServicesBase() {
   // If there is no port Init() was never called successfully.
-  if (!job_port_)
+  if (!job_port_.IsValid())
     return;
 
   // Closing the port causes, that no more Job notifications are delivered to
   // the worker thread and also causes the thread to exit. This is what we
   // want to do since we are going to close all outstanding Jobs and notifying
   // the policy objects ourselves.
-  ::PostQueuedCompletionStatus(job_port_, 0, THREAD_CTRL_QUIT, FALSE);
-  ::CloseHandle(job_port_);
+  ::PostQueuedCompletionStatus(job_port_.Get(), 0, THREAD_CTRL_QUIT, FALSE);
 
-  if (WAIT_TIMEOUT == ::WaitForSingleObject(job_thread_, 1000)) {
+  if (job_thread_.IsValid() &&
+      WAIT_TIMEOUT == ::WaitForSingleObject(job_thread_.Get(), 1000)) {
     // Cannot clean broker services.
     NOTREACHED();
     return;
   }
 
-  JobTrackerList::iterator it;
-  for (it = tracker_list_.begin(); it != tracker_list_.end(); ++it) {
-    JobTracker* tracker = (*it);
-    FreeResources(tracker);
-    delete tracker;
-  }
-  ::CloseHandle(job_thread_);
+  STLDeleteElements(&tracker_list_);
   delete thread_pool_;
-  ::CloseHandle(no_targets_);
 
   // Cancel the wait events and delete remaining peer trackers.
   for (PeerTrackerMap::iterator it = peer_map_.begin();
@@ -192,37 +171,13 @@ BrokerServicesBase::~BrokerServicesBase() {
     DeregisterPeerTracker(it->second);
   }
 
-  // If job_port_ isn't NULL, assumes that the lock has been initialized.
-  if (job_port_)
-    ::DeleteCriticalSection(&lock_);
-
-  // Close any token in the cache.
-  for (TokenCacheMap::iterator it = token_cache_.begin();
-       it != token_cache_.end(); ++it) {
-    ::CloseHandle(it->second.first);
-    ::CloseHandle(it->second.second);
-  }
+  ::DeleteCriticalSection(&lock_);
 }
 
 TargetPolicy* BrokerServicesBase::CreatePolicy() {
   // If you change the type of the object being created here you must also
   // change the downcast to it in SpawnTarget().
   return new PolicyBase;
-}
-
-void BrokerServicesBase::FreeResources(JobTracker* tracker) {
-  if (NULL != tracker->policy) {
-    BOOL res = ::TerminateJobObject(tracker->job, SBOX_ALL_OK);
-    DCHECK(res);
-    // Closing the job causes the target process to be destroyed so this
-    // needs to happen before calling OnJobEmpty().
-    res = ::CloseHandle(tracker->job);
-    DCHECK(res);
-    // In OnJobEmpty() we don't actually use the job handle directly.
-    tracker->policy->OnJobEmpty(tracker->job);
-    tracker->policy->Release();
-    tracker->policy = NULL;
-  }
 }
 
 // The worker thread stays in a loop waiting for asynchronous notifications
@@ -236,8 +191,8 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
   base::PlatformThread::SetName("BrokerEvent");
 
   BrokerServicesBase* broker = reinterpret_cast<BrokerServicesBase*>(param);
-  HANDLE port = broker->job_port_;
-  HANDLE no_targets = broker->no_targets_;
+  HANDLE port = broker->job_port_.Get();
+  HANDLE no_targets = broker->no_targets_.Get();
 
   int target_counter = 0;
   ::ResetEvent(no_targets);
@@ -247,11 +202,12 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
     ULONG_PTR key = 0;
     LPOVERLAPPED ovl = NULL;
 
-    if (!::GetQueuedCompletionStatus(port, &events, &key, &ovl, INFINITE))
+    if (!::GetQueuedCompletionStatus(port, &events, &key, &ovl, INFINITE)) {
       // this call fails if the port has been closed before we have a
       // chance to service the last packet which is 'exit' anyway so
       // this is not an error.
       return 1;
+    }
 
     if (key > THREAD_CTRL_LAST) {
       // The notification comes from a job object. There are nine notifications
@@ -265,7 +221,7 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
           // to appear out of thin air in this job, it safe to assume that
           // we can tell the policy to destroy the target object, and for
           // us to release our reference to the policy object.
-          FreeResources(tracker);
+          tracker->FreeResources();
           break;
         }
 
@@ -297,7 +253,7 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
         }
 
         case JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT: {
-          BOOL res = ::TerminateJobObject(tracker->job,
+          BOOL res = ::TerminateJobObject(tracker->job.Get(),
                                           SBOX_FATAL_MEMORY_EXCEEDED);
           DCHECK(res);
           break;
@@ -359,53 +315,18 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   // with the soon to be created target process.
   base::win::ScopedHandle initial_token;
   base::win::ScopedHandle lockdown_token;
+  base::win::ScopedHandle lowbox_token;
   ResultCode result = SBOX_ALL_OK;
 
-  if (IsTokenCacheable(policy_base)) {
-    // Create the master tokens only once and save them in a cache. That way
-    // can just duplicate them to avoid hammering LSASS on every sandboxed
-    // process launch.
-    uint32_t token_key = GenerateTokenCacheKey(policy_base);
-    TokenCacheMap::iterator it = token_cache_.find(token_key);
-    HANDLE initial_token_temp;
-    HANDLE lockdown_token_temp;
-    if (it != token_cache_.end()) {
-      initial_token_temp = it->second.first;
-      lockdown_token_temp = it->second.second;
-    } else {
-      result = policy_base->MakeTokens(&initial_token, &lockdown_token);
-      if (SBOX_ALL_OK != result)
-        return result;
-      token_cache_[token_key] =
-          std::make_pair(initial_token.Get(), lockdown_token.Get());
-      initial_token_temp = initial_token.Take();
-      lockdown_token_temp = lockdown_token.Take();
-    }
-
-    if (!::DuplicateToken(initial_token_temp, SecurityImpersonation,
-                          &initial_token_temp)) {
-      return SBOX_ERROR_GENERIC;
-    }
-    initial_token.Set(initial_token_temp);
-
-    if (!::DuplicateTokenEx(lockdown_token_temp, TOKEN_ALL_ACCESS, 0,
-                            SecurityIdentification, TokenPrimary,
-                            &lockdown_token_temp)) {
-      return SBOX_ERROR_GENERIC;
-    }
-    lockdown_token.Set(lockdown_token_temp);
-  } else {
-    result = policy_base->MakeTokens(&initial_token, &lockdown_token);
-    if (SBOX_ALL_OK != result)
-      return result;
-  }
-
-  HANDLE job_temp;
-  result = policy_base->MakeJobObject(&job_temp);
+  result =
+      policy_base->MakeTokens(&initial_token, &lockdown_token, &lowbox_token);
   if (SBOX_ALL_OK != result)
     return result;
 
-  base::win::ScopedHandle job(job_temp);
+  base::win::ScopedHandle job;
+  result = policy_base->MakeJobObject(&job);
+  if (SBOX_ALL_OK != result)
+    return result;
 
   // Initialize the startup information from the policy.
   base::win::StartupInformation startup_info;
@@ -498,13 +419,11 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   // Create the TargetProces object and spawn the target suspended. Note that
   // Brokerservices does not own the target object. It is owned by the Policy.
   base::win::ScopedProcessInformation process_info;
-  TargetProcess* target = new TargetProcess(initial_token.Pass(),
-                                            lockdown_token.Pass(),
-                                            job.Get(),
-                                            thread_pool_);
+  TargetProcess* target =
+      new TargetProcess(initial_token.Pass(), lockdown_token.Pass(),
+                        lowbox_token.Pass(), job.Get(), thread_pool_);
 
   DWORD win_result = target->Create(exe_path, command_line, inherit_handles,
-                                    policy_base->GetLowBoxSid() ? true : false,
                                     startup_info, &process_info);
 
   policy_base->ClearSharedHandles();
@@ -523,11 +442,12 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   // the job object generates notifications using the completion port.
   policy_base->AddRef();
   if (job.IsValid()) {
-    scoped_ptr<JobTracker> tracker(new JobTracker(job.Take(), policy_base));
+    scoped_ptr<JobTracker> tracker(new JobTracker(job.Pass(), policy_base));
 
     // There is no obvious recovery after failure here. Previous version with
     // SpawnCleanup() caused deletion of TargetProcess twice. crbug.com/480639
-    CHECK(AssociateCompletionPort(tracker->job, job_port_, tracker.get()));
+    CHECK(AssociateCompletionPort(tracker->job.Get(), job_port_.Get(),
+                                  tracker.get()));
 
     // Save the tracker because in cleanup we might need to force closing
     // the Jobs.
@@ -538,7 +458,7 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
     // never get a message that this target is being terminated thus we should
     // not block WaitForAllTargets until we have at least one target with job.
     if (child_process_ids_.empty())
-      ::SetEvent(no_targets_);
+      ::SetEvent(no_targets_.Get());
     // We can not track the life time of such processes and it is responsibility
     // of the host application to make sure that spawned targets without jobs
     // are terminated when the main application don't need them anymore.
@@ -553,7 +473,7 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
 
 
 ResultCode BrokerServicesBase::WaitForAllTargets() {
-  ::WaitForSingleObject(no_targets_, INFINITE);
+  ::WaitForSingleObject(no_targets_.Get(), INFINITE);
   return SBOX_ALL_OK;
 }
 
@@ -573,7 +493,7 @@ VOID CALLBACK BrokerServicesBase::RemovePeer(PVOID parameter, BOOLEAN timeout) {
 
 ResultCode BrokerServicesBase::AddTargetPeer(HANDLE peer_process) {
   scoped_ptr<PeerTracker> peer(new PeerTracker(::GetProcessId(peer_process),
-                                               job_port_));
+                                               job_port_.Get()));
   if (!peer->id)
     return SBOX_ERROR_GENERIC;
 
@@ -597,7 +517,7 @@ ResultCode BrokerServicesBase::AddTargetPeer(HANDLE peer_process) {
   }
 
   // Release the pointer since it will be cleaned up by the callback.
-  peer.release();
+  ignore_result(peer.release());
   return SBOX_ALL_OK;
 }
 

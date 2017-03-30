@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/sessions/tab_restore_service_observer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -23,6 +24,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/sessions/core/tab_restore_service_observer.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -33,12 +36,11 @@
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/net_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/WebKit/public/web/WebFindOptions.h"
 #include "url/gurl.h"
 
 // Class used to run a message loop waiting for the TabRestoreService to finish
 // loading. Does nothing if the TabRestoreService was already loaded.
-class WaitForLoadObserver : public TabRestoreServiceObserver {
+class WaitForLoadObserver : public sessions::TabRestoreServiceObserver {
  public:
   explicit WaitForLoadObserver(Browser* browser)
       : tab_restore_service_(
@@ -60,14 +62,16 @@ class WaitForLoadObserver : public TabRestoreServiceObserver {
 
  private:
   // Overridden from TabRestoreServiceObserver:
-  void TabRestoreServiceChanged(TabRestoreService* service) override {}
-  void TabRestoreServiceDestroyed(TabRestoreService* service) override {}
-  void TabRestoreServiceLoaded(TabRestoreService* service) override {
+  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override {
+  }
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override {}
+  void TabRestoreServiceLoaded(sessions::TabRestoreService* service) override {
     DCHECK(do_wait_);
     run_loop_.Quit();
   }
 
-  TabRestoreService* tab_restore_service_;
+  sessions::TabRestoreService* tab_restore_service_;
   const bool do_wait_;
   base::RunLoop run_loop_;
 
@@ -410,7 +414,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreIntoSameWindow) {
 // Tests that a duplicate history entry is not created when we restore a page
 // to an existing SiteInstance.  (Bug 1230446)
 IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWithExistingSiteInstance) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL http_url1(embedded_test_server()->GetURL("/title1.html"));
   GURL http_url2(embedded_test_server()->GetURL("/title2.html"));
@@ -456,8 +460,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWithExistingSiteInstance) {
 }
 
 // See crbug.com/248574
-// TODO(vivaldi) Reenable mac for Vivaldi
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN)
 #define MAYBE_RestoreCrossSiteWithExistingSiteInstance DISABLED_RestoreCrossSiteWithExistingSiteInstance
 #else
 #define MAYBE_RestoreCrossSiteWithExistingSiteInstance RestoreCrossSiteWithExistingSiteInstance
@@ -468,7 +471,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWithExistingSiteInstance) {
 // already exists.  (Bug 1204135)
 IN_PROC_BROWSER_TEST_F(TabRestoreTest,
                        MAYBE_RestoreCrossSiteWithExistingSiteInstance) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL http_url1(embedded_test_server()->GetURL("/title1.html"));
   GURL http_url2(embedded_test_server()->GetURL("/title2.html"));
@@ -567,13 +570,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWindow) {
 
 // Restore tab with special URL chrome://credits/ and make sure the page loads
 // properly after restore. See http://crbug.com/31905.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_RestoreTabWithSpecialURL DISABLED_RestoreTabWithSpecialURL
-#else
-#define MAYBE_RestoreTabWithSpecialURL RestoreTabWithSpecialURL
-#endif
-IN_PROC_BROWSER_TEST_F(TabRestoreTest, MAYBE_RestoreTabWithSpecialURL) {
+IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreTabWithSpecialURL) {
   // Navigate new tab to a special URL.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(chrome::kChromeUICreditsURL), NEW_FOREGROUND_TAB,
@@ -596,14 +593,8 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, MAYBE_RestoreTabWithSpecialURL) {
 
 // Restore tab with special URL in its navigation history, go back to that
 // entry and see that it loads properly. See http://crbug.com/31905
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_RestoreTabWithSpecialURLOnBack DISABLED_RestoreTabWithSpecialURLOnBack
-#else
-#define MAYBE_RestoreTabWithSpecialURLOnBack RestoreTabWithSpecialURLOnBack
-#endif
-IN_PROC_BROWSER_TEST_F(TabRestoreTest, MAYBE_RestoreTabWithSpecialURLOnBack) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreTabWithSpecialURLOnBack) {
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   const GURL http_url(embedded_test_server()->GetURL("/title1.html"));
 

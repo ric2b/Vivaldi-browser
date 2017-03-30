@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_PRINTING_PRINT_PREVIEW_MESSAGE_HANDLER_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -52,10 +53,9 @@ class PrintPreviewMessageHandler
   // Message handlers.
   void OnRequestPrintPreview(
       const PrintHostMsg_RequestPrintPreview_Params& params);
-  void OnDidGetDefaultPageLayout(
-      const printing::PageSizeMargins& page_layout_in_points,
-      const gfx::Rect& printable_area_in_points,
-      bool has_custom_page_size_style);
+  void OnDidGetDefaultPageLayout(const PageSizeMargins& page_layout_in_points,
+                                 const gfx::Rect& printable_area_in_points,
+                                 bool has_custom_page_size_style);
   void OnDidGetPreviewPageCount(
       const PrintHostMsg_DidGetPreviewPageCount_Params& params);
   void OnDidPreviewPage(const PrintHostMsg_DidPreviewPage_Params& params);

@@ -46,7 +46,7 @@ void SceneLayer::OnDetach() {
   layer()->RemoveFromParent();
 }
 
-void SceneLayer::Destroy(JNIEnv* env, jobject jobj) {
+void SceneLayer::Destroy(JNIEnv* env, const JavaParamRef<jobject>& jobj) {
   delete this;
 }
 
@@ -58,7 +58,7 @@ SkColor SceneLayer::GetBackgroundColor() {
   return SK_ColorWHITE;
 }
 
-static jlong Init(JNIEnv* env, jobject jobj) {
+static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& jobj) {
   // This will automatically bind to the Java object and pass ownership there.
   SceneLayer* tree_provider = new SceneLayer(env, jobj);
   return reinterpret_cast<intptr_t>(tree_provider);

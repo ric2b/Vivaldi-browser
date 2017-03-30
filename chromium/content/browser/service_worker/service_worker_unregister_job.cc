@@ -9,8 +9,8 @@
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_storage.h"
-#include "content/browser/service_worker/service_worker_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/common/service_worker/service_worker_utils.h"
 
 namespace content {
 
@@ -80,21 +80,21 @@ void ServiceWorkerUnregisterJob::OnRegistrationFound(
   Complete(registration->id(), SERVICE_WORKER_OK);
 }
 
-void ServiceWorkerUnregisterJob::Complete(int64 registration_id,
+void ServiceWorkerUnregisterJob::Complete(int64_t registration_id,
                                           ServiceWorkerStatusCode status) {
   CompleteInternal(registration_id, status);
   context_->job_coordinator()->FinishJob(pattern_, this);
 }
 
 void ServiceWorkerUnregisterJob::CompleteInternal(
-    int64 registration_id,
+    int64_t registration_id,
     ServiceWorkerStatusCode status) {
   if (!is_promise_resolved_)
     ResolvePromise(registration_id, status);
 }
 
 void ServiceWorkerUnregisterJob::ResolvePromise(
-    int64 registration_id,
+    int64_t registration_id,
     ServiceWorkerStatusCode status) {
   DCHECK(!is_promise_resolved_);
   is_promise_resolved_ = true;

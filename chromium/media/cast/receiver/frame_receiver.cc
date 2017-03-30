@@ -5,15 +5,29 @@
 #include "media/cast/receiver/frame_receiver.h"
 
 #include <algorithm>
+#include <string>
 
 #include "base/big_endian.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
+#include "media/cast/cast_config.h"
+#include "media/cast/cast_defines.h"
 #include "media/cast/cast_environment.h"
+#include "media/cast/constants.h"
+#include "media/cast/net/rtcp/rtcp_utility.h"
 
 namespace {
+
 const int kMinSchedulingDelayMs = 1;
+
+media::cast::RtcpTimeData CreateRtcpTimeData(base::TimeTicks now) {
+  media::cast::RtcpTimeData ret;
+  ret.timestamp = now;
+  media::cast::ConvertTimeTicksToNtp(now, &ret.ntp_seconds, &ret.ntp_fraction);
+  return ret;
+}
+
 }  // namespace
 
 namespace media {
@@ -33,18 +47,15 @@ FrameReceiver::FrameReceiver(
       rtp_timebase_(config.rtp_timebase),
       target_playout_delay_(
           base::TimeDelta::FromMilliseconds(config.rtp_max_delay_ms)),
-      expected_frame_duration_(
-          base::TimeDelta::FromSeconds(1) / config.target_frame_rate),
+      expected_frame_duration_(base::TimeDelta::FromSeconds(1) /
+                               config.target_frame_rate),
       reports_are_scheduled_(false),
       framer_(cast_environment->Clock(),
               this,
               config.sender_ssrc,
               true,
               config.rtp_max_delay_ms * config.target_frame_rate / 1000),
-      rtcp_(RtcpCastMessageCallback(),
-            RtcpRttCallback(),
-            RtcpLogMessageCallback(),
-            cast_environment_->Clock(),
+      rtcp_(cast_environment_->Clock(),
             NULL,
             config.receiver_ssrc,
             config.sender_ssrc),
@@ -55,13 +66,12 @@ FrameReceiver::FrameReceiver(
   DCHECK_GT(config.rtp_max_delay_ms, 0);
   DCHECK_GT(config.target_frame_rate, 0);
   decryptor_.Initialize(config.aes_key, config.aes_iv_mask);
-  cast_environment_->Logging()->AddRawEventSubscriber(&event_subscriber_);
-  memset(frame_id_to_rtp_timestamp_, 0, sizeof(frame_id_to_rtp_timestamp_));
+  cast_environment_->logger()->Subscribe(&event_subscriber_);
 }
 
 FrameReceiver::~FrameReceiver() {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
-  cast_environment_->Logging()->RemoveRawEventSubscriber(&event_subscriber_);
+  cast_environment_->logger()->Unsubscribe(&event_subscriber_);
 }
 
 void FrameReceiver::RequestEncodedFrame(
@@ -74,11 +84,11 @@ void FrameReceiver::RequestEncodedFrame(
 bool FrameReceiver::ProcessPacket(scoped_ptr<Packet> packet) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
 
-  if (Rtcp::IsRtcpPacket(&packet->front(), packet->size())) {
+  if (IsRtcpPacket(&packet->front(), packet->size())) {
     rtcp_.IncomingRtcpPacket(&packet->front(), packet->size());
   } else {
     RtpCastHeader rtp_header;
-    const uint8* payload_data;
+    const uint8_t* payload_data;
     size_t payload_size;
     if (!packet_parser_.ParsePacket(&packet->front(),
                                     packet->size(),
@@ -89,7 +99,7 @@ bool FrameReceiver::ProcessPacket(scoped_ptr<Packet> packet) {
     }
 
     ProcessParsedPacket(rtp_header, payload_data, payload_size);
-    stats_.UpdateStatistics(rtp_header);
+    stats_.UpdateStatistics(rtp_header, rtp_timebase_);
   }
 
   if (!reports_are_scheduled_) {
@@ -102,7 +112,7 @@ bool FrameReceiver::ProcessPacket(scoped_ptr<Packet> packet) {
 }
 
 void FrameReceiver::ProcessParsedPacket(const RtpCastHeader& rtp_header,
-                                        const uint8* payload_data,
+                                        const uint8_t* payload_data,
                                         size_t payload_size) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
 
@@ -110,10 +120,17 @@ void FrameReceiver::ProcessParsedPacket(const RtpCastHeader& rtp_header,
 
   frame_id_to_rtp_timestamp_[rtp_header.frame_id & 0xff] =
       rtp_header.rtp_timestamp;
-  cast_environment_->Logging()->InsertPacketEvent(
-      now, PACKET_RECEIVED, event_media_type_, rtp_header.rtp_timestamp,
-      rtp_header.frame_id, rtp_header.packet_id, rtp_header.max_packet_id,
-      payload_size);
+
+  scoped_ptr<PacketEvent> receive_event(new PacketEvent());
+  receive_event->timestamp = now;
+  receive_event->type = PACKET_RECEIVED;
+  receive_event->media_type = event_media_type_;
+  receive_event->rtp_timestamp = rtp_header.rtp_timestamp;
+  receive_event->frame_id = rtp_header.frame_id;
+  receive_event->packet_id = rtp_header.packet_id;
+  receive_event->max_packet_id = rtp_header.max_packet_id;
+  receive_event->size = payload_size;
+  cast_environment_->logger()->DispatchPacketEvent(std::move(receive_event));
 
   bool duplicate = false;
   const bool complete =
@@ -126,7 +143,7 @@ void FrameReceiver::ProcessParsedPacket(const RtpCastHeader& rtp_header,
   // Update lip-sync values upon receiving the first packet of each frame, or if
   // they have never been set yet.
   if (rtp_header.packet_id == 0 || lip_sync_reference_time_.is_null()) {
-    RtpTimestamp fresh_sync_rtp;
+    RtpTimeTicks fresh_sync_rtp;
     base::TimeTicks fresh_sync_reference;
     if (!rtcp_.GetLatestLipSyncTimes(&fresh_sync_rtp, &fresh_sync_reference)) {
       // HACK: The sender should have provided Sender Reports before the first
@@ -144,9 +161,10 @@ void FrameReceiver::ProcessParsedPacket(const RtpCastHeader& rtp_header,
     if (lip_sync_reference_time_.is_null()) {
       lip_sync_reference_time_ = fresh_sync_reference;
     } else {
-      lip_sync_reference_time_ += RtpDeltaToTimeDelta(
-          static_cast<int32>(fresh_sync_rtp - lip_sync_rtp_timestamp_),
-          rtp_timebase_);
+      // Note: It's okay for the conversion ToTimeDelta() to be approximate
+      // because |lip_sync_drift_| will account for accumulated errors.
+      lip_sync_reference_time_ +=
+          (fresh_sync_rtp - lip_sync_rtp_timestamp_).ToTimeDelta(rtp_timebase_);
     }
     lip_sync_rtp_timestamp_ = fresh_sync_rtp;
     lip_sync_drift_.Update(
@@ -163,21 +181,22 @@ void FrameReceiver::CastFeedback(const RtcpCastMessage& cast_message) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
 
   base::TimeTicks now = cast_environment_->Clock()->NowTicks();
-  RtpTimestamp rtp_timestamp =
+  RtpTimeTicks rtp_timestamp =
       frame_id_to_rtp_timestamp_[cast_message.ack_frame_id & 0xff];
-  cast_environment_->Logging()->InsertFrameEvent(
-      now, FRAME_ACK_SENT, event_media_type_,
-      rtp_timestamp, cast_message.ack_frame_id);
+
+  scoped_ptr<FrameEvent> ack_sent_event(new FrameEvent());
+  ack_sent_event->timestamp = now;
+  ack_sent_event->type = FRAME_ACK_SENT;
+  ack_sent_event->media_type = event_media_type_;
+  ack_sent_event->rtp_timestamp = rtp_timestamp;
+  ack_sent_event->frame_id = cast_message.ack_frame_id;
+  cast_environment_->logger()->DispatchFrameEvent(std::move(ack_sent_event));
 
   ReceiverRtcpEventSubscriber::RtcpEvents rtcp_events;
   event_subscriber_.GetRtcpEventsWithRedundancy(&rtcp_events);
-  transport_->SendRtcpFromRtpReceiver(rtcp_.GetLocalSsrc(),
-                                      rtcp_.GetRemoteSsrc(),
-                                      rtcp_.ConvertToNTPAndSave(now),
-                                      &cast_message,
-                                      target_playout_delay_,
-                                      &rtcp_events,
-                                      NULL);
+  transport_->SendRtcpFromRtpReceiver(
+      rtcp_.local_ssrc(), rtcp_.remote_ssrc(), CreateRtcpTimeData(now),
+      &cast_message, target_playout_delay_, &rtcp_events, NULL);
 }
 
 void FrameReceiver::EmitAvailableEncodedFrames() {
@@ -278,7 +297,7 @@ void FrameReceiver::EmitOneFrame(const ReceiveEncodedFrameCallback& callback,
                                  scoped_ptr<EncodedFrame> encoded_frame) const {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
   if (!callback.is_null())
-    callback.Run(encoded_frame.Pass());
+    callback.Run(std::move(encoded_frame));
 }
 
 base::TimeTicks FrameReceiver::GetPlayoutTime(const EncodedFrame& frame) const {
@@ -287,12 +306,10 @@ base::TimeTicks FrameReceiver::GetPlayoutTime(const EncodedFrame& frame) const {
     target_playout_delay = base::TimeDelta::FromMilliseconds(
         frame.new_playout_delay_ms);
   }
-  return lip_sync_reference_time_ +
-      lip_sync_drift_.Current() +
-      RtpDeltaToTimeDelta(
-          static_cast<int32>(frame.rtp_timestamp - lip_sync_rtp_timestamp_),
-          rtp_timebase_) +
-      target_playout_delay;
+  return lip_sync_reference_time_ + lip_sync_drift_.Current() +
+         (frame.rtp_timestamp - lip_sync_rtp_timestamp_)
+             .ToTimeDelta(rtp_timebase_) +
+         target_playout_delay;
 }
 
 void FrameReceiver::ScheduleNextCastMessage() {
@@ -324,20 +341,16 @@ void FrameReceiver::ScheduleNextRtcpReport() {
       CastEnvironment::MAIN, FROM_HERE,
       base::Bind(&FrameReceiver::SendNextRtcpReport,
                  weak_factory_.GetWeakPtr()),
-      base::TimeDelta::FromMilliseconds(kDefaultRtcpIntervalMs));
+      base::TimeDelta::FromMilliseconds(kRtcpReportIntervalMs));
 }
 
 void FrameReceiver::SendNextRtcpReport() {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
   const base::TimeTicks now = cast_environment_->Clock()->NowTicks();
   RtpReceiverStatistics stats = stats_.GetStatistics();
-  transport_->SendRtcpFromRtpReceiver(rtcp_.GetLocalSsrc(),
-                                      rtcp_.GetRemoteSsrc(),
-                                      rtcp_.ConvertToNTPAndSave(now),
-                                      NULL,
-                                      base::TimeDelta(),
-                                      NULL,
-                                      &stats);
+  transport_->SendRtcpFromRtpReceiver(rtcp_.local_ssrc(), rtcp_.remote_ssrc(),
+                                      CreateRtcpTimeData(now), NULL,
+                                      base::TimeDelta(), NULL, &stats);
   ScheduleNextRtcpReport();
 }
 

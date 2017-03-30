@@ -31,7 +31,6 @@ var activeVisit = null;
 /** @const */ var Command = cr.ui.Command;
 /** @const */ var FocusOutlineManager = cr.ui.FocusOutlineManager;
 /** @const */ var Menu = cr.ui.Menu;
-/** @const */ var MenuButton = cr.ui.MenuButton;
 /** @const */ var MenuItem = cr.ui.MenuItem;
 
 /**
@@ -78,8 +77,6 @@ var HistoryEntry;
  *            term: string}}
  */
 var HistoryQuery;
-
-MenuButton.createDropDownArrows();
 
 /**
  * Returns true if the mobile (non-desktop) version is being shown.
@@ -303,7 +300,7 @@ Visit.prototype.getResultDOM = function(propertyBag) {
     if (focusless)
       dropDown.tabIndex = -1;
 
-    cr.ui.decorate(dropDown, MenuButton);
+    cr.ui.decorate(dropDown, cr.ui.MenuButton);
     dropDown.respondToArrowKeys = false;
 
     dropDown.addEventListener('mousedown', setActiveVisit);
@@ -895,83 +892,48 @@ HistoryModel.prototype.getGroupByDomain = function() {
 
 /**
  * Provides an implementation for a single column grid.
+ * @param {!Element} root
+ * @param {Node} boundary
  * @constructor
  * @extends {cr.ui.FocusRow}
  */
-function HistoryFocusRow() {}
+function HistoryFocusRow(root, boundary) {
+  cr.ui.FocusRow.call(this, root, boundary);
 
-/**
- * Decorates |rowElement| so that it can be treated as a HistoryFocusRow item.
- * @param {Element} rowElement The element representing this row.
- * @param {Node} boundary Focus events are ignored outside of this node.
- */
-HistoryFocusRow.decorate = function(rowElement, boundary) {
-  rowElement.__proto__ = HistoryFocusRow.prototype;
-  rowElement.decorate(boundary);
-
-  rowElement.addElementIfPresent_('.entry-box input', 'checkbox');
-  rowElement.addElementIfPresent_('.domain-checkbox', 'checkbox');
-  rowElement.addElementIfPresent_('.bookmark-section.starred', 'star');
-  rowElement.addElementIfPresent_('[is="action-link"]', 'domain');
-  rowElement.addElementIfPresent_('.title a', 'title');
-  rowElement.addElementIfPresent_('.drop-down', 'menu');
-};
+  // None of these are guaranteed to exist in all versions of the UI.
+  this.addItem('checkbox', '.entry-box input');
+  this.addItem('checkbox', '.domain-checkbox');
+  this.addItem('star', '.bookmark-section.starred');
+  this.addItem('domain', '[is="action-link"]');
+  this.addItem('title', '.title a');
+  this.addItem('menu', '.drop-down');
+}
 
 HistoryFocusRow.prototype = {
   __proto__: cr.ui.FocusRow.prototype,
 
   /** @override */
-  onActiveStateChanged: function(state) {
-    this.classList.toggle('active', state);
-  },
+  getCustomEquivalent: function(sampleElement) {
+    var equivalent;
 
-  /** @override */
-  getEquivalentElement: function(element) {
-    if (this.contains(element))
-      return element;
-
-    // All elements default to another element with the same type.
-    var equivalent = this.getColumn_(element.getAttribute('column-type'));
-
-    if (!equivalent) {
-      switch (element.getAttribute('column-type')) {
-        case 'star':
-          equivalent = this.getColumn_('title') || this.getColumn_('domain');
-          break;
-        case 'domain':
-          equivalent = this.getColumn_('title');
-          break;
-        case 'title':
-          equivalent = this.getColumn_('domain');
-          break;
-        case 'menu':
-          return this.focusableElements[this.focusableElements.length - 1];
-      }
+    switch (this.getTypeForElement(sampleElement)) {
+      case 'star':
+        equivalent = this.getFirstFocusable('title') ||
+                     this.getFirstFocusable('domain');
+        break;
+      case 'domain':
+        equivalent = this.getFirstFocusable('title');
+        break;
+      case 'title':
+        equivalent = this.getFirstFocusable('domain');
+        break;
+      case 'menu':
+        equivalent = this.getFocusableElements().slice(-1)[0];
+        break;
     }
 
-    return equivalent || this.focusableElements[0];
-  },
-
-  /**
-   * @param {string} type The type of column to return.
-   * @return {?Element} The column matching the type.
-   * @private
-   */
-  getColumn_: function(type) {
-    return this.querySelector('[column-type=' + type + ']');
-  },
-
-  /**
-   * @param {string} query A query to select the appropriate element.
-   * @param {string} type The type to use for the element.
-   * @private
-   */
-  addElementIfPresent_: function(query, type) {
-    var element = this.querySelector(query);
-    if (element) {
-      this.addFocusableElement(element);
-      element.setAttribute('column-type', type);
-    }
+    return equivalent ||
+        cr.ui.FocusRow.prototype.getCustomEquivalent.call(this, sampleElement);
   },
 };
 
@@ -1241,7 +1203,7 @@ HistoryView.prototype.onBeforeUnstarred = function(visit) {
 
   // Focus the title or domain when the bookmarked star is removed because the
   // star will no longer be focusable.
-  row.querySelector('[column-type=title], [column-type=domain]').focus();
+  row.root.querySelector('[focus-type=title], [focus-type=domain]').focus();
 };
 
 /** @param {Visit} visit The visit that was just unstarred. */
@@ -1708,8 +1670,7 @@ HistoryView.prototype.updateFocusGrid_ = function() {
 
   for (var i = 0; i < rows.length; ++i) {
     assert(rows[i].parentNode);
-    HistoryFocusRow.decorate(rows[i], this.resultDiv_);
-    this.focusGrid_.addRow(rows[i]);
+    this.focusGrid_.addRow(new HistoryFocusRow(rows[i], this.resultDiv_));
   }
   this.focusGrid_.ensureRowActive();
 };
@@ -1754,14 +1715,16 @@ HistoryView.prototype.updateClearBrowsingDataButton_ = function() {
 HistoryView.prototype.setTimeColumnWidth_ = function() {
   // Find the maximum width of all the time elements on the page.
   var times = this.resultDiv_.querySelectorAll('.entry .time');
-  var widths = Array.prototype.map.call(times, function(el) {
+  Array.prototype.forEach.call(times, function(el) {
     el.style.minWidth = '-webkit-min-content';
-    var width = el.clientWidth;
-    el.style.minWidth = '';
-
+  });
+  var widths = Array.prototype.map.call(times, function(el) {
     // Add an extra pixel to prevent rounding errors from causing the text to
     // be ellipsized at certain zoom levels (see crbug.com/329779).
-    return width + 1;
+    return el.clientWidth + 1;
+  });
+  Array.prototype.forEach.call(times, function(el) {
+    el.style.minWidth = '';
   });
   var maxWidth = widths.length ? Math.max.apply(null, widths) : 0;
 
@@ -1803,14 +1766,11 @@ HistoryView.prototype.toggleGroupedVisits_ = function(e) {
 
   entry.classList.toggle('expand');
 
-  var row = entry.querySelector('.site-domain-wrapper');
-  var activeRows =
-      this.resultDiv_.getElementsByClassName(cr.ui.FocusRow.ACTIVE_CLASS);
-  for (var i = 0; i < activeRows.length; ++i) {
-    if (activeRows[i] != row) // Ignore |row| to avoid flicker.
-      activeRows[i].makeActive(false);
-  }
-  row.makeActive(true);
+  var root = entry.querySelector('.site-domain-wrapper');
+
+  this.focusGrid_.rows.forEach(function(row) {
+    row.makeActive(row.root == root);
+  });
 
   this.updateFocusGrid_();
 };
@@ -2005,6 +1965,16 @@ function load() {
 
     window.addEventListener(
         'resize', historyView.updateClearBrowsingDataButton_);
+
+<if expr="is_ios">
+    // Trigger window resize event when search field is focused to force update
+    // of the clear browsing button, which should disappear when search field
+    // is active. The window is not resized when the virtual keyboard is shown
+    // on iOS.
+    searchField.addEventListener('focus', function() {
+      cr.dispatchSimpleEvent(window, 'resize');
+    });
+</if>  /* is_ios */
 
     // When the search field loses focus, add a delay before updating the
     // visibility, otherwise the button will flash on the screen before the

@@ -31,13 +31,11 @@ base::LazyInstance<GlobalState> g_global_state = LAZY_INSTANCE_INITIALIZER;
 
 namespace content {
 
-jobject CreateShellView(Shell* shell) {
+ScopedJavaLocalRef<jobject> CreateShellView(Shell* shell) {
   JNIEnv* env = base::android::AttachCurrentThread();
   jobject j_shell_manager = g_global_state.Get().j_shell_manager.obj();
-  return Java_ShellManager_createShell(
-      env,
-      j_shell_manager,
-      reinterpret_cast<intptr_t>(shell)).Release();
+  return Java_ShellManager_createShell(env, j_shell_manager,
+                                       reinterpret_cast<intptr_t>(shell));
 }
 
 void RemoveShellView(jobject shell_view) {
@@ -51,12 +49,15 @@ bool RegisterShellManager(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
-static void Init(JNIEnv* env, jclass clazz, jobject obj) {
-  g_global_state.Get().j_shell_manager.Reset(
-      base::android::ScopedJavaLocalRef<jobject>(env, obj));
+static void Init(JNIEnv* env,
+                 const JavaParamRef<jclass>& clazz,
+                 const JavaParamRef<jobject>& obj) {
+  g_global_state.Get().j_shell_manager.Reset(obj);
 }
 
-void LaunchShell(JNIEnv* env, jclass clazz, jstring jurl) {
+void LaunchShell(JNIEnv* env,
+                 const JavaParamRef<jclass>& clazz,
+                 const JavaParamRef<jstring>& jurl) {
   ShellBrowserContext* browserContext =
       ShellContentBrowserClient::Get()->browser_context();
   GURL url(base::android::ConvertJavaStringToUTF8(env, jurl));

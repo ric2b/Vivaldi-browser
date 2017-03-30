@@ -6,6 +6,7 @@
 #define MEDIA_BASE_AUDIO_HARDWARE_CONFIG_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "media/audio/audio_parameters.h"
 #include "media/base/channel_layout.h"
@@ -44,6 +45,8 @@ class MEDIA_EXPORT AudioHardwareConfig {
   // For clients which don't need low latency, a larger buffer size should be
   // used to save power and CPU resources.
   int GetHighLatencyBufferSize() const;
+  static int GetHighLatencyBufferSize(
+      const media::AudioParameters& output_params);
 
  private:
   // Cached values; access is protected by |config_lock_|.

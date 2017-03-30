@@ -6,6 +6,7 @@
 #define ASH_DISPLAY_CURSOR_WINDOW_CONTROLLER_H_
 
 #include "ash/ash_export.h"
+#include "base/macros.h"
 #include "ui/aura/window.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/display.h"
@@ -64,6 +65,8 @@ class ASH_EXPORT CursorWindowController {
 
   // Hides/shows cursor window based on current cursor state.
   void UpdateCursorVisibility();
+
+  const gfx::ImageSkia& GetCursorImageForTest() const;
 
   bool is_cursor_compositing_enabled_;
   aura::Window* container_;

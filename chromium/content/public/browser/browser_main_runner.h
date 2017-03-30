@@ -5,7 +5,6 @@
 #ifndef CONTENT_PUBLIC_BROWSER_BROWSER_MAIN_RUNNER_H_
 #define CONTENT_PUBLIC_BROWSER_BROWSER_MAIN_RUNNER_H_
 
-#include "base/basictypes.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -19,6 +18,9 @@ class CONTENT_EXPORT BrowserMainRunner {
 
   // Create a new BrowserMainRunner object.
   static BrowserMainRunner* Create();
+
+  // Returns true if the BrowserMainRunner has exited the main loop.
+  static bool ExitedMainMessageLoop();
 
   // Initialize all necessary browser state. The |parameters| values will be
   // copied. Returning a non-negative value indicates that initialization

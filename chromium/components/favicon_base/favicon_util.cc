@@ -4,8 +4,11 @@
 
 #include "components/favicon_base/favicon_util.h"
 
+#include <stddef.h>
+
 #include <cmath>
 
+#include "build/build_config.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/favicon_base/select_favicon_frames.h"
 #include "skia/ext/image_operations.h"
@@ -123,8 +126,7 @@ SkBitmap ResizeBitmapByDownsamplingIfPossible(
 
     SkCanvas canvas(bitmap);
     canvas.drawBitmapRect(
-        best_bitmap, NULL,
-        SkRect::MakeFromIRect(SkIRect::MakeWH(desired_size, desired_size)));
+        best_bitmap, SkRect::MakeIWH(desired_size, desired_size), NULL);
     return bitmap;
   }
   return skia::ImageOperations::Resize(best_bitmap,

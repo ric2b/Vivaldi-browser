@@ -8,9 +8,11 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+
+class AccountId;
 
 namespace chrome {
 
@@ -22,17 +24,16 @@ class MultiUserWindowManagerStub : public MultiUserWindowManager {
 
   // MultiUserWindowManager overrides:
   void SetWindowOwner(aura::Window* window,
-                      const std::string& user_id) override;
-  const std::string& GetWindowOwner(aura::Window* window) const override;
+                      const AccountId& account_id) override;
+  const AccountId& GetWindowOwner(aura::Window* window) const override;
   void ShowWindowForUser(aura::Window* window,
-                         const std::string& user_id) override;
+                         const AccountId& account_id) override;
   bool AreWindowsSharedAmongUsers() const override;
   void GetOwnersOfVisibleWindows(
-      std::set<std::string>* user_ids) const override;
+      std::set<AccountId>* account_ids) const override;
   bool IsWindowOnDesktopOfUser(aura::Window* window,
-                               const std::string& user_id) const override;
-  const std::string& GetUserPresentingWindow(
-      aura::Window* window) const override;
+                               const AccountId& account_id) const override;
+  const AccountId& GetUserPresentingWindow(aura::Window* window) const override;
   void AddUser(content::BrowserContext* context) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;

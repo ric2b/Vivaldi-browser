@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_EXTENSION_ZOOM_REQUEST_CLIENT_H_
 #define EXTENSIONS_BROWSER_EXTENSION_ZOOM_REQUEST_CLIENT_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/ui/zoom/zoom_controller.h"
 #include "extensions/common/extension.h"
@@ -21,6 +22,7 @@ class ExtensionZoomRequestClient : public ui_zoom::ZoomRequestClient {
  public:
   explicit ExtensionZoomRequestClient(scoped_refptr<const Extension> extension);
 
+  bool ShouldSuppressBubble() const override;
   const Extension* extension() const { return extension_.get(); }
 
  private:

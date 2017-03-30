@@ -4,13 +4,15 @@
 
 #include "content/renderer/gpu/render_widget_compositor.h"
 
+#include <stddef.h>
 #include <limits>
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/field_trial.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
@@ -18,6 +20,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/base/switches.h"
@@ -32,16 +35,19 @@
 #include "cc/output/copy_output_result.h"
 #include "cc/output/latency_info_swap_promise.h"
 #include "cc/output/swap_promise.h"
+#include "cc/proto/compositor_message.pb.h"
 #include "cc/resources/single_release_callback.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/trees/latency_info_swap_promise_monitor.h"
 #include "cc/trees/layer_tree_host.h"
+#include "cc/trees/remote_proto_channel.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/public/common/content_switches.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/service/gpu_switches.h"
 #include "third_party/WebKit/public/platform/WebCompositeAndReadbackAsyncCallback.h"
 #include "third_party/WebKit/public/platform/WebLayoutAndPaintAsyncCallback.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
@@ -66,7 +72,6 @@ namespace cc {
 class Layer;
 }
 
-using blink::WebBeginFrameArgs;
 using blink::WebFloatPoint;
 using blink::WebRect;
 using blink::WebSelection;
@@ -214,7 +219,9 @@ RenderWidgetCompositor::RenderWidgetCompositor(
     : num_failed_recreate_attempts_(0),
       widget_(widget),
       compositor_deps_(compositor_deps),
+      never_visible_(false),
       layout_and_paint_async_callback_(nullptr),
+      remote_proto_channel_receiver_(nullptr),
       weak_factory_(this) {
 }
 
@@ -227,25 +234,28 @@ void RenderWidgetCompositor::Initialize() {
   // to keep content always crisp when possible.
   settings.layer_transforms_should_scale_layer_contents = true;
 
-  settings.renderer_settings.disable_gpu_vsync =
-      cmd->HasSwitch(switches::kDisableGpuVsync);
+  if (cmd->HasSwitch(switches::kDisableGpuVsync)) {
+    std::string display_vsync_string =
+        cmd->GetSwitchValueASCII(switches::kDisableGpuVsync);
+    if (display_vsync_string == "gpu") {
+      settings.renderer_settings.disable_display_vsync = true;
+    } else if (display_vsync_string == "beginframe") {
+      settings.wait_for_beginframe_interval = false;
+    } else {
+      settings.renderer_settings.disable_display_vsync = true;
+      settings.wait_for_beginframe_interval = false;
+    }
+  }
   settings.main_frame_before_activation_enabled =
       cmd->HasSwitch(cc::switches::kEnableMainFrameBeforeActivation) &&
       !cmd->HasSwitch(cc::switches::kDisableMainFrameBeforeActivation);
-  settings.report_overscroll_only_for_scrollable_axes =
-      !compositor_deps_->IsElasticOverscrollEnabled();
   settings.accelerated_animation_enabled =
-      !cmd->HasSwitch(cc::switches::kDisableThreadedAnimation);
-  const std::string slimming_group =
-      base::FieldTrialList::FindFullName("SlimmingPaint");
-  settings.use_display_lists =
-      (cmd->HasSwitch(switches::kEnableSlimmingPaint) ||
-      !cmd->HasSwitch(switches::kDisableSlimmingPaint)) &&
-      (slimming_group != "DisableSlimmingPaint");
-  if (cmd->HasSwitch(switches::kEnableCompositorAnimationTimelines)) {
-    settings.use_compositor_animation_timelines = true;
-    blink::WebRuntimeFeatures::enableCompositorAnimationTimelines(true);
-  }
+      compositor_deps_->IsThreadedAnimationEnabled();
+
+  settings.use_compositor_animation_timelines =
+      !cmd->HasSwitch(switches::kDisableCompositorAnimationTimelines);
+  blink::WebRuntimeFeatures::enableCompositorAnimationTimelines(
+      settings.use_compositor_animation_timelines);
 
   settings.default_tile_size = CalculateDefaultTileSize(widget_);
   if (cmd->HasSwitch(switches::kDefaultTileWidth)) {
@@ -294,11 +304,15 @@ void RenderWidgetCompositor::Initialize() {
   settings.use_distance_field_text =
       compositor_deps_->IsDistanceFieldTextEnabled();
   settings.use_zero_copy = compositor_deps_->IsZeroCopyEnabled();
-  settings.use_one_copy = compositor_deps_->IsOneCopyEnabled();
+  settings.use_partial_raster = compositor_deps_->IsPartialRasterEnabled();
   settings.enable_elastic_overscroll =
       compositor_deps_->IsElasticOverscrollEnabled();
-  settings.use_image_texture_target = compositor_deps_->GetImageTextureTarget();
-  settings.gather_pixel_refs = compositor_deps_->IsGatherPixelRefsEnabled();
+  settings.renderer_settings.use_gpu_memory_buffer_resources =
+      compositor_deps_->IsGpuMemoryBufferCompositorResourcesEnabled();
+  settings.use_image_texture_targets =
+      compositor_deps_->GetImageTextureTargets();
+  settings.image_decode_tasks_enabled =
+      compositor_deps_->AreImageDecodeTasksEnabled();
 
   if (cmd->HasSwitch(cc::switches::kTopControlsShowThreshold)) {
       std::string top_threshold_str =
@@ -320,6 +334,8 @@ void RenderWidgetCompositor::Initialize() {
 
   settings.verify_property_trees =
       cmd->HasSwitch(cc::switches::kEnablePropertyTreeVerification);
+  if (cmd->HasSwitch(cc::switches::kDisableCompositorPropertyTrees))
+    settings.use_property_trees = false;
   settings.renderer_settings.allow_antialiasing &=
       !cmd->HasSwitch(cc::switches::kDisableCompositedAntialiasing);
   // The means the renderer compositor has 2 possible modes:
@@ -332,8 +348,6 @@ void RenderWidgetCompositor::Initialize() {
   // These flags should be mirrored by UI versions in ui/compositor/.
   settings.initial_debug_state.show_debug_borders =
       cmd->HasSwitch(cc::switches::kShowCompositedLayerBorders);
-  settings.initial_debug_state.show_fps_counter =
-      cmd->HasSwitch(cc::switches::kShowFPSCounter);
   settings.initial_debug_state.show_layer_animation_bounds_rects =
       cmd->HasSwitch(cc::switches::kShowLayerAnimationBounds);
   settings.initial_debug_state.show_paint_rects =
@@ -361,48 +375,22 @@ void RenderWidgetCompositor::Initialize() {
         &settings.initial_debug_state.slow_down_raster_scale_factor);
   }
 
-  settings.invert_viewport_scroll_order =
-      cmd->HasSwitch(switches::kInvertViewportScrollOrder);
-
-  if (cmd->HasSwitch(cc::switches::kMaxTilesForInterestArea)) {
-    int max_tiles_for_interest_area;
-    if (GetSwitchValueAsInt(*cmd,
-                            cc::switches::kMaxTilesForInterestArea,
-                            1, std::numeric_limits<int>::max(),
-                            &max_tiles_for_interest_area))
-      settings.max_tiles_for_interest_area = max_tiles_for_interest_area;
-  }
-
-  if (cmd->HasSwitch(cc::switches::kMaxUnusedResourceMemoryUsagePercentage)) {
-    int max_unused_resource_memory_percentage;
-    if (GetSwitchValueAsInt(
-            *cmd,
-            cc::switches::kMaxUnusedResourceMemoryUsagePercentage,
-            0, 100,
-            &max_unused_resource_memory_percentage)) {
-      settings.max_unused_resource_memory_percentage =
-          max_unused_resource_memory_percentage;
-    }
-  }
-
   settings.strict_layer_property_change_checking =
       cmd->HasSwitch(cc::switches::kStrictLayerPropertyChangeChecking);
 
 #if defined(OS_ANDROID)
-  SynchronousCompositorFactory* synchronous_compositor_factory =
-      SynchronousCompositorFactory::GetInstance();
+  DCHECK(!SynchronousCompositorFactory::GetInstance() ||
+         !cmd->HasSwitch(switches::kIPCSyncCompositing));
+  bool using_synchronous_compositor =
+      SynchronousCompositorFactory::GetInstance() ||
+      cmd->HasSwitch(switches::kIPCSyncCompositing);
 
   // We can't use GPU rasterization on low-end devices, because the Ganesh
   // cache would consume too much memory.
   if (base::SysInfo::IsLowEndDevice())
     settings.gpu_rasterization_enabled = false;
-  settings.using_synchronous_renderer_compositor =
-      synchronous_compositor_factory;
-  settings.record_full_layer = widget_->DoesRecordFullLayer();
-  settings.report_overscroll_only_for_scrollable_axes =
-      !synchronous_compositor_factory;
-  settings.max_partial_texture_updates = 0;
-  if (synchronous_compositor_factory) {
+  settings.using_synchronous_renderer_compositor = using_synchronous_compositor;
+  if (using_synchronous_compositor) {
     // Android WebView uses system scrollbars, so make ours invisible.
     settings.scrollbar_animator = cc::LayerTreeSettings::NO_ANIMATOR;
     settings.solid_color_scrollbar_color = SK_ColorTRANSPARENT;
@@ -415,13 +403,12 @@ void RenderWidgetCompositor::Initialize() {
   }
   settings.renderer_settings.highp_threshold_min = 2048;
   // Android WebView handles root layer flings itself.
-  settings.ignore_root_layer_flings =
-      synchronous_compositor_factory;
+  settings.ignore_root_layer_flings = using_synchronous_compositor;
   // Memory policy on Android WebView does not depend on whether device is
   // low end, so always use default policy.
   bool use_low_memory_policy =
-      base::SysInfo::IsLowEndDevice() && !synchronous_compositor_factory;
-  // RGBA_4444 textures are only enabled for low end devices
+      base::SysInfo::IsLowEndDevice() && !using_synchronous_compositor;
+  // RGBA_4444 textures are only enabled by default for low end devices
   // and are disabled for Android WebView as it doesn't support the format.
   settings.renderer_settings.use_rgba_4444_textures = use_low_memory_policy;
   if (use_low_memory_policy) {
@@ -437,7 +424,7 @@ void RenderWidgetCompositor::Initialize() {
   }
   // Webview does not own the surface so should not clear it.
   settings.renderer_settings.should_clear_root_render_pass =
-      !synchronous_compositor_factory;
+      !using_synchronous_compositor;
 
   // TODO(danakj): Only do this on low end devices.
   settings.create_low_res_tiling = true;
@@ -455,11 +442,6 @@ void RenderWidgetCompositor::Initialize() {
   settings.scrollbar_fade_delay_ms = 500;
   settings.scrollbar_fade_resize_delay_ms = 500;
   settings.scrollbar_fade_duration_ms = 300;
-
-  // When pinching in, only show the pinch-viewport overlay scrollbars if the
-  // page scale is at least some threshold away from the minimum. i.e. don't
-  // show the pinch scrollbars when at minimum scale.
-  settings.scrollbar_show_scale_threshold = 1.05f;
 #endif
 
   if (cmd->HasSwitch(switches::kEnableLowResTiling))
@@ -469,11 +451,24 @@ void RenderWidgetCompositor::Initialize() {
   if (cmd->HasSwitch(cc::switches::kEnableBeginFrameScheduling))
     settings.use_external_begin_frame_source = true;
 
+  settings.renderer_settings.use_rgba_4444_textures |=
+      cmd->HasSwitch(switches::kEnableRGBA4444Textures);
+  settings.renderer_settings.use_rgba_4444_textures &=
+      !cmd->HasSwitch(switches::kDisableRGBA4444Textures);
+
   if (widget_->for_oopif()) {
     // TODO(simonhong): Apply BeginFrame scheduling for OOPIF.
     // See crbug.com/471411.
     settings.use_external_begin_frame_source = false;
   }
+
+  settings.max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;  // 32MB
+  // Use 1/4th of staging buffers on low-end devices.
+  if (base::SysInfo::IsLowEndDevice())
+    settings.max_staging_buffer_usage_in_bytes /= 4;
+
+  cc::ManagedMemoryPolicy current = settings.memory_policy_;
+  settings.memory_policy_ = GetGpuMemoryPolicy(current);
 
   scoped_refptr<base::SingleThreadTaskRunner> compositor_thread_task_runner =
       compositor_deps_->GetCompositorImplThreadTaskRunner();
@@ -486,6 +481,11 @@ void RenderWidgetCompositor::Initialize() {
       compositor_deps_->GetGpuMemoryBufferManager();
   cc::TaskGraphRunner* task_graph_runner =
       compositor_deps_->GetTaskGraphRunner();
+
+  bool use_remote_compositing = cmd->HasSwitch(switches::kUseRemoteCompositing);
+
+  if (use_remote_compositing)
+    settings.use_external_begin_frame_source = false;
 
   scoped_ptr<cc::BeginFrameSource> external_begin_frame_source;
   if (settings.use_external_begin_frame_source) {
@@ -500,8 +500,14 @@ void RenderWidgetCompositor::Initialize() {
   params.settings = &settings;
   params.task_graph_runner = task_graph_runner;
   params.main_task_runner = main_thread_compositor_task_runner;
-  params.external_begin_frame_source = external_begin_frame_source.Pass();
-  if (compositor_thread_task_runner.get()) {
+  params.external_begin_frame_source = std::move(external_begin_frame_source);
+  if (use_remote_compositing) {
+    DCHECK(!compositor_thread_task_runner.get());
+
+    // TODO(khushalsagar): Replace this with LayerTreeHost::CreateRemote
+    // See crbug/550687.
+    layer_tree_host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
+  } else if (compositor_thread_task_runner.get()) {
     layer_tree_host_ = cc::LayerTreeHost::CreateThreaded(
         compositor_thread_task_runner, &params);
   } else {
@@ -511,6 +517,11 @@ void RenderWidgetCompositor::Initialize() {
 }
 
 RenderWidgetCompositor::~RenderWidgetCompositor() {}
+
+void RenderWidgetCompositor::SetNeverVisible() {
+  DCHECK(!layer_tree_host_->visible());
+  never_visible_ = true;
+}
 
 const base::WeakPtr<cc::InputHandler>&
 RenderWidgetCompositor::GetInputHandler() {
@@ -550,7 +561,7 @@ RenderWidgetCompositor::CreateLatencyInfoSwapPromiseMonitor(
 
 void RenderWidgetCompositor::QueueSwapPromise(
     scoped_ptr<cc::SwapPromise> swap_promise) {
-  layer_tree_host_->QueueSwapPromise(swap_promise.Pass());
+  layer_tree_host_->QueueSwapPromise(std::move(swap_promise));
 }
 
 int RenderWidgetCompositor::GetSourceFrameNumber() const {
@@ -577,17 +588,14 @@ int RenderWidgetCompositor::ScheduleMicroBenchmark(
     const std::string& name,
     scoped_ptr<base::Value> value,
     const base::Callback<void(scoped_ptr<base::Value>)>& callback) {
-  return layer_tree_host_->ScheduleMicroBenchmark(name, value.Pass(), callback);
+  return layer_tree_host_->ScheduleMicroBenchmark(name, std::move(value),
+                                                  callback);
 }
 
 bool RenderWidgetCompositor::SendMessageToMicroBenchmark(
     int id,
     scoped_ptr<base::Value> value) {
-  return layer_tree_host_->SendMessageToMicroBenchmark(id, value.Pass());
-}
-
-void RenderWidgetCompositor::StartCompositor() {
-  layer_tree_host_->SetLayerTreeHostClientReady();
+  return layer_tree_host_->SendMessageToMicroBenchmark(id, std::move(value));
 }
 
 void RenderWidgetCompositor::setRootLayer(const blink::WebLayer& layer) {
@@ -618,22 +626,8 @@ void RenderWidgetCompositor::detachCompositorAnimationTimeline(
 }
 
 void RenderWidgetCompositor::setViewportSize(
-    const WebSize&,
     const WebSize& device_viewport_size) {
   layer_tree_host_->SetViewportSize(device_viewport_size);
-}
-
-void RenderWidgetCompositor::setViewportSize(
-    const WebSize& device_viewport_size) {
-  layer_tree_host_->SetViewportSize(device_viewport_size);
-}
-
-WebSize RenderWidgetCompositor::layoutViewportSize() const {
-  return layer_tree_host_->device_viewport_size();
-}
-
-WebSize RenderWidgetCompositor::deviceViewportSize() const {
-  return layer_tree_host_->device_viewport_size();
 }
 
 WebFloatPoint RenderWidgetCompositor::adjustEventPointForPinchZoom(
@@ -645,10 +639,6 @@ void RenderWidgetCompositor::setDeviceScaleFactor(float device_scale) {
   layer_tree_host_->SetDeviceScaleFactor(device_scale);
 }
 
-float RenderWidgetCompositor::deviceScaleFactor() const {
-  return layer_tree_host_->device_scale_factor();
-}
-
 void RenderWidgetCompositor::setBackgroundColor(blink::WebColor color) {
   layer_tree_host_->set_background_color(color);
 }
@@ -658,6 +648,9 @@ void RenderWidgetCompositor::setHasTransparentBackground(bool transparent) {
 }
 
 void RenderWidgetCompositor::setVisible(bool visible) {
+  if (never_visible_)
+    return;
+
   layer_tree_host_->SetVisible(visible);
 }
 
@@ -688,6 +681,15 @@ void RenderWidgetCompositor::heuristicsForGpuRasterizationUpdated(
 
 void RenderWidgetCompositor::setNeedsAnimate() {
   layer_tree_host_->SetNeedsAnimate();
+  layer_tree_host_->SetNeedsUpdateLayers();
+}
+
+void RenderWidgetCompositor::setNeedsBeginFrame() {
+  layer_tree_host_->SetNeedsAnimate();
+}
+
+void RenderWidgetCompositor::setNeedsCompositorUpdate() {
+  layer_tree_host_->SetNeedsUpdateLayers();
 }
 
 void RenderWidgetCompositor::didStopFlinging() {
@@ -706,7 +708,7 @@ void RenderWidgetCompositor::registerViewportLayers(
     const blink::WebLayer* outerViewportScrollLayer) {
   layer_tree_host_->RegisterViewportLayers(
       // TODO(bokan): This check can probably be removed now, but it looks
-      // like overscroll elasticity may still be NULL until PinchViewport
+      // like overscroll elasticity may still be NULL until VisualViewport
       // registers its layers.
       // The scroll elasticity layer will only exist when using pinch virtual
       // viewports.
@@ -718,7 +720,7 @@ void RenderWidgetCompositor::registerViewportLayers(
       static_cast<const cc_blink::WebLayerImpl*>(innerViewportScrollLayer)
           ->layer(),
       // TODO(bokan): This check can probably be removed now, but it looks
-      // like overscroll elasticity may still be NULL until PinchViewport
+      // like overscroll elasticity may still be NULL until VisualViewport
       // registers its layers.
       // The outer viewport layer will only exist when using pinch virtual
       // viewports.
@@ -811,10 +813,6 @@ void RenderWidgetCompositor::SynchronouslyComposite() {
   layer_tree_host_->Composite(base::TimeTicks::Now());
 }
 
-void RenderWidgetCompositor::finishAllRendering() {
-  layer_tree_host_->FinishAllRendering();
-}
-
 void RenderWidgetCompositor::setDeferCommits(bool defer_commits) {
   layer_tree_host_->SetDeferCommits(defer_commits);
 }
@@ -838,12 +836,6 @@ void RenderWidgetCompositor::setShowPaintRects(bool show) {
 void RenderWidgetCompositor::setShowDebugBorders(bool show) {
   cc::LayerTreeDebugState debug_state = layer_tree_host_->debug_state();
   debug_state.show_debug_borders = show;
-  layer_tree_host_->SetDebugState(debug_state);
-}
-
-void RenderWidgetCompositor::setContinuousPaintingEnabled(bool enabled) {
-  cc::LayerTreeDebugState debug_state = layer_tree_host_->debug_state();
-  debug_state.continuous_painting = enabled;
   layer_tree_host_->SetDebugState(debug_state);
 }
 
@@ -880,27 +872,24 @@ void RenderWidgetCompositor::DidBeginMainFrame() {
 }
 
 void RenderWidgetCompositor::BeginMainFrame(const cc::BeginFrameArgs& args) {
-  double frame_time_sec = (args.frame_time - base::TimeTicks()).InSecondsF();
-  double deadline_sec = (args.deadline - base::TimeTicks()).InSecondsF();
-  double interval_sec = args.interval.InSecondsF();
-  WebBeginFrameArgs web_begin_frame_args =
-      WebBeginFrameArgs(frame_time_sec, deadline_sec, interval_sec);
   compositor_deps_->GetRendererScheduler()->WillBeginFrame(args);
-  widget_->webwidget()->beginFrame(web_begin_frame_args);
+  double frame_time_sec = (args.frame_time - base::TimeTicks()).InSecondsF();
+  widget_->webwidget()->beginFrame(frame_time_sec);
 }
 
 void RenderWidgetCompositor::BeginMainFrameNotExpectedSoon() {
   compositor_deps_->GetRendererScheduler()->BeginFrameNotExpectedSoon();
 }
 
-void RenderWidgetCompositor::Layout() {
-  widget_->webwidget()->layout();
+void RenderWidgetCompositor::UpdateLayerTreeHost() {
+  widget_->webwidget()->updateAllLifecyclePhases();
 
   if (temporary_copy_output_request_) {
     // For WebViewImpl, this will always have a root layer.  For other widgets,
     // the widget may be closed before servicing this request, so ignore it.
     if (cc::Layer* root_layer = layer_tree_host_->root_layer()) {
-      root_layer->RequestCopyOfOutput(temporary_copy_output_request_.Pass());
+      root_layer->RequestCopyOfOutput(
+          std::move(temporary_copy_output_request_));
     } else {
       temporary_copy_output_request_->SendEmptyResult();
       temporary_copy_output_request_ = nullptr;
@@ -940,7 +929,7 @@ void RenderWidgetCompositor::RequestNewOutputSurface() {
 
   DCHECK_EQ(surface->capabilities().max_frames_pending, 1);
 
-  layer_tree_host_->SetOutputSurface(surface.Pass());
+  layer_tree_host_->SetOutputSurface(std::move(surface));
 }
 
 void RenderWidgetCompositor::DidInitializeOutputSurface() {
@@ -996,6 +985,19 @@ void RenderWidgetCompositor::DidAbortSwapBuffers() {
   widget_->OnSwapBuffersAborted();
 }
 
+void RenderWidgetCompositor::SetProtoReceiver(ProtoReceiver* receiver) {
+  remote_proto_channel_receiver_ = receiver;
+}
+
+void RenderWidgetCompositor::SendCompositorProto(
+    const cc::proto::CompositorMessage& proto) {
+  int signed_size = proto.ByteSize();
+  size_t unsigned_size = base::checked_cast<size_t>(signed_size);
+  std::vector<uint8_t> serialized(unsigned_size);
+  proto.SerializeToArray(serialized.data(), signed_size);
+  widget_->ForwardCompositorProto(serialized);
+}
+
 void RenderWidgetCompositor::RecordFrameTimingEvents(
     scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
     scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
@@ -1028,19 +1030,109 @@ void RenderWidgetCompositor::RecordFrameTimingEvents(
   }
 }
 
-void RenderWidgetCompositor::RateLimitSharedMainThreadContext() {
-  cc::ContextProvider* provider =
-      compositor_deps_->GetSharedMainThreadContextProvider();
-  // provider can be NULL after the GPU process crashed enough times and we
-  // don't want to restart it any more (falling back to software).
-  if (!provider)
-    return;
-  provider->ContextGL()->RateLimitOffscreenContextCHROMIUM();
-}
-
 void RenderWidgetCompositor::SetSurfaceIdNamespace(
     uint32_t surface_id_namespace) {
   layer_tree_host_->set_surface_id_namespace(surface_id_namespace);
+}
+
+void RenderWidgetCompositor::OnHandleCompositorProto(
+    const std::vector<uint8_t>& proto) {
+  DCHECK(remote_proto_channel_receiver_);
+
+  scoped_ptr<cc::proto::CompositorMessage> deserialized(
+      new cc::proto::CompositorMessage);
+  int signed_size = base::checked_cast<int>(proto.size());
+  if (!deserialized->ParseFromArray(proto.data(), signed_size)) {
+    LOG(ERROR) << "Unable to parse compositor proto.";
+    return;
+  }
+
+  remote_proto_channel_receiver_->OnProtoReceived(std::move(deserialized));
+}
+
+cc::ManagedMemoryPolicy RenderWidgetCompositor::GetGpuMemoryPolicy(
+    const cc::ManagedMemoryPolicy& policy) {
+  cc::ManagedMemoryPolicy actual = policy;
+  actual.bytes_limit_when_visible = 0;
+
+  // If the value was overridden on the command line, use the specified value.
+  static bool client_hard_limit_bytes_overridden =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kForceGpuMemAvailableMb);
+  if (client_hard_limit_bytes_overridden) {
+    if (base::StringToSizeT(
+            base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+                switches::kForceGpuMemAvailableMb),
+            &actual.bytes_limit_when_visible))
+      actual.bytes_limit_when_visible *= 1024 * 1024;
+    return actual;
+  }
+
+#if defined(OS_ANDROID)
+  // We can't query available GPU memory from the system on Android.
+  // Physical memory is also mis-reported sometimes (eg. Nexus 10 reports
+  // 1262MB when it actually has 2GB, while Razr M has 1GB but only reports
+  // 128MB java heap size). First we estimate physical memory using both.
+  size_t dalvik_mb = base::SysInfo::DalvikHeapSizeMB();
+  size_t physical_mb = base::SysInfo::AmountOfPhysicalMemoryMB();
+  size_t physical_memory_mb = 0;
+  if (dalvik_mb >= 256)
+    physical_memory_mb = dalvik_mb * 4;
+  else
+    physical_memory_mb = std::max(dalvik_mb * 4, (physical_mb * 4) / 3);
+
+  // Now we take a default of 1/8th of memory on high-memory devices,
+  // and gradually scale that back for low-memory devices (to be nicer
+  // to other apps so they don't get killed). Examples:
+  // Nexus 4/10(2GB)    256MB (normally 128MB)
+  // Droid Razr M(1GB)  114MB (normally 57MB)
+  // Galaxy Nexus(1GB)  100MB (normally 50MB)
+  // Xoom(1GB)          100MB (normally 50MB)
+  // Nexus S(low-end)   8MB (normally 8MB)
+  // Note that the compositor now uses only some of this memory for
+  // pre-painting and uses the rest only for 'emergencies'.
+  if (actual.bytes_limit_when_visible == 0) {
+    // NOTE: Non-low-end devices use only 50% of these limits,
+    // except during 'emergencies' where 100% can be used.
+    if (!base::SysInfo::IsLowEndDevice()) {
+      if (physical_memory_mb >= 1536)
+        actual.bytes_limit_when_visible = physical_memory_mb / 8;  // >192MB
+      else if (physical_memory_mb >= 1152)
+        actual.bytes_limit_when_visible = physical_memory_mb / 8;  // >144MB
+      else if (physical_memory_mb >= 768)
+        actual.bytes_limit_when_visible = physical_memory_mb / 10;  // >76MB
+      else
+        actual.bytes_limit_when_visible = physical_memory_mb / 12;  // <64MB
+    } else {
+      // Low-end devices have 512MB or less memory by definition
+      // so we hard code the limit rather than relying on the heuristics
+      // above. Low-end devices use 4444 textures so we can use a lower limit.
+      actual.bytes_limit_when_visible = 8;
+    }
+    actual.bytes_limit_when_visible =
+        actual.bytes_limit_when_visible * 1024 * 1024;
+    // Clamp the observed value to a specific range on Android.
+    actual.bytes_limit_when_visible = std::max(
+        actual.bytes_limit_when_visible, static_cast<size_t>(8 * 1024 * 1024));
+    actual.bytes_limit_when_visible =
+        std::min(actual.bytes_limit_when_visible,
+                 static_cast<size_t>(256 * 1024 * 1024));
+  }
+  actual.priority_cutoff_when_visible =
+      gpu::MemoryAllocation::CUTOFF_ALLOW_EVERYTHING;
+#else
+  // Ignore what the system said and give all clients the same maximum
+  // allocation on desktop platforms.
+  actual.bytes_limit_when_visible = 512 * 1024 * 1024;
+  actual.priority_cutoff_when_visible =
+      gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
+#endif
+  return actual;
+}
+
+void RenderWidgetCompositor::SetPaintedDeviceScaleFactor(
+    float device_scale) {
+  layer_tree_host_->SetPaintedDeviceScaleFactor(device_scale);
 }
 
 }  // namespace content

@@ -74,6 +74,9 @@ cvox.KeyMap.AVAILABLE_MAP_INFO = {
 'keymap_flat': {
     'file': 'flat_keymap.json'
   },
+'keymap_next': {
+    'file': 'next_keymap.json'
+  },
 'keymap_experimental': {
     'file': 'experimental.json'
   }
@@ -327,6 +330,16 @@ cvox.KeyMap.fromDefaults = function() {
 
 
 /**
+ * Convenience method for getting a ChromeVox Next key map.
+ * @return {cvox.KeyMap} The Next key map.
+ */
+cvox.KeyMap.fromNext = function() {
+  return cvox.KeyMap.fromPath(cvox.KeyMap.KEYMAP_PATH +
+      cvox.KeyMap.AVAILABLE_MAP_INFO['keymap_next'].file);
+};
+
+
+/**
  * Convenience method for creating a key map based on a JSON (key, value) Object
  * where the key is a literal keyboard string and value is a command string.
  * @param {string} json The JSON.
@@ -343,6 +356,8 @@ cvox.KeyMap.fromJSON = function(json) {
           cvox.PlatformUtil.matchesPlatform(value.sequence.platformFilter);
     });
   } catch (e) {
+    console.error('Failed to load key map from JSON');
+    console.error(e);
     return null;
   }
 

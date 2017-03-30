@@ -4,6 +4,8 @@
 
 #include "ui/views/controls/message_box_view.h"
 
+#include <stddef.h>
+
 #include "base/i18n/rtl.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_split.h"
@@ -25,7 +27,7 @@
 
 namespace {
 
-const int kDefaultMessageWidth = 320;
+const int kDefaultMessageWidth = 400;
 
 // Paragraph separators are defined in
 // http://www.unicode.org/Public/6.0.0/ucd/extracted/DerivedBidiClass.txt
@@ -217,7 +219,7 @@ void MessageBoxView::ResetLayoutManager() {
                           GridLayout::USE_PREF, 0, 0);
   }
 
-  const int kMaxScrollViewHeight = 600;
+  const int kMaxScrollViewHeight = 400;
   views::View* message_contents = new views::View();
   message_contents->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));

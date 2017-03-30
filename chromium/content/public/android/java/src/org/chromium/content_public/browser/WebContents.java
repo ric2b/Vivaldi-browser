@@ -4,8 +4,11 @@
 
 package org.chromium.content_public.browser;
 
+import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.os.Parcelable;
 
+import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 
 /**
@@ -90,12 +93,18 @@ public interface WebContents extends Parcelable {
     void paste();
 
     /**
+     * Replace the selected text with the {@code word}.
+     */
+    void replace(String word);
+
+    /**
      * Select all content.
      */
     void selectAll();
 
     /**
-     * Clear the selection.
+     * Clear the selection. This includes the cursor which is a zero-sized selection, and keyboard
+     * will be hidden as a result.
      */
     void unselect();
 
@@ -138,6 +147,11 @@ public interface WebContents extends Parcelable {
      * @return Whether the page is currently showing an interstitial, such as a bad HTTPS page.
      */
     boolean isShowingInterstitialPage();
+
+    /**
+     * @return Whether the location bar should be focused by default for this page.
+     */
+    boolean focusLocationBarByDefault();
 
     /**
      * If the view is ready to draw contents to the screen. In hardware mode,
@@ -218,6 +232,21 @@ public interface WebContents extends Parcelable {
      * Injects the passed Javascript code in the current page and evaluates it.
      * If a result is required, pass in a callback.
      *
+     * It is not possible to use this method to evaluate JavaScript on web
+     * content, only on WebUI pages.
+     *
+     * @param script The Javascript to execute.
+     * @param callback The callback to be fired off when a result is ready. The script's
+     *                 result will be json encoded and passed as the parameter, and the call
+     *                 will be made on the main thread.
+     *                 If no result is required, pass null.
+     */
+    void evaluateJavaScript(String script, JavaScriptCallback callback);
+
+    /**
+     * Injects the passed Javascript code in the current page and evaluates it.
+     * If a result is required, pass in a callback.
+     *
      * @param script The Javascript to execute.
      * @param callback The callback to be fired off when a result is ready. The script's
      *                 result will be json encoded and passed as the parameter, and the call
@@ -225,13 +254,18 @@ public interface WebContents extends Parcelable {
      *                 If no result is required, pass null.
      */
     @VisibleForTesting
-    void evaluateJavaScript(String script, JavaScriptCallback callback);
+    void evaluateJavaScriptForTests(String script, JavaScriptCallback callback);
 
     /**
      * Adds a log message to dev tools console. |level| must be a value of
      * org.chromium.content_public.common.ConsoleMessageLevel.
      */
     void addMessageToDevToolsConsole(int level, String message);
+
+    /**
+     * Dispatches a Message event to the specified frame.
+     */
+    void sendMessageToFrame(String frameName, String message, String targetOrigin);
 
     /**
      * Returns whether the initial empty page has been accessed by a script from another
@@ -271,6 +305,11 @@ public interface WebContents extends Parcelable {
     void suspendMediaSession();
 
     /**
+     * Stops the current media session.
+     */
+    void stopMediaSession();
+
+    /**
      * Add an observer to the WebContents
      *
      * @param observer The observer to add.
@@ -283,4 +322,31 @@ public interface WebContents extends Parcelable {
      * @param observer The observer to remove.
      */
     void removeObserver(WebContentsObserver observer);
+
+    /**
+     * @return The list of observers.
+     */
+    @VisibleForTesting
+    ObserverList.RewindableIterator<WebContentsObserver> getObserversForTesting();
+
+    /**
+     * Called when context menu gets opened.
+     */
+    void onContextMenuOpened();
+
+    /**
+     * Called when context menu gets closed. Note that closing context menu that is
+     * not triggered by WebContents will still call this. However, it will have no effect
+     * if onContextMenuOpened() isn't called in advance.
+     */
+    void onContextMenuClosed();
+
+    /**
+     * @return The character encoding for the current visible page.
+     */
+    @VisibleForTesting
+    String getEncoding();
+
+    public void getContentBitmapAsync(Bitmap.Config config, float scale, Rect srcRect,
+            ContentBitmapCallback callback);
 }

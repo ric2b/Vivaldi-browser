@@ -2,8 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/strings/string_util.h"
 #include "media/base/data_buffer.h"
+
+#include <stdint.h>
+#include <utility>
+
+#include "base/macros.h"
+#include "base/strings/string_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
@@ -30,10 +35,10 @@ TEST(DataBufferTest, Constructor_NonZeroSize) {
 TEST(DataBufferTest, Constructor_ScopedArray) {
   // Data should be passed and both data and buffer size should be set.
   const int kSize = 8;
-  scoped_ptr<uint8[]> data(new uint8[kSize]);
-  const uint8* kData = data.get();
+  scoped_ptr<uint8_t[]> data(new uint8_t[kSize]);
+  const uint8_t* kData = data.get();
 
-  scoped_refptr<DataBuffer> buffer = new DataBuffer(data.Pass(), kSize);
+  scoped_refptr<DataBuffer> buffer = new DataBuffer(std::move(data), kSize);
   EXPECT_TRUE(buffer->data());
   EXPECT_TRUE(buffer->writable_data());
   EXPECT_EQ(kData, buffer->data());
@@ -42,7 +47,7 @@ TEST(DataBufferTest, Constructor_ScopedArray) {
 }
 
 TEST(DataBufferTest, CopyFrom) {
-  const uint8 kTestData[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77 };
+  const uint8_t kTestData[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
   const int kTestDataSize = arraysize(kTestData);
 
   scoped_refptr<DataBuffer> buffer =
@@ -101,11 +106,11 @@ TEST(DataBufferTest, ReadingWriting) {
   scoped_refptr<DataBuffer> buffer(new DataBuffer(kDataSize));
   ASSERT_TRUE(buffer.get());
 
-  uint8* data = buffer->writable_data();
+  uint8_t* data = buffer->writable_data();
   ASSERT_TRUE(data);
   memcpy(data, kData, kDataSize);
   buffer->set_data_size(kDataSize);
-  const uint8* read_only_data = buffer->data();
+  const uint8_t* read_only_data = buffer->data();
   ASSERT_EQ(data, read_only_data);
   ASSERT_EQ(0, memcmp(read_only_data, kData, kDataSize));
   EXPECT_FALSE(buffer->end_of_stream());

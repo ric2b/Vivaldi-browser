@@ -5,6 +5,7 @@
 #include "chrome/browser/pepper_broker_infobar_delegate.h"
 
 #include "base/prefs/pref_service.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/plugins/plugin_finder.h"
@@ -14,6 +15,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/infobars/core/infobar.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/user_metrics.h"
@@ -22,7 +24,6 @@
 #include "content/public/common/webplugininfo.h"
 #include "grit/components_strings.h"
 #include "grit/theme_resources.h"
-#include "net/base/net_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
 
@@ -44,7 +45,7 @@ void PepperBrokerInfoBarDelegate::Create(
       TabSpecificContentSettings::FromWebContents(web_contents);
 
   HostContentSettingsMap* content_settings =
-      profile->GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(profile);
   ContentSetting setting =
       content_settings->GetContentSetting(url, url,
                                           CONTENT_SETTINGS_TYPE_PPAPI_BROKER,
@@ -92,7 +93,12 @@ PepperBrokerInfoBarDelegate::~PepperBrokerInfoBarDelegate() {
     callback_.Run(false);
 }
 
-int PepperBrokerInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::InfoBarIdentifier
+PepperBrokerInfoBarDelegate::GetIdentifier() const {
+  return PEPPER_BROKER_INFOBAR_DELEGATE;
+}
+
+int PepperBrokerInfoBarDelegate::GetIconId() const {
   return IDR_INFOBAR_PLUGIN_INSTALL;
 }
 
@@ -104,10 +110,9 @@ base::string16 PepperBrokerInfoBarDelegate::GetMessageText() const {
   DCHECK(success);
   scoped_ptr<PluginMetadata> plugin_metadata(
       PluginFinder::GetInstance()->GetPluginMetadata(plugin));
-  return l10n_util::GetStringFUTF16(IDS_PEPPER_BROKER_MESSAGE,
-                                    plugin_metadata->name(),
-                                    net::FormatUrl(url_.GetOrigin(),
-                                                   languages_));
+  return l10n_util::GetStringFUTF16(
+      IDS_PEPPER_BROKER_MESSAGE, plugin_metadata->name(),
+      url_formatter::FormatUrlForSecurityDisplay(url_, languages_));
 }
 
 base::string16 PepperBrokerInfoBarDelegate::GetButtonLabel(
@@ -130,15 +135,8 @@ base::string16 PepperBrokerInfoBarDelegate::GetLinkText() const {
   return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
 }
 
-bool PepperBrokerInfoBarDelegate::LinkClicked(
-    WindowOpenDisposition disposition) {
-  GURL learn_more_url("https://support.google.com/chrome/?p=ib_pepper_broker");
-  InfoBarService::WebContentsFromInfoBar(infobar())->OpenURL(
-      content::OpenURLParams(
-          learn_more_url, content::Referrer(),
-          (disposition == CURRENT_TAB) ? NEW_FOREGROUND_TAB : disposition,
-          ui::PAGE_TRANSITION_LINK, false));
-  return false;
+GURL PepperBrokerInfoBarDelegate::GetLinkURL() const {
+  return GURL("https://support.google.com/chrome/?p=ib_pepper_broker");
 }
 
 void PepperBrokerInfoBarDelegate::DispatchCallback(bool result) {

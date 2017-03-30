@@ -49,8 +49,8 @@ enum BadSyncDataReason {
   // No ExtensionSpecifics in the EntitySpecifics.
   NO_EXTENSION_SPECIFICS,
 
-  // Enabled extensions can't have disable reasons.
-  BAD_DISABLE_REASONS,
+  // Not used anymore; still here because of UMA.
+  DEPRECATED_BAD_DISABLE_REASONS,
 
   // Must be at the end.
   NUM_BAD_SYNC_DATA_REASONS
@@ -141,7 +141,7 @@ scoped_ptr<ExtensionSyncData> ExtensionSyncData::CreateFromSyncData(
     const syncer::SyncData& sync_data) {
   scoped_ptr<ExtensionSyncData> data(new ExtensionSyncData);
   if (data->PopulateFromSyncData(sync_data))
-    return data.Pass();
+    return data;
   return nullptr;
 }
 
@@ -153,9 +153,9 @@ scoped_ptr<ExtensionSyncData> ExtensionSyncData::CreateFromSyncChange(
   if (!data.get())
     return nullptr;
 
-  data->set_uninstalled(sync_change.change_type() ==
-                        syncer::SyncChange::ACTION_DELETE);
-  return data.Pass();
+  if (sync_change.change_type() == syncer::SyncChange::ACTION_DELETE)
+    data->uninstalled_ = true;
+  return data;
 }
 
 syncer::SyncData ExtensionSyncData::GetSyncData() const {
@@ -202,7 +202,7 @@ void ExtensionSyncData::ToAppSpecifics(sync_pb::AppSpecifics* specifics) const {
       static_cast<sync_pb::AppSpecifics::LaunchType>(launch_type_);
 
   // The corresponding validation of this value during processing of an
-  // AppSyncData is in ExtensionSyncService::ProcessAppSyncData.
+  // ExtensionSyncData is in ExtensionSyncService::ApplySyncData.
   if (launch_type_ >= LAUNCH_TYPE_FIRST && launch_type_ < NUM_LAUNCH_TYPES &&
       sync_pb::AppSpecifics_LaunchType_IsValid(sync_launch_type)) {
     specifics->set_launch_type(sync_launch_type);
@@ -250,17 +250,6 @@ bool ExtensionSyncData::PopulateFromExtensionSpecifics(
     LOG(ERROR) << "Attempt to sync bad ExtensionSpecifics (bad update URL):\n"
                << GetExtensionSpecificsLogMessage(specifics);
     RecordBadSyncData(BAD_UPDATE_URL);
-    return false;
-  }
-
-  // Enabled extensions can't have disable reasons. (The proto field may be
-  // unset, in which case it defaults to DISABLE_NONE.)
-  if (specifics.enabled() &&
-      specifics.disable_reasons() != Extension::DISABLE_NONE) {
-    LOG(ERROR) << "Attempt to sync bad ExtensionSpecifics "
-               << "(enabled extension can't have disable reasons):\n"
-               << GetExtensionSpecificsLogMessage(specifics);
-    RecordBadSyncData(BAD_DISABLE_REASONS);
     return false;
   }
 
@@ -315,10 +304,6 @@ bool ExtensionSyncData::PopulateFromAppSpecifics(
   }
 
   return true;
-}
-
-void ExtensionSyncData::set_uninstalled(bool uninstalled) {
-  uninstalled_ = uninstalled;
 }
 
 bool ExtensionSyncData::PopulateFromSyncData(

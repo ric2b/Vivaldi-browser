@@ -4,6 +4,8 @@
 
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 
+#include <utility>
+
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
@@ -62,7 +64,7 @@ int InfoBarManagerImpl::GetActiveEntryID() {
 
 scoped_ptr<infobars::InfoBar> InfoBarManagerImpl::CreateConfirmInfoBar(
     scoped_ptr<ConfirmInfoBarDelegate> delegate) {
-  return ::CreateConfirmInfoBar(delegate.Pass());
+  return ::CreateConfirmInfoBar(std::move(delegate));
 }
 
 void InfoBarManagerImpl::NavigationItemCommitted(
@@ -77,4 +79,9 @@ void InfoBarManagerImpl::WebStateDestroyed() {
   web_state()->RemoveUserData(UserDataKey());
   // That was the equivalent of "delete this". This object is now destroyed;
   // returning from this function is the only safe thing to do.
+}
+
+void InfoBarManagerImpl::OpenURL(const GURL& url,
+                                 WindowOpenDisposition disposition) {
+  NOTIMPLEMENTED();
 }

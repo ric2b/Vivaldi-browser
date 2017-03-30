@@ -4,10 +4,6 @@
 
 #include "base/test/launcher/test_launcher.h"
 
-#if defined(OS_POSIX)
-#include <fcntl.h>
-#endif
-
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -20,6 +16,7 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/kill.h"
@@ -40,7 +37,12 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_POSIX)
+#include <fcntl.h>
+#endif
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -167,7 +169,7 @@ class SignalFDWatcher : public MessageLoopForIO::Watcher {
 // Parses the environment variable var as an Int32.  If it is unset, returns
 // true.  If it is set, unsets it then converts it to Int32 before
 // returning it in |result|.  Returns true on success.
-bool TakeInt32FromEnvironment(const char* const var, int32* result) {
+bool TakeInt32FromEnvironment(const char* const var, int32_t* result) {
   scoped_ptr<Environment> env(Environment::Create());
   std::string str_val;
 
@@ -434,7 +436,9 @@ void DoLaunchChildTestProcess(
 
 }  // namespace
 
+const char kGTestBreakOnFailure[] = "gtest_break_on_failure";
 const char kGTestFilterFlag[] = "gtest_filter";
+const char kGTestFlagfileFlag[] = "gtest_flagfile";
 const char kGTestHelpFlag[]   = "gtest_help";
 const char kGTestListTestsFlag[] = "gtest_list_tests";
 const char kGTestRepeatFlag[] = "gtest_repeat";
@@ -450,12 +454,14 @@ TestLauncher::TestLauncher(TestLauncherDelegate* launcher_delegate,
       total_shards_(1),
       shard_index_(0),
       cycles_(1),
+      test_found_count_(0),
       test_started_count_(0),
       test_finished_count_(0),
       test_success_count_(0),
       test_broken_count_(0),
       retry_count_(0),
       retry_limit_(0),
+      force_run_broken_tests_(false),
       run_result_(true),
       watchdog_timer_(FROM_HERE,
                       TimeDelta::FromSeconds(kOutputTimeoutSeconds),
@@ -464,10 +470,7 @@ TestLauncher::TestLauncher(TestLauncherDelegate* launcher_delegate,
       parallel_jobs_(parallel_jobs) {
 }
 
-TestLauncher::~TestLauncher() {
-  if (worker_pool_owner_)
-    worker_pool_owner_->pool()->Shutdown();
-}
+TestLauncher::~TestLauncher() {}
 
 bool TestLauncher::Run() {
   if (!Init())
@@ -561,8 +564,9 @@ void TestLauncher::OnTestFinished(const TestResult& result) {
                  << ": " << print_test_stdio;
   }
   if (print_snippet) {
-    std::vector<std::string> snippet_lines;
-    SplitStringDontTrim(result.output_snippet, '\n', &snippet_lines);
+    std::vector<std::string> snippet_lines = SplitString(
+        result.output_snippet, "\n", base::KEEP_WHITESPACE,
+        base::SPLIT_WANT_ALL);
     if (snippet_lines.size() > kOutputSnippetLinesLimit) {
       size_t truncated_size = snippet_lines.size() - kOutputSnippetLinesLimit;
       snippet_lines.erase(
@@ -570,7 +574,7 @@ void TestLauncher::OnTestFinished(const TestResult& result) {
           snippet_lines.begin() + truncated_size);
       snippet_lines.insert(snippet_lines.begin(), "<truncated>");
     }
-    fprintf(stdout, "%s", JoinString(snippet_lines, "\n").c_str());
+    fprintf(stdout, "%s", base::JoinString(snippet_lines, "\n").c_str());
     fflush(stdout);
   }
 
@@ -617,8 +621,8 @@ void TestLauncher::OnTestFinished(const TestResult& result) {
     test_broken_count_++;
   }
   size_t broken_threshold =
-      std::max(static_cast<size_t>(20), test_started_count_ / 10);
-  if (test_broken_count_ >= broken_threshold) {
+      std::max(static_cast<size_t>(20), test_found_count_ / 10);
+  if (!force_run_broken_tests_ && test_broken_count_ >= broken_threshold) {
     fprintf(stdout, "Too many badly broken tests (%" PRIuS "), exiting now.\n",
             test_broken_count_);
     fflush(stdout);
@@ -642,7 +646,7 @@ void TestLauncher::OnTestFinished(const TestResult& result) {
     return;
   }
 
-  if (tests_to_retry_.size() >= broken_threshold) {
+  if (!force_run_broken_tests_ && tests_to_retry_.size() >= broken_threshold) {
     fprintf(stdout,
             "Too many failing tests (%" PRIuS "), skipping retries.\n",
             tests_to_retry_.size());
@@ -754,6 +758,9 @@ bool TestLauncher::Init() {
     retry_limit_ = 3;
   }
 
+  if (command_line->HasSwitch(switches::kTestLauncherForceRunBrokenTests))
+    force_run_broken_tests_ = true;
+
   fprintf(stdout, "Initial parallel jobs limit: %" PRIuS ".\n", parallel_jobs_);
   if (command_line->HasSwitch(switches::kTestLauncherJobs)) {
     int jobs = -1;
@@ -794,16 +801,16 @@ bool TestLauncher::Init() {
       return false;
     }
 
-    std::vector<std::string> filter_lines;
-    SplitString(filter, '\n', &filter_lines);
-    for (size_t i = 0; i < filter_lines.size(); i++) {
-      if (filter_lines[i].empty())
+    std::vector<std::string> filter_lines = SplitString(
+        filter, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    for (const std::string& filter_line : filter_lines) {
+      if (filter_line.empty() || filter_line[0] == '#')
         continue;
 
-      if (filter_lines[i][0] == '-')
-        negative_test_filter_.push_back(filter_lines[i].substr(1));
+      if (filter_line[0] == '-')
+        negative_test_filter_.push_back(filter_line.substr(1));
       else
-        positive_test_filter_.push_back(filter_lines[i]);
+        positive_test_filter_.push_back(filter_line);
     }
   } else {
     // Split --gtest_filter at '-', if there is one, to separate into
@@ -811,13 +818,18 @@ bool TestLauncher::Init() {
     std::string filter = command_line->GetSwitchValueASCII(kGTestFilterFlag);
     size_t dash_pos = filter.find('-');
     if (dash_pos == std::string::npos) {
-      SplitString(filter, ':', &positive_test_filter_);
+      positive_test_filter_ = SplitString(
+          filter, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     } else {
       // Everything up to the dash.
-      SplitString(filter.substr(0, dash_pos), ':', &positive_test_filter_);
+      positive_test_filter_ = SplitString(
+          filter.substr(0, dash_pos), ":", base::TRIM_WHITESPACE,
+          base::SPLIT_WANT_ALL);
 
       // Everything after the dash.
-      SplitString(filter.substr(dash_pos + 1), ':', &negative_test_filter_);
+      negative_test_filter_ = SplitString(
+          filter.substr(dash_pos + 1), ":", base::TRIM_WHITESPACE,
+          base::SPLIT_WANT_ALL);
     }
   }
 
@@ -900,9 +912,9 @@ void TestLauncher::RunTests() {
   std::vector<std::string> test_names;
   for (size_t i = 0; i < tests_.size(); i++) {
     std::string test_name = FormatFullTestName(
-        tests_[i].first, tests_[i].second);
+        tests_[i].test_case_name, tests_[i].test_name);
 
-    results_tracker_.AddTest(test_name);
+    results_tracker_.AddTest(test_name, tests_[i].file, tests_[i].line);
 
     const CommandLine* command_line = CommandLine::ForCurrentProcess();
     if (test_name.find("DISABLED") != std::string::npos) {
@@ -913,8 +925,13 @@ void TestLauncher::RunTests() {
         continue;
     }
 
-    if (!launcher_delegate_->ShouldRunTest(tests_[i].first, tests_[i].second))
+    if (!launcher_delegate_->ShouldRunTest(
+        tests_[i].test_case_name, tests_[i].test_name)) {
       continue;
+    }
+
+    // Count tests in the binary, before we apply filter and sharding.
+    test_found_count_++;
 
     // Skip the test that doesn't match the filter (if given).
     if (!positive_test_filter_.empty()) {
@@ -939,7 +956,7 @@ void TestLauncher::RunTests() {
     if (excluded)
       continue;
 
-    if (Hash(test_name) % total_shards_ != static_cast<uint32>(shard_index_))
+    if (Hash(test_name) % total_shards_ != static_cast<uint32_t>(shard_index_))
       continue;
 
     test_names.push_back(test_name);
@@ -958,14 +975,18 @@ void TestLauncher::RunTests() {
 }
 
 void TestLauncher::RunTestIteration() {
-  if (cycles_ == 0) {
-    MessageLoop::current()->Quit();
+  const bool stop_on_failure =
+      CommandLine::ForCurrentProcess()->HasSwitch(kGTestBreakOnFailure);
+  if (cycles_ == 0 ||
+      (stop_on_failure && test_success_count_ != test_finished_count_)) {
+    MessageLoop::current()->QuitWhenIdle();
     return;
   }
 
   // Special value "-1" means "repeat indefinitely".
   cycles_ = (cycles_ == -1) ? cycles_ : cycles_ - 1;
 
+  test_found_count_ = 0;
   test_started_count_ = 0;
   test_finished_count_ = 0;
   test_success_count_ = 0;

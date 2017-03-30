@@ -5,7 +5,9 @@
 #ifndef TOOLS_GN_C_INCLUDE_ITERATOR_H_
 #define TOOLS_GN_C_INCLUDE_ITERATOR_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 
 class InputFile;

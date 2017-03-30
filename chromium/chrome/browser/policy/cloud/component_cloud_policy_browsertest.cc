@@ -4,14 +4,14 @@
 
 #include <string>
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
@@ -85,18 +85,6 @@ const char kTestPolicy2[] =
     "}";
 
 const char kTestPolicy2JSON[] = "{\"Another\":\"turn_it_off\"}";
-
-#if !defined(OS_CHROMEOS)
-// Same encoding as ResourceCache does for its keys.
-bool Base64UrlEncode(const std::string& value, std::string* encoded) {
-  if (value.empty())
-    return false;
-  base::Base64Encode(value, encoded);
-  base::ReplaceChars(*encoded, "+", "-", encoded);
-  base::ReplaceChars(*encoded, "/", "_", encoded);
-  return true;
-}
-#endif
 
 }  // namespace
 
@@ -188,12 +176,11 @@ class ComponentCloudPolicyTest : public ExtensionBrowserTest {
         UserCloudPolicyManagerFactory::GetForBrowserContext(
             browser()->profile());
     ASSERT_TRUE(policy_manager);
-    policy_manager->Connect(
-        g_browser_process->local_state(),
-        g_browser_process->system_request_context(),
-        UserCloudPolicyManager::CreateCloudPolicyClient(
-            connector->device_management_service(),
-            g_browser_process->system_request_context()).Pass());
+    policy_manager->Connect(g_browser_process->local_state(),
+                            g_browser_process->system_request_context(),
+                            UserCloudPolicyManager::CreateCloudPolicyClient(
+                                connector->device_management_service(),
+                                g_browser_process->system_request_context()));
 #endif  // defined(OS_CHROMEOS)
 
     // Register the cloud policy client.
@@ -305,9 +292,13 @@ IN_PROC_BROWSER_TEST_F(ComponentCloudPolicyTest, SignOutAndBackIn) {
 
   // Verify that the policy cache exists.
   std::string cache_key;
-  ASSERT_TRUE(Base64UrlEncode("extension-policy", &cache_key));
+  base::Base64UrlEncode(
+      "extension-policy", base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+      &cache_key);
   std::string cache_subkey;
-  ASSERT_TRUE(Base64UrlEncode(kTestExtension, &cache_subkey));
+  base::Base64UrlEncode(
+      kTestExtension, base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+      &cache_subkey);
   base::FilePath cache_path = browser()->profile()->GetPath()
       .Append(FILE_PATH_LITERAL("Policy"))
       .Append(FILE_PATH_LITERAL("Components"))

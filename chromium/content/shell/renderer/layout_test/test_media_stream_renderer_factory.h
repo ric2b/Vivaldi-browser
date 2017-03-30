@@ -22,11 +22,16 @@ class TestMediaStreamRendererFactory : public MediaStreamRendererFactory {
   scoped_refptr<VideoFrameProvider> GetVideoFrameProvider(
       const GURL& url,
       const base::Closure& error_cb,
-      const VideoFrameProvider::RepaintCB& repaint_cb) override;
+      const VideoFrameProvider::RepaintCB& repaint_cb,
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      const scoped_refptr<base::TaskRunner>& worker_task_runner,
+      media::GpuVideoAcceleratorFactories* gpu_factories) override;
 
   scoped_refptr<MediaStreamAudioRenderer> GetAudioRenderer(
       const GURL& url,
-      int render_frame_id) override;
+      int render_frame_id,
+      const std::string& device_id,
+      const url::Origin& security_origin) override;
 };
 
 }  // namespace content

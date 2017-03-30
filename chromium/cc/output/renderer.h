@@ -5,9 +5,8 @@
 #ifndef CC_OUTPUT_RENDERER_H_
 #define CC_OUTPUT_RENDERER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
-#include "cc/base/scoped_ptr_vector.h"
 #include "cc/output/renderer_capabilities.h"
 #include "cc/output/renderer_settings.h"
 #include "ui/gfx/geometry/rect.h"
@@ -21,7 +20,7 @@ class RenderPassId;
 class ScopedResource;
 class Task;
 
-typedef ScopedPtrVector<RenderPass> RenderPassList;
+typedef std::vector<scoped_ptr<RenderPass>> RenderPassList;
 
 struct RendererCapabilitiesImpl {
   RendererCapabilitiesImpl();
@@ -35,6 +34,9 @@ struct RendererCapabilitiesImpl {
 
   // Capabilities used on compositor thread only.
   bool using_partial_swap;
+  // Whether it's valid to SwapBuffers with an empty rect. Trivially true when
+  // |using_partial_swap|.
+  bool allow_empty_swap;
   bool using_egl_image;
   bool using_image;
   bool using_discard_framebuffer;
@@ -72,8 +74,6 @@ class CC_EXPORT Renderer {
 
   // Waits for rendering to finish.
   virtual void Finish() = 0;
-
-  virtual void DoNoOp() {}
 
   // Puts backbuffer onscreen.
   virtual void SwapBuffers(const CompositorFrameMetadata& metadata) = 0;

@@ -13,6 +13,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/renderer_preferences.h"
 #include "jni/CastWindowAndroid_jni.h"
@@ -137,21 +138,16 @@ bool CastWindowAndroid::CanOverscrollContent() const {
 }
 
 bool CastWindowAndroid::AddMessageToConsole(content::WebContents* source,
-                                            int32 level,
+                                            int32_t level,
                                             const base::string16& message,
-                                            int32 line_no,
+                                            int32_t line_no,
                                             const base::string16& source_id) {
   return false;
 }
 
 void CastWindowAndroid::ActivateContents(content::WebContents* contents) {
   DCHECK_EQ(contents, web_contents_.get());
-  contents->GetRenderViewHost()->Focus();
-}
-
-void CastWindowAndroid::DeactivateContents(content::WebContents* contents) {
-  DCHECK_EQ(contents, web_contents_.get());
-  contents->GetRenderViewHost()->Blur();
+  contents->GetRenderViewHost()->GetWidget()->Focus();
 }
 
 void CastWindowAndroid::RenderProcessGone(base::TerminationStatus status) {

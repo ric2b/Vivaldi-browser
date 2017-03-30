@@ -50,11 +50,12 @@ class _Generator(object):
     (c.Append('#ifndef %s' % ifndef_name)
       .Append('#define %s' % ifndef_name)
       .Append()
+      .Append('#include <stdint.h>')
+      .Append()
       .Append('#include <map>')
       .Append('#include <string>')
       .Append('#include <vector>')
       .Append()
-      .Append('#include "base/basictypes.h"')
       .Append('#include "base/logging.h"')
       .Append('#include "base/memory/linked_ptr.h"')
       .Append('#include "base/memory/scoped_ptr.h"')
@@ -195,7 +196,7 @@ class _Generator(object):
     elif type_.property_type == PropertyType.ARRAY:
       if generate_typedefs and type_.description:
         c.Comment(type_.description)
-      c.Cblock(self._GenerateType(type_.item_type))
+      c.Cblock(self._GenerateType(type_.item_type, is_toplevel=is_toplevel))
       if generate_typedefs:
         (c.Append('typedef std::vector<%s > %s;' % (
                        self._type_helper.GetCppType(type_.item_type),

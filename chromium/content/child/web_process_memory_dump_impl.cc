@@ -4,21 +4,26 @@
 
 #include "content/child/web_process_memory_dump_impl.h"
 
+#include <stddef.h>
+
+#include "base/memory/discardable_memory.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "content/child/web_memory_allocator_dump_impl.h"
+#include "skia/ext/skia_trace_memory_dump_impl.h"
 
 namespace content {
 
 WebProcessMemoryDumpImpl::WebProcessMemoryDumpImpl()
     : owned_process_memory_dump_(
           new base::trace_event::ProcessMemoryDump(nullptr)),
-      process_memory_dump_(owned_process_memory_dump_.get()) {
-}
+      process_memory_dump_(owned_process_memory_dump_.get()),
+      level_of_detail_(base::trace_event::MemoryDumpLevelOfDetail::DETAILED) {}
 
 WebProcessMemoryDumpImpl::WebProcessMemoryDumpImpl(
+    base::trace_event::MemoryDumpLevelOfDetail level_of_detail,
     base::trace_event::ProcessMemoryDump* process_memory_dump)
-    : process_memory_dump_(process_memory_dump) {
-}
+    : process_memory_dump_(process_memory_dump),
+      level_of_detail_(level_of_detail) {}
 
 WebProcessMemoryDumpImpl::~WebProcessMemoryDumpImpl() {
 }
@@ -109,13 +114,13 @@ void WebProcessMemoryDumpImpl::takeAllDumpsFrom(
         first_entry->first;
     memory_allocator_dumps_.set(
         memory_allocator_dump,
-        other_impl->memory_allocator_dumps_.take_and_erase(first_entry).Pass());
+        other_impl->memory_allocator_dumps_.take_and_erase(first_entry));
   }
   DCHECK_EQ(expected_final_size, memory_allocator_dumps_.size());
   DCHECK(other_impl->memory_allocator_dumps_.empty());
 }
 
-void WebProcessMemoryDumpImpl::AddOwnershipEdge(
+void WebProcessMemoryDumpImpl::addOwnershipEdge(
     blink::WebMemoryAllocatorDumpGuid source,
     blink::WebMemoryAllocatorDumpGuid target,
     int importance) {
@@ -124,12 +129,37 @@ void WebProcessMemoryDumpImpl::AddOwnershipEdge(
       base::trace_event::MemoryAllocatorDumpGuid(target), importance);
 }
 
-void WebProcessMemoryDumpImpl::AddOwnershipEdge(
+void WebProcessMemoryDumpImpl::addOwnershipEdge(
     blink::WebMemoryAllocatorDumpGuid source,
     blink::WebMemoryAllocatorDumpGuid target) {
   process_memory_dump_->AddOwnershipEdge(
       base::trace_event::MemoryAllocatorDumpGuid(source),
       base::trace_event::MemoryAllocatorDumpGuid(target));
+}
+
+void WebProcessMemoryDumpImpl::addSuballocation(
+    blink::WebMemoryAllocatorDumpGuid source,
+    const blink::WebString& target_node_name) {
+  process_memory_dump_->AddSuballocation(
+      base::trace_event::MemoryAllocatorDumpGuid(source),
+      target_node_name.utf8());
+}
+
+SkTraceMemoryDump* WebProcessMemoryDumpImpl::createDumpAdapterForSkia(
+    const blink::WebString& dump_name_prefix) {
+  sk_trace_dump_list_.push_back(new skia::SkiaTraceMemoryDumpImpl(
+      dump_name_prefix.utf8(), level_of_detail_, process_memory_dump_));
+  return sk_trace_dump_list_.back();
+}
+
+blink::WebMemoryAllocatorDump*
+WebProcessMemoryDumpImpl::CreateDiscardableMemoryAllocatorDump(
+    const std::string& name,
+    base::DiscardableMemory* discardable) {
+  base::trace_event::MemoryAllocatorDump* dump =
+      discardable->CreateMemoryAllocatorDump(name.c_str(),
+                                             process_memory_dump_);
+  return createWebMemoryAllocatorDump(dump);
 }
 
 }  // namespace content

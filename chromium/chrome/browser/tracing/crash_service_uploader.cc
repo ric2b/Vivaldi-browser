@@ -4,18 +4,21 @@
 
 #include "chrome/browser/tracing/crash_service_uploader.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/json/json_writer.h"
-#include "base/memory/shared_memory.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
-#include "chrome/common/chrome_version_info.h"
+#include "build/build_config.h"
+#include "components/tracing/tracing_switches.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "net/base/mime_util.h"
@@ -32,11 +35,15 @@
 using std::string;
 
 namespace {
-const char kUploadURL[] = "https://clients2.google.com/cr/staging_report";
+
+const char kUploadURL[] = "https://clients2.google.com/cr/report";
 const char kUploadContentType[] = "multipart/form-data";
 const char kMultipartBoundary[] =
     "----**--yradnuoBgoLtrapitluMklaTelgooG--**----";
 const int kHttpResponseOk = 200;
+
+// Allow up to 10MB for trace upload
+const int kMaxUploadBytes = 10000000;
 
 }  // namespace
 
@@ -87,8 +94,8 @@ void TraceCrashServiceUploader::OnURLFetchComplete(
 
 void TraceCrashServiceUploader::OnURLFetchUploadProgress(
     const net::URLFetcher* source,
-    int64 current,
-    int64 total) {
+    int64_t current,
+    int64_t total) {
   DCHECK(url_fetcher_.get());
 
   LOG(WARNING) << "Upload progress: " << current << " of " << total;
@@ -103,7 +110,7 @@ void TraceCrashServiceUploader::OnURLFetchUploadProgress(
 void TraceCrashServiceUploader::DoUpload(
     const std::string& file_contents,
     UploadMode upload_mode,
-    scoped_ptr<base::DictionaryValue> metadata,
+    scoped_ptr<const base::DictionaryValue> metadata,
     const UploadProgressCallback& progress_callback,
     const UploadDoneCallback& done_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -111,15 +118,15 @@ void TraceCrashServiceUploader::DoUpload(
       content::BrowserThread::FILE, FROM_HERE,
       base::Bind(&TraceCrashServiceUploader::DoUploadOnFileThread,
                  base::Unretained(this), file_contents, upload_mode,
-                 upload_url_, base::Passed(metadata.Pass()), progress_callback,
-                 done_callback));
+                 upload_url_, base::Passed(std::move(metadata)),
+                 progress_callback, done_callback));
 }
 
 void TraceCrashServiceUploader::DoUploadOnFileThread(
     const std::string& file_contents,
     UploadMode upload_mode,
     const std::string& upload_url,
-    scoped_ptr<base::DictionaryValue> metadata,
+    scoped_ptr<const base::DictionaryValue> metadata,
     const UploadProgressCallback& progress_callback,
     const UploadDoneCallback& done_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
@@ -147,12 +154,11 @@ void TraceCrashServiceUploader::DoUploadOnFileThread(
 #error Platform not supported.
 #endif
 
-  // VersionInfo::ProductNameAndVersionForUserAgent() returns a string like
+  // version_info::GetProductNameAndVersionForUserAgent() returns a string like
   // "Chrome/aa.bb.cc.dd", split out the part before the "/".
-  chrome::VersionInfo version_info;
-  std::vector<std::string> product_components;
-  base::SplitString(version_info.ProductNameAndVersionForUserAgent(), '/',
-                    &product_components);
+  std::vector<std::string> product_components = base::SplitString(
+      version_info::GetProductNameAndVersionForUserAgent(), "/",
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   DCHECK_EQ(2U, product_components.size());
   std::string version;
   if (product_components.size() == 2U) {
@@ -186,7 +192,7 @@ void TraceCrashServiceUploader::DoUploadOnFileThread(
   }
 
   std::string post_data;
-  SetupMultipart(product, version, metadata.Pass(), "trace.json.gz",
+  SetupMultipart(product, version, std::move(metadata), "trace.json.gz",
                  compressed_contents, &post_data);
 
   content::BrowserThread::PostTask(
@@ -195,7 +201,8 @@ void TraceCrashServiceUploader::DoUploadOnFileThread(
                  base::Unretained(this), upload_url, post_data));
 }
 
-void TraceCrashServiceUploader::OnUploadError(std::string error_message) {
+void TraceCrashServiceUploader::OnUploadError(
+    const std::string& error_message) {
   LOG(ERROR) << error_message;
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
@@ -205,7 +212,7 @@ void TraceCrashServiceUploader::OnUploadError(std::string error_message) {
 void TraceCrashServiceUploader::SetupMultipart(
     const std::string& product,
     const std::string& version,
-    scoped_ptr<base::DictionaryValue> metadata,
+    scoped_ptr<const base::DictionaryValue> metadata,
     const std::string& trace_filename,
     const std::string& trace_contents,
     std::string* post_data) {
@@ -267,9 +274,9 @@ bool TraceCrashServiceUploader::Compress(std::string input,
                             8,  // memLevel = 8 is default.
                             Z_DEFAULT_STRATEGY);
   DCHECK_EQ(Z_OK, result);
-  stream.next_in = reinterpret_cast<uint8*>(&input[0]);
+  stream.next_in = reinterpret_cast<uint8_t*>(&input[0]);
   stream.avail_in = input.size();
-  stream.next_out = reinterpret_cast<uint8*>(compressed);
+  stream.next_out = reinterpret_cast<uint8_t*>(compressed);
   stream.avail_out = max_compressed_bytes;
   // Do a one-shot compression. This will return Z_STREAM_END only if |output|
   // is large enough to hold all compressed data.

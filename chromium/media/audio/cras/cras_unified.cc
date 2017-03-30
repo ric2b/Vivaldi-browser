@@ -5,6 +5,7 @@
 #include "media/audio/cras/cras_unified.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "media/audio/cras/audio_manager_cras.h"
 
 namespace media {
@@ -158,7 +159,7 @@ void CrasUnifiedStream::Start(AudioSourceCallback* callback) {
 
   // Initialize channel layout to all -1 to indicate that none of
   // the channels is set in the layout.
-  int8 layout[CRAS_CH_MAX] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+  int8_t layout[CRAS_CH_MAX] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
   // Converts to CRAS defined channels. ChannelOrder will return -1
   // for channels that does not present in params_.channel_layout().
@@ -232,9 +233,8 @@ void CrasUnifiedStream::GetVolume(double* volume) {
   *volume = volume_;
 }
 
-uint32 CrasUnifiedStream::GetBytesLatency(
-    const struct timespec& latency_ts) {
-  uint32 latency_usec;
+uint32_t CrasUnifiedStream::GetBytesLatency(const struct timespec& latency_ts) {
+  uint32_t latency_usec;
 
   // Treat negative latency (if we are too slow to render) as 0.
   if (latency_ts.tv_sec < 0 || latency_ts.tv_nsec < 0) {
@@ -253,8 +253,8 @@ uint32 CrasUnifiedStream::GetBytesLatency(
 // Static callback asking for samples.
 int CrasUnifiedStream::UnifiedCallback(cras_client* client,
                                        cras_stream_id_t stream_id,
-                                       uint8* input_samples,
-                                       uint8* output_samples,
+                                       uint8_t* input_samples,
+                                       uint8_t* output_samples,
                                        unsigned int frames,
                                        const timespec* input_ts,
                                        const timespec* output_ts,
@@ -278,11 +278,11 @@ int CrasUnifiedStream::StreamError(cras_client* client,
 }
 
 // Calls the appropriate rendering function for this type of stream.
-uint32 CrasUnifiedStream::DispatchCallback(size_t frames,
-                                           uint8* input_samples,
-                                           uint8* output_samples,
-                                           const timespec* input_ts,
-                                           const timespec* output_ts) {
+uint32_t CrasUnifiedStream::DispatchCallback(size_t frames,
+                                             uint8_t* input_samples,
+                                             uint8_t* output_samples,
+                                             const timespec* input_ts,
+                                             const timespec* output_ts) {
   switch (stream_direction_) {
     case CRAS_STREAM_OUTPUT:
       return WriteAudio(frames, output_samples, output_ts);
@@ -296,9 +296,9 @@ uint32 CrasUnifiedStream::DispatchCallback(size_t frames,
   return 0;
 }
 
-uint32 CrasUnifiedStream::WriteAudio(size_t frames,
-                                     uint8* buffer,
-                                     const timespec* sample_ts) {
+uint32_t CrasUnifiedStream::WriteAudio(size_t frames,
+                                       uint8_t* buffer,
+                                       const timespec* sample_ts) {
   DCHECK_EQ(frames, static_cast<size_t>(output_bus_->frames()));
 
   // Determine latency and pass that on to the source.
@@ -306,7 +306,7 @@ uint32 CrasUnifiedStream::WriteAudio(size_t frames,
   cras_client_calc_playback_latency(sample_ts, &latency_ts);
 
   int frames_filled = source_callback_->OnMoreData(
-      output_bus_.get(), GetBytesLatency(latency_ts));
+      output_bus_.get(), GetBytesLatency(latency_ts), 0);
 
   // Note: If this ever changes to output raw float the data must be clipped and
   // sanitized since it may come from an untrusted source such as NaCl.

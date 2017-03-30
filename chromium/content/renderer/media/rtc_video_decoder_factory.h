@@ -5,10 +5,11 @@
 #ifndef CONTENT_RENDERER_MEDIA_RTC_VIDEO_DECODER_FACTORY_H_
 #define CONTENT_RENDERER_MEDIA_RTC_VIDEO_DECODER_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/threading/thread.h"
 #include "content/common/content_export.h"
 #include "third_party/libjingle/source/talk/media/webrtc/webrtcvideodecoderfactory.h"
-#include "third_party/webrtc/modules/video_coding/codecs/interface/video_codec_interface.h"
+#include "third_party/webrtc/modules/video_coding/include/video_codec_interface.h"
 
 namespace webrtc {
 class VideoDecoder;
@@ -25,7 +26,7 @@ class CONTENT_EXPORT RTCVideoDecoderFactory
     : NON_EXPORTED_BASE(public cricket::WebRtcVideoDecoderFactory) {
  public:
   explicit RTCVideoDecoderFactory(
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& gpu_factories);
+      media::GpuVideoAcceleratorFactories* gpu_factories);
   ~RTCVideoDecoderFactory() override;
 
   // Runs on Chrome_libJingle_WorkerThread. The child thread is blocked while
@@ -38,7 +39,7 @@ class CONTENT_EXPORT RTCVideoDecoderFactory
   void DestroyVideoDecoder(webrtc::VideoDecoder* decoder) override;
 
  private:
-  const scoped_refptr<media::GpuVideoAcceleratorFactories> gpu_factories_;
+  media::GpuVideoAcceleratorFactories* gpu_factories_;
 
   DISALLOW_COPY_AND_ASSIGN(RTCVideoDecoderFactory);
 };

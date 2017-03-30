@@ -4,7 +4,7 @@
 
 #include "mojo/runner/android/background_application_loader.h"
 
-#include "mojo/application/public/interfaces/application.mojom.h"
+#include "mojo/shell/public/interfaces/application.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -20,7 +20,7 @@ class DummyLoader : public shell::ApplicationLoader {
   void Load(const GURL& url,
             InterfaceRequest<Application> application_request) override {
     if (simulate_app_quit_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void DontSimulateAppQuit() { simulate_app_quit_ = false; }

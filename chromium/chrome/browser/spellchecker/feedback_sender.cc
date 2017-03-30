@@ -48,6 +48,7 @@
 #include "chrome/common/spellcheck_common.h"
 #include "chrome/common/spellcheck_marker.h"
 #include "chrome/common/spellcheck_messages.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "content/public/browser/render_process_host.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/load_flags.h"
@@ -58,6 +59,8 @@ namespace spellcheck {
 
 namespace {
 
+const size_t kMaxFeedbackSizeBytes = 10 * 1024 * 1024;  // 10 MB
+
 // The default URL where feedback data is sent.
 const char kFeedbackServiceURL[] = "https://www.googleapis.com/rpc";
 
@@ -66,7 +69,7 @@ const int kMinIntervalSeconds = 5;
 
 // Returns a hash of |session_start|, the current timestamp, and
 // |suggestion_index|.
-uint32 BuildHash(const base::Time& session_start, size_t suggestion_index) {
+uint32_t BuildHash(const base::Time& session_start, size_t suggestion_index) {
   return base::Hash(
       base::StringPrintf("%" PRId64 "%" PRId64 "%" PRIuS,
                          session_start.ToInternalValue(),
@@ -99,7 +102,7 @@ base::ListValue* BuildSuggestionInfo(
            suggestions.begin();
        suggestion_it != suggestions.end();
        ++suggestion_it) {
-    base::DictionaryValue* suggestion = suggestion_it->Serialize();
+    base::DictionaryValue* suggestion = SerializeMisspelling(*suggestion_it);
     suggestion->SetBoolean("isFirstInSession", is_first_feedback_batch);
     suggestion->SetBoolean("isAutoCorrection", false);
     list->Append(suggestion);
@@ -165,6 +168,7 @@ FeedbackSender::FeedbackSender(net::URLRequestContextGetter* request_context,
       language_(language),
       country_(country),
       misspelling_counter_(0),
+      feedback_(kMaxFeedbackSizeBytes),
       session_start_(base::Time::Now()),
       feedback_service_url_(kFeedbackServiceURL) {
   // The command-line switch is for testing and temporary.
@@ -181,72 +185,71 @@ FeedbackSender::FeedbackSender(net::URLRequestContextGetter* request_context,
 FeedbackSender::~FeedbackSender() {
 }
 
-void FeedbackSender::SelectedSuggestion(uint32 hash, int suggestion_index) {
+void FeedbackSender::SelectedSuggestion(uint32_t hash, int suggestion_index) {
   Misspelling* misspelling = feedback_.GetMisspelling(hash);
   // GetMisspelling() returns null for flushed feedback. Feedback is flushed
   // when the session expires every |kSessionHours| hours.
   if (!misspelling)
     return;
-  misspelling->action.type = SpellcheckAction::TYPE_SELECT;
-  misspelling->action.index = suggestion_index;
+  misspelling->action.set_type(SpellcheckAction::TYPE_SELECT);
+  misspelling->action.set_index(suggestion_index);
   misspelling->timestamp = base::Time::Now();
 }
 
-void FeedbackSender::AddedToDictionary(uint32 hash) {
+void FeedbackSender::AddedToDictionary(uint32_t hash) {
   Misspelling* misspelling = feedback_.GetMisspelling(hash);
   // GetMisspelling() returns null for flushed feedback. Feedback is flushed
   // when the session expires every |kSessionHours| hours.
   if (!misspelling)
     return;
-  misspelling->action.type = SpellcheckAction::TYPE_ADD_TO_DICT;
+  misspelling->action.set_type(SpellcheckAction::TYPE_ADD_TO_DICT);
   misspelling->timestamp = base::Time::Now();
-  const std::set<uint32>& hashes =
-      feedback_.FindMisspellings(misspelling->GetMisspelledString());
-  for (std::set<uint32>::const_iterator hash_it = hashes.begin();
-       hash_it != hashes.end();
-       ++hash_it) {
+  const std::set<uint32_t>& hashes =
+      feedback_.FindMisspellings(GetMisspelledString(*misspelling));
+  for (std::set<uint32_t>::const_iterator hash_it = hashes.begin();
+       hash_it != hashes.end(); ++hash_it) {
     Misspelling* duplicate_misspelling = feedback_.GetMisspelling(*hash_it);
     if (!duplicate_misspelling || duplicate_misspelling->action.IsFinal())
       continue;
-    duplicate_misspelling->action.type = SpellcheckAction::TYPE_ADD_TO_DICT;
+    duplicate_misspelling->action.set_type(SpellcheckAction::TYPE_ADD_TO_DICT);
     duplicate_misspelling->timestamp = misspelling->timestamp;
   }
 }
 
-void FeedbackSender::RecordInDictionary(uint32 hash) {
+void FeedbackSender::RecordInDictionary(uint32_t hash) {
   Misspelling* misspelling = feedback_.GetMisspelling(hash);
   // GetMisspelling() returns null for flushed feedback. Feedback is flushed
   // when the session expires every |kSessionHours| hours.
   if (!misspelling)
     return;
-  misspelling->action.type = SpellcheckAction::TYPE_IN_DICTIONARY;
+  misspelling->action.set_type(SpellcheckAction::TYPE_IN_DICTIONARY);
 }
 
-void FeedbackSender::IgnoredSuggestions(uint32 hash) {
+void FeedbackSender::IgnoredSuggestions(uint32_t hash) {
   Misspelling* misspelling = feedback_.GetMisspelling(hash);
   // GetMisspelling() returns null for flushed feedback. Feedback is flushed
   // when the session expires every |kSessionHours| hours.
   if (!misspelling)
     return;
-  misspelling->action.type = SpellcheckAction::TYPE_PENDING_IGNORE;
+  misspelling->action.set_type(SpellcheckAction::TYPE_PENDING_IGNORE);
   misspelling->timestamp = base::Time::Now();
 }
 
-void FeedbackSender::ManuallyCorrected(uint32 hash,
+void FeedbackSender::ManuallyCorrected(uint32_t hash,
                                        const base::string16& correction) {
   Misspelling* misspelling = feedback_.GetMisspelling(hash);
   // GetMisspelling() returns null for flushed feedback. Feedback is flushed
   // when the session expires every |kSessionHours| hours.
   if (!misspelling)
     return;
-  misspelling->action.type = SpellcheckAction::TYPE_MANUALLY_CORRECTED;
-  misspelling->action.value = correction;
+  misspelling->action.set_type(SpellcheckAction::TYPE_MANUALLY_CORRECTED);
+  misspelling->action.set_value(correction);
   misspelling->timestamp = base::Time::Now();
 }
 
 void FeedbackSender::OnReceiveDocumentMarkers(
     int renderer_process_id,
-    const std::vector<uint32>& markers) {
+    const std::vector<uint32_t>& markers) {
   if ((base::Time::Now() - session_start_).InHours() >=
       chrome::spellcheck_common::kSessionHours) {
     FlushFeedback();
@@ -275,7 +278,7 @@ void FeedbackSender::OnSpellcheckResults(
   // Generate a map of marker offsets to marker hashes. This map helps to
   // efficiently lookup feedback data based on the position of the misspelling
   // in text.
-  typedef std::map<size_t, uint32> MarkerMap;
+  typedef std::map<size_t, uint32_t> MarkerMap;
   MarkerMap marker_map;
   for (size_t i = 0; i < markers.size(); ++i)
     marker_map[markers[i].offset] = markers[i].hash;
@@ -379,7 +382,7 @@ void FeedbackSender::RequestDocumentMarkers() {
        ++it) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&FeedbackSender::OnReceiveDocumentMarkers,
-                              AsWeakPtr(), *it, std::vector<uint32>()));
+                              AsWeakPtr(), *it, std::vector<uint32_t>()));
   }
 }
 
@@ -410,6 +413,8 @@ void FeedbackSender::SendFeedback(const std::vector<Misspelling>& feedback_data,
   net::URLFetcher* sender =
       net::URLFetcher::Create(kUrlFetcherId, feedback_service_url_,
                               net::URLFetcher::POST, this).release();
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      sender, data_use_measurement::DataUseUserData::SPELL_CHECKER);
   sender->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
                        net::LOAD_DO_NOT_SAVE_COOKIES);
   sender->SetUploadData("application/json", feedback);

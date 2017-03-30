@@ -41,6 +41,12 @@ remoting.AppRemoting = function(args) {
   base.inherits(this, remoting.Application);
   remoting.app = this;
 
+  // Save recent errors for inclusion in user feedback.
+  remoting.ConsoleWrapper.getInstance().activate(
+      5,
+      remoting.ConsoleWrapper.LogType.ERROR,
+      remoting.ConsoleWrapper.LogType.ASSERT);
+
   /** @private {remoting.Activity} */
   this.activity_ = null;
 
@@ -98,7 +104,8 @@ remoting.AppRemoting.prototype.signInFailed_ = function(error) {
  */
 remoting.AppRemoting.prototype.initApplication_ = function() {
   remoting.messageWindowManager = new remoting.MessageWindowManager(
-      this.windowMessageDispatcher_);
+      /** @type {base.WindowMessageDispatcher} */
+      (this.windowMessageDispatcher_));
 };
 
 /**
@@ -113,7 +120,9 @@ remoting.AppRemoting.prototype.startApplication_ = function(token) {
   this.licenseManager_.getSubscriptionToken(token).then(
       function(/** string*/ subscriptionToken) {
     that.activity_ = new remoting.AppRemotingActivity(
-        that.appCapabilities_, that, windowShape, subscriptionToken);
+        that.appCapabilities_, that, windowShape, subscriptionToken,
+        /** @type {base.WindowMessageDispatcher} */
+        (that.windowMessageDispatcher_));
     that.activity_.start();
   });
 };

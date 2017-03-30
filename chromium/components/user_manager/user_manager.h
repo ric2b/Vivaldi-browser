@@ -7,17 +7,27 @@
 
 #include <string>
 
+#include "base/callback_forward.h"
+#include "base/macros.h"
+#include "base/strings/string16.h"
 #include "components/user_manager/user.h"
-#include "components/user_manager/user_id.h"
 #include "components/user_manager/user_manager_export.h"
 #include "components/user_manager/user_type.h"
+
+class AccountId;
+class PrefService;
 
 namespace base {
 class DictionaryValue;
 }
 
 namespace chromeos {
+class LoginState;
 class ScopedUserManagerEnabler;
+}
+
+namespace cryptohome {
+class AsyncMethodCaller;
 }
 
 namespace user_manager {
@@ -54,7 +64,7 @@ class USER_MANAGER_EXPORT UserManager {
     virtual void UserAddedToSession(const User* added_user);
 
     // Called right before notifying on user change so that those who rely
-    // on user_id hash would be accessing up-to-date value.
+    // on account_id hash would be accessing up-to-date value.
     virtual void ActiveUserHashChanged(const std::string& hash);
 
     // Called when child status has changed.
@@ -87,7 +97,7 @@ class USER_MANAGER_EXPORT UserManager {
   // after creation so that user_manager::UserManager::Get() doesn't fail.
   // Tests could call this method if they are replacing existing UserManager
   // instance with their own test instance.
-  void Initialize();
+  virtual void Initialize();
 
   // Checks whether the UserManager instance has been created already.
   // This method is not thread-safe and must be called from the main UI thread.
@@ -138,21 +148,22 @@ class USER_MANAGER_EXPORT UserManager {
   // All users that are unable to perform unlock are excluded from this list.
   virtual UserList GetUnlockUsers() const = 0;
 
-  // Returns the email of the owner user. Returns an empty string if there is
+  // Returns account Id of the owner user. Returns an empty Id if there is
   // no owner for the device.
-  virtual const std::string& GetOwnerEmail() const = 0;
+  virtual const AccountId& GetOwnerAccountId() const = 0;
 
-  // Indicates that a user with the given |user_id| has just logged in. The
+  // Indicates that a user with the given |account_id| has just logged in. The
   // persistent list is updated accordingly if the user is not ephemeral.
   // |browser_restart| is true when reloading Chrome after crash to distinguish
   // from normal sign in flow.
   // |username_hash| is used to identify homedir mount point.
-  virtual void UserLoggedIn(const std::string& user_id,
+  virtual void UserLoggedIn(const AccountId& account_id,
                             const std::string& username_hash,
                             bool browser_restart) = 0;
 
-  // Switches to active user identified by |user_id|. User has to be logged in.
-  virtual void SwitchActiveUser(const std::string& user_id) = 0;
+  // Switches to active user identified by |account_id|. User has to be logged
+  // in.
+  virtual void SwitchActiveUser(const AccountId& account_id) = 0;
 
   // Switches to the last active user (called after crash happens and session
   // restore has completed).
@@ -170,25 +181,25 @@ class USER_MANAGER_EXPORT UserManager {
   // Removes the user from the device. Note, it will verify that the given user
   // isn't the owner, so calling this method for the owner will take no effect.
   // Note, |delegate| can be NULL.
-  virtual void RemoveUser(const std::string& user_id,
+  virtual void RemoveUser(const AccountId& account_id,
                           RemoveUserDelegate* delegate) = 0;
 
   // Removes the user from the persistent list only. Also removes the user's
   // picture.
-  virtual void RemoveUserFromList(const std::string& user_id) = 0;
+  virtual void RemoveUserFromList(const AccountId& account_id) = 0;
 
-  // Returns true if a user with the given user id is found in the persistent
+  // Returns true if a user with the given account id is found in the persistent
   // list or currently logged in as ephemeral.
-  virtual bool IsKnownUser(const std::string& user_id) const = 0;
+  virtual bool IsKnownUser(const AccountId& account_id) const = 0;
 
-  // Returns the user with the given user id if found in the persistent
+  // Returns the user with the given account id if found in the persistent
   // list or currently logged in as ephemeral. Returns |NULL| otherwise.
-  virtual const User* FindUser(const std::string& user_id) const = 0;
+  virtual const User* FindUser(const AccountId& account_id) const = 0;
 
-  // Returns the user with the given user id if found in the persistent
+  // Returns the user with the given account id if found in the persistent
   // list or currently logged in as ephemeral. Returns |NULL| otherwise.
   // Same as FindUser but returns non-const pointer to User object.
-  virtual User* FindUserAndModify(const std::string& user_id) = 0;
+  virtual User* FindUserAndModify(const AccountId& account_id) = 0;
 
   // Returns the logged-in user.
   // TODO(nkostylev): Deprecate this call, move clients to GetActiveUser().
@@ -208,42 +219,43 @@ class USER_MANAGER_EXPORT UserManager {
 
   // Saves user's oauth token status in local state preferences.
   virtual void SaveUserOAuthStatus(
-      const std::string& user_id,
+      const AccountId& account_id,
       User::OAuthTokenStatus oauth_token_status) = 0;
 
   // Saves a flag indicating whether online authentication against GAIA should
   // be enforced during the user's next sign-in.
-  virtual void SaveForceOnlineSignin(const std::string& user_id,
+  virtual void SaveForceOnlineSignin(const AccountId& account_id,
                                      bool force_online_signin) = 0;
 
   // Saves user's displayed name in local state preferences.
   // Ignored If there is no such user.
-  virtual void SaveUserDisplayName(const std::string& user_id,
+  virtual void SaveUserDisplayName(const AccountId& account_id,
                                    const base::string16& display_name) = 0;
 
   // Updates data upon User Account download.
-  virtual void UpdateUserAccountData(const std::string& user_id,
+  virtual void UpdateUserAccountData(const AccountId& account_id,
                                      const UserAccountData& account_data) = 0;
 
-  // Returns the display name for user |user_id| if it is known (was
+  // Returns the display name for user |account_id| if it is known (was
   // previously set by a |SaveUserDisplayName| call).
   // Otherwise, returns an empty string.
   virtual base::string16 GetUserDisplayName(
-      const std::string& user_id) const = 0;
+      const AccountId& account_id) const = 0;
 
   // Saves user's displayed (non-canonical) email in local state preferences.
   // Ignored If there is no such user.
-  virtual void SaveUserDisplayEmail(const std::string& user_id,
+  virtual void SaveUserDisplayEmail(const AccountId& account_id,
                                     const std::string& display_email) = 0;
 
-  // Returns the display email for user |user_id| if it is known (was
+  // Returns the display email for user |account_id| if it is known (was
   // previously set by a |SaveUserDisplayEmail| call).
-  // Otherwise, returns |user_id| itself.
-  virtual std::string GetUserDisplayEmail(const std::string& user_id) const = 0;
+  // Otherwise, returns |account_id| itself.
+  virtual std::string GetUserDisplayEmail(
+      const AccountId& account_id) const = 0;
 
-  // Saves user's type for user |user_id| into local state preferences.
+  // Saves user's type for user |account_id| into local state preferences.
   // Ignored If there is no such user.
-  virtual void SaveUserType(const std::string& user_id,
+  virtual void SaveUserType(const AccountId& account_id,
                             const UserType& user_type) = 0;
 
   // Returns true if current user is an owner.
@@ -290,11 +302,12 @@ class USER_MANAGER_EXPORT UserManager {
   // or restart after crash.
   virtual bool IsSessionStarted() const = 0;
 
-  // Returns true if data stored or cached for the user with the given user id
+  // Returns true if data stored or cached for the user with the given
+  // |account_id|
   // address outside that user's cryptohome (wallpaper, avatar, OAuth token
   // status, display name, display email) is to be treated as ephemeral.
   virtual bool IsUserNonCryptohomeDataEphemeral(
-      const std::string& user_id) const = 0;
+      const AccountId& account_id) const = 0;
 
   virtual void AddObserver(Observer* obs) = 0;
   virtual void RemoveObserver(Observer* obs) = 0;
@@ -311,92 +324,53 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns true if supervised users allowed.
   virtual bool AreSupervisedUsersAllowed() const = 0;
 
-  // Methods for storage/retrieval of per-user properties in Local State.
+  // Returns "Local State" PrefService instance.
+  virtual PrefService* GetLocalState() const = 0;
 
-  // Performs a lookup of properties associated with |user_id|. If found,
-  // returns |true| and fills |out_value|. |out_value| can be NULL, if
-  // only existence check is required.
-  virtual bool FindKnownUserPrefs(const UserID& user_id,
-                                  const base::DictionaryValue** out_value) = 0;
+  // Checks for platform-specific known users matching given |user_email| and
+  // |gaia_id|. If data matches a known account, fills |out_account_id| with
+  // account id and returns true.
+  virtual bool GetPlatformKnownUserId(const std::string& user_email,
+                                      const std::string& gaia_id,
+                                      AccountId* out_account_id) const = 0;
 
-  // Updates (or creates) properties associated with |user_id| based
-  // on |values|. |clear| defines if existing properties are cleared (|true|)
-  // or if it is just a incremental update (|false|).
-  virtual void UpdateKnownUserPrefs(const UserID& user_id,
-                                    const base::DictionaryValue& values,
-                                    bool clear) = 0;
+  // Returns account id of the Guest user.
+  virtual const AccountId& GetGuestAccountId() const = 0;
 
-  // Returns true if |user_id| preference by |path| does exist,
-  // fills in |out_value|. Otherwise returns false.
-  virtual bool GetKnownUserStringPref(const UserID& user_id,
-                                      const std::string& path,
-                                      std::string* out_value) = 0;
+  // Returns true if this is first exec after boot.
+  virtual bool IsFirstExecAfterBoot() const = 0;
 
-  // Updates user's identified by |user_id| string preference |path|.
-  virtual void SetKnownUserStringPref(const UserID& user_id,
-                                      const std::string& path,
-                                      const std::string& in_value) = 0;
+  // Actually removes cryptohome.
+  virtual void AsyncRemoveCryptohome(const AccountId& account_id) const = 0;
 
-  // Returns true if |user_id| preference by |path| does exist,
-  // fills in |out_value|. Otherwise returns false.
-  virtual bool GetKnownUserBooleanPref(const UserID& user_id,
-                                       const std::string& path,
-                                       bool* out_value) = 0;
+  // Returns true if |account_id| is Guest user.
+  virtual bool IsGuestAccountId(const AccountId& account_id) const = 0;
 
-  // Updates user's identified by |user_id| boolean preference |path|.
-  virtual void SetKnownUserBooleanPref(const UserID& user_id,
-                                       const std::string& path,
-                                       const bool in_value) = 0;
+  // Returns true if |account_id| is Stub user.
+  virtual bool IsStubAccountId(const AccountId& account_id) const = 0;
 
-  // Returns true if |user_id| preference by |path| does exist,
-  // fills in |out_value|. Otherwise returns false.
-  virtual bool GetKnownUserIntegerPref(const UserID& user_id,
-                                       const std::string& path,
-                                       int* out_value) = 0;
+  // Returns true if |account_id| is supervised.
+  virtual bool IsSupervisedAccountId(const AccountId& account_id) const = 0;
 
-  // Updates user's identified by |user_id| integer preference |path|.
-  virtual void SetKnownUserIntegerPref(const UserID& user_id,
-                                       const std::string& path,
-                                       const int in_value) = 0;
+  // Returns true when the browser has crashed and restarted during the current
+  // user's session.
+  virtual bool HasBrowserRestarted() const = 0;
 
-  // Updates |gaia_id| for user with |user_id|.
-  // TODO(antrim): Update this once UserID contains GAIA ID.
-  virtual void UpdateGaiaID(const UserID& user_id,
-                            const std::string& gaia_id) = 0;
+  // Returns image from resources bundle.
+  virtual const gfx::ImageSkia& GetResourceImagekiaNamed(int id) const = 0;
 
-  // Find GAIA ID for user with |user_id|, fill in |out_value| and return true
-  // if GAIA ID was found or false otherwise.
-  // TODO(antrim): Update this once UserID contains GAIA ID.
-  virtual bool FindGaiaID(const UserID& user_id, std::string* out_value) = 0;
+  // Returns string from resources bundle.
+  virtual base::string16 GetResourceStringUTF16(int string_id) const = 0;
 
-  // Saves whether the user authenticates using SAML.
-  virtual void UpdateUsingSAML(const UserID& user_id,
-                               const bool using_saml) = 0;
+  // Schedules CheckAndResolveLocale using given task runner and
+  // |on_resolved_callback| as reply callback.
+  virtual void ScheduleResolveLocale(
+      const std::string& locale,
+      const base::Closure& on_resolved_callback,
+      std::string* out_resolved_locale) const = 0;
 
-  // Returns if SAML needs to be used for authentication of the user with
-  // |user_id|, if it is known (was set by a |UpdateUsingSaml| call). Otherwise
-  // returns false.
-  virtual bool FindUsingSAML(const UserID& user_id) = 0;
-
-  // Setter and getter for DeviceId known user string preference.
-  virtual void SetKnownUserDeviceId(const UserID& user_id,
-                                    const std::string& device_id) = 0;
-  virtual std::string GetKnownUserDeviceId(const UserID& user_id) = 0;
-
-  // Setter and getter for GAPSCookie known user string preference.
-  virtual void SetKnownUserGAPSCookie(const UserID& user_id,
-                                      const std::string& gaps_cookie) = 0;
-
-  virtual std::string GetKnownUserGAPSCookie(const UserID& user_id) = 0;
-
-  // Saves why the user has to go through re-auth flow.
-  virtual void UpdateReauthReason(const UserID& user_id,
-                                  const int reauth_reason) = 0;
-
-  // Returns the reason why the user with |user_id| has to go through the
-  // re-auth flow. Returns true if such a reason was recorded or false
-  // otherwise.
-  virtual bool FindReauthReason(const UserID& user_id, int* out_value) = 0;
+  // Returns true if |image_index| is a valid default user image index.
+  virtual bool IsValidDefaultUserImageId(int image_index) const = 0;
 
  protected:
   // Sets UserManager instance.

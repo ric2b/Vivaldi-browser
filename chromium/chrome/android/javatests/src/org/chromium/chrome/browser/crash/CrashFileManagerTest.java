@@ -4,12 +4,16 @@
 
 package org.chromium.chrome.browser.crash;
 
+import android.test.MoreAsserts;
+import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.regex.Pattern;
 
 /**
@@ -20,6 +24,7 @@ public class CrashFileManagerTest extends CrashTestCase {
 
     private File mTmpFile1;
     private File mTmpFile2;
+    private File mTmpFile3;
 
     private File mDmpFile1;
     private File mDmpFile2;
@@ -38,6 +43,9 @@ public class CrashFileManagerTest extends CrashTestCase {
 
         mTmpFile2 = new File(mCrashDir, "abcde12345" + CrashFileManager.TMP_SUFFIX);
         mTmpFile2.createNewFile();
+
+        mTmpFile3 = new File(mCrashDir, "abcdefghi" + CrashFileManager.TMP_SUFFIX);
+        mTmpFile3.createNewFile();
 
         mDmpFile1 = new File(mCrashDir, "123_abc.dmp0");
         mDmpFile1.createNewFile();
@@ -72,25 +80,30 @@ public class CrashFileManagerTest extends CrashTestCase {
         Pattern testPattern = Pattern.compile("^123");
         File[] actualFiles = crashFileManager.getMatchingFiles(testPattern);
         assertNotNull(actualFiles);
-        assertEquals(expectedFiles.length, actualFiles.length);
-        for (int i = 0; i < expectedFiles.length; i++) {
-            // Test to see if files are properly ordered.
-            assertEquals(expectedFiles[i], actualFiles[i]);
-        }
+        MoreAsserts.assertEquals("Failed to match file by pattern", expectedFiles, actualFiles);
+    }
+
+    @MediumTest
+    @Feature({"Android-AppBase"})
+    public void testFileComparator() throws IOException {
+        CrashFileManager crashFileManager = new CrashFileManager(mCacheDir);
+        File[] expectedFiles = new File[] {mTmpFile3, mTmpFile2, mTmpFile1};
+        File[] originalFiles = new File[] {mTmpFile1, mTmpFile2, mTmpFile3};
+        Arrays.sort(originalFiles, crashFileManager.sFileComparator);
+        assertNotNull(originalFiles);
+        MoreAsserts.assertEquals("File comparator failed to prioritize last modified file",
+                expectedFiles, originalFiles);
     }
 
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testGetAllMinidumpFilesSorted() {
         CrashFileManager crashFileManager = new CrashFileManager(mCacheDir);
-        File[] expectedFiles = new File[] {mDmpFile1, mDmpFile2};
+        File[] expectedFiles = new File[] {mDmpFile2, mDmpFile1};
         File[] actualFiles = crashFileManager.getAllMinidumpFilesSorted();
         assertNotNull(actualFiles);
-        assertEquals(expectedFiles.length, actualFiles.length);
-        for (int i = 0; i < expectedFiles.length; i++) {
-            // Test to see if files are properly ordered.
-            assertEquals(expectedFiles[i], actualFiles[i]);
-        }
+        MoreAsserts.assertEquals("Failed to sort minidumps by modification time", expectedFiles,
+                actualFiles);
     }
 
     @SmallTest
@@ -105,6 +118,7 @@ public class CrashFileManagerTest extends CrashTestCase {
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testDeleteFile() {
+        assertTrue(mTmpFile1.exists());
         assertTrue(CrashFileManager.deleteFile(mTmpFile1));
         assertFalse(mTmpFile1.exists());
     }
@@ -116,11 +130,8 @@ public class CrashFileManagerTest extends CrashTestCase {
         File[] expectedFiles = new File[] { mDmpFile1, mDmpFile2 };
         File[] actualFiles = crashFileManager.getAllMinidumpFiles();
         assertNotNull(actualFiles);
-        assertEquals(expectedFiles.length, actualFiles.length);
-        for (int i = 0; i < expectedFiles.length; i++) {
-            // Test to see if files are properly ordered.
-            assertEquals(expectedFiles[i], actualFiles[i]);
-        }
+        MoreAsserts.assertEquals("Failed to get the correct minidump files in directory",
+                expectedFiles, actualFiles);
     }
 
     @SmallTest
@@ -130,11 +141,8 @@ public class CrashFileManagerTest extends CrashTestCase {
         File[] expectedFiles = new File[] { mUpFile1, mUpFile2 };
         File[] actualFiles = crashFileManager.getAllUploadedFiles();
         assertNotNull(actualFiles);
-        assertEquals(expectedFiles.length, actualFiles.length);
-        for (int i = 0; i < expectedFiles.length; i++) {
-            // Test to see if files are properly ordered.
-            assertEquals(expectedFiles[i], actualFiles[i]);
-        }
+        MoreAsserts.assertEquals("Failed to get the correct uploaded files in directory",
+                expectedFiles, actualFiles);
     }
 
     @SmallTest
@@ -155,21 +163,15 @@ public class CrashFileManagerTest extends CrashTestCase {
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testAttemptNumberRename() {
-        assertEquals("file.dmp.try1", CrashFileManager.incrementAttemptNumber("file.dmp"));
-        assertEquals("f.dmp.try2", CrashFileManager.incrementAttemptNumber("f.dmp.try1"));
-        assertEquals("f.dmp.try20", CrashFileManager.incrementAttemptNumber("f.dmp.try10"));
-        assertEquals("f.try2.dmp", CrashFileManager.incrementAttemptNumber("f.try1.dmp"));
-        assertEquals("f.tryN.dmp.try1", CrashFileManager.incrementAttemptNumber("f.tryN.dmp"));
-    }
-
-    @SmallTest
-    @Feature({"Android-AppBase"})
-    public void testCleanAllMiniDumps() {
-        assertEquals(6, mCrashDir.listFiles().length);
-
-        CrashFileManager crashFileManager = new CrashFileManager(mCacheDir);
-        crashFileManager.cleanAllMiniDumps();
-
-        assertEquals(0, mCrashDir.listFiles().length);
+        assertEquals("file.dmp.try1",
+                CrashFileManager.filenameWithIncrementedAttemptNumber("file.dmp"));
+        assertEquals("f.dmp.try2",
+                CrashFileManager.filenameWithIncrementedAttemptNumber("f.dmp.try1"));
+        assertEquals("f.dmp.try20",
+                CrashFileManager.filenameWithIncrementedAttemptNumber("f.dmp.try10"));
+        assertEquals("f.try2.dmp",
+                CrashFileManager.filenameWithIncrementedAttemptNumber("f.try1.dmp"));
+        assertEquals("f.tryN.dmp.try1",
+                CrashFileManager.filenameWithIncrementedAttemptNumber("f.tryN.dmp"));
     }
 }

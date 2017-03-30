@@ -35,8 +35,6 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'CorrectEventFiringTest.testShouldFireEventsInTheRightOrder',
     'CorrectEventFiringTest.testShouldFireFocusEventWhenClicking',
     'DragAndDropTest.testDragTooFar',
-    # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=374
-    'ElementFindingTest.testShouldNotBeAbleToFindAnElementOnABlankPage',
     'ExecutingAsyncJavascriptTest.includesAlertTextInUnhandledAlertException',
     'ExecutingAsyncJavascriptTest.shouldCatchErrorsWithMessageAndStacktraceWhenExecutingInitialScript',
     'ExecutingAsyncJavascriptTest.throwsIfAlertHappensDuringScript',
@@ -47,6 +45,8 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'ExecutingJavascriptTest.testShouldThrowAnExceptionWithMessageAndStacktraceWhenTheJavascriptIsBad',
     'FormHandlingTest.testShouldNotBeAbleToSubmitAFormThatDoesNotExist',
     'FrameSwitchingTest.testShouldNotBeAbleToDoAnythingTheFrameIsDeletedFromUnderUs',
+    # https://code.google.com/p/chromedriver/issues/detail?id=1249
+    'FrameSwitchingTest.testGetCurrentUrl',
     'I18nTest.testShouldBeAbleToActivateIMEEngine',
     # Broken because AddWebStorage.java is broken.
     'LocalStorageTest.*',
@@ -90,15 +90,17 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'PageLoadingTest.testShouldBeAbleToNavigateBackInTheBrowserHistory',
     # https://code.google.com/p/chromedriver/issues/detail?id=1117
     'PageLoadingTest.testShouldBeAbleToAccessPagesWithAnInsecureSslCertificate',
-    # https://code.google.com/p/chromedriver/issues/detail?id=1138
-    'XPathElementFindingTest.*',
+    # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=1113
+    'FrameSwitchingTest.testShouldNotSwitchMagicallyToTheTopWindow',
+    # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=1151
+    'DragAndDropTest.testDragAndDrop',
+    'DragAndDropTest.testShouldAllowUsersToDragAndDropToElementsOffTheCurrentViewPort',
+    'DragAndDropTest.testElementInDiv',
 ]
 
 
 _OS_NEGATIVE_FILTER = {}
 _OS_NEGATIVE_FILTER['win'] = [
-    # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=282
-    'PageLoadingTest.testShouldNotHangIfDocumentOpenCallIsNeverFollowedByDocumentCloseCall',
     # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=373
     'RenderedWebElementTest.testHoverPersists',
     'RenderedWebElementTest.canClickOnASuckerFishStyleMenu',
@@ -109,6 +111,10 @@ _OS_NEGATIVE_FILTER['win'] = [
 _OS_NEGATIVE_FILTER['linux'] = [
     # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=416
     'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePage',
+    # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=1148
+    'CombinedInputActionsTest.testCombiningShiftAndClickResultsInANewWindow',
+    # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=1150
+    'BasicKeyboardInterfaceTest.testBasicKeyboardInputOnActiveElement',
 ]
 _OS_NEGATIVE_FILTER['mac'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=26
@@ -121,6 +127,8 @@ _OS_NEGATIVE_FILTER['mac'] = [
     'PageLoadingTest.testShouldBeAbleToNavigateBackInTheBrowserHistoryInPresenceOfIframes',
     # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=416
     'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePage',
+    # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=1149
+    'ChromeDriverTests.testShouldAllowTheUserToSwitchToAnIFrameAndRemainFocusedOnIt',
 ]
 _OS_NEGATIVE_FILTER['android:chrome'] = [
     'ChromeOptionsFunctionalTest.canStartChromeWithCustomOptions',
@@ -171,18 +179,8 @@ _OS_NEGATIVE_FILTER['android:chrome'] = [
     # Not applicable on ChromeShell (doesn't support tabs).
     'WindowSwitchingTest.*',
 
-    # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=441
-    'PageLoadingTest.testShouldBeAbleToNavigateBackInTheBrowserHistory',
-    'PageLoadingTest.testShouldBeAbleToNavigateForwardsInTheBrowserHistory',
     # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=528
     'PageLoadingTest.testShouldDoNothingIfThereIsNothingToGoBackTo',
-
-    # https://code.google.com/p/chromedriver/issues/detail?id=526
-    'ElementFindingTest.testShouldNotBeAbleToLocateASingleElementOnABlankPage',
-    'ElementFindingTest.testShouldBeAbleToFindAnElementByBooleanAttributeUsingShortCssSelector',
-
-    # https://code.google.com/p/chromedriver/issues/detail?id=527
-    'ClickTest.testCanClickOnALinkThatContainsEmbeddedBlockElements',
 
     # https://code.google.com/p/chromedriver/issues/detail?id=604
     'I18nTest.testShouldBeAbleToActivateIMEEngine',
@@ -197,21 +195,30 @@ _OS_NEGATIVE_FILTER['android:chrome'] = [
     'CorrectEventFiringTest.testShouldEmitOnClickEventsWhenSelectingElements',
     'CorrectEventFiringTest.testSendingKeysToAnotherElementShouldCauseTheBlurEventToFire',
 
-    # https://code.google.com/p/chromedriver/issues/detail?id=998
+    # https://code.google.com/p/chromedriver/issues/detail?id=998	
     'ImplicitWaitTest.testShouldImplicitlyWaitForASingleElement',
-    'ImplicitWaitTest.testShouldReturnAfterFirstAttemptToFindManyAfterDisablingImplicitWaits',
+
+    # https://code.google.com/p/chromedriver/issues/detail?id=1176
+    'ChromeDriverTests.clientLogShouldBeEnabledByDefault',
+
+    # https://code.google.com/p/chromedriver/issues/detail?id=1119
+    'CombinedInputActionsTest.testCanClickOnLinksWithAnOffset',
+    'CombinedInputActionsTest.testMouseMovementWorksWhenNavigatingToAnotherPage',
 ]
 _OS_NEGATIVE_FILTER['android:chrome_stable'] = (
     _OS_NEGATIVE_FILTER['android:chrome'])
-_OS_NEGATIVE_FILTER['android:chrome_beta'] = (
-    _OS_NEGATIVE_FILTER['android:chrome']
-)
-_OS_NEGATIVE_FILTER['android:chrome_shell'] = (
+_OS_NEGATIVE_FILTER['android:chromium'] = (
     _OS_NEGATIVE_FILTER['android:chrome'] + [
-        # https://code.google.com/p/chromedriver/issues/detail?id=1119
-        'ClickTest.testShouldClickOnFirstBoundingClientRectWithNonZeroSize',
-        'CombinedInputActionsTest.testCanClickOnLinksWithAnOffset',
-        'CombinedInputActionsTest.testMouseMovementWorksWhenNavigatingToAnotherPage',
+        'CorrectEventFiringTest.testShouldFireClickEventWhenClicking',
+        'CorrectEventFiringTest.testShouldFireMouseDownEventWhenClicking',
+    ]
+)
+_OS_NEGATIVE_FILTER['android:chrome_beta'] = (
+    _OS_NEGATIVE_FILTER['android:chrome'] + [
+         # https://code.google.com/p/chromedriver/issues/detail?id=1220
+        'BasicMouseInterfaceTest.testDragAndDrop',
+        'BasicMouseInterfaceTest.testDraggingElementWithMouseFiresEvents',
+        'BasicMouseInterfaceTest.testDraggingElementWithMouseMovesItToAnotherList',
     ]
 )
 _OS_NEGATIVE_FILTER['android:chromedriver_webview_shell'] = (
@@ -222,9 +229,6 @@ _OS_NEGATIVE_FILTER['android:chromedriver_webview_shell'] = (
         'FormHandlingTest.handleFormWithJavascriptAction',
         'TypingTest.testShouldReportKeyCodeOfArrowKeysUpDownEvents',
         'TypingTest.testShouldReportKeyCodeOfArrowKeys',
-        'CombinedInputActionsTest.testCanClickOnLinks',
-        'CombinedInputActionsTest.testCanClickOnLinksWithAnOffset',
-        'CombinedInputActionsTest.testMouseMovementWorksWhenNavigatingToAnotherPage',
     ]
 )
 

@@ -10,8 +10,8 @@ import android.graphics.Color;
 import android.graphics.RectF;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.MathUtils;
 
 /**
@@ -122,7 +122,11 @@ public class LayoutTab implements ChromeAnimation.Animatable<LayoutTab.Property>
     /** The color of the background of the tab. Used as the best approximation to fill in. */
     private int mBackgroundColor = Color.WHITE;
 
-    private int mFallbackThumbnailId = Tab.INVALID_TAB_ID;
+    private int mToolbarBackgroundColor = 0xfff2f2f2;
+
+    private int mTextBoxBackgroundColor = Color.WHITE;
+
+    private float mTextBoxAlpha = 1.0f;
 
     // End section --------------
 
@@ -205,10 +209,12 @@ public class LayoutTab implements ChromeAnimation.Animatable<LayoutTab.Property>
      *                              wait for the content layer to load.
      * @param canUseLiveTexture     Whether the tab can use a live texture when being displayed.
      */
-    public void initFromHost(int backgroundColor, int fallbackThumbnailId, boolean shouldStall,
-            boolean canUseLiveTexture) {
+    public void initFromHost(int backgroundColor, boolean shouldStall, boolean canUseLiveTexture,
+            int toolbarBackgroundColor, int textBoxBackgroundColor, float textBoxAlpha) {
         mBackgroundColor = backgroundColor;
-        mFallbackThumbnailId = fallbackThumbnailId;
+        mToolbarBackgroundColor = toolbarBackgroundColor;
+        mTextBoxBackgroundColor = textBoxBackgroundColor;
+        mTextBoxAlpha = textBoxAlpha;
         mShouldStall = shouldStall;
         mCanUseLiveTexture = canUseLiveTexture;
         mInitFromHostCalled = true;
@@ -868,11 +874,24 @@ public class LayoutTab implements ChromeAnimation.Animatable<LayoutTab.Property>
     }
 
     /**
-     * @return The id of a snapshot that would be acceptable to use if the snapshot for this tab
-     *         is unavailable.
+     * @return The color of the background of the toolbar.
      */
-    public int getFallbackThumbnailId() {
-        return mFallbackThumbnailId;
+    public int getToolbarBackgroundColor() {
+        return mToolbarBackgroundColor;
+    }
+
+    /**
+     * @return The color of the textbox in the toolbar. Used as the color for the anonymize rect.
+     */
+    public int getTextBoxBackgroundColor() {
+        return mTextBoxBackgroundColor;
+    }
+
+    /**
+     * @return The alpha value of the textbox in the toolbar.
+     */
+    public float getTextBoxAlpha() {
+        return mTextBoxAlpha;
     }
 
     /**

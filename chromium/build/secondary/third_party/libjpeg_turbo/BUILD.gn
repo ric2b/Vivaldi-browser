@@ -5,6 +5,7 @@
 # Do not use the targets in this file unless you need a certain libjpeg
 # implementation. Use the meta target //third_party:jpeg instead.
 
+import("//build/config/sanitizers/sanitizers.gni")
 if (current_cpu == "arm") {
   import("//build/config/arm.gni")
 }
@@ -198,14 +199,11 @@ source_set("libjpeg") {
 
   # MemorySanitizer doesn't support assembly code, so keep it disabled in
   # MSan builds for now.
-  # TODO: Enable on Linux when .asm files are recognized.
-  if (is_msan || is_linux) {
+  if (is_msan) {
     sources += [ "jsimd_none.c" ]
   } else {
     deps = [
       ":simd",
     ]
   }
-
-  # TODO(GYP): Compile the .asm files with YASM as GYP does.
 }

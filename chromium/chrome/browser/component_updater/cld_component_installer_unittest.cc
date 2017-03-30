@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/component_updater/cld_component_installer.h"
+
+#include <stddef.h>
 #include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -14,7 +18,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "base/version.h"
-#include "chrome/browser/component_updater/cld_component_installer.h"
 #include "components/translate/content/browser/browser_cld_data_provider.h"
 #include "components/translate/content/common/cld_data_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -86,7 +89,7 @@ TEST_F(CldComponentInstallerTest, VerifyInstallation) {
   ASSERT_TRUE(base::CreateDirectory(data_file_dir));
   const base::FilePath data_file = data_file_dir.Append(kTestCldDataFileName);
   const std::string test_data("fake cld2 data file content here :)");
-  ASSERT_EQ(static_cast<int32>(test_data.length()),
+  ASSERT_EQ(static_cast<int32_t>(test_data.length()),
             base::WriteFile(data_file, test_data.c_str(), test_data.length()));
   ASSERT_TRUE(traits_.VerifyInstallation(manifest, temp_dir_.path()));
 }
@@ -102,7 +105,8 @@ TEST_F(CldComponentInstallerTest, GetInstalledPath) {
   const base::FilePath base_dir;
   const base::FilePath result =
       CldComponentInstallerTraits::GetInstalledPath(base_dir);
-  ASSERT_TRUE(base::EndsWith(result.value(), kTestCldDataFileName, true));
+  ASSERT_TRUE(base::EndsWith(result.value(), kTestCldDataFileName,
+                             base::CompareCase::SENSITIVE));
 }
 
 TEST_F(CldComponentInstallerTest, GetBaseDirectory) {
@@ -124,11 +128,13 @@ TEST_F(CldComponentInstallerTest, ComponentReady) {
   scoped_ptr<base::DictionaryValue> manifest;
   const base::FilePath install_dir(FILE_PATH_LITERAL("/foo"));
   const base::Version version("1.2.3.4");
-  traits_.ComponentReady(version, install_dir, manifest.Pass());
+  traits_.ComponentReady(version, install_dir, std::move(manifest));
   base::FilePath result = CldComponentInstallerTraits::GetLatestCldDataFile();
   ASSERT_TRUE(base::StartsWith(result.AsUTF16Unsafe(),
-                               install_dir.AsUTF16Unsafe(), true));
-  ASSERT_TRUE(base::EndsWith(result.value(), kTestCldDataFileName, true));
+                               install_dir.AsUTF16Unsafe(),
+                               base::CompareCase::SENSITIVE));
+  ASSERT_TRUE(base::EndsWith(result.value(), kTestCldDataFileName,
+                             base::CompareCase::SENSITIVE));
 }
 
 }  // namespace component_updater

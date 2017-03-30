@@ -5,6 +5,7 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_NET_AW_URL_REQUEST_JOB_FACTORY_H_
 #define ANDROID_WEBVIEW_BROWSER_NET_AW_URL_REQUEST_JOB_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/url_request/url_request_job_factory.h"
 
@@ -26,7 +27,7 @@ class AwURLRequestJobFactory : public net::URLRequestJobFactory {
   ~AwURLRequestJobFactory() override;
 
   bool SetProtocolHandler(const std::string& scheme,
-                          ProtocolHandler* protocol_handler);
+                          scoped_ptr<ProtocolHandler> protocol_handler);
 
   // net::URLRequestJobFactory implementation.
   net::URLRequestJob* MaybeCreateJobWithProtocolHandler(

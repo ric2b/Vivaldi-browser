@@ -4,17 +4,18 @@
 
 #include "chrome/browser/chromeos/input_method/input_method_manager_impl.h"
 
+#include <stddef.h>
 #include <algorithm>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "chrome/browser/chromeos/input_method/input_method_engine_interface.h"
 #include "chrome/browser/chromeos/input_method/mock_candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/mock_input_method_engine.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -29,6 +30,7 @@
 #include "ui/base/ime/chromeos/fake_input_method_delegate.h"
 #include "ui/base/ime/chromeos/mock_component_extension_ime_manager_delegate.h"
 #include "ui/base/ime/chromeos/mock_ime_engine_handler.h"
+#include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/input_method_initializer.h"
 #include "ui/chromeos/ime/input_method_menu_item.h"
 #include "ui/chromeos/ime/input_method_menu_manager.h"
@@ -140,8 +142,8 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
     keyboard_ = new FakeImeKeyboard;
     manager_->SetImeKeyboardForTesting(keyboard_);
     mock_engine_handler_.reset(new MockInputMethodEngine());
-    IMEBridge::Initialize();
-    IMEBridge::Get()->SetCurrentEngineHandler(mock_engine_handler_.get());
+    ui::IMEBridge::Initialize();
+    ui::IMEBridge::Get()->SetCurrentEngineHandler(mock_engine_handler_.get());
 
     menu_manager_ = ui::ime::InputMethodMenuManager::GetInstance();
 
@@ -192,7 +194,7 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
         ImeIdFromEngineId(kExt2Engine1Id),
         descriptors,
         mock_engine_handler_.get());
-    manager_->InitializeComponentExtensionForTesting(delegate.Pass());
+    manager_->InitializeComponentExtensionForTesting(std::move(delegate));
   }
 
   void InitImeList() {
@@ -244,6 +246,20 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
     ext_xkb_engine_colemak.language_codes.push_back("en-US");
     ext_xkb_engine_colemak.layouts.push_back("us(colemak)");
     ext_xkb.engines.push_back(ext_xkb_engine_colemak);
+
+    ComponentExtensionEngine ext_xkb_engine_workman;
+    ext_xkb_engine_workman.engine_id = "xkb:us:workman:eng";
+    ext_xkb_engine_workman.display_name = "xkb:us:workman:eng";
+    ext_xkb_engine_workman.language_codes.push_back("en-US");
+    ext_xkb_engine_workman.layouts.push_back("us(workman)");
+    ext_xkb.engines.push_back(ext_xkb_engine_workman);
+
+    ComponentExtensionEngine ext_xkb_engine_workman_intl;
+    ext_xkb_engine_workman_intl.engine_id = "xkb:us:workman-intl:eng";
+    ext_xkb_engine_workman_intl.display_name = "xkb:us:workman-intl:eng";
+    ext_xkb_engine_workman_intl.language_codes.push_back("en-US");
+    ext_xkb_engine_workman_intl.layouts.push_back("us(workman-intl)");
+    ext_xkb.engines.push_back(ext_xkb_engine_workman_intl);
 
     ComponentExtensionEngine ext_xkb_engine_fr;
     ext_xkb_engine_fr.engine_id = "xkb:fr::fra";
@@ -376,7 +392,7 @@ TEST_F(InputMethodManagerImplTest, TestObserver) {
   menu_manager_->AddObserver(&observer);
   EXPECT_EQ(0, observer.input_method_changed_count_);
   manager_->GetActiveIMEState()->EnableLoginLayouts("en-US", keyboard_layouts);
-  EXPECT_EQ(6U, manager_->GetActiveIMEState()->GetActiveInputMethods()->size());
+  EXPECT_EQ(8U, manager_->GetActiveIMEState()->GetActiveInputMethods()->size());
   EXPECT_EQ(1, observer.input_method_changed_count_);
   // Menu change is triggered only if current input method was actually changed.
   EXPECT_EQ(0, observer.input_method_menu_item_changed_count_);
@@ -424,13 +440,13 @@ TEST_F(InputMethodManagerImplTest, TestGetSupportedInputMethods) {
 }
 
 TEST_F(InputMethodManagerImplTest, TestEnableLayouts) {
-  // Currently 6 keyboard layouts are supported for en-US, and 1 for ja. See
+  // Currently 8 keyboard layouts are supported for en-US, and 1 for ja. See
   // ibus_input_method.txt.
   std::vector<std::string> keyboard_layouts;
 
   InitComponentExtension();
   manager_->GetActiveIMEState()->EnableLoginLayouts("en-US", keyboard_layouts);
-  EXPECT_EQ(6U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
+  EXPECT_EQ(8U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
 
   // For http://crbug.com/19655#c11 - (5)
   // The hardware keyboard layout "xkb:us::eng" is always active, hence 2U.
@@ -460,8 +476,8 @@ TEST_F(InputMethodManagerImplTest, TestEnableLayoutsNonUsHardwareKeyboard) {
       "en-US",
       manager_->GetInputMethodUtil()->GetHardwareLoginInputMethodIds());
   EXPECT_EQ(
-      7U,
-      manager_->GetActiveIMEState()->GetNumActiveInputMethods());  // 6 + French
+      9U,
+      manager_->GetActiveIMEState()->GetNumActiveInputMethods());  // 8 + French
   // The physical layout is Japanese.
   manager_->GetInputMethodUtil()->SetHardwareKeyboardLayoutForTesting(
       "xkb:jp::jpn");
@@ -489,8 +505,8 @@ TEST_F(InputMethodManagerImplTest, TestEnableMultipleHardwareKeyboardLayout) {
   manager_->GetActiveIMEState()->EnableLoginLayouts(
       "en-US",
       manager_->GetInputMethodUtil()->GetHardwareLoginInputMethodIds());
-  // 6 + French + Hungarian
-  EXPECT_EQ(8U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
+  // 8 + French + Hungarian
+  EXPECT_EQ(10U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
 }
 
 TEST_F(InputMethodManagerImplTest,
@@ -901,7 +917,7 @@ TEST_F(InputMethodManagerImplTest, TestNextInputMethod) {
   keyboard_layouts.push_back(ImeIdFromEngineId("xkb:us::eng"));
   // For http://crbug.com/19655#c11 - (1)
   manager_->GetActiveIMEState()->EnableLoginLayouts("en-US", keyboard_layouts);
-  EXPECT_EQ(6U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
+  EXPECT_EQ(8U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
   EXPECT_EQ(ImeIdFromEngineId("xkb:us::eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
   EXPECT_EQ("us", keyboard_->last_layout_);
@@ -932,6 +948,16 @@ TEST_F(InputMethodManagerImplTest, TestNextInputMethod) {
   EXPECT_EQ("us(colemak)", keyboard_->last_layout_);
   manager_->GetActiveIMEState()->SwitchToNextInputMethod();
   EXPECT_TRUE(observer.last_show_message_);
+  EXPECT_EQ(ImeIdFromEngineId("xkb:us:workman:eng"),
+            manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
+  EXPECT_EQ("us(workman)", keyboard_->last_layout_);
+  manager_->GetActiveIMEState()->SwitchToNextInputMethod();
+  EXPECT_TRUE(observer.last_show_message_);
+  EXPECT_EQ(ImeIdFromEngineId("xkb:us:workman-intl:eng"),
+            manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
+  EXPECT_EQ("us(workman-intl)", keyboard_->last_layout_);
+  manager_->GetActiveIMEState()->SwitchToNextInputMethod();
+  EXPECT_TRUE(observer.last_show_message_);
   EXPECT_EQ(ImeIdFromEngineId("xkb:us::eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
   EXPECT_EQ("us", keyboard_->last_layout_);
@@ -947,7 +973,7 @@ TEST_F(InputMethodManagerImplTest, TestPreviousInputMethod) {
   std::vector<std::string> keyboard_layouts;
   keyboard_layouts.push_back(ImeIdFromEngineId("xkb:us::eng"));
   manager_->GetActiveIMEState()->EnableLoginLayouts("en-US", keyboard_layouts);
-  EXPECT_EQ(6U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
+  EXPECT_EQ(8U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
   EXPECT_TRUE(manager_->GetActiveIMEState()->CanCycleInputMethod());
   EXPECT_EQ(ImeIdFromEngineId("xkb:us::eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
@@ -1019,7 +1045,7 @@ TEST_F(InputMethodManagerImplTest, TestSwitchInputMethodWithUsLayouts) {
   std::vector<std::string> keyboard_layouts;
   keyboard_layouts.push_back(ImeIdFromEngineId("xkb:us::eng"));
   manager_->GetActiveIMEState()->EnableLoginLayouts("en-US", keyboard_layouts);
-  EXPECT_EQ(6U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
+  EXPECT_EQ(8U, manager_->GetActiveIMEState()->GetNumActiveInputMethods());
 
   // Henkan, Muhenkan, ZenkakuHankaku should be ignored when no Japanese IMEs
   // and keyboards are enabled.

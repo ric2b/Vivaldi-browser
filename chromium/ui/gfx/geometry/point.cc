@@ -4,6 +4,11 @@
 
 #include "ui/gfx/geometry/point.h"
 
+#include "base/strings/stringprintf.h"
+#include "build/build_config.h"
+#include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/point_f.h"
+
 #if defined(OS_WIN)
 #include <windows.h>
 #elif defined(OS_IOS)
@@ -11,8 +16,6 @@
 #elif defined(OS_MACOSX)
 #include <ApplicationServices/ApplicationServices.h>
 #endif
-
-#include "base/strings/stringprintf.h"
 
 namespace gfx {
 
@@ -61,6 +64,42 @@ void Point::SetToMax(const Point& other) {
 
 std::string Point::ToString() const {
   return base::StringPrintf("%d,%d", x(), y());
+}
+
+Point ScaleToCeiledPoint(const Point& point, float x_scale, float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return point;
+  return ToCeiledPoint(ScalePoint(gfx::PointF(point), x_scale, y_scale));
+}
+
+Point ScaleToCeiledPoint(const Point& point, float scale) {
+  if (scale == 1.f)
+    return point;
+  return ToCeiledPoint(ScalePoint(gfx::PointF(point), scale, scale));
+}
+
+Point ScaleToFlooredPoint(const Point& point, float x_scale, float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return point;
+  return ToFlooredPoint(ScalePoint(gfx::PointF(point), x_scale, y_scale));
+}
+
+Point ScaleToFlooredPoint(const Point& point, float scale) {
+  if (scale == 1.f)
+    return point;
+  return ToFlooredPoint(ScalePoint(gfx::PointF(point), scale, scale));
+}
+
+Point ScaleToRoundedPoint(const Point& point, float x_scale, float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return point;
+  return ToRoundedPoint(ScalePoint(gfx::PointF(point), x_scale, y_scale));
+}
+
+Point ScaleToRoundedPoint(const Point& point, float scale) {
+  if (scale == 1.f)
+    return point;
+  return ToRoundedPoint(ScalePoint(gfx::PointF(point), scale, scale));
 }
 
 }  // namespace gfx

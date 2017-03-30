@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_DEVICE_PERMISSION_MANAGER_H_
 #define EXTENSIONS_DEVICE_PERMISSION_MANAGER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <vector>
@@ -21,10 +23,9 @@
 #include "device/hid/hid_service.h"
 #include "device/usb/usb_service.h"
 
+namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
-
-namespace base {
 class Value;
 }
 
@@ -142,8 +143,8 @@ class DevicePermissionsManager : public KeyedService,
   static DevicePermissionsManager* Get(content::BrowserContext* context);
 
   static base::string16 GetPermissionMessage(
-      uint16 vendor_id,
-      uint16 product_id,
+      uint16_t vendor_id,
+      uint16_t product_id,
       const base::string16& manufacturer_string,
       const base::string16& product_string,
       const base::string16& serial_number,
@@ -210,7 +211,7 @@ class DevicePermissionsManagerFactory
   static DevicePermissionsManagerFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<DevicePermissionsManagerFactory>;
+  friend struct base::DefaultSingletonTraits<DevicePermissionsManagerFactory>;
 
   DevicePermissionsManagerFactory();
   ~DevicePermissionsManagerFactory() override;

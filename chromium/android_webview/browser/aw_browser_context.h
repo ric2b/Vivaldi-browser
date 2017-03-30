@@ -9,10 +9,11 @@
 
 #include "android_webview/browser/aw_download_manager_delegate.h"
 #include "android_webview/browser/aw_message_port_service.h"
+#include "android_webview/browser/aw_metrics_service_client.h"
 #include "android_webview/browser/aw_ssl_host_state_delegate.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/visitedlink/browser/visitedlink_delegate.h"
@@ -41,6 +42,11 @@ namespace net {
 class CookieStore;
 }
 
+namespace policy {
+class URLBlacklistManager;
+class BrowserPolicyConnectorBase;
+}
+
 namespace visitedlink {
 class VisitedLinkMaster;
 }
@@ -51,6 +57,14 @@ class AwFormDatabaseService;
 class AwQuotaManagerBridge;
 class AwURLRequestContextGetter;
 class JniDependencyFactory;
+
+namespace prefs {
+
+// Used for Kerberos authentication.
+extern const char kAuthAndroidNegotiateAccountType[];
+extern const char kAuthServerWhitelist[];
+
+}  // namespace prefs
 
 class AwBrowserContext : public content::BrowserContext,
                          public visitedlink::VisitedLinkDelegate {
@@ -71,8 +85,9 @@ class AwBrowserContext : public content::BrowserContext,
   static void SetDataReductionProxyEnabled(bool enabled);
   static void SetLegacyCacheRemovalDelayForTest(int delay_ms);
 
-  // Maps to BrowserMainParts::PreMainMessageLoopRun.
+  // These map to BrowserMainParts::Pre/PostMainMessageLoopRun.
   void PreMainMessageLoopRun();
+  void PostMainMessageLoopRun();
 
   // These methods map to Add methods in visitedlink::VisitedLinkMaster.
   void AddVisitedURLs(const std::vector<GURL>& urls);
@@ -87,20 +102,15 @@ class AwBrowserContext : public content::BrowserContext,
       content::URLRequestInterceptorScopedVector request_interceptors);
 
   AwQuotaManagerBridge* GetQuotaManagerBridge();
-
   AwFormDatabaseService* GetFormDatabaseService();
-
   data_reduction_proxy::DataReductionProxySettings*
       GetDataReductionProxySettings();
-
   data_reduction_proxy::DataReductionProxyIOData*
       GetDataReductionProxyIOData();
-
   AwURLRequestContextGetter* GetAwURLRequestContext();
-
-  void CreateUserPrefServiceIfNecessary();
-
   AwMessagePortService* GetMessagePortService();
+
+  policy::URLBlacklistManager* GetURLBlacklistManager();
 
   // content::BrowserContext implementation.
   scoped_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
@@ -123,11 +133,13 @@ class AwBrowserContext : public content::BrowserContext,
   content::PushMessagingService* GetPushMessagingService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
+  content::BackgroundSyncController* GetBackgroundSyncController() override;
 
   // visitedlink::VisitedLinkDelegate implementation.
   void RebuildTable(const scoped_refptr<URLEnumerator>& enumerator) override;
 
  private:
+  void InitUserPrefService();
   void CreateDataReductionProxyStatisticsIfNecessary();
   static bool data_reduction_proxy_enabled_;
 
@@ -151,6 +163,8 @@ class AwBrowserContext : public content::BrowserContext,
   scoped_ptr<content::ResourceContext> resource_context_;
 
   scoped_ptr<PrefService> user_pref_service_;
+  scoped_ptr<policy::BrowserPolicyConnectorBase> browser_policy_connector_;
+  scoped_ptr<policy::URLBlacklistManager> blacklist_manager_;
 
   scoped_ptr<data_reduction_proxy::DataReductionProxySettings>
       data_reduction_proxy_settings_;

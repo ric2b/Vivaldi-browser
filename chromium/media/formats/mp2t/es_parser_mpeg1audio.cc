@@ -4,16 +4,16 @@
 
 #include "media/formats/mp2t/es_parser_mpeg1audio.h"
 
+#include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "media/base/audio_timestamp_helper.h"
 #include "media/base/bit_reader.h"
-#include "media/base/buffers.h"
 #include "media/base/channel_layout.h"
 #include "media/base/stream_parser_buffer.h"
+#include "media/base/timestamp_constants.h"
 #include "media/formats/common/offset_byte_queue.h"
 #include "media/formats/mp2t/mp2t_common.h"
 #include "media/formats/mpeg/mpeg1_audio_stream_parser.h"
@@ -23,7 +23,7 @@ namespace mp2t {
 
 struct EsParserMpeg1Audio::Mpeg1AudioFrame {
   // Pointer to the ES data.
-  const uint8* data;
+  const uint8_t* data;
 
   // Frame size.
   int size;
@@ -32,16 +32,16 @@ struct EsParserMpeg1Audio::Mpeg1AudioFrame {
   int sample_count;
 
   // Frame offset in the ES queue.
-  int64 queue_offset;
+  int64_t queue_offset;
 };
 
 EsParserMpeg1Audio::EsParserMpeg1Audio(
     const NewAudioConfigCB& new_audio_config_cb,
     const EmitBufferCB& emit_buffer_cb,
-    const LogCB& log_cb)
-  : log_cb_(log_cb),
-    new_audio_config_cb_(new_audio_config_cb),
-    emit_buffer_cb_(emit_buffer_cb) {
+    const scoped_refptr<MediaLog>& media_log)
+    : media_log_(media_log),
+      new_audio_config_cb_(new_audio_config_cb),
+      emit_buffer_cb_(emit_buffer_cb) {
 }
 
 EsParserMpeg1Audio::~EsParserMpeg1Audio() {
@@ -107,7 +107,7 @@ void EsParserMpeg1Audio::ResetInternal() {
 bool EsParserMpeg1Audio::LookForMpeg1AudioFrame(
     Mpeg1AudioFrame* mpeg1audio_frame) {
   int es_size;
-  const uint8* es;
+  const uint8_t* es;
   es_queue_->Peek(&es, &es_size);
 
   int max_offset = es_size - MPEG1AudioStreamParser::kHeaderSize;
@@ -115,14 +115,14 @@ bool EsParserMpeg1Audio::LookForMpeg1AudioFrame(
     return false;
 
   for (int offset = 0; offset < max_offset; offset++) {
-    const uint8* cur_buf = &es[offset];
+    const uint8_t* cur_buf = &es[offset];
     if (cur_buf[0] != 0xff)
       continue;
 
     int remaining_size = es_size - offset;
     DCHECK_GE(remaining_size, MPEG1AudioStreamParser::kHeaderSize);
     MPEG1AudioStreamParser::Header header;
-    if (!MPEG1AudioStreamParser::ParseHeader(log_cb_, cur_buf, &header))
+    if (!MPEG1AudioStreamParser::ParseHeader(media_log_, cur_buf, &header))
       continue;
 
     if (remaining_size < header.frame_size) {
@@ -160,10 +160,9 @@ bool EsParserMpeg1Audio::LookForMpeg1AudioFrame(
 }
 
 bool EsParserMpeg1Audio::UpdateAudioConfiguration(
-    const uint8* mpeg1audio_header) {
+    const uint8_t* mpeg1audio_header) {
   MPEG1AudioStreamParser::Header header;
-  if (!MPEG1AudioStreamParser::ParseHeader(log_cb_,
-                                           mpeg1audio_header,
+  if (!MPEG1AudioStreamParser::ParseHeader(media_log_, mpeg1audio_header,
                                            &header)) {
     return false;
   }
@@ -175,7 +174,7 @@ bool EsParserMpeg1Audio::UpdateAudioConfiguration(
       kSampleFormatS16,
       header.channel_layout,
       header.sample_rate,
-      NULL, 0,
+      std::vector<uint8_t>(),
       false);
 
   if (!audio_decoder_config.Matches(last_audio_decoder_config_)) {

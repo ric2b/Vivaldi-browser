@@ -18,6 +18,7 @@
 #include "chrome/browser/chromeos/system/automatic_reboot_manager.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager_default_delegate.h"
+#include "chrome/browser/chromeos/system/system_clock.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
@@ -45,7 +46,6 @@ void BrowserProcessPlatformPart::ShutdownAutomaticRebootManager() {
 }
 
 void BrowserProcessPlatformPart::InitializeChromeUserManager() {
-  DisableDinoEasterEggIfEnrolled();
   DCHECK(!chrome_user_manager_);
   chrome_user_manager_ =
       chromeos::ChromeUserManagerImpl::CreateChromeUserManager();
@@ -104,14 +104,6 @@ BrowserProcessPlatformPart::browser_policy_connector_chromeos() {
       g_browser_process->browser_policy_connector());
 }
 
-void BrowserProcessPlatformPart::DisableDinoEasterEggIfEnrolled() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  const bool is_enterprise_managed = g_browser_process->platform_part()->
-             browser_policy_connector_chromeos()->IsEnterpriseManaged();
-  if (is_enterprise_managed)
-    command_line->AppendSwitch(switches::kDisableDinosaurEasterEgg);
-}
-
 chromeos::TimeZoneResolver* BrowserProcessPlatformPart::GetTimezoneResolver() {
   if (!timezone_resolver_.get()) {
     timezone_resolver_.reset(new chromeos::TimeZoneResolver(
@@ -126,6 +118,12 @@ chromeos::TimeZoneResolver* BrowserProcessPlatformPart::GetTimezoneResolver() {
   return timezone_resolver_.get();
 }
 
+chromeos::system::SystemClock* BrowserProcessPlatformPart::GetSystemClock() {
+  if (!system_clock_.get())
+    system_clock_.reset(new chromeos::system::SystemClock());
+
+  return system_clock_.get();
+}
 void BrowserProcessPlatformPart::StartTearDown() {
   // interactive_ui_tests check for memory leaks before this object is
   // destroyed.  So we need to destroy |timezone_resolver_| here.

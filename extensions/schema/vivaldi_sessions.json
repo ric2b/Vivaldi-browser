@@ -1,0 +1,115 @@
+// Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved.
+
+[
+  {
+    "namespace": "sessionsPrivate",
+    "description": "Vivaldi sessions support api.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/sessions/vivaldi_sessions_api.h"
+    },
+    "types": [
+      {
+        "id": "SessionItem",
+        "type": "object",
+        "description": "Object that holds all information about a single session.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Session display name created from the filename"
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getAll",
+        "type": "function",
+        "description": "Returns all previously saved sessions stored on disk.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "sessions",
+                "type": "array",
+                "items": {
+                  "$ref": "SessionItem"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "saveOpenTabs",
+        "type": "function",
+        "description": "Saves all open tabs to the named session.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "description": "Name of the session to save to."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "status",
+                "type": "integer",
+                "description": "0 for success, error code for any error."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "open",
+        "type": "function",
+        "description": "Open a specific named session.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "description": "Name of the session to open."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "status",
+                "type": "integer",
+                "description": "0 for success, error code for any error."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "type": "function",
+        "description": "Deletes the named session.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "description": "Name of the session to delete."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "status",
+                "type": "integer",
+                "description": "0 for success, error code for any error."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

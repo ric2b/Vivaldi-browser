@@ -5,25 +5,25 @@
 #ifndef UI_EVENTS_OZONE_EVDEV_EVENT_MODIFIERS_EVDEV_H_
 #define UI_EVENTS_OZONE_EVDEV_EVENT_MODIFIERS_EVDEV_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "ui/events/ozone/evdev/events_ozone_evdev_export.h"
 
 namespace ui {
 
 enum {
   EVDEV_MODIFIER_NONE,
-  EVDEV_MODIFIER_CAPS_LOCK,
   EVDEV_MODIFIER_SHIFT,
   EVDEV_MODIFIER_CONTROL,
   EVDEV_MODIFIER_ALT,
+  EVDEV_MODIFIER_COMMAND,
+  EVDEV_MODIFIER_ALTGR,
+  EVDEV_MODIFIER_MOD3,
+  EVDEV_MODIFIER_CAPS_LOCK,
   EVDEV_MODIFIER_LEFT_MOUSE_BUTTON,
   EVDEV_MODIFIER_MIDDLE_MOUSE_BUTTON,
   EVDEV_MODIFIER_RIGHT_MOUSE_BUTTON,
   EVDEV_MODIFIER_BACK_MOUSE_BUTTON,
   EVDEV_MODIFIER_FORWARD_MOUSE_BUTTON,
-  EVDEV_MODIFIER_COMMAND,
-  EVDEV_MODIFIER_ALTGR,
-  EVDEV_MODIFIER_MOD3,
   EVDEV_NUM_MODIFIERS
 };
 
@@ -58,6 +58,9 @@ class EVENTS_OZONE_EVDEV_EXPORT EventModifiersEvdev {
 
   // Return current flags to use for incoming events.
   int GetModifierFlags();
+
+  // Release modifier keys.
+  void ResetKeyboardModifiers();
 
   // Return the mask for the specified modifier.
   static int GetEventFlagFromModifier(unsigned int modifier);

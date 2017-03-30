@@ -4,11 +4,15 @@
 
 #include "chrome/browser/ui/webui/components_ui.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -233,6 +237,7 @@ base::string16 ComponentsUI::ServiceStatusToString(
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_UPTODATE);
     case update_client::CrxUpdateItem::State::kNoUpdate:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_NOUPDATE);
+    case update_client::CrxUpdateItem::State::kUninstalled:  // Fall through.
     case update_client::CrxUpdateItem::State::kLastStatus:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_UNKNOWN);
   }

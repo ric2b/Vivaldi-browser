@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/data_pipe_producer_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe_producer_dispatcher.h"
 
 #include "base/logging.h"
-#include "mojo/edk/system/data_pipe.h"
-#include "mojo/edk/system/memory.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/memory.h"
 
 namespace mojo {
 namespace system {
@@ -35,6 +35,11 @@ DataPipeProducerDispatcher::Deserialize(Channel* channel,
   return dispatcher;
 }
 
+DataPipe* DataPipeProducerDispatcher::GetDataPipeForTest() {
+  MutexLocker locker(&mutex());
+  return data_pipe_.get();
+}
+
 DataPipeProducerDispatcher::DataPipeProducerDispatcher() {
 }
 
@@ -44,19 +49,19 @@ DataPipeProducerDispatcher::~DataPipeProducerDispatcher() {
 }
 
 void DataPipeProducerDispatcher::CancelAllAwakablesNoLock() {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   data_pipe_->ProducerCancelAllAwakables();
 }
 
 void DataPipeProducerDispatcher::CloseImplNoLock() {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   data_pipe_->ProducerClose();
   data_pipe_ = nullptr;
 }
 
 scoped_refptr<Dispatcher>
 DataPipeProducerDispatcher::CreateEquivalentDispatcherAndCloseImplNoLock() {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
 
   scoped_refptr<DataPipeProducerDispatcher> rv = Create();
   rv->Init(data_pipe_);
@@ -68,7 +73,7 @@ MojoResult DataPipeProducerDispatcher::WriteDataImplNoLock(
     UserPointer<const void> elements,
     UserPointer<uint32_t> num_bytes,
     MojoWriteDataFlags flags) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return data_pipe_->ProducerWriteData(
       elements, num_bytes, (flags & MOJO_WRITE_DATA_FLAG_ALL_OR_NONE));
 }
@@ -77,31 +82,30 @@ MojoResult DataPipeProducerDispatcher::BeginWriteDataImplNoLock(
     UserPointer<void*> buffer,
     UserPointer<uint32_t> buffer_num_bytes,
     MojoWriteDataFlags flags) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
 
-  return data_pipe_->ProducerBeginWriteData(
-      buffer, buffer_num_bytes, (flags & MOJO_WRITE_DATA_FLAG_ALL_OR_NONE));
+  return data_pipe_->ProducerBeginWriteData(buffer, buffer_num_bytes);
 }
 
 MojoResult DataPipeProducerDispatcher::EndWriteDataImplNoLock(
     uint32_t num_bytes_written) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
 
   return data_pipe_->ProducerEndWriteData(num_bytes_written);
 }
 
 HandleSignalsState DataPipeProducerDispatcher::GetHandleSignalsStateImplNoLock()
     const {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return data_pipe_->ProducerGetHandleSignalsState();
 }
 
 MojoResult DataPipeProducerDispatcher::AddAwakableImplNoLock(
     Awakable* awakable,
     MojoHandleSignals signals,
-    uint32_t context,
+    uintptr_t context,
     HandleSignalsState* signals_state) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return data_pipe_->ProducerAddAwakable(awakable, signals, context,
                                          signals_state);
 }
@@ -109,7 +113,7 @@ MojoResult DataPipeProducerDispatcher::AddAwakableImplNoLock(
 void DataPipeProducerDispatcher::RemoveAwakableImplNoLock(
     Awakable* awakable,
     HandleSignalsState* signals_state) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   data_pipe_->ProducerRemoveAwakable(awakable, signals_state);
 }
 
@@ -135,7 +139,7 @@ bool DataPipeProducerDispatcher::EndSerializeAndCloseImplNoLock(
 }
 
 bool DataPipeProducerDispatcher::IsBusyNoLock() const {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return data_pipe_->ProducerIsBusy();
 }
 

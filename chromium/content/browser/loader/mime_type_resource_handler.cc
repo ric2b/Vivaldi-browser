@@ -4,6 +4,7 @@
 
 #include "content/browser/loader/mime_type_resource_handler.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -16,7 +17,6 @@
 #include "components/mime_util/mime_util.h"
 #include "content/browser/download/download_resource_handler.h"
 #include "content/browser/download/download_stats.h"
-#include "content/browser/loader/certificate_resource_handler.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/loader/stream_resource_handler.h"
@@ -86,7 +86,7 @@ MimeTypeResourceHandler::MimeTypeResourceHandler(
     ResourceDispatcherHostImpl* host,
     PluginService* plugin_service,
     net::URLRequest* request)
-    : LayeredResourceHandler(request, next_handler.Pass()),
+    : LayeredResourceHandler(request, std::move(next_handler)),
       state_(STATE_STARTING),
       host_(host),
       plugin_service_(plugin_service),
@@ -94,8 +94,7 @@ MimeTypeResourceHandler::MimeTypeResourceHandler(
       bytes_read_(0),
       must_download_(false),
       must_download_is_set_(false),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 MimeTypeResourceHandler::~MimeTypeResourceHandler() {
 }
@@ -111,9 +110,7 @@ void MimeTypeResourceHandler::SetController(ResourceController* controller) {
 }
 
 bool MimeTypeResourceHandler::OnResponseStarted(ResourceResponse* response,
-                                                bool* defer,
-                                                bool open_when_done,
-                                                bool ask_for_target) {
+                                                bool* defer) {
   response_ = response;
 
   // A 304 response should not contain a Content-Type header (RFC 7232 section
@@ -142,6 +139,13 @@ bool MimeTypeResourceHandler::OnResponseStarted(ResourceResponse* response,
 
   state_ = STATE_PROCESSING;
   return ProcessResponse(defer);
+}
+
+bool MimeTypeResourceHandler::OnResponseStarted(ResourceResponse* response,
+                                                bool* defer,
+                                                bool open_when_done,
+                                                bool ask_for_target) {
+  return OnResponseStarted(response, defer);
 }
 
 bool MimeTypeResourceHandler::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
@@ -294,30 +298,74 @@ bool MimeTypeResourceHandler::DetermineMimeType() {
   return made_final_decision;
 }
 
+bool MimeTypeResourceHandler::SelectPluginHandler(bool* defer,
+                                                  bool* handled_by_plugin) {
+  *handled_by_plugin = false;
+#if defined(ENABLE_PLUGINS)
+  ResourceRequestInfoImpl* info = GetRequestInfo();
+  bool allow_wildcard = false;
+  bool stale;
+  WebPluginInfo plugin;
+  bool has_plugin = plugin_service_->GetPluginInfo(
+      info->GetChildID(), info->GetRenderFrameID(), info->GetContext(),
+      request()->url(), GURL(), response_->head.mime_type, allow_wildcard,
+      &stale, &plugin, NULL);
+
+  if (stale) {
+    // Refresh the plugins asynchronously.
+    plugin_service_->GetPlugins(
+        base::Bind(&MimeTypeResourceHandler::OnPluginsLoaded,
+                   weak_ptr_factory_.GetWeakPtr()));
+    request()->LogBlockedBy("MimeTypeResourceHandler");
+    *defer = true;
+    return true;
+  }
+
+  if (has_plugin && plugin.type != WebPluginInfo::PLUGIN_TYPE_BROWSER_PLUGIN) {
+    *handled_by_plugin = true;
+    return true;
+  }
+
+  // Attempt to intercept the request as a stream.
+  base::FilePath plugin_path;
+  if (has_plugin)
+    plugin_path = plugin.path;
+  std::string payload;
+  scoped_ptr<ResourceHandler> handler(host_->MaybeInterceptAsStream(
+      plugin_path, request(), response_.get(), &payload));
+  if (handler) {
+    *handled_by_plugin = true;
+    return UseAlternateNextHandler(std::move(handler), payload);
+  }
+#endif
+  return true;
+}
+
 bool MimeTypeResourceHandler::SelectNextHandler(bool* defer) {
   DCHECK(!response_->head.mime_type.empty());
 
   ResourceRequestInfoImpl* info = GetRequestInfo();
   const std::string& mime_type = response_->head.mime_type;
 
-  if (mime_util::IsSupportedCertificateMimeType(mime_type)) {
-    // Install certificate file.
-    info->set_is_download(true);
-    scoped_ptr<ResourceHandler> handler(
-        new CertificateResourceHandler(request()));
-    return UseAlternateNextHandler(handler.Pass(), std::string());
+  // https://crbug.com/568184 - Temporary hack to track servers that aren't
+  // setting Content-Disposition when sending x-x509-user-cert and expecting
+  // the browser to automatically install certificates; this is being
+  // deprecated and will be removed upon full <keygen> removal.
+  if (mime_type == "application/x-x509-user-cert") {
+    UMA_HISTOGRAM_BOOLEAN(
+        "UserCert.ContentDisposition",
+        response_->head.headers->HasHeader("Content-Disposition"));
   }
 
   // Allow requests for object/embed tags to be intercepted as streams.
   if (info->GetResourceType() == content::RESOURCE_TYPE_OBJECT) {
     DCHECK(!info->allow_download());
-    std::string payload;
-    scoped_ptr<ResourceHandler> handler(
-        host_->MaybeInterceptAsStream(request(), response_.get(), &payload));
-    if (handler) {
-      DCHECK(!mime_util::IsSupportedMimeType(mime_type));
-      return UseAlternateNextHandler(handler.Pass(), payload);
-    }
+
+    bool handled_by_plugin;
+    if (!SelectPluginHandler(defer, &handled_by_plugin))
+      return false;
+    if (handled_by_plugin || *defer)
+      return true;
   }
 
   if (!info->allow_download())
@@ -334,28 +382,11 @@ bool MimeTypeResourceHandler::SelectNextHandler(bool* defer) {
     if (mime_util::IsSupportedMimeType(mime_type))
       return true;
 
-    std::string payload;
-    scoped_ptr<ResourceHandler> handler(
-        host_->MaybeInterceptAsStream(request(), response_.get(), &payload));
-    if (handler) {
-      return UseAlternateNextHandler(handler.Pass(), payload);
-    }
-
-#if defined(ENABLE_PLUGINS)
-    bool stale;
-    bool has_plugin = HasSupportingPlugin(&stale);
-    if (stale) {
-      // Refresh the plugins asynchronously.
-      plugin_service_->GetPlugins(
-          base::Bind(&MimeTypeResourceHandler::OnPluginsLoaded,
-                     weak_ptr_factory_.GetWeakPtr()));
-      request()->LogBlockedBy("MimeTypeResourceHandler");
-      *defer = true;
+    bool handled_by_plugin;
+    if (!SelectPluginHandler(defer, &handled_by_plugin))
+      return false;
+    if (handled_by_plugin || *defer)
       return true;
-    }
-    if (has_plugin)
-      return true;
-#endif
   }
 
   // Install download handler
@@ -368,7 +399,7 @@ bool MimeTypeResourceHandler::SelectNextHandler(bool* defer) {
           DownloadItem::kInvalidId,
           scoped_ptr<DownloadSaveInfo>(new DownloadSaveInfo()),
           DownloadUrlParameters::OnStartedCallback()));
-  return UseAlternateNextHandler(handler.Pass(), std::string());
+  return UseAlternateNextHandler(std::move(handler), std::string());
 }
 
 bool MimeTypeResourceHandler::UseAlternateNextHandler(
@@ -420,7 +451,7 @@ bool MimeTypeResourceHandler::UseAlternateNextHandler(
 
   // This is handled entirely within the new ResourceHandler, so just reset the
   // original ResourceHandler.
-  next_handler_ = new_handler.Pass();
+  next_handler_ = std::move(new_handler);
   next_handler_->SetController(this);
 
   return CopyReadBufferToNextHandler();
@@ -470,23 +501,6 @@ bool MimeTypeResourceHandler::MustDownload() {
   }
 
   return must_download_;
-}
-
-bool MimeTypeResourceHandler::HasSupportingPlugin(bool* stale) {
-#if defined(ENABLE_PLUGINS)
-  ResourceRequestInfoImpl* info = GetRequestInfo();
-
-  bool allow_wildcard = false;
-  WebPluginInfo plugin;
-  return plugin_service_->GetPluginInfo(
-      info->GetChildID(), info->GetRenderFrameID(), info->GetContext(),
-      request()->url(), GURL(), response_->head.mime_type, allow_wildcard,
-      stale, &plugin, NULL);
-#else
-  if (stale)
-    *stale = false;
-  return false;
-#endif
 }
 
 bool MimeTypeResourceHandler::CopyReadBufferToNextHandler() {

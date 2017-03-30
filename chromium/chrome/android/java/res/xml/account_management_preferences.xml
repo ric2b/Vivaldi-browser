@@ -11,9 +11,11 @@
     <PreferenceCategory
         android:title="@string/account_management_title"
         android:order="0" />
+
+    <!-- The summary is set programmatically (the exact value depends on whether modifying
+         accounts is allowed). -->
     <org.chromium.chrome.browser.preferences.ChromeSwitchPreference
         android:key="sign_out_switch"
-        android:summary="@string/sign_in_accounts_message"
         android:order="1"
         app:dontUseSummaryAsTitle="true" />
     <org.chromium.chrome.browser.preferences.TextMessagePreference
@@ -49,8 +51,8 @@
         android:title="@string/account_management_child_content_title"
         android:order="1005" />
     <Preference
-        android:key="child_safe_search"
-        android:title="@string/account_management_child_safe_search_title"
+        android:key="child_safe_sites"
+        android:title="@string/account_management_child_safe_sites_title"
         android:order="1006" />
 
 </PreferenceScreen>

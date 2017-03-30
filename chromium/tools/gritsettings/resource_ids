@@ -39,6 +39,9 @@
   "net/base/net_resources.grd": {
     "includes": [4000],
   },
+  "mash/wm/resources/mash_wm_resources.grd": {
+    "structures": [4400],
+  },
   "ui/resources/ui_unscaled_resources.grd": {
     "includes": [4500],
   },
@@ -51,6 +54,9 @@
   "ui/resources/ui_resources.grd": {
     "structures": [5500],
   },
+  "ui/app_list/resources/app_list_resources.grd": {
+    "structures": [5760],
+  },
   "ui/views/resources/views_resources.grd": {
     "structures": [5800],
   },
@@ -58,12 +64,13 @@
     "includes": [6100],
     "structures": [6150],
   },
-  #"chrome/app/theme/theme_resources.grd": {
-  "chrome/app/theme/vivaldi_theme_resources.grd": {
+  "ui/keyboard/keyboard_resources.grd": {
+    "includes": [6850],
+  },
+  "chrome/app/theme/theme_resources.grd": {
     "structures": [7000],
   },
-  #"chrome/app/theme/chrome_unscaled_resources.grd": {
-  "chrome/app/theme/vivaldi_unscaled_resources.grd": {
+  "chrome/app/theme/chrome_unscaled_resources.grd": {
     "includes": [8000],
   },
   "ui/strings/app_locale_settings.grd": {
@@ -99,7 +106,7 @@
   "chrome/app/chromium_strings.grd": {
     "messages": [11500],
   },
-  "chrome/app/vivaldi_strings.grd": {
+  "chrome/app/google_chrome_strings.grd": {
     "messages": [11500],
   },
   # Leave lots of space for generated_resources since it has most of our
@@ -109,162 +116,195 @@
     "messages": [12500],
   },
   "content/app/strings/content_strings.grd": {
-    "messages": [19000],
+    "messages": [18900],
+  },
+  # Settings Chromium strings and Settings Google Chrome strings must start
+  # at the same id.  We only use one file depending on whether we're building
+  # Chromium or Google Chrome.
+  "chrome/app/settings_chromium_strings.grd": {
+    "messages": [19700],
+  },
+  "chrome/app/settings_google_chrome_strings.grd": {
+    "messages": [19700],
+  },
+  "chrome/app/settings_strings.grd": {
+    "messages": [20000],
   },
   "components/policy/resources/policy_templates.grd": {
-    "structures": [20500],
-    "messages": [20510],
-  },
-  "chrome/browser/resources/sync_internals_resources.grd": {
-    "includes": [21500],
+    "structures": [20400],
+    "messages": [20410],
   },
   "chrome/browser/resources/signin_internals_resources.grd": {
-    "includes": [21750],
+    "includes": [21400],
   },
   "chrome/browser/resources/invalidations_resources.grd": {
-    "includes": [21950],
+    "includes": [21600],
   },
   # This file is generated during the build.
   "<(SHARED_INTERMEDIATE_DIR)/devtools/devtools_resources.grd": {
-    "includes": [22000],
+    "includes": [21650],
   },
   "devtools_resources.grd": {
-    "includes": [22000],
+    "includes": [21650],
   },
   "chrome/browser/resources/options_resources.grd": {
-    "includes": [23000],
-    "structures": [23200],
+    "includes": [22650],
+    "structures": [22850],
   },
   "chrome/browser/resources/options_test_resources.grd": {
-    "includes": [23400],
-    "structures": [23450],
+    "includes": [23050],
+    "structures": [23090],
+  },
+  "chrome/test/data/webui_test_resources.grd": {
+    "includes": [23130],
+    "structures": [23140],
   },
   "cloud_print/virtual_driver/win/install/virtual_driver_setup_resources.grd": {
-    "messages": [23500],
-    "includes": [23550],
+    "messages": [23150],
+    "includes": [23200],
   },
   "cloud_print/service/win/service_resources.grd": {
-    "messages": [23600],
-    "includes": [23700],
-    "structures": [23750],
+    "messages": [23250],
+    "includes": [23350],
+    "structures": [23400],
   },
   "cloud_print/gcp20/prototype/gcp20_device.grd": {
-    "messages": [23800],
-    "includes": [23830],
-    "structures": [23860],
+    "messages": [23450],
+    "includes": [23480],
+    "structures": [23490],
   },
   "chrome/browser/resources/quota_internals_resources.grd": {
-    "includes": [24000],
+    "includes": [23650],
   },
   "content/content_resources.grd": {
-    "includes": [25000],
+    "includes": [24150],
   },
   "content/shell/shell_resources.grd": {
-    "includes": [25500],
+    "includes": [24650],
   },
   # This file is generated during the build.
   "<(SHARED_INTERMEDIATE_DIR)/content/browser/tracing/tracing_resources.grd": {
-    "includes": [25750],
+    "includes": [24900],
   },
-  # iOS resources overlap with ash, chromeos and extensions_api, as these are
-  # not used on iOS.
-  "ios/chrome/app/strings/ios_strings_resources.grd": {
-    "messages": [26000],
+  # iOS resources overlap with android_webview, ash, chromeos and extensions_api,
+  # as these are not used on iOS.
+  "ios/chrome/app/strings/ios_locale_settings.grd": {
+    "messages": [25150],
+  },
+  "ios/chrome/app/strings/ios_strings.grd": {
+    "messages": [25155],
+  },
+  # Chromium strings and Google Chrome strings must start at the same id.
+  # We only use one file depending on whether we're building Chromium or
+  # Google Chrome.
+  "ios/chrome/app/strings/ios_chromium_strings.grd": {
+    "messages": [26055],
+  },
+  "ios/chrome/app/strings/ios_google_chrome_strings.grd": {
+    "messages": [26055],
+  },
+  "ios/chrome/app/resources/ios_resources.grd": {
+    "structures": [26150],
+    "includes": [26160],
   },
   "ios/chrome/app/theme/ios_theme_resources.grd": {
-    "structures": [27000],
+    "structures": [26170],
+  },
+  "ios/chrome/today_extension/strings/ios_today_extension_strings.grd": {
+    "messages": [26635],
   },
   "ash/ash_strings.grd": {
-    "messages": [26000],
+    "messages": [25150],
+  },
+  "android_webview/ui/aw_resources.grd": {
+    "includes": [25150],
+  },
+  "android_webview/ui/aw_strings.grd": {
+    "messages": [25250],
   },
   "ui/chromeos/resources/ui_chromeos_resources.grd": {
-    "structures": [26200],
+    "structures": [25350],
   },
   "ui/chromeos/ui_chromeos_strings.grd": {
-    "messages": [26300],
+    "messages": [25450],
   },
   "chrome/common/extensions_api_resources.grd": {
-    "includes": [26400],
+    "includes": [25550],
   },
   "extensions/extensions_resources.grd": {
-    "includes": [26600],
+    "includes": [25750],
   },
   "extensions/browser/resources/extensions_browser_resources.grd": {
-    "structures": [26800],
+    "structures": [25950],
   },
   "extensions/renderer/resources/extensions_renderer_resources.grd": {
-    "includes": [26850],
-    "structures": [26950],
+    "includes": [26000],
+    "structures": [26100],
   },
   "extensions/extensions_strings.grd": {
-    "messages": [27000],
+    "messages": [26150],
   },
   "extensions/shell/app_shell_resources.grd": {
-    "includes": [27400],
+    "includes": [26550],
   },
   "chrome/browser/resources/memory_internals_resources.grd": {
-    "includes": [27500],
+    "includes": [26650],
   },
   "chrome/browser/resources/password_manager_internals_resources.grd": {
-    "includes": [27800],
+    "includes": [26850],
   },
   "device/bluetooth/bluetooth_strings.grd": {
-    "messages": [28000],
-  },
-  "ui/keyboard/keyboard_resources.grd": {
-    "includes": [28050],
+    "messages": [27150],
   },
   "ui/file_manager/file_manager_resources.grd": {
-    "includes": [28110],
+    "includes": [27260],
   },
   "components/chrome_apps/chrome_apps_resources.grd": {
-    "includes": [28290],
+    "includes": [27440],
   },
   "ui/login/login_resources.grd": {
-    "includes": [28310],
+    "includes": [27460],
   },
   "chrome/browser/resources/translate_internals_resources.grd": {
-    "includes": [28510],
+    "includes": [27660],
   },
   "chrome/browser/resources/sync_file_system_internals_resources.grd": {
-    "includes": [29010],
+    "includes": [28160],
   },
   "chrome/app/address_input_strings.grd": {
-    "messages": [29110],
+    "messages": [28260],
   },
   "remoting/resources/remoting_strings.grd": {
-    "messages": [29560],
+    "messages": [28710],
   },
   "components/components_strings.grd": {
-    "messages": [30010],
+    "messages": [29160],
+  },
+  # Chromium strings and Google Chrome strings must start at the same id.
+  # We only use one file depending on whether we're building Chromium or
+  # Google Chrome.
+  "components/components_chromium_strings.grd": {
+    "messages": [30150],
+  },
+  "components/components_google_chrome_strings.grd": {
+    "messages": [30150],
   },
   "components/resources/components_resources.grd": {
-    "includes": [30260],
+    "includes": [30175],
   },
   "components/resources/components_scaled_resources.grd": {
-    "structures": [30310],
+    "structures": [30345],
   },
   "third_party/WebKit/public/blink_resources.grd": {
-    "includes": [30350],
-    "structures": [30650],
+    "includes": [30370],
+    "structures": [30670],
   },
-  "chrome/browser/devtools/device/webrtc/resources.grd": {
-    "includes": [30800],
-  },
-  "chrome/browser/resources/settings/settings_resources.grd": {
+  "chrome/browser/resources/md_policy/policy_resources.grd": {
     "structures": [30900],
   },
-  "chrome/app/theme/vivaldi_unscaled_resources.grd": {
-    "includes": [31000],
+  "chrome/browser/resources/settings/settings_resources.grd": {
+    "structures": [30920],
   },
-
-  # These files don't need to reserve resource ids, but are listed here so that
-  # translation scripts know of their existence.
-  "android_webview/java/strings/android_webview_strings.grd": {},
-  "chrome/android/java/strings/android_chrome_strings.grd": {},
-  "content/public/android/java/strings/android_content_strings.grd": {},
-  "ui/accessibility/extensions/strings/accessibility_extensions_strings.grd": {},
-  "ui/android/java/strings/android_ui_strings.grd": {},
 
   # Resource ids starting at 31000 are reserved for projects built on Chromium.
 }

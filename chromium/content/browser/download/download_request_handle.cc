@@ -5,7 +5,6 @@
 #include "content/browser/download/download_request_handle.h"
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -13,12 +12,13 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 
 namespace content {
 
-DownloadRequestHandle::~DownloadRequestHandle() {
-}
+DownloadRequestHandleInterface::~DownloadRequestHandleInterface() {}
+
+DownloadRequestHandle::~DownloadRequestHandle() {}
 
 DownloadRequestHandle::DownloadRequestHandle()
     : child_id_(-1),
@@ -42,12 +42,11 @@ DownloadRequestHandle::DownloadRequestHandle(
 }
 
 WebContents* DownloadRequestHandle::GetWebContents() const {
-  // PlzNavigate: if a FrameTreeNodeID was provided, use it to return the
+  // PlzNavigate: if a FrameTreeNodeId was provided, use it to return the
   // WebContents.
   // TODO(davidben): This logic should be abstracted within the ResourceLoader
   // stack. https://crbug.com/376003
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     FrameTreeNode* frame_tree_node =
         FrameTreeNode::GloballyFindByID(frame_tree_node_id_);
     if (frame_tree_node) {
@@ -64,12 +63,11 @@ WebContents* DownloadRequestHandle::GetWebContents() const {
 }
 
 DownloadManager* DownloadRequestHandle::GetDownloadManager() const {
-  // PlzNavigate: if a FrameTreeNodeID was provided, use it to return the
+  // PlzNavigate: if a FrameTreeNodeId was provided, use it to return the
   // DownloadManager.
   // TODO(davidben): This logic should be abstracted within the ResourceLoader
   // stack. https://crbug.com/376003
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     FrameTreeNode* frame_tree_node =
         FrameTreeNode::GloballyFindByID(frame_tree_node_id_);
     if (frame_tree_node) {

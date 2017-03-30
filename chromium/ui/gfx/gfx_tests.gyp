@@ -39,6 +39,7 @@
         'codec/jpeg_codec_unittest.cc',
         'codec/png_codec_unittest.cc',
         'color_analysis_unittest.cc',
+        'color_profile_mac_unittest.mm',
         'color_utils_unittest.cc',
         'display_change_notifier_unittest.cc',
         'display_unittest.cc',
@@ -68,6 +69,7 @@
         'range/range_unittest.cc',
         'range/range_win_unittest.cc',
         'render_text_unittest.cc',
+        'screen_win_unittest.cc',
         'sequential_id_generator_unittest.cc',
         'shadow_value_unittest.cc',
         'skbitmap_operations_unittest.cc',
@@ -130,6 +132,7 @@
         }],
         ['OS == "win"', {
           'sources': [
+            'color_profile_win_unittest.cc',
             'font_fallback_win_unittest.cc',
             'icon_util_unittest.cc',
             'icon_util_unittests.rc',

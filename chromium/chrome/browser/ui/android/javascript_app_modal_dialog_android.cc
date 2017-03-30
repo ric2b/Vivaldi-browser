@@ -6,6 +6,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/app_modal/chrome_javascript_native_dialog_factory.h"
 #include "components/app_modal/app_modal_dialog_queue.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
@@ -108,7 +109,10 @@ void JavascriptAppModalDialogAndroid::AcceptAppModalDialog() {
 }
 
 void JavascriptAppModalDialogAndroid::DidAcceptAppModalDialog(
-    JNIEnv* env, jobject, jstring prompt, bool should_suppress_js_dialogs) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>&,
+    const JavaParamRef<jstring>& prompt,
+    bool should_suppress_js_dialogs) {
   base::string16 prompt_text =
       base::android::ConvertJavaStringToUTF16(env, prompt);
   dialog_->OnAccept(prompt_text, should_suppress_js_dialogs);
@@ -125,7 +129,9 @@ bool JavascriptAppModalDialogAndroid::IsShowing() const {
 }
 
 void JavascriptAppModalDialogAndroid::DidCancelAppModalDialog(
-    JNIEnv* env, jobject, bool should_suppress_js_dialogs) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>&,
+    bool should_suppress_js_dialogs) {
   dialog_->OnCancel(should_suppress_js_dialogs);
   delete this;
 }
@@ -136,15 +142,17 @@ const ScopedJavaGlobalRef<jobject>&
 }
 
 // static
-jobject GetCurrentModalDialog(JNIEnv* env, jclass clazz) {
+ScopedJavaLocalRef<jobject> GetCurrentModalDialog(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
   app_modal::AppModalDialog* dialog =
       app_modal::AppModalDialogQueue::GetInstance()->active_dialog();
   if (!dialog || !dialog->native_dialog())
-    return NULL;
+    return ScopedJavaLocalRef<jobject>();
 
   JavascriptAppModalDialogAndroid* js_dialog =
       static_cast<JavascriptAppModalDialogAndroid*>(dialog->native_dialog());
-  return js_dialog->GetDialogObject().obj();
+  return ScopedJavaLocalRef<jobject>(js_dialog->GetDialogObject());
 }
 
 // static

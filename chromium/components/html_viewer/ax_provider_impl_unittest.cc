@@ -4,6 +4,10 @@
 
 #include "components/html_viewer/ax_provider_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "components/html_viewer/blink_platform_impl.h"
@@ -35,7 +39,9 @@ namespace {
 class TestWebFrameClient : public WebFrameClient {
  public:
   ~TestWebFrameClient() override {}
-  void didStopLoading() override { base::MessageLoop::current()->Quit(); }
+  void didStopLoading() override {
+    base::MessageLoop::current()->QuitWhenIdle();
+  }
 };
 
 class TestWebViewClient : public WebViewClient {
@@ -54,7 +60,8 @@ class AxProviderImplTest : public testing::Test {
     gin::V8Initializer::LoadV8Natives();
 #endif
     blink::initialize(
-        new html_viewer::BlinkPlatformImpl(nullptr, renderer_scheduler_.get()));
+        new html_viewer::BlinkPlatformImpl(nullptr, nullptr,
+                                           renderer_scheduler_.get()));
   }
 
   ~AxProviderImplTest() override {
@@ -69,7 +76,7 @@ class AxProviderImplTest : public testing::Test {
 };
 
 struct NodeCatcher {
-  void OnNodes(Array<AxNodePtr> nodes) { this->nodes = nodes.Pass(); }
+  void OnNodes(Array<AxNodePtr> nodes) { this->nodes = std::move(nodes); }
   Array<AxNodePtr> nodes;
 };
 
@@ -93,19 +100,12 @@ AxNodePtr CreateNode(int id,
     node->text = mojo::AxText::New();
     node->text->content = text;
   }
-  return node.Pass();
+  return node;
 }
 
 }  // namespace
 
-
-// TODO(msw): This test crashes on Android; see http://crbug.com/486171
-#if defined(OS_ANDROID)
-#define MAYBE_Basic DISABLED_Basic
-#else
-#define MAYBE_Basic Basic
-#endif
-TEST_F(AxProviderImplTest, MAYBE_Basic) {
+TEST_F(AxProviderImplTest, Basic) {
   TestWebViewClient web_view_client;
   TestWebFrameClient web_frame_client;
   WebView* view = WebView::create(&web_view_client);
@@ -125,7 +125,7 @@ TEST_F(AxProviderImplTest, MAYBE_Basic) {
   ax_provider_impl.GetTree(
       base::Bind(&NodeCatcher::OnNodes, base::Unretained(&catcher)));
 
-  std::map<uint32, AxNode*> lookup;
+  std::map<uint32_t, AxNode*> lookup;
   for (size_t i = 0; i < catcher.nodes.size(); ++i) {
     auto& node = catcher.nodes[i];
     lookup[node->id] = node.get();
@@ -168,7 +168,7 @@ TEST_F(AxProviderImplTest, MAYBE_Basic) {
                          "http://monkey.net/",
                          "")->Equals(*link));
 
-  auto is_descendant_of = [&lookup](uint32 id, uint32 ancestor) {
+  auto is_descendant_of = [&lookup](uint32_t id, uint32_t ancestor) {
     for (; (id = lookup[id]->parent_id) != 0;) {
       if (id == ancestor)
         return true;

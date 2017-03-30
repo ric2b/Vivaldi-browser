@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -30,7 +31,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, IncognitoNoScript) {
       .AppendASCII("content_scripts")));
 
   // Open incognito window and navigate to test page.
-  Browser* otr_browser = ui_test_utils::OpenURLOffTheRecord(
+  Browser* otr_browser = OpenURLOffTheRecord(
       browser()->profile(),
       embedded_test_server()->GetURL("/extensions/test_file.html"));
 
@@ -72,7 +73,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_IncognitoYesScript) {
       .AppendASCII("content_scripts").AppendASCII("isolated_world1")));
 
   // Open incognito window and navigate to test page.
-  Browser* otr_browser = ui_test_utils::OpenURLOffTheRecord(
+  Browser* otr_browser = OpenURLOffTheRecord(
       browser()->profile(),
       embedded_test_server()->GetURL("/extensions/test_file.html"));
 
@@ -109,7 +110,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, Incognito) {
   ResultCatcher catcher;
 
   // Open incognito window and navigate to test page.
-  ui_test_utils::OpenURLOffTheRecord(
+  OpenURLOffTheRecord(
       browser()->profile(),
       embedded_test_server()->GetURL("/extensions/test_file.html"));
 
@@ -138,9 +139,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_IncognitoSplitMode) {
   ExtensionTestMessageListener listener_incognito("waiting_incognito", true);
 
   // Open incognito window and navigate to test page.
-  ui_test_utils::OpenURLOffTheRecord(
-      browser()->profile(),
-      embedded_test_server()->GetURL("/extensions/test_file.html"));
+  OpenURLOffTheRecord(browser()->profile(), embedded_test_server()->GetURL(
+                                                "/extensions/test_file.html"));
 
   ASSERT_TRUE(LoadExtensionIncognito(test_data_dir_
       .AppendASCII("incognito").AppendASCII("split")));
@@ -170,16 +170,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, IncognitoDisabled) {
   ExtensionTestMessageListener listener("createIncognitoTab", true);
 
   // Open incognito window and navigate to test page.
-  ui_test_utils::OpenURLOffTheRecord(
-      browser()->profile(),
-      embedded_test_server()->GetURL("/extensions/test_file.html"));
+  OpenURLOffTheRecord(browser()->profile(), embedded_test_server()->GetURL(
+                                                "/extensions/test_file.html"));
 
   ASSERT_TRUE(LoadExtension(test_data_dir_
       .AppendASCII("incognito").AppendASCII("apis_disabled")));
 
   EXPECT_TRUE(listener.WaitUntilSatisfied());
-  ui_test_utils::OpenURLOffTheRecord(browser()->profile(),
-                                     GURL("about:blank"));
+  OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
   listener.Reply("created");
 
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
@@ -197,7 +195,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_IncognitoPopup) {
       .AppendASCII("incognito").AppendASCII("popup")));
 
   // Open incognito window and navigate to test page.
-  Browser* incognito_browser = ui_test_utils::OpenURLOffTheRecord(
+  Browser* incognito_browser = OpenURLOffTheRecord(
       browser()->profile(),
       embedded_test_server()->GetURL("/extensions/test_file.html"));
 

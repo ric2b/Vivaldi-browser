@@ -4,6 +4,9 @@
 
 #include "cc/resources/texture_mailbox.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "cc/resources/shared_bitmap.h"
 
@@ -15,37 +18,35 @@ TextureMailbox::TextureMailbox() : shared_bitmap_(NULL) {
 TextureMailbox::TextureMailbox(const gpu::MailboxHolder& mailbox_holder)
     : mailbox_holder_(mailbox_holder),
       shared_bitmap_(NULL),
-      allow_overlay_(false),
-      nearest_neighbor_(false) {
-}
+      is_overlay_candidate_(false),
+      nearest_neighbor_(false) {}
 
 TextureMailbox::TextureMailbox(const gpu::Mailbox& mailbox,
-                               uint32 target,
-                               uint32 sync_point)
-    : mailbox_holder_(mailbox, target, sync_point),
+                               const gpu::SyncToken& sync_token,
+                               uint32_t target)
+    : mailbox_holder_(mailbox, sync_token, target),
       shared_bitmap_(NULL),
-      allow_overlay_(false),
-      nearest_neighbor_(false) {
-}
+      is_overlay_candidate_(false),
+      nearest_neighbor_(false) {}
 
 TextureMailbox::TextureMailbox(const gpu::Mailbox& mailbox,
-                               uint32 target,
-                               uint32 sync_point,
+                               const gpu::SyncToken& sync_token,
+                               uint32_t target,
                                const gfx::Size& size_in_pixels,
-                               bool allow_overlay)
-    : mailbox_holder_(mailbox, target, sync_point),
+                               bool is_overlay_candidate)
+    : mailbox_holder_(mailbox, sync_token, target),
       shared_bitmap_(nullptr),
       size_in_pixels_(size_in_pixels),
-      allow_overlay_(allow_overlay),
+      is_overlay_candidate_(is_overlay_candidate),
       nearest_neighbor_(false) {
-  DCHECK_IMPLIES(allow_overlay, !size_in_pixels.IsEmpty());
+  DCHECK(!is_overlay_candidate || !size_in_pixels.IsEmpty());
 }
 
 TextureMailbox::TextureMailbox(SharedBitmap* shared_bitmap,
                                const gfx::Size& size_in_pixels)
     : shared_bitmap_(shared_bitmap),
       size_in_pixels_(size_in_pixels),
-      allow_overlay_(false),
+      is_overlay_candidate_(false),
       nearest_neighbor_(false) {
   // If an embedder of cc gives an invalid TextureMailbox, we should crash
   // here to identify the offender.

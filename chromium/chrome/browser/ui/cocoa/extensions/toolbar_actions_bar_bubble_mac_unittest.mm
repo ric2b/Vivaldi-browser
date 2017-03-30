@@ -5,10 +5,11 @@
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #import "chrome/browser/ui/cocoa/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/extensions/toolbar_actions_bar_bubble_mac.h"
-#import "chrome/browser/ui/cocoa/run_loop_testing.h"
+#include "chrome/browser/ui/cocoa/run_loop_testing.h"
 #include "chrome/browser/ui/toolbar/test_toolbar_actions_bar_bubble_delegate.h"
 #import "ui/events/test/cocoa_test_event_utils.h"
 
@@ -117,11 +118,14 @@ void ToolbarActionsBarBubbleMacTest::TestBubbleButton(
     case ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE:
       button = [bubble actionButton];
       break;
-    case ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS:
+    case ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_USER_ACTION:
       button = [bubble dismissButton];
       break;
     case ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE:
       button = [bubble learnMoreButton];
+      break;
+    case ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_DEACTIVATION:
+      NOTREACHED();  // Deactivation is tested below.
       break;
   }
   ASSERT_TRUE(button);
@@ -144,7 +148,7 @@ void ToolbarActionsBarBubbleMacTest::TestBubbleButton(
 TEST_F(ToolbarActionsBarBubbleMacTest, CloseActionAndDismiss) {
   // Test all the possible actions.
   TestBubbleButton(ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE);
-  TestBubbleButton(ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS);
+  TestBubbleButton(ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_USER_ACTION);
   TestBubbleButton(ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE);
 
   {
@@ -160,7 +164,7 @@ TEST_F(ToolbarActionsBarBubbleMacTest, CloseActionAndDismiss) {
     [bubble close];
     chrome::testing::NSRunLoopRunAllPending();
     ASSERT_TRUE(delegate.close_action());
-    EXPECT_EQ(ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS,
+    EXPECT_EQ(ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_DEACTIVATION,
               *delegate.close_action());
     EXPECT_TRUE([windowObserver windowIsClosing]);
   }

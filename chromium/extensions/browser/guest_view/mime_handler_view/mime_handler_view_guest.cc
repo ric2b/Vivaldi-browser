@@ -4,10 +4,13 @@
 
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 
+#include <utility>
+
 #include "base/strings/stringprintf.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/host_zoom_map.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/stream_handle.h"
 #include "content/public/browser/stream_info.h"
@@ -38,7 +41,7 @@ StreamContainer::StreamContainer(scoped_ptr<content::StreamInfo> stream,
                                  bool embedded,
                                  const GURL& handler_url,
                                  const std::string& extension_id)
-    : stream_(stream.Pass()),
+    : stream_(std::move(stream)),
       embedded_(embedded),
       tab_id_(tab_id),
       handler_url_(handler_url),
@@ -67,17 +70,14 @@ base::WeakPtr<StreamContainer> StreamContainer::GetWeakPtr() {
 const char MimeHandlerViewGuest::Type[] = "mimehandler";
 
 // static
-GuestViewBase* MimeHandlerViewGuest::Create(
-    content::WebContents* owner_web_contents) {
+GuestViewBase* MimeHandlerViewGuest::Create(WebContents* owner_web_contents) {
   return new MimeHandlerViewGuest(owner_web_contents);
 }
 
-MimeHandlerViewGuest::MimeHandlerViewGuest(
-    content::WebContents* owner_web_contents)
+MimeHandlerViewGuest::MimeHandlerViewGuest(WebContents* owner_web_contents)
     : GuestView<MimeHandlerViewGuest>(owner_web_contents),
       delegate_(ExtensionsAPIClient::Get()->CreateMimeHandlerViewGuestDelegate(
-          this)) {
-}
+          this)) {}
 
 MimeHandlerViewGuest::~MimeHandlerViewGuest() {
 }
@@ -150,33 +150,42 @@ void MimeHandlerViewGuest::DidInitialize(
   ExtensionsAPIClient::Get()->AttachWebContentsHelpers(web_contents());
 }
 
+bool MimeHandlerViewGuest::ShouldHandleFindRequestsForEmbedder() const {
+  return is_full_page_plugin();
+}
+
 bool MimeHandlerViewGuest::ZoomPropagatesFromEmbedderToGuest() const {
   return false;
 }
 
-bool MimeHandlerViewGuest::Find(int request_id,
-                                const base::string16& search_text,
-                                const blink::WebFindOptions& options) {
-  if (is_full_page_plugin()) {
-    web_contents()->Find(request_id, search_text, options);
-    return true;
-  }
-  return false;
-}
-
-bool MimeHandlerViewGuest::StopFinding(content::StopFindAction action) {
-  if (is_full_page_plugin()) {
-    web_contents()->StopFinding(action);
-    return true;
-  }
-  return false;
-}
-
-content::WebContents* MimeHandlerViewGuest::OpenURLFromTab(
-    content::WebContents* source,
+WebContents* MimeHandlerViewGuest::OpenURLFromTab(
+    WebContents* source,
     const content::OpenURLParams& params) {
   return embedder_web_contents()->GetDelegate()->OpenURLFromTab(
       embedder_web_contents(), params);
+}
+
+void MimeHandlerViewGuest::NavigationStateChanged(
+    WebContents* source,
+    content::InvalidateTypes changed_flags) {
+  if (!(changed_flags & content::INVALIDATE_TYPE_TITLE))
+    return;
+
+  // Only consider title changes not triggered by URL changes. Otherwise, the
+  // URL of the mime handler will be displayed.
+  if (changed_flags & content::INVALIDATE_TYPE_URL)
+    return;
+
+  if (!is_full_page_plugin())
+    return;
+
+  content::NavigationEntry* last_committed_entry =
+      embedder_web_contents()->GetController().GetLastCommittedEntry();
+  if (last_committed_entry) {
+    last_committed_entry->SetTitle(source->GetTitle());
+    embedder_web_contents()->GetDelegate()->NavigationStateChanged(
+        embedder_web_contents(), changed_flags);
+  }
 }
 
 bool MimeHandlerViewGuest::HandleContextMenu(
@@ -188,7 +197,7 @@ bool MimeHandlerViewGuest::HandleContextMenu(
 }
 
 bool MimeHandlerViewGuest::PreHandleGestureEvent(
-    content::WebContents* source,
+    WebContents* source,
     const blink::WebGestureEvent& event) {
   if (event.type == blink::WebGestureEvent::GesturePinchBegin ||
       event.type == blink::WebGestureEvent::GesturePinchUpdate ||
@@ -207,23 +216,6 @@ MimeHandlerViewGuest::GetJavaScriptDialogManager(
       web_contents());
 }
 
-void MimeHandlerViewGuest::FindReply(content::WebContents* web_contents,
-                                     int request_id,
-                                     int number_of_matches,
-                                     const gfx::Rect& selection_rect,
-                                     int active_match_ordinal,
-                                     bool final_update) {
-  if (!attached() || !embedder_web_contents()->GetDelegate())
-    return;
-
-  embedder_web_contents()->GetDelegate()->FindReply(embedder_web_contents(),
-                                                    request_id,
-                                                    number_of_matches,
-                                                    selection_rect,
-                                                    active_match_ordinal,
-                                                    final_update);
-}
-
 bool MimeHandlerViewGuest::SaveFrame(const GURL& url,
                                      const content::Referrer& referrer) {
   if (!attached())
@@ -235,9 +227,18 @@ bool MimeHandlerViewGuest::SaveFrame(const GURL& url,
 }
 
 void MimeHandlerViewGuest::DocumentOnLoadCompletedInMainFrame() {
-  embedder_web_contents()->Send(
-      new ExtensionsGuestViewMsg_MimeHandlerViewGuestOnLoadCompleted(
-          element_instance_id()));
+  // Assume the embedder WebContents is valid here. Change this to a DCHECK
+  // after verifying https://crbug.com/569990.
+  CHECK(owner_web_contents());
+
+  // Although we should always be attached before loading is complete, the
+  // MimeHandlerViewGuest may become detached in some cases so we still need
+  // to check whether we're attached here.
+  if (attached()) {
+    embedder_web_contents()->Send(
+        new ExtensionsGuestViewMsg_MimeHandlerViewGuestOnLoadCompleted(
+            element_instance_id()));
+  }
 }
 
 base::WeakPtr<StreamContainer> MimeHandlerViewGuest::GetStream() const {

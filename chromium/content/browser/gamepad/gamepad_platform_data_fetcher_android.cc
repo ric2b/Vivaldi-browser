@@ -4,6 +4,8 @@
 
 #include "content/browser/gamepad/gamepad_platform_data_fetcher_android.h"
 
+#include <stddef.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -59,19 +61,19 @@ void GamepadPlatformDataFetcherAndroid::PauseHint(bool paused) {
   if (!env)
     return;
 
-  Java_GamepadList_notifyForGamepadsAccess(env, paused);
+  Java_GamepadList_setGamepadAPIActive(env, !paused);
 }
 
 static void SetGamepadData(JNIEnv* env,
-                           jobject obj,
+                           const JavaParamRef<jobject>& obj,
                            jlong gamepads,
                            jint index,
                            jboolean mapping,
                            jboolean connected,
-                           jstring devicename,
+                           const JavaParamRef<jstring>& devicename,
                            jlong timestamp,
-                           jfloatArray jaxes,
-                           jfloatArray jbuttons) {
+                           const JavaParamRef<jfloatArray>& jaxes,
+                           const JavaParamRef<jfloatArray>& jbuttons) {
   DCHECK(gamepads);
   blink::WebGamepads* pads = reinterpret_cast<WebGamepads*>(gamepads);
   DCHECK_EQ(pads->length, unsigned(index));

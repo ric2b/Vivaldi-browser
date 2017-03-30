@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
@@ -24,6 +24,7 @@
 #include "net/base/network_change_notifier.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
+class AccountId;
 class GURL;
 class PrefRegistrySimple;
 class PrefService;
@@ -246,7 +247,7 @@ class UserSessionManager
 
  private:
   friend class test::UserSessionManagerTestApi;
-  friend struct DefaultSingletonTraits<UserSessionManager>;
+  friend struct base::DefaultSingletonTraits<UserSessionManager>;
 
   typedef std::set<std::string> SigninSessionRestoreStateSet;
 
@@ -300,7 +301,7 @@ class UserSessionManager
   // Profile is created, extensions and promo resources are initialized.
   void UserProfileInitialized(Profile* profile,
                               bool is_incognito_profile,
-                              const std::string& user_id);
+                              const AccountId& account_id);
 
   // Callback to resume profile creation after transferring auth data from
   // the authentication profile.
@@ -368,7 +369,7 @@ class UserSessionManager
       const locale_util::LanguageSwitchResult& result);
 
   // Callback invoked when |token_handle_util_| has finished.
-  void OnTokenHandleObtained(const user_manager::UserID& id, bool success);
+  void OnTokenHandleObtained(const AccountId& account_id, bool success);
 
   // Returns |true| if token handles should be used on this device.
   bool TokenHandlesEnabled();

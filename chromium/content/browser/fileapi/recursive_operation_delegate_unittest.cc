@@ -6,11 +6,11 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -73,7 +73,7 @@ class LoggingRecursiveOperation : public storage::RecursiveOperationDelegate {
     }
 
     operation_runner()->GetMetadata(
-        url,
+        url, storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY,
         base::Bind(&LoggingRecursiveOperation::DidGetMetadata,
                    weak_factory_.GetWeakPtr(), callback));
   }

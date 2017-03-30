@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -19,8 +21,8 @@
 
 namespace content {
 
-const uint8 kBlackValue = 0x00;
-const uint8 kColorValue = 0xAB;
+const uint8_t kBlackValue = 0x00;
+const uint8_t kColorValue = 0xAB;
 
 ACTION_P(RunClosure, closure) {
   closure.Run();
@@ -49,9 +51,8 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
   void DeliverVideoFrameAndWaitForRenderer(MockMediaStreamVideoSink* sink) {
     base::RunLoop run_loop;
     base::Closure quit_closure = run_loop.QuitClosure();
-    EXPECT_CALL(*sink, OnVideoFrame()).WillOnce(
-        RunClosure(quit_closure));
-    scoped_refptr<media::VideoFrame> frame =
+    EXPECT_CALL(*sink, OnVideoFrame()).WillOnce(RunClosure(quit_closure));
+    const scoped_refptr<media::VideoFrame> frame =
         media::VideoFrame::CreateColorFrame(
             gfx::Size(MediaStreamVideoSource::kDefaultWidth,
                       MediaStreamVideoSource::kDefaultHeight),
@@ -69,7 +70,7 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
   blink::WebMediaStreamTrack CreateTrack() {
     blink::WebMediaConstraints constraints;
     constraints.initialize();
-    bool enabled = true;
+    const bool enabled = true;
     blink::WebMediaStreamTrack track =
         MediaStreamVideoTrack::CreateVideoTrack(
             mock_source_, constraints,
@@ -87,8 +88,8 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
   }
 
  private:
-  base::MessageLoopForUI message_loop_;
-  scoped_ptr<ChildProcess> child_process_;
+  const base::MessageLoopForUI message_loop_;
+  const scoped_ptr<ChildProcess> child_process_;
   blink::WebMediaStreamSource blink_source_;
   // |mock_source_| is owned by |webkit_source_|.
   MockMediaStreamVideoSource* mock_source_;
@@ -98,8 +99,7 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
 TEST_F(MediaStreamVideoTrackTest, AddAndRemoveSink) {
   MockMediaStreamVideoSink sink;
   blink::WebMediaStreamTrack track = CreateTrack();
-  MediaStreamVideoSink::AddToVideoTrack(
-      &sink, sink.GetDeliverFrameCB(), track);
+  MediaStreamVideoSink::AddToVideoTrack(&sink, sink.GetDeliverFrameCB(), track);
 
   DeliverVideoFrameAndWaitForRenderer(&sink);
   EXPECT_EQ(1, sink.number_of_frames());
@@ -139,7 +139,7 @@ class CheckThreadHelper {
 void CheckThreadVideoFrameReceiver(
     CheckThreadHelper* helper,
     const scoped_refptr<media::VideoFrame>& frame,
-    const base::TimeTicks& estimated_capture_time) {
+    base::TimeTicks estimated_capture_time) {
   // Do nothing.
 }
 
@@ -164,8 +164,7 @@ TEST_F(MediaStreamVideoTrackTest, ResetCallbackOnThread) {
 TEST_F(MediaStreamVideoTrackTest, SetEnabled) {
   MockMediaStreamVideoSink sink;
   blink::WebMediaStreamTrack track = CreateTrack();
-  MediaStreamVideoSink::AddToVideoTrack(
-      &sink, sink.GetDeliverFrameCB(), track);
+  MediaStreamVideoSink::AddToVideoTrack(&sink, sink.GetDeliverFrameCB(), track);
 
   MediaStreamVideoTrack* video_track =
       MediaStreamVideoTrack::GetVideoTrack(track);
@@ -192,8 +191,7 @@ TEST_F(MediaStreamVideoTrackTest, SetEnabled) {
 TEST_F(MediaStreamVideoTrackTest, SourceStopped) {
   MockMediaStreamVideoSink sink;
   blink::WebMediaStreamTrack track = CreateTrack();
-  MediaStreamVideoSink::AddToVideoTrack(
-      &sink, sink.GetDeliverFrameCB(), track);
+  MediaStreamVideoSink::AddToVideoTrack(&sink, sink.GetDeliverFrameCB(), track);
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive, sink.state());
 
   mock_source()->StopSource();
@@ -217,7 +215,7 @@ TEST_F(MediaStreamVideoTrackTest, StopLastTrack) {
       &sink2, sink2.GetDeliverFrameCB(), track2);
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive, sink2.state());
 
-  MediaStreamVideoTrack* native_track1 =
+  MediaStreamVideoTrack* const native_track1 =
       MediaStreamVideoTrack::GetVideoTrack(track1);
   native_track1->Stop();
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateEnded, sink1.state());
@@ -225,7 +223,7 @@ TEST_F(MediaStreamVideoTrackTest, StopLastTrack) {
               blink_source().readyState());
   MediaStreamVideoSink::RemoveFromVideoTrack(&sink1, track1);
 
-  MediaStreamVideoTrack* native_track2 =
+  MediaStreamVideoTrack* const native_track2 =
         MediaStreamVideoTrack::GetVideoTrack(track2);
   native_track2->Stop();
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateEnded, sink2.state());

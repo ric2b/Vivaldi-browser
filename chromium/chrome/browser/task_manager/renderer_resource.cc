@@ -4,13 +4,13 @@
 
 #include "chrome/browser/task_manager/renderer_resource.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/process_resource_usage.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/task_manager/resource_provider.h"
 #include "chrome/browser/task_manager/task_manager_util.h"
-#include "chrome/common/render_messages.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/service_registry.h"
@@ -28,7 +28,7 @@ RendererResource::RendererResource(base::ProcessHandle process,
       render_view_host_->GetProcess()->GetServiceRegistry();
   if (service_registry)
     service_registry->ConnectToRemoteService(mojo::GetProxy(&service));
-  process_resource_usage_.reset(new ProcessResourceUsage(service.Pass()));
+  process_resource_usage_.reset(new ProcessResourceUsage(std::move(service)));
 }
 
 RendererResource::~RendererResource() {

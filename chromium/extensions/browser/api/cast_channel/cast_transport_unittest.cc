@@ -5,9 +5,13 @@
 #include "extensions/browser/api/cast_channel/cast_transport.h"
 
 #include <stddef.h>
+#include <stdint.h>
 #include <queue>
 
-#include "base/test/simple_test_tick_clock.h"
+#include "base/macros.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
+#include "base/test/simple_test_clock.h"
 #include "extensions/browser/api/cast_channel/cast_framer.h"
 #include "extensions/browser/api/cast_channel/cast_socket.h"
 #include "extensions/browser/api/cast_channel/cast_test_util.h"
@@ -30,7 +34,7 @@ using testing::Return;
 using testing::WithArg;
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 namespace {
 
@@ -128,12 +132,12 @@ class MockSocket : public net::Socket {
                    int buf_len,
                    const net::CompletionCallback& callback));
 
-  virtual int SetReceiveBufferSize(int32 size) {
+  virtual int SetReceiveBufferSize(int32_t size) {
     NOTREACHED();
     return 0;
   }
 
-  virtual int SetSendBufferSize(int32 size) {
+  virtual int SetSendBufferSize(int32_t size) {
     NOTREACHED();
     return 0;
   }
@@ -142,9 +146,9 @@ class MockSocket : public net::Socket {
 class CastTransportTest : public testing::Test {
  public:
   CastTransportTest()
-      : logger_(new Logger(
-            scoped_ptr<base::TickClock>(new base::SimpleTestTickClock),
-            base::TimeTicks())) {
+      : logger_(
+            new Logger(make_scoped_ptr<base::Clock>(new base::SimpleTestClock),
+                       base::Time())) {
     delegate_ = new MockCastTransportDelegate;
     transport_.reset(new CastTransportImpl(&mock_socket_, kChannelId,
                                            CreateIPEndPointForTest(),
@@ -154,6 +158,13 @@ class CastTransportTest : public testing::Test {
   ~CastTransportTest() override {}
 
  protected:
+  // Runs all pending tasks in the message loop.
+  void RunPendingTasks() {
+    base::RunLoop run_loop;
+    run_loop.RunUntilIdle();
+  }
+
+  base::MessageLoop message_loop_;
   MockCastTransportDelegate* delegate_;
   MockSocket mock_socket_;
   ChannelAuthType auth_type_;
@@ -180,7 +191,9 @@ TEST_F(CastTransportTest, TestFullWriteAsync) {
   transport_->SendMessage(
       message,
       base::Bind(&CompleteHandler::Complete, base::Unretained(&write_handler)));
+  RunPendingTasks();
   socket_cbs.Pop(serialized_message.size());
+  RunPendingTasks();
   EXPECT_EQ(serialized_message, output);
 }
 
@@ -211,11 +224,14 @@ TEST_F(CastTransportTest, TestPartialWritesAsync) {
   transport_->SendMessage(
       message,
       base::Bind(&CompleteHandler::Complete, base::Unretained(&write_handler)));
+  RunPendingTasks();
   EXPECT_EQ(serialized_message, output);
   socket_cbs.Pop(1);
+  RunPendingTasks();
 
   EXPECT_CALL(write_handler, Complete(net::OK));
   socket_cbs.Pop(serialized_message.size() - 1);
+  RunPendingTasks();
   EXPECT_EQ(serialized_message.substr(1, serialized_message.size() - 1),
             output);
 }
@@ -227,10 +243,13 @@ TEST_F(CastTransportTest, TestWriteFailureAsync) {
   EXPECT_CALL(mock_socket_, Write(NotNull(), _, _)).WillOnce(
       DoAll(EnqueueCallback<2>(&socket_cbs), Return(net::ERR_IO_PENDING)));
   EXPECT_CALL(write_handler, Complete(net::ERR_FAILED));
+  EXPECT_CALL(*delegate_, OnError(CHANNEL_ERROR_SOCKET_ERROR));
   transport_->SendMessage(
       message,
       base::Bind(&CompleteHandler::Complete, base::Unretained(&write_handler)));
+  RunPendingTasks();
   socket_cbs.Pop(net::ERR_CONNECTION_RESET);
+  RunPendingTasks();
   EXPECT_EQ(proto::SOCKET_WRITE, logger_->GetLastErrors(kChannelId).event_type);
   EXPECT_EQ(net::ERR_CONNECTION_RESET,
             logger_->GetLastErrors(kChannelId).net_return_value);
@@ -251,6 +270,7 @@ TEST_F(CastTransportTest, TestFullWriteSync) {
   transport_->SendMessage(
       message,
       base::Bind(&CompleteHandler::Complete, base::Unretained(&write_handler)));
+  RunPendingTasks();
   EXPECT_EQ(serialized_message, output);
 }
 
@@ -275,6 +295,7 @@ TEST_F(CastTransportTest, TestPartialWritesSync) {
   transport_->SendMessage(
       message,
       base::Bind(&CompleteHandler::Complete, base::Unretained(&write_handler)));
+  RunPendingTasks();
   EXPECT_EQ(serialized_message.substr(1, serialized_message.size() - 1),
             output);
 }
@@ -288,6 +309,7 @@ TEST_F(CastTransportTest, TestWriteFailureSync) {
   transport_->SendMessage(
       message,
       base::Bind(&CompleteHandler::Complete, base::Unretained(&write_handler)));
+  RunPendingTasks();
   EXPECT_EQ(proto::SOCKET_WRITE, logger_->GetLastErrors(kChannelId).event_type);
   EXPECT_EQ(net::ERR_CONNECTION_RESET,
             logger_->GetLastErrors(kChannelId).net_return_value);
@@ -302,6 +324,7 @@ TEST_F(CastTransportTest, TestFullReadAsync) {
   CastMessage message = CreateCastMessage();
   std::string serialized_message;
   EXPECT_TRUE(MessageFramer::Serialize(message, &serialized_message));
+  EXPECT_CALL(*delegate_, Start());
 
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
@@ -329,9 +352,11 @@ TEST_F(CastTransportTest, TestFullReadAsync) {
               Read(NotNull(), MessageFramer::MessageHeader::header_size(), _))
       .WillOnce(Return(net::ERR_IO_PENDING));
   transport_->Start();
+  RunPendingTasks();
   socket_cbs.Pop(MessageFramer::MessageHeader::header_size());
   socket_cbs.Pop(serialized_message.size() -
                  MessageFramer::MessageHeader::header_size());
+  RunPendingTasks();
 }
 
 TEST_F(CastTransportTest, TestPartialReadAsync) {
@@ -341,6 +366,8 @@ TEST_F(CastTransportTest, TestPartialReadAsync) {
   CastMessage message = CreateCastMessage();
   std::string serialized_message;
   EXPECT_TRUE(MessageFramer::Serialize(message, &serialized_message));
+
+  EXPECT_CALL(*delegate_, Start());
 
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
@@ -387,6 +414,8 @@ TEST_F(CastTransportTest, TestReadErrorInHeaderAsync) {
   std::string serialized_message;
   EXPECT_TRUE(MessageFramer::Serialize(message, &serialized_message));
 
+  EXPECT_CALL(*delegate_, Start());
+
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
               Read(NotNull(), MessageFramer::MessageHeader::header_size(), _))
@@ -410,6 +439,8 @@ TEST_F(CastTransportTest, TestReadErrorInBodyAsync) {
   CastMessage message = CreateCastMessage();
   std::string serialized_message;
   EXPECT_TRUE(MessageFramer::Serialize(message, &serialized_message));
+
+  EXPECT_CALL(*delegate_, Start());
 
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
@@ -456,6 +487,7 @@ TEST_F(CastTransportTest, TestReadCorruptedMessageAsync) {
     serialized_message[i] = 'x';
   }
 
+  EXPECT_CALL(*delegate_, Start());
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
               Read(NotNull(), MessageFramer::MessageHeader::header_size(), _))
@@ -492,6 +524,8 @@ TEST_F(CastTransportTest, TestFullReadSync) {
   std::string serialized_message;
   EXPECT_TRUE(MessageFramer::Serialize(message, &serialized_message));
 
+  EXPECT_CALL(*delegate_, Start());
+
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
               Read(NotNull(), MessageFramer::MessageHeader::header_size(), _))
@@ -525,6 +559,8 @@ TEST_F(CastTransportTest, TestPartialReadSync) {
   CastMessage message = CreateCastMessage();
   std::string serialized_message;
   EXPECT_TRUE(MessageFramer::Serialize(message, &serialized_message));
+
+  EXPECT_CALL(*delegate_, Start());
 
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
@@ -564,6 +600,8 @@ TEST_F(CastTransportTest, TestReadErrorInHeaderSync) {
   std::string serialized_message;
   EXPECT_TRUE(MessageFramer::Serialize(message, &serialized_message));
 
+  EXPECT_CALL(*delegate_, Start());
+
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
               Read(NotNull(), MessageFramer::MessageHeader::header_size(), _))
@@ -578,6 +616,8 @@ TEST_F(CastTransportTest, TestReadErrorInBodySync) {
   CastMessage message = CreateCastMessage();
   std::string serialized_message;
   EXPECT_TRUE(MessageFramer::Serialize(message, &serialized_message));
+
+  EXPECT_CALL(*delegate_, Start());
 
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
@@ -617,6 +657,8 @@ TEST_F(CastTransportTest, TestReadCorruptedMessageSync) {
     serialized_message[i] = 'x';
   }
 
+  EXPECT_CALL(*delegate_, Start());
+
   // Read bytes [0, 3].
   EXPECT_CALL(mock_socket_,
               Read(NotNull(), MessageFramer::MessageHeader::header_size(), _))
@@ -640,5 +682,5 @@ TEST_F(CastTransportTest, TestReadCorruptedMessageSync) {
   transport_->Start();
 }
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

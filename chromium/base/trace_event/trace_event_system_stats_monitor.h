@@ -7,11 +7,12 @@
 
 #include "base/base_export.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process_metrics.h"
 #include "base/timer/timer.h"
-#include "base/trace_event/trace_event_impl.h"
+#include "base/trace_event/trace_log.h"
 
 namespace base {
 
@@ -33,7 +34,7 @@ class BASE_EXPORT TraceEventSystemStatsMonitor
   explicit TraceEventSystemStatsMonitor(
       scoped_refptr<SingleThreadTaskRunner> task_runner);
 
-  virtual ~TraceEventSystemStatsMonitor();
+  ~TraceEventSystemStatsMonitor() override;
 
   // base::trace_event::TraceLog::EnabledStateChangedObserver overrides:
   void OnTraceLogEnabled() override;
@@ -56,7 +57,7 @@ class BASE_EXPORT TraceEventSystemStatsMonitor
   scoped_refptr<SingleThreadTaskRunner> task_runner_;
 
   // Timer to schedule system profile dumps.
-  RepeatingTimer<TraceEventSystemStatsMonitor> dump_timer_;
+  RepeatingTimer dump_timer_;
 
   WeakPtrFactory<TraceEventSystemStatsMonitor> weak_factory_;
 

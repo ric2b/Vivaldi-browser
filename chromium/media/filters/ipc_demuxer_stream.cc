@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_util.h"
 #include "media/filters/ipc_media_pipeline_host.h"
 #include "media/filters/platform_media_pipeline_types.h"
 
@@ -77,7 +78,7 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
   audio_config.Initialize(
       kCodecPCM, platform_audio_config.format,
       GuessChannelLayout(platform_audio_config.channel_count),
-      platform_audio_config.samples_per_second, nullptr, 0, false, false,
+      platform_audio_config.samples_per_second, EmptyExtraData(), false,
       base::TimeDelta(), 0);
 
   return audio_config;
@@ -96,11 +97,14 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
   // information, which is normally read from the data stream.
   VideoDecoderConfig video_config;
   video_config.Initialize(
-      kCodecH264, H264PROFILE_MAIN, VideoFrame::YV12,
-      VideoFrame::COLOR_SPACE_UNSPECIFIED, platform_video_config.coded_size,
-      platform_video_config.visible_rect, platform_video_config.natural_size,
-      reinterpret_cast<const uint8_t*>(&platform_video_config.planes),
-      sizeof(platform_video_config.planes), false, false);
+      kCodecH264, H264PROFILE_MAIN, PIXEL_FORMAT_YV12, COLOR_SPACE_UNSPECIFIED,
+      platform_video_config.coded_size, platform_video_config.visible_rect,
+      platform_video_config.natural_size,
+      std::vector<uint8_t>(
+          reinterpret_cast<const uint8_t*>(&platform_video_config.planes),
+          reinterpret_cast<const uint8_t*>(&platform_video_config.planes)
+              + sizeof(platform_video_config.planes)),
+      false);
 
   return video_config;
 }

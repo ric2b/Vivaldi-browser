@@ -5,8 +5,9 @@
 #include "gin/converter.h"
 
 #include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/memory/scoped_ptr.h"
 #include "gin/public/isolate_holder.h"
@@ -80,7 +81,7 @@ TEST_F(ConverterTest, Int32) {
 
   struct {
     v8::Local<v8::Value> input;
-    bool expect_sucess;
+    bool expect_success;
     int expected_result;
   } test_data_from[] = {
     { Boolean::New(instance_->isolate(), false).As<Value>(), false, 0 },
@@ -102,7 +103,7 @@ TEST_F(ConverterTest, Int32) {
     int32_t result = std::numeric_limits<int32_t>::min();
     bool success = Converter<int32_t>::FromV8(instance_->isolate(),
                                               test_data_from[i].input, &result);
-    EXPECT_EQ(test_data_from[i].expect_sucess, success) << i;
+    EXPECT_EQ(test_data_from[i].expect_success, success) << i;
     if (success)
       EXPECT_EQ(test_data_from[i].expected_result, result) << i;
   }

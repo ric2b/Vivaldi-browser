@@ -4,10 +4,13 @@
 
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <set>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
+#include "app/vivaldi_apptools.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -17,6 +20,7 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
@@ -28,6 +32,7 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_danger_prompt.h"
 #include "chrome/browser/download/download_file_icon_extractor.h"
@@ -536,7 +541,7 @@ void RunDownloadQuery(
       return;
   }
 
-  scoped_ptr<base::DictionaryValue> query_in_value(query_in.ToValue().Pass());
+  scoped_ptr<base::DictionaryValue> query_in_value(query_in.ToValue());
   for (base::DictionaryValue::Iterator query_json_field(*query_in_value.get());
        !query_json_field.IsAtEnd(); query_json_field.Advance()) {
     FilterTypeMap::const_iterator filter_type =
@@ -597,9 +602,8 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
       scoped_ptr<base::DictionaryValue> json_item)
       : updated_(0),
         changed_fired_(0),
-        json_(json_item.Pass()),
-        creator_conflict_action_(
-            downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY),
+        json_(std::move(json_item)),
+        creator_conflict_action_(downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY),
         determined_conflict_action_(
             downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -615,7 +619,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
 
   const base::DictionaryValue& json() const { return *json_.get(); }
   void set_json(scoped_ptr<base::DictionaryValue> json_item) {
-    json_ = json_item.Pass();
+    json_ = std::move(json_item);
   }
 
   void OnItemUpdated() { ++updated_; }
@@ -878,7 +882,8 @@ bool OnDeterminingFilenameWillDispatchCallback(
     ExtensionDownloadsEventRouterData* data,
     content::BrowserContext* context,
     const Extension* extension,
-    base::ListValue* event_args) {
+    Event* event,
+    const base::DictionaryValue* listener_filter) {
   *any_determiners = true;
   base::Time installed =
       ExtensionPrefs::Get(context)->GetInstallTime(extension->id());
@@ -957,6 +962,7 @@ bool DownloadsDownloadFunction::RunAsync() {
       new content::DownloadUrlParameters(
           download_url, render_frame_host()->GetProcess()->GetID(),
           render_view_host_do_not_use()->GetRoutingID(),
+          render_frame_host()->GetRoutingID(),
           current_profile->GetResourceContext()));
 
   base::FilePath creator_suggested_filename;
@@ -1019,7 +1025,7 @@ bool DownloadsDownloadFunction::RunAsync() {
 
   DownloadManager* manager = BrowserContext::GetDownloadManager(
       current_profile);
-  manager->DownloadUrl(download_params.Pass());
+  manager->DownloadUrl(std::move(download_params));
   RecordDownloadSource(DOWNLOAD_INITIATED_BY_EXTENSION);
   RecordApiFunctions(DOWNLOADS_FUNCTION_DOWNLOAD);
   return true;
@@ -1091,7 +1097,7 @@ bool DownloadsSearchFunction::RunSync() {
   for (DownloadManager::DownloadVector::const_iterator it = results.begin();
        it != results.end(); ++it) {
     DownloadItem* download_item = *it;
-    uint32 download_id = download_item->GetId();
+    uint32_t download_id = download_item->GetId();
     bool off_record = ((incognito_manager != NULL) &&
                        (incognito_manager->GetDownload(download_id) != NULL));
     scoped_ptr<base::DictionaryValue> json_item(
@@ -1351,7 +1357,7 @@ bool DownloadsOpenFunction::RunSync() {
   // VB-4457 - gisli@vivaldi.com:  Normally extensions can not call open unless 
   // this is a user gesture.  Make exception for Vivaldi.
   if (InvalidId(download_item, &error_) ||
-      (extension()->id() != "mpognobbkildjkofajifpdfhcoklimli" &&
+      (!vivaldi::IsVivaldiApp(extension()->id()) &&
         Fault(!user_gesture(), errors::kUserGesture, &error_)) ||
       Fault(download_item->GetState() != DownloadItem::COMPLETE,
             errors::kNotComplete,
@@ -1595,11 +1601,10 @@ void ExtensionDownloadsEventRouter::OnDeterminingFilename(
   base::DictionaryValue* json = DownloadItemToJSON(
       item, profile_).release();
   json->SetString(kFilenameKey, suggested_path.LossyDisplayName());
-  DispatchEvent(downloads::OnDeterminingFilename::kEventName,
-                false,
+  DispatchEvent(events::DOWNLOADS_ON_DETERMINING_FILENAME,
+                downloads::OnDeterminingFilename::kEventName, false,
                 base::Bind(&OnDeterminingFilenameWillDispatchCallback,
-                           &any_determiners,
-                           data),
+                           &any_determiners, data),
                 json);
   if (!any_determiners) {
     data->ClearPendingDeterminers();
@@ -1760,15 +1765,13 @@ void ExtensionDownloadsEventRouter::OnDownloadCreated(
   }
   scoped_ptr<base::DictionaryValue> json_item(
       DownloadItemToJSON(download_item, profile_));
-  DispatchEvent(downloads::OnCreated::kEventName,
-                true,
-                Event::WillDispatchCallback(),
-                json_item->DeepCopy());
+  DispatchEvent(events::DOWNLOADS_ON_CREATED, downloads::OnCreated::kEventName,
+                true, Event::WillDispatchCallback(), json_item->DeepCopy());
   if (!ExtensionDownloadsEventRouterData::Get(download_item) &&
       (router->HasEventListener(downloads::OnChanged::kEventName) ||
        router->HasEventListener(
            downloads::OnDeterminingFilename::kEventName))) {
-    new ExtensionDownloadsEventRouterData(download_item, json_item.Pass());
+    new ExtensionDownloadsEventRouterData(download_item, std::move(json_item));
   }
 }
 
@@ -1832,13 +1835,12 @@ void ExtensionDownloadsEventRouter::OnDownloadUpdated(
   // changed. Replace the stored json with the new json.
   data->OnItemUpdated();
   if (changed) {
-    DispatchEvent(downloads::OnChanged::kEventName,
-                  true,
-                  Event::WillDispatchCallback(),
-                  delta.release());
+    DispatchEvent(events::DOWNLOADS_ON_CHANGED,
+                  downloads::OnChanged::kEventName, true,
+                  Event::WillDispatchCallback(), delta.release());
     data->OnChangedFired();
   }
-  data->set_json(new_json.Pass());
+  data->set_json(std::move(new_json));
 }
 
 void ExtensionDownloadsEventRouter::OnDownloadRemoved(
@@ -1847,13 +1849,13 @@ void ExtensionDownloadsEventRouter::OnDownloadRemoved(
   if (download_item->IsTemporary())
     return;
   DispatchEvent(
-      downloads::OnErased::kEventName,
-      true,
+      events::DOWNLOADS_ON_ERASED, downloads::OnErased::kEventName, true,
       Event::WillDispatchCallback(),
       new base::FundamentalValue(static_cast<int>(download_item->GetId())));
 }
 
 void ExtensionDownloadsEventRouter::DispatchEvent(
+    events::HistogramValue histogram_value,
     const std::string& event_name,
     bool include_incognito,
     const Event::WillDispatchCallback& will_dispatch_callback,
@@ -1865,7 +1867,8 @@ void ExtensionDownloadsEventRouter::DispatchEvent(
   args->Append(arg);
   std::string json_args;
   base::JSONWriter::Write(*args, &json_args);
-  scoped_ptr<Event> event(new Event(events::UNKNOWN, event_name, args.Pass()));
+  scoped_ptr<Event> event(
+      new Event(histogram_value, event_name, std::move(args)));
   // The downloads system wants to share on-record events with off-record
   // extension renderers even in incognito_split_mode because that's how
   // chrome://downloads works. The "restrict_to_profile" mechanism does not
@@ -1874,7 +1877,7 @@ void ExtensionDownloadsEventRouter::DispatchEvent(
   event->restrict_to_browser_context =
       (include_incognito && !profile_->IsOffTheRecord()) ? NULL : profile_;
   event->will_dispatch_callback = will_dispatch_callback;
-  EventRouter::Get(profile_)->BroadcastEvent(event.Pass());
+  EventRouter::Get(profile_)->BroadcastEvent(std::move(event));
   DownloadsNotificationSource notification_source;
   notification_source.event_name = event_name;
   notification_source.profile = profile_;

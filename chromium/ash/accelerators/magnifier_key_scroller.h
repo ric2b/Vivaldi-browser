@@ -7,6 +7,7 @@
 
 #include "ash/accelerators/key_hold_detector.h"
 #include "ash/ash_export.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/event_handler.h"
 
@@ -41,6 +42,7 @@ class ASH_EXPORT MagnifierKeyScroller : public KeyHoldDetector::Delegate {
   // KeyHoldDetector overrides:
   bool ShouldProcessEvent(const ui::KeyEvent* event) const override;
   bool IsStartEvent(const ui::KeyEvent* event) const override;
+  bool ShouldStopEventPropagation() const override;
   void OnKeyHold(const ui::KeyEvent* event) override;
   void OnKeyUnhold(const ui::KeyEvent* event) override;
 

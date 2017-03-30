@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_APP_LIST_APP_LIST_CONTROLLER_DELEGATE_IMPL_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 
 struct AppLaunchParams;
@@ -34,7 +35,7 @@ class AppListControllerDelegateImpl : public AppListControllerDelegate {
   bool IsAppPinned(const std::string& extension_id) override;
   void PinApp(const std::string& extension_id) override;
   void UnpinApp(const std::string& extension_id) override;
-  Pinnable GetPinnable() override;
+  Pinnable GetPinnable(const std::string& extension_id) override;
   bool CanDoCreateShortcutsFlow() override;
   void DoCreateShortcutsFlow(Profile* profile,
                              const std::string& extension_id) override;

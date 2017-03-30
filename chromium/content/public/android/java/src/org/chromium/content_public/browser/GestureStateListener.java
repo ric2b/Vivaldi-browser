@@ -25,11 +25,6 @@ public class GestureStateListener {
     public void onFlingStartGesture(int vx, int vy, int scrollOffsetY, int scrollExtentY) {}
 
     /**
-     * Called when a fling is cancelled.
-     */
-    public void onFlingCancelGesture() {}
-
-    /**
      * Called when a fling has ended.
      */
     public void onFlingEndGesture(int scrollOffsetY, int scrollExtentY) {}
@@ -68,4 +63,14 @@ public class GestureStateListener {
      * but was not handled.
      */
     public void onShowUnhandledTapUIIfNeeded(int x, int y) {}
+
+    /**
+     * Called when the gesture source (ContentViewCore) loses window focus.
+     */
+    public void onWindowFocusChanged(boolean hasWindowFocus) {}
+
+    /**
+     * Called when the gesture source (ContentViewCore) is being destroyed.
+     */
+    public void onDestroyed() {}
 }

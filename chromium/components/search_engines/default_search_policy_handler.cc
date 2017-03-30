@@ -4,6 +4,10 @@
 
 #include "components/search_engines/default_search_policy_handler.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/prefs/pref_value_map.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -169,7 +173,7 @@ void DefaultSearchEncodingsPolicyHandler::ApplyPolicySettings(
       string_parts.push_back(s);
     }
   }
-  std::string encodings = JoinString(string_parts, ';');
+  std::string encodings = base::JoinString(string_parts, ";");
   prefs->SetString(prefs::kDefaultSearchProviderEncodings, encodings);
 }
 
@@ -230,7 +234,7 @@ void DefaultSearchPolicyHandler::ApplyPolicySettings(const PolicyMap& policies,
   if (DefaultSearchProviderIsDisabled(policies)) {
     scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
     dict->SetBoolean(DefaultSearchManager::kDisabledByPolicy, true);
-    DefaultSearchManager::AddPrefValueToMap(dict.Pass(), prefs);
+    DefaultSearchManager::AddPrefValueToMap(std::move(dict), prefs);
     return;
   }
 
@@ -294,7 +298,7 @@ void DefaultSearchPolicyHandler::ApplyPolicySettings(const PolicyMap& policies,
   if (keyword.empty())
     dict->SetString(DefaultSearchManager::kKeyword, host);
 
-  DefaultSearchManager::AddPrefValueToMap(dict.Pass(), prefs);
+  DefaultSearchManager::AddPrefValueToMap(std::move(dict), prefs);
 }
 
 bool DefaultSearchPolicyHandler::CheckIndividualPolicies(

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/simple_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/simple_dispatcher.h"
 
 #include "base/logging.h"
 
@@ -16,21 +16,21 @@ SimpleDispatcher::~SimpleDispatcher() {
 }
 
 void SimpleDispatcher::HandleSignalsStateChangedNoLock() {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   awakable_list_.AwakeForStateChange(GetHandleSignalsStateImplNoLock());
 }
 
 void SimpleDispatcher::CancelAllAwakablesNoLock() {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   awakable_list_.CancelAll();
 }
 
 MojoResult SimpleDispatcher::AddAwakableImplNoLock(
     Awakable* awakable,
     MojoHandleSignals signals,
-    uint32_t context,
+    uintptr_t context,
     HandleSignalsState* signals_state) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
 
   HandleSignalsState state(GetHandleSignalsStateImplNoLock());
   if (state.satisfies(signals)) {
@@ -51,7 +51,7 @@ MojoResult SimpleDispatcher::AddAwakableImplNoLock(
 void SimpleDispatcher::RemoveAwakableImplNoLock(
     Awakable* awakable,
     HandleSignalsState* signals_state) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   awakable_list_.Remove(awakable);
   if (signals_state)
     *signals_state = GetHandleSignalsStateImplNoLock();

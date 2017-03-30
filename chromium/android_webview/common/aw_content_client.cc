@@ -5,10 +5,10 @@
 #include "android_webview/common/aw_content_client.h"
 
 #include "android_webview/common/aw_version_info_values.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
+#include "gpu/config/gpu_info.h"
 #include "ipc/ipc_message.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -64,6 +64,13 @@ bool AwContentClient::CanSendWhileSwappedOut(const IPC::Message* message) {
   // be dropped by the renderer during a swap out, deadlocking the browser.
   // Because of this we should never drop any synchronous IPC replies.
   return message->type() == IPC_REPLY_ID;
+}
+
+void AwContentClient::SetGpuInfo(const gpu::GPUInfo& gpu_info) {
+  gpu_fingerprint_ = gpu_info.gl_version + '|' + gpu_info.gl_vendor + '|' +
+                     gpu_info.gl_renderer;
+  std::replace_if(gpu_fingerprint_.begin(), gpu_fingerprint_.end(),
+                  [](char c) { return !::isprint(c); }, '_');
 }
 
 }  // namespace android_webview

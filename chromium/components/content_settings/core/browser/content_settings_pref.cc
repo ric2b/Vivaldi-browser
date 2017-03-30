@@ -11,6 +11,8 @@
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_split.h"
 #include "base/time/clock.h"
+#include "components/content_settings/core/browser/content_settings_info.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -23,17 +25,7 @@ namespace {
 
 const char kSettingPath[] = "setting";
 const char kPerResourceIdentifierPrefName[] = "per_resource";
-const char kPerPluginPrefName[] = "per_plugin";
 const char kLastUsed[] = "last_used";
-
-ContentSetting FixObsoleteCookiePromptMode(ContentSettingsType content_type,
-                                           ContentSetting setting) {
-  if (content_type == CONTENT_SETTINGS_TYPE_COOKIES &&
-      setting == CONTENT_SETTING_ASK) {
-    return CONTENT_SETTING_BLOCK;
-  }
-  return setting;
-}
 
 // If the given content type supports resource identifiers in user preferences,
 // returns true and sets |pref_key| to the key in the content settings
@@ -41,6 +33,23 @@ ContentSetting FixObsoleteCookiePromptMode(ContentSettingsType content_type,
 // Otherwise, returns false.
 bool SupportsResourceIdentifiers(ContentSettingsType content_type) {
   return content_type == CONTENT_SETTINGS_TYPE_PLUGINS;
+}
+
+bool IsValueAllowedForType(const base::Value* value, ContentSettingsType type) {
+  const content_settings::ContentSettingsInfo* info =
+      content_settings::ContentSettingsRegistry::GetInstance()->Get(type);
+  if (info) {
+    int setting;
+    if (!value->GetAsInteger(&setting))
+      return false;
+    if (setting == CONTENT_SETTING_DEFAULT)
+      return false;
+    return info->IsSettingValid(IntToContentSetting(setting));
+  }
+
+  // TODO(raymes): We should permit different types of base::Value for
+  // website settings.
+  return value->GetType() == base::Value::TYPE_DICTIONARY;
 }
 
 }  // namespace
@@ -51,9 +60,8 @@ ContentSettingsPref::ContentSettingsPref(
     ContentSettingsType content_type,
     PrefService* prefs,
     PrefChangeRegistrar* registrar,
-    const char* pref_name,
+    const std::string& pref_name,
     bool incognito,
-    bool* updating_old_preferences_flag,
     NotifyObserversCallback notify_callback)
     : content_type_(content_type),
       prefs_(prefs),
@@ -61,23 +69,10 @@ ContentSettingsPref::ContentSettingsPref(
       pref_name_(pref_name),
       is_incognito_(incognito),
       updating_preferences_(false),
-      updating_old_preferences_(updating_old_preferences_flag),
       notify_callback_(notify_callback) {
   DCHECK(prefs_);
 
-  // If the migration hasn't happened yet, or if this content setting
-  // is syncable, the parent |PrefProvider| is going to copy the contents
-  // of the old preference to this new preference. There is no need
-  // to initialize this preference separately (in fact, in the case
-  // of migration, we would be writing the empty new preference back to the
-  // old one, erasing it). Since copying between preferences is disallowed
-  // in incognito, |ContentSettingsPref| needs to be initialized from the new
-  // preference in incognito as well.
-  if ((prefs_->GetBoolean(prefs::kMigratedContentSettingsPatternPairs) &&
-       !IsContentSettingsTypeSyncable(content_type_))
-      || is_incognito_) {
-    ReadContentSettingsFromPrefAndWriteToOldPref();
-  }
+  ReadContentSettingsFromPref();
 
   registrar_->Add(
       pref_name_,
@@ -87,7 +82,7 @@ ContentSettingsPref::ContentSettingsPref(
 ContentSettingsPref::~ContentSettingsPref() {
 }
 
-RuleIterator* ContentSettingsPref::GetRuleIterator(
+scoped_ptr<RuleIterator> ContentSettingsPref::GetRuleIterator(
     const ResourceIdentifier& resource_identifier,
     bool incognito) const {
   if (incognito)
@@ -102,6 +97,7 @@ bool ContentSettingsPref::SetWebsiteSetting(
     const ContentSettingsPattern& secondary_pattern,
     const ResourceIdentifier& resource_identifier,
     base::Value* in_value) {
+  DCHECK(!in_value || IsValueAllowedForType(in_value, content_type_));
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(prefs_);
   DCHECK(primary_pattern != ContentSettingsPattern::Wildcard() ||
@@ -139,12 +135,6 @@ bool ContentSettingsPref::SetWebsiteSetting(
                secondary_pattern,
                resource_identifier,
                value.get());
-    if (IsContentSettingsTypeSyncable(content_type_)) {
-      UpdateOldPref(primary_pattern,
-                    secondary_pattern,
-                    resource_identifier,
-                    value.get());
-    }
   }
 
   notify_callback_.Run(
@@ -167,16 +157,13 @@ void ContentSettingsPref::ClearAllContentSettingsRules() {
   }
 
   if (!is_incognito_) {
-    // Clear the new preference.
+    // Clear the preference.
     {
       base::AutoReset<bool> auto_reset(&updating_preferences_, true);
       DictionaryPrefUpdate update(prefs_, pref_name_);
       base::DictionaryValue* pattern_pairs_settings = update.Get();
       pattern_pairs_settings->Clear();
     }
-
-    if (IsContentSettingsTypeSyncable(content_type_))
-      ClearOldPreference();
   }
 
   notify_callback_.Run(ContentSettingsPattern(),
@@ -249,14 +236,14 @@ size_t ContentSettingsPref::GetNumExceptions() {
   return value_map_.size();
 }
 
-void ContentSettingsPref::ReadContentSettingsFromPrefAndWriteToOldPref() {
-  // Clear the old preference, so we can copy the exceptions from the new
-  // preference into it. Note that copying in this direction is disallowed
-  // in incognito, to avoid the echo effect: New preference -> PrefProvider ->
-  // Old preference -> Incognito PrefProvider -> New preference -> etc.
-  if (!is_incognito_ && IsContentSettingsTypeSyncable(content_type_))
-    ClearOldPreference();
+bool ContentSettingsPref::TryLockForTesting() const {
+  if (!lock_.Try())
+    return false;
+  lock_.Release();
+  return true;
+}
 
+void ContentSettingsPref::ReadContentSettingsFromPref() {
   // |DictionaryPrefUpdate| sends out notifications when destructed. This
   // construction order ensures |AutoLock| gets destroyed first and |lock_| is
   // not held when the notifications are sent. Also, |auto_reset| must be still
@@ -328,48 +315,20 @@ void ContentSettingsPref::ReadContentSettingsFromPrefAndWriteToOldPref() {
                               content_type_,
                               resource_identifier,
                               setting_ptr->DeepCopy());
-          if (!is_incognito_ && IsContentSettingsTypeSyncable(content_type_)) {
-              UpdateOldPref(pattern_pair.first,
-                            pattern_pair.second,
-                            resource_identifier,
-                            setting_ptr.get());
-          }
         }
       }
     }
-    base::Value* value = NULL;
-    if (HostContentSettingsMap::ContentTypeHasCompoundValue(content_type_)) {
-      const base::DictionaryValue* setting = NULL;
-      // TODO(xians): Handle the non-dictionary types.
-      if (settings_dictionary->GetDictionaryWithoutPathExpansion(
-              kSettingPath, &setting)) {
-        DCHECK(!setting->empty());
-        value = setting->DeepCopy();
-      }
-    } else {
-      int setting = CONTENT_SETTING_DEFAULT;
-      if (settings_dictionary->GetIntegerWithoutPathExpansion(
-              kSettingPath, &setting)) {
-        DCHECK_NE(CONTENT_SETTING_DEFAULT, setting);
-        setting = FixObsoleteCookiePromptMode(content_type_,
-                                              ContentSetting(setting));
-        value = new base::FundamentalValue(setting);
-      }
-    }
 
-    if (value != NULL) {
-      scoped_ptr<base::Value> value_ptr(value);
+    const base::Value* value = nullptr;
+    settings_dictionary->GetWithoutPathExpansion(kSettingPath, &value);
+
+    if (value) {
+      DCHECK(IsValueAllowedForType(value, content_type_));
       value_map_.SetValue(pattern_pair.first,
                           pattern_pair.second,
                           content_type_,
                           ResourceIdentifier(),
                           value->DeepCopy());
-      if (!is_incognito_ && IsContentSettingsTypeSyncable(content_type_)) {
-          UpdateOldPref(pattern_pair.first,
-                        pattern_pair.second,
-                        ResourceIdentifier(),
-                        value_ptr.get());
-      }
       if (content_type_ == CONTENT_SETTINGS_TYPE_COOKIES) {
         ContentSetting s = ValueToContentSetting(value);
         switch (s) {
@@ -407,7 +366,7 @@ void ContentSettingsPref::OnPrefChanged() {
   if (updating_preferences_)
     return;
 
-  ReadContentSettingsFromPrefAndWriteToOldPref();
+  ReadContentSettingsFromPref();
 
   notify_callback_.Run(ContentSettingsPattern(),
                        ContentSettingsPattern(),
@@ -484,127 +443,6 @@ void ContentSettingsPref::UpdatePref(
       }
     }
   }
-}
-
-void ContentSettingsPref::UpdateOldPref(
-    const ContentSettingsPattern& primary_pattern,
-    const ContentSettingsPattern& secondary_pattern,
-    const ResourceIdentifier& resource_identifier,
-    const base::Value* value) {
-  DCHECK(IsContentSettingsTypeSyncable(content_type_));
-
-  // The incognito provider cannot write the settings to avoid echo effect:
-  // New preference -> PrefProvider -> Old preference ->
-  // -> Incognito PrefProvider -> New preference -> etc.
-  DCHECK(!is_incognito_);
-
-  if (*updating_old_preferences_)
-    return;
-
-  base::AutoReset<bool> auto_reset(updating_old_preferences_, true);
-  {
-    DictionaryPrefUpdate update(prefs_,
-                                prefs::kContentSettingsPatternPairs);
-    base::DictionaryValue* pattern_pairs_settings = update.Get();
-
-    // Get settings dictionary for the given patterns.
-    std::string pattern_str(CreatePatternString(primary_pattern,
-                                                secondary_pattern));
-    base::DictionaryValue* settings_dictionary = NULL;
-    bool found = pattern_pairs_settings->GetDictionaryWithoutPathExpansion(
-        pattern_str, &settings_dictionary);
-
-    if (!found && value) {
-      settings_dictionary = new base::DictionaryValue;
-      pattern_pairs_settings->SetWithoutPathExpansion(
-          pattern_str, settings_dictionary);
-    }
-
-    if (settings_dictionary) {
-      if (content_type_ == CONTENT_SETTINGS_TYPE_PLUGINS &&
-          !resource_identifier.empty()) {
-        base::DictionaryValue* resource_dictionary = NULL;
-        found = settings_dictionary->GetDictionary(
-            kPerPluginPrefName, &resource_dictionary);
-        if (!found) {
-          if (value == NULL)
-            return;  // Nothing to remove. Exit early.
-          resource_dictionary = new base::DictionaryValue;
-          settings_dictionary->Set(kPerPluginPrefName, resource_dictionary);
-        }
-        // Update resource dictionary.
-        if (value == NULL) {
-          resource_dictionary->RemoveWithoutPathExpansion(resource_identifier,
-                                                          NULL);
-          if (resource_dictionary->empty()) {
-            settings_dictionary->RemoveWithoutPathExpansion(
-                kPerPluginPrefName, NULL);
-          }
-        } else {
-          resource_dictionary->SetWithoutPathExpansion(
-              resource_identifier, value->DeepCopy());
-        }
-      } else {
-        // Update settings dictionary.
-        std::string setting_path = GetTypeName(content_type_);
-        if (value == NULL) {
-          settings_dictionary->RemoveWithoutPathExpansion(setting_path,
-                                                          NULL);
-          settings_dictionary->RemoveWithoutPathExpansion(kLastUsed, NULL);
-        } else {
-          settings_dictionary->SetWithoutPathExpansion(
-              setting_path, value->DeepCopy());
-        }
-      }
-      // Remove the settings dictionary if it is empty.
-      if (settings_dictionary->empty()) {
-        pattern_pairs_settings->RemoveWithoutPathExpansion(
-            pattern_str, NULL);
-      }
-    }
-  }
-}
-
-void ContentSettingsPref::ClearOldPreference() {
-  DCHECK(IsContentSettingsTypeSyncable(content_type_));
-
-  if (*updating_old_preferences_)
-    return;
-
-  std::vector<std::string> keys;
-
-  base::AutoReset<bool> auto_reset(updating_old_preferences_, true);
-  DictionaryPrefUpdate update(prefs_, prefs::kContentSettingsPatternPairs);
-  base::DictionaryValue* old_dictionary = update.Get();
-
-  for (base::DictionaryValue::Iterator it(*old_dictionary);
-       !it.IsAtEnd(); it.Advance()) {
-    keys.push_back(it.key());
-  }
-
-  for (const std::string& key : keys) {
-    base::DictionaryValue* exception;
-    bool is_dictionary =
-        old_dictionary->GetDictionaryWithoutPathExpansion(key, &exception);
-    DCHECK(is_dictionary);
-
-    exception->RemoveWithoutPathExpansion(GetTypeName(content_type_), NULL);
-
-    base::DictionaryValue* last_used;
-    if (exception->GetDictionaryWithoutPathExpansion(kLastUsed, &last_used)) {
-      last_used->RemoveWithoutPathExpansion(GetTypeName(content_type_), NULL);
-
-      if (last_used->empty())
-        exception->RemoveWithoutPathExpansion(kLastUsed, NULL);
-    }
-
-    if (content_type_ == CONTENT_SETTINGS_TYPE_PLUGINS)
-      exception->RemoveWithoutPathExpansion(kPerPluginPrefName, NULL);
-
-    if (exception->empty())
-      old_dictionary->RemoveWithoutPathExpansion(key, NULL);
-  }
-
 }
 
 // static

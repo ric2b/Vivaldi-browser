@@ -162,7 +162,6 @@ class PageCyclerNetsimTop10(_PageCycler):
         report_speed_index = options.report_speed_index,
         clear_cache_before_each_run = True)
 
-
 @benchmark.Enabled('android')
 class PageCyclerTop10Mobile(_PageCycler):
   """Page load time benchmark for the top 10 mobile web pages.
@@ -175,10 +174,14 @@ class PageCyclerTop10Mobile(_PageCycler):
     return 'page_cycler.top_10_mobile'
 
   def CreateStorySet(self, options):
-    return page_sets.Top10MobilePageSet(run_no_page_interactions=True)
+    # Disable the taobao.com page since it's crashing. crbug.com/509690
+    stories = page_sets.Top10MobilePageSet(run_no_page_interactions=True)
+    found = next((x for x in stories if 'taobao.com' in x.url), None)
+    if found:
+      stories.RemoveStory(found)
+    return stories
 
-
-@benchmark.Disabled
+@benchmark.Disabled('all')
 class PageCyclerKeyMobileSites(_PageCycler):
   """Page load time benchmark for key mobile sites."""
   page_set = page_sets.KeyMobileSitesPageSet
@@ -201,14 +204,16 @@ class PageCyclerToughLayoutCases(_PageCycler):
     return 'page_cycler.tough_layout_cases'
 
 
-# crbug.com/273986: This test is flakey on Windows.
-@benchmark.Disabled('win')
+# crbug.com/273986: This test is flakey on Windows Chrome.
+@benchmark.Enabled('android', 'chromeos', 'linux', 'ios', 'mac',
+                   'mandoline-release', 'mandoline-debug')
 class PageCyclerTypical25(_PageCycler):
   """Page load time benchmark for a 25 typical web pages.
 
   Designed to represent typical, not highly optimized or highly popular web
   sites. Runs against pages recorded in June, 2014.
   """
+  options = {'pageset_repeat': 3}
 
   @classmethod
   def Name(cls):
@@ -217,24 +222,32 @@ class PageCyclerTypical25(_PageCycler):
   def CreateStorySet(self, options):
     return page_sets.Typical25PageSet(run_no_page_interactions=True)
 
-# crbug.com/273986: This test is flakey on Windows.
-@benchmark.Disabled  # crbug.com/463346: Test is crashing Chrome.
-class PageCyclerOopifTypical25(_PageCycler):
-  """ A varation of the benchmark above, but running in --site-per-process
-  to allow measuring performance of out-of-process iframes.
-  """
+
+@benchmark.Disabled('reference', 'android')
+class PageCyclerBasicOopifIsolated(_PageCycler):
+  """ A benchmark measuring performance of out-of-process iframes. """
+  page_set = page_sets.OopifBasicPageSet
+
   @classmethod
   def Name(cls):
-    return 'page_cycler_oopif.typical_25'
+    return 'page_cycler_site_isolation.basic_oopif'
 
   def SetExtraBrowserOptions(self, options):
     options.AppendExtraBrowserArgs(['--site-per-process'])
 
-  def CreateStorySet(self, options):
-    return page_sets.Typical25PageSet(run_no_page_interactions=True)
+
+@benchmark.Disabled('reference')  # crbug.com/523346
+class PageCyclerBasicOopif(_PageCycler):
+  """ A benchmark measuring performance of the out-of-process iframes page
+  set, without running in out-of-process iframes mode.. """
+  page_set = page_sets.OopifBasicPageSet
+
+  @classmethod
+  def Name(cls):
+    return 'page_cycler.basic_oopif'
 
 
-@benchmark.Disabled # crbug.com/443730
+@benchmark.Disabled('all')  # crbug.com/443730
 class PageCyclerBigJs(_PageCycler):
   page_set = page_sets.BigJsPageSet
   @classmethod

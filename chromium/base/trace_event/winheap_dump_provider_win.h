@@ -5,8 +5,11 @@
 #ifndef BASE_TRACE_EVENT_WINHEAP_DUMP_PROVIDER_WIN_H_
 #define BASE_TRACE_EVENT_WINHEAP_DUMP_PROVIDER_WIN_H_
 
+#include <stddef.h>
+
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/trace_event/memory_dump_provider.h"
 
@@ -26,10 +29,15 @@ struct WinHeapInfo {
 // about them.
 class BASE_EXPORT WinHeapDumpProvider : public MemoryDumpProvider {
  public:
+  // Name of the allocated_objects dump. Use this to declare suballocator dumps
+  // from other dump providers.
+  static const char kAllocatedObjects[];
+
   static WinHeapDumpProvider* GetInstance();
 
   // MemoryDumpProvider implementation.
-  bool OnMemoryDump(ProcessMemoryDump* pmd) override;
+  bool OnMemoryDump(const MemoryDumpArgs& args,
+                    ProcessMemoryDump* pmd) override;
 
  private:
   friend struct DefaultSingletonTraits<WinHeapDumpProvider>;

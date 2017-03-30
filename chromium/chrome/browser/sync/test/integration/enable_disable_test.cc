@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/sync/profile_sync_service.h"
+#include "base/macros.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/read_transaction.h"
@@ -44,12 +45,15 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableOneAtATime) {
   // Setup sync with no enabled types.
   ASSERT_TRUE(GetClient(0)->SetupSync(syncer::ModelTypeSet()));
 
-  const syncer::ModelTypeSet registered_types =
-      GetSyncService(0)->GetRegisteredDataTypes();
   syncer::UserShare* user_share = GetSyncService(0)->GetUserShare();
   const sync_driver::DataTypeStatusTable& data_type_status_table =
       GetSyncService(0)->data_type_status_table();
-  for (syncer::ModelTypeSet::Iterator it = registered_types.First();
+
+  const syncer::ModelTypeSet registered_types =
+      GetSyncService(0)->GetRegisteredDataTypes();
+  const syncer::ModelTypeSet registered_user_types =
+      Intersection(registered_types, syncer::UserSelectableTypes());
+  for (syncer::ModelTypeSet::Iterator it = registered_user_types.First();
        it.Good(); it.Inc()) {
     ASSERT_TRUE(GetClient(0)->EnableSyncForDatatype(it.Get()));
 

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/simple_test_clock.h"
@@ -100,17 +101,11 @@ class MockSdchObserver : public SdchObserver {
 class SdchManagerTest : public testing::Test {
  protected:
   SdchManagerTest()
-      : sdch_manager_(new SdchManager),
-        default_support_(sdch_manager_->sdch_enabled()) { }
+      : sdch_manager_(new SdchManager) {}
 
   ~SdchManagerTest() override {}
 
   SdchManager* sdch_manager() { return sdch_manager_.get(); }
-
-  // Reset globals back to default state.
-  void TearDown() override {
-    SdchManager::EnableSdchSupport(default_support_);
-  }
 
   // Attempt to add a dictionary to the manager and probe for success or
   // failure.
@@ -122,7 +117,6 @@ class SdchManagerTest : public testing::Test {
 
  private:
   scoped_ptr<SdchManager> sdch_manager_;
-  bool default_support_;
 };
 
 static std::string NewSdchDictionary(const std::string& domain) {
@@ -140,9 +134,6 @@ static std::string NewSdchDictionary(const std::string& domain) {
 TEST_F(SdchManagerTest, DomainSupported) {
   GURL google_url("http://www.google.com");
 
-  SdchManager::EnableSdchSupport(false);
-  EXPECT_EQ(SDCH_DISABLED, sdch_manager()->IsInSupportedDomain(google_url));
-  SdchManager::EnableSdchSupport(true);
   EXPECT_EQ(SDCH_OK, sdch_manager()->IsInSupportedDomain(google_url));
 }
 
@@ -578,8 +569,8 @@ TEST_F(SdchManagerTest, ExpirationCheckedProperly) {
   // It should be visible if looked up by hash whether expired or not.
   SdchProblemCode problem_code;
   scoped_ptr<SdchManager::DictionarySet> hash_set(
-      sdch_manager()->GetDictionarySetByHash(
-          target_gurl, server_hash, &problem_code).Pass());
+      sdch_manager()->GetDictionarySetByHash(target_gurl, server_hash,
+                                             &problem_code));
   ASSERT_TRUE(hash_set);
   ASSERT_EQ(SDCH_OK, problem_code);
 
@@ -589,15 +580,6 @@ TEST_F(SdchManagerTest, ExpirationCheckedProperly) {
   EXPECT_TRUE(sdch_manager()->GetDictionarySetByHash(
       target_gurl, server_hash, &problem_code));
   EXPECT_EQ(SDCH_OK, problem_code);
-}
-
-TEST_F(SdchManagerTest, SdchOnByDefault) {
-  GURL google_url("http://www.google.com");
-  scoped_ptr<SdchManager> sdch_manager(new SdchManager);
-
-  EXPECT_EQ(SDCH_OK, sdch_manager->IsInSupportedDomain(google_url));
-  SdchManager::EnableSdchSupport(false);
-  EXPECT_EQ(SDCH_DISABLED, sdch_manager->IsInSupportedDomain(google_url));
 }
 
 // Confirm dispatch of notification.

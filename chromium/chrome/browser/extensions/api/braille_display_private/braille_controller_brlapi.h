@@ -7,7 +7,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
@@ -79,7 +79,7 @@ class BrailleControllerImpl : public BrailleController {
   // Manipulated on the FILE thread.
   base::FilePathWatcher file_path_watcher_;
 
-  friend struct DefaultSingletonTraits<BrailleControllerImpl>;
+  friend struct base::DefaultSingletonTraits<BrailleControllerImpl>;
 
   DISALLOW_COPY_AND_ASSIGN(BrailleControllerImpl);
 };

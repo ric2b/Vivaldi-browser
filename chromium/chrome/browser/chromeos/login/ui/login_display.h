@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
@@ -58,9 +59,6 @@ class LoginDisplay {
     // Used when the lock screen is being displayed.
     virtual void Signout() = 0;
 
-    // Create new Google account.
-    virtual void CreateAccount() = 0;
-
     // Complete sign process with specified |user_context|.
     // Used for new users authenticated through an extension.
     virtual void CompleteLogin(const UserContext& user_context) = 0;
@@ -94,7 +92,7 @@ class LoginDisplay {
     virtual void ResetPublicSessionAutoLoginTimer() = 0;
 
     // Returns true if user is allowed to log in by domain policy.
-    virtual bool IsUserWhitelisted(const std::string& user_id) = 0;
+    virtual bool IsUserWhitelisted(const AccountId& account_id) = 0;
 
    protected:
     virtual ~Delegate();
@@ -130,9 +128,6 @@ class LoginDisplay {
 
   // Displays detailed error screen for error with ID |error_id|.
   virtual void ShowErrorScreen(LoginDisplay::SigninError error_id) = 0;
-
-  // Proceed with Gaia flow because password has changed.
-  virtual void ShowGaiaPasswordChanged(const std::string& username) = 0;
 
   // Show password changed dialog. If |show_password_error| is not null
   // user already tried to enter old password but it turned out to be incorrect.

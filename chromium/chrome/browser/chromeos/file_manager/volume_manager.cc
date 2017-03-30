@@ -4,7 +4,9 @@
 
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -16,8 +18,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/file_manager/snapshot_manager.h"
@@ -30,6 +30,8 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/disks/disk_mount_manager.h"
+#include "components/drive/file_system_core_util.h"
+#include "components/drive/file_system_interface.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -39,8 +41,8 @@
 namespace file_manager {
 namespace {
 
-const uint32 kAccessCapabilityReadWrite = 0;
-const uint32 kFilesystemTypeGenericHierarchical = 2;
+const uint32_t kAccessCapabilityReadWrite = 0;
+const uint32_t kFilesystemTypeGenericHierarchical = 2;
 const char kFileManagerMTPMountNamePrefix[] = "fileman-mtp-";
 const char kMtpVolumeIdPrefix [] = "mtp:";
 const char kRootPath[] = "/";

@@ -4,6 +4,8 @@
 
 #include "components/sync_driver/fake_generic_change_processor.h"
 
+#include <utility>
+
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "sync/api/syncable_service.h"
@@ -13,13 +15,13 @@ namespace sync_driver {
 
 FakeGenericChangeProcessor::FakeGenericChangeProcessor(
     syncer::ModelType type,
-    SyncApiComponentFactory* sync_factory)
+    SyncClient* sync_client)
     : GenericChangeProcessor(type,
                              NULL,
                              base::WeakPtr<syncer::SyncableService>(),
                              base::WeakPtr<syncer::SyncMergeResult>(),
                              NULL,
-                             sync_factory,
+                             sync_client,
                              nullptr),
       sync_model_has_user_created_nodes_(true),
       sync_model_has_user_created_nodes_success_(true) {
@@ -67,7 +69,7 @@ bool FakeGenericChangeProcessor::CryptoReadyIfNecessary() {
 
 FakeGenericChangeProcessorFactory::FakeGenericChangeProcessorFactory(
     scoped_ptr<FakeGenericChangeProcessor> processor)
-    : processor_(processor.Pass()) {}
+    : processor_(std::move(processor)) {}
 
 FakeGenericChangeProcessorFactory::~FakeGenericChangeProcessorFactory() {}
 
@@ -78,8 +80,8 @@ FakeGenericChangeProcessorFactory::CreateGenericChangeProcessor(
     DataTypeErrorHandler* error_handler,
     const base::WeakPtr<syncer::SyncableService>& local_service,
     const base::WeakPtr<syncer::SyncMergeResult>& merge_result,
-    SyncApiComponentFactory* sync_factory) {
-  return processor_.Pass();
+    SyncClient* sync_client) {
+  return std::move(processor_);
 }
 
 }  // namespace sync_driver

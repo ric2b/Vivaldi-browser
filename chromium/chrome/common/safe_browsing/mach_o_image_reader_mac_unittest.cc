@@ -6,7 +6,10 @@
 
 #include <arpa/inet.h>
 #include <libkern/OSByteOrder.h>
+#include <mach-o/fat.h>
 #include <mach-o/loader.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <uuid/uuid.h>
 
@@ -14,6 +17,7 @@
 #include "base/files/memory_mapped_file.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "chrome/common/chrome_paths.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -421,6 +425,62 @@ TEST_F(MachOImageReaderTest, NotMachO) {
   ASSERT_NO_FATAL_FAILURE(OpenTestFile("src.c", &file));
   MachOImageReader reader;
   EXPECT_FALSE(reader.Initialize(file.data(), file.length()));
+}
+
+TEST_F(MachOImageReaderTest, IsMachOMagicValue) {
+  static const uint32_t kMagics[] = { MH_MAGIC, MH_MAGIC, FAT_MAGIC };
+  for (uint32_t magic : kMagics) {
+    SCOPED_TRACE(base::StringPrintf("0x%x", magic));
+    EXPECT_TRUE(MachOImageReader::IsMachOMagicValue(magic));
+    EXPECT_TRUE(MachOImageReader::IsMachOMagicValue(OSSwapInt32(magic)));
+  }
+}
+
+// https://crbug.com/524044
+TEST_F(MachOImageReaderTest, CmdsizeSmallerThanLoadCommand) {
+#pragma pack(push, 1)
+  struct TestImage {
+    mach_header_64 header;
+    segment_command_64 page_zero;
+    load_command small_sized;
+    segment_command_64 fake_code;
+  };
+#pragma pack(pop)
+
+  TestImage test_image = {};
+
+  test_image.header.magic = MH_MAGIC_64;
+  test_image.header.cputype = CPU_TYPE_X86_64;
+  test_image.header.filetype = MH_EXECUTE;
+  test_image.header.ncmds = 3;
+  test_image.header.sizeofcmds = sizeof(test_image) - sizeof(test_image.header);
+
+  test_image.page_zero.cmd = LC_SEGMENT;
+  test_image.page_zero.cmdsize = sizeof(test_image.page_zero);
+  strcpy(test_image.page_zero.segname, SEG_PAGEZERO);
+  test_image.page_zero.vmsize = PAGE_SIZE;
+
+  test_image.small_sized.cmd = LC_SYMSEG;
+  test_image.small_sized.cmdsize = sizeof(test_image.small_sized) - 3;
+
+  test_image.fake_code.cmd = LC_SEGMENT;
+  test_image.fake_code.cmdsize = sizeof(test_image.fake_code);
+  strcpy(test_image.fake_code.segname, SEG_TEXT);
+
+  MachOImageReader reader;
+  EXPECT_TRUE(reader.Initialize(reinterpret_cast<const uint8_t*>(&test_image),
+                                sizeof(test_image)));
+
+  EXPECT_FALSE(reader.IsFat());
+  EXPECT_TRUE(reader.Is64Bit());
+
+  const auto& load_commands = reader.GetLoadCommands();
+  EXPECT_EQ(3u, load_commands.size());
+
+  EXPECT_EQ(static_cast<uint32_t>(LC_SEGMENT), load_commands[0].cmd());
+  EXPECT_EQ(static_cast<uint32_t>(LC_SYMSEG), load_commands[1].cmd());
+  EXPECT_EQ(sizeof(load_command) - 3, load_commands[1].cmdsize());
+  EXPECT_EQ(static_cast<uint32_t>(LC_SEGMENT), load_commands[2].cmd());
 }
 
 }  // namespace

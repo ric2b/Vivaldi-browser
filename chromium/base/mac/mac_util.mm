@@ -6,8 +6,8 @@
 
 #import <Cocoa/Cocoa.h>
 #import <IOKit/IOKitLib.h>
-
 #include <errno.h>
+#include <stddef.h>
 #include <string.h>
 #include <sys/utsname.h>
 #include <sys/xattr.h>
@@ -463,7 +463,7 @@ int MacOSXMinorVersionInternal() {
   // immediate death.
   CHECK(darwin_major_version >= 6);
   int mac_os_x_minor_version = darwin_major_version - 4;
-  DLOG_IF(WARNING, darwin_major_version > 14) << "Assuming Darwin "
+  DLOG_IF(WARNING, darwin_major_version > 15) << "Assuming Darwin "
       << base::IntToString(darwin_major_version) << " is Mac OS X 10."
       << base::IntToString(mac_os_x_minor_version);
 
@@ -542,12 +542,6 @@ bool IsOSYosemiteOrLater() {
 }
 #endif
 
-#if !defined(BASE_MAC_MAC_UTIL_H_INLINED_GT_10_10)
-bool IsOSLaterThanYosemite_DontCallThis() {
-  return MacOSXMinorVersion() > YOSEMITE_MINOR_VERSION;
-}
-#endif
-
 #if !defined(BASE_MAC_MAC_UTIL_H_INLINED_GT_10_11)
 bool IsOSElCapitan() {
   return MacOSXMinorVersion() == EL_CAPITAN_MINOR_VERSION;
@@ -557,6 +551,12 @@ bool IsOSElCapitan() {
 #if !defined(BASE_MAC_MAC_UTIL_H_INLINED_GE_10_11)
 bool IsOSElCapitanOrLater() {
   return MacOSXMinorVersion() >= EL_CAPITAN_MINOR_VERSION;
+}
+#endif
+
+#if !defined(BASE_MAC_MAC_UTIL_H_INLINED_GT_10_11)
+bool IsOSLaterThanElCapitan_DontCallThis() {
+  return MacOSXMinorVersion() > EL_CAPITAN_MINOR_VERSION;
 }
 #endif
 
@@ -582,15 +582,15 @@ std::string GetModelIdentifier() {
 
 bool ParseModelIdentifier(const std::string& ident,
                           std::string* type,
-                          int32* major,
-                          int32* minor) {
+                          int32_t* major,
+                          int32_t* minor) {
   size_t number_loc = ident.find_first_of("0123456789");
   if (number_loc == std::string::npos)
     return false;
   size_t comma_loc = ident.find(',', number_loc);
   if (comma_loc == std::string::npos)
     return false;
-  int32 major_tmp, minor_tmp;
+  int32_t major_tmp, minor_tmp;
   std::string::const_iterator begin = ident.begin();
   if (!StringToInt(
           StringPiece(begin + number_loc, begin + comma_loc), &major_tmp) ||

@@ -4,18 +4,23 @@
 
 #include "chrome/test/base/web_ui_browser_test.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/web_ui_test_handler.h"
 #include "chrome/common/chrome_paths.h"
@@ -224,7 +229,7 @@ void WebUIBrowserTest::BrowsePreload(const GURL& browse_to) {
 
 // This custom ContentBrowserClient is used to get notified when a WebContents
 // for the print preview dialog gets created.
-class PrintContentBrowserClient : public chrome::ChromeContentBrowserClient {
+class PrintContentBrowserClient : public ChromeContentBrowserClient {
  public:
   PrintContentBrowserClient(WebUIBrowserTest* browser_test,
                             const std::string& preload_test_fixture,
@@ -418,7 +423,7 @@ bool WebUIBrowserTest::RunJavascriptUsingHandler(
   if (!libraries_preloaded_) {
     BuildJavascriptLibraries(&libraries);
     if (!preload_host) {
-      content = JoinString(libraries, '\n');
+      content = base::JoinString(libraries, base::ASCIIToUTF16("\n"));
       libraries.clear();
     }
   }

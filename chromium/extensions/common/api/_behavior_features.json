@@ -18,16 +18,6 @@
 // hashes back to ids.
 
 {
-  "bluetooth.peripheral": {
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "platforms": ["chromeos"],
-    "whitelist": [
-      "307E96539209F95A1A8740C713E6998A73657D96",  // http://crbug.com/485292
-      "81986D4F846CEDDDB962643FA501D1780DD441BB",  // http://crbug.com/485292
-      "9E287A8257E58EFB13E89C86A4B75A3AC4B058D8"   // http://crbug.com/485292
-    ]
-  },
   "whitelisted_for_incognito": {
     "channel": "stable",
     "extension_types": "all",
@@ -38,6 +28,28 @@
       "D5736E4B5CF695CB93A2FB57E4FDC6E5AFAB6FE2",  // http://crbug.com/312900
       "D57DE394F36DC1C3220E7604C575D29C51A6C495",  // http://crbug.com/319444
       "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9"   // http://crbug.com/371562
+    ]
+  },
+  "do_not_sync": {
+    "channel": "stable",
+    "component_extensions_auto_granted": false,
+    "extension_types": "all",
+    "whitelist": [
+      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/574889
+      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/505879
+      "A45DABDB47A31CC812E5490AB748C7D05E2D32E9",  // http://crbug.com/505879
+      "BFEE2E3B80BE21A645E63E9346DFC383E7CB3BDA",  // http://crbug.com/505879
+      "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // http://crbug.com/505879
+      "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // http://crbug.com/505879
+      "B11A93E7E5B541F8010245EBDE2C74647D6C14B9",  // http://crbug.com/505879
+      "FA01E0B81978950F2BC5A50512FD769725F57510"   // http://crbug.com/505879
+    ]
+  },
+  "zoom_without_bubble": {
+    "channel": "stable",
+    "extension_types": "all",
+    "whitelist": [
+      "CBCC42ABED43A4B58FE3810E62AFFA010EB0349F"   // https://crbug.com/538252
     ]
   }
 }

@@ -4,16 +4,18 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/register_app_task.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
-#include "chrome/browser/drive/drive_uploader.h"
-#include "chrome/browser/drive/fake_drive_service.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_util.h"
 #include "chrome/browser/sync_file_system/drive_backend/fake_drive_service_helper.h"
@@ -22,6 +24,8 @@
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.pb.h"
 #include "chrome/browser/sync_file_system/drive_backend/sync_engine_context.h"
 #include "chrome/browser/sync_file_system/sync_file_system_test_util.h"
+#include "components/drive/drive_uploader.h"
+#include "components/drive/service/fake_drive_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,7 +37,7 @@ namespace sync_file_system {
 namespace drive_backend {
 
 namespace {
-const int64 kSyncRootTrackerID = 100;
+const int64_t kSyncRootTrackerID = 100;
 }  // namespace
 
 class RegisterAppTaskTest : public testing::Test {
@@ -58,12 +62,10 @@ class RegisterAppTaskTest : public testing::Test {
         fake_drive_service.get(), drive_uploader.get(),
         kSyncRootFolderTitle));
 
-    context_.reset(new SyncEngineContext(fake_drive_service.Pass(),
-                                         drive_uploader.Pass(),
-                                         nullptr /* task_logger */,
-                                         base::ThreadTaskRunnerHandle::Get(),
-                                         base::ThreadTaskRunnerHandle::Get(),
-                                         nullptr /* worker_pool */));
+    context_.reset(new SyncEngineContext(
+        std::move(fake_drive_service), std::move(drive_uploader),
+        nullptr /* task_logger */, base::ThreadTaskRunnerHandle::Get(),
+        base::ThreadTaskRunnerHandle::Get(), nullptr /* worker_pool */));
 
     ASSERT_EQ(google_apis::HTTP_CREATED,
               fake_drive_service_helper_->AddOrphanedFolder(
@@ -122,10 +124,11 @@ class RegisterAppTaskTest : public testing::Test {
     ASSERT_TRUE(db);
     ASSERT_FALSE(context_->GetMetadataDatabase());
     scoped_ptr<MetadataDatabase> metadata_db;
-    ASSERT_EQ(SYNC_STATUS_OK,
-              MetadataDatabase::CreateForTesting(
-                  db.Pass(), true /* enable_on_disk_index */, &metadata_db));
-    context_->SetMetadataDatabase(metadata_db.Pass());
+    ASSERT_EQ(
+        SYNC_STATUS_OK,
+        MetadataDatabase::CreateForTesting(
+            std::move(db), true /* enable_on_disk_index */, &metadata_db));
+    context_->SetMetadataDatabase(std::move(metadata_db));
   }
 
   SyncStatusCode RunRegisterAppTask(const std::string& app_id) {
@@ -208,7 +211,8 @@ class RegisterAppTaskTest : public testing::Test {
     return files.size();
   }
 
-  bool HasRemoteAppRoot(const std::string& app_id) {
+  bool GetAppRootFolderID(const std::string& app_id,
+                          std::string* app_root_folder_id) {
     TrackerIDSet files;
     if (!context_->GetMetadataDatabase()->FindTrackersByParentAndTitle(
             kSyncRootTrackerID, app_id, &files) ||
@@ -218,13 +222,37 @@ class RegisterAppTaskTest : public testing::Test {
     FileTracker app_root_tracker;
     EXPECT_TRUE(context_->GetMetadataDatabase()->FindTrackerByTrackerID(
         files.active_tracker(), &app_root_tracker));
-    std::string app_root_folder_id = app_root_tracker.file_id();
+    *app_root_folder_id = app_root_tracker.file_id();
+    return true;
+  }
+
+  bool HasRemoteAppRoot(const std::string& app_id) {
+    std::string app_root_folder_id;
+    if (!GetAppRootFolderID(app_id, &app_root_folder_id))
+      return false;
+
     scoped_ptr<google_apis::FileResource> entry;
     if (google_apis::HTTP_SUCCESS !=
         fake_drive_service_helper_->GetFileResource(app_root_folder_id, &entry))
       return false;
 
     return !entry->labels().is_trashed();
+  }
+
+  bool VerifyRemoteAppRootVisibility(const std::string& app_id) {
+    std::string app_root_folder_id;
+    if (!GetAppRootFolderID(app_id, &app_root_folder_id))
+      return false;
+
+    google_apis::drive::FileVisibility visibility;
+    if (google_apis::HTTP_SUCCESS !=
+        fake_drive_service_helper_->GetFileVisibility(
+            app_root_folder_id, &visibility))
+      return false;
+    if (visibility != google_apis::drive::FILE_VISIBILITY_PRIVATE)
+      return false;
+
+    return true;
   }
 
  private:
@@ -236,8 +264,8 @@ class RegisterAppTaskTest : public testing::Test {
 
   std::string sync_root_folder_id_;
 
-  int64 next_file_id_;
-  int64 next_tracker_id_;
+  int64_t next_file_id_;
+  int64_t next_tracker_id_;
 
   content::TestBrowserThreadBundle browser_threads_;
   base::ScopedTempDir database_dir_;
@@ -256,7 +284,7 @@ TEST_F(RegisterAppTaskTest, AlreadyRegistered) {
   const std::string kAppID = "app_id";
   SetUpRegisteredAppRoot(kAppID, db.get());
 
-  CreateMetadataDatabase(db.Pass());
+  CreateMetadataDatabase(std::move(db));
   EXPECT_EQ(SYNC_STATUS_OK, RunRegisterAppTask(kAppID));
 
   EXPECT_EQ(1u, CountRegisteredAppRoot());
@@ -269,7 +297,7 @@ TEST_F(RegisterAppTaskTest, CreateAppFolder) {
   SetUpInitialData(db.get());
 
   const std::string kAppID = "app_id";
-  CreateMetadataDatabase(db.Pass());
+  CreateMetadataDatabase(std::move(db));
   RunRegisterAppTask(kAppID);
 
   EXPECT_EQ(1u, CountRegisteredAppRoot());
@@ -277,6 +305,7 @@ TEST_F(RegisterAppTaskTest, CreateAppFolder) {
 
   EXPECT_EQ(1u, CountRemoteFileInSyncRoot());
   EXPECT_TRUE(HasRemoteAppRoot(kAppID));
+  EXPECT_TRUE(VerifyRemoteAppRootVisibility(kAppID));
 }
 
 TEST_F(RegisterAppTaskTest, RegisterExistingFolder) {
@@ -287,7 +316,7 @@ TEST_F(RegisterAppTaskTest, RegisterExistingFolder) {
   const std::string kAppID = "app_id";
   SetUpUnregisteredAppRoot(kAppID, db.get());
 
-  CreateMetadataDatabase(db.Pass());
+  CreateMetadataDatabase(std::move(db));
   RunRegisterAppTask(kAppID);
 
   EXPECT_EQ(1u, CountRegisteredAppRoot());
@@ -303,7 +332,7 @@ TEST_F(RegisterAppTaskTest, RegisterExistingFolder_MultipleCandidate) {
   SetUpUnregisteredAppRoot(kAppID, db.get());
   SetUpUnregisteredAppRoot(kAppID, db.get());
 
-  CreateMetadataDatabase(db.Pass());
+  CreateMetadataDatabase(std::move(db));
   RunRegisterAppTask(kAppID);
 
   EXPECT_EQ(1u, CountRegisteredAppRoot());

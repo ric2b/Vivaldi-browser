@@ -89,10 +89,18 @@ void NetworkDelegate::NotifyResponseStarted(URLRequest* request) {
   OnResponseStarted(request);
 }
 
-void NetworkDelegate::NotifyRawBytesRead(const URLRequest& request,
-                                         int bytes_read) {
+void NetworkDelegate::NotifyNetworkBytesReceived(URLRequest* request,
+                                                 int64_t bytes_received) {
   DCHECK(CalledOnValidThread());
-  OnRawBytesRead(request, bytes_read);
+  DCHECK_GT(bytes_received, 0);
+  OnNetworkBytesReceived(request, bytes_received);
+}
+
+void NetworkDelegate::NotifyNetworkBytesSent(URLRequest* request,
+                                             int64_t bytes_sent) {
+  DCHECK(CalledOnValidThread());
+  DCHECK_GT(bytes_sent, 0);
+  OnNetworkBytesSent(request, bytes_sent);
 }
 
 void NetworkDelegate::NotifyBeforeRedirect(URLRequest* request,
@@ -160,8 +168,12 @@ bool NetworkDelegate::CanEnablePrivacyMode(
   return OnCanEnablePrivacyMode(url, first_party_for_cookies);
 }
 
-bool NetworkDelegate::FirstPartyOnlyCookieExperimentEnabled() const {
-  return OnFirstPartyOnlyCookieExperimentEnabled();
+bool NetworkDelegate::AreExperimentalCookieFeaturesEnabled() const {
+  return OnAreExperimentalCookieFeaturesEnabled();
+}
+
+bool NetworkDelegate::AreStrictSecureCookiesEnabled() const {
+  return OnAreStrictSecureCookiesEnabled();
 }
 
 bool NetworkDelegate::CancelURLRequestWithPolicyViolatingReferrerHeader(

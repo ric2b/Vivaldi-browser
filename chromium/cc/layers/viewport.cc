@@ -34,43 +34,35 @@ void Viewport::Pan(const gfx::Vector2dF& delta) {
 
 Viewport::ScrollResult Viewport::ScrollBy(const gfx::Vector2dF& delta,
                                           const gfx::Point& viewport_point,
-                                          bool is_wheel_scroll,
+                                          bool is_direct_manipulation,
                                           bool affect_top_controls) {
   gfx::Vector2dF content_delta = delta;
-  ScrollResult result;
 
-  if (affect_top_controls && ShouldTopControlsConsumeScroll(delta)) {
-    result.top_controls_applied_delta = ScrollTopControls(delta);
-    content_delta -= result.top_controls_applied_delta;
-  }
+  if (affect_top_controls && ShouldTopControlsConsumeScroll(delta))
+    content_delta -= ScrollTopControls(delta);
 
   gfx::Vector2dF pending_content_delta = content_delta;
 
-  if (OuterScrollLayer()) {
-    pending_content_delta -= host_impl_->ScrollLayer(OuterScrollLayer(),
-                                                     pending_content_delta,
-                                                     viewport_point,
-                                                     is_wheel_scroll);
-  }
+  pending_content_delta -= host_impl_->ScrollLayer(InnerScrollLayer(),
+                                                   pending_content_delta,
+                                                   viewport_point,
+                                                   is_direct_manipulation);
 
-  // TODO(bokan): This shouldn't be needed but removing it causes subtle
-  // viewport movement during top controls manipulation.
-  if (!gfx::ToRoundedVector2d(pending_content_delta).IsZero()) {
-    pending_content_delta -= host_impl_->ScrollLayer(InnerScrollLayer(),
-                                                     pending_content_delta,
-                                                     viewport_point,
-                                                     is_wheel_scroll);
-    result.unused_scroll_delta = AdjustOverscroll(pending_content_delta);
-  }
+  ScrollResult result;
 
+  pending_content_delta -= host_impl_->ScrollLayer(OuterScrollLayer(),
+                                                   pending_content_delta,
+                                                   viewport_point,
+                                                   is_direct_manipulation);
+  result.consumed_delta = delta - AdjustOverscroll(pending_content_delta);
 
-  result.applied_delta = content_delta - pending_content_delta;
+  result.content_scrolled_delta = content_delta - pending_content_delta;
   return result;
 }
 
 void Viewport::SnapPinchAnchorIfWithinMargin(const gfx::Point& anchor) {
-  gfx::SizeF viewport_size =
-      host_impl_->active_tree()->InnerViewportContainerLayer()->bounds();
+  gfx::SizeF viewport_size = gfx::SizeF(
+      host_impl_->active_tree()->InnerViewportContainerLayer()->bounds());
 
   if (anchor.x() < kPinchZoomSnapMarginDips)
     pinch_anchor_adjustment_.set_x(-anchor.x());
@@ -89,8 +81,7 @@ void Viewport::PinchUpdate(float magnify_delta, const gfx::Point& anchor) {
     // length of the screen edge, offset all updates by the amount so that we
     // effectively snap the pinch zoom to the edge of the screen. This makes it
     // easy to zoom in on position: fixed elements.
-    if (host_impl_->settings().invert_viewport_scroll_order)
-      SnapPinchAnchorIfWithinMargin(anchor);
+    SnapPinchAnchorIfWithinMargin(anchor);
 
     pinch_zoom_active_ = true;
   }
@@ -102,11 +93,11 @@ void Viewport::PinchUpdate(float magnify_delta, const gfx::Point& anchor) {
   gfx::Point adjusted_anchor = anchor + pinch_anchor_adjustment_;
   float page_scale = active_tree->current_page_scale_factor();
   gfx::PointF previous_scale_anchor =
-      gfx::ScalePoint(adjusted_anchor, 1.f / page_scale);
+      gfx::ScalePoint(gfx::PointF(adjusted_anchor), 1.f / page_scale);
   active_tree->SetPageScaleOnActiveTree(page_scale * magnify_delta);
   page_scale = active_tree->current_page_scale_factor();
   gfx::PointF new_scale_anchor =
-      gfx::ScalePoint(adjusted_anchor, 1.f / page_scale);
+      gfx::ScalePoint(gfx::PointF(adjusted_anchor), 1.f / page_scale);
   gfx::Vector2dF move = previous_scale_anchor - new_scale_anchor;
 
   // Scale back to viewport space since that's the coordinate space ScrollBy
@@ -117,14 +108,7 @@ void Viewport::PinchUpdate(float magnify_delta, const gfx::Point& anchor) {
   // be accounted for from the intended move.
   move -= InnerScrollLayer()->ClampScrollToMaxScrollOffset();
 
-  if (host_impl_->settings().invert_viewport_scroll_order) {
-    Pan(move);
-  } else {
-    gfx::Point viewport_point;
-    bool is_wheel_event = false;
-    bool affect_top_controls = false;
-    ScrollBy(move, viewport_point, is_wheel_event, affect_top_controls);
-  }
+  Pan(move);
 }
 
 void Viewport::PinchEnd() {
@@ -152,6 +136,8 @@ bool Viewport::ShouldTopControlsConsumeScroll(
 }
 
 gfx::Vector2dF Viewport::AdjustOverscroll(const gfx::Vector2dF& delta) const {
+  // TODO(tdresser): Use a more rational epsilon. See crbug.com/510550 for
+  // details.
   const float kEpsilon = 0.1f;
   gfx::Vector2dF adjusted = delta;
 
@@ -159,16 +145,6 @@ gfx::Vector2dF Viewport::AdjustOverscroll(const gfx::Vector2dF& delta) const {
     adjusted.set_x(0.0f);
   if (std::abs(adjusted.y()) < kEpsilon)
     adjusted.set_y(0.0f);
-
-  // Disable overscroll on axes which are impossible to scroll.
-  if (host_impl_->settings().report_overscroll_only_for_scrollable_axes) {
-    if (std::abs(MaxTotalScrollOffset().x()) <= kEpsilon ||
-        !InnerScrollLayer()->user_scrollable_horizontal())
-      adjusted.set_x(0.0f);
-    if (std::abs(MaxTotalScrollOffset().y()) <= kEpsilon ||
-        !InnerScrollLayer()->user_scrollable_vertical())
-      adjusted.set_y(0.0f);
-  }
 
   return adjusted;
 }

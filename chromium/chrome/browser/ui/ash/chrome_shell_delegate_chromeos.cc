@@ -10,6 +10,7 @@
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/chromeos/background/ash_user_wallpaper_delegate.h"
 #include "chrome/browser/chromeos/display/display_configuration_observer.h"
 #include "chrome/browser/chromeos/display/display_preferences.h"
+#include "chrome/browser/chromeos/policy/display_rotation_default_handler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -35,6 +37,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/user_metrics.h"
 #include "ui/aura/window.h"
@@ -63,8 +67,14 @@ void InitAfterFirstSessionStart() {
 
 class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
  public:
-  AccessibilityDelegateImpl() {}
-  ~AccessibilityDelegateImpl() override {}
+  AccessibilityDelegateImpl() {
+    ash::Shell::GetInstance()->AddShellObserver(
+        chromeos::AccessibilityManager::Get());
+  }
+  ~AccessibilityDelegateImpl() override {
+    ash::Shell::GetInstance()->RemoveShellObserver(
+        chromeos::AccessibilityManager::Get());
+  }
 
   void ToggleHighContrast() override {
     DCHECK(chromeos::AccessibilityManager::Get());
@@ -214,16 +224,25 @@ bool ChromeShellDelegate::IsFirstRunAfterBoot() const {
 
 void ChromeShellDelegate::PreInit() {
   chromeos::LoadDisplayPreferences(IsFirstRunAfterBoot());
+  // Object owns itself, and deletes itself when Observer::OnShutdown is called:
+  new policy::DisplayRotationDefaultHandler();
   // Set the observer now so that we can save the initial state
   // in Shell::Init.
   display_configuration_observer_.reset(
       new chromeos::DisplayConfigurationObserver());
+
+  arc_session_observer_.reset(new ArcSessionObserver);
 
   chrome_user_metrics_recorder_.reset(new ChromeUserMetricsRecorder);
 }
 
 void ChromeShellDelegate::PreShutdown() {
   display_configuration_observer_.reset();
+
+  // Remove the ARC observer now since it uses the ash::Shell instance in its
+  // destructor, which is unavailable after PreShutdown() returns.
+  arc_session_observer_.reset();
+
   chrome_user_metrics_recorder_.reset();
 }
 
@@ -290,4 +309,36 @@ void ChromeShellDelegate::PlatformInit() {
   registrar_.Add(this,
                  chrome::NOTIFICATION_SESSION_STARTED,
                  content::NotificationService::AllSources());
+}
+
+ChromeShellDelegate::ArcSessionObserver::ArcSessionObserver() {
+  ash::Shell::GetInstance()->AddShellObserver(this);
+}
+
+ChromeShellDelegate::ArcSessionObserver::~ArcSessionObserver() {
+  ash::Shell::GetInstance()->RemoveShellObserver(this);
+}
+
+void ChromeShellDelegate::ArcSessionObserver::OnLoginStateChanged(
+    ash::user::LoginStatus status) {
+  switch (status) {
+    case ash::user::LOGGED_IN_LOCKED:
+    case ash::user::LOGGED_IN_KIOSK_APP:
+      return;
+
+    case ash::user::LOGGED_IN_NONE:
+      arc::ArcServiceManager::Get()->arc_bridge_service()->Shutdown();
+      break;
+
+    case ash::user::LOGGED_IN_USER:
+    case ash::user::LOGGED_IN_OWNER:
+    case ash::user::LOGGED_IN_GUEST:
+    case ash::user::LOGGED_IN_PUBLIC:
+    case ash::user::LOGGED_IN_SUPERVISED:
+      if (arc::ArcBridgeService::GetEnabled(
+              base::CommandLine::ForCurrentProcess())) {
+        arc::ArcServiceManager::Get()->arc_bridge_service()->HandleStartup();
+      }
+      break;
+  }
 }

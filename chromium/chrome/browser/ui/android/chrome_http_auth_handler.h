@@ -8,6 +8,7 @@
 #include <jni.h>
 
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/login/login_prompt.h"
 
@@ -17,7 +18,8 @@
 // by, e.g., showing the user a login dialog.
 class ChromeHttpAuthHandler {
  public:
-  explicit ChromeHttpAuthHandler(const base::string16& explanation);
+  ChromeHttpAuthHandler(const base::string16& authority,
+                        const base::string16& explanation);
   ~ChromeHttpAuthHandler();
 
   // This must be called before using the object.
@@ -41,20 +43,24 @@ class ChromeHttpAuthHandler {
   // --------------------------------------------------------------
 
   // Submits the username and password to the observer.
-  void SetAuth(JNIEnv* env, jobject, jstring username, jstring password);
+  void SetAuth(JNIEnv* env,
+               const base::android::JavaParamRef<jobject>&,
+               const base::android::JavaParamRef<jstring>& username,
+               const base::android::JavaParamRef<jstring>& password);
 
   // Cancels the authentication attempt of the observer.
-  void CancelAuth(JNIEnv* env, jobject);
+  void CancelAuth(JNIEnv* env, const base::android::JavaParamRef<jobject>&);
 
   // These functions return the strings needed to display a login form.
   base::android::ScopedJavaLocalRef<jstring> GetMessageBody(
-      JNIEnv* env, jobject);
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>&);
   // Registers the ChromeHttpAuthHandler native methods.
   static bool RegisterChromeHttpAuthHandler(JNIEnv* env);
  private:
   LoginHandler* observer_;
   base::android::ScopedJavaGlobalRef<jobject> java_chrome_http_auth_handler_;
-  // e.g. "The server example.com:80 requires a username and password."
+  base::string16 authority_;
   base::string16 explanation_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeHttpAuthHandler);

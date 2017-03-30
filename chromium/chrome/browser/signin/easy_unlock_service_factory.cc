@@ -6,8 +6,10 @@
 
 #include "base/command_line.h"
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/signin/easy_unlock_app_manager.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/signin/easy_unlock_service_regular.h"
@@ -51,7 +53,7 @@ base::FilePath GetEasyUnlockAppPath() {
 
 // static
 EasyUnlockServiceFactory* EasyUnlockServiceFactory::GetInstance() {
-  return Singleton<EasyUnlockServiceFactory>::get();
+  return base::Singleton<EasyUnlockServiceFactory>::get();
 }
 
 // static
@@ -70,6 +72,7 @@ EasyUnlockServiceFactory::EasyUnlockServiceFactory()
       extensions::ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
   DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
   DependsOn(SigninManagerFactory::GetInstance());
+  DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
 #if defined(OS_CHROMEOS)
   DependsOn(EasyUnlockTpmKeyManagerFactory::GetInstance());
 #endif
@@ -86,7 +89,7 @@ KeyedService* EasyUnlockServiceFactory::BuildServiceInstanceFor(
 #if defined(OS_CHROMEOS)
   if (chromeos::ProfileHelper::IsSigninProfile(
           Profile::FromBrowserContext(context))) {
-    if (!EasyUnlockService::IsSignInEnabled() || !context->IsOffTheRecord())
+    if (!context->IsOffTheRecord())
       return NULL;
 
     service = new EasyUnlockServiceSignin(Profile::FromBrowserContext(context));

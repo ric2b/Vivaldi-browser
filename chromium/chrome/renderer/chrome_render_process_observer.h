@@ -9,14 +9,20 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/process/process.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "content/public/renderer/render_process_observer.h"
 
 class GURL;
 struct ContentSettings;
+
+namespace base {
+class CommandLine;
+}
 
 namespace content {
 class ResourceDispatcherDelegate;
@@ -41,12 +47,16 @@ class ChromeRenderProcessObserver : public content::RenderProcessObserver,
   const RendererContentSettingRules* content_setting_rules() const;
 
  private:
-  // RenderProcessObserver implementation.
+  // Initializes field trial state change observation and notifies the browser
+  // of any field trials that might have already been activated.
+  void InitFieldTrialObserving(const base::CommandLine& command_line);
+
+  // content::RenderProcessObserver:
   bool OnControlMessageReceived(const IPC::Message& message) override;
   void WebKitInitialized() override;
   void OnRenderProcessShutdown() override;
 
-  // Observer implementation.
+  // base::FieldTrialList::Observer:
   void OnFieldTrialGroupFinalized(const std::string& trial_name,
                                   const std::string& group_name) override;
 
@@ -56,7 +66,8 @@ class ChromeRenderProcessObserver : public content::RenderProcessObserver,
   void OnSetContentSettingRules(const RendererContentSettingRules& rules);
   void OnGetCacheResourceStats();
   void OnSetFieldTrialGroup(const std::string& fiel_trial_name,
-                            const std::string& group_name);
+                            const std::string& group_name,
+                            base::ProcessId sender_pid);
 
   static bool is_incognito_process_;
   scoped_ptr<content::ResourceDispatcherDelegate> resource_delegate_;

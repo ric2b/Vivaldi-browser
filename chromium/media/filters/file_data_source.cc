@@ -5,6 +5,7 @@
 #include "media/filters/file_data_source.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/logging.h"
 
@@ -12,13 +13,15 @@ namespace media {
 
 FileDataSource::FileDataSource()
     : force_read_errors_(false),
-      force_streaming_(false) {
+      force_streaming_(false),
+      bytes_read_(0) {
 }
 
 FileDataSource::FileDataSource(base::File file)
     : force_read_errors_(false),
-      force_streaming_(false) {
-  file_.Initialize(file.Pass());
+      force_streaming_(false),
+      bytes_read_(0) {
+  file_.Initialize(std::move(file));
 }
 
 bool FileDataSource::Initialize(const base::FilePath& file_path) {
@@ -29,14 +32,16 @@ bool FileDataSource::Initialize(const base::FilePath& file_path) {
 void FileDataSource::Stop() {
 }
 
-void FileDataSource::Read(int64 position, int size, uint8* data,
+void FileDataSource::Read(int64_t position,
+                          int size,
+                          uint8_t* data,
                           const DataSource::ReadCB& read_cb) {
   if (force_read_errors_ || !file_.IsValid()) {
     read_cb.Run(kReadError);
     return;
   }
 
-  int64 file_size = file_.length();
+  int64_t file_size = file_.length();
 
   CHECK_GE(file_size, 0);
   CHECK_GE(position, 0);
@@ -44,13 +49,15 @@ void FileDataSource::Read(int64 position, int size, uint8* data,
 
   // Cap position and size within bounds.
   position = std::min(position, file_size);
-  int64 clamped_size = std::min(static_cast<int64>(size), file_size - position);
+  int64_t clamped_size =
+      std::min(static_cast<int64_t>(size), file_size - position);
 
   memcpy(data, file_.data() + position, clamped_size);
+  bytes_read_ += clamped_size;
   read_cb.Run(clamped_size);
 }
 
-bool FileDataSource::GetSize(int64* size_out) {
+bool FileDataSource::GetSize(int64_t* size_out) {
   *size_out = file_.length();
   return true;
 }

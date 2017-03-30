@@ -8,12 +8,14 @@
 
 #include "chrome_elf/blacklist/blacklist_interceptions.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 // Note that only #includes from base that are either header-only or built into
 // base_static (see base/base.gyp) are allowed here.
-#include "base/basictypes.h"
 #include "base/strings/string16.h"
 #include "base/win/pe_image.h"
 #include "chrome_elf/blacklist/blacklist.h"
@@ -36,6 +38,9 @@ FARPROC GetNtDllExportByName(const char* export_name) {
 }
 
 int DllMatch(const base::string16& module_name) {
+  if (module_name.empty())
+    return -1;
+
   for (int i = 0; blacklist::g_troublesome_dlls[i] != NULL; ++i) {
     if (_wcsicmp(module_name.c_str(), blacklist::g_troublesome_dlls[i]) == 0)
       return i;
@@ -124,7 +129,7 @@ base::string16 ExtractLoadedModuleName(const base::string16& module_path) {
 // with additional info about the image.
 void SafeGetImageInfo(const base::win::PEImage& pe,
                       std::string* out_name,
-                      uint32* flags) {
+                      uint32_t* flags) {
   out_name->clear();
   out_name->reserve(MAX_PATH);
   *flags = 0;
@@ -157,7 +162,7 @@ void SafeGetImageInfo(const base::win::PEImage& pe,
   }
 }
 
-base::string16 GetImageInfoFromLoadedModule(HMODULE module, uint32* flags) {
+base::string16 GetImageInfoFromLoadedModule(HMODULE module, uint32_t* flags) {
   std::string out_name;
   base::win::PEImage pe(module);
   SafeGetImageInfo(pe, &out_name, flags);
@@ -194,25 +199,27 @@ NTSTATUS BlNtMapViewOfSectionImpl(
   if (module) {
     UINT image_flags;
 
-    base::string16 module_name(GetImageInfoFromLoadedModule(
+    base::string16 module_name_from_image(GetImageInfoFromLoadedModule(
         reinterpret_cast<HMODULE>(*base), &image_flags));
-    base::string16 file_name(GetBackingModuleFilePath(*base));
 
-    if (module_name.empty() && (image_flags & sandbox::MODULE_HAS_CODE)) {
-      // If the module has no exports we retrieve the module name from the
-      // full path of the mapped section.
-      module_name = ExtractLoadedModuleName(file_name);
+    int blocked_index = DllMatch(module_name_from_image);
+
+    // If the module name isn't blacklisted, see if the file name is different
+    // and blacklisted.
+    if (blocked_index == -1) {
+      base::string16 file_name(GetBackingModuleFilePath(*base));
+      base::string16 module_name_from_file = ExtractLoadedModuleName(file_name);
+
+      if (module_name_from_image != module_name_from_file)
+        blocked_index = DllMatch(module_name_from_file);
     }
 
-    if (!module_name.empty()) {
-      int blocked_index = DllMatch(module_name);
-      if (blocked_index != -1) {
-        DCHECK_NT(g_nt_unmap_view_of_section_func);
-        g_nt_unmap_view_of_section_func(process, *base);
-        ret = STATUS_UNSUCCESSFUL;
+    if (blocked_index != -1) {
+      DCHECK_NT(g_nt_unmap_view_of_section_func);
+      g_nt_unmap_view_of_section_func(process, *base);
+      ret = STATUS_UNSUCCESSFUL;
 
-        blacklist::BlockedDll(blocked_index);
-      }
+      blacklist::BlockedDll(blocked_index);
     }
   }
 

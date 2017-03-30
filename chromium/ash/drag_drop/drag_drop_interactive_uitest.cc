@@ -5,17 +5,13 @@
 #include "ash/drag_drop/drag_drop_controller.h"
 
 #include "ash/shell.h"
-#include "ash/test/ash_test_base.h"
+#include "ash/test/ash_interactive_ui_test_base.h"
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
-#include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/base/test/ui_controls.h"
-#include "ui/base/ui_base_paths.h"
-#include "ui/gl/gl_surface.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -48,7 +44,7 @@ class TargetView : public views::View {
   // views::View overrides:
   bool GetDropFormats(
       int* formats,
-      std::set<OSExchangeData::CustomFormat>* custom_formats) override {
+      std::set<ui::Clipboard::FormatType>* format_types) override {
     *formats = ui::OSExchangeData::STRING;
     return true;
   }
@@ -86,7 +82,7 @@ views::Widget* CreateWidget(views::View* contents_view,
 }
 
 void QuitLoop() {
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void DragDropAcrossMultiDisplay_Step4() {
@@ -117,27 +113,7 @@ void DragDropAcrossMultiDisplay_Step1() {
 
 }  // namespace
 
-class DragDropTest : public test::AshTestBase {
- public:
-  DragDropTest() {}
-  ~DragDropTest() override {}
-
-  void SetUp() override {
-    gfx::GLSurface::InitializeOneOffForTests();
-
-    ui::RegisterPathProvider();
-    ui::ResourceBundle::InitSharedInstanceWithLocale(
-        "en-US", NULL, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
-    base::FilePath resources_pack_path;
-    PathService::Get(base::DIR_MODULE, &resources_pack_path);
-    resources_pack_path =
-        resources_pack_path.Append(FILE_PATH_LITERAL("resources.pak"));
-    ResourceBundle::GetSharedInstance().AddDataPackFromPath(
-        resources_pack_path, ui::SCALE_FACTOR_NONE);
-
-    test::AshTestBase::SetUp();
-  }
-};
+using DragDropTest = test::AshInteractiveUITestBase;
 
 #if !defined(OS_CHROMEOS)
 #define MAYBE_DragDropAcrossMultiDisplay DISABLED_DragDropAcrossMultiDisplay

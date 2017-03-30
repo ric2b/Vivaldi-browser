@@ -5,39 +5,57 @@
 #ifndef CHROME_BROWSER_UI_TOOLBAR_COMPONENT_TOOLBAR_ACTIONS_FACTORY_H_
 #define CHROME_BROWSER_UI_TOOLBAR_COMPONENT_TOOLBAR_ACTIONS_FACTORY_H_
 
-#include "base/macros.h"
-#include "base/memory/scoped_vector.h"
+#include <set>
+#include <string>
 
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
+
+class Browser;
 class Profile;
 class ToolbarActionViewController;
+
+namespace extensions {
+class ComponentMigrationHelper;
+}  // extensions
 
 // The registry for all component toolbar actions. Component toolbar actions
 // are actions that live in the toolbar (like extension actions), but are
 // components of chrome, such as ChromeCast.
 class ComponentToolbarActionsFactory {
  public:
+  // Component action IDs.
+  static const char kMediaRouterActionId[];
+
   ComponentToolbarActionsFactory();
-  ~ComponentToolbarActionsFactory();
+  virtual ~ComponentToolbarActionsFactory();
 
   static ComponentToolbarActionsFactory* GetInstance();
 
-  // Returns a collection of controllers for Chrome Actions. Declared virtual
-  // for testing.
-  virtual ScopedVector<ToolbarActionViewController>
-      GetComponentToolbarActions();
+  // Returns a vector of IDs of the component actions.
+  virtual std::set<std::string> GetInitialComponentIds(Profile* profile);
 
-  // Returns the number of component actions.
-  int GetNumComponentActions();
+  // Returns a collection of controllers for component actions. Declared
+  // virtual for testing.
+  virtual scoped_ptr<ToolbarActionViewController>
+  GetComponentToolbarActionForId(const std::string& id, Browser* browser,
+                                 ToolbarActionsBar* bar);
+
+  // Registers component actions that are migrating from extensions.
+  virtual void RegisterComponentMigrations(
+      extensions::ComponentMigrationHelper* helper) const;
+
+  // Synchronizes component action visibility and extension install status.
+  virtual void HandleComponentMigrations(
+      extensions::ComponentMigrationHelper* helper,
+      Profile* profile) const;
 
   // Sets the factory to use for testing purposes.
   // Ownership remains with the caller.
   static void SetTestingFactory(ComponentToolbarActionsFactory* factory);
 
  private:
-  // The number of component actions. Initially set to -1 to denote that the
-  // count has not been checked yet.
-  int num_component_actions_;
-
   DISALLOW_COPY_AND_ASSIGN(ComponentToolbarActionsFactory);
 };
 

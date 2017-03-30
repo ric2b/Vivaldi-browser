@@ -4,17 +4,20 @@
 
 #include "chrome/browser/ui/webui/options/font_settings_handler.h"
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/character_encoding.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -64,7 +67,8 @@ const char kAdvancedFontSettingsExtensionId[] =
 namespace options {
 
 FontSettingsHandler::FontSettingsHandler()
-    : extension_registry_observer_(this) {
+    : extension_registry_observer_(this),
+      weak_ptr_factory_(this) {
 }
 
 FontSettingsHandler::~FontSettingsHandler() {
@@ -190,7 +194,7 @@ void FontSettingsHandler::OnExtensionUnloaded(
 void FontSettingsHandler::HandleFetchFontsData(const base::ListValue* args) {
   content::GetFontListAsync(
       base::Bind(&FontSettingsHandler::FontsListHasLoaded,
-                 base::Unretained(this)));
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FontSettingsHandler::FontsListHasLoaded(

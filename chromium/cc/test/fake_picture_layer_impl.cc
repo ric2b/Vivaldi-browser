@@ -4,6 +4,8 @@
 
 #include "cc/test/fake_picture_layer_impl.h"
 
+#include <stddef.h>
+
 #include <vector>
 #include "cc/tiles/tile.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -13,7 +15,7 @@ namespace cc {
 FakePictureLayerImpl::FakePictureLayerImpl(
     LayerTreeImpl* tree_impl,
     int id,
-    scoped_refptr<RasterSource> raster_source,
+    scoped_refptr<DisplayListRasterSource> raster_source,
     bool is_mask)
     : PictureLayerImpl(tree_impl,
                        id,
@@ -31,7 +33,7 @@ FakePictureLayerImpl::FakePictureLayerImpl(
 FakePictureLayerImpl::FakePictureLayerImpl(
     LayerTreeImpl* tree_impl,
     int id,
-    scoped_refptr<RasterSource> raster_source,
+    scoped_refptr<DisplayListRasterSource> raster_source,
     bool is_mask,
     const gfx::Size& layer_bounds)
     : PictureLayerImpl(tree_impl,
@@ -125,7 +127,7 @@ PictureLayerTiling* FakePictureLayerImpl::LowResTiling() const {
 }
 
 void FakePictureLayerImpl::SetRasterSourceOnPending(
-    scoped_refptr<RasterSource> raster_source,
+    scoped_refptr<DisplayListRasterSource> raster_source,
     const Region& invalidation) {
   DCHECK(layer_tree_impl()->IsPendingTree());
   Region invalidation_temp = invalidation;
@@ -187,11 +189,11 @@ size_t FakePictureLayerImpl::CountTilesRequired(
   if (!tilings_)
     return 0;
 
-  if (visible_rect_for_tile_priority_.IsEmpty())
+  if (visible_layer_rect().IsEmpty())
     return 0;
 
   gfx::Rect rect = viewport_rect_for_tile_priority_in_content_space_;
-  rect.Intersect(visible_rect_for_tile_priority_);
+  rect.Intersect(visible_layer_rect());
 
   size_t count = 0;
 

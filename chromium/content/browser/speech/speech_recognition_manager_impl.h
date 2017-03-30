@@ -6,9 +6,9 @@
 #define CONTENT_BROWSER_SPEECH_SPEECH_RECOGNITION_MANAGER_IMPL_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/memory/weak_ptr.h"
@@ -98,7 +98,7 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl :
   // BrowserMainLoop is the only one allowed to istantiate and free us.
   friend class BrowserMainLoop;
   // Needed for dtor.
-  friend struct base::DefaultDeleter<SpeechRecognitionManagerImpl>;
+  friend std::default_delete<SpeechRecognitionManagerImpl>;
   SpeechRecognitionManagerImpl(media::AudioManager* audio_manager,
                                MediaStreamManager* media_stream_manager);
   ~SpeechRecognitionManagerImpl() override;

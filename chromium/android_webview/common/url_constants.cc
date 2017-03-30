@@ -4,12 +4,9 @@
 
 #include "android_webview/common/url_constants.h"
 
-namespace android_webview {
+#include "base/strings/string_util.h"
 
-// The content: scheme is used in Android for interacting with content
-// provides.
-// See http://developer.android.com/reference/android/content/ContentUris.html
-const char kContentScheme[] = "content";
+namespace android_webview {
 
 // These are special paths used with the file: scheme to access application
 // assets and resources.
@@ -19,5 +16,14 @@ const char kAndroidResourcePath[] = "/android_res/";
 
 // This scheme is used to display a default HTML5 video poster.
 const char kAndroidWebViewVideoPosterScheme[] = "android-webview-video-poster";
+
+bool IsAndroidSpecialFileUrl(const GURL& url) {
+  if (!url.is_valid() || !url.SchemeIsFile() || !url.has_path())
+    return false;
+  return base::StartsWith(url.path(), kAndroidAssetPath,
+                          base::CompareCase::SENSITIVE) ||
+         base::StartsWith(url.path(), kAndroidResourcePath,
+                          base::CompareCase::SENSITIVE);
+}
 
 }  // namespace android_webview

@@ -2,12 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+from telemetry import decorators
 from telemetry.internal.results import output_formatter
 from telemetry.util import perf_tests_helper
 from telemetry import value as value_module
 from telemetry.value import summary as summary_module
 
 
+@decorators.Deprecated(2016, 2, 29, 'Chart JSON is a supported alternative. '
+                       'See https://goo.gl/8daFav .')
 class BuildbotOutputFormatter(output_formatter.OutputFormatter):
   def __init__(self, output_stream, trace_tag=''):
     super(BuildbotOutputFormatter, self).__init__(output_stream)
@@ -53,6 +56,9 @@ class BuildbotOutputFormatter(output_formatter.OutputFormatter):
 
     buildbot_measurement_name, buildbot_trace_name = (
         value.GetChartAndTraceNameForPerPageResult())
+    if value.tir_label:
+      buildbot_measurement_name = '%s-%s' % (value.tir_label,
+                                             buildbot_measurement_name)
     self._PrintPerfResult(buildbot_measurement_name,
                           buildbot_trace_name,
                           buildbot_value, value.units, buildbot_data_type)
@@ -73,6 +79,11 @@ class BuildbotOutputFormatter(output_formatter.OutputFormatter):
     buildbot_measurement_name, buildbot_trace_name = (
         value.GetChartAndTraceNameForComputedSummaryResult(
             self._trace_tag))
+    if value.tir_label:
+      buildbot_measurement_name = '%s-%s' % (value.tir_label,
+                                             buildbot_measurement_name)
+      buildbot_trace_name = '%s-%s' % (value.tir_label,
+                                       buildbot_trace_name)
     self._PrintPerfResult(buildbot_measurement_name,
                           buildbot_trace_name,
                           buildbot_value, value.units, buildbot_data_type)

@@ -6,10 +6,12 @@
 
 #include <math.h>
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <algorithm>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -250,7 +252,7 @@ TEST(StringUtilTest, TrimWhitespace) {
   for (size_t i = 0; i < arraysize(trim_cases_ascii); ++i) {
     const trim_case_ascii& value = trim_cases_ascii[i];
     EXPECT_EQ(value.return_value,
-              TrimWhitespace(value.input, value.positions, &output_ascii));
+              TrimWhitespaceASCII(value.input, value.positions, &output_ascii));
     EXPECT_EQ(value.output, output_ascii);
   }
 }
@@ -503,30 +505,30 @@ TEST(StringUtilTest, ConvertASCII) {
   EXPECT_EQ(0, string_with_nul.compare(narrow_with_nul));
 }
 
+TEST(StringUtilTest, ToLowerASCII) {
+  EXPECT_EQ('c', ToLowerASCII('C'));
+  EXPECT_EQ('c', ToLowerASCII('c'));
+  EXPECT_EQ('2', ToLowerASCII('2'));
+
+  EXPECT_EQ(static_cast<char16>('c'), ToLowerASCII(static_cast<char16>('C')));
+  EXPECT_EQ(static_cast<char16>('c'), ToLowerASCII(static_cast<char16>('c')));
+  EXPECT_EQ(static_cast<char16>('2'), ToLowerASCII(static_cast<char16>('2')));
+
+  EXPECT_EQ("cc2", ToLowerASCII("Cc2"));
+  EXPECT_EQ(ASCIIToUTF16("cc2"), ToLowerASCII(ASCIIToUTF16("Cc2")));
+}
+
 TEST(StringUtilTest, ToUpperASCII) {
   EXPECT_EQ('C', ToUpperASCII('C'));
   EXPECT_EQ('C', ToUpperASCII('c'));
   EXPECT_EQ('2', ToUpperASCII('2'));
 
-  EXPECT_EQ(L'C', ToUpperASCII(L'C'));
-  EXPECT_EQ(L'C', ToUpperASCII(L'c'));
-  EXPECT_EQ(L'2', ToUpperASCII(L'2'));
+  EXPECT_EQ(static_cast<char16>('C'), ToUpperASCII(static_cast<char16>('C')));
+  EXPECT_EQ(static_cast<char16>('C'), ToUpperASCII(static_cast<char16>('c')));
+  EXPECT_EQ(static_cast<char16>('2'), ToUpperASCII(static_cast<char16>('2')));
 
-  std::string in_place_a("Cc2");
-  StringToUpperASCII(&in_place_a);
-  EXPECT_EQ("CC2", in_place_a);
-
-  std::wstring in_place_w(L"Cc2");
-  StringToUpperASCII(&in_place_w);
-  EXPECT_EQ(L"CC2", in_place_w);
-
-  std::string original_a("Cc2");
-  std::string upper_a = StringToUpperASCII(original_a);
-  EXPECT_EQ("CC2", upper_a);
-
-  std::wstring original_w(L"Cc2");
-  std::wstring upper_w = StringToUpperASCII(original_w);
-  EXPECT_EQ(L"CC2", upper_w);
+  EXPECT_EQ("CC2", ToUpperASCII("Cc2"));
+  EXPECT_EQ(ASCIIToUTF16("CC2"), ToUpperASCII(ASCIIToUTF16("Cc2")));
 }
 
 TEST(StringUtilTest, LowerCaseEqualsASCII) {
@@ -549,7 +551,7 @@ TEST(StringUtilTest, LowerCaseEqualsASCII) {
 
 TEST(StringUtilTest, FormatBytesUnlocalized) {
   static const struct {
-    int64 bytes;
+    int64_t bytes;
     const char* expected;
   } cases[] = {
     // Expected behavior: we show one post-decimal digit when we have
@@ -669,26 +671,7 @@ TEST(StringUtilTest, HexDigitToInt) {
   EXPECT_EQ(15, HexDigitToInt('f'));
 }
 
-// Test for JoinString
 TEST(StringUtilTest, JoinString) {
-  std::vector<std::string> in;
-  EXPECT_EQ("", JoinString(in, ','));
-
-  in.push_back("a");
-  EXPECT_EQ("a", JoinString(in, ','));
-
-  in.push_back("b");
-  in.push_back("c");
-  EXPECT_EQ("a,b,c", JoinString(in, ','));
-
-  in.push_back(std::string());
-  EXPECT_EQ("a,b,c,", JoinString(in, ','));
-  in.push_back(" ");
-  EXPECT_EQ("a|b|c|| ", JoinString(in, '|'));
-}
-
-// Test for JoinString overloaded with std::string separator
-TEST(StringUtilTest, JoinStringWithString) {
   std::string separator(", ");
   std::vector<std::string> parts;
   EXPECT_EQ(std::string(), JoinString(parts, separator));
@@ -706,8 +689,7 @@ TEST(StringUtilTest, JoinStringWithString) {
   EXPECT_EQ("a|b|c|| ", JoinString(parts, "|"));
 }
 
-// Test for JoinString overloaded with string16 separator
-TEST(StringUtilTest, JoinStringWithString16) {
+TEST(StringUtilTest, JoinString16) {
   string16 separator = ASCIIToUTF16(", ");
   std::vector<string16> parts;
   EXPECT_EQ(string16(), JoinString(parts, separator));
@@ -726,59 +708,83 @@ TEST(StringUtilTest, JoinStringWithString16) {
 }
 
 TEST(StringUtilTest, StartsWith) {
-  EXPECT_TRUE(StartsWithASCII("javascript:url", "javascript", true));
-  EXPECT_FALSE(StartsWithASCII("JavaScript:url", "javascript", true));
-  EXPECT_TRUE(StartsWithASCII("javascript:url", "javascript", false));
-  EXPECT_TRUE(StartsWithASCII("JavaScript:url", "javascript", false));
-  EXPECT_FALSE(StartsWithASCII("java", "javascript", true));
-  EXPECT_FALSE(StartsWithASCII("java", "javascript", false));
-  EXPECT_FALSE(StartsWithASCII(std::string(), "javascript", false));
-  EXPECT_FALSE(StartsWithASCII(std::string(), "javascript", true));
-  EXPECT_TRUE(StartsWithASCII("java", std::string(), false));
-  EXPECT_TRUE(StartsWithASCII("java", std::string(), true));
+  EXPECT_TRUE(StartsWith("javascript:url", "javascript",
+                         base::CompareCase::SENSITIVE));
+  EXPECT_FALSE(StartsWith("JavaScript:url", "javascript",
+                          base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(StartsWith("javascript:url", "javascript",
+                         base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(StartsWith("JavaScript:url", "javascript",
+                         base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(StartsWith("java", "javascript", base::CompareCase::SENSITIVE));
+  EXPECT_FALSE(StartsWith("java", "javascript",
+                          base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(StartsWith(std::string(), "javascript",
+                          base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(StartsWith(std::string(), "javascript",
+                          base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(StartsWith("java", std::string(),
+                         base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(StartsWith("java", std::string(), base::CompareCase::SENSITIVE));
 
   EXPECT_TRUE(StartsWith(ASCIIToUTF16("javascript:url"),
-                         ASCIIToUTF16("javascript"), true));
+                         ASCIIToUTF16("javascript"),
+                         base::CompareCase::SENSITIVE));
   EXPECT_FALSE(StartsWith(ASCIIToUTF16("JavaScript:url"),
-                          ASCIIToUTF16("javascript"), true));
+                          ASCIIToUTF16("javascript"),
+                          base::CompareCase::SENSITIVE));
   EXPECT_TRUE(StartsWith(ASCIIToUTF16("javascript:url"),
-                         ASCIIToUTF16("javascript"), false));
+                         ASCIIToUTF16("javascript"),
+                         base::CompareCase::INSENSITIVE_ASCII));
   EXPECT_TRUE(StartsWith(ASCIIToUTF16("JavaScript:url"),
-                         ASCIIToUTF16("javascript"), false));
-  EXPECT_FALSE(StartsWith(ASCIIToUTF16("java"),
-                          ASCIIToUTF16("javascript"), true));
-  EXPECT_FALSE(StartsWith(ASCIIToUTF16("java"),
-                          ASCIIToUTF16("javascript"), false));
-  EXPECT_FALSE(StartsWith(string16(), ASCIIToUTF16("javascript"), false));
-  EXPECT_FALSE(StartsWith(string16(), ASCIIToUTF16("javascript"), true));
-  EXPECT_TRUE(StartsWith(ASCIIToUTF16("java"), string16(), false));
-  EXPECT_TRUE(StartsWith(ASCIIToUTF16("java"), string16(), true));
+                         ASCIIToUTF16("javascript"),
+                         base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(StartsWith(ASCIIToUTF16("java"), ASCIIToUTF16("javascript"),
+                          base::CompareCase::SENSITIVE));
+  EXPECT_FALSE(StartsWith(ASCIIToUTF16("java"), ASCIIToUTF16("javascript"),
+                          base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(StartsWith(string16(), ASCIIToUTF16("javascript"),
+                          base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(StartsWith(string16(), ASCIIToUTF16("javascript"),
+                          base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(StartsWith(ASCIIToUTF16("java"), string16(),
+                         base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(StartsWith(ASCIIToUTF16("java"), string16(),
+                         base::CompareCase::SENSITIVE));
 }
 
 TEST(StringUtilTest, EndsWith) {
-  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.plugin"),
-                       ASCIIToUTF16(".plugin"), true));
-  EXPECT_FALSE(EndsWith(ASCIIToUTF16("Foo.Plugin"),
-                        ASCIIToUTF16(".plugin"), true));
-  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.plugin"),
-                       ASCIIToUTF16(".plugin"), false));
-  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.Plugin"),
-                       ASCIIToUTF16(".plugin"), false));
-  EXPECT_FALSE(EndsWith(ASCIIToUTF16(".plug"), ASCIIToUTF16(".plugin"), true));
-  EXPECT_FALSE(EndsWith(ASCIIToUTF16(".plug"), ASCIIToUTF16(".plugin"), false));
-  EXPECT_FALSE(EndsWith(ASCIIToUTF16("Foo.plugin Bar"),
-                        ASCIIToUTF16(".plugin"), true));
-  EXPECT_FALSE(EndsWith(ASCIIToUTF16("Foo.plugin Bar"),
-                        ASCIIToUTF16(".plugin"), false));
-  EXPECT_FALSE(EndsWith(string16(), ASCIIToUTF16(".plugin"), false));
-  EXPECT_FALSE(EndsWith(string16(), ASCIIToUTF16(".plugin"), true));
-  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.plugin"), string16(), false));
-  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.plugin"), string16(), true));
-  EXPECT_TRUE(EndsWith(ASCIIToUTF16(".plugin"),
-                       ASCIIToUTF16(".plugin"), false));
-  EXPECT_TRUE(EndsWith(ASCIIToUTF16(".plugin"), ASCIIToUTF16(".plugin"), true));
-  EXPECT_TRUE(EndsWith(string16(), string16(), false));
-  EXPECT_TRUE(EndsWith(string16(), string16(), true));
+  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.plugin"), ASCIIToUTF16(".plugin"),
+                       base::CompareCase::SENSITIVE));
+  EXPECT_FALSE(EndsWith(ASCIIToUTF16("Foo.Plugin"), ASCIIToUTF16(".plugin"),
+                        base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.plugin"), ASCIIToUTF16(".plugin"),
+                       base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.Plugin"), ASCIIToUTF16(".plugin"),
+                       base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(EndsWith(ASCIIToUTF16(".plug"), ASCIIToUTF16(".plugin"),
+                        base::CompareCase::SENSITIVE));
+  EXPECT_FALSE(EndsWith(ASCIIToUTF16(".plug"), ASCIIToUTF16(".plugin"),
+                        base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(EndsWith(ASCIIToUTF16("Foo.plugin Bar"), ASCIIToUTF16(".plugin"),
+                        base::CompareCase::SENSITIVE));
+  EXPECT_FALSE(EndsWith(ASCIIToUTF16("Foo.plugin Bar"), ASCIIToUTF16(".plugin"),
+                        base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(EndsWith(string16(), ASCIIToUTF16(".plugin"),
+                        base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(EndsWith(string16(), ASCIIToUTF16(".plugin"),
+                        base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.plugin"), string16(),
+                       base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(EndsWith(ASCIIToUTF16("Foo.plugin"), string16(),
+                       base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(EndsWith(ASCIIToUTF16(".plugin"), ASCIIToUTF16(".plugin"),
+                       base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(EndsWith(ASCIIToUTF16(".plugin"), ASCIIToUTF16(".plugin"),
+                       base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(
+      EndsWith(string16(), string16(), base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(EndsWith(string16(), string16(), base::CompareCase::SENSITIVE));
 }
 
 TEST(StringUtilTest, GetStringFWithOffsets) {
@@ -1054,6 +1060,46 @@ TEST(StringUtilTest, ContainsOnlyChars) {
   EXPECT_FALSE(ContainsOnlyChars(ASCIIToUTF16("a"), kWhitespaceUTF16));
   EXPECT_FALSE(ContainsOnlyChars(ASCIIToUTF16("\thello\r \n  "),
                                   kWhitespaceUTF16));
+}
+
+TEST(StringUtilTest, CompareCaseInsensitiveASCII) {
+  EXPECT_EQ(0, CompareCaseInsensitiveASCII("", ""));
+  EXPECT_EQ(0, CompareCaseInsensitiveASCII("Asdf", "aSDf"));
+
+  // Differing lengths.
+  EXPECT_EQ(-1, CompareCaseInsensitiveASCII("Asdf", "aSDfA"));
+  EXPECT_EQ(1, CompareCaseInsensitiveASCII("AsdfA", "aSDf"));
+
+  // Differing values.
+  EXPECT_EQ(-1, CompareCaseInsensitiveASCII("AsdfA", "aSDfb"));
+  EXPECT_EQ(1, CompareCaseInsensitiveASCII("Asdfb", "aSDfA"));
+}
+
+TEST(StringUtilTest, EqualsCaseInsensitiveASCII) {
+  EXPECT_TRUE(EqualsCaseInsensitiveASCII("", ""));
+  EXPECT_TRUE(EqualsCaseInsensitiveASCII("Asdf", "aSDF"));
+  EXPECT_FALSE(EqualsCaseInsensitiveASCII("bsdf", "aSDF"));
+  EXPECT_FALSE(EqualsCaseInsensitiveASCII("Asdf", "aSDFz"));
+}
+
+TEST(StringUtilTest, IsUnicodeWhitespace) {
+  // NOT unicode white space.
+  EXPECT_FALSE(IsUnicodeWhitespace(L'\0'));
+  EXPECT_FALSE(IsUnicodeWhitespace(L'A'));
+  EXPECT_FALSE(IsUnicodeWhitespace(L'0'));
+  EXPECT_FALSE(IsUnicodeWhitespace(L'.'));
+  EXPECT_FALSE(IsUnicodeWhitespace(L';'));
+  EXPECT_FALSE(IsUnicodeWhitespace(L'\x4100'));
+
+  // Actual unicode whitespace.
+  EXPECT_TRUE(IsUnicodeWhitespace(L' '));
+  EXPECT_TRUE(IsUnicodeWhitespace(L'\xa0'));
+  EXPECT_TRUE(IsUnicodeWhitespace(L'\x3000'));
+  EXPECT_TRUE(IsUnicodeWhitespace(L'\t'));
+  EXPECT_TRUE(IsUnicodeWhitespace(L'\r'));
+  EXPECT_TRUE(IsUnicodeWhitespace(L'\v'));
+  EXPECT_TRUE(IsUnicodeWhitespace(L'\f'));
+  EXPECT_TRUE(IsUnicodeWhitespace(L'\n'));
 }
 
 class WriteIntoTest : public testing::Test {

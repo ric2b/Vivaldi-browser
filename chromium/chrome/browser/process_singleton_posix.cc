@@ -52,14 +52,16 @@
 #include <set>
 #include <string>
 
+#include <stddef.h>
+
 #include "base/base_paths.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
@@ -77,6 +79,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -111,17 +114,6 @@ const int kMaxMessageLength = 32 * 1024;
 const int kMaxACKMessageLength = arraysize(kShutdownToken) - 1;
 
 const char kLockDelimiter = '-';
-
-// Set a file descriptor to be non-blocking.
-// Return 0 on success, -1 on failure.
-int SetNonBlocking(int fd) {
-  int flags = fcntl(fd, F_GETFL, 0);
-  if (-1 == flags)
-    return flags;
-  if (flags & O_NONBLOCK)
-    return 0;
-  return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
 
 // Set the close-on-exec bit on a file descriptor.
 // Returns 0 on success, -1 on failure.
@@ -232,9 +224,8 @@ int SetupSocketOnly() {
   int sock = socket(PF_UNIX, SOCK_STREAM, 0);
   PCHECK(sock >= 0) << "socket() failed";
 
-  int rv = SetNonBlocking(sock);
-  DCHECK_EQ(0, rv) << "Failed to make non-blocking socket.";
-  rv = SetCloseOnExec(sock);
+  DCHECK(base::SetNonBlocking(sock)) << "Failed to make non-blocking socket.";
+  int rv = SetCloseOnExec(sock);
   DCHECK_EQ(0, rv) << "Failed to set CLOEXEC on socket.";
 
   return sock;
@@ -479,7 +470,7 @@ class ProcessSingleton::LinuxWatcher
           ui_message_loop_(ui_message_loop),
           fd_(fd),
           bytes_read_(0) {
-      DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+      DCHECK_CURRENTLY_ON(BrowserThread::IO);
       // Wait for reads.
       base::MessageLoopForIO::current()->WatchFileDescriptor(
           fd, true, base::MessageLoopForIO::WATCH_READ, &fd_reader_, this);
@@ -503,7 +494,7 @@ class ProcessSingleton::LinuxWatcher
 
    private:
     void CleanupAndDeleteSelf() {
-      DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+      DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
       parent_->RemoveSocketReader(this);
       // We're deleted beyond this point.
@@ -527,7 +518,7 @@ class ProcessSingleton::LinuxWatcher
     // reads.
     size_t bytes_read_;
 
-    base::OneShotTimer<SocketReader> timer_;
+    base::OneShotTimer timer_;
 
     DISALLOW_COPY_AND_ASSIGN(SocketReader);
   };
@@ -566,7 +557,7 @@ class ProcessSingleton::LinuxWatcher
   friend class base::DeleteHelper<ProcessSingleton::LinuxWatcher>;
 
   ~LinuxWatcher() override {
-    DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
     STLDeleteElements(&readers_);
 
     base::MessageLoopForIO* ml = base::MessageLoopForIO::current();
@@ -591,7 +582,7 @@ class ProcessSingleton::LinuxWatcher
 };
 
 void ProcessSingleton::LinuxWatcher::OnFileCanReadWithoutBlocking(int fd) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // Accepting incoming client.
   sockaddr_un from;
   socklen_t from_len = sizeof(from);
@@ -601,8 +592,8 @@ void ProcessSingleton::LinuxWatcher::OnFileCanReadWithoutBlocking(int fd) {
     PLOG(ERROR) << "accept() failed";
     return;
   }
-  int rv = SetNonBlocking(connection_socket);
-  DCHECK_EQ(0, rv) << "Failed to make non-blocking socket.";
+  DCHECK(base::SetNonBlocking(connection_socket))
+      << "Failed to make non-blocking socket.";
   SocketReader* reader = new SocketReader(this,
                                           ui_message_loop_,
                                           connection_socket);
@@ -610,7 +601,7 @@ void ProcessSingleton::LinuxWatcher::OnFileCanReadWithoutBlocking(int fd) {
 }
 
 void ProcessSingleton::LinuxWatcher::StartListening(int socket) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // Watch for client connections on this socket.
   base::MessageLoopForIO* ml = base::MessageLoopForIO::current();
   ml->AddDestructionObserver(this);
@@ -639,7 +630,7 @@ void ProcessSingleton::LinuxWatcher::HandleMessage(
 }
 
 void ProcessSingleton::LinuxWatcher::RemoveSocketReader(SocketReader* reader) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(reader);
   readers_.erase(reader);
   delete reader;
@@ -651,7 +642,7 @@ void ProcessSingleton::LinuxWatcher::RemoveSocketReader(SocketReader* reader) {
 
 void ProcessSingleton::LinuxWatcher::SocketReader::OnFileCanReadWithoutBlocking(
     int fd) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK_EQ(fd, fd_);
   while (bytes_read_ < sizeof(buf_)) {
     ssize_t rv = HANDLE_EINTR(
@@ -684,8 +675,9 @@ void ProcessSingleton::LinuxWatcher::SocketReader::OnFileCanReadWithoutBlocking(
   }
 
   std::string str(buf_, bytes_read_);
-  std::vector<std::string> tokens;
-  base::SplitString(str, kTokenDelimiter, &tokens);
+  std::vector<std::string> tokens = base::SplitString(
+      str, std::string(1, kTokenDelimiter),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   if (tokens.size() < 3 || tokens[0] != kStartToken) {
     LOG(ERROR) << "Wrong message format: " << str;

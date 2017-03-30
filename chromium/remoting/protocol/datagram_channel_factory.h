@@ -8,17 +8,17 @@
 #include <string>
 
 #include "base/callback_forward.h"
-
-namespace net {
-class Socket;
-}  // namespace net
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 
 namespace remoting {
 namespace protocol {
 
+class P2PDatagramSocket;
+
 class DatagramChannelFactory {
  public:
-  typedef base::Callback<void(scoped_ptr<net::Socket>)>
+  typedef base::Callback<void(scoped_ptr<P2PDatagramSocket>)>
       ChannelCreatedCallback;
 
   DatagramChannelFactory() {}

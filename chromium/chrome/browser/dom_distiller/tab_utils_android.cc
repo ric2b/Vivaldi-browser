@@ -12,6 +12,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
+#include "components/dom_distiller/core/experiments.h"
+#include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
 #include "jni/DomDistillerTabUtils_jni.h"
@@ -21,17 +23,17 @@
 namespace android {
 
 void DistillCurrentPageAndView(JNIEnv* env,
-                               jclass clazz,
-                               jobject j_web_contents) {
+                               const JavaParamRef<jclass>& clazz,
+                               const JavaParamRef<jobject>& j_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(j_web_contents);
   ::DistillCurrentPageAndView(web_contents);
 }
 
 void DistillAndView(JNIEnv* env,
-                    jclass clazz,
-                    jobject j_source_web_contents,
-                    jobject j_destination_web_contents) {
+                    const JavaParamRef<jclass>& clazz,
+                    const JavaParamRef<jobject>& j_source_web_contents,
+                    const JavaParamRef<jobject>& j_destination_web_contents) {
   content::WebContents* source_web_contents =
       content::WebContents::FromJavaWebContents(j_source_web_contents);
   content::WebContents* destination_web_contents =
@@ -39,9 +41,10 @@ void DistillAndView(JNIEnv* env,
   ::DistillAndView(source_web_contents, destination_web_contents);
 }
 
-jstring GetFormattedUrlFromOriginalDistillerUrl(JNIEnv* env,
-                                                jclass clazz,
-                                                jstring j_url) {
+ScopedJavaLocalRef<jstring> GetFormattedUrlFromOriginalDistillerUrl(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& j_url) {
   GURL url(base::android::ConvertJavaStringToUTF8(env, j_url));
   Profile* profile = ProfileManager::GetLastUsedProfile();
   std::string languages;  // Empty if Profile cannot be retrieved.
@@ -56,14 +59,18 @@ jstring GetFormattedUrlFromOriginalDistillerUrl(JNIEnv* env,
   // and pastes it into another program, that program may think the URL ends at
   // the space.
   return base::android::ConvertUTF16ToJavaString(
-             env,
-             net::FormatUrl(url,
-                            languages,
-                            net::kFormatUrlOmitAll,
-                            net::UnescapeRule::NORMAL,
-                            NULL,
-                            NULL,
-                            NULL)).Release();
+      env, url_formatter::FormatUrl(
+               url, languages, url_formatter::kFormatUrlOmitAll,
+               net::UnescapeRule::NORMAL, nullptr, nullptr, nullptr));
+}
+
+// Returns true if the distiller experiment is set to use any heuristic other
+// than "NONE". This is used to prevent the Reader Mode panel from loading
+// when it would otherwise never be shown.
+jboolean IsDistillerHeuristicsEnabled(JNIEnv* env,
+                                    const JavaParamRef<jclass>& clazz) {
+  return dom_distiller::GetDistillerHeuristicsType()
+      != dom_distiller::DistillerHeuristicsType::NONE;
 }
 
 }  // namespace android

@@ -6,6 +6,7 @@
 
 #import <Cocoa/Cocoa.h>
 #include <errno.h>
+#include <stddef.h>
 #include <sys/xattr.h>
 
 #include "base/command_line.h"
@@ -13,14 +14,15 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #import "chrome/common/mac/app_mode_common.h"
+#include "components/version_info/version_info.h"
 #include "grit/theme_resources.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -70,6 +72,7 @@ scoped_ptr<web_app::ShortcutInfo> GetShortcutInfo() {
   info->profile_path = base::FilePath("user_data_dir").Append("Profile 1");
   info->profile_name = "profile name";
   info->version_for_display = "stable 1.0";
+  info->from_bookmark = false;
   return info;
 }
 
@@ -134,7 +137,7 @@ TEST_F(WebAppShortcutCreatorTest, CreateShortcuts) {
   EXPECT_NSEQ(base::SysUTF8ToNSString(info_->url.spec()),
               [plist objectForKey:app_mode::kCrAppModeShortcutURLKey]);
 
-  EXPECT_NSEQ(base::SysUTF8ToNSString(chrome::VersionInfo().Version()),
+  EXPECT_NSEQ(base::SysUTF8ToNSString(version_info::GetVersionNumber()),
               [plist objectForKey:app_mode::kCrBundleVersionKey]);
   EXPECT_NSEQ(base::SysUTF8ToNSString(info_->version_for_display),
               [plist objectForKey:app_mode::kCFBundleShortVersionStringKey]);
@@ -145,7 +148,8 @@ TEST_F(WebAppShortcutCreatorTest, CreateShortcuts) {
     if (!base::mac::ObjCCast<NSString>(value))
       continue;
 
-    EXPECT_EQ([value rangeOfString:@"@APP_"].location, NSNotFound)
+    EXPECT_EQ(static_cast<NSUInteger>(NSNotFound),
+              [value rangeOfString:@"@APP_"].location)
         << [key UTF8String] << ":" << [value UTF8String];
   }
 }
@@ -184,6 +188,34 @@ TEST_F(WebAppShortcutCreatorTest, UpdateShortcuts) {
 
   EXPECT_FALSE(shortcut_creator.UpdateShortcuts());
   EXPECT_FALSE(base::PathExists(shim_path_));
+  EXPECT_FALSE(base::PathExists(other_shim_path.Append("Contents")));
+}
+
+TEST_F(WebAppShortcutCreatorTest, UpdateBookmarkAppShortcut) {
+  base::ScopedTempDir other_folder_temp_dir;
+  EXPECT_TRUE(other_folder_temp_dir.CreateUniqueTempDir());
+  base::FilePath other_folder = other_folder_temp_dir.path();
+  base::FilePath other_shim_path = other_folder.Append(shim_base_name_);
+  info_->from_bookmark = true;
+
+  NiceMock<WebAppShortcutCreatorMock> shortcut_creator(app_data_dir_,
+                                                       info_.get());
+  EXPECT_CALL(shortcut_creator, GetApplicationsDirname())
+      .WillRepeatedly(Return(destination_dir_));
+
+  std::string expected_bundle_id = kFakeChromeBundleId;
+  expected_bundle_id += ".app.Profile-1-" + info_->extension_id;
+
+  EXPECT_CALL(shortcut_creator, GetAppBundleById(expected_bundle_id))
+      .WillOnce(Return(shim_path_));
+
+  EXPECT_TRUE(shortcut_creator.BuildShortcut(other_shim_path));
+
+  EXPECT_TRUE(base::DeleteFile(other_shim_path, true));
+
+  // The original shim should be recreated.
+  EXPECT_TRUE(shortcut_creator.UpdateShortcuts());
+  EXPECT_TRUE(base::PathExists(shim_path_));
   EXPECT_FALSE(base::PathExists(other_shim_path.Append("Contents")));
 }
 

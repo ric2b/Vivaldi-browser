@@ -4,6 +4,8 @@
 
 #include "chrome/browser/thumbnails/thumbnail_list_source.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/base64.h"
@@ -164,6 +166,6 @@ void ThumbnailListSource::OnMostVisitedURLsAvailable(
   }
   out.push_back(kHtmlFooter);
 
-  std::string out_html = JoinString(out, "");
+  std::string out_html = base::JoinString(out, base::StringPiece());
   callback.Run(base::RefCountedString::TakeString(&out_html));
 }

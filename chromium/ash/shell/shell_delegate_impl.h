@@ -9,47 +9,37 @@
 
 #include "ash/shell_delegate.h"
 #include "base/compiler_specific.h"
-
-namespace content {
-class BrowserContext;
-}
+#include "base/macros.h"
 
 namespace keyboard {
-class KeyboardControllerProxy;
+class KeyboardUI;
 }
 
 namespace ash {
 namespace shell {
 
 class ShelfDelegateImpl;
-class WindowWatcher;
 
 class ShellDelegateImpl : public ash::ShellDelegate {
  public:
   ShellDelegateImpl();
   ~ShellDelegateImpl() override;
 
-  void SetWatcher(WindowWatcher* watcher);
-  void set_browser_context(content::BrowserContext* browser_context) {
-    browser_context_ = browser_context;
-  }
-
   bool IsFirstRunAfterBoot() const override;
   bool IsIncognitoAllowed() const override;
   bool IsMultiProfilesEnabled() const override;
   bool IsRunningInForcedAppMode() const override;
-  bool IsMultiAccountEnabled() const override;
+  bool CanShowWindowForUser(aura::Window* window) const override;
   bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
   void PreShutdown() override;
   void Exit() override;
-  keyboard::KeyboardControllerProxy* CreateKeyboardControllerProxy() override;
+  keyboard::KeyboardUI* CreateKeyboardUI() override;
   void VirtualKeyboardActivated(bool activated) override;
   void AddVirtualKeyboardStateObserver(
       VirtualKeyboardStateObserver* observer) override;
   void RemoveVirtualKeyboardStateObserver(
       VirtualKeyboardStateObserver* observer) override;
-  content::BrowserContext* GetActiveBrowserContext() override;
   app_list::AppListViewDelegate* GetAppListViewDelegate() override;
   ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
   ash::SystemTrayDelegate* CreateSystemTrayDelegate() override;
@@ -63,13 +53,10 @@ class ShellDelegateImpl : public ash::ShellDelegate {
                                    ash::ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
+  gfx::Image GetDeprecatedAcceleratorImage() const override;
 
  private:
-  // Used to update Launcher. Owned by main.
-  WindowWatcher* watcher_;
-
   ShelfDelegateImpl* shelf_delegate_;
-  content::BrowserContext* browser_context_;
   scoped_ptr<app_list::AppListViewDelegate> app_list_view_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellDelegateImpl);

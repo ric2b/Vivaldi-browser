@@ -4,10 +4,13 @@
 
 #include "cc/raster/gpu_tile_task_worker_pool.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/playback/raster_source.h"
+#include "cc/playback/display_list_raster_source.h"
 #include "cc/raster/gpu_rasterizer.h"
 #include "cc/raster/raster_buffer.h"
 #include "cc/raster/scoped_gpu_raster.h"
@@ -34,22 +37,21 @@ class RasterBufferImpl : public RasterBuffer {
   }
 
   // Overridden from RasterBuffer:
-  void Playback(const RasterSource* raster_source,
+  void Playback(const DisplayListRasterSource* raster_source,
                 const gfx::Rect& raster_full_rect,
                 const gfx::Rect& raster_dirty_rect,
                 uint64_t new_content_id,
-                float scale) override {
+                float scale,
+                bool include_images) override {
     TRACE_EVENT0("cc", "RasterBufferImpl::Playback");
+    // GPU raster doesn't do low res tiles, so should always include images.
+    DCHECK(include_images);
     ContextProvider* context_provider = rasterizer_->resource_provider()
                                             ->output_surface()
                                             ->worker_context_provider();
+    DCHECK(context_provider);
 
-    // The context lock must be held while accessing the context on a
-    // worker thread.
-    base::AutoLock context_lock(*context_provider->GetLock());
-
-    // Allow this worker thread to bind to context_provider.
-    context_provider->DetachFromThread();
+    ContextProvider::ScopedContextLock scoped_context(context_provider);
 
     gfx::Rect playback_rect = raster_full_rect;
     if (resource_has_previous_content_) {
@@ -64,10 +66,7 @@ class RasterBufferImpl : public RasterBuffer {
                                  playback_rect, scale);
 
     // Barrier to sync worker context output to cc context.
-    context_provider->ContextGL()->OrderingBarrierCHROMIUM();
-
-    // Allow compositor thread to bind to context_provider.
-    context_provider->DetachFromThread();
+    scoped_context.ContextGL()->OrderingBarrierCHROMIUM();
   }
 
  private:
@@ -106,10 +105,7 @@ GpuTileTaskWorkerPool::GpuTileTaskWorkerPool(
       rasterizer_(new GpuRasterizer(context_provider,
                                     resource_provider,
                                     use_distance_field_text,
-                                    gpu_rasterization_msaa_sample_count)),
-      task_set_finished_weak_ptr_factory_(this),
-      weak_ptr_factory_(this) {
-}
+                                    gpu_rasterization_msaa_sample_count)) {}
 
 GpuTileTaskWorkerPool::~GpuTileTaskWorkerPool() {
   DCHECK_EQ(0u, completed_tasks_.size());
@@ -117,10 +113,6 @@ GpuTileTaskWorkerPool::~GpuTileTaskWorkerPool() {
 
 TileTaskRunner* GpuTileTaskWorkerPool::AsTileTaskRunner() {
   return this;
-}
-
-void GpuTileTaskWorkerPool::SetClient(TileTaskRunnerClient* client) {
-  client_ = client;
 }
 
 void GpuTileTaskWorkerPool::Shutdown() {
@@ -131,56 +123,10 @@ void GpuTileTaskWorkerPool::Shutdown() {
   task_graph_runner_->WaitForTasksToFinishRunning(namespace_token_);
 }
 
-void GpuTileTaskWorkerPool::ScheduleTasks(TileTaskQueue* queue) {
+void GpuTileTaskWorkerPool::ScheduleTasks(TaskGraph* graph) {
   TRACE_EVENT0("cc", "GpuTileTaskWorkerPool::ScheduleTasks");
 
-  // Mark all task sets as pending.
-  tasks_pending_.set();
-
-  size_t priority = kTileTaskPriorityBase;
-
-  graph_.Reset();
-
-  // Cancel existing OnTaskSetFinished callbacks.
-  task_set_finished_weak_ptr_factory_.InvalidateWeakPtrs();
-
-  scoped_refptr<TileTask> new_task_set_finished_tasks[kNumberOfTaskSets];
-
-  size_t task_count[kNumberOfTaskSets] = {0};
-
-  for (TaskSet task_set = 0; task_set < kNumberOfTaskSets; ++task_set) {
-    new_task_set_finished_tasks[task_set] = CreateTaskSetFinishedTask(
-        task_runner_.get(),
-        base::Bind(&GpuTileTaskWorkerPool::OnTaskSetFinished,
-                   task_set_finished_weak_ptr_factory_.GetWeakPtr(), task_set));
-  }
-
-  for (TileTaskQueue::Item::Vector::const_iterator it = queue->items.begin();
-       it != queue->items.end(); ++it) {
-    const TileTaskQueue::Item& item = *it;
-    RasterTask* task = item.task;
-    DCHECK(!task->HasCompleted());
-
-    for (TaskSet task_set = 0; task_set < kNumberOfTaskSets; ++task_set) {
-      if (!item.task_sets[task_set])
-        continue;
-
-      ++task_count[task_set];
-
-      graph_.edges.push_back(
-          TaskGraph::Edge(task, new_task_set_finished_tasks[task_set].get()));
-    }
-
-    InsertNodesForRasterTask(&graph_, task, task->dependencies(), priority++);
-  }
-
-  for (TaskSet task_set = 0; task_set < kNumberOfTaskSets; ++task_set) {
-    InsertNodeForTask(&graph_, new_task_set_finished_tasks[task_set].get(),
-                      kTaskSetFinishedTaskPriorityBase + task_set,
-                      task_count[task_set]);
-  }
-
-  ScheduleTasksOnOriginThread(this, &graph_);
+  ScheduleTasksOnOriginThread(this, graph);
 
   // Barrier to sync any new resources to the worker context.
   rasterizer_->resource_provider()
@@ -189,11 +135,7 @@ void GpuTileTaskWorkerPool::ScheduleTasks(TileTaskQueue* queue) {
       ->ContextGL()
       ->OrderingBarrierCHROMIUM();
 
-  task_graph_runner_->ScheduleTasks(namespace_token_, &graph_);
-
-  std::copy(new_task_set_finished_tasks,
-            new_task_set_finished_tasks + kNumberOfTaskSets,
-            task_set_finished_tasks_);
+  task_graph_runner_->ScheduleTasks(namespace_token_, graph);
 }
 
 void GpuTileTaskWorkerPool::CheckForCompletedTasks() {
@@ -205,24 +147,24 @@ void GpuTileTaskWorkerPool::CheckForCompletedTasks() {
   completed_tasks_.clear();
 }
 
-ResourceFormat GpuTileTaskWorkerPool::GetResourceFormat() const {
+ResourceFormat GpuTileTaskWorkerPool::GetResourceFormat(
+    bool must_support_alpha) const {
   return rasterizer_->resource_provider()->best_render_buffer_format();
 }
 
-bool GpuTileTaskWorkerPool::GetResourceRequiresSwizzle() const {
+bool GpuTileTaskWorkerPool::GetResourceRequiresSwizzle(
+    bool must_support_alpha) const {
   // This doesn't require a swizzle because we rasterize to the correct format.
   return false;
 }
 
 void GpuTileTaskWorkerPool::CompleteTasks(const Task::Vector& tasks) {
   for (auto& task : tasks) {
-    RasterTask* raster_task = static_cast<RasterTask*>(task.get());
+    TileTask* tile_task = static_cast<TileTask*>(task.get());
 
-    raster_task->WillComplete();
-    raster_task->CompleteOnOriginThread(this);
-    raster_task->DidComplete();
-
-    raster_task->RunReplyOnOriginThread();
+    tile_task->WillComplete();
+    tile_task->CompleteOnOriginThread(this);
+    tile_task->DidComplete();
   }
   completed_tasks_.clear();
 }
@@ -238,15 +180,6 @@ scoped_ptr<RasterBuffer> GpuTileTaskWorkerPool::AcquireBufferForRaster(
 void GpuTileTaskWorkerPool::ReleaseBufferForRaster(
     scoped_ptr<RasterBuffer> buffer) {
   // Nothing to do here. RasterBufferImpl destructor cleans up after itself.
-}
-
-void GpuTileTaskWorkerPool::OnTaskSetFinished(TaskSet task_set) {
-  TRACE_EVENT1("cc", "GpuTileTaskWorkerPool::OnTaskSetFinished", "task_set",
-               task_set);
-
-  DCHECK(tasks_pending_[task_set]);
-  tasks_pending_[task_set] = false;
-  client_->DidFinishRunningTileTasks(task_set);
 }
 
 }  // namespace cc

@@ -5,6 +5,7 @@
 #include "media/blink/webmediasource_impl.h"
 
 #include "base/guid.h"
+#include "media/base/mime_util.h"
 #include "media/blink/websourcebuffer_impl.h"
 #include "media/filters/chunk_demuxer.h"
 #include "third_party/WebKit/public/platform/WebCString.h"
@@ -24,10 +25,9 @@ STATIC_ASSERT_MATCHING_STATUS_ENUM(AddStatusNotSupported, kNotSupported);
 STATIC_ASSERT_MATCHING_STATUS_ENUM(AddStatusReachedIdLimit, kReachedIdLimit);
 #undef STATIC_ASSERT_MATCHING_STATUS_ENUM
 
-WebMediaSourceImpl::WebMediaSourceImpl(
-    ChunkDemuxer* demuxer, LogCB log_cb)
-    : demuxer_(demuxer),
-      log_cb_(log_cb) {
+WebMediaSourceImpl::WebMediaSourceImpl(ChunkDemuxer* demuxer,
+                                       const scoped_refptr<MediaLog>& media_log)
+    : demuxer_(demuxer), media_log_(media_log) {
   DCHECK(demuxer_);
 }
 
@@ -35,16 +35,16 @@ WebMediaSourceImpl::~WebMediaSourceImpl() {}
 
 WebMediaSource::AddStatus WebMediaSourceImpl::addSourceBuffer(
     const blink::WebString& type,
-    const blink::WebVector<blink::WebString>& codecs,
+    const blink::WebString& codecs,
     blink::WebSourceBuffer** source_buffer) {
   std::string id = base::GenerateGUID();
-  std::vector<std::string> new_codecs(codecs.size());
-  for (size_t i = 0; i < codecs.size(); ++i)
-    new_codecs[i] = codecs[i].utf8().data();
+
+  std::vector<std::string> parsed_codec_ids;
+  media::ParseCodecString(codecs.utf8().data(), &parsed_codec_ids, false);
 
   WebMediaSource::AddStatus result =
       static_cast<WebMediaSource::AddStatus>(
-          demuxer_->AddId(id, type.utf8().data(), new_codecs));
+          demuxer_->AddId(id, type.utf8().data(), parsed_codec_ids));
 
   if (result == WebMediaSource::AddStatusOk)
     *source_buffer = new WebSourceBufferImpl(id, demuxer_);

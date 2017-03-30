@@ -5,25 +5,30 @@
 #ifndef CHROME_BROWSER_PROFILES_PROFILE_IO_DATA_H_
 #define CHROME_BROWSER_PROFILES_PROFILE_IO_DATA_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_member.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
+#include "chrome/browser/devtools/devtools_network_controller_handle.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/storage_partition_descriptor.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
+#include "net/cert/ct_verifier.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
@@ -34,11 +39,14 @@
 class ChromeHttpUserAgentSettings;
 class ChromeNetworkDelegate;
 class ChromeURLRequestContextGetter;
-class DevToolsNetworkController;
 class HostContentSettingsMap;
 class MediaDeviceIDSalt;
 class ProtocolHandlerRegistry;
 class SupervisedUserURLFilter;
+
+namespace chromeos {
+class CertificateProvider;
+}
 
 namespace chrome_browser_net {
 class ResourcePrefetchPredictorObserver;
@@ -58,10 +66,10 @@ class InfoMap;
 }
 
 namespace net {
+class CertificateReportSender;
 class CertVerifier;
 class ChannelIDService;
 class CookieStore;
-class FraudulentCertificateReporter;
 class FtpTransactionFactory;
 class HttpServerProperties;
 class HttpTransactionFactory;
@@ -107,6 +115,9 @@ class ProfileIOData {
   static void InstallProtocolHandlers(
       net::URLRequestJobFactoryImpl* job_factory,
       content::ProtocolHandlerMap* protocol_handlers);
+
+  // Sets a global CertVerifier to use when initializing all profiles.
+  static void SetCertVerifierForTesting(net::CertVerifier* cert_verifier);
 
   // Called by Profile.
   content::ResourceContext* GetResourceContext() const;
@@ -170,8 +181,8 @@ class ProfileIOData {
 
   content::ResourceContext::SaltCallback GetMediaDeviceIDSalt() const;
 
-  DevToolsNetworkController* network_controller() const {
-    return network_controller_.get();
+  DevToolsNetworkControllerHandle* network_controller_handle() const {
+    return &network_controller_handle_;
   }
 
   net::TransportSecurityState* transport_security_state() const {
@@ -280,7 +291,7 @@ class ProfileIOData {
     scoped_refptr<content_settings::CookieSettings> cookie_settings;
     scoped_refptr<HostContentSettingsMap> host_content_settings_map;
     scoped_refptr<net::SSLConfigService> ssl_config_service;
-    scoped_refptr<net::CookieMonster::Delegate> cookie_monster_delegate;
+    scoped_refptr<net::CookieMonsterDelegate> cookie_monster_delegate;
 #if defined(ENABLE_EXTENSIONS)
     scoped_refptr<extensions::InfoMap> extension_info_map;
 #endif
@@ -310,6 +321,7 @@ class ProfileIOData {
 #if defined(OS_CHROMEOS)
     std::string username_hash;
     bool use_system_key_slot;
+    scoped_ptr<chromeos::CertificateProvider> certificate_provider;
 #endif
 
     // The profile this struct was populated from. It's passed as a void* to
@@ -319,8 +331,6 @@ class ProfileIOData {
   };
 
   explicit ProfileIOData(Profile::ProfileType profile_type);
-
-  static std::string GetSSLSessionCacheShard();
 
   void InitializeOnUIThread(Profile* profile);
   void ApplyProfileParamsToContext(net::URLRequestContext* context) const;
@@ -353,10 +363,6 @@ class ProfileIOData {
       scoped_ptr<data_reduction_proxy::DataReductionProxyIOData>
           data_reduction_proxy_io_data) const;
 
-  net::FraudulentCertificateReporter* fraudulent_certificate_reporter() const {
-    return fraudulent_certificate_reporter_.get();
-  }
-
   net::ProxyService* proxy_service() const {
     return proxy_service_.get();
   }
@@ -379,15 +385,18 @@ class ProfileIOData {
   // URLRequests may be accessing.
   void DestroyResourceContext();
 
-  // Creates network session and main network transaction factory.
+  scoped_ptr<net::HttpNetworkSession> CreateHttpNetworkSession(
+      const ProfileParams& profile_params) const;
+
+  // Creates main network transaction factory.
   scoped_ptr<net::HttpCache> CreateMainHttpFactory(
-      const ProfileParams* profile_params,
-      net::HttpCache::BackendFactory* main_backend) const;
+      net::HttpNetworkSession* session,
+      scoped_ptr<net::HttpCache::BackendFactory> main_backend) const;
 
   // Creates network transaction factory.
   scoped_ptr<net::HttpCache> CreateHttpFactory(
       net::HttpNetworkSession* shared_session,
-      net::HttpCache::BackendFactory* backend) const;
+      scoped_ptr<net::HttpCache::BackendFactory> backend) const;
 
   void SetCookieSettingsForTesting(
       content_settings::CookieSettings* cookie_settings);
@@ -403,7 +412,7 @@ class ProfileIOData {
     net::URLRequestContext* GetRequestContext() override;
     scoped_ptr<net::ClientCertStore> CreateClientCertStore() override;
     void CreateKeygenHandler(
-        uint32 key_size_in_bits,
+        uint32_t key_size_in_bits,
         const std::string& challenge_string,
         const GURL& url,
         const base::Callback<void(scoped_ptr<net::KeygenHandler>)>& callback)
@@ -516,14 +525,7 @@ class ProfileIOData {
   mutable BooleanPrefMember quick_check_enabled_;
   mutable IntegerPrefMember incognito_availibility_pref_;
 
-  // The state of metrics reporting in the browser that this profile runs on.
-  // Unfortunately, since ChromeOS has a separate representation of this state,
-  // we need to make one available based on the platform.
-#if defined(OS_CHROMEOS)
-  bool enable_metrics_;
-#else
   BooleanPrefMember enable_metrics_;
-#endif
 
 #if defined(ENABLE_CONFIGURATION_POLICY)
   // Pointed to by NetworkDelegate.
@@ -540,23 +542,24 @@ class ProfileIOData {
   mutable scoped_ptr<data_reduction_proxy::DataReductionProxyIOData>
       data_reduction_proxy_io_data_;
 
-  mutable scoped_ptr<net::FraudulentCertificateReporter>
-      fraudulent_certificate_reporter_;
   mutable scoped_ptr<net::ProxyService> proxy_service_;
   mutable scoped_ptr<net::TransportSecurityState> transport_security_state_;
+  mutable scoped_ptr<net::CTVerifier> cert_transparency_verifier_;
   mutable scoped_ptr<net::HttpServerProperties>
       http_server_properties_;
 #if defined(OS_CHROMEOS)
   // Set to |cert_verifier_| if it references a PolicyCertVerifier. In that
   // case, the verifier is owned by  |cert_verifier_|. Otherwise, set to NULL.
-  mutable policy::PolicyCertVerifier* policy_cert_verifier_;
   mutable scoped_ptr<net::CertVerifier> cert_verifier_;
+  mutable policy::PolicyCertVerifier* policy_cert_verifier_;
   mutable std::string username_hash_;
   mutable bool use_system_key_slot_;
+  mutable scoped_ptr<chromeos::CertificateProvider> certificate_provider_;
 #endif
 
   mutable scoped_ptr<net::TransportSecurityPersister>
       transport_security_persister_;
+  mutable scoped_ptr<net::CertificateReportSender> certificate_report_sender_;
 
   // These are only valid in between LazyInitialize() and their accessor being
   // called.
@@ -589,7 +592,7 @@ class ProfileIOData {
       extension_throttle_manager_;
 #endif
 
-  mutable scoped_ptr<DevToolsNetworkController> network_controller_;
+  mutable DevToolsNetworkControllerHandle network_controller_handle_;
 
   // TODO(jhawkins): Remove once crbug.com/102004 is fixed.
   bool initialized_on_UI_thread_;

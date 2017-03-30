@@ -12,6 +12,10 @@
 #include "content/common/view_messages.h"
 #include "content/public/renderer/render_thread.h"
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "media/base/pipeline_stats.h"
+#endif
+
 namespace {
 
 // Print an event to the chromium log.
@@ -40,6 +44,9 @@ RenderMediaLog::RenderMediaLog()
 }
 
 void RenderMediaLog::AddEvent(scoped_ptr<media::MediaLogEvent> event) {
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  media::pipeline_stats::SerializeInto(&event->params);
+#endif
   // Always post to preserve the correct order of events.
   // TODO(xhwang): Consider using sorted containers to keep the order and
   // avoid extra posting.

@@ -4,6 +4,8 @@
 
 #include "extensions/common/manifest_handlers/sandboxed_page_info.h"
 
+#include <stddef.h>
+
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -22,7 +24,7 @@ namespace keys = extensions::manifest_keys;
 namespace errors = manifest_errors;
 
 const char kDefaultSandboxedPageContentSecurityPolicy[] =
-    "sandbox allow-scripts allow-forms allow-popups";
+    "sandbox allow-scripts allow-forms allow-popups allow-modals";
 
 static base::LazyInstance<SandboxedPageInfo> g_empty_sandboxed_info =
     LAZY_INSTANCE_INITIALIZER;
@@ -74,7 +76,7 @@ bool SandboxedPageHandler::Parse(Extension* extension, base::string16* error) {
     std::string relative_path;
     if (!list_value->GetString(i, &relative_path)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          errors::kInvalidSandboxedPage, base::IntToString(i));
+          errors::kInvalidSandboxedPage, base::SizeTToString(i));
       return false;
     }
     URLPattern pattern(URLPattern::SCHEME_EXTENSION);

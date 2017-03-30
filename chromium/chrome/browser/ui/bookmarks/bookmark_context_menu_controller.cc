@@ -4,27 +4,30 @@
 
 #include "chrome/browser/ui/bookmarks/bookmark_context_menu_controller.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client_factory.h"
+#include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
+#include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/user_metrics.h"
@@ -50,7 +53,8 @@ BookmarkContextMenuController::BookmarkContextMenuController(
       navigator_(navigator),
       parent_(parent),
       selection_(selection),
-      model_(BookmarkModelFactory::GetForProfile(profile)) {
+      model_(BookmarkModelFactory::GetForProfile(profile)),
+      weak_factory_(this) {
   DCHECK(profile_);
   DCHECK(model_->loaded());
   menu_model_.reset(new ui::SimpleMenuModel(this));
@@ -135,6 +139,8 @@ void BookmarkContextMenuController::AddCheckboxItem(int id,
 void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
   if (delegate_)
     delegate_->WillExecuteCommand(id, selection_);
+
+  base::WeakPtr<BookmarkContextMenuController> ref(weak_factory_.GetWeakPtr());
 
   switch (id) {
     case IDC_BOOKMARK_BAR_OPEN_ALL:
@@ -298,6 +304,10 @@ void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
       NOTREACHED();
   }
 
+  // It's possible executing the command resulted in deleting |this|.
+  if (!ref)
+    return;
+
   if (delegate_)
     delegate_->DidExecuteCommand(id);
 }
@@ -320,10 +330,10 @@ base::string16 BookmarkContextMenuController::GetLabelForCommandId(
         undo_manager()->GetRedoLabel();
   }
   if (command_id == IDC_BOOKMARK_BAR_SHOW_MANAGED_BOOKMARKS) {
-    ChromeBookmarkClient* client =
-        ChromeBookmarkClientFactory::GetForProfile(profile_);
+    bookmarks::ManagedBookmarkService* managed =
+        ManagedBookmarkServiceFactory::GetForProfile(profile_);
     return l10n_util::GetStringFUTF16(IDS_BOOKMARK_BAR_SHOW_MANAGED_BOOKMARKS,
-                                      client->managed_node()->GetTitle());
+                                      managed->managed_node()->GetTitle());
   }
 
   NOTREACHED();
@@ -417,9 +427,9 @@ bool BookmarkContextMenuController::IsCommandIdVisible(int command_id) const {
   if (command_id == IDC_BOOKMARK_BAR_SHOW_MANAGED_BOOKMARKS) {
     // The option to hide the Managed Bookmarks folder is only available if
     // there are any managed bookmarks configured at all.
-    ChromeBookmarkClient* client =
-        ChromeBookmarkClientFactory::GetForProfile(profile_);
-    return !client->managed_node()->empty();
+    bookmarks::ManagedBookmarkService* managed =
+        ManagedBookmarkServiceFactory::GetForProfile(profile_);
+    return !managed->managed_node()->empty();
   }
 
   return true;

@@ -7,10 +7,9 @@
 
 #include <gtk/gtk.h>
 
-#include "chrome/browser/ui/libgtk2ui/owned_widget_gtk2.h"
+#include "base/macros.h"
 #include "ui/native_theme/native_theme_base.h"
 
-typedef struct _GdkColor GdkColor;
 
 namespace libgtk2ui {
 
@@ -22,14 +21,6 @@ class NativeThemeGtk2 : public ui::NativeThemeBase {
   static NativeThemeGtk2* instance();
 
   // Overridden from ui::NativeThemeBase:
-  gfx::Size GetPartSize(Part part,
-                        State state,
-                        const ExtraParams& extra) const override;
-  void Paint(SkCanvas* canvas,
-             Part part,
-             State state,
-             const gfx::Rect& rect,
-             const ExtraParams& extra) const override;
   SkColor GetSystemColor(ColorId color_id) const override;
   void PaintMenuPopupBackground(
       SkCanvas* canvas,
@@ -41,37 +32,25 @@ class NativeThemeGtk2 : public ui::NativeThemeBase {
       const gfx::Rect& rect,
       const MenuListExtraParams& menu_list) const override;
 
+  // Gets a ChromeGtkFrame theme color; returns true on success. Always returns
+  // false in GTK3.
+  bool GetChromeStyleColor(const char* style_property,
+                           SkColor* ret_color) const;
+
+  // Returns various widgets for theming use.
+  GtkWidget* GetWindow() const;
+  GtkWidget* GetEntry() const;
+  GtkWidget* GetLabel() const;
+  GtkWidget* GetButton() const;
+  GtkWidget* GetBlueButton() const;
+  GtkWidget* GetTree() const;
+  GtkWidget* GetTooltip() const;
+  GtkWidget* GetMenu() const;
+  GtkWidget* GetMenuItem() const;
+
  private:
   NativeThemeGtk2();
   ~NativeThemeGtk2() override;
-
-  // Implementation of GetSystemColor.
-  GdkColor GetSystemGdkColor(ColorId color_id) const;
-
-  // Returns styles associated with various widget types.
-  GtkWidget* GetRealizedWindow() const;
-  GtkStyle* GetWindowStyle() const;
-  GtkStyle* GetEntryStyle() const;
-  GtkStyle* GetLabelStyle() const;
-  GtkStyle* GetButtonStyle() const;
-  GtkStyle* GetTreeStyle() const;
-  GtkStyle* GetTooltipStyle() const;
-  GtkStyle* GetMenuStyle() const;
-  GtkStyle* GetMenuItemStyle() const;
-
-  void PaintComboboxArrow(SkCanvas* canvas,
-                          GtkStateType state,
-                          const gfx::Rect& rect) const;
-
-  mutable GtkWidget* fake_window_;
-  mutable GtkWidget* fake_tooltip_;
-  mutable OwnedWidgetGtk fake_entry_;
-  mutable OwnedWidgetGtk fake_label_;
-  mutable OwnedWidgetGtk fake_button_;
-  mutable OwnedWidgetGtk fake_tree_;
-
-  mutable OwnedWidgetGtk fake_menu_;
-  mutable GtkWidget* fake_menu_item_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeThemeGtk2);
 };

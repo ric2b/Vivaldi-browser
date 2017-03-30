@@ -5,10 +5,13 @@
 #ifndef COMPONENTS_POLICY_CORE_COMMON_POLICY_MAP_H_
 #define COMPONENTS_POLICY_CORE_COMMON_POLICY_MAP_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "components/policy/core/common/external_data_fetcher.h"
@@ -27,6 +30,9 @@ class POLICY_EXPORT PolicyMap {
     PolicyScope scope;
     base::Value* value;
     ExternalDataFetcher* external_data_fetcher;
+
+    // For debugging and displaying only. Set by provider delivering the policy.
+    PolicySource source;
 
     Entry();
 
@@ -63,6 +69,7 @@ class POLICY_EXPORT PolicyMap {
   void Set(const std::string& policy,
            PolicyLevel level,
            PolicyScope scope,
+           PolicySource source,
            base::Value* value,
            ExternalDataFetcher* external_data_fetcher);
 
@@ -85,11 +92,12 @@ class POLICY_EXPORT PolicyMap {
   void MergeFrom(const PolicyMap& other);
 
   // Loads the values in |policies| into this PolicyMap. All policies loaded
-  // will have |level| and |scope| in their entries. Existing entries are
-  // replaced.
+  // will have |level|, |scope| and |source| in their entries. Existing entries
+  // are replaced.
   void LoadFrom(const base::DictionaryValue* policies,
                 PolicyLevel level,
-                PolicyScope scope);
+                PolicyScope scope,
+                PolicySource source);
 
   // Compares this value map against |other| and stores all key names that have
   // different values or reference different external data in |differing_keys|.

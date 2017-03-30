@@ -32,6 +32,7 @@ import android.support.v7.media.MediaRouter.RouteInfo;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.BaseChromiumApplication;
 import org.chromium.base.CommandLine;
+import org.chromium.base.test.shadows.ShadowMultiDex;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.media.remote.MediaRouteController.MediaStateListener;
 import org.chromium.chrome.browser.media.remote.MediaRouteController.UiListener;
@@ -51,8 +52,8 @@ import org.robolectric.internal.ReflectionHelpers;
 
 /** Tests for {@link AbstractMediaRouteController}. */
 @RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, shadows = AbstractMediaRouteControllerTest.ShadowMediaRouter.class,
-        application = BaseChromiumApplication.class)
+@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
+        shadows = {AbstractMediaRouteControllerTest.ShadowMediaRouter.class, ShadowMultiDex.class})
 public class AbstractMediaRouteControllerTest {
 
     /** Reset the environment before each test. */
@@ -99,13 +100,13 @@ public class AbstractMediaRouteControllerTest {
         mediaRouteCtrl.setPlayerStateForMediaItemState(MediaItemStatus.PLAYBACK_STATE_INVALIDATED);
         assertFalse(mediaRouteCtrl.isPlaying());
 
-        doReturn(0).when(mediaRouteCtrl).getPosition();
-        doReturn(5000).when(mediaRouteCtrl).getDuration();
+        doReturn(0L).when(mediaRouteCtrl).getPosition();
+        doReturn(5000L).when(mediaRouteCtrl).getDuration();
         mediaRouteCtrl.setPlayerStateForMediaItemState(MediaItemStatus.PLAYBACK_STATE_PAUSED);
         assertFalse(mediaRouteCtrl.isPlaying());
 
-        doReturn(5000).when(mediaRouteCtrl).getPosition();
-        doReturn(5000).when(mediaRouteCtrl).getDuration();
+        doReturn(5000L).when(mediaRouteCtrl).getPosition();
+        doReturn(5000L).when(mediaRouteCtrl).getDuration();
         mediaRouteCtrl.setPlayerStateForMediaItemState(MediaItemStatus.PLAYBACK_STATE_PAUSED);
         assertFalse(mediaRouteCtrl.isPlaying());
 
@@ -145,13 +146,13 @@ public class AbstractMediaRouteControllerTest {
         mediaRouteCtrl.setPlayerStateForMediaItemState(MediaItemStatus.PLAYBACK_STATE_INVALIDATED);
         assertFalse(mediaRouteCtrl.isBeingCast());
 
-        doReturn(0).when(mediaRouteCtrl).getPosition();
-        doReturn(5000).when(mediaRouteCtrl).getDuration();
+        doReturn(0L).when(mediaRouteCtrl).getPosition();
+        doReturn(5000L).when(mediaRouteCtrl).getDuration();
         mediaRouteCtrl.setPlayerStateForMediaItemState(MediaItemStatus.PLAYBACK_STATE_PAUSED);
         assertTrue(mediaRouteCtrl.isBeingCast());
 
-        doReturn(5000).when(mediaRouteCtrl).getPosition();
-        doReturn(5000).when(mediaRouteCtrl).getDuration();
+        doReturn(5000L).when(mediaRouteCtrl).getPosition();
+        doReturn(5000L).when(mediaRouteCtrl).getDuration();
         mediaRouteCtrl.setPlayerStateForMediaItemState(MediaItemStatus.PLAYBACK_STATE_PAUSED);
         assertFalse(mediaRouteCtrl.isBeingCast());
 
@@ -448,17 +449,17 @@ public class AbstractMediaRouteControllerTest {
         }
 
         @Override
-        public int getPosition() {
+        public long getPosition() {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public int getDuration() {
+        public long getDuration() {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public void seekTo(int msec) {
+        public void seekTo(long msec) {
             throw new UnsupportedOperationException();
         }
 
@@ -473,7 +474,8 @@ public class AbstractMediaRouteControllerTest {
         }
 
         @Override
-        protected void onRouteSelectedEvent(MediaRouter router, RouteInfo route) {
+        public void onRouteSelected(MediaStateListener player, MediaRouter router,
+                RouteInfo route) {
             throw new UnsupportedOperationException();
         }
 

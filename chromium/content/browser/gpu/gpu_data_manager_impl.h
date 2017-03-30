@@ -5,12 +5,15 @@
 #ifndef CONTENT_BROWSER_GPU_GPU_DATA_MANAGER_IMPL_H_
 #define CONTENT_BROWSER_GPU_GPU_DATA_MANAGER_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/gtest_prod_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/process/kill.h"
@@ -154,17 +157,17 @@ class CONTENT_EXPORT GpuDataManagerImpl
   // Note that the unblocking API must be part of the content API
   // because it is called from Chrome side code.
   void BlockDomainFrom3DAPIs(const GURL& url, DomainGuilt guilt);
-  bool Are3DAPIsBlocked(const GURL& url,
+  bool Are3DAPIsBlocked(const GURL& top_origin_url,
                         int render_process_id,
-                        int render_view_id,
+                        int render_frame_id,
                         ThreeDAPIType requester);
 
   // Disables domain blocking for 3D APIs. For use only in tests.
   void DisableDomainBlockingFor3DAPIsForTesting();
 
-  void Notify3DAPIBlocked(const GURL& url,
+  void Notify3DAPIBlocked(const GURL& top_origin_url,
                           int render_process_id,
-                          int render_view_id,
+                          int render_frame_id,
                           ThreeDAPIType requester);
 
   // Get number of features being blacklisted.
@@ -175,7 +178,7 @@ class CONTENT_EXPORT GpuDataManagerImpl
 
   // Set the active gpu.
   // Return true if it's a different GPU from the previous active one.
-  bool UpdateActiveGpu(uint32 vendor_id, uint32 device_id);
+  bool UpdateActiveGpu(uint32_t vendor_id, uint32_t device_id);
 
   // Called when GPU process initialization failed.
   void OnGpuProcessInitFailure();
@@ -185,7 +188,7 @@ class CONTENT_EXPORT GpuDataManagerImpl
  private:
   friend class GpuDataManagerImplPrivate;
   friend class GpuDataManagerImplPrivateTest;
-  friend struct DefaultSingletonTraits<GpuDataManagerImpl>;
+  friend struct base::DefaultSingletonTraits<GpuDataManagerImpl>;
 
   // It's similar to AutoUnlock, but we want to make it a no-op
   // if the owner GpuDataManagerImpl is null.

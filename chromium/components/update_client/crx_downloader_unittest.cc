@@ -11,6 +11,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/update_client/crx_downloader.h"
 #include "net/base/net_errors.h"
 #include "net/url_request/test_url_request_interceptor.h"
@@ -116,8 +117,8 @@ void CrxDownloaderTest::SetUp() {
   // Do not use the background downloader in these tests.
   crx_downloader_.reset(
       CrxDownloader::Create(false, context_.get(),
-                            base::ThreadTaskRunnerHandle::Get(),
-                            NULL).release());
+                            base::ThreadTaskRunnerHandle::Get())
+          .release());
   crx_downloader_->set_progress_callback(progress_callback_);
 
   get_interceptor_.reset(

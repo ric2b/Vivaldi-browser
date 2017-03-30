@@ -31,13 +31,16 @@ InterstitialPageDelegateAndroid::~InterstitialPageDelegateAndroid() {
     Java_InterstitialPageDelegateAndroid_onNativeDestroyed(env, obj.obj());
 }
 
-void InterstitialPageDelegateAndroid::Proceed(JNIEnv* env, jobject obj) {
+void InterstitialPageDelegateAndroid::Proceed(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (page_)
     page_->Proceed();
 }
 
-void InterstitialPageDelegateAndroid::DontProceed(JNIEnv* env,
-                                                  jobject obj) {
+void InterstitialPageDelegateAndroid::DontProceed(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (page_)
     page_->DontProceed();
 }
@@ -84,7 +87,9 @@ bool InterstitialPageDelegateAndroid
   return RegisterNativesImpl(env);
 }
 
-static jlong Init(JNIEnv* env, jobject obj, jstring html_content) {
+static jlong Init(JNIEnv* env,
+                  const JavaParamRef<jobject>& obj,
+                  const JavaParamRef<jstring>& html_content) {
   InterstitialPageDelegateAndroid* delegate =
       new InterstitialPageDelegateAndroid(
           env, obj, base::android::ConvertJavaStringToUTF8(env, html_content));

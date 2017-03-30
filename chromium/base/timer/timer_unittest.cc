@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::TimeDelta;
@@ -51,17 +55,15 @@ class OneShotTimerTester {
   }
 
   bool* did_run_;
-  base::OneShotTimer<OneShotTimerTester> timer_;
+  base::OneShotTimer timer_;
   const unsigned delay_ms_;
   bool quit_message_loop_;
 };
 
 class OneShotSelfDeletingTimerTester {
  public:
-  explicit OneShotSelfDeletingTimerTester(bool* did_run) :
-      did_run_(did_run),
-      timer_(new base::OneShotTimer<OneShotSelfDeletingTimerTester>()) {
-  }
+  explicit OneShotSelfDeletingTimerTester(bool* did_run)
+      : did_run_(did_run), timer_(new base::OneShotTimer()) {}
 
   void Start() {
     timer_->Start(FROM_HERE, TimeDelta::FromMilliseconds(10), this,
@@ -76,7 +78,7 @@ class OneShotSelfDeletingTimerTester {
   }
 
   bool* did_run_;
-  scoped_ptr<base::OneShotTimer<OneShotSelfDeletingTimerTester> > timer_;
+  scoped_ptr<base::OneShotTimer> timer_;
 };
 
 class RepeatingTimerTester {
@@ -101,7 +103,7 @@ class RepeatingTimerTester {
   bool* did_run_;
   int counter_;
   TimeDelta delay_;
-  base::RepeatingTimer<RepeatingTimerTester> timer_;
+  base::RepeatingTimer timer_;
 };
 
 void RunTest_OneShotTimer(base::MessageLoop::Type message_loop_type) {
@@ -205,8 +207,8 @@ void RunTest_DelayTimer_NoCall(base::MessageLoop::Type message_loop_type) {
 
   // If Delay is never called, the timer shouldn't go off.
   DelayTimerTarget target;
-  base::DelayTimer<DelayTimerTarget> timer(FROM_HERE,
-      TimeDelta::FromMilliseconds(1), &target, &DelayTimerTarget::Signal);
+  base::DelayTimer timer(FROM_HERE, TimeDelta::FromMilliseconds(1), &target,
+                         &DelayTimerTarget::Signal);
 
   bool did_run = false;
   OneShotTimerTester tester(&did_run);
@@ -220,8 +222,8 @@ void RunTest_DelayTimer_OneCall(base::MessageLoop::Type message_loop_type) {
   base::MessageLoop loop(message_loop_type);
 
   DelayTimerTarget target;
-  base::DelayTimer<DelayTimerTarget> timer(FROM_HERE,
-      TimeDelta::FromMilliseconds(1), &target, &DelayTimerTarget::Signal);
+  base::DelayTimer timer(FROM_HERE, TimeDelta::FromMilliseconds(1), &target,
+                         &DelayTimerTarget::Signal);
   timer.Reset();
 
   bool did_run = false;
@@ -233,11 +235,8 @@ void RunTest_DelayTimer_OneCall(base::MessageLoop::Type message_loop_type) {
 }
 
 struct ResetHelper {
-  ResetHelper(base::DelayTimer<DelayTimerTarget>* timer,
-              DelayTimerTarget* target)
-      : timer_(timer),
-        target_(target) {
-  }
+  ResetHelper(base::DelayTimer* timer, DelayTimerTarget* target)
+      : timer_(timer), target_(target) {}
 
   void Reset() {
     ASSERT_FALSE(target_->signaled());
@@ -245,8 +244,8 @@ struct ResetHelper {
   }
 
  private:
-  base::DelayTimer<DelayTimerTarget> *const timer_;
-  DelayTimerTarget *const target_;
+  base::DelayTimer* const timer_;
+  DelayTimerTarget* const target_;
 };
 
 void RunTest_DelayTimer_Reset(base::MessageLoop::Type message_loop_type) {
@@ -254,13 +253,13 @@ void RunTest_DelayTimer_Reset(base::MessageLoop::Type message_loop_type) {
 
   // If Delay is never called, the timer shouldn't go off.
   DelayTimerTarget target;
-  base::DelayTimer<DelayTimerTarget> timer(FROM_HERE,
-      TimeDelta::FromMilliseconds(50), &target, &DelayTimerTarget::Signal);
+  base::DelayTimer timer(FROM_HERE, TimeDelta::FromMilliseconds(50), &target,
+                         &DelayTimerTarget::Signal);
   timer.Reset();
 
   ResetHelper reset_helper(&timer, &target);
 
-  base::OneShotTimer<ResetHelper> timers[20];
+  base::OneShotTimer timers[20];
   for (size_t i = 0; i < arraysize(timers); ++i) {
     timers[i].Start(FROM_HERE, TimeDelta::FromMilliseconds(i * 10),
                     &reset_helper, &ResetHelper::Reset);
@@ -288,9 +287,8 @@ void RunTest_DelayTimer_Deleted(base::MessageLoop::Type message_loop_type) {
   DelayTimerFatalTarget target;
 
   {
-    base::DelayTimer<DelayTimerFatalTarget> timer(
-        FROM_HERE, TimeDelta::FromMilliseconds(50), &target,
-        &DelayTimerFatalTarget::Signal);
+    base::DelayTimer timer(FROM_HERE, TimeDelta::FromMilliseconds(50), &target,
+                           &DelayTimerFatalTarget::Signal);
     timer.Reset();
   }
 

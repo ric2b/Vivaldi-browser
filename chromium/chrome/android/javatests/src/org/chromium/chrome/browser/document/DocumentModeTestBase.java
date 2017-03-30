@@ -4,26 +4,31 @@
 
 package org.chromium.chrome.browser.document;
 
-import android.content.Context;
+import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.view.ContextMenu;
 import android.view.View;
 
+import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.EmptyTabObserver;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.test.MultiActivityTestBase;
 import org.chromium.chrome.test.util.ActivityUtils;
+import org.chromium.chrome.test.util.ApplicationTestUtils;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.DisableInTabbedMode;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -42,7 +47,7 @@ import java.util.concurrent.Callable;
 @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
 @DisableInTabbedMode
 public class DocumentModeTestBase extends MultiActivityTestBase {
-    protected static final String TAG = "cr.document";
+    protected static final String TAG = "document";
 
     private static class TestTabObserver extends EmptyTabObserver {
         private ContextMenu mContextMenu;
@@ -51,30 +56,6 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
         public void onContextMenuShown(Tab tab, ContextMenu menu) {
             mContextMenu = menu;
         }
-    }
-
-    protected void launchHomeIntent(Context context) throws Exception {
-        Intent startMain = new Intent(Intent.ACTION_MAIN);
-        startMain.addCategory(Intent.CATEGORY_HOME);
-        startMain.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(startMain);
-        MultiActivityTestBase.waitUntilChromeInBackground();
-    }
-
-    protected void launchMainIntent(Context context) throws Exception {
-        Intent intent = new Intent(Intent.ACTION_MAIN);
-        intent.setPackage(context.getPackageName());
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(intent);
-        MultiActivityTestBase.waitUntilChromeInForeground();
-    }
-
-    protected void fireViewIntent(Context context, Uri data) throws Exception {
-        Intent intent = new Intent(Intent.ACTION_VIEW, data);
-        intent.setClassName(context.getPackageName(), ChromeLauncherActivity.class.getName());
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(intent);
-        MultiActivityTestBase.waitUntilChromeInForeground();
     }
 
     /**
@@ -124,7 +105,7 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
                         runnable);
             }
         };
-        return launchUrlViaRunnable(incognito, runnable, expectedTitle);
+        return launchUrlViaRunnable(incognito, runnable, expectedTitle, false);
     }
 
     /** Starts a DocumentActivity using {@ref ChromeLauncherActivity.launchDocumentInstance().} */
@@ -138,7 +119,23 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
                 ChromeLauncherActivity.launchDocumentInstance(null, incognito, asyncParams);
             }
         };
-        return launchUrlViaRunnable(incognito, runnable, expectedTitle);
+        return launchUrlViaRunnable(incognito, runnable, expectedTitle, false);
+    }
+
+    /** Starts a DocumentActivity in background using
+     * {@ref ChromeLauncherActivity.launchDocumentInstance().} */
+    protected int launchViaLaunchDocumentInstanceInBackground(final boolean incognito,
+            final String url, final String expectedTitle) throws Exception {
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                AsyncTabCreationParams asyncParams =
+                        new AsyncTabCreationParams(new LoadUrlParams(url));
+                asyncParams.setDocumentLaunchMode(ChromeLauncherActivity.LAUNCH_MODE_AFFILIATED);
+                ChromeLauncherActivity.launchDocumentInstance(null, incognito, asyncParams);
+            }
+        };
+        return launchUrlViaRunnable(incognito, runnable, expectedTitle, true);
     }
 
     /**
@@ -149,7 +146,7 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
      * @return ID of the Tab that was launched.
      */
     protected int launchUrlViaRunnable(final boolean incognito, final Runnable runnable,
-            final String expectedTitle) throws Exception {
+            final String expectedTitle, final boolean launchedInBackground) throws Exception {
         final int tabCount =
                 ChromeApplication.isDocumentTabModelSelectorInitializedForTests()
                 ? ChromeApplication.getDocumentTabModelSelector().getModel(incognito)
@@ -165,10 +162,10 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
                 incognito ? IncognitoDocumentActivity.class : DocumentActivity.class, runnable);
 
         assertTrue(ChromeApplication.isDocumentTabModelSelectorInitializedForTests());
-        MultiActivityTestBase.waitUntilChromeInForeground();
+        ApplicationTestUtils.waitUntilChromeInForeground();
 
         // Wait until the selector is ready and the Tabs have been added to the DocumentTabModel.
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (!ChromeApplication.isDocumentTabModelSelectorInitializedForTests()) {
@@ -182,9 +179,13 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
                 if (selector.getCurrentTabId() == tabId) return false;
                 return true;
             }
-        }));
+        });
 
-        waitForFullLoad(newActivity, expectedTitle);
+        if (launchedInBackground) {
+            ChromeTabUtils.waitForTabPageLoaded(newActivity.getActivityTab(), (String) null);
+        } else {
+            waitForFullLoad(newActivity, expectedTitle);
+        }
         return ChromeApplication.getDocumentTabModelSelector().getCurrentTabId();
     }
 
@@ -205,7 +206,7 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
 
         openLinkInNewTabViaContextMenu(false, false);
 
-        assertTrue(CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (expectedTabCount != tabModel.getCount()) return false;
@@ -213,20 +214,29 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
                 if (expectedTabId != selector.getCurrentTabId()) return false;
                 return true;
             }
-        }));
+        });
 
         assertEquals(expectedActivity, ApplicationStatus.getLastTrackedFocusedActivity());
     }
 
     /**
      * Long presses at the center of the page and opens a new Tab via a link's context menu.
-     * @param selectIncognitoItem If true, selects "Open in incognito tab".
-     *                            If false, selects "Open in new tab".
+     *
+     * Note that incognito context menus don't display the "Open in incognito tab" menu item.
+     * Instead, selecting "Open in new tab" when in incognito mode will open a new incognito
+     * tab in the background.  Specifically:
+     *     Regular tab + "Open in new tab" -> Opens new regular tab in the background
+     *     Regular tab + "Open in incognito tab" -> Opens new incognito tab in the foreground
+     *     Incognito tab + "Open in new tab" -> Opens new incognito tab in the background
+     *     Incognito tab + "Open in incognito tab" -> Can't happen.
+     *
+     * @param selectOpenInIncognitoTab If true, selects "Open in incognito tab".
+     *                                 If false, selects "Open in new tab".
      * @param waitForIncognito If true, waits for an IncognitoDocumentActivity to start.
      *                         If false, waits for a DocumentActivity to start.
      */
-    protected void openLinkInNewTabViaContextMenu(
-            final boolean selectIncognitoItem, final boolean waitForIncognito) throws Exception {
+    protected void openLinkInNewTabViaContextMenu(final boolean selectOpenInIncognitoTab,
+            final boolean waitForIncognito) throws Exception {
         // Long press the center of the page, which should bring up the context menu.
         final TestTabObserver observer = new TestTabObserver();
         final DocumentActivity activity =
@@ -239,13 +249,13 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
                 return activity.findViewById(android.R.id.content).getRootView();
             }
         });
-        TouchCommon.longPressView(view, view.getWidth() / 2, view.getHeight() / 2);
-        assertTrue(CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        TouchCommon.longPressView(view);
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return observer.mContextMenu != null;
             }
-        }));
+        });
         activity.getActivityTab().removeObserver(observer);
 
         // Select the "open in new tab" option.
@@ -254,7 +264,7 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
                 new Runnable() {
                     @Override
                     public void run() {
-                        if (selectIncognitoItem) {
+                        if (selectOpenInIncognitoTab) {
                             assertTrue(observer.mContextMenu.performIdentifierAction(
                                     R.id.contextmenu_open_in_incognito_tab, 0));
                         } else {
@@ -264,6 +274,57 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
                     }
                 }
         );
-        waitForFullLoad(newActivity, "Page 4");
+        if (selectOpenInIncognitoTab) {
+            waitForFullLoad(newActivity, "Page 4");
+        } else {
+            ChromeTabUtils.waitForTabPageLoaded(newActivity.getActivityTab(), (String) null);
+        }
+    }
+
+    /**
+     * Switches to the specified tab and waits until its activity is brought to the foreground.
+     */
+    protected void switchToTab(final Tab tab) throws Exception {
+        final TabModel tabModel =
+                ChromeApplication.getDocumentTabModelSelector().getCurrentModel();
+        CriteriaHelper.pollForCriteria(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                // http://crbug.com/509866: TabModelUtils#setIndex() sometimes fails.
+                // So we need to call it repeatedly.
+                getInstrumentation().runOnMainSync(new Runnable() {
+                    @Override
+                    public void run() {
+                        TabModelUtils.setIndex(tabModel,
+                                TabModelUtils.getTabIndexById(tabModel, tab.getId()));
+                    }
+                });
+
+                Activity activity = tab.getWindowAndroid().getActivity().get();
+                if (activity == null) return false;
+                return ApplicationStatus.getStateForActivity(activity) == ActivityState.RESUMED;
+            }
+        });
+    }
+
+    /**
+     * Starts ChromeTabbedActivity via intent with the specified URL but
+     * doesn't wait for the URL to load.
+     * @return The started activity.
+     */
+    protected ChromeTabbedActivity startTabbedActivity(final String url) {
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                Intent intent = new Intent();
+                intent.setAction(Intent.ACTION_VIEW);
+                intent.setClassName(mContext, ChromeTabbedActivity.class.getName());
+                intent.setData(Uri.parse(url));
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+                mContext.startActivity(intent);
+            }
+        };
+        return ActivityUtils.waitForActivity(getInstrumentation(), ChromeTabbedActivity.class,
+                runnable);
     }
 }

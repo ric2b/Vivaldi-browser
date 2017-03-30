@@ -13,9 +13,11 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "net/base/escape.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/template_expressions.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/font.h"
@@ -35,9 +37,11 @@ std::string GetBitmapDataUrl(const SkBitmap& bitmap) {
                "width", bitmap.width(), "height", bitmap.height());
   std::vector<unsigned char> output;
   gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false, &output);
-  std::string str_url;
-  str_url.insert(str_url.end(), output.begin(), output.end());
+  return GetPngDataUrl(output.data(), output.size());
+}
 
+std::string GetPngDataUrl(const unsigned char* data, size_t size) {
+  std::string str_url(reinterpret_cast<const char*>(data), size);
   base::Base64Encode(str_url, &str_url);
   str_url.insert(0, "data:image/png;base64,");
   return str_url;
@@ -118,19 +122,30 @@ void SetLoadTimeDataDefaults(const std::string& app_locale,
   localized_strings->SetString("textdirection", GetTextDirection());
 }
 
-std::string GetWebUiCssTextDefaults() {
-  std::vector<std::string> placeholders;
-  placeholders.push_back(GetTextDirection());  // $1
-  placeholders.push_back(GetFontFamily());  // $2
-  placeholders.push_back(GetFontSize());  // $3
+std::string GetWebUiCssTextDefaults(const std::string& css_template) {
+  std::map<base::StringPiece, std::string> placeholders;
+  placeholders["textDirection"] = GetTextDirection();
+  placeholders["fontFamily"] = GetFontFamily();
+  placeholders["fontSize"] = GetFontSize();
+  return ui::ReplaceTemplateExpressions(css_template, placeholders);
+}
 
+std::string GetWebUiCssTextDefaults() {
   const ui::ResourceBundle& resource_bundle =
       ui::ResourceBundle::GetSharedInstance();
   const std::string& css_template =
       resource_bundle.GetRawDataResource(IDR_WEBUI_CSS_TEXT_DEFAULTS)
           .as_string();
+  return GetWebUiCssTextDefaults(css_template);
+}
 
-  return ReplaceStringPlaceholders(css_template, placeholders, nullptr);
+std::string GetWebUiCssTextDefaultsMd() {
+  const ui::ResourceBundle& resource_bundle =
+      ui::ResourceBundle::GetSharedInstance();
+  const std::string& css_template =
+      resource_bundle.GetRawDataResource(IDR_WEBUI_CSS_TEXT_DEFAULTS_MD)
+          .as_string();
+  return GetWebUiCssTextDefaults(css_template);
 }
 
 void AppendWebUiCssTextDefaults(std::string* html) {

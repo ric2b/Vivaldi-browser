@@ -2,15 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "media/base/media_util.h"
 #include "media/base/stream_parser_buffer.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/video_decoder_config.h"
 #include "media/formats/mp2t/es_adapter_video.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -24,21 +30,16 @@ VideoDecoderConfig CreateFakeVideoConfig() {
   gfx::Size coded_size(320, 240);
   gfx::Rect visible_rect(0, 0, 320, 240);
   gfx::Size natural_size(320, 240);
-  return VideoDecoderConfig(
-      kCodecH264,
-      H264PROFILE_MAIN,
-      VideoFrame::I420,
-      coded_size,
-      visible_rect,
-      natural_size,
-      NULL, 0, false);
+  return VideoDecoderConfig(kCodecH264, H264PROFILE_MAIN, PIXEL_FORMAT_I420,
+                            COLOR_SPACE_UNSPECIFIED, coded_size, visible_rect,
+                            natural_size, EmptyExtraData(), false);
 }
 
 StreamParserBuffer::BufferQueue
 GenerateFakeBuffers(const int* frame_pts_ms,
                     const bool* is_key_frame,
                     size_t frame_count) {
-  uint8 dummy_buffer[] = {0, 0, 0, 0};
+  uint8_t dummy_buffer[] = {0, 0, 0, 0};
 
   StreamParserBuffer::BufferQueue buffers(frame_count);
   for (size_t k = 0; k < frame_count; k++) {

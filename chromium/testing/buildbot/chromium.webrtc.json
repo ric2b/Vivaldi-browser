@@ -1,0 +1,57 @@
+{
+  "Linux Builder": {
+    "additional_compile_targets": [
+      "browser_tests",
+      "content_browsertests",
+      "content_unittests",
+      "frame_analyzer",
+      "media_unittests",
+      "midi_unittests",
+      "remoting_unittests",
+      "rgba_to_i420_converter"
+    ]
+  },
+  "Linux Tester": {
+    "gtest_tests": []
+  },
+  "Mac Builder": {
+    "additional_compile_targets": [
+      "browser_tests",
+      "content_browsertests",
+      "content_unittests",
+      "frame_analyzer",
+      "media_unittests",
+      "midi_unittests",
+      "remoting_unittests",
+      "rgba_to_i420_converter"
+    ]
+  },
+  "Mac Tester": {
+    "gtest_tests": []
+  },
+  "Win Builder": {
+    "additional_compile_targets": [
+      "browser_tests",
+      "content_browsertests",
+      "content_unittests",
+      "crash_service",
+      "frame_analyzer",
+      "media_unittests",
+      "midi_unittests",
+      "remoting_unittests",
+      "rgba_to_i420_converter"
+    ]
+  },
+  "Win10 Tester": {
+    "gtest_tests": []
+  },
+  "Win7 Tester": {
+    "gtest_tests": []
+  },
+  "Win8 Tester": {
+    "gtest_tests": []
+  },
+  "WinXP Tester": {
+    "gtest_tests": []
+  }
+}

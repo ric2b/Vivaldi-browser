@@ -12,9 +12,12 @@ var metrics = metrics || metricsBase;
 
 /**
  * Analytics tracking ID for Files app.
- * @const {string}
+ * @const {!Object<string, string>}
  */
-metrics.TRACKING_ID = 'UA-38248358-9';
+metrics.TRACKING_IDS = {
+  hhaomjibdihmijegdhdafkllkbggdgoj: 'UA-38248358-9',  // Files.app
+  pmfjbimdmchhbnneeidfognadeopoehp: 'UA-38248358-13'  // Image Loader
+};
 
 /**
  * Convert a short metric name to the full format.
@@ -59,7 +62,8 @@ metrics.createTracker_ = function() {
 
   // Create a tracker, add a filter that only enables analytics when UMA is
   // enabled.
-  metrics.tracker_ = metrics.analytics_.getTracker(metrics.TRACKING_ID);
+  metrics.tracker_ = metrics.analytics_.getTracker(
+      metrics.TRACKING_IDS[chrome.runtime.id]);
   metrics.tracker_.addFilter(metrics.umaEnabledFilter_);
 };
 
@@ -76,6 +80,11 @@ metrics.umaEnabledFilter_ = function(hit) {
 
   chrome.fileManagerPrivate.isUMAEnabled(
       function(enabled) {
+        if (chrome.runtime.lastError) {
+          console.error(chrome.runtime.lastError.message);
+          return;
+        }
+        assert(enabled !== undefined);
         if (!enabled) {
           // If UMA was just toggled, reset the analytics ID.
           if (metrics.enabled_) {

@@ -5,6 +5,7 @@
 #include "extensions/browser/content_verifier.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "base/stl_util.h"
@@ -19,6 +20,42 @@
 #include "extensions/common/extension_l10n_util.h"
 
 namespace extensions {
+
+namespace {
+
+ContentVerifier::TestObserver* g_test_observer = NULL;
+
+// This function converts paths like "//foo/bar", "./foo/bar", and
+// "/foo/bar" to "foo/bar". It also converts path separators to "/".
+base::FilePath NormalizeRelativePath(const base::FilePath& path) {
+  if (path.ReferencesParent())
+    return base::FilePath();
+
+  std::vector<base::FilePath::StringType> parts;
+  path.GetComponents(&parts);
+  if (parts.empty())
+    return base::FilePath();
+
+  // Remove the first component if it is '.' or '/' or '//'.
+  const base::FilePath::StringType separators(
+      base::FilePath::kSeparators, base::FilePath::kSeparatorsLength);
+  if (!parts[0].empty() &&
+      (parts[0] == base::FilePath::kCurrentDirectory ||
+       parts[0].find_first_not_of(separators) == std::string::npos))
+    parts.erase(parts.begin());
+
+  // Note that elsewhere we always normalize path separators to '/' so this
+  // should work for all platforms.
+  return base::FilePath(
+      base::JoinString(parts, base::FilePath::StringType(1, '/')));
+}
+
+}  // namespace
+
+// static
+void ContentVerifier::SetObserverForTests(TestObserver* observer) {
+  g_test_observer = observer;
+}
 
 ContentVerifier::ContentVerifier(content::BrowserContext* context,
                                  ContentVerifierDelegate* delegate)
@@ -62,8 +99,10 @@ ContentVerifyJob* ContentVerifier::CreateJobFor(
   if (!data)
     return NULL;
 
+  base::FilePath normalized_path = NormalizeRelativePath(relative_path);
+
   std::set<base::FilePath> paths;
-  paths.insert(relative_path);
+  paths.insert(normalized_path);
   if (!ShouldVerifyAnyPaths(extension_id, extension_root, paths))
     return NULL;
 
@@ -71,7 +110,7 @@ ContentVerifyJob* ContentVerifier::CreateJobFor(
   // a cache of ContentHashReader's that we hold onto past the end of each job.
   return new ContentVerifyJob(
       new ContentHashReader(extension_id, data->version, extension_root,
-                            relative_path, delegate_->GetPublicKey()),
+                            normalized_path, delegate_->GetPublicKey()),
       base::Bind(&ContentVerifier::VerifyFailed, this, extension_id));
 }
 
@@ -105,28 +144,6 @@ void ContentVerifier::VerifyFailed(const std::string& extension_id,
   }
 }
 
-static base::FilePath MakeImagePathRelative(const base::FilePath& path) {
-  if (path.ReferencesParent())
-    return base::FilePath();
-
-  std::vector<base::FilePath::StringType> parts;
-  path.GetComponents(&parts);
-  if (parts.empty())
-    return base::FilePath();
-
-  // Remove the first component if it is '.' or '/' or '//'.
-  const base::FilePath::StringType separators(
-      base::FilePath::kSeparators, base::FilePath::kSeparatorsLength);
-  if (!parts[0].empty() &&
-      (parts[0] == base::FilePath::kCurrentDirectory ||
-       parts[0].find_first_not_of(separators) == std::string::npos))
-    parts.erase(parts.begin());
-
-  // Note that elsewhere we always normalize path separators to '/' so this
-  // should work for all platforms.
-  return base::FilePath(JoinString(parts, '/'));
-}
-
 void ContentVerifier::OnExtensionLoaded(
     content::BrowserContext* browser_context,
     const Extension* extension) {
@@ -144,12 +161,12 @@ void ContentVerifier::OnExtensionLoaded(
     scoped_ptr<std::set<base::FilePath>> image_paths(
         new std::set<base::FilePath>);
     for (const auto& path : original_image_paths) {
-      image_paths->insert(MakeImagePathRelative(path));
+      image_paths->insert(NormalizeRelativePath(path));
     }
 
     scoped_ptr<ContentVerifierIOData::ExtensionData> data(
         new ContentVerifierIOData::ExtensionData(
-            image_paths.Pass(),
+            std::move(image_paths),
             extension->version() ? *extension->version() : base::Version()));
     content::BrowserThread::PostTask(content::BrowserThread::IO,
                                      FROM_HERE,
@@ -187,6 +204,9 @@ void ContentVerifier::OnFetchComplete(
     bool success,
     bool was_force_check,
     const std::set<base::FilePath>& hash_mismatch_paths) {
+  if (g_test_observer)
+    g_test_observer->OnFetchComplete(extension_id, success);
+
   if (shutdown_)
     return;
 

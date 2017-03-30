@@ -6,6 +6,7 @@
 #define COMPONENTS_RESOURCE_PROVIDER_RESOURCE_PROVIDER_IMPL_H_
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "components/resource_provider/public/interfaces/resource_provider.mojom.h"
 
 namespace resource_provider {
@@ -13,7 +14,8 @@ namespace resource_provider {
 // ResourceProvider implementation that loads resources in background threads.
 class ResourceProviderImpl : public resource_provider::ResourceProvider {
  public:
-  explicit ResourceProviderImpl(const base::FilePath& application_path);
+  ResourceProviderImpl(const base::FilePath& application_path,
+                       const std::string& resource_provider_app_url);
   ~ResourceProviderImpl() override;
 
  private:
@@ -22,6 +24,7 @@ class ResourceProviderImpl : public resource_provider::ResourceProvider {
                     const GetResourcesCallback& callback) override;
 
   const base::FilePath application_path_;
+  const std::string resource_provider_app_url_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceProviderImpl);
 };

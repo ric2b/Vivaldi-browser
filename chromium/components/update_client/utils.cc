@@ -4,6 +4,7 @@
 
 #include "components/update_client/utils.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <cmath>
 
@@ -16,6 +17,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "components/crx_file/id_util.h"
 #include "components/update_client/configurator.h"
 #include "components/update_client/crx_update_item.h"
@@ -188,7 +190,7 @@ bool DeleteFileAndEmptyParentDirectory(const base::FilePath& filepath) {
 std::string GetCrxComponentID(const CrxComponent& component) {
   const size_t kCrxIdSize = 16;
   CHECK_GE(component.pk_hash.size(), kCrxIdSize);
-  return HexStringToID(base::StringToLowerASCII(
+  return HexStringToID(base::ToLowerASCII(
       base::HexEncode(&component.pk_hash[0], kCrxIdSize)));
 }
 

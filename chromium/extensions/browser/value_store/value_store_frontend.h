@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -27,12 +28,13 @@ class ValueStoreFrontend
   typedef base::Callback<void(scoped_ptr<base::Value>)> ReadCallback;
 
   ValueStoreFrontend();
-  explicit ValueStoreFrontend(const base::FilePath& db_path);
+  ValueStoreFrontend(const std::string& uma_client_name,
+                     const base::FilePath& db_path);
   // This variant is useful for testing (using a mock ValueStore).
   explicit ValueStoreFrontend(scoped_ptr<ValueStore> value_store);
   ~ValueStoreFrontend();
 
-  void Init(const base::FilePath& db_path);
+  void Init(const std::string& uma_client_name, const base::FilePath& db_path);
 
   // Retrieves a value from the database asynchronously, passing a copy to
   // |callback| when ready. NULL is passed if no matching entry is found.

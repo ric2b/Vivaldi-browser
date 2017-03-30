@@ -4,13 +4,16 @@
 
 #include "remoting/host/desktop_session_win.h"
 
-#include <limits>
 #include <sddl.h>
+
+#include <limits>
+#include <utility>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/guid.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -368,11 +371,9 @@ scoped_ptr<DesktopSession> DesktopSessionWin::CreateForConsole(
     DaemonProcess* daemon_process,
     int id,
     const ScreenResolution& resolution) {
-  scoped_ptr<ConsoleSession> session(new ConsoleSession(
+  return make_scoped_ptr(new ConsoleSession(
       caller_task_runner, io_task_runner, daemon_process, id,
       HostService::GetInstance()));
-
-  return session.Pass();
 }
 
 // static
@@ -388,7 +389,7 @@ scoped_ptr<DesktopSession> DesktopSessionWin::CreateForVirtualTerminal(
   if (!session->Initialize(resolution))
     return nullptr;
 
-  return session.Pass();
+  return std::move(session);
 }
 
 DesktopSessionWin::DesktopSessionWin(
@@ -459,7 +460,7 @@ void DesktopSessionWin::TerminateSession() {
   daemon_process()->CloseDesktopSession(id());
 }
 
-void DesktopSessionWin::OnChannelConnected(int32 peer_pid) {
+void DesktopSessionWin::OnChannelConnected(int32_t peer_pid) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   ReportElapsedTime("channel connected");
@@ -502,7 +503,7 @@ void DesktopSessionWin::OnPermanentError(int exit_code) {
   TerminateSession();
 }
 
-void DesktopSessionWin::OnSessionAttached(uint32 session_id) {
+void DesktopSessionWin::OnSessionAttached(uint32_t session_id) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
   DCHECK(!launcher_);
   DCHECK(monitoring_notifications_);
@@ -536,19 +537,16 @@ void DesktopSessionWin::OnSessionAttached(uint32 session_id) {
                            kCopiedSwitchNames, arraysize(kCopiedSwitchNames));
 
   // Create a delegate capable of launching a process in a different session.
-  scoped_ptr<WtsSessionProcessDelegate> delegate(
-      new WtsSessionProcessDelegate(io_task_runner_,
-                                    target.Pass(),
-                                    launch_elevated,
-                                    base::WideToUTF8(
-                                        kDaemonIpcSecurityDescriptor)));
+  scoped_ptr<WtsSessionProcessDelegate> delegate(new WtsSessionProcessDelegate(
+      io_task_runner_, std::move(target), launch_elevated,
+      base::WideToUTF8(kDaemonIpcSecurityDescriptor)));
   if (!delegate->Initialize(session_id)) {
     TerminateSession();
     return;
   }
 
   // Create a launcher for the desktop process, using the per-session delegate.
-  launcher_.reset(new WorkerProcessLauncher(delegate.Pass(), this));
+  launcher_.reset(new WorkerProcessLauncher(std::move(delegate), this));
 }
 
 void DesktopSessionWin::OnSessionDetached() {

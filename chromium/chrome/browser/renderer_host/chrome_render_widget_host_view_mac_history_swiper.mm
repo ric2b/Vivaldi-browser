@@ -12,6 +12,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 // The horizontal distance required to cause the browser to perform a history
 // navigation.
@@ -116,6 +118,37 @@ BOOL forceMagicMouse = NO;
 
 - (void)rendererHandledWheelEvent:(const blink::WebMouseWheelEvent&)event
                          consumed:(BOOL)consumed {
+  // NOTE(espen@vivaldi.com). The history swiper has not been designed with a
+  // BrowserPlugin in mind. Wheel events (two finger swiping creates wheel
+  // events) are sent to the renderer process and the reply, which we examine
+  // here, is used to determine if the renderer scrolls horizontally
+  // (consumed == true) or not. No history swiping can occur if we scroll at the
+  // same time. The initial event has a phase flag set to NSEventPhaseBegan
+  // when sent to the renderer. No history swiping can start before an event
+  // with this phase flag is returned and then only if the renderer has not
+  // consumed the event (consumed = false).
+  //
+  // The problem when we use a BrowserPlugin in the renderer is that this
+  // introduces a new async. message sent from the browser plugin to the
+  // view that will scroll the content. The BrowserPlugin will however always
+  // reply synchronously to the calling code that the event has been consumed.
+  // That state is returned in the event with the NSEventPhaseBegan phase flag
+  // set. See BrowserPlugin::handleInputEvent() and
+  // RenderWidget::OnHandleInputEvent() which calls it and trigger the reply
+  // event.
+  //
+  // We have to relax parsing of the returned values to be able to start
+  // history swiping mode.
+  if (vivaldi::IsVivaldiRunning()) {
+    static int lastPhase = NSEventPhaseNone;  // static to simplify patch.
+    if (event.phase == NSEventPhaseBegan || lastPhase == NSEventPhaseBegan) {
+      beganEventUnconsumed_ = !consumed;
+    }
+    lastPhase = event.phase == NSEventPhaseBegan ? NSEventPhaseBegan
+                                                 : NSEventPhaseNone;
+    return;
+  }
+
   if (event.phase != NSEventPhaseBegan)
     return;
   beganEventUnconsumed_ = !consumed;

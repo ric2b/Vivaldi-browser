@@ -12,6 +12,7 @@
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/zipfile_installer.h"
@@ -46,7 +47,6 @@ struct MockExtensionRegistryObserver : public ExtensionRegistryObserver {
   void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
                                   const Extension* extension,
                                   bool is_update,
-                                  bool from_ephemeral,
                                   const std::string& old_name) override {
     last_extension_installed = extension->id();
     quit_closure_.Run();

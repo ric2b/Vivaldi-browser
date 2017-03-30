@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "chrome/browser/ui/extensions/extension_message_bubble_browsertest.h"
 #include "chrome/browser/ui/views/extensions/extension_message_bubble_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/toolbar/wrench_toolbar_button.h"
 
 namespace {
 
@@ -40,8 +41,10 @@ void CheckBubbleAndReferenceView(views::BubbleDelegateView* bubble,
   EXPECT_FALSE(bubble_bounds.x() > reference_bounds.right());
   EXPECT_FALSE(reference_bounds.x() > bubble_bounds.right());
 
-  // And, of course, the bubble should be visible.
+  // And, of course, the bubble should be visible...
   EXPECT_TRUE(bubble->visible());
+  // ... as should its Widget.
+  EXPECT_TRUE(bubble->GetWidget()->IsVisible());
 }
 
 }  // namespace
@@ -49,13 +52,17 @@ void CheckBubbleAndReferenceView(views::BubbleDelegateView* bubble,
 class ExtensionMessageBubbleViewBrowserTest
     : public ExtensionMessageBubbleBrowserTest {
  protected:
-  ExtensionMessageBubbleViewBrowserTest() {}
+  ExtensionMessageBubbleViewBrowserTest() {
+    extensions::ExtensionMessageBubbleView::
+        set_bubble_appearance_wait_time_for_testing(0);
+  }
   ~ExtensionMessageBubbleViewBrowserTest() override {}
 
  private:
   // ExtensionMessageBubbleBrowserTest:
   void CheckBubble(Browser* browser, AnchorPosition anchor) override;
   void CloseBubble(Browser* browser) override;
+  void CheckBubbleIsNotPresent(Browser* browser) override;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionMessageBubbleViewBrowserTest);
 };
@@ -70,8 +77,8 @@ void ExtensionMessageBubbleViewBrowserTest::CheckBubble(Browser* browser,
     case ANCHOR_BROWSER_ACTION:
       anchor_view = container->GetToolbarActionViewAt(0);
       break;
-    case ANCHOR_WRENCH_MENU:
-      anchor_view = toolbar_view->app_menu();
+    case ANCHOR_APP_MENU:
+      anchor_view = toolbar_view->app_menu_button();
       break;
   }
   CheckBubbleAndReferenceView(bubble, anchor_view);
@@ -86,19 +93,26 @@ void ExtensionMessageBubbleViewBrowserTest::CloseBubble(Browser* browser) {
   EXPECT_EQ(nullptr, container->active_bubble());
 }
 
+void ExtensionMessageBubbleViewBrowserTest::CheckBubbleIsNotPresent(
+    Browser* browser) {
+  EXPECT_EQ(
+      nullptr,
+      GetToolbarViewForBrowser(browser)->browser_actions()->active_bubble());
+}
+
 IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
                        ExtensionBubbleAnchoredToExtensionAction) {
   TestBubbleAnchoredToExtensionAction();
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
-                       ExtensionBubbleAnchoredToWrenchMenu) {
-  TestBubbleAnchoredToWrenchMenu();
+                       ExtensionBubbleAnchoredToAppMenu) {
+  TestBubbleAnchoredToAppMenu();
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
-                       ExtensionBubbleAnchoredToWrenchMenuWithOtherAction) {
-  TestBubbleAnchoredToWrenchMenuWithOtherAction();
+                       ExtensionBubbleAnchoredToAppMenuWithOtherAction) {
+  TestBubbleAnchoredToAppMenuWithOtherAction();
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
@@ -109,4 +123,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
                        ExtensionBubbleShowsOnStartup) {
   TestBubbleShowsOnStartup();
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
+                       TestUninstallDangerousExtension) {
+  TestUninstallDangerousExtension();
 }

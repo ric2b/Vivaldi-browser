@@ -4,12 +4,17 @@
 
 #include "chrome/browser/android/contextualsearch/contextual_search_delegate.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/android/contextualsearch/contextual_search_context.h"
+#include "chrome/browser/android/contextualsearch/resolved_search_term.h"
 #include "components/search_engines/template_url_service.h"
+#include "net/base/escape.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -49,6 +54,7 @@ class ContextualSearchDelegateTest : public testing::Test {
     response_code_ = -1;
     search_term_ = "invalid";
     display_text_ = "unknown";
+    context_language_ = "";
   }
 
   TemplateURLService* CreateTemplateURLService() {
@@ -133,36 +139,29 @@ class ContextualSearchDelegateTest : public testing::Test {
   std::string display_text() { return display_text_; }
   std::string alternate_term() { return alternate_term_; }
   bool do_prevent_preload() { return prevent_preload_; }
-  std::string before_text() { return before_text_; }
   std::string after_text() { return after_text_; }
   int start_adjust() { return start_adjust_; }
   int end_adjust() { return end_adjust_; }
+  std::string context_language() { return context_language_; }
 
   // The delegate under test.
   scoped_ptr<ContextualSearchDelegate> delegate_;
 
  private:
-  void recordSearchTermResolutionResponse(bool is_invalid,
-                                          int response_code,
-                                          const std::string& search_term,
-                                          const std::string& display_text,
-                                          const std::string& alternate_term,
-                                          bool prevent_preload,
-                                          int start_adjust,
-                                          int end_adjust) {
-    is_invalid_ = is_invalid;
-    response_code_ = response_code;
-    search_term_ = search_term;
-    display_text_ = display_text;
-    alternate_term_ = alternate_term;
-    prevent_preload_ = prevent_preload;
-    start_adjust_ = start_adjust;
-    end_adjust_ = end_adjust;
+  void recordSearchTermResolutionResponse(
+      const ResolvedSearchTerm& resolved_search_term) {
+    is_invalid_ = resolved_search_term.is_invalid;
+    response_code_ = resolved_search_term.response_code;
+    search_term_ = resolved_search_term.search_term;
+    display_text_ = resolved_search_term.display_text;
+    alternate_term_ = resolved_search_term.alternate_term;
+    prevent_preload_ = resolved_search_term.prevent_preload;
+    start_adjust_ = resolved_search_term.selection_start_adjust;
+    end_adjust_ = resolved_search_term.selection_end_adjust;
+    context_language_ = resolved_search_term.context_language;
   }
 
-  void recordSurroundingText(const std::string& before_text,
-                             const std::string& after_text) {
-    before_text_ = before_text;
+  void recordSurroundingText(const std::string& after_text) {
     after_text_ = after_text;
   }
 
@@ -181,8 +180,8 @@ class ContextualSearchDelegateTest : public testing::Test {
   bool prevent_preload_;
   int start_adjust_;
   int end_adjust_;
-  std::string before_text_;
   std::string after_text_;
+  std::string context_language_;
 
   base::MessageLoopForIO io_message_loop_;
   net::TestURLFetcherFactory test_factory_;
@@ -395,7 +394,6 @@ TEST_F(ContextualSearchDelegateTest, SurroundingTextHighMaximum) {
   base::string16 surrounding = base::ASCIIToUTF16("aa bb Bogus dd ee");
   SetSurroundingContext(surrounding, 6, 11);
   delegate_->SendSurroundingText(30);  // High maximum # of surrounding chars.
-  EXPECT_EQ("aa bb", before_text());
   EXPECT_EQ("dd ee", after_text());
 }
 
@@ -404,7 +402,6 @@ TEST_F(ContextualSearchDelegateTest, SurroundingTextLowMaximum) {
   SetSurroundingContext(surrounding, 6, 11);
   delegate_->SendSurroundingText(3);  // Low maximum # of surrounding chars.
   // Whitespaces are trimmed.
-  EXPECT_EQ("bb", before_text());
   EXPECT_EQ("dd", after_text());
 }
 
@@ -412,8 +409,14 @@ TEST_F(ContextualSearchDelegateTest, SurroundingTextNoBeforeText) {
   base::string16 surrounding = base::ASCIIToUTF16("Bogus ee ff gg");
   SetSurroundingContext(surrounding, 0, 5);
   delegate_->SendSurroundingText(5);
-  EXPECT_EQ("", before_text());
   EXPECT_EQ("ee f", after_text());
+}
+
+TEST_F(ContextualSearchDelegateTest, SurroundingTextNoAfterText) {
+  base::string16 surrounding = base::ASCIIToUTF16("aa bb Bogus");
+  SetSurroundingContext(surrounding, 6, 11);
+  delegate_->SendSurroundingText(5);
+  EXPECT_EQ("", after_text());
 }
 
 TEST_F(ContextualSearchDelegateTest, ExtractMentionsStartEnd) {
@@ -451,7 +454,7 @@ TEST_F(ContextualSearchDelegateTest, SurroundingTextForIcingNegativeLimit) {
   EXPECT_EQ(base::ASCIIToUTF16("Barack Obama"), result);
 }
 
-TEST_F(ContextualSearchDelegateTest, DecodeSearchTermsFromJsonResponse) {
+TEST_F(ContextualSearchDelegateTest, DecodeSearchTermFromJsonResponse) {
   std::string json_with_escape =
       ")]}'\n"
       "{\"mid\":\"/m/02mjmr\", \"search_term\":\"obama\","
@@ -464,12 +467,31 @@ TEST_F(ContextualSearchDelegateTest, DecodeSearchTermsFromJsonResponse) {
   std::string prevent_preload;
   int mention_start;
   int mention_end;
-  delegate_->DecodeSearchTermsFromJsonResponse(json_with_escape, &search_term,
-                                               &display_text, &alternate_term,
-                                               &prevent_preload, &mention_start,
-                                               &mention_end);
+  std::string context_language;
+  delegate_->DecodeSearchTermFromJsonResponse(
+      json_with_escape, &search_term, &display_text, &alternate_term,
+      &prevent_preload, &mention_start, &mention_end, &context_language);
   EXPECT_EQ("obama", search_term);
   EXPECT_EQ("Barack Obama", display_text);
   EXPECT_EQ("barack obama", alternate_term);
   EXPECT_EQ("", prevent_preload);
+  EXPECT_EQ("", context_language);
+}
+
+TEST_F(ContextualSearchDelegateTest, ResponseWithLanguage) {
+  CreateDefaultSearchContextAndRequestSearchTerm();
+  fetcher()->set_response_code(200);
+  fetcher()->SetResponseString(
+      "{\"mid\":\"/m/02mjmr\",\"search_term\":\"obama\","
+      "\"mentions\":[0,15],\"prevent_preload\":\"1\", "
+      "\"lang\":\"de\"}");
+  fetcher()->delegate()->OnURLFetchComplete(fetcher());
+
+  EXPECT_FALSE(is_invalid());
+  EXPECT_EQ(200, response_code());
+  EXPECT_EQ("obama", search_term());
+  EXPECT_EQ("obama", display_text());
+  EXPECT_TRUE(do_prevent_preload());
+  EXPECT_TRUE(DoesRequestContainOurSpecificBasePage());
+  EXPECT_EQ("de", context_language());
 }

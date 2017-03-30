@@ -13,9 +13,10 @@
         '../net/net.gyp:net',
         '../url/url.gyp:url_lib',
         'components_strings.gyp:components_strings',
+        'data_use_measurement_core',
         'keyed_service_core',
         'pref_registry',
-        'url_fixer',
+        'url_formatter/url_formatter.gyp:url_formatter',
       ],
       'include_dirs': [
         '..',
@@ -24,8 +25,6 @@
         # Note: sources duplicated in GN build.
         'google/core/browser/google_pref_names.cc',
         'google/core/browser/google_pref_names.h',
-        'google/core/browser/google_search_metrics.cc',
-        'google/core/browser/google_search_metrics.h',
         'google/core/browser/google_switches.cc',
         'google/core/browser/google_switches.h',
         'google/core/browser/google_url_tracker.cc',

@@ -5,20 +5,20 @@
 #ifndef ASH_SYSTEM_TRAY_TRAY_POPUP_LABEL_BUTTON_BORDER_H_
 #define ASH_SYSTEM_TRAY_TRAY_POPUP_LABEL_BUTTON_BORDER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/views/controls/button/label_button_border.h"
 
 namespace ash {
 
 // A border for label buttons that paints a vertical separator in normal state
 // and a custom hover effect in hovered or pressed state.
-class TrayPopupLabelButtonBorder : public views::LabelButtonBorder {
+class TrayPopupLabelButtonBorder : public views::LabelButtonAssetBorder {
  public:
   TrayPopupLabelButtonBorder();
   ~TrayPopupLabelButtonBorder() override;
 
-  // views::LabelButtonBorder:
+  // views::LabelButtonAssetBorder:
   void Paint(const views::View& view, gfx::Canvas* canvas) override;
 
  private:

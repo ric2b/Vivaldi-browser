@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -18,16 +21,16 @@
 #include "remoting/client/chromoting_client.h"
 #include "remoting/client/client_context.h"
 #include "remoting/client/client_user_interface.h"
-#include "remoting/client/video_renderer.h"
 #include "remoting/host/chromoting_host.h"
 #include "remoting/host/chromoting_host_context.h"
 #include "remoting/host/fake_desktop_environment.h"
-#include "remoting/host/video_frame_pump.h"
 #include "remoting/protocol/jingle_session_manager.h"
-#include "remoting/protocol/libjingle_transport_factory.h"
 #include "remoting/protocol/me2me_host_authenticator_factory.h"
 #include "remoting/protocol/negotiating_client_authenticator.h"
 #include "remoting/protocol/session_config.h"
+#include "remoting/protocol/transport_context.h"
+#include "remoting/protocol/video_frame_pump.h"
+#include "remoting/protocol/video_renderer.h"
 #include "remoting/signaling/fake_signal_strategy.h"
 #include "remoting/test/fake_network_dispatcher.h"
 #include "remoting/test/fake_port_allocator.h"
@@ -74,7 +77,7 @@ class ProtocolPerfTest
     : public testing::Test,
       public testing::WithParamInterface<NetworkPerformanceParams>,
       public ClientUserInterface,
-      public VideoRenderer,
+      public protocol::VideoRenderer,
       public protocol::VideoStub,
       public HostStatusObserver {
  public:
@@ -82,7 +85,7 @@ class ProtocolPerfTest
       : host_thread_("host"),
         capture_thread_("capture"),
         encode_thread_("encode") {
-    VideoFramePump::EnableTimestampsForTests();
+    protocol::VideoFramePump::EnableTimestampsForTests();
     host_thread_.StartWithOptions(
         base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
     capture_thread_.Start();
@@ -119,8 +122,11 @@ class ProtocolPerfTest
 
   // VideoRenderer interface.
   void OnSessionConfig(const protocol::SessionConfig& config) override {}
-  ChromotingStats* GetStats() override { return nullptr; }
   protocol::VideoStub* GetVideoStub() override { return this; }
+  protocol::FrameConsumer* GetFrameConsumer() override {
+    NOTREACHED();
+    return nullptr;
+  }
 
   // protocol::VideoStub interface.
   void ProcessVideoPacket(scoped_ptr<VideoPacket> video_packet,
@@ -131,7 +137,7 @@ class ProtocolPerfTest
       return;
     }
 
-    last_video_packet_ = video_packet.Pass();
+    last_video_packet_ = std::move(video_packet);
 
     if (!on_frame_task_.is_null())
       on_frame_task_.Run();
@@ -225,33 +231,30 @@ class ProtocolPerfTest
     protocol::NetworkSettings network_settings(
         protocol::NetworkSettings::NAT_TRAVERSAL_OUTGOING);
 
-    scoped_ptr<FakePortAllocator> port_allocator(
-        FakePortAllocator::Create(fake_network_dispatcher_));
-    port_allocator->socket_factory()->SetBandwidth(GetParam().bandwidth,
-                                                   GetParam().max_buffers);
-    port_allocator->socket_factory()->SetLatency(GetParam().latency_average,
-                                                 GetParam().latency_stddev);
-    port_allocator->socket_factory()->set_out_of_order_rate(
+    scoped_ptr<FakePortAllocatorFactory> port_allocator_factory(
+        new FakePortAllocatorFactory(fake_network_dispatcher_));
+    port_allocator_factory->socket_factory()->SetBandwidth(
+        GetParam().bandwidth, GetParam().max_buffers);
+    port_allocator_factory->socket_factory()->SetLatency(
+        GetParam().latency_average, GetParam().latency_stddev);
+    port_allocator_factory->socket_factory()->set_out_of_order_rate(
         GetParam().out_of_order_rate);
-    scoped_ptr<protocol::TransportFactory> host_transport_factory(
-        new protocol::LibjingleTransportFactory(
-            host_signaling_.get(), port_allocator.Pass(), network_settings,
-            protocol::TransportRole::SERVER));
-
+    scoped_refptr<protocol::TransportContext> transport_context(
+        new protocol::TransportContext(
+            host_signaling_.get(), std::move(port_allocator_factory),
+            network_settings, protocol::TransportRole::SERVER));
     scoped_ptr<protocol::SessionManager> session_manager(
-        new protocol::JingleSessionManager(host_transport_factory.Pass()));
+        new protocol::JingleSessionManager(host_signaling_.get()));
+    session_manager->set_protocol_config(protocol_config_->Clone());
 
     // Encoder runs on a separate thread, main thread is used for everything
     // else.
-    host_.reset(new ChromotingHost(host_signaling_.get(),
-                                   &desktop_environment_factory_,
-                                   session_manager.Pass(),
-                                   host_thread_.task_runner(),
-                                   host_thread_.task_runner(),
-                                   capture_thread_.task_runner(),
-                                   encode_thread_.task_runner(),
-                                   host_thread_.task_runner(),
-                                   host_thread_.task_runner()));
+    host_.reset(new ChromotingHost(
+        &desktop_environment_factory_, std::move(session_manager),
+        transport_context, host_thread_.task_runner(),
+        host_thread_.task_runner(), capture_thread_.task_runner(),
+        encode_thread_.task_runner(), host_thread_.task_runner(),
+        host_thread_.task_runner()));
 
     base::FilePath certs_dir(net::GetTestCertsDirectory());
 
@@ -267,17 +270,15 @@ class ProtocolPerfTest
     scoped_refptr<RsaKeyPair> key_pair = RsaKeyPair::FromString(key_base64);
     ASSERT_TRUE(key_pair.get());
 
-
     protocol::SharedSecretHash host_secret;
     host_secret.hash_function = protocol::AuthenticationMethod::NONE;
     host_secret.value = "123456";
     scoped_ptr<protocol::AuthenticatorFactory> auth_factory =
         protocol::Me2MeHostAuthenticatorFactory::CreateWithSharedSecret(
             true, kHostOwner, host_cert, key_pair, host_secret, nullptr);
-    host_->SetAuthenticatorFactory(auth_factory.Pass());
+    host_->SetAuthenticatorFactory(std::move(auth_factory));
 
     host_->AddStatusObserver(this);
-    host_->set_protocol_config(protocol_config_->Clone());
     host_->Start(kHostOwner);
 
     message_loop_.PostTask(FROM_HERE,
@@ -295,18 +296,18 @@ class ProtocolPerfTest
     client_context_.reset(
         new ClientContext(base::ThreadTaskRunnerHandle::Get()));
 
-    scoped_ptr<FakePortAllocator> port_allocator(
-        FakePortAllocator::Create(fake_network_dispatcher_));
-    port_allocator->socket_factory()->SetBandwidth(GetParam().bandwidth,
-                                                   GetParam().max_buffers);
-    port_allocator->socket_factory()->SetLatency(GetParam().latency_average,
-                                                 GetParam().latency_stddev);
-    port_allocator->socket_factory()->set_out_of_order_rate(
+    scoped_ptr<FakePortAllocatorFactory> port_allocator_factory(
+        new FakePortAllocatorFactory(fake_network_dispatcher_));
+    port_allocator_factory->socket_factory()->SetBandwidth(
+        GetParam().bandwidth, GetParam().max_buffers);
+    port_allocator_factory->socket_factory()->SetLatency(
+        GetParam().latency_average, GetParam().latency_stddev);
+    port_allocator_factory->socket_factory()->set_out_of_order_rate(
         GetParam().out_of_order_rate);
-    scoped_ptr<protocol::TransportFactory> client_transport_factory(
-        new protocol::LibjingleTransportFactory(
-            client_signaling_.get(), port_allocator.Pass(), network_settings,
-            protocol::TransportRole::CLIENT));
+    scoped_refptr<protocol::TransportContext> transport_context(
+        new protocol::TransportContext(
+            host_signaling_.get(), std::move(port_allocator_factory),
+            network_settings, protocol::TransportRole::SERVER));
 
     std::vector<protocol::AuthenticationMethod> auth_methods;
     auth_methods.push_back(protocol::AuthenticationMethod::Spake2(
@@ -317,14 +318,12 @@ class ProtocolPerfTest
             std::string(),  // client_pairing_secret
             std::string(),  // authentication_tag
             base::Bind(&ProtocolPerfTest::FetchPin, base::Unretained(this)),
-            nullptr,
-            auth_methods));
+            nullptr, auth_methods));
     client_.reset(
         new ChromotingClient(client_context_.get(), this, this, nullptr));
-    client_->SetProtocolConfigForTests(protocol_config_->Clone());
-    client_->Start(
-        client_signaling_.get(), client_authenticator.Pass(),
-        client_transport_factory.Pass(), kHostJid, std::string());
+    client_->set_protocol_config(protocol_config_->Clone());
+    client_->Start(client_signaling_.get(), std::move(client_authenticator),
+                   transport_context, kHostJid, std::string());
   }
 
   void FetchPin(
@@ -447,7 +446,7 @@ class IntermittentChangeFrameGenerator
       result->mutable_updated_region()->AddRect(
           webrtc::DesktopRect::MakeXYWH(0, 0, kWidth, kHeight));
     }
-    return result.Pass();
+    return result;
   }
 
  private:

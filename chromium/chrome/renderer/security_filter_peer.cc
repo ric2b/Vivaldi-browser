@@ -5,6 +5,7 @@
 #include "chrome/renderer/security_filter_peer.h"
 
 #include <string>
+#include <utility>
 
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
@@ -67,7 +68,7 @@ SecurityFilterPeer* SecurityFilterPeer::CreateSecurityFilterPeerForFrame(
   return new ReplaceContentPeer(peer, "text/html", html);
 }
 
-void SecurityFilterPeer::OnUploadProgress(uint64 position, uint64 size) {
+void SecurityFilterPeer::OnUploadProgress(uint64_t position, uint64_t size) {
   original_peer_->OnUploadProgress(position, size);
 }
 
@@ -130,7 +131,7 @@ void BufferedPeer::OnCompletedRequest(int error_code,
                                       bool stale_copy_in_cache,
                                       const std::string& security_info,
                                       const base::TimeTicks& completion_time,
-                                      int64 total_transfer_size) {
+                                      int64_t total_transfer_size) {
   // Make sure we delete ourselves at the end of this call.
   scoped_ptr<BufferedPeer> this_deleter(this);
 
@@ -147,8 +148,9 @@ void BufferedPeer::OnCompletedRequest(int error_code,
       data_.empty() ? nullptr : new content::FixedReceivedData(
                                     data_.data(), data_.size(), -1));
   original_peer_->OnReceivedCompletedResponse(
-      response_info_, data_to_pass.Pass(), error_code, was_ignored_by_handler,
-      stale_copy_in_cache, security_info, completion_time, total_transfer_size);
+      response_info_, std::move(data_to_pass), error_code,
+      was_ignored_by_handler, stale_copy_in_cache, security_info,
+      completion_time, total_transfer_size);
 }
 
 void BufferedPeer::OnReceivedCompletedResponse(
@@ -159,11 +161,11 @@ void BufferedPeer::OnReceivedCompletedResponse(
     bool stale_copy_in_cache,
     const std::string& security_info,
     const base::TimeTicks& completion_time,
-    int64 total_transfer_size) {
+    int64_t total_transfer_size) {
   // Make sure we delete ourselves at the end of this call.
   scoped_ptr<BufferedPeer> this_deleter(this);
   original_peer_->OnReceivedCompletedResponse(
-      info, data.Pass(), error_code, was_ignored_by_handler,
+      info, std::move(data), error_code, was_ignored_by_handler,
       stale_copy_in_cache, security_info, completion_time, total_transfer_size);
 }
 
@@ -195,7 +197,7 @@ void ReplaceContentPeer::OnCompletedRequest(
     bool stale_copy_in_cache,
     const std::string& security_info,
     const base::TimeTicks& completion_time,
-    int64 total_transfer_size) {
+    int64_t total_transfer_size) {
   // Make sure we delete ourselves at the end of this call.
   scoped_ptr<ReplaceContentPeer> this_deleter(this);
 
@@ -208,8 +210,8 @@ void ReplaceContentPeer::OnCompletedRequest(
       data_.empty() ? nullptr : new content::FixedReceivedData(
                                     data_.data(), data_.size(), -1));
   original_peer_->OnReceivedCompletedResponse(
-      response_info_, data_to_pass.Pass(), net::OK, false, stale_copy_in_cache,
-      security_info, completion_time, total_transfer_size);
+      response_info_, std::move(data_to_pass), net::OK, false,
+      stale_copy_in_cache, security_info, completion_time, total_transfer_size);
 }
 
 void ReplaceContentPeer::OnReceivedCompletedResponse(
@@ -220,11 +222,11 @@ void ReplaceContentPeer::OnReceivedCompletedResponse(
     bool stale_copy_in_cache,
     const std::string& security_info,
     const base::TimeTicks& completion_time,
-    int64 total_transfer_size) {
+    int64_t total_transfer_size) {
   // Make sure we delete ourselves at the end of this call.
   scoped_ptr<ReplaceContentPeer> this_deleter(this);
 
   original_peer_->OnReceivedCompletedResponse(
-      info, data.Pass(), error_code, was_ignored_by_handler,
+      info, std::move(data), error_code, was_ignored_by_handler,
       stale_copy_in_cache, security_info, completion_time, total_transfer_size);
 }

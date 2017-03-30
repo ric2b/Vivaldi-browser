@@ -6,12 +6,14 @@
 
 #include <algorithm>
 
+#include "build/build_config.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/find_bar_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -71,7 +73,7 @@ bool FindBarHost::MaybeForwardKeyEventToWebpage(
   // input. Otherwise Up and Down arrow key strokes get eaten. "Nom Nom Nom".
   render_view_host->ClearFocusedElement();
   NativeWebKeyboardEvent event(key_event);
-  render_view_host->ForwardKeyboardEvent(event);
+  render_view_host->GetWidget()->ForwardKeyboardEvent(event);
   return true;
 }
 
@@ -299,21 +301,14 @@ gfx::Rect FindBarHost::GetDialogPosition(gfx::Rect avoid_overlapping_rect) {
   gfx::Rect new_pos = FindBarController::GetLocationForFindbarView(
       view_location, widget_bounds, avoid_overlapping_rect);
 
-  // While we are animating, the Find window will grow bottoms up so we need to
-  // re-position the widget so that it appears to grow out of the toolbar.
-  if (animation_offset() > 0)
-    new_pos.Offset(0, std::min(0, -animation_offset()));
-
   return new_pos;
 }
 
 void FindBarHost::SetDialogPosition(const gfx::Rect& new_pos) {
+  DropdownBarHost::SetDialogPosition(new_pos);
+
   if (new_pos.IsEmpty())
     return;
-
-  if (!host()->IsVisible())
-    host()->Show();
-  host()->SetBounds(new_pos);
 
   // Tell the immersive mode controller about the find bar's new bounds. The
   // immersive mode controller uses the bounds to keep the top-of-window views

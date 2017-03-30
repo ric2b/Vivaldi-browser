@@ -5,40 +5,28 @@
 #include "remoting/protocol/fake_connection_to_host.h"
 
 #include "remoting/protocol/authenticator.h"
+#include "remoting/protocol/transport_context.h"
 
 namespace remoting {
 namespace test {
 
 FakeConnectionToHost::FakeConnectionToHost()
-    : state_(INITIALIZING),
-      session_config_(protocol::SessionConfig::ForTest()) {
-}
+    : session_config_(protocol::SessionConfig::ForTest()) {}
+FakeConnectionToHost::~FakeConnectionToHost() {}
 
-FakeConnectionToHost::~FakeConnectionToHost() {
-}
-
-void FakeConnectionToHost::set_candidate_config(
-    scoped_ptr<protocol::CandidateSessionConfig> config) {
-}
-
-void FakeConnectionToHost::set_client_stub(protocol::ClientStub* client_stub) {
-}
+void FakeConnectionToHost::set_client_stub(protocol::ClientStub* client_stub) {}
 
 void FakeConnectionToHost::set_clipboard_stub(
-    protocol::ClipboardStub* clipboard_stub) {
-}
+    protocol::ClipboardStub* clipboard_stub) {}
 
-void FakeConnectionToHost::set_video_stub(protocol::VideoStub* video_stub) {
-}
+void FakeConnectionToHost::set_video_renderer(
+    protocol::VideoRenderer* video_renderer) {}
 
-void FakeConnectionToHost::set_audio_stub(protocol::AudioStub* audio_stub) {
-}
+void FakeConnectionToHost::set_audio_stub(protocol::AudioStub* audio_stub) {}
 
 void FakeConnectionToHost::Connect(
-    SignalStrategy* signal_strategy,
-    scoped_ptr<protocol::TransportFactory> transport_factory,
-    scoped_ptr<protocol::Authenticator> authenticator,
-    const std::string& host_jid,
+    scoped_ptr<protocol::Session> session,
+    scoped_refptr<protocol::TransportContext> transport_context,
     HostEventCallback* event_callback) {
   DCHECK(event_callback);
 
@@ -59,7 +47,7 @@ void FakeConnectionToHost::SignalStateChange(protocol::Session::State state,
       // No updates for these events.
       break;
 
-    case protocol::Session::CONNECTED:
+    case protocol::Session::ACCEPTED:
       SetState(CONNECTED, error);
       break;
 

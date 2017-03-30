@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <locale>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/at_exit.h"
@@ -14,6 +17,7 @@
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -25,6 +29,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_local.h"
+#include "build/build_config.h"
 #include "chrome/test/chromedriver/logging.h"
 #include "chrome/test/chromedriver/net/port_server.h"
 #include "chrome/test/chromedriver/server/http_handler.h"
@@ -51,16 +56,16 @@ class HttpServer : public net::HttpServer::Delegate {
       : handle_request_func_(handle_request_func),
         weak_factory_(this) {}
 
-  virtual ~HttpServer() {}
+  ~HttpServer() override {}
 
-  bool Start(uint16 port, bool allow_remote) {
+  bool Start(uint16_t port, bool allow_remote) {
     std::string binding_ip = kLocalHostAddress;
     if (allow_remote)
       binding_ip = "0.0.0.0";
     scoped_ptr<net::ServerSocket> server_socket(
         new net::TCPServerSocket(NULL, net::NetLog::Source()));
     server_socket->ListenWithAddressAndPort(binding_ip, port, 1);
-    server_.reset(new net::HttpServer(server_socket.Pass(), this));
+    server_.reset(new net::HttpServer(std::move(server_socket), this));
     net::IPEndPoint address;
     return server_->GetLocalAddress(&address) == net::OK;
   }
@@ -123,7 +128,7 @@ void HandleRequestOnCmdThread(
       scoped_ptr<net::HttpServerResponseInfo> response(
           new net::HttpServerResponseInfo(net::HTTP_UNAUTHORIZED));
       response->SetBody("Unauthorized access", "text/plain");
-      send_response_func.Run(response.Pass());
+      send_response_func.Run(std::move(response));
       return;
     }
   }
@@ -153,7 +158,7 @@ void StopServerOnIOThread() {
   delete server;
 }
 
-void StartServerOnIOThread(uint16 port,
+void StartServerOnIOThread(uint16_t port,
                            bool allow_remote,
                            const HttpRequestHandlerFunc& handle_request_func) {
   scoped_ptr<HttpServer> temp_server(new HttpServer(handle_request_func));
@@ -164,7 +169,7 @@ void StartServerOnIOThread(uint16 port,
   lazy_tls_server.Pointer()->Set(temp_server.release());
 }
 
-void RunServer(uint16 port,
+void RunServer(uint16_t port,
                bool allow_remote,
                const std::vector<std::string>& whitelisted_ips,
                const std::string& url_base,
@@ -177,7 +182,7 @@ void RunServer(uint16 port,
   base::MessageLoop cmd_loop;
   base::RunLoop cmd_run_loop;
   HttpHandler handler(cmd_run_loop.QuitClosure(), io_thread.task_runner(),
-                      url_base, adb_port, port_server.Pass());
+                      url_base, adb_port, std::move(port_server));
   HttpRequestHandlerFunc handle_request_func =
       base::Bind(&HandleRequestOnCmdThread, &handler, whitelisted_ips);
 
@@ -212,7 +217,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   // Parse command line flags.
-  uint16 port = 9515;
+  uint16_t port = 9515;
   int adb_port = 5037;
   bool allow_remote = false;
   std::vector<std::string> whitelisted_ips;
@@ -253,7 +258,7 @@ int main(int argc, char *argv[]) {
       printf("Invalid port. Exiting...\n");
       return 1;
     }
-    port = static_cast<uint16>(cmd_line_port);
+    port = static_cast<uint16_t>(cmd_line_port);
   }
   if (cmd_line->HasSwitch("adb-port")) {
     if (!base::StringToInt(cmd_line->GetSwitchValueASCII("adb-port"),
@@ -287,7 +292,8 @@ int main(int argc, char *argv[]) {
   if (cmd_line->HasSwitch("whitelisted-ips")) {
     allow_remote = true;
     std::string whitelist = cmd_line->GetSwitchValueASCII("whitelisted-ips");
-    base::SplitString(whitelist, ',', &whitelisted_ips);
+    whitelisted_ips = base::SplitString(
+        whitelist, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   }
   if (!cmd_line->HasSwitch("silent")) {
     printf("Starting ChromeDriver %s on port %u\n", kChromeDriverVersion, port);
@@ -306,7 +312,7 @@ int main(int argc, char *argv[]) {
     printf("Unable to initialize logging. Exiting...\n");
     return 1;
   }
-  RunServer(port, allow_remote, whitelisted_ips,
-            url_base, adb_port, port_server.Pass());
+  RunServer(port, allow_remote, whitelisted_ips, url_base, adb_port,
+            std::move(port_server));
   return 0;
 }

@@ -11,9 +11,9 @@
 
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/profiles/profile_metrics.h"
-#include "chrome/browser/signin/signin_header_helper.h"
-#include "chrome/browser/ui/profile_chooser_constants.h"
 #import "chrome/browser/ui/cocoa/base_bubble_controller.h"
+#include "chrome/browser/ui/profile_chooser_constants.h"
+#include "components/signin/core/browser/signin_header_helper.h"
 
 class AvatarMenu;
 class ActiveProfileObserverBridge;
@@ -23,6 +23,11 @@ class ProfileOAuth2TokenService;
 namespace content {
 class WebContents;
 }
+
+namespace signin_metrics {
+enum class AccessPoint;
+}
+
 class GaiaWebContentsDelegate;
 
 // This window controller manages the bubble that displays a "menu" of profiles.
@@ -64,13 +69,17 @@ class GaiaWebContentsDelegate;
 
   // The GAIA service type that caused this menu to open.
   signin::GAIAServiceType serviceType_;
+
+  // The current access point of sign in.
+  signin_metrics::AccessPoint accessPoint_;
 }
 
 - (id)initWithBrowser:(Browser*)browser
            anchoredAt:(NSPoint)point
              viewMode:(profiles::BubbleViewMode)viewMode
          tutorialMode:(profiles::TutorialMode)tutorialMode
-          serviceType:(signin::GAIAServiceType)GAIAServiceType;
+          serviceType:(signin::GAIAServiceType)GAIAServiceType
+          accessPoint:(signin_metrics::AccessPoint)accessPoint;
 
 // Creates all the subviews of the avatar bubble for |viewToDisplay|.
 - (void)initMenuContentsWithView:(profiles::BubbleViewMode)viewToDisplay;

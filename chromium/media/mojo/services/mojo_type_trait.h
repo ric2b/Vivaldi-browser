@@ -6,15 +6,21 @@
 #define MEDIA_MOJO_SERVICES_MOJO_TYPE_TRAIT_H_
 
 #include "media/base/media_keys.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/array.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/string.h"
+#include "mojo/public/cpp/bindings/array.h"
+#include "mojo/public/cpp/bindings/string.h"
 
 namespace media {
 
-// A trait class to help get the corresponding mojo type for a native type.
+// A trait struct to help get the corresponding mojo type for a native type.
+// By default the mojo type is the same as the native type. This works well for
+// primitive types like integers.
 template <typename T>
-class MojoTypeTrait {};
+struct MojoTypeTrait {
+  typedef T MojoType;
+  static MojoType DefaultValue() { return MojoType(); }
+};
 
+// Specialization for string.
 template <>
 struct MojoTypeTrait<std::string> {
   typedef mojo::String MojoType;

@@ -5,7 +5,10 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_MANAGER_ANDROID_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_MANAGER_ANDROID_H_
 
+#include <stdint.h>
+
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/android/content_view_core_impl.h"
 
@@ -74,43 +77,85 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
   // Implementation of BrowserAccessibilityManager.
   void NotifyAccessibilityEvent(ui::AXEvent event_type,
                                 BrowserAccessibility* node) override;
+  void OnLocationChanges(
+      const std::vector<AccessibilityHostMsg_LocationChangeParams>& params)
+          override;
 
   // --------------------------------------------------------------------------
   // Methods called from Java via JNI
   // --------------------------------------------------------------------------
 
   // Tree methods.
-  jint GetRootId(JNIEnv* env, jobject obj);
-  jboolean IsNodeValid(JNIEnv* env, jobject obj, jint id);
-  void HitTest(JNIEnv* env, jobject obj, jint x, jint y);
+  jint GetRootId(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  jboolean IsNodeValid(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       jint id);
+  void HitTest(JNIEnv* env,
+               const base::android::JavaParamRef<jobject>& obj,
+               jint x,
+               jint y);
 
   // Methods to get information about a specific node.
-  jboolean IsEditableText(JNIEnv* env, jobject obj, jint id);
-  jint GetEditableTextSelectionStart(JNIEnv* env, jobject obj, jint id);
-  jint GetEditableTextSelectionEnd(JNIEnv* env, jobject obj, jint id);
+  jboolean IsEditableText(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          jint id);
+  jint GetEditableTextSelectionStart(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint id);
+  jint GetEditableTextSelectionEnd(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint id);
 
   // Populate Java accessibility data structures with info about a node.
   jboolean PopulateAccessibilityNodeInfo(
-      JNIEnv* env, jobject obj, jobject info, jint id);
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& info,
+      jint id);
   jboolean PopulateAccessibilityEvent(
-      JNIEnv* env, jobject obj, jobject event, jint id, jint event_type);
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& event,
+      jint id,
+      jint event_type);
 
   // Perform actions.
-  void Click(JNIEnv* env, jobject obj, jint id);
-  void Focus(JNIEnv* env, jobject obj, jint id);
-  void Blur(JNIEnv* env, jobject obj);
-  void ScrollToMakeNodeVisible(JNIEnv* env, jobject obj, jint id);
-  void SetTextFieldValue(JNIEnv* env, jobject obj, jint id, jstring value);
-  void SetSelection(JNIEnv* env, jobject obj, jint id, jint start, jint end);
-  jboolean AdjustSlider(JNIEnv* env, jobject obj, jint id, jboolean increment);
+  void Click(JNIEnv* env,
+             const base::android::JavaParamRef<jobject>& obj,
+             jint id);
+  void Focus(JNIEnv* env,
+             const base::android::JavaParamRef<jobject>& obj,
+             jint id);
+  void Blur(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void ScrollToMakeNodeVisible(JNIEnv* env,
+                               const base::android::JavaParamRef<jobject>& obj,
+                               jint id);
+  void SetTextFieldValue(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj,
+                         jint id,
+                         const base::android::JavaParamRef<jstring>& value);
+  void SetSelection(JNIEnv* env,
+                    const base::android::JavaParamRef<jobject>& obj,
+                    jint id,
+                    jint start,
+                    jint end);
+  jboolean AdjustSlider(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj,
+                        jint id,
+                        jboolean increment);
 
   // Return the id of the next node in tree order in the direction given by
   // |forwards|, starting with |start_id|, that matches |element_type|,
   // where |element_type| is a special uppercase string from TalkBack or
   // BrailleBack indicating general categories of web content like
   // "SECTION" or "CONTROL".  Return 0 if not found.
-  jint FindElementType(JNIEnv* env, jobject obj, jint start_id,
-                       jstring element_type, jboolean forwards);
+  jint FindElementType(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       jint start_id,
+                       const base::android::JavaParamRef<jstring>& element_type,
+                       jboolean forwards);
 
   // Respond to a ACTION_[NEXT/PREVIOUS]_AT_MOVEMENT_GRANULARITY action
   // and move the cursor/selection within the given node id. We keep track
@@ -119,12 +164,19 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
   // in Blink, too, and either way calls
   // Java_BrowserAccessibilityManager_finishGranularityMove with the
   // result.
-  jboolean NextAtGranularity(JNIEnv* env, jobject obj,
-                             jint granularity, jboolean extend_selection,
-                             jint id, jint cursor_index);
-  jboolean PreviousAtGranularity(JNIEnv* env, jobject obj,
-                                 jint granularity, jboolean extend_selection,
-                                 jint id, jint cursor_index);
+  jboolean NextAtGranularity(JNIEnv* env,
+                             const base::android::JavaParamRef<jobject>& obj,
+                             jint granularity,
+                             jboolean extend_selection,
+                             jint id,
+                             jint cursor_index);
+  jboolean PreviousAtGranularity(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint granularity,
+      jboolean extend_selection,
+      jint id,
+      jint cursor_index);
 
   // Helper functions to compute the next start and end index when moving
   // forwards or backwards by character, word, or line. This part is
@@ -132,24 +184,35 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
   // take a single cursor index as input and return the boundaries surrounding
   // the next word or line. If moving by character, the output start and
   // end index will be the same.
-  bool NextAtGranularity(
-      int32 granularity, int cursor_index,
-      BrowserAccessibilityAndroid* node, int32* start_index, int32* end_index);
-  bool PreviousAtGranularity(
-      int32 granularity, int cursor_index,
-      BrowserAccessibilityAndroid* node, int32* start_index, int32* end_index);
+  bool NextAtGranularity(int32_t granularity,
+                         int cursor_index,
+                         BrowserAccessibilityAndroid* node,
+                         int32_t* start_index,
+                         int32_t* end_index);
+  bool PreviousAtGranularity(int32_t granularity,
+                             int cursor_index,
+                             BrowserAccessibilityAndroid* node,
+                             int32_t* start_index,
+                             int32_t* end_index);
 
   // Set accessibility focus. This sends a message to the renderer to
   // asynchronously load inline text boxes for this node only, enabling more
   // accurate movement by granularities on this node.
-  void SetAccessibilityFocus(JNIEnv* env, jobject obj, jint id);
+  void SetAccessibilityFocus(JNIEnv* env,
+                             const base::android::JavaParamRef<jobject>& obj,
+                             jint id);
 
   // Returns true if the object is a slider.
-  bool IsSlider(JNIEnv* env, jobject obj, jint id);
+  bool IsSlider(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& obj,
+                jint id);
 
   // Scrolls any scrollable container by about 80% of one page in the
   // given direction.
-  bool Scroll(JNIEnv* env, jobject obj, jint id, int direction);
+  bool Scroll(JNIEnv* env,
+              const base::android::JavaParamRef<jobject>& obj,
+              jint id,
+              int direction);
 
  protected:
   // AXTreeDelegate overrides.

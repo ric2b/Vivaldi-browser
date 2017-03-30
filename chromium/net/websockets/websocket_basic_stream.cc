@@ -4,12 +4,14 @@
 
 #include "net/websockets/websocket_basic_stream.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
@@ -24,9 +26,9 @@ namespace net {
 
 namespace {
 
-// This uses type uint64 to match the definition of
+// This uses type uint64_t to match the definition of
 // WebSocketFrameHeader::payload_length in websocket_frame.h.
-const uint64 kMaxControlFramePayload = 125;
+const uint64_t kMaxControlFramePayload = 125;
 
 // The number of bytes to attempt to read at a time.
 // TODO(ricea): See if there is a better number or algorithm to fulfill our
@@ -40,24 +42,21 @@ const uint64 kMaxControlFramePayload = 125;
 //     packet sizes / encryption block sizes / IPC alignment issues, etc.
 const int kReadBufferSize = 32 * 1024;
 
-typedef ScopedVector<WebSocketFrame>::const_iterator WebSocketFrameIterator;
-
 // Returns the total serialized size of |frames|. This function assumes that
 // |frames| will be serialized with mask field. This function forces the
 // masked bit of the frames on.
 int CalculateSerializedSizeAndTurnOnMaskBit(
-    ScopedVector<WebSocketFrame>* frames) {
-  const uint64 kMaximumTotalSize = std::numeric_limits<int>::max();
+    std::vector<scoped_ptr<WebSocketFrame>>* frames) {
+  const uint64_t kMaximumTotalSize = std::numeric_limits<int>::max();
 
-  uint64 total_size = 0;
-  for (WebSocketFrameIterator it = frames->begin(); it != frames->end(); ++it) {
-    WebSocketFrame* frame = *it;
+  uint64_t total_size = 0;
+  for (const auto& frame : *frames) {
     // Force the masked bit on.
     frame->header.masked = true;
     // We enforce flow control so the renderer should never be able to force us
     // to cache anywhere near 2GB of frames.
-    uint64 frame_size = frame->header.payload_length +
-        GetWebSocketFrameHeaderSize(frame->header);
+    uint64_t frame_size = frame->header.payload_length +
+                          GetWebSocketFrameHeaderSize(frame->header);
     CHECK_LE(frame_size, kMaximumTotalSize - total_size)
         << "Aborting to prevent overflow";
     total_size += frame_size;
@@ -73,7 +72,7 @@ WebSocketBasicStream::WebSocketBasicStream(
     const std::string& sub_protocol,
     const std::string& extensions)
     : read_buffer_(new IOBufferWithSize(kReadBufferSize)),
-      connection_(connection.Pass()),
+      connection_(std::move(connection)),
       http_read_buffer_(http_read_buffer),
       sub_protocol_(sub_protocol),
       extensions_(extensions),
@@ -86,8 +85,9 @@ WebSocketBasicStream::WebSocketBasicStream(
 
 WebSocketBasicStream::~WebSocketBasicStream() { Close(); }
 
-int WebSocketBasicStream::ReadFrames(ScopedVector<WebSocketFrame>* frames,
-                                     const CompletionCallback& callback) {
+int WebSocketBasicStream::ReadFrames(
+    std::vector<scoped_ptr<WebSocketFrame>>* frames,
+    const CompletionCallback& callback) {
   DCHECK(frames->empty());
   // If there is data left over after parsing the HTTP headers, attempt to parse
   // it as WebSocket frames.
@@ -98,7 +98,7 @@ int WebSocketBasicStream::ReadFrames(ScopedVector<WebSocketFrame>* frames,
     scoped_refptr<GrowableIOBuffer> buffered_data;
     buffered_data.swap(http_read_buffer_);
     DCHECK(http_read_buffer_.get() == NULL);
-    ScopedVector<WebSocketFrameChunk> frame_chunks;
+    std::vector<scoped_ptr<WebSocketFrameChunk>> frame_chunks;
     if (!parser_.Decode(buffered_data->StartOfBuffer(),
                         buffered_data->offset(),
                         &frame_chunks))
@@ -132,8 +132,9 @@ int WebSocketBasicStream::ReadFrames(ScopedVector<WebSocketFrame>* frames,
   }
 }
 
-int WebSocketBasicStream::WriteFrames(ScopedVector<WebSocketFrame>* frames,
-                                      const CompletionCallback& callback) {
+int WebSocketBasicStream::WriteFrames(
+    std::vector<scoped_ptr<WebSocketFrame>>* frames,
+    const CompletionCallback& callback) {
   // This function always concatenates all frames into a single buffer.
   // TODO(ricea): Investigate whether it would be better in some cases to
   // perform multiple writes with smaller buffers.
@@ -145,8 +146,7 @@ int WebSocketBasicStream::WriteFrames(ScopedVector<WebSocketFrame>* frames,
 
   char* dest = combined_buffer->data();
   int remaining_size = total_size;
-  for (WebSocketFrameIterator it = frames->begin(); it != frames->end(); ++it) {
-    WebSocketFrame* frame = *it;
+  for (const auto& frame : *frames) {
     WebSocketMaskingKey mask = generate_websocket_masking_key_();
     int result =
         WriteWebSocketFrameHeader(frame->header, &mask, dest, remaining_size);
@@ -157,7 +157,8 @@ int WebSocketBasicStream::WriteFrames(ScopedVector<WebSocketFrame>* frames,
     dest += result;
     remaining_size -= result;
 
-    CHECK_LE(frame->header.payload_length, static_cast<uint64>(remaining_size));
+    CHECK_LE(frame->header.payload_length,
+             static_cast<uint64_t>(remaining_size));
     const int frame_size = static_cast<int>(frame->header.payload_length);
     if (frame_size > 0) {
       const char* const frame_data = frame->data->data();
@@ -191,9 +192,9 @@ WebSocketBasicStream::CreateWebSocketBasicStreamForTesting(
     const std::string& extensions,
     WebSocketMaskingKeyGeneratorFunction key_generator_function) {
   scoped_ptr<WebSocketBasicStream> stream(new WebSocketBasicStream(
-      connection.Pass(), http_read_buffer, sub_protocol, extensions));
+      std::move(connection), http_read_buffer, sub_protocol, extensions));
   stream->generate_websocket_masking_key_ = key_generator_function;
-  return stream.Pass();
+  return stream;
 }
 
 int WebSocketBasicStream::WriteEverything(
@@ -237,14 +238,14 @@ void WebSocketBasicStream::OnWriteComplete(
 
 int WebSocketBasicStream::HandleReadResult(
     int result,
-    ScopedVector<WebSocketFrame>* frames) {
+    std::vector<scoped_ptr<WebSocketFrame>>* frames) {
   DCHECK_NE(ERR_IO_PENDING, result);
   DCHECK(frames->empty());
   if (result < 0)
     return result;
   if (result == 0)
     return ERR_CONNECTION_CLOSED;
-  ScopedVector<WebSocketFrameChunk> frame_chunks;
+  std::vector<scoped_ptr<WebSocketFrameChunk>> frame_chunks;
   if (!parser_.Decode(read_buffer_->data(), result, &frame_chunks))
     return WebSocketErrorToNetError(parser_.websocket_error());
   if (frame_chunks.empty())
@@ -253,21 +254,17 @@ int WebSocketBasicStream::HandleReadResult(
 }
 
 int WebSocketBasicStream::ConvertChunksToFrames(
-    ScopedVector<WebSocketFrameChunk>* frame_chunks,
-    ScopedVector<WebSocketFrame>* frames) {
+    std::vector<scoped_ptr<WebSocketFrameChunk>>* frame_chunks,
+    std::vector<scoped_ptr<WebSocketFrame>>* frames) {
   for (size_t i = 0; i < frame_chunks->size(); ++i) {
     scoped_ptr<WebSocketFrame> frame;
-    int result = ConvertChunkToFrame(
-        scoped_ptr<WebSocketFrameChunk>((*frame_chunks)[i]), &frame);
-    (*frame_chunks)[i] = NULL;
+    int result = ConvertChunkToFrame(std::move((*frame_chunks)[i]), &frame);
     if (result != OK)
       return result;
     if (frame)
-      frames->push_back(frame.Pass());
+      frames->push_back(std::move(frame));
   }
-  // All the elements of |frame_chunks| are now NULL, so there is no point in
-  // calling delete on them all.
-  frame_chunks->weak_clear();
+  frame_chunks->clear();
   if (frames->empty())
     return ERR_IO_PENDING;
   return OK;
@@ -349,10 +346,10 @@ int WebSocketBasicStream::ConvertChunkToFrame(
   // header. A check for exact equality can only be used when the whole frame
   // arrives in one chunk.
   DCHECK_GE(current_frame_header_->payload_length,
-            base::checked_cast<uint64>(chunk_size));
+            base::checked_cast<uint64_t>(chunk_size));
   DCHECK(!is_first_chunk || !is_final_chunk ||
          current_frame_header_->payload_length ==
-             base::checked_cast<uint64>(chunk_size));
+             base::checked_cast<uint64_t>(chunk_size));
 
   // Convert the chunk to a complete frame.
   *frame = CreateFrame(is_final_chunk, data_buffer);
@@ -393,7 +390,7 @@ scoped_ptr<WebSocketFrame> WebSocketBasicStream::CreateFrame(
   // belong to it.
   if (is_final_chunk)
     current_frame_header_.reset();
-  return result_frame.Pass();
+  return result_frame;
 }
 
 void WebSocketBasicStream::AddToIncompleteControlFrameBody(
@@ -411,9 +408,10 @@ void WebSocketBasicStream::AddToIncompleteControlFrameBody(
   incomplete_control_frame_body_->set_offset(new_offset);
 }
 
-void WebSocketBasicStream::OnReadComplete(ScopedVector<WebSocketFrame>* frames,
-                                          const CompletionCallback& callback,
-                                          int result) {
+void WebSocketBasicStream::OnReadComplete(
+    std::vector<scoped_ptr<WebSocketFrame>>* frames,
+    const CompletionCallback& callback,
+    int result) {
   result = HandleReadResult(result, frames);
   if (result == ERR_IO_PENDING)
     result = ReadFrames(frames, callback);

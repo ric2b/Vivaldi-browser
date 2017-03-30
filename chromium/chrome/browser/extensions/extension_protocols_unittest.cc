@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -137,7 +140,8 @@ class ExtensionProtocolTest : public testing::Test {
         resource_type == content::RESOURCE_TYPE_MAIN_FRAME,  // is_main_frame
         false,   // parent_is_main_frame
         true,    // allow_download
-        false);  // is_async
+        false,   // is_async
+        false);  // is_using_lofi
     request->Start();
     base::MessageLoop::current()->Run();
   }

@@ -4,6 +4,8 @@
 
 #include "ui/app_list/search/history.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/app_list/search/history_data.h"
@@ -17,7 +19,8 @@ namespace {
 // Normalize the given string by joining all its tokens with a space.
 std::string NormalizeString(const std::string& utf8) {
   TokenizedString tokenized(base::UTF8ToUTF16(utf8));
-  return base::UTF16ToUTF8(JoinString(tokenized.tokens(), ' '));
+  return base::UTF16ToUTF8(
+      base::JoinString(tokenized.tokens(), base::ASCIIToUTF16(" ")));
 }
 
 }  // namespace
@@ -49,7 +52,7 @@ void History::AddLaunchEvent(const std::string& query,
 scoped_ptr<KnownResults> History::GetKnownResults(
     const std::string& query) const {
   DCHECK(IsReady());
-  return data_->GetKnownResults(NormalizeString(query)).Pass();
+  return data_->GetKnownResults(NormalizeString(query));
 }
 
 void History::OnHistoryDataLoadedFromStore() {

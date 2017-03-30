@@ -4,10 +4,13 @@
 
 #include "content/test/fake_compositor_dependencies.h"
 
+#include <stddef.h>
+
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "cc/test/fake_external_begin_frame_source.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "ui/gfx/buffer_types.h"
 
 namespace content {
 
@@ -41,16 +44,20 @@ bool FakeCompositorDependencies::IsZeroCopyEnabled() {
   return true;
 }
 
-bool FakeCompositorDependencies::IsOneCopyEnabled() {
+bool FakeCompositorDependencies::IsPartialRasterEnabled() {
+  return false;
+}
+
+bool FakeCompositorDependencies::IsGpuMemoryBufferCompositorResourcesEnabled() {
   return false;
 }
 
 bool FakeCompositorDependencies::IsElasticOverscrollEnabled() {
   return false;
 }
-
-uint32 FakeCompositorDependencies::GetImageTextureTarget() {
-  return GL_TEXTURE_2D;
+std::vector<unsigned> FakeCompositorDependencies::GetImageTextureTargets() {
+  return std::vector<unsigned>(static_cast<size_t>(gfx::BufferFormat::LAST) + 1,
+                               GL_TEXTURE_2D);
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -93,8 +100,12 @@ cc::TaskGraphRunner* FakeCompositorDependencies::GetTaskGraphRunner() {
   return &task_graph_runner_;
 }
 
-bool FakeCompositorDependencies::IsGatherPixelRefsEnabled() {
+bool FakeCompositorDependencies::AreImageDecodeTasksEnabled() {
   return false;
+}
+
+bool FakeCompositorDependencies::IsThreadedAnimationEnabled() {
+  return true;
 }
 
 }  // namespace content

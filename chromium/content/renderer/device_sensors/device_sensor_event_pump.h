@@ -5,6 +5,7 @@
 #ifndef CONTENT_RENDERER_DEVICE_SENSORS_DEVICE_SENSOR_EVENT_PUMP_H_
 #define CONTENT_RENDERER_DEVICE_SENSORS_DEVICE_SENSOR_EVENT_PUMP_H_
 
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -92,7 +93,7 @@ class CONTENT_EXPORT DeviceSensorEventPump
 
   int pump_delay_microseconds_;
   PumpState state_;
-  base::RepeatingTimer<DeviceSensorEventPump> timer_;
+  base::RepeatingTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceSensorEventPump);
 };

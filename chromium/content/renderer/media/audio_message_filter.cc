@@ -28,21 +28,22 @@ class AudioMessageFilter::AudioOutputIPCImpl
   ~AudioOutputIPCImpl() override;
 
   // media::AudioOutputIPC implementation.
+  void RequestDeviceAuthorization(media::AudioOutputIPCDelegate* delegate,
+                                  int session_id,
+                                  const std::string& device_id,
+                                  const url::Origin& security_origin) override;
   void CreateStream(media::AudioOutputIPCDelegate* delegate,
-                    const media::AudioParameters& params,
-                    int session_id) override;
+                    const media::AudioParameters& params) override;
   void PlayStream() override;
   void PauseStream() override;
   void CloseStream() override;
   void SetVolume(double volume) override;
-  void SwitchOutputDevice(const std::string& device_id,
-                          const GURL& security_origin,
-                          int request_id) override;
 
  private:
   const scoped_refptr<AudioMessageFilter> filter_;
   const int render_frame_id_;
   int stream_id_;
+  bool stream_created_;
 };
 
 AudioMessageFilter* AudioMessageFilter::g_filter = NULL;
@@ -69,7 +70,8 @@ AudioMessageFilter::AudioOutputIPCImpl::AudioOutputIPCImpl(
     int render_frame_id)
     : filter_(filter),
       render_frame_id_(render_frame_id),
-      stream_id_(kStreamIDNotSet) {}
+      stream_id_(kStreamIDNotSet),
+      stream_created_(false) {}
 
 AudioMessageFilter::AudioOutputIPCImpl::~AudioOutputIPCImpl() {}
 
@@ -80,25 +82,42 @@ scoped_ptr<media::AudioOutputIPC> AudioMessageFilter::CreateAudioOutputIPC(
       new AudioOutputIPCImpl(this, render_frame_id));
 }
 
-void AudioMessageFilter::AudioOutputIPCImpl::CreateStream(
+void AudioMessageFilter::AudioOutputIPCImpl::RequestDeviceAuthorization(
     media::AudioOutputIPCDelegate* delegate,
-    const media::AudioParameters& params,
-    int session_id) {
+    int session_id,
+    const std::string& device_id,
+    const url::Origin& security_origin) {
   DCHECK(filter_->io_task_runner_->BelongsToCurrentThread());
   DCHECK(delegate);
   DCHECK_EQ(stream_id_, kStreamIDNotSet);
+  DCHECK(!stream_created_);
+
   stream_id_ = filter_->delegates_.Add(delegate);
-  filter_->Send(new AudioHostMsg_CreateStream(stream_id_, render_frame_id_,
-                                              session_id, params));
+  filter_->Send(new AudioHostMsg_RequestDeviceAuthorization(
+      stream_id_, render_frame_id_, session_id, device_id,
+      url::Origin(security_origin)));
+}
+
+void AudioMessageFilter::AudioOutputIPCImpl::CreateStream(
+    media::AudioOutputIPCDelegate* delegate,
+    const media::AudioParameters& params) {
+  DCHECK(filter_->io_task_runner_->BelongsToCurrentThread());
+  DCHECK(!stream_created_);
+  if (stream_id_ == kStreamIDNotSet)
+    stream_id_ = filter_->delegates_.Add(delegate);
+
+  filter_->Send(
+      new AudioHostMsg_CreateStream(stream_id_, render_frame_id_, params));
+  stream_created_ = true;
 }
 
 void AudioMessageFilter::AudioOutputIPCImpl::PlayStream() {
-  DCHECK_NE(stream_id_, kStreamIDNotSet);
+  DCHECK(stream_created_);
   filter_->Send(new AudioHostMsg_PlayStream(stream_id_));
 }
 
 void AudioMessageFilter::AudioOutputIPCImpl::PauseStream() {
-  DCHECK_NE(stream_id_, kStreamIDNotSet);
+  DCHECK(stream_created_);
   filter_->Send(new AudioHostMsg_PauseStream(stream_id_));
 }
 
@@ -108,22 +127,12 @@ void AudioMessageFilter::AudioOutputIPCImpl::CloseStream() {
   filter_->Send(new AudioHostMsg_CloseStream(stream_id_));
   filter_->delegates_.Remove(stream_id_);
   stream_id_ = kStreamIDNotSet;
+  stream_created_ = false;
 }
 
 void AudioMessageFilter::AudioOutputIPCImpl::SetVolume(double volume) {
-  DCHECK_NE(stream_id_, kStreamIDNotSet);
+  DCHECK(stream_created_);
   filter_->Send(new AudioHostMsg_SetVolume(stream_id_, volume));
-}
-
-void AudioMessageFilter::AudioOutputIPCImpl::SwitchOutputDevice(
-    const std::string& device_id,
-    const GURL& security_origin,
-    int request_id) {
-  DCHECK_NE(stream_id_, kStreamIDNotSet);
-  DVLOG(1) << __FUNCTION__
-           << "(" << device_id << ", " << security_origin << ")";
-  filter_->Send(new AudioHostMsg_SwitchOutputDevice(
-      stream_id_, render_frame_id_, device_id, security_origin, request_id));
 }
 
 void AudioMessageFilter::Send(IPC::Message* message) {
@@ -139,10 +148,9 @@ bool AudioMessageFilter::OnMessageReceived(const IPC::Message& message) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(AudioMessageFilter, message)
+    IPC_MESSAGE_HANDLER(AudioMsg_NotifyDeviceAuthorized, OnDeviceAuthorized)
     IPC_MESSAGE_HANDLER(AudioMsg_NotifyStreamCreated, OnStreamCreated)
     IPC_MESSAGE_HANDLER(AudioMsg_NotifyStreamStateChanged, OnStreamStateChanged)
-    IPC_MESSAGE_HANDLER(AudioMsg_NotifyOutputDeviceSwitched,
-                        OnOutputDeviceSwitched)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -176,11 +184,23 @@ void AudioMessageFilter::OnChannelClosing() {
   }
 }
 
+void AudioMessageFilter::OnDeviceAuthorized(
+    int stream_id,
+    media::OutputDeviceStatus device_status,
+    const media::AudioParameters& output_params) {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  media::AudioOutputIPCDelegate* delegate = delegates_.Lookup(stream_id);
+  if (!delegate)
+    return;
+
+  delegate->OnDeviceAuthorized(device_status, output_params);
+}
+
 void AudioMessageFilter::OnStreamCreated(
     int stream_id,
     base::SharedMemoryHandle handle,
     base::SyncSocket::TransitDescriptor socket_descriptor,
-    uint32 length) {
+    uint32_t length) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   WebRtcLogMessage(base::StringPrintf(
@@ -211,22 +231,6 @@ void AudioMessageFilter::OnStreamStateChanged(
     return;
   }
   delegate->OnStateChanged(state);
-}
-
-void AudioMessageFilter::OnOutputDeviceSwitched(
-    int stream_id,
-    int request_id,
-    media::SwitchOutputDeviceResult result) {
-  DCHECK(io_task_runner_->BelongsToCurrentThread());
-  DVLOG(1) << __FUNCTION__
-           << "(" << stream_id << ", " << request_id << ", " << result << ")";
-  media::AudioOutputIPCDelegate* delegate = delegates_.Lookup(stream_id);
-  if (!delegate) {
-    DLOG(WARNING) << "Got OnOutputDeviceSwitched() event for a nonexistent or"
-                  << " removed audio renderer.  State: " << result;
-    return;
-  }
-  delegate->OnOutputDeviceSwitched(request_id, result);
 }
 
 }  // namespace content

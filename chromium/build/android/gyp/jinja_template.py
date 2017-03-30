@@ -13,8 +13,11 @@ import sys
 
 from util import build_utils
 
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
+from pylib.constants import host_paths
+
 # Import jinja2 from third_party/jinja2
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../third_party'))
+sys.path.append(os.path.join(host_paths.DIR_SOURCE_ROOT, 'third_party'))
 import jinja2  # pylint: disable=F0401
 
 
@@ -76,8 +79,8 @@ def main():
                     'input. Required if --output-zip is given.')
   parser.add_option('--loader-base-dir', help='Base path used by the template '
                     'loader. Must be a common ancestor directory of '
-                    'the inputs. Defaults to CHROMIUM_SRC.',
-                    default=build_utils.CHROMIUM_SRC)
+                    'the inputs. Defaults to DIR_SOURCE_ROOT.',
+                    default=host_paths.DIR_SOURCE_ROOT)
   parser.add_option('--variables', help='Variables to be made available in the '
                     'template processing environment, as a GYP list (e.g. '
                     '--variables "channel=beta mstone=39")', default='')

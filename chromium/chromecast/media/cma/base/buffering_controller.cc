@@ -10,7 +10,7 @@
 #include "chromecast/base/metrics/cast_metrics_helper.h"
 #include "chromecast/media/cma/base/buffering_state.h"
 #include "chromecast/media/cma/base/cma_logging.h"
-#include "media/base/buffers.h"
+#include "media/base/timestamp_constants.h"
 
 namespace chromecast {
 namespace media {
@@ -26,6 +26,11 @@ BufferingController::BufferingController(
       weak_factory_(this) {
   weak_this_ = weak_factory_.GetWeakPtr();
   thread_checker_.DetachFromThread();
+  CMALOG(kLogControl) << __FUNCTION__
+                      << " High threshold: "
+                      << config_->high_level().InMilliseconds()
+                      << "ms Low threshold: "
+                      << config_->low_level().InMilliseconds() << "ms";
 }
 
 BufferingController::~BufferingController() {
@@ -39,7 +44,7 @@ void BufferingController::UpdateHighLevelThreshold(
   if (high_level_threshold > config_->high_level())
     return;
   CMALOG(kLogControl) << "High buffer threshold: "
-                      << high_level_threshold.InMilliseconds();
+                      << high_level_threshold.InMilliseconds() << "ms";
   config_->set_high_level(high_level_threshold);
 
   // Make sure the low level threshold is somewhat consistent.
@@ -48,7 +53,7 @@ void BufferingController::UpdateHighLevelThreshold(
   base::TimeDelta low_level_threshold = high_level_threshold / 3;
   if (low_level_threshold <= config_->low_level()) {
     CMALOG(kLogControl) << "Low buffer threshold: "
-                        << low_level_threshold.InMilliseconds();
+                        << low_level_threshold.InMilliseconds() << "ms";
     config_->set_low_level(low_level_threshold);
   }
 

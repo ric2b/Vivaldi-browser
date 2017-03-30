@@ -5,14 +5,24 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_INSTALLED_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_INSTALLED_BUBBLE_VIEW_H_
 
-#include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/extensions/extension_installed_bubble.h"
+#include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
+#include "components/bubble/bubble_reference.h"
 #include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/controls/button/button.h"
+#include "ui/views/controls/link_listener.h"
 
 class Browser;
+class BubbleSyncPromoView;
 
 namespace extensions {
 class Extension;
+}
+
+namespace views {
+class LabelButton;
+class Link;
 }
 
 // Provides feedback to the user upon successful installation of an
@@ -22,37 +32,53 @@ class Extension;
 //    BROWSER_ACTION -> The browserAction icon in the toolbar.
 //    PAGE_ACTION    -> A preview of the pageAction icon in the location
 //                      bar which is shown while the Bubble is shown.
-//    GENERIC        -> The wrench menu. This case includes pageActions that
-//                      don't specify a default icon.
-class ExtensionInstalledBubbleView
-    : public ExtensionInstalledBubble::Delegate,
-      public views::BubbleDelegateView {
+//    GENERIC        -> The app menu. This case includes pageActions that don't
+//                      specify a default icon.
+class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
+                                     public views::BubbleDelegateView,
+                                     public views::ButtonListener,
+                                     public views::LinkListener {
  public:
-  // Creates the ExtensionInstalledBubbleView and schedules it to be shown once
-  // the extension has loaded. |extension| is the installed extension. |browser|
-  // is the browser window which will host the bubble. |icon| is the install
-  // icon of the extension.
-  static void Show(const extensions::Extension* extension,
-                   Browser* browser,
-                   const SkBitmap& icon);
-
- private:
-  ExtensionInstalledBubbleView(const extensions::Extension* extension,
-                               Browser* browser,
-                               const SkBitmap& icon);
-
+  ExtensionInstalledBubbleView(ExtensionInstalledBubble* bubble,
+                               BubbleReference bubble_reference);
   ~ExtensionInstalledBubbleView() override;
 
-  // ExtensionInstalledBubble::Delegate:
-  bool MaybeShowNow() override;
+  // Recalculate the anchor position for this bubble.
+  void UpdateAnchorView();
 
-  // views::WidgetDelegate:
+  void InitLayout(const ExtensionInstalledBubble& bubble);
+
+ private:
+  // views::BubbleDelegateView:
   void WindowClosing() override;
-
-  // views::BubbleDelegate:
   gfx::Rect GetAnchorRect() const override;
+  void OnWidgetClosing(views::Widget* widget) override;
+  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
-  ExtensionInstalledBubble bubble_;
+  // BubbleSyncPromoDelegate:
+  void OnSignInLinkClicked() override;
+
+  // views::LinkListener:
+  void LinkClicked(views::Link* source, int event_flags) override;
+
+  // views::ButtonListener:
+  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+
+  BubbleReference bubble_reference_;
+  const extensions::Extension* extension_;
+  Browser* browser_;
+  ExtensionInstalledBubble::BubbleType type_;
+  ExtensionInstalledBubble::AnchorPosition anchor_position_;
+
+  // The sync promo section of the bubble.
+  BubbleSyncPromoView* sync_promo_;
+
+  // The button to close the bubble.
+  views::LabelButton* close_;
+
+  // The shortcut to open the manage shortcuts page.
+  views::Link* manage_shortcut_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionInstalledBubbleView);
 };

@@ -7,6 +7,7 @@
 #include "base/stl_util.h"
 #include "net/quic/congestion_control/loss_detection_interface.h"
 #include "net/quic/congestion_control/send_algorithm_interface.h"
+#include "net/quic/quic_flags.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_sent_packet_manager.h"
 
@@ -21,8 +22,15 @@ size_t QuicSentPacketManagerPeer::GetMaxTailLossProbes(
 
 // static
 void QuicSentPacketManagerPeer::SetMaxTailLossProbes(
-    QuicSentPacketManager* sent_packet_manager, size_t max_tail_loss_probes) {
+    QuicSentPacketManager* sent_packet_manager,
+    size_t max_tail_loss_probes) {
   sent_packet_manager->max_tail_loss_probes_ = max_tail_loss_probes;
+}
+
+// static
+bool QuicSentPacketManagerPeer::GetEnableHalfRttTailLossProbe(
+    QuicSentPacketManager* sent_packet_manager) {
+  return sent_packet_manager->enable_half_rtt_tail_loss_probe_;
 }
 
 // static
@@ -45,8 +53,7 @@ void QuicSentPacketManagerPeer::SetPerspective(
 }
 
 // static
-const SendAlgorithmInterface*
-    QuicSentPacketManagerPeer::GetSendAlgorithm(
+const SendAlgorithmInterface* QuicSentPacketManagerPeer::GetSendAlgorithm(
     const QuicSentPacketManager& sent_packet_manager) {
   return sent_packet_manager.send_algorithm_.get();
 }
@@ -86,30 +93,42 @@ bool QuicSentPacketManagerPeer::HasPendingPackets(
 // static
 QuicTime QuicSentPacketManagerPeer::GetSentTime(
     const QuicSentPacketManager* sent_packet_manager,
-    QuicPacketSequenceNumber sequence_number) {
-  DCHECK(sent_packet_manager->unacked_packets_.IsUnacked(sequence_number));
+    QuicPacketNumber packet_number) {
+  DCHECK(sent_packet_manager->unacked_packets_.IsUnacked(packet_number));
 
   return sent_packet_manager->unacked_packets_.GetTransmissionInfo(
-      sequence_number).sent_time;
+                                                  packet_number)
+      .sent_time;
 }
 
 // static
 bool QuicSentPacketManagerPeer::IsRetransmission(
     QuicSentPacketManager* sent_packet_manager,
-    QuicPacketSequenceNumber sequence_number) {
-  DCHECK(sent_packet_manager->HasRetransmittableFrames(sequence_number));
-  return sent_packet_manager->HasRetransmittableFrames(sequence_number) &&
-      sent_packet_manager->unacked_packets_.GetTransmissionInfo(
-          sequence_number).all_transmissions != nullptr;
+    QuicPacketNumber packet_number) {
+  DCHECK(sent_packet_manager->HasRetransmittableFrames(packet_number));
+  if (FLAGS_quic_track_single_retransmission) {
+    if (!sent_packet_manager->HasRetransmittableFrames(packet_number)) {
+      return false;
+    }
+    for (auto transmission_info : sent_packet_manager->unacked_packets_) {
+      if (transmission_info.retransmission == packet_number) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return sent_packet_manager->HasRetransmittableFrames(packet_number) &&
+         sent_packet_manager->unacked_packets_.GetTransmissionInfo(
+                                                  packet_number)
+                 .all_transmissions != nullptr;
 }
 
 // static
 void QuicSentPacketManagerPeer::MarkForRetransmission(
     QuicSentPacketManager* sent_packet_manager,
-    QuicPacketSequenceNumber sequence_number,
+    QuicPacketNumber packet_number,
     TransmissionType transmission_type) {
-  sent_packet_manager->MarkForRetransmission(sequence_number,
-                                             transmission_type);
+  sent_packet_manager->MarkForRetransmission(packet_number, transmission_type);
 }
 
 // static
@@ -146,8 +165,8 @@ QuicByteCount QuicSentPacketManagerPeer::GetBytesInFlight(
 
 // static
 QuicSentPacketManager::NetworkChangeVisitor*
-    QuicSentPacketManagerPeer::GetNetworkChangeVisitor(
-        const QuicSentPacketManager* sent_packet_manager) {
+QuicSentPacketManagerPeer::GetNetworkChangeVisitor(
+    const QuicSentPacketManager* sent_packet_manager) {
   return sent_packet_manager->network_change_visitor_;
 }
 

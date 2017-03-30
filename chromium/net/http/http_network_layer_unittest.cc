@@ -4,7 +4,8 @@
 
 #include "net/http/http_network_layer.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/strings/stringprintf.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/dns/mock_host_resolver.h"
@@ -32,10 +33,10 @@ class HttpNetworkLayerTest : public PlatformTest {
     ConfigureTestDependencies(ProxyService::CreateDirect());
   }
 
-  void ConfigureTestDependencies(ProxyService* proxy_service) {
+  void ConfigureTestDependencies(scoped_ptr<ProxyService> proxy_service) {
     cert_verifier_.reset(new MockCertVerifier);
     transport_security_state_.reset(new TransportSecurityState);
-    proxy_service_.reset(proxy_service);
+    proxy_service_ = std::move(proxy_service);
     HttpNetworkSession::Params session_params;
     session_params.client_socket_factory = &mock_socket_factory_;
     session_params.host_resolver = &host_resolver_;
@@ -45,7 +46,7 @@ class HttpNetworkLayerTest : public PlatformTest {
     session_params.ssl_config_service = ssl_config_service_.get();
     session_params.http_server_properties =
         http_server_properties_.GetWeakPtr();
-    network_session_ = new HttpNetworkSession(session_params);
+    network_session_.reset(new HttpNetworkSession(session_params));
     factory_.reset(new HttpNetworkLayer(network_session_.get()));
   }
 
@@ -259,7 +260,7 @@ class HttpNetworkLayerTest : public PlatformTest {
   scoped_ptr<TransportSecurityState> transport_security_state_;
   scoped_ptr<ProxyService> proxy_service_;
   const scoped_refptr<SSLConfigService> ssl_config_service_;
-  scoped_refptr<HttpNetworkSession> network_session_;
+  scoped_ptr<HttpNetworkSession> network_session_;
   scoped_ptr<HttpNetworkLayer> factory_;
   HttpServerPropertiesImpl http_server_properties_;
 };

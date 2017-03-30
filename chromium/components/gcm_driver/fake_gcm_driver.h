@@ -14,13 +14,12 @@ namespace gcm {
 class FakeGCMDriver : public GCMDriver {
  public:
   FakeGCMDriver();
+  explicit FakeGCMDriver(
+      const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner);
+
   ~FakeGCMDriver() override;
 
   // GCMDriver overrides:
-  void Shutdown() override;
-  void AddAppHandler(const std::string& app_id,
-                     GCMAppHandler* handler) override;
-  void RemoveAppHandler(const std::string& app_id) override;
   void OnSignedIn() override;
   void OnSignedOut() override;
   void AddConnectionObserver(GCMConnectionObserver* observer) override;
@@ -31,7 +30,7 @@ class FakeGCMDriver : public GCMDriver {
   bool IsStarted() const override;
   bool IsConnected() const override;
   void GetGCMStatistics(const GetGCMStatisticsCallback& callback,
-                        bool clear_logs) override;
+                        ClearActivityLogs clear_logs) override;
   void SetGCMRecording(const GetGCMStatisticsCallback& callback,
                        bool recording) override;
   void SetAccountTokens(
@@ -54,7 +53,7 @@ class FakeGCMDriver : public GCMDriver {
   void UnregisterImpl(const std::string& app_id) override;
   void SendImpl(const std::string& app_id,
                 const std::string& receiver_id,
-                const GCMClient::OutgoingMessage& message) override;
+                const OutgoingMessage& message) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakeGCMDriver);

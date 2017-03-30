@@ -4,13 +4,14 @@
 
 #include "cc/quads/draw_quad.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "cc/base/math_util.h"
 #include "cc/output/filter_operations.h"
-#include "cc/quads/checkerboard_draw_quad.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/io_surface_draw_quad.h"
 #include "cc/quads/largest_draw_quad.h"
@@ -23,7 +24,7 @@
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
-#include "cc/test/fake_picture_pile_impl.h"
+#include "cc/test/fake_display_list_raster_source.h"
 #include "cc/test/geometry_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/effects/SkBlurImageFilter.h"
@@ -361,24 +362,6 @@ void CompareDrawQuad(DrawQuad* quad,
   }                                                              \
   SETUP_AND_COPY_QUAD_NEW_RP(Type, quad_new, copy_a);
 
-TEST(DrawQuadTest, CopyCheckerboardDrawQuad) {
-  gfx::Rect visible_rect(40, 50, 30, 20);
-  SkColor color = 0xfabb0011;
-  float scale = 2.3f;
-  CREATE_SHARED_STATE();
-
-  CREATE_QUAD_3_NEW(CheckerboardDrawQuad, visible_rect, color, scale);
-  EXPECT_EQ(DrawQuad::CHECKERBOARD, copy_quad->material);
-  EXPECT_EQ(visible_rect, copy_quad->visible_rect);
-  EXPECT_EQ(color, copy_quad->color);
-  EXPECT_EQ(scale, copy_quad->scale);
-
-  CREATE_QUAD_2_ALL(CheckerboardDrawQuad, color, scale);
-  EXPECT_EQ(DrawQuad::CHECKERBOARD, copy_quad->material);
-  EXPECT_EQ(color, copy_quad->color);
-  EXPECT_EQ(scale, copy_quad->scale);
-}
-
 TEST(DrawQuadTest, CopyDebugBorderDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   SkColor color = 0xfabb0011;
@@ -405,12 +388,8 @@ TEST(DrawQuadTest, CopyIOSurfaceDrawQuad) {
   IOSurfaceDrawQuad::Orientation orientation = IOSurfaceDrawQuad::UNFLIPPED;
   CREATE_SHARED_STATE();
 
-  CREATE_QUAD_5_NEW(IOSurfaceDrawQuad,
-                    opaque_rect,
-                    visible_rect,
-                    size,
-                    resource_id,
-                    orientation);
+  CREATE_QUAD_5_NEW(IOSurfaceDrawQuad, opaque_rect, visible_rect, size,
+                    resource_id, orientation);
   EXPECT_EQ(DrawQuad::IO_SURFACE_CONTENT, copy_quad->material);
   EXPECT_EQ(visible_rect, copy_quad->visible_rect);
   EXPECT_EQ(opaque_rect, copy_quad->opaque_rect);
@@ -506,25 +485,22 @@ TEST(DrawQuadTest, CopyStreamVideoDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   ResourceId resource_id = 64;
   gfx::Size resource_size_in_pixels = gfx::Size(40, 41);
-  bool allow_overlay = true;
   gfx::Transform matrix = gfx::Transform(0.5, 0.25, 1, 0.75, 0, 1);
   CREATE_SHARED_STATE();
 
-  CREATE_QUAD_6_NEW(StreamVideoDrawQuad, opaque_rect, visible_rect, resource_id,
-                    resource_size_in_pixels, allow_overlay, matrix);
+  CREATE_QUAD_5_NEW(StreamVideoDrawQuad, opaque_rect, visible_rect, resource_id,
+                    resource_size_in_pixels, matrix);
   EXPECT_EQ(DrawQuad::STREAM_VIDEO_CONTENT, copy_quad->material);
   EXPECT_EQ(visible_rect, copy_quad->visible_rect);
   EXPECT_EQ(opaque_rect, copy_quad->opaque_rect);
   EXPECT_EQ(resource_id, copy_quad->resource_id());
-  EXPECT_EQ(allow_overlay, copy_quad->allow_overlay());
   EXPECT_EQ(resource_size_in_pixels, copy_quad->resource_size_in_pixels());
   EXPECT_EQ(matrix, copy_quad->matrix);
 
-  CREATE_QUAD_4_ALL(StreamVideoDrawQuad, resource_id, resource_size_in_pixels,
-                    allow_overlay, matrix);
+  CREATE_QUAD_3_ALL(StreamVideoDrawQuad, resource_id, resource_size_in_pixels,
+                    matrix);
   EXPECT_EQ(DrawQuad::STREAM_VIDEO_CONTENT, copy_quad->material);
   EXPECT_EQ(resource_id, copy_quad->resource_id());
-  EXPECT_EQ(allow_overlay, copy_quad->allow_overlay());
   EXPECT_EQ(resource_size_in_pixels, copy_quad->resource_size_in_pixels());
   EXPECT_EQ(matrix, copy_quad->matrix);
 }
@@ -550,7 +526,6 @@ TEST(DrawQuadTest, CopyTextureDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   unsigned resource_id = 82;
   gfx::Size resource_size_in_pixels = gfx::Size(40, 41);
-  bool allow_overlay = true;
   bool premultiplied_alpha = true;
   gfx::PointF uv_top_left(0.5f, 224.f);
   gfx::PointF uv_bottom_right(51.5f, 260.f);
@@ -581,13 +556,12 @@ TEST(DrawQuadTest, CopyTextureDrawQuad) {
   EXPECT_EQ(y_flipped, copy_quad->y_flipped);
   EXPECT_EQ(nearest_neighbor, copy_quad->nearest_neighbor);
 
-  CREATE_QUAD_10_ALL(TextureDrawQuad, resource_id, resource_size_in_pixels,
-                     allow_overlay, premultiplied_alpha, uv_top_left,
-                     uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity,
-                     y_flipped, nearest_neighbor);
+  CREATE_QUAD_9_ALL(TextureDrawQuad, resource_id, resource_size_in_pixels,
+                    premultiplied_alpha, uv_top_left, uv_bottom_right,
+                    SK_ColorTRANSPARENT, vertex_opacity, y_flipped,
+                    nearest_neighbor);
   EXPECT_EQ(DrawQuad::TEXTURE_CONTENT, copy_quad->material);
   EXPECT_EQ(resource_id, copy_quad->resource_id());
-  EXPECT_EQ(allow_overlay, copy_quad->allow_overlay());
   EXPECT_EQ(resource_size_in_pixels, copy_quad->resource_size_in_pixels());
   EXPECT_EQ(premultiplied_alpha, copy_quad->premultiplied_alpha);
   EXPECT_EQ(uv_top_left, copy_quad->uv_top_left);
@@ -694,9 +668,8 @@ TEST(DrawQuadTest, CopyPictureDrawQuad) {
   ResourceFormat texture_format = RGBA_8888;
   gfx::Rect content_rect(30, 40, 20, 30);
   float contents_scale = 3.141592f;
-  scoped_refptr<RasterSource> raster_source =
-      FakePicturePileImpl::CreateEmptyPile(gfx::Size(100, 100),
-                                           gfx::Size(100, 100));
+  scoped_refptr<DisplayListRasterSource> raster_source =
+      FakeDisplayListRasterSource::CreateEmpty(gfx::Size(100, 100));
   CREATE_SHARED_STATE();
 
   CREATE_QUAD_9_NEW(PictureDrawQuad, opaque_rect, visible_rect, tex_coord_rect,
@@ -741,16 +714,6 @@ class DrawQuadIteratorTest : public testing::Test {
   int num_resources_;
 };
 
-TEST_F(DrawQuadIteratorTest, CheckerboardDrawQuad) {
-  gfx::Rect visible_rect(40, 50, 30, 20);
-  SkColor color = 0xfabb0011;
-  float scale = 3.2f;
-
-  CREATE_SHARED_STATE();
-  CREATE_QUAD_3_NEW(CheckerboardDrawQuad, visible_rect, color, scale);
-  EXPECT_EQ(0, IterateAndCount(quad_new));
-}
-
 TEST_F(DrawQuadIteratorTest, DebugBorderDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   SkColor color = 0xfabb0011;
@@ -769,12 +732,8 @@ TEST_F(DrawQuadIteratorTest, IOSurfaceDrawQuad) {
   IOSurfaceDrawQuad::Orientation orientation = IOSurfaceDrawQuad::UNFLIPPED;
 
   CREATE_SHARED_STATE();
-  CREATE_QUAD_5_NEW(IOSurfaceDrawQuad,
-                    opaque_rect,
-                    visible_rect,
-                    size,
-                    resource_id,
-                    orientation);
+  CREATE_QUAD_5_NEW(IOSurfaceDrawQuad, opaque_rect, visible_rect, size,
+                    resource_id, orientation);
   EXPECT_EQ(resource_id, quad_new->io_surface_resource_id());
   EXPECT_EQ(1, IterateAndCount(quad_new));
   EXPECT_EQ(resource_id + 1, quad_new->io_surface_resource_id());
@@ -835,14 +794,12 @@ TEST_F(DrawQuadIteratorTest, StreamVideoDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   ResourceId resource_id = 64;
   gfx::Size resource_size_in_pixels = gfx::Size(40, 41);
-  bool allow_overlay = true;
   gfx::Transform matrix = gfx::Transform(0.5, 0.25, 1, 0.75, 0, 1);
 
   CREATE_SHARED_STATE();
-  CREATE_QUAD_6_NEW(StreamVideoDrawQuad, opaque_rect, visible_rect, resource_id,
-                    resource_size_in_pixels, allow_overlay, matrix);
+  CREATE_QUAD_5_NEW(StreamVideoDrawQuad, opaque_rect, visible_rect, resource_id,
+                    resource_size_in_pixels, matrix);
   EXPECT_EQ(resource_id, quad_new->resource_id());
-  EXPECT_EQ(allow_overlay, quad_new->allow_overlay());
   EXPECT_EQ(resource_size_in_pixels, quad_new->resource_size_in_pixels());
   EXPECT_EQ(1, IterateAndCount(quad_new));
   EXPECT_EQ(resource_id + 1, quad_new->resource_id());
@@ -949,9 +906,8 @@ TEST_F(DrawQuadIteratorTest, DISABLED_PictureDrawQuad) {
   ResourceFormat texture_format = RGBA_8888;
   gfx::Rect content_rect(30, 40, 20, 30);
   float contents_scale = 3.141592f;
-  scoped_refptr<RasterSource> raster_source =
-      FakePicturePileImpl::CreateEmptyPile(gfx::Size(100, 100),
-                                           gfx::Size(100, 100));
+  scoped_refptr<DisplayListRasterSource> raster_source =
+      FakeDisplayListRasterSource::CreateEmpty(gfx::Size(100, 100));
 
   CREATE_SHARED_STATE();
   CREATE_QUAD_9_NEW(PictureDrawQuad, opaque_rect, visible_rect, tex_coord_rect,
@@ -965,9 +921,6 @@ TEST(DrawQuadTest, LargestQuadType) {
 
   for (int i = 0; i <= DrawQuad::MATERIAL_LAST; ++i) {
     switch (static_cast<DrawQuad::Material>(i)) {
-      case DrawQuad::CHECKERBOARD:
-        largest = std::max(largest, sizeof(CheckerboardDrawQuad));
-        break;
       case DrawQuad::DEBUG_BORDER:
         largest = std::max(largest, sizeof(DebugBorderDrawQuad));
         break;
@@ -1012,9 +965,6 @@ TEST(DrawQuadTest, LargestQuadType) {
   LOG(ERROR) << "kLargestDrawQuad " << LargestDrawQuadSize();
   for (int i = 0; i <= DrawQuad::MATERIAL_LAST; ++i) {
     switch (static_cast<DrawQuad::Material>(i)) {
-      case DrawQuad::CHECKERBOARD:
-        LOG(ERROR) << "CheckerboardDrawQuad " << sizeof(CheckerboardDrawQuad);
-        break;
       case DrawQuad::DEBUG_BORDER:
         LOG(ERROR) << "DebugBorderDrawQuad " << sizeof(DebugBorderDrawQuad);
         break;

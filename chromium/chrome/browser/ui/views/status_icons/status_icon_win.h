@@ -8,8 +8,8 @@
 #include <windows.h>
 #include <shellapi.h>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/win/scoped_gdi_object.h"
 #include "chrome/browser/status_icons/status_icon.h"
@@ -50,7 +50,8 @@ class StatusIconWin : public StatusIcon {
   void SetToolTip(const base::string16& tool_tip) override;
   void DisplayBalloon(const gfx::ImageSkia& icon,
                       const base::string16& title,
-                      const base::string16& contents) override;
+                      const base::string16& contents,
+                      const message_center::NotifierId& notifier_id) override;
   void ForceVisible() override;
 
  protected:

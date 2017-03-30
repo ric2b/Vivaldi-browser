@@ -4,7 +4,11 @@
 
 #include "ui/views/controls/table/table_header.h"
 
+#include <stddef.h>
+
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_utils.h"

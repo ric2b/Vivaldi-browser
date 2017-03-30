@@ -11,7 +11,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/app_mode/app_session_lifetime.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_diagnosis_runner.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -26,7 +25,6 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "components/crx_file/id_util.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -36,6 +34,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/file_util.h"
 #include "extensions/common/manifest_handlers/kiosk_mode_info.h"
 #include "extensions/common/manifest_handlers/offline_enabled_info.h"
 #include "extensions/common/manifest_url_handlers.h"
@@ -73,11 +72,7 @@ StartupAppLauncher::StartupAppLauncher(Profile* profile,
     : profile_(profile),
       app_id_(app_id),
       diagnostic_mode_(diagnostic_mode),
-      delegate_(delegate),
-      network_ready_handled_(false),
-      launch_attempt_(0),
-      ready_to_launch_(false),
-      wait_for_crx_update_(false) {
+      delegate_(delegate) {
   DCHECK(profile_);
   DCHECK(crx_file::id_util::IdIsValid(app_id_));
   KioskAppManager::Get()->AddObserver(this);
@@ -132,8 +127,8 @@ void StartupAppLauncher::LoadOAuthFileOnBlockingPool(
   base::FilePath auth_file = user_data_dir.Append(kOAuthFileName);
   scoped_ptr<JSONFileValueDeserializer> deserializer(
       new JSONFileValueDeserializer(user_data_dir.Append(kOAuthFileName)));
-  scoped_ptr<base::Value> value(
-      deserializer->Deserialize(&error_code, &error_msg));
+  scoped_ptr<base::Value> value =
+      deserializer->Deserialize(&error_code, &error_msg);
   base::DictionaryValue* dict = NULL;
   if (error_code != JSONFileValueDeserializer::JSON_NO_ERROR ||
       !value.get() || !value->GetAsDictionary(&dict)) {
@@ -179,8 +174,7 @@ void StartupAppLauncher::RestartLauncher() {
 void StartupAppLauncher::MaybeInitializeNetwork() {
   network_ready_handled_ = false;
 
-  const Extension* extension = extensions::ExtensionSystem::Get(profile_)->
-      extension_service()->GetInstalledExtension(app_id_);
+  const Extension* extension = GetPrimaryAppExtension();
   bool crx_cached = KioskAppManager::Get()->HasCachedCrx(app_id_);
   const bool requires_network =
       (!extension && !crx_cached) ||
@@ -248,9 +242,7 @@ void StartupAppLauncher::OnRefreshTokensLoaded() {
 
 void StartupAppLauncher::MaybeLaunchApp() {
   // Check if the app is offline enabled.
-  const Extension* extension = extensions::ExtensionSystem::Get(profile_)
-                                   ->extension_service()
-                                   ->GetInstalledExtension(app_id_);
+  const Extension* extension = GetPrimaryAppExtension();
   DCHECK(extension);
   const bool offline_enabled =
       extensions::OfflineEnabledInfo::IsOfflineEnabled(extension);
@@ -272,6 +264,59 @@ void StartupAppLauncher::MaybeLaunchApp() {
   }
 }
 
+void StartupAppLauncher::MaybeCheckExtensionUpdate() {
+  extensions::ExtensionUpdater* updater =
+      extensions::ExtensionSystem::Get(profile_)
+          ->extension_service()
+          ->updater();
+  if (!delegate_->IsNetworkReady() || !updater) {
+    MaybeLaunchApp();
+    return;
+  }
+
+  extension_update_found_ = false;
+  registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_UPDATE_FOUND,
+                 content::NotificationService::AllSources());
+
+  // Enforce an immediate version update check for all extensions before
+  // launching the primary app. After the chromeos is updated, the shared
+  // module(e.g. ARC runtime) may need to be updated to a newer version
+  // compatible with the new chromeos. See crbug.com/555083.
+  extensions::ExtensionUpdater::CheckParams params;
+  params.install_immediately = true;
+  params.callback = base::Bind(
+      &StartupAppLauncher::OnExtensionUpdateCheckFinished, AsWeakPtr());
+  updater->CheckNow(params);
+}
+
+void StartupAppLauncher::OnExtensionUpdateCheckFinished() {
+  if (extension_update_found_) {
+    // Reload the primary app to make sure any reference to the previous version
+    // of the shared module, extension, etc will be cleaned up andthe new
+    // version will be loaded.
+    extensions::ExtensionSystem::Get(profile_)
+            ->extension_service()
+            ->ReloadExtension(app_id_);
+    extension_update_found_ = false;
+  }
+  registrar_.Remove(this, extensions::NOTIFICATION_EXTENSION_UPDATE_FOUND,
+                    content::NotificationService::AllSources());
+
+  MaybeLaunchApp();
+}
+
+void StartupAppLauncher::Observe(int type,
+                                 const content::NotificationSource& source,
+                                 const content::NotificationDetails& details) {
+  DCHECK(type == extensions::NOTIFICATION_EXTENSION_UPDATE_FOUND);
+  typedef const std::pair<std::string, Version> UpdateDetails;
+  const std::string& id = content::Details<UpdateDetails>(details)->first;
+  const Version& version = content::Details<UpdateDetails>(details)->second;
+  VLOG(1) << "Found extension update id=" << id
+      << " version=" << version.GetString();
+  extension_update_found_ = true;
+}
+
 void StartupAppLauncher::OnFinishCrxInstall(const std::string& extension_id,
                                             bool success) {
   // Wait for pending updates or dependent extensions to download.
@@ -290,14 +335,17 @@ void StartupAppLauncher::OnFinishCrxInstall(const std::string& extension_id,
     return;
   }
 
-  if (success) {
-    MaybeLaunchApp();
+  if (DidPrimaryOrSecondaryAppFailedToInstall(success, extension_id)) {
+    OnLaunchFailure(KioskAppLaunchError::UNABLE_TO_INSTALL);
     return;
   }
 
-  LOG(ERROR) << "Failed to install the kiosk application app_id: "
-             << extension_id;
-  OnLaunchFailure(KioskAppLaunchError::UNABLE_TO_INSTALL);
+  if (GetPrimaryAppExtension()) {
+    if (!secondary_apps_installed_)
+      MaybeInstallSecondaryApps();
+    else
+      MaybeCheckExtensionUpdate();
+  }
 }
 
 void StartupAppLauncher::OnKioskExtensionLoadedInCache(
@@ -322,14 +370,82 @@ void StartupAppLauncher::OnKioskAppDataLoadStatusChanged(
     OnLaunchFailure(KioskAppLaunchError::UNABLE_TO_DOWNLOAD);
 }
 
+bool StartupAppLauncher::IsAnySecondaryAppPending() const {
+  const extensions::Extension* extension = GetPrimaryAppExtension();
+  DCHECK(extension);
+  extensions::KioskModeInfo* info = extensions::KioskModeInfo::Get(extension);
+  for (const auto& id : info->secondary_app_ids) {
+    if (extensions::ExtensionSystem::Get(profile_)
+            ->extension_service()
+            ->pending_extension_manager()
+            ->IsIdPending(id)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool StartupAppLauncher::AreSecondaryAppsInstalled() const {
+  const extensions::Extension* extension = GetPrimaryAppExtension();
+  DCHECK(extension);
+  extensions::KioskModeInfo* info = extensions::KioskModeInfo::Get(extension);
+  for (const auto& id : info->secondary_app_ids) {
+    if (!extensions::ExtensionSystem::Get(profile_)
+             ->extension_service()
+             ->GetInstalledExtension(id)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool StartupAppLauncher::HasSecondaryApps() const {
+  const extensions::Extension* extension = GetPrimaryAppExtension();
+  DCHECK(extension);
+  return extensions::KioskModeInfo::HasSecondaryApps(extension);
+}
+
+bool StartupAppLauncher::DidPrimaryOrSecondaryAppFailedToInstall(
+    bool success,
+    const std::string& id) const {
+  if (success)
+    return false;
+
+  if (id == app_id_) {
+    LOG(ERROR) << "Failed to install crx file of the primary app id=" << id;
+    return true;
+  }
+
+  const extensions::Extension* extension = GetPrimaryAppExtension();
+  if (!extension)
+    return false;
+
+  extensions::KioskModeInfo* info = extensions::KioskModeInfo::Get(extension);
+  for (const auto& app_id : info->secondary_app_ids) {
+    if (app_id == id) {
+      LOG(ERROR) << "Failed to install a secondary app id=" << id;
+      return true;
+    }
+  }
+
+  LOG(WARNING) << "Failed to install crx file for an app id=" << id;
+  return false;
+}
+
+const extensions::Extension* StartupAppLauncher::GetPrimaryAppExtension()
+    const {
+  return extensions::ExtensionSystem::Get(profile_)
+      ->extension_service()
+      ->GetInstalledExtension(app_id_);
+}
+
 void StartupAppLauncher::LaunchApp() {
   if (!ready_to_launch_) {
     NOTREACHED();
     LOG(ERROR) << "LaunchApp() called but launcher is not initialized.";
   }
 
-  const Extension* extension = extensions::ExtensionSystem::Get(profile_)->
-      extension_service()->GetInstalledExtension(app_id_);
+  const Extension* extension = GetPrimaryAppExtension();
   CHECK(extension);
 
   if (!extensions::KioskModeInfo::IsKioskEnabled(extension)) {
@@ -341,7 +457,7 @@ void StartupAppLauncher::LaunchApp() {
   OpenApplication(AppLaunchParams(profile_, extension,
                                   extensions::LAUNCH_CONTAINER_WINDOW,
                                   NEW_WINDOW, extensions::SOURCE_KIOSK));
-  InitAppSession(profile_, app_id_);
+  KioskAppManager::Get()->InitSession(profile_, app_id_);
 
   user_manager::UserManager::Get()->SessionStarted();
 
@@ -368,6 +484,7 @@ void StartupAppLauncher::OnLaunchFailure(KioskAppLaunchError::Error error) {
 }
 
 void StartupAppLauncher::BeginInstall() {
+  extensions::file_util::SetUseSafeInstallation(true);
   KioskAppManager::Get()->InstallFromCache(app_id_);
   if (extensions::ExtensionSystem::Get(profile_)
           ->extension_service()
@@ -381,13 +498,38 @@ void StartupAppLauncher::BeginInstall() {
     return;
   }
 
-  if (extensions::ExtensionSystem::Get(profile_)
-          ->extension_service()
-          ->GetInstalledExtension(app_id_)) {
-    // Launch the app.
-    OnReadyToLaunch();
+  if (GetPrimaryAppExtension()) {
+    // Install secondary apps.
+    MaybeInstallSecondaryApps();
   } else {
     // The extension is skipped for installation due to some error.
+    OnLaunchFailure(KioskAppLaunchError::UNABLE_TO_INSTALL);
+  }
+}
+
+void StartupAppLauncher::MaybeInstallSecondaryApps() {
+  if (!AreSecondaryAppsInstalled() && !delegate_->IsNetworkReady()) {
+    OnLaunchFailure(KioskAppLaunchError::UNABLE_TO_INSTALL);
+    return;
+  }
+
+  secondary_apps_installed_ = true;
+  extensions::KioskModeInfo* info =
+      extensions::KioskModeInfo::Get(GetPrimaryAppExtension());
+  KioskAppManager::Get()->InstallSecondaryApps(info->secondary_app_ids);
+  if (IsAnySecondaryAppPending()) {
+    delegate_->OnInstallingApp();
+    // Observe the crx installation events.
+    extensions::InstallTracker* tracker =
+        extensions::InstallTrackerFactory::GetForBrowserContext(profile_);
+    tracker->AddObserver(this);
+    return;
+  }
+
+  if (AreSecondaryAppsInstalled()) {
+    // Check extension update before launching the primary kiosk app.
+    MaybeCheckExtensionUpdate();
+  } else {
     OnLaunchFailure(KioskAppLaunchError::UNABLE_TO_INSTALL);
   }
 }

@@ -4,6 +4,9 @@
 
 #include "extensions/browser/api/web_request/web_request_permissions.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/common/extensions/extension_test_util.h"
@@ -137,7 +140,8 @@ TEST_F(ExtensionWebRequestHelpersTestWithThreadsTest, TestHideRequestForURL) {
                                             false,   // is_main_frame
                                             false,   // parent_is_main_frame
                                             true,    // allow_download
-                                            false);  // is_async
+                                            false,   // is_async
+                                            false);  // is_using_lofi
     extension_info_map_->RegisterExtensionProcess(
         extensions::kWebStoreAppId, process_id, site_instance_id);
     EXPECT_TRUE(WebRequestPermissions::HideRequest(

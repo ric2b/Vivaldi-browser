@@ -4,16 +4,20 @@
 
 #include "chrome/browser/ui/views/session_crashed_bubble_view.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
@@ -23,14 +27,15 @@
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/toolbar/wrench_toolbar_button.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "components/metrics/metrics_pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_source.h"
@@ -138,8 +143,8 @@ class SessionCrashedBubbleView::BrowserRemovalObserver
 };
 
 // static
-bool SessionCrashedBubbleView::Show(Browser* browser) {
-  if (!IsBubbleUIEnabled())
+bool SessionCrashedBubble::Show(Browser* browser) {
+  if (!IsBubbleUIEnabled() || browser->is_vivaldi())
     return false;
 
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -147,8 +152,8 @@ bool SessionCrashedBubbleView::Show(Browser* browser) {
     return true;
 
   // Observes browser removal event and will be deallocated in ShowForReal.
-  scoped_ptr<BrowserRemovalObserver> browser_observer(
-      new BrowserRemovalObserver(browser));
+  scoped_ptr<SessionCrashedBubbleView::BrowserRemovalObserver> browser_observer(
+      new SessionCrashedBubbleView::BrowserRemovalObserver(browser));
 
 // Stats collection only applies to Google Chrome builds.
 #if defined(GOOGLE_CHROME_BUILD)
@@ -162,7 +167,7 @@ bool SessionCrashedBubbleView::Show(Browser* browser) {
       base::Bind(&SessionCrashedBubbleView::ShowForReal,
                  base::Passed(&browser_observer)));
 #else
-  SessionCrashedBubbleView::ShowForReal(browser_observer.Pass(), false);
+  SessionCrashedBubbleView::ShowForReal(std::move(browser_observer), false);
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
   return true;
@@ -179,8 +184,10 @@ void SessionCrashedBubbleView::ShowForReal(
 
 #if defined(GOOGLE_CHROME_BUILD)
   if (!uma_opted_in_already) {
-    offer_uma_optin = g_browser_process->local_state()->FindPreference(
-        prefs::kMetricsReportingEnabled)->IsUserModifiable();
+    offer_uma_optin =
+        g_browser_process->local_state()
+            ->FindPreference(metrics::prefs::kMetricsReportingEnabled)
+            ->IsUserModifiable();
   }
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
@@ -191,8 +198,9 @@ void SessionCrashedBubbleView::ShowForReal(
     return;
   }
 
-  views::View* anchor_view =
-      BrowserView::GetBrowserViewForBrowser(browser)->toolbar()->app_menu();
+  views::View* anchor_view = BrowserView::GetBrowserViewForBrowser(browser)
+                                 ->toolbar()
+                                 ->app_menu_button();
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
 
@@ -394,7 +402,8 @@ void SessionCrashedBubbleView::ButtonPressed(views::Button* sender,
   RestorePreviousSession(sender);
 }
 
-void SessionCrashedBubbleView::StyledLabelLinkClicked(const gfx::Range& range,
+void SessionCrashedBubbleView::StyledLabelLinkClicked(views::StyledLabel* label,
+                                                      const gfx::Range& range,
                                                       int event_flags) {
   browser_->OpenURL(content::OpenURLParams(
       GURL("https://support.google.com/chrome/answer/96817"),

@@ -6,6 +6,7 @@
 
 #include "base/atomicops.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 
 using base::internal::PlatformThreadLocalStorage;
 
@@ -76,8 +77,10 @@ void** ConstructTlsVector() {
     // TLS_KEY_OUT_OF_INDEXES, go ahead and set it.  Otherwise, do nothing, as
     // another thread already did our dirty work.
     if (PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES !=
-        base::subtle::NoBarrier_CompareAndSwap(&g_native_tls_key,
-            PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES, key)) {
+        static_cast<PlatformThreadLocalStorage::TLSKey>(
+            base::subtle::NoBarrier_CompareAndSwap(
+                &g_native_tls_key,
+                PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES, key))) {
       // We've been shortcut. Another thread replaced g_native_tls_key first so
       // we need to destroy our index and use the one the other thread got
       // first.
@@ -192,8 +195,8 @@ void PlatformThreadLocalStorage::OnThreadExit(void* value) {
 }  // namespace internal
 
 ThreadLocalStorage::Slot::Slot(TLSDestructorFunc destructor) {
-  initialized_ = false;
   slot_ = 0;
+  base::subtle::Release_Store(&initialized_, 0);
   Initialize(destructor);
 }
 
@@ -211,7 +214,7 @@ void ThreadLocalStorage::StaticSlot::Initialize(TLSDestructorFunc destructor) {
 
   // Setup our destructor.
   g_tls_destructors[slot_] = destructor;
-  initialized_ = true;
+  base::subtle::Release_Store(&initialized_, 1);
 }
 
 void ThreadLocalStorage::StaticSlot::Free() {
@@ -221,7 +224,7 @@ void ThreadLocalStorage::StaticSlot::Free() {
   DCHECK_LT(slot_, kThreadLocalStorageSize);
   g_tls_destructors[slot_] = NULL;
   slot_ = 0;
-  initialized_ = false;
+  base::subtle::Release_Store(&initialized_, 0);
 }
 
 void* ThreadLocalStorage::StaticSlot::Get() const {

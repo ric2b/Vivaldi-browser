@@ -5,20 +5,23 @@
 #include "components/autofill/core/browser/credit_card.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <algorithm>
 #include <ostream>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/validation.h"
@@ -82,42 +85,27 @@ CreditCard::CreditCard(const std::string& guid, const std::string& origin)
       type_(kGenericCard),
       expiration_month_(0),
       expiration_year_(0),
-      server_status_(OK) {
-}
+      server_status_(OK) {}
 
 CreditCard::CreditCard(const base::string16& card_number,
                        int expiration_month,
                        int expiration_year)
-    : AutofillDataModel(std::string(), std::string()),
-      record_type_(LOCAL_CARD),
-      server_status_(OK) {
+    : CreditCard() {
   SetNumber(card_number);
   SetExpirationMonth(expiration_month);
   SetExpirationYear(expiration_year);
 }
 
 CreditCard::CreditCard(RecordType type, const std::string& server_id)
-    : AutofillDataModel(base::GenerateGUID(), std::string()),
-      record_type_(type),
-      type_(kGenericCard),
-      expiration_month_(0),
-      expiration_year_(0),
-      server_id_(server_id),
-      server_status_(OK) {
+    : CreditCard() {
   DCHECK(type == MASKED_SERVER_CARD || type == FULL_SERVER_CARD);
+  record_type_ = type;
+  server_id_ = server_id;
 }
 
-CreditCard::CreditCard()
-    : AutofillDataModel(base::GenerateGUID(), std::string()),
-      record_type_(LOCAL_CARD),
-      type_(kGenericCard),
-      expiration_month_(0),
-      expiration_year_(0),
-      server_status_(OK) {
-}
+CreditCard::CreditCard() : CreditCard(base::GenerateGUID(), std::string()) {}
 
-CreditCard::CreditCard(const CreditCard& credit_card)
-    : AutofillDataModel(std::string(), std::string()) {
+CreditCard::CreditCard(const CreditCard& credit_card) : CreditCard() {
   operator=(credit_card);
 }
 
@@ -443,14 +431,13 @@ const std::pair<base::string16, base::string16> CreditCard::LabelPieces()
 
 void CreditCard::SetInfoForMonthInputType(const base::string16& value) {
   // Check if |text| is "yyyy-mm" format first, and check normal month format.
-  if (!autofill::MatchesPattern(value,
-                                base::UTF8ToUTF16("^[0-9]{4}-[0-9]{1,2}$"))) {
+  if (!MatchesPattern(value, base::UTF8ToUTF16("^[0-9]{4}-[0-9]{1,2}$")))
     return;
-  }
 
-  std::vector<base::string16> year_month;
-  base::SplitString(value, L'-', &year_month);
-  DCHECK_EQ((int)year_month.size(), 2);
+  std::vector<base::StringPiece16> year_month = base::SplitStringPiece(
+      value, base::ASCIIToUTF16("-"),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  DCHECK_EQ(2u, year_month.size());
   int num = 0;
   bool converted = false;
   converted = base::StringToInt(year_month[0], &num);
@@ -499,6 +486,15 @@ base::string16 CreditCard::TypeAndLastFourDigits() const {
   // ellipsis.
   // TODO(estade): i18n?
   return type + base::UTF8ToUTF16("\xC2\xA0\xE2\x8B\xAF") + digits;
+}
+
+base::string16 CreditCard::AbbreviatedExpirationDateForDisplay() const {
+  base::string16 month = ExpirationMonthAsString();
+  base::string16 year = Expiration2DigitYearAsString();
+  return month.empty() || year.empty()
+             ? base::string16()
+             : l10n_util::GetStringFUTF16(
+                   IDS_AUTOFILL_CREDIT_CARD_EXPIRATION_DATE_ABBR, month, year);
 }
 
 void CreditCard::operator=(const CreditCard& credit_card) {
@@ -626,15 +622,14 @@ bool CreditCard::IsEmpty(const std::string& app_locale) const {
 }
 
 bool CreditCard::IsComplete() const {
-  return
-      autofill::IsValidCreditCardNumber(number_) &&
-      expiration_month_ != 0 &&
-      expiration_year_ != 0;
+  return IsValidCreditCardNumber(number_) &&
+         expiration_month_ != 0 &&
+         expiration_year_ != 0;
 }
 
 bool CreditCard::IsValid() const {
-  return autofill::IsValidCreditCardNumber(number_) &&
-         autofill::IsValidCreditCardExpirationDate(
+  return IsValidCreditCardNumber(number_) &&
+         IsValidCreditCardExpirationDate(
              expiration_year_, expiration_month_, base::Time::Now());
 }
 
@@ -704,6 +699,12 @@ void CreditCard::SetNumber(const base::string16& number) {
   // when we have masked cards from the server (last 4 digits).
   if (record_type_ != MASKED_SERVER_CARD)
     type_ = GetCreditCardType(StripSeparators(number_));
+}
+
+void CreditCard::RecordAndLogUse() {
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.DaysSinceLastUse.CreditCard",
+                            (base::Time::Now() - use_date()).InDays());
+  RecordUse();
 }
 
 // static
@@ -780,13 +781,13 @@ std::ostream& operator<<(std::ostream& os, const CreditCard& credit_card) {
 // These values must match the values in WebKitPlatformSupportImpl in
 // webkit/glue. We send these strings to WebKit, which then asks
 // WebKitPlatformSupportImpl to load the image data.
-const char* const kAmericanExpressCard = "americanExpressCC";
-const char* const kDinersCard = "dinersCC";
-const char* const kDiscoverCard = "discoverCC";
-const char* const kGenericCard = "genericCC";
-const char* const kJCBCard = "jcbCC";
-const char* const kMasterCard = "masterCardCC";
-const char* const kUnionPay = "unionPayCC";
-const char* const kVisaCard = "visaCC";
+const char kAmericanExpressCard[] = "americanExpressCC";
+const char kDinersCard[] = "dinersCC";
+const char kDiscoverCard[] = "discoverCC";
+const char kGenericCard[] = "genericCC";
+const char kJCBCard[] = "jcbCC";
+const char kMasterCard[] = "masterCardCC";
+const char kUnionPay[] = "unionPayCC";
+const char kVisaCard[] = "visaCC";
 
 }  // namespace autofill

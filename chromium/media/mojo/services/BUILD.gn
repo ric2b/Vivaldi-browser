@@ -15,7 +15,7 @@ import("//mojo/public/mojo_application.gni")
 
 config("enable_mojo_media_config") {
   assert(enable_mojo_media == "none" || enable_mojo_media == "browser" ||
-         enable_mojo_media == "utility")
+         enable_mojo_media == "gpu" || enable_mojo_media == "utility")
 
   if (enable_mojo_media != "none") {
     defines = [ "ENABLE_MOJO_MEDIA" ]
@@ -23,6 +23,8 @@ config("enable_mojo_media_config") {
 
   if (enable_mojo_media == "browser") {
     defines += [ "ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS" ]
+  } else if (enable_mojo_media == "gpu") {
+    defines += [ "ENABLE_MOJO_MEDIA_IN_GPU_PROCESS" ]
   } else if (enable_mojo_media == "utility") {
     defines += [ "ENABLE_MOJO_MEDIA_IN_UTILITY_PROCESS" ]
   }
@@ -41,7 +43,7 @@ source_set("converters") {
     "//mojo/common",
     "//mojo/converters/geometry",
     "//mojo/environment:chromium",
-    "//third_party/mojo/src/mojo/public/c/system:for_component",
+    "//mojo/public/c/system:for_component",
     "//ui/mojo/geometry:interfaces",
   ]
 }
@@ -53,6 +55,8 @@ source_set("proxy") {
     "mojo_cdm.h",
     "mojo_cdm_factory.cc",
     "mojo_cdm_factory.h",
+    "mojo_decryptor.cc",
+    "mojo_decryptor.h",
     "mojo_demuxer_stream_impl.cc",
     "mojo_demuxer_stream_impl.h",
     "mojo_renderer_factory.cc",
@@ -69,10 +73,30 @@ source_set("proxy") {
     "//base",
     "//media",
     "//media/mojo/interfaces",
-    "//mojo/application/public/interfaces",
     "//mojo/common",
     "//mojo/environment:chromium",
-    "//third_party/mojo/src/mojo/public/c/system:for_component",
+    "//mojo/public/c/system:for_component",
+    "//mojo/shell/public/interfaces",
+  ]
+}
+
+source_set("media_client") {
+  sources = [
+    "mojo_media_client.cc",
+    "mojo_media_client.h",
+  ]
+  if (is_android) {
+    sources += [ "android_mojo_media_client.cc" ]
+  } else {
+    sources += [ "default_mojo_media_client.cc" ]
+  }
+
+  public_configs = [ ":enable_mojo_media_config" ]
+
+  deps = [
+    "//base",
+    "//media",
+    "//media:shared_memory_support",
   ]
 }
 
@@ -82,10 +106,10 @@ source_set("cdm_service") {
     "//base",
     "//media",
     "//media/mojo/interfaces",
-    "//mojo/application/public/interfaces",
     "//mojo/common",
     "//mojo/environment:chromium",
-    "//third_party/mojo/src/mojo/public/c/system:for_component",
+    "//mojo/public/c/system:for_component",
+    "//mojo/shell/public/interfaces",
   ]
 
   sources = [
@@ -95,21 +119,27 @@ source_set("cdm_service") {
     "mojo_cdm_service.h",
     "mojo_cdm_service_context.cc",
     "mojo_cdm_service_context.h",
+    "mojo_decryptor_service.cc",
+    "mojo_decryptor_service.h",
     "mojo_type_trait.h",
   ]
+
+  if (is_android) {
+    sources += [
+      "mojo_provision_fetcher.cc",
+      "mojo_provision_fetcher.h",
+    ]
+  }
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 }
 
-# MediaRenderer service; without a specific config.
-source_set("renderer_service_generic") {
+source_set("renderer_service") {
   sources = [
     "demuxer_stream_provider_shim.cc",
     "demuxer_stream_provider_shim.h",
     "mojo_demuxer_stream_adapter.cc",
     "mojo_demuxer_stream_adapter.h",
-    "mojo_media_client.cc",
-    "mojo_media_client.h",
     "mojo_renderer_service.cc",
     "mojo_renderer_service.h",
   ]
@@ -118,25 +148,9 @@ source_set("renderer_service_generic") {
     ":converters",
     "//base",
     "//media",
+    "//media:shared_memory_support",
     "//media/mojo/interfaces",
-    "//media:shared_memory_support",
     "//mojo/common",
-  ]
-}
-
-# MediaRenderer service with a default config.
-source_set("renderer_service") {
-  sources = [
-    "default_mojo_media_client.cc",
-  ]
-
-  public_configs = [ ":enable_mojo_media_config" ]
-
-  deps = [
-    ":renderer_service_generic",
-    "//base",
-    "//media",
-    "//media:shared_memory_support",
   ]
 }
 
@@ -144,16 +158,19 @@ source_set("application") {
   sources = [
     "mojo_media_application.cc",
     "mojo_media_application.h",
+    "service_factory_impl.cc",
+    "service_factory_impl.h",
   ]
 
   public_configs = [ ":enable_mojo_media_config" ]
 
   deps = [
     ":cdm_service",
+    ":media_client",
     ":renderer_service",
     "//base",
-    "//mojo/application/public/cpp",
-    "//third_party/mojo/src/mojo/public/c/system:for_component",
+    "//mojo/public/c/system:for_component",
+    "//mojo/shell/public/cpp",
   ]
 }
 
@@ -167,67 +184,71 @@ test("media_mojo_unittests") {
     "//base",
     "//base/test:test_support",
     "//media",
+    "//media/base:test_support",
     "//media/mojo/interfaces",
     "//mojo/environment:chromium",
+    "//testing/gmock",
     "//testing/gtest",
     "//third_party/mojo/src/mojo/edk/system",
     "//third_party/mojo/src/mojo/edk/test:run_all_unittests",
   ]
 }
 
-if (!is_component_build) {
-  mojo_native_application("media") {
-    sources = [
-      "main.cc",
-    ]
+mojo_native_application("media") {
+  sources = [
+    "main.cc",
+  ]
 
-    deps = [
-      ":application",
-      "//third_party/mojo/src/mojo/public/c/system:for_shared_library",
-    ]
-  }
+  deps = [
+    ":application",
+    "//mojo/public/c/system:for_shared_library",
+  ]
+}
 
-  # Note, the following tests must be loaded via mojo_runner as an app, e.g.
-  #
-  #   out/Debug/mojo_runner mojo:media_apptests
-  #   out/Debug/mojo_runner mojo:media_pipeline_integration_apptests
-  #
-  mojo_native_application("media_apptests") {
-    testonly = true
+# Note, the following tests must be loaded via mojo_runner as an app, e.g.
+#
+#   out/Debug/mojo_runner mojo:media_apptests
+#   out/Debug/mojo_runner mojo:media_pipeline_integration_apptests
+#
+mojo_native_application("media_apptests") {
+  testonly = true
 
-    sources = [
-      "media_apptest.cc",
-    ]
+  sources = [
+    "media_apptest.cc",
+  ]
 
-    deps = [
-      ":proxy",
-      "//media/base:test_support",
-      "//mojo/application/public/cpp:test_support",
-      "//testing/gmock",
-      "//testing/gtest",
-    ]
+  deps = [
+    ":proxy",
+    "//media/base:test_support",
+    "//mojo/shell/public/cpp:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
 
-    data_deps = [ ":media" ]
-  }
+  data_deps = [
+    ":media",
+  ]
+}
 
-  mojo_native_application("media_pipeline_integration_apptests") {
-    testonly = true
+mojo_native_application("media_pipeline_integration_apptests") {
+  testonly = true
 
-    deps = [
-      "//media/test:mojo_pipeline_integration_tests",
-    ]
+  deps = [
+    "//media/test:mojo_pipeline_integration_tests",
+  ]
 
-    data_deps = [ ":media" ]
-  }
+  data_deps = [
+    ":media",
+  ]
 }
 
 group("services") {
-  deps = [
+  public_deps = [
     ":proxy",
   ]
 
   if (!is_component_build) {
-    deps += [ ":media" ]
+    public_deps += [ ":media" ]
   }
 }
 

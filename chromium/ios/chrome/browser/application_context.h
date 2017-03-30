@@ -9,6 +9,14 @@
 
 #include "base/macros.h"
 
+namespace component_updater {
+class ComponentUpdateService;
+}
+
+namespace gcm {
+class GCMDriver;
+}
+
 namespace ios {
 class ChromeBrowserStateManager;
 }
@@ -17,11 +25,41 @@ namespace metrics {
 class MetricsService;
 }
 
+namespace metrics_services_manager {
+class MetricsServicesManager;
+}
+
 namespace net {
 class URLRequestContextGetter;
 }
 
+namespace net_log {
+class ChromeNetLog;
+}
+
+namespace network_time {
+class NetworkTimeTracker;
+}
+
+namespace rappor {
+class RapporService;
+}
+
+namespace safe_browsing {
+class SafeBrowsingService;
+}
+
+namespace variations {
+class VariationsService;
+}
+
+namespace web_resource {
+class PromoResourceService;
+}
+
 class ApplicationContext;
+class CRLSetFetcher;
+class IOSChromeIOThread;
 class PrefService;
 
 // Gets the global application context. Cannot return null.
@@ -31,6 +69,19 @@ class ApplicationContext {
  public:
   ApplicationContext();
   virtual ~ApplicationContext();
+
+  // Invoked when application enters foreground. Cancels the effect of
+  // OnAppEnterBackground(), in particular removes the boolean preference
+  // indicating that the ChromeBrowserStates have been shutdown.
+  virtual void OnAppEnterForeground() = 0;
+
+  // Invoked when application enters background. Saves any state that must be
+  // saved before shutdown can continue.
+  virtual void OnAppEnterBackground() = 0;
+
+  // Returns whether the last complete shutdown was clean (i.e. happened while
+  // the application was backgrounded).
+  virtual bool WasLastShutdownClean() = 0;
 
   // Gets the local state associated with this application.
   virtual PrefService* GetLocalState() = 0;
@@ -44,8 +95,44 @@ class ApplicationContext {
   // Gets the ChromeBrowserStateManager used by this application.
   virtual ios::ChromeBrowserStateManager* GetChromeBrowserStateManager() = 0;
 
+  // Gets the manager for the various metrics-related service, constructing it
+  // if necessary.
+  virtual metrics_services_manager::MetricsServicesManager*
+  GetMetricsServicesManager() = 0;
+
   // Gets the MetricsService used by this application.
   virtual metrics::MetricsService* GetMetricsService() = 0;
+
+  // Gets the VariationsService used by this application.
+  virtual variations::VariationsService* GetVariationsService() = 0;
+
+  // Gets the RapporService. May return null.
+  virtual rappor::RapporService* GetRapporService() = 0;
+
+  // Gets the ChromeNetLog.
+  virtual net_log::ChromeNetLog* GetNetLog() = 0;
+
+  // Gets the NetworkTimeTracker.
+  virtual network_time::NetworkTimeTracker* GetNetworkTimeTracker() = 0;
+
+  // Gets the IOSChromeIOThread.
+  virtual IOSChromeIOThread* GetIOSChromeIOThread() = 0;
+
+  // Gets the GCMDriver.
+  virtual gcm::GCMDriver* GetGCMDriver() = 0;
+
+  // Gets the PromoResourceService.
+  virtual web_resource::PromoResourceService* GetPromoResourceService() = 0;
+
+  // Gets the ComponentUpdateService.
+  virtual component_updater::ComponentUpdateService*
+  GetComponentUpdateService() = 0;
+
+  // Gets the CRLSetFetcher.
+  virtual CRLSetFetcher* GetCRLSetFetcher() = 0;
+
+  // Gets the SafeBrowsingService.
+  virtual safe_browsing::SafeBrowsingService* GetSafeBrowsingService() = 0;
 
  protected:
   // Sets the global ApplicationContext instance.

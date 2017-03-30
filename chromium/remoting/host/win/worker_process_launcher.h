@@ -5,9 +5,11 @@
 #ifndef REMOTING_HOST_WIN_WORKER_PROCESS_LAUNCHER_H_
 #define REMOTING_HOST_WIN_WORKER_PROCESS_LAUNCHER_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -94,7 +96,7 @@ class WorkerProcessLauncher
   // Mirrors methods of IPC::Listener to be invoked by |Delegate|. |Delegate|
   // has to validate |peer_pid| if necessary.
   bool OnMessageReceived(const IPC::Message& message);
-  void OnChannelConnected(int32 peer_pid);
+  void OnChannelConnected(int32_t peer_pid);
   void OnChannelError();
 
  private:
@@ -139,7 +141,7 @@ class WorkerProcessLauncher
 
   // The timer used to delay termination of the worker process when an IPC error
   // occured or when Crash() request is pending
-  base::OneShotTimer<WorkerProcessLauncher> kill_process_timer_;
+  base::OneShotTimer kill_process_timer_;
 
   // The default timeout for |kill_process_timer_|.
   base::TimeDelta kill_process_timeout_;
@@ -148,7 +150,7 @@ class WorkerProcessLauncher
   net::BackoffEntry launch_backoff_;
 
   // Timer used to schedule the next attempt to launch the process.
-  base::OneShotTimer<WorkerProcessLauncher> launch_timer_;
+  base::OneShotTimer launch_timer_;
 
   // Monitors |worker_process_| to detect when the launched process
   // terminates.
@@ -156,7 +158,7 @@ class WorkerProcessLauncher
 
   // Timer used to detect whether a launch attempt was successful or not, and to
   // cancel the launch attempt if it is taking too long.
-  base::OneShotTimer<WorkerProcessLauncher> launch_result_timer_;
+  base::OneShotTimer launch_result_timer_;
 
   // The handle of the worker process, if launched.
   base::win::ScopedHandle worker_process_;

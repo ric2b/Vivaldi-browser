@@ -4,8 +4,6 @@
 
 {
   'variables': {
-    'cast_graphics_gyp%': '../../chromecast/chromecast.gyp',
-    'libcast_media_gyp%': '../../chromecast/media/media.gyp',
     'internal_ozone_platform_deps': [
       'ozone_platform_cast',
     ],
@@ -15,23 +13,26 @@
     ],
   },
   'targets': [
+    # GN target: //ui/ozone/platform/cast:cast
     {
       'target_name': 'ozone_platform_cast',
       'type': 'static_library',
       'dependencies': [
-        '<(cast_graphics_gyp):libcast_graphics_1.0',
-        '<(libcast_media_gyp):libcast_media_1.0',
         '../events/events.gyp:events',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
         '../../base/base.gyp:base',
         '../../chromecast/chromecast.gyp:cast_public_api',
+        '../../chromecast/chromecast.gyp:libcast_graphics_1.0',
         '../../chromecast/media/media.gyp:media_base',
       ],
-      'defines': [
-        'OZONE_IMPLEMENTATION',
+      'include_dirs': [
+        '<(DEPTH)/third_party/khronos',
       ],
+
       'sources': [
+        'client_native_pixmap_factory_cast.cc',
+        'client_native_pixmap_factory_cast.h',
         'gpu_platform_support_cast.cc',
         'gpu_platform_support_cast.h',
         'overlay_manager_cast.cc',
@@ -45,6 +46,11 @@
         'surface_ozone_egl_cast.cc',
         'surface_ozone_egl_cast.h',
       ],
+      'link_settings': {
+        'libraries': [
+          '-ldl',
+        ],
+      },
     },
   ],
 }

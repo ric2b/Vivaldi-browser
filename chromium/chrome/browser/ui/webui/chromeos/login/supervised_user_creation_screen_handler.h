@@ -8,9 +8,10 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
-#include "components/user_manager/user_image/default_user_images.h"
 #include "content/public/browser/web_ui.h"
 
 namespace base {
@@ -32,7 +33,7 @@ class SupervisedUserCreationScreenHandler : public BaseScreenHandler {
 
     // Starts supervised user creation flow, with manager identified by
     // |manager_id| and |manager_password|.
-    virtual void AuthenticateManager(const std::string& manager_id,
+    virtual void AuthenticateManager(const AccountId& manager_account_id,
                                      const std::string& manager_password) = 0;
 
     // Starts supervised user creation flow, with supervised user that would
@@ -106,8 +107,8 @@ class SupervisedUserCreationScreenHandler : public BaseScreenHandler {
   // WebUI message handlers.
   void HandleCheckSupervisedUserName(const base::string16& name);
 
-  void HandleManagerSelected(const std::string& manager_id);
-  void HandleImportUserSelected(const std::string& user_id);
+  void HandleManagerSelected(const AccountId& manager_id);
+  void HandleImportUserSelected(const AccountId& account_id);
 
   void HandleFinishLocalSupervisedUserCreation();
   void HandleAbortLocalSupervisedUserCreation();
@@ -115,12 +116,12 @@ class SupervisedUserCreationScreenHandler : public BaseScreenHandler {
   void HandleRetryLocalSupervisedUserCreation(const base::ListValue* args);
   void HandleCurrentSupervisedUserPage(const std::string& current_page);
 
-  void HandleAuthenticateManager(const std::string& raw_manager_username,
+  void HandleAuthenticateManager(const AccountId& manager_account_id,
                                  const std::string& manager_password);
   void HandleCreateSupervisedUser(const base::string16& new_raw_user_name,
                                const std::string& new_user_password);
-  void HandleImportSupervisedUser(const std::string& user_id);
-  void HandleImportSupervisedUserWithPassword(const std::string& user_id,
+  void HandleImportSupervisedUser(const AccountId& account_id);
+  void HandleImportSupervisedUserWithPassword(const AccountId& account_id,
                                               const std::string& password);
 
   void HandleGetImages();

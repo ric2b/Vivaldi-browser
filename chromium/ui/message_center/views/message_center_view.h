@@ -5,7 +5,9 @@
 #ifndef UI_MESSAGE_CENTER_VIEWS_MESSAGE_CENTER_VIEW_H_
 #define UI_MESSAGE_CENTER_VIEWS_MESSAGE_CENTER_VIEW_H_
 
+#include <stddef.h>
 
+#include "base/macros.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/message_center_observer.h"
@@ -83,6 +85,7 @@ class MESSAGE_CENTER_EXPORT MessageCenterView : public views::View,
   bool HasClickedListener(const std::string& notification_id) override;
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override;
+  void ClickOnSettingsButton(const std::string& notification_id) override;
 
   // Overridden from gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;

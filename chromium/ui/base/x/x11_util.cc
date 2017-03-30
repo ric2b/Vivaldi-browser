@@ -23,16 +23,19 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
 #include "base/threading/thread.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkPostConfig.h"
@@ -52,6 +55,11 @@
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/x/x11_error_tracker.h"
+
+#if !defined(OS_CHROMEOS)
+#include "base/command_line.h"
+#include "ui/gfx/x/x11_switches.h"
+#endif
 
 #if defined(OS_FREEBSD)
 #include <sys/sysctl.h>
@@ -211,7 +219,7 @@ XCursorCache* cursor_cache = NULL;
 class XCustomCursorCache {
  public:
   static XCustomCursorCache* GetInstance() {
-    return Singleton<XCustomCursorCache>::get();
+    return base::Singleton<XCustomCursorCache>::get();
   }
 
   ::Cursor InstallCustomCursor(XcursorImage* image) {
@@ -239,7 +247,7 @@ class XCustomCursorCache {
   }
 
  private:
-  friend struct DefaultSingletonTraits<XCustomCursorCache>;
+  friend struct base::DefaultSingletonTraits<XCustomCursorCache>;
 
   class XCustomCursor {
    public:
@@ -297,76 +305,6 @@ bool IsXInput2Available() {
   return DeviceDataManagerX11::GetInstance()->IsXInput2Available();
 }
 
-static SharedMemorySupport DoQuerySharedMemorySupport(XDisplay* dpy) {
-  int dummy;
-  Bool pixmaps_supported;
-  // Query the server's support for XSHM.
-  if (!XShmQueryVersion(dpy, &dummy, &dummy, &pixmaps_supported))
-    return SHARED_MEMORY_NONE;
-
-#if defined(OS_FREEBSD)
-  // On FreeBSD we can't access the shared memory after it was marked for
-  // deletion, unless this behaviour is explicitly enabled by the user.
-  // In case it's not enabled disable shared memory support.
-  int allow_removed;
-  size_t length = sizeof(allow_removed);
-
-  if ((sysctlbyname("kern.ipc.shm_allow_removed", &allow_removed, &length,
-      NULL, 0) < 0) || allow_removed < 1) {
-    return SHARED_MEMORY_NONE;
-  }
-#endif
-
-  // Next we probe to see if shared memory will really work
-  int shmkey = shmget(IPC_PRIVATE, 1, 0600);
-  if (shmkey == -1) {
-    LOG(WARNING) << "Failed to get shared memory segment.";
-    return SHARED_MEMORY_NONE;
-  } else {
-    VLOG(1) << "Got shared memory segment " << shmkey;
-  }
-
-  void* address = shmat(shmkey, NULL, 0);
-  // Mark the shared memory region for deletion
-  shmctl(shmkey, IPC_RMID, NULL);
-
-  XShmSegmentInfo shminfo;
-  memset(&shminfo, 0, sizeof(shminfo));
-  shminfo.shmid = shmkey;
-
-  gfx::X11ErrorTracker err_tracker;
-  bool result = XShmAttach(dpy, &shminfo);
-  if (result)
-    VLOG(1) << "X got shared memory segment " << shmkey;
-  else
-    LOG(WARNING) << "X failed to attach to shared memory segment " << shmkey;
-  if (err_tracker.FoundNewError())
-    result = false;
-  shmdt(address);
-  if (!result) {
-    LOG(WARNING) << "X failed to attach to shared memory segment " << shmkey;
-    return SHARED_MEMORY_NONE;
-  }
-
-  VLOG(1) << "X attached to shared memory segment " << shmkey;
-
-  XShmDetach(dpy, &shminfo);
-  return pixmaps_supported ? SHARED_MEMORY_PIXMAP : SHARED_MEMORY_PUTIMAGE;
-}
-
-SharedMemorySupport QuerySharedMemorySupport(XDisplay* dpy) {
-  static SharedMemorySupport shared_memory_support = SHARED_MEMORY_NONE;
-  static bool shared_memory_support_cached = false;
-
-  if (shared_memory_support_cached)
-    return shared_memory_support;
-
-  shared_memory_support = DoQuerySharedMemorySupport(dpy);
-  shared_memory_support_cached = true;
-
-  return shared_memory_support;
-}
-
 bool QueryRenderSupport(Display* dpy) {
   int dummy;
   // We don't care about the version of Xrender since all the features which
@@ -415,7 +353,7 @@ XcursorImage* SkBitmapToXcursorImage(const SkBitmap* cursor_image,
         skia::ImageOperations::RESIZE_BETTER,
         static_cast<int>(cursor_image->width() * scale),
         static_cast<int>(cursor_image->height() * scale));
-    hotspot_point = gfx::ToFlooredPoint(gfx::ScalePoint(hotspot, scale));
+    hotspot_point = gfx::ScaleToFlooredPoint(hotspot, scale);
     needs_scale = true;
   }
 
@@ -436,9 +374,7 @@ XcursorImage* SkBitmapToXcursorImage(const SkBitmap* cursor_image,
   return image;
 }
 
-
-int CoalescePendingMotionEvents(const XEvent* xev,
-                                XEvent* last_event) {
+int CoalescePendingMotionEvents(const XEvent* xev, XEvent* last_event) {
   XIDeviceEvent* xievent = static_cast<XIDeviceEvent*>(xev->xcookie.data);
   int num_coalesced = 0;
   XDisplay* display = xev->xany.display;
@@ -467,7 +403,9 @@ int CoalescePendingMotionEvents(const XEvent* xev,
     if (next_event.type == GenericEvent &&
         next_event.xgeneric.evtype == event_type &&
         !ui::DeviceDataManagerX11::GetInstance()->IsCMTGestureEvent(
-            &next_event)) {
+            next_event) &&
+        ui::DeviceDataManagerX11::GetInstance()->GetScrollClassEventDetail(
+            next_event) == SCROLL_TYPE_NO_SCROLL) {
       XIDeviceEvent* next_xievent =
           static_cast<XIDeviceEvent*>(next_event.xcookie.data);
       // Confirm that the motion event is targeted at the same window
@@ -476,8 +414,7 @@ int CoalescePendingMotionEvents(const XEvent* xev,
           xievent->child == next_xievent->child &&
           xievent->detail == next_xievent->detail &&
           xievent->buttons.mask_len == next_xievent->buttons.mask_len &&
-          (memcmp(xievent->buttons.mask,
-                  next_xievent->buttons.mask,
+          (memcmp(xievent->buttons.mask, next_xievent->buttons.mask,
                   xievent->buttons.mask_len) == 0) &&
           xievent->mods.base == next_xievent->mods.base &&
           xievent->mods.latched == next_xievent->mods.latched &&
@@ -623,10 +560,8 @@ bool IsWindowVisible(XID window) {
   std::vector<XAtom> wm_states;
   if (GetAtomArrayProperty(window, "_NET_WM_STATE", &wm_states)) {
     XAtom hidden_atom = GetAtom("_NET_WM_STATE_HIDDEN");
-    if (std::find(wm_states.begin(), wm_states.end(), hidden_atom) !=
-            wm_states.end()) {
+    if (ContainsValue(wm_states, hidden_atom))
       return false;
-    }
   }
 
   // Some compositing window managers (notably kwin) do not actually unmap
@@ -1251,7 +1186,7 @@ WindowManagerName GuessWindowManager() {
       return WM_FLUXBOX;
     if (name == "i3")
       return WM_I3;
-    if (base::StartsWithASCII(name, "IceWM", true))
+    if (base::StartsWith(name, "IceWM", base::CompareCase::SENSITIVE))
       return WM_ICE_WM;
     if (name == "ion3")
       return WM_ION3;
@@ -1478,6 +1413,64 @@ void LogErrorEventDescription(XDisplay* dpy,
       << "minor_code " << static_cast<int>(error_event.minor_code)
       << " (" << request_str << ")";
 }
+
+#if !defined(OS_CHROMEOS)
+void ChooseVisualForWindow(Visual** visual, int* depth) {
+  static Visual* s_visual = NULL;
+  static int s_depth = 0;
+
+  if (!s_visual) {
+    XDisplay* display = gfx::GetXDisplay();
+    XAtom NET_WM_CM_S0 = XInternAtom(display, "_NET_WM_CM_S0", False);
+
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kEnableTransparentVisuals) &&
+        XGetSelectionOwner(display, NET_WM_CM_S0) != None) {
+      // Choose the first ARGB8888 visual
+      XVisualInfo visual_template;
+      visual_template.screen = 0;
+
+      int visuals_len;
+      gfx::XScopedPtr<XVisualInfo[]> visual_list(XGetVisualInfo(
+          display, VisualScreenMask, &visual_template, &visuals_len));
+      for (int i = 0; i < visuals_len; ++i) {
+        // Why support only 8888 ARGB? Because it's all that GTK+ supports. In
+        // gdkvisual-x11.cc, they look for this specific visual and use it for
+        // all their alpha channel using needs.
+        //
+        // TODO(erg): While the following does find a valid visual, some GL
+        // drivers
+        // don't believe that this has an alpha channel. According to marcheu@,
+        // this should work on open source driver though. (It doesn't work with
+        // NVidia's binaries currently.) http://crbug.com/369209
+        const XVisualInfo& info = visual_list[i];
+        if (info.depth == 32 && info.visual->red_mask == 0xff0000 &&
+            info.visual->green_mask == 0x00ff00 &&
+            info.visual->blue_mask == 0x0000ff) {
+          s_visual = info.visual;
+          s_depth = info.depth;
+          break;
+        }
+      }
+    } else {
+      XWindowAttributes windowAttribs;
+      Window root = XDefaultRootWindow(display);
+      Status status = XGetWindowAttributes(display, root, &windowAttribs);
+      DCHECK(status != 0);
+      s_visual = windowAttribs.visual;
+      s_depth = windowAttribs.depth;
+    }
+  }  // !s_visual
+
+  DCHECK(s_visual);
+  DCHECK(s_depth > 0);
+
+  if (visual)
+    *visual = s_visual;
+  if (depth)
+    *depth = s_depth;
+}
+#endif
 
 // ----------------------------------------------------------------------------
 // End of x11_util_internal.h

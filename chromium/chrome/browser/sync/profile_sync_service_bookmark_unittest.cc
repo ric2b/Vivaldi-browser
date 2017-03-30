@@ -6,6 +6,9 @@
 // BookmarkChangeProcessor.  Write unit tests for
 // BookmarkModelAssociator separately.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <queue>
 #include <stack>
@@ -14,29 +17,35 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/mock_entropy_provider.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/chrome_bookmark_client.h"
 #include "chrome/browser/bookmarks/chrome_bookmark_client_factory.h"
-#include "chrome/browser/sync/glue/bookmark_change_processor.h"
-#include "chrome/browser/sync/glue/bookmark_model_associator.h"
+#include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/sync_bookmarks/bookmark_change_processor.h"
+#include "components/sync_bookmarks/bookmark_model_associator.h"
 #include "components/sync_driver/data_type_error_handler.h"
 #include "components/sync_driver/data_type_error_handler_mock.h"
+#include "components/sync_driver/fake_sync_client.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "sync/api/sync_error.h"
+#include "sync/api/sync_merge_result.h"
 #include "sync/internal_api/public/change_record.h"
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/read_transaction.h"
@@ -80,11 +89,33 @@ void MakeServerUpdate(syncer::WriteTransaction* trans,
   node->GetMutableEntryForTest()->PutIsUnappliedUpdate(true);
 }
 
-void MakeServerUpdate(syncer::WriteTransaction* trans, int64 id) {
+void MakeServerUpdate(syncer::WriteTransaction* trans, int64_t id) {
   syncer::WriteNode node(trans);
   EXPECT_EQ(BaseNode::INIT_OK, node.InitByIdLookup(id));
   MakeServerUpdate(trans, &node);
 }
+
+class TestSyncClient : public sync_driver::FakeSyncClient {
+ public:
+  explicit TestSyncClient(Profile* profile) : profile_(profile) {}
+
+  bookmarks::BookmarkModel* GetBookmarkModel() override {
+    return BookmarkModelFactory::GetForProfile(profile_);
+  }
+
+  favicon::FaviconService* GetFaviconService() override {
+    return FaviconServiceFactory::GetForProfile(
+        profile_, ServiceAccessType::EXPLICIT_ACCESS);
+  }
+
+  history::HistoryService* GetHistoryService() override {
+    return HistoryServiceFactory::GetForProfile(
+        profile_, ServiceAccessType::EXPLICIT_ACCESS);
+  }
+
+ private:
+  Profile* profile_;
+};
 
 // FakeServerChange constructs a list of syncer::ChangeRecords while modifying
 // the sync model, and can pass the ChangeRecord list to a
@@ -98,12 +129,12 @@ class FakeServerChange {
   }
 
   // Pretend that the server told the syncer to add a bookmark object.
-  int64 AddWithMetaInfo(const std::string& title,
-                        const std::string& url,
-                        const BookmarkNode::MetaInfoMap* meta_info_map,
-                        bool is_folder,
-                        int64 parent_id,
-                        int64 predecessor_id) {
+  int64_t AddWithMetaInfo(const std::string& title,
+                          const std::string& url,
+                          const BookmarkNode::MetaInfoMap* meta_info_map,
+                          bool is_folder,
+                          int64_t parent_id,
+                          int64_t predecessor_id) {
     syncer::ReadNode parent(trans_);
     EXPECT_EQ(BaseNode::INIT_OK, parent.InitByIdLookup(parent_id));
     syncer::WriteNode node(trans_);
@@ -136,47 +167,47 @@ class FakeServerChange {
     return node.GetId();
   }
 
-  int64 Add(const std::string& title,
-            const std::string& url,
-            bool is_folder,
-            int64 parent_id,
-            int64 predecessor_id) {
+  int64_t Add(const std::string& title,
+              const std::string& url,
+              bool is_folder,
+              int64_t parent_id,
+              int64_t predecessor_id) {
     return AddWithMetaInfo(title, url, NULL, is_folder, parent_id,
                            predecessor_id);
   }
 
   // Add a bookmark folder.
-  int64 AddFolder(const std::string& title,
-                  int64 parent_id,
-                  int64 predecessor_id) {
+  int64_t AddFolder(const std::string& title,
+                    int64_t parent_id,
+                    int64_t predecessor_id) {
     return Add(title, std::string(), true, parent_id, predecessor_id);
   }
-  int64 AddFolderWithMetaInfo(const std::string& title,
-                              const BookmarkNode::MetaInfoMap* meta_info_map,
-                              int64 parent_id,
-                              int64 predecessor_id) {
+  int64_t AddFolderWithMetaInfo(const std::string& title,
+                                const BookmarkNode::MetaInfoMap* meta_info_map,
+                                int64_t parent_id,
+                                int64_t predecessor_id) {
     return AddWithMetaInfo(title, std::string(), meta_info_map, true, parent_id,
                            predecessor_id);
   }
 
   // Add a bookmark.
-  int64 AddURL(const std::string& title,
-               const std::string& url,
-               int64 parent_id,
-               int64 predecessor_id) {
+  int64_t AddURL(const std::string& title,
+                 const std::string& url,
+                 int64_t parent_id,
+                 int64_t predecessor_id) {
     return Add(title, url, false, parent_id, predecessor_id);
   }
-  int64 AddURLWithMetaInfo(const std::string& title,
-                           const std::string& url,
-                           const BookmarkNode::MetaInfoMap* meta_info_map,
-                           int64 parent_id,
-                           int64 predecessor_id) {
+  int64_t AddURLWithMetaInfo(const std::string& title,
+                             const std::string& url,
+                             const BookmarkNode::MetaInfoMap* meta_info_map,
+                             int64_t parent_id,
+                             int64_t predecessor_id) {
     return AddWithMetaInfo(title, url, meta_info_map, false, parent_id,
                            predecessor_id);
   }
 
   // Pretend that the server told the syncer to delete an object.
-  void Delete(int64 id) {
+  void Delete(int64_t id) {
     {
       // Delete the sync node.
       syncer::WriteNode node(trans_);
@@ -204,7 +235,7 @@ class FakeServerChange {
   }
 
   // Set a new title value, and return the old value.
-  std::string ModifyTitle(int64 id, const std::string& new_title) {
+  std::string ModifyTitle(int64_t id, const std::string& new_title) {
     syncer::WriteNode node(trans_);
     EXPECT_EQ(BaseNode::INIT_OK, node.InitByIdLookup(id));
     std::string old_title = node.GetTitle();
@@ -216,12 +247,14 @@ class FakeServerChange {
   // Set a new parent and predecessor value.  Return the old parent id.
   // We could return the old predecessor id, but it turns out not to be
   // very useful for assertions.
-  int64 ModifyPosition(int64 id, int64 parent_id, int64 predecessor_id) {
+  int64_t ModifyPosition(int64_t id,
+                         int64_t parent_id,
+                         int64_t predecessor_id) {
     syncer::ReadNode parent(trans_);
     EXPECT_EQ(BaseNode::INIT_OK, parent.InitByIdLookup(parent_id));
     syncer::WriteNode node(trans_);
     EXPECT_EQ(BaseNode::INIT_OK, node.InitByIdLookup(id));
-    int64 old_parent_id = node.GetParentId();
+    int64_t old_parent_id = node.GetParentId();
     if (predecessor_id == 0) {
       EXPECT_TRUE(node.SetPosition(parent, NULL));
     } else {
@@ -234,7 +267,7 @@ class FakeServerChange {
     return old_parent_id;
   }
 
-  void ModifyCreationTime(int64 id, int64 creation_time_us) {
+  void ModifyCreationTime(int64_t id, int64_t creation_time_us) {
     syncer::WriteNode node(trans_);
     ASSERT_EQ(BaseNode::INIT_OK, node.InitByIdLookup(id));
     sync_pb::BookmarkSpecifics specifics = node.GetBookmarkSpecifics();
@@ -243,7 +276,7 @@ class FakeServerChange {
     SetModified(id);
   }
 
-  void ModifyMetaInfo(int64 id,
+  void ModifyMetaInfo(int64_t id,
                       const BookmarkNode::MetaInfoMap& meta_info_map) {
     syncer::WriteNode node(trans_);
     ASSERT_EQ(BaseNode::INIT_OK, node.InitByIdLookup(id));
@@ -266,7 +299,7 @@ class FakeServerChange {
  private:
   // Helper function to push an ACTION_UPDATE record onto the back
   // of the changelist.
-  void SetModified(int64 id) {
+  void SetModified(int64_t id) {
     // Coalesce multi-property edits.
     if (!changes_.empty() && changes_.back().id == id &&
         changes_.back().action ==
@@ -348,7 +381,8 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
   enum SaveOption { SAVE_TO_STORAGE, DONT_SAVE_TO_STORAGE };
 
   ProfileSyncServiceBookmarkTest()
-      : model_(NULL),
+      : sync_client_(&profile_),
+        model_(NULL),
         local_merge_result_(syncer::BOOKMARKS),
         syncer_merge_result_(syncer::BOOKMARKS) {}
 
@@ -377,7 +411,8 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
   // change the sync model directly after ModelAssociation.  This function can
   // be invoked prior to model association to set up first-time sync model
   // association scenarios.
-  int64 AddFolderToShare(syncer::WriteTransaction* trans, std::string title) {
+  int64_t AddFolderToShare(syncer::WriteTransaction* trans,
+                           const std::string& title) {
     EXPECT_FALSE(model_associator_);
 
     // Be sure to call CreatePermanentBookmarkNodes(), otherwise this will fail.
@@ -401,10 +436,10 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
   // the sync model directly after ModelAssociation.  This function can be
   // invoked prior to model association to set up first-time sync model
   // association scenarios.
-  int64 AddBookmarkToShare(syncer::WriteTransaction* trans,
-                           int64 parent_id,
-                           const std::string& title,
-                           const std::string& url) {
+  int64_t AddBookmarkToShare(syncer::WriteTransaction* trans,
+                             int64_t parent_id,
+                             const std::string& title,
+                             const std::string& url) {
     EXPECT_FALSE(model_associator_);
 
     syncer::ReadNode parent(trans);
@@ -482,7 +517,7 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
     EXPECT_EQ(BaseNode::INIT_OK, root.InitTypeRoot(type));
 
     // Loop through creating permanent nodes as necessary.
-    int64 last_child_id = syncer::kInvalidId;
+    int64_t last_child_id = syncer::kInvalidId;
     for (int i = 0; i < kNumPermanentNodes; ++i) {
       // First check if the node already exists. This is for tests that involve
       // persistence and set up sync more than once.
@@ -519,10 +554,8 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
 
     // Set up model associator.
     model_associator_.reset(new BookmarkModelAssociator(
-        BookmarkModelFactory::GetForProfile(&profile_),
-        &profile_,
-        test_user_share_.user_share(),
-        &mock_error_handler_,
+        BookmarkModelFactory::GetForProfile(&profile_), &sync_client_,
+        test_user_share_.user_share(), &mock_error_handler_,
         kExpectMobileBookmarks));
 
     local_merge_result_ = syncer::SyncMergeResult(syncer::BOOKMARKS);
@@ -565,10 +598,8 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
     ASSERT_TRUE(AssociateModels());
 
     // Set up change processor.
-    change_processor_.reset(
-        new BookmarkChangeProcessor(&profile_,
-                                    model_associator_.get(),
-                                    &mock_error_handler_));
+    change_processor_.reset(new BookmarkChangeProcessor(
+        &sync_client_, model_associator_.get(), &mock_error_handler_));
     change_processor_->Start(test_user_share_.user_share());
   }
 
@@ -670,51 +701,51 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
   }
 
   void ExpectBrowserNodeMatching(syncer::BaseTransaction* trans,
-                                 int64 sync_id) {
+                                 int64_t sync_id) {
     EXPECT_TRUE(sync_id);
     const BookmarkNode* bnode =
         model_associator_->GetChromeNodeFromSyncId(sync_id);
     ASSERT_TRUE(bnode);
     ASSERT_TRUE(CanSyncNode(bnode));
 
-    int64 id = model_associator_->GetSyncIdFromChromeId(bnode->id());
+    int64_t id = model_associator_->GetSyncIdFromChromeId(bnode->id());
     EXPECT_EQ(id, sync_id);
     ExpectSyncerNodeMatching(trans, bnode);
   }
 
-  void ExpectBrowserNodeUnknown(int64 sync_id) {
+  void ExpectBrowserNodeUnknown(int64_t sync_id) {
     EXPECT_FALSE(model_associator_->GetChromeNodeFromSyncId(sync_id));
   }
 
-  void ExpectBrowserNodeKnown(int64 sync_id) {
+  void ExpectBrowserNodeKnown(int64_t sync_id) {
     EXPECT_TRUE(model_associator_->GetChromeNodeFromSyncId(sync_id));
   }
 
   void ExpectSyncerNodeKnown(const BookmarkNode* node) {
-    int64 sync_id = model_associator_->GetSyncIdFromChromeId(node->id());
+    int64_t sync_id = model_associator_->GetSyncIdFromChromeId(node->id());
     EXPECT_NE(sync_id, syncer::kInvalidId);
   }
 
   void ExpectSyncerNodeUnknown(const BookmarkNode* node) {
-    int64 sync_id = model_associator_->GetSyncIdFromChromeId(node->id());
+    int64_t sync_id = model_associator_->GetSyncIdFromChromeId(node->id());
     EXPECT_EQ(sync_id, syncer::kInvalidId);
   }
 
-  void ExpectBrowserNodeTitle(int64 sync_id, const std::string& title) {
+  void ExpectBrowserNodeTitle(int64_t sync_id, const std::string& title) {
     const BookmarkNode* bnode =
         model_associator_->GetChromeNodeFromSyncId(sync_id);
     ASSERT_TRUE(bnode);
     EXPECT_EQ(bnode->GetTitle(), base::UTF8ToUTF16(title));
   }
 
-  void ExpectBrowserNodeURL(int64 sync_id, const std::string& url) {
+  void ExpectBrowserNodeURL(int64_t sync_id, const std::string& url) {
     const BookmarkNode* bnode =
         model_associator_->GetChromeNodeFromSyncId(sync_id);
     ASSERT_TRUE(bnode);
     EXPECT_EQ(GURL(url), bnode->url());
   }
 
-  void ExpectBrowserNodeParent(int64 sync_id, int64 parent_sync_id) {
+  void ExpectBrowserNodeParent(int64_t sync_id, int64_t parent_sync_id) {
     const BookmarkNode* node =
         model_associator_->GetChromeNodeFromSyncId(sync_id);
     ASSERT_TRUE(node);
@@ -736,10 +767,10 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
     EXPECT_EQ(root->GetIndexOf(model_->mobile_node()), 2);
 #endif  // defined(OS_IOS) || defined(OS_ANDROID)
 
-    std::stack<int64> stack;
+    std::stack<int64_t> stack;
     stack.push(bookmark_bar_id());
     while (!stack.empty()) {
-      int64 id = stack.top();
+      int64_t id = stack.top();
       stack.pop();
       if (!id) continue;
 
@@ -758,17 +789,17 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
     ExpectModelMatch(&trans);
   }
 
-  int64 mobile_bookmarks_id() {
+  int64_t mobile_bookmarks_id() {
     return
         model_associator_->GetSyncIdFromChromeId(model_->mobile_node()->id());
   }
 
-  int64 other_bookmarks_id() {
+  int64_t other_bookmarks_id() {
     return
         model_associator_->GetSyncIdFromChromeId(model_->other_node()->id());
   }
 
-  int64 bookmark_bar_id() {
+  int64_t bookmark_bar_id() {
     return model_associator_->GetSyncIdFromChromeId(
         model_->bookmark_bar_node()->id());
   }
@@ -778,6 +809,7 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
 
  protected:
   TestingProfile profile_;
+  TestSyncClient sync_client_;
   BookmarkModel* model_;
   syncer::TestUserShare test_user_share_;
   scoped_ptr<BookmarkChangeProcessor> change_processor_;
@@ -818,7 +850,7 @@ TEST_F(ProfileSyncServiceBookmarkTest, InitialModelAssociate) {
   {
     syncer::WriteTransaction trans(FROM_HERE, test_user_share_.user_share());
     for (int i = 0; i < kNumFolders; ++i) {
-      int64 folder_id =
+      int64_t folder_id =
           AddFolderToShare(&trans, base::StringPrintf("folder%05d", i));
       for (int j = 0; j < kNumBookmarksPerFolder; ++j) {
         AddBookmarkToShare(
@@ -864,7 +896,7 @@ TEST_F(ProfileSyncServiceBookmarkTest, InitialModelAssociateWithDeleteJournal) {
   CreatePermanentBookmarkNodes();
 
   // Create entries matching the folder and the bookmark above.
-  int64 folder_id, bookmark_id;
+  int64_t folder_id, bookmark_id;
   {
     syncer::WriteTransaction trans(FROM_HERE, test_user_share_.user_share());
     folder_id = AddFolderToShare(&trans, "foobar");
@@ -905,8 +937,8 @@ TEST_F(ProfileSyncServiceBookmarkTest,
   const int kFolderToIncludeBookmarks = 7;
   const int kBookmarkToDelete = 4;
 
-  int64 folder_ids[kNumFolders];
-  int64 bookmark_ids[kNumBookmarks];
+  int64_t folder_ids[kNumFolders];
+  int64_t bookmark_ids[kNumBookmarks];
 
   // Create native folders and bookmarks with identical names. Only
   // one of the folders contains bookmarks and others are empty. Here is the
@@ -947,15 +979,15 @@ TEST_F(ProfileSyncServiceBookmarkTest,
 
   CreatePermanentBookmarkNodes();
 
-  int64 sync_bookmark_id_to_delete = 0;
+  int64_t sync_bookmark_id_to_delete = 0;
   {
     // Create sync folders matching native folders above.
-    int64 parent_id = 0;
+    int64_t parent_id = 0;
     syncer::WriteTransaction trans(FROM_HERE, test_user_share_.user_share());
     // Create in reverse order because AddFolderToShare passes NULL for
     // |predecessor| argument.
     for (int i = kNumFolders - 1; i >= 0; i--) {
-      int64 id = AddFolderToShare(&trans, "folder");
+      int64_t id = AddFolderToShare(&trans, "folder");
 
       // Pre-map sync folders to native folders by setting
       // external ID. This will verify that the association algorithm picks
@@ -1040,7 +1072,7 @@ TEST_F(ProfileSyncServiceBookmarkTest, InitialModelAssociateWithInvalidUrl) {
   CreatePermanentBookmarkNodes();
   {
     syncer::WriteTransaction trans(FROM_HERE, test_user_share_.user_share());
-    int64 folder_id = AddFolderToShare(&trans, "folder");
+    int64_t folder_id = AddFolderToShare(&trans, "folder");
     // Please note that each AddBookmarkToShare inserts the node at the front
     // so the actual order of children in the directory will be opposite.
     AddBookmarkToShare(&trans, folder_id, "node2", "http://www.node2.com/");
@@ -1131,13 +1163,13 @@ TEST_F(ProfileSyncServiceBookmarkTest, ServerChangeProcessing) {
   syncer::WriteTransaction trans(FROM_HERE, test_user_share_.user_share());
 
   FakeServerChange adds(&trans);
-  int64 f1 = adds.AddFolder("Server Folder B", bookmark_bar_id(), 0);
-  int64 f2 = adds.AddFolder("Server Folder A", bookmark_bar_id(), f1);
-  int64 u1 = adds.AddURL("Some old site", "ftp://nifty.andrew.cmu.edu/",
-                         bookmark_bar_id(), f2);
-  int64 u2 = adds.AddURL("Nifty", "ftp://nifty.andrew.cmu.edu/", f1, 0);
+  int64_t f1 = adds.AddFolder("Server Folder B", bookmark_bar_id(), 0);
+  int64_t f2 = adds.AddFolder("Server Folder A", bookmark_bar_id(), f1);
+  int64_t u1 = adds.AddURL("Some old site", "ftp://nifty.andrew.cmu.edu/",
+                           bookmark_bar_id(), f2);
+  int64_t u2 = adds.AddURL("Nifty", "ftp://nifty.andrew.cmu.edu/", f1, 0);
   // u3 is a duplicate URL
-  int64 u3 = adds.AddURL("Nifty2", "ftp://nifty.andrew.cmu.edu/", f1, u2);
+  int64_t u3 = adds.AddURL("Nifty2", "ftp://nifty.andrew.cmu.edu/", f1, u2);
   // u4 is a duplicate title, different URL.
   adds.AddURL("Some old site", "http://slog.thestranger.com/",
               bookmark_bar_id(), u1);
@@ -1148,8 +1180,8 @@ TEST_F(ProfileSyncServiceBookmarkTest, ServerChangeProcessing) {
       "scrollbars=0,status=0,toolbar=0,width=300," \
       "height=300,resizable');});");
   adds.AddURL(std::string(), javascript_url, other_bookmarks_id(), 0);
-  int64 u6 = adds.AddURL(
-      "Sync1", "http://www.syncable.edu/", mobile_bookmarks_id(), 0);
+  int64_t u6 = adds.AddURL("Sync1", "http://www.syncable.edu/",
+                           mobile_bookmarks_id(), 0);
 
   syncer::ChangeRecordList::const_iterator it;
   // The bookmark model shouldn't yet have seen any of the nodes of |adds|.
@@ -1169,14 +1201,14 @@ TEST_F(ProfileSyncServiceBookmarkTest, ServerChangeProcessing) {
   // TODO(ncarter): Determine if we allow ModifyURL ops or not.
   /* std::string u2_old_url = mods.ModifyURL(u2, "http://www.google.com"); */
   std::string u2_old_title = mods.ModifyTitle(u2, "The Google");
-  int64 u2_old_parent = mods.ModifyPosition(u2, f2, 0);
+  int64_t u2_old_parent = mods.ModifyPosition(u2, f2, 0);
 
   // Now move f1 after u2.
   std::string f1_old_title = mods.ModifyTitle(f1, "Server Folder C");
-  int64 f1_old_parent = mods.ModifyPosition(f1, f2, u2);
+  int64_t f1_old_parent = mods.ModifyPosition(f1, f2, u2);
 
   // Then add u3 after f1.
-  int64 u3_old_parent = mods.ModifyPosition(u3, f2, f1);
+  int64_t u3_old_parent = mods.ModifyPosition(u3, f2, f1);
 
   std::string u6_old_title = mods.ModifyTitle(u6, "Mobile Folder A");
 
@@ -1231,14 +1263,14 @@ TEST_F(ProfileSyncServiceBookmarkTest, ServerChangeRequiringFosterParent) {
   // ApplyModelChanges puts a temporary foster parent node.
   std::string url("http://dev.chromium.org/");
   FakeServerChange adds(&trans);
-  int64 f0 = other_bookmarks_id();                 // + other_node
-  int64 f1 = adds.AddFolder("f1",      f0, 0);    //   + f1
-  int64 f2 = adds.AddFolder("f2",      f1, 0);    //     + f2
-  int64 u3 = adds.AddURL(   "u3", url, f2, 0);    //       + u3    NOLINT
-  int64 u4 = adds.AddURL(   "u4", url, f2, u3);   //       + u4    NOLINT
-  int64 u5 = adds.AddURL(   "u5", url, f1, f2);   //     + u5      NOLINT
-  int64 f6 = adds.AddFolder("f6",      f1, u5);   //     + f6
-  int64 u7 = adds.AddURL(   "u7", url, f0, f1);   //   + u7        NOLINT
+  int64_t f0 = other_bookmarks_id();            // + other_node
+  int64_t f1 = adds.AddFolder("f1", f0, 0);     //   + f1
+  int64_t f2 = adds.AddFolder("f2", f1, 0);     //     + f2
+  int64_t u3 = adds.AddURL("u3", url, f2, 0);   //       + u3    NOLINT
+  int64_t u4 = adds.AddURL("u4", url, f2, u3);  //       + u4    NOLINT
+  int64_t u5 = adds.AddURL("u5", url, f1, f2);  //     + u5      NOLINT
+  int64_t f6 = adds.AddFolder("f6", f1, u5);    //     + f6
+  int64_t u7 = adds.AddURL("u7", url, f0, f1);  //   + u7        NOLINT
 
   syncer::ChangeRecordList::const_iterator it;
   // The bookmark model shouldn't yet have seen any of the nodes of |adds|.
@@ -1483,11 +1515,11 @@ TEST_F(ProfileSyncServiceBookmarkTest, ApplySyncDeletesFromJournal) {
   //   +-- Folder 2
   //         +-- URL 2
   LoadBookmarkModel(DELETE_EXISTING_STORAGE, SAVE_TO_STORAGE);
-  int64 u0 = 0;
-  int64 f1 = 0;
-  int64 u1 = 0;
-  int64 f2 = 0;
-  int64 u2 = 0;
+  int64_t u0 = 0;
+  int64_t f1 = 0;
+  int64_t u1 = 0;
+  int64_t f2 = 0;
+  int64_t u2 = 0;
   StartSync();
   int fixed_sync_bk_count = GetSyncBookmarkCount();
   {
@@ -1566,7 +1598,7 @@ struct TestData {
 };
 
 // Map from bookmark node ID to its version.
-typedef std::map<int64, int64> BookmarkNodeVersionMap;
+typedef std::map<int64_t, int64_t> BookmarkNodeVersionMap;
 
 // TODO(ncarter): Integrate the existing TestNode/PopulateNodeFromString code
 // in the bookmark model unittest, to make it simpler to set up test data
@@ -2062,49 +2094,6 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, MergeModelsWithSomeExtras) {
   ExpectBookmarkModelMatchesTestData();
 }
 
-// Tests the optimistic bookmark association case where some nodes are moved
-// and untracked by the sync before the association.
-TEST_F(ProfileSyncServiceBookmarkTestWithData, OptimisticMergeWithMoves) {
-  // TODO(stanisc): crbug.com/456876: Remove this once the optimistic
-  // association experiment has ended.
-  base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
-  base::FieldTrialList::CreateFieldTrial("SyncOptimisticBookmarkAssociation",
-                                         "Enabled");
-
-  LoadBookmarkModel(DELETE_EXISTING_STORAGE, DONT_SAVE_TO_STORAGE);
-  WriteTestDataToBookmarkModel();
-
-  int num_bookmarks = model_->root_node()->GetTotalNodeCount();
-
-  StartSync();
-  ExpectModelMatch();
-  StopSync();
-
-  EXPECT_EQ(num_bookmarks, model_->root_node()->GetTotalNodeCount());
-
-  // Move one folder into another
-  const BookmarkNode* bookmark_bar_node = model_->bookmark_bar_node();
-  const BookmarkNode* f1 = bookmark_bar_node->GetChild(1);
-  ASSERT_TRUE(f1->is_folder());
-  const BookmarkNode* f2 = bookmark_bar_node->GetChild(3);
-  ASSERT_TRUE(f2->is_folder());
-  model_->Move(f2, f1, 0);
-
-  StartSync();
-  ExpectModelMatch();
-  StopSync();
-
-  // Expect folders to not duplicate.
-  EXPECT_EQ(num_bookmarks, model_->root_node()->GetTotalNodeCount());
-
-  // Perform one more cycle and make sure that the number of nodes stays
-  // the same.
-  StartSync();
-  ExpectModelMatch();
-  StopSync();
-  EXPECT_EQ(num_bookmarks, model_->root_node()->GetTotalNodeCount());
-}
-
 // Tests that when persisted model associations are used, things work fine.
 TEST_F(ProfileSyncServiceBookmarkTestWithData, ModelAssociationPersistence) {
   LoadBookmarkModel(DELETE_EXISTING_STORAGE, DONT_SAVE_TO_STORAGE);
@@ -2210,12 +2199,6 @@ TEST_F(ProfileSyncServiceBookmarkTest, AssociationState) {
 // Verify that the creation_time_us changes are applied in the local model at
 // association time and update time.
 TEST_F(ProfileSyncServiceBookmarkTestWithData, UpdateDateAdded) {
-  // TODO(stanisc): crbug.com/456876: Remove this once the optimistic
-  // association experiment has ended.
-  base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
-  base::FieldTrialList::CreateFieldTrial("SyncOptimisticBookmarkAssociation",
-                                         "Enabled");
-
   LoadBookmarkModel(DELETE_EXISTING_STORAGE, DONT_SAVE_TO_STORAGE);
   WriteTestDataToBookmarkModel();
 
@@ -2240,8 +2223,8 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, UpdateDateAdded) {
   // and Sync.
   {
     syncer::ReadTransaction trans(FROM_HERE, test_user_share_.user_share());
-    int64 sync_version = trans.GetModelVersion(syncer::BOOKMARKS);
-    int64 native_version = model_->root_node()->sync_transaction_version();
+    int64_t sync_version = trans.GetModelVersion(syncer::BOOKMARKS);
+    int64_t native_version = model_->root_node()->sync_transaction_version();
     EXPECT_EQ(native_version, sync_version);
   }
 
@@ -2250,8 +2233,8 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, UpdateDateAdded) {
   // crbug/464907.
   EXPECT_EQ(child_node->date_added(), base::Time::FromInternalValue(10));
 
-  // Reset transaction version on the native model to trigger conservative
-  // association algorithm.
+  // Reset transaction version on the native model to trigger updating data
+  // for all bookmark nodes.
   model_->SetNodeSyncTransactionVersion(
       model_->root_node(), syncer::syncable::kInvalidTransactionVersion);
 
@@ -2268,8 +2251,7 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, UpdateDateAdded) {
   const std::string kTitle = "Some site";
   const std::string kUrl = "http://www.whatwhat.yeah/";
   const int kCreationTime = 30;
-  int64 id = adds.AddURL(kTitle, kUrl,
-                         bookmark_bar_id(), 0);
+  int64_t id = adds.AddURL(kTitle, kUrl, bookmark_bar_id(), 0);
   adds.ApplyPendingChanges(change_processor_.get());
   FakeServerChange updates(&trans);
   updates.ModifyCreationTime(id, kCreationTime);
@@ -2281,6 +2263,38 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, UpdateDateAdded) {
   EXPECT_EQ(base::UTF8ToUTF16(kTitle), node->GetTitle());
   EXPECT_EQ(kUrl, node->url().possibly_invalid_spec());
   EXPECT_EQ(node->date_added(), base::Time::FromInternalValue(30));
+}
+
+// Verifies that the transaction version in the native bookmark model gets
+// updated and synced with the sync transaction version even when the
+// association doesn't modify any sync nodes. This is necessary to ensure
+// that the native transaction doesn't get stuck at "unset" version and skips
+// any further consistency checks.
+TEST_F(ProfileSyncServiceBookmarkTestWithData,
+       NativeTransactionVersionUpdated) {
+  LoadBookmarkModel(DELETE_EXISTING_STORAGE, DONT_SAVE_TO_STORAGE);
+  WriteTestDataToBookmarkModel();
+
+  // Start sync in order to create bookmark nodes in the sync db.
+  StartSync();
+  StopSync();
+
+  // Reset transaction version on the native mode to "unset".
+  model_->SetNodeSyncTransactionVersion(
+      model_->root_node(), syncer::syncable::kInvalidTransactionVersion);
+
+  // Restart sync.
+  StartSync();
+  StopSync();
+
+  // Verify that the native transaction version has been updated and is now
+  // in sync with the sync version.
+  {
+    syncer::ReadTransaction trans(FROM_HERE, test_user_share_.user_share());
+    int64_t sync_version = trans.GetModelVersion(syncer::BOOKMARKS);
+    int64_t native_version = model_->root_node()->sync_transaction_version();
+    EXPECT_EQ(native_version, sync_version);
+  }
 }
 
 // Tests that changes to the sync nodes meta info gets reflected in the local
@@ -2295,13 +2309,13 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, UpdateMetaInfoFromSync) {
   FakeServerChange adds(&trans);
   BookmarkNode::MetaInfoMap folder_meta_info;
   folder_meta_info["folder"] = "foldervalue";
-  int64 folder_id = adds.AddFolderWithMetaInfo(
+  int64_t folder_id = adds.AddFolderWithMetaInfo(
       "folder title", &folder_meta_info, bookmark_bar_id(), 0);
   BookmarkNode::MetaInfoMap node_meta_info;
   node_meta_info["node"] = "nodevalue";
   node_meta_info["other"] = "othervalue";
-  int64 id = adds.AddURLWithMetaInfo("node title", "http://www.foo.com",
-                                     &node_meta_info, folder_id, 0);
+  int64_t id = adds.AddURLWithMetaInfo("node title", "http://www.foo.com",
+                                       &node_meta_info, folder_id, 0);
   adds.ApplyPendingChanges(change_processor_.get());
 
   // Verify that the nodes are created with the correct meta info.
@@ -2369,7 +2383,7 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, MetaInfoPreservedOnNonChange) {
   StartSync();
 
   std::string orig_specifics;
-  int64 sync_id;
+  int64_t sync_id;
   const BookmarkNode* bookmark;
 
   // Create bookmark folder node containing meta info.
@@ -2377,7 +2391,7 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, MetaInfoPreservedOnNonChange) {
     syncer::WriteTransaction trans(FROM_HERE, test_user_share_.user_share());
     FakeServerChange adds(&trans);
 
-    int64 folder_id = adds.AddFolder("folder title", bookmark_bar_id(), 0);
+    int64_t folder_id = adds.AddFolder("folder title", bookmark_bar_id(), 0);
 
     BookmarkNode::MetaInfoMap node_meta_info;
     node_meta_info["one"] = "1";
@@ -2422,7 +2436,7 @@ void ProfileSyncServiceBookmarkTestWithData::GetTransactionVersions(
     const BookmarkNode* n = nodes.front();
     nodes.pop();
 
-    int64 version = n->sync_transaction_version();
+    int64_t version = n->sync_transaction_version();
     EXPECT_NE(BookmarkNode::kInvalidSyncTransactionVersion, version);
 
     (*node_versions)[n->id()] = version;
@@ -2446,7 +2460,7 @@ void ProfileSyncServiceBookmarkTestWithData::ExpectTransactionVersionMatch(
     syncer::ReadNode sync_node(&trans);
     ASSERT_TRUE(model_associator_->InitSyncNodeFromChromeId(it->first,
                                                             &sync_node));
-    EXPECT_EQ(sync_node.GetEntry()->GetTransactionVersion(), it->second);
+    EXPECT_EQ(sync_node.GetTransactionVersion(), it->second);
     BookmarkNodeVersionMap::const_iterator expected_ver_it =
         version_expected.find(it->first);
     if (expected_ver_it != version_expected.end())
@@ -2540,7 +2554,7 @@ TEST_F(ProfileSyncServiceBookmarkTestWithData, PersistenceError) {
 
   // Now shut down sync and artificially increment the native model's version.
   StopSync();
-  int64 root_version = initial_versions[model_->root_node()->id()];
+  int64_t root_version = initial_versions[model_->root_node()->id()];
   model_->SetNodeSyncTransactionVersion(model_->root_node(), root_version + 1);
 
   // Upon association, bookmarks should fail to associate.
@@ -2570,7 +2584,7 @@ TEST_F(ProfileSyncServiceBookmarkTest, UpdateThenAdd) {
   // Recreate the change processor then update that bookmark. Sync should
   // receive the update call and gracefully treat that as if it were an add.
   change_processor_.reset(new BookmarkChangeProcessor(
-      &profile_, model_associator_.get(), &mock_error_handler_));
+      &sync_client_, model_associator_.get(), &mock_error_handler_));
   change_processor_->Start(test_user_share_.user_share());
   model_->SetTitle(node, base::ASCIIToUTF16("title2"));
   ExpectModelMatch();
@@ -2578,6 +2592,31 @@ TEST_F(ProfileSyncServiceBookmarkTest, UpdateThenAdd) {
   // Then simulate the add call arriving late.
   change_processor_->BookmarkNodeAdded(model_, model_->bookmark_bar_node(), 0);
   ExpectModelMatch();
+}
+
+// Verify operations on native nodes that shouldn't be propagated to Sync.
+TEST_F(ProfileSyncServiceBookmarkTest, TestUnsupportedNodes) {
+  LoadBookmarkModel(DELETE_EXISTING_STORAGE, DONT_SAVE_TO_STORAGE);
+  StartSync();
+
+  // Initial number of bookmarks on the sync side.
+  int sync_bookmark_count = GetSyncBookmarkCount();
+
+  // Create a bookmark under managed_node() permanent folder.
+  bookmarks::ManagedBookmarkService* managed_bookmark_service =
+      ManagedBookmarkServiceFactory::GetForProfile(&profile_);
+  const BookmarkNode* folder = managed_bookmark_service->managed_node();
+  const BookmarkNode* node = model_->AddURL(
+      folder, 0, base::ASCIIToUTF16("node"), GURL("http://www.node.com/"));
+
+  // Verify that these changes are ignored by Sync.
+  EXPECT_EQ(sync_bookmark_count, GetSyncBookmarkCount());
+  int64_t sync_id = model_associator_->GetSyncIdFromChromeId(node->id());
+  EXPECT_EQ(syncer::kInvalidId, sync_id);
+
+  // Verify that Sync ignores deleting this node.
+  model_->Remove(node);
+  EXPECT_EQ(sync_bookmark_count, GetSyncBookmarkCount());
 }
 
 }  // namespace

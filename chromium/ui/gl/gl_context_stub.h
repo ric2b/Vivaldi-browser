@@ -5,6 +5,7 @@
 #ifndef UI_GL_GL_CONTEXT_STUB_H_
 #define UI_GL_GL_CONTEXT_STUB_H_
 
+#include "base/macros.h"
 #include "ui/gl/gl_context.h"
 
 namespace gfx {
@@ -17,7 +18,6 @@ class GL_EXPORT GLContextStub : public GLContextReal {
   // Implement GLContext.
   bool Initialize(GLSurface* compatible_surface,
                   GpuPreference gpu_preference) override;
-  void Destroy() override;
   bool MakeCurrent(GLSurface* surface) override;
   void ReleaseCurrent(GLSurface* surface) override;
   bool IsCurrent(GLSurface* surface) override;

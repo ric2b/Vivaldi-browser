@@ -7,11 +7,18 @@
 
 #import <UIKit/UIKit.h>
 
-#include "ios/web/public/web_state/crw_web_delegate.h"
+#include "ios/web/public/web_state/ui/crw_web_delegate.h"
 
 namespace web {
 class BrowserState;
 }
+
+// Accessibility label for the back button.
+extern NSString* const kWebShellBackButtonAccessibilityLabel;
+// Accessibility label for the forward button.
+extern NSString* const kWebShellForwardButtonAccessibilityLabel;
+// Accessibility label for the URL address text field.
+extern NSString* const kWebShellAddressFieldAccessibilityLabel;
 
 // Implements the main UI for ios_web_shell, including a toolbar and web view.
 @interface ViewController

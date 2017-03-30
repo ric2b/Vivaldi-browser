@@ -5,10 +5,13 @@
 #ifndef CONTENT_COMMON_GPU_MEDIA_GPU_VIDEO_DECODE_ACCELERATOR_H_
 #define CONTENT_COMMON_GPU_MEDIA_GPU_VIDEO_DECODE_ACCELERATOR_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "base/synchronization/waitable_event.h"
@@ -19,6 +22,8 @@
 #include "ipc/ipc_sender.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ui/gfx/geometry/size.h"
+
+struct AcceleratedVideoDecoderMsg_Decode_Params;
 
 namespace content {
 
@@ -32,23 +37,29 @@ class GpuVideoDecodeAccelerator
   // |stub->decoder()| will be made current around any operation that touches
   // the underlying VDA so that it can make GL calls safely.
   GpuVideoDecodeAccelerator(
-      int32 host_route_id,
+      int32_t host_route_id,
       GpuCommandBufferStub* stub,
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
+
+  // Static query for the capabilities, which includes the supported profiles.
+  // This query calls the appropriate platform-specific version.  The returned
+  // capabilities will not contain duplicate supported profile entries.
+  static gpu::VideoDecodeAcceleratorCapabilities GetCapabilities();
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // media::VideoDecodeAccelerator::Client implementation.
-  void ProvidePictureBuffers(uint32 requested_num_of_buffers,
+  void NotifyCdmAttached(bool success) override;
+  void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
                              const gfx::Size& dimensions,
-                             uint32 texture_target) override;
-  void DismissPictureBuffer(int32 picture_buffer_id) override;
+                             uint32_t texture_target) override;
+  void DismissPictureBuffer(int32_t picture_buffer_id) override;
   void PictureReady(const media::Picture& picture) override;
-  void NotifyError(media::VideoDecodeAccelerator::Error error) override;
-  void NotifyEndOfBitstreamBuffer(int32 bitstream_buffer_id) override;
+  void NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) override;
   void NotifyFlushDone() override;
   void NotifyResetDone() override;
+  void NotifyError(media::VideoDecodeAccelerator::Error error) override;
 
   // GpuCommandBufferStub::DestructionObserver implementation.
   void OnWillDestroyStub() override;
@@ -57,16 +68,11 @@ class GpuVideoDecodeAccelerator
   bool Send(IPC::Message* message) override;
 
   // Initialize VDAs from the set of VDAs supported for current platform until
-  // one of them succeeds for given |profile|. Send the |init_done_msg| when
+  // one of them succeeds for given |config|. Send the |init_done_msg| when
   // done. filter_ is passed to GpuCommandBufferStub channel only if the chosen
   // VDA can decode on IO thread.
-  void Initialize(const media::VideoCodecProfile profile,
+  void Initialize(const media::VideoDecodeAccelerator::Config& config,
                   IPC::Message* init_done_msg);
-
-  // Static query for supported profiles. This query calls the appropriate
-  // platform-specific version. The returned supported profiles vector will
-  // not contain duplicates.
-  static gpu::VideoDecodeAcceleratorSupportedProfiles GetSupportedProfiles();
 
  private:
   typedef scoped_ptr<media::VideoDecodeAccelerator>(
@@ -86,10 +92,11 @@ class GpuVideoDecodeAccelerator
   ~GpuVideoDecodeAccelerator() override;
 
   // Handlers for IPC messages.
-  void OnDecode(base::SharedMemoryHandle handle, int32 id, uint32 size);
-  void OnAssignPictureBuffers(const std::vector<int32>& buffer_ids,
-                              const std::vector<uint32>& texture_ids);
-  void OnReusePictureBuffer(int32 picture_buffer_id);
+  void OnSetCdm(int cdm_id);
+  void OnDecode(const AcceleratedVideoDecoderMsg_Decode_Params& params);
+  void OnAssignPictureBuffers(const std::vector<int32_t>& buffer_ids,
+                              const std::vector<uint32_t>& texture_ids);
+  void OnReusePictureBuffer(int32_t picture_buffer_id);
   void OnFlush();
   void OnReset();
   void OnDestroy();
@@ -104,12 +111,12 @@ class GpuVideoDecodeAccelerator
   void SendCreateDecoderReply(IPC::Message* message, bool succeeded);
 
   // Helper to bind |image| to the texture specified by |client_texture_id|.
-  void BindImage(uint32 client_texture_id,
-                 uint32 texture_target,
-                 scoped_refptr<gfx::GLImage> image);
+  void BindImage(uint32_t client_texture_id,
+                 uint32_t texture_target,
+                 scoped_refptr<gl::GLImage> image);
 
   // Route ID to communicate with the host.
-  const int32 host_route_id_;
+  const int32_t host_route_id_;
 
   // Unowned pointer to the underlying GpuCommandBufferStub.  |this| is
   // registered as a DestuctionObserver of |stub_| and will self-delete when
@@ -127,7 +134,7 @@ class GpuVideoDecodeAccelerator
   gfx::Size texture_dimensions_;
 
   // The texture target as requested by ProvidePictureBuffers().
-  uint32 texture_target_;
+  uint32_t texture_target_;
 
   // The message filter to run VDA::Decode on IO thread if VDA supports it.
   scoped_refptr<MessageFilter> filter_;
@@ -151,7 +158,7 @@ class GpuVideoDecodeAccelerator
   base::Lock debug_uncleared_textures_lock_;
 
   // A map from picture buffer ID to TextureRef that have not been cleared.
-  std::map<int32, scoped_refptr<gpu::gles2::TextureRef> > uncleared_textures_;
+  std::map<int32_t, scoped_refptr<gpu::gles2::TextureRef>> uncleared_textures_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(GpuVideoDecodeAccelerator);
 };

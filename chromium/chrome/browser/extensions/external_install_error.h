@@ -33,8 +33,7 @@ class WebstoreDataFetcher;
 // possible) and will handle adding itself to the GlobalErrorService when
 // initialized and removing itself from the GlobalErrorService upon
 // destruction.
-class ExternalInstallError : public ExtensionInstallPrompt::Delegate,
-                             public WebstoreDataFetcherDelegate {
+class ExternalInstallError : public WebstoreDataFetcherDelegate {
  public:
   // The possible types of errors to show. A menu alert adds a menu item to the
   // wrench, which spawns an extension install dialog when clicked. The bubble
@@ -51,9 +50,7 @@ class ExternalInstallError : public ExtensionInstallPrompt::Delegate,
                        ExternalInstallManager* manager);
   ~ExternalInstallError() override;
 
-  // ExtensionInstallPrompt::Delegate implementation.
-  void InstallUIProceed() override;
-  void InstallUIAbort(bool user_initiated) override;
+  void OnInstallPromptDone(ExtensionInstallPrompt::Result result);
 
   // Show the associated dialog. This should only be called once the dialog is
   // ready.
@@ -78,8 +75,11 @@ class ExternalInstallError : public ExtensionInstallPrompt::Delegate,
   // Called when the dialog has been successfully populated, and is ready to be
   // shown.
   void OnDialogReady(ExtensionInstallPromptShowParams* show_params,
-                     ExtensionInstallPrompt::Delegate* prompt_delegate,
-                     scoped_refptr<ExtensionInstallPrompt::Prompt> prompt);
+                     const ExtensionInstallPrompt::DoneCallback& done_callback,
+                     scoped_ptr<ExtensionInstallPrompt::Prompt> prompt);
+
+  // Removes the error.
+  void RemoveError();
 
   // The associated BrowserContext.
   content::BrowserContext* browser_context_;
@@ -99,7 +99,7 @@ class ExternalInstallError : public ExtensionInstallPrompt::Delegate,
   // The UI for showing the error.
   scoped_ptr<ExtensionInstallPrompt> install_ui_;
   scoped_ptr<ExtensionInstallPromptShowParams> install_ui_show_params_;
-  scoped_refptr<ExtensionInstallPrompt::Prompt> prompt_;
+  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt_;
 
   // The UI for the given error, which will take the form of either a menu
   // alert or a bubble alert (depending on the |alert_type_|.

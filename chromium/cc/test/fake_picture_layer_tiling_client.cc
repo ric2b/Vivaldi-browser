@@ -4,38 +4,41 @@
 
 #include "cc/test/fake_picture_layer_tiling_client.h"
 
+#include <stddef.h>
+
 #include <limits>
 
-#include "cc/test/fake_picture_pile_impl.h"
+#include "base/thread_task_runner_handle.h"
+#include "cc/test/fake_display_list_raster_source.h"
 #include "cc/test/fake_tile_manager.h"
 
 namespace cc {
 
 FakePictureLayerTilingClient::FakePictureLayerTilingClient()
     : tile_manager_(new FakeTileManager(&tile_manager_client_)),
-      pile_(FakePicturePileImpl::CreateInfiniteFilledPile()),
+      raster_source_(FakeDisplayListRasterSource::CreateInfiniteFilled()),
       twin_set_(nullptr),
       twin_tiling_(nullptr),
-      has_valid_tile_priorities_(true) {
-}
+      has_valid_tile_priorities_(true) {}
 
 FakePictureLayerTilingClient::FakePictureLayerTilingClient(
     ResourceProvider* resource_provider)
-    : resource_pool_(ResourcePool::Create(resource_provider, GL_TEXTURE_2D)),
+    : resource_pool_(
+          ResourcePool::Create(resource_provider,
+                               base::ThreadTaskRunnerHandle::Get().get())),
       tile_manager_(
           new FakeTileManager(&tile_manager_client_, resource_pool_.get())),
-      pile_(FakePicturePileImpl::CreateInfiniteFilledPile()),
+      raster_source_(FakeDisplayListRasterSource::CreateInfiniteFilled()),
       twin_set_(nullptr),
       twin_tiling_(nullptr),
-      has_valid_tile_priorities_(true) {
-}
+      has_valid_tile_priorities_(true) {}
 
 FakePictureLayerTilingClient::~FakePictureLayerTilingClient() {
 }
 
-ScopedTilePtr FakePictureLayerTilingClient::CreateTile(float content_scale,
-                                                       const gfx::Rect& rect) {
-  return tile_manager_->CreateTile(tile_size_, rect, 1, 0, 0, 0);
+ScopedTilePtr FakePictureLayerTilingClient::CreateTile(
+    const Tile::CreateInfo& info) {
+  return tile_manager_->CreateTile(info, 0, 0, 0);
 }
 
 void FakePictureLayerTilingClient::SetTileSize(const gfx::Size& tile_size) {

@@ -5,8 +5,11 @@
 #ifndef NET_FILTER_MOCK_FILTER_CONTEXT_H_
 #define NET_FILTER_MOCK_FILTER_CONTEXT_H_
 
+#include <stdint.h>
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/sdch_manager.h"
 #include "net/filter/filter.h"
@@ -28,7 +31,7 @@ class MockFilterContext : public FilterContext {
   void SetCached(bool is_cached) { is_cached_content_ = is_cached; }
   void SetResponseCode(int response_code) { response_code_ = response_code; }
   void SetSdchResponse(scoped_ptr<SdchManager::DictionarySet> handle) {
-    dictionaries_handle_ = handle.Pass();
+    dictionaries_handle_ = std::move(handle);
   }
   URLRequestContext* GetModifiableURLRequestContext() const {
     return context_.get();
@@ -55,7 +58,7 @@ class MockFilterContext : public FilterContext {
   SdchManager::DictionarySet* SdchDictionariesAdvertised() const override;
 
   // How many bytes were fed to filter(s) so far?
-  int64 GetByteReadCount() const override;
+  int64_t GetByteReadCount() const override;
 
   int GetResponseCode() const override;
 

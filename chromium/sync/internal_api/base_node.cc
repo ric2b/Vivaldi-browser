@@ -4,6 +4,8 @@
 
 #include "sync/internal_api/public/base_node.h"
 
+#include <stdint.h>
+
 #include <stack>
 
 #include "base/strings/string_number_conversions.h"
@@ -31,10 +33,10 @@ namespace syncer {
 
 using syncable::SPECIFICS;
 
-// Helper function to look up the int64 metahandle of an object given the ID
+// Helper function to look up the int64_t metahandle of an object given the ID
 // string.
-static int64 IdToMetahandle(syncable::BaseTransaction* trans,
-                            const syncable::Id& id) {
+static int64_t IdToMetahandle(syncable::BaseTransaction* trans,
+                              const syncable::Id& id) {
   if (id.IsNull())
     return kInvalidId;
   syncable::Entry entry(trans, syncable::GET_BY_ID, id);
@@ -48,7 +50,7 @@ BaseNode::BaseNode() : password_data_(new sync_pb::PasswordSpecificsData) {}
 BaseNode::~BaseNode() {}
 
 bool BaseNode::DecryptIfNecessary() {
-  if (!GetEntry()->GetUniqueServerTag().empty())
+  if (GetIsPermanentFolder())
       return true;  // Ignore unique folders.
   const sync_pb::EntitySpecifics& specifics =
       GetEntry()->GetSpecifics();
@@ -124,7 +126,7 @@ const sync_pb::EntitySpecifics& BaseNode::GetUnencryptedSpecifics(
           specifics.bookmark();
       if (bookmark_specifics.has_title() ||
           GetTitle().empty() ||  // For the empty node case
-          !GetEntry()->GetUniqueServerTag().empty()) {
+          GetIsPermanentFolder()) {
         // It's possible we previously had to convert and set
         // |unencrypted_data_| but then wrote our own data, so we allow
         // |unencrypted_data_| to be non-empty.
@@ -140,12 +142,12 @@ const sync_pb::EntitySpecifics& BaseNode::GetUnencryptedSpecifics(
   }
 }
 
-int64 BaseNode::GetParentId() const {
+int64_t BaseNode::GetParentId() const {
   return IdToMetahandle(GetTransaction()->GetWrappedTrans(),
                         GetEntry()->GetParentId());
 }
 
-int64 BaseNode::GetId() const {
+int64_t BaseNode::GetId() const {
   return GetEntry()->GetMetahandle();
 }
 
@@ -155,6 +157,15 @@ base::Time BaseNode::GetModificationTime() const {
 
 bool BaseNode::GetIsFolder() const {
   return GetEntry()->GetIsDir();
+}
+
+bool BaseNode::GetIsPermanentFolder() const {
+  bool is_permanent_folder = !GetEntry()->GetUniqueServerTag().empty();
+  if (is_permanent_folder) {
+    // If the node is a permanent folder it must also have IS_DIR bit set.
+    DCHECK(GetIsFolder());
+  }
+  return is_permanent_folder;
 }
 
 std::string BaseNode::GetTitle() const {
@@ -177,28 +188,28 @@ bool BaseNode::HasChildren() const {
   return dir->HasChildren(trans, GetEntry()->GetId());
 }
 
-int64 BaseNode::GetPredecessorId() const {
+int64_t BaseNode::GetPredecessorId() const {
   syncable::Id id_string = GetEntry()->GetPredecessorId();
   if (id_string.IsNull())
     return kInvalidId;
   return IdToMetahandle(GetTransaction()->GetWrappedTrans(), id_string);
 }
 
-int64 BaseNode::GetSuccessorId() const {
+int64_t BaseNode::GetSuccessorId() const {
   syncable::Id id_string = GetEntry()->GetSuccessorId();
   if (id_string.IsNull())
     return kInvalidId;
   return IdToMetahandle(GetTransaction()->GetWrappedTrans(), id_string);
 }
 
-int64 BaseNode::GetFirstChildId() const {
+int64_t BaseNode::GetFirstChildId() const {
   syncable::Id id_string = GetEntry()->GetFirstChildId();
   if (id_string.IsNull())
     return kInvalidId;
   return IdToMetahandle(GetTransaction()->GetWrappedTrans(), id_string);
 }
 
-void BaseNode::GetChildIds(std::vector<int64>* result) const {
+void BaseNode::GetChildIds(std::vector<int64_t>* result) const {
   GetEntry()->GetChildHandles(result);
 }
 
@@ -214,8 +225,12 @@ base::DictionaryValue* BaseNode::ToValue() const {
   return GetEntry()->ToValue(GetTransaction()->GetCryptographer());
 }
 
-int64 BaseNode::GetExternalId() const {
+int64_t BaseNode::GetExternalId() const {
   return GetEntry()->GetLocalExternalId();
+}
+
+const syncable::Id& BaseNode::GetSyncId() const {
+  return GetEntry()->GetId();
 }
 
 const sync_pb::BookmarkSpecifics& BaseNode::GetBookmarkSpecifics() const {

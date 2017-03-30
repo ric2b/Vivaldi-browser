@@ -111,7 +111,7 @@ cvox.NavigationManager.prototype.reset = function() {
    * @private
    */
   this.curSel_ = document.activeElement != document.body ?
-      /** @type {!cvox.CursorSelection} **/
+      /** @type {!cvox.CursorSelection} */
       (cvox.CursorSelection.fromNode(document.activeElement)) :
       this.shifter_.begin(this.curSel_, {reversed: false});
 
@@ -390,7 +390,7 @@ cvox.NavigationManager.prototype.syncAll = function(opt_skipText) {
 cvox.NavigationManager.prototype.clearPageSel = function(opt_announce) {
   var hasSel = !!this.pageSel_;
   if (hasSel && opt_announce) {
-    var announcement = cvox.ChromeVox.msgs.getMsg('clear_page_selection');
+    var announcement = Msgs.getMsg('clear_page_selection');
     cvox.ChromeVox.tts.speak(announcement, cvox.QueueMode.FLUSH,
                              cvox.AbstractTts.PERSONALITY_ANNOTATION);
   }
@@ -449,23 +449,23 @@ cvox.NavigationManager.prototype.getDescription = function() {
 
   // Earcons.
   if (this.skipped_) {
-    earcons.push(cvox.AbstractEarcons.PARAGRAPH_BREAK);
+    earcons.push(cvox.Earcon.SKIP);
     this.skipped_ = false;
   }
   if (this.recovered_) {
-    earcons.push(cvox.AbstractEarcons.FONT_CHANGE);
+    earcons.push(cvox.Earcon.RECOVER_FOCUS);
     this.recovered_ = false;
   }
   if (this.pageEnd_) {
-    earcons.push(cvox.AbstractEarcons.WRAP);
+    earcons.push(cvox.Earcon.WRAP);
     this.pageEnd_ = false;
   }
   if (this.enteredShifter_) {
-    earcons.push(cvox.AbstractEarcons.OBJECT_ENTER);
+    earcons.push(cvox.Earcon.OBJECT_ENTER);
     this.enteredShifter_ = false;
   }
   if (this.exitedShifter_) {
-    earcons.push(cvox.AbstractEarcons.OBJECT_EXIT);
+    earcons.push(cvox.Earcon.OBJECT_EXIT);
     this.exitedShifter_ = false;
   }
   if (earcons.length > 0 && desc.length > 0) {
@@ -701,11 +701,11 @@ cvox.NavigationManager.prototype.finishNavCommand = function(
   if (this.pageEnd_ && !this.pageEndAnnounced_) {
     this.pageEndAnnounced_ = true;
     cvox.ChromeVox.tts.stop();
-    cvox.ChromeVox.earcons.playEarcon(cvox.AbstractEarcons.WRAP);
+    cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.WRAP);
     if (cvox.ChromeVox.verbosity === cvox.VERBOSITY_VERBOSE) {
-      var msg = cvox.ChromeVox.msgs.getMsg('wrapped_to_top');
+      var msg = Msgs.getMsg('wrapped_to_top');
       if (this.isReversed()) {
-        msg = cvox.ChromeVox.msgs.getMsg('wrapped_to_bottom');
+        msg = Msgs.getMsg('wrapped_to_bottom');
       }
       cvox.ChromeVox.tts.speak(msg, cvox.QueueMode.QUEUE,
           cvox.AbstractTts.PERSONALITY_ANNOTATION);
@@ -714,8 +714,7 @@ cvox.NavigationManager.prototype.finishNavCommand = function(
   }
 
   if (this.enteredShifter_ || this.exitedShifter_) {
-    opt_prefix = cvox.ChromeVox.msgs.getMsg(
-        'enter_content_say', [this.shifter_.getName()]);
+    opt_prefix = Msgs.getMsg('enter_content_say', [this.shifter_.getName()]);
   }
 
   var descriptionArray = cvox.ChromeVox.navigationManager.getDescription();

@@ -5,11 +5,15 @@
 #ifndef MEDIA_CAST_NET_RTP_RTP_PACKETIZER_H_
 #define MEDIA_CAST_NET_RTP_RTP_PACKETIZER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <cmath>
 #include <list>
 #include <map>
 
 #include "base/time/time.h"
+#include "media/cast/common/rtp_time.h"
 #include "media/cast/net/rtp/packet_storage.h"
 
 namespace base {
@@ -27,8 +31,8 @@ struct RtpPacketizerConfig {
 
   // General.
   int payload_type;
-  uint16 max_payload_length;
-  uint16 sequence_number;
+  uint16_t max_payload_length;
+  uint16_t sequence_number;
 
   // SSRC.
   unsigned int ssrc;
@@ -48,21 +52,21 @@ class RtpPacketizer {
 
   // Return the next sequence number, and increment by one. Enables unique
   // incremental sequence numbers for every packet (including retransmissions).
-  uint16 NextSequenceNumber();
+  uint16_t NextSequenceNumber();
 
   size_t send_packet_count() const { return send_packet_count_; }
   size_t send_octet_count() const { return send_octet_count_; }
 
  private:
-  void BuildCommonRTPheader(Packet* packet, bool marker_bit, uint32 time_stamp);
+  void BuildCommonRTPheader(Packet* packet,
+                            bool marker_bit,
+                            RtpTimeTicks rtp_timestamp);
 
   RtpPacketizerConfig config_;
   PacedSender* const transport_;  // Not owned by this class.
   PacketStorage* packet_storage_;
 
-  uint16 sequence_number_;
-  uint32 rtp_timestamp_;
-  uint16 packet_id_;
+  uint16_t sequence_number_;
 
   size_t send_packet_count_;
   size_t send_octet_count_;

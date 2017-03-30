@@ -1,6 +1,7 @@
 {
   'variables': {
     'chromium_code': 1,
+    'pdf_enable_xfa%': 0,
     'pdf_engine%': 0,  # 0 PDFium
   },
   'targets': [
@@ -9,12 +10,10 @@
       'type': 'static_library',
       'dependencies': [
         '../base/base.gyp:base',
-        '../components/components.gyp:ui_zoom',
-        '../content/content.gyp:content_common',
+        '../gin/gin.gyp:gin',
         '../net/net.gyp:net',
         '../ppapi/ppapi.gyp:ppapi_cpp_objects',
         '../ppapi/ppapi.gyp:ppapi_internal_module',
-        '../third_party/pdfium/pdfium.gyp:pdfium',
       ],
       'ldflags': [ '-L<(PRODUCT_DIR)',],
       'sources': [
@@ -35,11 +34,12 @@
         'pdf_engine.h',
         'preview_mode_client.cc',
         'preview_mode_client.h',
-        'resource.h',
-        'resource_consts.h',
       ],
       'conditions': [
         ['pdf_engine==0', {
+          'dependencies': [
+            '../third_party/pdfium/pdfium.gyp:pdfium',
+          ],
           'sources': [
             'pdfium/pdfium_api_string_buffer_adapter.cc',
             'pdfium/pdfium_api_string_buffer_adapter.h',
@@ -55,6 +55,11 @@
             'pdfium/pdfium_range.cc',
             'pdfium/pdfium_range.h',
           ],
+        }],
+        ['pdf_enable_xfa==1', {
+           'defines': [
+             'PDF_ENABLE_XFA',
+           ]
         }],
         ['OS=="win"', {
           # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.

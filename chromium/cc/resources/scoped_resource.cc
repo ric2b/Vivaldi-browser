@@ -22,24 +22,21 @@ void ScopedResource::Allocate(const gfx::Size& size,
   DCHECK(!size.IsEmpty());
 
   set_dimensions(size, format);
-  set_id(resource_provider_->CreateResource(
-      size, GL_CLAMP_TO_EDGE, hint, format));
+  set_id(resource_provider_->CreateResource(size, hint, format));
 
 #if DCHECK_IS_ON()
   allocate_thread_id_ = base::PlatformThread::CurrentId();
 #endif
 }
 
-void ScopedResource::AllocateManaged(const gfx::Size& size,
-                                     GLenum target,
-                                     ResourceFormat format) {
+void ScopedResource::AllocateWithGpuMemoryBuffer(const gfx::Size& size,
+                                                 ResourceFormat format) {
   DCHECK(!id());
   DCHECK(!size.IsEmpty());
 
   set_dimensions(size, format);
-  set_id(resource_provider_->CreateManagedResource(
-      size, target, GL_CLAMP_TO_EDGE, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      format));
+  set_id(resource_provider_->CreateGpuMemoryBufferResource(
+      size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format));
 
 #if DCHECK_IS_ON()
   allocate_thread_id_ = base::PlatformThread::CurrentId();

@@ -5,7 +5,10 @@
 #ifndef MEDIA_FORMATS_MP2T_TS_SECTION_PSI_H_
 #define MEDIA_FORMATS_MP2T_TS_SECTION_PSI_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "media/base/byte_queue.h"
 #include "media/formats/mp2t/ts_section.h"
 
@@ -22,7 +25,8 @@ class TsSectionPsi : public TsSection {
 
   // TsSection implementation.
   bool Parse(bool payload_unit_start_indicator,
-                     const uint8* buf, int size) override;
+             const uint8_t* buf,
+             int size) override;
   void Flush() override;
   void Reset() override;
 

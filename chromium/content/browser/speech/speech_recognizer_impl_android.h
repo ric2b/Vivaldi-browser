@@ -8,6 +8,7 @@
 #include <jni.h>
 
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/speech/speech_recognizer.h"
@@ -31,14 +32,23 @@ class CONTENT_EXPORT SpeechRecognizerImplAndroid : public SpeechRecognizer {
   bool IsCapturingAudio() const override;
 
   // Called from Java methods via JNI.
-  void OnAudioStart(JNIEnv* env, jobject obj);
-  void OnSoundStart(JNIEnv* env, jobject obj);
-  void OnSoundEnd(JNIEnv* env, jobject obj);
-  void OnAudioEnd(JNIEnv* env, jobject obj);
-  void OnRecognitionResults(JNIEnv* env, jobject obj, jobjectArray strings,
-                            jfloatArray floats, jboolean interim);
-  void OnRecognitionError(JNIEnv* env, jobject obj, jint error);
-  void OnRecognitionEnd(JNIEnv* env, jobject obj);
+  void OnAudioStart(JNIEnv* env,
+                    const base::android::JavaParamRef<jobject>& obj);
+  void OnSoundStart(JNIEnv* env,
+                    const base::android::JavaParamRef<jobject>& obj);
+  void OnSoundEnd(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void OnAudioEnd(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void OnRecognitionResults(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobjectArray>& strings,
+      const base::android::JavaParamRef<jfloatArray>& floats,
+      jboolean interim);
+  void OnRecognitionError(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          jint error);
+  void OnRecognitionEnd(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
 
   static bool RegisterSpeechRecognizer(JNIEnv* env);
 
@@ -49,8 +59,9 @@ class CONTENT_EXPORT SpeechRecognizerImplAndroid : public SpeechRecognizer {
     STATE_AWAITING_FINAL_RESULT
   };
 
-  void StartRecognitionOnUIThread(
-      std::string language, bool continuous, bool interim_results);
+  void StartRecognitionOnUIThread(const std::string& language,
+                                  bool continuous,
+                                  bool interim_results);
   void OnRecognitionResultsOnIOThread(SpeechRecognitionResults const &results);
 
   ~SpeechRecognizerImplAndroid() override;

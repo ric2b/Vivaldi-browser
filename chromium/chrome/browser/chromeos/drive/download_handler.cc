@@ -4,18 +4,23 @@
 
 #include "chrome/browser/chromeos/drive/download_handler.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
+#include "base/strings/string_util.h"
 #include "base/supports_user_data.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "chrome/browser/chromeos/drive/drive.pb.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/drive/write_on_cache_file.h"
 #include "chrome/browser/download/download_history.h"
 #include "chrome/browser/download/download_service.h"
 #include "chrome/browser/download/download_service_factory.h"
+#include "components/drive/drive.pb.h"
+#include "components/drive/file_system_interface.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -27,6 +32,16 @@ namespace {
 
 // Key for base::SupportsUserData::Data.
 const char kDrivePathKey[] = "DrivePath";
+
+// Mime types that we better not trust. If the file was downloade with these
+// mime types, while uploading to Drive we ignore it at guess by our own logic.
+const char* kGenericMimeTypes[] = {"text/html", "text/plain",
+                                   "application/octet-stream"};
+
+// Longer is better. But at the same time, this value should be short enough as
+// drive::internal::kMinFreeSpaceInBytes is not used up by file download in this
+// interval.
+const base::TimeDelta kFreeDiskSpaceDelay = base::TimeDelta::FromSeconds(3);
 
 // User Data stored in DownloadItem for drive path.
 class DriveUserData : public base::SupportsUserData::Data {
@@ -108,12 +123,26 @@ bool IsPersistedDriveDownload(const base::FilePath& drive_tmp_download_path,
   return download_history && download_history->WasRestoredFromHistory(download);
 }
 
+// Returns an empty string |mime_type| was too generic that can be a result of
+// 'default' fallback choice on the HTTP server. In such a case, we ignore the
+// type so that our logic can guess by its own while uploading to Drive.
+std::string FilterOutGenericMimeType(const std::string& mime_type) {
+  for (size_t i = 0; i < arraysize(kGenericMimeTypes); ++i) {
+    if (base::LowerCaseEqualsASCII(mime_type, kGenericMimeTypes[i]))
+      return std::string();
+  }
+  return mime_type;
+}
+
+void IgnoreFreeDiskSpaceIfNeededForCallback(bool /*result*/) {}
+
 }  // namespace
 
 DownloadHandler::DownloadHandler(FileSystemInterface* file_system)
     : file_system_(file_system),
-      weak_ptr_factory_(this) {
-}
+      has_pending_free_disk_space_(false),
+      free_disk_space_delay_(kFreeDiskSpaceDelay),
+      weak_ptr_factory_(this) {}
 
 DownloadHandler::~DownloadHandler() {
 }
@@ -220,8 +249,69 @@ void DownloadHandler::CheckForFileExistence(
                  callback));
 }
 
+void DownloadHandler::SetFreeDiskSpaceDelayForTesting(
+    const base::TimeDelta& delay) {
+  free_disk_space_delay_ = delay;
+}
+
+int64_t DownloadHandler::CalculateRequestSpace(
+    const DownloadManager::DownloadVector& downloads) {
+  int64_t request_space = 0;
+
+  for (const auto* download : downloads) {
+    if (download->IsDone())
+      continue;
+
+    const int64_t total_bytes = download->GetTotalBytes();
+    // Skip unknown size download. Since drive cache tries to keep
+    // drive::internal::kMinFreeSpaceInBytes, we can continue download with
+    // using the space temporally.
+    if (total_bytes == 0)
+      continue;
+
+    request_space += total_bytes - download->GetReceivedBytes();
+  }
+
+  return request_space;
+}
+
+void DownloadHandler::FreeDiskSpaceIfNeeded() {
+  if (has_pending_free_disk_space_)
+    return;
+
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::Bind(&DownloadHandler::FreeDiskSpaceIfNeededImmediately,
+                            weak_ptr_factory_.GetWeakPtr()),
+      free_disk_space_delay_);
+
+  has_pending_free_disk_space_ = true;
+}
+
+void DownloadHandler::FreeDiskSpaceIfNeededImmediately() {
+  DownloadManager::DownloadVector downloads;
+
+  // Get all downloads of current profile and its off-the-record profile.
+  // TODO(yawano): support multi profiles.
+  if (notifier_ && notifier_->GetManager()) {
+    notifier_->GetManager()->GetAllDownloads(&downloads);
+  }
+  if (notifier_incognito_ && notifier_incognito_->GetManager()) {
+    notifier_incognito_->GetManager()->GetAllDownloads(&downloads);
+  }
+
+  // Free disk space even if request size is 0 byte in order to make drive cache
+  // keep drive::internal::kMinFreeSpaceInBytes.
+  file_system_->FreeDiskSpaceIfNeededFor(
+      CalculateRequestSpace(downloads),
+      base::Bind(&IgnoreFreeDiskSpaceIfNeededForCallback));
+
+  has_pending_free_disk_space_ = false;
+}
+
 void DownloadHandler::OnDownloadCreated(DownloadManager* manager,
                                         DownloadItem* download) {
+  FreeDiskSpaceIfNeededImmediately();
+
   // Remove any persisted Drive DownloadItem. crbug.com/171384
   if (IsPersistedDriveDownload(drive_tmp_download_path_, download)) {
     // Remove download later, since doing it here results in a crash.
@@ -247,6 +337,8 @@ void DownloadHandler::RemoveDownload(void* manager_id, int id) {
 void DownloadHandler::OnDownloadUpdated(
     DownloadManager* manager, DownloadItem* download) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  FreeDiskSpaceIfNeeded();
 
   // Only accept downloads that have the Drive meta data associated with them.
   DriveUserData* data = GetDriveUserData(download);
@@ -301,16 +393,13 @@ void DownloadHandler::UploadDownloadItem(DownloadManager* manager,
   DCHECK_EQ(DownloadItem::COMPLETE, download->GetState());
   base::FilePath* cache_file_path = new base::FilePath;
   WriteOnCacheFileAndReply(
-      file_system_,
-      util::ExtractDrivePath(GetTargetPath(download)),
-      download->GetMimeType(),
+      file_system_, util::ExtractDrivePath(GetTargetPath(download)),
+      FilterOutGenericMimeType(download->GetMimeType()),
       base::Bind(&MoveDownloadedFile, download->GetTargetFilePath(),
                  cache_file_path),
       base::Bind(&DownloadHandler::SetCacheFilePath,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 static_cast<void*>(manager),
-                 download->GetId(),
-                 base::Owned(cache_file_path)));
+                 weak_ptr_factory_.GetWeakPtr(), static_cast<void*>(manager),
+                 download->GetId(), base::Owned(cache_file_path)));
 }
 
 void DownloadHandler::SetCacheFilePath(void* manager_id,

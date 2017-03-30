@@ -329,13 +329,7 @@ TEST_F(TimeFormatTest, SimpleAndDetailedStringFallback) {
 }
 
 // crbug.com/159388: This test fails when daylight savings time ends.
-#if defined(OS_MACOSX)
-  // TODO: Re-enable for Vivaldi VB-29 (Mac)
-#define MAYBE_RelativeDate DISABLED_RelativeDate
-#else
-#define MAYBE_RelativeDate RelativeDate
-#endif
-TEST_F(TimeFormatTest, MAYBE_RelativeDate) {
+TEST_F(TimeFormatTest, RelativeDate) {
   base::Time now = base::Time::Now();
   base::string16 today_str = TimeFormat::RelativeDate(now, NULL);
   EXPECT_EQ(ASCIIToUTF16("Today"), today_str);

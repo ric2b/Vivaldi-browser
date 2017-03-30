@@ -5,6 +5,9 @@
 #ifndef UI_EVENTS_GESTURE_DETECTION_MOTION_EVENT_H_
 #define UI_EVENTS_GESTURE_DETECTION_MOTION_EVENT_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "ui/events/gesture_detection/gesture_detection_export.h"
@@ -16,6 +19,7 @@ namespace ui {
 class GESTURE_DETECTION_EXPORT MotionEvent {
  public:
   enum Action {
+    ACTION_NONE,
     ACTION_DOWN,
     ACTION_UP,
     ACTION_MOVE,
@@ -38,6 +42,8 @@ class GESTURE_DETECTION_EXPORT MotionEvent {
     BUTTON_TERTIARY = 1 << 2,
     BUTTON_BACK = 1 << 3,
     BUTTON_FORWARD = 1 << 4,
+    BUTTON_STYLUS_PRIMARY = 1 << 5,
+    BUTTON_STYLUS_SECONDARY = 1 << 6,
   };
 
   // The implementer promises that |GetPointerId()| will never exceed
@@ -47,7 +53,7 @@ class GESTURE_DETECTION_EXPORT MotionEvent {
   virtual ~MotionEvent() {}
 
   // An unique identifier this motion event.
-  virtual uint32 GetUniqueEventId() const = 0;
+  virtual uint32_t GetUniqueEventId() const = 0;
   virtual Action GetAction() const = 0;
   // Only valid if |GetAction()| returns ACTION_POINTER_UP or
   // ACTION_POINTER_DOWN.
@@ -62,6 +68,7 @@ class GESTURE_DETECTION_EXPORT MotionEvent {
   virtual float GetTouchMinor(size_t pointer_index) const = 0;
   virtual float GetOrientation(size_t pointer_index) const = 0;
   virtual float GetPressure(size_t pointer_index) const = 0;
+  virtual float GetTilt(size_t pointer_index) const = 0;
   virtual ToolType GetToolType(size_t pointer_index) const = 0;
   virtual int GetButtonState() const = 0;
   virtual int GetFlags() const = 0;
@@ -100,6 +107,7 @@ class GESTURE_DETECTION_EXPORT MotionEvent {
   float GetOrientation() const { return GetOrientation(0); }
 
   float GetPressure() const { return GetPressure(0); }
+  float GetTilt() const { return GetTilt(0); }
   ToolType GetToolType() const { return GetToolType(0); }
 
   // O(N) search of pointers (use sparingly!). Returns -1 if |id| nonexistent.

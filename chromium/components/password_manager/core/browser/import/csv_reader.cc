@@ -4,9 +4,12 @@
 
 #include "components/password_manager/core/browser/import/csv_reader.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace {
 

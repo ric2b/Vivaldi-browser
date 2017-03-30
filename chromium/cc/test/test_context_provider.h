@@ -5,7 +5,11 @@
 #ifndef CC_TEST_TEST_CONTEXT_PROVIDER_H_
 #define CC_TEST_TEST_CONTEXT_PROVIDER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
@@ -25,6 +29,9 @@ class TestContextProvider : public ContextProvider {
     CreateCallback;
 
   static scoped_refptr<TestContextProvider> Create();
+  // Creates a worker context provider that can be used on any thread. This is
+  // equivalent to: Create(); BindToCurrentThread(); SetupLock().
+  static scoped_refptr<TestContextProvider> CreateWorker();
   static scoped_refptr<TestContextProvider> Create(
       scoped_ptr<TestWebGraphicsContext3D> context);
 
@@ -37,12 +44,8 @@ class TestContextProvider : public ContextProvider {
   void InvalidateGrContext(uint32_t state) override;
   void SetupLock() override;
   base::Lock* GetLock() override;
-  void VerifyContexts() override;
   void DeleteCachedResources() override;
-  bool DestroyedOnMainThread() override;
   void SetLostContextCallback(const LostContextCallback& cb) override;
-  void SetMemoryPolicyChangedCallback(
-      const MemoryPolicyChangedCallback& cb) override;
 
   TestWebGraphicsContext3D* TestContext3d();
 
@@ -53,8 +56,6 @@ class TestContextProvider : public ContextProvider {
   TestWebGraphicsContext3D* UnboundTestContext3d();
 
   TestContextSupport* support() { return &support_; }
-
-  void SetMemoryAllocation(const ManagedMemoryPolicy& policy);
 
   void SetMaxTransferBufferUsageBytes(size_t max_transfer_buffer_usage_bytes);
 
@@ -74,13 +75,9 @@ class TestContextProvider : public ContextProvider {
   base::ThreadChecker main_thread_checker_;
   base::ThreadChecker context_thread_checker_;
 
-  base::Lock destroyed_lock_;
-  bool destroyed_;
-
   base::Lock context_lock_;
 
   LostContextCallback lost_context_callback_;
-  MemoryPolicyChangedCallback memory_policy_changed_callback_;
   skia::RefPtr<class GrContext> gr_context_;
 
   base::WeakPtrFactory<TestContextProvider> weak_ptr_factory_;

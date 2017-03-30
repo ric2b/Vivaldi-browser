@@ -53,8 +53,10 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   // Notifications coming from the RenderFrameHosts ----------------------------
 
   // The RenderFrameHostImpl started a provisional load.
-  virtual void DidStartProvisionalLoad(RenderFrameHostImpl* render_frame_host,
-                                       const GURL& url) {};
+  virtual void DidStartProvisionalLoad(
+      RenderFrameHostImpl* render_frame_host,
+      const GURL& url,
+      const base::TimeTicks& navigation_start) {};
 
   // The RenderFrameHostImpl has failed a provisional load.
   virtual void DidFailProvisionalLoadWithError(
@@ -94,6 +96,14 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       NavigationController::ReloadType reload_type,
       bool is_same_document_history_load);
 
+  // Called on a newly created subframe during a history navigation. The browser
+  // process looks up the corresponding FrameNavigationEntry for the new frame
+  // based on |unique_name| and navigates it in the correct process. Returns
+  // false if the FrameNavigationEntry can't be found or the navigation fails.
+  // This is only used in OOPIF-enabled modes.
+  virtual bool NavigateNewChildFrame(RenderFrameHostImpl* render_frame_host,
+                                     const std::string& unique_name);
+
   // Navigation requests -------------------------------------------------------
 
   virtual base::TimeTicks GetCurrentLoadStart();
@@ -114,14 +124,11 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   virtual void RequestTransferURL(
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
-      SiteInstance* source_site_instance,
       const std::vector<GURL>& redirect_chain,
       const Referrer& referrer,
       ui::PageTransition page_transition,
-      WindowOpenDisposition disposition,
       const GlobalRequestID& transferred_global_request_id,
-      bool should_replace_current_entry,
-      bool user_gesture) {}
+      bool should_replace_current_entry) {}
 
   // PlzNavigate
   // Called after receiving a BeforeUnloadACK IPC from the renderer. If

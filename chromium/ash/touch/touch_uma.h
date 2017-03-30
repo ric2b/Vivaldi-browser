@@ -8,6 +8,7 @@
 #include <map>
 
 #include "ash/shell.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/widget/widget.h"
@@ -60,7 +61,7 @@ class ASH_EXPORT TouchUMA {
                         const ui::TouchEvent& event);
 
  private:
-  friend struct DefaultSingletonTraits<TouchUMA>;
+  friend struct base::DefaultSingletonTraits<TouchUMA>;
 
   TouchUMA();
   ~TouchUMA();

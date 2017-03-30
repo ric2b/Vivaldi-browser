@@ -8,7 +8,7 @@
 #include <set>
 
 #include "base/android/jni_android.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "media/audio/audio_manager_base.h"
@@ -20,7 +20,7 @@ class OpenSLESOutputStream;
 // Android implemention of AudioManager.
 class MEDIA_EXPORT AudioManagerAndroid : public AudioManagerBase {
  public:
-  AudioManagerAndroid(AudioLogFactory* audio_log_factory);
+  explicit AudioManagerAndroid(AudioLogFactory* audio_log_factory);
 
   // Implementation of AudioManager.
   bool HasAudioOutputDevices() override;
@@ -53,7 +53,9 @@ class MEDIA_EXPORT AudioManagerAndroid : public AudioManagerBase {
 
   static bool RegisterAudioManager(JNIEnv* env);
 
-  void SetMute(JNIEnv* env, jobject obj, jboolean muted);
+  void SetMute(JNIEnv* env,
+               const base::android::JavaParamRef<jobject>& obj,
+               jboolean muted);
 
   // Sets a volume that applies to all this manager's output audio streams.
   // This overrides other SetVolume calls (e.g. through AudioHostMsg_SetVolume).

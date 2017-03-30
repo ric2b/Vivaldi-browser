@@ -12,11 +12,12 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 
 bool FixupBrowserAboutURL(GURL* url,
                           content::BrowserContext* browser_context) {
@@ -24,7 +25,7 @@ bool FixupBrowserAboutURL(GURL* url,
   // phase that determines the virtual URL, by including it in an initial
   // URLHandler.  This prevents minor changes from producing a virtual URL,
   // which could lead to a URL spoof.
-  *url = url_fixer::FixupURL(url->possibly_invalid_spec(), std::string());
+  *url = url_formatter::FixupURL(url->possibly_invalid_spec(), std::string());
   return true;
 }
 
@@ -34,11 +35,11 @@ bool WillHandleBrowserAboutURL(GURL* url,
   //            then hopefully we can remove this forced fixup.
   FixupBrowserAboutURL(url, browser_context);
 
-  // Check that about: URLs are fixed up to chrome: by url_fixer::FixupURL.
+  // Check that about: URLs are fixed up to chrome: by url_formatter::FixupURL.
   DCHECK((*url == GURL(url::kAboutBlankURL)) ||
          !url->SchemeIs(url::kAboutScheme));
 
-  // Only handle chrome://foo/, url_fixer::FixupURL translates about:foo.
+  // Only handle chrome://foo/, url_formatter::FixupURL translates about:foo.
   if (!url->SchemeIs(content::kChromeUIScheme))
     return false;
 
@@ -55,8 +56,15 @@ bool WillHandleBrowserAboutURL(GURL* url,
     host = chrome::kChromeUISyncInternalsHost;
   // Redirect chrome://extensions.
   } else if (host == chrome::kChromeUIExtensionsHost) {
-    host = chrome::kChromeUIUberHost;
-    path = chrome::kChromeUIExtensionsHost + url->path();
+    // If the material design extensions page is enabled, it gets its own host.
+    // Otherwise, it's handled by the uber settings page.
+    if (::switches::MdExtensionsEnabled()) {
+      host = chrome::kChromeUIExtensionsHost;
+      path = url->path();
+    } else {
+      host = chrome::kChromeUIUberHost;
+      path = chrome::kChromeUIExtensionsHost + url->path();
+    }
   // Redirect chrome://settings/extensions (legacy URL).
   } else if (host == chrome::kChromeUISettingsHost &&
       url->path() == std::string("/") + chrome::kExtensionsSubPage) {
@@ -64,14 +72,21 @@ bool WillHandleBrowserAboutURL(GURL* url,
     path = chrome::kChromeUIExtensionsHost;
   // Redirect chrome://history.
   } else if (host == chrome::kChromeUIHistoryHost) {
+    // Material design history is handled on the top-level chrome://history
+    // host.
+    if (::switches::MdHistoryEnabled()) {
+      host = chrome::kChromeUIHistoryHost;
+      path = url->path();
+    } else {
 #if defined(OS_ANDROID)
-    // On Android, redirect directly to chrome://history-frame since
-    // uber page is unsupported.
-    host = chrome::kChromeUIHistoryFrameHost;
+      // On Android, redirect directly to chrome://history-frame since
+      // uber page is unsupported.
+      host = chrome::kChromeUIHistoryFrameHost;
 #else
-    host = chrome::kChromeUIUberHost;
-    path = chrome::kChromeUIHistoryHost + url->path();
+      host = chrome::kChromeUIUberHost;
+      path = chrome::kChromeUIHistoryHost + url->path();
 #endif
+    }
   // Redirect chrome://settings
   } else if (host == chrome::kChromeUISettingsHost) {
     if (::switches::AboutInSettingsEnabled()) {

@@ -4,8 +4,6 @@
 
 #include "cc/raster/tile_task_runner.h"
 
-#include <algorithm>
-
 namespace cc {
 
 TileTask::TileTask() : did_schedule_(false), did_complete_(false) {
@@ -14,14 +12,6 @@ TileTask::TileTask() : did_schedule_(false), did_complete_(false) {
 TileTask::~TileTask() {
   DCHECK(!did_schedule_);
   DCHECK(!did_run_ || did_complete_);
-}
-
-ImageDecodeTask* TileTask::AsImageDecodeTask() {
-  return NULL;
-}
-
-RasterTask* TileTask::AsRasterTask() {
-  return NULL;
 }
 
 void TileTask::WillSchedule() {
@@ -58,43 +48,11 @@ ImageDecodeTask::ImageDecodeTask() {
 ImageDecodeTask::~ImageDecodeTask() {
 }
 
-ImageDecodeTask* ImageDecodeTask::AsImageDecodeTask() {
-  return this;
-}
-
-RasterTask::RasterTask(const Resource* resource,
-                       ImageDecodeTask::Vector* dependencies)
-    : resource_(resource) {
+RasterTask::RasterTask(ImageDecodeTask::Vector* dependencies) {
   dependencies_.swap(*dependencies);
 }
 
 RasterTask::~RasterTask() {
-}
-
-RasterTask* RasterTask::AsRasterTask() {
-  return this;
-}
-
-TileTaskQueue::Item::Item(RasterTask* task, const TaskSetCollection& task_sets)
-    : task(task), task_sets(task_sets) {
-  DCHECK(task_sets.any());
-}
-
-TileTaskQueue::Item::~Item() {
-}
-
-TileTaskQueue::TileTaskQueue() {
-}
-
-TileTaskQueue::~TileTaskQueue() {
-}
-
-void TileTaskQueue::Swap(TileTaskQueue* other) {
-  items.swap(other->items);
-}
-
-void TileTaskQueue::Reset() {
-  items.clear();
 }
 
 }  // namespace cc

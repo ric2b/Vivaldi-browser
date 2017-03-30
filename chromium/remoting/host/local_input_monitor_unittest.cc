@@ -6,6 +6,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/host/client_session_control.h"
 #include "remoting/host/host_mock_objects.h"
@@ -67,7 +68,7 @@ TEST_F(LocalInputMonitorTest, Basic) {
   EXPECT_CALL(client_session_control_, client_jid())
       .Times(AnyNumber())
       .WillRepeatedly(ReturnRef(client_jid_));
-  EXPECT_CALL(client_session_control_, DisconnectSession())
+  EXPECT_CALL(client_session_control_, DisconnectSession(_))
       .Times(AnyNumber());
   EXPECT_CALL(client_session_control_, OnLocalMouseMoved(_))
       .Times(AnyNumber());

@@ -8,8 +8,8 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "chrome/browser/chromeos/drive/drive.pb.h"
 #include "chrome/browser/chromeos/drive/drive_file_stream_reader.h"
+#include "components/drive/drive.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -24,7 +24,7 @@ WebkitFileStreamReaderImpl::WebkitFileStreamReaderImpl(
     const DriveFileStreamReader::FileSystemGetter& file_system_getter,
     base::SequencedTaskRunner* file_task_runner,
     const base::FilePath& drive_file_path,
-    int64 offset,
+    int64_t offset,
     const base::Time& expected_modification_time)
     : stream_reader_(
           new DriveFileStreamReader(file_system_getter, file_task_runner)),
@@ -65,7 +65,7 @@ int WebkitFileStreamReaderImpl::Read(net::IOBuffer* buffer,
   return net::ERR_IO_PENDING;
 }
 
-int64 WebkitFileStreamReaderImpl::GetLength(
+int64_t WebkitFileStreamReaderImpl::GetLength(
     const net::Int64CompletionCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(stream_reader_);

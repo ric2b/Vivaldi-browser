@@ -9,7 +9,7 @@
 namespace media {
 namespace cast {
 
-RtcpCastMessage::RtcpCastMessage(uint32 ssrc)
+RtcpCastMessage::RtcpCastMessage(uint32_t ssrc)
     : media_ssrc(ssrc), ack_frame_id(0u), target_delay_ms(0) {}
 RtcpCastMessage::RtcpCastMessage()
     : media_ssrc(0), ack_frame_id(0u), target_delay_ms(0) {}
@@ -19,12 +19,9 @@ RtcpReceiverEventLogMessage::RtcpReceiverEventLogMessage()
     : type(UNKNOWN), packet_id(0u) {}
 RtcpReceiverEventLogMessage::~RtcpReceiverEventLogMessage() {}
 
-RtcpReceiverFrameLogMessage::RtcpReceiverFrameLogMessage(uint32 timestamp)
+RtcpReceiverFrameLogMessage::RtcpReceiverFrameLogMessage(RtpTimeTicks timestamp)
     : rtp_timestamp_(timestamp) {}
 RtcpReceiverFrameLogMessage::~RtcpReceiverFrameLogMessage() {}
-
-RtcpNackMessage::RtcpNackMessage() : remote_ssrc(0u) {}
-RtcpNackMessage::~RtcpNackMessage() {}
 
 RtcpReceiverReferenceTimeReport::RtcpReceiverReferenceTimeReport()
     : remote_ssrc(0u), ntp_seconds(0u), ntp_fraction(0u) {}

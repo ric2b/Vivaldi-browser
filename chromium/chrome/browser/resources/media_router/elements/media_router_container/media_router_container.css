@@ -2,44 +2,98 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
+:root {
+  --container-header-height: 52px;
+}
+
 .active-sink {
   color: rgb(33, 150, 243);
 }
 
-#container-header.cast-mode {
-  /* TODO(kdresner): Update this when we get a real color. */
-  background-color: rgb(244, 67, 54);
+.cast-mode-icon,
+.sink-icon {
+  -webkit-padding-end: 12px;
+  -webkit-padding-start: 16px;
+  height: 16px;
+  width: 16px;
 }
 
-#container-header.filter {
-  background-color: rgb(57, 73, 171);
+#cast-mode-list {
+  margin-top: var(--container-header-height);
+  padding-bottom: 12px;
+  padding-top: 4px;
 }
 
-#container-header.route-details {
-  display: none;
-}
-
-#container-header.sink-list {
-  background-color: rgb(33, 150, 243);
+#container-header {
+  position: fixed;
+  width: 100%;
+  z-index: 1;
 }
 
 #device-missing {
   align-items: center;
-  color: rgb(33, 150, 243);
+  background-color: white;
   display: flex;
-  height: 150px;
+  height: 120px;
   justify-content: center;
+  margin-top: var(--container-header-height);
 }
 
-#header-text {
-  -webkit-padding-start: 5px;
-  flex-grow: 1;
-  font-size: 1.4em;
-  margin: 0;
+#device-missing a {
+  color: rgba(33, 150, 243, 0.87);
+  text-decoration: none;
 }
 
-.route {
-  color: rgb(150, 150, 150);
+#first-run-button {
+  background-color: white;
+}
+
+#first-run-button-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+#first-run-flow {
+  background-color: rgb(33, 150, 243);
+  padding: 24px 16px 4px 16px;
+  position: fixed;
+  z-index: 1;
+}
+
+#first-run-text,
+#first-run-title {
+  color: white;
+  padding-bottom: 24px;
+}
+
+#first-run-text {
+  font-size: 1.0em;
+  line-height: 1.5em;
+}
+
+#first-run-flow a {
+  color: white;
+  text-decoration: none;
+}
+
+.first-run-learn-more {
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+#first-run-title {
+  font-size: 1.25em;
+}
+
+#issue-banner {
+  margin-top: var(--container-header-height);
+  width: 100%;
+}
+
+#issue-banner.non-blocking {
+  bottom: 0;
+  margin-top: 0;
 }
 
 paper-item {
@@ -47,7 +101,7 @@ paper-item {
   font-size: 1.0em;
   line-height: 0;
   min-height: 0;
-  padding: 14px 0;
+  padding: 12px 0;
 }
 
 paper-item:hover {
@@ -55,33 +109,53 @@ paper-item:hover {
   border: 0;
 }
 
-paper-item iron-icon {
-  -webkit-padding-end: 16px;
-  -webkit-padding-start: 20px;
-  height: 16px;
-  width: 16px;
-}
-
 paper-menu {
   -webkit-user-select: none;
-  color: rgb(0, 0, 0);
-  padding: 0;
+  color: rgba(0, 0, 0, 0.87);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 12px;
+  padding-top: 4px;
+}
+
+#searching-devices-spinner {
+  height: 30px;
+  width: 30px;
+}
+
+#share-screen-text {
+  -webkit-padding-start: 16px;
+  color: rgb(150, 150, 150);
+  padding-bottom: 4px;
+  padding-top: 12px;
 }
 
 .sink-content {
   display: flex;
   flex-direction: row;
+  font-weight: normal;
 }
 
-#sink-list {
-  max-height: 275px;
-  overflow-y: scroll;
+.sink-domain {
+  -webkit-padding-start: 6px;
+  color: rgb(150, 150, 150);
+}
+
+.sink-subtext {
+  color: rgb(150, 150, 150);
+  padding-top: 8px;
 }
 
 .sink-text {
+  -webkit-padding-end: 26px;
+  flex-direction: row;
   line-height: normal;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   width: 250px;
+}
+
+#route-details {
+  margin-top: var(--container-header-height);
 }

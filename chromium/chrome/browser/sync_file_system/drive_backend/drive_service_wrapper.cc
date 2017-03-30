@@ -7,7 +7,7 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/drive/drive_service_interface.h"
+#include "components/drive/service/drive_service_interface.h"
 
 namespace sync_file_system {
 namespace drive_backend {
@@ -61,7 +61,7 @@ void DriveServiceWrapper::GetAboutResource(
 }
 
 void DriveServiceWrapper::GetChangeList(
-    int64 start_changestamp,
+    int64_t start_changestamp,
     const google_apis::ChangeListCallback& callback) {
   DCHECK(sequece_checker_.CalledOnValidSequencedThread());
   drive_service_->GetChangeList(start_changestamp, callback);

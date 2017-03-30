@@ -10,6 +10,8 @@ from telemetry.internal.backends import android_browser_backend_settings
 from telemetry.internal.backends import android_command_line_backend
 from telemetry.internal.backends import app_backend
 
+from devil.android import app_ui
+
 
 class AndroidAppBackend(app_backend.AppBackend):
 
@@ -23,10 +25,16 @@ class AndroidAppBackend(app_backend.AppBackend):
     self._is_running = False
     self._app_has_webviews = app_has_webviews
     self._existing_processes_by_pid = {}
+    self._app_ui = None
 
   @property
-  def _adb(self):
-    return self.platform_backend.adb
+  def device(self):
+    return self.platform_backend.device
+
+  def GetAppUi(self):
+    if self._app_ui is None:
+      self._app_ui = app_ui.AppUi(self.device, self._start_intent.package)
+    return self._app_ui
 
   def _LaunchAndWaitForApplication(self):
     """Launch the app and wait for it to be ready."""
@@ -38,8 +46,8 @@ class AndroidAppBackend(app_backend.AppBackend):
     # TODO(slamm): check if the wait for "ps" check is really needed, or
     # whether the "blocking=True" fall back is sufficient.
     has_ready_predicate = self._is_app_ready_predicate is not None
-    self._adb.device().StartActivity(self._start_intent,
-                                     blocking=not has_ready_predicate)
+    self.device.StartActivity(self._start_intent,
+                              blocking=not has_ready_predicate)
     if has_ready_predicate:
       util.WaitFor(is_app_ready, timeout=60)
 
@@ -58,7 +66,7 @@ class AndroidAppBackend(app_backend.AppBackend):
           android_browser_backend_settings.WebviewBackendSettings(
               'android-webview'))
       with android_command_line_backend.SetUpCommandLineFlags(
-          self._adb, backend_settings, webview_startup_args):
+          self.device, backend_settings, webview_startup_args):
         self._LaunchAndWaitForApplication()
     else:
       self._LaunchAndWaitForApplication()

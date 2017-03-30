@@ -186,6 +186,13 @@ bool Parser::ReadUint64(uint64_t* out) {
   return ParseUint64(encoded_int, out);
 }
 
+bool Parser::ReadBitString(BitString* bit_string) {
+  Input value;
+  if (!ReadTag(kBitString, &value))
+    return false;
+  return ParseBitString(value, bit_string);
+}
+
 }  // namespace der
 
 }  // namespace net

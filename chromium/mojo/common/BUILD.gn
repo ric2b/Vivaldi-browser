@@ -5,7 +5,7 @@
 import("//testing/test.gni")
 
 group("common") {
-  deps = [
+  public_deps = [
     ":common_base",
     ":url_type_converters",
   ]
@@ -18,16 +18,11 @@ component("common_base") {
   sources = [
     "common_type_converters.cc",
     "common_type_converters.h",
+    "data_pipe_drainer.cc",
+    "data_pipe_drainer.h",
     "data_pipe_file_utils.cc",
     "data_pipe_utils.cc",
     "data_pipe_utils.h",
-    "handle_watcher.cc",
-    "handle_watcher.h",
-    "message_pump_mojo.cc",
-    "message_pump_mojo.h",
-    "message_pump_mojo_handler.h",
-    "time_helper.cc",
-    "time_helper.h",
     "user_agent.cc",
     "user_agent.h",
     "weak_binding_set.h",
@@ -36,10 +31,18 @@ component("common_base") {
 
   defines = [ "MOJO_COMMON_IMPLEMENTATION" ]
 
+  public_deps = [
+    "//mojo/public/cpp/system",
+  ]
+
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
-    "//third_party/mojo/src/mojo/public/c/system:for_component",
+    "//mojo/environment:chromium",
+    "//mojo/message_pump",
+    "//mojo/public/c/system:for_component",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/environment",
   ]
 }
 
@@ -56,7 +59,17 @@ source_set("url_type_converters") {
     ":common_base",
     "//base",
     "//base/third_party/dynamic_annotations",
+    "//mojo/public/cpp/bindings",
     "//url",
+  ]
+}
+
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("mojo_common_unittests_run") {
+  testonly = true
+  deps = [
+    ":mojo_common_unittests",
   ]
 }
 
@@ -66,36 +79,50 @@ test("mojo_common_unittests") {
     ":common",
     "//base",
     "//base:message_loop_tests",
+    "//base/test:test_support",
     "//mojo/environment:chromium",
+    "//mojo/message_pump",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/test_support:test_utils",
     "//testing/gtest",
     "//third_party/mojo/src/mojo/edk/test:run_all_unittests",
     "//third_party/mojo/src/mojo/edk/test:test_support",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
-    "//third_party/mojo/src/mojo/public/cpp/test_support:test_utils",
     "//url",
   ]
 
   sources = [
+    # The message_pump tests are so small and some what related to this code
+    # that we put them here.
+    "../message_pump/handle_watcher_unittest.cc",
+    "../message_pump/message_pump_mojo_unittest.cc",
     "common_type_converters_unittest.cc",
-    "handle_watcher_unittest.cc",
-    "message_pump_mojo_unittest.cc",
   ]
+
+  if (is_linux && !is_component_build) {
+    # This tests dynamically loads libmojo_test_support even in non-component
+    # builds.
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+  }
 }
 
-if (!is_component_build) {
-  source_set("tracing_impl") {
-    sources = [
-      "trace_controller_impl.cc",
-      "trace_controller_impl.h",
-      "tracing_impl.cc",
-      "tracing_impl.h",
-    ]
+test("mojo_common_perftests") {
+  deps = [
+    ":common",
+    "//base",
+    "//mojo/environment:chromium",
+    "//mojo/message_pump",
+    "//mojo/public/cpp/test_support:test_utils",
+    "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/test:run_all_perftests",
+  ]
 
-    deps = [
-      "//base",
-      "//mojo/application/public/cpp",
-      "//mojo/services/tracing:bindings",
-      "//third_party/mojo/src/mojo/public/cpp/bindings",
-    ]
+  sources = [
+    "../message_pump/handle_watcher_perftest.cc",
+  ]
+
+  if (is_linux && !is_component_build) {
+    # This test dynamically loads libmojo_test_support even in non-component
+    # builds.
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
   }
 }

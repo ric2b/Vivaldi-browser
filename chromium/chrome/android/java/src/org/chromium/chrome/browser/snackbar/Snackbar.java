@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.snackbar;
 
+import android.graphics.Bitmap;
+
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 
 /**
@@ -23,8 +25,11 @@ public class Snackbar {
     private String mTemplateText;
     private String mActionText;
     private Object mActionData;
+    private int mBackgroundColor;
     private boolean mSingleLine = true;
     private int mDurationMs;
+    private Bitmap mProfileImage;
+    private boolean mForceDisplay = false;
 
     // Prevent instantiation.
     private Snackbar() {}
@@ -52,13 +57,24 @@ public class Snackbar {
 
     /**
      * Sets the action button to show on the snackbar.
-     * @param actionText The text to show on the button.
-     * @param actionData The data to be passed to {@link SnackbarController#onAction} when the
-     *                   button is pressed.
+     * @param actionText The text to show on the button. If null, the button will not be shown.
+     * @param actionData An object to be passed to {@link SnackbarController#onAction} or
+     *        {@link SnackbarController#onDismissNoAction} when the button is pressed or the
+     *        snackbar is dismissed.
      */
     public Snackbar setAction(String actionText, Object actionData) {
         mActionText = actionText;
         mActionData = actionData;
+        return this;
+    }
+
+    /**
+     * Sets the identity profile image that will be displayed at the beginning of the snackbar.
+     * If null, there won't be a profile image. The ability to have an icon is exclusive to
+     * identity snackbars.
+     */
+    public Snackbar setProfileImage(Bitmap profileImage) {
+        mProfileImage = profileImage;
         return this;
     }
 
@@ -77,6 +93,35 @@ public class Snackbar {
     public Snackbar setDuration(int durationMs) {
         mDurationMs = durationMs;
         return this;
+    }
+
+    /**
+     * Sets the background color for the snackbar. If 0, the snackbar will use default color.
+     */
+    public Snackbar setBackgroundColor(int color) {
+        mBackgroundColor = color;
+        return this;
+    }
+
+    /**
+     * Forces this snackbar to be shown when {@link #dismissAllSnackbars(SnackbarManager)} is called
+     * from a timeout. If {@link #showSnackbar(SnackbarManager)} is called while this snackbar is
+     * showing, the new snackbar will be added to the stack and this snackbar will not be
+     * overwritten.
+     */
+    public Snackbar setForceDisplay() {
+        mForceDisplay = true;
+        return this;
+    }
+
+    /**
+     * Returns true if this snackbar should still be shown when @link
+     * #dismissAllSnackbars(SnackbarManager)} is called from a timeout. If
+     * {@link #showSnackbar(SnackbarManager)} is called while this snackbar is showing, the new
+     * snackbar will be added to the stack and this snackbar will not be overwritten.
+     */
+    public boolean getForceDisplay() {
+        return mForceDisplay;
     }
 
     SnackbarController getController() {
@@ -105,5 +150,19 @@ public class Snackbar {
 
     int getDuration() {
         return mDurationMs;
+    }
+
+    /**
+     * If method returns zero, then default color for snackbar will be used.
+     */
+    int getBackgroundColor() {
+        return mBackgroundColor;
+    }
+
+    /**
+     * If method returns null, then no profileImage will be shown in snackbar.
+     */
+    Bitmap getProfileImage() {
+        return mProfileImage;
     }
 }

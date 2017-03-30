@@ -4,6 +4,8 @@
 
 #include "ui/gfx/render_text.h"
 
+#include <limits.h>
+
 #include <algorithm>
 #include <climits>
 
@@ -14,13 +16,16 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "third_party/icu/source/common/unicode/rbbi.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
+#include "third_party/skia/include/core/SkDrawLooper.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
+#include "ui/gfx/platform_font.h"
 #include "ui/gfx/render_text_harfbuzz.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/skia_util.h"
@@ -30,6 +35,7 @@
 #include "ui/gfx/utf16_indexing.h"
 
 #if defined(OS_MACOSX)
+#include "third_party/skia/include/ports/SkTypeface_mac.h"
 #include "ui/gfx/render_text_mac.h"
 #endif  // defined(OS_MACOSX)
 
@@ -84,6 +90,7 @@ int DetermineBaselineCenteringText(const Rect& display_rect,
   return baseline + std::max(min_shift, std::min(max_shift, baseline_shift));
 }
 
+#if !defined(OS_MACOSX)
 // Converts |Font::FontStyle| flags to |SkTypeface::Style| flags.
 SkTypeface::Style ConvertFontStyleToSkiaTypefaceStyle(int font_style) {
   int skia_style = SkTypeface::kNormal;
@@ -91,17 +98,20 @@ SkTypeface::Style ConvertFontStyleToSkiaTypefaceStyle(int font_style) {
   skia_style |= (font_style & Font::ITALIC) ? SkTypeface::kItalic : 0;
   return static_cast<SkTypeface::Style>(skia_style);
 }
+#endif
+
+int round(float value) {
+  return static_cast<int>(floor(value + 0.5f));
+}
 
 // Given |font| and |display_width|, returns the width of the fade gradient.
 int CalculateFadeGradientWidth(const FontList& font_list, int display_width) {
-  // Fade in/out about 2.5 characters of the beginning/end of the string.
-  // The .5 here is helpful if one of the characters is a space.
-  // Use a quarter of the display width if the display width is very short.
-  const int average_character_width = font_list.GetExpectedTextWidth(1);
-  const double gradient_width = std::min(average_character_width * 2.5,
-                                         display_width / 4.0);
-  DCHECK_GE(gradient_width, 0.0);
-  return static_cast<int>(floor(gradient_width + 0.5));
+  // Fade in/out about 3 characters of the beginning/end of the string.
+  // Use a 1/3 of the display width if the display width is very short.
+  const int narrow_width = font_list.GetExpectedTextWidth(3);
+  const int gradient_width = std::min(narrow_width, round(display_width / 3.f));
+  DCHECK_GE(gradient_width, 0);
+  return gradient_width;
 }
 
 // Appends to |positions| and |colors| values corresponding to the fade over
@@ -129,12 +139,22 @@ void AddFadeEffect(const Rect& text_rect,
 
 // Creates a SkShader to fade the text, with |left_part| specifying the left
 // fade effect, if any, and |right_part| specifying the right fade effect.
-skia::RefPtr<SkShader> CreateFadeShader(const Rect& text_rect,
+skia::RefPtr<SkShader> CreateFadeShader(const FontList& font_list,
+                                        const Rect& text_rect,
                                         const Rect& left_part,
                                         const Rect& right_part,
                                         SkColor color) {
-  // Fade alpha of 51/255 corresponds to a fade of 0.2 of the original color.
-  const SkColor fade_color = SkColorSetA(color, 51);
+  // In general, fade down to 0 alpha.  But when the available width is less
+  // than four characters, linearly ramp up the fade target alpha to as high as
+  // 20% at zero width.  This allows the user to see the last faded characters a
+  // little better when there are only a few characters shown.
+  const float width_fraction =
+      text_rect.width() / static_cast<float>(font_list.GetExpectedTextWidth(4));
+  const SkAlpha kAlphaAtZeroWidth = 51;
+  const SkAlpha alpha = (width_fraction < 1) ?
+      static_cast<SkAlpha>(round((1 - width_fraction) * kAlphaAtZeroWidth)) : 0;
+  const SkColor fade_color = SkColorSetA(color, alpha);
+
   std::vector<SkScalar> positions;
   std::vector<SkColor> colors;
 
@@ -152,10 +172,8 @@ skia::RefPtr<SkShader> CreateFadeShader(const Rect& text_rect,
     colors.push_back(colors.back());
   }
 
-  SkPoint points[2];
-  points[0].iset(text_rect.x(), text_rect.y());
-  points[1].iset(text_rect.right(), text_rect.y());
-
+  const SkPoint points[2] = { PointToSkPoint(text_rect.origin()),
+                              PointToSkPoint(text_rect.top_right()) };
   return skia::AdoptRef(
       SkGradientShader::CreateLinear(&points[0], &colors[0], &positions[0],
                                      colors.size(), SkShader::kClamp_TileMode));
@@ -235,11 +253,8 @@ void SkiaTextRenderer::SetTextSize(SkScalar size) {
   paint_.setTextSize(size);
 }
 
-void SkiaTextRenderer::SetFontFamilyWithStyle(const std::string& family,
-                                              int style) {
-  DCHECK(!family.empty());
-
-  skia::RefPtr<SkTypeface> typeface = CreateSkiaTypeface(family.c_str(), style);
+void SkiaTextRenderer::SetFontWithStyle(const Font& font, int style) {
+  skia::RefPtr<SkTypeface> typeface = CreateSkiaTypeface(font, style);
   if (typeface) {
     // |paint_| adds its own ref. So don't |release()| it from the ref ptr here.
     SetTypeface(typeface.get());
@@ -265,7 +280,7 @@ void SkiaTextRenderer::SetUnderlineMetrics(SkScalar thickness,
 }
 
 void SkiaTextRenderer::DrawPosText(const SkPoint* pos,
-                                   const uint16* glyphs,
+                                   const uint16_t* glyphs,
                                    size_t glyph_count) {
   const size_t byte_length = glyph_count * sizeof(glyphs[0]);
   canvas_skia_->drawPosText(&glyphs[0], byte_length, &pos[0], paint_);
@@ -402,11 +417,13 @@ Line::Line() : preceding_heights(0), baseline(0) {}
 
 Line::~Line() {}
 
-skia::RefPtr<SkTypeface> CreateSkiaTypeface(const std::string& family,
-                                            int style) {
+#if !defined(OS_MACOSX)
+skia::RefPtr<SkTypeface> CreateSkiaTypeface(const gfx::Font& font, int style) {
   SkTypeface::Style skia_style = ConvertFontStyleToSkiaTypefaceStyle(style);
-  return skia::AdoptRef(SkTypeface::CreateFromName(family.c_str(), skia_style));
+  return skia::AdoptRef(
+      SkTypeface::CreateFromName(font.GetFontName().c_str(), skia_style));
 }
+#endif
 
 void ApplyRenderParams(const FontRenderParams& params,
                        bool subpixel_rendering_suppressed,
@@ -708,10 +725,12 @@ void RenderText::SetCompositionRange(const Range& composition_range) {
 
 void RenderText::SetColor(SkColor value) {
   colors_.SetValue(value);
+  OnTextColorChanged();
 }
 
 void RenderText::ApplyColor(SkColor value, const Range& range) {
   colors_.ApplyValue(value, range);
+  OnTextColorChanged();
 }
 
 void RenderText::SetBaselineStyle(BaselineStyle value) {
@@ -770,7 +789,7 @@ VisualCursorDirection RenderText::GetVisualDirectionOfLogicalEnd() {
 }
 
 SizeF RenderText::GetStringSizeF() {
-  return GetStringSize();
+  return gfx::SizeF(GetStringSize());
 }
 
 float RenderText::GetContentWidthF() {
@@ -807,8 +826,10 @@ void RenderText::Draw(Canvas* canvas) {
   if (cursor_enabled() && cursor_visible() && focused())
     DrawCursor(canvas, selection_model_);
 
-  if (!text().empty())
-    DrawVisualText(canvas);
+  if (!text().empty()) {
+    internal::SkiaTextRenderer renderer(canvas);
+    DrawVisualText(&renderer);
+  }
 
   if (clip_to_display_rect())
     canvas->Restore();
@@ -1018,6 +1039,9 @@ void RenderText::SetSelectionModel(const SelectionModel& model) {
   cached_bounds_and_offset_valid_ = false;
 }
 
+void RenderText::OnTextColorChanged() {
+}
+
 void RenderText::UpdateDisplayText(float text_width) {
   // TODO(oshima): Consider support eliding for multi-line text.
   // This requires max_line support first.
@@ -1203,8 +1227,9 @@ void RenderText::ApplyFadeEffects(internal::SkiaTextRenderer* renderer) {
   text_rect.Inset(GetAlignmentOffset(0).x(), 0, 0, 0);
 
   // TODO(msw): Use the actual text colors corresponding to each faded part.
-  skia::RefPtr<SkShader> shader = CreateFadeShader(
-      text_rect, left_part, right_part, colors_.breaks().front().second);
+  skia::RefPtr<SkShader> shader =
+      CreateFadeShader(font_list(), text_rect, left_part, right_part,
+                       colors_.breaks().front().second);
   if (shader)
     renderer->SetShader(shader.get());
 }

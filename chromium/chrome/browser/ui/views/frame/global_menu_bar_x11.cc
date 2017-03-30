@@ -6,9 +6,11 @@
 
 #include <dlfcn.h>
 #include <glib-object.h>
+#include <stddef.h>
 
 #include "base/debug/leak_annotations.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -21,18 +23,19 @@
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/browser_tab_restore_service_delegate.h"
+#include "chrome/browser/ui/browser_live_tab_context.h"
 #include "chrome/browser/ui/views/frame/browser_desktop_window_tree_host_x11.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/global_menu_bar_registrar_x11.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/history/core/browser/top_sites.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "grit/components_strings.h"
 #include "ui/base/accelerators/menu_label_accelerator_util_linux.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
@@ -206,11 +209,11 @@ GlobalMenuBarCommand history_menu[] = {
 
   { MENU_SEPARATOR, MENU_SEPARATOR },
 
-  { IDS_HISTORY_VISITED_LINUX, MENU_DISABLED_ID, TAG_MOST_VISITED_HEADER },
+  { IDS_HISTORY_CLOSED_LINUX, MENU_DISABLED_ID, TAG_RECENTLY_CLOSED_HEADER },
 
   { MENU_SEPARATOR, MENU_SEPARATOR },
 
-  { IDS_HISTORY_CLOSED_LINUX, MENU_DISABLED_ID, TAG_RECENTLY_CLOSED_HEADER },
+  { IDS_HISTORY_VISITED_LINUX, MENU_DISABLED_ID, TAG_MOST_VISITED_HEADER },
 
   { MENU_SEPARATOR, MENU_SEPARATOR },
 
@@ -534,7 +537,7 @@ void GlobalMenuBarX11::RegisterAccelerator(DbusmenuMenuitem* item,
 }
 
 GlobalMenuBarX11::HistoryItem* GlobalMenuBarX11::HistoryItemForTab(
-    const TabRestoreService::Tab& entry) {
+    const sessions::TabRestoreService::Tab& entry) {
   const sessions::SerializedNavigationEntry& current_navigation =
       entry.navigations.at(entry.current_navigation_index);
   HistoryItem* item = new HistoryItem();
@@ -736,8 +739,9 @@ void GlobalMenuBarX11::TopSitesChanged(history::TopSites* top_sites,
     GetTopSitesData();
 }
 
-void GlobalMenuBarX11::TabRestoreServiceChanged(TabRestoreService* service) {
-  const TabRestoreService::Entries& entries = service->entries();
+void GlobalMenuBarX11::TabRestoreServiceChanged(
+    sessions::TabRestoreService* service) {
+  const sessions::TabRestoreService::Entries& entries = service->entries();
 
   ClearMenuSection(history_menu_, TAG_RECENTLY_CLOSED);
 
@@ -747,14 +751,15 @@ void GlobalMenuBarX11::TabRestoreServiceChanged(TabRestoreService* service) {
                                         TAG_RECENTLY_CLOSED_HEADER) + 1;
 
   unsigned int added_count = 0;
-  for (TabRestoreService::Entries::const_iterator it = entries.begin();
+  for (sessions::TabRestoreService::Entries::const_iterator it =
+           entries.begin();
        it != entries.end() && added_count < kRecentlyClosedCount; ++it) {
-    TabRestoreService::Entry* entry = *it;
+    sessions::TabRestoreService::Entry* entry = *it;
 
-    if (entry->type == TabRestoreService::WINDOW) {
-      TabRestoreService::Window* entry_win =
-          static_cast<TabRestoreService::Window*>(entry);
-      std::vector<TabRestoreService::Tab>& tabs = entry_win->tabs;
+    if (entry->type == sessions::TabRestoreService::WINDOW) {
+      sessions::TabRestoreService::Window* entry_win =
+          static_cast<sessions::TabRestoreService::Window*>(entry);
+      std::vector<sessions::TabRestoreService::Tab>& tabs = entry_win->tabs;
       if (tabs.empty())
         continue;
 
@@ -790,9 +795,9 @@ void GlobalMenuBarX11::TabRestoreServiceChanged(TabRestoreService* service) {
 
       // Loop over the window's tabs and add them to the submenu.
       int subindex = 2;
-      std::vector<TabRestoreService::Tab>::const_iterator iter;
+      std::vector<sessions::TabRestoreService::Tab>::const_iterator iter;
       for (iter = tabs.begin(); iter != tabs.end(); ++iter) {
-        TabRestoreService::Tab tab = *iter;
+        sessions::TabRestoreService::Tab tab = *iter;
         HistoryItem* tab_item = HistoryItemForTab(tab);
         item->tabs.push_back(tab_item);
         AddHistoryItemToMenu(tab_item,
@@ -802,8 +807,9 @@ void GlobalMenuBarX11::TabRestoreServiceChanged(TabRestoreService* service) {
       }
 
       ++added_count;
-    } else if (entry->type == TabRestoreService::TAB) {
-      TabRestoreService::Tab* tab = static_cast<TabRestoreService::Tab*>(entry);
+    } else if (entry->type == sessions::TabRestoreService::TAB) {
+      sessions::TabRestoreService::Tab* tab =
+          static_cast<sessions::TabRestoreService::Tab*>(entry);
       HistoryItem* item = HistoryItemForTab(*tab);
       AddHistoryItemToMenu(item,
                            history_menu_,
@@ -815,7 +821,7 @@ void GlobalMenuBarX11::TabRestoreServiceChanged(TabRestoreService* service) {
 }
 
 void GlobalMenuBarX11::TabRestoreServiceDestroyed(
-    TabRestoreService* service) {
+    sessions::TabRestoreService* service) {
   tab_restore_service_ = nullptr;
 }
 
@@ -845,12 +851,11 @@ void GlobalMenuBarX11::OnHistoryItemActivated(DbusmenuMenuitem* sender,
 
   // If this item can be restored using TabRestoreService, do so. Otherwise,
   // just load the URL.
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(profile_);
   if (item->session_id && service) {
-    service->RestoreEntryById(browser_->tab_restore_service_delegate(),
-                              item->session_id, browser_->host_desktop_type(),
-                              UNKNOWN);
+    service->RestoreEntryById(browser_->live_tab_context(), item->session_id,
+                              browser_->host_desktop_type(), UNKNOWN);
   } else {
     DCHECK(item->url.is_valid());
     browser_->OpenURL(content::OpenURLParams(

@@ -4,12 +4,19 @@
 
 #include "chrome/browser/ui/website_settings/website_settings.h"
 
+#include <string>
+#include <vector>
+
 #include "base/at_exit.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
+#include "chrome/browser/usb/usb_chooser_context.h"
+#include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -18,6 +25,10 @@
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/cert_store.h"
 #include "content/public/common/ssl_status.h"
+#include "device/core/device_client.h"
+#include "device/usb/mock_usb_device.h"
+#include "device/usb/mock_usb_service.h"
+#include "grit/theme_resources.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_connection_status_flags.h"
@@ -26,8 +37,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::SSLStatus;
+using security_state::SecurityStateModel;
 using testing::_;
 using testing::AnyNumber;
+using testing::Invoke;
 using testing::Return;
 using testing::SetArgPointee;
 
@@ -51,6 +64,19 @@ int SetSSLCipherSuite(int connection_status, int cipher_suite) {
   return cipher_suite | connection_status;
 }
 
+class TestDeviceClient : public device::DeviceClient {
+ public:
+  TestDeviceClient() {}
+  ~TestDeviceClient() override {}
+
+  device::MockUsbService& usb_service() { return usb_service_; }
+
+ private:
+  device::UsbService* GetUsbService() override { return &usb_service_; }
+
+  device::MockUsbService usb_service_;
+};
+
 class MockCertStore : public content::CertStore {
  public:
   virtual ~MockCertStore() {}
@@ -62,8 +88,9 @@ class MockWebsiteSettingsUI : public WebsiteSettingsUI {
  public:
   virtual ~MockWebsiteSettingsUI() {}
   MOCK_METHOD1(SetCookieInfo, void(const CookieInfoList& cookie_info_list));
-  MOCK_METHOD1(SetPermissionInfo,
-               void(const PermissionInfoList& permission_info_list));
+  MOCK_METHOD2(SetPermissionInfo,
+               void(const PermissionInfoList& permission_info_list,
+                    const ChosenObjectInfoList& chosen_object_info_list));
   MOCK_METHOD1(SetIdentityInfo, void(const IdentityInfo& identity_info));
   MOCK_METHOD1(SetSelectedTab, void(TabId tab_id));
 };
@@ -77,7 +104,7 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     // Setup stub SSLStatus.
-    ssl_.security_style = content::SECURITY_STYLE_UNAUTHENTICATED;
+    security_info_.security_level = SecurityStateModel::NONE;
 
     // Create the certificate.
     cert_id_ = 1;
@@ -99,6 +126,8 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
 
     // Setup mock ui.
     mock_ui_.reset(new MockWebsiteSettingsUI());
+    ON_CALL(*mock_ui_, SetPermissionInfo(_, _))
+        .WillByDefault(Invoke(this, &WebsiteSettingsTest::SetPermissionInfo));
   }
 
   void TearDown() override {
@@ -110,18 +139,32 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
 
   void SetDefaultUIExpectations(MockWebsiteSettingsUI* mock_ui) {
     // During creation |WebsiteSettings| makes the following calls to the ui.
-    EXPECT_CALL(*mock_ui, SetPermissionInfo(_));
+    EXPECT_CALL(*mock_ui, SetPermissionInfo(_, _));
     EXPECT_CALL(*mock_ui, SetIdentityInfo(_));
     EXPECT_CALL(*mock_ui, SetCookieInfo(_));
   }
 
-  void SetURL(std::string url) { url_ = GURL(url); }
+  void SetURL(const std::string& url) { url_ = GURL(url); }
+
+  void SetPermissionInfo(const PermissionInfoList& permission_info_list,
+                         const ChosenObjectInfoList& chosen_object_info_list) {
+    last_chosen_object_info_.clear();
+    for (WebsiteSettingsUI::ChosenObjectInfo* chosen_object_info :
+         chosen_object_info_list)
+      last_chosen_object_info_.push_back(make_scoped_ptr(chosen_object_info));
+  }
 
   const GURL& url() const { return url_; }
   MockCertStore* cert_store() { return &cert_store_; }
   int cert_id() { return cert_id_; }
   MockWebsiteSettingsUI* mock_ui() { return mock_ui_.get(); }
-  const SSLStatus& ssl() { return ssl_; }
+  const SecurityStateModel::SecurityInfo& security_info() {
+    return security_info_;
+  }
+  const std::vector<scoped_ptr<WebsiteSettingsUI::ChosenObjectInfo>>&
+  last_chosen_object_info() {
+    return last_chosen_object_info_;
+  }
   TabSpecificContentSettings* tab_specific_content_settings() {
     return TabSpecificContentSettings::FromWebContents(web_contents());
   }
@@ -132,21 +175,26 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
   WebsiteSettings* website_settings() {
     if (!website_settings_.get()) {
       website_settings_.reset(new WebsiteSettings(
-          mock_ui(), profile(), tab_specific_content_settings(),
-          infobar_service(), url(), ssl(), cert_store()));
+          mock_ui(), profile(), tab_specific_content_settings(), web_contents(),
+          url(), security_info(), cert_store()));
     }
     return website_settings_.get();
   }
 
-  SSLStatus ssl_;
+  device::MockUsbService& usb_service() { return device_client_.usb_service(); }
+
+  SecurityStateModel::SecurityInfo security_info_;
 
  private:
+  TestDeviceClient device_client_;
   scoped_ptr<WebsiteSettings> website_settings_;
   scoped_ptr<MockWebsiteSettingsUI> mock_ui_;
   int cert_id_;
   scoped_refptr<net::X509Certificate> cert_;
   MockCertStore cert_store_;
   GURL url_;
+  std::vector<scoped_ptr<WebsiteSettingsUI::ChosenObjectInfo>>
+      last_chosen_object_info_;
 };
 
 }  // namespace
@@ -154,13 +202,15 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
 TEST_F(WebsiteSettingsTest, OnPermissionsChanged) {
   // Setup site permissions.
   HostContentSettingsMap* content_settings =
-      profile()->GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(profile());
   ContentSetting setting = content_settings->GetContentSetting(
       url(), url(), CONTENT_SETTINGS_TYPE_POPUPS, std::string());
   EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+#if defined(ENABLE_PLUGINS)
   setting = content_settings->GetContentSetting(
       url(), url(), CONTENT_SETTINGS_TYPE_PLUGINS, std::string());
-  EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(setting, CONTENT_SETTING_DETECT_IMPORTANT_CONTENT);
+#endif
   setting = content_settings->GetContentSetting(
       url(), url(), CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string());
   EXPECT_EQ(setting, CONTENT_SETTING_ASK);
@@ -179,12 +229,7 @@ TEST_F(WebsiteSettingsTest, OnPermissionsChanged) {
 
   // SetPermissionInfo() is called once initially, and then again every time
   // OnSitePermissionChanged() is called.
-// TODO(markusheintz): This is a temporary hack to fix issue: http://crbug.com/144203.
-#if defined(OS_MACOSX)
-  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_)).Times(7);
-#else
-  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_)).Times(1);
-#endif
+  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_, _)).Times(7);
   EXPECT_CALL(*mock_ui(), SetSelectedTab(
       WebsiteSettingsUI::TAB_ID_PERMISSIONS));
 
@@ -226,7 +271,7 @@ TEST_F(WebsiteSettingsTest, OnPermissionsChanged) {
 TEST_F(WebsiteSettingsTest, OnPermissionsChanged_Fullscreen) {
   // Setup site permissions.
   HostContentSettingsMap* content_settings =
-      profile()->GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(profile());
   ContentSetting setting = content_settings->GetContentSetting(
       url(), url(), CONTENT_SETTINGS_TYPE_FULLSCREEN, std::string());
   EXPECT_EQ(setting, CONTENT_SETTING_ASK);
@@ -238,13 +283,7 @@ TEST_F(WebsiteSettingsTest, OnPermissionsChanged_Fullscreen) {
 
   // SetPermissionInfo() is called once initially, and then again every time
   // OnSitePermissionChanged() is called.
-  // TODO(markusheintz): This is a temporary hack to fix issue:
-  // http://crbug.com/144203.
-#if defined(OS_MACOSX)
-  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_)).Times(3);
-#else
-  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_)).Times(1);
-#endif
+  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_, _)).Times(3);
 
   // Execute code under tests.
   website_settings()->OnSitePermissionChanged(CONTENT_SETTINGS_TYPE_FULLSCREEN,
@@ -272,13 +311,40 @@ TEST_F(WebsiteSettingsTest, OnPermissionsChanged_Fullscreen) {
 }
 
 TEST_F(WebsiteSettingsTest, OnSiteDataAccessed) {
-  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_));
+  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_, _));
   EXPECT_CALL(*mock_ui(), SetIdentityInfo(_));
   EXPECT_CALL(*mock_ui(), SetCookieInfo(_)).Times(2);
   EXPECT_CALL(*mock_ui(), SetSelectedTab(
       WebsiteSettingsUI::TAB_ID_PERMISSIONS));
 
   website_settings()->OnSiteDataAccessed();
+}
+
+TEST_F(WebsiteSettingsTest, OnChosenObjectDeleted) {
+  scoped_refptr<device::UsbDevice> device =
+      new device::MockUsbDevice(0, 0, "Google", "Gizmo", "1234567890");
+  usb_service().AddDevice(device);
+  UsbChooserContext* store = UsbChooserContextFactory::GetForProfile(profile());
+  store->GrantDevicePermission(url(), url(), device->guid());
+
+  EXPECT_CALL(*mock_ui(), SetIdentityInfo(_));
+  EXPECT_CALL(*mock_ui(), SetCookieInfo(_));
+  EXPECT_CALL(*mock_ui(),
+              SetSelectedTab(WebsiteSettingsUI::TAB_ID_PERMISSIONS));
+
+  // Access WebsiteSettings so that SetPermissionInfo is called once to populate
+  // |last_chosen_object_info_|. It will be called again by
+  // OnSiteChosenObjectDeleted.
+  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_, _)).Times(2);
+  website_settings();
+
+  ASSERT_EQ(1u, last_chosen_object_info().size());
+  const WebsiteSettingsUI::ChosenObjectInfo* info =
+      last_chosen_object_info()[0].get();
+  website_settings()->OnSiteChosenObjectDeleted(info->ui_info, *info->object);
+
+  EXPECT_FALSE(store->HasDevicePermission(url(), url(), device->guid()));
+  EXPECT_EQ(0u, last_chosen_object_info().size());
 }
 
 TEST_F(WebsiteSettingsTest, HTTPConnection) {
@@ -293,14 +359,15 @@ TEST_F(WebsiteSettingsTest, HTTPConnection) {
 }
 
 TEST_F(WebsiteSettingsTest, HTTPSConnection) {
-  ssl_.security_style = content::SECURITY_STYLE_AUTHENTICATED;
-  ssl_.cert_id = cert_id();
-  ssl_.cert_status = 0;
-  ssl_.security_bits = 81;  // No error if > 80.
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
-  ssl_.connection_status = status;
+  security_info_.connection_status = status;
 
   SetDefaultUIExpectations(mock_ui());
   EXPECT_CALL(*mock_ui(), SetSelectedTab(
@@ -313,16 +380,18 @@ TEST_F(WebsiteSettingsTest, HTTPSConnection) {
   EXPECT_EQ(base::string16(), website_settings()->organization_name());
 }
 
-TEST_F(WebsiteSettingsTest, HTTPSMixedContent) {
-  ssl_.security_style = content::SECURITY_STYLE_AUTHENTICATED;
-  ssl_.cert_id = cert_id();
-  ssl_.cert_status = 0;
-  ssl_.security_bits = 81;  // No error if > 80.
-  ssl_.content_status = SSLStatus::DISPLAYED_INSECURE_CONTENT;
+TEST_F(WebsiteSettingsTest, HTTPSPassiveMixedContent) {
+  security_info_.security_level = SecurityStateModel::NONE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  security_info_.mixed_content_status =
+      SecurityStateModel::DISPLAYED_MIXED_CONTENT;
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
-  ssl_.connection_status = status;
+  security_info_.connection_status = status;
 
   SetDefaultUIExpectations(mock_ui());
   EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
@@ -331,6 +400,35 @@ TEST_F(WebsiteSettingsTest, HTTPSMixedContent) {
             website_settings()->site_connection_status());
   EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_CERT,
             website_settings()->site_identity_status());
+  EXPECT_EQ(IDR_PAGEINFO_WARNING_MINOR,
+            WebsiteSettingsUI::GetConnectionIconID(
+                website_settings()->site_connection_status()));
+  EXPECT_EQ(base::string16(), website_settings()->organization_name());
+}
+
+TEST_F(WebsiteSettingsTest, HTTPSActiveMixedContent) {
+  security_info_.security_level = SecurityStateModel::SECURITY_ERROR;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  security_info_.mixed_content_status =
+      SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_MIXED_SCRIPT,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_CERT,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(IDR_PAGEINFO_BAD,
+            WebsiteSettingsUI::GetConnectionIconID(
+                website_settings()->site_connection_status()));
   EXPECT_EQ(base::string16(), website_settings()->organization_name());
 }
 
@@ -343,15 +441,17 @@ TEST_F(WebsiteSettingsTest, HTTPSEVCert) {
   EXPECT_CALL(*cert_store(), RetrieveCert(ev_cert_id, _)).WillRepeatedly(
       DoAll(SetArgPointee<1>(ev_cert), Return(true)));
 
-  ssl_.security_style = content::SECURITY_STYLE_AUTHENTICATED;
-  ssl_.cert_id = ev_cert_id;
-  ssl_.cert_status = net::CERT_STATUS_IS_EV;
-  ssl_.security_bits = 81;  // No error if > 80.
-  ssl_.content_status = SSLStatus::DISPLAYED_INSECURE_CONTENT;
+  security_info_.security_level = SecurityStateModel::NONE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = ev_cert_id;
+  security_info_.cert_status = net::CERT_STATUS_IS_EV;
+  security_info_.security_bits = 81;  // No error if > 80.
+  security_info_.mixed_content_status =
+      SecurityStateModel::DISPLAYED_MIXED_CONTENT;
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
-  ssl_.connection_status = status;
+  security_info_.connection_status = status;
 
   SetDefaultUIExpectations(mock_ui());
   EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
@@ -365,14 +465,15 @@ TEST_F(WebsiteSettingsTest, HTTPSEVCert) {
 }
 
 TEST_F(WebsiteSettingsTest, HTTPSRevocationError) {
-  ssl_.security_style = content::SECURITY_STYLE_AUTHENTICATED;
-  ssl_.cert_id = cert_id();
-  ssl_.cert_status = net::CERT_STATUS_UNABLE_TO_CHECK_REVOCATION;
-  ssl_.security_bits = 81;  // No error if > 80.
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = net::CERT_STATUS_UNABLE_TO_CHECK_REVOCATION;
+  security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
-  ssl_.connection_status = status;
+  security_info_.connection_status = status;
 
   SetDefaultUIExpectations(mock_ui());
   EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
@@ -385,14 +486,15 @@ TEST_F(WebsiteSettingsTest, HTTPSRevocationError) {
 }
 
 TEST_F(WebsiteSettingsTest, HTTPSConnectionError) {
-  ssl_.security_style = content::SECURITY_STYLE_AUTHENTICATED;
-  ssl_.cert_id = cert_id();
-  ssl_.cert_status = 0;
-  ssl_.security_bits = -1;
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = -1;
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
-  ssl_.connection_status = status;
+  security_info_.connection_status = status;
 
   SetDefaultUIExpectations(mock_ui());
   EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
@@ -404,6 +506,248 @@ TEST_F(WebsiteSettingsTest, HTTPSConnectionError) {
   EXPECT_EQ(base::string16(), website_settings()->organization_name());
 }
 
+TEST_F(WebsiteSettingsTest, HTTPSPolicyCertConnection) {
+  security_info_.security_level = SecurityStateModel::SECURITY_POLICY_WARNING;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(base::string16(), website_settings()->organization_name());
+}
+
+TEST_F(WebsiteSettingsTest, HTTPSSHA1Minor) {
+  security_info_.security_level = SecurityStateModel::NONE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+  security_info_.sha1_deprecation_status =
+      SecurityStateModel::DEPRECATED_SHA1_MINOR;
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::
+                SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(base::string16(), website_settings()->organization_name());
+  EXPECT_EQ(IDR_PAGEINFO_WARNING_MINOR,
+            WebsiteSettingsUI::GetIdentityIconID(
+                website_settings()->site_identity_status()));
+}
+
+TEST_F(WebsiteSettingsTest, HTTPSSHA1Major) {
+  security_info_.security_level = SecurityStateModel::NONE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+  security_info_.sha1_deprecation_status =
+      SecurityStateModel::DEPRECATED_SHA1_MAJOR;
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::
+                SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(base::string16(), website_settings()->organization_name());
+  EXPECT_EQ(IDR_PAGEINFO_BAD,
+            WebsiteSettingsUI::GetIdentityIconID(
+                website_settings()->site_identity_status()));
+}
+
+// All SCTs are from unknown logs.
+TEST_F(WebsiteSettingsTest, UnknownSCTs) {
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_LOG_UNKNOWN);
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_LOG_UNKNOWN);
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(IDR_PAGEINFO_BAD, WebsiteSettingsUI::GetIdentityIconID(
+                                  website_settings()->site_identity_status()));
+}
+
+// All SCTs are invalid.
+TEST_F(WebsiteSettingsTest, InvalidSCTs) {
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_INVALID);
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_INVALID);
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(IDR_PAGEINFO_BAD, WebsiteSettingsUI::GetIdentityIconID(
+                                  website_settings()->site_identity_status()));
+}
+
+// All SCTs are valid.
+TEST_F(WebsiteSettingsTest, ValidSCTs) {
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_OK);
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_OK);
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(),
+              SetSelectedTab(WebsiteSettingsUI::TAB_ID_PERMISSIONS));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_CERT,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(IDR_PAGEINFO_GOOD, WebsiteSettingsUI::GetIdentityIconID(
+                                   website_settings()->site_identity_status()));
+}
+
+// All SCTs are valid for an EV cert.
+TEST_F(WebsiteSettingsTest, ValidSCTsEV) {
+  scoped_refptr<net::X509Certificate> ev_cert =
+      net::X509Certificate::CreateFromBytes(
+          reinterpret_cast<const char*>(google_der), sizeof(google_der));
+  int ev_cert_id = 1;
+  EXPECT_CALL(*cert_store(), RetrieveCert(ev_cert_id, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(ev_cert), Return(true)));
+
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = ev_cert_id;
+  security_info_.cert_status = net::CERT_STATUS_IS_EV;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_OK);
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_OK);
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(),
+              SetSelectedTab(WebsiteSettingsUI::TAB_ID_PERMISSIONS));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_EV_CERT,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(IDR_PAGEINFO_GOOD, WebsiteSettingsUI::GetIdentityIconID(
+                                   website_settings()->site_identity_status()));
+}
+
+// A mix of unknown and invalid SCTs.
+TEST_F(WebsiteSettingsTest, UnknownAndInvalidSCTs) {
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_LOG_UNKNOWN);
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_INVALID);
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(), SetSelectedTab(WebsiteSettingsUI::TAB_ID_CONNECTION));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(IDR_PAGEINFO_BAD, WebsiteSettingsUI::GetIdentityIconID(
+                                  website_settings()->site_identity_status()));
+}
+
+// At least one SCT is valid and one is from an unknown log.
+TEST_F(WebsiteSettingsTest, ValidAndUnknownSCTs) {
+  security_info_.security_level = SecurityStateModel::SECURE;
+  security_info_.scheme_is_cryptographic = true;
+  security_info_.cert_id = cert_id();
+  security_info_.cert_status = 0;
+  security_info_.security_bits = 81;  // No error if > 80.
+  int status = 0;
+  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
+  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
+  security_info_.connection_status = status;
+
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_OK);
+  security_info_.sct_verify_statuses.push_back(net::ct::SCT_STATUS_LOG_UNKNOWN);
+
+  SetDefaultUIExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(),
+              SetSelectedTab(WebsiteSettingsUI::TAB_ID_PERMISSIONS));
+
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
+            website_settings()->site_connection_status());
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_CERT,
+            website_settings()->site_identity_status());
+  EXPECT_EQ(IDR_PAGEINFO_GOOD, WebsiteSettingsUI::GetIdentityIconID(
+                                   website_settings()->site_identity_status()));
+}
+
+#if !defined(OS_ANDROID)
 TEST_F(WebsiteSettingsTest, NoInfoBar) {
   SetDefaultUIExpectations(mock_ui());
   EXPECT_CALL(*mock_ui(), SetSelectedTab(
@@ -417,15 +761,7 @@ TEST_F(WebsiteSettingsTest, ShowInfoBar) {
   EXPECT_CALL(*mock_ui(), SetIdentityInfo(_));
   EXPECT_CALL(*mock_ui(), SetCookieInfo(_));
 
-  // SetPermissionInfo() is called once initially, and then again every time
-  // OnSitePermissionChanged() is called.
-  // TODO(markusheintz): This is a temporary hack to fix issue:
-  // http://crbug.com/144203.
-#if defined(OS_MACOSX)
-  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_)).Times(2);
-#else
-  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_)).Times(1);
-#endif
+  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_, _)).Times(2);
 
   EXPECT_CALL(*mock_ui(), SetSelectedTab(
       WebsiteSettingsUI::TAB_ID_PERMISSIONS));
@@ -437,13 +773,14 @@ TEST_F(WebsiteSettingsTest, ShowInfoBar) {
 
   infobar_service()->RemoveInfoBar(infobar_service()->infobar_at(0));
 }
+#endif
 
 TEST_F(WebsiteSettingsTest, AboutBlankPage) {
   SetURL("about:blank");
   SetDefaultUIExpectations(mock_ui());
-  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_INTERNAL_PAGE,
+  EXPECT_EQ(WebsiteSettings::SITE_CONNECTION_STATUS_UNENCRYPTED,
             website_settings()->site_connection_status());
-  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_INTERNAL_PAGE,
+  EXPECT_EQ(WebsiteSettings::SITE_IDENTITY_STATUS_NO_CERT,
             website_settings()->site_identity_status());
   EXPECT_EQ(base::string16(), website_settings()->organization_name());
 }

@@ -11,11 +11,13 @@
 // we use a void* for Visual*). The Xlib headers are highly polluting so we try
 // hard to limit their spread into the rest of the code.
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/event_types.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "ui/base/ui_base_export.h"
 #include "ui/events/event_constants.h"
@@ -44,18 +46,6 @@ namespace ui {
 
 // Returns true if the system supports XINPUT2.
 UI_BASE_EXPORT bool IsXInput2Available();
-
-// X shared memory comes in three flavors:
-// 1) No SHM support,
-// 2) SHM putimage,
-// 3) SHM pixmaps + putimage.
-enum SharedMemorySupport {
-  SHARED_MEMORY_NONE,
-  SHARED_MEMORY_PUTIMAGE,
-  SHARED_MEMORY_PIXMAP
-};
-// Return the shared memory type of our X connection.
-UI_BASE_EXPORT SharedMemorySupport QuerySharedMemorySupport(XDisplay* dpy);
 
 // Return true iff the display supports Xrender
 UI_BASE_EXPORT bool QueryRenderSupport(XDisplay* dpy);

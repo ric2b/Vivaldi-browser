@@ -12,7 +12,7 @@
 #include "base/values.h"
 #include "chrome/service/cloud_print/cloud_print_url_fetcher.h"
 #include "chrome/service/service_process.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
 #include "net/url_request/url_request_test_util.h"
@@ -255,7 +255,8 @@ CloudPrintURLFetcherBasicTest::HandleRawResponse(
   if (handle_raw_response_) {
     // If the current message loop is not the IO loop, it will be shut down when
     // the main loop returns and this thread subsequently goes out of scope.
-    io_task_runner()->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+    io_task_runner()->PostTask(FROM_HERE,
+                               base::MessageLoop::QuitWhenIdleClosure());
     return CloudPrintURLFetcher::STOP_PROCESSING;
   }
   return CloudPrintURLFetcher::CONTINUE_PROCESSING;
@@ -269,7 +270,8 @@ CloudPrintURLFetcherBasicTest::HandleRawData(
   // We should never get here if we returned true in HandleRawResponse
   EXPECT_FALSE(handle_raw_response_);
   if (handle_raw_data_) {
-    io_task_runner()->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+    io_task_runner()->PostTask(FROM_HERE,
+                               base::MessageLoop::QuitWhenIdleClosure());
     return CloudPrintURLFetcher::STOP_PROCESSING;
   }
   return CloudPrintURLFetcher::CONTINUE_PROCESSING;
@@ -284,7 +286,8 @@ CloudPrintURLFetcherBasicTest::HandleJSONData(
   // We should never get here if we returned true in one of the above methods.
   EXPECT_FALSE(handle_raw_response_);
   EXPECT_FALSE(handle_raw_data_);
-  io_task_runner()->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  io_task_runner()->PostTask(FROM_HERE,
+                             base::MessageLoop::QuitWhenIdleClosure());
   return CloudPrintURLFetcher::STOP_PROCESSING;
 }
 
@@ -302,7 +305,8 @@ CloudPrintURLFetcherOverloadTest::HandleRawData(
     // We have already sent 20 requests continuously. And we expect that
     // it takes more than 1 second due to the overload protection settings.
     EXPECT_TRUE(Time::Now() - start_time_ >= one_second);
-    io_task_runner()->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+    io_task_runner()->PostTask(FROM_HERE,
+                               base::MessageLoop::QuitWhenIdleClosure());
   }
   return CloudPrintURLFetcher::STOP_PROCESSING;
 }
@@ -321,50 +325,47 @@ CloudPrintURLFetcherRetryBackoffTest::HandleRawData(
 void CloudPrintURLFetcherRetryBackoffTest::OnRequestGiveUp() {
   // It takes more than 200 ms to finish all 11 requests.
   EXPECT_TRUE(Time::Now() - start_time_ >= TimeDelta::FromMilliseconds(200));
-  io_task_runner()->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  io_task_runner()->PostTask(FROM_HERE,
+                             base::MessageLoop::QuitWhenIdleClosure());
 }
 
 TEST_F(CloudPrintURLFetcherBasicTest, HandleRawResponse) {
-  net::SpawnedTestServer test_server(net::SpawnedTestServer::TYPE_HTTP,
-                                     net::SpawnedTestServer::kLocalhost,
-                                     base::FilePath(kDocRoot));
+  net::EmbeddedTestServer test_server;
+  test_server.AddDefaultHandlers(base::FilePath(kDocRoot));
   ASSERT_TRUE(test_server.Start());
   SetHandleRawResponse(true);
 
-  CreateFetcher(test_server.GetURL("echo"), 0);
+  CreateFetcher(test_server.GetURL("/echo"), 0);
   base::MessageLoop::current()->Run();
 }
 
 TEST_F(CloudPrintURLFetcherBasicTest, HandleRawData) {
-  net::SpawnedTestServer test_server(net::SpawnedTestServer::TYPE_HTTP,
-                                     net::SpawnedTestServer::kLocalhost,
-                                     base::FilePath(kDocRoot));
+  net::EmbeddedTestServer test_server;
+  test_server.AddDefaultHandlers(base::FilePath(kDocRoot));
   ASSERT_TRUE(test_server.Start());
 
   SetHandleRawData(true);
-  CreateFetcher(test_server.GetURL("echo"), 0);
+  CreateFetcher(test_server.GetURL("/echo"), 0);
   base::MessageLoop::current()->Run();
 }
 
 TEST_F(CloudPrintURLFetcherOverloadTest, Protect) {
-  net::SpawnedTestServer test_server(net::SpawnedTestServer::TYPE_HTTP,
-                                     net::SpawnedTestServer::kLocalhost,
-                                     base::FilePath(kDocRoot));
+  net::EmbeddedTestServer test_server;
+  test_server.AddDefaultHandlers(base::FilePath(kDocRoot));
   ASSERT_TRUE(test_server.Start());
 
-  GURL url(test_server.GetURL("defaultresponse"));
+  GURL url(test_server.GetURL("/defaultresponse"));
   CreateFetcher(url, 11);
 
   base::MessageLoop::current()->Run();
 }
 
 TEST_F(CloudPrintURLFetcherRetryBackoffTest, GiveUp) {
-  net::SpawnedTestServer test_server(net::SpawnedTestServer::TYPE_HTTP,
-                                     net::SpawnedTestServer::kLocalhost,
-                                     base::FilePath(kDocRoot));
+  net::EmbeddedTestServer test_server;
+  test_server.AddDefaultHandlers(base::FilePath(kDocRoot));
   ASSERT_TRUE(test_server.Start());
 
-  GURL url(test_server.GetURL("defaultresponse"));
+  GURL url(test_server.GetURL("/defaultresponse"));
   CreateFetcher(url, 11);
 
   base::MessageLoop::current()->Run();

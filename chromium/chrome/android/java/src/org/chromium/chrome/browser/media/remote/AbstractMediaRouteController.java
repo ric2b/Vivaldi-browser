@@ -8,13 +8,13 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.support.v7.media.MediaControlIntent;
 import android.support.v7.media.MediaItemStatus;
 import android.support.v7.media.MediaRouteSelector;
 import android.support.v7.media.MediaRouter;
 import android.support.v7.media.MediaRouter.RouteInfo;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.google.android.gms.cast.CastMediaControlIntent;
 
@@ -24,6 +24,7 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.media.remote.RemoteVideoInfo.PlayerState;
+import org.chromium.ui.widget.Toast;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -94,6 +95,10 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
      * selected route.
      */
     private class DeviceSelectionCallback extends MediaRouter.Callback {
+        // Note that this doesn't use onRouteSelected, but instead casting is started directly
+        // by the selection dialog. It has to be done that way, since selecting the current route
+        // on a new video doesn't call onRouteSelected.
+
         private Runnable mConnectionFailureNotifier = new Runnable() {
                 @Override
             public void run() {
@@ -140,11 +145,6 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
         }
 
         @Override
-        public void onRouteSelected(MediaRouter router, RouteInfo route) {
-            onRouteSelectedEvent(router, route);
-        }
-
-        @Override
         public void onRouteUnselected(MediaRouter router, RouteInfo route) {
             onRouteUnselectedEvent(router, route);
             if (getCurrentRoute() != null && !getCurrentRoute().isDefault()
@@ -157,8 +157,8 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
     }
 
     /** Number of ms to wait for reconnection, after which we call the failure callbacks. */
-    protected static final int CONNECTION_FAILURE_NOTIFICATION_DELAY_MS = 10000;
-    private static final int END_OF_VIDEO_THRESHOLD_MS = 500;
+    protected static final long CONNECTION_FAILURE_NOTIFICATION_DELAY_MS = 10000L;
+    private static final long END_OF_VIDEO_THRESHOLD_MS = 500L;
     private static final String TAG = "AbstractMediaRouteController";
     private final Set<MediaStateListener> mAvailableRouteListeners;
     private final Context mContext;
@@ -174,15 +174,20 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
     private final MediaRouter mMediaRouter;
 
     private final MediaRouteSelector mMediaRouteSelector;
+    /**
+     * The media state listener connects to the web page that requested casting. It will be null if
+     * that page is no longer in a tab, but closing the page or tab should not stop cast. Cast can
+     * still be controlled through the notification even if the page is closed.
+     */
     private MediaStateListener mMediaStateListener;
     private PlayerState mPlaybackState = PlayerState.FINISHED;
     private boolean mRoutesAvailable = false;
     private final Set<UiListener> mUiListeners;
     private boolean mWatchingRouteSelection = false;
 
-    /**
-     * Sole constructor
-     */
+    private long mMediaElementAttachedTimestampMs = 0;
+    private long mMediaElementDetachedTimestampMs = 0;
+
     protected AbstractMediaRouteController() {
 
         mDebug = CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_CAST_DEBUG_LOGS);
@@ -285,9 +290,6 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
         return mHandler;
     }
 
-    /**
-     * @return the mMediaRouter
-     */
     protected final MediaRouter getMediaRouter() {
         return mMediaRouter;
     }
@@ -307,15 +309,11 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
         return mCurrentRoute == null ? null : mCurrentRoute.getName();
     }
 
-    /**
-     * @return The list of MediaRouteController.Listener objects that will receive messages from
-     *         this class.
-     */
     protected final Set<UiListener> getUiListeners() {
         return mUiListeners;
     }
 
-    private final boolean isAtEndOfVideo(int positionMs, int videoLengthMs) {
+    private final boolean isAtEndOfVideo(long positionMs, long videoLengthMs) {
         return videoLengthMs - positionMs < END_OF_VIDEO_THRESHOLD_MS && videoLengthMs > 0;
     }
 
@@ -347,7 +345,25 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
         for (UiListener listener : mUiListeners) {
             listener.onRouteSelected(route.getName(), this);
         }
-        if (mMediaStateListener != null) mMediaStateListener.onRouteSelected(route.getName());
+        if (mMediaStateListener == null) return;
+        if (!canCastMedia()) return;
+        startCastingVideo(route);
+    }
+
+    private void startCastingVideo(RouteInfo route) {
+        if (mMediaStateListener == null) return;
+        mMediaStateListener.pauseLocal();
+        mMediaStateListener.onCastStarting(route.getName());
+        String url = mMediaStateListener.getSourceUrl();
+        Uri uri = url == null ? null : Uri.parse(url);
+        setDataSource(uri, mMediaStateListener.getCookies(), mMediaStateListener.getUserAgent());
+        prepareAsync(
+                mMediaStateListener.getFrameUrl(), mMediaStateListener.getStartPositionMillis());
+    }
+
+    private boolean canCastMedia() {
+        return isRemotePlaybackAvailable() && !routeIsDefaultRoute()
+                && currentRouteSupportsRemotePlayback();
     }
 
     @Override
@@ -362,12 +378,21 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
 
     protected abstract void onRouteAddedEvent(MediaRouter router, RouteInfo route);
 
-    protected abstract void onRouteSelectedEvent(MediaRouter router, RouteInfo route);
+    // TODO: Merge with onRouteSelected(). Needs two sided patch for downstream implementations
+    protected void onRouteSelectedEvent(MediaRouter router, RouteInfo route) {
+    }
+
+    @Override
+    public void onRouteSelected(MediaStateListener player, MediaRouter router, RouteInfo route) {
+        if (mMediaStateListener != null) mMediaStateListener.onCastStopping();
+        setMediaStateListener(player);
+        onRouteSelectedEvent(router, route);
+    }
 
     protected abstract void onRouteUnselectedEvent(MediaRouter router, RouteInfo route);
 
     @Override
-    public void onSeek(int position) {
+    public void onSeek(long position) {
         seekTo(position);
     }
 
@@ -379,6 +404,33 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
     @Override
     public void prepareMediaRoute() {
         startWatchingRouteSelection();
+    }
+
+    @Override
+    public void release() {
+        recordEndOfSessionUMA();
+    }
+
+    private void recordEndOfSessionUMA() {
+        long remotePlaybackStoppedTimestampMs = SystemClock.uptimeMillis();
+
+        // There was no media element ever...
+        if (mMediaElementAttachedTimestampMs == 0) return;
+
+        long remotePlaybackIntervalMs =
+                remotePlaybackStoppedTimestampMs - mMediaElementAttachedTimestampMs;
+
+        if (mMediaElementDetachedTimestampMs == 0) {
+            mMediaElementDetachedTimestampMs = remotePlaybackStoppedTimestampMs;
+        }
+
+        int noElementRemotePlaybackTimePercentage =
+                (int) ((remotePlaybackStoppedTimestampMs - mMediaElementDetachedTimestampMs) * 100
+                        / remotePlaybackIntervalMs);
+        RecordCastAction.recordRemoteSessionTimeWithoutMediaElementPercentage(
+                noElementRemotePlaybackTimePercentage);
+        mMediaElementAttachedTimestampMs = 0;
+        mMediaElementDetachedTimestampMs = 0;
     }
 
     protected final void registerRoute(RouteInfo route) {
@@ -437,15 +489,33 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
 
     @Override
     public void setMediaStateListener(MediaStateListener mediaStateListener) {
+        if (mMediaStateListener != null && mediaStateListener == null
+                    && mMediaElementAttachedTimestampMs != 0) {
+            mMediaElementDetachedTimestampMs = SystemClock.uptimeMillis();
+        } else if (mMediaStateListener == null && mediaStateListener != null) {
+            // We're switching the videos so let's record the UMA for the previous one.
+            if (mMediaElementDetachedTimestampMs != 0) recordEndOfSessionUMA();
+
+            mMediaElementAttachedTimestampMs = SystemClock.uptimeMillis();
+            mMediaElementDetachedTimestampMs = 0;
+        }
+
         mMediaStateListener = mediaStateListener;
     }
 
-    private void setPrepared() {
+    private void onCasting() {
         if (!mIsPrepared) {
             for (UiListener listener : mUiListeners) {
                 listener.onPrepared(this);
             }
-            if (mMediaStateListener != null) mMediaStateListener.onPrepared();
+            if (mMediaStateListener != null) {
+                if (mMediaStateListener.isPauseRequested()) pause();
+                if (mMediaStateListener.isSeekRequested()) {
+                    seekTo(mMediaStateListener.getSeekLocation());
+                } else {
+                    seekTo(mMediaStateListener.getLocalPosition());
+                }
+            }
             RecordCastAction.castDefaultPlayerResult(true);
             mIsPrepared = true;
         }
@@ -551,12 +621,12 @@ public abstract class AbstractMediaRouteController implements MediaRouteControll
                             System.currentTimeMillis());
                     RemotePlaybackSettings.setShouldReconnectToRemote(getContext(),
                             !mCurrentRoute.isDefault());
-                    setPrepared();
+                    onCasting();
                     break;
                 case PAUSED:
                     RemotePlaybackSettings.setShouldReconnectToRemote(getContext(),
                             !mCurrentRoute.isDefault());
-                    setPrepared();
+                    onCasting();
                     break;
                 case FINISHED:
                     release();

@@ -12,9 +12,9 @@
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "ui/gfx/swap_result.h"
@@ -118,18 +118,14 @@ class OZONE_EXPORT HardwareDisplayController {
   //
   // Note that this function does not block. Also, this function should not be
   // called again before the page flip occurrs.
-  //
-  // Returns true if the page flip was successfully registered, false otherwise.
-  //
-  // When called with |test_only| true, this performs the page flip without
-  // changing any state, reporting if this page flip would be allowed to occur.
-  // This is always a synchronous operation, so |is_sync| is ignored and the
-  // callback is called immediately but should also be ignored; only the return
-  // value matters.
-  bool SchedulePageFlip(const OverlayPlaneList& plane_list,
-                        bool is_sync,
-                        bool test_only,
+  void SchedulePageFlip(const OverlayPlaneList& plane_list,
                         const PageFlipCallback& callback);
+
+  // Returns true if the page flip with the |plane_list| would succeed. This
+  // doesn't change any state.
+  bool TestPageFlip(const OverlayPlaneList& plane_list);
+
+  bool IsFormatSupported(uint32_t fourcc_format, uint32_t z_order) const;
 
   // Set the hardware cursor to show the contents of |surface|.
   bool SetCursor(const scoped_refptr<ScanoutBuffer>& buffer);
@@ -152,19 +148,23 @@ class OZONE_EXPORT HardwareDisplayController {
 
   uint64_t GetTimeOfLastFlip() const;
 
-  const std::vector<CrtcController*>& crtc_controllers() const {
-    return crtc_controllers_.get();
+  const std::vector<scoped_ptr<CrtcController>>& crtc_controllers() const {
+    return crtc_controllers_;
   }
 
   scoped_refptr<DrmDevice> GetAllocationDrmDevice() const;
 
  private:
+  bool ActualSchedulePageFlip(const OverlayPlaneList& plane_list,
+                              bool test_only,
+                              const PageFlipCallback& callback);
+
   base::ScopedPtrHashMap<DrmDevice*, scoped_ptr<HardwareDisplayPlaneList>>
       owned_hardware_planes_;
 
   // Stores the CRTC configuration. This is used to identify monitors and
   // configure them.
-  ScopedVector<CrtcController> crtc_controllers_;
+  std::vector<scoped_ptr<CrtcController>> crtc_controllers_;
 
   // Location of the controller on the screen.
   gfx::Point origin_;

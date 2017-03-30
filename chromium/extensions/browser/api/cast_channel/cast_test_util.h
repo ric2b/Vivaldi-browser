@@ -6,7 +6,10 @@
 #define EXTENSIONS_BROWSER_API_CAST_CHANNEL_CAST_TEST_UTIL_H_
 
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "extensions/browser/api/cast_channel/cast_socket.h"
 #include "extensions/browser/api/cast_channel/cast_transport.h"
 #include "extensions/common/api/cast_channel/cast_channel.pb.h"
@@ -14,23 +17,21 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 
 extern const char kTestExtensionId[];
 
-class MockCastTransport
-    : public extensions::core_api::cast_channel::CastTransport {
+class MockCastTransport : public extensions::api::cast_channel::CastTransport {
  public:
   MockCastTransport();
   ~MockCastTransport() override;
 
   void SetReadDelegate(scoped_ptr<CastTransport::Delegate> delegate) override;
 
-  MOCK_METHOD2(
-      SendMessage,
-      void(const extensions::core_api::cast_channel::CastMessage& message,
-           const net::CompletionCallback& callback));
+  MOCK_METHOD2(SendMessage,
+               void(const extensions::api::cast_channel::CastMessage& message,
+                    const net::CompletionCallback& callback));
 
   MOCK_METHOD0(Start, void(void));
 
@@ -71,7 +72,7 @@ class MockCastSocket : public CastSocket {
   // ptr.
   void Connect(scoped_ptr<CastTransport::Delegate> delegate,
                base::Callback<void(ChannelError)> callback) override {
-    delegate_ = delegate.Pass();
+    delegate_ = std::move(delegate);
     ConnectRawPtr(delegate_.get(), callback);
   }
 
@@ -83,6 +84,7 @@ class MockCastSocket : public CastSocket {
   MOCK_CONST_METHOD0(ready_state, ReadyState());
   MOCK_CONST_METHOD0(error_state, ChannelError());
   MOCK_CONST_METHOD0(keep_alive, bool(void));
+  MOCK_CONST_METHOD0(audio_only, bool(void));
   MOCK_METHOD1(SetErrorState, void(ChannelError error_state));
 
   CastTransport* transport() const override { return mock_transport_.get(); }
@@ -110,14 +112,15 @@ MATCHER_P(EqualsProto, message, "") {
   return expected_serialized == actual_serialized;
 }
 
-ACTION_TEMPLATE(RunCompletionCallback,
+ACTION_TEMPLATE(PostCompletionCallbackTask,
                 HAS_1_TEMPLATE_PARAMS(int, cb_idx),
                 AND_1_VALUE_PARAMS(rv)) {
-  testing::get<cb_idx>(args).Run(rv);
+  base::MessageLoop::current()->PostTask(
+      FROM_HERE, base::Bind(testing::get<cb_idx>(args), rv));
 }
 
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_CAST_CHANNEL_CAST_TEST_UTIL_H_

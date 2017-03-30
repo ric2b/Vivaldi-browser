@@ -5,11 +5,12 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_HTTP_BRIDGE_H_
 #define SYNC_INTERNAL_API_PUBLIC_HTTP_BRIDGE_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -47,14 +48,14 @@ class CancelationSignal;
 // This is a one-time use bridge. Create one for each request you want to make.
 // It is RefCountedThreadSafe because it can PostTask to the io loop, and thus
 // needs to stick around across context switches, etc.
-class SYNC_EXPORT_PRIVATE HttpBridge
-    : public base::RefCountedThreadSafe<HttpBridge>,
-      public HttpPostProviderInterface,
-      public net::URLFetcherDelegate {
+class SYNC_EXPORT HttpBridge : public base::RefCountedThreadSafe<HttpBridge>,
+                               public HttpPostProviderInterface,
+                               public net::URLFetcherDelegate {
  public:
   HttpBridge(const std::string& user_agent,
              const scoped_refptr<net::URLRequestContextGetter>& context,
-             const NetworkTimeUpdateCallback& network_time_update_callback);
+             const NetworkTimeUpdateCallback& network_time_update_callback,
+             const BindToTrackerCallback& bind_to_tracker_callback);
 
   // HttpPostProvider implementation.
   void SetExtraRequestHeaders(const char* headers) override;
@@ -77,21 +78,22 @@ class SYNC_EXPORT_PRIVATE HttpBridge
   // net::URLFetcherDelegate implementation.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
   void OnURLFetchDownloadProgress(const net::URLFetcher* source,
-                                  int64 current, int64 total) override;
+                                  int64_t current,
+                                  int64_t total) override;
   void OnURLFetchUploadProgress(const net::URLFetcher* source,
-                                int64 current, int64 total) override;
+                                int64_t current,
+                                int64_t total) override;
 
   net::URLRequestContextGetter* GetRequestContextGetterForTest() const;
 
  protected:
-  friend class base::RefCountedThreadSafe<HttpBridge>;
-
   ~HttpBridge() override;
 
   // Protected virtual so the unit test can override to shunt network requests.
   virtual void MakeAsynchronousPost();
 
  private:
+  friend class base::RefCountedThreadSafe<HttpBridge>;
   friend class SyncHttpBridgeTest;
   friend class ::HttpBridgeTest;
 
@@ -180,6 +182,10 @@ class SYNC_EXPORT_PRIVATE HttpBridge
   // Callback for updating network time.
   NetworkTimeUpdateCallback network_time_update_callback_;
 
+  // A callback to tag Sync request to be able to record data use of this
+  // service by data_use_measurement component.
+  BindToTrackerCallback bind_to_tracker_callback_;
+
   DISALLOW_COPY_AND_ASSIGN(HttpBridge);
 };
 
@@ -194,7 +200,8 @@ class SYNC_EXPORT HttpBridgeFactory : public HttpPostProviderFactory,
   ~HttpBridgeFactory() override;
 
   // HttpPostProviderFactory:
-  void Init(const std::string& user_agent) override;
+  void Init(const std::string& user_agent,
+            const BindToTrackerCallback& bind_to_tracker_callback) override;
   HttpPostProviderInterface* Create() override;
   void Destroy(HttpPostProviderInterface* http) override;
 
@@ -215,6 +222,10 @@ class SYNC_EXPORT HttpBridgeFactory : public HttpPostProviderFactory,
   NetworkTimeUpdateCallback network_time_update_callback_;
 
   CancelationSignal* const cancelation_signal_;
+
+  // A callback to tag Sync request to be able to record data use of this
+  // service by data_use_measurement component.
+  BindToTrackerCallback bind_to_tracker_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpBridgeFactory);
 };

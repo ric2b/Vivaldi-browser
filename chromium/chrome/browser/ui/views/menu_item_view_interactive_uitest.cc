@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/views/menu_test_base.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -57,8 +58,11 @@ class MenuItemViewTestBasic : public MenuTestBase {
 typedef MenuItemViewTestBasic<0> MenuItemViewTestBasic0;
 typedef MenuItemViewTestBasic<1> MenuItemViewTestBasic1;
 typedef MenuItemViewTestBasic<2> MenuItemViewTestBasic2;
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestBasic0, SelectItem0)
 VIEW_TEST(MenuItemViewTestBasic1, SelectItem1)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestBasic2, SelectItem2)
 
 // Test class for inserting a menu item while the menu is open.
@@ -79,6 +83,7 @@ class MenuItemViewTestInsert : public MenuTestBase {
 
   // Insert item at INSERT_INDEX and click item at SELECT_INDEX.
   void DoTestWithMenuOpen() override {
+    LOG(ERROR) << "\nDoTestWithMenuOpen\n";
     views::SubmenuView* submenu = menu()->GetSubmenu();
     ASSERT_TRUE(submenu);
     ASSERT_TRUE(submenu->IsShowing());
@@ -103,6 +108,7 @@ class MenuItemViewTestInsert : public MenuTestBase {
 
   // Check clicked item and complete test.
   void Step2() {
+    LOG(ERROR) << "\nStep2\n";
     views::SubmenuView* submenu = menu()->GetSubmenu();
     ASSERT_TRUE(submenu);
     ASSERT_FALSE(submenu->IsShowing());
@@ -115,6 +121,7 @@ class MenuItemViewTestInsert : public MenuTestBase {
     else
       ASSERT_EQ(SELECT_INDEX, last_command());
 
+    LOG(ERROR) << "\nDone\n";
     Done();
   }
 
@@ -134,11 +141,23 @@ typedef MenuItemViewTestInsert<1,0> MenuItemViewTestInsert10;
 typedef MenuItemViewTestInsert<1,2> MenuItemViewTestInsert12;
 typedef MenuItemViewTestInsert<2,0> MenuItemViewTestInsert20;
 typedef MenuItemViewTestInsert<2,2> MenuItemViewTestInsert22;
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsert00, InsertItem00)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsert02, InsertItem02)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsert10, InsertItem10)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsert12, InsertItem12)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsert20, InsertItem20)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsert22, InsertItem22)
 
 // Test class for inserting a menu item while a submenu is open.
@@ -199,7 +218,12 @@ class MenuItemViewTestInsertWithSubmenu : public MenuTestBase {
 // then inserts an item in the top-level menu at X.
 typedef MenuItemViewTestInsertWithSubmenu<0> MenuItemViewTestInsertWithSubmenu0;
 typedef MenuItemViewTestInsertWithSubmenu<1> MenuItemViewTestInsertWithSubmenu1;
+
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsertWithSubmenu0, InsertItemWithSubmenu0)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsertWithSubmenu1, InsertItemWithSubmenu1)
 
 // Test class for removing a menu item while the menu is open.
@@ -261,11 +285,22 @@ typedef MenuItemViewTestRemove<1,0> MenuItemViewTestRemove10;
 typedef MenuItemViewTestRemove<1,1> MenuItemViewTestRemove11;
 typedef MenuItemViewTestRemove<2,0> MenuItemViewTestRemove20;
 typedef MenuItemViewTestRemove<2,1> MenuItemViewTestRemove21;
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestRemove00, RemoveItem00)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestRemove01, RemoveItem01)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestRemove10, RemoveItem10)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestRemove11, RemoveItem11)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestRemove20, RemoveItem20)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestRemove21, RemoveItem21)
 
 // Test class for removing a menu item while a submenu is open.
@@ -338,6 +373,8 @@ typedef MenuItemViewTestRemoveWithSubmenu<1> MenuItemViewTestRemoveWithSubmenu1;
 #define MAYBE_RemoveItemWithSubmenu0 RemoveItemWithSubmenu0
 #define MAYBE_RemoveItemWithSubmenu1 RemoveItemWithSubmenu1
 #endif
-
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestRemoveWithSubmenu0, MAYBE_RemoveItemWithSubmenu0)
+
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestRemoveWithSubmenu1, MAYBE_RemoveItemWithSubmenu1)

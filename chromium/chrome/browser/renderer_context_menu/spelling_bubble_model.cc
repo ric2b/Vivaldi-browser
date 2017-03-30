@@ -23,12 +23,8 @@ using content::Referrer;
 using content::WebContents;
 
 SpellingBubbleModel::SpellingBubbleModel(Profile* profile,
-                                         WebContents* web_contents,
-                                         bool include_autocorrect)
-    : profile_(profile),
-      web_contents_(web_contents),
-      include_autocorrect_(include_autocorrect) {
-}
+                                         WebContents* web_contents)
+    : profile_(profile), web_contents_(web_contents) {}
 
 SpellingBubbleModel::~SpellingBubbleModel() {
 }
@@ -39,11 +35,6 @@ base::string16 SpellingBubbleModel::GetTitle() const {
 
 base::string16 SpellingBubbleModel::GetMessageText() const {
   return l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_SPELLING_BUBBLE_TEXT);
-}
-
-gfx::Image* SpellingBubbleModel::GetIcon() const {
-  return &ResourceBundle::GetSharedInstance().GetImageNamed(
-      IDR_PRODUCT_LOGO_16);
 }
 
 base::string16 SpellingBubbleModel::GetButtonLabel(BubbleButton button) const {
@@ -64,10 +55,13 @@ base::string16 SpellingBubbleModel::GetLinkText() const {
   return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
 }
 
+GURL SpellingBubbleModel::GetLinkURL() const {
+  return GURL(chrome::kPrivacyLearnMoreURL);
+}
+
 void SpellingBubbleModel::LinkClicked() {
-  OpenURLParams params(
-      GURL(chrome::kPrivacyLearnMoreURL), Referrer(), NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK, false);
+  OpenURLParams params(GetLinkURL(), Referrer(), NEW_FOREGROUND_TAB,
+                       ui::PAGE_TRANSITION_LINK, false);
   web_contents_->OpenURL(params);
 }
 
@@ -75,6 +69,4 @@ void SpellingBubbleModel::SetPref(bool enabled) {
   PrefService* pref = profile_->GetPrefs();
   DCHECK(pref);
   pref->SetBoolean(prefs::kSpellCheckUseSpellingService, enabled);
-  if (include_autocorrect_)
-    pref->SetBoolean(prefs::kEnableAutoSpellCorrect, enabled);
 }

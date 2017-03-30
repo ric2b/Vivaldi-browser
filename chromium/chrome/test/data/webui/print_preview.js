@@ -70,6 +70,7 @@ PrintPreviewWebUITest.prototype = {
         startGetInitialSettings: function() {},
         startGetLocalDestinations: function() {},
         startGetPrivetDestinations: function() {},
+        startGetExtensionDestinations: function() {},
         startGetLocalDestinationCapabilities: function(destinationId) {}
       };
       var oldNativeLayerEventType = print_preview.NativeLayer.EventType;
@@ -165,6 +166,7 @@ PrintPreviewWebUITest.prototype = {
    * @override
    */
   setUp: function() {
+    testing.Test.prototype.setUp.call(this);
     Mock4JS.clearMocksToVerify();
 
     this.initialSettings_ = new print_preview.NativeInitialSettings(
@@ -180,7 +182,7 @@ PrintPreviewWebUITest.prototype = {
       false /*selectionOnly*/,
       'FooDevice' /*systemDefaultDestinationId*/,
       null /*serializedAppStateStr*/,
-      false /*documentHasSelection*/);
+      null /*serializedDefaultDestinationSelectionRulesStr*/);
     this.localDestinationInfos_ = [
       { printerName: 'FooName', deviceName: 'FooDevice' },
       { printerName: 'BarName', deviceName: 'BarDevice' }
@@ -188,6 +190,12 @@ PrintPreviewWebUITest.prototype = {
     this.nativeLayer_ = printPreview.nativeLayer_;
 
     testing.Test.disableAnimationsAndTransitions();
+
+    // Enable when failure is resolved.
+    // AX_TEXT_03: http://crbug.com/559209
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'multipleLabelableElementsPerLabel',
+        '#page-settings > .right-column > *');
   }
 };
 
@@ -338,6 +346,20 @@ TEST_F('PrintPreviewWebUITest', 'TestPrintPreviewRestoreLocalDestination',
   testDone();
 });
 
+TEST_F('PrintPreviewWebUITest',
+    'TestPrintPreviewDefaultDestinationSelectionRules', function() {
+  // It also makes sure these rules do override system default destination.
+  this.initialSettings_.serializedDefaultDestinationSelectionRulesStr_ =
+      '{"namePattern":".*Bar.*"}';
+  this.setInitialSettings();
+  this.setLocalDestinations();
+
+  assertEquals(
+      'BarDevice', printPreview.destinationStore_.selectedDestination.id);
+
+  testDone();
+});
+
 TEST_F('PrintPreviewWebUITest', 'TestSystemDialogLinkIsHiddenInAppKioskMode',
     function() {
   if (cr.isChromeOS) {
@@ -461,30 +483,6 @@ TEST_F('PrintPreviewWebUITest', 'SourceIsPDFCapabilities', function() {
   expectTrue(
       otherOptions.querySelector('.fit-to-page-checkbox').checked);
   checkSectionVisible($('media-size-settings'), true);
-
-  this.waitForAnimationToEnd('other-options-collapsible');
-});
-
-// When the print scaling is disabled for the source "PDF", we show the fit
-// to page option but the state is unchecked by default.
-TEST_F('PrintPreviewWebUITest', 'PrintScalingDisabledForPlugin', function() {
-  this.initialSettings_.isDocumentModifiable_ = false;
-  this.setInitialSettings();
-  this.setLocalDestinations();
-  this.setCapabilities(getCddTemplate("FooDevice"));
-
-  // Indicate that the PDF does not support scaling by default.
-  var printPresetOptionsEvent = new Event(
-      print_preview.NativeLayer.EventType.PRINT_PRESET_OPTIONS);
-  printPresetOptionsEvent.optionsFromDocument = {disableScaling: true};
-  this.nativeLayer_.dispatchEvent(printPresetOptionsEvent);
-
-  var otherOptions = $('other-options-settings');
-  checkSectionVisible(otherOptions, true);
-  checkElementDisplayed(
-      otherOptions.querySelector('.fit-to-page-container'), true);
-  expectFalse(
-      otherOptions.querySelector('.fit-to-page-checkbox').checked);
 
   this.waitForAnimationToEnd('other-options-collapsible');
 });

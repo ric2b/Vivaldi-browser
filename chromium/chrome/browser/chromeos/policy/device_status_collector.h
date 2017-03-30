@@ -5,14 +5,16 @@
 #ifndef CHROME_BROWSER_CHROMEOS_POLICY_DEVICE_STATUS_COLLECTOR_H_
 #define CHROME_BROWSER_CHROMEOS_POLICY_DEVICE_STATUS_COLLECTOR_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -66,15 +68,22 @@ class DeviceStatusCollector {
   //   cpu  user_time nice_time system_time idle_time
   using CPUStatisticsFetcher = base::Callback<std::string(void)>;
 
-  // Constructor. Callers can inject their own VolumeInfoFetcher and
-  // CPUStatisticsFetcher. A null callback can be passed for either parameter,
-  // to use the default implementation.
+  // Reads CPU temperatures from /sys/class/hwmon/hwmon*/temp*_input and
+  // appropriate labels from /sys/class/hwmon/hwmon*/temp*_label.
+  using CPUTempFetcher =
+      base::Callback<std::vector<enterprise_management::CPUTempInfo>()>;
+
+  // Constructor. Callers can inject their own VolumeInfoFetcher,
+  // CPUStatisticsFetcher and CPUTempFetcher. These callbacks are executed on
+  // Blocking Pool. A null callback can be passed for either parameter, to use
+  // the default implementation.
   DeviceStatusCollector(
       PrefService* local_state,
       chromeos::system::StatisticsProvider* provider,
       const LocationUpdateRequester& location_update_requester,
       const VolumeInfoFetcher& volume_info_fetcher,
-      const CPUStatisticsFetcher& cpu_statistics_fetcher);
+      const CPUStatisticsFetcher& cpu_statistics_fetcher,
+      const CPUTempFetcher& cpu_temp_fetcher);
   virtual ~DeviceStatusCollector();
 
   // Fills in the passed proto with device status information. Will return
@@ -141,9 +150,9 @@ class DeviceStatusCollector {
   // Trims the store activity periods to only retain data within the
   // [|min_day_key|, |max_day_key|). The record for |min_day_key| will be
   // adjusted by subtracting |min_day_trim_duration|.
-  void TrimStoredActivityPeriods(int64 min_day_key,
+  void TrimStoredActivityPeriods(int64_t min_day_key,
                                  int min_day_trim_duration,
-                                 int64 max_day_key);
+                                 int64_t max_day_key);
 
   void AddActivePeriod(base::Time start, base::Time end);
 
@@ -185,6 +194,10 @@ class DeviceStatusCollector {
   // Callback invoked to update our cpu usage information.
   void ReceiveCPUStatistics(const std::string& statistics);
 
+  // Callback invoked to update our CPU temp information.
+  void StoreCPUTempInfo(
+      const std::vector<enterprise_management::CPUTempInfo>& info);
+
   // Helper routine to convert from Shill-provided signal strength (percent)
   // to dBm units expected by server.
   int ConvertWifiSignalStrength(int signal_strength);
@@ -198,15 +211,15 @@ class DeviceStatusCollector {
   // GetDeviceStatus(), and the duration for it. This is used to trim the
   // stored data in OnSubmittedSuccessfully(). Trimming is delayed so
   // unsuccessful uploads don't result in dropped data.
-  int64 last_reported_day_;
+  int64_t last_reported_day_;
   int duration_for_last_reported_day_;
 
   // Whether a geolocation update is currently in progress.
   bool geolocation_update_in_progress_;
 
-  base::RepeatingTimer<DeviceStatusCollector> idle_poll_timer_;
-  base::RepeatingTimer<DeviceStatusCollector> hardware_status_sampling_timer_;
-  base::OneShotTimer<DeviceStatusCollector> geolocation_update_timer_;
+  base::RepeatingTimer idle_poll_timer_;
+  base::RepeatingTimer hardware_status_sampling_timer_;
+  base::OneShotTimer geolocation_update_timer_;
 
   std::string os_version_;
   std::string firmware_version_;
@@ -216,13 +229,16 @@ class DeviceStatusCollector {
   // Cached disk volume information.
   std::vector<enterprise_management::VolumeInfo> volume_info_;
 
+  // Cached CPU temp information.
+  std::vector<enterprise_management::CPUTempInfo> cpu_temp_info_;
+
   struct ResourceUsage {
     // Sample of percentage-of-CPU-used.
     int cpu_usage_percent;
 
     // Amount of free RAM (measures raw memory used by processes, not internal
     // memory waiting to be reclaimed by GC).
-    int64 bytes_of_ram_free;
+    int64_t bytes_of_ram_free;
   };
 
   // Samples of resource usage (contains multiple samples taken
@@ -235,13 +251,16 @@ class DeviceStatusCollector {
   // Callback invoked to fetch information about cpu usage.
   CPUStatisticsFetcher cpu_statistics_fetcher_;
 
+  // Callback invoked to fetch information about cpu temperature.
+  CPUTempFetcher cpu_temp_fetcher_;
+
   chromeos::system::StatisticsProvider* statistics_provider_;
 
   chromeos::CrosSettings* cros_settings_;
 
   // The most recent CPU readings.
-  uint64 last_cpu_active_;
-  uint64 last_cpu_idle_;
+  uint64_t last_cpu_active_;
+  uint64_t last_cpu_idle_;
 
   // TODO(bartfab): Remove this once crbug.com/125931 is addressed and a proper
   // way to mock geolocation exists.

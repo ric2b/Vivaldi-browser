@@ -11,12 +11,14 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/process/process_handle.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/win/event_trace_controller.h"
 #include "base/win/event_trace_provider.h"
 #include "base/win/scoped_handle.h"
+#include "base/win/windows_version.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -61,25 +63,25 @@ TEST(EtwTracePropertiesTest, Initialization) {
   EXPECT_EQ(0u, p->Wnode.HistoricalContext);
 
   EXPECT_TRUE(kGuidNull == p->Wnode.Guid);
-  EXPECT_EQ(0, p->Wnode.ClientContext);
-  EXPECT_EQ(WNODE_FLAG_TRACED_GUID, p->Wnode.Flags);
+  EXPECT_EQ(0u, p->Wnode.ClientContext);
+  EXPECT_EQ(static_cast<ULONG>(WNODE_FLAG_TRACED_GUID), p->Wnode.Flags);
 
-  EXPECT_EQ(0, p->BufferSize);
-  EXPECT_EQ(0, p->MinimumBuffers);
-  EXPECT_EQ(0, p->MaximumBuffers);
-  EXPECT_EQ(0, p->MaximumFileSize);
-  EXPECT_EQ(0, p->LogFileMode);
-  EXPECT_EQ(0, p->FlushTimer);
-  EXPECT_EQ(0, p->EnableFlags);
+  EXPECT_EQ(0u, p->BufferSize);
+  EXPECT_EQ(0u, p->MinimumBuffers);
+  EXPECT_EQ(0u, p->MaximumBuffers);
+  EXPECT_EQ(0u, p->MaximumFileSize);
+  EXPECT_EQ(0u, p->LogFileMode);
+  EXPECT_EQ(0u, p->FlushTimer);
+  EXPECT_EQ(0u, p->EnableFlags);
   EXPECT_EQ(0, p->AgeLimit);
 
-  EXPECT_EQ(0, p->NumberOfBuffers);
-  EXPECT_EQ(0, p->FreeBuffers);
-  EXPECT_EQ(0, p->EventsLost);
-  EXPECT_EQ(0, p->BuffersWritten);
-  EXPECT_EQ(0, p->LogBuffersLost);
-  EXPECT_EQ(0, p->RealTimeBuffersLost);
-  EXPECT_EQ(0, p->LoggerThreadId);
+  EXPECT_EQ(0u, p->NumberOfBuffers);
+  EXPECT_EQ(0u, p->FreeBuffers);
+  EXPECT_EQ(0u, p->EventsLost);
+  EXPECT_EQ(0u, p->BuffersWritten);
+  EXPECT_EQ(0u, p->LogBuffersLost);
+  EXPECT_EQ(0u, p->RealTimeBuffersLost);
+  EXPECT_EQ(0u, p->LoggerThreadId);
   EXPECT_NE(0u, p->LogFileNameOffset);
   EXPECT_NE(0u, p->LoggerNameOffset);
 }
@@ -132,7 +134,7 @@ class EtwTraceControllerTest : public testing::Test {
 TEST_F(EtwTraceControllerTest, Initialize) {
   EtwTraceController controller;
 
-  EXPECT_EQ(NULL, controller.session());
+  EXPECT_EQ(0u, controller.session());
   EXPECT_STREQ(L"", controller.session_name());
 }
 
@@ -147,11 +149,11 @@ TEST_F(EtwTraceControllerTest, StartRealTimeSession) {
     return;
   }
 
-  EXPECT_TRUE(NULL != controller.session());
+  EXPECT_NE(0u, controller.session());
   EXPECT_STREQ(session_name_.c_str(), controller.session_name());
 
   EXPECT_HRESULT_SUCCEEDED(controller.Stop(NULL));
-  EXPECT_EQ(NULL, controller.session());
+  EXPECT_EQ(0u, controller.session());
   EXPECT_STREQ(L"", controller.session_name());
 }
 
@@ -170,28 +172,21 @@ TEST_F(EtwTraceControllerTest, StartFileSession) {
     return;
   }
 
-  EXPECT_TRUE(NULL != controller.session());
+  EXPECT_NE(0u, controller.session());
   EXPECT_STREQ(session_name_.c_str(), controller.session_name());
 
   EXPECT_HRESULT_SUCCEEDED(controller.Stop(NULL));
-  EXPECT_EQ(NULL, controller.session());
+  EXPECT_EQ(0u, controller.session());
   EXPECT_STREQ(L"", controller.session_name());
   base::DeleteFile(temp, false);
 }
 
-//Disabled on win in vivaldi for now, see chrome issue:
-//https://code.google.com/p/chromium/issues/detail?id=525297
-//VB-8744
-#if defined(OS_WIN)
-#define MAYBE_EnableDisable DISABLED_EnableDisable
-#else
-#define MAYBE_EnableDisable EnableDisable
-#endif
-TEST_F(EtwTraceControllerTest, MAYBE_EnableDisable) {
+// This test is flaky for unclear reasons. See bugs 525297 and 534184
+TEST_F(EtwTraceControllerTest, DISABLED_EnableDisable) {
   TestingProvider provider(test_provider_);
 
-  EXPECT_EQ(ERROR_SUCCESS, provider.Register());
-  EXPECT_EQ(NULL, provider.session_handle());
+  EXPECT_EQ(static_cast<DWORD>(ERROR_SUCCESS), provider.Register());
+  EXPECT_EQ(0u, provider.session_handle());
 
   EtwTraceController controller;
   HRESULT hr = controller.StartRealtimeSession(session_name_.c_str(),
@@ -214,9 +209,9 @@ TEST_F(EtwTraceControllerTest, MAYBE_EnableDisable) {
   provider.WaitForCallback();
 
   EXPECT_EQ(0, provider.enable_level());
-  EXPECT_EQ(0, provider.enable_flags());
+  EXPECT_EQ(0u, provider.enable_flags());
 
-  EXPECT_EQ(ERROR_SUCCESS, provider.Unregister());
+  EXPECT_EQ(static_cast<DWORD>(ERROR_SUCCESS), provider.Unregister());
 
   // Enable the provider again, before registering.
   EXPECT_HRESULT_SUCCEEDED(controller.EnableProvider(test_provider_,
@@ -224,18 +219,25 @@ TEST_F(EtwTraceControllerTest, MAYBE_EnableDisable) {
 
   // Register the provider again, the settings above
   // should take immediate effect.
-  EXPECT_EQ(ERROR_SUCCESS, provider.Register());
+  EXPECT_EQ(static_cast<DWORD>(ERROR_SUCCESS), provider.Register());
 
   EXPECT_EQ(TRACE_LEVEL_VERBOSE, provider.enable_level());
   EXPECT_EQ(kTestProviderFlags, provider.enable_flags());
 
-  EXPECT_HRESULT_SUCCEEDED(controller.Stop(NULL));
-
+  // Consume the callback event of the previous controller.EnableProvider().
   provider.WaitForCallback();
 
-  // Session should have wound down.
-  EXPECT_EQ(0, provider.enable_level());
-  EXPECT_EQ(0, provider.enable_flags());
+  EXPECT_HRESULT_SUCCEEDED(controller.Stop(NULL));
+
+  // Windows 7 does not call the callback when Stop() is called so we
+  // can't wait, and enable_level and enable_flags are not zeroed.
+  if (base::win::GetVersion() >= VERSION_WIN8) {
+    provider.WaitForCallback();
+
+    // Session should have wound down.
+    EXPECT_EQ(0, provider.enable_level());
+    EXPECT_EQ(0u, provider.enable_flags());
+  }
 }
 
 }  // namespace win

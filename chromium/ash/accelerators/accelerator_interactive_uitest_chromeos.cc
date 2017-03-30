@@ -9,18 +9,14 @@
 #include "ash/system/chromeos/network/network_observer.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
-#include "ash/test/ash_test_base.h"
+#include "ash/test/ash_interactive_ui_test_base.h"
 #include "ash/test/test_screenshot_delegate.h"
 #include "ash/test/test_volume_control_delegate.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "chromeos/network/network_handler.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/base/test/ui_controls.h"
-#include "ui/base/ui_base_paths.h"
-#include "ui/gl/gl_surface.h"
 
 namespace ash {
 namespace test {
@@ -53,24 +49,13 @@ class TestNetworkObserver : public NetworkObserver {
 // make sure they work properly. The test is done as an interactive ui test
 // using ui_controls::Send*() functions.
 // This is to catch any future regressions (crbug.com/469235).
-class AcceleratorInteractiveUITest : public AshTestBase, public ShellObserver {
+class AcceleratorInteractiveUITest : public AshInteractiveUITestBase,
+                                     public ShellObserver {
  public:
   AcceleratorInteractiveUITest() : is_in_overview_mode_(false) {}
 
   void SetUp() override {
-    gfx::GLSurface::InitializeOneOffForTests();
-
-    ui::RegisterPathProvider();
-    ui::ResourceBundle::InitSharedInstanceWithLocale(
-        "en-US", NULL, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
-    base::FilePath resources_pack_path;
-    PathService::Get(base::DIR_MODULE, &resources_pack_path);
-    resources_pack_path =
-        resources_pack_path.Append(FILE_PATH_LITERAL("resources.pak"));
-    ResourceBundle::GetSharedInstance().AddDataPackFromPath(
-        resources_pack_path, ui::SCALE_FACTOR_NONE);
-
-    AshTestBase::SetUp();
+    AshInteractiveUITestBase::SetUp();
 
     Shell::GetInstance()->AddShellObserver(this);
 
@@ -82,7 +67,7 @@ class AcceleratorInteractiveUITest : public AshTestBase, public ShellObserver {
 
     Shell::GetInstance()->RemoveShellObserver(this);
 
-    AshTestBase::TearDown();
+    AshInteractiveUITestBase::TearDown();
   }
 
   // Sends a key press event and waits synchronously until it's completely
@@ -183,7 +168,7 @@ TEST_F(AcceleratorInteractiveUITest, MAYBE_ChromeOsAccelerators) {
   // Test VOLUME_MUTE, VOLUME_DOWN, and VOLUME_UP.
   TestVolumeControlDelegate* volume_delegate = new TestVolumeControlDelegate;
   shell()->system_tray_delegate()->SetVolumeControlDelegate(
-      scoped_ptr<VolumeControlDelegate>(volume_delegate).Pass());
+      scoped_ptr<VolumeControlDelegate>(volume_delegate));
   // VOLUME_MUTE.
   EXPECT_EQ(0, volume_delegate->handle_volume_mute_count());
   SendKeyPressSync(ui::VKEY_VOLUME_MUTE, false, false, false);

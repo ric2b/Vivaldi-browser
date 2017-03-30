@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
@@ -9,11 +10,11 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
@@ -47,7 +48,7 @@ class MockAutofillClient : public TestAutofillClient {
   MOCK_METHOD0(HideAutofillPopup, void());
 
  private:
-  TestingPrefServiceSyncable prefs_;
+  syncable_prefs::TestingPrefServiceSyncable prefs_;
 
   DISALLOW_COPY_AND_ASSIGN(MockAutofillClient);
 };

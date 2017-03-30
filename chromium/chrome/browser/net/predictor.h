@@ -19,6 +19,9 @@
 #ifndef CHROME_BROWSER_NET_PREDICTOR_H_
 #define CHROME_BROWSER_NET_PREDICTOR_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <queue>
 #include <set>
@@ -26,6 +29,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/net/prediction_options.h"
@@ -132,7 +136,6 @@ class Predictor {
   // ------------- Start UI thread methods.
 
   virtual void InitNetworkPredictor(PrefService* user_prefs,
-                                    PrefService* local_state,
                                     IOThread* io_thread,
                                     net::URLRequestContextGetter* getter,
                                     ProfileIOData* profile_io_data);
@@ -146,8 +149,7 @@ class Predictor {
   void PreconnectUrlAndSubresources(const GURL& url,
                                     const GURL& first_party_for_cookies);
 
-  static UrlList GetPredictedUrlListAtStartup(PrefService* user_prefs,
-                                              PrefService* local_state);
+  static UrlList GetPredictedUrlListAtStartup(PrefService* user_prefs);
 
   static void set_max_queueing_delay(int max_queueing_delay_ms);
 
@@ -242,12 +244,16 @@ class Predictor {
 
   // May be called from either the IO or UI thread and will PostTask
   // to the IO thread if necessary.
-  void PreconnectUrl(const GURL& url, const GURL& first_party_for_cookies,
-                     UrlInfo::ResolutionMotivation motivation, int count);
+  void PreconnectUrl(const GURL& url,
+                     const GURL& first_party_for_cookies,
+                     UrlInfo::ResolutionMotivation motivation,
+                     bool allow_credentials,
+                     int count);
 
   void PreconnectUrlOnIOThread(const GURL& url,
                                const GURL& first_party_for_cookies,
                                UrlInfo::ResolutionMotivation motivation,
+                               bool allow_credentials,
                                int count);
 
   // ------------- End IO thread methods.
@@ -403,9 +409,9 @@ class Predictor {
   // Interval between periodic trimming of our whole referrer list.
   // We only do a major trimming about once an hour, and then only when the user
   // is actively browsing.
-  static const int64 kDurationBetweenTrimmingsHours;
+  static const int64_t kDurationBetweenTrimmingsHours;
   // Interval between incremental trimmings (to avoid inducing Jank).
-  static const int64 kDurationBetweenTrimmingIncrementsSeconds;
+  static const int64_t kDurationBetweenTrimmingIncrementsSeconds;
   // Number of referring URLs processed in an incremental trimming.
   static const size_t kUrlsTrimmedPerIncrement;
 
@@ -601,7 +607,6 @@ class SimplePredictor : public Predictor {
       : Predictor(preconnect_enabled, predictor_enabled) {}
   ~SimplePredictor() override {}
   void InitNetworkPredictor(PrefService* user_prefs,
-                            PrefService* local_state,
                             IOThread* io_thread,
                             net::URLRequestContextGetter* getter,
                             ProfileIOData* profile_io_data) override;

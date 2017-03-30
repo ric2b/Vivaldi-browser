@@ -8,7 +8,6 @@
 #include <list>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 
 namespace remoting {
@@ -58,10 +57,20 @@ struct ChannelConfig {
 
 class CandidateSessionConfig;
 
-// SessionConfig is used by the chromoting Session to store negotiated
-// chromotocol configuration.
+// SessionConfig is used to represent negotiated session configuration. Note
+// that it's useful mainly for the legacy protocol. When using the new
+// WebRTC-based protocol the using_webrtc() flag is set to true and all other
+// fields should be ignored.
 class SessionConfig {
  public:
+  enum class Protocol {
+    // Current ICE-based protocol.
+    ICE,
+
+    // New WebRTC-based protocol.
+    WEBRTC,
+  };
+
   // Selects session configuration that is supported by both participants.
   // nullptr is returned if such configuration doesn't exist. When selecting
   // channel configuration priority is given to the configs listed first
@@ -80,23 +89,25 @@ class SessionConfig {
 
   // Returns a suitable session configuration for use in tests.
   static scoped_ptr<SessionConfig> ForTest();
-  static scoped_ptr<SessionConfig> WithLegacyIceForTest();
+  static scoped_ptr<SessionConfig> ForTestWithVerbatimVideo();
+  static scoped_ptr<SessionConfig> ForTestWithWebrtc();
 
-  bool standard_ice() const { return standard_ice_; }
+  Protocol protocol() const { return protocol_; }
 
-  const ChannelConfig& control_config() const { return control_config_; }
-  const ChannelConfig& event_config() const { return event_config_; }
-  const ChannelConfig& video_config() const { return video_config_; }
-  const ChannelConfig& audio_config() const { return audio_config_; }
+  // All fields below should be ignored when protocol() is set to WEBRTC.
+  const ChannelConfig& control_config() const;
+  const ChannelConfig& event_config() const;
+  const ChannelConfig& video_config() const;
+  const ChannelConfig& audio_config() const;
 
   bool is_audio_enabled() const {
     return audio_config_.transport != ChannelConfig::TRANSPORT_NONE;
   }
 
  private:
-  SessionConfig();
+  SessionConfig(Protocol protocol);
 
-  bool standard_ice_ = true;
+  const Protocol protocol_;
 
   ChannelConfig control_config_;
   ChannelConfig event_config_;
@@ -116,8 +127,13 @@ class CandidateSessionConfig {
 
   ~CandidateSessionConfig();
 
-  bool standard_ice() const { return standard_ice_; }
-  void set_standard_ice(bool standard_ice) { standard_ice_ = standard_ice; }
+  bool webrtc_supported() const { return webrtc_supported_; }
+  void set_webrtc_supported(bool webrtc_supported) {
+    webrtc_supported_ = webrtc_supported;
+  }
+
+  bool ice_supported() const { return ice_supported_; }
+  void set_ice_supported(bool ice_supported) { ice_supported_ = ice_supported; }
 
   const std::list<ChannelConfig>& control_configs() const {
     return control_configs_;
@@ -151,6 +167,18 @@ class CandidateSessionConfig {
     return &audio_configs_;
   }
 
+  // Old clients always list VP9 as supported and preferred even though they
+  // shouldn't have it enabled yet. I.e. the host cannot trust VP9 codec
+  // preference received from the client. To workaround this issue the client
+  // adds a hint in the session-initiate message to indicate that it actually
+  // wants VP9 to be enabled.
+  //
+  // TODO(sergeyu): Remove this kludge as soon as VP9 is enabled by default.
+  bool vp9_experiment_enabled() const { return vp9_experiment_enabled_; }
+  void set_vp9_experiment_enabled(bool value) {
+    vp9_experiment_enabled_ = value;
+  }
+
   // Returns true if |config| is supported.
   bool IsSupported(const SessionConfig& config) const;
 
@@ -158,19 +186,22 @@ class CandidateSessionConfig {
 
   // Helpers for enabling/disabling specific features.
   void DisableAudioChannel();
-  void EnableVideoCodec(ChannelConfig::Codec codec);
+  void PreferTransport(ChannelConfig::TransportType transport);
 
  private:
   CandidateSessionConfig();
   explicit CandidateSessionConfig(const CandidateSessionConfig& config);
   CandidateSessionConfig& operator=(const CandidateSessionConfig& b);
 
-  bool standard_ice_ = true;
+  bool webrtc_supported_ = false;
+  bool ice_supported_ = false;
 
   std::list<ChannelConfig> control_configs_;
   std::list<ChannelConfig> event_configs_;
   std::list<ChannelConfig> video_configs_;
   std::list<ChannelConfig> audio_configs_;
+
+  bool vp9_experiment_enabled_ = false;
 };
 
 }  // namespace protocol

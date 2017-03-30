@@ -5,6 +5,9 @@
 #ifndef UI_DISPLAY_CHROMEOS_TEST_TEST_DISPLAY_SNAPSHOT_H_
 #define UI_DISPLAY_CHROMEOS_TEST_TEST_DISPLAY_SNAPSHOT_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "ui/display/display_export.h"
 #include "ui/display/types/display_snapshot.h"
 
@@ -18,6 +21,7 @@ class DISPLAY_EXPORT TestDisplaySnapshot : public DisplaySnapshot {
                       const gfx::Size& physical_size,
                       DisplayConnectionType type,
                       bool is_aspect_preserving_scaling,
+                      int64_t product_id,
                       const std::vector<const DisplayMode*>& modes,
                       const DisplayMode* current_mode,
                       const DisplayMode* native_mode);

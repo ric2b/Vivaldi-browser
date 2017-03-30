@@ -10,19 +10,19 @@
 #include <vector>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/scoped_observer.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
-#include "chrome/browser/sessions/tab_restore_service_observer.h"
 #import "chrome/browser/ui/cocoa/main_menu_item.h"
 #import "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_service_observer.h"
-#include "components/sessions/session_id.h"
+#include "components/sessions/core/session_id.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/sessions/core/tab_restore_service_observer.h"
 
 class Profile;
-class TabRestoreService;
 @class HistoryMenuCocoaController;
 
 namespace {
@@ -55,7 +55,7 @@ struct FaviconImageResult;
 // unlike the typical ownership model, this bridge owns its controller. The
 // controller is very thin and only exists to interact with Cocoa, but this
 // class does the bulk of the work.
-class HistoryMenuBridge : public TabRestoreServiceObserver,
+class HistoryMenuBridge : public sessions::TabRestoreServiceObserver,
                           public MainMenuItem,
                           public history::HistoryServiceObserver {
  public:
@@ -126,8 +126,9 @@ class HistoryMenuBridge : public TabRestoreServiceObserver,
   ~HistoryMenuBridge() override;
 
   // TabRestoreServiceObserver:
-  void TabRestoreServiceChanged(TabRestoreService* service) override;
-  void TabRestoreServiceDestroyed(TabRestoreService* service) override;
+  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override;
 
   // MainMenuItem:
   void ResetMenu() override;
@@ -179,7 +180,7 @@ class HistoryMenuBridge : public TabRestoreServiceObserver,
 
   // Creates a HistoryItem* for the given tab entry. Caller takes ownership of
   // the result and must delete it when finished.
-  HistoryItem* HistoryItemForTab(const TabRestoreService::Tab& entry);
+  HistoryItem* HistoryItemForTab(const sessions::TabRestoreService::Tab& entry);
 
   // Helper function that sends an async request to the FaviconService to get
   // an icon. The callback will update the NSMenuItem directly.
@@ -219,7 +220,7 @@ class HistoryMenuBridge : public TabRestoreServiceObserver,
 
   Profile* profile_;  // weak
   history::HistoryService* history_service_;  // weak
-  TabRestoreService* tab_restore_service_;  // weak
+  sessions::TabRestoreService* tab_restore_service_;  // weak
 
   base::CancelableTaskTracker cancelable_task_tracker_;
 

@@ -10,6 +10,7 @@ import android.content.DialogInterface;
 import android.content.res.TypedArray;
 import android.util.SparseBooleanArray;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ListView;
@@ -31,18 +32,16 @@ public class SelectPopupDialog implements SelectPopup {
     // The dialog hosting the popup list view.
     private final AlertDialog mListBoxPopup;
     private final ContentViewCore mContentViewCore;
-    private final Context mContext;
 
     private boolean mSelectionNotified;
 
-    public SelectPopupDialog(ContentViewCore contentViewCore, List<SelectPopupItem> items,
-            boolean multiple, int[] selected) {
+    public SelectPopupDialog(ContentViewCore contentViewCore, Context windowContext,
+            List<SelectPopupItem> items, boolean multiple, int[] selected) {
         mContentViewCore = contentViewCore;
-        mContext = mContentViewCore.getContext();
 
-        final ListView listView = new ListView(mContext);
+        final ListView listView = new ListView(windowContext);
         listView.setCacheColorHint(0);
-        AlertDialog.Builder b = new AlertDialog.Builder(mContext)
+        AlertDialog.Builder b = new AlertDialog.Builder(windowContext)
                 .setView(listView)
                 .setCancelable(true)
                 .setInverseBackgroundForced(true);
@@ -64,7 +63,7 @@ public class SelectPopupDialog implements SelectPopup {
         }
         mListBoxPopup = b.create();
         final SelectPopupAdapter adapter = new SelectPopupAdapter(
-                mContext, getSelectDialogLayout(multiple), items);
+                mListBoxPopup.getContext(), getSelectDialogLayout(multiple), items);
         listView.setAdapter(adapter);
         listView.setFocusableInTouchMode(true);
 
@@ -98,7 +97,7 @@ public class SelectPopupDialog implements SelectPopup {
 
     private int getSelectDialogLayout(boolean isMultiChoice) {
         int resourceId;
-        TypedArray styledAttributes = mContext.obtainStyledAttributes(
+        TypedArray styledAttributes = mListBoxPopup.getContext().obtainStyledAttributes(
                 R.style.SelectPopupDialog, SELECT_DIALOG_ATTRS);
         resourceId = styledAttributes.getResourceId(isMultiChoice ? 0 : 1, 0);
         styledAttributes.recycle();
@@ -130,7 +129,11 @@ public class SelectPopupDialog implements SelectPopup {
 
     @Override
     public void show() {
-        mListBoxPopup.show();
+        try {
+            mListBoxPopup.show();
+        } catch (WindowManager.BadTokenException e) {
+            notifySelection(null);
+        }
     }
 
     @Override

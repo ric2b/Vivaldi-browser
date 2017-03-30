@@ -13,6 +13,8 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/common/signin_pref_names.h"
@@ -35,6 +37,41 @@ SigninManagerBase::SigninManagerBase(
 }
 
 SigninManagerBase::~SigninManagerBase() {}
+
+// static
+void SigninManagerBase::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterStringPref(prefs::kGoogleServicesHostedDomain,
+                               std::string());
+  registry->RegisterStringPref(prefs::kGoogleServicesLastAccountId,
+                               std::string());
+  registry->RegisterStringPref(prefs::kGoogleServicesLastUsername,
+                               std::string());
+  registry->RegisterInt64Pref(
+      prefs::kGoogleServicesRefreshTokenAnnotateScheduledTime,
+      base::Time().ToInternalValue());
+  registry->RegisterStringPref(prefs::kGoogleServicesSigninScopedDeviceId,
+                               std::string());
+  registry->RegisterStringPref(prefs::kGoogleServicesAccountId, std::string());
+  registry->RegisterStringPref(prefs::kGoogleServicesUserAccountId,
+                               std::string());
+  registry->RegisterBooleanPref(prefs::kAutologinEnabled, true);
+  registry->RegisterBooleanPref(prefs::kReverseAutologinEnabled, true);
+  registry->RegisterListPref(prefs::kReverseAutologinRejectedEmailList,
+                             new base::ListValue);
+  registry->RegisterBooleanPref(prefs::kSigninAllowed, true);
+  registry->RegisterInt64Pref(prefs::kSignedInTime,
+                              base::Time().ToInternalValue());
+
+  // Deprecated prefs: will be removed in a future release.
+  registry->RegisterStringPref(prefs::kGoogleServicesUsername, std::string());
+}
+
+// static
+void SigninManagerBase::RegisterPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterStringPref(prefs::kGoogleServicesUsernamePattern,
+                               std::string());
+}
 
 void SigninManagerBase::Initialize(PrefService* local_state) {
   // Should never call Initialize() twice.
@@ -73,8 +110,8 @@ void SigninManagerBase::Initialize(PrefService* local_state) {
       // in this case the account tracker should have the gaia_id so fetch it
       // from there.
       if (pref_gaia_id.empty()) {
-        AccountTrackerService::AccountInfo info =
-            account_tracker_service_->GetAccountInfo(pref_account_username);
+        AccountInfo info = account_tracker_service_->FindAccountInfoByEmail(
+            pref_account_username);
         pref_gaia_id = info.gaia;
       }
 
@@ -88,6 +125,11 @@ void SigninManagerBase::Initialize(PrefService* local_state) {
       account_id = account_tracker_service_->SeedAccountInfo(
           pref_gaia_id, pref_account_username);
 
+      // Set account id before removing obsolete user name in case crash in the
+      // middle.
+      client_->GetPrefs()->SetString(prefs::kGoogleServicesAccountId,
+                                     account_id);
+
       // Now remove obsolete preferences.
       client_->GetPrefs()->ClearPref(prefs::kGoogleServicesUsername);
     }
@@ -97,8 +139,20 @@ void SigninManagerBase::Initialize(PrefService* local_state) {
     // kGoogleServicesAccountId.
   }
 
-  if (!account_id.empty())
+  if (!account_id.empty()) {
+    if (account_tracker_service_->GetMigrationState() ==
+        AccountTrackerService::MIGRATION_IN_PROGRESS) {
+      AccountInfo account_info =
+          account_tracker_service_->FindAccountInfoByEmail(account_id);
+      // |account_info.gaia| could be empty if |account_id| is already gaia id.
+      if (!account_info.gaia.empty()) {
+        account_id = account_info.gaia;
+        client_->GetPrefs()->SetString(prefs::kGoogleServicesAccountId,
+                                       account_id);
+      }
+    }
     SetAuthenticatedAccountId(account_id);
+  }
 }
 
 bool SigninManagerBase::IsInitialized() const { return initialized_; }
@@ -107,9 +161,8 @@ bool SigninManagerBase::IsSigninAllowed() const {
   return client_->GetPrefs()->GetBoolean(prefs::kSigninAllowed);
 }
 
-std::string SigninManagerBase::GetAuthenticatedUsername() const {
-  return account_tracker_service_->GetAccountInfo(
-      GetAuthenticatedAccountId()).email;
+AccountInfo SigninManagerBase::GetAuthenticatedAccountInfo() const {
+  return account_tracker_service_->GetAccountInfo(GetAuthenticatedAccountId());
 }
 
 const std::string& SigninManagerBase::GetAuthenticatedAccountId() const {
@@ -147,8 +200,7 @@ void SigninManagerBase::SetAuthenticatedAccountId(
 
   // This preference is set so that code on I/O thread has access to the
   // Gaia id of the signed in user.
-  AccountTrackerService::AccountInfo info =
-      account_tracker_service_->GetAccountInfo(account_id);
+  AccountInfo info = account_tracker_service_->GetAccountInfo(account_id);
 
   // When this function is called from Initialize(), it's possible for
   // |info.gaia| to be empty when migrating from a really old profile.
@@ -158,8 +210,10 @@ void SigninManagerBase::SetAuthenticatedAccountId(
   }
 
   // Go ahead and update the last signed in account info here as well. Once a
-  // user is signed in the two preferences should match. Doing it here as
-  // opposed to on signin allows us to catch the upgrade scenario.
+  // user is signed in the corresponding preferences should match. Doing it here
+  // as opposed to on signin allows us to catch the upgrade scenario.
+  client_->GetPrefs()->SetString(prefs::kGoogleServicesLastAccountId,
+                                 account_id);
   client_->GetPrefs()->SetString(prefs::kGoogleServicesLastUsername,
                                  info.email);
 }

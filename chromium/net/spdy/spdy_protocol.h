@@ -2,79 +2,62 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This file contains some protocol structures for use with SPDY 2 and 3
-// The SPDY 2 spec can be found at:
-// http://dev.chromium.org/spdy/spdy-protocol/spdy-protocol-draft2
+// This file contains some protocol structures for use with SPDY 3 and HTTP 2
 // The SPDY 3 spec can be found at:
 // http://dev.chromium.org/spdy/spdy-protocol/spdy-protocol-draft3
 
 #ifndef NET_SPDY_SPDY_PROTOCOL_H_
 #define NET_SPDY_SPDY_PROTOCOL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <limits>
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/sys_byteorder.h"
 #include "net/base/net_export.h"
 #include "net/spdy/spdy_alt_svc_wire_format.h"
 #include "net/spdy/spdy_bitmasks.h"
+#include "net/spdy/spdy_header_block.h"
 
 namespace net {
 
 // The major versions of SPDY. Major version differences indicate
 // framer-layer incompatibility, as opposed to minor version numbers
-// which indicate application-layer incompatibility. Do not rely on
-// the mapping from enum value SPDYn to the integer n.
+// which indicate application-layer incompatibility. It is NOT guaranteed
+// that the enum value SPDYn maps to the integer n.
 enum SpdyMajorVersion {
-  SPDY2 = 2,
-  SPDY_MIN_VERSION = SPDY2,
-  SPDY3 = 3,
-  HTTP2 = 4,
+  SPDY3 = 1,
+  SPDY_MIN_VERSION = SPDY3,
+  HTTP2,
   SPDY_MAX_VERSION = HTTP2
 };
 
 // A SPDY stream id is a 31 bit entity.
-typedef uint32 SpdyStreamId;
+typedef uint32_t SpdyStreamId;
 
 // Specifies the stream ID used to denote the current session (for
 // flow control).
 const SpdyStreamId kSessionFlowControlStreamId = 0;
 
 // The maxmium possible control frame size allowed by the spec.
-const int32 kSpdyMaxControlFrameSize = (1 << 24) - 1;
+const int32_t kSpdyMaxControlFrameSize = (1 << 24) - 1;
 
 // The maximum control frame size we accept.
-const int32 kControlFrameSizeLimit = 1 << 14;
+const int32_t kControlFrameSizeLimit = 1 << 14;
 
 // Maximum window size for a Spdy stream or session.
-const int32 kSpdyMaximumWindowSize = 0x7FFFFFFF;  // Max signed 32bit int
+const int32_t kSpdyMaximumWindowSize = 0x7FFFFFFF;  // Max signed 32bit int
 
 // Maximum padding size in octets for one DATA or HEADERS or PUSH_PROMISE frame.
-const int32 kPaddingSizePerFrame = 256;
-
-// SPDY 2 dictionary.
-// This is just a hacked dictionary to use for shrinking HTTP-like headers.
-const char kV2Dictionary[] =
-  "optionsgetheadpostputdeletetraceacceptaccept-charsetaccept-encodingaccept-"
-  "languageauthorizationexpectfromhostif-modified-sinceif-matchif-none-matchi"
-  "f-rangeif-unmodifiedsincemax-forwardsproxy-authorizationrangerefererteuser"
-  "-agent10010120020120220320420520630030130230330430530630740040140240340440"
-  "5406407408409410411412413414415416417500501502503504505accept-rangesageeta"
-  "glocationproxy-authenticatepublicretry-afterservervarywarningwww-authentic"
-  "ateallowcontent-basecontent-encodingcache-controlconnectiondatetrailertran"
-  "sfer-encodingupgradeviawarningcontent-languagecontent-lengthcontent-locati"
-  "oncontent-md5content-rangecontent-typeetagexpireslast-modifiedset-cookieMo"
-  "ndayTuesdayWednesdayThursdayFridaySaturdaySundayJanFebMarAprMayJunJulAugSe"
-  "pOctNovDecchunkedtext/htmlimage/pngimage/jpgimage/gifapplication/xmlapplic"
-  "ation/xhtmltext/plainpublicmax-agecharset=iso-8859-1utf-8gzipdeflateHTTP/1"
-  ".1statusversionurl";
-const int kV2DictionarySize = arraysize(kV2Dictionary);
+const int32_t kPaddingSizePerFrame = 256;
 
 // SPDY 3 dictionary.
 const char kV3Dictionary[] = {
@@ -286,7 +269,6 @@ enum SpdyFrameType {
   GOAWAY,
   HEADERS,
   WINDOW_UPDATE,
-  CREDENTIAL = 10,  // No longer valid.  Kept for identifiability.
   PUSH_PROMISE,
   CONTINUATION,
   PRIORITY,
@@ -382,7 +364,6 @@ enum SpdyRstStreamStatus {
   RST_STREAM_FLOW_CONTROL_ERROR = 7,
   RST_STREAM_STREAM_IN_USE = 8,
   RST_STREAM_STREAM_ALREADY_CLOSED = 9,
-  RST_STREAM_INVALID_CREDENTIALS = 10,
   // FRAME_TOO_LARGE (defined by SPDY versions 3.1 and below), and
   // FRAME_SIZE_ERROR (defined by HTTP/2) are mapped to the same internal
   // reset status.
@@ -416,17 +397,23 @@ enum SpdyGoAwayStatus {
 };
 
 // A SPDY priority is a number between 0 and 7 (inclusive).
-// SPDY priority range is version-dependent. For SPDY 2 and below, priority is a
-// number between 0 and 3.
-typedef uint8 SpdyPriority;
+typedef uint8_t SpdyPriority;
 
-typedef std::map<std::string, std::string> SpdyNameValueBlock;
+// Lowest and Highest here refer to SPDY priorities as described in
 
-typedef uint64 SpdyPingId;
+// https://www.chromium.org/spdy/spdy-protocol/spdy-protocol-draft3-1#TOC-2.3.3-Stream-priority
+const SpdyPriority kV3HighestPriority = 0;
+const SpdyPriority kV3LowestPriority = 7;
+
+typedef uint64_t SpdyPingId;
 
 typedef std::string SpdyProtocolId;
 
-enum class SpdyHeaderValidatorType { REQUEST, RESPONSE };
+enum class SpdyHeaderValidatorType {
+  REQUEST,
+  RESPONSE_HEADER,
+  RESPONSE_TRAILER
+};
 
 // TODO(hkhalil): Add direct testing for this? It won't increase coverage any,
 // but is good to do anyway.
@@ -519,18 +506,17 @@ class NET_EXPORT_PRIVATE SpdyConstants {
 
   static size_t GetFrameMaximumSize(SpdyMajorVersion version);
 
-  // Returns the size of a header block size field. Valid only for SPDY
-  // versions <= 3.
-  static size_t GetSizeOfSizeField(SpdyMajorVersion version);
+  // Returns the size of a header block size field. Valid only for SPDY 3.
+  static size_t GetSizeOfSizeField();
 
   // Returns the size (in bytes) of a wire setting ID and value.
   static size_t GetSettingSize(SpdyMajorVersion version);
 
   // Initial window size for a stream in bytes.
-  static int32 GetInitialStreamWindowSize(SpdyMajorVersion version);
+  static int32_t GetInitialStreamWindowSize(SpdyMajorVersion version);
 
   // Initial window size for a session in bytes.
-  static int32 GetInitialSessionWindowSize(SpdyMajorVersion version);
+  static int32_t GetInitialSessionWindowSize(SpdyMajorVersion version);
 
   static SpdyMajorVersion ParseMajorVersion(int version_number);
 
@@ -601,33 +587,30 @@ class NET_EXPORT_PRIVATE SpdyFrameWithFinIR : public SpdyFrameWithStreamIdIR {
   DISALLOW_COPY_AND_ASSIGN(SpdyFrameWithFinIR);
 };
 
-// Abstract class intended to be inherited by IRs that contain a name-value
+// Abstract class intended to be inherited by IRs that contain a header
 // block. Implies SpdyFrameWithFinIR.
-class NET_EXPORT_PRIVATE SpdyFrameWithNameValueBlockIR
+class NET_EXPORT_PRIVATE SpdyFrameWithHeaderBlockIR
     : public NON_EXPORTED_BASE(SpdyFrameWithFinIR) {
  public:
-  const SpdyNameValueBlock& name_value_block() const {
-    return name_value_block_;
-  }
-  void set_name_value_block(const SpdyNameValueBlock& name_value_block) {
+  ~SpdyFrameWithHeaderBlockIR() override;
+
+  const SpdyHeaderBlock& header_block() const { return header_block_; }
+  void set_header_block(const SpdyHeaderBlock& header_block) {
     // Deep copy.
-    name_value_block_ = name_value_block;
+    header_block_ = header_block;
   }
   void SetHeader(base::StringPiece name, base::StringPiece value) {
-    name_value_block_[name.as_string()] = value.as_string();
+    header_block_[name] = value;
   }
-  SpdyNameValueBlock* mutable_name_value_block() {
-    return &name_value_block_;
-  }
+  SpdyHeaderBlock* mutable_header_block() { return &header_block_; }
 
  protected:
-  explicit SpdyFrameWithNameValueBlockIR(SpdyStreamId stream_id);
-  ~SpdyFrameWithNameValueBlockIR() override;
+  explicit SpdyFrameWithHeaderBlockIR(SpdyStreamId stream_id);
 
  private:
-  SpdyNameValueBlock name_value_block_;
+  SpdyHeaderBlock header_block_;
 
-  DISALLOW_COPY_AND_ASSIGN(SpdyFrameWithNameValueBlockIR);
+  DISALLOW_COPY_AND_ASSIGN(SpdyFrameWithHeaderBlockIR);
 };
 
 class NET_EXPORT_PRIVATE SpdyDataIR
@@ -681,11 +664,10 @@ class NET_EXPORT_PRIVATE SpdyDataIR
   DISALLOW_COPY_AND_ASSIGN(SpdyDataIR);
 };
 
-class NET_EXPORT_PRIVATE SpdySynStreamIR
-    : public SpdyFrameWithNameValueBlockIR {
+class NET_EXPORT_PRIVATE SpdySynStreamIR : public SpdyFrameWithHeaderBlockIR {
  public:
   explicit SpdySynStreamIR(SpdyStreamId stream_id)
-      : SpdyFrameWithNameValueBlockIR(stream_id),
+      : SpdyFrameWithHeaderBlockIR(stream_id),
         associated_to_stream_id_(0),
         priority_(0),
         unidirectional_(false) {}
@@ -712,10 +694,10 @@ class NET_EXPORT_PRIVATE SpdySynStreamIR
   DISALLOW_COPY_AND_ASSIGN(SpdySynStreamIR);
 };
 
-class NET_EXPORT_PRIVATE SpdySynReplyIR : public SpdyFrameWithNameValueBlockIR {
+class NET_EXPORT_PRIVATE SpdySynReplyIR : public SpdyFrameWithHeaderBlockIR {
  public:
   explicit SpdySynReplyIR(SpdyStreamId stream_id)
-      : SpdyFrameWithNameValueBlockIR(stream_id) {}
+      : SpdyFrameWithHeaderBlockIR(stream_id) {}
 
   void Visit(SpdyFrameVisitor* visitor) const override;
 
@@ -725,8 +707,7 @@ class NET_EXPORT_PRIVATE SpdySynReplyIR : public SpdyFrameWithNameValueBlockIR {
 
 class NET_EXPORT_PRIVATE SpdyRstStreamIR : public SpdyFrameWithStreamIdIR {
  public:
-  SpdyRstStreamIR(SpdyStreamId stream_id, SpdyRstStreamStatus status,
-                  base::StringPiece description);
+  SpdyRstStreamIR(SpdyStreamId stream_id, SpdyRstStreamStatus status);
 
   ~SpdyRstStreamIR() override;
 
@@ -737,13 +718,10 @@ class NET_EXPORT_PRIVATE SpdyRstStreamIR : public SpdyFrameWithStreamIdIR {
     status_ = status;
   }
 
-  base::StringPiece description() const { return description_; }
-
   void Visit(SpdyFrameVisitor* visitor) const override;
 
  private:
   SpdyRstStreamStatus status_;
-  base::StringPiece description_;
 
   DISALLOW_COPY_AND_ASSIGN(SpdyRstStreamIR);
 };
@@ -757,7 +735,7 @@ class NET_EXPORT_PRIVATE SpdySettingsIR : public SpdyFrameIR {
               value(0) {}
     bool persist_value;
     bool persisted;
-    int32 value;
+    int32_t value;
   };
   typedef std::map<SpdySettingsIds, Value> ValueMap;
 
@@ -770,7 +748,7 @@ class NET_EXPORT_PRIVATE SpdySettingsIR : public SpdyFrameIR {
   void AddSetting(SpdySettingsIds id,
                   bool persist_value,
                   bool persisted,
-                  int32 value) {
+                  int32_t value) {
     values_[id].persist_value = persist_value;
     values_[id].persisted = persisted;
     values_[id].value = value;
@@ -828,7 +806,7 @@ class NET_EXPORT_PRIVATE SpdyGoAwayIR : public SpdyFrameIR {
     status_ = status;
   }
 
-  const base::StringPiece& description() const;
+  const base::StringPiece& description() const { return description_; }
 
   void Visit(SpdyFrameVisitor* visitor) const override;
 
@@ -840,16 +818,16 @@ class NET_EXPORT_PRIVATE SpdyGoAwayIR : public SpdyFrameIR {
   DISALLOW_COPY_AND_ASSIGN(SpdyGoAwayIR);
 };
 
-class NET_EXPORT_PRIVATE SpdyHeadersIR : public SpdyFrameWithNameValueBlockIR {
+class NET_EXPORT_PRIVATE SpdyHeadersIR : public SpdyFrameWithHeaderBlockIR {
  public:
   explicit SpdyHeadersIR(SpdyStreamId stream_id)
-      : SpdyFrameWithNameValueBlockIR(stream_id) {}
+      : SpdyFrameWithHeaderBlockIR(stream_id) {}
 
   void Visit(SpdyFrameVisitor* visitor) const override;
 
   bool has_priority() const { return has_priority_; }
   void set_has_priority(bool has_priority) { has_priority_ = has_priority; }
-  uint32 priority() const { return priority_; }
+  uint32_t priority() const { return priority_; }
   void set_priority(SpdyPriority priority) { priority_ = priority; }
   SpdyStreamId parent_stream_id() const { return parent_stream_id_; }
   void set_parent_stream_id(SpdyStreamId id) { parent_stream_id_ = id; }
@@ -868,7 +846,7 @@ class NET_EXPORT_PRIVATE SpdyHeadersIR : public SpdyFrameWithNameValueBlockIR {
  private:
   bool has_priority_ = false;
   // 31-bit priority.
-  uint32 priority_ = 0;
+  uint32_t priority_ = 0;
   SpdyStreamId parent_stream_id_ = 0;
   bool exclusive_ = false;
   bool padded_ = false;
@@ -879,12 +857,12 @@ class NET_EXPORT_PRIVATE SpdyHeadersIR : public SpdyFrameWithNameValueBlockIR {
 
 class NET_EXPORT_PRIVATE SpdyWindowUpdateIR : public SpdyFrameWithStreamIdIR {
  public:
-  SpdyWindowUpdateIR(SpdyStreamId stream_id, int32 delta)
+  SpdyWindowUpdateIR(SpdyStreamId stream_id, int32_t delta)
       : SpdyFrameWithStreamIdIR(stream_id) {
     set_delta(delta);
   }
-  int32 delta() const { return delta_; }
-  void set_delta(int32 delta) {
+  int32_t delta() const { return delta_; }
+  void set_delta(int32_t delta) {
     DCHECK_LT(0, delta);
     DCHECK_LE(delta, kSpdyMaximumWindowSize);
     delta_ = delta;
@@ -893,7 +871,7 @@ class NET_EXPORT_PRIVATE SpdyWindowUpdateIR : public SpdyFrameWithStreamIdIR {
   void Visit(SpdyFrameVisitor* visitor) const override;
 
  private:
-  int32 delta_;
+  int32_t delta_;
 
   DISALLOW_COPY_AND_ASSIGN(SpdyWindowUpdateIR);
 };
@@ -910,11 +888,10 @@ class NET_EXPORT_PRIVATE SpdyBlockedIR
   DISALLOW_COPY_AND_ASSIGN(SpdyBlockedIR);
 };
 
-class NET_EXPORT_PRIVATE SpdyPushPromiseIR
-    : public SpdyFrameWithNameValueBlockIR {
+class NET_EXPORT_PRIVATE SpdyPushPromiseIR : public SpdyFrameWithHeaderBlockIR {
  public:
   SpdyPushPromiseIR(SpdyStreamId stream_id, SpdyStreamId promised_stream_id)
-      : SpdyFrameWithNameValueBlockIR(stream_id),
+      : SpdyFrameWithHeaderBlockIR(stream_id),
         promised_stream_id_(promised_stream_id),
         padded_(false),
         padding_payload_len_(0) {}
@@ -944,11 +921,10 @@ class NET_EXPORT_PRIVATE SpdyPushPromiseIR
 // TODO(jgraettinger): This representation needs review. SpdyContinuationIR
 // needs to frame a portion of a single, arbitrarily-broken encoded buffer.
 class NET_EXPORT_PRIVATE SpdyContinuationIR
-    : public SpdyFrameWithNameValueBlockIR {
+    : public SpdyFrameWithHeaderBlockIR {
  public:
   explicit SpdyContinuationIR(SpdyStreamId stream_id)
-      : SpdyFrameWithNameValueBlockIR(stream_id),
-        end_headers_(false) {}
+      : SpdyFrameWithHeaderBlockIR(stream_id), end_headers_(false) {}
 
   void Visit(SpdyFrameVisitor* visitor) const override;
 
@@ -970,7 +946,7 @@ class NET_EXPORT_PRIVATE SpdyAltSvcIR : public SpdyFrameWithStreamIdIR {
     return altsvc_vector_;
   }
 
-  void set_origin(const std::string origin) { origin_ = origin; }
+  void set_origin(const std::string& origin) { origin_ = origin; }
   void add_altsvc(const SpdyAltSvcWireFormat::AlternativeService& altsvc) {
     altsvc_vector_.push_back(altsvc);
   }
@@ -992,7 +968,7 @@ class NET_EXPORT_PRIVATE SpdyPriorityIR : public SpdyFrameWithStreamIdIR {
         exclusive_(false) {}
   SpdyPriorityIR(SpdyStreamId stream_id,
                  SpdyStreamId parent_stream_id,
-                 uint8 weight,
+                 uint8_t weight,
                  bool exclusive)
       : SpdyFrameWithStreamIdIR(stream_id),
         parent_stream_id_(parent_stream_id),
@@ -1000,8 +976,8 @@ class NET_EXPORT_PRIVATE SpdyPriorityIR : public SpdyFrameWithStreamIdIR {
         exclusive_(exclusive) {}
   SpdyStreamId parent_stream_id() const { return parent_stream_id_; }
   void set_parent_stream_id(SpdyStreamId id) { parent_stream_id_ = id; }
-  uint8 weight() const { return weight_; }
-  void set_weight(uint8 weight) { weight_ = weight; }
+  uint8_t weight() const { return weight_; }
+  void set_weight(uint8_t weight) { weight_ = weight; }
   bool exclusive() const { return exclusive_; }
   void set_exclusive(bool exclusive) { exclusive_ = exclusive; }
 
@@ -1009,7 +985,7 @@ class NET_EXPORT_PRIVATE SpdyPriorityIR : public SpdyFrameWithStreamIdIR {
 
  private:
   SpdyStreamId parent_stream_id_;
-  uint8 weight_;
+  uint8_t weight_;
   bool exclusive_;
   DISALLOW_COPY_AND_ASSIGN(SpdyPriorityIR);
 };

@@ -5,9 +5,12 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_METRICS_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_METRICS_H_
 
+#include <stddef.h>
+
 #include "base/macros.h"
 #include "content/browser/service_worker/service_worker_database.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerResponseError.h"
+#include "content/common/service_worker/service_worker_types.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseError.h"
 
 class GURL;
 
@@ -27,14 +30,6 @@ class ServiceWorkerMetrics {
     WRITE_HEADERS_ERROR,
     WRITE_DATA_ERROR,
     NUM_WRITE_RESPONSE_RESULT_TYPES,
-  };
-
-  enum DiskCacheMigrationResult {
-    MIGRATION_OK,
-    MIGRATION_NOT_NECESSARY,
-    MIGRATION_ERROR_MIGRATION_FAILED,
-    MIGRATION_ERROR_UPDATE_DATABASE,
-    NUM_MIGRATION_RESULT_TYPES,
   };
 
   enum DeleteAndStartOverResult {
@@ -64,23 +59,42 @@ class ServiceWorkerMetrics {
     REQUEST_JOB_ERROR_DESTROYED,
     REQUEST_JOB_ERROR_DESTROYED_WITH_BLOB,
     REQUEST_JOB_ERROR_DESTROYED_WITH_STREAM,
+    REQUEST_JOB_ERROR_BAD_DELEGATE,
     NUM_REQUEST_JOB_RESULT_TYPES,
   };
 
-  enum StopWorkerStatus {
-    STOP_STATUS_STOPPING,
-    STOP_STATUS_STOPPED,
-    STOP_STATUS_STALLED,
-    STOP_STATUS_STALLED_THEN_STOPPED,
-    NUM_STOP_STATUS_TYPES
+  // Used for UMA. Append-only.
+  enum class StopStatus {
+    NORMAL,
+    DETACH_BY_REGISTRY,
+    TIMEOUT,
+    // Add new types here.
+    NUM_TYPES
   };
 
-  enum EventType {
-    EVENT_TYPE_FETCH,
+  // Used for UMA. Append-only.
+  enum class EventType {
+    ACTIVATE,
+    INSTALL,
+    FETCH,
+    SYNC,
+    NOTIFICATION_CLICK,
+    PUSH,
+    GEOFENCING,
+    SERVICE_PORT_CONNECT,
     // Add new events to record here.
 
-    NUM_EVENT_TYPES
+    NUM_TYPES
   };
+
+  // Used for UMA. Append only.
+  enum class Site { OTHER, NEW_TAB_PAGE, NUM_TYPES };
+
+  // Excludes NTP scope from UMA for now as it tends to dominate the stats and
+  // makes the results largely skewed. Some metrics don't follow this policy
+  // and hence don't call this function.
+  static bool ShouldExcludeSiteFromHistogram(Site site);
+  static bool ShouldExcludeURLFromHistogram(const GURL& url);
 
   // Used for ServiceWorkerDiskCache.
   static void CountInitDiskCacheResult(bool result);
@@ -94,8 +108,8 @@ class ServiceWorkerMetrics {
   static void RecordDestroyDatabaseResult(ServiceWorkerDatabase::Status status);
 
   // Used for ServiceWorkerStorage.
+  static void RecordPurgeResourceResult(int net_error);
   static void RecordDeleteAndStartOverResult(DeleteAndStartOverResult result);
-  static void RecordDiskCacheMigrationResult(DiskCacheMigrationResult result);
 
   // Counts the number of page loads controlled by a Service Worker.
   static void CountControlledPageLoad(const GURL& url);
@@ -111,7 +125,7 @@ class ServiceWorkerMetrics {
                                     bool is_installed);
 
   // Records the result of trying to stop a worker.
-  static void RecordStopWorkerStatus(StopWorkerStatus status);
+  static void RecordWorkerStopped(StopStatus status);
 
   // Records the time taken to successfully stop a worker.
   static void RecordStopWorkerTime(const base::TimeDelta& time);
@@ -121,14 +135,24 @@ class ServiceWorkerMetrics {
 
   // Records how much of dispatched events are handled while a Service
   // Worker is awake (i.e. after it is woken up until it gets stopped).
-  static void RecordEventHandledRatio(const GURL& scope,
-                                      EventType event,
+  static void RecordEventHandledRatio(EventType event,
                                       size_t handled_events,
                                       size_t fired_events);
+
+  // Records how often a dispatched event times out.
+  static void RecordEventTimeout(EventType event);
+
+  // Records the amount of time spent handling an event.
+  static void RecordEventDuration(EventType event, const base::TimeDelta& time);
 
   // Records the result of dispatching a fetch event to a service worker.
   static void RecordFetchEventStatus(bool is_main_resource,
                                      ServiceWorkerStatusCode status);
+
+  // Records the amount of time spent handling a fetch event with the given
+  // result.
+  static void RecordFetchEventTime(ServiceWorkerFetchEventResult result,
+                                   const base::TimeDelta& time);
 
   // Records result of a ServiceWorkerURLRequestJob that was forwarded to
   // the service worker.
@@ -140,6 +164,14 @@ class ServiceWorkerMetrics {
   static void RecordStatusZeroResponseError(
       bool is_main_resource,
       blink::WebServiceWorkerResponseError error);
+
+  // Records the mode of request that was fallbacked to the network.
+  static void RecordFallbackedRequestMode(FetchRequestMode mode);
+
+  // Called at the beginning of each ServiceWorkerVersion::Dispatch*Event
+  // function. Records the time elapsed since idle (generally the time since the
+  // previous event ended).
+  static void RecordTimeBetweenEvents(const base::TimeDelta& time);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(ServiceWorkerMetrics);

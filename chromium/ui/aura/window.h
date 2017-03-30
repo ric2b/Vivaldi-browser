@@ -5,12 +5,14 @@
 #ifndef UI_AURA_WINDOW_H_
 #define UI_AURA_WINDOW_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -312,7 +314,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   void* GetNativeWindowProperty(const char* key) const;
 
   // Type of a function to delete a property that this window owns.
-  typedef void (*PropertyDeallocator)(int64 value);
+  typedef void (*PropertyDeallocator)(int64_t value);
 
   // Overridden from ui::LayerDelegate:
   void OnDeviceScaleFactorChanged(float device_scale_factor) override;
@@ -337,12 +339,12 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   friend class WindowTargeter;
   friend class subtle::PropertyHelper;
   // Called by the public {Set,Get,Clear}Property functions.
-  int64 SetPropertyInternal(const void* key,
-                            const char* name,
-                            PropertyDeallocator deallocator,
-                            int64 value,
-                            int64 default_value);
-  int64 GetPropertyInternal(const void* key, int64 default_value) const;
+  int64_t SetPropertyInternal(const void* key,
+                              const char* name,
+                              PropertyDeallocator deallocator,
+                              int64_t value,
+                              int64_t default_value);
+  int64_t GetPropertyInternal(const void* key, int64_t default_value) const;
 
   // Returns true if the mouse pointer at relative-to-this-Window's-origin
   // |local_point| can trigger an event for this Window.
@@ -381,16 +383,6 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // of an add, |new_parent| is the new parent |child| is going to be parented
   // to.
   void RemoveChildImpl(Window* child, Window* new_parent);
-
-  // If this Window has a layer it is added to |parent| and the origin set to
-  // |offset|. Otherwise this recurses through the children invoking
-  // ReparentLayers(). The net effect is both setting the parent of layers to
-  // |parent| as well as updating bounds of windows with a layerless ancestor.
-  void ReparentLayers(ui::Layer* parent, const gfx::Vector2d& offset);
-
-  // Offsets the first encountered Windows with layers by |offset|. This
-  // recurses through all layerless Windows, stopping at windows with layers.
-  void OffsetLayerBounds(const gfx::Vector2d& offset);
 
   // Called when this window's parent has changed.
   void OnParentChanged();
@@ -520,7 +512,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // WindowProperty<>.
   struct Value {
     const char* name;
-    int64 value;
+    int64_t value;
     PropertyDeallocator deallocator;
   };
 

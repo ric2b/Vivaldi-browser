@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -87,7 +88,7 @@ void acquire_sample(int fd, const Context& context) {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   char buffer[1024];
-  int n = snprintf(buffer, sizeof(buffer), "%d.%06d ", tv.tv_sec, tv.tv_usec);
+  int n = snprintf(buffer, sizeof(buffer), "%ld.%06ld ", tv.tv_sec, tv.tv_usec);
   safe_write(fd, buffer, n);
 
   for (int i = 0; i < context.nb_files; ++i)

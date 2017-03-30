@@ -53,6 +53,8 @@ inline const CMTimeRange& CoreMediaGlueCMTimeRangeToCMTimeRange(
 MEDIA_EXPORT AudioChannelLayoutTag
 ChromeChannelLayoutToCoreAudioTag(ChannelLayout chrome_layout);
 
+std::string FourCCToString(uint32_t fourcc);
+
 }  // namespace media
 
 #endif  // MEDIA_BASE_MAC_FRAMEWORK_TYPE_CONVERSIONS_H_

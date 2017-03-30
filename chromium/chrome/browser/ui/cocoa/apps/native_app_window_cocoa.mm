@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/cocoa/apps/native_app_window_cocoa.h"
 
-#include "base/command_line.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
@@ -25,6 +24,8 @@
 #include "third_party/skia/include/core/SkRegion.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
 #include "ui/gfx/skia_util.h"
+
+#include "app/vivaldi_apptools.h"
 
 // NOTE: State Before Update.
 //
@@ -57,7 +58,7 @@ const int kActivateThrottlePeriodSeconds = 2;
 NSRect GfxToCocoaBounds(gfx::Rect bounds) {
   typedef AppWindow::BoundsSpecification BoundsSpecification;
 
-  NSRect main_screen_rect = [[[NSScreen screens] objectAtIndex:0] frame];
+  NSRect main_screen_rect = [[[NSScreen screens] firstObject] frame];
 
   // If coordinates are unspecified, center window on primary screen.
   if (bounds.x() == BoundsSpecification::kUnspecifiedPosition)
@@ -99,6 +100,10 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 
 @synthesize appWindow = appWindow_;
 
+- (void)setTitlebarBackgroundView:(NSView*)view {
+  titlebar_background_view_.reset([view retain]);
+}
+
 - (void)windowWillClose:(NSNotification*)notification {
   if (appWindow_)
     appWindow_->WindowWillClose();
@@ -112,6 +117,14 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 - (void)windowDidResignKey:(NSNotification*)notification {
   if (appWindow_)
     appWindow_->WindowDidResignKey();
+}
+
+- (void)windowDidBecomeMain:(NSNotification*)notification {
+  [titlebar_background_view_ setNeedsDisplay:YES];
+}
+
+- (void)windowDidResignMain:(NSNotification*)notification {
+  [titlebar_background_view_ setNeedsDisplay:YES];
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
@@ -163,10 +176,6 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
   return proposedSize;
 }
 
-- (void)executeCommand:(int)command {
-  // No-op, swallow the event.
-}
-
 - (BOOL)handledByExtensionCommand:(NSEvent*)event
     priority:(ui::AcceleratorManager::HandlerPriority)priority {
   if (appWindow_)
@@ -184,10 +193,10 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 // Similar to ChromeBrowserWindow, don't draw the title, but allow it to be seen
 // in menus, Expose, etc.
 - (BOOL)_isTitleHidden {
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
+  if (vivaldi::IsVivaldiRunning())
     return NO;
-  else
-    return YES;
+
+  return YES;
 }
 
 @end
@@ -234,6 +243,7 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 
 @interface NSView (WebContentsView)
 - (void)setMouseDownCanMoveWindow:(BOOL)can_move;
+- (void)_addKnownSubview:(NSView *)subview;
 @end
 
 NativeAppWindowCocoa::NativeAppWindowCocoa(
@@ -253,7 +263,6 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
       thumbnail_window_(params.thumbnail_window) {
   Observe(WebContents());
 
-  base::scoped_nsobject<NSWindow> window;
   Class window_class = has_frame_ ?
       [AppNSWindow class] : [AppFramelessNSWindow class];
 
@@ -261,11 +270,11 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
   // the window bounds and constraints can be set precisely.
   NSRect cocoa_bounds = GfxToCocoaBounds(
       params.GetInitialWindowBounds(gfx::Insets()));
-  window.reset([[window_class alloc]
-      initWithContentRect:cocoa_bounds
-                styleMask:GetWindowStyleMask()
-                  backing:NSBackingStoreBuffered
-                    defer:NO]);
+  NSWindow* window =
+      [[window_class alloc] initWithContentRect:cocoa_bounds
+                                      styleMask:GetWindowStyleMask()
+                                        backing:NSBackingStoreBuffered
+                                          defer:NO];
 
   std::string name;
   const extensions::Extension* extension = app_window_->GetExtension();
@@ -273,11 +282,6 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
     name = extension->name();
   [window setTitle:base::SysUTF8ToNSString(name)];
   [[window contentView] setWantsLayer:YES];
-  if (has_frame_ && has_frame_color_) {
-    [TitlebarBackgroundView addToNSWindow:window
-                              activeColor:active_frame_color_
-                            inactiveColor:inactive_frame_color_];
-  }
 
   if (base::mac::IsOSSnowLeopard() &&
       [window respondsToSelector:@selector(setBottomCornerRounded:)])
@@ -290,14 +294,22 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
                                          params.visible_on_all_workspaces);
 
   window_controller_.reset(
-      [[NativeAppWindowController alloc] initWithWindow:window.release()]);
+      [[NativeAppWindowController alloc] initWithWindow:window]);
+
+  if (has_frame_ && has_frame_color_) {
+    TitlebarBackgroundView* view =
+        [TitlebarBackgroundView addToNSWindow:window
+                                  activeColor:active_frame_color_
+                                inactiveColor:inactive_frame_color_];
+    [window_controller_ setTitlebarBackgroundView:view];
+  }
 
   NSView* view = WebContents()->GetNativeView();
   [view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
   InstallView();
 
-  [[window_controller_ window] setDelegate:window_controller_];
+  [window setDelegate:window_controller_];
   [window_controller_ setAppWindow:this];
 
   // We can now compute the precise window bounds and constraints.
@@ -307,7 +319,7 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
                             params.GetContentMaximumSize(insets));
 
   // Initialize |restored_bounds_|.
-  restored_bounds_ = [this->window() frame];
+  restored_bounds_ = [window frame];
 
   extension_keybinding_registry_.reset(new ExtensionKeybindingRegistryCocoa(
       Profile::FromBrowserContext(app_window_->browser_context()),
@@ -343,7 +355,10 @@ void NativeAppWindowCocoa::InstallView() {
 
     NSView* frameView = [[window() contentView] superview];
     [view setFrame:[frameView bounds]];
-    [frameView addSubview:view];
+    if ([frameView respondsToSelector:@selector(_addKnownSubview:)])
+      [frameView _addKnownSubview:view];
+    else
+      [frameView addSubview:view];
 
     [[window() standardWindowButton:NSWindowZoomButton] setHidden:YES];
     [[window() standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
@@ -391,6 +406,23 @@ void NativeAppWindowCocoa::SetFullscreen(int fullscreen_types) {
     // fullscreen.
     if (fullscreen && !shows_fullscreen_controls_)
       gfx::SetNSWindowCanFullscreen(window(), true);
+
+    // NOTE(tomas@vivaldi.com): If the window is not native (has no frame)
+    // make sure that the native title is not shown.
+    // The superview of the standard buttons is the titlebar view.
+    if (vivaldi::IsVivaldiRunning() && !has_frame_) {
+      if (fullscreen) {
+        [window() toggleFullScreen:nil];
+        [[[window() standardWindowButton:NSWindowZoomButton] superview]
+            setHidden:NO];
+      } else {
+        [[[window() standardWindowButton:NSWindowZoomButton] superview]
+            setHidden:YES];
+        [window() toggleFullScreen:nil];
+      }
+      return;
+    }
+
     [window() toggleFullScreen:nil];
     return;
   }
@@ -446,7 +478,7 @@ gfx::NativeWindow NativeAppWindowCocoa::GetNativeWindow() const {
 
 gfx::Rect NativeAppWindowCocoa::GetRestoredBounds() const {
   // Flip coordinates based on the primary screen.
-  NSScreen* screen = [[NSScreen screens] objectAtIndex:0];
+  NSScreen* screen = [[NSScreen screens] firstObject];
   NSRect frame = restored_bounds_;
   gfx::Rect bounds(frame.origin.x, 0, NSWidth(frame), NSHeight(frame));
   bounds.set_y(NSHeight([screen frame]) - NSMaxY(frame));
@@ -463,7 +495,7 @@ ui::WindowShowState NativeAppWindowCocoa::GetRestoredState() const {
 
 gfx::Rect NativeAppWindowCocoa::GetBounds() const {
   // Flip coordinates based on the primary screen.
-  NSScreen* screen = [[NSScreen screens] objectAtIndex:0];
+  NSScreen* screen = [[NSScreen screens] firstObject];
   NSRect frame = [window() frame];
   gfx::Rect bounds(frame.origin.x, 0, NSWidth(frame), NSHeight(frame));
   bounds.set_y(NSHeight([screen frame]) - NSMaxY(frame));
@@ -494,7 +526,9 @@ void NativeAppWindowCocoa::Show() {
   }
 
   last_activate_ = now;
-  [BrowserWindowUtils activateWindowForController:window_controller_];
+
+  [window() makeKeyAndOrderFront:nil];
+  [NSApp activateIgnoringOtherApps:YES];
 }
 
 void NativeAppWindowCocoa::ShowInactive() {
@@ -685,7 +719,7 @@ gfx::Insets NativeAppWindowCocoa::GetFrameInsets() const {
 
   // Flip the coordinates based on the main screen.
   NSInteger screen_height =
-      NSHeight([[[NSScreen screens] objectAtIndex:0] frame]);
+      NSHeight([[[NSScreen screens] firstObject] frame]);
 
   NSRect frame_nsrect = [window() frame];
   gfx::Rect frame_rect(NSRectToCGRect(frame_nsrect));
@@ -837,11 +871,6 @@ void NativeAppWindowCocoa::HideWithApp() {
   HideWithoutMarkingHidden();
 }
 
-void NativeAppWindowCocoa::UpdateShelfMenu() {
-  // TODO(tmdiep): To be implemented for Mac.
-  NOTIMPLEMENTED();
-}
-
 gfx::Size NativeAppWindowCocoa::GetContentMinimumSize() const {
   return size_constraints_.GetMinimumSize();
 }
@@ -873,11 +902,6 @@ void NativeAppWindowCocoa::SetAlwaysOnTop(bool always_on_top) {
 
 void NativeAppWindowCocoa::SetVisibleOnAllWorkspaces(bool always_visible) {
   gfx::SetNSWindowVisibleOnAllWorkspaces(window(), always_visible);
-}
-
-void NativeAppWindowCocoa::SetInterceptAllKeys(bool want_all_key) {
-  // TODO(sriramsr): implement for OSX (http://crbug.com/166928).
-  NOTIMPLEMENTED();
 }
 
 NativeAppWindowCocoa::~NativeAppWindowCocoa() {

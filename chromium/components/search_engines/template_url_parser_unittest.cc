@@ -4,6 +4,7 @@
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/chrome_paths.h"
@@ -20,7 +21,7 @@ using base::ASCIIToUTF16;
 // occurrence of value_str_ in its value.
 class ParamFilterImpl : public TemplateURLParser::ParameterFilter {
  public:
-  ParamFilterImpl(std::string name_str, std::string value_str);
+  ParamFilterImpl(const std::string& name_str, const std::string& value_str);
   ~ParamFilterImpl() override;
 
   bool KeepParameter(const std::string& key, const std::string& value) override;
@@ -32,10 +33,9 @@ class ParamFilterImpl : public TemplateURLParser::ParameterFilter {
   DISALLOW_COPY_AND_ASSIGN(ParamFilterImpl);
 };
 
-ParamFilterImpl::ParamFilterImpl(std::string name_str, std::string value_str)
-   : name_str_(name_str),
-     value_str_(value_str) {
-}
+ParamFilterImpl::ParamFilterImpl(const std::string& name_str,
+                                 const std::string& value_str)
+    : name_str_(name_str), value_str_(value_str) {}
 
 ParamFilterImpl::~ParamFilterImpl() {
 }

@@ -11,25 +11,26 @@ namespace net {
 namespace test {
 
 // static
-QuicPacketSequenceNumber QuicFramerPeer::CalculatePacketSequenceNumberFromWire(
+QuicPacketNumber QuicFramerPeer::CalculatePacketNumberFromWire(
     QuicFramer* framer,
-    QuicSequenceNumberLength sequence_number_length,
-    QuicPacketSequenceNumber packet_sequence_number) {
-  return framer->CalculatePacketSequenceNumberFromWire(sequence_number_length,
-                                                       packet_sequence_number);
+    QuicPacketNumberLength packet_number_length,
+    QuicPacketNumber last_packet_number,
+    QuicPacketNumber packet_number) {
+  return framer->CalculatePacketNumberFromWire(
+      packet_number_length, last_packet_number, packet_number);
 }
 
 // static
 void QuicFramerPeer::SetLastSerializedConnectionId(
-    QuicFramer* framer, QuicConnectionId connection_id) {
+    QuicFramer* framer,
+    QuicConnectionId connection_id) {
   framer->last_serialized_connection_id_ = connection_id;
 }
 
 // static
-void QuicFramerPeer::SetLastSequenceNumber(
-    QuicFramer* framer,
-    QuicPacketSequenceNumber packet_sequence_number) {
-  framer->last_sequence_number_ = packet_sequence_number;
+void QuicFramerPeer::SetLastPacketNumber(QuicFramer* framer,
+                                         QuicPacketNumber packet_number) {
+  framer->last_packet_number_ = packet_number;
 }
 
 // static
@@ -50,13 +51,11 @@ void QuicFramerPeer::SwapCrypters(QuicFramer* framer1, QuicFramer* framer2) {
   framer2->decrypter_level_ = framer1->decrypter_level_;
   framer1->decrypter_level_ = framer2_level;
   framer2_level = framer2->alternative_decrypter_level_;
-  framer2->alternative_decrypter_level_ =
-      framer1->alternative_decrypter_level_;
+  framer2->alternative_decrypter_level_ = framer1->alternative_decrypter_level_;
   framer1->alternative_decrypter_level_ = framer2_level;
 
   const bool framer2_latch = framer2->alternative_decrypter_latch_;
-  framer2->alternative_decrypter_latch_ =
-      framer1->alternative_decrypter_latch_;
+  framer2->alternative_decrypter_latch_ = framer1->alternative_decrypter_latch_;
   framer1->alternative_decrypter_latch_ = framer2_latch;
 }
 
@@ -64,6 +63,16 @@ void QuicFramerPeer::SwapCrypters(QuicFramer* framer1, QuicFramer* framer2) {
 QuicEncrypter* QuicFramerPeer::GetEncrypter(QuicFramer* framer,
                                             EncryptionLevel level) {
   return framer->encrypter_[level].get();
+}
+
+// static
+QuicPacketNumber QuicFramerPeer::GetLastPacketNumber(QuicFramer* framer) {
+  return framer->last_packet_number_;
+}
+
+// static
+QuicPathId QuicFramerPeer::GetLastPathId(QuicFramer* framer) {
+  return framer->last_path_id_;
 }
 
 }  // namespace test

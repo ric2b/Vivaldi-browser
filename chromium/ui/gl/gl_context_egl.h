@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/gl/gl_context.h"
 
 typedef void* EGLContext;
@@ -26,7 +27,6 @@ class GLContextEGL : public GLContextReal {
   // Implement GLContext.
   bool Initialize(GLSurface* compatible_surface,
                   GpuPreference gpu_preference) override;
-  void Destroy() override;
   bool MakeCurrent(GLSurface* surface) override;
   void ReleaseCurrent(GLSurface* surface) override;
   bool IsCurrent(GLSurface* surface) override;
@@ -34,13 +34,14 @@ class GLContextEGL : public GLContextReal {
   void OnSetSwapInterval(int interval) override;
   std::string GetExtensions() override;
   bool WasAllocatedUsingRobustnessExtension() override;
-  bool GetTotalGpuMemory(size_t* bytes) override;
   void SetUnbindFboOnMakeCurrent() override;
 
  protected:
   ~GLContextEGL() override;
 
  private:
+  void Destroy();
+
   EGLContext context_;
   EGLDisplay display_;
   EGLConfig config_;

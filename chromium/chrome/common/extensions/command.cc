@@ -4,11 +4,14 @@
 
 #include "chrome/common/extensions/command.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
@@ -74,8 +77,8 @@ ui::Accelerator ParseImpl(const std::string& accelerator,
     return ui::Accelerator();
   }
 
-  std::vector<std::string> tokens;
-  base::SplitString(accelerator, '+', &tokens);
+  std::vector<std::string> tokens = base::SplitString(
+      accelerator, "+", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (tokens.size() == 0 ||
       (tokens.size() == 1 && DoesRequireModifier(accelerator)) ||
       tokens.size() > kMaxTokenSize) {
@@ -264,15 +267,15 @@ std::string NormalizeShortcutSuggestion(const std::string& suggestion,
   if (!normalize)
     return suggestion;
 
-  std::vector<std::string> tokens;
-  base::SplitString(suggestion, '+', &tokens);
+  std::vector<std::string> tokens = base::SplitString(
+      suggestion, "+", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   for (size_t i = 0; i < tokens.size(); i++) {
     if (tokens[i] == values::kKeyCtrl)
       tokens[i] = values::kKeyCommand;
     else if (tokens[i] == values::kKeyMacCtrl)
       tokens[i] = values::kKeyCtrl;
   }
-  return JoinString(tokens, '+');
+  return base::JoinString(tokens, "+");
 }
 
 }  // namespace

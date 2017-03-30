@@ -5,8 +5,10 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chromeos/extensions/users_private/users_private_delegate.h"
 #include "chrome/browser/chromeos/extensions/users_private/users_private_delegate_factory.h"
 #include "chrome/browser/extensions/api/settings_private/prefs_util.h"
@@ -44,7 +46,7 @@ class TestPrefsUtil : public PrefsUtil {
     }
     pref_object->value.reset(value);
 
-    return pref_object.Pass();
+    return pref_object;
   }
 
   bool AppendToListCrosSetting(const std::string& pref_name,

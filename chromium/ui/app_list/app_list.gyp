@@ -26,6 +26,7 @@
         '../resources/ui_resources.gyp:ui_resources',
         '../strings/ui_strings.gyp:ui_strings',
         '../../third_party/icu/icu.gyp:icuuc',
+        'resources/app_list_resources.gyp:app_list_resources',
       ],
       'defines': [
         'APP_LIST_IMPLEMENTATION',
@@ -229,7 +230,6 @@
         '../../base/base.gyp:base',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
-        '../resources/ui_resources.gyp:ui_resources',
         'app_list',
       ],
       'sources': [
@@ -334,7 +334,7 @@
     },
   ],
   'conditions': [
-    ['0 and toolkit_views==1', {
+    ['toolkit_views==1', {
       'targets': [
         {
           'target_name': 'app_list_demo',
@@ -367,7 +367,7 @@
               },
               'dependencies': [
                 '../../sandbox/sandbox.gyp:sandbox',
-                '../../content/content.gyp:content_startup_helper_win',
+                '../../content/content.gyp:sandbox_helper_win',
               ],
             }],
             ['OS=="win" and component!="shared_library" and win_use_allocator_shim==1', {
@@ -379,7 +379,7 @@
         },
       ],
     }],  # toolkit_views==1
-    ['0 and test_isolation_mode != "noop"', {
+    ['test_isolation_mode != "noop"', {
       'targets': [
         {
           'target_name': 'app_list_unittests_run',

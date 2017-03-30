@@ -12,17 +12,18 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_checker.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
-#include "components/content_settings/core/browser/content_settings_override_provider.h"
+#include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/keyed_service/core/refcounted_keyed_service.h"
 
 class ExtensionService;
 class GURL;
@@ -34,19 +35,18 @@ class Value;
 }
 
 namespace content_settings {
-class OverrideProvider;
 class ObservableProvider;
 class ProviderInterface;
 class PrefProvider;
+class TestUtils;
 }
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-class HostContentSettingsMap
-    : public content_settings::Observer,
-      public base::RefCountedThreadSafe<HostContentSettingsMap> {
+class HostContentSettingsMap : public content_settings::Observer,
+                               public RefcountedKeyedService {
  public:
   enum ProviderType {
     // EXTENSION names is a layering violation when this class will move to
@@ -56,7 +56,6 @@ class HostContentSettingsMap
     POLICY_PROVIDER,
     SUPERVISED_PROVIDER,
     CUSTOM_EXTENSION_PROVIDER,
-    OVERRIDE_PROVIDER,
     PREF_PROVIDER,
     DEFAULT_PROVIDER,
     NUM_PROVIDER_TYPES,
@@ -135,81 +134,68 @@ class HostContentSettingsMap
   // this pattern.
   // NOTICE: This is just a convenience method for content types that use
   // |CONTENT_SETTING| as their data type. For content types that use other
-  // data types please use the method SetWebsiteSetting.
+  // data types please use the method SetWebsiteSettingDefaultScope().
   //
   // This should only be called on the UI thread.
+  // TODO(raymes): Create a version of this function which uses the default
+  // scope.
   void SetContentSetting(const ContentSettingsPattern& primary_pattern,
                          const ContentSettingsPattern& secondary_pattern,
                          ContentSettingsType content_type,
                          const std::string& resource_identifier,
                          ContentSetting setting);
 
-  // Sets the |value| for the given patterns, |content_type| and
-  // |resource_identifier|. Setting the value to NULL causes the default value
-  // for that type to be used when loading pages matching this pattern.
+  // Sets the |value| for the default scope of the url that is appropriate for
+  // the given |content_type| and |resource_identifier|. Setting the value to
+  // null removes the default pattern pair for this content type.
   //
-  // Takes ownership of the passed value.
-  void SetWebsiteSetting(const ContentSettingsPattern& primary_pattern,
-                         const ContentSettingsPattern& secondary_pattern,
-                         ContentSettingsType content_type,
-                         const std::string& resource_identifier,
-                         base::Value* value);
+  // Internally this will call SetWebsiteSettingCustomScope() with the default
+  // scope patterns for the given |content_type|. Developers will generally want
+  // to use this function instead of SetWebsiteSettingCustomScope() unless they
+  // need to specify custom scoping.
+  void SetWebsiteSettingDefaultScope(const GURL& requesting_url,
+                                     const GURL& top_level_url,
+                                     ContentSettingsType content_type,
+                                     const std::string& resource_identifier,
+                                     base::Value* value);
 
-  // Sets the most specific rule that currently defines the permission for the
-  // given permission type.
-  void SetNarrowestWebsiteSetting(
+  // Sets a rule to apply the |value| for all sites matching |pattern|,
+  // |content_type| and |resource_identifier|. Setting the value to null removes
+  // the given pattern pair. Unless adding a custom-scoped setting, most
+  // developers will want to use SetWebsiteSettingDefaultScope() instead.
+  void SetWebsiteSettingCustomScope(
       const ContentSettingsPattern& primary_pattern,
       const ContentSettingsPattern& secondary_pattern,
       ContentSettingsType content_type,
       const std::string& resource_identifier,
-      ContentSetting setting,
-      content_settings::SettingInfo existing_info);
+      scoped_ptr<base::Value> value);
 
-  // Convenience method to add a content setting for the given URLs, making sure
-  // that there is no setting overriding it.
-  //
-  // This should only be called on the UI thread.
-  void AddExceptionForURL(const GURL& primary_url,
-                          const GURL& secondary_url,
-                          ContentSettingsType content_type,
-                          ContentSetting setting);
+  // Sets the most specific rule that currently defines the setting for the
+  // given content type. TODO(raymes): Remove this once all content settings
+  // are scoped to origin scope. There is no scope more narrow than origin
+  // scope, so we can just blindly set the value of the origin scope when that
+  // happens.
+  void SetNarrowestContentSetting(const GURL& primary_url,
+                                  const GURL& secondary_url,
+                                  ContentSettingsType type,
+                                  ContentSetting setting);
 
   // Clears all host-specific settings for one content type.
   //
   // This should only be called on the UI thread.
   void ClearSettingsForOneType(ContentSettingsType content_type);
 
-  static bool IsValueAllowedForType(PrefService* prefs,
-                                    const base::Value* value,
-                                    ContentSettingsType content_type);
-  static bool IsSettingAllowedForType(PrefService* prefs,
-                                      ContentSetting setting,
-                                      ContentSettingsType content_type);
-  static bool IsDefaultSettingAllowedForType(PrefService* prefs,
-                                             ContentSetting setting,
+  static bool IsDefaultSettingAllowedForType(ContentSetting setting,
                                              ContentSettingsType content_type);
 
-  // Returns true if the values for content type are of type dictionary/map.
-  static bool ContentTypeHasCompoundValue(ContentSettingsType type);
-
-  // Detaches the HostContentSettingsMap from all Profile-related objects like
-  // PrefService. This methods needs to be called before destroying the Profile.
-  // Afterwards, none of the methods above that should only be called on the UI
-  // thread should be called anymore.
-  void ShutdownOnUIThread();
+  // RefcountedKeyedService implementation.
+  void ShutdownOnUIThread() override;
 
   // content_settings::Observer implementation.
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
                                ContentSettingsType content_type,
                                std::string resource_identifier) override;
-
-  // Returns true if we should allow all content types for this URL.  This is
-  // true for various internal objects like chrome:// URLs, so UI and other
-  // things users think of as "not webpages" don't break.
-  static bool ShouldAllowAllContent(const GURL& primary_url,
-                                    const GURL& secondary_url,
-                                    ContentSettingsType content_type);
 
   // Returns the ProviderType associated with the given source string.
   // TODO(estade): I regret adding this. At the moment there are no legitimate
@@ -257,31 +243,6 @@ class HostContentSettingsMap
       const ContentSettingsPattern& secondary_pattern,
       ContentSettingsType content_type);
 
-  // Returns the content setting without considering the global on/off toggle
-  // for the content setting that matches the URLs.
-  ContentSetting GetContentSettingWithoutOverride(
-      const GURL& primary_url,
-      const GURL& secondary_url,
-      ContentSettingsType content_type,
-      const std::string& resource_identifier);
-
-  // Returns the single content setting |value| without considering the
-  // global on/off toggle for the content setting that matches the given
-  // patterns.
-  scoped_ptr<base::Value> GetWebsiteSettingWithoutOverride(
-      const GURL& primary_url,
-      const GURL& secondary_url,
-      ContentSettingsType content_type,
-      const std::string& resource_identifier,
-      content_settings::SettingInfo* info) const;
-
-  // Sets globally if a given |content_type| |is_enabled|.
-  void SetContentSettingOverride(ContentSettingsType content_type,
-                                 bool is_enabled);
-
-  // Returns if a given |content_type| is enabled.
-  bool GetContentSettingOverride(ContentSettingsType content_type);
-
   // Adds/removes an observer for content settings changes.
   void AddObserver(content_settings::Observer* observer);
   void RemoveObserver(content_settings::Observer* observer);
@@ -295,6 +256,7 @@ class HostContentSettingsMap
  private:
   friend class base::RefCountedThreadSafe<HostContentSettingsMap>;
   friend class HostContentSettingsMapTest_NonDefaultSettings_Test;
+  friend class content_settings::TestUtils;
 
   typedef std::map<ProviderType, content_settings::ProviderInterface*>
       ProviderMap;
@@ -333,8 +295,24 @@ class HostContentSettingsMap
       const GURL& secondary_url,
       ContentSettingsType content_type,
       const std::string& resource_identifier,
-      content_settings::SettingInfo* info,
-      bool get_override) const;
+      content_settings::SettingInfo* info) const;
+
+  static scoped_ptr<base::Value> GetContentSettingValueAndPatterns(
+      const content_settings::ProviderInterface* provider,
+      const GURL& primary_url,
+      const GURL& secondary_url,
+      ContentSettingsType content_type,
+      const std::string& resource_identifier,
+      bool include_incognito,
+      ContentSettingsPattern* primary_pattern,
+      ContentSettingsPattern* secondary_pattern);
+
+  static scoped_ptr<base::Value> GetContentSettingValueAndPatterns(
+      content_settings::RuleIterator* rule_iterator,
+      const GURL& primary_url,
+      const GURL& secondary_url,
+      ContentSettingsPattern* primary_pattern,
+      ContentSettingsPattern* secondary_pattern);
 
   content_settings::PrefProvider* GetPrefProvider();
 

@@ -18,9 +18,9 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -106,7 +106,7 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
     ~DefaultBackend() override;
 
     // Returns a factory for an in-memory cache.
-    static BackendFactory* InMemory(int max_bytes);
+    static scoped_ptr<BackendFactory> InMemory(int max_bytes);
 
     // BackendFactory implementation.
     int CreateBackend(NetLog* net_log,
@@ -126,23 +126,24 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
   static const int kPrefetchReuseMins = 5;
 
   // The disk cache is initialized lazily (by CreateTransaction) in this case.
-  // The HttpCache takes ownership of the |backend_factory|.
-  HttpCache(const HttpNetworkSession::Params& params,
-            BackendFactory* backend_factory);
-
-  // The disk cache is initialized lazily (by CreateTransaction) in this case.
   // Provide an existing HttpNetworkSession, the cache can construct a
   // network layer with a shared HttpNetworkSession in order for multiple
   // network layers to share information (e.g. authentication data). The
   // HttpCache takes ownership of the |backend_factory|.
-  HttpCache(HttpNetworkSession* session, BackendFactory* backend_factory);
+  //
+  // The HttpCache must be destroyed before the HttpNetworkSession.
+  //
+  // If |set_up_quic_server_info| is true, configures the cache to track
+  // information about servers supporting QUIC.
+  HttpCache(HttpNetworkSession* session,
+            scoped_ptr<BackendFactory> backend_factory,
+            bool set_up_quic_server_info);
 
-  // Initialize the cache from its component parts. The lifetime of the
-  // |network_layer| and |backend_factory| are managed by the HttpCache and
-  // will be destroyed using |delete| when the HttpCache is destroyed.
-  HttpCache(HttpTransactionFactory* network_layer,
-            NetLog* net_log,
-            BackendFactory* backend_factory);
+  // Initialize the cache from its component parts. |network_layer| and
+  // |backend_factory| will be destroyed when the HttpCache is.
+  HttpCache(scoped_ptr<HttpTransactionFactory> network_layer,
+            scoped_ptr<BackendFactory> backend_factory,
+            bool set_up_quic_server_info);
 
   ~HttpCache() override;
 
@@ -170,6 +171,7 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
   // referenced by |url|, as long as the entry's |expected_response_time| has
   // not changed. This method returns without blocking, and the operation will
   // be performed asynchronously without any completion notification.
+  // Takes ownership of |buf|.
   void WriteMetadata(const GURL& url,
                      RequestPriority priority,
                      base::Time expected_response_time,
@@ -376,10 +378,6 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
   // Removes the transaction |trans|, from the pending list of |pending_op|.
   bool RemovePendingTransactionFromPendingOp(PendingOp* pending_op,
                                              Transaction* trans);
-
-  // Instantiates and sets QUIC server info factory.
-  void SetupQuicServerInfoFactory(HttpNetworkSession* session);
-
   // Resumes processing the pending list of |entry|.
   void ProcessPendingQueue(ActiveEntry* entry);
 
@@ -416,8 +414,6 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
   bool fail_conditionalization_for_test_;
 
   Mode mode_;
-
-  scoped_ptr<QuicServerInfoFactoryAdaptor> quic_server_info_factory_;
 
   scoped_ptr<HttpTransactionFactory> network_layer_;
 

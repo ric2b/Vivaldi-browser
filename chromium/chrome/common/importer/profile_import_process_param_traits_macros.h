@@ -11,9 +11,9 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/strings/string16.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/common_param_traits_macros.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_autofill_form_data_entry.h"
@@ -27,9 +27,15 @@
 
 #include "importer/imported_notes_entry.h"
 
+#if defined(OS_WIN)
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(importer::ImporterType,
                               importer::TYPE_UNKNOWN,
                               importer::TYPE_OPERA_OPIUM)
+#else
+IPC_ENUM_TRAITS_MIN_MAX_VALUE(importer::ImporterType,
+                              importer::TYPE_UNKNOWN,
+                              importer::TYPE_OPERA_OPIUM)
+#endif
 
 IPC_STRUCT_TRAITS_BEGIN(importer::SourceProfile)
   IPC_STRUCT_TRAITS_MEMBER(importer_name)

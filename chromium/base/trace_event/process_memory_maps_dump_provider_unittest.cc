@@ -4,9 +4,9 @@
 
 #include "base/trace_event/process_memory_maps_dump_provider.h"
 
-#include <fstream>
-#include <sstream>
+#include <stdint.h>
 
+#include "base/files/file_util.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/process_memory_maps.h"
 #include "base/trace_event/trace_event_argument.h"
@@ -15,7 +15,6 @@
 namespace base {
 namespace trace_event {
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
 namespace {
 const char kTestSmaps1[] =
     "00400000-004be000 r-xp 00000000 fc:01 1234              /file/1\n"
@@ -104,35 +103,42 @@ const char kTestSmaps2[] =
     "MMUPageSize:           4 kB\n"
     "Locked:                0 kB\n"
     "VmFlags: rd wr mr mw me ac sd\n";
+
+void CreateAndSetSmapsFileForTesting(const char* smaps_string,
+                                     ScopedFILE& file) {
+  FilePath temp_path;
+  FILE* temp_file = CreateAndOpenTemporaryFile(&temp_path);
+  file.reset(temp_file);
+  ASSERT_TRUE(temp_file);
+
+  ASSERT_TRUE(base::WriteFileDescriptor(fileno(temp_file), smaps_string,
+                                        strlen(smaps_string)));
+}
+
 }  // namespace
 
 TEST(ProcessMemoryMapsDumpProviderTest, ParseProcSmaps) {
-  const uint32 kProtR = ProcessMemoryMaps::VMRegion::kProtectionFlagsRead;
-  const uint32 kProtW = ProcessMemoryMaps::VMRegion::kProtectionFlagsWrite;
-  const uint32 kProtX = ProcessMemoryMaps::VMRegion::kProtectionFlagsExec;
+  const uint32_t kProtR = ProcessMemoryMaps::VMRegion::kProtectionFlagsRead;
+  const uint32_t kProtW = ProcessMemoryMaps::VMRegion::kProtectionFlagsWrite;
+  const uint32_t kProtX = ProcessMemoryMaps::VMRegion::kProtectionFlagsExec;
+  const MemoryDumpArgs dump_args = {MemoryDumpLevelOfDetail::DETAILED};
 
   auto pmmdp = ProcessMemoryMapsDumpProvider::GetInstance();
 
-  // Emulate a non-existent /proc/self/smaps.
-  ProcessMemoryDump pmd_invalid(nullptr /* session_state */);
-  std::ifstream non_existent_file("/tmp/does-not-exist");
-  ProcessMemoryMapsDumpProvider::proc_smaps_for_testing = &non_existent_file;
-  CHECK_EQ(false, non_existent_file.good());
-  pmmdp->OnMemoryDump(&pmd_invalid);
-  ASSERT_FALSE(pmd_invalid.has_process_mmaps());
-
   // Emulate an empty /proc/self/smaps.
-  std::ifstream empty_file("/dev/null");
-  ProcessMemoryMapsDumpProvider::proc_smaps_for_testing = &empty_file;
-  CHECK_EQ(true, empty_file.good());
-  pmmdp->OnMemoryDump(&pmd_invalid);
+  ProcessMemoryDump pmd_invalid(nullptr /* session_state */);
+  ScopedFILE empty_file(OpenFile(FilePath("/dev/null"), "r"));
+  ASSERT_TRUE(empty_file.get());
+  ProcessMemoryMapsDumpProvider::proc_smaps_for_testing = empty_file.get();
+  pmmdp->OnMemoryDump(dump_args, &pmd_invalid);
   ASSERT_FALSE(pmd_invalid.has_process_mmaps());
 
   // Parse the 1st smaps file.
   ProcessMemoryDump pmd_1(nullptr /* session_state */);
-  std::istringstream test_smaps_1(kTestSmaps1);
-  ProcessMemoryMapsDumpProvider::proc_smaps_for_testing = &test_smaps_1;
-  pmmdp->OnMemoryDump(&pmd_1);
+  ScopedFILE temp_file1;
+  CreateAndSetSmapsFileForTesting(kTestSmaps1, temp_file1);
+  ProcessMemoryMapsDumpProvider::proc_smaps_for_testing = temp_file1.get();
+  pmmdp->OnMemoryDump(dump_args, &pmd_1);
   ASSERT_TRUE(pmd_1.has_process_mmaps());
   const auto& regions_1 = pmd_1.process_mmaps()->vm_regions();
   ASSERT_EQ(2UL, regions_1.size());
@@ -161,9 +167,10 @@ TEST(ProcessMemoryMapsDumpProviderTest, ParseProcSmaps) {
 
   // Parse the 2nd smaps file.
   ProcessMemoryDump pmd_2(nullptr /* session_state */);
-  std::istringstream test_smaps_2(kTestSmaps2);
-  ProcessMemoryMapsDumpProvider::proc_smaps_for_testing = &test_smaps_2;
-  pmmdp->OnMemoryDump(&pmd_2);
+  ScopedFILE temp_file2;
+  CreateAndSetSmapsFileForTesting(kTestSmaps2, temp_file2);
+  ProcessMemoryMapsDumpProvider::proc_smaps_for_testing = temp_file2.get();
+  pmmdp->OnMemoryDump(dump_args, &pmd_2);
   ASSERT_TRUE(pmd_2.has_process_mmaps());
   const auto& regions_2 = pmd_2.process_mmaps()->vm_regions();
   ASSERT_EQ(1UL, regions_2.size());
@@ -178,7 +185,6 @@ TEST(ProcessMemoryMapsDumpProviderTest, ParseProcSmaps) {
   EXPECT_EQ(4 * 1024UL, regions_2[0].byte_stats_private_dirty_resident);
   EXPECT_EQ(0 * 1024UL, regions_2[0].byte_stats_swapped);
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
 }  // namespace trace_event
 }  // namespace base

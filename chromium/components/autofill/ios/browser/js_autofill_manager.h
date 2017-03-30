@@ -16,12 +16,12 @@
 @interface JsAutofillManager : CRWJSInjectionManager
 
 // Extracts forms from a web page. Only forms with at least |requiredFields|
-// fields and the appropriate attribute requirements are extracted.
+// fields are extracted.
 // |completionHandler| is called with the JSON string of forms of a web page.
 // |completionHandler| cannot be nil.
-- (void)fetchFormsWithRequirements:(autofill::RequirementsMask)requirements
-        minimumRequiredFieldsCount:(NSUInteger)requiredFieldsCount
-                 completionHandler:(void (^)(NSString*))completionHandler;
+- (void)fetchFormsWithMinimumRequiredFieldsCount:(NSUInteger)requiredFieldsCount
+                               completionHandler:
+                                   (void (^)(NSString*))completionHandler;
 
 // Stores the current active element. This is used to make the element active
 // again in case the web view loses focus when a dialog is presented over it.
@@ -37,23 +37,25 @@
 - (void)fillActiveFormField:(NSString*)dataString
           completionHandler:(ProceduralBlock)completionHandler;
 
-// Fills a number of fields in the same named form.
-// Applies Autofill CSS (i.e. yellow background) to filled elements if
-// |styleElements| is true.
+// Fills a number of fields in the same named form for full-form Autofill.
+// Applies Autofill CSS (i.e. yellow background) to filled elements.
+// Only empty fields will be filled, except that field named
+// |forceFillFieldName| will always be filled even if non-empty.
+// |forceFillFieldName| may be null.
 // |completionHandler| is called after the forms are filled. |completionHandler|
 // cannot be nil.
 - (void)fillForm:(NSString*)dataString
-        styleElements:(BOOL)styleElements
-    completionHandler:(ProceduralBlock)completionHandler;
+    forceFillFieldName:(NSString*)forceFillFieldName
+     completionHandler:(ProceduralBlock)completionHandler;
 
-// Dispatches the autocomplete event to the form element with the given
-// |formName|.
-- (void)dispatchAutocompleteEvent:(NSString*)formName;
-
-// Dispatches the autocomplete error event to the form element with the given
-// |formName|, supplying the given reason.
-- (void)dispatchAutocompleteErrorEvent:(NSString*)formName
-                            withReason:(NSString*)reason;
+// Clear autofilled fields of the specified form. Fields that are not currently
+// autofilled are not modified. Field contents are cleared, and Autofill flag
+// and styling are removed. 'change' events are sent for fields whose contents
+// changed.
+// |completionHandler| is called after the forms are filled. |completionHandler|
+// cannot be nil.
+- (void)clearAutofilledFieldsForFormNamed:(NSString*)formName
+                        completionHandler:(ProceduralBlock)completionHandler;
 
 // Marks up the form with autofill field prediction data (diagnostic tool).
 - (void)fillPredictionData:(NSString*)dataString;

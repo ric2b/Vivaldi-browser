@@ -4,16 +4,15 @@
 
 #include "base/process/process.h"
 
+#include <utility>
+
 #include "base/process/kill.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
-
-#if defined(OS_MACOSX)
-#include <mach/mach.h>
-#endif  // OS_MACOSX
 
 namespace {
 
@@ -53,13 +52,13 @@ TEST_F(ProcessTest, Move) {
   Process process2;
   EXPECT_FALSE(process2.IsValid());
 
-  process2 = process1.Pass();
+  process2 = std::move(process1);
   EXPECT_TRUE(process2.IsValid());
   EXPECT_FALSE(process1.IsValid());
   EXPECT_FALSE(process2.is_current());
 
   Process process3 = Process::Current();
-  process2 = process3.Pass();
+  process2 = std::move(process3);
   EXPECT_TRUE(process2.is_current());
   EXPECT_TRUE(process2.IsValid());
   EXPECT_FALSE(process3.IsValid());
@@ -171,28 +170,30 @@ TEST_F(ProcessTest, WaitForExitWithTimeout) {
 // backgrounding and restoring.
 // Note: a platform may not be willing or able to lower the priority of
 // a process. The calls to SetProcessBackground should be noops then.
-// TODO: reenable for Vivaldi
-#if defined(OS_WIN)
-#define MAYBE_SetProcessBackgrounded DISABLED_SetProcessBackgrounded
-#else
-#define MAYBE_SetProcessBackgrounded SetProcessBackgrounded
-#endif
-TEST_F(ProcessTest, MAYBE_SetProcessBackgrounded) {
+TEST_F(ProcessTest, SetProcessBackgrounded) {
   Process process(SpawnChild("SimpleChildProcess"));
   int old_priority = process.GetPriority();
-#if defined(OS_MACOSX)
-  // On the Mac, backgrounding a process requires a port to that process.
-  // In the browser it's available through the MachBroker class, which is not
-  // part of base. Additionally, there is an indefinite amount of time between
-  // spawning a process and receiving its port. Because this test just checks
-  // the ability to background/foreground a process, we can use the current
-  // process's port instead.
-  mach_port_t process_port = mach_task_self();
-  EXPECT_TRUE(process.SetProcessBackgrounded(process_port, true));
-  EXPECT_TRUE(process.IsProcessBackgrounded(process_port));
-  EXPECT_TRUE(process.SetProcessBackgrounded(process_port, false));
-  EXPECT_FALSE(process.IsProcessBackgrounded(process_port));
-#elif defined(OS_WIN)
+#if defined(OS_WIN)
+  EXPECT_TRUE(process.SetProcessBackgrounded(true));
+  EXPECT_TRUE(process.IsProcessBackgrounded());
+  EXPECT_TRUE(process.SetProcessBackgrounded(false));
+  EXPECT_FALSE(process.IsProcessBackgrounded());
+#else
+  if (process.CanBackgroundProcesses()) {
+    process.SetProcessBackgrounded(true);
+    process.SetProcessBackgrounded(false);
+  }
+#endif
+  int new_priority = process.GetPriority();
+  EXPECT_EQ(old_priority, new_priority);
+}
+
+// Same as SetProcessBackgrounded but to this very process. It uses
+// a different code path at least for Windows.
+TEST_F(ProcessTest, SetProcessBackgroundedSelf) {
+  Process process = Process::Current();
+  int old_priority = process.GetPriority();
+#if defined(OS_WIN)
   EXPECT_TRUE(process.SetProcessBackgrounded(true));
   EXPECT_TRUE(process.IsProcessBackgrounded());
   EXPECT_TRUE(process.SetProcessBackgrounded(false));
@@ -205,34 +206,20 @@ TEST_F(ProcessTest, MAYBE_SetProcessBackgrounded) {
   EXPECT_EQ(old_priority, new_priority);
 }
 
-// Same as SetProcessBackgrounded but to this very process. It uses
-// a different code path at least for Windows.
-// TODO: reenable for Vivaldi
-#if defined(OS_WIN)
-#define MAYBE_SetProcessBackgroundedSelf DISABLED_SetProcessBackgroundedSelf
-#else
-#define MAYBE_SetProcessBackgroundedSelf SetProcessBackgroundedSelf
-#endif
-TEST_F(ProcessTest, MAYBE_SetProcessBackgroundedSelf) {
-  Process process = Process::Current();
-  int old_priority = process.GetPriority();
-#if defined(OS_MACOSX)
-  mach_port_t process_port = mach_task_self();
-  EXPECT_TRUE(process.SetProcessBackgrounded(process_port, true));
-  EXPECT_TRUE(process.IsProcessBackgrounded(process_port));
-  EXPECT_TRUE(process.SetProcessBackgrounded(process_port, false));
-  EXPECT_FALSE(process.IsProcessBackgrounded(process_port));
-#elif defined(OS_WIN)
-  EXPECT_TRUE(process.SetProcessBackgrounded(true));
-  EXPECT_TRUE(process.IsProcessBackgrounded());
-  EXPECT_TRUE(process.SetProcessBackgrounded(false));
-  EXPECT_FALSE(process.IsProcessBackgrounded());
-#else
-  process.SetProcessBackgrounded(true);
-  process.SetProcessBackgrounded(false);
-#endif
-  int new_priority = process.GetPriority();
-  EXPECT_EQ(old_priority, new_priority);
+#if defined(OS_CHROMEOS)
+
+// Tests that the function IsProcessBackgroundedCGroup() can parse the contents
+// of the /proc/<pid>/cgroup file successfully.
+TEST_F(ProcessTest, TestIsProcessBackgroundedCGroup) {
+  const char kNotBackgrounded[] = "5:cpuacct,cpu,cpuset:/daemons\n";
+  const char kBackgrounded[] =
+      "2:freezer:/chrome_renderers/to_be_frozen\n"
+      "1:cpu:/chrome_renderers/background\n";
+
+  EXPECT_FALSE(IsProcessBackgroundedCGroup(kNotBackgrounded));
+  EXPECT_TRUE(IsProcessBackgroundedCGroup(kBackgrounded));
 }
+
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace base

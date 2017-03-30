@@ -71,9 +71,19 @@ public interface NavigationController {
     public void reload(boolean checkForRepost);
 
     /**
+     * Reload the current page to refresh page contents, may not revalidate the cache contents.
+     */
+    public void reloadToRefreshContent(boolean checkForRepost);
+
+    /**
      * Reload the current page, ignoring the contents of the cache.
      */
     public void reloadIgnoringCache(boolean checkForRepost);
+
+    /**
+     * Reload the current page with Lo-Fi off, ignoring the contents of the cache.
+     */
+    public void reloadDisableLoFi(boolean checkForRepost);
 
     /**
      * Cancel the pending reload.

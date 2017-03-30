@@ -10,6 +10,8 @@
 #include "base/auto_reset.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -371,7 +373,7 @@ void TabDragController::Drag(const gfx::Point& point_in_screen) {
         // When all tabs in a maximized browser are dragged the browser gets
         // restored during the drag and maximized back when the drag ends.
         views::Widget* widget = GetAttachedBrowserWidget();
-        const int last_tabstrip_width = attached_tabstrip_->tab_area_width();
+        const int last_tabstrip_width = attached_tabstrip_->GetTabAreaWidth();
         std::vector<gfx::Rect> drag_bounds = CalculateBoundsForDraggedTabs();
         OffsetX(GetAttachedDragPoint(point_in_screen).x(), &drag_bounds);
         gfx::Rect new_bounds(CalculateDraggedBrowserBounds(source_tabstrip_,
@@ -701,9 +703,9 @@ void TabDragController::MoveAttached(const gfx::Point& point_in_screen) {
   // the threshold.
   int threshold = kHorizontalMoveThreshold;
   if (!attached_tabstrip_->touch_layout_.get()) {
-    double unselected, selected;
-    attached_tabstrip_->GetCurrentTabWidths(&unselected, &selected);
-    double ratio = unselected / Tab::GetStandardSize().width();
+    double ratio =
+        static_cast<double>(attached_tabstrip_->current_inactive_width()) /
+        Tab::GetStandardSize().width();
     threshold = static_cast<int>(ratio * kHorizontalMoveThreshold);
   }
   // else case: touch tabs never shrink.
@@ -1024,7 +1026,7 @@ void TabDragController::DetachIntoNewBrowserAndRunMoveLoop(
     return;
   }
 
-  const int last_tabstrip_width = attached_tabstrip_->tab_area_width();
+  const int last_tabstrip_width = attached_tabstrip_->GetTabAreaWidth();
   std::vector<gfx::Rect> drag_bounds = CalculateBoundsForDraggedTabs();
   OffsetX(GetAttachedDragPoint(point_in_screen).x(), &drag_bounds);
 
@@ -1288,10 +1290,8 @@ gfx::Rect TabDragController::GetDraggedViewTabStripBounds(
                      source_tab_drag_data()->attached_tab->height());
   }
 
-  double sel_width, unselected_width;
-  attached_tabstrip_->GetCurrentTabWidths(&sel_width, &unselected_width);
   return gfx::Rect(tab_strip_point.x(), tab_strip_point.y(),
-                   static_cast<int>(sel_width),
+                   attached_tabstrip_->current_active_width(),
                    Tab::GetStandardSize().height());
 }
 
@@ -1689,11 +1689,14 @@ gfx::Rect TabDragController::CalculateDraggedBrowserBounds(
       break; // Nothing to do for DETACH_ABOVE_OR_BELOW.
   }
 
-  // To account for the extra vertical on restored windows that is absent on
-  // maximized windows, add an additional vertical offset extracted from the tab
-  // strip.
-  if (source->GetWidget()->IsMaximized())
-    new_bounds.Offset(0, -source->kNewTabButtonVerticalOffset);
+  // Account for the extra space above the tabstrip on restored windows versus
+  // maximized windows.
+  if (source->GetWidget()->IsMaximized()) {
+    const auto* frame_view = static_cast<BrowserNonClientFrameView*>(
+        source->GetWidget()->non_client_view()->frame_view());
+    new_bounds.Offset(
+        0, frame_view->GetTopInset(false) - frame_view->GetTopInset(true));
+  }
   return new_bounds;
 }
 
@@ -1703,7 +1706,7 @@ void TabDragController::AdjustBrowserAndTabBoundsForDrag(
     std::vector<gfx::Rect>* drag_bounds) {
   attached_tabstrip_->InvalidateLayout();
   attached_tabstrip_->DoLayout();
-  const int dragged_tabstrip_width = attached_tabstrip_->tab_area_width();
+  const int dragged_tabstrip_width = attached_tabstrip_->GetTabAreaWidth();
 
   // If the new tabstrip is smaller than the old resize the tabs.
   if (dragged_tabstrip_width < last_tabstrip_width) {
@@ -1772,9 +1775,8 @@ gfx::Point TabDragController::GetCursorScreenPoint() {
     gfx::PointF touch_point_f;
     bool got_touch_point = ui::GestureRecognizer::Get()->
         GetLastTouchPointForTarget(widget_window, &touch_point_f);
-    // TODO(tdresser): Switch to using gfx::PointF. See crbug.com/337824.
+    CHECK(got_touch_point);
     gfx::Point touch_point = gfx::ToFlooredPoint(touch_point_f);
-    DCHECK(got_touch_point);
     wm::ConvertPointToScreen(widget_window->GetRootWindow(), &touch_point);
     return touch_point;
   }

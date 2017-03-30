@@ -10,8 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/common/permission_service.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/error_handler.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
 
@@ -24,8 +23,7 @@ enum class PermissionType;
 // to have some information about the current context. That enables the service
 // to know whether it can show UI and have knowledge of the associated
 // WebContents for example.
-class PermissionServiceImpl : public PermissionService,
-                              public mojo::ErrorHandler {
+class PermissionServiceImpl : public PermissionService {
  public:
   ~PermissionServiceImpl() override;
 
@@ -42,15 +40,18 @@ class PermissionServiceImpl : public PermissionService,
 
  private:
   using PermissionStatusCallback = mojo::Callback<void(PermissionStatus)>;
+  using PermissionsStatusCallback =
+      mojo::Callback<void(mojo::Array<PermissionStatus>)>;
 
   struct PendingRequest {
-    PendingRequest(PermissionType permission, const GURL& origin,
-                   const PermissionStatusCallback& callback);
+    PendingRequest(const PermissionsStatusCallback& callback,
+                   int request_count);
     ~PendingRequest();
 
-    PermissionType permission;
-    GURL origin;
-    PermissionStatusCallback callback;
+    // Request ID received from the PermissionManager.
+    int id;
+    PermissionsStatusCallback callback;
+    int request_count;
   };
   using RequestsMap = IDMap<PendingRequest, IDMapOwnPointer>;
 
@@ -75,6 +76,10 @@ class PermissionServiceImpl : public PermissionService,
                          const mojo::String& origin,
                          bool user_gesture,
                          const PermissionStatusCallback& callback) override;
+  void RequestPermissions(mojo::Array<PermissionName> permissions,
+                          const mojo::String& origin,
+                          bool user_gesture,
+                          const PermissionsStatusCallback& callback) override;
   void RevokePermission(PermissionName permission,
                         const mojo::String& origin,
                         const PermissionStatusCallback& callback) override;
@@ -84,10 +89,14 @@ class PermissionServiceImpl : public PermissionService,
       PermissionStatus last_known_status,
       const PermissionStatusCallback& callback) override;
 
-  // mojo::ErrorHandler
-  void OnConnectionError() override;
+  void OnConnectionError();
 
-  void OnRequestPermissionResponse(int request_id, PermissionStatus status);
+  void OnRequestPermissionResponse(
+      int pending_request_id,
+      PermissionStatus status);
+  void OnRequestPermissionsResponse(
+      int pending_request_id,
+      const std::vector<PermissionStatus>& result);
 
   PermissionStatus GetPermissionStatusFromName(PermissionName permission,
                                                const GURL& origin);

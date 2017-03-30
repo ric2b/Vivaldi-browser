@@ -16,12 +16,8 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/extensions/signin/gaia_auth_extension_loader.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/network/network_state.h"
@@ -31,7 +27,6 @@
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
@@ -49,10 +44,6 @@ const char kEnrollmentStepWorking[] = "working";
 const char kEnrollmentModeUIForced[] = "forced";
 const char kEnrollmentModeUIManual[] = "manual";
 const char kEnrollmentModeUIRecovery[] = "recovery";
-
-// Enrollment help topic IDs.
-const int kEnrollmentHelpTopicRegular = 6142332;
-const int kEnrollmentHelpTopicServerTriggered = 4631259;
 
 // Converts |mode| to a mode identifier for the UI.
 std::string EnrollmentModeToUIMode(policy::EnrollmentConfig::Mode mode) {
@@ -108,36 +99,20 @@ EnrollmentScreenHandler::EnrollmentScreenHandler(
     : BaseScreenHandler(kJsScreenPath),
       controller_(NULL),
       show_on_init_(false),
-      frame_error_(net::OK),
       first_show_(true),
       observe_network_failure_(false),
       network_state_informer_(network_state_informer),
       network_error_model_(network_error_model),
       histogram_helper_(new ErrorScreensHistogramHelper("Enrollment")),
-      auth_extension_(nullptr),
       weak_ptr_factory_(this) {
   set_async_assets_load_id(OobeUI::kScreenOobeEnrollment);
   DCHECK(network_state_informer_.get());
   DCHECK(network_error_model_);
   network_state_informer_->AddObserver(this);
-
-  if (chromeos::LoginDisplayHostImpl::default_host()) {
-    chromeos::WebUILoginView* login_view =
-        chromeos::LoginDisplayHostImpl::default_host()->GetWebUILoginView();
-    if (login_view)
-      login_view->AddFrameObserver(this);
-  }
 }
 
 EnrollmentScreenHandler::~EnrollmentScreenHandler() {
   network_state_informer_->RemoveObserver(this);
-
-  if (chromeos::LoginDisplayHostImpl::default_host()) {
-    chromeos::WebUILoginView* login_view =
-        chromeos::LoginDisplayHostImpl::default_host()->GetWebUILoginView();
-    if (login_view)
-      login_view->RemoveFrameObserver(this);
-  }
 }
 
 // EnrollmentScreenHandler, WebUIMessageHandler implementation --
@@ -172,11 +147,6 @@ void EnrollmentScreenHandler::PrepareToShow() {
 }
 
 void EnrollmentScreenHandler::Show() {
-  if (!auth_extension_) {
-    Profile* signin_profile = ProfileHelper::GetSigninProfile();
-    auth_extension_.reset(new ScopedGaiaAuthExtension(signin_profile));
-  }
-
   if (!page_is_ready())
     show_on_init_ = true;
   else
@@ -363,27 +333,17 @@ void EnrollmentScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
   builder->Add("oauthEnrollScreenTitle",
                IDS_ENTERPRISE_ENROLLMENT_SCREEN_TITLE);
-  builder->Add("oauthEnrollDescription", IDS_ENTERPRISE_ENROLLMENT_DESCRIPTION);
-  builder->Add("oauthEnrollReEnrollmentText",
-               IDS_ENTERPRISE_ENROLLMENT_RE_ENROLLMENT_TEXT);
   builder->Add("oauthEnrollRetry", IDS_ENTERPRISE_ENROLLMENT_RETRY);
-  builder->Add("oauthEnrollCancel", IDS_ENTERPRISE_ENROLLMENT_CANCEL);
-  builder->Add("oauthEnrollBack", IDS_ENTERPRISE_ENROLLMENT_BACK);
   builder->Add("oauthEnrollDone", IDS_ENTERPRISE_ENROLLMENT_DONE);
-  builder->Add("oauthEnrollContinue", IDS_ENTERPRISE_ENROLLMENT_CONTINUE);
-  builder->Add("oauthEnrollNextBtn", IDS_NEWGAIA_OFFLINE_NEXT_BUTTON_TEXT);
+  builder->Add("oauthEnrollNextBtn", IDS_OFFLINE_LOGIN_NEXT_BUTTON_TEXT);
   builder->Add("oauthEnrollSkip", IDS_ENTERPRISE_ENROLLMENT_SKIP);
   builder->Add("oauthEnrollSuccess", IDS_ENTERPRISE_ENROLLMENT_SUCCESS);
   builder->Add("oauthEnrollDeviceInformation",
                IDS_ENTERPRISE_ENROLLMENT_DEVICE_INFORMATION);
-  builder->Add("oauthEnrollAttributes", IDS_ENTERPRISE_ENROLLMENT_ATTRIBUTES);
-  builder->Add("oauthEnrollExplainLink",
-               IDS_ENTERPRISE_ENROLLMENT_EXPLAIN_LINK);
   builder->Add("oauthEnrollExplaneAttributeLink",
                IDS_ENTERPRISE_ENROLLMENT_EXPLAIN_ATTRIBUTE_LINK);
   builder->Add("oauthEnrollAttributeExplanation",
                IDS_ENTERPRISE_ENROLLMENT_ATTRIBUTE_EXPLANATION);
-  builder->Add("oauthEnrollWorking", IDS_ENTERPRISE_ENROLLMENT_WORKING);
   builder->Add("oauthEnrollAssetIdLabel",
                IDS_ENTERPRISE_ENROLLMENT_ASSET_ID_LABEL);
   builder->Add("oauthEnrollLocationLabel",
@@ -430,9 +390,7 @@ void EnrollmentScreenHandler::UpdateStateInternal(
   const bool is_online = (state == NetworkStateInformer::ONLINE);
   const bool is_behind_captive_portal =
       (state == NetworkStateInformer::CAPTIVE_PORTAL);
-  const bool is_frame_error =
-      (frame_error() != net::OK) ||
-      (reason == NetworkError::ERROR_REASON_FRAME_ERROR);
+  const bool is_frame_error = reason == NetworkError::ERROR_REASON_FRAME_ERROR;
 
   LOG(WARNING) << "EnrollmentScreenHandler::UpdateState(): "
                << "state=" << NetworkStateInformer::StatusString(state) << ", "
@@ -459,9 +417,7 @@ void EnrollmentScreenHandler::SetupAndShowOfflineMessage(
   const std::string network_path = network_state_informer_->network_path();
   const bool is_behind_captive_portal = IsBehindCaptivePortal(state, reason);
   const bool is_proxy_error = IsProxyError(state, reason);
-  const bool is_frame_error =
-      (frame_error() != net::OK) ||
-      (reason == NetworkError::ERROR_REASON_FRAME_ERROR);
+  const bool is_frame_error = reason == NetworkError::ERROR_REASON_FRAME_ERROR;
 
   if (is_proxy_error) {
     network_error_model_->SetErrorState(NetworkError::ERROR_STATE_PROXY,
@@ -505,12 +461,6 @@ void EnrollmentScreenHandler::HideOfflineMessage(
   histogram_helper_->OnErrorHide();
 }
 
-void EnrollmentScreenHandler::OnFrameError(
-    const std::string& frame_unique_name) {
-  if (frame_unique_name == "oauth-enroll-signin-frame") {
-    HandleFrameLoadingCompleted(net::ERR_FAILED);
-  }
-}
 // EnrollmentScreenHandler, private -----------------------------
 
 void EnrollmentScreenHandler::HandleClose(const std::string& reason) {
@@ -537,16 +487,11 @@ void EnrollmentScreenHandler::HandleRetry() {
   controller_->OnRetry();
 }
 
-void EnrollmentScreenHandler::HandleFrameLoadingCompleted(int status) {
-  const net::Error frame_error = static_cast<net::Error>(status);
-  frame_error_ = frame_error;
-
+void EnrollmentScreenHandler::HandleFrameLoadingCompleted() {
   if (network_state_informer_->state() != NetworkStateInformer::ONLINE)
     return;
-  if (frame_error_)
-    UpdateState(NetworkError::ERROR_REASON_FRAME_ERROR);
-  else
-    UpdateState(NetworkError::ERROR_REASON_UPDATE);
+
+  UpdateState(NetworkError::ERROR_REASON_UPDATE);
 }
 
 void EnrollmentScreenHandler::HandleDeviceAttributesProvided(
@@ -576,10 +521,9 @@ void EnrollmentScreenHandler::ShowErrorMessage(const std::string& message,
 
 void EnrollmentScreenHandler::DoShow() {
   base::DictionaryValue screen_data;
-  screen_data.SetString(
-      "signin_url",
-      base::StringPrintf("%s/main.html", extensions::kGaiaAuthExtensionOrigin));
   screen_data.SetString("gaiaUrl", GaiaUrls::GetInstance()->gaia_url().spec());
+  screen_data.SetString("clientId",
+                        GaiaUrls::GetInstance()->oauth2_chrome_client_id());
   screen_data.SetString("enrollment_mode",
                         EnrollmentModeToUIMode(config_.mode));
   screen_data.SetString("management_domain", config_.management_domain);
@@ -589,14 +533,6 @@ void EnrollmentScreenHandler::DoShow() {
                        ->GetDeviceCloudPolicyManager()
                        ->IsRemoraRequisition();
   screen_data.SetString("flow", cfm ? "cfm" : "enterprise");
-
-  const bool is_server_triggered_enrollment =
-      config_.mode == policy::EnrollmentConfig::MODE_SERVER_ADVERTISED ||
-      config_.mode == policy::EnrollmentConfig::MODE_SERVER_FORCED;
-  screen_data.SetInteger("learn_more_help_topic_id",
-                         is_server_triggered_enrollment
-                             ? kEnrollmentHelpTopicServerTriggered
-                             : kEnrollmentHelpTopicRegular);
 
   ShowScreen(OobeUI::kScreenOobeEnrollment, &screen_data);
   if (first_show_) {

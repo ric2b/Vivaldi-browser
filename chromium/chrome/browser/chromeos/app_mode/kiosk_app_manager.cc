@@ -4,8 +4,10 @@
 
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 
+#include <stddef.h>
 #include <map>
 #include <set>
+#include <utility>
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
@@ -19,6 +21,7 @@
 #include "base/stl_util.h"
 #include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/app_mode/app_session.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_data.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_external_loader.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager_observer.h"
@@ -38,6 +41,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/ownership/owner_key_util.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/extension_urls.h"
@@ -204,6 +208,14 @@ void KioskAppManager::SetAppWasAutoLaunchedWithZeroDelay(
     const std::string& app_id) {
   DCHECK_EQ(auto_launch_app_id_, app_id);
   currently_auto_launched_with_zero_delay_app_ = app_id;
+}
+
+void KioskAppManager::InitSession(Profile* profile,
+                                   const std::string& app_id) {
+  LOG_IF(FATAL, app_session_) << "Kiosk session is already initialized.";
+
+  app_session_.reset(new AppSession);
+  app_session_->Init(profile, app_id);
 }
 
 void KioskAppManager::EnableConsumerKioskAutoLaunch(
@@ -465,7 +477,7 @@ void KioskAppManager::RemoveObserver(KioskAppManagerObserver* observer) {
 extensions::ExternalLoader* KioskAppManager::CreateExternalLoader() {
   if (external_loader_created_) {
     NOTREACHED();
-    return NULL;
+    return nullptr;
   }
   external_loader_created_ = true;
   KioskAppExternalLoader* loader = new KioskAppExternalLoader();
@@ -474,17 +486,46 @@ extensions::ExternalLoader* KioskAppManager::CreateExternalLoader() {
   return loader;
 }
 
+extensions::ExternalLoader*
+KioskAppManager::CreateSecondaryAppExternalLoader() {
+  if (secondary_app_external_loader_created_) {
+    NOTREACHED();
+    return nullptr;
+  }
+  secondary_app_external_loader_created_ = true;
+  KioskAppExternalLoader* secondary_loader = new KioskAppExternalLoader();
+  secondary_app_external_loader_ = secondary_loader->AsWeakPtr();
+
+  return secondary_loader;
+}
+
 void KioskAppManager::InstallFromCache(const std::string& id) {
   const base::DictionaryValue* extension = NULL;
   if (external_cache_->cached_extensions()->GetDictionary(id, &extension)) {
     scoped_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
     base::DictionaryValue* extension_copy = extension->DeepCopy();
     prefs->Set(id, extension_copy);
-    external_loader_->SetCurrentAppExtensions(prefs.Pass());
+    external_loader_->SetCurrentAppExtensions(std::move(prefs));
   } else {
     LOG(ERROR) << "Can't find app in the cached externsions"
                << " id = " << id;
   }
+}
+
+void KioskAppManager::InstallSecondaryApps(
+    const std::vector<std::string>& ids) {
+  scoped_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
+  for (const std::string& id : ids) {
+    scoped_ptr<base::DictionaryValue> extension_entry(
+        new base::DictionaryValue);
+    extension_entry->SetStringWithoutPathExpansion(
+        extensions::ExternalProviderImpl::kExternalUpdateUrl,
+        extension_urls::GetWebstoreUpdateUrl().spec());
+    extension_entry->SetBoolean(
+        extensions::ExternalProviderImpl::kIsFromWebstore, true);
+    prefs->Set(id, std::move(extension_entry));
+  }
+  secondary_app_external_loader_->SetCurrentAppExtensions(std::move(prefs));
 }
 
 void KioskAppManager::UpdateExternalCache() {
@@ -511,7 +552,9 @@ void KioskAppManager::PutValidatedExternalExtension(
 }
 
 KioskAppManager::KioskAppManager()
-    : ownership_established_(false), external_loader_created_(false) {
+    : ownership_established_(false),
+      external_loader_created_(false),
+      secondary_app_external_loader_created_(false) {
   base::FilePath cache_dir;
   GetCrxCacheDir(&cache_dir);
   external_cache_.reset(
@@ -521,6 +564,7 @@ KioskAppManager::KioskAppManager()
                         this,
                         true /* always_check_updates */,
                         false /* wait_for_cache_initialization */));
+  external_cache_->set_flush_on_put(true);
   UpdateAppData();
   local_accounts_subscription_ =
       CrosSettings::Get()->AddSettingsObserver(
@@ -609,9 +653,9 @@ void KioskAppManager::UpdateAppData() {
   const user_manager::User* active_user =
       user_manager::UserManager::Get()->GetActiveUser();
   if (active_user) {
-    std::string active_user_id = active_user->GetUserID();
+    const AccountId active_account_id = active_user->GetAccountId();
     for (const auto& it : old_apps) {
-      if (it.second->user_id() == active_user_id) {
+      if (it.second->user_id() == active_account_id.GetUserEmail()) {
         VLOG(1) << "Currently running kiosk app removed from policy, exiting";
         cryptohomes_barrier_closure = BarrierClosure(
             old_apps.size(), base::Bind(&chrome::AttemptUserExit));
@@ -652,7 +696,7 @@ void KioskAppManager::UpdateAppData() {
 
     prefs->Set(apps_[i]->app_id(), entry.release());
   }
-  external_cache_->UpdateExtensionsList(prefs.Pass());
+  external_cache_->UpdateExtensionsList(std::move(prefs));
 
   RetryFailedAppDataFetch();
 

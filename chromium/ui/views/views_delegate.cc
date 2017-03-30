@@ -5,7 +5,9 @@
 #include "ui/views/views_delegate.h"
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "ui/views/views_touch_selection_controller_factory.h"
+#include "ui/views/widget/native_widget_private.h"
 
 #if defined(USE_AURA)
 #include "ui/views/touchui/touch_selection_menu_runner_views.h"
@@ -52,6 +54,12 @@ void ViewsDelegate::NotifyMenuItemFocused(const base::string16& menu_name,
                                           int item_index,
                                           int item_count,
                                           bool has_submenu) {
+}
+
+ViewsDelegate::ProcessMenuAcceleratorResult
+ViewsDelegate::ProcessAcceleratorWhileMenuShowing(
+    const ui::Accelerator& accelerator) {
+  return ProcessMenuAcceleratorResult::LEAVE_MENU_OPEN;
 }
 
 #if defined(OS_WIN)

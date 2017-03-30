@@ -7,6 +7,7 @@
 
 #include <directmanipulation.h>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/win/scoped_comptr.h"
 #include "ui/gfx/geometry/rect.h"
@@ -63,6 +64,8 @@ class GFX_EXPORT DirectManipulationHelper {
   // logistics purposes.
   void HandleMouseWheel(HWND window, UINT message, WPARAM w_param,
       LPARAM l_param);
+
+  ~DirectManipulationHelper();
 
  private:
   DirectManipulationHelper();

@@ -33,7 +33,7 @@ ImageEditor.Mode.Adjust = function(name, title) {
   this.viewportGeneration_ = 0;
 
   /**
-   * @type {?string}
+   * @type {?function(!ImageData,!ImageData,number,number)}
    * @private
    */
   this.filter_ = null;
@@ -45,15 +45,14 @@ ImageEditor.Mode.Adjust = function(name, title) {
   this.canvas_ = null;
 
   /**
-   * @type {ImageData}
-   * @private
+   * @private {ImageData}
    */
   this.previewImageData_ = null;
 
   /**
-   * @type {ImageData}
+   * @private {ImageData}
    */
-  this.originalImageData = null;
+  this.originalImageData_ = null;
 };
 
 ImageEditor.Mode.Adjust.prototype = {__proto__: ImageEditor.Mode.prototype};
@@ -133,8 +132,10 @@ ImageEditor.Mode.Adjust.prototype.updatePreviewImage_ = function(options) {
       this.canvas_ = this.getImageView().createOverlayCanvas();
 
     this.getImageView().setupDeviceBuffer(this.canvas_);
-    this.originalImageData = this.getImageView().copyScreenImageData();
-    this.previewImageData_ = this.getImageView().copyScreenImageData();
+    this.originalImageData_ = this.getImageView().getScreenImageDataWith(
+        this.canvas_.width, this.canvas_.height);
+    this.previewImageData_ = this.getImageView().getScreenImageDataWith(
+        this.canvas_.width, this.canvas_.height);
 
     isPreviewImageInvalidated = true;
   } else {
@@ -144,11 +145,11 @@ ImageEditor.Mode.Adjust.prototype.updatePreviewImage_ = function(options) {
 
   // Update preview image with applying filter.
   if (isPreviewImageInvalidated) {
-    assert(this.originalImageData);
+    assert(this.originalImageData_);
     assert(this.previewImageData_);
 
     ImageUtil.trace.resetTimer('preview');
-    this.filter_(this.previewImageData_, this.originalImageData, 0, 0);
+    this.filter_(this.previewImageData_, this.originalImageData_, 0, 0);
     ImageUtil.trace.reportTimer('preview');
 
     this.canvas_.getContext('2d').putImageData(this.previewImageData_, 0, 0);
@@ -229,12 +230,6 @@ ImageEditor.Mode.Autofix = function() {
 
 ImageEditor.Mode.Autofix.prototype =
     {__proto__: ImageEditor.Mode.ColorFilter.prototype};
-
-/** @override */
-ImageEditor.Mode.Autofix.prototype.createTools = function(toolbar) {
-  var self = this;
-  toolbar.addButton('Apply', 'Apply', this.apply.bind(this));
-};
 
 /** @override */
 ImageEditor.Mode.Autofix.prototype.isApplicable = function() {

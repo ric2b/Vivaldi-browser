@@ -4,14 +4,32 @@
 
 #include "content/browser/loader/resource_request_info_impl.h"
 
+#include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/loader/global_routing_id.h"
 #include "content/browser/loader/resource_message_filter.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/net/url_request_user_data.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_request_id.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/process_type.h"
 #include "net/url_request/url_request.h"
 
 namespace content {
+
+namespace {
+
+WebContents* GetWebContentsFromFTNID(int frame_tree_node_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  FrameTreeNode* frame_tree_node =
+      FrameTreeNode::GloballyFindByID(frame_tree_node_id);
+  if (!frame_tree_node)
+    return nullptr;
+
+  return WebContentsImpl::FromFrameTreeNode(frame_tree_node);
+}
+
+}  // namespace
 
 // ----------------------------------------------------------------------------
 // ResourceRequestInfo
@@ -32,7 +50,8 @@ void ResourceRequestInfo::AllocateForTesting(net::URLRequest* request,
                                              bool is_main_frame,
                                              bool parent_is_main_frame,
                                              bool allow_download,
-                                             bool is_async) {
+                                             bool is_async,
+                                             bool is_using_lofi) {
   // Make sure both |is_main_frame| and |parent_is_main_frame| aren't set at the
   // same time.
   DCHECK(!(is_main_frame && parent_is_main_frame));
@@ -52,7 +71,6 @@ void ResourceRequestInfo::AllocateForTesting(net::URLRequest* request,
           render_frame_id,                   // render_frame_id
           is_main_frame,                     // is_main_frame
           parent_is_main_frame,              // parent_is_main_frame
-          0,                                 // parent_render_frame_id
           resource_type,                     // resource_type
           ui::PAGE_TRANSITION_LINK,          // transition_type
           false,                             // should_replace_current_entry
@@ -67,7 +85,10 @@ void ResourceRequestInfo::AllocateForTesting(net::URLRequest* request,
           blink::WebPageVisibilityStateVisible,  // visibility_state
           context,                           // context
           base::WeakPtr<ResourceMessageFilter>(),  // filter
-          is_async);                         // is_async
+          false,                             // report_raw_headers
+          is_async,                          // is_async
+          is_using_lofi,                     // is_using_lofi
+          std::string());                    // original_headers
   info->AssociateWithRequest(request);
 }
 
@@ -110,7 +131,6 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
     int render_frame_id,
     bool is_main_frame,
     bool parent_is_main_frame,
-    int parent_render_frame_id,
     ResourceType resource_type,
     ui::PageTransition transition_type,
     bool should_replace_current_entry,
@@ -125,7 +145,10 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
     blink::WebPageVisibilityState visibility_state,
     ResourceContext* context,
     base::WeakPtr<ResourceMessageFilter> filter,
-    bool is_async)
+    bool report_raw_headers,
+    bool is_async,
+    bool is_using_lofi,
+    const std::string& original_headers)
     : cross_site_handler_(NULL),
       detachable_handler_(NULL),
       process_type_(process_type),
@@ -137,7 +160,6 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
       render_frame_id_(render_frame_id),
       is_main_frame_(is_main_frame),
       parent_is_main_frame_(parent_is_main_frame),
-      parent_render_frame_id_(parent_render_frame_id),
       should_replace_current_entry_(should_replace_current_entry),
       is_download_(is_download),
       is_stream_(is_stream),
@@ -155,10 +177,36 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
       visibility_state_(visibility_state),
       context_(context),
       filter_(filter),
-      is_async_(is_async) {
+      report_raw_headers_(report_raw_headers),
+      is_async_(is_async),
+      is_using_lofi_(is_using_lofi),
+      original_headers_(original_headers) {
 }
 
 ResourceRequestInfoImpl::~ResourceRequestInfoImpl() {
+}
+
+ResourceRequestInfo::WebContentsGetter
+ResourceRequestInfoImpl::GetWebContentsGetterForRequest() const {
+  // PlzNavigate: navigation requests are created with a valid FrameTreeNode ID
+  // and invalid RenderProcessHost and RenderFrameHost IDs. The FrameTreeNode
+  // ID should be used to access the WebContents.
+  if (frame_tree_node_id_ != -1) {
+    DCHECK(IsBrowserSideNavigationEnabled());
+    return base::Bind(&GetWebContentsFromFTNID, frame_tree_node_id_);
+  }
+
+  // In other cases, use the RenderProcessHost ID + RenderFrameHost ID to get
+  // the WebContents.
+  int render_process_host_id = -1;
+  int render_frame_host_id = -1;
+  if (!GetAssociatedRenderFrame(&render_process_host_id,
+                                &render_frame_host_id)) {
+    NOTREACHED();
+  }
+
+  return base::Bind(&WebContentsImpl::FromRenderFrameHostID,
+                    render_process_host_id, render_frame_host_id);
 }
 
 ResourceContext* ResourceRequestInfoImpl::GetContext() const {
@@ -177,10 +225,6 @@ int ResourceRequestInfoImpl::GetOriginPID() const {
   return origin_pid_;
 }
 
-int ResourceRequestInfoImpl::GetRequestID() const {
-  return request_id_;
-}
-
 int ResourceRequestInfoImpl::GetRenderFrameID() const {
   return render_frame_id_;
 }
@@ -191,10 +235,6 @@ bool ResourceRequestInfoImpl::IsMainFrame() const {
 
 bool ResourceRequestInfoImpl::ParentIsMainFrame() const {
   return parent_is_main_frame_;
-}
-
-int ResourceRequestInfoImpl::GetParentRenderFrameID() const {
-  return parent_render_frame_id_;
 }
 
 ResourceType ResourceRequestInfoImpl::GetResourceType() const {
@@ -247,6 +287,14 @@ bool ResourceRequestInfoImpl::IsDownload() const {
   return is_download_;
 }
 
+bool ResourceRequestInfoImpl::IsUsingLoFi() const {
+  return is_using_lofi_;
+}
+
+bool ResourceRequestInfoImpl::ShouldReportRawHeaders() const {
+  return report_raw_headers_;
+}
+
 void ResourceRequestInfoImpl::AssociateWithRequest(net::URLRequest* request) {
   request->SetUserData(NULL, this);
   int render_process_id;
@@ -256,6 +304,10 @@ void ResourceRequestInfoImpl::AssociateWithRequest(net::URLRequest* request) {
         URLRequestUserData::kUserDataKey,
         new URLRequestUserData(render_process_id, render_frame_id));
   }
+}
+
+int ResourceRequestInfoImpl::GetRequestID() const {
+  return request_id_;
 }
 
 GlobalRequestID ResourceRequestInfoImpl::GetGlobalRequestID() const {
@@ -269,15 +321,15 @@ GlobalRoutingID ResourceRequestInfoImpl::GetGlobalRoutingID() const {
 void ResourceRequestInfoImpl::UpdateForTransfer(
     int child_id,
     int route_id,
+    int render_frame_id,
     int origin_pid,
     int request_id,
-    int parent_render_frame_id,
     base::WeakPtr<ResourceMessageFilter> filter) {
   child_id_ = child_id;
   route_id_ = route_id;
+  render_frame_id_ = render_frame_id;
   origin_pid_ = origin_pid;
   request_id_ = request_id;
-  parent_render_frame_id_ = parent_render_frame_id;
   filter_ = filter;
 }
 

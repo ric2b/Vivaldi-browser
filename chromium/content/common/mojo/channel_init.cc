@@ -4,6 +4,8 @@
 
 #include "content/common/mojo/channel_init.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/lazy_instance.h"
@@ -26,27 +28,18 @@ mojo::ScopedMessagePipeHandle ChannelInit::Init(
     scoped_refptr<base::TaskRunner> io_thread_task_runner) {
   scoped_ptr<IPC::ScopedIPCSupport> ipc_support(
       new IPC::ScopedIPCSupport(io_thread_task_runner));
-  mojo::ScopedMessagePipeHandle message_pipe =
-      mojo::embedder::CreateChannel(
-          mojo::embedder::ScopedPlatformHandle(
-              mojo::embedder::PlatformHandle(file)),
-          base::Bind(&ChannelInit::OnCreatedChannel,
-                     weak_factory_.GetWeakPtr(),
-                     base::Passed(&ipc_support)),
-          base::ThreadTaskRunnerHandle::Get()).Pass();
-  return message_pipe.Pass();
+  mojo::ScopedMessagePipeHandle message_pipe = mojo::embedder::CreateChannel(
+      mojo::embedder::ScopedPlatformHandle(
+          mojo::embedder::PlatformHandle(file)),
+      base::Bind(&ChannelInit::OnCreatedChannel, weak_factory_.GetWeakPtr(),
+                 base::Passed(&ipc_support)),
+      base::ThreadTaskRunnerHandle::Get());
+  return message_pipe;
 }
 
 void ChannelInit::WillDestroySoon() {
   if (channel_info_)
     mojo::embedder::WillDestroyChannelSoon(channel_info_);
-}
-
-void ChannelInit::ShutdownOnIOThread() {
-  if (channel_info_)
-    mojo::embedder::DestroyChannelOnIOThread(channel_info_);
-  channel_info_ = nullptr;
-  ipc_support_.reset();
 }
 
 // static
@@ -63,7 +56,7 @@ void ChannelInit::OnCreatedChannel(
 
   DCHECK(!self->channel_info_);
   self->channel_info_ = channel;
-  self->ipc_support_ = ipc_support.Pass();
+  self->ipc_support_ = std::move(ipc_support);
 }
 
 }  // namespace content

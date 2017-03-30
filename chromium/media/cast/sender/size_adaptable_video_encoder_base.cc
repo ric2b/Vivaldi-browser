@@ -4,6 +4,8 @@
 
 #include "media/cast/sender/size_adaptable_video_encoder_base.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "media/base/video_frame.h"
@@ -19,7 +21,7 @@ SizeAdaptableVideoEncoderBase::SizeAdaptableVideoEncoderBase(
       video_config_(video_config),
       status_change_cb_(status_change_cb),
       frames_in_encoder_(0),
-      last_frame_id_(kStartFrameId),
+      last_frame_id_(kFirstFrameId - 1),
       weak_factory_(this) {
   cast_environment_->PostTask(
       CastEnvironment::MAIN,
@@ -77,12 +79,6 @@ void SizeAdaptableVideoEncoderBase::GenerateKeyFrame() {
     encoder_->GenerateKeyFrame();
 }
 
-void SizeAdaptableVideoEncoderBase::LatestFrameIdToReference(uint32 frame_id) {
-  DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
-  if (encoder_)
-    encoder_->LatestFrameIdToReference(frame_id);
-}
-
 scoped_ptr<VideoFrameFactory>
     SizeAdaptableVideoEncoderBase::CreateVideoFrameFactory() {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
@@ -138,7 +134,7 @@ void SizeAdaptableVideoEncoderBase::TrySpawningReplacementEncoder(
           << frame_size_.ToString() << " to "
           << size_needed.ToString() << ").";
   frame_size_ = size_needed;
-  encoder_ = CreateEncoder().Pass();
+  encoder_ = CreateEncoder();
   DCHECK(encoder_);
 }
 
@@ -161,7 +157,7 @@ void SizeAdaptableVideoEncoderBase::OnEncodedVideoFrame(
   --frames_in_encoder_;
   DCHECK_GE(frames_in_encoder_, 0);
   last_frame_id_ = encoded_frame->frame_id;
-  frame_encoded_callback.Run(encoded_frame.Pass());
+  frame_encoded_callback.Run(std::move(encoded_frame));
 }
 
 }  // namespace cast

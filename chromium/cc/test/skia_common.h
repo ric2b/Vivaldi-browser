@@ -7,9 +7,9 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "skia/ext/refptr.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-#include "third_party/skia/include/core/SkFlattenable.h"
-#include "third_party/skia/include/core/SkPixelRef.h"
+#include "third_party/skia/include/core/SkImage.h"
 
 namespace gfx {
 class Rect;
@@ -17,18 +17,17 @@ class Size;
 }
 
 namespace cc {
-class Picture;
 class DisplayItemList;
-
-void DrawPicture(unsigned char* buffer,
-                 const gfx::Rect& layer_rect,
-                 scoped_refptr<Picture> picture);
 
 void DrawDisplayList(unsigned char* buffer,
                      const gfx::Rect& layer_rect,
                      scoped_refptr<DisplayItemList> list);
 
-void CreateBitmap(const gfx::Size& size, const char* uri, SkBitmap* bitmap);
+bool AreDisplayListDrawingResultsSame(const gfx::Rect& layer_rect,
+                                      scoped_refptr<DisplayItemList> list_a,
+                                      scoped_refptr<DisplayItemList> list_b);
+
+skia::RefPtr<SkImage> CreateDiscardableImage(const gfx::Size& size);
 
 }  // namespace cc
 

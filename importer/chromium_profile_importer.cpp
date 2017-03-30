@@ -8,6 +8,8 @@
 #include "importer/chrome_importer_utils.h"
 #include "base/strings/utf_string_conversions.h"
 
+#include "app/vivaldi_resources.h"
+
 using namespace importer;
 using namespace base;
 using namespace std;
@@ -21,22 +23,25 @@ ChromiumProfileImporter::~ChromiumProfileImporter(){
 
 }
 
-ChromiumProfileImporter::ChromiumProfileImporter(){
+ChromiumProfileImporter::ChromiumProfileImporter() {
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_CHROME));
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_YANDEX));
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM));
-  chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_BETA));
-  chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_DEV));
+  chromeProfiles.push_back(
+      GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_BETA));
+  chromeProfiles.push_back(
+      GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_DEV));
 #if !defined(OS_MACOSX)
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_VIVALDI));
 #endif
 }
 
-ChromiumProfile ChromiumProfileImporter::GetChromeProfile(ImporterType importerType) {
+ChromiumProfile
+ChromiumProfileImporter::GetChromeProfile(ImporterType importerType) {
   ChromiumProfile prof = ChromiumProfile();
   switch (importerType) {
 
-  case ImporterType::TYPE_CHROME :
+  case ImporterType::TYPE_CHROME:
     prof.importer_type = importerType;
     prof.import_name_resource_idx = IDS_IMPORT_FROM_GOOGLE_CHROME;
     return prof;
@@ -71,18 +76,24 @@ ChromiumProfile ChromiumProfileImporter::GetChromeProfile(ImporterType importerT
   }
 }
 
-void ChromiumProfileImporter::DetectChromiumProfiles(vector<SourceProfile*>* profiles){
-
+void ChromiumProfileImporter::DetectChromiumProfiles(
+    vector<SourceProfile> *profiles) {
   for (size_t i = 0; i < chromeProfiles.size(); ++i) {
     FilePath profileDirectory =
       GetProfileDir(chromeProfiles[i].importer_type);
-
-    if (PathExists(profileDirectory)) {
-      SourceProfile* chrome = new SourceProfile;
-      chrome->importer_name =
+    bool has_profile_dir = PathExists(profileDirectory);
+    if (!has_profile_dir) {
+      // Vivaldi allows import from standalone, so clear the path if it doesn't
+      // exist.
+      profileDirectory.clear();
+    }
+    if (has_profile_dir ||
+        chromeProfiles[i].importer_type == ImporterType::TYPE_VIVALDI) {
+      SourceProfile chrome;
+      chrome.importer_name =
         l10n_util::GetStringUTF16(chromeProfiles[i].import_name_resource_idx);
-      chrome->importer_type = chromeProfiles[i].importer_type;
-      chrome->source_path = profileDirectory;
+      chrome.importer_type = chromeProfiles[i].importer_type;
+      chrome.source_path = profileDirectory;
 
       vector<ChromeProfileInfo> prof;
       if (chromeProfiles[i].importer_type == ImporterType::TYPE_OPERA_OPIUM ||
@@ -98,9 +109,9 @@ void ChromiumProfileImporter::DetectChromiumProfiles(vector<SourceProfile*>* pro
       } else {
         ReadProfiles(&prof, profileDirectory);
       }
-      chrome->user_profile_names = prof;
+      chrome.user_profile_names = prof;
 
-      chrome->services_supported =
+      chrome.services_supported =
         importer::FAVORITES |
         /*    importer::NOTES |*/
         importer::PASSWORDS |
@@ -113,10 +124,8 @@ void ChromiumProfileImporter::DetectChromiumProfiles(vector<SourceProfile*>* pro
 }
 
 void ChromiumProfileImporter::ReadProfiles(vector<ChromeProfileInfo> *cp,
-    FilePath profileDirectory)
-{
-  FilePath profileFileName =
-    profileDirectory.AppendASCII("Local State");
+                                           FilePath profileDirectory) {
+  FilePath profileFileName = profileDirectory.AppendASCII("Local State");
   if (!PathExists(profileFileName))
     return;
 

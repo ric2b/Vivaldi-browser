@@ -4,6 +4,8 @@
 
 #include "extensions/browser/extension_throttle_manager.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
@@ -117,7 +119,7 @@ ExtensionThrottleManager::RegisterRequestUrl(const GURL& url) {
 
 void ExtensionThrottleManager::SetBackoffPolicyForTests(
     scoped_ptr<net::BackoffEntry::Policy> policy) {
-  backoff_policy_for_tests_ = policy.Pass();
+  backoff_policy_for_tests_ = std::move(policy);
 }
 
 void ExtensionThrottleManager::OverrideEntryForTests(
@@ -175,7 +177,7 @@ std::string ExtensionThrottleManager::GetIdFromUrl(const GURL& url) const {
     return url.possibly_invalid_spec();
 
   GURL id = url.ReplaceComponents(url_id_replacements_);
-  return base::StringToLowerASCII(id.spec()).c_str();
+  return base::ToLowerASCII(id.spec());
 }
 
 void ExtensionThrottleManager::GarbageCollectEntriesIfNecessary() {

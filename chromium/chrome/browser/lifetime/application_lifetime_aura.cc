@@ -4,14 +4,18 @@
 
 #include "chrome/browser/lifetime/application_lifetime.h"
 
-#include "ash/shell.h"
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/views/widget/widget.h"
+
+#if defined(USE_ASH)
+#include "ash/shell.h"
+#endif
 
 namespace chrome {
 
@@ -20,6 +24,7 @@ void HandleAppExitingForPlatform() {
   // and windows created by Ash (launcher, background, etc).
   g_browser_process->notification_ui_manager()->CancelAll();
 
+#if defined(USE_ASH)
   // This may be called before |ash::Shell| is initialized when
   // XIOError is reported.  crbug.com/150633.
   if (ash::Shell::HasInstance()) {
@@ -28,6 +33,7 @@ void HandleAppExitingForPlatform() {
     aura::client::GetCaptureClient(ash::Shell::GetPrimaryRootWindow())->
         SetCapture(NULL);
   }
+#endif
 
   views::Widget::CloseAllSecondaryWidgets();
 
@@ -43,7 +49,7 @@ void HandleAppExitingForPlatform() {
     // NotifyAndTerminate does nothing if called more than once.
     NotifyAndTerminate(true);
   }
-#endif  // OS_CHROMEOS
+#endif
 }
 
 }  // namespace chrome

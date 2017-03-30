@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/history/history_api.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -23,7 +25,6 @@
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/api/history.h"
 #include "chrome/common/pref_names.h"
@@ -37,7 +38,6 @@ namespace extensions {
 
 using api::history::HistoryItem;
 using api::history::VisitItem;
-using extensions::ActivityLog;
 
 typedef std::vector<linked_ptr<api::history::HistoryItem> >
     HistoryItemList;
@@ -73,7 +73,7 @@ scoped_ptr<HistoryItem> GetHistoryItem(const history::URLRow& row) {
   history_item->typed_count.reset(new int(row.typed_count()));
   history_item->visit_count.reset(new int(row.visit_count()));
 
-  return history_item.Pass();
+  return history_item;
 }
 
 scoped_ptr<VisitItem> GetVisitItem(const history::VisitRow& row) {
@@ -126,7 +126,7 @@ scoped_ptr<VisitItem> GetVisitItem(const history::VisitRow& row) {
 
   visit_item->transition = transition;
 
-  return visit_item.Pass();
+  return visit_item;
 }
 
 }  // namespace
@@ -148,7 +148,8 @@ void HistoryEventRouter::OnURLVisited(history::HistoryService* history_service,
                                       base::Time visit_time) {
   scoped_ptr<HistoryItem> history_item = GetHistoryItem(row);
   scoped_ptr<base::ListValue> args = OnVisited::Create(*history_item);
-  DispatchEvent(profile_, api::history::OnVisited::kEventName, args.Pass());
+  DispatchEvent(profile_, events::HISTORY_ON_VISITED,
+                api::history::OnVisited::kEventName, std::move(args));
 }
 
 void HistoryEventRouter::OnURLsDeleted(history::HistoryService* history_service,
@@ -165,19 +166,19 @@ void HistoryEventRouter::OnURLsDeleted(history::HistoryService* history_service,
   removed.urls.reset(urls);
 
   scoped_ptr<base::ListValue> args = OnVisitRemoved::Create(removed);
-  DispatchEvent(profile_, api::history::OnVisitRemoved::kEventName,
-                args.Pass());
+  DispatchEvent(profile_, events::HISTORY_ON_VISIT_REMOVED,
+                api::history::OnVisitRemoved::kEventName, std::move(args));
 }
 
-void HistoryEventRouter::DispatchEvent(
-    Profile* profile,
-    const std::string& event_name,
-    scoped_ptr<base::ListValue> event_args) {
-  if (profile && extensions::EventRouter::Get(profile)) {
-    scoped_ptr<extensions::Event> event(new extensions::Event(
-        extensions::events::UNKNOWN, event_name, event_args.Pass()));
+void HistoryEventRouter::DispatchEvent(Profile* profile,
+                                       events::HistogramValue histogram_value,
+                                       const std::string& event_name,
+                                       scoped_ptr<base::ListValue> event_args) {
+  if (profile && EventRouter::Get(profile)) {
+    scoped_ptr<Event> event(
+        new Event(histogram_value, event_name, std::move(event_args)));
     event->restrict_to_browser_context = profile;
-    extensions::EventRouter::Get(profile)->BroadcastEvent(event.Pass());
+    EventRouter::Get(profile)->BroadcastEvent(std::move(event));
   }
 }
 
@@ -353,61 +354,9 @@ void HistorySearchFunction::SearchComplete(history::QueryResults* results) {
   SendAsyncResponse();
 }
 
-/////////// Vivaldi specific ///////////
-
-bool HistoryDbSearchFunction::RunAsyncImpl() {
-  scoped_ptr<Search::Params> params(Search::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
-      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
-
-  int max_hits = 100;
-
-  if (params->query.max_results.get())
-    max_hits = *params->query.max_results;
-
-  const char* sql_statement =
-      "SELECT urls.id, urls.url, urls.title, urls.visit_count, "
-      "urls.typed_count, urls.last_visit_time, urls.hidden "
-      "FROM urls WHERE hidden = 0 "
-      "AND urls.url LIKE ? OR urls.title LIKE ? ORDER BY urls.id LIMIT ?";
-  const std::string search_text = "%" + params->query.text + "%";
-  hs->QueryHistoryWStatement(sql_statement, search_text, max_hits,
-                   base::Bind(&HistoryDbSearchFunction::SearchComplete,
-                              base::Unretained(this)),
-                   &task_tracker_);
-
-  return true;
-}
-
-void HistoryDbSearchFunction::SearchComplete(history::QueryResults* results) {
-  HistoryItemList history_item_vec;
-  if (results && !results->empty()) {
-    for (history::QueryResults::URLResultVector::const_iterator iterator =
-            results->begin();
-         iterator != results->end();
-        ++iterator) {
-      history_item_vec.push_back(make_linked_ptr(
-          GetHistoryItem(**iterator).release()));
-    }
-  }
-  // This must be revisited since it is slow!
-  results_ = Search::Results::Create(history_item_vec);
-  SendAsyncResponse();
-}
-
-/////////// ^ Vivaldi specific ^ ///////////
-
 bool HistoryAddUrlFunction::RunAsync() {
   scoped_ptr<AddUrl::Params> params(AddUrl::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  // Vivaldi specific; we have added incognito mode for webviews and need to
-  // take this into account here.
-  if (GetCurrentBrowser()->profile()->IsOffTheRecord())
-    // This is not an error.
-    return true;
 
   GURL url;
   if (!ValidateUrl(params->details.url, &url))

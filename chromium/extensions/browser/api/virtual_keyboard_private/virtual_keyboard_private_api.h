@@ -53,6 +53,19 @@ class VirtualKeyboardPrivateHideKeyboardFunction
   bool RunSync() override;
 };
 
+class VirtualKeyboardPrivateSetHotrodKeyboardFunction
+    : public SyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("virtualKeyboardPrivate.setHotrodKeyboard",
+                             VIRTUALKEYBOARDPRIVATE_SETHOTRODKEYBOARD);
+
+ protected:
+  ~VirtualKeyboardPrivateSetHotrodKeyboardFunction() override {}
+
+  // ExtensionFunction:
+  bool RunSync() override;
+};
+
 class VirtualKeyboardPrivateLockKeyboardFunction
     : public SyncExtensionFunction {
  public:
@@ -112,6 +125,19 @@ class VirtualKeyboardPrivateSetModeFunction : public SyncExtensionFunction {
 
  protected:
   ~VirtualKeyboardPrivateSetModeFunction() override {}
+
+  // ExtensionFunction:
+  bool RunSync() override;
+};
+
+class VirtualKeyboardPrivateSetKeyboardStateFunction
+    : public SyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("virtualKeyboardPrivate.setKeyboardState",
+                             VIRTUALKEYBOARDPRIVATE_SETKEYBOARDSTATE);
+
+ protected:
+  ~VirtualKeyboardPrivateSetKeyboardStateFunction() override {}
 
   // ExtensionFunction:
   bool RunSync() override;

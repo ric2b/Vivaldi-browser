@@ -6,11 +6,11 @@ package org.chromium.chrome.browser.feedback;
 
 import android.os.AsyncTask;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.browser.profiles.Profile;
 
 import java.io.IOException;
@@ -25,7 +25,7 @@ import java.net.URL;
  */
 @JNINamespace("chrome::android")
 public final class ConnectivityChecker {
-    private static final String TAG = "cr.feedback";
+    private static final String TAG = "feedback";
 
     private static final String DEFAULT_HTTP_NO_CONTENT_URL =
             "http://clients4.google.com/generate_204";

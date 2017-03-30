@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/prefs/pref_change_registrar.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/devtools/device/devtools_android_bridge.h"
 #include "chrome/browser/devtools/devtools_embedder_message_dispatcher.h"
@@ -25,6 +26,7 @@
 class DevToolsAndroidBridge;
 class InfoBarService;
 class Profile;
+class PortForwardingStatusSerializer;
 
 namespace content {
 struct FileChooserParams;
@@ -32,14 +34,16 @@ class WebContents;
 }
 
 // Base implementation of DevTools bindings around front-end.
-class DevToolsUIBindings :public content::DevToolsFrontendHost::Delegate,
-                           public DevToolsEmbedderMessageDispatcher::Delegate,
+class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
                            public DevToolsAndroidBridge::DeviceCountListener,
                            public content::DevToolsAgentHostClient,
-                           public net::URLFetcherDelegate {
+                           public net::URLFetcherDelegate,
+                           public DevToolsFileHelper::Delegate {
  public:
   static DevToolsUIBindings* ForWebContents(
       content::WebContents* web_contents);
+  static content::DevToolsExternalAgentProxyDelegate*
+      CreateWebSocketAPIChannel();
 
   class Delegate {
    public:
@@ -77,11 +81,9 @@ class DevToolsUIBindings :public content::DevToolsFrontendHost::Delegate,
   bool IsAttachedTo(content::DevToolsAgentHost* agent_host);
 
  private:
+  friend class WebSocketAPIChannel;
 
-  // content::DevToolsFrontendHost::Delegate implementation.
-  void HandleMessageFromDevToolsFrontend(const std::string& message) override;
-  void HandleMessageFromDevToolsFrontendToBackend(
-      const std::string& message) override;
+  void HandleMessageFromDevToolsFrontend(const std::string& message);
 
   // content::DevToolsAgentHostClient implementation.
   void DispatchProtocolMessage(content::DevToolsAgentHost* agent_host,
@@ -108,7 +110,7 @@ class DevToolsUIBindings :public content::DevToolsFrontendHost::Delegate,
   void AppendToFile(const std::string& url,
                     const std::string& content) override;
   void RequestFileSystems() override;
-  void AddFileSystem() override;
+  void AddFileSystem(const std::string& file_system_path) override;
   void RemoveFileSystem(const std::string& file_system_path) override;
   void UpgradeDraggedFileSystemPermissions(
       const std::string& file_system_url) override;
@@ -122,14 +124,24 @@ class DevToolsUIBindings :public content::DevToolsFrontendHost::Delegate,
   void ZoomIn() override;
   void ZoomOut() override;
   void ResetZoom() override;
+  void SetDevicesDiscoveryConfig(
+      bool discover_usb_devices,
+      bool port_forwarding_enabled,
+      const std::string& port_forwarding_config) override;
   void SetDevicesUpdatesEnabled(bool enabled) override;
-  void SendMessageToBrowser(const std::string& message) override;
+  void PerformActionOnRemotePage(const std::string& page_id,
+                                 const std::string& action) override;
+  void OpenRemotePage(const std::string& browser_id,
+                      const std::string& url) override;
+  void DispatchProtocolMessageFromDevToolsFrontend(
+      const std::string& message) override;
   void RecordEnumeratedHistogram(const std::string& name,
                                  int sample,
                                  int boundary_value) override;
   void SendJsonRequest(const DispatchCallback& callback,
                        const std::string& browser_id,
                        const std::string& url) override;
+  void SendFrontendAPINotification(const std::string& message) override;
   void GetPreferences(const DispatchCallback& callback) override;
   void SetPreference(const std::string& name,
                      const std::string& value) override;
@@ -151,6 +163,7 @@ class DevToolsUIBindings :public content::DevToolsFrontendHost::Delegate,
   virtual void DevicesUpdated(const std::string& source,
                               const base::ListValue& targets);
 
+  void DocumentAvailableInMainFrame();
   void DocumentOnLoadCompletedInMainFrame();
   void DidNavigateMainFrame();
   void FrontendLoaded();
@@ -158,14 +171,19 @@ class DevToolsUIBindings :public content::DevToolsFrontendHost::Delegate,
   void JsonReceived(const DispatchCallback& callback,
                     int result,
                     const std::string& message);
+  void DevicesDiscoveryConfigUpdated();
+  void SendPortForwardingStatus(const base::Value& status);
+
+  // DevToolsFileHelper::Delegate overrides.
+  void FileSystemAdded(
+      const DevToolsFileHelper::FileSystem& file_system) override;
+  void FileSystemRemoved(const std::string& file_system_path) override;
+  void FilePathsChanged(const std::vector<std::string>& file_paths) override;
 
   // DevToolsFileHelper callbacks.
   void FileSavedAs(const std::string& url);
   void CanceledFileSaveAs(const std::string& url);
   void AppendedTo(const std::string& url);
-  void FileSystemsLoaded(
-      const std::vector<DevToolsFileHelper::FileSystem>& file_systems);
-  void FileSystemAdded(const DevToolsFileHelper::FileSystem& file_system);
   void IndexingTotalWorkCalculated(int request_id,
                                    const std::string& file_system_path,
                                    int total_work);
@@ -184,7 +202,6 @@ class DevToolsUIBindings :public content::DevToolsFrontendHost::Delegate,
   void AddDevToolsExtensionsToClient();
 
   class FrontendWebContentsObserver;
-  friend class FrontendWebContentsObserver;
   scoped_ptr<FrontendWebContentsObserver> frontend_contents_observer_;
 
   Profile* profile_;
@@ -203,7 +220,10 @@ class DevToolsUIBindings :public content::DevToolsFrontendHost::Delegate,
 
   bool devices_updates_enabled_;
   bool frontend_loaded_;
+  bool reattaching_;
   scoped_ptr<DevToolsTargetsUIHandler> remote_targets_handler_;
+  scoped_ptr<PortForwardingStatusSerializer> port_status_serializer_;
+  PrefChangeRegistrar pref_change_registrar_;
   scoped_ptr<DevToolsEmbedderMessageDispatcher> embedder_message_dispatcher_;
   GURL url_;
   using PendingRequestsMap = std::map<const net::URLFetcher*, DispatchCallback>;

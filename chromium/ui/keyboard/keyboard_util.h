@@ -7,12 +7,9 @@
 
 #include <string>
 
-#include "base/strings/string16.h"
 // TODO(beng): replace with forward decl once RootWindow is renamed.
 #include "ui/aura/window.h"
 #include "ui/keyboard/keyboard_export.h"
-
-struct GritResourceMap;
 
 namespace aura {
 class WindowTreeHost;
@@ -52,7 +49,17 @@ enum KeyboardShowOverride {
   KEYBOARD_SHOW_OVERRIDE_NONE,
 };
 
-// Gets the caculated keyboard bounds from |root_bounds|. The keyboard height
+// An enumeration of keyboard states.
+enum KeyboardState {
+  // Default state. System decides whether to show the keyboard or not.
+  KEYBOARD_STATE_AUTO = 0,
+  // Request virtual keyboard be deployed.
+  KEYBOARD_STATE_ENABLED,
+  // Request virtual keyboard be suppressed.
+  KEYBOARD_STATE_DISABLED,
+};
+
+// Gets the calculated keyboard bounds from |root_bounds|. The keyboard height
 // is specified by |keyboard_height|. This should be only called when keyboard
 // is in FULL_WDITH mode.
 KEYBOARD_EXPORT gfx::Rect FullWidthKeyboardBoundsFromRootBounds(
@@ -64,11 +71,23 @@ KEYBOARD_EXPORT void SetAccessibilityKeyboardEnabled(bool enabled);
 // Gets the state of the a11y onscreen keyboard.
 KEYBOARD_EXPORT bool GetAccessibilityKeyboardEnabled();
 
+// Sets the state of the hotrod onscreen keyboard.
+KEYBOARD_EXPORT void SetHotrodKeyboardEnabled(bool enabled);
+
+// Gets the state of the hotrod onscreen keyboard.
+KEYBOARD_EXPORT bool GetHotrodKeyboardEnabled();
+
 // Sets the state of the touch onscreen keyboard.
 KEYBOARD_EXPORT void SetTouchKeyboardEnabled(bool enabled);
 
 // Gets the state of the touch onscreen keyboard.
 KEYBOARD_EXPORT bool GetTouchKeyboardEnabled();
+
+// Sets the requested state of the keyboard.
+KEYBOARD_EXPORT void SetRequestedKeyboardState(KeyboardState state);
+
+// Gets the requested state of the keyboard.
+KEYBOARD_EXPORT int GetRequestedKeyboardState();
 
 // Gets the default keyboard layout.
 KEYBOARD_EXPORT std::string GetKeyboardLayout();
@@ -99,14 +118,11 @@ KEYBOARD_EXPORT bool IsExperimentalInputViewEnabled();
 // Returns true if floating virtual keyboard feature is enabled.
 KEYBOARD_EXPORT bool IsFloatingVirtualKeyboardEnabled();
 
-// Returns true if gesture typing is enabled for virtual keyboard.
+// Returns true if gesture typing option is enabled for virtual keyboard.
 KEYBOARD_EXPORT bool IsGestureTypingEnabled();
 
 // Returns true if gesture editing option is enabled for virtual keyboard.
 KEYBOARD_EXPORT bool IsGestureEditingEnabled();
-
-// Returns true if material design is enabled for the keyboard.
-KEYBOARD_EXPORT bool IsMaterialDesignEnabled();
 
 // Returns true if voice input is enabled for the keyboard.
 KEYBOARD_EXPORT bool IsVoiceInputEnabled();
@@ -142,11 +158,6 @@ KEYBOARD_EXPORT void MarkKeyboardLoadStarted();
 // Marks that the keyboard load has ended. This finishes measuring that the
 // keyboard is loaded.
 KEYBOARD_EXPORT void MarkKeyboardLoadFinished();
-
-// Get the list of keyboard resources. |size| is populated with the number of
-// resources in the returned array.
-KEYBOARD_EXPORT const GritResourceMap* GetKeyboardExtensionResources(
-    size_t* size);
 
 // Sets the override content url.
 // This is used by for input view for extension IMEs.

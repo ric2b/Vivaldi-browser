@@ -4,9 +4,7 @@
 
 #include "chrome/test/base/ui_test_utils.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#endif
+#include <stddef.h>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -14,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
@@ -22,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -32,12 +32,12 @@
 #include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/find_bar/find_notification_details.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
@@ -47,8 +47,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
-#include "components/search_engines/template_url_service.h"
-#include "content/public/browser/dom_operation_notification_details.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/geolocation_provider.h"
@@ -72,13 +71,15 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/gfx/geometry/rect.h"
 
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
+
 #if defined(USE_AURA)
 #include "ash/shell.h"
 #include "ui/aura/window_event_dispatcher.h"
 #endif
 
-using content::DomOperationNotificationDetails;
-using content::NativeWebKeyboardEvent;
 using content::NavigationController;
 using content::NavigationEntry;
 using content::OpenURLParams;
@@ -146,22 +147,10 @@ bool GetCurrentTabTitle(const Browser* browser, base::string16* title) {
   return true;
 }
 
-Browser* OpenURLOffTheRecord(Profile* profile, const GURL& url) {
-  chrome::HostDesktopType active_desktop = chrome::GetActiveDesktop();
-  chrome::OpenURLOffTheRecord(profile, url, active_desktop);
-  Browser* browser = chrome::FindTabbedBrowser(
-      profile->GetOffTheRecordProfile(), false, active_desktop);
-  content::TestNavigationObserver observer(
-      browser->tab_strip_model()->GetActiveWebContents());
-  observer.Wait();
-  return browser;
-}
-
 void NavigateToURL(chrome::NavigateParams* params) {
   chrome::Navigate(params);
   content::WaitForLoadStop(params->target_contents);
 }
-
 
 void NavigateToURLWithPost(Browser* browser, const GURL& url) {
   chrome::NavigateParams params(browser, url,
@@ -339,20 +328,6 @@ int FindInPage(WebContents* tab,
   return observer.number_of_matches();
 }
 
-void WaitForTemplateURLServiceToLoad(TemplateURLService* service) {
-  if (service->loaded())
-    return;
-  scoped_refptr<content::MessageLoopRunner> message_loop_runner =
-      new content::MessageLoopRunner;
-  scoped_ptr<TemplateURLService::Subscription> subscription =
-      service->RegisterOnLoadedCallback(
-          message_loop_runner->QuitClosure());
-  service->Load();
-  message_loop_runner->Run();
-
-  ASSERT_TRUE(service->loaded());
-}
-
 void DownloadURL(Browser* browser, const GURL& download_url) {
   base::ScopedTempDir downloads_directory;
   ASSERT_TRUE(downloads_directory.CreateUniqueTempDir());
@@ -384,12 +359,12 @@ void SendToOmniboxAndSubmit(LocationBar* location_bar,
   }
 }
 
-Browser* GetBrowserNotInSet(std::set<Browser*> excluded_browsers) {
+Browser* GetBrowserNotInSet(const std::set<Browser*>& excluded_browsers) {
   for (chrome::BrowserIterator it; !it.done(); it.Next()) {
     if (excluded_browsers.find(*it) == excluded_browsers.end())
       return *it;
   }
-  return NULL;
+  return nullptr;
 }
 
 namespace {

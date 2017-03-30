@@ -9,7 +9,7 @@
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "remoting/client/chromoting_stats.h"
+#include "remoting/protocol/performance_tracker.h"
 #include "remoting/signaling/server_log_entry.h"
 
 using base::StringPrintf;
@@ -105,29 +105,29 @@ scoped_ptr<ServerLogEntry> MakeLogEntryForSessionStateChange(
     entry->Set(kKeyConnectionError, GetValueError(error));
   }
 
-  return entry.Pass();
+  return entry;
 }
 
 scoped_ptr<ServerLogEntry> MakeLogEntryForStatistics(
-    ChromotingStats* statistics) {
+    protocol::PerformanceTracker* perf_tracker) {
   scoped_ptr<ServerLogEntry> entry(new ServerLogEntry());
   entry->AddRoleField(kValueRoleClient);
   entry->AddEventNameField(kValueEventNameStatistics);
 
   entry->Set("video-bandwidth",
-             StringPrintf("%.2f", statistics->video_bandwidth()->Rate()));
+             StringPrintf("%.2f", perf_tracker->video_bandwidth()));
   entry->Set("capture-latency",
-             StringPrintf("%.2f", statistics->video_capture_ms()->Average()));
+             StringPrintf("%.2f", perf_tracker->video_capture_ms()));
   entry->Set("encode-latency",
-             StringPrintf("%.2f", statistics->video_encode_ms()->Average()));
+             StringPrintf("%.2f", perf_tracker->video_encode_ms()));
   entry->Set("decode-latency",
-             StringPrintf("%.2f", statistics->video_decode_ms()->Average()));
+             StringPrintf("%.2f", perf_tracker->video_decode_ms()));
   entry->Set("render-latency",
-             StringPrintf("%.2f", statistics->video_frame_rate()->Rate()));
+             StringPrintf("%.2f", perf_tracker->video_frame_rate()));
   entry->Set("roundtrip-latency",
-             StringPrintf("%.2f", statistics->round_trip_ms()->Average()));
+             StringPrintf("%.2f", perf_tracker->round_trip_ms()));
 
-  return entry.Pass();
+  return entry;
 }
 
 scoped_ptr<ServerLogEntry> MakeLogEntryForSessionIdOld(
@@ -136,7 +136,7 @@ scoped_ptr<ServerLogEntry> MakeLogEntryForSessionIdOld(
   entry->AddRoleField(kValueRoleClient);
   entry->AddEventNameField(kValueEventNameSessionIdOld);
   AddSessionIdToLogEntry(entry.get(), session_id);
-  return entry.Pass();
+  return entry;
 }
 
 scoped_ptr<ServerLogEntry> MakeLogEntryForSessionIdNew(
@@ -145,7 +145,7 @@ scoped_ptr<ServerLogEntry> MakeLogEntryForSessionIdNew(
   entry->AddRoleField(kValueRoleClient);
   entry->AddEventNameField(kValueEventNameSessionIdNew);
   AddSessionIdToLogEntry(entry.get(), session_id);
-  return entry.Pass();
+  return entry;
 }
 
 void AddClientFieldsToLogEntry(ServerLogEntry* entry) {

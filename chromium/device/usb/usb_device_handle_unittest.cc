@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_io_thread.h"
+#include "device/test/test_device_client.h"
 #include "device/test/usb_test_gadget.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_handle.h"
@@ -21,6 +24,7 @@ class UsbDeviceHandleTest : public ::testing::Test {
   void SetUp() override {
     message_loop_.reset(new base::MessageLoopForUI);
     io_thread_.reset(new base::TestIOThread(base::TestIOThread::kAutoStart));
+    device_client_.reset(new TestDeviceClient(io_thread_->task_runner()));
   }
 
  protected:
@@ -28,6 +32,7 @@ class UsbDeviceHandleTest : public ::testing::Test {
 
  private:
   scoped_ptr<base::MessageLoop> message_loop_;
+  scoped_ptr<TestDeviceClient> device_client_;
 };
 
 class TestOpenCallback {
@@ -128,10 +133,10 @@ TEST_F(UsbDeviceHandleTest, InterruptTransfer) {
 
   scoped_refptr<net::IOBufferWithSize> in_buffer(new net::IOBufferWithSize(64));
   TestCompletionCallback in_completion;
-  handle->InterruptTransfer(USB_DIRECTION_INBOUND, 0x81, in_buffer.get(),
-                            in_buffer->size(),
-                            5000,  // 5 second timeout
-                            in_completion.callback());
+  handle->GenericTransfer(USB_DIRECTION_INBOUND, 0x81, in_buffer.get(),
+                          in_buffer->size(),
+                          5000,  // 5 second timeout
+                          in_completion.callback());
 
   scoped_refptr<net::IOBufferWithSize> out_buffer(
       new net::IOBufferWithSize(in_buffer->size()));
@@ -140,10 +145,10 @@ TEST_F(UsbDeviceHandleTest, InterruptTransfer) {
     out_buffer->data()[i] = i;
   }
 
-  handle->InterruptTransfer(USB_DIRECTION_OUTBOUND, 0x01, out_buffer.get(),
-                            out_buffer->size(),
-                            5000,  // 5 second timeout
-                            out_completion.callback());
+  handle->GenericTransfer(USB_DIRECTION_OUTBOUND, 0x01, out_buffer.get(),
+                          out_buffer->size(),
+                          5000,  // 5 second timeout
+                          out_completion.callback());
   out_completion.WaitForResult();
   ASSERT_EQ(USB_TRANSFER_COMPLETED, out_completion.status());
   EXPECT_EQ(static_cast<size_t>(out_buffer->size()),
@@ -183,10 +188,10 @@ TEST_F(UsbDeviceHandleTest, BulkTransfer) {
   scoped_refptr<net::IOBufferWithSize> in_buffer(
       new net::IOBufferWithSize(512));
   TestCompletionCallback in_completion;
-  handle->BulkTransfer(USB_DIRECTION_INBOUND, 0x82, in_buffer.get(),
-                       in_buffer->size(),
-                       5000,  // 5 second timeout
-                       in_completion.callback());
+  handle->GenericTransfer(USB_DIRECTION_INBOUND, 0x82, in_buffer.get(),
+                          in_buffer->size(),
+                          5000,  // 5 second timeout
+                          in_completion.callback());
 
   scoped_refptr<net::IOBufferWithSize> out_buffer(
       new net::IOBufferWithSize(in_buffer->size()));
@@ -195,10 +200,10 @@ TEST_F(UsbDeviceHandleTest, BulkTransfer) {
     out_buffer->data()[i] = i;
   }
 
-  handle->BulkTransfer(USB_DIRECTION_OUTBOUND, 0x02, out_buffer.get(),
-                       out_buffer->size(),
-                       5000,  // 5 second timeout
-                       out_completion.callback());
+  handle->GenericTransfer(USB_DIRECTION_OUTBOUND, 0x02, out_buffer.get(),
+                          out_buffer->size(),
+                          5000,  // 5 second timeout
+                          out_completion.callback());
   out_completion.WaitForResult();
   ASSERT_EQ(USB_TRANSFER_COMPLETED, out_completion.status());
   EXPECT_EQ(static_cast<size_t>(out_buffer->size()),

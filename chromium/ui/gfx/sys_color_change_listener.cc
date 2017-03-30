@@ -6,7 +6,6 @@
 
 #include <windows.h>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/scoped_ptr.h"
@@ -56,7 +55,7 @@ class SysColorChangeObserver {
   void RemoveListener(SysColorChangeListener* listener);
 
  private:
-  friend struct DefaultSingletonTraits<SysColorChangeObserver>;
+  friend struct base::DefaultSingletonTraits<SysColorChangeObserver>;
 
   SysColorChangeObserver();
   virtual ~SysColorChangeObserver();
@@ -69,7 +68,7 @@ class SysColorChangeObserver {
 
 // static
 SysColorChangeObserver* SysColorChangeObserver::GetInstance() {
-  return Singleton<SysColorChangeObserver>::get();
+  return base::Singleton<SysColorChangeObserver>::get();
 }
 
 SysColorChangeObserver::SysColorChangeObserver()

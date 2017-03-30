@@ -5,11 +5,12 @@
 #ifndef CHROME_BROWSER_UI_ANDROID_TAB_MODEL_TAB_MODEL_H_
 #define CHROME_BROWSER_UI_ANDROID_TAB_MODEL_TAB_MODEL_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/sync/glue/synced_window_delegate.h"
-#include "chrome/browser/ui/toolbar/toolbar_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_model_delegate.h"
-#include "components/sessions/session_id.h"
+#include "components/sessions/core/session_id.h"
+#include "components/sync_sessions/synced_window_delegate.h"
+#include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
@@ -46,7 +47,8 @@ class TabModel : public content::NotificationObserver {
   virtual void CloseTabAt(int index) = 0;
 
   // Used for restoring tabs from synced foreign sessions.
-  virtual void CreateTab(content::WebContents* web_contents,
+  virtual void CreateTab(TabAndroid* parent,
+                         content::WebContents* web_contents,
                          int parent_tab_id) = 0;
 
   // Used by Developer Tools to create a new tab with a given URL.

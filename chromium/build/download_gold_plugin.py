@@ -5,6 +5,7 @@
 
 """Script to download LLVM gold plugin from google storage."""
 
+import find_depot_tools
 import json
 import os
 import shutil
@@ -14,9 +15,7 @@ import zipfile
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CHROME_SRC = os.path.abspath(os.path.join(SCRIPT_DIR, os.pardir))
-sys.path.insert(0, os.path.join(CHROME_SRC, 'tools'))
 
-import find_depot_tools
 
 DEPOT_PATH = find_depot_tools.add_depot_tools_to_path()
 GSUTIL_PATH = os.path.join(DEPOT_PATH, 'gsutil.py')
@@ -35,8 +34,13 @@ def main():
 
   os.chdir(LLVM_BUILD_PATH)
 
+  # TODO(pcc): Fix gsutil.py cp url file < /dev/null 2>&0
+  # (currently aborts with exit code 1,
+  # https://github.com/GoogleCloudPlatform/gsutil/issues/289) or change the
+  # stdin->stderr redirect in update.py to do something else (crbug.com/494442).
   subprocess.check_call(['python', GSUTIL_PATH,
-                         'cp', remote_path, targz_name])
+                         'cp', remote_path, targz_name],
+                        stderr=open('/dev/null', 'w'))
   subprocess.check_call(['tar', 'xzf', targz_name])
   os.remove(targz_name)
   return 0

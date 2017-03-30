@@ -4,19 +4,33 @@
 
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 
+#include <utility>
+
+#include "build/build_config.h"
 #include "device/bluetooth/test/mock_bluetooth_advertisement.h"
 
 namespace device {
+
+using testing::Invoke;
+using testing::_;
 
 MockBluetoothAdapter::Observer::Observer() {}
 MockBluetoothAdapter::Observer::~Observer() {}
 
 MockBluetoothAdapter::MockBluetoothAdapter() {
+  ON_CALL(*this, AddObserver(_))
+      .WillByDefault(Invoke([this](BluetoothAdapter::Observer* observer) {
+        this->BluetoothAdapter::AddObserver(observer);
+      }));
+  ON_CALL(*this, RemoveObserver(_))
+      .WillByDefault(Invoke([this](BluetoothAdapter::Observer* observer) {
+        this->BluetoothAdapter::RemoveObserver(observer);
+      }));
 }
 
 MockBluetoothAdapter::~MockBluetoothAdapter() {}
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
 void MockBluetoothAdapter::Shutdown() {
 }
 #endif
@@ -24,19 +38,17 @@ void MockBluetoothAdapter::Shutdown() {
 void MockBluetoothAdapter::AddDiscoverySession(
     BluetoothDiscoveryFilter* discovery_filter,
     const base::Closure& callback,
-    const ErrorCallback& error_callback) {
-}
+    const DiscoverySessionErrorCallback& error_callback) {}
 
 void MockBluetoothAdapter::RemoveDiscoverySession(
     BluetoothDiscoveryFilter* discovery_filter,
     const base::Closure& callback,
-    const ErrorCallback& error_callback) {
-}
+    const DiscoverySessionErrorCallback& error_callback) {}
 
 void MockBluetoothAdapter::SetDiscoveryFilter(
     scoped_ptr<BluetoothDiscoveryFilter> discovery_filter,
     const base::Closure& callback,
-    const ErrorCallback& error_callback) {
+    const DiscoverySessionErrorCallback& error_callback) {
   SetDiscoveryFilterRaw(discovery_filter.get(), callback, error_callback);
 }
 
@@ -50,7 +62,7 @@ void MockBluetoothAdapter::StartDiscoverySessionWithFilter(
 
 void MockBluetoothAdapter::AddMockDevice(
     scoped_ptr<MockBluetoothDevice> mock_device) {
-  mock_devices_.push_back(mock_device.Pass());
+  mock_devices_.push_back(std::move(mock_device));
 }
 
 BluetoothAdapter::ConstDeviceList MockBluetoothAdapter::GetConstMockDevices() {

@@ -61,6 +61,7 @@ bool VideoCaptureMessageFilter::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(VideoCaptureMsg_BufferReady, OnBufferReceived)
     IPC_MESSAGE_HANDLER(VideoCaptureMsg_StateChanged, OnDeviceStateChanged)
     IPC_MESSAGE_HANDLER(VideoCaptureMsg_NewBuffer, OnBufferCreated)
+    IPC_MESSAGE_HANDLER(VideoCaptureMsg_NewBuffer2, OnBufferCreated2)
     IPC_MESSAGE_HANDLER(VideoCaptureMsg_FreeBuffer, OnBufferDestroyed)
     IPC_MESSAGE_HANDLER(VideoCaptureMsg_DeviceSupportedFormatsEnumerated,
                         OnDeviceSupportedFormatsEnumerated)
@@ -92,18 +93,17 @@ void VideoCaptureMessageFilter::OnChannelClosing() {
 
 VideoCaptureMessageFilter::~VideoCaptureMessageFilter() {}
 
-VideoCaptureMessageFilter::Delegate* VideoCaptureMessageFilter::find_delegate(
-    int device_id) const {
+VideoCaptureMessageFilter::Delegate*
+VideoCaptureMessageFilter::find_delegate(int device_id) const {
   Delegates::const_iterator i = delegates_.find(device_id);
-  return i != delegates_.end() ? i->second : NULL;
+  return i != delegates_.end() ? i->second : nullptr;
 }
 
-void VideoCaptureMessageFilter::OnBufferCreated(
-    int device_id,
-    base::SharedMemoryHandle handle,
-    int length,
-    int buffer_id) {
-  Delegate* delegate = find_delegate(device_id);
+void VideoCaptureMessageFilter::OnBufferCreated(int device_id,
+                                                base::SharedMemoryHandle handle,
+                                                int length,
+                                                int buffer_id) {
+  Delegate* const delegate = find_delegate(device_id);
   if (!delegate) {
     DLOG(WARNING) << "OnBufferCreated: Got video SHM buffer for a "
                      "non-existent or removed video capture.";
@@ -111,11 +111,32 @@ void VideoCaptureMessageFilter::OnBufferCreated(
     // Send the buffer back to Host in case it's waiting for all buffers
     // to be returned.
     base::SharedMemory::CloseHandle(handle);
-    Send(new VideoCaptureHostMsg_BufferReady(device_id, buffer_id, 0, -1.0));
+
+    Send(new VideoCaptureHostMsg_BufferReady(
+        device_id, buffer_id, gpu::SyncToken() /* release_sync_token */,
+        -1.0 /* consumer_resource_utilization */));
     return;
   }
 
   delegate->OnBufferCreated(handle, length, buffer_id);
+}
+
+void VideoCaptureMessageFilter::OnBufferCreated2(
+    int device_id,
+    const std::vector<gfx::GpuMemoryBufferHandle>& handles,
+    const gfx::Size& size,
+    int buffer_id) {
+  Delegate* const delegate = find_delegate(device_id);
+  if (!delegate) {
+    DLOG(WARNING) << "OnBufferCreated: Got video GMB buffer for a "
+                     "non-existent or removed video capture.";
+    Send(new VideoCaptureHostMsg_BufferReady(
+        device_id, buffer_id, gpu::SyncToken() /* release_sync_token */,
+        -1.0 /* consumer_resource_utilization */));
+    return;
+  }
+
+  delegate->OnBufferCreated2(handles, size, buffer_id);
 }
 
 void VideoCaptureMessageFilter::OnBufferReceived(
@@ -127,8 +148,8 @@ void VideoCaptureMessageFilter::OnBufferReceived(
 
     // Send the buffer back to Host in case it's waiting for all buffers
     // to be returned.
-    Send(new VideoCaptureHostMsg_BufferReady(
-        params.device_id, params.buffer_id, 0, -1.0));
+    Send(new VideoCaptureHostMsg_BufferReady(params.device_id, params.buffer_id,
+                                             gpu::SyncToken(), -1.0));
     return;
   }
 
@@ -138,14 +159,12 @@ void VideoCaptureMessageFilter::OnBufferReceived(
                              params.pixel_format,
                              params.storage_type,
                              params.coded_size,
-                             params.visible_rect,
-                             params.mailbox_holder);
+                             params.visible_rect);
 }
 
-void VideoCaptureMessageFilter::OnBufferDestroyed(
-    int device_id,
-    int buffer_id) {
-  Delegate* delegate = find_delegate(device_id);
+void VideoCaptureMessageFilter::OnBufferDestroyed(int device_id,
+                                                  int buffer_id) {
+  Delegate* const delegate = find_delegate(device_id);
   if (!delegate) {
     DLOG(WARNING) << "OnBufferDestroyed: Instructed to free buffer for a "
         "non-existent or removed video capture.";
@@ -158,7 +177,7 @@ void VideoCaptureMessageFilter::OnBufferDestroyed(
 void VideoCaptureMessageFilter::OnDeviceStateChanged(
     int device_id,
     VideoCaptureState state) {
-  Delegate* delegate = find_delegate(device_id);
+  Delegate* const delegate = find_delegate(device_id);
   if (!delegate) {
     DLOG(WARNING) << "OnDeviceStateChanged: Got video capture event for a "
         "non-existent or removed video capture.";
@@ -170,7 +189,7 @@ void VideoCaptureMessageFilter::OnDeviceStateChanged(
 void VideoCaptureMessageFilter::OnDeviceSupportedFormatsEnumerated(
     int device_id,
     const media::VideoCaptureFormats& supported_formats) {
-  Delegate* delegate = find_delegate(device_id);
+  Delegate* const delegate = find_delegate(device_id);
   if (!delegate) {
     DLOG(WARNING) << "OnDeviceFormatsEnumerated: unknown device";
     return;
@@ -181,7 +200,7 @@ void VideoCaptureMessageFilter::OnDeviceSupportedFormatsEnumerated(
 void VideoCaptureMessageFilter::OnDeviceFormatsInUseReceived(
     int device_id,
     const media::VideoCaptureFormats& formats_in_use) {
-  Delegate* delegate = find_delegate(device_id);
+  Delegate* const delegate = find_delegate(device_id);
   if (!delegate) {
     DLOG(WARNING) << "OnDeviceFormatInUse: unknown device";
     return;

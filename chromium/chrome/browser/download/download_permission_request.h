@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_DOWNLOAD_DOWNLOAD_PERMISSION_REQUEST_H_
 #define CHROME_BROWSER_DOWNLOAD_DOWNLOAD_PERMISSION_REQUEST_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
@@ -21,7 +21,7 @@ class DownloadPermissionRequest : public PermissionBubbleRequest {
   ~DownloadPermissionRequest() override;
 
   // PermisisonBubbleDelegate:
-  int GetIconID() const override;
+  int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
   bool HasUserGesture() const override;

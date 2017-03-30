@@ -10,6 +10,8 @@
 
 #include <sddl.h>
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/logging.h"
@@ -25,8 +27,8 @@
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_message.h"
 #include "remoting/base/typed_buffer.h"
-#include "remoting/host/ipc_constants.h"
 #include "remoting/host/ipc_util.h"
+#include "remoting/host/switches.h"
 #include "remoting/host/win/launch_process_with_token.h"
 #include "remoting/host/win/security_descriptor.h"
 #include "remoting/host/win/window_station_and_desktop.h"
@@ -87,25 +89,44 @@ bool CreateRestrictedToken(ScopedHandle* token_out) {
   if (restricted_token.Init(token.Get()) != ERROR_SUCCESS)
     return false;
 
-  // Remove all privileges in the token.
-  if (restricted_token.DeleteAllPrivileges(nullptr) != ERROR_SUCCESS)
-    return false;
-
-  // Set low integrity level if supported by the OS.
   if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
+    // "SeChangeNotifyPrivilege" is needed to access the machine certificate
+    // (including its private key) in the "Local Machine" cert store. This is
+    // needed for HTTPS client third-party authentication . But the presence of
+    // "SeChangeNotifyPrivilege" also allows it to open and manipulate objects
+    // owned by the same user. This risk is only mitigated by setting the
+    // process integrity level to Low, which is why it is unsafe to enable
+    // "SeChangeNotifyPrivilege" on Windows XP where we don't have process
+    // integrity to protect us.
+    std::vector<base::string16> exceptions;
+    exceptions.push_back(base::string16(L"SeChangeNotifyPrivilege"));
+
+    // Remove privileges in the token.
+    if (restricted_token.DeleteAllPrivileges(&exceptions) != ERROR_SUCCESS)
+      return false;
+
+    // Set low integrity level if supported by the OS.
     if (restricted_token.SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW)
         != ERROR_SUCCESS) {
       return false;
     }
+  } else {
+    // Remove all privileges in the token.
+    // Since "SeChangeNotifyPrivilege" is among the privileges being removed,
+    // the network process won't be able to acquire certificates from the local
+    // machine store. This means third-party authentication won't work.
+    if (restricted_token.DeleteAllPrivileges(nullptr) != ERROR_SUCCESS)
+      return false;
   }
 
   // Return the resulting token.
-  if (restricted_token.GetRestrictedTokenHandle(&temp_handle) ==
-      ERROR_SUCCESS) {
-    token_out->Set(temp_handle);
-    return true;
+  DWORD result = restricted_token.GetRestrictedToken(token_out);
+  if (result != ERROR_SUCCESS) {
+    LOG(ERROR) << "Failed to get the restricted token: " << result;
+    return false;
   }
-  return false;
+
+  return true;
 }
 
 // Creates a window station with a given name and the default desktop giving
@@ -218,9 +239,8 @@ UnprivilegedProcessDelegate::UnprivilegedProcessDelegate(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     scoped_ptr<base::CommandLine> target_command)
     : io_task_runner_(io_task_runner),
-      target_command_(target_command.Pass()),
-      event_handler_(nullptr) {
-}
+      target_command_(std::move(target_command)),
+      event_handler_(nullptr) {}
 
 UnprivilegedProcessDelegate::~UnprivilegedProcessDelegate() {
   DCHECK(CalledOnValidThread());
@@ -297,7 +317,7 @@ void UnprivilegedProcessDelegate::LaunchProcess(
 
     // Create our own window station and desktop accessible by |logon_sid|.
     WindowStationAndDesktop handles;
-    if (!CreateWindowStationAndDesktop(logon_sid.Pass(), &handles)) {
+    if (!CreateWindowStationAndDesktop(std::move(logon_sid), &handles)) {
       PLOG(ERROR) << "Failed to create a window station and desktop";
       ReportFatalError();
       return;
@@ -306,23 +326,17 @@ void UnprivilegedProcessDelegate::LaunchProcess(
     // Try to launch the worker process. The launched process inherits
     // the window station, desktop and pipe handles, created above.
     ScopedHandle worker_thread;
-    if (!LaunchProcessWithToken(command_line.GetProgram(),
-                                command_line.GetCommandLineString(),
-                                token.Get(),
-                                &process_attributes,
-                                &thread_attributes,
-                                true,
-                                0,
-                                nullptr,
-                                &worker_process,
-                                &worker_thread)) {
+    if (!LaunchProcessWithToken(
+            command_line.GetProgram(), command_line.GetCommandLineString(),
+            token.Get(), &process_attributes, &thread_attributes, true, 0,
+            nullptr, &worker_process, &worker_thread)) {
       ReportFatalError();
       return;
     }
   }
 
-  channel_ = server.Pass();
-  ReportProcessLaunched(worker_process.Pass());
+  channel_ = std::move(server);
+  ReportProcessLaunched(std::move(worker_process));
 }
 
 void UnprivilegedProcessDelegate::Send(IPC::Message* message) {
@@ -360,7 +374,7 @@ bool UnprivilegedProcessDelegate::OnMessageReceived(
   return event_handler_->OnMessageReceived(message);
 }
 
-void UnprivilegedProcessDelegate::OnChannelConnected(int32 peer_pid) {
+void UnprivilegedProcessDelegate::OnChannelConnected(int32_t peer_pid) {
   DCHECK(CalledOnValidThread());
 
   DWORD pid = GetProcessId(worker_process_.Get());
@@ -396,19 +410,15 @@ void UnprivilegedProcessDelegate::ReportProcessLaunched(
   DCHECK(CalledOnValidThread());
   DCHECK(!worker_process_.IsValid());
 
-  worker_process_ = worker_process.Pass();
+  worker_process_ = std::move(worker_process);
 
   // Report a handle that can be used to wait for the worker process completion,
   // query information about the process and duplicate handles.
   DWORD desired_access =
       SYNCHRONIZE | PROCESS_DUP_HANDLE | PROCESS_QUERY_INFORMATION;
   HANDLE temp_handle;
-  if (!DuplicateHandle(GetCurrentProcess(),
-                       worker_process_.Get(),
-                       GetCurrentProcess(),
-                       &temp_handle,
-                       desired_access,
-                       FALSE,
+  if (!DuplicateHandle(GetCurrentProcess(), worker_process_.Get(),
+                       GetCurrentProcess(), &temp_handle, desired_access, FALSE,
                        0)) {
     PLOG(ERROR) << "Failed to duplicate a handle";
     ReportFatalError();
@@ -416,7 +426,7 @@ void UnprivilegedProcessDelegate::ReportProcessLaunched(
   }
   ScopedHandle limited_handle(temp_handle);
 
-  event_handler_->OnProcessLaunched(limited_handle.Pass());
+  event_handler_->OnProcessLaunched(std::move(limited_handle));
 }
 
 }  // namespace remoting

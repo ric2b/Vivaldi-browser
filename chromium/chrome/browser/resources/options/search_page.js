@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,6 +45,11 @@ cr.define('options', function() {
       // making sure the bubbles stay in the correct location as sections
       // may dynamically change size at any time.
       this.intervalId = setInterval(this.updatePosition.bind(this), 250);
+
+      this.addEventListener('mouseover', function() {
+        this.innards_.classList.toggle('above');
+        this.updatePosition();
+      });
     },
 
     /**
@@ -103,7 +108,13 @@ cr.define('options', function() {
       // Position the bubble below the location of the owner.
       var left = owner.offsetLeft + owner.offsetWidth / 2 -
           this.offsetWidth / 2;
-      var top = owner.offsetTop + owner.offsetHeight;
+
+      var BUBBLE_EDGE_OFFSET = 5;
+      var top = owner.offsetTop;
+      if (this.innards_.classList.contains('above'))
+        top -= this.offsetHeight + BUBBLE_EDGE_OFFSET;
+      else
+        top += owner.offsetHeight + BUBBLE_EDGE_OFFSET;
 
       // Update the position in the CSS.  Cache the last values for
       // best performance.
@@ -136,6 +147,20 @@ cr.define('options', function() {
     __proto__: Page.prototype,
 
     /**
+     * Wait a bit to see if the user is still entering search text.
+     * @type {number|undefined}
+     * @private
+     */
+    delayedSearchMetric_: undefined,
+
+    /**
+     * Only send the time of first search once.
+     * @type {boolean}
+     * @private
+     */
+    hasSentFirstSearchTime_: false,
+
+    /**
      * A boolean to prevent recursion. Used by setSearchText_().
      * @type {boolean}
      * @private
@@ -145,6 +170,9 @@ cr.define('options', function() {
     /** @override */
     initializePage: function() {
       Page.prototype.initializePage.call(this);
+
+      // Record the start time for use in reporting metrics.
+      this.createdTimestamp_ = Date.now();
 
       this.searchField = $('search-field');
 
@@ -292,6 +320,12 @@ cr.define('options', function() {
         return;
       }
 
+      if (!this.hasSentFirstSearchTime_) {
+        this.hasSentFirstSearchTime_ = true;
+        chrome.metricsPrivate.recordMediumTime('Settings.TimeToFirstSearch',
+            Date.now() - this.createdTimestamp_);
+      }
+
       // Toggle the search page if necessary. Otherwise, update the hash.
       var hash = '#' + encodeURIComponent(text);
       if (this.searchActive_) {
@@ -317,6 +351,8 @@ cr.define('options', function() {
       }
 
       var bubbleControls = [];
+      var pageMatchesForMetrics = 0;
+      var subpageMatchesForMetrics = 0;
 
       // Generate search text by applying lowercase and escaping any characters
       // that would be problematic for regular expressions.
@@ -334,8 +370,10 @@ cr.define('options', function() {
           for (var i = 0, node; node = elements[i]; i++) {
             if (this.highlightMatches_(regExp, node)) {
               node.classList.remove('search-hidden');
-              if (!node.hidden)
+              if (!node.hidden) {
                 foundMatches = true;
+                pageMatchesForMetrics += 1;
+              }
             }
           }
         }
@@ -353,6 +391,7 @@ cr.define('options', function() {
                 bubbleControls.concat(this.getAssociatedControls_(page));
 
             foundMatches = true;
+            subpageMatchesForMetrics += 1;
           }
         }
       }
@@ -361,9 +400,25 @@ cr.define('options', function() {
       $('searchPageNoMatches').hidden = foundMatches;
 
       // Create search balloons for sub-page results.
-      var length = bubbleControls.length;
-      for (var i = 0; i < length; i++)
+      var bubbleCount = bubbleControls.length;
+      for (var i = 0; i < bubbleCount; i++)
         this.createSearchBubble_(bubbleControls[i], text);
+
+      // If the search doesn't change for one second, send some metrics.
+      clearTimeout(this.delayedSearchMetric_);
+      this.delayedSearchMetric_ = setTimeout(function() {
+        if (!foundMatches) {
+          chrome.metricsPrivate.recordSmallCount(
+            'Settings.SearchLengthNoMatch', text.length);
+        }
+        chrome.metricsPrivate.recordUserAction('Settings.Searching');
+        chrome.metricsPrivate.recordSmallCount(
+            'Settings.SearchLength', text.length);
+        chrome.metricsPrivate.recordSmallCount(
+            'Settings.SearchPageMatchCount', pageMatchesForMetrics);
+        chrome.metricsPrivate.recordSmallCount(
+            'Settings.SearchSubpageMatchCount', subpageMatchesForMetrics);
+      }, 1000);
 
       // Cleanup the recursion-prevention variable.
       this.insideSetSearchText_ = false;

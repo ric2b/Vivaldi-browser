@@ -56,7 +56,8 @@ function PDFScriptingAPI(window, plugin) {
   this.setPlugin(plugin);
 
   window.addEventListener('message', function(event) {
-    if (event.origin != 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai') {
+    if (event.origin != 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai' &&
+        event.origin != 'chrome://print') {
       console.error('Received message that was not from the extension: ' +
                     event);
       return;
@@ -269,16 +270,16 @@ PDFScriptingAPI.prototype = {
  * @return {HTMLIFrameElement} the iframe element containing the PDF viewer.
  */
 function PDFCreateOutOfProcessPlugin(src) {
+  var client = new PDFScriptingAPI(window);
   var iframe = window.document.createElement('iframe');
-  iframe.setAttribute(
-      'src',
-      'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?' + src);
+  iframe.setAttribute('src', 'pdf_preview.html?' + src);
   // Prevent the frame from being tab-focusable.
   iframe.setAttribute('tabindex', '-1');
-  var client = new PDFScriptingAPI(window);
+
   iframe.onload = function() {
     client.setPlugin(iframe.contentWindow);
   };
+
   // Add the functions to the iframe so that they can be called directly.
   iframe.setViewportChangedCallback =
       client.setViewportChangedCallback.bind(client);

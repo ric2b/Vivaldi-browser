@@ -45,6 +45,9 @@ def ResultsAsChartDict(benchmark_metadata, page_specific_values,
       if chart_name == trace_name:
         trace_name = 'summary'
 
+    if value.tir_label:
+      chart_name = value.tir_label + '@@' + chart_name
+
     # This intentionally overwrites the trace if it already exists because this
     # is expected of output from the buildbots currently.
     # See: crbug.com/413393
@@ -52,9 +55,14 @@ def ResultsAsChartDict(benchmark_metadata, page_specific_values,
 
   result_dict = {
     'format_version': '0.1',
+    'next_version': '0.2',
+    # TODO(sullivan): benchmark_name, benchmark_description, and
+    # trace_rerun_options should be removed when incrementing format_version
+    # to 0.1.
     'benchmark_name': benchmark_metadata.name,
     'benchmark_description': benchmark_metadata.description,
     'trace_rerun_options': benchmark_metadata.rerun_options,
+    'benchmark_metadata': benchmark_metadata.AsDict(),
     'charts': charts,
   }
 

@@ -8,23 +8,19 @@
 
 goog.provide('cvox.ChromeVoxBackground');
 
+goog.require('Msgs');
 goog.require('cvox.AbstractEarcons');
 goog.require('cvox.BrailleBackground');
 goog.require('cvox.BrailleCaptionsBackground');
 goog.require('cvox.ChromeVox');
 goog.require('cvox.ChromeVoxEditableTextBase');
 goog.require('cvox.ChromeVoxPrefs');
+goog.require('cvox.ClassicEarcons');
 goog.require('cvox.CompositeTts');
 goog.require('cvox.ConsoleTts');
-goog.require('cvox.EarconsBackground');
 goog.require('cvox.ExtensionBridge');
-goog.require('cvox.HostFactory');
 goog.require('cvox.InjectedScriptLoader');
-goog.require('cvox.Msgs');
 goog.require('cvox.NavBraille');
-// TODO(dtseng): This is required to prevent Closure from stripping our export
-// prefs on window.
-goog.require('cvox.OptionsPage');
 goog.require('cvox.PlatformFilter');
 goog.require('cvox.PlatformUtil');
 goog.require('cvox.QueueMode');
@@ -43,6 +39,77 @@ cvox.ChromeVoxBackground = function() {
 
 
 /**
+ * @param {string} pref
+ * @param {*} value
+ * @param {boolean} announce
+ */
+cvox.ChromeVoxBackground.setPref = function(pref, value, announce) {
+  if (pref == 'active' && value != cvox.ChromeVox.isActive) {
+    if (cvox.ChromeVox.isActive) {
+      cvox.ChromeVox.tts.speak(Msgs.getMsg('chromevox_inactive'),
+                               cvox.QueueMode.FLUSH);
+      chrome.accessibilityPrivate.setNativeAccessibilityEnabled(true);
+    } else {
+      chrome.accessibilityPrivate.setNativeAccessibilityEnabled(false);
+    }
+  } else if (pref == 'earcons') {
+    cvox.AbstractEarcons.enabled = !!value;
+  } else if (pref == 'sticky' && announce) {
+    if (value) {
+      cvox.ChromeVox.tts.speak(Msgs.getMsg('sticky_mode_enabled'),
+                               cvox.QueueMode.FLUSH);
+    } else {
+      cvox.ChromeVox.tts.speak(
+          Msgs.getMsg('sticky_mode_disabled'),
+          cvox.QueueMode.FLUSH);
+    }
+  } else if (pref == 'typingEcho' && announce) {
+    var announceStr = '';
+    switch (value) {
+      case cvox.TypingEcho.CHARACTER:
+        announceStr = Msgs.getMsg('character_echo');
+        break;
+      case cvox.TypingEcho.WORD:
+        announceStr = Msgs.getMsg('word_echo');
+        break;
+      case cvox.TypingEcho.CHARACTER_AND_WORD:
+        announceStr = Msgs.getMsg('character_and_word_echo');
+        break;
+      case cvox.TypingEcho.NONE:
+        announceStr = Msgs.getMsg('none_echo');
+        break;
+      default:
+        break;
+    }
+    if (announceStr) {
+      cvox.ChromeVox.tts.speak(announceStr, cvox.QueueMode.QUEUE);
+    }
+  } else if (pref == 'brailleCaptions') {
+    cvox.BrailleCaptionsBackground.setActive(!!value);
+  }
+  window['prefs'].setPref(pref, value);
+  cvox.ChromeVoxBackground.readPrefs();
+};
+
+
+/**
+ * Read and apply preferences that affect the background context.
+ */
+cvox.ChromeVoxBackground.readPrefs = function() {
+  if (!window['prefs']) {
+    return;
+  }
+
+  var prefs = window['prefs'].getPrefs();
+  cvox.ChromeVoxEditableTextBase.useIBeamCursor =
+      (prefs['useIBeamCursor'] == 'true');
+  cvox.ChromeVox.isActive =
+      (prefs['active'] == 'true' || cvox.ChromeVox.isChromeOS);
+  cvox.ChromeVox.isStickyPrefOn = (prefs['sticky'] == 'true');
+};
+
+
+/**
  * Initialize the background page: set up TTS and bridge listeners.
  */
 cvox.ChromeVoxBackground.prototype.init = function() {
@@ -55,9 +122,8 @@ cvox.ChromeVoxBackground.prototype.init = function() {
     return;
   }
 
-  cvox.ChromeVox.msgs = new cvox.Msgs();
   this.prefs = new cvox.ChromeVoxPrefs();
-  this.readPrefs();
+  cvox.ChromeVoxBackground.readPrefs();
 
   var consoleTts = cvox.ConsoleTts.getInstance();
   consoleTts.setEnabled(true);
@@ -76,7 +142,6 @@ cvox.ChromeVoxBackground.prototype.init = function() {
       .add(this.backgroundTts_)
       .add(consoleTts);
 
-  this.earcons = new cvox.EarconsBackground();
   this.addBridgeListener();
 
   /**
@@ -86,13 +151,14 @@ cvox.ChromeVoxBackground.prototype.init = function() {
    */
   this.backgroundBraille_ = new cvox.BrailleBackground();
 
-    this.tabsApiHandler_ = new cvox.TabsApiHandler(
-      this.tts, this.backgroundBraille_, this.earcons);
+  this.tabsApiHandler_ = new cvox.TabsApiHandler();
 
   // Export globals on cvox.ChromeVox.
   cvox.ChromeVox.tts = this.tts;
   cvox.ChromeVox.braille = this.backgroundBraille_;
-  cvox.ChromeVox.earcons = this.earcons;
+
+  if (!cvox.ChromeVox.earcons)
+    cvox.ChromeVox.earcons = new cvox.ClassicEarcons();
 
   if (cvox.ChromeVox.isChromeOS &&
       chrome.accessibilityPrivate.onIntroduceChromeVox) {
@@ -127,14 +193,14 @@ cvox.ChromeVoxBackground.prototype.init = function() {
 
   if (localStorage['active'] == 'false') {
     // Warn the user when the browser first starts if ChromeVox is inactive.
-    this.tts.speak(cvox.ChromeVox.msgs.getMsg('chromevox_inactive'),
+    this.tts.speak(Msgs.getMsg('chromevox_inactive'),
                    cvox.QueueMode.QUEUE);
   } else if (cvox.PlatformUtil.matchesPlatform(cvox.PlatformFilter.WML)) {
     // Introductory message.
-    this.tts.speak(cvox.ChromeVox.msgs.getMsg('chromevox_intro'),
+    this.tts.speak(Msgs.getMsg('chromevox_intro'),
                    cvox.QueueMode.QUEUE);
     cvox.ChromeVox.braille.write(cvox.NavBraille.fromText(
-        cvox.ChromeVox.msgs.getMsg('intro_brl')));
+        Msgs.getMsg('intro_brl')));
   }
 };
 
@@ -234,15 +300,15 @@ cvox.ChromeVoxBackground.prototype.onTtsMessage = function(msg) {
     var announcement;
     switch (msg['property']) {
     case cvox.AbstractTts.RATE:
-      announcement = cvox.ChromeVox.msgs.getMsg('announce_rate',
+      announcement = Msgs.getMsg('announce_rate',
                                                 [valueAsPercent]);
       break;
     case cvox.AbstractTts.PITCH:
-      announcement = cvox.ChromeVox.msgs.getMsg('announce_pitch',
+      announcement = Msgs.getMsg('announce_pitch',
                                                 [valueAsPercent]);
       break;
     case cvox.AbstractTts.VOLUME:
-      announcement = cvox.ChromeVox.msgs.getMsg('announce_volume',
+      announcement = Msgs.getMsg('announce_volume',
                                                 [valueAsPercent]);
       break;
     }
@@ -252,7 +318,7 @@ cvox.ChromeVoxBackground.prototype.onTtsMessage = function(msg) {
                      cvox.AbstractTts.PERSONALITY_ANNOTATION);
     }
   } else if (msg['action'] == 'cyclePunctuationEcho') {
-    this.tts.speak(cvox.ChromeVox.msgs.getMsg(
+    this.tts.speak(Msgs.getMsg(
             this.backgroundTts_.cyclePunctuationEcho()),
                    cvox.QueueMode.FLUSH);
   }
@@ -265,7 +331,7 @@ cvox.ChromeVoxBackground.prototype.onTtsMessage = function(msg) {
  */
 cvox.ChromeVoxBackground.prototype.onEarconMessage = function(msg) {
   if (msg.action == 'play') {
-    this.earcons.playEarcon(msg.earcon);
+    cvox.ChromeVox.earcons.playEarcon(msg['earcon']);
   }
 };
 
@@ -317,54 +383,10 @@ cvox.ChromeVoxBackground.prototype.addBridgeListener = function() {
       if (action == 'getPrefs') {
         this.prefs.sendPrefsToPort(port);
       } else if (action == 'setPref') {
-        if (msg['pref'] == 'active' &&
-            msg['value'] != cvox.ChromeVox.isActive) {
-          if (cvox.ChromeVox.isActive) {
-            this.tts.speak(cvox.ChromeVox.msgs.getMsg('chromevox_inactive'),
-                           cvox.QueueMode.FLUSH);
-            chrome.accessibilityPrivate.setNativeAccessibilityEnabled(
-                true);
-          } else {
-            chrome.accessibilityPrivate.setNativeAccessibilityEnabled(
-                false);
-          }
-        } else if (msg['pref'] == 'earcons') {
-          this.earcons.enabled = msg['value'];
-        } else if (msg['pref'] == 'sticky' && msg['announce']) {
-          if (msg['value']) {
-            this.tts.speak(cvox.ChromeVox.msgs.getMsg('sticky_mode_enabled'),
-                           cvox.QueueMode.QUEUE);
-          } else {
-            this.tts.speak(
-                cvox.ChromeVox.msgs.getMsg('sticky_mode_disabled'),
-                cvox.QueueMode.QUEUE);
-          }
-        } else if (msg['pref'] == 'typingEcho' && msg['announce']) {
-          var announce = '';
-          switch (msg['value']) {
-            case cvox.TypingEcho.CHARACTER:
-              announce = cvox.ChromeVox.msgs.getMsg('character_echo');
-              break;
-            case cvox.TypingEcho.WORD:
-              announce = cvox.ChromeVox.msgs.getMsg('word_echo');
-              break;
-            case cvox.TypingEcho.CHARACTER_AND_WORD:
-              announce = cvox.ChromeVox.msgs.getMsg('character_and_word_echo');
-              break;
-            case cvox.TypingEcho.NONE:
-              announce = cvox.ChromeVox.msgs.getMsg('none_echo');
-              break;
-            default:
-              break;
-          }
-          if (announce) {
-            this.tts.speak(announce, cvox.QueueMode.QUEUE);
-          }
-        } else if (msg['pref'] == 'brailleCaptions') {
-          cvox.BrailleCaptionsBackground.setActive(msg['value']);
-        }
-        this.prefs.setPref(msg['pref'], msg['value']);
-        this.readPrefs();
+        var pref = /** @type {string} */(msg['pref']);
+        var announce = !!msg['announce'];
+        cvox.ChromeVoxBackground.setPref(
+            pref, msg['value'], announce);
       }
       break;
     case 'Math':
@@ -406,22 +428,15 @@ cvox.ChromeVoxBackground.prototype.addBridgeListener = function() {
         console.log(err);
       }
       break;
+    case 'toggleChromeVoxVersion':
+      if (global.backgroundObj) {
+        global.backgroundObj.onGotCommand('toggleChromeVoxVersion', true);
+      }
+      break;
     }
   }, this));
 };
 
-
-/**
- * Read and apply preferences that affect the background context.
- */
-cvox.ChromeVoxBackground.prototype.readPrefs = function() {
-  var prefs = this.prefs.getPrefs();
-  cvox.ChromeVoxEditableTextBase.useIBeamCursor =
-      (prefs['useIBeamCursor'] == 'true');
-  cvox.ChromeVox.isActive =
-      (prefs['active'] == 'true' || cvox.ChromeVox.isChromeOS);
-  cvox.ChromeVox.isStickyPrefOn = (prefs['sticky'] == 'true');
-};
 
 /**
  * Checks if we are currently in an incognito window.
@@ -444,11 +459,20 @@ cvox.ChromeVoxBackground.prototype.isIncognito_ = function() {
  * Handles the onIntroduceChromeVox event.
  */
 cvox.ChromeVoxBackground.prototype.onIntroduceChromeVox = function() {
-  cvox.ChromeVox.tts.speak(cvox.ChromeVox.msgs.getMsg('chromevox_intro'),
+  cvox.ChromeVox.tts.speak(Msgs.getMsg('chromevox_intro'),
                            cvox.QueueMode.QUEUE,
                            {doNotInterrupt: true});
   cvox.ChromeVox.braille.write(cvox.NavBraille.fromText(
-      cvox.ChromeVox.msgs.getMsg('intro_brl')));
+      Msgs.getMsg('intro_brl')));
+};
+
+
+/**
+ * Gets the voice currently used by ChromeVox when calling tts.
+ * @return {string}
+ */
+cvox.ChromeVoxBackground.prototype.getCurrentVoice = function() {
+  return this.backgroundTts_.currentVoice;
 };
 
 
@@ -466,6 +490,9 @@ cvox.ChromeVoxBackground.prototype.onIntroduceChromeVox = function() {
   // Export the braille translator manager for access by the options page.
   window['braille_translator_manager'] =
       background.backgroundBraille_.getTranslatorManager();
+
+  window['getCurrentVoice'] =
+      background.getCurrentVoice.bind(background);
 
   // Export injection for ChromeVox Next.
   cvox.ChromeVox.injectChromeVoxIntoTabs =

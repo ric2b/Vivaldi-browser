@@ -4,9 +4,7 @@
 
 #include "content/browser/gpu/gpu_internals_ui.h"
 
-#if defined(OS_LINUX) && defined(USE_X11)
-#include <X11/Xlib.h>
-#endif
+#include <stddef.h>
 
 #include <string>
 
@@ -15,10 +13,13 @@
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/i18n/time_formatting.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/values.h"
+#include "build/build_config.h"
+#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/grit/content_resources.h"
@@ -36,6 +37,9 @@
 #include "third_party/angle/src/common/version.h"
 #include "ui/gl/gpu_switching_manager.h"
 
+#if defined(OS_LINUX) && defined(USE_X11)
+#include <X11/Xlib.h>
+#endif
 #if defined(OS_WIN)
 #include "ui/base/win/shell.h"
 #endif
@@ -112,6 +116,8 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
   basic_info->Append(NewDescriptionValuePair(
       "Initialization time",
       base::Int64ToString(gpu_info.initialization_time.InMilliseconds())));
+  basic_info->Append(NewDescriptionValuePair(
+      "In-process GPU", new base::FundamentalValue(gpu_info.in_process_gpu)));
   basic_info->Append(NewDescriptionValuePair(
       "Sandboxed", new base::FundamentalValue(gpu_info.sandboxed)));
   basic_info->Append(NewDescriptionValuePair(
@@ -226,6 +232,89 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
     dx_info.reset(DxDiagNodeToList(gpu_info.dx_diagnostics));
   info->Set("diagnostics", dx_info.Pass());
 #endif
+
+  return info;
+}
+
+const char* BufferFormatToString(gfx::BufferFormat format) {
+  switch (format) {
+    case gfx::BufferFormat::ATC:
+      return "ATC";
+    case gfx::BufferFormat::ATCIA:
+      return "ATCIA";
+    case gfx::BufferFormat::DXT1:
+      return "DXT1";
+    case gfx::BufferFormat::DXT5:
+      return "DXT5";
+    case gfx::BufferFormat::ETC1:
+      return "ETC1";
+    case gfx::BufferFormat::R_8:
+      return "R_8";
+    case gfx::BufferFormat::RGBA_4444:
+      return "RGBA_4444";
+    case gfx::BufferFormat::RGBX_8888:
+      return "RGBX_8888";
+    case gfx::BufferFormat::RGBA_8888:
+      return "RGBA_8888";
+    case gfx::BufferFormat::BGRX_8888:
+      return "BGRX_8888";
+    case gfx::BufferFormat::BGRA_8888:
+      return "BGRA_8888";
+    case gfx::BufferFormat::YUV_420:
+      return "YUV_420";
+    case gfx::BufferFormat::YUV_420_BIPLANAR:
+      return "YUV_420_BIPLANAR";
+    case gfx::BufferFormat::UYVY_422:
+      return "UYVY_422";
+  }
+  NOTREACHED();
+  return nullptr;
+}
+
+const char* BufferUsageToString(gfx::BufferUsage usage) {
+  switch (usage) {
+    case gfx::BufferUsage::GPU_READ:
+      return "GPU_READ";
+    case gfx::BufferUsage::SCANOUT:
+      return "SCANOUT";
+    case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
+      return "GPU_READ_CPU_READ_WRITE";
+    case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
+      return "GPU_READ_CPU_READ_WRITE_PERSISTENT";
+  }
+  NOTREACHED();
+  return nullptr;
+}
+
+base::DictionaryValue* GpuMemoryBufferInfoAsDictionaryValue() {
+  base::ListValue* gpu_memory_buffer_info = new base::ListValue();
+
+  BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager =
+      BrowserGpuMemoryBufferManager::current();
+
+  for (size_t format = 0;
+       format < static_cast<size_t>(gfx::BufferFormat::LAST) + 1; format++) {
+    std::string native_usage_support;
+    for (size_t usage = 0;
+         usage < static_cast<size_t>(gfx::BufferUsage::LAST) + 1; usage++) {
+      if (gpu_memory_buffer_manager->IsNativeGpuMemoryBufferConfiguration(
+              static_cast<gfx::BufferFormat>(format),
+              static_cast<gfx::BufferUsage>(usage)))
+        native_usage_support = base::StringPrintf(
+            "%s%s %s", native_usage_support.c_str(),
+            native_usage_support.empty() ? "" : ",",
+            BufferUsageToString(static_cast<gfx::BufferUsage>(usage)));
+    }
+    if (native_usage_support.empty())
+      native_usage_support = base::StringPrintf("Software only");
+
+    gpu_memory_buffer_info->Append(NewDescriptionValuePair(
+        BufferFormatToString(static_cast<gfx::BufferFormat>(format)),
+        native_usage_support));
+  }
+
+  base::DictionaryValue* info = new base::DictionaryValue();
+  info->Set("gpu_memory_buffer_info", gpu_memory_buffer_info);
 
   return info;
 }
@@ -407,6 +496,14 @@ void GpuMessageHandler::OnGpuInfoUpdate() {
   // Send GPU Info to javascript.
   web_ui()->CallJavascriptFunction("browserBridge.onGpuInfoUpdate",
       *(gpu_info_val.get()));
+
+  // Get GpuMemoryBuffer Info.
+  scoped_ptr<base::DictionaryValue> gpu_memory_buffer_info_val(
+      GpuMemoryBufferInfoAsDictionaryValue());
+
+  // Send GpuMemoryBuffer Info to javascript.
+  web_ui()->CallJavascriptFunction("browserBridge.onGpuMemoryBufferInfoUpdate",
+                                   *(gpu_memory_buffer_info_val.get()));
 }
 
 void GpuMessageHandler::OnGpuSwitched() {

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_HID_DETECTION_SCREEN_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_HID_DETECTION_SCREEN_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -60,11 +62,11 @@ class HIDDetectionScreen : public HIDDetectionModel,
   void RequestPasskey(device::BluetoothDevice* device) override;
   void DisplayPinCode(device::BluetoothDevice* device,
                       const std::string& pincode) override;
-  void DisplayPasskey(
-      device::BluetoothDevice* device, uint32 passkey) override;
-  void KeysEntered(device::BluetoothDevice* device, uint32 entered) override;
-  void ConfirmPasskey(
-      device::BluetoothDevice* device, uint32 passkey) override;
+  void DisplayPasskey(device::BluetoothDevice* device,
+                      uint32_t passkey) override;
+  void KeysEntered(device::BluetoothDevice* device, uint32_t entered) override;
+  void ConfirmPasskey(device::BluetoothDevice* device,
+                      uint32_t passkey) override;
   void AuthorizePairing(device::BluetoothDevice* device) override;
 
   // device::BluetoothAdapter::Observer implementation.
@@ -174,8 +176,7 @@ class HIDDetectionScreen : public HIDDetectionModel,
   void SendKeyboardDeviceNotification();
 
   // Helper method. Sets device name or placeholder if the name is empty.
-  void SetKeyboardDeviceName_(std::string name);
-
+  void SetKeyboardDeviceName_(const std::string& name);
 
   HIDDetectionView* view_;
 

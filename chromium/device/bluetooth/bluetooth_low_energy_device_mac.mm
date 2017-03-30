@@ -5,12 +5,15 @@
 #include "device/bluetooth/bluetooth_low_energy_device_mac.h"
 
 #import <CoreFoundation/CoreFoundation.h>
+#include <stddef.h>
 
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/sdk_forward_declarations.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "device/bluetooth/bluetooth_adapter_mac.h"
+#include "device/bluetooth/bluetooth_device.h"
 
 using device::BluetoothDevice;
 using device::BluetoothLowEnergyDeviceMac;
@@ -28,45 +31,62 @@ device::BluetoothUUID BluetoothUUIDWithCBUUID(CBUUID* uuid) {
 }  // namespace
 
 BluetoothLowEnergyDeviceMac::BluetoothLowEnergyDeviceMac(
+    BluetoothAdapterMac* adapter,
     CBPeripheral* peripheral,
-    NSDictionary* advertisementData,
-    int rssi) {
+    NSDictionary* advertisement_data,
+    int rssi)
+    : BluetoothDeviceMac(adapter) {
   DCHECK(BluetoothAdapterMac::IsLowEnergyAvailable());
-  Update(peripheral, advertisementData, rssi);
+  identifier_ = GetPeripheralIdentifier(peripheral);
+  hash_address_ = GetPeripheralHashAddress(peripheral);
+  Update(peripheral, advertisement_data, rssi);
 }
 
 BluetoothLowEnergyDeviceMac::~BluetoothLowEnergyDeviceMac() {
 }
 
 void BluetoothLowEnergyDeviceMac::Update(CBPeripheral* peripheral,
-                                         NSDictionary* advertisementData,
+                                         NSDictionary* advertisement_data,
                                          int rssi) {
   last_update_time_.reset([[NSDate date] retain]);
   peripheral_.reset([peripheral retain]);
   rssi_ = rssi;
+  NSNumber* connectable =
+      [advertisement_data objectForKey:CBAdvertisementDataIsConnectable];
+  connectable_ = [connectable boolValue];
   ClearServiceData();
-  NSNumber* nbConnectable =
-      [advertisementData objectForKey:CBAdvertisementDataIsConnectable];
-  connectable_ = [nbConnectable boolValue];
-  NSDictionary* serviceData =
-      [advertisementData objectForKey:CBAdvertisementDataServiceDataKey];
-  for (CBUUID* uuid in serviceData) {
-    NSData* data = [serviceData objectForKey:uuid];
-    BluetoothUUID serviceUUID = BluetoothUUIDWithCBUUID(uuid);
-    SetServiceData(serviceUUID, (const char*)[data bytes], [data length]);
+  NSDictionary* service_data =
+      [advertisement_data objectForKey:CBAdvertisementDataServiceDataKey];
+  for (CBUUID* uuid in service_data) {
+    NSData* data = [service_data objectForKey:uuid];
+    BluetoothUUID service_uuid = BluetoothUUIDWithCBUUID(uuid);
+    SetServiceData(service_uuid, static_cast<const char*>([data bytes]),
+                   [data length]);
+  }
+  NSArray* service_uuids =
+      [advertisement_data objectForKey:CBAdvertisementDataServiceUUIDsKey];
+  for (CBUUID* uuid in service_uuids) {
+    advertised_uuids_.insert(
+        BluetoothUUID(std::string([[uuid UUIDString] UTF8String])));
+  }
+  NSArray* overflow_service_uuids = [advertisement_data
+      objectForKey:CBAdvertisementDataOverflowServiceUUIDsKey];
+  for (CBUUID* uuid in overflow_service_uuids) {
+    advertised_uuids_.insert(
+        BluetoothUUID(std::string([[uuid UUIDString] UTF8String])));
   }
 }
 
 std::string BluetoothLowEnergyDeviceMac::GetIdentifier() const {
-  return GetPeripheralIdentifier(peripheral_);
+  return identifier_;
 }
 
-uint32 BluetoothLowEnergyDeviceMac::GetBluetoothClass() const {
-  return 0;
+uint32_t BluetoothLowEnergyDeviceMac::GetBluetoothClass() const {
+  return 0x1F00;  // Unspecified Device Class
 }
 
 std::string BluetoothLowEnergyDeviceMac::GetAddress() const {
-  return std::string();
+  return hash_address_;
 }
 
 BluetoothDevice::VendorIDSource BluetoothLowEnergyDeviceMac::GetVendorIDSource()
@@ -74,15 +94,15 @@ BluetoothDevice::VendorIDSource BluetoothLowEnergyDeviceMac::GetVendorIDSource()
   return VENDOR_ID_UNKNOWN;
 }
 
-uint16 BluetoothLowEnergyDeviceMac::GetVendorID() const {
+uint16_t BluetoothLowEnergyDeviceMac::GetVendorID() const {
   return 0;
 }
 
-uint16 BluetoothLowEnergyDeviceMac::GetProductID() const {
+uint16_t BluetoothLowEnergyDeviceMac::GetProductID() const {
   return 0;
 }
 
-uint16 BluetoothLowEnergyDeviceMac::GetDeviceID() const {
+uint16_t BluetoothLowEnergyDeviceMac::GetDeviceID() const {
   return 0;
 }
 
@@ -95,7 +115,11 @@ bool BluetoothLowEnergyDeviceMac::IsPaired() const {
 }
 
 bool BluetoothLowEnergyDeviceMac::IsConnected() const {
-  return [peripheral_ isConnected];
+  return IsGattConnected();
+}
+
+bool BluetoothLowEnergyDeviceMac::IsGattConnected() const {
+  return (GetPeripheralState() == CBPeripheralStateConnected);
 }
 
 bool BluetoothLowEnergyDeviceMac::IsConnectable() const {
@@ -107,14 +131,15 @@ bool BluetoothLowEnergyDeviceMac::IsConnecting() const {
 }
 
 BluetoothDevice::UUIDList BluetoothLowEnergyDeviceMac::GetUUIDs() const {
-  return std::vector<device::BluetoothUUID>();
+  return BluetoothDevice::UUIDList(advertised_uuids_.begin(),
+                                   advertised_uuids_.end());
 }
 
-int16 BluetoothLowEnergyDeviceMac::GetInquiryRSSI() const {
+int16_t BluetoothLowEnergyDeviceMac::GetInquiryRSSI() const {
   return kUnknownPower;
 }
 
-int16 BluetoothLowEnergyDeviceMac::GetInquiryTxPower() const {
+int16_t BluetoothLowEnergyDeviceMac::GetInquiryTxPower() const {
   NOTIMPLEMENTED();
   return kUnknownPower;
 }
@@ -147,7 +172,7 @@ void BluetoothLowEnergyDeviceMac::SetPinCode(const std::string& pincode) {
   NOTIMPLEMENTED();
 }
 
-void BluetoothLowEnergyDeviceMac::SetPasskey(uint32 passkey) {
+void BluetoothLowEnergyDeviceMac::SetPasskey(uint32_t passkey) {
   NOTIMPLEMENTED();
 }
 
@@ -169,7 +194,8 @@ void BluetoothLowEnergyDeviceMac::Disconnect(
   NOTIMPLEMENTED();
 }
 
-void BluetoothLowEnergyDeviceMac::Forget(const ErrorCallback& error_callback) {
+void BluetoothLowEnergyDeviceMac::Forget(const base::Closure& callback,
+                                         const ErrorCallback& error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -201,6 +227,18 @@ std::string BluetoothLowEnergyDeviceMac::GetDeviceName() const {
   return base::SysNSStringToUTF8([peripheral_ name]);
 }
 
+void BluetoothLowEnergyDeviceMac::CreateGattConnectionImpl() {
+  // Mac implementation does not yet use the default CreateGattConnection
+  // implementation. http://crbug.com/520774
+  NOTIMPLEMENTED();
+}
+
+void BluetoothLowEnergyDeviceMac::DisconnectGatt() {
+  // Mac implementation does not yet use the default CreateGattConnection
+  // implementation. http://crbug.com/520774
+  NOTIMPLEMENTED();
+}
+
 // static
 std::string BluetoothLowEnergyDeviceMac::GetPeripheralIdentifier(
     CBPeripheral* peripheral) {
@@ -208,4 +246,29 @@ std::string BluetoothLowEnergyDeviceMac::GetPeripheralIdentifier(
   NSUUID* uuid = [peripheral identifier];
   NSString* uuidString = [uuid UUIDString];
   return base::SysNSStringToUTF8(uuidString);
+}
+
+// static
+std::string BluetoothLowEnergyDeviceMac::GetPeripheralHashAddress(
+    CBPeripheral* peripheral) {
+  const size_t kCanonicalAddressNumberOfBytes = 6;
+  char raw[kCanonicalAddressNumberOfBytes];
+  crypto::SHA256HashString(GetPeripheralIdentifier(peripheral), raw,
+                           sizeof(raw));
+  std::string hash = base::HexEncode(raw, sizeof(raw));
+  return BluetoothDevice::CanonicalizeAddress(hash);
+}
+
+CBPeripheralState BluetoothLowEnergyDeviceMac::GetPeripheralState() const {
+  Class peripheral_class = NSClassFromString(@"CBPeripheral");
+  base::scoped_nsobject<NSMethodSignature> signature([[peripheral_class
+      instanceMethodSignatureForSelector:@selector(state)] retain]);
+  base::scoped_nsobject<NSInvocation> invocation(
+      [[NSInvocation invocationWithMethodSignature:signature] retain]);
+  [invocation setTarget:peripheral_];
+  [invocation setSelector:@selector(state)];
+  [invocation invoke];
+  CBPeripheralState state = CBPeripheralStateDisconnected;
+  [invocation getReturnValue:&state];
+  return state;
 }

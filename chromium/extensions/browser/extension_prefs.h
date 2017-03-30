@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -17,7 +17,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "extensions/browser/app_sorting.h"
 #include "extensions/browser/blacklist_state.h"
 #include "extensions/browser/extension_scoped_prefs.h"
 #include "extensions/browser/install_flag.h"
@@ -41,7 +40,6 @@ namespace extensions {
 
 class AppSorting;
 class ExtensionPrefsObserver;
-class ExtensionPrefsUninstallExtension;
 class URLPatternSet;
 
 // Class for managing global and per-extension preferences.
@@ -131,20 +129,20 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // included in |early_observers| if they need to observe events which occur
   // during initialization of the ExtensionPrefs object.
   static ExtensionPrefs* Create(
+      content::BrowserContext* browser_context,
       PrefService* prefs,
       const base::FilePath& root_dir,
       ExtensionPrefValueMap* extension_pref_value_map,
-      scoped_ptr<AppSorting> app_sorting,
       bool extensions_disabled,
       const std::vector<ExtensionPrefsObserver*>& early_observers);
 
   // A version of Create which allows injection of a custom base::Time provider.
   // Use this as needed for testing.
   static ExtensionPrefs* Create(
+      content::BrowserContext* browser_context,
       PrefService* prefs,
       const base::FilePath& root_dir,
       ExtensionPrefValueMap* extension_pref_value_map,
-      scoped_ptr<AppSorting> app_sorting,
       bool extensions_disabled,
       const std::vector<ExtensionPrefsObserver*>& early_observers,
       scoped_ptr<TimeProvider> time_provider);
@@ -170,6 +168,7 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // Checks whether |extension_id| is disabled. If there's no state pref for
   // the extension, this will return false. Generally you should use
   // ExtensionService::IsExtensionEnabled instead.
+  // Note that blacklisted extensions are NOT marked as disabled!
   bool IsExtensionDisabled(const std::string& id) const;
 
   // Get/Set the order that the browser actions appear in the toolbar.
@@ -201,8 +200,14 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
                               const Manifest::Location& location,
                               bool external_uninstall);
 
-  // Called to change the extension's state when it is enabled/disabled.
-  void SetExtensionState(const std::string& extension_id, Extension::State);
+  // Sets the extension's state to enabled and clears disable reasons.
+  void SetExtensionEnabled(const std::string& extension_id);
+
+  // Sets the extension's state to disabled and sets the disable reasons.
+  // However, if the current state is EXTERNAL_EXTENSION_UNINSTALLED then that
+  // is preserved (but the disable reasons are still set).
+  void SetExtensionDisabled(const std::string& extension_id,
+                            int disable_reasons);
 
   // Called to change the extension's BlacklistState. Currently only used for
   // non-malicious extensions.
@@ -252,6 +257,10 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   bool DidExtensionEscalatePermissions(const std::string& id) const;
 
   // Getters and setters for disabled reason.
+  // Note that you should rarely need to modify disable reasons directly -
+  // pass the proper value to SetExtensionState instead when you enable/disable
+  // an extension. In particular, AddDisableReason(s) is only legal when the
+  // extension is not enabled.
   int GetDisableReasons(const std::string& extension_id) const;
   bool HasDisableReason(const std::string& extension_id,
                         Extension::DisableReason disable_reason) const;
@@ -260,6 +269,8 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   void AddDisableReasons(const std::string& extension_id, int disable_reasons);
   void RemoveDisableReason(const std::string& extension_id,
                            Extension::DisableReason disable_reason);
+  void ReplaceDisableReasons(const std::string& extension_id,
+                             int disable_reasons);
   void ClearDisableReasons(const std::string& extension_id);
 
   // Gets the set of extensions that have been blacklisted in prefs. This will
@@ -344,26 +355,28 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // Returns the granted permission set for the extension with |extension_id|,
   // and NULL if no preferences were found for |extension_id|.
   // This passes ownership of the returned set to the caller.
-  PermissionSet* GetGrantedPermissions(const std::string& extension_id) const;
+  scoped_ptr<const PermissionSet> GetGrantedPermissions(
+      const std::string& extension_id) const;
 
   // Adds |permissions| to the granted permissions set for the extension with
   // |extension_id|. The new granted permissions set will be the union of
   // |permissions| and the already granted permissions.
   void AddGrantedPermissions(const std::string& extension_id,
-                             const PermissionSet* permissions);
+                             const PermissionSet& permissions);
 
   // As above, but subtracts the given |permissions| from the granted set.
   void RemoveGrantedPermissions(const std::string& extension_id,
-                                const PermissionSet* permissions);
+                                const PermissionSet& permissions);
 
   // Gets the active permission set for the specified extension. This may
   // differ from the permissions in the manifest due to the optional
   // permissions API. This passes ownership of the set to the caller.
-  PermissionSet* GetActivePermissions(const std::string& extension_id) const;
+  scoped_ptr<const PermissionSet> GetActivePermissions(
+      const std::string& extension_id) const;
 
   // Sets the active |permissions| for the extension with |extension_id|.
   void SetActivePermissions(const std::string& extension_id,
-                            const PermissionSet* permissions);
+                            const PermissionSet& permissions);
 
   // Records whether or not this extension is currently running.
   void SetExtensionRunning(const std::string& extension_id, bool is_running);
@@ -439,12 +452,6 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // information.
   scoped_ptr<ExtensionsInfo> GetAllDelayedInstallInfo() const;
 
-  // Returns true if the extension is an ephemeral app.
-  bool IsEphemeralApp(const std::string& extension_id) const;
-
-  // Promotes an ephemeral app to a regular installed app.
-  void OnEphemeralAppPromoted(const std::string& extension_id);
-
   // Returns true if the user repositioned the app on the app launcher via drag
   // and drop.
   bool WasAppDraggedByUser(const std::string& extension_id) const;
@@ -501,7 +508,7 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   PrefService* pref_service() const { return prefs_; }
 
   // The underlying AppSorting.
-  AppSorting* app_sorting() const { return app_sorting_.get(); }
+  AppSorting* app_sorting() const;
 
   // Schedules garbage collection of an extension's on-disk data on the next
   // start of this ExtensionService. Applies only to extensions with isolated
@@ -531,6 +538,12 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   int GetCorruptedDisableCount() const;
   void IncrementCorruptedDisableCount();
 
+  // Whether the extension with the given |id| needs to be synced. This is set
+  // when the state (such as enabled/disabled or allowed in incognito) is
+  // changed before Sync is ready.
+  bool NeedsSync(const std::string& extension_id) const;
+  void SetNeedsSync(const std::string& extension_id, bool needs_sync);
+
   // Add extension to the preferences map BrowserContext owned |extension_pref_value_map_|
   // This was added because of extensions being added outside of the regular system. Like
   // Vivaldi and other bundled extensions.
@@ -544,14 +557,15 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   enum DisableReasonChange {
     DISABLE_REASON_ADD,
     DISABLE_REASON_REMOVE,
+    DISABLE_REASON_REPLACE,
     DISABLE_REASON_CLEAR
   };
 
   // See the Create methods.
-  ExtensionPrefs(PrefService* prefs,
+  ExtensionPrefs(content::BrowserContext* browser_context,
+                 PrefService* prefs,
                  const base::FilePath& root_dir,
                  ExtensionPrefValueMap* extension_pref_value_map,
-                 scoped_ptr<AppSorting> app_sorting,
                  scoped_ptr<TimeProvider> time_provider,
                  bool extensions_disabled,
                  const std::vector<ExtensionPrefsObserver*>& early_observers);
@@ -591,14 +605,15 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
 
   // Interprets |pref_key| in |extension_id|'s preferences as an
   // PermissionSet, and passes ownership of the set to the caller.
-  PermissionSet* ReadPrefAsPermissionSet(const std::string& extension_id,
-                                         const std::string& pref_key) const;
+  scoped_ptr<const PermissionSet> ReadPrefAsPermissionSet(
+      const std::string& extension_id,
+      const std::string& pref_key) const;
 
   // Converts the |new_value| to its value and sets the |pref_key| pref
   // belonging to |extension_id|.
   void SetExtensionPrefPermissionSet(const std::string& extension_id,
                                      const std::string& pref_key,
-                                     const PermissionSet* new_value);
+                                     const PermissionSet& new_value);
 
   // Returns an immutable dictionary for extension |id|'s prefs, or NULL if it
   // doesn't exist.
@@ -622,9 +637,6 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
 
   // Migrates the permissions data in the pref store.
   void MigratePermissions(const ExtensionIdList& extension_ids);
-
-  // Migrates the disable reasons from a single enum to a bit mask.
-  void MigrateDisableReasons(const ExtensionIdList& extension_ids);
 
   // Checks whether there is a state pref for the extension and if so, whether
   // it matches |check_state|.
@@ -669,6 +681,8 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
       const syncer::StringOrdinal& suggested_page_ordinal,
       base::DictionaryValue* extension_dict);
 
+  content::BrowserContext* browser_context_;
+
   // The pref service specific to this set of extension prefs. Owned by the
   // BrowserContext.
   PrefService* prefs_;
@@ -678,10 +692,6 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
 
   // Weak pointer, owned by BrowserContext.
   ExtensionPrefValueMap* extension_pref_value_map_;
-
-  // Contains all the logic for handling the order for various extension
-  // properties.
-  scoped_ptr<AppSorting> app_sorting_;
 
   scoped_ptr<TimeProvider> time_provider_;
 

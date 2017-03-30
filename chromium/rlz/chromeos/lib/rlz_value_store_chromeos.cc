@@ -61,7 +61,7 @@ base::FilePath GetRlzStoreLockPath() {
 }
 
 // Returns the dictionary key for storing access point-related prefs.
-std::string GetKeyName(std::string key, AccessPoint access_point) {
+std::string GetKeyName(const std::string& key, AccessPoint access_point) {
   std::string brand = SupplementaryBranding::GetBrand();
   if (brand.empty())
     brand = kNoSupplementaryBrand;
@@ -69,7 +69,7 @@ std::string GetKeyName(std::string key, AccessPoint access_point) {
 }
 
 // Returns the dictionary key for storing product-related prefs.
-std::string GetKeyName(std::string key, Product product) {
+std::string GetKeyName(const std::string& key, Product product) {
   std::string brand = SupplementaryBranding::GetBrand();
   if (brand.empty())
     brand = kNoSupplementaryBrand;
@@ -94,14 +94,14 @@ bool RlzValueStoreChromeOS::HasAccess(AccessType type) {
   return type == kReadAccess || !read_only_;
 }
 
-bool RlzValueStoreChromeOS::WritePingTime(Product product, int64 time) {
+bool RlzValueStoreChromeOS::WritePingTime(Product product, int64_t time) {
   DCHECK(CalledOnValidThread());
   rlz_store_->SetString(GetKeyName(kPingTimeKey, product),
                         base::Int64ToString(time));
   return true;
 }
 
-bool RlzValueStoreChromeOS::ReadPingTime(Product product, int64* time) {
+bool RlzValueStoreChromeOS::ReadPingTime(Product product, int64_t* time) {
   DCHECK(CalledOnValidThread());
   std::string ping_time;
   return rlz_store_->GetString(GetKeyName(kPingTimeKey, product), &ping_time) &&
@@ -212,8 +212,8 @@ void RlzValueStoreChromeOS::ReadStore() {
   int error_code = 0;
   std::string error_msg;
   JSONFileValueDeserializer deserializer(store_path_);
-  scoped_ptr<base::Value> value(
-      deserializer.Deserialize(&error_code, &error_msg));
+  scoped_ptr<base::Value> value =
+      deserializer.Deserialize(&error_code, &error_msg);
   switch (error_code) {
     case JSONFileValueDeserializer::JSON_NO_SUCH_FILE:
       read_only_ = false;
@@ -242,7 +242,7 @@ void RlzValueStoreChromeOS::WriteStore() {
     LOG(ERROR) << "Error writing RLZ store";
 }
 
-bool RlzValueStoreChromeOS::AddValueToList(std::string list_name,
+bool RlzValueStoreChromeOS::AddValueToList(const std::string& list_name,
                                            base::Value* value) {
   base::ListValue* list_value = NULL;
   if (!rlz_store_->GetList(list_name, &list_value)) {
@@ -253,7 +253,7 @@ bool RlzValueStoreChromeOS::AddValueToList(std::string list_name,
   return true;
 }
 
-bool RlzValueStoreChromeOS::RemoveValueFromList(std::string list_name,
+bool RlzValueStoreChromeOS::RemoveValueFromList(const std::string& list_name,
                                                 const base::Value& value) {
   base::ListValue* list_value = NULL;
   if (!rlz_store_->GetList(list_name, &list_value))

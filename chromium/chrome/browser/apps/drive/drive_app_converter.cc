@@ -4,11 +4,14 @@
 
 #include "chrome/browser/apps/drive/drive_app_converter.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <set>
+#include <utility>
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/crx_installer.h"
@@ -57,7 +60,7 @@ class DriveAppConverter::IconFetcher : public net::URLFetcherDelegate,
   // net::URLFetcherDelegate overrides:
   void OnURLFetchComplete(const net::URLFetcher* source) override {
     CHECK_EQ(fetcher_.get(), source);
-    scoped_ptr<net::URLFetcher> fetcher(fetcher_.Pass());
+    scoped_ptr<net::URLFetcher> fetcher(std::move(fetcher_));
 
     if (!fetcher->GetStatus().is_success() ||
         fetcher->GetResponseCode() != net::HTTP_OK) {
@@ -117,16 +120,11 @@ void DriveAppConverter::Start() {
   web_app_.title = base::UTF8ToUTF16(drive_app_info_.app_name);
   web_app_.app_url = drive_app_info_.create_url;
 
-  const std::set<int> allowed_sizes(extension_misc::kExtensionIconSizes,
-                                    extension_misc::kExtensionIconSizes +
-                                        extension_misc::kNumExtensionIconSizes);
   std::set<int> pending_sizes;
   for (size_t i = 0; i < drive_app_info_.app_icons.size(); ++i) {
     const int icon_size = drive_app_info_.app_icons[i].first;
-    if (allowed_sizes.find(icon_size) == allowed_sizes.end() ||
-        pending_sizes.find(icon_size) != pending_sizes.end()) {
+    if (pending_sizes.find(icon_size) != pending_sizes.end())
       continue;
-    }
 
     pending_sizes.insert(icon_size);
     const GURL& icon_url = drive_app_info_.app_icons[i].second;
@@ -195,7 +193,7 @@ void DriveAppConverter::OnFinishCrxInstall(const std::string& extension_id,
   }
 
   extension_ = crx_installer_->extension();
-  is_new_install_ = success && crx_installer_->current_version().empty();
+  is_new_install_ = success && !crx_installer_->current_version().IsValid();
   PostInstallCleanUp();
 
   base::ResetAndReturn(&finished_callback_).Run(this, success);

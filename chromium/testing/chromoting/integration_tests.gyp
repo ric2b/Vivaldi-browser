@@ -21,6 +21,15 @@
                 'app_remoting_integration_tests.isolate',
               ],
             },  # target_name: 'app_remoting_integration_tests_run'
+            {
+              'target_name': 'chromoting_integration_tests_run',
+              'includes': [
+                './dependencies.gypi',
+              ],
+              'sources': [
+                'chromoting_integration_tests.isolate',
+              ],
+            },  # target_name: 'chromoting_integration_tests_run'
           ],
         }],
         ['run_multi_machine_tests==1', {
@@ -40,14 +49,43 @@
       ],
       'targets': [
         {
-          'target_name': 'chromoting_integration_tests_run',
+          'target_name': 'chromoting_browser_tests_run',
           'includes': [
             './dependencies.gypi',
           ],
           'sources': [
-            'chromoting_integration_tests.isolate',
+            'chromoting_browser_tests.isolate',
           ],
-        },  # target_name: 'chromoting_integration_tests_run'
+          'conditions': [
+            ['OS=="linux"', {
+              'actions': [
+                {
+                  'action_name': 'download_test_files',
+                  'variables': {
+                    'dl_files_script': './download_test_files.py',
+                    'files_list': './chromoting_test_files.txt',
+                    'output_folder': './',
+                  },
+                  'inputs': [
+                    '<(files_list)',
+                  ],
+                  'outputs': [
+                    '<(output_folder)',
+                  ],
+                  'action': [
+                    'python',
+                    '<(dl_files_script)',
+                    '--files',
+                    '<(files_list)',
+                    '--output_folder',
+                    '<(output_folder)',
+                  ],
+                  'message': 'Downloading required Remoting test files.',
+                },
+              ],
+            }],
+          ],
+        },  # target_name: 'chromoting_browser_integration_tests_run'
       ],
     }],
   ],

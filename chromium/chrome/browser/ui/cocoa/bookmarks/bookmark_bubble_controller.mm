@@ -6,17 +6,20 @@
 
 #include "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client.h"
+#include "chrome/browser/ui/bookmarks/bookmark_bubble_observer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_button.h"
-#import "chrome/browser/ui/cocoa/bookmarks/bookmark_sync_promo_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
+#import "chrome/browser/ui/cocoa/bubble_sync_promo_controller.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/signin/core/browser/signin_metrics.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
@@ -27,13 +30,6 @@ using base::UserMetricsAction;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
-// An object to represent the ChooseAnotherFolder item in the pop up.
-@interface ChooseAnotherFolder : NSObject
-@end
-
-@implementation ChooseAnotherFolder
-@end
-
 @interface BookmarkBubbleController (PrivateAPI)
 - (void)updateBookmarkNode;
 - (void)fillInFolderList;
@@ -43,27 +39,26 @@ using bookmarks::BookmarkNode;
 
 @synthesize node = node_;
 
-+ (id)chooseAnotherFolderObject {
   // Singleton object to act as a representedObject for the "choose another
   // folder" item in the pop up.
-  static ChooseAnotherFolder* object = nil;
-  if (!object) {
-    object = [[ChooseAnotherFolder alloc] init];
-  }
++ (id)chooseAnotherFolderObject {
+  static id object = [[NSObject alloc] init];
   return object;
 }
 
 - (id)initWithParentWindow:(NSWindow*)parentWindow
-                    client:(ChromeBookmarkClient*)client
+            bubbleObserver:(bookmarks::BookmarkBubbleObserver*)bubbleObserver
+                   managed:(bookmarks::ManagedBookmarkService*)managed
                      model:(BookmarkModel*)model
                       node:(const BookmarkNode*)node
          alreadyBookmarked:(BOOL)alreadyBookmarked {
-  DCHECK(client);
+  DCHECK(managed);
   DCHECK(node);
   if ((self = [super initWithWindowNibPath:@"BookmarkBubble"
                               parentWindow:parentWindow
                                 anchoredAt:NSZeroPoint])) {
-    client_ = client;
+    bookmarkBubbleObserver_ = bubbleObserver;
+    managedBookmarkService_ = managed;
     model_ = model;
     node_ = node;
     alreadyBookmarked_ = alreadyBookmarked;
@@ -79,7 +74,12 @@ using bookmarks::BookmarkNode;
   Browser* browser = chrome::FindBrowserWithWindow(self.parentWindow);
   if (SyncPromoUI::ShouldShowSyncPromo(browser->profile())) {
     syncPromoController_.reset(
-        [[BookmarkSyncPromoController alloc] initWithBrowser:browser]);
+        [[BubbleSyncPromoController alloc]
+            initWithBrowser:browser
+              promoStringId:IDS_BOOKMARK_SYNC_PROMO_MESSAGE
+               linkStringId:IDS_BOOKMARK_SYNC_PROMO_LINK
+                accessPoint:
+                    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE]);
     [syncPromoPlaceholder_ addSubview:[syncPromoController_ view]];
 
     // Resize the sync promo and its placeholder.
@@ -101,51 +101,16 @@ using bookmarks::BookmarkNode;
   }
 }
 
-// If this is a new bookmark somewhere visible (e.g. on the bookmark
-// bar), pulse it.  Else, call ourself recursively with our parent
-// until we find something visible to pulse.
-- (void)startPulsingBookmarkButton:(const BookmarkNode*)node  {
-  while (node) {
-    if ((node->parent() == model_->bookmark_bar_node()) ||
-        (node->parent() == client_->managed_node()) ||
-        (node->parent() == client_->supervised_node()) ||
-        (node == model_->other_node())) {
-      pulsingBookmarkNode_ = node;
-      bookmarkObserver_->StartObservingNode(pulsingBookmarkNode_);
-      NSValue *value = [NSValue valueWithPointer:node];
-      NSDictionary *dict = [NSDictionary
-                             dictionaryWithObjectsAndKeys:value,
-                             bookmark_button::kBookmarkKey,
-                             [NSNumber numberWithBool:YES],
-                             bookmark_button::kBookmarkPulseFlagKey,
-                             nil];
-      [[NSNotificationCenter defaultCenter]
-        postNotificationName:bookmark_button::kPulseBookmarkButtonNotification
-                      object:self
-                    userInfo:dict];
-      return;
-    }
-    node = node->parent();
-  }
+- (void)browserWillBeDestroyed {
+  bookmarkBubbleObserver_ = nullptr;
 }
 
-- (void)stopPulsingBookmarkButton {
-  if (!pulsingBookmarkNode_)
+- (void)notifyBubbleClosed {
+  if (!bookmarkBubbleObserver_)
     return;
-  NSValue *value = [NSValue valueWithPointer:pulsingBookmarkNode_];
-  if (bookmarkObserver_)
-      bookmarkObserver_->StopObservingNode(pulsingBookmarkNode_);
-  pulsingBookmarkNode_ = NULL;
-  NSDictionary *dict = [NSDictionary
-                         dictionaryWithObjectsAndKeys:value,
-                         bookmark_button::kBookmarkKey,
-                         [NSNumber numberWithBool:NO],
-                         bookmark_button::kBookmarkPulseFlagKey,
-                         nil];
-  [[NSNotificationCenter defaultCenter]
-        postNotificationName:bookmark_button::kPulseBookmarkButtonNotification
-                      object:self
-                    userInfo:dict];
+
+  bookmarkBubbleObserver_->OnBookmarkBubbleHidden();
+  bookmarkBubbleObserver_ = nullptr;
 }
 
 // Close the bookmark bubble without changing anything.  Unlike a
@@ -160,7 +125,7 @@ using bookmarks::BookmarkNode;
 - (void)windowWillClose:(NSNotification*)notification {
   // We caught a close so we don't need to watch for the parent closing.
   bookmarkObserver_.reset();
-  [self stopPulsingBookmarkButton];
+  [self notifyBubbleClosed];
   [super windowWillClose:notification];
 }
 
@@ -171,7 +136,6 @@ using bookmarks::BookmarkNode;
   NSWindow* parentWindow = self.parentWindow;
   BrowserWindowController* bwc =
       [BrowserWindowController browserWindowControllerForWindow:parentWindow];
-  [bwc lockBarVisibilityForOwner:self withAnimation:NO delay:NO];
 
   InfoBubbleView* bubble = self.bubble;
   [bubble setArrowLocation:info_bubble::kTopRight];
@@ -201,22 +165,16 @@ using bookmarks::BookmarkNode;
   // dialog, the bookmark bubble's cancel: means "don't add this as a
   // bookmark", not "cancel editing".  We must take extra care to not
   // touch the bookmark in this selector.
-  bookmarkObserver_.reset(
-      new BookmarkModelObserverForCocoa(model_, ^(BOOL nodeWasDeleted) {
-          // If a watched node was deleted, the pointer to the pulsing button
-          // is likely stale.
-          if (nodeWasDeleted)
-            pulsingBookmarkNode_ = NULL;
-          [self dismissWithoutEditing:nil];
-      }));
+  bookmarkObserver_.reset(new BookmarkModelObserverForCocoa(model_, ^() {
+    [self dismissWithoutEditing:nil];
+  }));
   bookmarkObserver_->StartObservingNode(node_);
-
-  // Pulse something interesting on the bookmark bar.
-  [self startPulsingBookmarkButton:node_];
 
   [parentWindow addChildWindow:window ordered:NSWindowAbove];
   [window makeKeyAndOrderFront:self];
   [self registerKeyStateEventTap];
+
+  bookmarkBubbleObserver_->OnBookmarkBubbleShown(node_);
 }
 
 - (void)close {
@@ -239,7 +197,6 @@ using bookmarks::BookmarkNode;
 }
 
 - (IBAction)ok:(id)sender {
-  [self stopPulsingBookmarkButton];  // before parent changes
   [self updateBookmarkNode];
   [self close];
 }
@@ -252,13 +209,11 @@ using bookmarks::BookmarkNode;
     // |-remove:| calls |-close| so don't do it.
     [self remove:sender];
   } else {
-    [self stopPulsingBookmarkButton];
     [self dismissWithoutEditing:nil];
   }
 }
 
 - (IBAction)remove:(id)sender {
-  [self stopPulsingBookmarkButton];
   bookmarks::RemoveAllBookmarks(model_, node_->url());
   content::RecordAction(UserMetricsAction("BookmarkBubble_Unstar"));
   node_ = NULL;  // no longer valid
@@ -275,8 +230,8 @@ using bookmarks::BookmarkNode;
   if (!self.parentWindow)
     return;
   NSMenuItem* selected = [folderPopUpButton_ selectedItem];
-  ChooseAnotherFolder* chooseItem = [[self class] chooseAnotherFolderObject];
-  if ([[selected representedObject] isEqual:chooseItem]) {
+  if ([selected representedObject] ==
+      [[self class] chooseAnotherFolderObject]) {
     content::RecordAction(
         UserMetricsAction("BookmarkBubble_EditFromCombobox"));
     [self showEditor];
@@ -313,7 +268,7 @@ using bookmarks::BookmarkNode;
   const BookmarkNode* oldParent = node_->parent();
   NSMenuItem* selectedItem = [folderPopUpButton_ selectedItem];
   id representedObject = [selectedItem representedObject];
-  if ([representedObject isEqual:[[self class] chooseAnotherFolderObject]]) {
+  if (representedObject == [[self class] chooseAnotherFolderObject]) {
     // "Choose another folder..."
     return;
   }
@@ -340,8 +295,7 @@ using bookmarks::BookmarkNode;
   NSMenuItem *item = [menu addItemWithTitle:title
                                      action:NULL
                               keyEquivalent:@""];
-  ChooseAnotherFolder* obj = [[self class] chooseAnotherFolderObject];
-  [item setRepresentedObject:obj];
+  [item setRepresentedObject:[[self class] chooseAnotherFolderObject]];
   // Finally, select the current parent.
   NSValue* parentValue = [NSValue valueWithPointer:node_->parent()];
   NSInteger idx = [menu indexOfItemWithRepresentedObject:parentValue];
@@ -355,6 +309,10 @@ using bookmarks::BookmarkNode;
 
 - (NSView*)syncPromoPlaceholder {
   return syncPromoPlaceholder_;
+}
+
+- (bookmarks::BookmarkBubbleObserver*)bookmarkBubbleObserver {
+  return bookmarkBubbleObserver_;
 }
 
 + (NSString*)chooseAnotherFolderString {
@@ -380,7 +338,7 @@ using bookmarks::BookmarkNode;
   for (int i = 0; i < parent->child_count(); i++) {
     const BookmarkNode* child = parent->GetChild(i);
     if (child->is_folder() && child->IsVisible() &&
-        client_->CanBeEditedByUser(child)) {
+        managedBookmarkService_->CanBeEditedByUser(child)) {
       [self addFolderNodes:child
              toPopUpButton:button
                indentation:indentation];

@@ -18,6 +18,10 @@
     #     A Python string substituion pattern used to generate the C++
     #     namespace for each API. Use %(namespace)s to replace with the API
     #     namespace, like "toplevel::%(namespace)s_api".
+    #   bundle_name:
+    #     A string to prepend to generated bundle class names, so that multiple
+    #     bundle rules can be used without conflicting.  Only used with one of
+    #     the cpp-bundle generators.
     #
     # Functions and namespaces can be excluded by setting "nocompile" to true.
     # The default root path of API implementation sources is
@@ -38,6 +42,7 @@
       '<(api_gen_dir)/util_cc_helper.py',
     ],
     'schema_include_rules': [],
+    'actual_root%':'<(DEPTH)',
   },
   'actions': [
     {
@@ -54,9 +59,10 @@
       'action': [
         'python',
         '<(api_gen)',
-        '--root=<(DEPTH)',
+        '--root=<(actual_root)',
         '--destdir=<(SHARED_INTERMEDIATE_DIR)',
         '--namespace=<(root_namespace)',
+        '--bundle-name=<(bundle_name)',
         '--generator=cpp-bundle-schema',
         '--include-rules=<(schema_include_rules)',
         '<@(schema_files)',

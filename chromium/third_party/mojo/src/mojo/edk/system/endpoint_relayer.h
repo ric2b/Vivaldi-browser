@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_ENDPOINT_RELAYER_H_
-#define MOJO_EDK_SYSTEM_ENDPOINT_RELAYER_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_ENDPOINT_RELAYER_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_ENDPOINT_RELAYER_H_
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/synchronization/lock.h"
-#include "mojo/edk/system/channel_endpoint_client.h"
-#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint_client.h"
+#include "third_party/mojo/src/mojo/edk/system/mutex.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace mojo {
 namespace system {
@@ -68,7 +68,8 @@ class MOJO_SYSTEM_IMPL_EXPORT EndpointRelayer final
   static unsigned GetPeerPort(unsigned port);
 
   // Initialize this object. This must be called before any other method.
-  void Init(ChannelEndpoint* endpoint0, ChannelEndpoint* endpoint1);
+  void Init(ChannelEndpoint* endpoint0,
+            ChannelEndpoint* endpoint1) MOJO_NOT_THREAD_SAFE;
 
   // Sets (or resets) the filter, which can (optionally) handle/filter
   // |Type::ENDPOINT_CLIENT| messages (see |Filter| above).
@@ -81,11 +82,9 @@ class MOJO_SYSTEM_IMPL_EXPORT EndpointRelayer final
  private:
   ~EndpointRelayer() override;
 
-  // TODO(vtl): We could probably get away without the lock if we had a
-  // thread-safe |scoped_refptr|.
-  base::Lock lock_;  // Protects the following members.
-  scoped_refptr<ChannelEndpoint> endpoints_[2];
-  scoped_ptr<Filter> filter_;
+  Mutex mutex_;
+  scoped_refptr<ChannelEndpoint> endpoints_[2] MOJO_GUARDED_BY(mutex_);
+  scoped_ptr<Filter> filter_ MOJO_GUARDED_BY(mutex_);
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(EndpointRelayer);
 };
@@ -93,4 +92,4 @@ class MOJO_SYSTEM_IMPL_EXPORT EndpointRelayer final
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_ENDPOINT_RELAYER_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_ENDPOINT_RELAYER_H_

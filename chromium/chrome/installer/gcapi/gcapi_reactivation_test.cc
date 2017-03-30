@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/win/registry.h"
@@ -13,7 +14,6 @@
 #include "chrome/installer/gcapi/gcapi_reactivation.h"
 #include "chrome/installer/gcapi/gcapi_test_registry_overrider.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/google_update_experiment_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::Time;
@@ -37,7 +37,7 @@ class GCAPIReactivationTest : public ::testing::Test {
                 google_update::kRegVersionField, L"1.2.3.4") == ERROR_SUCCESS);
   }
 
-  bool SetLastRunTime(HKEY hive, int64 last_run_time) {
+  bool SetLastRunTime(HKEY hive, int64_t last_run_time) {
     return SetLastRunTimeString(hive, base::Int64ToString16(last_run_time));
   }
 
@@ -108,7 +108,7 @@ TEST_F(GCAPIReactivationTest, CanOfferReactivation_Basic) {
   EXPECT_FALSE(CanOfferReactivation(L"GAGA",
                                     GCAPI_INVOKED_STANDARD_SHELL,
                                     &error));
-  EXPECT_EQ(REACTIVATE_ERROR_NOTINSTALLED, error);
+  EXPECT_EQ(static_cast<DWORD>(REACTIVATE_ERROR_NOTINSTALLED), error);
 
   // Now pretend to be installed. CanOfferReactivation should pass.
   EXPECT_TRUE(SetChromeInstallMarker(HKEY_CURRENT_USER));
@@ -123,7 +123,7 @@ TEST_F(GCAPIReactivationTest, CanOfferReactivation_Basic) {
   EXPECT_FALSE(CanOfferReactivation(L"GAGA",
                                     GCAPI_INVOKED_STANDARD_SHELL,
                                     &error));
-  EXPECT_EQ(REACTIVATE_ERROR_NOTDORMANT, error);
+  EXPECT_EQ(static_cast<DWORD>(REACTIVATE_ERROR_NOTDORMANT), error);
 
   // Now set a last_run value that exceeds the threshold.
   hkcu_last_run = Time::NowFromSystemTime() -
@@ -138,7 +138,7 @@ TEST_F(GCAPIReactivationTest, CanOfferReactivation_Basic) {
   EXPECT_FALSE(CanOfferReactivation(NULL,
                                     GCAPI_INVOKED_STANDARD_SHELL,
                                     &error));
-  EXPECT_EQ(REACTIVATE_ERROR_INVALID_INPUT, error);
+  EXPECT_EQ(static_cast<DWORD>(REACTIVATE_ERROR_INVALID_INPUT), error);
 
   // One more valid one
   EXPECT_TRUE(CanOfferReactivation(L"GAGA",
@@ -151,7 +151,7 @@ TEST_F(GCAPIReactivationTest, CanOfferReactivation_Basic) {
   EXPECT_FALSE(CanOfferReactivation(L"GAGA",
                                     GCAPI_INVOKED_STANDARD_SHELL,
                                     &error));
-  EXPECT_EQ(REACTIVATE_ERROR_ALREADY_REACTIVATED, error);
+  EXPECT_EQ(static_cast<DWORD>(REACTIVATE_ERROR_ALREADY_REACTIVATED), error);
 }
 
 TEST_F(GCAPIReactivationTest, Reactivation_Flow) {
@@ -174,7 +174,7 @@ TEST_F(GCAPIReactivationTest, Reactivation_Flow) {
   EXPECT_FALSE(ReactivateChrome(L"GAGA",
                                 GCAPI_INVOKED_STANDARD_SHELL,
                                 &error));
-  EXPECT_EQ(REACTIVATE_ERROR_ALREADY_REACTIVATED, error);
+  EXPECT_EQ(static_cast<DWORD>(REACTIVATE_ERROR_ALREADY_REACTIVATED), error);
 
   // Should not be able to reactivate under other brands:
   EXPECT_FALSE(ReactivateChrome(L"MAMA",
@@ -186,7 +186,7 @@ TEST_F(GCAPIReactivationTest, Reactivation_Flow) {
   EXPECT_FALSE(ReactivateChrome(L"PFFT",
                                 GCAPI_INVOKED_STANDARD_SHELL,
                                 &error));
-  EXPECT_EQ(REACTIVATE_ERROR_ALREADY_REACTIVATED, error);
+  EXPECT_EQ(static_cast<DWORD>(REACTIVATE_ERROR_ALREADY_REACTIVATED), error);
   EXPECT_EQ(L"GAGA", GetReactivationString(HKEY_CURRENT_USER));
 }
 

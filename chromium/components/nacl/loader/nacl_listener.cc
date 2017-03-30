@@ -18,12 +18,14 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "components/nacl/common/nacl_messages.h"
 #include "components/nacl/common/nacl_renderer_messages.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "components/nacl/loader/nacl_ipc_adapter.h"
 #include "components/nacl/loader/nacl_validation_db.h"
 #include "components/nacl/loader/nacl_validation_query.h"
+#include "ipc/attachment_broker_unprivileged.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_switches.h"
 #include "ipc/ipc_sync_channel.h"
@@ -110,17 +112,6 @@ int CreateMemoryObject(size_t size, int executable) {
 }
 
 #elif defined(OS_WIN)
-// We wrap the function to convert the bool return value to an int.
-int BrokerDuplicateHandle(NaClHandle source_handle,
-                          uint32_t process_id,
-                          NaClHandle* target_handle,
-                          uint32_t desired_access,
-                          uint32_t options) {
-  return content::BrokerDuplicateHandle(source_handle, process_id,
-                                        target_handle, desired_access,
-                                        options);
-}
-
 int AttachDebugExceptionHandler(const void* info, size_t info_size) {
   std::string info_string(reinterpret_cast<const char*>(info), info_size);
   bool result = false;
@@ -194,17 +185,19 @@ class BrowserValidationDBProxy : public NaClValidationDB {
   NaClListener* listener_;
 };
 
-
-NaClListener::NaClListener() : shutdown_event_(true, false),
-                               io_thread_("NaCl_IOThread"),
+NaClListener::NaClListener()
+    : shutdown_event_(true, false),
+      io_thread_("NaCl_IOThread"),
 #if defined(OS_LINUX)
-                               prereserved_sandbox_size_(0),
+      prereserved_sandbox_size_(0),
 #endif
 #if defined(OS_POSIX)
-                               number_of_cores_(-1),  // unknown/error
+      number_of_cores_(-1),  // unknown/error
 #endif
-                               main_loop_(NULL),
-                               is_started_(false) {
+      main_loop_(NULL),
+      is_started_(false) {
+  attachment_broker_.reset(
+      IPC::AttachmentBrokerUnprivileged::CreateBroker().release());
   io_thread_.StartWithOptions(
       base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
   DCHECK(g_listener == NULL);
@@ -262,10 +255,11 @@ void NaClListener::Listen() {
           switches::kProcessChannelID);
   channel_ = IPC::SyncChannel::Create(this, io_thread_.task_runner().get(),
                                       &shutdown_event_);
-  filter_ = new IPC::SyncMessageFilter(&shutdown_event_);
-  channel_->AddFilter(filter_.get());
+  filter_ = channel_->CreateSyncMessageFilter();
   channel_->AddFilter(new FileTokenMessageFilter());
   channel_->Init(channel_name, IPC::Channel::MODE_CLIENT, true);
+  if (attachment_broker_.get())
+    attachment_broker_->DesignateBrokerCommunicationChannel(channel_.get());
   main_loop_ = base::MessageLoop::current();
   main_loop_->Run();
 }
@@ -346,32 +340,29 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
     LOG(FATAL) << "NaClAppCreate() failed";
   }
 
-  IPC::ChannelHandle browser_handle;
-  IPC::ChannelHandle ppapi_renderer_handle;
-  IPC::ChannelHandle manifest_service_handle;
+  IPC::ChannelHandle browser_handle =
+      IPC::Channel::GenerateVerifiedChannelID("nacl");
+  IPC::ChannelHandle ppapi_renderer_handle =
+      IPC::Channel::GenerateVerifiedChannelID("nacl");
+  IPC::ChannelHandle manifest_service_handle =
+      IPC::Channel::GenerateVerifiedChannelID("nacl");
 
-  if (params.enable_ipc_proxy) {
-    browser_handle = IPC::Channel::GenerateVerifiedChannelID("nacl");
-    ppapi_renderer_handle = IPC::Channel::GenerateVerifiedChannelID("nacl");
-    manifest_service_handle = IPC::Channel::GenerateVerifiedChannelID("nacl");
-
-    // Create the PPAPI IPC channels between the NaCl IRT and the host
-    // (browser/renderer) processes. The IRT uses these channels to
-    // communicate with the host and to initialize the IPC dispatchers.
-    SetUpIPCAdapter(&browser_handle, io_thread_.task_runner(), nap,
-                    NACL_CHROME_DESC_BASE,
-                    NaClIPCAdapter::ResolveFileTokenCallback(),
-                    NaClIPCAdapter::OpenResourceCallback());
-    SetUpIPCAdapter(&ppapi_renderer_handle, io_thread_.task_runner(), nap,
-                    NACL_CHROME_DESC_BASE + 1,
-                    NaClIPCAdapter::ResolveFileTokenCallback(),
-                    NaClIPCAdapter::OpenResourceCallback());
-    SetUpIPCAdapter(
-        &manifest_service_handle, io_thread_.task_runner(), nap,
-        NACL_CHROME_DESC_BASE + 2,
-        base::Bind(&NaClListener::ResolveFileToken, base::Unretained(this)),
-        base::Bind(&NaClListener::OnOpenResource, base::Unretained(this)));
-  }
+  // Create the PPAPI IPC channels between the NaCl IRT and the host
+  // (browser/renderer) processes. The IRT uses these channels to
+  // communicate with the host and to initialize the IPC dispatchers.
+  SetUpIPCAdapter(&browser_handle, io_thread_.task_runner(), nap,
+                  NACL_CHROME_DESC_BASE,
+                  NaClIPCAdapter::ResolveFileTokenCallback(),
+                  NaClIPCAdapter::OpenResourceCallback());
+  SetUpIPCAdapter(&ppapi_renderer_handle, io_thread_.task_runner(), nap,
+                  NACL_CHROME_DESC_BASE + 1,
+                  NaClIPCAdapter::ResolveFileTokenCallback(),
+                  NaClIPCAdapter::OpenResourceCallback());
+  SetUpIPCAdapter(
+      &manifest_service_handle, io_thread_.task_runner(), nap,
+      NACL_CHROME_DESC_BASE + 2,
+      base::Bind(&NaClListener::ResolveFileToken, base::Unretained(this)),
+      base::Bind(&NaClListener::OnOpenResource, base::Unretained(this)));
 
   trusted_listener_ =
       new NaClTrustedListener(IPC::Channel::GenerateVerifiedChannelID("nacl"),
@@ -421,9 +412,6 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
         params.version);
   }
 
-  CHECK(params.imc_bootstrap_handle != IPC::InvalidPlatformFileForTransit());
-  args->imc_bootstrap_handle =
-      IPC::PlatformFileForTransitToPlatformFile(params.imc_bootstrap_handle);
   args->enable_debug_stub = params.enable_debug_stub;
 
   // Now configure parts that depend on process type.
@@ -446,10 +434,6 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
     args->pnacl_mode = 0;
     args->initial_nexe_max_code_bytes = 0;
   } else if (params.process_type == nacl::kPNaClTranslatorProcessType) {
-    // Transitioning the PNaCl translators to use the IRT again:
-    // https://code.google.com/p/nativeclient/issues/detail?id=3914.
-    // Once done, this can be removed.
-    args->irt_load_optional = 1;
     args->pnacl_mode = 0;
   }
 
@@ -459,7 +443,6 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
           params.debug_stub_server_bound_socket);
 #endif
 #if defined(OS_WIN)
-  args->broker_duplicate_handle_func = BrokerDuplicateHandle;
   args->attach_debug_exception_handler_func = AttachDebugExceptionHandler;
   args->debug_stub_server_port_selected_handler_func =
       DebugStubPortSelectedHandler;

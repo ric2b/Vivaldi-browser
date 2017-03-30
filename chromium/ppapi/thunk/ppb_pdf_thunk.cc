@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/private/ppb_pdf.h"
@@ -15,13 +17,6 @@ namespace ppapi {
 namespace thunk {
 
 namespace {
-
-PP_Var GetLocalizedString(PP_Instance instance, PP_ResourceString string_id) {
-  EnterInstanceAPI<PPB_PDF_API> enter(instance);
-  if (enter.failed())
-    return PP_MakeUndefined();
-  return enter.functions()->GetLocalizedString(string_id);
-}
 
 PP_Resource GetFontFileWithFallback(
     PP_Instance instance,
@@ -137,7 +132,6 @@ void GetV8ExternalSnapshotData(PP_Instance instance,
 }
 
 const PPB_PDF g_ppb_pdf_thunk = {
-  &GetLocalizedString,
   &GetFontFileWithFallback,
   &GetFontTableForPrivateFontFile,
   &SearchString,

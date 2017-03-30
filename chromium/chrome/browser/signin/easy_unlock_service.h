@@ -13,17 +13,20 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "chrome/browser/signin/chrome_proximity_auth_client.h"
 #include "chrome/browser/signin/easy_unlock_auth_attempt.h"
 #include "chrome/browser/signin/easy_unlock_metrics.h"
 #include "chrome/browser/signin/easy_unlock_screenlock_state_handler.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/proximity_auth/remote_device.h"
 #include "components/proximity_auth/screenlock_state.h"
-#include "components/proximity_auth/webui/proximity_auth_ui_delegate.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_types.h"
 #endif
+
+class AccountId;
 
 namespace base {
 class DictionaryValue;
@@ -40,6 +43,7 @@ class PrefRegistrySyncable;
 
 namespace proximity_auth {
 class ProximityAuthBleSystem;
+class ProximityAuthSystem;
 }
 
 class EasyUnlockAppManager;
@@ -47,8 +51,7 @@ class EasyUnlockServiceObserver;
 class Profile;
 class PrefRegistrySimple;
 
-class EasyUnlockService : public KeyedService,
-                          public proximity_auth::ProximityAuthUIDelegate {
+class EasyUnlockService : public KeyedService {
  public:
   enum TurnOffFlowStatus {
     IDLE,
@@ -85,22 +88,19 @@ class EasyUnlockService : public KeyedService,
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
   // Removes the hardlock state for the given user.
-  static void ResetLocalStateForUser(const std::string& user_id);
+  static void ResetLocalStateForUser(const AccountId& account_id);
 
   // Returns the user's preferences.
-  static UserSettings GetUserSettings(const std::string& user_id);
+  static UserSettings GetUserSettings(const AccountId& account_id);
 
   // Returns the identifier for the device.
   static std::string GetDeviceId();
-
-  // Returns true if Easy sign-in is enabled.
-  static bool IsSignInEnabled();
 
   // Returns the EasyUnlockService type.
   virtual Type GetType() const = 0;
 
   // Returns the user currently associated with the service.
-  virtual std::string GetUserEmail() const = 0;
+  virtual AccountId GetAccountId() const = 0;
 
   // Launches Easy Unlock setup app.
   virtual void LaunchSetup() = 0;
@@ -113,6 +113,7 @@ class EasyUnlockService : public KeyedService,
   // Gets/Sets the remote devices list.
   virtual const base::ListValue* GetRemoteDevices() const = 0;
   virtual void SetRemoteDevices(const base::ListValue& devices) = 0;
+  virtual void SetRemoteBleDevices(const base::ListValue& devices) = 0;
 
   // Runs the flow for turning Easy unlock off.
   virtual void RunTurnOffFlow() = 0;
@@ -134,11 +135,11 @@ class EasyUnlockService : public KeyedService,
   virtual std::string GetWrappedSecret() const = 0;
 
   // Records metrics for Easy sign-in outcome for the given user.
-  virtual void RecordEasySignInOutcome(const std::string& user_id,
+  virtual void RecordEasySignInOutcome(const AccountId& account_id,
                                        bool success) const = 0;
 
   // Records metrics for password based flow for the given user.
-  virtual void RecordPasswordLoginEvent(const std::string& user_id) const = 0;
+  virtual void RecordPasswordLoginEvent(const AccountId& account_id) const = 0;
 
   // Starts auto pairing.
   typedef base::Callback<void(bool success, const std::string& error)>
@@ -185,12 +186,12 @@ class EasyUnlockService : public KeyedService,
 
   // Starts an auth attempt for the user associated with the service. The
   // attempt type (unlock vs. signin) will depend on the service type.
-  void AttemptAuth(const std::string& user_id);
+  void AttemptAuth(const AccountId& account_id);
 
   // Similar to above but a callback is invoked after the auth attempt is
   // finalized instead of default unlock/sign-in.
   typedef EasyUnlockAuthAttempt::FinalizedCallback AttemptAuthCallback;
-  void AttemptAuth(const std::string& user_id,
+  void AttemptAuth(const AccountId& account_id,
                    const AttemptAuthCallback& callback);
 
   // Finalizes the previously started auth attempt for easy unlock. If called on
@@ -204,7 +205,7 @@ class EasyUnlockService : public KeyedService,
   void FinalizeSignin(const std::string& secret);
 
   // Handles Easy Unlock auth failure for the user.
-  void HandleAuthFailure(const std::string& user_id);
+  void HandleAuthFailure(const AccountId& account_id);
 
   // Checks the consistency between pairing data and cryptohome keys. Set
   // hardlock state if the two do not match.
@@ -220,14 +221,6 @@ class EasyUnlockService : public KeyedService,
 
   void AddObserver(EasyUnlockServiceObserver* observer);
   void RemoveObserver(EasyUnlockServiceObserver* observer);
-
-  // ProximityAuthUIDelegate:
-  PrefService* GetPrefService() override;
-  scoped_ptr<proximity_auth::SecureMessageDelegate>
-  CreateSecureMessageDelegate() override;
-  scoped_ptr<proximity_auth::CryptAuthClientFactory>
-  CreateCryptAuthClientFactory() override;
-  cryptauth::DeviceClassifier GetDeviceClassifier() override;
 
   ChromeProximityAuthClient* proximity_auth_client() {
     return &proximity_auth_client_;
@@ -253,7 +246,7 @@ class EasyUnlockService : public KeyedService,
   virtual void OnWillFinalizeUnlock(bool success) = 0;
 
   // Called when the local device resumes after a suspend.
-  virtual void OnSuspendDone() = 0;
+  virtual void OnSuspendDoneInternal() = 0;
 
   // KeyedService override:
   void Shutdown() override;
@@ -299,12 +292,18 @@ class EasyUnlockService : public KeyedService,
   // Saves hardlock state for the given user. Update UI if the currently
   // associated user is the same.
   void SetHardlockStateForUser(
-      const std::string& user_id,
+      const AccountId& account_id,
       EasyUnlockScreenlockStateHandler::HardlockState state);
 
   // Returns the authentication event for a recent password sign-in or unlock,
   // according to the current state of the service.
   EasyUnlockAuthEvent GetPasswordAuthEvent() const;
+
+  // Called by subclasses when remote devices allowed to unlock the screen
+  // are loaded for |account_id|.
+  void SetProximityAuthDevices(
+      const AccountId& account_id,
+      const proximity_auth::RemoteDeviceList& remote_devices);
 
  private:
   // A class to detect whether a bluetooth adapter is present.
@@ -325,7 +324,7 @@ class EasyUnlockService : public KeyedService,
 #if defined(OS_CHROMEOS)
   // Callback for get key operation from CheckCryptohomeKeysAndMaybeHardlock.
   void OnCryptohomeKeysFetchedForChecking(
-      const std::string& user_id,
+      const AccountId& account_id,
       const std::set<std::string> paired_devices,
       bool success,
       const chromeos::EasyUnlockDeviceKeyDataList& key_data_list);
@@ -333,6 +332,9 @@ class EasyUnlockService : public KeyedService,
 
   // Updates the service to state for handling system suspend.
   void PrepareForSuspend();
+
+  // Called when the system resumes from a suspended state.
+  void OnSuspendDone();
 
   void EnsureTpmKeyPresentIfNeeded();
 
@@ -349,12 +351,16 @@ class EasyUnlockService : public KeyedService,
   // progress.
   scoped_ptr<EasyUnlockAuthAttempt> auth_attempt_;
 
+  // Detects when the system Bluetooth adapter status changes.
   scoped_ptr<BluetoothDetector> bluetooth_detector_;
 
-  // The proximity auth over Bluetooth Low Energy system. This is main entry
-  // point to bootstap Smart Lock to discover phones over Bluetooth Low
-  // Energy.
-  scoped_ptr<proximity_auth::ProximityAuthBleSystem> proximity_auth_ble_system_;
+  // Handles connecting, authenticating, and updating the UI on the lock/sign-in
+  // screen. After a |RemoteDevice| instance is provided, this object will
+  // handle the rest.
+  // TODO(tengs): This object is intended as a replacement of the background
+  // page of the easy_unlock Chrome app. We are in the process of removing the
+  // app in favor of |proximity_auth_system_|.
+  scoped_ptr<proximity_auth::ProximityAuthSystem> proximity_auth_system_;
 
 #if defined(OS_CHROMEOS)
   // Monitors suspend and wake state of ChromeOS.

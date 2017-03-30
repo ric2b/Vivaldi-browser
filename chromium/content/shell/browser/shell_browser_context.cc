@@ -4,6 +4,8 @@
 
 #include "content/shell/browser/shell_browser_context.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/environment.h"
@@ -11,6 +13,8 @@
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
+#include "content/public/browser/background_sync_controller.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
@@ -128,13 +132,10 @@ ShellBrowserContext::CreateURLRequestContextGetter(
     ProtocolHandlerMap* protocol_handlers,
     URLRequestInterceptorScopedVector request_interceptors) {
   return new ShellURLRequestContextGetter(
-      ignore_certificate_errors_,
-      GetPath(),
+      ignore_certificate_errors_, GetPath(),
       BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO),
       BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::FILE),
-      protocol_handlers,
-      request_interceptors.Pass(),
-      net_log_);
+      protocol_handlers, std::move(request_interceptors), net_log_);
 }
 
 net::URLRequestContextGetter* ShellBrowserContext::CreateRequestContext(
@@ -142,7 +143,7 @@ net::URLRequestContextGetter* ShellBrowserContext::CreateRequestContext(
     URLRequestInterceptorScopedVector request_interceptors) {
   DCHECK(!url_request_getter_.get());
   url_request_getter_ = CreateURLRequestContextGetter(
-      protocol_handlers, request_interceptors.Pass());
+      protocol_handlers, std::move(request_interceptors));
   resource_context_->set_url_request_context_getter(url_request_getter_.get());
   return url_request_getter_.get();
 }
@@ -204,6 +205,12 @@ PermissionManager* ShellBrowserContext::GetPermissionManager() {
   if (!permission_manager_.get())
     permission_manager_.reset(new ShellPermissionManager());
   return permission_manager_.get();
+}
+
+BackgroundSyncController* ShellBrowserContext::GetBackgroundSyncController() {
+  if (!background_sync_controller_)
+    background_sync_controller_.reset(new BackgroundSyncController());
+  return background_sync_controller_.get();
 }
 
 }  // namespace content

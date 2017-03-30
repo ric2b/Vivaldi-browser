@@ -5,9 +5,9 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_CONTROLLER_H_
 #define COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_CONTROLLER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
@@ -124,13 +124,6 @@ class AutocompleteController : public AutocompleteProviderListener {
   KeywordProvider* keyword_provider() const { return keyword_provider_; }
   SearchProvider* search_provider() const { return search_provider_; }
 
-  // Deprecated. Do not use that method! It's provided temporarily as clank
-  // migrates. If you need to access the aucomplete input you should keep a
-  // local copy of it.
-  // TODO(beaudoin): Remove this method once clank no longer rely on it.
-  // crbug.com/367832
-  const AutocompleteInput& input() const { return input_; }
-
   const AutocompleteResult& result() const { return result_; }
   bool done() const { return done_; }
   const Providers& providers() const { return providers_; }
@@ -232,10 +225,10 @@ class AutocompleteController : public AutocompleteProviderListener {
 
   // Timer used to remove any matches copied from the last result. When run
   // invokes |ExpireCopiedEntries|.
-  base::OneShotTimer<AutocompleteController> expire_timer_;
+  base::OneShotTimer expire_timer_;
 
   // Timer used to tell the providers to Stop() searching for matches.
-  base::OneShotTimer<AutocompleteController> stop_timer_;
+  base::OneShotTimer stop_timer_;
 
   // Amount of time (in ms) between when the user stops typing and
   // when we send Stop() to every provider.  This is intended to avoid

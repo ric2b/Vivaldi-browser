@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_IN_MEMORY_URL_INDEX_TYPES_H_
 #define COMPONENTS_OMNIBOX_BROWSER_IN_MEMORY_URL_INDEX_TYPES_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <vector>
@@ -42,6 +44,13 @@ typedef std::vector<TermMatch> TermMatches;
 TermMatches MatchTermInString(const base::string16& term,
                               const base::string16& cleaned_string,
                               int term_num);
+
+// Sorts |matches| by offset and returns the result.
+TermMatches SortMatches(const TermMatches& matches);
+
+// Removes overlapping substring matches from |matches| and returns the
+// cleaned up matches.  Assumes |matches| is already sorted.
+TermMatches DeoverlapMatches(const TermMatches& sorted_matches);
 
 // Sorts and removes overlapping substring matches from |matches| and
 // returns the cleaned up matches.

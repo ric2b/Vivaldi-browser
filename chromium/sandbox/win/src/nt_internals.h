@@ -8,6 +8,7 @@
 #define SANDBOX_WIN_SRC_NT_INTERNALS_H__
 
 #include <windows.h>
+#include <stddef.h>
 
 typedef LONG NTSTATUS;
 #define NT_SUCCESS(st) (st >= 0)
@@ -308,15 +309,27 @@ typedef enum _PROCESSINFOCLASS {
 } PROCESSINFOCLASS;
 
 typedef PVOID PPEB;
-typedef PVOID KPRIORITY;
+typedef LONG KPRIORITY;
 
 typedef struct _PROCESS_BASIC_INFORMATION {
-  NTSTATUS ExitStatus;
+  union {
+    NTSTATUS ExitStatus;
+    PVOID padding_for_x64_0;
+  };
   PPEB PebBaseAddress;
   KAFFINITY AffinityMask;
-  KPRIORITY BasePriority;
-  ULONG UniqueProcessId;
-  ULONG InheritedFromUniqueProcessId;
+  union {
+    KPRIORITY BasePriority;
+    PVOID padding_for_x64_1;
+  };
+  union {
+    DWORD UniqueProcessId;
+    PVOID padding_for_x64_2;
+  };
+  union {
+    DWORD InheritedFromUniqueProcessId;
+    PVOID padding_for_x64_3;
+  };
 } PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
 
 typedef NTSTATUS (WINAPI *NtQueryInformationProcessFunction)(

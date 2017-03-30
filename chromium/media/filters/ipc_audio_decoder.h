@@ -7,8 +7,6 @@
 #ifndef MEDIA_FILTERS_IPC_AUDIO_DECODER_H_
 #define MEDIA_FILTERS_IPC_AUDIO_DECODER_H_
 
-#include <string>
-
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/synchronization/waitable_event.h"
@@ -16,13 +14,14 @@
 #include "media/base/media_export.h"
 #include "media/filters/ipc_media_pipeline_host.h"
 
+namespace base {
+class SequencedTaskRunner;
+}
+
 namespace media {
 
 class AudioBus;
 class FFmpegURLProtocol;
-struct PlatformAudioConfig;
-struct PlatformMediaTimeInfo;
-struct PlatformVideoConfig;
 
 // Audio decoder based on the IPCMediaPipeline. It decodes in-memory audio file
 // data. It is used for Web Audio API, so its usage has to be synchronous.
@@ -30,12 +29,22 @@ struct PlatformVideoConfig;
 // synchronization tricks in order to appear synchronous.
 class MEDIA_EXPORT IPCAudioDecoder {
  public:
+  // TODO(wdzierzanowski): Only necessary because this class currently
+  // interferes with AudioFileReaderTest (DNA-45771).
+  class MEDIA_EXPORT ScopedDisableForTesting {
+   public:
+    ScopedDisableForTesting();
+    ~ScopedDisableForTesting();
+  };
+
   explicit IPCAudioDecoder(FFmpegURLProtocol* protocol);
   ~IPCAudioDecoder();
 
+  static bool IsAvailable();
   static void Preinitialize(
       const IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,
-      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner);
+      const scoped_refptr<base::SequencedTaskRunner>& main_task_runner,
+      const scoped_refptr<base::SequencedTaskRunner>& media_task_runner);
 
   bool Initialize();
 
@@ -49,23 +58,14 @@ class MEDIA_EXPORT IPCAudioDecoder {
  private:
   class InMemoryDataSource;
 
-  static bool preinitialized_;
-  static base::LazyInstance<IPCMediaPipelineHost::Creator>::Leaky
-      ipc_media_pipeline_host_creator_;
-  static base::LazyInstance<scoped_refptr<base::SingleThreadTaskRunner>>::Leaky
-      media_task_runner_;
-
   void OnInitialized(bool success,
                      int bitrate,
                      const PlatformMediaTimeInfo& time_info,
                      const PlatformAudioConfig& audio_config,
                      const PlatformVideoConfig& video_config);
-
   void ReadInternal();
   void DataReady(DemuxerStream::Status status,
                  const scoped_refptr<DecoderBuffer>& buffer);
-
-  void DestroyPipelineOnMediaThread();
 
   scoped_ptr<InMemoryDataSource> data_source_;
 
@@ -76,16 +76,11 @@ class MEDIA_EXPORT IPCAudioDecoder {
   media::SampleFormat sample_format_;
   base::TimeDelta duration_;
 
-  bool initialized_successfully_;
-
-  base::WaitableEvent initialization_event_;
-  base::WaitableEvent destruction_event_;
-  base::WaitableEvent read_event_;
-
   AudioBus* audio_bus_;
   int frames_read_;
 
   scoped_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
+  base::WaitableEvent media_task_done_;
 
   base::ThreadChecker thread_checker_;
 

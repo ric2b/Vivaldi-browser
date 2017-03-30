@@ -5,8 +5,10 @@
 #ifndef CONTENT_BROWSER_DOWNLOAD_SAVE_ITEM_H_
 #define CONTENT_BROWSER_DOWNLOAD_SAVE_ITEM_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "content/browser/download/save_types.h"
 #include "content/public/common/referrer.h"
 #include "url/gurl.h"
@@ -35,13 +37,13 @@ class SaveItem {
   void Start();
 
   // Received a new chunk of data.
-  void Update(int64 bytes_so_far);
+  void Update(int64_t bytes_so_far);
 
   // Cancel saving item.
   void Cancel();
 
   // Saving operation completed.
-  void Finish(int64 size, bool is_success);
+  void Finish(int64_t size, bool is_success);
 
   // Rough percent complete, -1 means we don't know (since we didn't receive a
   // total size).
@@ -50,19 +52,17 @@ class SaveItem {
   // Update path for SaveItem, the actual file is renamed on the file thread.
   void Rename(const base::FilePath& full_path);
 
-  void SetSaveId(int32 save_id);
-
-  void SetTotalBytes(int64 total_bytes);
+  void SetTotalBytes(int64_t total_bytes);
 
   // Accessors.
+  SaveItemId id() const { return save_item_id_; }
   SaveState state() const { return state_; }
   const base::FilePath& full_path() const { return full_path_; }
   const base::FilePath& file_name() const { return file_name_; }
   const GURL& url() const { return url_; }
   const Referrer& referrer() const { return referrer_; }
-  int64 total_bytes() const { return total_bytes_; }
-  int64 received_bytes() const { return received_bytes_; }
-  int32 save_id() const { return save_id_; }
+  int64_t total_bytes() const { return total_bytes_; }
+  int64_t received_bytes() const { return received_bytes_; }
   bool has_final_name() const { return has_final_name_; }
   bool success() const { return is_success_; }
   SaveFileCreateInfo::SaveFileSource save_source() const {
@@ -72,10 +72,10 @@ class SaveItem {
 
  private:
   // Internal helper for maintaining consistent received and total sizes.
-  void UpdateSize(int64 size);
+  void UpdateSize(int64_t size);
 
-  // Request ID assigned by the ResourceDispatcherHost.
-  int32 save_id_;
+  // Unique identifier for this SaveItem instance.
+  const SaveItemId save_item_id_;
 
   // Full path to the save item file.
   base::FilePath full_path_;
@@ -88,10 +88,10 @@ class SaveItem {
   Referrer referrer_;
 
   // Total bytes expected.
-  int64 total_bytes_;
+  int64_t total_bytes_;
 
   // Current received bytes.
-  int64 received_bytes_;
+  int64_t received_bytes_;
 
   // The current state of this save item.
   SaveState state_;

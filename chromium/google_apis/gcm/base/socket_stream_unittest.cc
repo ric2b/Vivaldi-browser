@@ -4,11 +4,12 @@
 
 #include "google_apis/gcm/base/socket_stream.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "net/socket/socket_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -87,10 +88,9 @@ void GCMSocketStreamTest::BuildSocket(const ReadList& read_list,
                                       const WriteList& write_list) {
   mock_reads_ = read_list;
   mock_writes_ = write_list;
-  data_provider_.reset(
-      new net::StaticSocketDataProvider(
-          vector_as_array(&mock_reads_), mock_reads_.size(),
-          vector_as_array(&mock_writes_), mock_writes_.size()));
+  data_provider_.reset(new net::StaticSocketDataProvider(
+      mock_reads_.data(), mock_reads_.size(), mock_writes_.data(),
+      mock_writes_.size()));
   socket_factory_.AddSocketDataProvider(data_provider_.get());
   OpenConnection();
   ResetInputStream();
@@ -115,8 +115,8 @@ base::StringPiece GCMSocketStreamTest::DoInputStreamRead(int bytes) {
       break;
     total_bytes_read += size;
     if (initial_buffer) {  // Verify the buffer doesn't skip data.
-      EXPECT_EQ(static_cast<const uint8*>(initial_buffer) + total_bytes_read,
-                static_cast<const uint8*>(buffer) + size);
+      EXPECT_EQ(static_cast<const uint8_t*>(initial_buffer) + total_bytes_read,
+                static_cast<const uint8_t*>(buffer) + size);
     } else {
       initial_buffer = buffer;
     }

@@ -5,20 +5,24 @@
 #ifndef CONTENT_PUBLIC_BROWSER_TRACING_CONTROLLER_H_
 #define CONTENT_PUBLIC_BROWSER_TRACING_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/trace_event/trace_event.h"
+#include "base/values.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/tracing_delegate.h"
 
 namespace content {
 
 class TracingController;
 
 // TracingController is used on the browser processes to enable/disable
-// trace status and collect trace data. Only the browser UI thread is allowed
+// tracing status and collect trace data. Only the browser UI thread is allowed
 // to interact with the TracingController object. All callbacks are called on
 // the UI thread.
 class TracingController {
@@ -36,14 +40,37 @@ class TracingController {
   class CONTENT_EXPORT TraceDataSink
       : public base::RefCountedThreadSafe<TraceDataSink> {
    public:
+    TraceDataSink();
+
     virtual void AddTraceChunk(const std::string& chunk) {}
-    virtual void SetSystemTrace(const std::string& data) {}
-    virtual void SetMetadata(const std::string& data) {}
+
+    // Add a TracingAgent's trace to the data sink.
+    virtual void AddAgentTrace(const std::string& trace_label,
+                               const std::string& trace_data);
+
+    // Notice that TracingController adds some default metadata when
+    // StopTracing is called, which may override metadata that you would
+    // set beforehand in case of key collision.
+    virtual void AddMetadata(const base::DictionaryValue& data);
+    virtual scoped_ptr<const base::DictionaryValue> GetMetadataCopy() const;
+    virtual void SetMetadataFilterPredicate(
+        const MetadataFilterPredicate& metadata_filter_predicate);
     virtual void Close() {}
 
    protected:
     friend class base::RefCountedThreadSafe<TraceDataSink>;
-    virtual ~TraceDataSink() {}
+
+    // Get a map of TracingAgent's data, which is previously added by
+    // AddAgentTrace(). The map's key is the trace label and the map's value is
+    // the trace data.
+    virtual const std::map<std::string, std::string>& GetAgentTrace() const;
+
+    virtual ~TraceDataSink();
+
+   private:
+    std::map<std::string, std::string> additional_tracing_agent_trace_;
+    MetadataFilterPredicate metadata_filter_predicate_;
+    base::DictionaryValue metadata_;
   };
 
   // An implementation of this interface is passed when constructing a
@@ -54,22 +81,25 @@ class TracingController {
       : public base::RefCountedThreadSafe<TraceDataEndpoint> {
    public:
     virtual void ReceiveTraceChunk(const std::string& chunk) {}
-    virtual void ReceiveTraceFinalContents(const std::string& contents) {}
+    virtual void ReceiveTraceFinalContents(
+      scoped_ptr<const base::DictionaryValue> metadata,
+      const std::string& contents) {}
 
    protected:
     friend class base::RefCountedThreadSafe<TraceDataEndpoint>;
     virtual ~TraceDataEndpoint() {}
   };
 
-  // Create a trace sink that may be supplied to DisableRecording or
+  // Create a trace sink that may be supplied to StopTracing or
   // CaptureMonitoringSnapshot to capture the trace data as a string.
   CONTENT_EXPORT static scoped_refptr<TraceDataSink> CreateStringSink(
-      const base::Callback<void(base::RefCountedString*)>& callback);
+      const base::Callback<void(scoped_ptr<const base::DictionaryValue>,
+                                base::RefCountedString*)>& callback);
 
   CONTENT_EXPORT static scoped_refptr<TraceDataSink> CreateCompressedStringSink(
       scoped_refptr<TraceDataEndpoint> endpoint);
 
-  // Create a trace sink that may be supplied to DisableRecording or
+  // Create a trace sink that may be supplied to StopTracing or
   // CaptureMonitoringSnapshot to dump the trace data to a file.
   CONTENT_EXPORT static scoped_refptr<TraceDataSink> CreateFileSink(
       const base::FilePath& file_path,
@@ -78,7 +108,8 @@ class TracingController {
   // Create an endpoint that may be supplied to any TraceDataSink to
   // dump the trace data to a callback.
   CONTENT_EXPORT static scoped_refptr<TraceDataEndpoint> CreateCallbackEndpoint(
-      const base::Callback<void(base::RefCountedString*)>& callback);
+      const base::Callback<void(scoped_ptr<const base::DictionaryValue>,
+                                base::RefCountedString*)>& callback);
 
   // Create an endpoint that may be supplied to any TraceDataSink to
   // dump the trace data to a file.
@@ -97,13 +128,13 @@ class TracingController {
   virtual bool GetCategories(
       const GetCategoriesDoneCallback& callback) = 0;
 
-  // Start recording on all processes.
+  // Start tracing (recording traces) on all processes.
   //
-  // Recording begins immediately locally, and asynchronously on child processes
-  // as soon as they receive the EnableRecording request.
+  // Tracing begins immediately locally, and asynchronously on child processes
+  // as soon as they receive the StartTracing request.
   //
-  // Once all child processes have acked to the EnableRecording request,
-  // EnableRecordingDoneCallback will be called back.
+  // Once all child processes have acked to the StartTracing request,
+  // StartTracingDoneCallback will be called back.
   //
   // |category_filter| is a filter to control what category groups should be
   // traced. A filter can have an optional '-' prefix to exclude category groups
@@ -114,13 +145,13 @@ class TracingController {
   //           "test_MyTest*,test_OtherStuff",
   //           "-excluded_category1,-excluded_category2"
   //
-  // |options| controls what kind of tracing is enabled.
-  typedef base::Callback<void()> EnableRecordingDoneCallback;
-  virtual bool EnableRecording(
+  // |trace_config| controls what kind of tracing is enabled.
+  typedef base::Callback<void()> StartTracingDoneCallback;
+  virtual bool StartTracing(
       const base::trace_event::TraceConfig& trace_config,
-      const EnableRecordingDoneCallback& callback) = 0;
+      const StartTracingDoneCallback& callback) = 0;
 
-  // Stop recording on all processes.
+  // Stop tracing (recording traces) on all processes.
   //
   // Child processes typically are caching trace data and only rarely flush
   // and send trace data back to the browser process. That is because it may be
@@ -128,7 +159,7 @@ class TracingController {
   // to avoid much runtime overhead of tracing. So, to end tracing, we must
   // asynchronously ask all child processes to flush any pending trace data.
   //
-  // Once all child processes have acked to the DisableRecording request,
+  // Once all child processes have acked to the StopTracing request,
   // TracingFileResultCallback will be called back with a file that contains
   // the traced data.
   //
@@ -136,33 +167,33 @@ class TracingController {
   // as a comma-separated sequences of JSON-stringified events, followed by
   // a notification that the trace collection is finished.
   //
-  virtual bool DisableRecording(
+  virtual bool StopTracing(
       const scoped_refptr<TraceDataSink>& trace_data_sink) = 0;
 
   // Start monitoring on all processes.
   //
   // Monitoring begins immediately locally, and asynchronously on child
-  // processes as soon as they receive the EnableMonitoring request.
+  // processes as soon as they receive the StartMonitoring request.
   //
-  // Once all child processes have acked to the EnableMonitoring request,
-  // EnableMonitoringDoneCallback will be called back.
+  // Once all child processes have acked to the StartMonitoring request,
+  // StartMonitoringDoneCallback will be called back.
   //
   // |category_filter| is a filter to control what category groups should be
   // traced.
   //
-  // |options| controls what kind of tracing is enabled.
-  typedef base::Callback<void()> EnableMonitoringDoneCallback;
-  virtual bool EnableMonitoring(
+  // |trace_config| controls what kind of tracing is enabled.
+  typedef base::Callback<void()> StartMonitoringDoneCallback;
+  virtual bool StartMonitoring(
       const base::trace_event::TraceConfig& trace_config,
-      const EnableMonitoringDoneCallback& callback) = 0;
+      const StartMonitoringDoneCallback& callback) = 0;
 
   // Stop monitoring on all processes.
   //
-  // Once all child processes have acked to the DisableMonitoring request,
-  // DisableMonitoringDoneCallback is called back.
-  typedef base::Callback<void()> DisableMonitoringDoneCallback;
-  virtual bool DisableMonitoring(
-      const DisableMonitoringDoneCallback& callback) = 0;
+  // Once all child processes have acked to the StopMonitoring request,
+  // StopMonitoringDoneCallback is called back.
+  typedef base::Callback<void()> StopMonitoringDoneCallback;
+  virtual bool StopMonitoring(
+      const StopMonitoringDoneCallback& callback) = 0;
 
   // Get the current monitoring configuration.
   virtual void GetMonitoringStatus(
@@ -205,8 +236,8 @@ class TracingController {
   // watch event callback.
   virtual bool CancelWatchEvent() = 0;
 
-  // Check if the tracing system is recording
-  virtual bool IsRecording() const = 0;
+  // Check if the tracing system is tracing
+  virtual bool IsTracing() const = 0;
 
  protected:
   virtual ~TracingController() {}

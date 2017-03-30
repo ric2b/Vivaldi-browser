@@ -4,6 +4,8 @@
 
 #include "remoting/host/token_validator_base.h"
 
+#include <stddef.h>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -13,6 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "net/base/escape.h"
 #include "net/base/io_buffer.h"
 #include "net/base/request_priority.h"
@@ -27,6 +30,9 @@
 #include "net/ssl/client_cert_store_mac.h"
 #endif
 #include "net/ssl/ssl_cert_request_info.h"
+#include "net/ssl/ssl_platform_key.h"
+#include "net/ssl/ssl_private_key.h"
+#include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
@@ -66,7 +72,7 @@ void TokenValidatorBase::ValidateThirdPartyToken(
   DCHECK(!on_token_validated.is_null());
 
   on_token_validated_ = on_token_validated;
-
+  token_ = token;
   StartValidateRequest(token);
 }
 
@@ -101,9 +107,26 @@ void TokenValidatorBase::OnReadCompleted(net::URLRequest* source,
   const net::URLRequestStatus status = request_->status();
 
   if (!status.is_io_pending()) {
+    retrying_request_ = false;
     std::string shared_token = ProcessResponse();
     request_.reset();
     on_token_validated_.Run(shared_token);
+  }
+}
+
+void TokenValidatorBase::OnReceivedRedirect(
+    net::URLRequest* request,
+    const net::RedirectInfo& redirect_info,
+    bool* defer_redirect) {
+  if (!retrying_request_ && redirect_info.new_method == "GET" &&
+      redirect_info.new_url == third_party_auth_config_.token_validation_url) {
+    // A sequence of redirects caused the original POST request to become a GET
+    // request for this URL. Cancel the request, and re-submit the POST request.
+    // The chain of redirects are expected to set some cookies that will
+    // ensure the new POST request succeeds.
+    retrying_request_ = true;
+    DCHECK(data_.empty());
+    StartValidateRequest(token_);
   }
 }
 
@@ -117,7 +140,15 @@ void TokenValidatorBase::OnCertificateRequested(
   client_cert_store = new net::ClientCertStoreNSS(
       net::ClientCertStoreNSS::PasswordDelegateFactory());
 #elif defined(OS_WIN)
-  client_cert_store = new net::ClientCertStoreWin();
+  // The network process is running as "Local Service" whose "Current User"
+  // cert store doesn't contain any certificates. Use the "Local Machine"
+  // store instead.
+  // The ACL on the private key of the machine certificate in the "Local
+  // Machine" cert store needs to allow access by "Local Service".
+  HCERTSTORE cert_store = ::CertOpenStore(
+      CERT_STORE_PROV_SYSTEM, 0, NULL,
+      CERT_SYSTEM_STORE_LOCAL_MACHINE | CERT_STORE_READONLY_FLAG, L"MY");
+  client_cert_store = new net::ClientCertStoreWin(cert_store);
 #elif defined(OS_MACOSX)
   client_cert_store = new net::ClientCertStoreMac();
 #elif defined(USE_OPENSSL)
@@ -144,13 +175,15 @@ void TokenValidatorBase::OnCertificatesSelected(
       third_party_auth_config_.token_validation_cert_issuer;
   if (request_) {
     for (size_t i = 0; i < selected_certs->size(); ++i) {
+      net::X509Certificate* cert = (*selected_certs)[i].get();
       if (issuer == kCertIssuerWildCard ||
-          issuer == (*selected_certs)[i]->issuer().common_name) {
-        request_->ContinueWithCertificate((*selected_certs)[i].get());
+          issuer == cert->issuer().common_name) {
+        request_->ContinueWithCertificate(
+            cert, net::FetchClientCertPrivateKey(cert).get());
         return;
       }
     }
-    request_->ContinueWithCertificate(nullptr);
+    request_->ContinueWithCertificate(nullptr, nullptr);
   }
 }
 

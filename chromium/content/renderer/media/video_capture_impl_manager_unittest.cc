@@ -4,6 +4,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -90,8 +91,8 @@ class VideoCaptureImplManagerTest : public ::testing::Test {
 
  protected:
   MOCK_METHOD2(OnFrameReady,
-              void(const scoped_refptr<media::VideoFrame>&,
-                   const base::TimeTicks& estimated_capture_time));
+               void(const scoped_refptr<media::VideoFrame>&,
+                    base::TimeTicks estimated_capture_time));
   MOCK_METHOD0(OnStarted, void());
   MOCK_METHOD0(OnStopped, void());
 
@@ -110,9 +111,8 @@ class VideoCaptureImplManagerTest : public ::testing::Test {
 
   base::Closure StartCapture(const media::VideoCaptureParams& params) {
     return manager_->StartCapture(
-        0, params,
-        base::Bind(&VideoCaptureImplManagerTest::OnStateUpdate,
-                   base::Unretained(this)),
+        0, params, base::Bind(&VideoCaptureImplManagerTest::OnStateUpdate,
+                              base::Unretained(this)),
         base::Bind(&VideoCaptureImplManagerTest::OnFrameReady,
                    base::Unretained(this)));
   }

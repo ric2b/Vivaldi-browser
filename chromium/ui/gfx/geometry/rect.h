@@ -17,8 +17,8 @@
 #include <string>
 
 #include "base/numerics/safe_conversions.h"
+#include "build/build_config.h"
 #include "ui/gfx/geometry/point.h"
-#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
 
@@ -56,11 +56,6 @@ class GFX_EXPORT Rect {
   // Construct an equivalent CoreGraphics object.
   CGRect ToCGRect() const;
 #endif
-
-  operator RectF() const {
-    return RectF(static_cast<float>(x()), static_cast<float>(y()),
-                 static_cast<float>(width()), static_cast<float>(height()));
-  }
 
   int x() const { return origin_.x(); }
   void set_x(int x) { origin_.set_x(x); }
@@ -185,6 +180,8 @@ class GFX_EXPORT Rect {
 
   std::string ToString() const;
 
+  bool ApproximatelyEqual(const Rect& rect, int tolerance) const;
+
  private:
   gfx::Point origin_;
   gfx::Size size_;
@@ -220,6 +217,8 @@ GFX_EXPORT Rect BoundingRect(const Point& p1, const Point& p2);
 inline Rect ScaleToEnclosingRect(const Rect& rect,
                                  float x_scale,
                                  float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return rect;
   // These next functions cast instead of using e.g. ToFlooredInt() because we
   // haven't checked to ensure that the clamping behavior of the helper
   // functions doesn't degrade performance, and callers shouldn't be passing
@@ -248,6 +247,8 @@ inline Rect ScaleToEnclosingRect(const Rect& rect, float scale) {
 inline Rect ScaleToEnclosedRect(const Rect& rect,
                                 float x_scale,
                                 float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return rect;
   DCHECK(base::IsValueInRangeForNumericType<int>(
       std::ceil(rect.x() * x_scale)));
   DCHECK(base::IsValueInRangeForNumericType<int>(

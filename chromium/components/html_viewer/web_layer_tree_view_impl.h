@@ -11,9 +11,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "cc/trees/layer_tree_host_client.h"
-#include "components/view_manager/public/interfaces/gpu.mojom.h"
-#include "components/view_manager/public/interfaces/surfaces.mojom.h"
-#include "mojo/cc/output_surface_mojo.h"
+#include "components/mus/public/cpp/output_surface.h"
+#include "components/mus/public/interfaces/gpu.mojom.h"
 #include "third_party/WebKit/public/platform/WebLayerTreeView.h"
 
 namespace base {
@@ -33,33 +32,27 @@ namespace gpu {
 class GpuMemoryBufferManager;
 }
 
-namespace mojo {
-class View;
-}
-
 namespace html_viewer {
 
 class WebLayerTreeViewImpl : public blink::WebLayerTreeView,
-                             public cc::LayerTreeHostClient,
-                             public mojo::OutputSurfaceMojoClient {
+                             public cc::LayerTreeHostClient {
  public:
   WebLayerTreeViewImpl(
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      cc::TaskGraphRunner* task_graph_runner,
-      mojo::SurfacePtr surface,
-      mojo::GpuPtr gpu_service);
+      cc::TaskGraphRunner* task_graph_runner);
   ~WebLayerTreeViewImpl() override;
 
-  void set_widget(blink::WebWidget* widget) { widget_ = widget; }
-  void set_view(mojo::View* view) { view_ = view; }
+  void Initialize(mus::mojom::GpuPtr gpu_service,
+                  mus::Window* window,
+                  blink::WebWidget* widget);
 
   // cc::LayerTreeHostClient implementation.
   void WillBeginMainFrame() override;
   void DidBeginMainFrame() override;
   void BeginMainFrame(const cc::BeginFrameArgs& args) override;
   void BeginMainFrameNotExpectedSoon() override;
-  void Layout() override;
+  void UpdateLayerTreeHost() override;
   void ApplyViewportDeltas(const gfx::Vector2dF& inner_delta,
                            const gfx::Vector2dF& outer_delta,
                            const gfx::Vector2dF& elastic_overscroll_delta,
@@ -73,60 +66,51 @@ class WebLayerTreeViewImpl : public blink::WebLayerTreeView,
   void DidCommitAndDrawFrame() override;
   void DidCompleteSwapBuffers() override;
   void DidCompletePageScaleAnimation() override {}
-  void RateLimitSharedMainThreadContext() override {}
   void RecordFrameTimingEvents(
       scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
       scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet> main_frame_events)
       override {}
 
   // blink::WebLayerTreeView implementation.
-  virtual void setRootLayer(const blink::WebLayer& layer);
-  virtual void clearRootLayer();
-  virtual void setViewportSize(const blink::WebSize& device_viewport_size);
-  virtual blink::WebSize deviceViewportSize() const;
-  virtual void setDeviceScaleFactor(float);
+  void setRootLayer(const blink::WebLayer& layer) override;
+  void clearRootLayer() override;
+  void setViewportSize(const blink::WebSize& device_viewport_size) override;
+  void setDeviceScaleFactor(float) override;
   virtual float deviceScaleFactor() const;
-  virtual void setBackgroundColor(blink::WebColor color);
-  virtual void setHasTransparentBackground(bool has_transparent_background);
-  virtual void setVisible(bool visible);
-  virtual void setPageScaleFactorAndLimits(float page_scale_factor,
-                                           float minimum,
-                                           float maximum);
-  virtual void startPageScaleAnimation(const blink::WebPoint& destination,
-                                       bool use_anchor,
-                                       float new_page_scale,
-                                       double duration_sec);
-  virtual void heuristicsForGpuRasterizationUpdated(bool matches_heuristic) {}
-  virtual void setNeedsAnimate();
-  virtual void didStopFlinging() {}
-  virtual void compositeAndReadbackAsync(
-      blink::WebCompositeAndReadbackAsyncCallback* callback) {}
-  virtual void finishAllRendering();
-  virtual void setDeferCommits(bool defer_commits) {}
-  virtual void registerForAnimations(blink::WebLayer* layer);
-  virtual void registerViewportLayers(
+  void setBackgroundColor(blink::WebColor color) override;
+  void setHasTransparentBackground(bool has_transparent_background) override;
+  void setVisible(bool visible) override;
+  void setPageScaleFactorAndLimits(float page_scale_factor,
+                                   float minimum,
+                                   float maximum) override;
+  void startPageScaleAnimation(const blink::WebPoint& destination,
+                               bool use_anchor,
+                               float new_page_scale,
+                               double duration_sec) override;
+  void heuristicsForGpuRasterizationUpdated(bool matches_heuristic) override {}
+  void setNeedsAnimate() override;
+  void didStopFlinging() override {}
+  void compositeAndReadbackAsync(
+      blink::WebCompositeAndReadbackAsyncCallback* callback) override {}
+  void setDeferCommits(bool defer_commits) override {}
+  void registerForAnimations(blink::WebLayer* layer) override;
+  void registerViewportLayers(
       const blink::WebLayer* overscrollElasticityLayer,
       const blink::WebLayer* pageScaleLayerLayer,
       const blink::WebLayer* innerViewportScrollLayer,
-      const blink::WebLayer* outerViewportScrollLayer);
-  virtual void clearViewportLayers();
-  virtual void registerSelection(const blink::WebSelection& selection) {}
-  virtual void clearSelection() {}
-  virtual void setShowFPSCounter(bool) {}
-  virtual void setShowPaintRects(bool) {}
-  virtual void setShowDebugBorders(bool) {}
-  virtual void setContinuousPaintingEnabled(bool) {}
-  virtual void setShowScrollBottleneckRects(bool) {}
-
-  // OutputSurfaceMojoClient implementation.
-  void DidCreateSurface(cc::SurfaceId id) override;
+      const blink::WebLayer* outerViewportScrollLayer) override;
+  void clearViewportLayers() override;
+  void registerSelection(const blink::WebSelection& selection) override {}
+  void clearSelection() override {}
+  void setShowFPSCounter(bool) override {}
+  void setShowPaintRects(bool) override {}
+  void setShowDebugBorders(bool) override {}
+  void setShowScrollBottleneckRects(bool) override {}
 
  private:
-  void DidCreateSurfaceOnMainThread(cc::SurfaceId id);
-
-  // widget_ and view_ will outlive us.
+  // widget_ and window_ will outlive us.
   blink::WebWidget* widget_;
-  mojo::View* view_;
+  mus::Window* window_;
   scoped_ptr<cc::LayerTreeHost> layer_tree_host_;
   scoped_ptr<cc::OutputSurface> output_surface_;
   scoped_refptr<base::SingleThreadTaskRunner>

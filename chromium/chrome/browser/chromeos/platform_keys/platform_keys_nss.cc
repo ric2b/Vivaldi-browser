@@ -8,6 +8,9 @@
 #include <cryptohi.h>
 #include <keyhi.h>
 #include <secder.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -17,13 +20,13 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
+#include "chrome/browser/chromeos/certificate_provider/certificate_provider.h"
 #include "chrome/browser/chromeos/net/client_cert_filter_chromeos.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/net/client_cert_store_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/api/enterprise_platform_keys/enterprise_platform_keys_api.h"
 #include "chrome/browser/net/nss_context.h"
@@ -37,9 +40,7 @@
 #include "net/base/net_errors.h"
 #include "net/cert/cert_database.h"
 #include "net/cert/nss_cert_database.h"
-#include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util_nss.h"
-#include "net/ssl/client_cert_store_chromeos.h"
 #include "net/ssl/ssl_cert_request_info.h"
 
 using content::BrowserContext;
@@ -446,9 +447,9 @@ void GenerateRSAKeyWithDB(scoped_ptr<GenerateRSAKeyState> state,
 
 // Does the actual signing on a worker thread. Used by SignRSAWithDB().
 void SignRSAOnWorkerThread(scoped_ptr<SignRSAState> state) {
-  const uint8* public_key_uint8 =
-      reinterpret_cast<const uint8*>(state->public_key_.data());
-  std::vector<uint8> public_key_vector(
+  const uint8_t* public_key_uint8 =
+      reinterpret_cast<const uint8_t*>(state->public_key_.data());
+  std::vector<uint8_t> public_key_vector(
       public_key_uint8, public_key_uint8 + state->public_key_.size());
 
   crypto::ScopedSECKEYPrivateKey rsa_key;
@@ -483,8 +484,7 @@ void SignRSAOnWorkerThread(scoped_ptr<SignRSAState> state) {
     }
 
     std::vector<unsigned char> signature(signature_len);
-    SECItem signature_output = {
-        siBuffer, vector_as_array(&signature), signature.size()};
+    SECItem signature_output = {siBuffer, signature.data(), signature.size()};
     if (PK11_Sign(rsa_key.get(), &signature_output, &input) == SECSuccess)
       signature_str.assign(signature.begin(), signature.end());
   } else {
@@ -542,7 +542,7 @@ void SignRSAWithDB(scoped_ptr<SignRSAState> state,
 void DidSelectCertificatesOnIOThread(
     scoped_ptr<SelectCertificatesState> state) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  state->CallBack(FROM_HERE, state->certs_.Pass(),
+  state->CallBack(FROM_HERE, std::move(state->certs_),
                   std::string() /* no error */);
 }
 
@@ -550,10 +550,11 @@ void DidSelectCertificatesOnIOThread(
 // SelectClientCertificates().
 void SelectCertificatesOnIOThread(scoped_ptr<SelectCertificatesState> state) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  state->cert_store_.reset(new net::ClientCertStoreChromeOS(
-      make_scoped_ptr(new chromeos::ClientCertFilterChromeOS(
-          state->use_system_key_slot_, state->username_hash_)),
-      net::ClientCertStoreChromeOS::PasswordDelegateFactory()));
+  state->cert_store_.reset(new ClientCertStoreChromeOS(
+      nullptr,  // no additional provider
+      make_scoped_ptr(new ClientCertFilterChromeOS(state->use_system_key_slot_,
+                                                   state->username_hash_)),
+      ClientCertStoreChromeOS::PasswordDelegateFactory()));
 
   state->certs_.reset(new net::CertificateList);
 
@@ -583,7 +584,8 @@ void FilterCertificatesOnWorkerThread(scoped_ptr<GetCertificatesState> state) {
     client_certs->push_back(*it);
   }
 
-  state->CallBack(FROM_HERE, client_certs.Pass(), std::string() /* no error */);
+  state->CallBack(FROM_HERE, std::move(client_certs),
+                  std::string() /* no error */);
 }
 
 // Passes the obtained certificates to the worker thread for filtering. Used by
@@ -591,7 +593,7 @@ void FilterCertificatesOnWorkerThread(scoped_ptr<GetCertificatesState> state) {
 void DidGetCertificates(scoped_ptr<GetCertificatesState> state,
                         scoped_ptr<net::CertificateList> all_certs) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  state->certs_ = all_certs.Pass();
+  state->certs_ = std::move(all_certs);
   base::WorkerPool::PostTask(
       FROM_HERE,
       base::Bind(&FilterCertificatesOnWorkerThread, base::Passed(&state)),
@@ -632,7 +634,7 @@ void ImportCertificateWithDB(scoped_ptr<ImportCertificateState> state,
   // Check that the private key is in the correct slot.
   PK11SlotInfo* slot =
       PK11_KeyForCertExists(state->certificate_->os_cert_handle(), NULL, NULL);
-  if (slot != state->slot_) {
+  if (slot != state->slot_.get()) {
     state->OnError(FROM_HERE, kErrorKeyNotFound);
     return;
   }
@@ -691,7 +693,8 @@ void GetTokensWithDB(scoped_ptr<GetTokensState> state,
   if (cert_db->GetSystemSlot())
     token_ids->push_back(kTokenIdSystem);
 
-  state->CallBack(FROM_HERE, token_ids.Pass(), std::string() /* no error */);
+  state->CallBack(FROM_HERE, std::move(token_ids),
+                  std::string() /* no error */);
 }
 
 }  // namespace
@@ -777,12 +780,9 @@ void SelectClientCertificates(
       chromeos::ProfileHelper::Get()->GetUserByProfile(
           Profile::FromBrowserContext(browser_context));
 
-  // Use the device-wide system key slot only if the user is of the same
-  // domain as the device is registered to.
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  bool use_system_key_slot = connector->GetUserAffiliation(user->email()) ==
-                             policy::USER_AFFILIATION_MANAGED;
+  // Use the device-wide system key slot only if the user is affiliated on the
+  // device.
+  const bool use_system_key_slot = user->IsAffiliated();
 
   scoped_ptr<SelectCertificatesState> state(new SelectCertificatesState(
       user->username_hash(), use_system_key_slot, cert_request_info, callback));

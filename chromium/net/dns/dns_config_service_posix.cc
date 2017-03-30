@@ -6,13 +6,13 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -210,6 +210,7 @@ class DnsConfigServicePosix::Watcher {
                                 DNS_CONFIG_WATCH_FAILED_TO_START_CONFIG,
                                 DNS_CONFIG_WATCH_MAX);
     }
+#if !defined(OS_IOS)
     if (!hosts_watcher_.Watch(
             base::FilePath(service_->file_path_hosts_), false,
             base::Bind(&Watcher::OnHostsChanged, base::Unretained(this)))) {
@@ -219,6 +220,7 @@ class DnsConfigServicePosix::Watcher {
                                 DNS_CONFIG_WATCH_FAILED_TO_START_HOSTS,
                                 DNS_CONFIG_WATCH_MAX);
     }
+#endif
     return success;
   }
 
@@ -249,7 +251,9 @@ class DnsConfigServicePosix::Watcher {
 
   DnsConfigServicePosix* service_;
   DnsConfigWatcher config_watcher_;
+#if !defined(OS_IOS)
   base::FilePathWatcher hosts_watcher_;
+#endif
 
   base::WeakPtrFactory<Watcher> weak_factory_;
 
@@ -262,13 +266,17 @@ class DnsConfigServicePosix::Watcher {
 class DnsConfigServicePosix::ConfigReader : public SerialWorker {
  public:
   explicit ConfigReader(DnsConfigServicePosix* service)
-      : service_(service), success_(false) {}
+      : service_(service), success_(false) {
+    const DnsConfig* test_config = service->dns_config_for_testing_;
+    if (test_config)
+      dns_config_for_testing_.reset(new DnsConfig(*test_config));
+  }
 
   void DoWork() override {
     base::TimeTicks start_time = base::TimeTicks::Now();
     ConfigParsePosixResult result = ReadDnsConfig(&dns_config_);
-    if (service_->dns_config_for_testing_) {
-      dns_config_ = *service_->dns_config_for_testing_;
+    if (dns_config_for_testing_) {
+      dns_config_ = *dns_config_for_testing_;
       result = CONFIG_PARSE_POSIX_OK;
     }
     switch (result) {
@@ -302,7 +310,12 @@ class DnsConfigServicePosix::ConfigReader : public SerialWorker {
  private:
   ~ConfigReader() override {}
 
-  DnsConfigServicePosix* service_;
+  // Raw pointer to owning DnsConfigService. This must never be accessed inside
+  // DoWork(), since service may be destroyed while SerialWorker is running
+  // on worker thread.
+  DnsConfigServicePosix* const service_;
+  // Dns config value to always return for testing.
+  scoped_ptr<const DnsConfig> dns_config_for_testing_;
   // Written in DoWork, read in OnWorkFinished, no locking necessary.
   DnsConfig dns_config_;
   bool success_;
@@ -314,15 +327,16 @@ class DnsConfigServicePosix::ConfigReader : public SerialWorker {
 class DnsConfigServicePosix::HostsReader : public SerialWorker {
  public:
   explicit HostsReader(DnsConfigServicePosix* service)
-      : service_(service), success_(false) {}
+      : service_(service),
+        file_path_hosts_(service->file_path_hosts_),
+        success_(false) {}
 
  private:
   ~HostsReader() override {}
 
   void DoWork() override {
     base::TimeTicks start_time = base::TimeTicks::Now();
-    success_ =
-        ParseHostsFile(base::FilePath(service_->file_path_hosts_), &hosts_);
+    success_ = ParseHostsFile(file_path_hosts_, &hosts_);
     UMA_HISTOGRAM_BOOLEAN("AsyncDNS.HostParseResult", success_);
     UMA_HISTOGRAM_TIMES("AsyncDNS.HostsParseDuration",
                         base::TimeTicks::Now() - start_time);
@@ -336,7 +350,12 @@ class DnsConfigServicePosix::HostsReader : public SerialWorker {
     }
   }
 
-  DnsConfigServicePosix* service_;
+  // Raw pointer to owning DnsConfigService. This must never be accessed inside
+  // DoWork(), since service may be destroyed while SerialWorker is running
+  // on worker thread.
+  DnsConfigServicePosix* const service_;
+  // Hosts file path to parse.
+  const base::FilePath file_path_hosts_;
   // Written in DoWork, read in OnWorkFinished, no locking necessary.
   DnsHosts hosts_;
   bool success_;
@@ -345,8 +364,8 @@ class DnsConfigServicePosix::HostsReader : public SerialWorker {
 };
 
 DnsConfigServicePosix::DnsConfigServicePosix()
-    : file_path_hosts_(kFilePathHosts),
-      dns_config_for_testing_(nullptr),
+    : file_path_hosts_(kFilePathHosts),  // Must set before |hosts_reader_|
+      dns_config_for_testing_(nullptr),  // Must set before |config_reader_|
       config_reader_(new ConfigReader(this)),
       hosts_reader_(new HostsReader(this))
 #if defined(OS_ANDROID)
@@ -404,6 +423,23 @@ void DnsConfigServicePosix::SetDnsConfigForTesting(
     const DnsConfig* dns_config) {
   DCHECK(CalledOnValidThread());
   dns_config_for_testing_ = dns_config;
+  // Reset ConfigReader to bind new DnsConfig for testing.
+  config_reader_->Cancel();
+  config_reader_ = make_scoped_refptr(new ConfigReader(this));
+}
+
+void DnsConfigServicePosix::SetHostsFilePathForTesting(
+    const base::FilePath::CharType* file_path) {
+  DCHECK(CalledOnValidThread());
+  file_path_hosts_ = file_path;
+  // Reset HostsReader to bind new hosts file path.
+  hosts_reader_->Cancel();
+  hosts_reader_ = make_scoped_refptr(new HostsReader(this));
+  // If watching, reset to bind new hosts file path and resume watching.
+  if (watcher_) {
+    watcher_.reset(new Watcher(this));
+    watcher_->Watch();
+  }
 }
 
 #if !defined(OS_ANDROID)

@@ -9,7 +9,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_pump_mac.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/avatar_menu_observer.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
@@ -17,6 +16,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest_mac.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
@@ -29,20 +29,17 @@ class AvatarMenuBubbleControllerTest : public CocoaTest {
   }
 
   void SetUp() override {
-    switches::DisableNewAvatarMenuForTesting(
-        base::CommandLine::ForCurrentProcess());
-
     CocoaTest::SetUp();
     ASSERT_TRUE(manager_.SetUp());
 
-    manager_.CreateTestingProfile("test1", scoped_ptr<PrefServiceSyncable>(),
-                                  base::ASCIIToUTF16("Test 1"), 1,
-                                  std::string(),
-                                  TestingProfile::TestingFactories());
-    manager_.CreateTestingProfile("test2", scoped_ptr<PrefServiceSyncable>(),
-                                  base::ASCIIToUTF16("Test 2"), 0,
-                                  std::string(),
-                                  TestingProfile::TestingFactories());
+    manager_.CreateTestingProfile(
+        "test1", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+        base::ASCIIToUTF16("Test 1"), 1, std::string(),
+        TestingProfile::TestingFactories());
+    manager_.CreateTestingProfile(
+        "test2", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+        base::ASCIIToUTF16("Test 2"), 0, std::string(),
+        TestingProfile::TestingFactories());
 
     menu_ = new AvatarMenu(manager_.profile_info_cache(), NULL, NULL);
     menu_->RebuildMenu();
@@ -132,10 +129,10 @@ TEST_F(AvatarMenuBubbleControllerTest, PerformLayout) {
   base::scoped_nsobject<NSMutableArray> oldItems([[controller() items] copy]);
 
   // Now create a new profile and notify the delegate.
-  manager()->CreateTestingProfile("test3", scoped_ptr<PrefServiceSyncable>(),
-                                  base::ASCIIToUTF16("Test 3"), 0,
-                                  std::string(),
-                                  TestingProfile::TestingFactories());
+  manager()->CreateTestingProfile(
+      "test3", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+      base::ASCIIToUTF16("Test 3"), 0, std::string(),
+      TestingProfile::TestingFactories());
 
   // Testing the bridge is not worth the effort...
   [controller() performLayout];

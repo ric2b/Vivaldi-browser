@@ -4,6 +4,9 @@
 
 #include "components/update_client/action_update_check.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -37,10 +40,9 @@ ActionUpdateCheck::ActionUpdateCheck(
     scoped_ptr<UpdateChecker> update_checker,
     const base::Version& browser_version,
     const std::string& extra_request_parameters)
-    : update_checker_(update_checker.Pass()),
+    : update_checker_(std::move(update_checker)),
       browser_version_(browser_version),
-      extra_request_parameters_(extra_request_parameters) {
-}
+      extra_request_parameters_(extra_request_parameters) {}
 
 ActionUpdateCheck::~ActionUpdateCheck() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -199,6 +201,9 @@ void ActionUpdateCheck::OnUpdateCheckFailed(int error,
   DCHECK(error);
 
   VLOG(1) << "Update check failed." << error;
+
+  ChangeAllItemsState(CrxUpdateItem::State::kChecking,
+                      CrxUpdateItem::State::kNoUpdate);
 
   UpdateComplete(error);
 }

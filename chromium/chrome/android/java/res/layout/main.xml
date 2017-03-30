@@ -15,11 +15,27 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <FrameLayout
+        <HorizontalScrollView
             android:id="@+id/keyboard_accessory"
+            android:layout_height="@dimen/keyboard_accessory_height"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:background="@drawable/keyboard_accessory_background"
+            android:contentDescription="@string/autofill_keyboard_accessory_content_description"
+            android:fillViewport="true"
+            android:scrollbars="none"
             android:visibility="gone" />
+
+        <org.chromium.chrome.browser.widget.FadingShadowView
+            android:id="@+id/bottombar_shadow"
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:layout_marginTop="-2dp"
+            android:visibility="gone" />
+
+        <ViewStub
+            android:id="@+id/bottombar_stub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
     </LinearLayout>
 
     <ViewStub
@@ -46,8 +62,7 @@
         android:inflatedId="@+id/empty_container"
         android:layout="@layout/empty_background_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        />
+        android:layout_height="match_parent" />
     <!-- This empty view is used as the anchor for custom menu -->
     <View
         android:id="@+id/menu_anchor_stub"

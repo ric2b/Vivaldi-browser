@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/ash/ash_util.h"
 
+#include "ash/accelerators/accelerator_controller.h"
 #include "ash/shell.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/ash/ash_init.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -48,6 +50,12 @@ bool IsNativeViewInAsh(gfx::NativeView native_view) {
 
 bool IsNativeWindowInAsh(gfx::NativeWindow native_window) {
   return IsNativeViewInAsh(native_window);
+}
+
+bool IsAcceleratorDeprecated(const ui::Accelerator& accelerator) {
+  ash::AcceleratorController* controller =
+      ash::Shell::GetInstance()->accelerator_controller();
+  return controller->IsDeprecated(accelerator);
 }
 
 }  // namespace chrome

@@ -4,6 +4,8 @@
 
 #include "chrome/test/chromedriver/chrome/devtools_client_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -19,7 +21,13 @@
 
 namespace {
 
+const char kInspectorDefaultContextError[] =
+    "Cannot find default execution context";
 const char kInspectorContextError[] =
+    "Cannot find execution context with given id";
+// Builds older than commit position 353387 return a different error message.
+// TODO(samuong): Remove this once we stop supporting Chrome 47.
+const char kOldInspectorContextError[] =
     "Execution context with given id not found.";
 
 Status ParseInspectorError(const std::string& error_json) {
@@ -29,7 +37,9 @@ Status ParseInspectorError(const std::string& error_json) {
     return Status(kUnknownError, "inspector error with no error message");
   std::string error_message;
   if (error_dict->GetString("message", &error_message) &&
-      error_message == kInspectorContextError) {
+      (error_message == kInspectorDefaultContextError ||
+       error_message == kInspectorContextError ||
+       error_message == kOldInspectorContextError)) {
     return Status(kNoSuchExecutionContext);
   }
   return Status(kUnknownError, "unhandled inspector error: " + error_json);
@@ -73,11 +83,10 @@ InspectorCommandResponse::~InspectorCommandResponse() {}
 
 const char DevToolsClientImpl::kBrowserwideDevToolsClientId[] = "browser";
 
-DevToolsClientImpl::DevToolsClientImpl(
-    const SyncWebSocketFactory& factory,
-    const std::string& url,
-    const std::string& id)
-    : socket_(factory.Run().Pass()),
+DevToolsClientImpl::DevToolsClientImpl(const SyncWebSocketFactory& factory,
+                                       const std::string& url,
+                                       const std::string& id)
+    : socket_(factory.Run()),
       url_(url),
       crashed_(false),
       id_(id),
@@ -92,7 +101,7 @@ DevToolsClientImpl::DevToolsClientImpl(
     const std::string& url,
     const std::string& id,
     const FrontendCloserFunc& frontend_closer_func)
-    : socket_(factory.Run().Pass()),
+    : socket_(factory.Run()),
       url_(url),
       crashed_(false),
       id_(id),
@@ -108,7 +117,7 @@ DevToolsClientImpl::DevToolsClientImpl(
     const std::string& id,
     const FrontendCloserFunc& frontend_closer_func,
     const ParserFunc& parser_func)
-    : socket_(factory.Run().Pass()),
+    : socket_(factory.Run()),
       url_(url),
       crashed_(false),
       id_(id),
@@ -268,7 +277,7 @@ Status DevToolsClientImpl::SendCommandInternal(
     internal::InspectorCommandResponse& response = response_info->response;
     if (!response.result)
       return ParseInspectorError(response.error);
-    *result = response.result.Pass();
+    *result = std::move(response.result);
   }
   return Status(kOk);
 }
@@ -447,8 +456,10 @@ Status DevToolsClientImpl::EnsureListenersNotifiedOfCommandResponse() {
     DevToolsEventListener* listener =
         unnotified_cmd_response_listeners_.front();
     unnotified_cmd_response_listeners_.pop_front();
-    Status status =
-        listener->OnCommandSuccess(this, unnotified_cmd_response_info_->method);
+    Status status = listener->OnCommandSuccess(
+        this,
+        unnotified_cmd_response_info_->method,
+        *unnotified_cmd_response_info_->response.result.get());
     if (status.IsError())
       return status;
   }

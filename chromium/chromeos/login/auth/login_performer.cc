@@ -18,6 +18,7 @@
 #include "chromeos/login/user_names.h"
 #include "chromeos/login_event_recorder.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
@@ -29,18 +30,14 @@ using base::UserMetricsAction;
 namespace chromeos {
 
 LoginPerformer::LoginPerformer(scoped_refptr<base::TaskRunner> task_runner,
-                               Delegate* delegate,
-                               bool disable_client_login)
+                               Delegate* delegate)
     : delegate_(delegate),
       task_runner_(task_runner),
-      online_attempt_host_(this),
       last_login_failure_(AuthFailure::AuthFailureNone()),
       password_changed_(false),
       password_changed_callback_count_(0),
       auth_mode_(AUTH_MODE_INTERNAL),
-      disable_client_login_(disable_client_login),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 LoginPerformer::~LoginPerformer() {
   DVLOG(1) << "Deleting LoginPerformer";
@@ -106,23 +103,13 @@ void LoginPerformer::OnPasswordChangeDetected() {
   }
 }
 
-void LoginPerformer::OnChecked(const std::string& user_id, bool success) {
-  if (!delegate_) {
-    // Delegate is reset in case of successful offline login.
-    // See ExistingUserConstoller::OnAuthSuccess().
-    // Case when user has changed password and enters old password
-    // does not block user from sign in yet.
-    return;
-  }
-  delegate_->OnOnlineChecked(user_id, success);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // LoginPerformer, public:
 
 void LoginPerformer::NotifyWhitelistCheckFailure() {
   if (delegate_)
-    delegate_->WhiteListCheckFailed(user_context_.GetUserID());
+    delegate_->WhiteListCheckFailed(
+        user_context_.GetAccountId().GetUserEmail());
   else
     NOTREACHED();
 }
@@ -143,21 +130,21 @@ void LoginPerformer::PerformLogin(const UserContext& user_context,
 
 void LoginPerformer::DoPerformLogin(const UserContext& user_context,
                                     AuthorizationMode auth_mode) {
-  std::string email = gaia::CanonicalizeEmail(user_context.GetUserID());
   bool wildcard_match = false;
 
-  if (!IsUserWhitelisted(email, &wildcard_match)) {
+  const AccountId& account_id = user_context.GetAccountId();
+  if (!IsUserWhitelisted(account_id, &wildcard_match)) {
     NotifyWhitelistCheckFailure();
     return;
   }
 
   if (user_context.GetAuthFlow() == UserContext::AUTH_FLOW_EASY_UNLOCK)
-    SetupEasyUnlockUserFlow(user_context.GetUserID());
+    SetupEasyUnlockUserFlow(user_context.GetAccountId());
 
   switch (auth_mode_) {
     case AUTH_MODE_EXTENSION: {
       RunOnlineWhitelistCheck(
-          email, wildcard_match, user_context.GetRefreshToken(),
+          account_id, wildcard_match, user_context.GetRefreshToken(),
           base::Bind(&LoginPerformer::StartLoginCompletion,
                      weak_factory_.GetWeakPtr()),
           base::Bind(&LoginPerformer::NotifyWhitelistCheckFailure,
@@ -171,8 +158,9 @@ void LoginPerformer::DoPerformLogin(const UserContext& user_context,
 }
 
 void LoginPerformer::LoginAsSupervisedUser(const UserContext& user_context) {
-  DCHECK_EQ(chromeos::login::kSupervisedUserDomain,
-            gaia::ExtractDomainName(user_context.GetUserID()));
+  DCHECK_EQ(
+      chromeos::login::kSupervisedUserDomain,
+      gaia::ExtractDomainName(user_context.GetAccountId().GetUserEmail()));
 
   user_context_ = user_context;
   user_context_.SetUserType(user_manager::USER_TYPE_SUPERVISED);
@@ -189,11 +177,11 @@ void LoginPerformer::TrustedLoginAsSupervisedUser(
     const UserContext& user_context) {
   if (!AreSupervisedUsersAllowed()) {
     LOG(ERROR) << "Login attempt of supervised user detected.";
-    delegate_->WhiteListCheckFailed(user_context.GetUserID());
+    delegate_->WhiteListCheckFailed(user_context.GetAccountId().GetUserEmail());
     return;
   }
 
-  SetupSupervisedUserFlow(user_context.GetUserID());
+  SetupSupervisedUserFlow(user_context.GetAccountId());
   UserContext user_context_copy = TransformSupervisedKey(user_context);
 
   if (UseExtendedAuthenticatorForSupervisedUser(user_context)) {
@@ -217,7 +205,7 @@ void LoginPerformer::TrustedLoginAsSupervisedUser(
 }
 
 void LoginPerformer::LoginAsPublicSession(const UserContext& user_context) {
-  if (!CheckPolicyForUser(user_context.GetUserID())) {
+  if (!CheckPolicyForUser(user_context.GetAccountId())) {
     DCHECK(delegate_);
     if (delegate_)
       delegate_->PolicyLoadFailed();
@@ -294,11 +282,6 @@ void LoginPerformer::StartAuthentication() {
                                       authenticator_.get(),
                                       base::Unretained(browser_context),
                                       user_context_));
-    if (!disable_client_login_) {
-      // Make unobtrusive online check. It helps to determine password change
-      // state in the case when offline login fails.
-      online_attempt_host_.Check(GetSigninRequestContext(), user_context_);
-    }
   } else {
     NOTREACHED();
   }

@@ -4,10 +4,13 @@
 
 #include "chrome/browser/speech/extension_api/tts_engine_extension_api.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/json/json_writer.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -65,7 +68,7 @@ void WarnIfMissingPauseOrResumeListener(
 }  // namespace
 
 TtsExtensionEngine* TtsExtensionEngine::GetInstance() {
-  return Singleton<TtsExtensionEngine>::get();
+  return base::Singleton<TtsExtensionEngine>::get();
 }
 
 void TtsExtensionEngine::GetVoices(content::BrowserContext* browser_context,
@@ -194,34 +197,34 @@ void TtsExtensionEngine::Speak(Utterance* utterance,
 
   scoped_ptr<extensions::Event> event(
       new extensions::Event(extensions::events::TTS_ENGINE_ON_SPEAK,
-                            tts_engine_events::kOnSpeak, args.Pass()));
+                            tts_engine_events::kOnSpeak, std::move(args)));
   Profile* profile = Profile::FromBrowserContext(utterance->browser_context());
   event->restrict_to_browser_context = profile;
   EventRouter::Get(profile)
-      ->DispatchEventToExtension(utterance->extension_id(), event.Pass());
+      ->DispatchEventToExtension(utterance->extension_id(), std::move(event));
 }
 
 void TtsExtensionEngine::Stop(Utterance* utterance) {
   scoped_ptr<base::ListValue> args(new base::ListValue());
   scoped_ptr<extensions::Event> event(
       new extensions::Event(extensions::events::TTS_ENGINE_ON_STOP,
-                            tts_engine_events::kOnStop, args.Pass()));
+                            tts_engine_events::kOnStop, std::move(args)));
   Profile* profile = Profile::FromBrowserContext(utterance->browser_context());
   event->restrict_to_browser_context = profile;
   EventRouter::Get(profile)
-      ->DispatchEventToExtension(utterance->extension_id(), event.Pass());
+      ->DispatchEventToExtension(utterance->extension_id(), std::move(event));
 }
 
 void TtsExtensionEngine::Pause(Utterance* utterance) {
   scoped_ptr<base::ListValue> args(new base::ListValue());
   scoped_ptr<extensions::Event> event(
       new extensions::Event(extensions::events::TTS_ENGINE_ON_PAUSE,
-                            tts_engine_events::kOnPause, args.Pass()));
+                            tts_engine_events::kOnPause, std::move(args)));
   Profile* profile = Profile::FromBrowserContext(utterance->browser_context());
   event->restrict_to_browser_context = profile;
   EventRouter* event_router = EventRouter::Get(profile);
   std::string id = utterance->extension_id();
-  event_router->DispatchEventToExtension(id, event.Pass());
+  event_router->DispatchEventToExtension(id, std::move(event));
   WarnIfMissingPauseOrResumeListener(profile, event_router, id);
 }
 
@@ -229,12 +232,12 @@ void TtsExtensionEngine::Resume(Utterance* utterance) {
   scoped_ptr<base::ListValue> args(new base::ListValue());
   scoped_ptr<extensions::Event> event(
       new extensions::Event(extensions::events::TTS_ENGINE_ON_RESUME,
-                            tts_engine_events::kOnResume, args.Pass()));
+                            tts_engine_events::kOnResume, std::move(args)));
   Profile* profile = Profile::FromBrowserContext(utterance->browser_context());
   event->restrict_to_browser_context = profile;
   EventRouter* event_router = EventRouter::Get(profile);
   std::string id = utterance->extension_id();
-  event_router->DispatchEventToExtension(id, event.Pass());
+  event_router->DispatchEventToExtension(id, std::move(event));
   WarnIfMissingPauseOrResumeListener(profile, event_router, id);
 }
 

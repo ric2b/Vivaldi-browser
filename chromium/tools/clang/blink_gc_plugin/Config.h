@@ -138,6 +138,11 @@ class Config {
            name == "ThreadSafeRefCountedGarbageCollected";
   }
 
+  static bool IsGCRefCountedBase(const std::string& name) {
+    return name == "RefCountedGarbageCollected" ||
+           name == "ThreadSafeRefCountedGarbageCollected";
+  }
+
   static bool IsGCBase(const std::string& name) {
     return name == "GarbageCollected" ||
            IsGCFinalizedBase(name) ||
@@ -264,6 +269,9 @@ class Config {
       return false;
     return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
   }
+
+  // Test if a template specialization is an instantiation.
+  static bool IsTemplateInstantiation(clang::CXXRecordDecl* record);
 };
 
 #endif  // TOOLS_BLINK_GC_PLUGIN_CONFIG_H_

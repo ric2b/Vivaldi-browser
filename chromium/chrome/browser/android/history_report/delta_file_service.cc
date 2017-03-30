@@ -23,20 +23,20 @@ void DoDeletePage(history_report::DeltaFileBackend* backend, const GURL& url) {
 }
 
 void DoTrim(history_report::DeltaFileBackend* backend,
-            int64 lower_bound,
+            int64_t lower_bound,
             base::WaitableEvent* finished,
-            int64* result) {
+            int64_t* result) {
   *result = backend->Trim(lower_bound);
   finished->Signal();
 }
 
 void DoQuery(
     history_report::DeltaFileBackend* backend,
-    int64 last_seq_no,
-    int32 limit,
+    int64_t last_seq_no,
+    int32_t limit,
     base::WaitableEvent* finished,
-    scoped_ptr<std::vector<history_report::DeltaFileEntryWithData> >* result) {
-  *result = backend->Query(last_seq_no, limit).Pass();
+    scoped_ptr<std::vector<history_report::DeltaFileEntryWithData>>* result) {
+  *result = backend->Query(last_seq_no, limit);
   finished->Signal();
 }
 
@@ -94,8 +94,8 @@ void DeltaFileService::PageDeleted(const GURL& url) {
       base::SequencedWorkerPool::BLOCK_SHUTDOWN);
 }
 
-int64 DeltaFileService::Trim(int64 lower_bound) {
-  int64 result;
+int64_t DeltaFileService::Trim(int64_t lower_bound) {
+  int64_t result;
   base::WaitableEvent finished(false, false);
   base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
   pool->PostSequencedWorkerTaskWithShutdownBehavior(
@@ -111,9 +111,9 @@ int64 DeltaFileService::Trim(int64 lower_bound) {
   return result;
 }
 
-scoped_ptr<std::vector<DeltaFileEntryWithData> > DeltaFileService::Query(
-    int64 last_seq_no,
-    int32 limit) {
+scoped_ptr<std::vector<DeltaFileEntryWithData>> DeltaFileService::Query(
+    int64_t last_seq_no,
+    int32_t limit) {
   scoped_ptr<std::vector<DeltaFileEntryWithData> > result;
   base::WaitableEvent finished(false, false);
   base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
@@ -128,7 +128,7 @@ scoped_ptr<std::vector<DeltaFileEntryWithData> > DeltaFileService::Query(
                  base::Unretained(&result)),
       base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
   finished.Wait();
-  return result.Pass();
+  return result;
 }
 
 bool DeltaFileService::Recreate(const std::vector<std::string>& urls) {

@@ -21,12 +21,12 @@ struct CONTENT_EXPORT FrameReplicationState {
   FrameReplicationState();
   FrameReplicationState(blink::WebTreeScopeType scope,
                         const std::string& name,
-                        blink::WebSandboxFlags sandbox_flags);
+                        blink::WebSandboxFlags sandbox_flags,
+                        bool should_enforce_strict_mixed_content_checking);
   ~FrameReplicationState();
 
-  // Current serialized security origin of the frame.  Unique origins are
-  // represented as the string "null" per RFC 6454.  This field is updated
-  // whenever a frame navigation commits.
+  // Current origin of the frame. This field is updated whenever a frame
+  // navigation commits.
   //
   // TODO(alexmos): For now, |origin| updates are immediately sent to all frame
   // proxies when in --site-per-process mode. This isn't ideal, since Blink
@@ -69,6 +69,11 @@ struct CONTENT_EXPORT FrameReplicationState {
   // params: having a const member implicitly deletes the copy assignment
   // operator.
   blink::WebTreeScopeType scope;
+
+  // True if a frame's current document should strictly block all mixed
+  // content. Updates are immediately sent to all frame proxies when
+  // frames live in different processes.
+  bool should_enforce_strict_mixed_content_checking;
 
   // TODO(alexmos): Eventually, this structure can also hold other state that
   // needs to be replicated, such as frame sizing info.

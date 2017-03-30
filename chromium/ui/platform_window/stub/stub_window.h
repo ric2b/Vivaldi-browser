@@ -5,13 +5,15 @@
 #ifndef UI_PLATFORM_WINDOW_STUB_STUB_WINDOW_H_
 #define UI_PLATFORM_WINDOW_STUB_STUB_WINDOW_H_
 
+#include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/stub/stub_window_export.h"
 
 namespace ui {
 
-class STUB_WINDOW_EXPORT StubWindow : public PlatformWindow {
+class STUB_WINDOW_EXPORT StubWindow : NON_EXPORTED_BASE(public PlatformWindow) {
  public:
   explicit StubWindow(PlatformWindowDelegate* delegate);
   ~StubWindow() override;
@@ -23,6 +25,7 @@ class STUB_WINDOW_EXPORT StubWindow : public PlatformWindow {
   void Close() override;
   void SetBounds(const gfx::Rect& bounds) override;
   gfx::Rect GetBounds() override;
+  void SetTitle(const base::string16& title) override;
   void SetCapture() override;
   void ReleaseCapture() override;
   void ToggleFullscreen() override;
@@ -32,6 +35,7 @@ class STUB_WINDOW_EXPORT StubWindow : public PlatformWindow {
   void SetCursor(PlatformCursor cursor) override;
   void MoveCursorTo(const gfx::Point& location) override;
   void ConfineCursorToBounds(const gfx::Rect& bounds) override;
+  PlatformImeController* GetPlatformImeController() override;
 
   PlatformWindowDelegate* delegate_;
   gfx::Rect bounds_;

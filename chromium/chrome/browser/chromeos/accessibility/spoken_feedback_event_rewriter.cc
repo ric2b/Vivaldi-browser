@@ -5,30 +5,37 @@
 #include "chrome/browser/chromeos/accessibility/spoken_feedback_event_rewriter.h"
 
 #include <string>
+#include <utility>
 
-#include "base/values.h"
-#include "chrome/browser/browser_process.h"
+#include "ash/shell.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/common/extensions/api/commands/commands_handler.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/process_manager.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/content_accelerators/accelerator_util.h"
 #include "ui/events/event.h"
+#include "ui/events/event_processor.h"
+
+SpokenFeedbackEventRewriterDelegate::SpokenFeedbackEventRewriterDelegate() {}
 
 bool SpokenFeedbackEventRewriterDelegate::IsSpokenFeedbackEnabled() const {
-  return true;
+  return chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled();
 }
 
 bool SpokenFeedbackEventRewriterDelegate::DispatchKeyEventToChromeVox(
-    const ui::KeyEvent& key_event) {
-  int kAllModifiers = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
-                      ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN;
-
+    const ui::KeyEvent& key_event,
+    bool capture) {
   if (!chromeos::AccessibilityManager::Get())
     return false;
-  content::BrowserContext* context =
-      chromeos::AccessibilityManager::Get()->profile();
+
+  content::BrowserContext* context = ProfileManager::GetActiveUserProfile();
   if (!context)
     return false;
 
@@ -38,41 +45,63 @@ bool SpokenFeedbackEventRewriterDelegate::DispatchKeyEventToChromeVox(
   if (!extension)
     return false;
 
-  extensions::EventRouter* event_router = extensions::EventRouter::Get(context);
-  if (!event_router->ExtensionHasEventListener(
-          extension_misc::kChromeVoxExtensionId, "commands.onCommand"))
+  extensions::ExtensionHost* host =
+      extensions::ProcessManager::Get(context)
+          ->GetBackgroundHostForExtension(extension->id());
+  if (!host)
     return false;
 
-  const extensions::CommandMap* commands =
-      extensions::CommandsInfo::GetNamedCommands(extension);
-  if (!commands)
+  content::RenderViewHost* rvh = host->render_view_host();
+
+  // Listen for any unhandled keyboard events from ChromeVox's background page
+  // when capturing keys to reinject.
+  if (capture)
+    host->host_contents()->SetDelegate(this);
+  else
+    host->host_contents()->SetDelegate(nullptr);
+
+  // Forward all key events to ChromeVox's background page.
+  const content::NativeWebKeyboardEvent web_event(key_event);
+  rvh->GetWidget()->ForwardKeyboardEvent(web_event);
+
+  if ((key_event.key_code() >= ui::VKEY_F1) &&
+      (key_event.key_code() <= ui::VKEY_F12))
     return false;
 
-  int modifiers = key_event.flags() & kAllModifiers;
-  std::string command_name;
-  for (auto iter : *commands) {
-    int command_modifiers =
-        iter.second.accelerator().modifiers() & kAllModifiers;
-    if (iter.second.accelerator().key_code() == key_event.key_code() &&
-        command_modifiers == modifiers)
-      command_name = iter.second.command_name();
+  return capture;
+}
+
+void SpokenFeedbackEventRewriterDelegate::HandleKeyboardEvent(
+    content::WebContents* source,
+    const content::NativeWebKeyboardEvent& event) {
+  ui::KeyEvent key_event(*static_cast<ui::KeyEvent*>(event.os_event));
+
+  if ((key_event.key_code() >= ui::VKEY_F1) &&
+      (key_event.key_code() <= ui::VKEY_F12))
+    return;
+
+  ui::EventProcessor* processor =
+      ash::Shell::GetPrimaryRootWindow()->GetHost()->event_processor();
+  bool dispatcher_destroyed = false;
+
+  // Tab always comes back as ui::ET_KEY_RELEASED. Unfortunately, this is
+  // explicitly skipped by FocusManager, which handles tab traversal. Change the
+  // event here.
+  if (key_event.key_code() == ui::VKEY_TAB) {
+    ui::KeyEvent tab_press(ui::ET_KEY_PRESSED, key_event.key_code(),
+                           key_event.code(), key_event.flags(),
+                           key_event.GetDomKey(), key_event.time_stamp());
+    dispatcher_destroyed =
+        processor->OnEventFromSource(&tab_press).dispatcher_destroyed;
+  } else {
+    dispatcher_destroyed =
+        processor->OnEventFromSource(&key_event).dispatcher_destroyed;
   }
 
-  if (command_name.empty())
-    return false;
-
-  scoped_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(new base::StringValue(command_name));
-
-  scoped_ptr<extensions::Event> extension_event(
-      new extensions::Event(extensions::events::COMMANDS_ON_COMMAND,
-                            "commands.onCommand", args.Pass()));
-  extension_event->restrict_to_browser_context = context;
-
-  event_router->DispatchEventToExtension(extension_misc::kChromeVoxExtensionId,
-                                         extension_event.Pass());
-
-  return true;
+  if (dispatcher_destroyed) {
+    VLOG(0) << "Undispatched key " << key_event.key_code()
+            << " due to destroyed dispatcher.";
+  }
 }
 
 SpokenFeedbackEventRewriter::SpokenFeedbackEventRewriter() {
@@ -84,7 +113,7 @@ SpokenFeedbackEventRewriter::~SpokenFeedbackEventRewriter() {
 
 void SpokenFeedbackEventRewriter::SetDelegateForTest(
     scoped_ptr<SpokenFeedbackEventRewriterDelegate> delegate) {
-  delegate_ = delegate.Pass();
+  delegate_ = std::move(delegate);
 }
 
 ui::EventRewriteStatus SpokenFeedbackEventRewriter::RewriteEvent(
@@ -97,22 +126,16 @@ ui::EventRewriteStatus SpokenFeedbackEventRewriter::RewriteEvent(
        event.type() != ui::ET_KEY_RELEASED))
     return ui::EVENT_REWRITE_CONTINUE;
 
-  const ui::KeyEvent key_event = static_cast<const ui::KeyEvent&>(event);
-  if (event.type() == ui::ET_KEY_RELEASED) {
-    std::vector<int>::iterator it =
-        std::find(captured_key_codes_.begin(), captured_key_codes_.end(),
-                  key_event.key_code());
-    if (it != captured_key_codes_.end()) {
-      captured_key_codes_.erase(it);
-      return ui::EVENT_REWRITE_DISCARD;
-    }
+  std::string extension_id =
+      chromeos::AccessibilityManager::Get()->keyboard_listener_extension_id();
+  if (extension_id.empty())
     return ui::EVENT_REWRITE_CONTINUE;
-  }
 
-  if (delegate_->DispatchKeyEventToChromeVox(key_event)) {
-    captured_key_codes_.push_back(key_event.key_code());
+  bool capture =
+      chromeos::AccessibilityManager::Get()->keyboard_listener_capture();
+  const ui::KeyEvent key_event = static_cast<const ui::KeyEvent&>(event);
+  if (delegate_->DispatchKeyEventToChromeVox(key_event, capture))
     return ui::EVENT_REWRITE_DISCARD;
-  }
   return ui::EVENT_REWRITE_CONTINUE;
 }
 

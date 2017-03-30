@@ -29,8 +29,7 @@ class AwWebContentsDelegate
                  bool final_update) override;
   void CanDownload(const GURL& url,
                    const std::string& request_method,
-                           const content::DownloadInformation& info,
-                           const base::Callback<void(const content::DownloadItemAction&)>& callback) override;
+                   const base::Callback<void(bool)>& callback) override;
   void RunFileChooser(content::WebContents* web_contents,
                       const content::FileChooserParams& params) override;
   void AddNewContents(content::WebContents* source,
@@ -52,6 +51,7 @@ class AwWebContentsDelegate
   void ActivateContents(content::WebContents* contents) override;
   void LoadingStateChanged(content::WebContents* source,
                            bool to_different_document) override;
+  bool ShouldResumeRequestsForCreatedWindow() override;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,

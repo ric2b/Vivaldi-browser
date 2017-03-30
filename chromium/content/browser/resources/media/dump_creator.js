@@ -33,42 +33,70 @@ var DumpCreator = (function() {
         '</button></a></div>' +
         '<p><label><input type=checkbox>' +
         'Enable diagnostic audio recordings</label></p>' +
-        '<p>A diagnostic audio recording is used for analyzing audio' +
-        ' problems. It contains the audio played out from the speaker and' +
-        ' recorded from the microphone and is saved to the local disk.' +
-        ' Checking this box will enable the recording for ongoing WebRTC' +
-        ' calls and for future WebRTC calls. When the box is unchecked or' +
-        ' this page is closed, all ongoing recordings will be stopped and' +
-        ' this recording functionality will be disabled for future WebRTC' +
-        ' calls. Recordings in multiple tabs are supported as well as' +
-        ' multiple recordings in the same tab. When enabling, you select a' +
-        ' base filename to save the dump(s) to. The base filename will have a' +
-        ' suffix appended to it as &lt;base filename&gt;.&lt;render process' +
-        ' ID&gt;.&lt;recording ID&gt;. If recordings are' +
-        ' disabled and then enabled using the same base filename, the' +
-        ' file(s) will be appended to and may become invalid. It is' +
-        ' recommended to choose a new base filename each time or move' +
-        ' the resulting files before enabling again. If track processing is' +
-        ' disabled (--disable-audio-track-processing): (1) Only one recording' +
-        ' per render process is supported. (2) When the box is unchecked or' +
-        ' this page is closed, ongoing recordings will continue until the' +
-        ' call ends or the page with the recording is closed</p>';
-
+        '<p class=audio-recordings-info>A diagnostic audio recording is used' +
+        ' for analyzing audio problems. It consists of two files and contains' +
+        ' the audio played out from the speaker and recorded from the' +
+        ' microphone and is saved to the local disk. Checking this box will' +
+        ' enable the recording for ongoing WebRTC calls and for future WebRTC' +
+        ' calls. When the box is unchecked or this page is closed, all' +
+        ' ongoing recordings will be stopped and this recording' +
+        ' functionality will be disabled for future WebRTC calls. Recordings' +
+        ' in multiple tabs are supported as well as multiple recordings in' +
+        ' the same tab. When enabling, you select a base filename to which' +
+        ' suffixes will be appended as</p>' +
+        '<p><div>&lt;base filename&gt;.&lt;render process ID&gt;' +
+        '.aec_dump.&lt;recording ID&gt;</div>' +
+        '<div>&lt;base filename&gt;.&lt;render process ID&gt;' +
+        '.source_input.&lt;stream ID&gt;.pcm</div></p>' +
+        '<p class=audio-recordings-info>If recordings are disabled and then' +
+        ' enabled using the same base filename, the files will be appended' +
+        ' to and may become invalid. It is recommended to choose a new base' +
+        ' filename each time or move the produced files before enabling' +
+        ' again.</p>' +
+        '<p><label><input type=checkbox>' +
+        'Enable diagnostic packet and event recording</label></p>' +
+        '<p class=audio-recordings-info>A diagnostic packet and event' +
+        ' recording can be used for analyzing various issues related to' +
+        ' thread starvation, jitter buffers or bandwidth estimation. Two' +
+        ' types of data are logged. First, incoming and outgoing RTP headers' +
+        ' and RTCP packets are logged. These do not include any audio or' +
+        ' video information, nor any other types of personally identifiable' +
+        ' information (so no IP addresses or URLs). Checking this box will' +
+        ' enable the recording for ongoing WebRTC calls and for future' +
+        ' WebRTC calls. When the box is unchecked or this page is closed,' +
+        ' all ongoing recordings will be stopped and this recording' +
+        ' functionality will be disabled for future WebRTC calls. Recording' +
+        ' in multiple tabs or multiple recordings in the same tab is' +
+        ' currently not supported. When enabling, a filename for the' +
+        ' recording can be selected. If an existing file is selected, it' +
+        ' will be overwritten. </p>';
     content.getElementsByTagName('a')[0].addEventListener(
         'click', this.onDownloadData_.bind(this));
     content.getElementsByTagName('input')[0].addEventListener(
-        'click', this.onAecRecordingChanged_.bind(this));
+        'click', this.onAudioDebugRecordingsChanged_.bind(this));
+    content.getElementsByTagName('input')[1].addEventListener(
+        'click', this.onEventLogRecordingsChanged_.bind(this));
   }
 
   DumpCreator.prototype = {
-    // Mark the AEC recording checkbox checked.
-    enableAecRecording: function() {
+    // Mark the diagnostic audio recording checkbox checked.
+    enableAudioDebugRecordings: function() {
       this.root_.getElementsByTagName('input')[0].checked = true;
     },
 
-    // Mark the AEC recording checkbox unchecked.
-    disableAecRecording: function() {
+    // Mark the diagnostic audio recording checkbox unchecked.
+    disableAudioDebugRecordings: function() {
       this.root_.getElementsByTagName('input')[0].checked = false;
+    },
+
+    // Mark the event log recording checkbox checked.
+    enableEventLogRecordings: function() {
+      this.root_.getElementsByTagName('input')[1].checked = true;
+    },
+
+    // Mark the event log recording checkbox unchecked.
+    disableEventLogRecordings: function() {
+      this.root_.getElementsByTagName('input')[1].checked = false;
     },
 
     /**
@@ -93,16 +121,30 @@ var DumpCreator = (function() {
     },
 
     /**
-     * Handles the event of toggling the AEC recording state.
+     * Handles the event of toggling the audio debug recordings state.
      *
      * @private
      */
-    onAecRecordingChanged_: function() {
+    onAudioDebugRecordingsChanged_: function() {
       var enabled = this.root_.getElementsByTagName('input')[0].checked;
       if (enabled) {
-        chrome.send('enableAecRecording');
+        chrome.send('enableAudioDebugRecordings');
       } else {
-        chrome.send('disableAecRecording');
+        chrome.send('disableAudioDebugRecordings');
+      }
+    },
+
+    /**
+     * Handles the event of toggling the event log recordings state.
+     *
+     * @private
+     */
+    onEventLogRecordingsChanged_: function() {
+      var enabled = this.root_.getElementsByTagName('input')[1].checked;
+      if (enabled) {
+        chrome.send('enableEventLogRecordings');
+      } else {
+        chrome.send('disableEventLogRecordings');
       }
     },
   };

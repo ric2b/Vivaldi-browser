@@ -4,6 +4,10 @@
 
 #include "chrome/browser/chromeos/mobile/mobile_activator.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/values.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -118,6 +122,7 @@ class MobileActivatorTest : public testing::Test {
     NetworkHandler::Initialize();
   }
   void TearDown() override {
+    mobile_activator_.TerminateActivation();
     NetworkHandler::Shutdown();
     DBusThreadManager::Shutdown();
   }
@@ -286,7 +291,7 @@ void FakeRequestCellularActivationFailure(
     const base::Closure& success_callback,
     const network_handler::ErrorCallback& error_callback) {
   scoped_ptr<base::DictionaryValue> value;
-  error_callback.Run("", value.Pass());
+  error_callback.Run("", std::move(value));
 }
 
 TEST_F(MobileActivatorTest, OTASPScheduling) {

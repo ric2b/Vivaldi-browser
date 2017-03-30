@@ -4,6 +4,8 @@
 
 #include "net/ssl/default_channel_id_store.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
@@ -68,7 +70,7 @@ void DefaultChannelIDStore::GetChannelIDTask::Run(
   DCHECK(err != ERR_IO_PENDING);
 
   InvokeCallback(base::Bind(callback_, err, server_identifier_,
-                            base::Passed(key_result.Pass())));
+                            base::Passed(std::move(key_result))));
 }
 
 // --------------------------------------------------------------------------
@@ -86,15 +88,14 @@ class DefaultChannelIDStore::SetChannelIDTask
 
 DefaultChannelIDStore::SetChannelIDTask::SetChannelIDTask(
     scoped_ptr<ChannelID> channel_id)
-    : channel_id_(channel_id.Pass()) {
-}
+    : channel_id_(std::move(channel_id)) {}
 
 DefaultChannelIDStore::SetChannelIDTask::~SetChannelIDTask() {
 }
 
 void DefaultChannelIDStore::SetChannelIDTask::Run(
     DefaultChannelIDStore* store) {
-  store->SyncSetChannelID(channel_id_.Pass());
+  store->SyncSetChannelID(std::move(channel_id_));
 }
 
 // --------------------------------------------------------------------------
@@ -235,7 +236,7 @@ int DefaultChannelIDStore::GetChannelID(
 }
 
 void DefaultChannelIDStore::SetChannelID(scoped_ptr<ChannelID> channel_id) {
-  auto task = new SetChannelIDTask(channel_id.Pass());
+  auto task = new SetChannelIDTask(std::move(channel_id));
   RunOrEnqueueTask(scoped_ptr<Task>(task));
 }
 
@@ -302,16 +303,16 @@ void DefaultChannelIDStore::InitStore() {
 }
 
 void DefaultChannelIDStore::OnLoaded(
-    scoped_ptr<ScopedVector<ChannelID> > channel_ids) {
+    scoped_ptr<std::vector<scoped_ptr<ChannelID>>> channel_ids) {
   DCHECK(CalledOnValidThread());
-
-  for (std::vector<ChannelID*>::const_iterator it = channel_ids->begin();
+  for (std::vector<scoped_ptr<ChannelID>>::iterator it = channel_ids->begin();
        it != channel_ids->end(); ++it) {
     DCHECK(channel_ids_.find((*it)->server_identifier()) ==
            channel_ids_.end());
-    channel_ids_[(*it)->server_identifier()] = *it;
+    std::string ident = (*it)->server_identifier();
+    channel_ids_[ident] = it->release();
   }
-  channel_ids->weak_clear();
+  channel_ids->clear();
 
   loaded_ = true;
 
@@ -327,10 +328,8 @@ void DefaultChannelIDStore::OnLoaded(
   UMA_HISTOGRAM_COUNTS_100("DomainBoundCerts.TaskWaitCount",
                            waiting_tasks_.size());
 
-
-  for (ScopedVector<Task>::iterator i = waiting_tasks_.begin();
-       i != waiting_tasks_.end(); ++i)
-    (*i)->Run(this);
+  for (scoped_ptr<Task>& i : waiting_tasks_)
+    i->Run(this);
   waiting_tasks_.clear();
 }
 
@@ -339,7 +338,7 @@ void DefaultChannelIDStore::SyncSetChannelID(scoped_ptr<ChannelID> channel_id) {
   DCHECK(loaded_);
 
   InternalDeleteChannelID(channel_id->server_identifier());
-  InternalInsertChannelID(channel_id.Pass());
+  InternalInsertChannelID(std::move(channel_id));
 }
 
 void DefaultChannelIDStore::SyncDeleteChannelID(
@@ -384,7 +383,7 @@ void DefaultChannelIDStore::EnqueueTask(scoped_ptr<Task> task) {
   DCHECK(!loaded_);
   if (waiting_tasks_.empty())
     waiting_tasks_start_time_ = base::TimeTicks::Now();
-  waiting_tasks_.push_back(task.Pass());
+  waiting_tasks_.push_back(std::move(task));
 }
 
 void DefaultChannelIDStore::RunOrEnqueueTask(scoped_ptr<Task> task) {
@@ -392,7 +391,7 @@ void DefaultChannelIDStore::RunOrEnqueueTask(scoped_ptr<Task> task) {
   InitIfNecessary();
 
   if (!loaded_) {
-    EnqueueTask(task.Pass());
+    EnqueueTask(std::move(task));
     return;
   }
 

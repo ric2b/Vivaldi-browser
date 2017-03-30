@@ -11,7 +11,7 @@ import("//tools/grit/grit_rule.gni")
 # About the policy component:
 #
 # There should really be two components. One called "policy" that includes all
-# generated code, and one "policy/proto" liek we have now. The proto needs to
+# generated code, and one "policy/proto" like we have now. The proto needs to
 # be separate for cases like SesssionManagerClient which uses the protos to
 # communicate with the Chrome OS system layer, but doesn't need the rest of the
 # policy stuff).
@@ -24,35 +24,35 @@ import("//tools/grit/grit_rule.gni")
 # dependencies (GN will do the right thing without this extra target).
 if (is_component_build) {
   component("policy_component") {
-    deps = [
+    public_deps = [
       "//components/policy/core/browser",
       "//components/policy/core/common",
     ]
   }
   group("policy_component_browser") {
-    deps = [
+    public_deps = [
       ":policy_component",
     ]
   }
   group("policy_component_common") {
-    deps = [
+    public_deps = [
       ":policy_component",
     ]
   }
 } else {  # Compile to separate libraries.
   group("policy_component") {
-    deps = [
+    public_deps = [
       ":policy_component_browser",
       ":policy_component_common",
     ]
   }
   component("policy_component_browser") {
-    deps = [
+    public_deps = [
       "//components/policy/core/browser",
     ]
   }
   component("policy_component_common") {
-    deps = [
+    public_deps = [
       "//components/policy/core/common",
     ]
   }
@@ -76,6 +76,7 @@ if (enable_configuration_policy) {
   constants_source_path = "$policy_gen_dir/policy_constants.cc"
   protobuf_decoder_path = "$policy_gen_dir/cloud_policy_generated.cc"
   app_restrictions_path = "$policy_gen_dir/app_restrictions.xml"
+  risk_tag_header_path = "$policy_gen_dir/risk_tag.h"
 
   action("cloud_policy_code_generate") {
     script = "tools/generate_policy_source.py"
@@ -99,6 +100,7 @@ if (enable_configuration_policy) {
       chrome_settings_proto_path,
       cloud_policy_proto_path,
       app_restrictions_path,
+      risk_tag_header_path,
     ]
 
     if (target_os != "android") {
@@ -118,6 +120,7 @@ if (enable_configuration_policy) {
           rebase_path(protobuf_decoder_path, root_build_dir),
       "--app-restrictions-definition=" +
           rebase_path(app_restrictions_path, root_build_dir),
+      "--risk-tag-header=" + rebase_path(risk_tag_header_path, root_build_dir),
       chrome_version_path,
       target_os,
       chromeos_flag,
@@ -205,11 +208,12 @@ if (enable_configuration_policy) {
       constants_header_path,
       constants_source_path,
       protobuf_decoder_path,
+      risk_tag_header_path,
     ]
 
     defines = [ "POLICY_COMPONENT_IMPLEMENTATION" ]
 
-    deps = [
+    public_deps = [
       ":cloud_policy_code_generate",
       ":cloud_policy_proto_generated_compile",
       "//base",
@@ -218,13 +222,13 @@ if (enable_configuration_policy) {
   }
 
   group("test_support") {
-    deps = [
+    public_deps = [
       ":chrome_settings_proto_generated_compile",
       ":policy_component",
     ]
   }
 
-  static_library("policy_component_test_support") {
+  source_set("policy_component_test_support") {
     testonly = true
     sources = [
       "core/browser/configuration_policy_pref_store_test.cc",
@@ -266,10 +270,14 @@ if (enable_configuration_policy) {
       ]
     }
 
-    deps = [
+    public_deps = [
+      ":policy",
       ":policy_component",
       ":test_support",
+      "//base",
       "//components/policy/proto",
+      "//crypto",
+      "//net",
       "//testing/gmock",
       "//testing/gtest",
     ]

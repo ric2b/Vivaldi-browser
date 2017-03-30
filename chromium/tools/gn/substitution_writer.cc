@@ -310,8 +310,10 @@ void SubstitutionWriter::WriteNinjaVariablesForSource(
     std::ostream& out) {
   for (const auto& type : types) {
     // Don't write SOURCE since that just maps to Ninja's $in variable, which
-    // is implicit in the rule.
-    if (type != SUBSTITUTION_SOURCE) {
+    // is implicit in the rule. RESPONSE_FILE_NAME is written separately
+    // only when writing target rules since it can never be used in any
+    // other context (like process_file_template).
+    if (type != SUBSTITUTION_SOURCE && type != SUBSTITUTION_RSP_FILE_NAME) {
       out << "  " << kSubstitutionNinjaNames[type] << " = ";
         EscapeStringToStream(
             out,
@@ -421,6 +423,9 @@ bool SubstitutionWriter::GetTargetSubstitution(
       // Only include the toolchain for non-default toolchains.
       *result = target->label().GetUserVisibleName(
           !target->settings()->is_default());
+      break;
+    case SUBSTITUTION_LABEL_NAME:
+      *result = target->label().name();
       break;
     case SUBSTITUTION_ROOT_GEN_DIR:
       SetDirOrDotWithNoSlash(

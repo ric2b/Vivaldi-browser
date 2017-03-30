@@ -6,14 +6,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-
 #include <limits>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -185,16 +185,14 @@ void NaClSandbox::InitializeLayerTwoSandbox(bool uses_nonsfi_mode) {
   // Pass proc_fd_ ownership to the BPF sandbox, which guarantees it will
   // be closed. There is no point in keeping it around since the BPF policy
   // will prevent its usage.
-  if (uses_nonsfi_mode) {
-    layer_two_enabled_ = nacl::nonsfi::InitializeBPFSandbox(proc_fd_.Pass());
-    layer_two_is_nonsfi_ = true;
-  } else {
 #if defined(OS_NACL_NONSFI)
-    LOG(FATAL) << "nacl_helper_nonsfi can run only Non-SFI plugin.";
+  CHECK(uses_nonsfi_mode);
+  layer_two_enabled_ = nacl::nonsfi::InitializeBPFSandbox(std::move(proc_fd_));
+  layer_two_is_nonsfi_ = true;
 #else
-    layer_two_enabled_ = nacl::InitializeBPFSandbox(proc_fd_.Pass());
+  CHECK(!uses_nonsfi_mode);
+  layer_two_enabled_ = nacl::InitializeBPFSandbox(std::move(proc_fd_));
 #endif
-  }
 }
 
 void NaClSandbox::SealLayerOneSandbox() {

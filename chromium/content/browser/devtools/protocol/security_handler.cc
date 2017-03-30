@@ -25,7 +25,7 @@ std::string SecurityStyleToProtocolSecurityState(
     case SECURITY_STYLE_UNKNOWN:
       return kSecurityStateUnknown;
     case SECURITY_STYLE_UNAUTHENTICATED:
-      return kSecurityStateHttp;
+      return kSecurityStateNeutral;
     case SECURITY_STYLE_AUTHENTICATION_BROKEN:
       return kSecurityStateInsecure;
     case SECURITY_STYLE_WARNING:
@@ -43,10 +43,13 @@ void AddExplanations(
     const std::vector<SecurityStyleExplanation>& explanations_to_add,
     std::vector<scoped_refptr<SecurityStateExplanation>>* explanations) {
   for (const auto& it : explanations_to_add) {
-    explanations->push_back(SecurityStateExplanation::Create()
-                                ->set_security_state(security_style)
-                                ->set_summary(it.summary)
-                                ->set_description(it.description));
+    scoped_refptr<SecurityStateExplanation> explanation =
+        SecurityStateExplanation::Create()->set_security_state(security_style)
+                                          ->set_summary(it.summary)
+                                          ->set_description(it.description);
+    if (it.cert_id > 0)
+      explanation->set_certificate_id(it.cert_id);
+    explanations->push_back(explanation);
   }
 }
 
@@ -96,13 +99,33 @@ void SecurityHandler::SecurityStyleChanged(
   AddExplanations(kSecurityStateInsecure,
                   security_style_explanations.broken_explanations,
                   &explanations);
-  AddExplanations(kSecurityStateWarning,
-                  security_style_explanations.warning_explanations,
+  AddExplanations(kSecurityStateNeutral,
+                  security_style_explanations.unauthenticated_explanations,
+                  &explanations);
+  AddExplanations(kSecurityStateSecure,
+                  security_style_explanations.secure_explanations,
                   &explanations);
 
-  client_->SecurityStateChanged(SecurityStateChangedParams::Create()
-                                    ->set_security_state(security_state)
-                                    ->set_explanations(explanations));
+  scoped_refptr<MixedContentStatus> mixed_content_status =
+      MixedContentStatus::Create()
+          ->set_ran_insecure_content(
+              security_style_explanations.ran_insecure_content)
+          ->set_displayed_insecure_content(
+              security_style_explanations.displayed_insecure_content)
+          ->set_ran_insecure_content_style(SecurityStyleToProtocolSecurityState(
+              security_style_explanations.ran_insecure_content_style))
+          ->set_displayed_insecure_content_style(
+              SecurityStyleToProtocolSecurityState(
+                  security_style_explanations
+                      .displayed_insecure_content_style));
+
+  client_->SecurityStateChanged(
+      SecurityStateChangedParams::Create()
+          ->set_security_state(security_state)
+          ->set_scheme_is_cryptographic(
+              security_style_explanations.scheme_is_cryptographic)
+          ->set_mixed_content_status(mixed_content_status)
+          ->set_explanations(explanations));
 }
 
 Response SecurityHandler::Enable() {

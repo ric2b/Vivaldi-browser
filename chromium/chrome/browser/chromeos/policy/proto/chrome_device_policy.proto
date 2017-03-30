@@ -56,12 +56,12 @@ message DataRoamingEnabledProto {
   optional bool data_roaming_enabled = 1 [default = false];
 }
 
-message DeviceProxySettingsProto {
+message OBSOLETE_DeviceProxySettingsProto {
   // One of "direct", "auto_detect", "pac_script", "fixed_servers", "system"
-  optional string proxy_mode = 1;
-  optional string proxy_server = 2;
-  optional string proxy_pac_url = 3;
-  optional string proxy_bypass_list = 4;
+  optional string OBSOLETE_proxy_mode = 1 [deprecated = true];
+  optional string OBSOLETE_proxy_server = 2 [deprecated = true];
+  optional string OBSOLETE_proxy_pac_url = 3 [deprecated = true];
+  optional string OBSOLETE_proxy_bypass_list = 4 [deprecated = true];
 }
 
 // This is used by chromeos, make sure to do cleanup there before marking it as
@@ -91,13 +91,13 @@ message DeviceOpenNetworkConfigurationProto {
 
 // Policies to turn on portions of the device status reports.
 message DeviceReportingProto {
-  optional bool report_version_info = 1;
-  optional bool report_activity_times = 2;
-  optional bool report_boot_mode = 3;
-  optional bool report_location = 4;
-  optional bool report_network_interfaces = 5;
-  optional bool report_users = 6;
-  optional bool report_hardware_status = 7;
+  optional bool report_version_info = 1 [default = true];
+  optional bool report_activity_times = 2 [default = true];
+  optional bool report_boot_mode = 3 [default = true];
+  optional bool report_location = 4 [default = false];
+  optional bool report_network_interfaces = 5 [default = true];
+  optional bool report_users = 6 [default = true];
+  optional bool report_hardware_status = 7 [default = true];
   optional bool report_session_status = 8 [default = true];
 
   // Frequency to report device status, default to 3 hours.
@@ -625,11 +625,35 @@ message LoginScreenDomainAutoCompleteProto {
   optional string login_screen_domain_auto_complete = 1;
 }
 
+// Settings that control whether a device would send system logs to the server.
+message DeviceLogUploadSettingsProto {
+  // Whether the device should send system logs. The default is false.
+  optional bool system_log_upload_enabled = 1 [default = false];
+}
+
+// This setting is controlled by the device policy DisplayRotationDefault.
+// If the policy is set and therefore display_rotation_default contains a value,
+// all displays will be rotated clockwise to the specified orientation at
+// reboot, when first connected, or when the setting is changed.
+// If the optional field |Rotation display_rotation_default = 1| is not present,
+// no changes are done to the rotation.
+message DisplayRotationDefaultProto {
+  // This enum corresponds to gfx::Display::Rotation in ui/gfx/display.h.
+  enum Rotation {
+    ROTATE_0 = 0;
+    ROTATE_90 = 1;
+    ROTATE_180 = 2;
+    ROTATE_270 = 3;
+  };
+  optional Rotation display_rotation_default = 1;
+}
+
 message ChromeDeviceSettingsProto {
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
   optional UserWhitelistProto user_whitelist = 2;
   optional GuestModeEnabledProto guest_mode_enabled = 3;
-  optional DeviceProxySettingsProto device_proxy_settings = 4;
+  optional OBSOLETE_DeviceProxySettingsProto device_proxy_settings = 4
+      [deprecated = true];
   optional CameraEnabledProto camera_enabled = 5;
   optional ShowUserNamesOnSigninProto show_user_names = 6;
   optional DataRoamingEnabledProto data_roaming_enabled = 7;
@@ -666,4 +690,6 @@ message ChromeDeviceSettingsProto {
   optional ExtensionCacheSizeProto extension_cache_size = 36;
   optional LoginScreenDomainAutoCompleteProto
       login_screen_domain_auto_complete = 37;
+  optional DeviceLogUploadSettingsProto device_log_upload_settings = 38;
+  optional DisplayRotationDefaultProto display_rotation_default = 39;
 }

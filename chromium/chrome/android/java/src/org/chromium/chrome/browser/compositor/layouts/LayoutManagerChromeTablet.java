@@ -5,22 +5,31 @@
 package org.chromium.chrome.browser.compositor.layouts;
 
 import android.content.Context;
-import android.text.TextUtils;
+import android.graphics.Bitmap;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.view.MotionEvent;
 import android.view.ViewGroup;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.AreaGestureEventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeEventFilter.ScrollDirection;
+import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilterHost;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.GestureHandler;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
+import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeManagerDelegate;
+import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
+import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 import java.util.List;
@@ -31,7 +40,7 @@ import java.util.List;
  */
 public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     // Event Filters
-    private final AreaGestureEventFilter mTabStripFilter;
+    private final TabStripEventFilter mTabStripFilter;
 
     // Internal State
     private final String mDefaultTitle;
@@ -50,7 +59,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         Context context = host.getContext();
 
         // Build Event Filters
-        mTabStripFilter = new AreaGestureEventFilter(
+        mTabStripFilter = new TabStripEventFilter(
                 context, this, new TabStripEventHandler(), null, false, false);
 
         mTabStripLayoutHelperManager = new StripLayoutHelperManager(
@@ -120,20 +129,27 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     }
 
     @Override
+    protected void tabModelSwitched(boolean incognito) {
+        super.tabModelSwitched(incognito);
+        getTabModelSelector().commitAllTabClosures();
+    }
+
+    @Override
     public void init(TabModelSelector selector, TabCreatorManager creator,
             TabContentManager content, ViewGroup androidContentContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
+            ReaderModeManagerDelegate readerModeDelegate,
             DynamicResourceLoader dynamicResourceLoader) {
         if (mTabStripLayoutHelperManager != null) {
             mTabStripLayoutHelperManager.setTabModelSelector(selector, creator, content);
         }
 
         super.init(selector, creator, content, androidContentContainer, contextualSearchDelegate,
-                dynamicResourceLoader);
+                readerModeDelegate, dynamicResourceLoader);
 
         mTabObserver = new TabModelSelectorTabObserver(selector) {
             @Override
-            public void onFaviconUpdated(Tab tab) {
+            public void onFaviconUpdated(Tab tab, Bitmap icon) {
                 updateTitle(tab);
             }
 
@@ -150,8 +166,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             for (int j = 0; j < model.getCount(); j++) {
                 Tab tab = model.getTabAt(j);
                 if (tab != null && mTitleCache != null) {
-                    mTitleCache.put(tab.getId(), getTitleBitmap(tab), getFaviconBitmap(tab),
-                            tab.isIncognito(), tab.isTitleDirectionRtl());
+                    mTitleCache.getUpdatedTitle(tab, mDefaultTitle);
                 }
             }
         }
@@ -169,24 +184,25 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     }
 
     @Override
-    protected String getTitleForTab(Tab tab) {
-        String title = super.getTitleForTab(tab);
-        if (TextUtils.isEmpty(title)) title = mDefaultTitle;
-        return title;
-    }
-
-    @Override
     public StripLayoutHelperManager getStripLayoutHelperManager() {
         return mTabStripLayoutHelperManager;
     }
 
+    @Override
+    public SceneLayer getUpdatedActiveSceneLayer(Rect viewport, Rect contentViewport,
+            LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
+            ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
+        mTabStripLayoutHelperManager.setBrightness(getActiveLayout().getToolbarBrightness());
+        return super.getUpdatedActiveSceneLayer(viewport, contentViewport, layerTitleCache,
+                tabContentManager, resourceManager, fullscreenManager);
+    }
+
     private void updateTitle(Tab tab) {
         if (tab != null && mTitleCache != null) {
-            mTitleCache.put(tab.getId(), getTitleBitmap(tab), getFaviconBitmap(tab),
-                    tab.isIncognito(), tab.isTitleDirectionRtl());
-
-            getActiveLayout().tabTitleChanged(tab.getId(), getTitleForTab(tab));
+            String title = mTitleCache.getUpdatedTitle(tab, mDefaultTitle);
+            getActiveLayout().tabTitleChanged(tab.getId(), title);
         }
+        requestUpdate();
     }
 
     private class TabletToolbarSwipeHandler extends ToolbarSwipeHandler {
@@ -208,8 +224,8 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
 
     private class TabStripEventHandler implements GestureHandler {
         @Override
-        public void onDown(float x, float y) {
-            mTabStripLayoutHelperManager.onDown(time(), x, y);
+        public void onDown(float x, float y, boolean fromMouse, int buttons) {
+            mTabStripLayoutHelperManager.onDown(time(), x, y, fromMouse, buttons);
         }
 
         @Override
@@ -223,8 +239,8 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         }
 
         @Override
-        public void click(float x, float y) {
-            mTabStripLayoutHelperManager.click(time(), x, y);
+        public void click(float x, float y, boolean fromMouse, int buttons) {
+            mTabStripLayoutHelperManager.click(time(), x, y, fromMouse, buttons);
         }
 
         @Override
@@ -240,6 +256,22 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         @Override
         public void onPinch(float x0, float y0, float x1, float y1, boolean firstEvent) {
             // Not implemented.
+        }
+    }
+
+    private class TabStripEventFilter extends AreaGestureEventFilter {
+        public TabStripEventFilter(Context context, EventFilterHost host, GestureHandler handler,
+                RectF triggerRect, boolean autoOffset, boolean useDefaultLongPress) {
+            super(context, host, handler, triggerRect, autoOffset, useDefaultLongPress);
+        }
+
+        @Override
+        public boolean onInterceptTouchEventInternal(MotionEvent e, boolean isKeyboardShowing) {
+            if (getActiveLayout().isTabStripEventFilterEnabled()) {
+                return super.onInterceptTouchEventInternal(e, isKeyboardShowing);
+            }
+
+            return false;
         }
     }
 }

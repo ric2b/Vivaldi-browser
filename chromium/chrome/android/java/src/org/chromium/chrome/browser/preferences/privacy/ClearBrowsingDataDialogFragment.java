@@ -23,14 +23,15 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckedTextView;
 import android.widget.TextView;
-import android.widget.Toast;
 
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.signin.AccountManagementFragment;
 import org.chromium.sync.signin.ChromeSigninController;
 import org.chromium.ui.text.SpanApplier;
+import org.chromium.ui.widget.Toast;
 
 import java.util.EnumSet;
 
@@ -193,7 +194,14 @@ public class ClearBrowsingDataDialogFragment extends DialogFragment
      */
     private void updateButtonState() {
         Button clearButton = mDialog.getButton(AlertDialog.BUTTON_POSITIVE);
-        if (clearButton != null) clearButton.setEnabled(!mSelectedOptions.isEmpty());
+        if (clearButton == null) return;
+        boolean isEnabled = !mSelectedOptions.isEmpty();
+        clearButton.setEnabled(isEnabled);
+
+        // Work around a bug in the app compat library where disabled buttons in alert dialogs
+        // don't look disabled on pre-L devices. See: http://crbug.com/550784
+        // TODO(newt): remove this workaround when the app compat library is fixed (b/26017217)
+        clearButton.setTextColor(isEnabled ? 0xFF4285F4 : 0x335A5A5A);
     }
 
     @Override
@@ -279,5 +287,10 @@ public class ClearBrowsingDataDialogFragment extends DialogFragment
                 getActivity().getString(R.string.clear_browsing_data_progress_title),
                 getActivity().getString(R.string.clear_browsing_data_progress_message), true,
                 false);
+    }
+
+    @VisibleForTesting
+    ProgressDialog getProgressDialog() {
+        return mProgressDialog;
     }
 }

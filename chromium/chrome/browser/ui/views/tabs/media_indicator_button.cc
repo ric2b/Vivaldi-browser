@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/tabs/media_indicator_button.h"
 
+#include "base/macros.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
@@ -22,6 +23,13 @@ namespace {
 // UpdateEnabledForMuteToggle().
 const int kMinMouseSelectableAreaPercent = 250;
 const int kMinGestureSelectableAreaPercent = 400;
+
+// Returns true if either Shift or Control are being held down.  In this case,
+// mouse events are delegated to the Tab, to perform tab selection in the tab
+// strip instead.
+bool IsShiftOrControlDown(const ui::Event& event) {
+  return (event.flags() & (ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)) != 0;
+}
 
 }  // namespace
 
@@ -71,16 +79,8 @@ void MediaIndicatorButton::TransitionToMediaState(TabMediaState next_state) {
   if (next_state == media_state_)
     return;
 
-  if (next_state != TAB_MEDIA_STATE_NONE) {
-    const gfx::ImageSkia* const indicator_image =
-        chrome::GetTabMediaIndicatorImage(next_state).ToImageSkia();
-    SetImage(views::CustomButton::STATE_NORMAL, indicator_image);
-    SetImage(views::CustomButton::STATE_DISABLED, indicator_image);
-    const gfx::ImageSkia* const affordance_image =
-        chrome::GetTabMediaIndicatorAffordanceImage(next_state).ToImageSkia();
-    SetImage(views::CustomButton::STATE_HOVERED, affordance_image);
-    SetImage(views::CustomButton::STATE_PRESSED, affordance_image);
-  }
+  if (next_state != TAB_MEDIA_STATE_NONE)
+    ResetImages(next_state);
 
   if ((media_state_ == TAB_MEDIA_STATE_AUDIO_PLAYING &&
        next_state == TAB_MEDIA_STATE_AUDIO_MUTING) ||
@@ -119,7 +119,7 @@ void MediaIndicatorButton::TransitionToMediaState(TabMediaState next_state) {
 }
 
 void MediaIndicatorButton::UpdateEnabledForMuteToggle() {
-  bool enable = chrome::IsTabAudioMutingFeatureEnabled() &&
+  bool enable = chrome::AreExperimentalMuteControlsEnabled() &&
       (media_state_ == TAB_MEDIA_STATE_AUDIO_PLAYING ||
        media_state_ == TAB_MEDIA_STATE_AUDIO_MUTING);
 
@@ -136,6 +136,12 @@ void MediaIndicatorButton::UpdateEnabledForMuteToggle() {
   SetEnabled(enable);
 }
 
+void MediaIndicatorButton::OnParentTabButtonColorChanged() {
+  if (media_state_ == TAB_MEDIA_STATE_AUDIO_PLAYING ||
+      media_state_ == TAB_MEDIA_STATE_AUDIO_MUTING)
+    ResetImages(media_state_);
+}
+
 const char* MediaIndicatorButton::GetClassName() const {
   return kViewClassName;
 }
@@ -149,8 +155,8 @@ bool MediaIndicatorButton::OnMousePressed(const ui::MouseEvent& event) {
   // Do not handle this mouse event when anything but the left mouse button is
   // pressed or when any modifier keys are being held down.  Instead, the Tab
   // should react (e.g., middle-click for close, right-click for context menu).
-  if (event.flags() != ui::EF_LEFT_MOUSE_BUTTON) {
-    if (state_ != views::CustomButton::STATE_DISABLED)
+  if (!event.IsOnlyLeftMouseButton() || IsShiftOrControlDown(event)) {
+    if (state() != views::CustomButton::STATE_DISABLED)
       SetState(views::CustomButton::STATE_NORMAL);  // Turn off hover.
     return false;  // Event to be handled by Tab.
   }
@@ -168,8 +174,8 @@ bool MediaIndicatorButton::OnMouseDragged(const ui::MouseEvent& event) {
 
 void MediaIndicatorButton::OnMouseEntered(const ui::MouseEvent& event) {
   // If any modifier keys are being held down, do not turn on hover.
-  if (state_ != views::CustomButton::STATE_DISABLED &&
-      event.flags() != ui::EF_NONE) {
+  if (state() != views::CustomButton::STATE_DISABLED &&
+      IsShiftOrControlDown(event)) {
     SetState(views::CustomButton::STATE_NORMAL);
     return;
   }
@@ -178,8 +184,8 @@ void MediaIndicatorButton::OnMouseEntered(const ui::MouseEvent& event) {
 
 void MediaIndicatorButton::OnMouseMoved(const ui::MouseEvent& event) {
   // If any modifier keys are being held down, turn off hover.
-  if (state_ != views::CustomButton::STATE_DISABLED &&
-      event.flags() != ui::EF_NONE) {
+  if (state() != views::CustomButton::STATE_DISABLED &&
+      IsShiftOrControlDown(event)) {
     SetState(views::CustomButton::STATE_NORMAL);
     return;
   }
@@ -224,7 +230,9 @@ void MediaIndicatorButton::NotifyClick(const ui::Event& event) {
 bool MediaIndicatorButton::IsTriggerableEvent(const ui::Event& event) {
   // For mouse events, only trigger on the left mouse button and when no
   // modifier keys are being held down.
-  if (event.IsMouseEvent() && event.flags() != ui::EF_LEFT_MOUSE_BUTTON)
+  if (event.IsMouseEvent() &&
+      (!static_cast<const ui::MouseEvent*>(&event)->IsOnlyLeftMouseButton() ||
+       IsShiftOrControlDown(event)))
     return false;
 
   // For gesture events on an inactive tab, require an even wider tab before
@@ -242,4 +250,16 @@ bool MediaIndicatorButton::IsTriggerableEvent(const ui::Event& event) {
 Tab* MediaIndicatorButton::GetTab() const {
   DCHECK_EQ(static_cast<views::View*>(parent_tab_), parent());
   return parent_tab_;
+}
+
+void MediaIndicatorButton::ResetImages(TabMediaState state) {
+  SkColor color = parent_tab_->button_color();
+  gfx::ImageSkia indicator_image =
+      chrome::GetTabMediaIndicatorImage(state, color).AsImageSkia();
+  SetImage(views::CustomButton::STATE_NORMAL, &indicator_image);
+  SetImage(views::CustomButton::STATE_DISABLED, &indicator_image);
+  gfx::ImageSkia affordance_image =
+      chrome::GetTabMediaIndicatorAffordanceImage(state, color).AsImageSkia();
+  SetImage(views::CustomButton::STATE_HOVERED, &affordance_image);
+  SetImage(views::CustomButton::STATE_PRESSED, &affordance_image);
 }

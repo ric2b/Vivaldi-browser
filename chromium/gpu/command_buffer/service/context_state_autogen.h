@@ -36,6 +36,10 @@ struct EnableFlags {
   bool cached_rasterizer_discard;
   bool primitive_restart_fixed_index;
   bool cached_primitive_restart_fixed_index;
+  bool multisample_ext;
+  bool cached_multisample_ext;
+  bool sample_alpha_to_one_ext;
+  bool cached_sample_alpha_to_one_ext;
 };
 
 GLfloat blend_color_red;
@@ -62,6 +66,7 @@ GLboolean color_mask_blue;
 GLboolean cached_color_mask_blue;
 GLboolean color_mask_alpha;
 GLboolean cached_color_mask_alpha;
+GLenum coverage_modulation;
 GLenum cull_mode;
 GLenum depth_func;
 GLboolean depth_mask;
@@ -74,8 +79,19 @@ GLenum hint_fragment_shader_derivative;
 GLfloat line_width;
 GLfloat modelview_matrix[16];
 GLfloat projection_matrix[16];
+GLenum stencil_path_func;
+GLint stencil_path_ref;
+GLuint stencil_path_mask;
 GLint pack_alignment;
 GLint unpack_alignment;
+GLint pack_row_length;
+GLint pack_skip_pixels;
+GLint pack_skip_rows;
+GLint unpack_row_length;
+GLint unpack_image_height;
+GLint unpack_skip_pixels;
+GLint unpack_skip_rows;
+GLint unpack_skip_images;
 GLfloat polygon_offset_factor;
 GLfloat polygon_offset_units;
 GLclampf sample_coverage_value;
@@ -165,6 +181,17 @@ inline void SetDeviceCapabilityState(GLenum cap, bool enable) {
           !ignore_cached_state)
         return;
       enable_flags.cached_primitive_restart_fixed_index = enable;
+      break;
+    case GL_MULTISAMPLE_EXT:
+      if (enable_flags.cached_multisample_ext == enable && !ignore_cached_state)
+        return;
+      enable_flags.cached_multisample_ext = enable;
+      break;
+    case GL_SAMPLE_ALPHA_TO_ONE_EXT:
+      if (enable_flags.cached_sample_alpha_to_one_ext == enable &&
+          !ignore_cached_state)
+        return;
+      enable_flags.cached_sample_alpha_to_one_ext = enable;
       break;
     default:
       NOTREACHED();

@@ -5,7 +5,7 @@
 #include "net/test/ct_test_util.h"
 
 #include <stdint.h>
-#include <string>
+#include <string.h>
 #include <vector>
 
 #include "base/base64.h"
@@ -25,7 +25,7 @@ namespace ct {
 namespace {
 
 std::string HexToBytes(const char* hex_data) {
-  std::vector<uint8> output;
+  std::vector<uint8_t> output;
   std::string result;
   if (base::HexStringToBytes(hex_data, &output))
     result.assign(reinterpret_cast<const char*>(&output[0]), output.size());
@@ -166,7 +166,7 @@ const char kSampleSTHTreeHeadSignature[] =
     "6c7a20022100e38464f3c0fd066257b982074f7ac87655e0c8f714768a050b4be9a7b441cb"
     "d3";
 size_t kSampleSTHTreeSize = 21u;
-int64 kSampleSTHTimestamp = 1396877277237u;
+int64_t kSampleSTHTimestamp = INT64_C(1396877277237);
 
 }  // namespace
 
@@ -255,7 +255,7 @@ std::string GetDerEncodedFakeOCSPResponseIssuerCert() {
 }
 
 // A sample, valid STH
-void GetSampleSignedTreeHead(SignedTreeHead* sth) {
+bool GetSampleSignedTreeHead(SignedTreeHead* sth) {
   sth->version = SignedTreeHead::V1;
   sth->timestamp = base::Time::UnixEpoch() +
                    base::TimeDelta::FromMilliseconds(kSampleSTHTimestamp);
@@ -263,7 +263,39 @@ void GetSampleSignedTreeHead(SignedTreeHead* sth) {
   std::string sha256_root_hash = GetSampleSTHSHA256RootHash();
   memcpy(sth->sha256_root_hash, sha256_root_hash.c_str(), kSthRootHashLength);
 
-  GetSampleSTHTreeHeadDecodedSignature(&(sth->signature));
+  return GetSampleSTHTreeHeadDecodedSignature(&(sth->signature));
+}
+
+bool GetSampleEmptySignedTreeHead(SignedTreeHead* sth) {
+  sth->version = SignedTreeHead::V1;
+  sth->timestamp = base::Time::UnixEpoch() +
+                   base::TimeDelta::FromMilliseconds(INT64_C(1450443594920));
+  sth->tree_size = 0;
+  std::string empty_root_hash = HexToBytes(
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  memcpy(sth->sha256_root_hash, empty_root_hash.c_str(), kSthRootHashLength);
+
+  std::string tree_head_signature = HexToBytes(
+      "040300463044022046c26401de9416403da54762dc1f1687c38eafd791b15e484ab4c5f7"
+      "f52721fe02201bf537a3bbea47109fc76c2273fe0f3349f493a07de9335c266330105fb0"
+      "2a4a");
+  base::StringPiece sp(tree_head_signature);
+  return DecodeDigitallySigned(&sp, &(sth->signature)) && sp.empty();
+}
+
+bool GetBadEmptySignedTreeHead(SignedTreeHead* sth) {
+  sth->version = SignedTreeHead::V1;
+  sth->timestamp = base::Time::UnixEpoch() +
+                   base::TimeDelta::FromMilliseconds(INT64_C(1450870952897));
+  sth->tree_size = 0;
+  memset(sth->sha256_root_hash, 'f', kSthRootHashLength);
+
+  std::string tree_head_signature = HexToBytes(
+      "04030046304402207cab04c62dee5d1cbc95fec30cd8417313f71587b75f133ad2e6f324"
+      "74f164d702205e2f3a9bce46f87d7e20e951a4e955da3cb502f8717a22fabd7c5d7e1bef"
+      "46ea");
+  base::StringPiece sp(tree_head_signature);
+  return DecodeDigitallySigned(&sp, &(sth->signature)) && sp.empty();
 }
 
 std::string GetSampleSTHSHA256RootHash() {
@@ -274,11 +306,10 @@ std::string GetSampleSTHTreeHeadSignature() {
   return HexToBytes(kSampleSTHTreeHeadSignature);
 }
 
-void GetSampleSTHTreeHeadDecodedSignature(DigitallySigned* signature) {
+bool GetSampleSTHTreeHeadDecodedSignature(DigitallySigned* signature) {
   std::string tree_head_signature = HexToBytes(kSampleSTHTreeHeadSignature);
   base::StringPiece sp(tree_head_signature);
-  CHECK(DecodeDigitallySigned(&sp, signature));
-  CHECK(sp.empty());
+  return DecodeDigitallySigned(&sp, signature) && sp.empty();
 }
 
 std::string GetSampleSTHAsJson() {
@@ -288,7 +319,7 @@ std::string GetSampleSTHAsJson() {
 }
 
 std::string CreateSignedTreeHeadJsonString(size_t tree_size,
-                                           int64 timestamp,
+                                           int64_t timestamp,
                                            std::string sha256_root_hash,
                                            std::string tree_head_signature) {
   std::string sth_json =
@@ -310,6 +341,23 @@ std::string CreateSignedTreeHeadJsonString(size_t tree_size,
 
   sth_json += "}";
   return sth_json;
+}
+
+std::string CreateConsistencyProofJsonString(
+    const std::vector<std::string>& raw_nodes) {
+  std::string consistency_proof_json = std::string("{\"consistency\":[");
+
+  for (auto it = raw_nodes.begin(); it != raw_nodes.end(); ++it) {
+    std::string proof_node_b64;
+    base::Base64Encode(*it, &proof_node_b64);
+    consistency_proof_json +=
+        base::StringPrintf("\"%s\"", proof_node_b64.c_str());
+    if (it + 1 != raw_nodes.end())
+      consistency_proof_json += std::string(",");
+  }
+  consistency_proof_json += std::string("]}");
+
+  return consistency_proof_json;
 }
 
 }  // namespace ct

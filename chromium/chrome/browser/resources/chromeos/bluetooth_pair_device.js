@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// TODO(dbeam): should these be global like this?
+var Page = cr.ui.pageManager.Page;
 var PageManager = cr.ui.pageManager.PageManager;
 var BluetoothPairing = options.BluetoothPairing;
-var FakeBluetoothOverlayParent = options.FakeBluetoothOverlayParent;
 
 /** @override */
 PageManager.closeOverlay = function() {
@@ -13,12 +14,13 @@ PageManager.closeOverlay = function() {
 
 /**
  * Listener for the |beforeunload| event.
+ * TODO(dbeam): probably ought to be using addEventListener() instead.
  */
 window.onbeforeunload = function() {
   PageManager.willClose();
 };
 
-/*
+/**
  * Override calls from BluetoothOptionsHandler.
  */
 cr.define('options', function() {
@@ -61,16 +63,19 @@ function load() {
 
   chrome.send('coreOptionsInitialize');
 
-  PageManager.register(FakeBluetoothOverlayParent.getInstance());
-  PageManager.registerOverlay(BluetoothPairing.getInstance(),
-                              FakeBluetoothOverlayParent.getInstance());
+  var pairingPage = new Page('bluetooth', '', 'bluetooth-container');
+  PageManager.register(pairingPage);
+  PageManager.registerOverlay(BluetoothPairing.getInstance(), pairingPage);
 
-  var device = {};
+  // Since this UI is used to host a BluetoothPairing dialog we need to add
+  // an onPairing observer. (Normally that would be added in browser_options).
+  chrome.bluetoothPrivate.onPairing.addListener(
+      BluetoothPairing.onBluetoothPairingEvent);
+
+  // Show the BluetoothPairing dialog.
   var args = JSON.parse(chrome.getVariableValue('dialogArguments'));
-  device = args;
-  device.pairing = 'bluetoothStartConnecting';
-  BluetoothPairing.showDialog(device);
-  chrome.send('updateBluetoothDevice', [device.address, 'connect']);
+  var device = /** @type {!chrome.bluetooth.Device} */ (args);
+  BluetoothPairing.connect(device, true);
 }
 
 document.addEventListener('DOMContentLoaded', load);

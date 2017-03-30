@@ -23,22 +23,31 @@
         'UI_ANDROID_IMPLEMENTATION',
       ],
       'sources' : [
+        'animation_utils.h',
+        'edge_effect.cc',
+        'edge_effect.h',
+        'edge_effect_base.cc',
+        'edge_effect_base.h',
+        'edge_effect_l.cc',
+        'edge_effect_l.h',
+        'overscroll_glow.cc',
+        'overscroll_glow.h',
+        'overscroll_refresh.cc',
+        'overscroll_refresh.h',
+        'resources/crushed_sprite_resource.cc',
+        'resources/crushed_sprite_resource.h',
         'resources/resource_manager.cc',
         'resources/resource_manager.h',
         'resources/resource_manager_impl.cc',
         'resources/resource_manager_impl.h',
-        'resources/ui_resource_android.cc',
-        'resources/ui_resource_android.h',
-        'resources/ui_resource_client_android.h',
-        'resources/ui_resource_provider.cc',
         'resources/ui_resource_provider.h',
         'ui_android_export.h',
         'ui_android_jni_registrar.cc',
         'ui_android_jni_registrar.h',
-        'view_android.cc',
         'view_android.h',
         'window_android.cc',
         'window_android.h',
+        'window_android_compositor.cc',
         'window_android_compositor.h',
         'window_android_observer.h',
       ],
@@ -55,7 +64,7 @@
       },
       'includes': [ '../../build/jni_generator.gypi' ],
     },
-    { 
+    {
       'target_name': 'android_resource_type_java',
       'type': 'none',
       'variables': {
@@ -165,8 +174,10 @@
         '../../base/base.gyp:base',
         '../../base/base.gyp:test_support_base',
         '../../cc/cc.gyp:cc',
+        '../../cc/cc_tests.gyp:cc_test_support',
         '../../skia/skia.gyp:skia',
         '../../testing/android/native_test.gyp:native_test_native_code',
+        '../../testing/gmock.gyp:gmock',
         '../../testing/gtest.gyp:gtest',
         '../base/ui_base.gyp:ui_base',
         '../gfx/gfx.gyp:gfx',
@@ -174,6 +185,7 @@
         'ui_android',
       ],
       'sources': [
+        'overscroll_refresh_unittest.cc',
         'resources/resource_manager_impl_unittest.cc',
         'run_all_unittests.cc',
       ],
@@ -191,4 +203,25 @@
       'includes': [ '../../build/apk_test.gypi' ],
     },
   ],
+  'conditions': [
+    ['test_isolation_mode != "noop"',
+      {
+        'targets': [
+          {
+            'target_name': 'ui_android_unittests_apk_run',
+            'type': 'none',
+            'dependencies': [
+              'ui_android_unittests_apk',
+            ],
+            'includes': [
+              '../../build/isolate.gypi',
+            ],
+            'sources': [
+              'ui_android_unittests_apk.isolate',
+            ],
+          },
+        ]
+      }
+    ],
+  ]
 }

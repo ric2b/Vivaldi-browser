@@ -62,20 +62,20 @@
         'wifi/fake_wifi_service.h',
       ],
     },
-    #{
-    #  'target_name': 'wifi_test',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../base/base.gyp:base',
-    #    'onc_component',
-    #    'wifi_component',
-    #  ],
-    #  'include_dirs': [
-    #    '..',
-    #  ],
-    #  'sources': [
-    #    'wifi/wifi_test.cc',
-    #  ],
-    # },
+    {
+      'target_name': 'wifi_test',
+      'type': 'executable',
+      'dependencies': [
+        '../base/base.gyp:base',
+        'onc_component',
+        'wifi_component',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'sources': [
+        'wifi/wifi_test.cc',
+      ],
+    },
   ],
 }

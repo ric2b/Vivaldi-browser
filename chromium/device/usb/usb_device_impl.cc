@@ -4,6 +4,8 @@
 
 #include "device/usb/usb_device_impl.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
@@ -12,6 +14,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/usb/usb_context.h"
 #include "device/usb/usb_descriptors.h"
@@ -22,7 +25,7 @@
 #if defined(OS_CHROMEOS)
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/permission_broker_client.h"
-#include "dbus/file_descriptor.h"
+#include "dbus/file_descriptor.h"  // nogncheck
 #endif  // defined(OS_CHROMEOS)
 
 namespace device {
@@ -89,13 +92,68 @@ UsbUsageType GetUsageType(const libusb_endpoint_descriptor* descriptor) {
   }
 }
 
+void ConvertConfigDescriptor(const libusb_config_descriptor* platform_config,
+                             UsbConfigDescriptor* configuration) {
+  configuration->configuration_value = platform_config->bConfigurationValue;
+  configuration->self_powered = (platform_config->bmAttributes & 0x40) != 0;
+  configuration->remote_wakeup = (platform_config->bmAttributes & 0x20) != 0;
+  configuration->maximum_power = platform_config->MaxPower * 2;
+
+  for (size_t i = 0; i < platform_config->bNumInterfaces; ++i) {
+    const struct libusb_interface* platform_interface =
+        &platform_config->interface[i];
+    for (int j = 0; j < platform_interface->num_altsetting; ++j) {
+      const struct libusb_interface_descriptor* platform_alt_setting =
+          &platform_interface->altsetting[j];
+      UsbInterfaceDescriptor interface;
+
+      interface.interface_number = platform_alt_setting->bInterfaceNumber;
+      interface.alternate_setting = platform_alt_setting->bAlternateSetting;
+      interface.interface_class = platform_alt_setting->bInterfaceClass;
+      interface.interface_subclass = platform_alt_setting->bInterfaceSubClass;
+      interface.interface_protocol = platform_alt_setting->bInterfaceProtocol;
+
+      interface.endpoints.reserve(platform_alt_setting->bNumEndpoints);
+      for (size_t k = 0; k < platform_alt_setting->bNumEndpoints; ++k) {
+        const struct libusb_endpoint_descriptor* platform_endpoint =
+            &platform_alt_setting->endpoint[k];
+        UsbEndpointDescriptor endpoint;
+
+        endpoint.address = platform_endpoint->bEndpointAddress;
+        endpoint.direction = GetDirection(platform_endpoint);
+        endpoint.maximum_packet_size = platform_endpoint->wMaxPacketSize;
+        endpoint.synchronization_type =
+            GetSynchronizationType(platform_endpoint);
+        endpoint.transfer_type = GetTransferType(platform_endpoint);
+        endpoint.usage_type = GetUsageType(platform_endpoint);
+        endpoint.polling_interval = platform_endpoint->bInterval;
+        endpoint.extra_data = std::vector<uint8_t>(
+            platform_endpoint->extra,
+            platform_endpoint->extra + platform_endpoint->extra_length);
+
+        interface.endpoints.push_back(endpoint);
+      }
+
+      interface.extra_data = std::vector<uint8_t>(
+          platform_alt_setting->extra,
+          platform_alt_setting->extra + platform_alt_setting->extra_length);
+
+      configuration->interfaces.push_back(interface);
+    }
+  }
+
+  configuration->extra_data = std::vector<uint8_t>(
+      platform_config->extra,
+      platform_config->extra + platform_config->extra_length);
+}
+
 }  // namespace
 
 UsbDeviceImpl::UsbDeviceImpl(
     scoped_refptr<UsbContext> context,
     PlatformUsbDevice platform_device,
-    uint16 vendor_id,
-    uint16 product_id,
+    uint16_t vendor_id,
+    uint16_t product_id,
     scoped_refptr<base::SequencedTaskRunner> blocking_task_runner)
     : UsbDevice(vendor_id,
                 product_id,
@@ -108,7 +166,8 @@ UsbDeviceImpl::UsbDeviceImpl(
       blocking_task_runner_(blocking_task_runner) {
   CHECK(platform_device) << "platform_device cannot be NULL";
   libusb_ref_device(platform_device);
-  RefreshConfiguration();
+  ReadAllConfigurations();
+  RefreshActiveConfiguration();
 }
 
 UsbDeviceImpl::~UsbDeviceImpl() {
@@ -145,7 +204,7 @@ void UsbDeviceImpl::Open(const OpenCallback& callback) {
 #endif  // defined(OS_CHROMEOS)
 }
 
-bool UsbDeviceImpl::Close(scoped_refptr<UsbDeviceHandle> handle) {
+void UsbDeviceImpl::Close(scoped_refptr<UsbDeviceHandle> handle) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   for (HandlesVector::iterator it = handles_.begin(); it != handles_.end();
@@ -153,15 +212,14 @@ bool UsbDeviceImpl::Close(scoped_refptr<UsbDeviceHandle> handle) {
     if (it->get() == handle.get()) {
       (*it)->InternalClose();
       handles_.erase(it);
-      return true;
+      return;
     }
   }
-  return false;
 }
 
-const UsbConfigDescriptor* UsbDeviceImpl::GetConfiguration() {
+const UsbConfigDescriptor* UsbDeviceImpl::GetActiveConfiguration() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return configuration_.get();
+  return active_configuration_;
 }
 
 void UsbDeviceImpl::OnDisconnect() {
@@ -177,7 +235,34 @@ void UsbDeviceImpl::OnDisconnect() {
   }
 }
 
-void UsbDeviceImpl::RefreshConfiguration() {
+void UsbDeviceImpl::ReadAllConfigurations() {
+  libusb_device_descriptor device_descriptor;
+  int rv = libusb_get_device_descriptor(platform_device_, &device_descriptor);
+  if (rv == LIBUSB_SUCCESS) {
+    uint8_t num_configurations = device_descriptor.bNumConfigurations;
+    configurations_.reserve(num_configurations);
+    for (uint8_t i = 0; i < num_configurations; ++i) {
+      libusb_config_descriptor* platform_config;
+      rv = libusb_get_config_descriptor(platform_device_, i, &platform_config);
+      if (rv != LIBUSB_SUCCESS) {
+        USB_LOG(EVENT) << "Failed to get config descriptor: "
+                       << ConvertPlatformUsbErrorToString(rv);
+        continue;
+      }
+
+      UsbConfigDescriptor config_descriptor;
+      ConvertConfigDescriptor(platform_config, &config_descriptor);
+      configurations_.push_back(config_descriptor);
+      libusb_free_config_descriptor(platform_config);
+    }
+  } else {
+    USB_LOG(EVENT) << "Failed to get device descriptor: "
+                   << ConvertPlatformUsbErrorToString(rv);
+  }
+}
+
+void UsbDeviceImpl::RefreshActiveConfiguration() {
+  active_configuration_ = nullptr;
   libusb_config_descriptor* platform_config;
   int rv =
       libusb_get_active_config_descriptor(platform_device_, &platform_config);
@@ -187,57 +272,12 @@ void UsbDeviceImpl::RefreshConfiguration() {
     return;
   }
 
-  configuration_.reset(new UsbConfigDescriptor());
-  configuration_->configuration_value = platform_config->bConfigurationValue;
-  configuration_->self_powered = (platform_config->bmAttributes & 0x40) != 0;
-  configuration_->remote_wakeup = (platform_config->bmAttributes & 0x20) != 0;
-  configuration_->maximum_power = platform_config->MaxPower * 2;
-
-  for (size_t i = 0; i < platform_config->bNumInterfaces; ++i) {
-    const struct libusb_interface* platform_interface =
-        &platform_config->interface[i];
-    for (int j = 0; j < platform_interface->num_altsetting; ++j) {
-      const struct libusb_interface_descriptor* platform_alt_setting =
-          &platform_interface->altsetting[j];
-      UsbInterfaceDescriptor interface;
-
-      interface.interface_number = platform_alt_setting->bInterfaceNumber;
-      interface.alternate_setting = platform_alt_setting->bAlternateSetting;
-      interface.interface_class = platform_alt_setting->bInterfaceClass;
-      interface.interface_subclass = platform_alt_setting->bInterfaceSubClass;
-      interface.interface_protocol = platform_alt_setting->bInterfaceProtocol;
-
-      for (size_t k = 0; k < platform_alt_setting->bNumEndpoints; ++k) {
-        const struct libusb_endpoint_descriptor* platform_endpoint =
-            &platform_alt_setting->endpoint[k];
-        UsbEndpointDescriptor endpoint;
-
-        endpoint.address = platform_endpoint->bEndpointAddress;
-        endpoint.direction = GetDirection(platform_endpoint);
-        endpoint.maximum_packet_size = platform_endpoint->wMaxPacketSize;
-        endpoint.synchronization_type =
-            GetSynchronizationType(platform_endpoint);
-        endpoint.transfer_type = GetTransferType(platform_endpoint);
-        endpoint.usage_type = GetUsageType(platform_endpoint);
-        endpoint.polling_interval = platform_endpoint->bInterval;
-        endpoint.extra_data = std::vector<uint8_t>(
-            platform_endpoint->extra,
-            platform_endpoint->extra + platform_endpoint->extra_length);
-
-        interface.endpoints.push_back(endpoint);
-      }
-
-      interface.extra_data = std::vector<uint8_t>(
-          platform_alt_setting->extra,
-          platform_alt_setting->extra + platform_alt_setting->extra_length);
-
-      configuration_->interfaces.push_back(interface);
+  for (const auto& config : configurations_) {
+    if (config.configuration_value == platform_config->bConfigurationValue) {
+      active_configuration_ = &config;
+      break;
     }
   }
-
-  configuration_->extra_data = std::vector<uint8_t>(
-      platform_config->extra,
-      platform_config->extra + platform_config->extra_length);
 
   libusb_free_config_descriptor(platform_config);
 }

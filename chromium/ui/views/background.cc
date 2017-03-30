@@ -5,12 +5,16 @@
 #include "ui/views/background.h"
 
 #include "base/logging.h"
-#include "skia/ext/skia_utils_win.h"
-#include "third_party/skia/include/core/SkPaint.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/views/painter.h"
 #include "ui/views/view.h"
+
+#if defined(OS_WIN)
+#include "skia/ext/skia_utils_win.h"
+#endif
 
 namespace views {
 
@@ -85,18 +89,18 @@ HBRUSH Background::GetNativeControlBrush() const {
 }
 #endif
 
-//static
+// static
 Background* Background::CreateSolidBackground(SkColor color) {
   return new SolidBackground(color);
 }
 
-//static
+// static
 Background* Background::CreateStandardPanelBackground() {
   // TODO(beng): Should be in NativeTheme.
   return CreateSolidBackground(SK_ColorWHITE);
 }
 
-//static
+// static
 Background* Background::CreateVerticalGradientBackground(SkColor color1,
                                                          SkColor color2) {
   Background* background = CreateBackgroundPainter(
@@ -107,7 +111,7 @@ Background* Background::CreateVerticalGradientBackground(SkColor color1,
   return background;
 }
 
-//static
+// static
 Background* Background::CreateVerticalMultiColorGradientBackground(
     SkColor* colors,
     SkScalar* pos,
@@ -120,7 +124,7 @@ Background* Background::CreateVerticalMultiColorGradientBackground(
   return background;
 }
 
-//static
+// static
 Background* Background::CreateBackgroundPainter(bool owns_painter,
                                                 Painter* painter) {
   return new BackgroundPainter(owns_painter, painter);

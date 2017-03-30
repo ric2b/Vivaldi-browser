@@ -12,6 +12,7 @@
 #include "ash/system/date/date_view.h"
 #include "ash/system/date/tray_date.h"
 #include "ash/test/display_manager_test_api.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -34,8 +35,11 @@ namespace chromeos {
 
 namespace {
 
-const char* kUser1 = "user1@test.com";
-const char* kUser2 = "user2@test.com";
+// Because policy is not needed this test it is better to use e-mails that
+// are definitely not enterprise. This lets us to avoid faking of policy fetch
+// procedure.
+const char kUser1[] = "user1@gmail.com";
+const char kUser2[] = "user2@gmail.com";
 
 base::HourClockType GetHourType() {
   const ash::TrayDate* tray_date = ash::Shell::GetInstance()
@@ -64,11 +68,7 @@ class DisplayNotificationsTest : public InProcessBrowserTest {
   void SetUp() override { InProcessBrowserTest::SetUp(); }
 
   void UpdateDisplay(const std::string& display_specs) {
-    ash::DisplayManager* display_manager =
-        ash::Shell::GetInstance()->display_manager();
-    ash::test::DisplayManagerTestApi display_manager_test_api(display_manager);
-    display_manager_test_api.UpdateDisplay(display_specs);
-    display_manager->RunPendingTasksForTest();
+    ash::test::DisplayManagerTestApi().UpdateDisplay(display_specs);
   }
 
   message_center::NotificationList::Notifications GetVisibleNotifications()
@@ -80,16 +80,21 @@ class DisplayNotificationsTest : public InProcessBrowserTest {
 class SystemTrayDelegateChromeOSTest : public LoginManagerTest {
  protected:
   SystemTrayDelegateChromeOSTest()
-      : LoginManagerTest(false /* should_launch_browser */) {}
+      : LoginManagerTest(false /* should_launch_browser */),
+        account_id1_(AccountId::FromUserEmail(kUser1)),
+        account_id2_(AccountId::FromUserEmail(kUser2)) {}
 
   ~SystemTrayDelegateChromeOSTest() override {}
 
-  void SetupUserProfile(std::string user_name, bool use_24_hour_clock) {
+  void SetupUserProfile(const AccountId& account_id, bool use_24_hour_clock) {
     const user_manager::User* user =
-        user_manager::UserManager::Get()->FindUser(user_name);
+        user_manager::UserManager::Get()->FindUser(account_id);
     Profile* profile = ProfileHelper::Get()->GetProfileByUser(user);
     profile->GetPrefs()->SetBoolean(prefs::kUse24HourClock, use_24_hour_clock);
   }
+
+  const AccountId account_id1_;
+  const AccountId account_id2_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SystemTrayDelegateChromeOSTest);
@@ -97,25 +102,25 @@ class SystemTrayDelegateChromeOSTest : public LoginManagerTest {
 
 IN_PROC_BROWSER_TEST_F(SystemTrayDelegateChromeOSTest,
                        PRE_TestMultiProfile24HourClock) {
-  RegisterUser(kUser1);
-  RegisterUser(kUser2);
+  RegisterUser(account_id1_.GetUserEmail());
+  RegisterUser(account_id2_.GetUserEmail());
   StartupUtils::MarkOobeCompleted();
 }
 
 // Test that clock type is taken from user profile for current active user.
 IN_PROC_BROWSER_TEST_F(SystemTrayDelegateChromeOSTest,
                        TestMultiProfile24HourClock) {
-  LoginUser(kUser1);
-  SetupUserProfile(kUser1, true /* Use_24_hour_clock. */);
+  LoginUser(account_id1_.GetUserEmail());
+  SetupUserProfile(account_id1_, true /* Use_24_hour_clock. */);
   CreateDefaultView();
   EXPECT_EQ(base::k24HourClock, GetHourType());
   UserAddingScreen::Get()->Start();
   content::RunAllPendingInMessageLoop();
-  AddUser(kUser2);
-  SetupUserProfile(kUser2, false /* Use_24_hour_clock. */);
+  AddUser(account_id2_.GetUserEmail());
+  SetupUserProfile(account_id2_, false /* Use_24_hour_clock. */);
   CreateDefaultView();
   EXPECT_EQ(base::k12HourClock, GetHourType());
-  user_manager::UserManager::Get()->SwitchActiveUser(kUser1);
+  user_manager::UserManager::Get()->SwitchActiveUser(account_id1_);
   CreateDefaultView();
   EXPECT_EQ(base::k24HourClock, GetHourType());
 }

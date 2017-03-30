@@ -4,13 +4,14 @@
 
 #include "chrome/browser/ui/search_engines/edit_search_engine_controller.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/user_metrics.h"
 #include "url/gurl.h"
 
@@ -126,9 +127,9 @@ void EditSearchEngineController::CleanUpCancelledAdd() {
 std::string EditSearchEngineController::GetFixedUpURL(
     const std::string& url_input) const {
   std::string url;
-  base::TrimWhitespace(TemplateURLRef::DisplayURLToURLRef(
-                           base::UTF8ToUTF16(url_input)),
-                       base::TRIM_ALL, &url);
+  base::TrimWhitespaceASCII(
+      TemplateURLRef::DisplayURLToURLRef(base::UTF8ToUTF16(url_input)),
+      base::TRIM_ALL, &url);
   if (url.empty())
     return url;
 
@@ -142,7 +143,7 @@ std::string EditSearchEngineController::GetFixedUpURL(
       TemplateURLRef::SearchTermsArgs(base::ASCIIToUTF16("x")),
       TemplateURLServiceFactory::GetForProfile(profile_)->search_terms_data()));
   url::Parsed parts;
-  std::string scheme(url_fixer::SegmentURL(expanded_url, &parts));
+  std::string scheme(url_formatter::SegmentURL(expanded_url, &parts));
   if (!parts.scheme.is_valid())
     url.insert(0, scheme + "://");
 

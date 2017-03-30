@@ -5,6 +5,9 @@
 #ifndef NET_QUIC_TOOLS_QUIC_SIMPLE_PER_CONNECTION_PACKET_WRITER_H_
 #define NET_QUIC_TOOLS_QUIC_SIMPLE_PER_CONNECTION_PACKET_WRITER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_packet_writer.h"
@@ -22,11 +25,11 @@ class QuicSimplePerConnectionPacketWriter : public QuicPacketWriter {
  public:
   // Does not take ownership of |shared_writer| or |connection|.
   QuicSimplePerConnectionPacketWriter(
-      QuicSimpleServerPacketWriter* shared_writer,
-      QuicConnection* connection);
+      QuicSimpleServerPacketWriter* shared_writer);
   ~QuicSimplePerConnectionPacketWriter() override;
 
   QuicPacketWriter* shared_writer() const;
+  void set_connection(QuicConnection* connection) { connection_ = connection; }
   QuicConnection* connection() const { return connection_; }
 
   // Default implementation of the QuicPacketWriter interface: Passes everything
@@ -38,12 +41,13 @@ class QuicSimplePerConnectionPacketWriter : public QuicPacketWriter {
   bool IsWriteBlockedDataBuffered() const override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
+  QuicByteCount GetMaxPacketSize(const IPEndPoint& peer_address) const override;
 
  private:
   void OnWriteComplete(WriteResult result);
 
   QuicSimpleServerPacketWriter* shared_writer_;  // Not owned.
-  QuicConnection* connection_;  // Not owned.
+  QuicConnection* connection_;                   // Not owned.
 
   base::WeakPtrFactory<QuicSimplePerConnectionPacketWriter> weak_factory_;
 

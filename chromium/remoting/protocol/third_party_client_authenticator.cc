@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/third_party_client_authenticator.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -21,7 +23,7 @@ namespace protocol {
 ThirdPartyClientAuthenticator::ThirdPartyClientAuthenticator(
     scoped_ptr<TokenFetcher> token_fetcher)
     : ThirdPartyAuthenticatorBase(WAITING_MESSAGE),
-      token_fetcher_(token_fetcher.Pass()) {
+      token_fetcher_(std::move(token_fetcher)) {
 }
 
 ThirdPartyClientAuthenticator::~ThirdPartyClientAuthenticator() {

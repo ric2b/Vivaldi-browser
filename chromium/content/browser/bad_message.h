@@ -19,9 +19,7 @@ namespace bad_message {
 //
 // NOTE: Do not remove or reorder elements in this list. Add new entries at the
 // end. Items may be renamed but do not change the values. We rely on the enum
-// values in histograms. Also update histograms.xml with any new values by
-// running:
-//    python tools/metrics/histograms/update_bad_message_reasons.py
+// values in histograms.
 enum BadMessageReason {
   NC_IN_PAGE_NAVIGATION = 0,
   RFH_CAN_COMMIT_URL_BLOCKED = 1,
@@ -32,7 +30,7 @@ enum BadMessageReason {
   RVH_CAN_ACCESS_FILES_OF_PAGE_STATE = 6,
   RVH_FILE_CHOOSER_PATH = 7,
   RWH_SYNTHETIC_GESTURE = 8,
-  RWH_FOCUS = 9,
+  RWH_FOCUS = 9,  // obsolete; no longer used
   RWH_BLUR = 10,
   RWH_SHARED_BITMAP = 11,
   RWH_BAD_ACK_MESSAGE = 12,
@@ -101,8 +99,8 @@ enum BadMessageReason {
   FAMF_APPEND_SHARED_MEMORY_TO_STREAM = 75,
   IDBDH_CAN_READ_FILE = 76,
   IDBDH_GET_OR_TERMINATE = 77,
-  RMF_SET_COOKIE_BAD_ORIGIN = 78,
-  RMF_GET_COOKIES_BAD_ORIGIN = 79,
+  RFMF_SET_COOKIE_BAD_ORIGIN = 78,
+  RFMF_GET_COOKIES_BAD_ORIGIN = 79,
   SWDH_GET_REGISTRATIONS_NO_HOST = 80,
   SWDH_GET_REGISTRATIONS_INVALID_ORIGIN = 81,
   ARH_UNAUTHORIZED_URL = 82,
@@ -114,10 +112,26 @@ enum BadMessageReason {
   SWDH_UPDATE_CANNOT = 88,
   SWDH_UNREGISTER_BAD_REGISTRATION_ID = 89,
   BDH_INVALID_WRITE_VALUE_LENGTH = 90,
+  WC_MEMORY_CACHE_RESOURCE_BAD_SECURITY_INFO = 91,
+  WC_RENDERER_DID_NAVIGATE_BAD_SECURITY_INFO = 92,
+  OBSOLETE_BDH_DUPLICATE_REQUEST_DEVICE_ID = 93,
+  CSDH_INVALID_ORIGIN = 94,
+  RDH_ILLEGAL_ORIGIN = 95,
+  RDH_UNAUTHORIZED_HEADER_REQUEST = 96,
+  RDH_INVALID_URL = 97,
+  BDH_CHARACTERISTIC_ALREADY_SUBSCRIBED = 98,
+  RFH_OWNER_PROPERTY = 99,
+  BDH_EMPTY_OR_INVALID_FILTERS = 100,
+  WC_CONTENT_WITH_CERT_ERRORS_BAD_SECURITY_INFO = 101,
+  RFMF_RENDERER_FAKED_ITS_OWN_DEATH = 102,
+  DWNLD_INVALID_SAVABLE_RESOURCE_LINKS_RESPONSE = 103,
+  DWNLD_INVALID_SERIALIZE_AS_MHTML_RESPONSE = 104,
+  BDH_DEVICE_NOT_ALLOWED_FOR_ORIGIN = 105,
 
   // Please add new elements here. The naming convention is abbreviated class
   // name (e.g. RenderFrameHost becomes RFH) plus a unique description of the
-  // reason.
+  // reason. After making changes, you MUST update histograms.xml by running:
+  // "python tools/metrics/histograms/update_bad_message_reasons.py"
   BAD_MESSAGE_MAX
 };
 

@@ -5,15 +5,14 @@
 package org.chromium.chrome.browser.signin;
 
 import android.accounts.Account;
-import android.app.Activity;
 import android.content.Context;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
-import org.chromium.base.CalledByNative;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.signin.ChromeSigninController;
@@ -25,8 +24,6 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import javax.annotation.Nullable;
-
 /**
  * Java instance for the native OAuth2TokenService.
  * <p/>
@@ -34,8 +31,8 @@ import javax.annotation.Nullable;
  * AccountManagerHelper and forwards callbacks to native code.
  * <p/>
  */
-public final class OAuth2TokenService {
-
+public final class OAuth2TokenService
+        implements AccountTrackerService.OnSystemAccountsSeededListener {
     private static final String TAG = "OAuth2TokenService";
 
     @VisibleForTesting
@@ -53,12 +50,16 @@ public final class OAuth2TokenService {
 
     private static final String OAUTH2_SCOPE_PREFIX = "oauth2:";
 
+    private Context mPendingValidationContext = null;
+    private boolean mPendingValidationForceNotifications = false;
+
     private final long mNativeOAuth2TokenServiceDelegateAndroid;
     private final ObserverList<OAuth2TokenServiceObserver> mObservers;
 
-    private OAuth2TokenService(long nativeOAuth2Service) {
+    private OAuth2TokenService(Context context, long nativeOAuth2Service) {
         mNativeOAuth2TokenServiceDelegateAndroid = nativeOAuth2Service;
         mObservers = new ObserverList<OAuth2TokenServiceObserver>();
+        AccountTrackerService.get(context).addSystemAccountsSeededListener(this);
     }
 
     public static OAuth2TokenService getForProfile(Profile profile) {
@@ -67,16 +68,18 @@ public final class OAuth2TokenService {
     }
 
     @CalledByNative
-    private static OAuth2TokenService create(long nativeOAuth2Service) {
+    private static OAuth2TokenService create(Context context, long nativeOAuth2Service) {
         ThreadUtils.assertOnUiThread();
-        return new OAuth2TokenService(nativeOAuth2Service);
+        return new OAuth2TokenService(context, nativeOAuth2Service);
     }
 
+    @VisibleForTesting
     public void addObserver(OAuth2TokenServiceObserver observer) {
         ThreadUtils.assertOnUiThread();
         mObservers.addObserver(observer);
     }
 
+    @VisibleForTesting
     public void removeObserver(OAuth2TokenServiceObserver observer) {
         ThreadUtils.assertOnUiThread();
         mObservers.removeObserver(observer);
@@ -98,19 +101,19 @@ public final class OAuth2TokenService {
     }
 
     /**
-     * Called by native to list the activite accounts in the OS.
+     * Called by native to list the activite account names in the OS.
      */
     @VisibleForTesting
     @CalledByNative
-    public static String[] getSystemAccounts(Context context) {
+    public static String[] getSystemAccountNames(Context context) {
         AccountManagerHelper accountManagerHelper = AccountManagerHelper.get(context);
         java.util.List<String> accountNames = accountManagerHelper.getGoogleAccountNames();
         return accountNames.toArray(new String[accountNames.size()]);
     }
 
     /**
-     * Called by native to list the accounts with OAuth2 refresh tokens.
-     * This can differ from getSystemAccounts as the user add/remove accounts
+     * Called by native to list the accounts Id with OAuth2 refresh tokens.
+     * This can differ from getSystemAccountNames as the user add/remove accounts
      * from the OS. validateAccounts should be called to keep these two
      * in sync.
      */
@@ -142,11 +145,16 @@ public final class OAuth2TokenService {
         String oauth2Scope = OAUTH2_SCOPE_PREFIX + scope;
 
         AccountManagerHelper accountManagerHelper = AccountManagerHelper.get(context);
-        accountManagerHelper.getAuthTokenFromForeground(
-                null, account, oauth2Scope, new AccountManagerHelper.GetAuthTokenCallback() {
+        accountManagerHelper.getAuthToken(
+                account, oauth2Scope, new AccountManagerHelper.GetAuthTokenCallback() {
                     @Override
-                    public void tokenAvailable(String token, boolean isTransientError) {
-                        nativeOAuth2TokenFetched(token, isTransientError, nativeCallback);
+                    public void tokenAvailable(String token) {
+                        nativeOAuth2TokenFetched(token, false, nativeCallback);
+                    }
+
+                    @Override
+                    public void tokenUnavailable(boolean isTransientError) {
+                        nativeOAuth2TokenFetched(null, isTransientError, nativeCallback);
                     }
                 });
     }
@@ -154,17 +162,14 @@ public final class OAuth2TokenService {
     /**
      * Call this method to retrieve an OAuth2 access token for the given account and scope.
      *
-     * @param activity the current activity. May be null.
      * @param account the account to get the access token for.
      * @param scope The scope to get an auth token for (without Android-style 'oauth2:' prefix).
      * @param callback called on successful and unsuccessful fetching of auth token.
      */
-    public static void getOAuth2AccessToken(
-            Context context, @Nullable Activity activity, Account account, String scope,
+    public static void getOAuth2AccessToken(Context context, Account account, String scope,
             AccountManagerHelper.GetAuthTokenCallback callback) {
         String oauth2Scope = OAUTH2_SCOPE_PREFIX + scope;
-        AccountManagerHelper.get(context).getAuthTokenFromForeground(
-                activity, account, oauth2Scope, callback);
+        AccountManagerHelper.get(context).getAuthToken(account, oauth2Scope, callback);
     }
 
     /**
@@ -173,7 +178,6 @@ public final class OAuth2TokenService {
      *
      * Given that this is a blocking method call, this should never be called from the UI thread.
      *
-     * @param activity the current activity. May be null.
      * @param account the account to get the access token for.
      * @param scope The scope to get an auth token for (without Android-style 'oauth2:' prefix).
      * @param timeout the timeout.
@@ -181,17 +185,21 @@ public final class OAuth2TokenService {
      */
     @VisibleForTesting
     public static String getOAuth2AccessTokenWithTimeout(
-            Context context, @Nullable Activity activity, Account account, String scope,
-            long timeout, TimeUnit unit) {
+            Context context, Account account, String scope, long timeout, TimeUnit unit) {
         assert !ThreadUtils.runningOnUiThread();
         final AtomicReference<String> result = new AtomicReference<String>();
         final Semaphore semaphore = new Semaphore(0);
         getOAuth2AccessToken(
-                context, activity, account, scope,
-                new AccountManagerHelper.GetAuthTokenCallback() {
+                context, account, scope, new AccountManagerHelper.GetAuthTokenCallback() {
                     @Override
-                    public void tokenAvailable(String token, boolean isTransientError) {
+                    public void tokenAvailable(String token) {
                         result.set(token);
+                        semaphore.release();
+                    }
+
+                    @Override
+                    public void tokenUnavailable(boolean isTransientError) {
+                        result.set(null);
                         semaphore.release();
                     }
                 });
@@ -227,13 +235,66 @@ public final class OAuth2TokenService {
         }
     }
 
+    /**
+    * Continue pending accounts validation after system accounts have been seeded into
+    * AccountTrackerService.
+    */
+    @Override
+    public void onSystemAccountsSeedingComplete() {
+        if (mPendingValidationContext != null) {
+            validateAccountsWithSignedInAccountName(
+                    mPendingValidationContext, mPendingValidationForceNotifications);
+            mPendingValidationContext = null;
+            mPendingValidationForceNotifications = false;
+        }
+    }
+
+    /**
+    * Clear pending accounts validation when system accounts in AccountTrackerService were
+    * refreshed.
+    */
+    @Override
+    public void onSystemAccountsChanged() {
+        mPendingValidationContext = null;
+        mPendingValidationForceNotifications = false;
+    }
+
     @CalledByNative
     public void validateAccounts(Context context, boolean forceNotifications) {
         ThreadUtils.assertOnUiThread();
+        if (!AccountTrackerService.get(context).checkAndSeedSystemAccounts()) {
+            mPendingValidationContext = context;
+            mPendingValidationForceNotifications = forceNotifications;
+            return;
+        }
+
+        validateAccountsWithSignedInAccountName(context, forceNotifications);
+    }
+
+    private void validateAccountsWithSignedInAccountName(
+            Context context, boolean forceNotifications) {
         String currentlySignedInAccount =
                 ChromeSigninController.get(context).getSignedInAccountName();
+        if (currentlySignedInAccount != null
+                && isSignedInAccountChanged(context, currentlySignedInAccount)) {
+            // Set currentlySignedInAccount to null for validation if signed-in account was changed
+            // (renamed or removed from the device), this will cause all credentials in token
+            // service be revoked.
+            // Could only get here during Chrome cold startup.
+            // After chrome started, SigninHelper and AccountsChangedReceiver will handle account
+            // change (re-signin or sign out signed-in account).
+            currentlySignedInAccount = null;
+        }
         nativeValidateAccounts(mNativeOAuth2TokenServiceDelegateAndroid, currentlySignedInAccount,
                 forceNotifications);
+    }
+
+    private boolean isSignedInAccountChanged(Context context, String signedInAccountName) {
+        String[] accountNames = getSystemAccountNames(context);
+        for (String accountName : accountNames) {
+            if (accountName.equals(signedInAccountName)) return false;
+        }
+        return true;
     }
 
     /**
@@ -241,6 +302,7 @@ public final class OAuth2TokenService {
      * OAuth2TokenService that a refresh token is now available. This may cause observers to retry
      * operations that require authentication.
      */
+    @VisibleForTesting
     public void fireRefreshTokenAvailable(Account account) {
         ThreadUtils.assertOnUiThread();
         assert account != null;
@@ -249,7 +311,7 @@ public final class OAuth2TokenService {
     }
 
     @CalledByNative
-    public void notifyRefreshTokenAvailable(String accountName) {
+    private void notifyRefreshTokenAvailable(String accountName) {
         assert accountName != null;
         Account account = AccountManagerHelper.createAccountFromName(accountName);
         for (OAuth2TokenServiceObserver observer : mObservers) {
@@ -261,6 +323,7 @@ public final class OAuth2TokenService {
      * Triggers a notification to all observers of the native and Java instance of the
      * OAuth2TokenService that a refresh token is now revoked.
      */
+    @VisibleForTesting
     public void fireRefreshTokenRevoked(Account account) {
         ThreadUtils.assertOnUiThread();
         assert account != null;
@@ -281,6 +344,7 @@ public final class OAuth2TokenService {
      * Triggers a notification to all observers of the native and Java instance of the
      * OAuth2TokenService that all refresh tokens now have been loaded.
      */
+    @VisibleForTesting
     public void fireRefreshTokensLoaded() {
         ThreadUtils.assertOnUiThread();
         nativeFireRefreshTokensLoadedFromJava(mNativeOAuth2TokenServiceDelegateAndroid);

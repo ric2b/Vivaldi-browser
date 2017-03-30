@@ -124,7 +124,9 @@
 
 #include "components/metrics/metrics_service.h"
 
+#include <stddef.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -147,6 +149,7 @@
 #include "base/time/time.h"
 #include "base/tracked_objects.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_manager.h"
 #include "components/metrics/metrics_log_uploader.h"
@@ -242,15 +245,6 @@ bool ShouldUploadLog() {
 
 }  // namespace
 
-
-SyntheticTrialGroup::SyntheticTrialGroup(uint32 trial, uint32 group) {
-  id.name = trial;
-  id.group = group;
-}
-
-SyntheticTrialGroup::~SyntheticTrialGroup() {
-}
-
 // static
 MetricsService::ShutdownCleanliness MetricsService::clean_shutdown_status_ =
     MetricsService::CLEANLY_SHUTDOWN;
@@ -292,7 +286,7 @@ MetricsService::MetricsService(MetricsStateManager* state_manager,
       client_(client),
       local_state_(local_state),
       clean_exit_beacon_(client->GetRegistryBackupKey(), local_state),
-      recording_active_(false),
+      recording_state_(UNSET),
       reporting_active_(false),
       test_mode_active_(false),
       state_(INITIALIZED),
@@ -307,7 +301,7 @@ MetricsService::MetricsService(MetricsStateManager* state_manager,
   DCHECK(local_state_);
 
   // Set the install date if this is our first run.
-  int64 install_date = local_state_->GetInt64(prefs::kInstallDate);
+  int64_t install_date = local_state_->GetInt64(prefs::kInstallDate);
   if (install_date == 0)
     local_state_->SetInt64(prefs::kInstallDate, base::Time::Now().ToTimeT());
 }
@@ -337,13 +331,6 @@ void MetricsService::Start() {
   EnableReporting();
 }
 
-bool MetricsService::StartIfMetricsReportingEnabled() {
-  const bool enabled = state_manager_->IsMetricsReportingEnabled();
-  if (enabled)
-    Start();
-  return enabled;
-}
-
 void MetricsService::StartRecordingForTests() {
   test_mode_active_ = true;
   EnableRecording();
@@ -371,11 +358,11 @@ std::string MetricsService::GetClientId() {
   return state_manager_->client_id();
 }
 
-int64 MetricsService::GetInstallDate() {
+int64_t MetricsService::GetInstallDate() {
   return local_state_->GetInt64(prefs::kInstallDate);
 }
 
-int64 MetricsService::GetMetricsReportingEnabledDate() {
+int64_t MetricsService::GetMetricsReportingEnabledDate() {
   return local_state_->GetInt64(prefs::kMetricsReportingEnabledTimestamp);
 }
 
@@ -393,9 +380,9 @@ MetricsService::CreateEntropyProvider() {
 void MetricsService::EnableRecording() {
   DCHECK(IsSingleThreaded());
 
-  if (recording_active_)
+  if (recording_state_ == ACTIVE)
     return;
-  recording_active_ = true;
+  recording_state_ = ACTIVE;
 
   state_manager_->ForceClientIdCreation();
   client_->SetMetricsClientId(state_manager_->client_id());
@@ -414,9 +401,9 @@ void MetricsService::EnableRecording() {
 void MetricsService::DisableRecording() {
   DCHECK(IsSingleThreaded());
 
-  if (!recording_active_)
+  if (recording_state_ == INACTIVE)
     return;
-  recording_active_ = false;
+  recording_state_ = INACTIVE;
 
   client_->OnRecordingDisabled();
 
@@ -430,7 +417,7 @@ void MetricsService::DisableRecording() {
 
 bool MetricsService::recording_active() const {
   DCHECK(IsSingleThreaded());
-  return recording_active_;
+  return recording_state_ == ACTIVE;
 }
 
 bool MetricsService::reporting_active() const {
@@ -471,7 +458,7 @@ void MetricsService::HandleIdleSinceLastTransmission(bool in_idle) {
 }
 
 void MetricsService::OnApplicationNotIdle() {
-  if (recording_active_)
+  if (recording_state_ == ACTIVE)
     HandleIdleSinceLastTransmission(false);
 }
 
@@ -563,7 +550,7 @@ void MetricsService::PushExternalLog(const std::string& log) {
 // Initialization methods
 
 void MetricsService::InitializeMetricsState() {
-  const int64 buildtime = MetricsLog::GetBuildTime();
+  const int64_t buildtime = MetricsLog::GetBuildTime();
   const std::string version = client_->GetVersionString();
   bool version_changed = false;
   if (local_state_->GetInt64(prefs::kStabilityStatsBuildTime) != buildtime ||
@@ -654,7 +641,7 @@ void MetricsService::OnUserAction(const std::string& action) {
   HandleIdleSinceLastTransmission(false);
 }
 
-void MetricsService::FinishedGatheringInitialMetrics() {
+void MetricsService::FinishedInitTask() {
   DCHECK_EQ(INIT_TASK_SCHEDULED, state_);
   state_ = INIT_TASK_DONE;
 
@@ -681,9 +668,9 @@ void MetricsService::GetUptimes(PrefService* pref,
   *uptime = now - first_updated_time_;
   last_updated_time_ = now;
 
-  const int64 incremental_time_secs = incremental_uptime->InSeconds();
+  const int64_t incremental_time_secs = incremental_uptime->InSeconds();
   if (incremental_time_secs > 0) {
-    int64 metrics_uptime = pref->GetInt64(prefs::kUninstallMetricsUptimeSec);
+    int64_t metrics_uptime = pref->GetInt64(prefs::kUninstallMetricsUptimeSec);
     metrics_uptime += incremental_time_secs;
     pref->SetInt64(prefs::kUninstallMetricsUptimeSec, metrics_uptime);
   }
@@ -728,15 +715,15 @@ void MetricsService::OpenNewLog() {
     state_ = INIT_TASK_SCHEDULED;
 
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&MetricsService::StartGatheringMetrics,
+        FROM_HERE, base::Bind(&MetricsService::StartInitTask,
                               self_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromSeconds(kInitializationDelaySeconds));
   }
 }
 
-void MetricsService::StartGatheringMetrics() {
-  client_->StartGatheringMetrics(
-      base::Bind(&MetricsService::FinishedGatheringInitialMetrics,
+void MetricsService::StartInitTask() {
+  client_->InitializeSystemProfileMetrics(
+      base::Bind(&MetricsService::FinishedInitTask,
                  self_ptr_factory_.GetWeakPtr()));
 }
 
@@ -821,7 +808,7 @@ void MetricsService::StartScheduledUpload() {
     SendNextLog();
   } else {
     // There are no logs left to send, so start creating a new one.
-    client_->CollectFinalMetrics(
+    client_->CollectFinalMetricsForLog(
         base::Bind(&MetricsService::OnFinalLogInfoCollectionDone,
                    self_ptr_factory_.GetWeakPtr()));
   }
@@ -894,7 +881,7 @@ bool MetricsService::PrepareInitialStabilityLog() {
     return false;
 
   log_manager_.PauseCurrentLog();
-  log_manager_.BeginLoggingWithLog(initial_stability_log.Pass());
+  log_manager_.BeginLoggingWithLog(std::move(initial_stability_log));
 
   // Note: Some stability providers may record stability stats via histograms,
   //       so this call has to be after BeginLoggingWithLog().
@@ -926,7 +913,7 @@ void MetricsService::PrepareInitialMetricsLog() {
   // Histograms only get written to the current log, so make the new log current
   // before writing them.
   log_manager_.PauseCurrentLog();
-  log_manager_.BeginLoggingWithLog(initial_metrics_log_.Pass());
+  log_manager_.BeginLoggingWithLog(std::move(initial_metrics_log_));
 
   // Note: Some stability providers may record stability stats via histograms,
   //       so this call has to be after BeginLoggingWithLog().
@@ -968,13 +955,7 @@ void MetricsService::SendStagedLog() {
   const std::string hash =
       base::HexEncode(log_manager_.staged_log_hash().data(),
                       log_manager_.staged_log_hash().size());
-  bool success = log_uploader_->UploadLog(log_manager_.staged_log(), hash);
-  UMA_HISTOGRAM_BOOLEAN("UMA.UploadCreation", success);
-  if (!success) {
-    // Skip this upload and hope things work out next time.
-    SkipAndDiscardUpload();
-    return;
-  }
+  log_uploader_->UploadLog(log_manager_.staged_log(), hash);
 
   HandleIdleSinceLastTransmission(true);
 }
@@ -1027,7 +1008,7 @@ void MetricsService::IncrementPrefValue(const char* path) {
 }
 
 void MetricsService::IncrementLongPrefsValue(const char* path) {
-  int64 value = local_state_->GetInt64(path);
+  int64_t value = local_state_->GetInt64(path);
   local_state_->SetInt64(path, value + 1);
 }
 
@@ -1038,19 +1019,19 @@ bool MetricsService::UmaMetricsProperlyShutdown() {
 }
 
 void MetricsService::AddSyntheticTrialObserver(
-    SyntheticTrialObserver* observer) {
+    variations::SyntheticTrialObserver* observer) {
   synthetic_trial_observer_list_.AddObserver(observer);
   if (!synthetic_trial_groups_.empty())
     observer->OnSyntheticTrialsChanged(synthetic_trial_groups_);
 }
 
 void MetricsService::RemoveSyntheticTrialObserver(
-    SyntheticTrialObserver* observer) {
+    variations::SyntheticTrialObserver* observer) {
   synthetic_trial_observer_list_.RemoveObserver(observer);
 }
 
 void MetricsService::RegisterSyntheticFieldTrial(
-    const SyntheticTrialGroup& trial) {
+    const variations::SyntheticTrialGroup& trial) {
   for (size_t i = 0; i < synthetic_trial_groups_.size(); ++i) {
     if (synthetic_trial_groups_[i].id.name == trial.id.name) {
       if (synthetic_trial_groups_[i].id.group != trial.id.group) {
@@ -1062,16 +1043,21 @@ void MetricsService::RegisterSyntheticFieldTrial(
     }
   }
 
-  SyntheticTrialGroup trial_group = trial;
+  variations::SyntheticTrialGroup trial_group = trial;
   trial_group.start_time = base::TimeTicks::Now();
   synthetic_trial_groups_.push_back(trial_group);
   NotifySyntheticTrialObservers();
 }
 
+void MetricsService::GetCurrentSyntheticFieldTrialsForTesting(
+    std::vector<variations::ActiveGroupId>* synthetic_trials) {
+  GetSyntheticFieldTrialsOlderThan(base::TimeTicks::Now(), synthetic_trials);
+}
+
 void MetricsService::RegisterMetricsProvider(
     scoped_ptr<MetricsProvider> provider) {
   DCHECK_EQ(INITIALIZED, state_);
-  metrics_providers_.push_back(provider.Pass());
+  metrics_providers_.push_back(std::move(provider));
 }
 
 void MetricsService::CheckForClonedInstall(
@@ -1080,17 +1066,18 @@ void MetricsService::CheckForClonedInstall(
 }
 
 void MetricsService::NotifySyntheticTrialObservers() {
-  FOR_EACH_OBSERVER(SyntheticTrialObserver, synthetic_trial_observer_list_,
+  FOR_EACH_OBSERVER(variations::SyntheticTrialObserver,
+                    synthetic_trial_observer_list_,
                     OnSyntheticTrialsChanged(synthetic_trial_groups_));
 }
 
-void MetricsService::GetCurrentSyntheticFieldTrials(
+void MetricsService::GetSyntheticFieldTrialsOlderThan(
+    base::TimeTicks time,
     std::vector<variations::ActiveGroupId>* synthetic_trials) {
   DCHECK(synthetic_trials);
   synthetic_trials->clear();
-  const MetricsLog* current_log = log_manager_.current_log();
   for (size_t i = 0; i < synthetic_trial_groups_.size(); ++i) {
-    if (synthetic_trial_groups_[i].start_time <= current_log->creation_time())
+    if (synthetic_trial_groups_[i].start_time <= time)
       synthetic_trials->push_back(synthetic_trial_groups_[i].id);
   }
 }
@@ -1105,11 +1092,9 @@ scoped_ptr<MetricsLog> MetricsService::CreateLog(MetricsLog::LogType log_type) {
 
 void MetricsService::RecordCurrentEnvironment(MetricsLog* log) {
   std::vector<variations::ActiveGroupId> synthetic_trials;
-  GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  GetSyntheticFieldTrialsOlderThan(log->creation_time(), &synthetic_trials);
   log->RecordEnvironment(metrics_providers_.get(), synthetic_trials,
                          GetInstallDate(), GetMetricsReportingEnabledDate());
-  UMA_HISTOGRAM_COUNTS_100("UMA.SyntheticTrials.Count",
-                           synthetic_trials.size());
 }
 
 void MetricsService::RecordCurrentHistograms() {

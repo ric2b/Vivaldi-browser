@@ -8,10 +8,11 @@
 #include <set>
 
 #include "ash/ash_export.h"
-#include "ash/display/display_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/wm/wm_types.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/point.h"
@@ -33,7 +34,7 @@ class WindowResizer;
 class ASH_EXPORT ToplevelWindowEventHandler
     : public ui::EventHandler,
       public aura::client::WindowMoveClient,
-      public DisplayController::Observer {
+      public WindowTreeHostManager::Observer {
  public:
   ToplevelWindowEventHandler();
   ~ToplevelWindowEventHandler() override;
@@ -50,7 +51,7 @@ class ASH_EXPORT ToplevelWindowEventHandler
       aura::client::WindowMoveSource move_source) override;
   void EndMoveLoop() override;
 
-  // Overridden form ash::DisplayController::Observer:
+  // Overridden form ash::WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanging() override;
 
  private:

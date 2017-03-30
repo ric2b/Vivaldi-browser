@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <utility>
 
@@ -18,11 +21,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/devtools_discovery/devtools_discovery_manager.h"
 #include "components/devtools_http_handler/devtools_http_handler.h"
 #include "components/devtools_http_handler/devtools_http_handler_delegate.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/devtools_external_agent_proxy_delegate.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/user_agent.h"
 #include "net/base/escape.h"
@@ -69,7 +74,7 @@ const char kTargetDevtoolsFrontendUrlField[] = "devtoolsFrontendUrl";
 // Maximum write buffer size of devtools http/websocket connections.
 // TODO(rmcilroy/pfieldman): Reduce this back to 100Mb when we have
 // added back pressure on the TraceComplete message protocol - crbug.com/456845.
-const int32 kSendBufferSizeForDevTools = 256 * 1024 * 1024;  // 256Mb
+const int32_t kSendBufferSizeForDevTools = 256 * 1024 * 1024;  // 256Mb
 
 }  // namespace
 
@@ -98,7 +103,7 @@ class ServerWrapper : net::HttpServer::Delegate {
 
   void WriteActivePortToUserProfile(const base::FilePath& output_directory);
 
-  virtual ~ServerWrapper() {}
+  ~ServerWrapper() override {}
 
  private:
   // net::HttpServer::Delegate implementation.
@@ -122,10 +127,9 @@ ServerWrapper::ServerWrapper(base::WeakPtr<DevToolsHttpHandler> handler,
                              const base::FilePath& frontend_dir,
                              bool bundles_resources)
     : handler_(handler),
-      server_(new net::HttpServer(socket.Pass(), this)),
+      server_(new net::HttpServer(std::move(socket), this)),
       frontend_dir_(frontend_dir),
-      bundles_resources_(bundles_resources) {
-}
+      bundles_resources_(bundles_resources) {}
 
 int ServerWrapper::GetLocalAddress(net::IPEndPoint* address) {
   return server_->GetLocalAddress(address);
@@ -194,7 +198,7 @@ void ServerStartedOnUI(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (handler && thread && server_wrapper) {
     handler->ServerStarted(thread, server_wrapper, socket_factory,
-                           ip_address.Pass());
+                           std::move(ip_address));
   } else {
     TerminateOnUI(thread, server_wrapper, socket_factory);
   }
@@ -213,7 +217,7 @@ void StartServerOnHandlerThread(
       server_socket_factory->CreateForHttpServer();
   scoped_ptr<net::IPEndPoint> ip_address(new net::IPEndPoint);
   if (server_socket) {
-    server_wrapper = new ServerWrapper(handler, server_socket.Pass(),
+    server_wrapper = new ServerWrapper(handler, std::move(server_socket),
                                        frontend_dir, bundles_resources);
     if (!output_directory.empty())
       server_wrapper->WriteActivePortToUserProfile(output_directory);
@@ -359,18 +363,26 @@ static std::string PathWithoutParams(const std::string& path) {
 }
 
 static std::string GetMimeType(const std::string& filename) {
-  if (base::EndsWith(filename, ".html", false)) {
+  if (base::EndsWith(filename, ".html", base::CompareCase::INSENSITIVE_ASCII)) {
     return "text/html";
-  } else if (base::EndsWith(filename, ".css", false)) {
+  } else if (base::EndsWith(filename, ".css",
+                            base::CompareCase::INSENSITIVE_ASCII)) {
     return "text/css";
-  } else if (base::EndsWith(filename, ".js", false)) {
+  } else if (base::EndsWith(filename, ".js",
+                            base::CompareCase::INSENSITIVE_ASCII)) {
     return "application/javascript";
-  } else if (base::EndsWith(filename, ".png", false)) {
+  } else if (base::EndsWith(filename, ".png",
+                            base::CompareCase::INSENSITIVE_ASCII)) {
     return "image/png";
-  } else if (base::EndsWith(filename, ".gif", false)) {
+  } else if (base::EndsWith(filename, ".gif",
+                            base::CompareCase::INSENSITIVE_ASCII)) {
     return "image/gif";
-  } else if (base::EndsWith(filename, ".json", false)) {
+  } else if (base::EndsWith(filename, ".json",
+                            base::CompareCase::INSENSITIVE_ASCII)) {
     return "application/json";
+  } else if (base::EndsWith(filename, ".svg",
+                            base::CompareCase::INSENSITIVE_ASCII)) {
+    return "image/svg+xml";
   }
   LOG(ERROR) << "GetMimeType doesn't know mime type for: "
              << filename
@@ -483,7 +495,7 @@ void ServerWrapper::OnClose(int connection_id) {
 }
 
 std::string DevToolsHttpHandler::GetFrontendURLInternal(
-    const std::string id,
+    const std::string& id,
     const std::string& host) {
   return base::StringPrintf(
       "%s%sws=%s%s%s",
@@ -696,6 +708,18 @@ void DevToolsHttpHandler::OnWebSocketRequest(
     return;
   }
 
+  // Handle external connections (such as frontend api) on the embedder level.
+  content::DevToolsExternalAgentProxyDelegate* external_delegate =
+      delegate_->HandleWebSocketConnection(request.path);
+  if (external_delegate) {
+    scoped_refptr<DevToolsAgentHost> agent_host =
+        DevToolsAgentHost::Create(external_delegate);
+    connection_to_client_[connection_id] = new DevToolsAgentHostClientImpl(
+        thread_->message_loop(), server_wrapper_, connection_id, agent_host);
+    AcceptWebSocket(connection_id, request);
+    return;
+  }
+
   size_t pos = request.path.find(kPageUrlPrefix);
   if (pos != 0) {
     Send404(connection_id);
@@ -796,7 +820,7 @@ void ServerWrapper::WriteActivePortToUserProfile(
   // Write this port to a well-known file in the profile directory
   // so Telemetry can pick it up.
   base::FilePath path = output_directory.Append(kDevToolsActivePortFileName);
-  std::string port_string = base::IntToString(endpoint.port());
+  std::string port_string = base::UintToString(endpoint.port());
   if (base::WriteFile(path, port_string.c_str(),
                       static_cast<int>(port_string.length())) < 0) {
     LOG(ERROR) << "Error writing DevTools active port to file";

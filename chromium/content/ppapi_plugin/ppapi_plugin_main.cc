@@ -4,6 +4,7 @@
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/debugger.h"
 #include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
@@ -19,14 +20,22 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/plugin/content_plugin_client.h"
-#include "crypto/nss_util.h"
+#include "ipc/ipc_sender.h"
 #include "ppapi/proxy/plugin_globals.h"
 #include "ppapi/proxy/proxy_module.h"
 #include "ui/base/ui_base_switches.h"
 
 #if defined(OS_WIN)
+#include "base/win/win_util.h"
+#include "base/win/windows_version.h"
+#include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_win.h"
+#include "content/common/font_warmup_win.h"
+#include "content/public/common/dwrite_font_platform_win.h"
 #include "sandbox/win/src/sandbox.h"
+#include "third_party/WebKit/public/web/win/WebFontRendering.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
+#include "ui/gfx/win/direct_write.h"
+#include "ui/gfx/win/dpi.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -115,12 +124,6 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
   base::trace_event::TraceLog::GetInstance()->SetProcessSortIndex(
       kTraceEventPpapiProcessSortIndex);
 
-#if defined(OS_LINUX) && !defined(USE_OPENSSL)
-  // Some out-of-process PPAPI plugins use NSS.
-  // NSS must be initialized before enabling the sandbox below.
-  crypto::InitNSSSafely();
-#endif
-
   // Allow the embedder to perform any necessary per-process initialization
   // before the sandbox is initialized.
   if (GetContentClient()->plugin())
@@ -135,10 +138,31 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
       new PpapiThread(parameters.command_line, false));  // Not a broker.
 
 #if defined(OS_WIN)
-  SkTypeface_SetEnsureLOGFONTAccessibleProc(SkiaPreCacheFont);
+  if (!base::win::IsUser32AndGdi32Available())
+    gfx::win::MaybeInitializeDirectWrite();
+  bool use_direct_write = gfx::win::IsDirectWriteEnabled();
+  if (use_direct_write) {
+    if (ShouldUseDirectWriteFontProxyFieldTrial()) {
+      InitializeDWriteFontProxy(
+          base::Bind(&ppapi::proxy::PluginGlobals::GetBrowserSender,
+                     base::Unretained(ppapi::proxy::PluginGlobals::Get())));
+    } else {
+      WarmupDirectWrite();
+    }
+  } else {
+    SkTypeface_SetEnsureLOGFONTAccessibleProc(SkiaPreCacheFont);
+  }
+
+  blink::WebFontRendering::setUseDirectWrite(use_direct_write);
+  blink::WebFontRendering::setDeviceScaleFactor(gfx::GetDPIScale());
 #endif
 
   main_message_loop.Run();
+
+#if defined(OS_WIN)
+  if (ShouldUseDirectWriteFontProxyFieldTrial())
+    UninitializeDWriteFontProxy();
+#endif
   return 0;
 }
 

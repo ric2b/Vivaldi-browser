@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_ASH_LAUNCHER_BROWSER_SHORTCUT_LAUNCHER_ITEM_CONTROLLER_H_
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_BROWSER_SHORTCUT_LAUNCHER_ITEM_CONTROLLER_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
 
 namespace content {
@@ -46,6 +47,7 @@ class BrowserShortcutLauncherItemController : public LauncherItemController {
   ui::MenuModel* CreateContextMenu(aura::Window* root_window) override;
   ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
   bool IsDraggable() override;
+  bool CanPin() const override;
   bool ShouldShowTooltip() override;
   void Close() override;
 

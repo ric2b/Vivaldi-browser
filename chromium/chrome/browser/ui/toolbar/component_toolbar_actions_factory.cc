@@ -6,10 +6,16 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "chrome/browser/ui/toolbar/media_router_action.h"
+#include "chrome/browser/extensions/component_migration_helper.h"
+#include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
-#include "chrome/common/chrome_switches.h"
 #include "extensions/common/feature_switch.h"
+
+#if defined(ENABLE_MEDIA_ROUTER)
+#include "chrome/browser/ui/toolbar/media_router_action.h"
+#endif
 
 namespace {
 
@@ -18,10 +24,16 @@ ComponentToolbarActionsFactory* testing_factory_ = nullptr;
 base::LazyInstance<ComponentToolbarActionsFactory> lazy_factory =
     LAZY_INSTANCE_INITIALIZER;
 
+const char kCastExtensionId[] = "boadgeojelhgndaghljhdicfkmllpafd";
+const char kCastBetaExtensionId[] = "dliochdbjfkdbacpmhlcpmleaejidimm";
+
 }  // namespace
 
-ComponentToolbarActionsFactory::ComponentToolbarActionsFactory()
-    : num_component_actions_(-1) {}
+// static
+const char ComponentToolbarActionsFactory::kMediaRouterActionId[] =
+    "media_router_action";
+
+ComponentToolbarActionsFactory::ComponentToolbarActionsFactory() {}
 ComponentToolbarActionsFactory::~ComponentToolbarActionsFactory() {}
 
 // static
@@ -29,14 +41,20 @@ ComponentToolbarActionsFactory* ComponentToolbarActionsFactory::GetInstance() {
   return testing_factory_ ? testing_factory_ : &lazy_factory.Get();
 }
 
-ScopedVector<ToolbarActionViewController>
-ComponentToolbarActionsFactory::GetComponentToolbarActions() {
-  ScopedVector<ToolbarActionViewController> component_actions;
+std::set<std::string> ComponentToolbarActionsFactory::GetInitialComponentIds(
+    Profile* profile) {
+  std::set<std::string> component_ids;
+  return component_ids;
+}
 
+scoped_ptr<ToolbarActionViewController>
+ComponentToolbarActionsFactory::GetComponentToolbarActionForId(
+    const std::string& id,
+    Browser* browser,
+    ToolbarActionsBar* bar) {
   // This is currently behind the extension-action-redesign flag, as it is
   // designed for the new toolbar.
-  if (!extensions::FeatureSwitch::extension_action_redesign()->IsEnabled())
-    return component_actions.Pass();
+  DCHECK(extensions::FeatureSwitch::extension_action_redesign()->IsEnabled());
 
   // Add component toolbar actions here.
   // This current design means that the ComponentToolbarActionsFactory is aware
@@ -44,22 +62,14 @@ ComponentToolbarActionsFactory::GetComponentToolbarActions() {
   // (since each will have an action in the toolbar or overflow menu), this
   // should be okay. If this changes, we should rethink this design to have,
   // e.g., RegisterChromeAction().
-
 #if defined(ENABLE_MEDIA_ROUTER)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kEnableMediaRouter)) {
-    component_actions.push_back(new MediaRouterAction());
-  }
-#endif
+  if (id == kMediaRouterActionId)
+    return scoped_ptr<ToolbarActionViewController>(
+        new MediaRouterAction(browser, bar));
+#endif  // defined(ENABLE_MEDIA_ROUTER)
 
-  return component_actions.Pass();
-}
-
-int ComponentToolbarActionsFactory::GetNumComponentActions() {
-  if (num_component_actions_ == -1)
-    num_component_actions_ = GetComponentToolbarActions().size();
-
-  return num_component_actions_;
+  NOTREACHED();
+  return scoped_ptr<ToolbarActionViewController>();
 }
 
 // static
@@ -67,3 +77,20 @@ void ComponentToolbarActionsFactory::SetTestingFactory(
     ComponentToolbarActionsFactory* factory) {
   testing_factory_ = factory;
 }
+
+void ComponentToolbarActionsFactory::RegisterComponentMigrations(
+    extensions::ComponentMigrationHelper* helper) const {
+  helper->Register(kMediaRouterActionId, kCastExtensionId);
+  helper->Register(kMediaRouterActionId, kCastBetaExtensionId);
+}
+
+void ComponentToolbarActionsFactory::HandleComponentMigrations(
+    extensions::ComponentMigrationHelper* helper,
+    Profile* profile) const {
+  if (media_router::MediaRouterEnabled(profile) && !profile->IsOffTheRecord()) {
+    helper->OnFeatureEnabled(kMediaRouterActionId);
+  } else {
+    helper->OnFeatureDisabled(kMediaRouterActionId);
+  }
+}
+

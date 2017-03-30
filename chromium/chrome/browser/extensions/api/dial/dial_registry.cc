@@ -13,8 +13,8 @@
 #include "chrome/browser/extensions/api/dial/dial_api.h"
 #include "chrome/browser/extensions/api/dial/dial_device_data.h"
 #include "chrome/browser/extensions/api/dial/dial_service.h"
-#include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/common/extensions/api/dial.h"
+#include "components/net_log/chrome_net_log.h"
 
 using base::Time;
 using base::TimeDelta;
@@ -27,9 +27,7 @@ DialRegistry::DialRegistry(Observer* dial_api,
                            const base::TimeDelta& expiration,
                            const size_t max_devices)
   : num_listeners_(0),
-    discovery_generation_(0),
     registry_generation_(0),
-    last_event_discovery_generation_(0),
     last_event_registry_generation_(0),
     label_count_(0),
     refresh_interval_delta_(refresh_interval),
@@ -64,6 +62,10 @@ void DialRegistry::OnListenerAdded() {
     VLOG(2) << "Listener added; starting periodic discovery.";
     StartPeriodicDiscovery();
   }
+  // Event listeners with the current device list.
+  // TODO(crbug.com/576817): Rework the DIAL API so we don't need to have extra
+  // behaviors when adding listeners.
+  SendEvent();
 }
 
 void DialRegistry::OnListenerRemoved() {
@@ -104,7 +106,6 @@ bool DialRegistry::DiscoverNow() {
 
   if (!dial_->HasObserver(this))
     NOTREACHED() << "DiscoverNow() called without observing dial_";
-  discovery_generation_++;
   return dial_->Discover();
 }
 
@@ -125,8 +126,7 @@ void DialRegistry::StartPeriodicDiscovery() {
 void DialRegistry::DoDiscovery() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(dial_.get());
-  discovery_generation_++;
-  VLOG(2) << "About to discover! Generation = " << discovery_generation_;
+  VLOG(2) << "About to discover!";
   dial_->Discover();
 }
 
@@ -186,22 +186,15 @@ void DialRegistry::Clear() {
 }
 
 void DialRegistry::MaybeSendEvent() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  // Send an event if the device list has changed since the last event.
+  bool needs_event = last_event_registry_generation_ < registry_generation_;
+  VLOG(2) << "lerg = " << last_event_registry_generation_ << ", rg = "
+          << registry_generation_ << ", needs_event = " << needs_event;
+  if (needs_event)
+    SendEvent();
+}
 
-  // We need to send an event if:
-  // (1) We haven't sent one yet in this round of discovery, or
-  // (2) The device list changed since the last MaybeSendEvent.
-  bool needs_event =
-      (last_event_discovery_generation_ < discovery_generation_ ||
-       last_event_registry_generation_ < registry_generation_);
-  VLOG(2) << "ledg = " << last_event_discovery_generation_ << ", dg = "
-          << discovery_generation_
-          << ", lerg = " << last_event_registry_generation_ << ", rg = "
-          << registry_generation_
-          << ", needs_event = " << needs_event;
-  if (!needs_event)
-    return;
-
+void DialRegistry::SendEvent() {
   DeviceList device_list;
   for (DeviceByLabelMap::const_iterator i = device_by_label_map_.begin();
        i != device_by_label_map_.end(); i++) {
@@ -209,8 +202,7 @@ void DialRegistry::MaybeSendEvent() {
   }
   dial_api_->OnDialDeviceEvent(device_list);
 
-  // Reset watermarks.
-  last_event_discovery_generation_ = discovery_generation_;
+  // Reset watermark.
   last_event_registry_generation_ = registry_generation_;
 }
 

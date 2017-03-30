@@ -27,7 +27,8 @@ SDK_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 NeededMatcher = re.compile('^ *NEEDED *([^ ]+)\n$')
 FormatMatcher = re.compile('^(.+):\\s*file format (.+)\n$')
 
-RUNNABLE_LD = 'runnable-ld.so'  # Name of the dynamic loader
+LOADER_X86 = 'runnable-ld.so'  # Name of the dynamic loader
+LOADER_ARM = 'elf_loader_arm.nexe'  # Name of the ARM dynamic loader
 
 OBJDUMP_ARCH_MAP = {
     # Names returned by Linux's objdump:
@@ -90,7 +91,10 @@ def _GetNeededDynamic(main_files, objdump, lib_path):
   all_files, unexamined = GleanFromObjdump(main_files, None, objdump, lib_path)
   for arch in all_files.itervalues():
     if unexamined:
-      unexamined.add((RUNNABLE_LD, arch))
+      if arch == 'arm':
+        unexamined.add((LOADER_ARM, arch))
+      else:
+        unexamined.add((LOADER_X86, arch))
 
   while unexamined:
     files_to_examine = {}
@@ -206,16 +210,9 @@ def _FindLibsInPath(name, lib_path):
   files = []
   for dirname in lib_path:
     # The libc.so files in the the glibc toolchain is actually a linker
-    # script which references libc.so.<SHA1>.  This means the lib.so itself
-    # does not end up in the NEEDED section for glibc.  However with bionic
-    # the SONAME is actually libc.so.  If we pass glibc's libc.so to objdump
-    # if fails to parse it, os this filters out libc.so expept for within
-    # the bionic toolchain.
-    # TODO(bradnelson): Remove this once the SONAME in bionic is made to be
-    # unique in the same it is under glibc:
-    # https://code.google.com/p/nativeclient/issues/detail?id=3833
-    rel_dirname = os.path.relpath(dirname, SDK_DIR)
-    if name == 'libc.so' and 'bionic' not in rel_dirname:
+    # script which references libc.so.<SHA1>.  This means the libc.so itself
+    # does not end up in the NEEDED section for glibc.
+    if name == 'libc.so':
       continue
     filename = os.path.join(dirname, name)
     if os.path.exists(filename):

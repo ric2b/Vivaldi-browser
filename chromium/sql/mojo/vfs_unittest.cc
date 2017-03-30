@@ -2,20 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <memory>
+#include <utility>
+
+#include "base/macros.h"
 #include "components/filesystem/public/interfaces/file_system.mojom.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/application_test_base.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/application_test_base.h"
 #include "mojo/util/capture_util.h"
 #include "sql/mojo/mojo_vfs.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/sqlite/sqlite3.h"
 
-namespace base {
+namespace std {
 
 // This deleter lets us be safe with sqlite3 objects, which aren't really the
 // structs, but slabs of new uint8_t[size].
 template <>
-struct DefaultDeleter<sqlite3_file> {
+struct default_delete<sqlite3_file> {
   inline void operator()(sqlite3_file* ptr) const {
     // Why don't we call file->pMethods->xClose() here? Because it's not
     // guaranteed to be valid. sqlite3_file "objects" can be in partially
@@ -24,15 +29,16 @@ struct DefaultDeleter<sqlite3_file> {
   }
 };
 
-}  // namespace base
+}  // namespace std
 
 namespace sql {
 
 const char kFileName[] = "TestingDatabase.db";
 
-class VFSTest : public mojo::test::ApplicationTestBase {
+class VFSTest : public mojo::test::ApplicationTestBase,
+                public filesystem::FileSystemClient {
  public:
-  VFSTest() {}
+  VFSTest() : binding_(this) {}
   ~VFSTest() override {}
 
   sqlite3_vfs* vfs() {
@@ -47,17 +53,19 @@ class VFSTest : public mojo::test::ApplicationTestBase {
   void SetUp() override {
     mojo::test::ApplicationTestBase::SetUp();
 
-    mojo::URLRequestPtr request(mojo::URLRequest::New());
-    request->url = mojo::String::From("mojo:filesystem");
-    application_impl()->ConnectToService(request.Pass(), &files_);
+    application_impl()->ConnectToService("mojo:filesystem", &files_);
+
+    filesystem::FileSystemClientPtr client;
+    binding_.Bind(GetProxy(&client));
 
     filesystem::FileError error = filesystem::FILE_ERROR_FAILED;
     filesystem::DirectoryPtr directory;
-    files_->OpenFileSystem("temp", GetProxy(&directory), mojo::Capture(&error));
+    files_->OpenFileSystem("temp", GetProxy(&directory), std::move(client),
+                           mojo::Capture(&error));
     ASSERT_TRUE(files_.WaitForIncomingResponse());
     ASSERT_EQ(filesystem::FILE_ERROR_OK, error);
 
-    vfs_.reset(new ScopedMojoFilesystemVFS(directory.Pass()));
+    vfs_.reset(new ScopedMojoFilesystemVFS(std::move(directory)));
   }
 
   void TearDown() override {
@@ -65,15 +73,19 @@ class VFSTest : public mojo::test::ApplicationTestBase {
     mojo::test::ApplicationTestBase::TearDown();
   }
 
+  void OnFileSystemShutdown() override {
+  }
+
  private:
   filesystem::FileSystemPtr files_;
   scoped_ptr<ScopedMojoFilesystemVFS> vfs_;
+  mojo::Binding<filesystem::FileSystemClient> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(VFSTest);
 };
 
 TEST_F(VFSTest, TestInstalled) {
-  EXPECT_EQ("mojo", vfs()->zName);
+  EXPECT_EQ("mojo", std::string(vfs()->zName));
 }
 
 TEST_F(VFSTest, ExclusiveOpen) {
@@ -113,6 +125,19 @@ TEST_F(VFSTest, NonexclusiveOpen) {
 
   file->pMethods->xClose(file.get());
   file->pMethods->xClose(file2.get());
+}
+
+TEST_F(VFSTest, NullFilenameOpen) {
+  // Opening a file with a null filename should return a valid file object.
+  scoped_ptr<sqlite3_file> file(MakeFile());
+  int out_flags;
+  int rc = vfs()->xOpen(
+      vfs(), nullptr, file.get(),
+      SQLITE_OPEN_DELETEONCLOSE | SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE,
+      &out_flags);
+  EXPECT_EQ(SQLITE_OK, rc);
+
+  file->pMethods->xClose(file.get());
 }
 
 TEST_F(VFSTest, DeleteOnClose) {

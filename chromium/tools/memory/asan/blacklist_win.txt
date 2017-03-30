@@ -1,6 +1,5 @@
-# The rules in this file are only applied at compile time on Windows.
-# Because the Chrome buildsystem does not automatically touch the files
-# mentioned here, changing this file requires clobbering all ASan bots.
+# The rules in this file are only applied at compile time. If you can modify the
+# source in question, consider function attributes to disable instrumentation.
 #
 # Please think twice before you add or remove these rules.
 
@@ -19,7 +18,13 @@ fun:*EatResolverThunk*sandbox*
 fun:*InterceptionAgent*sandbox*
 fun:*ResolverThunk*sandbox*
 fun:*Target*SandboxFactory*sandbox*
+fun:*ProcessState*sandbox*
 src:*pe_image.h
 src:*pe_image.cc
 src:*resolver_32.cc
+src:*filesystem_interception.cc
+src:*process_thread_interception.cc
+src:*registry_interception.cc
+src:*sandbox_nt_util.cc
+src:*sync_interception.cc
 ################################################################################

@@ -4,8 +4,11 @@
 
 #include "ppapi/shared_impl/ppb_audio_shared.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
+#include "media/audio/audio_parameters.h"
 #include "ppapi/nacl_irt/public/irt_ppapi.h"
 #include "ppapi/shared_impl/ppapi_globals.h"
 #include "ppapi/shared_impl/ppb_audio_config_shared.h"
@@ -112,8 +115,14 @@ void PPB_Audio_Shared::SetStreamInfo(
         std::string(),
         "Failed to map shared memory for PPB_Audio_Shared.");
   } else {
-    audio_bus_ = media::AudioBus::WrapMemory(
-        kAudioOutputChannels, sample_frame_count, shared_memory_->memory());
+    DCHECK_EQ(shared_memory_size_,
+              sizeof(media::AudioOutputBufferParameters) +
+                  media::AudioBus::CalculateMemorySize(kAudioOutputChannels,
+                                                       sample_frame_count));
+    media::AudioOutputBuffer* buffer =
+        reinterpret_cast<media::AudioOutputBuffer*>(shared_memory_->memory());
+    audio_bus_ = media::AudioBus::WrapMemory(kAudioOutputChannels,
+                                             sample_frame_count, buffer->audio);
     // Setup integer audio buffer for user audio data.
     client_buffer_size_bytes_ = audio_bus_->frames() * audio_bus_->channels() *
                                 kBitsPerAudioOutputSample / 8;
@@ -161,18 +170,21 @@ void PPB_Audio_Shared::StopThread() {
   // down the thread and Join it while holding the lock, we would deadlock. So
   // we give up the lock here so that the thread at least _can_ make Pepper
   // calls without causing deadlock.
+  // IMPORTANT: This instance's thread state should be reset to uninitialized
+  // before we release the proxy lock, so any calls from the plugin while we're
+  // unlocked can't access the joined thread.
   if (g_nacl_mode) {
     if (nacl_thread_active_) {
+      nacl_thread_active_ = false;
       int result =
           CallWhileUnlocked(g_thread_functions.thread_join, nacl_thread_id_);
       DCHECK_EQ(0, result);
-      nacl_thread_active_ = false;
     }
   } else {
     if (audio_thread_.get()) {
+      auto local_audio_thread(std::move(audio_thread_));
       CallWhileUnlocked(base::Bind(&base::DelegateSimpleThread::Join,
-                                   base::Unretained(audio_thread_.get())));
-      audio_thread_.reset();
+                                   base::Unretained(local_audio_thread.get())));
     }
   }
 }

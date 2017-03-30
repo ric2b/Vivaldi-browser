@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/webstore_widget_private/app_installer.h"
 
+#include "base/macros.h"
 #include "chrome/common/extensions/webstore_install_result.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -55,12 +56,12 @@ const GURL& AppInstaller::GetRequestorURL() const {
   return GURL::EmptyGURL();
 }
 
-scoped_refptr<ExtensionInstallPrompt::Prompt>
-AppInstaller::CreateInstallPrompt() const {
+scoped_ptr<ExtensionInstallPrompt::Prompt> AppInstaller::CreateInstallPrompt()
+    const {
   if (silent_installation_)
-    return NULL;
+    return nullptr;
 
-  scoped_refptr<ExtensionInstallPrompt::Prompt> prompt(
+  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt(
       new ExtensionInstallPrompt::Prompt(
           ExtensionInstallPrompt::INLINE_INSTALL_PROMPT));
 

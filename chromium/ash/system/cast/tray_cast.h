@@ -8,7 +8,7 @@
 #include "ash/cast_config_delegate.h"
 #include "ash/shell_observer.h"
 #include "ash/system/tray/system_tray_item.h"
-#include "base/memory/weak_ptr.h"
+#include "base/macros.h"
 
 namespace ash {
 namespace tray {
@@ -18,12 +18,24 @@ class CastDetailedView;
 class CastDuplexView;
 }  // namespace tray
 
-class TrayCast : public SystemTrayItem, public ShellObserver {
+class ASH_EXPORT TrayCast : public SystemTrayItem,
+                            public ShellObserver,
+                            public CastConfigDelegate::Observer {
  public:
   explicit TrayCast(SystemTray* system_tray);
   ~TrayCast() override;
 
  private:
+  // Helper/utility methods for testing.
+  friend class TrayCastTestAPI;
+  void StartCastForTest(const std::string& receiver_id);
+  void StopCastForTest();
+  // Returns the id of the item we are currently displaying in the cast view.
+  // This assumes that the cast view is active.
+  const std::string& GetDisplayedCastId();
+  const views::View* GetDefaultView() const;
+  enum ChildViewId { TRAY_VIEW = 1, SELECT_VIEW, CAST_VIEW };
+
   // Overridden from SystemTrayItem.
   views::View* CreateTrayView(user::LoginStatus status) override;
   views::View* CreateDefaultView(user::LoginStatus status) override;
@@ -36,13 +48,12 @@ class TrayCast : public SystemTrayItem, public ShellObserver {
   // Overridden from ShellObserver.
   void OnCastingSessionStartedOrStopped(bool started) override;
 
+  // Overridden from CastConfigDelegate::Observer.
+  void OnDevicesUpdated(
+      const CastConfigDelegate::ReceiversAndActivities& devices) override;
+
   // Returns true if the cast extension was detected.
   bool HasCastExtension();
-
-  // Callback used to enable/disable the begin casting view depending on
-  // if we have any cast receivers.
-  void UpdateCachedReceiverState(
-      const CastConfigDelegate::ReceiversAndActivites& receivers_activities);
 
   // This makes sure that the current view displayed in the tray is the correct
   // one, depending on if we are currently casting. If we're casting, then a
@@ -51,15 +62,15 @@ class TrayCast : public SystemTrayItem, public ShellObserver {
   // casting session.
   void UpdatePrimaryView();
 
+  CastConfigDelegate::ReceiversAndActivities receivers_and_activities_;
+  bool is_casting_ = false;
+
+  bool added_observer_ = false;
+
   // Not owned.
   tray::CastTrayView* tray_ = nullptr;
   tray::CastDuplexView* default_ = nullptr;
   tray::CastDetailedView* detailed_ = nullptr;
-  CastConfigDelegate* cast_config_delegate_;
-
-  bool has_cast_receivers_ = false;
-  bool is_casting_ = false;
-  base::WeakPtrFactory<TrayCast> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayCast);
 };

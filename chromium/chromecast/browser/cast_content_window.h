@@ -11,10 +11,7 @@
 
 namespace aura {
 class WindowTreeHost;
-namespace test {
-class TestFocusClient;
-} // namespace test
-} // namespace aura
+}
 
 namespace content {
 class BrowserContext;
@@ -26,6 +23,7 @@ class Size;
 }
 
 namespace chromecast {
+namespace shell {
 
 class CastContentWindow : public content::WebContentsObserver {
  public:
@@ -33,6 +31,10 @@ class CastContentWindow : public content::WebContentsObserver {
 
   // Removes the window from the screen.
   ~CastContentWindow() override;
+
+  // Sets the window's background to be transparent (call before
+  // CreateWindowTree).
+  void SetTransparent() { transparent_ = true; }
 
   // Create a window with the given size for |web_contents|.
   void CreateWindowTree(const gfx::Size& initial_size,
@@ -44,19 +46,20 @@ class CastContentWindow : public content::WebContentsObserver {
 
   // content::WebContentsObserver implementation:
   void DidFirstVisuallyNonEmptyPaint() override;
-  void MediaPaused() override;
-  void MediaStartedPlaying() override;
+  void MediaStoppedPlaying(const MediaPlayerId& id) override;
+  void MediaStartedPlaying(const MediaPlayerId& id) override;
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
 
  private:
 #if defined(USE_AURA)
   scoped_ptr<aura::WindowTreeHost> window_tree_host_;
-  scoped_ptr<aura::test::TestFocusClient> focus_client_;
 #endif
+  bool transparent_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentWindow);
 };
 
+}  // namespace shell
 }  // namespace chromecast
 
 #endif  // CHROMECAST_BROWSER_CAST_CONTENT_WINDOW_H_

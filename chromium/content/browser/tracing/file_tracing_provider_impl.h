@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_TRACING_FILE_TRACING_PROVIDER_IMPL_H_
 #define CONTENT_BROWSER_TRACING_FILE_TRACING_PROVIDER_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/files/file_tracing.h"
 #include "base/macros.h"
 
@@ -15,14 +17,14 @@ extern const char kFileTracingEventCategoryGroup[];
 class FileTracingProviderImpl : public base::FileTracing::Provider {
  public:
   FileTracingProviderImpl();
-  ~FileTracingProviderImpl();
+  ~FileTracingProviderImpl() override;
 
   // base::FileTracing::Provider:
   bool FileTracingCategoryIsEnabled() const override;
   void FileTracingEnable(void* id) override;
   void FileTracingDisable(void* id) override;
   void FileTracingEventBegin(const char* name, void* id,
-                             const base::FilePath& path, int64 size) override;
+                             const base::FilePath& path, int64_t size) override;
   void FileTracingEventEnd(const char* name, void* id) override;
 
  private:

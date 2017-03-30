@@ -5,55 +5,63 @@
 #ifndef COMPONENTS_HTML_VIEWER_DEVTOOLS_AGENT_IMPL_H_
 #define COMPONENTS_HTML_VIEWER_DEVTOOLS_AGENT_IMPL_H_
 
+#include <string>
+#include <vector>
+
 #include "base/macros.h"
 #include "components/devtools_service/public/interfaces/devtools_service.mojom.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/WebKit/public/web/WebDevToolsAgentClient.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
 
 namespace blink {
 class WebLocalFrame;
 }
 
-namespace mojo {
-class Shell;
-}
-
 namespace html_viewer {
 
 class DevToolsAgentImpl : public devtools_service::DevToolsAgent,
-                          public blink::WebDevToolsAgentClient,
-                          public mojo::ErrorHandler {
+                          public blink::WebDevToolsAgentClient {
  public:
   // |frame| must outlive this object.
-  DevToolsAgentImpl(blink::WebLocalFrame* frame, mojo::Shell* shell);
+  // This agent should restore its internal state using |state| if it is not
+  // null.
+  DevToolsAgentImpl(blink::WebLocalFrame* frame,
+                    const std::string& id,
+                    const std::string* state);
   ~DevToolsAgentImpl() override;
 
-  blink::WebLocalFrame* frame() const { return frame_; }
-
-  // Returns whether a "Page.navigate" command is being handled.
-  bool handling_page_navigate_request() const {
-    return handling_page_navigate_request_;
-  }
+  void BindToRequest(mojo::InterfaceRequest<DevToolsAgent> request);
 
  private:
   // devtools_service::DevToolsAgent implementation.
-  void SetClient(devtools_service::DevToolsAgentClientPtr client,
-                 const mojo::String& client_id) override;
+  void SetClient(devtools_service::DevToolsAgentClientPtr client) override;
   void DispatchProtocolMessage(const mojo::String& message) override;
 
   // blink::WebDevToolsAgentClient implementation.
-  void sendProtocolMessage(int call_id,
+  void sendProtocolMessage(int session_id,
+                           int call_id,
                            const blink::WebString& response,
-                           const blink::WebString& state);
+                           const blink::WebString& state) override;
 
-  // mojo::ErrorHandler implementation.
-  void OnConnectionError() override;
+  void OnConnectionError();
 
   blink::WebLocalFrame* const frame_;
+  const std::string id_;
+
   mojo::Binding<DevToolsAgent> binding_;
   devtools_service::DevToolsAgentClientPtr client_;
 
-  bool handling_page_navigate_request_;
+  // If we restore the agent's internal state using serialized state data from a
+  // previous agent, the agent may generate messages before |client_| is set.
+  // In that case, we need to cache messages for the client.
+  bool cache_until_client_ready_;
+
+  struct CachedClientMessage {
+    int call_id;
+    mojo::String response;
+    mojo::String state;
+  };
+  std::vector<CachedClientMessage> cached_client_messages_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsAgentImpl);
 };

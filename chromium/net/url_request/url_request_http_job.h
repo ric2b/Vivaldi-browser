@@ -5,21 +5,27 @@
 #ifndef NET_URL_REQUEST_URL_REQUEST_HTTP_JOB_H_
 #define NET_URL_REQUEST_URL_REQUEST_HTTP_JOB_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "net/base/auth.h"
 #include "net/base/completion_callback.h"
+#include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
 #include "net/base/sdch_manager.h"
 #include "net/cookies/cookie_store.h"
 #include "net/filter/filter.h"
 #include "net/http/http_request_info.h"
 #include "net/socket/connection_attempts.h"
+#include "net/url_request/url_request_backoff_manager.h"
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_throttler_entry_interface.h"
 
@@ -31,6 +37,7 @@ class HttpResponseInfo;
 class HttpTransaction;
 class HttpUserAgentSettings;
 class ProxyInfo;
+class SSLPrivateKey;
 class UploadDataStream;
 class URLRequestContext;
 
@@ -69,11 +76,11 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
 
   class HttpFilterContext;
 
+  // Shadows URLRequestJob's version of this method.
+  void NotifyBeforeNetworkStart(bool* defer);
+
   // Shadows URLRequestJob's version of this method so we can grab cookies.
   void NotifyHeadersComplete();
-
-  // Shadows URLRequestJob's method so we can record histograms.
-  void NotifyDone(const URLRequestStatus& status);
 
   void DestroyTransaction();
 
@@ -82,6 +89,9 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void SaveCookiesAndNotifyHeadersComplete(int result);
   void SaveNextCookie();
   void FetchResponseCookies(std::vector<std::string>* cookies);
+
+  // Processes a Backoff header, if one exists.
+  void ProcessBackoffHeader();
 
   // Processes the Strict-Transport-Security header, if one exists.
   void ProcessStrictTransportSecurityHeader();
@@ -109,8 +119,10 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   bool GetCharset(std::string* charset) override;
   void GetResponseInfo(HttpResponseInfo* info) override;
   void GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
   bool GetResponseCookies(std::vector<std::string>* cookies) override;
   int GetResponseCode() const override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) const override;
   Filter* SetupFilter() const override;
   bool CopyFragmentOnRedirect(const GURL& location) const override;
   bool IsSafeRedirect(const GURL& location) override;
@@ -118,13 +130,15 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void GetAuthChallengeInfo(scoped_refptr<AuthChallengeInfo>*) override;
   void SetAuth(const AuthCredentials& credentials) override;
   void CancelAuth() override;
-  void ContinueWithCertificate(X509Certificate* client_cert) override;
+  void ContinueWithCertificate(X509Certificate* client_cert,
+                               SSLPrivateKey* client_private_key) override;
   void ContinueDespiteLastError() override;
   void ResumeNetworkStart() override;
-  bool ReadRawData(IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(IOBuffer* buf, int buf_size) override;
   void StopCaching() override;
   bool GetFullRequestHeaders(HttpRequestHeaders* headers) const override;
-  int64 GetTotalReceivedBytes() const override;
+  int64_t GetTotalReceivedBytes() const override;
+  int64_t GetTotalSentBytes() const override;
   void DoneReading() override;
   void DoneReadingRedirectResponse() override;
 
@@ -226,7 +240,7 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
 
   // The number of bytes that have been accounted for in packets (where some of
   // those packets may possibly have had their time of arrival recorded).
-  int64 bytes_observed_in_packets_;
+  int64_t bytes_observed_in_packets_;
 
   // The request time may not be available when we are being destroyed, so we
   // snapshot it early on.
@@ -264,6 +278,15 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   bool awaiting_callback_;
 
   const HttpUserAgentSettings* http_user_agent_settings_;
+
+  URLRequestBackoffManager* backoff_manager_;
+
+  // Keeps track of total received bytes over the network from transactions used
+  // by this job that have already been destroyed.
+  int64_t total_received_bytes_from_previous_transactions_;
+  // Keeps track of total sent bytes over the network from transactions used by
+  // this job that have already been destroyed.
+  int64_t total_sent_bytes_from_previous_transactions_;
 
   base::WeakPtrFactory<URLRequestHttpJob> weak_factory_;
 

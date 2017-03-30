@@ -5,7 +5,6 @@
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 
 #include "base/command_line.h"
-#include "base/json/json_file_value_serializer.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -17,10 +16,8 @@
 #include "chrome/browser/chromeos/net/network_portal_detector_test_impl.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/webui/signin/inline_login_ui.h"
-#include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/fake_shill_manager_client.h"
 #include "components/policy/core/common/policy_switches.h"
@@ -43,6 +40,7 @@ const char kGAIAHost[] = "accounts.google.com";
 // static
 const char OobeBaseTest::kFakeUserEmail[] = "fake-email@gmail.com";
 const char OobeBaseTest::kFakeUserPassword[] = "fake-password";
+const char OobeBaseTest::kFakeUserGaiaId[] = "fake-gaiaId";
 const char OobeBaseTest::kFakeSIDCookie[] = "fake-SID-cookie";
 const char OobeBaseTest::kFakeLSIDCookie[] = "fake-LSID-cookie";
 
@@ -51,7 +49,6 @@ OobeBaseTest::OobeBaseTest()
       network_portal_detector_(NULL),
       needs_background_networking_(false),
       gaia_frame_parent_("signin-frame"),
-      use_webview_(true),
       initialize_fake_merge_session_(true) {
   set_exit_when_last_browser_closes(false);
   set_chromeos_user_ = false;
@@ -70,46 +67,21 @@ void OobeBaseTest::SetUp() {
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&FakeGaia::HandleRequest, base::Unretained(fake_gaia_.get())));
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  // Don't spin up the IO thread yet since no threads are allowed while
+  // spawning sandbox host process. See crbug.com/322732.
+  ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
 
   // Start https wrapper here so that the URLs can be pointed at it in
   // SetUpCommandLine().
   InitHttpsForwarders();
 
-  // Stop IO thread here because no threads are allowed while
-  // spawning sandbox host process. See crbug.com/322732.
-  embedded_test_server()->StopThread();
-
   ExtensionApiTest::SetUp();
-}
-
-bool OobeBaseTest::SetUpUserDataDirectory() {
-  base::FilePath user_data_dir;
-  CHECK(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
-  base::FilePath local_state_path =
-      user_data_dir.Append(chrome::kLocalStateFilename);
-
-  if (!use_webview()) {
-    // Set webview disabled flag only when local state file does not exist.
-    // Otherwise, we break PRE tests that leave state in it.
-    if (!base::PathExists(local_state_path)) {
-      base::DictionaryValue local_state_dict;
-
-      // TODO(nkostylev): Fix tests that fail with webview signin.
-      local_state_dict.SetBoolean(prefs::kWebviewSigninDisabled, true);
-
-      CHECK(JSONFileValueSerializer(local_state_path)
-                .Serialize(local_state_dict));
-    }
-  }
-
-  return ExtensionApiTest::SetUpUserDataDirectory();
 }
 
 void OobeBaseTest::SetUpInProcessBrowserTestFixture() {
   host_resolver()->AddRule("*", "127.0.0.1");
   network_portal_detector_ = new NetworkPortalDetectorTestImpl();
-  NetworkPortalDetector::InitializeForTesting(network_portal_detector_);
+  network_portal_detector::InitializeForTesting(network_portal_detector_);
   network_portal_detector_->SetDefaultNetworkForTesting(
       FakeShillManagerClient::kFakeEthernetNetworkGuid);
 
@@ -122,8 +94,9 @@ void OobeBaseTest::SetUpOnMainThread() {
                                           kFakeLSIDCookie);
   }
 
-  // Restart the thread as the sandbox host process has already been spawned.
-  embedded_test_server()->RestartThreadAndListen();
+  // Start the accept thread as the sandbox host process has already been
+  // spawned.
+  embedded_test_server()->StartAcceptingConnections();
 
   login_screen_load_observer_.reset(new content::WindowedNotificationObserver(
       chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
@@ -136,6 +109,8 @@ void OobeBaseTest::SetUpOnMainThread() {
   test::UserSessionManagerTestApi session_manager_test_api(
       UserSessionManager::GetInstance());
   session_manager_test_api.SetShouldObtainTokenHandleInTests(false);
+
+  LoginDisplayHostImpl::DisableRestrictiveProxyCheckForTest();
 
   ExtensionApiTest::SetUpOnMainThread();
 }
@@ -168,7 +143,7 @@ void OobeBaseTest::SetUpCommandLine(base::CommandLine* command_line) {
                                   gaia_url.spec());
 
   fake_gaia_->Initialize();
-  fake_gaia_->set_issue_oauth_code_cookie(use_webview());
+  fake_gaia_->set_issue_oauth_code_cookie(true);
 }
 
 void OobeBaseTest::InitHttpsForwarders() {
@@ -241,16 +216,18 @@ WebUILoginDisplay* OobeBaseTest::GetLoginDisplay() {
 
 void OobeBaseTest::WaitForGaiaPageLoad() {
   WaitForSigninScreen();
+  WaitForGaiaPageReload();
+}
 
-  if (!use_webview())
-    return;
-
-  JS().Evaluate(
-      "$('gaia-signin').gaiaAuthHost_.addEventListener('ready',"
-      "function() {"
-      "window.domAutomationController.setAutomationId(0);"
-      "window.domAutomationController.send('GaiaReady');"
-      "});");
+void OobeBaseTest::WaitForGaiaPageReload() {
+  JS()
+      .Evaluate(
+          "$('gaia-signin').gaiaAuthHost_.addEventListener('ready',"
+          "function f() {"
+          "$(\'gaia-signin\').gaiaAuthHost_.removeEventListener(\'ready\', f);"
+          "window.domAutomationController.setAutomationId(0);"
+          "window.domAutomationController.send('GaiaReady');"
+          "});");
 
   content::DOMMessageQueue message_queue;
   std::string message;

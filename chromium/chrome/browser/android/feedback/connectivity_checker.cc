@@ -100,7 +100,7 @@ class ConnectivityChecker : public net::URLFetcherDelegate {
   // has already happened, and no further action should be taken.
   bool is_being_destroyed_;
 
-  scoped_ptr<base::OneShotTimer<ConnectivityChecker>> expiration_timer_;
+  scoped_ptr<base::OneShotTimer> expiration_timer_;
 };
 
 void ConnectivityChecker::OnURLFetchComplete(const net::URLFetcher* source) {
@@ -136,8 +136,7 @@ ConnectivityChecker::ConnectivityChecker(
 }
 
 void ConnectivityChecker::StartAsyncCheck() {
-  url_fetcher_ =
-      net::URLFetcher::Create(url_, net::URLFetcher::GET, this).Pass();
+  url_fetcher_ = net::URLFetcher::Create(url_, net::URLFetcher::GET, this);
   url_fetcher_->SetRequestContext(request_context_);
   url_fetcher_->SetStopOnRedirect(true);
   url_fetcher_->SetAutomaticallyRetryOn5xx(false);
@@ -147,7 +146,7 @@ void ConnectivityChecker::StartAsyncCheck() {
                              net::LOAD_DO_NOT_SEND_COOKIES |
                              net::LOAD_DO_NOT_SEND_AUTH_DATA);
   url_fetcher_->Start();
-  expiration_timer_.reset(new base::OneShotTimer<ConnectivityChecker>());
+  expiration_timer_.reset(new base::OneShotTimer());
   expiration_timer_->Start(FROM_HERE, timeout_, this,
                            &ConnectivityChecker::OnTimeout);
 }
@@ -164,11 +163,11 @@ void ConnectivityChecker::OnTimeout() {
 }  // namespace
 
 void CheckConnectivity(JNIEnv* env,
-                       jclass clazz,
-                       jobject j_profile,
-                       jstring j_url,
+                       const JavaParamRef<jclass>& clazz,
+                       const JavaParamRef<jobject>& j_profile,
+                       const JavaParamRef<jstring>& j_url,
                        jlong j_timeout_ms,
-                       jobject j_callback) {
+                       const JavaParamRef<jobject>& j_callback) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
   if (!profile) {
     PostCallback(env, j_callback, CONNECTIVITY_CHECK_RESULT_ERROR);
@@ -183,11 +182,13 @@ void CheckConnectivity(JNIEnv* env,
   // This object will be deleted when the connectivity check has completed.
   ConnectivityChecker* connectivity_checker = new ConnectivityChecker(
       profile, url, base::TimeDelta::FromMilliseconds(j_timeout_ms),
-      base::android::ScopedJavaLocalRef<jobject>(env, j_callback));
+      j_callback);
   connectivity_checker->StartAsyncCheck();
 }
 
-jboolean IsUrlValid(JNIEnv* env, jclass clazz, jstring j_url) {
+jboolean IsUrlValid(JNIEnv* env,
+                    const JavaParamRef<jclass>& clazz,
+                    const JavaParamRef<jstring>& j_url) {
   GURL url(base::android::ConvertJavaStringToUTF8(env, j_url));
   return url.is_valid();
 }

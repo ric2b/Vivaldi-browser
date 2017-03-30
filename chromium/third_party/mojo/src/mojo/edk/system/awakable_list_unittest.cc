@@ -7,13 +7,13 @@
 // increase tolerance and reduce observed flakiness (though doing so reduces the
 // meaningfulness of the test).
 
-#include "mojo/edk/system/awakable_list.h"
+#include "third_party/mojo/src/mojo/edk/system/awakable_list.h"
 
-#include "mojo/edk/system/handle_signals_state.h"
-#include "mojo/edk/system/test_utils.h"
-#include "mojo/edk/system/waiter.h"
-#include "mojo/edk/system/waiter_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/system/handle_signals_state.h"
+#include "third_party/mojo/src/mojo/edk/system/test_utils.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter_test_utils.h"
 
 namespace mojo {
 namespace system {
@@ -21,7 +21,7 @@ namespace {
 
 TEST(AwakableListTest, BasicCancel) {
   MojoResult result;
-  uint32_t context;
+  uintptr_t context;
 
   // Cancel immediately after thread start.
   {
@@ -62,7 +62,7 @@ TEST(AwakableListTest, BasicCancel) {
 
 TEST(AwakableListTest, BasicAwakeSatisfied) {
   MojoResult result;
-  uint32_t context;
+  uintptr_t context;
 
   // Awake immediately after thread start.
   {
@@ -112,7 +112,7 @@ TEST(AwakableListTest, BasicAwakeSatisfied) {
 
 TEST(AwakableListTest, BasicAwakeUnsatisfiable) {
   MojoResult result;
-  uint32_t context;
+  uintptr_t context;
 
   // Awake (for unsatisfiability) immediately after thread start.
   {
@@ -162,10 +162,10 @@ TEST(AwakableListTest, MultipleAwakables) {
   MojoResult result2;
   MojoResult result3;
   MojoResult result4;
-  uint32_t context1;
-  uint32_t context2;
-  uint32_t context3;
-  uint32_t context4;
+  uintptr_t context1;
+  uintptr_t context2;
+  uintptr_t context3;
+  uintptr_t context4;
 
   // Cancel two awakables.
   {

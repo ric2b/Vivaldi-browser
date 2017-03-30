@@ -4,14 +4,16 @@
 
 #include "components/filesystem/files_test_base.h"
 
+#include <utility>
+
 #include "components/filesystem/public/interfaces/directory.mojom.h"
 #include "components/filesystem/public/interfaces/types.mojom.h"
-#include "mojo/application/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/application_impl.h"
 #include "mojo/util/capture_util.h"
 
 namespace filesystem {
 
-FilesTestBase::FilesTestBase() {
+FilesTestBase::FilesTestBase() : binding_(this) {
 }
 
 FilesTestBase::~FilesTestBase() {
@@ -19,15 +21,19 @@ FilesTestBase::~FilesTestBase() {
 
 void FilesTestBase::SetUp() {
   ApplicationTestBase::SetUp();
+  application_impl()->ConnectToService("mojo:filesystem", &files_);
+}
 
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From("mojo:filesystem");
-  application_impl()->ConnectToService(request.Pass(), &files_);
+void FilesTestBase::OnFileSystemShutdown() {
 }
 
 void FilesTestBase::GetTemporaryRoot(DirectoryPtr* directory) {
+  filesystem::FileSystemClientPtr client;
+  binding_.Bind(GetProxy(&client));
+
   FileError error = FILE_ERROR_FAILED;
-  files()->OpenFileSystem("temp", GetProxy(directory), mojo::Capture(&error));
+  files()->OpenFileSystem("temp", GetProxy(directory), std::move(client),
+                          mojo::Capture(&error));
   ASSERT_TRUE(files().WaitForIncomingResponse());
   ASSERT_EQ(FILE_ERROR_OK, error);
 }

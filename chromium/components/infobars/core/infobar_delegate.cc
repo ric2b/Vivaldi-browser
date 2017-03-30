@@ -8,7 +8,14 @@
 #include "build/build_config.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_manager.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/vector_icons_public.h"
+
+#if !defined(OS_MACOSX) && !defined(OS_IOS) && !defined(OS_ANDROID)
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/paint_vector_icon.h"
+#endif
 
 namespace infobars {
 
@@ -26,13 +33,29 @@ InfoBarDelegate::Type InfoBarDelegate::GetInfoBarType() const {
   return WARNING_TYPE;
 }
 
-int InfoBarDelegate::GetIconID() const {
+int InfoBarDelegate::GetIconId() const {
   return kNoIconID;
 }
 
+gfx::VectorIconId InfoBarDelegate::GetVectorIconId() const {
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
+}
+
 gfx::Image InfoBarDelegate::GetIcon() const {
-  int icon_id = GetIconID();
-  return (icon_id == kNoIconID) ? gfx::Image() :
+#if !defined(OS_MACOSX) && !defined(OS_IOS) && !defined(OS_ANDROID)
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    gfx::VectorIconId vector_id = GetVectorIconId();
+    if (vector_id != gfx::VectorIconId::VECTOR_ICON_NONE) {
+      return gfx::Image(gfx::CreateVectorIcon(vector_id, 18,
+                                              GetInfoBarType() == WARNING_TYPE
+                                                  ? SkColorSetRGB(0xFF, 0x67, 0)
+                                                  : gfx::kGoogleBlue500));
+    }
+  }
+#endif
+
+  int icon_id = GetIconId();
+  return icon_id == kNoIconID ? gfx::Image() :
       ResourceBundle::GetSharedInstance().GetNativeImageNamed(icon_id);
 }
 
@@ -54,20 +77,16 @@ bool InfoBarDelegate::ShouldExpire(const NavigationDetails& details) const {
 void InfoBarDelegate::InfoBarDismissed() {
 }
 
-AutoLoginInfoBarDelegate* InfoBarDelegate::AsAutoLoginInfoBarDelegate() {
+ConfirmInfoBarDelegate* InfoBarDelegate::AsConfirmInfoBarDelegate() {
   return nullptr;
 }
 
-ConfirmInfoBarDelegate* InfoBarDelegate::AsConfirmInfoBarDelegate() {
+HungRendererInfoBarDelegate* InfoBarDelegate::AsHungRendererInfoBarDelegate() {
   return nullptr;
 }
 
 InsecureContentInfoBarDelegate*
     InfoBarDelegate::AsInsecureContentInfoBarDelegate() {
-  return nullptr;
-}
-
-MediaStreamInfoBarDelegate* InfoBarDelegate::AsMediaStreamInfoBarDelegate() {
   return nullptr;
 }
 
@@ -103,9 +122,21 @@ ThreeDAPIInfoBarDelegate* InfoBarDelegate::AsThreeDAPIInfoBarDelegate() {
 }
 
 translate::TranslateInfoBarDelegate*
-InfoBarDelegate::AsTranslateInfoBarDelegate() {
+    InfoBarDelegate::AsTranslateInfoBarDelegate() {
   return nullptr;
 }
+
+#if defined(OS_ANDROID)
+MediaStreamInfoBarDelegateAndroid*
+InfoBarDelegate::AsMediaStreamInfoBarDelegateAndroid() {
+  return nullptr;
+}
+
+MediaThrottleInfoBarDelegate*
+    InfoBarDelegate::AsMediaThrottleInfoBarDelegate() {
+  return nullptr;
+}
+#endif
 
 InfoBarDelegate::InfoBarDelegate() : nav_entry_id_(0) {
 }

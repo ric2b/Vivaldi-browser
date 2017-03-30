@@ -6,6 +6,7 @@
 
 #include "ash/host/root_window_transformer.h"
 #include "ash/ime/input_method_event_handler.h"
+#include "ui/events/event_processor.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/transform.h"
 
@@ -57,18 +58,14 @@ void AshRemoteWindowTreeHostWin::UpdateRootWindowSize(
   transformer_helper_.UpdateWindowSize(host_size);
 }
 
-bool AshRemoteWindowTreeHostWin::DispatchKeyEventPostIME(
-    const ui::KeyEvent& event) {
-  ui::KeyEvent event_copy(event);
+ui::EventDispatchDetails AshRemoteWindowTreeHostWin::DispatchKeyEventPostIME(
+    ui::KeyEvent* event) {
   input_method_handler()->SetPostIME(true);
-  ui::EventSource::DeliverEventToProcessor(&event_copy);
-  input_method_handler()->SetPostIME(false);
-  return event_copy.handled();
-}
-
-ui::EventDispatchDetails AshRemoteWindowTreeHostWin::DeliverEventToProcessor(
-    ui::Event* event) {
-  return ui::EventSource::DeliverEventToProcessor(event);
+  ui::EventDispatchDetails details =
+      event_processor()->OnEventFromSource(event);
+  if (!details.dispatcher_destroyed)
+    input_method_handler()->SetPostIME(false);
+  return details;
 }
 
 }  // namespace ash

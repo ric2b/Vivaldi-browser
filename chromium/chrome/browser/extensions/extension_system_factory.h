@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_EXTENSION_SYSTEM_FACTORY_H_
 #define CHROME_BROWSER_EXTENSIONS_EXTENSION_SYSTEM_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/extensions/extension_system_impl.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
@@ -23,7 +24,7 @@ class ExtensionSystemSharedFactory : public BrowserContextKeyedServiceFactory {
   static ExtensionSystemSharedFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<ExtensionSystemSharedFactory>;
+  friend struct base::DefaultSingletonTraits<ExtensionSystemSharedFactory>;
 
   ExtensionSystemSharedFactory();
   ~ExtensionSystemSharedFactory() override;
@@ -48,7 +49,7 @@ class ExtensionSystemFactory : public ExtensionSystemProvider {
   static ExtensionSystemFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<ExtensionSystemFactory>;
+  friend struct base::DefaultSingletonTraits<ExtensionSystemFactory>;
 
   ExtensionSystemFactory();
   ~ExtensionSystemFactory() override;

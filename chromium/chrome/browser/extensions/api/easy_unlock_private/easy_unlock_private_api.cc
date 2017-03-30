@@ -4,27 +4,47 @@
 
 #include "chrome/browser/extensions/api/easy_unlock_private/easy_unlock_private_api.h"
 
+#include <utility>
 #include <vector>
 
+#include "base/base64url.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/memory/linked_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/thread_task_runner_handle.h"
+#include "base/time/default_tick_clock.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
+#include "build/build_config.h"
+#include "chrome/browser/extensions/api/easy_unlock_private/easy_unlock_private_connection_manager.h"
 #include "chrome/browser/extensions/api/easy_unlock_private/easy_unlock_private_crypto_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/easy_unlock_screenlock_state_handler.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
+#include "chrome/browser/signin/easy_unlock_service_regular.h"
 #include "chrome/browser/ui/proximity_auth/proximity_auth_error_bubble.h"
 #include "chrome/common/extensions/api/easy_unlock_private.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/proximity_auth/ble/bluetooth_low_energy_connection.h"
+#include "components/proximity_auth/ble/bluetooth_low_energy_connection_finder.h"
+#include "components/proximity_auth/bluetooth_throttler_impl.h"
 #include "components/proximity_auth/bluetooth_util.h"
+#include "components/proximity_auth/cryptauth/cryptauth_device_manager.h"
+#include "components/proximity_auth/cryptauth/cryptauth_enrollment_manager.h"
 #include "components/proximity_auth/cryptauth/cryptauth_enrollment_utils.h"
+#include "components/proximity_auth/cryptauth/proto/cryptauth_api.pb.h"
+#include "components/proximity_auth/cryptauth/secure_message_delegate.h"
+#include "components/proximity_auth/logging/logging.h"
+#include "components/proximity_auth/proximity_auth_client.h"
+#include "components/proximity_auth/remote_device.h"
 #include "components/proximity_auth/screenlock_bridge.h"
 #include "components/proximity_auth/screenlock_state.h"
 #include "components/proximity_auth/switches.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -56,6 +76,12 @@ EasyUnlockPrivateCryptoDelegate* GetCryptoDelegate(
     content::BrowserContext* context) {
   return BrowserContextKeyedAPIFactory<EasyUnlockPrivateAPI>::Get(context)
       ->GetCryptoDelegate();
+}
+
+EasyUnlockPrivateConnectionManager* GetConnectionManager(
+    content::BrowserContext* context) {
+  return BrowserContextKeyedAPIFactory<EasyUnlockPrivateAPI>::Get(context)
+      ->get_connection_manager();
 }
 
 ScreenlockState ToScreenlockState(easy_unlock_private::State state) {
@@ -95,8 +121,8 @@ BrowserContextKeyedAPIFactory<EasyUnlockPrivateAPI>*
   return g_factory.Pointer();
 }
 
-EasyUnlockPrivateAPI::EasyUnlockPrivateAPI(content::BrowserContext* context) {
-}
+EasyUnlockPrivateAPI::EasyUnlockPrivateAPI(content::BrowserContext* context)
+    : connection_manager_(new EasyUnlockPrivateConnectionManager(context)) {}
 
 EasyUnlockPrivateAPI::~EasyUnlockPrivateAPI() {}
 
@@ -326,14 +352,12 @@ bool EasyUnlockPrivateGetStringsFunction::RunSync() {
   strings->SetString(
       "setupErrorFindingPhone",
       l10n_util::GetStringUTF16(IDS_EASY_UNLOCK_SETUP_ERROR_FINDING_PHONE));
-  strings->SetString(
-      "setupErrorSyncPhoneState",
-       l10n_util::GetStringUTF16(
-           IDS_EASY_UNLOCK_SETUP_ERROR_SYNC_PHONE_STATE_FAILED));
-  strings->SetString(
-      "setupErrorConnectingToPhone",
-      l10n_util::GetStringFUTF16(
-          IDS_EASY_UNLOCK_SETUP_ERROR_CONNECTING_TO_PHONE, device_type));
+  strings->SetString("setupErrorSyncPhoneState",
+                     l10n_util::GetStringUTF16(
+                         IDS_EASY_UNLOCK_SETUP_ERROR_SYNC_PHONE_STATE_FAILED));
+  strings->SetString("setupErrorConnectingToPhone",
+                     l10n_util::GetStringUTF16(
+                         IDS_EASY_UNLOCK_SETUP_ERROR_CONNECTING_TO_PHONE));
 
   SetResult(strings.release());
   return true;
@@ -468,9 +492,10 @@ bool EasyUnlockPrivateSeekBluetoothDeviceByAddressFunction::RunAsync() {
       base::Bind(
           &EasyUnlockPrivateSeekBluetoothDeviceByAddressFunction::OnSeekFailure,
           this),
-      content::BrowserThread::GetBlockingPool()->
-          GetTaskRunnerWithShutdownBehavior(
-              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN).get());
+      content::BrowserThread::GetBlockingPool()
+          ->GetTaskRunnerWithShutdownBehavior(
+              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN)
+          .get());
   return true;
 }
 
@@ -552,6 +577,12 @@ EasyUnlockPrivateGetPermitAccessFunction::
 }
 
 bool EasyUnlockPrivateGetPermitAccessFunction::RunSync() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery)) {
+    ReturnPermitAccessForExperiment();
+    return true;
+  }
+
   Profile* profile = Profile::FromBrowserContext(browser_context());
   const base::DictionaryValue* permit_value =
       EasyUnlockService::Get(profile)->GetPermitAccess();
@@ -562,6 +593,55 @@ bool EasyUnlockPrivateGetPermitAccessFunction::RunSync() {
   }
 
   return true;
+}
+
+void EasyUnlockPrivateGetPermitAccessFunction::GetKeyPairForExperiment(
+    std::string* user_public_key,
+    std::string* user_private_key) {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  proximity_auth::CryptAuthEnrollmentManager* enrollment_manager =
+      EasyUnlockService::Get(profile)
+          ->proximity_auth_client()
+          ->GetCryptAuthEnrollmentManager();
+  base::Base64UrlEncode(enrollment_manager->GetUserPublicKey(),
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        user_public_key);
+  base::Base64UrlEncode(enrollment_manager->GetUserPrivateKey(),
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        user_private_key);
+}
+
+void EasyUnlockPrivateGetPermitAccessFunction::
+    ReturnPermitAccessForExperiment() {
+  // Check that we are inside a user session.
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  EasyUnlockService* easy_unlock_service = EasyUnlockService::Get(profile);
+  if (easy_unlock_service->GetType() != EasyUnlockService::TYPE_REGULAR) {
+    SetError("This function must be called inside a user session.");
+    SendResponse(true);
+    return;
+  }
+
+  std::string b64_public_key, b64_private_key;
+  GetKeyPairForExperiment(&b64_public_key, &b64_private_key);
+
+  // Fill in the permit access JSON dictionary.
+  proximity_auth::ProximityAuthClient* client =
+      easy_unlock_service->proximity_auth_client();
+  scoped_ptr<base::DictionaryValue> permit_access(new base::DictionaryValue());
+  permit_access->SetString("permitId",
+                           "permit://google.com/" + client->GetAccountId());
+  permit_access->SetString("id", b64_public_key);
+  permit_access->SetString("type", "access");
+  permit_access->SetString("data", b64_private_key);
+
+  PA_LOG(INFO) << "Returning permit access for "
+               << "chrome.easyUnlockPrivate.getPermitAccess:\n"
+               << "  id: " << b64_public_key;
+
+  scoped_ptr<easy_unlock_private::PermitRecord> result =
+      easy_unlock_private::PermitRecord::FromValue(*permit_access);
+  results_ = easy_unlock_private::GetPermitAccess::Results::Create(*result);
 }
 
 EasyUnlockPrivateClearPermitAccessFunction::
@@ -596,7 +676,13 @@ bool EasyUnlockPrivateSetRemoteDevicesFunction::RunSync() {
   for (size_t i = 0; i < params->devices.size(); ++i) {
     devices.Append(params->devices[i]->ToValue().release());
   }
-  EasyUnlockService::Get(profile)->SetRemoteDevices(devices);
+  // Store the BLE device if we are trying out the BLE experiment.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery)) {
+    EasyUnlockService::Get(profile)->SetRemoteBleDevices(devices);
+  } else {
+    EasyUnlockService::Get(profile)->SetRemoteDevices(devices);
+  }
 
   return true;
 }
@@ -609,12 +695,126 @@ EasyUnlockPrivateGetRemoteDevicesFunction::
     ~EasyUnlockPrivateGetRemoteDevicesFunction() {
 }
 
-bool EasyUnlockPrivateGetRemoteDevicesFunction::RunSync() {
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  const base::ListValue* devices =
-      EasyUnlockService::Get(profile)->GetRemoteDevices();
-  SetResult(devices ? devices->DeepCopy() : new base::ListValue());
+bool EasyUnlockPrivateGetRemoteDevicesFunction::RunAsync() {
+  // Return the remote devices stored with the native CryptAuthDeviceManager if
+  // we are trying out the BLE experiment.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery)) {
+    ReturnDevicesForExperiment();
+  } else {
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+    const base::ListValue* devices =
+        EasyUnlockService::Get(profile)->GetRemoteDevices();
+    SetResult(devices ? devices->DeepCopy() : new base::ListValue());
+    SendResponse(true);
+  }
+
   return true;
+}
+
+std::string EasyUnlockPrivateGetRemoteDevicesFunction::GetUserPrivateKey() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  proximity_auth::ProximityAuthClient* client =
+      EasyUnlockService::Get(profile)->proximity_auth_client();
+  proximity_auth::CryptAuthEnrollmentManager* enrollment_manager =
+      client->GetCryptAuthEnrollmentManager();
+  return enrollment_manager->GetUserPrivateKey();
+}
+
+std::vector<cryptauth::ExternalDeviceInfo>
+EasyUnlockPrivateGetRemoteDevicesFunction::GetUnlockKeys() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  proximity_auth::ProximityAuthClient* client =
+      EasyUnlockService::Get(profile)->proximity_auth_client();
+  proximity_auth::CryptAuthDeviceManager* device_manager =
+      client->GetCryptAuthDeviceManager();
+  return device_manager->unlock_keys();
+}
+
+void EasyUnlockPrivateGetRemoteDevicesFunction::ReturnDevicesForExperiment() {
+  // Check that we are inside a user profile.
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  EasyUnlockService* easy_unlock_service = EasyUnlockService::Get(profile);
+  if (easy_unlock_service->GetType() != EasyUnlockService::TYPE_REGULAR) {
+    SetError("This function must be called inside a user session.");
+    SendResponse(true);
+    return;
+  }
+
+  // Get the synced unlock key data.
+  proximity_auth::ProximityAuthClient* client =
+      easy_unlock_service->proximity_auth_client();
+
+  permit_id_ = "permit://google.com/easyunlock/v1/" + client->GetAccountId();
+  secure_message_delegate_ = client->CreateSecureMessageDelegate();
+  std::vector<cryptauth::ExternalDeviceInfo> unlock_keys = GetUnlockKeys();
+  expected_devices_count_ = unlock_keys.size();
+
+  remote_devices_.reset(new base::ListValue());
+  if (expected_devices_count_ == 0) {
+    SetResult(std::move(remote_devices_));
+    SendResponse(true);
+    return;
+  }
+
+  // If there is a BLE unlock key, then don't return anything, so the app does
+  // not try the classic Bluetooth protocol.
+  for (const auto& unlock_key : unlock_keys) {
+    if (unlock_key.bluetooth_address().empty()) {
+      SetResult(std::move(remote_devices_));
+      SendResponse(true);
+      return;
+    }
+  }
+
+  // Derive the PSKs for the user's unlock keys.
+  PA_LOG(INFO) << "Deriving PSKs for "
+               << "chrome.easyUnlockPrivate.getRemoteDevices.\n"
+               << "Expecting " << expected_devices_count_ << " devices.";
+  for (const auto& unlock_key : unlock_keys) {
+    secure_message_delegate_->DeriveKey(
+        GetUserPrivateKey(), unlock_key.public_key(),
+        base::Bind(
+            &EasyUnlockPrivateGetRemoteDevicesFunction::OnPSKDerivedForDevice,
+            this, unlock_key));
+  }
+}
+
+void EasyUnlockPrivateGetRemoteDevicesFunction::OnPSKDerivedForDevice(
+    const cryptauth::ExternalDeviceInfo& device,
+    const std::string& persistent_symmetric_key) {
+  std::string b64_public_key, b64_psk;
+  base::Base64UrlEncode(device.public_key(),
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        &b64_public_key);
+  base::Base64UrlEncode(persistent_symmetric_key,
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        &b64_psk);
+
+  // Fill in the JSON dictionary containing a single unlock key's data.
+  scoped_ptr<base::DictionaryValue> device_dictionary(
+      new base::DictionaryValue());
+  device_dictionary->SetString("name", device.friendly_device_name());
+  device_dictionary->SetString("bluetoothAddress", device.bluetooth_address());
+  device_dictionary->SetString("psk", b64_psk);
+
+  // Fill in the permit license for the unlock key.
+  scoped_ptr<base::DictionaryValue> permit_license(new base::DictionaryValue());
+  permit_license->SetString("permitId", permit_id_);
+  permit_license->SetString("id", b64_public_key);
+  permit_license->SetString("type", "license");
+  permit_license->SetString("data", b64_public_key);
+  device_dictionary->Set("permitRecord", std::move(permit_license));
+
+  remote_devices_->Append(std::move(device_dictionary));
+
+  // If all PSKs are derived, then return from the API call.
+  PA_LOG(INFO) << "Derived PSK for " << b64_public_key << ": "
+               << remote_devices_->GetSize() << "/" << expected_devices_count_;
+  if (remote_devices_->GetSize() == expected_devices_count_) {
+    SetResult(std::move(remote_devices_));
+    SendResponse(true);
+  }
 }
 
 EasyUnlockPrivateGetSignInChallengeFunction::
@@ -642,7 +842,7 @@ bool EasyUnlockPrivateGetSignInChallengeFunction::RunAsync() {
       return false;
     }
     key_manager->SignUsingTpmKey(
-        EasyUnlockService::Get(profile)->GetUserEmail(),
+        EasyUnlockService::Get(profile)->GetAccountId(),
         std::string(params->nonce.begin(), params->nonce.end()),
         base::Bind(&EasyUnlockPrivateGetSignInChallengeFunction::OnDone, this,
                    challenge));
@@ -694,22 +894,26 @@ bool EasyUnlockPrivateGetUserInfoFunction::RunSync() {
   EasyUnlockService* service =
       EasyUnlockService::Get(Profile::FromBrowserContext(browser_context()));
   std::vector<linked_ptr<easy_unlock_private::UserInfo> > users;
-  std::string user_id = service->GetUserEmail();
-  if (!user_id.empty()) {
+  const AccountId& account_id = service->GetAccountId();
+  if (account_id.is_valid()) {
     users.push_back(
         linked_ptr<easy_unlock_private::UserInfo>(
             new easy_unlock_private::UserInfo()));
-    users[0]->user_id = user_id;
+    users[0]->user_id = account_id.GetUserEmail();
     users[0]->logged_in = service->GetType() == EasyUnlockService::TYPE_REGULAR;
     users[0]->data_ready = users[0]->logged_in ||
                            service->GetRemoteDevices() != NULL;
 
     EasyUnlockService::UserSettings user_settings =
-        EasyUnlockService::GetUserSettings(user_id);
+        EasyUnlockService::GetUserSettings(account_id);
     users[0]->require_close_proximity = user_settings.require_close_proximity;
 
     users[0]->device_user_id = proximity_auth::CalculateDeviceUserId(
-        EasyUnlockService::GetDeviceId(), user_id);
+        EasyUnlockService::GetDeviceId(), account_id.GetUserEmail());
+
+    users[0]->ble_discovery_enabled =
+        base::CommandLine::ForCurrentProcess()->HasSwitch(
+            proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery);
   }
   results_ = easy_unlock_private::GetUserInfo::Results::Create(users);
   return true;
@@ -754,7 +958,7 @@ void EasyUnlockPrivateGetConnectionInfoFunction::OnConnectionInfo(
   results->AppendInteger(connection_info.rssi);
   results->AppendInteger(connection_info.transmit_power);
   results->AppendInteger(connection_info.max_transmit_power);
-  SetResultList(results.Pass());
+  SetResultList(std::move(results));
   SendResponse(true);
 }
 
@@ -839,6 +1043,142 @@ bool EasyUnlockPrivateSetAutoPairingResultFunction::RunSync() {
   EasyUnlockService::Get(profile)
       ->SetAutoPairingResult(params->result.success, error_message);
 
+  return true;
+}
+
+EasyUnlockPrivateFindSetupConnectionFunction::
+    EasyUnlockPrivateFindSetupConnectionFunction()
+    : bluetooth_throttler_(new proximity_auth::BluetoothThrottlerImpl(
+          make_scoped_ptr(new base::DefaultTickClock()))) {}
+
+EasyUnlockPrivateFindSetupConnectionFunction::
+    ~EasyUnlockPrivateFindSetupConnectionFunction() {
+  // |connection_finder_| has a raw pointer to |bluetooth_throttler_|, so it
+  // should be destroyed first.
+  connection_finder_.reset();
+  bluetooth_throttler_.reset();
+}
+
+void EasyUnlockPrivateFindSetupConnectionFunction::
+    OnConnectionFinderTimedOut() {
+  SetError("No connection found.");
+  connection_finder_.reset();
+  SendResponse(false);
+}
+
+void EasyUnlockPrivateFindSetupConnectionFunction::OnConnectionFound(
+    scoped_ptr<proximity_auth::Connection> connection) {
+  // Connection are not persistent by default.
+  std::string device_address = connection->remote_device().bluetooth_address;
+  bool persistent = false;
+  int connection_id =
+      GetConnectionManager(browser_context())
+          ->AddConnection(extension(), std::move(connection), persistent);
+  results_ = easy_unlock_private::FindSetupConnection::Results::Create(
+      connection_id, device_address);
+  SendResponse(true);
+}
+
+bool EasyUnlockPrivateFindSetupConnectionFunction::RunAsync() {
+  scoped_ptr<easy_unlock_private::FindSetupConnection::Params> params =
+      easy_unlock_private::FindSetupConnection::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  // Creates a BLE connection finder to look for any device advertising
+  // |params->setup_service_uuid|.
+  connection_finder_.reset(
+      new proximity_auth::BluetoothLowEnergyConnectionFinder(
+          proximity_auth::RemoteDevice(), params->setup_service_uuid,
+          proximity_auth::BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE,
+          nullptr, bluetooth_throttler_.get(), 3));
+
+  connection_finder_->Find(base::Bind(
+      &EasyUnlockPrivateFindSetupConnectionFunction::OnConnectionFound, this));
+
+  timer_.reset(new base::OneShotTimer());
+  timer_->Start(FROM_HERE, base::TimeDelta::FromSeconds(params->time_out),
+                base::Bind(&EasyUnlockPrivateFindSetupConnectionFunction::
+                               OnConnectionFinderTimedOut,
+                           this));
+
+  return true;
+}
+
+EasyUnlockPrivateSetupConnectionStatusFunction::
+    EasyUnlockPrivateSetupConnectionStatusFunction() {}
+
+EasyUnlockPrivateSetupConnectionStatusFunction::
+    ~EasyUnlockPrivateSetupConnectionStatusFunction() {}
+
+bool EasyUnlockPrivateSetupConnectionStatusFunction::RunSync() {
+  scoped_ptr<easy_unlock_private::SetupConnectionStatus::Params> params =
+      easy_unlock_private::SetupConnectionStatus::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  api::easy_unlock_private::ConnectionStatus status =
+      GetConnectionManager(browser_context())
+          ->ConnectionStatus(extension(), params->connection_id);
+  results_ =
+      easy_unlock_private::SetupConnectionStatus::Results::Create(status);
+  if (status == api::easy_unlock_private::CONNECTION_STATUS_NONE)
+    SetError("Invalid connectionId");
+  return true;
+}
+
+EasyUnlockPrivateSetupConnectionDisconnectFunction::
+    EasyUnlockPrivateSetupConnectionDisconnectFunction() {}
+
+EasyUnlockPrivateSetupConnectionDisconnectFunction::
+    ~EasyUnlockPrivateSetupConnectionDisconnectFunction() {}
+
+bool EasyUnlockPrivateSetupConnectionDisconnectFunction::RunSync() {
+  scoped_ptr<easy_unlock_private::SetupConnectionDisconnect::Params> params =
+      easy_unlock_private::SetupConnectionDisconnect::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  bool success = GetConnectionManager(browser_context())
+                     ->Disconnect(extension(), params->connection_id);
+  if (!success)
+    SetError("Invalid connectionId.");
+  return true;
+}
+
+EasyUnlockPrivateSetupConnectionSendFunction::
+    EasyUnlockPrivateSetupConnectionSendFunction() {}
+
+EasyUnlockPrivateSetupConnectionSendFunction::
+    ~EasyUnlockPrivateSetupConnectionSendFunction() {}
+
+bool EasyUnlockPrivateSetupConnectionSendFunction::RunSync() {
+  scoped_ptr<easy_unlock_private::SetupConnectionSend::Params> params =
+      easy_unlock_private::SetupConnectionSend::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  std::string payload(params->data.begin(), params->data.end());
+  bool success = GetConnectionManager(browser_context())
+                     ->SendMessage(extension(), params->connection_id, payload);
+  if (!success)
+    SetError("Invalid connectionId.");
+  return true;
+}
+
+EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction::
+    EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction() {}
+
+EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction::
+    ~EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction() {}
+
+bool EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction::RunSync() {
+  scoped_ptr<easy_unlock_private::SetupConnectionGetDeviceAddress::Params>
+      params =
+          easy_unlock_private::SetupConnectionGetDeviceAddress::Params::Create(
+              *args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  std::string device_address =
+      GetConnectionManager(browser_context())
+          ->GetDeviceAddress(extension(), params->connection_id);
+  results_ =
+      easy_unlock_private::SetupConnectionGetDeviceAddress::Results::Create(
+          device_address);
+  if (device_address.empty())
+    SetError("Invalid connectionId.");
   return true;
 }
 

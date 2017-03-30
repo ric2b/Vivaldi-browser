@@ -5,42 +5,41 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_LOCATION_BAR_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_LOCATION_BAR_VIEW_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/prefs/pref_member.h"
 #include "chrome/browser/extensions/extension_context_menu_model.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_controller.h"
-#include "chrome/browser/ui/search/search_model_observer.h"
-#include "chrome/browser/ui/toolbar/toolbar_model.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
 #include "chrome/browser/ui/views/dropdown_bar_host.h"
 #include "chrome/browser/ui/views/dropdown_bar_host_delegate.h"
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "components/search_engines/template_url_service_observer.h"
+#include "components/security_state/security_state_model.h"
 #include "components/ui/zoom/zoom_event_manager_observer.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/drag_controller.h"
 
 class ActionBoxButtonView;
 class CommandUpdater;
 class ContentSettingBubbleModelDelegate;
 class ContentSettingImageView;
-class EVBubbleView;
 class ExtensionAction;
 class GURL;
-class GeneratedCreditCardView;
 class InstantController;
 class KeywordHintView;
 class LocationIconView;
 class OpenPDFInReaderView;
-class ManagePasswordsIconView;
+class ManagePasswordsIconViews;
 class PageActionWithBadgeView;
 class PageActionImageView;
 class Profile;
@@ -50,14 +49,12 @@ class TemplateURLService;
 class TranslateIconView;
 class ZoomView;
 
-namespace content {
-struct SSLStatus;
+namespace autofill {
+class SaveCardIconView;
 }
 
 namespace views {
 class BubbleDelegateView;
-class ImageButton;
-class ImageView;
 class Label;
 class Widget;
 }
@@ -73,28 +70,20 @@ class Widget;
 class LocationBarView : public LocationBar,
                         public LocationBarTesting,
                         public views::View,
-                        public views::ButtonListener,
                         public views::DragController,
                         public gfx::AnimationDelegate,
-                        public OmniboxEditController,
+                        public ChromeOmniboxEditController,
                         public DropdownBarHostDelegate,
                         public TemplateURLServiceObserver,
-                        public SearchModelObserver,
                         public ui_zoom::ZoomEventManagerObserver {
  public:
   // The location bar view's class name.
   static const char kViewClassName[];
 
-  // Returns the offset used during dropdown animation.
-  int dropdown_animation_offset() const { return dropdown_animation_offset_; }
-
   class Delegate {
    public:
     // Should return the current web contents.
     virtual content::WebContents* GetWebContents() = 0;
-
-    // Returns the InstantController, or NULL if there isn't one.
-    virtual InstantController* GetInstant() = 0;
 
     virtual ToolbarModel* GetToolbarModel() = 0;
     virtual const ToolbarModel* GetToolbarModel() const = 0;
@@ -113,9 +102,11 @@ class LocationBarView : public LocationBar,
         GetContentSettingBubbleModelDelegate() = 0;
 
     // Shows permissions and settings for the given web contents.
-    virtual void ShowWebsiteSettings(content::WebContents* web_contents,
-                                     const GURL& url,
-                                     const content::SSLStatus& ssl) = 0;
+    virtual void ShowWebsiteSettings(
+        content::WebContents* web_contents,
+        const GURL& url,
+        const security_state::SecurityStateModel::SecurityInfo&
+            security_info) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -126,7 +117,7 @@ class LocationBarView : public LocationBar,
     TEXT,
     SELECTED_TEXT,
     DEEMPHASIZED_TEXT,
-    SECURITY_TEXT,
+    EV_BUBBLE_TEXT_AND_BORDER,
   };
 
   LocationBarView(Browser* browser,
@@ -146,8 +137,12 @@ class LocationBarView : public LocationBar,
 
   // Returns the appropriate color for the desired kind, based on the user's
   // system theme.
-  SkColor GetColor(connection_security::SecurityLevel security_level,
-                   ColorKind kind) const;
+  SkColor GetColor(ColorKind kind) const;
+
+  // Returns the color to be used for security text in the context of
+  // |security_level|.
+  SkColor GetSecureTextColor(
+      security_state::SecurityStateModel::SecurityLevel security_level) const;
 
   // Returns the delegate.
   Delegate* delegate() const { return delegate_; }
@@ -159,7 +154,7 @@ class LocationBarView : public LocationBar,
   ZoomView* zoom_view() { return zoom_view_; }
 
   // The passwords icon. It may not be visible.
-  ManagePasswordsIconView* manage_passwords_icon_view() {
+  ManagePasswordsIconViews* manage_passwords_icon_view() {
     return manage_passwords_icon_view_;
   }
 
@@ -180,8 +175,10 @@ class LocationBarView : public LocationBar,
   // The star. It may not be visible.
   StarView* star_view() { return star_view_; }
 
-  // Toggles the translate icon on or off.
-  void SetTranslateIconToggled(bool on);
+  // The save credit card icon. It may not be visible.
+  autofill::SaveCardIconView* save_credit_card_icon_view() {
+    return save_credit_card_icon_view_;
+  }
 
   // The translate icon. It may not be visible.
   TranslateIconView* translate_icon_view() { return translate_icon_view_; }
@@ -219,8 +216,6 @@ class LocationBarView : public LocationBar,
   OmniboxViewViews* omnibox_view() { return omnibox_view_; }
   const OmniboxViewViews* omnibox_view() const { return omnibox_view_; }
 
-  views::View* generated_credit_card_view();
-
   // Returns the height of the control without the top and bottom
   // edges(i.e.  the height of the edit control inside).  If
   // |use_preferred_size| is true this will be the preferred height,
@@ -229,11 +224,18 @@ class LocationBarView : public LocationBar,
 
   // Returns the position and width that the popup should be, and also the left
   // edge that the results should align themselves to (which will leave some
-  // border on the left of the popup).
+  // border on the left of the popup). |top_edge_overlap| specifies the number
+  // of pixels the top edge of the popup should overlap the bottom edge of
+  // the toolbar.
   void GetOmniboxPopupPositioningInfo(gfx::Point* top_left_screen_coord,
                                       int* popup_width,
                                       int* left_margin,
-                                      int* right_margin);
+                                      int* right_margin,
+                                      int top_edge_overlap);
+
+  // Updates the controller, and, if |contents| is non-null, restores saved
+  // state that the tab holds.
+  void Update(const content::WebContents* contents);
 
   // Clears the location bar's state for |contents|.
   void ResetTabState(content::WebContents* contents);
@@ -248,9 +250,10 @@ class LocationBarView : public LocationBar,
   void GetAccessibleState(ui::AXViewState* state) override;
   gfx::Size GetPreferredSize() const override;
   void Layout() override;
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
-  // OmniboxEditController:
-  void Update(const content::WebContents* contents) override;
+  // ChromeOmniboxEditController:
+  void UpdateWithoutTabRestore() override;
   void ShowURL() override;
   ToolbarModel* GetToolbarModel() override;
   content::WebContents* GetWebContents() override;
@@ -258,18 +261,6 @@ class LocationBarView : public LocationBar,
   // ZoomEventManagerObserver:
   // Updates the view for the zoom icon when default zoom levels change.
   void OnDefaultZoomLevelChanged() override;
-
-  // Thickness of the edges of the omnibox background images, in normal mode.
-  static const int kNormalEdgeThickness;
-  // The same, but for popup mode.
-  static const int kPopupEdgeThickness;
-  // Space between items in the location bar, as well as between items and the
-  // edges.
-  static const int kItemPadding;
-  // Amount of padding built into the standard omnibox icons.
-  static const int kIconInternalPadding;
-  // Space between the edge and a bubble.
-  static const int kBubblePadding;
 
  private:
   typedef std::vector<ContentSettingImageView*> ContentSettingViews;
@@ -281,15 +272,16 @@ class LocationBarView : public LocationBar,
 
   // Helper for GetMinimumWidth().  Calculates the incremental minimum width
   // |view| should add to the trailing width after the omnibox.
-  static int IncrementalMinimumWidth(views::View* view);
+  int IncrementalMinimumWidth(views::View* view) const;
 
-  // Returns the thickness of any visible left and right edge, in pixels.
-  int GetHorizontalEdgeThickness() const;
+  // Returns the thickness of any visible edge, in pixels.
+  int GetEdgeThickness() const;
 
-  // The same, but for the top and bottom edges.
-  int vertical_edge_thickness() const {
-    return is_popup_mode_ ? kPopupEdgeThickness : kNormalEdgeThickness;
-  }
+  // The vertical padding to be applied to all contained views.
+  int VerticalPadding() const;
+
+  // Updates |location_icon_view_| based on the current state and theme.
+  void RefreshLocationIcon();
 
   // Updates the visibility state of the Content Blocked icons to reflect what
   // is actually blocked on the current page. Returns true if the visibility
@@ -312,6 +304,9 @@ class LocationBarView : public LocationBar,
   // Updates the view for the zoom icon based on the current tab's zoom. Returns
   // true if the visibility of the view changed.
   bool RefreshZoomView();
+
+  // Updates |save_credit_card_icon_view_|. Returns true if visibility changed.
+  bool RefreshSaveCreditCardIconView();
 
   // Updates the Translate icon based on the current tab's Translate status.
   void RefreshTranslateIcon();
@@ -347,13 +342,13 @@ class LocationBarView : public LocationBar,
   void FocusSearch() override;
   void UpdateContentSettingsIcons() override;
   void UpdateManagePasswordsIconAndBubble() override;
+  void UpdateSaveCreditCardIcon() override;
   void UpdatePageActions() override;
   void UpdateBookmarkStarVisibility() override;
   void UpdateLocationBarVisibility(bool visible, bool animation) override;
   bool ShowPageActionPopup(const extensions::Extension* extension,
                            bool grant_active_tab) override;
   void UpdateOpenPDFInReaderPrompt() override;
-  void UpdateGeneratedCreditCardView() override;
   void SaveStateToContents(content::WebContents* contents) override;
   const OmniboxView* GetOmniboxView() const override;
   LocationBarTesting* GetLocationBarForTesting() override;
@@ -373,9 +368,6 @@ class LocationBarView : public LocationBar,
   void OnPaint(gfx::Canvas* canvas) override;
   void PaintChildren(const ui::PaintContext& context) override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // views::DragController:
   void WriteDragDataForView(View* sender,
                             const gfx::Point& press_pt,
@@ -389,22 +381,16 @@ class LocationBarView : public LocationBar,
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationEnded(const gfx::Animation* animation) override;
 
-  // OmniboxEditController:
+  // ChromeOmniboxEditController:
   void OnChanged() override;
   void OnSetFocus() override;
-  InstantController* GetInstant() override;
   const ToolbarModel* GetToolbarModel() const override;
 
   // DropdownBarHostDelegate:
   void SetFocusAndSelection(bool select_all) override;
-  void SetAnimationOffset(int offset) override;
 
   // TemplateURLServiceObserver:
   void OnTemplateURLServiceChanged() override;
-
-  // SearchModelObserver:
-  void ModelChanged(const SearchModel::State& old_state,
-                    const SearchModel::State& new_state) override;
 
   // The Browser this LocationBarView is in.  Note that at least
   // chromeos::SimpleWebViewDialog uses a LocationBarView outside any browser
@@ -416,14 +402,12 @@ class LocationBarView : public LocationBar,
   // Our delegate.
   Delegate* delegate_;
 
-  // Object used to paint the border.
+  // Object used to paint the border. Not used for material design.
   scoped_ptr<views::Painter> border_painter_;
 
-  // An icon to the left of the edit field.
+  // An icon to the left of the edit field: the HTTPS lock, blank page icon,
+  // search icon, EV HTTPS bubble, etc.
   LocationIconView* location_icon_view_;
-
-  // A bubble displayed for EV HTTPS sites.
-  EVBubbleView* ev_bubble_view_;
 
   // A view to show inline autocompletion when an IME is active.  In this case,
   // we shouldn't change the text or selection inside the OmniboxView itself,
@@ -447,26 +431,23 @@ class LocationBarView : public LocationBar,
   // Shown if the selected url has a corresponding keyword.
   KeywordHintView* keyword_hint_view_;
 
-  // The voice search icon.
-  views::ImageButton* mic_search_view_;
-
   // The content setting views.
   ContentSettingViews content_setting_views_;
 
   // The zoom icon.
   ZoomView* zoom_view_;
 
-  // A bubble that shows after successfully generating a new credit card number.
-  GeneratedCreditCardView* generated_credit_card_view_;
-
   // The icon to open a PDF in Reader.
   OpenPDFInReaderView* open_pdf_in_reader_view_;
 
   // The manage passwords icon.
-  ManagePasswordsIconView* manage_passwords_icon_view_;
+  ManagePasswordsIconViews* manage_passwords_icon_view_;
 
   // The page action icon views.
   PageActionViews page_action_views_;
+
+  // The save credit card icon.
+  autofill::SaveCardIconView* save_credit_card_icon_view_;
 
   // The icon for Translate.
   TranslateIconView* translate_icon_view_;
@@ -491,12 +472,6 @@ class LocationBarView : public LocationBar,
 
   // Tracks this preference to determine whether bookmark editing is allowed.
   BooleanPrefMember edit_bookmarks_enabled_;
-
-  // During dropdown animation, the host clips the widget and draws only the
-  // bottom part of it. The view needs to know the pixel offset at which we are
-  // drawing the widget so that we can draw the curved edges that attach to the
-  // toolbar in the right location.
-  int dropdown_animation_offset_;
 
   // This is a debug state variable that stores if the WebContents was null
   // during the last RefreshPageAction.

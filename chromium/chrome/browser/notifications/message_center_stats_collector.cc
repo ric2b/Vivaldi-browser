@@ -4,6 +4,8 @@
 
 #include "chrome/browser/notifications/message_center_stats_collector.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/metrics/histogram.h"
@@ -107,6 +109,11 @@ void MessageCenterStatsCollector::OnNotificationButtonClicked(
   notification_stat.CollectAction(NOTIFICATION_ACTION_BUTTON_CLICK);
 }
 
+void MessageCenterStatsCollector::OnNotificationSettingsClicked() {
+  content::RecordAction(
+      base::UserMetricsAction("Notifications.ShowSiteSettings"));
+}
+
 void MessageCenterStatsCollector::OnNotificationDisplayed(
     const std::string& notification_id,
     const message_center::DisplaySource source) {
@@ -143,4 +150,3 @@ void MessageCenterStatsCollector::OnQuietModeChanged(bool in_quiet_mode) {
         base::UserMetricsAction("Notifications.Unmute"));
   }
 }
-

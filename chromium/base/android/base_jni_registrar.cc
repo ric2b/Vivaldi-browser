@@ -10,6 +10,7 @@
 #include "base/android/build_info.h"
 #include "base/android/command_line_android.h"
 #include "base/android/content_uri_utils.h"
+#include "base/android/context_utils.h"
 #include "base/android/cpu_features.h"
 #include "base/android/event_log.h"
 #include "base/android/field_trial_list.h"
@@ -28,7 +29,7 @@
 #include "base/android/sys_utils.h"
 #include "base/android/thread_utils.h"
 #include "base/android/trace_event_binding.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/message_loop/message_pump_android.h"
 #include "base/power_monitor/power_monitor_device_source_android.h"
 #include "base/trace_event/trace_event.h"
@@ -39,13 +40,13 @@ namespace android {
 static RegistrationMethod kBaseRegisteredMethods[] = {
     {"AnimationFrameTimeHistogram",
      base::android::RegisterAnimationFrameTimeHistogram},
-    {"ApkAssets",
-     base::android::RegisterApkAssets},
+    {"ApkAssets", base::android::RegisterApkAssets},
     {"ApplicationStatusListener",
      base::android::ApplicationStatusListener::RegisterBindings},
     {"BuildInfo", base::android::BuildInfo::RegisterBindings},
     {"CommandLine", base::android::RegisterCommandLine},
     {"ContentUriUtils", base::RegisterContentUriUtils},
+    {"ContextUtils", base::android::RegisterContextUtils},
     {"CpuFeatures", base::android::RegisterCpuFeatures},
     {"EventLog", base::android::RegisterEventLog},
     {"FieldTrialList", base::android::RegisterFieldTrialList},

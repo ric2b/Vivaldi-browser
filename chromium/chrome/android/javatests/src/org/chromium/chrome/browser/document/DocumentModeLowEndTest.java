@@ -12,25 +12,29 @@ import android.content.Context;
 import android.os.Build;
 import android.test.suitebuilder.annotation.MediumTest;
 
+import org.chromium.base.BaseSwitches;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.EmptyTabObserver;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
-import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.test.util.DisableInTabbedMode;
 import org.chromium.content.app.SandboxedProcessService;
 import org.chromium.content.browser.test.util.CallbackHelper;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tests the how Document mode works on low end devices.
  */
 @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
 @DisableInTabbedMode
+// TODO(dskiba): remove the following switch once we have Svelte bots running L
+@CommandLineFlags.Add(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)
 public class DocumentModeLowEndTest extends DocumentModeTestBase {
 
     @Restriction(RESTRICTION_TYPE_LOW_END_DEVICE)
@@ -38,6 +42,7 @@ public class DocumentModeLowEndTest extends DocumentModeTestBase {
     public void testNewTabLoadLowEnd() throws Exception {
         launchViaLaunchDocumentInstance(false, HREF_LINK, "href link page");
 
+        final AtomicReference<Tab> backgroundTab = new AtomicReference<Tab>();
         final CallbackHelper tabCreatedCallback = new CallbackHelper();
         final CallbackHelper tabLoadStartedCallback = new CallbackHelper();
 
@@ -47,6 +52,7 @@ public class DocumentModeLowEndTest extends DocumentModeTestBase {
             @Override
             public void onNewTabCreated(final Tab newTab) {
                 selector.removeObserver(this);
+                backgroundTab.set(newTab);
                 tabCreatedCallback.notifyCalled();
 
                 assertFalse(newTab.getWebContents().isLoadingToDifferentDocument());
@@ -67,7 +73,8 @@ public class DocumentModeLowEndTest extends DocumentModeTestBase {
         assertEquals(1, tabCreatedCallback.getCallCount());
         assertEquals(0, tabLoadStartedCallback.getCallCount());
 
-        TabModelUtils.setIndex(selector.getCurrentModel(), 1);
+        switchToTab(backgroundTab.get());
+
         tabLoadStartedCallback.waitForCallback(0);
     }
 

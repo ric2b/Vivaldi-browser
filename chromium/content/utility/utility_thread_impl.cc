@@ -5,9 +5,10 @@
 #include "content/utility/utility_thread_impl.h"
 
 #include <stddef.h>
+#include <utility>
 
 #include "base/command_line.h"
-#include "base/memory/scoped_vector.h"
+#include "build/build_config.h"
 #include "content/child/blink_platform_impl.h"
 #include "content/child/child_process.h"
 #include "content/common/child_process_messages.h"
@@ -55,8 +56,8 @@ UtilityThreadImpl::~UtilityThreadImpl() {
 void UtilityThreadImpl::Shutdown() {
   ChildThreadImpl::Shutdown();
 
-  if (!IsInBrowserProcess())
-    blink::shutdown();
+  if (blink_platform_impl_)
+    blink::shutdownWithoutV8();
 }
 
 void UtilityThreadImpl::ReleaseProcessIfNeeded() {
@@ -74,17 +75,22 @@ void UtilityThreadImpl::ReleaseProcessIfNeeded() {
   }
 }
 
-void UtilityThreadImpl::Init() {
-  batch_mode_ = false;
-  ChildProcess::current()->AddRefProcess();
-  if (!IsInBrowserProcess()) {
+void UtilityThreadImpl::EnsureBlinkInitialized() {
+  if (blink_platform_impl_ || IsInBrowserProcess()) {
     // We can only initialize WebKit on one thread, and in single process mode
     // we run the utility thread on separate thread. This means that if any code
     // needs WebKit initialized in the utility process, they need to have
     // another path to support single process mode.
-    blink_platform_impl_.reset(new UtilityBlinkPlatformImpl);
-    blink::initialize(blink_platform_impl_.get());
+    return;
   }
+
+  blink_platform_impl_.reset(new UtilityBlinkPlatformImpl);
+  blink::initializeWithoutV8(blink_platform_impl_.get());
+}
+
+void UtilityThreadImpl::Init() {
+  batch_mode_ = false;
+  ChildProcess::current()->AddRefProcess();
   GetContentClient()->utility()->UtilityThreadStarted();
 
   process_control_.reset(new UtilityProcessControlImpl);
@@ -144,7 +150,8 @@ void UtilityThreadImpl::OnLoadPlugins(
 void UtilityThreadImpl::BindProcessControlRequest(
     mojo::InterfaceRequest<ProcessControl> request) {
   DCHECK(process_control_);
-  process_control_bindings_.AddBinding(process_control_.get(), request.Pass());
+  process_control_bindings_.AddBinding(process_control_.get(),
+                                       std::move(request));
 }
 
 }  // namespace content

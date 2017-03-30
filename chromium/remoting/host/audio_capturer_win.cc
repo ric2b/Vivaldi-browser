@@ -4,13 +4,15 @@
 
 #include "remoting/host/audio_capturer_win.h"
 
-#include <windows.h>
 #include <avrt.h>
 #include <mmreg.h>
 #include <mmsystem.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <windows.h>
 
 #include <algorithm>
-#include <stdlib.h>
+#include <utility>
 
 #include "base/logging.h"
 
@@ -58,7 +60,7 @@ bool AudioCapturerWin::Start(const PacketCapturedCallback& callback) {
   callback_ = callback;
 
   // Initialize the capture timer.
-  capture_timer_.reset(new base::RepeatingTimer<AudioCapturerWin>());
+  capture_timer_.reset(new base::RepeatingTimer());
 
   HRESULT hr = S_OK;
 
@@ -226,8 +228,8 @@ void AudioCapturerWin::DoCapture() {
       break;
 
     if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0 &&
-        !silence_detector_.IsSilence(
-            reinterpret_cast<const int16*>(data), frames * kChannels)) {
+        !silence_detector_.IsSilence(reinterpret_cast<const int16_t*>(data),
+                                     frames * kChannels)) {
       scoped_ptr<AudioPacket> packet(new AudioPacket());
       packet->add_data(data, frames * wave_format_ex_->nBlockAlign);
       packet->set_encoding(AudioPacket::ENCODING_RAW);
@@ -235,7 +237,7 @@ void AudioCapturerWin::DoCapture() {
       packet->set_bytes_per_sample(AudioPacket::BYTES_PER_SAMPLE_2);
       packet->set_channels(AudioPacket::CHANNELS_STEREO);
 
-      callback_.Run(packet.Pass());
+      callback_.Run(std::move(packet));
     }
 
     hr = audio_capture_client_->ReleaseBuffer(frames);

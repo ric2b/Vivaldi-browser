@@ -4,7 +4,10 @@
 
 #include "sync/internal_api/public/attachments/attachment_uploader_impl.h"
 
-#include "base/base64.h"
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
@@ -150,7 +153,7 @@ class TokenServiceProvider
     : public OAuth2TokenServiceRequest::TokenServiceProvider,
       base::NonThreadSafe {
  public:
-  TokenServiceProvider(OAuth2TokenService* token_service);
+  explicit TokenServiceProvider(OAuth2TokenService* token_service);
 
   // OAuth2TokenService::TokenServiceProvider implementation.
   scoped_refptr<base::SingleThreadTaskRunner> GetTokenServiceTaskRunner()
@@ -224,7 +227,7 @@ class AttachmentUploaderImplTest : public testing::Test,
   scoped_ptr<RequestHandler> request_handler_;
   scoped_ptr<AttachmentUploader> uploader_;
   AttachmentUploader::UploadCallback upload_callback_;
-  net::test_server::EmbeddedTestServer server_;
+  net::EmbeddedTestServer server_;
   // A closure that signals an upload has finished.
   base::Closure signal_upload_done_;
   std::vector<HttpRequest> http_requests_received_;
@@ -282,7 +285,7 @@ void AttachmentUploaderImplTest::SetUp() {
   url_request_context_getter_ =
       new net::TestURLRequestContextGetter(message_loop_.task_runner());
 
-  ASSERT_TRUE(server_.InitializeAndWaitUntilReady());
+  ASSERT_TRUE(server_.Start());
   server_.RegisterRequestHandler(
       base::Bind(&RequestHandler::HandleRequest,
                  base::Unretained(request_handler_.get())));
@@ -395,7 +398,7 @@ scoped_ptr<HttpResponse> RequestHandler::HandleRequest(
   scoped_ptr<BasicHttpResponse> response(new BasicHttpResponse);
   response->set_code(GetStatusCode());
   response->set_content_type("text/plain");
-  return response.Pass();
+  return std::move(response);
 }
 
 void RequestHandler::SetStatusCode(const net::HttpStatusCode& status_code) {

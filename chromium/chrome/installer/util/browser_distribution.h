@@ -9,11 +9,12 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/installer/util/util_constants.h"
 
 #if defined(OS_WIN)
@@ -33,7 +34,6 @@ class BrowserDistribution {
 
   enum ShortcutType {
     SHORTCUT_CHROME,
-    SHORTCUT_CHROME_ALTERNATE,
     SHORTCUT_APP_LAUNCHER
   };
 
@@ -129,13 +129,16 @@ class BrowserDistribution {
 
   virtual std::string GetSafeBrowsingName();
 
-  virtual std::string GetNetworkStatsServer() const;
-
 #if defined(OS_WIN)
   virtual base::string16 GetDistributionData(HKEY root_key);
 #endif
 
-  virtual base::string16 GetUninstallLinkName();
+  // Returns the path "Software\<PRODUCT>". This subkey of HKEY_CURRENT_USER can
+  // be used to save and restore state. With the exception of data that is used
+  // by third parties (e.g., a subkey that specifies the location of a native
+  // messaging host's manifest), state stored in this key is removed during
+  // uninstall when the user chooses to also delete their browsing data.
+  virtual base::string16 GetRegistryPath();
 
   virtual base::string16 GetUninstallRegPath();
 
@@ -147,10 +150,9 @@ class BrowserDistribution {
 
   virtual bool GetChromeChannel(base::string16* channel);
 
-  // Returns true if this distribution includes a DelegateExecute verb handler,
-  // and provides the CommandExecuteImpl class UUID if |handler_class_uuid| is
-  // non-NULL.
-  virtual bool GetCommandExecuteImplClsid(base::string16* handler_class_uuid);
+  // Returns the CommandExecuteImpl class UUID (or empty string if this
+  // distribution doesn't include a DelegateExecute verb handler).
+  virtual base::string16 GetCommandExecuteImplClsid();
 
   virtual void UpdateInstallStatus(bool system_install,
       installer::ArchiveType archive_type,

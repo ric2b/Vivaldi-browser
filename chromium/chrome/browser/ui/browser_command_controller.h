@@ -7,12 +7,13 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/prefs/pref_member.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/command_updater_delegate.h"
-#include "chrome/browser/sessions/tab_restore_service_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "components/sessions/core/tab_restore_service_observer.h"
 #include "ui/base/window_open_disposition.h"
 
 class Browser;
@@ -27,7 +28,7 @@ namespace chrome {
 
 class BrowserCommandController : public CommandUpdaterDelegate,
                                  public TabStripModelObserver,
-                                 public TabRestoreServiceObserver {
+                                 public sessions::TabRestoreServiceObserver {
  public:
   explicit BrowserCommandController(Browser* browser);
   ~BrowserCommandController() override;
@@ -95,9 +96,10 @@ class BrowserCommandController : public CommandUpdaterDelegate,
                               int index) override;
 
   // Overridden from TabRestoreServiceObserver:
-  void TabRestoreServiceChanged(TabRestoreService* service) override;
-  void TabRestoreServiceDestroyed(TabRestoreService* service) override;
-  void TabRestoreServiceLoaded(TabRestoreService* service) override;
+  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override;
+  void TabRestoreServiceLoaded(sessions::TabRestoreService* service) override;
 
   // Returns true if the regular Chrome UI (not the fullscreen one and
   // not the single-tab one) is shown. Used for updating window command states
@@ -154,10 +156,13 @@ class BrowserCommandController : public CommandUpdaterDelegate,
   // |force| is true if the button should change its icon immediately.
   void UpdateReloadStopState(bool is_loading, bool force);
 
+  void UpdateTabRestoreCommandState();
+
   // Updates commands for find.
   void UpdateCommandsForFind();
 
-  void UpdateTabRestoreCommandState();
+  // Updates commands for Media Router.
+  void UpdateCommandsForMediaRouter();
 
   // Add/remove observers for interstitial attachment/detachment from
   // |contents|.

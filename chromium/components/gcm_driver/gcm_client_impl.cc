@@ -4,6 +4,9 @@
 
 #include "components/gcm_driver/gcm_client_impl.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -82,7 +85,7 @@ const char kMessageTypeKey[] = "message_type";
 const char kMessageTypeSendErrorKey[] = "send_error";
 const char kSendErrorMessageIdKey[] = "google.message_id";
 const char kSendMessageFromValue[] = "gcm@chrome.com";
-const int64 kDefaultUserSerialNumber = 0LL;
+const int64_t kDefaultUserSerialNumber = 0LL;
 const int kDestroyGCMStoreDelayMS = 5 * 60 * 1000;  // 5 minutes.
 
 GCMClient::Result ToGCMClientResult(MCSClient::MessageSendStatus status) {
@@ -211,8 +214,7 @@ bool DeserializeInstanceIDData(const std::string& serialized_data,
   return !instance_id->empty() && !extra_data->empty();
 }
 
-void RecordOutgoingMessageToUMA(
-    const gcm::GCMClient::OutgoingMessage& message) {
+void RecordOutgoingMessageToUMA(const gcm::OutgoingMessage& message) {
   OutgoingMessageTTLCategory ttl_category;
   if (message.time_to_live == 0)
     ttl_category = TTL_ZERO;
@@ -256,16 +258,15 @@ scoped_ptr<MCSClient> GCMInternalsBuilder::BuildMCSClient(
 scoped_ptr<ConnectionFactory> GCMInternalsBuilder::BuildConnectionFactory(
       const std::vector<GURL>& endpoints,
       const net::BackoffEntry::Policy& backoff_policy,
-      const scoped_refptr<net::HttpNetworkSession>& gcm_network_session,
-      const scoped_refptr<net::HttpNetworkSession>& http_network_session,
-      net::NetLog* net_log,
+      net::HttpNetworkSession* gcm_network_session,
+      net::HttpNetworkSession* http_network_session,
       GCMStatsRecorder* recorder) {
   return make_scoped_ptr<ConnectionFactory>(
       new ConnectionFactoryImpl(endpoints,
                                 backoff_policy,
                                 gcm_network_session,
                                 http_network_session,
-                                net_log,
+                                nullptr,
                                 recorder));
 }
 
@@ -295,7 +296,7 @@ void GCMClientImpl::CheckinInfo::Reset() {
 }
 
 GCMClientImpl::GCMClientImpl(scoped_ptr<GCMInternalsBuilder> internals_builder)
-    : internals_builder_(internals_builder.Pass()),
+    : internals_builder_(std::move(internals_builder)),
       state_(UNINITIALIZED),
       delegate_(NULL),
       start_mode_(DELAYED_START),
@@ -304,8 +305,7 @@ GCMClientImpl::GCMClientImpl(scoped_ptr<GCMInternalsBuilder> internals_builder)
       url_request_context_getter_(NULL),
       periodic_checkin_ptr_factory_(this),
       destroying_gcm_store_ptr_factory_(this),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 GCMClientImpl::~GCMClientImpl() {
 }
@@ -327,12 +327,12 @@ void GCMClientImpl::Initialize(
       url_request_context_getter_->GetURLRequestContext()->
           GetNetworkSessionParams();
   DCHECK(network_session_params);
-  network_session_ = new net::HttpNetworkSession(*network_session_params);
+  network_session_.reset(new net::HttpNetworkSession(*network_session_params));
 
   chrome_build_info_ = chrome_build_info;
 
   gcm_store_.reset(
-      new GCMStoreImpl(path, blocking_task_runner, encryptor.Pass()));
+      new GCMStoreImpl(path, blocking_task_runner, std::move(encryptor)));
 
   delegate_ = delegate;
 
@@ -382,10 +382,18 @@ void GCMClientImpl::OnLoadCompleted(scoped_ptr<GCMStore::LoadResult> result) {
 
   if (!result->success) {
     if (result->store_does_not_exist) {
-      // In the case that the store does not exist, set |state| back to
-      // INITIALIZED such that store loading could be triggered again when
-      // Start() is called with IMMEDIATE_START.
-      state_ = INITIALIZED;
+      if (start_mode_ == IMMEDIATE_START) {
+        // An immediate start was requested during the delayed start that just
+        // completed. Perform it now.
+        gcm_store_->Load(GCMStore::CREATE_IF_MISSING,
+                         base::Bind(&GCMClientImpl::OnLoadCompleted,
+                                    weak_ptr_factory_.GetWeakPtr()));
+      } else {
+        // In the case that the store does not exist, set |state_| back to
+        // INITIALIZED such that store loading could be triggered again when
+        // Start() is called with IMMEDIATE_START.
+        state_ = INITIALIZED;
+      }
     } else {
       // Otherwise, destroy the store to try again.
       ResetStore();
@@ -428,7 +436,7 @@ void GCMClientImpl::OnLoadCompleted(scoped_ptr<GCMStore::LoadResult> result) {
       instance_id_data_[iter->first] = std::make_pair(instance_id, extra_data);
   }
 
-  load_result_ = result.Pass();
+  load_result_ = std::move(result);
   state_ = LOADED;
 
   // Don't initiate the GCM connection when GCM is in delayed start mode and
@@ -472,23 +480,21 @@ void GCMClientImpl::StartGCM() {
 void GCMClientImpl::InitializeMCSClient() {
   std::vector<GURL> endpoints;
   endpoints.push_back(gservices_settings_.GetMCSMainEndpoint());
-  endpoints.push_back(gservices_settings_.GetMCSFallbackEndpoint());
+  GURL fallback_endpoint = gservices_settings_.GetMCSFallbackEndpoint();
+  if (fallback_endpoint.is_valid())
+    endpoints.push_back(fallback_endpoint);
   connection_factory_ = internals_builder_->BuildConnectionFactory(
       endpoints,
       GetGCMBackoffPolicy(),
-      network_session_,
+      network_session_.get(),
       url_request_context_getter_->GetURLRequestContext()
           ->http_transaction_factory()
           ->GetSession(),
-      net_log_.net_log(),
       &recorder_);
   connection_factory_->SetConnectionListener(this);
   mcs_client_ = internals_builder_->BuildMCSClient(
-      chrome_build_info_.version,
-      clock_.get(),
-      connection_factory_.get(),
-      gcm_store_.get(),
-      &recorder_).Pass();
+      chrome_build_info_.version, clock_.get(), connection_factory_.get(),
+      gcm_store_.get(), &recorder_);
 
   mcs_client_->Initialize(
       base::Bind(&GCMClientImpl::OnMCSError, weak_ptr_factory_.GetWeakPtr()),
@@ -496,7 +502,7 @@ void GCMClientImpl::InitializeMCSClient() {
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&GCMClientImpl::OnMessageSentToMCS,
                  weak_ptr_factory_.GetWeakPtr()),
-      load_result_.Pass());
+      std::move(load_result_));
 }
 
 void GCMClientImpl::OnFirstTimeDeviceCheckinCompleted(
@@ -625,7 +631,7 @@ void GCMClientImpl::SetLastTokenFetchTime(const base::Time& time) {
 
 void GCMClientImpl::UpdateHeartbeatTimer(scoped_ptr<base::Timer> timer) {
   DCHECK(mcs_client_);
-  mcs_client_->UpdateHeartbeatTimer(timer.Pass());
+  mcs_client_->UpdateHeartbeatTimer(std::move(timer));
 }
 
 void GCMClientImpl::AddInstanceIDData(const std::string& app_id,
@@ -917,14 +923,14 @@ void GCMClientImpl::Register(
 
   scoped_ptr<RegistrationRequest> registration_request(new RegistrationRequest(
       gservices_settings_.GetRegistrationURL(), request_info,
-      request_handler.Pass(), GetGCMBackoffPolicy(),
+      std::move(request_handler), GetGCMBackoffPolicy(),
       base::Bind(&GCMClientImpl::OnRegisterCompleted,
                  weak_ptr_factory_.GetWeakPtr(), registration_info),
       kMaxRegistrationRetries, url_request_context_getter_, &recorder_,
       source_to_record));
   registration_request->Start();
-  pending_registration_requests_.insert(registration_info,
-                                        registration_request.Pass());
+  pending_registration_requests_.insert(
+      std::make_pair(registration_info, std::move(registration_request)));
 }
 
 void GCMClientImpl::OnRegisterCompleted(
@@ -1058,14 +1064,14 @@ void GCMClientImpl::Unregister(
   scoped_ptr<UnregistrationRequest> unregistration_request(
       new UnregistrationRequest(
           gservices_settings_.GetRegistrationURL(), request_info,
-          request_handler.Pass(), GetGCMBackoffPolicy(),
+          std::move(request_handler), GetGCMBackoffPolicy(),
           base::Bind(&GCMClientImpl::OnUnregisterCompleted,
                      weak_ptr_factory_.GetWeakPtr(), registration_info),
           kMaxUnregistrationRetries, url_request_context_getter_, &recorder_,
           source_to_record));
   unregistration_request->Start();
-  pending_unregistration_requests_.insert(registration_info,
-                                          unregistration_request.Pass());
+  pending_unregistration_requests_.insert(
+      std::make_pair(registration_info, std::move(unregistration_request)));
 }
 
 void GCMClientImpl::OnUnregisterCompleted(
@@ -1147,7 +1153,7 @@ std::string GCMClientImpl::GetStateString() const {
 }
 
 void GCMClientImpl::SetRecording(bool recording) {
-  recorder_.SetRecording(recording);
+  recorder_.set_is_recording(recording);
 }
 
 void GCMClientImpl::ClearActivityLogs() {
@@ -1208,7 +1214,7 @@ void GCMClientImpl::OnMessageReceivedFromMCS(const gcm::MCSMessage& message) {
   }
 }
 
-void GCMClientImpl::OnMessageSentToMCS(int64 user_serial_number,
+void GCMClientImpl::OnMessageSentToMCS(int64_t user_serial_number,
                                        const std::string& app_id,
                                        const std::string& message_id,
                                        MCSClient::MessageSendStatus status) {
@@ -1336,6 +1342,8 @@ void GCMClientImpl::HandleIncomingDataMessage(
   if (data_message_stanza.has_token())
     incoming_message.collapse_key = data_message_stanza.token();
   incoming_message.data = message_data;
+  incoming_message.raw_data = data_message_stanza.raw_data();
+
   delegate_->OnMessageReceived(app_id, incoming_message);
 }
 

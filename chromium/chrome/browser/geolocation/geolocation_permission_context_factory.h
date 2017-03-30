@@ -5,25 +5,26 @@
 #ifndef CHROME_BROWSER_GEOLOCATION_GEOLOCATION_PERMISSION_CONTEXT_FACTORY_H_
 #define CHROME_BROWSER_GEOLOCATION_GEOLOCATION_PERMISSION_CONTEXT_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
-#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "chrome/browser/permissions/permission_context_factory_base.h"
 
 class GeolocationPermissionContext;
 class PrefRegistrySyncable;
 class Profile;
 
 class GeolocationPermissionContextFactory
-    : public BrowserContextKeyedServiceFactory {
+    : public PermissionContextFactoryBase {
  public:
   static GeolocationPermissionContext* GetForProfile(Profile* profile);
 
   static GeolocationPermissionContextFactory* GetInstance();
 
  private:
-  friend struct
-      DefaultSingletonTraits<GeolocationPermissionContextFactory>;
+  friend struct base::DefaultSingletonTraits<
+      GeolocationPermissionContextFactory>;
 
   GeolocationPermissionContextFactory();
   ~GeolocationPermissionContextFactory() override;
@@ -31,10 +32,6 @@ class GeolocationPermissionContextFactory
   // BrowserContextKeyedBaseFactory methods:
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* profile) const override;
-  void RegisterProfilePrefs(
-      user_prefs::PrefRegistrySyncable* registry) override;
-  content::BrowserContext* GetBrowserContextToUse(
-      content::BrowserContext* context) const override;
 
   DISALLOW_COPY_AND_ASSIGN(GeolocationPermissionContextFactory);
 };

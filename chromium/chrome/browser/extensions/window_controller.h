@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_WINDOW_CONTROLLER_H_
 #define CHROME_BROWSER_EXTENSIONS_WINDOW_CONTROLLER_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "chrome/common/extensions/api/windows.h"
 
 class Browser;  // TODO(stevenjb) eliminate this dependency.
 class GURL;
@@ -40,6 +43,24 @@ class WindowController {
     REASON_NONE,
     REASON_NOT_EDITABLE,
   };
+
+  // A bitmaks used as filter on window types.
+  using TypeFilter = uint32_t;
+
+  // Represents the lack of any window filter, implying
+  // IsVisibleToExtension will be used as non-filtered behavior.
+  static const TypeFilter kNoWindowFilter = 0;
+
+  // Returns a filter allowing all window types to be manipulated
+  // through the chrome.windows APIs.
+  static TypeFilter GetAllWindowFilter();
+
+  // Builds a filter out of a vector of window types.
+  static TypeFilter GetFilterFromWindowTypes(
+      const std::vector<api::windows::WindowType>& types);
+
+  static TypeFilter GetFilterFromWindowTypesValues(
+      const base::ListValue* types);
 
   WindowController(ui::BaseWindow* window, Profile* profile);
   virtual ~WindowController();
@@ -82,6 +103,9 @@ class WindowController {
   // Extension/window visibility and ownership is window-specific, subclasses
   // need to define this behavior.
   virtual bool IsVisibleToExtension(const Extension* extension) const = 0;
+
+  // Returns true if the window type of the controller matches the |filter|.
+  bool MatchesFilter(TypeFilter filter) const;
 
  private:
   ui::BaseWindow* window_;

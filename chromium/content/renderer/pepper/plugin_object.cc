@@ -4,6 +4,8 @@
 
 #include "content/renderer/pepper/plugin_object.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
@@ -74,6 +76,11 @@ PP_Var PluginObject::Create(PepperPluginInstanceImpl* instance,
   V8VarConverter var_converter(instance->pp_instance(),
                                V8VarConverter::kAllowObjectVars);
   PepperTryCatchVar try_catch(instance, &var_converter, NULL);
+  // If the V8 context is empty, we may be in the process of tearing down the
+  // frame and may not have a valid isolate (in particular due to re-entrancy).
+  // We shouldn't try to call gin::CreateHandle.
+  if (try_catch.GetContext().IsEmpty())
+    return PP_MakeUndefined();
   gin::Handle<PluginObject> object =
       gin::CreateHandle(instance->GetIsolate(),
                         new PluginObject(instance, ppp_class, ppp_class_data));

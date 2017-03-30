@@ -22,7 +22,7 @@ class WMFReadRequest : public base::win::IUnknownImpl {
   WMFReadRequest(BYTE* buff, ULONG len) : buffer(buff), length(len), read(0) {
   }
 
-  ~WMFReadRequest() {}
+  ~WMFReadRequest() override {}
 
   BYTE* buffer;
   ULONG length;
@@ -38,23 +38,21 @@ void BlockingReadDone(int* bytes_read_out,
 
 }  // namespace
 
-const int64 WMFByteStream::kUnknownSize = -1;
+const int64_t WMFByteStream::kUnknownSize = -1;
 
 WMFByteStream::WMFByteStream(media::DataSource* data_source)
     : data_source_(data_source),
       async_result_(NULL),
-      last_read_bytes_(0),
       read_position_(0),
-      stopped_(false),
-      ref_count_(0),
-      weak_factory_(this) {
+      stopped_(false) {
+  DVLOG(1) << __FUNCTION__;
   DCHECK(data_source_);
 }
 
 WMFByteStream::~WMFByteStream() {
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(stopped_);
-  DCHECK(base::AtomicRefCountIsZero(&ref_count_));
 }
 
 HRESULT WMFByteStream::Initialize(LPCWSTR mime_type) {
@@ -63,8 +61,8 @@ HRESULT WMFByteStream::Initialize(LPCWSTR mime_type) {
   HRESULT hresult = MFCreateAttributes(attributes_.Receive(), 1);
   if (SUCCEEDED(hresult)) {
     attributes_->SetString(MF_BYTESTREAM_CONTENT_TYPE, mime_type);
-    read_cb_ = media::BindToCurrentLoop(
-        base::Bind(&WMFByteStream::OnReadData, weak_factory_.GetWeakPtr()));
+    read_cb_ =
+        media::BindToCurrentLoop(base::Bind(&WMFByteStream::OnReadData, this));
     return S_OK;
   }
 
@@ -72,6 +70,7 @@ HRESULT WMFByteStream::Initialize(LPCWSTR mime_type) {
 }
 
 void WMFByteStream::Stop() {
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   stopped_ = true;
@@ -104,17 +103,11 @@ WMFByteStream::QueryInterface(REFIID riid, void** object) {
 }
 
 ULONG STDMETHODCALLTYPE WMFByteStream::AddRef() {
-#if DCHECK_IS_ON()
-  base::AtomicRefCountInc(&ref_count_);
-#endif
-  return 1;
+  return IUnknownImpl::AddRef();
 }
 
 ULONG STDMETHODCALLTYPE WMFByteStream::Release() {
-#if DCHECK_IS_ON()
-  base::AtomicRefCountDec(&ref_count_);
-#endif
-  return 1;
+  return IUnknownImpl::Release();
 }
 
 HRESULT STDMETHODCALLTYPE
@@ -129,7 +122,7 @@ WMFByteStream::GetCapabilities(DWORD* capabilities) {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::GetLength(QWORD* length) {
-  int64 size = -1;
+  int64_t size = -1;
   // The Media Framework expects -1 when the size is unknown.
   *length = data_source_->GetSize(&size) ? size : kUnknownSize;
   return S_OK;
@@ -147,7 +140,7 @@ WMFByteStream::GetCurrentPosition(QWORD* position) {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::SetCurrentPosition(QWORD position) {
-  if (static_cast<int64>(position) < 0) {
+  if (static_cast<int64_t>(position) < 0) {
     return E_INVALIDARG;  // might happen if the stream is not seekable or
                           // if the position overflows the stream
   }
@@ -157,7 +150,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::SetCurrentPosition(QWORD position) {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::IsEndOfStream(BOOL* end_of_stream) {
-  int64 size = -1;
+  int64_t size = -1;
   if (!data_source_->GetSize(&size))
     size = kUnknownSize;
   *end_of_stream = size > 0 && read_position_ >= size;
@@ -169,6 +162,11 @@ WMFByteStream::Read(BYTE* buff, ULONG len, ULONG* read) {
   DCHECK(!thread_checker_.CalledOnValidThread())
       << "Trying to make a blocking read on the main thread";
 
+  if (stopped_) {
+    // NOTE(pettern@vivaldi.com): Do not try to read when we've stopped
+    // as it might cause freezes with the read_done event never firing.
+    return E_FAIL;
+  }
   base::WaitableEvent read_done(false, false);
   int bytes_read = 0;
   data_source_->Read(read_position_, len, buff,
@@ -186,6 +184,9 @@ WMFByteStream::Read(BYTE* buff, ULONG len, ULONG* read) {
 void WMFByteStream::OnReadData(int size) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  if (stopped_)
+    return;
+
   base::win::ScopedComPtr<IUnknown> unknown;
   HRESULT hr = async_result_->GetObjectW(unknown.Receive());
   WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.get());
@@ -193,8 +194,6 @@ void WMFByteStream::OnReadData(int size) {
   HRESULT status;
   if (FAILED(hr) || !unknown || size == media::DataSource::kReadError) {
     status = E_FAIL;
-  } else if (stopped_) {
-    status = E_INVALIDARG;
   } else {
     DCHECK(static_cast<ULONG>(size) <= read_request->length);
     read_request->read = size;
@@ -279,7 +278,7 @@ WMFByteStream::Seek(MFBYTESTREAM_SEEK_ORIGIN seek_origin,
                     LONGLONG seek_offset,
                     DWORD seek_flags,
                     QWORD* current_position) {
-  int64 size = -1;
+  int64_t size = -1;
   if (!data_source_->GetSize(&size))
     size = kUnknownSize;
   switch (seek_origin) {

@@ -7,26 +7,26 @@ package org.chromium.net.urlconnection;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.test.util.Feature;
-import org.chromium.net.CronetTestActivity;
 import org.chromium.net.CronetTestBase;
+import org.chromium.net.CronetTestFramework;
 import org.chromium.net.NativeTestServer;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URL;
 
+/**
+ * Tests for CronetHttpURLStreamHandler class.
+ */
 public class CronetHttpURLStreamHandlerTest extends CronetTestBase {
-    private CronetTestActivity mActivity;
+    private CronetTestFramework mTestFramework;
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        mActivity = launchCronetTestApp();
-        assertTrue(NativeTestServer.startNativeTestServer(
-                getInstrumentation().getTargetContext()));
+        mTestFramework = startCronetTestFramework();
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
     @Override
@@ -40,12 +40,12 @@ public class CronetHttpURLStreamHandlerTest extends CronetTestBase {
     public void testOpenConnectionHttp() throws Exception {
         URL url = new URL(NativeTestServer.getEchoMethodURL());
         CronetHttpURLStreamHandler streamHandler =
-                new CronetHttpURLStreamHandler(mActivity.mUrlRequestContext);
+                new CronetHttpURLStreamHandler(mTestFramework.mCronetEngine);
         HttpURLConnection connection =
                 (HttpURLConnection) streamHandler.openConnection(url);
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        assertEquals("GET", getResponseAsString(connection));
+        assertEquals("GET", TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 
@@ -54,7 +54,7 @@ public class CronetHttpURLStreamHandlerTest extends CronetTestBase {
     public void testOpenConnectionHttps() throws Exception {
         URL url = new URL("https://example.com");
         CronetHttpURLStreamHandler streamHandler =
-                new CronetHttpURLStreamHandler(mActivity.mUrlRequestContext);
+                new CronetHttpURLStreamHandler(mTestFramework.mCronetEngine);
         HttpURLConnection connection =
                 (HttpURLConnection) streamHandler.openConnection(url);
         assertNotNull(connection);
@@ -65,7 +65,7 @@ public class CronetHttpURLStreamHandlerTest extends CronetTestBase {
     public void testOpenConnectionProtocolNotSupported() throws Exception {
         URL url = new URL("ftp://example.com");
         CronetHttpURLStreamHandler streamHandler =
-                new CronetHttpURLStreamHandler(mActivity.mUrlRequestContext);
+                new CronetHttpURLStreamHandler(mTestFramework.mCronetEngine);
         try {
             streamHandler.openConnection(url);
             fail();
@@ -79,7 +79,7 @@ public class CronetHttpURLStreamHandlerTest extends CronetTestBase {
     public void testOpenConnectionWithProxy() throws Exception {
         URL url = new URL(NativeTestServer.getEchoMethodURL());
         CronetHttpURLStreamHandler streamHandler =
-                new CronetHttpURLStreamHandler(mActivity.mUrlRequestContext);
+                new CronetHttpURLStreamHandler(mTestFramework.mCronetEngine);
         Proxy proxy = new Proxy(Proxy.Type.HTTP,
                 new InetSocketAddress("127.0.0.1", 8080));
         try {
@@ -88,20 +88,5 @@ public class CronetHttpURLStreamHandlerTest extends CronetTestBase {
         } catch (UnsupportedOperationException e) {
             // Expected.
         }
-    }
-
-    /**
-     * Helper method to extract response body as a string for testing.
-     */
-    // TODO(xunjieli): consider moving this helper method to a util class.
-    private String getResponseAsString(HttpURLConnection connection)
-            throws Exception {
-        InputStream in = connection.getInputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        int b;
-        while ((b = in.read()) != -1) {
-            out.write(b);
-        }
-        return out.toString();
     }
 }

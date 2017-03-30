@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "base/callback_helpers.h"
 #include "base/memory/scoped_ptr.h"
@@ -126,11 +127,11 @@ class ProxyServiceMojoTest : public testing::Test,
     mock_host_resolver_.rules()->AddRule("example.com", "1.2.3.4");
 
     fetcher_ = new MockProxyScriptFetcher;
-    proxy_service_.reset(CreateProxyServiceUsingMojoFactory(
-        this, new ProxyConfigServiceFixed(
-                  ProxyConfig::CreateFromCustomPacURL(GURL(kPacUrl))),
-        fetcher_, new DoNothingDhcpProxyScriptFetcher(), &mock_host_resolver_,
-        &net_log_, &network_delegate_));
+    proxy_service_ = CreateProxyServiceUsingMojoFactory(
+        this, make_scoped_ptr(new ProxyConfigServiceFixed(
+                  ProxyConfig::CreateFromCustomPacURL(GURL(kPacUrl)))),
+        fetcher_, make_scoped_ptr(new DoNothingDhcpProxyScriptFetcher()),
+        &mock_host_resolver_, &net_log_, &network_delegate_);
   }
 
   scoped_ptr<base::ScopedClosureRunner> CreateResolver(
@@ -138,7 +139,7 @@ class ProxyServiceMojoTest : public testing::Test,
       mojo::InterfaceRequest<interfaces::ProxyResolver> req,
       interfaces::ProxyResolverFactoryRequestClientPtr client) override {
     InProcessMojoProxyResolverFactory::GetInstance()->CreateResolver(
-        pac_script, req.Pass(), client.Pass());
+        pac_script, std::move(req), std::move(client));
     return make_scoped_ptr(
         new base::ScopedClosureRunner(on_delete_closure_.closure()));
   }
@@ -147,8 +148,8 @@ class ProxyServiceMojoTest : public testing::Test,
   LoggingMockHostResolver mock_host_resolver_;
   MockProxyScriptFetcher* fetcher_;  // Owned by |proxy_service_|.
   TestNetLog net_log_;
-  scoped_ptr<ProxyService> proxy_service_;
   TestClosure on_delete_closure_;
+  scoped_ptr<ProxyService> proxy_service_;
 };
 
 TEST_F(ProxyServiceMojoTest, Basic) {

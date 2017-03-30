@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
@@ -10,10 +14,12 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/thread_test_helper.h"
+#include "build/build_config.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/indexed_db/indexed_db_class_factory.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
@@ -47,7 +53,8 @@ namespace content {
 
 // This browser test is aimed towards exercising the IndexedDB bindings and
 // the actual implementation that lives in the browser side.
-class IndexedDBBrowserTest : public ContentBrowserTest {
+class IndexedDBBrowserTest : public ContentBrowserTest,
+                             public ::testing::WithParamInterface<const char*> {
  public:
   IndexedDBBrowserTest() : disk_usage_(-1) {}
 
@@ -119,7 +126,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest {
             shell()->web_contents()->GetBrowserContext())->GetQuotaManager());
   }
 
-  static void SetTempQuota(int64 bytes, scoped_refptr<QuotaManager> qm) {
+  static void SetTempQuota(int64_t bytes, scoped_refptr<QuotaManager> qm) {
     if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
       BrowserThread::PostTask(
           BrowserThread::IO, FROM_HERE,
@@ -134,7 +141,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest {
     ASSERT_TRUE(helper->Run());
   }
 
-  virtual int64 RequestDiskUsage() {
+  virtual int64_t RequestDiskUsage() {
     PostTaskAndReplyWithResult(
         GetContext()->TaskRunner(),
         FROM_HERE,
@@ -175,13 +182,11 @@ class IndexedDBBrowserTest : public ContentBrowserTest {
     return GetTestClassFactory();
   }
 
-  virtual void DidGetDiskUsage(int64 bytes) {
-    disk_usage_ = bytes;
-  }
+  virtual void DidGetDiskUsage(int64_t bytes) { disk_usage_ = bytes; }
 
   virtual void DidGetBlobFileCount(int count) { blob_file_count_ = count; }
 
-  int64 disk_usage_;
+  int64_t disk_usage_;
   int blob_file_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBBrowserTest);
@@ -230,6 +235,10 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, TransactionTest) {
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, CallbackAccounting) {
   SimpleTest(GetTestUrl("indexeddb", "callback_accounting.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, GetAllMaxMessageSize) {
+  SimpleTest(GetTestUrl("indexeddb", "getall_max_message_size.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DoesntHangTest) {
@@ -347,10 +356,10 @@ class IndexedDBBrowserTestWithVersion123456Schema : public
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithVersion123456Schema,
                        DestroyTest) {
-  int64 original_size = RequestDiskUsage();
+  int64_t original_size = RequestDiskUsage();
   EXPECT_GT(original_size, 0);
   SimpleTest(GetTestUrl("indexeddb", "open_bad_db.html"));
-  int64 new_size = RequestDiskUsage();
+  int64_t new_size = RequestDiskUsage();
   EXPECT_GT(new_size, 0);
   EXPECT_NE(original_size, new_size);
 }
@@ -362,10 +371,10 @@ class IndexedDBBrowserTestWithVersion987654SSVData : public
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithVersion987654SSVData,
                        DestroyTest) {
-  int64 original_size = RequestDiskUsage();
+  int64_t original_size = RequestDiskUsage();
   EXPECT_GT(original_size, 0);
   SimpleTest(GetTestUrl("indexeddb", "open_bad_db.html"));
-  int64 new_size = RequestDiskUsage();
+  int64_t new_size = RequestDiskUsage();
   EXPECT_GT(new_size, 0);
   EXPECT_NE(original_size, new_size);
 }
@@ -377,10 +386,10 @@ class IndexedDBBrowserTestWithCorruptLevelDB : public
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithCorruptLevelDB,
                        DestroyTest) {
-  int64 original_size = RequestDiskUsage();
+  int64_t original_size = RequestDiskUsage();
   EXPECT_GT(original_size, 0);
   SimpleTest(GetTestUrl("indexeddb", "open_bad_db.html"));
-  int64 new_size = RequestDiskUsage();
+  int64_t new_size = RequestDiskUsage();
   EXPECT_GT(new_size, 0);
   EXPECT_NE(original_size, new_size);
 }
@@ -392,10 +401,10 @@ class IndexedDBBrowserTestWithMissingSSTFile : public
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithMissingSSTFile,
                        DestroyTest) {
-  int64 original_size = RequestDiskUsage();
+  int64_t original_size = RequestDiskUsage();
   EXPECT_GT(original_size, 0);
   SimpleTest(GetTestUrl("indexeddb", "open_missing_table.html"));
-  int64 new_size = RequestDiskUsage();
+  int64_t new_size = RequestDiskUsage();
   EXPECT_GT(new_size, 0);
   EXPECT_NE(original_size, new_size);
 }
@@ -407,14 +416,14 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, LevelDBLogFileTest) {
   base::FilePath log_file(FILE_PATH_LITERAL("LOG"));
   base::FilePath log_file_path =
       GetContext()->data_path().Append(leveldb_dir).Append(log_file);
-  int64 size;
+  int64_t size;
   EXPECT_TRUE(base::GetFileSize(log_file_path, &size));
   EXPECT_GT(size, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, CanDeleteWhenOverQuotaTest) {
   SimpleTest(GetTestUrl("indexeddb", "fill_up_5k.html"));
-  int64 size = RequestDiskUsage();
+  int64_t size = RequestDiskUsage();
   const int kQuotaKilobytes = 2;
   EXPECT_GT(size, kQuotaKilobytes * 1024);
   SetQuota(kQuotaKilobytes);
@@ -452,7 +461,14 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed, DISABLED_BlobDidAck) {
   EXPECT_EQ(0UL, blob_context->context()->blob_count());
 }
 
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed, BlobDidAckPrefetch) {
+// Very flaky on Linux. See crbug.com/459835.
+#if defined(OS_LINUX)
+#define MAYBE_BlobDidAckPrefetch DISABLED_BlobDidAckPrefetch
+#else
+#define MAYBE_BlobDidAckPrefetch BlobDidAckPrefetch
+#endif
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed,
+                       MAYBE_BlobDidAckPrefetch) {
   SimpleTest(GetTestUrl("indexeddb", "blob_did_ack_prefetch.html"));
   // Wait for idle so that the blob ack has time to be received/processed by
   // the browser process.
@@ -469,7 +485,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, BlobsCountAgainstQuota) {
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteForOriginDeletesBlobs) {
   SimpleTest(GetTestUrl("indexeddb", "write_20mb_blob.html"));
-  int64 size = RequestDiskUsage();
+  int64_t size = RequestDiskUsage();
   // This assertion assumes that we do not compress blobs.
   EXPECT_GT(size, 20 << 20 /* 20 MB */);
   GetContext()->TaskRunner()->PostTask(
@@ -539,7 +555,7 @@ static void CorruptIndexedDBDatabase(
         idb_data_path, recursive, base::FileEnumerator::FILES);
     for (base::FilePath idb_file = enumerator.Next(); !idb_file.empty();
          idb_file = enumerator.Next()) {
-      int64 size(0);
+      int64_t size(0);
       GetFileSize(idb_file, &size);
 
       if (idb_file.Extension() == FILE_PATH_LITERAL(".ldb")) {
@@ -597,7 +613,7 @@ static scoped_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
     scoped_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_OK);
-    return http_response.Pass();
+    return std::move(http_response);
   } else if (request_path == "fail" && !request_query.empty()) {
     FailClass failure_class = FAIL_CLASS_NOTHING;
     FailMethod failure_method = FAIL_METHOD_NOTHING;
@@ -661,7 +677,7 @@ static scoped_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
     scoped_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_OK);
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   // A request for a test resource
@@ -674,26 +690,14 @@ static scoped_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
   if (!base::ReadFileToString(resource_path, &file_contents))
     return scoped_ptr<net::test_server::HttpResponse>();
   http_response->set_content(file_contents);
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 }  // namespace
 
-class IndexedDBBrowserCorruptionTest
-    : public IndexedDBBrowserTest,
-      public ::testing::WithParamInterface<const char*> {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // Experimental for IDBObjectStore.getAll()
-    command_line->AppendSwitch(
-        switches::kEnableExperimentalWebPlatformFeatures);
-  }
-};
-
-IN_PROC_BROWSER_TEST_P(IndexedDBBrowserCorruptionTest,
-                       OperationOnCorruptedOpenDatabase) {
+IN_PROC_BROWSER_TEST_P(IndexedDBBrowserTest, OperationOnCorruptedOpenDatabase) {
   ASSERT_TRUE(embedded_test_server()->Started() ||
-              embedded_test_server()->InitializeAndWaitUntilReady());
+              embedded_test_server()->Start());
   const GURL& origin_url = embedded_test_server()->base_url();
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&CorruptDBRequestHandler,
@@ -710,8 +714,8 @@ IN_PROC_BROWSER_TEST_P(IndexedDBBrowserCorruptionTest,
   SimpleTest(embedded_test_server()->GetURL(test_file));
 }
 
-INSTANTIATE_TEST_CASE_P(IndexedDBBrowserCorruptionTestInstantiation,
-                        IndexedDBBrowserCorruptionTest,
+INSTANTIATE_TEST_CASE_P(IndexedDBBrowserTestInstantiation,
+                        IndexedDBBrowserTest,
                         ::testing::Values("failGetBlobJournal",
                                           "get",
                                           "getAll",
@@ -724,11 +728,11 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest,
                        DeleteCompactsBackingStore) {
   const GURL test_url = GetTestUrl("indexeddb", "delete_compact.html");
   SimpleTest(GURL(test_url.spec() + "#fill"));
-  int64 after_filling = RequestDiskUsage();
+  int64_t after_filling = RequestDiskUsage();
   EXPECT_GT(after_filling, 0);
 
   SimpleTest(GURL(test_url.spec() + "#purge"));
-  int64 after_deleting = RequestDiskUsage();
+  int64_t after_deleting = RequestDiskUsage();
   EXPECT_LT(after_deleting, after_filling);
 
   // The above tests verify basic assertions - that filling writes data and
@@ -778,7 +782,15 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, PRE_VersionChangeCrashResilience) {
   exit(0);
 }
 
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, VersionChangeCrashResilience) {
+// Fails to cleanup GPU processes on swarming.
+// http://crbug.com/552543
+#if defined(OS_WIN)
+#define MAYBE_VersionChangeCrashResilience DISABLED_VersionChangeCrashResilience
+#else
+#define MAYBE_VersionChangeCrashResilience VersionChangeCrashResilience
+#endif
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest,
+                       MAYBE_VersionChangeCrashResilience) {
   NavigateAndWaitForTitle(shell(), "version_change_crash.html", "#part3",
                           "pass - part3 - rolled back");
 }

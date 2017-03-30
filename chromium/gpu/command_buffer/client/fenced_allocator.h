@@ -7,6 +7,7 @@
 #ifndef GPU_COMMAND_BUFFER_CLIENT_FENCED_ALLOCATOR_H_
 #define GPU_COMMAND_BUFFER_CLIENT_FENCED_ALLOCATOR_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <vector>
@@ -33,16 +34,14 @@ class GPU_EXPORT FencedAllocator {
  public:
   typedef unsigned int Offset;
   // Invalid offset, returned by Alloc in case of failure.
-  static const Offset kInvalidOffset = 0xffffffffU;
+  enum : Offset { kInvalidOffset = 0xffffffffU };
 
   // Allocation alignment, must be a power of two.
-  static const unsigned int kAllocAlignment = 16;
+  enum : unsigned int { kAllocAlignment = 16 };
 
   // Creates a FencedAllocator. Note that the size of the buffer is passed, but
   // not its base address: everything is handled as offsets into the buffer.
-  FencedAllocator(unsigned int size,
-                  CommandBufferHelper *helper,
-                  const base::Closure& poll_callback);
+  FencedAllocator(unsigned int size, CommandBufferHelper* helper);
 
   ~FencedAllocator();
 
@@ -70,7 +69,7 @@ class GPU_EXPORT FencedAllocator {
   // Parameters:
   //   offset: the offset of the memory block to free.
   //   token: the token value to wait for before re-using the memory.
-  void FreePendingToken(Offset offset, int32 token);
+  void FreePendingToken(Offset offset, int32_t token);
 
   // Frees any blocks pending a token for which the token has been read.
   void FreeUnused();
@@ -82,6 +81,9 @@ class GPU_EXPORT FencedAllocator {
   // caller can wait. Allocating a block of this size will succeed, but may
   // block.
   unsigned int GetLargestFreeOrPendingSize();
+
+  // Gets the total size of all free blocks that are available without waiting.
+  unsigned int GetFreeSize();
 
   // Checks for consistency inside the book-keeping structures. Used for
   // testing.
@@ -143,7 +145,6 @@ class GPU_EXPORT FencedAllocator {
   Offset AllocInBlock(BlockIndex index, unsigned int size);
 
   CommandBufferHelper *helper_;
-  base::Closure poll_callback_;
   Container blocks_;
   size_t bytes_in_use_;
 
@@ -156,10 +157,8 @@ class FencedAllocatorWrapper {
  public:
   FencedAllocatorWrapper(unsigned int size,
                          CommandBufferHelper* helper,
-                         const base::Closure& poll_callback,
                          void* base)
-      : allocator_(size, helper, poll_callback),
-        base_(base) { }
+      : allocator_(size, helper), base_(base) {}
 
   // Allocates a block of memory. If the buffer is out of directly available
   // memory, this function may wait until memory that was freed "pending a
@@ -206,7 +205,7 @@ class FencedAllocatorWrapper {
   // Parameters:
   //   pointer: the pointer to the memory block to free.
   //   token: the token value to wait for before re-using the memory.
-  void FreePendingToken(void *pointer, int32 token) {
+  void FreePendingToken(void* pointer, int32_t token) {
     DCHECK(pointer);
     allocator_.FreePendingToken(GetOffset(pointer), token);
   }
@@ -242,6 +241,9 @@ class FencedAllocatorWrapper {
   unsigned int GetLargestFreeOrPendingSize() {
     return allocator_.GetLargestFreeOrPendingSize();
   }
+
+  // Gets the total size of all free blocks.
+  unsigned int GetFreeSize() { return allocator_.GetFreeSize(); }
 
   // Checks for consistency inside the book-keeping structures. Used for
   // testing.

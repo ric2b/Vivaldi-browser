@@ -21,12 +21,11 @@ from telemetry.value import trace
 
 
 class PageTestResults(object):
-  def __init__(self, output_stream=None, output_formatters=None,
+  def __init__(self, output_formatters=None,
                progress_reporter=None, trace_tag='', output_dir=None,
                value_can_be_added_predicate=lambda v, is_first: True):
     """
     Args:
-      output_stream: The output stream to use to write test results.
       output_formatters: A list of output formatters. The output
           formatters are typically used to format the test results, such
           as CsvPivotTableOutputFormatter, which output the test results as CSV.
@@ -45,7 +44,6 @@ class PageTestResults(object):
     # TODO(chrishenry): Figure out if trace_tag is still necessary.
 
     super(PageTestResults, self).__init__()
-    self._output_stream = output_stream
     self._progress_reporter = (
         progress_reporter if progress_reporter is not None
         else reporter_module.ProgressReporter())
@@ -72,6 +70,10 @@ class PageTestResults(object):
         v = copy.copy(v)
       setattr(result, k, v)
     return result
+
+  @property
+  def pages_to_profiling_files(self):
+    return self._pages_to_profiling_files
 
   @property
   def serialized_trace_file_ids_to_paths(self):
@@ -156,7 +158,7 @@ class PageTestResults(object):
     self._current_page_run = story_run.StoryRun(page)
     self._progress_reporter.WillRunPage(self)
 
-  def DidRunPage(self, page):  # pylint: disable=W0613
+  def DidRunPage(self, page):  # pylint: disable=unused-argument
     """
     Args:
       page: The current page under test.

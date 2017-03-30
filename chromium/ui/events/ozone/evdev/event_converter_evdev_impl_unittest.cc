@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <linux/input.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
@@ -18,8 +22,6 @@
 #include "ui/events/ozone/evdev/keyboard_evdev.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 
-#include <linux/input.h>
-
 namespace ui {
 
 const char kTestDevicePath[] = "/dev/input/test-device";
@@ -32,7 +34,6 @@ class MockEventConverterEvdevImpl : public EventConverterEvdevImpl {
       : EventConverterEvdevImpl(fd,
                                 base::FilePath(kTestDevicePath),
                                 1,
-                                INPUT_DEVICE_UNKNOWN,
                                 EventDeviceInfo(),
                                 cursor,
                                 dispatcher) {
@@ -121,13 +122,13 @@ class EventConverterEvdevImplTest : public testing::Test {
   unsigned size() { return dispatched_events_.size(); }
   ui::KeyEvent* dispatched_event(unsigned index) {
     DCHECK_GT(dispatched_events_.size(), index);
-    ui::Event* ev = dispatched_events_[index];
+    ui::Event* ev = dispatched_events_[index].get();
     DCHECK(ev->IsKeyEvent());
     return static_cast<ui::KeyEvent*>(ev);
   }
   ui::MouseEvent* dispatched_mouse_event(unsigned index) {
     DCHECK_GT(dispatched_events_.size(), index);
-    ui::Event* ev = dispatched_events_[index];
+    ui::Event* ev = dispatched_events_[index].get();
     DCHECK(ev->IsMouseEvent());
     return static_cast<ui::MouseEvent*>(ev);
   }
@@ -141,7 +142,7 @@ class EventConverterEvdevImplTest : public testing::Test {
  private:
   void DispatchEventForTest(ui::Event* event) {
     scoped_ptr<ui::Event> cloned_event = ui::Event::Clone(*event);
-    dispatched_events_.push_back(cloned_event.Pass());
+    dispatched_events_.push_back(std::move(cloned_event));
   }
 
   base::MessageLoopForUI ui_loop_;
@@ -152,7 +153,7 @@ class EventConverterEvdevImplTest : public testing::Test {
   scoped_ptr<ui::DeviceEventDispatcherEvdev> dispatcher_;
   scoped_ptr<ui::MockEventConverterEvdevImpl> device_;
 
-  ScopedVector<ui::Event> dispatched_events_;
+  std::vector<scoped_ptr<ui::Event>> dispatched_events_;
 
   int events_out_;
   int events_in_;

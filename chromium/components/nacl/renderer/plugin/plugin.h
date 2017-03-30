@@ -9,28 +9,24 @@
 #ifndef COMPONENTS_NACL_RENDERER_PLUGIN_PLUGIN_H_
 #define COMPONENTS_NACL_RENDERER_PLUGIN_PLUGIN_H_
 
+#include <stdint.h>
 #include <stdio.h>
 
 #include <string>
 
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "components/nacl/renderer/plugin/nacl_subprocess.h"
 #include "components/nacl/renderer/plugin/pnacl_coordinator.h"
 #include "components/nacl/renderer/plugin/service_runtime.h"
 #include "components/nacl/renderer/plugin/utility.h"
 #include "components/nacl/renderer/ppb_nacl_private.h"
-#include "native_client/src/include/nacl_macros.h"
-#include "native_client/src/include/nacl_scoped_ptr.h"
 #include "ppapi/cpp/instance.h"
 #include "ppapi/cpp/private/uma_private.h"
 #include "ppapi/cpp/url_loader.h"
 #include "ppapi/cpp/var.h"
 #include "ppapi/cpp/view.h"
 #include "ppapi/utility/completion_callback_factory.h"
-
-namespace nacl {
-class DescWrapper;
-class DescWrapperFactory;
-}  // namespace nacl
 
 namespace pp {
 class CompletionCallback;
@@ -97,12 +93,9 @@ class Plugin : public pp::Instance {
   // Report an error that was encountered while loading a module.
   void ReportLoadError(const ErrorInfo& error_info);
 
-  nacl::DescWrapperFactory* wrapper_factory() const { return wrapper_factory_; }
-
   const PPB_NaCl_Private* nacl_interface() const { return nacl_interface_; }
 
  private:
-  NACL_DISALLOW_COPY_AND_ASSIGN(Plugin);
   // The browser will invoke the destructor via the pp::Instance
   // pointer to this object, not from base's Delete().
   ~Plugin() override;
@@ -115,14 +108,6 @@ class Plugin : public pp::Instance {
   void StartSelLdr(ServiceRuntime* service_runtime,
                    const SelLdrStartParams& params,
                    pp::CompletionCallback callback);
-
-  // This is invoked on the main thread.
-  void StartNexe(int32_t pp_error, ServiceRuntime* service_runtime);
-
-  // Continuation for LoadHelperNaClModule. This is invoked on the main thread.
-  void StartHelperNexe(int32_t pp_error,
-                       NaClSubprocess* subprocess_to_init,
-                       pp::CompletionCallback callback);
 
   // Callback used when getting the URL for the .nexe file.  If the URL loading
   // is successful, the file descriptor is opened and can be passed to sel_ldr
@@ -151,11 +136,9 @@ class Plugin : public pp::Instance {
 
   bool uses_nonsfi_mode_;
 
-  nacl::DescWrapperFactory* wrapper_factory_;
-
   pp::CompletionCallbackFactory<Plugin> callback_factory_;
 
-  nacl::scoped_ptr<PnaclCoordinator> pnacl_coordinator_;
+  scoped_ptr<PnaclCoordinator> pnacl_coordinator_;
 
   int exit_status_;
 
@@ -163,6 +146,8 @@ class Plugin : public pp::Instance {
 
   const PPB_NaCl_Private* nacl_interface_;
   pp::UMAPrivate uma_interface_;
+
+  DISALLOW_COPY_AND_ASSIGN(Plugin);
 };
 
 }  // namespace plugin

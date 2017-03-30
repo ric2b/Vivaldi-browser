@@ -4,6 +4,8 @@
 
 #include "cc/layers/texture_layer_impl.h"
 
+#include <stddef.h>
+
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface.h"
 #include "cc/test/layer_test_common.h"
@@ -12,10 +14,9 @@
 namespace cc {
 namespace {
 
-void IgnoreCallback(uint32 sync_point,
+void IgnoreCallback(const gpu::SyncToken& sync_token,
                     bool lost,
-                    BlockingTaskRunner* main_thread_task_runner) {
-}
+                    BlockingTaskRunner* main_thread_task_runner) {}
 
 TEST(TextureLayerImplTest, VisibleOpaqueRegion) {
   const gfx::Size layer_bounds(100, 100);
@@ -52,7 +53,7 @@ TEST(TextureLayerImplTest, Occlusion) {
   gpu::Mailbox mailbox;
   impl.output_surface()->context_provider()->ContextGL()->GenMailboxCHROMIUM(
       mailbox.name);
-  TextureMailbox texture_mailbox(mailbox, GL_TEXTURE_2D, 0);
+  TextureMailbox texture_mailbox(mailbox, gpu::SyncToken(), GL_TEXTURE_2D);
 
   TextureLayerImpl* texture_layer_impl =
       impl.AddChildToRoot<TextureLayerImpl>();

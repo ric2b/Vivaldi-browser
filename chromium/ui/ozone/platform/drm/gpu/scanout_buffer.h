@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/memory/ref_counted.h"
+#include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace ui {
@@ -20,11 +21,18 @@ class ScanoutBuffer : public base::RefCountedThreadSafe<ScanoutBuffer> {
   // ID allocated by the KMS API when the buffer is registered (via the handle).
   virtual uint32_t GetFramebufferId() const = 0;
 
+  // Returns FourCC format representing the way pixel data has been encoded in
+  // memory for the registered framebuffer. This can be used to check if frame
+  // buffer is compatible with a given hardware plane.
+  virtual uint32_t GetFramebufferPixelFormat() const = 0;
+
   // Handle for the buffer. This is received when allocating the buffer.
   virtual uint32_t GetHandle() const = 0;
 
   // Size of the buffer.
   virtual gfx::Size GetSize() const = 0;
+
+  virtual bool RequiresGlFinish() const = 0;
 
  protected:
   virtual ~ScanoutBuffer() {}
@@ -38,6 +46,7 @@ class ScanoutBufferGenerator {
 
   virtual scoped_refptr<ScanoutBuffer> Create(
       const scoped_refptr<DrmDevice>& drm,
+      gfx::BufferFormat format,
       const gfx::Size& size) = 0;
 };
 

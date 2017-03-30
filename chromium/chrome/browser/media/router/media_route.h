@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/containers/small_map.h"
-#include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chrome/browser/media/router/media_sink.h"
@@ -32,11 +31,17 @@ class MediaRoute {
   // |media_sink|: The sink that is receiving the media.
   // |description|: Description of the route to be displayed.
   // |is_local|: true if the route was created from this browser.
+  // |custom_controller_path|: custom controller path if it is given by route
+  //                      provider. empty otherwise.
+  // |for_display|: Set to true if this route should be displayed for
+  //                |media_sink_id| in UI.
   MediaRoute(const MediaRoute::Id& media_route_id,
              const MediaSource& media_source,
-             const MediaSink& media_sink,
+             const MediaSink::Id& media_sink_id,
              const std::string& description,
-             bool is_local);
+             bool is_local,
+             const std::string& custom_controller_path,
+             bool for_display);
   ~MediaRoute();
 
   // The media route identifier.
@@ -45,8 +50,8 @@ class MediaRoute {
   // The media source being routed.
   const MediaSource& media_source() const { return media_source_; }
 
-  // The sink being routed to.
-  const MediaSink& media_sink() const { return media_sink_; }
+  // The ID of sink being routed to.
+  const MediaSink::Id& media_sink_id() const { return media_sink_id_; }
 
   // The description of the media route activity, for example
   // "Playing Foo Bar Music All Access."
@@ -57,42 +62,26 @@ class MediaRoute {
   // by a media route provider.)
   bool is_local() const { return is_local_; }
 
+  // The custom controller path. This allows route provider to have custom route
+  // detail as well as its own route control features route control features in
+  // the media router dialog.
+  const std::string& custom_controller_path() const {
+    return custom_controller_path_;
+  }
+
+  bool for_display() const { return for_display_; }
+
   bool Equals(const MediaRoute& other) const;
 
  private:
   MediaRoute::Id media_route_id_;
   MediaSource media_source_;
-  MediaSink media_sink_;
+  MediaSink::Id media_sink_id_;
   std::string description_;
   bool is_local_;
+  std::string custom_controller_path_;
+  bool for_display_;
 };
-
-class MediaRouteIdToPresentationSessionMapping {
- public:
-  MediaRouteIdToPresentationSessionMapping();
-  ~MediaRouteIdToPresentationSessionMapping();
-
-  void Add(const MediaRoute::Id& route_id,
-           const content::PresentationSessionInfo& session_info);
-  void Remove(const MediaRoute::Id& route_id);
-  void Clear();
-
-  // Gets the PresentationSessionInfo corresponding to |route_id| or nullptr
-  // if it does not exist. Caller should not hold on to the returned pointer.
-  const content::PresentationSessionInfo* Get(
-      const MediaRoute::Id& route_id) const;
-
- private:
-  base::SmallMap<std::map<MediaRoute::Id, content::PresentationSessionInfo>>
-      route_id_to_presentation_;
-
-  DISALLOW_COPY_AND_ASSIGN(MediaRouteIdToPresentationSessionMapping);
-};
-
-// Return a pair of Presentation ID and URL. If the input route ID is invalid,
-// a pair of empty strings is returned.
-std::pair<std::string, std::string> GetPresentationIdAndUrl(
-    const MediaRoute::Id& id);
 
 }  // namespace media_router
 

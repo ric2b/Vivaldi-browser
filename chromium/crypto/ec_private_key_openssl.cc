@@ -8,6 +8,8 @@
 #include <openssl/evp.h>
 #include <openssl/pkcs12.h>
 #include <openssl/x509.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
@@ -32,7 +34,7 @@ using ScopedX509_SIG = ScopedOpenSSL<X509_SIG, X509_SIG_free>;
 // Helper to export |key| into |output| via the specified ExportBioFunction.
 bool ExportKeyWithBio(const void* key,
                       ExportBioFunction export_fn,
-                      std::vector<uint8>* output) {
+                      std::vector<uint8_t>* output) {
   if (!key)
     return false;
 
@@ -62,7 +64,7 @@ typedef int (*ExportDataFunction)(const void* key, unsigned char** data);
 // Helper to export |key| into |output| via the specified export function.
 bool ExportKey(const void* key,
                ExportDataFunction export_fn,
-               std::vector<uint8>* output) {
+               std::vector<uint8_t>* output) {
   if (!key)
     return false;
 
@@ -93,9 +95,6 @@ ECPrivateKey* ECPrivateKey::Copy() const {
 }
 
 // static
-bool ECPrivateKey::IsSupported() { return true; }
-
-// static
 ECPrivateKey* ECPrivateKey::Create() {
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
 
@@ -115,8 +114,8 @@ ECPrivateKey* ECPrivateKey::Create() {
 // static
 ECPrivateKey* ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
     const std::string& password,
-    const std::vector<uint8>& encrypted_private_key_info,
-    const std::vector<uint8>& subject_public_key_info) {
+    const std::vector<uint8_t>& encrypted_private_key_info,
+    const std::vector<uint8_t>& subject_public_key_info) {
   // NOTE: The |subject_public_key_info| can be ignored here, it is only
   // useful for the NSS implementation (which uses the public key's SHA1
   // as a lookup key when storing the private one in its store).
@@ -160,10 +159,9 @@ ECPrivateKey* ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
   return result.release();
 }
 
-bool ECPrivateKey::ExportEncryptedPrivateKey(
-    const std::string& password,
-    int iterations,
-    std::vector<uint8>* output) {
+bool ECPrivateKey::ExportEncryptedPrivateKey(const std::string& password,
+                                             int iterations,
+                                             std::vector<uint8_t>* output) {
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
   // Convert into a PKCS#8 object.
   ScopedPKCS8_PRIV_KEY_INFO pkcs8(EVP_PKEY2PKCS8(key_));
@@ -176,9 +174,10 @@ bool ECPrivateKey::ExportEncryptedPrivateKey(
   // equivalent.
   ScopedX509_SIG encrypted(PKCS8_encrypt_pbe(
       NID_pbe_WithSHA1And3_Key_TripleDES_CBC,
+      nullptr,
       reinterpret_cast<const uint8_t*>(password.data()),
       password.size(),
-      NULL,
+      nullptr,
       0,
       iterations,
       pkcs8.get()));
@@ -191,7 +190,7 @@ bool ECPrivateKey::ExportEncryptedPrivateKey(
                           output);
 }
 
-bool ECPrivateKey::ExportPublicKey(std::vector<uint8>* output) {
+bool ECPrivateKey::ExportPublicKey(std::vector<uint8_t>* output) {
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
   return ExportKeyWithBio(
       key_, reinterpret_cast<ExportBioFunction>(i2d_PUBKEY_bio), output);
@@ -207,8 +206,8 @@ bool ECPrivateKey::ExportRawPublicKey(std::string* output) {
   if (len != kExpectedKeyLength)
     return false;
 
-  uint8 buf[kExpectedKeyLength];
-  uint8* derp = buf;
+  uint8_t buf[kExpectedKeyLength];
+  uint8_t* derp = buf;
   len = i2d_PublicKey(key_, &derp);
   if (len != kExpectedKeyLength)
     return false;
@@ -217,7 +216,7 @@ bool ECPrivateKey::ExportRawPublicKey(std::string* output) {
   return true;
 }
 
-bool ECPrivateKey::ExportValue(std::vector<uint8>* output) {
+bool ECPrivateKey::ExportValue(std::vector<uint8_t>* output) {
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
   ScopedEC_KEY ec_key(EVP_PKEY_get1_EC_KEY(key_));
   return ExportKey(ec_key.get(),
@@ -225,7 +224,7 @@ bool ECPrivateKey::ExportValue(std::vector<uint8>* output) {
                    output);
 }
 
-bool ECPrivateKey::ExportECParams(std::vector<uint8>* output) {
+bool ECPrivateKey::ExportECParams(std::vector<uint8_t>* output) {
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
   ScopedEC_KEY ec_key(EVP_PKEY_get1_EC_KEY(key_));
   return ExportKey(ec_key.get(),

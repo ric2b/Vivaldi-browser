@@ -8,10 +8,8 @@ import logging
 import os
 import tempfile
 
-from pylib import constants
 from pylib.base import base_test_result
 from pylib.remote.device import remote_device_test_run
-from pylib.utils import apk_helper
 
 
 class RemoteDeviceInstrumentationTestRun(
@@ -27,6 +25,7 @@ class RemoteDeviceInstrumentationTestRun(
     """Set up the triggering of a test run."""
     logging.info('Triggering test run.')
 
+    # pylint: disable=protected-access
     with tempfile.NamedTemporaryFile(suffix='.txt') as test_list_file:
       tests = self._test_instance.GetTests()
       logging.debug('preparing to run %d instrumentation tests remotely:',
@@ -41,7 +40,6 @@ class RemoteDeviceInstrumentationTestRun(
 
       env_vars = self._test_instance.GetDriverEnvironmentVars(
           test_list_file_path=test_list_file.name)
-      env_vars.update(self._test_instance.GetHttpServerEnvironmentVars())
 
       logging.debug('extras:')
       for k, v in env_vars.iteritems():
@@ -52,7 +50,8 @@ class RemoteDeviceInstrumentationTestRun(
           self._test_instance.driver_apk,
           self._test_instance.driver_name,
           environment_variables=env_vars,
-          extra_apks=[self._test_instance.test_apk])
+          extra_apks=([self._test_instance.test_apk] +
+                      self._test_instance.additional_apks))
 
   #override
   def _ParseTestResults(self):
@@ -71,4 +70,5 @@ class RemoteDeviceInstrumentationTestRun(
     else:
       raise Exception('Unexpected result type: %s' % type(result).__name__)
 
+    self._DetectPlatformErrors(r)
     return r

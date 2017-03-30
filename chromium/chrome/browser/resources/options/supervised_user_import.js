@@ -41,7 +41,8 @@ cr.define('options', function() {
       var avatarGrid = $('select-avatar-grid');
       options.ProfilesIconGrid.decorate(avatarGrid);
       var avatarIcons = loadTimeData.getValue('avatarIcons');
-      avatarGrid.dataModel = new ArrayDataModel(avatarIcons);
+      avatarGrid.dataModel = new ArrayDataModel(
+          /** @type {!Array} */(avatarIcons));
 
       supervisedUserList.addEventListener('change', function(event) {
         var supervisedUser = supervisedUserList.selectedItem;
@@ -77,7 +78,8 @@ cr.define('options', function() {
       $('import-existing-supervised-user-link').hidden = false;
 
       options.SupervisedUserListData.requestExistingSupervisedUsers().then(
-          this.receiveExistingSupervisedUsers_, this.onSigninError_.bind(this));
+          this.receiveExistingSupervisedUsers_.bind(this),
+          this.onSigninError_.bind(this));
       options.SupervisedUserListData.addObserver(this);
 
       this.updateImportInProgress_(false);
@@ -186,7 +188,8 @@ cr.define('options', function() {
 
       $('supervised-user-list').dataModel = new ArrayDataModel(supervisedUsers);
       if (supervisedUsers.length == 0) {
-        this.onError_(loadTimeData.getString('noExistingSupervisedUsers'));
+        this.onErrorInternal_(
+            loadTimeData.getString('noExistingSupervisedUsers'));
         $('supervised-user-import-ok').disabled = true;
       } else {
         // Hide the error bubble.
@@ -196,7 +199,8 @@ cr.define('options', function() {
 
     onSigninError_: function() {
       $('supervised-user-list').dataModel = null;
-      this.onError_(loadTimeData.getString('supervisedUserImportSigninError'));
+      this.onErrorInternal_(
+          loadTimeData.getString('supervisedUserImportSigninError'));
     },
 
     /**
@@ -207,10 +211,19 @@ cr.define('options', function() {
      * @private
      */
     onError_: function(error) {
+      this.onErrorInternal_(error);
+      this.updateImportInProgress_(false);
+    },
+
+    /**
+     * Displays an error message.
+     * @param {string} error The error message to display.
+     * @private
+     */
+    onErrorInternal_: function(error) {
       var errorBubble = $('supervised-user-import-error-bubble');
       errorBubble.hidden = false;
       errorBubble.textContent = error;
-      this.updateImportInProgress_(false);
     },
 
     /**

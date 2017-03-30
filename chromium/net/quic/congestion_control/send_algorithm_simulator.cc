@@ -4,6 +4,8 @@
 
 #include "net/quic/congestion_control/send_algorithm_simulator.h"
 
+#include <stdint.h>
+
 #include <limits>
 
 #include "base/logging.h"
@@ -56,10 +58,9 @@ SendAlgorithmSimulator::Transfer::Transfer(Sender* sender,
       start_time(start_time),
       name(name) {}
 
-SendAlgorithmSimulator::SendAlgorithmSimulator(
-    MockClock* clock,
-    QuicBandwidth bandwidth,
-    QuicTime::Delta rtt)
+SendAlgorithmSimulator::SendAlgorithmSimulator(MockClock* clock,
+                                               QuicBandwidth bandwidth,
+                                               QuicTime::Delta rtt)
     : clock_(clock),
       lose_next_ack_(false),
       forward_loss_rate_(0),
@@ -69,7 +70,7 @@ SendAlgorithmSimulator::SendAlgorithmSimulator(
       rtt_(rtt),
       buffer_size_(1000000),
       delayed_ack_timer_(QuicTime::Delta::FromMilliseconds(100)) {
-  uint32 seed = base::RandInt(0, std::numeric_limits<int32>::max());
+  uint32_t seed = base::RandInt(0, std::numeric_limits<int32_t>::max());
   DVLOG(1) << "Seeding SendAlgorithmSimulator with " << seed;
   simple_random_.set_seed(seed);
 }
@@ -81,25 +82,27 @@ void SendAlgorithmSimulator::AddTransfer(Sender* sender, size_t num_bytes) {
               StringPrintf("#%zu", pending_transfers_.size()));
 }
 
-void SendAlgorithmSimulator::AddTransfer(
-    Sender* sender, size_t num_bytes, QuicTime start_time, string name) {
+void SendAlgorithmSimulator::AddTransfer(Sender* sender,
+                                         size_t num_bytes,
+                                         QuicTime start_time,
+                                         string name) {
   pending_transfers_.push_back(Transfer(sender, num_bytes, start_time, name));
   // Record initial stats from when the transfer begins.
   pending_transfers_.back().sender->RecordStats();
 }
 
 void SendAlgorithmSimulator::TransferBytes() {
-  TransferBytes(kuint64max, QuicTime::Delta::Infinite());
+  TransferBytes(std::numeric_limits<uint64_t>::max(),
+                QuicTime::Delta::Infinite());
 }
 
 void SendAlgorithmSimulator::TransferBytes(QuicByteCount max_bytes,
                                            QuicTime::Delta max_time) {
-  const QuicTime end_time = max_time.IsInfinite() ?
-      QuicTime::Zero().Add(QuicTime::Delta::Infinite()) :
-      clock_->Now().Add(max_time);
+  const QuicTime end_time =
+      max_time.IsInfinite() ? QuicTime::Zero().Add(QuicTime::Delta::Infinite())
+                            : clock_->Now().Add(max_time);
   QuicByteCount bytes_sent = 0;
-  while (!pending_transfers_.empty() &&
-         clock_->Now() < end_time &&
+  while (!pending_transfers_.empty() && clock_->Now() < end_time &&
          bytes_sent < max_bytes) {
     // Determine the times of next send and of the next ack arrival.
     PacketEvent send_event = NextSendEvent();
@@ -114,9 +117,10 @@ void SendAlgorithmSimulator::TransferBytes(QuicByteCount max_bytes,
       SendDataNow(&pending_transfers_.front());
     } else if (ack_event.time_delta < send_event.time_delta) {
       DVLOG(1) << "Handling ack of largest observed:"
-               << ack_event.transfer->sender->next_acked << ", advancing time:"
-               << ack_event.time_delta.ToMicroseconds() << "us";
-      // Ack data all the data up to ack time and lose any missing sequence
+               << ack_event.transfer->sender->next_acked
+               << ", advancing time:" << ack_event.time_delta.ToMicroseconds()
+               << "us";
+      // Ack data all the data up to ack time and lose any missing packet
       // numbers.
       clock_->AdvanceTime(ack_event.time_delta);
       HandlePendingAck(ack_event.transfer);
@@ -143,9 +147,8 @@ SendAlgorithmSimulator::PacketEvent SendAlgorithmSimulator::NextSendEvent() {
     // If the flow hasn't started, use the start time.
     QuicTime::Delta transfer_send_time = it->start_time.Subtract(clock_->Now());
     if (clock_->Now() >= it->start_time) {
-      transfer_send_time =
-          it->sender->send_algorithm->TimeUntilSend(
-              clock_->Now(), it->bytes_in_flight, HAS_RETRANSMITTABLE_DATA);
+      transfer_send_time = it->sender->send_algorithm->TimeUntilSend(
+          clock_->Now(), it->bytes_in_flight, HAS_RETRANSMITTABLE_DATA);
     }
     if (transfer_send_time < next_send_time) {
       next_send_time = transfer_send_time;
@@ -186,11 +189,11 @@ QuicTime::Delta SendAlgorithmSimulator::FindNextAcked(Transfer* transfer) {
   Sender* sender = transfer->sender;
   if (sender->next_acked == sender->last_acked) {
     // Determine if the next ack is lost only once, to ensure determinism.
-    lose_next_ack_ =
-        reverse_loss_rate_ * kuint64max > simple_random_.RandUint64();
+    lose_next_ack_ = reverse_loss_rate_ * std::numeric_limits<uint64_t>::max() >
+                     simple_random_.RandUint64();
   }
 
-  QuicPacketSequenceNumber next_acked = sender->last_acked;
+  QuicPacketNumber next_acked = sender->last_acked;
   QuicTime::Delta next_ack_delay =
       FindNextAck(transfer, sender->last_acked, &next_acked);
   if (lose_next_ack_) {
@@ -202,8 +205,8 @@ QuicTime::Delta SendAlgorithmSimulator::FindNextAcked(Transfer* transfer) {
 
 QuicTime::Delta SendAlgorithmSimulator::FindNextAck(
     const Transfer* transfer,
-    QuicPacketSequenceNumber last_acked,
-    QuicPacketSequenceNumber* next_acked) const {
+    QuicPacketNumber last_acked,
+    QuicPacketNumber* next_acked) const {
   *next_acked = last_acked;
   QuicTime::Delta ack_delay = QuicTime::Delta::Infinite();
   // Remove any packets that are simulated as lost.
@@ -213,19 +216,19 @@ QuicTime::Delta SendAlgorithmSimulator::FindNextAck(
       continue;
     }
     // Skip over any packets less than or equal to last_acked.
-    if (it->sequence_number <= last_acked) {
+    if (it->packet_number <= last_acked) {
       continue;
     }
     // Lost packets don't trigger an ack.
     if (it->lost) {
       continue;
     }
-    DCHECK_LT(*next_acked, it->sequence_number);
+    DCHECK_LT(*next_acked, it->packet_number);
     // Consider a delayed ack for the current next_acked.
     if (ack_delay < it->ack_time.Subtract(clock_->Now())) {
       break;
     }
-    *next_acked = it->sequence_number;
+    *next_acked = it->packet_number;
     ack_delay = it->ack_time.Subtract(clock_->Now());
     if (HasRecentLostPackets(transfer, *next_acked) ||
         (*next_acked - last_acked) >= 2) {
@@ -241,10 +244,11 @@ QuicTime::Delta SendAlgorithmSimulator::FindNextAck(
 }
 
 bool SendAlgorithmSimulator::HasRecentLostPackets(
-    const Transfer* transfer, QuicPacketSequenceNumber next_acked) const {
-  QuicPacketSequenceNumber last_packet = transfer->sender->last_acked;
+    const Transfer* transfer,
+    QuicPacketNumber next_acked) const {
+  QuicPacketNumber last_packet = transfer->sender->last_acked;
   for (list<SentPacket>::const_iterator it = sent_packets_.begin();
-       it != sent_packets_.end() && it->sequence_number < next_acked; ++it) {
+       it != sent_packets_.end() && it->packet_number < next_acked; ++it) {
     if (transfer != it->transfer) {
       continue;
     }
@@ -254,21 +258,21 @@ bool SendAlgorithmSimulator::HasRecentLostPackets(
     }
     // Buffer dropped packets are skipped automatically, but still end up
     // being lost and cause acks to be sent immediately.
-    if (it->sequence_number > last_packet + 1) {
+    if (it->packet_number > last_packet + 1) {
       return true;
     }
-    last_packet = it->sequence_number;
+    last_packet = it->packet_number;
   }
   return false;
 }
 
 void SendAlgorithmSimulator::HandlePendingAck(Transfer* transfer) {
-  Sender* sender  = transfer->sender;
+  Sender* sender = transfer->sender;
   DCHECK_LT(sender->last_acked, sender->next_acked);
   SendAlgorithmInterface::CongestionVector acked_packets;
   SendAlgorithmInterface::CongestionVector lost_packets;
-  DVLOG(1) << "Acking packets from:" << sender->last_acked
-           << " to " << sender->next_acked
+  DVLOG(1) << "Acking packets from:" << sender->last_acked << " to "
+           << sender->next_acked
            << " bytes_in_flight:" << transfer->bytes_in_flight
            << " Now():" << (clock_->Now().ToDebuggingValue() / 1000) << "ms";
   // Some entries may be missing from the sent_packets_ array, if they were
@@ -277,25 +281,22 @@ void SendAlgorithmSimulator::HandlePendingAck(Transfer* transfer) {
   list<SentPacket>::iterator it = sent_packets_.begin();
   while (sender->last_acked < sender->next_acked) {
     ++sender->last_acked;
-    TransmissionInfo info = TransmissionInfo();
-    info.bytes_sent = kPacketSize;
-    info.in_flight = true;
     // Find the next SentPacket for this transfer.
     while (it->transfer != transfer) {
       DCHECK(it != sent_packets_.end());
       ++it;
     }
     // If it's missing from the array, it's a loss.
-    if (it->sequence_number > sender->last_acked) {
+    if (it->packet_number > sender->last_acked) {
       DVLOG(1) << "Lost packet:" << sender->last_acked
                << " dropped by buffer overflow.";
-      lost_packets.push_back(std::make_pair(sender->last_acked, info));
+      lost_packets.push_back(std::make_pair(sender->last_acked, kPacketSize));
       continue;
     }
     if (it->lost) {
-      lost_packets.push_back(std::make_pair(sender->last_acked, info));
+      lost_packets.push_back(std::make_pair(sender->last_acked, kPacketSize));
     } else {
-      acked_packets.push_back(std::make_pair(sender->last_acked, info));
+      acked_packets.push_back(std::make_pair(sender->last_acked, kPacketSize));
     }
     // This packet has been acked or lost, remove it from sent_packets_.
     largest_observed = *it;
@@ -304,16 +305,15 @@ void SendAlgorithmSimulator::HandlePendingAck(Transfer* transfer) {
 
   DCHECK(!largest_observed.lost);
   DVLOG(1) << "Updating RTT from send_time:"
-           << largest_observed.send_time.ToDebuggingValue() << " to ack_time:"
-           << largest_observed.ack_time.ToDebuggingValue();
+           << largest_observed.send_time.ToDebuggingValue()
+           << " to ack_time:" << largest_observed.ack_time.ToDebuggingValue();
   QuicTime::Delta measured_rtt =
       largest_observed.ack_time.Subtract(largest_observed.send_time);
   DCHECK_GE(measured_rtt.ToMicroseconds(), rtt_.ToMicroseconds());
-  sender->rtt_stats->UpdateRtt(measured_rtt,
-                               QuicTime::Delta::Zero(),
+  sender->rtt_stats->UpdateRtt(measured_rtt, QuicTime::Delta::Zero(),
                                clock_->Now());
-  sender->send_algorithm->OnCongestionEvent(
-      true, transfer->bytes_in_flight, acked_packets, lost_packets);
+  sender->send_algorithm->OnCongestionEvent(true, transfer->bytes_in_flight,
+                                            acked_packets, lost_packets);
   DCHECK_LE(kPacketSize * (acked_packets.size() + lost_packets.size()),
             transfer->bytes_in_flight);
   transfer->bytes_in_flight -=
@@ -326,11 +326,11 @@ void SendAlgorithmSimulator::HandlePendingAck(Transfer* transfer) {
     // Remove completed transfers and record transfer bandwidth.
     QuicTime::Delta transfer_time =
         clock_->Now().Subtract(transfer->start_time);
-    sender->last_transfer_loss_rate = static_cast<float>(transfer->bytes_lost) /
+    sender->last_transfer_loss_rate =
+        static_cast<float>(transfer->bytes_lost) /
         (transfer->bytes_lost + transfer->bytes_acked);
-    sender->last_transfer_bandwidth =
-        QuicBandwidth::FromBytesAndTimeDelta(transfer->num_bytes,
-                                             transfer_time);
+    sender->last_transfer_bandwidth = QuicBandwidth::FromBytesAndTimeDelta(
+        transfer->num_bytes, transfer_time);
     DCHECK_GE(bandwidth_.ToBitsPerSecond(),
               sender->last_transfer_bandwidth.ToBitsPerSecond());
     for (vector<Transfer>::iterator it = pending_transfers_.begin();
@@ -344,25 +344,27 @@ void SendAlgorithmSimulator::HandlePendingAck(Transfer* transfer) {
 }
 
 void SendAlgorithmSimulator::SendDataNow(Transfer* transfer) {
-  Sender* sender  = transfer->sender;
+  Sender* sender = transfer->sender;
   ++sender->last_sent;
   DVLOG(1) << "Sending packet:" << sender->last_sent
            << " name:" << transfer->name
            << " bytes_in_flight:" << transfer->bytes_in_flight
            << " cwnd:" << sender->send_algorithm->GetCongestionWindow()
            << " Now():" << (clock_->Now().ToDebuggingValue() / 1000) << "ms";
-  sender->send_algorithm->OnPacketSent(
-      clock_->Now(), transfer->bytes_in_flight,
-      sender->last_sent, kPacketSize, HAS_RETRANSMITTABLE_DATA);
+  sender->send_algorithm->OnPacketSent(clock_->Now(), transfer->bytes_in_flight,
+                                       sender->last_sent, kPacketSize,
+                                       HAS_RETRANSMITTABLE_DATA);
   // Lose the packet immediately if the buffer is full.
   if (sent_packets_.size() * kPacketSize < buffer_size_) {
     // TODO(ianswett): This buffer simulation is an approximation.
     // An ack time of zero means loss.
     bool packet_lost =
-        forward_loss_rate_ * kuint64max > simple_random_.RandUint64();
+        forward_loss_rate_ * std::numeric_limits<uint64_t>::max() >
+        simple_random_.RandUint64();
     // Handle correlated loss.
     if (!sent_packets_.empty() && sent_packets_.back().lost &&
-        loss_correlation_ * kuint64max > simple_random_.RandUint64()) {
+        loss_correlation_ * std::numeric_limits<uint64_t>::max() >
+            simple_random_.RandUint64()) {
       packet_lost = true;
     }
     DVLOG(1) << "losing packet:" << sender->last_sent
@@ -375,11 +377,13 @@ void SendAlgorithmSimulator::SendDataNow(Transfer* transfer) {
     if (kPacketSize > bdp) {
       ack_time = ack_time.Add(bandwidth_.TransferTime(kPacketSize - bdp));
     }
-    QuicTime queue_ack_time = sent_packets_.empty() ? QuicTime::Zero() :
-        sent_packets_.back().ack_time.Add(bandwidth_.TransferTime(kPacketSize));
+    QuicTime queue_ack_time = sent_packets_.empty()
+                                  ? QuicTime::Zero()
+                                  : sent_packets_.back().ack_time.Add(
+                                        bandwidth_.TransferTime(kPacketSize));
     ack_time = QuicTime::Max(ack_time, queue_ack_time);
-    sent_packets_.push_back(SentPacket(
-        sender->last_sent, clock_->Now(), ack_time, packet_lost, transfer));
+    sent_packets_.push_back(SentPacket(sender->last_sent, clock_->Now(),
+                                       ack_time, packet_lost, transfer));
   } else {
     DVLOG(1) << "losing packet:" << sender->last_sent
              << " name:" << transfer->name << " because the buffer was full.";

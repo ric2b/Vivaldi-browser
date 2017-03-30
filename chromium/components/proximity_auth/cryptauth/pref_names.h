@@ -15,6 +15,9 @@ extern const char kCryptAuthDeviceSyncUnlockKeys[];
 extern const char kCryptAuthEnrollmentIsRecoveringFromFailure[];
 extern const char kCryptAuthEnrollmentLastEnrollmentTimeSeconds[];
 extern const char kCryptAuthEnrollmentReason[];
+extern const char kCryptAuthEnrollmentUserPublicKey[];
+extern const char kCryptAuthEnrollmentUserPrivateKey[];
+extern const char kCryptAuthGCMRegistrationId[];
 
 }  // namespace prefs
 }  // proximity_auth

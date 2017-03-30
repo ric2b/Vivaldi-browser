@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/memory/scoped_vector.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
@@ -14,7 +13,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
-#include "components/sessions/session_types.h"
+#include "components/sessions/core/session_types.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -31,7 +30,7 @@ content::WebContents* SessionRestore::RestoreForeignSessionTab(
   Profile* profile = Profile::FromBrowserContext(context);
   TabModel* tab_model = TabModelList::GetTabModelForWebContents(web_contents);
   DCHECK(tab_model);
-  ScopedVector<content::NavigationEntry> scoped_entries =
+  std::vector<scoped_ptr<content::NavigationEntry>> entries =
       sessions::ContentSerializedNavigationBuilder::ToNavigationEntries(
           session_tab.navigations, profile);
   content::WebContents* new_web_contents = content::WebContents::Create(
@@ -40,7 +39,7 @@ content::WebContents* SessionRestore::RestoreForeignSessionTab(
   new_web_contents->GetController().Restore(
       selected_index,
       content::NavigationController::RESTORE_LAST_SESSION_EXITED_CLEANLY,
-      &scoped_entries);
+      &entries);
 
   TabAndroid* current_tab = TabAndroid::FromWebContents(web_contents);
   DCHECK(current_tab);
@@ -50,7 +49,8 @@ content::WebContents* SessionRestore::RestoreForeignSessionTab(
   } else {
     DCHECK(disposition == NEW_FOREGROUND_TAB ||
         disposition == NEW_BACKGROUND_TAB);
-    tab_model->CreateTab(new_web_contents, current_tab->GetAndroidId());
+    tab_model->CreateTab(current_tab, new_web_contents,
+                         current_tab->GetAndroidId());
   }
   return new_web_contents;
 }

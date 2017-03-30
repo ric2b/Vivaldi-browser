@@ -16,6 +16,9 @@
       <message name="IDS_BOOKMARK_GROUP_FROM_IE" desc="The group name of bookmarks from Internet Explorer">
         Imported From IE
       </message>
+      <message name="IDS_BOOKMARK_GROUP_FROM_EDGE" desc="The group name of bookmarks from Edge">
+        Imported From Edge
+      </message>
     </if>
     <message name="IDS_BOOKMARK_GROUP_FROM_FIREFOX" desc="The group name of bookmarks from Firefox">
       Imported From Firefox
@@ -193,10 +196,7 @@
 
   <!-- Begin of Bookmarks Sync Promo strings. -->
   <message name="IDS_BOOKMARK_SYNC_PROMO_MESSAGE" desc="Text of the sync promo displayed at the bottom of the bookmark bubble.">
-    <ph name="SIGN_IN_LINK">$1<ex>Sign in</ex></ph> to get your bookmarks everywhere.
-  </message>
-  <message name="IDS_BOOKMARK_SYNC_PROMO_LINK" desc="Text of the link to sign in from the bookmark sync promo.">
-    Sign in
+    To get your bookmarks on all your devices, <ph name="SIGN_IN_LINK">$1<ex>sign in</ex></ph>.
   </message>
   <!-- End of Bookmarks Sync Promo strings. -->
 

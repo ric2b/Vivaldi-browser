@@ -3,8 +3,12 @@
 // found in the LICENSE file.
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
+
+#include <utility>
 
 #import "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #import "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -102,7 +106,7 @@ class TranslationInfoBarTest : public CocoaProfileTest {
     scoped_ptr<translate::TranslateInfoBarDelegate> delegate(
         new MockTranslateInfoBarDelegate(web_contents_.get(), type, error));
     scoped_ptr<infobars::InfoBar> infobar(
-        chrome_translate_client->CreateInfoBar(delegate.Pass()));
+        chrome_translate_client->CreateInfoBar(std::move(delegate)));
     if (infobar_)
       infobar_->CloseSoon();
     infobar_ = static_cast<InfoBarCocoa*>(infobar.release());
@@ -222,7 +226,9 @@ TEST_F(TranslationInfoBarTest, Bug36666) {
     .Times(0);
 
   int arbitrary_index = 2;
-  [infobar_controller_ sourceLanguageModified:arbitrary_index];
+  NSString* arbitrary_language = @"es";
+  [infobar_controller_ sourceLanguageModified:arbitrary_language
+                            withLanguageIndex:arbitrary_index];
   EXPECT_CALL(*infobar_delegate(), Translate())
     .Times(0);
 }

@@ -4,6 +4,8 @@
 
 #include "content/renderer/pepper/url_response_info_util.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -33,7 +35,7 @@ class HeaderFlattener : public WebHTTPHeaderVisitor {
  public:
   const std::string& buffer() const { return buffer_; }
 
-  virtual void visitHeader(const WebString& name, const WebString& value) {
+  void visitHeader(const WebString& name, const WebString& value) override {
     if (!buffer_.empty())
       buffer_.append("\n");
     buffer_.append(name.utf8());
@@ -75,7 +77,7 @@ void DataFromWebURLResponse(RendererPpapiHostImpl* host_impl,
                             const WebURLResponse& response,
                             const DataFromWebURLResponseCallback& callback) {
   ppapi::URLResponseInfoData data;
-  data.url = response.url().spec();
+  data.url = response.url().string().utf8();
   data.status_code = response.httpStatusCode();
   data.status_text = response.httpStatusText().utf8();
   if (IsRedirect(data.status_code)) {

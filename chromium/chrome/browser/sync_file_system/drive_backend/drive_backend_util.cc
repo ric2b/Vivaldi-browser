@@ -5,22 +5,21 @@
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_util.h"
 
 #include "base/logging.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
-#include "chrome/browser/drive/drive_api_util.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/leveldb_wrapper.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.pb.h"
 #include "chrome/browser/sync_file_system/logger.h"
+#include "components/drive/drive_api_util.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
 
 namespace sync_file_system {
 namespace drive_backend {
 
-void PutVersionToDB(int64 version, LevelDBWrapper* db) {
+void PutVersionToDB(int64_t version, LevelDBWrapper* db) {
   DCHECK(db);
   db->Put(kDatabaseVersionKey, base::Int64ToString(version));
 }
@@ -60,7 +59,7 @@ void PutFileMetadataDeletionToDB(const std::string& file_id,
   db->Delete(kFileMetadataKeyPrefix + file_id);
 }
 
-void PutFileTrackerDeletionToDB(int64 tracker_id, LevelDBWrapper* db) {
+void PutFileTrackerDeletionToDB(int64_t tracker_id, LevelDBWrapper* db) {
   DCHECK(db);
   db->Delete(kFileTrackerKeyPrefix + base::Int64ToString(tracker_id));
 }
@@ -172,7 +171,7 @@ scoped_ptr<ServiceMetadata> InitializeServiceMetadata(LevelDBWrapper* db) {
     service_metadata->set_next_tracker_id(1);
   }
 
-  return service_metadata.Pass();
+  return service_metadata;
 }
 
 }  // namespace drive_backend

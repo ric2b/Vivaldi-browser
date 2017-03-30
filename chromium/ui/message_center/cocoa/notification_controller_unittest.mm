@@ -6,6 +6,7 @@
 
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,6 +22,16 @@ using base::ASCIIToUTF16;
 using base::UTF8ToUTF16;
 
 namespace {
+
+// A test delegate used for tests that deal with the notification settings
+// button.
+class NotificationSettingsDelegate
+    : public message_center::NotificationDelegate {
+  bool ShouldDisplaySettingsButton() override { return true; }
+
+ private:
+  ~NotificationSettingsDelegate() override {}
+};
 
 class MockMessageCenter : public message_center::FakeMessageCenter {
  public:
@@ -95,6 +106,10 @@ class MockMessageCenter : public message_center::FakeMessageCenter {
   return contextMessage_.get();
 }
 
+- (HoverImageButton*)settingsButton {
+  return settingsButton_.get();
+}
+
 - (NSView*)listView {
   return listView_.get();
 }
@@ -117,14 +132,10 @@ class NotificationControllerTest : public ui::CocoaTest {
 TEST_F(NotificationControllerTest, BasicLayout) {
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_SIMPLE,
-          "",
+          message_center::NOTIFICATION_TYPE_SIMPLE, "",
           ASCIIToUTF16("Added to circles"),
-          ASCIIToUTF16("Jonathan and 5 others"),
-          gfx::Image(),
-          base::string16(),
-          DummyNotifierId(),
-          message_center::RichNotificationData(),
+          ASCIIToUTF16("Jonathan and 5 others"), gfx::Image(), base::string16(),
+          GURL(), DummyNotifierId(), message_center::RichNotificationData(),
           NULL));
   gfx::Image testIcon([TestIcon() retain]);
   notification->set_icon(testIcon);
@@ -144,21 +155,51 @@ TEST_F(NotificationControllerTest, BasicLayout) {
   EXPECT_EQ(controller.get(), [[controller closeButton] target]);
 }
 
+TEST_F(NotificationControllerTest, NotificationSetttingsButtonLayout) {
+  scoped_ptr<message_center::Notification> notification(
+      new message_center::Notification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, "",
+          ASCIIToUTF16("Added to circles"),
+          ASCIIToUTF16("Jonathan and 5 others"), gfx::Image(), base::string16(),
+          GURL("https://plus.com"), DummyNotifierId(),
+          message_center::RichNotificationData(),
+          new NotificationSettingsDelegate()));
+
+  base::scoped_nsobject<MCNotificationController> controller(
+      [[MCNotificationController alloc] initWithNotification:notification.get()
+                                               messageCenter:nullptr]);
+  [controller view];
+  EXPECT_EQ(controller.get(), [[controller settingsButton] target]);
+}
+
+TEST_F(NotificationControllerTest, ContextMessageAsDomainNotificationLayout) {
+  scoped_ptr<message_center::Notification> notification(
+      new message_center::Notification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, "",
+          ASCIIToUTF16("Added to circles"),
+          ASCIIToUTF16("Jonathan and 5 others"), gfx::Image(), base::string16(),
+          GURL("https://plus.com"), DummyNotifierId(),
+          message_center::RichNotificationData(), new NotificationDelegate()));
+  base::scoped_nsobject<MCNotificationController> controller(
+      [[MCNotificationController alloc] initWithNotification:notification.get()
+                                               messageCenter:nullptr]);
+  [controller view];
+
+  EXPECT_EQ(base::SysNSStringToUTF8([[controller contextMessageView] string]),
+            "plus.com");
+}
+
 TEST_F(NotificationControllerTest, OverflowText) {
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_SIMPLE,
-          "",
+          message_center::NOTIFICATION_TYPE_SIMPLE, "",
           ASCIIToUTF16("This is a much longer title that should wrap "
                        "multiple lines."),
           ASCIIToUTF16("And even the message is long. This sure is a wordy "
                        "notification. Are you really going to read this "
                        "entire thing?"),
-          gfx::Image(),
-          base::string16(),
-          DummyNotifierId(),
-          message_center::RichNotificationData(),
-          NULL));
+          gfx::Image(), base::string16(), GURL(), DummyNotifierId(),
+          message_center::RichNotificationData(), NULL));
   base::scoped_nsobject<MCNotificationController> controller(
       [[MCNotificationController alloc] initWithNotification:notification.get()
                                                messageCenter:NULL]);
@@ -171,15 +212,9 @@ TEST_F(NotificationControllerTest, OverflowText) {
 TEST_F(NotificationControllerTest, Close) {
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_SIMPLE,
-          "an_id",
-          base::string16(),
-          base::string16(),
-          gfx::Image(),
-          base::string16(),
-          DummyNotifierId(),
-          message_center::RichNotificationData(),
-          NULL));
+          message_center::NOTIFICATION_TYPE_SIMPLE, "an_id", base::string16(),
+          base::string16(), gfx::Image(), base::string16(), GURL(),
+          DummyNotifierId(), message_center::RichNotificationData(), NULL));
   MockMessageCenter message_center;
 
   base::scoped_nsobject<MCNotificationController> controller(
@@ -197,16 +232,12 @@ TEST_F(NotificationControllerTest, Close) {
 TEST_F(NotificationControllerTest, Update) {
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_SIMPLE,
-          "",
+          message_center::NOTIFICATION_TYPE_SIMPLE, "",
           ASCIIToUTF16("A simple title"),
           ASCIIToUTF16("This message isn't too long and should fit in the"
                        "default bounds."),
-          gfx::Image(),
-          base::string16(),
-          DummyNotifierId(),
-          message_center::RichNotificationData(),
-          NULL));
+          gfx::Image(), base::string16(), GURL(), DummyNotifierId(),
+          message_center::RichNotificationData(), NULL));
   base::scoped_nsobject<MCNotificationController> controller(
       [[MCNotificationController alloc] initWithNotification:notification.get()
                                                messageCenter:NULL]);
@@ -238,15 +269,9 @@ TEST_F(NotificationControllerTest, Buttons) {
 
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_BASE_FORMAT,
-          "an_id",
-          base::string16(),
-          base::string16(),
-          gfx::Image(),
-          base::string16(),
-          DummyNotifierId(),
-          optional,
-          NULL));
+          message_center::NOTIFICATION_TYPE_BASE_FORMAT, "an_id",
+          base::string16(), base::string16(), gfx::Image(), base::string16(),
+          GURL(), DummyNotifierId(), optional, NULL));
   MockMessageCenter message_center;
 
   base::scoped_nsobject<MCNotificationController> controller(
@@ -263,14 +288,9 @@ TEST_F(NotificationControllerTest, Buttons) {
 TEST_F(NotificationControllerTest, Image) {
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_BASE_FORMAT,
-          "an_id",
-          base::string16(),
-          base::string16(),
-          gfx::Image(),
-          base::string16(),
-          DummyNotifierId(),
-          message_center::RichNotificationData(),
+          message_center::NOTIFICATION_TYPE_BASE_FORMAT, "an_id",
+          base::string16(), base::string16(), gfx::Image(), base::string16(),
+          GURL(), DummyNotifierId(), message_center::RichNotificationData(),
           NULL));
   NSImage* image = [NSImage imageNamed:NSImageNameFolder];
   notification->set_image(gfx::Image([image retain]));
@@ -306,15 +326,10 @@ TEST_F(NotificationControllerTest, List) {
 
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_BASE_FORMAT,
-          "an_id",
+          message_center::NOTIFICATION_TYPE_BASE_FORMAT, "an_id",
           UTF8ToUTF16("Notification Title"),
-          UTF8ToUTF16("Notification Message - should be hidden"),
-          gfx::Image(),
-          base::string16(),
-          DummyNotifierId(),
-          optional,
-          NULL));
+          UTF8ToUTF16("Notification Message - should be hidden"), gfx::Image(),
+          base::string16(), GURL(), DummyNotifierId(), optional, NULL));
 
   MockMessageCenter message_center;
   base::scoped_nsobject<MCNotificationController> controller(
@@ -337,15 +352,9 @@ TEST_F(NotificationControllerTest, NoMessage) {
 
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_BASE_FORMAT,
-          "an_id",
-          UTF8ToUTF16("Notification Title"),
-          UTF8ToUTF16(""),
-          gfx::Image(),
-          base::string16(),
-          DummyNotifierId(),
-          optional,
-          NULL));
+          message_center::NOTIFICATION_TYPE_BASE_FORMAT, "an_id",
+          UTF8ToUTF16("Notification Title"), UTF8ToUTF16(""), gfx::Image(),
+          base::string16(), GURL(), DummyNotifierId(), optional, NULL));
 
   MockMessageCenter message_center;
   base::scoped_nsobject<MCNotificationController> controller(
@@ -363,15 +372,10 @@ TEST_F(NotificationControllerTest, MessageSize) {
   std::string id("id");
   NotifierId notifier_id(NotifierId::APPLICATION, "notifier");
   scoped_ptr<Notification> notification(new Notification(
-      NOTIFICATION_TYPE_BASE_FORMAT,
-      id,
-      base::UTF8ToUTF16(""),
+      NOTIFICATION_TYPE_BASE_FORMAT, id, base::UTF8ToUTF16(""),
       ASCIIToUTF16("And\neven\nthe\nmessage is long.\nThis sure is wordy"),
-      gfx::Image(),
-      base::string16() /* display_source */,
-      notifier_id,
-      data,
-      NULL /* delegate */));
+      gfx::Image(), base::string16() /* display_source */, GURL(), notifier_id,
+      data, NULL /* delegate */));
 
   base::scoped_nsobject<MCNotificationController> controller(
       [[MCNotificationController alloc] initWithNotification:notification.get()
@@ -422,7 +426,7 @@ TEST_F(NotificationControllerTest, MessageSize) {
   EXPECT_EQ(1u, compute_message_lines());
 
   // Same as above, but context message takes away from message lines.
-  notification->set_context_message(base::UTF8ToUTF16("foo"));
+  notification->set_context_message(UTF8ToUTF16("foo"));
   notification->set_title(ASCIIToUTF16(""));
   [controller updateNotification:notification.get()];
   EXPECT_EQ(1u, compute_message_lines());

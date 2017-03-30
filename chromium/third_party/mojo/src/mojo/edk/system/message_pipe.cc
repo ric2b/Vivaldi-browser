@@ -2,18 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/message_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe.h"
+
+#include <utility>
 
 #include "base/logging.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/channel_endpoint.h"
-#include "mojo/edk/system/channel_endpoint_id.h"
-#include "mojo/edk/system/incoming_endpoint.h"
-#include "mojo/edk/system/local_message_pipe_endpoint.h"
-#include "mojo/edk/system/message_in_transit.h"
-#include "mojo/edk/system/message_pipe_dispatcher.h"
-#include "mojo/edk/system/message_pipe_endpoint.h"
-#include "mojo/edk/system/proxy_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint_id.h"
+#include "third_party/mojo/src/mojo/edk/system/incoming_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/local_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/proxy_message_pipe_endpoint.h"
 
 namespace mojo {
 namespace system {
@@ -184,7 +186,7 @@ HandleSignalsState MessagePipe::GetHandleSignalsState(unsigned port) const {
 MojoResult MessagePipe::AddAwakable(unsigned port,
                                     Awakable* awakable,
                                     MojoHandleSignals signals,
-                                    uint32_t context,
+                                    uintptr_t context,
                                     HandleSignalsState* signals_state) {
   DCHECK(port == 0 || port == 1);
 
@@ -332,7 +334,7 @@ MojoResult MessagePipe::EnqueueMessageNoLock(
   }
 
   // The endpoint's |EnqueueMessage()| may not report failure.
-  endpoints_[port]->EnqueueMessage(message.Pass());
+  endpoints_[port]->EnqueueMessage(std::move(message));
   return MOJO_RESULT_OK;
 }
 
@@ -376,7 +378,7 @@ MojoResult MessagePipe::AttachTransportsNoLock(
       dispatchers->push_back(nullptr);
     }
   }
-  message->SetDispatchers(dispatchers.Pass());
+  message->SetDispatchers(std::move(dispatchers));
   return MOJO_RESULT_OK;
 }
 

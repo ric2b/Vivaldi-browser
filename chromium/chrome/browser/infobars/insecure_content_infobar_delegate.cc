@@ -4,6 +4,9 @@
 
 #include "chrome/browser/infobars/insecure_content_infobar_delegate.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/metrics/histogram.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/common/render_messages.h"
@@ -33,12 +36,12 @@ void InsecureContentInfoBarDelegate::Create(InfoBarService* infobar_service) {
     InsecureContentInfoBarDelegate* delegate =
         old_infobar->delegate()->AsInsecureContentInfoBarDelegate();
     if (delegate != nullptr) {
-      infobar_service->ReplaceInfoBar(old_infobar, new_infobar.Pass());
+      infobar_service->ReplaceInfoBar(old_infobar, std::move(new_infobar));
       return;
     }
   }
 
-  infobar_service->AddInfoBar(new_infobar.Pass());
+  infobar_service->AddInfoBar(std::move(new_infobar));
 }
 
 InsecureContentInfoBarDelegate::InsecureContentInfoBarDelegate()
@@ -46,6 +49,11 @@ InsecureContentInfoBarDelegate::InsecureContentInfoBarDelegate()
 }
 
 InsecureContentInfoBarDelegate::~InsecureContentInfoBarDelegate() {
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+InsecureContentInfoBarDelegate::GetIdentifier() const {
+  return INSECURE_CONTENT_INFOBAR_DELEGATE;
 }
 
 void InsecureContentInfoBarDelegate::InfoBarDismissed() {
@@ -97,13 +105,6 @@ base::string16 InsecureContentInfoBarDelegate::GetLinkText() const {
   return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
 }
 
-bool InsecureContentInfoBarDelegate::LinkClicked(
-    WindowOpenDisposition disposition) {
-  InfoBarService::WebContentsFromInfoBar(infobar())->OpenURL(
-      content::OpenURLParams(
-          GURL("https://support.google.com/chrome/answer/1342714"),
-          content::Referrer(),
-          (disposition == CURRENT_TAB) ? NEW_FOREGROUND_TAB : disposition,
-          ui::PAGE_TRANSITION_LINK, false));
-  return false;
+GURL InsecureContentInfoBarDelegate::GetLinkURL() const {
+  return GURL("https://support.google.com/chrome/answer/1342714");
 }

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "chrome/service/cloud_print/cloud_print_proxy_backend.h"
@@ -35,6 +35,12 @@ class CloudPrintProxy : public CloudPrintProxyFrontend,
   };
   CloudPrintProxy();
   ~CloudPrintProxy() override;
+
+  // Provides a CloudPrintProxy instance, which may be lazily instantiated.
+  class Provider {
+   public:
+    virtual CloudPrintProxy* GetCloudPrintProxy() = 0;
+  };
 
   // Initializes the object. This should be called every time an object of this
   // class is constructed.

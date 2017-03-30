@@ -13,6 +13,10 @@ struct AutocompleteMatchType {
   //
   // These values are stored in ShortcutsDatabase and in GetDemotionsByType()
   // and cannot be renumbered.
+  //
+  // Automatically generate a corresponding Java enum:
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.omnibox
+  // GENERATED_JAVA_CLASS_NAME_OVERRIDE: OmniboxSuggestionType
   enum Type {
     URL_WHAT_YOU_TYPED    = 0,  // The input as a URL.
     HISTORY_URL           = 1,  // A past page whose URL contains the input.
@@ -42,10 +46,14 @@ struct AutocompleteMatchType {
     BOOKMARK_TITLE              = 16,  // A bookmark whose title contains the
                                        // input.
     NAVSUGGEST_PERSONALIZED     = 17,  // A personalized suggestion URL.
-    CALCULATOR                  = 18,  // A calculator result
+    CALCULATOR                  = 18,  // A calculator result.
+    CLIPBOARD                   = 19,  // A URL based on the clipboard.
+    VOICE_SUGGEST               = 20,  // An Android-specific type which
+                                       // indicates a search from voice
+                                       // recognizer.
 
-    BOOKMARK_NICK               = 19,  // A bookmark whose nickname contains the input.
-    BOOKMARK_DESCRIPTION        = 20,  // A bookmark whose description contains the input.
+    BOOKMARK_NICK               = 21,  // A bookmark whose nickname contains the input.
+    BOOKMARK_DESCRIPTION        = 22,  // A bookmark whose description contains the input.
     NUM_TYPES,
   };
 

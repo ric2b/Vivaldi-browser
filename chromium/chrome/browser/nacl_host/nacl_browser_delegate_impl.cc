@@ -4,8 +4,11 @@
 
 #include "chrome/browser/nacl_host/nacl_browser_delegate_impl.h"
 
+#include <stddef.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/browser_process.h"
@@ -17,9 +20,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/renderer_host/pepper/chrome_browser_pepper_host_factory.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/logging_chrome.h"
 #include "chrome/common/pepper_permission_util.h"
 #include "content/public/browser/browser_thread.h"
@@ -133,12 +136,12 @@ bool NaClBrowserDelegateImpl::GetUserDirectory(base::FilePath* user_dir) {
 }
 
 std::string NaClBrowserDelegateImpl::GetVersionString() const {
-  return chrome::VersionInfo().CreateVersionString();
+  return chrome::GetVersionString();
 }
 
 ppapi::host::HostFactory* NaClBrowserDelegateImpl::CreatePpapiHostFactory(
     content::BrowserPpapiHost* ppapi_host) {
-  return new chrome::ChromeBrowserPepperHostFactory(ppapi_host);
+  return new ChromeBrowserPepperHostFactory(ppapi_host);
 }
 
 void NaClBrowserDelegateImpl::SetDebugPatterns(
@@ -152,19 +155,20 @@ void NaClBrowserDelegateImpl::SetDebugPatterns(
     std::string negated_patterns = debug_patterns;
     inverse_debug_patterns_ = true;
     negated_patterns.erase(0, 1);
-    base::SplitString(negated_patterns, ',', &patterns);
+    patterns = base::SplitString(
+        negated_patterns, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   } else {
-    base::SplitString(debug_patterns, ',', &patterns);
+    patterns = base::SplitString(
+        debug_patterns, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   }
-  for (std::vector<std::string>::iterator iter = patterns.begin();
-       iter != patterns.end(); ++iter) {
+  for (const std::string& pattern_str : patterns) {
     // Allow chrome:// schema, which is used to filter out the internal
     // PNaCl translator. Also allow chrome-extension:// schema (which
     // can have NaCl modules). The default is to disallow these schema
     // since they can be dangerous in the context of chrome extension
     // permissions, but they are okay here, for NaCl GDB avoidance.
     URLPattern pattern(URLPattern::SCHEME_ALL);
-    if (pattern.Parse(*iter) == URLPattern::PARSE_SUCCESS) {
+    if (pattern.Parse(pattern_str) == URLPattern::PARSE_SUCCESS) {
       // If URL pattern has scheme equal to *, Parse method resets valid
       // schemes mask to http and https only, so we need to reset it after
       // Parse to re-include chrome-extension and chrome schema.

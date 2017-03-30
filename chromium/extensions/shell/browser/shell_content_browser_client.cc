@@ -4,7 +4,12 @@
 
 #include "extensions/shell/browser/shell_content_browser_client.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "components/guest_view/browser/guest_view_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -123,9 +128,10 @@ net::URLRequestContextGetter* ShellContentBrowserClient::CreateRequestContext(
   (*protocol_handlers)[kExtensionScheme] =
       linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
           CreateExtensionProtocolHandler(false /* is_incognito */,
-                                         extension_info_map));
+                                         extension_info_map)
+              .release());
   return browser_main_parts_->browser_context()->CreateRequestContext(
-      protocol_handlers, request_interceptors.Pass(), extension_info_map);
+      protocol_handlers, std::move(request_interceptors), extension_info_map);
 }
 
 bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {

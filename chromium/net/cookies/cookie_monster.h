@@ -7,6 +7,9 @@
 #ifndef NET_COOKIES_COOKIE_MONSTER_H_
 #define NET_COOKIES_COOKIE_MONSTER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <map>
 #include <queue>
@@ -15,9 +18,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -67,7 +70,6 @@ class ParsedCookie;
 class NET_EXPORT CookieMonster : public CookieStore {
  public:
   class PersistentCookieStore;
-  typedef CookieMonsterDelegate Delegate;
 
   // Terminology:
   //    * The 'top level domain' (TLD) of an internet domain name is
@@ -152,7 +154,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   typedef base::Callback<void(const CookieList& cookies)> GetCookieListCallback;
   typedef base::Callback<void(bool success)> DeleteCookieCallback;
-  typedef base::Callback<void(bool cookies_exist)> HasCookiesForETLDP1Callback;
 
   // Sets a cookie given explicit user-provided cookie attributes. The cookie
   // name, value, domain, etc. are each provided as separate strings. This
@@ -169,6 +170,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
                                  bool secure,
                                  bool http_only,
                                  bool first_party,
+                                 bool enforce_prefixes,
+                                 bool enforce_strict_secure,
                                  CookiePriority priority,
                                  const SetCookiesCallback& callback);
 
@@ -201,13 +204,9 @@ class NET_EXPORT CookieMonster : public CookieStore {
   void DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
                                   const DeleteCookieCallback& callback);
 
-  // Checks whether for a given ETLD+1, there currently exist any cookies.
-  void HasCookiesForETLDP1Async(const std::string& etldp1,
-                                const HasCookiesForETLDP1Callback& callback);
-
-  // Resets the list of cookieable schemes to the supplied schemes.
-  // If this this method is called, it must be called before first use of
-  // the instance (i.e. as part of the instance initialization process).
+  // Resets the list of cookieable schemes to the supplied schemes. Does
+  // nothing if called after first use of the instance (i.e. after the
+  // instance initialization process).
   void SetCookieableSchemes(const char* const schemes[], size_t num_schemes);
 
   // Instructs the cookie monster to not delete expired cookies. This is used
@@ -338,7 +337,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   class SetCookieWithDetailsTask;
   class SetCookieWithOptionsTask;
   class DeleteSessionCookiesTask;
-  class HasCookiesForETLDP1Task;
 
   // Testing support.
   // For SetCookieWithCreationTime.
@@ -365,6 +363,18 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   // For ComputeCookieDiff.
   FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest, ComputeCookieDiff);
+
+  // For CookieSource histogram enum.
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest, CookieSourceHistogram);
+
+  // For kSafeFromGlobalPurgeDays in CookieStore.
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterStrictSecureTest, EvictSecureCookies);
+
+  // For CookieDeleteEquivalent histogram enum.
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest,
+                           CookieDeleteEquivalentHistogramTest);
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterStrictSecureTest,
+                           CookieDeleteEquivalentHistogramTest);
 
   // Internal reasons for deletion, used to populate informative histograms
   // and to provide a public cause for onCookieChange notifications.
@@ -402,6 +412,10 @@ class NET_EXPORT CookieMonster : public CookieStore {
     // cookies as we load them. See http://crbug.com/238041.
     DELETE_COOKIE_CONTROL_CHAR,
 
+    // When strict secure cookies is enabled, non-secure cookies are evicted
+    // right after expired cookies.
+    DELETE_COOKIE_NON_SECURE,
+
     DELETE_COOKIE_LAST_ENTRY
   };
 
@@ -414,6 +428,45 @@ class NET_EXPORT CookieMonster : public CookieStore {
     COOKIE_TYPE_HTTPONLY,
     COOKIE_TYPE_SECURE,
     COOKIE_TYPE_LAST_ENTRY
+  };
+
+  // Used to populate a histogram containing information about the
+  // sources of Secure and non-Secure cookies: that is, whether such
+  // cookies are set by origins with cryptographic or non-cryptographic
+  // schemes. Please do not reorder the list when adding new
+  // entries. New items MUST be added at the end of the list, just
+  // before COOKIE_SOURCE_LAST_ENTRY.
+  //
+  // COOKIE_SOURCE_(NON)SECURE_COOKIE_(NON)CRYPTOGRAPHIC_SCHEME means
+  // that a cookie was set or overwritten from a URL with the given type
+  // of scheme. This enum should not be used when cookies are *cleared*,
+  // because its purpose is to understand if Chrome can deprecate the
+  // ability of HTTP urls to set/overwrite Secure cookies.
+  enum CookieSource {
+    COOKIE_SOURCE_SECURE_COOKIE_CRYPTOGRAPHIC_SCHEME = 0,
+    COOKIE_SOURCE_SECURE_COOKIE_NONCRYPTOGRAPHIC_SCHEME,
+    COOKIE_SOURCE_NONSECURE_COOKIE_CRYPTOGRAPHIC_SCHEME,
+    COOKIE_SOURCE_NONSECURE_COOKIE_NONCRYPTOGRAPHIC_SCHEME,
+    COOKIE_SOURCE_LAST_ENTRY
+  };
+
+  // Used to populate a histogram for cookie setting in the "delete equivalent"
+  // step. Measures total attempts to delete an equivalent cookie as well as if
+  // a cookie is found to delete, if a cookie is skipped because it is secure,
+  // and if it is skipped for being secure but would have been deleted
+  // otherwise. The last two are only possible if strict secure cookies is
+  // turned on and if an insecure origin attempts to a set a cookie where a
+  // cookie with the same name and secure attribute already exists.
+  //
+  // Enum for UMA. Do no reorder or remove entries. New entries must be place
+  // directly before COOKIE_DELETE_EQUIVALENT_LAST_ENTRY and histograms.xml must
+  // be updated accordingly.
+  enum CookieDeleteEquivalent {
+    COOKIE_DELETE_EQUIVALENT_ATTEMPT = 0,
+    COOKIE_DELETE_EQUIVALENT_FOUND,
+    COOKIE_DELETE_EQUIVALENT_SKIPPING_SECURE,
+    COOKIE_DELETE_EQUIVALENT_WOULD_HAVE_DELETED,
+    COOKIE_DELETE_EQUIVALENT_LAST_ENTRY
   };
 
   // The strategy for fetching cookies. Controlled by Finch experiment.
@@ -448,14 +501,14 @@ class NET_EXPORT CookieMonster : public CookieStore {
                             bool secure,
                             bool http_only,
                             bool first_party,
+                            bool enforce_prefixes,
+                            bool enforce_strict_secure,
                             CookiePriority priority);
 
   CookieList GetAllCookies();
 
   CookieList GetAllCookiesForURLWithOptions(const GURL& url,
                                             const CookieOptions& options);
-
-  CookieList GetAllCookiesForURL(const GURL& url);
 
   int DeleteAll(bool sync_to_store);
 
@@ -483,8 +536,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
                                  const base::Time& creation_time);
 
   int DeleteSessionCookies();
-
-  bool HasCookiesForETLDP1(const std::string& etldp1);
 
   // The first access to the cookie store initializes it. This method should be
   // called before any access to the cookie store.
@@ -529,10 +580,9 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   // Checks for any duplicate cookies for CookieMap key |key| which lie between
   // |begin| and |end|. If any are found, all but the most recent are deleted.
-  // Returns the number of duplicate cookies that were deleted.
-  int TrimDuplicateCookiesForKey(const std::string& key,
-                                 CookieMap::iterator begin,
-                                 CookieMap::iterator end);
+  void TrimDuplicateCookiesForKey(const std::string& key,
+                                  CookieMap::iterator begin,
+                                  CookieMap::iterator end);
 
   void SetDefaultCookieableSchemes();
 
@@ -550,14 +600,17 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   // Delete any cookies that are equivalent to |ecc| (same path, domain, etc).
   // If |skip_httponly| is true, httponly cookies will not be deleted.  The
-  // return value with be true if |skip_httponly| skipped an httponly cookie.
-  // |key| is the key to find the cookie in cookies_; see the comment before
-  // the CookieMap typedef for details.
+  // return value will be true if |skip_httponly| skipped an httponly cookie or
+  // |enforce_strict_secure| is true and the cookie to
+  // delete was Secure and the scheme of |ecc| is insecure.  |key| is the key to
+  // find the cookie in cookies_; see the comment before the CookieMap typedef
+  // for details.
   // NOTE: There should never be more than a single matching equivalent cookie.
   bool DeleteAnyEquivalentCookie(const std::string& key,
                                  const CanonicalCookie& ecc,
                                  bool skip_httponly,
-                                 bool already_expired);
+                                 bool already_expired,
+                                 bool enforce_strict_secure);
 
   // Takes ownership of *cc. Returns an iterator that points to the inserted
   // cookie in cookies_. Guarantee: all iterators to cookies_ remain valid.
@@ -599,23 +652,41 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // constants for details.
   //
   // Returns the number of cookies deleted (useful for debugging).
-  int GarbageCollect(const base::Time& current, const std::string& key);
+  size_t GarbageCollect(const base::Time& current,
+                        const std::string& key,
+                        bool enforce_strict_secure);
 
-  // Helper for GarbageCollect(); can be called directly as well.  Deletes
-  // all expired cookies in |itpair|.  If |cookie_its| is non-NULL, it is
-  // populated with all the non-expired cookies from |itpair|.
+  // Helper for GarbageCollect(); can be called directly as well.  Deletes all
+  // expired cookies in |itpair|.  If |cookie_its| is non-NULL, all the
+  // non-expired cookies from |itpair| are appended to |cookie_its|.
   //
   // Returns the number of cookies deleted.
-  int GarbageCollectExpired(const base::Time& current,
-                            const CookieMapItPair& itpair,
-                            std::vector<CookieMap::iterator>* cookie_its);
+  size_t GarbageCollectExpired(const base::Time& current,
+                               const CookieMapItPair& itpair,
+                               CookieItVector* cookie_its);
+
+  // Helper for GarbageCollect(). Deletes all cookies not marked Secure in
+  // |valid_cookies_its|.  If |cookie_its| is non-NULL, all the Secure cookies
+  // from |itpair| are appended to |cookie_its|.
+  //
+  // Returns the numeber of cookies deleted.
+  size_t GarbageCollectNonSecure(const CookieItVector& valid_cookies,
+                                 CookieItVector* cookie_its);
 
   // Helper for GarbageCollect(). Deletes all cookies in the range specified by
   // [|it_begin|, |it_end|). Returns the number of cookies deleted.
-  int GarbageCollectDeleteRange(const base::Time& current,
-                                DeletionCause cause,
-                                CookieItVector::iterator cookie_its_begin,
-                                CookieItVector::iterator cookie_its_end);
+  size_t GarbageCollectDeleteRange(const base::Time& current,
+                                   DeletionCause cause,
+                                   CookieItVector::iterator cookie_its_begin,
+                                   CookieItVector::iterator cookie_its_end);
+
+  // Helper for GarbageCollect(). Deletes cookies in |cookie_its| from least to
+  // most recently used, but only before |safe_date|. Also will stop deleting
+  // when the number of remaining cookies hits |purge_goal|.
+  size_t GarbageCollectLeastRecentlyAccessed(const base::Time& current,
+                                             const base::Time& safe_date,
+                                             size_t purge_goal,
+                                             CookieItVector cookie_its);
 
   // Find the key (for lookup in cookies_) based on the given domain.
   // See comment on keys before the CookieMap typedef.
@@ -663,16 +734,12 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Histogram variables; see CookieMonster::InitializeHistograms() in
   // cookie_monster.cc for details.
   base::HistogramBase* histogram_expiration_duration_minutes_;
-  base::HistogramBase* histogram_between_access_interval_minutes_;
   base::HistogramBase* histogram_evicted_last_access_minutes_;
   base::HistogramBase* histogram_count_;
-  base::HistogramBase* histogram_domain_count_;
-  base::HistogramBase* histogram_etldp1_count_;
-  base::HistogramBase* histogram_domain_per_etldp1_count_;
-  base::HistogramBase* histogram_number_duplicate_db_cookies_;
   base::HistogramBase* histogram_cookie_deletion_cause_;
   base::HistogramBase* histogram_cookie_type_;
-  base::HistogramBase* histogram_time_mac_;
+  base::HistogramBase* histogram_cookie_source_scheme_;
+  base::HistogramBase* histogram_cookie_delete_equivalent_;
   base::HistogramBase* histogram_time_blocked_on_load_;
 
   CookieMap cookies_;
@@ -723,7 +790,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // avoid ever letting cookies with duplicate creation times into the store;
   // that way we don't have to worry about what sections of code are safe
   // to call while it's in that state.
-  std::set<int64> creation_times_;
+  std::set<int64_t> creation_times_;
 
   std::vector<std::string> cookieable_schemes_;
 

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/plugins/plugin_finder.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/message_loop/message_loop.h"
@@ -161,8 +163,8 @@ void PluginFinder::RegisterPrefs(PrefRegistrySimple* registry) {
 // static
 PluginFinder* PluginFinder::GetInstance() {
   // PluginFinder::GetInstance() is the only method that's allowed to call
-  // Singleton<PluginFinder>::get().
-  return Singleton<PluginFinder>::get();
+  // base::Singleton<PluginFinder>::get().
+  return base::Singleton<PluginFinder>::get();
 }
 
 PluginFinder::PluginFinder() : version_(-1) {

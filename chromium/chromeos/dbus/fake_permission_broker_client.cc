@@ -5,6 +5,7 @@
 #include "chromeos/dbus/fake_permission_broker_client.h"
 
 #include <fcntl.h>
+#include <stdint.h>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -27,16 +28,16 @@ void OpenPathAndValidate(
     const std::string& path,
     const PermissionBrokerClient::OpenPathCallback& callback,
     scoped_refptr<base::TaskRunner> task_runner) {
+  dbus::FileDescriptor dbus_fd;
   int fd = HANDLE_EINTR(open(path.c_str(), O_RDWR));
   if (fd < 0) {
-    PLOG(ERROR) << "Failed to open '" << path << "'";
+    PLOG(WARNING) << "Failed to open '" << path << "'";
   } else {
-    dbus::FileDescriptor dbus_fd;
     dbus_fd.PutValue(fd);
     dbus_fd.CheckValidity();
-    task_runner->PostTask(FROM_HERE,
-                          base::Bind(callback, base::Passed(&dbus_fd)));
   }
+  task_runner->PostTask(FROM_HERE,
+                        base::Bind(callback, base::Passed(&dbus_fd)));
 }
 
 }  // namespace
@@ -69,7 +70,7 @@ void FakePermissionBrokerClient::OpenPath(const std::string& path,
 }
 
 void FakePermissionBrokerClient::RequestTcpPortAccess(
-    uint16 port,
+    uint16_t port,
     const std::string& interface,
     const dbus::FileDescriptor& lifeline_fd,
     const ResultCallback& callback) {
@@ -78,7 +79,7 @@ void FakePermissionBrokerClient::RequestTcpPortAccess(
 }
 
 void FakePermissionBrokerClient::RequestUdpPortAccess(
-    uint16 port,
+    uint16_t port,
     const std::string& interface,
     const dbus::FileDescriptor& lifeline_fd,
     const ResultCallback& callback) {
@@ -87,14 +88,14 @@ void FakePermissionBrokerClient::RequestUdpPortAccess(
 }
 
 void FakePermissionBrokerClient::ReleaseTcpPort(
-    uint16 port,
+    uint16_t port,
     const std::string& interface,
     const ResultCallback& callback) {
   callback.Run(true);
 }
 
 void FakePermissionBrokerClient::ReleaseUdpPort(
-    uint16 port,
+    uint16_t port,
     const std::string& interface,
     const ResultCallback& callback) {
   callback.Run(true);

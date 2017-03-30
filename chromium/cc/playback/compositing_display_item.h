@@ -5,6 +5,9 @@
 #ifndef CC_PLAYBACK_COMPOSITING_DISPLAY_ITEM_H_
 #define CC_PLAYBACK_COMPOSITING_DISPLAY_ITEM_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
 #include "cc/playback/display_item.h"
@@ -20,40 +23,60 @@ namespace cc {
 
 class CC_EXPORT CompositingDisplayItem : public DisplayItem {
  public:
-  CompositingDisplayItem();
+  CompositingDisplayItem(uint8_t alpha,
+                         SkXfermode::Mode xfermode,
+                         SkRect* bounds,
+                         skia::RefPtr<SkColorFilter> color_filter,
+                         bool lcd_text_requires_opaque_layer);
+  explicit CompositingDisplayItem(const proto::DisplayItem& proto);
   ~CompositingDisplayItem() override;
 
-  void SetNew(uint8_t alpha,
-              SkXfermode::Mode xfermode,
-              SkRect* bounds,
-              skia::RefPtr<SkColorFilter> color_filter);
-
+  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               const gfx::Rect& canvas_target_playback_rect,
               SkPicture::AbortCallback* callback) const override;
-  void AsValueInto(base::trace_event::TracedValue* array) const override;
+  void AsValueInto(const gfx::Rect& visual_rect,
+                   base::trace_event::TracedValue* array) const override;
+  size_t ExternalMemoryUsage() const override;
+
+  int ApproximateOpCount() const { return 1; }
+  bool IsSuitableForGpuRasterization() const { return true; }
 
  private:
+  void SetNew(uint8_t alpha,
+              SkXfermode::Mode xfermode,
+              SkRect* bounds,
+              skia::RefPtr<SkColorFilter> color_filter,
+              bool lcd_text_requires_opaque_layer);
+
   uint8_t alpha_;
   SkXfermode::Mode xfermode_;
   bool has_bounds_;
   SkRect bounds_;
   skia::RefPtr<SkColorFilter> color_filter_;
+  bool lcd_text_requires_opaque_layer_;
 };
 
 class CC_EXPORT EndCompositingDisplayItem : public DisplayItem {
  public:
   EndCompositingDisplayItem();
+  explicit EndCompositingDisplayItem(const proto::DisplayItem& proto);
   ~EndCompositingDisplayItem() override;
 
   static scoped_ptr<EndCompositingDisplayItem> Create() {
     return make_scoped_ptr(new EndCompositingDisplayItem());
   }
 
+  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               const gfx::Rect& canvas_target_playback_rect,
               SkPicture::AbortCallback* callback) const override;
-  void AsValueInto(base::trace_event::TracedValue* array) const override;
+  void AsValueInto(const gfx::Rect& visual_rect,
+                   base::trace_event::TracedValue* array) const override;
+  size_t ExternalMemoryUsage() const override;
+
+  int ApproximateOpCount() const { return 0; }
+  bool IsSuitableForGpuRasterization() const { return true; }
 };
 
 }  // namespace cc

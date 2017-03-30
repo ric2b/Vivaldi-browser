@@ -5,8 +5,12 @@
 #ifndef UI_BASE_MODELS_LIST_MODEL_H_
 #define UI_BASE_MODELS_LIST_MODEL_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
@@ -60,7 +64,7 @@ class ListModel {
 
   // Removes and deletes all items from the model.
   void DeleteAll() {
-    ScopedVector<ItemType> to_be_deleted(items_.Pass());
+    ScopedVector<ItemType> to_be_deleted(std::move(items_));
     NotifyItemsRemoved(0, to_be_deleted.size());
   }
 

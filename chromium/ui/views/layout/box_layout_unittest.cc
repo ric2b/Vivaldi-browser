@@ -4,6 +4,8 @@
 
 #include "ui/views/layout/box_layout.h"
 
+#include <stddef.h>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/view.h"
@@ -197,6 +199,25 @@ TEST_F(BoxLayoutTest, EmptyPreferredSize) {
     EXPECT_EQ(v2->GetPreferredSize().width(), v2->bounds().width()) << i;
     EXPECT_EQ(v2->GetPreferredSize().height(), v2->bounds().height()) << i;
   }
+}
+
+// Verifies that a BoxLayout correctly handles child spacing, flex layout, and
+// empty preferred size, simultaneously.
+TEST_F(BoxLayoutTest, EmptyPreferredSizeWithFlexLayoutAndChildSpacing) {
+  host_->RemoveAllChildViews(true);
+  BoxLayout* layout = new BoxLayout(BoxLayout::kHorizontal, 0, 0, 5);
+  host_->SetLayoutManager(layout);
+  View* v1 = new StaticSizedView(gfx::Size());
+  host_->AddChildView(v1);
+  View* v2 = new StaticSizedView(gfx::Size(10, 10));
+  host_->AddChildView(v2);
+  View* v3 = new StaticSizedView(gfx::Size(1, 1));
+  host_->AddChildViewAt(v3, 0);
+  layout->SetFlexForView(v3, 1);
+  host_->SetSize(gfx::Size(1000, 15));
+  host_->Layout();
+
+  EXPECT_EQ(host_->bounds().right(), v2->bounds().right());
 }
 
 TEST_F(BoxLayoutTest, MainAxisAlignmentHorizontal) {

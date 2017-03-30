@@ -4,16 +4,20 @@
 
 #include "chrome/browser/extensions/api/identity/identity_api.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -71,6 +75,16 @@ namespace {
 
 static const char kChromiumDomainRedirectUrlPattern[] =
     "https://%s.chromiumapp.org/";
+
+#if defined(OS_CHROMEOS)
+// The list of apps that are allowed to use the Identity API to retrieve the
+// token from the device robot account in a public session.
+const char* const kPublicSessionAllowedOrigins[] = {
+    // Chrome Remote Desktop - Chromium branding.
+    "chrome-extension://ljacajndfccfgnfohlgkdphmbnpkjflk/",
+    // Chrome Remote Desktop - Official branding.
+    "chrome-extension://gbchcmhmhahfdphkhkmpfmihenigjmpp/"};
+#endif
 
 std::string GetPrimaryAccountId(content::BrowserContext* context) {
   SigninManagerBase* signin_manager =
@@ -139,7 +153,7 @@ IdentityAPI::IdentityAPI(content::BrowserContext* context)
               Profile::FromBrowserContext(context)),
           ProfileOAuth2TokenServiceFactory::GetForProfile(
               Profile::FromBrowserContext(context)),
-          LoginUIServiceFactory::GetForProfile(
+          LoginUIServiceFactory::GetShowLoginPopupCallbackForProfile(
               Profile::FromBrowserContext(context))),
       account_tracker_(&profile_identity_provider_,
                        g_browser_process->system_request_context()) {
@@ -232,11 +246,11 @@ void IdentityAPI::OnAccountSignInChanged(const gaia::AccountIds& ids,
 
   scoped_ptr<base::ListValue> args =
       api::identity::OnSignInChanged::Create(account_info, is_signed_in);
-  scoped_ptr<Event> event(new Event(events::UNKNOWN,
+  scoped_ptr<Event> event(new Event(events::IDENTITY_ON_SIGN_IN_CHANGED,
                                     api::identity::OnSignInChanged::kEventName,
-                                    args.Pass(), browser_context_));
+                                    std::move(args), browser_context_));
 
-  EventRouter::Get(browser_context_)->BroadcastEvent(event.Pass());
+  EventRouter::Get(browser_context_)->BroadcastEvent(std::move(event));
 }
 
 void IdentityAPI::AddShutdownObserver(ShutdownObserver* observer) {
@@ -371,8 +385,16 @@ bool IdentityGetAuthTokenFunction::RunAsync() {
 #if defined(OS_CHROMEOS)
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (user_manager::UserManager::Get()->IsLoggedInAsKioskApp() &&
-      connector->IsEnterpriseManaged()) {
+  bool is_kiosk = user_manager::UserManager::Get()->IsLoggedInAsKioskApp();
+  bool is_public_session =
+      user_manager::UserManager::Get()->IsLoggedInAsPublicAccount();
+
+  if (connector->IsEnterpriseManaged() && (is_kiosk || is_public_session)) {
+    if (is_public_session && !IsOriginWhitelistedInPublicSession()) {
+      CompleteFunctionWithError(identity_constants::kUserNotSignedIn);
+      return true;
+    }
+
     StartMintTokenFlow(IdentityMintRequestQueue::MINT_TYPE_NONINTERACTIVE);
     return true;
   }
@@ -494,8 +516,15 @@ void IdentityGetAuthTokenFunction::StartMintToken(
     switch (cache_status) {
       case IdentityTokenCacheValue::CACHE_STATUS_NOTFOUND:
 #if defined(OS_CHROMEOS)
-        // Always force minting token for ChromeOS kiosk app.
-        if (user_manager::UserManager::Get()->IsLoggedInAsKioskApp()) {
+        // Always force minting token for ChromeOS kiosk app and public session.
+        if (user_manager::UserManager::Get()->IsLoggedInAsPublicAccount() &&
+            !IsOriginWhitelistedInPublicSession()) {
+          CompleteFunctionWithError(identity_constants::kUserNotSignedIn);
+          return;
+        }
+
+        if (user_manager::UserManager::Get()->IsLoggedInAsKioskApp() ||
+            user_manager::UserManager::Get()->IsLoggedInAsPublicAccount()) {
           gaia_mint_token_mode_ = OAuth2MintTokenFlow::MODE_MINT_TOKEN_FORCE;
           policy::BrowserPolicyConnectorChromeOS* connector =
               g_browser_process->platform_part()
@@ -753,6 +782,19 @@ void IdentityGetAuthTokenFunction::StartDeviceLoginAccessTokenRequest() {
                             scopes,
                             this);
 }
+
+bool IdentityGetAuthTokenFunction::IsOriginWhitelistedInPublicSession() {
+  DCHECK(extension());
+  GURL extension_url = extension()->url();
+  for (size_t i = 0; i < arraysize(kPublicSessionAllowedOrigins); i++) {
+    URLPattern allowed_origin(URLPattern::SCHEME_ALL,
+                              kPublicSessionAllowedOrigins[i]);
+    if (allowed_origin.MatchesSecurityOrigin(extension_url)) {
+      return true;
+    }
+  }
+  return false;
+}
 #endif
 
 void IdentityGetAuthTokenFunction::StartLoginAccessTokenRequest() {
@@ -861,7 +903,7 @@ ExtensionFunction::ResponseAction IdentityGetProfileUserInfoFunction::Run() {
     return RespondNow(Error(identity_constants::kOffTheRecord));
   }
 
-  AccountTrackerService::AccountInfo account =
+  AccountInfo account =
       AccountTrackerServiceFactory::GetForProfile(GetProfile())
           ->GetAccountInfo(GetPrimaryAccountId(GetProfile()));
   api::identity::ProfileUserInfo profile_user_info;

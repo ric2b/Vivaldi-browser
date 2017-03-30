@@ -4,14 +4,17 @@
 
 #include "content/browser/web_contents/aura/overscroll_navigation_overlay.h"
 
+#include <string.h>
+#include <utility>
 #include <vector>
-#include "base/command_line.h"
+
+#include "base/macros.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/frame_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/overscroll_configuration.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
@@ -39,7 +42,8 @@ class OverscrollTestWebContents : public TestWebContents {
       scoped_ptr<aura::Window> fake_native_view,
       scoped_ptr<aura::Window> fake_contents_window) {
     OverscrollTestWebContents* web_contents = new OverscrollTestWebContents(
-        browser_context, fake_native_view.Pass(), fake_contents_window.Pass());
+        browser_context, std::move(fake_native_view),
+        std::move(fake_contents_window));
     web_contents->Init(WebContents::CreateParams(browser_context, instance));
     return web_contents;
   }
@@ -64,8 +68,8 @@ class OverscrollTestWebContents : public TestWebContents {
       scoped_ptr<aura::Window> fake_native_view,
       scoped_ptr<aura::Window> fake_contents_window)
       : TestWebContents(browser_context),
-        fake_native_view_(fake_native_view.Pass()),
-        fake_contents_window_(fake_contents_window.Pass()),
+        fake_native_view_(std::move(fake_native_view)),
+        fake_contents_window_(std::move(fake_contents_window)),
         is_being_destroyed_(false) {}
 
  private:
@@ -98,7 +102,7 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
   }
 
   void ReceivePaintUpdate() {
-    FrameHostMsg_DidFirstVisuallyNonEmptyPaint msg(
+    ViewHostMsg_DidFirstVisuallyNonEmptyPaint msg(
         main_test_rfh()->GetRoutingID());
     RenderViewHostTester::TestOnMessageReceived(test_rvh(), msg);
   }
@@ -117,13 +121,11 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
     else
       EXPECT_EQ(GetOverlay()->direction_, OverscrollNavigationOverlay::NONE);
     window->SetBounds(gfx::Rect(root_window()->bounds().size()));
-    GetOverlay()->OnOverscrollCompleted(window.Pass());
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableBrowserSideNavigation)) {
+    GetOverlay()->OnOverscrollCompleted(std::move(window));
+    if (IsBrowserSideNavigationEnabled())
       main_test_rfh()->PrepareForCommit();
-    } else {
+    else
       contents()->GetPendingMainFrame()->PrepareForCommit();
-    }
     if (window_created)
       EXPECT_TRUE(contents()->CrossProcessNavigationPending());
     else
@@ -165,10 +167,8 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
 
     // Replace the default test web contents with our custom class.
     SetContents(OverscrollTestWebContents::Create(
-        browser_context(),
-        SiteInstance::Create(browser_context()),
-        fake_native_view.Pass(),
-        fake_contents_window.Pass()));
+        browser_context(), SiteInstance::Create(browser_context()),
+        std::move(fake_native_view), std::move(fake_contents_window)));
 
     contents()->NavigateAndCommit(first());
     EXPECT_TRUE(controller().GetVisibleEntry());
@@ -193,7 +193,7 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
     RenderViewHostTester::TestOnMessageReceived(test_rvh(), rect);
 
     // Reset pending flags for size/paint.
-    test_rvh()->ResetSizeAndRepaintPendingFlags();
+    test_rvh()->GetWidget()->ResetSizeAndRepaintPendingFlags();
 
     // Create the overlay, and set the contents of the overlay window.
     overlay_.reset(new OverscrollNavigationOverlay(contents(), root_window()));

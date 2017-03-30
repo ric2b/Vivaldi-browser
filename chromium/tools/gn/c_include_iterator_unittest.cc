@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/c_include_iterator.h"
 #include "tools/gn/input_file.h"
@@ -13,8 +15,8 @@ bool RangeIs(const LocationRange& range,
              int line, int begin_char, int end_char) {
   return range.begin().line_number() == line &&
          range.end().line_number() == line &&
-         range.begin().char_offset() == begin_char &&
-         range.end().char_offset() == end_char;
+         range.begin().column_number() == begin_char &&
+         range.end().column_number() == end_char;
 }
 
 }  // namespace
@@ -131,4 +133,27 @@ TEST(CIncludeIterator, TolerateNonIncludes) {
     EXPECT_EQ(include, contents.as_string());
   }
   EXPECT_FALSE(iter.GetNextIncludeString(&contents, &range));
+}
+
+// Tests that comments of the form
+//    /*
+//     *
+//     */
+// are not counted toward the non-include line count.
+TEST(CIncludeIterator, CStyleComments) {
+  std::string buffer("/*");
+  for (size_t i = 0; i < 1000; i++)
+    buffer.append(" *\n");
+  buffer.append(" */\n\n");
+  buffer.append("#include \"foo/bar.h\"\n");
+
+  InputFile file(SourceFile("//foo.cc"));
+  file.SetContents(buffer);
+
+  base::StringPiece contents;
+  LocationRange range;
+
+  CIncludeIterator iter(&file);
+  EXPECT_TRUE(iter.GetNextIncludeString(&contents, &range));
+  EXPECT_EQ("foo/bar.h", contents);
 }

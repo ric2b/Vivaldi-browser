@@ -9,14 +9,15 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "base/time/default_clock.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/app_list/speech_recognizer_delegate.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/web_contents.h"
@@ -69,8 +70,10 @@ class StartPageService : public KeyedService,
 
   void AppListShown();
   void AppListHidden();
-  void ToggleSpeechRecognition(
+
+  void StartSpeechRecognition(
       const scoped_refptr<content::SpeechRecognitionSessionPreamble>& preamble);
+  void StopSpeechRecognition();
 
   // Called when the WebUI has finished loading.
   void WebUILoaded();
@@ -143,6 +146,11 @@ class StartPageService : public KeyedService,
   void DidNavigateMainFrame(
       const content::LoadCommittedDetails& details,
       const content::FrameNavigateParams& params) override;
+  void DidFailProvisionalLoad(content::RenderFrameHost* render_frame_host,
+                              const GURL& validated_url,
+                              int error_code,
+                              const base::string16& error_description,
+                              bool was_ignored_by_handler) override;
 
   // Change the known microphone availability. |available| should be true if
   // the microphone exists and is available for use.

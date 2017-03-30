@@ -4,11 +4,14 @@
 
 #include "components/guest_view/renderer/guest_view_request.h"
 
+#include <utility>
+
 #include "components/guest_view/common/guest_view_messages.h"
 #include "components/guest_view/renderer/guest_view_container.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/WebKit/public/web/WebRemoteFrame.h"
 #include "third_party/WebKit/public/web/WebScopedMicrotaskSuppression.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -52,8 +55,7 @@ GuestViewAttachRequest::GuestViewAttachRequest(
     v8::Isolate* isolate)
     : GuestViewRequest(container, callback, isolate),
       guest_instance_id_(guest_instance_id),
-      params_(params.Pass()) {
-}
+      params_(std::move(params)) {}
 
 GuestViewAttachRequest::~GuestViewAttachRequest() {
 }
@@ -88,7 +90,15 @@ void GuestViewAttachRequest::HandleResponse(const IPC::Message& message) {
 
   v8::HandleScope handle_scope(isolate());
   blink::WebFrame* frame = guest_proxy_render_view->GetWebView()->mainFrame();
-  v8::Local<v8::Value> window = frame->mainWorldScriptContext()->Global();
+  // TODO(lazyboy,nasko): The WebLocalFrame branch is not used when running
+  // on top of out-of-process iframes. Remove it once the code is converted.
+  v8::Local<v8::Value> window;
+  if (frame->isWebLocalFrame()) {
+    window = frame->mainWorldScriptContext()->Global();
+  } else {
+    window =
+        frame->toWebRemoteFrame()->deprecatedMainWorldScriptContext()->Global();
+  }
 
   const int argc = 1;
   scoped_ptr<v8::Local<v8::Value>[]> argv(new v8::Local<v8::Value>[argc]);
@@ -96,7 +106,7 @@ void GuestViewAttachRequest::HandleResponse(const IPC::Message& message) {
 
   // Call the AttachGuest API's callback with the guest proxy as the first
   // parameter.
-  ExecuteCallbackIfAvailable(argc, argv.Pass());
+  ExecuteCallbackIfAvailable(argc, std::move(argv));
 }
 
 GuestViewDetachRequest::GuestViewDetachRequest(

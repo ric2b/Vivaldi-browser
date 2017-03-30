@@ -9,9 +9,9 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
-#include "base/memory/linked_ptr.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
@@ -42,6 +42,7 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
   void RemoveObserver(NetworkPolicyObserver* observer) override;
 
   void GetProperties(
+      const std::string& userhash,
       const std::string& service_path,
       const network_handler::DictionaryResultCallback& callback,
       const network_handler::ErrorCallback& error_callback) override;
@@ -111,13 +112,14 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
   friend class ManagedNetworkConfigurationHandlerTest;
   friend class NetworkConnectionHandlerTest;
   friend class NetworkHandler;
+  friend class ProhibitedTechnologiesHandlerTest;
 
   struct Policies;
   typedef base::Callback<void(const std::string& service_path,
                               scoped_ptr<base::DictionaryValue> properties)>
       GetDevicePropertiesCallback;
-  typedef std::map<std::string, linked_ptr<Policies> > UserToPoliciesMap;
-  typedef std::map<std::string, linked_ptr<PolicyApplicator>>
+  typedef std::map<std::string, scoped_ptr<Policies>> UserToPoliciesMap;
+  typedef std::map<std::string, scoped_ptr<PolicyApplicator>>
       UserToPolicyApplicatorMap;
   typedef std::map<std::string, std::set<std::string>>
       UserToModifiedPoliciesMap;
@@ -129,7 +131,8 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
   void Init(NetworkStateHandler* network_state_handler,
             NetworkProfileHandler* network_profile_handler,
             NetworkConfigurationHandler* network_configuration_handler,
-            NetworkDeviceHandler* network_device_handler);
+            NetworkDeviceHandler* network_device_handler,
+            ProhibitedTechnologiesHandler* prohibitied_technologies_handler);
 
   // Sends the response to the caller of GetManagedProperties.
   void SendManagedProperties(
@@ -140,11 +143,11 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
       scoped_ptr<base::DictionaryValue> shill_properties);
 
   // Sends the response to the caller of GetProperties.
-  void SendProperties(
-      const network_handler::DictionaryResultCallback& callback,
-      const network_handler::ErrorCallback& error_callback,
-      const std::string& service_path,
-      scoped_ptr<base::DictionaryValue> shill_properties);
+  void SendProperties(const std::string& userhash,
+                      const network_handler::DictionaryResultCallback& callback,
+                      const network_handler::ErrorCallback& error_callback,
+                      const std::string& service_path,
+                      scoped_ptr<base::DictionaryValue> shill_properties);
 
   const Policies* GetPoliciesForUser(const std::string& userhash) const;
   const Policies* GetPoliciesForProfile(const NetworkProfile& profile) const;
@@ -200,6 +203,7 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
   NetworkProfileHandler* network_profile_handler_;
   NetworkConfigurationHandler* network_configuration_handler_;
   NetworkDeviceHandler* network_device_handler_;
+  ProhibitedTechnologiesHandler* prohibited_technologies_handler_;
 
   // Owns the currently running PolicyApplicators.
   UserToPolicyApplicatorMap policy_applicators_;
@@ -211,7 +215,7 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
   // associated set of GUIDs is empty.
   UserToModifiedPoliciesMap queued_modified_policies_;
 
-  base::ObserverList<NetworkPolicyObserver> observers_;
+  base::ObserverList<NetworkPolicyObserver, true> observers_;
 
   // For Shill client callbacks
   base::WeakPtrFactory<ManagedNetworkConfigurationHandlerImpl>

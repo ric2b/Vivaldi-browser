@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/sync_file_system/sync_file_system_service.h"
+
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -20,7 +23,6 @@
 #include "chrome/browser/sync_file_system/sync_callbacks.h"
 #include "chrome/browser/sync_file_system/sync_event_observer.h"
 #include "chrome/browser/sync_file_system/sync_file_metadata.h"
-#include "chrome/browser/sync_file_system/sync_file_system_service.h"
 #include "chrome/browser/sync_file_system/sync_file_system_test_util.h"
 #include "chrome/browser/sync_file_system/sync_status_code.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
@@ -155,7 +157,7 @@ class SyncFileSystemServiceTest : public testing::Test {
                 SetRemoteChangeProcessor(local_service.get())).Times(1);
 
     sync_service_->Initialize(
-        local_service.Pass(),
+        std::move(local_service),
         scoped_ptr<RemoteFileSyncService>(remote_service_));
 
     // Disable auto sync by default.

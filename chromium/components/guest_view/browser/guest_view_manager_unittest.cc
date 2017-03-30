@@ -3,6 +3,10 @@
 // found in the LICENSE file.
 
 #include "components/guest_view/browser/guest_view_manager.h"
+
+#include <utility>
+
+#include "base/macros.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
 #include "content/public/test/test_browser_context.h"
@@ -49,7 +53,7 @@ TEST_F(GuestViewManagerTest, AddRemove) {
   scoped_ptr<GuestViewManagerDelegate> delegate(
       new GuestViewManagerDelegate());
   scoped_ptr<TestGuestViewManager> manager(
-      new TestGuestViewManager(&browser_context, delegate.Pass()));
+      new TestGuestViewManager(&browser_context, std::move(delegate)));
 
   scoped_ptr<WebContents> web_contents1(CreateWebContents());
   scoped_ptr<WebContents> web_contents2(CreateWebContents());

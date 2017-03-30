@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/android/path_utils.h"
 #include "base/big_endian.h"
@@ -16,6 +17,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/worker_pool.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/android_opengl/etc1/etc1.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -172,7 +174,7 @@ void ThumbnailCache::Put(TabId tab_id,
 
   RemoveFromReadQueue(tab_id);
   MakeSpaceForNewItemIfNecessary(tab_id);
-  cache_.Put(tab_id, thumbnail.Pass());
+  cache_.Put(tab_id, std::move(thumbnail));
 
   if (use_approximation_thumbnail_) {
     std::pair<SkBitmap, float> approximation =
@@ -180,7 +182,7 @@ void ThumbnailCache::Put(TabId tab_id,
     scoped_ptr<Thumbnail> approx_thumbnail = Thumbnail::Create(
         tab_id, time_stamp, approximation.second, ui_resource_provider_, this);
     approx_thumbnail->SetBitmap(approximation.first);
-    approximation_cache_.Put(tab_id, approx_thumbnail.Pass());
+    approximation_cache_.Put(tab_id, std::move(approx_thumbnail));
   }
   CompressThumbnailIfNecessary(tab_id, time_stamp, bitmap, thumbnail_scale);
 }
@@ -471,6 +473,11 @@ void ThumbnailCache::RemoveFromReadQueue(TabId tab_id) {
       std::find(read_queue_.begin(), read_queue_.end(), tab_id);
   if (read_iter != read_queue_.end())
     read_queue_.erase(read_iter);
+}
+
+void ThumbnailCache::OnUIResourcesWereEvicted() {
+  cache_.Clear();
+  approximation_cache_.Clear();
 }
 
 void ThumbnailCache::InvalidateCachedThumbnail(Thumbnail* thumbnail) {
@@ -818,7 +825,7 @@ void ThumbnailCache::PostReadTask(TabId tab_id,
     if (kPreferCPUMemory)
       thumbnail->CreateUIResource();
 
-    cache_.Put(tab_id, thumbnail.Pass());
+    cache_.Put(tab_id, std::move(thumbnail));
     NotifyObserversOfThumbnailRead(tab_id);
   }
 
@@ -914,8 +921,8 @@ std::pair<SkBitmap, float> ThumbnailCache::CreateApproximation(
   SkAutoLockPixels bitmap_lock(bitmap);
   float new_scale = 1.f / kApproximationScaleFactor;
 
-  gfx::Size dst_size = gfx::ToFlooredSize(
-      gfx::ScaleSize(gfx::Size(bitmap.width(), bitmap.height()), new_scale));
+  gfx::Size dst_size = gfx::ScaleToFlooredSize(
+      gfx::Size(bitmap.width(), bitmap.height()), new_scale);
   SkBitmap dst_bitmap;
   dst_bitmap.allocPixels(SkImageInfo::Make(dst_size.width(),
                                            dst_size.height(),

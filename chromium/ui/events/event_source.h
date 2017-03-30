@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "ui/events/event_dispatcher.h"
 #include "ui/events/events_export.h"
 
@@ -34,10 +35,11 @@ class EVENTS_EXPORT EventSource {
 
  protected:
   EventDispatchDetails SendEventToProcessor(Event* event);
-  virtual EventDispatchDetails DeliverEventToProcessor(Event* event);
 
  private:
   friend class EventSourceTestApi;
+
+  EventDispatchDetails DeliverEventToProcessor(Event* event);
 
   typedef std::vector<EventRewriter*> EventRewriterList;
   EventRewriterList rewriter_list_;

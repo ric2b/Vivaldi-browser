@@ -4,6 +4,8 @@
 
 #include "content/browser/tracing/etw_system_event_consumer_win.h"
 
+#include <stdint.h>
+
 #include "base/base64.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/lazy_instance.h"
@@ -16,6 +18,9 @@
 namespace content {
 
 namespace {
+
+const char kETWTracingAgentName[] = "etw";
+const char kETWTraceLabel[] = "systemTraceEvents";
 
 const int kEtwBufferSizeInKBytes = 16;
 const int kEtwBufferFlushTimeoutInSeconds = 1;
@@ -36,8 +41,16 @@ EtwSystemEventConsumer::EtwSystemEventConsumer()
 EtwSystemEventConsumer::~EtwSystemEventConsumer() {
 }
 
-bool EtwSystemEventConsumer::StartSystemTracing() {
+std::string EtwSystemEventConsumer::GetTracingAgentName() {
+  return kETWTracingAgentName;
+}
 
+std::string EtwSystemEventConsumer::GetTraceEventLabel() {
+  return kETWTraceLabel;
+}
+
+bool EtwSystemEventConsumer::StartAgentTracing(
+    const base::trace_event::TraceConfig& trace_config) {
   // Activate kernel tracing.
   if (!StartKernelSessionTracing())
     return false;
@@ -52,39 +65,36 @@ bool EtwSystemEventConsumer::StartSystemTracing() {
   return true;
 }
 
-void EtwSystemEventConsumer::StopSystemTracing(const OutputCallback& callback) {
+void EtwSystemEventConsumer::StopAgentTracing(
+    const StopAgentTracingCallback& callback) {
   // Deactivate kernel tracing.
   if (!StopKernelSessionTracing()) {
     LOG(FATAL) << "Could not stop system tracing.";
   }
 
   // Stop consuming and flush events.
-  OutputCallback on_stop_system_tracing_done_callback =
-      base::Bind(&EtwSystemEventConsumer::OnStopSystemTracingDone,
-                 base::Unretained(this),
-                 callback);
   thread_.message_loop()->PostTask(FROM_HERE,
       base::Bind(&EtwSystemEventConsumer::FlushOnThread,
-                 base::Unretained(this), on_stop_system_tracing_done_callback));
+                 base::Unretained(this),
+                 callback));
 }
 
 void EtwSystemEventConsumer::OnStopSystemTracingDone(
-    const OutputCallback& callback,
+    const StopAgentTracingCallback& callback,
     const scoped_refptr<base::RefCountedString>& result) {
 
   // Stop the consumer thread.
   thread_.Stop();
 
   // Pass the serialized events.
-  callback.Run(result);
+  callback.Run(GetTracingAgentName(), GetTraceEventLabel(), result);
 }
 
 bool EtwSystemEventConsumer::StartKernelSessionTracing() {
   // Enabled flags (tracing facilities).
-  uint32 enabled_flags = EVENT_TRACE_FLAG_IMAGE_LOAD |
-                         EVENT_TRACE_FLAG_PROCESS |
-                         EVENT_TRACE_FLAG_THREAD |
-                         EVENT_TRACE_FLAG_CSWITCH;
+  uint32_t enabled_flags = EVENT_TRACE_FLAG_IMAGE_LOAD |
+                           EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD |
+                           EVENT_TRACE_FLAG_CSWITCH;
 
   EVENT_TRACE_PROPERTIES& p = *properties_.get();
   p.LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
@@ -129,7 +139,7 @@ bool EtwSystemEventConsumer::StopKernelSessionTracing() {
 
 // static
 EtwSystemEventConsumer* EtwSystemEventConsumer::GetInstance() {
-  return Singleton<EtwSystemEventConsumer>::get();
+  return base::Singleton<EtwSystemEventConsumer>::get();
 }
 
 // static
@@ -140,7 +150,7 @@ void EtwSystemEventConsumer::ProcessEvent(EVENT_TRACE* event) {
 void EtwSystemEventConsumer::AddSyncEventToBuffer() {
   // Sync the clocks.
   base::Time walltime = base::Time::NowFromSystemTime();
-  base::TraceTicks now = base::TraceTicks::Now();
+  base::TimeTicks now = base::TimeTicks::Now();
 
   LARGE_INTEGER walltime_in_us;
   walltime_in_us.QuadPart = walltime.ToInternalValue();
@@ -209,7 +219,8 @@ void EtwSystemEventConsumer::TraceAndConsumeOnThread() {
   Close();
 }
 
-void EtwSystemEventConsumer::FlushOnThread(const OutputCallback& callback) {
+void EtwSystemEventConsumer::FlushOnThread(
+    const StopAgentTracingCallback& callback) {
   // Add the header information to the stream.
   scoped_ptr<base::DictionaryValue> header(new base::DictionaryValue());
   header->Set("name", new base::StringValue("ETW"));
@@ -225,8 +236,12 @@ void EtwSystemEventConsumer::FlushOnThread(const OutputCallback& callback) {
   // Pass the result to the UI Thread.
   scoped_refptr<base::RefCountedString> result =
       base::RefCountedString::TakeString(&output);
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(callback, result));
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&EtwSystemEventConsumer::OnStopSystemTracingDone,
+                 base::Unretained(this),
+                 callback,
+                 result));
 }
 
 }  // namespace content

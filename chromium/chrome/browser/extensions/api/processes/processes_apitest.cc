@@ -18,6 +18,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_Processes) {
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ProcessesVsTaskManager) {
+  // This test is for the old implementation of the task manager. We must
+  // explicitly disable the new one.
+  task_manager::browsertest_util::EnableOldTaskManager();
+
   // Ensure task manager is not yet updating
   TaskManagerModel* model = TaskManager::GetInstance()->model();
   EXPECT_EQ(0, model->update_requests_);
@@ -42,4 +46,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ProcessesVsTaskManager) {
   // Unload the extension and check that listener count decreases
   UnloadExtension(last_loaded_extension_id());
   EXPECT_EQ(1, model->update_requests_);
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, CannotTerminateBrowserProcess) {
+  ASSERT_TRUE(RunExtensionTest("processes/terminate-browser-process"))
+      << message_;
 }

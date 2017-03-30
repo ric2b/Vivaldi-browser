@@ -5,8 +5,10 @@
 #ifndef MEDIA_CDM_PPAPI_EXTERNAL_CLEAR_KEY_FFMPEG_CDM_VIDEO_DECODER_H_
 #define MEDIA_CDM_PPAPI_EXTERNAL_CLEAR_KEY_FFMPEG_CDM_VIDEO_DECODER_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/cdm/ppapi/external_clear_key/cdm_video_decoder.h"
 #include "media/cdm/ppapi/external_clear_key/clear_key_cdm_common.h"

@@ -5,10 +5,11 @@
 #ifndef SYNC_TEST_FAKE_SERVER_FAKE_SERVER_ENTITY_H_
 #define SYNC_TEST_FAKE_SERVER_FAKE_SERVER_ENTITY_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/protocol/sync.pb.h"
 
@@ -32,16 +33,17 @@ class FakeServerEntity {
   virtual ~FakeServerEntity();
   const std::string& GetId() const;
   syncer::ModelType GetModelType() const;
-  int64 GetVersion() const;
-  void SetVersion(int64 version);
+  int64_t GetVersion() const;
+  void SetVersion(int64_t version);
   const std::string& GetName() const;
-  void SetName(std::string name);
+  void SetName(const std::string& name);
 
   // Replaces |specifics_| with |updated_specifics|. This method is meant to be
   // used to mimic a client commit.
   void SetSpecifics(const sync_pb::EntitySpecifics& updated_specifics);
 
   // Common data items needed by server
+  virtual bool RequiresParentId() const = 0;
   virtual std::string GetParentId() const = 0;
   virtual void SerializeAsProto(sync_pb::SyncEntity* proto) const = 0;
   virtual bool IsDeleted() const;
@@ -55,7 +57,7 @@ class FakeServerEntity {
 
   FakeServerEntity(const std::string& id,
                    const syncer::ModelType& model_type,
-                   int64 version,
+                   int64_t version,
                    const std::string& name);
 
   void SerializeBaseProtoFields(sync_pb::SyncEntity* sync_entity) const;
@@ -68,7 +70,7 @@ class FakeServerEntity {
   syncer::ModelType model_type_;
 
   // The version of this entity.
-  int64 version_;
+  int64_t version_;
 
   // The name of the entity.
   std::string name_;

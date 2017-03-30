@@ -29,7 +29,6 @@ AnimationPlayer::AnimationPlayer(int id)
 AnimationPlayer::~AnimationPlayer() {
   DCHECK(!animation_timeline_);
   DCHECK(!element_animations_);
-  DCHECK(!layer_id_);
 }
 
 scoped_refptr<AnimationPlayer> AnimationPlayer::CreateImplInstance() const {
@@ -105,9 +104,10 @@ void AnimationPlayer::BindElementAnimations() {
   DCHECK(element_animations_);
 
   // Pass all accumulated animations to LAC.
-  for (auto it = animations_.begin(); it != animations_.end(); ++it)
+  for (auto& animation : animations_) {
     element_animations_->layer_animation_controller()->AddAnimation(
-        animations_.take(it));
+        std::move(animation));
+  }
   if (!animations_.empty())
     SetNeedsCommit();
   animations_.clear();
@@ -119,16 +119,15 @@ void AnimationPlayer::UnbindElementAnimations() {
 }
 
 void AnimationPlayer::AddAnimation(scoped_ptr<Animation> animation) {
-  DCHECK_IMPLIES(
-      animation->target_property() == Animation::SCROLL_OFFSET,
-      animation_host_ && animation_host_->SupportsScrollAnimations());
+  DCHECK(animation->target_property() != Animation::SCROLL_OFFSET ||
+         (animation_host_ && animation_host_->SupportsScrollAnimations()));
 
   if (element_animations_) {
     element_animations_->layer_animation_controller()->AddAnimation(
-        animation.Pass());
+        std::move(animation));
     SetNeedsCommit();
   } else {
-    animations_.push_back(animation.Pass());
+    animations_.push_back(std::move(animation));
   }
 }
 
@@ -145,22 +144,45 @@ void AnimationPlayer::RemoveAnimation(int animation_id) {
         animation_id);
     SetNeedsCommit();
   } else {
-    auto animations_to_remove = animations_.remove_if([animation_id](
-        Animation* animation) { return animation->id() == animation_id; });
+    auto animations_to_remove =
+        std::remove_if(animations_.begin(), animations_.end(),
+                       [animation_id](const scoped_ptr<Animation>& animation) {
+                         return animation->id() == animation_id;
+                       });
+    animations_.erase(animations_to_remove, animations_.end());
+  }
+}
+
+void AnimationPlayer::AbortAnimation(int animation_id) {
+  DCHECK(element_animations_);
+  element_animations_->layer_animation_controller()->AbortAnimation(
+      animation_id);
+  SetNeedsCommit();
+}
+
+void AnimationPlayer::AbortAnimations(
+    Animation::TargetProperty target_property) {
+  if (element_animations_) {
+    element_animations_->layer_animation_controller()->AbortAnimations(
+        target_property);
+    SetNeedsCommit();
+  } else {
+    auto animations_to_remove = std::remove_if(
+        animations_.begin(), animations_.end(),
+        [target_property](const scoped_ptr<Animation>& animation) {
+          return animation->target_property() == target_property;
+        });
     animations_.erase(animations_to_remove, animations_.end());
   }
 }
 
 void AnimationPlayer::PushPropertiesTo(AnimationPlayer* player_impl) {
-  if (!element_animations_) {
-    if (player_impl->element_animations())
+  if (layer_id_ != player_impl->layer_id()) {
+    if (player_impl->layer_id())
       player_impl->DetachLayer();
-    return;
+    if (layer_id_)
+      player_impl->AttachLayer(layer_id_);
   }
-
-  DCHECK(layer_id_);
-  if (!player_impl->element_animations())
-    player_impl->AttachLayer(layer_id_);
 }
 
 void AnimationPlayer::NotifyAnimationStarted(
@@ -181,9 +203,19 @@ void AnimationPlayer::NotifyAnimationFinished(
                                                        target_property, group);
 }
 
+void AnimationPlayer::NotifyAnimationAborted(
+    base::TimeTicks monotonic_time,
+    Animation::TargetProperty target_property,
+    int group) {
+  if (layer_animation_delegate_)
+    layer_animation_delegate_->NotifyAnimationAborted(monotonic_time,
+                                                      target_property, group);
+}
+
 void AnimationPlayer::SetNeedsCommit() {
   DCHECK(animation_host_);
   animation_host_->SetNeedsCommit();
+  animation_host_->SetNeedsRebuildPropertyTrees();
 }
 
 }  // namespace cc

@@ -4,9 +4,13 @@
 
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_manager.h"
@@ -53,8 +57,9 @@ class RenderWidgetHostViewGuestTest : public testing::Test {
     browser_context_.reset(new TestBrowserContext);
     MockRenderProcessHost* process_host =
         new MockRenderProcessHost(browser_context_.get());
-    widget_host_ = new RenderWidgetHostImpl(
-        &delegate_, process_host, MSG_ROUTING_NONE, false);
+    int32_t routing_id = process_host->GetNextRoutingID();
+    widget_host_ =
+        new RenderWidgetHostImpl(&delegate_, process_host, routing_id, false);
     view_ = new RenderWidgetHostViewGuest(
         widget_host_, NULL,
         (new TestRenderWidgetHostView(widget_host_))->GetWeakPtr());
@@ -104,13 +109,10 @@ class TestBrowserPluginGuest : public BrowserPluginGuest {
                          BrowserPluginGuestDelegate* delegate):
       BrowserPluginGuest(web_contents->HasOpener(), web_contents, delegate),
       last_scale_factor_received_(0.f),
-      update_scale_factor_received_(0.f),
       received_delegated_frame_(false) {}
   ~TestBrowserPluginGuest() override {}
 
   void ResetTestData() {
-    update_frame_size_received_= gfx::Size();
-    update_scale_factor_received_ = 0.f;
     last_surface_id_received_ = cc::SurfaceId();
     last_frame_size_received_ = gfx::Size();
     last_scale_factor_received_ = 0.f;
@@ -126,12 +128,6 @@ class TestBrowserPluginGuest : public BrowserPluginGuest {
     BrowserPluginGuest::set_attached_for_test(attached);
   }
 
-  void UpdateGuestSizeIfNecessary(const gfx::Size& frame_size,
-                                  float scale_factor) override {
-    update_frame_size_received_= frame_size;
-    update_scale_factor_received_ = scale_factor;
-  }
-
   void SwapCompositorFrame(uint32_t output_surface_id,
                            int host_process_id,
                            int host_routing_id,
@@ -144,7 +140,7 @@ class TestBrowserPluginGuest : public BrowserPluginGuest {
 
     // Call base-class version so that we can test UpdateGuestSizeIfNecessary().
     BrowserPluginGuest::SwapCompositorFrame(output_surface_id, host_process_id,
-                                            host_routing_id, frame.Pass());
+                                            host_routing_id, std::move(frame));
   }
 
   void SetChildFrameSurface(const cc::SurfaceId& surface_id,
@@ -158,7 +154,6 @@ class TestBrowserPluginGuest : public BrowserPluginGuest {
 
   cc::SurfaceId last_surface_id_received_;
   gfx::Size last_frame_size_received_;
-  gfx::Size update_frame_size_received_;
   float last_scale_factor_received_;
   float update_scale_factor_received_;
 
@@ -190,8 +185,9 @@ class RenderWidgetHostViewGuestSurfaceTest
     browser_plugin_guest_ = new TestBrowserPluginGuest(
         web_contents_.get(), &browser_plugin_guest_delegate_);
 
-    widget_host_ = new RenderWidgetHostImpl(&delegate_, process_host,
-                                            MSG_ROUTING_NONE, false);
+    int32_t routing_id = process_host->GetNextRoutingID();
+    widget_host_ =
+        new RenderWidgetHostImpl(&delegate_, process_host, routing_id, false);
     view_ = new RenderWidgetHostViewGuest(
         widget_host_, browser_plugin_guest_,
         (new TestRenderWidgetHostView(widget_host_))->GetWeakPtr());
@@ -244,7 +240,7 @@ scoped_ptr<cc::CompositorFrame> CreateDelegatedFrame(float scale_factor,
   scoped_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
   pass->SetNew(cc::RenderPassId(1, 1), gfx::Rect(size), damage,
                gfx::Transform());
-  frame->delegated_frame_data->render_pass_list.push_back(pass.Pass());
+  frame->delegated_frame_data->render_pass_list.push_back(std::move(pass));
   return frame;
 }
 }  // anonymous namespace
@@ -262,10 +258,6 @@ TEST_F(RenderWidgetHostViewGuestSurfaceTest, TestGuestSurface) {
   browser_plugin_guest_->set_attached(true);
   view_->OnSwapCompositorFrame(
       0, CreateDelegatedFrame(scale_factor, view_size, view_rect));
-
-  EXPECT_EQ(view_size, browser_plugin_guest_->update_frame_size_received_);
-  EXPECT_EQ(scale_factor,
-            browser_plugin_guest_->update_scale_factor_received_);
 
   if (UseSurfacesEnabled()) {
     cc::SurfaceId id = surface_id();
@@ -326,8 +318,6 @@ TEST_F(RenderWidgetHostViewGuestSurfaceTest, TestGuestSurface) {
 
   view_->OnSwapCompositorFrame(
       0, CreateDelegatedFrame(scale_factor, view_size, view_rect));
-  EXPECT_EQ(gfx::Size(), browser_plugin_guest_->update_frame_size_received_);
-  EXPECT_EQ(0.f, browser_plugin_guest_->update_scale_factor_received_);
   if (UseSurfacesEnabled())
     EXPECT_TRUE(surface_id().is_null());
 }

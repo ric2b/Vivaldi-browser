@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "webcontentdecryptionmodule_impl.h"
+#include "media/blink/webcontentdecryptionmodule_impl.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
@@ -43,7 +44,8 @@ void WebContentDecryptionModuleImpl::Create(
 
   // TODO(ddorwin): This should be a DCHECK.
   std::string key_system_ascii = base::UTF16ToASCII(key_system);
-  if (!media::IsSupportedKeySystem(key_system_ascii)) {
+  if (!media::KeySystems::GetInstance()->IsSupportedKeySystem(
+          key_system_ascii)) {
     std::string message =
         "Keysystem '" + key_system_ascii + "' is not supported.";
     result->completeWithError(
@@ -68,7 +70,7 @@ void WebContentDecryptionModuleImpl::Create(
   // be destructed.
   scoped_refptr<CdmSessionAdapter> adapter(new CdmSessionAdapter());
   adapter->CreateCdm(cdm_factory, key_system_ascii, security_origin_as_gurl,
-                     cdm_config, result.Pass());
+                     cdm_config, std::move(result));
 }
 
 WebContentDecryptionModuleImpl::WebContentDecryptionModuleImpl(
@@ -86,13 +88,13 @@ WebContentDecryptionModuleImpl::createSession() {
 }
 
 void WebContentDecryptionModuleImpl::setServerCertificate(
-    const uint8* server_certificate,
+    const uint8_t* server_certificate,
     size_t server_certificate_length,
     blink::WebContentDecryptionModuleResult result) {
   DCHECK(server_certificate);
   adapter_->SetServerCertificate(
-      std::vector<uint8>(server_certificate,
-                         server_certificate + server_certificate_length),
+      std::vector<uint8_t>(server_certificate,
+                           server_certificate + server_certificate_length),
       scoped_ptr<SimpleCdmPromise>(
           new CdmResultPromise<>(result, std::string())));
 }

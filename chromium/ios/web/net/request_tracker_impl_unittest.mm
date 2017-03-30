@@ -4,8 +4,11 @@
 
 #include "ios/web/net/request_tracker_impl.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/sys_string_conversions.h"
@@ -121,6 +124,19 @@ namespace {
 // Used and incremented each time a tabId is created.
 int g_count = 0;
 
+// URLRequest::Delegate that does nothing.
+class DummyURLRequestDelegate : public net::URLRequest::Delegate {
+ public:
+  DummyURLRequestDelegate() {}
+  ~DummyURLRequestDelegate() override {}
+
+  void OnResponseStarted(net::URLRequest* request) override {}
+  void OnReadCompleted(net::URLRequest* request, int bytes_read) override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DummyURLRequestDelegate);
+};
+
 class RequestTrackerTest : public PlatformTest {
  public:
   RequestTrackerTest()
@@ -224,7 +240,7 @@ class RequestTrackerTest : public PlatformTest {
   net::TestJobInterceptor* AddInterceptorToRequest(size_t i) {
     // |interceptor| will be deleted from |job_factory_|'s destructor.
     net::TestJobInterceptor* protocol_handler = new net::TestJobInterceptor();
-    job_factory_.SetProtocolHandler("http", protocol_handler);
+    job_factory_.SetProtocolHandler("http", make_scoped_ptr(protocol_handler));
     contexts_[i]->set_job_factory(&job_factory_);
     return protocol_handler;
   }
@@ -239,9 +255,10 @@ class RequestTrackerTest : public PlatformTest {
 
     while (i >= requests_.size()) {
       contexts_.push_back(new net::URLRequestContext());
-      requests_.push_back(contexts_[i]->CreateRequest(url,
-                                                      net::DEFAULT_PRIORITY,
-                                                      NULL).release());
+      requests_.push_back(
+          contexts_[i]
+              ->CreateRequest(url, net::DEFAULT_PRIORITY, &request_delegate_)
+              .release());
 
       if (secure) {
         // Put a valid SSLInfo inside
@@ -261,6 +278,8 @@ class RequestTrackerTest : public PlatformTest {
     EXPECT_TRUE(!secure == !requests_[i]->url().SchemeIsCryptographic());
     return requests_[i];
   }
+
+  DummyURLRequestDelegate request_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(RequestTrackerTest);
 };
@@ -422,12 +441,12 @@ TEST_F(RequestTrackerTest, CaptureHeaders) {
       const_cast<char*>(headers.data())[i] = '\0';
   }
   net::URLRequest* request = GetRequest(0);
+  // TODO(mmenke):  This is really bizarre. Do something more reasonable.
   const_cast<net::HttpResponseInfo&>(request->response_info()).headers =
       new net::HttpResponseHeaders(headers);
-  // |job| will be owned by |request| and released from its destructor.
-  net::URLRequestTestJob* job = new net::URLRequestTestJob(
-      request, request->context()->network_delegate(), headers, "", false);
-  AddInterceptorToRequest(0)->set_main_intercept_job(job);
+  scoped_ptr<net::URLRequestTestJob> job(new net::URLRequestTestJob(
+      request, request->context()->network_delegate(), headers, "", false));
+  AddInterceptorToRequest(0)->set_main_intercept_job(std::move(job));
   request->Start();
 
   tracker_->StartRequest(request);

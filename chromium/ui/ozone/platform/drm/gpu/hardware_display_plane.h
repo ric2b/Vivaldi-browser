@@ -8,7 +8,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/basictypes.h"
+#include <vector>
+
+#include "base/macros.h"
 #include "ui/ozone/ozone_export.h"
 #include "ui/ozone/platform/drm/common/scoped_drm_types.h"
 
@@ -22,31 +24,45 @@ class DrmDevice;
 
 class OZONE_EXPORT HardwareDisplayPlane {
  public:
+  enum Type { kDummy, kPrimary, kOverlay, kCursor };
+
   HardwareDisplayPlane(uint32_t plane_id, uint32_t possible_crtcs);
 
   virtual ~HardwareDisplayPlane();
 
-  virtual bool Initialize(DrmDevice* drm);
+  bool Initialize(DrmDevice* drm,
+                  const std::vector<uint32_t>& formats,
+                  bool is_dummy,
+                  bool test_only);
+
+  bool IsSupportedFormat(uint32_t format);
 
   bool CanUseForCrtc(uint32_t crtc_index);
 
   bool in_use() const { return in_use_; }
   void set_in_use(bool in_use) { in_use_ = in_use; }
 
-  bool is_dummy() const { return is_dummy_; }
-  void set_is_dummy(bool is_dummy) { is_dummy_ = is_dummy; }
-
   uint32_t plane_id() const { return plane_id_; }
+
+  Type type() const { return type_; }
 
   void set_owning_crtc(uint32_t crtc) { owning_crtc_ = crtc; }
   uint32_t owning_crtc() const { return owning_crtc_; }
 
+  const std::vector<uint32_t>& supported_formats() const;
+
  protected:
+  virtual bool InitializeProperties(
+      DrmDevice* drm,
+      const ScopedDrmObjectPropertyPtr& plane_props);
+
   uint32_t plane_id_ = 0;
   uint32_t possible_crtcs_ = 0;
   uint32_t owning_crtc_ = 0;
+  uint32_t last_used_format_ = 0;
   bool in_use_ = false;
-  bool is_dummy_ = false;
+  Type type_ = kPrimary;
+  std::vector<uint32_t> supported_formats_;
 
   DISALLOW_COPY_AND_ASSIGN(HardwareDisplayPlane);
 };

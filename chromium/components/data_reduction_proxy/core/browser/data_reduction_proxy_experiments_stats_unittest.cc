@@ -4,7 +4,9 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_experiments_stats.h"
 
+#include <stdint.h>
 #include <map>
+#include <utility>
 
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_service.h"
@@ -20,7 +22,7 @@
 namespace {
 
 // Test value for how long a Data Reduction Proxy configuration should be valid.
-const int64 kConfigExpirationSeconds = 60 * 60 * 24;
+const int64_t kConfigExpirationSeconds = 60 * 60 * 24;
 
 }  // namespace
 
@@ -28,7 +30,7 @@ namespace data_reduction_proxy {
 
 class DataReductionProxyExperimentsStatsTest : public testing::Test {
  public:
-  void SetPrefValue(const std::string& path, int64 value) {}
+  void SetPrefValue(const std::string& path, int64_t value) {}
 
  protected:
   void SetUp() override {
@@ -38,10 +40,10 @@ class DataReductionProxyExperimentsStatsTest : public testing::Test {
   void SetConfigExperimentValues(
       bool enabled,
       const base::TimeDelta& retrieve_offset_from_now,
-      int64 roundtrip_milliseconds_base,
+      int64_t roundtrip_milliseconds_base,
       double roundtrip_multiplier,
-      int64 roundtrip_milliseconds_increment,
-      int64 expiration_seconds,
+      int64_t roundtrip_milliseconds_increment,
+      int64_t expiration_seconds,
       bool always_stale) {
     variations::testing::ClearAllVariationParams();
     std::map<std::string, std::string> variation_params;
@@ -92,11 +94,11 @@ TEST_F(DataReductionProxyExperimentsStatsTest, CheckConfigHistograms) {
   struct {
     DataReductionProxyRequestType request_type;
     base::Time request_time;
-    int64 received_content_length;
-    int64 original_content_length;
-    int64 expected_received_content_length;
-    int64 expected_original_content_length;
-    int64 expected_diff;
+    int64_t received_content_length;
+    int64_t original_content_length;
+    int64_t expected_received_content_length;
+    int64_t expected_original_content_length;
+    int64_t expected_diff;
   } test_cases[] = {
       {
        VIA_DATA_REDUCTION_PROXY,
@@ -125,7 +127,7 @@ TEST_F(DataReductionProxyExperimentsStatsTest, CheckConfigHistograms) {
       new DataReductionProxyExperimentsStats(
           base::Bind(&DataReductionProxyExperimentsStatsTest::SetPrefValue,
                      base::Unretained(this))));
-  experiments_stats->InitializeOnUIThread(config_params.Pass());
+  experiments_stats->InitializeOnUIThread(std::move(config_params));
   for (const auto& test_case : test_cases) {
     base::HistogramTester histogram_tester;
     experiments_stats->RecordBytes(

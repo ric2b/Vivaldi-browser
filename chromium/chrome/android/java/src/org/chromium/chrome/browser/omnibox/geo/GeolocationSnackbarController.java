@@ -7,13 +7,13 @@ package org.chromium.chrome.browser.omnibox.geo;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.text.SpannableString;
 import android.text.style.TypefaceSpan;
 import android.view.View;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.preferences.MainPreferences;
@@ -82,7 +82,8 @@ public class GeolocationSnackbarController implements SnackbarController {
         String settings = context.getResources().getString(R.string.preferences);
         int durationMs = DeviceClassManager.isAccessibilityModeEnabled(view.getContext())
                 ? ACCESSIBILITY_SNACKBAR_DURATION_MS : SNACKBAR_DURATION_MS;
-        final Snackbar snackbar = Snackbar.make(message, new GeolocationSnackbarController())
+        final GeolocationSnackbarController controller = new GeolocationSnackbarController();
+        final Snackbar snackbar = Snackbar.make(message, controller)
                 .setAction(settings, view)
                 .setSingleLine(false)
                 .setDuration(durationMs);
@@ -90,7 +91,7 @@ public class GeolocationSnackbarController implements SnackbarController {
         view.postDelayed(new Runnable() {
             @Override
             public void run() {
-                snackbarManager.dismissSnackbar(false);
+                snackbarManager.dismissSnackbars(controller);
                 snackbarManager.showSnackbar(snackbar);
                 setGeolocationSnackbarShown(context);
             }
@@ -100,7 +101,7 @@ public class GeolocationSnackbarController implements SnackbarController {
     private static boolean neverShowSnackbar(Context context) {
         // Don't show the snackbar on pre-M devices because location permission was explicitly
         // granted at install time.
-        if (!BuildInfo.isMncOrLater()) return true;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
 
         // Don't show the snackbar if Chrome doesn't have location permission since X-Geo won't be
         // sent unless the user explicitly grants this permission.
@@ -114,7 +115,7 @@ public class GeolocationSnackbarController implements SnackbarController {
         // Don't show the snackbar if location is disabled for google.com, since X-Geo won't be sent
         // unless the user explicitly reenables location for google.com.
         Uri searchUri = Uri.parse(TemplateUrlService.getInstance().getUrlForSearchQuery("foo"));
-        if (GeolocationHeader.isLocationDisabledForUrl(searchUri)) return true;
+        if (GeolocationHeader.isLocationDisabledForUrl(searchUri, false)) return true;
 
         return false;
     }

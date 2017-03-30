@@ -5,13 +5,16 @@
 #ifndef EXTENSIONS_BROWSER_APP_WINDOW_APP_WINDOW_H_
 #define EXTENSIONS_BROWSER_APP_WINDOW_APP_WINDOW_H_
 
+#include <stdint.h>
+
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "components/sessions/session_id.h"
-#include "components/web_modal/popup_manager.h"
+#include "components/sessions/core/session_id.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -59,7 +62,7 @@ class AppWindowContents {
                           const GURL& url) = 0;
 
   // Called to load the contents, after the app window is created.
-  virtual void LoadContents(int32 creator_process_id) = 0;
+  virtual void LoadContents(int32_t creator_process_id) = 0;
 
   // Called when the native window changes.
   virtual void NativeWindowChanged(NativeAppWindow* native_app_window) = 0;
@@ -69,6 +72,9 @@ class AppWindowContents {
 
   // Called in tests when the window is shown
   virtual void DispatchWindowShownForTests() const = 0;
+
+  // Called when the renderer notifies the browser that the window is ready.
+  virtual void OnWindowReady() = 0;
 
   virtual content::WebContents* GetWebContents() const = 0;
 
@@ -162,7 +168,7 @@ class AppWindow : public content::WebContentsDelegate,
     std::string window_key;
 
     // The process ID of the process that requested the create.
-    int32 creator_process_id;
+    int32_t creator_process_id;
 
     // Initial state of the window.
     ui::WindowShowState state;
@@ -244,6 +250,13 @@ class AppWindow : public content::WebContentsDelegate,
   // NativeAppWindows should call this to determine what the window's title
   // is on startup and from within UpdateWindowTitle().
   base::string16 GetTitle() const;
+
+  // |callback| will then be called when the first navigation in the window is
+  // ready to commit.
+  void SetOnFirstCommitCallback(const base::Closure& callback);
+
+  // Called when the first navigation in the window is ready to commit.
+  void OnReadyToCommitFirstNavigation();
 
   // Call to notify ShellRegistry and delete the window. Subclasses should
   // invoke this method instead of using "delete this".
@@ -335,10 +348,6 @@ class AppWindow : public content::WebContentsDelegate,
   // Restores the always-on-top property according to |cached_always_on_top_|.
   void RestoreAlwaysOnTop();
 
-  // Set whether the window should get even reserved keys (modulo platform
-  // restrictions).
-  void SetInterceptAllKeys(bool want_all_keys);
-
   // Retrieve the current state of the app window as a dictionary, to pass to
   // the renderer.
   void GetSerializedState(base::DictionaryValue* properties) const;
@@ -348,6 +357,10 @@ class AppWindow : public content::WebContentsDelegate,
   // Called by the window API when events can be sent to the window for this
   // app.
   void WindowEventsReady();
+
+  // Notifies the window's contents that the render view is ready and it can
+  // unblock resource requests.
+  void NotifyRenderViewReady();
 
   // Whether the app window wants to be alpha enabled.
   bool requested_alpha_enabled() const { return requested_alpha_enabled_; }
@@ -359,10 +372,8 @@ class AppWindow : public content::WebContentsDelegate,
   bool is_ime_window() const { return is_ime_window_; }
 
   void SetAppWindowContentsForTesting(scoped_ptr<AppWindowContents> contents) {
-    app_window_contents_ = contents.Pass();
+    app_window_contents_ = std::move(contents);
   }
-
-  web_modal::PopupManager* GetPopupManager() const;
 
  protected:
   ~AppWindow() override;
@@ -432,11 +443,6 @@ class AppWindow : public content::WebContentsDelegate,
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const Extension* extension,
                            UnloadedExtensionInfo::Reason reason) override;
-  void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
-                                  const Extension* extension,
-                                  bool is_update,
-                                  bool from_ephemeral,
-                                  const std::string& old_name) override;
 
   // web_modal::WebContentsModalDialogManagerDelegate implementation.
   void SetWebContentsBlocked(content::WebContents* web_contents,
@@ -523,10 +529,6 @@ class AppWindow : public content::WebContentsDelegate,
   // The initial url this AppWindow was navigated to.
   GURL initial_url_;
 
-  // Manages popup windows (bubbles, tab-modals) visible overlapping the
-  // app window.
-  scoped_ptr<web_modal::PopupManager> popup_manager_;
-
   // Bit field of FullscreenType.
   int fullscreen_types_;
 
@@ -572,6 +574,9 @@ class AppWindow : public content::WebContentsDelegate,
 
   // Whether |is_ime_window| was set in the CreateParams.
   bool is_ime_window_;
+
+  // PlzNavigate: this is called when the first navigation is ready to commit.
+  base::Closure on_first_commit_callback_;
 
   base::WeakPtrFactory<AppWindow> image_loader_ptr_factory_;
 

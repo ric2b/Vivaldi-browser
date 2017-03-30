@@ -4,6 +4,7 @@
 
 #include "chrome/browser/policy/cloud/user_cloud_policy_invalidator_factory.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/policy/cloud/user_cloud_policy_invalidator.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,7 +22,7 @@ namespace policy {
 // static
 UserCloudPolicyInvalidatorFactory*
     UserCloudPolicyInvalidatorFactory::GetInstance() {
-  return Singleton<UserCloudPolicyInvalidatorFactory>::get();
+  return base::Singleton<UserCloudPolicyInvalidatorFactory>::get();
 }
 
 UserCloudPolicyInvalidatorFactory::UserCloudPolicyInvalidatorFactory()

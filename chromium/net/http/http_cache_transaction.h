@@ -9,17 +9,20 @@
 #define NET_HTTP_HTTP_CACHE_TRANSACTION_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/load_states.h"
+#include "net/base/net_error_details.h"
 #include "net/base/request_priority.h"
 #include "net/base/upload_progress.h"
 #include "net/http/http_cache.h"
@@ -37,6 +40,7 @@ namespace net {
 class PartialData;
 struct HttpRequestInfo;
 struct LoadTimingInfo;
+class SSLPrivateKey;
 
 // This is the transaction that is returned by the HttpCache transaction
 // factory.
@@ -132,6 +136,7 @@ class HttpCache::Transaction : public HttpTransaction {
             const BoundNetLog& net_log) override;
   int RestartIgnoringLastError(const CompletionCallback& callback) override;
   int RestartWithCertificate(X509Certificate* client_cert,
+                             SSLPrivateKey* client_private_key,
                              const CompletionCallback& callback) override;
   int RestartWithAuth(const AuthCredentials& credentials,
                       const CompletionCallback& callback) override;
@@ -141,13 +146,16 @@ class HttpCache::Transaction : public HttpTransaction {
            const CompletionCallback& callback) override;
   void StopCaching() override;
   bool GetFullRequestHeaders(HttpRequestHeaders* headers) const override;
-  int64 GetTotalReceivedBytes() const override;
+  int64_t GetTotalReceivedBytes() const override;
+  int64_t GetTotalSentBytes() const override;
   void DoneReading() override;
   const HttpResponseInfo* GetResponseInfo() const override;
   LoadState GetLoadState() const override;
   UploadProgress GetUploadProgress(void) const override;
   void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) const override;
   void SetPriority(RequestPriority priority) override;
   void SetWebSocketHandshakeStreamCreateHelper(
       WebSocketHandshakeStreamBase::CreateHelper* create_helper) override;
@@ -170,49 +178,55 @@ class HttpCache::Transaction : public HttpTransaction {
   };
 
   enum State {
+    // Normally, states are traversed in approximately this order.
     STATE_NONE,
     STATE_GET_BACKEND,
     STATE_GET_BACKEND_COMPLETE,
-    STATE_SEND_REQUEST,
-    STATE_SEND_REQUEST_COMPLETE,
-    STATE_SUCCESSFUL_SEND_REQUEST,
-    STATE_NETWORK_READ,
-    STATE_NETWORK_READ_COMPLETE,
     STATE_INIT_ENTRY,
     STATE_OPEN_ENTRY,
     STATE_OPEN_ENTRY_COMPLETE,
-    STATE_CREATE_ENTRY,
-    STATE_CREATE_ENTRY_COMPLETE,
     STATE_DOOM_ENTRY,
     STATE_DOOM_ENTRY_COMPLETE,
+    STATE_CREATE_ENTRY,
+    STATE_CREATE_ENTRY_COMPLETE,
     STATE_ADD_TO_ENTRY,
     STATE_ADD_TO_ENTRY_COMPLETE,
+    STATE_CACHE_READ_RESPONSE,
+    STATE_CACHE_READ_RESPONSE_COMPLETE,
+    STATE_TOGGLE_UNUSED_SINCE_PREFETCH,
+    STATE_TOGGLE_UNUSED_SINCE_PREFETCH_COMPLETE,
+    STATE_CACHE_DISPATCH_VALIDATION,
+    STATE_CACHE_QUERY_DATA,
+    STATE_CACHE_QUERY_DATA_COMPLETE,
     STATE_START_PARTIAL_CACHE_VALIDATION,
     STATE_COMPLETE_PARTIAL_CACHE_VALIDATION,
+    STATE_SEND_REQUEST,
+    STATE_SEND_REQUEST_COMPLETE,
+    STATE_SUCCESSFUL_SEND_REQUEST,
     STATE_UPDATE_CACHED_RESPONSE,
+    STATE_CACHE_WRITE_UPDATED_RESPONSE,
+    STATE_CACHE_WRITE_UPDATED_RESPONSE_COMPLETE,
     STATE_UPDATE_CACHED_RESPONSE_COMPLETE,
     STATE_OVERWRITE_CACHED_RESPONSE,
+    STATE_CACHE_WRITE_RESPONSE,
+    STATE_CACHE_WRITE_RESPONSE_COMPLETE,
     STATE_TRUNCATE_CACHED_DATA,
     STATE_TRUNCATE_CACHED_DATA_COMPLETE,
     STATE_TRUNCATE_CACHED_METADATA,
     STATE_TRUNCATE_CACHED_METADATA_COMPLETE,
     STATE_PARTIAL_HEADERS_RECEIVED,
-    STATE_CACHE_READ_RESPONSE,
-    STATE_CACHE_READ_RESPONSE_COMPLETE,
-    STATE_CACHE_DISPATCH_VALIDATION,
-    STATE_TOGGLE_UNUSED_SINCE_PREFETCH,
-    STATE_TOGGLE_UNUSED_SINCE_PREFETCH_COMPLETE,
-    STATE_CACHE_WRITE_RESPONSE,
-    STATE_CACHE_WRITE_TRUNCATED_RESPONSE,
-    STATE_CACHE_WRITE_RESPONSE_COMPLETE,
     STATE_CACHE_READ_METADATA,
     STATE_CACHE_READ_METADATA_COMPLETE,
-    STATE_CACHE_QUERY_DATA,
-    STATE_CACHE_QUERY_DATA_COMPLETE,
+
+    // These states are entered from Read/AddTruncatedFlag.
+    STATE_NETWORK_READ,
+    STATE_NETWORK_READ_COMPLETE,
     STATE_CACHE_READ_DATA,
     STATE_CACHE_READ_DATA_COMPLETE,
     STATE_CACHE_WRITE_DATA,
-    STATE_CACHE_WRITE_DATA_COMPLETE
+    STATE_CACHE_WRITE_DATA_COMPLETE,
+    STATE_CACHE_WRITE_TRUNCATED_RESPONSE,
+    STATE_CACHE_WRITE_TRUNCATED_RESPONSE_COMPLETE
   };
 
   // Used for categorizing transactions for reporting in histograms. Patterns
@@ -232,14 +246,8 @@ class HttpCache::Transaction : public HttpTransaction {
     PATTERN_MAX,
   };
 
-  // This is a helper function used to trigger a completion callback.  It may
-  // only be called if callback_ is non-null.
-  void DoCallback(int rv);
-
-  // This will trigger the completion callback if appropriate.
-  int HandleResult(int rv);
-
-  // Runs the state transition loop.
+  // Runs the state transition loop. Resets and calls |callback_| on exit,
+  // unless the return value is ERR_IO_PENDING.
   int DoLoop(int result);
 
   // Each of these methods corresponds to a State value.  If there is an
@@ -247,46 +255,49 @@ class HttpCache::Transaction : public HttpTransaction {
   // corresponding callback.
   int DoGetBackend();
   int DoGetBackendComplete(int result);
-  int DoSendRequest();
-  int DoSendRequestComplete(int result);
-  int DoSuccessfulSendRequest();
-  int DoNetworkRead();
-  int DoNetworkReadComplete(int result);
   int DoInitEntry();
   int DoOpenEntry();
   int DoOpenEntryComplete(int result);
-  int DoCreateEntry();
-  int DoCreateEntryComplete(int result);
   int DoDoomEntry();
   int DoDoomEntryComplete(int result);
+  int DoCreateEntry();
+  int DoCreateEntryComplete(int result);
   int DoAddToEntry();
   int DoAddToEntryComplete(int result);
+  int DoCacheReadResponse();
+  int DoCacheReadResponseComplete(int result);
+  int DoCacheToggleUnusedSincePrefetch();
+  int DoCacheToggleUnusedSincePrefetchComplete(int result);
+  int DoCacheDispatchValidation();
+  int DoCacheQueryData();
+  int DoCacheQueryDataComplete(int result);
   int DoStartPartialCacheValidation();
   int DoCompletePartialCacheValidation(int result);
+  int DoSendRequest();
+  int DoSendRequestComplete(int result);
+  int DoSuccessfulSendRequest();
   int DoUpdateCachedResponse();
+  int DoCacheWriteUpdatedResponse();
+  int DoCacheWriteUpdatedResponseComplete(int result);
   int DoUpdateCachedResponseComplete(int result);
   int DoOverwriteCachedResponse();
+  int DoCacheWriteResponse();
+  int DoCacheWriteResponseComplete(int result);
   int DoTruncateCachedData();
   int DoTruncateCachedDataComplete(int result);
   int DoTruncateCachedMetadata();
   int DoTruncateCachedMetadataComplete(int result);
   int DoPartialHeadersReceived();
-  int DoCacheReadResponse();
-  int DoCacheReadResponseComplete(int result);
-  int DoCacheDispatchValidation();
-  int DoCacheToggleUnusedSincePrefetch();
-  int DoCacheToggleUnusedSincePrefetchComplete(int result);
-  int DoCacheWriteResponse();
-  int DoCacheWriteTruncatedResponse();
-  int DoCacheWriteResponseComplete(int result);
   int DoCacheReadMetadata();
   int DoCacheReadMetadataComplete(int result);
-  int DoCacheQueryData();
-  int DoCacheQueryDataComplete(int result);
+  int DoNetworkRead();
+  int DoNetworkReadComplete(int result);
   int DoCacheReadData();
   int DoCacheReadDataComplete(int result);
   int DoCacheWriteData(int num_bytes);
   int DoCacheWriteDataComplete(int result);
+  int DoCacheWriteTruncatedResponse();
+  int DoCacheWriteTruncatedResponseComplete(int result);
 
   // These functions are involved in a field trial testing storing certificates
   // in seperate entries from the HttpResponseInfo.
@@ -326,7 +337,8 @@ class HttpCache::Transaction : public HttpTransaction {
 
   // Called to restart a network transaction with a client certificate.
   // Returns network error code.
-  int RestartNetworkRequestWithCertificate(X509Certificate* client_cert);
+  int RestartNetworkRequestWithCertificate(X509Certificate* client_cert,
+                                           SSLPrivateKey* client_private_key);
 
   // Called to restart a network transaction with authentication credentials.
   // Returns network error code.
@@ -354,12 +366,6 @@ class HttpCache::Transaction : public HttpTransaction {
   // Setups the transaction for reading from the cache entry.
   int SetupEntryForRead();
 
-  // Reads data from the network.
-  int ReadFromNetwork(IOBuffer* data, int data_len);
-
-  // Reads data from the cache entry.
-  int ReadFromEntry(IOBuffer* data, int data_len);
-
   // Called to write data to the cache entry.  If the write fails, then the
   // cache entry is destroyed.  Future calls to this function will just do
   // nothing without side-effect.  Returns a network error code.
@@ -369,6 +375,14 @@ class HttpCache::Transaction : public HttpTransaction {
   // Called to write response_ to the cache entry. |truncated| indicates if the
   // entry should be marked as incomplete.
   int WriteResponseInfoToEntry(bool truncated);
+
+  // Helper function, should be called with result of WriteResponseInfoToEntry
+  // (or the result of the callback, when WriteResponseInfoToEntry returns
+  // ERR_IO_PENDING). Calls DoneWritingToEntry if |result| is not the right
+  // number of bytes. It is expected that the state that calls this will
+  // return whatever net error code this function returns, which currently
+  // is always "OK".
+  int OnWriteResponseInfoToEntryComplete(int result);
 
   // Called when we are done writing to the cache entry.
   void DoneWritingToEntry(bool success);
@@ -436,7 +450,6 @@ class HttpCache::Transaction : public HttpTransaction {
   const HttpResponseInfo* new_response_;
   std::string cache_key_;
   Mode mode_;
-  State target_state_;
   bool reading_;  // We are already reading. Never reverts to false once set.
   bool invalid_range_;  // We may bypass the cache for this request.
   bool truncated_;  // We don't have all the response data.
@@ -464,7 +477,8 @@ class HttpCache::Transaction : public HttpTransaction {
   base::TimeTicks first_cache_access_since_;
   base::TimeTicks send_request_since_;
 
-  int64 total_received_bytes_;
+  int64_t total_received_bytes_;
+  int64_t total_sent_bytes_;
 
   // Load timing information for the last network request, if any.  Set in the
   // 304 and 206 response cases, as the network transaction may be destroyed
@@ -472,6 +486,7 @@ class HttpCache::Transaction : public HttpTransaction {
   scoped_ptr<LoadTimingInfo> old_network_trans_load_timing_;
 
   ConnectionAttempts old_connection_attempts_;
+  IPEndPoint old_remote_endpoint_;
 
   // The helper object to use to create WebSocketHandshakeStreamBase
   // objects. Only relevant when establishing a WebSocket connection.

@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -21,7 +24,6 @@
 #include "ui/ozone/demo/gl_renderer.h"
 #include "ui/ozone/demo/software_renderer.h"
 #include "ui/ozone/demo/surfaceless_gl_renderer.h"
-#include "ui/ozone/gpu/gpu_memory_buffer_factory_ozone_native_buffer.h"
 #include "ui/ozone/public/ozone_gpu_test_helper.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/ozone_switches.h"
@@ -33,15 +35,25 @@ const int kTestWindowHeight = 600;
 
 const char kDisableGpu[] = "disable-gpu";
 
+const char kDisableSurfaceless[] = "disable-surfaceless";
+
 const char kWindowSize[] = "window-size";
 
 class DemoWindow;
+
+scoped_refptr<gfx::GLSurface> CreateGLSurface(gfx::AcceleratedWidget widget) {
+  scoped_refptr<gfx::GLSurface> surface;
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableSurfaceless))
+    surface = gfx::GLSurface::CreateSurfacelessViewGLSurface(widget);
+  if (!surface)
+    surface = gfx::GLSurface::CreateViewGLSurface(widget);
+  return surface;
+}
 
 class RendererFactory {
  public:
   enum RendererType {
     GL,
-    SURFACELESS_GL,
     SOFTWARE,
   };
 
@@ -57,9 +69,6 @@ class RendererFactory {
 
   // Helper for applications that do GL on main thread.
   ui::OzoneGpuTestHelper gpu_helper_;
-
-  // Used by the surfaceless renderers to allocate buffers.
-  ui::GpuMemoryBufferFactoryOzoneNativeBuffer buffer_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererFactory);
 };
@@ -84,7 +93,7 @@ class WindowManager : public ui::NativeDisplayObserver {
   scoped_ptr<ui::NativeDisplayDelegate> delegate_;
   base::Closure quit_closure_;
   RendererFactory renderer_factory_;
-  ScopedVector<DemoWindow> windows_;
+  std::vector<scoped_ptr<DemoWindow>> windows_;
 
   // Flags used to keep track of the current state of display configuration.
   //
@@ -137,7 +146,7 @@ class DemoWindow : public ui::PlatformWindowDelegate {
   void OnDamageRect(const gfx::Rect& damaged_region) override {}
   void DispatchEvent(ui::Event* event) override {
     if (event->IsKeyEvent() &&
-        static_cast<ui::KeyEvent*>(event)->code() == ui::DomCode::KEY_Q)
+        static_cast<ui::KeyEvent*>(event)->code() == ui::DomCode::US_Q)
       Quit();
   }
   void OnCloseRequest() override { Quit(); }
@@ -148,6 +157,9 @@ class DemoWindow : public ui::PlatformWindowDelegate {
                                     float device_pixel_ratio) override {
     DCHECK_NE(widget, gfx::kNullAcceleratedWidget);
     widget_ = widget;
+  }
+  void OnAcceleratedWidgetDestroyed() override {
+    NOTREACHED();
   }
   void OnActivationChanged(bool active) override {}
 
@@ -189,11 +201,7 @@ bool RendererFactory::Initialize() {
       gfx::GLSurface::InitializeOneOff() &&
       gpu_helper_.Initialize(base::ThreadTaskRunnerHandle::Get(),
                              base::ThreadTaskRunnerHandle::Get())) {
-    if (command_line->HasSwitch(switches::kOzoneUseSurfaceless)) {
-      type_ = SURFACELESS_GL;
-    } else {
-      type_ = GL;
-    }
+    type_ = GL;
   } else {
     type_ = SOFTWARE;
   }
@@ -205,11 +213,16 @@ scoped_ptr<ui::Renderer> RendererFactory::CreateRenderer(
     gfx::AcceleratedWidget widget,
     const gfx::Size& size) {
   switch (type_) {
-    case GL:
-      return make_scoped_ptr(new ui::GlRenderer(widget, size));
-    case SURFACELESS_GL:
-      return make_scoped_ptr(
-          new ui::SurfacelessGlRenderer(widget, size, &buffer_factory_));
+    case GL: {
+      scoped_refptr<gfx::GLSurface> surface = CreateGLSurface(widget);
+      if (!surface)
+        LOG(FATAL) << "Failed to create GL surface";
+      if (surface->IsSurfaceless())
+        return make_scoped_ptr(
+            new ui::SurfacelessGlRenderer(widget, surface, size));
+      else
+        return make_scoped_ptr(new ui::GlRenderer(widget, surface, size));
+    }
     case SOFTWARE:
       return make_scoped_ptr(new ui::SoftwareRenderer(widget, size));
   }
@@ -301,7 +314,7 @@ void WindowManager::OnDisplayConfigured(const gfx::Rect& bounds, bool success) {
     scoped_ptr<DemoWindow> window(
         new DemoWindow(this, &renderer_factory_, bounds));
     window->Start();
-    windows_.push_back(window.Pass());
+    windows_.push_back(std::move(window));
   } else {
     LOG(ERROR) << "Failed to configure display at " << bounds.ToString();
   }

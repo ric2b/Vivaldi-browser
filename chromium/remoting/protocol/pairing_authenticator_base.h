@@ -5,6 +5,7 @@
 #ifndef REMOTING_PROTOCOL_PAIRING_AUTHENTICATOR_BASE_H_
 #define REMOTING_PROTOCOL_PAIRING_AUTHENTICATOR_BASE_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "remoting/protocol/authenticator.h"
 #include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
@@ -48,6 +49,7 @@ class PairingAuthenticatorBase : public Authenticator {
   void ProcessMessage(const buzz::XmlElement* message,
                       const base::Closure& resume_callback) override;
   scoped_ptr<buzz::XmlElement> GetNextMessage() override;
+  const std::string& GetAuthKey() const override;
   scoped_ptr<ChannelAuthenticator> CreateChannelAuthenticator() const override;
 
  protected:

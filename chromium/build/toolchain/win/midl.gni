@@ -6,7 +6,8 @@ assert(is_win)
 
 import("//build/config/win/visual_studio_version.gni")
 
-# This template defines a rule to invoke the MS IDL compiler.
+# This template defines a rule to invoke the MS IDL compiler. The generated
+# source code will be compiled and linked into targets that depend on this.
 #
 # Parameters
 #
@@ -84,15 +85,11 @@ template("midl") {
       "/Oicf",
     ]
 
-    if (defined(invoker.deps)) {
-      deps = invoker.deps
-    }
+    forward_variables_from(invoker, [ "deps" ])
   }
 
   source_set(target_name) {
-    if (defined(invoker.visibility)) {
-      visibility = invoker.visibility
-    }
+    forward_variables_from(invoker, [ "visibility" ])
 
     # We only compile the IID files from the IDL tool rather than all outputs.
     sources = process_file_template(invoker.sources,
@@ -101,5 +98,7 @@ template("midl") {
     public_deps = [
       ":$action_name",
     ]
+
+    configs += [ "//build/config/win:midl_warnings" ]
   }
 }

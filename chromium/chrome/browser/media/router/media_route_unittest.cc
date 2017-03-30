@@ -18,45 +18,28 @@ namespace media_router {
 
 // Tests the == operator to ensure that only route ID equality is being checked.
 TEST(MediaRouteTest, Equals) {
-  MediaRoute route1(kRouteId1, MediaSourceForCastApp("DialApp"),
-                    MediaSink("sinkId", "sinkName"), "Description", false);
+  MediaRoute route1(kRouteId1, MediaSourceForCastApp("DialApp"), "sinkId",
+                    "Description", false, "", false);
 
   // Same as route1 with different sink ID.
   MediaRoute route2(kRouteId1, MediaSourceForCastApp("DialApp"),
-                    MediaSink("differentSinkId", "different sink"),
-                    "Description", false);
+                    "differentSinkId", "Description", false, "", false);
   EXPECT_TRUE(route1.Equals(route2));
 
   // Same as route1 with different description.
-  MediaRoute route3(kRouteId1, MediaSourceForCastApp("DialApp"),
-                    MediaSink("sinkId", "sinkName"), "differentDescription",
-                    false);
+  MediaRoute route3(kRouteId1, MediaSourceForCastApp("DialApp"), "sinkId",
+                    "differentDescription", false, "", false);
   EXPECT_TRUE(route1.Equals(route3));
 
   // Same as route1 with different is_local.
-  MediaRoute route4(kRouteId1, MediaSourceForCastApp("DialApp"),
-                    MediaSink("sinkId", "sinkName"), "Description", true);
+  MediaRoute route4(kRouteId1, MediaSourceForCastApp("DialApp"), "sinkId",
+                    "Description", true, "", false);
   EXPECT_TRUE(route1.Equals(route4));
 
   // The ID is different from route1's.
-  MediaRoute route5(kRouteId2, MediaSourceForCastApp("DialApp"),
-                    MediaSink("sinkId", "sinkName"), "Description", false);
+  MediaRoute route5(kRouteId2, MediaSourceForCastApp("DialApp"), "sinkId",
+                    "Description", false, "", false);
   EXPECT_FALSE(route1.Equals(route5));
-}
-
-TEST(MediaRouteTest, ParseId) {
-  EXPECT_EQ("1", GetPresentationIdAndUrl(kRouteId1).first);
-  EXPECT_EQ("http://foo.com", GetPresentationIdAndUrl(kRouteId1).second);
-  auto invalid = std::make_pair(std::string(), std::string());
-  EXPECT_EQ(invalid, GetPresentationIdAndUrl("invalid"));
-  EXPECT_EQ(invalid, GetPresentationIdAndUrl(
-                         "urn:x-org.chromium:media:route:2"));
-  EXPECT_EQ(invalid, GetPresentationIdAndUrl(
-                         "urn:x-org.chromium:media:route:2/"));
-  EXPECT_EQ(invalid, GetPresentationIdAndUrl(
-                         "urn:x-org.chromium:media:route:2/cast-sink2/"));
-  EXPECT_EQ(invalid, GetPresentationIdAndUrl(
-                         "urn:x-org.chromium:media:route:2//http://foo.com"));
 }
 
 }  // namespace media_router

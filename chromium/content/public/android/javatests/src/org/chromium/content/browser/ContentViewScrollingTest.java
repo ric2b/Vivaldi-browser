@@ -8,6 +8,7 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.os.SystemClock;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -100,7 +101,7 @@ public class ContentViewScrollingTest extends ContentShellTestBase {
 
     private void assertWaitForScroll(final boolean hugLeft, final boolean hugTop)
             throws InterruptedException {
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 // Scrolling and flinging don't result in exact coordinates.
@@ -115,7 +116,7 @@ public class ContentViewScrollingTest extends ContentShellTestBase {
                         : getContentViewCore().getNativeScrollYForTest() > maxThreshold;
                 return xCorrect && yCorrect;
             }
-        }));
+        });
     }
 
     private void fling(final int vx, final int vy) throws Throwable {
@@ -145,12 +146,29 @@ public class ContentViewScrollingTest extends ContentShellTestBase {
         });
     }
 
+    private void scrollWithJoystick(final float deltaAxisX, final float deltaAxisY)
+            throws Throwable {
+        runTestOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                // Synthesize joystick motion event and send to ContentViewCore.
+                MotionEvent leftJoystickMotionEvent =
+                        MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE,
+                                deltaAxisX, deltaAxisY, 0);
+                leftJoystickMotionEvent.setSource(
+                        leftJoystickMotionEvent.getSource() | InputDevice.SOURCE_CLASS_JOYSTICK);
+                getContentViewCore().getContainerView().onGenericMotionEvent(
+                        leftJoystickMotionEvent);
+            }
+        });
+    }
+
     @Override
     protected void setUp() throws Exception {
         super.setUp();
 
         launchContentShellWithUrl(LARGE_PAGE);
-        assertTrue("Page failed to load", waitForActiveShellToBeDoneLoading());
+        waitForActiveShellToBeDoneLoading();
         assertWaitForPageScaleFactorMatch(2.0f);
 
         assertEquals(0, getContentViewCore().getNativeScrollXForTest());
@@ -244,6 +262,34 @@ public class ContentViewScrollingTest extends ContentShellTestBase {
         assertWaitForScroll(false, false);
     }
 
+    @SmallTest
+    @Feature({"Main"})
+    public void testJoystickScroll() throws Throwable {
+        scrollTo(0, 0);
+        assertWaitForScroll(true, true);
+
+        // Scroll with X axis in deadzone and the Y axis active.
+        // Only the Y axis should have an effect, arriving at lower-left.
+        scrollWithJoystick(0.1f, 1f);
+        assertWaitForScroll(true, false);
+
+        // Scroll with Y axis in deadzone and the X axis active.
+        scrollWithJoystick(1f, -0.1f);
+        assertWaitForScroll(false, false);
+
+        // Vertical scroll to upper-right.
+        scrollWithJoystick(0, -0.75f);
+        assertWaitForScroll(false, true);
+
+        // Horizontal scroll to top-left.
+        scrollWithJoystick(-0.75f, 0);
+        assertWaitForScroll(true, true);
+
+        // Diagonal scroll to bottom-right.
+        scrollWithJoystick(1f, 1f);
+        assertWaitForScroll(false, false);
+    }
+
     /**
      * To ensure the device properly responds to bounds-exceeding scrolls, e.g., overscroll
      * effects are properly initialized.
@@ -292,11 +338,11 @@ public class ContentViewScrollingTest extends ContentShellTestBase {
         });
         scrollTo(scrollToX, scrollToY);
         assertWaitForScroll(false, false);
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return containerViewInternals.isScrollChanged();
             }
-        }));
+        });
     }
 }

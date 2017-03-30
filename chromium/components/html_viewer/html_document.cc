@@ -4,186 +4,141 @@
 
 #include "components/html_viewer/html_document.h"
 
-#include "base/bind.h"
+#include <utility>
+
 #include "base/command_line.h"
-#include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
-#include "components/devtools_service/public/cpp/switches.h"
-#include "components/html_viewer/blink_input_events_type_converters.h"
+#include "base/time/time.h"
 #include "components/html_viewer/blink_url_request_type_converters.h"
 #include "components/html_viewer/devtools_agent_impl.h"
-#include "components/html_viewer/geolocation_client_impl.h"
+#include "components/html_viewer/document_resource_waiter.h"
 #include "components/html_viewer/global_state.h"
-#include "components/html_viewer/media_factory.h"
-#include "components/html_viewer/web_layer_tree_view_impl.h"
-#include "components/html_viewer/web_storage_namespace_impl.h"
+#include "components/html_viewer/html_frame.h"
+#include "components/html_viewer/html_frame_tree_manager.h"
+#include "components/html_viewer/test_html_viewer_impl.h"
 #include "components/html_viewer/web_url_loader_impl.h"
-#include "components/view_manager/public/cpp/view.h"
-#include "components/view_manager/public/cpp/view_manager.h"
-#include "components/view_manager/public/cpp/view_property.h"
-#include "components/view_manager/public/interfaces/surfaces.mojom.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/connect.h"
-#include "mojo/application/public/interfaces/shell.mojom.h"
+#include "components/mus/public/cpp/window.h"
+#include "components/mus/public/cpp/window_tree_connection.h"
+#include "components/mus/ws/ids.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
-#include "skia/ext/refptr.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "mojo/public/cpp/system/data_pipe.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/connect.h"
+#include "mojo/shell/public/interfaces/shell.mojom.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebRemoteFrame.h"
-#include "third_party/WebKit/public/web/WebRemoteFrameClient.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
-#include "third_party/WebKit/public/web/WebSettings.h"
-#include "third_party/WebKit/public/web/WebView.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
-#include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkDevice.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/size.h"
 
-using blink::WebString;
 using mojo::AxProvider;
-using mojo::Rect;
-using mojo::ServiceProviderPtr;
-using mojo::URLResponsePtr;
-using mojo::View;
-using mojo::ViewManager;
-using mojo::WeakBindToRequest;
+using mus::Window;
 
 namespace html_viewer {
 namespace {
 
-bool EnableRemoteDebugging() {
+const char kEnableTestInterface[] = "enable-html-viewer-test-interface";
+
+bool IsTestInterfaceEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      devtools_service::kRemoteDebuggingPort);
-}
-
-// WebRemoteFrameClient implementation used for OOPIFs.
-// TODO(sky): this needs to talk to browser by way of an interface.
-class RemoteFrameClientImpl : public blink::WebRemoteFrameClient {
- public:
-  explicit RemoteFrameClientImpl(mojo::View* view) : view_(view) {}
-  ~RemoteFrameClientImpl() {}
-
-  // WebRemoteFrameClient methods:
-  virtual void postMessageEvent(blink::WebLocalFrame* source_frame,
-                                blink::WebRemoteFrame* target_frame,
-                                blink::WebSecurityOrigin target_origin,
-                                blink::WebDOMMessageEvent event) {}
-  virtual void initializeChildFrame(const blink::WebRect& frame_rect,
-                                    float scale_factor) {
-    mojo::Rect rect;
-    rect.x = frame_rect.x;
-    rect.y = frame_rect.y;
-    rect.width = frame_rect.width;
-    rect.height = frame_rect.height;
-    view_->SetBounds(rect);
-  }
-  virtual void navigate(const blink::WebURLRequest& request,
-                        bool should_replace_current_entry) {}
-  virtual void reload(bool ignore_cache, bool is_client_redirect) {}
-
-  virtual void forwardInputEvent(const blink::WebInputEvent* event) {}
-
- private:
-  mojo::View* const view_;
-
-  DISALLOW_COPY_AND_ASSIGN(RemoteFrameClientImpl);
-};
-
-void ConfigureSettings(blink::WebSettings* settings) {
-  settings->setCookieEnabled(true);
-  settings->setDefaultFixedFontSize(13);
-  settings->setDefaultFontSize(16);
-  settings->setLoadsImagesAutomatically(true);
-  settings->setJavaScriptEnabled(true);
-}
-
-mojo::Target WebNavigationPolicyToNavigationTarget(
-    blink::WebNavigationPolicy policy) {
-  switch (policy) {
-    case blink::WebNavigationPolicyCurrentTab:
-      return mojo::TARGET_SOURCE_NODE;
-    case blink::WebNavigationPolicyNewBackgroundTab:
-    case blink::WebNavigationPolicyNewForegroundTab:
-    case blink::WebNavigationPolicyNewWindow:
-    case blink::WebNavigationPolicyNewPopup:
-      return mojo::TARGET_NEW_NODE;
-    default:
-      return mojo::TARGET_DEFAULT;
-  }
-}
-
-bool CanNavigateLocally(blink::WebFrame* frame,
-                        const blink::WebURLRequest& request) {
-  // For now, we just load child frames locally.
-  if (frame->parent())
-    return true;
-
-  // If we have extraData() it means we already have the url response
-  // (presumably because we are being called via Navigate()). In that case we
-  // can go ahead and navigate locally.
-  if (request.extraData())
-    return true;
-
-  // Otherwise we don't know if we're the right app to handle this request. Ask
-  // host to do the navigation for us.
-  return false;
+      kEnableTestInterface);
 }
 
 }  // namespace
 
-HTMLDocument::CreateParams::CreateParams(
-    mojo::ApplicationImpl* html_document_app,
-    mojo::ApplicationConnection* connection,
-    mojo::URLResponsePtr response,
-    GlobalState* global_state,
-    const DeleteCallback& delete_callback)
-    : html_document_app(html_document_app),
-      connection(connection),
-      response(response.Pass()),
-      global_state(global_state),
-      delete_callback(delete_callback) {
+// A WindowTreeDelegate implementation that delegates to a (swappable) delegate.
+// This is used when one HTMLDocument takes over for another delegate
+// (OnSwap()).
+class WindowTreeDelegateImpl : public mus::WindowTreeDelegate {
+ public:
+  explicit WindowTreeDelegateImpl(mus::WindowTreeDelegate* delegate)
+      : delegate_(delegate) {}
+  ~WindowTreeDelegateImpl() override {}
+
+  void set_delegate(mus::WindowTreeDelegate* delegate) { delegate_ = delegate; }
+
+ private:
+  // WindowTreeDelegate:
+  void OnEmbed(mus::Window* root) override { delegate_->OnEmbed(root); }
+  void OnUnembed(mus::Window* root) override { delegate_->OnUnembed(root); }
+  void OnConnectionLost(mus::WindowTreeConnection* connection) override {
+    delegate_->OnConnectionLost(connection);
+  }
+
+  mus::WindowTreeDelegate* delegate_;
+
+  DISALLOW_COPY_AND_ASSIGN(WindowTreeDelegateImpl);
+};
+
+HTMLDocument::BeforeLoadCache::BeforeLoadCache() {}
+
+HTMLDocument::BeforeLoadCache::~BeforeLoadCache() {
+  STLDeleteElements(&ax_provider_requests);
+  STLDeleteElements(&test_interface_requests);
 }
 
-HTMLDocument::CreateParams::~CreateParams() {
+HTMLDocument::TransferableState::TransferableState()
+    : owns_window_tree_connection(false), root(nullptr) {}
+
+HTMLDocument::TransferableState::~TransferableState() {}
+
+void HTMLDocument::TransferableState::Move(TransferableState* other) {
+  owns_window_tree_connection = other->owns_window_tree_connection;
+  root = other->root;
+  window_tree_delegate_impl = std::move(other->window_tree_delegate_impl);
+
+  other->root = nullptr;
+  other->owns_window_tree_connection = false;
 }
 
-HTMLDocument::HTMLDocument(HTMLDocument::CreateParams* params)
-    : app_refcount_(params->html_document_app->app_lifetime_helper()
+HTMLDocument::HTMLDocument(mojo::ApplicationImpl* html_document_app,
+                           mojo::ApplicationConnection* connection,
+                           mojo::URLResponsePtr response,
+                           GlobalState* global_state,
+                           const DeleteCallback& delete_callback,
+                           HTMLFactory* factory)
+    : app_refcount_(html_document_app->app_lifetime_helper()
                         ->CreateAppRefCount()),
-      html_document_app_(params->html_document_app),
-      response_(params->response.Pass()),
-      navigator_host_(params->connection->GetServiceProvider()),
-      web_view_(nullptr),
-      root_(nullptr),
-      view_manager_client_factory_(params->html_document_app->shell(), this),
-      global_state_(params->global_state),
-      delete_callback_(params->delete_callback) {
-  params->connection->AddService(
-      static_cast<InterfaceFactory<mojo::AxProvider>*>(this));
-  params->connection->AddService(&view_manager_client_factory_);
+      html_document_app_(html_document_app),
+      connection_(connection),
+      global_state_(global_state),
+      frame_(nullptr),
+      delete_callback_(delete_callback),
+      factory_(factory) {
+  connection->AddService<web_view::mojom::FrameClient>(this);
+  connection->AddService<AxProvider>(this);
+  connection->AddService<mus::mojom::WindowTreeClient>(this);
+  connection->AddService<devtools_service::DevToolsAgent>(this);
+  if (IsTestInterfaceEnabled())
+    connection->AddService<TestHTMLViewer>(this);
 
-  if (global_state_->did_init())
-    Load(response_.Pass());
+  resource_waiter_.reset(
+      new DocumentResourceWaiter(global_state_, std::move(response), this));
 }
 
 void HTMLDocument::Destroy() {
-  // See comment in header for a description of lifetime.
-  if (root_) {
-    // Deleting the ViewManager calls back to OnViewManagerDestroyed() and
-    // triggers deletion.
-    delete root_->view_manager();
+  TRACE_EVENT0("html_viewer", "HTMLDocument::Destroy");
+  if (resource_waiter_) {
+    mus::Window* root = resource_waiter_->root();
+    if (root) {
+      resource_waiter_.reset();
+      delete root->connection();
+    } else {
+      delete this;
+    }
+  } else if (frame_) {
+    // Closing the frame ends up destroying the ViewManager, which triggers
+    // deleting this (OnConnectionLost()).
+    frame_->Close();
+  } else if (transferable_state_.root) {
+    // This triggers deleting us.
+    if (transferable_state_.owns_window_tree_connection)
+      delete transferable_state_.root->connection();
+    else
+      delete this;
   } else {
     delete this;
   }
@@ -193,283 +148,187 @@ HTMLDocument::~HTMLDocument() {
   delete_callback_.Run(this);
 
   STLDeleteElements(&ax_providers_);
-  STLDeleteElements(&ax_provider_requests_);
-
-  if (web_view_)
-    web_view_->close();
-  if (root_)
-    root_->RemoveObserver(this);
 }
 
-void HTMLDocument::OnEmbed(View* root) {
-  DCHECK(!global_state_->is_headless());
-  root_ = root;
-  root_->AddObserver(this);
-  UpdateFocus();
+void HTMLDocument::Load() {
+  TRACE_EVENT0("html_viewer", "HTMLDocument::Load");
+  DCHECK(resource_waiter_ && resource_waiter_->is_ready());
 
-  InitGlobalStateAndLoadIfNecessary();
-}
-
-void HTMLDocument::OnViewManagerDestroyed(ViewManager* view_manager) {
-  delete this;
-}
-
-void HTMLDocument::Create(mojo::ApplicationConnection* connection,
-                          mojo::InterfaceRequest<AxProvider> request) {
-  if (!did_finish_load_) {
-    // Cache AxProvider interface requests until the document finishes loading.
-    auto cached_request = new mojo::InterfaceRequest<AxProvider>();
-    *cached_request = request.Pass();
-    ax_provider_requests_.insert(cached_request);
-  } else {
-    ax_providers_.insert(
-        new AxProviderImpl(web_view_, request.Pass()));
-  }
-}
-
-void HTMLDocument::Load(URLResponsePtr response) {
-  DCHECK(!web_view_);
-  web_view_ = blink::WebView::create(this);
-  touch_handler_.reset(new TouchHandler(web_view_));
-  web_layer_tree_view_impl_->set_widget(web_view_);
-  ConfigureSettings(web_view_->settings());
-
-  blink::WebLocalFrame* main_frame =
-      blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, this);
-  web_view_->setMainFrame(main_frame);
-
-  // TODO(yzshen): http://crbug.com/498986 Creating DevToolsAgentImpl instances
-  // causes html_viewer_apptests flakiness currently. Before we fix that we
-  // cannot enable remote debugging (which is required by Telemetry tests) on
-  // the bots.
-  if (EnableRemoteDebugging()) {
-    devtools_agent_.reset(
-        new DevToolsAgentImpl(main_frame, html_document_app_->shell()));
+  // Note: |window| is null if we're taking over for an existing frame.
+  mus::Window* window = resource_waiter_->root();
+  if (window) {
+    global_state_->InitIfNecessary(
+        window->viewport_metrics().size_in_pixels.To<gfx::Size>(),
+        window->viewport_metrics().device_pixel_ratio);
   }
 
-  GURL url(response->url);
+  scoped_ptr<WebURLRequestExtraData> extra_data(new WebURLRequestExtraData);
+  extra_data->synthetic_response = resource_waiter_->ReleaseURLResponse();
 
-  WebURLRequestExtraData* extra_data = new WebURLRequestExtraData;
-  extra_data->synthetic_response = response.Pass();
+  base::TimeTicks navigation_start_time =
+      resource_waiter_->navigation_start_time();
+  frame_ = HTMLFrameTreeManager::CreateFrameAndAttachToTree(
+      global_state_, window, std::move(resource_waiter_), this);
+
+  // If the frame wasn't created we can destroy ourself.
+  if (!frame_) {
+    Destroy();
+    return;
+  }
+
+  if (devtools_agent_request_.is_pending()) {
+    if (frame_->devtools_agent()) {
+      frame_->devtools_agent()->BindToRequest(
+          std::move(devtools_agent_request_));
+    } else {
+      devtools_agent_request_ =
+          mojo::InterfaceRequest<devtools_service::DevToolsAgent>();
+    }
+  }
+
+  const GURL url(extra_data->synthetic_response->url);
 
   blink::WebURLRequest web_request;
   web_request.initialize();
   web_request.setURL(url);
-  web_request.setExtraData(extra_data);
+  web_request.setExtraData(extra_data.release());
 
-  web_view_->mainFrame()->loadRequest(web_request);
-  UpdateFocus();
+  frame_->LoadRequest(web_request, navigation_start_time);
 }
 
-void HTMLDocument::UpdateWebviewSizeFromViewSize() {
-  web_view_->setDeviceScaleFactor(global_state_->device_pixel_ratio());
-  const gfx::Size size_in_pixels(root_->bounds().width, root_->bounds().height);
-  const gfx::Size size_in_dips = gfx::ConvertSizeToDIP(
-      root_->viewport_metrics().device_pixel_ratio, size_in_pixels);
-  web_view_->resize(
-      blink::WebSize(size_in_dips.width(), size_in_dips.height()));
-  web_layer_tree_view_impl_->setViewportSize(size_in_pixels);
+HTMLDocument::BeforeLoadCache* HTMLDocument::GetBeforeLoadCache() {
+  CHECK(!did_finish_local_frame_load_);
+  if (!before_load_cache_.get())
+    before_load_cache_.reset(new BeforeLoadCache);
+  return before_load_cache_.get();
 }
 
-void HTMLDocument::InitGlobalStateAndLoadIfNecessary() {
-  DCHECK(root_);
-  if (root_->viewport_metrics().device_pixel_ratio == 0.f)
+void HTMLDocument::OnEmbed(Window* root) {
+  transferable_state_.root = root;
+  resource_waiter_->SetRoot(root);
+}
+
+void HTMLDocument::OnConnectionLost(mus::WindowTreeConnection* connection) {
+  delete this;
+}
+
+void HTMLDocument::OnFrameDidFinishLoad() {
+  TRACE_EVENT0("html_viewer", "HTMLDocument::OnFrameDidFinishLoad");
+  did_finish_local_frame_load_ = true;
+  scoped_ptr<BeforeLoadCache> before_load_cache = std::move(before_load_cache_);
+  if (!before_load_cache)
     return;
 
-  if (!web_view_) {
-    global_state_->InitIfNecessary(
-        root_->viewport_metrics().size_in_pixels.To<gfx::Size>(),
-        root_->viewport_metrics().device_pixel_ratio);
-    Load(response_.Pass());
+  // Bind any pending AxProvider and TestHTMLViewer interface requests.
+  for (auto it : before_load_cache->ax_provider_requests) {
+    ax_providers_.insert(new AxProviderImpl(
+        frame_->frame_tree_manager()->GetWebView(), std::move(*it)));
   }
-
-  UpdateWebviewSizeFromViewSize();
-  web_layer_tree_view_impl_->set_view(root_);
+  for (auto it : before_load_cache->test_interface_requests) {
+    CHECK(IsTestInterfaceEnabled());
+    test_html_viewers_.push_back(new TestHTMLViewerImpl(
+        frame_->web_frame()->toWebLocalFrame(), std::move(*it)));
+  }
 }
 
-blink::WebStorageNamespace* HTMLDocument::createSessionStorageNamespace() {
-  return new WebStorageNamespaceImpl();
+mojo::ApplicationImpl* HTMLDocument::GetApp() {
+  return html_document_app_;
 }
 
-void HTMLDocument::initializeLayerTreeView() {
-  if (global_state_->is_headless()) {
-    web_layer_tree_view_impl_.reset(
-        new WebLayerTreeViewImpl(global_state_->compositor_thread(), nullptr,
-                                 nullptr, nullptr, nullptr));
+HTMLFactory* HTMLDocument::GetHTMLFactory() {
+  return factory_;
+}
+
+void HTMLDocument::OnFrameSwappedToRemote() {
+  // When the frame becomes remote HTMLDocument is no longer needed.
+  frame_ = nullptr;
+  Destroy();
+}
+
+void HTMLDocument::OnSwap(HTMLFrame* frame, HTMLFrameDelegate* old_delegate) {
+  TRACE_EVENT0("html_viewer", "HTMLDocument::OnSwap");
+  DCHECK(frame->IsLocal());
+  DCHECK(frame->window());
+  DCHECK(!frame_);
+  DCHECK(!transferable_state_.root);
+  if (!old_delegate) {
+    // We're taking over a child of a local root that isn't associated with a
+    // delegate. In this case the frame's window is not the root of the
+    // WindowTreeConnection.
+    transferable_state_.owns_window_tree_connection = false;
+    transferable_state_.root = frame->window();
+  } else {
+    HTMLDocument* old_document = static_cast<HTMLDocument*>(old_delegate);
+    transferable_state_.Move(&old_document->transferable_state_);
+    if (transferable_state_.window_tree_delegate_impl)
+      transferable_state_.window_tree_delegate_impl->set_delegate(this);
+    old_document->frame_ = nullptr;
+    old_document->Destroy();
+  }
+}
+
+void HTMLDocument::OnFrameDestroyed() {
+  if (!transferable_state_.owns_window_tree_connection)
+    delete this;
+}
+
+void HTMLDocument::Create(mojo::ApplicationConnection* connection,
+                          mojo::InterfaceRequest<AxProvider> request) {
+  if (!did_finish_local_frame_load_) {
+    // Cache AxProvider interface requests until the document finishes loading.
+    auto cached_request = new mojo::InterfaceRequest<AxProvider>();
+    *cached_request = std::move(request);
+    GetBeforeLoadCache()->ax_provider_requests.insert(cached_request);
+  } else {
+    ax_providers_.insert(
+        new AxProviderImpl(frame_->web_view(), std::move(request)));
+  }
+}
+
+void HTMLDocument::Create(mojo::ApplicationConnection* connection,
+                          mojo::InterfaceRequest<TestHTMLViewer> request) {
+  CHECK(IsTestInterfaceEnabled());
+  if (!did_finish_local_frame_load_) {
+    auto cached_request = new mojo::InterfaceRequest<TestHTMLViewer>();
+    *cached_request = std::move(request);
+    GetBeforeLoadCache()->test_interface_requests.insert(cached_request);
+  } else {
+    test_html_viewers_.push_back(new TestHTMLViewerImpl(
+        frame_->web_frame()->toWebLocalFrame(), std::move(request)));
+  }
+}
+
+void HTMLDocument::Create(
+    mojo::ApplicationConnection* connection,
+    mojo::InterfaceRequest<web_view::mojom::FrameClient> request) {
+  if (frame_) {
+    DVLOG(1) << "Request for FrameClient after one already vended.";
     return;
   }
-
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From("mojo:surfaces_service");
-  mojo::SurfacePtr surface;
-  html_document_app_->ConnectToService(request.Pass(), &surface);
-
-  // TODO(jamesr): Should be mojo:gpu_service
-  mojo::URLRequestPtr request2(mojo::URLRequest::New());
-  request2->url = mojo::String::From("mojo:view_manager");
-  mojo::GpuPtr gpu_service;
-  html_document_app_->ConnectToService(request2.Pass(), &gpu_service);
-  web_layer_tree_view_impl_.reset(new WebLayerTreeViewImpl(
-      global_state_->compositor_thread(),
-      global_state_->gpu_memory_buffer_manager(),
-      global_state_->raster_thread_helper()->task_graph_runner(),
-      surface.Pass(), gpu_service.Pass()));
+  resource_waiter_->Bind(std::move(request));
 }
 
-blink::WebLayerTreeView* HTMLDocument::layerTreeView() {
-  return web_layer_tree_view_impl_.get();
-}
-
-blink::WebMediaPlayer* HTMLDocument::createMediaPlayer(
-    blink::WebLocalFrame* frame,
-    const blink::WebURL& url,
-    blink::WebMediaPlayerClient* client,
-    blink::WebContentDecryptionModule* initial_cdm) {
-  return global_state_->media_factory()->CreateMediaPlayer(
-      frame, url, client, initial_cdm, html_document_app_->shell());
-}
-
-blink::WebFrame* HTMLDocument::createChildFrame(
-    blink::WebLocalFrame* parent,
-    blink::WebTreeScopeType scope,
-    const blink::WebString& frameName,
-    blink::WebSandboxFlags sandboxFlags) {
-  blink::WebLocalFrame* child_frame = blink::WebLocalFrame::create(scope, this);
-  parent->appendChild(child_frame);
-  return child_frame;
-}
-
-void HTMLDocument::frameDetached(blink::WebFrame* frame, DetachType type) {
-  DCHECK(type == DetachType::Remove);
-  if (frame->parent())
-    frame->parent()->removeChild(frame);
-
-  if (devtools_agent_ && frame == devtools_agent_->frame())
-    devtools_agent_.reset();
-
-  // |frame| is invalid after here.
-  frame->close();
-}
-
-blink::WebCookieJar* HTMLDocument::cookieJar(blink::WebLocalFrame* frame) {
-  // TODO(darin): Blink does not fallback to the Platform provided WebCookieJar.
-  // Either it should, as it once did, or we should find another solution here.
-  return blink::Platform::current()->cookieJar();
-}
-
-blink::WebNavigationPolicy HTMLDocument::decidePolicyForNavigation(
-    const NavigationPolicyInfo& info) {
-  // TODO(yzshen): Remove this check once the browser is able to navigate an
-  // existing html_viewer instance and about:blank page support is ready.
-  if (devtools_agent_ && devtools_agent_->frame() == info.frame &&
-      devtools_agent_->handling_page_navigate_request()) {
-    return info.defaultPolicy;
+void HTMLDocument::Create(
+    mojo::ApplicationConnection* connection,
+    mojo::InterfaceRequest<devtools_service::DevToolsAgent> request) {
+  if (frame_) {
+    if (frame_->devtools_agent())
+      frame_->devtools_agent()->BindToRequest(std::move(request));
+  } else {
+    devtools_agent_request_ = std::move(request);
   }
-
-  std::string frame_name = info.frame ? info.frame->assignedName().utf8() : "";
-
-  if (CanNavigateLocally(info.frame, info.urlRequest))
-    return info.defaultPolicy;
-
-  if (navigator_host_.get()) {
-    mojo::URLRequestPtr url_request = mojo::URLRequest::From(info.urlRequest);
-    navigator_host_->RequestNavigate(
-        WebNavigationPolicyToNavigationTarget(info.defaultPolicy),
-        url_request.Pass());
-  }
-
-  return blink::WebNavigationPolicyIgnore;
 }
 
-blink::WebGeolocationClient* HTMLDocument::geolocationClient() {
-  if (!geolocation_client_impl_)
-    geolocation_client_impl_.reset(new GeolocationClientImpl);
-  return geolocation_client_impl_.get();
-}
-
-void HTMLDocument::didAddMessageToConsole(
-    const blink::WebConsoleMessage& message,
-    const blink::WebString& source_name,
-    unsigned source_line,
-    const blink::WebString& stack_trace) {
-  VLOG(1) << "[" << source_name.utf8() << "(" << source_line << ")] "
-          << message.text.utf8();
-}
-
-void HTMLDocument::didFinishLoad(blink::WebLocalFrame* frame) {
-  // TODO(msw): Notify AxProvider clients of updates on child frame loads.
-  did_finish_load_ = true;
-  // Bind any pending AxProviderImpl interface requests.
-  for (auto it : ax_provider_requests_)
-    ax_providers_.insert(new AxProviderImpl(web_view_, it->Pass()));
-  STLDeleteElements(&ax_provider_requests_);
-}
-
-void HTMLDocument::didNavigateWithinPage(
-    blink::WebLocalFrame* frame,
-    const blink::WebHistoryItem& history_item,
-    blink::WebHistoryCommitType commit_type) {
-  if (navigator_host_.get())
-    navigator_host_->DidNavigateLocally(history_item.urlString().utf8());
-}
-
-blink::WebEncryptedMediaClient* HTMLDocument::encryptedMediaClient() {
-  return global_state_->media_factory()->GetEncryptedMediaClient();
-}
-
-void HTMLDocument::OnViewBoundsChanged(View* view,
-                                       const Rect& old_bounds,
-                                       const Rect& new_bounds) {
-  DCHECK_EQ(view, root_);
-  UpdateWebviewSizeFromViewSize();
-}
-
-void HTMLDocument::OnViewViewportMetricsChanged(
-    mojo::View* view,
-    const mojo::ViewportMetrics& old_metrics,
-    const mojo::ViewportMetrics& new_metrics) {
-  InitGlobalStateAndLoadIfNecessary();
-}
-
-void HTMLDocument::OnViewDestroyed(View* view) {
-  DCHECK_EQ(view, root_);
-  root_ = nullptr;
-}
-
-void HTMLDocument::OnViewInputEvent(View* view, const mojo::EventPtr& event) {
-  if (event->pointer_data) {
-    // Blink expects coordintes to be in DIPs.
-    event->pointer_data->x /= global_state_->device_pixel_ratio();
-    event->pointer_data->y /= global_state_->device_pixel_ratio();
-    event->pointer_data->screen_x /= global_state_->device_pixel_ratio();
-    event->pointer_data->screen_y /= global_state_->device_pixel_ratio();
-  }
-
-  if ((event->action == mojo::EVENT_TYPE_POINTER_DOWN ||
-       event->action == mojo::EVENT_TYPE_POINTER_UP ||
-       event->action == mojo::EVENT_TYPE_POINTER_CANCEL ||
-       event->action == mojo::EVENT_TYPE_POINTER_MOVE) &&
-      event->pointer_data->kind == mojo::POINTER_KIND_TOUCH) {
-    touch_handler_->OnTouchEvent(*event);
-    return;
-  }
-  scoped_ptr<blink::WebInputEvent> web_event =
-      event.To<scoped_ptr<blink::WebInputEvent>>();
-  if (web_event)
-    web_view_->handleInputEvent(*web_event);
-}
-
-void HTMLDocument::OnViewFocusChanged(mojo::View* gained_focus,
-                                      mojo::View* lost_focus) {
-  UpdateFocus();
-}
-
-void HTMLDocument::UpdateFocus() {
-  if (!web_view_)
-    return;
-  bool is_focused = root_ && root_->HasFocus();
-  web_view_->setFocus(is_focused);
-  web_view_->setIsActive(is_focused);
+void HTMLDocument::Create(
+    mojo::ApplicationConnection* connection,
+    mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request) {
+  DCHECK(!transferable_state_.window_tree_delegate_impl);
+  transferable_state_.window_tree_delegate_impl.reset(
+      new WindowTreeDelegateImpl(this));
+  transferable_state_.owns_window_tree_connection = true;
+  mus::WindowTreeConnection::Create(
+      transferable_state_.window_tree_delegate_impl.get(), std::move(request),
+      mus::WindowTreeConnection::CreateType::DONT_WAIT_FOR_EMBED);
 }
 
 }  // namespace html_viewer

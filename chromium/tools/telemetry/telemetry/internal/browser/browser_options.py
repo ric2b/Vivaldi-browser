@@ -10,18 +10,19 @@ import shlex
 import socket
 import sys
 
-from telemetry.core import device_finder
 from telemetry.core import platform
-from telemetry.core.platform.profiler import profiler_finder
 from telemetry.core import util
 from telemetry.internal.browser import browser_finder
 from telemetry.internal.browser import browser_finder_exceptions
 from telemetry.internal.browser import profile_types
+from telemetry.internal.platform import device_finder
+from telemetry.internal.platform.profiler import profiler_finder
+from telemetry.internal.util import path as path_module
 from telemetry.util import wpr_modes
 
-util.AddDirToPythonPath(
-    util.GetChromiumSrcDir(), 'third_party', 'webpagereplay')
-import net_configs  # pylint: disable=F0401
+from catapult_base import cloud_storage
+
+import net_configs
 
 
 class BrowserFinderOptions(optparse.Values):
@@ -32,7 +33,7 @@ class BrowserFinderOptions(optparse.Values):
 
     self.browser_type = browser_type
     self.browser_executable = None
-    self.chrome_root = None
+    self.chrome_root = path_module.GetChromiumSrcDir()
     self.device = None
     self.cros_ssh_identity = None
 
@@ -49,6 +50,7 @@ class BrowserFinderOptions(optparse.Values):
     self.browser_options = BrowserOptions()
     self.output_file = None
 
+    self.android_blacklist_file = None
     self.android_rndis = False
     self.no_performance_mode = False
 
@@ -98,8 +100,7 @@ class BrowserFinderOptions(optparse.Values):
         help='The SSH port of the remote ChromeOS device (requires --remote).')
     identity = None
     testing_rsa = os.path.join(
-        util.GetChromiumSrcDir(),
-        'third_party', 'chromite', 'ssh_keys', 'testing_rsa')
+        util.GetTelemetryThirdPartyDir(), 'chromite', 'ssh_keys', 'testing_rsa')
     if os.path.exists(testing_rsa):
       identity = testing_rsa
     group.add_option('--identity',
@@ -114,8 +115,9 @@ class BrowserFinderOptions(optparse.Values):
     group.add_option(
         '--profiler', default=None, type='choice',
         choices=profiler_choices,
-        help='Record profiling data using this tool. Supported values: ' +
-             ', '.join(profiler_choices))
+        help='Record profiling data using this tool. Supported values: %s. '
+             '(Notice: this flag cannot be used for Timeline Based Measurement '
+             'benchmarks.)' % ', '.join(profiler_choices))
     group.add_option(
         '-v', '--verbose', action='count', dest='verbosity',
         help='Increase verbosity level (repeat as needed)')
@@ -136,6 +138,8 @@ class BrowserFinderOptions(optparse.Values):
     group.add_option('--no-android-rndis', dest='android_rndis',
         action='store_false', help='Do not use RNDIS forwarding on Android.'
         ' [default]')
+    group.add_option('--android-blacklist-file',
+                     help='Device blacklist JSON file.')
     parser.add_option_group(group)
 
     # Browser options.
@@ -156,8 +160,6 @@ class BrowserFinderOptions(optparse.Values):
         logging.getLogger().setLevel(logging.INFO)
       else:
         logging.getLogger().setLevel(logging.WARNING)
-      logging.basicConfig(
-          format='%(levelname)s:%(name)s:%(asctime)s:%(message)s')
 
       if self.device == 'list':
         devices = device_finder.GetDevicesMatchingOptions(self)
@@ -239,14 +241,21 @@ class BrowserOptions(object):
     # Disable default apps.
     self.disable_default_apps = True
 
-    # Whether to use the new code path for choosing an ephemeral port for
-    # DevTools. The bots set this to true. When Chrome 37 reaches stable,
-    # remove this setting and the old code path. http://crbug.com/379980
-    self.use_devtools_active_port = False
+    self.enable_logging = False
+    # The cloud storage bucket & path for uploading logs data produced by the
+    # browser to.
+    # If logs_cloud_remote_path is None, a random remote path is generated every
+    # time the logs data is uploaded.
+    self.logs_cloud_bucket = cloud_storage.TELEMETRY_OUTPUT
+    self.logs_cloud_remote_path = None
 
     # TODO(danduong): Find a way to store target_os here instead of
     # finder_options.
     self._finder_options = None
+
+    # Whether to take screen shot for failed page & put them in telemetry's
+    # profiling results.
+    self.take_screenshot_for_failed_page = False
 
   def __repr__(self):
     # This works around the infinite loop caused by the introduction of a
@@ -295,11 +304,12 @@ class BrowserOptions(object):
     group.add_option('--show-stdout',
         action='store_true',
         help='When possible, will display the stdout of the process')
-    # This hidden option is to be removed, and the older code path deleted,
-    # once Chrome 37 reaches Stable. http://crbug.com/379980
-    group.add_option('--use-devtools-active-port',
+    group.add_option('--enable-browser-logging',
+        dest='enable_logging',
         action='store_true',
-        help=optparse.SUPPRESS_HELP)
+        help=('Enable browser logging. The log file is saved in temp directory.'
+              "Note that enabling this flag affects the browser's "
+              'performance'))
     parser.add_option_group(group)
 
     group = optparse.OptionGroup(parser, 'Compatibility options')
@@ -307,18 +317,16 @@ class BrowserOptions(object):
         help='Ignored argument for compatibility with runtest.py harness')
     parser.add_option_group(group)
 
-
-
   def UpdateFromParseResults(self, finder_options):
     """Copies our options from finder_options"""
     browser_options_list = [
         'extra_browser_args_as_string',
         'extra_wpr_args_as_string',
+        'enable_logging',
         'netsim',
         'profile_dir',
         'profile_type',
         'show_stdout',
-        'use_devtools_active_port',
         ]
     for o in browser_options_list:
       a = getattr(finder_options, o, None)
@@ -329,14 +337,14 @@ class BrowserOptions(object):
     self.browser_type = finder_options.browser_type
     self._finder_options = finder_options
 
-    if hasattr(self, 'extra_browser_args_as_string'): # pylint: disable=E1101
+    if hasattr(self, 'extra_browser_args_as_string'):
       tmp = shlex.split(
-        self.extra_browser_args_as_string) # pylint: disable=E1101
+        self.extra_browser_args_as_string)
       self.AppendExtraBrowserArgs(tmp)
       delattr(self, 'extra_browser_args_as_string')
-    if hasattr(self, 'extra_wpr_args_as_string'): # pylint: disable=E1101
+    if hasattr(self, 'extra_wpr_args_as_string'):
       tmp = shlex.split(
-        self.extra_wpr_args_as_string) # pylint: disable=E1101
+        self.extra_wpr_args_as_string)
       self.extra_wpr_args.extend(tmp)
       delattr(self, 'extra_wpr_args_as_string')
     if self.profile_type == 'default':
@@ -420,6 +428,7 @@ class CrosBrowserOptions(ChromeBrowserOptions):
     self.gaia_login = False
     self.username = 'test@test.test'
     self.password = ''
+    self.gaia_id = '12345'
 
   def IsCrosBrowserOptions(self):
     return True

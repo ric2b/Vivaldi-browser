@@ -4,6 +4,8 @@
 
 #include "content/renderer/pepper/pepper_url_loader_host.h"
 
+#include <stddef.h>
+
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/renderer_ppapi_host_impl.h"
 #include "content/renderer/pepper/url_request_info_util.h"
@@ -118,7 +120,7 @@ int32_t PepperURLLoaderHost::OnResourceMessageReceived(
   return PP_ERROR_FAILED;
 }
 
-void PepperURLLoaderHost::willSendRequest(
+void PepperURLLoaderHost::willFollowRedirect(
     WebURLLoader* loader,
     WebURLRequest& new_request,
     const WebURLResponse& redirect_response) {

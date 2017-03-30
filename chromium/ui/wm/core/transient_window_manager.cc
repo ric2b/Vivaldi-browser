@@ -11,6 +11,7 @@
 #include "base/stl_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_property.h"
+#include "ui/aura/window_tracker.h"
 #include "ui/wm/core/transient_window_observer.h"
 #include "ui/wm/core/transient_window_stacking_client.h"
 #include "ui/wm/core/window_util.h"
@@ -162,8 +163,11 @@ void TransientWindowManager::OnWindowVisibilityChanged(Window* window,
 
   // If the window has transient children, updates the transient children's
   // visiblity as well.
-  for (Window* child : transient_children_)
-    Get(child)->UpdateTransientChildVisibility(visible);
+  // WindowTracker is used because child window
+  // could be deleted inside UpdateTransientChildVisibility call.
+  aura::WindowTracker tracker(transient_children_);
+  while (tracker.has_windows())
+    Get(tracker.Pop())->UpdateTransientChildVisibility(visible);
 
   // Remember the show request in |show_on_parent_visible_| and hide it again
   // if the following conditions are met

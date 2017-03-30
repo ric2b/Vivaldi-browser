@@ -6,9 +6,10 @@
 #define CHROME_BROWSER_UI_COCOA_OMNIBOX_OMNIBOX_POPUP_VIEW_MAC_H_
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
 
-#include "base/basictypes.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_popup_matrix.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -33,6 +34,7 @@ class OmniboxPopupViewMac : public OmniboxPopupView,
   // Overridden from OmniboxPopupView:
   bool IsOpen() const override;
   void InvalidateLine(size_t line) override {}
+  void OnLineSelected(size_t line) override {}
   void UpdatePopupAppearance() override;
   gfx::Rect GetTargetBounds() override;
   // This is only called by model in SetSelectedLine() after updating

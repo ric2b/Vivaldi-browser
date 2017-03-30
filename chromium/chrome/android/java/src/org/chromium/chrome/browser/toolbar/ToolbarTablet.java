@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.toolbar;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -18,10 +17,10 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.NavigationPopup;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.widget.TintedImageButton;
 
 /**
@@ -41,9 +40,10 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
     private OnClickListener mBookmarkListener;
     private OnClickListener mTabSwitcherListener;
 
-    private boolean mInTabSwitcherwMode = false;
+    private boolean mIsInTabSwitcherMode = false;
 
     private boolean mShowTabStack;
+
 
     private NavigationPopup mNavigationPopup;
 
@@ -86,12 +86,12 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
         mBookmarkButton = (TintedImageButton) findViewById(R.id.bookmark_button);
 
         mMenuButton = (TintedImageButton) findViewById(R.id.menu_button);
-        mMenuButton.setVisibility(
+        mMenuButtonWrapper.setVisibility(
                 shouldShowMenuButton() ? View.VISIBLE : View.GONE);
 
         if (mAccessibilitySwitcherButton.getVisibility() == View.GONE
-                && mMenuButton.getVisibility() == View.GONE) {
-            ApiCompatibilityUtils.setPaddingRelative((View) mMenuButton.getParent(), 0, 0,
+                && mMenuButtonWrapper.getVisibility() == View.GONE) {
+            ApiCompatibilityUtils.setPaddingRelative((View) mMenuButtonWrapper.getParent(), 0, 0,
                     getResources().getDimensionPixelSize(R.dimen.tablet_toolbar_end_padding), 0);
         }
     }
@@ -188,6 +188,7 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
 
         mAccessibilitySwitcherButton.setOnClickListener(this);
         mBookmarkButton.setOnClickListener(this);
+
         mMenuButton.setOnKeyListener(new KeyboardNavigationListener() {
             @Override
             public View getNextFocusForward() {
@@ -236,8 +237,8 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
     private void displayNavigationPopup(boolean isForward, View anchorView) {
         Tab tab = getToolbarDataProvider().getTab();
         if (tab == null || tab.getWebContents() == null) return;
-        mNavigationPopup = new NavigationPopup(
-                getContext(), tab.getWebContents().getNavigationController(), isForward);
+        mNavigationPopup = new NavigationPopup(tab.getProfile(), getContext(),
+                tab.getWebContents().getNavigationController(), isForward);
 
         mNavigationPopup.setAnchorView(anchorView);
 
@@ -268,6 +269,7 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
             }
         } else if (mAccessibilitySwitcherButton == v) {
             if (mTabSwitcherListener != null) {
+                cancelAppMenuUpdateBadgeAnimation();
                 mTabSwitcherListener.onClick(mAccessibilitySwitcherButton);
             }
         }
@@ -291,12 +293,10 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
             setBackgroundResource(incognito
                     ? R.color.incognito_primary_color : R.color.default_primary_color);
 
-            ColorStateList dark = getResources().getColorStateList(R.color.dark_mode_tint);
-            ColorStateList white = getResources().getColorStateList(R.color.light_mode_tint);
-            mMenuButton.setTint(incognito ? white : dark);
-            mHomeButton.setTint(incognito ? white : dark);
-            mBackButton.setTint(incognito ? white : dark);
-            mForwardButton.setTint(incognito ? white : dark);
+            mMenuButton.setTint(incognito ? mLightModeTint : mDarkModeTint);
+            mHomeButton.setTint(incognito ? mLightModeTint : mDarkModeTint);
+            mBackButton.setTint(incognito ? mLightModeTint : mDarkModeTint);
+            mForwardButton.setTint(incognito ? mLightModeTint : mDarkModeTint);
             if (incognito) {
                 mLocationBar.getContainerView().getBackground().setAlpha(
                         ToolbarPhone.LOCATION_BAR_TRANSPARENT_BACKGROUND_ALPHA);
@@ -306,6 +306,9 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
             mAccessibilitySwitcherButton.setImageDrawable(
                     incognito ? mTabSwitcherButtonDrawableLight : mTabSwitcherButtonDrawable);
             mLocationBar.updateVisualsForState();
+            if (mShowMenuBadge) {
+                setAppMenuUpdateBadgeDrawable(incognito);
+            }
             mUseLightColorAssets = incognito;
         }
         mLocationBar.setUrlBarFocus(false);
@@ -313,14 +316,14 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
 
     @Override
     protected void updateBackButtonVisibility(boolean canGoBack) {
-        boolean enableButton = canGoBack && !mInTabSwitcherwMode;
+        boolean enableButton = canGoBack && !mIsInTabSwitcherMode;
         mBackButton.setEnabled(enableButton);
         mBackButton.setFocusable(enableButton);
     }
 
     @Override
     protected void updateForwardButtonVisibility(boolean canGoForward) {
-        boolean enableButton = canGoForward && !mInTabSwitcherwMode;
+        boolean enableButton = canGoForward && !mIsInTabSwitcherMode;
         mForwardButton.setEnabled(enableButton);
         mForwardButton.setFocusable(enableButton);
     }
@@ -336,38 +339,44 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
             mReloadButton.setContentDescription(getContext().getString(
                     R.string.accessibility_btn_refresh));
         }
-        ColorStateList dark = getResources().getColorStateList(R.color.dark_mode_tint);
-        ColorStateList white = getResources().getColorStateList(R.color.light_mode_tint);
-        mReloadButton.setTint(isIncognito() ? white : dark);
-        mReloadButton.setEnabled(!mInTabSwitcherwMode);
+        mReloadButton.setTint(isIncognito() ? mLightModeTint : mDarkModeTint);
+        mReloadButton.setEnabled(!mIsInTabSwitcherMode);
     }
 
     @Override
-    protected void updateBookmarkButtonVisibility(boolean isBookmarked) {
-        int tintColor = isIncognito() ? R.color.light_mode_tint : R.color.dark_mode_tint;
+    protected void updateBookmarkButton(boolean isBookmarked, boolean editingAllowed) {
         if (isBookmarked) {
             mBookmarkButton.setImageResource(R.drawable.btn_star_filled);
             // Non-incognito mode shows a blue filled star.
-            if (!isIncognito()) tintColor = R.color.blue_mode_tint;
+            mBookmarkButton.setTint(isIncognito()
+                    ? mLightModeTint
+                    : ApiCompatibilityUtils.getColorStateList(
+                            getResources(), R.color.blue_mode_tint));
         } else {
             mBookmarkButton.setImageResource(R.drawable.btn_star);
+            mBookmarkButton.setTint(isIncognito() ? mLightModeTint : mDarkModeTint);
         }
-        ColorStateList tint = getResources().getColorStateList(tintColor);
-        mBookmarkButton.setTint(tint);
+        mBookmarkButton.setEnabled(editingAllowed);
     }
 
     @Override
     protected void setTabSwitcherMode(
             boolean inTabSwitcherMode, boolean showToolbar, boolean delayAnimation) {
         if (mShowTabStack && inTabSwitcherMode) {
-            mInTabSwitcherwMode = true;
+            mIsInTabSwitcherMode = true;
             mBackButton.setEnabled(false);
             mForwardButton.setEnabled(false);
             mReloadButton.setEnabled(false);
             mLocationBar.getContainerView().setVisibility(View.INVISIBLE);
+            if (mShowMenuBadge) {
+                mMenuBadge.setVisibility(View.GONE);
+            }
         } else {
-            mInTabSwitcherwMode = false;
+            mIsInTabSwitcherMode = false;
             mLocationBar.getContainerView().setVisibility(View.VISIBLE);
+            if (mShowMenuBadge) {
+                setAppMenuUpdateBadgeToVisible(false);
+            }
         }
     }
 
@@ -407,4 +416,14 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
         return mLocationBar;
     }
 
+    @Override
+    public void showAppMenuUpdateBadge() {
+        super.showAppMenuUpdateBadge();
+        if (!mIsInTabSwitcherMode) {
+            if (mUseLightColorAssets) {
+                setAppMenuUpdateBadgeDrawable(mUseLightColorAssets);
+            }
+            setAppMenuUpdateBadgeToVisible(true);
+        }
+    }
 }

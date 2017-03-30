@@ -26,6 +26,7 @@ const char kSilverlightPluginMimeTypePrefix[] = "application/x-silverlight";
 const size_t kMaxRendererProcessCount = 82;
 const int kMaxSessionHistoryEntries = 50;
 const size_t kMaxTitleChars = 4 * 1024;
+const size_t kMaxURLChars = 2 * 1024 * 1024;
 const size_t kMaxURLDisplayChars = 32 * 1024;
 
 #if defined(GOOGLE_CHROME_BUILD)
@@ -38,8 +39,5 @@ const int kStatsMaxThreads = 32;
 const int kStatsMaxCounters = 3000;
 
 const int kHistogramSynchronizerReservedSequenceNumber = 0;
-
-const char kFlashHwVideoDecodeFieldTrialName[] = "FlashHardwareVideoDecode";
-const char kFlashHwVideoDecodeFieldTrialEnabledName[] = "HwVideo";
 
 }  // namespace content

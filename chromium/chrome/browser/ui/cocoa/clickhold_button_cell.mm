@@ -17,16 +17,20 @@ static const CGFloat kDragDistThreshold = 2.5;
 
 @interface ClickHoldButtonCell (Private)
 - (void)resetToDefaults;
+- (BOOL)shouldExposeAccessibilityShowMenu;
 @end  // @interface ClickHoldButtonCell (Private)
 
 @implementation ClickHoldButtonCell
 
 @synthesize enableClickHold = enableClickHold_;
+@synthesize enableRightClick = enableRightClick_;
 @synthesize clickHoldTimeout = clickHoldTimeout_;
 @synthesize trackOnlyInRect = trackOnlyInRect_;
 @synthesize activateOnDrag = activateOnDrag_;
 @synthesize clickHoldTarget = clickHoldTarget_;
 @synthesize clickHoldAction = clickHoldAction_;
+@synthesize accessibilityShowMenuTarget = accessibilityShowMenuTarget_;
+@synthesize accessibilityShowMenuAction = accessibilityShowMenuAction_;
 
 // Overrides:
 
@@ -56,6 +60,19 @@ static const CGFloat kDragDistThreshold = 2.5;
   if ((self = [super initTextCell:string]))
     [self resetToDefaults];
   return self;
+}
+
+- (void)accessibilityPerformAction:(NSString*)action {
+  if ([action isEqualToString:NSAccessibilityShowMenuAction] &&
+      [self shouldExposeAccessibilityShowMenu]) {
+    NSControl* controlView = static_cast<NSControl*>([self controlView]);
+    if (controlView)
+      [controlView sendAction:accessibilityShowMenuAction_
+                           to:accessibilityShowMenuTarget_];
+    return;
+  }
+
+  [super accessibilityPerformAction:action];
 }
 
 - (BOOL)startTrackingAt:(NSPoint)startPoint
@@ -170,6 +187,18 @@ static const CGFloat kDragDistThreshold = 2.5;
   return NO;
 }
 
+// Accessors and mutators:
+
+- (NSArray*)accessibilityActionNames {
+  NSArray* actionNames = [super accessibilityActionNames];
+  if ([self shouldExposeAccessibilityShowMenu] &&
+      ![actionNames containsObject:NSAccessibilityShowMenuAction]) {
+    return [actionNames arrayByAddingObject:NSAccessibilityShowMenuAction];
+  }
+
+  return actionNames;
+}
+
 @end  // @implementation ClickHoldButtonCell
 
 @implementation ClickHoldButtonCell (Private)
@@ -183,6 +212,12 @@ static const CGFloat kDragDistThreshold = 2.5;
   [self setClickHoldTimeout:0.25];
   [self setTrackOnlyInRect:NO];
   [self setActivateOnDrag:YES];
+}
+
+- (BOOL)shouldExposeAccessibilityShowMenu {
+  return (enableRightClick_ ||
+      (enableClickHold_ && clickHoldTimeout_ > kMinTimeout)) &&
+      accessibilityShowMenuAction_ && accessibilityShowMenuTarget_;
 }
 
 @end  // @implementation ClickHoldButtonCell (Private)

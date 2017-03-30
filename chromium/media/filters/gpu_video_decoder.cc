@@ -5,6 +5,7 @@
 #include "media/filters/gpu_video_decoder.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -14,6 +15,7 @@
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
@@ -22,6 +24,10 @@
 #include "media/base/video_decoder_config.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "media/base/pipeline_stats.h"
+#endif
 
 namespace media {
 
@@ -38,8 +44,7 @@ static const size_t kSharedMemorySegmentBytes = 100 << 10;
 
 GpuVideoDecoder::SHMBuffer::SHMBuffer(scoped_ptr<base::SharedMemory> m,
                                       size_t s)
-    : shm(m.Pass()), size(s) {
-}
+    : shm(std::move(m)), size(s) {}
 
 GpuVideoDecoder::SHMBuffer::~SHMBuffer() {}
 
@@ -52,16 +57,18 @@ GpuVideoDecoder::PendingDecoderBuffer::PendingDecoderBuffer(
 
 GpuVideoDecoder::PendingDecoderBuffer::~PendingDecoderBuffer() {}
 
-GpuVideoDecoder::BufferData::BufferData(
-    int32 bbid, base::TimeDelta ts, const gfx::Rect& vr, const gfx::Size& ns)
-    : bitstream_buffer_id(bbid), timestamp(ts), visible_rect(vr),
-      natural_size(ns) {
-}
+GpuVideoDecoder::BufferData::BufferData(int32_t bbid,
+                                        base::TimeDelta ts,
+                                        const gfx::Rect& vr,
+                                        const gfx::Size& ns)
+    : bitstream_buffer_id(bbid),
+      timestamp(ts),
+      visible_rect(vr),
+      natural_size(ns) {}
 
 GpuVideoDecoder::BufferData::~BufferData() {}
 
-GpuVideoDecoder::GpuVideoDecoder(
-    const scoped_refptr<GpuVideoAcceleratorFactories>& factories)
+GpuVideoDecoder::GpuVideoDecoder(GpuVideoAcceleratorFactories* factories)
     : needs_bitstream_conversion_(false),
       factories_(factories),
       state_(kNormal),
@@ -69,8 +76,9 @@ GpuVideoDecoder::GpuVideoDecoder(
       next_picture_buffer_id_(0),
       next_bitstream_buffer_id_(0),
       available_pictures_(0),
+      needs_all_picture_buffers_to_decode_(false),
       weak_factory_(this) {
-  DCHECK(factories_.get());
+  DCHECK(factories_);
 }
 
 void GpuVideoDecoder::Reset(const base::Closure& closure)  {
@@ -124,16 +132,28 @@ std::string GpuVideoDecoder::GetDisplayName() const {
 
 void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                  bool /* low_delay */,
+                                 const SetCdmReadyCB& set_cdm_ready_cb,
                                  const InitCB& init_cb,
                                  const OutputCB& output_cb) {
   DVLOG(3) << "Initialize()";
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   DCHECK(config.IsValidConfig());
-  DCHECK(!config.is_encrypted());
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_MACOSX)
+  pipeline_stats::AddDecoderClass(GetDisplayName());
+#endif
 
   InitCB bound_init_cb =
       base::Bind(&ReportGpuVideoDecoderInitializeStatusToUMAAndRunCB,
                  BindToCurrentLoop(init_cb));
+
+#if !defined(OS_ANDROID)
+  if (config.is_encrypted()) {
+    DVLOG(1) << "Encrypted stream not supported.";
+    bound_init_cb.Run(false);
+    return;
+  }
+#endif
 
   bool previously_initialized = config_.IsValidConfig();
   DVLOG(1) << "(Re)initializing GVD with config: "
@@ -147,16 +167,26 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
     return;
   }
 
-  if (!IsProfileSupported(config.profile(), config.coded_size())) {
+  VideoDecodeAccelerator::Capabilities capabilities =
+      factories_->GetVideoDecodeAcceleratorCapabilities();
+  if (!IsProfileSupported(capabilities, config.profile(),
+                          config.coded_size())) {
+    DVLOG(1) << "Profile " << config.profile() << " or coded size "
+             << config.coded_size().ToString() << " not supported.";
     bound_init_cb.Run(false);
     return;
   }
 
   config_ = config;
+  needs_all_picture_buffers_to_decode_ =
+      capabilities.flags &
+      VideoDecodeAccelerator::Capabilities::NEEDS_ALL_PICTURE_BUFFERS_TO_DECODE;
   needs_bitstream_conversion_ = (config.codec() == kCodecH264);
   output_cb_ = BindToCurrentLoop(output_cb);
 
   if (previously_initialized) {
+    DVLOG(3) << __FUNCTION__
+             << " Expecting initialized VDA to detect in-stream config change.";
     // Reinitialization with a different config (but same codec and profile).
     // VDA should handle it by detecting this in-stream by itself,
     // no need to notify it.
@@ -164,14 +194,61 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
     return;
   }
 
-  vda_ = factories_->CreateVideoDecodeAccelerator().Pass();
-  if (!vda_ || !vda_->Initialize(config.profile(), this)) {
+  vda_ = factories_->CreateVideoDecodeAccelerator();
+
+  VideoDecodeAccelerator::Config vda_config(config);
+
+  if (!vda_ || !vda_->Initialize(vda_config, this)) {
+    DVLOG(1) << "VDA initialization failed.";
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_MACOSX)
+    pipeline_stats::ReportVideoDecoderInitResult(false);
+#endif
     bound_init_cb.Run(false);
     return;
   }
 
+  if (config.is_encrypted()) {
+    init_cb_ = bound_init_cb;
+    set_cdm_ready_cb_ = set_cdm_ready_cb;
+    set_cdm_ready_cb_.Run(BindToCurrentLoop(
+        base::Bind(&GpuVideoDecoder::SetCdm, weak_factory_.GetWeakPtr())));
+    return;
+  }
+
   DVLOG(3) << "GpuVideoDecoder::Initialize() succeeded.";
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_MACOSX)
+  pipeline_stats::ReportVideoDecoderInitResult(true);
+#endif
   bound_init_cb.Run(true);
+}
+
+void GpuVideoDecoder::SetCdm(CdmContext* cdm_context,
+                             const CdmAttachedCB& cdm_attached_cb) {
+  DVLOG(2) << __FUNCTION__;
+  DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
+
+  DCHECK(!init_cb_.is_null());
+  DCHECK(!set_cdm_ready_cb_.is_null());
+  set_cdm_ready_cb_.Reset();
+
+  if (!cdm_context || cdm_context->GetCdmId() == CdmContext::kInvalidCdmId) {
+    DVLOG(1) << "CDM ID not available.";
+    cdm_attached_cb.Run(false);
+    base::ResetAndReturn(&init_cb_).Run(false);
+    return;
+  }
+
+  cdm_attached_cb_ = cdm_attached_cb;
+  vda_->SetCdm(cdm_context->GetCdmId());
+}
+
+void GpuVideoDecoder::NotifyCdmAttached(bool success) {
+  DVLOG_IF(2, !success) << __FUNCTION__ << ": CDM not attached.";
+  DCHECK(!init_cb_.is_null());
+  DCHECK(!cdm_attached_cb_.is_null());
+
+  base::ResetAndReturn(&cdm_attached_cb_).Run(success);
+  base::ResetAndReturn(&init_cb_).Run(success);
 }
 
 void GpuVideoDecoder::DestroyPictureBuffers(PictureBufferMap* buffers) {
@@ -205,6 +282,8 @@ void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   DCHECK(pending_reset_cb_.is_null());
 
+  DVLOG(3) << __FUNCTION__ << " " << buffer->AsHumanReadableString();
+
   DecodeCB bound_decode_cb = BindToCurrentLoop(decode_cb);
 
   if (state_ == kError || !vda_) {
@@ -227,6 +306,7 @@ void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   DCHECK_EQ(state_, kNormal);
 
   if (buffer->end_of_stream()) {
+    DVLOG(3) << __FUNCTION__ << " Initiating Flush for EOS.";
     state_ = kDrainingDecoder;
     eos_decode_cb_ = bound_decode_cb;
     vda_->Flush();
@@ -241,8 +321,15 @@ void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   }
 
   memcpy(shm_buffer->shm->memory(), buffer->data(), size);
-  BitstreamBuffer bitstream_buffer(
-      next_bitstream_buffer_id_, shm_buffer->shm->handle(), size);
+  // AndroidVideoDecodeAccelerator needs the timestamp to output frames in
+  // presentation order.
+  BitstreamBuffer bitstream_buffer(next_bitstream_buffer_id_,
+                                   shm_buffer->shm->handle(), size,
+                                   buffer->timestamp());
+
+  if (buffer->decrypt_config())
+    bitstream_buffer.SetDecryptConfig(*buffer->decrypt_config());
+
   // Mask against 30 bits, to avoid (undefined) wraparound on signed integer.
   next_bitstream_buffer_id_ = (next_bitstream_buffer_id_ + 1) & 0x3FFFFFFF;
   DCHECK(!ContainsKey(bitstream_buffers_in_decoder_, bitstream_buffer.id()));
@@ -272,7 +359,8 @@ void GpuVideoDecoder::RecordBufferData(const BitstreamBuffer& bitstream_buffer,
     input_buffer_data_.pop_back();
 }
 
-void GpuVideoDecoder::GetBufferData(int32 id, base::TimeDelta* timestamp,
+void GpuVideoDecoder::GetBufferData(int32_t id,
+                                    base::TimeDelta* timestamp,
                                     gfx::Rect* visible_rect,
                                     gfx::Size* natural_size) {
   for (std::list<BufferData>::const_iterator it =
@@ -295,23 +383,25 @@ bool GpuVideoDecoder::NeedsBitstreamConversion() const {
 
 bool GpuVideoDecoder::CanReadWithoutStalling() const {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
-  return
-      next_picture_buffer_id_ == 0 ||  // Decode() will ProvidePictureBuffers().
-      available_pictures_ > 0;
+  return next_picture_buffer_id_ ==
+             0 ||  // Decode() will ProvidePictureBuffers().
+         (!needs_all_picture_buffers_to_decode_ && available_pictures_ > 0) ||
+         available_pictures_ ==
+             static_cast<int>(assigned_picture_buffers_.size());
 }
 
 int GpuVideoDecoder::GetMaxDecodeRequests() const {
   return kMaxInFlightDecodes;
 }
 
-void GpuVideoDecoder::ProvidePictureBuffers(uint32 count,
+void GpuVideoDecoder::ProvidePictureBuffers(uint32_t count,
                                             const gfx::Size& size,
-                                            uint32 texture_target) {
+                                            uint32_t texture_target) {
   DVLOG(3) << "ProvidePictureBuffers(" << count << ", "
            << size.width() << "x" << size.height() << ")";
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
-  std::vector<uint32> texture_ids;
+  std::vector<uint32_t> texture_ids;
   std::vector<gpu::Mailbox> texture_mailboxes;
   decoder_texture_target_ = texture_target;
   if (!factories_->CreateTextures(count,
@@ -342,7 +432,7 @@ void GpuVideoDecoder::ProvidePictureBuffers(uint32 count,
   vda_->AssignPictureBuffers(picture_buffers);
 }
 
-void GpuVideoDecoder::DismissPictureBuffer(int32 id) {
+void GpuVideoDecoder::DismissPictureBuffer(int32_t id) {
   DVLOG(3) << "DismissPictureBuffer(" << id << ")";
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
@@ -372,42 +462,48 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
   PictureBufferMap::iterator it =
       assigned_picture_buffers_.find(picture.picture_buffer_id());
   if (it == assigned_picture_buffers_.end()) {
-    NOTREACHED() << "Missing picture buffer: " << picture.picture_buffer_id();
+    DLOG(ERROR) << "Missing picture buffer: " << picture.picture_buffer_id();
     NotifyError(VideoDecodeAccelerator::PLATFORM_FAILURE);
     return;
   }
   const PictureBuffer& pb = it->second;
 
-  // Validate picture rectangle from GPU. This is for sanity/security check
-  // even the rectangle is not used in this class.
-  if (picture.visible_rect().IsEmpty() ||
-      !gfx::Rect(pb.size()).Contains(picture.visible_rect())) {
-    NOTREACHED() << "Invalid picture size from VDA: "
-                 << picture.visible_rect().ToString() << " should fit in "
-                 << pb.size().ToString();
-    NotifyError(media::VideoDecodeAccelerator::PLATFORM_FAILURE);
-    return;
-  }
-
   // Update frame's timestamp.
   base::TimeDelta timestamp;
-  // Some of the VDAs don't support and thus don't provide us with visible
-  // size in picture.size, passing coded size instead, so always drop it and
-  // use config information instead.
+  // Some of the VDAs like DXVA, AVDA, and VTVDA don't support and thus don't
+  // provide us with visible size in picture.size, passing (0, 0) instead, so
+  // for those cases drop it and use config information instead.
   gfx::Rect visible_rect;
   gfx::Size natural_size;
   GetBufferData(picture.bitstream_buffer_id(), &timestamp, &visible_rect,
                 &natural_size);
+
+  if (!picture.visible_rect().IsEmpty()) {
+    visible_rect = picture.visible_rect();
+  }
+  if (!gfx::Rect(pb.size()).Contains(visible_rect)) {
+    LOG(WARNING) << "Visible size " << visible_rect.ToString()
+                 << " is larger than coded size " << pb.size().ToString();
+    visible_rect = gfx::Rect(pb.size());
+  }
+
   DCHECK(decoder_texture_target_);
 
+  bool opaque = IsOpaque(config_.format());
+
   scoped_refptr<VideoFrame> frame(VideoFrame::WrapNativeTexture(
-      VideoFrame::ARGB,
-      gpu::MailboxHolder(pb.texture_mailbox(), decoder_texture_target_,
-                         0 /* sync_point */),
+      opaque ? PIXEL_FORMAT_XRGB : PIXEL_FORMAT_ARGB,
+      gpu::MailboxHolder(pb.texture_mailbox(), gpu::SyncToken(),
+                         decoder_texture_target_),
       BindToCurrentLoop(base::Bind(
           &GpuVideoDecoder::ReleaseMailbox, weak_factory_.GetWeakPtr(),
           factories_, picture.picture_buffer_id(), pb.texture_id())),
       pb.size(), visible_rect, natural_size, timestamp));
+  if (!frame) {
+    DLOG(ERROR) << "Create frame failed for: " << picture.picture_buffer_id();
+    NotifyError(VideoDecodeAccelerator::PLATFORM_FAILURE);
+    return;
+  }
   if (picture.allow_overlay())
     frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY, true);
   CHECK_GT(available_pictures_, 0);
@@ -436,12 +532,12 @@ void GpuVideoDecoder::DeliverFrame(
 // static
 void GpuVideoDecoder::ReleaseMailbox(
     base::WeakPtr<GpuVideoDecoder> decoder,
-    const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories,
-    int64 picture_buffer_id,
-    uint32 texture_id,
-    uint32 release_sync_point) {
+    media::GpuVideoAcceleratorFactories* factories,
+    int64_t picture_buffer_id,
+    uint32_t texture_id,
+    const gpu::SyncToken& release_sync_token) {
   DCHECK(factories->GetTaskRunner()->BelongsToCurrentThread());
-  factories->WaitSyncPoint(release_sync_point);
+  factories->WaitSyncToken(release_sync_token);
 
   if (decoder) {
     decoder->ReusePictureBuffer(picture_buffer_id);
@@ -452,14 +548,14 @@ void GpuVideoDecoder::ReleaseMailbox(
   factories->DeleteTexture(texture_id);
 }
 
-void GpuVideoDecoder::ReusePictureBuffer(int64 picture_buffer_id) {
+void GpuVideoDecoder::ReusePictureBuffer(int64_t picture_buffer_id) {
   DVLOG(3) << "ReusePictureBuffer(" << picture_buffer_id << ")";
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
   DCHECK(!picture_buffers_at_display_.empty());
   PictureBufferTextureMap::iterator display_iterator =
       picture_buffers_at_display_.find(picture_buffer_id);
-  uint32 texture_id = display_iterator->second;
+  uint32_t texture_id = display_iterator->second;
   DCHECK(display_iterator != picture_buffers_at_display_.end());
   picture_buffers_at_display_.erase(display_iterator);
 
@@ -487,11 +583,11 @@ scoped_ptr<GpuVideoDecoder::SHMBuffer> GpuVideoDecoder::GetSHM(
     // CreateSharedMemory() can return NULL during Shutdown.
     if (!shm)
       return NULL;
-    return make_scoped_ptr(new SHMBuffer(shm.Pass(), size_to_allocate));
+    return make_scoped_ptr(new SHMBuffer(std::move(shm), size_to_allocate));
   }
   scoped_ptr<SHMBuffer> ret(available_shm_segments_.back());
   available_shm_segments_.pop_back();
-  return ret.Pass();
+  return ret;
 }
 
 void GpuVideoDecoder::PutSHM(scoped_ptr<SHMBuffer> shm_buffer) {
@@ -499,11 +595,11 @@ void GpuVideoDecoder::PutSHM(scoped_ptr<SHMBuffer> shm_buffer) {
   available_shm_segments_.push_back(shm_buffer.release());
 }
 
-void GpuVideoDecoder::NotifyEndOfBitstreamBuffer(int32 id) {
+void GpuVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t id) {
   DVLOG(3) << "NotifyEndOfBitstreamBuffer(" << id << ")";
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
-  std::map<int32, PendingDecoderBuffer>::iterator it =
+  std::map<int32_t, PendingDecoderBuffer>::iterator it =
       bitstream_buffers_in_decoder_.find(id);
   if (it == bitstream_buffers_in_decoder_.end()) {
     NotifyError(VideoDecodeAccelerator::PLATFORM_FAILURE);
@@ -524,12 +620,19 @@ GpuVideoDecoder::~GpuVideoDecoder() {
     DestroyVDA();
   DCHECK(assigned_picture_buffers_.empty());
 
+  if (!set_cdm_ready_cb_.is_null())
+    base::ResetAndReturn(&set_cdm_ready_cb_).Run(CdmReadyCB());
+  if (!cdm_attached_cb_.is_null())
+    base::ResetAndReturn(&cdm_attached_cb_).Run(false);
+  if (!init_cb_.is_null())
+    base::ResetAndReturn(&init_cb_).Run(false);
+
   for (size_t i = 0; i < available_shm_segments_.size(); ++i) {
     delete available_shm_segments_[i];
   }
   available_shm_segments_.clear();
 
-  for (std::map<int32, PendingDecoderBuffer>::iterator it =
+  for (std::map<int32_t, PendingDecoderBuffer>::iterator it =
            bitstream_buffers_in_decoder_.begin();
        it != bitstream_buffers_in_decoder_.end(); ++it) {
     delete it->second.shm_buffer;
@@ -573,12 +676,12 @@ void GpuVideoDecoder::NotifyError(media::VideoDecodeAccelerator::Error error) {
   DestroyVDA();
 }
 
-bool GpuVideoDecoder::IsProfileSupported(VideoCodecProfile profile,
-                                         const gfx::Size& coded_size) {
+bool GpuVideoDecoder::IsProfileSupported(
+    const VideoDecodeAccelerator::Capabilities& capabilities,
+    VideoCodecProfile profile,
+    const gfx::Size& coded_size) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
-  VideoDecodeAccelerator::SupportedProfiles supported_profiles =
-      factories_->GetVideoDecodeAcceleratorSupportedProfiles();
-  for (const auto& supported_profile : supported_profiles) {
+  for (const auto& supported_profile : capabilities.supported_profiles) {
     if (profile == supported_profile.profile) {
       return IsCodedSizeSupported(coded_size,
                                   supported_profile.min_resolution,

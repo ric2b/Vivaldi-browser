@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_SYNTHETIC_GESTURE_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_SYNTHETIC_GESTURE_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -40,6 +41,8 @@ class CONTENT_EXPORT SyntheticGesture {
     GESTURE_RESULT_MAX = GESTURE_SOURCE_TYPE_NOT_IMPLEMENTED
   };
 
+  enum PointerActionType { PRESS, MOVE, RELEASE };
+
   // Update the state of the gesture and forward the appropriate events to the
   // platform. This function is called repeatedly by the synthetic gesture
   // controller until it stops returning GESTURE_RUNNING.
@@ -47,8 +50,6 @@ class CONTENT_EXPORT SyntheticGesture {
       const base::TimeTicks& timestamp, SyntheticGestureTarget* target) = 0;
 
  protected:
-  static double ConvertTimestampToSeconds(const base::TimeTicks& timestamp);
-
   DISALLOW_COPY_AND_ASSIGN(SyntheticGesture);
 };
 

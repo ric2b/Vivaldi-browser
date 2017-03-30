@@ -4,6 +4,8 @@
 
 #include "components/content_settings/core/common/content_settings_pattern_parser.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_util.h"
 #include "url/url_constants.h"
 
@@ -130,7 +132,8 @@ void PatternParser::Parse(const std::string& pattern_spec,
                                            host_component.len);
     if (host == kHostWildcard) {
       builder->WithDomainWildcard();
-    } else if (base::StartsWithASCII(host, kDomainWildcard, true)) {
+    } else if (base::StartsWith(host, kDomainWildcard,
+                                base::CompareCase::SENSITIVE)) {
       host = host.substr(kDomainWildcardLength);
       builder->WithDomainWildcard();
       builder->WithHost(host);

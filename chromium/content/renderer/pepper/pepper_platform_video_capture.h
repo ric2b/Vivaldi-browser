@@ -7,9 +7,9 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -18,6 +18,10 @@
 #include "media/base/video_capture_types.h"
 
 class GURL;
+
+namespace media {
+class VideoFrame;
+}  // namespace media
 
 namespace content {
 class PepperMediaDeviceManager;
@@ -42,7 +46,7 @@ class PepperPlatformVideoCapture {
   void OnDeviceOpened(int request_id, bool succeeded, const std::string& label);
   void OnStateUpdate(VideoCaptureState state);
   void OnFrameReady(const scoped_refptr<media::VideoFrame>& frame,
-                    const base::TimeTicks& estimated_capture_time);
+                    base::TimeTicks estimated_capture_time);
 
   // Can return NULL if the RenderFrame referenced by |render_frame_id_| has
   // gone away.

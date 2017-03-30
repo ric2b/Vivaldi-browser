@@ -4,17 +4,21 @@
 
 #include "chrome/browser/net/proxy_service_factory.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/net/pref_proxy_config_tracker_impl.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_switches.h"
 #include "net/log/net_log.h"
 #include "net/proxy/dhcp_proxy_script_fetcher_factory.h"
 #include "net/proxy/proxy_config_service.h"
@@ -57,8 +61,8 @@ bool EnableOutOfProcessV8Pac(const base::CommandLine& command_line) {
 }  // namespace
 
 // static
-net::ProxyConfigService* ProxyServiceFactory::CreateProxyConfigService(
-    PrefProxyConfigTracker* tracker) {
+scoped_ptr<net::ProxyConfigService>
+ProxyServiceFactory::CreateProxyConfigService(PrefProxyConfigTracker* tracker) {
   // The linux gconf-based proxy settings getter relies on being initialized
   // from the UI thread.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -77,13 +81,12 @@ net::ProxyConfigService* ProxyServiceFactory::CreateProxyConfigService(
   // TODO(port): the IO and FILE message loops are only used by Linux.  Can
   // that code be moved to chrome/browser instead of being in net, so that it
   // can use BrowserThread instead of raw MessageLoop pointers? See bug 25354.
-  base_service.reset(net::ProxyService::CreateSystemProxyConfigService(
+  base_service = net::ProxyService::CreateSystemProxyConfigService(
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
 #endif  // !defined(OS_CHROMEOS)
 
-  return tracker->CreateTrackingProxyConfigService(base_service.Pass())
-      .release();
+  return tracker->CreateTrackingProxyConfigService(std::move(base_service));
 }
 
 // static
@@ -94,7 +97,9 @@ ProxyServiceFactory::CreatePrefProxyConfigTrackerOfProfile(
 #if defined(OS_CHROMEOS)
   return new chromeos::ProxyConfigServiceImpl(profile_prefs, local_state_prefs);
 #else
-  return new PrefProxyConfigTrackerImpl(profile_prefs);
+  return new PrefProxyConfigTrackerImpl(
+      profile_prefs,
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -105,16 +110,18 @@ ProxyServiceFactory::CreatePrefProxyConfigTrackerOfLocalState(
 #if defined(OS_CHROMEOS)
   return new chromeos::ProxyConfigServiceImpl(NULL, local_state_prefs);
 #else
-  return new PrefProxyConfigTrackerImpl(local_state_prefs);
+  return new PrefProxyConfigTrackerImpl(
+      local_state_prefs,
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
 #endif  // defined(OS_CHROMEOS)
 }
 
 // static
-net::ProxyService* ProxyServiceFactory::CreateProxyService(
+scoped_ptr<net::ProxyService> ProxyServiceFactory::CreateProxyService(
     net::NetLog* net_log,
     net::URLRequestContext* context,
     net::NetworkDelegate* network_delegate,
-    net::ProxyConfigService* proxy_config_service,
+    scoped_ptr<net::ProxyConfigService> proxy_config_service,
     const base::CommandLine& command_line,
     bool quick_check_enabled) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -147,15 +154,15 @@ net::ProxyService* ProxyServiceFactory::CreateProxyService(
     }
   }
 
-  net::ProxyService* proxy_service = NULL;
+  scoped_ptr<net::ProxyService> proxy_service;
   if (use_v8) {
 #if defined(OS_IOS)
     NOTREACHED();
 #else
-    net::DhcpProxyScriptFetcher* dhcp_proxy_script_fetcher;
+    scoped_ptr<net::DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher;
 #if defined(OS_CHROMEOS)
-    dhcp_proxy_script_fetcher =
-        new chromeos::DhcpProxyScriptFetcherChromeos(context);
+    dhcp_proxy_script_fetcher.reset(
+        new chromeos::DhcpProxyScriptFetcherChromeos(context));
 #else
     net::DhcpProxyScriptFetcherFactory dhcp_factory;
     dhcp_proxy_script_fetcher = dhcp_factory.Create(context);
@@ -166,30 +173,31 @@ net::ProxyService* ProxyServiceFactory::CreateProxyService(
     // should override other options.
     if (command_line.HasSwitch(switches::kV8PacMojoInProcess)) {
       proxy_service = net::CreateProxyServiceUsingMojoInProcess(
-          proxy_config_service, new net::ProxyScriptFetcherImpl(context),
-          dhcp_proxy_script_fetcher, context->host_resolver(), net_log,
-          network_delegate);
+          std::move(proxy_config_service),
+          new net::ProxyScriptFetcherImpl(context),
+          std::move(dhcp_proxy_script_fetcher), context->host_resolver(),
+          net_log, network_delegate);
     } else if (EnableOutOfProcessV8Pac(command_line)) {
       proxy_service = net::CreateProxyServiceUsingMojoFactory(
           UtilityProcessMojoProxyResolverFactory::GetInstance(),
-          proxy_config_service, new net::ProxyScriptFetcherImpl(context),
-          dhcp_proxy_script_fetcher, context->host_resolver(), net_log,
-          network_delegate);
+          std::move(proxy_config_service),
+          new net::ProxyScriptFetcherImpl(context),
+          std::move(dhcp_proxy_script_fetcher), context->host_resolver(),
+          net_log, network_delegate);
     }
 #endif  // !defined(OS_ANDROID)
 
     if (!proxy_service) {
       proxy_service = net::CreateProxyServiceUsingV8ProxyResolver(
-          proxy_config_service, new net::ProxyScriptFetcherImpl(context),
-          dhcp_proxy_script_fetcher, context->host_resolver(), net_log,
-          network_delegate);
+          std::move(proxy_config_service),
+          new net::ProxyScriptFetcherImpl(context),
+          std::move(dhcp_proxy_script_fetcher), context->host_resolver(),
+          net_log, network_delegate);
     }
 #endif  // defined(OS_IOS)
   } else {
     proxy_service = net::ProxyService::CreateUsingSystemProxyResolver(
-        proxy_config_service,
-        num_pac_threads,
-        net_log);
+        std::move(proxy_config_service), num_pac_threads, net_log);
   }
 
   proxy_service->set_quick_check_enabled(quick_check_enabled);

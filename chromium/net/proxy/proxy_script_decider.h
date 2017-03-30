@@ -5,9 +5,12 @@
 #ifndef NET_PROXY_PROXY_SCRIPT_DECIDER_H_
 #define NET_PROXY_PROXY_SCRIPT_DECIDER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
@@ -76,8 +79,7 @@ class NET_EXPORT_PRIVATE ProxyScriptDecider {
 
   const ProxyConfig& effective_config() const;
 
-  // TODO(eroman): Return a const-pointer.
-  ProxyResolverScriptData* script_data() const;
+  const scoped_refptr<ProxyResolverScriptData>& script_data() const;
 
   void set_quick_check_enabled(bool enabled) {
     quick_check_enabled_ = enabled;
@@ -186,7 +188,7 @@ class NET_EXPORT_PRIVATE ProxyScriptDecider {
   bool fetch_pac_bytes_;
 
   base::TimeDelta wait_delay_;
-  base::OneShotTimer<ProxyScriptDecider> wait_timer_;
+  base::OneShotTimer wait_timer_;
 
   // Whether to do DNS quick check
   bool quick_check_enabled_;
@@ -196,7 +198,7 @@ class NET_EXPORT_PRIVATE ProxyScriptDecider {
   scoped_refptr<ProxyResolverScriptData> script_data_;
 
   AddressList wpad_addresses_;
-  base::OneShotTimer<ProxyScriptDecider> quick_check_timer_;
+  base::OneShotTimer quick_check_timer_;
   scoped_ptr<SingleRequestHostResolver> host_resolver_;
   base::Time quick_check_start_time_;
 

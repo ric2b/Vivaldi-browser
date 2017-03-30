@@ -28,7 +28,9 @@ SystemGestureEventFilter::~SystemGestureEventFilter() {
 
 void SystemGestureEventFilter::OnMouseEvent(ui::MouseEvent* event) {
 #if defined(OS_CHROMEOS)
-  if (event->type() == ui::ET_MOUSE_PRESSED && ui::IsTouchDevicePresent()) {
+  if (event->type() == ui::ET_MOUSE_PRESSED &&
+      ui::GetTouchScreensAvailability() ==
+          ui::TouchScreensAvailability::ENABLED) {
     Shell::GetInstance()->metrics()->RecordUserMetricsAction(UMA_MOUSE_DOWN);
   }
 #endif
@@ -50,12 +52,6 @@ void SystemGestureEventFilter::OnGestureEvent(ui::GestureEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
   ash::TouchUMA::GetInstance()->RecordGestureEvent(target, *event);
   long_press_affordance_->ProcessEvent(target, event);
-
-  if (overview_gesture_handler_ &&
-      overview_gesture_handler_->ProcessGestureEvent(*event)) {
-    event->StopPropagation();
-    return;
-  }
 
   if (event->type() == ui::ET_GESTURE_WIN8_EDGE_SWIPE &&
       shelf_gesture_handler_->ProcessGestureEvent(*event, target)) {

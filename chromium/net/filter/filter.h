@@ -46,11 +46,13 @@
 #ifndef NET_FILTER_FILTER_H__
 #define NET_FILTER_FILTER_H__
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
@@ -113,7 +115,7 @@ class NET_EXPORT_PRIVATE FilterContext {
 
   // How many bytes were read from the net or cache so far (and potentially
   // pushed into a filter for processing)?
-  virtual int64 GetByteReadCount() const = 0;
+  virtual int64_t GetByteReadCount() const = 0;
 
   // What response code was received with the associated network transaction?
   // For example: 200 is ok.  4xx are error codes. etc.
@@ -151,6 +153,7 @@ class NET_EXPORT_PRIVATE Filter {
 
   // Specifies type of filters that can be created.
   enum FilterType {
+    FILTER_TYPE_BROTLI,
     FILTER_TYPE_DEFLATE,
     FILTER_TYPE_GZIP,
     FILTER_TYPE_GZIP_HELPING_SDCH,  // Gzip possible, but pass through allowed.
@@ -231,6 +234,7 @@ class NET_EXPORT_PRIVATE Filter {
   std::string OrderedFilterList() const;
 
  protected:
+  friend class BrotliUnitTest;
   friend class GZipUnitTest;
   friend class SdchFilterChainingTest;
   FRIEND_TEST_ALL_PREFIXES(FilterTest, ThreeFilterChain);
@@ -283,6 +287,7 @@ class NET_EXPORT_PRIVATE Filter {
 
   // Helper methods for PrependNewFilter. If initialization is successful,
   // they return a fully initialized Filter. Otherwise, return NULL.
+  static Filter* InitBrotliFilter(FilterType type_id, int buffer_size);
   static Filter* InitGZipFilter(FilterType type_id, int buffer_size);
   static Filter* InitSdchFilter(FilterType type_id,
                                 const FilterContext& filter_context,

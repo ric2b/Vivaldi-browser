@@ -13,6 +13,8 @@
 #ifndef CONTENT_COMMON_FRAME_PARAM_MACROS_H_
 #define CONTENT_COMMON_FRAME_PARAM_MACROS_H_
 
+#include <stdint.h>
+
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_ack.h"
 #include "content/public/common/common_param_traits.h"
@@ -35,15 +37,8 @@ IPC_STRUCT_BEGIN(FrameMsg_CompositorFrameSwapped_Params)
   IPC_STRUCT_MEMBER(int, producing_route_id)
 
   IPC_STRUCT_MEMBER(cc::CompositorFrame, frame)
-  IPC_STRUCT_MEMBER(uint32, output_surface_id)
+  IPC_STRUCT_MEMBER(uint32_t, output_surface_id)
   IPC_STRUCT_MEMBER(base::SharedMemoryHandle, shared_memory_handle)
-IPC_STRUCT_END()
-
-IPC_STRUCT_BEGIN(FrameHostMsg_BuffersSwappedACK_Params)
-  IPC_STRUCT_MEMBER(int, gpu_host_id)
-  IPC_STRUCT_MEMBER(int, gpu_route_id)
-  IPC_STRUCT_MEMBER(gpu::Mailbox, mailbox)
-  IPC_STRUCT_MEMBER(uint32, sync_point)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(FrameHostMsg_CompositorFrameSwappedACK_Params)
@@ -51,13 +46,13 @@ IPC_STRUCT_BEGIN(FrameHostMsg_CompositorFrameSwappedACK_Params)
   IPC_STRUCT_MEMBER(int, producing_host_id)
   IPC_STRUCT_MEMBER(int, producing_route_id)
 
-  IPC_STRUCT_MEMBER(uint32, output_surface_id)
+  IPC_STRUCT_MEMBER(uint32_t, output_surface_id)
   IPC_STRUCT_MEMBER(cc::CompositorFrameAck, ack)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(FrameHostMsg_ReclaimCompositorResources_Params)
   IPC_STRUCT_MEMBER(int, route_id)
-  IPC_STRUCT_MEMBER(uint32, output_surface_id)
+  IPC_STRUCT_MEMBER(uint32_t, output_surface_id)
   IPC_STRUCT_MEMBER(int, renderer_host_id)
   IPC_STRUCT_MEMBER(cc::CompositorFrameAck, ack)
 IPC_STRUCT_END()

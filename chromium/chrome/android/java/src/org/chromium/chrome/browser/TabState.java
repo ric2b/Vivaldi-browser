@@ -5,11 +5,13 @@
 package org.chromium.chrome.browser;
 
 import android.os.Handler;
+import android.os.StrictMode;
 import android.util.Log;
 import android.util.Pair;
 
 import org.chromium.base.StreamUtil;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content.browser.crypto.CipherFactory;
 import org.chromium.content_public.browser.WebContents;
 
@@ -58,11 +60,11 @@ public class TabState {
 
     /** Contains the state for a WebContents. */
     public static class WebContentsState {
-        public final ByteBuffer mBuffer;
+        private final ByteBuffer mBuffer;
         private int mVersion;
 
         public WebContentsState(ByteBuffer buffer) {
-            this.mBuffer = buffer;
+            mBuffer = buffer;
         }
 
         public ByteBuffer buffer() {
@@ -110,7 +112,7 @@ public class TabState {
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
-                    nativeFreeWebContentsStateBuffer(mBuffer);
+                    nativeFreeWebContentsStateBuffer(buffer());
                 }
             });
         }
@@ -168,6 +170,8 @@ public class TabState {
     public static TabState restoreTabState(File tabFile, boolean isIncognito) {
         FileInputStream stream = null;
         TabState tabState = null;
+        // Temporarily allowing disk access while fixing. TODO: http://crbug.com/543201
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
             stream = new FileInputStream(tabFile);
             tabState = TabState.readState(stream, isIncognito);
@@ -177,6 +181,7 @@ public class TabState {
             Log.e(TAG, "Failed to restore tab state.", exception);
         } finally {
             StreamUtil.closeQuietly(stream);
+            StrictMode.setThreadPolicy(oldPolicy);
         }
         return tabState;
     }

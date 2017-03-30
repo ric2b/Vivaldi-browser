@@ -15,11 +15,20 @@ extern const wchar_t kVisualElements[];
 extern const wchar_t kVisualElementsManifest[];
 extern const wchar_t kWowHelperExe[];
 extern const wchar_t kStandaloneProfileHelper[];
+extern const wchar_t kCrashServiceExe[];
 
 extern const wchar_t kInstallSourceDir[];
 extern const wchar_t kInstallSourceChromeDir[];
 
 extern const wchar_t kMediaPlayerRegPath[];
+
+namespace switches {
+
+extern const char kDelay[];
+extern const char kSetDisplayVersionProduct[];
+extern const char kSetDisplayVersionValue[];
+
+}  // namespace switches
 
 }  // namespace installer
 

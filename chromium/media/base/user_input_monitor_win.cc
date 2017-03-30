@@ -4,9 +4,13 @@
 
 #include "media/base/user_input_monitor.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -65,7 +69,7 @@ class UserInputMonitorWinCore
 
   // These members are only accessed on the UI thread.
   scoped_ptr<base::win::MessageWindow> window_;
-  uint8 events_monitored_;
+  uint8_t events_monitored_;
   KeyboardEventCounter counter_;
 
   DISALLOW_COPY_AND_ASSIGN(UserInputMonitorWinCore);
@@ -180,18 +184,18 @@ LRESULT UserInputMonitorWinCore::OnInput(HRAWINPUT input_handle) {
   UINT size = 0;
   UINT result = GetRawInputData(
       input_handle, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER));
-  if (result == -1) {
+  if (result == static_cast<UINT>(-1)) {
     PLOG(ERROR) << "GetRawInputData() failed";
     return 0;
   }
   DCHECK_EQ(0u, result);
 
   // Retrieve the input record itself.
-  scoped_ptr<uint8[]> buffer(new uint8[size]);
+  scoped_ptr<uint8_t[]> buffer(new uint8_t[size]);
   RAWINPUT* input = reinterpret_cast<RAWINPUT*>(buffer.get());
   result = GetRawInputData(
       input_handle, RID_INPUT, buffer.get(), &size, sizeof(RAWINPUTHEADER));
-  if (result == -1) {
+  if (result == static_cast<UINT>(-1)) {
     PLOG(ERROR) << "GetRawInputData() failed";
     return 0;
   }

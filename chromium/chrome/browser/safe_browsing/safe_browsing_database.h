@@ -13,18 +13,20 @@
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
 #include "chrome/browser/safe_browsing/safe_browsing_store.h"
-
-namespace safe_browsing {
-class PrefixSet;
-}
+#include "components/safe_browsing_db/util.h"
 
 class GURL;
+
+namespace safe_browsing {
+
+class PrefixSet;
 class SafeBrowsingDatabase;
 
 // Factory for creating SafeBrowsingDatabase. Tests implement this factory
@@ -97,6 +99,16 @@ class SafeBrowsingDatabase {
       std::vector<SBPrefix>* prefix_hits,
       std::vector<SBFullHashResult>* cache_hits) = 0;
 
+  // Returns false if none of the hashes in |full_hashes| are in the browse
+  // database or all were already cached as a miss.  If it returns true,
+  // |prefix_hits| contains sorted unique matching hash prefixes which had no
+  // cached results and |cache_hits| contains any matching cached gethash
+  // results.  This function is safe to call from any thread.
+  virtual bool ContainsBrowseHashes(
+      const std::vector<SBFullHash>& full_hashes,
+      std::vector<SBPrefix>* prefix_hits,
+      std::vector<SBFullHashResult>* cache_hits) = 0;
+
   // Returns true iff the given url is on the unwanted software blacklist.
   // Returns false if |url| is not in the browse database or already was cached
   // as a miss.  If it returns true, |prefix_hits| contains sorted unique
@@ -105,6 +117,18 @@ class SafeBrowsingDatabase {
   // call from any thread.
   virtual bool ContainsUnwantedSoftwareUrl(
       const GURL& url,
+      std::vector<SBPrefix>* prefix_hits,
+      std::vector<SBFullHashResult>* cache_hits) = 0;
+
+  // Returns true iff any of the given hashes are on the unwanted software
+  // blacklist.
+  // Returns false if none of the hashes in |full_hashes| are in the browse
+  // database or all were already cached as a miss.  If it returns true,
+  // |prefix_hits| contains sorted unique matching hash prefixes which had no
+  // cached results and |cache_hits| contains any matching cached gethash
+  // results.  This function is safe to call from any thread.
+  virtual bool ContainsUnwantedSoftwareHashes(
+      const std::vector<SBFullHash>& full_hashes,
       std::vector<SBPrefix>* prefix_hits,
       std::vector<SBFullHashResult>* cache_hits) = 0;
 
@@ -168,8 +192,9 @@ class SafeBrowsingDatabase {
   // UpdateFinished().  If it returns false, the caller MUST NOT call
   // the other functions.
   virtual bool UpdateStarted(std::vector<SBListChunkRanges>* lists) = 0;
-  virtual void InsertChunks(const std::string& list_name,
-                            const std::vector<SBChunkData*>& chunks) = 0;
+  virtual void InsertChunks(
+      const std::string& list_name,
+      const std::vector<scoped_ptr<SBChunkData>>& chunks) = 0;
   virtual void DeleteChunks(
       const std::vector<SBChunkDelete>& chunk_deletes) = 0;
   virtual void UpdateFinished(bool update_succeeded) = 0;
@@ -318,8 +343,15 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
   bool ContainsBrowseUrl(const GURL& url,
                          std::vector<SBPrefix>* prefix_hits,
                          std::vector<SBFullHashResult>* cache_hits) override;
+  bool ContainsBrowseHashes(const std::vector<SBFullHash>& full_hashes,
+                         std::vector<SBPrefix>* prefix_hits,
+                         std::vector<SBFullHashResult>* cache_hits) override;
   bool ContainsUnwantedSoftwareUrl(
       const GURL& url,
+      std::vector<SBPrefix>* prefix_hits,
+      std::vector<SBFullHashResult>* cache_hits) override;
+  bool ContainsUnwantedSoftwareHashes(
+      const std::vector<SBFullHash>& full_hashes,
       std::vector<SBPrefix>* prefix_hits,
       std::vector<SBFullHashResult>* cache_hits) override;
   bool ContainsDownloadUrlPrefixes(const std::vector<SBPrefix>& prefixes,
@@ -332,8 +364,9 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
                                  std::vector<SBPrefix>* prefix_hits) override;
   bool ContainsMalwareIP(const std::string& ip_address) override;
   bool UpdateStarted(std::vector<SBListChunkRanges>* lists) override;
-  void InsertChunks(const std::string& list_name,
-                    const std::vector<SBChunkData*>& chunks) override;
+  void InsertChunks(
+      const std::string& list_name,
+      const std::vector<scoped_ptr<SBChunkData>>& chunks) override;
   void DeleteChunks(const std::vector<SBChunkDelete>& chunk_deletes) override;
   void UpdateFinished(bool update_succeeded) override;
   void CacheHashResults(const std::vector<SBPrefix>& prefixes,
@@ -432,8 +465,8 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
     // PrefixSets to speed up lookups for particularly large lists. The
     // PrefixSet themselves are never modified, instead a new one is swapped in
     // on update.
-    scoped_ptr<const safe_browsing::PrefixSet> browse_prefix_set_;
-    scoped_ptr<const safe_browsing::PrefixSet> unwanted_software_prefix_set_;
+    scoped_ptr<const PrefixSet> browse_prefix_set_;
+    scoped_ptr<const PrefixSet> unwanted_software_prefix_set_;
 
     // Cache of gethash results for prefix stores. Entries should not be used if
     // they are older than their expire_after field.  Cached misses will have
@@ -527,13 +560,6 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
                             std::vector<SBPrefix>* prefix_hits,
                             std::vector<SBFullHashResult>* cache_hits);
 
-  // Exposed for testing of PrefixSetContainsUrlHashes() on the
-  // PrefixSet backing kMalwareList.
-  bool ContainsBrowseUrlHashesForTesting(
-      const std::vector<SBFullHash>& full_hashes,
-      std::vector<SBPrefix>* prefix_hits,
-      std::vector<SBFullHashResult>* cache_hits);
-
   bool PrefixSetContainsUrlHashes(const std::vector<SBFullHash>& full_hashes,
                                   PrefixSetId prefix_set_id,
                                   std::vector<SBPrefix>* prefix_hits,
@@ -590,10 +616,10 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
 
   // Helpers for InsertChunks().
   void InsertAddChunk(SafeBrowsingStore* store,
-                      safe_browsing_util::ListType list_id,
+                      ListType list_id,
                       const SBChunkData& chunk);
   void InsertSubChunk(SafeBrowsingStore* store,
-                      safe_browsing_util::ListType list_id,
+                      ListType list_id,
                       const SBChunkData& chunk);
 
   // Updates the |store| and stores the result on disk under |store_filename|.
@@ -675,5 +701,7 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
   // thread.
   base::WeakPtrFactory<SafeBrowsingDatabaseNew> reset_factory_;
 };
+
+}  // namespace safe_browsing
 
 #endif  // CHROME_BROWSER_SAFE_BROWSING_SAFE_BROWSING_DATABASE_H_

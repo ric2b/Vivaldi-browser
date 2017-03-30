@@ -5,6 +5,7 @@
 #ifndef GPU_COMMAND_BUFFER_CLIENT_GPU_CONTROL_H_
 #define GPU_COMMAND_BUFFER_CLIENT_GPU_CONTROL_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <vector>
@@ -12,6 +13,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "gpu/command_buffer/common/capabilities.h"
+#include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/gpu_export.h"
 
@@ -26,6 +28,7 @@ class GpuMemoryBuffer;
 }
 
 namespace gpu {
+struct SyncToken;
 
 // Common interface for GpuControl implementations.
 class GPU_EXPORT GpuControl {
@@ -73,12 +76,6 @@ class GPU_EXPORT GpuControl {
   // passed the glEndQueryEXT() point.
   virtual void SignalQuery(uint32_t query, const base::Closure& callback) = 0;
 
-  virtual void SetSurfaceVisible(bool visible) = 0;
-
-  // Attaches an external stream to the texture given by |texture_id| and
-  // returns a stream identifier.
-  virtual uint32_t CreateStreamTexture(uint32_t texture_id) = 0;
-
   // Sets a lock this will be held on every callback from the GPU
   // implementation. This lock must be set and must be held on every call into
   // the GPU implementation if it is to be used from multiple threads. This
@@ -88,6 +85,45 @@ class GPU_EXPORT GpuControl {
   // Returns true if the channel to the Gpu is lost. When true, all contexts
   // should be considered as lost.
   virtual bool IsGpuChannelLost() = 0;
+
+  // When this function returns it ensures all previously flushed work is
+  // visible by the service. This command does this by sending a synchronous
+  // IPC. Note just because the work is visible to the server does not mean
+  // that it has been processed. This is only relevant for out of process
+  // services and will be treated as a NOP for in process command buffers.
+  virtual void EnsureWorkVisible() = 0;
+
+  // The namespace and command buffer ID forms a unique pair for all existing
+  // GpuControl (on client) and matches for the corresponding command buffer
+  // (on server) in a single server process. The extra command buffer data can
+  // be used for extra identification purposes. One usage is to store some
+  // extra field to identify unverified sync tokens for the implementation of
+  // the CanWaitUnverifiedSyncToken() function.
+  virtual CommandBufferNamespace GetNamespaceID() const = 0;
+  virtual uint64_t GetCommandBufferID() const = 0;
+  virtual int32_t GetExtraCommandBufferData() const = 0;
+
+  // Fence Syncs use release counters at a context level, these fence syncs
+  // need to be flushed before they can be shared with other contexts across
+  // channels. Subclasses should implement these functions and take care of
+  // figuring out when a fence sync has been flushed. The difference between
+  // IsFenceSyncFlushed and IsFenceSyncFlushReceived, one is testing is the
+  // client has issued the flush, and the other is testing if the service
+  // has received the flush.
+  virtual uint64_t GenerateFenceSyncRelease() = 0;
+  virtual bool IsFenceSyncRelease(uint64_t release) = 0;
+  virtual bool IsFenceSyncFlushed(uint64_t release) = 0;
+  virtual bool IsFenceSyncFlushReceived(uint64_t release) = 0;
+
+  // Runs |callback| when sync token is signalled.
+  virtual void SignalSyncToken(const SyncToken& sync_token,
+                               const base::Closure& callback) = 0;
+
+  // Under some circumstances a sync token may be used which has not been
+  // verified to have been flushed. For example, fence syncs queued on the
+  // same channel as the wait command guarantee that the fence sync will
+  // be enqueued first so does not need to be flushed.
+  virtual bool CanWaitUnverifiedSyncToken(const SyncToken* sync_token) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GpuControl);

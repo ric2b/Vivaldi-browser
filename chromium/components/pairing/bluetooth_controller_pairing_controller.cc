@@ -4,6 +4,8 @@
 
 #include "components/pairing/bluetooth_controller_pairing_controller.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -71,7 +73,7 @@ void BluetoothControllerPairingController::DeviceFound(
   DCHECK_EQ(current_stage_, STAGE_DEVICES_DISCOVERY);
   DCHECK(thread_checker_.CalledOnValidThread());
   if (base::StartsWith(device->GetName(), base::ASCIIToUTF16(kDeviceNamePrefix),
-                       false)) {
+                       base::CompareCase::INSENSITIVE_ASCII)) {
     discovered_devices_.insert(device->GetAddress());
     FOR_EACH_OBSERVER(ControllerPairingController::Observer, observers_,
                       DiscoveredDevicesListChanged());
@@ -132,7 +134,7 @@ void BluetoothControllerPairingController::OnGetAdapter(
 void BluetoothControllerPairingController::OnStartDiscoverySession(
     scoped_ptr<device::BluetoothDiscoverySession> discovery_session) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  discovery_session_ = discovery_session.Pass();
+  discovery_session_ = std::move(discovery_session);
   ChangeStage(STAGE_DEVICES_DISCOVERY);
 
   for (const auto& device : adapter_->GetDevices())
@@ -312,6 +314,19 @@ void BluetoothControllerPairingController::SetConfirmationCodeIsCorrect(
   }
 }
 
+void BluetoothControllerPairingController::SetHostNetwork(
+    const std::string& onc_spec) {
+  pairing_api::AddNetwork add_network;
+  add_network.set_api_version(kPairingAPIVersion);
+  add_network.mutable_parameters()->set_onc_spec(onc_spec);
+
+  int size = 0;
+  scoped_refptr<net::IOBuffer> io_buffer(
+      ProtoDecoder::SendHostNetwork(add_network, &size));
+
+  SendBuffer(io_buffer, size);
+}
+
 void BluetoothControllerPairingController::SetHostConfiguration(
     bool accepted_eula,
     const std::string& lang,
@@ -345,6 +360,7 @@ void BluetoothControllerPairingController::OnAuthenticationDone(
   pairing_api::PairDevices pair_devices;
   pair_devices.set_api_version(kPairingAPIVersion);
   pair_devices.mutable_parameters()->set_admin_access_token(auth_token);
+  pair_devices.mutable_parameters()->set_enrolling_domain(domain);
 
   int size = 0;
   scoped_refptr<net::IOBuffer> io_buffer(
@@ -365,13 +381,20 @@ void BluetoothControllerPairingController::OnHostStatusMessage(
       message.parameters().update_status();
   pairing_api::HostStatusParameters::EnrollmentStatus enrollment_status =
       message.parameters().enrollment_status();
+  pairing_api::HostStatusParameters::Connectivity connectivity =
+      message.parameters().connectivity();
   VLOG(1) << "OnHostStatusMessage, update_status=" << update_status;
   // TODO(zork): Check domain. (http://crbug.com/405761)
-  if (enrollment_status ==
+  if (connectivity == pairing_api::HostStatusParameters::CONNECTIVITY_NONE) {
+    ChangeStage(STAGE_HOST_NETWORK_ERROR);
+  } else if (enrollment_status ==
       pairing_api::HostStatusParameters::ENROLLMENT_STATUS_SUCCESS) {
     // TODO(achuith, zork): Need to ensure that controller has also successfully
     // enrolled.
     CompleteSetup();
+  } else if (enrollment_status ==
+             pairing_api::HostStatusParameters::ENROLLMENT_STATUS_FAILURE) {
+    ChangeStage(STAGE_HOST_ENROLLMENT_ERROR);
   } else if (update_status ==
       pairing_api::HostStatusParameters::UPDATE_STATUS_UPDATING) {
     ChangeStage(STAGE_HOST_UPDATE_IN_PROGRESS);
@@ -457,21 +480,21 @@ void BluetoothControllerPairingController::DisplayPinCode(
 
 void BluetoothControllerPairingController::DisplayPasskey(
     device::BluetoothDevice* device,
-    uint32 passkey) {
+    uint32_t passkey) {
   // Disallow unknown device.
   device->RejectPairing();
 }
 
 void BluetoothControllerPairingController::KeysEntered(
     device::BluetoothDevice* device,
-    uint32 entered) {
+    uint32_t entered) {
   // Disallow unknown device.
   device->RejectPairing();
 }
 
 void BluetoothControllerPairingController::ConfirmPasskey(
     device::BluetoothDevice* device,
-    uint32 passkey) {
+    uint32_t passkey) {
   confirmation_code_ = base::StringPrintf("%06d", passkey);
   ChangeStage(STAGE_WAITING_FOR_CODE_CONFIRMATION);
 }

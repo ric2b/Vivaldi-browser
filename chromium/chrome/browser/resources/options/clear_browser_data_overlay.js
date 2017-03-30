@@ -71,8 +71,6 @@ cr.define('options', function() {
         checkboxes[i].onclick = f;
       }
 
-      //this.createStuffRemainsFooter_();
-
       $('clear-browser-data-dismiss').onclick = function(event) {
         ClearBrowserDataOverlay.dismiss();
       };
@@ -92,21 +90,39 @@ cr.define('options', function() {
       this.updateStateOfControls_();
     },
 
+    /** @override */
+    didShowPage: function() {
+      chrome.send('openedClearBrowserData');
+    },
+
     /**
      * Create a footer that explains that some content is not cleared by the
-     * clear browsing history dialog.
+     * clear browsing data dialog and warns that the deletion may be synced.
+     * @param {boolean} simple Whether to use a simple support string.
+     * @param {boolean} syncing Whether the user uses Sync.
+     * @private
      */
-    createStuffRemainsFooter_: function() {
+    createFooter_: function(simple, syncing) {
       // The localized string is of the form "Saved [content settings] and
       // {search engines} will not be cleared and may reflect your browsing
-      // habits.". The following parses out the parts in brackts and braces and
-      // converts them into buttons whereas the remainders are represented as
-      // span elements.
+      // habits.", or of the form "Some settings that may reflect browsing
+      // habits |will not be cleared|." if the simplified support string
+      // experiment is enabled. The following parses out the parts in brackets
+      // and braces and converts them into buttons whereas the remainders are
+      // represented as span elements.
       var footer =
-          document.querySelector('#some-stuff-remains-footer p');
+          document.querySelector('#some-stuff-remains-footer p span');
       var footerFragments =
-          loadTimeData.getString('contentSettingsAndSearchEnginesRemain')
+          loadTimeData.getString('clearBrowserDataSupportString')
                       .split(/([|#])/);
+
+      if (simple) {
+        footerFragments.unshift(
+            loadTimeData.getString('clearBrowserDataSyncWarning') +
+            ' '  // Padding between the sync warning and the rest of the footer.
+        );
+      }
+
       for (var i = 0; i < footerFragments.length;) {
         var linkId = '';
         if (i + 2 < footerFragments.length) {
@@ -127,18 +143,38 @@ cr.define('options', function() {
         } else {
           var span = document.createElement('span');
           span.textContent = footerFragments[i];
+          if (simple && i == 0) {
+            span.id = 'clear-browser-data-sync-warning';
+            span.hidden = !syncing;
+          }
           footer.appendChild(span);
           i += 1;
         }
       }
-      $('open-content-settings-from-clear-browsing-data').onclick =
-          function(event) {
-        PageManager.showPageByName('content');
-      };
-      $('open-search-engines-from-clear-browsing-data').onclick =
-          function(event) {
-        PageManager.showPageByName('searchEngines');
-      };
+
+      if (!simple) {
+        $('open-content-settings-from-clear-browsing-data').onclick =
+            function(event) {
+          PageManager.showPageByName('content');
+        };
+        $('open-search-engines-from-clear-browsing-data').onclick =
+            function(event) {
+          PageManager.showPageByName('searchEngines');
+        };
+      }
+
+      $('clear-browser-data-old-learn-more-link').hidden = simple;
+      $('clear-browser-data-footer-learn-more-link').hidden = !simple;
+      $('flash-storage-settings').hidden = simple;
+    },
+
+    /**
+     * Shows or hides the sync warning based on whether the user uses Sync.
+     * @param {boolean} syncing Whether the user uses Sync.
+     * @private
+     */
+    updateSyncWarning_: function(syncing) {
+      $('clear-browser-data-sync-warning').hidden = !syncing;
     },
 
     /**
@@ -220,6 +256,19 @@ cr.define('options', function() {
       $('clear-browser-data-time-period').disabled = clearing;
       $('cbd-throbber').style.visibility = clearing ? 'visible' : 'hidden';
       $('clear-browser-data-dismiss').disabled = clearing;
+    },
+
+    /**
+     * Updates the given data volume counter with a given text.
+     * @param {string} pref_name Name of the deletion preference of the counter
+     *     to be updated.
+     * @param {string} text The new text of the counter.
+     * @private
+     */
+    updateCounter_: function(pref_name, text) {
+      var counter = document.querySelector(
+          'input[pref="' + pref_name + '"] ~ .clear-browser-data-counter');
+      counter.textContent = text;
     }
   };
 
@@ -228,6 +277,18 @@ cr.define('options', function() {
   //
   ClearBrowserDataOverlay.setAllowDeletingHistory = function(allowed) {
     ClearBrowserDataOverlay.getInstance().setAllowDeletingHistory_(allowed);
+  };
+
+  ClearBrowserDataOverlay.updateCounter = function(pref_name, text) {
+    ClearBrowserDataOverlay.getInstance().updateCounter_(pref_name, text);
+  };
+
+  ClearBrowserDataOverlay.createFooter = function(simple, syncing) {
+    ClearBrowserDataOverlay.getInstance().createFooter_(simple, syncing);
+  };
+
+  ClearBrowserDataOverlay.updateSyncWarning = function(syncing) {
+    ClearBrowserDataOverlay.getInstance().updateSyncWarning_(syncing);
   };
 
   ClearBrowserDataOverlay.setClearing = function(clearing) {

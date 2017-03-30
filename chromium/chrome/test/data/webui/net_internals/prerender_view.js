@@ -184,19 +184,10 @@ PrerenderTask.prototype = {
 /**
  * Prerender a page and navigate to it, once prerendering starts.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsPrerenderViewSucceed ' +
-    'DISABLED_netInternalsPrerenderViewSucceed');
-GEN('#else');
-GEN('#define MAYBE_netInternalsPrerenderViewSucceed ' +
-    'netInternalsPrerenderViewSucceed');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsPrerenderViewSucceed',
-       function () {
+TEST_F('NetInternalsTest', 'netInternalsPrerenderViewSucceed', function() {
   var taskQueue = new NetInternalsTest.TaskQueue(true);
   taskQueue.addTask(
-      new NetInternalsTest.GetTestServerURLTask('files/title1.html'));
+      new NetInternalsTest.GetTestServerURLTask('/title1.html'));
   taskQueue.addTask(new PrerenderTask(true, 'Used'));
   taskQueue.run();
 });
@@ -207,7 +198,7 @@ TEST_F('NetInternalsTest', 'MAYBE_netInternalsPrerenderViewSucceed',
 TEST_F('NetInternalsTest', 'netInternalsPrerenderViewFail', function() {
   var taskQueue = new NetInternalsTest.TaskQueue(true);
   taskQueue.addTask(
-      new NetInternalsTest.GetTestServerURLTask('files/download-test1.lib'));
+      new NetInternalsTest.GetTestServerURLTask('/download-test1.lib'));
   taskQueue.addTask(new PrerenderTask(false, 'Download'));
   taskQueue.run();
 });

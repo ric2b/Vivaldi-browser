@@ -4,7 +4,11 @@
 
 #include "chromecast/media/cma/ipc_streamer/video_decoder_config_marshaller.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/logging.h"
 #include "chromecast/media/cma/ipc/media_message.h"
 #include "media/base/video_decoder_config.h"
@@ -59,13 +63,15 @@ void VideoDecoderConfigMarshaller::Write(
   CHECK(msg->WritePod(config.codec()));
   CHECK(msg->WritePod(config.profile()));
   CHECK(msg->WritePod(config.format()));
+  CHECK(msg->WritePod(config.color_space()));
   SizeMarshaller::Write(config.coded_size(), msg);
   RectMarshaller::Write(config.visible_rect(), msg);
   SizeMarshaller::Write(config.natural_size(), msg);
   CHECK(msg->WritePod(config.is_encrypted()));
-  CHECK(msg->WritePod(config.extra_data_size()));
-  if (config.extra_data_size() > 0)
-    CHECK(msg->WriteBuffer(config.extra_data(), config.extra_data_size()));
+  CHECK(msg->WritePod(config.extra_data().size()));
+  if (!config.extra_data().empty())
+    CHECK(msg->WriteBuffer(&config.extra_data()[0],
+                           config.extra_data().size()));
 }
 
 // static
@@ -73,17 +79,19 @@ void VideoDecoderConfigMarshaller::Write(
     MediaMessage* msg) {
   ::media::VideoCodec codec;
   ::media::VideoCodecProfile profile;
-  ::media::VideoFrame::Format format;
+  ::media::VideoPixelFormat format;
+  ::media::ColorSpace color_space;
   gfx::Size coded_size;
   gfx::Rect visible_rect;
   gfx::Size natural_size;
   bool is_encrypted;
   size_t extra_data_size;
-  scoped_ptr<uint8[]> extra_data;
+  std::vector<uint8_t> extra_data;
 
   CHECK(msg->ReadPod(&codec));
   CHECK(msg->ReadPod(&profile));
   CHECK(msg->ReadPod(&format));
+  CHECK(msg->ReadPod(&color_space));
   coded_size = SizeMarshaller::Read(msg);
   visible_rect = RectMarshaller::Read(msg);
   natural_size = SizeMarshaller::Read(msg);
@@ -94,19 +102,20 @@ void VideoDecoderConfigMarshaller::Write(
   CHECK_LE(codec, ::media::kVideoCodecMax);
   CHECK_GE(profile, ::media::VIDEO_CODEC_PROFILE_UNKNOWN);
   CHECK_LE(profile, ::media::VIDEO_CODEC_PROFILE_MAX);
-  CHECK_GE(format, ::media::VideoFrame::UNKNOWN);
-  CHECK_LE(format, ::media::VideoFrame::FORMAT_MAX);
+  CHECK_GE(format, ::media::PIXEL_FORMAT_UNKNOWN);
+  CHECK_LE(format, ::media::PIXEL_FORMAT_MAX);
+  CHECK_GE(color_space, ::media::COLOR_SPACE_UNSPECIFIED);
+  CHECK_LE(color_space, ::media::COLOR_SPACE_MAX);
   CHECK_LT(extra_data_size, kMaxExtraDataSize);
   if (extra_data_size > 0) {
-    extra_data.reset(new uint8[extra_data_size]);
-    CHECK(msg->ReadBuffer(extra_data.get(), extra_data_size));
+    extra_data.resize(extra_data_size);
+    CHECK(msg->ReadBuffer(&extra_data[0], extra_data.size()));
   }
 
   return ::media::VideoDecoderConfig(
-      codec, profile, format,
+      codec, profile, format, color_space,
       coded_size, visible_rect, natural_size,
-      extra_data.get(), extra_data_size,
-      is_encrypted);
+      extra_data, is_encrypted);
 }
 
 }  // namespace media

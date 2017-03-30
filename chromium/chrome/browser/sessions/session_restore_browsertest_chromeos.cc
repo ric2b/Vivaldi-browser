@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <list>
 #include <vector>
 
@@ -10,6 +12,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/defaults.h"
+#include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -17,7 +20,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/sessions/serialized_navigation_entry_test_helper.h"
+#include "components/sessions/core/serialized_navigation_entry_test_helper.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 

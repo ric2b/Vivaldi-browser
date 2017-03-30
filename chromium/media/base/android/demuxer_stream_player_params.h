@@ -5,6 +5,8 @@
 #ifndef MEDIA_BASE_ANDROID_DEMUXER_STREAM_PLAYER_PARAMS_H_
 #define MEDIA_BASE_ANDROID_DEMUXER_STREAM_PLAYER_PARAMS_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "media/base/audio_decoder_config.h"
@@ -24,14 +26,14 @@ struct MEDIA_EXPORT DemuxerConfigs {
   int audio_channels;
   int audio_sampling_rate;
   bool is_audio_encrypted;
-  std::vector<uint8> audio_extra_data;
-  int64 audio_codec_delay_ns;
-  int64 audio_seek_preroll_ns;
+  std::vector<uint8_t> audio_extra_data;
+  int64_t audio_codec_delay_ns;
+  int64_t audio_seek_preroll_ns;
 
   VideoCodec video_codec;
   gfx::Size video_size;
   bool is_video_encrypted;
-  std::vector<uint8> video_extra_data;
+  std::vector<uint8_t> video_extra_data;
 
   base::TimeDelta duration;
 };
@@ -43,7 +45,7 @@ struct MEDIA_EXPORT AccessUnit {
   DemuxerStream::Status status;
   bool is_end_of_stream;
   // TODO(ycheo): Use the shared memory to transfer the block data.
-  std::vector<uint8> data;
+  std::vector<uint8_t> data;
   base::TimeDelta timestamp;
   std::vector<char> key_id;
   std::vector<char> iv;
@@ -68,6 +70,9 @@ struct MEDIA_EXPORT DemuxerData {
 };  // namespace media
 
 // For logging
+MEDIA_EXPORT
+std::ostream& operator<<(std::ostream& os, media::DemuxerStream::Type type);
+
 MEDIA_EXPORT
 std::ostream& operator<<(std::ostream& os, const media::AccessUnit& au);
 

@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
@@ -212,7 +214,7 @@ class SelectFileDialogExtensionBrowserTest : public ExtensionBrowserTest {
         "document.querySelector(\'" + button_class + "\').click();");
     // The file selection handler closes the dialog and does not return control
     // to JavaScript, so do not wait for return values.
-    host->GetMainFrame()->ExecuteJavaScript(script);
+    host->GetMainFrame()->ExecuteJavaScriptForTests(script);
     LOG(INFO) << "Waiting for window close notification.";
     listener_->WaitForCalled();
 

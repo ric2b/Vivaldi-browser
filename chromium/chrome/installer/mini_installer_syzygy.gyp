@@ -3,10 +3,6 @@
 # found in the LICENSE file.
 {
   'variables': {
-    'version_py': '<(DEPTH)/build/util/version.py',
-    'version_path': '<(DEPTH)/chrome/VERSION',
-    'lastchange_path': '<(DEPTH)/build/util/LASTCHANGE',
-    'branding_dir': '../app/theme/<(branding_path_component)',
     'msvs_use_common_release': 0,
     'msvs_use_common_linker_extras': 0,
   },
@@ -21,15 +17,13 @@
           'targets': [
             {
               'target_name': 'mini_installer_syzygy',
-              'type': 'executable',
               'product_name': 'mini_installer',
-
               'variables': {
                 'chrome_dll_project': [
                   '../chrome_syzygy.gyp:chrome_dll_syzygy',
                 ],
                 'chrome_dll_path': [
-                  '<(PRODUCT_DIR)/syzygy/vivaldi.dll',
+                  '<(PRODUCT_DIR)/syzygy/chrome.dll',
                 ],
                 'output_dir': '<(PRODUCT_DIR)/syzygy',
               },
@@ -50,8 +44,8 @@
                   '../chrome_syzygy.gyp:chrome_child_dll_syzygy',
                 ],
                 'chrome_dll_path': [
-                  '<(PRODUCT_DIR)/syzygy/vivaldi.dll',
-                  '<(PRODUCT_DIR)/syzygy/vivaldi_child.dll',
+                  '<(PRODUCT_DIR)/syzygy/chrome.dll',
+                  '<(PRODUCT_DIR)/syzygy/chrome_child.dll',
                 ],
                 'output_dir': '<(PRODUCT_DIR)/syzygy',
               },

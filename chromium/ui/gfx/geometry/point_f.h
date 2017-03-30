@@ -7,7 +7,9 @@
 
 #include <iosfwd>
 #include <string>
+#include <tuple>
 
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/gfx_export.h"
 
@@ -19,6 +21,9 @@ class GFX_EXPORT PointF {
   PointF() : x_(0.f), y_(0.f) {}
   PointF(float x, float y) : x_(x), y_(y) {}
   ~PointF() {}
+
+  explicit PointF(const Point& p)
+      : PointF(static_cast<float>(p.x()), static_cast<float>(p.y())) {}
 
   float x() const { return x_; }
   float y() const { return y_; }
@@ -59,7 +64,7 @@ class GFX_EXPORT PointF {
   // This comparison is required to use PointF in sets, or sorted
   // vectors.
   bool operator<(const PointF& rhs) const {
-    return (y_ == rhs.y_) ? (x_ < rhs.x_) : (y_ < rhs.y_);
+    return std::tie(y_, x_) < std::tie(rhs.y_, rhs.x_);
   }
 
   void Scale(float scale) {

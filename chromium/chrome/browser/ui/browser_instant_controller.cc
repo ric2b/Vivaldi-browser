@@ -13,18 +13,20 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_popup_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/instant_types.h"
 #include "chrome/common/url_constants.h"
+#include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/omnibox/browser/omnibox_view.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/referrer.h"
 #include "ui/base/page_transition_types.h"
 
@@ -39,7 +41,46 @@ InstantSearchPrerenderer* GetInstantSearchPrerenderer(Profile* profile) {
   return instant_service ? instant_service->instant_search_prerenderer() : NULL;
 }
 
+// Helper class for posting a task to reload a tab, to avoid doing a re-entrant
+// navigation, since it can be called when starting a navigation. This class
+// makes sure to only execute the reload if the WebContents still exists.
+class TabReloader : public content::WebContentsUserData<TabReloader> {
+ public:
+  static void Reload(content::WebContents* web_contents) {
+    TabReloader::CreateForWebContents(web_contents);
+  }
+
+ private:
+  friend class content::WebContentsUserData<TabReloader>;
+
+  explicit TabReloader(content::WebContents* web_contents)
+      : web_contents_(web_contents), weak_ptr_factory_(this) {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::UI,
+        FROM_HERE,
+        base::Bind(&TabReloader::ReloadImpl, weak_ptr_factory_.GetWeakPtr()));
+  }
+  ~TabReloader() override {}
+
+  void ReloadImpl() {
+    web_contents_->GetController().Reload(false);
+
+    // As the reload was not triggered by the user we don't want to close any
+    // infobars. We have to tell the InfoBarService after the reload,
+    // otherwise it would ignore this call when
+    // WebContentsObserver::DidStartNavigationToPendingEntry is invoked.
+    InfoBarService::FromWebContents(web_contents_)->set_ignore_next_reload();
+
+    web_contents_->RemoveUserData(UserDataKey());
+  }
+
+  content::WebContents* web_contents_;
+  base::WeakPtrFactory<TabReloader> weak_ptr_factory_;
+};
+
 }  // namespace
+
+DEFINE_WEB_CONTENTS_USER_DATA_KEY(TabReloader);
 
 
 // BrowserInstantController ---------------------------------------------------
@@ -75,7 +116,7 @@ bool BrowserInstantController::OpenInstant(WindowOpenDisposition disposition,
   DCHECK(disposition == CURRENT_TAB) << disposition;
 
   const base::string16& search_terms =
-      chrome::ExtractSearchTermsFromURL(profile(), url);
+      search::ExtractSearchTermsFromURL(profile(), url);
   EmbeddedSearchRequestParams request_params(url);
   if (search_terms.empty())
     return false;
@@ -95,7 +136,7 @@ bool BrowserInstantController::OpenInstant(WindowOpenDisposition disposition,
 
   // If we will not be replacing search terms from this URL, don't send to
   // InstantController.
-  if (!chrome::IsQueryExtractionAllowedForURL(profile(), url))
+  if (!search::IsQueryExtractionAllowedForURL(profile(), url))
     return false;
   return instant_.SubmitQuery(search_terms, request_params);
 }
@@ -166,22 +207,16 @@ void BrowserInstantController::DefaultSearchProviderChanged(
     if (google_base_url_domain_changed &&
         SearchTabHelper::FromWebContents(contents)->model()->mode().is_ntp()) {
       // Replace the server NTP with the local NTP.
-      content::NavigationController::LoadURLParams
-          params(chrome::GetLocalInstantURL(profile()));
+      content::NavigationController::LoadURLParams params(
+          search::GetLocalInstantURL(profile()));
       params.should_replace_current_entry = true;
       params.referrer = content::Referrer();
       params.transition_type = ui::PAGE_TRANSITION_RELOAD;
       contents->GetController().LoadURLWithParams(params);
     } else {
       // Reload the contents to ensure that it gets assigned to a
-      // non-priviledged renderer.
-      contents->GetController().Reload(false);
-
-      // As the reload was not triggered by the user we don't want to close any
-      // infobars. We have to tell the InfoBarService after the reload,
-      // otherwise it would ignore this call when
-      // WebContentsObserver::DidStartNavigationToPendingEntry is invoked.
-      InfoBarService::FromWebContents(contents)->set_ignore_next_reload();
+      // non-privileged renderer.
+      TabReloader::Reload(contents);
     }
   }
 }

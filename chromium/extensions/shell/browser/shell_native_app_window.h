@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_SHELL_BROWSER_SHELL_NATIVE_APP_WINDOW_H_
 #define EXTENSIONS_SHELL_BROWSER_SHELL_NATIVE_APP_WINDOW_H_
 
+#include "base/macros.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
 
@@ -52,7 +53,6 @@ class ShellNativeAppWindow : public NativeAppWindow {
       const std::vector<DraggableRegion>& regions) override;
   SkRegion* GetDraggableRegion() override;
   void UpdateShape(scoped_ptr<SkRegion> region) override;
-  void SetInterceptAllKeys(bool want_all_keys) override;
   void HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
   bool IsFrameless() const override;
@@ -62,7 +62,6 @@ class ShellNativeAppWindow : public NativeAppWindow {
   gfx::Insets GetFrameInsets() const override;
   void ShowWithApp() override;
   void HideWithApp() override;
-  void UpdateShelfMenu() override;
   gfx::Size GetContentMinimumSize() const override;
   gfx::Size GetContentMaximumSize() const override;
   void SetContentSizeConstraints(const gfx::Size& min_size,

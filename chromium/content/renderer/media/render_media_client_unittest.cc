@@ -67,7 +67,7 @@ class TestContentRendererClient : public ContentRendererClient {
 #if 0 && defined(WIDEVINE_CDM_AVAILABLE) && defined(WIDEVINE_CDM_IS_COMPONENT)
 bool ContainsWidevine(
     const std::vector<media::KeySystemInfo>& key_systems_info) {
-  for (const auto& key_system_info: key_systems_info) {
+  for (const auto& key_system_info : key_systems_info) {
     if (key_system_info.key_system == kWidevineKeySystem)
       return true;
   }
@@ -122,7 +122,6 @@ TEST_F(RenderMediaClientTest, KeySystemNameForUMA) {
   EXPECT_TRUE(clearkey_uma_name.empty()) << "Clear Key is added by media/ and "
                                             "should not be added by the "
                                             "MediaClient.";
-  ;
 }
 #endif
 

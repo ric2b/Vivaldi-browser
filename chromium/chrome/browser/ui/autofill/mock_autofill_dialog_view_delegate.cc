@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/autofill/mock_autofill_dialog_view_delegate.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/native_web_keyboard_event.h"  // For gmock.
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect.h"  // Only needed because gmock needs complete types.
 
@@ -44,8 +45,6 @@ MockAutofillDialogViewDelegate::MockAutofillDialogViewDelegate() {
   cc_default_inputs_.push_back(kCreditCardInputs[0]);
   ON_CALL(*this, RequestedFieldsForSection(SECTION_CC))
       .WillByDefault(ReturnRef(cc_default_inputs_));
-  ON_CALL(*this, RequestedFieldsForSection(SECTION_CC_BILLING))
-      .WillByDefault(ReturnRef(cc_default_inputs_));
 
   ON_CALL(*this, GetDialogButtons())
       .WillByDefault(Return(ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL));
@@ -54,8 +53,6 @@ MockAutofillDialogViewDelegate::MockAutofillDialogViewDelegate() {
   // Activate all sections but CC_BILLING - default for the real
   // controller implementation, too.
   ON_CALL(*this, SectionIsActive(_)).WillByDefault(Return(true));
-  ON_CALL(*this, SectionIsActive(SECTION_CC_BILLING))
-      .WillByDefault(Return(false));
 }
 
 void MockAutofillDialogViewDelegate::SetWebContents(

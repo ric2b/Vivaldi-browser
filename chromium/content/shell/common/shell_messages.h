@@ -89,18 +89,8 @@ IPC_MESSAGE_ROUTED0(ShellViewHostMsg_Reload)
 IPC_MESSAGE_ROUTED2(ShellViewHostMsg_LoadURLForFrame,
                     GURL /* url */,
                     std::string /* frame_name */)
-IPC_MESSAGE_ROUTED1(ShellViewHostMsg_SetDeviceScaleFactor,
-                    float /* factor */)
 IPC_MESSAGE_ROUTED0(ShellViewHostMsg_CaptureSessionHistory)
 IPC_MESSAGE_ROUTED0(ShellViewHostMsg_CloseRemainingWindows)
-
-IPC_MESSAGE_CONTROL3(ShellViewHostMsg_EchoPing,
-                     int /* routing_id */,
-                     int /* id */,
-                     std::string /* body */)
-IPC_MESSAGE_ROUTED2(ShellViewMsg_EchoPong,
-                    int /* id */,
-                    std::string /* body */)
 
 IPC_STRUCT_TRAITS_BEGIN(content::LeakDetectionResult)
 IPC_STRUCT_TRAITS_MEMBER(leaked)
@@ -109,3 +99,12 @@ IPC_STRUCT_TRAITS_END()
 
 IPC_MESSAGE_ROUTED1(ShellViewHostMsg_LeakDetectionDone,
                     content::LeakDetectionResult /* result */)
+
+IPC_MESSAGE_ROUTED1(ShellViewHostMsg_SetBluetoothManualChooser,
+                    bool /* enable */)
+IPC_MESSAGE_ROUTED0(ShellViewHostMsg_GetBluetoothManualChooserEvents)
+IPC_MESSAGE_ROUTED1(ShellViewMsg_ReplyBluetoothManualChooserEvents,
+                    std::vector<std::string> /* events */)
+IPC_MESSAGE_ROUTED2(ShellViewHostMsg_SendBluetoothManualChooserEvent,
+                    std::string /* event */,
+                    std::string /* argument */)

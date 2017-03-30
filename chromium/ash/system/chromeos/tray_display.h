@@ -5,12 +5,15 @@
 #ifndef ASH_SYSTEM_CHROMEOS_TRAY_DISPLAY_H_
 #define ASH_SYSTEM_CHROMEOS_TRAY_DISPLAY_H_
 
+#include <stdint.h>
+
 #include <map>
 
 #include "ash/ash_export.h"
-#include "ash/display/display_controller.h"
 #include "ash/display/display_info.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/system/tray/system_tray_item.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/views/view.h"
 
@@ -22,18 +25,18 @@ class AshTestBase;
 }
 
 class ASH_EXPORT TrayDisplay : public SystemTrayItem,
-                               public DisplayController::Observer {
+                               public WindowTreeHostManager::Observer {
  public:
   explicit TrayDisplay(SystemTray* system_tray);
   ~TrayDisplay() override;
 
-  // Overridden from DisplayControllerObserver:
+  // Overridden from WindowTreeHostManagerObserver:
   void OnDisplayConfigurationChanged() override;
 
  private:
   friend class TrayDisplayTest;
 
-  typedef std::map<int64, DisplayInfo> DisplayInfoMap;
+  typedef std::map<int64_t, DisplayInfo> DisplayInfoMap;
 
   static const char kNotificationId[];
 

@@ -5,7 +5,8 @@
 #ifndef MEDIA_BASE_CONTAINER_NAMES_H_
 #define MEDIA_BASE_CONTAINER_NAMES_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "media/base/media_export.h"
 
 namespace media {
@@ -62,14 +63,14 @@ enum MediaContainerName {
 };
 
 // Determine the container type.
-MEDIA_EXPORT MediaContainerName DetermineContainer(const uint8* buffer,
+MEDIA_EXPORT MediaContainerName DetermineContainer(const uint8_t* buffer,
                                                    int buffer_size);
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 // This is a simplified version used by Opera's ProtocolSniffer, in particular
 // we don't want to CheckMov as it triggers also for MPEG4.
 MEDIA_EXPORT MediaContainerName
-    OperaDetermineContainer(const uint8* buffer, int buffer_size);
+    OperaDetermineContainer(const uint8_t* buffer, int buffer_size);
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 }  // namespace container_names

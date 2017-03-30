@@ -4,6 +4,8 @@
 
 #include "content/child/appcache/web_application_cache_host_impl.h"
 
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
 #include "base/id_map.h"
 #include "base/strings/string_util.h"
@@ -167,7 +169,7 @@ void WebApplicationCacheHostImpl::willStartMainResourceRequest(
 
   std::string method = request.httpMethod().utf8();
   is_get_method_ = (method == kHttpGETMethod);
-  DCHECK(method == base::StringToUpperASCII(method));
+  DCHECK(method == base::ToUpperASCII(method));
 
   const WebApplicationCacheHostImpl* spawning_host_impl =
       static_cast<const WebApplicationCacheHostImpl*>(spawning_host);

@@ -7,10 +7,11 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "chrome/browser/drive/drive_uploader.h"
+#include "components/drive/drive_uploader.h"
 
 namespace base {
 class SingleThreadTaskRunner;

@@ -11,7 +11,15 @@ Developer Preview.
 To test your app, you need three things:
 <ol>
   <li> Your APK. </li>
-  <li> PC, Mac, Linux, or Chromebook on Chrome Version 41+. </li>
+  <li> PC, Mac, Linux, or Chromebook on Chrome Version 41+.
+  <ul>
+    <li>
+      Note: ARC is no longer supported on 32-bit x86 platforms and those
+      platforms will no longer receive updates after October 13, 2015. All ARM
+      platforms will continue to work and receive updates.
+    </li>
+  </ul>
+  </li>
   <li> <a href="http://goo.gl/gAn0Xh">The ARC Welder app</a>. </li>
 </ol>
 </p>
@@ -68,7 +76,7 @@ When testing your APK on ARC, developers have passed along these helpful tips:
     <li>
       If the app crashes and you can't get logs using logcat, try collecting
       <a href="/native-client/devguide/devcycle/debugging#debugging-with-printf">
-      stdout and stderr from Chrome/NaCl</a>.  On ChromeOS, you can get these
+      stdout and stderr from Chrome/NaCl</a>.  On Chrome OS, you can get these
       logs from chrome://system/ and expanding <em>ui_log</em>.
     </li>
     <li>
@@ -114,6 +122,9 @@ When testing your APK on ARC, developers have passed along these helpful tips:
     To ensure compatibility with all users, package and test your app on the <a
     href="https://support.google.com/chromebook/answer/1086915?hl=en&source=genius-rts">Chromebook
     Stable channel</a>.
+  </li>
+  <li>
+    To use in-app payments, <a href="arc_in_app_payments.html">read more</a>.
   </li>
 </ul>
 </p>

@@ -7,23 +7,22 @@
 
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "third_party/webrtc/p2p/client/httpportallocator.h"
+#include "remoting/protocol/port_allocator_factory.h"
+#include "third_party/webrtc/p2p/client/basicportallocator.h"
 
 namespace remoting {
 
 class FakeNetworkDispatcher;
 class FakePacketSocketFactory;
 
-class FakePortAllocator : public cricket::HttpPortAllocatorBase {
+class FakePortAllocator : public cricket::BasicPortAllocator {
  public:
-  static scoped_ptr<FakePortAllocator> Create(
-      scoped_refptr<FakeNetworkDispatcher> fake_network_dispatcher);
-
+  FakePortAllocator(rtc::NetworkManager* network_manager,
+                    rtc::PacketSocketFactory* socket_factory);
   ~FakePortAllocator() override;
-
-  FakePacketSocketFactory* socket_factory() { return socket_factory_.get(); }
 
   // cricket::BasicPortAllocator overrides.
   cricket::PortAllocatorSession* CreateSessionInternal(
@@ -33,13 +32,26 @@ class FakePortAllocator : public cricket::HttpPortAllocatorBase {
       const std::string& ice_password) override;
 
  private:
-  FakePortAllocator(scoped_ptr<rtc::NetworkManager> network_manager,
-                    scoped_ptr<FakePacketSocketFactory> socket_factory);
+  DISALLOW_COPY_AND_ASSIGN(FakePortAllocator);
+};
 
+class FakePortAllocatorFactory : public protocol::PortAllocatorFactory {
+ public:
+  FakePortAllocatorFactory(
+      scoped_refptr<FakeNetworkDispatcher> fake_network_dispatcher);
+  ~FakePortAllocatorFactory() override;
+
+  FakePacketSocketFactory* socket_factory() { return socket_factory_.get(); }
+
+   // PortAllocatorFactory interface.
+  scoped_ptr<cricket::PortAllocator> CreatePortAllocator(
+      scoped_refptr<protocol::TransportContext> transport_context) override;
+
+ private:
   scoped_ptr<rtc::NetworkManager> network_manager_;
   scoped_ptr<FakePacketSocketFactory> socket_factory_;
 
-  DISALLOW_COPY_AND_ASSIGN(FakePortAllocator);
+  DISALLOW_COPY_AND_ASSIGN(FakePortAllocatorFactory);
 };
 
 }  // namespace remoting

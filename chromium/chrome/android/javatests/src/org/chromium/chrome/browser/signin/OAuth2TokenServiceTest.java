@@ -9,6 +9,7 @@ import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.test.util.AdvancedMockContext;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.test.util.AccountHolder;
@@ -17,6 +18,7 @@ import org.chromium.sync.test.util.MockAccountManager;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
+/** Tests for OAuth2TokenService. */
 public class OAuth2TokenServiceTest extends InstrumentationTestCase {
 
     private AdvancedMockContext mContext;
@@ -32,21 +34,26 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
         AccountManagerHelper.overrideAccountManagerHelperForTests(mContext, mAccountManager);
     }
 
-    @SmallTest
-    @Feature({"Sync"})
+    /*  http://crbug.com/533417
+     *  @SmallTest
+     *  @Feature({"Sync"})
+     */
+    @DisabledTest
     public void testGetAccountsNoAccountsRegistered() {
         String[] accounts = OAuth2TokenService.getAccounts(mContext);
         assertEquals("There should be no accounts registered", 0, accounts.length);
     }
 
-    @SmallTest
-    @Feature({"Sync"})
+    /*@SmallTest
+    @Feature({"Sync"})*/
+    // http://crbug.com/527852
+    @DisabledTest
     public void testGetAccountsOneAccountRegistered() {
         Account account1 = AccountManagerHelper.createAccountFromName("foo@gmail.com");
         AccountHolder accountHolder1 = AccountHolder.create().account(account1).build();
         mAccountManager.addAccountHolderExplicitly(accountHolder1);
 
-        String[] sysAccounts = OAuth2TokenService.getSystemAccounts(mContext);
+        String[] sysAccounts = OAuth2TokenService.getSystemAccountNames(mContext);
         assertEquals("There should be one registered account", 1, sysAccounts.length);
         assertEquals("The account should be " + account1, account1.name, sysAccounts[0]);
 
@@ -54,8 +61,10 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
         assertEquals("There should be zero registered account", 0, accounts.length);
     }
 
-    @SmallTest
-    @Feature({"Sync"})
+    /*@SmallTest
+    @Feature({"Sync"})*/
+    // http://crbug.com/527852
+    @DisabledTest
     public void testGetAccountsTwoAccountsRegistered() {
         Account account1 = AccountManagerHelper.createAccountFromName("foo@gmail.com");
         AccountHolder accountHolder1 = AccountHolder.create().account(account1).build();
@@ -64,7 +73,7 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
         AccountHolder accountHolder2 = AccountHolder.create().account(account2).build();
         mAccountManager.addAccountHolderExplicitly(accountHolder2);
 
-        String[] sysAccounts = OAuth2TokenService.getSystemAccounts(mContext);
+        String[] sysAccounts = OAuth2TokenService.getSystemAccountNames(mContext);
         assertEquals("There should be one registered account", 2, sysAccounts.length);
         assertTrue("The list should contain " + account1,
                 Arrays.asList(sysAccounts).contains(account1.name));
@@ -75,6 +84,7 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
         assertEquals("There should be zero registered account", 0, accounts.length);
     }
 
+    @DisabledTest // http://crbug.com/568620
     @SmallTest
     @Feature({"Sync"})
     public void testGetOAuth2AccessTokenWithTimeoutOnSuccess() {
@@ -83,8 +93,10 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
         runTestOfGetOAuth2AccessTokenWithTimeout(authToken);
     }
 
-    @SmallTest
-    @Feature({"Sync"})
+    /*@SmallTest
+    @Feature({"Sync"})*/
+    // http://crbug.com/527852
+    @DisabledTest
     public void testGetOAuth2AccessTokenWithTimeoutOnError() {
         String authToken = null;
         // Should not crash when auth token is null.
@@ -104,9 +116,8 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
                         .authToken(oauth2Scope, expectedToken).build();
         mAccountManager.addAccountHolderExplicitly(accountHolder);
 
-        String accessToken =
-                OAuth2TokenService.getOAuth2AccessTokenWithTimeout(
-                        mContext, null, account, scope, 5, TimeUnit.SECONDS);
+        String accessToken = OAuth2TokenService.getOAuth2AccessTokenWithTimeout(
+                mContext, account, scope, 5, TimeUnit.SECONDS);
         assertEquals(expectedToken, accessToken);
     }
 }

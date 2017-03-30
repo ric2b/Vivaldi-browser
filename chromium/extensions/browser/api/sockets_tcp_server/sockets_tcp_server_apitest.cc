@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
 #include "extensions/browser/api/dns/host_resolver_wrapper.h"
@@ -14,7 +16,6 @@
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
 
 namespace extensions {
 
@@ -51,8 +52,8 @@ class SocketsTcpServerApiTest : public ShellApiTest {
 };
 
 IN_PROC_BROWSER_TEST_F(SocketsTcpServerApiTest, SocketTCPCreateGood) {
-  scoped_refptr<core_api::SocketsTcpServerCreateFunction>
-      socket_create_function(new core_api::SocketsTcpServerCreateFunction());
+  scoped_refptr<api::SocketsTcpServerCreateFunction> socket_create_function(
+      new api::SocketsTcpServerCreateFunction());
   scoped_refptr<Extension> empty_extension(test_util::CreateEmptyExtension());
 
   socket_create_function->set_extension(empty_extension.get());
@@ -62,8 +63,8 @@ IN_PROC_BROWSER_TEST_F(SocketsTcpServerApiTest, SocketTCPCreateGood) {
       api_test_utils::RunFunctionAndReturnSingleResult(
           socket_create_function.get(), "[]", browser_context()));
   ASSERT_EQ(base::Value::TYPE_DICTIONARY, result->GetType());
-  base::DictionaryValue* value =
-      static_cast<base::DictionaryValue*>(result.get());
+  scoped_ptr<base::DictionaryValue> value =
+      base::DictionaryValue::From(std::move(result));
   int socketId = -1;
   EXPECT_TRUE(value->GetInteger("socketId", &socketId));
   ASSERT_TRUE(socketId > 0);
@@ -81,7 +82,9 @@ IN_PROC_BROWSER_TEST_F(SocketsTcpServerApiTest, SocketTCPServerExtension) {
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
 
-IN_PROC_BROWSER_TEST_F(SocketsTcpServerApiTest, SocketTCPServerUnbindOnUnload) {
+// Flaky. http://crbug.com/561474
+IN_PROC_BROWSER_TEST_F(SocketsTcpServerApiTest,
+                       DISABLED_SocketTCPServerUnbindOnUnload) {
   std::string path("sockets_tcp_server/unload");
   ResultCatcher catcher;
   const Extension* extension = LoadApp(path);

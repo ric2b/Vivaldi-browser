@@ -5,13 +5,18 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_VIEW_BASE_H_
 #define CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_VIEW_BASE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/kill.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
@@ -34,6 +39,7 @@ class SkBitmap;
 
 struct AccessibilityHostMsg_EventParams;
 struct ViewHostMsg_SelectionBounds_Params;
+struct ViewHostMsg_TextInputState_Params;
 
 namespace media {
 class VideoFrame;
@@ -41,6 +47,12 @@ class VideoFrame;
 
 namespace blink {
 struct WebScreenInfo;
+class WebMouseEvent;
+class WebMouseWheelEvent;
+}
+
+namespace ui {
+class LatencyInfo;
 }
 
 namespace content {
@@ -60,6 +72,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   ~RenderWidgetHostViewBase() override;
 
   // RenderWidgetHostView implementation.
+  bool IsAura() const override;
+
   void SetBackgroundColor(SkColor color) override;
   void SetBackgroundColorToDefault() final;
   bool GetBackgroundOpaque() override;
@@ -85,7 +99,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Return a value that is incremented each time the renderer swaps a new frame
   // to the view.
-  uint32 RendererFrameNumber();
+  uint32_t RendererFrameNumber();
 
   // Called each time the RenderWidgetHost receives a new frame for display from
   // the renderer.
@@ -143,9 +157,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // be used to inject synthetic input events.
   virtual scoped_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget();
 
-  // Return true if frame subscription is supported on this platform.
-  virtual bool CanSubscribeFrame() const;
-
   // Create a BrowserAccessibilityManager for this view.
   virtual BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate);
@@ -158,8 +169,13 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Informs that the focused DOM node has changed.
   virtual void FocusedNodeChanged(bool is_editable_node) {}
 
-  virtual void OnSwapCompositorFrame(uint32 output_surface_id,
+  virtual void OnSwapCompositorFrame(uint32_t output_surface_id,
                                      scoped_ptr<cc::CompositorFrame> frame) {}
+
+  // This method exists to allow removing of displayed graphics, after a new
+  // page has been loaded, to prevent the displayed URL from being out of sync
+  // with what is visible on screen.
+  virtual void ClearCompositorFrame() = 0;
 
   // Because the associated remote WebKit instance can asynchronously
   // prevent-default on a dispatched touch event, the touch events are queued in
@@ -176,6 +192,39 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Returns the compositing surface ID namespace, or 0 if Surfaces are not
   // enabled.
   virtual uint32_t GetSurfaceIdNamespace();
+
+  // When there are multiple RenderWidgetHostViews for a single page, input
+  // events need to be targeted to the correct one for handling. The following
+  // methods are invoked on the RenderWidgetHostView that should be able to
+  // properly handle the event (i.e. it has focus for keyboard events, or has
+  // been identified by hit testing mouse, touch or gesture events).
+  virtual uint32_t SurfaceIdNamespaceAtPoint(const gfx::Point& point,
+                                             gfx::Point* transformed_point);
+  virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) {}
+  virtual void ProcessMouseEvent(const blink::WebMouseEvent& event) {}
+  virtual void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) {}
+  virtual void ProcessTouchEvent(const blink::WebTouchEvent& event,
+                         const ui::LatencyInfo& latency) {}
+
+  // If a RenderWidgetHost is dealing with points that are transformed from the
+  // root frame for a page (i.e. because its content is contained within
+  // that of another RenderWidgetHost), this provides a facility to convert
+  // a point from its own coordinate space to that of the root frame.
+  // This only needs to be overriden by RenderWidgetHostView subclasses
+  // that handle content embedded within other RenderWidgetHostViews.
+  virtual void TransformPointToRootCoordSpace(const gfx::Point& point,
+                                              gfx::Point* transformed_point);
+
+  // Transform a point that is in the coordinate space of a Surface that is
+  // embedded within the RenderWidgetHostViewBase's Surface to the
+  // coordinate space of the embedding Surface. Typically this means that a
+  // point was received from an out-of-process iframe's RenderWidget and needs
+  // to be translated to viewport coordinates for the root RWHV, in which case
+  // this method is called on the root RWHV with the out-of-process iframe's
+  // SurfaceId.
+  virtual void TransformPointToLocalCoordSpace(const gfx::Point& point,
+                                               cc::SurfaceId original_surface,
+                                               gfx::Point* transformed_point);
 
   //----------------------------------------------------------------------------
   // The following static methods are implemented by each platform.
@@ -208,11 +257,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Indicates whether the page has finished loading.
   virtual void SetIsLoading(bool is_loading) = 0;
 
-  // Updates the type of the input method attached to the view.
-  virtual void TextInputTypeChanged(ui::TextInputType type,
-                                    ui::TextInputMode mode,
-                                    bool can_compose_inline,
-                                    int flags) = 0;
+  // Updates the state of the input method attached to the view.
+  virtual void TextInputStateChanged(
+      const ViewHostMsg_TextInputState_Params& params) = 0;
 
   // Cancel the ongoing composition of the input method attached to the view.
   virtual void ImeCancelComposition() = 0;
@@ -220,13 +267,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Notifies the View that the renderer has ceased to exist.
   virtual void RenderProcessGone(base::TerminationStatus status,
                                  int error_code) = 0;
-
-  // Notifies the View that the renderer's host has ceased to exist.
-  // The default implementation of this is a no-op. This hack exists to fix
-  // a crash on the branch.
-  // TODO(ccameron): Clean this up.
-  // http://crbug.com/404828
-  virtual void RenderWidgetHostGone() {}
 
   // Tells the View to destroy itself.
   virtual void Destroy() = 0;
@@ -254,7 +294,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void CopyFromCompositingSurface(
       const gfx::Rect& src_subrect,
       const gfx::Size& dst_size,
-      ReadbackRequestCallback& callback,
+      const ReadbackRequestCallback& callback,
       const SkColorType preferred_color_type) = 0;
 
   // Copies the contents of the compositing surface, populating the given
@@ -269,7 +309,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void CopyFromCompositingSurfaceToVideoFrame(
       const gfx::Rect& src_subrect,
       const scoped_refptr<media::VideoFrame>& target,
-      const base::Callback<void(bool)>& callback) = 0;
+      const base::Callback<void(const gfx::Rect&, bool)>& callback) = 0;
 
   // Returns true if CopyFromCompositingSurfaceToVideoFrame() is likely to
   // succeed.
@@ -278,9 +318,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // should be renamed to HasCompositingSurface(), or unified with
   // IsSurfaceAvailableForCopy() and HasAcceleratedSurface().
   virtual bool CanCopyToVideoFrame() const = 0;
-
-  // DEPRECATED. Called when an accelerated compositing surface is initialized.
-  virtual void AcceleratedSurfaceInitialized(int route_id) {}
 
   // Return true if the view has an accelerated surface that contains the last
   // presented frame for the view. If |desired_size| is non-empty, true is
@@ -296,11 +333,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
       const gfx::Display& display);
 
   virtual void GetScreenInfo(blink::WebScreenInfo* results) = 0;
+  virtual bool GetScreenColorProfile(std::vector<char>* color_profile) = 0;
 
   // Gets the bounds of the window, in screen coordinates.
   virtual gfx::Rect GetBoundsInRootWindow() = 0;
-
-  virtual gfx::GLSurfaceHandle GetCompositingSurface() = 0;
 
   // Called by the RenderFrameHost when it receives an IPC response to a
   // TextSurroundingSelectionRequest.
@@ -317,11 +353,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // main frame.
   virtual void OnDidNavigateMainFrameToNewPage();
 
-#if defined(OS_ANDROID)
   // Instructs the view to not drop the surface even when the view is hidden.
   virtual void LockCompositingSurface() = 0;
   virtual void UnlockCompositingSurface() = 0;
-#endif
 
 #if defined(OS_MACOSX)
   // Does any event handling necessary for plugin IME; should be called after
@@ -396,7 +430,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // The current selection range relative to the start of the web page.
   gfx::Range selection_range_;
 
-protected:
+ protected:
   // The scale factor of the display the renderer is currently on.
   float current_device_scale_factor_;
 
@@ -412,9 +446,9 @@ protected:
 
   gfx::Rect current_display_area_;
 
-  uint32 renderer_frame_number_;
+  uint32_t renderer_frame_number_;
 
-  base::OneShotTimer<RenderWidgetHostViewBase> flush_input_timer_;
+  base::OneShotTimer flush_input_timer_;
 
   base::WeakPtrFactory<RenderWidgetHostViewBase> weak_factory_;
 

@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -14,16 +14,16 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/perf_time_logger.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/local_message_pipe_endpoint.h"
-#include "mojo/edk/system/message_pipe.h"
-#include "mojo/edk/system/message_pipe_test_utils.h"
-#include "mojo/edk/system/proxy_message_pipe_endpoint.h"
-#include "mojo/edk/system/raw_channel.h"
-#include "mojo/edk/system/test_utils.h"
-#include "mojo/edk/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/local_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_test_utils.h"
+#include "third_party/mojo/src/mojo/edk/system/proxy_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/raw_channel.h"
+#include "third_party/mojo/src/mojo/edk/system/test_utils.h"
+#include "third_party/mojo/src/mojo/edk/test/test_utils.h"
 
 namespace mojo {
 namespace system {
@@ -95,11 +95,11 @@ MOJO_MULTIPROCESS_TEST_CHILD_MAIN(PingPongClient) {
   embedder::SimplePlatformSupport platform_support;
   test::ChannelThread channel_thread(&platform_support);
   embedder::ScopedPlatformHandle client_platform_handle =
-      mojo::test::MultiprocessTestHelper::client_platform_handle.Pass();
+      std::move(mojo::test::MultiprocessTestHelper::client_platform_handle);
   CHECK(client_platform_handle.is_valid());
   scoped_refptr<ChannelEndpoint> ep;
   scoped_refptr<MessagePipe> mp(MessagePipe::CreateLocalProxy(&ep));
-  channel_thread.Start(client_platform_handle.Pass(), ep);
+  channel_thread.Start(std::move(client_platform_handle), ep);
 
   std::string buffer(1000000, '\0');
   int rv = 0;

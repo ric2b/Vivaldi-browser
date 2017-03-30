@@ -5,6 +5,8 @@
 #ifndef CHROME_INSTALLER_UTIL_DELETE_TREE_WORK_ITEM_H_
 #define CHROME_INSTALLER_UTIL_DELETE_TREE_WORK_ITEM_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -28,9 +30,22 @@ class DeleteTreeWorkItem : public WorkItem {
  private:
   friend class WorkItem;
 
+  // |root_path| will be moved to |temp_path| (rather than copied there and then
+  // deleted). For best results in this case, |root_path| and |temp_path|
+  // should be on the same volume; otherwise, the move will be simulated
+  // by a copy-and-delete operation.
   DeleteTreeWorkItem(const base::FilePath& root_path,
                      const base::FilePath& temp_path,
                      const std::vector<base::FilePath>& key_paths);
+
+  // Return temporary path for work based on |backup_path_| and |root_path_|.
+  base::FilePath GetBackupPath();
+
+  // Attempts to delete |root_path_|. Returns true on success.
+  bool DeleteRoot();
+
+  // Attempts to move |root_path_| to backup. Returns true on success.
+  bool MoveRootToBackup();
 
   // Root path to delete.
   base::FilePath root_path_;
@@ -53,8 +68,8 @@ class DeleteTreeWorkItem : public WorkItem {
   // The temporary directory into which the original root_path_ has been moved.
   base::ScopedTempDir backup_path_;
 
-  // Set to true once root_path_ has been copied into backup_path_.
-  bool copied_to_backup_;
+  // Set to true once root_path_ has been moved into backup_path_.
+  bool moved_to_backup_;
 };
 
 #endif  // CHROME_INSTALLER_UTIL_DELETE_TREE_WORK_ITEM_H_

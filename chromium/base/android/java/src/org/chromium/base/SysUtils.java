@@ -4,12 +4,10 @@
 
 package org.chromium.base;
 
-import android.annotation.TargetApi;
-import android.app.ActivityManager;
-import android.content.Context;
-import android.os.Build;
 import android.os.StrictMode;
 import android.util.Log;
+
+import org.chromium.base.annotations.CalledByNative;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -23,9 +21,6 @@ public class SysUtils {
     // A device reporting strictly more total memory in megabytes cannot be considered 'low-end'.
     private static final int ANDROID_LOW_MEMORY_DEVICE_THRESHOLD_MB = 512;
 
-    // Number of kilobytes in a megabyte.
-    private static final int KBS_IN_MB = 1024;
-
     private static final String TAG = "SysUtils";
 
     private static Boolean sLowEndDevice;
@@ -37,7 +32,7 @@ public class SysUtils {
      * @return Amount of physical memory in kilobytes, or 0 if there was
      *         an error trying to access the information.
      */
-    private static int amountOfPhysicalMemoryMB() {
+    private static int amountOfPhysicalMemoryKB() {
         // Extract total memory RAM size by parsing /proc/meminfo, note that
         // this is exactly what the implementation of sysconf(_SC_PHYS_PAGES)
         // does. However, it can't be called because this method must be
@@ -70,12 +65,12 @@ public class SysUtils {
 
                         int totalMemoryKB = Integer.parseInt(m.group(1));
                         // Sanity check.
-                        if (totalMemoryKB <= KBS_IN_MB) {
+                        if (totalMemoryKB <= 1024) {
                             Log.w(TAG, "Invalid /proc/meminfo total size in kB: " + m.group(1));
                             break;
                         }
 
-                        return totalMemoryKB / KBS_IN_MB;
+                        return totalMemoryKB;
                     }
 
                 } finally {
@@ -104,7 +99,6 @@ public class SysUtils {
         return sLowEndDevice.booleanValue();
     }
 
-    @TargetApi(Build.VERSION_CODES.KITKAT)
     private static boolean detectLowEndDevice() {
         assert CommandLine.isInitialized();
         if (CommandLine.getInstance().hasSwitch(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)) {
@@ -113,27 +107,8 @@ public class SysUtils {
         if (CommandLine.getInstance().hasSwitch(BaseSwitches.DISABLE_LOW_END_DEVICE_MODE)) {
             return false;
         }
-        // Any pre-KitKat device cannot be considered 'low-end'.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
-            return false;
-        }
 
-        Context context = ApplicationStatus.getApplicationContext();
-        if (context != null) {
-            ActivityManager activityManager = (ActivityManager)
-                    context.getSystemService(Context.ACTIVITY_SERVICE);
-            if (activityManager.isLowRamDevice()) {
-                return true;
-            }
-        } else {
-            Log.e(TAG, "ApplicationContext is null in ApplicationStatus");
-        }
-
-        int ramSizeMB = amountOfPhysicalMemoryMB();
-        if (ramSizeMB <= 0) {
-            return false;
-        }
-
-        return ramSizeMB < ANDROID_LOW_MEMORY_DEVICE_THRESHOLD_MB;
+        int ramSizeKB = amountOfPhysicalMemoryKB();
+        return (ramSizeKB > 0 && ramSizeKB / 1024 < ANDROID_LOW_MEMORY_DEVICE_THRESHOLD_MB);
     }
 }

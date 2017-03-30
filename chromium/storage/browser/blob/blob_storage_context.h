@@ -5,10 +5,14 @@
 #ifndef STORAGE_BROWSER_BLOB_BLOB_STORAGE_CONTEXT_H_
 #define STORAGE_BROWSER_BLOB_BLOB_STORAGE_CONTEXT_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "storage/browser/blob/blob_data_handle.h"
@@ -55,7 +59,10 @@ class STORAGE_EXPORT BlobStorageContext
   // To cleanly use a builder multiple times, please call Clone() on the
   // builder, or even better for memory savings, clear the builder and append
   // the previously constructed blob.
-  scoped_ptr<BlobDataHandle> AddFinishedBlob(BlobDataBuilder* builder);
+  scoped_ptr<BlobDataHandle> AddFinishedBlob(const BlobDataBuilder& builder);
+
+  // Deprecated, use const ref version above.
+  scoped_ptr<BlobDataHandle> AddFinishedBlob(const BlobDataBuilder* builder);
 
   // Useful for coining blob urls from within the browser process.
   bool RegisterPublicBlobURL(const GURL& url, const std::string& uuid);

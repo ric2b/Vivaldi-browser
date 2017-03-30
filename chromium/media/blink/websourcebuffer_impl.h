@@ -5,10 +5,12 @@
 #ifndef MEDIA_BLINK_WEBSOURCEBUFFER_IMPL_H_
 #define MEDIA_BLINK_WEBSOURCEBUFFER_IMPL_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "third_party/WebKit/public/platform/WebSourceBuffer.h"
 
@@ -18,22 +20,24 @@ class ChunkDemuxer;
 class WebSourceBufferImpl : public blink::WebSourceBuffer {
  public:
   WebSourceBufferImpl(const std::string& id, ChunkDemuxer* demuxer);
-  virtual ~WebSourceBufferImpl();
+  ~WebSourceBufferImpl() override;
 
   // blink::WebSourceBuffer implementation.
-  virtual void setClient(blink::WebSourceBufferClient* client);
-  virtual bool setMode(AppendMode mode);
-  virtual blink::WebTimeRanges buffered();
-  virtual void append(
+  void setClient(blink::WebSourceBufferClient* client) override;
+  bool setMode(AppendMode mode) override;
+  blink::WebTimeRanges buffered() override;
+  bool evictCodedFrames(double currentPlaybackTime,
+                        size_t newDataSize) override;
+  void append(
       const unsigned char* data,
       unsigned length,
-      double* timestamp_offset);
-  virtual void abort();
-  virtual void remove(double start, double end);
-  virtual bool setTimestampOffset(double offset);
-  virtual void setAppendWindowStart(double start);
-  virtual void setAppendWindowEnd(double end);
-  virtual void removedFromMediaSource();
+      double* timestamp_offset) override;
+  void resetParserState() override;
+  void remove(double start, double end) override;
+  bool setTimestampOffset(double offset) override;
+  void setAppendWindowStart(double start) override;
+  void setAppendWindowEnd(double end) override;
+  void removedFromMediaSource() override;
 
  private:
   // Demuxer callback handler to process an initialization segment received

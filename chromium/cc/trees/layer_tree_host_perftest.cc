@@ -4,6 +4,8 @@
 
 #include "cc/trees/layer_tree_host.h"
 
+#include <stdint.h>
+
 #include <sstream>
 
 #include "base/files/file_path.h"
@@ -44,7 +46,8 @@ class LayerTreeHostPerfTest : public LayerTreeTest {
   }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->renderer_settings.disable_gpu_vsync = true;
+    settings->wait_for_beginframe_interval = false;
+    settings->renderer_settings.disable_display_vsync = true;
   }
 
   void BeginTest() override {
@@ -137,6 +140,7 @@ class LayerTreeHostPerfTestJsonReader : public LayerTreeHostPerfTest {
                                                   &fake_content_layer_client_);
     ASSERT_TRUE(root.get());
     layer_tree_host()->SetRootLayer(root);
+    fake_content_layer_client_.set_bounds(viewport);
   }
 
  private:
@@ -147,13 +151,13 @@ class LayerTreeHostPerfTestJsonReader : public LayerTreeHostPerfTest {
 TEST_F(LayerTreeHostPerfTestJsonReader, TenTenSingleThread) {
   SetTestName("10_10_single_thread");
   ReadTestFile("10_10_layer_tree");
-  RunTest(false, false);
+  RunTest(CompositorMode::SingleThreaded, false);
 }
 
 TEST_F(LayerTreeHostPerfTestJsonReader, TenTenThreaded) {
   SetTestName("10_10_threaded_impl_side");
   ReadTestFile("10_10_layer_tree");
-  RunTest(true, false);
+  RunTest(CompositorMode::Threaded, false);
 }
 
 // Simulates a tab switcher scene with two stacks of 10 tabs each.
@@ -162,14 +166,14 @@ TEST_F(LayerTreeHostPerfTestJsonReader,
   full_damage_each_frame_ = true;
   SetTestName("10_10_single_thread_full_damage_each_frame");
   ReadTestFile("10_10_layer_tree");
-  RunTest(false, false);
+  RunTest(CompositorMode::SingleThreaded, false);
 }
 
 TEST_F(LayerTreeHostPerfTestJsonReader, TenTenThreaded_FullDamageEachFrame) {
   full_damage_each_frame_ = true;
   SetTestName("10_10_threaded_impl_side_full_damage_each_frame");
   ReadTestFile("10_10_layer_tree");
-  RunTest(true, false);
+  RunTest(CompositorMode::Threaded, false);
 }
 
 // Invalidates a leaf layer in the tree on the main thread after every commit.
@@ -203,13 +207,13 @@ class LayerTreeHostPerfTestLeafInvalidates
 TEST_F(LayerTreeHostPerfTestLeafInvalidates, TenTenSingleThread) {
   SetTestName("10_10_single_thread_leaf_invalidates");
   ReadTestFile("10_10_layer_tree");
-  RunTest(false, false);
+  RunTest(CompositorMode::SingleThreaded, false);
 }
 
 TEST_F(LayerTreeHostPerfTestLeafInvalidates, TenTenThreaded) {
   SetTestName("10_10_threaded_impl_side_leaf_invalidates");
   ReadTestFile("10_10_layer_tree");
-  RunTest(true, false);
+  RunTest(CompositorMode::Threaded, false);
 }
 
 // Simulates main-thread scrolling on each frame.
@@ -225,7 +229,7 @@ class ScrollingLayerTreePerfTest : public LayerTreeHostPerfTestJsonReader {
     ASSERT_TRUE(scrollable_.get());
   }
 
-  void Layout() override {
+  void UpdateLayerTreeHost() override {
     if (TestEnded())
       return;
     static const gfx::Vector2d delta = gfx::Vector2d(0, 10);
@@ -244,7 +248,7 @@ TEST_F(ScrollingLayerTreePerfTest, LongScrollablePageSingleThread) {
   // crbug.com/444219 is fixed.
   bool old_verify_property_trees = verify_property_trees();
   set_verify_property_trees(false);
-  RunTest(false, false);
+  RunTest(CompositorMode::SingleThreaded, false);
   set_verify_property_trees(old_verify_property_trees);
 }
 
@@ -255,11 +259,12 @@ TEST_F(ScrollingLayerTreePerfTest, LongScrollablePageThreaded) {
   // crbug.com/444219 is fixed.
   bool old_verify_property_trees = verify_property_trees();
   set_verify_property_trees(false);
-  RunTest(true, false);
+  RunTest(CompositorMode::Threaded, false);
   set_verify_property_trees(old_verify_property_trees);
 }
 
-static void EmptyReleaseCallback(uint32 sync_point, bool lost_resource) {}
+static void EmptyReleaseCallback(const gpu::SyncToken& sync_token,
+                                 bool lost_resource) {}
 
 // Simulates main-thread scrolling on each frame.
 class BrowserCompositorInvalidateLayerTreePerfTest
@@ -288,13 +293,14 @@ class BrowserCompositorInvalidateLayerTreePerfTest
     std::ostringstream name_stream;
     name_stream << "name" << next_sync_point_;
     gpu_mailbox.SetName(
-        reinterpret_cast<const int8*>(name_stream.str().c_str()));
+        reinterpret_cast<const int8_t*>(name_stream.str().c_str()));
     scoped_ptr<SingleReleaseCallback> callback = SingleReleaseCallback::Create(
         base::Bind(&EmptyReleaseCallback));
-    TextureMailbox mailbox(gpu_mailbox, GL_TEXTURE_2D, next_sync_point_);
+    TextureMailbox mailbox(gpu_mailbox, gpu::SyncToken(next_sync_point_),
+                           GL_TEXTURE_2D);
     next_sync_point_++;
 
-    tab_contents_->SetTextureMailbox(mailbox, callback.Pass());
+    tab_contents_->SetTextureMailbox(mailbox, std::move(callback));
   }
 
   void DidCommit() override {
@@ -329,7 +335,7 @@ TEST_F(BrowserCompositorInvalidateLayerTreePerfTest, DenseBrowserUIThreaded) {
   measure_commit_cost_ = true;
   SetTestName("dense_layer_tree");
   ReadTestFile("dense_layer_tree");
-  RunTest(true, false);
+  RunTest(CompositorMode::Threaded, false);
 }
 
 // Simulates a page with several large, transformed and animated layers.
@@ -338,7 +344,7 @@ TEST_F(LayerTreeHostPerfTestJsonReader, HeavyPageThreaded) {
   measure_commit_cost_ = true;
   SetTestName("heavy_page");
   ReadTestFile("heavy_layer_tree");
-  RunTest(true, false);
+  RunTest(CompositorMode::Threaded, false);
 }
 
 }  // namespace

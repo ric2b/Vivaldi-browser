@@ -11,6 +11,10 @@ source_set("component_updater") {
     "component_updater_service_internal.h",
     "component_updater_switches.cc",
     "component_updater_switches.h",
+    "component_updater_url_constants.cc",
+    "component_updater_url_constants.h",
+    "configurator_impl.cc",
+    "configurator_impl.h",
     "default_component_installer.cc",
     "default_component_installer.h",
     "pref_names.cc",
@@ -22,8 +26,23 @@ source_set("component_updater") {
   deps = [
     "//base",
     "//components/update_client",
+    "//components/version_info",
     "//ui/base",
     "//url",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "mock_component_updater_service.cc",
+    "mock_component_updater_service.h",
+  ]
+
+  public_deps = [
+    ":component_updater",
+    "//base",
+    "//testing/gmock",
   ]
 }
 
@@ -37,7 +56,9 @@ source_set("unit_tests") {
   deps = [
     ":component_updater",
     "//base",
-    "//testing/gtest",
+    "//base/test:test_support",
+    "//components/update_client:test_support",
     "//testing/gmock",
+    "//testing/gtest",
   ]
 }

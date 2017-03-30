@@ -7,9 +7,11 @@
 
 #include <string>
 
+#include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+#include "components/security_state/security_state_model.h"
 #include "content/public/common/page_zoom.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -21,7 +23,6 @@ class Profile;
 namespace content {
 class PageState;
 class WebContents;
-struct SSLStatus;
 }
 
 namespace chrome {
@@ -99,24 +100,25 @@ void BookmarkCurrentPageAllowingExtensionOverrides(Browser* browser);
 bool CanBookmarkCurrentPage(const Browser* browser);
 void BookmarkAllTabs(Browser* browser);
 bool CanBookmarkAllTabs(const Browser* browser);
+void SaveCreditCard(Browser* browser);
 void Translate(Browser* browser);
 void ManagePasswordsForPage(Browser* browser);
-#if defined(OS_WIN)
-void TogglePagePinnedToStartScreen(Browser* browser);
-#endif
 void SavePage(Browser* browser);
 bool CanSavePage(const Browser* browser);
 void ShowFindBar(Browser* browser);
-void ShowWebsiteSettings(Browser* browser,
-                         content::WebContents* web_contents,
-                         const GURL& url,
-                         const content::SSLStatus& ssl);
+void ShowWebsiteSettings(
+    Browser* browser,
+    content::WebContents* web_contents,
+    const GURL& url,
+    const security_state::SecurityStateModel::SecurityInfo& security_info);
 void Print(Browser* browser);
 bool CanPrint(Browser* browser);
 #if defined(ENABLE_BASIC_PRINTING)
 void BasicPrint(Browser* browser);
 bool CanBasicPrint(Browser* browser);
 #endif  // ENABLE_BASIC_PRINTING
+bool CanRouteMedia(Browser* browser);
+void RouteMedia(Browser* browser);
 void EmailPageLocation(Browser* browser);
 bool CanEmailPageLocation(const Browser* browser);
 void CutCopyPaste(Browser* browser, int command_id);
@@ -142,7 +144,6 @@ void ShowAppMenu(Browser* browser);
 void ShowAvatarMenu(Browser* browser);
 void ShowFastUserSwitcher(Browser* browser);
 void OpenUpdateChromeDialog(Browser* browser);
-void ToggleSpeechInput(Browser* browser);
 void DistillCurrentPage(Browser* browser);
 bool CanRequestTabletSite(content::WebContents* current_tab);
 bool IsRequestingTabletSite(Browser* browser);

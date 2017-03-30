@@ -4,11 +4,14 @@
 
 #include "cloud_print/gcp20/prototype/cloud_print_requester.h"
 
+#include <stdint.h>
+#include <limits>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/md5.h"
 #include "base/message_loop/message_loop.h"
-#include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "cloud_print/gcp20/prototype/cloud_print_url_request_context_getter.h"
 #include "google_apis/google_api_keys.h"
@@ -86,7 +89,7 @@ std::string LocalSettingsToJson(const LocalSettings& settings) {
   current->SetBoolean("printer/local_printing_enabled",
                          settings.local_printing_enabled);
   current->SetInteger("xmpp_timeout_value", settings.xmpp_timeout_value);
-  dictionary.Set("current", current.Pass());
+  dictionary.Set("current", std::move(current));
 
   std::string local_settings;
   base::JSONWriter::Write(dictionary, &local_settings);
@@ -121,11 +124,7 @@ void CloudPrintRequester::StartRegistration(const std::string& proxy_id,
                                             const std::string& user,
                                             const LocalSettings& settings,
                                             const std::string& cdd) {
-  std::string mime_boundary;
-  int r1 = base::RandInt(0, kint32max);
-  int r2 = base::RandInt(0, kint32max);
-  base::SStringPrintf(&mime_boundary,
-                      "---------------------------%08X%08X", r1, r2);
+  std::string mime_boundary = net::GenerateMimeMultipartBoundary();
 
   std::string data;
   std::string data_mimetype;

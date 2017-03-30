@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -96,7 +97,7 @@ scoped_ptr<net::URLFetcher> FakeURLFetcherFactory::CreateURLFetcher(
       net::FakeURLFetcherFactory::CreateURLFetcher(id, url, request_type,
                                                    delegate);
   EXPECT_TRUE(fetcher);
-  return fetcher.Pass();
+  return fetcher;
 }
 
 }  // namespace
@@ -156,6 +157,7 @@ void CloudExternalDataManagerBaseTest::SetUp() {
   cloud_policy_store_.policy_map_.Set(kStringPolicy,
                                       POLICY_LEVEL_MANDATORY,
                                       POLICY_SCOPE_USER,
+                                      POLICY_SOURCE_CLOUD,
                                       new base::StringValue(std::string()),
                                       NULL);
   // Make |k10BytePolicy| reference 10 bytes of external data.
@@ -202,7 +204,7 @@ scoped_ptr<base::DictionaryValue>
   metadata->SetStringWithoutPathExpansion("url", url);
   metadata->SetStringWithoutPathExpansion("hash", base::HexEncode(hash.c_str(),
                                                                   hash.size()));
-  return metadata.Pass();
+  return metadata;
 }
 
 void CloudExternalDataManagerBaseTest::SetExternalDataReference(
@@ -212,6 +214,7 @@ void CloudExternalDataManagerBaseTest::SetExternalDataReference(
       policy,
       POLICY_LEVEL_MANDATORY,
       POLICY_SCOPE_USER,
+      POLICY_SOURCE_CLOUD,
       metadata.release(),
       new ExternalDataFetcher(
           external_data_manager_->weak_factory_.GetWeakPtr(), policy));

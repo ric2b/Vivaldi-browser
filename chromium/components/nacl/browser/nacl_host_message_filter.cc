@@ -4,7 +4,12 @@
 
 #include "components/nacl/browser/nacl_host_message_filter.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/sys_info.h"
+#include "build/build_config.h"
 #include "components/nacl/browser/bad_message.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/nacl_file_host.h"
@@ -31,21 +36,20 @@ namespace {
 const size_t kMaxPreOpenResourceFiles = 200;
 
 ppapi::PpapiPermissions GetNaClPermissions(
-    uint32 permission_bits,
+    uint32_t permission_bits,
     content::BrowserContext* browser_context,
     const GURL& document_url) {
   // Only allow NaCl plugins to request certain permissions. We don't want
   // a compromised renderer to be able to start a nacl plugin with e.g. Flash
   // permissions which may expand the surface area of the sandbox.
-  uint32 masked_bits = permission_bits & ppapi::PERMISSION_DEV;
+  uint32_t masked_bits = permission_bits & ppapi::PERMISSION_DEV;
   if (content::PluginService::GetInstance()->PpapiDevChannelSupported(
           browser_context, document_url))
     masked_bits |= ppapi::PERMISSION_DEV_CHANNEL;
   return ppapi::PpapiPermissions::GetForCommandLine(masked_bits);
 }
 
-
-ppapi::PpapiPermissions GetPpapiPermissions(uint32 permission_bits,
+ppapi::PpapiPermissions GetPpapiPermissions(uint32_t permission_bits,
                                             int render_process_id,
                                             int render_view_id) {
   // We get the URL from WebContents from the RenderViewHost, since we don't
@@ -127,7 +131,7 @@ void NaClHostMessageFilter::OnLaunchNaCl(
   // up permissions, and we don't have the right browser state to look up some
   // of the whitelisting parameters anyway.
   if (launch_params.process_type == kPNaClTranslatorProcessType) {
-    uint32 perms = launch_params.permission_bits & ppapi::PERMISSION_DEV;
+    uint32_t perms = launch_params.permission_bits & ppapi::PERMISSION_DEV;
     LaunchNaClContinuationOnIOThread(
         launch_params,
         reply_msg,
@@ -221,9 +225,8 @@ void NaClHostMessageFilter::BatchOpenResourceFiles(
       continue;
 
     prefetched_resource_files.push_back(NaClResourcePrefetchResult(
-        IPC::TakeFileHandleForProcess(file.Pass(), PeerHandle()),
-        file_path_metadata,
-        request_list[i].file_key));
+        IPC::TakeFileHandleForProcess(std::move(file), PeerHandle()),
+        file_path_metadata, request_list[i].file_key));
 
     if (prefetched_resource_files.size() >= kMaxPreOpenResourceFiles)
       break;
@@ -321,7 +324,7 @@ void NaClHostMessageFilter::SyncReturnTemporaryFile(
   if (file.IsValid()) {
     NaClHostMsg_NaClCreateTemporaryFile::WriteReplyParams(
         reply_msg,
-        IPC::TakeFileHandleForProcess(file.Pass(), PeerHandle()));
+        IPC::TakeFileHandleForProcess(std::move(file), PeerHandle()));
   } else {
     reply_msg->set_reply_error();
   }

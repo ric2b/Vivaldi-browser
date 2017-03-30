@@ -5,6 +5,7 @@
 #include "chrome/browser/chrome_device_client.h"
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "device/hid/hid_service.h"
 #include "device/usb/usb_service.h"
@@ -17,12 +18,20 @@ ChromeDeviceClient::~ChromeDeviceClient() {}
 
 device::UsbService* ChromeDeviceClient::GetUsbService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return device::UsbService::GetInstance(
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+  if (!usb_service_) {
+    usb_service_ = device::UsbService::Create(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+  }
+  return usb_service_.get();
 }
 
 device::HidService* ChromeDeviceClient::GetHidService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return device::HidService::GetInstance(
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+#if !defined(OS_ANDROID)
+  if (!hid_service_) {
+    hid_service_ = device::HidService::Create(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+  }
+#endif
+  return hid_service_.get();
 }

@@ -4,11 +4,14 @@
 
 #include "chrome/browser/search/hotword_service.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
@@ -17,6 +20,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/hotword_private/hotword_private_api.h"
@@ -268,8 +272,7 @@ class HotwordNotificationDelegate : public NotificationDelegate {
 // static
 bool HotwordService::DoesHotwordSupportLanguage(Profile* profile) {
   std::string normalized_locale =
-      l10n_util::NormalizeLocale(GetCurrentLocale(profile));
-  base::StringToLowerASCII(&normalized_locale);
+      base::ToLowerASCII(l10n_util::NormalizeLocale(GetCurrentLocale(profile)));
 
   // For M43, we are limiting always-on to en_us only.
   // TODO(kcarattini): Remove this once
@@ -428,17 +431,13 @@ void HotwordService::ShowHotwordNotification() {
 
   Notification notification(
       message_center::NOTIFICATION_TYPE_SIMPLE,
-      GURL(),
       l10n_util::GetStringUTF16(IDS_HOTWORD_NOTIFICATION_TITLE),
       l10n_util::GetStringUTF16(IDS_HOTWORD_NOTIFICATION_DESCRIPTION),
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(
           IDR_HOTWORD_NOTIFICATION_ICON),
-      message_center::NotifierId(
-          message_center::NotifierId::SYSTEM_COMPONENT,
-          hotword_internal::kHotwordNotifierId),
-      base::string16(),
-      std::string(),
-      data,
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 hotword_internal::kHotwordNotifierId),
+      base::string16(), GURL(), std::string(), data,
       new HotwordNotificationDelegate(profile_));
 
   g_browser_process->notification_ui_manager()->Add(notification, profile_);

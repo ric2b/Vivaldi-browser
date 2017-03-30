@@ -4,13 +4,17 @@
 
 #include "chrome/browser/extensions/api/file_system/file_system_api.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
@@ -61,13 +65,15 @@ AcceptOption* BuildAcceptOption(const std::string& description,
     option->description.reset(new std::string(description));
 
   if (!mime_types.empty()) {
-    option->mime_types.reset(new std::vector<std::string>());
-    base::SplitString(mime_types, ',', option->mime_types.get());
+    option->mime_types.reset(new std::vector<std::string>(
+        base::SplitString(mime_types, ",",
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)));
   }
 
   if (!extensions.empty()) {
-    option->extensions.reset(new std::vector<std::string>());
-    base::SplitString(extensions, ',', option->extensions.get());
+    option->extensions.reset(new std::vector<std::string>(
+        base::SplitString(extensions, ",",
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)));
   }
 
   return option;
@@ -314,7 +320,8 @@ TEST_F(FileSystemApiConsentProviderTest, ForNonKioskApps) {
   // Component apps are not granted unless they are whitelisted.
   {
     scoped_refptr<Extension> component_extension(
-        test_util::BuildApp(ExtensionBuilder().SetLocation(Manifest::COMPONENT))
+        test_util::BuildApp(
+            std::move(ExtensionBuilder().SetLocation(Manifest::COMPONENT)))
             .Build());
     TestingConsentProviderDelegate delegate;
     ConsentProvider provider(&delegate);
@@ -325,7 +332,8 @@ TEST_F(FileSystemApiConsentProviderTest, ForNonKioskApps) {
   // user.
   {
     scoped_refptr<Extension> whitelisted_component_extension(
-        test_util::BuildApp(ExtensionBuilder().SetLocation(Manifest::COMPONENT))
+        test_util::BuildApp(
+            std::move(ExtensionBuilder().SetLocation(Manifest::COMPONENT)))
             .Build());
     TestingConsentProviderDelegate delegate;
     delegate.SetComponentWhitelist(whitelisted_component_extension->id());
@@ -359,13 +367,15 @@ TEST_F(FileSystemApiConsentProviderTest, ForKioskApps) {
   // instantly without asking for user consent, but with a notification.
   {
     scoped_refptr<Extension> auto_launch_kiosk_app(
-        test_util::BuildApp(ExtensionBuilder().Pass())
+        test_util::BuildApp(ExtensionBuilder())
             .MergeManifest(DictionaryBuilder()
                                .SetBoolean("kiosk_enabled", true)
                                .SetBoolean("kiosk_only", true))
             .Build());
-    user_manager_->AddKioskAppUser(auto_launch_kiosk_app->id());
-    user_manager_->LoginUser(auto_launch_kiosk_app->id());
+    user_manager_->AddKioskAppUser(
+        AccountId::FromUserEmail(auto_launch_kiosk_app->id()));
+    user_manager_->LoginUser(
+        AccountId::FromUserEmail(auto_launch_kiosk_app->id()));
 
     TestingConsentProviderDelegate delegate;
     delegate.SetIsAutoLaunched(true);
@@ -386,12 +396,13 @@ TEST_F(FileSystemApiConsentProviderTest, ForKioskApps) {
   // Non-component apps in manual-launch kiosk mode will be granted access after
   // receiving approval from the user.
   scoped_refptr<Extension> manual_launch_kiosk_app(
-      test_util::BuildApp(ExtensionBuilder().Pass())
+      test_util::BuildApp(ExtensionBuilder())
           .MergeManifest(DictionaryBuilder()
                              .SetBoolean("kiosk_enabled", true)
                              .SetBoolean("kiosk_only", true))
           .Build());
-  user_manager_->KioskAppLoggedIn(manual_launch_kiosk_app->id());
+  user_manager_->KioskAppLoggedIn(
+      AccountId::FromUserEmail(manual_launch_kiosk_app->id()));
   {
     TestingConsentProviderDelegate delegate;
     delegate.SetDialogButton(ui::DIALOG_BUTTON_OK);

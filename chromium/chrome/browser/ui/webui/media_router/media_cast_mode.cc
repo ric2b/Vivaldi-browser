@@ -11,41 +11,19 @@
 
 namespace media_router {
 
-std::string MediaCastModeToTitle(MediaCastMode mode, const std::string& host) {
-  switch (mode) {
-    case MediaCastMode::DEFAULT:
-      return l10n_util::GetStringFUTF8(
-          IDS_MEDIA_ROUTER_DEFAULT_CAST_MODE_TITLE, base::UTF8ToUTF16(host));
-    case MediaCastMode::TAB_MIRROR:
-      return l10n_util::GetStringUTF8(
-          IDS_MEDIA_ROUTER_TAB_MIRROR_CAST_MODE_TITLE);
-    case MediaCastMode::DESKTOP_OR_WINDOW_MIRROR:
-      return l10n_util::GetStringUTF8(
-          IDS_MEDIA_ROUTER_DESKTOP_OR_WINDOW_MIRROR_CAST_MODE_TITLE);
-    case MediaCastMode::SOUND_OPTIMIZED_TAB_MIRROR:
-      return l10n_util::GetStringUTF8(
-          IDS_MEDIA_ROUTER_SOUND_OPTIMIZED_TAB_MIRROR_CAST_MODE_TITLE);
-    default:
-      NOTREACHED();
-      return "";
-  }
-}
-
 std::string MediaCastModeToDescription(
     MediaCastMode mode, const std::string& host) {
   switch (mode) {
     case MediaCastMode::DEFAULT:
       return l10n_util::GetStringFUTF8(
-          IDS_MEDIA_ROUTER_DEFAULT_CAST_MODE, base::UTF8ToUTF16(host));
+          IDS_MEDIA_ROUTER_DEFAULT_CAST_MODE,
+          base::UTF8ToUTF16(host));
     case MediaCastMode::TAB_MIRROR:
       return l10n_util::GetStringUTF8(
           IDS_MEDIA_ROUTER_TAB_MIRROR_CAST_MODE);
-    case MediaCastMode::DESKTOP_OR_WINDOW_MIRROR:
+    case MediaCastMode::DESKTOP_MIRROR:
       return l10n_util::GetStringUTF8(
-          IDS_MEDIA_ROUTER_DESKTOP_OR_WINDOW_MIRROR_CAST_MODE);
-    case MediaCastMode::SOUND_OPTIMIZED_TAB_MIRROR:
-      return l10n_util::GetStringUTF8(
-          IDS_MEDIA_ROUTER_SOUND_OPTIMIZED_TAB_MIRROR_CAST_MODE);
+          IDS_MEDIA_ROUTER_DESKTOP_MIRROR_CAST_MODE);
     default:
       NOTREACHED();
       return "";
@@ -53,16 +31,14 @@ std::string MediaCastModeToDescription(
 }
 
 bool IsValidCastModeNum(int cast_mode_num) {
-  return cast_mode_num >= MediaCastMode::DEFAULT &&
-         cast_mode_num < MediaCastMode::NUM_CAST_MODES;
-}
-
-MediaCastMode GetPreferredCastMode(const CastModeSet& cast_modes) {
-  if (cast_modes.empty()) {
-    LOG(ERROR) << "Called with empty cast_modes!";
-    return MediaCastMode::DEFAULT;
+  switch (cast_mode_num) {
+    case MediaCastMode::DEFAULT:
+    case MediaCastMode::TAB_MIRROR:
+    case MediaCastMode::DESKTOP_MIRROR:
+      return true;
+    default:
+      return false;
   }
-  return *cast_modes.begin();
 }
 
 }  // namespace media_router

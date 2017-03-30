@@ -11,32 +11,25 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
-#include "base/memory/scoped_vector.h"
-#include "base/memory/shared_memory.h"
 #include "base/single_thread_task_runner.h"
+#include "base/sys_info.h"
 #include "base/thread_task_runner_handle.h"
 #include "content/renderer/pepper/pepper_video_encoder_host.h"
 #include "content/renderer/render_thread_impl.h"
-#include "third_party/libvpx/source/libvpx/vpx/vp8cx.h"
-#include "third_party/libvpx/source/libvpx/vpx/vpx_encoder.h"
+#include "third_party/libvpx_new/source/libvpx/vpx/vp8cx.h"
+#include "third_party/libvpx_new/source/libvpx/vpx/vpx_encoder.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace content {
 
+namespace {
+
 // TODO(llandwerlin): Libvpx doesn't seem to have a maximum frame size
 // limitation. We currently limit the size of the frames to encode at
-// 1080p (%64 pixels blocks), this seems like a reasonable limit for
+// 2160p (%64 pixels blocks), this seems like a reasonable limit for
 // software encoding.
-const int32_t kMaxWidth = 1920;
-const int32_t kMaxHeight = 1088;
-
-// Default speed for the encoder (same as WebRTC). Increases the CPU
-// usage as the value is more negative (VP8 valid range: -16..16).
-const int32_t kDefaultCpuUsed = -6;
-
-// Default quantizer min/max values.
-const int32_t kDefaultMinQuantizer = 2;
-const int32_t kDefaultMaxQuantizer = 52;
+const int32_t kMaxWidth = 4096;
+const int32_t kMaxHeight = 2176;
 
 // Bitstream buffer size.
 const uint32_t kBitstreamBufferSize = 2 * 1024 * 1024;
@@ -44,20 +37,74 @@ const uint32_t kBitstreamBufferSize = 2 * 1024 * 1024;
 // Number of frames needs at any given time.
 const uint32_t kInputFrameCount = 1;
 
+// Maximal number or threads used for encoding.
+const int32_t kMaxNumThreads = 8;
+
+// Default speed for the encoder. Increases the CPU usage as the value
+// is more negative (VP8 valid range: -16..16, VP9 valid range:
+// -8..8), using the same value as WebRTC.
+const int32_t kVp8DefaultCpuUsed = -6;
+
+// Default quantizer min/max values (same values as WebRTC).
+const int32_t kVp8DefaultMinQuantizer = 2;
+const int32_t kVp8DefaultMaxQuantizer = 52;
+
+// Maximum bitrate in CQ mode (same value as ffmpeg).
+const int32_t kVp8MaxCQBitrate = 1000000;
+
+// For VP9, the following 3 values are the same values as remoting.
+const int32_t kVp9DefaultCpuUsed = 6;
+
+const int32_t kVp9DefaultMinQuantizer = 20;
+const int32_t kVp9DefaultMaxQuantizer = 30;
+
+// VP9 adaptive quantization strategy (same as remoting (live video
+// conferencing)).
+const int kVp9AqModeCyclicRefresh = 3;
+
+void GetVpxCodecParameters(media::VideoCodecProfile codec,
+                           vpx_codec_iface_t** vpx_codec,
+                           int32_t* min_quantizer,
+                           int32_t* max_quantizer,
+                           int32_t* cpu_used) {
+  switch (codec) {
+    case media::VP8PROFILE_ANY:
+      *vpx_codec = vpx_codec_vp8_cx();
+      *min_quantizer = kVp8DefaultMinQuantizer;
+      *max_quantizer = kVp8DefaultMaxQuantizer;
+      *cpu_used = kVp8DefaultCpuUsed;
+      break;
+    case media::VP9PROFILE_ANY:
+      *vpx_codec = vpx_codec_vp9_cx();
+      *min_quantizer = kVp9DefaultMinQuantizer;
+      *max_quantizer = kVp9DefaultMaxQuantizer;
+      *cpu_used = kVp9DefaultCpuUsed;
+      break;
+    default:
+      *vpx_codec = nullptr;
+      *min_quantizer = 0;
+      *max_quantizer = 0;
+      *cpu_used = 0;
+      NOTREACHED();
+  }
+}
+
+}  // namespace
+
 class VideoEncoderShim::EncoderImpl {
  public:
   explicit EncoderImpl(const base::WeakPtr<VideoEncoderShim>& shim);
   ~EncoderImpl();
 
-  void Initialize(media::VideoFrame::Format input_format,
+  void Initialize(media::VideoPixelFormat input_format,
                   const gfx::Size& input_visible_size,
                   media::VideoCodecProfile output_profile,
-                  uint32 initial_bitrate);
+                  uint32_t initial_bitrate);
   void Encode(const scoped_refptr<media::VideoFrame>& frame,
               bool force_keyframe);
   void UseOutputBitstreamBuffer(const media::BitstreamBuffer& buffer,
                                 uint8_t* mem);
-  void RequestEncodingParametersChange(uint32 bitrate, uint32 framerate);
+  void RequestEncodingParametersChange(uint32_t bitrate, uint32_t framerate);
   void Stop();
 
  private:
@@ -92,7 +139,7 @@ class VideoEncoderShim::EncoderImpl {
   vpx_codec_enc_cfg_t config_;
   vpx_codec_ctx_t encoder_;
 
-  uint32 framerate_;
+  uint32_t framerate_;
 
   std::deque<PendingEncode> frames_;
   std::deque<BitstreamBuffer> buffers_;
@@ -111,21 +158,24 @@ VideoEncoderShim::EncoderImpl::~EncoderImpl() {
 }
 
 void VideoEncoderShim::EncoderImpl::Initialize(
-    media::VideoFrame::Format input_format,
+    media::VideoPixelFormat input_format,
     const gfx::Size& input_visible_size,
     media::VideoCodecProfile output_profile,
-    uint32 initial_bitrate) {
+    uint32_t initial_bitrate) {
   gfx::Size coded_size =
       media::VideoFrame::PlaneSize(input_format, 0, input_visible_size);
 
+  vpx_codec_iface_t* vpx_codec;
+  int32_t min_quantizer, max_quantizer, cpu_used;
+  GetVpxCodecParameters(output_profile, &vpx_codec, &min_quantizer,
+                        &max_quantizer, &cpu_used);
+
   // Populate encoder configuration with default values.
-  if (vpx_codec_enc_config_default(vpx_codec_vp8_cx(), &config_, 0) !=
-      VPX_CODEC_OK) {
+  if (vpx_codec_enc_config_default(vpx_codec, &config_, 0) != VPX_CODEC_OK) {
     NotifyError(media::VideoEncodeAccelerator::kPlatformFailureError);
     return;
   }
 
-  config_.g_threads = 1;
   config_.g_w = input_visible_size.width();
   config_.g_h = input_visible_size.height();
 
@@ -135,11 +185,27 @@ void VideoEncoderShim::EncoderImpl::Initialize(
   config_.g_timebase.num = 1;
   config_.g_timebase.den = base::Time::kMicrosecondsPerSecond;
   config_.rc_target_bitrate = initial_bitrate / 1000;
-  config_.rc_min_quantizer = kDefaultMinQuantizer;
-  config_.rc_max_quantizer = kDefaultMaxQuantizer;
+  config_.rc_min_quantizer = min_quantizer;
+  config_.rc_max_quantizer = max_quantizer;
+  // Do not saturate CPU utilization just for encoding. On a lower-end system
+  // with only 1 or 2 cores, use only one thread for encoding. On systems with
+  // more cores, allow half of the cores to be used for encoding.
+  config_.g_threads =
+      std::min(kMaxNumThreads, (base::SysInfo::NumberOfProcessors() + 1) / 2);
+
+  // Use Q/CQ mode if no target bitrate is given. Note that in the VP8/CQ case
+  // the meaning of rc_target_bitrate changes to target maximum rate.
+  if (initial_bitrate == 0) {
+    if (output_profile == media::VP9PROFILE_ANY) {
+      config_.rc_end_usage = VPX_Q;
+    } else if (output_profile == media::VP8PROFILE_ANY) {
+      config_.rc_end_usage = VPX_CQ;
+      config_.rc_target_bitrate = kVp8MaxCQBitrate;
+    }
+  }
 
   vpx_codec_flags_t flags = 0;
-  if (vpx_codec_enc_init(&encoder_, vpx_codec_vp8_cx(), &config_, flags) !=
+  if (vpx_codec_enc_init(&encoder_, vpx_codec, &config_, flags) !=
       VPX_CODEC_OK) {
     NotifyError(media::VideoEncodeAccelerator::kPlatformFailureError);
     return;
@@ -151,10 +217,18 @@ void VideoEncoderShim::EncoderImpl::Initialize(
     return;
   }
 
-  if (vpx_codec_control(&encoder_, VP8E_SET_CPUUSED, kDefaultCpuUsed) !=
+  if (vpx_codec_control(&encoder_, VP8E_SET_CPUUSED, cpu_used) !=
       VPX_CODEC_OK) {
     NotifyError(media::VideoEncodeAccelerator::kPlatformFailureError);
     return;
+  }
+
+  if (output_profile == media::VP9PROFILE_ANY) {
+    if (vpx_codec_control(&encoder_, VP9E_SET_AQ_MODE,
+                          kVp9AqModeCyclicRefresh) != VPX_CODEC_OK) {
+      NotifyError(media::VideoEncodeAccelerator::kPlatformFailureError);
+      return;
+    }
   }
 
   renderer_task_runner_->PostTask(
@@ -178,11 +252,11 @@ void VideoEncoderShim::EncoderImpl::UseOutputBitstreamBuffer(
 }
 
 void VideoEncoderShim::EncoderImpl::RequestEncodingParametersChange(
-    uint32 bitrate,
-    uint32 framerate) {
+    uint32_t bitrate,
+    uint32_t framerate) {
   framerate_ = framerate;
 
-  uint32 bitrate_kbit = bitrate / 1000;
+  uint32_t bitrate_kbit = bitrate / 1000;
   if (config_.rc_target_bitrate == bitrate_kbit)
     return;
 
@@ -312,19 +386,33 @@ VideoEncoderShim::GetSupportedProfiles() {
     profiles.push_back(profile);
   }
 
+  ret = vpx_codec_enc_config_default(vpx_codec_vp9_cx(), &config, 0);
+  if (ret == VPX_CODEC_OK) {
+    media::VideoEncodeAccelerator::SupportedProfile profile;
+    profile.profile = media::VP9PROFILE_ANY;
+    profile.max_resolution = gfx::Size(kMaxWidth, kMaxHeight);
+    profile.max_framerate_numerator = config.g_timebase.den;
+    profile.max_framerate_denominator = config.g_timebase.num;
+    profiles.push_back(profile);
+  }
+
   return profiles;
 }
 
 bool VideoEncoderShim::Initialize(
-    media::VideoFrame::Format input_format,
+    media::VideoPixelFormat input_format,
     const gfx::Size& input_visible_size,
     media::VideoCodecProfile output_profile,
-    uint32 initial_bitrate,
+    uint32_t initial_bitrate,
     media::VideoEncodeAccelerator::Client* client) {
   DCHECK(RenderThreadImpl::current());
   DCHECK_EQ(client, host_);
 
-  if (input_format != media::VideoFrame::I420)
+  if (input_format != media::PIXEL_FORMAT_I420)
+    return false;
+
+  if (output_profile != media::VP8PROFILE_ANY &&
+      output_profile != media::VP9PROFILE_ANY)
     return false;
 
   media_task_runner_->PostTask(
@@ -357,8 +445,8 @@ void VideoEncoderShim::UseOutputBitstreamBuffer(
                  host_->ShmHandleToAddress(buffer.id())));
 }
 
-void VideoEncoderShim::RequestEncodingParametersChange(uint32 bitrate,
-                                                       uint32 framerate) {
+void VideoEncoderShim::RequestEncodingParametersChange(uint32_t bitrate,
+                                                       uint32_t framerate) {
   DCHECK(RenderThreadImpl::current());
 
   media_task_runner_->PostTask(
@@ -386,7 +474,7 @@ void VideoEncoderShim::OnRequireBitstreamBuffers(
 
 void VideoEncoderShim::OnBitstreamBufferReady(
     scoped_refptr<media::VideoFrame> frame,
-    int32 bitstream_buffer_id,
+    int32_t bitstream_buffer_id,
     size_t payload_size,
     bool key_frame) {
   DCHECK(RenderThreadImpl::current());

@@ -5,6 +5,8 @@
 #ifndef NET_TOOLS_BALSA_BALSA_HEADERS_H_
 #define NET_TOOLS_BALSA_BALSA_HEADERS_H_
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <iosfwd>
 #include <iterator>
@@ -538,7 +540,7 @@ class BalsaHeaders {
       do {
         iterator_base::increment();
       } while (!AtEnd() &&
-               !StringPieceUtils::EqualIgnoreCase(key_, (**this).first));
+               !base::EqualsCaseInsensitiveASCII(key_, (**this).first));
       return *this;
     }
 

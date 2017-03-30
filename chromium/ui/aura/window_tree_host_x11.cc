@@ -16,8 +16,8 @@
 #include <limits>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -25,6 +25,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -218,6 +219,7 @@ WindowTreeHostX11::WindowTreeHostX11(const gfx::Rect& bounds)
   XSetWindowAttributes swa;
   memset(&swa, 0, sizeof(swa));
   swa.background_pixmap = None;
+  swa.bit_gravity = NorthWestGravity;
   swa.override_redirect = default_override_redirect;
   xwindow_ = XCreateWindow(
       xdisplay_, x_root_window_,
@@ -226,7 +228,7 @@ WindowTreeHostX11::WindowTreeHostX11(const gfx::Rect& bounds)
       CopyFromParent,  // depth
       InputOutput,
       CopyFromParent,  // visual
-      CWBackPixmap | CWOverrideRedirect,
+      CWBackPixmap | CWBitGravity | CWOverrideRedirect,
       &swa);
   if (ui::PlatformEventSource::GetInstance())
     ui::PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
@@ -276,7 +278,8 @@ WindowTreeHostX11::WindowTreeHostX11(const gfx::Rect& bounds)
 
   XRRSelectInput(xdisplay_, x_root_window_,
                  RRScreenChangeNotifyMask | RROutputChangeNotifyMask);
-  CreateCompositor(GetAcceleratedWidget());
+  CreateCompositor();
+  OnAcceleratedWidgetAvailable();
 }
 
 WindowTreeHostX11::~WindowTreeHostX11() {
@@ -658,12 +661,6 @@ void WindowTreeHostX11::TranslateAndDispatchLocatedEvent(
 // static
 WindowTreeHost* WindowTreeHost::Create(const gfx::Rect& bounds) {
   return new WindowTreeHostX11(bounds);
-}
-
-// static
-gfx::Size WindowTreeHost::GetNativeScreenSize() {
-  ::XDisplay* xdisplay = gfx::GetXDisplay();
-  return gfx::Size(DisplayWidth(xdisplay, 0), DisplayHeight(xdisplay, 0));
 }
 
 namespace test {

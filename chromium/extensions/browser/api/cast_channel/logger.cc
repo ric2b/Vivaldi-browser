@@ -4,10 +4,13 @@
 
 #include "extensions/browser/api/cast_channel/logger.h"
 
+#include <stdint.h>
+
 #include <string>
+#include <utility>
 
 #include "base/strings/string_util.h"
-#include "base/time/tick_clock.h"
+#include "base/time/clock.h"
 #include "extensions/browser/api/cast_channel/cast_auth_util.h"
 #include "extensions/browser/api/cast_channel/cast_socket.h"
 #include "extensions/browser/api/cast_channel/logger_util.h"
@@ -15,7 +18,7 @@
 #include "third_party/zlib/zlib.h"
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 
 using net::IPEndPoint;
@@ -76,12 +79,9 @@ scoped_ptr<char[]> Compress(const std::string& input, size_t* length) {
   size_t out_size = deflateBound(&stream, input.size());
   scoped_ptr<char[]> out(new char[out_size]);
 
-  static_assert(sizeof(uint8) == sizeof(char),
-                "uint8 char should be of different sizes");
-
-  stream.next_in = reinterpret_cast<uint8*>(const_cast<char*>(input.data()));
+  stream.next_in = reinterpret_cast<uint8_t*>(const_cast<char*>(input.data()));
   stream.avail_in = input.size();
-  stream.next_out = reinterpret_cast<uint8*>(out.get());
+  stream.next_out = reinterpret_cast<uint8_t*>(out.get());
   stream.avail_out = out_size;
 
   // Do a one-shot compression. This will return Z_STREAM_END only if |output|
@@ -99,7 +99,7 @@ scoped_ptr<char[]> Compress(const std::string& input, size_t* length) {
   if (success)
     *length = out_size - stream.avail_out;
 
-  return out.Pass();
+  return out;
 }
 
 // Propagate any error fields set in |event| to |last_errors|.  If any error
@@ -115,10 +115,6 @@ void MaybeSetLastErrors(const SocketEvent& event, LastErrors* last_errors) {
         event.challenge_reply_error_type();
     last_errors->event_type = event.type();
   }
-  if (event.has_nss_error_code()) {
-    last_errors->nss_error_code = event.nss_error_code();
-    last_errors->event_type = event.type();
-  }
 }
 
 }  // namespace
@@ -129,9 +125,8 @@ Logger::AggregatedSocketEventLog::AggregatedSocketEventLog() {
 Logger::AggregatedSocketEventLog::~AggregatedSocketEventLog() {
 }
 
-Logger::Logger(scoped_ptr<base::TickClock> clock,
-               base::TimeTicks unix_epoch_time_ticks)
-    : clock_(clock.Pass()), unix_epoch_time_ticks_(unix_epoch_time_ticks) {
+Logger::Logger(scoped_ptr<base::Clock> clock, base::Time unix_epoch_time)
+    : clock_(std::move(clock)), unix_epoch_time_(unix_epoch_time) {
   DCHECK(clock_);
 
   // Logger may not be necessarily be created on the IO thread, but logging
@@ -251,7 +246,8 @@ void Logger::LogSocketEventForMessage(int channel_id,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   SocketEvent event = CreateEvent(event_type);
-  if (base::StartsWithASCII(message_namespace, kInternalNamespacePrefix, false))
+  if (base::StartsWith(message_namespace, kInternalNamespacePrefix,
+                       base::CompareCase::INSENSITIVE_ASCII))
     event.set_message_namespace(message_namespace);
   event.set_details(details);
 
@@ -265,8 +261,6 @@ void Logger::LogSocketChallengeReplyEvent(int channel_id,
   SocketEvent event = CreateEvent(proto::AUTH_CHALLENGE_REPLY);
   event.set_challenge_reply_error_type(
       ChallegeReplyErrorToProto(auth_result.error_type));
-  if (auth_result.nss_error_code != 0)
-    event.set_nss_error_code(auth_result.nss_error_code);
 
   LogSocketEvent(channel_id, event);
 }
@@ -274,8 +268,8 @@ void Logger::LogSocketChallengeReplyEvent(int channel_id,
 SocketEvent Logger::CreateEvent(EventType event_type) {
   SocketEvent event;
   event.set_type(event_type);
-  event.set_timestamp_micros(clock_->NowTicks().ToInternalValue() -
-                             unix_epoch_time_ticks_.ToInternalValue());
+  event.set_timestamp_micros(
+      (clock_->Now() - unix_epoch_time_).InMicroseconds());
   return event;
 }
 
@@ -368,5 +362,5 @@ LastErrors Logger::GetLastErrors(int channel_id) const {
 }
 
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

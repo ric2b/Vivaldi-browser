@@ -112,8 +112,8 @@ NSColor* ThemeService::GetNSColor(int id) const {
   if (nscolor_iter != nscolor_cache_.end())
     return nscolor_iter->second;
 
-  SkColor sk_color = GetColor(id);
-  NSColor* color = gfx::SkColorToCalibratedNSColor(sk_color);
+  SkColor sk_color = GetColor(id, false);
+  NSColor* color = skia::SkColorToCalibratedNSColor(sk_color);
 
   // We loaded successfully.  Cache the color.
   if (color)
@@ -130,7 +130,7 @@ NSColor* ThemeService::GetNSColorTint(int id) const {
   if (nscolor_iter != nscolor_cache_.end())
     return nscolor_iter->second;
 
-  color_utils::HSL tint = GetTint(id);
+  color_utils::HSL tint = GetTint(id, false);
   NSColor* tint_color = nil;
   if (tint.h == -1 && tint.s == -1 && tint.l == -1) {
     tint_color = [NSColor blackColor];
@@ -285,4 +285,29 @@ void ThemeService::FreePlatformCaches() {
     [i->second release];
   }
   nsgradient_cache_.clear();
+}
+
+bool ThemeService::BrowserThemeProvider::UsingSystemTheme() const {
+  return theme_service_.UsingSystemTheme();
+}
+
+NSImage* ThemeService::BrowserThemeProvider::GetNSImageNamed(int id) const {
+  return theme_service_.GetNSImageNamed(id);
+}
+
+NSColor* ThemeService::BrowserThemeProvider::GetNSImageColorNamed(
+    int id) const {
+  return theme_service_.GetNSImageColorNamed(id);
+}
+
+NSColor* ThemeService::BrowserThemeProvider::GetNSColor(int id) const {
+  return theme_service_.GetNSColor(id);
+}
+
+NSColor* ThemeService::BrowserThemeProvider::GetNSColorTint(int id) const {
+  return theme_service_.GetNSColorTint(id);
+}
+
+NSGradient* ThemeService::BrowserThemeProvider::GetNSGradient(int id) const {
+  return theme_service_.GetNSGradient(id);
 }

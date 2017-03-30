@@ -4,6 +4,8 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -16,7 +18,6 @@
 #include <vector>
 
 #include "base/at_exit.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -24,8 +25,8 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/pickle.h"
 #include "base/strings/string_number_conversions.h"
@@ -170,9 +171,12 @@ class HostControllersManager {
           adb_port, -device_port);
       const bool controller_did_exist = DeleteRefCountedValueInMap(
           controller_key, controllers_.get());
-      SendMessage(
-          !controller_did_exist ? "ERROR: could not unmap port" : "OK",
-          client_socket.get());
+      if (!controller_did_exist) {
+        SendMessage("ERROR: could not unmap port.", client_socket.get());
+        LogExistingControllers(client_socket);
+      } else {
+        SendMessage("OK", client_socket.get());
+      }
 
       RemoveAdbPortForDeviceIfNeeded(adb_path, device_serial);
       return;
@@ -202,6 +206,7 @@ class HostControllersManager {
     if (!host_controller.get()) {
       has_failed_ = true;
       SendMessage("ERROR: Connection to device failed.", client_socket.get());
+      LogExistingControllers(client_socket);
       return;
     }
     // Get the current allocated port.
@@ -215,6 +220,14 @@ class HostControllersManager {
     controllers_->insert(
         std::make_pair(MakeHostControllerMapKey(adb_port, device_port),
                        linked_ptr<HostController>(host_controller.release())));
+  }
+
+  void LogExistingControllers(const scoped_ptr<Socket>& client_socket) {
+    SendMessage("ERROR: Existing controllers:", client_socket.get());
+    for (const auto& controller : *controllers_) {
+      SendMessage(base::StringPrintf("ERROR:   %s", controller.first.c_str()),
+          client_socket.get());
+    }
   }
 
   void RemoveAdbPortForDeviceIfNeeded(const std::string& adb_path,
@@ -344,7 +357,7 @@ class ServerDelegate : public Daemon::ServerDelegate {
     if (!pickle_it.ReadInt(&host_port))
       host_port = -1;
     controllers_manager_.HandleRequest(adb_path_, device_serial, device_port,
-                                       host_port, client_socket.Pass());
+                                       host_port, std::move(client_socket));
   }
 
  private:
@@ -403,7 +416,7 @@ int PortToInt(const std::string& s) {
   int value;
   // Note that 0 is a valid port (used for dynamic port allocation).
   if (!base::StringToInt(s, &value) || value < 0 ||
-      value > std::numeric_limits<uint16>::max()) {
+      value > std::numeric_limits<uint16_t>::max()) {
     LOG(ERROR) << "Could not convert string " << s << " to port";
     ExitWithUsage();
   }

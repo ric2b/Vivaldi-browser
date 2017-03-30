@@ -4,7 +4,7 @@
 
 #include "ash/display/screen_position_controller.h"
 
-#include "ash/display/display_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
@@ -14,8 +14,10 @@
 #include "ash/wm/window_state.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
+#include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tracker.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/screen.h"
@@ -36,8 +38,9 @@ bool ShouldStayInSameRootWindow(const aura::Window* window) {
 // the child windows and transient children of the transient children.
 void MoveAllTransientChildrenToNewRoot(const gfx::Display& display,
                                        aura::Window* window) {
-  aura::Window* dst_root = Shell::GetInstance()->display_controller()->
-      GetRootWindowForDisplayId(display.id());
+  aura::Window* dst_root = Shell::GetInstance()
+                               ->window_tree_host_manager()
+                               ->GetRootWindowForDisplayId(display.id());
   aura::Window::Windows transient_children =
       ::wm::GetTransientChildren(window);
   for (aura::Window::Windows::iterator iter = transient_children.begin();
@@ -72,11 +75,9 @@ void ScreenPositionController::ConvertHostPointToRelativeToRootWindow(
   gfx::Point point_in_root(*point);
   root_window->GetHost()->ConvertPointFromHost(&point_in_root);
 
-  *target_root = root_window;
-  *point = point_in_root;
-
 #if defined(USE_X11) || defined(USE_OZONE)
-  if (!root_window->ContainsPointInRoot(point_in_root)) {
+  gfx::Rect host_bounds(root_window->GetHost()->GetBounds().size());
+  if (!host_bounds.Contains(*point)) {
     // This conversion is necessary to deal with X's passive input
     // grab while dragging window. For example, if we have two
     // displays, say 1000x1000 (primary) and 500x500 (extended one
@@ -108,13 +109,13 @@ void ScreenPositionController::ConvertHostPointToRelativeToRootWindow(
         *target_root = root_windows[i];
         *point = location_in_native;
         host->ConvertPointFromNativeScreen(point);
-        break;
+        return;
       }
     }
   }
-#else
-  NOTIMPLEMENTED();
 #endif
+  *target_root = root_window;
+  *point = point_in_root;
 }
 
 void ScreenPositionController::ConvertPointToScreen(
@@ -164,9 +165,9 @@ void ScreenPositionController::SetBounds(aura::Window* window,
   //    outside of the display.
   if (!::wm::GetTransientParent(window) &&
       !ShouldStayInSameRootWindow(window)) {
-    aura::Window* dst_root =
-        Shell::GetInstance()->display_controller()->GetRootWindowForDisplayId(
-            display.id());
+    aura::Window* dst_root = Shell::GetInstance()
+                                 ->window_tree_host_manager()
+                                 ->GetRootWindowForDisplayId(display.id());
     DCHECK(dst_root);
     aura::Window* dst_container = NULL;
     if (dst_root != window->GetRootWindow()) {

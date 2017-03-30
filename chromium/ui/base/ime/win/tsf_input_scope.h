@@ -9,13 +9,16 @@
 #include <Windows.h>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ime/ui_base_ime_export.h"
 
 namespace ui {
 namespace tsf_inputscope {
+
+// Initializes the TSF for input scopes. It loads the tsf dll and get the
+// function pointer for setting the input scopes in TSF.
+UI_BASE_IME_EXPORT void InitializeTsfForInputScopes();
 
 // Returns InputScope list corresoponding to ui::TextInputType and
 // ui::TextInputMode.

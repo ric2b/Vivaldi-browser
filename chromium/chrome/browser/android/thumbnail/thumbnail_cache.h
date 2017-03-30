@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_ANDROID_THUMBNAIL_THUMBNAIL_CACHE_H_
 #define CHROME_BROWSER_ANDROID_THUMBNAIL_THUMBNAIL_CACHE_H_
 
+#include <stddef.h>
+
 #include <list>
 #include <set>
 #include <string>
@@ -12,13 +14,13 @@
 #include "base/bind.h"
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/thumbnail/scoped_ptr_expiring_cache.h"
 #include "chrome/browser/android/thumbnail/thumbnail.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-#include "ui/android/resources/ui_resource_client_android.h"
 #include "ui/android/resources/ui_resource_provider.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
@@ -69,6 +71,10 @@ class ThumbnailCache : ThumbnailDelegate {
       TabId tab_id,
       const base::Callback<void(bool, SkBitmap)>&
           post_decompress_callback);
+
+  // Called when resident textures were evicted, which requires paging
+  // in bitmaps.
+  void OnUIResourcesWereEvicted();
 
   // ThumbnailDelegate implementation
   void InvalidateCachedThumbnail(Thumbnail* thumbnail) override;

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 
+#include <stddef.h>
+
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -93,34 +95,6 @@ void IncrementPrefValue(const char* path) {
   pref->SetInteger(path, value + 1);
 }
 
-const char kEduDomain[] = ".edu";
-
-// Possible device enrollment status for a Chrome OS device.
-enum EnrollmentStatus {
-  NON_MANAGED,
-  MANAGED_EDU,
-  MANAGED_NON_EDU,
-  ERROR_GETTING_ENROLLMENT_STATUS,
-  ENROLLMENT_STATUS_MAX,
-};
-
-// Get the enrollment status.
-EnrollmentStatus GetEnrollmentStatus() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-        g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (!connector)
-    return ERROR_GETTING_ENROLLMENT_STATUS;
-
-  if (!connector->IsEnterpriseManaged())
-    return NON_MANAGED;
-
-  std::string domain = connector->GetEnterpriseDomain();
-  if (base::EndsWith(domain, kEduDomain, false /* case insensitive */))
-    return MANAGED_EDU;
-
-  return MANAGED_NON_EDU;
-}
-
 }  // namespace
 
 ChromeOSMetricsProvider::ChromeOSMetricsProvider()
@@ -153,6 +127,16 @@ void ChromeOSMetricsProvider::LogCrash(const std::string& crash_type) {
   // Wake up metrics logs sending if necessary now that new
   // log data is available.
   g_browser_process->metrics_service()->OnApplicationNotIdle();
+}
+
+ChromeOSMetricsProvider::EnrollmentStatus
+ChromeOSMetricsProvider::GetEnrollmentStatus() {
+  policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  if (!connector)
+    return ERROR_GETTING_ENROLLMENT_STATUS;
+
+  return connector->IsEnterpriseManaged() ? MANAGED : NON_MANAGED;
 }
 
 void ChromeOSMetricsProvider::OnDidCreateMetricsLog() {
@@ -266,12 +250,12 @@ void ChromeOSMetricsProvider::WriteBluetoothProto(
     paired_device->set_type(AsBluetoothDeviceType(device->GetDeviceType()));
 
     // |address| is xx:xx:xx:xx:xx:xx, extract the first three components and
-    // pack into a uint32.
+    // pack into a uint32_t.
     std::string address = device->GetAddress();
     if (address.size() > 9 && address[2] == ':' && address[5] == ':' &&
         address[8] == ':') {
       std::string vendor_prefix_str;
-      uint64 vendor_prefix;
+      uint64_t vendor_prefix;
 
       base::RemoveChars(address.substr(0, 9), ":", &vendor_prefix_str);
       DCHECK_EQ(6U, vendor_prefix_str.size());

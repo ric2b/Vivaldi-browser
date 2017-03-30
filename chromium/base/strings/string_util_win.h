@@ -6,6 +6,7 @@
 #define BASE_STRINGS_STRING_UTIL_WIN_H_
 
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
@@ -18,14 +19,6 @@ namespace base {
 // for interaction with APIs that require it.
 inline char* strdup(const char* str) {
   return _strdup(str);
-}
-
-inline int strcasecmp(const char* s1, const char* s2) {
-  return _stricmp(s1, s2);
-}
-
-inline int strncasecmp(const char* s1, const char* s2, size_t count) {
-  return _strnicmp(s1, s2, count);
 }
 
 inline int vsnprintf(char* buffer, size_t size,

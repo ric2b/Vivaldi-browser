@@ -9,7 +9,6 @@
 #include <functional>
 #include <limits>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_util.h"
 #include "base/hash.h"
@@ -125,8 +124,8 @@ using simple_util::GetFileIndexFromStreamIndex;
 
 SimpleEntryStat::SimpleEntryStat(base::Time last_used,
                                  base::Time last_modified,
-                                 const int32 data_size[],
-                                 const int32 sparse_data_size)
+                                 const int32_t data_size[],
+                                 const int32_t sparse_data_size)
     : last_used_(last_used),
       last_modified_(last_modified),
       sparse_data_size_(sparse_data_size) {
@@ -156,9 +155,9 @@ int SimpleEntryStat::GetLastEOFOffsetInFile(const std::string& key,
   return GetOffsetInFile(key, eof_data_offset, stream_index);
 }
 
-int64 SimpleEntryStat::GetFileSize(const std::string& key,
-                                   int file_index) const {
-  const int32 total_data_size =
+int64_t SimpleEntryStat::GetFileSize(const std::string& key,
+                                     int file_index) const {
+  const int32_t total_data_size =
       file_index == 0 ? data_size_[0] + data_size_[1] + sizeof(SimpleFileEOF)
                       : data_size_[2];
   return GetFileSizeFromKeyAndDataSize(key, total_data_size);
@@ -182,10 +181,8 @@ SimpleSynchronousEntry::CRCRecord::CRCRecord() : index(-1),
 
 SimpleSynchronousEntry::CRCRecord::CRCRecord(int index_p,
                                              bool has_crc32_p,
-                                             uint32 data_crc32_p)
-    : index(index_p),
-      has_crc32(has_crc32_p),
-      data_crc32(data_crc32_p) {}
+                                             uint32_t data_crc32_p)
+    : index(index_p), has_crc32(has_crc32_p), data_crc32(data_crc32_p) {}
 
 SimpleSynchronousEntry::EntryOperationData::EntryOperationData(int index_p,
                                                                int offset_p,
@@ -206,18 +203,17 @@ SimpleSynchronousEntry::EntryOperationData::EntryOperationData(int index_p,
       doomed(doomed_p) {}
 
 SimpleSynchronousEntry::EntryOperationData::EntryOperationData(
-    int64 sparse_offset_p,
+    int64_t sparse_offset_p,
     int buf_len_p)
-    : sparse_offset(sparse_offset_p),
-      buf_len(buf_len_p) {}
+    : sparse_offset(sparse_offset_p), buf_len(buf_len_p) {}
 
 // static
 void SimpleSynchronousEntry::OpenEntry(
     net::CacheType cache_type,
     const FilePath& path,
-    const uint64 entry_hash,
+    const uint64_t entry_hash,
     bool had_index,
-    SimpleEntryCreationResults *out_results) {
+    SimpleEntryCreationResults* out_results) {
   base::ElapsedTimer open_time;
   SimpleSynchronousEntry* sync_entry =
       new SimpleSynchronousEntry(cache_type, path, "", entry_hash);
@@ -242,9 +238,9 @@ void SimpleSynchronousEntry::CreateEntry(
     net::CacheType cache_type,
     const FilePath& path,
     const std::string& key,
-    const uint64 entry_hash,
+    const uint64_t entry_hash,
     bool had_index,
-    SimpleEntryCreationResults *out_results) {
+    SimpleEntryCreationResults* out_results) {
   DCHECK_EQ(entry_hash, GetEntryHashKey(key));
   SimpleSynchronousEntry* sync_entry =
       new SimpleSynchronousEntry(cache_type, path, key, entry_hash);
@@ -261,31 +257,32 @@ void SimpleSynchronousEntry::CreateEntry(
 }
 
 // static
-int SimpleSynchronousEntry::DoomEntry(
-    const FilePath& path,
-    uint64 entry_hash) {
+int SimpleSynchronousEntry::DoomEntry(const FilePath& path,
+                                      uint64_t entry_hash) {
   const bool deleted_well = DeleteFilesForEntryHash(path, entry_hash);
   return deleted_well ? net::OK : net::ERR_FAILED;
 }
 
 // static
 int SimpleSynchronousEntry::DoomEntrySet(
-    const std::vector<uint64>* key_hashes,
+    const std::vector<uint64_t>* key_hashes,
     const FilePath& path) {
   const size_t did_delete_count = std::count_if(
-      key_hashes->begin(), key_hashes->end(), std::bind1st(
-          std::ptr_fun(SimpleSynchronousEntry::DeleteFilesForEntryHash), path));
+      key_hashes->begin(), key_hashes->end(),
+      [&path](const uint64_t& key_hash) {
+        return SimpleSynchronousEntry::DeleteFilesForEntryHash(path, key_hash);
+      });
   return (did_delete_count == key_hashes->size()) ? net::OK : net::ERR_FAILED;
 }
 
 void SimpleSynchronousEntry::ReadData(const EntryOperationData& in_entry_op,
                                       net::IOBuffer* out_buf,
-                                      uint32* out_crc32,
+                                      uint32_t* out_crc32,
                                       SimpleEntryStat* entry_stat,
                                       int* out_result) const {
   DCHECK(initialized_);
   DCHECK_NE(0, in_entry_op.index);
-  const int64 file_offset =
+  const int64_t file_offset =
       entry_stat->GetOffsetInFile(key_, in_entry_op.offset, in_entry_op.index);
   int file_index = GetFileIndexFromStreamIndex(in_entry_op.index);
   // Zero-length reads and reads to the empty streams of omitted files should
@@ -321,7 +318,7 @@ void SimpleSynchronousEntry::WriteData(const EntryOperationData& in_entry_op,
   int buf_len = in_entry_op.buf_len;
   bool truncate = in_entry_op.truncate;
   bool doomed = in_entry_op.doomed;
-  const int64 file_offset = out_entry_stat->GetOffsetInFile(
+  const int64_t file_offset = out_entry_stat->GetOffsetInFile(
       key_, in_entry_op.offset, in_entry_op.index);
   bool extending_by_write = offset + buf_len > out_entry_stat->data_size(index);
 
@@ -354,7 +351,7 @@ void SimpleSynchronousEntry::WriteData(const EntryOperationData& in_entry_op,
 
   if (extending_by_write) {
     // The EOF record and the eventual stream afterward need to be zeroed out.
-    const int64 file_eof_offset =
+    const int64_t file_eof_offset =
         out_entry_stat->GetEOFOffsetInFile(key_, index);
     if (!files_[file_index].SetLength(file_eof_offset)) {
       RecordWriteResult(cache_type_, WRITE_RESULT_PRETRUNCATE_FAILURE);
@@ -399,7 +396,7 @@ void SimpleSynchronousEntry::ReadSparseData(
     base::Time* out_last_used,
     int* out_result) {
   DCHECK(initialized_);
-  int64 offset = in_entry_op.sparse_offset;
+  int64_t offset = in_entry_op.sparse_offset;
   int buf_len = in_entry_op.buf_len;
 
   char* buf = out_buf->data();
@@ -415,9 +412,10 @@ void SimpleSynchronousEntry::ReadSparseData(
     DCHECK_EQ(it->first, found_range->offset);
     if (found_range->offset + found_range->length > offset) {
       DCHECK_GE(found_range->length, 0);
-      DCHECK_LE(found_range->length, kint32max);
+      DCHECK_LE(found_range->length, std::numeric_limits<int32_t>::max());
       DCHECK_GE(offset - found_range->offset, 0);
-      DCHECK_LE(offset - found_range->offset, kint32max);
+      DCHECK_LE(offset - found_range->offset,
+                std::numeric_limits<int32_t>::max());
       int net_offset = static_cast<int>(offset - found_range->offset);
       int range_len_after_offset =
           static_cast<int>(found_range->length - net_offset);
@@ -456,11 +454,11 @@ void SimpleSynchronousEntry::ReadSparseData(
 void SimpleSynchronousEntry::WriteSparseData(
     const EntryOperationData& in_entry_op,
     net::IOBuffer* in_buf,
-    uint64 max_sparse_data_size,
+    uint64_t max_sparse_data_size,
     SimpleEntryStat* out_entry_stat,
     int* out_result) {
   DCHECK(initialized_);
-  int64 offset = in_entry_op.sparse_offset;
+  int64_t offset = in_entry_op.sparse_offset;
   int buf_len = in_entry_op.buf_len;
 
   const char* buf = in_buf->data();
@@ -472,13 +470,14 @@ void SimpleSynchronousEntry::WriteSparseData(
     return;
   }
 
-  uint64 sparse_data_size = out_entry_stat->sparse_data_size();
+  uint64_t sparse_data_size = out_entry_stat->sparse_data_size();
   // This is a pessimistic estimate; it assumes the entire buffer is going to
   // be appended as a new range, not written over existing ranges.
   if (sparse_data_size + buf_len > max_sparse_data_size) {
     DVLOG(1) << "Truncating sparse data file (" << sparse_data_size << " + "
              << buf_len << " > " << max_sparse_data_size << ")";
     TruncateSparseFile();
+    out_entry_stat->set_sparse_data_size(0);
   }
 
   SparseRangeIterator it = sparse_ranges_.lower_bound(offset);
@@ -488,9 +487,10 @@ void SimpleSynchronousEntry::WriteSparseData(
     SparseRange* found_range = &it->second;
     if (found_range->offset + found_range->length > offset) {
       DCHECK_GE(found_range->length, 0);
-      DCHECK_LE(found_range->length, kint32max);
+      DCHECK_LE(found_range->length, std::numeric_limits<int32_t>::max());
       DCHECK_GE(offset - found_range->offset, 0);
-      DCHECK_LE(offset - found_range->offset, kint32max);
+      DCHECK_LE(offset - found_range->offset,
+                std::numeric_limits<int32_t>::max());
       int net_offset = static_cast<int>(offset - found_range->offset);
       int range_len_after_offset =
           static_cast<int>(found_range->length - net_offset);
@@ -552,23 +552,23 @@ void SimpleSynchronousEntry::WriteSparseData(
   base::Time modification_time = Time::Now();
   out_entry_stat->set_last_used(modification_time);
   out_entry_stat->set_last_modified(modification_time);
-  int32 old_sparse_data_size = out_entry_stat->sparse_data_size();
+  int32_t old_sparse_data_size = out_entry_stat->sparse_data_size();
   out_entry_stat->set_sparse_data_size(old_sparse_data_size + appended_so_far);
   *out_result = written_so_far;
 }
 
 void SimpleSynchronousEntry::GetAvailableRange(
     const EntryOperationData& in_entry_op,
-    int64* out_start,
+    int64_t* out_start,
     int* out_result) {
   DCHECK(initialized_);
-  int64 offset = in_entry_op.sparse_offset;
+  int64_t offset = in_entry_op.sparse_offset;
   int len = in_entry_op.buf_len;
 
   SparseRangeIterator it = sparse_ranges_.lower_bound(offset);
 
-  int64 start = offset;
-  int64 avail_so_far = 0;
+  int64_t start = offset;
+  int64_t avail_so_far = 0;
 
   if (it != sparse_ranges_.end() && it->second.offset < offset + len)
     start = it->second.offset;
@@ -590,17 +590,17 @@ void SimpleSynchronousEntry::GetAvailableRange(
     ++it;
   }
 
-  int64 len_from_start = len - (start - offset);
+  int64_t len_from_start = len - (start - offset);
   *out_start = start;
   *out_result = static_cast<int>(std::min(avail_so_far, len_from_start));
 }
 
 void SimpleSynchronousEntry::CheckEOFRecord(int index,
                                             const SimpleEntryStat& entry_stat,
-                                            uint32 expected_crc32,
+                                            uint32_t expected_crc32,
                                             int* out_result) const {
   DCHECK(initialized_);
-  uint32 crc32;
+  uint32_t crc32;
   bool has_crc32;
   int stream_size;
   *out_result =
@@ -674,11 +674,11 @@ void SimpleSynchronousEntry::Close(
       continue;
 
     files_[i].Close();
-    const int64 file_size = entry_stat.GetFileSize(key_, i);
+    const int64_t file_size = entry_stat.GetFileSize(key_, i);
     SIMPLE_CACHE_UMA(CUSTOM_COUNTS,
                      "LastClusterSize", cache_type_,
                      file_size % 4096, 0, 4097, 50);
-    const int64 cluster_loss = file_size % 4096 ? 4096 - file_size % 4096 : 0;
+    const int64_t cluster_loss = file_size % 4096 ? 4096 - file_size % 4096 : 0;
     SIMPLE_CACHE_UMA(PERCENTAGE,
                      "LastClusterLossPercent", cache_type_,
                      static_cast<base::HistogramBase::Sample>(
@@ -701,7 +701,7 @@ void SimpleSynchronousEntry::Close(
 SimpleSynchronousEntry::SimpleSynchronousEntry(net::CacheType cache_type,
                                                const FilePath& path,
                                                const std::string& key,
-                                               const uint64 entry_hash)
+                                               const uint64_t entry_hash)
     : cache_type_(cache_type),
       path_(path),
       entry_hash_(entry_hash),
@@ -902,7 +902,7 @@ int SimpleSynchronousEntry::InitializeForOpen(
     bool had_index,
     SimpleEntryStat* out_entry_stat,
     scoped_refptr<net::GrowableIOBuffer>* stream_0_data,
-    uint32* out_stream_0_crc32) {
+    uint32_t* out_stream_0_crc32) {
   DCHECK(!initialized_);
   if (!OpenFiles(had_index, out_entry_stat)) {
     DLOG(WARNING) << "Could not open platform files for entry.";
@@ -939,7 +939,7 @@ int SimpleSynchronousEntry::InitializeForOpen(
     scoped_ptr<char[]> key(new char[header.key_length]);
     int key_read_result = files_[i].Read(sizeof(header), key.get(),
                                          header.key_length);
-    if (key_read_result != implicit_cast<int>(header.key_length)) {
+    if (key_read_result != base::checked_cast<int>(header.key_length)) {
       DLOG(WARNING) << "Cannot read key from entry.";
       RecordSyncOpenResult(cache_type_, OPEN_ENTRY_CANT_READ_KEY, had_index);
       return net::ERR_FAILED;
@@ -971,7 +971,7 @@ int SimpleSynchronousEntry::InitializeForOpen(
     }
   }
 
-  int32 sparse_data_size = 0;
+  int32_t sparse_data_size = 0;
   if (!OpenSparseFileIfExists(&sparse_data_size)) {
     RecordSyncOpenResult(
         cache_type_, OPEN_ENTRY_SPARSE_OPEN_FAILED, had_index);
@@ -1018,7 +1018,7 @@ bool SimpleSynchronousEntry::InitializeCreatedFile(
 
   bytes_written = files_[file_index].Write(sizeof(header), key_.data(),
                                            key_.size());
-  if (bytes_written != implicit_cast<int>(key_.size())) {
+  if (bytes_written != base::checked_cast<int>(key_.size())) {
     *out_result = CREATE_ENTRY_CANT_WRITE_KEY;
     return false;
   }
@@ -1053,14 +1053,14 @@ int SimpleSynchronousEntry::ReadAndValidateStream0(
     int total_data_size,
     SimpleEntryStat* out_entry_stat,
     scoped_refptr<net::GrowableIOBuffer>* stream_0_data,
-    uint32* out_stream_0_crc32) const {
+    uint32_t* out_stream_0_crc32) const {
   // Temporarily assign all the data size to stream 1 in order to read the
   // EOF record for stream 0, which contains the size of stream 0.
   out_entry_stat->set_data_size(0, 0);
   out_entry_stat->set_data_size(1, total_data_size - sizeof(SimpleFileEOF));
 
   bool has_crc32;
-  uint32 read_crc32;
+  uint32_t read_crc32;
   int stream_0_size;
   int ret_value_crc32 = GetEOFRecordData(
       0, *out_entry_stat, &has_crc32, &read_crc32, &stream_0_size);
@@ -1086,7 +1086,7 @@ int SimpleSynchronousEntry::ReadAndValidateStream0(
     return net::ERR_FAILED;
 
   // Check the CRC32.
-  uint32 expected_crc32 =
+  uint32_t expected_crc32 =
       stream_0_size == 0
           ? crc32(0, Z_NULL, 0)
           : crc32(crc32(0, Z_NULL, 0),
@@ -1105,7 +1105,7 @@ int SimpleSynchronousEntry::ReadAndValidateStream0(
 int SimpleSynchronousEntry::GetEOFRecordData(int index,
                                              const SimpleEntryStat& entry_stat,
                                              bool* out_has_crc32,
-                                             uint32* out_crc32,
+                                             uint32_t* out_crc32,
                                              int* out_data_size) const {
   SimpleFileEOF eof_record;
   int file_offset = entry_stat.GetEOFOffsetInFile(key_, index);
@@ -1137,10 +1137,9 @@ void SimpleSynchronousEntry::Doom() const {
 }
 
 // static
-bool SimpleSynchronousEntry::DeleteFileForEntryHash(
-    const FilePath& path,
-    const uint64 entry_hash,
-    const int file_index) {
+bool SimpleSynchronousEntry::DeleteFileForEntryHash(const FilePath& path,
+                                                    const uint64_t entry_hash,
+                                                    const int file_index) {
   FilePath to_delete = path.AppendASCII(
       GetFilenameFromEntryHashAndFileIndex(entry_hash, file_index));
   return simple_util::SimpleCacheDeleteFile(to_delete);
@@ -1149,7 +1148,7 @@ bool SimpleSynchronousEntry::DeleteFileForEntryHash(
 // static
 bool SimpleSynchronousEntry::DeleteFilesForEntryHash(
     const FilePath& path,
-    const uint64 entry_hash) {
+    const uint64_t entry_hash) {
   bool result = true;
   for (int i = 0; i < kSimpleEntryFileCount; ++i) {
     if (!DeleteFileForEntryHash(path, entry_hash, i) && !CanOmitEmptyFile(i))
@@ -1183,7 +1182,7 @@ FilePath SimpleSynchronousEntry::GetFilenameFromFileIndex(int file_index) {
 }
 
 bool SimpleSynchronousEntry::OpenSparseFileIfExists(
-    int32* out_sparse_data_size) {
+    int32_t* out_sparse_data_size) {
   DCHECK(!sparse_file_open());
 
   FilePath filename = path_.AppendASCII(
@@ -1219,13 +1218,14 @@ void SimpleSynchronousEntry::CloseSparseFile() {
 bool SimpleSynchronousEntry::TruncateSparseFile() {
   DCHECK(sparse_file_open());
 
-  int64 header_and_key_length = sizeof(SimpleFileHeader) + key_.size();
+  int64_t header_and_key_length = sizeof(SimpleFileHeader) + key_.size();
   if (!sparse_file_.SetLength(header_and_key_length)) {
     DLOG(WARNING) << "Could not truncate sparse file";
     return false;
   }
 
   sparse_ranges_.clear();
+  sparse_tail_offset_ = header_and_key_length;
 
   return true;
 }
@@ -1248,7 +1248,7 @@ bool SimpleSynchronousEntry::InitializeSparseFile() {
 
   int key_write_result = sparse_file_.Write(sizeof(header), key_.data(),
                                             key_.size());
-  if (key_write_result != implicit_cast<int>(key_.size())) {
+  if (key_write_result != base::checked_cast<int>(key_.size())) {
     DLOG(WARNING) << "Could not write sparse file key";
     return false;
   }
@@ -1259,10 +1259,10 @@ bool SimpleSynchronousEntry::InitializeSparseFile() {
   return true;
 }
 
-bool SimpleSynchronousEntry::ScanSparseFile(int32* out_sparse_data_size) {
+bool SimpleSynchronousEntry::ScanSparseFile(int32_t* out_sparse_data_size) {
   DCHECK(sparse_file_open());
 
-  int64 sparse_data_size = 0;
+  int64_t sparse_data_size = 0;
 
   SimpleFileHeader header;
   int header_read_result =
@@ -1284,7 +1284,7 @@ bool SimpleSynchronousEntry::ScanSparseFile(int32* out_sparse_data_size) {
 
   sparse_ranges_.clear();
 
-  int64 range_header_offset = sizeof(header) + key_.size();
+  int64_t range_header_offset = sizeof(header) + key_.size();
   while (1) {
     SimpleFileSparseRangeHeader range_header;
     int range_header_read_result =
@@ -1317,7 +1317,7 @@ bool SimpleSynchronousEntry::ScanSparseFile(int32* out_sparse_data_size) {
     sparse_data_size += range.length;
   }
 
-  *out_sparse_data_size = static_cast<int32>(sparse_data_size);
+  *out_sparse_data_size = static_cast<int32_t>(sparse_data_size);
   sparse_tail_offset_ = range_header_offset;
 
   return true;
@@ -1338,9 +1338,8 @@ bool SimpleSynchronousEntry::ReadSparseRange(const SparseRange* range,
 
   // If we read the whole range and we have a crc32, check it.
   if (offset == 0 && len == range->length && range->data_crc32 != 0) {
-    uint32 actual_crc32 = crc32(crc32(0L, Z_NULL, 0),
-                                reinterpret_cast<const Bytef*>(buf),
-                                len);
+    uint32_t actual_crc32 =
+        crc32(crc32(0L, Z_NULL, 0), reinterpret_cast<const Bytef*>(buf), len);
     if (actual_crc32 != range->data_crc32) {
       DLOG(WARNING) << "Sparse range crc32 mismatch.";
       return false;
@@ -1359,7 +1358,7 @@ bool SimpleSynchronousEntry::WriteSparseRange(SparseRange* range,
   DCHECK_LE(offset, range->length);
   DCHECK_LE(offset + len, range->length);
 
-  uint32 new_crc32 = 0;
+  uint32_t new_crc32 = 0;
   if (offset == 0 && len == range->length) {
     new_crc32 = crc32(crc32(0L, Z_NULL, 0),
                       reinterpret_cast<const Bytef*>(buf),
@@ -1378,7 +1377,7 @@ bool SimpleSynchronousEntry::WriteSparseRange(SparseRange* range,
     int bytes_written = sparse_file_.Write(range->file_offset - sizeof(header),
                                            reinterpret_cast<char*>(&header),
                                            sizeof(header));
-    if (bytes_written != implicit_cast<int>(sizeof(header))) {
+    if (bytes_written != base::checked_cast<int>(sizeof(header))) {
       DLOG(WARNING) << "Could not rewrite sparse range header.";
       return false;
     }
@@ -1393,16 +1392,15 @@ bool SimpleSynchronousEntry::WriteSparseRange(SparseRange* range,
   return true;
 }
 
-bool SimpleSynchronousEntry::AppendSparseRange(int64 offset,
+bool SimpleSynchronousEntry::AppendSparseRange(int64_t offset,
                                                int len,
                                                const char* buf) {
   DCHECK_GE(offset, 0);
   DCHECK_GT(len, 0);
   DCHECK(buf);
 
-  uint32 data_crc32 = crc32(crc32(0L, Z_NULL, 0),
-                            reinterpret_cast<const Bytef*>(buf),
-                            len);
+  uint32_t data_crc32 =
+      crc32(crc32(0L, Z_NULL, 0), reinterpret_cast<const Bytef*>(buf), len);
 
   SimpleFileSparseRangeHeader header;
   header.sparse_range_magic_number = kSimpleSparseRangeMagicNumber;
@@ -1413,7 +1411,7 @@ bool SimpleSynchronousEntry::AppendSparseRange(int64 offset,
   int bytes_written = sparse_file_.Write(sparse_tail_offset_,
                                          reinterpret_cast<char*>(&header),
                                          sizeof(header));
-  if (bytes_written != implicit_cast<int>(sizeof(header))) {
+  if (bytes_written != base::checked_cast<int>(sizeof(header))) {
     DLOG(WARNING) << "Could not append sparse range header.";
     return false;
   }
@@ -1424,7 +1422,7 @@ bool SimpleSynchronousEntry::AppendSparseRange(int64 offset,
     DLOG(WARNING) << "Could not append sparse range data.";
     return false;
   }
-  int64 data_file_offset = sparse_tail_offset_;
+  int64_t data_file_offset = sparse_tail_offset_;
   sparse_tail_offset_ += bytes_written;
 
   SparseRange range;

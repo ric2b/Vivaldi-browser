@@ -21,7 +21,7 @@ ExtensionRegistry* ExtensionRegistry::Get(content::BrowserContext* context) {
 
 scoped_ptr<ExtensionSet> ExtensionRegistry::GenerateInstalledExtensionsSet()
     const {
-  return GenerateInstalledExtensionsSet(EVERYTHING).Pass();
+  return GenerateInstalledExtensionsSet(EVERYTHING);
 }
 
 scoped_ptr<ExtensionSet> ExtensionRegistry::GenerateInstalledExtensionsSet(
@@ -37,7 +37,7 @@ scoped_ptr<ExtensionSet> ExtensionRegistry::GenerateInstalledExtensionsSet(
     installed_extensions->InsertAll(blacklisted_extensions_);
   if (include_mask & IncludeFlag::BLOCKED)
     installed_extensions->InsertAll(blocked_extensions_);
-  return installed_extensions.Pass();
+  return installed_extensions;
 }
 
 void ExtensionRegistry::AddObserver(ExtensionRegistryObserver* observer) {
@@ -56,6 +56,13 @@ void ExtensionRegistry::TriggerOnLoaded(const Extension* extension) {
                     OnExtensionLoaded(browser_context_, extension));
 }
 
+void ExtensionRegistry::TriggerOnReady(const Extension* extension) {
+  CHECK(extension);
+  DCHECK(enabled_extensions_.Contains(extension->id()));
+  FOR_EACH_OBSERVER(ExtensionRegistryObserver, observers_,
+                    OnExtensionReady(browser_context_, extension));
+}
+
 void ExtensionRegistry::TriggerOnUnloaded(
     const Extension* extension,
     UnloadedExtensionInfo::Reason reason) {
@@ -68,17 +75,14 @@ void ExtensionRegistry::TriggerOnUnloaded(
 
 void ExtensionRegistry::TriggerOnWillBeInstalled(const Extension* extension,
                                                  bool is_update,
-                                                 bool from_ephemeral,
                                                  const std::string& old_name) {
   CHECK(extension);
   DCHECK_EQ(is_update,
             GenerateInstalledExtensionsSet()->Contains(extension->id()));
   DCHECK_EQ(is_update, !old_name.empty());
-  FOR_EACH_OBSERVER(
-      ExtensionRegistryObserver,
-      observers_,
-      OnExtensionWillBeInstalled(
-          browser_context_, extension, is_update, from_ephemeral, old_name));
+  FOR_EACH_OBSERVER(ExtensionRegistryObserver, observers_,
+                    OnExtensionWillBeInstalled(browser_context_, extension,
+                                               is_update, old_name));
 }
 
 void ExtensionRegistry::TriggerOnInstalled(const Extension* extension,
@@ -103,7 +107,7 @@ void ExtensionRegistry::TriggerOnUninstalled(const Extension* extension,
 
 const Extension* ExtensionRegistry::GetExtensionById(const std::string& id,
                                                      int include_mask) const {
-  std::string lowercase_id = base::StringToLowerASCII(id);
+  std::string lowercase_id = base::ToLowerASCII(id);
   if (include_mask & ENABLED) {
     const Extension* extension = enabled_extensions_.GetByID(lowercase_id);
     if (extension)
@@ -143,6 +147,10 @@ bool ExtensionRegistry::AddEnabled(
 }
 
 bool ExtensionRegistry::RemoveEnabled(const std::string& id) {
+  // Only enabled extensions can be ready, so removing an enabled extension
+  // should also remove from the ready set if possible.
+  if (ready_extensions_.Contains(id))
+    RemoveReady(id);
   return enabled_extensions_.Remove(id);
 }
 
@@ -182,17 +190,22 @@ bool ExtensionRegistry::RemoveBlocked(const std::string& id) {
   return blocked_extensions_.Remove(id);
 }
 
+bool ExtensionRegistry::AddReady(
+    const scoped_refptr<const Extension>& extension) {
+  return ready_extensions_.Insert(extension);
+}
+
+bool ExtensionRegistry::RemoveReady(const std::string& id) {
+  return ready_extensions_.Remove(id);
+}
+
 void ExtensionRegistry::ClearAll() {
   enabled_extensions_.Clear();
   disabled_extensions_.Clear();
   terminated_extensions_.Clear();
   blacklisted_extensions_.Clear();
   blocked_extensions_.Clear();
-}
-
-void ExtensionRegistry::SetDisabledModificationCallback(
-    const ExtensionSet::ModificationCallback& callback) {
-  disabled_extensions_.set_modification_callback(callback);
+  ready_extensions_.Clear();
 }
 
 void ExtensionRegistry::Shutdown() {

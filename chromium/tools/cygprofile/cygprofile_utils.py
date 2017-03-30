@@ -12,21 +12,22 @@ import re
 
 class WarningCollector(object):
   """Collects warnings, but limits the number printed to a set value."""
-  def __init__(self, max_warnings):
+  def __init__(self, max_warnings, level=logging.WARNING):
     self._warnings = 0
     self._max_warnings = max_warnings
+    self._level = level
 
   def Write(self, message):
-    """Print a warning if fewer than max_warnings have already been printed."""
+    """Prints a warning if fewer than max_warnings have already been printed."""
     if self._warnings < self._max_warnings:
-      logging.warning(message)
+      logging.log(self._level, message)
     self._warnings += 1
 
   def WriteEnd(self, message):
     """Once all warnings have been printed, use this to print the number of
     elided warnings."""
     if self._warnings > self._max_warnings:
-      logging.warning('%d more warnings for: %s' % (
+      logging.log(self._level, '%d more warnings for: %s' % (
           self._warnings - self._max_warnings, message))
 
 
@@ -57,7 +58,7 @@ def GetObjDir(libchrome):
   Assumes libchrome is in for example .../Release/lib/libchrome.so and object
   files are in .../Release/obj.
   """
-  # TODO(azarchs): Pass obj path in explicitly where needed rather than relying
-  # on the above assumption.
+  # TODO(lizeb,pasko): Pass obj path in explicitly where needed rather than
+  # relying on the above assumption.
   return os.path.abspath(os.path.join(
       os.path.dirname(libchrome), '../obj'))

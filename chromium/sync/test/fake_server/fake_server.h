@@ -5,13 +5,13 @@
 #ifndef SYNC_TEST_FAKE_SERVER_FAKE_SERVER_H_
 #define SYNC_TEST_FAKE_SERVER_FAKE_SERVER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
-#include "base/containers/scoped_ptr_map.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
@@ -81,6 +81,10 @@ class FakeServer {
   bool ModifyEntitySpecifics(const std::string& id,
                              const sync_pb::EntitySpecifics& updated_specifics);
 
+  bool ModifyBookmarkEntity(const std::string& id,
+                            const std::string& parent_id,
+                            const sync_pb::EntitySpecifics& updated_specifics);
+
   // Clears server data simulating a "dashboard stop and clear" and sets a new
   // store birthday.
   void ClearServerData();
@@ -139,8 +143,10 @@ class FakeServer {
   base::WeakPtr<FakeServer> AsWeakPtr();
 
  private:
-  typedef base::ScopedPtrMap<std::string, scoped_ptr<FakeServerEntity>>
-      EntityMap;
+  using EntityMap = std::map<std::string, scoped_ptr<FakeServerEntity>>;
+
+  // Gets FakeServer ready for syncing.
+  void Init();
 
   // Processes a GetUpdates call.
   bool HandleGetUpdatesRequest(const sync_pb::GetUpdatesMessage& get_updates,
@@ -199,10 +205,10 @@ class FakeServer {
 
   // This is the last version number assigned to an entity. The next entity will
   // have a version number of version_ + 1.
-  int64 version_;
+  int64_t version_;
 
   // The current store birthday value.
-  int64 store_birthday_;
+  int64_t store_birthday_;
 
   // Whether the server should act as if incoming connections are properly
   // authenticated.

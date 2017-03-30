@@ -12,12 +12,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/browser/notification_service.h"
@@ -37,7 +39,7 @@ using extensions::Extension;
 using extensions::ExtensionSystem;
 using extensions::ExtensionUpdater;
 
-using extensions::core_api::runtime::PlatformInfo;
+using extensions::api::runtime::PlatformInfo;
 
 namespace {
 
@@ -183,15 +185,15 @@ void ChromeRuntimeAPIDelegate::OpenURL(const GURL& uninstall_url) {
 bool ChromeRuntimeAPIDelegate::GetPlatformInfo(PlatformInfo* info) {
   const char* os = update_client::UpdateQueryParams::GetOS();
   if (strcmp(os, "mac") == 0) {
-    info->os = extensions::core_api::runtime::PLATFORM_OS_MAC;
+    info->os = extensions::api::runtime::PLATFORM_OS_MAC;
   } else if (strcmp(os, "win") == 0) {
-    info->os = extensions::core_api::runtime::PLATFORM_OS_WIN;
+    info->os = extensions::api::runtime::PLATFORM_OS_WIN;
   } else if (strcmp(os, "cros") == 0) {
-    info->os = extensions::core_api::runtime::PLATFORM_OS_CROS;
+    info->os = extensions::api::runtime::PLATFORM_OS_CROS;
   } else if (strcmp(os, "linux") == 0) {
-    info->os = extensions::core_api::runtime::PLATFORM_OS_LINUX;
+    info->os = extensions::api::runtime::PLATFORM_OS_LINUX;
   } else if (strcmp(os, "openbsd") == 0) {
-    info->os = extensions::core_api::runtime::PLATFORM_OS_OPENBSD;
+    info->os = extensions::api::runtime::PLATFORM_OS_OPENBSD;
   } else {
     NOTREACHED();
     return false;
@@ -199,11 +201,11 @@ bool ChromeRuntimeAPIDelegate::GetPlatformInfo(PlatformInfo* info) {
 
   const char* arch = update_client::UpdateQueryParams::GetArch();
   if (strcmp(arch, "arm") == 0) {
-    info->arch = extensions::core_api::runtime::PLATFORM_ARCH_ARM;
+    info->arch = extensions::api::runtime::PLATFORM_ARCH_ARM;
   } else if (strcmp(arch, "x86") == 0) {
-    info->arch = extensions::core_api::runtime::PLATFORM_ARCH_X86_32;
+    info->arch = extensions::api::runtime::PLATFORM_ARCH_X86_32;
   } else if (strcmp(arch, "x64") == 0) {
-    info->arch = extensions::core_api::runtime::PLATFORM_ARCH_X86_64;
+    info->arch = extensions::api::runtime::PLATFORM_ARCH_X86_64;
   } else {
     NOTREACHED();
     return false;
@@ -211,14 +213,11 @@ bool ChromeRuntimeAPIDelegate::GetPlatformInfo(PlatformInfo* info) {
 
   const char* nacl_arch = update_client::UpdateQueryParams::GetNaclArch();
   if (strcmp(nacl_arch, "arm") == 0) {
-    info->nacl_arch =
-        extensions::core_api::runtime::PLATFORM_NACL_ARCH_ARM;
+    info->nacl_arch = extensions::api::runtime::PLATFORM_NACL_ARCH_ARM;
   } else if (strcmp(nacl_arch, "x86-32") == 0) {
-    info->nacl_arch =
-        extensions::core_api::runtime::PLATFORM_NACL_ARCH_X86_32;
+    info->nacl_arch = extensions::api::runtime::PLATFORM_NACL_ARCH_X86_32;
   } else if (strcmp(nacl_arch, "x86-64") == 0) {
-    info->nacl_arch =
-        extensions::core_api::runtime::PLATFORM_NACL_ARCH_X86_64;
+    info->nacl_arch = extensions::api::runtime::PLATFORM_NACL_ARCH_X86_64;
   } else {
     NOTREACHED();
     return false;

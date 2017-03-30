@@ -13,12 +13,6 @@
 # past the curses-based dialog press TAB <ret> TAB <ret> to agree.
 
 args="$@"
-if test "$1" = "--skip-sdk-packages"; then
-  skip_inst_sdk_packages=1
-  args="${@:2}"
-else
-  skip_inst_sdk_packages=0
-fi
 
 if ! uname -m | egrep -q "i686|x86_64"; then
   echo "Only x86 architectures are currently supported" >&2
@@ -90,11 +84,6 @@ then
     grep -v 'javaplugin.so' "${TEMPDIR}"/update-java-alternatives.out
     exit 1
   fi
-fi
-
-# Install SDK packages for android
-if test "$skip_inst_sdk_packages" != 1; then
-  "$(dirname "${BASH_SOURCE[0]}")/install-android-sdks.sh"
 fi
 
 echo "install-build-deps-android.sh complete."

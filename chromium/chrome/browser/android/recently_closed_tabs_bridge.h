@@ -9,35 +9,42 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
-#include "chrome/browser/sessions/tab_restore_service_observer.h"
+#include "base/macros.h"
+#include "components/sessions/core/tab_restore_service_observer.h"
 
 class Profile;
-class TabRestoreService;
 
 // Provides the list of recently closed tabs to Java.
-class RecentlyClosedTabsBridge : public TabRestoreServiceObserver {
+class RecentlyClosedTabsBridge : public sessions::TabRestoreServiceObserver {
  public:
   explicit RecentlyClosedTabsBridge(Profile* profile);
 
-  void Destroy(JNIEnv* env, jobject obj);
-  void SetRecentlyClosedCallback(JNIEnv* env, jobject obj, jobject jcallback);
-  jboolean GetRecentlyClosedTabs(JNIEnv* env,
-                                 jobject obj,
-                                 jobject jtabs,
-                                 jint max_tab_count);
-  jboolean OpenRecentlyClosedTab(JNIEnv* env,
-                                 jobject obj,
-                                 jobject jtab,
-                                 jint tab_id,
-                                 jint j_disposition);
-  void ClearRecentlyClosedTabs(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void SetRecentlyClosedCallback(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& jcallback);
+  jboolean GetRecentlyClosedTabs(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& jtabs,
+      jint max_tab_count);
+  jboolean OpenRecentlyClosedTab(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& jtab,
+      jint tab_id,
+      jint j_disposition);
+  void ClearRecentlyClosedTabs(JNIEnv* env,
+                               const base::android::JavaParamRef<jobject>& obj);
 
   // Observer callback for TabRestoreServiceObserver. Notifies the registered
   // callback that the recently closed tabs list has changed.
-  void TabRestoreServiceChanged(TabRestoreService* service) override;
+  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
 
   // Observer callback when our associated TabRestoreService is destroyed.
-  void TabRestoreServiceDestroyed(TabRestoreService* service) override;
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override;
 
   // Registers JNI methods.
   static bool Register(JNIEnv* env);
@@ -56,7 +63,7 @@ class RecentlyClosedTabsBridge : public TabRestoreServiceObserver {
   Profile* profile_;
 
   // TabRestoreService that we are observing.
-  TabRestoreService* tab_restore_service_;
+  sessions::TabRestoreService* tab_restore_service_;
 
   DISALLOW_COPY_AND_ASSIGN(RecentlyClosedTabsBridge);
 };

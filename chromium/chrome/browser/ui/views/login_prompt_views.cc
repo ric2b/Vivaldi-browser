@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/login/login_prompt.h"
 
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/views/login_view.h"
@@ -12,6 +13,7 @@
 #include "components/password_manager/core/browser/password_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "net/url_request/url_request.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -34,8 +36,9 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
   }
 
   // LoginModelObserver:
-  void OnAutofillDataAvailable(const base::string16& username,
-                               const base::string16& password) override {
+  void OnAutofillDataAvailableInternal(
+      const base::string16& username,
+      const base::string16& password) override {
     // Nothing to do here since LoginView takes care of autofill for win.
   }
   void OnLoginModelDestroying() override {}
@@ -55,7 +58,8 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     content::WebContents* web_contents = GetWebContentsForLogin();
     if (web_contents)
-      web_contents->GetRenderViewHost()->SetIgnoreInputEvents(false);
+      web_contents->GetRenderViewHost()->GetWidget()->SetIgnoreInputEvents(
+          false);
 
     // Reference is no longer valid.
     dialog_ = NULL;
@@ -67,7 +71,7 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
 
     // The widget is going to delete itself; clear our pointer.
     dialog_ = NULL;
-    SetModel(NULL);
+    ResetModel();
 
     ReleaseSoon();
   }
@@ -97,8 +101,9 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
   }
 
   // LoginHandler:
-  void BuildViewForPasswordManager(password_manager::PasswordManager* manager,
-                                   const base::string16& explanation) override {
+  void BuildViewImpl(const base::string16& authority,
+                     const base::string16& explanation,
+                     LoginModelData* login_model_data) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     // Create a new LoginView and set the model for it.  The model (password
@@ -106,7 +111,7 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
     // browser window, so the view may be destroyed after the password
     // manager. The view listens for model destruction and unobserves
     // accordingly.
-    login_view_ = new LoginView(explanation, manager);
+    login_view_ = new LoginView(authority, explanation, login_model_data);
 
     // Scary thread safety note: This can potentially be called *after* SetAuth
     // or CancelAuth (say, if the request was cancelled before the UI thread got
@@ -138,8 +143,11 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
   DISALLOW_COPY_AND_ASSIGN(LoginHandlerViews);
 };
 
-// static
-LoginHandler* LoginHandler::Create(net::AuthChallengeInfo* auth_info,
-                                   net::URLRequest* request) {
+namespace chrome {
+
+LoginHandler* CreateLoginHandlerViews(net::AuthChallengeInfo* auth_info,
+                                      net::URLRequest* request) {
   return new LoginHandlerViews(auth_info, request);
 }
+
+}  // namespace chrome

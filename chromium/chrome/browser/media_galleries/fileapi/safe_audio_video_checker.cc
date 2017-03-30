@@ -4,6 +4,9 @@
 
 #include "chrome/browser/media_galleries/fileapi/safe_audio_video_checker.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
@@ -14,9 +17,9 @@
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/extensions/chrome_utility_extensions_messages.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/utility_process_host.h"
-#include "content/public/browser/browser_thread.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -24,7 +27,7 @@
 SafeAudioVideoChecker::SafeAudioVideoChecker(
     base::File file,
     const storage::CopyOrMoveFileValidator::ResultCallback& callback)
-    : state_(INITIAL_STATE), file_(file.Pass()), callback_(callback) {
+    : state_(INITIAL_STATE), file_(std::move(file)), callback_(callback) {
   DCHECK(!callback.is_null());
 }
 
@@ -57,14 +60,13 @@ void SafeAudioVideoChecker::OnProcessStarted() {
 
   if (utility_process_host_->GetData().handle == base::kNullProcessHandle)
     DLOG(ERROR) << "Child process handle is null";
-  IPC::PlatformFileForTransit file_for_transit =
-      IPC::TakeFileHandleForProcess(file_.Pass(),
-                                    utility_process_host_->GetData().handle);
+  IPC::PlatformFileForTransit file_for_transit = IPC::TakeFileHandleForProcess(
+      std::move(file_), utility_process_host_->GetData().handle);
   if (file_for_transit == IPC::InvalidPlatformFileForTransit()) {
     OnCheckingFinished(false /* valid? */);
     return;
   }
-  const int64 kFileDecodeTimeInMS = 250;
+  const int64_t kFileDecodeTimeInMS = 250;
   utility_process_host_->Send(new ChromeUtilityMsg_CheckMediaFile(
       kFileDecodeTimeInMS, file_for_transit));
 }

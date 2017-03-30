@@ -41,7 +41,7 @@ void WebViewFindHelper::DispatchFindUpdateEvent(bool canceled,
   args->SetBoolean(webview::kFindFinalUpdate, final_update);
   DCHECK(webview_guest_);
   webview_guest_->DispatchEventToView(
-      new GuestViewEvent(webview::kEventFindReply, args.Pass()));
+      new GuestViewEvent(webview::kEventFindReply, std::move(args)));
 }
 
 void WebViewFindHelper::EndFindSession(int session_request_id, bool canceled) {
@@ -131,6 +131,13 @@ void WebViewFindHelper::Find(
   // Update the current find session, if necessary.
   if (!full_options->findNext)
     current_find_session_ = insert_result.first->second;
+
+  // Handle the empty |search_text| case internally.
+  if (search_text.empty()) {
+    guest_web_contents->StopFinding(content::STOP_FIND_ACTION_CLEAR_SELECTION);
+    FindReply(current_find_request_id_, 0, gfx::Rect(), 0, true);
+    return;
+  }
 
   guest_web_contents->Find(current_find_request_id_,
                            search_text, *full_options);

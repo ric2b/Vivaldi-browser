@@ -10,7 +10,7 @@
       'type': 'static_library',
       'dependencies': [
         '../base/base.gyp:base',
-        '../content/content.gyp:content_browser',
+        '../base/base.gyp:base_i18n',
         '../skia/skia.gyp:skia',
         '../ui/base/ui_base.gyp:ui_base',
         '../ui/gfx/gfx.gyp:gfx',
@@ -22,9 +22,8 @@
       ],
       'sources': [
         # Note: sources list duplicated in GN build.
-        'favicon/core/fallback_icon_client.h',
-        'favicon/core/fallback_icon_service.cc',
-        'favicon/core/fallback_icon_service.h',
+        'favicon/core/fallback_url_util.cc',
+        'favicon/core/fallback_url_util.h',
         'favicon/core/favicon_client.h',
         'favicon/core/favicon_driver.cc',
         'favicon/core/favicon_driver.h',
@@ -37,11 +36,22 @@
         'favicon/core/favicon_service.h',
         'favicon/core/favicon_url.cc',
         'favicon/core/favicon_url.h',
+        'favicon/core/favicon_util.cc',
+        'favicon/core/favicon_util.h',
         'favicon/core/large_icon_service.cc',
         'favicon/core/large_icon_service.h',
       ],
       'include_dirs': [
         '..',
+      ],
+      'conditions': [
+        ['OS!="ios"', {
+          'sources': [
+            'favicon/core/fallback_icon_client.h',
+            'favicon/core/fallback_icon_service.cc',
+            'favicon/core/fallback_icon_service.h',
+          ],
+        }],
       ],
     },
   ],

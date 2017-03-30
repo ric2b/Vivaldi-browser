@@ -8,8 +8,8 @@
 #include <list>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "ui/events/event_constants.h"
@@ -19,6 +19,10 @@
 
 namespace base {
 class TickClock;
+}
+
+namespace gfx {
+class PointF;
 }
 
 namespace ui {
@@ -70,6 +74,12 @@ class EventGeneratorDelegate {
   // |hosted_target| into the root window's coordinate system.
   virtual void ConvertPointFromHost(const EventTarget* hosted_target,
                                     gfx::Point* point) const = 0;
+
+  // Detemines whether the input method should be the first to handle key events
+  // before dispathcing to Views. If it does, the given |event| will be
+  // dispatched and processed by the input method from the host of |target|.
+  virtual void DispatchKeyEventToIME(EventTarget* target,
+                                     ui::KeyEvent* event) = 0;
 };
 
 // ui::test::EventGenerator is a tool that generates and dispatches events.
@@ -170,6 +180,11 @@ class EventGenerator {
   void MoveMouseToInHost(int x, int y) {
     MoveMouseToInHost(gfx::Point(x, y));
   }
+
+  // Generates a mouse move event at the point given in the host
+  // coordinates, with a native event with |point_for_natve|.
+  void MoveMouseToWithNative(const gfx::Point& point_in_host,
+                             const gfx::Point& point_for_native);
 
   // Generates events to move mouse to be the given |point| in screen
   // coordinates.

@@ -5,6 +5,7 @@
 #include "components/policy/core/common/async_policy_provider.h"
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/sequenced_task_runner.h"
@@ -12,6 +13,7 @@
 #include "components/policy/core/common/async_policy_loader.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema_registry.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -32,6 +34,7 @@ void SetPolicy(PolicyBundle* bundle,
       .Set(name,
            POLICY_LEVEL_MANDATORY,
            POLICY_SCOPE_USER,
+           POLICY_SOURCE_PLATFORM,
            new base::StringValue(value),
            NULL);
 }
@@ -69,7 +72,7 @@ scoped_ptr<PolicyBundle> MockPolicyLoader::Load() {
     bundle.reset(new PolicyBundle());
     bundle->CopyFrom(*loaded);
   }
-  return bundle.Pass();
+  return bundle;
 }
 
 }  // namespace

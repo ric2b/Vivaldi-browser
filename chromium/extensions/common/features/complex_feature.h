@@ -7,8 +7,10 @@
 
 #include <set>
 #include <string>
+#include <vector>
 
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/manifest.h"
@@ -20,7 +22,7 @@ namespace extensions {
 // available, but not if only some combination of Features is available.
 class ComplexFeature : public Feature {
  public:
-  typedef ScopedVector<Feature> FeatureList;
+  using FeatureList = std::vector<scoped_ptr<Feature>>;
 
   explicit ComplexFeature(scoped_ptr<FeatureList> features);
   ~ComplexFeature() override;

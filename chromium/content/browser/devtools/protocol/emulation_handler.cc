@@ -4,7 +4,10 @@
 
 #include "content/browser/devtools/protocol/emulation_handler.h"
 
+#include <utility>
+
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/geolocation/geolocation_service_context.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -37,20 +40,13 @@ ui::GestureProviderConfigType TouchEmulationConfigurationToType(
 
 }  // namespace
 
-EmulationHandler::EmulationHandler(page::PageHandler* page_handler)
+EmulationHandler::EmulationHandler()
     : touch_emulation_enabled_(false),
       device_emulation_enabled_(false),
-      page_handler_(page_handler),
-      host_(nullptr)
-{
-  page_handler->SetScreencastListener(this);
+      host_(nullptr) {
 }
 
 EmulationHandler::~EmulationHandler() {
-}
-
-void EmulationHandler::ScreencastEnabledChanged() {
-   UpdateTouchEventEmulationState();
 }
 
 void EmulationHandler::SetRenderFrameHost(RenderFrameHostImpl* host) {
@@ -88,7 +84,7 @@ Response EmulationHandler::SetGeolocationOverride(
   } else {
     geoposition->error_code = Geoposition::ERROR_CODE_POSITION_UNAVAILABLE;
   }
-  geolocation_context->SetOverride(geoposition.Pass());
+  geolocation_context->SetOverride(std::move(geoposition));
   return Response::OK();
 }
 
@@ -169,7 +165,7 @@ Response EmulationHandler::SetDeviceMetricsOverride(
   if (optional_scale && (*optional_scale <= 0 || *optional_scale > max_scale)) {
     return Response::InvalidParams(
         "scale must be positive, not greater than " +
-        base::IntToString(max_scale));
+        base::DoubleToString(max_scale));
   }
 
   blink::WebDeviceEmulationParams params;
@@ -216,8 +212,7 @@ void EmulationHandler::UpdateTouchEventEmulationState() {
       host_ ? host_->GetRenderWidgetHost() : nullptr;
   if (!widget_host)
     return;
-  bool enabled = touch_emulation_enabled_ ||
-      page_handler_->screencast_enabled();
+  bool enabled = touch_emulation_enabled_;
   ui::GestureProviderConfigType config_type =
       TouchEmulationConfigurationToType(touch_emulation_configuration_);
   widget_host->SetTouchEventEmulationEnabled(enabled, config_type);

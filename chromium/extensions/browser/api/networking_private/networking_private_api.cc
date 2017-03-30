@@ -27,16 +27,18 @@ extensions::NetworkingPrivateDelegate* GetDelegate(
 
 namespace extensions {
 
-namespace private_api = core_api::networking_private;
+namespace private_api = api::networking_private;
 
 namespace networking_private {
 
 // static
 const char kErrorInvalidNetworkGuid[] = "Error.InvalidNetworkGuid";
+const char kErrorInvalidNetworkOperation[] = "Error.InvalidNetworkOperation";
 const char kErrorNetworkUnavailable[] = "Error.NetworkUnavailable";
 const char kErrorEncryptionError[] = "Error.EncryptionError";
 const char kErrorNotReady[] = "Error.NotReady";
 const char kErrorNotSupported[] = "Error.NotSupported";
+const char kErrorSimLocked[] = "Error.SimLocked";
 
 }  // namespace networking_private
 
@@ -151,7 +153,7 @@ bool NetworkingPrivateSetPropertiesFunction::RunAsync() {
 
   GetDelegate(browser_context())
       ->SetProperties(
-          params->network_guid, properties_dict.Pass(),
+          params->network_guid, std::move(properties_dict),
           base::Bind(&NetworkingPrivateSetPropertiesFunction::Success, this),
           base::Bind(&NetworkingPrivateSetPropertiesFunction::Failure, this));
   return true;
@@ -183,7 +185,7 @@ bool NetworkingPrivateCreateNetworkFunction::RunAsync() {
 
   GetDelegate(browser_context())
       ->CreateNetwork(
-          params->shared, properties_dict.Pass(),
+          params->shared, std::move(properties_dict),
           base::Bind(&NetworkingPrivateCreateNetworkFunction::Success, this),
           base::Bind(&NetworkingPrivateCreateNetworkFunction::Failure, this));
   return true;
@@ -360,7 +362,7 @@ bool NetworkingPrivateGetDeviceStatesFunction::RunSync() {
   }
 
   scoped_ptr<base::ListValue> device_state_list(new base::ListValue);
-  for (const private_api::DeviceStateProperties* properties : *device_states)
+  for (const auto& properties : *device_states)
     device_state_list->Append(properties->ToValue().release());
   SetResult(device_state_list.release());
   return true;
@@ -699,6 +701,70 @@ void NetworkingPrivateGetCaptivePortalStatusFunction::Success(
 }
 
 void NetworkingPrivateGetCaptivePortalStatusFunction::Failure(
+    const std::string& error) {
+  error_ = error;
+  SendResponse(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// NetworkingPrivateUnlockCellularSimFunction
+
+NetworkingPrivateUnlockCellularSimFunction::
+    ~NetworkingPrivateUnlockCellularSimFunction() {}
+
+bool NetworkingPrivateUnlockCellularSimFunction::RunAsync() {
+  scoped_ptr<private_api::UnlockCellularSim::Params> params =
+      private_api::UnlockCellularSim::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  GetDelegate(browser_context())
+      ->UnlockCellularSim(
+          params->network_guid, params->pin, params->puk ? *params->puk : "",
+          base::Bind(&NetworkingPrivateUnlockCellularSimFunction::Success,
+                     this),
+          base::Bind(&NetworkingPrivateUnlockCellularSimFunction::Failure,
+                     this));
+  return true;
+}
+
+void NetworkingPrivateUnlockCellularSimFunction::Success() {
+  SendResponse(true);
+}
+
+void NetworkingPrivateUnlockCellularSimFunction::Failure(
+    const std::string& error) {
+  error_ = error;
+  SendResponse(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// NetworkingPrivateSetCellularSimStateFunction
+
+NetworkingPrivateSetCellularSimStateFunction::
+    ~NetworkingPrivateSetCellularSimStateFunction() {}
+
+bool NetworkingPrivateSetCellularSimStateFunction::RunAsync() {
+  scoped_ptr<private_api::SetCellularSimState::Params> params =
+      private_api::SetCellularSimState::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  GetDelegate(browser_context())
+      ->SetCellularSimState(
+          params->network_guid, params->sim_state.require_pin,
+          params->sim_state.current_pin,
+          params->sim_state.new_pin ? *params->sim_state.new_pin : "",
+          base::Bind(&NetworkingPrivateSetCellularSimStateFunction::Success,
+                     this),
+          base::Bind(&NetworkingPrivateSetCellularSimStateFunction::Failure,
+                     this));
+  return true;
+}
+
+void NetworkingPrivateSetCellularSimStateFunction::Success() {
+  SendResponse(true);
+}
+
+void NetworkingPrivateSetCellularSimStateFunction::Failure(
     const std::string& error) {
   error_ = error;
   SendResponse(false);

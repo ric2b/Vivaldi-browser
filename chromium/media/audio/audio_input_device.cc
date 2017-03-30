@@ -4,10 +4,16 @@
 
 #include "media/audio/audio_input_device.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/base/audio_bus.h"
 
@@ -35,10 +41,11 @@ class AudioInputDevice::AudioThreadCallback
   void MapSharedMemory() override;
 
   // Called whenever we receive notifications about pending data.
-  void Process(uint32 pending_data) override;
+  void Process(uint32_t pending_data) override;
 
  private:
   int current_segment_id_;
+  uint32_t last_buffer_id_;
   ScopedVector<media::AudioBus> audio_buses_;
   CaptureCallback* capture_callback_;
 
@@ -50,7 +57,7 @@ AudioInputDevice::AudioInputDevice(
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
     : ScopedTaskRunnerObserver(io_task_runner),
       callback_(NULL),
-      ipc_(ipc.Pass()),
+      ipc_(std::move(ipc)),
       state_(IDLE),
       session_id_(0),
       agc_is_enabled_(false),
@@ -140,7 +147,7 @@ void AudioInputDevice::OnStreamCreated(
   audio_callback_.reset(new AudioInputDevice::AudioThreadCallback(
       audio_parameters_, handle, length, total_segments, callback_));
   audio_thread_.Start(
-      audio_callback_.get(), socket_handle, "AudioInputDevice", false);
+      audio_callback_.get(), socket_handle, "AudioInputDevice", true);
 
   state_ = RECORDING;
   ipc_->RecordStream();
@@ -176,7 +183,8 @@ void AudioInputDevice::OnStateChanged(
       // object.  Possibly require calling Initialize again or provide
       // a callback object via Start() and clear it in Stop().
       if (!audio_thread_.IsStopped())
-        callback_->OnCaptureError();
+        callback_->OnCaptureError(
+            "AudioInputDevice::OnStateChanged - audio thread still running");
       break;
     default:
       NOTREACHED();
@@ -272,6 +280,7 @@ AudioInputDevice::AudioThreadCallback::AudioThreadCallback(
     : AudioDeviceThread::Callback(audio_parameters, memory, memory_length,
                                   total_segments),
       current_segment_id_(0),
+      last_buffer_id_(UINT32_MAX),
       capture_callback_(capture_callback) {
 }
 
@@ -282,39 +291,57 @@ void AudioInputDevice::AudioThreadCallback::MapSharedMemory() {
   shared_memory_.Map(memory_length_);
 
   // Create vector of audio buses by wrapping existing blocks of memory.
-  uint8* ptr = static_cast<uint8*>(shared_memory_.memory());
+  uint8_t* ptr = static_cast<uint8_t*>(shared_memory_.memory());
   for (int i = 0; i < total_segments_; ++i) {
     media::AudioInputBuffer* buffer =
         reinterpret_cast<media::AudioInputBuffer*>(ptr);
     scoped_ptr<media::AudioBus> audio_bus =
         media::AudioBus::WrapMemory(audio_parameters_, buffer->audio);
-    audio_buses_.push_back(audio_bus.Pass());
+    audio_buses_.push_back(std::move(audio_bus));
     ptr += segment_length_;
   }
 }
 
-void AudioInputDevice::AudioThreadCallback::Process(uint32 pending_data) {
+void AudioInputDevice::AudioThreadCallback::Process(uint32_t pending_data) {
   // The shared memory represents parameters, size of the data buffer and the
   // actual data buffer containing audio data. Map the memory into this
   // structure and parse out parameters and the data area.
-  uint8* ptr = static_cast<uint8*>(shared_memory_.memory());
+  uint8_t* ptr = static_cast<uint8_t*>(shared_memory_.memory());
   ptr += current_segment_id_ * segment_length_;
   AudioInputBuffer* buffer = reinterpret_cast<AudioInputBuffer*>(ptr);
+
   // Usually this will be equal but in the case of low sample rate (e.g. 8kHz,
   // the buffer may be bigger (on mac at least)).
   DCHECK_GE(buffer->params.size,
             segment_length_ - sizeof(AudioInputBufferParameters));
-  double volume = buffer->params.volume;
-  bool key_pressed = buffer->params.key_pressed;
+
+  // Verify correct sequence.
+  if (buffer->params.id != last_buffer_id_ + 1) {
+    std::string message = base::StringPrintf(
+        "Incorrect buffer sequence. Expected = %u. Actual = %u.",
+        last_buffer_id_ + 1, buffer->params.id);
+    LOG(ERROR) << message;
+    capture_callback_->OnCaptureError(message);
+  }
+  if (current_segment_id_ != static_cast<int>(pending_data)) {
+    std::string message = base::StringPrintf(
+        "Segment id not matching. Remote = %u. Local = %d.",
+        pending_data, current_segment_id_);
+    LOG(ERROR) << message;
+    capture_callback_->OnCaptureError(message);
+  }
+  last_buffer_id_ = buffer->params.id;
 
   // Use pre-allocated audio bus wrapping existing block of shared memory.
   media::AudioBus* audio_bus = audio_buses_[current_segment_id_];
 
-  // Deliver captured data to the client in floating point format
-  // and update the audio-delay measurement.
-  int audio_delay_milliseconds = pending_data / bytes_per_ms_;
+  // Deliver captured data to the client in floating point format and update
+  // the audio delay measurement.
   capture_callback_->Capture(
-      audio_bus, audio_delay_milliseconds, volume, key_pressed);
+      audio_bus,
+      buffer->params.hardware_delay_bytes / bytes_per_ms_,  // Delay in ms
+      buffer->params.volume,
+      buffer->params.key_pressed);
 
   if (++current_segment_id_ >= total_segments_)
     current_segment_id_ = 0;

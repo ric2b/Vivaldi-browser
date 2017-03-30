@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_API_DECLARATIVE_TEST_RULES_REGISTRY_H__
 #define EXTENSIONS_BROWSER_API_DECLARATIVE_TEST_RULES_REGISTRY_H__
 
+#include "base/macros.h"
 #include "extensions/browser/api/declarative/rules_registry.h"
 
 namespace extensions {
@@ -24,7 +25,7 @@ class TestRulesRegistry : public RulesRegistry {
   // RulesRegistry implementation:
   std::string AddRulesImpl(
       const std::string& extension_id,
-      const std::vector<linked_ptr<RulesRegistry::Rule>>& rules) override;
+      const std::vector<linked_ptr<api::events::Rule>>& rules) override;
   std::string RemoveRulesImpl(
       const std::string& extension_id,
       const std::vector<std::string>& rule_identifiers) override;

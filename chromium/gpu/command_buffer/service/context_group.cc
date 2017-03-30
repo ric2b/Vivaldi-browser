@@ -4,25 +4,28 @@
 
 #include "gpu/command_buffer/service/context_group.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 
 #include "base/command_line.h"
-#include "base/strings/string_util.h"
-#include "base/sys_info.h"
+#include "gpu/command_buffer/common/value_state.h"
 #include "gpu/command_buffer/service/buffer_manager.h"
 #include "gpu/command_buffer/service/framebuffer_manager.h"
-#include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
-#include "gpu/command_buffer/service/memory_tracking.h"
+#include "gpu/command_buffer/service/path_manager.h"
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
+#include "gpu/command_buffer/service/sampler_manager.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "gpu/command_buffer/service/valuebuffer_manager.h"
-#include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_bindings.h"
+#include "ui/gl/gl_version_info.h"
 
 namespace gpu {
 namespace gles2 {
@@ -31,18 +34,33 @@ ContextGroup::ContextGroup(
     const scoped_refptr<MailboxManager>& mailbox_manager,
     const scoped_refptr<MemoryTracker>& memory_tracker,
     const scoped_refptr<ShaderTranslatorCache>& shader_translator_cache,
+    const scoped_refptr<FramebufferCompletenessCache>&
+        framebuffer_completeness_cache,
     const scoped_refptr<FeatureInfo>& feature_info,
     const scoped_refptr<SubscriptionRefSet>& subscription_ref_set,
     const scoped_refptr<ValueStateMap>& pending_valuebuffer_state,
     bool bind_generates_resource)
-    : context_type_(CONTEXT_TYPE_UNDEFINED),
-      mailbox_manager_(mailbox_manager),
+    : mailbox_manager_(mailbox_manager),
       memory_tracker_(memory_tracker),
       shader_translator_cache_(shader_translator_cache),
+#if defined(OS_MACOSX)
+      // Framebuffer completeness is not cacheable on OS X because of dynamic
+      // graphics switching.
+      // http://crbug.com/180876
+      // TODO(tobiasjs): determine whether GPU switching is possible
+      // programmatically, rather than just hardcoding this behaviour
+      // for OS X.
+      framebuffer_completeness_cache_(NULL),
+#else
+      framebuffer_completeness_cache_(framebuffer_completeness_cache),
+#endif
       subscription_ref_set_(subscription_ref_set),
       pending_valuebuffer_state_(pending_valuebuffer_state),
-      enforce_gl_minimums_(base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnforceGLMinimums)),
+      enforce_gl_minimums_(
+          base::CommandLine::InitializedForCurrentProcess()
+              ? base::CommandLine::ForCurrentProcess()->HasSwitch(
+                    switches::kEnforceGLMinimums)
+              : false),
       bind_generates_resource_(bind_generates_resource),
       max_vertex_attribs_(0u),
       max_texture_units_(0u),
@@ -53,9 +71,9 @@ ContextGroup::ContextGroup(
       max_vertex_uniform_vectors_(0u),
       max_color_attachments_(1u),
       max_draw_buffers_(1u),
+      max_dual_source_draw_buffers_(0u),
       program_cache_(NULL),
-      feature_info_(feature_info),
-      draw_buffer_(GL_BACK) {
+      feature_info_(feature_info) {
   {
     if (!mailbox_manager_.get())
       mailbox_manager_ = new MailboxManagerImpl;
@@ -65,61 +83,37 @@ ContextGroup::ContextGroup(
       pending_valuebuffer_state_ = new ValueStateMap();
     if (!feature_info.get())
       feature_info_ = new FeatureInfo;
-    TransferBufferManager* manager = new TransferBufferManager();
-    transfer_buffer_manager_ = manager;
-    manager->Initialize();
+    transfer_buffer_manager_ = new TransferBufferManager(memory_tracker_.get());
   }
 }
 
-static void GetIntegerv(GLenum pname, uint32* var) {
+static void GetIntegerv(GLenum pname, uint32_t* var) {
   GLint value = 0;
   glGetIntegerv(pname, &value);
   *var = value;
 }
 
-// static
-ContextGroup::ContextType ContextGroup::GetContextType(
-    unsigned webgl_version) {
-  switch (webgl_version) {
-    case 0:
-      return CONTEXT_TYPE_OTHER;
-    case 1:
-      return CONTEXT_TYPE_WEBGL1;
-    case 2:
-      return CONTEXT_TYPE_WEBGL2;
-    default:
-      return CONTEXT_TYPE_UNDEFINED;
-  }
-}
-
-bool ContextGroup::Initialize(
-    GLES2Decoder* decoder,
-    ContextGroup::ContextType context_type,
-    const DisallowedFeatures& disallowed_features) {
-  if (context_type == CONTEXT_TYPE_UNDEFINED) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because of unknown "
-               << "context type.";
-    return false;
-  }
-  if (context_type_ == CONTEXT_TYPE_UNDEFINED) {
-    context_type_ = context_type;
-  } else if (context_type_ != context_type) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because the type of "
-               << "the context does not fit with the group.";
-    return false;
-  }
-
-  // If we've already initialized the group just add the context.
+bool ContextGroup::Initialize(GLES2Decoder* decoder,
+                              ContextType context_type,
+                              const DisallowedFeatures& disallowed_features) {
   if (HaveContexts()) {
+    if (context_type != feature_info_->context_type()) {
+      LOG(ERROR) << "ContextGroup::Initialize failed because the type of "
+                 << "the context does not fit with the group.";
+      return false;
+    }
+    // If we've already initialized the group just add the context.
     decoders_.push_back(base::AsWeakPtr<GLES2Decoder>(decoder));
     return true;
   }
 
-  if (!feature_info_->Initialize(disallowed_features)) {
+  if (!feature_info_->Initialize(context_type, disallowed_features)) {
     LOG(ERROR) << "ContextGroup::Initialize failed because FeatureInfo "
                << "initialization failed.";
     return false;
   }
+
+  transfer_buffer_manager_->Initialize();
 
   const GLint kMinRenderbufferSize = 512;  // GL says 1 pixel!
   GLint max_renderbuffer_size = 0;
@@ -149,17 +143,23 @@ bool ContextGroup::Initialize(
     GetIntegerv(GL_MAX_DRAW_BUFFERS_ARB, &max_draw_buffers_);
     if (max_draw_buffers_ < 1)
       max_draw_buffers_ = 1;
-    draw_buffer_ = GL_BACK;
+  }
+  if (feature_info_->feature_flags().ext_blend_func_extended) {
+    GetIntegerv(GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT,
+                &max_dual_source_draw_buffers_);
+    DCHECK(max_dual_source_draw_buffers_ >= 1);
   }
 
   buffer_manager_.reset(
       new BufferManager(memory_tracker_.get(), feature_info_.get()));
-  framebuffer_manager_.reset(
-      new FramebufferManager(max_draw_buffers_, max_color_attachments_));
+  framebuffer_manager_.reset(new FramebufferManager(
+      max_draw_buffers_, max_color_attachments_, feature_info_->context_type(),
+      framebuffer_completeness_cache_));
   renderbuffer_manager_.reset(new RenderbufferManager(
       memory_tracker_.get(), max_renderbuffer_size, max_samples,
       feature_info_.get()));
   shader_manager_.reset(new ShaderManager());
+  sampler_manager_.reset(new SamplerManager(feature_info_.get()));
   valuebuffer_manager_.reset(
       new ValuebufferManager(subscription_ref_set_.get(),
                              pending_valuebuffer_state_.get()));
@@ -279,23 +279,27 @@ bool ContextGroup::Initialize(
   if (feature_info_->workarounds().max_fragment_uniform_vectors) {
     max_fragment_uniform_vectors_ = std::min(
         max_fragment_uniform_vectors_,
-        static_cast<uint32>(
+        static_cast<uint32_t>(
             feature_info_->workarounds().max_fragment_uniform_vectors));
   }
   if (feature_info_->workarounds().max_varying_vectors) {
-    max_varying_vectors_ = std::min(
-        max_varying_vectors_,
-        static_cast<uint32>(feature_info_->workarounds().max_varying_vectors));
+    max_varying_vectors_ =
+        std::min(max_varying_vectors_,
+                 static_cast<uint32_t>(
+                     feature_info_->workarounds().max_varying_vectors));
   }
   if (feature_info_->workarounds().max_vertex_uniform_vectors) {
     max_vertex_uniform_vectors_ =
         std::min(max_vertex_uniform_vectors_,
-                 static_cast<uint32>(
+                 static_cast<uint32_t>(
                      feature_info_->workarounds().max_vertex_uniform_vectors));
   }
 
-  program_manager_.reset(new ProgramManager(
-      program_cache_, max_varying_vectors_));
+  path_manager_.reset(new PathManager());
+
+  program_manager_.reset(
+      new ProgramManager(program_cache_, max_varying_vectors_,
+                         max_dual_source_draw_buffers_, feature_info_.get()));
 
   if (!texture_manager_->Initialize()) {
     LOG(ERROR) << "Context::Group::Initialize failed because texture manager "
@@ -365,6 +369,11 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
     texture_manager_.reset();
   }
 
+  if (path_manager_ != NULL) {
+    path_manager_->Destroy(have_context);
+    path_manager_.reset();
+  }
+
   if (program_manager_ != NULL) {
     program_manager_->Destroy(have_context);
     program_manager_.reset();
@@ -375,6 +384,11 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
     shader_manager_.reset();
   }
 
+  if (sampler_manager_ != NULL) {
+    sampler_manager_->Destroy(have_context);
+    sampler_manager_.reset();
+  }
+
   if (valuebuffer_manager_ != NULL) {
     valuebuffer_manager_->Destroy();
     valuebuffer_manager_.reset();
@@ -383,8 +397,8 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
   memory_tracker_ = NULL;
 }
 
-uint32 ContextGroup::GetMemRepresented() const {
-  uint32 total = 0;
+uint32_t ContextGroup::GetMemRepresented() const {
+  uint32_t total = 0;
   if (buffer_manager_.get())
     total += buffer_manager_->mem_represented();
   if (renderbuffer_manager_.get())
@@ -415,7 +429,7 @@ bool ContextGroup::CheckGLFeature(GLint min_required, GLint* v) {
   return value >= min_required;
 }
 
-bool ContextGroup::CheckGLFeatureU(GLint min_required, uint32* v) {
+bool ContextGroup::CheckGLFeatureU(GLint min_required, uint32_t* v) {
   GLint value = *v;
   if (enforce_gl_minimums_) {
     value = std::min(min_required, value);
@@ -432,9 +446,10 @@ bool ContextGroup::QueryGLFeature(
   return CheckGLFeature(min_required, v);
 }
 
-bool ContextGroup::QueryGLFeatureU(
-    GLenum pname, GLint min_required, uint32* v) {
-  uint32 value = 0;
+bool ContextGroup::QueryGLFeatureU(GLenum pname,
+                                   GLint min_required,
+                                   uint32_t* v) {
+  uint32_t value = 0;
   GetIntegerv(pname, &value);
   bool result = CheckGLFeatureU(min_required, &value);
   *v = value;

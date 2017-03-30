@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/file_system_provider/operations/write_file.h"
 
+#include <utility>
+
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "chrome/common/extensions/api/file_system_provider.h"
@@ -17,7 +19,7 @@ WriteFile::WriteFile(extensions::EventRouter* event_router,
                      const ProvidedFileSystemInfo& file_system_info,
                      int file_handle,
                      scoped_refptr<net::IOBuffer> buffer,
-                     int64 offset,
+                     int64_t offset,
                      int length,
                      const storage::AsyncFileUtil::StatusCallback& callback)
     : Operation(event_router, file_system_info),
@@ -25,8 +27,7 @@ WriteFile::WriteFile(extensions::EventRouter* event_router,
       buffer_(buffer),
       offset_(offset),
       length_(length),
-      callback_(callback) {
-}
+      callback_(callback) {}
 
 WriteFile::~WriteFile() {
 }
@@ -59,7 +60,7 @@ bool WriteFile::Execute(int request_id) {
       request_id,
       extensions::events::FILE_SYSTEM_PROVIDER_ON_WRITE_FILE_REQUESTED,
       extensions::api::file_system_provider::OnWriteFileRequested::kEventName,
-      event_args.Pass());
+      std::move(event_args));
 }
 
 void WriteFile::OnSuccess(int /* request_id */,

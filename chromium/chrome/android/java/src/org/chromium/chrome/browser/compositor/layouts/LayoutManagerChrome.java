@@ -5,19 +5,14 @@
 package org.chromium.chrome.browser.compositor.layouts;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.text.TextUtils;
 import android.view.ViewGroup;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.R;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.compositor.TitleCache;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.compositor.layouts.content.TitleBitmapFactory;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.BlackHoleEventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeEventFilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
@@ -27,7 +22,9 @@ import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeManagerDelegate;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -72,12 +69,9 @@ public class LayoutManagerChrome
     // Internal State
     /** A {@link TitleCache} instance that stores all title/favicon bitmaps as CC resources. */
     protected TitleCache mTitleCache;
-    /** Responsible for building non-incognito titles. */
-    protected TitleBitmapFactory mStandardTitleBitmapFactory;
-    /** Responsible for building all incognito titles. */
-    protected TitleBitmapFactory mIncognitoTitleBitmapFactory;
+
     /** Whether or not animations are enabled.  This can disable certain layouts or effects. */
-    protected boolean mEnableAnimations = true;
+    private boolean mEnableAnimations = true;
     private boolean mCreatingNtp;
     private final ObserverList<OverviewModeObserver> mOverviewModeObservers;
     private TabModelSelectorObserver mTabModelSelectorObserver;
@@ -174,11 +168,6 @@ public class LayoutManagerChrome
         Context context = host.getContext();
         LayoutRenderHost renderHost = host.getLayoutRenderHost();
 
-        // Set up state
-        mStandardTitleBitmapFactory =
-                new TitleBitmapFactory(context, false, R.drawable.default_favicon);
-        mIncognitoTitleBitmapFactory =
-                new TitleBitmapFactory(context, true, R.drawable.default_favicon_white);
         mOverviewModeObservers = new ObserverList<OverviewModeObserver>();
 
         // Build Event Filter Handlers
@@ -228,6 +217,7 @@ public class LayoutManagerChrome
     public void init(TabModelSelector selector, TabCreatorManager creator,
             TabContentManager content, ViewGroup androidContentContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
+            ReaderModeManagerDelegate readerModeDelegate,
             DynamicResourceLoader dynamicResourceLoader) {
         // TODO: TitleCache should be a part of the ResourceManager.
         mTitleCache = mHost.getTitleCache();
@@ -238,7 +228,7 @@ public class LayoutManagerChrome
         if (mOverviewLayout != null) mOverviewLayout.setTabModelSelector(selector, content);
 
         super.init(selector, creator, content, androidContentContainer, contextualSearchDelegate,
-                dynamicResourceLoader);
+                readerModeDelegate, dynamicResourceLoader);
 
         mTabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
             @Override
@@ -254,12 +244,12 @@ public class LayoutManagerChrome
 
         mTabSelectorTabObserver = new TabModelSelectorTabObserver(selector) {
             @Override
-            public void onLoadStarted(Tab tab) {
+            public void onLoadStarted(Tab tab, boolean toDifferentDocument) {
                 tabLoadStarted(tab.getId(), tab.isIncognito());
             }
 
             @Override
-            public void onLoadStopped(Tab tab) {
+            public void onLoadStopped(Tab tab, boolean toDifferentDocument) {
                 tabLoadFinished(tab.getId(), tab.isIncognito());
             }
 
@@ -543,7 +533,7 @@ public class LayoutManagerChrome
     }
 
     @Override
-    public void initLayoutTabFromHost(int tabId) {
+    public void initLayoutTabFromHost(final int tabId) {
         super.initLayoutTabFromHost(tabId);
 
         if (getTabModelSelector() == null || getActiveLayout() == null) return;
@@ -556,47 +546,8 @@ public class LayoutManagerChrome
         if (layoutTab == null) return;
 
         if (mTitleCache != null && layoutTab.isTitleNeeded()) {
-            mTitleCache.put(tabId, getTitleBitmap(tab), getFaviconBitmap(tab), tab.isIncognito(),
-                    tab.isTitleDirectionRtl());
+            mTitleCache.getUpdatedTitle(tab, "");
         }
-    }
-
-    /**
-     * Builds a title bitmap for a {@link Tab}. This function does not do anything in the
-     * general case because only the phone need to bake special resource.
-     *
-     * @param tab The tab to build the title bitmap for.
-     * @return The Title bitmap
-     */
-    protected Bitmap getTitleBitmap(Tab tab) {
-        TitleBitmapFactory titleBitmapFactory =
-                tab.isIncognito() ? mIncognitoTitleBitmapFactory : mStandardTitleBitmapFactory;
-
-        return titleBitmapFactory.getTitleBitmap(mHost.getContext(), getTitleForTab(tab));
-    }
-
-    /**
-     * Comes up with a valid title to return for a tab.
-     * @param tab The {@link Tab} to build a title for.
-     * @return    The title to use.
-     */
-    protected String getTitleForTab(Tab tab) {
-        String title = tab.getTitle();
-        if (TextUtils.isEmpty(title)) title = tab.getUrl();
-        return title;
-    }
-
-    /**
-     * Builds a favicon bitmap for a {@link Tab}. This function does not do anything in the
-     * general case because only the phone need to bake special texture.
-     *
-     * @param tab The tab to build the title bitmap for.
-     * @return The Favicon bitmap
-     */
-    protected Bitmap getFaviconBitmap(Tab tab) {
-        TitleBitmapFactory titleBitmapFactory =
-                tab.isIncognito() ? mIncognitoTitleBitmapFactory : mStandardTitleBitmapFactory;
-        return titleBitmapFactory.getFaviconBitmap(mHost.getContext(), tab.getFavicon());
     }
 
     /**
@@ -676,6 +627,14 @@ public class LayoutManagerChrome
      */
     public void setEnableAnimations(boolean enabled) {
         mEnableAnimations = enabled;
+    }
+
+    /**
+     * @return Whether animations should be done for model changes.
+     */
+    @VisibleForTesting
+    public boolean animationsEnabled() {
+        return mEnableAnimations;
     }
 
     @Override

@@ -6,10 +6,12 @@
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
@@ -54,7 +56,7 @@ class MockAutofillDriver : public TestAutofillDriver {
   DISALLOW_COPY_AND_ASSIGN(MockAutofillDriver);
 };
 
-class MockAutofillClient : public autofill::TestAutofillClient {
+class MockAutofillClient : public TestAutofillClient {
  public:
   MockAutofillClient() {}
 
@@ -292,6 +294,83 @@ TEST_F(AutofillExternalDelegateUnitTest, UpdateDataListWhileShowingPopup) {
                                                data_list_items);
 }
 
+// Test that we _don't_ de-dupe autofill values against datalist values. We
+// keep both with a separator.
+TEST_F(AutofillExternalDelegateUnitTest, DuplicateAutofillDatalistValues) {
+  IssueOnQuery(kQueryId);
+
+  std::vector<base::string16> data_list_items;
+  data_list_items.push_back(base::ASCIIToUTF16("Rick"));
+  data_list_items.push_back(base::ASCIIToUTF16("Deckard"));
+
+  EXPECT_CALL(autofill_client_, UpdateAutofillPopupDataListValues(
+                                    data_list_items, data_list_items));
+
+  external_delegate_->SetCurrentDataListValues(data_list_items,
+                                               data_list_items);
+
+  // The enums must be cast to ints to prevent compile errors on linux_rel.
+  auto element_ids =
+      testing::ElementsAre(static_cast<int>(POPUP_ITEM_ID_DATALIST_ENTRY),
+                           static_cast<int>(POPUP_ITEM_ID_DATALIST_ENTRY),
+#if !defined(OS_ANDROID)
+                           static_cast<int>(POPUP_ITEM_ID_SEPARATOR),
+#endif
+                           kAutofillProfileId,
+#if !defined(OS_ANDROID)
+                           static_cast<int>(POPUP_ITEM_ID_SEPARATOR),
+#endif
+                           static_cast<int>(POPUP_ITEM_ID_AUTOFILL_OPTIONS));
+  EXPECT_CALL(autofill_client_,
+              ShowAutofillPopup(_, _, SuggestionVectorIdsAre(element_ids), _));
+
+  // Have an Autofill item that is identical to one of the datalist entries.
+  std::vector<Suggestion> autofill_item;
+  autofill_item.push_back(Suggestion());
+  autofill_item[0].value = ASCIIToUTF16("Rick");
+  autofill_item[0].frontend_id = kAutofillProfileId;
+  external_delegate_->OnSuggestionsReturned(kQueryId, autofill_item);
+}
+
+// Test that we de-dupe autocomplete values against datalist values, keeping the
+// latter in case of a match.
+TEST_F(AutofillExternalDelegateUnitTest, DuplicateAutocompleteDatalistValues) {
+  IssueOnQuery(kQueryId);
+
+  std::vector<base::string16> data_list_items;
+  data_list_items.push_back(base::ASCIIToUTF16("Rick"));
+  data_list_items.push_back(base::ASCIIToUTF16("Deckard"));
+
+  EXPECT_CALL(autofill_client_, UpdateAutofillPopupDataListValues(
+                                    data_list_items, data_list_items));
+
+  external_delegate_->SetCurrentDataListValues(data_list_items,
+                                               data_list_items);
+
+  // The enums must be cast to ints to prevent compile errors on linux_rel.
+  auto element_ids = testing::ElementsAre(
+      // We are expecting only two data list entries.
+      static_cast<int>(POPUP_ITEM_ID_DATALIST_ENTRY),
+      static_cast<int>(POPUP_ITEM_ID_DATALIST_ENTRY),
+#if !defined(OS_ANDROID)
+      static_cast<int>(POPUP_ITEM_ID_SEPARATOR),
+#endif
+      static_cast<int>(POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY));
+  EXPECT_CALL(autofill_client_,
+              ShowAutofillPopup(_, _, SuggestionVectorIdsAre(element_ids), _));
+
+  // Have an Autocomplete item that is identical to one of the datalist entries
+  // and one that is distinct.
+  std::vector<Suggestion> autocomplete_items;
+  autocomplete_items.push_back(Suggestion());
+  autocomplete_items[0].value = ASCIIToUTF16("Rick");
+  autocomplete_items[0].frontend_id = POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY;
+  autocomplete_items.push_back(Suggestion());
+  autocomplete_items[1].value = ASCIIToUTF16("Cain");
+  autocomplete_items[1].frontend_id = POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY;
+  external_delegate_->OnSuggestionsReturned(kQueryId, autocomplete_items);
+}
+
 // Test that the Autofill popup is able to display warnings explaining why
 // Autofill is disabled for a website.
 // Regression test for http://crbug.com/247880
@@ -356,7 +435,7 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateClearPreviewedForm) {
 TEST_F(AutofillExternalDelegateUnitTest,
        ExternalDelegateHidePopupAfterEditing) {
   EXPECT_CALL(autofill_client_, ShowAutofillPopup(_, _, _, _));
-  autofill::GenerateTestAutofillPopup(external_delegate_.get());
+  GenerateTestAutofillPopup(external_delegate_.get());
 
   EXPECT_CALL(autofill_client_, HideAutofillPopup());
   external_delegate_->DidEndTextFieldEditing();
@@ -475,16 +554,25 @@ TEST_F(AutofillExternalDelegateUnitTest, ScanCreditCardPromptMetricsTest) {
   }
 }
 
+MATCHER_P3(CreditCardMatches,
+           card_number,
+           expiration_month,
+           expiration_year,
+           "") {
+  return !arg.Compare(
+      CreditCard(card_number, expiration_month, expiration_year));
+}
+
 // Test that autofill manager will fill the credit card form after user scans a
 // credit card.
 TEST_F(AutofillExternalDelegateUnitTest, FillCreditCardForm) {
   base::string16 card_number = base::ASCIIToUTF16("test");
   int expiration_month = 1;
   int expiration_year = 3000;
-  EXPECT_CALL(
-      *autofill_manager_,
-      FillCreditCardForm(
-          _, _, _, CreditCard(card_number, expiration_month, expiration_year)));
+  EXPECT_CALL(*autofill_manager_,
+              FillCreditCardForm(
+                  _, _, _, CreditCardMatches(card_number, expiration_month,
+                                             expiration_year)));
   external_delegate_->OnCreditCardScanned(card_number, expiration_month,
                                           expiration_year);
 }
@@ -514,9 +602,12 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateFillFieldWithValue) {
   base::string16 dummy_string(ASCIIToUTF16("baz foo"));
   EXPECT_CALL(*autofill_driver_,
               RendererShouldFillFieldWithValue(dummy_string));
+  base::HistogramTester histogram_tester;
   external_delegate_->DidAcceptSuggestion(dummy_string,
                                           POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY,
                                           0);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.SuggestionAcceptedIndex.Autocomplete", 0, 1);
 }
 
 }  // namespace autofill

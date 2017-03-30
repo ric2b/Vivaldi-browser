@@ -5,6 +5,8 @@
 #ifndef NET_PROXY_PROXY_LIST_H_
 #define NET_PROXY_PROXY_LIST_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -78,8 +80,8 @@ class NET_EXPORT_PRIVATE ProxyList {
   // For example: "PROXY xxx.xxx.xxx.xxx:xx; SOCKS yyy.yyy.yyy:yy".
   std::string ToPacString() const;
 
-  // Returns a serialized value for the list. The caller takes ownership of it.
-  base::ListValue* ToValue() const;
+  // Returns a serialized value for the list.
+  scoped_ptr<base::ListValue> ToValue() const;
 
   // Marks the current proxy server as bad and deletes it from the list. The
   // list of known bad proxies is given by |proxy_retry_info|. |net_error|

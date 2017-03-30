@@ -5,7 +5,7 @@
 #include "cc/animation/scrollbar_animation_controller_thinning.h"
 
 #include "cc/layers/solid_color_scrollbar_layer_impl.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/test_shared_bitmap_manager.h"
@@ -21,16 +21,10 @@ class ScrollbarAnimationControllerThinningTest
       public ScrollbarAnimationControllerClient {
  public:
   ScrollbarAnimationControllerThinningTest()
-      : host_impl_(&proxy_, &shared_bitmap_manager_, &task_graph_runner_) {}
+      : host_impl_(&task_runner_provider_,
+                   &shared_bitmap_manager_,
+                   &task_graph_runner_) {}
 
-  void StartAnimatingScrollbarAnimationController(
-      ScrollbarAnimationController* controller) override {
-    is_animating_ = true;
-  }
-  void StopAnimatingScrollbarAnimationController(
-      ScrollbarAnimationController* controller) override {
-    is_animating_ = false;
-  }
   void PostDelayedScrollbarAnimationTask(const base::Closure& start_fade,
                                          base::TimeDelta delay) override {
     start_fade_ = start_fade;
@@ -38,6 +32,12 @@ class ScrollbarAnimationControllerThinningTest
   }
   void SetNeedsRedrawForScrollbarAnimation() override {
     did_request_redraw_ = true;
+  }
+  void SetNeedsAnimateForScrollbarAnimation() override {
+    did_request_animate_ = true;
+  }
+  ScrollbarSet ScrollbarsFor(int scroll_layer_id) const override {
+    return host_impl_.ScrollbarsFor(scroll_layer_id);
   }
 
  protected:
@@ -47,7 +47,7 @@ class ScrollbarAnimationControllerThinningTest
     clip_layer_ = LayerImpl::Create(host_impl_.active_tree(), 3);
     scroll_layer->SetScrollClipLayer(clip_layer_->id());
     LayerImpl* scroll_layer_ptr = scroll_layer.get();
-    clip_layer_->AddChild(scroll_layer.Pass());
+    clip_layer_->AddChild(std::move(scroll_layer));
 
     const int kId = 2;
     const int kThumbThickness = 10;
@@ -63,17 +63,16 @@ class ScrollbarAnimationControllerThinningTest
                                              kIsLeftSideVerticalScrollbar,
                                              kIsOverlayScrollbar);
 
-    scrollbar_layer_->SetScrollLayerAndClipLayerByIds(scroll_layer_ptr->id(),
-                                                      clip_layer_->id());
+    scrollbar_layer_->SetScrollLayerId(scroll_layer_ptr->id());
     clip_layer_->SetBounds(gfx::Size(100, 100));
     scroll_layer_ptr->SetBounds(gfx::Size(200, 200));
 
     scrollbar_controller_ = ScrollbarAnimationControllerThinning::Create(
-        scroll_layer_ptr, this, base::TimeDelta::FromSeconds(2),
+        scroll_layer_ptr->id(), this, base::TimeDelta::FromSeconds(2),
         base::TimeDelta::FromSeconds(5), base::TimeDelta::FromSeconds(3));
   }
 
-  FakeImplProxy proxy_;
+  FakeImplTaskRunnerProvider task_runner_provider_;
   TestSharedBitmapManager shared_bitmap_manager_;
   TestTaskGraphRunner task_graph_runner_;
   FakeLayerTreeHostImpl host_impl_;
@@ -83,8 +82,8 @@ class ScrollbarAnimationControllerThinningTest
 
   base::Closure start_fade_;
   base::TimeDelta delay_;
-  bool is_animating_;
   bool did_request_redraw_;
+  bool did_request_animate_;
 };
 
 // Check initialization of scrollbar.

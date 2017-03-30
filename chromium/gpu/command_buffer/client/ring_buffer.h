@@ -7,6 +7,8 @@
 #ifndef GPU_COMMAND_BUFFER_CLIENT_RING_BUFFER_H_
 #define GPU_COMMAND_BUFFER_CLIENT_RING_BUFFER_H_
 
+#include <stdint.h>
+
 #include <deque>
 
 #include "base/logging.h"
@@ -63,6 +65,9 @@ class GPU_EXPORT RingBuffer {
   // Gets the size of the largest free block that is available without waiting.
   unsigned int GetLargestFreeSizeNoWaiting();
 
+  // Gets the total size of all free blocks that are available without waiting.
+  unsigned int GetTotalFreeSizeNoWaiting();
+
   // Gets the size of the largest free block that can be allocated if the
   // caller can wait. Allocating a block of this size will succeed, but may
   // block.
@@ -72,12 +77,12 @@ class GPU_EXPORT RingBuffer {
 
   // Gets a pointer to a memory block given the base memory and the offset.
   void* GetPointer(RingBuffer::Offset offset) const {
-    return static_cast<int8*>(base_) + offset;
+    return static_cast<int8_t*>(base_) + offset;
   }
 
   // Gets the offset to a memory block given the base memory and the address.
   RingBuffer::Offset GetOffset(void* pointer) const {
-    return static_cast<int8*>(pointer) - static_cast<int8*>(base_);
+    return static_cast<int8_t*>(pointer) - static_cast<int8_t*>(base_);
   }
 
   // Rounds the given size to the alignment in use.

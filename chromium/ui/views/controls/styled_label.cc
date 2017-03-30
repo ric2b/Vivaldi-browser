@@ -4,6 +4,8 @@
 
 #include "ui/views/controls/styled_label.h"
 
+#include <stddef.h>
+
 #include <limits>
 #include <vector>
 
@@ -46,7 +48,8 @@ scoped_ptr<Label> CreateLabelRange(
     result.reset(new Label(text));
   }
 
-  result->SetEnabledColor(style_info.color);
+  if (style_info.color != SK_ColorTRANSPARENT)
+    result->SetEnabledColor(style_info.color);
   result->SetFontList(font_list);
 
   if (!style_info.tooltip.empty())
@@ -56,7 +59,7 @@ scoped_ptr<Label> CreateLabelRange(
         result->font_list().DeriveWithStyle(style_info.font_style));
   }
 
-  return result.Pass();
+  return result;
 }
 
 }  // namespace
@@ -66,8 +69,7 @@ scoped_ptr<Label> CreateLabelRange(
 
 StyledLabel::RangeStyleInfo::RangeStyleInfo()
     : font_style(gfx::Font::NORMAL),
-      color(ui::NativeTheme::instance()->GetSystemColor(
-          ui::NativeTheme::kColorId_LabelEnabledColor)),
+      color(SK_ColorTRANSPARENT),
       disable_line_wrapping(false),
       is_link(false) {}
 
@@ -78,7 +80,6 @@ StyledLabel::RangeStyleInfo StyledLabel::RangeStyleInfo::CreateForLink() {
   RangeStyleInfo result;
   result.disable_line_wrapping = true;
   result.is_link = true;
-  result.color = Link::GetDefaultEnabledColor();
   return result;
 }
 
@@ -216,7 +217,7 @@ void StyledLabel::PreferredSizeChanged() {
 
 void StyledLabel::LinkClicked(Link* source, int event_flags) {
   if (listener_)
-    listener_->StyledLabelLinkClicked(link_targets_[source], event_flags);
+    listener_->StyledLabelLinkClicked(this, link_targets_[source], event_flags);
 }
 
 gfx::Size StyledLabel::CalculateAndDoLayout(int width, bool dry_run) {

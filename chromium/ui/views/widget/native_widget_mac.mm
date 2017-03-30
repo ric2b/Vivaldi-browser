@@ -6,6 +6,8 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include <utility>
+
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
@@ -15,6 +17,7 @@
 #import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/native_theme_mac.h"
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/bridged_native_widget.h"
 #import "ui/views/cocoa/native_widget_mac_nswindow.h"
@@ -38,6 +41,13 @@ namespace views {
 namespace {
 
 NSInteger StyleMaskForParams(const Widget::InitParams& params) {
+  // If the Widget is modal, it will be displayed as a sheet. This works best if
+  // it has NSTitledWindowMask. For example, with NSBorderlessWindowMask, the
+  // parent window still accepts input.
+  if (params.delegate &&
+      params.delegate->GetModalType() == ui::MODAL_TYPE_WINDOW)
+    return NSTitledWindowMask;
+
   // TODO(tapted): Determine better masks when there are use cases for it.
   if (params.remove_standard_frame)
     return NSBorderlessWindowMask;
@@ -86,13 +96,22 @@ bool NativeWidgetMac::IsWindowModalSheet() const {
 }
 
 void NativeWidgetMac::OnWindowWillClose() {
-  delegate_->OnNativeWidgetDestroying();
   // Note: If closed via CloseNow(), |bridge_| will already be reset. If closed
-  // by the user, or via Close() and a RunLoop, this will reset it.
-  bridge_.reset();
+  // by the user, or via Close() and a RunLoop, notify observers while |bridge_|
+  // is still a valid pointer, then reset it.
+  if (bridge_) {
+    delegate_->OnNativeWidgetDestroying();
+    bridge_.reset();
+  }
   delegate_->OnNativeWidgetDestroyed();
   if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)
     delete this;
+}
+
+int NativeWidgetMac::SheetPositionY() {
+  NSView* view = GetNativeView();
+  return
+      [view convertPoint:NSMakePoint(0, NSHeight([view frame])) toView:nil].y;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -121,6 +140,8 @@ void NativeWidgetMac::InitNativeWidget(const Widget::InitParams& params) {
   bool translucent = params.opacity == Widget::InitParams::TRANSLUCENT_WINDOW;
   bridge_->CreateLayer(params.layer_type, translucent);
 }
+
+void NativeWidgetMac::OnWidgetInitDone() {}
 
 NonClientFrameView* NativeWidgetMac::CreateNonClientFrameView() {
   return new NativeFrameView(GetWidget());
@@ -177,7 +198,11 @@ void NativeWidgetMac::ReorderNativeViews() {
 }
 
 void NativeWidgetMac::ViewRemoved(View* view) {
-  NOTIMPLEMENTED();
+  // TODO(tapted): Something for drag and drop might be needed here in future.
+  // See http://crbug.com/464581. A NOTIMPLEMENTED() here makes a lot of spam,
+  // so only emit it when a drag and drop could be likely.
+  if (IsMouseButtonDown())
+    NOTIMPLEMENTED();
 }
 
 void NativeWidgetMac::SetNativeWindowProperty(const char* name, void* value) {
@@ -328,17 +353,23 @@ void NativeWidgetMac::Close() {
   // Clear the view early to suppress repaints.
   bridge_->SetRootView(NULL);
 
-  // Calling performClose: will momentarily highlight the close button, but
-  // AppKit will reject it if there is no close button.
-  SEL close_selector = ([window styleMask] & NSClosableWindowMask)
-                           ? @selector(performClose:)
-                           : @selector(close);
-  [window performSelector:close_selector withObject:nil afterDelay:0];
+  // Widget::Close() ensures [Non]ClientView::CanClose() returns true, so there
+  // is no need to call the NSWindow or its delegate's -windowShouldClose:
+  // implementation in the manner of -[NSWindow performClose:]. But,
+  // like -performClose:, first remove the window from AppKit's display
+  // list to avoid crashes like http://crbug.com/156101.
+  [window orderOut:nil];
+  [window performSelector:@selector(close) withObject:nil afterDelay:0];
 }
 
 void NativeWidgetMac::CloseNow() {
+  if (!bridge_)
+    return;
+
+  // Notify observers while |bridged_| is still valid.
+  delegate_->OnNativeWidgetDestroying();
   // Reset |bridge_| to NULL before destroying it.
-  scoped_ptr<BridgedNativeWidget> bridge(bridge_.Pass());
+  scoped_ptr<BridgedNativeWidget> bridge(std::move(bridge_));
 }
 
 void NativeWidgetMac::Show() {
@@ -500,8 +531,7 @@ void NativeWidgetMac::ClearNativeFocus() {
 }
 
 gfx::Rect NativeWidgetMac::GetWorkAreaBoundsInScreen() const {
-  NOTIMPLEMENTED();
-  return gfx::Rect();
+  return gfx::ScreenRectFromNSRect([[GetNativeWindow() screen] visibleFrame]);
 }
 
 Widget::MoveLoopResult NativeWidgetMac::RunMoveLoop(
@@ -531,7 +561,7 @@ void NativeWidgetMac::SetVisibilityAnimationTransition(
 }
 
 ui::NativeTheme* NativeWidgetMac::GetNativeTheme() const {
-  return ui::NativeTheme::instance();
+  return ui::NativeThemeMac::instance();
 }
 
 void NativeWidgetMac::OnRootViewLayout() {
@@ -555,7 +585,8 @@ void NativeWidgetMac::RepostNativeEvent(gfx::NativeEvent native_event) {
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetMac, protected:
 
-NSWindow* NativeWidgetMac::CreateNSWindow(const Widget::InitParams& params) {
+NativeWidgetMacNSWindow* NativeWidgetMac::CreateNSWindow(
+    const Widget::InitParams& params) {
   return [[[NativeWidgetMacNSWindow alloc]
       initWithContentRect:ui::kWindowSizeDeterminedLater
                 styleMask:StyleMaskForParams(params)
@@ -650,7 +681,14 @@ void NativeWidgetPrivate::GetAllOwnedWidgets(gfx::NativeView native_view,
 // static
 void NativeWidgetPrivate::ReparentNativeView(gfx::NativeView native_view,
                                              gfx::NativeView new_parent) {
-  NOTIMPLEMENTED();
+  BridgedNativeWidget* bridge =
+      NativeWidgetMac::GetBridgeForNativeWindow([native_view window]);
+  if (bridge && bridge->parent() &&
+      bridge->parent()->GetNSWindow() == [new_parent window])
+    return;  // Nothing to do.
+
+  // Not supported. See http://crbug.com/514920.
+  NOTREACHED();
 }
 
 // static

@@ -9,16 +9,16 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/simple_test_clock.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -47,7 +47,7 @@ class SpeechAuthHelperTest : public testing::Test {
     ASSERT_TRUE(testing_profile_manager_->SetUp());
     profile_ = testing_profile_manager_->CreateTestingProfile(
         kTestUser,
-        scoped_ptr<PrefServiceSyncable>(),
+        scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
         base::UTF8ToUTF16(kTestUser),
         0,
         std::string(),
@@ -60,7 +60,9 @@ class SpeechAuthHelperTest : public testing::Test {
 
  protected:
   void SetupRefreshToken() {
-    GetFakeProfileOAuth2TokenService()->UpdateCredentials(kTestUser,
+    std::string account_id = SigninManagerFactory::GetForProfile(profile_)
+                                 ->GetAuthenticatedAccountId();
+    GetFakeProfileOAuth2TokenService()->UpdateCredentials(account_id,
                                                           "fake_refresh_token");
   }
 

@@ -9,6 +9,7 @@
 
 #include <windows.h>
 #include <msi.h>
+#include <shellapi.h>
 
 #include "base/files/file_path.h"
 #include "base/path_service.h"
@@ -18,7 +19,7 @@
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/chrome_icon_resources_win.h"
-#include "chrome/common/net/test_server_locations.h"
+#include "chrome/common/chrome_paths_internal.h"
 #include "chrome/installer/util/app_registration_data.h"
 #include "chrome/installer/util/channel_info.h"
 #include "chrome/installer/util/google_update_constants.h"
@@ -31,6 +32,8 @@
 #include "chrome/installer/util/updating_app_registration_data.h"
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/wmi.h"
+#include "third_party/crashpad/crashpad/client/crash_report_database.h"
+#include "third_party/crashpad/crashpad/client/settings.h"
 
 namespace {
 
@@ -48,13 +51,44 @@ base::string16 LocalizeUrl(const wchar_t* url) {
   base::string16 language;
   if (!GoogleUpdateSettings::GetLanguage(&language))
     language = L"en-US";  // Default to US English.
-  return ReplaceStringPlaceholders(url, language.c_str(), NULL);
+  return base::ReplaceStringPlaceholders(url, language.c_str(), NULL);
 }
 
 base::string16 GetUninstallSurveyUrl() {
   const wchar_t kSurveyUrl[] = L"https://support.google.com/chrome/"
                                L"contact/chromeuninstall3?hl=$1";
   return LocalizeUrl(kSurveyUrl);
+}
+
+bool NavigateToUrlWithEdge(const base::string16& url) {
+  base::string16 protocol_url = L"microsoft-edge:" + url;
+  SHELLEXECUTEINFO info = { sizeof(info) };
+  info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+  info.lpVerb = L"open";
+  info.lpFile = protocol_url.c_str();
+  info.nShow = SW_SHOWNORMAL;
+  if (::ShellExecuteEx(&info))
+    return true;
+  PLOG(ERROR) << "Failed to launch Edge for uninstall survey";
+  return false;
+}
+
+void NavigateToUrlWithIExplore(const base::string16& url) {
+  base::FilePath iexplore;
+  if (!PathService::Get(base::DIR_PROGRAM_FILES, &iexplore))
+    return;
+
+  iexplore = iexplore.AppendASCII("Internet Explorer");
+  iexplore = iexplore.AppendASCII("iexplore.exe");
+
+  base::string16 command = L"\"" + iexplore.value() + L"\" " + url;
+
+  int pid = 0;
+  // The reason we use WMI to launch the process is because the uninstall
+  // process runs inside a Job object controlled by the shell. As long as there
+  // are processes running, the shell will not close the uninstall applet. WMI
+  // allows us to escape from the Job object so the applet will close.
+  installer::WMIProcess::Launch(command, &pid);
 }
 
 }  // namespace
@@ -83,41 +117,34 @@ void GoogleChromeDistribution::DoPostUninstallOperations(
   // need to escape the string before using it in a URL.
   const base::string16 kVersionParam = L"crversion";
   const base::string16 kOSParam = L"os";
-  base::win::OSInfo::VersionNumber version_number =
-      base::win::OSInfo::GetInstance()->version_number();
-  base::string16 os_version = base::StringPrintf(L"%d.%d.%d",
-      version_number.major, version_number.minor, version_number.build);
 
-  base::FilePath iexplore;
-  if (!PathService::Get(base::DIR_PROGRAM_FILES, &iexplore))
-    return;
+  const base::win::OSInfo* os_info = base::win::OSInfo::GetInstance();
+  base::win::OSInfo::VersionNumber version_number = os_info->version_number();
+  base::string16 os_version =
+      base::StringPrintf(L"%d.%d.%d", version_number.major,
+                         version_number.minor, version_number.build);
 
-  iexplore = iexplore.AppendASCII("Internet Explorer");
-  iexplore = iexplore.AppendASCII("iexplore.exe");
-
-  base::string16 command = L"\"" + iexplore.value() + L"\" " +
-      GetUninstallSurveyUrl() +
-      L"&" + kVersionParam + L"=" + base::ASCIIToUTF16(version.GetString()) +
-      L"&" + kOSParam + L"=" + os_version;
+  base::string16 url = GetUninstallSurveyUrl() + L"&" + kVersionParam + L"=" +
+                       base::ASCIIToUTF16(version.GetString()) + L"&" +
+                       kOSParam + L"=" + os_version;
 
   base::string16 uninstall_metrics;
   if (installer::ExtractUninstallMetricsFromFile(local_data_path,
                                                  &uninstall_metrics)) {
     // The user has opted into anonymous usage data collection, so append
     // metrics and distribution data.
-    command += uninstall_metrics;
+    url += uninstall_metrics;
     if (!distribution_data.empty()) {
-      command += L"&";
-      command += distribution_data;
+      url += L"&";
+      url += distribution_data;
     }
   }
 
-  int pid = 0;
-  // The reason we use WMI to launch the process is because the uninstall
-  // process runs inside a Job object controlled by the shell. As long as there
-  // are processes running, the shell will not close the uninstall applet. WMI
-  // allows us to escape from the Job object so the applet will close.
-  installer::WMIProcess::Launch(command, &pid);
+  if (os_info->version() >= base::win::VERSION_WIN10 &&
+      NavigateToUrlWithEdge(url)) {
+    return;
+  }
+  NavigateToUrlWithIExplore(url);
 }
 
 base::string16 GoogleChromeDistribution::GetActiveSetupGuid() {
@@ -135,14 +162,11 @@ base::string16 GoogleChromeDistribution::GetShortcutName(
     ShortcutType shortcut_type) {
   int string_id = IDS_PRODUCT_NAME_BASE;
   switch (shortcut_type) {
-    case SHORTCUT_CHROME_ALTERNATE:
-      string_id = IDS_OEM_MAIN_SHORTCUT_NAME_BASE;
-      break;
     case SHORTCUT_APP_LAUNCHER:
       string_id = IDS_APP_LIST_SHORTCUT_NAME_BASE;
       break;
     default:
-      DCHECK_EQ(shortcut_type, SHORTCUT_CHROME);
+      DCHECK_EQ(SHORTCUT_CHROME, shortcut_type);
       break;
   }
   return installer::GetLocalizedString(string_id);
@@ -151,8 +175,7 @@ base::string16 GoogleChromeDistribution::GetShortcutName(
 int GoogleChromeDistribution::GetIconIndex(ShortcutType shortcut_type) {
   if (shortcut_type == SHORTCUT_APP_LAUNCHER)
     return icon_resources::kAppLauncherIndex;
-  DCHECK(shortcut_type == SHORTCUT_CHROME ||
-         shortcut_type == SHORTCUT_CHROME_ALTERNATE) << shortcut_type;
+  DCHECK_EQ(SHORTCUT_CHROME, shortcut_type);
   return icon_resources::kApplicationIndex;
 }
 
@@ -191,10 +214,6 @@ std::string GoogleChromeDistribution::GetSafeBrowsingName() {
   return "googlechrome";
 }
 
-std::string GoogleChromeDistribution::GetNetworkStatsServer() const {
-  return chrome_common_net::kEchoTestServerLocation;
-}
-
 base::string16 GoogleChromeDistribution::GetDistributionData(HKEY root_key) {
   base::string16 sub_key(google_update::kRegPathClientState);
   sub_key.append(L"\\");
@@ -229,13 +248,17 @@ base::string16 GoogleChromeDistribution::GetDistributionData(HKEY root_key) {
   result.append(L"=");
   result.append(ap_value);
 
-  return result;
-}
+  // Crash client id.
+  base::FilePath crash_dir;
+  if (chrome::GetDefaultCrashDumpLocation(&crash_dir)) {
+    crashpad::UUID client_id;
+    scoped_ptr<crashpad::CrashReportDatabase> database(
+        crashpad::CrashReportDatabase::InitializeWithoutCreating(crash_dir));
+    if (database && database->GetSettings()->GetClientID(&client_id))
+      result.append(L"&crash_client_id=").append(client_id.ToString16());
+  }
 
-base::string16 GoogleChromeDistribution::GetUninstallLinkName() {
-  const base::string16& link_name =
-      installer::GetLocalizedString(IDS_UNINSTALL_CHROME_BASE);
-  return link_name;
+  return result;
 }
 
 base::string16 GoogleChromeDistribution::GetUninstallRegPath() {
@@ -247,11 +270,8 @@ base::string16 GoogleChromeDistribution::GetIconFilename() {
   return installer::kChromeExe;
 }
 
-bool GoogleChromeDistribution::GetCommandExecuteImplClsid(
-    base::string16* handler_class_uuid) {
-  if (handler_class_uuid)
-    *handler_class_uuid = kCommandExecuteImplUuid;
-  return true;
+base::string16 GoogleChromeDistribution::GetCommandExecuteImplClsid() {
+  return kCommandExecuteImplUuid;
 }
 
 // This method checks if we need to change "ap" key in Google Update to try

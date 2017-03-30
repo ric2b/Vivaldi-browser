@@ -199,7 +199,7 @@ public:
   void ImportItemStarted(importer::ImportItem item) override {}
   void ImportItemEnded(importer::ImportItem item) override {}
   void ImportEnded() override {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     EXPECT_EQ(arraysize(OperaBookmarks), bookmark_count);
     EXPECT_EQ(arraysize(OperaNotes), notes_count);
     EXPECT_EQ(arraysize(OperaPasswords), password_count);

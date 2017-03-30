@@ -8,14 +8,16 @@
 #include <OpenGL/OpenGL.h>
 
 #include "base/mac/scoped_typeref.h"
+#include "base/macros.h"
 #include "ui/gl/gl_export.h"
 
 namespace base {
 
 template<>
 struct ScopedTypeRefTraits<CGLContextObj> {
-  static void Retain(CGLContextObj object) {
-    CGLRetainContext(object);
+  static CGLContextObj InvalidValue() { return nullptr; }
+  static CGLContextObj Retain(CGLContextObj object) {
+    return CGLRetainContext(object);
   }
   static void Release(CGLContextObj object) {
     CGLReleaseContext(object);
@@ -24,8 +26,9 @@ struct ScopedTypeRefTraits<CGLContextObj> {
 
 template<>
 struct ScopedTypeRefTraits<CGLPixelFormatObj> {
-  static void Retain(CGLPixelFormatObj object) {
-    CGLRetainPixelFormat(object);
+  static CGLPixelFormatObj InvalidValue() { return nullptr; }
+  static CGLPixelFormatObj Retain(CGLPixelFormatObj object) {
+    return CGLRetainPixelFormat(object);
   }
   static void Release(CGLPixelFormatObj object) {
     CGLReleasePixelFormat(object);

@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_EASY_UNLOCK_PRIVATE_EASY_UNLOCK_PRIVATE_API_H_
 #define CHROME_BROWSER_EXTENSIONS_API_EASY_UNLOCK_PRIVATE_EASY_UNLOCK_PRIVATE_API_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "extensions/browser/api/bluetooth/bluetooth_extension_function.h"
@@ -17,12 +19,28 @@
 
 // Implementations for chrome.easyUnlockPrivate API functions.
 
+namespace base {
+class Timer;
+}
+
 namespace content {
 class BrowserContext;
 }
 
+namespace cryptauth {
+class ExternalDeviceInfo;
+}
+
+namespace proximity_auth {
+class Connection;
+class BluetoothLowEnergyConnectionFinder;
+class BluetoothThrottler;
+class SecureMessageDelegate;
+}
+
 namespace extensions {
 
+class EasyUnlockPrivateConnectionManager;
 class EasyUnlockPrivateCryptoDelegate;
 
 class EasyUnlockPrivateAPI : public BrowserContextKeyedAPI {
@@ -37,6 +55,10 @@ class EasyUnlockPrivateAPI : public BrowserContextKeyedAPI {
 
   EasyUnlockPrivateCryptoDelegate* GetCryptoDelegate();
 
+  EasyUnlockPrivateConnectionManager* get_connection_manager() {
+    return connection_manager_.get();
+  }
+
  private:
   friend class BrowserContextKeyedAPIFactory<EasyUnlockPrivateAPI>;
 
@@ -44,6 +66,8 @@ class EasyUnlockPrivateAPI : public BrowserContextKeyedAPI {
   static const char* service_name() { return "EasyUnlockPrivate"; }
 
   scoped_ptr<EasyUnlockPrivateCryptoDelegate> crypto_delegate_;
+
+  scoped_ptr<EasyUnlockPrivateConnectionManager> connection_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateAPI);
 };
@@ -166,7 +190,7 @@ class EasyUnlockPrivateSeekBluetoothDeviceByAddressFunction
 };
 
 class EasyUnlockPrivateConnectToBluetoothServiceInsecurelyFunction
-    : public core_api::BluetoothSocketAbstractConnectFunction {
+    : public api::BluetoothSocketAbstractConnectFunction {
  public:
   DECLARE_EXTENSION_FUNCTION(
       "easyUnlockPrivate.connectToBluetoothServiceInsecurely",
@@ -222,11 +246,21 @@ class EasyUnlockPrivateGetPermitAccessFunction : public SyncExtensionFunction {
                              EASYUNLOCKPRIVATE_GETPERMITACCESS)
   EasyUnlockPrivateGetPermitAccessFunction();
 
- private:
+ protected:
   ~EasyUnlockPrivateGetPermitAccessFunction() override;
 
+  // Writes the user's public and private key in base64 form to the
+  // |user_public_key| and |user_private_key| fields. Exposed for testing.
+  virtual void GetKeyPairForExperiment(std::string* user_public_key,
+                                       std::string* user_private_key);
+
+ private:
   // SyncExtensionFunction:
   bool RunSync() override;
+
+  // Instead of returning the value set by easyUnlockPrivate.setPermitAccess,
+  // return the permit access used by the native CryptAuthEnrollmentManager.
+  void ReturnPermitAccessForExperiment();
 
   DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateGetPermitAccessFunction);
 };
@@ -262,17 +296,47 @@ class EasyUnlockPrivateSetRemoteDevicesFunction : public SyncExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateSetRemoteDevicesFunction);
 };
 
-class EasyUnlockPrivateGetRemoteDevicesFunction : public SyncExtensionFunction {
+class EasyUnlockPrivateGetRemoteDevicesFunction
+    : public AsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("easyUnlockPrivate.getRemoteDevices",
                              EASYUNLOCKPRIVATE_GETREMOTEDEVICES)
   EasyUnlockPrivateGetRemoteDevicesFunction();
 
- private:
+ protected:
   ~EasyUnlockPrivateGetRemoteDevicesFunction() override;
 
-  // SyncExtensionFunction:
-  bool RunSync() override;
+  // Returns the user's private key used for the native experiment.
+  // Exposed for testing.
+  virtual std::string GetUserPrivateKey();
+
+  // Returns the user's unlock keys used for the native experiment.
+  // Exposed for testing.
+  virtual std::vector<cryptauth::ExternalDeviceInfo> GetUnlockKeys();
+
+ private:
+  // AsyncExtensionFunction:
+  bool RunAsync() override;
+
+  // Returns devices managed by the native Chrome component if the
+  // kEnableBluetoothLowEnergyDiscovery flag is set.
+  void ReturnDevicesForExperiment();
+
+  // Callback when the PSK of a device is derived.
+  void OnPSKDerivedForDevice(const cryptauth::ExternalDeviceInfo& device,
+                             const std::string& persistent_symmetric_key);
+
+  // The permit id of the user. Used for the native experiment.
+  std::string permit_id_;
+
+  // The expected number of devices to return. Used for the native experiment.
+  size_t expected_devices_count_;
+
+  // Working list of the devices to return. Used for the native experiment.
+  scoped_ptr<base::ListValue> remote_devices_;
+
+  // Used to derive devices' PSK. Used for the native experiment.
+  scoped_ptr<proximity_auth::SecureMessageDelegate> secure_message_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateGetRemoteDevicesFunction);
 };
@@ -328,7 +392,7 @@ class EasyUnlockPrivateGetUserInfoFunction : public SyncExtensionFunction {
 };
 
 class EasyUnlockPrivateGetConnectionInfoFunction
-    : public core_api::BluetoothExtensionFunction {
+    : public api::BluetoothExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("easyUnlockPrivate.getConnectionInfo",
                              EASYUNLOCKPRIVATE_GETCONNECTIONINFO)
@@ -390,6 +454,105 @@ class EasyUnlockPrivateSetAutoPairingResultFunction
   bool RunSync() override;
 
   DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateSetAutoPairingResultFunction);
+};
+
+class EasyUnlockPrivateFindSetupConnectionFunction
+    : public AsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("easyUnlockPrivate.findSetupConnection",
+                             EASYUNLOCKPRIVATE_FINDSETUPCONNECTION)
+  EasyUnlockPrivateFindSetupConnectionFunction();
+
+ private:
+  ~EasyUnlockPrivateFindSetupConnectionFunction() override;
+
+  // AsyncExtensionFunction:
+  bool RunAsync() override;
+
+  // Called when the connection with the remote device advertising the setup
+  // service was found.
+  void OnConnectionFound(scoped_ptr<proximity_auth::Connection> connection);
+
+  // Callback when waiting for |connection_finder_| to return.
+  void OnConnectionFinderTimedOut();
+
+  // The BLE connection finder instance.
+  scoped_ptr<proximity_auth::BluetoothLowEnergyConnectionFinder>
+      connection_finder_;
+
+  // The connection throttler passed to the BLE connection finder.
+  scoped_ptr<proximity_auth::BluetoothThrottler> bluetooth_throttler_;
+
+  // Used for timing out when waiting for the connection finder to return.
+  scoped_ptr<base::Timer> timer_;
+
+  DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateFindSetupConnectionFunction);
+};
+
+class EasyUnlockPrivateSetupConnectionStatusFunction
+    : public SyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("easyUnlockPrivate.setupConnectionStatus",
+                             EASYUNLOCKPRIVATE_SETUPCONNECTIONSTATUS)
+  EasyUnlockPrivateSetupConnectionStatusFunction();
+
+ private:
+  ~EasyUnlockPrivateSetupConnectionStatusFunction() override;
+
+  // SyncExtensionFunction:
+  bool RunSync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateSetupConnectionStatusFunction);
+};
+
+class EasyUnlockPrivateSetupConnectionDisconnectFunction
+    : public SyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("easyUnlockPrivate.setupConnectionDisconnect",
+                             EASYUNLOCKPRIVATE_SETUPCONNECTIONDISCONNECT)
+  EasyUnlockPrivateSetupConnectionDisconnectFunction();
+
+ private:
+  ~EasyUnlockPrivateSetupConnectionDisconnectFunction() override;
+
+  // SyncExtensionFunction:
+  bool RunSync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateSetupConnectionDisconnectFunction);
+};
+
+class EasyUnlockPrivateSetupConnectionSendFunction
+    : public SyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("easyUnlockPrivate.setupConnectionSend",
+                             EASYUNLOCKPRIVATE_SETUPCONNECTIONSEND)
+  EasyUnlockPrivateSetupConnectionSendFunction();
+
+ private:
+  ~EasyUnlockPrivateSetupConnectionSendFunction() override;
+
+  // SyncExtensionFunction:
+  bool RunSync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(EasyUnlockPrivateSetupConnectionSendFunction);
+};
+
+class EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction
+    : public SyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION(
+      "easyUnlockPrivate.setupConnectionGetDeviceAddress",
+      EASYUNLOCKPRIVATE_SETUPCONNECTIONGETDEVICEADDRESS)
+  EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction();
+
+ private:
+  ~EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction() override;
+
+  // SyncExtensionFunction:
+  bool RunSync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(
+      EasyUnlockPrivateSetupConnectionGetDeviceAddressFunction);
 };
 
 }  // namespace extensions

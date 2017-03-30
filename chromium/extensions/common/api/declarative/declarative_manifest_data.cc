@@ -4,6 +4,9 @@
 
 #include "extensions/common/api/declarative/declarative_manifest_data.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "extensions/common/manifest_constants.h"
@@ -167,7 +170,7 @@ scoped_ptr<DeclarativeManifestData> DeclarativeManifestData::FromValue(
 
     result->event_rules_map_[event].push_back(rule);
   }
-  return result.Pass();
+  return result;
 }
 
 std::vector<linked_ptr<DeclarativeManifestData::Rule>>&

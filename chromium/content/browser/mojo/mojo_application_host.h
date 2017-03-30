@@ -5,8 +5,10 @@
 #ifndef CONTENT_BROWSER_MOJO_MOJO_APPLICATION_HOST_H_
 #define CONTENT_BROWSER_MOJO_MOJO_APPLICATION_HOST_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process_handle.h"
+#include "build/build_config.h"
 #include "content/common/application_setup.mojom.h"
 #include "content/common/mojo/channel_init.h"
 #include "content/common/mojo/service_registry_impl.h"
@@ -39,9 +41,6 @@ class CONTENT_EXPORT MojoApplicationHost {
   void Activate(IPC::Sender* sender, base::ProcessHandle process_handle);
 
   void WillDestroySoon();
-
-  // Shuts down the Mojo channel. Must be called from the IO thread.
-  void ShutdownOnIOThread();
 
   ServiceRegistry* service_registry() { return &service_registry_; }
 

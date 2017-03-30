@@ -9,9 +9,9 @@ import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.Tab;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -40,7 +40,7 @@ public class RevenueStats {
     /**
      * Notifies tab creation event.
      */
-    public void tabCreated(Tab chromeTab) {}
+    public void tabCreated(Tab tab) {}
 
     /**
      * Returns whether the RLZ provider has been notified that the first search has occurred.

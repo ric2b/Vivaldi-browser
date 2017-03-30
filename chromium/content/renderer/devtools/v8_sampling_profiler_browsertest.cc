@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/json/json_reader.h"
 #include "base/run_loop.h"
+#include "base/trace_event/trace_buffer.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/test/render_view_test.h"
 #include "content/renderer/devtools/v8_sampling_profiler.h"
@@ -30,7 +33,7 @@ class V8SamplingProfilerTest : public RenderViewTest {
     RenderViewTest::TearDown();
   }
 
-  void KickV8() { ExecuteJavaScript("1"); }
+  void KickV8() { ExecuteJavaScriptForTests("1"); }
 
   void SyncFlush(TraceLog* trace_log) {
     base::WaitableEvent flush_complete_event(false, false);
@@ -53,9 +56,9 @@ class V8SamplingProfilerTest : public RenderViewTest {
     trace_buffer_.Finish();
 
     scoped_ptr<Value> root;
-    root.reset(base::JSONReader::DeprecatedRead(
+    root = base::JSONReader::Read(
         json_output_.json_output,
-        base::JSON_PARSE_RFC | base::JSON_DETACHABLE_CHILDREN));
+        base::JSON_PARSE_RFC | base::JSON_DETACHABLE_CHILDREN);
 
     if (!root.get()) {
       LOG(ERROR) << json_output_.json_output;

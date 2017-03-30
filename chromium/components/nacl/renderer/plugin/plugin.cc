@@ -9,20 +9,21 @@
 
 #include <string>
 
+#include "base/logging.h"
 #include "components/nacl/renderer/plugin/nacl_subprocess.h"
 #include "components/nacl/renderer/plugin/plugin_error.h"
 #include "components/nacl/renderer/plugin/service_runtime.h"
 #include "components/nacl/renderer/plugin/utility.h"
 #include "components/nacl/renderer/ppb_nacl_private.h"
-#include "native_client/src/include/nacl_base.h"
-#include "native_client/src/include/nacl_macros.h"
-#include "native_client/src/include/nacl_scoped_ptr.h"
-#include "native_client/src/include/portability.h"
-#include "native_client/src/include/portability_io.h"
-#include "native_client/src/shared/platform/nacl_check.h"
-#include "native_client/src/trusted/desc/nacl_desc_wrapper.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/cpp/module.h"
+
+namespace {
+
+void NoOpCallback(void* user_data, int32_t result) {
+}
+
+}
 
 namespace plugin {
 
@@ -72,18 +73,8 @@ void Plugin::LoadNaClModule(PP_NaClFileInfo file_info,
     return;
   }
 
-  // We don't take any action once nexe loading has completed, so pass an empty
-  // callback here for |callback|.
-  pp::CompletionCallback callback = callback_factory_.NewCallback(
-      &Plugin::StartNexe, service_runtime);
-  StartSelLdr(service_runtime, params, callback);
-}
-
-void Plugin::StartNexe(int32_t pp_error, ServiceRuntime* service_runtime) {
-  CHECK(pp::Module::Get()->core()->IsMainThread());
-  if (pp_error != PP_OK)
-    return;
-  service_runtime->StartNexe();
+  StartSelLdr(service_runtime, params,
+              pp::CompletionCallback(NoOpCallback, NULL));
 }
 
 void Plugin::LoadHelperNaClModule(const std::string& helper_url,
@@ -101,28 +92,7 @@ void Plugin::LoadHelperNaClModule(const std::string& helper_url,
                          false,   // Not main_service_runtime.
                          false);  // No non-SFI mode (i.e. in SFI-mode).
   subprocess_to_init->set_service_runtime(service_runtime);
-  pp::CompletionCallback sel_ldr_callback = callback_factory_.NewCallback(
-      &Plugin::StartHelperNexe, subprocess_to_init, callback);
-  StartSelLdr(service_runtime, params, sel_ldr_callback);
-}
-
-void Plugin::StartHelperNexe(int32_t pp_error,
-                             NaClSubprocess* subprocess_to_init,
-                             pp::CompletionCallback callback) {
-  CHECK(pp::Module::Get()->core()->IsMainThread());
-  if (pp_error != PP_OK) {
-    callback.RunAndClear(pp_error);
-    return;
-  }
-  // TODO(jvoung): This operation blocks. That's bad because this is the
-  // main thread. However, we could make it so that StartHelperNexe isn't
-  // called until the blocking is minimized. There is a hook in
-  // sel_main_chrome which indicates when the nexe load is done. If we hook
-  // up that hook to StartSelLdr's callback, then we'll only
-  // call StartNexe once the nexe load is done instead of blocking here
-  // until the nexe load is done.
-  subprocess_to_init->service_runtime()->StartNexe();
-  callback.RunAndClear(PP_OK);
+  StartSelLdr(service_runtime, params, callback);
 }
 
 // All failures of this function will show up as "Missing Plugin-in", so
@@ -130,7 +100,6 @@ void Plugin::StartHelperNexe(int32_t pp_error,
 // failure. Note that module loading functions will log their own errors.
 bool Plugin::Init(uint32_t argc, const char* argn[], const char* argv[]) {
   nacl_interface_->InitializePlugin(pp_instance(), argc, argn, argv);
-  wrapper_factory_ = new nacl::DescWrapperFactory();
   pp::CompletionCallback open_cb =
       callback_factory_.NewCallback(&Plugin::NaClManifestFileDidOpen);
   nacl_interface_->RequestNaClManifest(pp_instance(),
@@ -140,9 +109,8 @@ bool Plugin::Init(uint32_t argc, const char* argn[], const char* argv[]) {
 
 Plugin::Plugin(PP_Instance pp_instance)
     : pp::Instance(pp_instance),
-      main_subprocess_("main subprocess", NULL, NULL),
+      main_subprocess_("main subprocess", NULL),
       uses_nonsfi_mode_(false),
-      wrapper_factory_(NULL),
       nacl_interface_(NULL),
       uma_interface_(this) {
   callback_factory_.Initialize(this);
@@ -186,8 +154,6 @@ Plugin::~Plugin() {
   // though the Shutdown method may have been called, during the
   // lifetime of the service threads.
   ShutDownSubprocesses();
-
-  delete wrapper_factory_;
 }
 
 bool Plugin::HandleDocumentLoad(const pp::URLLoader& url_loader) {

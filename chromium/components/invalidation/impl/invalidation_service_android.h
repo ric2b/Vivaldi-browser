@@ -6,12 +6,14 @@
 #define COMPONENTS_INVALIDATION_IMPL_INVALIDATION_SERVICE_ANDROID_H_
 
 #include <jni.h>
+#include <stdint.h>
+
 #include <map>
 
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "components/invalidation/impl/invalidation_logger.h"
@@ -51,11 +53,11 @@ class InvalidationServiceAndroid
   IdentityProvider* GetIdentityProvider() override;
 
   void Invalidate(JNIEnv* env,
-                  jobject obj,
+                  const base::android::JavaParamRef<jobject>& obj,
                   jint object_source,
-                  jstring object_id,
+                  const base::android::JavaParamRef<jstring>& object_id,
                   jlong version,
-                  jstring state);
+                  const base::android::JavaParamRef<jstring>& state);
 
   // The InvalidationServiceAndroid always reports that it is enabled.
   // This is used only by unit tests.
@@ -64,9 +66,8 @@ class InvalidationServiceAndroid
   static bool RegisterJni(JNIEnv* env);
 
  private:
-  typedef std::map<invalidation::ObjectId,
-                   int64,
-                   syncer::ObjectIdLessThan> ObjectIdVersionMap;
+  typedef std::map<invalidation::ObjectId, int64_t, syncer::ObjectIdLessThan>
+      ObjectIdVersionMap;
 
   // Friend class so that InvalidationServiceFactoryAndroid has access to
   // private member object java_ref_.

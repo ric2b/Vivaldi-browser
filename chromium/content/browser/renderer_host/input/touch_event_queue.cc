@@ -4,7 +4,10 @@
 
 #include "content/browser/renderer_host/input/touch_event_queue.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
@@ -56,7 +59,9 @@ bool HasPointChanged(const WebTouchPoint& point_1,
       point_1.radiusX != point_2.radiusX ||
       point_1.radiusY != point_2.radiusY ||
       point_1.rotationAngle != point_2.rotationAngle ||
-      point_1.force != point_2.force) {
+      point_1.force != point_2.force ||
+      point_1.tiltX != point_2.tiltX ||
+      point_1.tiltY != point_2.tiltY) {
     return true;
   }
   return false;
@@ -488,7 +493,7 @@ void TouchEventQueue::QueueEvent(const TouchEventWithLatencyInfo& event) {
 
 void TouchEventQueue::ProcessTouchAck(InputEventAckState ack_result,
                                       const LatencyInfo& latency_info,
-                                      const uint32 unique_touch_event_id) {
+                                      const uint32_t unique_touch_event_id) {
   TRACE_EVENT0("input", "TouchEventQueue::ProcessTouchAck");
 
   // We receive an ack for async touchmove from render.
@@ -616,7 +621,8 @@ void TouchEventQueue::ForwardNextEventToRenderer() {
 
 void TouchEventQueue::FlushPendingAsyncTouchmove() {
   DCHECK(!dispatching_touch_);
-  scoped_ptr<TouchEventWithLatencyInfo> touch = pending_async_touchmove_.Pass();
+  scoped_ptr<TouchEventWithLatencyInfo> touch =
+      std::move(pending_async_touchmove_);
   touch->event.cancelable = false;
   touch_queue_.push_front(new CoalescedWebTouchEvent(*touch, true));
   SendTouchEventImmediately(touch.get());
@@ -636,8 +642,10 @@ void TouchEventQueue::OnGestureScrollEvent(
     return;
   }
 
-  if (gesture_event.event.type == blink::WebInputEvent::GestureScrollUpdate)
+  if (gesture_event.event.type == blink::WebInputEvent::GestureScrollUpdate &&
+      gesture_event.event.resendingPluginId == -1) {
     send_touch_events_async_ = true;
+  }
 }
 
 void TouchEventQueue::OnGestureEventAck(
@@ -648,9 +656,12 @@ void TouchEventQueue::OnGestureEventAck(
   // gesture event (or even part of the current sequence).  Worst case, the
   // delay in updating the absorption state will result in minor UI glitches.
   // A valid |pending_async_touchmove_| will be flushed when the next event is
-  // forwarded.
-  if (event.event.type == blink::WebInputEvent::GestureScrollUpdate)
+  // forwarded. Scroll updates that are being resent from a GuestView are
+  // ignored.
+  if (event.event.type == blink::WebInputEvent::GestureScrollUpdate &&
+      event.event.resendingPluginId == -1) {
     send_touch_events_async_ = (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED);
+  }
 }
 
 void TouchEventQueue::OnHasTouchEventHandlers(bool has_handlers) {
@@ -733,7 +744,7 @@ scoped_ptr<CoalescedWebTouchEvent> TouchEventQueue::PopTouchEvent() {
   DCHECK(!touch_queue_.empty());
   scoped_ptr<CoalescedWebTouchEvent> event(touch_queue_.front());
   touch_queue_.pop_front();
-  return event.Pass();
+  return event;
 }
 
 void TouchEventQueue::SendTouchEventImmediately(

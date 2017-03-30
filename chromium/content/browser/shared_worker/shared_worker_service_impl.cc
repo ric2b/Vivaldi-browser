@@ -4,12 +4,15 @@
 
 #include "content/browser/shared_worker/shared_worker_service_impl.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <iterator>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -127,7 +130,7 @@ class SharedWorkerServiceImpl::SharedWorkerPendingInstance {
 
   explicit SharedWorkerPendingInstance(
       scoped_ptr<SharedWorkerInstance> instance)
-      : instance_(instance.Pass()) {}
+      : instance_(std::move(instance)) {}
   ~SharedWorkerPendingInstance() {}
   SharedWorkerInstance* instance() { return instance_.get(); }
   SharedWorkerInstance* release_instance() { return instance_.release(); }
@@ -221,7 +224,7 @@ bool (*SharedWorkerServiceImpl::s_try_increment_worker_ref_count_)(int) =
 
 SharedWorkerServiceImpl* SharedWorkerServiceImpl::GetInstance() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return Singleton<SharedWorkerServiceImpl>::get();
+  return base::Singleton<SharedWorkerServiceImpl>::get();
 }
 
 SharedWorkerServiceImpl::SharedWorkerServiceImpl()
@@ -284,16 +287,13 @@ void SharedWorkerServiceImpl::CreateWorker(
     SharedWorkerMessageFilter* filter,
     ResourceContext* resource_context,
     const WorkerStoragePartitionId& partition_id,
-    bool* url_mismatch) {
+    blink::WebWorkerCreationError* creation_error) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  *url_mismatch = false;
-  scoped_ptr<SharedWorkerInstance> instance(
-      new SharedWorkerInstance(params.url,
-                               params.name,
-                               params.content_security_policy,
-                               params.security_policy_type,
-                               resource_context,
-                               partition_id));
+  *creation_error = blink::WebWorkerCreationErrorNone;
+  scoped_ptr<SharedWorkerInstance> instance(new SharedWorkerInstance(
+      params.url, params.name, params.content_security_policy,
+      params.security_policy_type, resource_context, partition_id,
+      params.creation_context_type));
   scoped_ptr<SharedWorkerPendingInstance::SharedWorkerPendingRequest> request(
       new SharedWorkerPendingInstance::SharedWorkerPendingRequest(
           filter,
@@ -303,16 +303,21 @@ void SharedWorkerServiceImpl::CreateWorker(
           params.render_frame_route_id));
   if (SharedWorkerPendingInstance* pending = FindPendingInstance(*instance)) {
     if (params.url != pending->instance()->url()) {
-      *url_mismatch = true;
+      *creation_error = blink::WebWorkerCreationErrorURLMismatch;
       return;
     }
-    pending->AddRequest(request.Pass());
+    if (params.creation_context_type !=
+        pending->instance()->creation_context_type()) {
+      *creation_error = blink::WebWorkerCreationErrorSecureContextMismatch;
+    }
+    pending->AddRequest(std::move(request));
     return;
   }
   scoped_ptr<SharedWorkerPendingInstance> pending_instance(
-      new SharedWorkerPendingInstance(instance.Pass()));
-  pending_instance->AddRequest(request.Pass());
-  ReserveRenderProcessToCreateWorker(pending_instance.Pass(), url_mismatch);
+      new SharedWorkerPendingInstance(std::move(instance)));
+  pending_instance->AddRequest(std::move(request));
+  ReserveRenderProcessToCreateWorker(std::move(pending_instance),
+                                     creation_error);
 }
 
 void SharedWorkerServiceImpl::ForwardToWorker(
@@ -447,9 +452,8 @@ void SharedWorkerServiceImpl::OnSharedWorkerMessageFilterClosing(
   }
 
   std::vector<int> remove_pending_instance_list;
-  for (PendingInstaneMap::iterator iter = pending_instances_.begin();
-       iter != pending_instances_.end();
-       ++iter) {
+  for (PendingInstanceMap::iterator iter = pending_instances_.begin();
+       iter != pending_instances_.end(); ++iter) {
     iter->second->RemoveRequest(filter->render_process_id());
     if (!iter->second->requests()->size())
       remove_pending_instance_list.push_back(iter->first);
@@ -467,11 +471,11 @@ void SharedWorkerServiceImpl::NotifyWorkerDestroyed(int worker_process_id,
 
 void SharedWorkerServiceImpl::ReserveRenderProcessToCreateWorker(
     scoped_ptr<SharedWorkerPendingInstance> pending_instance,
-    bool* url_mismatch) {
+    blink::WebWorkerCreationError* creation_error) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!FindPendingInstance(*pending_instance->instance()));
-  if (url_mismatch)
-    *url_mismatch = false;
+  if (creation_error)
+    *creation_error = blink::WebWorkerCreationErrorNone;
   if (!pending_instance->requests()->size())
     return;
   int worker_process_id = -1;
@@ -480,9 +484,14 @@ void SharedWorkerServiceImpl::ReserveRenderProcessToCreateWorker(
   SharedWorkerHost* host = FindSharedWorkerHost(*pending_instance->instance());
   if (host) {
     if (pending_instance->instance()->url() != host->instance()->url()) {
-      if (url_mismatch)
-        *url_mismatch = true;
+      if (creation_error)
+        *creation_error = blink::WebWorkerCreationErrorURLMismatch;
       return;
+    }
+    if (pending_instance->instance()->creation_context_type() !=
+        host->instance()->creation_context_type()) {
+      if (creation_error)
+        *creation_error = blink::WebWorkerCreationErrorSecureContextMismatch;
     }
     worker_process_id = host->process_id();
     worker_route_id = host->worker_route_id();
@@ -520,7 +529,7 @@ void SharedWorkerServiceImpl::ReserveRenderProcessToCreateWorker(
               worker_route_id,
               is_new_worker),
           s_try_increment_worker_ref_count_));
-  pending_instances_.set(pending_instance_id, pending_instance.Pass());
+  pending_instances_.set(pending_instance_id, std::move(pending_instance));
 }
 
 void SharedWorkerServiceImpl::RenderProcessReservedCallback(
@@ -546,7 +555,7 @@ void SharedWorkerServiceImpl::RenderProcessReservedCallback(
       // Retry reserving a renderer process if the existed Shared Worker was
       // destroyed on IO thread while reserving the renderer process on UI
       // thread.
-      ReserveRenderProcessToCreateWorker(pending_instance.Pass(), NULL);
+      ReserveRenderProcessToCreateWorker(std::move(pending_instance), NULL);
       return;
     }
     pending_instance->RegisterToSharedWorkerHost(existing_host);
@@ -559,7 +568,7 @@ void SharedWorkerServiceImpl::RenderProcessReservedCallback(
     pending_instance->RemoveRequest(worker_process_id);
     // Retry reserving a renderer process if the requested renderer process was
     // destroyed on IO thread while reserving the renderer process on UI thread.
-    ReserveRenderProcessToCreateWorker(pending_instance.Pass(), NULL);
+    ReserveRenderProcessToCreateWorker(std::move(pending_instance), NULL);
     return;
   }
   scoped_ptr<SharedWorkerHost> host(new SharedWorkerHost(
@@ -569,7 +578,7 @@ void SharedWorkerServiceImpl::RenderProcessReservedCallback(
   const base::string16 name = host->instance()->name();
   host->Start(pause_on_start);
   worker_hosts_.set(std::make_pair(worker_process_id, worker_route_id),
-                    host.Pass());
+                    std::move(host));
   FOR_EACH_OBSERVER(
       WorkerServiceObserver,
       observers_,
@@ -589,7 +598,7 @@ void SharedWorkerServiceImpl::RenderProcessReserveFailedCallback(
     return;
   pending_instance->RemoveRequest(worker_process_id);
   // Retry reserving a renderer process.
-  ReserveRenderProcessToCreateWorker(pending_instance.Pass(), NULL);
+  ReserveRenderProcessToCreateWorker(std::move(pending_instance), NULL);
 }
 
 SharedWorkerHost* SharedWorkerServiceImpl::FindSharedWorkerHost(
@@ -605,10 +614,8 @@ SharedWorkerHost* SharedWorkerServiceImpl::FindSharedWorkerHost(
        iter != worker_hosts_.end();
        ++iter) {
     SharedWorkerHost* host = iter->second;
-    if (host->instance() && !host->closed() &&
-        host->instance()->Matches(instance)) {
+    if (host->IsAvailable() && host->instance()->Matches(instance))
       return iter->second;
-    }
   }
   return NULL;
 }
@@ -616,9 +623,8 @@ SharedWorkerHost* SharedWorkerServiceImpl::FindSharedWorkerHost(
 SharedWorkerServiceImpl::SharedWorkerPendingInstance*
 SharedWorkerServiceImpl::FindPendingInstance(
     const SharedWorkerInstance& instance) {
-  for (PendingInstaneMap::iterator iter = pending_instances_.begin();
-       iter != pending_instances_.end();
-       ++iter) {
+  for (PendingInstanceMap::iterator iter = pending_instances_.begin();
+       iter != pending_instances_.end(); ++iter) {
     if (iter->second->instance()->Matches(instance))
       return iter->second;
   }

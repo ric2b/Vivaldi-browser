@@ -6,20 +6,24 @@
 
 #include <algorithm>
 
-#include "base/basictypes.h"
+#include "base/base_switches.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/i18n/rtl.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/prefs/json_pref_store.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -28,9 +32,9 @@
 #include "chrome/common/service_process_util.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/service/cloud_print/cloud_print_message_handler.h"
 #include "chrome/service/cloud_print/cloud_print_proxy.h"
 #include "chrome/service/net/service_url_request_context_getter.h"
-#include "chrome/service/service_ipc_server.h"
 #include "chrome/service/service_process_prefs.h"
 #include "net/base/network_change_notifier.h"
 #include "net/url_request/url_fetcher.h"
@@ -113,10 +117,10 @@ void PrepareRestartOnCrashEnviroment(
 }  // namespace
 
 ServiceProcess::ServiceProcess()
-  : shutdown_event_(true, false),
-    main_message_loop_(NULL),
-    enabled_services_(0),
-    update_available_(false) {
+    : shutdown_event_(true /* manual_reset */, false /* initially_signaled */),
+      main_message_loop_(NULL),
+      enabled_services_(0),
+      update_available_(false) {
   DCHECK(!g_service_process);
   g_service_process = this;
 }
@@ -190,13 +194,18 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
 
   VLOG(1) << "Starting Service Process IPC Server";
   ipc_server_.reset(new ServiceIPCServer(
-      service_process_state_->GetServiceProcessChannel()));
+      this /* client */,
+      io_task_runner(),
+      service_process_state_->GetServiceProcessChannel(),
+      &shutdown_event_));
+  ipc_server_->AddMessageHandler(make_scoped_ptr(
+      new cloud_print::CloudPrintMessageHandler(ipc_server_.get(), this)));
   ipc_server_->Init();
 
   // After the IPC server has started we signal that the service process is
   // ready.
   if (!service_process_state_->SignalReady(
-          io_thread_->task_runner().get(),
+          io_task_runner().get(),
           base::Bind(&ServiceProcess::Terminate, base::Unretained(this)))) {
     return false;
   }
@@ -256,15 +265,23 @@ void ServiceProcess::Shutdown() {
 }
 
 void ServiceProcess::Terminate() {
-  main_message_loop_->task_runner()->PostTask(FROM_HERE,
-                                              base::MessageLoop::QuitClosure());
+  main_message_loop_->task_runner()->PostTask(
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
-bool ServiceProcess::HandleClientDisconnect() {
+void ServiceProcess::OnShutdown() {
+  Shutdown();
+}
+
+void ServiceProcess::OnUpdateAvailable() {
+  update_available_ = true;
+}
+
+bool ServiceProcess::OnIPCClientDisconnect() {
   // If there are no enabled services or if there is an update available
   // we want to shutdown right away. Else we want to keep listening for
   // new connections.
-  if (!enabled_services_ || update_available()) {
+  if (!enabled_services_ || update_available_) {
     Shutdown();
     return false;
   }
@@ -337,8 +354,8 @@ void ServiceProcess::ScheduleShutdownCheck() {
 
 void ServiceProcess::ShutdownIfNeeded() {
   if (0 == enabled_services_) {
-    if (ipc_server_->is_client_connected()) {
-      // If there is a client connected, we need to try again later.
+    if (ipc_server_->is_ipc_client_connected()) {
+      // If there is an IPC client connected, we need to try again later.
       // Note that there is still a timing window here because a client may
       // decide to connect at this point.
       // TODO(sanjeevr): Fix this timing window.

@@ -6,12 +6,14 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_info.h"
+#include "extensions/common/permissions/settings_override_permission.h"
 #include "extensions/common/permissions/usb_device_permission.h"
 #include "extensions/common/url_pattern_set.h"
 #include "extensions/strings/grit/extensions_strings.h"
@@ -32,20 +34,23 @@ class ChromePermissionMessageProviderUnittest : public testing::Test {
   ~ChromePermissionMessageProviderUnittest() override {}
 
  protected:
-  std::vector<base::string16> GetMessages(const APIPermissionSet& permissions,
-                                          Manifest::Type type) {
-    scoped_refptr<const PermissionSet> permission_set = new PermissionSet(
-        permissions, ManifestPermissionSet(), URLPatternSet(), URLPatternSet());
-    return message_provider_->GetLegacyWarningMessages(permission_set.get(),
-                                                       type);
+  PermissionMessages GetMessages(const APIPermissionSet& permissions,
+                                 Manifest::Type type) {
+    return message_provider_->GetPermissionMessages(
+        message_provider_->GetAllPermissionIDs(
+            PermissionSet(permissions, ManifestPermissionSet(), URLPatternSet(),
+                          URLPatternSet()),
+            type));
   }
 
-  std::vector<base::string16> GetDetails(const APIPermissionSet& permissions,
-                                         Manifest::Type type) {
-    scoped_refptr<const PermissionSet> permission_set = new PermissionSet(
-        permissions, ManifestPermissionSet(), URLPatternSet(), URLPatternSet());
-    return message_provider_->GetLegacyWarningMessagesDetails(
-        permission_set.get(), type);
+  bool IsPrivilegeIncrease(const APIPermissionSet& old_permissions,
+                           const APIPermissionSet& new_permissions) {
+    return message_provider_->IsPrivilegeIncrease(
+        PermissionSet(old_permissions, ManifestPermissionSet(), URLPatternSet(),
+                      URLPatternSet()),
+        PermissionSet(new_permissions, ManifestPermissionSet(), URLPatternSet(),
+                      URLPatternSet()),
+        Manifest::TYPE_EXTENSION);
   }
 
  private:
@@ -58,32 +63,36 @@ class ChromePermissionMessageProviderUnittest : public testing::Test {
 // superset permission message is displayed if they are both present.
 TEST_F(ChromePermissionMessageProviderUnittest,
        SupersetOverridesSubsetPermission) {
-  APIPermissionSet permissions;
-  std::vector<base::string16> messages;
-
-  permissions.clear();
-  permissions.insert(APIPermission::kTab);
-  messages = GetMessages(permissions, Manifest::TYPE_PLATFORM_APP);
-  ASSERT_EQ(1U, messages.size());
-  EXPECT_EQ(
-      l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ),
-      messages[0]);
-
-  permissions.clear();
-  permissions.insert(APIPermission::kTopSites);
-  messages = GetMessages(permissions, Manifest::TYPE_PLATFORM_APP);
-  ASSERT_EQ(1U, messages.size());
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_TOPSITES),
-            messages[0]);
-
-  permissions.clear();
-  permissions.insert(APIPermission::kTab);
-  permissions.insert(APIPermission::kTopSites);
-  messages = GetMessages(permissions, Manifest::TYPE_PLATFORM_APP);
-  ASSERT_EQ(1U, messages.size());
-  EXPECT_EQ(
-      l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ),
-      messages[0]);
+  {
+    APIPermissionSet permissions;
+    permissions.insert(APIPermission::kTab);
+    PermissionMessages messages =
+        GetMessages(permissions, Manifest::TYPE_PLATFORM_APP);
+    ASSERT_EQ(1U, messages.size());
+    EXPECT_EQ(
+        l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ),
+        messages.front().message());
+  }
+  {
+    APIPermissionSet permissions;
+    permissions.insert(APIPermission::kTopSites);
+    PermissionMessages messages =
+        GetMessages(permissions, Manifest::TYPE_PLATFORM_APP);
+    ASSERT_EQ(1U, messages.size());
+    EXPECT_EQ(l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_TOPSITES),
+              messages.front().message());
+  }
+  {
+    APIPermissionSet permissions;
+    permissions.insert(APIPermission::kTab);
+    permissions.insert(APIPermission::kTopSites);
+    PermissionMessages messages =
+        GetMessages(permissions, Manifest::TYPE_PLATFORM_APP);
+    ASSERT_EQ(1U, messages.size());
+    EXPECT_EQ(
+        l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ),
+        messages.front().message());
+  }
 }
 
 // Checks that when permissions are merged into a single message, their details
@@ -105,21 +114,47 @@ TEST_F(ChromePermissionMessageProviderUnittest,
   ASSERT_TRUE(usb->FromValue(devices_list.get(), nullptr, nullptr));
   permissions.insert(usb.release());
 
-  std::vector<base::string16> messages =
+  PermissionMessages messages =
       GetMessages(permissions, Manifest::TYPE_EXTENSION);
-  std::vector<base::string16> details =
-      GetDetails(permissions, Manifest::TYPE_EXTENSION);
 
   ASSERT_EQ(2U, messages.size());
-  ASSERT_EQ(messages.size(), details.size());
+  auto it = messages.begin();
+  const PermissionMessage& message0 = *it++;
   EXPECT_EQ(
       l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ),
-      messages[0]);
-  EXPECT_TRUE(details[0].empty());
+      message0.message());
+  EXPECT_TRUE(message0.submessages().empty());
+  const PermissionMessage& message1 = *it++;
   EXPECT_EQ(
       l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST),
-      messages[1]);
-  EXPECT_FALSE(details[1].empty());
+      message1.message());
+  EXPECT_FALSE(message1.submessages().empty());
+}
+
+// Anti-test: Check that adding a parameter to a SettingsOverridePermission
+// doesn't trigger a privilege increase. This is because prior to M46 beta, we
+// failed to store the parameter in the granted_permissions pref. Now we do, and
+// we don't want to bother every user with a spurious permissions warning.
+// See crbug.com/533086.
+// TODO(treib,devlin): Remove this for M48, when hopefully all users will have
+// updated prefs.
+TEST_F(ChromePermissionMessageProviderUnittest,
+       EvilHackToSuppressSettingsOverrideParameter) {
+  const APIPermissionInfo* info =
+      PermissionsInfo::GetInstance()->GetByID(APIPermission::kSearchProvider);
+
+  APIPermissionSet granted_permissions;
+  granted_permissions.insert(new SettingsOverrideAPIPermission(info));
+
+  APIPermissionSet actual_permissions;
+  actual_permissions.insert(new SettingsOverrideAPIPermission(info, "a.com"));
+
+  EXPECT_FALSE(IsPrivilegeIncrease(granted_permissions, actual_permissions));
+
+  // Just to be safe: Adding the permission (with or without parameter) should
+  // still be considered a privilege escalation.
+  EXPECT_TRUE(IsPrivilegeIncrease(APIPermissionSet(), granted_permissions));
+  EXPECT_TRUE(IsPrivilegeIncrease(APIPermissionSet(), actual_permissions));
 }
 
 }  // namespace extensions

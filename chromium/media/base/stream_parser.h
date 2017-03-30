@@ -5,12 +5,16 @@
 #ifndef MEDIA_BASE_STREAM_PARSER_H_
 #define MEDIA_BASE_STREAM_PARSER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
@@ -106,7 +110,7 @@ class MEDIA_EXPORT StreamParser {
   // First parameter - The type of the initialization data associated with the
   //                   stream.
   // Second parameter - The initialization data associated with the stream.
-  typedef base::Callback<void(EmeInitDataType, const std::vector<uint8>&)>
+  typedef base::Callback<void(EmeInitDataType, const std::vector<uint8_t>&)>
       EncryptedMediaInitDataCB;
 
   StreamParser();
@@ -125,7 +129,7 @@ class MEDIA_EXPORT StreamParser {
       const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
       const NewMediaSegmentCB& new_segment_cb,
       const base::Closure& end_of_segment_cb,
-      const LogCB& log_cb) = 0;
+      const scoped_refptr<MediaLog>& media_log) = 0;
 
   // Called when a seek occurs. This flushes the current parser state
   // and puts the parser in a state where it can receive data for the new seek
@@ -135,7 +139,7 @@ class MEDIA_EXPORT StreamParser {
   // Called when there is new data to parse.
   //
   // Returns true if the parse succeeds.
-  virtual bool Parse(const uint8* buf, int size) = 0;
+  virtual bool Parse(const uint8_t* buf, int size) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StreamParser);

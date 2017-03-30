@@ -4,8 +4,11 @@
 
 #include "chrome/utility/media_galleries/picasa_album_table_reader.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -19,7 +22,7 @@ namespace {
 // |variant_time| is specified as the number of days from Dec 30, 1899.
 base::Time TimeFromMicrosoftVariantTime(double variant_time) {
   base::TimeDelta variant_delta = base::TimeDelta::FromMicroseconds(
-      static_cast<int64>(variant_time * base::Time::kMicrosecondsPerDay));
+      static_cast<int64_t>(variant_time * base::Time::kMicrosecondsPerDay));
 
   return base::Time::FromLocalExploded(kPmpVariantTimeEpoch) + variant_delta;
 }
@@ -27,9 +30,7 @@ base::Time TimeFromMicrosoftVariantTime(double variant_time) {
 }  // namespace
 
 PicasaAlbumTableReader::PicasaAlbumTableReader(AlbumTableFiles table_files)
-    : table_files_(table_files.Pass()),
-      initialized_(false) {
-}
+    : table_files_(std::move(table_files)), initialized_(false) {}
 
 PicasaAlbumTableReader::~PicasaAlbumTableReader() {
 }
@@ -64,7 +65,7 @@ bool PicasaAlbumTableReader::Init() {
 
   // In the PMP format, columns can be different lengths. The number of rows
   // in the table is max of all the columns, and short columns are NULL padded.
-  uint32 row_count = 0;
+  uint32_t row_count = 0;
   row_count = std::max(row_count, category_column.rows_read());
   row_count = std::max(row_count, date_column.rows_read());
   row_count = std::max(row_count, filename_column.rows_read());
@@ -72,8 +73,8 @@ bool PicasaAlbumTableReader::Init() {
   row_count = std::max(row_count, token_column.rows_read());
   row_count = std::max(row_count, uid_column.rows_read());
 
-  for (uint32 i = 0; i < row_count; i++) {
-    uint32 category = kAlbumCategoryInvalid;
+  for (uint32_t i = 0; i < row_count; i++) {
+    uint32_t category = kAlbumCategoryInvalid;
     double date = 0;
     std::string name;
     std::string uid;

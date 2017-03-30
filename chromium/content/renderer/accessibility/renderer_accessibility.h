@@ -8,12 +8,15 @@
 #include <vector>
 
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "content/common/accessibility_messages.h"
+#include "content/common/ax_content_node_data.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/renderer/accessibility/blink_ax_tree_source.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "ui/accessibility/ax_tree_serializer.h"
+
+struct AccessibilityHostMsg_EventParams;
 
 namespace blink {
 class WebDocument;
@@ -48,8 +51,9 @@ class CONTENT_EXPORT RendererAccessibility : public RenderFrameObserver {
  public:
   // Request a one-time snapshot of the accessibility tree without
   // enabling accessibility if it wasn't already enabled.
-  static void SnapshotAccessibilityTree(RenderFrameImpl* render_frame,
-                                        ui::AXTreeUpdate* response);
+  static void SnapshotAccessibilityTree(
+      RenderFrameImpl* render_frame,
+      AXContentTreeUpdate* response);
 
   explicit RendererAccessibility(RenderFrameImpl* render_frame);
   ~RendererAccessibility() override;
@@ -107,7 +111,10 @@ class CONTENT_EXPORT RendererAccessibility : public RenderFrameObserver {
   void OnScrollToPoint(int acc_obj_id, gfx::Point point);
   void OnSetScrollOffset(int acc_obj_id, gfx::Point offset);
   void OnSetFocus(int acc_obj_id);
-  void OnSetTextSelection(int acc_obj_id, int start_offset, int end_offset);
+  void OnSetSelection(int anchor_acc_obj_id,
+                      int anchor_offset,
+                      int focus_acc_obj_id,
+                      int focus_offset);
   void OnSetValue(int acc_obj_id, base::string16 value);
   void OnShowContextMenu(int acc_obj_id);
 
@@ -119,7 +126,11 @@ class CONTENT_EXPORT RendererAccessibility : public RenderFrameObserver {
   BlinkAXTreeSource tree_source_;
 
   // The serializer that sends accessibility messages to the browser process.
-  ui::AXTreeSerializer<blink::WebAXObject> serializer_;
+  using BlinkAXTreeSerializer =
+      ui::AXTreeSerializer<blink::WebAXObject,
+                           AXContentNodeData,
+                           AXContentTreeData>;
+  BlinkAXTreeSerializer serializer_;
 
   // Current location of every object, so we can detect when it moves.
   base::hash_map<int, gfx::Rect> locations_;

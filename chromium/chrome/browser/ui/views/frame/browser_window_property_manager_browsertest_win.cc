@@ -7,8 +7,10 @@
 #include <shlobj.h>  // Must be before propkey.
 #include <propkey.h>
 #include <shellapi.h>
+#include <stddef.h>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_comptr.h"
@@ -48,7 +50,7 @@ namespace {
 void UnblockOnProfileCreation(Profile* profile,
                               Profile::CreateStatus status) {
   if (status == Profile::CREATE_STATUS_INITIALIZED)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 // Checks that the relaunch name, relaunch command and app icon for the given
@@ -95,7 +97,7 @@ void ValidateBrowserWindowProperties(
                 browser->profile()->GetPath()).value(),
             prop_var.get().pwszVal);
   prop_var.Reset();
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void ValidateHostedAppWindowProperties(const Browser* browser,
@@ -140,7 +142,7 @@ void ValidateHostedAppWindowProperties(const Browser* browser,
                 web_app_dir, base::UTF8ToUTF16(extension->name())).value(),
             prop_var.get().pwszVal);
   prop_var.Reset();
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void PostValidationTaskToUIThread(const base::Closure& validation_task) {
@@ -207,7 +209,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithProfileShortcutManager,
       profile_manager->GenerateNextProfileDirectoryPath();
   profile_manager->CreateProfileAsync(path_profile2,
                                       base::Bind(&UnblockOnProfileCreation),
-                                      base::string16(), base::string16(),
+                                      base::string16(), std::string(),
                                       std::string());
 
   // Spin to allow profile creation to take place, loop is terminated

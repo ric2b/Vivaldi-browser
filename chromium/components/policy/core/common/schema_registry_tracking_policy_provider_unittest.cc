@@ -5,6 +5,7 @@
 #include "components/policy/core/common/schema_registry_tracking_policy_provider.h"
 
 #include <string>
+#include <utility>
 
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
@@ -86,6 +87,7 @@ TEST_F(SchemaRegistryTrackingPolicyProviderTest, PassOnChromePolicy) {
   bundle.Get(chrome_ns).Set("policy",
                             POLICY_LEVEL_MANDATORY,
                             POLICY_SCOPE_USER,
+                            POLICY_SOURCE_CLOUD,
                             new base::StringValue("visible"),
                             NULL);
 
@@ -96,9 +98,10 @@ TEST_F(SchemaRegistryTrackingPolicyProviderTest, PassOnChromePolicy) {
       .Set("foo",
            POLICY_LEVEL_MANDATORY,
            POLICY_SCOPE_USER,
+           POLICY_SOURCE_CLOUD,
            new base::StringValue("not visible"),
            NULL);
-  mock_provider_.UpdatePolicy(delegate_bundle.Pass());
+  mock_provider_.UpdatePolicy(std::move(delegate_bundle));
   Mock::VerifyAndClearExpectations(&observer_);
 
   EXPECT_FALSE(schema_registry_tracking_provider_.IsInitializationComplete(
@@ -127,6 +130,7 @@ TEST_F(SchemaRegistryTrackingPolicyProviderTest, SchemaReadyWithComponents) {
   policy_map.Set("foo",
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue("omg"),
                  NULL);
   scoped_ptr<PolicyBundle> bundle(new PolicyBundle);
@@ -134,7 +138,7 @@ TEST_F(SchemaRegistryTrackingPolicyProviderTest, SchemaReadyWithComponents) {
   bundle->Get(PolicyNamespace(POLICY_DOMAIN_EXTENSIONS, "xyz"))
       .CopyFrom(policy_map);
   EXPECT_CALL(observer_, OnUpdatePolicy(&schema_registry_tracking_provider_));
-  mock_provider_.UpdatePolicy(bundle.Pass());
+  mock_provider_.UpdatePolicy(std::move(bundle));
   Mock::VerifyAndClearExpectations(&observer_);
 
   EXPECT_CALL(mock_provider_, RefreshPolicies()).Times(0);
@@ -178,6 +182,7 @@ TEST_F(SchemaRegistryTrackingPolicyProviderTest, DelegateUpdates) {
   policy_map.Set("foo",
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue("omg"),
                  NULL);
   // Chrome policy updates are visible even if the components aren't ready.
@@ -221,12 +226,13 @@ TEST_F(SchemaRegistryTrackingPolicyProviderTest, RemoveAndAddComponent) {
   platform_policy.Get(ns).Set("foo",
                               POLICY_LEVEL_MANDATORY,
                               POLICY_SCOPE_USER,
+                              POLICY_SOURCE_CLOUD,
                               new base::StringValue("omg"),
                               NULL);
   scoped_ptr<PolicyBundle> copy(new PolicyBundle);
   copy->CopyFrom(platform_policy);
   EXPECT_CALL(observer_, OnUpdatePolicy(_));
-  mock_provider_.UpdatePolicy(copy.Pass());
+  mock_provider_.UpdatePolicy(std::move(copy));
   Mock::VerifyAndClearExpectations(&observer_);
   EXPECT_TRUE(
       schema_registry_tracking_provider_.policies().Equals(platform_policy));
@@ -247,7 +253,7 @@ TEST_F(SchemaRegistryTrackingPolicyProviderTest, RemoveAndAddComponent) {
   EXPECT_CALL(observer_, OnUpdatePolicy(_));
   copy.reset(new PolicyBundle);
   copy->CopyFrom(platform_policy);
-  mock_provider_.UpdatePolicy(copy.Pass());
+  mock_provider_.UpdatePolicy(std::move(copy));
   Mock::VerifyAndClearExpectations(&observer_);
   EXPECT_TRUE(
       schema_registry_tracking_provider_.policies().Equals(platform_policy));

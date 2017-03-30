@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
 
@@ -741,8 +743,8 @@ URLMatcherConditionSet::URLMatcherConditionSet(
     scoped_ptr<URLMatcherPortFilter> port_filter)
     : id_(id),
       conditions_(conditions),
-      scheme_filter_(scheme_filter.Pass()),
-      port_filter_(port_filter.Pass()) {}
+      scheme_filter_(std::move(scheme_filter)),
+      port_filter_(std::move(port_filter)) {}
 
 URLMatcherConditionSet::URLMatcherConditionSet(
     ID id,
@@ -753,8 +755,8 @@ URLMatcherConditionSet::URLMatcherConditionSet(
     : id_(id),
       conditions_(conditions),
       query_conditions_(query_conditions),
-      scheme_filter_(scheme_filter.Pass()),
-      port_filter_(port_filter.Pass()) {}
+      scheme_filter_(std::move(scheme_filter)),
+      port_filter_(std::move(port_filter)) {}
 
 bool URLMatcherConditionSet::IsMatch(
     const std::set<StringPattern::ID>& matching_patterns,

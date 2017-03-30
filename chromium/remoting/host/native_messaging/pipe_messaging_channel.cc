@@ -4,12 +4,14 @@
 
 #include "remoting/host/native_messaging/pipe_messaging_channel.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/values.h"
+#include "build/build_config.h"
 
 #if defined(OS_POSIX)
 #include <unistd.h>
@@ -43,19 +45,16 @@ base::File DuplicatePlatformFile(base::File file) {
 
 namespace remoting {
 
-PipeMessagingChannel::PipeMessagingChannel(
-    base::File input,
-    base::File output)
-    : native_messaging_reader_(DuplicatePlatformFile(input.Pass())),
-      native_messaging_writer_(new NativeMessagingWriter(
-          DuplicatePlatformFile(output.Pass()))),
+PipeMessagingChannel::PipeMessagingChannel(base::File input, base::File output)
+    : native_messaging_reader_(DuplicatePlatformFile(std::move(input))),
+      native_messaging_writer_(
+          new NativeMessagingWriter(DuplicatePlatformFile(std::move(output)))),
       event_handler_(nullptr),
       weak_factory_(this) {
   weak_ptr_ = weak_factory_.GetWeakPtr();
 }
 
-PipeMessagingChannel::~PipeMessagingChannel() {
-}
+PipeMessagingChannel::~PipeMessagingChannel() {}
 
 void PipeMessagingChannel::Start(EventHandler* event_handler) {
   DCHECK(CalledOnValidThread());
@@ -73,11 +72,10 @@ void PipeMessagingChannel::ProcessMessage(scoped_ptr<base::Value> message) {
   DCHECK(CalledOnValidThread());
 
   if (event_handler_)
-    event_handler_->OnMessage(message.Pass());
+    event_handler_->OnMessage(std::move(message));
 }
 
-void PipeMessagingChannel::SendMessage(
-    scoped_ptr<base::Value> message) {
+void PipeMessagingChannel::SendMessage(scoped_ptr<base::Value> message) {
   DCHECK(CalledOnValidThread());
 
   bool success = message && native_messaging_writer_;

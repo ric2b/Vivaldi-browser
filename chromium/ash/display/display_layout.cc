@@ -5,7 +5,9 @@
 #include "ash/display/display_layout.h"
 
 #include "ash/ash_switches.h"
+#include "ash/display/display_manager.h"
 #include "ash/display/display_pref_util.h"
+#include "ash/shell.h"
 #include "base/json/json_value_converter.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -53,7 +55,7 @@ std::string GetStringFromPosition(DisplayLayout::Position position) {
   return iter != map->end() ? iter->second : std::string("unknown");
 }
 
-bool GetDisplayIdFromString(const base::StringPiece& position, int64* field) {
+bool GetDisplayIdFromString(const base::StringPiece& position, int64_t* field) {
   return base::StringToInt64(position, field);
 }
 
@@ -72,7 +74,7 @@ DisplayLayout::DisplayLayout()
       offset(0),
       mirrored(false),
 #if defined(OS_CHROMEOS)
-      default_unified(switches::UnifiedDesktopEnabled()),
+      default_unified(true),
 #else
       default_unified(false),
 #endif
@@ -84,7 +86,7 @@ DisplayLayout::DisplayLayout(DisplayLayout::Position position, int offset)
       offset(offset),
       mirrored(false),
 #if defined(OS_CHROMEOS)
-      default_unified(switches::UnifiedDesktopEnabled()),
+      default_unified(true),
 #else
       default_unified(false),
 #endif
@@ -146,9 +148,13 @@ bool DisplayLayout::ConvertToValue(const DisplayLayout& layout,
 
 std::string DisplayLayout::ToString() const {
   const std::string position_str = GetStringFromPosition(position);
+  bool unified =
+      default_unified &&
+      Shell::GetInstance()->display_manager()->unified_desktop_enabled();
+
   return base::StringPrintf("%s, %d%s%s", position_str.c_str(), offset,
                             mirrored ? ", mirrored" : "",
-                            default_unified ? ", unified" : "");
+                            unified ? ", unified" : "");
 }
 
 // static
@@ -160,7 +166,7 @@ void DisplayLayout::RegisterJSONConverter(
   converter->RegisterBoolField(kMirroredKey, &DisplayLayout::mirrored);
   converter->RegisterBoolField(kDefaultUnifiedKey,
                                &DisplayLayout::default_unified);
-  converter->RegisterCustomField<int64>(
+  converter->RegisterCustomField<int64_t>(
       kPrimaryIdKey, &DisplayLayout::primary_id, &GetDisplayIdFromString);
 }
 

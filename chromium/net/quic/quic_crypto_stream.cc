@@ -15,6 +15,7 @@
 
 using std::string;
 using base::StringPiece;
+using net::SpdyPriority;
 
 namespace net {
 
@@ -42,17 +43,25 @@ void QuicCryptoStream::OnHandshakeMessage(
   session()->OnCryptoHandshakeMessageReceived(message);
 }
 
-uint32 QuicCryptoStream::ProcessRawData(const char* data,
-                                        uint32 data_len) {
-  if (!crypto_framer_.ProcessInput(StringPiece(data, data_len))) {
-    CloseConnection(crypto_framer_.error());
-    return 0;
+void QuicCryptoStream::OnDataAvailable() {
+  struct iovec iov;
+  while (true) {
+    if (sequencer()->GetReadableRegions(&iov, 1) != 1) {
+      // No more data to read.
+      break;
+    }
+    StringPiece data(static_cast<char*>(iov.iov_base), iov.iov_len);
+    if (!crypto_framer_.ProcessInput(data)) {
+      CloseConnectionWithDetails(crypto_framer_.error(),
+                                 crypto_framer_.error_detail());
+      return;
+    }
+    sequencer()->MarkConsumed(iov.iov_len);
   }
-  return data_len;
 }
 
-QuicPriority QuicCryptoStream::EffectivePriority() const {
-  return QuicUtils::HighestPriority();
+SpdyPriority QuicCryptoStream::Priority() const {
+  return net::kV3HighestPriority;
 }
 
 void QuicCryptoStream::SendHandshakeMessage(
@@ -62,29 +71,25 @@ void QuicCryptoStream::SendHandshakeMessage(
 
 void QuicCryptoStream::SendHandshakeMessage(
     const CryptoHandshakeMessage& message,
-    QuicAckNotifier::DelegateInterface* delegate) {
+    QuicAckListenerInterface* listener) {
   DVLOG(1) << ENDPOINT << "Sending " << message.DebugString();
   session()->OnCryptoHandshakeMessageSent(message);
   const QuicData& data = message.GetSerialized();
   // TODO(wtc): check the return value.
-  WriteOrBufferData(string(data.data(), data.length()), false, delegate);
+  WriteOrBufferData(string(data.data(), data.length()), false, listener);
 }
 
-bool QuicCryptoStream::ExportKeyingMaterial(
-    StringPiece label,
-    StringPiece context,
-    size_t result_len,
-    string* result) const {
+bool QuicCryptoStream::ExportKeyingMaterial(StringPiece label,
+                                            StringPiece context,
+                                            size_t result_len,
+                                            string* result) const {
   if (!handshake_confirmed()) {
     DLOG(ERROR) << "ExportKeyingMaterial was called before forward-secure"
                 << "encryption was established.";
     return false;
   }
   return CryptoUtils::ExportKeyingMaterial(
-      crypto_negotiated_params_.subkey_secret,
-      label,
-      context,
-      result_len,
+      crypto_negotiated_params_.subkey_secret, label, context, result_len,
       result);
 }
 

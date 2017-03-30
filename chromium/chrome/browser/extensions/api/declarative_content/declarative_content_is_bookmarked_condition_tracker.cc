@@ -6,12 +6,80 @@
 
 #include "base/bind.h"
 #include "base/stl_util.h"
+#include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/extensions/api/declarative_content/content_constants.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/common/permissions/permissions_data.h"
 
 namespace extensions {
+
+namespace {
+
+const char kInvalidTypeOfParameter[] = "Attribute '%s' has an invalid type";
+const char kIsBookmarkedRequiresBookmarkPermission[] =
+    "Property 'isBookmarked' requires 'bookmarks' permission";
+
+bool HasBookmarkAPIPermission(const Extension* extension) {
+  return extension->permissions_data()->HasAPIPermission(
+      APIPermission::kBookmark);
+}
+
+}  // namespace
+
+//
+// DeclarativeContentIsBookmarkedPredicate
+//
+
+DeclarativeContentIsBookmarkedPredicate::
+~DeclarativeContentIsBookmarkedPredicate() {
+}
+
+bool DeclarativeContentIsBookmarkedPredicate::IsIgnored() const {
+  return !HasBookmarkAPIPermission(extension_.get());
+}
+
+// static
+scoped_ptr<DeclarativeContentIsBookmarkedPredicate>
+DeclarativeContentIsBookmarkedPredicate::Create(
+    ContentPredicateEvaluator* evaluator,
+    const Extension* extension,
+    const base::Value& value,
+    std::string* error) {
+  bool is_bookmarked = false;
+  if (value.GetAsBoolean(&is_bookmarked)) {
+    if (!HasBookmarkAPIPermission(extension)) {
+      *error = kIsBookmarkedRequiresBookmarkPermission;
+      return scoped_ptr<DeclarativeContentIsBookmarkedPredicate>();
+    } else {
+      return make_scoped_ptr(
+          new DeclarativeContentIsBookmarkedPredicate(evaluator, extension,
+                                                      is_bookmarked));
+    }
+  } else {
+    *error = base::StringPrintf(kInvalidTypeOfParameter,
+                                declarative_content_constants::kIsBookmarked);
+    return scoped_ptr<DeclarativeContentIsBookmarkedPredicate>();
+  }
+}
+
+ContentPredicateEvaluator*
+DeclarativeContentIsBookmarkedPredicate::GetEvaluator() const {
+  return evaluator_;
+}
+
+DeclarativeContentIsBookmarkedPredicate::
+DeclarativeContentIsBookmarkedPredicate(
+    ContentPredicateEvaluator* evaluator,
+    scoped_refptr<const Extension> extension,
+    bool is_bookmarked)
+    : evaluator_(evaluator),
+      extension_(extension),
+      is_bookmarked_(is_bookmarked) {
+}
 
 //
 // PerWebContentsTracker
@@ -79,11 +147,10 @@ WebContentsDestroyed() {
 //
 
 DeclarativeContentIsBookmarkedConditionTracker::
-DeclarativeContentIsBookmarkedConditionTracker(
-    content::BrowserContext* context,
-    DeclarativeContentConditionTrackerDelegate* delegate)
-    : extensive_bookmark_changes_in_progress_(0),
-      delegate_(delegate),
+DeclarativeContentIsBookmarkedConditionTracker(content::BrowserContext* context,
+                                               Delegate* delegate)
+    : delegate_(delegate),
+      extensive_bookmark_changes_in_progress_(0),
       scoped_bookmarks_observer_(this) {
   bookmarks::BookmarkModel* bookmark_model =
       BookmarkModelFactory::GetForProfile(Profile::FromBrowserContext(context));
@@ -96,14 +163,37 @@ DeclarativeContentIsBookmarkedConditionTracker::
 ~DeclarativeContentIsBookmarkedConditionTracker() {
 }
 
+std::string DeclarativeContentIsBookmarkedConditionTracker::
+GetPredicateApiAttributeName() const {
+  return declarative_content_constants::kIsBookmarked;
+}
+
+scoped_ptr<const ContentPredicate>
+DeclarativeContentIsBookmarkedConditionTracker::CreatePredicate(
+    const Extension* extension,
+    const base::Value& value,
+    std::string* error) {
+  return DeclarativeContentIsBookmarkedPredicate::Create(this, extension, value,
+                                                         error);
+}
+
+// We don't have any centralized state to update for new predicates, so we don't
+// need to take any action here or in StopTrackingPredicates().
+void DeclarativeContentIsBookmarkedConditionTracker::TrackPredicates(
+    const std::map<const void*, std::vector<const ContentPredicate*>>&
+        predicates) {
+}
+
+void DeclarativeContentIsBookmarkedConditionTracker::StopTrackingPredicates(
+    const std::vector<const void*>& predicate_groups) {
+}
+
 void DeclarativeContentIsBookmarkedConditionTracker::TrackForWebContents(
     content::WebContents* contents) {
   per_web_contents_tracker_[contents] =
       make_linked_ptr(new PerWebContentsTracker(
           contents,
-          base::Bind(&DeclarativeContentConditionTrackerDelegate::
-                     RequestEvaluation,
-                     base::Unretained(delegate_)),
+          base::Bind(&Delegate::RequestEvaluation, base::Unretained(delegate_)),
           base::Bind(&DeclarativeContentIsBookmarkedConditionTracker::
                      DeletePerWebContentsTracker,
                      base::Unretained(this))));
@@ -117,10 +207,15 @@ void DeclarativeContentIsBookmarkedConditionTracker::OnWebContentsNavigation(
   per_web_contents_tracker_[contents]->UpdateState(true);
 }
 
-bool DeclarativeContentIsBookmarkedConditionTracker::IsUrlBookmarked(
-    content::WebContents* contents) {
-  DCHECK(ContainsKey(per_web_contents_tracker_, contents));
-  return per_web_contents_tracker_[contents]->is_url_bookmarked();
+bool DeclarativeContentIsBookmarkedConditionTracker::EvaluatePredicate(
+    const ContentPredicate* predicate,
+    content::WebContents* tab) const {
+  DCHECK_EQ(this, predicate->GetEvaluator());
+  const DeclarativeContentIsBookmarkedPredicate* typed_predicate =
+      static_cast<const DeclarativeContentIsBookmarkedPredicate*>(predicate);
+  auto loc = per_web_contents_tracker_.find(tab);
+  DCHECK(loc != per_web_contents_tracker_.end());
+  return loc->second->is_url_bookmarked() == typed_predicate->is_bookmarked();
 }
 
 void DeclarativeContentIsBookmarkedConditionTracker::BookmarkModelChanged() {}

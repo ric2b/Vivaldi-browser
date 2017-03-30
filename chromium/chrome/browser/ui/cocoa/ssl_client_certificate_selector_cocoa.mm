@@ -5,6 +5,9 @@
 #import "chrome/browser/ui/cocoa/ssl_client_certificate_selector_cocoa.h"
 
 #import <SecurityInterface/SFChooseIdentityPanel.h>
+#include <stddef.h>
+
+#include <utility>
 
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
@@ -15,10 +18,11 @@
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_mac.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/guest_view/browser/guest_view_base.h"
-#include "components/web_modal/popup_manager.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/web_contents.h"
+#include "grit/components_strings.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util_mac.h"
 #include "net/ssl/ssl_cert_request_info.h"
@@ -49,7 +53,7 @@ class SSLClientAuthObserverCocoaBridge : public SSLClientAuthObserver,
       SSLClientCertificateSelectorCocoa* controller)
       : SSLClientAuthObserver(browser_context,
                               cert_request_info,
-                              delegate.Pass()),
+                              std::move(delegate)),
         controller_(controller) {}
 
   // SSLClientAuthObserver implementation:
@@ -85,7 +89,7 @@ void ShowSSLClientCertificateSelector(
   // GetTopLevelWebContents() will return |contents| otherwise.
   // TODO(davidben): Move this hook to the WebContentsDelegate and only try to
   // show a dialog in Browser's implementation. https://crbug.com/456255
-  if (web_modal::PopupManager::FromWebContents(
+  if (web_modal::WebContentsModalDialogManager::FromWebContents(
           guest_view::GuestViewBase::GetTopLevelWebContents(contents)) ==
       nullptr)
     return;
@@ -95,7 +99,7 @@ void ShowSSLClientCertificateSelector(
       [[SSLClientCertificateSelectorCocoa alloc]
           initWithBrowserContext:contents->GetBrowserContext()
                  certRequestInfo:cert_request_info
-                        delegate:delegate.Pass()];
+                        delegate:std::move(delegate)];
   [selector displayForWebContents:contents];
 }
 
@@ -111,7 +115,7 @@ void ShowSSLClientCertificateSelector(
   DCHECK(certRequestInfo);
   if ((self = [super init])) {
     observer_.reset(new SSLClientAuthObserverCocoaBridge(
-        browserContext, certRequestInfo, delegate.Pass(), self));
+        browserContext, certRequestInfo, std::move(delegate), self));
   }
   return self;
 }

@@ -6,12 +6,10 @@
 #define CONTENT_RENDERER_NPAPI_PLUGIN_CHANNEL_HOST_H_
 
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "content/child/npapi/np_channel_base.h"
 #include "ipc/ipc_channel_handle.h"
-
-namespace IPC {
-class AttachmentBroker;
-}
 
 namespace content {
 class NPObjectBase;
@@ -27,13 +25,11 @@ class PluginChannelHost : public NPChannelBase {
 #endif
   static PluginChannelHost* GetPluginChannelHost(
       const IPC::ChannelHandle& channel_handle,
-      base::SingleThreadTaskRunner* ipc_task_runner,
-      IPC::AttachmentBroker* broker);
+      base::SingleThreadTaskRunner* ipc_task_runner);
 
   bool Init(base::SingleThreadTaskRunner* ipc_task_runner,
             bool create_pipe_now,
-            base::WaitableEvent* shutdown_event,
-            IPC::AttachmentBroker* broker) override;
+            base::WaitableEvent* shutdown_event) override;
 
   int GenerateRouteID() override;
 

@@ -7,9 +7,11 @@
 
 #include <set>
 #include <string>
+#include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -142,7 +144,7 @@ class NET_EXPORT_PRIVATE DhcpProxyScriptFetcherWin
   // Vector, in Windows' network adapter preference order, of
   // DhcpProxyScriptAdapterFetcher objects that are or were attempting
   // to fetch a PAC file based on DHCP configuration.
-  typedef ScopedVector<DhcpProxyScriptAdapterFetcher> FetcherVector;
+  using FetcherVector = std::vector<scoped_ptr<DhcpProxyScriptAdapterFetcher>>;
   FetcherVector fetchers_;
 
   // Number of fetchers we are waiting for.
@@ -158,7 +160,7 @@ class NET_EXPORT_PRIVATE DhcpProxyScriptFetcherWin
   // PAC URL retrieved from DHCP, if any. Valid only in state STATE_DONE.
   GURL pac_url_;
 
-  base::OneShotTimer<DhcpProxyScriptFetcherWin> wait_timer_;
+  base::OneShotTimer wait_timer_;
 
   URLRequestContext* const url_request_context_;
 

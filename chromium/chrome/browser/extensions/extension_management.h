@@ -114,12 +114,12 @@ class ExtensionManagement : public KeyedService {
   APIPermissionSet GetBlockedAPIPermissions(const Extension* extension) const;
 
   // Returns blocked permission set for |extension|.
-  scoped_refptr<const PermissionSet> GetBlockedPermissions(
+  scoped_ptr<const PermissionSet> GetBlockedPermissions(
       const Extension* extension) const;
 
   // Returns true if every permission in |perms| is allowed for |extension|.
   bool IsPermissionSetAllowed(const Extension* extension,
-                              scoped_refptr<const PermissionSet> perms) const;
+                              const PermissionSet& perms) const;
 
   // Returns true if |extension| meets the minimum required version set for it.
   // If there is no such requirement set for it, returns true as well.
@@ -198,7 +198,7 @@ class ExtensionManagementFactory : public BrowserContextKeyedServiceFactory {
   static ExtensionManagementFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<ExtensionManagementFactory>;
+  friend struct base::DefaultSingletonTraits<ExtensionManagementFactory>;
 
   ExtensionManagementFactory();
   ~ExtensionManagementFactory() override;

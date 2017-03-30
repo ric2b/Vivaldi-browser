@@ -4,7 +4,10 @@
 
 #include "content/renderer/text_input_client_observer.h"
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "content/common/text_input_client_messages.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -88,16 +91,17 @@ void TextInputClientObserver::OnFirstRectForCharacterRange(gfx::Range range) {
 
 void TextInputClientObserver::OnStringForRange(gfx::Range range) {
 #if defined(OS_MACOSX)
+  blink::WebPoint baselinePoint;
   NSAttributedString* string = nil;
   blink::WebLocalFrame* frame = webview()->focusedFrame()->toWebLocalFrame();
   if (frame) {
     string = blink::WebSubstringUtil::attributedSubstringInRange(
-        frame, range.start(), range.length());
+        frame, range.start(), range.length(), &baselinePoint);
   }
   scoped_ptr<const mac::AttributedStringCoder::EncodedString> encoded(
       mac::AttributedStringCoder::Encode(string));
   Send(new TextInputClientReplyMsg_GotStringForRange(routing_id(),
-      *encoded.get()));
+      *encoded.get(), baselinePoint));
 #else
   NOTIMPLEMENTED();
 #endif

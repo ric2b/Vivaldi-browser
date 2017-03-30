@@ -4,6 +4,8 @@
 
 #include "cc/test/scheduler_test_common.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/logging.h"
@@ -60,8 +62,7 @@ base::TimeTicks TestBackToBackBeginFrameSource::Now() {
 
 TestSyntheticBeginFrameSource::TestSyntheticBeginFrameSource(
     scoped_ptr<DelayBasedTimeSource> time_source)
-    : SyntheticBeginFrameSource(time_source.Pass()) {
-}
+    : SyntheticBeginFrameSource(std::move(time_source)) {}
 
 TestSyntheticBeginFrameSource::~TestSyntheticBeginFrameSource() {
 }
@@ -69,22 +70,25 @@ TestSyntheticBeginFrameSource::~TestSyntheticBeginFrameSource() {
 scoped_ptr<FakeCompositorTimingHistory> FakeCompositorTimingHistory::Create() {
   scoped_ptr<RenderingStatsInstrumentation> rendering_stats_instrumentation =
       RenderingStatsInstrumentation::Create();
-  return make_scoped_ptr(
-      new FakeCompositorTimingHistory(rendering_stats_instrumentation.Pass()));
+  return make_scoped_ptr(new FakeCompositorTimingHistory(
+      std::move(rendering_stats_instrumentation)));
 }
 
 FakeCompositorTimingHistory::FakeCompositorTimingHistory(
     scoped_ptr<RenderingStatsInstrumentation> rendering_stats_instrumentation)
-    : CompositorTimingHistory(rendering_stats_instrumentation.get()),
+    : CompositorTimingHistory(CompositorTimingHistory::NULL_UMA,
+                              rendering_stats_instrumentation.get()),
       rendering_stats_instrumentation_owned_(
-          rendering_stats_instrumentation.Pass()) {
-}
+          std::move(rendering_stats_instrumentation)) {}
 
 FakeCompositorTimingHistory::~FakeCompositorTimingHistory() {
 }
 
 void FakeCompositorTimingHistory::SetAllEstimatesTo(base::TimeDelta duration) {
   begin_main_frame_to_commit_duration_ = duration;
+  begin_main_frame_queue_duration_critical_ = duration;
+  begin_main_frame_queue_duration_not_critical_ = duration;
+  begin_main_frame_start_to_commit_duration_ = duration;
   commit_to_ready_to_activate_duration_ = duration;
   prepare_tiles_duration_ = duration;
   activate_duration_ = duration;
@@ -94,6 +98,22 @@ void FakeCompositorTimingHistory::SetAllEstimatesTo(base::TimeDelta duration) {
 void FakeCompositorTimingHistory::SetBeginMainFrameToCommitDurationEstimate(
     base::TimeDelta duration) {
   begin_main_frame_to_commit_duration_ = duration;
+}
+
+void FakeCompositorTimingHistory::
+    SetBeginMainFrameQueueDurationCriticalEstimate(base::TimeDelta duration) {
+  begin_main_frame_queue_duration_critical_ = duration;
+}
+
+void FakeCompositorTimingHistory::
+    SetBeginMainFrameQueueDurationNotCriticalEstimate(
+        base::TimeDelta duration) {
+  begin_main_frame_queue_duration_not_critical_ = duration;
+}
+
+void FakeCompositorTimingHistory::
+    SetBeginMainFrameStartToCommitDurationEstimate(base::TimeDelta duration) {
+  begin_main_frame_start_to_commit_duration_ = duration;
 }
 
 void FakeCompositorTimingHistory::SetCommitToReadyToActivateDurationEstimate(
@@ -119,6 +139,24 @@ void FakeCompositorTimingHistory::SetDrawDurationEstimate(
 base::TimeDelta
 FakeCompositorTimingHistory::BeginMainFrameToCommitDurationEstimate() const {
   return begin_main_frame_to_commit_duration_;
+}
+
+base::TimeDelta
+FakeCompositorTimingHistory::BeginMainFrameQueueDurationCriticalEstimate()
+    const {
+  return begin_main_frame_queue_duration_critical_;
+}
+
+base::TimeDelta
+FakeCompositorTimingHistory::BeginMainFrameQueueDurationNotCriticalEstimate()
+    const {
+  return begin_main_frame_queue_duration_not_critical_;
+}
+
+base::TimeDelta
+FakeCompositorTimingHistory::BeginMainFrameStartToCommitDurationEstimate()
+    const {
+  return begin_main_frame_start_to_commit_duration_;
 }
 
 base::TimeDelta
@@ -156,8 +194,9 @@ scoped_ptr<TestScheduler> TestScheduler::Create(
       TestBackToBackBeginFrameSource::Create(now_src, task_runner);
   return make_scoped_ptr(new TestScheduler(
       now_src, client, settings, layer_tree_host_id, task_runner,
-      external_frame_source, synthetic_frame_source.Pass(),
-      unthrottled_frame_source.Pass(), compositor_timing_history.Pass()));
+      external_frame_source, std::move(synthetic_frame_source),
+      std::move(unthrottled_frame_source),
+      std::move(compositor_timing_history)));
 }
 
 TestScheduler::TestScheduler(
@@ -175,11 +214,10 @@ TestScheduler::TestScheduler(
                 layer_tree_host_id,
                 task_runner,
                 external_frame_source,
-                synthetic_frame_source.Pass(),
-                unthrottled_frame_source.Pass(),
-                compositor_timing_history.Pass()),
-      now_src_(now_src) {
-}
+                std::move(synthetic_frame_source),
+                std::move(unthrottled_frame_source),
+                std::move(compositor_timing_history)),
+      now_src_(now_src) {}
 
 base::TimeTicks TestScheduler::Now() const {
   return now_src_->NowTicks();

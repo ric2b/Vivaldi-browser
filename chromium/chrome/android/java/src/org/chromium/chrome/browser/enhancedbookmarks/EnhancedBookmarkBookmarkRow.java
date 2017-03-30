@@ -9,13 +9,17 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
+import android.text.format.Formatter;
 import android.util.AttributeSet;
+import android.view.View;
+import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkItem;
-import org.chromium.chrome.browser.enhanced_bookmarks.LaunchLocation;
-import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkManager.UIState;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkItem;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 import org.chromium.components.bookmarks.BookmarkId;
 
@@ -43,7 +47,8 @@ public class EnhancedBookmarkBookmarkRow extends EnhancedBookmarkRow implements 
                 R.dimen.enhanced_bookmark_item_icon_size);
         int textSize = getResources().getDimensionPixelSize(
                 R.dimen.enhanced_bookmark_item_icon_text_size);
-        int iconColor = getResources().getColor(R.color.enhanced_bookmark_icon_background_color);
+        int iconColor = ApiCompatibilityUtils.getColor(getResources(),
+                R.color.enhanced_bookmark_icon_background_color);
         mIconGenerator = new RoundedIconGenerator(mDisplayedIconSize , mDisplayedIconSize,
                 mCornerRadius, iconColor, textSize);
     }
@@ -54,13 +59,16 @@ public class EnhancedBookmarkBookmarkRow extends EnhancedBookmarkRow implements 
     public void onClick() {
         int launchLocation = -1;
         switch (mDelegate.getCurrentState()) {
-            case UIState.STATE_ALL_BOOKMARKS:
+            case EnhancedBookmarkUIState.STATE_ALL_BOOKMARKS:
                 launchLocation = LaunchLocation.ALL_ITEMS;
                 break;
-            case UIState.STATE_FOLDER:
+            case EnhancedBookmarkUIState.STATE_FOLDER:
                 launchLocation = LaunchLocation.FOLDER;
                 break;
-            case UIState.STATE_LOADING:
+            case EnhancedBookmarkUIState.STATE_FILTER:
+                launchLocation = LaunchLocation.FILTER;
+                break;
+            case EnhancedBookmarkUIState.STATE_LOADING:
                 assert false :
                         "The main content shouldn't be inflated if it's still loading";
                 break;
@@ -77,8 +85,32 @@ public class EnhancedBookmarkBookmarkRow extends EnhancedBookmarkRow implements 
         mUrl = item.getUrl();
         mIconImageView.setImageDrawable(null);
         mTitleView.setText(item.getTitle());
-        mDelegate.getModel().getLargeIcon(mUrl, mMinIconSize, this);
+        mDelegate.getLargeIconBridge().getLargeIconForUrl(mUrl, mMinIconSize, this);
+        updateOfflinePageSize(bookmarkId);
         return item;
+    }
+
+    private void updateOfflinePageSize(BookmarkId bookmarkId) {
+        OfflinePageItem offlinePage = null;
+        OfflinePageBridge bridge = mDelegate.getModel().getOfflinePageBridge();
+        if (mDelegate.getCurrentState() == EnhancedBookmarkUIState.STATE_FILTER && bridge != null) {
+            offlinePage = bridge.getPageByBookmarkId(bookmarkId);
+        }
+        TextView textView = (TextView) findViewById(R.id.offline_page_size);
+        View bookmarkRowView = findViewById(R.id.bookmark_row);
+        if (offlinePage != null) {
+            int verticalPadding = textView.getResources().getDimensionPixelSize(
+                    R.dimen.offline_page_item_vertical_spacing);
+            textView.setText(Formatter.formatFileSize(getContext(), offlinePage.getFileSize()));
+            // Get the embedded bookmark_row layout, and add padding.  This is because the entries
+            // in filter view are larger (contain more items) than normal bookmark view.
+            bookmarkRowView.setPadding(0, verticalPadding / 2, 0, verticalPadding / 2);
+            textView.setVisibility(View.VISIBLE);
+        } else {
+            textView.setVisibility(View.GONE);
+            // Remove padding when we leave filter view.
+            bookmarkRowView.setPadding(0, 0, 0, 0);
+        }
     }
 
     // LargeIconCallback implementation.
@@ -92,7 +124,7 @@ public class EnhancedBookmarkBookmarkRow extends EnhancedBookmarkRow implements 
         } else {
             RoundedBitmapDrawable roundedIcon = RoundedBitmapDrawableFactory.create(
                     getResources(),
-                    Bitmap.createScaledBitmap(icon, mDisplayedIconSize, mDisplayedIconSize, true));
+                    Bitmap.createScaledBitmap(icon, mDisplayedIconSize, mDisplayedIconSize, false));
             roundedIcon.setCornerRadius(mCornerRadius);
             mIconImageView.setImageDrawable(roundedIcon);
         }

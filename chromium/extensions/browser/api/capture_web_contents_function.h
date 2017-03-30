@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_API_CAPTURE_WEB_CONTENTS_FUNCTION_H_
 #define EXTENSIONS_BROWSER_API_CAPTURE_WEB_CONTENTS_FUNCTION_H_
 
+#include "base/macros.h"
 #include "content/public/browser/readback_types.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/common/api/extension_types.h"
@@ -53,7 +54,7 @@ class CaptureWebContentsFunction : public AsyncExtensionFunction {
   int context_id_;
 
   // The format (JPEG vs PNG) of the resulting image.  Set in RunAsync().
-  core_api::extension_types::ImageFormat image_format_;
+  api::extension_types::ImageFormat image_format_;
 
   // Quality setting to use when encoding jpegs.  Set in RunAsync().
   int image_quality_;

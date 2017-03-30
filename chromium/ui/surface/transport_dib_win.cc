@@ -5,6 +5,8 @@
 #include "ui/surface/transport_dib.h"
 
 #include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <limits>
 
@@ -20,13 +22,11 @@ TransportDIB::TransportDIB()
 TransportDIB::~TransportDIB() {
 }
 
-TransportDIB::TransportDIB(HANDLE handle)
-    : shared_memory_(handle, false /* read write */),
-      size_(0) {
-}
+TransportDIB::TransportDIB(base::SharedMemoryHandle handle)
+    : shared_memory_(handle, false /* read write */), size_(0) {}
 
 // static
-TransportDIB* TransportDIB::Create(size_t size, uint32 sequence_num) {
+TransportDIB* TransportDIB::Create(size_t size, uint32_t sequence_num) {
   TransportDIB* dib = new TransportDIB;
 
   if (!dib->shared_memory_.CreateAnonymous(size)) {
@@ -55,10 +55,11 @@ TransportDIB* TransportDIB::CreateWithHandle(Handle handle) {
 
 // static
 bool TransportDIB::is_valid_handle(Handle dib) {
-  return dib != NULL;
+  return dib.IsValid();
 }
 
-skia::PlatformCanvas* TransportDIB::GetPlatformCanvas(int w, int h) {
+skia::PlatformCanvas* TransportDIB::GetPlatformCanvas(int w, int h,
+                                                      bool opaque) {
   // This DIB already mapped the file into this process, but PlatformCanvas
   // will map it again.
   DCHECK(!memory()) << "Mapped file twice in the same process.";
@@ -66,9 +67,9 @@ skia::PlatformCanvas* TransportDIB::GetPlatformCanvas(int w, int h) {
   // We can't check the canvas size before mapping, but it's safe because
   // Windows will fail to map the section if the dimensions of the canvas
   // are too large.
-  skia::PlatformCanvas* canvas =
-      skia::CreatePlatformCanvas(w, h, true, shared_memory_.handle(),
-                                 skia::RETURN_NULL_ON_FAILURE);
+  skia::PlatformCanvas* canvas = skia::CreatePlatformCanvas(
+      w, h, opaque, shared_memory_.handle().GetHandle(),
+      skia::RETURN_NULL_ON_FAILURE);
 
   // Calculate the size for the memory region backing the canvas.
   if (canvas)
@@ -85,7 +86,7 @@ bool TransportDIB::Map() {
 
   if (!shared_memory_.Map(0 /* map whole shared memory segment */)) {
     LOG(ERROR) << "Failed to map transport DIB"
-               << " handle:" << shared_memory_.handle()
+               << " handle:" << shared_memory_.handle().GetHandle()
                << " error:" << ::GetLastError();
     return false;
   }

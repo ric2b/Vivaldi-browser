@@ -26,7 +26,6 @@ POLICY_EXPORT extern const char kParamDeviceType[];
 POLICY_EXPORT extern const char kParamOAuthToken[];
 POLICY_EXPORT extern const char kParamPlatform[];
 POLICY_EXPORT extern const char kParamRequest[];
-POLICY_EXPORT extern const char kParamUserAffiliation[];
 
 // String extern constants for the device and app type we report to the server.
 POLICY_EXPORT extern const char kValueAppType[];
@@ -40,10 +39,9 @@ POLICY_EXPORT extern const char kValueRequestUploadCertificate[];
 POLICY_EXPORT extern const char kValueRequestDeviceStateRetrieval[];
 POLICY_EXPORT extern const char kValueRequestUploadStatus[];
 POLICY_EXPORT extern const char kValueRequestRemoteCommands[];
-POLICY_EXPORT extern const char kValueUserAffiliationManaged[];
-POLICY_EXPORT extern const char kValueUserAffiliationNone[];
 POLICY_EXPORT extern const char kValueRequestDeviceAttributeUpdatePermission[];
 POLICY_EXPORT extern const char kValueRequestDeviceAttributeUpdate[];
+POLICY_EXPORT extern const char kValueRequestGcmIdUpdate[];
 
 // Policy type strings for the policy_type field in PolicyFetchRequest.
 POLICY_EXPORT extern const char kChromeDevicePolicyType[];
@@ -66,14 +64,6 @@ POLICY_EXPORT extern const char kChromePolicyHeader[];
 // keys are valid.
 POLICY_EXPORT std::string GetPolicyVerificationKey();
 POLICY_EXPORT extern const char kPolicyVerificationKeyHash[];
-
-// Describes the affiliation of a user w.r.t. the device owner.
-enum UserAffiliation {
-  // User is on the same domain the device was registered with.
-  USER_AFFILIATION_MANAGED,
-  // No affiliation between device and user.
-  USER_AFFILIATION_NONE,
-};
 
 // Status codes for communication errors with the device management service.
 // This enum is used to define the buckets for an enumerated UMA histogram.
@@ -134,12 +124,6 @@ enum DeviceMode {
                                           // consumer kiosk with ability to auto
                                           // launch a kiosk webapp.
 };
-
-// Returns the Chrome user policy type to use. This allows overridding the
-// default user policy type on Android and iOS for testing purposes.
-// TODO(joaodasilva): remove this once the server is ready.
-// http://crbug.com/248527
-POLICY_EXPORT const char* GetChromeUserPolicyType();
 
 // An enum that indicates if a device that has a local owner, is enterprise-
 // managed, or is consumer-managed. This is a copy of ManagementMode in

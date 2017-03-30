@@ -4,6 +4,10 @@
 
 #include "cc/raster/tile_task_worker_pool.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
 #include "cc/debug/lap_timer.h"
@@ -12,8 +16,8 @@
 #include "cc/raster/gpu_rasterizer.h"
 #include "cc/raster/gpu_tile_task_worker_pool.h"
 #include "cc/raster/one_copy_tile_task_worker_pool.h"
-#include "cc/raster/pixel_buffer_tile_task_worker_pool.h"
 #include "cc/raster/raster_buffer.h"
+#include "cc/raster/synchronous_task_graph_runner.h"
 #include "cc/raster/tile_task_runner.h"
 #include "cc/raster/zero_copy_tile_task_worker_pool.h"
 #include "cc/resources/resource_pool.h"
@@ -97,12 +101,8 @@ class PerfContextProvider : public ContextProvider {
   }
   void SetupLock() override {}
   base::Lock* GetLock() override { return &context_lock_; }
-  void VerifyContexts() override {}
   void DeleteCachedResources() override {}
-  bool DestroyedOnMainThread() override { return false; }
   void SetLostContextCallback(const LostContextCallback& cb) override {}
-  void SetMemoryPolicyChangedCallback(
-      const MemoryPolicyChangedCallback& cb) override {}
 
  private:
   ~PerfContextProvider() override {}
@@ -114,7 +114,6 @@ class PerfContextProvider : public ContextProvider {
 };
 
 enum TileTaskWorkerPoolType {
-  TILE_TASK_WORKER_POOL_TYPE_PIXEL_BUFFER,
   TILE_TASK_WORKER_POOL_TYPE_ZERO_COPY,
   TILE_TASK_WORKER_POOL_TYPE_ONE_COPY,
   TILE_TASK_WORKER_POOL_TYPE_GPU,
@@ -134,8 +133,7 @@ class PerfImageDecodeTaskImpl : public ImageDecodeTask {
 
   // Overridden from TileTask:
   void ScheduleOnOriginThread(TileTaskClient* client) override {}
-  void CompleteOnOriginThread(TileTaskClient* client) override {}
-  void RunReplyOnOriginThread() override { Reset(); }
+  void CompleteOnOriginThread(TileTaskClient* client) override { Reset(); }
 
   void Reset() {
     did_run_ = false;
@@ -153,7 +151,7 @@ class PerfRasterTaskImpl : public RasterTask {
  public:
   PerfRasterTaskImpl(scoped_ptr<ScopedResource> resource,
                      ImageDecodeTask::Vector* dependencies)
-      : RasterTask(resource.get(), dependencies), resource_(resource.Pass()) {}
+      : RasterTask(dependencies), resource_(std::move(resource)) {}
 
   // Overridden from Task:
   void RunOnWorkerThread() override {}
@@ -161,12 +159,12 @@ class PerfRasterTaskImpl : public RasterTask {
   // Overridden from TileTask:
   void ScheduleOnOriginThread(TileTaskClient* client) override {
     // No tile ids are given to support partial updates.
-    raster_buffer_ = client->AcquireBufferForRaster(resource(), 0, 0);
+    raster_buffer_ = client->AcquireBufferForRaster(resource_.get(), 0, 0);
   }
   void CompleteOnOriginThread(TileTaskClient* client) override {
-    client->ReleaseBufferForRaster(raster_buffer_.Pass());
+    client->ReleaseBufferForRaster(std::move(raster_buffer_));
+    Reset();
   }
-  void RunReplyOnOriginThread() override { Reset(); }
 
   void Reset() {
     did_run_ = false;
@@ -192,7 +190,7 @@ class TileTaskWorkerPoolPerfTestBase {
   TileTaskWorkerPoolPerfTestBase()
       : context_provider_(make_scoped_refptr(new PerfContextProvider)),
         task_runner_(new base::TestSimpleTaskRunner),
-        task_graph_runner_(new TaskGraphRunner),
+        task_graph_runner_(new SynchronousTaskGraphRunner),
         timer_(kWarmupRuns,
                base::TimeDelta::FromMilliseconds(kTimeLimitMillis),
                kTimeCheckInterval) {}
@@ -216,19 +214,27 @@ class TileTaskWorkerPoolPerfTestBase {
 
       ImageDecodeTask::Vector dependencies = image_decode_tasks;
       raster_tasks->push_back(
-          new PerfRasterTaskImpl(resource.Pass(), &dependencies));
+          new PerfRasterTaskImpl(std::move(resource), &dependencies));
     }
   }
 
-  void BuildTileTaskQueue(TileTaskQueue* queue,
+  void BuildTileTaskGraph(TaskGraph* graph,
                           const RasterTaskVector& raster_tasks) {
-    for (size_t i = 0u; i < raster_tasks.size(); ++i) {
-      bool required_for_activation = (i % 2) == 0;
-      TaskSetCollection task_set_collection;
-      task_set_collection[ALL] = true;
-      task_set_collection[REQUIRED_FOR_ACTIVATION] = required_for_activation;
-      queue->items.push_back(
-          TileTaskQueue::Item(raster_tasks[i].get(), task_set_collection));
+    uint16_t priority = 0;
+
+    for (auto& raster_task : raster_tasks) {
+      priority++;
+
+      for (auto& decode_task : raster_task->dependencies()) {
+        graph->nodes.push_back(
+            TaskGraph::Node(decode_task.get(), 0u /* group */, priority, 0u));
+        graph->edges.push_back(
+            TaskGraph::Edge(raster_task.get(), decode_task.get()));
+      }
+
+      graph->nodes.push_back(TaskGraph::Node(
+          raster_task.get(), 0u /* group */, priority,
+          static_cast<uint32_t>(raster_task->dependencies().size())));
     }
   }
 
@@ -238,40 +244,30 @@ class TileTaskWorkerPoolPerfTestBase {
   scoped_ptr<FakeOutputSurface> output_surface_;
   scoped_ptr<ResourceProvider> resource_provider_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
-  scoped_ptr<TaskGraphRunner> task_graph_runner_;
+  scoped_ptr<SynchronousTaskGraphRunner> task_graph_runner_;
   LapTimer timer_;
 };
 
 class TileTaskWorkerPoolPerfTest
     : public TileTaskWorkerPoolPerfTestBase,
-      public testing::TestWithParam<TileTaskWorkerPoolType>,
-      public TileTaskRunnerClient {
+      public testing::TestWithParam<TileTaskWorkerPoolType> {
  public:
   // Overridden from testing::Test:
   void SetUp() override {
     switch (GetParam()) {
-      case TILE_TASK_WORKER_POOL_TYPE_PIXEL_BUFFER:
-        Create3dOutputSurfaceAndResourceProvider();
-        tile_task_worker_pool_ = PixelBufferTileTaskWorkerPool::Create(
-            task_runner_.get(), task_graph_runner_.get(),
-            context_provider_.get(), resource_provider_.get(),
-            std::numeric_limits<size_t>::max());
-        break;
       case TILE_TASK_WORKER_POOL_TYPE_ZERO_COPY:
         Create3dOutputSurfaceAndResourceProvider();
         tile_task_worker_pool_ = ZeroCopyTileTaskWorkerPool::Create(
             task_runner_.get(), task_graph_runner_.get(),
-            resource_provider_.get());
+            resource_provider_.get(), false);
         break;
       case TILE_TASK_WORKER_POOL_TYPE_ONE_COPY:
         Create3dOutputSurfaceAndResourceProvider();
-        staging_resource_pool_ = ResourcePool::Create(resource_provider_.get(),
-                                                      GL_TEXTURE_2D);
         tile_task_worker_pool_ = OneCopyTileTaskWorkerPool::Create(
             task_runner_.get(), task_graph_runner_.get(),
             context_provider_.get(), resource_provider_.get(),
-            staging_resource_pool_.get(), std::numeric_limits<int>::max(),
-            false);
+            std::numeric_limits<int>::max(), false,
+            std::numeric_limits<int>::max(), false);
         break;
       case TILE_TASK_WORKER_POOL_TYPE_GPU:
         Create3dOutputSurfaceAndResourceProvider();
@@ -288,19 +284,10 @@ class TileTaskWorkerPoolPerfTest
     }
 
     DCHECK(tile_task_worker_pool_);
-    tile_task_worker_pool_->AsTileTaskRunner()->SetClient(this);
   }
   void TearDown() override {
     tile_task_worker_pool_->AsTileTaskRunner()->Shutdown();
     tile_task_worker_pool_->AsTileTaskRunner()->CheckForCompletedTasks();
-  }
-
-  // Overriden from TileTaskRunnerClient:
-  void DidFinishRunningTileTasks(TaskSet task_set) override {
-    tile_task_worker_pool_->AsTileTaskRunner()->CheckForCompletedTasks();
-  }
-  TaskSetCollection TasksThatShouldBeForcedToComplete() const override {
-    return TaskSetCollection();
   }
 
   void RunMessageLoopUntilAllTasksHaveCompleted() {
@@ -316,19 +303,19 @@ class TileTaskWorkerPoolPerfTest
     CreateImageDecodeTasks(num_image_decode_tasks, &image_decode_tasks);
     CreateRasterTasks(num_raster_tasks, image_decode_tasks, &raster_tasks);
 
-    // Avoid unnecessary heap allocations by reusing the same queue.
-    TileTaskQueue queue;
+    // Avoid unnecessary heap allocations by reusing the same graph.
+    TaskGraph graph;
 
     timer_.Reset();
     do {
-      queue.Reset();
-      BuildTileTaskQueue(&queue, raster_tasks);
-      tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&queue);
+      graph.Reset();
+      BuildTileTaskGraph(&graph, raster_tasks);
+      tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&graph);
       tile_task_worker_pool_->AsTileTaskRunner()->CheckForCompletedTasks();
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
-    TileTaskQueue empty;
+    TaskGraph empty;
     tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&empty);
     RunMessageLoopUntilAllTasksHaveCompleted();
 
@@ -348,21 +335,21 @@ class TileTaskWorkerPoolPerfTest
                         &raster_tasks[i]);
     }
 
-    // Avoid unnecessary heap allocations by reusing the same queue.
-    TileTaskQueue queue;
+    // Avoid unnecessary heap allocations by reusing the same graph.
+    TaskGraph graph;
 
     size_t count = 0;
     timer_.Reset();
     do {
-      queue.Reset();
-      BuildTileTaskQueue(&queue, raster_tasks[count % kNumVersions]);
-      tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&queue);
+      graph.Reset();
+      BuildTileTaskGraph(&graph, raster_tasks[count % kNumVersions]);
+      tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&graph);
       tile_task_worker_pool_->AsTileTaskRunner()->CheckForCompletedTasks();
       ++count;
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
-    TileTaskQueue empty;
+    TaskGraph empty;
     tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&empty);
     RunMessageLoopUntilAllTasksHaveCompleted();
 
@@ -378,19 +365,19 @@ class TileTaskWorkerPoolPerfTest
     CreateImageDecodeTasks(num_image_decode_tasks, &image_decode_tasks);
     CreateRasterTasks(num_raster_tasks, image_decode_tasks, &raster_tasks);
 
-    // Avoid unnecessary heap allocations by reusing the same queue.
-    TileTaskQueue queue;
+    // Avoid unnecessary heap allocations by reusing the same graph.
+    TaskGraph graph;
 
     timer_.Reset();
     do {
-      queue.Reset();
-      BuildTileTaskQueue(&queue, raster_tasks);
-      tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&queue);
+      graph.Reset();
+      BuildTileTaskGraph(&graph, raster_tasks);
+      tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&graph);
       RunMessageLoopUntilAllTasksHaveCompleted();
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
-    TileTaskQueue empty;
+    TaskGraph empty;
     tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&empty);
     RunMessageLoopUntilAllTasksHaveCompleted();
 
@@ -400,7 +387,7 @@ class TileTaskWorkerPoolPerfTest
 
  private:
   void Create3dOutputSurfaceAndResourceProvider() {
-    output_surface_ = FakeOutputSurface::Create3d(context_provider_).Pass();
+    output_surface_ = FakeOutputSurface::Create3d(context_provider_);
     CHECK(output_surface_->BindToClient(&output_surface_client_));
     resource_provider_ = FakeResourceProvider::Create(
         output_surface_.get(), nullptr, &gpu_memory_buffer_manager_);
@@ -416,8 +403,6 @@ class TileTaskWorkerPoolPerfTest
 
   std::string TestModifierString() const {
     switch (GetParam()) {
-      case TILE_TASK_WORKER_POOL_TYPE_PIXEL_BUFFER:
-        return std::string("_pixel_tile_task_worker_pool");
       case TILE_TASK_WORKER_POOL_TYPE_ZERO_COPY:
         return std::string("_zero_copy_tile_task_worker_pool");
       case TILE_TASK_WORKER_POOL_TYPE_ONE_COPY:
@@ -431,7 +416,6 @@ class TileTaskWorkerPoolPerfTest
     return std::string();
   }
 
-  scoped_ptr<ResourcePool> staging_resource_pool_;
   scoped_ptr<TileTaskWorkerPool> tile_task_worker_pool_;
   TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   TestSharedBitmapManager shared_bitmap_manager_;
@@ -464,27 +448,25 @@ TEST_P(TileTaskWorkerPoolPerfTest, ScheduleAndExecuteTasks) {
   RunScheduleAndExecuteTasksTest("32_4", 32, 4);
 }
 
-INSTANTIATE_TEST_CASE_P(
-    TileTaskWorkerPoolPerfTests,
-    TileTaskWorkerPoolPerfTest,
-    ::testing::Values(TILE_TASK_WORKER_POOL_TYPE_PIXEL_BUFFER,
-                      TILE_TASK_WORKER_POOL_TYPE_ZERO_COPY,
-                      TILE_TASK_WORKER_POOL_TYPE_ONE_COPY,
-                      TILE_TASK_WORKER_POOL_TYPE_GPU,
-                      TILE_TASK_WORKER_POOL_TYPE_BITMAP));
+INSTANTIATE_TEST_CASE_P(TileTaskWorkerPoolPerfTests,
+                        TileTaskWorkerPoolPerfTest,
+                        ::testing::Values(TILE_TASK_WORKER_POOL_TYPE_ZERO_COPY,
+                                          TILE_TASK_WORKER_POOL_TYPE_ONE_COPY,
+                                          TILE_TASK_WORKER_POOL_TYPE_GPU,
+                                          TILE_TASK_WORKER_POOL_TYPE_BITMAP));
 
 class TileTaskWorkerPoolCommonPerfTest : public TileTaskWorkerPoolPerfTestBase,
                                          public testing::Test {
  public:
   // Overridden from testing::Test:
   void SetUp() override {
-    output_surface_ = FakeOutputSurface::Create3d(context_provider_).Pass();
+    output_surface_ = FakeOutputSurface::Create3d(context_provider_);
     CHECK(output_surface_->BindToClient(&output_surface_client_));
     resource_provider_ =
         FakeResourceProvider::Create(output_surface_.get(), nullptr);
   }
 
-  void RunBuildTileTaskQueueTest(const std::string& test_name,
+  void RunBuildTileTaskGraphTest(const std::string& test_name,
                                  unsigned num_raster_tasks,
                                  unsigned num_image_decode_tasks) {
     ImageDecodeTask::Vector image_decode_tasks;
@@ -492,28 +474,28 @@ class TileTaskWorkerPoolCommonPerfTest : public TileTaskWorkerPoolPerfTestBase,
     CreateImageDecodeTasks(num_image_decode_tasks, &image_decode_tasks);
     CreateRasterTasks(num_raster_tasks, image_decode_tasks, &raster_tasks);
 
-    // Avoid unnecessary heap allocations by reusing the same queue.
-    TileTaskQueue queue;
+    // Avoid unnecessary heap allocations by reusing the same graph.
+    TaskGraph graph;
 
     timer_.Reset();
     do {
-      queue.Reset();
-      BuildTileTaskQueue(&queue, raster_tasks);
+      graph.Reset();
+      BuildTileTaskGraph(&graph, raster_tasks);
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
-    perf_test::PrintResult("build_raster_task_queue", "", test_name,
+    perf_test::PrintResult("build_raster_task_graph", "", test_name,
                            timer_.LapsPerSecond(), "runs/s", true);
   }
 };
 
-TEST_F(TileTaskWorkerPoolCommonPerfTest, BuildTileTaskQueue) {
-  RunBuildTileTaskQueueTest("1_0", 1, 0);
-  RunBuildTileTaskQueueTest("32_0", 32, 0);
-  RunBuildTileTaskQueueTest("1_1", 1, 1);
-  RunBuildTileTaskQueueTest("32_1", 32, 1);
-  RunBuildTileTaskQueueTest("1_4", 1, 4);
-  RunBuildTileTaskQueueTest("32_4", 32, 4);
+TEST_F(TileTaskWorkerPoolCommonPerfTest, BuildTileTaskGraph) {
+  RunBuildTileTaskGraphTest("1_0", 1, 0);
+  RunBuildTileTaskGraphTest("32_0", 32, 0);
+  RunBuildTileTaskGraphTest("1_1", 1, 1);
+  RunBuildTileTaskGraphTest("32_1", 32, 1);
+  RunBuildTileTaskGraphTest("1_4", 1, 4);
+  RunBuildTileTaskGraphTest("32_4", 32, 4);
 }
 
 }  // namespace

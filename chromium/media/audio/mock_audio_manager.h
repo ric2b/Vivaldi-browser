@@ -5,6 +5,7 @@
 #ifndef MEDIA_AUDIO_MOCK_AUDIO_MANAGER_H_
 #define MEDIA_AUDIO_MOCK_AUDIO_MANAGER_H_
 
+#include "base/macros.h"
 #include "media/audio/audio_manager.h"
 
 namespace media {
@@ -65,8 +66,6 @@ class MockAudioManager : public media::AudioManager {
 
   scoped_ptr<AudioLog> CreateAudioLog(
       AudioLogFactory::AudioComponent component) override;
-
-  void SetHasKeyboardMic() override;
 
  protected:
   ~MockAudioManager() override;

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/cdm/ppapi/external_clear_key/cdm_video_decoder.h"
 
@@ -51,7 +50,7 @@ scoped_ptr<CdmVideoDecoder> CreateVideoDecoder(
 
 #endif  // CLEAR_KEY_CDM_USE_FAKE_VIDEO_DECODER
 
-  return video_decoder.Pass();
+  return video_decoder;
 }
 
 }  // namespace media

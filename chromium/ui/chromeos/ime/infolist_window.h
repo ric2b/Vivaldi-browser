@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/timer/timer.h"
@@ -56,7 +57,7 @@ class UI_CHROMEOS_EXPORT InfolistWindow : public views::BubbleDelegateView {
   // Information description font.
   gfx::FontList description_font_list_;
 
-  base::OneShotTimer<views::Widget> show_hide_timer_;
+  base::OneShotTimer show_hide_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(InfolistWindow);
 };

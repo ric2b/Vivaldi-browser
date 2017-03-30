@@ -5,6 +5,7 @@
 #include "ash/wm/workspace/workspace_layout_manager.h"
 
 #include <string>
+#include <utility>
 
 #include "ash/display/display_layout.h"
 #include "ash/display/display_manager.h"
@@ -21,7 +22,6 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
@@ -813,7 +813,7 @@ namespace {
 
 class WorkspaceLayoutManagerBackdropTest : public test::AshTestBase {
  public:
-  WorkspaceLayoutManagerBackdropTest() {}
+  WorkspaceLayoutManagerBackdropTest() : default_container_(nullptr) {}
   ~WorkspaceLayoutManagerBackdropTest() override {}
 
   void SetUp() override {
@@ -835,7 +835,7 @@ class WorkspaceLayoutManagerBackdropTest : public test::AshTestBase {
       backdrop.reset(new ash::WorkspaceBackdropDelegate(default_container_));
     }
     (static_cast<WorkspaceLayoutManager*>(default_container_->layout_manager()))
-        ->SetMaximizeBackdropDelegate(backdrop.Pass());
+        ->SetMaximizeBackdropDelegate(std::move(backdrop));
     // Closing and / or opening can be a delayed operation.
     base::MessageLoop::current()->RunUntilIdle();
   }
@@ -1001,7 +1001,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, ShelfVisibilityChangesBounds) {
 
 class WorkspaceLayoutManagerKeyboardTest : public test::AshTestBase {
  public:
-  WorkspaceLayoutManagerKeyboardTest() {}
+  WorkspaceLayoutManagerKeyboardTest() : layout_manager_(nullptr) {}
   ~WorkspaceLayoutManagerKeyboardTest() override {}
 
   void SetUp() override {

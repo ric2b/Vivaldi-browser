@@ -5,8 +5,10 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/test/launcher/unit_test_launcher.h"
+#include "base/test/test_discardable_memory_allocator.h"
 #include "base/test/test_suite.h"
 #include "build/build_config.h"
+#include "media/base/fake_media_resources.h"
 #include "media/base/media.h"
 #include "media/base/media_switches.h"
 
@@ -23,6 +25,9 @@ class TestSuiteNoAtExit : public base::TestSuite {
 
  protected:
   void Initialize() override;
+
+ private:
+  base::TestDiscardableMemoryAllocator discardable_memory_allocator_;
 };
 
 void TestSuiteNoAtExit::Initialize() {
@@ -43,6 +48,9 @@ void TestSuiteNoAtExit::Initialize() {
   // Run this here instead of main() to ensure an AtExitManager is already
   // present.
   media::InitializeMediaLibrary();
+  media::SetUpFakeMediaResources();
+
+  base::DiscardableMemoryAllocator::SetInstance(&discardable_memory_allocator_);
 }
 
 int main(int argc, char** argv) {

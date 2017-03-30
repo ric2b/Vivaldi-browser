@@ -4,7 +4,14 @@
 
 #include "mojo/services/network/url_loader_impl.h"
 
-#include "base/memory/scoped_vector.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+#include <vector>
+
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "mojo/common/common_type_converters.h"
 #include "mojo/common/url_type_converters.h"
@@ -76,7 +83,7 @@ URLResponsePtr MakeURLResponse(const net::URLRequest* url_request) {
       HttpHeaderPtr header = HttpHeader::New();
       header->name = name;
       header->value = value;
-      response->headers.push_back(header.Pass());
+      response->headers.push_back(std::move(header));
     }
   }
 
@@ -88,14 +95,14 @@ URLResponsePtr MakeURLResponse(const net::URLRequest* url_request) {
   url_request->GetCharset(&charset);
   response->charset = charset;
 
-  return response.Pass();
+  return response;
 }
 
 // Reads the request body upload data from a DataPipe.
 class UploadDataPipeElementReader : public net::UploadElementReader {
  public:
   UploadDataPipeElementReader(ScopedDataPipeConsumerHandle pipe)
-      : pipe_(pipe.Pass()), num_bytes_(0) {}
+      : pipe_(std::move(pipe)), num_bytes_(0) {}
   ~UploadDataPipeElementReader() override {}
 
   // UploadElementReader overrides:
@@ -104,8 +111,8 @@ class UploadDataPipeElementReader : public net::UploadElementReader {
     ReadDataRaw(pipe_.get(), nullptr, &num_bytes_, MOJO_READ_DATA_FLAG_QUERY);
     return net::OK;
   }
-  uint64 GetContentLength() const override { return num_bytes_; }
-  uint64 BytesRemaining() const override { return num_bytes_ - offset_; }
+  uint64_t GetContentLength() const override { return num_bytes_; }
+  uint64_t BytesRemaining() const override { return num_bytes_ - offset_; }
   bool IsInMemory() const override { return false; }
   int Read(net::IOBuffer* buf,
            int buf_length,
@@ -137,12 +144,13 @@ URLLoaderImpl::URLLoaderImpl(NetworkContext* context,
                              scoped_ptr<mojo::AppRefCount> app_refcount)
     : context_(context),
       response_body_buffer_size_(0),
+      response_body_bytes_read_(0),
       auto_follow_redirects_(true),
       connected_(true),
-      binding_(this, request.Pass()),
-      app_refcount_(app_refcount.Pass()),
+      binding_(this, std::move(request)),
+      app_refcount_(std::move(app_refcount)),
       weak_ptr_factory_(this) {
-  binding_.set_error_handler(this);
+  binding_.set_connection_error_handler([this]() { OnConnectionError(); });
   context_->RegisterURLLoader(this);
 }
 
@@ -190,13 +198,13 @@ void URLLoaderImpl::Start(URLRequestPtr request,
     url_request_->SetExtraRequestHeaders(headers);
   }
   if (request->body) {
-    ScopedVector<net::UploadElementReader> element_readers;
+    std::vector<scoped_ptr<net::UploadElementReader>> element_readers;
     for (size_t i = 0; i < request->body.size(); ++i) {
-      element_readers.push_back(
-          new UploadDataPipeElementReader(request->body[i].Pass()));
+      element_readers.push_back(make_scoped_ptr(
+          new UploadDataPipeElementReader(std::move(request->body[i]))));
     }
     url_request_->set_upload(make_scoped_ptr<net::UploadDataStream>(
-        new net::ElementsUploadDataStream(element_readers.Pass(), 0)));
+        new net::ElementsUploadDataStream(std::move(element_readers), 0)));
   }
   if (request->bypass_cache)
     url_request_->SetLoadFlags(net::LOAD_BYPASS_CACHE);
@@ -229,15 +237,20 @@ void URLLoaderImpl::FollowRedirect(
 void URLLoaderImpl::QueryStatus(
     const Callback<void(URLLoaderStatusPtr)>& callback) {
   URLLoaderStatusPtr status(URLLoaderStatus::New());
+  status->bytes_read = response_body_bytes_read_;
   if (url_request_) {
     status->is_loading = url_request_->is_pending();
     if (!url_request_->status().is_success())
       status->error = MakeNetworkError(url_request_->status().error());
+    if (url_request_->response_info().headers) {
+      status->content_length =
+          url_request_->response_info().headers->GetContentLength();
+    }
   } else {
     status->is_loading = false;
   }
   // TODO(darin): Populate more status fields.
-  callback.Run(status.Pass());
+  callback.Run(std::move(status));
 }
 
 void URLLoaderImpl::OnConnectionError() {
@@ -263,7 +276,7 @@ void URLLoaderImpl::OnReceivedRedirect(net::URLRequest* url_request,
   response->redirect_url = String::From(redirect_info.new_url);
   response->redirect_referrer = redirect_info.new_referrer;
 
-  SendResponse(response.Pass());
+  SendResponse(std::move(response));
 
   DeleteIfNeeded();
 }
@@ -284,11 +297,11 @@ void URLLoaderImpl::OnResponseStarted(net::URLRequest* url_request) {
   // TODO(darin): Honor given buffer size.
 
   URLResponsePtr response = MakeURLResponse(url_request);
-  response->body = data_pipe.consumer_handle.Pass();
-  response_body_stream_ = data_pipe.producer_handle.Pass();
+  response->body = std::move(data_pipe.consumer_handle);
+  response_body_stream_ = std::move(data_pipe.producer_handle);
   ListenForPeerClosed();
 
-  SendResponse(response.Pass());
+  SendResponse(std::move(response));
 
   // Start reading...
   ReadMore();
@@ -315,13 +328,13 @@ void URLLoaderImpl::SendError(
   if (url_request_)
     response->url = String::From(url_request_->url());
   response->error = MakeNetworkError(error_code);
-  callback.Run(response.Pass());
+  callback.Run(std::move(response));
 }
 
 void URLLoaderImpl::SendResponse(URLResponsePtr response) {
   Callback<void(URLResponsePtr)> callback;
   std::swap(callback_, callback);
-  callback.Run(response.Pass());
+  callback.Run(std::move(response));
 }
 
 void URLLoaderImpl::OnResponseBodyStreamReady(MojoResult result) {
@@ -383,6 +396,7 @@ void URLLoaderImpl::ReadMore() {
 void URLLoaderImpl::DidRead(uint32_t num_bytes, bool completed_synchronously) {
   DCHECK(url_request_->status().is_success());
 
+  response_body_bytes_read_ += num_bytes;
   response_body_stream_ = pending_write_->Complete(num_bytes);
   pending_write_ = nullptr;
 

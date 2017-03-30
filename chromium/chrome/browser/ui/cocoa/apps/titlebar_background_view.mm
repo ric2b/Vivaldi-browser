@@ -4,6 +4,7 @@
 
 #import "chrome/browser/ui/cocoa/apps/titlebar_background_view.h"
 
+#include "base/logging.h"
 #import "skia/ext/skia_utils_mac.h"
 
 @interface TitlebarBackgroundView ()
@@ -12,9 +13,10 @@
 
 @implementation TitlebarBackgroundView
 
-+ (void)addToNSWindow:(NSWindow*)window
-          activeColor:(SkColor)activeColor
-        inactiveColor:(SkColor)inactiveColor {
++ (TitlebarBackgroundView*)addToNSWindow:(NSWindow*)window
+                             activeColor:(SkColor)activeColor
+                           inactiveColor:(SkColor)inactiveColor {
+  DCHECK(window);
   // AppKit only officially supports adding subviews to the window's
   // contentView and not its superview (an NSNextStepFrame). The 10.10 SDK
   // allows adding an NSTitlebarAccessoryViewController to a window, but the
@@ -33,8 +35,9 @@
                positioned:NSWindowBelow
                relativeTo:nil];
 
-  [titlebar_background_view setColor:gfx::SkColorToSRGBNSColor(activeColor)
-                       inactiveColor:gfx::SkColorToSRGBNSColor(inactiveColor)];
+  [titlebar_background_view setColor:skia::SkColorToSRGBNSColor(activeColor)
+                       inactiveColor:skia::SkColorToSRGBNSColor(inactiveColor)];
+  return titlebar_background_view.autorelease();
 }
 
 - (void)drawRect:(NSRect)rect {

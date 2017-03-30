@@ -1,0 +1,9 @@
+include_rules = [
+  "+base",
+  "+cc",
+  "-cc/blink",
+  "-content",
+  "+third_party/skia",
+  "+ui/gfx",
+  "+ui/gl",
+]

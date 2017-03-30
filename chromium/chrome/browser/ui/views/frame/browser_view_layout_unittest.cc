@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/browser_view_layout.h"
 
+#include "base/macros.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_view_layout_delegate.h"
 #include "chrome/browser/ui/views/frame/contents_layout_manager.h"
@@ -45,7 +46,7 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   gfx::Rect GetBoundsForTabStripInBrowserView() const override {
     return gfx::Rect();
   }
-  int GetTopInsetInBrowserView() const override { return 0; }
+  int GetTopInsetInBrowserView(bool restored) const override { return 0; }
   int GetThemeBackgroundXInset() const override { return 0; }
   bool IsToolbarVisible() const override { return toolbar_visible_; }
   bool IsBookmarkBarVisible() const override { return bookmark_bar_visible_; }

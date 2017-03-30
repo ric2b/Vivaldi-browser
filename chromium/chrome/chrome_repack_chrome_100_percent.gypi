@@ -10,6 +10,7 @@
       '<(SHARED_INTERMEDIATE_DIR)/ui/resources/ui_resources_100_percent.pak',
       '<(grit_out_dir)/renderer_resources_100_percent.pak',
       '<(grit_out_dir)/theme_resources_100_percent.pak',
+      '<@(repack_extras_100_percent)',
     ],
     'pak_output': '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_100_percent.pak',
     'conditions': [
@@ -37,6 +38,11 @@
       ['enable_extensions==1', {
         'pak_inputs': [
           '<(SHARED_INTERMEDIATE_DIR)/extensions/extensions_browser_resources_100_percent.pak',
+        ],
+      }],
+      ['enable_app_list==1', {
+        'pak_inputs': [
+          '<(SHARED_INTERMEDIATE_DIR)/ui/app_list/resources/app_list_resources_100_percent.pak',
         ],
       }],
     ],

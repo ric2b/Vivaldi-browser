@@ -4,6 +4,10 @@
 
 #include "chrome/browser/ui/search/search_tab_helper.h"
 
+#include <stdint.h>
+
+#include <string>
+
 #include "base/command_line.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
@@ -14,13 +18,13 @@
 #include "chrome/browser/search/instant_unittest_base.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/signin/fake_signin_manager.h"
+#include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service_mock.h"
+#include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/ui/search/search_ipc_router.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/webui/ntp/ntp_user_data_logger.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/ntp_logging_events.h"
 #include "chrome/common/render_messages.h"
@@ -29,7 +33,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chrome/test/base/ui_test_utils.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/navigation_controller.h"
@@ -55,7 +59,6 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
   virtual ~MockSearchIPCRouterDelegate() {}
 
   MOCK_METHOD1(OnInstantSupportDetermined, void(bool supports_instant));
-  MOCK_METHOD1(OnSetVoiceSearchSupport, void(bool supports_voice_search));
   MOCK_METHOD1(FocusOmnibox, void(OmniboxFocusState state));
   MOCK_METHOD3(NavigateToURL, void(const GURL&, WindowOpenDisposition, bool));
   MOCK_METHOD1(OnDeleteMostVisitedItem, void(const GURL& url));
@@ -84,10 +87,9 @@ class SearchTabHelperTest : public ChromeRenderViewHostTestHarness {
   content::BrowserContext* CreateBrowserContext() override {
     TestingProfile::Builder builder;
     builder.AddTestingFactory(SigninManagerFactory::GetInstance(),
-                              FakeSigninManagerBase::Build);
-    builder.AddTestingFactory(
-        ProfileSyncServiceFactory::GetInstance(),
-        ProfileSyncServiceMock::BuildMockProfileSyncService);
+                              BuildFakeSigninManagerBase);
+    builder.AddTestingFactory(ProfileSyncServiceFactory::GetInstance(),
+                              BuildMockProfileSyncService);
     return builder.Build().release();
   }
 
@@ -116,7 +118,7 @@ class SearchTabHelperTest : public ChromeRenderViewHostTestHarness {
         .WillRepeatedly(Return(result));
   }
 
-  bool MessageWasSent(uint32 id) {
+  bool MessageWasSent(uint32_t id) {
     return process()->sink().GetFirstMessageMatching(id) != NULL;
   }
 
@@ -317,6 +319,46 @@ TEST_F(SearchTabHelperTest, OnHistorySyncCheckNotSyncing) {
   ASSERT_FALSE(base::get<0>(params));
 }
 
+TEST_F(SearchTabHelperTest, OnMostVisitedItemsChangedFromServer) {
+  InstantMostVisitedItem item;
+  item.is_server_side_suggestion = true;
+  std::vector<InstantMostVisitedItem> items;
+  items.push_back(item);
+
+  SearchTabHelper* search_tab_helper =
+      SearchTabHelper::FromWebContents(web_contents());
+  ASSERT_NE(static_cast<SearchTabHelper*>(NULL), search_tab_helper);
+
+  auto logger = NTPUserDataLogger::GetOrCreateFromWebContents(web_contents());
+  ASSERT_FALSE(logger->has_server_side_suggestions_);
+  ASSERT_FALSE(logger->has_client_side_suggestions_);
+
+  search_tab_helper->MostVisitedItemsChanged(items);
+
+  ASSERT_TRUE(logger->has_server_side_suggestions_);
+  ASSERT_FALSE(logger->has_client_side_suggestions_);
+}
+
+TEST_F(SearchTabHelperTest, OnMostVisitedItemsChangedFromClient) {
+  InstantMostVisitedItem item;
+  item.is_server_side_suggestion = false;
+  std::vector<InstantMostVisitedItem> items;
+  items.push_back(item);
+
+  SearchTabHelper* search_tab_helper =
+      SearchTabHelper::FromWebContents(web_contents());
+  ASSERT_NE(static_cast<SearchTabHelper*>(NULL), search_tab_helper);
+
+  auto logger = NTPUserDataLogger::GetOrCreateFromWebContents(web_contents());
+  ASSERT_FALSE(logger->has_server_side_suggestions_);
+  ASSERT_FALSE(logger->has_client_side_suggestions_);
+
+  search_tab_helper->MostVisitedItemsChanged(items);
+
+  ASSERT_FALSE(logger->has_server_side_suggestions_);
+  ASSERT_TRUE(logger->has_client_side_suggestions_);
+}
+
 class TabTitleObserver : public content::WebContentsObserver {
  public:
   explicit TabTitleObserver(content::WebContents* contents)
@@ -353,31 +395,6 @@ TEST_F(SearchTabHelperTest, TitleIsSetForNTP) {
   EXPECT_EQ(title, web_contents()->GetTitle());
 }
 
-class SearchTabHelperWindowTest : public BrowserWithTestWindowTest {
- protected:
-  void SetUp() override {
-    BrowserWithTestWindowTest::SetUp();
-    TemplateURLServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-        profile(), &TemplateURLServiceFactory::BuildInstanceFor);
-    TemplateURLService* template_url_service =
-        TemplateURLServiceFactory::GetForProfile(profile());
-    ui_test_utils::WaitForTemplateURLServiceToLoad(template_url_service);
-
-    TemplateURLData data;
-    data.SetURL("http://foo.com/url?bar={searchTerms}");
-    data.instant_url = "http://foo.com/instant?"
-        "{google:omniboxStartMarginParameter}{google:forceInstantResults}"
-        "foo=foo#foo=foo&strk";
-    data.new_tab_url = std::string("https://foo.com/newtab?strk");
-    data.alternate_urls.push_back("http://foo.com/alt#quux={searchTerms}");
-    data.search_terms_replacement_key = "strk";
-
-    TemplateURL* template_url = new TemplateURL(data);
-    template_url_service->Add(template_url);
-    template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
-  }
-};
-
 class SearchTabHelperPrerenderTest : public InstantUnitTestBase {
  public:
   ~SearchTabHelperPrerenderTest() override {}
@@ -401,7 +418,7 @@ class SearchTabHelperPrerenderTest : public InstantUnitTestBase {
   }
 
   bool IsInstantURLMarkedForPrerendering() {
-    GURL instant_url(chrome::GetSearchResultPrefetchBaseURL(profile()));
+    GURL instant_url(search::GetSearchResultPrefetchBaseURL(profile()));
     prerender::PrerenderManager* prerender_manager =
         prerender::PrerenderManagerFactory::GetForProfile(profile());
     return prerender_manager->HasPrerenderedUrl(instant_url, web_contents());

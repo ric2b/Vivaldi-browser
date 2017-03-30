@@ -7,12 +7,14 @@ package org.chromium.chrome.browser.omnibox;
 import static org.chromium.chrome.test.util.OmniboxTestUtils.buildSuggestionMap;
 
 import android.os.SystemClock;
+import android.support.v4.view.ViewCompat;
 import android.test.FlakyTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.text.Selection;
 import android.util.Pair;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -25,7 +27,7 @@ import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.omnibox.AutocompleteController.OnSuggestionsReceivedListener;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestion.Type;
+import org.chromium.chrome.browser.omnibox.LocationBarLayout.OmniboxSuggestionsList;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
@@ -42,6 +44,7 @@ import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -99,24 +102,22 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
         final UrlBar urlBar = (UrlBar) getActivity().findViewById(R.id.url_bar);
 
         OmniboxTestUtils.toggleUrlBarFocus(urlBar, true);
-        assertTrue("Soft input mode failed to switch on focus",
-                CriteriaHelper.pollForCriteria(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return getActivity().getWindow().getAttributes().softInputMode
-                                == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN;
-                    }
-                }));
+        CriteriaHelper.pollForCriteria(new Criteria("Soft input mode failed to switch on focus") {
+            @Override
+            public boolean isSatisfied() {
+                return getActivity().getWindow().getAttributes().softInputMode
+                        == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN;
+            }
+        });
 
         OmniboxTestUtils.toggleUrlBarFocus(urlBar, false);
-        assertTrue("Soft input mode failed to switch on unfocus",
-                CriteriaHelper.pollForCriteria(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return getActivity().getWindow().getAttributes().softInputMode
-                                == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
-                    }
-                }));
+        CriteriaHelper.pollForCriteria(new Criteria("Soft input mode failed to switch on unfocus") {
+            @Override
+            public boolean isSatisfied() {
+                return getActivity().getWindow().getAttributes().softInputMode
+                        == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+            }
+        });
     }
 
     /**
@@ -143,13 +144,13 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
         OmniboxTestUtils.toggleUrlBarFocus(urlBar, true);
 
-        assertTrue("Should have requested zero suggest on focusing",
-                CriteriaHelper.pollForCriteria(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return controller.numZeroSuggestRequests() == 1;
-                    }
-                }));
+        CriteriaHelper.pollForCriteria(new Criteria(
+                "Should have requested zero suggest on focusing") {
+            @Override
+            public boolean isSatisfied() {
+                return controller.numZeroSuggestRequests() == 1;
+            }
+        });
     }
 
     /**
@@ -185,28 +186,27 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
             }
         });
 
-        assertTrue("Should have drawn the delete button",
-                CriteriaHelper.pollForCriteria(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return deleteButton.getWidth() > 0;
-                    }
-                }));
+        CriteriaHelper.pollForCriteria(new Criteria("Should have drawn the delete button") {
+            @Override
+            public boolean isSatisfied() {
+                return deleteButton.getWidth() > 0;
+            }
+        });
 
         // The click view below ends up clicking on the menu button underneath the delete button
         // for some time after the delete button appears. Wait for UI to settle down before
         // clicking.
         UiUtils.settleDownUI(getInstrumentation());
 
-        singleClickView(deleteButton, deleteButton.getWidth() / 2, deleteButton.getHeight() / 2);
+        singleClickView(deleteButton);
 
-        assertTrue("Should have requested zero suggest results on url bar empty",
-                CriteriaHelper.pollForCriteria(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return controller.numZeroSuggestRequests() == 1;
-                    }
-                }));
+        CriteriaHelper.pollForCriteria(new Criteria(
+                "Should have requested zero suggest results on url bar empty") {
+            @Override
+            public boolean isSatisfied() {
+                return controller.numZeroSuggestRequests() == 1;
+            }
+        });
     }
 
     @MediumTest
@@ -241,13 +241,13 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
         assertEquals("No calls to zero suggest yet", 0, controller.numZeroSuggestRequests());
         KeyUtils.singleKeyEventView(getInstrumentation(), urlBar, KeyEvent.KEYCODE_DEL);
-        assertTrue("Should have requested zero suggest results on url bar empty",
-                CriteriaHelper.pollForCriteria(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return controller.numZeroSuggestRequests() == 1;
-                    }
-                }));
+        CriteriaHelper.pollForCriteria(new Criteria(
+                "Should have requested zero suggest results on url bar empty") {
+            @Override
+            public boolean isSatisfied() {
+                return controller.numZeroSuggestRequests() == 1;
+            }
+        });
     }
 
     // Sanity check that no text is displayed in the omnibox when on the NTP page and that the hint
@@ -312,62 +312,34 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
                 new TestSuggestionResultsBuilder()
                         .setTextShownFor("wiki")
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_SUGGEST, "wikipedia", null)
-                                .addGeneratedSuggestion(Type.SEARCH_SUGGEST, "wiki", null)
-                                .addGeneratedSuggestion(Type.SEARCH_SUGGEST, "wikileaks", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_SUGGEST,
+                                        "wikipedia", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_SUGGEST,
+                                        "wiki", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_SUGGEST,
+                                        "wikileaks", null)
                                 .setAutocompleteText("pedia")),
                 new TestSuggestionResultsBuilder()
                         .setTextShownFor("onomatop")
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_SUGGEST, "onomatopoeia", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_SUGGEST,
+                                        "onomatopoeia", null)
                                 .addGeneratedSuggestion(
-                                        Type.SEARCH_SUGGEST, "onomatopoeia foo", null)
+                                        OmniboxSuggestionType.SEARCH_SUGGEST,
+                                        "onomatopoeia foo", null)
                                 .setAutocompleteText("oeia")),
                 new TestSuggestionResultsBuilder()
                         .setTextShownFor("mispellled")
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_SUGGEST, "misspelled", null)
-                                .addGeneratedSuggestion(
-                                        Type.SEARCH_SUGGEST, "misspelled words", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_SUGGEST,
+                                        "misspelled", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_SUGGEST,
+                                        "misspelled words", null)
                                 .setAutocompleteText(""))
         );
         checkAutocompleteText(suggestionsMap, "wiki", "wikipedia", 4, 9);
         checkAutocompleteText(suggestionsMap, "onomatop", "onomatopoeia", 8, 12);
         checkAutocompleteText(suggestionsMap, "mispellled", "mispellled", 10, 10);
-    }
-
-    /**
-     * crbug.com/267901
-     * @MediumTest
-     * @Feature({"Omnibox"})
-     */
-    @FlakyTest
-    public void testPerformSearchQuery() throws InterruptedException {
-        UiUtils.settleDownUI(getInstrumentation());
-        final String testQuery = "Test Query";
-
-        ChromeTabUtils.waitForTabPageLoaded(getActivity().getActivityTab(), new Runnable() {
-            @Override
-            public void run() {
-                ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-                    @Override
-                    public void run() {
-                        final LocationBarLayout locationBar =
-                                (LocationBarLayout) getActivity().findViewById(R.id.location_bar);
-                        locationBar.performSearchQueryForTest(testQuery);
-                    }
-                });
-            }
-        });
-
-        getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                final UrlBar urlBar = (UrlBar) getActivity().findViewById(R.id.url_bar);
-                String currentUrl = urlBar.getText().toString();
-                assertEquals(testQuery, currentUrl);
-            }
-        });
     }
 
     @MediumTest
@@ -378,16 +350,22 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
                 new TestSuggestionResultsBuilder()
                         .setTextShownFor("test")
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testing", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testing", null)
                                 .setAutocompleteText("ing"))
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testz", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testz", null)
                                 .setAutocompleteText("ing"))
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testblarg", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testblarg", null)
                                 .setAutocompleteText("ing")));
         checkAutocompleteText(suggestionsMap, "test", "testing", 4, 7);
     }
@@ -400,16 +378,22 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
                 new TestSuggestionResultsBuilder()
                         .setTextShownFor("test")
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testing", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testing", null)
                                 .setAutocompleteText("i"))
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testz", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testz", null)
                                 .setAutocompleteText("in"))
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testblarg", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testblarg", null)
                                 .setAutocompleteText("ing for the win")));
         checkAutocompleteText(suggestionsMap, "test", "testing for the win", 4, 19);
     }
@@ -422,16 +406,22 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
                 new TestSuggestionResultsBuilder()
                         .setTextShownFor("test")
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testing", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testing", null)
                                 .setAutocompleteText("ing is awesome"))
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testz", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testz", null)
                                 .setAutocompleteText("ing is hard"))
                         .addSuggestions(new SuggestionsResultBuilder()
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "test", null)
-                                .addGeneratedSuggestion(Type.SEARCH_HISTORY, "testblarg", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "test", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "testblarg", null)
                                 .setAutocompleteText("ingz")));
         checkAutocompleteText(suggestionsMap, "test", "testingz", 4, 8);
     }
@@ -634,6 +624,103 @@ public class OmniboxTest extends ChromeActivityTestCaseBase<ChromeActivity> {
             String expectedPrePath, String expectedPostPath, Pair<String, String> actualValues) {
         assertEquals(expectedPrePath, actualValues.first);
         assertEquals(expectedPostPath, actualValues.second);
+    }
+
+    @MediumTest
+    @Feature({"Omnibox"})
+    public void testSuggestionDirectionSwitching() throws InterruptedException {
+        final TextView urlBarView = (TextView) getActivity().findViewById(R.id.url_bar);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                urlBarView.requestFocus();
+                urlBarView.setText("");
+            }
+        });
+
+        final LocationBarLayout locationBar =
+                ((LocationBarLayout) getActivity().findViewById(R.id.location_bar));
+
+        Map<String, List<SuggestionsResult>> suggestionsMap = buildSuggestionMap(
+                new TestSuggestionResultsBuilder()
+                        .setTextShownFor("ل")
+                        .addSuggestions(new SuggestionsResultBuilder()
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "للك", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "www.test.com", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "للكتا", null)),
+                new TestSuggestionResultsBuilder()
+                        .setTextShownFor("للك")
+                        .addSuggestions(new SuggestionsResultBuilder()
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "للكتاب", null)),
+                new TestSuggestionResultsBuilder()
+                        .setTextShownFor("f")
+                        .addSuggestions(new SuggestionsResultBuilder()
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "f", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "fa", null)
+                                .addGeneratedSuggestion(OmniboxSuggestionType.SEARCH_HISTORY,
+                                        "fac", null)));
+        final TestAutocompleteController controller = new TestAutocompleteController(
+                locationBar, locationBar, suggestionsMap);
+
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                locationBar.setAutocompleteController(controller);
+            }
+        });
+
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                urlBarView.setText("ل");
+            }
+        });
+        verifyOmniboxSuggestionAlignment(locationBar, 3, View.LAYOUT_DIRECTION_RTL);
+
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                urlBarView.setText("للك");
+            }
+        });
+        verifyOmniboxSuggestionAlignment(locationBar, 1, View.LAYOUT_DIRECTION_RTL);
+
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                urlBarView.setText("f");
+            }
+        });
+        verifyOmniboxSuggestionAlignment(locationBar, 3, View.LAYOUT_DIRECTION_LTR);
+    }
+
+    private void verifyOmniboxSuggestionAlignment(
+            final LocationBarLayout locationBar, final int expectedSuggestionCount,
+            final int expectedLayoutDirection) throws InterruptedException {
+        OmniboxTestUtils.waitForOmniboxSuggestions(locationBar, expectedSuggestionCount);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                OmniboxSuggestionsList suggestionsList = locationBar.getSuggestionList();
+                assertEquals(expectedSuggestionCount, suggestionsList.getChildCount());
+                for (int i = 0; i < suggestionsList.getChildCount(); i++) {
+                    SuggestionView suggestionView = (SuggestionView) suggestionsList.getChildAt(i);
+                    assertEquals(
+                            String.format(
+                                    Locale.getDefault(),
+                                    "Incorrect layout direction of suggestion at index %d",
+                                    i),
+                            expectedLayoutDirection,
+                            ViewCompat.getLayoutDirection(suggestionView));
+                }
+            }
+        });
     }
 
     @Override

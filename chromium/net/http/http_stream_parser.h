@@ -5,9 +5,12 @@
 #ifndef NET_HTTP_HTTP_STREAM_PARSER_H_
 #define NET_HTTP_HTTP_STREAM_PARSER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -73,9 +76,20 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
 
   void SetConnectionReused();
 
-  bool IsConnectionReusable() const;
+  // Returns true if the underlying connection can be reused.
+  // The connection can be reused if:
+  // * It's still connected.
+  // * The response headers indicate the connection can be kept alive.
+  // * The end of the response can be found, though it may not have yet been
+  //     received.
+  //
+  // Note that if response headers have yet to be received, this will return
+  // false.
+  bool CanReuseConnection() const;
 
-  int64 received_bytes() const { return received_bytes_; }
+  int64_t received_bytes() const { return received_bytes_; }
+
+  int64_t sent_bytes() const { return sent_bytes_; }
 
   void GetSSLInfo(SSLInfo* ssl_info);
 
@@ -169,6 +183,9 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
   // Examine the parsed headers to try to determine the response body size.
   void CalculateResponseBodySize();
 
+  // Uploads statistics about status line compliance with RFC 7230.
+  void ValidateStatusLine(const std::string& status_line);
+
   // Next state of the request, when the current one completes.
   State io_state_;
 
@@ -196,7 +213,10 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
 
   // The amount of received data.  If connection is reused then intermediate
   // value may be bigger than final.
-  int64 received_bytes_;
+  int64_t received_bytes_;
+
+  // The amount of sent data.
+  int64_t sent_bytes_;
 
   // The parsed response headers.  Owned by the caller of SendRequest.  This
   // cannot be safely accessed after reading the final set of headers, as the
@@ -207,10 +227,10 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
   // Indicates the content length.  If this value is less than zero
   // (and chunked_decoder_ is null), then we must read until the server
   // closes the connection.
-  int64 response_body_length_;
+  int64_t response_body_length_;
 
   // Keep track of the number of response body bytes read so far.
-  int64 response_body_read_;
+  int64_t response_body_read_;
 
   // Helper if the data is chunked.
   scoped_ptr<HttpChunkedDecoder> chunked_decoder_;

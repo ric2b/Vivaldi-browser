@@ -154,11 +154,12 @@ class HTTPSServer(tlslite.api.TLSSocketServerMixIn,
 
   def __init__(self, server_address, request_hander_class, pem_cert_and_key,
                ssl_client_auth, ssl_client_cas, ssl_client_cert_types,
-               ssl_bulk_ciphers, ssl_key_exchanges, enable_npn,
+               ssl_bulk_ciphers, ssl_key_exchanges, npn_protocols,
                record_resume_info, tls_intolerant,
                tls_intolerance_type, signed_cert_timestamps,
                fallback_scsv_enabled, ocsp_response,
-               alert_after_handshake):
+               alert_after_handshake, disable_channel_id, disable_ems,
+               token_binding_params):
     self.cert_chain = tlslite.api.X509CertChain()
     self.cert_chain.parsePemList(pem_cert_and_key)
     # Force using only python implementation - otherwise behavior is different
@@ -171,10 +172,7 @@ class HTTPSServer(tlslite.api.TLSSocketServerMixIn,
     self.ssl_client_auth = ssl_client_auth
     self.ssl_client_cas = []
     self.ssl_client_cert_types = []
-    if enable_npn:
-      self.next_protos = ['http/1.1']
-    else:
-      self.next_protos = None
+    self.npn_protocols = npn_protocols
     self.signed_cert_timestamps = signed_cert_timestamps
     self.fallback_scsv_enabled = fallback_scsv_enabled
     self.ocsp_response = ocsp_response
@@ -204,6 +202,12 @@ class HTTPSServer(tlslite.api.TLSSocketServerMixIn,
       self.ssl_handshake_settings.tlsIntoleranceType = tls_intolerance_type
     if alert_after_handshake:
       self.ssl_handshake_settings.alertAfterHandshake = True
+    if disable_channel_id:
+      self.ssl_handshake_settings.enableChannelID = False
+    if disable_ems:
+      self.ssl_handshake_settings.enableExtendedMasterSecret = False
+    self.ssl_handshake_settings.supportedTokenBindingParams = \
+        token_binding_params
 
     if record_resume_info:
       # If record_resume_info is true then we'll replace the session cache with
@@ -227,7 +231,7 @@ class HTTPSServer(tlslite.api.TLSSocketServerMixIn,
                                     settings=self.ssl_handshake_settings,
                                     reqCAs=self.ssl_client_cas,
                                     reqCertTypes=self.ssl_client_cert_types,
-                                    nextProtos=self.next_protos,
+                                    nextProtos=self.npn_protocols,
                                     signedCertTimestamps=
                                     self.signed_cert_timestamps,
                                     fallbackSCSV=self.fallback_scsv_enabled,
@@ -336,9 +340,9 @@ class TestPageHandler(testserver_base.BasePageHandler):
       self.GetSSLSessionCacheHandler,
       self.SSLManySmallRecords,
       self.GetChannelID,
+      self.GetClientCert,
       self.ClientCipherListHandler,
       self.CloseSocketHandler,
-      self.RangeResetHandler,
       self.DefaultResponseHandler]
     post_handlers = [
       self.EchoTitleHandler,
@@ -471,7 +475,7 @@ class TestPageHandler(testserver_base.BasePageHandler):
 
   def CachePrivateHandler(self):
     """This request handler yields a page with the title set to the current
-    system time, and allows caching for 5 seconds."""
+    system time, and allows caching for 3 seconds."""
 
     if not self._ShouldHandleRequest("/cache/private"):
       return False
@@ -488,7 +492,7 @@ class TestPageHandler(testserver_base.BasePageHandler):
 
   def CachePublicHandler(self):
     """This request handler yields a page with the title set to the current
-    system time, and allows caching for 5 seconds."""
+    system time, and allows caching for 3 seconds."""
 
     if not self._ShouldHandleRequest("/cache/public"):
       return False
@@ -1512,6 +1516,24 @@ class TestPageHandler(testserver_base.BasePageHandler):
     self.wfile.write(hashlib.sha256(channel_id).digest().encode('base64'))
     return True
 
+  def GetClientCert(self):
+    """Send a reply whether a client certificate was provided."""
+
+    if not self._ShouldHandleRequest('/client-cert'):
+      return False
+
+    self.send_response(200)
+    self.send_header('Content-Type', 'text/plain')
+    self.end_headers()
+
+    cert_chain = self.server.tlsConnection.session.clientCertChain
+    if cert_chain != None:
+      self.wfile.write('got client cert with fingerprint: ' +
+                       cert_chain.getFingerprint())
+    else:
+      self.wfile.write('got no client cert')
+    return True
+
   def ClientCipherListHandler(self):
     """Send a reply containing the cipher suite list that the client
     provided. Each cipher suite value is serialized in decimal, followed by a
@@ -1535,154 +1557,6 @@ class TestPageHandler(testserver_base.BasePageHandler):
       return False
 
     self.wfile.close()
-    return True
-
-  def RangeResetHandler(self):
-    """Send data broken up by connection resets every N (default 4K) bytes.
-    Support range requests.  If the data requested doesn't straddle a reset
-    boundary, it will all be sent.  Used for testing resuming downloads."""
-
-    def DataForRange(start, end):
-      """Data to be provided for a particular range of bytes."""
-      # Offset and scale to avoid too obvious (and hence potentially
-      # collidable) data.
-      return ''.join([chr(y % 256)
-                      for y in range(start * 2 + 15, end * 2 + 15, 2)])
-
-    if not self._ShouldHandleRequest('/rangereset'):
-      return False
-
-    # HTTP/1.1 is required for ETag and range support.
-    self.protocol_version = 'HTTP/1.1'
-    _, _, url_path, _, query, _ = urlparse.urlparse(self.path)
-
-    # Defaults
-    size = 8000
-    # Note that the rst is sent just before sending the rst_boundary byte.
-    rst_boundary = 4000
-    respond_to_range = True
-    hold_for_signal = False
-    rst_limit = -1
-    token = 'DEFAULT'
-    fail_precondition = 0
-    send_verifiers = True
-
-    # Parse the query
-    qdict = urlparse.parse_qs(query, True)
-    if 'size' in qdict:
-      size = int(qdict['size'][0])
-    if 'rst_boundary' in qdict:
-      rst_boundary = int(qdict['rst_boundary'][0])
-    if 'token' in qdict:
-      # Identifying token for stateful tests.
-      token = qdict['token'][0]
-    if 'rst_limit' in qdict:
-      # Max number of rsts for a given token.
-      rst_limit = int(qdict['rst_limit'][0])
-    if 'bounce_range' in qdict:
-      respond_to_range = False
-    if 'hold' in qdict:
-      # Note that hold_for_signal will not work with null range requests;
-      # see TODO below.
-      hold_for_signal = True
-    if 'no_verifiers' in qdict:
-      send_verifiers = False
-    if 'fail_precondition' in qdict:
-      fail_precondition = int(qdict['fail_precondition'][0])
-
-    # Record already set information, or set it.
-    rst_limit = TestPageHandler.rst_limits.setdefault(token, rst_limit)
-    if rst_limit != 0:
-      TestPageHandler.rst_limits[token] -= 1
-    fail_precondition = TestPageHandler.fail_precondition.setdefault(
-      token, fail_precondition)
-    if fail_precondition != 0:
-      TestPageHandler.fail_precondition[token] -= 1
-
-    first_byte = 0
-    last_byte = size - 1
-
-    # Does that define what we want to return, or do we need to apply
-    # a range?
-    range_response = False
-    range_header = self.headers.getheader('range')
-    if range_header and respond_to_range:
-      mo = re.match("bytes=(\d*)-(\d*)", range_header)
-      if mo.group(1):
-        first_byte = int(mo.group(1))
-      if mo.group(2):
-        last_byte = int(mo.group(2))
-      if last_byte > size - 1:
-        last_byte = size - 1
-      range_response = True
-      if last_byte < first_byte:
-        return False
-
-    if (fail_precondition and
-        (self.headers.getheader('If-Modified-Since') or
-         self.headers.getheader('If-Match'))):
-      self.send_response(412)
-      self.end_headers()
-      return True
-
-    if range_response:
-      self.send_response(206)
-      self.send_header('Content-Range',
-                       'bytes %d-%d/%d' % (first_byte, last_byte, size))
-    else:
-      self.send_response(200)
-    self.send_header('Content-Type', 'application/octet-stream')
-    self.send_header('Content-Length', last_byte - first_byte + 1)
-    if send_verifiers:
-      # If fail_precondition is non-zero, then the ETag for each request will be
-      # different.
-      etag = "%s%d" % (token, fail_precondition)
-      self.send_header('ETag', etag)
-      self.send_header('Last-Modified', 'Tue, 19 Feb 2013 14:32 EST')
-    self.end_headers()
-
-    if hold_for_signal:
-      # TODO(rdsmith/phajdan.jr): http://crbug.com/169519: Without writing
-      # a single byte, the self.server.handle_request() below hangs
-      # without processing new incoming requests.
-      self.wfile.write(DataForRange(first_byte, first_byte + 1))
-      first_byte = first_byte + 1
-      # handle requests until one of them clears this flag.
-      self.server.wait_for_download = True
-      while self.server.wait_for_download:
-        self.server.handle_request()
-
-    possible_rst = ((first_byte / rst_boundary) + 1) * rst_boundary
-    if possible_rst >= last_byte or rst_limit == 0:
-      # No RST has been requested in this range, so we don't need to
-      # do anything fancy; just write the data and let the python
-      # infrastructure close the connection.
-      self.wfile.write(DataForRange(first_byte, last_byte + 1))
-      self.wfile.flush()
-      return True
-
-    # We're resetting the connection part way in; go to the RST
-    # boundary and then send an RST.
-    # Because socket semantics do not guarantee that all the data will be
-    # sent when using the linger semantics to hard close a socket,
-    # we send the data and then wait for our peer to release us
-    # before sending the reset.
-    data = DataForRange(first_byte, possible_rst)
-    self.wfile.write(data)
-    self.wfile.flush()
-    self.server.wait_for_download = True
-    while self.server.wait_for_download:
-      self.server.handle_request()
-    l_onoff = 1  # Linger is active.
-    l_linger = 0  # Seconds to linger for.
-    self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
-                 struct.pack('ii', l_onoff, l_linger))
-
-    # Close all duplicates of the underlying socket to force the RST.
-    self.wfile.close()
-    self.rfile.close()
-    self.connection.close()
-
     return True
 
   def DefaultResponseHandler(self):
@@ -2030,7 +1904,7 @@ class ServerRunner(testserver_base.TestServerRunner):
                              self.options.ssl_client_cert_type,
                              self.options.ssl_bulk_cipher,
                              self.options.ssl_key_exchange,
-                             self.options.enable_npn,
+                             self.options.npn_protocols,
                              self.options.record_resume,
                              self.options.tls_intolerant,
                              self.options.tls_intolerance_type,
@@ -2038,7 +1912,10 @@ class ServerRunner(testserver_base.TestServerRunner):
                                  "base64"),
                              self.options.fallback_scsv,
                              stapled_ocsp_response,
-                             self.options.alert_after_handshake)
+                             self.options.alert_after_handshake,
+                             self.options.disable_channel_id,
+                             self.options.disable_extended_master_secret,
+                             self.options.token_binding_params)
         print 'HTTPS server started on https://%s:%d...' % \
             (host, server.server_port)
       else:
@@ -2256,12 +2133,10 @@ class ServerRunner(testserver_base.TestServerRunner):
                                   'multiple times, indicating multiple '
                                   'algorithms should be enabled.');
     # TODO(davidben): Add ALPN support to tlslite.
-    self.option_parser.add_option('--enable-npn', dest='enable_npn',
-                                  default=False, const=True,
-                                  action='store_const',
-                                  help='Enable server support for the NPN '
-                                  'extension. The server will advertise '
-                                  'support for exactly one protocol, http/1.1')
+    self.option_parser.add_option('--npn-protocols', action='append',
+                                  help='Specify the list of protocols sent in'
+                                  'an NPN response.  The server will not'
+                                  'support NPN if the list is empty.')
     self.option_parser.add_option('--file-root-url', default='/files/',
                                   help='Specify a root URL for files served.')
     # TODO(ricea): Generalize this to support basic auth for HTTP too.
@@ -2284,6 +2159,11 @@ class ServerRunner(testserver_base.TestServerRunner):
                                   default=False, action='store_true',
                                   help='If set, the FTP server will not create '
                                   'an anonymous user.')
+    self.option_parser.add_option('--disable-channel-id', action='store_true')
+    self.option_parser.add_option('--disable-extended-master-secret',
+                                  action='store_true')
+    self.option_parser.add_option('--token-binding-params', action='append',
+                                  default=[], type='int')
 
 
 if __name__ == '__main__':

@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/util_constants.h"
+#include "components/metrics/metrics_pref_names.h"
 
 namespace installer {
 
@@ -51,7 +52,7 @@ bool ExtractUninstallMetrics(const base::DictionaryValue& root,
   // Make sure that the user wants us reporting metrics. If not, don't
   // add our uninstall metrics.
   bool metrics_reporting_enabled = false;
-  if (!root.GetBoolean(prefs::kMetricsReportingEnabled,
+  if (!root.GetBoolean(metrics::prefs::kMetricsReportingEnabled,
                        &metrics_reporting_enabled) ||
       !metrics_reporting_enabled) {
     return false;
@@ -77,7 +78,7 @@ bool ExtractUninstallMetricsFromFile(const base::FilePath& file_path,
   JSONFileValueDeserializer json_deserializer(file_path);
 
   std::string json_error_string;
-  scoped_ptr<base::Value> root(json_deserializer.Deserialize(NULL, NULL));
+  scoped_ptr<base::Value> root = json_deserializer.Deserialize(NULL, NULL);
   if (!root.get())
     return false;
 

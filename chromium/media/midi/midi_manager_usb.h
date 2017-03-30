@@ -5,14 +5,17 @@
 #ifndef MEDIA_MIDI_MIDI_MANAGER_USB_H_
 #define MEDIA_MIDI_MIDI_MANAGER_USB_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "media/midi/midi_manager.h"
@@ -39,14 +42,14 @@ class USB_MIDI_EXPORT MidiManagerUsb
   // MidiManager implementation.
   void StartInitialization() override;
   void DispatchSendMidiData(MidiManagerClient* client,
-                            uint32 port_index,
-                            const std::vector<uint8>& data,
+                            uint32_t port_index,
+                            const std::vector<uint8_t>& data,
                             double timestamp) override;
 
   // UsbMidiDeviceDelegate implementation.
   void ReceiveUsbMidiData(UsbMidiDevice* device,
                           int endpoint_number,
-                          const uint8* data,
+                          const uint8_t* data,
                           size_t size,
                           base::TimeTicks time) override;
   void OnDeviceAttached(scoped_ptr<UsbMidiDevice> device) override;
@@ -54,7 +57,7 @@ class USB_MIDI_EXPORT MidiManagerUsb
 
   // UsbMidiInputStream::Delegate implementation.
   void OnReceivedData(size_t jack_index,
-                      const uint8* data,
+                      const uint8_t* data,
                       size_t size,
                       base::TimeTicks time) override;
 

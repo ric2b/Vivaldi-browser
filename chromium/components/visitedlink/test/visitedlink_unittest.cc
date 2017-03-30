@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <cstdio>
 #include <string>
 #include <vector>
 
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
@@ -107,6 +111,7 @@ class TrackingVisitedLinkEventListener : public VisitedLinkMaster::Listener {
  public:
   TrackingVisitedLinkEventListener()
       : reset_count_(0),
+        completely_reset_count_(0),
         add_count_(0) {}
 
   void NewTable(base::SharedMemory* table) override {
@@ -120,7 +125,12 @@ class TrackingVisitedLinkEventListener : public VisitedLinkMaster::Listener {
     }
   }
   void Add(VisitedLinkCommon::Fingerprint) override { add_count_++; }
-  void Reset() override { reset_count_++; }
+  void Reset(bool invalidate_hashes) override {
+    if (invalidate_hashes)
+      completely_reset_count_++;
+    else
+      reset_count_++;
+  }
 
   void SetUp() {
     reset_count_ = 0;
@@ -128,10 +138,12 @@ class TrackingVisitedLinkEventListener : public VisitedLinkMaster::Listener {
   }
 
   int reset_count() const { return reset_count_; }
+  int completely_reset_count() { return completely_reset_count_; }
   int add_count() const { return add_count_; }
 
  private:
   int reset_count_;
+  int completely_reset_count_;
   int add_count_;
 };
 
@@ -142,14 +154,23 @@ class VisitedLinkTest : public testing::Test {
   //
   // |suppress_rebuild| is set when we're not testing rebuilding, see
   // the VisitedLinkMaster constructor.
-  bool InitVisited(int initial_size, bool suppress_rebuild) {
+  //
+  // |wait_for_io_complete| wait for result of async loading.
+  bool InitVisited(int initial_size,
+                   bool suppress_rebuild,
+                   bool wait_for_io_complete) {
     // Initialize the visited link system.
     master_.reset(new VisitedLinkMaster(new TrackingVisitedLinkEventListener(),
                                         &delegate_,
                                         true,
                                         suppress_rebuild, visited_file_,
                                         initial_size));
-    return master_->Init();
+    bool result = master_->Init();
+    if (result && wait_for_io_complete) {
+      // Wait for all pending file I/O to be completed.
+      content::RunAllBlockingPoolTasksUntilIdle();
+    }
+    return result;
   }
 
   // May be called multiple times (some tests will do this to clear things,
@@ -169,7 +190,8 @@ class VisitedLinkTest : public testing::Test {
     // Clean up after our caller, who may have left the database open.
     ClearDB();
 
-    ASSERT_TRUE(InitVisited(0, true));
+    ASSERT_TRUE(InitVisited(0, true, true));
+
     master_->DebugValidate();
 
     // check that the table has the proper number of entries
@@ -231,7 +253,7 @@ class VisitedLinkTest : public testing::Test {
 // This test creates and reads some databases to make sure the data is
 // preserved throughout those operations.
 TEST_F(VisitedLinkTest, DatabaseIO) {
-  ASSERT_TRUE(InitVisited(0, true));
+  ASSERT_TRUE(InitVisited(0, true, true));
 
   for (int i = 0; i < g_test_count; i++)
     master_->AddURL(TestURL(i));
@@ -242,8 +264,8 @@ TEST_F(VisitedLinkTest, DatabaseIO) {
 
 // Checks that we can delete things properly when there are collisions.
 TEST_F(VisitedLinkTest, Delete) {
-  static const int32 kInitialSize = 17;
-  ASSERT_TRUE(InitVisited(kInitialSize, true));
+  static const int32_t kInitialSize = 17;
+  ASSERT_TRUE(InitVisited(kInitialSize, true, true));
 
   // Add a cluster from 14-17 wrapping around to 0. These will all hash to the
   // same value.
@@ -281,17 +303,17 @@ TEST_F(VisitedLinkTest, Delete) {
 // When we delete more than kBigDeleteThreshold we trigger different behavior
 // where the entire file is rewritten.
 TEST_F(VisitedLinkTest, BigDelete) {
-  ASSERT_TRUE(InitVisited(16381, true));
+  ASSERT_TRUE(InitVisited(16381, true, true));
 
   // Add the base set of URLs that won't be deleted.
   // Reload() will test for these.
-  for (int32 i = 0; i < g_test_count; i++)
+  for (int32_t i = 0; i < g_test_count; i++)
     master_->AddURL(TestURL(i));
 
   // Add more URLs than necessary to trigger this case.
   const int kTestDeleteCount = VisitedLinkMaster::kBigDeleteThreshold + 2;
   URLs urls_to_delete;
-  for (int32 i = g_test_count; i < g_test_count + kTestDeleteCount; i++) {
+  for (int32_t i = g_test_count; i < g_test_count + kTestDeleteCount; i++) {
     GURL url(TestURL(i));
     master_->AddURL(url);
     urls_to_delete.push_back(url);
@@ -305,7 +327,7 @@ TEST_F(VisitedLinkTest, BigDelete) {
 }
 
 TEST_F(VisitedLinkTest, DeleteAll) {
-  ASSERT_TRUE(InitVisited(0, true));
+  ASSERT_TRUE(InitVisited(0, true, true));
 
   {
     VisitedLinkSlave slave;
@@ -340,7 +362,7 @@ TEST_F(VisitedLinkTest, DeleteAll) {
   }
 
   // Reopen and validate.
-  ASSERT_TRUE(InitVisited(0, true));
+  ASSERT_TRUE(InitVisited(0, true, true));
   master_->DebugValidate();
   EXPECT_EQ(0, master_->GetUsedCount());
   for (int i = 0; i < g_test_count; i++)
@@ -351,8 +373,8 @@ TEST_F(VisitedLinkTest, DeleteAll) {
 // full, notifies its slaves of the change, and updates the disk.
 TEST_F(VisitedLinkTest, Resizing) {
   // Create a very small database.
-  const int32 initial_size = 17;
-  ASSERT_TRUE(InitVisited(initial_size, true));
+  const int32_t initial_size = 17;
+  ASSERT_TRUE(InitVisited(initial_size, true, true));
 
   // ...and a slave
   VisitedLinkSlave slave;
@@ -362,7 +384,7 @@ TEST_F(VisitedLinkTest, Resizing) {
   slave.OnUpdateVisitedLinks(new_handle);
   g_slaves.push_back(&slave);
 
-  int32 used_count = master_->GetUsedCount();
+  int32_t used_count = master_->GetUsedCount();
   ASSERT_EQ(used_count, 0);
 
   for (int i = 0; i < g_test_count; i++) {
@@ -372,7 +394,7 @@ TEST_F(VisitedLinkTest, Resizing) {
   }
 
   // Verify that the table got resized sufficiently.
-  int32 table_size;
+  int32_t table_size;
   VisitedLinkCommon::Fingerprint* table;
   master_->GetUsageStatistics(&table_size, &table);
   used_count = master_->GetUsedCount();
@@ -382,11 +404,11 @@ TEST_F(VisitedLinkTest, Resizing) {
 
   // Verify that the slave got the resize message and has the same
   // table information.
-  int32 child_table_size;
+  int32_t child_table_size;
   VisitedLinkCommon::Fingerprint* child_table;
   slave.GetUsageStatistics(&child_table_size, &child_table);
   ASSERT_EQ(table_size, child_table_size);
-  for (int32 i = 0; i < table_size; i++) {
+  for (int32_t i = 0; i < table_size; i++) {
     ASSERT_EQ(table[i], child_table[i]);
   }
 
@@ -408,7 +430,7 @@ TEST_F(VisitedLinkTest, Rebuild) {
 
   // Initialize the visited link DB. Since the visited links file doesn't exist
   // and we don't suppress history rebuilding, this will load from history.
-  ASSERT_TRUE(InitVisited(0, false));
+  ASSERT_TRUE(InitVisited(0, false, false));
 
   // While the table is rebuilding, add the rest of the URLs to the visited
   // link system. This isn't guaranteed to happen during the rebuild, so we
@@ -445,7 +467,7 @@ TEST_F(VisitedLinkTest, Rebuild) {
 
 // Test that importing a large number of URLs will work
 TEST_F(VisitedLinkTest, BigImport) {
-  ASSERT_TRUE(InitVisited(0, false));
+  ASSERT_TRUE(InitVisited(0, false, false));
 
   // Before the table rebuilds, add a large number of URLs
   int total_count = VisitedLinkMaster::kDefaultTableSize + 10;
@@ -463,7 +485,14 @@ TEST_F(VisitedLinkTest, BigImport) {
 }
 
 TEST_F(VisitedLinkTest, Listener) {
-  ASSERT_TRUE(InitVisited(0, true));
+  ASSERT_TRUE(InitVisited(0, true, true));
+
+  TrackingVisitedLinkEventListener* listener =
+      static_cast<TrackingVisitedLinkEventListener*>(master_->GetListener());
+
+  // Verify that VisitedLinkMaster::Listener::Reset(true) was never called when
+  // the table was created.
+  EXPECT_EQ(0, listener->completely_reset_count());
 
   // Add test URLs.
   for (int i = 0; i < g_test_count; i++) {
@@ -480,14 +509,21 @@ TEST_F(VisitedLinkTest, Listener) {
   // ... and all of the remaining ones.
   master_->DeleteAllURLs();
 
-  TrackingVisitedLinkEventListener* listener =
-      static_cast<TrackingVisitedLinkEventListener*>(master_->GetListener());
-
   // Verify that VisitedLinkMaster::Listener::Add was called for each added URL.
   EXPECT_EQ(g_test_count, listener->add_count());
   // Verify that VisitedLinkMaster::Listener::Reset was called both when one and
   // all URLs are deleted.
   EXPECT_EQ(2, listener->reset_count());
+
+  ClearDB();
+
+  ASSERT_TRUE(InitVisited(0, true, true));
+
+  listener =
+      static_cast<TrackingVisitedLinkEventListener*>(master_->GetListener());
+  // Verify that VisitedLinkMaster::Listener::Reset(true) was called when the
+  // table was loaded.
+  EXPECT_EQ(1, listener->completely_reset_count());
 }
 
 class VisitCountingContext : public content::TestBrowserContext {
@@ -496,6 +532,7 @@ class VisitCountingContext : public content::TestBrowserContext {
       : add_count_(0),
         add_event_count_(0),
         reset_event_count_(0),
+        completely_reset_event_count_(0),
         new_table_count_(0) {}
 
   void CountAddEvent(int by) {
@@ -507,6 +544,10 @@ class VisitCountingContext : public content::TestBrowserContext {
     reset_event_count_++;
   }
 
+  void CountCompletelyResetEvent() {
+    completely_reset_event_count_++;
+  }
+
   void CountNewTable() {
     new_table_count_++;
   }
@@ -514,12 +555,16 @@ class VisitCountingContext : public content::TestBrowserContext {
   int add_count() const { return add_count_; }
   int add_event_count() const { return add_event_count_; }
   int reset_event_count() const { return reset_event_count_; }
+  int completely_reset_event_count() const {
+    return completely_reset_event_count_;
+  }
   int new_table_count() const { return new_table_count_; }
 
  private:
   int add_count_;
   int add_event_count_;
   int reset_event_count_;
+  int completely_reset_event_count_;
   int new_table_count_;
 };
 
@@ -552,11 +597,17 @@ class VisitRelayingRenderProcessHost : public MockRenderProcessHost {
 
     if (msg->type() == ChromeViewMsg_VisitedLink_Add::ID) {
       base::PickleIterator iter(*msg);
-      std::vector<uint64> fingerprints;
+      std::vector<uint64_t> fingerprints;
       CHECK(IPC::ReadParam(msg, &iter, &fingerprints));
       counting_context->CountAddEvent(fingerprints.size());
     } else if (msg->type() == ChromeViewMsg_VisitedLink_Reset::ID) {
-      counting_context->CountResetEvent();
+      base::PickleIterator iter(*msg);
+      bool invalidate_hashes;
+      CHECK(IPC::ReadParam(msg, &iter, &invalidate_hashes));
+      if (invalidate_hashes)
+        counting_context->CountCompletelyResetEvent();
+      else
+        counting_context->CountResetEvent();
     } else if (msg->type() == ChromeViewMsg_VisitedLink_NewTable::ID) {
       counting_context->CountNewTable();
     }
@@ -593,10 +644,19 @@ class VisitedLinkEventsTest : public content::RenderViewHostTestHarness {
     content::RenderViewHostTestHarness::SetUp();
   }
 
+  void TearDown() override {
+    // Explicitly destroy the master before proceeding with the rest
+    // of teardown because it posts a task to close a file handle, and
+    // we need to make sure we've finished all file related work
+    // before our superclass sets about destroying the scoped temp
+    // directory.
+    master_.reset();
+    RenderViewHostTestHarness::TearDown();
+  }
+
   content::BrowserContext* CreateBrowserContext() override {
     VisitCountingContext* context = new VisitCountingContext();
-    master_.reset(new VisitedLinkMaster(context, &delegate_, true));
-    master_->Init();
+    CreateVisitedLinkMaster(context);
     return context;
   }
 
@@ -608,7 +668,7 @@ class VisitedLinkEventsTest : public content::RenderViewHostTestHarness {
     return master_.get();
   }
 
-  void WaitForCoalescense() {
+  void WaitForCoalescence() {
     // Let the timer fire.
     //
     // TODO(ajwong): This is horrid! What is the right synchronization method?
@@ -620,14 +680,26 @@ class VisitedLinkEventsTest : public content::RenderViewHostTestHarness {
   }
 
  protected:
+  void CreateVisitedLinkMaster(content::BrowserContext* browser_context) {
+    master_.reset(new VisitedLinkMaster(browser_context, &delegate_, true));
+    master_->Init();
+  }
+
   VisitedLinkRenderProcessHostFactory vc_rph_factory_;
 
- private:
   TestVisitedLinkDelegate delegate_;
   scoped_ptr<VisitedLinkMaster> master_;
 };
 
-TEST_F(VisitedLinkEventsTest, Coalescense) {
+TEST_F(VisitedLinkEventsTest, Coalescence) {
+  // Waiting complete rebuild the table.
+  content::RunAllBlockingPoolTasksUntilIdle();
+
+  WaitForCoalescence();
+
+  // After rebuild table expect reset event.
+  EXPECT_EQ(1, context()->reset_event_count());
+
   // add some URLs to master.
   // Add a few URLs.
   master()->AddURL(GURL("http://acidtests.org/"));
@@ -641,7 +713,7 @@ TEST_F(VisitedLinkEventsTest, Coalescense) {
   EXPECT_EQ(0, context()->add_count());
   EXPECT_EQ(0, context()->add_event_count());
 
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   // We now should have 3 entries added in 1 event.
   EXPECT_EQ(3, context()->add_count());
@@ -652,7 +724,7 @@ TEST_F(VisitedLinkEventsTest, Coalescense) {
   master()->AddURL(GURL("http://webkit.org/"));
   master()->AddURL(GURL("http://acid3.acidtests.org/"));
 
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   // We should have 6 entries added in 2 events.
   EXPECT_EQ(6, context()->add_count());
@@ -661,7 +733,7 @@ TEST_F(VisitedLinkEventsTest, Coalescense) {
   // Test whether duplicate entries produce add events.
   master()->AddURL(GURL("http://acidtests.org/"));
 
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   // We should have no change in results.
   EXPECT_EQ(6, context()->add_count());
@@ -671,41 +743,57 @@ TEST_F(VisitedLinkEventsTest, Coalescense) {
   master()->AddURL(GURL("http://build.chromium.org/"));
   master()->DeleteAllURLs();
 
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   // We should have no change in results except for one new reset event.
   EXPECT_EQ(6, context()->add_count());
   EXPECT_EQ(2, context()->add_event_count());
-  EXPECT_EQ(1, context()->reset_event_count());
+  EXPECT_EQ(2, context()->reset_event_count());
 }
 
 TEST_F(VisitedLinkEventsTest, Basics) {
   RenderViewHostTester::For(rvh())->CreateTestRenderView(
       base::string16(), MSG_ROUTING_NONE, MSG_ROUTING_NONE, -1, false);
 
+  // Waiting complete rebuild the table.
+  content::RunAllBlockingPoolTasksUntilIdle();
+
+  WaitForCoalescence();
+
+  // After rebuild table expect reset event.
+  EXPECT_EQ(1, context()->reset_event_count());
+
   // Add a few URLs.
   master()->AddURL(GURL("http://acidtests.org/"));
   master()->AddURL(GURL("http://google.com/"));
   master()->AddURL(GURL("http://chromium.org/"));
 
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   // We now should have 1 add event.
   EXPECT_EQ(1, context()->add_event_count());
-  EXPECT_EQ(0, context()->reset_event_count());
+  EXPECT_EQ(1, context()->reset_event_count());
 
   master()->DeleteAllURLs();
 
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   // We should have no change in add results, plus one new reset event.
   EXPECT_EQ(1, context()->add_event_count());
-  EXPECT_EQ(1, context()->reset_event_count());
+  EXPECT_EQ(2, context()->reset_event_count());
 }
 
 TEST_F(VisitedLinkEventsTest, TabVisibility) {
   RenderViewHostTester::For(rvh())->CreateTestRenderView(
       base::string16(), MSG_ROUTING_NONE, MSG_ROUTING_NONE, -1, false);
+
+  // Waiting complete rebuild the table.
+  content::RunAllBlockingPoolTasksUntilIdle();
+
+  WaitForCoalescence();
+
+  // After rebuild table expect reset event.
+  EXPECT_EQ(1, context()->reset_event_count());
 
   // Simulate tab becoming inactive.
   RenderViewHostTester::For(rvh())->SimulateWasHidden();
@@ -715,18 +803,18 @@ TEST_F(VisitedLinkEventsTest, TabVisibility) {
   master()->AddURL(GURL("http://google.com/"));
   master()->AddURL(GURL("http://chromium.org/"));
 
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   // We shouldn't have any events.
   EXPECT_EQ(0, context()->add_event_count());
-  EXPECT_EQ(0, context()->reset_event_count());
+  EXPECT_EQ(1, context()->reset_event_count());
 
   // Simulate the tab becoming active.
   RenderViewHostTester::For(rvh())->SimulateWasShown();
 
   // We should now have 3 add events, still no reset events.
   EXPECT_EQ(1, context()->add_event_count());
-  EXPECT_EQ(0, context()->reset_event_count());
+  EXPECT_EQ(1, context()->reset_event_count());
 
   // Deactivate the tab again.
   RenderViewHostTester::For(rvh())->SimulateWasHidden();
@@ -735,18 +823,18 @@ TEST_F(VisitedLinkEventsTest, TabVisibility) {
   for (int i = 0; i < 100; i++)
     master()->AddURL(TestURL(i));
 
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   // Again, no change in events until tab is active.
   EXPECT_EQ(1, context()->add_event_count());
-  EXPECT_EQ(0, context()->reset_event_count());
+  EXPECT_EQ(1, context()->reset_event_count());
 
   // Activate the tab.
   RenderViewHostTester::For(rvh())->SimulateWasShown();
 
   // We should have only one more reset event.
   EXPECT_EQ(1, context()->add_event_count());
-  EXPECT_EQ(1, context()->reset_event_count());
+  EXPECT_EQ(2, context()->reset_event_count());
 }
 
 // Tests that VisitedLink ignores renderer process creation notification for a
@@ -759,9 +847,44 @@ TEST_F(VisitedLinkEventsTest, IgnoreRendererCreationFromDifferentContext) {
       content::NOTIFICATION_RENDERER_PROCESS_CREATED,
       content::Source<content::RenderProcessHost>(&different_process_host),
       content::NotificationService::NoDetails());
-  WaitForCoalescense();
+  WaitForCoalescence();
 
   EXPECT_EQ(0, different_context.new_table_count());
+}
+
+class VisitedLinkCompletelyResetEventTest : public VisitedLinkEventsTest {
+ public:
+  content::BrowserContext* CreateBrowserContext() override {
+    VisitCountingContext* context = new VisitCountingContext();
+    CreateVisitedLinkFile(context);
+    CreateVisitedLinkMaster(context);
+    return context;
+  }
+
+  void CreateVisitedLinkFile(content::BrowserContext* browser_context) {
+    base::FilePath visited_file =
+        browser_context->GetPath().Append(FILE_PATH_LITERAL("Visited Links"));
+    scoped_ptr<VisitedLinkMaster> master(
+        new VisitedLinkMaster(new TrackingVisitedLinkEventListener(),
+                              &delegate_, true, true, visited_file, 0));
+    master->Init();
+    // Waiting complete create the table.
+    content::RunAllBlockingPoolTasksUntilIdle();
+
+    master.reset();
+    // Wait for all pending file I/O to be completed.
+    content::RunAllBlockingPoolTasksUntilIdle();
+  }
+};
+
+TEST_F(VisitedLinkCompletelyResetEventTest, LoadTable) {
+  // Waiting complete loading the table.
+  content::RunAllBlockingPoolTasksUntilIdle();
+
+  WaitForCoalescence();
+
+  // After load table expect completely reset event.
+  EXPECT_EQ(1, context()->completely_reset_event_count());
 }
 
 }  // namespace visitedlink

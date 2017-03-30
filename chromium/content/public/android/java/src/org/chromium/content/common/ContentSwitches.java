@@ -31,13 +31,6 @@ public abstract class ContentSwitches {
     public static final String RUNNING_PERFORMANCE_BENCHMARK =
             "running-performance-benchmark";
 
-    // Disables exposing web content using Android's accessibility
-    // framework and enables the (older) javascript injection accessibility.
-    // TODO(dmazzoni): remove this after native accessibility is in stable.
-    // http://crbug.com/356775
-    public static final String ENABLE_ACCESSIBILITY_SCRIPT_INJECTION =
-            "enable-accessibility-script-injection";
-
     // Sets the ISO country code that will be used for phone number detection.
     public static final String NETWORK_COUNTRY_ISO = "network-country-iso";
 
@@ -49,9 +42,6 @@ public abstract class ContentSwitches {
 
     // Native switch - chrome_switches::kEnableInstantExtendedAPI
     public static final String ENABLE_INSTANT_EXTENDED_API = "enable-instant-extended-api";
-
-    // Native switch - shell_switches::kDumpRenderTree
-    public static final String DUMP_RENDER_TREE = "dump-render-tree";
 
     // Native switch - shell_switches::kRunLayoutTest
     public static final String RUN_LAYOUT_TEST = "run-layout-test";
@@ -72,6 +62,15 @@ public abstract class ContentSwitches {
     // Native switch kDisableGestureRequirementForMediaPlayback
     public static final String DISABLE_GESTURE_REQUIREMENT_FOR_MEDIA_PLAYBACK =
             "disable-gesture-requirement-for-media-playback";
+
+    // Native switch kRendererProcessLimit
+    public static final String RENDER_PROCESS_LIMIT = "renderer-process-limit";
+
+    // Native switch kInProcessGPU
+    public static final String IN_PROCESS_GPU = "in-process-gpu";
+
+    // Native switch kIPCSyncCompositing
+    public static final String IPC_SYNC_COMPOSITING = "ipc-sync-compositing";
 
     // Prevent instantiation.
     private ContentSwitches() {}

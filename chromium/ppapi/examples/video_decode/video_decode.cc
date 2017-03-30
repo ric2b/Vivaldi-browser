@@ -35,6 +35,8 @@
 // include-guards), make sure this is the last file #include'd in this file.
 #undef NDEBUG
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 // Assert |context_| isn't holding any GL Errors.  Done as a macro instead of a
 // function to preserve line number information in the failure message.
@@ -256,6 +258,7 @@ Decoder::Decoder(MyInstance* instance,
   decoder_->Initialize(graphics_3d,
                        kBitstreamProfile,
                        PP_HARDWAREACCELERATION_WITHFALLBACK,
+                       0,
                        callback_factory_.NewCallback(&Decoder::InitializeDone));
 }
 

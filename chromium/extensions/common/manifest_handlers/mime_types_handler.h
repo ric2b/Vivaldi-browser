@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handler.h"
 
@@ -42,6 +41,15 @@ class MimeTypesHandler {
   const std::string& handler_url() const { return handler_url_; }
 
   const std::set<std::string>& mime_type_set() const { return mime_type_set_; }
+
+  // Returns true if this MimeTypesHandler has a plugin associated with it (for
+  // the mimeHandlerPrivate API). Returns false if the MimeTypesHandler is for
+  // the streamsPrivate API.
+  bool HasPlugin() const;
+
+  // If HasPlugin() returns true, this will return the plugin path for the
+  // plugin associated with this MimeTypesHandler.
+  base::FilePath GetPluginPath() const;
 
  private:
   // The id for the extension this action belongs to (as defined in the

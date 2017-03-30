@@ -3,17 +3,21 @@
 // found in the LICENSE file.
 //
 
+#include <errno.h>
 #include <fcntl.h>
 #include <libdrm/drm_fourcc.h>
 #include <linux/videodev2.h>
 #include <poll.h>
+#include <string.h>
 #include <sys/eventfd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
 #include "base/files/scoped_file.h"
+#include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/common/gpu/media/generic_v4l2_device.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_bindings.h"
@@ -100,7 +104,7 @@ void GenericV4L2Device::Munmap(void* addr, unsigned int len) {
 bool GenericV4L2Device::SetDevicePollInterrupt() {
   DVLOG(3) << "SetDevicePollInterrupt()";
 
-  const uint64 buf = 1;
+  const uint64_t buf = 1;
   if (HANDLE_EINTR(write(device_poll_interrupt_fd_.get(), &buf, sizeof(buf))) ==
       -1) {
     DPLOG(ERROR) << "SetDevicePollInterrupt(): write() failed";
@@ -112,7 +116,7 @@ bool GenericV4L2Device::SetDevicePollInterrupt() {
 bool GenericV4L2Device::ClearDevicePollInterrupt() {
   DVLOG(3) << "ClearDevicePollInterrupt()";
 
-  uint64 buf;
+  uint64_t buf;
   if (HANDLE_EINTR(read(device_poll_interrupt_fd_.get(), &buf, sizeof(buf))) ==
       -1) {
     if (errno == EAGAIN) {
@@ -177,6 +181,7 @@ bool GenericV4L2Device::CanCreateEGLImageFrom(uint32_t v4l2_pixfmt) {
     DRM_FORMAT_ARGB8888,
 #if defined(ARCH_CPU_ARMEL)
     DRM_FORMAT_NV12,
+    DRM_FORMAT_MT21,
 #endif
   };
 
@@ -200,8 +205,7 @@ EGLImageKHR GenericV4L2Device::CreateEGLImage(EGLDisplay egl_display,
     return EGL_NO_IMAGE_KHR;
   }
 
-  media::VideoFrame::Format vf_format =
-      V4L2PixFmtToVideoFrameFormat(v4l2_pixfmt);
+  media::VideoPixelFormat vf_format = V4L2PixFmtToVideoPixelFormat(v4l2_pixfmt);
   // Number of components, as opposed to the number of V4L2 planes, which is
   // just a buffer count.
   size_t num_planes = media::VideoFrame::NumPlanes(vf_format);
@@ -282,7 +286,7 @@ EGLBoolean GenericV4L2Device::DestroyEGLImage(EGLDisplay egl_display,
 
 GLenum GenericV4L2Device::GetTextureTarget() { return GL_TEXTURE_EXTERNAL_OES; }
 
-uint32 GenericV4L2Device::PreferredInputFormat() {
+uint32_t GenericV4L2Device::PreferredInputFormat() {
   // TODO(posciak): We should support "dontcare" returns here once we
   // implement proper handling (fallback, negotiation) for this in users.
   CHECK_EQ(type_, kEncoder);

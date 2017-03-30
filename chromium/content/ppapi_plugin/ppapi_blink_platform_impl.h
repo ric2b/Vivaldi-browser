@@ -5,8 +5,11 @@
 #ifndef CONTENT_PPAPI_PLUGIN_PPAPI_BLINK_PLATFORM_IMPL_H_
 #define CONTENT_PPAPI_PLUGIN_PPAPI_BLINK_PLATFORM_IMPL_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "content/child/blink_platform_impl.h"
 
 namespace content {
@@ -14,40 +17,41 @@ namespace content {
 class PpapiBlinkPlatformImpl : public BlinkPlatformImpl {
  public:
   PpapiBlinkPlatformImpl();
-  virtual ~PpapiBlinkPlatformImpl();
+  ~PpapiBlinkPlatformImpl() override;
 
   // Shutdown must be called just prior to shutting down blink.
   void Shutdown();
 
   // BlinkPlatformImpl methods:
-  virtual blink::WebClipboard* clipboard();
-  virtual blink::WebMimeRegistry* mimeRegistry();
-  virtual blink::WebFileUtilities* fileUtilities();
-  virtual blink::WebSandboxSupport* sandboxSupport();
+  blink::WebThread* currentThread() override;
+  blink::WebClipboard* clipboard() override;
+  blink::WebMimeRegistry* mimeRegistry() override;
+  blink::WebFileUtilities* fileUtilities() override;
+  blink::WebSandboxSupport* sandboxSupport() override;
   virtual bool sandboxEnabled();
-  virtual unsigned long long visitedLinkHash(const char* canonicalURL,
-                                             size_t length);
-  virtual bool isLinkVisited(unsigned long long linkHash);
-  virtual void createMessageChannel(blink::WebMessagePortChannel** channel1,
-                                    blink::WebMessagePortChannel** channel2);
+  unsigned long long visitedLinkHash(const char* canonicalURL,
+                                     size_t length) override;
+  bool isLinkVisited(unsigned long long linkHash) override;
+  void createMessageChannel(blink::WebMessagePortChannel** channel1,
+                            blink::WebMessagePortChannel** channel2) override;
   virtual void setCookies(const blink::WebURL& url,
                           const blink::WebURL& first_party_for_cookies,
                           const blink::WebString& value);
   virtual blink::WebString cookies(
       const blink::WebURL& url,
       const blink::WebURL& first_party_for_cookies);
-  virtual blink::WebString defaultLocale();
-  virtual blink::WebThemeEngine* themeEngine();
-  virtual blink::WebURLLoader* createURLLoader();
-  virtual void getPluginList(bool refresh, blink::WebPluginListBuilder*);
-  virtual blink::WebData loadResource(const char* name);
-  virtual blink::WebStorageNamespace* createLocalStorageNamespace();
+  blink::WebString defaultLocale() override;
+  blink::WebThemeEngine* themeEngine() override;
+  blink::WebURLLoader* createURLLoader() override;
+  void getPluginList(bool refresh, blink::WebPluginListBuilder*) override;
+  blink::WebData loadResource(const char* name) override;
+  blink::WebStorageNamespace* createLocalStorageNamespace() override;
   virtual void dispatchStorageEvent(const blink::WebString& key,
       const blink::WebString& oldValue, const blink::WebString& newValue,
       const blink::WebString& origin, const blink::WebURL& url,
       bool isLocalStorage);
-  virtual int databaseDeleteFile(const blink::WebString& vfs_file_name,
-                                 bool sync_dir);
+  int databaseDeleteFile(const blink::WebString& vfs_file_name,
+                         bool sync_dir) override;
 
  private:
 #if !defined(OS_ANDROID) && !defined(OS_WIN)

@@ -6,10 +6,14 @@
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_FRAME_MAC_H_
 
 #include "chrome/browser/ui/views/frame/native_browser_frame.h"
+
+#import "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "ui/views/widget/native_widget_mac.h"
 
 class BrowserFrame;
 class BrowserView;
+@class ChromeCommandDispatcherDelegate;
 
 ////////////////////////////////////////////////////////////////////////////////
 //  BrowserFrameMac is a NativeWidgetMac subclass that provides
@@ -22,6 +26,7 @@ class BrowserFrameMac : public views::NativeWidgetMac,
 
   // Overridden from views::NativeWidgetMac:
   void OnWindowWillClose() override;
+  int SheetPositionY() override;
   void InitNativeWidget(const views::Widget::InitParams& params) override;
 
   // Overridden from NativeBrowserFrame:
@@ -36,7 +41,7 @@ class BrowserFrameMac : public views::NativeWidgetMac,
   ~BrowserFrameMac() override;
 
   // Overridden from views::NativeWidgetMac:
-  gfx::NativeWindow CreateNSWindow(
+  NativeWidgetMacNSWindow* CreateNSWindow(
       const views::Widget::InitParams& params) override;
 
   // Overridden from NativeBrowserFrame:
@@ -44,6 +49,8 @@ class BrowserFrameMac : public views::NativeWidgetMac,
 
  private:
   BrowserView* browser_view_;  // Weak. Our ClientView.
+  base::scoped_nsobject<ChromeCommandDispatcherDelegate>
+      command_dispatcher_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserFrameMac);
 };

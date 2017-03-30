@@ -4,15 +4,22 @@
 
 #include "media/base/fake_demuxer_stream.h"
 
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_util.h"
 #include "media/base/test_helpers.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -25,11 +32,9 @@ const int kStartWidth = 320;
 const int kStartHeight = 240;
 const int kWidthDelta = 4;
 const int kHeightDelta = 3;
-const uint8 kKeyId[] = { 0x00, 0x01, 0x02, 0x03 };
-const uint8 kIv[] = {
-  0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
+const uint8_t kKeyId[] = {0x00, 0x01, 0x02, 0x03};
+const uint8_t kIv[] = {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 FakeDemuxerStream::FakeDemuxerStream(int num_configs,
                                      int num_buffers_in_one_config,
@@ -142,10 +147,11 @@ void FakeDemuxerStream::SeekToStart() {
 
 void FakeDemuxerStream::UpdateVideoDecoderConfig() {
   const gfx::Rect kVisibleRect(kStartWidth, kStartHeight);
-  video_decoder_config_.Initialize(
-      kCodecVP8, VIDEO_CODEC_PROFILE_UNKNOWN, VideoFrame::YV12,
-      VideoFrame::COLOR_SPACE_UNSPECIFIED, next_coded_size_, kVisibleRect,
-      next_coded_size_, NULL, 0, is_encrypted_, false);
+  video_decoder_config_.Initialize(kCodecVP8, VIDEO_CODEC_PROFILE_UNKNOWN,
+                                   PIXEL_FORMAT_YV12, COLOR_SPACE_UNSPECIFIED,
+                                   next_coded_size_, kVisibleRect,
+                                   next_coded_size_, EmptyExtraData(),
+                                   is_encrypted_);
   next_coded_size_.Enlarge(kWidthDelta, kHeightDelta);
 }
 

@@ -4,126 +4,123 @@
 
 #include "chrome/browser/supervised_user/supervised_user_site_list.h"
 
+#include <algorithm>
+
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/values.h"
-#include "components/safe_json/safe_json_parser.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
-const int kSitelistFormatVersion = 1;
+const int kSitelistFormatVersion = 2;
 
+const char kEntryPointUrlKey[] = "entry_point_url";
 const char kHostnameHashesKey[] = "hostname_hashes";
-const char kNameKey[] = "name";
-const char kSitesKey[] = "sites";
 const char kSitelistFormatVersionKey[] = "version";
-const char kUrlKey[] = "url";
 const char kWhitelistKey[] = "whitelist";
 
 namespace {
 
-std::string ReadFileOnBlockingThread(const base::FilePath& path) {
+scoped_ptr<base::Value> ReadFileOnBlockingThread(const base::FilePath& path) {
   SCOPED_UMA_HISTOGRAM_TIMER("ManagedUsers.Whitelist.ReadDuration");
-  std::string contents;
-  base::ReadFileToString(path, &contents);
-  return contents;
+  JSONFileValueDeserializer deserializer(path);
+  int error_code;
+  std::string error_msg;
+  scoped_ptr<base::Value> value =
+      deserializer.Deserialize(&error_code, &error_msg);
+  if (!value) {
+    LOG(ERROR) << "Couldn't load site list " << path.value() << ": "
+               << error_msg;
+  }
+  return value;
 }
 
-void HandleError(const base::FilePath& path, const std::string& error) {
-  LOG(ERROR) << "Couldn't load site list " << path.value() << ": " << error;
-}
-
-// Takes a DictionaryValue entry from the JSON file and fills the whitelist
-// (via URL patterns or hostname hashes) and the URL in the corresponding Site
-// struct.
-void AddWhitelistEntries(const base::DictionaryValue* site_dict,
-                         SupervisedUserSiteList::Site* site) {
-  bool found = false;
-
-  const base::ListValue* whitelist = nullptr;
-  if (site_dict->GetList(kWhitelistKey, &whitelist)) {
-    found = true;
-    for (const base::Value* entry : *whitelist) {
-      std::string pattern;
-      if (!entry->GetAsString(&pattern)) {
+std::vector<std::string> ConvertListValues(const base::ListValue* list_values) {
+  std::vector<std::string> converted;
+  if (list_values) {
+    for (const base::Value* entry : *list_values) {
+      std::string entry_string;
+      if (!entry->GetAsString(&entry_string)) {
         LOG(ERROR) << "Invalid whitelist entry";
         continue;
       }
 
-      site->patterns.push_back(pattern);
+      converted.push_back(entry_string);
     }
   }
-
-  const base::ListValue* hash_list = nullptr;
-  if (site_dict->GetList(kHostnameHashesKey, &hash_list)) {
-    found = true;
-    for (const base::Value* entry : *hash_list) {
-      std::string hash;
-      if (!entry->GetAsString(&hash)) {
-        LOG(ERROR) << "Invalid hostname_hashes entry";
-        continue;
-      }
-      // TODO(treib): Check that |hash| has exactly 40 (2*base::kSHA1Length)
-      // characters from [0-9a-fA-F]. Or just store the raw bytes (from
-      // base::HexStringToBytes).
-
-      site->hostname_hashes.push_back(hash);
-    }
-  }
-
-  if (found)
-    return;
-
-  // Fall back to using a whitelist based on the URL.
-  std::string url_str;
-  if (!site_dict->GetString(kUrlKey, &url_str)) {
-    LOG(ERROR) << "Whitelist is invalid";
-    return;
-  }
-
-  GURL url(url_str);
-  if (!url.is_valid()) {
-    LOG(ERROR) << "URL " << url_str << " is invalid";
-    return;
-  }
-
-  site->patterns.push_back(url.host());
+  return converted;
 }
 
 }  // namespace
 
-SupervisedUserSiteList::Site::Site(const base::string16& name) : name(name) {
+SupervisedUserSiteList::HostnameHash::HostnameHash(
+    const std::string& hostname) {
+  base::SHA1HashBytes(reinterpret_cast<const unsigned char*>(hostname.c_str()),
+                      hostname.size(), bytes_.data());
 }
 
-SupervisedUserSiteList::Site::~Site() {
+SupervisedUserSiteList::HostnameHash::HostnameHash(
+    const std::vector<uint8_t>& bytes) {
+  CHECK_GE(bytes.size(), base::kSHA1Length);
+  std::copy(bytes.begin(), bytes.end(), bytes_.begin());
 }
 
-void SupervisedUserSiteList::Load(const base::FilePath& path,
+bool SupervisedUserSiteList::HostnameHash::operator==(
+    const HostnameHash& rhs) const {
+  return bytes_ == rhs.bytes_;
+}
+
+size_t SupervisedUserSiteList::HostnameHash::hash() const {
+  // This just returns the first sizeof(size_t) bytes of |bytes_|.
+  return *reinterpret_cast<const size_t*>(bytes_.data());
+}
+
+void SupervisedUserSiteList::Load(const std::string& id,
+                                  const base::string16& title,
+                                  const base::FilePath& path,
                                   const LoadedCallback& callback) {
   base::PostTaskAndReplyWithResult(
       content::BrowserThread::GetBlockingPool()
           ->GetTaskRunnerWithShutdownBehavior(
-              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN).get(),
-      FROM_HERE,
-      base::Bind(&ReadFileOnBlockingThread, path),
-      base::Bind(&SupervisedUserSiteList::ParseJson, path, callback));
+              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN)
+          .get(),
+      FROM_HERE, base::Bind(&ReadFileOnBlockingThread, path),
+      base::Bind(&SupervisedUserSiteList::OnJsonLoaded, id, title, path,
+                 base::TimeTicks::Now(), callback));
 }
 
-SupervisedUserSiteList::SupervisedUserSiteList(const base::ListValue& sites) {
-  for (const base::Value* site : sites) {
-    const base::DictionaryValue* entry = nullptr;
-    if (!site->GetAsDictionary(&entry)) {
-      LOG(ERROR) << "Entry is invalid";
+SupervisedUserSiteList::SupervisedUserSiteList(
+    const std::string& id,
+    const base::string16& title,
+    const GURL& entry_point,
+    const base::ListValue* patterns,
+    const base::ListValue* hostname_hashes)
+    : SupervisedUserSiteList(id,
+                             title,
+                             entry_point,
+                             ConvertListValues(patterns),
+                             ConvertListValues(hostname_hashes)) {}
+
+SupervisedUserSiteList::SupervisedUserSiteList(
+    const std::string& id,
+    const base::string16& title,
+    const GURL& entry_point,
+    const std::vector<std::string>& patterns,
+    const std::vector<std::string>& hostname_hashes)
+    : id_(id), title_(title), entry_point_(entry_point), patterns_(patterns) {
+  for (const std::string& hostname_hash : hostname_hashes) {
+    std::vector<uint8_t> hash_bytes;
+    if (hostname_hash.size() != 2 * base::kSHA1Length ||
+        !base::HexStringToBytes(hostname_hash, &hash_bytes)) {
+      LOG(ERROR) << "Invalid hostname_hashes entry";
       continue;
     }
-
-    base::string16 name;
-    entry->GetString(kNameKey, &name);
-    sites_.push_back(Site(name));
-    AddWhitelistEntries(entry, &sites_.back());
+    DCHECK_EQ(base::kSHA1Length, hash_bytes.size());
+    hostname_hashes_.push_back(HostnameHash(hash_bytes));
   }
 }
 
@@ -131,24 +128,16 @@ SupervisedUserSiteList::~SupervisedUserSiteList() {
 }
 
 // static
-void SupervisedUserSiteList::ParseJson(
-    const base::FilePath& path,
-    const SupervisedUserSiteList::LoadedCallback& callback,
-    const std::string& json) {
-  // TODO(bauerb): Use JSONSanitizer to sanitize whitelists on installation
-  // instead of using the expensive SafeJsonParser on every load.
-  safe_json::SafeJsonParser::Parse(
-      json, base::Bind(&SupervisedUserSiteList::OnJsonParseSucceeded, path,
-                       base::TimeTicks::Now(), callback),
-      base::Bind(&HandleError, path));
-}
-
-// static
-void SupervisedUserSiteList::OnJsonParseSucceeded(
+void SupervisedUserSiteList::OnJsonLoaded(
+    const std::string& id,
+    const base::string16& title,
     const base::FilePath& path,
     base::TimeTicks start_time,
     const SupervisedUserSiteList::LoadedCallback& callback,
     scoped_ptr<base::Value> value) {
+  if (!value)
+    return;
+
   if (!start_time.is_null()) {
     UMA_HISTOGRAM_TIMES("ManagedUsers.Whitelist.JsonParseDuration",
                         base::TimeTicks::Now() - start_time);
@@ -165,17 +154,21 @@ void SupervisedUserSiteList::OnJsonParseSucceeded(
     LOG(ERROR) << "Site list " << path.value() << " has invalid version";
     return;
   }
-
-  if (version > kSitelistFormatVersion) {
-    LOG(ERROR) << "Site list " << path.value() << " has a too new format";
+  if (version != kSitelistFormatVersion) {
+    LOG(ERROR) << "Site list " << path.value() << " has wrong version "
+               << version << ", expected " << kSitelistFormatVersion;
     return;
   }
 
-  base::ListValue* sites = nullptr;
-  if (!dict->GetList(kSitesKey, &sites)) {
-    LOG(ERROR) << "Site list " << path.value() << " does not contain any sites";
-    return;
-  }
+  std::string entry_point_url;
+  dict->GetString(kEntryPointUrlKey, &entry_point_url);
 
-  callback.Run(make_scoped_refptr(new SupervisedUserSiteList(*sites)));
+  base::ListValue* patterns = nullptr;
+  dict->GetList(kWhitelistKey, &patterns);
+
+  base::ListValue* hostname_hashes = nullptr;
+  dict->GetList(kHostnameHashesKey, &hostname_hashes);
+
+  callback.Run(make_scoped_refptr(new SupervisedUserSiteList(
+      id, title, GURL(entry_point_url), patterns, hostname_hashes)));
 }

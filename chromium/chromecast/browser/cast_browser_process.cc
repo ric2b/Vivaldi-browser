@@ -4,18 +4,21 @@
 
 #include "chromecast/browser/cast_browser_process.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_resource_dispatcher_host_delegate.h"
 #include "chromecast/browser/devtools/remote_debugging_server.h"
 #include "chromecast/browser/metrics/cast_metrics_service_client.h"
-#include "chromecast/browser/service/cast_service.h"
 #include "chromecast/net/connectivity_checker.h"
+#include "chromecast/service/cast_service.h"
 
 #if defined(OS_ANDROID)
-#include "components/crash/browser/crash_dump_manager_android.h"
+#include "components/crash/content/browser/crash_dump_manager_android.h"
 #endif  // defined(OS_ANDROID)
 
 #if defined(USE_AURA)
@@ -36,7 +39,8 @@ CastBrowserProcess* CastBrowserProcess::GetInstance() {
 }
 
 CastBrowserProcess::CastBrowserProcess()
-    : net_log_(nullptr) {
+    : cast_content_browser_client_(nullptr),
+      net_log_(nullptr) {
   DCHECK(!g_instance);
   g_instance = this;
 }
@@ -54,6 +58,12 @@ void CastBrowserProcess::SetBrowserContext(
   browser_context_.swap(browser_context);
 }
 
+void CastBrowserProcess::SetCastContentBrowserClient(
+    CastContentBrowserClient* cast_content_browser_client) {
+  DCHECK(!cast_content_browser_client_);
+  cast_content_browser_client_ = cast_content_browser_client;
+}
+
 void CastBrowserProcess::SetCastService(scoped_ptr<CastService> cast_service) {
   DCHECK(!cast_service_);
   cast_service_.swap(cast_service);
@@ -62,7 +72,7 @@ void CastBrowserProcess::SetCastService(scoped_ptr<CastService> cast_service) {
 #if defined(USE_AURA)
 void CastBrowserProcess::SetCastScreen(scoped_ptr<CastScreen> cast_screen) {
   DCHECK(!cast_screen_);
-  cast_screen_ = cast_screen.Pass();
+  cast_screen_ = std::move(cast_screen);
 }
 #endif  // defined(USE_AURA)
 

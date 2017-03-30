@@ -4,15 +4,18 @@
 
 #include "remoting/host/native_messaging/native_messaging_writer.h"
 
-#include <string>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
+#include <string>
+#include <utility>
+
 #include "base/json/json_writer.h"
 
 namespace {
 
 // 4-byte type used for the message header.
-typedef uint32 MessageLengthType;
+typedef uint32_t MessageLengthType;
 
 // Defined as an int, for passing to APIs that take an int, to avoid
 // signed/unsigned warnings about implicit cast.
@@ -30,9 +33,7 @@ const size_t kMaximumMessageSize = 1024 * 1024;
 namespace remoting {
 
 NativeMessagingWriter::NativeMessagingWriter(base::File file)
-    : write_stream_(file.Pass()),
-      fail_(false) {
-}
+    : write_stream_(std::move(file)), fail_(false) {}
 
 NativeMessagingWriter::~NativeMessagingWriter() {
 }

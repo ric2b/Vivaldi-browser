@@ -5,9 +5,10 @@
 #ifndef MEDIA_FORMATS_MP4_ES_DESCRIPTOR_H_
 #define MEDIA_FORMATS_MP4_ES_DESCRIPTOR_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -20,8 +21,10 @@ namespace mp4 {
 // objectTypeIndication Values. Only values currently in use are included.
 enum ObjectType {
   kForbidden = 0,
-  kISO_14496_3 = 0x40,  // MPEG4 AAC
-  kISO_13818_7_AAC_LC = 0x67  // MPEG2 AAC-LC
+  kISO_14496_3 = 0x40,         // MPEG4 AAC
+  kISO_13818_7_AAC_LC = 0x67,  // MPEG2 AAC-LC
+  kAC3 = 0xa5,                 // AC3
+  kEAC3 = 0xa6                 // EAC3 / Dolby Digital Plus
 };
 
 // This class parse object type and decoder specific information from an
@@ -30,15 +33,15 @@ enum ObjectType {
 class MEDIA_EXPORT ESDescriptor {
  public:
   // Utility function to check if the given object type is AAC.
-  static bool IsAAC(uint8 object_type);
+  static bool IsAAC(uint8_t object_type);
 
   ESDescriptor();
   ~ESDescriptor();
 
-  bool Parse(const std::vector<uint8>& data);
+  bool Parse(const std::vector<uint8_t>& data);
 
-  uint8 object_type() const;
-  const std::vector<uint8>& decoder_specific_info() const;
+  uint8_t object_type() const;
+  const std::vector<uint8_t>& decoder_specific_info() const;
 
  private:
   enum Tag {
@@ -50,8 +53,8 @@ class MEDIA_EXPORT ESDescriptor {
   bool ParseDecoderConfigDescriptor(BitReader* reader);
   bool ParseDecoderSpecificInfo(BitReader* reader);
 
-  uint8 object_type_;
-  std::vector<uint8> decoder_specific_info_;
+  uint8_t object_type_;
+  std::vector<uint8_t> decoder_specific_info_;
 };
 
 }  // namespace mp4

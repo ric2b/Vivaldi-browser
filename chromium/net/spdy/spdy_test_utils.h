@@ -5,16 +5,23 @@
 #ifndef NET_SPDY_TEST_UTILS_H_
 #define NET_SPDY_TEST_UTILS_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <string>
 
+#include "net/spdy/spdy_header_block.h"
 #include "net/spdy/spdy_protocol.h"
 
 namespace net {
 
 class HashValue;
 class TransportSecurityState;
+
+inline bool operator==(base::StringPiece x,
+                       const SpdyHeaderBlock::StringPieceProxy& y) {
+  return x == y.operator base::StringPiece();
+}
 
 namespace test {
 
@@ -29,7 +36,7 @@ void CompareCharArraysWithHexError(
     const int expected_len);
 
 void SetFrameFlags(SpdyFrame* frame,
-                   uint8 flags,
+                   uint8_t flags,
                    SpdyMajorVersion spdy_version);
 
 void SetFrameLength(SpdyFrame* frame,
@@ -52,7 +59,6 @@ void AddPin(TransportSecurityState* state,
             uint8_t backup_label);
 
 }  // namespace test
-
 }  // namespace net
 
 #endif  // NET_SPDY_TEST_UTILS_H_

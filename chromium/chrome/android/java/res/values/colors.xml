@@ -16,10 +16,11 @@
     <color name="dark_action_bar_color">#263238</color>
 
     <!-- Infobar colors -->
-    <color name="infobar_background">#fff</color>
-    <color name="infobar_background_separator">#afafaf</color>
     <color name="infobar_accent_blue">#4285f4</color>
-    <color name="infobar_tertiary_button_text">#969696</color>
+    <color name="infobar_descriptive_text_color">#646464</color>
+
+    <!-- Snackbar colors -->
+    <color name="snackbar_background_color">#282C32</color>
 
     <!-- Tab Switcher Colors -->
     <color name="tab_switcher_background">#14181C</color>
@@ -37,9 +38,6 @@
 
     <!-- Website Settings Popup colors -->
     <color name="website_settings_popup_text">#444444</color>
-    <color name="website_settings_popup_button_text">#444444</color>
-    <color name="website_settings_connection_broken_leading_text">#db4437</color>
-    <color name="website_settings_popup_permission_spinner_text">#646464</color>
     <color name="website_settings_popup_text_link">#4285f4</color>
 
     <!-- URL Emphasizer colors -->
@@ -86,16 +84,19 @@
     <!-- Sad Tab colors -->
     <color name="sad_tab_header_text_color">#333333</color>
     <color name="sad_tab_body_text_color">#646464</color>
-    
+
     <!-- NTP Colors. Used on the bookmarks and recent tabs pages. -->
     <color name="ntp_bg">#fff</color>
     <color name="ntp_bg_incognito">#222</color>
-    <color name="ntp_most_visited_text">#333</color>
-    <color name="ntp_most_visited_bg">#f2f2f2</color>
     <color name="ntp_list_item_text">#333</color>
     <color name="ntp_list_header_text">#333</color>
     <color name="ntp_list_header_subtext">#969696</color>
     <color name="ntp_list_header_subtext_active">#7cadff</color>
+    <color name="snippets_publisher_name_color">#7f7f7f</color>
+    <color name="snippets_text_color">#7f7f7f</color>
+    <color name="snippets_list_header_text_color">#7f7f7f</color>
+    <color name="snippets_headline_text_color">#000000</color>
+    <color name="snippets_read_more_link_color">@color/light_active_color</color>
 
     <!-- Signin promo screen colors -->
     <color name="illustration_background_color">#4FC3F7</color>
@@ -103,6 +104,12 @@
     <!-- Contextual Search colors -->
     <color name="contextual_search_promo_text_color">#333333</color>
     <color name="contextual_search_promo_background_color">#EEEEEE</color>
+
+    <!-- Progress Bar colors -->
+    <color name="progress_bar_foreground">@color/light_active_color</color>
+    <color name="progress_bar_foreground_white">@android:color/white</color>
+    <color name="progress_bar_background">#3d4386f7</color>
+    <color name="progress_bar_background_white">#4d000000</color>
 
     <!-- Theme colors. Also used for toolbar background -->
     <color name="incognito_primary_color">#505050</color>
@@ -131,6 +138,8 @@
     <color name="reader_mode_header_bg">#ff494949</color>
 
     <!-- WebappActivity colors -->
+    <color name="webapp_default_bg">#fafafa</color>
+    <color name="webapp_splash_title_light">#ffffff</color>
     <color name="webapp_url_bar_bg">#fafafa</color>
     <color name="webapp_url_bar_separator">#e1e1e1</color>
 
@@ -138,8 +147,6 @@
     <color name="enhanced_bookmark_detail_text">#212121</color>
     <color name="enhanced_bookmark_detail_section">#7C7B79</color>
     <color name="enhanced_bookmark_app_bar_shadow_color">#1D000000</color>
-    <color name="enhanced_bookmark_selection_action_bar_background">#4F82F4</color>
-    <color name="enhanced_bookmark_drawer_selected_color">#4281F4</color>
     <color name="enhanced_bookmark_drawer_selected_background_color">#F0F0F0</color>
     <color name="enhanced_bookmark_list_item_highlight_color">#804281f4</color>
     <color name="enhanced_bookmark_icon_background_color">#ff787878</color>
@@ -147,4 +154,19 @@
 
     <!-- Opt out promo -->
     <color name="opt_out_text_color">#646464</color>
+
+    <!-- Media UI Colors -->
+    <color name="media_session_icon_color">#14181C</color>
+
+    <!-- Smart Lock for Passwords UI colors-->
+    <color name="smart_lock_auto_signin_snackbar_background_color">#2196F3</color>
+
+    <!-- Physical Web colors -->
+    <color name="physical_web_header_color">#333</color>
+    <color name="physical_web_url_color">#969696</color>
+    <color name="physical_web_url_description_color">#646464</color>
+    <color name="physical_web_logo_gray_tint">#ccc</color>
+
+    <!-- Bottom bar colors -->
+    <color name="bottom_bar_shadow_color">#1d000000</color>
 </resources>

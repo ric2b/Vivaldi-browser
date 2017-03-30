@@ -89,13 +89,13 @@ function expose(name, cls, exposed) {
 
   if ('functions' in exposed) {
     $Array.forEach(exposed.functions, function(func) {
-      publicClass.prototype[func] = function () {
+      publicClass.prototype[func] = function() {
         // andre@vivaldi.com : This check was added due to VB-3887.
         //   A listener could be added to an event, where the listener was
         //   deleted. Causing this to be null and access to 'undefined.'
         if (privates(this) !== undefined) {
-          var impl = privates(this).impl;
-          return $Function.apply(impl[func], impl, arguments);
+        var impl = privates(this).impl;
+        return $Function.apply(impl[func], impl, arguments);
         }
       };
     });
@@ -171,9 +171,9 @@ function promise(func) {
   });
 }
 
-exports.forEach = forEach;
-exports.loadTypeSchema = loadTypeSchema;
-exports.lookup = lookup;
-exports.expose = expose;
-exports.deepCopy = deepCopy;
-exports.promise = promise;
+exports.$set('forEach', forEach);
+exports.$set('loadTypeSchema', loadTypeSchema);
+exports.$set('lookup', lookup);
+exports.$set('expose', expose);
+exports.$set('deepCopy', deepCopy);
+exports.$set('promise', promise);

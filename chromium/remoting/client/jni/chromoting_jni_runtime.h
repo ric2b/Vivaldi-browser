@@ -9,16 +9,19 @@
 #include <string>
 
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "remoting/base/auto_thread.h"
 #include "remoting/client/jni/chromoting_jni_instance.h"
 #include "remoting/protocol/connection_to_host.h"
 
+namespace base {
 template<typename T> struct DefaultSingletonTraits;
+}
 
 namespace remoting {
 
-bool RegisterJni(JNIEnv* env);
+bool RegisterChromotingJniRuntime(JNIEnv* env);
 
 // Houses the global resources on which the Chromoting components run
 // (e.g. message loops and task runners). Proxies outgoing JNI calls from its
@@ -97,8 +100,7 @@ class ChromotingJniRuntime {
                               const std::string& message);
 
   // Creates a new Bitmap object to store a video frame.
-  base::android::ScopedJavaLocalRef<jobject> NewBitmap(
-      webrtc::DesktopSize size);
+  base::android::ScopedJavaLocalRef<jobject> NewBitmap(int width, int height);
 
   // Updates video frame bitmap. |bitmap| must be an instance of
   // android.graphics.Bitmap. Call on the display thread.
@@ -136,7 +138,7 @@ class ChromotingJniRuntime {
   // Contains all connection-specific state.
   scoped_refptr<ChromotingJniInstance> session_;
 
-  friend struct DefaultSingletonTraits<ChromotingJniRuntime>;
+  friend struct base::DefaultSingletonTraits<ChromotingJniRuntime>;
 
   DISALLOW_COPY_AND_ASSIGN(ChromotingJniRuntime);
 };

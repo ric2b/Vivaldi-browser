@@ -9,8 +9,10 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -352,10 +354,9 @@ bool FullscreenController::OnAcceptExclusiveAccessPermission() {
     // TODO(estark): Revisit this when crbug.com/455882 is fixed.
     if (!requester.SchemeIsFile() && !embedder.SchemeIsFile() &&
         primary_pattern.IsValid() && secondary_pattern.IsValid()) {
-      HostContentSettingsMap* settings_map = exclusive_access_manager()
-                                                 ->context()
-                                                 ->GetProfile()
-                                                 ->GetHostContentSettingsMap();
+      HostContentSettingsMap* settings_map =
+          HostContentSettingsMapFactory::GetForProfile(
+              exclusive_access_manager()->context()->GetProfile());
       settings_map->SetContentSetting(
           primary_pattern, secondary_pattern, CONTENT_SETTINGS_TYPE_FULLSCREEN,
           std::string(), CONTENT_SETTING_ALLOW);
@@ -431,7 +432,8 @@ void FullscreenController::ToggleFullscreenModeInternal(
   // FullscreenWithoutChrome and FullscreenWithToolbar.
   if (exclusive_access_context->IsFullscreen() &&
       !IsWindowFullscreenForTabOrPending() &&
-      exclusive_access_context->SupportsFullscreenWithToolbar()) {
+      exclusive_access_context->SupportsFullscreenWithToolbar() &&
+      IsExtensionFullscreenOrPending()) {
     if (option == BROWSER_WITH_TOOLBAR) {
       enter_fullscreen = enter_fullscreen ||
                          !exclusive_access_context->IsFullscreenWithToolbar();
@@ -509,6 +511,12 @@ void FullscreenController::ExitFullscreenModeInternal() {
 ContentSetting FullscreenController::GetFullscreenSetting() const {
   DCHECK(exclusive_access_tab());
 
+  // If simplified UI is enabled, never ask the user, just auto-allow.
+  // TODO(mgiuca): Should we allow the user to block use of fullscreen?
+  // http://crbug.com/515747.
+  if (ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled())
+    return CONTENT_SETTING_ALLOW;
+
   GURL url = GetRequestingOrigin();
 
   // Always ask on file:// URLs, since we can't meaningfully make the
@@ -522,23 +530,19 @@ ContentSetting FullscreenController::GetFullscreenSetting() const {
 
   // If the permission was granted to the website with no embedder, it should
   // always be allowed, even if embedded.
-  if (exclusive_access_manager()
-          ->context()
-          ->GetProfile()
-          ->GetHostContentSettingsMap()
-          ->GetContentSetting(url, url, CONTENT_SETTINGS_TYPE_FULLSCREEN,
-                              std::string()) == CONTENT_SETTING_ALLOW) {
+  if (HostContentSettingsMapFactory::GetForProfile(
+        exclusive_access_manager()->context()->GetProfile())
+            ->GetContentSetting(url, url, CONTENT_SETTINGS_TYPE_FULLSCREEN,
+                                std::string()) == CONTENT_SETTING_ALLOW) {
     return CONTENT_SETTING_ALLOW;
   }
 
   // See the comment above the call to |SetContentSetting()| for how the
   // requesting and embedding origins interact with each other wrt permissions.
-  return exclusive_access_manager()
-      ->context()
-      ->GetProfile()
-      ->GetHostContentSettingsMap()
-      ->GetContentSetting(url, GetEmbeddingOrigin(),
-                          CONTENT_SETTINGS_TYPE_FULLSCREEN, std::string());
+  return HostContentSettingsMapFactory::GetForProfile(
+      exclusive_access_manager()->context()->GetProfile())
+          ->GetContentSetting(url, GetEmbeddingOrigin(),
+                              CONTENT_SETTINGS_TYPE_FULLSCREEN, std::string());
 }
 
 bool FullscreenController::IsPrivilegedFullscreenForTab() const {

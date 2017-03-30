@@ -4,6 +4,8 @@
 
 #include "chrome/browser/spellchecker/spelling_service_client.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/json/json_reader.h"
@@ -18,6 +20,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/spellcheck_common.h"
 #include "chrome/common/spellcheck_result.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "google_apis/google_api_keys.h"
@@ -36,6 +39,9 @@ const char kMisspellingsPath[] = "result.spellingCheckResponse.misspellings";
 
 // The location of error messages in JSON response from spelling service.
 const char kErrorPath[] = "error";
+
+// Languages currently supported by SPELLCHECK.
+const char* const kValidLanguages[] = {"en", "es", "fi", "da"};
 
 }  // namespace
 
@@ -102,6 +108,8 @@ bool SpellingServiceClient::RequestTextCheck(
 
   GURL url = GURL(kSpellingServiceURL);
   net::URLFetcher* fetcher = CreateURLFetcher(url).release();
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher, data_use_measurement::DataUseUserData::SPELL_CHECKER);
   fetcher->SetRequestContext(context->GetRequestContext());
   fetcher->SetUploadData("application/json", request);
   fetcher->SetLoadFlags(
@@ -121,8 +129,7 @@ bool SpellingServiceClient::IsAvailable(
   // unavailable.
   if (!pref->GetBoolean(prefs::kEnableContinuousSpellcheck) ||
       !pref->GetBoolean(prefs::kSpellCheckUseSpellingService) ||
-      context->IsOffTheRecord() ||
-      chrome::spellcheck_common::IsMultilingualSpellcheckEnabled())
+      context->IsOffTheRecord())
     return false;
 
   // If the locale for spelling has not been set, the user has not decided to
@@ -135,15 +142,13 @@ bool SpellingServiceClient::IsAvailable(
   // Finally, if all options are available, we only enable only SUGGEST
   // if SPELLCHECK is not available for our language because SPELLCHECK results
   // are a superset of SUGGEST results.
-  // TODO(rlp): Only available for English right now. Fix this line to include
-  // all languages SPELLCHECK covers.
-  bool language_available = !locale.compare(0, 2, "en");
-  if (language_available) {
-    return type == SPELLCHECK;
-  } else {
-    // Only SUGGEST is allowed.
-    return type == SUGGEST;
+  for (const char* language : kValidLanguages) {
+    if (!locale.compare(0, 2, language))
+      return type == SPELLCHECK;
   }
+
+  // Only SUGGEST is allowed.
+  return type == SUGGEST;
 }
 
 bool SpellingServiceClient::ParseResponse(
@@ -189,9 +194,9 @@ bool SpellingServiceClient::ParseResponse(
   //     "data": [...]
   //   }
   // }
-  scoped_ptr<base::DictionaryValue> value(
-      static_cast<base::DictionaryValue*>(base::JSONReader::DeprecatedRead(
-          data, base::JSON_ALLOW_TRAILING_COMMAS)));
+  scoped_ptr<base::DictionaryValue> value(static_cast<base::DictionaryValue*>(
+      base::JSONReader::Read(data, base::JSON_ALLOW_TRAILING_COMMAS)
+          .release()));
   if (!value.get() || !value->IsType(base::Value::TYPE_DICTIONARY))
     return false;
 

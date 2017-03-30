@@ -205,15 +205,7 @@ WaitForEntryDestructionTask.prototype = {
 /**
  * Adds a successful lookup to the DNS cache, then clears the cache.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsDnsViewSuccess ' +
-    'DISABLED_netInternalsDnsViewSuccess');
-GEN('#else');
-GEN('#define MAYBE_netInternalsDnsViewSuccess ' +
-    'netInternalsDnsViewSuccess');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsDnsViewSuccess', function () {
+TEST_F('NetInternalsTest', 'netInternalsDnsViewSuccess', function() {
   NetInternalsTest.switchToView('dns');
   var taskQueue = new NetInternalsTest.TaskQueue(true);
   taskQueue.addTask(new AddCacheEntryTask(
@@ -239,15 +231,7 @@ TEST_F('NetInternalsTest', 'netInternalsDnsViewFail', function() {
 /**
  * Adds an expired successful lookup to the DNS cache, then clears the cache.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsDnsViewExpired ' +
-    'DISABLED_netInternalsDnsViewExpired');
-GEN('#else');
-GEN('#define MAYBE_netInternalsDnsViewExpired ' +
-    'netInternalsDnsViewExpired');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsDnsViewExpired', function () {
+TEST_F('NetInternalsTest', 'netInternalsDnsViewExpired', function() {
   NetInternalsTest.switchToView('dns');
   var taskQueue = new NetInternalsTest.TaskQueue(true);
   taskQueue.addTask(new AddCacheEntryTask(
@@ -260,15 +244,7 @@ TEST_F('NetInternalsTest', 'MAYBE_netInternalsDnsViewExpired', function () {
 /**
  * Adds two entries to the DNS cache, clears the cache, and then repeats.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsDnsViewAddTwoTwice ' +
-    'DISABLED_netInternalsDnsViewAddTwoTwice');
-GEN('#else');
-GEN('#define MAYBE_netInternalsDnsViewAddTwoTwice ' +
-    'netInternalsDnsViewAddTwoTwice');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsDnsViewAddTwoTwice', function () {
+TEST_F('NetInternalsTest', 'netInternalsDnsViewAddTwoTwice', function() {
   NetInternalsTest.switchToView('dns');
   var taskQueue = new NetInternalsTest.TaskQueue(true);
   for (var i = 0; i < 2; ++i) {

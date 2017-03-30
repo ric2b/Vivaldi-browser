@@ -5,6 +5,9 @@
 #ifndef CONTENT_RENDERER_PEPPER_PEPPER_PLUGIN_INSTANCE_IMPL_H_
 #define CONTENT_RENDERER_PEPPER_PEPPER_PLUGIN_INSTANCE_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <set>
 #include <string>
@@ -12,10 +15,12 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/texture_layer_client.h"
@@ -57,7 +62,6 @@
 #include "third_party/WebKit/public/web/WebPlugin.h"
 #include "third_party/WebKit/public/web/WebUserGestureToken.h"
 #include "ui/base/ime/text_input_type.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 #include "v8/include/v8.h"
@@ -132,6 +136,12 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
                                           PluginModule* module,
                                           blink::WebPluginContainer* container,
                                           const GURL& plugin_url);
+
+  // Return the PepperPluginInstanceImpl for the given |instance_id|. Will
+  // return the instance even if it is in the process of being deleted.
+  // Currently only used in tests.
+  static PepperPluginInstanceImpl* GetForTesting(PP_Instance instance_id);
+
   RenderFrameImpl* render_frame() const { return render_frame_; }
   PluginModule* module() const { return module_.get(); }
 
@@ -422,7 +432,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
                                       uint32_t event_classes) override;
   void ClearInputEventRequest(PP_Instance instance,
                               uint32_t event_classes) override;
-  void StartTrackingLatency(PP_Instance instance) override;
   void PostMessage(PP_Instance instance, PP_Var message) override;
   int32_t RegisterMessageHandler(PP_Instance instance,
                                  void* user_data,
@@ -460,14 +469,14 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
                               PP_URLComponents_Dev* components) override;
 
   // PPB_ContentDecryptor_Private implementation.
-  void PromiseResolved(PP_Instance instance, uint32 promise_id) override;
+  void PromiseResolved(PP_Instance instance, uint32_t promise_id) override;
   void PromiseResolvedWithSession(PP_Instance instance,
-                                  uint32 promise_id,
+                                  uint32_t promise_id,
                                   PP_Var session_id_var) override;
   void PromiseRejected(PP_Instance instance,
-                       uint32 promise_id,
+                       uint32_t promise_id,
                        PP_CdmExceptionCode exception_code,
-                       uint32 system_code,
+                       uint32_t system_code,
                        PP_Var error_description_var) override;
   void SessionMessage(PP_Instance instance,
                       PP_Var session_id_var,
@@ -487,7 +496,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   void LegacySessionError(PP_Instance instance,
                           PP_Var session_id_var,
                           PP_CdmExceptionCode exception_code,
-                          uint32 system_code,
+                          uint32_t system_code,
                           PP_Var error_description_var) override;
   void DeliverBlock(PP_Instance instance,
                     PP_Resource decrypted_block,
@@ -536,8 +545,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   void OnThrottleStateChange() override;
   void OnHiddenForPlaceholder(bool hidden) override;
 
-  void AddLatencyInfo(const std::vector<ui::LatencyInfo>& latency_info);
-
  private:
   friend class base::RefCounted<PepperPluginInstanceImpl>;
   friend class PpapiPluginInstanceTest;
@@ -551,20 +558,20 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   class ExternalDocumentLoader : public blink::WebURLLoaderClient {
    public:
     ExternalDocumentLoader();
-    virtual ~ExternalDocumentLoader();
+    ~ExternalDocumentLoader() override;
 
     void ReplayReceivedData(WebURLLoaderClient* document_loader);
 
     // blink::WebURLLoaderClient implementation.
-    virtual void didReceiveData(blink::WebURLLoader* loader,
-                                const char* data,
-                                int data_length,
-                                int encoded_data_length);
-    virtual void didFinishLoading(blink::WebURLLoader* loader,
-                                  double finish_time,
-                                  int64_t total_encoded_data_length);
-    virtual void didFail(blink::WebURLLoader* loader,
-                         const blink::WebURLError& error);
+    void didReceiveData(blink::WebURLLoader* loader,
+                        const char* data,
+                        int data_length,
+                        int encoded_data_length) override;
+    void didFinishLoading(blink::WebURLLoader* loader,
+                          double finish_time,
+                          int64_t total_encoded_data_length) override;
+    void didFail(blink::WebURLLoader* loader,
+                 const blink::WebURLError& error) override;
 
    private:
     std::list<std::string> data_;
@@ -638,10 +645,9 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // - we are not in Flash full-screen mode (or transitioning to it)
   // Otherwise it destroys the layer.
   // It does either operation lazily.
-  // device_changed: true if the bound device has been changed, and
-  // UpdateLayer() will be forced to recreate the layer and attaches to the
-  // container.
-  void UpdateLayer(bool device_changed);
+  // force_creation: Force UpdateLayer() to recreate the layer and attaches
+  //   to the container. Set to true if the bound device has been changed.
+  void UpdateLayer(bool force_creation);
 
   // Internal helper function for PrintPage().
   void PrintPageHelper(PP_PrintPageNumberRange_Dev* page_ranges,
@@ -913,10 +919,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
 
   // The text that is currently selected in the plugin.
   base::string16 selected_text_;
-
-  int64 last_input_number_;
-
-  bool is_tracking_latency_;
 
   bool initialized_;
 

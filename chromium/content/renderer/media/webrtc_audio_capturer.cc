@@ -6,9 +6,11 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "content/child/child_process.h"
 #include "content/renderer/media/audio_device_factory.h"
 #include "content/renderer/media/media_stream_audio_processor.h"
@@ -244,7 +246,7 @@ WebRtcAudioCapturer::WebRtcAudioCapturer(
     : constraints_(constraints),
       audio_processor_(new rtc::RefCountedObject<MediaStreamAudioProcessor>(
           constraints,
-          device_info.device.input.effects,
+          device_info.device.input,
           audio_device)),
       running_(false),
       render_frame_id_(render_frame_id),
@@ -343,11 +345,8 @@ void WebRtcAudioCapturer::SetCapturerSourceInternal(
   // which would normally be used by default.
   // bits_per_sample is always 16 for now.
   media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                channel_layout,
-                                sample_rate,
-                                16,
-                                buffer_size,
-                                device_info_.device.input.effects);
+                                channel_layout, sample_rate, 16, buffer_size);
+  params.set_effects(device_info_.device.input.effects);
 
   {
     base::AutoLock auto_lock(lock_);
@@ -561,8 +560,8 @@ void WebRtcAudioCapturer::Capture(const media::AudioBus* audio_source,
   }
 }
 
-void WebRtcAudioCapturer::OnCaptureError() {
-  NOTIMPLEMENTED();
+void WebRtcAudioCapturer::OnCaptureError(const std::string& message) {
+  WebRtcLogMessage("WAC::OnCaptureError: " + message);
 }
 
 media::AudioParameters WebRtcAudioCapturer::source_audio_parameters() const {

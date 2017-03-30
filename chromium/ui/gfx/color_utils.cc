@@ -4,21 +4,21 @@
 
 #include "ui/gfx/color_utils.h"
 
-#include <math.h>
-#if defined(OS_WIN)
-#include <windows.h>
-#endif
+#include <stdint.h>
 
 #include <algorithm>
+#include <cmath>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/color_palette.h"
+
 #if defined(OS_WIN)
+#include <windows.h>
 #include "skia/ext/skia_utils_win.h"
 #endif
-#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace color_utils {
 
@@ -77,6 +77,10 @@ double ContrastRatio(double foreground_luminance, double background_luminance) {
 
 // ----------------------------------------------------------------------------
 
+double GetContrastRatio(SkColor color_a, SkColor color_b) {
+  return ContrastRatio(RelativeLuminance(color_a), RelativeLuminance(color_b));
+}
+
 unsigned char GetLuminanceForColor(SkColor color) {
   return base::saturated_cast<unsigned char>(
       (0.3 * SkColorGetR(color)) +
@@ -130,14 +134,14 @@ SkColor HSLToSkColor(const HSL& hsl, SkAlpha alpha) {
   // If there's no color, we don't care about hue and can do everything based on
   // brightness.
   if (!saturation) {
-    uint8 light;
+    uint8_t light;
 
     if (lightness < 0)
       light = 0;
     else if (lightness >= 1.0)
       light = 255;
     else
-      light = static_cast<uint8>(SkDoubleToFixed(lightness) >> 8);
+      light = static_cast<uint8_t>(SkDoubleToFixed(lightness) >> 8);
 
     return SkColorSetARGB(alpha, light, light, light);
   }
@@ -192,32 +196,35 @@ void MakeHSLShiftValid(HSL* hsl) {
 }
 
 SkColor HSLShift(SkColor color, const HSL& shift) {
-  HSL hsl;
   SkAlpha alpha = SkColorGetA(color);
-  SkColorToHSL(color, &hsl);
 
-  // Replace the hue with the tint's hue.
-  if (shift.h >= 0)
-    hsl.h = shift.h;
+  if (shift.h >= 0 || shift.s >= 0) {
+    HSL hsl;
+    SkColorToHSL(color, &hsl);
 
-  // Change the saturation.
-  if (shift.s >= 0) {
-    if (shift.s <= 0.5)
-      hsl.s *= shift.s * 2.0;
-    else
-      hsl.s += (1.0 - hsl.s) * ((shift.s - 0.5) * 2.0);
+    // Replace the hue with the tint's hue.
+    if (shift.h >= 0)
+      hsl.h = shift.h;
+
+    // Change the saturation.
+    if (shift.s >= 0) {
+      if (shift.s <= 0.5)
+        hsl.s *= shift.s * 2.0;
+      else
+        hsl.s += (1.0 - hsl.s) * ((shift.s - 0.5) * 2.0);
+    }
+
+    color = HSLToSkColor(hsl, alpha);
   }
 
-  SkColor result = HSLToSkColor(hsl, alpha);
-
   if (shift.l < 0)
-    return result;
+    return color;
 
   // Lightness shifts in the style of popular image editors aren't actually
   // represented in HSL - the L value does have some effect on saturation.
-  double r = static_cast<double>(SkColorGetR(result));
-  double g = static_cast<double>(SkColorGetG(result));
-  double b = static_cast<double>(SkColorGetB(result));
+  double r = static_cast<double>(SkColorGetR(color));
+  double g = static_cast<double>(SkColorGetG(color));
+  double b = static_cast<double>(SkColorGetB(color));
   if (shift.l <= 0.5) {
     r *= (shift.l * 2.0);
     g *= (shift.l * 2.0);
@@ -228,9 +235,9 @@ SkColor HSLShift(SkColor color, const HSL& shift) {
     b += (255.0 - b) * ((shift.l - 0.5) * 2.0);
   }
   return SkColorSetARGB(alpha,
-                        static_cast<int>(r),
-                        static_cast<int>(g),
-                        static_cast<int>(b));
+                        static_cast<int>(std::round(r)),
+                        static_cast<int>(std::round(g)),
+                        static_cast<int>(std::round(b)));
 }
 
 void BuildLumaHistogram(const SkBitmap& bitmap, int histogram[256]) {
@@ -286,12 +293,13 @@ SkColor AlphaBlend(SkColor foreground, SkColor background, SkAlpha alpha) {
                         static_cast<int>(b));
 }
 
+bool IsDark(SkColor color) {
+  return GetLuminanceForColor(color) < 128;
+}
+
 SkColor BlendTowardOppositeLuminance(SkColor color, SkAlpha alpha) {
-  unsigned char background_luminance =
-      color_utils::GetLuminanceForColor(color);
-  const SkColor blend_color =
-      (background_luminance < 128) ? SK_ColorWHITE : SK_ColorBLACK;
-  return color_utils::AlphaBlend(blend_color, color, alpha);
+  return AlphaBlend(IsDark(color) ? SK_ColorWHITE : SK_ColorBLACK, color,
+                    alpha);
 }
 
 SkColor GetReadableColor(SkColor foreground, SkColor background) {
@@ -325,5 +333,17 @@ bool IsInvertedColorScheme() {
   return false;
 }
 #endif  // !defined(OS_WIN)
+
+SkColor DeriveDefaultIconColor(SkColor text_color) {
+  // This function works similarly to BlendTowardOppositeLuminance, but uses a
+  // different blend value for lightening and darkening.
+  if (IsDark(text_color)) {
+    // For black text, this comes out to kChromeIconGrey.
+    return color_utils::AlphaBlend(SK_ColorWHITE, text_color,
+                                   SkColorGetR(gfx::kChromeIconGrey));
+  }
+  // The dimming is less dramatic when darkening a light color.
+  return color_utils::AlphaBlend(SK_ColorBLACK, text_color, 0x33);
+}
 
 }  // namespace color_utils

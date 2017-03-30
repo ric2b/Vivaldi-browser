@@ -6,7 +6,7 @@
 
 #include "base/android/jni_string.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/metrics/variations/variations_service.h"
+#include "components/variations/service/variations_service.h"
 #include "jni/VariationsSession_jni.h"
 
 namespace {
@@ -17,12 +17,13 @@ bool g_on_app_enter_foreground_called = false;
 
 }  // namespace
 
-static void StartVariationsSession(JNIEnv* env,
-                                   jobject obj,
-                                   jstring jrestrict_mode) {
+static void StartVariationsSession(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& jrestrict_mode) {
   DCHECK(g_browser_process);
 
-  chrome_variations::VariationsService* variations_service =
+  variations::VariationsService* variations_service =
       g_browser_process->variations_service();
   // Triggers an OnAppEnterForeground on the VariationsService. This may fetch
   // a new seed.

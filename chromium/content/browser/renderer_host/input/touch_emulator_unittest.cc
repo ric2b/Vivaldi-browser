@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
@@ -12,11 +13,6 @@
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
 #include "content/common/input/web_input_event_traits.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if defined(USE_AURA)
-#include "ui/aura/env.h"
-#include "ui/aura/test/test_screen.h"
-#endif
 
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -46,13 +42,7 @@ class TouchEmulatorTest : public testing::Test,
 
   // testing::Test
   void SetUp() override {
-#if defined(USE_AURA)
-    aura::Env::CreateInstance(true);
-    screen_.reset(aura::TestScreen::Create(gfx::Size()));
-    gfx::Screen::SetScreenInstance(gfx::SCREEN_TYPE_NATIVE, screen_.get());
-#endif
-
-    emulator_.reset(new TouchEmulator(this));
+    emulator_.reset(new TouchEmulator(this, 1.0f));
     emulator_->SetDoubleTapSupportForPageEnabled(false);
     emulator_->Enable(ui::GestureProviderConfigType::GENERIC_MOBILE);
   }
@@ -60,15 +50,10 @@ class TouchEmulatorTest : public testing::Test,
   void TearDown() override {
     emulator_->Disable();
     EXPECT_EQ("", ExpectedEvents());
-
-#if defined(USE_AURA)
-    aura::Env::DeleteInstance();
-    gfx::Screen::SetScreenInstance(gfx::SCREEN_TYPE_NATIVE, nullptr);
-    screen_.reset();
-#endif
   }
 
-  void ForwardGestureEvent(const blink::WebGestureEvent& event) override {
+  void ForwardEmulatedGestureEvent(
+      const blink::WebGestureEvent& event) override {
     forwarded_events_.push_back(event.type);
   }
 
@@ -251,9 +236,6 @@ class TouchEmulatorTest : public testing::Test,
  private:
   scoped_ptr<TouchEmulator> emulator_;
   std::vector<WebInputEvent::Type> forwarded_events_;
-#if defined(USE_AURA)
-  scoped_ptr<gfx::Screen> screen_;
-#endif
   double last_event_time_seconds_;
   double event_time_delta_seconds_;
   bool shift_pressed_;
@@ -573,6 +555,10 @@ TEST_F(TouchEmulatorTest, CancelAfterDisableDoesNotCrash) {
   emulator()->Disable();
   EXPECT_EQ("TouchStart TouchCancel", ExpectedEvents());
   emulator()->CancelTouch();
+}
+
+TEST_F(TouchEmulatorTest, ConstructorWithHighDeviceScaleDoesNotCrash) {
+  TouchEmulator(this, 4.0f);
 }
 
 }  // namespace content

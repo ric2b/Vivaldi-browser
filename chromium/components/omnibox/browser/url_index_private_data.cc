@@ -4,6 +4,8 @@
 
 #include "components/omnibox/browser/url_index_private_data.h"
 
+#include <stdint.h>
+
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -11,10 +13,10 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_util.h"
 #include "base/i18n/break_iterator.h"
 #include "base/i18n/case_conversion.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -26,7 +28,7 @@
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/omnibox/browser/in_memory_url_index.h"
-#include "net/base/net_util.h"
+#include "components/url_formatter/url_formatter.h"
 
 #if defined(USE_SYSTEM_PROTOBUF)
 #include <google/protobuf/repeated_field.h>
@@ -707,10 +709,9 @@ bool URLIndexPrivateData::IndexRow(
 
   history::URLID row_id = row.id();
   // Strip out username and password before saving and indexing.
-  base::string16 url(net::FormatUrl(gurl, languages,
-      net::kFormatUrlOmitUsernamePassword,
-      net::UnescapeRule::NONE,
-      NULL, NULL, NULL));
+  base::string16 url(url_formatter::FormatUrl(
+      gurl, languages, url_formatter::kFormatUrlOmitUsernamePassword,
+      net::UnescapeRule::NONE, nullptr, nullptr, nullptr));
 
   HistoryID history_id = static_cast<HistoryID>(row_id);
   DCHECK_LT(history_id, std::numeric_limits<HistoryID>::max());
@@ -1075,8 +1076,8 @@ bool URLIndexPrivateData::RestoreWordList(
   if (!cache.has_word_list())
     return false;
   const WordListItem& list_item(cache.word_list());
-  uint32 expected_item_count = list_item.word_count();
-  uint32 actual_item_count = list_item.word_size();
+  uint32_t expected_item_count = list_item.word_count();
+  uint32_t actual_item_count = list_item.word_size();
   if (actual_item_count == 0 || actual_item_count != expected_item_count)
     return false;
   const RepeatedPtrField<std::string>& words(list_item.word());
@@ -1091,8 +1092,8 @@ bool URLIndexPrivateData::RestoreWordMap(
   if (!cache.has_word_map())
     return false;
   const WordMapItem& list_item(cache.word_map());
-  uint32 expected_item_count = list_item.item_count();
-  uint32 actual_item_count = list_item.word_map_entry_size();
+  uint32_t expected_item_count = list_item.item_count();
+  uint32_t actual_item_count = list_item.word_map_entry_size();
   if (actual_item_count == 0 || actual_item_count != expected_item_count)
     return false;
   const RepeatedPtrField<WordMapEntry>& entries(list_item.word_map_entry());
@@ -1107,8 +1108,8 @@ bool URLIndexPrivateData::RestoreCharWordMap(
   if (!cache.has_char_word_map())
     return false;
   const CharWordMapItem& list_item(cache.char_word_map());
-  uint32 expected_item_count = list_item.item_count();
-  uint32 actual_item_count = list_item.char_word_map_entry_size();
+  uint32_t expected_item_count = list_item.item_count();
+  uint32_t actual_item_count = list_item.char_word_map_entry_size();
   if (actual_item_count == 0 || actual_item_count != expected_item_count)
     return false;
   const RepeatedPtrField<CharWordMapEntry>&
@@ -1121,8 +1122,8 @@ bool URLIndexPrivateData::RestoreCharWordMap(
       return false;
     base::char16 uni_char = static_cast<base::char16>(iter->char_16());
     WordIDSet word_id_set;
-    const RepeatedField<int32>& word_ids(iter->word_id());
-    for (RepeatedField<int32>::const_iterator jiter = word_ids.begin();
+    const RepeatedField<int32_t>& word_ids(iter->word_id());
+    for (RepeatedField<int32_t>::const_iterator jiter = word_ids.begin();
          jiter != word_ids.end(); ++jiter)
       word_id_set.insert(*jiter);
     char_word_map_[uni_char] = word_id_set;
@@ -1135,8 +1136,8 @@ bool URLIndexPrivateData::RestoreWordIDHistoryMap(
   if (!cache.has_word_id_history_map())
     return false;
   const WordIDHistoryMapItem& list_item(cache.word_id_history_map());
-  uint32 expected_item_count = list_item.item_count();
-  uint32 actual_item_count = list_item.word_id_history_map_entry_size();
+  uint32_t expected_item_count = list_item.item_count();
+  uint32_t actual_item_count = list_item.word_id_history_map_entry_size();
   if (actual_item_count == 0 || actual_item_count != expected_item_count)
     return false;
   const RepeatedPtrField<WordIDHistoryMapEntry>&
@@ -1149,8 +1150,8 @@ bool URLIndexPrivateData::RestoreWordIDHistoryMap(
       return false;
     WordID word_id = iter->word_id();
     HistoryIDSet history_id_set;
-    const RepeatedField<int64>& history_ids(iter->history_id());
-    for (RepeatedField<int64>::const_iterator jiter = history_ids.begin();
+    const RepeatedField<int64_t>& history_ids(iter->history_id());
+    for (RepeatedField<int64_t>::const_iterator jiter = history_ids.begin();
          jiter != history_ids.end(); ++jiter) {
       history_id_set.insert(*jiter);
       AddToHistoryIDWordMap(*jiter, word_id);
@@ -1165,8 +1166,8 @@ bool URLIndexPrivateData::RestoreHistoryInfoMap(
   if (!cache.has_history_info_map())
     return false;
   const HistoryInfoMapItem& list_item(cache.history_info_map());
-  uint32 expected_item_count = list_item.item_count();
-  uint32 actual_item_count = list_item.history_info_map_entry_size();
+  uint32_t expected_item_count = list_item.item_count();
+  uint32_t actual_item_count = list_item.history_info_map_entry_size();
   if (actual_item_count == 0 || actual_item_count != expected_item_count)
     return false;
   const RepeatedPtrField<HistoryInfoMapEntry>&
@@ -1206,8 +1207,8 @@ bool URLIndexPrivateData::RestoreWordStartsMap(
   // page titles.
   if (cache.has_word_starts_map()) {
     const WordStartsMapItem& list_item(cache.word_starts_map());
-    uint32 expected_item_count = list_item.item_count();
-    uint32 actual_item_count = list_item.word_starts_map_entry_size();
+    uint32_t expected_item_count = list_item.item_count();
+    uint32_t actual_item_count = list_item.word_starts_map_entry_size();
     if (actual_item_count == 0 || actual_item_count != expected_item_count)
       return false;
     const RepeatedPtrField<WordStartsMapEntry>&
@@ -1217,13 +1218,13 @@ bool URLIndexPrivateData::RestoreWordStartsMap(
       HistoryID history_id = iter->history_id();
       RowWordStarts word_starts;
       // Restore the URL word starts.
-      const RepeatedField<int32>& url_starts(iter->url_word_starts());
-      for (RepeatedField<int32>::const_iterator jiter = url_starts.begin();
+      const RepeatedField<int32_t>& url_starts(iter->url_word_starts());
+      for (RepeatedField<int32_t>::const_iterator jiter = url_starts.begin();
            jiter != url_starts.end(); ++jiter)
         word_starts.url_word_starts_.push_back(*jiter);
       // Restore the page title word starts.
-      const RepeatedField<int32>& title_starts(iter->title_word_starts());
-      for (RepeatedField<int32>::const_iterator jiter = title_starts.begin();
+      const RepeatedField<int32_t>& title_starts(iter->title_word_starts());
+      for (RepeatedField<int32_t>::const_iterator jiter = title_starts.begin();
            jiter != title_starts.end(); ++jiter)
         word_starts.title_word_starts_.push_back(*jiter);
       word_starts_map_[history_id] = word_starts;

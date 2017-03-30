@@ -4,6 +4,8 @@
 
 #include "extensions/browser/value_store/testing_value_store.h"
 
+#include <utility>
+
 #include "base/logging.h"
 
 namespace {
@@ -12,10 +14,13 @@ const char kGenericErrorMessage[] = "TestingValueStore configured to error";
 
 }  // namespace
 
-TestingValueStore::TestingValueStore()
-    : read_count_(0), write_count_(0), error_code_(OK) {}
+TestingValueStore::TestingValueStore() : read_count_(0), write_count_(0) {}
 
 TestingValueStore::~TestingValueStore() {}
+
+void TestingValueStore::set_status_code(StatusCode status_code) {
+  status_ = ValueStore::Status(status_code, kGenericErrorMessage);
+}
 
 size_t TestingValueStore::GetBytesInUse(const std::string& key) {
   // Let SettingsStorageQuotaEnforcer implement this.
@@ -43,8 +48,8 @@ ValueStore::ReadResult TestingValueStore::Get(const std::string& key) {
 ValueStore::ReadResult TestingValueStore::Get(
     const std::vector<std::string>& keys) {
   read_count_++;
-  if (error_code_ != OK)
-    return MakeReadResult(TestingError());
+  if (!status_.ok())
+    return MakeReadResult(status_);
 
   base::DictionaryValue* settings = new base::DictionaryValue();
   for (std::vector<std::string>::const_iterator it = keys.begin();
@@ -54,14 +59,14 @@ ValueStore::ReadResult TestingValueStore::Get(
       settings->SetWithoutPathExpansion(*it, value->DeepCopy());
     }
   }
-  return MakeReadResult(make_scoped_ptr(settings));
+  return MakeReadResult(make_scoped_ptr(settings), status_);
 }
 
 ValueStore::ReadResult TestingValueStore::Get() {
   read_count_++;
-  if (error_code_ != OK)
-    return MakeReadResult(TestingError());
-  return MakeReadResult(make_scoped_ptr(storage_.DeepCopy()));
+  if (!status_.ok())
+    return MakeReadResult(status_);
+  return MakeReadResult(make_scoped_ptr(storage_.DeepCopy()), status_);
 }
 
 ValueStore::WriteResult TestingValueStore::Set(
@@ -74,8 +79,8 @@ ValueStore::WriteResult TestingValueStore::Set(
 ValueStore::WriteResult TestingValueStore::Set(
     WriteOptions options, const base::DictionaryValue& settings) {
   write_count_++;
-  if (error_code_ != OK)
-    return MakeWriteResult(TestingError());
+  if (!status_.ok())
+    return MakeWriteResult(status_);
 
   scoped_ptr<ValueStoreChangeList> changes(new ValueStoreChangeList());
   for (base::DictionaryValue::Iterator it(settings);
@@ -91,7 +96,7 @@ ValueStore::WriteResult TestingValueStore::Set(
       storage_.SetWithoutPathExpansion(it.key(), it.value().DeepCopy());
     }
   }
-  return MakeWriteResult(changes.Pass());
+  return MakeWriteResult(std::move(changes), status_);
 }
 
 ValueStore::WriteResult TestingValueStore::Remove(const std::string& key) {
@@ -101,8 +106,8 @@ ValueStore::WriteResult TestingValueStore::Remove(const std::string& key) {
 ValueStore::WriteResult TestingValueStore::Remove(
     const std::vector<std::string>& keys) {
   write_count_++;
-  if (error_code_ != OK)
-    return MakeWriteResult(TestingError());
+  if (!status_.ok())
+    return MakeWriteResult(status_);
 
   scoped_ptr<ValueStoreChangeList> changes(new ValueStoreChangeList());
   for (std::vector<std::string>::const_iterator it = keys.begin();
@@ -112,7 +117,7 @@ ValueStore::WriteResult TestingValueStore::Remove(
       changes->push_back(ValueStoreChange(*it, old_value.release(), NULL));
     }
   }
-  return MakeWriteResult(changes.Pass());
+  return MakeWriteResult(std::move(changes), status_);
 }
 
 ValueStore::WriteResult TestingValueStore::Clear() {
@@ -122,17 +127,4 @@ ValueStore::WriteResult TestingValueStore::Clear() {
     keys.push_back(it.key());
   }
   return Remove(keys);
-}
-
-bool TestingValueStore::Restore() {
-  return true;
-}
-
-bool TestingValueStore::RestoreKey(const std::string& key) {
-  return true;
-}
-
-scoped_ptr<ValueStore::Error> TestingValueStore::TestingError() {
-  return make_scoped_ptr(new ValueStore::Error(
-      error_code_, kGenericErrorMessage, scoped_ptr<std::string>()));
 }

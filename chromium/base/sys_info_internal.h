@@ -5,7 +5,7 @@
 #ifndef BASE_SYS_INFO_INTERNAL_H_
 #define BASE_SYS_INFO_INTERNAL_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 namespace base {
 

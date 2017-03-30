@@ -18,6 +18,7 @@
         '<(DEPTH)/gpu/command_buffer/command_buffer.gyp:gles2_utils',
         '<(DEPTH)/skia/skia.gyp:skia',
         '<(DEPTH)/third_party/mesa/mesa.gyp:mesa_headers',
+        '<(DEPTH)/ui/base/ui_base.gyp:ui_base',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
       ],
@@ -73,6 +74,8 @@
         'gl_fence_nv.h',
         'gl_gl_api_implementation.cc',
         'gl_gl_api_implementation.h',
+        'gl_helper.cc',
+        'gl_helper.h',
         'gl_image.h',
         'gl_image_memory.cc',
         'gl_image_memory.h',
@@ -101,6 +104,8 @@
         'gl_surface_mac.cc',
         'gl_surface_osmesa.cc',
         'gl_surface_osmesa.h',
+        'gl_surface_overlay.cc',
+        'gl_surface_overlay.h',
         'gl_surface_ozone.cc',
         'gl_surface_stub.cc',
         'gl_surface_stub.h',
@@ -115,12 +120,16 @@
         'gpu_switching_observer.h',
         'gpu_timing.cc',
         'gpu_timing.h',
+        'scoped_api.cc',
+        'scoped_api.h',
         'scoped_binders.cc',
         'scoped_binders.h',
         'scoped_make_current.cc',
         'scoped_make_current.h',
         'sync_control_vsync_provider.cc',
         'sync_control_vsync_provider.h',
+        'trace_util.cc',
+        'trace_util.h',
       ],
       'conditions': [
         ['OS in ("win", "android", "linux")', {
@@ -150,12 +159,6 @@
             'gl_implementation_osmesa.h',
           ],
         }],
-        ['OS=="linux"', {
-          'sources': [
-            'gl_image_linux_dma_buffer.cc',
-            'gl_image_linux_dma_buffer.h',
-          ],
-        }],
         ['use_x11 == 1', {
           'sources': [
             'gl_bindings_autogen_glx.cc',
@@ -168,6 +171,8 @@
             'gl_glx_api_implementation.h',
             'gl_image_glx.cc',
             'gl_image_glx.h',
+            'gl_surface_egl_x11.cc',
+            'gl_surface_egl_x11.h',
             'gl_surface_glx.cc',
             'gl_surface_glx.h',
           ],
@@ -181,6 +186,8 @@
             '<(DEPTH)/build/linux/system.gyp:xcomposite',
             '<(DEPTH)/build/linux/system.gyp:xext',
             '<(DEPTH)/ui/events/platform/events_platform.gyp:events_platform',
+            '<(DEPTH)/third_party/angle/src/angle.gyp:libEGL_ANGLE',
+            '<(DEPTH)/third_party/angle/src/angle.gyp:libGLESv2_ANGLE',
             '<(DEPTH)/ui/gfx/x/gfx_x11.gyp:gfx_x11',
           ],
         }],
@@ -198,6 +205,8 @@
             'gl_surface_wgl.h',
             'gl_wgl_api_implementation.cc',
             'gl_wgl_api_implementation.h',
+            'vsync_provider_win.cc',
+            'vsync_provider_win.h',
           ],
           'msvs_settings': {
             'VCLinkerTool': {
@@ -225,7 +234,7 @@
             'gl_context_cgl.h',
             'gl_fence_apple.cc',
             'gl_fence_apple.h',
-            'gl_image_io_surface.cc',
+            'gl_image_io_surface.mm',
             'gl_image_io_surface.h',
             'scoped_cgl.cc',
             'scoped_cgl.h',
@@ -234,6 +243,7 @@
             'libraries': [
               '$(SDKROOT)/System/Library/Frameworks/IOSurface.framework',
               '$(SDKROOT)/System/Library/Frameworks/OpenGL.framework',
+              '$(SDKROOT)/System/Library/Frameworks/Quartz.framework',
             ],
           },
         }],
@@ -263,6 +273,10 @@
           'sources/': [ ['exclude', '^android/'] ],
         }],
         ['use_ozone==1', {
+          'sources': [
+            'gl_image_ozone_native_pixmap.cc',
+            'gl_image_ozone_native_pixmap.h',
+          ],
           'dependencies': [
             '../ozone/ozone.gyp:ozone',
             '../ozone/ozone.gyp:ozone_base',
@@ -289,6 +303,36 @@
         'gl_mock_autogen_gl.h',
         'gpu_timing_fake.cc',
         'gpu_timing_fake.h',
+      ],
+    },
+    {
+      'target_name': 'gl_test_support',
+      'type': 'static_library',
+      'dependencies': [
+        '<(DEPTH)/testing/gtest.gyp:gtest',
+        '../../third_party/khronos/khronos.gyp:khronos_headers',
+        'gl',
+      ],
+      'include_dirs': [
+        '../..',
+      ],
+      'sources': [
+        'test/gl_image_test_support.cc',
+        'test/gl_image_test_support.h',
+        'test/gl_image_test_template.h',
+        'test/gl_surface_test_support.cc',
+        'test/gl_surface_test_support.h',
+        'test/gl_test_helper.cc',
+        'test/gl_test_helper.h',
+      ],
+      'conditions': [
+        ['use_x11==1', {
+          'dependencies': [
+            '../../build/linux/system.gyp:x11',
+            '../gfx/x/gfx_x11.gyp:gfx_x11',
+            '../platform_window/x11/x11_window.gyp:x11_window',
+          ],
+        }],
       ],
     },
   ],

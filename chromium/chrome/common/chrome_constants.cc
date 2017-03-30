@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
-
-#include "base/files/file_path.h"
+#include "chrome/common/chrome_version.h"
 
 #define FPL FILE_PATH_LITERAL
 
@@ -20,6 +20,9 @@
 #endif  // defined(OS_MACOSX)
 
 namespace chrome {
+
+const char kChromeVersion[] = CHROME_VERSION_STRING;
+const char kVivaldiVersion[] = VIVALDI_VERSION_STRING;
 
 #if defined(OS_WIN)
 const char kChromeVersionEnvVar[] = "VIVALDI_VERSION";
@@ -108,7 +111,7 @@ const base::FilePath::CharType kHelperProcessExecutablePathChromium[] =
 #elif defined(OS_POSIX)
 const base::FilePath::CharType kBrowserProcessExecutablePathChromium[] =
     FPL("vivaldi");
-const base::FilePath::CharType kBrowserProcessExecutablePath[] = FPL("vivalid");
+const base::FilePath::CharType kBrowserProcessExecutablePath[] = FPL("vivaldi");
 const base::FilePath::CharType kHelperProcessExecutablePathChromium[] =
     FPL("vivaldi");
 const base::FilePath::CharType kHelperProcessExecutablePath[] = FPL("vivaldi");
@@ -117,17 +120,10 @@ const base::FilePath::CharType kHelperProcessExecutablePath[] = FPL("vivaldi");
 #if defined(OS_MACOSX)
 const base::FilePath::CharType kFrameworkName[] =
     FPL(PRODUCT_STRING " Framework.framework");
-
-const char* const kHelperFlavorSuffixes[] = {
-  FPL("EH"),  // Executable heap
-  FPL("NP"),  // No PIE
-  NULL
-};
 #endif  // OS_MACOSX
 
 #if defined(OS_WIN)
 const base::FilePath::CharType kBrowserResourcesDll[] = FPL("vivaldi.dll");
-const base::FilePath::CharType kMetroDriverDll[] = FPL("metro_driver.dll");
 const base::FilePath::CharType kStatusTrayWindowClass[] =
     FPL("Vivaldi_StatusTrayWindow");
 #endif  // defined(OS_WIN)
@@ -138,8 +134,6 @@ const base::FilePath::CharType kGuestProfileDir[] = FPL("Guest Profile");
 const base::FilePath::CharType kSystemProfileDir[] = FPL("System Profile");
 
 // filenames
-const base::FilePath::CharType kAffiliationDatabaseFileName[] =
-    FPL("Affiliation Database");
 const base::FilePath::CharType kCacheDirname[] = FPL("Cache");
 const base::FilePath::CharType kChannelIDFilename[] = FPL("Origin Bound Certs");
 const base::FilePath::CharType kCookieFilename[] = FPL("Cookies");
@@ -155,22 +149,22 @@ const base::FilePath::CharType kFirstRunSentinel[] = FPL("First Run");
 const base::FilePath::CharType kGCMStoreDirname[] = FPL("GCM Store");
 const base::FilePath::CharType kLocalStateFilename[] = FPL("Local State");
 const base::FilePath::CharType kLocalStorePoolName[] = FPL("LocalStorePool");
-const base::FilePath::CharType kLoginDataFileName[] = FPL("Login Data");
 const base::FilePath::CharType kMediaCacheDirname[] = FPL("Media Cache");
 const base::FilePath::CharType kNetworkPersistentStateFilename[] =
     FPL("Network Persistent State");
+const base::FilePath::CharType kOfflinePageArchviesDirname[] =
+    FPL("Offline Pages/archives");
+const base::FilePath::CharType kOfflinePageMetadataDirname[] =
+    FPL("Offline Pages/metadata");
 const base::FilePath::CharType kPreferencesFilename[] = FPL("Preferences");
 const base::FilePath::CharType kProtectedPreferencesFilenameDeprecated[] =
     FPL("Protected Preferences");
 const base::FilePath::CharType kReadmeFilename[] = FPL("README");
-const base::FilePath::CharType kResetPromptMementoFilename[] =
-    FPL("Reset Prompt Memento");
 const base::FilePath::CharType kSafeBrowsingBaseFilename[] =
     FPL("Safe Browsing");
 const base::FilePath::CharType kSecurePreferencesFilename[] =
     FPL("Secure Preferences");
 const base::FilePath::CharType kServiceStateFileName[] = FPL("Service State");
-const base::FilePath::CharType kShortcutsDatabaseName[] = FPL("Shortcuts");
 const base::FilePath::CharType kSingletonCookieFilename[] =
     FPL("SingletonCookie");
 const base::FilePath::CharType kSingletonLockFilename[] = FPL("SingletonLock");
@@ -179,6 +173,8 @@ const base::FilePath::CharType kSingletonSocketFilename[] =
 const base::FilePath::CharType kSupervisedUserSettingsFilename[] =
     FPL("Managed Mode Settings");
 const base::FilePath::CharType kThemePackFilename[] = FPL("Cached Theme.pak");
+const base::FilePath::CharType kThemePackMaterialDesignFilename[] =
+    FPL("Cached Theme Material Design.pak");
 const base::FilePath::CharType kWebAppDirname[] = FPL("Web Applications");
 
 #if defined(OS_WIN)
@@ -212,9 +208,6 @@ const wchar_t kMetroNavigationAndSearchMessage[] =
     L"VIVALDI_METRO_NAV_SEARCH_REQUEST";
 const wchar_t kMetroGetCurrentTabInfoMessage[] =
     L"VIVALDI_METRO_GET_CURRENT_TAB_INFO";
-const wchar_t kMetroRegistryPath[] =
-    L"Software\\" PRODUCT_STRING_PATH L"\\Metro";
-const wchar_t kLaunchModeValue[] = L"launch_mode";
 // This is used by breakpad and the metrics reporting.
 const wchar_t kBrowserCrashDumpAttemptsRegistryPath[] =
     L"Software\\" PRODUCT_STRING_PATH L"\\BrowserCrashDumpAttempts";
@@ -223,7 +216,6 @@ const wchar_t kBrowserCrashDumpAttemptsRegistryPathSxS[] =
 // This is used by browser exit code metrics reporting.
 const wchar_t kBrowserExitCodesRegistryPath[] =
     L"Software\\" PRODUCT_STRING_PATH L"\\BrowserExitCodes";
-const char kSafeModeEnvVar[] = "VIVALDI_SAFE_MODE";
 #endif
 
 #if defined(OS_CHROMEOS)

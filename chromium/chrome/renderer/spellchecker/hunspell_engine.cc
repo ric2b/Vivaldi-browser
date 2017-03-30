@@ -4,8 +4,10 @@
 
 #include "chrome/renderer/spellchecker/hunspell_engine.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 #include "base/files/memory_mapped_file.h"
 #include "base/time/time.h"
@@ -31,7 +33,7 @@ namespace {
                 "MaxSuggestLen too long");
 }  // namespace
 
-#if !defined(OS_MACOSX)
+#if !defined(USE_BROWSER_SPELLCHECKER)
 SpellingEngine* CreateNativeSpellingEngine() {
   return new HunspellEngine();
 }
@@ -51,7 +53,7 @@ void HunspellEngine::Init(base::File file) {
   initialized_ = true;
   hunspell_.reset();
   bdict_file_.reset();
-  file_ = file.Pass();
+  file_ = std::move(file);
   hunspell_enabled_ = file_.IsValid();
   // Delay the actual initialization of hunspell until it is needed.
 }
@@ -62,7 +64,7 @@ void HunspellEngine::InitializeHunspell() {
 
   bdict_file_.reset(new base::MemoryMappedFile);
 
-  if (bdict_file_->Initialize(file_.Pass())) {
+  if (bdict_file_->Initialize(std::move(file_))) {
     hunspell_.reset(new Hunspell(bdict_file_->data(), bdict_file_->length()));
   } else {
     NOTREACHED() << "Could not mmap spellchecker dictionary.";

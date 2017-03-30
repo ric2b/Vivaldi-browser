@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_BANNERS_APP_BANNER_INFOBAR_DELEGATE_DESKTOP_H_
 #define CHROME_BROWSER_BANNERS_APP_BANNER_INFOBAR_DELEGATE_DESKTOP_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
@@ -47,6 +48,7 @@ class AppBannerInfoBarDelegateDesktop : public ConfirmInfoBarDelegate {
   bool Accept() override;
 
   // InfoBarDelegate override.
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   void InfoBarDismissed() override;
 
  protected:
@@ -64,7 +66,8 @@ class AppBannerInfoBarDelegateDesktop : public ConfirmInfoBarDelegate {
   bool has_user_interaction_;
 
   Type GetInfoBarType() const override;
-  int GetIconID() const override;
+  int GetIconId() const override;
+  gfx::VectorIconId GetVectorIconId() const override;
 
   DISALLOW_COPY_AND_ASSIGN(AppBannerInfoBarDelegateDesktop);
 };

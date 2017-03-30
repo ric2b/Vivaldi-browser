@@ -18,6 +18,7 @@
 #include "ui/gfx/text_constants.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/animation/ink_drop_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/mouse_constants.h"
@@ -90,7 +91,6 @@ MenuButton::~MenuButton() {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool MenuButton::Activate() {
-  SetState(STATE_PRESSED);
   if (listener_) {
     gfx::Rect lb = GetLocalBounds();
 
@@ -126,6 +126,8 @@ bool MenuButton::Activate() {
     // We don't set our state here. It's handled in the MenuController code or
     // by our click listener.
 
+    if (ink_drop_delegate())
+      ink_drop_delegate()->OnAction(InkDropState::QUICK_ACTION);
     listener_->OnMenuButtonClicked(this, menu_position);
 
     if (destroyed) {
@@ -173,12 +175,15 @@ const char* MenuButton::GetClassName() const {
 }
 
 bool MenuButton::OnMousePressed(const ui::MouseEvent& event) {
-  RequestFocus();
+  if (request_focus_on_press())
+    RequestFocus();
   if (state() != STATE_DISABLED && ShouldEnterPushedState(event) &&
       HitTestPoint(event.location())) {
     TimeDelta delta = TimeTicks::Now() - menu_closed_time_;
     if (delta.InMilliseconds() > kMinimumMsBetweenButtonClicks)
       return Activate();
+    if (ink_drop_delegate())
+      ink_drop_delegate()->OnAction(InkDropState::ACTION_PENDING);
   }
   return true;
 }
@@ -188,6 +193,8 @@ void MenuButton::OnMouseReleased(const ui::MouseEvent& event) {
       HitTestPoint(event.location()) && !InDrag()) {
     Activate();
   } else {
+    if (ink_drop_delegate())
+      ink_drop_delegate()->OnAction(InkDropState::HIDDEN);
     LabelButton::OnMouseReleased(event);
   }
 }
@@ -210,18 +217,23 @@ void MenuButton::OnMouseMoved(const ui::MouseEvent& event) {
 void MenuButton::OnGestureEvent(ui::GestureEvent* event) {
   if (state() != STATE_DISABLED) {
     if (ShouldEnterPushedState(*event) && !Activate()) {
-      // When |Activate()| returns |false|, it means that a menu is shown and
-      // has handled the gesture event. So, there is no need to further process
-      // the gesture event here.
+      // When |Activate()| returns |false|, it means the click was handled by
+      // a button listener and has handled the gesture event. So, there is no
+      // need to further process the gesture event here. However, if the
+      // listener didn't run menu code, we should make sure to reset our state.
+      if (state() == Button::STATE_HOVERED)
+        SetState(Button::STATE_NORMAL);
       return;
     }
     if (switches::IsTouchFeedbackEnabled()) {
       if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
         event->SetHandled();
-        SetState(Button::STATE_HOVERED);
+        if (pressed_lock_count_ == 0)
+          SetState(Button::STATE_HOVERED);
       } else if (state() == Button::STATE_HOVERED &&
                  (event->type() == ui::ET_GESTURE_TAP_CANCEL ||
-                  event->type() == ui::ET_GESTURE_END)) {
+                  event->type() == ui::ET_GESTURE_END) &&
+                 pressed_lock_count_ == 0) {
         SetState(Button::STATE_NORMAL);
       }
     }
@@ -257,6 +269,13 @@ bool MenuButton::OnKeyReleased(const ui::KeyEvent& event) {
   // you press space and clicks it when you release space.  For a MenuButton
   // we always activate the menu on key press.
   return false;
+}
+
+bool MenuButton::AcceleratorPressed(const ui::Accelerator& accelerator) {
+  // CustomButton::AcceleratorPressed ends up in NotifyClick, which doesn't work
+  // for menu buttons.
+  Activate();
+  return true;
 }
 
 void MenuButton::GetAccessibleState(ui::AXViewState* state) {
@@ -320,6 +339,8 @@ void MenuButton::StateChanged() {
       should_disable_after_press_ = false;
     else if (state() == STATE_DISABLED)
       should_disable_after_press_ = true;
+  } else {
+    LabelButton::StateChanged();
   }
 }
 
@@ -339,7 +360,7 @@ void MenuButton::DecrementPressedLocked() {
     if (should_disable_after_press_) {
       desired_state = STATE_DISABLED;
       should_disable_after_press_ = false;
-    } else if (IsMouseHovered()) {
+    } else if (ShouldEnterHoveredState()) {
       desired_state = STATE_HOVERED;
     }
     SetState(desired_state);

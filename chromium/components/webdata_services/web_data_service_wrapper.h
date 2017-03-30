@@ -10,6 +10,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "sql/init_status.h"
 #include "sync/api/syncable_service.h"
@@ -58,11 +59,8 @@ class WebDataServiceWrapper : public KeyedService {
       const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
       const syncer::SyncableService::StartSyncFlare& flare,
-      ShowErrorCallback show_error_callback);
+      const ShowErrorCallback& show_error_callback);
   ~WebDataServiceWrapper() override;
-
-  // For testing.
-  WebDataServiceWrapper();
 
   // KeyedService:
   void Shutdown() override;
@@ -75,6 +73,10 @@ class WebDataServiceWrapper : public KeyedService {
 #if defined(OS_WIN)
   virtual scoped_refptr<PasswordWebDataService> GetPasswordWebData();
 #endif
+
+ protected:
+  // For testing.
+  WebDataServiceWrapper();
 
  private:
   scoped_refptr<WebDatabaseService> web_database_;

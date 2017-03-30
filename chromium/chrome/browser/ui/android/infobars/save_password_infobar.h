@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_ANDROID_INFOBARS_SAVE_PASSWORD_INFOBAR_H_
 #define CHROME_BROWSER_UI_ANDROID_INFOBARS_SAVE_PASSWORD_INFOBAR_H_
 
+#include "base/macros.h"
 #include "chrome/browser/password_manager/save_password_infobar_delegate.h"
 #include "chrome/browser/ui/android/infobars/confirm_infobar.h"
 
@@ -23,7 +24,8 @@ class SavePasswordInfoBar : public ConfirmInfoBar {
   // ConfirmInfoBar:
   base::android::ScopedJavaLocalRef<jobject> CreateRenderInfoBar(
       JNIEnv* env) override;
-  void OnLinkClicked(JNIEnv* env, jobject obj) override;
+  void OnLinkClicked(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj) override;
 
   DISALLOW_COPY_AND_ASSIGN(SavePasswordInfoBar);
 };

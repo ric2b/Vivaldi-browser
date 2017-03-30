@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "media/base/media_log.h"
@@ -38,8 +41,8 @@ class MockBufferedDataSourceHost : public BufferedDataSourceHost {
   MockBufferedDataSourceHost() {}
   virtual ~MockBufferedDataSourceHost() {}
 
-  MOCK_METHOD1(SetTotalBytes, void(int64 total_bytes));
-  MOCK_METHOD2(AddBufferedByteRange, void(int64 start, int64 end));
+  MOCK_METHOD1(SetTotalBytes, void(int64_t total_bytes));
+  MOCK_METHOD2(AddBufferedByteRange, void(int64_t start, int64_t end));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockBufferedDataSourceHost);
@@ -51,11 +54,12 @@ class MockBufferedDataSource : public BufferedDataSource {
  public:
   MockBufferedDataSource(
       const GURL& url,
+      BufferedResourceLoader::CORSMode cors_mode,
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       WebLocalFrame* frame,
       BufferedDataSourceHost* host)
       : BufferedDataSource(url,
-                           BufferedResourceLoader::kUnspecified,
+                           cors_mode,
                            task_runner,
                            frame,
                            new media::MediaLog(),
@@ -66,9 +70,9 @@ class MockBufferedDataSource : public BufferedDataSource {
         loading_(false) {}
   virtual ~MockBufferedDataSource() {}
 
-  MOCK_METHOD2(CreateResourceLoader, BufferedResourceLoader*(int64, int64));
-  BufferedResourceLoader* CreateMockResourceLoader(int64 first_byte_position,
-                                                   int64 last_byte_position) {
+  MOCK_METHOD2(CreateResourceLoader, BufferedResourceLoader*(int64_t, int64_t));
+  BufferedResourceLoader* CreateMockResourceLoader(int64_t first_byte_position,
+                                                   int64_t last_byte_position) {
     CHECK(!loading_) << "Previous resource load wasn't cancelled";
 
     BufferedResourceLoader* loader =
@@ -102,8 +106,8 @@ class MockBufferedDataSource : public BufferedDataSource {
   DISALLOW_COPY_AND_ASSIGN(MockBufferedDataSource);
 };
 
-static const int64 kFileSize = 5000000;
-static const int64 kFarReadPosition = 4000000;
+static const int64_t kFileSize = 5000000;
+static const int64_t kFarReadPosition = 4000000;
 static const int kDataSize = 1024;
 
 static const char kHttpUrl[] = "http://localhost/foo.webm";
@@ -117,6 +121,7 @@ class BufferedDataSourceTest : public testing::Test {
       : view_(WebView::create(NULL)),
         frame_(
             WebLocalFrame::create(blink::WebTreeScopeType::Document, &client_)),
+        bytes_received_(0),
         preload_(BufferedDataSource::AUTO) {
     view_->setMainFrame(frame_);
   }
@@ -128,13 +133,13 @@ class BufferedDataSourceTest : public testing::Test {
 
   MOCK_METHOD1(OnInitialize, void(bool));
 
-  void Initialize(const char* url, bool expected) {
+  void InitializeWithCORS(const char* url,
+                          bool expected,
+                          BufferedResourceLoader::CORSMode cors_mode) {
     GURL gurl(url);
-    data_source_.reset(
-        new MockBufferedDataSource(gurl,
-                                   message_loop_.task_runner(),
-                                   view_->mainFrame()->toWebLocalFrame(),
-                                   &host_));
+    data_source_.reset(new MockBufferedDataSource(
+        gurl, cors_mode, message_loop_.task_runner(),
+        view_->mainFrame()->toWebLocalFrame(), &host_));
     data_source_->SetPreload(preload_);
 
     response_generator_.reset(new TestResponseGenerator(gurl, kFileSize));
@@ -146,6 +151,10 @@ class BufferedDataSourceTest : public testing::Test {
 
     bool is_http = gurl.SchemeIsHTTPOrHTTPS();
     EXPECT_EQ(data_source_->downloading(), is_http);
+  }
+
+  void Initialize(const char* url, bool expected) {
+    InitializeWithCORS(url, expected, BufferedResourceLoader::kUnspecified);
   }
 
   // Helper to initialize tests with a valid 200 response.
@@ -192,6 +201,7 @@ class BufferedDataSourceTest : public testing::Test {
         .WillOnce(Invoke(data_source_.get(),
                          &MockBufferedDataSource::CreateMockResourceLoader));
     message_loop_.RunUntilIdle();
+    bytes_received_ = 0;
   }
 
   void Respond(const WebURLResponse& response) {
@@ -205,6 +215,8 @@ class BufferedDataSourceTest : public testing::Test {
 
     loader()->didReceiveData(url_loader(), data.get(), size, size);
     message_loop_.RunUntilIdle();
+    bytes_received_ += size;
+    EXPECT_EQ(bytes_received_, data_source_->GetMemoryUsage());
   }
 
   void FinishLoading() {
@@ -215,7 +227,7 @@ class BufferedDataSourceTest : public testing::Test {
 
   MOCK_METHOD1(ReadCallback, void(int size));
 
-  void ReadAt(int64 position) {
+  void ReadAt(int64_t position) {
     data_source_->Read(position, kDataSize, buffer_,
                        base::Bind(&BufferedDataSourceTest::ReadCallback,
                                   base::Unretained(this)));
@@ -294,10 +306,11 @@ class BufferedDataSourceTest : public testing::Test {
 
   StrictMock<MockBufferedDataSourceHost> host_;
   base::MessageLoop message_loop_;
+  int bytes_received_;
 
  private:
   // Used for calling BufferedDataSource::Read().
-  uint8 buffer_[kDataSize];
+  uint8_t buffer_[kDataSize];
 
   BufferedDataSource::Preload preload_;
 
@@ -476,6 +489,7 @@ TEST_F(BufferedDataSourceTest, Http_RetryOnError) {
           DoAll(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit),
                 Invoke(data_source_.get(),
                        &MockBufferedDataSource::CreateMockResourceLoader)));
+  bytes_received_ = 0;
   loader()->didFail(url_loader(), response_generator_->GenerateError());
   run_loop.Run();
   Respond(response_generator_->Generate206(kDataSize));
@@ -577,6 +591,20 @@ TEST_F(BufferedDataSourceTest,
   ExecuteMixedResponseFailureTest(response1, response2);
 }
 
+TEST_F(BufferedDataSourceTest,
+       Http_MixedResponse_ServiceWorkerProxiedAndDifferentOriginResponseCORS) {
+  InitializeWithCORS(kHttpUrl, true, BufferedResourceLoader::kAnonymous);
+  WebURLResponse response1 =
+      response_generator_->GeneratePartial206(0, kDataSize - 1);
+  response1.setWasFetchedViaServiceWorker(true);
+  response1.setOriginalURLViaServiceWorker(GURL(kHttpDifferentOriginUrl));
+  WebURLResponse response2 =
+      response_generator_->GeneratePartial206(kDataSize, kDataSize * 2 - 1);
+  // The origin URL of response1 and response2 are different, but a CORS check
+  // has been passed for each request, so expect success.
+  ExecuteMixedResponseSuccessTest(response1, response2);
+}
+
 TEST_F(BufferedDataSourceTest, File_Retry) {
   InitializeWithFileResponse();
 
@@ -674,7 +702,7 @@ TEST_F(BufferedDataSourceTest, File_Successful) {
 TEST_F(BufferedDataSourceTest, StopDuringRead) {
   InitializeWith206Response();
 
-  uint8 buffer[256];
+  uint8_t buffer[256];
   data_source_->Read(0, arraysize(buffer), buffer, base::Bind(
       &BufferedDataSourceTest::ReadCallback, base::Unretained(this)));
 
@@ -836,7 +864,8 @@ TEST_F(BufferedDataSourceTest, LocalResource_DeferStrategy) {
   data_source_->MediaIsPlaying();
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
   Stop();
@@ -853,7 +882,8 @@ TEST_F(BufferedDataSourceTest, LocalResource_PreloadMetadata_DeferStrategy) {
   data_source_->MediaIsPlaying();
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
   Stop();
@@ -870,7 +900,8 @@ TEST_F(BufferedDataSourceTest, ExternalResource_Reponse200_DeferStrategy) {
   data_source_->MediaIsPlaying();
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
   Stop();
@@ -889,7 +920,8 @@ TEST_F(BufferedDataSourceTest,
   data_source_->MediaIsPlaying();
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
   Stop();
@@ -906,13 +938,18 @@ TEST_F(BufferedDataSourceTest, ExternalResource_Reponse206_DeferStrategy) {
   data_source_->MediaIsPlaying();
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
   set_might_be_reused_from_cache_in_future(true);
-  data_source_->MediaIsPaused();
+
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   EXPECT_EQ(BufferedResourceLoader::kNeverDefer, defer_strategy());
 
-  data_source_->MediaIsPlaying();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_NORMAL);
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
+
   set_might_be_reused_from_cache_in_future(false);
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
   Stop();
@@ -930,14 +967,19 @@ TEST_F(BufferedDataSourceTest,
 
   data_source_->MediaIsPlaying();
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
+
   set_might_be_reused_from_cache_in_future(true);
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   EXPECT_EQ(BufferedResourceLoader::kNeverDefer, defer_strategy());
 
-  data_source_->MediaIsPlaying();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_NORMAL);
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
+
   set_might_be_reused_from_cache_in_future(false);
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   EXPECT_EQ(BufferedResourceLoader::kCapacityDefer, defer_strategy());
 
   Stop();

@@ -4,10 +4,11 @@
 
 #include "sync/util/cryptographer.h"
 
+#include <stddef.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/base64.h"
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "sync/protocol/nigori_specifics.pb.h"
 #include "sync/util/encryptor.h"
@@ -170,7 +171,7 @@ bool Cryptographer::AddKey(const KeyParams& params) {
     NOTREACHED();  // Invalid username or password.
     return false;
   }
-  return AddKeyImpl(nigori.Pass(), true);
+  return AddKeyImpl(std::move(nigori), true);
 }
 
 bool Cryptographer::AddNonDefaultKey(const KeyParams& params) {
@@ -183,11 +184,11 @@ bool Cryptographer::AddNonDefaultKey(const KeyParams& params) {
     NOTREACHED();  // Invalid username or password.
     return false;
   }
-  return AddKeyImpl(nigori.Pass(), false);
+  return AddKeyImpl(std::move(nigori), false);
 }
 
 bool Cryptographer::AddKeyFromBootstrapToken(
-    const std::string restored_bootstrap_token) {
+    const std::string& restored_bootstrap_token) {
   // Create the new Nigori and make it the default encryptor.
   std::string serialized_nigori_key = UnpackBootstrapToken(
       restored_bootstrap_token);
@@ -361,7 +362,7 @@ std::string Cryptographer::GetDefaultNigoriKeyData() const {
   return key.SerializeAsString();
 }
 
-bool Cryptographer::ImportNigoriKey(const std::string serialized_nigori_key) {
+bool Cryptographer::ImportNigoriKey(const std::string& serialized_nigori_key) {
   if (serialized_nigori_key.empty())
     return false;
 
@@ -376,7 +377,7 @@ bool Cryptographer::ImportNigoriKey(const std::string serialized_nigori_key) {
     return false;
   }
 
-  if (!AddKeyImpl(nigori.Pass(), true))
+  if (!AddKeyImpl(std::move(nigori), true))
     return false;
   return true;
 }

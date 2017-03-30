@@ -5,7 +5,10 @@
 #ifndef MEDIA_BASE_ANDROID_MEDIA_CODEC_VIDEO_DECODER_H_
 #define MEDIA_BASE_ANDROID_MEDIA_CODEC_VIDEO_DECODER_H_
 
+#include <stddef.h>
+
 #include <set>
+#include "base/macros.h"
 #include "media/base/android/media_codec_decoder.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/android/scoped_java_surface.h"
@@ -28,41 +31,56 @@ class MediaCodecVideoDecoder : public MediaCodecDecoder {
   //                   decoder can use them.
   MediaCodecVideoDecoder(
       const scoped_refptr<base::SingleThreadTaskRunner>& media_runner,
+      FrameStatistics* frame_statistics,
       const base::Closure& request_data_cb,
       const base::Closure& starvation_cb,
+      const base::Closure& drained_requested_cb,
       const base::Closure& stop_done_cb,
+      const base::Closure& waiting_for_decryption_key_cb,
       const base::Closure& error_cb,
       const SetTimeCallback& update_current_time_cb,
-      const VideoSizeChangedCallback& video_size_changed_cb,
-      const base::Closure& codec_created_cb);
+      const VideoSizeChangedCallback& video_size_changed_cb);
   ~MediaCodecVideoDecoder() override;
 
   const char* class_name() const override;
 
   bool HasStream() const override;
   void SetDemuxerConfigs(const DemuxerConfigs& configs) override;
+  bool IsContentEncrypted() const override;
   void ReleaseDecoderResources() override;
+  void ReleaseMediaCodec() override;
 
   // Stores the video surface to use with upcoming Configure()
-  void SetPendingSurface(gfx::ScopedJavaSurface surface);
+  void SetVideoSurface(gfx::ScopedJavaSurface surface);
 
   // Returns true if there is a video surface to use.
-  bool HasPendingSurface() const;
+  bool HasVideoSurface() const;
+
+  // Sets whether protected surface is needed for the currently used DRM.
+  void SetProtectedSurfaceRequired(bool value);
+
+  // Returns true if  protected surface is needed.
+  bool IsProtectedSurfaceRequired() const;
 
  protected:
-  bool IsCodecReconfigureNeeded(const DemuxerConfigs& curr,
-                                const DemuxerConfigs& next) const override;
-  ConfigStatus ConfigureInternal() override;
-  void SynchronizePTSWithTime(base::TimeDelta current_time) override;
+  bool IsCodecReconfigureNeeded(const DemuxerConfigs& next) const override;
+  ConfigStatus ConfigureInternal(jobject media_crypto) override;
+  void AssociateCurrentTimeWithPTS(base::TimeDelta pts) override;
+  void DissociatePTSFromTime() override;
   void OnOutputFormatChanged() override;
   void Render(int buffer_index,
+              size_t offset,
               size_t size,
-              bool render_output,
+              RenderMode render_mode,
               base::TimeDelta pts,
               bool eos_encountered) override;
 
   int NumDelayedRenderTasks() const override;
   void ReleaseDelayedBuffers() override;
+
+#ifndef NDEBUG
+  void VerifyUnitIsKeyFrame(const AccessUnit* unit) const override;
+#endif
 
  private:
   // A helper method that releases output buffers and does
@@ -70,8 +88,8 @@ class MediaCodecVideoDecoder : public MediaCodecDecoder {
   // for later execution.
   void ReleaseOutputBuffer(int buffer_index,
                            base::TimeDelta pts,
-                           size_t size,
                            bool render,
+                           bool update_time,
                            bool eos_encountered);
 
   // Data.
@@ -82,14 +100,14 @@ class MediaCodecVideoDecoder : public MediaCodecDecoder {
   // Video surface that we render to.
   gfx::ScopedJavaSurface surface_;
 
+  // Flags that indicates whether we need protected surface.
+  bool is_protected_surface_required_;
+
   // Reports current playback time to the callee.
   SetTimeCallback update_current_time_cb_;
 
   // Informs the callee that video size is changed.
   VideoSizeChangedCallback video_size_changed_cb_;
-
-  // Informs the callee that the MediaCodec is created.
-  base::Closure codec_created_cb_;
 
   // Current video size to be sent with |video_size_changed_cb_|.
   gfx::Size video_size_;

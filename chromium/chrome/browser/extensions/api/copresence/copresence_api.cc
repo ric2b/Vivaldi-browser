@@ -4,14 +4,15 @@
 
 #include "chrome/browser/extensions/api/copresence/copresence_api.h"
 
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "base/memory/linked_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/copresence/chrome_whispernet_client.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/services/gcm/gcm_profile_service.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/extensions/api/copresence.h"
 #include "chrome/common/extensions/manifest_handlers/copresence_manifest.h"
 #include "chrome/common/pref_names.h"
@@ -19,6 +20,7 @@
 #include "components/copresence/proto/data.pb.h"
 #include "components/copresence/proto/enums.pb.h"
 #include "components/copresence/proto/rpcs.pb.h"
+#include "components/gcm_driver/gcm_profile_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/event_router.h"
@@ -71,7 +73,7 @@ copresence::CopresenceManager* CopresenceService::manager() {
   return manager_.get();
 }
 
-const std::string CopresenceService::auth_token(const std::string& app_id)
+std::string CopresenceService::auth_token(const std::string& app_id)
     const {
   // This won't be const if we use map[]
   const auto& key = auth_tokens_by_app_.find(app_id);
@@ -92,7 +94,7 @@ void CopresenceService::set_auth_token(const std::string& app_id,
 
 void CopresenceService::set_manager_for_testing(
     scoped_ptr<copresence::CopresenceManager> manager) {
-  manager_ = manager.Pass();
+  manager_ = std::move(manager);
 }
 
 void CopresenceService::ResetState() {
@@ -147,12 +149,12 @@ void CopresenceService::HandleMessages(
   }
 
   // Send the messages to the client app.
-  scoped_ptr<Event> event(
-      new Event(events::UNKNOWN, OnMessagesReceived::kEventName,
-                OnMessagesReceived::Create(subscription_id, api_messages),
-                browser_context_));
+  scoped_ptr<Event> event(new Event(
+      events::COPRESENCE_ON_MESSAGES_RECEIVED, OnMessagesReceived::kEventName,
+      OnMessagesReceived::Create(subscription_id, api_messages),
+      browser_context_));
   EventRouter::Get(browser_context_)
-      ->DispatchEventToExtension(app_id, event.Pass());
+      ->DispatchEventToExtension(app_id, std::move(event));
   DVLOG(2) << "Passed " << api_messages.size() << " messages to app \""
            << app_id << "\" for subscription \"" << subscription_id << "\"";
 }
@@ -160,11 +162,11 @@ void CopresenceService::HandleMessages(
 void CopresenceService::HandleStatusUpdate(
     copresence::CopresenceStatus status) {
   DCHECK_EQ(copresence::AUDIO_FAIL, status);
-  scoped_ptr<Event> event(
-      new Event(events::UNKNOWN, OnStatusUpdated::kEventName,
-                OnStatusUpdated::Create(api::copresence::STATUS_AUDIOFAILED),
-                browser_context_));
-  EventRouter::Get(browser_context_)->BroadcastEvent(event.Pass());
+  scoped_ptr<Event> event(new Event(
+      events::COPRESENCE_ON_STATUS_UPDATED, OnStatusUpdated::kEventName,
+      OnStatusUpdated::Create(api::copresence::STATUS_AUDIOFAILED),
+      browser_context_));
+  EventRouter::Get(browser_context_)->BroadcastEvent(std::move(event));
   DVLOG(2) << "Sent Audio Failed status update.";
 }
 
@@ -172,11 +174,11 @@ net::URLRequestContextGetter* CopresenceService::GetRequestContext() const {
   return browser_context_->GetRequestContext();
 }
 
-const std::string CopresenceService::GetPlatformVersionString() const {
-  return chrome::VersionInfo().CreateVersionString();
+std::string CopresenceService::GetPlatformVersionString() const {
+  return chrome::GetVersionString();
 }
 
-const std::string
+std::string
 CopresenceService::GetAPIKey(const std::string& app_id) const {
   // Check first if the app has set its key via the API.
   const auto& key = api_keys_by_app_.find(app_id);
@@ -210,7 +212,7 @@ gcm::GCMDriver* CopresenceService::GetGCMDriver() {
   return gcm_service ? gcm_service->driver() : nullptr;
 }
 
-const std::string CopresenceService::GetDeviceId(bool authenticated) {
+std::string CopresenceService::GetDeviceId(bool authenticated) {
   std::string id = GetPrefService()->GetString(GetPrefName(authenticated));
   DVLOG(3) << "Retrieved device ID \"" << id << "\", "
            << "authenticated = " << authenticated;

@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 """Hooks that apply globally to all scripts that import or use Telemetry."""
-
 import signal
 import sys
 
@@ -14,7 +13,6 @@ def InstallHooks():
   InstallUnhandledExceptionFormatter()
   InstallStackDumpOnSigusr1()
   InstallTerminationHook()
-
 
 def InstallUnhandledExceptionFormatter():
   """Print prettier exceptions that also contain the stack frame's locals."""

@@ -5,10 +5,14 @@
 #ifndef NET_TOOLS_FLIP_SERVER_MEM_CACHE_H_
 #define NET_TOOLS_FLIP_SERVER_MEM_CACHE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/tools/balsa/balsa_headers.h"
 #include "net/tools/balsa/balsa_visitor_interface.h"
@@ -103,20 +107,18 @@ class MemCacheIter {
   int priority;
   bool transformed_header;
   size_t body_bytes_consumed;
-  uint32 stream_id;
-  uint32 max_segment_size;
+  uint32_t stream_id;
+  uint32_t max_segment_size;
   size_t bytes_sent;
 };
 
 class MemoryCache {
  public:
-  typedef std::map<std::string, FileData*> Files;
+  using Files = std::map<std::string, scoped_ptr<FileData>>;
 
  public:
   MemoryCache();
   virtual ~MemoryCache();
-
-  void CloneFrom(const MemoryCache& mc);
 
   void AddFiles();
 
@@ -136,7 +138,6 @@ class MemoryCache {
 
  private:
   void InsertFile(FileData* file_data);
-  void ClearFiles();
 
   Files files_;
   std::string cwd_;

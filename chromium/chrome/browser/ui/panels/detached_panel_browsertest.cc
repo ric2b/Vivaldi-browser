@@ -61,13 +61,7 @@ IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, CheckDetachedPanelProperties) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DrawAttentionOnActive DISABLED_DrawAttentionOnActive
-#else
-#define MAYBE_DrawAttentionOnActive DrawAttentionOnActive
-#endif
-IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, MAYBE_DrawAttentionOnActive) {
+IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, DrawAttentionOnActive) {
   // Create a detached panel that is initially active.
   Panel* panel = CreateDetachedPanel("1", gfx::Rect(300, 200, 250, 200));
   scoped_ptr<NativePanelTesting> native_panel_testing(
@@ -83,13 +77,7 @@ IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, MAYBE_DrawAttentionOnActive) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DrawAttentionOnInactive DISABLED_DrawAttentionOnInactive
-#else
-#define MAYBE_DrawAttentionOnInactive DrawAttentionOnInactive
-#endif
-IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, MAYBE_DrawAttentionOnInactive) {
+IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, DrawAttentionOnInactive) {
   // Create an inactive detached panel.
   Panel* panel =
       CreateInactiveDetachedPanel("1", gfx::Rect(300, 200, 250, 200));
@@ -111,13 +99,7 @@ IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, MAYBE_DrawAttentionOnInactive) 
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DrawAttentionResetOnActivate DISABLED_DrawAttentionResetOnActivate
-#else
-#define MAYBE_DrawAttentionResetOnActivate DrawAttentionResetOnActivate
-#endif
-IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, MAYBE_DrawAttentionResetOnActivate) {
+IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, DrawAttentionResetOnActivate) {
   // Create an inactive detached panel.
   Panel* panel =
       CreateInactiveDetachedPanel("1", gfx::Rect(300, 200, 250, 200));
@@ -138,13 +120,7 @@ IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, MAYBE_DrawAttentionResetOnActiv
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ClickTitlebar DISABLED_ClickTitlebar
-#else
-#define MAYBE_ClickTitlebar ClickTitlebar
-#endif
-IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, MAYBE_ClickTitlebar) {
+IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, ClickTitlebar) {
   Panel* panel = CreateDetachedPanel("1", gfx::Rect(300, 200, 250, 200));
   EXPECT_FALSE(panel->IsMinimized());
 
@@ -173,14 +149,8 @@ IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest, MAYBE_ClickTitlebar) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UpdateDetachedPanelOnPrimaryDisplayChange DISABLED_UpdateDetachedPanelOnPrimaryDisplayChange
-#else
-#define MAYBE_UpdateDetachedPanelOnPrimaryDisplayChange UpdateDetachedPanelOnPrimaryDisplayChange
-#endif
 IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest,
-                       MAYBE_UpdateDetachedPanelOnPrimaryDisplayChange) {
+                       UpdateDetachedPanelOnPrimaryDisplayChange) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create a big detached panel on the primary display.
@@ -204,14 +174,8 @@ IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UpdateDetachedPanelOnSecondaryDisplayChange DISABLED_UpdateDetachedPanelOnSecondaryDisplayChange
-#else
-#define MAYBE_UpdateDetachedPanelOnSecondaryDisplayChange UpdateDetachedPanelOnSecondaryDisplayChange
-#endif
 IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest,
-                       MAYBE_UpdateDetachedPanelOnSecondaryDisplayChange) {
+                       UpdateDetachedPanelOnSecondaryDisplayChange) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Setup 2 displays with secondary display on the right side of primary
@@ -246,14 +210,8 @@ IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_KeepShowingDetachedPanelCreatedBeforeFullScreenMode DISABLED_KeepShowingDetachedPanelCreatedBeforeFullScreenMode
-#else
-#define MAYBE_KeepShowingDetachedPanelCreatedBeforeFullScreenMode KeepShowingDetachedPanelCreatedBeforeFullScreenMode
-#endif
 IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest,
-                       MAYBE_KeepShowingDetachedPanelCreatedBeforeFullScreenMode) {
+                       KeepShowingDetachedPanelCreatedBeforeFullScreenMode) {
   // Create a detached panel.
   CreatePanelParams params("1", gfx::Rect(300, 200, 250, 200), SHOW_AS_ACTIVE);
   params.create_mode = PanelManager::CREATE_AS_DETACHED;
@@ -274,14 +232,8 @@ IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest,
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_HideDetachedPanelCreatedOnFullScreenMode DISABLED_HideDetachedPanelCreatedOnFullScreenMode
-#else
-#define MAYBE_HideDetachedPanelCreatedOnFullScreenMode HideDetachedPanelCreatedOnFullScreenMode
-#endif
 IN_PROC_BROWSER_TEST_F(DetachedPanelBrowserTest,
-                       MAYBE_HideDetachedPanelCreatedOnFullScreenMode) {
+                       HideDetachedPanelCreatedOnFullScreenMode) {
   // Enable full-screen mode first.
   mock_display_settings_provider()->EnableFullScreenMode(true);
 

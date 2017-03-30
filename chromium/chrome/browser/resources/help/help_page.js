@@ -165,7 +165,9 @@ cr.define('help', function() {
       var logo = $('product-logo');
       logo.onclick = function(e) {
         logo.classList.remove('spin');
-        setTimeout(function() { logo.classList.add('spin'); }, 0);
+        // Force a style recalc that cancels the animation specified by "spin".
+        getComputedStyle(logo).getPropertyValue('animation-name');
+        logo.classList.add('spin');
       };
 
       // Attempt to update.
@@ -330,6 +332,9 @@ cr.define('help', function() {
       } else if (status == 'failed') {
         this.setUpdateImage_('failed');
         $('update-status-message').innerHTML = message;
+      } else if (status == 'disabled_by_admin') {
+        this.setUpdateImage_('disabled-by-admin');
+        $('update-status-message').innerHTML = message;
       }
 
       if (cr.isChromeOS) {
@@ -427,7 +432,7 @@ cr.define('help', function() {
      * @private
      */
     setObsoleteSystem_: function(obsolete) {
-      if (cr.isMac && $('update-obsolete-system-container')) {
+      if ($('update-obsolete-system-container')) {
         $('update-obsolete-system-container').hidden = !obsolete;
       }
     },
@@ -438,8 +443,7 @@ cr.define('help', function() {
      * @private
      */
     setObsoleteSystemEndOfTheLine_: function(endOfTheLine) {
-      if (cr.isMac &&
-          $('update-obsolete-system-container') &&
+      if ($('update-obsolete-system-container') &&
           !$('update-obsolete-system-container').hidden &&
           $('update-status-message')) {
         $('update-status-message').hidden = endOfTheLine;

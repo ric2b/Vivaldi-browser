@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 
 namespace variations {
@@ -22,7 +23,7 @@ class GroupMapAccessor {
 
   // Retrieve the singleton.
   static GroupMapAccessor* GetInstance() {
-    return Singleton<GroupMapAccessor>::get();
+    return base::Singleton<GroupMapAccessor>::get();
   }
 
   // Note that this normally only sets the ID for a group the first time, unless
@@ -81,7 +82,7 @@ class GroupMapAccessor {
   }
 
  private:
-  friend struct DefaultSingletonTraits<GroupMapAccessor>;
+  friend struct base::DefaultSingletonTraits<GroupMapAccessor>;
 
   // Retrieves the GroupToIDMap for |key|.
   GroupToIDMap* GetGroupToIDMap(IDCollectionKey key) {
@@ -108,7 +109,7 @@ class VariationsParamAssociator {
 
   // Retrieve the singleton.
   static VariationsParamAssociator* GetInstance() {
-    return Singleton<VariationsParamAssociator>::get();
+    return base::Singleton<VariationsParamAssociator>::get();
   }
 
   bool AssociateVariationParams(const std::string& trial_name,
@@ -116,7 +117,7 @@ class VariationsParamAssociator {
                                 const VariationParams& params) {
     base::AutoLock scoped_lock(lock_);
 
-    if (IsFieldTrialActive(trial_name))
+    if (base::FieldTrialList::IsTrialActive(trial_name))
       return false;
 
     const VariationKey key(trial_name, group_name);
@@ -147,22 +148,10 @@ class VariationsParamAssociator {
   }
 
  private:
-  friend struct DefaultSingletonTraits<VariationsParamAssociator>;
+  friend struct base::DefaultSingletonTraits<VariationsParamAssociator>;
 
   VariationsParamAssociator() {}
   ~VariationsParamAssociator() {}
-
-  // Tests whether a field trial is active (i.e. group() has been called on it).
-  // TODO(asvitkine): Expose this as an API on base::FieldTrial.
-  bool IsFieldTrialActive(const std::string& trial_name) {
-    base::FieldTrial::ActiveGroups active_groups;
-    base::FieldTrialList::GetActiveFieldTrialGroups(&active_groups);
-    for (size_t i = 0; i < active_groups.size(); ++i) {
-      if (active_groups[i].trial_name == trial_name)
-        return true;
-    }
-    return false;
-  }
 
   base::Lock lock_;
   std::map<VariationKey, VariationParams> variation_params_;

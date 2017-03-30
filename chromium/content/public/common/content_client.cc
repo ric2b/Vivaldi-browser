@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
+#include "build/build_config.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/common/user_agent.h"
 #include "ui/gfx/image/image.h"
@@ -111,5 +112,9 @@ bool ContentClient::GetSandboxProfileForSandboxType(
   return false;
 }
 #endif
+
+bool ContentClient::IsSupplementarySiteIsolationModeEnabled() {
+  return false;
+}
 
 }  // namespace content

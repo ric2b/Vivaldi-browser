@@ -5,6 +5,7 @@
 #include "extensions/browser/api/web_request/web_request_event_router_delegate.h"
 
 #include "extensions/browser/api/web_request/web_request_api_constants.h"
+#include "extensions/browser/api/web_request/web_request_event_details.h"
 
 namespace keys = extension_web_request_api_constants;
 
@@ -16,12 +17,15 @@ WebRequestEventRouterDelegate::WebRequestEventRouterDelegate() {
 WebRequestEventRouterDelegate::~WebRequestEventRouterDelegate() {
 }
 void WebRequestEventRouterDelegate::ExtractExtraRequestDetails(
-      net::URLRequest* request, base::DictionaryValue* out){
+    const net::URLRequest* request,
+    WebRequestEventDetails* out) {
   out->SetInteger(keys::kTabIdKey, -1);
 }
 
 bool WebRequestEventRouterDelegate::OnGetMatchingListenersImplCheck(
-    int tab_id, int window_id, net::URLRequest* request) {
+    int tab_id,
+    int window_id,
+    const net::URLRequest* request) {
   return false;
 }
 

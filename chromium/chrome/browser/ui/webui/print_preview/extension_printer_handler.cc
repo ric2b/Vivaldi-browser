@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/print_preview/extension_printer_handler.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -16,7 +17,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_split.h"
 #include "base/task_runner_util.h"
-#include "chrome/browser/local_discovery/pwg_raster_converter.h"
+#include "chrome/browser/printing/pwg_raster_converter.h"
 #include "components/cloud_devices/common/cloud_device_description.h"
 #include "components/cloud_devices/common/printer_description.h"
 #include "device/core/device_client.h"
@@ -42,7 +43,7 @@ using extensions::Extension;
 using extensions::ExtensionRegistry;
 using extensions::ListBuilder;
 using extensions::UsbPrinterManifestData;
-using local_discovery::PWGRasterConverter;
+using printing::PWGRasterConverter;
 
 namespace {
 
@@ -62,7 +63,7 @@ scoped_ptr<extensions::PrinterProviderPrintJob> UpdateJobFileInfoOnWorkerThread(
     scoped_ptr<extensions::PrinterProviderPrintJob> job) {
   if (base::GetFileInfo(raster_path, &job->file_info))
     job->document_path = raster_path;
-  return job.Pass();
+  return job;
 }
 
 // Callback to PWG raster conversion.
@@ -75,7 +76,7 @@ void UpdateJobFileInfo(
     bool success,
     const base::FilePath& pwg_file_path) {
   if (!success) {
-    callback.Run(job.Pass());
+    callback.Run(std::move(job));
     return;
   }
 
@@ -103,8 +104,8 @@ std::string GenerateProvisionalUsbPrinterId(const Extension* extension,
 bool ParseProvisionalUsbPrinterId(const std::string& printer_id,
                                   std::string* extension_id,
                                   std::string* device_guid) {
-  std::vector<std::string> components;
-  base::SplitString(printer_id, ':', &components);
+  std::vector<std::string> components = base::SplitString(
+      printer_id, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   if (components.size() != 3)
     return false;
@@ -207,7 +208,7 @@ void ExtensionPrinterHandler::StartPrint(
     // the same way as it's done with PWG raster.
     print_job->content_type = kContentTypePdf;
     print_job->document_bytes = print_data;
-    DispatchPrintJob(callback, print_job.Pass());
+    DispatchPrintJob(callback, std::move(print_job));
     return;
   }
 
@@ -219,7 +220,7 @@ void ExtensionPrinterHandler::StartPrint(
 
   print_job->content_type = kContentTypePWGRaster;
   ConvertToPWGRaster(print_data, printer_description, ticket, page_size,
-                     print_job.Pass(),
+                     std::move(print_job),
                      base::Bind(&ExtensionPrinterHandler::DispatchPrintJob,
                                 weak_ptr_factory_.GetWeakPtr(), callback));
 }
@@ -253,9 +254,9 @@ void ExtensionPrinterHandler::StartGrantPrinterAccess(
                      weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
-void ExtensionPrinterHandler::SetPwgRasterConverterForTesting(
-    scoped_ptr<local_discovery::PWGRasterConverter> pwg_raster_converter) {
-  pwg_raster_converter_ = pwg_raster_converter.Pass();
+void ExtensionPrinterHandler::SetPWGRasterConverterForTesting(
+    scoped_ptr<PWGRasterConverter> pwg_raster_converter) {
+  pwg_raster_converter_ = std::move(pwg_raster_converter);
 }
 
 void ExtensionPrinterHandler::ConvertToPWGRaster(
@@ -351,7 +352,7 @@ void ExtensionPrinterHandler::OnUsbDevicesEnumerated(
           continue;
         }
 
-        printer_list.Append(
+        printer_list.Append(std::move(
             DictionaryBuilder()
                 .Set("id", GenerateProvisionalUsbPrinterId(extension.get(),
                                                            device.get()))
@@ -362,7 +363,7 @@ void ExtensionPrinterHandler::OnUsbDevicesEnumerated(
                          device->product_string(), base::string16(), false))
                 .Set("extensionId", extension->id())
                 .Set("extensionName", extension->name())
-                .Set("provisional", true));
+                .Set("provisional", true)));
       }
     }
   }

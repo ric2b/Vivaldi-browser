@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_simple_task_runner.h"
@@ -64,21 +62,17 @@ class BluetoothDeviceWinTest : public testing::Test {
     base::HexStringToBytes(kTestVideoSdpBytes, &video_state->sdp_bytes);
     device_state_->service_record_states.push_back(video_state);
 
-    device_.reset(new BluetoothDeviceWin(*device_state_,
-                                         ui_task_runner,
-                                         socket_thread,
-                                         NULL,
+    device_.reset(new BluetoothDeviceWin(NULL, *device_state_, ui_task_runner,
+                                         socket_thread, NULL,
                                          net::NetLog::Source()));
 
     // Add empty device.
     empty_device_state_.reset(new BluetoothTaskManagerWin::DeviceState());
     empty_device_state_->name = kDeviceName;
     empty_device_state_->address = kDeviceAddress;
-    empty_device_.reset(new BluetoothDeviceWin(*empty_device_state_,
-                                               ui_task_runner,
-                                               socket_thread,
-                                               NULL,
-                                               net::NetLog::Source()));
+    empty_device_.reset(new BluetoothDeviceWin(NULL, *empty_device_state_,
+                                               ui_task_runner, socket_thread,
+                                               NULL, net::NetLog::Source()));
   }
 
  protected:
@@ -91,12 +85,12 @@ class BluetoothDeviceWinTest : public testing::Test {
 TEST_F(BluetoothDeviceWinTest, GetUUIDs) {
   BluetoothDevice::UUIDList uuids = device_->GetUUIDs();
 
-  EXPECT_EQ(2, uuids.size());
+  EXPECT_EQ(2u, uuids.size());
   EXPECT_EQ(kTestAudioSdpUuid, uuids[0]);
   EXPECT_EQ(kTestVideoSdpUuid, uuids[1]);
 
   uuids = empty_device_->GetUUIDs();
-  EXPECT_EQ(0, uuids.size());
+  EXPECT_EQ(0u, uuids.size());
 }
 
 TEST_F(BluetoothDeviceWinTest, IsEqual) {

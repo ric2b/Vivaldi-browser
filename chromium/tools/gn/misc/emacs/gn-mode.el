@@ -54,7 +54,7 @@ variable name or the '{{' and '}}' which surround it."
   :group 'gn-faces)
 
 (defvar gn-font-lock-target-declaration-keywords
-  '("action" "action_foreach" "copy" "executable" "group"
+  '("action" "action_foreach" "copy" "executable" "group" "loadable_module"
     "shared_library" "source_set" "static_library" "if" "else"))
 
 (defvar gn-font-lock-buildfile-fun-keywords
@@ -70,13 +70,12 @@ variable name or the '{{' and '}}' which surround it."
     "root_out_dir" "target_cpu" "target_gen_dir" "target_os" "target_out_dir"))
 
 (defvar gn-font-lock-var-keywords
-  '("all_dependent_configs" "allow_circular_includes_from" "args" "cflags"
-    "cflags_c" "cflags_cc" "cflags_objc" "cflags_objcc" "check_includes"
-    "complete_static_lib" "configs" "data" "data_deps" "defines" "depfile"
-    "deps" "forward_dependent_configs_from" "include_dirs" "inputs"
-    "ldflags" "lib_dirs" "libs" "output_extension" "output_name" "outputs"
-    "public" "public_configs" "public_deps" "script" "sources" "testonly"
-    "visibility"))
+  '("all_dependent_configs" "allow_circular_includes_from" "args" "asmflags"
+    "cflags" "cflags_c" "cflags_cc" "cflags_objc" "cflags_objcc"
+    "check_includes" "complete_static_lib" "configs" "data" "data_deps"
+    "defines" "depfile" "deps" "include_dirs" "inputs" "ldflags" "lib_dirs"
+    "libs" "output_extension" "output_name" "outputs" "public" "public_configs"
+    "public_deps" "script" "sources" "testonly" "visibility"))
 
 (defconst gn-font-lock-keywords
   `((,(regexp-opt gn-font-lock-target-declaration-keywords 'words) .
@@ -132,6 +131,7 @@ variable name or the '{{' and '}}' which surround it."
   (setq-local comment-use-syntax t)
   (setq-local comment-start "#")
   (setq-local comment-end "")
+  (setq-local indent-tabs-mode nil)
 
   (setq-local fill-paragraph-function 'gn-fill-paragraph)
 

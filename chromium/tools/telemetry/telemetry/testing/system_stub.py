@@ -7,7 +7,9 @@
 This test allows one to test code that itself uses os, sys, and subprocess.
 """
 
+import ntpath
 import os
+import posixpath
 import re
 import shlex
 import sys
@@ -15,8 +17,7 @@ import sys
 
 class Override(object):
   def __init__(self, base_module, module_list):
-    stubs = {'adb_commands': AdbCommandsModuleStub,
-             'cloud_storage': CloudStorageModuleStub,
+    stubs = {'cloud_storage': CloudStorageModuleStub,
              'open': OpenFunctionStub,
              'os': OsModuleStub,
              'perf_control': PerfControlModuleStub,
@@ -77,7 +78,8 @@ class AdbDevice(object):
   def NeedsSU(self):
     return self.needs_su
 
-  def RunShellCommand(self, args, **_kwargs):
+  def RunShellCommand(self, args, **kwargs):
+    del kwargs  # unused
     if isinstance(args, basestring):
       args = shlex.split(args)
     handler = self.shell_command_handlers[args[0]]
@@ -86,7 +88,8 @@ class AdbDevice(object):
   def FileExists(self, _):
     return False
 
-  def ReadFile(self, device_path, as_root=False):  # pylint: disable=W0613
+  def ReadFile(self, device_path, as_root=False):
+    del device_path, as_root  # unused
     return self.mock_content
 
   def GetProp(self, property_name):
@@ -94,57 +97,6 @@ class AdbDevice(object):
 
   def SetProp(self, property_name, property_value):
     self.system_properties[property_name] = property_value
-
-
-class AdbCommandsModuleStub(object):
-
-  class AdbCommandsStub(object):
-
-    def __init__(self, module, device):
-      self._module = module
-      self._device = device
-      self.is_root_enabled = True
-      self._adb_device = module.adb_device
-
-    def IsRootEnabled(self):
-      return self.is_root_enabled
-
-    def RestartAdbdOnDevice(self):
-      pass
-
-    def IsUserBuild(self):
-      return False
-
-    def WaitForDevicePm(self):
-      pass
-
-    def device(self):
-      return self._adb_device
-
-    def device_serial(self):
-      return self._device
-
-  def __init__(self):
-    self.attached_devices = []
-    self.apk_package_name = None
-    self.adb_device = AdbDevice()
-
-    def AdbCommandsStubConstructor(device=None):
-      return AdbCommandsModuleStub.AdbCommandsStub(self, device)
-    self.AdbCommands = AdbCommandsStubConstructor
-
-  @staticmethod
-  def IsAndroidSupported():
-    return True
-
-  def GetPackageName(self, _):
-    return self.apk_package_name
-
-  def GetAttachedDevices(self):
-    return self.attached_devices
-
-  def CleanupLeftoverProcesses(self):
-    pass
 
 
 class CloudStorageModuleStub(object):
@@ -394,6 +346,12 @@ class OsModuleStub(object):
         tmp = os.path.join(*paths)
         return tmp.replace('\\', '/')
 
+    def basename(self, path):
+      if self.sys.platform.startswith('win'):
+        return ntpath.basename(path)
+      else:
+        return posixpath.basename(path)
+
     @staticmethod
     def abspath(path):
       return os.path.abspath(path)
@@ -405,6 +363,14 @@ class OsModuleStub(object):
     @staticmethod
     def dirname(path):
       return os.path.dirname(path)
+
+    @staticmethod
+    def realpath(path):
+      return os.path.realpath(path)
+
+    @staticmethod
+    def split(path):
+      return os.path.split(path)
 
     @staticmethod
     def splitext(path):
@@ -523,7 +489,8 @@ class CertUtilsStub(object):
 
 class AdbInstallCertStub(object):
   class AndroidCertInstaller(object):
-    def __init__(self, device_id, _cert_name, _cert_path):
+    def __init__(self, device_id, cert_name, cert_path):
+      del cert_name, cert_path  # unused
       if device_id == 'success':
         pass
       elif device_id == 'failure':

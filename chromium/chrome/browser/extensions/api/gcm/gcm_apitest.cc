@@ -11,6 +11,7 @@
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "extensions/test/result_catcher.h"
 
 using extensions::ResultCatcher;
@@ -144,9 +145,8 @@ IN_PROC_BROWSER_TEST_F(GcmApiTest, SendMessageData) {
   ASSERT_TRUE(RunExtensionTest("gcm/functions/send_message_data"));
 
   EXPECT_EQ("destination-id", service()->last_receiver_id());
-  const gcm::GCMClient::OutgoingMessage& message =
-      service()->last_sent_message();
-  gcm::GCMClient::MessageData::const_iterator iter;
+  const gcm::OutgoingMessage& message = service()->last_sent_message();
+  gcm::MessageData::const_iterator iter;
 
   EXPECT_EQ(100, message.time_to_live);
 
@@ -162,11 +162,10 @@ IN_PROC_BROWSER_TEST_F(GcmApiTest, SendMessageDefaultTTL) {
   ASSERT_TRUE(RunExtensionTest("gcm/functions/send_message_default_ttl"));
 
   EXPECT_EQ("destination-id", service()->last_receiver_id());
-  const gcm::GCMClient::OutgoingMessage& message =
-      service()->last_sent_message();
-  gcm::GCMClient::MessageData::const_iterator iter;
+  const gcm::OutgoingMessage& message = service()->last_sent_message();
+  gcm::MessageData::const_iterator iter;
 
-  EXPECT_EQ(gcm::GCMClient::OutgoingMessage::kMaximumTTL, message.time_to_live);
+  EXPECT_EQ(gcm::OutgoingMessage::kMaximumTTL, message.time_to_live);
 }
 
 IN_PROC_BROWSER_TEST_F(GcmApiTest, OnMessagesDeleted) {
@@ -192,7 +191,7 @@ IN_PROC_BROWSER_TEST_F(GcmApiTest, OnMessage) {
 
   extensions::ExtensionGCMAppHandler app_handler(profile());
 
-  gcm::GCMClient::IncomingMessage message;
+  gcm::IncomingMessage message;
   message.data["property1"] = "value1";
   message.data["property2"] = "value2";
   // First message is sent without from and collapse key.

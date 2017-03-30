@@ -4,6 +4,10 @@
 
 #include "sync/engine/apply_control_data_updates.h"
 
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/metrics/histogram.h"
 #include "sync/engine/conflict_resolver.h"
 #include "sync/engine/conflict_util.h"
@@ -17,17 +21,10 @@
 
 namespace syncer {
 
-using syncable::GET_TYPE_ROOT;
-using syncable::IS_UNAPPLIED_UPDATE;
-using syncable::IS_UNSYNCED;
-using syncable::SERVER_SPECIFICS;
-using syncable::SPECIFICS;
-using syncable::SYNCER;
-
 void ApplyControlDataUpdates(syncable::Directory* dir) {
-  syncable::WriteTransaction trans(FROM_HERE, SYNCER, dir);
+  syncable::WriteTransaction trans(FROM_HERE, syncable::SYNCER, dir);
 
-  std::vector<int64> handles;
+  std::vector<int64_t> handles;
   dir->GetUnappliedUpdateMetaHandles(
       &trans, ToFullModelTypeSet(ControlTypes()), &handles);
 
@@ -39,13 +36,25 @@ void ApplyControlDataUpdates(syncable::Directory* dir) {
   ModelTypeSet control_types = ControlTypes();
   for (ModelTypeSet::Iterator iter = control_types.First(); iter.Good();
        iter.Inc()) {
-    syncable::MutableEntry entry(&trans, syncable::GET_TYPE_ROOT, iter.Get());
+    ModelType type = iter.Get();
+    syncable::MutableEntry entry(&trans, syncable::GET_TYPE_ROOT, type);
     if (!entry.good())
       continue;
-    if (!entry.GetIsUnappliedUpdate())
-      continue;
 
-    ModelType type = entry.GetServerModelType();
+    if (!entry.GetIsUnappliedUpdate()) {
+      // If this is a type with client generated root, the root node has been
+      // created locally and might never be updated by the server. In that case
+      // it has to be marked as having the initial download completed (which is
+      // done by changing the root's base version to a value other than
+      // CHANGES_VERSION). This does nothing if the root's base version is
+      // already other than CHANGES_VERSION.
+      if (IsTypeWithClientGeneratedRoot(type)) {
+        dir->MarkInitialSyncEndedForType(&trans, type);
+      }
+      continue;
+    }
+
+    DCHECK_EQ(type, entry.GetServerModelType());
     if (type == NIGORI) {
       // Nigori node applications never fail.
       ApplyNigoriUpdate(&trans,
@@ -60,7 +69,7 @@ void ApplyControlDataUpdates(syncable::Directory* dir) {
 
   // Go through the rest of the unapplied control updates, skipping over any
   // top level folders.
-  for (std::vector<int64>::const_iterator iter = handles.begin();
+  for (std::vector<int64_t>::const_iterator iter = handles.begin();
        iter != handles.end(); ++iter) {
     syncable::MutableEntry entry(&trans, syncable::GET_BY_HANDLE, *iter);
     CHECK(entry.good());

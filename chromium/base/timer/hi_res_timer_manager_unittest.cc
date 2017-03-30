@@ -4,11 +4,14 @@
 
 #include "base/timer/hi_res_timer_manager.h"
 
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -22,7 +25,7 @@ TEST(HiResTimerManagerTest, ToggleOnOff) {
   scoped_ptr<base::PowerMonitorSource> power_monitor_source(
       new base::PowerMonitorDeviceSource());
   scoped_ptr<base::PowerMonitor> power_monitor(
-      new base::PowerMonitor(power_monitor_source.Pass()));
+      new base::PowerMonitor(std::move(power_monitor_source)));
 
   HighResolutionTimerManager manager;
   // Simulate a on-AC power event to get to a known initial state.

@@ -2,17 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/public/c/gles2/gles2.h"
+#include <stdint.h>
+
+#include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/threading/thread_local.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "mojo/gles2/gles2_context.h"
+// Even though this isn't used here, we need to include it to get the symbols to
+// be exported in component build.
+#include "mojo/public/c/gles2/chromium_extension.h"
+#include "mojo/public/c/gles2/gles2.h"
 
 using gles2::GLES2Context;
 
 namespace {
+
+const int32_t kNone = 0x3038;  // EGL_NONE
 
 base::LazyInstance<base::ThreadLocalPointer<gpu::gles2::GLES2Interface> >::Leaky
     g_gpu_interface;
@@ -26,13 +34,22 @@ void RunSignalSyncCallback(MojoGLES2SignalSyncPointCallback callback,
 
 extern "C" {
 MojoGLES2Context MojoGLES2CreateContext(MojoHandle handle,
+                                        const int32_t* attrib_list,
                                         MojoGLES2ContextLost lost_callback,
                                         void* closure,
                                         const MojoAsyncWaiter* async_waiter) {
   mojo::MessagePipeHandle mph(handle);
   mojo::ScopedMessagePipeHandle scoped_handle(mph);
+  std::vector<int32_t> attribs;
+  if (attrib_list) {
+    for (int32_t const* p = attrib_list; *p != kNone;) {
+      attribs.push_back(*p++);
+      attribs.push_back(*p++);
+    }
+  }
+  attribs.push_back(kNone);
   scoped_ptr<GLES2Context> client(new GLES2Context(
-      async_waiter, scoped_handle.Pass(), lost_callback, closure));
+      attribs, async_waiter, std::move(scoped_handle), lost_callback, closure));
   if (!client->Initialize())
     client.reset();
   return client.release();
@@ -76,19 +93,12 @@ void* MojoGLES2GetContextSupport(MojoGLES2Context context) {
 }
 
 #define VISIT_GL_CALL(Function, ReturnType, PARAMETERS, ARGUMENTS) \
-  ReturnType gl##Function PARAMETERS {                             \
+  ReturnType GL_APIENTRY gl##Function PARAMETERS {                 \
     DCHECK(g_gpu_interface.Get().Get());                           \
     return g_gpu_interface.Get().Get()->Function ARGUMENTS;        \
   }
 #include "mojo/public/c/gles2/gles2_call_visitor_autogen.h"
-#include "mojo/public/c/gles2/gles2_call_visitor_chromium_copy_texture_autogen.h"
-#include "mojo/public/c/gles2/gles2_call_visitor_chromium_image_autogen.h"
-#include "mojo/public/c/gles2/gles2_call_visitor_chromium_miscellaneous_autogen.h"
-#include "mojo/public/c/gles2/gles2_call_visitor_chromium_pixel_transfer_buffer_object_autogen.h"
-#include "mojo/public/c/gles2/gles2_call_visitor_chromium_sub_image_autogen.h"
-#include "mojo/public/c/gles2/gles2_call_visitor_chromium_sync_point_autogen.h"
-#include "mojo/public/c/gles2/gles2_call_visitor_chromium_texture_mailbox_autogen.h"
-#include "mojo/public/c/gles2/gles2_call_visitor_occlusion_query_ext_autogen.h"
+#include "mojo/public/c/gles2/gles2_call_visitor_chromium_extension_autogen.h"
 #undef VISIT_GL_CALL
 
 }  // extern "C"

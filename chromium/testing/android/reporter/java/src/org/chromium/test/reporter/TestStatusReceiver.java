@@ -19,7 +19,7 @@ import java.util.List;
  */
 public class TestStatusReceiver extends BroadcastReceiver {
 
-    private static final String TAG = "cr.test.reporter";
+    private static final String TAG = "test_reporter";
 
     private final List<FailCallback> mFailCallbacks = new ArrayList<FailCallback>();
     private final List<HeartbeatCallback> mHeartbeatCallbacks = new ArrayList<HeartbeatCallback>();
@@ -48,7 +48,7 @@ public class TestStatusReceiver extends BroadcastReceiver {
 
     /** A callback used when a test has failed. */
     public interface FailCallback {
-        void testFailed(String testClass, String testMethod);
+        void testFailed(String testClass, String testMethod, String stackTrace);
     }
 
     /** A callback used when a heartbeat is received. */
@@ -112,6 +112,7 @@ public class TestStatusReceiver extends BroadcastReceiver {
         int pid = intent.getIntExtra(TestStatusReporter.EXTRA_PID, 0);
         String testClass = intent.getStringExtra(TestStatusReporter.EXTRA_TEST_CLASS);
         String testMethod = intent.getStringExtra(TestStatusReporter.EXTRA_TEST_METHOD);
+        String stackTrace = intent.getStringExtra(TestStatusReporter.EXTRA_STACK_TRACE);
 
         switch (intent.getAction()) {
             case TestStatusReporter.ACTION_TEST_STARTED:
@@ -126,7 +127,7 @@ public class TestStatusReceiver extends BroadcastReceiver {
                 break;
             case TestStatusReporter.ACTION_TEST_FAILED:
                 for (FailCallback c : mFailCallbacks) {
-                    c.testFailed(testClass, testMethod);
+                    c.testFailed(testClass, testMethod, stackTrace);
                 }
                 break;
             case TestStatusReporter.ACTION_HEARTBEAT:

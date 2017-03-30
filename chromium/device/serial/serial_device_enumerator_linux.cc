@@ -4,6 +4,9 @@
 
 #include "device/serial/serial_device_enumerator_linux.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 
@@ -37,15 +40,15 @@ mojo::Array<serial::DeviceInfoPtr> SerialDeviceEnumeratorLinux::GetDevices() {
   ScopedUdevEnumeratePtr enumerate(udev_enumerate_new(udev_.get()));
   if (!enumerate) {
     LOG(ERROR) << "Serial device enumeration failed.";
-    return devices.Pass();
+    return devices;
   }
   if (udev_enumerate_add_match_subsystem(enumerate.get(), kSerialSubsystem)) {
     LOG(ERROR) << "Serial device enumeration failed.";
-    return devices.Pass();
+    return devices;
   }
   if (udev_enumerate_scan_devices(enumerate.get())) {
     LOG(ERROR) << "Serial device enumeration failed.";
-    return devices.Pass();
+    return devices;
   }
 
   udev_list_entry* entry = udev_enumerate_get_list_entry(enumerate.get());
@@ -71,7 +74,7 @@ mojo::Array<serial::DeviceInfoPtr> SerialDeviceEnumeratorLinux::GetDevices() {
       const char* product_name =
           udev_device_get_property_value(device.get(), kProductNameKey);
 
-      uint32 int_value;
+      uint32_t int_value;
       if (vendor_id && base::HexStringToUInt(vendor_id, &int_value)) {
         info->vendor_id = int_value;
         info->has_vendor_id = true;
@@ -82,10 +85,10 @@ mojo::Array<serial::DeviceInfoPtr> SerialDeviceEnumeratorLinux::GetDevices() {
       }
       if (product_name)
         info->display_name = product_name;
-      devices.push_back(info.Pass());
+      devices.push_back(std::move(info));
     }
   }
-  return devices.Pass();
+  return devices;
 }
 
 }  // namespace device

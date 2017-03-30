@@ -4,10 +4,12 @@
 
 #include "remoting/protocol/secure_channel_factory.h"
 
+#include <utility>
+
 #include "base/bind.h"
-#include "net/socket/stream_socket.h"
 #include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/channel_authenticator.h"
+#include "remoting/protocol/p2p_stream_socket.h"
 
 namespace remoting {
 namespace protocol {
@@ -49,7 +51,7 @@ void SecureChannelFactory::CancelChannelCreation(
 void SecureChannelFactory::OnBaseChannelCreated(
     const std::string& name,
     const ChannelCreatedCallback& callback,
-    scoped_ptr<net::StreamSocket> socket) {
+    scoped_ptr<P2PStreamSocket> socket) {
   if (!socket) {
     callback.Run(nullptr);
     return;
@@ -59,7 +61,7 @@ void SecureChannelFactory::OnBaseChannelCreated(
       authenticator_->CreateChannelAuthenticator().release();
   channel_authenticators_[name] = channel_authenticator;
   channel_authenticator->SecureAndAuthenticate(
-      socket.Pass(),
+      std::move(socket),
       base::Bind(&SecureChannelFactory::OnSecureChannelCreated,
                  base::Unretained(this), name, callback));
 }
@@ -68,7 +70,7 @@ void SecureChannelFactory::OnSecureChannelCreated(
     const std::string& name,
     const ChannelCreatedCallback& callback,
     int error,
-    scoped_ptr<net::StreamSocket> socket) {
+    scoped_ptr<P2PStreamSocket> socket) {
   DCHECK((socket && error == net::OK) || (!socket && error != net::OK));
 
   AuthenticatorMap::iterator it = channel_authenticators_.find(name);
@@ -76,7 +78,7 @@ void SecureChannelFactory::OnSecureChannelCreated(
   delete it->second;
   channel_authenticators_.erase(it);
 
-  callback.Run(socket.Pass());
+  callback.Run(std::move(socket));
 }
 
 }  // namespace protocol

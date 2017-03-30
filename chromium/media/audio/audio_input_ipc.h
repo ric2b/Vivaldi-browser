@@ -5,6 +5,8 @@
 #ifndef MEDIA_AUDIO_AUDIO_INPUT_IPC_H_
 #define MEDIA_AUDIO_AUDIO_INPUT_IPC_H_
 
+#include <stdint.h>
+
 #include "base/memory/shared_memory.h"
 #include "base/sync_socket.h"
 #include "media/audio/audio_parameters.h"
@@ -70,7 +72,7 @@ class MEDIA_EXPORT AudioInputIPC {
                             int session_id,
                             const AudioParameters& params,
                             bool automatic_gain_control,
-                            uint32 total_segments) = 0;
+                            uint32_t total_segments) = 0;
 
   // Corresponds to a call to AudioInputController::Record() on the server side.
   virtual void RecordStream() = 0;

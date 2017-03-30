@@ -12,7 +12,7 @@ be used to generate an Android NOTICE file for the third-party code.
 
 It makes use of src/tools/licenses.py and the README.chromium files on which
 it depends. It also makes use of a data file, third_party_files_whitelist.txt,
-which whitelists indicidual files which contain third-party code but which
+which whitelists individual files which contain third-party code but which
 aren't in a third-party directory with a README.chromium file.
 """
 
@@ -280,6 +280,13 @@ def main():
     # 'set' is used to eliminate duplicate references to the same license file.
     print ' '.join(
       sorted(set(GenerateNoticeFile(generate_licenses_file_list_only=True))))
+    return ScanResult.Ok
+  elif args[0] == 'gn_notice_deps':
+    # generate list for gn.
+    # 'set' is used to eliminate duplicate references to the same license file.
+    gn_file_list = ['"' + f + '"' for f in
+        sorted(set(GenerateNoticeFile(generate_licenses_file_list_only=True)))]
+    print '[%s] ' % ','.join(gn_file_list)
     return ScanResult.Ok
   elif args[0] == 'notice':
     notice_file_contents = GenerateNoticeFile()

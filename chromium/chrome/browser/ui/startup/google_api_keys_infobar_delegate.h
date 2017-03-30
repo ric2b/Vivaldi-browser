@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_STARTUP_GOOGLE_API_KEYS_INFOBAR_DELEGATE_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "url/gurl.h"
@@ -23,10 +24,11 @@ class GoogleApiKeysInfoBarDelegate : public ConfirmInfoBarDelegate {
   GoogleApiKeysInfoBarDelegate();
   ~GoogleApiKeysInfoBarDelegate() override;
 
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;
   base::string16 GetLinkText() const override;
-  bool LinkClicked(WindowOpenDisposition disposition) override;
+  GURL GetLinkURL() const override;
 
   DISALLOW_COPY_AND_ASSIGN(GoogleApiKeysInfoBarDelegate);
 };

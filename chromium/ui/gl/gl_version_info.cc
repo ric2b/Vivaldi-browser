@@ -50,7 +50,8 @@ GLVersionInfo::GLVersionInfo(const char* version_str, const char* renderer_str)
                        &is_es, &is_es3);
   }
   if (renderer_str) {
-    is_angle = base::StartsWithASCII(renderer_str, "ANGLE", true);
+    is_angle = base::StartsWith(renderer_str, "ANGLE",
+                                base::CompareCase::SENSITIVE);
   }
 }
 
@@ -66,7 +67,7 @@ void GLVersionInfo::ParseVersionString(const char* version_str,
   *is_es3 = false;
   if (!version_str)
     return;
-  std::string lstr(base::StringToLowerASCII(std::string(version_str)));
+  std::string lstr(base::ToLowerASCII(version_str));
   *is_es = (lstr.length() > 12) && (lstr.substr(0, 9) == "opengl es");
   if (*is_es)
     lstr = lstr.substr(10, 3);

@@ -14,9 +14,12 @@
 #ifndef CONTENT_PUBLIC_COMMON_COMMON_PARAM_TRAITS_H_
 #define CONTENT_PUBLIC_COMMON_COMMON_PARAM_TRAITS_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/memory/ref_counted.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/common_param_traits_macros.h"
 #include "ipc/ipc_message_utils.h"
@@ -25,12 +28,17 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+#if defined(OS_WIN)
+#include "base/win/win_util.h"
+#endif
+
 namespace content {
 class PageState;
 }
 
 namespace net {
 class HostPortPair;
+class IPAddress;
 class IPEndPoint;
 }
 
@@ -69,6 +77,14 @@ struct CONTENT_EXPORT ParamTraits<net::IPEndPoint> {
 };
 
 template <>
+struct CONTENT_EXPORT ParamTraits<net::IPAddress> {
+  typedef net::IPAddress param_type;
+  static void Write(Message* m, const param_type& p);
+  static bool Read(const Message* m, base::PickleIterator* iter, param_type* p);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
 struct CONTENT_EXPORT ParamTraits<content::PageState> {
   typedef content::PageState param_type;
   static void Write(Message* m, const param_type& p);
@@ -81,8 +97,7 @@ struct ParamTraits<gfx::NativeWindow> {
   typedef gfx::NativeWindow param_type;
   static void Write(Message* m, const param_type& p) {
 #if defined(OS_WIN)
-    // HWNDs are always 32 bits on Windows, even on 64 bit systems.
-    m->WriteUInt32(reinterpret_cast<uint32>(p));
+    m->WriteUInt32(base::win::HandleToUint32(p));
 #else
     m->WriteData(reinterpret_cast<const char*>(&p), sizeof(p));
 #endif
@@ -90,7 +105,7 @@ struct ParamTraits<gfx::NativeWindow> {
   static bool Read(const Message* m, base::PickleIterator* iter,
                    param_type* r) {
 #if defined(OS_WIN)
-    return iter->ReadUInt32(reinterpret_cast<uint32*>(r));
+    return iter->ReadUInt32(reinterpret_cast<uint32_t*>(r));
 #else
     const char *data;
     int data_size = 0;

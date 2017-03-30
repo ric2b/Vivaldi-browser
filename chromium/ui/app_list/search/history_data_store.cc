@@ -4,6 +4,11 @@
 
 #include "ui/app_list/search/history_data_store.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/callback.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
@@ -93,13 +98,13 @@ scoped_ptr<HistoryData::Associations> Parse(
     association_data.primary = primary;
     association_data.secondary.swap(secondary);
 
-    int64 update_time_val;
+    int64_t update_time_val;
     base::StringToInt64(update_time_string, &update_time_val);
     association_data.update_time =
         base::Time::FromInternalValue(update_time_val);
   }
 
-  return data.Pass();
+  return data;
 }
 
 }  // namespace
@@ -214,7 +219,7 @@ void HistoryDataStore::OnDictionaryLoadedCallback(
   if (!dict) {
     callback.Run(nullptr);
   } else {
-    callback.Run(Parse(dict.Pass()).Pass());
+    callback.Run(Parse(std::move(dict)));
   }
 }
 

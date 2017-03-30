@@ -5,7 +5,12 @@
 #ifndef CHROME_BROWSER_TASK_MANAGEMENT_PROVIDERS_CHILD_PROCESS_TASK_H_
 #define CHROME_BROWSER_TASK_MANAGEMENT_PROVIDERS_CHILD_PROCESS_TASK_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "chrome/browser/task_management/providers/task.h"
+
+class ProcessResourceUsage;
 
 namespace content {
 struct ChildProcessData;
@@ -24,10 +29,23 @@ class ChildProcessTask : public Task {
   ~ChildProcessTask() override;
 
   // task_management::Task:
+  void Refresh(const base::TimeDelta& update_interval,
+               int64_t refresh_flags) override;
   Type GetType() const override;
   int GetChildProcessUniqueID() const override;
+  bool ReportsV8Memory() const;
+  int64_t GetV8MemoryAllocated() const override;
+  int64_t GetV8MemoryUsed() const override;
 
  private:
+  // The Mojo service wrapper that will provide us with the V8 memory usage of
+  // the browser child process represented by this object.
+  scoped_ptr<ProcessResourceUsage> process_resources_sampler_;
+
+  // The allocated and used V8 memory (in bytes).
+  int64_t v8_memory_allocated_;
+  int64_t v8_memory_used_;
+
   // The unique ID of the child process. It is not the PID of the process.
   // See |content::ChildProcessData::id|.
   const int unique_child_process_id_;
@@ -35,6 +53,10 @@ class ChildProcessTask : public Task {
   // The type of the child process. See |content::ProcessType| and
   // |NaClTrustedProcessType|.
   const int process_type_;
+
+  // Depending on the |process_type_|, determines whether this task uses V8
+  // memory or not.
+  const bool uses_v8_memory_;
 
   DISALLOW_COPY_AND_ASSIGN(ChildProcessTask);
 };

@@ -4,6 +4,10 @@
 
 #include "content/browser/file_descriptor_info_impl.h"
 
+#include <utility>
+
+#include "base/stl_util.h"
+
 namespace content {
 
 // static
@@ -23,7 +27,7 @@ void FileDescriptorInfoImpl::Share(int id, base::PlatformFile fd) {
 
 void FileDescriptorInfoImpl::Transfer(int id, base::ScopedFD fd) {
   AddToMapping(id, fd.get());
-  owned_descriptors_.push_back(new base::ScopedFD(fd.Pass()));
+  owned_descriptors_.push_back(std::move(fd));
 }
 
 base::PlatformFile FileDescriptorInfoImpl::GetFDAt(size_t i) const {
@@ -48,24 +52,20 @@ bool FileDescriptorInfoImpl::HasID(int id) const {
 }
 
 bool FileDescriptorInfoImpl::OwnsFD(base::PlatformFile file) const {
-  return owned_descriptors_.end() !=
-         std::find_if(
-             owned_descriptors_.begin(), owned_descriptors_.end(),
-             [file](const base::ScopedFD* fd) { return fd->get() == file; });
+  return ContainsValue(owned_descriptors_, file);
 }
 
 base::ScopedFD FileDescriptorInfoImpl::ReleaseFD(base::PlatformFile file) {
   DCHECK(OwnsFD(file));
 
   base::ScopedFD fd;
-  auto found = std::find_if(
-      owned_descriptors_.begin(), owned_descriptors_.end(),
-      [file](const base::ScopedFD* fd) { return fd->get() == file; });
+  auto found =
+      std::find(owned_descriptors_.begin(), owned_descriptors_.end(), file);
 
-  (*found)->swap(fd);
+  std::swap(*found, fd);
   owned_descriptors_.erase(found);
 
-  return fd.Pass();
+  return fd;
 }
 
 void FileDescriptorInfoImpl::AddToMapping(int id, base::PlatformFile fd) {

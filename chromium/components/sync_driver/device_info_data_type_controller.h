@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SYNC_DRIVER_DEVICE_INFO_DATA_TYPE_CONTROLLER_H_
 #define COMPONENTS_SYNC_DRIVER_DEVICE_INFO_DATA_TYPE_CONTROLLER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "components/sync_driver/local_device_info_provider.h"
@@ -18,7 +19,7 @@ class DeviceInfoDataTypeController : public UIDataTypeController {
   DeviceInfoDataTypeController(
       const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       const base::Closure& error_callback,
-      SyncApiComponentFactory* sync_factory,
+      SyncClient* sync_client,
       LocalDeviceInfoProvider* local_device_info_provider);
 
  private:

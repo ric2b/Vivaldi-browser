@@ -56,20 +56,24 @@
             "description": "The text displayed for the node."
           },
           "nickname": {
-                "type": "string",
-                "description": "The nickname for the node. Vivaldi extended property"
+            "type": "string",
+            "description": "The nickname for the node. Vivaldi extended property"
           },
           "description": {
-                "type": "string",
-                "description": "The description text for the node. Vivaldi extended property"
+            "type": "string",
+            "description": "The description text for the node. Vivaldi extended property"
           },
           "thumbnail": {
-                "type": "string",
-                "description": "Base 64 encoded thumbnail image"
+            "type": "string",
+            "description": "chrome://thumb/<url> pointing to the stored url of the thumbnail"
           },
           "speeddial": {
-                "type": "boolean",
-                "description": "Boolean variable, stating if a bookmark/folder is a speeddial"
+            "type": "boolean",
+            "description": "Boolean variable, stating if a bookmark/folder is a speeddial"
+          },
+          "trash": {
+            "type": "boolean",
+            "description": "true if this is the trash folder. Read only."
           },
           "dateAdded": {
             "type": "number",
@@ -121,36 +125,23 @@
           },
           "nickname": {
             "type": "string",
-            "description": "The nickname for the node. Vivaldi extended property",
+            "description": "The nickname for the node. Vivaldi extended property.",
             "optional": true
           },
           "description": {
             "type": "string",
-            "description": "The description text for the node. Vivaldi extended property",
+            "description": "The description text for the node. Vivaldi extended property.",
             "optional": true
           },
           "thumbnail": {
             "type": "string",
-            "description": "Base 64 encoded thumbnail image",
+            "description": "chrome://thumb/<url> pointing to the stored url of the thumbnail. Vivaldi extended property.",
             "optional": true
           },
           "speeddial": {
             "type": "boolean",
-            "description": "Boolean variable, stating if a bookmark/folder is a speeddial",
+            "description": "Boolean variable, stating if a bookmark/folder is a speeddial. Vivaldi extended property",
             "optional": true
-          }
-        }
-      },
-      {
-        "id": "SpeedDialInfo",
-        "type": "object",
-        "description": "Object passed to the updateSpeedDialsForWindowsJumplist function.",
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
           }
         }
       }
@@ -327,18 +318,6 @@
                 "items": { "$ref": "BookmarkTreeNode" }
               }
             ]
-          }
-        ]
-      },
-	  {
-        "name": "updateSpeedDialsForWindowsJumplist",
-        "type": "function",
-        "description": "Update the speed dial list in Windows 7+ jumplist.",
-        "parameters": [
-          {
-            "name": "speedDials",
-            "type": "array",
-            "items": { "$ref": "SpeedDialInfo" }
           }
         ]
       },
@@ -550,7 +529,8 @@
             "name": "removeInfo",
             "properties": {
               "parentId": { "type": "string" },
-              "index": { "type": "integer" }
+              "index": { "type": "integer" },
+              "node": { "$ref": "BookmarkTreeNode" }
             }
           }
         ]

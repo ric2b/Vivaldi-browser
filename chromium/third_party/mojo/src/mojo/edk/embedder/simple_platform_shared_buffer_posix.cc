@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/embedder/simple_platform_shared_buffer.h"
+#include "third_party/mojo/src/mojo/edk/embedder/simple_platform_shared_buffer.h"
 
 #include <stdint.h>
 #include <stdio.h>     // For |fileno()|.
@@ -10,8 +10,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>  // For |off_t|.
 #include <unistd.h>
-
 #include <limits>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -20,7 +20,7 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
-#include "mojo/edk/embedder/platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_handle.h"
 
 // We assume that |size_t| and |off_t| (type for |ftruncate()|) fits in a
 // |uint64_t|.
@@ -114,7 +114,7 @@ bool SimplePlatformSharedBuffer::InitFromPlatformHandle(
 
   // TODO(vtl): More checks?
 
-  handle_ = platform_handle.Pass();
+  handle_ = std::move(platform_handle);
   return true;
 }
 

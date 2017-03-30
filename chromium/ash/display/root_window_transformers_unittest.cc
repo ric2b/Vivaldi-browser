@@ -6,6 +6,7 @@
 
 #include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
+#include "ash/display/display_util.h"
 #include "ash/host/root_window_transformer.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/screen_util.h"
@@ -58,8 +59,8 @@ class TestEventHandler : public ui::EventHandler {
     // entire root window.
     if (target->name() != kDesktopBackgroundView)
       return;
-    touch_radius_x_ = event->radius_x();
-    touch_radius_y_ = event->radius_y();
+    touch_radius_x_ = event->pointer_details().radius_x();
+    touch_radius_y_ = event->pointer_details().radius_y();
     event->StopPropagation();
   }
 
@@ -107,7 +108,7 @@ class TestEventHandler : public ui::EventHandler {
   DISALLOW_COPY_AND_ASSIGN(TestEventHandler);
 };
 
-float GetStoredUIScale(int64 id) {
+float GetStoredUIScale(int64_t id) {
   return Shell::GetInstance()->display_manager()->GetDisplayInfo(id).
       GetEffectiveUIScale();
 }
@@ -151,7 +152,7 @@ TEST_F(RootWindowTransformersTest, MAYBE_RotateAndMagnify) {
 
   UpdateDisplay("120x200,300x400*2");
   gfx::Display display1 = Shell::GetScreen()->GetPrimaryDisplay();
-  int64 display2_id = ScreenUtil::GetSecondaryDisplay().id();
+  int64_t display2_id = ScreenUtil::GetSecondaryDisplay().id();
 
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   ui::test::EventGenerator generator1(root_windows[0]);
@@ -243,8 +244,7 @@ TEST_F(RootWindowTransformersTest, ScaleAndMagnify) {
   UpdateDisplay("600x400*2@1.5,500x300");
 
   gfx::Display display1 = Shell::GetScreen()->GetPrimaryDisplay();
-  test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
-      .SetInternalDisplayId(display1.id());
+  test::ScopedSetInternalDisplayId set_internal(display1.id());
   gfx::Display display2 = ScreenUtil::GetSecondaryDisplay();
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   MagnificationController* magnifier =
@@ -263,8 +263,7 @@ TEST_F(RootWindowTransformersTest, ScaleAndMagnify) {
   EXPECT_EQ("299,150", event_handler.GetLocationAndReset());
   magnifier->SetEnabled(false);
 
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  display_manager->SetDisplayUIScale(display1.id(), 1.25);
+  SetDisplayUIScale(display1.id(), 1.25f);
   display1 = Shell::GetScreen()->GetPrimaryDisplay();
   display2 = ScreenUtil::GetSecondaryDisplay();
   magnifier->SetEnabled(true);

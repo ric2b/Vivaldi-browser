@@ -3,9 +3,11 @@
 // found in the LICENSE file.
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
 
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_target.h"
@@ -45,11 +47,11 @@ NSPoint ConvertRootPointToTarget(NSWindow* target,
 // Inverse of ui::EventFlagsFromModifiers().
 NSUInteger EventFlagsToModifiers(int flags) {
   NSUInteger modifiers = 0;
-  modifiers |= (flags & ui::EF_CAPS_LOCK_DOWN) ? NSAlphaShiftKeyMask : 0;
   modifiers |= (flags & ui::EF_SHIFT_DOWN) ? NSShiftKeyMask : 0;
   modifiers |= (flags & ui::EF_CONTROL_DOWN) ? NSControlKeyMask : 0;
   modifiers |= (flags & ui::EF_ALT_DOWN) ? NSAlternateKeyMask : 0;
   modifiers |= (flags & ui::EF_COMMAND_DOWN) ? NSCommandKeyMask : 0;
+  modifiers |= (flags & ui::EF_CAPS_LOCK_ON) ? NSAlphaShiftKeyMask : 0;
   // ui::EF_*_MOUSE_BUTTON not handled here.
   // NSFunctionKeyMask, NSNumericPadKeyMask and NSHelpKeyMask not mapped.
   return modifiers;
@@ -219,12 +221,13 @@ NSEvent* CreateMouseEventInWindow(NSWindow* window,
 // class.
 class EventGeneratorDelegateMac : public ui::EventTarget,
                                   public ui::EventSource,
+                                  public ui::EventHandler,
                                   public ui::EventProcessor,
                                   public ui::EventTargeter,
                                   public ui::test::EventGeneratorDelegate {
  public:
   static EventGeneratorDelegateMac* GetInstance() {
-    return Singleton<EventGeneratorDelegateMac>::get();
+    return base::Singleton<EventGeneratorDelegateMac>::get();
   }
 
   IMP CurrentEventMethod() {
@@ -240,7 +243,7 @@ class EventGeneratorDelegateMac : public ui::EventTarget,
   scoped_ptr<ui::EventTargetIterator> GetChildIterator() const override;
   ui::EventTargeter* GetEventTargeter() override { return this; }
 
-  // Overridden from ui::EventHandler (via ui::EventTarget):
+  // Overridden from ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
   void OnKeyEvent(ui::KeyEvent* event) override;
   void OnTouchEvent(ui::TouchEvent* event) override;
@@ -283,9 +286,15 @@ class EventGeneratorDelegateMac : public ui::EventTarget,
                             gfx::Point* point) const override {}
   void ConvertPointFromHost(const ui::EventTarget* hosted_target,
                             gfx::Point* point) const override {}
+  void DispatchKeyEventToIME(EventTarget* target,
+                             ui::KeyEvent* event) override {
+    // InputMethodMac does not send native events nor do the necessary
+    // translation. Key events must be handled natively by an NSResponder which
+    // translates keyboard events into editing commands.
+  }
 
  private:
-  friend struct DefaultSingletonTraits<EventGeneratorDelegateMac>;
+  friend struct base::DefaultSingletonTraits<EventGeneratorDelegateMac>;
 
   EventGeneratorDelegateMac();
   ~EventGeneratorDelegateMac() override;
@@ -303,6 +312,7 @@ class EventGeneratorDelegateMac : public ui::EventTarget,
 EventGeneratorDelegateMac::EventGeneratorDelegateMac() : owner_(nullptr) {
   DCHECK(!ui::test::EventGenerator::default_delegate);
   ui::test::EventGenerator::default_delegate = this;
+  SetTargetHandler(this);
   // Install a fake "edit" menu. This is normally provided by Chrome's
   // MainMenu.xib, but src/ui shouldn't depend on that.
   fake_menu_.reset([[NSMenu alloc] initWithTitle:@"Edit"]);

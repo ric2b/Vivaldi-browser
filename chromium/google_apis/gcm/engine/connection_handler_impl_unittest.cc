@@ -4,6 +4,10 @@
 
 #include "google_apis/gcm/engine/connection_handler_impl.h"
 
+#include <stdint.h>
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
@@ -11,6 +15,7 @@
 #include "base/test/test_timeouts.h"
 #include "google/protobuf/io/coded_stream.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
+#include "google/protobuf/wire_format_lite.h"
 #include "google_apis/gcm/base/mcs_util.h"
 #include "google_apis/gcm/base/socket_stream.h"
 #include "google_apis/gcm/protocol/mcs.pb.h"
@@ -25,8 +30,8 @@ typedef scoped_ptr<google::protobuf::MessageLite> ScopedMessage;
 typedef std::vector<net::MockRead> ReadList;
 typedef std::vector<net::MockWrite> WriteList;
 
-const uint64 kAuthId = 54321;
-const uint64 kAuthToken = 12345;
+const uint64_t kAuthId = 54321;
+const uint64_t kAuthToken = 12345;
 const char kMCSVersion = 41;  // The protocol version.
 const int kMCSPort = 5228;    // The server port.
 const char kDataMsgFrom[] = "data_from";
@@ -41,13 +46,13 @@ const char kDataMsgFromLong2[] =
     "this is a second long from that will result in a message > 128 bytes";
 const char kDataMsgCategoryLong2[] =
     "this is a second long category that will result in a message > 128 bytes";
-const uint8 kInvalidTag = 100;  // An invalid tag.
+const uint8_t kInvalidTag = 100;  // An invalid tag.
 
 // ---- Helpers for building messages. ----
 
 // Encode a protobuf packet with protobuf type |tag| and serialized protobuf
 // bytes |proto| into the MCS message form (tag + varint size + bytes).
-std::string EncodePacket(uint8 tag, const std::string& proto) {
+std::string EncodePacket(uint8_t tag, const std::string& proto) {
   std::string result;
   google::protobuf::io::StringOutputStream string_output_stream(&result);
   {
@@ -96,11 +101,38 @@ std::string EncodeHandshakeResponse() {
 // Build a serialized data message stanza protobuf.
 std::string BuildDataMessage(const std::string& from,
                              const std::string& category) {
-  std::string result;
   mcs_proto::DataMessageStanza data_message;
   data_message.set_from(from);
   data_message.set_category(category);
   return data_message.SerializeAsString();
+}
+
+// Build a corrupt data message that will force the protobuf parser to backup
+// after completion (useful in testing memory corruption cases due to a
+// CodedInputStream going out of scope).
+std::string BuildCorruptDataMessage() {
+  // Manually construct the message with invalid data. We set field 2 (id) to
+  // be an invalid string.
+  const int kMsgTag =
+      (2 << google::protobuf::internal::WireFormatLite::kTagTypeBits) |
+      google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED;
+  const int kStringLength = -1;  // Corrupted length.
+  const char kStringData[] = "id";
+  std::string data_message_proto;
+  google::protobuf::io::StringOutputStream string_output_stream(
+      &data_message_proto);
+  {
+    google::protobuf::io::CodedOutputStream coded_output_stream(
+        &string_output_stream);
+    coded_output_stream.WriteVarint32(kMsgTag);
+    coded_output_stream.WriteVarint32(
+        static_cast<google::protobuf::uint32>(kStringLength));
+    coded_output_stream.WriteRaw(&kStringData, sizeof(kStringData));
+    // ~CodedOutputStream must run before the move constructor at the
+    // return statement. http://crbug.com/338962
+  }
+
+  return data_message_proto;
 }
 
 class GCMConnectionHandlerImplTest : public testing::Test {
@@ -117,7 +149,7 @@ class GCMConnectionHandlerImplTest : public testing::Test {
   ConnectionHandlerImpl* connection_handler() {
     return connection_handler_.get();
   }
-  base::MessageLoop* message_loop() { return &message_loop_; };
+  base::MessageLoop* message_loop() { return &message_loop_; }
   net::StaticSocketDataProvider* data_provider() {
     return data_provider_.get();
   }
@@ -212,7 +244,7 @@ void GCMConnectionHandlerImplTest::Connect(
 void GCMConnectionHandlerImplTest::ReadContinuation(
     ScopedMessage* dst_proto,
     ScopedMessage new_proto) {
-  *dst_proto = new_proto.Pass();
+  *dst_proto = std::move(new_proto);
   run_loop_->Quit();
 }
 
@@ -227,6 +259,8 @@ void GCMConnectionHandlerImplTest::WriteContinuation() {
 
 void GCMConnectionHandlerImplTest::ConnectionContinuation(int error) {
   last_error_ = error;
+  if (error != net::OK)
+    connection_handler_->Reset();
   run_loop_->Quit();
 }
 
@@ -813,6 +847,64 @@ TEST_F(GCMConnectionHandlerImplTest, RecvMsgSplitSize) {
   ASSERT_TRUE(received_message.get());
   EXPECT_EQ(data_message_proto, received_message->SerializeAsString());
   EXPECT_EQ(net::OK, last_error());
+}
+
+// Make sure a message with invalid data is handled gracefully and resets
+// the connection with a FAILED error.
+TEST_F(GCMConnectionHandlerImplTest, InvalidData) {
+  std::string handshake_request = EncodeHandshakeRequest();
+  WriteList write_list(1, net::MockWrite(net::ASYNC, handshake_request.c_str(),
+                                         handshake_request.size()));
+  std::string handshake_response = EncodeHandshakeResponse();
+  std::string data_message_proto = BuildCorruptDataMessage();
+  std::string invalid_message_pkt =
+      EncodePacket(kDataMessageStanzaTag, data_message_proto);
+
+  ReadList read_list;
+  read_list.push_back(net::MockRead(net::ASYNC, handshake_response.c_str(),
+                                    handshake_response.size()));
+  read_list.push_back(net::MockRead(net::ASYNC, invalid_message_pkt.c_str(),
+                                    invalid_message_pkt.size()));
+  BuildSocket(read_list, write_list);
+
+  ScopedMessage received_message;
+  Connect(&received_message);
+  WaitForMessage();  // The login send.
+  WaitForMessage();  // The login response.
+  received_message.reset();
+  WaitForMessage();  // The invalid message.
+  EXPECT_FALSE(received_message.get());
+  EXPECT_EQ(net::ERR_FAILED, last_error());
+}
+
+// Make sure a long message with invalid data is handled gracefully and resets
+// the connection with a FAILED error.
+TEST_F(GCMConnectionHandlerImplTest, InvalidDataLong) {
+  std::string handshake_request = EncodeHandshakeRequest();
+  WriteList write_list(1, net::MockWrite(net::ASYNC, handshake_request.c_str(),
+                                         handshake_request.size()));
+  std::string handshake_response = EncodeHandshakeResponse();
+  std::string data_message_proto = BuildCorruptDataMessage();
+  // Pad the corrupt data so it's beyond the normal single packet length.
+  data_message_proto.resize(1 << 12);
+  std::string invalid_message_pkt =
+      EncodePacket(kDataMessageStanzaTag, data_message_proto);
+
+  ReadList read_list;
+  read_list.push_back(net::MockRead(net::ASYNC, handshake_response.c_str(),
+                                    handshake_response.size()));
+  read_list.push_back(net::MockRead(net::ASYNC, invalid_message_pkt.c_str(),
+                                    invalid_message_pkt.size()));
+  BuildSocket(read_list, write_list);
+
+  ScopedMessage received_message;
+  Connect(&received_message);
+  WaitForMessage();  // The login send.
+  WaitForMessage();  // The login response.
+  received_message.reset();
+  WaitForMessage();  // The invalid message.
+  EXPECT_FALSE(received_message.get());
+  EXPECT_EQ(net::ERR_FAILED, last_error());
 }
 
 }  // namespace

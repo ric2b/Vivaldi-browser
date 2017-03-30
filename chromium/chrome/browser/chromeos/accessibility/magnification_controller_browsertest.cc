@@ -8,6 +8,7 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
@@ -69,7 +70,7 @@ class MagnifierAnimationWaiter {
       : controller_(controller) {}
 
   void Wait() {
-    base::RepeatingTimer<MagnifierAnimationWaiter> check_timer;
+    base::RepeatingTimer check_timer;
     check_timer.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(10), this,
                       &MagnifierAnimationWaiter::OnTimer);
     runner_ = new content::MessageLoopRunner;

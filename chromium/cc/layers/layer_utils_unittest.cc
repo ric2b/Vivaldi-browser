@@ -4,10 +4,12 @@
 
 #include "cc/layers/layer_utils.h"
 
+#include "cc/animation/animation_host.h"
+#include "cc/animation/animation_id_provider.h"
 #include "cc/animation/transform_operations.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/test/animation_test_common.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -22,17 +24,35 @@ float diagonal(float width, float height) {
   return std::sqrt(width * width + height * height);
 }
 
+class LayerTreeSettingsForAnimationBoundsTest : public LayerTreeSettings {
+ public:
+  LayerTreeSettingsForAnimationBoundsTest() {
+    use_compositor_animation_timelines = true;
+  }
+};
+
 class LayerUtilsGetAnimationBoundsTest : public testing::Test {
  public:
   LayerUtilsGetAnimationBoundsTest()
-      : host_impl_(&proxy_, &shared_bitmap_manager_, &task_graph_runner_),
+      : host_impl_(LayerTreeSettingsForAnimationBoundsTest(),
+                   &task_runner_provider_,
+                   &shared_bitmap_manager_,
+                   &task_graph_runner_),
         root_(CreateThreeNodeTree(&host_impl_)),
-        parent_(root_->children()[0]),
-        child_(parent_->children()[0]) {}
+        parent_(root_->children()[0].get()),
+        child_(parent_->children()[0].get()) {
+    if (host_impl_.settings().use_compositor_animation_timelines) {
+      timeline_ =
+          AnimationTimeline::Create(AnimationIdProvider::NextTimelineId());
+      host_impl_.animation_host()->AddAnimationTimeline(timeline_);
+    }
+  }
 
   LayerImpl* root() { return root_.get(); }
   LayerImpl* parent() { return parent_; }
   LayerImpl* child() { return child_; }
+  scoped_refptr<AnimationTimeline> timeline() { return timeline_; }
+  FakeLayerTreeHostImpl& host_impl() { return host_impl_; }
 
  private:
   static scoped_ptr<LayerImpl> CreateThreeNodeTree(
@@ -41,16 +61,17 @@ class LayerUtilsGetAnimationBoundsTest : public testing::Test {
     root->AddChild(LayerImpl::Create(host_impl->active_tree(), 2));
     root->children()[0]->AddChild(
         LayerImpl::Create(host_impl->active_tree(), 3));
-    return root.Pass();
+    return root;
   }
 
-  FakeImplProxy proxy_;
+  FakeImplTaskRunnerProvider task_runner_provider_;
   TestSharedBitmapManager shared_bitmap_manager_;
   TestTaskGraphRunner task_graph_runner_;
   FakeLayerTreeHostImpl host_impl_;
   scoped_ptr<LayerImpl> root_;
   LayerImpl* parent_;
   LayerImpl* child_;
+  scoped_refptr<AnimationTimeline> timeline_;
 };
 
 TEST_F(LayerUtilsGetAnimationBoundsTest, ScaleRoot) {
@@ -60,7 +81,12 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, ScaleRoot) {
   start.AppendScale(1.f, 1.f, 1.f);
   TransformOperations end;
   end.AppendScale(2.f, 2.f, 1.f);
-  AddAnimatedTransformToLayer(root(), duration, start, end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(root()->id(), timeline(), duration,
+                                          start, end);
+  } else {
+    AddAnimatedTransformToLayer(root(), duration, start, end);
+  }
 
   root()->SetPosition(gfx::PointF());
   parent()->SetPosition(gfx::PointF());
@@ -85,7 +111,12 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, TranslateParentLayer) {
   start.AppendTranslate(0.f, 0.f, 0.f);
   TransformOperations end;
   end.AppendTranslate(50.f, 50.f, 0.f);
-  AddAnimatedTransformToLayer(parent(), duration, start, end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(parent()->id(), timeline(), duration,
+                                          start, end);
+  } else {
+    AddAnimatedTransformToLayer(parent(), duration, start, end);
+  }
 
   parent()->SetBounds(gfx::Size(350, 200));
 
@@ -108,7 +139,12 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, TranslateChildLayer) {
   start.AppendTranslate(0.f, 0.f, 0.f);
   TransformOperations end;
   end.AppendTranslate(50.f, 50.f, 0.f);
-  AddAnimatedTransformToLayer(child(), duration, start, end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child()->id(), timeline(), duration,
+                                          start, end);
+  } else {
+    AddAnimatedTransformToLayer(child(), duration, start, end);
+  }
 
   parent()->SetBounds(gfx::Size(350, 200));
 
@@ -131,11 +167,21 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, TranslateBothLayers) {
   start.AppendTranslate(0.f, 0.f, 0.f);
   TransformOperations child_end;
   child_end.AppendTranslate(50.f, 0.f, 0.f);
-  AddAnimatedTransformToLayer(parent(), duration, start, child_end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(parent()->id(), timeline(), duration,
+                                          start, child_end);
+  } else {
+    AddAnimatedTransformToLayer(parent(), duration, start, child_end);
+  }
 
   TransformOperations grand_child_end;
   grand_child_end.AppendTranslate(0.f, 50.f, 0.f);
-  AddAnimatedTransformToLayer(child(), duration, start, grand_child_end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child()->id(), timeline(), duration,
+                                          start, grand_child_end);
+  } else {
+    AddAnimatedTransformToLayer(child(), duration, start, grand_child_end);
+  }
 
   parent()->SetBounds(gfx::Size(350, 200));
 
@@ -158,7 +204,12 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXNoPerspective) {
   start.AppendRotate(1.f, 0.f, 0.f, 0.f);
   TransformOperations end;
   end.AppendRotate(1.f, 0.f, 0.f, 90.f);
-  AddAnimatedTransformToLayer(child(), duration, start, end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child()->id(), timeline(), duration,
+                                          start, end);
+  } else {
+    AddAnimatedTransformToLayer(child(), duration, start, end);
+  }
 
   parent()->SetBounds(gfx::Size(350, 200));
 
@@ -184,7 +235,12 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspective) {
   start.AppendRotate(1.f, 0.f, 0.f, 0.f);
   TransformOperations end;
   end.AppendRotate(1.f, 0.f, 0.f, 90.f);
-  AddAnimatedTransformToLayer(child(), duration, start, end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child()->id(), timeline(), duration,
+                                          start, end);
+  } else {
+    AddAnimatedTransformToLayer(child(), duration, start, end);
+  }
 
   // Make the anchor point not the default 0.5 value and line up with the
   // child center to make the math easier.
@@ -218,7 +274,12 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateZ) {
   start.AppendRotate(0.f, 0.f, 1.f, 0.f);
   TransformOperations end;
   end.AppendRotate(0.f, 0.f, 1.f, 90.f);
-  AddAnimatedTransformToLayer(child(), duration, start, end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child()->id(), timeline(), duration,
+                                          start, end);
+  } else {
+    AddAnimatedTransformToLayer(child(), duration, start, end);
+  }
 
   parent()->SetBounds(gfx::Size(350, 200));
 
@@ -250,7 +311,12 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, MismatchedTransforms) {
   start.AppendTranslate(5, 6, 7);
   TransformOperations end;
   end.AppendRotate(0.f, 0.f, 1.f, 90.f);
-  AddAnimatedTransformToLayer(child(), duration, start, end);
+  if (host_impl().settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child()->id(), timeline(), duration,
+                                          start, end);
+  } else {
+    AddAnimatedTransformToLayer(child(), duration, start, end);
+  }
 
   parent()->SetBounds(gfx::Size(350, 200));
 

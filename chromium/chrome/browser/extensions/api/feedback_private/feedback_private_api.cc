@@ -4,13 +4,17 @@
 
 #include "chrome/browser/extensions/api/feedback_private/feedback_private_api.h"
 
+#include <utility>
+
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/feedback_private/feedback_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,6 +23,7 @@
 #include "components/feedback/tracing_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "extensions/browser/event_router.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "url/url_util.h"
@@ -89,12 +94,12 @@ void FeedbackPrivateAPI::RequestFeedback(
     args->Append(info.ToValue().release());
 
     scoped_ptr<Event> event(new Event(
-        events::UNKNOWN, feedback_private::OnFeedbackRequested::kEventName,
-        args.Pass()));
+        events::FEEDBACK_PRIVATE_ON_FEEDBACK_REQUESTED,
+        feedback_private::OnFeedbackRequested::kEventName, std::move(args)));
     event->restrict_to_browser_context = browser_context_;
 
     EventRouter::Get(browser_context_)
-        ->DispatchEventToExtension(kFeedbackExtensionId, event.Pass());
+        ->DispatchEventToExtension(kFeedbackExtensionId, std::move(event));
   }
 }
 
@@ -127,6 +132,15 @@ bool FeedbackPrivateGetStringsFunction::RunSync() {
   SET_STRING("privacy-note", IDS_FEEDBACK_PRIVACY_NOTE);
   SET_STRING("performance-trace",
              IDS_FEEDBACK_INCLUDE_PERFORMANCE_TRACE_CHECKBOX);
+  // Add the localized strings needed for the "system information" page.
+  SET_STRING("sysinfoPageTitle", IDS_FEEDBACK_SYSINFO_PAGE_TITLE);
+  SET_STRING("sysinfoPageDescription", IDS_ABOUT_SYS_DESC);
+  SET_STRING("sysinfoPageTableTitle", IDS_ABOUT_SYS_TABLE_TITLE);
+  SET_STRING("sysinfoPageExpandAllBtn", IDS_ABOUT_SYS_EXPAND_ALL);
+  SET_STRING("sysinfoPageCollapseAllBtn", IDS_ABOUT_SYS_COLLAPSE_ALL);
+  SET_STRING("sysinfoPageExpandBtn", IDS_ABOUT_SYS_EXPAND);
+  SET_STRING("sysinfoPageCollapseBtn", IDS_ABOUT_SYS_COLLAPSE);
+  SET_STRING("sysinfoPageStatusLoading", IDS_FEEDBACK_SYSINFO_PAGE_LOADING);
 #undef SET_STRING
 
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
@@ -142,7 +156,7 @@ bool FeedbackPrivateGetUserEmailFunction::RunSync() {
   SigninManagerBase* signin_manager =
       SigninManagerFactory::GetForProfile(GetProfile());
   SetResult(new base::StringValue(
-      signin_manager ? signin_manager->GetAuthenticatedUsername()
+      signin_manager ? signin_manager->GetAuthenticatedAccountInfo().email
                      : std::string()));
   return true;
 }
@@ -214,7 +228,7 @@ bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
          it != sys_info->end(); ++it)
       (*sys_logs.get())[it->get()->key] = it->get()->value;
   }
-  feedback_data->SetAndCompressSystemInfo(sys_logs.Pass());
+  feedback_data->SetAndCompressSystemInfo(std::move(sys_logs));
 
   FeedbackService* service =
       FeedbackPrivateAPI::GetFactoryInstance()->Get(GetProfile())->GetService();
@@ -224,7 +238,7 @@ bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
     scoped_ptr<std::string> histograms(new std::string);
     *histograms = base::StatisticsRecorder::ToJSON(std::string());
     if (!histograms->empty())
-      feedback_data->SetAndCompressHistograms(histograms.Pass());
+      feedback_data->SetAndCompressHistograms(std::move(histograms));
   }
 
   service->SendFeedback(

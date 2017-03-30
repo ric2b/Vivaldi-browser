@@ -5,8 +5,8 @@
 #ifndef UI_GL_GL_CONTEXT_OSMESA_H_
 #define UI_GL_GL_CONTEXT_OSMESA_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/gl/gl_context.h"
 
 typedef struct osmesa_context* OSMesaContext;
@@ -24,7 +24,6 @@ class GLContextOSMesa : public GLContextReal {
   // Implement GLContext.
   bool Initialize(GLSurface* compatible_surface,
                   GpuPreference gpu_preference) override;
-  void Destroy() override;
   bool MakeCurrent(GLSurface* surface) override;
   void ReleaseCurrent(GLSurface* surface) override;
   bool IsCurrent(GLSurface* surface) override;
@@ -35,6 +34,8 @@ class GLContextOSMesa : public GLContextReal {
   ~GLContextOSMesa() override;
 
  private:
+  void Destroy();
+
   OSMesaContext context_;
   bool is_released_;
 

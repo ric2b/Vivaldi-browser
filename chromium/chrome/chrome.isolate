@@ -35,11 +35,11 @@
     ['OS=="linux" or OS=="win"', {
       'variables': {
         'command': [
-          '<(PRODUCT_DIR)/vivaldi<(EXECUTABLE_SUFFIX)',
+          '<(PRODUCT_DIR)/chrome<(EXECUTABLE_SUFFIX)',
         ],
         'files': [
-          '<(PRODUCT_DIR)/vivaldi<(EXECUTABLE_SUFFIX)',
-          '<(PRODUCT_DIR)/vivaldi_100_percent.pak',
+          '<(PRODUCT_DIR)/chrome<(EXECUTABLE_SUFFIX)',
+          '<(PRODUCT_DIR)/chrome_100_percent.pak',
           '<(PRODUCT_DIR)/locales/en-US.pak',
           '<(PRODUCT_DIR)/locales/fr.pak',
           '<(PRODUCT_DIR)/resources/extension/',
@@ -87,9 +87,9 @@
       'variables': {
         'files': [
           '<(PRODUCT_DIR)/<(version_full).manifest',
-          '<(PRODUCT_DIR)/vivaldi_200_percent.pak',
-          '<(PRODUCT_DIR)/vivaldi.dll',
-          '<(PRODUCT_DIR)/vivaldi_elf.dll',
+          '<(PRODUCT_DIR)/chrome_200_percent.pak',
+          '<(PRODUCT_DIR)/chrome.dll',
+          '<(PRODUCT_DIR)/chrome_elf.dll',
           '<(PRODUCT_DIR)/libexif.dll',
           '<(PRODUCT_DIR)/osmesa.dll',
         ],
@@ -113,7 +113,7 @@
     ['OS=="win" and component=="static_library"', {
       'variables': {
         'files': [
-          '<(PRODUCT_DIR)/vivaldi_child.dll',
+          '<(PRODUCT_DIR)/chrome_child.dll',
         ],
       },
     }],
@@ -127,7 +127,7 @@
   ],
   'includes': [
     '../base/base.isolate',
-    '../third_party/angle/angle.isolate',
     '../gin/v8.isolate',
+    '../ui/gl/gl.isolate',
   ],
 }

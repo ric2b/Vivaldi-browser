@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_STORAGE_POLICY_VALUE_STORE_H_
 #define CHROME_BROWSER_EXTENSIONS_API_STORAGE_POLICY_VALUE_STORE_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "extensions/browser/api/storage/settings_observer.h"
@@ -54,9 +57,6 @@ class PolicyValueStore : public ValueStore {
   WriteResult Remove(const std::string& key) override;
   WriteResult Remove(const std::vector<std::string>& keys) override;
   WriteResult Clear() override;
-  // Hopefully, as a Read-Only database, there is no reason to use these.
-  bool Restore() override;
-  bool RestoreKey(const std::string& key) override;
 
   // For unit tests.
   ValueStore* delegate() { return delegate_.get(); }

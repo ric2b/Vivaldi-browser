@@ -4,6 +4,8 @@
 
 #include "media/formats/common/stream_parser_test_base.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "media/base/test_data_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,7 +31,7 @@ static std::string BufferQueueToString(
 
 StreamParserTestBase::StreamParserTestBase(
     scoped_ptr<StreamParser> stream_parser)
-    : parser_(stream_parser.Pass()) {
+    : parser_(std::move(stream_parser)) {
   parser_->Init(
       base::Bind(&StreamParserTestBase::OnInitDone, base::Unretained(this)),
       base::Bind(&StreamParserTestBase::OnNewConfig, base::Unretained(this)),
@@ -38,7 +40,7 @@ StreamParserTestBase::StreamParserTestBase(
       base::Bind(&StreamParserTestBase::OnKeyNeeded, base::Unretained(this)),
       base::Bind(&StreamParserTestBase::OnNewSegment, base::Unretained(this)),
       base::Bind(&StreamParserTestBase::OnEndOfSegment, base::Unretained(this)),
-      LogCB());
+      new MediaLog());
 }
 
 StreamParserTestBase::~StreamParserTestBase() {}
@@ -52,17 +54,18 @@ std::string StreamParserTestBase::ParseFile(const std::string& filename,
   return results_stream_.str();
 }
 
-std::string StreamParserTestBase::ParseData(const uint8* data, size_t length) {
+std::string StreamParserTestBase::ParseData(const uint8_t* data,
+                                            size_t length) {
   results_stream_.clear();
   EXPECT_TRUE(AppendDataInPieces(data, length, length));
   return results_stream_.str();
 }
 
-bool StreamParserTestBase::AppendDataInPieces(const uint8* data,
+bool StreamParserTestBase::AppendDataInPieces(const uint8_t* data,
                                               size_t length,
                                               size_t piece_size) {
-  const uint8* start = data;
-  const uint8* end = data + length;
+  const uint8_t* start = data;
+  const uint8_t* end = data + length;
   while (start < end) {
     size_t append_size = std::min(piece_size, static_cast<size_t>(end - start));
     if (!parser_->Parse(start, append_size))
@@ -109,7 +112,7 @@ bool StreamParserTestBase::OnNewBuffers(
 }
 
 void StreamParserTestBase::OnKeyNeeded(EmeInitDataType type,
-                                       const std::vector<uint8>& init_data) {
+                                       const std::vector<uint8_t>& init_data) {
   DVLOG(1) << __FUNCTION__ << "(" << static_cast<int>(type) << ", "
            << init_data.size() << ")";
 }

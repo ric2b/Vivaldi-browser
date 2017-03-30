@@ -13,15 +13,7 @@ GEN_INCLUDE(['net_internals_test.js']);
  * tabs with visible handles, validating visibility of all other tabs as it
  * goes.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsTourTabs ' +
-    'DISABLED_netInternalsTourTabs');
-GEN('#else');
-GEN('#define MAYBE_netInternalsTourTabs ' +
-    'netInternalsTourTabs');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsTourTabs', function() {
+TEST_F('NetInternalsTest', 'netInternalsTourTabs', function() {
   // Prevent sending any events to the browser as we flip through tabs, since
   // this test is just intended to make sure everything's created and hooked
   // up properly Javascript side.

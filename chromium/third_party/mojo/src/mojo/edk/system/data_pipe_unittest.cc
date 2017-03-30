@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/data_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include <limits>
 
-#include "mojo/edk/system/configuration.h"
 #include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/system/configuration.h"
 
 namespace mojo {
 namespace system {

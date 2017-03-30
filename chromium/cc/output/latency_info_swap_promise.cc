@@ -4,6 +4,8 @@
 
 #include "cc/output/latency_info_swap_promise.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 
@@ -34,7 +36,7 @@ LatencyInfoSwapPromise::~LatencyInfoSwapPromise() {
 }
 
 void LatencyInfoSwapPromise::DidSwap(CompositorFrameMetadata* metadata) {
-  DCHECK(!latency_.terminated);
+  DCHECK(!latency_.terminated());
   metadata->latency_info.push_back(latency_);
 }
 
@@ -46,15 +48,17 @@ void LatencyInfoSwapPromise::DidNotSwap(DidNotSwapReason reason) {
   // DCHECK(latency_.terminated);
 }
 
-int64 LatencyInfoSwapPromise::TraceId() const {
-  return latency_.trace_id;
+int64_t LatencyInfoSwapPromise::TraceId() const {
+  return latency_.trace_id();
 }
 
 // Trace the original LatencyInfo of a LatencyInfoSwapPromise
 void LatencyInfoSwapPromise::OnCommit() {
-  TRACE_EVENT_FLOW_STEP0("input,benchmark", "LatencyInfo.Flow",
+  TRACE_EVENT_WITH_FLOW1("input,benchmark",
+                         "LatencyInfo.Flow",
                          TRACE_ID_DONT_MANGLE(TraceId()),
-                         "HanldeInputEventMainCommit");
+                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
+                         "step", "HandleInputEventMainCommit");
 }
 
 }  // namespace cc

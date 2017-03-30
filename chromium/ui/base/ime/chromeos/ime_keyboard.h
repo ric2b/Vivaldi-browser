@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/observer_list.h"
 #include "ui/base/ime/ui_base_ime_export.h"
 
@@ -28,8 +27,9 @@ enum ModifierKey {
   kVoidKey,
   kCapsLockKey,
   kEscapeKey,
-  // IMPORTANT: You should update kCustomizableKeys[] in .cc file, if you
-  // add a customizable key.
+  kBackspaceKey,
+  // IMPORTANT: Add new key to the end, because the keys may have been stored
+  // in user preferences.
   kNumModifierKeys,
 };
 

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
 
+#include <stddef.h>
+
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/values.h"
@@ -51,8 +53,6 @@ static void EncodePinnedTab(TabStripModel* model,
 
   content::WebContents* web_contents = model->GetWebContentsAt(index);
   NavigationEntry* entry = web_contents->GetController().GetActiveEntry();
-  if (!entry && web_contents->GetController().GetEntryCount())
-    entry = web_contents->GetController().GetEntryAtIndex(0);
   if (entry) {
     value->SetString(kURL, entry->GetURL().spec());
     values->Append(value.release());

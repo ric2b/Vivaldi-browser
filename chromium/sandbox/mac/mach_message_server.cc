@@ -6,6 +6,7 @@
 
 #include <bsm/libbsm.h>
 #include <servers/bootstrap.h>
+#include <stddef.h>
 
 #include <string>
 
@@ -73,6 +74,10 @@ bool MachMessageServer::Initialize() {
   dispatch_source_->Resume();
 
   return true;
+}
+
+void MachMessageServer::Shutdown() {
+  dispatch_source_.reset();
 }
 
 pid_t MachMessageServer::GetMessageSenderPID(IPCMessage request) {

@@ -103,6 +103,8 @@ void FakeMessageCenter::ClickOnNotificationButton(const std::string& id,
                                                   int button_index) {
 }
 
+void FakeMessageCenter::ClickOnSettingsButton(const std::string& id) {}
+
 void FakeMessageCenter::MarkSinglePopupAsShown(const std::string& id,
                                                bool mark_notification_as_read) {
 }
@@ -139,5 +141,7 @@ void FakeMessageCenter::RestartPopupTimers() {}
 void FakeMessageCenter::PausePopupTimers() {}
 
 void FakeMessageCenter::DisableTimersForTest() {}
+
+void FakeMessageCenter::EnableChangeQueueForTest(bool enabled) {}
 
 }  // namespace message_center

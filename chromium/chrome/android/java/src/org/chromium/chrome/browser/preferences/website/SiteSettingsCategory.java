@@ -14,13 +14,13 @@ import android.graphics.PorterDuff;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Build;
 import android.preference.Preference;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.ForegroundColorSpan;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.BuildInfo;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
@@ -308,7 +308,7 @@ public class SiteSettingsCategory {
         String globalMessage = getMessageForEnablingOsGlobalPermission(activity);
 
         Resources resources = activity.getResources();
-        int color = resources.getColor(R.color.pref_accent_color);
+        int color = ApiCompatibilityUtils.getColor(resources, R.color.pref_accent_color);
         ForegroundColorSpan linkSpan = new ForegroundColorSpan(color);
 
         if (perAppIntent != null) {
@@ -346,7 +346,8 @@ public class SiteSettingsCategory {
         Drawable icon = ApiCompatibilityUtils.getDrawable(activity.getResources(),
                 R.drawable.exclamation_triangle);
         icon.mutate();
-        int disabledColor = activity.getResources().getColor(R.color.pref_accent_color);
+        int disabledColor = ApiCompatibilityUtils.getColor(activity.getResources(),
+                R.color.pref_accent_color);
         icon.setColorFilter(disabledColor, PorterDuff.Mode.SRC_IN);
         return icon;
     }
@@ -436,7 +437,7 @@ public class SiteSettingsCategory {
      * @param permission The string of the permission to check.
      */
     private boolean permissionOnInAndroid(String permission, Context context) {
-        if (!BuildInfo.isMncOrLater()) return true;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
 
         return PackageManager.PERMISSION_GRANTED == context.getPackageManager().checkPermission(
                 permission, context.getPackageName());

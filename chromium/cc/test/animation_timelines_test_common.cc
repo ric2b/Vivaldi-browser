@@ -39,6 +39,7 @@ TestHostClient::TestHostClient(ThreadInstance thread_instance)
     : host_(AnimationHost::Create(thread_instance)),
       mutators_need_commit_(false) {
   host_->SetMutatorHostClient(this);
+  host_->SetSupportsScrollAnimations(true);
 }
 
 TestHostClient::~TestHostClient() {
@@ -62,6 +63,8 @@ bool TestHostClient::IsLayerInTree(int layer_id,
 void TestHostClient::SetMutatorsNeedCommit() {
   mutators_need_commit_ = true;
 }
+
+void TestHostClient::SetMutatorsNeedRebuildPropertyTrees() {}
 
 void TestHostClient::SetLayerFilterMutated(int layer_id,
                                            LayerTreeType tree_type,
@@ -160,15 +163,6 @@ void TestHostClient::ExpectTransformPropertyMutated(int layer_id,
   EXPECT_EQ(transform_y, layer->transform_y());
 }
 
-void TestHostClient::ExpectScrollOffsetPropertyMutated(
-    int layer_id,
-    LayerTreeType tree_type,
-    const gfx::ScrollOffset& scroll_offset) const {
-  TestLayer* layer = FindTestLayer(layer_id, tree_type);
-  EXPECT_TRUE(layer->is_property_mutated(Animation::OPACITY));
-  EXPECT_EQ(scroll_offset, layer->scroll_offset());
-}
-
 TestLayer* TestHostClient::FindTestLayer(int layer_id,
                                          LayerTreeType tree_type) const {
   const LayerIdToTestLayer& layers_in_tree = tree_type == LayerTreeType::ACTIVE
@@ -204,9 +198,11 @@ AnimationTimelinesTest::AnimationTimelinesTest()
       host_impl_(nullptr),
       timeline_id_(AnimationIdProvider::NextTimelineId()),
       player_id_(AnimationIdProvider::NextPlayerId()),
-      layer_id_(1) {
+      next_test_layer_id_(0) {
   host_ = client_.host();
   host_impl_ = client_impl_.host();
+
+  layer_id_ = NextTestLayerId();
 }
 
 AnimationTimelinesTest::~AnimationTimelinesTest() {
@@ -215,6 +211,11 @@ AnimationTimelinesTest::~AnimationTimelinesTest() {
 void AnimationTimelinesTest::SetUp() {
   timeline_ = AnimationTimeline::Create(timeline_id_);
   player_ = AnimationPlayer::Create(player_id_);
+}
+
+void AnimationTimelinesTest::TearDown() {
+  host_impl_->ClearTimelines();
+  host_->ClearTimelines();
 }
 
 void AnimationTimelinesTest::GetImplTimelineAndPlayerByID() {
@@ -234,16 +235,16 @@ void AnimationTimelinesTest::ReleaseRefPtrs() {
 void AnimationTimelinesTest::AnimateLayersTransferEvents(
     base::TimeTicks time,
     unsigned expect_events) {
-  scoped_ptr<AnimationEventsVector> events =
+  scoped_ptr<AnimationEvents> events =
       host_->animation_registrar()->CreateEvents();
 
   host_impl_->animation_registrar()->AnimateLayers(time);
   host_impl_->animation_registrar()->UpdateAnimationState(true, events.get());
-  EXPECT_EQ(expect_events, events->size());
+  EXPECT_EQ(expect_events, events->events_.size());
 
   host_->animation_registrar()->AnimateLayers(time);
   host_->animation_registrar()->UpdateAnimationState(true, nullptr);
-  host_->animation_registrar()->SetAnimationEvents(events.Pass());
+  host_->animation_registrar()->SetAnimationEvents(std::move(events));
 }
 
 AnimationPlayer* AnimationTimelinesTest::GetPlayerForLayerId(int layer_id) {
@@ -258,6 +259,11 @@ AnimationPlayer* AnimationTimelinesTest::GetImplPlayerForLayerId(int layer_id) {
       host_impl_->GetElementAnimationsForLayerId(layer_id);
   return element_animations ? element_animations->players_list().head()->value()
                             : nullptr;
+}
+
+int AnimationTimelinesTest::NextTestLayerId() {
+  next_test_layer_id_++;
+  return next_test_layer_id_;
 }
 
 }  // namespace cc

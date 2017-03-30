@@ -4,6 +4,9 @@
 
 #include "chrome/browser/chromeos/system_logs/debug_log_writer.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -74,12 +77,8 @@ void WriteDebugLogToFile(base::File* file,
   scoped_refptr<base::TaskRunner> task_runner =
       GetSequencedTaskRunner(sequence_token_name);
   chromeos::DBusThreadManager::Get()->GetDebugDaemonClient()->DumpDebugLogs(
-      should_compress,
-      file->Pass(),
-      task_runner,
-      base::Bind(&WriteDebugLogToFileCompleted,
-                 file_path,
-                 sequence_token_name,
+      should_compress, std::move(*file), task_runner,
+      base::Bind(&WriteDebugLogToFileCompleted, file_path, sequence_token_name,
                  callback));
 }
 
@@ -122,8 +121,8 @@ void OnCompressArchiveCompleted(
         content::BrowserThread::UI,
         FROM_HERE,
         base::Bind(callback, base::FilePath(), false));
-    base::DeleteFile(tar_file_path, true);
-    base::DeleteFile(compressed_output_path, true);
+    base::DeleteFile(tar_file_path, false);
+    base::DeleteFile(compressed_output_path, false);
     return;
   }
 
@@ -144,7 +143,7 @@ void CompressArchive(const base::FilePath& tar_file_path,
         content::BrowserThread::UI,
         FROM_HERE,
         base::Bind(callback, base::FilePath(), false));
-    base::DeleteFile(tar_file_path, true);
+    base::DeleteFile(tar_file_path, false);
     return;
   }
 
@@ -203,7 +202,7 @@ void OnSystemLogsAdded(const DebugLogWriter::StoreLogsCallback& callback,
 
 void IntializeLogFile(base::File* file,
                       const base::FilePath& file_path,
-                      uint32 flags) {
+                      uint32_t flags) {
   base::FilePath dir = file_path.DirName();
   if (!base::DirectoryExists(dir)) {
     if (!base::CreateDirectory(dir)) {

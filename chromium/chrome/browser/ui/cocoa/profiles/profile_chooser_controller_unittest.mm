@@ -7,32 +7,37 @@
 #include "base/command_line.h"
 #import "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/services/gcm/fake_gcm_profile_service.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
-#include "chrome/browser/signin/fake_account_fetcher_service.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service.h"
+#include "chrome/browser/signin/account_tracker_service_factory.h"
+#include "chrome/browser/signin/chrome_signin_helper.h"
+#include "chrome/browser/signin/fake_account_fetcher_service_builder.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_header_helper.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/cocoa/cocoa_profile_test.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/signin/core/browser/fake_account_fetcher_service.h"
+#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/common/signin_pref_names.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 
 const std::string kGaiaId = "gaiaid-user@gmail.com";
 const std::string kEmail = "user@gmail.com";
 const std::string kSecondaryEmail = "user2@gmail.com";
+const std::string kSecondaryGaiaId = "gaiaid-user2@gmail.com";
 const std::string kLoginToken = "oauth2_login_token";
 
 class ProfileChooserControllerTest : public CocoaProfileTest {
@@ -44,7 +49,7 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
                        BuildFakeProfileOAuth2TokenService));
     factories.push_back(
         std::make_pair(AccountFetcherServiceFactory::GetInstance(),
-                       FakeAccountFetcherService::BuildForTests));
+                       FakeAccountFetcherServiceBuilder::BuildForTests));
     AddTestingFactories(factories);
   }
 
@@ -56,14 +61,13 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
     gcm::GCMProfileServiceFactory::GetInstance()->SetTestingFactory(
         browser()->profile(), gcm::FakeGCMProfileService::Build);
 
-    testing_profile_manager()->
-        CreateTestingProfile("test1", scoped_ptr<PrefServiceSyncable>(),
-                             base::ASCIIToUTF16("Test 1"), 0, std::string(),
-                             testing_factories());
-    testing_profile_manager()->
-        CreateTestingProfile("test2", scoped_ptr<PrefServiceSyncable>(),
-                             base::ASCIIToUTF16("Test 2"), 1, std::string(),
-                             TestingProfile::TestingFactories());
+    testing_profile_manager()->CreateTestingProfile(
+        "test1", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+        base::ASCIIToUTF16("Test 1"), 0, std::string(), testing_factories());
+    testing_profile_manager()->CreateTestingProfile(
+        "test2", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+        base::ASCIIToUTF16("Test 2"), 1, std::string(),
+        TestingProfile::TestingFactories());
 
     menu_ = new AvatarMenu(testing_profile_manager()->profile_info_cache(),
                            NULL, NULL);
@@ -92,7 +96,9 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
              anchoredAt:point
                viewMode:profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER
            tutorialMode:mode
-            serviceType:signin::GAIA_SERVICE_TYPE_NONE]);
+            serviceType:signin::GAIA_SERVICE_TYPE_NONE
+            accessPoint:signin_metrics::AccessPoint::
+                            ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN]);
     [controller_ showWindow:nil];
   }
 
@@ -131,7 +137,9 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
              anchoredAt:point
                viewMode:profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER
            tutorialMode:profiles::TUTORIAL_MODE_NONE
-            serviceType:signin::GAIA_SERVICE_TYPE_NONE]);
+            serviceType:signin::GAIA_SERVICE_TYPE_NONE
+            accessPoint:signin_metrics::AccessPoint::
+                            ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN]);
     [controller_ showWindow:nil];
   }
 
@@ -148,8 +156,6 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
 };
 
 TEST_F(ProfileChooserControllerTest, InitialLayoutWithNewMenu) {
-  switches::EnableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
   StartProfileChooserController();
 
   NSArray* subviews = [[[controller() window] contentView] subviews];
@@ -215,8 +221,6 @@ TEST_F(ProfileChooserControllerTest, InitialLayoutWithNewMenu) {
 }
 
 TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterWelcome) {
-  switches::EnableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
   // The welcome upgrade tutorial takes precedence so show it then dismiss it.
   // The right click tutorial should be shown right away.
   StartProfileChooserControllerWithTutorialMode(
@@ -227,8 +231,6 @@ TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterWelcome) {
 }
 
 TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterReopen) {
-  switches::EnableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
   // The welcome upgrade tutorial takes precedence so show it then close the
   // menu. Reopening the menu should show the tutorial.
   StartProfileChooserController();
@@ -245,8 +247,6 @@ TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterReopen) {
 }
 
 TEST_F(ProfileChooserControllerTest, RightClickTutorialNotShownAfterDismiss) {
-  switches::EnableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
   // The welcome upgrade tutorial takes precedence so show it then close the
   // menu. Reopening the menu should show the tutorial.
   StartProfileChooserController();
@@ -278,19 +278,16 @@ TEST_F(ProfileChooserControllerTest, RightClickTutorialNotShownAfterDismiss) {
 }
 
 TEST_F(ProfileChooserControllerTest, OtherProfilesSortedAlphabetically) {
-  switches::EnableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
-
   // Add two extra profiles, to make sure sorting is alphabetical and not
   // by order of creation.
-  testing_profile_manager()->
-      CreateTestingProfile("test3", scoped_ptr<PrefServiceSyncable>(),
-                           base::ASCIIToUTF16("New Profile"), 1, std::string(),
-                           TestingProfile::TestingFactories());
-  testing_profile_manager()->
-      CreateTestingProfile("test4", scoped_ptr<PrefServiceSyncable>(),
-                           base::ASCIIToUTF16("Another Test"), 1, std::string(),
-                           TestingProfile::TestingFactories());
+  testing_profile_manager()->CreateTestingProfile(
+      "test3", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+      base::ASCIIToUTF16("New Profile"), 1, std::string(),
+      TestingProfile::TestingFactories());
+  testing_profile_manager()->CreateTestingProfile(
+      "test4", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+      base::ASCIIToUTF16("Another Test"), 1, std::string(),
+      TestingProfile::TestingFactories());
   StartFastUserSwitcher();
 
   NSArray* subviews = [[[controller() window] contentView] subviews];
@@ -319,8 +316,6 @@ TEST_F(ProfileChooserControllerTest, OtherProfilesSortedAlphabetically) {
 
 TEST_F(ProfileChooserControllerTest,
     LocalProfileActiveCardLinksWithNewMenu) {
-  switches::EnableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
   StartProfileChooserController();
   NSArray* subviews = [[[controller() window] contentView] subviews];
   ASSERT_EQ(2U, [subviews count]);
@@ -367,8 +362,6 @@ TEST_F(ProfileChooserControllerTest,
 
 TEST_F(ProfileChooserControllerTest,
     SignedInProfileActiveCardLinksWithNewMenu) {
-  switches::EnableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
   // Sign in the first profile.
   ProfileInfoCache* cache = testing_profile_manager()->profile_info_cache();
   cache->SetAuthInfoOfProfileAtIndex(0, kGaiaId, base::ASCIIToUTF16(kEmail));
@@ -401,14 +394,22 @@ TEST_F(ProfileChooserControllerTest, AccountManagementLayout) {
   // should be used.
   cache->SetProfileIsUsingDefaultNameAtIndex(0, false);
 
-  // Set up the signin manager and the OAuth2Tokens.
+  // Set up the AccountTrackerService, signin manager and the OAuth2Tokens.
   Profile* profile = browser()->profile();
-  SigninManagerFactory::GetForProfile(profile)->
-      SetAuthenticatedAccountInfo(kEmail, kEmail);
-  ProfileOAuth2TokenServiceFactory::GetForProfile(profile)->
-      UpdateCredentials(kEmail, kLoginToken);
-  ProfileOAuth2TokenServiceFactory::GetForProfile(profile)->
-      UpdateCredentials(kSecondaryEmail, kLoginToken);
+  AccountTrackerServiceFactory::GetForProfile(profile)
+      ->SeedAccountInfo(kGaiaId, kEmail);
+  AccountTrackerServiceFactory::GetForProfile(profile)
+      ->SeedAccountInfo(kSecondaryGaiaId, kSecondaryEmail);
+  SigninManagerFactory::GetForProfile(profile)
+      ->SetAuthenticatedAccountInfo(kGaiaId, kEmail);
+  std::string account_id =
+      SigninManagerFactory::GetForProfile(profile)->GetAuthenticatedAccountId();
+  ProfileOAuth2TokenServiceFactory::GetForProfile(profile)
+      ->UpdateCredentials(account_id, kLoginToken);
+  account_id = AccountTrackerServiceFactory::GetForProfile(profile)
+                   ->PickAccountIdForAccount(kSecondaryGaiaId, kSecondaryEmail);
+  ProfileOAuth2TokenServiceFactory::GetForProfile(profile)
+      ->UpdateCredentials(account_id, kLoginToken);
 
   StartProfileChooserController();
   [controller() initMenuContentsWithView:

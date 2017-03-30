@@ -5,12 +5,15 @@
 #ifndef REMOTING_CLIENT_SOFTWARE_VIDEO_RENDERER_H_
 #define REMOTING_CLIENT_SOFTWARE_VIDEO_RENDERER_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "remoting/client/chromoting_stats.h"
-#include "remoting/client/frame_consumer_proxy.h"
-#include "remoting/client/frame_producer.h"
-#include "remoting/client/video_renderer.h"
+#include "base/memory/weak_ptr.h"
+#include "base/threading/thread_checker.h"
+#include "remoting/protocol/performance_tracker.h"
+#include "remoting/protocol/video_renderer.h"
 #include "remoting/protocol/video_stub.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
@@ -18,67 +21,59 @@ namespace base {
 class SingleThreadTaskRunner;
 }  // namespace base
 
+namespace webrtc {
+class DesktopFrame;
+}  // namespace webrtc
+
 namespace remoting {
 
-class ChromotingStats;
+class VideoDecoder;
+
+namespace protocol {
+class FrameConsumer;
+class PerformanceTracker;
+}  // namespace protocol
 
 // Implementation of VideoRenderer interface that decodes frame on CPU (on a
 // decode thread) and then passes decoded frames to a FrameConsumer.
-// FrameProducer methods can be called on any thread. All other methods must be
-// called on the main thread. Owned must ensure that this class outlives
-// FrameConsumer (which calls FrameProducer interface).
-class SoftwareVideoRenderer : public VideoRenderer,
-                              public protocol::VideoStub,
-                              public FrameProducer,
-                              public base::NonThreadSafe {
+class SoftwareVideoRenderer : public protocol::VideoRenderer,
+                              public protocol::VideoStub {
  public:
-  // Creates an update decoder on |main_task_runner_| and |decode_task_runner_|,
-  // outputting to |consumer|. The |main_task_runner_| is responsible for
-  // receiving and queueing packets. The |decode_task_runner_| is responsible
-  // for decoding the video packets.
-  // TODO(wez): Replace the ref-counted proxy with an owned FrameConsumer.
+  // All methods must be called on the same thread the renderer is created. The
+  // |decode_task_runner_| is used to decode the video packets. |perf_tracker|
+  // must outlive the renderer. |perf_tracker| may be nullptr, performance
+  // tracking is disabled in that case.
   SoftwareVideoRenderer(
-      scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> decode_task_runner,
-      scoped_refptr<FrameConsumerProxy> consumer);
+      protocol::FrameConsumer* consumer,
+      protocol::PerformanceTracker* perf_tracker);
   ~SoftwareVideoRenderer() override;
 
   // VideoRenderer interface.
   void OnSessionConfig(const protocol::SessionConfig& config) override;
-  ChromotingStats* GetStats() override;
   protocol::VideoStub* GetVideoStub() override;
+  protocol::FrameConsumer* GetFrameConsumer() override;
 
   // protocol::VideoStub interface.
   void ProcessVideoPacket(scoped_ptr<VideoPacket> packet,
                           const base::Closure& done) override;
 
-  // FrameProducer implementation. These methods may be called before we are
-  // Initialize()d, or we know the source screen size. These methods may be
-  // called on any thread.
-  //
-  // TODO(sergeyu): On Android a separate display thread is used for drawing.
-  // FrameConsumer calls FrameProducer on that thread. Can we avoid having a
-  // separate display thread? E.g. can we do everything on the decode thread?
-  void DrawBuffer(webrtc::DesktopFrame* buffer) override;
-  void InvalidateRegion(const webrtc::DesktopRegion& region) override;
-  void RequestReturnBuffers(const base::Closure& done) override;
-  void SetOutputSizeAndClip(const webrtc::DesktopSize& view_size,
-                            const webrtc::DesktopRect& clip_area) override;
-
  private:
-  class Core;
-
-  // Callback method when a VideoPacket is processed. |decode_start| contains
-  // the timestamp when the packet will start to be processed.
-  void OnPacketDone(base::Time decode_start, const base::Closure& done);
+  void RenderFrame(int32_t frame_id,
+                   const base::Closure& done,
+                   scoped_ptr<webrtc::DesktopFrame> frame);
+  void OnFrameRendered(int32_t frame_id, const base::Closure& done);
 
   scoped_refptr<base::SingleThreadTaskRunner> decode_task_runner_;
-  scoped_ptr<Core> core_;
+  protocol::FrameConsumer* consumer_;
+  protocol::PerformanceTracker* perf_tracker_;
 
-  ChromotingStats stats_;
+  scoped_ptr<VideoDecoder> decoder_;
 
-  // Keep track of the latest event timestamp bounced back from the host.
-  int64 latest_event_timestamp_;
+  webrtc::DesktopSize source_size_;
+  webrtc::DesktopVector source_dpi_;
+
+  base::ThreadChecker thread_checker_;
 
   base::WeakPtrFactory<SoftwareVideoRenderer> weak_factory_;
 

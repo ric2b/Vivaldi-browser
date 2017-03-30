@@ -5,8 +5,8 @@
 #ifndef NET_SOCKET_TCP_SERVER_SOCKET_H_
 #define NET_SOCKET_TCP_SERVER_SOCKET_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
@@ -26,6 +26,11 @@ class NET_EXPORT_PRIVATE TCPServerSocket : public ServerSocket {
   int GetLocalAddress(IPEndPoint* address) const override;
   int Accept(scoped_ptr<StreamSocket>* socket,
              const CompletionCallback& callback) override;
+
+  // Detachs from the current thread, to allow the socket to be transferred to
+  // a new thread. Should only be called when the object is no longer used by
+  // the old thread.
+  void DetachFromThread();
 
  private:
   // Converts |accepted_socket_| and stores the result in

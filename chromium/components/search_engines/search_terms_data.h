@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 
 // All data needed by TemplateURLRef::ReplaceSearchTerms which typically may
@@ -49,10 +49,6 @@ class SearchTermsData {
   // This implementation returns the empty string.
   virtual std::string GetSuggestRequestIdentifier() const;
 
-  // Returns true if search terms are shown in the omnibox on search results
-  // pages.
-  virtual bool IsShowingSearchTermsOnSearchResultsPages() const;
-
   // Returns a string indicating whether InstantExtended is enabled.
   virtual std::string InstantExtendedEnabledParam(bool for_search) const;
 
@@ -60,19 +56,19 @@ class SearchTermsData {
   // incrementally.
   virtual std::string ForceInstantResultsParam(bool for_prerender) const;
 
-  // Returns the start-edge margin of the omnibox in pixels.
-  virtual int OmniboxStartMargin() const;
-
-  // Returns a string indicating whether a non-default theme is active,
-  // suitable for adding as a query string param to the homepage.  This only
-  // applies if Instant Extended is enabled.  Returns an empty string otherwise.
-  // Determining this requires accessing the Profile, so this can only ever be
-  // non-empty for UIThreadSearchTermsData.
-  virtual std::string NTPIsThemedParam() const;
+  // Returns a string indicating which webview is currently in use on iOS,
+  // suitable for adding as a query string param to search requests.  Returns an
+  // empty string if no parameter should be passed along with search requests.
+  virtual std::string IOSWebViewTypeParam() const;
 
   // Returns the value to use for replacements of type
   // GOOGLE_IMAGE_SEARCH_SOURCE.
   virtual std::string GoogleImageSearchSource() const;
+
+  // Returns a string with languages understood by the user.
+  // Determining this requires accessing the Profile, so this can only ever be
+  // non-empty for UIThreadSearchTermsData.
+  virtual std::string GetAcceptLanguages() const;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SearchTermsData);

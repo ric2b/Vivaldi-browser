@@ -4,9 +4,13 @@
 
 #include "extensions/browser/api/socket/tls_socket.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <utility>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/address_list.h"
@@ -41,8 +45,8 @@ class MockSSLClientSocket : public net::SSLClientSocket {
                int(net::IOBuffer* buf,
                    int buf_len,
                    const net::CompletionCallback& callback));
-  MOCK_METHOD1(SetReceiveBufferSize, int(int32));
-  MOCK_METHOD1(SetSendBufferSize, int(int32));
+  MOCK_METHOD1(SetReceiveBufferSize, int(int32_t));
+  MOCK_METHOD1(SetSendBufferSize, int(int32_t));
   MOCK_METHOD1(Connect, int(const CompletionCallback&));
   MOCK_CONST_METHOD0(IsConnectedAndIdle, bool());
   MOCK_CONST_METHOD1(GetPeerAddress, int(net::IPEndPoint*));
@@ -56,6 +60,7 @@ class MockSSLClientSocket : public net::SSLClientSocket {
   MOCK_CONST_METHOD1(GetConnectionAttempts, void(net::ConnectionAttempts*));
   MOCK_METHOD0(ClearConnectionAttempts, void());
   MOCK_METHOD1(AddConnectionAttempts, void(const net::ConnectionAttempts&));
+  MOCK_CONST_METHOD0(GetTotalReceivedBytes, int64_t());
   MOCK_METHOD5(ExportKeyingMaterial,
                int(const StringPiece&,
                    bool,
@@ -120,7 +125,7 @@ class TLSSocketTest : public ::testing::Test {
     // it to expect invocations from TLSSocket to |ssl_socket_|.
     scoped_ptr<MockSSLClientSocket> ssl_sock(new MockSSLClientSocket);
     ssl_socket_ = ssl_sock.get();
-    socket_.reset(new TLSSocket(ssl_sock.Pass(), "test_extension_id"));
+    socket_.reset(new TLSSocket(std::move(ssl_sock), "test_extension_id"));
     EXPECT_CALL(*ssl_socket_, Disconnect()).Times(1);
   };
 

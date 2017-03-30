@@ -2,19 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <cstring>
-#include <set>
-
-#include <X11/extensions/XInput2.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <X11/XKBlib.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <X11/XKBlib.h>
+#include <X11/extensions/XInput2.h>
+
+#include <cstring>
+#include <set>
+#include <utility>
 
 // Generically-named #defines from Xlib that conflict with symbols in GTest.
 #undef Bool
 #undef None
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
@@ -23,6 +28,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/test/events_test_utils.h"
 #include "ui/events/test/events_test_utils_x11.h"
+#include "ui/events/x/events_x_utils.h"
 #include "ui/gfx/geometry/point.h"
 
 namespace ui {
@@ -76,6 +82,7 @@ class EventsXTest : public testing::Test {
   void SetUp() override {
     DeviceDataManagerX11::CreateInstance();
     ui::TouchFactory::GetInstance()->ResetForTest();
+    ResetTimestampRolloverCountersForTesting();
   }
  private:
   DISALLOW_COPY_AND_ASSIGN(EventsXTest);
@@ -293,7 +300,7 @@ TEST_F(EventsXTest, TouchEventBasic) {
   EXPECT_FLOAT_EQ(GetTouchForce(scoped_xevent), 0.5f);
 }
 
-int GetTouchIdForTrackingId(uint32 tracking_id) {
+int GetTouchIdForTrackingId(uint32_t tracking_id) {
   int slot = 0;
   bool success =
       TouchFactory::GetInstance()->QuerySlotForTrackingID(tracking_id, &slot);
@@ -378,7 +385,7 @@ TEST_F(EventsXTest, DisableKeyboard) {
 
   scoped_ptr<std::set<KeyboardCode> > excepted_keys(new std::set<KeyboardCode>);
   excepted_keys->insert(VKEY_B);
-  device_data_manager->SetDisabledKeyboardAllowedKeys(excepted_keys.Pass());
+  device_data_manager->SetDisabledKeyboardAllowedKeys(std::move(excepted_keys));
 
   ScopedXI2Event xev;
   // A is not allowed on the blocked keyboard, and should return ET_UNKNOWN.
@@ -504,6 +511,35 @@ TEST_F(EventsXTest, IgnoresMotionEventForMouseWheelScroll) {
   // We shouldn't produce a mouse move event on a mouse wheel
   // scroll. These events are only produced for some mice.
   EXPECT_EQ(ui::ET_UNKNOWN, ui::EventTypeFromNative(xev));
+}
+
+TEST_F(EventsXTest, TimestampRolloverAndAdjustWhenDecreasing) {
+  XEvent event;
+  InitButtonEvent(&event, true, gfx::Point(5, 10), 1, 0);
+
+  event.xbutton.time = 0xFFFFFFFF;
+  EXPECT_EQ(base::TimeDelta::FromMilliseconds(0xFFFFFFFF).ToInternalValue(),
+            ui::EventTimeFromNative(&event).ToInternalValue());
+
+  event.xbutton.time = 3;
+  EXPECT_EQ(
+      base::TimeDelta::FromMilliseconds(0x100000000LL + 3).ToInternalValue(),
+      ui::EventTimeFromNative(&event).ToInternalValue());
+}
+
+TEST_F(EventsXTest, NoTimestampRolloverWhenMonotonicIncreasing) {
+  XEvent event;
+  InitButtonEvent(&event, true, gfx::Point(5, 10), 1, 0);
+
+  event.xbutton.time = 1;
+  EXPECT_EQ(base::TimeDelta::FromMilliseconds(1).ToInternalValue(),
+            ui::EventTimeFromNative(&event).ToInternalValue());
+  event.xbutton.time = 2;
+  EXPECT_EQ(base::TimeDelta::FromMilliseconds(2).ToInternalValue(),
+            ui::EventTimeFromNative(&event).ToInternalValue());
+  event.xbutton.time = 0xFFFFFFFF;
+  EXPECT_EQ(base::TimeDelta::FromMilliseconds(0xFFFFFFFF).ToInternalValue(),
+            ui::EventTimeFromNative(&event).ToInternalValue());
 }
 
 }  // namespace ui

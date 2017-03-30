@@ -7,13 +7,11 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/strings/stringprintf.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
 
@@ -65,6 +63,11 @@ std::string OAuth2ApiCallFlow::CreateApiCallBodyContentType() {
   return "application/x-www-form-urlencoded";
 }
 
+net::URLFetcher::RequestType OAuth2ApiCallFlow::GetRequestTypeForBody(
+    const std::string& body) {
+  return body.empty() ? URLFetcher::GET : URLFetcher::POST;
+}
+
 void OAuth2ApiCallFlow::OnURLFetchComplete(const net::URLFetcher* source) {
   CHECK(source);
   CHECK_EQ(API_CALL_STARTED, state_);
@@ -75,10 +78,9 @@ scoped_ptr<URLFetcher> OAuth2ApiCallFlow::CreateURLFetcher(
     net::URLRequestContextGetter* context,
     const std::string& access_token) {
   std::string body = CreateApiCallBody();
-  bool empty_body = body.empty();
-  scoped_ptr<URLFetcher> result = net::URLFetcher::Create(
-      0, CreateApiCallUrl(), empty_body ? URLFetcher::GET : URLFetcher::POST,
-      this);
+  net::URLFetcher::RequestType request_type = GetRequestTypeForBody(body);
+  scoped_ptr<URLFetcher> result =
+      net::URLFetcher::Create(0, CreateApiCallUrl(), request_type, this);
 
   result->SetRequestContext(context);
   result->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
@@ -90,7 +92,10 @@ scoped_ptr<URLFetcher> OAuth2ApiCallFlow::CreateURLFetcher(
   // http://crbug.com/163710
   result->SetAutomaticallyRetryOnNetworkChanges(3);
 
-  if (!empty_body)
+  // Even if the the body is empty, we still set the Content-Type because an
+  // empty string may be a meaningful value. For example, a Protocol Buffer
+  // message with only default values will be serialized as an empty string.
+  if (request_type != net::URLFetcher::GET)
     result->SetUploadData(CreateApiCallBodyContentType(), body);
 
   return result;

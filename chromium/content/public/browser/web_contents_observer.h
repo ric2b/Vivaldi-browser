@@ -5,6 +5,9 @@
 #ifndef CONTENT_PUBLIC_BROWSER_WEB_CONTENTS_OBSERVER_H_
 #define CONTENT_PUBLIC_BROWSER_WEB_CONTENTS_OBSERVER_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/process/kill.h"
 #include "base/process/process_handle.h"
 #include "content/common/content_export.h"
@@ -13,6 +16,7 @@
 #include "content/public/common/security_style.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -20,6 +24,7 @@
 namespace content {
 
 class NavigationEntry;
+class NavigationHandle;
 class RenderFrameHost;
 class RenderViewHost;
 class WebContents;
@@ -97,13 +102,16 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // just swapped out.
   virtual void RenderViewDeleted(RenderViewHost* render_view_host) {}
 
-  // This method is invoked when the process for the current RenderView crashes.
-  // The WebContents continues to use the RenderViewHost, e.g. when the user
-  // reloads the current page. When the RenderViewHost itself is deleted, the
-  // RenderViewDeleted method will be invoked.
+  // This method is invoked when the process for the current main
+  // RenderFrameHost exits (usually by crashing, though possibly by other
+  // means). The WebContents continues to use the RenderFrameHost, e.g. when the
+  // user reloads the current page. When the RenderFrameHost itself is deleted,
+  // the RenderFrameDeleted method will be invoked.
   //
-  // Note that this is equivalent to
-  // RenderProcessHostObserver::RenderProcessExited().
+  // Note that this is triggered upstream through
+  // RenderProcessHostObserver::RenderProcessExited(); for code that doesn't
+  // otherwise need to be a WebContentsObserver, that API is probably a better
+  // choice.
   virtual void RenderProcessGone(base::TerminationStatus status) {}
 
   // This method is invoked when a WebContents swaps its visible RenderViewHost
@@ -113,15 +121,94 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   virtual void RenderViewHostChanged(RenderViewHost* old_host,
                                      RenderViewHost* new_host) {}
 
-  // This method is invoked after the WebContents decides which RenderFrameHost
-  // to use for the next browser-initiated navigation, but before the navigation
-  // starts.  It is not called for most renderer-initiated navigations, and it
-  // does not guarantee that the navigation will commit (e.g., 204s, downloads).
+  // Navigation related events ------------------------------------------------
+
+  // Called when a navigation started in the WebContents. |navigation_handle|
+  // is unique to a specific navigation. The same |navigation_handle| will be
+  // provided on subsequent calls to
+  // DidRedirect/FinishNavigation/ReadyToCommitNavigation related to this
+  // navigation.
   //
-  // DEPRECATED.  This method is difficult to use correctly and should be
-  // removed.  TODO(creis): Remove in http://crbug.com/424641.
-  virtual void AboutToNavigateRenderFrame(RenderFrameHost* old_host,
-                                          RenderFrameHost* new_host) {}
+  // Note that this is fired by navigations in any frame of the WebContents,
+  // not just the main frame.
+  //
+  // Note that more than one navigation can be ongoing in the same frame at the
+  // same time (including the main frame). Each will get its own
+  // NavigationHandle.
+  //
+  // Note that there is no guarantee that DidFinishNavigation will be called
+  // for any particular navigation before DidStartNavigation is called on the
+  // next.
+  virtual void DidStartNavigation(NavigationHandle* navigation_handle) {}
+
+  // Called when a navigation encountered a server redirect.
+  virtual void DidRedirectNavigation(NavigationHandle* navigation_handle) {}
+
+  // PlzNavigate
+  // Called when the navigation is ready to be committed in a renderer. Most
+  // observers should use DidFinishNavigation instead, which happens right
+  // after the navigation commits. This method is for observers that want to
+  // initialize renderer-side state just before the RenderFrame commits the
+  // navigation.
+  //
+  // This is the first point in time where a RenderFrameHost is associated with
+  // the navigation.
+  virtual void ReadyToCommitNavigation(NavigationHandle* navigation_handle) {}
+
+  // Called when a navigation finished in the WebContents. This happens when a
+  // navigation is committed, aborted or replaced by a new one. To know if the
+  // navigation has committed, use NavigationHandle::HasCommited; use
+  // NavigationHandle::IsErrorPage to know if the navigation resulted in an
+  // error page.
+  //
+  // If this is called because the navigation committed, then the document load
+  // will still be ongoing in the RenderFrameHost returned by
+  // |navigation_handle|. Use the document loads events such as DidStopLoading
+  // and related methods to listen for continued events from this
+  // RenderFrameHost.
+  //
+  // Note that |navigation_handle| will be destroyed at the end of this call,
+  // so do not keep a reference to it afterward.
+  virtual void DidFinishNavigation(NavigationHandle* navigation_handle) {}
+
+  // Document load events ------------------------------------------------------
+
+  // These two methods correspond to the points in time when the spinner of the
+  // tab starts and stops spinning.
+  virtual void DidStartLoading() {}
+  virtual void DidStopLoading() {}
+
+  // This method is invoked once the window.document object of the main frame
+  // was created.
+  virtual void DocumentAvailableInMainFrame() {}
+
+  // This method is invoked once the onload handler of the main frame has
+  // completed.
+  virtual void DocumentOnLoadCompletedInMainFrame() {}
+
+  // This method is invoked when the document in the given frame finished
+  // loading. At this point, scripts marked as defer were executed, and
+  // content scripts marked "document_end" get injected into the frame.
+  virtual void DocumentLoadedInFrame(RenderFrameHost* render_frame_host) {}
+
+  // This method is invoked when the navigation is done, i.e. the spinner of
+  // the tab will stop spinning, and the onload event was dispatched.
+  //
+  // If the WebContents is displaying replacement content, e.g. network error
+  // pages, DidFinishLoad is invoked for frames that were not sending
+  // navigational events before. It is safe to ignore these events.
+  virtual void DidFinishLoad(RenderFrameHost* render_frame_host,
+                             const GURL& validated_url) {}
+
+  // This method is like DidFinishLoad, but when the load failed or was
+  // cancelled, e.g. window.stop() is invoked.
+  virtual void DidFailLoad(RenderFrameHost* render_frame_host,
+                           const GURL& validated_url,
+                           int error_code,
+                           const base::string16& error_description,
+                           bool was_ignored_by_handler) {}
+
+  // ---------------------------------------------------------------------------
 
   // This method is invoked after the browser process starts a navigation to a
   // pending NavigationEntry. It is not called for renderer-initiated
@@ -187,36 +274,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
       SecurityStyle security_style,
       const SecurityStyleExplanations& security_style_explanations) {}
 
-  // This method is invoked once the window.document object of the main frame
-  // was created.
-  virtual void DocumentAvailableInMainFrame() {}
-
-  // This method is invoked once the onload handler of the main frame has
-  // completed.
-  virtual void DocumentOnLoadCompletedInMainFrame() {}
-
-  // This method is invoked when the document in the given frame finished
-  // loading. At this point, scripts marked as defer were executed, and
-  // content scripts marked "document_end" get injected into the frame.
-  virtual void DocumentLoadedInFrame(RenderFrameHost* render_frame_host) {}
-
-  // This method is invoked when the navigation is done, i.e. the spinner of
-  // the tab will stop spinning, and the onload event was dispatched.
-  //
-  // If the WebContents is displaying replacement content, e.g. network error
-  // pages, DidFinishLoad is invoked for frames that were not sending
-  // navigational events before. It is safe to ignore these events.
-  virtual void DidFinishLoad(RenderFrameHost* render_frame_host,
-                             const GURL& validated_url) {}
-
-  // This method is like DidFinishLoad, but when the load failed or was
-  // cancelled, e.g. window.stop() is invoked.
-  virtual void DidFailLoad(RenderFrameHost* render_frame_host,
-                           const GURL& validated_url,
-                           int error_code,
-                           const base::string16& error_description,
-                           bool was_ignored_by_handler) {}
-
   // This method is invoked when content was loaded from an in-memory cache.
   virtual void DidLoadResourceFromMemoryCache(
       const LoadFromMemoryCacheDetails& details) {}
@@ -231,6 +288,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   virtual void DidGetRedirectForResourceRequest(
       RenderFrameHost* render_frame_host,
       const ResourceRedirectDetails& details) {}
+
+  // This method is invoked when the extdata has been set (Vivaldi).
+  virtual void ExtDataSet(WebContents* contents) {}
 
   // This method is invoked when a new non-pending navigation entry is created.
   // This corresponds to one NavigationController entry being created
@@ -254,18 +314,28 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // paint after a non-empty layout.
   virtual void DidFirstVisuallyNonEmptyPaint() {}
 
-  // These two methods correspond to the points in time when the spinner of the
-  // tab starts and stops spinning.
-  virtual void DidStartLoading() {}
-  virtual void DidStopLoading() {}
-
   // When WebContents::Stop() is called, the WebContents stops loading and then
   // invokes this method. If there are ongoing navigations, their respective
   // failure methods will also be invoked.
   virtual void NavigationStopped() {}
 
   // This indicates that the next navigation was triggered by a user gesture.
+  // TODO(dominickn): remove this method in favor of DidGetUserInteraction,
+  // with the appropriate filtering by input event type.
   virtual void DidGetUserGesture() {}
+
+  // Called when there has been direct user interaction with the WebContents.
+  // The type argument specifies the kind of interaction. Direct user input
+  // signalled through this callback includes:
+  // 1) any mouse down event (blink::WebInputEvent::MouseDown);
+  // 2) the start of a mouse wheel scroll (blink::WebInputEvent::MouseWheel);
+  // 3) any raw key down event (blink::WebInputEvent::RawKeyDown); and
+  // 4) any gesture tap event (blink::WebInputEvent::GestureTapDown).
+  // The start of a mouse wheel scroll is heuristically detected: a mouse
+  // wheel event fired at least 0.1 seconds after any other wheel event is
+  // regarded as the beginning of a scroll. This matches the interval used by
+  // the Blink EventHandler to detect the end of scrolls.
+  virtual void DidGetUserInteraction(const blink::WebInputEvent::Type type) {}
 
   // This method is invoked when a RenderViewHost of this WebContents was
   // configured to ignore UI events, and an UI event took place.
@@ -330,6 +400,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // process.
   virtual void DidUpdateFaviconURL(const std::vector<FaviconURL>& candidates) {}
 
+  // Invoked when the WebContents is muted/unmuted.
+  virtual void DidUpdateAudioMutingState(bool muted) {}
+
   // Invoked when a pepper plugin creates and shows or destroys a fullscreen
   // RenderWidget.
   virtual void DidShowFullscreenWidget(int routing_id) {}
@@ -360,15 +433,21 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // Invoked when theme color is changed to |theme_color|.
   virtual void DidChangeThemeColor(SkColor theme_color) {}
 
-  // Invoked when media is playing.
-  virtual void MediaStartedPlaying() {}
-
-  // Invoked when media is paused.
-  virtual void MediaPaused() {}
+  // Invoked when media is playing or paused.  |id| is unique per player and per
+  // RenderFrameHost.  There may be multiple players within a RenderFrameHost
+  // and subsequently within a WebContents.  MediaStartedPlaying() will always
+  // be followed by MediaStoppedPlaying() after player teardown.  Observers must
+  // release all stored copies of |id| when MediaStoppedPlaying() is received.
+  using MediaPlayerId = std::pair<RenderFrameHost*, int64_t>;
+  virtual void MediaStartedPlaying(const MediaPlayerId& id) {}
+  virtual void MediaStoppedPlaying(const MediaPlayerId& id) {}
 
   // Invoked when media session has changed its state.
   virtual void MediaSessionStateChanged(bool is_controllable,
                                         bool is_suspended) {}
+
+  // Invoked when the renderer process changes the page scale factor.
+  virtual void OnPageScaleFactorChanged(float page_scale_factor) {}
 
   // Invoked if an IPC message is coming from a specific RenderFrameHost.
   virtual bool OnMessageReceived(const IPC::Message& message,

@@ -9,10 +9,11 @@
 #include <stack>
 #include <vector>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
+#include "build/build_config.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/event_source.h"
 #include "ui/gfx/geometry/rect.h"
@@ -241,6 +242,8 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // When set, this value is used as the Widget's NativeWidget implementation.
     // The Widget will not construct a default one. Default is NULL.
     NativeWidget* native_widget;
+    // If provided, sets the native theme for this widget.
+    ui::NativeTheme* native_theme;
     // Aura-only. Provides a DesktopWindowTreeHost implementation to use instead
     // of the default one.
     // TODO(beng): Figure out if there's a better way to expose this, e.g. get
@@ -269,6 +272,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     std::string wm_role_name;
     std::string wm_class_name;
     std::string wm_class_class;
+
+    // If true then the widget uses software compositing. Defaults to false.
+    // Only used on Windows.
+    bool force_software_compositing;
   };
 
   Widget();
@@ -555,7 +562,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   virtual bool IsVisible() const;
 
   // Returns the ThemeProvider that provides theme resources for this Widget.
-  virtual ui::ThemeProvider* GetThemeProvider() const;
+  virtual const ui::ThemeProvider* GetThemeProvider() const;
 
   ui::NativeTheme* GetNativeTheme() {
     return const_cast<ui::NativeTheme*>(
@@ -585,7 +592,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Returns the view that requested the current drag operation via
   // RunShellDrag(), or NULL if there is no such view or drag operation.
-  View* dragged_view() { return dragged_view_; }
+  View* dragged_view() {
+    return const_cast<View*>(const_cast<const Widget*>(this)->dragged_view());
+  }
+  const View* dragged_view() const { return dragged_view_; }
 
   // Adds the specified |rect| in client area coordinates to the rectangle to be
   // redrawn.
@@ -860,6 +870,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
                                ui::WindowShowState* show_state);
 
   internal::NativeWidgetPrivate* native_widget_;
+
+  // If non-null, the native theme for this widget. Otherwise the native theme
+  // comes from |native_widget_|.
+  ui::NativeTheme* native_theme_;
 
   base::ObserverList<WidgetObserver> observers_;
 

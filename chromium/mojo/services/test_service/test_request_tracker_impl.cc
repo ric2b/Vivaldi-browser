@@ -4,6 +4,11 @@
 
 #include "mojo/services/test_service/test_request_tracker_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 namespace mojo {
 namespace test {
 
@@ -16,8 +21,9 @@ TrackingContext::~TrackingContext() {
 TestRequestTrackerImpl::TestRequestTrackerImpl(
     InterfaceRequest<TestRequestTracker> request,
     TrackingContext* context)
-    : context_(context), binding_(this, request.Pass()), weak_factory_(this) {
-}
+    : context_(context),
+      binding_(this, std::move(request)),
+      weak_factory_(this) {}
 
 TestRequestTrackerImpl::~TestRequestTrackerImpl() {
 }
@@ -42,8 +48,7 @@ void TestRequestTrackerImpl::SetNameAndReturnId(
 TestTrackedRequestServiceImpl::TestTrackedRequestServiceImpl(
     InterfaceRequest<TestTrackedRequestService> request,
     TrackingContext* context)
-    : context_(context), binding_(this, request.Pass()) {
-}
+    : context_(context), binding_(this, std::move(request)) {}
 
 TestTrackedRequestServiceImpl::~TestTrackedRequestServiceImpl() {
 }
@@ -66,9 +71,9 @@ void TestTrackedRequestServiceImpl::GetReport(
       mean_health_numerator += it2->health;
     }
     report->mean_health = mean_health_numerator / num_samples;
-    reports.push_back(report.Pass());
+    reports.push_back(std::move(report));
   }
-  callback.Run(reports.Pass());
+  callback.Run(std::move(reports));
 }
 
 }  // namespace test

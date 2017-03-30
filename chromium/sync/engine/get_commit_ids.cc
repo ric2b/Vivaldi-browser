@@ -4,10 +4,13 @@
 
 #include "sync/engine/get_commit_ids.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "sync/engine/syncer_util.h"
 #include "sync/syncable/directory.h"
 #include "sync/syncable/entry.h"
@@ -35,18 +38,17 @@ void FilterUnreadyEntries(
     ModelTypeSet encrypted_types,
     bool passphrase_missing,
     const syncable::Directory::Metahandles& unsynced_handles,
-    std::set<int64>* ready_unsynced_set);
+    std::set<int64_t>* ready_unsynced_set);
 
 // Given a set of commit metahandles that are ready for commit
 // (|ready_unsynced_set|), sorts these into commit order and places up to
 // |max_entries| of them in the output parameter |out|.
 //
 // See the header file for an explanation of commit ordering.
-void OrderCommitIds(
-    syncable::BaseTransaction* trans,
-    size_t max_entries,
-    const std::set<int64>& ready_unsynced_set,
-    std::vector<int64>* out);
+void OrderCommitIds(syncable::BaseTransaction* trans,
+                    size_t max_entries,
+                    const std::set<int64_t>& ready_unsynced_set,
+                    std::vector<int64_t>* out);
 
 }  // namespace
 
@@ -59,7 +61,7 @@ void GetCommitIdsForType(
 
   // Gather the full set of unsynced items and store it in the session. They
   // are not in the correct order for commit.
-  std::set<int64> ready_unsynced_set;
+  std::set<int64_t> ready_unsynced_set;
   syncable::Directory::Metahandles all_unsynced_handles;
   GetUnsyncedEntries(trans, &all_unsynced_handles);
 
@@ -69,7 +71,7 @@ void GetCommitIdsForType(
   if (cryptographer) {
     encrypted_types = dir->GetNigoriHandler()->GetEncryptedTypes(trans);
     passphrase_missing = cryptographer->has_pending_keys();
-  };
+  }
 
   // We filter out all unready entries from the set of unsynced handles. This
   // new set of ready and unsynced items is then what we use to determine what
@@ -117,20 +119,17 @@ bool HasAttachmentNotOnServer(const syncable::Entry& entry) {
   return false;
 }
 
-// An entry is not considered ready for commit if any are true:
-// 1. It's in conflict.
-// 2. It requires encryption (either the type is encrypted but a passphrase
+// An entry may not commit if any are true:
+// 1. It requires encryption (either the type is encrypted but a passphrase
 //    is missing from the cryptographer, or the entry itself wasn't properly
 //    encrypted).
-// 3. It's type is currently throttled.
-// 4. It's a delete but has not been committed.
-bool IsEntryReadyForCommit(ModelTypeSet requested_types,
-                           ModelTypeSet encrypted_types,
-                           bool passphrase_missing,
-                           const syncable::Entry& entry) {
+// 2. It's type is currently throttled.
+// 3. It's a delete but has not been committed.
+bool MayEntryCommit(ModelTypeSet requested_types,
+                    ModelTypeSet encrypted_types,
+                    bool passphrase_missing,
+                    const syncable::Entry& entry) {
   DCHECK(entry.GetIsUnsynced());
-  if (IsEntryInConflict(entry))
-    return false;
 
   const ModelType type = entry.GetModelType();
   // We special case the nigori node because even though it is considered an
@@ -184,6 +183,74 @@ bool IsEntryReadyForCommit(ModelTypeSet requested_types,
   return true;
 }
 
+bool SupportsHierarchy(const syncable::Entry& item) {
+  // Types with explicit server supported hierarchy only.
+  return IsTypeWithServerGeneratedRoot(item.GetModelType());
+}
+
+// Excludes ancestors of deleted conflicted items from
+// |ready_unsynced_set|.
+void ExcludeDeletedAncestors(
+    syncable::BaseTransaction* trans,
+    const std::vector<int64_t>& deleted_conflicted_items,
+    std::set<int64_t>* ready_unsynced_set) {
+  for (auto iter = deleted_conflicted_items.begin();
+       iter != deleted_conflicted_items.end(); ++iter) {
+    syncable::Entry item(trans, syncable::GET_BY_HANDLE, *iter);
+    syncable::Id parent_id = item.GetParentId();
+    DCHECK(!parent_id.IsNull());
+
+    while (!parent_id.IsRoot()) {
+      syncable::Entry parent(trans, syncable::GET_BY_ID, parent_id);
+      CHECK(parent.good()) << "Bad user-only parent in item path.";
+      int64_t handle = parent.GetMetahandle();
+
+      if (!parent.GetIsDel())
+        break;
+
+      auto ready_iter = ready_unsynced_set->find(handle);
+      if (ready_iter == ready_unsynced_set->end())
+        break;
+
+      // Remove this entry from |ready_unsynced_set|.
+      ready_unsynced_set->erase(ready_iter);
+      parent_id = parent.GetParentId();
+    }
+  }
+}
+
+// Iterates over children of items from |conflicted_items| list that are in
+// |ready_unsynced_set|, exludes them from |ready_unsynced_set| and adds them
+// to |excluded_items| list.
+void ExcludeChildren(syncable::BaseTransaction* trans,
+                     const std::vector<int64_t>& conflicted_items,
+                     std::vector<int64_t>* excluded_items,
+                     std::set<int64_t>* ready_unsynced_set) {
+  for (auto iter = conflicted_items.begin(); iter != conflicted_items.end();
+       ++iter) {
+    syncable::Entry entry(trans, syncable::GET_BY_HANDLE, *iter);
+
+    if (!entry.GetIsDir() || entry.GetIsDel())
+      continue;
+
+    std::vector<int64_t> children;
+    entry.GetChildHandles(&children);
+
+    for (std::vector<int64_t>::const_iterator child_iter = children.begin();
+         child_iter != children.end(); ++child_iter) {
+      // Collect all child handles that are in |ready_unsynced_set|.
+      int64_t child_handle = *child_iter;
+      auto ready_iter = ready_unsynced_set->find(child_handle);
+      if (ready_iter != ready_unsynced_set->end()) {
+        // Remove this entry from |ready_unsynced_set| and add it
+        // to |excluded_items|.
+        ready_unsynced_set->erase(ready_iter);
+        excluded_items->push_back(child_handle);
+      }
+    }
+  }
+}
+
 // Filters |unsynced_handles| to remove all entries that do not belong to the
 // specified |requested_types|, or are not eligible for a commit at this time.
 void FilterUnreadyEntries(
@@ -192,21 +259,51 @@ void FilterUnreadyEntries(
     ModelTypeSet encrypted_types,
     bool passphrase_missing,
     const syncable::Directory::Metahandles& unsynced_handles,
-    std::set<int64>* ready_unsynced_set) {
-  for (syncable::Directory::Metahandles::const_iterator iter =
-       unsynced_handles.begin(); iter != unsynced_handles.end(); ++iter) {
+    std::set<int64_t>* ready_unsynced_set) {
+  std::vector<int64_t> deleted_conflicted_items;
+  std::vector<int64_t> conflicted_items;
+
+  // Go over all unsynced handles, filter the ones that might be committed based
+  // on type / encryption, then based on whether they are in conflict add them
+  // to either |ready_unsynced_set| or one of the conflicted lists.
+  for (auto iter = unsynced_handles.begin(); iter != unsynced_handles.end();
+       ++iter) {
     syncable::Entry entry(trans, syncable::GET_BY_HANDLE, *iter);
     // TODO(maniscalco): While we check if entry is ready to be committed, we
     // also need to check that all of its ancestors (parents, transitive) are
     // ready to be committed.  Once attachments can prevent an entry from being
     // committable, this method must ensure all ancestors are ready for commit
     // (bug 356273).
-    if (IsEntryReadyForCommit(requested_types,
-                              encrypted_types,
-                              passphrase_missing,
-                              entry)) {
-      ready_unsynced_set->insert(*iter);
+    if (MayEntryCommit(requested_types, encrypted_types, passphrase_missing,
+                       entry)) {
+      if (IsEntryInConflict(entry)) {
+        // Conflicting hierarchical entries might prevent their ancestors or
+        // descendants from being committed.
+        if (SupportsHierarchy(entry)) {
+          if (entry.GetIsDel()) {
+            deleted_conflicted_items.push_back(*iter);
+          } else if (entry.GetIsDir()) {
+            // Populate the initial version of |conflicted_items| with folder
+            // items that are in conflict.
+            conflicted_items.push_back(*iter);
+          }
+        }
+      } else {
+        ready_unsynced_set->insert(*iter);
+      }
     }
+  }
+
+  // If there are any deleted conflicted entries, remove their deleted ancestors
+  // from |ready_unsynced_set| as well.
+  ExcludeDeletedAncestors(trans, deleted_conflicted_items, ready_unsynced_set);
+
+  // Starting with conflicted_items containing conflicted folders go down and
+  // exclude all descendants from |ready_unsynced_set|.
+  while (!conflicted_items.empty()) {
+    std::vector<int64_t> new_list;
+    ExcludeChildren(trans, conflicted_items, &new_list, ready_unsynced_set);
+    conflicted_items.swap(new_list);
   }
 }
 
@@ -215,79 +312,62 @@ void FilterUnreadyEntries(
 // the traversal reaches the desired size before the full traversal is complete.
 class Traversal {
  public:
-  Traversal(
-    syncable::BaseTransaction* trans,
-    int64 max_entries,
-    syncable::Directory::Metahandles* out);
+  Traversal(syncable::BaseTransaction* trans,
+            int64_t max_entries,
+            syncable::Directory::Metahandles* out);
   ~Traversal();
 
   // First step of traversal building.  Adds non-deleted items in order.
-  void AddCreatesAndMoves(const std::set<int64>& ready_unsynced_set);
+  void AddCreatesAndMoves(const std::set<int64_t>& ready_unsynced_set);
 
   // Second step of traverals building.  Appends deleted items.
-  void AddDeletes(const std::set<int64>& ready_unsynced_set);
+  void AddDeletes(const std::set<int64_t>& ready_unsynced_set);
 
  private:
   // The following functions do not modify the traversal directly.  They return
   // their results in the |result| vector instead.
-  bool AddUncommittedParentsAndTheirPredecessors(
-      const std::set<int64>& ready_unsynced_set,
-      const syncable::Entry& item,
-      syncable::Directory::Metahandles* result) const;
+  void AddUncommittedParents(const std::set<int64_t>& ready_unsynced_set,
+                             const syncable::Entry& item,
+                             syncable::Directory::Metahandles* result) const;
 
-  void TryAddItem(const std::set<int64>& ready_unsynced_set,
+  bool TryAddItem(const std::set<int64_t>& ready_unsynced_set,
                   const syncable::Entry& item,
                   syncable::Directory::Metahandles* result) const;
 
-  void AddItemThenPredecessors(
-      const std::set<int64>& ready_unsynced_set,
-      const syncable::Entry& item,
-      syncable::Directory::Metahandles* result) const;
-
-  void AddPredecessorsThenItem(
-      const std::set<int64>& ready_unsynced_set,
-      const syncable::Entry& item,
-      syncable::Directory::Metahandles* result) const;
-
-  bool AddDeletedParents(const std::set<int64>& ready_unsynced_set,
+  void AddDeletedParents(const std::set<int64_t>& ready_unsynced_set,
                          const syncable::Entry& item,
                          const syncable::Directory::Metahandles& traversed,
                          syncable::Directory::Metahandles* result) const;
-
-  bool SupportsHierarchy(const syncable::Entry& item) const;
 
   // Returns true if we've collected enough items.
   bool IsFull() const;
 
   // Returns true if the specified handle is already in the traversal.
-  bool HaveItem(int64 handle) const;
+  bool HaveItem(int64_t handle) const;
 
   // Adds the specified handles to the traversal.
   void AppendManyToTraversal(const syncable::Directory::Metahandles& handles);
 
   // Adds the specifed handle to the traversal.
-  void AppendToTraversal(int64 handle);
+  void AppendToTraversal(int64_t handle);
 
   syncable::Directory::Metahandles* out_;
-  std::set<int64> added_handles_;
+  std::set<int64_t> added_handles_;
   const size_t max_entries_;
   syncable::BaseTransaction* trans_;
 
   DISALLOW_COPY_AND_ASSIGN(Traversal);
 };
 
-Traversal::Traversal(
-    syncable::BaseTransaction* trans,
-    int64 max_entries,
-    syncable::Directory::Metahandles* out)
-  : out_(out),
-    max_entries_(max_entries),
-    trans_(trans) { }
+Traversal::Traversal(syncable::BaseTransaction* trans,
+                     int64_t max_entries,
+                     syncable::Directory::Metahandles* out)
+    : out_(out), max_entries_(max_entries), trans_(trans) {}
 
 Traversal::~Traversal() {}
 
-bool Traversal::AddUncommittedParentsAndTheirPredecessors(
-    const std::set<int64>& ready_unsynced_set,
+void Traversal::AddUncommittedParents(
+    const std::set<int64_t>& ready_unsynced_set,
     const syncable::Entry& item,
     syncable::Directory::Metahandles* result) const {
   DCHECK(SupportsHierarchy(item));
@@ -298,101 +378,47 @@ bool Traversal::AddUncommittedParentsAndTheirPredecessors(
   while (!parent_id.ServerKnows()) {
     syncable::Entry parent(trans_, syncable::GET_BY_ID, parent_id);
     CHECK(parent.good()) << "Bad user-only parent in item path.";
-    int64 handle = parent.GetMetahandle();
+    int64_t handle = parent.GetMetahandle();
     if (HaveItem(handle)) {
       // We've already added this parent (and therefore all of its parents).
       // We can return early.
       break;
     }
-    if (IsEntryInConflict(parent)) {
-      // We ignore all entries that are children of a conflicing item.  Return
-      // false immediately to forget the traversal we've built up so far.
-      DVLOG(1) << "Parent was in conflict, omitting " << item;
-      return false;
+
+    if (!TryAddItem(ready_unsynced_set, parent, &dependencies)) {
+      // The parent isn't in |ready_unsynced_set|.
+      break;
     }
-    AddItemThenPredecessors(ready_unsynced_set,
-                            parent,
-                            &dependencies);
+
     parent_id = parent.GetParentId();
   }
 
   // Reverse what we added to get the correct order.
   result->insert(result->end(), dependencies.rbegin(), dependencies.rend());
-  return true;
 }
 
 // Adds the given item to the list if it is unsynced and ready for commit.
-void Traversal::TryAddItem(const std::set<int64>& ready_unsynced_set,
+bool Traversal::TryAddItem(const std::set<int64_t>& ready_unsynced_set,
                            const syncable::Entry& item,
                            syncable::Directory::Metahandles* result) const {
   DCHECK(item.GetIsUnsynced());
-  int64 item_handle = item.GetMetahandle();
+  int64_t item_handle = item.GetMetahandle();
   if (ready_unsynced_set.count(item_handle) != 0) {
     result->push_back(item_handle);
+    return true;
   }
-}
-
-// Adds the given item, and all its unsynced predecessors.  The traversal will
-// be cut short if any item along the traversal is not IS_UNSYNCED, or if we
-// detect that this area of the tree has already been traversed.  Items that are
-// not 'ready' for commit (see IsEntryReadyForCommit()) will not be added to the
-// list, though they will not stop the traversal.
-void Traversal::AddItemThenPredecessors(
-    const std::set<int64>& ready_unsynced_set,
-    const syncable::Entry& item,
-    syncable::Directory::Metahandles* result) const {
-  int64 item_handle = item.GetMetahandle();
-  if (HaveItem(item_handle)) {
-    // We've already added this item to the commit set, and so must have
-    // already added the predecessors as well.
-    return;
-  }
-  TryAddItem(ready_unsynced_set, item, result);
-  if (item.GetIsDel())
-    return;  // Deleted items have no predecessors.
-
-  syncable::Id prev_id = item.GetPredecessorId();
-  while (!prev_id.IsNull()) {
-    syncable::Entry prev(trans_, syncable::GET_BY_ID, prev_id);
-    CHECK(prev.good()) << "Bad id when walking predecessors.";
-    if (!prev.GetIsUnsynced()) {
-      // We're interested in "runs" of unsynced items.  This item breaks
-      // the streak, so we stop traversing.
-      return;
-    }
-    int64 handle = prev.GetMetahandle();
-    if (HaveItem(handle)) {
-      // We've already added this item to the commit set, and so must have
-      // already added the predecessors as well.
-      return;
-    }
-    TryAddItem(ready_unsynced_set, prev, result);
-    prev_id = prev.GetPredecessorId();
-  }
-}
-
-// Same as AddItemThenPredecessor, but the traversal order will be reversed.
-void Traversal::AddPredecessorsThenItem(
-    const std::set<int64>& ready_unsynced_set,
-    const syncable::Entry& item,
-    syncable::Directory::Metahandles* result) const {
-  syncable::Directory::Metahandles dependencies;
-  AddItemThenPredecessors(ready_unsynced_set, item, &dependencies);
-
-  // Reverse what we added to get the correct order.
-  result->insert(result->end(), dependencies.rbegin(), dependencies.rend());
+  return false;
 }
 
 // Traverses the tree from bottom to top, adding the deleted parents of the
 // given |item|.  Stops traversing if it encounters a non-deleted node, or
-// a node that was already listed in the |traversed| list.  Returns an error
-// (false) if a node along the traversal is in a conflict state.
+// a node that was already listed in the |traversed| list.
 //
 // The result list is reversed before it is returned, so the resulting
 // traversal is in top to bottom order.  Also note that this function appends
 // to the result list without clearing it.
-bool Traversal::AddDeletedParents(
-    const std::set<int64>& ready_unsynced_set,
+void Traversal::AddDeletedParents(
+    const std::set<int64_t>& ready_unsynced_set,
     const syncable::Entry& item,
     const syncable::Directory::Metahandles& traversed,
     syncable::Directory::Metahandles* result) const {
@@ -413,7 +439,7 @@ bool Traversal::AddDeletedParents(
       // needs to be committed first.
       break;
     }
-    int64 handle = parent.GetMetahandle();
+    int64_t handle = parent.GetMetahandle();
     if (!parent.GetIsUnsynced()) {
       // In some rare cases, our parent can be both deleted and unsynced.
       // (ie. the server-unknown parent case).
@@ -429,32 +455,25 @@ bool Traversal::AddDeletedParents(
       // We can return early.
       break;
     }
-    if (IsEntryInConflict(parent)) {
-      // We ignore all entries that are children of a conflicing item.  Return
-      // false immediately to forget the traversal we've built up so far.
-      DVLOG(1) << "Parent was in conflict, omitting " << item;
-      return false;
+
+    if (!TryAddItem(ready_unsynced_set, parent, &dependencies)) {
+      // The parent isn't in ready_unsynced_set.
+      break;
     }
-    TryAddItem(ready_unsynced_set, parent, &dependencies);
+
     parent_id = parent.GetParentId();
   }
 
   // Reverse what we added to get the correct order.
   result->insert(result->end(), dependencies.rbegin(), dependencies.rend());
-  return true;
 }
 
 bool Traversal::IsFull() const {
   return out_->size() >= max_entries_;
 }
 
-bool Traversal::HaveItem(int64 handle) const {
+bool Traversal::HaveItem(int64_t handle) const {
   return added_handles_.find(handle) != added_handles_.end();
-}
-
-bool Traversal::SupportsHierarchy(const syncable::Entry& item) const {
-  // Types with explicit server supported hierarchy only.
-  return IsTypeWithServerGeneratedRoot(item.GetModelType());
 }
 
 void Traversal::AppendManyToTraversal(
@@ -463,17 +482,17 @@ void Traversal::AppendManyToTraversal(
   added_handles_.insert(handles.begin(), handles.end());
 }
 
-void Traversal::AppendToTraversal(int64 metahandle) {
+void Traversal::AppendToTraversal(int64_t metahandle) {
   out_->push_back(metahandle);
   added_handles_.insert(metahandle);
 }
 
 void Traversal::AddCreatesAndMoves(
-    const std::set<int64>& ready_unsynced_set) {
+    const std::set<int64_t>& ready_unsynced_set) {
   // Add moves and creates, and prepend their uncommitted parents.
-  for (std::set<int64>::const_iterator iter = ready_unsynced_set.begin();
+  for (std::set<int64_t>::const_iterator iter = ready_unsynced_set.begin();
        !IsFull() && iter != ready_unsynced_set.end(); ++iter) {
-    int64 metahandle = *iter;
+    int64_t metahandle = *iter;
     if (HaveItem(metahandle))
       continue;
 
@@ -485,12 +504,9 @@ void Traversal::AddCreatesAndMoves(
         // We only commit an item + its dependencies if it and all its
         // dependencies are not in conflict.
         syncable::Directory::Metahandles item_dependencies;
-        if (AddUncommittedParentsAndTheirPredecessors(ready_unsynced_set, entry,
-                                                      &item_dependencies)) {
-          AddPredecessorsThenItem(ready_unsynced_set, entry,
-                                  &item_dependencies);
-          AppendManyToTraversal(item_dependencies);
-        }
+        AddUncommittedParents(ready_unsynced_set, entry, &item_dependencies);
+        TryAddItem(ready_unsynced_set, entry, &item_dependencies);
+        AppendManyToTraversal(item_dependencies);
       } else {
         // No hierarchy dependencies, just commit the item itself.
         AppendToTraversal(metahandle);
@@ -504,15 +520,15 @@ void Traversal::AddCreatesAndMoves(
     out_->resize(max_entries_);
 }
 
-void Traversal::AddDeletes(const std::set<int64>& ready_unsynced_set) {
+void Traversal::AddDeletes(const std::set<int64_t>& ready_unsynced_set) {
   syncable::Directory::Metahandles deletion_list;
 
   // Note: we iterate over all the unsynced set, regardless of the max size.
   // The max size is only enforced after the top-to-bottom order has been
   // reversed, in order to ensure children are always deleted before parents.
-  for (std::set<int64>::const_iterator iter = ready_unsynced_set.begin();
+  for (std::set<int64_t>::const_iterator iter = ready_unsynced_set.begin();
        iter != ready_unsynced_set.end(); ++iter) {
-    int64 metahandle = *iter;
+    int64_t metahandle = *iter;
 
     if (HaveItem(metahandle))
       continue;
@@ -528,16 +544,12 @@ void Traversal::AddDeletes(const std::set<int64>& ready_unsynced_set) {
     if (entry.GetIsDel()) {
       if (SupportsHierarchy(entry)) {
         syncable::Directory::Metahandles parents;
-        if (AddDeletedParents(ready_unsynced_set, entry, deletion_list,
-                              &parents)) {
-          // Append parents and chilren in top to bottom order.
-          deletion_list.insert(deletion_list.end(), parents.begin(),
-                               parents.end());
-          deletion_list.push_back(metahandle);
-        }
-      } else {
-        deletion_list.push_back(metahandle);
+        AddDeletedParents(ready_unsynced_set, entry, deletion_list, &parents);
+        // Append parents and chilren in top to bottom order.
+        deletion_list.insert(deletion_list.end(), parents.begin(),
+                             parents.end());
       }
+      deletion_list.push_back(metahandle);
     }
   }
 
@@ -552,15 +564,13 @@ void Traversal::AddDeletes(const std::set<int64>& ready_unsynced_set) {
     out_->resize(max_entries_);
 }
 
-void OrderCommitIds(
-    syncable::BaseTransaction* trans,
-    size_t max_entries,
-    const std::set<int64>& ready_unsynced_set,
-    syncable::Directory::Metahandles* out) {
+void OrderCommitIds(syncable::BaseTransaction* trans,
+                    size_t max_entries,
+                    const std::set<int64_t>& ready_unsynced_set,
+                    syncable::Directory::Metahandles* out) {
   // Commits follow these rules:
   // 1. Moves or creates are preceded by needed folder creates, from
-  //    root to leaf.  For folders whose contents are ordered, moves
-  //    and creates appear in order.
+  //    root to leaf.
   // 2. Moves/Creates before deletes.
   // 3. Deletes, collapsed.
   // We commit deleted moves under deleted items as moves when collapsing

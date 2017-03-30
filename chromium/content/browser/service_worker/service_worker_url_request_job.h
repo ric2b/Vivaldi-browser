@@ -5,9 +5,12 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_URL_REQUEST_JOB_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_URL_REQUEST_JOB_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -23,7 +26,8 @@
 #include "net/http/http_byte_range.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_job.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerResponseType.h"
+#include "net/url_request/url_request_status.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -44,7 +48,6 @@ class ServiceWorkerFetchDispatcher;
 class ServiceWorkerProviderHost;
 class ServiceWorkerVersion;
 class Stream;
-struct ResourceResponseInfo;
 
 class CONTENT_EXPORT ServiceWorkerURLRequestJob
     : public net::URLRequestJob,
@@ -52,18 +55,64 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
       public StreamReadObserver,
       public StreamRegisterObserver {
  public:
+  class CONTENT_EXPORT Delegate {
+   public:
+    virtual ~Delegate() {}
+
+    // Will be invoked before the request is restarted. The caller
+    // can use this opportunity to grab state from the
+    // ServiceWorkerURLRequestJob to determine how it should behave when the
+    // request is restarted.
+    virtual void OnPrepareToRestart(
+        base::TimeTicks service_worker_start_time,
+        base::TimeTicks service_worker_ready_time) = 0;
+
+    // Called when the request has finished starting.
+    // Unlike URLRequestJob::NotifyComplete, called both on success and failure.
+    virtual void OnStartCompleted(
+        bool was_fetched_via_service_worker,
+        bool was_fallback_required,
+        const GURL& original_url_via_service_worker,
+        blink::WebServiceWorkerResponseType response_type_via_service_worker,
+        base::TimeTicks worker_start_time,
+        base::TimeTicks service_worker_ready_time) = 0;
+
+    // Returns the ServiceWorkerVersion fetch events for this request job should
+    // be dispatched to. If no appropriate worker can be determined, returns
+    // nullptr and sets |*result| to an appropriate error.
+    virtual ServiceWorkerVersion* GetServiceWorkerVersion(
+        ServiceWorkerMetrics::URLRequestJobResult* result) = 0;
+
+    // Called after dispatching the fetch event to determine if processing of
+    // the request should still continue, or if processing should be aborted.
+    // When false is returned, this sets |*result| to an appropriate error.
+    virtual bool RequestStillValid(
+        ServiceWorkerMetrics::URLRequestJobResult* result);
+
+    // Called to signal that loading failed, and that the resource being loaded
+    // was a main resource.
+    virtual void MainResourceLoadFailed() {}
+
+    // Returns the origin of the page/context which initiated this request.
+    virtual GURL GetRequestingOrigin() = 0;
+  };
+
   ServiceWorkerURLRequestJob(
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate,
-      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
+      const std::string& client_id,
       base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
       const ResourceContext* resource_context,
       FetchRequestMode request_mode,
       FetchCredentialsMode credentials_mode,
+      FetchRedirectMode redirect_mode,
       bool is_main_resource_load,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
-      scoped_refptr<ResourceRequestBody> body);
+      scoped_refptr<ResourceRequestBody> body,
+      Delegate* delegate);
+
+  ~ServiceWorkerURLRequestJob() override;
 
   // Sets the response type.
   void FallbackToNetwork();
@@ -86,7 +135,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   void GetLoadTimingInfo(net::LoadTimingInfo* load_timing_info) const override;
   int GetResponseCode() const override;
   void SetExtraRequestHeaders(const net::HttpRequestHeaders& headers) override;
-  bool ReadRawData(net::IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(net::IOBuffer* buf, int buf_size) override;
 
   // net::URLRequest::Delegate overrides that read the blob from the
   // ServiceWorkerFetchResponse.
@@ -111,17 +160,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   // StreamRegisterObserver override:
   void OnStreamRegistered(Stream* stream) override;
 
-  void GetExtraResponseInfo(ResourceResponseInfo* response_info) const;
-
-  const base::TimeTicks& worker_start_time() const {
-    return worker_start_time_;
-  }
-  const base::TimeTicks& worker_ready_time() const {
-    return worker_ready_time_;
-  }
-
- protected:
-  ~ServiceWorkerURLRequestJob() override;
+  base::WeakPtr<ServiceWorkerURLRequestJob> GetWeakPtr();
 
  private:
   enum ResponseType {
@@ -147,7 +186,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   // Creates BlobDataHandle of the request body from |body_|. This handle
   // |request_body_blob_data_handle_| will be deleted when
   // ServiceWorkerURLRequestJob is deleted.
-  bool CreateRequestBodyBlob(std::string* blob_uuid, uint64* blob_size);
+  bool CreateRequestBodyBlob(std::string* blob_uuid, uint64_t* blob_size);
 
   // For FORWARD_TO_SERVICE_WORKER case.
   void DidPrepareFetchEvent();
@@ -180,7 +219,17 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
 
   const net::HttpResponseInfo* http_info() const;
 
-  base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
+  // Invoke callbacks before invoking corresponding URLRequestJob methods.
+  void NotifyHeadersComplete();
+  void NotifyStartError(net::URLRequestStatus status);
+  void NotifyRestartRequired();
+
+  // Wrapper that gathers parameters to |on_start_completed_callback_| and then
+  // calls it.
+  void OnStartCompleted() const;
+
+  // Not owned.
+  Delegate* delegate_;
 
   // Timing info to show on the popup in Devtools' Network tab.
   net::LoadTimingInfo load_timing_info_;
@@ -201,6 +250,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
 
   // Used when response type is FORWARD_TO_SERVICE_WORKER.
   scoped_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
+  std::string client_id_;
   base::WeakPtr<storage::BlobStorageContext> blob_storage_context_;
   const ResourceContext* resource_context_;
   scoped_ptr<net::URLRequest> blob_request_;
@@ -211,6 +261,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
 
   FetchRequestMode request_mode_;
   FetchCredentialsMode credentials_mode_;
+  FetchRedirectMode redirect_mode_;
   const bool is_main_resource_load_;
   RequestContextType request_context_type_;
   RequestContextFrameType frame_type_;

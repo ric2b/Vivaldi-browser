@@ -5,16 +5,16 @@
 #ifndef CONTENT_BROWSER_GAMEPAD_GAMEPAD_PLATFORM_DATA_FETCHER_MAC_H_
 #define CONTENT_BROWSER_GAMEPAD_GAMEPAD_PLATFORM_DATA_FETCHER_MAC_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "content/browser/gamepad/gamepad_data_fetcher.h"
-#include "content/browser/gamepad/gamepad_standard_mappings.h"
 #include "content/browser/gamepad/xbox_data_fetcher_mac.h"
 #include "content/common/gamepad_hardware_buffer.h"
-#include "third_party/WebKit/public/platform/WebGamepads.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/hid/IOHIDManager.h>
@@ -38,6 +38,7 @@ class GamepadPlatformDataFetcherMac : public GamepadDataFetcher,
 
  private:
   bool enabled_;
+  bool paused_;
   base::ScopedCFTypeRef<IOHIDManagerRef> hid_manager_ref_;
 
   static GamepadPlatformDataFetcherMac* InstanceFromContext(void* context);
@@ -71,9 +72,9 @@ class GamepadPlatformDataFetcherMac : public GamepadDataFetcher,
   void RegisterForNotifications();
   void UnregisterFromNotifications();
 
-  scoped_ptr<XboxDataFetcher> xbox_fetcher_;
+  void SanitizeGamepadData(size_t index, blink::WebGamepad* pad);
 
-  blink::WebGamepads data_;
+  scoped_ptr<XboxDataFetcher> xbox_fetcher_;
 
   // Side-band data that's not passed to the consumer, but we need to maintain
   // to update data_.
@@ -86,9 +87,6 @@ class GamepadPlatformDataFetcherMac : public GamepadDataFetcher,
         IOHIDElementRef axis_elements[blink::WebGamepad::axesLengthCap];
         CFIndex axis_minimums[blink::WebGamepad::axesLengthCap];
         CFIndex axis_maximums[blink::WebGamepad::axesLengthCap];
-        // Function to map from device data to standard layout, if available.
-        // May be null if no mapping is available.
-        GamepadStandardMappingFunction mapper;
       } hid;
       struct {
         XboxController* device;

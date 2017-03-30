@@ -7,9 +7,9 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/ui/search/search_ipc_router.h"
@@ -90,9 +90,6 @@ class SearchTabHelper : public content::WebContentsObserver,
   // Called when the tab corresponding to |this| instance is deactivated.
   void OnTabDeactivated();
 
-  // Tells the page to toggle voice search.
-  void ToggleVoiceSearch();
-
   // Returns true if the underlying page is a search results page.
   bool IsSearchResultsPage();
 
@@ -128,12 +125,10 @@ class SearchTabHelper : public content::WebContentsObserver,
                            OnHistorySyncCheckSyncing);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
                            OnHistorySyncCheckNotSyncing);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperWindowTest,
-                           OnProvisionalLoadFailRedirectNTPToLocal);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperWindowTest,
-                           OnProvisionalLoadFailDontRedirectIfAborted);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperWindowTest,
-                           OnProvisionalLoadFailDontRedirectNonNTP);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
+                           OnMostVisitedItemsChangedFromServer);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
+                           OnMostVisitedItemsChangedFromClient);
   FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest,
                            IgnoreMessageIfThePageIsNotActive);
   FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest,
@@ -164,7 +159,6 @@ class SearchTabHelper : public content::WebContentsObserver,
 
   // Overridden from SearchIPCRouter::Delegate:
   void OnInstantSupportDetermined(bool supports_instant) override;
-  void OnSetVoiceSearchSupport(bool supports_voice_search) override;
   void FocusOmnibox(OmniboxFocusState state) override;
   void NavigateToURL(const GURL& url,
                      WindowOpenDisposition disposition,
@@ -185,7 +179,6 @@ class SearchTabHelper : public content::WebContentsObserver,
   void ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) override;
   void MostVisitedItemsChanged(
       const std::vector<InstantMostVisitedItem>& items) override;
-  void OmniboxStartMarginChanged(int omnibox_start_margin) override;
 
   // Sets the mode of the model based on the current URL of web_contents().
   // Only updates the origin part of the mode if |update_origin| is true,
@@ -210,6 +203,10 @@ class SearchTabHelper : public content::WebContentsObserver,
 
   // Returns the OmniboxView for |web_contents_| or NULL if not available.
   OmniboxView* GetOmniboxView() const;
+
+  // Record whether each suggestion comes from server or client.
+  void LogMostVisitedItemsSource(
+      const std::vector<InstantMostVisitedItem>& items);
 
   typedef bool (*OmniboxHasFocusFn)(OmniboxView*);
 

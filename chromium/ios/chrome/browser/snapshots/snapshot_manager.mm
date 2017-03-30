@@ -51,10 +51,12 @@ BOOL ViewHierarchyContainsWKWebView(UIView* view) {
   // once the iOS 8 bugs have been fixed.
   BOOL useDrawViewHierarchy = ViewHierarchyContainsWKWebView(view);
 
+  BOOL snapshotSuccess = YES;
   CGContextSaveGState(context);
   CGContextTranslateCTM(context, -rect.origin.x, -rect.origin.y);
   if (useDrawViewHierarchy) {
-    [view drawViewHierarchyInRect:view.bounds afterScreenUpdates:YES];
+    snapshotSuccess =
+        [view drawViewHierarchyInRect:view.bounds afterScreenUpdates:NO];
   } else {
     [[view layer] renderInContext:context];
   }
@@ -67,8 +69,8 @@ BOOL ViewHierarchyContainsWKWebView(UIView* view) {
       CGContextTranslateCTM(context, 0, overlay.yOffset);
       if (useDrawViewHierarchy) {
         CGRect overlayRect = overlay.view.bounds;
-        // TODO(jyquinn): The 0 check is needed for a UIKit crash on iOS 7. This
-        // can be removed once iOS 7 is dropped. crbug.com/421213
+        // TODO(crbug.com/421213): The 0 check is needed for a UIKit crash on
+        // iOS 7. This can be removed once iOS 7 is dropped.
         if (overlayRect.size.width > 0 && overlayRect.size.height > 0) {
           [overlay.view drawViewHierarchyInRect:overlay.view.bounds
                              afterScreenUpdates:YES];
@@ -79,7 +81,9 @@ BOOL ViewHierarchyContainsWKWebView(UIView* view) {
       CGContextRestoreGState(context);
     }
   }
-  UIImage* image = UIGraphicsGetImageFromCurrentImageContext();
+  UIImage* image = nil;
+  if (snapshotSuccess)
+    image = UIGraphicsGetImageFromCurrentImageContext();
   CGContextRestoreGState(context);
   UIGraphicsEndImageContext();
   return image;

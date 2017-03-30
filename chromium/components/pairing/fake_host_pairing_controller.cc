@@ -4,6 +4,8 @@
 
 #include "components/pairing/fake_host_pairing_controller.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <vector>
 
@@ -120,6 +122,10 @@ std::string FakeHostPairingController::GetConfirmationCode() {
 
 std::string FakeHostPairingController::GetEnrollmentDomain() {
   return enrollment_domain_;
+}
+
+void FakeHostPairingController::OnNetworkConnectivityChanged(
+    Connectivity connectivity_status) {
 }
 
 void FakeHostPairingController::OnUpdateStatusChanged(

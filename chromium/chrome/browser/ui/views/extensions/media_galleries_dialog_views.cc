@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/views/extensions/media_galleries_dialog_views.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/views/extensions/media_gallery_checkbox_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "components/constrained_window/constrained_window_views.h"
-#include "components/web_modal/popup_manager.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/native_theme/native_theme.h"
@@ -81,10 +84,11 @@ MediaGalleriesDialogViews::~MediaGalleriesDialogViews() {
 void MediaGalleriesDialogViews::AcceptDialogForTesting() {
   accepted_ = true;
 
-  web_modal::PopupManager* popup_manager =
-      web_modal::PopupManager::FromWebContents(controller_->WebContents());
-  DCHECK(popup_manager);
-  popup_manager->CloseAllDialogsForTesting(controller_->WebContents());
+  web_modal::WebContentsModalDialogManager* manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(
+          controller_->WebContents());
+  DCHECK(manager);
+  web_modal::WebContentsModalDialogManager::TestApi(manager).CloseAllDialogs();
 }
 
 void MediaGalleriesDialogViews::InitChildViews() {

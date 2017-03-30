@@ -4,10 +4,13 @@
 
 #include "chrome/browser/profiles/profile_info_cache.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
@@ -19,6 +22,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_avatar_downloader.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -60,6 +64,10 @@ const char kSupervisedUserId[] = "managed_user_id";
 const char kProfileIsEphemeral[] = "is_ephemeral";
 const char kActiveTimeKey[] = "active_time";
 const char kIsAuthErrorKey[] = "is_auth_error";
+const char kStatsBrowsingHistoryKey[] = "stats_browsing_history";
+const char kStatsPasswordsKey[] = "stats_passwords";
+const char kStatsBookmarksKey[] = "stats_bookmarks";
+const char kStatsSettingsKey[] = "stats_settings";
 
 // First eight are generic icons, which use IDS_NUMBERED_PROFILE_NAME.
 const int kDefaultNames[] = {
@@ -184,7 +192,7 @@ ProfileInfoCache::ProfileInfoCache(PrefService* prefs,
 
   // If needed, start downloading the high-res avatars and migrate any legacy
   // profile names.
-  if (switches::IsNewAvatarMenu() && !disable_avatar_download_for_testing_)
+  if (!disable_avatar_download_for_testing_)
     MigrateLegacyProfileNamesAndDownloadAvatars();
 }
 
@@ -225,7 +233,7 @@ void ProfileInfoCache::AddProfileToCache(
 
   sorted_keys_.insert(FindPositionForProfile(key, name), key);
 
-  if (switches::IsNewAvatarMenu() && !disable_avatar_download_for_testing_)
+  if (!disable_avatar_download_for_testing_)
     DownloadHighResAvatarIfNeeded(icon_index, profile_path);
 
   FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
@@ -259,6 +267,7 @@ void ProfileInfoCache::DeleteProfileFromCache(
   std::string key = CacheKeyFromProfilePath(profile_path);
   cache->Remove(key, NULL);
   sorted_keys_.erase(std::find(sorted_keys_.begin(), sorted_keys_.end(), key));
+  profile_attributes_entries_.erase(profile_path);
 
   FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
                     observer_list_,
@@ -323,19 +332,20 @@ base::string16 ProfileInfoCache::GetUserNameOfProfileAtIndex(
 }
 
 const gfx::Image& ProfileInfoCache::GetAvatarIconOfProfileAtIndex(
-    size_t index) {
+    size_t index) const {
   if (IsUsingGAIAPictureOfProfileAtIndex(index)) {
     const gfx::Image* image = GetGAIAPictureOfProfileAtIndex(index);
     if (image)
       return *image;
   }
 
-  // Use the high resolution version of the avatar if it exists.
-  if (switches::IsNewAvatarMenu()) {
-    const gfx::Image* image = GetHighResAvatarOfProfileAtIndex(index);
-    if (image)
-      return *image;
-  }
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+  // Use the high resolution version of the avatar if it exists. Mobile and
+  // ChromeOS don't need the high resolution version so no need to fetch it.
+  const gfx::Image* image = GetHighResAvatarOfProfileAtIndex(index);
+  if (image)
+    return *image;
+#endif
 
   int resource_id = profiles::GetDefaultAvatarIconResourceIDAtIndex(
       GetAvatarIconIndexOfProfileAtIndex(index));
@@ -497,6 +507,55 @@ size_t ProfileInfoCache::GetAvatarIconIndexOfProfileAtIndex(size_t index)
   return icon_index;
 }
 
+bool ProfileInfoCache::HasStatsBrowsingHistoryOfProfileAtIndex(size_t index)
+    const {
+  int value = 0;
+  return GetInfoForProfileAtIndex(index)->GetInteger(kStatsBrowsingHistoryKey,
+                                                     &value);
+}
+
+int ProfileInfoCache::GetStatsBrowsingHistoryOfProfileAtIndex(size_t index)
+    const {
+  int value = 0;
+  GetInfoForProfileAtIndex(index)->GetInteger(kStatsBrowsingHistoryKey, &value);
+  return value;
+}
+
+bool ProfileInfoCache::HasStatsPasswordsOfProfileAtIndex(size_t index) const {
+  int value = 0;
+  return GetInfoForProfileAtIndex(index)->GetInteger(kStatsPasswordsKey,
+                                                     &value);
+}
+
+int ProfileInfoCache::GetStatsPasswordsOfProfileAtIndex(size_t index) const {
+  int value = 0;
+  GetInfoForProfileAtIndex(index)->GetInteger(kStatsPasswordsKey, &value);
+  return value;
+}
+
+bool ProfileInfoCache::HasStatsBookmarksOfProfileAtIndex(size_t index) const {
+  int value = 0;
+  return GetInfoForProfileAtIndex(index)->GetInteger(kStatsBookmarksKey,
+                                                     &value);
+}
+
+int ProfileInfoCache::GetStatsBookmarksOfProfileAtIndex(size_t index) const {
+  int value = 0;
+  GetInfoForProfileAtIndex(index)->GetInteger(kStatsBookmarksKey, &value);
+  return value;
+}
+
+bool ProfileInfoCache::HasStatsSettingsOfProfileAtIndex(size_t index) const {
+  int value = 0;
+  return GetInfoForProfileAtIndex(index)->GetInteger(kStatsSettingsKey, &value);
+}
+
+int ProfileInfoCache::GetStatsSettingsOfProfileAtIndex(size_t index) const {
+  int value = 0;
+  GetInfoForProfileAtIndex(index)->GetInteger(kStatsSettingsKey, &value);
+  return value;
+}
+
 void ProfileInfoCache::SetProfileActiveTimeAtIndex(size_t index) {
   if (base::Time::Now() - GetProfileActiveTimeAtIndex(index) <
       base::TimeDelta::FromHours(1)) {
@@ -584,7 +643,7 @@ void ProfileInfoCache::SetAvatarIconOfProfileAtIndex(size_t index,
 
   base::FilePath profile_path = GetPathOfProfileAtIndex(index);
 
-  if (switches::IsNewAvatarMenu() && !disable_avatar_download_for_testing_)
+  if (!disable_avatar_download_for_testing_)
     DownloadHighResAvatarIfNeeded(icon_index, profile_path);
 
   FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
@@ -863,10 +922,11 @@ base::string16 ProfileInfoCache::ChooseNameForNewProfile(
     size_t icon_index) const {
   base::string16 name;
   for (int name_index = 1; ; ++name_index) {
-    if (switches::IsNewAvatarMenu()) {
-      name = l10n_util::GetStringFUTF16Int(IDS_NEW_NUMBERED_PROFILE_NAME,
-                                           name_index);
-    } else if (icon_index < profiles::GetGenericAvatarIconCount()) {
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+    name = l10n_util::GetStringFUTF16Int(IDS_NEW_NUMBERED_PROFILE_NAME,
+                                         name_index);
+#else
+   if (icon_index < profiles::GetGenericAvatarIconCount()) {
       name = l10n_util::GetStringFUTF16Int(IDS_NUMBERED_PROFILE_NAME,
                                            name_index);
     } else {
@@ -875,6 +935,7 @@ base::string16 ProfileInfoCache::ChooseNameForNewProfile(
       if (name_index > 1)
         name.append(base::UTF8ToUTF16(base::IntToString(name_index)));
     }
+#endif
 
     // Loop through previously named profiles to ensure we're not duplicating.
     bool name_found = false;
@@ -903,6 +964,42 @@ size_t ProfileInfoCache::ChooseAvatarIconIndexForNewProfile() const {
 
   NOTREACHED();
   return 0;
+}
+
+void ProfileInfoCache::SetStatsBrowsingHistoryOfProfileAtIndex(size_t index,
+                                                               int value) {
+  scoped_ptr<base::DictionaryValue> info(
+      GetInfoForProfileAtIndex(index)->DeepCopy());
+  info->SetInteger(kStatsBrowsingHistoryKey, value);
+  // This takes ownership of |info|.
+  SetInfoForProfileAtIndex(index, info.release());
+}
+
+void ProfileInfoCache::SetStatsPasswordsOfProfileAtIndex(size_t index,
+                                                         int value) {
+  scoped_ptr<base::DictionaryValue> info(
+      GetInfoForProfileAtIndex(index)->DeepCopy());
+  info->SetInteger(kStatsPasswordsKey, value);
+  // This takes ownership of |info|.
+  SetInfoForProfileAtIndex(index, info.release());
+}
+
+void ProfileInfoCache::SetStatsBookmarksOfProfileAtIndex(size_t index,
+                                                         int value) {
+  scoped_ptr<base::DictionaryValue> info(
+      GetInfoForProfileAtIndex(index)->DeepCopy());
+  info->SetInteger(kStatsBookmarksKey, value);
+  // This takes ownership of |info|.
+  SetInfoForProfileAtIndex(index, info.release());
+}
+
+void ProfileInfoCache::SetStatsSettingsOfProfileAtIndex(size_t index,
+                                                        int value) {
+  scoped_ptr<base::DictionaryValue> info(
+      GetInfoForProfileAtIndex(index)->DeepCopy());
+  info->SetInteger(kStatsSettingsKey, value);
+  // This takes ownership of |info|.
+  SetInfoForProfileAtIndex(index, info.release());
 }
 
 const base::FilePath& ProfileInfoCache::GetUserDataDir() const {
@@ -1026,10 +1123,10 @@ bool ProfileInfoCache::ChooseAvatarIconIndexForNewProfile(
     bool allow_generic_icon,
     bool must_be_unique,
     size_t* out_icon_index) const {
-  // Always allow all icons for new profiles if using the
-  // --new-avatar-menu flag.
-  if (switches::IsNewAvatarMenu())
-    allow_generic_icon = true;
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+  // Always allow the generic icon when displaying the new avatar menu.
+  allow_generic_icon = true;
+#endif
   size_t start = allow_generic_icon ? 0 : profiles::GetGenericAvatarIconCount();
   size_t end = profiles::GetDefaultAvatarIconCount();
   size_t count = end - start;
@@ -1199,8 +1296,6 @@ void ProfileInfoCache::OnAvatarPictureSaved(
 }
 
 void ProfileInfoCache::MigrateLegacyProfileNamesAndDownloadAvatars() {
-  DCHECK(switches::IsNewAvatarMenu());
-
   // Only do this on desktop platforms.
 #if !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
   // Migrate any legacy profile names ("First user", "Default Profile") to
@@ -1237,4 +1332,52 @@ void ProfileInfoCache::MigrateLegacyProfileNamesAndDownloadAvatars() {
         GetAvatarIconIndexOfProfileAtIndex(profile_index)));
   }
 #endif
+}
+
+void ProfileInfoCache::AddProfile(
+    const base::FilePath& profile_path,
+    const base::string16& name,
+    const std::string& gaia_id,
+    const base::string16& user_name,
+    size_t icon_index,
+    const std::string& supervised_user_id) {
+  AddProfileToCache(
+      profile_path, name, gaia_id, user_name, icon_index, supervised_user_id);
+}
+
+void ProfileInfoCache::RemoveProfile(const base::FilePath& profile_path) {
+  DeleteProfileFromCache(profile_path);
+}
+
+std::vector<ProfileAttributesEntry*>
+ProfileInfoCache::GetAllProfilesAttributes() {
+  std::vector<ProfileAttributesEntry*> ret;
+  for (size_t i = 0; i < GetNumberOfProfiles(); ++i) {
+    ProfileAttributesEntry* entry;
+    if (GetProfileAttributesWithPath(GetPathOfProfileAtIndex(i), &entry)) {
+      ret.push_back(entry);
+    }
+  }
+  return ret;
+}
+
+bool ProfileInfoCache::GetProfileAttributesWithPath(
+    const base::FilePath& path, ProfileAttributesEntry** entry) {
+  if (GetNumberOfProfiles() == 0)
+    return false;
+
+  if (GetIndexOfProfileWithPath(path) == std::string::npos)
+    return false;
+
+  if (profile_attributes_entries_.find(path) ==
+      profile_attributes_entries_.end()) {
+    // The profile info is in the cache but its entry isn't created yet, insert
+    // it in the map.
+    scoped_ptr<ProfileAttributesEntry> new_entry(new ProfileAttributesEntry());
+    profile_attributes_entries_.add(path, std::move(new_entry));
+    profile_attributes_entries_.get(path)->Initialize(this, path);
+  }
+
+  *entry = profile_attributes_entries_.get(path);
+  return true;
 }

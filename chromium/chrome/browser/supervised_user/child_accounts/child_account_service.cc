@@ -9,6 +9,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
@@ -19,18 +20,14 @@
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
-
-#if defined(OS_ANDROID)
-#include "base/android/jni_android.h"
-#include "chrome/browser/supervised_user/child_accounts/child_account_service_android.h"
-#endif
+#include "components/signin/core/common/signin_pref_names.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -38,8 +35,6 @@
 #endif
 
 const char kChildAccountDetectionFieldTrialName[] = "ChildAccountDetection";
-
-const char kIsChildAccountServiceFlagName[] = "uca";
 
 // Normally, re-check the family info once per day.
 const int kUpdateIntervalSeconds = 60 * 60 * 24;
@@ -102,35 +97,9 @@ void ChildAccountService::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kChildAccountStatusKnown, false);
 }
 
-void ChildAccountService::SetIsChildAccount(bool is_child_account) {
-  PropagateChildStatusToUser(is_child_account);
-  if (profile_->IsChild() != is_child_account) {
-    if (is_child_account) {
-      profile_->GetPrefs()->SetString(prefs::kSupervisedUserId,
-                                      supervised_users::kChildAccountSUID);
-    } else {
-      profile_->GetPrefs()->ClearPref(prefs::kSupervisedUserId);
-
-      ClearFirstCustodianPrefs();
-      ClearSecondCustodianPrefs();
-    }
-  }
-  profile_->GetPrefs()->SetBoolean(prefs::kChildAccountStatusKnown, true);
-
-  for (const auto& callback : status_received_callback_list_)
-    callback.Run();
-  status_received_callback_list_.clear();
-}
-
 void ChildAccountService::Init() {
   SupervisedUserServiceFactory::GetForProfile(profile_)->SetDelegate(this);
   AccountTrackerServiceFactory::GetForProfile(profile_)->AddObserver(this);
-
-#if defined(OS_ANDROID)
-  bool is_child_account = false;
-  if (GetJavaChildAccountStatus(&is_child_account))
-    SetIsChildAccount(is_child_account);
-#endif
 
   PropagateChildStatusToUser(profile_->IsChild());
 
@@ -171,12 +140,19 @@ bool ChildAccountService::SetActive(bool active) {
   active_ = active;
 
   if (active_) {
-    // In contrast to legacy SUs, child account SUs must sign in.
-    scoped_ptr<base::Value> allow_signin(new base::FundamentalValue(true));
     SupervisedUserSettingsService* settings_service =
         SupervisedUserSettingsServiceFactory::GetForProfile(profile_);
-    settings_service->SetLocalSetting(supervised_users::kSigninAllowed,
-                                      allow_signin.Pass());
+
+    // In contrast to legacy SUs, child account SUs must sign in.
+    settings_service->SetLocalSetting(
+        supervised_users::kSigninAllowed,
+        make_scoped_ptr(new base::FundamentalValue(true)));
+
+    // SafeSearch is controlled at the account level, so don't override it
+    // client-side.
+    settings_service->SetLocalSetting(
+        supervised_users::kForceSafeSearch,
+        make_scoped_ptr(new base::FundamentalValue(false)));
 #if !defined(OS_CHROMEOS)
     // This is also used by user policies (UserPolicySigninService), but since
     // child accounts can not also be Dasher accounts, there shouldn't be any
@@ -214,22 +190,38 @@ bool ChildAccountService::SetActive(bool active) {
   return true;
 }
 
-void ChildAccountService::OnAccountUpdated(
-    const AccountTrackerService::AccountInfo& info) {
-  std::string auth_account_id = SigninManagerFactory::GetForProfile(profile_)
-      ->GetAuthenticatedAccountId();
-  if (!info.IsValid() || info.account_id != auth_account_id)
-    return;
+void ChildAccountService::SetIsChildAccount(bool is_child_account) {
+  PropagateChildStatusToUser(is_child_account);
+  if (profile_->IsChild() != is_child_account) {
+    if (is_child_account) {
+      profile_->GetPrefs()->SetString(prefs::kSupervisedUserId,
+                                      supervised_users::kChildAccountSUID);
+    } else {
+      profile_->GetPrefs()->ClearPref(prefs::kSupervisedUserId);
 
+      ClearFirstCustodianPrefs();
+      ClearSecondCustodianPrefs();
+    }
+  }
+  profile_->GetPrefs()->SetBoolean(prefs::kChildAccountStatusKnown, true);
+
+  for (const auto& callback : status_received_callback_list_)
+    callback.Run();
+  status_received_callback_list_.clear();
+}
+
+void ChildAccountService::OnAccountUpdated(const AccountInfo& info) {
   if (!IsChildAccountDetectionEnabled()) {
     SetIsChildAccount(false);
     return;
   }
 
-  bool is_child_account =
-      std::find(info.service_flags.begin(), info.service_flags.end(),
-                kIsChildAccountServiceFlagName) != info.service_flags.end();
-  SetIsChildAccount(is_child_account);
+  std::string auth_account_id = SigninManagerFactory::GetForProfile(profile_)
+      ->GetAuthenticatedAccountId();
+  if (info.account_id != auth_account_id)
+    return;
+
+  SetIsChildAccount(info.is_child_account);
 }
 
 void ChildAccountService::OnGetFamilyMembersSuccess(

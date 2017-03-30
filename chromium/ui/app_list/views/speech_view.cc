@@ -4,18 +4,23 @@
 
 #include "ui/app_list/views/speech_view.h"
 
+#include <stdint.h>
+
+#include <limits>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_view_delegate.h"
+#include "ui/app_list/resources/grit/app_list_resources.h"
 #include "ui/app_list/speech_ui_model.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/shadow_value.h"
-#include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/background.h"
@@ -163,10 +168,10 @@ void SpeechView::Reset() {
   OnSpeechRecognitionStateChanged(delegate_->GetSpeechUI()->state());
 }
 
-int SpeechView::GetIndicatorRadius(uint8 level) {
+int SpeechView::GetIndicatorRadius(uint8_t level) {
   int radius_min = mic_button_->width() / 2 + kIndicatorRadiusMinOffset;
   int range = kIndicatorRadiusMax - radius_min;
-  return level * range / kuint8max + radius_min;
+  return level * range / std::numeric_limits<uint8_t>::max() + radius_min;
 }
 
 void SpeechView::Layout() {
@@ -197,10 +202,10 @@ gfx::Size SpeechView::GetPreferredSize() const {
 }
 
 void SpeechView::ButtonPressed(views::Button* sender, const ui::Event& event) {
-  delegate_->ToggleSpeechRecognition();
+  delegate_->StopSpeechRecognition();
 }
 
-void SpeechView::OnSpeechSoundLevelChanged(uint8 level) {
+void SpeechView::OnSpeechSoundLevelChanged(uint8_t level) {
   if (!visible() ||
       delegate_->GetSpeechUI()->state() == SPEECH_RECOGNITION_NETWORK_ERROR)
     return;

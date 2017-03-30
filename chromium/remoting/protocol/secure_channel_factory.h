@@ -7,7 +7,7 @@
 
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/base/net_errors.h"
 #include "remoting/protocol/stream_channel_factory.h"
 
@@ -39,12 +39,12 @@ class SecureChannelFactory : public StreamChannelFactory {
 
   void OnBaseChannelCreated(const std::string& name,
                             const ChannelCreatedCallback& callback,
-                            scoped_ptr<net::StreamSocket> socket);
+                            scoped_ptr<P2PStreamSocket> socket);
 
   void OnSecureChannelCreated(const std::string& name,
                               const ChannelCreatedCallback& callback,
                               int error,
-                              scoped_ptr<net::StreamSocket> socket);
+                              scoped_ptr<P2PStreamSocket> socket);
 
   StreamChannelFactory* channel_factory_;
   Authenticator* authenticator_;

@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_TEST_RUNNER_MOCK_CREDENTIAL_MANAGER_CLIENT_H_
 #define COMPONENTS_TEST_RUNNER_MOCK_CREDENTIAL_MANAGER_CLIENT_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "third_party/WebKit/public/platform/WebCredentialManagerClient.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
@@ -26,13 +27,12 @@ class MockCredentialManagerClient : public blink::WebCredentialManagerClient {
   void SetResponse(blink::WebCredential* credential);
 
   // blink::WebCredentialManager:
-  virtual void dispatchSignedIn(const blink::WebCredential& credential,
-                                NotificationCallbacks* callbacks);
-  virtual void dispatchRequireUserMediation(NotificationCallbacks* callbacks);
-  virtual void dispatchRequest(
-      bool zero_click_only,
-      const blink::WebVector<blink::WebURL>& federations,
-      RequestCallbacks* callbacks);
+  void dispatchStore(const blink::WebCredential& credential,
+                     NotificationCallbacks* callbacks) override;
+  void dispatchRequireUserMediation(NotificationCallbacks* callbacks) override;
+  void dispatchGet(bool zero_click_only,
+                   const blink::WebVector<blink::WebURL>& federations,
+                   RequestCallbacks* callbacks) override;
 
  private:
   scoped_ptr<blink::WebCredential> credential_;

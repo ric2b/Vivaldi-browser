@@ -1,0 +1,72 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+
+source_set("unittest_support") {
+  sources = [
+    "test_window.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/mus/public/cpp",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "window_server_test_base.cc",
+    "window_server_test_base.h",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_config",
+    "//components/mus/public/cpp",
+    "//mojo/shell/public/cpp:sources",
+    "//mojo/shell/public/cpp:test_support",
+    "//testing/gtest",
+  ]
+}
+
+test("mojo_view_manager_lib_unittests") {
+  sources = [
+    "run_all_unittests.cc",
+    "test_window_tree.cc",
+    "test_window_tree.h",
+    "window_server_test_suite.cc",
+    "window_server_test_suite.h",
+    "window_tree_client_impl_unittest.cc",
+    "window_unittest.cc",
+  ]
+
+  deps = [
+    ":unittest_support",
+    "//base",
+    "//base/test:test_support",
+    "//components/mus/common",
+    "//components/mus/public/cpp",
+    "//mojo/common:common_base",
+    "//mojo/converters/geometry",
+    "//mojo/converters/input_events",
+    "//mojo/gles2",
+    "//mojo/platform_handle:platform_handle_impl",
+    "//mojo/public/cpp/system",
+    "//mojo/shell/public/cpp",
+    "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//ui/events",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+    "//ui/mojo/geometry:interfaces",
+  ]
+
+  if (use_x11) {
+    deps += [ "//ui/gfx/x" ]
+  }
+}

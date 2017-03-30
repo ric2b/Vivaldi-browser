@@ -6,6 +6,8 @@
 
 #include "base/logging.h"
 #include "net/quic/iovector.h"
+#include "net/quic/quic_ack_listener_interface.h"
+#include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/quic_flow_controller.h"
 #include "net/quic/quic_session.h"
@@ -42,78 +44,16 @@ size_t GetReceivedFlowControlWindow(QuicSession* session) {
 
 }  // namespace
 
-// Wrapper that aggregates OnAckNotifications for packets sent using
-// WriteOrBufferData and delivers them to the original
-// QuicAckNotifier::DelegateInterface after all bytes written using
-// WriteOrBufferData are acked.  This level of indirection is
-// necessary because the delegate interface provides no mechanism that
-// WriteOrBufferData can use to inform it that the write required
-// multiple WritevData calls or that only part of the data has been
-// sent out by the time ACKs start arriving.
-class ReliableQuicStream::ProxyAckNotifierDelegate
-    : public QuicAckNotifier::DelegateInterface {
- public:
-  explicit ProxyAckNotifierDelegate(DelegateInterface* delegate)
-      : delegate_(delegate),
-        pending_acks_(0),
-        wrote_last_data_(false),
-        num_retransmitted_packets_(0),
-        num_retransmitted_bytes_(0) {
-  }
-
-  void OnAckNotification(int num_retransmitted_packets,
-                         int num_retransmitted_bytes,
-                         QuicTime::Delta delta_largest_observed) override {
-    DCHECK_LT(0, pending_acks_);
-    --pending_acks_;
-    num_retransmitted_packets_ += num_retransmitted_packets;
-    num_retransmitted_bytes_ += num_retransmitted_bytes;
-
-    if (wrote_last_data_ && pending_acks_ == 0) {
-      delegate_->OnAckNotification(num_retransmitted_packets_,
-                                   num_retransmitted_bytes_,
-                                   delta_largest_observed);
-    }
-  }
-
-  void WroteData(bool last_data) {
-    DCHECK(!wrote_last_data_);
-    ++pending_acks_;
-    wrote_last_data_ = last_data;
-  }
-
- protected:
-  // Delegates are ref counted.
-  ~ProxyAckNotifierDelegate() override {}
-
- private:
-  // Original delegate.  delegate_->OnAckNotification will be called when:
-  //   wrote_last_data_ == true and pending_acks_ == 0
-  scoped_refptr<DelegateInterface> delegate_;
-
-  // Number of outstanding acks.
-  int pending_acks_;
-
-  // True if no pending writes remain.
-  bool wrote_last_data_;
-
-  int num_retransmitted_packets_;
-  int num_retransmitted_bytes_;
-
-  DISALLOW_COPY_AND_ASSIGN(ProxyAckNotifierDelegate);
-};
-
 ReliableQuicStream::PendingData::PendingData(
     string data_in,
-    scoped_refptr<ProxyAckNotifierDelegate> delegate_in)
-    : data(data_in), offset(0), delegate(delegate_in) {
-}
+    QuicAckListenerInterface* ack_listener_in)
+    : data(data_in), offset(0), ack_listener(ack_listener_in) {}
 
-ReliableQuicStream::PendingData::~PendingData() {
-}
+ReliableQuicStream::PendingData::~PendingData() {}
 
 ReliableQuicStream::ReliableQuicStream(QuicStreamId id, QuicSession* session)
-    : sequencer_(this),
+    : queued_data_bytes_(0),
+      sequencer_(this, session->connection()->clock()),
       id_(id),
       session_(session),
       stream_bytes_read_(0),
@@ -140,27 +80,16 @@ ReliableQuicStream::ReliableQuicStream(QuicStreamId id, QuicSession* session)
   SetFromConfig();
 }
 
-ReliableQuicStream::~ReliableQuicStream() {
-}
+ReliableQuicStream::~ReliableQuicStream() {}
 
 void ReliableQuicStream::SetFromConfig() {
-  if (FLAGS_quic_send_fec_packet_only_on_fec_alarm &&
-      session_->config()->HasClientSentConnectionOption(kFSTR, perspective_)) {
+  if (session_->config()->HasClientSentConnectionOption(kFSTR, perspective_)) {
     fec_policy_ = FEC_PROTECT_ALWAYS;
   }
 }
 
 void ReliableQuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
-  if (read_side_closed_) {
-    DVLOG(1) << ENDPOINT << "Ignoring frame " << frame.stream_id;
-    // The subclass does not want read data:  blackhole the data.
-    return;
-  }
-
-  if (frame.stream_id != id_) {
-    session_->connection()->SendConnectionClose(QUIC_INTERNAL_ERROR);
-    return;
-  }
+  DCHECK_EQ(frame.stream_id, id_);
 
   if (frame.fin) {
     fin_received_ = true;
@@ -169,8 +98,14 @@ void ReliableQuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
     }
   }
 
+  if (read_side_closed_) {
+    DVLOG(1) << ENDPOINT << "Ignoring data in frame " << frame.stream_id;
+    // The subclass does not want to read data:  blackhole the data.
+    return;
+  }
+
   // This count includes duplicate data received.
-  size_t frame_payload_size = frame.data.size();
+  size_t frame_payload_size = frame.frame_length;
   stream_bytes_read_ += frame_payload_size;
 
   // Flow control is interested in tracking highest received offset.
@@ -179,8 +114,9 @@ void ReliableQuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
     // violation of flow control.
     if (flow_controller_.FlowControlViolation() ||
         connection_flow_controller_->FlowControlViolation()) {
-      session_->connection()->SendConnectionClose(
-          QUIC_FLOW_CONTROL_RECEIVED_TOO_MUCH_DATA);
+      session_->connection()->SendConnectionCloseWithDetails(
+          QUIC_FLOW_CONTROL_RECEIVED_TOO_MUCH_DATA,
+          "Flow control violation after increasing offset");
       return;
     }
   }
@@ -210,7 +146,7 @@ void ReliableQuicStream::OnStreamReset(const QuicRstStreamFrame& frame) {
 }
 
 void ReliableQuicStream::OnConnectionClosed(QuicErrorCode error,
-                                            bool from_peer) {
+                                            bool /*from_peer*/) {
   if (read_side_closed_ && write_side_closed_) {
     return;
   }
@@ -235,15 +171,10 @@ void ReliableQuicStream::OnFinRead() {
 }
 
 void ReliableQuicStream::Reset(QuicRstStreamErrorCode error) {
-  DCHECK_NE(QUIC_STREAM_NO_ERROR, error);
   stream_error_ = error;
   // Sending a RstStream results in calling CloseStream.
   session()->SendRstStream(id(), error, stream_bytes_written_);
   rst_sent_ = true;
-}
-
-void ReliableQuicStream::CloseConnection(QuicErrorCode error) {
-  session()->connection()->SendConnectionClose(error);
 }
 
 void ReliableQuicStream::CloseConnectionWithDetails(QuicErrorCode error,
@@ -254,14 +185,14 @@ void ReliableQuicStream::CloseConnectionWithDetails(QuicErrorCode error,
 void ReliableQuicStream::WriteOrBufferData(
     StringPiece data,
     bool fin,
-    QuicAckNotifier::DelegateInterface* ack_notifier_delegate) {
+    QuicAckListenerInterface* ack_listener) {
   if (data.empty() && !fin) {
-    LOG(DFATAL) << "data.empty() && !fin";
+    QUIC_BUG << "data.empty() && !fin";
     return;
   }
 
   if (fin_buffered_) {
-    LOG(DFATAL) << "Fin already buffered";
+    QUIC_BUG << "Fin already buffered";
     return;
   }
   if (write_side_closed_) {
@@ -269,34 +200,21 @@ void ReliableQuicStream::WriteOrBufferData(
     return;
   }
 
-  scoped_refptr<ProxyAckNotifierDelegate> proxy_delegate;
-  if (ack_notifier_delegate != nullptr) {
-    proxy_delegate = new ProxyAckNotifierDelegate(ack_notifier_delegate);
-  }
-
   QuicConsumedData consumed_data(0, false);
   fin_buffered_ = fin;
 
   if (queued_data_.empty()) {
     struct iovec iov(MakeIovec(data));
-    consumed_data = WritevData(&iov, 1, fin, proxy_delegate.get());
+    consumed_data = WritevData(&iov, 1, fin, ack_listener);
     DCHECK_LE(consumed_data.bytes_consumed, data.length());
   }
 
-  bool write_completed;
   // If there's unconsumed data or an unconsumed fin, queue it.
   if (consumed_data.bytes_consumed < data.length() ||
       (fin && !consumed_data.fin_consumed)) {
     StringPiece remainder(data.substr(consumed_data.bytes_consumed));
-    queued_data_.push_back(PendingData(remainder.as_string(), proxy_delegate));
-    write_completed = false;
-  } else {
-    write_completed = true;
-  }
-
-  if ((proxy_delegate.get() != nullptr) &&
-      (consumed_data.bytes_consumed > 0 || consumed_data.fin_consumed)) {
-    proxy_delegate->WroteData(write_completed);
+    queued_data_bytes_ += remainder.size();
+    queued_data_.push_back(PendingData(remainder.as_string(), ack_listener));
   }
 }
 
@@ -304,7 +222,7 @@ void ReliableQuicStream::OnCanWrite() {
   bool fin = false;
   while (!queued_data_.empty()) {
     PendingData* pending_data = &queued_data_.front();
-    ProxyAckNotifierDelegate* delegate = pending_data->delegate.get();
+    QuicAckListenerInterface* ack_listener = pending_data->ack_listener.get();
     if (queued_data_.size() == 1 && fin_buffered_) {
       fin = true;
     }
@@ -312,28 +230,22 @@ void ReliableQuicStream::OnCanWrite() {
         pending_data->offset >= pending_data->data.size()) {
       // This should be impossible because offset tracks the amount of
       // pending_data written thus far.
-      LOG(DFATAL) << "Pending offset is beyond available data. offset: "
-                  << pending_data->offset
-                  << " vs: " << pending_data->data.size();
+      QUIC_BUG << "Pending offset is beyond available data. offset: "
+               << pending_data->offset << " vs: " << pending_data->data.size();
       return;
     }
     size_t remaining_len = pending_data->data.size() - pending_data->offset;
     struct iovec iov = {
         const_cast<char*>(pending_data->data.data()) + pending_data->offset,
         remaining_len};
-    QuicConsumedData consumed_data = WritevData(&iov, 1, fin, delegate);
+    QuicConsumedData consumed_data = WritevData(&iov, 1, fin, ack_listener);
+    queued_data_bytes_ -= consumed_data.bytes_consumed;
     if (consumed_data.bytes_consumed == remaining_len &&
         fin == consumed_data.fin_consumed) {
       queued_data_.pop_front();
-      if (delegate != nullptr) {
-        delegate->WroteData(true);
-      }
     } else {
       if (consumed_data.bytes_consumed > 0) {
         pending_data->offset += consumed_data.bytes_consumed;
-        if (delegate != nullptr) {
-          delegate->WroteData(false);
-        }
       }
       break;
     }
@@ -352,7 +264,7 @@ void ReliableQuicStream::MaybeSendBlocked() {
   // WINDOW_UPDATE arrives.
   if (connection_flow_controller_->IsBlocked() &&
       !flow_controller_.IsBlocked()) {
-    session_->MarkWriteBlocked(id(), EffectivePriority());
+    session_->MarkConnectionLevelWriteBlocked(id(), Priority());
   }
 }
 
@@ -360,7 +272,7 @@ QuicConsumedData ReliableQuicStream::WritevData(
     const struct iovec* iov,
     int iov_count,
     bool fin,
-    QuicAckNotifier::DelegateInterface* ack_notifier_delegate) {
+    QuicAckListenerInterface* ack_listener) {
   if (write_side_closed_) {
     DLOG(ERROR) << ENDPOINT << "Attempt to write when the write side is closed";
     return QuicConsumedData(0, false);
@@ -395,10 +307,16 @@ QuicConsumedData ReliableQuicStream::WritevData(
 
   QuicConsumedData consumed_data = session()->WritevData(
       id(), QuicIOVector(iov, iov_count, write_length), stream_bytes_written_,
-      fin, GetFecProtection(), ack_notifier_delegate);
+      fin, GetFecProtection(), ack_listener);
   stream_bytes_written_ += consumed_data.bytes_consumed;
 
   AddBytesSent(consumed_data.bytes_consumed);
+
+  // The write may have generated a write error causing this stream to be
+  // closed. If so, simply return without marking the stream write blocked.
+  if (write_side_closed_) {
+    return consumed_data;
+  }
 
   if (consumed_data.bytes_consumed == write_length) {
     if (!fin_with_zero_data) {
@@ -411,10 +329,10 @@ QuicConsumedData ReliableQuicStream::WritevData(
       }
       CloseWriteSide();
     } else if (fin && !consumed_data.fin_consumed) {
-      session_->MarkWriteBlocked(id(), EffectivePriority());
+      session_->MarkConnectionLevelWriteBlocked(id(), Priority());
     }
   } else {
-    session_->MarkWriteBlocked(id(), EffectivePriority());
+    session_->MarkConnectionLevelWriteBlocked(id(), Priority());
   }
   return consumed_data;
 }
@@ -457,6 +375,11 @@ QuicVersion ReliableQuicStream::version() const {
   return session_->connection()->version();
 }
 
+void ReliableQuicStream::StopReading() {
+  DVLOG(1) << ENDPOINT << "Stop reading from stream " << id();
+  sequencer_.StopReading();
+}
+
 void ReliableQuicStream::OnClose() {
   CloseReadSide();
   CloseWriteSide();
@@ -495,7 +418,7 @@ void ReliableQuicStream::OnWindowUpdateFrame(
 
 bool ReliableQuicStream::MaybeIncreaseHighestReceivedOffset(
     QuicStreamOffset new_offset) {
-  uint64 increment =
+  uint64_t increment =
       new_offset - flow_controller_.highest_received_byte_offset();
   if (!flow_controller_.UpdateHighestReceivedOffset(new_offset)) {
     return false;

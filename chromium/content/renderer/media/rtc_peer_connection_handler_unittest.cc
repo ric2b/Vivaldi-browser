@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -231,6 +233,7 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
 
     mock_peer_connection_ = pc_handler_->native_peer_connection();
     ASSERT_TRUE(mock_peer_connection_);
+    EXPECT_CALL(*mock_peer_connection_, Close());
   }
 
   void TearDown() override {
@@ -288,8 +291,7 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
     blink::WebMediaStream local_stream;
     local_stream.initialize(base::UTF8ToUTF16(stream_label), audio_tracks,
                             video_tracks);
-    local_stream.setExtraData(
-        new MediaStream(local_stream));
+    local_stream.setExtraData(new MediaStream());
     return local_stream;
   }
 
@@ -334,6 +336,11 @@ TEST_F(RTCPeerConnectionHandlerTest, Destruct) {
   pc_handler_.reset(NULL);
 }
 
+TEST_F(RTCPeerConnectionHandlerTest, DestructAllHandlers) {
+  EXPECT_CALL(*mock_client_.get(), releasePeerConnectionHandler())
+      .Times(1);
+  RTCPeerConnectionHandler::DestructAllHandlers();
+}
 TEST_F(RTCPeerConnectionHandlerTest, CreateOffer) {
   blink::WebRTCSessionDescriptionRequest request;
   blink::WebMediaConstraints options;

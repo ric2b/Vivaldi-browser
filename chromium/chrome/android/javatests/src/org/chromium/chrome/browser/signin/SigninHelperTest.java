@@ -4,22 +4,23 @@
 
 package org.chromium.chrome.browser.signin;
 
-import android.content.Context;
+import android.accounts.Account;
 import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.test.util.AdvancedMockContext;
+import org.chromium.base.test.util.DisabledTest;
+import org.chromium.chrome.test.util.browser.signin.MockChangeEventChecker;
+import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.signin.ChromeSigninController;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import org.chromium.sync.test.util.AccountHolder;
+import org.chromium.sync.test.util.MockAccountManager;
 
 /**
  * Instrumentation tests for {@link SigninHelper}.
  */
 public class SigninHelperTest extends InstrumentationTestCase {
+    private MockAccountManager mAccountManager;
     private AdvancedMockContext mContext;
     private MockChangeEventChecker mEventChecker;
 
@@ -27,6 +28,10 @@ public class SigninHelperTest extends InstrumentationTestCase {
     public void setUp() {
         mContext = new AdvancedMockContext(getInstrumentation().getTargetContext());
         mEventChecker = new MockChangeEventChecker();
+
+        // Mock out the account manager on the device.
+        mAccountManager = new MockAccountManager(mContext, getInstrumentation().getContext());
+        AccountManagerHelper.overrideAccountManagerHelperForTests(mContext, mAccountManager);
     }
 
     @SmallTest
@@ -65,6 +70,7 @@ public class SigninHelperTest extends InstrumentationTestCase {
         assertEquals("B", getNewSignedInAccountName());
     }
 
+    @DisabledTest // crbug.com/568623
     @SmallTest
     public void testNotSignedInAccountRename() {
         setSignedInAccountName("A");
@@ -105,6 +111,22 @@ public class SigninHelperTest extends InstrumentationTestCase {
         assertEquals("D", getNewSignedInAccountName());
     }
 
+    @SmallTest
+    public void testLoopedAccountRename() {
+        setSignedInAccountName("A");
+        mEventChecker.insertRenameEvent("Z", "Y"); // Unrelated.
+        mEventChecker.insertRenameEvent("A", "B");
+        mEventChecker.insertRenameEvent("Y", "X"); // Unrelated.
+        mEventChecker.insertRenameEvent("B", "C");
+        mEventChecker.insertRenameEvent("C", "D");
+        mEventChecker.insertRenameEvent("D", "A"); // Looped.
+        Account account = AccountManagerHelper.createAccountFromName("D");
+        AccountHolder accountHolder = AccountHolder.create().account(account).build();
+        mAccountManager.addAccountHolderExplicitly(accountHolder);
+        SigninHelper.updateAccountRenameData(mContext, mEventChecker);
+        assertEquals("D", getNewSignedInAccountName());
+    }
+
     private void setSignedInAccountName(String account) {
         ChromeSigninController.get(mContext).setSignedInAccountName(account);
     }
@@ -115,32 +137,5 @@ public class SigninHelperTest extends InstrumentationTestCase {
 
     private String getNewSignedInAccountName() {
         return SigninHelper.getNewSignedInAccountName(mContext);
-    }
-
-    private static final class MockChangeEventChecker
-            implements SigninHelper.AccountChangeEventChecker {
-        private Map<String, List<String>> mEvents =
-                new HashMap<String, List<String>>();
-
-        @Override
-        public List<String> getAccountChangeEvents(
-                Context context, int index, String accountName) {
-            List<String> eventsList = getEventList(accountName);
-            return eventsList.subList(index, eventsList.size());
-        }
-
-        private void insertRenameEvent(String from, String to) {
-            List<String> eventsList = getEventList(from);
-            eventsList.add(to);
-        }
-
-        private List<String> getEventList(String account) {
-            List<String> eventsList = mEvents.get(account);
-            if (eventsList == null) {
-                eventsList = new ArrayList<String>();
-                mEvents.put(account, eventsList);
-            }
-            return eventsList;
-        }
     }
 }

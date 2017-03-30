@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/test/test_simple_task_runner.h"
 #include "content/renderer/media/mock_data_channel_impl.h"
@@ -17,6 +19,7 @@ class MockDataChannelHandlerClient :
   MockDataChannelHandlerClient() : state_(ReadyStateConnecting) {}
 
   void didChangeReadyState(ReadyState state) override { state_ = state; }
+  void didDecreaseBufferedAmount(unsigned previous_amount) override {}
   void didReceiveStringData(const blink::WebString& s) override {}
   void didReceiveRawData(const char* data, size_t size) override {}
   void didDetectError() override {}

@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -37,6 +37,7 @@ class DeviceCloudPolicyStoreChromeOS;
 class EnterpriseInstallAttributes;
 class HeartbeatScheduler;
 class StatusUploader;
+class SystemLogUploader;
 
 // CloudPolicyManager specialization for device policy on Chrome OS.
 class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
@@ -72,6 +73,9 @@ class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
   void SetDeviceRequisition(const std::string& requisition);
   bool IsRemoraRequisition() const;
   bool IsSharkRequisition() const;
+
+  // If set, the device will start the enterprise enrollment OOBE.
+  void SetDeviceEnrollmentAutoStart();
 
   // CloudPolicyManager:
   void Shutdown() override;
@@ -131,11 +135,14 @@ class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
   // state.
   scoped_ptr<StatusUploader> status_uploader_;
 
+  // Helper object that handles uploading system logs to the server.
+  scoped_ptr<SystemLogUploader> syslog_uploader_;
+
   // Helper object that handles sending heartbeats over the GCM channel to
   // the server, to monitor connectivity.
   scoped_ptr<HeartbeatScheduler> heartbeat_scheduler_;
 
-  // The TaskRunner used to do device status uploads.
+  // The TaskRunner used to do device status and log uploads.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   ServerBackedStateKeysBroker::Subscription state_keys_update_subscription_;

@@ -5,6 +5,7 @@
 #ifndef SYNC_ENGINE_BACKOFF_DELAY_PROVIDER_H_
 #define SYNC_ENGINE_BACKOFF_DELAY_PROVIDER_H_
 
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "sync/base/sync_export.h"
 
@@ -15,7 +16,7 @@ struct ModelNeutralState;
 }
 
 // A component used to get time delays associated with exponential backoff.
-class SYNC_EXPORT_PRIVATE BackoffDelayProvider {
+class SYNC_EXPORT BackoffDelayProvider {
  public:
   // Factory function to create a standard BackoffDelayProvider.
   static BackoffDelayProvider* FromDefaults();

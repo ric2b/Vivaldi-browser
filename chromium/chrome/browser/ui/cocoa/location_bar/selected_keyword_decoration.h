@@ -9,6 +9,8 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/cocoa/location_bar/bubble_decoration.h"
 

@@ -4,6 +4,8 @@
 
 #include <string.h>
 
+#include <algorithm>
+
 #include "base/logging.h"
 #include "net/der/input.h"
 
@@ -17,10 +19,29 @@ Input::Input() : data_(nullptr), len_(0) {
 Input::Input(const uint8_t* data, size_t len) : data_(data), len_(len) {
 }
 
+Input::Input(const base::StringPiece& in)
+    : data_(reinterpret_cast<const uint8_t*>(in.data())), len_(in.length()) {}
+
+Input::Input(const std::string* s) : Input(base::StringPiece(*s)) {}
+
 bool Input::Equals(const Input& other) const {
   if (len_ != other.len_)
     return false;
   return memcmp(data_, other.data_, len_) == 0;
+}
+
+std::string Input::AsString() const {
+  return std::string(reinterpret_cast<const char*>(data_), len_);
+}
+
+base::StringPiece Input::AsStringPiece() const {
+  return base::StringPiece(reinterpret_cast<const char*>(data_), len_);
+}
+
+bool operator<(const Input& lhs, const Input& rhs) {
+  return std::lexicographical_compare(
+      lhs.UnsafeData(), lhs.UnsafeData() + lhs.Length(), rhs.UnsafeData(),
+      rhs.UnsafeData() + rhs.Length());
 }
 
 ByteReader::ByteReader(const Input& in)

@@ -4,6 +4,8 @@
 
 #include "ui/events/ozone/evdev/event_converter_test_util.h"
 
+#include <stdint.h>
+
 #include "ui/events/ozone/device/device_manager.h"
 #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
 #include "ui/events/ozone/evdev/event_factory_evdev.h"
@@ -45,6 +47,10 @@ class TestDeviceEventDispatcherEvdev : public DeviceEventDispatcherEvdev {
 
   void DispatchMouseWheelEvent(const MouseWheelEventParams& params) override {
     event_factory_evdev_->DispatchMouseWheelEvent(params);
+  }
+
+  void DispatchPinchEvent(const PinchEventParams& params) override {
+    event_factory_evdev_->DispatchPinchEvent(params);
   }
 
   void DispatchScrollEvent(const ScrollEventParams& params) override {

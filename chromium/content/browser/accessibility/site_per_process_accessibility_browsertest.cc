@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
@@ -20,7 +21,6 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -28,39 +28,103 @@
 #include "content/test/accessibility_browser_test_utils.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
+// These tests time out on Android.
+#if defined(OS_ANDROID)
+#define MAYBE_SitePerProcessAccessibilityBrowserTest \
+    DISABLED_SitePerProcessAccessibilityBrowserTest
+#else
+#define MAYBE_SitePerProcessAccessibilityBrowserTest \
+    SitePerProcessAccessibilityBrowserTest
+#endif
+
 namespace content {
 
-class SitePerProcessAccessibilityBrowserTest
-    : public SitePerProcessBrowserTest {
- public:
-  SitePerProcessAccessibilityBrowserTest() {}
-};
+namespace {
 
-// Utility function to determine if an accessibility tree has finished loading
-// or if the tree represents a page that hasn't finished loading yet.
-bool AccessibilityTreeIsLoaded(BrowserAccessibilityManager* manager) {
-  BrowserAccessibility* root = manager->GetRoot();
-  return (root->GetFloatAttribute(ui::AX_ATTR_DOC_LOADING_PROGRESS) == 1.0 &&
-          root->GetStringAttribute(ui::AX_ATTR_DOC_URL) != url::kAboutBlankURL);
+// Searches recursively and returns true if any node's accessible name
+// is equal to the given text.
+bool AccessibilityTreeContainsText(BrowserAccessibility* node,
+                                   const std::string& text) {
+  if (node->GetStringAttribute(ui::AX_ATTR_NAME) == text)
+    return true;
+  for (unsigned i = 0; i < node->PlatformChildCount(); i++) {
+    if (AccessibilityTreeContainsText(node->PlatformGetChild(i), text))
+      return true;
+  }
+  return false;
 }
 
-// Disabled, see https://crbug.com/490831.
-// Times out on Android, not clear if it's an actual bug or just slow.
-IN_PROC_BROWSER_TEST_F(SitePerProcessAccessibilityBrowserTest,
-                       DISABLED_CrossSiteIframeAccessibility) {
+// Helper function to be used with FrameTree::ForEach, so that
+// AccessibilityNotificationWaiter can listen for accessibility
+// events in all frames.
+bool ListenToFrame(AccessibilityNotificationWaiter* waiter,
+                   FrameTreeNode* frame_tree_node) {
+  waiter->ListenToAdditionalFrame(frame_tree_node->current_frame_host());
+  return true;
+}
+
+}  // namespace
+
+class MAYBE_SitePerProcessAccessibilityBrowserTest
+    : public SitePerProcessBrowserTest {
+ public:
+  MAYBE_SitePerProcessAccessibilityBrowserTest() {}
+
+  void LoadCrossSitePageIntoFrame(FrameTreeNode* frame_tree_node,
+                                  const std::string& relative_url,
+                                  const std::string& host) {
+    // Load cross-site page into iframe.
+    RenderFrameHostImpl* child_rfh =
+        frame_tree_node->render_manager()->current_frame_host();
+    RenderFrameDeletedObserver deleted_observer(child_rfh);
+    GURL cross_site_url(embedded_test_server()->GetURL(host, relative_url));
+    NavigateFrameToURL(frame_tree_node, cross_site_url);
+
+    // Ensure that we have created a new process for the subframe.
+    SiteInstance* site_instance =
+        frame_tree_node->current_frame_host()->GetSiteInstance();
+    EXPECT_NE(shell()->web_contents()->GetSiteInstance(), site_instance);
+
+    // Wait until the iframe completes the swap.
+    deleted_observer.WaitUntilDeleted();
+  }
+
+  // This is intended to be a robust way to assert that the accessibility
+  // tree eventually gets into the correct state, without worrying about
+  // the exact ordering of events received while getting there.
+  //
+  // Searches the accessibility tree to see if any node's accessible name
+  // is equal to the given text. If not, sets up a notification waiter
+  // that listens for any accessibility event in any frame, and checks again
+  // after each event. Keeps looping until the text is found (or the
+  // test times out).
+  void WaitForAccessibilityTreeToContainText(const std::string& text) {
+    RenderFrameHostImpl* main_frame = static_cast<RenderFrameHostImpl*>(
+        shell()->web_contents()->GetMainFrame());
+    BrowserAccessibilityManager* main_frame_manager =
+        main_frame->browser_accessibility_manager();
+    FrameTree* frame_tree =
+        static_cast<WebContentsImpl*>(shell()->web_contents())->GetFrameTree();
+    while (!AccessibilityTreeContainsText(
+               main_frame_manager->GetRoot(), text)) {
+      AccessibilityNotificationWaiter accessibility_waiter(main_frame,
+                                                           ui::AX_EVENT_NONE);
+      frame_tree->ForEach(base::Bind(ListenToFrame, &accessibility_waiter));
+      accessibility_waiter.WaitForNotification();
+    }
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(MAYBE_SitePerProcessAccessibilityBrowserTest,
+                       CrossSiteIframeAccessibility) {
   // Enable full accessibility for all current and future WebContents.
   BrowserAccessibilityState::GetInstance()->EnableAccessibility();
 
-  AccessibilityNotificationWaiter main_frame_accessibility_waiter(
-      shell(), AccessibilityModeComplete,
-      ui::AX_EVENT_LOAD_COMPLETE);
-
-  host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(test_server()->Start());
-  GURL main_url(test_server()->GetURL("files/site_per_process_main.html"));
+  GURL main_url(embedded_test_server()->GetURL("/site_per_process_main.html"));
   NavigateToURL(shell(), main_url);
 
   // It is safe to obtain the root frame tree node here, as it doesn't change.
@@ -70,25 +134,13 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessAccessibilityBrowserTest,
 
   // Load same-site page into iframe.
   FrameTreeNode* child = root->child_at(0);
-  GURL http_url(test_server()->GetURL("files/title1.html"));
+  GURL http_url(embedded_test_server()->GetURL("/title1.html"));
   NavigateFrameToURL(child, http_url);
 
-  // Load cross-site page into iframe.
-  GURL::Replacements replace_host;
-  GURL cross_site_url(test_server()->GetURL("files/title2.html"));
-  replace_host.SetHostStr("foo.com");
-  cross_site_url = cross_site_url.ReplaceComponents(replace_host);
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
-
-  // Ensure that we have created a new process for the subframe.
-  ASSERT_EQ(2U, root->child_count());
-  SiteInstance* site_instance = child->current_frame_host()->GetSiteInstance();
-  EXPECT_NE(shell()->web_contents()->GetSiteInstance(), site_instance);
-
-  // Wait for the accessibility tree from the main frame to load.
-  // Because we created the AccessibilityNotificationWaiter before accessibility
-  // was enabled, we're guaranteed to get a LOAD_COMPLETE event.
-  main_frame_accessibility_waiter.WaitForNotification();
+  // Load cross-site page into iframe and wait for text from that
+  // page to appear in the accessibility tree.
+  LoadCrossSitePageIntoFrame(child, "/title2.html", "foo.com");
+  WaitForAccessibilityTreeToContainText("Title Of Awesomeness");
 
   RenderFrameHostImpl* main_frame = static_cast<RenderFrameHostImpl*>(
       shell()->web_contents()->GetMainFrame());
@@ -96,25 +148,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessAccessibilityBrowserTest,
       main_frame->browser_accessibility_manager();
   VLOG(1) << "Main frame accessibility tree:\n"
           << main_frame_manager->SnapshotAXTreeForTesting().ToString();
-  EXPECT_TRUE(AccessibilityTreeIsLoaded(main_frame_manager));
-
-  // Next, wait for the accessibility tree from the cross-process iframe
-  // to load. Since accessibility was enabled at the time this frame was
-  // created, we need to check to see if it's already loaded first, and
-  // only create an AccessibilityNotificationWaiter if it's not.
-  RenderFrameHostImpl* child_frame = static_cast<RenderFrameHostImpl*>(
-      child->current_frame_host());
-  BrowserAccessibilityManager* child_frame_manager =
-      child_frame->browser_accessibility_manager();
-  if (!AccessibilityTreeIsLoaded(child_frame_manager)) {
-    VLOG(1) << "Child frame accessibility tree is not loaded, waiting...";
-    AccessibilityNotificationWaiter child_frame_accessibility_waiter(
-        child_frame, ui::AX_EVENT_LOAD_COMPLETE);
-    child_frame_accessibility_waiter.WaitForNotification();
-  }
-  EXPECT_TRUE(AccessibilityTreeIsLoaded(child_frame_manager));
-  VLOG(1) << "Child frame accessibility tree:\n"
-          << child_frame_manager->SnapshotAXTreeForTesting().ToString();
 
   // Assert that we can walk from the main frame down into the child frame
   // directly, getting correct roles and data along the way.
@@ -130,12 +163,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessAccessibilityBrowserTest,
   EXPECT_EQ(ui::AX_ROLE_IFRAME, ax_iframe->GetRole());
   ASSERT_EQ(1U, ax_iframe->PlatformChildCount());
 
-  BrowserAccessibility* ax_scroll_area = ax_iframe->PlatformGetChild(0);
-  EXPECT_EQ(ui::AX_ROLE_SCROLL_AREA, ax_scroll_area->GetRole());
-  ASSERT_EQ(1U, ax_scroll_area->PlatformChildCount());
-
-  BrowserAccessibility* ax_child_frame_root =
-      ax_scroll_area->PlatformGetChild(0);
+  BrowserAccessibility* ax_child_frame_root = ax_iframe->PlatformGetChild(0);
   EXPECT_EQ(ui::AX_ROLE_ROOT_WEB_AREA, ax_child_frame_root->GetRole());
   ASSERT_EQ(1U, ax_child_frame_root->PlatformChildCount());
   EXPECT_EQ("Title Of Awesomeness",
@@ -152,7 +180,33 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessAccessibilityBrowserTest,
   ASSERT_EQ(0U, ax_child_frame_static_text->PlatformChildCount());
 
   // Last, check that the parent of the child frame root is correct.
-  EXPECT_EQ(ax_child_frame_root->GetParent(), ax_scroll_area);
+  EXPECT_EQ(ax_child_frame_root->GetParent(), ax_iframe);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_SitePerProcessAccessibilityBrowserTest,
+                       TwoCrossSiteNavigations) {
+  // Enable full accessibility for all current and future WebContents.
+  BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+
+  GURL main_url(embedded_test_server()->GetURL("/site_per_process_main.html"));
+  NavigateToURL(shell(), main_url);
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root =
+      static_cast<WebContentsImpl*>(shell()->web_contents())->
+          GetFrameTree()->root();
+
+  // Load first cross-site page into iframe and wait for text from that
+  // page to appear in the accessibility tree.
+  FrameTreeNode* child = root->child_at(0);
+  LoadCrossSitePageIntoFrame(child, "/title1.html", "foo.com");
+  WaitForAccessibilityTreeToContainText("This page has no title.");
+
+  // Load second cross-site page into iframe and wait for text from that
+  // page to appear in the accessibility tree. If this succeeds and doesn't
+  // time out, the test passes.
+  LoadCrossSitePageIntoFrame(child, "/title2.html", "bar.com");
+  WaitForAccessibilityTreeToContainText("Title Of Awesomeness");
 }
 
 }  // namespace content

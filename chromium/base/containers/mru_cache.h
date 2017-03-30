@@ -16,13 +16,16 @@
 #ifndef BASE_CONTAINERS_MRU_CACHE_H_
 #define BASE_CONTAINERS_MRU_CACHE_H_
 
+#include <stddef.h>
+
+#include <algorithm>
 #include <list>
 #include <map>
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
+#include "base/macros.h"
 
 namespace base {
 
@@ -135,6 +138,14 @@ class MRUCacheBase {
     if (index_iter == index_.end())
       return end();
     return index_iter->second;
+  }
+
+  // Exchanges the contents of |this| by the contents of the |other|.
+  void Swap(MRUCacheBase& other) {
+    ordering_.swap(other.ordering_);
+    index_.swap(other.index_);
+    std::swap(deletor_, other.deletor_);
+    std::swap(max_size_, other.max_size_);
   }
 
   // Erases the item referenced by the given iterator. An iterator to the item

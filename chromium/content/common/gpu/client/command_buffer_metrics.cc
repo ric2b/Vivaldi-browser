@@ -24,8 +24,10 @@ enum CommandBufferContextLostReason {
   CONTEXT_LOST_UNKNOWN,
   CONTEXT_LOST_OUT_OF_MEMORY,
   CONTEXT_LOST_MAKECURRENT_FAILED,
+  CONTEXT_LOST_INVALID_GPU_MESSAGE,
   // Add new values here and update _MAX_ENUM.
-  CONTEXT_LOST_REASON_MAX_ENUM = CONTEXT_LOST_MAKECURRENT_FAILED
+  // Also update //tools/metrics/histograms/histograms.xml
+  CONTEXT_LOST_REASON_MAX_ENUM = CONTEXT_LOST_INVALID_GPU_MESSAGE
 };
 
 CommandBufferContextLostReason GetContextLostReason(
@@ -45,6 +47,8 @@ CommandBufferContextLostReason GetContextLostReason(
         return CONTEXT_LOST_MAKECURRENT_FAILED;
       case gpu::error::kGpuChannelLost:
         return CONTEXT_LOST_GPU_CHANNEL_ERROR;
+      case gpu::error::kInvalidGpuMessage:
+        return CONTEXT_LOST_INVALID_GPU_MESSAGE;
     }
   }
   switch (error) {
@@ -77,6 +81,10 @@ void RecordContextLost(CommandBufferContextType type,
       break;
     case BROWSER_OFFSCREEN_MAINTHREAD_CONTEXT:
       UMA_HISTOGRAM_ENUMERATION("GPU.ContextLost.BrowserMainThread", reason,
+                                CONTEXT_LOST_REASON_MAX_ENUM);
+      break;
+    case BROWSER_WORKER_CONTEXT:
+      UMA_HISTOGRAM_ENUMERATION("GPU.ContextLost.BrowserWorker", reason,
                                 CONTEXT_LOST_REASON_MAX_ENUM);
       break;
     case RENDER_COMPOSITOR_CONTEXT:
@@ -120,6 +128,8 @@ std::string CommandBufferContextTypeToString(CommandBufferContextType type) {
       return "Compositor";
     case BROWSER_OFFSCREEN_MAINTHREAD_CONTEXT:
       return "Offscreen-MainThread";
+    case BROWSER_WORKER_CONTEXT:
+      return "CompositorWorker";
     case RENDER_COMPOSITOR_CONTEXT:
       return "RenderCompositor";
     case RENDER_WORKER_CONTEXT:

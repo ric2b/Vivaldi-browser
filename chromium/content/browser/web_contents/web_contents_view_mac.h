@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -38,7 +39,10 @@ class Vector2d;
 CONTENT_EXPORT
 @interface WebContentsViewCocoa : BaseView {
  @private
-  content::WebContentsViewMac* webContentsView_;  // WEAK; owns us
+  // Instances of this class are owned by both webContentsView_ and AppKit. It
+  // is possible for an instance to outlive its webContentsView_. The
+  // webContentsView_ must call -clearWebContentsView in its destructor.
+  content::WebContentsViewMac* webContentsView_;
   base::scoped_nsobject<WebDragSource> dragSource_;
   base::scoped_nsobject<WebDragDest> dragDest_;
   BOOL mouseDownCanMoveWindow_;
@@ -46,10 +50,6 @@ CONTENT_EXPORT
 
 - (void)setMouseDownCanMoveWindow:(BOOL)canMove;
 - (void)setOpaque:(BOOL)opaque;
-
-// Expose this, since sometimes one needs both the NSView and the
-// WebContentsImpl.
-- (content::WebContentsImpl*)webContents;
 @end
 
 namespace content {

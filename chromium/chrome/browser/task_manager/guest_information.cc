@@ -4,6 +4,7 @@
 
 #include "chrome/browser/task_manager/guest_information.h"
 
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,6 +19,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
@@ -107,12 +109,10 @@ void GuestInformation::GetAll(const NewWebContentsCallback& callback) {
   scoped_ptr<content::RenderWidgetHostIterator> widgets(
       content::RenderWidgetHost::GetRenderWidgetHosts());
   while (content::RenderWidgetHost* widget = widgets->GetNextHost()) {
-    if (widget->IsRenderView()) {
-      content::RenderViewHost* rvh = content::RenderViewHost::From(widget);
-      WebContents* web_contents = WebContents::FromRenderViewHost(rvh);
-      if (web_contents && GuestViewBase::IsGuest(web_contents))
-        callback.Run(web_contents);
-    }
+    content::RenderViewHost* rvh = content::RenderViewHost::From(widget);
+    WebContents* web_contents = WebContents::FromRenderViewHost(rvh);
+    if (web_contents && GuestViewBase::IsGuest(web_contents))
+      callback.Run(web_contents);
   }
 }
 

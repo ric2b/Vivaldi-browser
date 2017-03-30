@@ -5,6 +5,7 @@
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 
 #include <string>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -13,6 +14,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/policy/configuration_policy_handler_list_factory.h"
 #include "chrome/browser/policy/device_management_service_configuration.h"
 #include "chrome/common/chrome_paths.h"
@@ -37,7 +39,7 @@
 #elif defined(OS_POSIX) && !defined(OS_ANDROID)
 #include "components/policy/core/common/config_dir_policy_loader.h"
 #elif defined(OS_ANDROID)
-#include "components/policy/core/common/policy_provider_android.h"
+#include "components/policy/core/browser/android/android_combined_policy_provider.h"
 #endif
 
 using content::BrowserThread;
@@ -82,12 +84,11 @@ void ChromeBrowserPolicyConnector::Init(
       new DeviceManagementServiceConfiguration(
           BrowserPolicyConnector::GetDeviceManagementUrl()));
   scoped_ptr<DeviceManagementService> device_management_service(
-      new DeviceManagementService(configuration.Pass()));
+      new DeviceManagementService(std::move(configuration)));
   device_management_service->ScheduleInitialization(
       kServiceInitializationStartupDelay);
 
-  BrowserPolicyConnector::Init(
-      local_state, request_context, device_management_service.Pass());
+  InitInternal(local_state, std::move(device_management_service));
 }
 
 ConfigurationPolicyProvider*
@@ -102,7 +103,7 @@ ConfigurationPolicyProvider*
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE),
       GetManagedPolicyPath(),
       new MacPreferences()));
-  return new AsyncPolicyProvider(GetSchemaRegistry(), loader.Pass());
+  return new AsyncPolicyProvider(GetSchemaRegistry(), std::move(loader));
 #elif defined(OS_POSIX) && !defined(OS_ANDROID)
   base::FilePath config_dir_path;
   if (PathService::Get(chrome::DIR_POLICY_FILES, &config_dir_path)) {
@@ -110,12 +111,13 @@ ConfigurationPolicyProvider*
         BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE),
         config_dir_path,
         POLICY_SCOPE_MACHINE));
-    return new AsyncPolicyProvider(GetSchemaRegistry(), loader.Pass());
+    return new AsyncPolicyProvider(GetSchemaRegistry(), std::move(loader));
   } else {
     return NULL;
   }
 #elif defined(OS_ANDROID)
-  return new PolicyProviderAndroid();
+  return new policy::android::AndroidCombinedPolicyProvider(
+      GetSchemaRegistry());
 #else
   return NULL;
 #endif

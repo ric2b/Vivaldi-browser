@@ -62,41 +62,41 @@
         }],
       ],
     },
-    #{
-    #  'target_name': 'snapshot_unittests',
-    #  'type': '<(gtest_target_type)',
-    #  'dependencies': [
-    #    '../../skia/skia.gyp:skia',
-    #    '../../base/base.gyp:base',
-    #    '../../base/base.gyp:test_support_base',
-    #    '../../testing/gtest.gyp:gtest',
-    #    '../base/ui_base.gyp:ui_base',
-    #    '../gfx/gfx.gyp:gfx',
-    #    '../gfx/gfx.gyp:gfx_geometry',
-    #    'snapshot'
-    #  ],
-    #  'sources': [
-    #    'snapshot_aura_unittest.cc',
-    #    'snapshot_mac_unittest.mm',
-    #    'test/run_all_unittests.cc',
-    #  ],
-    #  'conditions': [
-    #    ['use_aura==1', {
-    #      'dependencies': [
-    #        '../../base/base.gyp:test_support_base',
-    #        '../aura/aura.gyp:aura_test_support',
-    #        '../compositor/compositor.gyp:compositor',
-    #        '../compositor/compositor.gyp:compositor_test_support',
-    #        '../wm/wm.gyp:wm',
-    #      ],
-    #    }],
-    #    # See http://crbug.com/162998#c4 for why this is needed.
-    #    ['OS=="linux" and use_allocator!="none"', {
-    #      'dependencies': [
-    #        '../../base/allocator/allocator.gyp:allocator',
-    #      ],
-    #    }],
-    #  ],
-    #},
+    {
+      'target_name': 'snapshot_unittests',
+      'type': '<(gtest_target_type)',
+      'dependencies': [
+        '../../skia/skia.gyp:skia',
+        '../../base/base.gyp:base',
+        '../../base/base.gyp:test_support_base',
+        '../../testing/gtest.gyp:gtest',
+        '../base/ui_base.gyp:ui_base',
+        '../gfx/gfx.gyp:gfx',
+        '../gfx/gfx.gyp:gfx_geometry',
+        'snapshot'
+      ],
+      'sources': [
+        'snapshot_aura_unittest.cc',
+        'snapshot_mac_unittest.mm',
+        'test/run_all_unittests.cc',
+      ],
+      'conditions': [
+        ['use_aura==1', {
+          'dependencies': [
+            '../../base/base.gyp:test_support_base',
+            '../aura/aura.gyp:aura_test_support',
+            '../compositor/compositor.gyp:compositor',
+            '../compositor/compositor.gyp:compositor_test_support',
+            '../wm/wm.gyp:wm',
+          ],
+        }],
+        # See http://crbug.com/162998#c4 for why this is needed.
+        ['OS=="linux" and use_allocator!="none"', {
+          'dependencies': [
+            '../../base/allocator/allocator.gyp:allocator',
+          ],
+        }],
+      ],
+    },
   ],
 }

@@ -8,12 +8,13 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/cache_storage/cache_storage.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/cache_storage_context.h"
+#include "content/public/browser/cache_storage_usage_info.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/quota/quota_client.h"
 #include "url/gurl.h"
@@ -44,6 +45,10 @@ class CONTENT_EXPORT CacheStorageManager {
 
   static scoped_ptr<CacheStorageManager> Create(
       CacheStorageManager* old_manager);
+
+  // Map a database identifier (computed from an origin) to the path.
+  static base::FilePath ConstructOriginPath(const base::FilePath& root_path,
+                                            const GURL& origin);
 
   virtual ~CacheStorageManager();
 
@@ -78,12 +83,15 @@ class CONTENT_EXPORT CacheStorageManager {
     return weak_ptr_factory_.GetWeakPtr();
   }
 
+  base::FilePath root_path() const { return root_path_; }
+
  private:
-  friend class CacheStorageQuotaClient;
+  friend class CacheStorageContextImpl;
   friend class CacheStorageManagerTest;
   friend class CacheStorageMigrationTest;
+  friend class CacheStorageQuotaClient;
 
-  typedef std::map<GURL, CacheStorage*> CacheStorageMap;
+  typedef std::map<GURL, scoped_ptr<CacheStorage>> CacheStorageMap;
 
   CacheStorageManager(
       const base::FilePath& path,
@@ -93,7 +101,9 @@ class CONTENT_EXPORT CacheStorageManager {
   // The returned CacheStorage* is owned by this manager.
   CacheStorage* FindOrCreateCacheStorage(const GURL& origin);
 
-  // QuotaClient support
+  // QuotaClient and Browsing Data Deletion support
+  void GetAllOriginsUsage(
+      const CacheStorageContext::GetUsageInfoCallback& callback);
   void GetOriginUsage(const GURL& origin_url,
                       const storage::QuotaClient::GetUsageCallback& callback);
   void GetOrigins(const storage::QuotaClient::GetOriginsCallback& callback);
@@ -102,6 +112,7 @@ class CONTENT_EXPORT CacheStorageManager {
       const storage::QuotaClient::GetOriginsCallback& callback);
   void DeleteOriginData(const GURL& origin,
                         const storage::QuotaClient::DeletionCallback& callback);
+  void DeleteOriginData(const GURL& origin);
   static void DeleteOriginDidClose(
       const GURL& origin,
       const storage::QuotaClient::DeletionCallback& callback,
@@ -112,10 +123,11 @@ class CONTENT_EXPORT CacheStorageManager {
       const {
     return request_context_getter_;
   }
+
   base::WeakPtr<storage::BlobStorageContext> blob_storage_context() const {
     return blob_context_;
   }
-  base::FilePath root_path() const { return root_path_; }
+
   const scoped_refptr<base::SequencedTaskRunner>& cache_task_runner() const {
     return cache_task_runner_;
   }
@@ -126,10 +138,6 @@ class CONTENT_EXPORT CacheStorageManager {
   static base::FilePath ConstructLegacyOriginPath(
       const base::FilePath& root_path,
       const GURL& origin);
-  // Map a database identifier (computed from an origin) to the path. Exposed
-  // for testing.
-  static base::FilePath ConstructOriginPath(const base::FilePath& root_path,
-                                            const GURL& origin);
 
   // Migrate from old origin-based path to storage identifier-based path.
   // TODO(jsbell); Remove method and all calls after a few releases.

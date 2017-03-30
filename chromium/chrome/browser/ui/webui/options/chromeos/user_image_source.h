@@ -8,10 +8,13 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "content/public/browser/url_data_source.h"
 #include "ui/base/layout.h"
+
+class AccountId;
 
 namespace base {
 class RefCountedMemory;
@@ -35,10 +38,11 @@ class UserImageSource : public content::URLDataSource {
       const content::URLDataSource::GotDataCallback& callback) override;
   std::string GetMimeType(const std::string& path) const override;
 
-  // Returns PNG encoded image for user with specified email. If there's
-  // no user with such email, returns the first default image.
-  static base::RefCountedMemory* GetUserImage(const std::string& email,
-                                              ui::ScaleFactor scale_factor);
+  // Returns PNG encoded image for user with specified |account_id|. If there's
+  // no user with such an id, returns the first default image. Always returns
+  // the 100%-scale asset.
+  static scoped_refptr<base::RefCountedMemory> GetUserImage(
+      const AccountId& account_id);
 
  private:
   ~UserImageSource() override;

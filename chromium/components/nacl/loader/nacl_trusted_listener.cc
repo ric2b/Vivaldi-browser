@@ -5,6 +5,7 @@
 #include "components/nacl/loader/nacl_trusted_listener.h"
 
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "ipc/message_filter.h"
 #include "native_client/src/public/chrome_main.h"
 
@@ -37,12 +38,10 @@ NaClTrustedListener::NaClTrustedListener(
     base::SingleThreadTaskRunner* ipc_task_runner,
     base::WaitableEvent* shutdown_event)
     : channel_handle_(handle) {
-  channel_ = IPC::SyncChannel::Create(handle,
-                                      IPC::Channel::MODE_SERVER,
-                                      this,
-                                      ipc_task_runner,
-                                      true,  /* create_channel_now */
-                                      shutdown_event).Pass();
+  channel_ =
+      IPC::SyncChannel::Create(handle, IPC::Channel::MODE_SERVER, this,
+                               ipc_task_runner, true, /* create_channel_now */
+                               shutdown_event);
   channel_->AddFilter(new EOFMessageFilter());
 }
 

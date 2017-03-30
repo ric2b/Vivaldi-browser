@@ -5,6 +5,7 @@
 #ifndef UI_BASE_IME_INPUT_METHOD_MAC_H_
 #define UI_BASE_IME_INPUT_METHOD_MAC_H_
 
+#include "base/macros.h"
 #include "ui/base/ime/input_method_base.h"
 
 namespace ui {
@@ -21,12 +22,11 @@ class UI_BASE_IME_EXPORT InputMethodMac : public InputMethodBase {
   // Overriden from InputMethod.
   bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
                                 NativeEventResult* result) override;
-  bool DispatchKeyEvent(const ui::KeyEvent& event) override;
+  void DispatchKeyEvent(ui::KeyEvent* event) override;
   void OnCaretBoundsChanged(const TextInputClient* client) override;
   void CancelComposition(const TextInputClient* client) override;
   void OnInputLocaleChanged() override;
   std::string GetInputLocale() override;
-  bool IsActive() override;
   bool IsCandidatePopupOpen() const override;
 
  private:

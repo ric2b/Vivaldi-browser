@@ -5,10 +5,14 @@
 #ifndef CC_OUTPUT_COMPOSITOR_FRAME_METADATA_H_
 #define CC_OUTPUT_COMPOSITOR_FRAME_METADATA_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "cc/base/cc_export.h"
 #include "cc/output/viewport_selection_bound.h"
+#include "cc/surfaces/surface_id.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
@@ -42,6 +46,11 @@ class CC_EXPORT CompositorFrameMetadata {
   gfx::Vector2dF location_bar_offset;
   gfx::Vector2dF location_bar_content_translation;
 
+  // This color is usually obtained from the background color of the <body>
+  // element. It can be used for filling in gutter areas around the frame when
+  // it's too small to fill the box the parent reserved for it.
+  SkColor root_background_color;
+
   // Provides selection region updates relative to the current viewport. If the
   // selection is empty or otherwise unused, the bound types will indicate such.
   ViewportSelection selection;
@@ -51,6 +60,9 @@ class CC_EXPORT CompositorFrameMetadata {
   // A set of SurfaceSequences that this frame satisfies (always in the same
   // namespace as the current Surface).
   std::vector<uint32_t> satisfies_sequences;
+
+  // This is the set of Surfaces that are referenced by this frame.
+  std::vector<SurfaceId> referenced_surfaces;
 };
 
 }  // namespace cc

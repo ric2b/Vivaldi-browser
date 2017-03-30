@@ -5,7 +5,9 @@
 #ifndef NET_BASE_IOVEC_H_
 #define NET_BASE_IOVEC_H_
 
-#if defined(OS_POSIX)
+#include <stddef.h>
+
+#if defined(OS_POSIX) && !defined(OS_NACL)
 #include <sys/uio.h>
 #else
 /* Structure for scatter/gather I/O.  */
@@ -13,6 +15,6 @@ struct iovec {
   void* iov_base;  /* Pointer to data.  */
   size_t iov_len;  /* Length of data.  */
 };
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_POSIX) && !defined(OS_NACL)
 
 #endif  // NET_BASE_IOVEC_H_

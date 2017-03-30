@@ -17,7 +17,7 @@
         # Chrome is the default viewer process currently used by the tests.
         # TODO(robertshield): Investigate building a standalone metro viewer
         # process.
-        '../chrome/chrome.gyp:vivaldi',
+        '../chrome/chrome.gyp:chrome',
         'win8.gyp:test_registrar_constants',
       ],
       'sources': [

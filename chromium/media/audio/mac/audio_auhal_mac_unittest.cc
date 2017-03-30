@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -88,7 +88,7 @@ TEST_F(AUHALStreamTest, CreateOpenStartStopClose) {
 
   // Wait for the first data callback from the OS.
   base::WaitableEvent event(false, false);
-  EXPECT_CALL(source_, OnMoreData(_, _))
+  EXPECT_CALL(source_, OnMoreData(_, _, _))
       .WillOnce(DoAll(ZeroBuffer(), SignalEvent(&event), Return(0)));
   EXPECT_CALL(source_, OnError(_)).Times(0);
   stream->Start(&source_);

@@ -75,9 +75,11 @@ int SolidColorScrollbarLayerImpl::ThumbThickness() const {
 }
 
 int SolidColorScrollbarLayerImpl::ThumbLength() const {
-  return std::max(
-      static_cast<int>(visible_to_total_length_ratio() * TrackLength()),
-      ThumbThickness());
+  float thumb_length = TrackLength();
+  if (scroll_layer_length())
+    thumb_length *= clip_layer_length() / scroll_layer_length();
+
+  return std::max(static_cast<int>(thumb_length), ThumbThickness());
 }
 
 float SolidColorScrollbarLayerImpl::TrackLength() const {
@@ -114,6 +116,10 @@ void SolidColorScrollbarLayerImpl::AppendQuads(
       render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
   quad->SetNew(
       shared_quad_state, thumb_quad_rect, visible_quad_rect, color_, false);
+}
+
+const char* SolidColorScrollbarLayerImpl::LayerTypeAsString() const {
+  return "cc::SolidColorScrollbarLayerImpl";
 }
 
 }  // namespace cc

@@ -5,7 +5,6 @@
 #ifndef CONTENT_PUBLIC_BROWSER_OVERSCROLL_CONFIGURATION_H_
 #define CONTENT_PUBLIC_BROWSER_OVERSCROLL_CONFIGURATION_H_
 
-#include "base/basictypes.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -22,8 +21,6 @@ enum OverscrollConfig {
   OVERSCROLL_CONFIG_VERT_RESIST_AFTER,
   OVERSCROLL_CONFIG_COUNT
 };
-
-CONTENT_EXPORT void SetOverscrollConfig(OverscrollConfig config, float value);
 
 CONTENT_EXPORT float GetOverscrollConfig(OverscrollConfig config);
 

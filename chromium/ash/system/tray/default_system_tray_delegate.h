@@ -8,6 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 
 namespace ash {
@@ -20,7 +21,7 @@ class ASH_EXPORT DefaultSystemTrayDelegate : public SystemTrayDelegate {
   // SystemTrayDelegate
   bool GetTrayVisibilityOnStartup() override;
   user::LoginStatus GetUserLoginStatus() const override;
-  const std::string GetSupervisedUserManager() const override;
+  std::string GetSupervisedUserManager() const override;
   bool IsUserSupervised() const override;
   void GetSystemUpdateInfo(UpdateInfo* info) const override;
   bool ShouldShowSettings() override;

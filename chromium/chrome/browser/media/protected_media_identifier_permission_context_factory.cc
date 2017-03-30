@@ -22,13 +22,13 @@ ProtectedMediaIdentifierPermissionContextFactory::GetForProfile(
 // static
 ProtectedMediaIdentifierPermissionContextFactory*
 ProtectedMediaIdentifierPermissionContextFactory::GetInstance() {
-  return Singleton<
+  return base::Singleton<
       ProtectedMediaIdentifierPermissionContextFactory>::get();
 }
 
 ProtectedMediaIdentifierPermissionContextFactory::
 ProtectedMediaIdentifierPermissionContextFactory()
-    : BrowserContextKeyedServiceFactory(
+    : PermissionContextFactoryBase(
           "ProtectedMediaIdentifierPermissionContext",
           BrowserContextDependencyManager::GetInstance()) {
 }
@@ -42,18 +42,4 @@ ProtectedMediaIdentifierPermissionContextFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {
   return new ProtectedMediaIdentifierPermissionContext(
       static_cast<Profile*>(profile));
-}
-
-void
-ProtectedMediaIdentifierPermissionContextFactory::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-#if defined(OS_ANDROID)
-  registry->RegisterBooleanPref(prefs::kProtectedMediaIdentifierEnabled, true);
-#endif
-}
-
-content::BrowserContext*
-ProtectedMediaIdentifierPermissionContextFactory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  return chrome::GetBrowserContextOwnInstanceInIncognito(context);
 }

@@ -6,6 +6,7 @@
 #define MEDIA_CAST_SENDER_AUDIO_SENDER_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -14,6 +15,8 @@
 #include "base/time/time.h"
 #include "media/base/audio_bus.h"
 #include "media/cast/cast_config.h"
+#include "media/cast/cast_defines.h"
+#include "media/cast/cast_sender.h"
 #include "media/cast/sender/frame_sender.h"
 
 namespace media {
@@ -47,7 +50,6 @@ class AudioSender : public FrameSender,
  protected:
   int GetNumberOfFramesInEncoder() const final;
   base::TimeDelta GetInFlightMediaDuration() const final;
-  void OnAck(uint32 frame_id) final;
 
  private:
   // Called by the |audio_encoder_| with the next EncodedFrame to send.

@@ -6,7 +6,6 @@
 
 #include <list>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -75,5 +74,5 @@ void QuotaPolicyChannelIDStore::OnLoad(
        ++channel_id) {
     server_identifiers_.insert((*channel_id)->server_identifier());
   }
-  loaded_callback.Run(channel_ids.Pass());
+  loaded_callback.Run(std::move(channel_ids));
 }

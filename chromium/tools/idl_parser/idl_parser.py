@@ -307,6 +307,11 @@ class IDLParser(object):
       p[2].AddChildren(p[1])
       p[0] = ListFromConcat(p[2], p[3])
 
+  # [12.1] Error recovery for DictionaryMembers
+  def p_DictionaryMembersError(self, p):
+    """DictionaryMembers : ExtendedAttributeList error"""
+    p[0] = self.BuildError(p, 'DictionaryMembers')
+
   # [13]
   def p_DictionaryMember(self, p):
     """DictionaryMember : Required Type identifier Default ';'"""
@@ -886,7 +891,8 @@ class IDLParser(object):
     """NonAnyType : PrimitiveType TypeSuffix
                   | PromiseType Null
                   | identifier TypeSuffix
-                  | SEQUENCE '<' Type '>' Null"""
+                  | SEQUENCE '<' Type '>' Null
+                  | FROZENARRAY '<' Type '>' Null"""
     if len(p) == 3:
       if type(p[1]) == str:
         typeref = self.BuildNamed('Typeref', p, 1)
@@ -895,7 +901,8 @@ class IDLParser(object):
       p[0] = ListFromConcat(typeref, p[2])
 
     if len(p) == 6:
-      p[0] = self.BuildProduction('Sequence', p, 1, ListFromConcat(p[3], p[5]))
+      cls = 'Sequence' if p[1] == 'sequence' else 'FrozenArray'
+      p[0] = self.BuildProduction(cls, p, 1, ListFromConcat(p[3], p[5]))
 
   # [79] NOT IMPLEMENTED (BufferRelatedType)
 

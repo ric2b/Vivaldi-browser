@@ -10,13 +10,13 @@
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/url_constants.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
+#include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/common/experiments.h"
 #include "components/password_manager/core/common/password_manager_switches.h"
 #include "jni/PasswordUIView_jni.h"
@@ -30,7 +30,9 @@ PasswordUIViewAndroid::PasswordUIViewAndroid(JNIEnv* env, jobject obj)
 
 PasswordUIViewAndroid::~PasswordUIViewAndroid() {}
 
-void PasswordUIViewAndroid::Destroy(JNIEnv*, jobject) { delete this; }
+void PasswordUIViewAndroid::Destroy(JNIEnv*, const JavaParamRef<jobject>&) {
+  delete this;
+}
 
 Profile* PasswordUIViewAndroid::GetProfile() {
   return ProfileManager::GetLastUsedProfile();
@@ -45,7 +47,7 @@ void PasswordUIViewAndroid::ShowPassword(
 }
 
 void PasswordUIViewAndroid::SetPasswordList(
-    const ScopedVector<autofill::PasswordForm>& password_list,
+    const std::vector<scoped_ptr<autofill::PasswordForm>>& password_list,
     bool show_passwords) {
   // Android just ignores the |show_passwords| argument.
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -57,7 +59,8 @@ void PasswordUIViewAndroid::SetPasswordList(
 }
 
 void PasswordUIViewAndroid::SetPasswordExceptionList(
-    const ScopedVector<autofill::PasswordForm>& password_exception_list) {
+    const std::vector<scoped_ptr<autofill::PasswordForm>>&
+        password_exception_list) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> ui_controller = weak_java_ui_controller_.get(env);
   if (!ui_controller.is_null()) {
@@ -68,12 +71,15 @@ void PasswordUIViewAndroid::SetPasswordExceptionList(
   }
 }
 
-void PasswordUIViewAndroid::UpdatePasswordLists(JNIEnv* env, jobject) {
+void PasswordUIViewAndroid::UpdatePasswordLists(JNIEnv* env,
+                                                const JavaParamRef<jobject>&) {
   password_manager_presenter_.UpdatePasswordLists();
 }
 
-ScopedJavaLocalRef<jobject>
-PasswordUIViewAndroid::GetSavedPasswordEntry(JNIEnv* env, jobject, int index) {
+ScopedJavaLocalRef<jobject> PasswordUIViewAndroid::GetSavedPasswordEntry(
+    JNIEnv* env,
+    const JavaParamRef<jobject>&,
+    int index) {
   const autofill::PasswordForm* form =
       password_manager_presenter_.GetPassword(index);
   if (!form) {
@@ -90,7 +96,9 @@ PasswordUIViewAndroid::GetSavedPasswordEntry(JNIEnv* env, jobject, int index) {
 }
 
 ScopedJavaLocalRef<jstring> PasswordUIViewAndroid::GetSavedPasswordException(
-    JNIEnv* env, jobject, int index) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>&,
+    int index) {
   const autofill::PasswordForm* form =
       password_manager_presenter_.GetPasswordException(index);
   if (!form)
@@ -101,27 +109,28 @@ ScopedJavaLocalRef<jstring> PasswordUIViewAndroid::GetSavedPasswordException(
 }
 
 void PasswordUIViewAndroid::HandleRemoveSavedPasswordEntry(
-    JNIEnv* env, jobject, int index) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>&,
+    int index) {
   password_manager_presenter_.RemoveSavedPassword(index);
 }
 
 void PasswordUIViewAndroid::HandleRemoveSavedPasswordException(
-    JNIEnv* env, jobject, int index) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>&,
+    int index) {
   password_manager_presenter_.RemovePasswordException(index);
 }
 
-jstring GetAccountDashboardURL(JNIEnv* env, jclass) {
+ScopedJavaLocalRef<jstring> GetAccountDashboardURL(
+    JNIEnv* env,
+    const JavaParamRef<jclass>&) {
   return ConvertUTF8ToJavaString(
-      env, chrome::kPasswordManagerAccountDashboardURL).Release();
+      env, password_manager::kPasswordManagerAccountDashboardURL);
 }
 
-static jboolean ShouldDisplayManageAccountLink(
-    JNIEnv* env, jclass) {
-  return password_manager::ManageAccountLinkExperimentEnabled();
-}
-
-static jboolean ShouldUseSmartLockBranding(
-    JNIEnv* env, jclass) {
+static jboolean ShouldUseSmartLockBranding(JNIEnv* env,
+                                           const JavaParamRef<jclass>&) {
   const ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(
           ProfileManager::GetLastUsedProfile());
@@ -129,7 +138,7 @@ static jboolean ShouldUseSmartLockBranding(
 }
 
 // static
-static jlong Init(JNIEnv* env, jobject obj) {
+static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   PasswordUIViewAndroid* controller = new PasswordUIViewAndroid(env, obj);
   return reinterpret_cast<intptr_t>(controller);
 }

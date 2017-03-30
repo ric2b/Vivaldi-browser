@@ -4,13 +4,17 @@
 
 #include "media/cdm/json_web_key.h"
 
-#include "base/base64.h"
+#include <stddef.h>
+
+#include "base/base64url.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 
@@ -22,70 +26,10 @@ const char kKeyTypeOct[] = "oct";  // Octet sequence.
 const char kKeyTag[] = "k";
 const char kKeyIdTag[] = "kid";
 const char kKeyIdsTag[] = "kids";
-const char kBase64Padding = '=';
-const char kBase64Plus[] = "+";
-const char kBase64UrlPlusReplacement[] = "-";
-const char kBase64Slash[] = "/";
-const char kBase64UrlSlashReplacement[] = "_";
-const char kBase64UrlInvalid[] = "+/=";
 const char kTypeTag[] = "type";
 const char kTemporarySession[] = "temporary";
 const char kPersistentLicenseSession[] = "persistent-license";
 const char kPersistentReleaseMessageSession[] = "persistent-release-message";
-
-// Encodes |input| into a base64url string without padding.
-static std::string EncodeBase64Url(const uint8* input, int input_length) {
-  std::string encoded_text;
-  base::Base64Encode(
-      std::string(reinterpret_cast<const char*>(input), input_length),
-      &encoded_text);
-
-  // Remove any padding characters added by Base64Encode().
-  size_t found = encoded_text.find_last_not_of(kBase64Padding);
-  if (found != std::string::npos)
-    encoded_text.erase(found + 1);
-
-  // base64url encoding means the characters '-' and '_' must be used
-  // instead of '+' and '/', respectively.
-  base::ReplaceChars(encoded_text, kBase64Plus, kBase64UrlPlusReplacement,
-                     &encoded_text);
-  base::ReplaceChars(encoded_text, kBase64Slash, kBase64UrlSlashReplacement,
-                     &encoded_text);
-
-  return encoded_text;
-}
-
-// Decodes a base64url string. Returns empty string on error.
-static std::string DecodeBase64Url(const std::string& encoded_text) {
-  // EME spec doesn't allow '+', '/', or padding characters.
-  if (encoded_text.find_first_of(kBase64UrlInvalid) != std::string::npos) {
-    DVLOG(1) << "Invalid base64url format: " << encoded_text;
-    return std::string();
-  }
-
-  // Since base::Base64Decode() requires padding characters, add them so length
-  // of |encoded_text| is exactly a multiple of 4.
-  size_t num_last_grouping_chars = encoded_text.length() % 4;
-  std::string modified_text = encoded_text;
-  if (num_last_grouping_chars > 0)
-    modified_text.append(4 - num_last_grouping_chars, kBase64Padding);
-
-  // base64url encoding means the characters '-' and '_' must be used
-  // instead of '+' and '/', respectively, so replace them before calling
-  // base::Base64Decode().
-  base::ReplaceChars(modified_text, kBase64UrlPlusReplacement, kBase64Plus,
-                     &modified_text);
-  base::ReplaceChars(modified_text, kBase64UrlSlashReplacement, kBase64Slash,
-                     &modified_text);
-
-  std::string decoded_text;
-  if (!base::Base64Decode(modified_text, &decoded_text)) {
-    DVLOG(1) << "Base64 decoding failed on: " << modified_text;
-    return std::string();
-  }
-
-  return decoded_text;
-}
 
 static std::string ShortenTo64Characters(const std::string& input) {
   // Convert |input| into a string with escaped characters replacing any
@@ -103,19 +47,29 @@ static std::string ShortenTo64Characters(const std::string& input) {
 }
 
 static scoped_ptr<base::DictionaryValue> CreateJSONDictionary(
-    const uint8* key,
+    const uint8_t* key,
     int key_length,
-    const uint8* key_id,
+    const uint8_t* key_id,
     int key_id_length) {
+  std::string key_string, key_id_string;
+  base::Base64UrlEncode(
+      base::StringPiece(reinterpret_cast<const char*>(key), key_length),
+      base::Base64UrlEncodePolicy::OMIT_PADDING, &key_string);
+  base::Base64UrlEncode(
+      base::StringPiece(reinterpret_cast<const char*>(key_id), key_id_length),
+      base::Base64UrlEncodePolicy::OMIT_PADDING, &key_id_string);
+
   scoped_ptr<base::DictionaryValue> jwk(new base::DictionaryValue());
   jwk->SetString(kKeyTypeTag, kKeyTypeOct);
-  jwk->SetString(kKeyTag, EncodeBase64Url(key, key_length));
-  jwk->SetString(kKeyIdTag, EncodeBase64Url(key_id, key_id_length));
-  return jwk.Pass();
+  jwk->SetString(kKeyTag, key_string);
+  jwk->SetString(kKeyIdTag, key_id_string);
+  return jwk;
 }
 
-std::string GenerateJWKSet(const uint8* key, int key_length,
-                           const uint8* key_id, int key_id_length) {
+std::string GenerateJWKSet(const uint8_t* key,
+                           int key_length,
+                           const uint8_t* key_id,
+                           int key_id_length) {
   // Create the JWK, and wrap it into a JWK Set.
   scoped_ptr<base::ListValue> list(new base::ListValue());
   list->Append(
@@ -135,9 +89,9 @@ std::string GenerateJWKSet(const KeyIdAndKeyPairs& keys,
   scoped_ptr<base::ListValue> list(new base::ListValue());
   for (const auto& key_pair : keys) {
     list->Append(CreateJSONDictionary(
-                     reinterpret_cast<const uint8*>(key_pair.second.data()),
+                     reinterpret_cast<const uint8_t*>(key_pair.second.data()),
                      key_pair.second.length(),
-                     reinterpret_cast<const uint8*>(key_pair.first.data()),
+                     reinterpret_cast<const uint8_t*>(key_pair.first.data()),
                      key_pair.first.length())
                      .release());
   }
@@ -185,15 +139,21 @@ static bool ConvertJwkToKeyPair(const base::DictionaryValue& jwk,
     return false;
   }
 
-  // Key ID and key are base64-encoded strings, so decode them.
-  std::string raw_key_id = DecodeBase64Url(encoded_key_id);
-  if (raw_key_id.empty()) {
+  // Key ID and key are base64url-encoded strings, so decode them.
+  std::string raw_key_id;
+  if (!base::Base64UrlDecode(encoded_key_id,
+                             base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+                             &raw_key_id) ||
+      raw_key_id.empty()) {
     DVLOG(1) << "Invalid '" << kKeyIdTag << "' value: " << encoded_key_id;
     return false;
   }
 
-  std::string raw_key = DecodeBase64Url(encoded_key);
-  if (raw_key.empty()) {
+  std::string raw_key;
+  if (!base::Base64UrlDecode(encoded_key,
+                             base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+                             &raw_key) ||
+      raw_key.empty()) {
     DVLOG(1) << "Invalid '" << kKeyTag << "' value: " << encoded_key;
     return false;
   }
@@ -307,25 +267,28 @@ bool ExtractKeyIdsFromKeyIdsInitData(const std::string& input,
       error_message->assign("'");
       error_message->append(kKeyIdsTag);
       error_message->append("'[");
-      error_message->append(base::UintToString(i));
+      error_message->append(base::SizeTToString(i));
       error_message->append("] is not string.");
       return false;
     }
 
-    // Key ID is a base64-encoded string, so decode it.
-    std::string raw_key_id = DecodeBase64Url(encoded_key_id);
-    if (raw_key_id.empty()) {
+    // Key ID is a base64url-encoded string, so decode it.
+    std::string raw_key_id;
+    if (!base::Base64UrlDecode(encoded_key_id,
+                               base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+                               &raw_key_id) ||
+        raw_key_id.empty()) {
       error_message->assign("'");
       error_message->append(kKeyIdsTag);
       error_message->append("'[");
-      error_message->append(base::UintToString(i));
+      error_message->append(base::SizeTToString(i));
       error_message->append("] is not valid base64url encoded. Value: ");
       error_message->append(ShortenTo64Characters(encoded_key_id));
       return false;
     }
 
     // Add the decoded key ID to the list.
-    local_key_ids.push_back(std::vector<uint8>(
+    local_key_ids.push_back(std::vector<uint8_t>(
         raw_key_id.data(), raw_key_id.data() + raw_key_id.length()));
   }
 
@@ -337,12 +300,19 @@ bool ExtractKeyIdsFromKeyIdsInitData(const std::string& input,
 
 void CreateLicenseRequest(const KeyIdList& key_ids,
                           MediaKeys::SessionType session_type,
-                          std::vector<uint8>* license) {
+                          std::vector<uint8_t>* license) {
   // Create the license request.
   scoped_ptr<base::DictionaryValue> request(new base::DictionaryValue());
   scoped_ptr<base::ListValue> list(new base::ListValue());
-  for (const auto& key_id : key_ids)
-    list->AppendString(EncodeBase64Url(&key_id[0], key_id.size()));
+  for (const auto& key_id : key_ids) {
+    std::string key_id_string;
+    base::Base64UrlEncode(
+        base::StringPiece(reinterpret_cast<const char*>(key_id.data()),
+                          key_id.size()),
+        base::Base64UrlEncodePolicy::OMIT_PADDING, &key_id_string);
+
+    list->AppendString(key_id_string);
+  }
   request->Set(kKeyIdsTag, list.release());
 
   switch (session_type) {
@@ -363,17 +333,24 @@ void CreateLicenseRequest(const KeyIdList& key_ids,
   serializer.Serialize(*request);
 
   // Convert the serialized license request into std::vector and return it.
-  std::vector<uint8> result(json.begin(), json.end());
+  std::vector<uint8_t> result(json.begin(), json.end());
   license->swap(result);
 }
 
 void CreateKeyIdsInitData(const KeyIdList& key_ids,
-                          std::vector<uint8>* init_data) {
+                          std::vector<uint8_t>* init_data) {
   // Create the init_data.
   scoped_ptr<base::DictionaryValue> dictionary(new base::DictionaryValue());
   scoped_ptr<base::ListValue> list(new base::ListValue());
-  for (const auto& key_id : key_ids)
-    list->AppendString(EncodeBase64Url(&key_id[0], key_id.size()));
+  for (const auto& key_id : key_ids) {
+    std::string key_id_string;
+    base::Base64UrlEncode(
+        base::StringPiece(reinterpret_cast<const char*>(key_id.data()),
+                          key_id.size()),
+        base::Base64UrlEncodePolicy::OMIT_PADDING, &key_id_string);
+
+    list->AppendString(key_id_string);
+  }
   dictionary->Set(kKeyIdsTag, list.release());
 
   // Serialize the dictionary as a string.
@@ -382,12 +359,12 @@ void CreateKeyIdsInitData(const KeyIdList& key_ids,
   serializer.Serialize(*dictionary);
 
   // Convert the serialized data into std::vector and return it.
-  std::vector<uint8> result(json.begin(), json.end());
+  std::vector<uint8_t> result(json.begin(), json.end());
   init_data->swap(result);
 }
 
-bool ExtractFirstKeyIdFromLicenseRequest(const std::vector<uint8>& license,
-                                         std::vector<uint8>* first_key) {
+bool ExtractFirstKeyIdFromLicenseRequest(const std::vector<uint8_t>& license,
+                                         std::vector<uint8_t>* first_key) {
   const std::string license_as_str(
       reinterpret_cast<const char*>(!license.empty() ? &license[0] : NULL),
       license.size());
@@ -423,13 +400,16 @@ bool ExtractFirstKeyIdFromLicenseRequest(const std::vector<uint8>& license,
     return false;
   }
 
-  std::string decoded_string = DecodeBase64Url(encoded_key);
-  if (decoded_string.empty()) {
+  std::string decoded_string;
+  if (!base::Base64UrlDecode(encoded_key,
+                             base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+                             &decoded_string) ||
+      decoded_string.empty()) {
     DVLOG(1) << "Invalid '" << kKeyIdsTag << "' value: " << encoded_key;
     return false;
   }
 
-  std::vector<uint8> result(decoded_string.begin(), decoded_string.end());
+  std::vector<uint8_t> result(decoded_string.begin(), decoded_string.end());
   first_key->swap(result);
   return true;
 }

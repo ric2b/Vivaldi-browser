@@ -4,6 +4,8 @@
 
 #include "win8/delegate_execute/delegate_execute_operation.h"
 
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -52,12 +54,12 @@ bool DelegateExecuteOperation::Init(const base::CommandLine* cmd_line) {
 }
 
 base::Process DelegateExecuteOperation::GetParent() const {
-  std::vector<base::string16> parts;
-  base::SplitString(mutex_, L'.', &parts);
+  std::vector<base::StringPiece16> parts = base::SplitStringPiece(
+      mutex_, L".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (parts.size() != 3)
     return base::Process();
   DWORD pid;
-  if (!base::StringToUint(parts[2], reinterpret_cast<uint32*>(&pid)))
+  if (!base::StringToUint(parts[2], reinterpret_cast<uint32_t*>(&pid)))
     return base::Process();
   return base::Process::Open(pid);
 }

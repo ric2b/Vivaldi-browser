@@ -114,6 +114,11 @@ class ExtensionTabUtil {
       TabStripModel* tab_strip,
       int tab_index);
 
+  // Creates a tab MutedInfo object (see chrome/common/extensions/api/tabs.json)
+  // with information about the mute state of a browser tab.
+  static scoped_ptr<base::DictionaryValue> CreateMutedInfo(
+      content::WebContents* contents);
+
   // Removes any privacy-sensitive fields from a Tab object if appropriate,
   // given the permissions of the extension and the tab in question.  The
   // tab_info object is modified in place.
@@ -125,6 +130,9 @@ class ExtensionTabUtil {
   // given the permissions of the extension in question.
   static void ScrubTabForExtension(const Extension* extension,
                                    api::tabs::Tab* tab);
+
+  // Returns if the given WebContents at the given index is discarded.
+  static bool IsDiscarded(content::WebContents* contents);
 
   // Gets the |tab_strip_model| and |tab_index| for the given |web_contents|.
   static bool GetTabStripModel(const content::WebContents* web_contents,
@@ -154,8 +162,10 @@ class ExtensionTabUtil {
   static GURL ResolvePossiblyRelativeURL(const std::string& url_string,
                                          const Extension* extension);
 
-  // Returns true if |url| is used for testing crashes.
-  static bool IsCrashURL(const GURL& url);
+  // Returns true if navigating to |url| would kill a page or the browser
+  // itself, whether by simulating a crash, browser quit, thread hang, or
+  // equivalent. Extensions should be prevented from navigating to such URLs.
+  static bool IsKillURL(const GURL& url);
 
   // Opens a tab for the specified |web_contents|.
   static void CreateTab(content::WebContents* web_contents,
@@ -175,6 +185,10 @@ class ExtensionTabUtil {
   // successfully opened (though it may not necessarily *load*, e.g. if the
   // URL does not exist).
   static bool OpenOptionsPage(const Extension* extension, Browser* browser);
+
+  // Returns true if the given Browser can report tabs to extensions.
+  // Example of Browsers which don't support tabs include apps and devtools.
+  static bool BrowserSupportsTabs(Browser* browser);
 };
 
 }  // namespace extensions

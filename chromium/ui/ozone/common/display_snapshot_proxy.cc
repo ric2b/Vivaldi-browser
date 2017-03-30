@@ -4,6 +4,8 @@
 
 #include "ui/ozone/common/display_snapshot_proxy.h"
 
+#include <stddef.h>
+
 #include "ui/ozone/common/display_mode_proxy.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
 
@@ -19,8 +21,8 @@ bool SameModes(const DisplayMode_Params& lhs, const DisplayMode_Params& rhs) {
 // Exclude 4K@60kHz becaseu this doesn't work in most devices/configuration now.
 // TODO(marcheu|oshima): Revisit this. crbug.com/39397
 bool IsModeBlackListed(const DisplayMode_Params& mode_params) {
-  return mode_params.size.width() >= 3840 && mode_params.size.width() >= 2160 &&
-         mode_params.refresh_rate >= 60.0f;
+  return mode_params.size.width() >= 3840 &&
+         mode_params.size.height() >= 2160 && mode_params.refresh_rate >= 60.0f;
 }
 
 }  // namespace
@@ -33,6 +35,7 @@ DisplaySnapshotProxy::DisplaySnapshotProxy(const DisplaySnapshot_Params& params)
                       params.is_aspect_preserving_scaling,
                       params.has_overscan,
                       params.display_name,
+                      params.sys_path,
                       std::vector<const DisplayMode*>(),
                       NULL,
                       NULL),

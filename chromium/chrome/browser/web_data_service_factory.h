@@ -7,10 +7,14 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "build/build_config.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/service_access_type.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
+
 class KeywordWebDataService;
 class Profile;
 class TokenWebData;
@@ -60,7 +64,7 @@ class WebDataServiceFactory : public BrowserContextKeyedServiceFactory {
   static WebDataServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<WebDataServiceFactory>;
+  friend struct base::DefaultSingletonTraits<WebDataServiceFactory>;
 
   WebDataServiceFactory();
   ~WebDataServiceFactory() override;

@@ -4,10 +4,12 @@
 
 #include "extensions/browser/api/socket/socket_api.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/containers/hash_tables.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/resource_context.h"
 #include "extensions/browser/api/dns/host_resolver_wrapper.h"
@@ -24,6 +26,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_util.h"
+#include "net/base/network_interfaces.h"
 #include "net/log/net_log.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -54,7 +57,7 @@ const char kMulticastSocketTypeError[] = "Only UDP socket supports multicast.";
 const char kSecureSocketTypeError[] = "Only TCP sockets are supported for TLS.";
 const char kSocketNotConnectedError[] = "Socket not connected";
 const char kWildcardAddress[] = "*";
-const uint16 kWildcardPort = 0;
+const uint16_t kWildcardPort = 0;
 
 #if defined(OS_CHROMEOS)
 const char kFirewallFailure[] = "Failed to open firewall port";
@@ -74,7 +77,7 @@ bool SocketAsyncApiFunction::Respond() { return error_.empty(); }
 scoped_ptr<SocketResourceManagerInterface>
 SocketAsyncApiFunction::CreateSocketResourceManager() {
   return scoped_ptr<SocketResourceManagerInterface>(
-             new SocketResourceManager<Socket>()).Pass();
+      new SocketResourceManager<Socket>());
 }
 
 int SocketAsyncApiFunction::AddSocket(Socket* socket) {
@@ -162,7 +165,7 @@ void SocketAsyncApiFunction::OnFirewallHoleOpened(
     return;
   }
 
-  socket->set_firewall_hole(hole.Pass());
+  socket->set_firewall_hole(std::move(hole));
   AsyncWorkCompleted();
 }
 
@@ -216,17 +219,17 @@ SocketCreateFunction::SocketCreateFunction()
 SocketCreateFunction::~SocketCreateFunction() {}
 
 bool SocketCreateFunction::Prepare() {
-  params_ = core_api::socket::Create::Params::Create(*args_);
+  params_ = api::socket::Create::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
 
   switch (params_->type) {
-    case extensions::core_api::socket::SOCKET_TYPE_TCP:
+    case extensions::api::socket::SOCKET_TYPE_TCP:
       socket_type_ = kSocketTypeTCP;
       break;
-    case extensions::core_api::socket::SOCKET_TYPE_UDP:
+    case extensions::api::socket::SOCKET_TYPE_UDP:
       socket_type_ = kSocketTypeUDP;
       break;
-    case extensions::core_api::socket::SOCKET_TYPE_NONE:
+    case extensions::api::socket::SOCKET_TYPE_NONE:
       NOTREACHED();
       break;
   }
@@ -267,7 +270,7 @@ bool SocketConnectFunction::Prepare() {
   int port;
   EXTENSION_FUNCTION_VALIDATE(
       args_->GetInteger(2, &port) && port >= 0 && port <= 65535);
-  port_ = static_cast<uint16>(port);
+  port_ = static_cast<uint16_t>(port);
   return true;
 }
 
@@ -355,7 +358,7 @@ bool SocketBindFunction::Prepare() {
   int port;
   EXTENSION_FUNCTION_VALIDATE(
       args_->GetInteger(2, &port) && port >= 0 && port <= 65535);
-  port_ = static_cast<uint16>(port);
+  port_ = static_cast<uint16_t>(port);
   return true;
 }
 
@@ -401,7 +404,7 @@ SocketListenFunction::SocketListenFunction() {}
 SocketListenFunction::~SocketListenFunction() {}
 
 bool SocketListenFunction::Prepare() {
-  params_ = core_api::socket::Listen::Params::Create(*args_);
+  params_ = api::socket::Listen::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -442,7 +445,7 @@ SocketAcceptFunction::SocketAcceptFunction() {}
 SocketAcceptFunction::~SocketAcceptFunction() {}
 
 bool SocketAcceptFunction::Prepare() {
-  params_ = core_api::socket::Accept::Params::Create(*args_);
+  params_ = api::socket::Accept::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -458,11 +461,12 @@ void SocketAcceptFunction::AsyncWorkStart() {
 }
 
 void SocketAcceptFunction::OnAccept(int result_code,
-                                    net::TCPClientSocket* socket) {
+                                    scoped_ptr<net::TCPClientSocket> socket) {
   base::DictionaryValue* result = new base::DictionaryValue();
   result->SetInteger(kResultCodeKey, result_code);
   if (socket) {
-    Socket* client_socket = new TCPSocket(socket, extension_id(), true);
+    Socket* client_socket =
+        new TCPSocket(std::move(socket), extension_id(), true);
     result->SetInteger(kSocketIdKey, AddSocket(client_socket));
   }
   SetResult(result);
@@ -475,7 +479,7 @@ SocketReadFunction::SocketReadFunction() {}
 SocketReadFunction::~SocketReadFunction() {}
 
 bool SocketReadFunction::Prepare() {
-  params_ = core_api::socket::Read::Params::Create(*args_);
+  params_ = api::socket::Read::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -550,7 +554,7 @@ SocketRecvFromFunction::SocketRecvFromFunction() {}
 SocketRecvFromFunction::~SocketRecvFromFunction() {}
 
 bool SocketRecvFromFunction::Prepare() {
-  params_ = core_api::socket::RecvFrom::Params::Create(*args_);
+  params_ = api::socket::RecvFrom::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -570,7 +574,7 @@ void SocketRecvFromFunction::AsyncWorkStart() {
 void SocketRecvFromFunction::OnCompleted(int bytes_read,
                                          scoped_refptr<net::IOBuffer> io_buffer,
                                          const std::string& address,
-                                         uint16 port) {
+                                         uint16_t port) {
   base::DictionaryValue* result = new base::DictionaryValue();
   result->SetInteger(kResultCodeKey, bytes_read);
   if (bytes_read > 0) {
@@ -601,7 +605,7 @@ bool SocketSendToFunction::Prepare() {
   int port;
   EXTENSION_FUNCTION_VALIDATE(
       args_->GetInteger(3, &port) && port >= 0 && port <= 65535);
-  port_ = static_cast<uint16>(port);
+  port_ = static_cast<uint16_t>(port);
 
   io_buffer_size_ = data->GetSize();
   io_buffer_ = new net::WrappedIOBuffer(data->GetBuffer());
@@ -667,7 +671,7 @@ SocketSetKeepAliveFunction::SocketSetKeepAliveFunction() {}
 SocketSetKeepAliveFunction::~SocketSetKeepAliveFunction() {}
 
 bool SocketSetKeepAliveFunction::Prepare() {
-  params_ = core_api::socket::SetKeepAlive::Params::Create(*args_);
+  params_ = api::socket::SetKeepAlive::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -691,7 +695,7 @@ SocketSetNoDelayFunction::SocketSetNoDelayFunction() {}
 SocketSetNoDelayFunction::~SocketSetNoDelayFunction() {}
 
 bool SocketSetNoDelayFunction::Prepare() {
-  params_ = core_api::socket::SetNoDelay::Params::Create(*args_);
+  params_ = api::socket::SetNoDelay::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -711,7 +715,7 @@ SocketGetInfoFunction::SocketGetInfoFunction() {}
 SocketGetInfoFunction::~SocketGetInfoFunction() {}
 
 bool SocketGetInfoFunction::Prepare() {
-  params_ = core_api::socket::GetInfo::Params::Create(*args_);
+  params_ = api::socket::GetInfo::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -723,13 +727,13 @@ void SocketGetInfoFunction::Work() {
     return;
   }
 
-  core_api::socket::SocketInfo info;
+  api::socket::SocketInfo info;
   // This represents what we know about the socket, and does not call through
   // to the system.
   if (socket->GetSocketType() == Socket::TYPE_TCP)
-    info.socket_type = extensions::core_api::socket::SOCKET_TYPE_TCP;
+    info.socket_type = extensions::api::socket::SOCKET_TYPE_TCP;
   else
-    info.socket_type = extensions::core_api::socket::SOCKET_TYPE_UDP;
+    info.socket_type = extensions::api::socket::SOCKET_TYPE_UDP;
   info.connected = socket->IsConnected();
 
   // Grab the peer address as known by the OS. This and the call below will
@@ -788,20 +792,20 @@ void SocketGetNetworkListFunction::SendResponseOnUIThread(
     const net::NetworkInterfaceList& interface_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  std::vector<linked_ptr<core_api::socket::NetworkInterface> > create_arg;
+  std::vector<linked_ptr<api::socket::NetworkInterface>> create_arg;
   create_arg.reserve(interface_list.size());
   for (net::NetworkInterfaceList::const_iterator i = interface_list.begin();
        i != interface_list.end();
        ++i) {
-    linked_ptr<core_api::socket::NetworkInterface> info =
-        make_linked_ptr(new core_api::socket::NetworkInterface);
+    linked_ptr<api::socket::NetworkInterface> info =
+        make_linked_ptr(new api::socket::NetworkInterface);
     info->name = i->name;
     info->address = net::IPAddressToString(i->address);
     info->prefix_length = i->prefix_length;
     create_arg.push_back(info);
   }
 
-  results_ = core_api::socket::GetNetworkList::Results::Create(create_arg);
+  results_ = api::socket::GetNetworkList::Results::Create(create_arg);
   SendResponse(true);
 }
 
@@ -810,7 +814,7 @@ SocketJoinGroupFunction::SocketJoinGroupFunction() {}
 SocketJoinGroupFunction::~SocketJoinGroupFunction() {}
 
 bool SocketJoinGroupFunction::Prepare() {
-  params_ = core_api::socket::JoinGroup::Params::Create(*args_);
+  params_ = api::socket::JoinGroup::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -854,7 +858,7 @@ SocketLeaveGroupFunction::SocketLeaveGroupFunction() {}
 SocketLeaveGroupFunction::~SocketLeaveGroupFunction() {}
 
 bool SocketLeaveGroupFunction::Prepare() {
-  params_ = core_api::socket::LeaveGroup::Params::Create(*args_);
+  params_ = api::socket::LeaveGroup::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -897,7 +901,7 @@ SocketSetMulticastTimeToLiveFunction::SocketSetMulticastTimeToLiveFunction() {}
 SocketSetMulticastTimeToLiveFunction::~SocketSetMulticastTimeToLiveFunction() {}
 
 bool SocketSetMulticastTimeToLiveFunction::Prepare() {
-  params_ = core_api::socket::SetMulticastTimeToLive::Params::Create(*args_);
+  params_ = api::socket::SetMulticastTimeToLive::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -930,7 +934,7 @@ SocketSetMulticastLoopbackModeFunction::
     ~SocketSetMulticastLoopbackModeFunction() {}
 
 bool SocketSetMulticastLoopbackModeFunction::Prepare() {
-  params_ = core_api::socket::SetMulticastLoopbackMode::Params::Create(*args_);
+  params_ = api::socket::SetMulticastLoopbackMode::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -962,7 +966,7 @@ SocketGetJoinedGroupsFunction::SocketGetJoinedGroupsFunction() {}
 SocketGetJoinedGroupsFunction::~SocketGetJoinedGroupsFunction() {}
 
 bool SocketGetJoinedGroupsFunction::Prepare() {
-  params_ = core_api::socket::GetJoinedGroups::Params::Create(*args_);
+  params_ = api::socket::GetJoinedGroups::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
@@ -1007,7 +1011,7 @@ SocketSecureFunction::~SocketSecureFunction() {
 
 bool SocketSecureFunction::Prepare() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  params_ = core_api::socket::Secure::Params::Create(*args_);
+  params_ = api::socket::Secure::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   url_request_getter_ = browser_context()->GetRequestContext();
   return true;
@@ -1067,7 +1071,7 @@ void SocketSecureFunction::TlsConnectDone(scoped_ptr<TLSSocket> socket,
     error_ = net::ErrorToString(result);
   }
 
-  results_ = core_api::socket::Secure::Results::Create(result);
+  results_ = api::socket::Secure::Results::Create(result);
   AsyncWorkCompleted();
 }
 

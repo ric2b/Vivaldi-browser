@@ -4,26 +4,28 @@
 
 #include "components/devtools_service/devtools_http_server.h"
 
+#include <stddef.h>
 #include <string.h>
-
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/devtools_service/devtools_agent_host.h"
 #include "components/devtools_service/devtools_registry_impl.h"
 #include "components/devtools_service/devtools_service.h"
-#include "mojo/application/public/cpp/application_impl.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/services/network/public/cpp/web_socket_read_queue.h"
 #include "mojo/services/network/public/cpp/web_socket_write_queue.h"
 #include "mojo/services/network/public/interfaces/net_address.mojom.h"
 #include "mojo/services/network/public/interfaces/network_service.mojom.h"
 #include "mojo/services/network/public/interfaces/web_socket.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
+#include "mojo/shell/public/cpp/application_impl.h"
 
 namespace devtools_service {
 
@@ -46,6 +48,16 @@ const char kTargetDescriptionField[] = "description";
 const char kTargetUrlField[] = "url";
 const char kTargetWebSocketDebuggerUrlField[] = "webSocketDebuggerUrl";
 const char kTargetDevtoolsFrontendUrlField[] = "devtoolsFrontendUrl";
+
+std::string GetHeaderValue(const mojo::HttpRequest& request,
+                           const std::string& name) {
+  for (size_t i = 0; i < request.headers.size(); ++i) {
+    if (name == request.headers[i]->name)
+      return request.headers[i]->value;
+  }
+
+  return std::string();
+}
 
 bool ParseJsonPath(const std::string& path,
                    std::string* command,
@@ -91,13 +103,13 @@ mojo::HttpResponsePtr MakeResponse(uint32_t status_code,
     options.element_num_bytes = 1;
     options.capacity_num_bytes = num_bytes;
     mojo::DataPipe data_pipe(options);
-    response->body = data_pipe.consumer_handle.Pass();
+    response->body = std::move(data_pipe.consumer_handle);
     MojoResult result =
         WriteDataRaw(data_pipe.producer_handle.get(), body.data(), &num_bytes,
                      MOJO_WRITE_DATA_FLAG_ALL_OR_NONE);
     CHECK_EQ(MOJO_RESULT_OK, result);
   }
-  return response.Pass();
+  return response;
 }
 
 mojo::HttpResponsePtr MakeJsonResponse(uint32_t status_code,
@@ -115,8 +127,7 @@ mojo::HttpResponsePtr MakeJsonResponse(uint32_t status_code,
 }
 
 class WebSocketRelayer : public DevToolsAgentHost::Delegate,
-                         public mojo::WebSocketClient,
-                         public mojo::ErrorHandler {
+                         public mojo::WebSocketClient {
  public:
   // Creates a WebSocketRelayer instance and sets it as the delegate of
   // |agent_host|.
@@ -135,9 +146,9 @@ class WebSocketRelayer : public DevToolsAgentHost::Delegate,
     DCHECK(send_stream.is_valid());
 
     mojo::WebSocketClientPtr web_socket_client;
-    new WebSocketRelayer(agent_host, web_socket.Pass(), send_stream.Pass(),
-                         &web_socket_client);
-    return web_socket_client.Pass();
+    new WebSocketRelayer(agent_host, std::move(web_socket),
+                         std::move(send_stream), &web_socket_client);
+    return web_socket_client;
   }
 
  private:
@@ -147,12 +158,12 @@ class WebSocketRelayer : public DevToolsAgentHost::Delegate,
                    mojo::WebSocketClientPtr* web_socket_client)
       : agent_host_(agent_host),
         binding_(this, web_socket_client),
-        web_socket_(web_socket.Pass()),
-        send_stream_(send_stream.Pass()),
+        web_socket_(std::move(web_socket)),
+        send_stream_(std::move(send_stream)),
         write_send_stream_(new mojo::WebSocketWriteQueue(send_stream_.get())),
         pending_send_count_(0),
         pending_receive_count_(0) {
-    web_socket_.set_error_handler(this);
+    web_socket_.set_connection_error_handler([this]() { OnConnectionError(); });
     agent_host->SetDelegate(this);
   }
 
@@ -197,7 +208,7 @@ class WebSocketRelayer : public DevToolsAgentHost::Delegate,
   void DidConnect(const mojo::String& selected_subprotocol,
                   const mojo::String& extensions,
                   mojo::ScopedDataPipeConsumerHandle receive_stream) override {
-    receive_stream_ = receive_stream.Pass();
+    receive_stream_ = std::move(receive_stream);
     read_receive_stream_.reset(
         new mojo::WebSocketReadQueue(receive_stream_.get()));
   }
@@ -227,8 +238,7 @@ class WebSocketRelayer : public DevToolsAgentHost::Delegate,
                 uint16_t code,
                 const mojo::String& reason) override {}
 
-  // mojo::ErrorHandler implementation.
-  void OnConnectionError() override {
+  void OnConnectionError() {
     web_socket_ = nullptr;
     binding_.Close();
 
@@ -281,22 +291,22 @@ class WebSocketRelayer : public DevToolsAgentHost::Delegate,
 }  // namespace
 
 class DevToolsHttpServer::HttpConnectionDelegateImpl
-    : public mojo::HttpConnectionDelegate,
-      public mojo::ErrorHandler {
+    : public mojo::HttpConnectionDelegate {
  public:
   HttpConnectionDelegateImpl(
       DevToolsHttpServer* owner,
       mojo::HttpConnectionPtr connection,
       mojo::InterfaceRequest<HttpConnectionDelegate> delegate_request)
       : owner_(owner),
-        connection_(connection.Pass()),
-        binding_(this, delegate_request.Pass()) {
+        connection_(std::move(connection)),
+        binding_(this, std::move(delegate_request)) {
     DCHECK(owner_);
     DCHECK(connection_);
     DCHECK(binding_.is_bound());
 
-    connection_.set_error_handler(this);
-    binding_.set_error_handler(this);
+    auto error_handler = [this]() { owner_->OnConnectionClosed(this); };
+    connection_.set_connection_error_handler(error_handler);
+    binding_.set_connection_error_handler(error_handler);
   }
 
   mojo::HttpConnection* connection() { return connection_.get(); }
@@ -305,17 +315,14 @@ class DevToolsHttpServer::HttpConnectionDelegateImpl
   // mojo::HttpConnectionDelegate implementation:
   void OnReceivedRequest(mojo::HttpRequestPtr request,
                          const OnReceivedRequestCallback& callback) override {
-    owner_->OnReceivedRequest(this, request.Pass(), callback);
+    owner_->OnReceivedRequest(this, std::move(request), callback);
   }
 
   void OnReceivedWebSocketRequest(
       mojo::HttpRequestPtr request,
       const OnReceivedWebSocketRequestCallback& callback) override {
-    owner_->OnReceivedWebSocketRequest(this, request.Pass(), callback);
+    owner_->OnReceivedWebSocketRequest(this, std::move(request), callback);
   }
-
-  // mojo::ErrorHandler implementation.
-  void OnConnectionError() override { owner_->OnConnectionClosed(this); }
 
   DevToolsHttpServer* const owner_;
   mojo::HttpConnectionPtr connection_;
@@ -330,9 +337,8 @@ DevToolsHttpServer::DevToolsHttpServer(DevToolsService* service,
   VLOG(1) << "Remote debugging HTTP server is started on port "
           << remote_debugging_port << ".";
   mojo::NetworkServicePtr network_service;
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = "mojo:network_service";
-  service_->application()->ConnectToService(request.Pass(), &network_service);
+  service_->application()->ConnectToService("mojo:network_service",
+                                            &network_service);
 
   mojo::NetAddressPtr local_address(mojo::NetAddress::New());
   local_address->family = mojo::NET_ADDRESS_FAMILY_IPV4;
@@ -348,7 +354,7 @@ DevToolsHttpServer::DevToolsHttpServer(DevToolsService* service,
   http_server_delegate_binding_.reset(
       new mojo::Binding<mojo::HttpServerDelegate>(this, &http_server_delegate));
   network_service->CreateHttpServer(
-      local_address.Pass(), http_server_delegate.Pass(),
+      std::move(local_address), std::move(http_server_delegate),
       mojo::NetworkService::CreateHttpServerCallback());
 }
 
@@ -359,8 +365,8 @@ DevToolsHttpServer::~DevToolsHttpServer() {
 void DevToolsHttpServer::OnConnected(
     mojo::HttpConnectionPtr connection,
     mojo::InterfaceRequest<mojo::HttpConnectionDelegate> delegate) {
-  connections_.insert(
-      new HttpConnectionDelegateImpl(this, connection.Pass(), delegate.Pass()));
+  connections_.insert(new HttpConnectionDelegateImpl(
+      this, std::move(connection), std::move(delegate)));
 }
 
 void DevToolsHttpServer::OnReceivedRequest(
@@ -370,9 +376,9 @@ void DevToolsHttpServer::OnReceivedRequest(
   DCHECK(connections_.find(connection) != connections_.end());
 
   if (request->url.get().find(kJsonRequestUrlPrefix) == 0) {
-    mojo::HttpResponsePtr response = ProcessJsonRequest(request.Pass());
+    mojo::HttpResponsePtr response = ProcessJsonRequest(std::move(request));
     if (response)
-      callback.Run(response.Pass());
+      callback.Run(std::move(response));
     else
       OnConnectionClosed(connection);
   } else {
@@ -415,9 +421,10 @@ void DevToolsHttpServer::OnReceivedWebSocketRequest(
       mojo::GetProxy(&web_socket);
   mojo::DataPipe data_pipe;
   mojo::WebSocketClientPtr web_socket_client = WebSocketRelayer::SetUp(
-      agent, web_socket.Pass(), data_pipe.producer_handle.Pass());
-  callback.Run(web_socket_request.Pass(), data_pipe.consumer_handle.Pass(),
-               web_socket_client.Pass());
+      agent, std::move(web_socket), std::move(data_pipe.producer_handle));
+  callback.Run(std::move(web_socket_request),
+               std::move(data_pipe.consumer_handle),
+               std::move(web_socket_client));
 }
 
 void DevToolsHttpServer::OnConnectionClosed(
@@ -464,6 +471,12 @@ mojo::HttpResponsePtr DevToolsHttpServer::ProcessJsonRequest(
       return nullptr;
     }
 
+    std::string host = GetHeaderValue(*request, "host");
+    if (host.empty()) {
+      host = base::StringPrintf("127.0.0.1:%u",
+                                static_cast<unsigned>(remote_debugging_port_));
+    }
+
     base::ListValue list_value;
     for (; !iter.IsAtEnd(); iter.Advance()) {
       scoped_ptr<base::DictionaryValue> dict_value(new base::DictionaryValue());
@@ -477,10 +490,9 @@ mojo::HttpResponsePtr DevToolsHttpServer::ProcessJsonRequest(
       dict_value->SetString(kTargetUrlField, std::string());
       dict_value->SetString(
           kTargetWebSocketDebuggerUrlField,
-          base::StringPrintf("ws://127.0.0.1:%u%s%s",
-                             static_cast<unsigned>(remote_debugging_port_),
-                             kPageUrlPrefix, iter.value()->id().c_str()));
-      list_value.Append(dict_value.Pass());
+          base::StringPrintf("ws://%s%s%s", host.c_str(), kPageUrlPrefix,
+                             iter.value()->id().c_str()));
+      list_value.Append(std::move(dict_value));
     }
     return MakeJsonResponse(200, &list_value, std::string());
   }

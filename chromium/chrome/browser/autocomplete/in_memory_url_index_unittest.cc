@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <fstream>
 
@@ -10,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/i18n/case_conversion.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
@@ -278,7 +282,7 @@ void InMemoryURLIndexTest::SetUp() {
       history::URLRow row;
       history_database_->FillURLRow(statement, &row);
       base::Time last_visit = time_right_now;
-      for (int64 i = row.last_visit().ToInternalValue(); i > 0; --i)
+      for (int64_t i = row.last_visit().ToInternalValue(); i > 0; --i)
         last_visit -= day_delta;
       row.set_last_visit(last_visit);
       history_database_->UpdateURLRow(row.id(), row);
@@ -298,7 +302,7 @@ void InMemoryURLIndexTest::SetUp() {
       history::VisitRow row;
       history_database_->FillVisitRow(statement, &row);
       base::Time last_visit = time_right_now;
-      for (int64 i = row.visit_time.ToInternalValue(); i > 0; --i)
+      for (int64_t i = row.visit_time.ToInternalValue(); i > 0; --i)
         last_visit -= day_delta;
       row.visit_time = last_visit;
       history_database_->UpdateVisitRow(row);
@@ -487,7 +491,7 @@ TEST_F(LimitedInMemoryURLIndexTest, Initialization) {
   // is the pre-filtered count, i.e. all of the items.
   sql::Statement statement(GetDB().GetUniqueStatement("SELECT * FROM urls;"));
   ASSERT_TRUE(statement.is_valid());
-  uint64 row_count = 0;
+  uint64_t row_count = 0;
   while (statement.Step()) ++row_count;
   EXPECT_EQ(1U, row_count);
 
@@ -500,13 +504,7 @@ TEST_F(LimitedInMemoryURLIndexTest, Initialization) {
   EXPECT_EQ(17U, private_data.word_map_.size());
 }
 
-#if defined(OS_WIN)
-// Flaky on windows trybots: http://crbug.com/351500
-#define MAYBE_Retrieval DISABLED_Retrieval
-#else
-#define MAYBE_Retrieval Retrieval
-#endif
-TEST_F(InMemoryURLIndexTest, MAYBE_Retrieval) {
+TEST_F(InMemoryURLIndexTest, Retrieval) {
   // See if a very specific term gives a single result.
   ScoredHistoryMatches matches = url_index_->HistoryItemsForTerms(
       ASCIIToUTF16("DrudgeReport"), base::string16::npos, kMaxMatches);
@@ -516,17 +514,14 @@ TEST_F(InMemoryURLIndexTest, MAYBE_Retrieval) {
   EXPECT_EQ(5, matches[0].url_info.id());
   EXPECT_EQ("http://drudgereport.com/", matches[0].url_info.url().spec());
   EXPECT_EQ(ASCIIToUTF16("DRUDGE REPORT 2010"), matches[0].url_info.title());
-  EXPECT_TRUE(matches[0].can_inline);
 
-  // Make sure a trailing space prevents inline-ability but still results
-  // in the expected result.
+  // Make sure a trailing space still results in the expected result.
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("DrudgeReport "),
                                              base::string16::npos, kMaxMatches);
   ASSERT_EQ(1U, matches.size());
   EXPECT_EQ(5, matches[0].url_info.id());
   EXPECT_EQ("http://drudgereport.com/", matches[0].url_info.url().spec());
   EXPECT_EQ(ASCIIToUTF16("DRUDGE REPORT 2010"), matches[0].url_info.title());
-  EXPECT_FALSE(matches[0].can_inline);
 
   // Search which should result in multiple results.
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("drudge"),
@@ -546,27 +541,18 @@ TEST_F(InMemoryURLIndexTest, MAYBE_Retrieval) {
             matches[0].url_info.url().spec());  // Note: URL gets lowercased.
   EXPECT_EQ(ASCIIToUTF16("Practically Perfect Search Result"),
             matches[0].url_info.title());
-  EXPECT_FALSE(matches[0].can_inline);
 
   // Search which should result in very poor result.
+  // No results since it will be suppressed by default scoring.
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("qui c"),
                                              base::string16::npos, kMaxMatches);
-  ASSERT_EQ(1U, matches.size());
-  // The results should have a poor score.
-  EXPECT_LT(matches[0].raw_score, 500);
-  EXPECT_EQ(33, matches[0].url_info.id());
-  EXPECT_EQ("http://quiteuselesssearchresultxyz.com/",
-            matches[0].url_info.url().spec());  // Note: URL gets lowercased.
-  EXPECT_EQ(ASCIIToUTF16("Practically Useless Search Result"),
-            matches[0].url_info.title());
-  EXPECT_FALSE(matches[0].can_inline);
+  ASSERT_EQ(0U, matches.size());
 
   // Search which will match at the end of an URL with encoded characters.
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("Mice"),
                                              base::string16::npos, kMaxMatches);
   ASSERT_EQ(1U, matches.size());
   EXPECT_EQ(30, matches[0].url_info.id());
-  EXPECT_FALSE(matches[0].can_inline);
 
   // Check that URLs are not escaped an escape time.
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("1% wikipedia"),
@@ -576,8 +562,7 @@ TEST_F(InMemoryURLIndexTest, MAYBE_Retrieval) {
   EXPECT_EQ("http://en.wikipedia.org/wiki/1%25_rule_(Internet_culture)",
             matches[0].url_info.url().spec());
 
-  // Verify that a single term can appear multiple times in the URL and as long
-  // as one starts the URL it is still inlined.
+  // Verify that a single term can appear multiple times in the URL.
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("fubar"),
                                              base::string16::npos, kMaxMatches);
   ASSERT_EQ(1U, matches.size());
@@ -585,7 +570,6 @@ TEST_F(InMemoryURLIndexTest, MAYBE_Retrieval) {
   EXPECT_EQ("http://fubarfubarandfubar.com/", matches[0].url_info.url().spec());
   EXPECT_EQ(ASCIIToUTF16("Situation Normal -- FUBARED"),
             matches[0].url_info.title());
-  EXPECT_TRUE(matches[0].can_inline);
 }
 
 TEST_F(InMemoryURLIndexTest, CursorPositionRetrieval) {
@@ -631,70 +615,56 @@ TEST_F(InMemoryURLIndexTest, CursorPositionRetrieval) {
 }
 
 TEST_F(InMemoryURLIndexTest, URLPrefixMatching) {
-  // "drudgere" - found, can inline
+  // "drudgere" - found
   ScoredHistoryMatches matches = url_index_->HistoryItemsForTerms(
       ASCIIToUTF16("drudgere"), base::string16::npos, kMaxMatches);
-  ASSERT_EQ(1U, matches.size());
-  EXPECT_TRUE(matches[0].can_inline);
-
-  // "drudgere" - found, can inline
-  matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("drudgere"),
-                                             base::string16::npos, kMaxMatches);
-  ASSERT_EQ(1U, matches.size());
-  EXPECT_TRUE(matches[0].can_inline);
+  EXPECT_EQ(1U, matches.size());
 
   // "www.atdmt" - not found
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("www.atdmt"),
                                              base::string16::npos, kMaxMatches);
   EXPECT_EQ(0U, matches.size());
 
-  // "atdmt" - found, cannot inline
+  // "atdmt" - found
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("atdmt"),
                                              base::string16::npos, kMaxMatches);
-  ASSERT_EQ(1U, matches.size());
-  EXPECT_FALSE(matches[0].can_inline);
+  EXPECT_EQ(1U, matches.size());
 
-  // "view.atdmt" - found, can inline
+  // "view.atdmt" - found
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("view.atdmt"),
                                              base::string16::npos, kMaxMatches);
   ASSERT_EQ(1U, matches.size());
-  EXPECT_TRUE(matches[0].can_inline);
 
-  // "view.atdmt" - found, can inline
+  // "view.atdmt" - found
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("view.atdmt"),
                                              base::string16::npos, kMaxMatches);
-  ASSERT_EQ(1U, matches.size());
-  EXPECT_TRUE(matches[0].can_inline);
+  EXPECT_EQ(1U, matches.size());
 
-  // "cnn.com" - found, can inline
+  // "cnn.com" - found
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("cnn.com"),
                                              base::string16::npos, kMaxMatches);
-  ASSERT_EQ(2U, matches.size());
-  // One match should be inline-able, the other not.
-  EXPECT_TRUE(matches[0].can_inline != matches[1].can_inline);
+  EXPECT_EQ(2U, matches.size());
 
-  // "www.cnn.com" - found, can inline
+  // "www.cnn.com" - found
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("www.cnn.com"),
                                              base::string16::npos, kMaxMatches);
-  ASSERT_EQ(1U, matches.size());
-  EXPECT_TRUE(matches[0].can_inline);
+  EXPECT_EQ(1U, matches.size());
 
-  // "ww.cnn.com" - found because we allow mid-term matches in hostnames
+  // "ww.cnn.com" - found because we suppress mid-term matches.
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("ww.cnn.com"),
                                              base::string16::npos, kMaxMatches);
-  ASSERT_EQ(1U, matches.size());
+  EXPECT_EQ(0U, matches.size());
 
-  // "www.cnn.com" - found, can inline
+  // "www.cnn.com" - found
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("www.cnn.com"),
                                              base::string16::npos, kMaxMatches);
-  ASSERT_EQ(1U, matches.size());
-  EXPECT_TRUE(matches[0].can_inline);
+  EXPECT_EQ(1U, matches.size());
 
   // "tp://www.cnn.com" - not found because we don't allow tp as a mid-term
   // match
   matches = url_index_->HistoryItemsForTerms(ASCIIToUTF16("tp://www.cnn.com"),
                                              base::string16::npos, kMaxMatches);
-  ASSERT_EQ(0U, matches.size());
+  EXPECT_EQ(0U, matches.size());
 }
 
 TEST_F(InMemoryURLIndexTest, ProperStringMatching) {
@@ -732,13 +702,7 @@ TEST_F(InMemoryURLIndexTest, HugeResultSet) {
   ASSERT_EQ(kMaxMatches, private_data.post_scoring_item_count_);
 }
 
-#if defined(OS_WIN)
-// Flaky on windows trybots: http://crbug.com/351500
-#define MAYBE_TitleSearch DISABLED_TitleSearch
-#else
-#define MAYBE_TitleSearch TitleSearch
-#endif
-TEST_F(InMemoryURLIndexTest, MAYBE_TitleSearch) {
+TEST_F(InMemoryURLIndexTest, TitleSearch) {
   // Signal if someone has changed the test DB.
   EXPECT_EQ(29U, GetPrivateData()->history_info_map_.size());
 
@@ -1049,10 +1013,10 @@ TEST_F(InMemoryURLIndexTest, ReadVisitsFromHistory) {
   ASSERT_TRUE(entry != history_info_map.end());
   {
     const VisitInfoVector& visits = entry->second.visits;
-    EXPECT_EQ(3u, visits.size());
-    EXPECT_EQ(0u, visits[0].second);
-    EXPECT_EQ(1u, visits[1].second);
-    EXPECT_EQ(0u, visits[2].second);
+    ASSERT_EQ(3u, visits.size());
+    EXPECT_EQ(static_cast<ui::PageTransition>(0u), visits[0].second);
+    EXPECT_EQ(static_cast<ui::PageTransition>(1u), visits[1].second);
+    EXPECT_EQ(static_cast<ui::PageTransition>(0u), visits[2].second);
   }
 
   // Ditto but for URL with id 35.
@@ -1060,9 +1024,9 @@ TEST_F(InMemoryURLIndexTest, ReadVisitsFromHistory) {
   ASSERT_TRUE(entry != history_info_map.end());
   {
     const VisitInfoVector& visits = entry->second.visits;
-    EXPECT_EQ(2u, visits.size());
-    EXPECT_EQ(1u, visits[0].second);
-    EXPECT_EQ(1u, visits[1].second);
+    ASSERT_EQ(2u, visits.size());
+    EXPECT_EQ(static_cast<ui::PageTransition>(1u), visits[0].second);
+    EXPECT_EQ(static_cast<ui::PageTransition>(1u), visits[1].second);
   }
 
   // The URL with id 32 has many visits listed in the database, but we
@@ -1073,7 +1037,7 @@ TEST_F(InMemoryURLIndexTest, ReadVisitsFromHistory) {
     const VisitInfoVector& visits = entry->second.visits;
     EXPECT_EQ(10u, visits.size());
     for (size_t i = 0; i < visits.size(); ++i)
-      EXPECT_EQ(0u, visits[i].second);
+      EXPECT_EQ(static_cast<ui::PageTransition>(0u), visits[i].second);
   }
 }
 
@@ -1146,13 +1110,7 @@ TEST_F(InMemoryURLIndexTest, CacheSaveRestore) {
   ExpectPrivateDataEqual(*old_data.get(), new_data);
 }
 
-#if defined(OS_WIN)
-// http://crbug.com/351500
-#define MAYBE_RebuildFromHistoryIfCacheOld DISABLED_RebuildFromHistoryIfCacheOld
-#else
-#define MAYBE_RebuildFromHistoryIfCacheOld RebuildFromHistoryIfCacheOld
-#endif
-TEST_F(InMemoryURLIndexTest, MAYBE_RebuildFromHistoryIfCacheOld) {
+TEST_F(InMemoryURLIndexTest, RebuildFromHistoryIfCacheOld) {
   base::ScopedTempDir temp_directory;
   ASSERT_TRUE(temp_directory.CreateUniqueTempDir());
   set_history_dir(temp_directory.path());

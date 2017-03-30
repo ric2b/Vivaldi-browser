@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/message_pipe_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_dispatcher.h"
 
 #include "base/logging.h"
-#include "mojo/edk/system/configuration.h"
-#include "mojo/edk/system/local_message_pipe_endpoint.h"
-#include "mojo/edk/system/memory.h"
-#include "mojo/edk/system/message_pipe.h"
-#include "mojo/edk/system/options_validation.h"
-#include "mojo/edk/system/proxy_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/configuration.h"
+#include "third_party/mojo/src/mojo/edk/system/local_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/memory.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/options_validation.h"
+#include "third_party/mojo/src/mojo/edk/system/proxy_message_pipe_endpoint.h"
 
 namespace mojo {
 namespace system {
@@ -105,22 +105,22 @@ MessagePipeDispatcher::~MessagePipeDispatcher() {
 }
 
 MessagePipe* MessagePipeDispatcher::GetMessagePipeNoLock() const {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return message_pipe_.get();
 }
 
 unsigned MessagePipeDispatcher::GetPortNoLock() const {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return port_;
 }
 
 void MessagePipeDispatcher::CancelAllAwakablesNoLock() {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   message_pipe_->CancelAllAwakables(port_);
 }
 
 void MessagePipeDispatcher::CloseImplNoLock() {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   message_pipe_->Close(port_);
   message_pipe_ = nullptr;
   port_ = kInvalidPort;
@@ -128,7 +128,7 @@ void MessagePipeDispatcher::CloseImplNoLock() {
 
 scoped_refptr<Dispatcher>
 MessagePipeDispatcher::CreateEquivalentDispatcherAndCloseImplNoLock() {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
 
   // TODO(vtl): Currently, there are no options, so we just use
   // |kDefaultCreateOptions|. Eventually, we'll have to duplicate the options
@@ -149,7 +149,7 @@ MojoResult MessagePipeDispatcher::WriteMessageImplNoLock(
          (transports->size() > 0 &&
           transports->size() <= GetConfiguration().max_message_num_handles));
 
-  lock().AssertAcquired();
+  mutex().AssertHeld();
 
   if (num_bytes > GetConfiguration().max_message_num_bytes)
     return MOJO_RESULT_RESOURCE_EXHAUSTED;
@@ -164,23 +164,23 @@ MojoResult MessagePipeDispatcher::ReadMessageImplNoLock(
     DispatcherVector* dispatchers,
     uint32_t* num_dispatchers,
     MojoReadMessageFlags flags) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return message_pipe_->ReadMessage(port_, bytes, num_bytes, dispatchers,
                                     num_dispatchers, flags);
 }
 
 HandleSignalsState MessagePipeDispatcher::GetHandleSignalsStateImplNoLock()
     const {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return message_pipe_->GetHandleSignalsState(port_);
 }
 
 MojoResult MessagePipeDispatcher::AddAwakableImplNoLock(
     Awakable* awakable,
     MojoHandleSignals signals,
-    uint32_t context,
+    uintptr_t context,
     HandleSignalsState* signals_state) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   return message_pipe_->AddAwakable(port_, awakable, signals, context,
                                     signals_state);
 }
@@ -188,7 +188,7 @@ MojoResult MessagePipeDispatcher::AddAwakableImplNoLock(
 void MessagePipeDispatcher::RemoveAwakableImplNoLock(
     Awakable* awakable,
     HandleSignalsState* signals_state) {
-  lock().AssertAcquired();
+  mutex().AssertHeld();
   message_pipe_->RemoveAwakable(port_, awakable, signals_state);
 }
 

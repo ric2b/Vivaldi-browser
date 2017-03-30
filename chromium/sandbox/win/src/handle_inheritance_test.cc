@@ -49,4 +49,4 @@ TEST(HandleInheritanceTests, TestStdoutInheritance) {
   }
 }
 
-}
+}  // namespace sandbox

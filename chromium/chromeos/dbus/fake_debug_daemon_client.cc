@@ -4,6 +4,9 @@
 
 #include "chromeos/dbus/fake_debug_daemon_client.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
@@ -14,6 +17,13 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "chromeos/chromeos_switches.h"
+
+namespace {
+
+const char kCrOSTracingAgentName[] = "cros";
+const char kCrOSTraceLabel[] = "systemTraceEvents";
+
+}  // namespace
 
 namespace chromeos {
 
@@ -38,15 +48,29 @@ void FakeDebugDaemonClient::SetDebugMode(const std::string& subsystem,
                                          const SetDebugModeCallback& callback) {
   callback.Run(false);
 }
-void FakeDebugDaemonClient::StartSystemTracing() {}
 
-bool FakeDebugDaemonClient::RequestStopSystemTracing(
-    scoped_refptr<base::TaskRunner> task_runner,
-    const StopSystemTracingCallback& callback) {
-  std::string no_data;
-  callback.Run(base::RefCountedString::TakeString(&no_data));
+std::string FakeDebugDaemonClient::GetTracingAgentName() {
+  return kCrOSTracingAgentName;
+}
+
+std::string FakeDebugDaemonClient::GetTraceEventLabel() {
+  return kCrOSTraceLabel;
+}
+
+bool FakeDebugDaemonClient::StartAgentTracing(
+    const base::trace_event::TraceConfig& trace_config) {
   return true;
 }
+
+void FakeDebugDaemonClient::StopAgentTracing(
+    const StopAgentTracingCallback& callback) {
+  std::string no_data;
+  callback.Run(GetTracingAgentName(), GetTraceEventLabel(),
+               base::RefCountedString::TakeString(&no_data));
+}
+
+void FakeDebugDaemonClient::SetStopAgentTracingTaskRunner(
+    scoped_refptr<base::TaskRunner> task_runner) {}
 
 void FakeDebugDaemonClient::GetRoutes(bool numeric,
                                       bool ipv6,
@@ -80,19 +104,13 @@ void FakeDebugDaemonClient::GetNetworkInterfaces(
       FROM_HERE, base::Bind(callback, false, ""));
 }
 
-void FakeDebugDaemonClient::GetPerfData(uint32_t duration,
-                                        const GetPerfDataCallback& callback) {
-  std::vector<uint8> data;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                base::Bind(callback, data));
-}
-
 void FakeDebugDaemonClient::GetPerfOutput(
     uint32_t duration,
+    const std::vector<std::string>& perf_args,
     const GetPerfOutputCallback& callback) {
   int status = 0;
-  std::vector<uint8> perf_data;
-  std::vector<uint8> perf_stat;
+  std::vector<uint8_t> perf_data;
+  std::vector<uint8_t> perf_stat;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, status, perf_data, perf_stat));
 }

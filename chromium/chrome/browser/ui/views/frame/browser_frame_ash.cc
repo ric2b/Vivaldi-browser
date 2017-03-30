@@ -9,6 +9,8 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_delegate.h"
 #include "ash/wm/window_util.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/frame/browser_shutdown.h"
@@ -61,9 +63,8 @@ BrowserFrameAsh::BrowserFrameAsh(BrowserFrame* browser_frame,
   Browser* browser = browser_view->browser();
   ash::wm::WindowState* window_state =
       ash::wm::GetWindowState(GetNativeWindow());
-  window_state->SetDelegate(
-      scoped_ptr<ash::wm::WindowStateDelegate>(
-          new BrowserWindowStateDelegate(browser)).Pass());
+  window_state->SetDelegate(scoped_ptr<ash::wm::WindowStateDelegate>(
+      new BrowserWindowStateDelegate(browser)));
 
   // Turn on auto window management if we don't need an explicit bounds.
   // This way the requested bounds are honored.

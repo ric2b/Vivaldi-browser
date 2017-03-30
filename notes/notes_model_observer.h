@@ -6,7 +6,7 @@
 #ifndef VIVALDI_NOTES_NOTES_MODEL_OBSERVER_H_
 #define VIVALDI_NOTES_NOTES_MODEL_OBSERVER_H_
 
-namespace Vivaldi {
+namespace vivaldi {
 
 class Notes_Model;
 class Notes_Node;
@@ -16,7 +16,7 @@ class NotesModelObserver {
  public:
   // Invoked when the model has finished loading. |ids_reassigned| mirrors
   // that of NotesLoadDetails::ids_reassigned. See it for details.
-  virtual void Loaded(Notes_Model* model, bool ids_reassigned) = 0;
+  virtual void Loaded(Notes_Model* model, bool ids_reassigned) {}
 
   // Invoked from the destructor of the Notes_Model.
   virtual void NotesModelBeingDeleted(Notes_Model* model) {}
@@ -26,12 +26,12 @@ class NotesModelObserver {
                                  const Notes_Node* old_parent,
                                  int old_index,
                                  const Notes_Node* new_parent,
-                                 int new_index) = 0;
+                                 int new_index) {}
 
   // Invoked when a node has been added.
   virtual void NotesNodeAdded(Notes_Model* model,
                                  const Notes_Node* parent,
-                                 int index) = 0;
+                                 int index) {}
 
   // Invoked before a node is removed.
   // |parent| the parent of the node that will be removed.
@@ -50,19 +50,18 @@ class NotesModelObserver {
   virtual void NotesNodeRemoved(Notes_Model* model,
                                    const Notes_Node* parent,
                                    int old_index,
-                                   const Notes_Node* node) = 0;
+                                   const Notes_Node* node) {}
 
   // Invoked before the title or url of a node is changed.
-  virtual void OnWillChangeNotesNode(Notes_Model* model,
-                                        const Notes_Node* node) {}
+  virtual void OnWillChangeNotesNode(Notes_Model *model,
+                                     const Notes_Node *node) {}
 
   // Invoked when the title or url of a node changes.
-  virtual void NotesNodeChanged(Notes_Model* model,
-                                   const Notes_Node* node) = 0;
+  virtual void NotesNodeChanged(Notes_Model *model, const Notes_Node *node) {}
 
   // Invoked when a favicon has been loaded or changed.
-  virtual void NotesNodeFaviconChanged(Notes_Model* model,
-                                          const Notes_Node* node) = 0;
+  virtual void NotesNodeFaviconChanged(Notes_Model *model,
+                                       const Notes_Node *node) {}
 
   // Invoked before the direct children of |node| have been reordered in some
   // way, such as sorted.
@@ -71,8 +70,8 @@ class NotesModelObserver {
 
   // Invoked when the children (just direct children, not descendants) of
   // |node| have been reordered in some way, such as sorted.
-  virtual void NotesNodeChildrenReordered(Notes_Model* model,
-                                             const Notes_Node* node) = 0;
+  virtual void NotesNodeChildrenReordered(Notes_Model *model,
+                                          const Notes_Node *node) {}
 
   // Invoked before an extensive set of model changes is about to begin.
   // This tells UI intensive observers to wait until the updates finish to
@@ -91,11 +90,12 @@ class NotesModelObserver {
   virtual void OnWillRemoveAllNotes(Notes_Model* model) {}
 
   // Invoked when all non-permanent bookmark nodes have been removed.
-  virtual void NotesAllNodesRemoved(Notes_Model* model) = 0;
+  virtual void NotesAllNodesRemoved(Notes_Model* model) {}
 
  protected:
   virtual ~NotesModelObserver() {}
 };
 
-}
+}  // namespace vivaldi
+
 #endif  // VIVALDI_NOTES_NOTES_MODEL_OBSERVER_H_

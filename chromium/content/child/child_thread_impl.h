@@ -5,31 +5,33 @@
 #ifndef CONTENT_CHILD_CHILD_THREAD_IMPL_H_
 #define CONTENT_CHILD_CHILD_THREAD_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/sequenced_task_runner.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 #include "content/child/mojo/mojo_application.h"
 #include "content/common/content_export.h"
 #include "content/common/message_router.h"
+#include "content/common/mojo/channel_init.h"
 #include "content/public/child/child_thread.h"
 #include "ipc/ipc_message.h"  // For IPC_MESSAGE_LOG_ENABLED.
+#include "ipc/ipc_platform_file.h"
 
 namespace base {
 class MessageLoop;
-
-namespace trace_event {
-class TraceMemoryController;
-}  // namespace trace_event
 }  // namespace base
 
 namespace IPC {
-class AttachmentBroker;
+class AttachmentBrokerUnprivileged;
 class MessageFilter;
 class ScopedIPCSupport;
 class SyncChannel;
@@ -87,7 +89,6 @@ class CONTENT_EXPORT ChildThreadImpl
   void PreCacheFont(const LOGFONT& log_font) override;
   void ReleaseCachedFonts() override;
 #endif
-  IPC::AttachmentBroker* GetAttachmentBroker() override;
 
   IPC::SyncChannel* channel() { return channel_.get(); }
 
@@ -191,14 +192,11 @@ class CONTENT_EXPORT ChildThreadImpl
   void OnProcessFinalRelease();
 
   virtual bool OnControlMessageReceived(const IPC::Message& msg);
-
-  void set_on_channel_error_called(bool on_channel_error_called) {
-    on_channel_error_called_ = on_channel_error_called;
-  }
+  virtual void OnProcessBackgrounded(bool backgrounded);
 
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& msg) override;
-  void OnChannelConnected(int32 peer_pid) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
 
   bool IsInBrowserProcess() const;
@@ -210,6 +208,9 @@ class CONTENT_EXPORT ChildThreadImpl
     // |sender| must outlive this object.
     explicit ChildThreadMessageRouter(IPC::Sender* sender);
     bool Send(IPC::Message* msg) override;
+
+    // MessageRouter overrides.
+    bool RouteMessage(const IPC::Message& msg) override;
 
    private:
     IPC::Sender* const sender_;
@@ -226,21 +227,20 @@ class CONTENT_EXPORT ChildThreadImpl
   void OnSetProfilerStatus(tracked_objects::ThreadData::Status status);
   void OnGetChildProfilerData(int sequence_number, int current_profiling_phase);
   void OnProfilingPhaseCompleted(int profiling_phase);
-  void OnProcessBackgrounded(bool background);
+  void OnBindExternalMojoShellHandle(const IPC::PlatformFileForTransit& file);
+  void OnSetMojoParentPipeHandle(const IPC::PlatformFileForTransit& file);
 #ifdef IPC_MESSAGE_LOG_ENABLED
   void OnSetIPCLoggingEnabled(bool enable);
-#endif
-#if defined(USE_TCMALLOC)
-  void OnGetTcmallocStats();
 #endif
 
   void EnsureConnected();
 
+  scoped_ptr<IPC::ScopedIPCSupport> mojo_ipc_support_;
   scoped_ptr<MojoApplication> mojo_application_;
 
   std::string channel_name_;
+  scoped_ptr<IPC::AttachmentBrokerUnprivileged> attachment_broker_;
   scoped_ptr<IPC::SyncChannel> channel_;
-  scoped_ptr<IPC::AttachmentBroker> attachment_broker_;
 
   // Allows threads other than the main thread to send sync messages.
   scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
@@ -285,16 +285,13 @@ class CONTENT_EXPORT ChildThreadImpl
   scoped_ptr<ChildDiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;
 
-  // Observes the trace event system. When tracing is enabled, optionally
-  // starts profiling the tcmalloc heap.
-  scoped_ptr<base::trace_event::TraceMemoryController> trace_memory_controller_;
-
   scoped_ptr<base::PowerMonitor> power_monitor_;
 
   scoped_refptr<ChildMessageFilter> geofencing_message_filter_;
-  scoped_refptr<ChildMessageFilter> bluetooth_message_filter_;
 
   scoped_refptr<base::SequencedTaskRunner> browser_process_io_runner_;
+
+  ChannelInit mojo_shell_channel_init_;
 
   base::WeakPtrFactory<ChildThreadImpl> channel_connected_factory_;
 

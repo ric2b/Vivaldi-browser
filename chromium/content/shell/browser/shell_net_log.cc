@@ -5,11 +5,13 @@
 #include "content/shell/browser/shell_net_log.h"
 
 #include <stdio.h>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "net/log/net_log_util.h"
 #include "net/log/write_to_file_net_log_observer.h"
@@ -64,8 +66,8 @@ ShellNetLog::ShellNetLog(const std::string& app_name) {
     } else {
       scoped_ptr<base::Value> constants(GetShellConstants(app_name));
       write_to_file_observer_.reset(new net::WriteToFileNetLogObserver());
-      write_to_file_observer_->StartObserving(this, file.Pass(),
-                                      constants.get(), nullptr);
+      write_to_file_observer_->StartObserving(this, std::move(file),
+                                              constants.get(), nullptr);
     }
   }
 }

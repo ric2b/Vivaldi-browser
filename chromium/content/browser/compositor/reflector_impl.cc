@@ -8,7 +8,6 @@
 #include "base/location.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/owned_mailbox.h"
-//#include "content/common/gpu/client/gl_helper.h"
 #include "ui/compositor/layer.h"
 
 namespace content {
@@ -170,9 +169,9 @@ void ReflectorImpl::OnSourcePostSubBuffer(const gfx::Rect& rect) {
 }
 
 static void ReleaseMailbox(scoped_refptr<OwnedMailbox> mailbox,
-                           unsigned int sync_point,
+                           const gpu::SyncToken& sync_token,
                            bool is_lost) {
-  mailbox->UpdateSyncPoint(sync_point);
+  mailbox->UpdateSyncToken(sync_token);
 }
 
 ScopedVector<ReflectorImpl::LayerData>::iterator ReflectorImpl::FindLayerData(

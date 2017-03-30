@@ -6,7 +6,6 @@
 
 #include <set>
 
-#include "base/basictypes.h"
 #include "net/base/host_port_pair.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -18,10 +17,9 @@ class PortSuggesterTest : public ::testing::Test {
   PortSuggesterTest()
       : entropy_(1345689),
         min_ephemeral_port_(1025),
-        max_ephemeral_port_(65535) {
-  }
+        max_ephemeral_port_(65535) {}
 
-  uint64 entropy_;
+  uint64_t entropy_;
   int min_ephemeral_port_;
   int max_ephemeral_port_;
 };
@@ -44,11 +42,11 @@ TEST_F(PortSuggesterTest, SuggestAllPorts) {
   scoped_refptr<PortSuggester> port_suggester =
       new PortSuggester(HostPortPair("www.example.com", 443), entropy_);
   std::set<int> ports;
-  const uint32 port_range = 20;
+  const uint32_t port_range = 20;
   const int insertion_limit = 200;  // We should be done by then.
   for (int i = 0; i < insertion_limit; ++i) {
-    ports.insert(port_suggester->SuggestPort(min_ephemeral_port_,
-        min_ephemeral_port_ + port_range - 1));
+    ports.insert(port_suggester->SuggestPort(
+        min_ephemeral_port_, min_ephemeral_port_ + port_range - 1));
     if (ports.size() == port_range) {
       break;
     }
@@ -64,8 +62,8 @@ TEST_F(PortSuggesterTest, AvoidDuplication) {
   std::set<int> ports;
   const size_t port_count = 200;
   for (size_t i = 0; i < port_count; ++i) {
-    ports.insert(port_suggester->SuggestPort(min_ephemeral_port_,
-                                             max_ephemeral_port_));
+    ports.insert(
+        port_suggester->SuggestPort(min_ephemeral_port_, max_ephemeral_port_));
   }
   EXPECT_EQ(port_suggester->call_count(), port_count);
   EXPECT_EQ(port_count, ports.size());
@@ -79,10 +77,9 @@ TEST_F(PortSuggesterTest, ConsistentPorts) {
   scoped_refptr<PortSuggester> port_suggester2 =
       new PortSuggester(HostPortPair("www.example.com", 443), entropy_);
   for (int test_count = 20; test_count > 0; --test_count) {
-    EXPECT_EQ(port_suggester1->SuggestPort(min_ephemeral_port_,
-                                           min_ephemeral_port_),
-              port_suggester2->SuggestPort(min_ephemeral_port_,
-                                           min_ephemeral_port_));
+    EXPECT_EQ(
+        port_suggester1->SuggestPort(min_ephemeral_port_, min_ephemeral_port_),
+        port_suggester2->SuggestPort(min_ephemeral_port_, min_ephemeral_port_));
   }
 }
 
@@ -100,9 +97,9 @@ TEST_F(PortSuggesterTest, DifferentHostPortEntropy) {
   size_t insertion_count = 0;
   for (size_t j = 0; j < arraysize(port_suggester); ++j) {
     for (int i = 0; i < port_count; ++i) {
-     ports.insert(port_suggester[j]->SuggestPort(min_ephemeral_port_,
-                                                 max_ephemeral_port_));
-     ++insertion_count;
+      ports.insert(port_suggester[j]->SuggestPort(min_ephemeral_port_,
+                                                  max_ephemeral_port_));
+      ++insertion_count;
     }
   }
   EXPECT_EQ(insertion_count, ports.size());

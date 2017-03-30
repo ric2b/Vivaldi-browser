@@ -5,9 +5,12 @@
 #ifndef CONTENT_CHILD_NPAPI_WEBPLUGIN_DELEGATE_IMPL_H_
 #define CONTENT_CHILD_NPAPI_WEBPLUGIN_DELEGATE_IMPL_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -92,41 +95,7 @@ class WebPluginDelegateImpl : public WebPluginDelegate {
   NPObject* GetPluginScriptableObject() override;
   NPP GetPluginNPP() override;
   bool GetFormValue(base::string16* value) override;
-  void DidFinishLoadWithReason(const GURL& url,
-                               NPReason reason,
-                               int notify_id) override;
   int GetProcessId() override;
-  void SendJavaScriptStream(const GURL& url,
-                            const std::string& result,
-                            bool success,
-                            int notify_id) override;
-  void DidReceiveManualResponse(const GURL& url,
-                                const std::string& mime_type,
-                                const std::string& headers,
-                                uint32 expected_length,
-                                uint32 last_modified) override;
-  void DidReceiveManualData(const char* buffer, int length) override;
-  void DidFinishManualLoading() override;
-  void DidManualLoadFail() override;
-  WebPluginResourceClient* CreateResourceClient(unsigned long resource_id,
-                                                const GURL& url,
-                                                int notify_id) override;
-  WebPluginResourceClient* CreateSeekableResourceClient(
-      unsigned long resource_id,
-      int range_request_id) override;
-  void FetchURL(unsigned long resource_id,
-                int notify_id,
-                const GURL& url,
-                const GURL& first_party_for_cookies,
-                const std::string& method,
-                const char* buf,
-                unsigned int len,
-                const Referrer& referrer,
-                bool notify_redirects,
-                bool is_plugin_src_load,
-                int origin_pid,
-                int render_frame_id,
-                int render_view_id) override;
   // End of WebPluginDelegate implementation.
 
   gfx::PluginWindowHandle windowed_handle() const { return windowed_handle_; }
@@ -301,7 +270,7 @@ class WebPluginDelegateImpl : public WebPluginDelegate {
   WNDPROC plugin_wnd_proc_;
 
   // Used to throttle WM_USER+1 messages in Flash.
-  uint32 last_message_;
+  uint32_t last_message_;
   bool is_calling_wndproc;
 
   // An IME emulator used by a windowless plugin to retrieve IME data through
@@ -395,7 +364,7 @@ class WebPluginDelegateImpl : public WebPluginDelegate {
   CALayer* layer_;  // Used for CA drawing mode. Weak, retained by plugin.
   WebPluginAcceleratedSurface* surface_;  // Weak ref.
   CARenderer* renderer_;  // Renders layer_ to surface_.
-  scoped_ptr<base::RepeatingTimer<WebPluginDelegateImpl> > redraw_timer_;
+  scoped_ptr<base::RepeatingTimer> redraw_timer_;
 
   // The upper-left corner of the web content area in screen coordinates,
   // relative to an upper-left (0,0).

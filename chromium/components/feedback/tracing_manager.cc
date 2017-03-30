@@ -43,7 +43,7 @@ int TracingManager::RequestTrace() {
 
   current_trace_id_ = g_next_trace_id;
   ++g_next_trace_id;
-  content::TracingController::GetInstance()->DisableRecording(
+  content::TracingController::GetInstance()->StopTracing(
       content::TracingController::CreateStringSink(
           base::Bind(&TracingManager::OnTraceDataCollected,
                      weak_ptr_factory_.GetWeakPtr())));
@@ -90,12 +90,14 @@ void TracingManager::DiscardTraceData(int id) {
 }
 
 void TracingManager::StartTracing() {
-  content::TracingController::GetInstance()->EnableRecording(
+  content::TracingController::GetInstance()->StartTracing(
       base::trace_event::TraceConfig(),
-      content::TracingController::EnableRecordingDoneCallback());
+      content::TracingController::StartTracingDoneCallback());
 }
 
-void TracingManager::OnTraceDataCollected(base::RefCountedString* trace_data) {
+void TracingManager::OnTraceDataCollected(
+    scoped_ptr<const base::DictionaryValue> metadata,
+    base::RefCountedString* trace_data) {
   if (!current_trace_id_)
     return;
 

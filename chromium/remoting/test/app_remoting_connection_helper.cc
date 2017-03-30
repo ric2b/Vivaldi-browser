@@ -4,6 +4,8 @@
 
 #include "remoting/test/app_remoting_connection_helper.h"
 
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
@@ -36,7 +38,9 @@ AppRemotingConnectionHelper::AppRemotingConnectionHelper(
 AppRemotingConnectionHelper::~AppRemotingConnectionHelper() {
   // |client_| destroys some of its members via DeleteSoon on the message loop's
   // TaskRunner so we need to run the loop until it has no more work to do.
-  client_->RemoveRemoteConnectionObserver(this);
+  if (!connection_is_ready_for_tests_) {
+    client_->RemoveRemoteConnectionObserver(this);
+  }
   client_.reset();
 
   base::RunLoop().RunUntilIdle();
@@ -44,17 +48,8 @@ AppRemotingConnectionHelper::~AppRemotingConnectionHelper() {
 
 void AppRemotingConnectionHelper::Initialize(
     scoped_ptr<TestChromotingClient> test_chromoting_client) {
-  client_ = test_chromoting_client.Pass();
+  client_ = std::move(test_chromoting_client);
   client_->AddRemoteConnectionObserver(this);
-}
-
-void AppRemotingConnectionHelper::SetHostMessageReceivedCallback(
-      HostMessageReceivedCallback host_message_received_callback) {
-  host_message_received_callback_ = host_message_received_callback;
-}
-
-void AppRemotingConnectionHelper::ResetHostMessageReceivedCallback() {
-  host_message_received_callback_.Reset();
 }
 
 bool AppRemotingConnectionHelper::StartConnection() {
@@ -80,9 +75,9 @@ bool AppRemotingConnectionHelper::StartConnection() {
   timer_->Start(FROM_HERE, base::TimeDelta::FromSeconds(30),
                 run_loop_->QuitClosure());
 
-  client_->StartConnection(AppRemotingSharedData->user_name(),
-                           AppRemotingSharedData->access_token(),
-                           remote_host_info);
+  client_->StartConnection(remote_host_info.GenerateConnectionSetupInfo(
+      AppRemotingSharedData->access_token(),
+      AppRemotingSharedData->user_name()));
 
   run_loop_->Run();
   timer_->Stop();
@@ -145,16 +140,13 @@ void AppRemotingConnectionHelper::HostMessageReceived(
     const protocol::ExtensionMessage& message) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // If a callback is not registered, then the message is passed to a default
-  // handler for the class based on the message type.
-  if (!host_message_received_callback_.is_null()) {
-    host_message_received_callback_.Run(message);
-  } else if (message.type() == "onWindowAdded") {
+  VLOG(2) << "HostMessage received by HostMessageReceived()."
+          << " type: " << message.type() << " data: " << message.data();
+
+  if (message.type() == "onWindowAdded") {
     HandleOnWindowAddedMessage(message);
   } else {
     VLOG(2) << "HostMessage not handled by HostMessageReceived().";
-    VLOG(2) << "type: " << message.type();
-    VLOG(2) << "data: " << message.data();
   }
 }
 
@@ -211,6 +203,7 @@ void AppRemotingConnectionHelper::HandleOnWindowAddedMessage(
   std::string main_window_title = application_details_.main_window_title;
   if (current_window_title.find_first_of(main_window_title) == 0) {
     connection_is_ready_for_tests_ = true;
+    client_->RemoveRemoteConnectionObserver(this);
 
     if (timer_->IsRunning()) {
       timer_->Stop();

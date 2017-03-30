@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -23,7 +26,7 @@ const char kAllCommands[] = "shell:"
     "echo " SEPARATOR "\n"
     "dumpsys user\n";
 
-const char kSeparator[] = SEPARATOR "\r\n";
+const char kSeparator[] = SEPARATOR;
 
 #undef SEPARATOR
 
@@ -86,9 +89,9 @@ const BrowserDescriptor kBrowserDescriptors[] = {
     "Content Shell"
   },
   {
-    "org.chromium.chrome.shell",
-    "chrome_shell_devtools_remote",
-    "Chrome Shell"
+    "org.chromium.chrome",
+    kChromeDefaultSocket,
+    "Chromium"
   },
 };
 

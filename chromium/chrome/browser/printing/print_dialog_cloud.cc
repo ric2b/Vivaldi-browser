@@ -5,6 +5,7 @@
 #include "chrome/browser/printing/print_dialog_cloud.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -12,6 +13,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "components/cloud_devices/common/cloud_devices_urls.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -68,7 +71,8 @@ void CreateCloudPrintSigninTab(Browser* browser,
     browser->window()->ShowAvatarBubbleFromAvatarButton(
         add_account ? BrowserWindow::AVATAR_BUBBLE_MODE_ADD_ACCOUNT
                     : BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
-        signin::ManageAccountsParams());
+        signin::ManageAccountsParams(),
+        signin_metrics::AccessPoint::ACCESS_POINT_CLOUD_PRINT);
   } else {
     GURL url = add_account ? cloud_devices::GetCloudPrintAddAccountURL()
                            : cloud_devices::GetCloudPrintSigninURL();

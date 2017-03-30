@@ -16,15 +16,16 @@ namespace system_notifier {
 // The list of ash system notifier IDs. Alphabetical order.
 ASH_EXPORT extern const char kNotifierBattery[];
 ASH_EXPORT extern const char kNotifierBluetooth[];
+ASH_EXPORT extern const char kNotifierDeprecatedAccelerator[];
 ASH_EXPORT extern const char kNotifierDisplay[];
 ASH_EXPORT extern const char kNotifierDisplayResolutionChange[];
 ASH_EXPORT extern const char kNotifierDisplayError[];
+ASH_EXPORT extern const char kNotifierDualRole[];
 ASH_EXPORT extern const char kNotifierLocale[];
 ASH_EXPORT extern const char kNotifierMultiProfileFirstRun[];
 ASH_EXPORT extern const char kNotifierNetwork[];
 ASH_EXPORT extern const char kNotifierNetworkError[];
 ASH_EXPORT extern const char kNotifierNetworkPortalDetector[];
-ASH_EXPORT extern const char kNotifierOobeScreen[];
 ASH_EXPORT extern const char kNotifierPower[];
 ASH_EXPORT extern const char kNotifierScreenshot[];
 ASH_EXPORT extern const char kNotifierScreenCapture[];

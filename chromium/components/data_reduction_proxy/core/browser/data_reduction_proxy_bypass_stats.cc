@@ -241,7 +241,7 @@ void DataReductionProxyBypassStats::RecordBypassedBytesHistograms(
     const net::URLRequest& request,
     bool data_reduction_proxy_enabled,
     const net::ProxyConfig& data_reduction_proxy_config) {
-  int64 content_length = request.received_response_content_length();
+  int64_t content_length = request.received_response_content_length();
 
   // Only record histograms when the data reduction proxy is enabled.
   if (!data_reduction_proxy_enabled)
@@ -300,7 +300,8 @@ void DataReductionProxyBypassStats::RecordBypassedBytesHistograms(
   }
 
   std::string mime_type;
-  request.GetMimeType(&mime_type);
+  if (request.response_headers())
+    request.response_headers()->GetMimeType(&mime_type);
   // MIME types are named by <media-type>/<subtype>. Check to see if the media
   // type is audio or video in order to record audio/video bypasses separately
   // for current bypasses and for the triggering requests of short bypasses.
@@ -385,7 +386,7 @@ void DataReductionProxyBypassStats::OnNetworkChanged(
 void DataReductionProxyBypassStats::RecordBypassedBytes(
     DataReductionProxyBypassType bypass_type,
     DataReductionProxyBypassStats::BypassedBytesType bypassed_bytes_type,
-    int64 content_length) {
+    int64_t content_length) {
   // Individual histograms are needed to count the bypassed bytes for each
   // bypass type so that we can see the size of requests. This helps us
   // remove outliers that would skew the sum of bypassed bytes for each type.

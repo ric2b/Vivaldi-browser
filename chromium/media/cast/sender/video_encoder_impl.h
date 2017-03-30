@@ -5,6 +5,7 @@
 #ifndef MEDIA_CAST_SENDER_VIDEO_ENCODER_IMPL_H_
 #define MEDIA_CAST_SENDER_VIDEO_ENCODER_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
@@ -22,7 +23,6 @@ class VideoEncoderImpl : public VideoEncoder {
  public:
   struct CodecDynamicConfig {
     bool key_frame_requested;
-    uint32 latest_frame_id_to_reference;
     int bit_rate;
   };
 
@@ -42,7 +42,6 @@ class VideoEncoderImpl : public VideoEncoder {
       const FrameEncodedCallback& frame_encoded_callback) final;
   void SetBitRate(int new_bit_rate) final;
   void GenerateKeyFrame() final;
-  void LatestFrameIdToReference(uint32 frame_id) final;
 
  private:
   scoped_refptr<CastEnvironment> cast_environment_;

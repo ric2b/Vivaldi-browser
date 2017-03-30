@@ -26,7 +26,7 @@ remoting.It2MeActivity = function() {
 
   var form = document.getElementById('access-code-form');
   /** @private */
-  this.accessCodeDialog_ = new remoting.InputDialog(
+  this.accessCodeDialog_ = remoting.modalDialogFactory.createInputDialog(
     remoting.AppMode.CLIENT_UNCONNECTED,
     form,
     form.querySelector('#access-code-entry'),
@@ -34,6 +34,9 @@ remoting.It2MeActivity = function() {
 
   /** @private {remoting.DesktopRemotingActivity} */
   this.desktopActivity_ = null;
+  /** @private {remoting.SessionLogger} */
+  this.logger_ = null;
+
 };
 
 remoting.It2MeActivity.prototype.dispose = function() {
@@ -43,25 +46,54 @@ remoting.It2MeActivity.prototype.dispose = function() {
 
 remoting.It2MeActivity.prototype.start = function() {
   var that = this;
+  var SessionState = remoting.ChromotingEvent.SessionState;
 
-  this.desktopActivity_ = new remoting.DesktopRemotingActivity(this);
+  this.logger_ = this.createLogger_();
+  this.logger_.logSessionStateChange(SessionState.STARTED);
+
+  console.assert(
+      !this.desktopActivity_, 'Zombie DesktopActivity from previous session');
+  base.dispose(this.desktopActivity_);
+  this.desktopActivity_ =
+      new remoting.DesktopRemotingActivity(this, this.logger_);
+
+  function onError(/** remoting.Error */ error) {
+    if (error.isCancel()) {
+      that.logger_.logSessionStateChange(SessionState.CONNECTION_CANCELED);
+      remoting.setMode(remoting.AppMode.HOME);
+    } else {
+      that.logger_.logSessionStateChange(SessionState.CONNECTION_FAILED, error);
+      that.showErrorMessage_(error);
+    }
+
+    base.dispose(that.desktopActivity_);
+    that.desktopActivity_ = null;
+  }
+
+  var sessionStart = Date.now();
 
   this.accessCodeDialog_.show().then(function(/** string */ accessCode) {
+    that.logger_.setAuthTotalTime(Date.now() - sessionStart);
     that.desktopActivity_.getConnectingDialog().show();
     return that.verifyAccessCode_(accessCode);
   }).then(function() {
     return remoting.HostListApi.getInstance().getSupportHost(that.hostId_);
   }).then(function(/** remoting.Host */ host) {
     that.connect_(host);
-  }).catch(remoting.Error.handler(function(/** remoting.Error */ error) {
-    if (error.hasTag(remoting.Error.Tag.CANCELLED)) {
-      remoting.setMode(remoting.AppMode.HOME);
-    } else {
-      var errorDiv = document.getElementById('connect-error-message');
-      l10n.localizeElementFromTag(errorDiv, error.getTag());
-      remoting.setMode(remoting.AppMode.CLIENT_CONNECT_FAILED_IT2ME);
-    }
-  }));
+  }).catch(remoting.Error.handler(onError));
+};
+
+
+/**
+ * @return {!remoting.SessionLogger}
+ * @private
+ */
+remoting.It2MeActivity.prototype.createLogger_ = function() {
+  var Event = remoting.ChromotingEvent;
+  var logger = remoting.SessionLogger.createForClient();
+  logger.setEntryPoint(Event.SessionEntryPoint.CONNECT_BUTTON);
+  logger.setLogEntryMode(Event.Mode.IT2ME);
+  return logger;
 };
 
 remoting.It2MeActivity.prototype.stop = function() {
@@ -149,7 +181,7 @@ remoting.It2MeActivity.prototype.verifyAccessCode_ = function(accessCode) {
  */
 remoting.It2MeActivity.prototype.connect_ = function(host) {
   this.desktopActivity_.start(
-      host, new remoting.CredentialsProvider({ accessCode: this.passCode_ }));
+      host, new remoting.CredentialsProvider({accessCode: this.passCode_}));
 };
 
 })();

@@ -5,13 +5,11 @@
 import logging
 import unittest
 
-from telemetry.core import util
 from telemetry import decorators
 from telemetry.internal.backends import android_command_line_backend
 from telemetry.testing import options_for_unittests
 
-util.AddDirToPythonPath(util.GetChromiumSrcDir(), 'build', 'android')
-from pylib.device import device_utils # pylint: disable=import-error
+from devil.android import device_utils
 
 
 class _MockBackendSettings(object):

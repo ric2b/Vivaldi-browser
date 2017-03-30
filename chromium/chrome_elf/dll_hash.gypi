@@ -14,18 +14,18 @@
         'dll_hash/dll_hash.h',
       ],
     },
-    #{
-    #  'target_name': 'dll_hash_main',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    'dll_hash',
-    #  ],
-    #  'include_dirs': [
-    #    '..',
-    #  ],
-    #  'sources': [
-    #    'dll_hash/dll_hash_main.cc',
-    #  ],
-    #}
+    {
+      'target_name': 'dll_hash_main',
+      'type': 'executable',
+      'dependencies': [
+        'dll_hash',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'sources': [
+        'dll_hash/dll_hash_main.cc',
+      ],
+    }
   ]
 }

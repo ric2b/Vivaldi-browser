@@ -5,18 +5,23 @@
 #ifndef CC_RESOURCES_RESOURCE_PROVIDER_H_
 #define CC_RESOURCES_RESOURCE_PROVIDER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/resource_id.h"
 #include "cc/output/context_provider.h"
@@ -33,6 +38,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 class GrContext;
 
@@ -44,7 +50,6 @@ class GLES2Interface;
 }
 
 namespace gfx {
-class GpuMemoryBuffer;
 class Rect;
 class Vector2d;
 }
@@ -57,7 +62,8 @@ class SharedBitmapManager;
 
 // This class is not thread-safe and can only be called from the thread it was
 // created on (in practice, the impl thread).
-class CC_EXPORT ResourceProvider {
+class CC_EXPORT ResourceProvider
+    : public base::trace_event::MemoryDumpProvider {
  private:
   struct Resource;
 
@@ -73,6 +79,7 @@ class CC_EXPORT ResourceProvider {
         TEXTURE_HINT_IMMUTABLE | TEXTURE_HINT_FRAMEBUFFER
   };
   enum ResourceType {
+    RESOURCE_TYPE_GPU_MEMORY_BUFFER,
     RESOURCE_TYPE_GL_TEXTURE,
     RESOURCE_TYPE_BITMAP,
   };
@@ -83,25 +90,22 @@ class CC_EXPORT ResourceProvider {
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       BlockingTaskRunner* blocking_main_thread_task_runner,
       int highp_threshold_min,
-      bool use_rgba_4444_texture_format,
       size_t id_allocation_chunk_size,
-      bool use_persistent_map_for_gpu_memory_buffers);
-  virtual ~ResourceProvider();
+      bool use_gpu_memory_buffer_resources,
+      const std::vector<unsigned>& use_image_texture_targets);
+  ~ResourceProvider() override;
 
   void DidLoseOutputSurface() { lost_output_surface_ = true; }
 
   int max_texture_size() const { return max_texture_size_; }
-  ResourceFormat memory_efficient_texture_format() const {
-    return use_rgba_4444_texture_format_ ? RGBA_4444 : best_texture_format_;
-  }
   ResourceFormat best_texture_format() const { return best_texture_format_; }
   ResourceFormat best_render_buffer_format() const {
     return best_render_buffer_format_;
   }
   ResourceFormat yuv_resource_format() const { return yuv_resource_format_; }
   bool use_sync_query() const { return use_sync_query_; }
-  bool use_persistent_map_for_gpu_memory_buffers() const {
-    return use_persistent_map_for_gpu_memory_buffers_;
+  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() {
+    return gpu_memory_buffer_manager_;
   }
   size_t num_resources() const { return resources_.size(); }
 
@@ -117,30 +121,19 @@ class CC_EXPORT ResourceProvider {
 
   ResourceType default_resource_type() const { return default_resource_type_; }
   ResourceType GetResourceType(ResourceId id);
+  GLenum GetResourceTextureTarget(ResourceId id);
 
   // Creates a resource of the default resource type.
   ResourceId CreateResource(const gfx::Size& size,
-                            GLint wrap_mode,
                             TextureHint hint,
                             ResourceFormat format);
 
-  // Creates a resource which is tagged as being managed for GPU memory
-  // accounting purposes.
-  ResourceId CreateManagedResource(const gfx::Size& size,
-                                   GLenum target,
-                                   GLint wrap_mode,
-                                   TextureHint hint,
-                                   ResourceFormat format);
+  // Creates a resource for a particular texture target (the distinction between
+  // texture targets has no effect in software mode).
+  ResourceId CreateGpuMemoryBufferResource(const gfx::Size& size,
+                                           TextureHint hint,
+                                           ResourceFormat format);
 
-  // You can also explicitly create a specific resource type.
-  ResourceId CreateGLTexture(const gfx::Size& size,
-                             GLenum target,
-                             GLenum texture_pool,
-                             GLint wrap_mode,
-                             TextureHint hint,
-                             ResourceFormat format);
-
-  ResourceId CreateBitmap(const gfx::Size& size, GLint wrap_mode);
   // Wraps an IOSurface into a GL resource.
   ResourceId CreateResourceFromIOSurface(const gfx::Size& size,
                                          unsigned io_surface_id);
@@ -175,7 +168,7 @@ class CC_EXPORT ResourceProvider {
 
   // Sets whether resources need sync points set on them when returned to this
   // child. Defaults to true.
-  void SetChildNeedsSyncPoints(int child, bool needs_sync_points);
+  void SetChildNeedsSyncTokens(int child, bool needs_sync_tokens);
 
   // Gets the child->parent resource ID map.
   const ResourceIdMap& GetChildToParentMap(int child) const;
@@ -194,7 +187,7 @@ class CC_EXPORT ResourceProvider {
   // declaring which resources are in use. Use DeclareUsedResourcesFromChild
   // after calling this method to do that. All calls to ReceiveFromChild should
   // be followed by a DeclareUsedResourcesFromChild.
-  // NOTE: if the sync_point is set on any TransferableResource, this will
+  // NOTE: if the sync_token is set on any TransferableResource, this will
   // wait on it.
   void ReceiveFromChild(
       int child, const TransferableResourceArray& transferable_resources);
@@ -207,7 +200,7 @@ class CC_EXPORT ResourceProvider {
 
   // Receives resources from the parent, moving them from mailboxes. Resource
   // IDs passed are in the child namespace.
-  // NOTE: if the sync_point is set on any TransferableResource, this will
+  // NOTE: if the sync_token is set on any TransferableResource, this will
   // wait on it.
   void ReceiveReturnsFromParent(
       const ReturnedResourceArray& transferable_resources);
@@ -224,6 +217,7 @@ class CC_EXPORT ResourceProvider {
 
     unsigned texture_id() const { return resource_->gl_id; }
     GLenum target() const { return resource_->target; }
+    const gfx::Size& texture_size() const { return resource_->size; }
 
    protected:
     ResourceProvider* resource_provider_;
@@ -281,7 +275,6 @@ class CC_EXPORT ResourceProvider {
       DCHECK(valid());
       return &sk_bitmap_;
     }
-    GLint wrap_mode() const { return wrap_mode_; }
 
     bool valid() const { return !!sk_bitmap_.getPixels(); }
 
@@ -289,7 +282,6 @@ class CC_EXPORT ResourceProvider {
     ResourceProvider* resource_provider_;
     ResourceId resource_id_;
     SkBitmap sk_bitmap_;
-    GLint wrap_mode_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedReadLockSoftware);
   };
@@ -323,10 +315,7 @@ class CC_EXPORT ResourceProvider {
    private:
     ResourceProvider* resource_provider_;
     ResourceProvider::Resource* resource_;
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
-    gfx::GpuMemoryBuffer* gpu_memory_buffer_;
-    gfx::Size size_;
-    ResourceFormat format_;
+    scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
     base::ThreadChecker thread_checker_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedWriteLockGpuMemoryBuffer);
@@ -413,8 +402,6 @@ class CC_EXPORT ResourceProvider {
   // For tests only!
   void CreateForTesting(ResourceId id);
 
-  GLenum TargetForTesting(ResourceId id);
-
   // Sets the current read fence. If a resource is locked for read
   // and has read fences enabled, the resource will not allow writes
   // until this fence has passed.
@@ -423,14 +410,10 @@ class CC_EXPORT ResourceProvider {
   // Indicates if we can currently lock this resource for write.
   bool CanLockForWrite(ResourceId id);
 
-  // Copy |rect| pixels from source to destination.
-  void CopyResource(ResourceId source_id,
-                    ResourceId dest_id,
-                    const gfx::Rect& rect);
+  // Indicates if this resource may be used for a hardware overlay plane.
+  bool IsOverlayCandidate(ResourceId id);
 
-  void WaitSyncPointIfNeeded(ResourceId id);
-
-  void WaitReadLockIfNeeded(ResourceId id);
+  void WaitSyncTokenIfNeeded(ResourceId id);
 
   static GLint GetActiveTextureUnit(gpu::gles2::GLES2Interface* gl);
 
@@ -438,15 +421,23 @@ class CC_EXPORT ResourceProvider {
 
   void ValidateResource(ResourceId id) const;
 
+  GLenum GetImageTextureTarget(ResourceFormat format);
+
+  // base::trace_event::MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
+
+  int tracing_id() const { return tracing_id_; }
+
  protected:
   ResourceProvider(OutputSurface* output_surface,
                    SharedBitmapManager* shared_bitmap_manager,
                    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
                    BlockingTaskRunner* blocking_main_thread_task_runner,
                    int highp_threshold_min,
-                   bool use_rgba_4444_texture_format,
                    size_t id_allocation_chunk_size,
-                   bool use_persistent_map_for_gpu_memory_buffers);
+                   bool use_gpu_memory_buffer_resources,
+                   const std::vector<unsigned>& use_image_texture_targets);
   void Initialize();
 
  private:
@@ -459,21 +450,18 @@ class CC_EXPORT ResourceProvider {
              Origin origin,
              GLenum target,
              GLenum filter,
-             GLenum texture_pool,
-             GLint wrap_mode,
              TextureHint hint,
+             ResourceType type,
              ResourceFormat format);
     Resource(uint8_t* pixels,
              SharedBitmap* bitmap,
              const gfx::Size& size,
              Origin origin,
-             GLenum filter,
-             GLint wrap_mode);
+             GLenum filter);
     Resource(const SharedBitmapId& bitmap_id,
              const gfx::Size& size,
              Origin origin,
-             GLenum filter,
-             GLint wrap_mode);
+             GLenum filter);
 
     int child_id;
     unsigned gl_id;
@@ -493,11 +481,10 @@ class CC_EXPORT ResourceProvider {
     bool locked_for_write : 1;
     bool lost : 1;
     bool marked_for_deletion : 1;
-    bool pending_set_pixels : 1;
-    bool set_pixels_completion_forced : 1;
     bool allocated : 1;
     bool read_lock_fences_enabled : 1;
     bool has_shared_bitmap_id : 1;
+    bool is_overlay_candidate : 1;
     scoped_refptr<Fence> read_lock_fence;
     gfx::Size size;
     Origin origin;
@@ -507,8 +494,6 @@ class CC_EXPORT ResourceProvider {
     GLenum filter;
     unsigned image_id;
     unsigned bound_image_id;
-    GLenum texture_pool;
-    GLint wrap_mode;
     TextureHint hint;
     ResourceType type;
     ResourceFormat format;
@@ -526,7 +511,7 @@ class CC_EXPORT ResourceProvider {
     ResourceIdMap parent_to_child_map;
     ReturnCallback return_callback;
     bool marked_for_deletion;
-    bool needs_sync_points;
+    bool needs_sync_tokens;
   };
   typedef base::hash_map<int, Child> ChildMap;
 
@@ -535,6 +520,11 @@ class CC_EXPORT ResourceProvider {
            resource->read_lock_fence->HasPassed();
   }
 
+  ResourceId CreateGLTexture(const gfx::Size& size,
+                             TextureHint hint,
+                             ResourceType type,
+                             ResourceFormat format);
+  ResourceId CreateBitmap(const gfx::Size& size);
   Resource* InsertResource(ResourceId id, const Resource& resource);
   Resource* GetResource(ResourceId id);
   const Resource* LockForRead(ResourceId id);
@@ -559,6 +549,7 @@ class CC_EXPORT ResourceProvider {
   void DestroyChildInternal(ChildMap::iterator it, DeleteStyle style);
   void LazyCreate(Resource* resource);
   void LazyAllocate(Resource* resource);
+  void LazyCreateImage(Resource* resource);
 
   void BindImageForSampling(Resource* resource);
   // Binds the given GL resource to a texture target for sampling using the
@@ -582,6 +573,7 @@ class CC_EXPORT ResourceProvider {
   ChildMap children_;
 
   ResourceType default_resource_type_;
+  bool use_gpu_memory_buffer_resources_;
   bool use_texture_storage_ext_;
   bool use_texture_format_bgra_;
   bool use_texture_usage_hint_;
@@ -594,74 +586,20 @@ class CC_EXPORT ResourceProvider {
   base::ThreadChecker thread_checker_;
 
   scoped_refptr<Fence> current_read_lock_fence_;
-  bool use_rgba_4444_texture_format_;
 
   const size_t id_allocation_chunk_size_;
   scoped_ptr<IdAllocator> texture_id_allocator_;
   scoped_ptr<IdAllocator> buffer_id_allocator_;
 
   bool use_sync_query_;
-  bool use_persistent_map_for_gpu_memory_buffers_;
-  // Fence used for CopyResource if CHROMIUM_sync_query is not supported.
-  scoped_refptr<SynchronousFence> synchronous_fence_;
+  std::vector<unsigned> use_image_texture_targets_;
+
+  // A process-unique ID used for disambiguating memory dumps from different
+  // resource providers.
+  int tracing_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceProvider);
 };
-
-// TODO(epenner): Move these format conversions to resource_format.h
-// once that builds on mac (npapi.h currently #includes OpenGL.h).
-inline int BitsPerPixel(ResourceFormat format) {
-  switch (format) {
-    case BGRA_8888:
-    case RGBA_8888:
-      return 32;
-    case RGBA_4444:
-    case RGB_565:
-      return 16;
-    case ALPHA_8:
-    case LUMINANCE_8:
-    case RED_8:
-      return 8;
-    case ETC1:
-      return 4;
-  }
-  NOTREACHED();
-  return 0;
-}
-
-inline GLenum GLDataType(ResourceFormat format) {
-  DCHECK_LE(format, RESOURCE_FORMAT_MAX);
-  static const unsigned format_gl_data_type[RESOURCE_FORMAT_MAX + 1] = {
-      GL_UNSIGNED_BYTE,           // RGBA_8888
-      GL_UNSIGNED_SHORT_4_4_4_4,  // RGBA_4444
-      GL_UNSIGNED_BYTE,           // BGRA_8888
-      GL_UNSIGNED_BYTE,           // ALPHA_8
-      GL_UNSIGNED_BYTE,           // LUMINANCE_8
-      GL_UNSIGNED_SHORT_5_6_5,    // RGB_565,
-      GL_UNSIGNED_BYTE,           // ETC1
-      GL_UNSIGNED_BYTE            // RED_8
-  };
-  return format_gl_data_type[format];
-}
-
-inline GLenum GLDataFormat(ResourceFormat format) {
-  DCHECK_LE(format, RESOURCE_FORMAT_MAX);
-  static const unsigned format_gl_data_format[RESOURCE_FORMAT_MAX + 1] = {
-      GL_RGBA,           // RGBA_8888
-      GL_RGBA,           // RGBA_4444
-      GL_BGRA_EXT,       // BGRA_8888
-      GL_ALPHA,          // ALPHA_8
-      GL_LUMINANCE,      // LUMINANCE_8
-      GL_RGB,            // RGB_565
-      GL_ETC1_RGB8_OES,  // ETC1
-      GL_RED_EXT         // RED_8
-  };
-  return format_gl_data_format[format];
-}
-
-inline GLenum GLInternalFormat(ResourceFormat format) {
-  return GLDataFormat(format);
-}
 
 }  // namespace cc
 

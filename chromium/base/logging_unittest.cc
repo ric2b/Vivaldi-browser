@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -122,7 +122,7 @@ TEST_F(LoggingTest, LogIsOn) {
   EXPECT_TRUE(kDfatalIsFatal == LOG_IS_ON(DFATAL));
 }
 
-TEST_F(LoggingTest, LoggingIsLazy) {
+TEST_F(LoggingTest, LoggingIsLazyBySeverity) {
   MockLogSource mock_log_source;
   EXPECT_CALL(mock_log_source, Log()).Times(0);
 
@@ -149,6 +149,24 @@ TEST_F(LoggingTest, LoggingIsLazy) {
   DVLOG_IF(1, true) << mock_log_source.Log();
   DVPLOG(1) << mock_log_source.Log();
   DVPLOG_IF(1, true) << mock_log_source.Log();
+}
+
+TEST_F(LoggingTest, LoggingIsLazyByDestination) {
+  MockLogSource mock_log_source;
+  MockLogSource mock_log_source_error;
+  EXPECT_CALL(mock_log_source, Log()).Times(0);
+
+  // Severity >= ERROR is always printed to stderr.
+  EXPECT_CALL(mock_log_source_error, Log()).Times(1).
+      WillRepeatedly(Return("log message"));
+
+  LoggingSettings settings;
+  settings.logging_dest = LOG_NONE;
+  InitLogging(settings);
+
+  LOG(INFO) << mock_log_source.Log();
+  LOG(WARNING) << mock_log_source.Log();
+  LOG(ERROR) << mock_log_source_error.Log();
 }
 
 // Official builds have CHECKs directly call BreakDebugger.
@@ -232,6 +250,30 @@ TEST_F(LoggingTest, DcheckReleaseBehavior) {
   DCHECK(some_variable) << "test";
   DPCHECK(some_variable) << "test";
   DCHECK_EQ(some_variable, 1) << "test";
+}
+
+TEST_F(LoggingTest, DCheckEqStatements) {
+  bool reached = false;
+  if (false)
+    DCHECK_EQ(false, true);           // Unreached.
+  else
+    DCHECK_EQ(true, reached = true);  // Reached, passed.
+  ASSERT_EQ(DCHECK_IS_ON() ? true : false, reached);
+
+  if (false)
+    DCHECK_EQ(false, true);           // Unreached.
+}
+
+TEST_F(LoggingTest, CheckEqStatements) {
+  bool reached = false;
+  if (false)
+    CHECK_EQ(false, true);           // Unreached.
+  else
+    CHECK_EQ(true, reached = true);  // Reached, passed.
+  ASSERT_TRUE(reached);
+
+  if (false)
+    CHECK_EQ(false, true);           // Unreached.
 }
 
 // Test that defining an operator<< for a type in a namespace doesn't prevent

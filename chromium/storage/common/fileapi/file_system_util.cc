@@ -4,9 +4,12 @@
 
 #include "storage/common/fileapi/file_system_util.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -420,8 +423,8 @@ bool CrackIsolatedFileSystemName(const std::string& filesystem_name,
   // names, so we do a case insensitive compare by converting both strings
   // to uppercase.
   // TODO(benwells): Remove this when WebKit uses the same constant.
-  start_token = base::StringToUpperASCII(start_token);
-  std::string filesystem_name_upper = base::StringToUpperASCII(filesystem_name);
+  start_token = base::ToUpperASCII(start_token);
+  std::string filesystem_name_upper = base::ToUpperASCII(filesystem_name);
   size_t pos = filesystem_name_upper.find(start_token);
   if (pos == std::string::npos)
     return false;

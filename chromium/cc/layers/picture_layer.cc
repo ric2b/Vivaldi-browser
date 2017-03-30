@@ -5,10 +5,13 @@
 #include "cc/layers/picture_layer.h"
 
 #include "base/auto_reset.h"
+#include "base/trace_event/trace_event.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer_impl.h"
 #include "cc/playback/display_list_recording_source.h"
-#include "cc/playback/picture_pile.h"
+#include "cc/proto/cc_conversions.h"
+#include "cc/proto/gfx_conversions.h"
+#include "cc/proto/layer.pb.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
@@ -33,9 +36,9 @@ PictureLayer::PictureLayer(const LayerSettings& settings,
 
 PictureLayer::PictureLayer(const LayerSettings& settings,
                            ContentLayerClient* client,
-                           scoped_ptr<RecordingSource> source)
+                           scoped_ptr<DisplayListRecordingSource> source)
     : PictureLayer(settings, client) {
-  recording_source_ = source.Pass();
+  recording_source_ = std::move(source);
 }
 
 PictureLayer::~PictureLayer() {
@@ -48,40 +51,23 @@ scoped_ptr<LayerImpl> PictureLayer::CreateLayerImpl(LayerTreeImpl* tree_impl) {
 
 void PictureLayer::PushPropertiesTo(LayerImpl* base_layer) {
   Layer::PushPropertiesTo(base_layer);
+  TRACE_EVENT0("cc", "PictureLayer::PushPropertiesTo");
   PictureLayerImpl* layer_impl = static_cast<PictureLayerImpl*>(base_layer);
   // TODO(danakj): Make is_mask_ a constructor parameter for PictureLayer.
   DCHECK_EQ(layer_impl->is_mask(), is_mask_);
-
-  int source_frame_number = layer_tree_host()->source_frame_number();
-  gfx::Size impl_bounds = layer_impl->bounds();
-  gfx::Size recording_source_bounds = recording_source_->GetSize();
-
-  // If update called, then recording source size must match bounds pushed to
-  // impl layer.
-  DCHECK_IMPLIES(update_source_frame_number_ == source_frame_number,
-                 impl_bounds == recording_source_bounds)
-      << " bounds " << impl_bounds.ToString() << " recording source "
-      << recording_source_bounds.ToString();
-
-  if (update_source_frame_number_ != source_frame_number &&
-      recording_source_bounds != impl_bounds) {
-    // Update may not get called for the layer (if it's not in the viewport
-    // for example, even though it has resized making the recording source no
-    // longer valid. In this case just destroy the recording source.
-    recording_source_->SetEmptyBounds();
-  }
+  DropRecordingSourceContentIfInvalid();
 
   layer_impl->SetNearestNeighbor(nearest_neighbor_);
 
   // Preserve lcd text settings from the current raster source.
   bool can_use_lcd_text = layer_impl->RasterSourceUsesLCDText();
-  scoped_refptr<RasterSource> raster_source =
+  scoped_refptr<DisplayListRasterSource> raster_source =
       recording_source_->CreateRasterSource(can_use_lcd_text);
   layer_impl->set_gpu_raster_max_texture_size(
       layer_tree_host()->device_viewport_size());
-  layer_impl->UpdateRasterSource(raster_source, &recording_invalidation_,
+  layer_impl->UpdateRasterSource(raster_source, &last_updated_invalidation_,
                                  nullptr);
-  DCHECK(recording_invalidation_.IsEmpty());
+  DCHECK(last_updated_invalidation_.IsEmpty());
 }
 
 void PictureLayer::SetLayerTreeHost(LayerTreeHost* host) {
@@ -89,27 +75,21 @@ void PictureLayer::SetLayerTreeHost(LayerTreeHost* host) {
   if (!host)
     return;
 
-  const LayerTreeSettings& settings = layer_tree_host()->settings();
-  if (!recording_source_) {
-    if (settings.use_display_lists) {
-      recording_source_.reset(
-          new DisplayListRecordingSource(settings.default_tile_grid_size));
-    } else {
-      recording_source_.reset(new PicturePile(settings.minimum_contents_scale,
-                                              settings.default_tile_grid_size));
-    }
-  }
+  if (!recording_source_)
+    recording_source_.reset(new DisplayListRecordingSource);
   recording_source_->SetSlowdownRasterScaleFactor(
       host->debug_state().slow_down_raster_scale_factor);
-  recording_source_->SetGatherPixelRefs(settings.gather_pixel_refs);
+  // If we need to enable image decode tasks, then we have to generate the
+  // discardable images metadata.
+  const LayerTreeSettings& settings = layer_tree_host()->settings();
+  recording_source_->SetGenerateDiscardableImagesMetadata(
+      settings.image_decode_tasks_enabled);
 }
 
 void PictureLayer::SetNeedsDisplayRect(const gfx::Rect& layer_rect) {
-  if (!layer_rect.IsEmpty()) {
-    // Clamp invalidation to the layer bounds.
-    pending_invalidation_.Union(
-        gfx::IntersectRects(layer_rect, gfx::Rect(bounds())));
-  }
+  DCHECK(!layer_tree_host() || !layer_tree_host()->in_paint_layer_contents());
+  if (recording_source_)
+    recording_source_->SetNeedsDisplayRect(layer_rect);
   Layer::SetNeedsDisplayRect(layer_rect);
 }
 
@@ -119,13 +99,6 @@ bool PictureLayer::Update() {
 
   gfx::Rect update_rect = visible_layer_rect();
   gfx::Size layer_size = paint_properties().bounds;
-
-  if (last_updated_visible_layer_rect_ == update_rect &&
-      recording_source_->GetSize() == layer_size &&
-      pending_invalidation_.IsEmpty()) {
-    // Only early out if the visible content rect of this layer hasn't changed.
-    return updated;
-  }
 
   recording_source_->SetBackgroundColor(SafeOpaqueBackgroundColor());
   recording_source_->SetRequiresClear(!contents_opaque() &&
@@ -137,25 +110,14 @@ bool PictureLayer::Update() {
   devtools_instrumentation::ScopedLayerTreeTask update_layer(
       devtools_instrumentation::kUpdateLayer, id(), layer_tree_host()->id());
 
-  // Calling paint in WebKit can sometimes cause invalidations, so save
-  // off the invalidation prior to calling update.
-  pending_invalidation_.Swap(&recording_invalidation_);
-  pending_invalidation_.Clear();
-
-  if (layer_tree_host()->settings().record_full_layer) {
-    // Workaround for http://crbug.com/235910 - to retain backwards compat
-    // the full page content must always be provided in the picture layer.
-    update_rect = gfx::Rect(layer_size);
-  }
-
   // UpdateAndExpandInvalidation will give us an invalidation that covers
   // anything not explicitly recorded in this frame. We give this region
   // to the impl side so that it drops tiles that may not have a recording
   // for them.
   DCHECK(client_);
   updated |= recording_source_->UpdateAndExpandInvalidation(
-      client_, &recording_invalidation_, layer_size, update_rect,
-      update_source_frame_number_, RecordingSource::RECORD_NORMALLY);
+      client_, &last_updated_invalidation_, layer_size, update_rect,
+      update_source_frame_number_, DisplayListRecordingSource::RECORD_NORMALLY);
   last_updated_visible_layer_rect_ = visible_layer_rect();
 
   if (updated) {
@@ -163,7 +125,7 @@ bool PictureLayer::Update() {
   } else {
     // If this invalidation did not affect the recording source, then it can be
     // cleared as an optimization.
-    recording_invalidation_.Clear();
+    last_updated_invalidation_.Clear();
   }
 
   return updated;
@@ -174,40 +136,24 @@ void PictureLayer::SetIsMask(bool is_mask) {
 }
 
 skia::RefPtr<SkPicture> PictureLayer::GetPicture() const {
-  // We could either flatten the RecordingSource into a single SkPicture,
-  // or paint a fresh one depending on what we intend to do with the
+  // We could either flatten the DisplayListRecordingSource into a single
+  // SkPicture, or paint a fresh one depending on what we intend to do with the
   // picture. For now we just paint a fresh one to get consistent results.
   if (!DrawsContent())
     return skia::RefPtr<SkPicture>();
 
   gfx::Size layer_size = bounds();
-  const LayerTreeSettings& settings = layer_tree_host()->settings();
+  scoped_ptr<DisplayListRecordingSource> recording_source(
+      new DisplayListRecordingSource);
+  Region recording_invalidation;
+  recording_source->UpdateAndExpandInvalidation(
+      client_, &recording_invalidation, layer_size, gfx::Rect(layer_size),
+      update_source_frame_number_, DisplayListRecordingSource::RECORD_NORMALLY);
 
-  if (settings.use_display_lists) {
-    scoped_ptr<RecordingSource> recording_source;
-    recording_source.reset(
-        new DisplayListRecordingSource(settings.default_tile_grid_size));
-    Region recording_invalidation;
-    recording_source->UpdateAndExpandInvalidation(
-        client_, &recording_invalidation, layer_size, gfx::Rect(layer_size),
-        update_source_frame_number_, RecordingSource::RECORD_NORMALLY);
+  scoped_refptr<DisplayListRasterSource> raster_source =
+      recording_source->CreateRasterSource(false);
 
-    scoped_refptr<RasterSource> raster_source =
-        recording_source->CreateRasterSource(false);
-
-    return raster_source->GetFlattenedPicture();
-  }
-
-  int width = layer_size.width();
-  int height = layer_size.height();
-
-  SkPictureRecorder recorder;
-  SkCanvas* canvas = recorder.beginRecording(width, height, nullptr, 0);
-  client_->PaintContents(canvas, gfx::Rect(width, height),
-                         ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
-  skia::RefPtr<SkPicture> picture =
-      skia::AdoptRef(recorder.endRecordingAsPicture());
-  return picture;
+  return raster_source->GetFlattenedPicture();
 }
 
 bool PictureLayer::IsSuitableForGpuRasterization() const {
@@ -231,8 +177,70 @@ bool PictureLayer::HasDrawableContent() const {
   return client_ && Layer::HasDrawableContent();
 }
 
+void PictureLayer::SetTypeForProtoSerialization(proto::LayerNode* proto) const {
+  proto->set_type(proto::LayerType::PICTURE_LAYER);
+}
+
+void PictureLayer::LayerSpecificPropertiesToProto(
+    proto::LayerProperties* proto) {
+  Layer::LayerSpecificPropertiesToProto(proto);
+  DropRecordingSourceContentIfInvalid();
+
+  proto::PictureLayerProperties* picture = proto->mutable_picture();
+  recording_source_->ToProtobuf(picture->mutable_recording_source());
+  RegionToProto(last_updated_invalidation_, picture->mutable_invalidation());
+  RectToProto(last_updated_visible_layer_rect_,
+              picture->mutable_last_updated_visible_layer_rect());
+  picture->set_is_mask(is_mask_);
+  picture->set_nearest_neighbor(nearest_neighbor_);
+
+  picture->set_update_source_frame_number(update_source_frame_number_);
+
+  last_updated_invalidation_.Clear();
+}
+
+void PictureLayer::FromLayerSpecificPropertiesProto(
+    const proto::LayerProperties& proto) {
+  Layer::FromLayerSpecificPropertiesProto(proto);
+  const proto::PictureLayerProperties& picture = proto.picture();
+  recording_source_->FromProtobuf(picture.recording_source());
+
+  Region new_invalidation = RegionFromProto(picture.invalidation());
+  last_updated_invalidation_.Swap(&new_invalidation);
+  last_updated_visible_layer_rect_ =
+      ProtoToRect(picture.last_updated_visible_layer_rect());
+  is_mask_ = picture.is_mask();
+  nearest_neighbor_ = picture.nearest_neighbor();
+
+  update_source_frame_number_ = picture.update_source_frame_number();
+}
+
 void PictureLayer::RunMicroBenchmark(MicroBenchmark* benchmark) {
   benchmark->RunOnLayer(this);
+}
+
+void PictureLayer::DropRecordingSourceContentIfInvalid() {
+  int source_frame_number = layer_tree_host()->source_frame_number();
+  gfx::Size recording_source_bounds = recording_source_->GetSize();
+
+  gfx::Size layer_bounds = bounds();
+  if (paint_properties().source_frame_number == source_frame_number)
+    layer_bounds = paint_properties().bounds;
+
+  // If update called, then recording source size must match bounds pushed to
+  // impl layer.
+  DCHECK(update_source_frame_number_ != source_frame_number ||
+         layer_bounds == recording_source_bounds)
+      << " bounds " << layer_bounds.ToString() << " recording source "
+      << recording_source_bounds.ToString();
+
+  if (update_source_frame_number_ != source_frame_number &&
+      recording_source_bounds != layer_bounds) {
+    // Update may not get called for the layer (if it's not in the viewport
+    // for example), even though it has resized making the recording source no
+    // longer valid. In this case just destroy the recording source.
+    recording_source_->SetEmptyBounds();
+  }
 }
 
 }  // namespace cc

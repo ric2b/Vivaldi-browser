@@ -4,6 +4,9 @@
 
 #include "net/ssl/ssl_cipher_suite_names.h"
 
+#if defined(USE_OPENSSL)
+#include <openssl/ssl.h>
+#endif
 #include <stdlib.h>
 
 #include "base/logging.h"
@@ -28,7 +31,7 @@
 namespace {
 
 struct CipherSuite {
-  uint16 cipher_suite, encoded;
+  uint16_t cipher_suite, encoded;
 };
 
 const struct CipherSuite kCipherSuites[] = {
@@ -196,9 +199,10 @@ const struct CipherSuite kCipherSuites[] = {
     {0xc08b, 0x1087},  // TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384
     {0xc08c, 0xf7f},   // TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256
     {0xc08d, 0xf87},   // TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384
-    {0xcc13, 0x108f},  // TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
-    {0xcc14, 0x0e8f},  // TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
-    {0xcc15, 0x0a8f},  // TLS_DHE_RSA_WITH_CHACHA20_POLY1305
+    {0xcc13, 0x108f},  // TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305 (non-standard)
+    {0xcc14, 0x0e8f},  // TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305 (non-standard)
+    {0xcca8, 0x108f},  // TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+    {0xcca9, 0x0e8f},  // TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
 };
 
 const struct {
@@ -273,7 +277,7 @@ int CipherSuiteCmp(const void* ia, const void* ib) {
   }
 }
 
-bool GetCipherProperties(uint16 cipher_suite,
+bool GetCipherProperties(uint16_t cipher_suite,
                          int* out_key_exchange,
                          int* out_cipher,
                          int* out_mac) {
@@ -299,8 +303,8 @@ namespace net {
 void SSLCipherSuiteToStrings(const char** key_exchange_str,
                              const char** cipher_str,
                              const char** mac_str,
-                             bool *is_aead,
-                             uint16 cipher_suite) {
+                             bool* is_aead,
+                             uint16_t cipher_suite) {
   *key_exchange_str = *cipher_str = *mac_str = "???";
   *is_aead = false;
 
@@ -346,19 +350,49 @@ void SSLVersionToString(const char** name, int ssl_version) {
 }
 
 bool ParseSSLCipherString(const std::string& cipher_string,
-                          uint16* cipher_suite) {
+                          uint16_t* cipher_suite) {
   int value = 0;
   if (cipher_string.size() == 6 &&
       base::StartsWith(cipher_string, "0x",
                        base::CompareCase::INSENSITIVE_ASCII) &&
       base::HexStringToInt(cipher_string, &value)) {
-    *cipher_suite = static_cast<uint16>(value);
+    *cipher_suite = static_cast<uint16_t>(value);
     return true;
   }
   return false;
 }
 
-bool IsSecureTLSCipherSuite(uint16 cipher_suite) {
+bool IsSecureTLSCipherSuite(uint16_t cipher_suite) {
+  int key_exchange, cipher, mac;
+  if (!GetCipherProperties(cipher_suite, &key_exchange, &cipher, &mac))
+    return false;
+
+  // Only allow ECDHE key exchanges.
+  switch (key_exchange) {
+    case 14:  // ECDHE_ECDSA
+    case 16:  // ECDHE_RSA
+      break;
+    default:
+      return false;
+  }
+
+  switch (cipher) {
+    case 13:  // AES_128_GCM
+    case 14:  // AES_256_GCM
+    case 17:  // CHACHA20_POLY1305
+      break;
+    default:
+      return false;
+  }
+
+  // Only AEADs allowed.
+  if (mac != kAEADMACValue)
+    return false;
+
+  return true;
+}
+
+bool IsTLSCipherSuiteAllowedByHTTP2(uint16_t cipher_suite) {
   int key_exchange, cipher, mac;
   if (!GetCipherProperties(cipher_suite, &key_exchange, &cipher, &mac))
     return false;
@@ -389,34 +423,22 @@ bool IsSecureTLSCipherSuite(uint16 cipher_suite) {
   return true;
 }
 
-bool IsFalseStartableTLSCipherSuite(uint16 cipher_suite) {
+const char* ECCurveName(uint16_t cipher_suite, int key_exchange_info) {
+#if defined(USE_OPENSSL)
   int key_exchange, cipher, mac;
   if (!GetCipherProperties(cipher_suite, &key_exchange, &cipher, &mac))
-    return false;
-
-  // Only allow ECDHE key exchanges.
+    return nullptr;
   switch (key_exchange) {
     case 14:  // ECDHE_ECDSA
     case 16:  // ECDHE_RSA
       break;
     default:
-      return false;
+      return nullptr;
   }
-
-  switch (cipher) {
-    case 13:  // AES_128_GCM
-    case 14:  // AES_256_GCM
-    case 17:  // CHACHA20_POLY1305
-      break;
-    default:
-      return false;
-  }
-
-  // Only AEADs allowed.
-  if (mac != kAEADMACValue)
-    return false;
-
-  return true;
+  return SSL_get_curve_name(key_exchange_info);
+#else
+  return nullptr;
+#endif
 }
 
 }  // namespace net

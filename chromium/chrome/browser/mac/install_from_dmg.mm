@@ -15,9 +15,9 @@
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/param.h>
+#include <unistd.h>
 
 #include "base/auto_reset.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
@@ -30,14 +30,18 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_ioobject.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/mac/dock.h"
 #import "chrome/browser/mac/keystone_glue.h"
 #include "chrome/browser/mac/relauncher.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -361,7 +365,13 @@ bool LaunchInstalledApp(NSString* installed_path,
   base::FilePath browser_path([installed_path fileSystemRepresentation]);
 
   base::FilePath helper_path = browser_path.Append("Contents/Versions");
-  helper_path = helper_path.Append(chrome::kChromeVersion);
+  helper_path = helper_path.Append(
+#if defined(VIVALDI_BUILD)
+      chrome::kVivaldiVersion
+#else
+      chrome::kChromeVersion
+#endif
+      );
   helper_path = helper_path.Append(chrome::kHelperProcessExecutablePath);
 
   std::vector<std::string> args =
@@ -370,8 +380,10 @@ bool LaunchInstalledApp(NSString* installed_path,
 
   std::vector<std::string> relauncher_args;
   if (!dmg_bsd_device_name.empty()) {
-    std::string dmg_arg(mac_relauncher::kRelauncherDMGDeviceArg);
-    dmg_arg.append(dmg_bsd_device_name);
+    std::string dmg_arg =
+        base::StringPrintf("--%s=%s",
+                           switches::kRelauncherProcessDMGDevice,
+                           dmg_bsd_device_name.c_str());
     relauncher_args.push_back(dmg_arg);
   }
 
@@ -512,12 +524,14 @@ struct SynchronousDACallbackData {
  public:
   SynchronousDACallbackData()
       : callback_called(false),
-        run_loop_running(false) {
+        run_loop_running(false),
+        can_log(true) {
   }
 
   base::ScopedCFTypeRef<DADissenterRef> dissenter;
   bool callback_called;
   bool run_loop_running;
+  bool can_log;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SynchronousDACallbackData);
@@ -568,19 +582,21 @@ bool SynchronousDAOperation(const char* name,
   }
 
   if (!callback_data->callback_called) {
-    LOG(ERROR) << name << ": timed out";
+    LOG_IF(ERROR, callback_data->can_log) << name << ": timed out";
     return false;
   } else if (callback_data->dissenter) {
-    CFStringRef status_string_cf =
-        DADissenterGetStatusString(callback_data->dissenter);
-    std::string status_string;
-    if (status_string_cf) {
-      status_string.assign(" ");
-      status_string.append(base::SysCFStringRefToUTF8(status_string_cf));
+    if (callback_data->can_log) {
+      CFStringRef status_string_cf =
+          DADissenterGetStatusString(callback_data->dissenter);
+      std::string status_string;
+      if (status_string_cf) {
+        status_string.assign(" ");
+        status_string.append(base::SysCFStringRefToUTF8(status_string_cf));
+      }
+      LOG(ERROR) << name << ": dissenter: "
+                 << DADissenterGetStatus(callback_data->dissenter)
+                 << status_string;
     }
-    LOG(ERROR) << name << ": dissenter: "
-               << DADissenterGetStatus(callback_data->dissenter)
-               << status_string;
     return false;
   }
 
@@ -588,8 +604,11 @@ bool SynchronousDAOperation(const char* name,
 }
 
 // Calls DADiskUnmount synchronously, returning the result.
-bool SynchronousDADiskUnmount(DADiskRef disk, DADiskUnmountOptions options) {
+bool SynchronousDADiskUnmount(DADiskRef disk,
+                              DADiskUnmountOptions options,
+                              bool can_log) {
   SynchronousDACallbackData callback_data;
+  callback_data.can_log = can_log;
   DADiskUnmount(disk, options, SynchronousDACallbackAdapter, &callback_data);
   return SynchronousDAOperation("DADiskUnmount", &callback_data);
 }
@@ -648,9 +667,17 @@ void EjectAndTrashDiskImage(const std::string& dmg_bsd_device_name) {
                                                       CFRunLoopGetCurrent(),
                                                       kCFRunLoopCommonModes);
 
-  if (!SynchronousDADiskUnmount(disk, kDADiskUnmountOptionWhole)) {
-    LOG(ERROR) << "SynchronousDADiskUnmount";
-    return;
+  // Retry the unmount in a loop to give anything that may have been in use on
+  // the disk image (such as crashpad_handler) a chance to exit.
+  int tries = 15;
+  while (!SynchronousDADiskUnmount(disk,
+                                   kDADiskUnmountOptionWhole,
+                                   --tries == 0)) {
+    if (tries == 0) {
+      LOG(ERROR) << "SynchronousDADiskUnmount";
+      return;
+    }
+    sleep(1);
   }
 
   if (!SynchronousDADiskEject(disk, kDADiskEjectOptionDefault)) {

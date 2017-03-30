@@ -9,12 +9,12 @@ source_set("brotli") {
     "dec/context.h",
     "dec/decode.c",
     "dec/decode.h",
+    "dec/dictionary.c",
     "dec/dictionary.h",
     "dec/huffman.c",
     "dec/huffman.h",
+    "dec/port.h",
     "dec/prefix.h",
-    "dec/safe_malloc.c",
-    "dec/safe_malloc.h",
     "dec/state.c",
     "dec/state.h",
     "dec/streams.c",
@@ -27,11 +27,7 @@ source_set("brotli") {
   configs += [ "//build/config/compiler:no_chromium_code" ]
 
   # Since we are never debug brotli, freeze the optimizations to -O2.
-  if (is_debug) {
-    configs -= [ "//build/config/compiler:no_optimize" ]
-  } else {
-    configs -= [ "//build/config/compiler:optimize" ]
-  }
+  configs -= [ "//build/config/compiler:default_optimization" ]
   configs += [ "//build/config/compiler:optimize_max" ]
 
   include_dirs = [ "dec" ]

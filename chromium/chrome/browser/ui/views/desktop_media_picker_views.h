@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_DESKTOP_MEDIA_PICKER_VIEWS_H_
 #define CHROME_BROWSER_UI_VIEWS_DESKTOP_MEDIA_PICKER_VIEWS_H_
 
+#include "base/macros.h"
 #include "chrome/browser/media/desktop_media_list_observer.h"
 #include "chrome/browser/media/desktop_media_picker.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -27,7 +28,7 @@ class DesktopMediaListView : public views::View,
                        scoped_ptr<DesktopMediaList> media_list);
   ~DesktopMediaListView() override;
 
-  void StartUpdating(content::DesktopMediaID::Id dialog_window_id);
+  void StartUpdating(content::DesktopMediaID dialog_window_id);
 
   // Called by DesktopMediaSourceView when selection has changed.
   void OnSelectionChanged();
@@ -133,12 +134,14 @@ class DesktopMediaPickerDialogView : public views::DialogDelegateView {
   ui::ModalType GetModalType() const override;
   base::string16 GetWindowTitle() const override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
+  views::View* GetInitiallyFocusedView() override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   bool Accept() override;
   void DeleteDelegate() override;
 
   void OnMediaListRowsChanged();
 
+  DesktopMediaListView* GetMediaListViewForTesting() const;
   DesktopMediaSourceView* GetMediaSourceViewForTesting(int index) const;
 
  private:

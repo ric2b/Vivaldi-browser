@@ -5,7 +5,7 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 
 #include "chrome/common/pref_names.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 class IncognitoModePrefsTest : public testing::Test {
@@ -14,7 +14,7 @@ class IncognitoModePrefsTest : public testing::Test {
     IncognitoModePrefs::RegisterProfilePrefs(prefs_.registry());
   }
 
-  TestingPrefServiceSyncable prefs_;
+  syncable_prefs::TestingPrefServiceSyncable prefs_;
 };
 
 TEST_F(IncognitoModePrefsTest, IntToAvailability) {

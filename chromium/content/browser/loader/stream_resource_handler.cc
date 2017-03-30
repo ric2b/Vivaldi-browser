@@ -23,11 +23,6 @@ void StreamResourceHandler::SetController(ResourceController* controller) {
   ResourceHandler::SetController(controller);
 }
 
-bool StreamResourceHandler::OnUploadProgress(uint64 position,
-                                             uint64 size) {
-  return true;
-}
-
 bool StreamResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* resp,
@@ -36,9 +31,7 @@ bool StreamResourceHandler::OnRequestRedirected(
 }
 
 bool StreamResourceHandler::OnResponseStarted(ResourceResponse* resp,
-                                              bool* defer,
-                                              bool open_when_done,
-                                              bool ask_for_target) {
+                                              bool* defer) {
   return true;
 }
 

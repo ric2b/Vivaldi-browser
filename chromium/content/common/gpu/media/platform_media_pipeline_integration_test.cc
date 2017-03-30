@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "content/common/gpu/media/test_pipeline_host.h"
 #include "media/base/audio_decoder_config.h"
+#include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
 #include "media/base/video_decoder_config.h"
@@ -47,12 +48,13 @@ class PlatformMediaPipelineIntegrationTest
     const std::string content_type;
     const GURL url("file://" +
                    media::GetTestDataFilePath(filename).AsUTF8Unsafe());
-    if (media::IPCDemuxer::IsSupported(content_type, url)) {
+    if (media::IPCDemuxer::CanPlayType(content_type, url)) {
       scoped_ptr<media::IPCMediaPipelineHost> pipeline_host(
           new TestPipelineHost(data_source_.get()));
       demuxer_.reset(new media::IPCDemuxer(
           message_loop_.task_runner(), data_source_.get(),
-          pipeline_host.Pass(), content_type, url));
+          std::move(pipeline_host), content_type, url,
+          new media::MediaLog()));
     }
   }
 };
@@ -75,7 +77,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
   } else {
     // On OS X 10.9, the expected hashes can be different, because our solution
     // doesn't necessarily process frames one by one, see AVFMediaDecoder.
-    EXPECT_EQ("-0.48,-0.20,-0.15,0.78,1.02,0.57,", GetAudioHash());
+    EXPECT_EQ("-1.38,-0.99,0.56,1.71,1.48,0.23,", GetAudioHash());
   }
 #elif defined(OS_WIN)
   EXPECT_EQ("eb228dfe6882747111161156164dcab0", GetVideoHash());

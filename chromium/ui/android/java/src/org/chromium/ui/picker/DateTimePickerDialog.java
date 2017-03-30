@@ -15,11 +15,17 @@ import android.widget.DatePicker.OnDateChangedListener;
 import android.widget.TimePicker;
 import android.widget.TimePicker.OnTimeChangedListener;
 
+import org.chromium.base.VisibleForTesting;
 import org.chromium.ui.R;
 
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.TimeZone;
 
+/**
+ * A dialog that allows the user to choose a date and time. Shown for HTML form input elements
+ * with type "datetime" or "datetime-local".
+ */
 public class DateTimePickerDialog extends AlertDialog implements OnClickListener,
         OnDateChangedListener, OnTimeChangedListener {
     private final DatePicker mDatePicker;
@@ -86,11 +92,10 @@ public class DateTimePickerDialog extends AlertDialog implements OnClickListener
 
         mTimePicker = (TimePicker) view.findViewById(R.id.time_picker);
         mTimePicker.setIs24HourView(is24HourView);
-        mTimePicker.setCurrentHour(hourOfDay);
-        mTimePicker.setCurrentMinute(minute);
+        setHour(mTimePicker, hourOfDay);
+        setMinute(mTimePicker, minute);
         mTimePicker.setOnTimeChangedListener(this);
-        onTimeChanged(mTimePicker, mTimePicker.getCurrentHour(),
-                mTimePicker.getCurrentMinute());
+        onTimeChanged(mTimePicker, getHour(mTimePicker), getMinute(mTimePicker));
     }
 
     @Override
@@ -104,7 +109,7 @@ public class DateTimePickerDialog extends AlertDialog implements OnClickListener
             mTimePicker.clearFocus();
             mCallBack.onDateTimeSet(mDatePicker, mTimePicker, mDatePicker.getYear(),
                     mDatePicker.getMonth(), mDatePicker.getDayOfMonth(),
-                    mTimePicker.getCurrentHour(), mTimePicker.getCurrentMinute());
+                    getHour(mTimePicker), getMinute(mTimePicker));
         }
     }
 
@@ -113,24 +118,32 @@ public class DateTimePickerDialog extends AlertDialog implements OnClickListener
             int month, int day) {
         // Signal a time change so the max/min checks can be applied.
         if (mTimePicker != null) {
-            onTimeChanged(mTimePicker, mTimePicker.getCurrentHour(),
-                    mTimePicker.getCurrentMinute());
+            onTimeChanged(mTimePicker, getHour(mTimePicker), getMinute(mTimePicker));
         }
     }
 
     @Override
     public void onTimeChanged(TimePicker view, int hourOfDay, int minute) {
-        Calendar calendar = new GregorianCalendar(mDatePicker.getYear(), mDatePicker.getMonth(),
-                mDatePicker.getDayOfMonth(), mTimePicker.getCurrentHour(),
-                mTimePicker.getCurrentMinute(), 0);
+        onTimeChangedInternal(mDatePicker.getYear(), mDatePicker.getMonth(),
+                mDatePicker.getDayOfMonth(), mTimePicker, mMinTimeMillis, mMaxTimeMillis);
+    }
 
-        if (calendar.getTimeInMillis() < mMinTimeMillis) {
-            calendar.setTimeInMillis(mMinTimeMillis);
-        } else if (calendar.getTimeInMillis() > mMaxTimeMillis) {
-            calendar.setTimeInMillis(mMaxTimeMillis);
+    @VisibleForTesting
+    public static void onTimeChangedInternal(int year, int month, int day, TimePicker picker,
+            long minTimeMillis, long maxTimeMillis) {
+        // Need to use a calendar object for UTC because we'd like to compare
+        // it with minimum/maximum values in UTC.
+        Calendar calendar = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+        calendar.clear();
+        calendar.set(year, month, day, getHour(picker), getMinute(picker), 0);
+
+        if (calendar.getTimeInMillis() < minTimeMillis) {
+            calendar.setTimeInMillis(minTimeMillis);
+        } else if (calendar.getTimeInMillis() > maxTimeMillis) {
+            calendar.setTimeInMillis(maxTimeMillis);
         }
-        mTimePicker.setCurrentHour(calendar.get(Calendar.HOUR));
-        mTimePicker.setCurrentMinute(calendar.get(Calendar.MINUTE));
+        setHour(picker, calendar.get(Calendar.HOUR_OF_DAY));
+        setMinute(picker, calendar.get(Calendar.MINUTE));
     }
 
     /**
@@ -143,7 +156,29 @@ public class DateTimePickerDialog extends AlertDialog implements OnClickListener
     public void updateDateTime(int year, int monthOfYear, int dayOfMonth,
             int hourOfDay, int minutOfHour) {
         mDatePicker.updateDate(year, monthOfYear, dayOfMonth);
-        mTimePicker.setCurrentHour(hourOfDay);
-        mTimePicker.setCurrentMinute(minutOfHour);
+        setHour(mTimePicker, hourOfDay);
+        setMinute(mTimePicker, minutOfHour);
+    }
+
+    // TODO(newt): delete these deprecated method calls once we support only API 23 and higher.
+
+    @SuppressWarnings("deprecation")
+    private static void setHour(TimePicker picker, int hour) {
+        picker.setCurrentHour(hour);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static void setMinute(TimePicker picker, int minute) {
+        picker.setCurrentMinute(minute);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static int getHour(TimePicker picker) {
+        return picker.getCurrentHour();
+    }
+
+    @SuppressWarnings("deprecation")
+    private static int getMinute(TimePicker picker) {
+        return picker.getCurrentMinute();
     }
 }

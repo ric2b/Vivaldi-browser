@@ -6,7 +6,6 @@
 
 #include "ui/compositor/layer_animator.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_controller_proxy.h"
 #include "ui/keyboard/keyboard_util.h"
 
 namespace keyboard {
@@ -49,6 +48,10 @@ void KeyboardLayoutManager::SetChildBounds(aura::Window* child,
     const gfx::Rect& window_bounds =
         controller_->GetContainerWindow()->GetRootWindow()->bounds();
     new_bounds.set_y(window_bounds.height() - new_bounds.height());
+    // If shelf is positioned on the left side of screen, x is not 0. In
+    // FULL_WIDTH mode, the virtual keyboard should always align with the left
+    // edge of the screen. So manually set x to 0 here.
+    new_bounds.set_x(0);
     new_bounds.set_width(window_bounds.width());
   }
   // Keyboard bounds should only be reset when it actually changes. Otherwise
@@ -67,21 +70,21 @@ void KeyboardLayoutManager::SetChildBounds(aura::Window* child,
   controller_->GetContainerWindow()->SetBounds(new_bounds);
   SetChildBoundsDirect(keyboard_, gfx::Rect(new_bounds.size()));
 
-  if (controller_->keyboard_mode() == FULL_WIDTH) {
-    if (old_bounds.height() == 0 && child->bounds().height() != 0 &&
-        controller_->show_on_resize()) {
-      // The window height is set to 0 initially or before switch to an IME in a
-      // different extension. Virtual keyboard window may wait for this bounds
-      // change to correctly animate in.
-      controller_->ShowKeyboard(false);
-    } else {
+  if (old_bounds.height() == 0 && child->bounds().height() != 0 &&
+      controller_->show_on_resize()) {
+    // The window height is set to 0 initially or before switch to an IME in a
+    // different extension. Virtual keyboard window may wait for this bounds
+    // change to correctly animate in.
+    controller_->ShowKeyboard(false);
+  } else {
+    if (controller_->keyboard_mode() == FULL_WIDTH) {
       // We need to send out this notification only if keyboard is visible since
       // keyboard window is resized even if keyboard is hidden.
       if (controller_->keyboard_visible())
         controller_->NotifyKeyboardBoundsChanging(requested_bounds);
+    } else if (controller_->keyboard_mode() == FLOATING) {
+      controller_->NotifyKeyboardBoundsChanging(gfx::Rect());
     }
-  } else if (controller_->keyboard_mode() == FLOATING) {
-    controller_->NotifyKeyboardBoundsChanging(gfx::Rect());
   }
 }
 

@@ -5,11 +5,13 @@
 #ifndef CHROME_BROWSER_PROFILES_AVATAR_MENU_H_
 #define CHROME_BROWSER_PROFILES_AVATAR_MENU_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/profiles/profile_info_cache_observer.h"
@@ -136,10 +138,6 @@ class AvatarMenu :
   // avatar menu. If the profile does not belong to a supervised user, an empty
   // string will be returned.
   base::string16 GetSupervisedUserInformation() const;
-
-  // Returns the icon for the supervised user which will be displayed in the
-  // avatar menu.
-  const gfx::Image& GetSupervisedUserIcon() const;
 
   // This menu is also used for the always-present Mac system menubar. If the
   // last active browser changes, the menu will need to reference that browser.

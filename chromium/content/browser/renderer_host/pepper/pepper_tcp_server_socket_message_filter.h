@@ -5,10 +5,14 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_PEPPER_PEPPER_TCP_SERVER_SOCKET_MESSAGE_FILTER_H_
 #define CONTENT_BROWSER_RENDERER_HOST_PEPPER_PEPPER_TCP_SERVER_SOCKET_MESSAGE_FILTER_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "net/base/ip_endpoint.h"
 #include "net/socket/tcp_socket.h"
@@ -16,6 +20,11 @@
 #include "ppapi/host/resource_message_filter.h"
 
 struct PP_NetAddress_Private;
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/network/firewall_hole.h"
+#include "content/public/browser/browser_thread.h"
+#endif  // defined(OS_CHROMEOS)
 
 namespace ppapi {
 namespace host {
@@ -87,6 +96,14 @@ class CONTENT_EXPORT PepperTCPServerSocketMessageFilter
   void SendAcceptError(const ppapi::host::ReplyMessageContext& context,
                        int32_t pp_result);
 
+#if defined(OS_CHROMEOS)
+  void OpenFirewallHole(const ppapi::host::ReplyMessageContext& context,
+                        int net_result);
+  void OnFirewallHoleOpened(const ppapi::host::ReplyMessageContext& context,
+                            int32_t net_result,
+                            scoped_ptr<chromeos::FirewallHole> hole);
+#endif  // defined(OS_CHROMEOS)
+
   // Following fields are initialized and used only on the IO thread.
   // Non-owning ptr.
   ppapi::host::PpapiHost* ppapi_host_;
@@ -98,6 +115,11 @@ class CONTENT_EXPORT PepperTCPServerSocketMessageFilter
   scoped_ptr<net::TCPSocket> socket_;
   scoped_ptr<net::TCPSocket> accepted_socket_;
   net::IPEndPoint accepted_address_;
+
+#if defined(OS_CHROMEOS)
+  scoped_ptr<chromeos::FirewallHole, content::BrowserThread::DeleteOnUIThread>
+      firewall_hole_;
+#endif  // defined(OS_CHROMEOS)
 
   // Following fields are initialized on the IO thread but used only
   // on the UI thread.

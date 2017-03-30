@@ -389,23 +389,26 @@ class BadExtensionsTest(unittest.TestCase):
 class CheckSingletonInHeadersTest(unittest.TestCase):
   def testSingletonInArbitraryHeader(self):
     diff_singleton_h = ['base::subtle::AtomicWord '
-                        'Singleton<Type, Traits, DifferentiatingType>::']
-    diff_foo_h = ['// Singleton<Foo> in comment.',
-                  'friend class Singleton<Foo>']
-    diff_bad_h = ['Foo* foo = Singleton<Foo>::get();']
+                        'base::Singleton<Type, Traits, DifferentiatingType>::']
+    diff_foo_h = ['// base::Singleton<Foo> in comment.',
+                  'friend class base::Singleton<Foo>']
+    diff_foo2_h = ['  //Foo* bar = base::Singleton<Foo>::get();']
+    diff_bad_h = ['Foo* foo = base::Singleton<Foo>::get();']
     mock_input_api = MockInputApi()
     mock_input_api.files = [MockAffectedFile('base/memory/singleton.h',
                                      diff_singleton_h),
                             MockAffectedFile('foo.h', diff_foo_h),
+                            MockAffectedFile('foo2.h', diff_foo2_h),
                             MockAffectedFile('bad.h', diff_bad_h)]
     warnings = PRESUBMIT._CheckSingletonInHeaders(mock_input_api,
                                                   MockOutputApi())
     self.assertEqual(1, len(warnings))
+    self.assertEqual(2, len(warnings[0].items))
     self.assertEqual('error', warnings[0].type)
-    self.assertTrue('Found Singleton<T>' in warnings[0].message)
+    self.assertTrue('Found base::Singleton<T>' in warnings[0].message)
 
   def testSingletonInCC(self):
-    diff_cc = ['Foo* foo = Singleton<Foo>::get();']
+    diff_cc = ['Foo* foo = base::Singleton<Foo>::get();']
     mock_input_api = MockInputApi()
     mock_input_api.files = [MockAffectedFile('some/path/foo.cc', diff_cc)]
     warnings = PRESUBMIT._CheckSingletonInHeaders(mock_input_api,
@@ -463,7 +466,7 @@ class CheckAddedDepsHaveTetsApprovalsTest(unittest.TestCase):
       '"+chrome/plugin/chrome_content_plugin_client.h",',
       '"+chrome/utility/chrome_content_utility_client.h",',
       '"+chromeos/chromeos_paths.h",',
-      '"+components/crash",',
+      '"+components/crash/content",',
       '"+components/nacl/common",',
       '"+content/public/browser/render_process_host.h",',
       '"+jni/fooblat.h",',
@@ -482,7 +485,7 @@ class CheckAddedDepsHaveTetsApprovalsTest(unittest.TestCase):
       'chrome/plugin/chrome_content_plugin_client.h',
       'chrome/utility/chrome_content_utility_client.h',
       'chromeos/chromeos_paths.h',
-      'components/crash/DEPS',
+      'components/crash/content/DEPS',
       'components/nacl/common/DEPS',
       'content/public/browser/render_process_host.h',
       'policy/DEPS',
@@ -840,32 +843,38 @@ class LogUsageTest(unittest.TestCase):
       ]),
       MockAffectedFile('IsInBasePackage.java', [
         'package org.chromium.base;',
-        'private static final String TAG = "cr.Foo";',
+        'private static final String TAG = "cr_Foo";',
         'Log.d(TAG, "foo");',
       ]),
       MockAffectedFile('IsInBasePackageButImportsLog.java', [
         'package org.chromium.base;',
         'import android.util.Log;',
-        'private static final String TAG = "cr.Foo";',
+        'private static final String TAG = "cr_Foo";',
         'Log.d(TAG, "foo");',
       ]),
       MockAffectedFile('HasBothLog.java', [
         'import org.chromium.base.Log;',
         'some random stuff',
-        'private static final String TAG = "cr.Foo";',
+        'private static final String TAG = "cr_Foo";',
         'Log.d(TAG, "foo");',
         'android.util.Log.d("TAG", "foo");',
       ]),
       MockAffectedFile('HasCorrectTag.java', [
         'import org.chromium.base.Log;',
         'some random stuff',
+        'private static final String TAG = "cr_Foo";',
+        'Log.d(TAG, "foo");',
+      ]),
+      MockAffectedFile('HasOldTag.java', [
+        'import org.chromium.base.Log;',
+        'some random stuff',
         'private static final String TAG = "cr.Foo";',
         'Log.d(TAG, "foo");',
       ]),
-      MockAffectedFile('HasShortCorrectTag.java', [
+      MockAffectedFile('HasDottedTag.java', [
         'import org.chromium.base.Log;',
         'some random stuff',
-        'private static final String TAG = "cr";',
+        'private static final String TAG = "cr_foo.bar";',
         'Log.d(TAG, "foo");',
       ]),
       MockAffectedFile('HasNoTagDecl.java', [
@@ -875,17 +884,17 @@ class LogUsageTest(unittest.TestCase):
       ]),
       MockAffectedFile('HasIncorrectTagDecl.java', [
         'import org.chromium.base.Log;',
-        'private static final String TAHG = "cr.Foo";',
+        'private static final String TAHG = "cr_Foo";',
         'some random stuff',
         'Log.d(TAG, "foo");',
       ]),
       MockAffectedFile('HasInlineTag.java', [
         'import org.chromium.base.Log;',
         'some random stuff',
-        'private static final String TAG = "cr.Foo";',
+        'private static final String TAG = "cr_Foo";',
         'Log.d("TAG", "foo");',
       ]),
-      MockAffectedFile('HasIncorrectTag.java', [
+      MockAffectedFile('HasUnprefixedTag.java', [
         'import org.chromium.base.Log;',
         'some random stuff',
         'private static final String TAG = "rubbish";',
@@ -894,7 +903,7 @@ class LogUsageTest(unittest.TestCase):
       MockAffectedFile('HasTooLongTag.java', [
         'import org.chromium.base.Log;',
         'some random stuff',
-        'private static final String TAG = "cr.24_charachers_long___";',
+        'private static final String TAG = "21_charachers_long___";',
         'Log.d(TAG, "foo");',
       ]),
     ]
@@ -902,26 +911,70 @@ class LogUsageTest(unittest.TestCase):
     msgs = PRESUBMIT._CheckAndroidCrLogUsage(
         mock_input_api, mock_output_api)
 
-    self.assertEqual(4, len(msgs))
+    self.assertEqual(5, len(msgs),
+                     'Expected %d items, found %d: %s' % (5, len(msgs), msgs))
 
     # Declaration format
-    self.assertEqual(3, len(msgs[0].items))
+    nb = len(msgs[0].items)
+    self.assertEqual(2, nb,
+                     'Expected %d items, found %d: %s' % (2, nb, msgs[0].items))
     self.assertTrue('HasNoTagDecl.java' in msgs[0].items)
     self.assertTrue('HasIncorrectTagDecl.java' in msgs[0].items)
-    self.assertTrue('HasIncorrectTag.java' in msgs[0].items)
 
     # Tag length
-    self.assertEqual(1, len(msgs[1].items))
+    nb = len(msgs[1].items)
+    self.assertEqual(1, nb,
+                     'Expected %d items, found %d: %s' % (1, nb, msgs[1].items))
     self.assertTrue('HasTooLongTag.java' in msgs[1].items)
 
     # Tag must be a variable named TAG
-    self.assertEqual(1, len(msgs[2].items))
+    nb = len(msgs[2].items)
+    self.assertEqual(1, nb,
+                     'Expected %d items, found %d: %s' % (1, nb, msgs[2].items))
     self.assertTrue('HasInlineTag.java:4' in msgs[2].items)
 
     # Util Log usage
-    self.assertEqual(2, len(msgs[3].items))
+    nb = len(msgs[3].items)
+    self.assertEqual(2, nb,
+                     'Expected %d items, found %d: %s' % (2, nb, msgs[3].items))
     self.assertTrue('HasAndroidLog.java:3' in msgs[3].items)
     self.assertTrue('IsInBasePackageButImportsLog.java:4' in msgs[3].items)
+
+    # Tag must not contain
+    nb = len(msgs[4].items)
+    self.assertEqual(2, nb,
+                     'Expected %d items, found %d: %s' % (2, nb, msgs[4].items))
+    self.assertTrue('HasDottedTag.java' in msgs[4].items)
+    self.assertTrue('HasOldTag.java' in msgs[4].items)
+
+class HardcodedGoogleHostsTest(unittest.TestCase):
+
+  def testWarnOnAssignedLiterals(self):
+    input_api = MockInputApi()
+    input_api.files = [
+      MockFile('content/file.cc',
+               ['char* host = "https://www.google.com";']),
+      MockFile('content/file.cc',
+               ['char* host = "https://www.googleapis.com";']),
+      MockFile('content/file.cc',
+               ['char* host = "https://clients1.google.com";']),
+    ]
+
+    warnings = PRESUBMIT._CheckHardcodedGoogleHostsInLowerLayers(
+      input_api, MockOutputApi())
+    self.assertEqual(1, len(warnings))
+    self.assertEqual(3, len(warnings[0].items))
+
+  def testAllowInComment(self):
+    input_api = MockInputApi()
+    input_api.files = [
+      MockFile('content/file.cc',
+               ['char* host = "https://www.aol.com"; // google.com'])
+    ]
+
+    warnings = PRESUBMIT._CheckHardcodedGoogleHostsInLowerLayers(
+      input_api, MockOutputApi())
+    self.assertEqual(0, len(warnings))
 
 
 if __name__ == '__main__':

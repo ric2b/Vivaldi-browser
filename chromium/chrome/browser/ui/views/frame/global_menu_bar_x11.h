@@ -9,17 +9,18 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/command_observer.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/avatar_menu_observer.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
-#include "chrome/browser/sessions/tab_restore_service_observer.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites_observer.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/sessions/core/tab_restore_service_observer.h"
 #include "ui/base/glib/glib_signal.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_observer_x11.h"
 
@@ -53,7 +54,7 @@ class GlobalMenuBarX11 : public AvatarMenuObserver,
                          public chrome::BrowserListObserver,
                          public CommandObserver,
                          public history::TopSitesObserver,
-                         public TabRestoreServiceObserver,
+                         public sessions::TabRestoreServiceObserver,
                          public views::DesktopWindowTreeHostObserverX11 {
  public:
   GlobalMenuBarX11(BrowserView* browser_view,
@@ -91,7 +92,7 @@ class GlobalMenuBarX11 : public AvatarMenuObserver,
                            const ui::Accelerator& accelerator);
 
   // Creates a HistoryItem from the data in |entry|.
-  HistoryItem* HistoryItemForTab(const TabRestoreService::Tab& entry);
+  HistoryItem* HistoryItemForTab(const sessions::TabRestoreService::Tab& entry);
 
   // Creates a menu item form |item| and inserts it in |menu| at |index|.
   void AddHistoryItemToMenu(HistoryItem* item,
@@ -136,8 +137,9 @@ class GlobalMenuBarX11 : public AvatarMenuObserver,
                        ChangeReason change_reason) override;
 
   // Overridden from TabRestoreServiceObserver:
-  void TabRestoreServiceChanged(TabRestoreService* service) override;
-  void TabRestoreServiceDestroyed(TabRestoreService* service) override;
+  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override;
 
   // Overridden from views::DesktopWindowTreeHostObserverX11:
   void OnWindowMapped(unsigned long xid) override;
@@ -175,7 +177,7 @@ class GlobalMenuBarX11 : public AvatarMenuObserver,
 
   scoped_refptr<history::TopSites> top_sites_;
 
-  TabRestoreService* tab_restore_service_;  // weak
+  sessions::TabRestoreService* tab_restore_service_;  // weak
 
   scoped_ptr<AvatarMenu> avatar_menu_;
 

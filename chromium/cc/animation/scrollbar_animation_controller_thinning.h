@@ -5,6 +5,7 @@
 #ifndef CC_ANIMATION_SCROLLBAR_ANIMATION_CONTROLLER_THINNING_H_
 #define CC_ANIMATION_SCROLLBAR_ANIMATION_CONTROLLER_THINNING_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/animation/scrollbar_animation_controller.h"
 #include "cc/base/cc_export.h"
@@ -18,7 +19,7 @@ class CC_EXPORT ScrollbarAnimationControllerThinning
     : public ScrollbarAnimationController {
  public:
   static scoped_ptr<ScrollbarAnimationControllerThinning> Create(
-      LayerImpl* scroll_layer,
+      int scroll_layer_id,
       ScrollbarAnimationControllerClient* client,
       base::TimeDelta delay_before_starting,
       base::TimeDelta resize_delay_before_starting,
@@ -38,7 +39,7 @@ class CC_EXPORT ScrollbarAnimationControllerThinning
 
  protected:
   ScrollbarAnimationControllerThinning(
-      LayerImpl* scroll_layer,
+      int scroll_layer_id,
       ScrollbarAnimationControllerClient* client,
       base::TimeDelta delay_before_starting,
       base::TimeDelta resize_delay_before_starting,

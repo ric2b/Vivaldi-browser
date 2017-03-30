@@ -31,6 +31,9 @@ namespace file_util {
 
 extern const base::FilePath::CharType kTempDirectoryName[];
 
+// Sets the flag to enable safe installation (i.e. flush all installed files).
+void SetUseSafeInstallation(bool use_safe_installation);
+
 // Copies |unpacked_source_dir| into the right location under |extensions_dir|.
 // The destination directory is returned on success, or empty path is returned
 // on failure.
@@ -59,11 +62,12 @@ scoped_refptr<Extension> LoadExtension(const base::FilePath& extension_root,
 
 // Loads an extension manifest from the specified directory. Returns NULL
 // on failure, with a description of the error in |error|.
-base::DictionaryValue* LoadManifest(const base::FilePath& extension_root,
-                                    std::string* error);
+scoped_ptr<base::DictionaryValue> LoadManifest(
+    const base::FilePath& extension_root,
+    std::string* error);
 
 // Convenience overload for specifying a manifest filename.
-base::DictionaryValue* LoadManifest(
+scoped_ptr<base::DictionaryValue> LoadManifest(
     const base::FilePath& extension_root,
     const base::FilePath::CharType* manifest_filename,
     std::string* error);

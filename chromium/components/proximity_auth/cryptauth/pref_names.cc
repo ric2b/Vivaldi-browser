@@ -12,7 +12,7 @@ namespace prefs {
 const char kCryptAuthDeviceSyncIsRecoveringFromFailure[] =
     "cryptauth.device_sync.is_recovering_from_failure";
 
-// The timestamp of the last successfull CryptAuth device_sync in seconds.
+// The timestamp of the last successful CryptAuth device_sync in seconds.
 const char kCryptAuthDeviceSyncLastSyncTimeSeconds[] =
     "cryptauth.device_sync.last_device_sync_time_seconds";
 
@@ -32,7 +32,7 @@ const char kCryptAuthDeviceSyncUnlockKeys[] =
 const char kCryptAuthEnrollmentIsRecoveringFromFailure[] =
     "cryptauth.enrollment.is_recovering_from_failure";
 
-// The timestamp of the last successfull CryptAuth enrollment in seconds.
+// The timestamp of the last successful CryptAuth enrollment in seconds.
 const char kCryptAuthEnrollmentLastEnrollmentTimeSeconds[] =
     "cryptauth.enrollment.last_enrollment_time_seconds";
 
@@ -41,5 +41,17 @@ const char kCryptAuthEnrollmentLastEnrollmentTimeSeconds[] =
 // components/proximity_auth/cryptauth/proto/cryptauth_api.proto.
 extern const char kCryptAuthEnrollmentReason[] = "cryptauth.enrollment.reason";
 
+// The public key of the user and device enrolled with CryptAuth.
+extern const char kCryptAuthEnrollmentUserPublicKey[] =
+    "cryptauth.enrollment.user_public_key";
+
+// The private key of the user and device enrolled with CryptAuth.
+extern const char kCryptAuthEnrollmentUserPrivateKey[] =
+    "cryptauth.enrollment.user_private_key";
+
+// The GCM registration id used for receiving push messages from CryptAuth.
+extern const char kCryptAuthGCMRegistrationId[] =
+    "cryptauth.gcm_registration_id";
+
 }  // namespace prefs
-}  // proximity_auth
+}  // namespace proximity_auth

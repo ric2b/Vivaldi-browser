@@ -4,9 +4,12 @@
 
 #include "base/files/memory_mapped_file.h"
 
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/sys_info.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -47,7 +50,7 @@ bool MemoryMappedFile::Initialize(const FilePath& file_name) {
 }
 
 bool MemoryMappedFile::Initialize(File file) {
-  return Initialize(file.Pass(), Region::kWholeFile);
+  return Initialize(std::move(file), Region::kWholeFile);
 }
 
 bool MemoryMappedFile::Initialize(File file, const Region& region) {
@@ -59,7 +62,7 @@ bool MemoryMappedFile::Initialize(File file, const Region& region) {
     DCHECK_GT(region.size, 0);
   }
 
-  file_ = file.Pass();
+  file_ = std::move(file);
 
   if (!MapFileRegionToMemory(region)) {
     CloseHandles();
@@ -74,14 +77,15 @@ bool MemoryMappedFile::IsValid() const {
 }
 
 // static
-void MemoryMappedFile::CalculateVMAlignedBoundaries(int64 start,
-                                                    int64 size,
-                                                    int64* aligned_start,
-                                                    int64* aligned_size,
-                                                    int32* offset) {
+void MemoryMappedFile::CalculateVMAlignedBoundaries(int64_t start,
+                                                    int64_t size,
+                                                    int64_t* aligned_start,
+                                                    int64_t* aligned_size,
+                                                    int32_t* offset) {
   // Sadly, on Windows, the mmap alignment is not just equal to the page size.
-  const int64 mask = static_cast<int64>(SysInfo::VMAllocationGranularity()) - 1;
-  DCHECK_LT(mask, std::numeric_limits<int32>::max());
+  const int64_t mask =
+      static_cast<int64_t>(SysInfo::VMAllocationGranularity()) - 1;
+  DCHECK_LT(mask, std::numeric_limits<int32_t>::max());
   *offset = start & mask;
   *aligned_start = start & ~mask;
   *aligned_size = (size + *offset + mask) & ~mask;

@@ -21,7 +21,7 @@
 
 namespace {
 const char kTestHtml[] = "/viewsource/test.html";
-const char kTestMedia[] = "files/media/pink_noise_140ms.wav";
+const char kTestMedia[] = "/media/pink_noise_140ms.wav";
 }
 
 typedef InProcessBrowserTest ViewSourceTest;
@@ -31,7 +31,7 @@ typedef InProcessBrowserTest ViewSourceTest;
 // page in view source).
 // Flaky; see http://crbug.com/72201.
 IN_PROC_BROWSER_TEST_F(ViewSourceTest, DoesBrowserRenderInViewSource) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // First we navigate to our view-source test page.
   GURL url(content::kViewSourceScheme + std::string(":") +
@@ -49,7 +49,7 @@ IN_PROC_BROWSER_TEST_F(ViewSourceTest, DoesBrowserRenderInViewSource) {
 // implementation of the view-source: prefix being consumed (removed from the
 // URL) if the URL was not changed (apart from adding the view-source prefix)
 IN_PROC_BROWSER_TEST_F(ViewSourceTest, DoesBrowserConsumeViewSourcePrefix) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // First we navigate to google.html.
   GURL url(embedded_test_server()->GetURL(kTestHtml));
@@ -69,7 +69,7 @@ IN_PROC_BROWSER_TEST_F(ViewSourceTest, DoesBrowserConsumeViewSourcePrefix) {
 // Make sure that when looking at the actual page, we can select "View Source"
 // from the menu.
 IN_PROC_BROWSER_TEST_F(ViewSourceTest, ViewSourceInMenuEnabledOnANormalPage) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL(kTestHtml));
   ui_test_utils::NavigateToURL(browser(), url);
@@ -80,9 +80,9 @@ IN_PROC_BROWSER_TEST_F(ViewSourceTest, ViewSourceInMenuEnabledOnANormalPage) {
 // For page that is media content, make sure that we cannot select "View Source"
 // See http://crbug.com/83714
 IN_PROC_BROWSER_TEST_F(ViewSourceTest, ViewSourceInMenuDisabledOnAMediaPage) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
-  GURL url(test_server()->GetURL(kTestMedia));
+  GURL url(embedded_test_server()->GetURL(kTestMedia));
   ui_test_utils::NavigateToURL(browser(), url);
 
   const char* mime_type = browser()->tab_strip_model()->GetActiveWebContents()->
@@ -96,7 +96,7 @@ IN_PROC_BROWSER_TEST_F(ViewSourceTest, ViewSourceInMenuDisabledOnAMediaPage) {
 // from the menu.
 IN_PROC_BROWSER_TEST_F(ViewSourceTest,
                        ViewSourceInMenuDisabledWhileViewingSource) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url_viewsource(content::kViewSourceScheme + std::string(":") +
                       embedded_test_server()->GetURL(kTestHtml).spec());
@@ -109,7 +109,7 @@ IN_PROC_BROWSER_TEST_F(ViewSourceTest,
 // the page in view-source mode.
 // Times out on Mac, Windows, ChromeOS Linux: crbug.com/162080
 IN_PROC_BROWSER_TEST_F(ViewSourceTest, DISABLED_TestViewSourceReload) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url_viewsource(content::kViewSourceScheme + std::string(":") +
                       embedded_test_server()->GetURL(kTestHtml).spec());
@@ -130,4 +130,56 @@ IN_PROC_BROWSER_TEST_F(ViewSourceTest, DISABLED_TestViewSourceReload) {
   observer2.Wait();
   ASSERT_TRUE(browser()->tab_strip_model()->GetWebContentsAt(0)->
                   GetController().GetActiveEntry()->IsViewSourceMode());
+}
+
+// This test ensures that view-source session history navigations work
+// correctly when switching processes. See https://crbug.com/544868.
+IN_PROC_BROWSER_TEST_F(ViewSourceTest,
+                       ViewSourceCrossProcessAndBack) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL url_viewsource(content::kViewSourceScheme + std::string(":") +
+                      embedded_test_server()->GetURL(kTestHtml).spec());
+  ui_test_utils::NavigateToURL(browser(), url_viewsource);
+  EXPECT_FALSE(chrome::CanViewSource(browser()));
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+
+  // Open another tab to the same origin, so the process is kept alive while
+  // the original tab is navigated cross-process. This is required for the
+  // original bug to reproduce.
+  {
+    GURL url = embedded_test_server()->GetURL("/title1.html");
+    ui_test_utils::UrlLoadObserver load_complete(
+        url, content::NotificationService::AllSources());
+    EXPECT_TRUE(content::ExecuteScript(
+        browser()->tab_strip_model()->GetActiveWebContents(),
+        "window.open('" + url.spec() + "');"));
+    load_complete.Wait();
+    EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  }
+
+  // Switch back to the first tab and navigate it cross-process.
+  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIVersionURL));
+  EXPECT_TRUE(chrome::CanViewSource(browser()));
+
+  // Navigate back in session history to ensure view-source mode is still
+  // active.
+  {
+    ui_test_utils::UrlLoadObserver load_complete(
+        url_viewsource, content::NotificationService::AllSources());
+    chrome::GoBack(browser(), CURRENT_TAB);
+    load_complete.Wait();
+  }
+
+  // Check whether the page is in view-source mode or not by checking if an
+  // expected element on the page exists or not. In view-source mode it
+  // should not be found.
+  bool result = false;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "domAutomationController.send(document.getElementById('bar') === null);",
+      &result));
+  EXPECT_TRUE(result);
+  EXPECT_FALSE(chrome::CanViewSource(browser()));
 }

@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/sync_driver/device_info_data_type_controller.h"
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
-#include "components/sync_driver/device_info_data_type_controller.h"
+#include "components/sync_driver/fake_sync_client.h"
 #include "components/sync_driver/local_device_info_provider_mock.h"
 #include "components/sync_driver/sync_api_component_factory.h"
 #include "sync/internal_api/public/base/model_type.h"
@@ -17,8 +19,7 @@ namespace sync_driver {
 
 namespace {
 
-class DeviceInfoDataTypeControllerTest : public testing::Test,
-                                         public SyncApiComponentFactory {
+class DeviceInfoDataTypeControllerTest : public testing::Test {
  public:
   DeviceInfoDataTypeControllerTest()
       : load_finished_(false),
@@ -36,7 +37,7 @@ class DeviceInfoDataTypeControllerTest : public testing::Test,
         "device_id"));
 
     controller_ = new DeviceInfoDataTypeController(
-        base::ThreadTaskRunnerHandle::Get(), base::Closure(), this,
+        base::ThreadTaskRunnerHandle::Get(), base::Closure(), &sync_client_,
         local_device_.get());
 
     load_finished_ = false;
@@ -53,24 +54,6 @@ class DeviceInfoDataTypeControllerTest : public testing::Test,
     controller_->LoadModels(
         base::Bind(&DeviceInfoDataTypeControllerTest::OnLoadFinished,
                    weak_ptr_factory_.GetWeakPtr()));
-  }
-
-  base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
-      syncer::ModelType type) override {
-    // Shouldn't be called for this test.
-    NOTREACHED();
-    return base::WeakPtr<syncer::SyncableService>();
-  }
-
-  scoped_ptr<syncer::AttachmentService> CreateAttachmentService(
-      scoped_ptr<syncer::AttachmentStoreForSync> attachment_store,
-      const syncer::UserShare& user_share,
-      const std::string& store_birthday,
-      syncer::ModelType model_type,
-      syncer::AttachmentService::Delegate* delegate) override {
-    // Shouldn't be called for this test.
-    NOTREACHED();
-    return scoped_ptr<syncer::AttachmentService>();
   }
 
   void OnLoadFinished(syncer::ModelType type, syncer::SyncError error) {
@@ -108,6 +91,7 @@ class DeviceInfoDataTypeControllerTest : public testing::Test,
   base::MessageLoopForUI message_loop_;
   syncer::ModelType last_type_;
   syncer::SyncError last_error_;
+  FakeSyncClient sync_client_;
   base::WeakPtrFactory<DeviceInfoDataTypeControllerTest> weak_ptr_factory_;
 };
 

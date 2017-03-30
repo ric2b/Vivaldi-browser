@@ -18,6 +18,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/login/user_names.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "grit/components_strings.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
@@ -41,11 +42,7 @@ WebUILoginDisplay::~WebUILoginDisplay() {
 // LoginDisplay implementation: ------------------------------------------------
 
 WebUILoginDisplay::WebUILoginDisplay(LoginDisplay::Delegate* delegate)
-    : LoginDisplay(delegate, gfx::Rect()),
-      show_guest_(false),
-      show_new_user_(false),
-      webui_handler_(NULL) {
-}
+    : LoginDisplay(delegate, gfx::Rect()) {}
 
 void WebUILoginDisplay::ClearAndEnablePassword() {
   if (webui_handler_)
@@ -76,12 +73,8 @@ void WebUILoginDisplay::HandleGetUsers() {
   SignInScreenController::Get()->SendUserList();
 }
 
-const user_manager::UserList& WebUILoginDisplay::GetUsers() const {
-  return SignInScreenController::Get()->GetUsers();
-}
-
-void WebUILoginDisplay::CheckUserStatus(const std::string& user_id) {
-  SignInScreenController::Get()->CheckUserStatus(user_id);
+void WebUILoginDisplay::CheckUserStatus(const AccountId& account_id) {
+  SignInScreenController::Get()->CheckUserStatus(account_id);
 }
 
 // ---- Gaia screen methods
@@ -180,11 +173,6 @@ void WebUILoginDisplay::ShowErrorScreen(LoginDisplay::SigninError error_id) {
   webui_handler_->ShowErrorScreen(error_id);
 }
 
-void WebUILoginDisplay::ShowGaiaPasswordChanged(const std::string& username) {
-  if (webui_handler_)
-    webui_handler_->ShowGaiaPasswordChanged(username);
-}
-
 void WebUILoginDisplay::ShowPasswordChangedDialog(bool show_password_error,
                                                   const std::string& email) {
   if (webui_handler_)
@@ -221,12 +209,6 @@ void WebUILoginDisplay::CancelUserAdding() {
   UserAddingScreen::Get()->Cancel();
 }
 
-void WebUILoginDisplay::CreateAccount() {
-  DCHECK(delegate_);
-  if (delegate_)
-    delegate_->CreateAccount();
-}
-
 void WebUILoginDisplay::CompleteLogin(const UserContext& user_context) {
   DCHECK(delegate_);
   if (delegate_)
@@ -246,13 +228,12 @@ void WebUILoginDisplay::MigrateUserData(const std::string& old_password) {
     delegate_->MigrateUserData(old_password);
 }
 
-void WebUILoginDisplay::LoadWallpaper(const std::string& username) {
-  WallpaperManager::Get()->SetUserWallpaperDelayed(username);
+void WebUILoginDisplay::LoadWallpaper(const AccountId& account_id) {
+  WallpaperManager::Get()->SetUserWallpaperDelayed(account_id);
 }
 
 void WebUILoginDisplay::LoadSigninWallpaper() {
-  WallpaperManager::Get()->SetDefaultWallpaperDelayed(
-      chromeos::login::kSignInUser);
+  WallpaperManager::Get()->SetDefaultWallpaperDelayed(login::SignInAccountId());
 }
 
 void WebUILoginDisplay::OnSigninScreenReady() {
@@ -262,8 +243,8 @@ void WebUILoginDisplay::OnSigninScreenReady() {
     delegate_->OnSigninScreenReady();
 }
 
-void WebUILoginDisplay::RemoveUser(const std::string& user_id) {
-  SignInScreenController::Get()->RemoveUser(user_id);
+void WebUILoginDisplay::RemoveUser(const AccountId& account_id) {
+  SignInScreenController::Get()->RemoveUser(account_id);
 }
 
 void WebUILoginDisplay::ResyncUserData() {
@@ -340,10 +321,10 @@ void WebUILoginDisplay::OnUserActivity(const ui::Event* event) {
     delegate_->ResetPublicSessionAutoLoginTimer();
 }
 
-bool WebUILoginDisplay::IsUserWhitelisted(const std::string& user_id) {
+bool WebUILoginDisplay::IsUserWhitelisted(const AccountId& account_id) {
   DCHECK(delegate_);
   if (delegate_)
-    return delegate_->IsUserWhitelisted(user_id);
+    return delegate_->IsUserWhitelisted(account_id);
   return true;
 }
 

@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// NOT DEAD CODE!
+// This code isn't dead, even if it isn't currently being used. Please refer to:
+// https://www.chromium.org/developers/how-tos/compact-language-detector-cld-data-source-configuration
+
 #include "components/translate/content/renderer/renderer_cld_data_provider_factory.h"
 
 #include "base/lazy_instance.h"
 #include "components/translate/content/renderer/renderer_cld_data_provider.h"
-#include "content/public/renderer/render_view_observer.h"
+#include "content/public/renderer/render_frame_observer.h"
 
 namespace {
 
@@ -25,7 +29,7 @@ namespace translate {
 
 scoped_ptr<RendererCldDataProvider>
 RendererCldDataProviderFactory::CreateRendererCldDataProvider(
-    content::RenderViewObserver* render_view_observer) {
+    content::RenderFrameObserver* render_frame_observer) {
   return scoped_ptr<RendererCldDataProvider>(
       new RendererCldDataProvider());
 }

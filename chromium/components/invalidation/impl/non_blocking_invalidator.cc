@@ -5,9 +5,11 @@
 #include "components/invalidation/impl/non_blocking_invalidator.h"
 
 #include <cstddef>
+#include <utility>
 
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
@@ -159,8 +161,7 @@ void NonBlockingInvalidator::Core::Initialize(
   scoped_ptr<SyncNetworkChannel> network_channel =
       initialize_options.network_channel_creator.Run();
   invalidation_notifier_.reset(new InvalidationNotifier(
-      network_channel.Pass(),
-      initialize_options.invalidator_client_id,
+      std::move(network_channel), initialize_options.invalidator_client_id,
       initialize_options.saved_invalidations,
       initialize_options.invalidation_bootstrap_data,
       initialize_options.invalidation_state_tracker,

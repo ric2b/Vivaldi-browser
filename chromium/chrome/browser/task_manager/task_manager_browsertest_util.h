@@ -5,10 +5,16 @@
 #ifndef CHROME_BROWSER_TASK_MANAGER_TASK_MANAGER_BROWSERTEST_UTIL_H_
 #define CHROME_BROWSER_TASK_MANAGER_TASK_MANAGER_BROWSERTEST_UTIL_H_
 
+#include <stddef.h>
+
 #include "base/strings/string16.h"
 
 namespace task_manager {
 namespace browsertest_util {
+
+// For the old task manager browser tests, we must call this to disable the
+// use of the new implementation and revert back to the old one.
+void EnableOldTaskManager();
 
 // Runs the message loop, observing the task manager, until there are exactly
 // |resource_count| many resources whose titles match the pattern

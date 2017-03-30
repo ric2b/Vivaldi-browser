@@ -8,8 +8,9 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "net/base/net_export.h"
 #include "net/url_request/url_request_job_factory.h"
 
@@ -23,10 +24,9 @@ class NET_EXPORT URLRequestJobFactoryImpl : public URLRequestJobFactory {
   ~URLRequestJobFactoryImpl() override;
 
   // Sets the ProtocolHandler for a scheme. Returns true on success, false on
-  // failure (a ProtocolHandler already exists for |scheme|). On success,
-  // URLRequestJobFactory takes ownership of |protocol_handler|.
+  // failure (a ProtocolHandler already exists for |scheme|).
   bool SetProtocolHandler(const std::string& scheme,
-                          ProtocolHandler* protocol_handler);
+                          scoped_ptr<ProtocolHandler> protocol_handler);
 
   // URLRequestJobFactory implementation
   URLRequestJob* MaybeCreateJobWithProtocolHandler(
@@ -51,7 +51,7 @@ class NET_EXPORT URLRequestJobFactoryImpl : public URLRequestJobFactory {
   // For testing only.
   friend class URLRequestFilter;
 
-  typedef std::map<std::string, ProtocolHandler*> ProtocolHandlerMap;
+  typedef std::map<std::string, scoped_ptr<ProtocolHandler>> ProtocolHandlerMap;
 
   // Sets a global URLRequestInterceptor for testing purposes.  The interceptor
   // is given the chance to intercept any request before the corresponding

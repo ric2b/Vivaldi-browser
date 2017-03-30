@@ -5,18 +5,26 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_RENDER_WIDGET_HOST_VIEW_GUEST_H_
 #define CONTENT_BROWSER_FRAME_HOST_RENDER_WIDGET_HOST_VIEW_GUEST_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
+#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/events/event.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/events/gestures/gesture_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/native_widget_types.h"
+
+struct ViewHostMsg_TextInputState_Params;
 
 namespace content {
 class BrowserPluginGuest;
@@ -36,14 +44,16 @@ struct NativeWebKeyboardEvent;
 // the relevant calls to the platform view.
 class CONTENT_EXPORT RenderWidgetHostViewGuest
     : public RenderWidgetHostViewChildFrame,
-      public ui::GestureConsumer,
-      public ui::GestureEventHelper {
+      public ui::GestureConsumer {
  public:
   RenderWidgetHostViewGuest(
       RenderWidgetHost* widget,
       BrowserPluginGuest* guest,
       base::WeakPtr<RenderWidgetHostViewBase> platform_view);
   ~RenderWidgetHostViewGuest() override;
+
+  RenderWidgetHostViewBase* GetPlatformView() const
+    { return platform_view_.get(); }
 
   bool OnMessageReceivedFromEmbedder(const IPC::Message& message,
                                      RenderWidgetHostImpl* embedder);
@@ -61,7 +71,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   gfx::NativeViewId GetNativeViewId() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   gfx::Rect GetViewBounds() const override;
-  void SetBackgroundColor(SkColor color) override;
   gfx::Size GetPhysicalBackingSize() const override;
   base::string16 GetSelectedText() const override;
 
@@ -73,10 +82,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
     const int owner_wiew_id) override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputTypeChanged(ui::TextInputType type,
-                            ui::TextInputMode input_mode,
-                            bool can_compose_inline,
-                            int flags) override;
+  void TextInputStateChanged(
+      const ViewHostMsg_TextInputState_Params& params) override;
   void ImeCancelComposition() override;
 #if defined(OS_MACOSX) || defined(USE_AURA)
   void ImeCompositionRangeChanged(
@@ -92,15 +99,21 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
                         const gfx::Range& range) override;
   void SelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params) override;
-  void OnSwapCompositorFrame(uint32 output_surface_id,
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
                              scoped_ptr<cc::CompositorFrame> frame) override;
 #if defined(USE_AURA)
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
 #endif
+  void ProcessTouchEvent(const blink::WebTouchEvent& event,
+                         const ui::LatencyInfo& latency) override;
+  void RegisterSurfaceNamespaceId();
+  void UnregisterSurfaceNamespaceId();
+
   bool LockMouse() override;
   void UnlockMouse() override;
   void GetScreenInfo(blink::WebScreenInfo* results) override;
+  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
@@ -124,10 +137,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
                                const SkBitmap& zoomed_bitmap) override;
 #endif  // defined(OS_ANDROID) || defined(USE_AURA)
 
-#if defined(OS_ANDROID)
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
-#endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)
   void SetParentNativeViewAccessible(
@@ -135,16 +146,14 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   gfx::NativeViewId GetParentForWindowlessPlugin() const override;
 #endif
 
-  // Overridden from ui::GestureEventHelper.
-  bool CanDispatchToConsumer(ui::GestureConsumer* consumer) override;
-  void DispatchGestureEvent(ui::GestureEvent* event) override;
-  void DispatchCancelTouchEvent(ui::TouchEvent* event) override;
+  void WheelEventAck(const blink::WebMouseWheelEvent& event,
+                     InputEventAckState ack_result) override;
+
+  void GestureEventAck(const blink::WebGestureEvent& event,
+                       InputEventAckState ack_result) override;
 
  protected:
   friend class RenderWidgetHostView;
-  friend class RenderWidgetHostImpl;	//getting guest_
-
-  BrowserPluginGuest *guest() { return guest_.get(); }
 
  private:
   // Destroys this view without calling |Destroy| on |platform_view_|.
@@ -167,15 +176,10 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   // to one another, therefore we access |guest_| through WeakPtr.
   base::WeakPtr<BrowserPluginGuest> guest_;
   gfx::Size size_;
-  gfx::Rect bounds_;
   // The platform view for this RenderWidgetHostView.
   // RenderWidgetHostViewGuest mostly only cares about stuff related to
   // compositing, the rest are directly forwared to this |platform_view_|.
   base::WeakPtr<RenderWidgetHostViewBase> platform_view_;
-#if defined(USE_AURA)
-  scoped_ptr<ui::GestureRecognizer> gesture_recognizer_;
-#endif
-
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewGuest);
 };
 

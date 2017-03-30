@@ -6,12 +6,13 @@
 
 #include <cmath>
 
-#include "ash/display/display_controller.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
 #include "ash/display/mirror_window_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/shell.h"
+#include "ui/aura/client/cursor_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/layout.h"
@@ -23,13 +24,15 @@ namespace ash {
 
 namespace {
 
-AshWindowTreeHost* GetMirroringAshWindowTreeHostForDisplayId(int64 display_id) {
+AshWindowTreeHost* GetMirroringAshWindowTreeHostForDisplayId(
+    int64_t display_id) {
   return Shell::GetInstance()
-      ->display_controller()
+      ->window_tree_host_manager()
       ->mirror_window_controller()
       ->GetAshWindowTreeHostForDisplayId(display_id);
 }
 
+#if defined(USE_OZONE)
 // Find a WindowTreeHost used for mirroring displays that contains
 // the |point_in_screen|. Returns nullptr if such WTH does not exist.
 aura::WindowTreeHost* FindMirroringWindowTreeHostFromScreenPoint(
@@ -45,12 +48,13 @@ aura::WindowTreeHost* FindMirroringWindowTreeHostFromScreenPoint(
   return GetMirroringAshWindowTreeHostForDisplayId(
              mirroring_display_list[index].id())->AsWindowTreeHost();
 }
+#endif
 
 }  // namespace
 
 UnifiedMouseWarpController::UnifiedMouseWarpController()
-    : allow_non_native_event_(false) {
-}
+    : current_cursor_display_id_(gfx::Display::kInvalidDisplayID),
+      update_location_for_test_(false) {}
 
 UnifiedMouseWarpController::~UnifiedMouseWarpController() {
 }
@@ -62,24 +66,35 @@ bool UnifiedMouseWarpController::WarpMouseCursor(ui::MouseEvent* event) {
     ComputeBounds();
 
   aura::Window* target = static_cast<aura::Window*>(event->target());
-  gfx::Point point_in_screen = event->location();
-  ::wm::ConvertPointToScreen(target, &point_in_screen);
+  gfx::Point point_in_unified_host = event->location();
+  ::wm::ConvertPointToScreen(target, &point_in_unified_host);
+  // The display bounds of the mirroring windows isn't scaled, so
+  // transform back to the host coordinates.
+  target->GetHost()->GetRootTransform().TransformPoint(&point_in_unified_host);
 
-  // A native event may not exist in unit test. Generate the native point
-  // from the screen point instead.
-  if (!event->HasNativeEvent()) {
-    if (!allow_non_native_event_)
-      return false;
-    aura::Window* target_root = target->GetRootWindow();
-    gfx::Point point_in_native = point_in_screen;
-    ::wm::ConvertPointFromScreen(target_root, &point_in_native);
-    aura::WindowTreeHost* host =
-        FindMirroringWindowTreeHostFromScreenPoint(point_in_screen);
-    DCHECK(host);
-    host->ConvertPointToNativeScreen(&point_in_native);
-    return WarpMouseCursorInNativeCoords(point_in_native, point_in_screen,
-                                         true);
+  if (current_cursor_display_id_ != gfx::Display::kInvalidDisplayID) {
+    aura::client::CursorClient* cursor_client =
+        aura::client::GetCursorClient(target->GetRootWindow());
+    if (cursor_client) {
+      DisplayManager::DisplayList mirroring_display_list =
+          Shell::GetInstance()
+              ->display_manager()
+              ->software_mirroring_display_list();
+      int index = FindDisplayIndexContainingPoint(mirroring_display_list,
+                                                  point_in_unified_host);
+      if (index >= 0) {
+        const gfx::Display& new_display = mirroring_display_list[index];
+        if (current_cursor_display_id_ != new_display.id()) {
+          cursor_client->SetDisplay(new_display);
+          current_cursor_display_id_ = gfx::Display::kInvalidDisplayID;
+        }
+      }
+    }
   }
+
+  // A native event may not exist in unit test.
+  if (!event->HasNativeEvent())
+    return false;
 
   gfx::Point point_in_native =
       ui::EventSystemLocationFromNative(event->native_event());
@@ -90,13 +105,14 @@ bool UnifiedMouseWarpController::WarpMouseCursor(ui::MouseEvent* event) {
   // Native events in Ozone are in the native window coordinate system. We need
   // to translate them to get the global position.
   aura::WindowTreeHost* host =
-      FindMirroringWindowTreeHostFromScreenPoint(point_in_screen);
+      FindMirroringWindowTreeHostFromScreenPoint(point_in_unified_host);
   if (!host)
     return false;
   point_in_native.Offset(host->GetBounds().x(), host->GetBounds().y());
 #endif
 
-  return WarpMouseCursorInNativeCoords(point_in_native, point_in_screen, false);
+  return WarpMouseCursorInNativeCoords(point_in_native, point_in_unified_host,
+                                       update_location_for_test_);
 }
 
 void UnifiedMouseWarpController::SetEnabled(bool enabled) {
@@ -132,7 +148,7 @@ void UnifiedMouseWarpController::ComputeBounds() {
 
 bool UnifiedMouseWarpController::WarpMouseCursorInNativeCoords(
     const gfx::Point& point_in_native,
-    const gfx::Point& point_in_screen,
+    const gfx::Point& point_in_unified_host,
     bool update_mouse_location_now) {
   bool in_first_edge = first_edge_bounds_in_native_.Contains(point_in_native);
   bool in_second_edge = second_edge_bounds_in_native_.Contains(point_in_native);
@@ -142,10 +158,15 @@ bool UnifiedMouseWarpController::WarpMouseCursorInNativeCoords(
       Shell::GetInstance()
           ->display_manager()
           ->software_mirroring_display_list();
+  // Wait updating the cursor until the cursor moves to the new display
+  // to avoid showing the wrong sized cursor at the source display.
+  current_cursor_display_id_ =
+      in_first_edge ? display_list[0].id() : display_list[1].id();
   AshWindowTreeHost* target_ash_host =
       GetMirroringAshWindowTreeHostForDisplayId(
           in_first_edge ? display_list[1].id() : display_list[0].id());
-  MoveCursorTo(target_ash_host, point_in_screen, update_mouse_location_now);
+  MoveCursorTo(target_ash_host, point_in_unified_host,
+               update_mouse_location_now);
   return true;
 }
 

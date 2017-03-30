@@ -6,14 +6,17 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <sys/stat.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <utility>
 
-#include "build/build_config.h"
 #include "base/logging.h"
 #include "base/pickle.h"
 #include "base/posix/unix_domain_socket_linux.h"
+#include "build/build_config.h"
 #include "sandbox/linux/syscall_broker/broker_channel.h"
 #include "sandbox/linux/syscall_broker/broker_common.h"
 #include "sandbox/linux/syscall_broker/broker_policy.h"
@@ -123,10 +126,9 @@ BrokerClient::BrokerClient(const BrokerPolicy& broker_policy,
                            bool fast_check_in_client,
                            bool quiet_failures_for_tests)
     : broker_policy_(broker_policy),
-      ipc_channel_(ipc_channel.Pass()),
+      ipc_channel_(std::move(ipc_channel)),
       fast_check_in_client_(fast_check_in_client),
-      quiet_failures_for_tests_(quiet_failures_for_tests) {
-}
+      quiet_failures_for_tests_(quiet_failures_for_tests) {}
 
 BrokerClient::~BrokerClient() {
 }

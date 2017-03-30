@@ -11,6 +11,7 @@
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/debug/stack_trace.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
@@ -18,16 +19,16 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/threading/simple_thread.h"
-#include "components/view_manager/android_loader.h"
+#include "build/build_config.h"
+#include "components/mus/android_loader.h"
 #include "jni/ShellMain_jni.h"
-#include "mojo/common/message_pump_mojo.h"
+#include "mojo/message_pump/message_pump_mojo.h"
 #include "mojo/runner/android/android_handler_loader.h"
 #include "mojo/runner/android/background_application_loader.h"
 #include "mojo/runner/android/context_init.h"
 #include "mojo/runner/android/ui_application_loader_android.h"
-#include "mojo/runner/child_process.h"
 #include "mojo/runner/context.h"
+#include "mojo/runner/host/child_process.h"
 #include "mojo/runner/init.h"
 #include "mojo/shell/application_loader.h"
 #include "ui/gl/gl_surface_egl.h"
@@ -39,43 +40,24 @@ namespace runner {
 
 namespace {
 
-// Tag for logging.
-const char kLogTag[] = "chromium";
-
 // Command line argument for the communication fifo.
 const char kFifoPath[] = "fifo-path";
-
-class MojoShellRunner : public base::DelegateSimpleThread::Delegate {
- public:
-  MojoShellRunner(const std::vector<std::string>& parameters) {}
-  ~MojoShellRunner() override {}
-
- private:
-  void Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(MojoShellRunner);
-};
 
 LazyInstance<scoped_ptr<base::MessageLoop>> g_java_message_loop =
     LAZY_INSTANCE_INITIALIZER;
 
 LazyInstance<scoped_ptr<Context>> g_context = LAZY_INSTANCE_INITIALIZER;
 
-LazyInstance<scoped_ptr<MojoShellRunner>> g_shell_runner =
-    LAZY_INSTANCE_INITIALIZER;
-
-LazyInstance<scoped_ptr<base::DelegateSimpleThread>> g_shell_thread =
-    LAZY_INSTANCE_INITIALIZER;
-
 LazyInstance<base::android::ScopedJavaGlobalRef<jobject>> g_main_activiy =
     LAZY_INSTANCE_INITIALIZER;
 
 void ConfigureAndroidServices(Context* context) {
+  CHECK(context->application_manager());
   context->application_manager()->SetLoaderForURL(
-      make_scoped_ptr(new UIApplicationLoader(
-          make_scoped_ptr(new view_manager::AndroidLoader()),
-          g_java_message_loop.Get().get())),
-      GURL("mojo:view_manager"));
+      make_scoped_ptr(
+          new UIApplicationLoader(make_scoped_ptr(new mus::AndroidLoader()),
+                                  g_java_message_loop.Get().get())),
+      GURL("mojo:mus"));
 
   // Android handler is bundled with the Mojo shell, because it uses the
   // MojoShell application as the JNI bridge to bootstrap execution of other
@@ -87,23 +69,10 @@ void ConfigureAndroidServices(Context* context) {
       GURL("mojo:android_handler"));
 }
 
-void QuitShellThread() {
-  g_shell_thread.Get()->Join();
-  g_shell_thread.Pointer()->reset();
+void ExitShell() {
   Java_ShellMain_finishActivity(base::android::AttachCurrentThread(),
                                 g_main_activiy.Get().obj());
   exit(0);
-}
-
-void MojoShellRunner::Run() {
-  base::MessageLoop loop(common::MessagePumpMojo::Create());
-  Context* context = g_context.Pointer()->get();
-  ConfigureAndroidServices(context);
-  context->RunCommandLineApplication();
-  loop.Run();
-
-  g_java_message_loop.Pointer()->get()->PostTask(FROM_HERE,
-                                                 base::Bind(&QuitShellThread));
 }
 
 // Initialize stdout redirection if the command line switch is present.
@@ -128,12 +97,12 @@ void InitializeRedirection() {
 }  // namespace
 
 static void Init(JNIEnv* env,
-                 jclass clazz,
-                 jobject activity,
-                 jstring mojo_shell_path,
-                 jobjectArray jparameters,
-                 jstring j_local_apps_directory,
-                 jstring j_tmp_dir) {
+                 const JavaParamRef<jclass>& clazz,
+                 const JavaParamRef<jobject>& activity,
+                 const JavaParamRef<jstring>& mojo_shell_path,
+                 const JavaParamRef<jobjectArray>& jparameters,
+                 const JavaParamRef<jstring>& j_local_apps_directory,
+                 const JavaParamRef<jstring>& j_tmp_dir) {
   g_main_activiy.Get().Reset(env, activity);
 
   // Setting the TMPDIR environment variable so that applications can use it.
@@ -143,9 +112,6 @@ static void Init(JNIEnv* env,
              base::android::ConvertJavaStringToUTF8(env, j_tmp_dir).c_str(), 1);
   DCHECK_EQ(return_value, 0);
 
-  base::android::ScopedJavaLocalRef<jobject> scoped_activity(env, activity);
-  base::android::InitApplicationContext(env, scoped_activity);
-
   std::vector<std::string> parameters;
   parameters.push_back(
       base::android::ConvertJavaStringToUTF8(env, mojo_shell_path));
@@ -153,7 +119,6 @@ static void Init(JNIEnv* env,
                                                      &parameters);
   base::CommandLine::Init(0, nullptr);
   base::CommandLine::ForCurrentProcess()->InitFromArgv(parameters);
-  g_shell_runner.Get().reset(new MojoShellRunner(parameters));
 
   InitializeLogging();
   mojo::runner::WaitForDebuggerIfNecessary();
@@ -163,14 +128,16 @@ static void Init(JNIEnv* env,
   // We want ~MessageLoop to happen prior to ~Context. Initializing
   // LazyInstances is akin to stack-allocating objects; their destructors
   // will be invoked first-in-last-out.
-  Context* shell_context = new Context();
-  shell_context->SetShellFileRoot(base::FilePath(
-      base::android::ConvertJavaStringToUTF8(env, j_local_apps_directory)));
+  base::FilePath shell_file_root(
+      base::android::ConvertJavaStringToUTF8(env, j_local_apps_directory));
+  Context* shell_context = new Context;
   g_context.Get().reset(shell_context);
 
   g_java_message_loop.Get().reset(new base::MessageLoopForUI);
   base::MessageLoopForUI::current()->Start();
-  shell_context->Init();
+
+  shell_context->Init(shell_file_root);
+  ConfigureAndroidServices(shell_context);
 
   // This is done after the main message loop is started since it may post
   // tasks. This is consistent with the ordering from the desktop version of
@@ -183,19 +150,20 @@ static void Init(JNIEnv* env,
   gfx::GLSurface::InitializeOneOff();
 }
 
-static void Start(JNIEnv* env, jclass clazz) {
+static void Start(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
 #if defined(MOJO_SHELL_DEBUG_URL)
   base::CommandLine::ForCurrentProcess()->AppendArg(MOJO_SHELL_DEBUG_URL);
   // Sleep for 5 seconds to give the debugger a chance to attach.
   sleep(5);
 #endif
 
-  g_shell_thread.Get().reset(new base::DelegateSimpleThread(
-      g_shell_runner.Get().get(), "ShellThread"));
-  g_shell_thread.Get()->Start();
+  Context* context = g_context.Pointer()->get();
+  context->RunCommandLineApplication(base::Bind(ExitShell));
 }
 
-static void AddApplicationURL(JNIEnv* env, jclass clazz, jstring jurl) {
+static void AddApplicationURL(JNIEnv* env,
+                              const JavaParamRef<jclass>& clazz,
+                              const JavaParamRef<jstring>& jurl) {
   base::CommandLine::ForCurrentProcess()->AppendArg(
       base::android::ConvertJavaStringToUTF8(env, jurl));
 }

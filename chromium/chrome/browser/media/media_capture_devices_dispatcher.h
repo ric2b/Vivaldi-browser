@@ -10,6 +10,7 @@
 #include <map>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/singleton.h"
@@ -148,7 +149,7 @@ class MediaCaptureDevicesDispatcher : public content::MediaObserver {
   void SetTestVideoCaptureDevices(const content::MediaStreamDevices& devices);
 
  private:
-  friend struct DefaultSingletonTraits<MediaCaptureDevicesDispatcher>;
+  friend struct base::DefaultSingletonTraits<MediaCaptureDevicesDispatcher>;
 
   MediaCaptureDevicesDispatcher();
   ~MediaCaptureDevicesDispatcher() override;

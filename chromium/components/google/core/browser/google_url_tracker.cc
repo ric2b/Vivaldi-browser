@@ -4,13 +4,17 @@
 
 #include "components/google/core/browser/google_url_tracker.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/google/core/browser/google_pref_names.h"
 #include "components/google/core/browser/google_switches.h"
 #include "components/google/core/browser/google_util.h"
@@ -27,10 +31,10 @@ const char GoogleURLTracker::kSearchDomainCheckURL[] =
 
 GoogleURLTracker::GoogleURLTracker(scoped_ptr<GoogleURLTrackerClient> client,
                                    Mode mode)
-    : client_(client.Pass()),
-      google_url_(mode == UNIT_TEST_MODE ?
-          kDefaultGoogleHomepage :
-          client_->GetPrefs()->GetString(prefs::kLastKnownGoogleURL)),
+    : client_(std::move(client)),
+      google_url_(mode == UNIT_TEST_MODE ? kDefaultGoogleHomepage
+                                         : client_->GetPrefs()->GetString(
+                                               prefs::kLastKnownGoogleURL)),
       fetcher_id_(0),
       in_startup_sleep_(true),
       already_fetched_(false),
@@ -96,8 +100,9 @@ void GoogleURLTracker::OnURLFetchComplete(const net::URLFetcher* source) {
   // See if the response data was valid.  It should be ".google.<TLD>".
   std::string url_str;
   source->GetResponseAsString(&url_str);
-  base::TrimWhitespace(url_str, base::TRIM_ALL, &url_str);
-  if (!base::StartsWithASCII(url_str, ".google.", false))
+  base::TrimWhitespaceASCII(url_str, base::TRIM_ALL, &url_str);
+  if (!base::StartsWith(url_str, ".google.",
+                        base::CompareCase::INSENSITIVE_ASCII))
     return;
   GURL url("https://www" + url_str);
   if (!url.is_valid() || (url.path().length() > 1) || url.has_query() ||
@@ -162,6 +167,9 @@ void GoogleURLTracker::StartFetchIfDesirable() {
   already_fetched_ = true;
   fetcher_ = net::URLFetcher::Create(fetcher_id_, GURL(kSearchDomainCheckURL),
                                      net::URLFetcher::GET, this);
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher_.get(),
+      data_use_measurement::DataUseUserData::GOOGLE_URL_TRACKER);
   ++fetcher_id_;
   // We don't want this fetch to set new entries in the cache or cookies, lest
   // we alarm the user.

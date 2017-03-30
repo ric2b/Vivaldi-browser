@@ -14,7 +14,7 @@ def _IssueMarkerAndScroll(action_runner):
 
 
 def _CreatePageClassWithSmoothInteractions(page_cls):
-  class DerivedSmoothPage(page_cls):  # pylint: disable=W0232
+  class DerivedSmoothPage(page_cls):  # pylint: disable=no-init
 
     def RunPageInteractions(self, action_runner):
       _IssueMarkerAndScroll(action_runner)
@@ -81,7 +81,7 @@ class Top25SmoothPageSet(story.StorySet):
 
   """ Pages hand-picked for 2012 CrOS scrolling tuning efforts. """
 
-  def __init__(self):
+  def __init__(self, techcrunch=True):
     super(Top25SmoothPageSet, self).__init__(
         archive_data_file='data/top_25_smooth.json',
         cloud_storage_bucket=story.PARTNER_BUCKET)
@@ -123,7 +123,8 @@ class Top25SmoothPageSet(story.StorySet):
         # Why: #1 news worldwide (Alexa global)
         'http://news.yahoo.com',
         # Why: #2 news worldwide
-        'http://www.cnn.com',
+        # crbug.com/528474
+        #'http://www.cnn.com',
         # Why: #1 world commerce website by visits; #3 commerce in the US by
         # time spent
         'http://www.amazon.com',
@@ -135,9 +136,17 @@ class Top25SmoothPageSet(story.StorySet):
         'http://answers.yahoo.com',
         # Why: #1 Alexa sports
         'http://sports.yahoo.com/',
-        # Why: top tech blog
-        'http://techcrunch.com'
     ]
+
+    if techcrunch:
+      # Why: top tech blog
+      other_urls.append('http://techcrunch.com')
 
     for url in other_urls:
       self.AddStory(TopSmoothPage(url, self))
+
+
+class V8Top25SmoothPageSet(Top25SmoothPageSet):
+  def __init__(self):
+    # Disabled for V8 because of crbug.com/507836, crbug.com/527425
+    super(V8Top25SmoothPageSet, self).__init__(techcrunch=False)

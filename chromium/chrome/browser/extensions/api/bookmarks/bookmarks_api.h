@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_BOOKMARKS_BOOKMARKS_API_H_
 #define CHROME_BROWSER_EXTENSIONS_API_BOOKMARKS_BOOKMARKS_API_H_
 
+#include <stdint.h>
+
 #include <list>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
@@ -18,11 +21,14 @@
 #include "extensions/browser/event_router.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
-class ChromeBookmarkClient;
-
 namespace base {
 class FilePath;
 class ListValue;
+}
+
+namespace bookmarks {
+class BookmarkModel;
+class ManagedBookmarkService;
 }
 
 namespace content {
@@ -76,12 +82,13 @@ class BookmarkEventRouter : public bookmarks::BookmarkModelObserver {
 
  private:
   // Helper to actually dispatch an event to extension listeners.
-  void DispatchEvent(const std::string& event_name,
+  void DispatchEvent(events::HistogramValue histogram_value,
+                     const std::string& event_name,
                      scoped_ptr<base::ListValue> event_args);
 
   content::BrowserContext* browser_context_;
   bookmarks::BookmarkModel* model_;
-  ChromeBookmarkClient* client_;
+  bookmarks::ManagedBookmarkService* managed_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkEventRouter);
 };
@@ -131,13 +138,13 @@ class BookmarksFunction : public ChromeAsyncExtensionFunction,
   // Helper to get the BookmarkModel.
   bookmarks::BookmarkModel* GetBookmarkModel();
 
-  // Helper to get the ChromeBookmarkClient.
-  ChromeBookmarkClient* GetChromeBookmarkClient();
+  // Helper to get the ManagedBookmarkService.
+  bookmarks::ManagedBookmarkService* GetManagedBookmarkService();
 
-  // Helper to get the bookmark id as int64 from the given string id.
+  // Helper to get the bookmark id as int64_t from the given string id.
   // Sets error_ to an error string if the given id string can't be parsed
-  // as an int64. In case of error, doesn't change id and returns false.
-  bool GetBookmarkIdAsInt64(const std::string& id_string, int64* id);
+  // as an int64_t. In case of error, doesn't change id and returns false.
+  bool GetBookmarkIdAsInt64(const std::string& id_string, int64_t* id);
 
   // Helper to get the bookmark node from a given string id.
   // If the given id can't be parsed or doesn't refer to a valid node, sets
@@ -242,9 +249,9 @@ class BookmarksRemoveFunction : public BookmarksFunction {
   DECLARE_EXTENSION_FUNCTION("bookmarks.remove", BOOKMARKS_REMOVE)
 
   // Returns true on successful parse and sets invalid_id to true if conversion
-  // from id string to int64 failed.
+  // from id string to int64_t failed.
   static bool ExtractIds(const base::ListValue* args,
-                         std::list<int64>* ids,
+                         std::list<int64_t>* ids,
                          bool* invalid_id);
 
  protected:
@@ -278,7 +285,7 @@ class BookmarksMoveFunction : public BookmarksFunction {
   DECLARE_EXTENSION_FUNCTION("bookmarks.move", BOOKMARKS_MOVE)
 
   static bool ExtractIds(const base::ListValue* args,
-                         std::list<int64>* ids,
+                         std::list<int64_t>* ids,
                          bool* invalid_id);
 
  protected:
@@ -293,7 +300,7 @@ class BookmarksUpdateFunction : public BookmarksFunction {
   DECLARE_EXTENSION_FUNCTION("bookmarks.update", BOOKMARKS_UPDATE)
 
   static bool ExtractIds(const base::ListValue* args,
-                         std::list<int64>* ids,
+                         std::list<int64_t>* ids,
                          bool* invalid_id);
 
  protected:
@@ -362,21 +369,6 @@ class BookmarksExportFunction : public BookmarksIOFunction {
   // BookmarksFunction:
   bool RunOnReady() override;
 };
-
-class BookmarksUpdateSpeedDialsForWindowsJumplistFunction : public BookmarksFunction {
-public:
-  DECLARE_EXTENSION_FUNCTION("bookmarks.updateSpeedDialsForWindowsJumplist", BOOKMARKS_UPDATESPEEDDIALSFORWINDOWSJUMPLIST);
-
-  BookmarksUpdateSpeedDialsForWindowsJumplistFunction();
-
-protected:
-  ~BookmarksUpdateSpeedDialsForWindowsJumplistFunction() override;
-
-private:
-  // BookmarksFunction:
-  bool RunOnReady() override;
-};
-
 
 }  // namespace extensions
 

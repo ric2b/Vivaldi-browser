@@ -12,8 +12,8 @@
 #include "ash/new_window_delegate.h"
 #include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
-#include "ash/shell/keyboard_controller_proxy_stub.h"
 #include "ash/shell_window_ids.h"
+#include "ash/test/test_keyboard_ui.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_system_tray_delegate.h"
@@ -21,15 +21,19 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/logging.h"
-#include "content/public/test/test_browser_context.h"
 #include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
 #include "ui/aura/window.h"
+#include "ui/gfx/image/image.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/system/tray/system_tray_notifier.h"
 #endif
+
+namespace content {
+class BrowserContext;
+}
 
 namespace ash {
 namespace test {
@@ -67,8 +71,7 @@ class MediaDelegateImpl : public MediaDelegate {
   void HandleMediaNextTrack() override {}
   void HandleMediaPlayPause() override {}
   void HandleMediaPrevTrack() override {}
-  MediaCaptureState GetMediaCaptureState(
-      content::BrowserContext* context) override {
+  MediaCaptureState GetMediaCaptureState(UserIndex index) override {
     return state_;
   }
 
@@ -105,8 +108,8 @@ bool TestShellDelegate::IsRunningInForcedAppMode() const {
   return false;
 }
 
-bool TestShellDelegate::IsMultiAccountEnabled() const {
-  return false;
+bool TestShellDelegate::CanShowWindowForUser(aura::Window* window) const {
+  return true;
 }
 
 bool TestShellDelegate::IsForceMaximizeOnFirstRun() const {
@@ -123,9 +126,8 @@ void TestShellDelegate::Exit() {
   num_exit_requests_++;
 }
 
-keyboard::KeyboardControllerProxy*
-    TestShellDelegate::CreateKeyboardControllerProxy() {
-  return new KeyboardControllerProxyStub();
+keyboard::KeyboardUI* TestShellDelegate::CreateKeyboardUI() {
+  return new TestKeyboardUI;
 }
 
 void TestShellDelegate::VirtualKeyboardActivated(bool activated) {
@@ -142,11 +144,6 @@ void TestShellDelegate::AddVirtualKeyboardStateObserver(
 void TestShellDelegate::RemoveVirtualKeyboardStateObserver(
     VirtualKeyboardStateObserver* observer) {
   keyboard_state_observer_list_.RemoveObserver(observer);
-}
-
-content::BrowserContext* TestShellDelegate::GetActiveBrowserContext() {
-  active_browser_context_.reset(new content::TestBrowserContext());
-  return active_browser_context_.get();
 }
 
 app_list::AppListViewDelegate* TestShellDelegate::GetAppListViewDelegate() {
@@ -197,6 +194,10 @@ GPUSupport* TestShellDelegate::CreateGPUSupport() {
 
 base::string16 TestShellDelegate::GetProductName() const {
   return base::string16();
+}
+
+gfx::Image TestShellDelegate::GetDeprecatedAcceleratorImage() const {
+  return gfx::Image();
 }
 
 void TestShellDelegate::SetMediaCaptureState(MediaCaptureState state) {

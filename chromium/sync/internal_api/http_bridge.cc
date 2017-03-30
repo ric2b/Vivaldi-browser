@@ -4,9 +4,18 @@
 
 #include "sync/internal_api/public/http_bridge.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <vector>
+
+#include "base/bit_cast.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -35,6 +44,29 @@ void LogTimeout(bool timed_out) {
   UMA_HISTOGRAM_BOOLEAN("Sync.URLFetchTimedOut", timed_out);
 }
 
+bool IsSyncHttpContentCompressionEnabled() {
+  const std::string group_name =
+      base::FieldTrialList::FindFullName("SyncHttpContentCompression");
+  return StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE);
+}
+
+void RecordSyncRequestContentLengthHistograms(int64_t compressed_content_length,
+                                              int64_t original_content_length) {
+  UMA_HISTOGRAM_COUNTS("Sync.RequestContentLength.Compressed",
+                       compressed_content_length);
+  UMA_HISTOGRAM_COUNTS("Sync.RequestContentLength.Original",
+                       original_content_length);
+}
+
+void RecordSyncResponseContentLengthHistograms(
+    int64_t compressed_content_length,
+    int64_t original_content_length) {
+  UMA_HISTOGRAM_COUNTS("Sync.ResponseContentLength.Compressed",
+                       compressed_content_length);
+  UMA_HISTOGRAM_COUNTS("Sync.ResponseContentLength.Original",
+                       original_content_length);
+}
+
 }  // namespace
 
 HttpBridgeFactory::HttpBridgeFactory(
@@ -55,8 +87,11 @@ HttpBridgeFactory::~HttpBridgeFactory() {
   cancelation_signal_->UnregisterHandler(this);
 }
 
-void HttpBridgeFactory::Init(const std::string& user_agent) {
+void HttpBridgeFactory::Init(
+    const std::string& user_agent,
+    const BindToTrackerCallback& bind_to_tracker_callback) {
   user_agent_ = user_agent;
+  bind_to_tracker_callback_ = bind_to_tracker_callback;
 }
 
 HttpPostProviderInterface* HttpBridgeFactory::Create() {
@@ -68,8 +103,9 @@ HttpPostProviderInterface* HttpBridgeFactory::Create() {
   // we've been asked to shut down.
   CHECK(request_context_getter_.get());
 
-  scoped_refptr<HttpBridge> http = new HttpBridge(
-      user_agent_, request_context_getter_, network_time_update_callback_);
+  scoped_refptr<HttpBridge> http =
+      new HttpBridge(user_agent_, request_context_getter_,
+                     network_time_update_callback_, bind_to_tracker_callback_);
   http->AddRef();
   return http.get();
 }
@@ -98,14 +134,15 @@ HttpBridge::URLFetchState::~URLFetchState() {}
 HttpBridge::HttpBridge(
     const std::string& user_agent,
     const scoped_refptr<net::URLRequestContextGetter>& context_getter,
-    const NetworkTimeUpdateCallback& network_time_update_callback)
+    const NetworkTimeUpdateCallback& network_time_update_callback,
+    const BindToTrackerCallback& bind_to_tracker_callback)
     : created_on_loop_(base::MessageLoop::current()),
       user_agent_(user_agent),
       http_post_completed_(false, false),
       request_context_getter_(context_getter),
       network_task_runner_(request_context_getter_->GetNetworkTaskRunner()),
-      network_time_update_callback_(network_time_update_callback) {
-}
+      network_time_update_callback_(network_time_update_callback),
+      bind_to_tracker_callback_(bind_to_tracker_callback) {}
 
 HttpBridge::~HttpBridge() {
 }
@@ -203,19 +240,32 @@ void HttpBridge::MakeAsynchronousPost() {
       base::Bind(&HttpBridge::OnURLFetchTimedOut, this));
 
   DCHECK(request_context_getter_.get());
+  fetch_state_.start_time = base::Time::Now();
   fetch_state_.url_poster =
       net::URLFetcher::Create(url_for_request_, net::URLFetcher::POST, this)
           .release();
+  if (!bind_to_tracker_callback_.is_null())
+    bind_to_tracker_callback_.Run(fetch_state_.url_poster);
   fetch_state_.url_poster->SetRequestContext(request_context_getter_.get());
-  fetch_state_.url_poster->SetUploadData(content_type_, request_content_);
   fetch_state_.url_poster->SetExtraRequestHeaders(extra_headers_);
+
+  if (!IsSyncHttpContentCompressionEnabled()) {
+    // We set "accept-encoding" here to avoid URLRequestHttpJob adding "gzip"
+    // into "accept-encoding" later.
+    fetch_state_.url_poster->AddExtraRequestHeader(base::StringPrintf(
+        "%s: %s", net::HttpRequestHeaders::kAcceptEncoding, "deflate"));
+  }
+
+  fetch_state_.url_poster->SetUploadData(content_type_, request_content_);
+  RecordSyncRequestContentLengthHistograms(request_content_.size(),
+                                           request_content_.size());
+
   fetch_state_.url_poster->AddExtraRequestHeader(base::StringPrintf(
       "%s: %s", net::HttpRequestHeaders::kUserAgent, user_agent_.c_str()));
   fetch_state_.url_poster->SetLoadFlags(net::LOAD_BYPASS_CACHE |
                                         net::LOAD_DISABLE_CACHE |
                                         net::LOAD_DO_NOT_SAVE_COOKIES |
                                         net::LOAD_DO_NOT_SEND_COOKIES);
-  fetch_state_.start_time = base::Time::Now();
 
   fetch_state_.url_poster->Start();
 }
@@ -302,6 +352,10 @@ void HttpBridge::OnURLFetchComplete(const net::URLFetcher* source) {
 
   if (fetch_state_.request_succeeded)
     LogTimeout(false);
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Sync.URLFetchResponse",
+                              source->GetStatus().is_success()
+                                  ? source->GetResponseCode()
+                                  : source->GetStatus().ToNetError());
   UMA_HISTOGRAM_LONG_TIMES("Sync.URLFetchTime",
                            fetch_state_.end_time - fetch_state_.start_time);
 
@@ -315,6 +369,17 @@ void HttpBridge::OnURLFetchComplete(const net::URLFetcher* source) {
   fetch_state_.response_headers = source->GetResponseHeaders();
   UpdateNetworkTime();
 
+  int64_t compressed_content_length = fetch_state_.response_content.size();
+  int64_t original_content_length = compressed_content_length;
+  if (fetch_state_.response_headers &&
+      fetch_state_.response_headers->HasHeaderValue("content-encoding",
+                                                    "gzip")) {
+    compressed_content_length =
+        fetch_state_.response_headers->GetContentLength();
+  }
+  RecordSyncResponseContentLengthHistograms(compressed_content_length,
+                                            original_content_length);
+
   // End of the line for url_poster_. It lives only on the IO loop.
   // We defer deletion because we're inside a callback from a component of the
   // URLFetcher, so it seems most natural / "polite" to let the stack unwind.
@@ -327,7 +392,8 @@ void HttpBridge::OnURLFetchComplete(const net::URLFetcher* source) {
 }
 
 void HttpBridge::OnURLFetchDownloadProgress(const net::URLFetcher* source,
-                                            int64 current, int64 total) {
+                                            int64_t current,
+                                            int64_t total) {
   DCHECK(network_task_runner_->BelongsToCurrentThread());
   // Reset the delay when forward progress is made.
   base::AutoLock lock(fetch_state_lock_);
@@ -336,7 +402,8 @@ void HttpBridge::OnURLFetchDownloadProgress(const net::URLFetcher* source,
 }
 
 void HttpBridge::OnURLFetchUploadProgress(const net::URLFetcher* source,
-                                          int64 current, int64 total) {
+                                          int64_t current,
+                                          int64_t total) {
   DCHECK(network_task_runner_->BelongsToCurrentThread());
   // Reset the delay when forward progress is made.
   base::AutoLock lock(fetch_state_lock_);
@@ -358,7 +425,7 @@ void HttpBridge::OnURLFetchTimedOut() {
   fetch_state_.request_completed = true;
   fetch_state_.request_succeeded = false;
   fetch_state_.http_response_code = -1;
-  fetch_state_.error_code = net::URLRequestStatus::FAILED;
+  fetch_state_.error_code = net::ERR_TIMED_OUT;
 
   // This method is called by the timer, not the url fetcher implementation,
   // so it's safe to delete the fetcher here.
@@ -389,7 +456,7 @@ void HttpBridge::UpdateNetworkTime() {
     return;
   }
 
-  int64 sane_time_ms = 0;
+  int64_t sane_time_ms = 0;
   if (base::StringToInt64(sane_time_str, &sane_time_ms)) {
     network_time_update_callback_.Run(
         base::Time::FromJsTime(sane_time_ms),

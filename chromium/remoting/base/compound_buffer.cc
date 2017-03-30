@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "remoting/base/compound_buffer.h"
+
+#include <algorithm>
 #include <functional>
 
 #include "base/logging.h"
 #include "net/base/io_buffer.h"
-#include "remoting/base/compound_buffer.h"
 
 namespace remoting {
 
@@ -144,12 +146,12 @@ net::IOBufferWithSize* CompoundBuffer::ToIOBufferWithSize() const {
 }
 
 void CompoundBuffer::CopyTo(char* data, int size) const {
-  char* pos = data;
+  int pos = 0;
   for (DataChunkList::const_iterator it = chunks_.begin();
-       it != chunks_.end(); ++it) {
-    CHECK_LE(pos + it->size, data + size);
-    memcpy(pos, it->start, it->size);
-    pos += it->size;
+       it != chunks_.end() && pos < size; ++it) {
+    int bytes_to_copy = std::min(size - pos, it->size);
+    memcpy(data + pos, it->start, bytes_to_copy);
+    pos += bytes_to_copy;
   }
 }
 
@@ -270,7 +272,7 @@ bool CompoundBufferInputStream::Skip(int count) {
   return count == 0;
 }
 
-int64 CompoundBufferInputStream::ByteCount() const {
+int64_t CompoundBufferInputStream::ByteCount() const {
   return position_;
 }
 

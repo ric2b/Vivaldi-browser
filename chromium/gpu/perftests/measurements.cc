@@ -4,6 +4,8 @@
 
 #include "gpu/perftests/measurements.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "testing/perf/perf_test.h"
 #include "ui/gl/gpu_timing.h"
@@ -55,8 +57,9 @@ Measurement::~Measurement() {
 MeasurementTimers::MeasurementTimers(gfx::GPUTimingClient* gpu_timing_client)
     : wall_time_start_(), cpu_time_start_(), gpu_timer_() {
   DCHECK(gpu_timing_client);
-  wall_time_start_ = base::TraceTicks::Now();
+  wall_time_start_ = base::TimeTicks::Now();
   if (base::ThreadTicks::IsSupported()) {
+    base::ThreadTicks::WaitUntilInitialized();
     cpu_time_start_ = base::ThreadTicks::Now();
   } else {
     static bool logged_once = false;
@@ -71,7 +74,7 @@ MeasurementTimers::MeasurementTimers(gfx::GPUTimingClient* gpu_timing_client)
 }
 
 void MeasurementTimers::Record() {
-  wall_time_ = base::TraceTicks::Now() - wall_time_start_;
+  wall_time_ = base::TimeTicks::Now() - wall_time_start_;
   if (base::ThreadTicks::IsSupported()) {
     cpu_time_ = base::ThreadTicks::Now() - cpu_time_start_;
   }
@@ -87,7 +90,7 @@ Measurement MeasurementTimers::GetAsMeasurement(const std::string& name) {
   if (!base::ThreadTicks::IsSupported()) {
     cpu_time_ = base::TimeDelta::FromMicroseconds(-1);
   }
-  int64 gpu_time = -1;
+  int64_t gpu_time = -1;
   if (gpu_timer_.get() != nullptr && gpu_timer_->IsAvailable()) {
     gpu_time = gpu_timer_->GetDeltaElapsed();
   }

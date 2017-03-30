@@ -4,35 +4,32 @@
 
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
+#include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 
 namespace password_manager {
 
-StubPasswordManagerClient::StubPasswordManagerClient() {
+ScopedVector<autofill::PasswordForm>
+StubPasswordManagerClient::PassThroughCredentialsFilter::FilterResults(
+    ScopedVector<autofill::PasswordForm> results) const {
+  return results;
 }
 
-StubPasswordManagerClient::~StubPasswordManagerClient() {
+bool StubPasswordManagerClient::PassThroughCredentialsFilter::ShouldSave(
+    const autofill::PasswordForm& form) const {
+  return true;
 }
 
-std::string StubPasswordManagerClient::GetSyncUsername() const {
-  return std::string();
-}
+StubPasswordManagerClient::StubPasswordManagerClient() {}
 
-bool StubPasswordManagerClient::IsSyncAccountCredential(
-    const std::string& username,
-    const std::string& origin) const {
-  return false;
-}
+StubPasswordManagerClient::~StubPasswordManagerClient() {}
 
-bool StubPasswordManagerClient::ShouldFilterAutofillResult(
-    const autofill::PasswordForm& form) {
-  return false;
-}
-
-bool StubPasswordManagerClient::PromptUserToSavePassword(
+bool StubPasswordManagerClient::PromptUserToSaveOrUpdatePassword(
     scoped_ptr<PasswordFormManager> form_to_save,
-    password_manager::CredentialSourceType type) {
+    password_manager::CredentialSourceType type,
+    bool update_password) {
   return false;
 }
 
@@ -58,6 +55,19 @@ PrefService* StubPasswordManagerClient::GetPrefs() {
 
 PasswordStore* StubPasswordManagerClient::GetPasswordStore() const {
   return nullptr;
+}
+
+const GURL& StubPasswordManagerClient::GetLastCommittedEntryURL() const {
+  return GURL::EmptyGURL();
+}
+
+const CredentialsFilter* StubPasswordManagerClient::GetStoreResultFilter()
+    const {
+  return &credentials_filter_;
+}
+
+const LogManager* StubPasswordManagerClient::GetLogManager() const {
+  return &log_manager_;
 }
 
 }  // namespace password_manager

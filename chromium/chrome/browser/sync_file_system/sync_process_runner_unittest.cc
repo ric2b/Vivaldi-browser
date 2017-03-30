@@ -4,8 +4,12 @@
 
 #include "chrome/browser/sync_file_system/sync_process_runner.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <queue>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -62,7 +66,7 @@ class FakeTimerHelper : public SyncProcessRunner::TimerHelper {
     SetCurrentTime(scheduled_time_);
   }
 
-  int64 GetCurrentDelay() {
+  int64_t GetCurrentDelay() {
     EXPECT_FALSE(timer_task_.is_null());
     return (scheduled_time_ - current_time_).InMilliseconds();
   }
@@ -81,10 +85,10 @@ class FakeSyncProcessRunner : public SyncProcessRunner {
                         scoped_ptr<TimerHelper> timer_helper,
                         size_t max_parallel_task)
       : SyncProcessRunner("FakeSyncProcess",
-                          client, timer_helper.Pass(),
+                          client,
+                          std::move(timer_helper),
                           max_parallel_task),
-        max_parallel_task_(max_parallel_task) {
-  }
+        max_parallel_task_(max_parallel_task) {}
 
   void StartSync(const SyncStatusCallback& callback) override {
     EXPECT_LT(running_tasks_.size(), max_parallel_task_);

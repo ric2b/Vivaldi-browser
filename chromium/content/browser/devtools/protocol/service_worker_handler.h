@@ -5,8 +5,11 @@
 #ifndef CONTENT_BROWSER_DEVTOOLS_PROTOCOL_SERVICE_WORKER_HANDLER_H_
 #define CONTENT_BROWSER_DEVTOOLS_PROTOCOL_SERVICE_WORKER_HANDLER_H_
 
+#include <stdint.h>
+
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/devtools/protocol/devtools_protocol_dispatcher.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
@@ -54,8 +57,9 @@ class ServiceWorkerHandler : public DevToolsAgentHostClient,
   Response StopWorker(const std::string& version_id);
   Response UpdateRegistration(const std::string& scope_url);
   Response InspectWorker(const std::string& version_id);
-  Response SkipWaiting(const std::string& version_id);
   Response SetDebugOnStart(bool debug_on_start);
+  Response SetForceUpdateOnPageLoad(const std::string& registration_id,
+                                    bool force_update_on_page_load);
   Response DeliverPushMessage(const std::string& origin,
                               const std::string& registration_id,
                               const std::string& data);
@@ -83,8 +87,8 @@ class ServiceWorkerHandler : public DevToolsAgentHostClient,
       const std::vector<ServiceWorkerRegistrationInfo>& registrations);
   void OnWorkerVersionUpdated(
       const std::vector<ServiceWorkerVersionInfo>& registrations);
-  void OnErrorReported(int64 registration_id,
-                       int64 version_id,
+  void OnErrorReported(int64_t registration_id,
+                       int64_t version_id,
                        const ServiceWorkerContextObserver::ErrorInfo& info);
 
   void OpenNewDevToolsWindow(int process_id, int devtools_agent_route_id);

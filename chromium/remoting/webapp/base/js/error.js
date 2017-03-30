@@ -36,6 +36,60 @@ remoting.Error.prototype.toString = function() {
 };
 
 /**
+ * @return {remoting.ChromotingEvent.ConnectionError} error
+ */
+remoting.Error.prototype.toConnectionError = function() {
+  var Tag = remoting.Error.Tag;
+  var ConnectionError = remoting.ChromotingEvent.ConnectionError;
+  switch (this.tag_) {
+    case Tag.NONE:
+      return ConnectionError.NONE;
+    case Tag.CLIENT_SUSPENDED:
+      return ConnectionError.CLIENT_SUSPENDED;
+    case Tag.INVALID_ACCESS_CODE:
+      return ConnectionError.INVALID_ACCESS_CODE;
+    case Tag.MISSING_PLUGIN:
+      return ConnectionError.MISSING_PLUGIN;
+    case Tag.AUTHENTICATION_FAILED:
+      return ConnectionError.AUTHENTICATION_FAILED;
+    case Tag.HOST_IS_OFFLINE:
+      return ConnectionError.HOST_OFFLINE;
+    case Tag.INCOMPATIBLE_PROTOCOL:
+      return ConnectionError.INCOMPATIBLE_PROTOCOL;
+    case Tag.BAD_VERSION:
+      return ConnectionError.BAD_VERSION;
+    case Tag.NETWORK_FAILURE:
+      return ConnectionError.NETWORK_FAILURE;
+    case Tag.HOST_OVERLOAD:
+      return ConnectionError.HOST_OVERLOAD;
+    case Tag.MAX_SESSION_LENGTH:
+      return ConnectionError.MAX_SESSION_LENGTH;
+    case Tag.HOST_CONFIGURATION_ERROR:
+      return ConnectionError.HOST_CONFIGURATION_ERROR;
+    case Tag.P2P_FAILURE:
+      return ConnectionError.P2P_FAILURE;
+    case Tag.NACL_DISABLED:
+      return ConnectionError.NACL_DISABLED;
+    case Tag.UNEXPECTED:
+      return ConnectionError.UNEXPECTED;
+    case Tag.NACL_PLUGIN_CRASHED:
+      return ConnectionError.NACL_PLUGIN_CRASHED;
+    // For errors that don't have a corresponding ConnectionError mapping,
+    // default to Error.UNKNOWN_ERROR.
+    case Tag.SERVICE_UNAVAILABLE:
+    case Tag.NOT_AUTHENTICATED:
+    case Tag.NOT_FOUND:
+    case Tag.INVALID_HOST_DOMAIN:
+    case Tag.REGISTRATION_FAILED:
+    case Tag.NOT_AUTHORIZED:
+    case Tag.APP_NOT_AUTHORIZED:
+    case Tag.CANCELLED:
+      return ConnectionError.UNKNOWN_ERROR;
+  }
+  return ConnectionError.UNKNOWN_ERROR;
+};
+
+/**
  * @return {remoting.Error.Tag} The tag used to create this Error.
  */
 remoting.Error.prototype.getTag = function() {
@@ -74,6 +128,14 @@ remoting.Error.prototype.isNone = function() {
 };
 
 /**
+ * @return {boolean} True if this object's tag is CANCELLED, meaning this
+ *     object represents the lack of an error.
+ */
+remoting.Error.prototype.isCancel = function() {
+  return this.hasTag(remoting.Error.Tag.CANCELLED);
+};
+
+/**
  * Convenience method for creating the second most common error type.
  * @return {!remoting.Error}
  */
@@ -100,20 +162,23 @@ remoting.Error.Tag = {
   // not normally cause the error text to be shown to the user, so the
   // i18n-content prefix is not needed in this case.
   CANCELLED: '__CANCELLED__',
+
   // Used to signify that the local computer was suspended for long enough that
   // the connection is expected to drop, allowing a reconnect attempt to be
-  // scheduled sooner. This is not shown to the user so i18n-content prefix is
-  // not needed in this case.
-  CLIENT_SUSPENDED: '__CLIENT_SUSPENDED__',
+  // scheduled sooner.
+  CLIENT_SUSPENDED: /*i18n-content*/ 'ERROR_NETWORK_FAILURE',
 
   INVALID_ACCESS_CODE: /*i18n-content*/ 'ERROR_INVALID_ACCESS_CODE',
   MISSING_PLUGIN: /*i18n-content*/ 'ERROR_MISSING_PLUGIN',
+  NACL_PLUGIN_CRASHED: /*i18n-content*/ 'ERROR_NACL_PLUGIN_CRASHED',
   AUTHENTICATION_FAILED: /*i18n-content*/ 'ERROR_AUTHENTICATION_FAILED',
   HOST_IS_OFFLINE: /*i18n-content*/ 'ERROR_HOST_IS_OFFLINE',
   INCOMPATIBLE_PROTOCOL: /*i18n-content*/ 'ERROR_INCOMPATIBLE_PROTOCOL',
-  BAD_PLUGIN_VERSION: /*i18n-content*/ 'ERROR_BAD_PLUGIN_VERSION',
+  BAD_VERSION: /*i18n-content*/ 'ERROR_BAD_PLUGIN_VERSION',
   NETWORK_FAILURE: /*i18n-content*/ 'ERROR_NETWORK_FAILURE',
   HOST_OVERLOAD: /*i18n-content*/ 'ERROR_HOST_OVERLOAD',
+  MAX_SESSION_LENGTH: /*i18n-content*/ 'ERROR_MAX_SESSION_LENGTH',
+  HOST_CONFIGURATION_ERROR: /*i18n-content*/ 'ERROR_HOST_CONFIGURATION_ERROR',
   UNEXPECTED: /*i18n-content*/ 'ERROR_UNEXPECTED',
   SERVICE_UNAVAILABLE: /*i18n-content*/ 'ERROR_SERVICE_UNAVAILABLE',
   NOT_AUTHENTICATED: /*i18n-content*/ 'ERROR_NOT_AUTHENTICATED',
@@ -123,7 +188,8 @@ remoting.Error.Tag = {
   REGISTRATION_FAILED: /*i18n-content*/ 'ERROR_HOST_REGISTRATION_FAILED',
   NOT_AUTHORIZED: /*i18n-content*/ 'ERROR_NOT_AUTHORIZED',
   // TODO(garykac): Move app-specific errors into separate location.
-  APP_NOT_AUTHORIZED: /*i18n-content*/ 'ERROR_APP_NOT_AUTHORIZED'
+  APP_NOT_AUTHORIZED: /*i18n-content*/ 'ERROR_APP_NOT_AUTHORIZED',
+  NACL_DISABLED: /*i18n-content*/ 'ERROR_NACL_DISABLED',
 };
 
 // A whole bunch of semi-redundant constants, mostly to reduce to size

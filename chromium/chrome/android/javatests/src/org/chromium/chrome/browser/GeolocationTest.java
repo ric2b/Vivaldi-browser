@@ -8,8 +8,10 @@ import android.location.Location;
 import android.test.FlakyTest;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.InfoBarUtil;
@@ -18,8 +20,6 @@ import org.chromium.content.browser.LocationProviderAdapter;
 import org.chromium.content.browser.LocationProviderFactory;
 import org.chromium.content.browser.LocationProviderFactory.LocationProvider;
 import org.chromium.content.browser.test.util.CallbackHelper;
-
-import java.util.List;
 
 /**
  * Test suite for Geo-Location functionality.
@@ -89,7 +89,7 @@ public class GeolocationTest extends ChromeActivityTestCaseBase<ChromeActivity> 
         final CallbackHelper loadCallback = new CallbackHelper();
         TabObserver observer = new EmptyTabObserver() {
             @Override
-            public void onLoadStopped(Tab tab) {
+            public void onLoadStopped(Tab tab, boolean toDifferentDocument) {
                 // If the device has a cached non-mock location, we won't get back our
                 // lat/long, so checking that it has "#pass" is sufficient.
                 if (tab.getUrl().startsWith(url + "#pass|")) {
@@ -100,8 +100,7 @@ public class GeolocationTest extends ChromeActivityTestCaseBase<ChromeActivity> 
         tab.addObserver(observer);
         loadUrl(url);
         assertTrue("InfoBar not added.", mListener.addInfoBarAnimationFinished());
-        List<InfoBar> infoBars = getActivity().getActivityTab().getInfoBarContainer().getInfoBars();
-        assertTrue("OK button wasn't found", InfoBarUtil.clickPrimaryButton(infoBars.get(0)));
+        assertTrue("OK button wasn't found", InfoBarUtil.clickPrimaryButton(getInfoBars().get(0)));
 
         sendLocation(createMockLocation(LATITUDE, LONGITUDE, ACCURACY));
         loadCallback.waitForCallback(0);
@@ -126,7 +125,7 @@ public class GeolocationTest extends ChromeActivityTestCaseBase<ChromeActivity> 
         final CallbackHelper loadCallback0 = new CallbackHelper();
         TabObserver observer = new EmptyTabObserver() {
             @Override
-            public void onLoadStopped(Tab tab) {
+            public void onLoadStopped(Tab tab, boolean toDifferentDocument) {
                 // If the device has a cached non-mock location, we won't get back our
                 // lat/long, so checking that it has "#pass" is sufficient.
                 if (tab.getUrl().startsWith(url + "#pass|0|")) {
@@ -138,11 +137,8 @@ public class GeolocationTest extends ChromeActivityTestCaseBase<ChromeActivity> 
         loadUrl(url);
         assertTrue("InfoBar not added.", mListener.addInfoBarAnimationFinished());
 
-        List<InfoBar> infoBars = getActivity().getActivityTab().getInfoBarContainer().getInfoBars();
-        assertTrue("OK button wasn't found", InfoBarUtil.clickPrimaryButton(infoBars.get(0)));
-
+        assertTrue("OK button wasn't found", InfoBarUtil.clickPrimaryButton(getInfoBars().get(0)));
         sendLocation(createMockLocation(LATITUDE, LONGITUDE, ACCURACY));
-
         loadCallback0.waitForCallback(0);
         tab.removeObserver(observer);
 
@@ -150,7 +146,7 @@ public class GeolocationTest extends ChromeActivityTestCaseBase<ChromeActivity> 
         final CallbackHelper loadCallback1 = new CallbackHelper();
         observer = new EmptyTabObserver() {
             @Override
-            public void onLoadStopped(Tab tab) {
+            public void onLoadStopped(Tab tab, boolean toDifferentDocument) {
                 // If the device has a cached non-mock location, we won't get back our
                 // lat/long, so checking that it has "#pass" is sufficient.
                 if (tab.getUrl().startsWith(url + "#pass|1|")) {

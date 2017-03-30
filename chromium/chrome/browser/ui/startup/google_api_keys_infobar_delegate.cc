@@ -29,6 +29,11 @@ GoogleApiKeysInfoBarDelegate::GoogleApiKeysInfoBarDelegate()
 GoogleApiKeysInfoBarDelegate::~GoogleApiKeysInfoBarDelegate() {
 }
 
+infobars::InfoBarDelegate::InfoBarIdentifier
+GoogleApiKeysInfoBarDelegate::GetIdentifier() const {
+  return GOOGLE_API_KEYS_INFOBAR_DELEGATE;
+}
+
 base::string16 GoogleApiKeysInfoBarDelegate::GetMessageText() const {
   return l10n_util::GetStringUTF16(IDS_MISSING_GOOGLE_API_KEYS);
 }
@@ -41,13 +46,6 @@ base::string16 GoogleApiKeysInfoBarDelegate::GetLinkText() const {
   return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
 }
 
-bool GoogleApiKeysInfoBarDelegate::LinkClicked(
-    WindowOpenDisposition disposition) {
-  InfoBarService::WebContentsFromInfoBar(infobar())->OpenURL(
-      content::OpenURLParams(
-          GURL("http://www.chromium.org/developers/how-tos/api-keys"),
-          content::Referrer(),
-          (disposition == CURRENT_TAB) ? NEW_FOREGROUND_TAB : disposition,
-          ui::PAGE_TRANSITION_LINK, false));
-  return false;
+GURL GoogleApiKeysInfoBarDelegate::GetLinkURL() const {
+  return GURL(google_apis::kAPIKeysDevelopersHowToURL);
 }

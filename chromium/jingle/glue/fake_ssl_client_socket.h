@@ -16,9 +16,10 @@
 #ifndef JINGLE_GLUE_FAKE_SSL_CLIENT_SOCKET_H_
 #define JINGLE_GLUE_FAKE_SSL_CLIENT_SOCKET_H_
 
+#include <stdint.h>
+
 #include <cstddef>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -51,8 +52,8 @@ class FakeSSLClientSocket : public net::StreamSocket {
   int Write(net::IOBuffer* buf,
             int buf_len,
             const net::CompletionCallback& callback) override;
-  int SetReceiveBufferSize(int32 size) override;
-  int SetSendBufferSize(int32 size) override;
+  int SetReceiveBufferSize(int32_t size) override;
+  int SetSendBufferSize(int32_t size) override;
   int Connect(const net::CompletionCallback& callback) override;
   void Disconnect() override;
   bool IsConnected() const override;
@@ -71,6 +72,7 @@ class FakeSSLClientSocket : public net::StreamSocket {
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const net::ConnectionAttempts& attempts) override {
   }
+  int64_t GetTotalReceivedBytes() const override;
 
  private:
   enum HandshakeState {

@@ -5,7 +5,6 @@
 #ifndef UI_GFX_COLOR_UTILS_H_
 #define UI_GFX_COLOR_UTILS_H_
 
-#include "base/basictypes.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/gfx_export.h"
 
@@ -19,6 +18,13 @@ struct HSL {
   double s;
   double l;
 };
+
+// The minimum contrast between text and background that is still readable.
+// This value is taken from w3c accessibility guidelines.
+const double kMinimumReadableContrastRatio = 4.5f;
+
+// Determines the contrast ratio of two colors.
+GFX_EXPORT double GetContrastRatio(SkColor color_a, SkColor color_b);
 
 GFX_EXPORT unsigned char GetLuminanceForColor(SkColor color);
 
@@ -81,6 +87,9 @@ GFX_EXPORT double CalculateBoringScore(const SkBitmap& bitmap);
 GFX_EXPORT SkColor AlphaBlend(SkColor foreground, SkColor background,
                               SkAlpha alpha);
 
+// Returns true if the luminance of |color| is closer to black than white.
+GFX_EXPORT bool IsDark(SkColor color);
+
 // Makes a dark color lighter or a light color darker by blending |color| with
 // white or black depending on its current luminance.  |alpha| controls the
 // amount of white or black that will be alpha-blended into |color|.
@@ -107,6 +116,10 @@ GFX_EXPORT SkColor GetSysSkColor(int which);
 // only true if the system has high-contrast mode enabled and and is using a
 // light-on-dark color scheme.
 GFX_EXPORT bool IsInvertedColorScheme();
+
+// Derives a color for icons on a UI surface based on the text color on the same
+// surface.
+GFX_EXPORT SkColor DeriveDefaultIconColor(SkColor text_color);
 
 }  // namespace color_utils
 

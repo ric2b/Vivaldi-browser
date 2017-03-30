@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 
@@ -35,14 +35,14 @@ class GlobalError {
   // overridden, this is based on the badge resource ID.
   virtual Severity GetSeverity();
 
-  // Returns true if a menu item should be added to the wrench menu.
+  // Returns true if a menu item should be added to the app menu.
   virtual bool HasMenuItem() = 0;
   // Returns the command ID for the menu item.
   virtual int MenuItemCommandID() = 0;
   // Returns the label for the menu item.
   virtual base::string16 MenuItemLabel() = 0;
-  // Returns the resource ID for the menu item icon.
-  virtual int MenuItemIconResourceID();
+  // Returns the menu item icon.
+  virtual gfx::Image MenuItemIcon();
   // Called when the user clicks on the menu item.
   virtual void ExecuteMenuItem(Browser* browser) = 0;
 

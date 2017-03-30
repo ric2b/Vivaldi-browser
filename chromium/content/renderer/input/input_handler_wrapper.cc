@@ -4,7 +4,10 @@
 
 #include "content/renderer/input/input_handler_wrapper.h"
 
+#include "base/command_line.h"
 #include "base/location.h"
+#include "content/common/input/did_overscroll_params.h"
+#include "content/public/common/content_switches.h"
 #include "content/renderer/input/input_event_filter.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "third_party/WebKit/public/platform/Platform.h"
@@ -16,13 +19,15 @@ InputHandlerWrapper::InputHandlerWrapper(
     int routing_id,
     const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
     const base::WeakPtr<cc::InputHandler>& input_handler,
-    const base::WeakPtr<RenderViewImpl>& render_view_impl)
+    const base::WeakPtr<RenderViewImpl>& render_view_impl,
+    bool enable_smooth_scrolling)
     : input_handler_manager_(input_handler_manager),
       routing_id_(routing_id),
       input_handler_proxy_(input_handler.get(), this),
       main_task_runner_(main_task_runner),
       render_view_impl_(render_view_impl) {
   DCHECK(input_handler);
+  input_handler_proxy_.set_smooth_scroll_enabled(enable_smooth_scrolling);
 }
 
 InputHandlerWrapper::~InputHandlerWrapper() {
@@ -47,7 +52,16 @@ blink::WebGestureCurve* InputHandlerWrapper::CreateFlingAnimationCurve(
       deviceSource, velocity, cumulative_scroll);
 }
 
-void InputHandlerWrapper::DidOverscroll(const DidOverscrollParams& params) {
+void InputHandlerWrapper::DidOverscroll(
+    const gfx::Vector2dF& accumulated_overscroll,
+    const gfx::Vector2dF& latest_overscroll_delta,
+    const gfx::Vector2dF& current_fling_velocity,
+    const gfx::PointF& causal_event_viewport_point) {
+  DidOverscrollParams params;
+  params.accumulated_overscroll = accumulated_overscroll;
+  params.latest_overscroll_delta = latest_overscroll_delta;
+  params.current_fling_velocity = current_fling_velocity;
+  params.causal_event_viewport_point = causal_event_viewport_point;
   input_handler_manager_->DidOverscroll(routing_id_, params);
 }
 

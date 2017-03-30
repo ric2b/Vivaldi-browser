@@ -20,6 +20,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_request_context.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -163,6 +164,7 @@ AppCacheUpdateJob::URLFetcher::~URLFetcher() {
 
 void AppCacheUpdateJob::URLFetcher::Start() {
   request_->set_first_party_for_cookies(job_->manifest_url_);
+  request_->set_initiator(url::Origin(job_->manifest_url_));
   if (fetch_type_ == MANIFEST_FETCH && job_->doing_full_update_check_)
     request_->SetLoadFlags(request_->load_flags() | net::LOAD_BYPASS_CACHE);
   else if (existing_response_headers_.get())
@@ -174,7 +176,7 @@ void AppCacheUpdateJob::URLFetcher::OnReceivedRedirect(
     net::URLRequest* request,
     const net::RedirectInfo& redirect_info,
     bool* defer_redirect) {
-  DCHECK(request_ == request);
+  DCHECK_EQ(request_.get(), request);
   // Redirect is not allowed by the update process.
   job_->MadeProgress();
   redirect_response_code_ = request->GetResponseCode();
@@ -185,7 +187,7 @@ void AppCacheUpdateJob::URLFetcher::OnReceivedRedirect(
 
 void AppCacheUpdateJob::URLFetcher::OnResponseStarted(
     net::URLRequest *request) {
-  DCHECK(request == request_);
+  DCHECK_EQ(request_.get(), request);
   int response_code = -1;
   if (request->status().is_success()) {
     response_code = request->GetResponseCode();
@@ -244,7 +246,7 @@ void AppCacheUpdateJob::URLFetcher::OnResponseStarted(
 
 void AppCacheUpdateJob::URLFetcher::OnReadCompleted(
     net::URLRequest* request, int bytes_read) {
-  DCHECK(request_ == request);
+  DCHECK_EQ(request_.get(), request);
   bool data_consumed = true;
   if (request->status().is_success() && bytes_read > 0) {
     job_->MadeProgress();
@@ -270,7 +272,8 @@ void AppCacheUpdateJob::URLFetcher::OnReadCompleted(
 
 void AppCacheUpdateJob::URLFetcher::AddConditionalHeaders(
     const net::HttpResponseHeaders* headers) {
-  DCHECK(request_.get() && headers);
+  DCHECK(request_);
+  DCHECK(headers);
   net::HttpRequestHeaders extra_headers;
 
   // Add If-Modified-Since header if response info has Last-Modified header.
@@ -405,11 +408,13 @@ AppCacheUpdateJob::~AppCacheUpdateJob() {
   if (internal_state_ != COMPLETED)
     Cancel();
 
-  DCHECK(!manifest_fetcher_);
-  DCHECK(pending_url_fetches_.empty());
   DCHECK(!inprogress_cache_.get());
   DCHECK(pending_master_entries_.empty());
-  DCHECK(master_entry_fetches_.empty());
+
+  // The job must not outlive any of its fetchers.
+  CHECK(!manifest_fetcher_);
+  CHECK(pending_url_fetches_.empty());
+  CHECK(master_entry_fetches_.empty());
 
   if (group_)
     group_->SetUpdateAppCacheStatus(AppCacheGroup::IDLE);
@@ -425,6 +430,9 @@ void AppCacheUpdateJob::StartUpdate(AppCacheHost* host,
     DCHECK(new_master_resource == host->pending_master_entry_url());
     DCHECK(!new_master_resource.has_ref());
     DCHECK(new_master_resource.GetOrigin() == manifest_url_.GetOrigin());
+
+    if (ContainsKey(failed_master_entries_, new_master_resource))
+      return;
 
     // Cannot add more to this update if already terminating.
     if (IsTerminating()) {
@@ -863,6 +871,8 @@ void AppCacheUpdateJob::HandleMasterEntryFetchCompleted(
     }
     hosts.clear();
 
+    failed_master_entries_.insert(url);
+
     const char* kFormatString = "Manifest fetch failed (%d) %s";
     std::string message = FormatUrlErrorMessage(
         kFormatString, request->url(), fetcher->result(), response_code);
@@ -1105,10 +1115,10 @@ void AppCacheUpdateJob::OnDestructionImminent(AppCacheHost* host) {
   // The host is about to be deleted; remove from our collection.
   PendingMasters::iterator found =
       pending_master_entries_.find(host->pending_master_entry_url());
-  DCHECK(found != pending_master_entries_.end());
+  CHECK(found != pending_master_entries_.end());
   PendingHosts& hosts = found->second;
   PendingHosts::iterator it = std::find(hosts.begin(), hosts.end(), host);
-  DCHECK(it != hosts.end());
+  CHECK(it != hosts.end());
   hosts.erase(it);
 }
 
@@ -1439,7 +1449,8 @@ bool AppCacheUpdateJob::MaybeLoadFromNewestCache(const GURL& url,
 }
 
 void AppCacheUpdateJob::OnResponseInfoLoaded(
-    AppCacheResponseInfo* response_info, int64 response_id) {
+    AppCacheResponseInfo* response_info,
+    int64_t response_id) {
   const net::HttpResponseInfo* http_info = response_info ?
       response_info->http_response_info() : NULL;
 

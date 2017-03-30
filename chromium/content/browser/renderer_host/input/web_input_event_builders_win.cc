@@ -6,6 +6,8 @@
 
 #include "base/logging.h"
 #include "content/browser/renderer_host/input/web_input_event_util.h"
+#include "ui/events/blink/blink_event_util.h"
+#include "ui/events/event_utils.h"
 #include "ui/gfx/win/dpi.h"
 
 using blink::WebInputEvent;
@@ -18,99 +20,14 @@ namespace content {
 static const unsigned long kDefaultScrollLinesPerWheelDelta = 3;
 static const unsigned long kDefaultScrollCharsPerWheelDelta = 1;
 
-static bool IsKeyDown(WPARAM wparam) {
-  return (GetKeyState(wparam) & 0x8000) != 0;
-}
-
-static int GetLocationModifier(WPARAM wparam, LPARAM lparam) {
-  int modifier = 0;
-  switch (wparam) {
-  case VK_RETURN:
-    if ((lparam >> 16) & KF_EXTENDED)
-      modifier = WebInputEvent::IsKeyPad;
-    break;
-  case VK_INSERT:
-  case VK_DELETE:
-  case VK_HOME:
-  case VK_END:
-  case VK_PRIOR:
-  case VK_NEXT:
-  case VK_UP:
-  case VK_DOWN:
-  case VK_LEFT:
-  case VK_RIGHT:
-    if (!((lparam >> 16) & KF_EXTENDED))
-      modifier = WebInputEvent::IsKeyPad;
-    break;
-  case VK_NUMLOCK:
-  case VK_NUMPAD0:
-  case VK_NUMPAD1:
-  case VK_NUMPAD2:
-  case VK_NUMPAD3:
-  case VK_NUMPAD4:
-  case VK_NUMPAD5:
-  case VK_NUMPAD6:
-  case VK_NUMPAD7:
-  case VK_NUMPAD8:
-  case VK_NUMPAD9:
-  case VK_DIVIDE:
-  case VK_MULTIPLY:
-  case VK_SUBTRACT:
-  case VK_ADD:
-  case VK_DECIMAL:
-  case VK_CLEAR:
-    modifier = WebInputEvent::IsKeyPad;
-    break;
-  case VK_SHIFT:
-    if (IsKeyDown(VK_LSHIFT))
-      modifier = WebInputEvent::IsLeft;
-    else if (IsKeyDown(VK_RSHIFT))
-      modifier = WebInputEvent::IsRight;
-    break;
-  case VK_CONTROL:
-    if (IsKeyDown(VK_LCONTROL))
-      modifier = WebInputEvent::IsLeft;
-    else if (IsKeyDown(VK_RCONTROL))
-      modifier = WebInputEvent::IsRight;
-    break;
-  case VK_MENU:
-    if (IsKeyDown(VK_LMENU))
-      modifier = WebInputEvent::IsLeft;
-    else if (IsKeyDown(VK_RMENU))
-      modifier = WebInputEvent::IsRight;
-    break;
-  case VK_LWIN:
-    modifier = WebInputEvent::IsLeft;
-    break;
-  case VK_RWIN:
-    modifier = WebInputEvent::IsRight;
-    break;
-  }
-
-  DCHECK(!modifier
-         || modifier == WebInputEvent::IsKeyPad
-         || modifier == WebInputEvent::IsLeft
-         || modifier == WebInputEvent::IsRight);
-  return modifier;
-}
-
-// Loads the state for toggle keys into the event.
-static void SetToggleKeyState(WebInputEvent* event) {
-  // Low bit set from GetKeyState indicates "toggled".
-  if (::GetKeyState(VK_NUMLOCK) & 1)
-    event->modifiers |= WebInputEvent::NumLockOn;
-  if (::GetKeyState(VK_CAPITAL) & 1)
-    event->modifiers |= WebInputEvent::CapsLockOn;
-}
-
 WebKeyboardEvent WebKeyboardEventBuilder::Build(HWND hwnd,
                                                 UINT message,
                                                 WPARAM wparam,
                                                 LPARAM lparam,
-                                                DWORD time_ms) {
+                                                double time_stamp) {
   WebKeyboardEvent result;
 
-  result.timeStampSeconds = time_ms / 1000.0;
+  result.timeStampSeconds = time_stamp;
 
   result.windowsKeyCode = static_cast<int>(wparam);
   // Record the scan code (along with other context bits) for this key event.
@@ -145,18 +62,10 @@ WebKeyboardEvent WebKeyboardEventBuilder::Build(HWND hwnd,
     result.text[0] = result.windowsKeyCode;
     result.unmodifiedText[0] = result.windowsKeyCode;
   }
-  if (result.type != WebInputEvent::Char) {
-    UpdateWindowsKeyCodeAndKeyIdentifier(
-        &result,
-        static_cast<ui::KeyboardCode>(result.windowsKeyCode));
-  }
+  result.setKeyIdentifierFromWindowsKeyCode();
 
-  if (::GetKeyState(VK_SHIFT) & 0x8000)
-    result.modifiers |= WebInputEvent::ShiftKey;
-  if (::GetKeyState(VK_CONTROL) & 0x8000)
-    result.modifiers |= WebInputEvent::ControlKey;
-  if (::GetKeyState(VK_MENU) & 0x8000)
-    result.modifiers |= WebInputEvent::AltKey;
+  result.modifiers =
+      ui::EventFlagsToWebEventModifiers(ui::GetModifiersFromKeyState());
   // NOTE: There doesn't seem to be a way to query the mouse button state in
   // this case.
 
@@ -166,9 +75,6 @@ WebKeyboardEvent WebKeyboardEventBuilder::Build(HWND hwnd,
   if ((result.type == WebInputEvent::RawKeyDown) && (lparam & 0x40000000))
     result.modifiers |= WebInputEvent::IsAutoRepeat;
 
-  result.modifiers |= GetLocationModifier(wparam, lparam);
-
-  SetToggleKeyState(&result);
   return result;
 }
 
@@ -188,7 +94,7 @@ WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
                                           UINT message,
                                           WPARAM wparam,
                                           LPARAM lparam,
-                                          DWORD time_ms) {
+                                          double time_stamp) {
   WebMouseEvent result;
 
   switch (message) {
@@ -204,6 +110,7 @@ WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
       result.button = WebMouseEvent::ButtonNone;
     break;
   case WM_MOUSELEAVE:
+  case WM_NCMOUSELEAVE:
     // TODO(rbyers): This should be MouseLeave but is disabled temporarily.
     // See http://crbug.com/450631
     result.type = WebInputEvent::MouseMove;
@@ -243,7 +150,7 @@ WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
     NOTREACHED();
   }
 
-  result.timeStampSeconds = time_ms / 1000.0;
+  result.timeStampSeconds = time_stamp;
 
   // set position fields:
 
@@ -300,13 +207,12 @@ WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
   result.clickCount = g_last_click_count;
 
   // set modifiers:
-
+  result.modifiers =
+      ui::EventFlagsToWebEventModifiers(ui::GetModifiersFromKeyState());
   if (wparam & MK_CONTROL)
     result.modifiers |= WebInputEvent::ControlKey;
   if (wparam & MK_SHIFT)
     result.modifiers |= WebInputEvent::ShiftKey;
-  if (::GetKeyState(VK_MENU) & 0x8000)
-    result.modifiers |= WebInputEvent::AltKey;
   if (wparam & MK_LBUTTON)
     result.modifiers |= WebInputEvent::LeftButtonDown;
   if (wparam & MK_MBUTTON)
@@ -314,7 +220,6 @@ WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
   if (wparam & MK_RBUTTON)
     result.modifiers |= WebInputEvent::RightButtonDown;
 
-  SetToggleKeyState(&result);
   return result;
 }
 
@@ -324,18 +229,16 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(HWND hwnd,
                                                     UINT message,
                                                     WPARAM wparam,
                                                     LPARAM lparam,
-                                                    DWORD time_ms) {
+                                                    double time_stamp) {
   WebMouseWheelEvent result;
 
   result.type = WebInputEvent::MouseWheel;
 
-  result.timeStampSeconds = time_ms / 1000.0;
+  result.timeStampSeconds = time_stamp;
 
   result.button = WebMouseEvent::ButtonNone;
 
   // Get key state, coordinates, and wheel delta from event.
-  typedef SHORT (WINAPI *GetKeyStateFunction)(int key);
-  GetKeyStateFunction get_key_state_func;
   UINT key_state;
   float wheel_delta;
   bool horizontal_scroll = false;
@@ -343,11 +246,10 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(HWND hwnd,
     // Synthesize mousewheel event from a scroll event.  This is needed to
     // simulate middle mouse scrolling in some laptops.  Use GetAsyncKeyState
     // for key state since we are synthesizing the input event.
-    get_key_state_func = GetAsyncKeyState;
     key_state = 0;
-    if (get_key_state_func(VK_SHIFT) & 0x8000)
+    if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
       key_state |= MK_SHIFT;
-    if (get_key_state_func(VK_CONTROL) & 0x8000)
+    if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
       key_state |= MK_CONTROL;
     // NOTE: There doesn't seem to be a way to query the mouse button state
     // in this case.
@@ -381,13 +283,16 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(HWND hwnd,
       horizontal_scroll = true;
   } else {
     // Non-synthesized event; we can just read data off the event.
-    get_key_state_func = ::GetKeyState;
     key_state = GET_KEYSTATE_WPARAM(wparam);
 
     result.globalX = static_cast<short>(LOWORD(lparam));
     result.globalY = static_cast<short>(HIWORD(lparam));
 
+    // Currently we leave hasPreciseScrollingDeltas false, even for trackpad
+    // scrolls that generate WM_MOUSEWHEEL, since we don't have a good way to
+    // distinguish these from real mouse wheels (crbug.com/545234).
     wheel_delta = static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam));
+
     if (message == WM_MOUSEHWHEEL) {
       horizontal_scroll = true;
       wheel_delta = -wheel_delta;  // Windows is <- -/+ ->, WebKit <- +/- ->.
@@ -397,20 +302,18 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(HWND hwnd,
     horizontal_scroll = true;
 
   // Set modifiers based on key state.
+  result.modifiers =
+      ui::EventFlagsToWebEventModifiers(ui::GetModifiersFromKeyState());
   if (key_state & MK_SHIFT)
     result.modifiers |= WebInputEvent::ShiftKey;
   if (key_state & MK_CONTROL)
     result.modifiers |= WebInputEvent::ControlKey;
-  if (get_key_state_func(VK_MENU) & 0x8000)
-    result.modifiers |= WebInputEvent::AltKey;
   if (key_state & MK_LBUTTON)
     result.modifiers |= WebInputEvent::LeftButtonDown;
   if (key_state & MK_MBUTTON)
     result.modifiers |= WebInputEvent::MiddleButtonDown;
   if (key_state & MK_RBUTTON)
     result.modifiers |= WebInputEvent::RightButtonDown;
-
-  SetToggleKeyState(&result);
 
   // Set coordinates by translating event coordinates from screen to client.
   POINT client_point = { result.globalX, result.globalY };

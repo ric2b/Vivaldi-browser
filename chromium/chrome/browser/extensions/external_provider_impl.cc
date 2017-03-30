@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/external_provider_impl.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <vector>
 
@@ -17,8 +19,10 @@
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_migrator.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -56,6 +60,8 @@
 #if defined(OS_WIN)
 #include "chrome/browser/extensions/external_registry_loader_win.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 using content::BrowserThread;
 
@@ -491,17 +497,40 @@ void ExternalProviderImpl::CreateExternalProviders(
 #if defined(OS_CHROMEOS)
     chromeos::KioskAppManager* kiosk_app_manager =
         chromeos::KioskAppManager::Get();
-    DCHECK(kiosk_app_manager);
-    if (kiosk_app_manager && !kiosk_app_manager->external_loader_created()) {
+    CHECK(kiosk_app_manager);
+
+    // Kiosk primary app external provider.
+    if (!kiosk_app_manager->external_loader_created()) {
+      // For enterprise managed kiosk apps, change the location to
+      // "force-installed by policy".
+      policy::BrowserPolicyConnectorChromeOS* const connector =
+          g_browser_process->platform_part()
+              ->browser_policy_connector_chromeos();
+      Manifest::Location location = Manifest::EXTERNAL_PREF;
+      if (connector && connector->IsEnterpriseManaged())
+        location = Manifest::EXTERNAL_POLICY;
+
       scoped_ptr<ExternalProviderImpl> kiosk_app_provider(
           new ExternalProviderImpl(
               service, kiosk_app_manager->CreateExternalLoader(), profile,
-              Manifest::EXTERNAL_PREF, Manifest::INVALID_LOCATION,
-              Extension::NO_FLAGS));
+              location, Manifest::INVALID_LOCATION, Extension::NO_FLAGS));
       kiosk_app_provider->set_auto_acknowledge(true);
       kiosk_app_provider->set_install_immediately(true);
       provider_list->push_back(
           linked_ptr<ExternalProviderInterface>(kiosk_app_provider.release()));
+    }
+
+    // Kiosk secondary app external provider.
+    if (!kiosk_app_manager->secondary_app_external_loader_created()) {
+      scoped_ptr<ExternalProviderImpl> secondary_kiosk_app_provider(
+          new ExternalProviderImpl(
+              service, kiosk_app_manager->CreateSecondaryAppExternalLoader(),
+              profile, Manifest::EXTERNAL_PREF,
+              Manifest::EXTERNAL_PREF_DOWNLOAD, Extension::NO_FLAGS));
+      secondary_kiosk_app_provider->set_auto_acknowledge(true);
+      secondary_kiosk_app_provider->set_install_immediately(true);
+      provider_list->push_back(linked_ptr<ExternalProviderInterface>(
+          secondary_kiosk_app_provider.release()));
     }
 #endif
     return;
@@ -611,7 +640,7 @@ void ExternalProviderImpl::CreateExternalProviders(
                 bundled_extension_creation_flags)));
 
     // Define a per-user source of external extensions.
-#if defined(OS_MACOSX)
+#if defined(OS_MACOSX) || (defined(OS_LINUX) && defined(CHROMIUM_BUILD))
     provider_list->push_back(
         linked_ptr<ExternalProviderInterface>(
             new ExternalProviderImpl(
@@ -659,7 +688,7 @@ void ExternalProviderImpl::CreateExternalProviders(
         drive_migration_provider.release()));
   }
 
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (!vivaldi::IsVivaldiRunning()) {
   provider_list->push_back(
     linked_ptr<ExternalProviderInterface>(
       new ExternalProviderImpl(

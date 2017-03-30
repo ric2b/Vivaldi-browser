@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/chromeos/options/cert_library.h"
@@ -117,14 +118,14 @@ class VPNConfigView : public ChildNetworkConfigView,
       PassphraseTextfield* textfield) const;
 
   // Convenience methods to get text from input field or cached VirtualNetwork.
-  const std::string GetService() const;
-  const std::string GetServer() const;
-  const std::string GetPSKPassphrase() const;
-  const std::string GetUsername() const;
-  const std::string GetUserPassphrase() const;
-  const std::string GetOTP() const;
-  const std::string GetGroupName() const;
-  const std::string GetServerCACertPEM() const;
+  std::string GetService() const;
+  std::string GetServer() const;
+  std::string GetPSKPassphrase() const;
+  std::string GetUsername() const;
+  std::string GetUserPassphrase() const;
+  std::string GetOTP() const;
+  std::string GetGroupName() const;
+  std::string GetServerCACertPEM() const;
   bool GetSaveCredentials() const;
   int GetProviderTypeIndex() const;
   std::string GetProviderTypeString() const;

@@ -4,6 +4,10 @@
 
 #include "sync/sessions/directory_type_debug_info_emitter.h"
 
+#include <stdint.h>
+
+#include <vector>
+
 #include "sync/internal_api/public/sessions/status_counters.h"
 #include "sync/internal_api/public/sessions/type_debug_info_observer.h"
 #include "sync/syncable/entry.h"
@@ -32,7 +36,7 @@ scoped_ptr<base::ListValue> DirectoryTypeDebugInfoEmitter::GetAllNodes() {
   syncable::ReadTransaction trans(FROM_HERE, directory_);
   scoped_ptr<base::ListValue> nodes(
       directory_->GetNodeDetailsForType(&trans, type_));
-  return nodes.Pass();
+  return nodes;
 }
 
 const CommitCounters& DirectoryTypeDebugInfoEmitter::GetCommitCounters() const {
@@ -67,13 +71,13 @@ void DirectoryTypeDebugInfoEmitter::EmitStatusCountersUpdate() {
     return;
 
   syncable::ReadTransaction trans(FROM_HERE, directory_);
-  std::vector<int64> result;
+  std::vector<int64_t> result;
   directory_->GetMetaHandlesOfType(&trans, type_, &result);
 
   StatusCounters counters;
   counters.num_entries_and_tombstones = result.size();
 
-  for (std::vector<int64>::const_iterator it = result.begin();
+  for (std::vector<int64_t>::const_iterator it = result.begin();
        it != result.end(); ++it) {
     syncable::Entry e(&trans, syncable::GET_BY_HANDLE, *it);
     if (!e.GetIsDel()) {

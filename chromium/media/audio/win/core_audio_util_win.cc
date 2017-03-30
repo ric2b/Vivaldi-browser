@@ -5,15 +5,19 @@
 #include "media/audio/win/core_audio_util_win.h"
 
 #include <devicetopology.h>
+#include <dxdiag.h>
 #include <functiondiscoverykeys_devpkey.h>
+#include <stddef.h>
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_propvariant.h"
+#include "base/win/scoped_variant.h"
 #include "base/win/windows_version.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/base/media_switches.h"
@@ -142,6 +146,10 @@ static std::string GetDeviceID(IMMDevice* device) {
   if (SUCCEEDED(device->GetId(&device_id_com)))
     base::WideToUTF8(device_id_com, wcslen(device_id_com), &device_id);
   return device_id;
+}
+
+static bool IsDefaultDeviceId(const std::string& device_id) {
+  return device_id.empty() || device_id == AudioManagerBase::kDefaultDeviceId;
 }
 
 static bool IsDeviceActive(IMMDevice* device) {
@@ -423,7 +431,25 @@ std::string CoreAudioUtil::GetAudioControllerID(IMMDevice* device,
 
 std::string CoreAudioUtil::GetMatchingOutputDeviceID(
     const std::string& input_device_id) {
-  ScopedComPtr<IMMDevice> input_device(CreateDevice(input_device_id));
+  // Special handling for the default communications device.
+  // We always treat the configured communications devices, as a pair.
+  // If we didn't do that and the user has e.g. configured a mic of a headset
+  // as the default comms input device and a different device (not the speakers
+  // of the headset) as the default comms output device, then we would otherwise
+  // here pick the headset as the matched output device.  That's technically
+  // correct, but the user experience would be that any audio played out to
+  // the matched device, would get ducked since it's not the default comms
+  // device.  So here, we go with the user's configuration.
+  if (input_device_id == AudioManagerBase::kCommunicationsDeviceId)
+    return AudioManagerBase::kCommunicationsDeviceId;
+
+  ScopedComPtr<IMMDevice> input_device;
+  if (IsDefaultDeviceId(input_device_id)) {
+    input_device = CreateDefaultDevice(eCapture, eConsole);
+  } else {
+    input_device = CreateDevice(input_device_id);
+  }
+
   if (!input_device.get())
     return std::string();
 
@@ -526,7 +552,7 @@ ScopedComPtr<IAudioClient> CoreAudioUtil::CreateDefaultClient(
 
 ScopedComPtr<IAudioClient> CoreAudioUtil::CreateClient(
     const std::string& device_id, EDataFlow data_flow, ERole role) {
-  if (device_id.empty())
+  if (IsDefaultDeviceId(device_id))
     return CreateDefaultClient(data_flow, role);
 
   ScopedComPtr<IMMDevice> device(CreateDevice(device_id));
@@ -711,31 +737,6 @@ HRESULT CoreAudioUtil::GetPreferredAudioParameters(
   return hr;
 }
 
-HRESULT CoreAudioUtil::GetPreferredAudioParameters(
-    EDataFlow data_flow, ERole role, AudioParameters* params) {
-  DCHECK(IsSupported());
-  ScopedComPtr<IAudioClient> client(CreateDefaultClient(data_flow, role));
-  if (!client.get()) {
-    // Map NULL-pointer to new error code which can be different from the
-    // actual error code. The exact value is not important here.
-    return AUDCLNT_E_ENDPOINT_CREATE_FAILED;
-  }
-
-  HRESULT hr = GetPreferredAudioParameters(client.get(), params);
-  if (FAILED(hr))
-    return hr;
-
-  if (role == eCommunications) {
-    // Raise the 'DUCKING' flag for default communication devices.
-    *params = AudioParameters(params->format(), params->channel_layout(),
-        params->channels(), params->sample_rate(), params->bits_per_sample(),
-        params->frames_per_buffer(),
-        params->effects() | AudioParameters::DUCKING);
-  }
-
-  return hr;
-}
-
 HRESULT CoreAudioUtil::GetPreferredAudioParameters(const std::string& device_id,
                                                    bool is_output_device,
                                                    AudioParameters* params) {
@@ -748,6 +749,9 @@ HRESULT CoreAudioUtil::GetPreferredAudioParameters(const std::string& device_id,
   } else if (device_id == AudioManagerBase::kLoopbackInputDeviceId) {
     DCHECK(!is_output_device);
     device = CoreAudioUtil::CreateDefaultDevice(eRender, eConsole);
+  } else if (device_id == AudioManagerBase::kCommunicationsDeviceId) {
+    device = CoreAudioUtil::CreateDefaultDevice(
+        is_output_device ? eRender : eCapture, eCommunications);
   } else {
     device = CreateDevice(device_id);
   }
@@ -775,21 +779,9 @@ HRESULT CoreAudioUtil::GetPreferredAudioParameters(const std::string& device_id,
   // TODO(dalecurtis): Old code rewrote != 1 channels to stereo, do we still
   // need to do the same thing?
   if (params->channels() != 1) {
-    params->Reset(params->format(), CHANNEL_LAYOUT_STEREO, 2,
+    params->Reset(params->format(), CHANNEL_LAYOUT_STEREO,
                   params->sample_rate(), params->bits_per_sample(),
                   params->frames_per_buffer());
-  }
-
-  ScopedComPtr<IMMDevice> communications_device(
-      CreateDefaultDevice(eCapture, eCommunications));
-  if (communications_device &&
-      GetDeviceID(communications_device.get()) == GetDeviceID(device.get())) {
-    // Raise the 'DUCKING' flag for default communication devices.
-    *params =
-        AudioParameters(params->format(), params->channel_layout(),
-                        params->channels(), params->sample_rate(),
-                        params->bits_per_sample(), params->frames_per_buffer(),
-                        params->effects() | AudioParameters::DUCKING);
   }
 
   return hr;
@@ -807,9 +799,11 @@ ChannelConfig CoreAudioUtil::GetChannelConfig(const std::string& device_id,
   return static_cast<ChannelConfig>(format.dwChannelMask);
 }
 
-HRESULT CoreAudioUtil::SharedModeInitialize(
-    IAudioClient* client, const WAVEFORMATPCMEX* format, HANDLE event_handle,
-    uint32* endpoint_buffer_size, const GUID* session_guid) {
+HRESULT CoreAudioUtil::SharedModeInitialize(IAudioClient* client,
+                                            const WAVEFORMATPCMEX* format,
+                                            HANDLE event_handle,
+                                            uint32_t* endpoint_buffer_size,
+                                            const GUID* session_guid) {
   DCHECK(IsSupported());
 
   // Use default flags (i.e, dont set AUDCLNT_STREAMFLAGS_NOPERSIST) to
@@ -921,6 +915,58 @@ bool CoreAudioUtil::FillRenderEndpointBufferWithSilence(
   DVLOG(2) << "filling up " << num_frames_to_fill << " frames with silence";
   return SUCCEEDED(render_client->ReleaseBuffer(num_frames_to_fill,
                                                 AUDCLNT_BUFFERFLAGS_SILENT));
+}
+
+bool CoreAudioUtil::GetDxDiagDetails(std::string* driver_name,
+                                     std::string* driver_version) {
+  ScopedComPtr<IDxDiagProvider, &IID_IDxDiagProvider> provider;
+  HRESULT hr =
+      provider.CreateInstance(CLSID_DxDiagProvider, NULL, CLSCTX_INPROC_SERVER);
+  if (FAILED(hr))
+    return false;
+
+  DXDIAG_INIT_PARAMS params = {sizeof(params)};
+  params.dwDxDiagHeaderVersion = DXDIAG_DX9_SDK_VERSION;
+  params.bAllowWHQLChecks = FALSE;
+  params.pReserved = NULL;
+  hr = provider->Initialize(&params);
+  if (FAILED(hr))
+    return false;
+
+  ScopedComPtr<IDxDiagContainer, &IID_IDxDiagContainer> root;
+  hr = provider->GetRootContainer(root.Receive());
+  if (FAILED(hr))
+    return false;
+
+  // Limit to the SoundDevices subtree. The tree in its entirity is
+  // enormous and only this branch contains useful information.
+  ScopedComPtr<IDxDiagContainer, &IID_IDxDiagContainer> sound_devices;
+  hr = root->GetChildContainer(L"DxDiag_DirectSound.DxDiag_SoundDevices.0",
+                               sound_devices.Receive());
+  if (FAILED(hr))
+    return false;
+
+  base::win::ScopedVariant variant;
+  hr = sound_devices->GetProp(L"szDriverName", variant.Receive());
+  if (FAILED(hr))
+    return false;
+
+  if (variant.type() == VT_BSTR && variant.ptr()->bstrVal) {
+    base::WideToUTF8(variant.ptr()->bstrVal, wcslen(variant.ptr()->bstrVal),
+                     driver_name);
+  }
+
+  variant.Reset();
+  hr = sound_devices->GetProp(L"szDriverVersion", variant.Receive());
+  if (FAILED(hr))
+    return false;
+
+  if (variant.type() == VT_BSTR && variant.ptr()->bstrVal) {
+    base::WideToUTF8(variant.ptr()->bstrVal, wcslen(variant.ptr()->bstrVal),
+                     driver_version);
+  }
+
+  return true;
 }
 
 }  // namespace media

@@ -7,22 +7,26 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "remoting/protocol/errors.h"
 #include "remoting/protocol/session_config.h"
+#include "remoting/protocol/transport.h"
 
-namespace net {
-class IPEndPoint;
-}  // namespace net
+namespace buzz {
+class XmlElement;
+}  // namespace buzz
 
 namespace remoting {
 namespace protocol {
 
+class Authenicator;
 class StreamChannelFactory;
+class Transport;
 struct TransportRoute;
 
-// Generic interface for Chromotocol connection used by both client and host.
-// Provides access to the connection channels, but doesn't depend on the
-// protocol used for each channel.
+// Session is responsible for initializing and authenticating both incoming and
+// outgoing connections. It uses TransportInfoSink interface to pass
+// transport-info messages to the transport.
 class Session {
  public:
   enum State {
@@ -36,7 +40,7 @@ class Session {
     ACCEPTING,
 
     // Session has been accepted and is pending authentication.
-    CONNECTED,
+    ACCEPTED,
 
     // Session has started authenticating.
     AUTHENTICATING,
@@ -60,14 +64,7 @@ class Session {
     // the session from within the handler if |state| is AUTHENTICATING
     // or CLOSED or FAILED.
     virtual void OnSessionStateChange(State state) = 0;
-
-    // Called whenever route for the channel specified with
-    // |channel_name| changes. Session must not be destroyed by the
-    // handler of this event.
-    virtual void OnSessionRouteChange(const std::string& channel_name,
-                                      const TransportRoute& route) = 0;
   };
-
 
   Session() {}
   virtual ~Session() {}
@@ -82,30 +79,18 @@ class Session {
   // JID of the other side.
   virtual const std::string& jid() = 0;
 
-  // Configuration of the protocol that was sent or received in the
-  // session-initiate jingle message. Returned pointer is valid until
-  // connection is closed.
-  virtual const CandidateSessionConfig* candidate_config() = 0;
-
   // Protocol configuration. Can be called only after session has been accepted.
   // Returned pointer is valid until connection is closed.
   virtual const SessionConfig& config() = 0;
 
-  // Set protocol configuration for an incoming session. Must be
-  // called on the host before the connection is accepted, from
-  // ChromotocolServer::IncomingConnectionCallback.
-  virtual void set_config(scoped_ptr<SessionConfig> config) = 0;
+  // Sets Transport to be used by the session. Must be called before the
+  // session becomes AUTHENTICATED. The transport must outlive the session.
+  virtual void SetTransport(Transport* transport) = 0;
 
-  // GetTransportChannelFactory() returns a factory that creates a new transport
-  // channel for each logical channel. GetMultiplexedChannelFactory() channels
-  // share a single underlying transport channel
-  virtual StreamChannelFactory* GetTransportChannelFactory() = 0;
-  virtual StreamChannelFactory* GetMultiplexedChannelFactory() = 0;
-
-  // Closes connection. Callbacks are guaranteed not to be called
-  // after this method returns. Must be called before the object is
-  // destroyed, unless the state is set to FAILED or CLOSED.
-  virtual void Close() = 0;
+  // Closes connection. EventHandler is guaranteed not to be called after this
+  // method returns. |error| specifies the error code in case when the session
+  // is being closed due to an error.
+  virtual void Close(ErrorCode error) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(Session);

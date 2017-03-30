@@ -55,9 +55,9 @@ source_set("update_client") {
     "//components/crx_file",
     "//courgette:courgette_lib",
     "//crypto",
+    "//net",
     "//third_party/libxml",
     "//third_party/zlib:zip",
-    "//net",
     "//url",
   ]
 }
@@ -73,12 +73,14 @@ source_set("test_support") {
     "url_request_post_interceptor.h",
   ]
 
-  deps = [
+  public_deps = [
     ":update_client",
+  ]
+  deps = [
     "//base",
     "//net:test_support",
-    "//testing/gtest",
     "//testing/gmock",
+    "//testing/gtest",
     "//url",
   ]
 }
@@ -92,17 +94,18 @@ source_set("unit_tests") {
     "request_sender_unittest.cc",
     "update_checker_unittest.cc",
     "update_client_unittest.cc",
+    "update_query_params_unittest.cc",
     "update_response_unittest.cc",
   ]
 
   deps = [
-    ":update_client",
     ":test_support",
+    ":update_client",
     "//base",
     "//courgette:courgette_lib",
     "//net:test_support",
-    "//testing/gtest",
     "//testing/gmock",
+    "//testing/gtest",
     "//third_party/libxml",
   ]
 }

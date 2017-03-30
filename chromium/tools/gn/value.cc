@@ -4,6 +4,9 @@
 
 #include "tools/gn/value.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "tools/gn/scope.h"
@@ -29,7 +32,7 @@ Value::Value(const ParseNode* origin, bool bool_val)
       origin_(origin) {
 }
 
-Value::Value(const ParseNode* origin, int64 int_val)
+Value::Value(const ParseNode* origin, int64_t int_val)
     : type_(INTEGER),
       boolean_value_(false),
       int_value_(int_val),
@@ -58,9 +61,8 @@ Value::Value(const ParseNode* origin, scoped_ptr<Scope> scope)
       string_value_(),
       boolean_value_(false),
       int_value_(0),
-      scope_value_(scope.Pass()),
-      origin_(origin) {
-}
+      scope_value_(std::move(scope)),
+      origin_(origin) {}
 
 Value::Value(const Value& other)
     : type_(other.type_),
@@ -111,7 +113,7 @@ const char* Value::DescribeType(Type t) {
 
 void Value::SetScopeValue(scoped_ptr<Scope> scope) {
   DCHECK(type_ == SCOPE);
-  scope_value_ = scope.Pass();
+  scope_value_ = std::move(scope);
 }
 
 std::string Value::ToString(bool quote_string) const {

@@ -4,13 +4,17 @@
 
 #include "remoting/protocol/fake_authenticator.h"
 
+#include <utility>
+
+#include "base/base64.h"
 #include "base/callback_helpers.h"
 #include "base/message_loop/message_loop.h"
+#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
-#include "net/socket/stream_socket.h"
 #include "remoting/base/constants.h"
+#include "remoting/protocol/p2p_stream_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
 
@@ -29,13 +33,13 @@ FakeChannelAuthenticator::~FakeChannelAuthenticator() {
 }
 
 void FakeChannelAuthenticator::SecureAndAuthenticate(
-    scoped_ptr<net::StreamSocket> socket,
+    scoped_ptr<P2PStreamSocket> socket,
     const DoneCallback& done_callback) {
-  socket_ = socket.Pass();
+  socket_ = std::move(socket);
+
+  done_callback_ = done_callback;
 
   if (async_) {
-    done_callback_ = done_callback;
-
     if (result_ != net::OK) {
       // Don't write anything if we are going to reject auth to make test
       // ordering deterministic.
@@ -85,11 +89,13 @@ void FakeChannelAuthenticator::OnAuthBytesRead(int result) {
 void FakeChannelAuthenticator::CallDoneCallback() {
   if (result_ != net::OK)
     socket_.reset();
-  base::ResetAndReturn(&done_callback_).Run(result_, socket_.Pass());
+  base::ResetAndReturn(&done_callback_).Run(result_, std::move(socket_));
 }
 
-FakeAuthenticator::FakeAuthenticator(
-    Type type, int round_trips, Action action, bool async)
+FakeAuthenticator::FakeAuthenticator(Type type,
+                                     int round_trips,
+                                     Action action,
+                                     bool async)
     : type_(type),
       round_trips_(round_trips),
       action_(action),
@@ -146,6 +152,15 @@ void FakeAuthenticator::ProcessMessage(const buzz::XmlElement* message,
   std::string id =
       message->TextNamed(buzz::QName(kChromotingXmlNamespace, "id"));
   EXPECT_EQ(id, base::IntToString(messages_));
+
+  // On the client receive the key in the last message.
+  if (type_ == CLIENT && messages_ == round_trips_ * 2 - 1) {
+    std::string key_base64 =
+        message->TextNamed(buzz::QName(kChromotingXmlNamespace, "key"));
+    EXPECT_TRUE(!key_base64.empty());
+    EXPECT_TRUE(base::Base64Decode(key_base64, &auth_key_));
+  }
+
   ++messages_;
   resume_callback.Run();
 }
@@ -160,8 +175,24 @@ scoped_ptr<buzz::XmlElement> FakeAuthenticator::GetNextMessage() {
   id->AddText(base::IntToString(messages_));
   result->AddElement(id);
 
+  // Add authentication key in the last message sent from host to client.
+  if (type_ == HOST && messages_ == round_trips_ * 2 - 1) {
+    auth_key_ =  base::RandBytesAsString(16);
+    buzz::XmlElement* key = new buzz::XmlElement(
+        buzz::QName(kChromotingXmlNamespace, "key"));
+    std::string key_base64;
+    base::Base64Encode(auth_key_, &key_base64);
+    key->AddText(key_base64);
+    result->AddElement(key);
+  }
+
   ++messages_;
-  return result.Pass();
+  return result;
+}
+
+const std::string& FakeAuthenticator::GetAuthKey() const {
+  EXPECT_EQ(ACCEPTED, state());
+  return auth_key_;
 }
 
 scoped_ptr<ChannelAuthenticator>
@@ -186,12 +217,10 @@ scoped_ptr<Authenticator> FakeHostAuthenticatorFactory::CreateAuthenticator(
     const std::string& local_jid,
     const std::string& remote_jid,
     const buzz::XmlElement* first_message) {
-  FakeAuthenticator* authenticator = new FakeAuthenticator(
-      FakeAuthenticator::HOST, round_trips_, action_, async_);
+  scoped_ptr<FakeAuthenticator> authenticator(new FakeAuthenticator(
+      FakeAuthenticator::HOST, round_trips_, action_, async_));
   authenticator->set_messages_till_started(messages_till_started_);
-
-  scoped_ptr<Authenticator> result(authenticator);
-  return result.Pass();
+  return std::move(authenticator);
 }
 
 }  // namespace protocol

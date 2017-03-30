@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -119,23 +122,11 @@ class PermissionBubbleManagerTest : public ChromeRenderViewHostTestHarness {
   scoped_ptr<PermissionBubbleManager> manager_;
 
   MockView* view_() { return static_cast<MockView*>(manager_->view_.get()); }
-
-  void ShowBubble() {
-    // nullptr browser is OK for test.
-    manager_->DisplayPendingRequests(nullptr);
-  }
 };
-
-TEST_F(PermissionBubbleManagerTest, TestFlag) {
-  EXPECT_TRUE(PermissionBubbleManager::Enabled());
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisablePermissionsBubbles);
-  EXPECT_FALSE(PermissionBubbleManager::Enabled());
-}
 
 TEST_F(PermissionBubbleManagerTest, SingleRequest) {
   manager_->AddRequest(&request1_);
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   WaitForCoalescing();
 
   EXPECT_TRUE(view_()->delegate_ == manager_.get());
@@ -149,7 +140,7 @@ TEST_F(PermissionBubbleManagerTest, SingleRequest) {
 }
 
 TEST_F(PermissionBubbleManagerTest, SingleRequestViewFirst) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
 
@@ -166,7 +157,7 @@ TEST_F(PermissionBubbleManagerTest, SingleRequestViewFirst) {
 TEST_F(PermissionBubbleManagerTest, TwoRequests) {
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&request2_);
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   WaitForCoalescing();
 
   EXPECT_TRUE(view_()->delegate_ == manager_.get());
@@ -185,7 +176,7 @@ TEST_F(PermissionBubbleManagerTest, TwoRequests) {
 TEST_F(PermissionBubbleManagerTest, TwoRequestsTabSwitch) {
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&request2_);
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   WaitForCoalescing();
 
   EXPECT_TRUE(view_()->delegate_ == manager_.get());
@@ -200,7 +191,7 @@ TEST_F(PermissionBubbleManagerTest, TwoRequestsTabSwitch) {
   manager_->HideBubble();
   EXPECT_FALSE(view_());
 
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   WaitForCoalescing();
   EXPECT_TRUE(view_()->shown_);
   ASSERT_EQ(static_cast<size_t>(2), view_()->permission_requests_.size());
@@ -215,7 +206,7 @@ TEST_F(PermissionBubbleManagerTest, TwoRequestsTabSwitch) {
 }
 
 TEST_F(PermissionBubbleManagerTest, NoRequests) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   WaitForCoalescing();
   EXPECT_FALSE(view_()->shown_);
 }
@@ -228,7 +219,7 @@ TEST_F(PermissionBubbleManagerTest, NoView) {
 }
 
 TEST_F(PermissionBubbleManagerTest, TwoRequestsCoalesce) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&request2_);
   EXPECT_FALSE(view_()->shown_);
@@ -239,7 +230,7 @@ TEST_F(PermissionBubbleManagerTest, TwoRequestsCoalesce) {
 }
 
 TEST_F(PermissionBubbleManagerTest, TwoRequestsDoNotCoalesce) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
   manager_->AddRequest(&request2_);
@@ -249,7 +240,7 @@ TEST_F(PermissionBubbleManagerTest, TwoRequestsDoNotCoalesce) {
 }
 
 TEST_F(PermissionBubbleManagerTest, TwoRequestsShownInTwoBubbles) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
   manager_->AddRequest(&request2_);
@@ -268,7 +259,7 @@ TEST_F(PermissionBubbleManagerTest, TwoRequestsShownInTwoBubbles) {
 }
 
 TEST_F(PermissionBubbleManagerTest, TestAddDuplicateRequest) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&request2_);
   manager_->AddRequest(&request1_);
@@ -281,7 +272,7 @@ TEST_F(PermissionBubbleManagerTest, TestAddDuplicateRequest) {
 }
 
 TEST_F(PermissionBubbleManagerTest, SequentialRequests) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
   EXPECT_TRUE(view_()->shown_);
@@ -300,7 +291,7 @@ TEST_F(PermissionBubbleManagerTest, SequentialRequests) {
 }
 
 TEST_F(PermissionBubbleManagerTest, SameRequestRejected) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&request1_);
   EXPECT_FALSE(request1_.finished());
@@ -312,7 +303,7 @@ TEST_F(PermissionBubbleManagerTest, SameRequestRejected) {
 }
 
 TEST_F(PermissionBubbleManagerTest, DuplicateRequestRejected) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   MockPermissionBubbleRequest dupe_request("test1");
   manager_->AddRequest(&dupe_request);
@@ -321,7 +312,7 @@ TEST_F(PermissionBubbleManagerTest, DuplicateRequestRejected) {
 }
 
 TEST_F(PermissionBubbleManagerTest, DuplicateQueuedRequest) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
   manager_->AddRequest(&request2_);
@@ -338,7 +329,7 @@ TEST_F(PermissionBubbleManagerTest, DuplicateQueuedRequest) {
 }
 
 TEST_F(PermissionBubbleManagerTest, ForgetRequestsOnPageNavigation) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
   manager_->AddRequest(&request2_);
@@ -363,7 +354,7 @@ TEST_F(PermissionBubbleManagerTest, TestCancel) {
 
   manager_->CancelRequest(&request1_);
   EXPECT_TRUE(request1_.finished());
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   EXPECT_FALSE(view_()->shown_);
 
   manager_->AddRequest(&request2_);
@@ -372,7 +363,7 @@ TEST_F(PermissionBubbleManagerTest, TestCancel) {
 }
 
 TEST_F(PermissionBubbleManagerTest, TestCancelWhileDialogShown) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
 
@@ -383,7 +374,7 @@ TEST_F(PermissionBubbleManagerTest, TestCancelWhileDialogShown) {
 }
 
 TEST_F(PermissionBubbleManagerTest, TestCancelWhileDialogShownNoUpdate) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   view_()->can_accept_updates_ = false;
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
@@ -396,7 +387,7 @@ TEST_F(PermissionBubbleManagerTest, TestCancelWhileDialogShownNoUpdate) {
 }
 
 TEST_F(PermissionBubbleManagerTest, TestCancelPendingRequest) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
   manager_->AddRequest(&request2_);
@@ -411,7 +402,7 @@ TEST_F(PermissionBubbleManagerTest, TestCancelPendingRequest) {
 }
 
 TEST_F(PermissionBubbleManagerTest, MainFrameNoRequestIFrameRequest) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&iframe_request_same_domain_);
   WaitForCoalescing();
   WaitForFrameLoad();
@@ -422,7 +413,7 @@ TEST_F(PermissionBubbleManagerTest, MainFrameNoRequestIFrameRequest) {
 }
 
 TEST_F(PermissionBubbleManagerTest, MainFrameAndIFrameRequestSameDomain) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&iframe_request_same_domain_);
   WaitForFrameLoad();
@@ -437,7 +428,7 @@ TEST_F(PermissionBubbleManagerTest, MainFrameAndIFrameRequestSameDomain) {
 }
 
 TEST_F(PermissionBubbleManagerTest, MainFrameAndIFrameRequestOtherDomain) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&iframe_request_other_domain_);
   WaitForFrameLoad();
@@ -453,7 +444,7 @@ TEST_F(PermissionBubbleManagerTest, MainFrameAndIFrameRequestOtherDomain) {
 }
 
 TEST_F(PermissionBubbleManagerTest, IFrameRequestWhenMainRequestVisible) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
   EXPECT_TRUE(view_()->shown_);
@@ -472,7 +463,7 @@ TEST_F(PermissionBubbleManagerTest, IFrameRequestWhenMainRequestVisible) {
 
 TEST_F(PermissionBubbleManagerTest,
        IFrameRequestOtherDomainWhenMainRequestVisible) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   WaitForCoalescing();
   EXPECT_TRUE(view_()->shown_);
@@ -489,7 +480,7 @@ TEST_F(PermissionBubbleManagerTest,
 
 TEST_F(PermissionBubbleManagerTest, IFrameUserGestureRequest) {
   iframe_request_other_domain_.SetHasUserGesture();
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&iframe_request_other_domain_);
   WaitForFrameLoad();
@@ -510,7 +501,7 @@ TEST_F(PermissionBubbleManagerTest, IFrameUserGestureRequest) {
 TEST_F(PermissionBubbleManagerTest, AllUserGestureRequests) {
   iframe_request_other_domain_.SetHasUserGesture();
   request2_.SetHasUserGesture();
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   manager_->AddRequest(&request1_);
   manager_->AddRequest(&iframe_request_other_domain_);
   WaitForCoalescing();
@@ -531,35 +522,8 @@ TEST_F(PermissionBubbleManagerTest, AllUserGestureRequests) {
   EXPECT_FALSE(view_()->shown_);
 }
 
-TEST_F(PermissionBubbleManagerTest, RequestsWithoutUserGesture) {
-  manager_->RequireUserGesture(true);
-  ShowBubble();
-  WaitForFrameLoad();
-  WaitForCoalescing();
-  manager_->AddRequest(&request1_);
-  manager_->AddRequest(&iframe_request_other_domain_);
-  manager_->AddRequest(&request2_);
-  base::MessageLoop::current()->RunUntilIdle();
-
-  EXPECT_FALSE(view_()->shown_);
-}
-
-TEST_F(PermissionBubbleManagerTest, RequestsWithUserGesture) {
-  manager_->RequireUserGesture(true);
-  ShowBubble();
-  WaitForFrameLoad();
-  WaitForCoalescing();
-  request1_.SetHasUserGesture();
-  manager_->AddRequest(&request1_);
-  manager_->AddRequest(&iframe_request_other_domain_);
-  manager_->AddRequest(&request2_);
-  base::MessageLoop::current()->RunUntilIdle();
-
-  EXPECT_TRUE(view_()->shown_);
-}
-
 TEST_F(PermissionBubbleManagerTest, RequestsDontNeedUserGesture) {
-  ShowBubble();
+  manager_->DisplayPendingRequests();
   WaitForFrameLoad();
   WaitForCoalescing();
   manager_->AddRequest(&request1_);

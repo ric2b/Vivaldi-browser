@@ -7,12 +7,14 @@
     {
       'target_name': 'ui_strings',
       'type': 'none',
+      'dependencies': [ '<(VIVALDI)/app/vivaldi_resources.gyp:ui_strings' ],
       'variables': {
         'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/ui/strings',
       },
       'actions': [
         {
           'action_name': 'generate_ui_strings',
+          'disabled': 1,
           'variables': {
             'grit_grd_file': 'ui_strings.grd',
           },

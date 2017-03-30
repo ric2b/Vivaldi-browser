@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
@@ -78,7 +79,7 @@ PlatformKeysService* PlatformKeysServiceFactory::GetForBrowserContext(
 
 // static
 PlatformKeysServiceFactory* PlatformKeysServiceFactory::GetInstance() {
-  return Singleton<PlatformKeysServiceFactory>::get();
+  return base::Singleton<PlatformKeysServiceFactory>::get();
 }
 
 PlatformKeysServiceFactory::PlatformKeysServiceFactory()

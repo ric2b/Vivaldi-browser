@@ -4,6 +4,9 @@
 
 #include "chrome/browser/net/chrome_extensions_network_delegate.h"
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "net/base/net_errors.h"
 
 #if defined(ENABLE_EXTENSIONS)
@@ -21,6 +24,7 @@
 
 using content::BrowserThread;
 using content::ResourceRequestInfo;
+using extensions::ExtensionWebRequestEventRouter;
 
 namespace {
 
@@ -30,13 +34,13 @@ enum RequestStatus { REQUEST_STARTED, REQUEST_DONE };
 // for a particular RenderFrame.
 void NotifyEPMRequestStatus(RequestStatus status,
                             void* profile_id,
-                            uint64 request_id,
+                            uint64_t request_id,
                             int process_id,
                             int render_frame_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  Profile* profile = reinterpret_cast<Profile*>(profile_id);
-  if (!g_browser_process->profile_manager()->IsValidProfile(profile))
+  if (!g_browser_process->profile_manager()->IsValidProfile(profile_id))
     return;
+  Profile* profile = reinterpret_cast<Profile*>(profile_id);
 
   extensions::ProcessManager* process_manager =
       extensions::ProcessManager::Get(profile);

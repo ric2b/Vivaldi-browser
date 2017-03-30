@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -17,18 +17,18 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "build/build_config.h"  // TODO(vtl): Remove this.
-#include "mojo/edk/embedder/platform_shared_buffer.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/dispatcher.h"
-#include "mojo/edk/system/message_pipe.h"
-#include "mojo/edk/system/message_pipe_test_utils.h"
-#include "mojo/edk/system/platform_handle_dispatcher.h"
-#include "mojo/edk/system/raw_channel.h"
-#include "mojo/edk/system/shared_buffer_dispatcher.h"
-#include "mojo/edk/system/test_utils.h"
-#include "mojo/edk/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_shared_buffer.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_test_utils.h"
+#include "third_party/mojo/src/mojo/edk/system/platform_handle_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/raw_channel.h"
+#include "third_party/mojo/src/mojo/edk/system/shared_buffer_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/test_utils.h"
+#include "third_party/mojo/src/mojo/edk/test/test_utils.h"
 
 namespace mojo {
 namespace system {
@@ -45,11 +45,11 @@ MOJO_MULTIPROCESS_TEST_CHILD_MAIN(EchoEcho) {
   embedder::SimplePlatformSupport platform_support;
   test::ChannelThread channel_thread(&platform_support);
   embedder::ScopedPlatformHandle client_platform_handle =
-      mojo::test::MultiprocessTestHelper::client_platform_handle.Pass();
+      std::move(mojo::test::MultiprocessTestHelper::client_platform_handle);
   CHECK(client_platform_handle.is_valid());
   scoped_refptr<ChannelEndpoint> ep;
   scoped_refptr<MessagePipe> mp(MessagePipe::CreateLocalProxy(&ep));
-  channel_thread.Start(client_platform_handle.Pass(), ep);
+  channel_thread.Start(std::move(client_platform_handle), ep);
 
   const std::string quitquitquit("quitquitquit");
   int rv = 0;
@@ -208,11 +208,11 @@ MOJO_MULTIPROCESS_TEST_CHILD_MAIN(CheckSharedBuffer) {
   embedder::SimplePlatformSupport platform_support;
   test::ChannelThread channel_thread(&platform_support);
   embedder::ScopedPlatformHandle client_platform_handle =
-      mojo::test::MultiprocessTestHelper::client_platform_handle.Pass();
+      std::move(mojo::test::MultiprocessTestHelper::client_platform_handle);
   CHECK(client_platform_handle.is_valid());
   scoped_refptr<ChannelEndpoint> ep;
   scoped_refptr<MessagePipe> mp(MessagePipe::CreateLocalProxy(&ep));
-  channel_thread.Start(client_platform_handle.Pass(), ep);
+  channel_thread.Start(std::move(client_platform_handle), ep);
 
   // Wait for the first message from our parent.
   HandleSignalsState hss;
@@ -390,11 +390,11 @@ MOJO_MULTIPROCESS_TEST_CHILD_MAIN(CheckPlatformHandleFile) {
   embedder::SimplePlatformSupport platform_support;
   test::ChannelThread channel_thread(&platform_support);
   embedder::ScopedPlatformHandle client_platform_handle =
-      mojo::test::MultiprocessTestHelper::client_platform_handle.Pass();
+      std::move(mojo::test::MultiprocessTestHelper::client_platform_handle);
   CHECK(client_platform_handle.is_valid());
   scoped_refptr<ChannelEndpoint> ep;
   scoped_refptr<MessagePipe> mp(MessagePipe::CreateLocalProxy(&ep));
-  channel_thread.Start(client_platform_handle.Pass(), ep);
+  channel_thread.Start(std::move(client_platform_handle), ep);
 
   HandleSignalsState hss;
   CHECK_EQ(test::WaitIfNecessary(mp, MOJO_HANDLE_SIGNAL_READABLE, &hss),
@@ -427,11 +427,11 @@ MOJO_MULTIPROCESS_TEST_CHILD_MAIN(CheckPlatformHandleFile) {
 
     scoped_refptr<PlatformHandleDispatcher> dispatcher(
         static_cast<PlatformHandleDispatcher*>(dispatchers[i].get()));
-    embedder::ScopedPlatformHandle h = dispatcher->PassPlatformHandle().Pass();
+    embedder::ScopedPlatformHandle h = dispatcher->PassPlatformHandle();
     CHECK(h.is_valid());
     dispatcher->Close();
 
-    base::ScopedFILE fp(mojo::test::FILEFromPlatformHandle(h.Pass(), "r"));
+    base::ScopedFILE fp(mojo::test::FILEFromPlatformHandle(std::move(h), "r"));
     CHECK(fp);
     std::string fread_buffer(100, '\0');
     size_t bytes_read =
@@ -472,7 +472,7 @@ TEST_P(MultiprocessMessagePipeTestWithPipeCount, PlatformHandlePassing) {
 
     scoped_refptr<PlatformHandleDispatcher> dispatcher =
         PlatformHandleDispatcher::Create(embedder::ScopedPlatformHandle(
-            mojo::test::PlatformHandleFromFILE(fp.Pass())));
+            mojo::test::PlatformHandleFromFILE(std::move(fp))));
     dispatchers.push_back(dispatcher);
     DispatcherTransport transport(
         test::DispatcherTryStartTransport(dispatcher.get()));

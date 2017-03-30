@@ -9,7 +9,7 @@
 #include "base/callback_list.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/webdata/token_web_data.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
 #include "net/cookies/cookie_store.h"
@@ -27,14 +27,6 @@ namespace net {
 class URLRequestContextGetter;
 }
 
-#if defined(OS_IOS)
-namespace ios {
-// TODO(msarda): http://crbug.com/358544 Remove this iOS specific code from the
-// core SigninClient.
-class ProfileOAuth2TokenServiceIOSProvider;
-}
-#endif
-
 // An interface that needs to be supplied to the Signin component by its
 // embedder.
 class SigninClient : public KeyedService {
@@ -46,6 +38,13 @@ class SigninClient : public KeyedService {
   };
 
   ~SigninClient() override {}
+
+  // If |for_ephemeral| is true, special kind of device ID for ephemeral users
+  // is generated.
+  static std::string GenerateSigninScopedDeviceID(bool for_ephemeral);
+
+  // Sign out.
+  void SignOut();
 
   // Call when done local initialization and SigninClient can initiate any work
   // it has to do that may require other components (like ProfileManager) to be
@@ -66,10 +65,6 @@ class SigninClient : public KeyedService {
   // When refresh token is requested for this user it will be annotated with
   // this device id.
   virtual std::string GetSigninScopedDeviceId() = 0;
-
-  // Perform Chrome-specific sign out. This happens when user signs out or about
-  // to sign in.
-  virtual void OnSignedOut() = 0;
 
   // Returns the URL request context information associated with the client.
   virtual net::URLRequestContextGetter* GetURLRequestContext() = 0;
@@ -115,22 +110,6 @@ class SigninClient : public KeyedService {
   virtual void RemoveContentSettingsObserver(
       content_settings::Observer* observer) = 0;
 
-  // Allows this sign-in client to update the account info before attempting
-  // to fetch it from GAIA. This avoids fetching the account info from
-  // GAIA when the data it already available on the client.
-  // |out_account_info->account_id| is not-empty and corresponds to an existing
-  // account.
-  //
-  // Returns true if |out_account_info| was updated.
-  virtual bool UpdateAccountInfo(
-      AccountTrackerService::AccountInfo* out_account_info) = 0;
-
-#if defined(OS_IOS)
-  // TODO(msarda): http://crbug.com/358544 Remove this iOS specific code from
-  // the core SigninClient.
-  virtual ios::ProfileOAuth2TokenServiceIOSProvider* GetIOSProvider() = 0;
-#endif
-
   // Execute |callback| if and when there is a network connection.
   virtual void DelayNetworkCall(const base::Closure& callback) = 0;
 
@@ -140,6 +119,18 @@ class SigninClient : public KeyedService {
       GaiaAuthConsumer* consumer,
       const std::string& source,
       net::URLRequestContextGetter* getter) = 0;
+
+ protected:
+  // Returns device id that is scoped to single signin.
+  // Stores the ID in the kGoogleServicesSigninScopedDeviceId pref.
+  std::string GetOrCreateScopedDeviceIdPref(PrefService* prefs);
+
+ private:
+  // Perform Chrome-specific sign out. This happens when user signs out or about
+  // to sign in.
+  // This method should not be called from the outside of SigninClient. External
+  // callers must use SignOut() instead.
+  virtual void OnSignedOut() = 0;
 };
 
 #endif  // COMPONENTS_SIGNIN_CORE_BROWSER_SIGNIN_CLIENT_H_

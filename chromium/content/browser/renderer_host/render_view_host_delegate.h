@@ -5,16 +5,16 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_RENDER_VIEW_HOST_DELEGATE_H_
 #define CONTENT_BROWSER_RENDERER_HOST_RENDER_VIEW_HOST_DELEGATE_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/process/kill.h"
 #include "base/strings/string16.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/common/content_export.h"
 #include "net/base/load_states.h"
-#include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -33,7 +33,6 @@ class Message;
 }
 
 namespace gfx {
-class Point;
 class Rect;
 class Size;
 }
@@ -83,10 +82,6 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // jam as reviewers before you use this method. http://crbug.com/82582
   virtual WebContents* GetAsWebContents();
 
-  // Return the rect where to display the resize corner, if any, otherwise
-  // an empty rect.
-  virtual gfx::Rect GetRootWindowResizerRect() const = 0;
-
   // The RenderView is being constructed (message sent to the renderer process
   // to construct a RenderView).  Now is a good time to send other setup events
   // to the RenderView.  This precedes any other commands to the RenderView.
@@ -95,7 +90,8 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // The RenderView has been constructed.
   virtual void RenderViewReady(RenderViewHost* render_view_host) {}
 
-  // The RenderView died somehow (crashed or was killed by the user).
+  // The process containing the RenderView exited somehow (either cleanly,
+  // crash, or user kill).
   virtual void RenderViewTerminated(RenderViewHost* render_view_host,
                                     base::TerminationStatus status,
                                     int error_code) {}
@@ -106,7 +102,7 @@ class CONTENT_EXPORT RenderViewHostDelegate {
 
   // The state for the page changed and should be updated.
   virtual void UpdateState(RenderViewHost* render_view_host,
-                           int32 page_id,
+                           int32_t page_id,
                            const PageState& state) {}
 
   // The destination URL has changed should be updated.
@@ -134,70 +130,34 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   virtual RendererPreferences GetRendererPrefs(
       BrowserContext* browser_context) const = 0;
 
-  // Notification the user has made a gesture while focus was on the
-  // page. This is used to avoid uninitiated user downloads (aka carpet
-  // bombing), see DownloadRequestLimiter for details.
-  virtual void OnUserGesture() {}
-
   // Notification from the renderer host that blocked UI event occurred.
   // This happens when there are tab-modal dialogs. In this case, the
   // notification is needed to let us draw attention to the dialog (i.e.
   // refocus on the modal dialog, flash title etc).
   virtual void OnIgnoredUIEvent() {}
 
-  // Notification that the renderer has become unresponsive. The
-  // delegate can use this notification to show a warning to the user.
-  virtual void RendererUnresponsive(RenderViewHost* render_view_host) {}
-
-  // Notification that a previously unresponsive renderer has become
-  // responsive again. The delegate can use this notification to end the
-  // warning shown to the user.
-  virtual void RendererResponsive(RenderViewHost* render_view_host) {}
-
   // Notification that the RenderViewHost's load state changed.
   virtual void LoadStateChanged(const GURL& url,
                                 const net::LoadStateWithParam& load_state,
-                                uint64 upload_position,
-                                uint64 upload_size) {}
+                                uint64_t upload_position,
+                                uint64_t upload_size) {}
 
-  // The page wants the hosting window to activate/deactivate itself (it
-  // called the JavaScript window.focus()/blur() method).
+  // The page wants the hosting window to activate itself (it called the
+  // JavaScript window.focus() method).
   virtual void Activate() {}
-  virtual void Deactivate() {}
-
-  // Notification that the view has lost capture.
-  virtual void LostCapture() {}
 
   // Called when a file selection is to be done.
   virtual void RunFileChooser(
       RenderViewHost* render_view_host,
       const FileChooserParams& params) {}
 
-  // Returns whether the associated tab is in fullscreen mode.
-  virtual bool IsFullscreenForCurrentTab() const;
-
-  // Returns the display mode for the view.
-  virtual blink::WebDisplayMode GetDisplayMode() const;
-
   // The contents' preferred size changed.
   virtual void UpdatePreferredSize(const gfx::Size& pref_size) {}
 
-  // The contents auto-resized and the container should match it.
-  virtual void ResizeDueToAutoResize(const gfx::Size& new_size) {}
-
-  // Requests to lock the mouse. Once the request is approved or rejected,
-  // GotResponseToLockMouseRequest() will be called on the requesting render
-  // view host.
-  virtual void RequestToLockMouse(bool user_gesture,
-                                  bool last_unlocked_by_target) {}
-
-  // Notification that the view has lost the mouse lock.
-  virtual void LostMouseLock() {}
-
   // The page is trying to open a new page (e.g. a popup window). The window
-  // should be created associated with the given |route_id| in process
-  // |render_process_id|, but it should not be shown yet. That should happen in
-  // response to ShowCreatedWindow.
+  // should be created associated with the given |route_id| in the process of
+  // |source_site_instance|, but it should not be shown yet. That
+  // should happen in response to ShowCreatedWindow.
   // |params.window_container_type| describes the type of RenderViewHost
   // container that is requested -- in particular, the window.open call may
   // have specified 'background' and 'persistent' in the feature string.
@@ -207,10 +167,15 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   //
   // Note: this is not called "CreateWindow" because that will clash with
   // the Windows function which is actually a #define.
+  //
+  // TODO(alexmos): This should be moved to RenderFrameHostDelegate, and the
+  // corresponding IPC message should be sent by the RenderFrame creating the
+  // new window.
   virtual void CreateNewWindow(
-      int render_process_id,
-      int route_id,
-      int main_frame_route_id,
+      SiteInstance* source_site_instance,
+      int32_t route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
       const ViewHostMsg_CreateWindow_Params& params,
       SessionStorageNamespace* session_storage_namespace) {}
 
@@ -220,12 +185,13 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // happen in response to ShowCreatedWidget.
   // |popup_type| indicates if the widget is a popup and what kind of popup it
   // is (select, autofill...).
-  virtual void CreateNewWidget(int render_process_id,
-                               int route_id,
+  virtual void CreateNewWidget(int32_t render_process_id,
+                               int32_t route_id,
                                blink::WebPopupType popup_type) {}
 
   // Creates a full screen RenderWidget. Similar to above.
-  virtual void CreateNewFullscreenWidget(int render_process_id, int route_id) {}
+  virtual void CreateNewFullscreenWidget(int32_t render_process_id,
+                                         int32_t route_id) {}
 
   // Show a previously created page with the specified disposition and bounds.
   // The window is identified by the route_id passed to CreateNewWindow.

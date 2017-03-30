@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -635,42 +638,6 @@ TEST_F(TemplateURLTest, ReplaceCurrentPageUrl) {
     ASSERT_TRUE(url.url_ref().SupportsReplacement(search_terms_data_));
     TemplateURLRef::SearchTermsArgs search_terms_args(test_data[i].search_term);
     search_terms_args.current_page_url = test_data[i].current_page_url;
-    GURL result(url.url_ref().ReplaceSearchTerms(search_terms_args,
-                                                 search_terms_data_));
-    ASSERT_TRUE(result.is_valid());
-    EXPECT_EQ(test_data[i].expected_result, result.spec());
-  }
-}
-
-TEST_F(TemplateURLTest, OmniboxStartmargin) {
-  struct TestData {
-    const bool enable_omnibox_start_margin;
-    const int omnibox_start_margin;
-    const std::string expected_result;
-  } test_data[] = {
-    { false,
-      0,
-      "http://bar/foo?q=foobar" },
-    { true,
-      0,
-      "http://bar/foo?es_sm=0&q=foobar" },
-    { true,
-      42,
-      "http://bar/foo?es_sm=42&q=foobar" },
-  };
-  TemplateURLData data;
-  data.SetURL("http://bar/foo?{google:omniboxStartMarginParameter}"
-              "q={searchTerms}");
-  data.input_encodings.push_back("UTF-8");
-  TemplateURL url(data);
-  EXPECT_TRUE(url.url_ref().IsValid(search_terms_data_));
-  ASSERT_TRUE(url.url_ref().SupportsReplacement(search_terms_data_));
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
-    TemplateURLRef::SearchTermsArgs search_terms_args(ASCIIToUTF16("foobar"));
-    search_terms_args.enable_omnibox_start_margin =
-        test_data[i].enable_omnibox_start_margin;
-    search_terms_data_.set_omnibox_start_margin(
-        test_data[i].omnibox_start_margin);
     GURL result(url.url_ref().ReplaceSearchTerms(search_terms_args,
                                                  search_terms_data_));
     ASSERT_TRUE(result.is_valid());
@@ -1602,35 +1569,6 @@ TEST_F(TemplateURLTest, IsSearchResults) {
   }
 }
 
-TEST_F(TemplateURLTest, ReflectsBookmarkBarPinned) {
-  TemplateURLData data;
-  data.input_encodings.push_back("UTF-8");
-  data.SetURL("{google:baseURL}?{google:bookmarkBarPinned}q={searchTerms}");
-  TemplateURL url(data);
-  EXPECT_TRUE(url.url_ref().IsValid(search_terms_data_));
-  ASSERT_TRUE(url.url_ref().SupportsReplacement(search_terms_data_));
-  TemplateURLRef::SearchTermsArgs search_terms_args(ASCIIToUTF16("foo"));
-
-  // Do not add the param when InstantExtended is suppressed on SRPs.
-  search_terms_data_.set_is_showing_search_terms_on_search_results_pages(false);
-  std::string result = url.url_ref().ReplaceSearchTerms(search_terms_args,
-                                                        search_terms_data_);
-  EXPECT_EQ("http://www.google.com/?q=foo", result);
-
-  // Add the param when InstantExtended is not suppressed on SRPs.
-  search_terms_data_.set_is_showing_search_terms_on_search_results_pages(true);
-  search_terms_args.bookmark_bar_pinned = false;
-  result = url.url_ref().ReplaceSearchTerms(search_terms_args,
-                                            search_terms_data_);
-  EXPECT_EQ("http://www.google.com/?bmbp=0&q=foo", result);
-
-  search_terms_data_.set_is_showing_search_terms_on_search_results_pages(true);
-  search_terms_args.bookmark_bar_pinned = true;
-  result = url.url_ref().ReplaceSearchTerms(search_terms_args,
-                                            search_terms_data_);
-  EXPECT_EQ("http://www.google.com/?bmbp=1&q=foo", result);
-}
-
 TEST_F(TemplateURLTest, SearchboxVersionIncludedForAnswers) {
   TemplateURLData data;
   search_terms_data_.set_google_base_url("http://bar/");
@@ -1694,17 +1632,21 @@ TEST_F(TemplateURLTest, ContextualSearchParameters) {
 }
 
 TEST_F(TemplateURLTest, GenerateKeyword) {
+  std::string accept_languages = "en,ru";
   ASSERT_EQ(ASCIIToUTF16("foo"),
-            TemplateURL::GenerateKeyword(GURL("http://foo")));
+            TemplateURL::GenerateKeyword(GURL("http://foo"), accept_languages));
   // www. should be stripped.
-  ASSERT_EQ(ASCIIToUTF16("foo"),
-            TemplateURL::GenerateKeyword(GURL("http://www.foo")));
+  ASSERT_EQ(ASCIIToUTF16("foo"), TemplateURL::GenerateKeyword(
+                                     GURL("http://www.foo"), accept_languages));
   // Make sure we don't get a trailing '/'.
-  ASSERT_EQ(ASCIIToUTF16("blah"),
-            TemplateURL::GenerateKeyword(GURL("http://blah/")));
+  ASSERT_EQ(ASCIIToUTF16("blah"), TemplateURL::GenerateKeyword(
+                                      GURL("http://blah/"), accept_languages));
   // Don't generate the empty string.
-  ASSERT_EQ(ASCIIToUTF16("www"),
-            TemplateURL::GenerateKeyword(GURL("http://www.")));
+  ASSERT_EQ(ASCIIToUTF16("www"), TemplateURL::GenerateKeyword(
+                                     GURL("http://www."), accept_languages));
+  ASSERT_EQ(
+      base::UTF8ToUTF16("\xd0\xb0\xd0\xb1\xd0\xb2"),
+      TemplateURL::GenerateKeyword(GURL("http://xn--80acd"), accept_languages));
 }
 
 TEST_F(TemplateURLTest, GenerateSearchURL) {

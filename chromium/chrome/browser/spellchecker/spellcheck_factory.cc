@@ -38,7 +38,7 @@ SpellcheckService* SpellcheckServiceFactory::GetForRenderProcessId(
 
 // static
 SpellcheckServiceFactory* SpellcheckServiceFactory::GetInstance() {
-  return Singleton<SpellcheckServiceFactory>::get();
+  return base::Singleton<SpellcheckServiceFactory>::get();
 }
 
 SpellcheckServiceFactory::SpellcheckServiceFactory()
@@ -79,10 +79,6 @@ void SpellcheckServiceFactory::RegisterProfilePrefs(
   user_prefs->RegisterBooleanPref(
       prefs::kEnableContinuousSpellcheck,
       true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  user_prefs->RegisterBooleanPref(
-      prefs::kEnableAutoSpellCorrect,
-      false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 

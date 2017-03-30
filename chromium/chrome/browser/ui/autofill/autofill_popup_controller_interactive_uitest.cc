@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -99,22 +100,23 @@ class AutofillPopupControllerBrowserTest
 };
 
 #if defined(OS_MACOSX)
-// Fails on Mac OS, see crbug/453256
-#define MAYBE_DoNotHidePopupOnWindowMove DISABLED_DoNotHidePopupOnWindowMove
+// Fails on Mac OS. http://crbug.com/453256
+#define MAYBE_HidePopupOnWindowMove DISABLED_HidePopupOnWindowMove
 #else
-#define MAYBE_DoNotHidePopupOnWindowMove DoNotHidePopupOnWindowMove
+#define MAYBE_HidePopupOnWindowMove HidePopupOnWindowMove
 #endif
 IN_PROC_BROWSER_TEST_F(AutofillPopupControllerBrowserTest,
-                       MAYBE_DoNotHidePopupOnWindowMove) {
+                       MAYBE_HidePopupOnWindowMove) {
   GenerateTestAutofillPopup(autofill_external_delegate_.get());
 
   EXPECT_FALSE(autofill_external_delegate_->popup_hidden());
 
-  // Move the window, which should not cause the popup to hide.
+  // Move the window, which should close the popup.
   gfx::Rect new_bounds = browser()->window()->GetBounds() - gfx::Vector2d(1, 1);
   browser()->window()->SetBounds(new_bounds);
 
-  EXPECT_FALSE(autofill_external_delegate_->popup_hidden());
+  autofill_external_delegate_->WaitForPopupHidden();
+  EXPECT_TRUE(autofill_external_delegate_->popup_hidden());
 }
 
 IN_PROC_BROWSER_TEST_F(AutofillPopupControllerBrowserTest,

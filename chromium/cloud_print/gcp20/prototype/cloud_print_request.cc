@@ -4,6 +4,9 @@
 
 #include "cloud_print/gcp20/prototype/cloud_print_request.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
@@ -19,7 +22,7 @@ using base::MessageLoop;
 
 namespace {
 
-const uint32 kDefaultTimeout = 20;  // in seconds
+const uint32_t kDefaultTimeout = 20;  // in seconds
 
 }  // namespace
 
@@ -54,7 +57,7 @@ scoped_ptr<CloudPrintRequest> CloudPrintRequest::CreatePost(
   scoped_ptr<CloudPrintRequest> request(
       new CloudPrintRequest(url, URLFetcher::POST, delegate));
   request->fetcher_->SetUploadData(mimetype, content);
-  return request.Pass();
+  return request;
 }
 
 void CloudPrintRequest::Run(

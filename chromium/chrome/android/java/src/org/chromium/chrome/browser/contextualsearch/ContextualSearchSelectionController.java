@@ -8,7 +8,8 @@ import android.os.Handler;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.ui.touch_selection.SelectionEventType;
@@ -36,7 +37,11 @@ public class ContextualSearchSelectionController {
     private static final int INVALID_IF_NO_SELECTION_CHANGE_AFTER_TAP_MS = 50;
     private static final double RETAP_DISTANCE_SQUARED_DP = Math.pow(75, 2);
 
+    // The default navigation-detection-delay in milliseconds.
+    private static final int TAP_NAVIGATION_DETECTION_DELAY = 16;
+
     private static final String CONTAINS_WORD_PATTERN = "(\\w|\\p{L}|\\p{N})+";
+    private static final String SINGLE_DIGIT_PATTERN = "^\\d$";
 
     // Max selection length must be limited or the entire request URL can go past the 2K limit.
     private static final int MAX_SELECTION_LENGTH = 100;
@@ -47,13 +52,14 @@ public class ContextualSearchSelectionController {
     private final Handler mRunnableHandler;
     private final float mPxToDp;
     private final Pattern mContainsWordPattern;
+    private final Pattern mSingleDigitPattern;
 
     private String mSelectedText;
     private SelectionType mSelectionType;
     private boolean mWasTapGestureDetected;
-    private boolean mIsSelectionBeingModified;
     private boolean mWasLastTapValid;
     private boolean mIsWaitingForInvalidTapDetection;
+    private boolean mIsSelectionEstablished;
     private boolean mShouldHandleSelectionModification;
     private boolean mDidExpandSelection;
 
@@ -103,6 +109,33 @@ public class ContextualSearchSelectionController {
         };
 
         mContainsWordPattern = Pattern.compile(CONTAINS_WORD_PATTERN);
+        mSingleDigitPattern = Pattern.compile(SINGLE_DIGIT_PATTERN);
+    }
+
+    /**
+     * Notifies that the base page has started loading a page.
+     */
+    void onBasePageLoadStarted() {
+        resetAllStates();
+    }
+
+    /**
+     * Notifies that the Contextual Search has ended.
+     * @param reason The reason for ending the Contextual Search.
+     */
+    void onSearchEnded(OverlayPanel.StateChangeReason reason) {
+        // If the user explicitly closes the panel after establishing a selection with long press,
+        // it should not reappear until a new selection is made. This prevents the panel from
+        // reappearing when a long press selection is modified after the user has taken action to
+        // get rid of the panel. See crbug.com/489461.
+        if (shouldPreventHandlingCurrentSelectionModification(reason)) {
+            preventHandlingCurrentSelectionModification();
+        }
+
+        // Long press selections should remain visible after ending a Contextual Search.
+        if (mSelectionType == SelectionType.TAP) {
+            clearSelection();
+        }
     }
 
     /**
@@ -112,15 +145,6 @@ public class ContextualSearchSelectionController {
      */
     public ContextualSearchGestureStateListener getGestureStateListener() {
         return new ContextualSearchGestureStateListener();
-    }
-
-    /**
-     * Temporarily prevents the controller from handling selection modification events on the
-     * current selection. Handling will be re-enabled when a new selection is made through either a
-     * tap or long press.
-     */
-    public void preventHandlingCurrentSelectionModification() {
-        mShouldHandleSelectionModification = false;
     }
 
     /**
@@ -154,6 +178,7 @@ public class ContextualSearchSelectionController {
      */
     void handleSelectionChanged(String selection) {
         if (mDidExpandSelection) {
+            mSelectedText = selection;
             mDidExpandSelection = false;
             return;
         }
@@ -168,17 +193,18 @@ public class ContextualSearchSelectionController {
                 return;
             }
         }
-        if (selection != null && !selection.isEmpty()) {
+        if (!selection.isEmpty()) {
             unscheduleInvalidTapNotification();
         }
-        if (mIsSelectionBeingModified) {
-            mSelectedText = selection;
-            mHandler.handleSelectionModification(selection, mX, mY);
-        } else if (mWasTapGestureDetected) {
-            mSelectedText = selection;
+
+        mSelectedText = selection;
+
+        if (mWasTapGestureDetected) {
             mSelectionType = SelectionType.TAP;
             handleSelection(selection, mSelectionType);
             mWasTapGestureDetected = false;
+        } else {
+            mHandler.handleSelectionModification(selection, isValidSelection(selection), mX, mY);
         }
     }
 
@@ -191,21 +217,25 @@ public class ContextualSearchSelectionController {
     void handleSelectionEvent(int eventType, float posXPix, float posYPix) {
         boolean shouldHandleSelection = false;
         switch (eventType) {
-            case SelectionEventType.SELECTION_SHOWN:
+            case SelectionEventType.SELECTION_HANDLES_SHOWN:
                 mWasTapGestureDetected = false;
                 mSelectionType = SelectionType.LONG_PRESS;
                 shouldHandleSelection = true;
+                // Since we're showing pins, we don't care if the previous tap was invalid anymore.
+                unscheduleInvalidTapNotification();
                 break;
-            case SelectionEventType.SELECTION_CLEARED:
+            case SelectionEventType.SELECTION_HANDLES_CLEARED:
                 mHandler.handleSelectionDismissal();
                 resetAllStates();
                 break;
-            case SelectionEventType.SELECTION_DRAG_STARTED:
-                mIsSelectionBeingModified = true;
-                break;
-            case SelectionEventType.SELECTION_DRAG_STOPPED:
-                mIsSelectionBeingModified = false;
+            case SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED:
                 shouldHandleSelection = mShouldHandleSelectionModification;
+                break;
+            case SelectionEventType.SELECTION_ESTABLISHED:
+                mIsSelectionEstablished = true;
+                break;
+            case SelectionEventType.SELECTION_DISSOLVED:
+                mIsSelectionEstablished = false;
                 break;
             default:
         }
@@ -235,7 +265,6 @@ public class ContextualSearchSelectionController {
         mHandler.handleSelection(selection, isValidSelection(selection), type, mX, mY);
     }
 
-
     /**
      * Resets all internal state of this class, including the tap state.
      */
@@ -252,7 +281,6 @@ public class ContextualSearchSelectionController {
         mSelectedText = null;
 
         mWasTapGestureDetected = false;
-        mIsSelectionBeingModified = false;
     }
 
     /**
@@ -273,7 +301,7 @@ public class ContextualSearchSelectionController {
                 public void run() {
                     mHandler.handleValidTap();
                 }
-            }, ContextualSearchFieldTrial.getNavigationDetectionDelay());
+            }, TAP_NAVIGATION_DETECTION_DELAY);
         }
         if (!mWasTapGestureDetected) {
             mWasLastTapValid = false;
@@ -357,11 +385,46 @@ public class ContextualSearchSelectionController {
     }
 
     /**
+     * This method checks whether the selection modification should be handled. This method
+     * is needed to allow modifying selections that are occluded by the Panel.
+     * See crbug.com/489461.
+     *
+     * @param reason The reason the panel is closing.
+     * @return Whether the selection modification should be handled.
+     */
+    private boolean shouldPreventHandlingCurrentSelectionModification(
+            OverlayPanel.StateChangeReason reason) {
+        return getSelectionType() == SelectionType.LONG_PRESS
+                && (reason == OverlayPanel.StateChangeReason.BACK_PRESS
+                || reason == OverlayPanel.StateChangeReason.BASE_PAGE_SCROLL
+                || reason == OverlayPanel.StateChangeReason.SWIPE
+                || reason == OverlayPanel.StateChangeReason.FLING
+                || reason == OverlayPanel.StateChangeReason.CLOSE_BUTTON);
+    }
+
+    /**
+     * Temporarily prevents the controller from handling selection modification events on the
+     * current selection. Handling will be re-enabled when a new selection is made through either a
+     * tap or long press.
+     */
+    private void preventHandlingCurrentSelectionModification() {
+        mShouldHandleSelectionModification = false;
+    }
+
+    /**
      * @return whether a tap gesture has been detected, for testing.
      */
     @VisibleForTesting
     boolean wasAnyTapGestureDetected() {
         return mIsWaitingForInvalidTapDetection;
+    }
+
+    /**
+     * @return whether the selection has been established, for testing.
+     */
+    @VisibleForTesting
+    boolean isSelectionEstablished() {
+        return mIsSelectionEstablished;
     }
 
     /** Determines if the given selection is valid or not.
@@ -374,10 +437,24 @@ public class ContextualSearchSelectionController {
 
     @VisibleForTesting
     boolean isValidSelection(String selection, ContentViewCore baseContentView) {
-        if (selection.length() > MAX_SELECTION_LENGTH || !doesContainAWord(selection)) {
+        if (selection.length() > MAX_SELECTION_LENGTH) {
             return false;
         }
-        return baseContentView != null && !baseContentView.isFocusedNodeEditable();
+
+        if (!doesContainAWord(selection)) {
+            return false;
+        }
+
+        if (baseContentView != null && baseContentView.isFocusedNodeEditable()) {
+            return false;
+        }
+
+        if (ContextualSearchFieldTrial.isDigitBlacklistEnabled()
+                && isBlacklistedWord(selection)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -388,5 +465,13 @@ public class ContextualSearchSelectionController {
     @VisibleForTesting
     public boolean doesContainAWord(String selection) {
         return mContainsWordPattern.matcher(selection).find();
+    }
+
+    /**
+     * @param word A given word.
+     * @return Whether the given word is blacklisted.
+     */
+    private boolean isBlacklistedWord(String word) {
+        return mSingleDigitPattern.matcher(word).find();
     }
 }

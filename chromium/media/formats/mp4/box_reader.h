@@ -5,11 +5,15 @@
 #ifndef MEDIA_FORMATS_MP4_BOX_READER_H_
 #define MEDIA_FORMATS_MP4_BOX_READER_H_
 
+#include <stdint.h>
+
+#include <limits>
 #include <map>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/numerics/safe_conversions.h"
 #include "media/base/media_export.h"
 #include "media/base/media_log.h"
 #include "media/formats/mp4/fourccs.h"
@@ -23,7 +27,7 @@ class BoxReader;
 struct MEDIA_EXPORT Box {
   virtual ~Box();
 
-  // Parse errors may be logged using the BoxReader's log callback.
+  // Parse errors may be logged using the BoxReader's media log.
   virtual bool Parse(BoxReader* reader) = 0;
 
   virtual FourCC BoxType() const = 0;
@@ -31,44 +35,55 @@ struct MEDIA_EXPORT Box {
 
 class MEDIA_EXPORT BufferReader {
  public:
-  BufferReader(const uint8* buf, const int size)
-      : buf_(buf), size_(size), pos_(0) {
+  BufferReader(const uint8_t* buf, const int size) : buf_(buf), pos_(0) {
     CHECK(buf);
-    CHECK_GE(size, 0);
+    size_ = base::checked_cast<uint64_t>(size);
   }
 
-  bool HasBytes(int count) { return (pos() + count <= size()); }
+  bool HasBytes(uint64_t count) {
+    // As the size of a box is implementation limited to 2^31, fail if
+    // attempting to check for too many bytes.
+    return (pos_ <= size_ &&
+            count <
+                static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) &&
+            size_ - pos_ >= count);
+  }
 
   // Read a value from the stream, perfoming endian correction, and advance the
   // stream pointer.
-  bool Read1(uint8* v)  WARN_UNUSED_RESULT;
-  bool Read2(uint16* v) WARN_UNUSED_RESULT;
-  bool Read2s(int16* v) WARN_UNUSED_RESULT;
-  bool Read4(uint32* v) WARN_UNUSED_RESULT;
-  bool Read4s(int32* v) WARN_UNUSED_RESULT;
-  bool Read8(uint64* v) WARN_UNUSED_RESULT;
-  bool Read8s(int64* v) WARN_UNUSED_RESULT;
+  bool Read1(uint8_t* v) WARN_UNUSED_RESULT;
+  bool Read2(uint16_t* v) WARN_UNUSED_RESULT;
+  bool Read2s(int16_t* v) WARN_UNUSED_RESULT;
+  bool Read4(uint32_t* v) WARN_UNUSED_RESULT;
+  bool Read4s(int32_t* v) WARN_UNUSED_RESULT;
+  bool Read8(uint64_t* v) WARN_UNUSED_RESULT;
+  bool Read8s(int64_t* v) WARN_UNUSED_RESULT;
 
   bool ReadFourCC(FourCC* v) WARN_UNUSED_RESULT;
 
-  bool ReadVec(std::vector<uint8>* t, int count) WARN_UNUSED_RESULT;
+  bool ReadVec(std::vector<uint8_t>* t, uint64_t count) WARN_UNUSED_RESULT;
 
   // These variants read a 4-byte integer of the corresponding signedness and
   // store it in the 8-byte return type.
-  bool Read4Into8(uint64* v) WARN_UNUSED_RESULT;
-  bool Read4sInto8s(int64* v) WARN_UNUSED_RESULT;
+  bool Read4Into8(uint64_t* v) WARN_UNUSED_RESULT;
+  bool Read4sInto8s(int64_t* v) WARN_UNUSED_RESULT;
 
   // Advance the stream by this many bytes.
-  bool SkipBytes(int nbytes) WARN_UNUSED_RESULT;
+  bool SkipBytes(uint64_t nbytes) WARN_UNUSED_RESULT;
 
-  const uint8* data() const { return buf_; }
-  int size() const { return size_; }
-  int pos() const { return pos_; }
+  const uint8_t* data() const { return buf_; }
+
+  // This returns the size of the box as specified in the box header. Initially
+  // it is the buffer size until the header is read. Note that the size
+  // specified in the box header may be different than the number of bytes
+  // actually provided.
+  uint64_t size() const { return size_; }
+  uint64_t pos() const { return pos_; }
 
  protected:
-  const uint8* buf_;
-  int size_;
-  int pos_;
+  const uint8_t* buf_;
+  uint64_t size_;
+  uint64_t pos_;
 
   template<typename T> bool Read(T* t) WARN_UNUSED_RESULT;
 };
@@ -83,9 +98,9 @@ class MEDIA_EXPORT BoxReader : public BufferReader {
   // values are only expected when insufficient data is available.
   //
   // |buf| is retained but not owned, and must outlive the BoxReader instance.
-  static BoxReader* ReadTopLevelBox(const uint8* buf,
+  static BoxReader* ReadTopLevelBox(const uint8_t* buf,
                                     const int buf_size,
-                                    const LogCB& log_cb,
+                                    const scoped_refptr<MediaLog>& media_log,
                                     bool* err);
 
   // Read the box header from the current buffer. This function returns true if
@@ -94,9 +109,9 @@ class MEDIA_EXPORT BoxReader : public BufferReader {
   // true. The semantics of |*err| are the same as above.
   //
   // |buf| is not retained.
-  static bool StartTopLevelBox(const uint8* buf,
+  static bool StartTopLevelBox(const uint8_t* buf,
                                const int buf_size,
-                               const LogCB& log_cb,
+                               const scoped_refptr<MediaLog>& media_log,
                                FourCC* type,
                                int* box_size,
                                bool* err) WARN_UNUSED_RESULT;
@@ -106,14 +121,14 @@ class MEDIA_EXPORT BoxReader : public BufferReader {
   // with any type of box -- it does not have to be IsValidTopLevelBox().
   //
   // |buf| is retained but not owned, and must outlive the BoxReader instance.
-  static BoxReader* ReadConcatentatedBoxes(const uint8* buf,
+  static BoxReader* ReadConcatentatedBoxes(const uint8_t* buf,
                                            const int buf_size);
 
   // Returns true if |type| is recognized to be a top-level box, false
   // otherwise. This returns true for some boxes which we do not parse.
   // Helpful in debugging misaligned appends.
   static bool IsValidTopLevelBox(const FourCC& type,
-                                 const LogCB& log_cb);
+                                 const scoped_refptr<MediaLog>& media_log);
 
   // Scan through all boxes within the current box, starting at the current
   // buffer position. Must be called before any of the *Child functions work.
@@ -159,15 +174,18 @@ class MEDIA_EXPORT BoxReader : public BufferReader {
   bool ReadFullBoxHeader() WARN_UNUSED_RESULT;
 
   FourCC type() const   { return type_; }
-  uint8 version() const { return version_; }
-  uint32 flags() const  { return flags_; }
+  uint8_t version() const { return version_; }
+  uint32_t flags() const { return flags_; }
 
-  const LogCB& log_cb() const { return log_cb_; }
+  const scoped_refptr<MediaLog>& media_log() const { return media_log_; }
 
  private:
   // Create a BoxReader from |buf|. |is_EOS| should be true if |buf| is
   // complete stream (i.e. no additional data is expected to be appended).
-  BoxReader(const uint8* buf, const int size, const LogCB& log_cb, bool is_EOS);
+  BoxReader(const uint8_t* buf,
+            const int size,
+            const scoped_refptr<MediaLog>& media_log,
+            bool is_EOS);
 
   // Must be called immediately after init. If the return is false, this
   // indicates that the box header and its contents were not available in the
@@ -185,10 +203,10 @@ class MEDIA_EXPORT BoxReader : public BufferReader {
   template <typename T>
   bool ReadAllChildrenInternal(std::vector<T>* children, bool check_box_type);
 
-  LogCB log_cb_;
+  scoped_refptr<MediaLog> media_log_;
   FourCC type_;
-  uint8 version_;
-  uint32 flags_;
+  uint8_t version_;
+  uint32_t flags_;
 
   typedef std::multimap<FourCC, BoxReader> ChildMap;
 
@@ -248,7 +266,7 @@ bool BoxReader::ReadAllChildrenInternal(std::vector<T>* children,
 
   bool err = false;
   while (pos_ < size_) {
-    BoxReader child_reader(&buf_[pos_], size_ - pos_, log_cb_, is_EOS_);
+    BoxReader child_reader(&buf_[pos_], size_ - pos_, media_log_, is_EOS_);
     if (!child_reader.ReadHeader(&err)) break;
     T child;
     RCHECK(!check_box_type || child_reader.type() == child.BoxType());

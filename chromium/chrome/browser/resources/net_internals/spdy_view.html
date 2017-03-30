@@ -1,8 +1,17 @@
 <div id=spdy-view-tab-content class=content-box>
   <ul id=spdy-view-status style='margin-top:0'>
     <li>HTTP/2 Enabled: <span jscontent="spdy_enabled"></span></li>
-    <li>Use Alternative Service: <span jscontent="use_alternate_protocols"></span></li>
-    <li>Next Protocols: <span jscontent="next_protos"></span></li>
+    <!-- "use_alternative_service" is used here since release 46, see
+         https://crrev.com/1268313004.  "use_alternate_protocols" is here to
+         support importing netlog json files from earlier browsers.
+         TODO(bnc): Deprecate around 2016 February. -->
+    <li>Use Alternative Service: <span jscontent="$this.use_alternative_services == undefined ? $this.use_alternate_protocols : $this.use_alternative_services"></span></li>
+    <!-- "alpn_protos" and "npn_protos" are used here since release 48, see
+         https://crrev.com/1387363004.  "next_protos" is here to support
+         importing netlog json files from earlier browsers.
+         TODO(bnc): Deprecate around 2016 April. -->
+    <li>ALPN Protocols: <span jscontent="$this.alpn_protos || $this.next_protos"></span></li>
+    <li>NPN Protocols: <span jscontent="$this.npn_protos || $this.next_protos"></span></li>
   </ul>
 
   <h4>HTTP/2 sessions</h4>
@@ -80,11 +89,7 @@
         <tbody>
           <tr jsselect="spdyAlternateProtocolMappings">
             <td jscontent="host_port_pair"></td>
-            <!-- "alternative_service" is used since release 43, see
-                 https://crrev.com/1043973002.  "alternate_protocol" is here
-                 to support importing netlog json files from earlier browsers.
-                 TODO(bnc): Deprecate around 2015 October. -->
-            <td jscontent="$this.alternative_service || $this.alternate_protocol"></td>
+            <td jscontent="alternative_service"></td>
           </tr>
         </tbody>
       </table>

@@ -5,6 +5,8 @@
 #ifndef CONTENT_RENDERER_MEDIA_VIDEO_TRACK_ADAPTER_H_
 #define CONTENT_RENDERER_MEDIA_VIDEO_TRACK_ADAPTER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/macros.h"
@@ -48,9 +50,8 @@ class VideoTrackAdapter
 
   // Delivers |frame| to all tracks that have registered a callback.
   // Must be called on the IO-thread.
-  void DeliverFrameOnIO(
-      const scoped_refptr<media::VideoFrame>& frame,
-      const base::TimeTicks& estimated_capture_time);
+  void DeliverFrameOnIO(const scoped_refptr<media::VideoFrame>& frame,
+                        base::TimeTicks estimated_capture_time);
 
   base::SingleThreadTaskRunner* io_task_runner() const {
     DCHECK(thread_checker_.CalledOnValidThread());
@@ -85,7 +86,7 @@ class VideoTrackAdapter
   // Compare |frame_counter_snapshot| with the current |frame_counter_|, and
   // inform of the situation (muted, not muted) via |set_muted_state_callback|.
   void CheckFramesReceivedOnIO(const OnMutedCallback& set_muted_state_callback,
-                               uint64 old_frame_counter_snapshot);
+                               uint64_t old_frame_counter_snapshot);
 
   // |thread_checker_| is bound to the main render thread.
   base::ThreadChecker thread_checker_;
@@ -113,7 +114,7 @@ class VideoTrackAdapter
   bool muted_state_;
 
   // Running frame counter, accessed on the IO-thread.
-  uint64 frame_counter_;
+  uint64_t frame_counter_;
 
   // Frame rate configured on the video source, accessed on the IO-thread.
   float source_frame_rate_;

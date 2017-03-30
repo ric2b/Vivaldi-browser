@@ -5,7 +5,7 @@
 #include "mojo/environment/default_async_waiter_impl.h"
 
 #include "base/bind.h"
-#include "mojo/common/handle_watcher.h"
+#include "mojo/message_pump/handle_watcher.h"
 
 namespace mojo {
 namespace internal {
@@ -24,6 +24,7 @@ MojoAsyncWaitID AsyncWait(MojoHandle handle,
                           MojoDeadline deadline,
                           MojoAsyncWaitCallback callback,
                           void* closure) {
+  CHECK(handle != MOJO_HANDLE_INVALID);
   // This instance will be deleted when done or cancelled.
   common::HandleWatcher* watcher = new common::HandleWatcher();
   watcher->Start(Handle(handle), signals, deadline,

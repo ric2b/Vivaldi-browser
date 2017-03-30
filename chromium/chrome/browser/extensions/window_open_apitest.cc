@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/memory/scoped_vector.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -194,7 +197,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_PopupBlockingExtension) {
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, PopupBlockingHostedApp) {
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("window_open").AppendASCII("popup_blocking")
@@ -207,14 +210,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, PopupBlockingHostedApp) {
   replace_host.SetHostStr("a.com");
 
   const std::string popup_app_contents_path(
-    "files/extensions/api_test/window_open/popup_blocking/hosted_app/");
+      "/extensions/api_test/window_open/popup_blocking/hosted_app/");
 
-  GURL open_tab =
-      test_server()->GetURL(popup_app_contents_path + "open_tab.html")
-          .ReplaceComponents(replace_host);
-  GURL open_popup =
-      test_server()->GetURL(popup_app_contents_path + "open_popup.html")
-          .ReplaceComponents(replace_host);
+  GURL open_tab = embedded_test_server()
+                      ->GetURL(popup_app_contents_path + "open_tab.html")
+                      .ReplaceComponents(replace_host);
+  GURL open_popup = embedded_test_server()
+                        ->GetURL(popup_app_contents_path + "open_popup.html")
+                        .ReplaceComponents(replace_host);
 
   browser()->OpenURL(OpenURLParams(
       open_tab, Referrer(), NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_TYPED,
@@ -259,6 +262,32 @@ class WindowOpenPanelTest : public ExtensionApiTest {
 #endif
 IN_PROC_BROWSER_TEST_F(WindowOpenPanelTest, MAYBE_WindowOpenPanel) {
   ASSERT_TRUE(RunExtensionTest("window_open/panel")) << message_;
+}
+
+// Test verifying that panel-subframe can use window.open to find
+// background-subframe (see the picture below).  In other words, the test
+// verifies that the everything on the picture below stays in the same
+// BrowsingInstance.
+//
+// +-extension background page---+    +-panel-----------------------------+
+// |                             |    |                                   |
+// | chrome.windows.create(      |    | +-panel-subframe----------------+ |
+// |   'type':'panel') -------------> | | (foo.com)                     | |
+// |                             |    | |                               | |
+// |   +-background-subframe-+   |    | | w = window.open(...,          | |
+// |   | (foo.com)           |   |    | |   "background-subframe-name") | |
+// |   |                     | <--------------/                         | |
+// |   +---------------------+   |    | +-------------------------------+ |
+// |                             |    |                                   |
+// +-----------------------------+    +-----------------------------------+
+//
+// See also crbug.com/568357 for more info / context.
+IN_PROC_BROWSER_TEST_F(WindowOpenPanelTest, BrowsingInstanceTest) {
+  host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  ASSERT_TRUE(RunExtensionTest("window_open/panel_browsing_instance"))
+      << message_;
 }
 
 #if defined(USE_ASH_PANELS) || defined(OS_LINUX)

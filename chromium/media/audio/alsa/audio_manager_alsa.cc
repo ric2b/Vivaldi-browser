@@ -4,10 +4,13 @@
 
 #include "media/audio/alsa/audio_manager_alsa.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/nix/xdg_util.h"
 #include "base/process/launch.h"
@@ -57,6 +60,7 @@ void AudioManagerAlsa::ShowLinuxAudioInputSettings() {
       break;
     case base::nix::DESKTOP_ENVIRONMENT_KDE3:
     case base::nix::DESKTOP_ENVIRONMENT_KDE4:
+    case base::nix::DESKTOP_ENVIRONMENT_KDE5:
       command_line.SetProgram(base::FilePath("kmix"));
       break;
     case base::nix::DESKTOP_ENVIRONMENT_UNITY:
@@ -163,9 +167,9 @@ void AudioManagerAlsa::GetAlsaDevicesInfo(
     // still empty.  Note, pulse has exclusively opened the default
     // device, so we must open the device via the "default" moniker.
     if (device_names->empty()) {
-      device_names->push_front(media::AudioDeviceName(
-          AudioManagerBase::kDefaultDeviceName,
-          AudioManagerBase::kDefaultDeviceId));
+      device_names->push_front(
+          media::AudioDeviceName(AudioManager::GetDefaultDeviceName(),
+                                 AudioManagerBase::kDefaultDeviceId));
     }
 
     // Get the unique device name for the device.
@@ -327,9 +331,8 @@ AudioParameters AudioManagerAlsa::GetPreferredOutputStreamParameters(
   if (user_buffer_size)
     buffer_size = user_buffer_size;
 
-  return AudioParameters(
-      AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
-      sample_rate, bits_per_sample, buffer_size, AudioParameters::NO_EFFECTS);
+  return AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
+                         sample_rate, bits_per_sample, buffer_size);
 }
 
 AudioOutputStream* AudioManagerAlsa::MakeOutputStream(

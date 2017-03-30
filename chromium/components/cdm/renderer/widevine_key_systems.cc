@@ -4,10 +4,13 @@
 
 #include "components/cdm/renderer/widevine_key_systems.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "media/base/eme_constants.h"
 
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
@@ -20,7 +23,7 @@ using media::SupportedCodecs;
 namespace cdm {
 
 // Return |name|'s parent key system.
-static std::string GetDirectParentName(std::string name) {
+static std::string GetDirectParentName(const std::string& name) {
   size_t last_period = name.find_last_of('.');
   DCHECK_GT(last_period, 0u);
   return name.substr(0u, last_period);

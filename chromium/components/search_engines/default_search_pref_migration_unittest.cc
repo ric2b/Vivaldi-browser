@@ -4,6 +4,8 @@
 
 #include "components/search_engines/default_search_pref_migration.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/compiler_specific.h"
@@ -91,7 +93,7 @@ void DefaultSearchPrefMigrationTest::SaveDefaultSearchProviderToLegacyPrefs(
     GURL icon_gurl = t_url->favicon_url();
     if (!icon_gurl.is_empty())
       icon_url = icon_gurl.spec();
-    encodings = JoinString(t_url->input_encodings(), ';');
+    encodings = base::JoinString(t_url->input_encodings(), ";");
     short_name = base::UTF16ToUTF8(t_url->short_name());
     keyword = base::UTF16ToUTF8(t_url->keyword());
     id_string = base::Int64ToString(t_url->id());
@@ -134,7 +136,7 @@ scoped_ptr<TemplateURL> DefaultSearchPrefMigrationTest::CreateKeyword(
   data.SetKeyword(base::ASCIIToUTF16(keyword));
   data.SetURL(url);
   scoped_ptr<TemplateURL> t_url(new TemplateURL(data));
-  return t_url.Pass();
+  return t_url;
 }
 
 TEST_F(DefaultSearchPrefMigrationTest, MigrateUserSelectedValue) {

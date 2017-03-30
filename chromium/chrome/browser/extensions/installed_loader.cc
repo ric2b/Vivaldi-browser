@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/installed_loader.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -13,7 +15,6 @@
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -28,6 +29,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_l10n_util.h"
@@ -212,8 +214,7 @@ void InstalledLoader::Load(const ExtensionInfo& info, bool write_to_prefs) {
     } else if (!extension_prefs_->IsExtensionDisabled(extension->id()) &&
                policy->MustRemainDisabled(
                    extension.get(), &disable_reason, NULL)) {
-      extension_prefs_->SetExtensionState(extension->id(), Extension::DISABLED);
-      extension_prefs_->AddDisableReason(extension->id(), disable_reason);
+      extension_prefs_->SetExtensionDisabled(extension->id(), disable_reason);
       force_disabled = true;
     }
     UMA_HISTOGRAM_BOOLEAN("ExtensionInstalledLoader.ForceDisabled",
@@ -333,6 +334,7 @@ void InstalledLoader::RecordExtensionsMetrics() {
   int theme_count = 0;
   int page_action_count = 0;
   int browser_action_count = 0;
+  int no_action_count = 0;
   int disabled_for_permissions_count = 0;
   int non_webstore_ntp_override_count = 0;
   int incognito_allowed_count = 0;
@@ -342,8 +344,6 @@ void InstalledLoader::RecordExtensionsMetrics() {
   int eventless_event_pages_count = 0;
 
   const ExtensionSet& extensions = extension_registry_->enabled_extensions();
-  ExtensionActionManager* extension_action_manager =
-      ExtensionActionManager::Get(profile);
   for (ExtensionSet::const_iterator iter = extensions.begin();
        iter != extensions.end();
        ++iter) {
@@ -497,11 +497,16 @@ void InstalledLoader::RecordExtensionsMetrics() {
         break;
     }
 
-    if (extension_action_manager->GetPageAction(*extension))
+    // We check the manifest key (instead of the ExtensionActionManager) because
+    // we want to know how many extensions have a given type of action as part
+    // of their code, rather than as part of the extension action redesign
+    // (which gives each extension an action).
+    if (extension->manifest()->HasKey(manifest_keys::kPageAction))
       ++page_action_count;
-
-    if (extension_action_manager->GetBrowserAction(*extension))
+    else if (extension->manifest()->HasKey(manifest_keys::kBrowserAction))
       ++browser_action_count;
+    else
+      ++no_action_count;
 
     RecordCreationFlags(extension);
 
@@ -512,7 +517,7 @@ void InstalledLoader::RecordExtensionsMetrics() {
     // extensions are boring.
     if (extension->ShouldDisplayInExtensionSettings() &&
         !Manifest::IsPolicyLocation(extension->location())) {
-      if (extension->can_be_incognito_enabled()) {
+      if (util::CanBeIncognitoEnabled(extension)) {
         if (util::IsIncognitoEnabled(extension->id(), profile))
           ++incognito_allowed_count;
         else
@@ -591,6 +596,8 @@ void InstalledLoader::RecordExtensionsMetrics() {
                            page_action_count);
   UMA_HISTOGRAM_COUNTS_100("Extensions.LoadBrowserAction",
                            browser_action_count);
+  UMA_HISTOGRAM_COUNTS_100("Extensions.LoadNoExtensionAction",
+                           no_action_count);
   UMA_HISTOGRAM_COUNTS_100("Extensions.DisabledForPermissions",
                            disabled_for_permissions_count);
   UMA_HISTOGRAM_COUNTS_100("Extensions.NonWebStoreNewTabPageOverrides",

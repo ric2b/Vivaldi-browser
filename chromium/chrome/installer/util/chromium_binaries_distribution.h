@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/installer/util/browser_distribution.h"
 
@@ -38,7 +39,7 @@ class ChromiumBinariesDistribution : public BrowserDistribution {
 
   std::string GetSafeBrowsingName() override;
 
-  base::string16 GetUninstallLinkName() override;
+  base::string16 GetRegistryPath() override;
 
   base::string16 GetUninstallRegPath() override;
 
@@ -46,7 +47,7 @@ class ChromiumBinariesDistribution : public BrowserDistribution {
 
   bool GetChromeChannel(base::string16* channel) override;
 
-  bool GetCommandExecuteImplClsid(base::string16* handler_class_uuid) override;
+  base::string16 GetCommandExecuteImplClsid() override;
 
  protected:
   friend class BrowserDistribution;

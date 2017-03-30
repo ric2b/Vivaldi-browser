@@ -8,10 +8,11 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_callback.h"
-#include "net/socket/stream_socket.h"
+#include "remoting/protocol/p2p_stream_socket.h"
 #include "remoting/protocol/stream_channel_factory.h"
 
 namespace base {
@@ -21,7 +22,7 @@ class SingleThreadTaskRunner;
 namespace remoting {
 namespace protocol {
 
-// FakeStreamSocket implement net::StreamSocket interface. All data written to
+// FakeStreamSocket implement P2PStreamSocket interface. All data written to
 // FakeStreamSocket is stored in a buffer returned by written_data(). Read()
 // reads data from another buffer that can be set with AppendInputData().
 // Pending reads are supported, so if there is a pending read AppendInputData()
@@ -31,7 +32,7 @@ namespace protocol {
 // PairWith() method, e.g.: a->PairWith(b). After this all data
 // written to |a| can be read from |b| and vice versa. Two connected
 // sockets |a| and |b| must be created and used on the same thread.
-class FakeStreamSocket : public net::StreamSocket {
+class FakeStreamSocket : public P2PStreamSocket {
  public:
   FakeStreamSocket();
   ~FakeStreamSocket() override;
@@ -68,57 +69,31 @@ class FakeStreamSocket : public net::StreamSocket {
 
   base::WeakPtr<FakeStreamSocket> GetWeakPtr();
 
-  // net::Socket implementation.
-  int Read(net::IOBuffer* buf,
-           int buf_len,
+  // P2PStreamSocket interface.
+  int Read(const scoped_refptr<net::IOBuffer>& buf, int buf_len,
            const net::CompletionCallback& callback) override;
-  int Write(net::IOBuffer* buf,
-            int buf_len,
+  int Write(const scoped_refptr<net::IOBuffer>& buf, int buf_len,
             const net::CompletionCallback& callback) override;
-  int SetReceiveBufferSize(int32 size) override;
-  int SetSendBufferSize(int32 size) override;
-
-  // net::StreamSocket interface.
-  int Connect(const net::CompletionCallback& callback) override;
-  void Disconnect() override;
-  bool IsConnected() const override;
-  bool IsConnectedAndIdle() const override;
-  int GetPeerAddress(net::IPEndPoint* address) const override;
-  int GetLocalAddress(net::IPEndPoint* address) const override;
-  const net::BoundNetLog& NetLog() const override;
-  void SetSubresourceSpeculation() override;
-  void SetOmniboxSpeculation() override;
-  bool WasEverUsed() const override;
-  bool UsingTCPFastOpen() const override;
-  bool WasNpnNegotiated() const override;
-  net::NextProto GetNegotiatedProtocol() const override;
-  bool GetSSLInfo(net::SSLInfo* ssl_info) override;
-  void GetConnectionAttempts(net::ConnectionAttempts* out) const override;
-  void ClearConnectionAttempts() override {}
-  void AddConnectionAttempts(const net::ConnectionAttempts& attempts) override {
-  }
 
  private:
-  void DoAsyncWrite(scoped_refptr<net::IOBuffer> buf, int buf_len,
+  void DoAsyncWrite(const scoped_refptr<net::IOBuffer>& buf, int buf_len,
                     const net::CompletionCallback& callback);
-  void DoWrite(net::IOBuffer* buf, int buf_len);
+  void DoWrite(const scoped_refptr<net::IOBuffer>& buf, int buf_len);
 
-  bool async_write_;
-  bool write_pending_;
-  int write_limit_;
-  int next_write_error_;
+  bool async_write_ = false;
+  bool write_pending_ = false;
+  int write_limit_ = 0;
+  int next_write_error_ = 0;
 
-  int next_read_error_;
+  int next_read_error_ = 0;
   scoped_refptr<net::IOBuffer> read_buffer_;
-  int read_buffer_size_;
+  int read_buffer_size_ = 0;
   net::CompletionCallback read_callback_;
   base::WeakPtr<FakeStreamSocket> peer_socket_;
 
   std::string written_data_;
   std::string input_data_;
-  int input_pos_;
-
-  net::BoundNetLog net_log_;
+  int input_pos_ = 0;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   base::WeakPtrFactory<FakeStreamSocket> weak_factory_;
@@ -138,7 +113,14 @@ class FakeStreamChannelFactory : public StreamChannelFactory {
 
   void set_fail_create(bool fail_create) { fail_create_ = fail_create; }
 
+  // Enables asynchronous Write() on created channels.
+  void set_async_write(bool async_write) { async_write_ = async_write; }
+
   FakeStreamSocket* GetFakeChannel(const std::string& name);
+
+  // Pairs the socket with |peer_socket|. Deleting either of the paired sockets
+  // unpairs them.
+  void PairWith(FakeStreamChannelFactory* peer_factory);
 
   // ChannelFactory interface.
   void CreateChannel(const std::string& name,
@@ -151,11 +133,14 @@ class FakeStreamChannelFactory : public StreamChannelFactory {
                             const ChannelCreatedCallback& callback);
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  bool asynchronous_create_;
-  std::map<std::string, base::WeakPtr<FakeStreamSocket> > channels_;
+  bool asynchronous_create_ = false;
+  std::map<std::string, base::WeakPtr<FakeStreamSocket>> channels_;
 
-  bool fail_create_;
+  bool fail_create_ = false;
 
+  bool async_write_ = false;
+
+  base::WeakPtr<FakeStreamChannelFactory> peer_factory_;
   base::WeakPtrFactory<FakeStreamChannelFactory> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeStreamChannelFactory);

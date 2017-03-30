@@ -5,13 +5,19 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_BROWSER_COMPOSITOR_OUTPUT_SURFACE_H_
 #define CONTENT_BROWSER_COMPOSITOR_BROWSER_COMPOSITOR_OUTPUT_SURFACE_H_
 
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
+#include "build/build_config.h"
 #include "cc/output/output_surface.h"
 #include "content/common/content_export.h"
 #include "ui/compositor/compositor_vsync_manager.h"
 
 namespace cc {
 class SoftwareOutputDevice;
+}
+
+namespace gfx {
+enum class SwapResult;
 }
 
 namespace content {
@@ -46,8 +52,12 @@ class CONTENT_EXPORT BrowserCompositorOutputSurface
   // compositors have started composition.
   virtual base::Closure CreateCompositionStartedCallback();
 
+  // Called when a swap completion is sent from the GPU process.
+  virtual void OnGpuSwapBuffersCompleted(
+      const std::vector<ui::LatencyInfo>& latency_info,
+      gfx::SwapResult result) = 0;
+
 #if defined(OS_MACOSX)
-  virtual void OnSurfaceDisplayed() = 0;
   virtual void SetSurfaceSuspendedForRecycle(bool suspended) = 0;
   virtual bool SurfaceShouldNotShowFramesAfterSuspendForRecycle() const = 0;
 #endif
@@ -56,6 +66,7 @@ class CONTENT_EXPORT BrowserCompositorOutputSurface
   // Constructor used by the accelerated implementation.
   BrowserCompositorOutputSurface(
       const scoped_refptr<cc::ContextProvider>& context,
+      const scoped_refptr<cc::ContextProvider>& worker_context,
       const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
       scoped_ptr<BrowserCompositorOverlayCandidateValidator>
           overlay_candidate_validator);

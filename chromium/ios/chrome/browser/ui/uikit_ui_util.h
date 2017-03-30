@@ -46,11 +46,36 @@ void AddBorderShadow(UIView* view, CGFloat offset, UIColor* color);
 // Adds a rounded-rectangle border shadow around a view.
 void AddRoundedBorderShadow(UIView* view, CGFloat radius, UIColor* color);
 
+enum CaptureViewOption {
+  kNoCaptureOption,      // Equivalent to calling CaptureView without options.
+  kAfterScreenUpdate,    // Require a synchronization with CA process which can
+                         // have side effects.
+  kClientSideRendering,  // Triggers a client side compositing, very slow.
+};
+
 // Captures and returns an autoreleased rendering of the |view|.
 // The |view| is assumed to be opaque and the returned image does
 // not have an alpha channel. The scale parameter is used as a scale factor
 // for the rendering context. Using 0.0 as scale will result in the device's
 // main screen scale to be used.
+// The CaptureViewWithOption function can be used with the |option|
+// parameter set to kAfterScreenUpdate if some changes performed in the view
+// and/or it's subtree that have not yet been part of a committed implicit
+// transaction must be reflected in the snapshot.
+// For example, it should be used if you just performed changes in the view or
+// its subviews before calling that function and wants those changes to be
+// reflected in the snapshot.
+// Calling CaptureView without option gives the best performances. If you only
+// need to hide subviews consider selectively rendering subviews in a bitmap
+// context using drawViewHierarchyInRect:afterScreenUpdates:NO.
+// The kClientSideRendering option can be used to directly re-render the view
+// client side instead of reusing the core animation layer's backing store, this
+// is slow.
+// On iOS < 9 this function is slow and always behave as if the option was set
+// to kClientSideRendering.
+UIImage* CaptureViewWithOption(UIView* view,
+                               CGFloat scale,
+                               CaptureViewOption option);
 UIImage* CaptureView(UIView* view, CGFloat scale);
 
 // Converts input image and returns a grey scaled version.
@@ -74,9 +99,15 @@ inline UIColor* UIColorFromRGB(int rgb, CGFloat alpha = 1.0) {
                          alpha:alpha];
 }
 
+// Returns whether an image contains an alpha channel. If yes, displaying the
+// image will require blending.
+// Intended for use in debug.
+BOOL ImageHasAlphaChannel(UIImage* image);
+
 // Returns an image resized to |targetSize|. It first calculate the projection
 // by calling CalculateProjection() and then create a new image of the desired
-// size and project the correct subset of the originla image onto it.
+// size and project the correct subset of the original image onto it.
+// The resulting image will have an alpha channel.
 //
 // Image interpolation level for resizing is set to kCGInterpolationDefault.
 //
@@ -84,6 +115,20 @@ inline UIColor* UIColorFromRGB(int rgb, CGFloat alpha = 1.0) {
 UIImage* ResizeImage(UIImage* image,
                      CGSize targetSize,
                      ProjectionMode projectionMode);
+
+// Returns an image resized to |targetSize|. It first calculate the projection
+// by calling CalculateProjection() and then create a new image of the desired
+// size and project the correct subset of the original image onto it.
+// |opaque| determine whether resulting image should have an alpha channel.
+// Prefer setting |opaque| to YES for better performances.
+//
+// Image interpolation level for resizing is set to kCGInterpolationDefault.
+//
+// The resize always preserves the scale of the original image.
+UIImage* ResizeImage(UIImage* image,
+                     CGSize targetSize,
+                     ProjectionMode projectionMode,
+                     BOOL opaque);
 
 // Returns a slightly blurred image darkened enough to provide contrast for
 // white text to be readable.
@@ -130,6 +175,13 @@ void ApplyVisualConstraints(NSArray* constraints,
                             NSDictionary* subviewsDictionary,
                             UIView* parentView);
 
+// Applies all |constraints| with |options| to all views in |subviewsDictionary|
+// in the superview |parentView|.
+void ApplyVisualConstraintsWithOptions(NSArray* constraints,
+                                       NSDictionary* subviewsDictionary,
+                                       NSLayoutFormatOptions options,
+                                       UIView* parentView);
+
 // Applies all |constraints| with |metrics| to all views in |subviewsDictionary|
 // in the superview |parentView|
 void ApplyVisualConstraintsWithMetrics(NSArray* constraints,
@@ -137,10 +189,25 @@ void ApplyVisualConstraintsWithMetrics(NSArray* constraints,
                                        NSDictionary* metrics,
                                        UIView* parentView);
 
+// Applies all |constraints| with |metrics| and |options| to all views in
+// |subviewsDictionary| in the superview |parentView|
+void ApplyVisualConstraintsWithMetricsAndOptions(
+    NSArray* constraints,
+    NSDictionary* subviewsDictionary,
+    NSDictionary* metrics,
+    NSLayoutFormatOptions options,
+    UIView* parentView);
+
 // Adds a constraint that |subview| is center aligned horizontally in
 // |parentView|.
 // |subview| must be a subview of |parentView|.
 void AddSameCenterXConstraint(UIView* parentView, UIView* subview);
+
+// Adds a constraint that |subview1| and |subview2| are center aligned
+// horizontally on |parentView|.
+// |subview1| and |subview2| must be subview of |parentView|.
+void AddSameCenterXConstraint(UIView *parentView, UIView *subview1,
+                              UIView *subview2);
 
 // Adds a constraint that |subview| is center aligned vertically in
 // |parentView|.
@@ -153,5 +220,19 @@ void AddSameCenterYConstraint(UIView* parentView, UIView* subview);
 void AddSameCenterYConstraint(UIView* parentView,
                               UIView* subview1,
                               UIView* subview2);
+
+// Whether the |environment| has a compact horizontal size class.
+bool IsCompact(id<UITraitEnvironment> environment);
+
+// Whether the main application window's rootViewController has a compact
+// horizontal size class.
+bool IsCompact();
+
+// Whether the |environment| has a compact iPad horizontal size class.
+bool IsCompactTablet(id<UITraitEnvironment> environment);
+
+// Whether the main application window's rootViewController has a compact
+// iPad horizontal size class.
+bool IsCompactTablet();
 
 #endif  // IOS_CHROME_BROWSER_UI_UIKIT_UI_UTIL_H_

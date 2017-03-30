@@ -16,12 +16,13 @@ _EXCLUDED_PATHS = (
     r"^native_client_sdk[\\\/]src[\\\/]tools[\\\/].*.mk",
     r"^net[\\\/]tools[\\\/]spdyshark[\\\/].*",
     r"^skia[\\\/].*",
+    r"^third_party[\\\/]WebKit[\\\/].*",
     r"^v8[\\\/].*",
     r".*MakeFile$",
     r".+_autogen\.h$",
     r".+[\\\/]pnacl_shim\.c$",
     r"^gpu[\\\/]config[\\\/].*_list_json\.cc$",
-    r"^chrome[\\\/]browser[\\\/]resources[\\\/]pdf[\\\/]index.js"
+    r"^chrome[\\\/]browser[\\\/]resources[\\\/]pdf[\\\/]index.js",
 )
 
 # The NetscapePlugIn library is excluded from pan-project as it will soon
@@ -63,8 +64,8 @@ _TEST_ONLY_WARNING = (
 
 _INCLUDE_ORDER_WARNING = (
     'Your #include order seems to be broken. Remember to use the right '
-    'collation (LC_COLLATE=C) and check\nhttps://google-styleguide.googlecode'
-    '.com/svn/trunk/cppguide.html#Names_and_Order_of_Includes')
+    'collation (LC_COLLATE=C) and check\nhttps://google.github.io/styleguide/'
+    'cppguide.html#Names_and_Order_of_Includes')
 
 _BANNED_OBJC_FUNCTIONS = (
     (
@@ -163,7 +164,9 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       True,
       (
+        r"^base[\\\/]process[\\\/]process_linux\.cc$",
         r"^base[\\\/]process[\\\/]process_metrics_linux\.cc$",
+        r"^blimp[\\\/]engine[\\\/]browser[\\\/]blimp_browser_main_parts\.cc$",
         r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]boot_times_recorder\.cc$",
         r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]"
             "customization_document_browsertest\.cc$",
@@ -174,8 +177,9 @@ _BANNED_CPP_FUNCTIONS = (
             r"simple_platform_shared_buffer_posix\.cc$",
         r"^net[\\\/]disk_cache[\\\/]cache_util\.cc$",
         r"^net[\\\/]url_request[\\\/]test_url_fetcher_factory\.cc$",
+        r"^remoting[\\\/]host[\\\/]gnubby_auth_handler_posix\.cc$",
         r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
-            "drm_display_host_manager\.cc$",
+            "drm_display_host_manager_core\.cc$",
       ),
     ),
     (
@@ -272,7 +276,6 @@ _IPC_ENUM_TRAITS_DEPRECATED = (
 _VALID_OS_MACROS = (
     # Please keep sorted.
     'OS_ANDROID',
-    'OS_ANDROID_HOST',
     'OS_BSD',
     'OS_CAT',       # For testing.
     'OS_CHROMEOS',
@@ -302,7 +305,7 @@ def _CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api):
   # calls to such functions without a proper C++ parser.
   file_inclusion_pattern = r'.+%s' % _IMPLEMENTATION_EXTENSIONS
 
-  base_function_pattern = r'[ :]test::[^\s]+|ForTest(ing)?|for_test(ing)?'
+  base_function_pattern = r'[ :]test::[^\s]+|ForTest(s|ing)?|for_test(s|ing)?'
   inclusion_pattern = input_api.re.compile(r'(%s)\s*\(' % base_function_pattern)
   comment_pattern = input_api.re.compile(r'//.*(%s)' % base_function_pattern)
   exclusion_pattern = input_api.re.compile(
@@ -356,7 +359,7 @@ def _CheckNoIOStreamInHeaders(input_api, output_api):
 
 
 def _CheckNoUNIT_TESTInSourceFiles(input_api, output_api):
-  """Checks to make sure no source files use UNIT_TEST"""
+  """Checks to make sure no source files use UNIT_TEST."""
   problems = []
   for f in input_api.AffectedFiles():
     if (not f.LocalPath().endswith(('.cc', '.mm'))):
@@ -370,6 +373,23 @@ def _CheckNoUNIT_TESTInSourceFiles(input_api, output_api):
     return []
   return [output_api.PresubmitPromptWarning('UNIT_TEST is only for headers.\n' +
       '\n'.join(problems))]
+
+
+def _CheckDCHECK_IS_ONHasBraces(input_api, output_api):
+  """Checks to make sure DCHECK_IS_ON() does not skip the braces."""
+  errors = []
+  pattern = input_api.re.compile(r'DCHECK_IS_ON(?!\(\))',
+                                 input_api.re.MULTILINE)
+  for f in input_api.AffectedSourceFiles(input_api.FilterSourceFile):
+    if (not f.LocalPath().endswith(('.cc', '.mm', '.h'))):
+      continue
+    for lnum, line in f.ChangedContents():
+      if input_api.re.search(pattern, line):
+          errors.append(output_api.PresubmitError(
+            ('%s:%d: Use of DCHECK_IS_ON() must be written as "#if ' +
+             'DCHECK_IS_ON()", not forgetting the braces.')
+            % (f.LocalPath(), lnum)))
+  return errors
 
 
 def _FindHistogramNameInLine(histogram_name, line):
@@ -654,13 +674,13 @@ def _CheckFilePermissions(input_api, output_api):
           '--root', input_api.change.RepositoryRoot()]
   for f in input_api.AffectedFiles():
     args += ['--file', f.LocalPath()]
-  checkperms = input_api.subprocess.Popen(args,
-                                          stdout=input_api.subprocess.PIPE)
-  errors = checkperms.communicate()[0].strip()
-  if errors:
-    return [output_api.PresubmitError('checkperms.py failed.',
-                                      errors.splitlines())]
-  return []
+  try:
+    input_api.subprocess.check_output(args)
+    return []
+  except input_api.subprocess.CalledProcessError as error:
+    return [output_api.PresubmitError(
+        'checkperms.py failed:',
+        long_text=error.output)]
 
 
 def _CheckNoAuraWindowPropertyHInHeaders(input_api, output_api):
@@ -882,7 +902,8 @@ def _CheckHardcodedGoogleHostsInLowerLayers(input_api, output_api):
                   _TEST_CODE_EXCLUDED_PATHS +
                   input_api.DEFAULT_BLACK_LIST))
 
-  base_pattern = '"[^"]*google\.com[^"]*"'
+  base_pattern = ('"[^"]*(google|googleapis|googlezip|googledrive|appspot)'
+                  '\.(com|net)[^"]*"')
   comment_pattern = input_api.re.compile('//.*%s' % base_pattern)
   pattern = input_api.re.compile(base_pattern)
   problems = []  # items are (filename, line_number, line)
@@ -1046,6 +1067,9 @@ def _CheckSpamLogging(input_api, output_api):
                  r"^cloud_print[\\\/]",
                  r"^components[\\\/]html_viewer[\\\/]"
                      r"web_test_delegate_impl\.cc$",
+                 # TODO(peter): Remove this exception. https://crbug.com/534537
+                 r"^content[\\\/]browser[\\\/]notifications[\\\/]"
+                     r"notification_event_dispatcher_impl\.cc$",
                  r"^content[\\\/]common[\\\/]gpu[\\\/]client[\\\/]"
                      r"gl_helper_benchmark\.cc$",
                  r"^courgette[\\\/]courgette_tool\.cc$",
@@ -1198,15 +1222,16 @@ def _GetJSONParseError(input_api, filename, eat_comments=True):
   try:
     contents = input_api.ReadFile(filename)
     if eat_comments:
-      json_comment_eater = input_api.os_path.join(
-          input_api.PresubmitLocalPath(),
-          'tools', 'json_comment_eater', 'json_comment_eater.py')
-      process = input_api.subprocess.Popen(
-          [input_api.python_executable, json_comment_eater],
-          stdin=input_api.subprocess.PIPE,
-          stdout=input_api.subprocess.PIPE,
-          universal_newlines=True)
-      (contents, _) = process.communicate(input=contents)
+      import sys
+      original_sys_path = sys.path
+      try:
+        sys.path = sys.path + [input_api.os_path.join(
+            input_api.PresubmitLocalPath(),
+            'tools', 'json_comment_eater')]
+        import json_comment_eater
+      finally:
+        sys.path = original_sys_path
+      contents = json_comment_eater.Nom(contents)
 
     input_api.json.loads(contents)
   except ValueError as e:
@@ -1311,11 +1336,47 @@ def _CheckJavaStyle(input_api, output_api):
       black_list=_EXCLUDED_PATHS + input_api.DEFAULT_BLACK_LIST)
 
 
+def _CheckAndroidToastUsage(input_api, output_api):
+  """Checks that code uses org.chromium.ui.widget.Toast instead of
+     android.widget.Toast (Chromium Toast doesn't force hardware
+     acceleration on low-end devices, saving memory).
+  """
+  toast_import_pattern = input_api.re.compile(
+      r'^import android\.widget\.Toast;$')
+
+  errors = []
+
+  sources = lambda affected_file: input_api.FilterSourceFile(
+      affected_file,
+      black_list=(_EXCLUDED_PATHS +
+                  _TEST_CODE_EXCLUDED_PATHS +
+                  input_api.DEFAULT_BLACK_LIST +
+                  (r'^chromecast[\\\/].*',
+                   r'^remoting[\\\/].*')),
+      white_list=(r'.*\.java$',))
+
+  for f in input_api.AffectedSourceFiles(sources):
+    for line_num, line in f.ChangedContents():
+      if toast_import_pattern.search(line):
+        errors.append("%s:%d" % (f.LocalPath(), line_num))
+
+  results = []
+
+  if errors:
+    results.append(output_api.PresubmitError(
+        'android.widget.Toast usage is detected. Android toasts use hardware'
+        ' acceleration, and can be\ncostly on low-end devices. Please use'
+        ' org.chromium.ui.widget.Toast instead.\n'
+        'Contact dskiba@chromium.org if you have any questions.',
+        errors))
+
+  return results
+
+
 def _CheckAndroidCrLogUsage(input_api, output_api):
   """Checks that new logs using org.chromium.base.Log:
     - Are using 'TAG' as variable name for the tags (warn)
-    - Are using the suggested name format for the tags: "cr.<PackageTag>" (warn)
-    - Are using a tag that is shorter than 23 characters (error)
+    - Are using a tag that is shorter than 20 characters (error)
   """
   cr_log_import_pattern = input_api.re.compile(
       r'^import org\.chromium\.base\.Log;$', input_api.re.MULTILINE)
@@ -1326,17 +1387,17 @@ def _CheckAndroidCrLogUsage(input_api, output_api):
   # Extract the tag from lines like `Log.d(TAG, "*");` or `Log.d("TAG", "*");`
   log_call_pattern = input_api.re.compile(r'^\s*Log\.\w\((?P<tag>\"?\w+\"?)\,')
   log_decl_pattern = input_api.re.compile(
-      r'^\s*private static final String TAG = "(?P<name>(.*)")',
+      r'^\s*private static final String TAG = "(?P<name>(.*))";',
       input_api.re.MULTILINE)
-  log_name_pattern = input_api.re.compile(r'^cr[.\w]*')
 
-  REF_MSG = ('See base/android/java/src/org/chromium/base/README_logging.md '
+  REF_MSG = ('See docs/android_logging.md '
             'or contact dgn@chromium.org for more info.')
   sources = lambda x: input_api.FilterSourceFile(x, white_list=(r'.*\.java$',))
 
   tag_decl_errors = []
   tag_length_errors = []
   tag_errors = []
+  tag_with_dot_errors = []
   util_log_errors = []
 
   for f in input_api.AffectedSourceFiles(sources):
@@ -1368,23 +1429,26 @@ def _CheckAndroidCrLogUsage(input_api, output_api):
     if has_modified_logs:
       # Make sure the tag is using the "cr" prefix and is not too long
       match = log_decl_pattern.search(file_content)
-      tag_name = match.group('name') if match else ''
-      if not log_name_pattern.search(tag_name ):
+      tag_name = match.group('name') if match else None
+      if not tag_name:
         tag_decl_errors.append(f.LocalPath())
-      if len(tag_name) > 23:
+      elif len(tag_name) > 20:
         tag_length_errors.append(f.LocalPath())
+      elif '.' in tag_name:
+        tag_with_dot_errors.append(f.LocalPath())
 
   results = []
   if tag_decl_errors:
     results.append(output_api.PresubmitPromptWarning(
         'Please define your tags using the suggested format: .\n'
-        '"private static final String TAG = "cr.<package tag>".\n' + REF_MSG,
+        '"private static final String TAG = "<package tag>".\n'
+        'They will be prepended with "cr_" automatically.\n' + REF_MSG,
         tag_decl_errors))
 
   if tag_length_errors:
     results.append(output_api.PresubmitError(
         'The tag length is restricted by the system to be at most '
-        '23 characters.\n' + REF_MSG,
+        '20 characters.\n' + REF_MSG,
         tag_length_errors))
 
   if tag_errors:
@@ -1397,6 +1461,31 @@ def _CheckAndroidCrLogUsage(input_api, output_api):
         'Please use org.chromium.base.Log for new logs.\n' + REF_MSG,
         util_log_errors))
 
+  if tag_with_dot_errors:
+    results.append(output_api.PresubmitPromptWarning(
+        'Dot in log tags cause them to be elided in crash reports.\n' + REF_MSG,
+        tag_with_dot_errors))
+
+  return results
+
+
+def _CheckAndroidNewMdpiAssetLocation(input_api, output_api):
+  """Checks if MDPI assets are placed in a correct directory."""
+  file_filter = lambda f: (f.LocalPath().endswith('.png') and
+                           ('/res/drawable/' in f.LocalPath() or
+                            '/res/drawable-ldrtl/' in f.LocalPath()))
+  errors = []
+  for f in input_api.AffectedFiles(include_deletes=False,
+                                   file_filter=file_filter):
+    errors.append('    %s' % f.LocalPath())
+
+  results = []
+  if errors:
+    results.append(output_api.PresubmitError(
+        'MDPI assets should be placed in /res/drawable-mdpi/ or '
+        '/res/drawable-ldrtl-mdpi/\ninstead of /res/drawable/ and'
+        '/res/drawable-ldrtl/.\n'
+        'Contact newt@chromium.org if you have questions.', errors))
   return results
 
 
@@ -1429,21 +1518,21 @@ def _CheckSingletonInHeaders(input_api, output_api):
                   (r"^base[\\\/]memory[\\\/]singleton\.h$",))
     return input_api.FilterSourceFile(affected_file, black_list=black_list)
 
-  pattern = input_api.re.compile(r'(?<!class\s)Singleton\s*<')
+  pattern = input_api.re.compile(r'(?<!class\sbase::)Singleton\s*<')
   files = []
   for f in input_api.AffectedSourceFiles(FileFilter):
     if (f.LocalPath().endswith('.h') or f.LocalPath().endswith('.hxx') or
         f.LocalPath().endswith('.hpp') or f.LocalPath().endswith('.inl')):
       contents = input_api.ReadFile(f)
       for line in contents.splitlines(False):
-        if (not input_api.re.match(r'//', line) and # Strip C++ comment.
+        if (not line.lstrip().startswith('//') and # Strip C++ comment.
             pattern.search(line)):
           files.append(f)
           break
 
   if files:
     return [ output_api.PresubmitError(
-        'Found Singleton<T> in the following header files.\n' +
+        'Found base::Singleton<T> in the following header files.\n' +
         'Please move them to an appropriate source file so that the ' +
         'template gets instantiated in a single compilation unit.',
         files) ]
@@ -1488,6 +1577,7 @@ def _CheckNoDeprecatedCSS(input_api, output_api):
                 (r"^chrome/common/extensions/docs",
                  r"^chrome/docs",
                  r"^components/dom_distiller/core/css/distilledpage_ios.css",
+                 r"^components/flags_ui/resources/apple_flags.css",
                  r"^native_client_sdk"))
   file_filter = lambda f: input_api.FilterSourceFile(
       f, white_list=file_inclusion_pattern, black_list=black_list)
@@ -1529,6 +1619,8 @@ def _AndroidSpecificOnUploadChecks(input_api, output_api):
   """Groups checks that target android code."""
   results = []
   results.extend(_CheckAndroidCrLogUsage(input_api, output_api))
+  results.extend(_CheckAndroidNewMdpiAssetLocation(input_api, output_api))
+  results.extend(_CheckAndroidToastUsage(input_api, output_api))
   return results
 
 
@@ -1543,6 +1635,7 @@ def _CommonChecks(input_api, output_api):
       _CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api))
   results.extend(_CheckNoIOStreamInHeaders(input_api, output_api))
   results.extend(_CheckNoUNIT_TESTInSourceFiles(input_api, output_api))
+  results.extend(_CheckDCHECK_IS_ONHasBraces(input_api, output_api))
   results.extend(_CheckNoNewWStrings(input_api, output_api))
   results.extend(_CheckNoDEPSGIT(input_api, output_api))
   results.extend(_CheckNoBannedFunctions(input_api, output_api))
@@ -1559,7 +1652,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckForInvalidOSMacros(input_api, output_api))
   results.extend(_CheckForInvalidIfDefinedMacros(input_api, output_api))
   # TODO(danakj): Remove this when base/move.h is removed.
-  results.extend(_CheckForUsingSideEffectsOfPass(input_api, output_api))
+  results.extend(_CheckForUsingPass(input_api, output_api))
   results.extend(_CheckAddedDepsHaveTargetApprovals(input_api, output_api))
   results.extend(
       input_api.canned_checks.CheckChangeHasNoTabs(
@@ -1723,17 +1816,17 @@ def _CheckForInvalidIfDefinedMacros(input_api, output_api):
       bad_macros)]
 
 
-def _CheckForUsingSideEffectsOfPass(input_api, output_api):
+def _CheckForUsingPass(input_api, output_api):
   """Check all affected files for using side effects of Pass."""
   errors = []
   for f in input_api.AffectedFiles():
     if f.LocalPath().endswith(('.h', '.c', '.cc', '.m', '.mm')):
       for lnum, line in f.ChangedContents():
-        # Disallow Foo(*my_scoped_thing.Pass()); See crbug.com/418297.
-        if input_api.re.search(r'\*[a-zA-Z0-9_]+\.Pass\(\)', line):
+        # Warn on any use of foo.Pass().
+        if input_api.re.search(r'[a-zA-Z0-9_]+\.Pass\(\)', line):
           errors.append(output_api.PresubmitError(
-            ('%s:%d uses *foo.Pass() to delete the contents of scoped_ptr. ' +
-             'See crbug.com/418297.') % (f.LocalPath(), lnum)))
+              ('%s:%d uses Pass(); please use std::move() instead. ' +
+               'See crbug.com/557422.') % (f.LocalPath(), lnum)))
   return errors
 
 
@@ -1847,9 +1940,6 @@ def GetDefaultTryConfigs(bots):
 def CheckChangeOnCommit(input_api, output_api):
   results = []
   results.extend(_CommonChecks(input_api, output_api))
-  # TODO(thestig) temporarily disabled, doesn't work in third_party/
-  #results.extend(input_api.canned_checks.CheckSvnModifiedDirectories(
-  #    input_api, output_api, sources))
   # Make sure the tree is 'open'.
   results.extend(input_api.canned_checks.CheckTreeIsOpen(
       input_api,

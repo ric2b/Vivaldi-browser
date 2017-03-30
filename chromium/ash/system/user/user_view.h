@@ -40,8 +40,7 @@ class UserView : public views::View,
  public:
   UserView(SystemTrayItem* owner,
            ash::user::LoginStatus login,
-           MultiProfileIndex index,
-           bool for_detailed_view);
+           UserIndex index);
   ~UserView() override;
 
   // Overridden from MouseWatcherListener:
@@ -75,7 +74,7 @@ class UserView : public views::View,
   // Removes the add user menu option.
   void RemoveAddUserMenuOption();
 
-  MultiProfileIndex multiprofile_index_;
+  UserIndex user_index_;
   // The view of the user card.
   views::View* user_card_view_;
 
@@ -92,9 +91,6 @@ class UserView : public views::View,
 
   // False when the add user panel is visible but not activatable.
   bool add_user_enabled_;
-
-  // True if this view will be used inside detailed view.
-  bool for_detailed_view_;
 
   // The mouse watcher which takes care of out of window hover events.
   scoped_ptr<views::MouseWatcher> mouse_watcher_;

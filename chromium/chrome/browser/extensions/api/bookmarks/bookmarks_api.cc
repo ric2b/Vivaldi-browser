@@ -4,6 +4,11 @@
 
 #include "chrome/browser/extensions/api/bookmarks/bookmarks_api.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/i18n/file_util_icu.h"
@@ -19,22 +24,18 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_html_writer.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client_factory.h"
+#include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/extensions/api/bookmarks/bookmark_api_constants.h"
 #include "chrome/browser/extensions/api/bookmarks/bookmark_api_helpers.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/importer/importer_uma.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/thumbnails/thumbnail_service.h"
-#include "chrome/browser/thumbnails/thumbnail_service_factory.h"
-#include "chrome/browser/thumbnails/thumbnailing_context.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/host_desktop.h"
-#include "chrome/browser/ui/vivaldi_browser_window.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "chrome/common/importer/importer_data_types.h"
@@ -42,6 +43,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
@@ -63,6 +66,9 @@
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
+using bookmarks::ManagedBookmarkService;
+using vivaldi::IsVivaldiApp;
+using vivaldi::kVivaldiReservedApiError;
 
 namespace extensions {
 
@@ -74,6 +80,7 @@ using bookmarks::CreateDetails;
 using content::BrowserContext;
 using content::BrowserThread;
 using content::WebContents;
+
 
 namespace {
 
@@ -100,48 +107,6 @@ base::FilePath GetDefaultFilepathForBookmarkExport() {
   return default_path.Append(filename);
 }
 
-std::string ProcessThumbnailUrl(const GURL& url, std::string thumbnail, Profile* profile) {
-  // Helper method to process thumbnails.
-
-  // Translate temp. tab thumbnails.
-  std::string tab_thumbnail_prefix("chrome://thumb/http://tab_thumbnail");
-  if (!thumbnail.compare(0, tab_thumbnail_prefix.size(), tab_thumbnail_prefix)) {
-    const GURL thumbnailUrl(thumbnail);
-
-    if (!url.is_valid()) {
-      return std::string();
-    }
-
-    scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-      ThumbnailServiceFactory::GetForProfile(profile);
-
-    scoped_refptr<base::RefCountedMemory> thumbnail_data;
-    if (!thumbnail_service->GetPageThumbnail(
-      GURL(thumbnailUrl.path().substr(1)), false, &thumbnail_data)) {
-      return std::string();
-    }
-    // Thumbnails are stored as jpeg in the thumbnail service.
-    scoped_ptr<SkBitmap> bitmap(gfx::JPEGCodec::Decode(thumbnail_data->front(),
-      thumbnail_data->size()));
-    gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap.get() ? *bitmap : SkBitmap());
-
-    scoped_refptr<thumbnails::ThumbnailingContext> context(new thumbnails::ThumbnailingContext(
-      url, thumbnail_service.get()));
-    context->score.force_update = true;
-
-    thumbnail_service->AddForcedURL(context->url);
-    thumbnail_service->SetPageThumbnail(*context, image);
-
-    return "chrome://thumb/" + url.spec();
-
-  }
-
-  // Translate base64 thumbnails to internal URLs??
-
-  return thumbnail;
-
-}
-
 }  // namespace
 
 bool BookmarksFunction::RunAsync() {
@@ -161,12 +126,12 @@ BookmarkModel* BookmarksFunction::GetBookmarkModel() {
   return BookmarkModelFactory::GetForProfile(GetProfile());
 }
 
-ChromeBookmarkClient* BookmarksFunction::GetChromeBookmarkClient() {
-  return ChromeBookmarkClientFactory::GetForProfile(GetProfile());
+ManagedBookmarkService* BookmarksFunction::GetManagedBookmarkService() {
+  return ManagedBookmarkServiceFactory::GetForProfile(GetProfile());
 }
 
 bool BookmarksFunction::GetBookmarkIdAsInt64(const std::string& id_string,
-                                             int64* id) {
+                                             int64_t* id) {
   if (base::StringToInt64(id_string, id))
     return true;
 
@@ -176,7 +141,7 @@ bool BookmarksFunction::GetBookmarkIdAsInt64(const std::string& id_string,
 
 const BookmarkNode* BookmarksFunction::GetBookmarkNodeFromId(
     const std::string& id_string) {
-  int64 id;
+  int64_t id;
   if (!GetBookmarkIdAsInt64(id_string, &id))
     return NULL;
 
@@ -192,7 +157,7 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     BookmarkModel* model,
     const CreateDetails& details,
     const BookmarkNode::MetaInfoMap* meta_info) {
-  int64 parentId;
+  int64_t parentId;
 
   if (!details.parent_id.get()) {
     // Optional, default to "other bookmarks".
@@ -221,18 +186,6 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
   if (details.title.get())
     title = base::UTF8ToUTF16(*details.title.get());
 
-  base::string16 nickname;  // Optional.
-  if (details.nickname.get())
-    nickname = base::UTF8ToUTF16(*details.nickname.get());
-
-  base::string16 description;  // Optional.
-  if (details.description.get())
-    description = base::UTF8ToUTF16(*details.description.get());
-
-  bool speeddial = false;  // Optional.
-  if (details.speeddial)
-    speeddial = *details.speeddial.get();
-
   std::string url_string;  // Optional.
   if (details.url.get())
     url_string = *details.url.get();
@@ -243,10 +196,32 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     return NULL;
   }
 
+  if (IsVivaldiApp(extension_id()) == false) {
+    // NOTE(pettern): Vivaldi-specific properties, no extension are allowed to
+    // set them.
+    if (details.nickname.get() || details.description.get() ||
+        details.speeddial.get() || details.thumbnail.get()) {
+      error_ = kVivaldiReservedApiError;
+      return nullptr;
+    }
+  }
+
+  base::string16 nickname;  // Optional.
+  if (details.nickname.get())
+    nickname = base::UTF8ToUTF16(*details.nickname.get());
+
+  base::string16 description;  // Optional.
+  if (details.description.get())
+    description = base::UTF8ToUTF16(*details.description.get());
+
+  bool speeddial = false;  // Optional.
+  if (details.speeddial.get())
+    speeddial = *details.speeddial.get();
+
   base::string16 thumbnail;  // Optional.
-  if (details.thumbnail.get())
-    thumbnail = base::UTF8ToUTF16(ProcessThumbnailUrl(
-                                    url, *details.thumbnail.get(), GetProfile()));
+  if (details.thumbnail.get()) {
+    thumbnail = base::UTF8ToUTF16(*details.thumbnail.get());
+  }
 
   // --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
   const BookmarkNode* node;
@@ -281,9 +256,9 @@ bool BookmarksFunction::CanBeModified(const BookmarkNode* node) {
     error_ = keys::kModifySpecialError;
     return false;
   }
-  ChromeBookmarkClient* client = GetChromeBookmarkClient();
-  if (::bookmarks::IsDescendantOf(node, client->managed_node()) ||
-      ::bookmarks::IsDescendantOf(node, client->supervised_node())) {
+  ManagedBookmarkService* managed = GetManagedBookmarkService();
+  if (::bookmarks::IsDescendantOf(node, managed->managed_node()) ||
+      ::bookmarks::IsDescendantOf(node, managed->supervised_node())) {
     error_ = keys::kModifyManagedError;
     return false;
   }
@@ -314,7 +289,7 @@ void BookmarksFunction::RunAndSendResponse() {
 BookmarkEventRouter::BookmarkEventRouter(Profile* profile)
     : browser_context_(profile),
       model_(BookmarkModelFactory::GetForProfile(profile)),
-      client_(ChromeBookmarkClientFactory::GetForProfile(profile)) {
+      managed_(ManagedBookmarkServiceFactory::GetForProfile(profile)) {
   model_->AddObserver(this);
 }
 
@@ -325,12 +300,13 @@ BookmarkEventRouter::~BookmarkEventRouter() {
 }
 
 void BookmarkEventRouter::DispatchEvent(
+    events::HistogramValue histogram_value,
     const std::string& event_name,
     scoped_ptr<base::ListValue> event_args) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
     event_router->BroadcastEvent(make_scoped_ptr(new extensions::Event(
-        extensions::events::UNKNOWN, event_name, event_args.Pass())));
+        histogram_value, event_name, std::move(event_args))));
   }
 }
 
@@ -357,7 +333,7 @@ void BookmarkEventRouter::BookmarkNodeMoved(BookmarkModel* model,
   move_info.old_index = old_index;
 
   DispatchEvent(
-      bookmarks::OnMoved::kEventName,
+      events::BOOKMARKS_ON_MOVED, bookmarks::OnMoved::kEventName,
       bookmarks::OnMoved::Create(base::Int64ToString(node->id()), move_info));
 }
 
@@ -366,8 +342,8 @@ void BookmarkEventRouter::BookmarkNodeAdded(BookmarkModel* model,
                                             int index) {
   const BookmarkNode* node = parent->GetChild(index);
   scoped_ptr<BookmarkTreeNode> tree_node(
-      bookmark_api_helpers::GetBookmarkTreeNode(client_, node, false, false));
-  DispatchEvent(bookmarks::OnCreated::kEventName,
+      bookmark_api_helpers::GetBookmarkTreeNode(managed_, node, false, false));
+  DispatchEvent(events::BOOKMARKS_ON_CREATED, bookmarks::OnCreated::kEventName,
                 bookmarks::OnCreated::Create(base::Int64ToString(node->id()),
                                              *tree_node));
 }
@@ -381,8 +357,10 @@ void BookmarkEventRouter::BookmarkNodeRemoved(
   bookmarks::OnRemoved::RemoveInfo remove_info;
   remove_info.parent_id = base::Int64ToString(parent->id());
   remove_info.index = index;
+  bookmark_api_helpers::PopulateBookmarkTreeNode(managed_, node, true, false,
+                                                 &remove_info.node);
 
-  DispatchEvent(bookmarks::OnRemoved::kEventName,
+  DispatchEvent(events::BOOKMARKS_ON_REMOVED, bookmarks::OnRemoved::kEventName,
                 bookmarks::OnRemoved::Create(base::Int64ToString(node->id()),
                                              remove_info));
 }
@@ -409,7 +387,7 @@ void BookmarkEventRouter::BookmarkNodeChanged(BookmarkModel* model,
     change_info.url.reset(new std::string(node->url().spec()));
   change_info.speeddial.reset( new bool( node->GetSpeeddial()));
 
-  DispatchEvent(bookmarks::OnChanged::kEventName,
+  DispatchEvent(events::BOOKMARKS_ON_CHANGED, bookmarks::OnChanged::kEventName,
                 bookmarks::OnChanged::Create(base::Int64ToString(node->id()),
                                              change_info));
 }
@@ -429,19 +407,22 @@ void BookmarkEventRouter::BookmarkNodeChildrenReordered(
     reorder_info.child_ids.push_back(base::Int64ToString(child->id()));
   }
 
-  DispatchEvent(bookmarks::OnChildrenReordered::kEventName,
+  DispatchEvent(events::BOOKMARKS_ON_CHILDREN_REORDERED,
+                bookmarks::OnChildrenReordered::kEventName,
                 bookmarks::OnChildrenReordered::Create(
                     base::Int64ToString(node->id()), reorder_info));
 }
 
 void BookmarkEventRouter::ExtensiveBookmarkChangesBeginning(
     BookmarkModel* model) {
-  DispatchEvent(bookmarks::OnImportBegan::kEventName,
+  DispatchEvent(events::BOOKMARKS_ON_IMPORT_BEGAN,
+                bookmarks::OnImportBegan::kEventName,
                 bookmarks::OnImportBegan::Create());
 }
 
 void BookmarkEventRouter::ExtensiveBookmarkChangesEnded(BookmarkModel* model) {
-  DispatchEvent(bookmarks::OnImportEnded::kEventName,
+  DispatchEvent(events::BOOKMARKS_ON_IMPORT_ENDED,
+                bookmarks::OnImportEnded::kEventName,
                 bookmarks::OnImportEnded::Create());
 }
 
@@ -486,7 +467,7 @@ bool BookmarksGetFunction::RunOnReady() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<linked_ptr<BookmarkTreeNode> > nodes;
-  ChromeBookmarkClient* client = GetChromeBookmarkClient();
+  ManagedBookmarkService* managed = GetManagedBookmarkService();
   if (params->id_or_id_list.as_strings) {
     std::vector<std::string>& ids = *params->id_or_id_list.as_strings;
     size_t count = ids.size();
@@ -495,14 +476,14 @@ bool BookmarksGetFunction::RunOnReady() {
       const BookmarkNode* node = GetBookmarkNodeFromId(ids[i]);
       if (!node)
         return false;
-      bookmark_api_helpers::AddNode(client, node, &nodes, false);
+      bookmark_api_helpers::AddNode(managed, node, &nodes, false);
     }
   } else {
     const BookmarkNode* node =
         GetBookmarkNodeFromId(*params->id_or_id_list.as_string);
     if (!node)
       return false;
-    bookmark_api_helpers::AddNode(client, node, &nodes, false);
+    bookmark_api_helpers::AddNode(managed, node, &nodes, false);
   }
 
   results_ = bookmarks::Get::Results::Create(nodes);
@@ -522,8 +503,8 @@ bool BookmarksGetChildrenFunction::RunOnReady() {
   int child_count = node->child_count();
   for (int i = 0; i < child_count; ++i) {
     const BookmarkNode* child = node->GetChild(i);
-    bookmark_api_helpers::AddNode(
-        GetChromeBookmarkClient(), child, &nodes, false);
+    bookmark_api_helpers::AddNode(GetManagedBookmarkService(), child, &nodes,
+                                  false);
   }
 
   results_ = bookmarks::GetChildren::Results::Create(nodes);
@@ -547,8 +528,8 @@ bool BookmarksGetRecentFunction::RunOnReady() {
   std::vector<const BookmarkNode*>::iterator i = nodes.begin();
   for (; i != nodes.end(); ++i) {
     const BookmarkNode* node = *i;
-    bookmark_api_helpers::AddNode(
-        GetChromeBookmarkClient(), node, &tree_nodes, false);
+    bookmark_api_helpers::AddNode(GetManagedBookmarkService(), node,
+                                  &tree_nodes, false);
   }
 
   results_ = bookmarks::GetRecent::Results::Create(tree_nodes);
@@ -559,7 +540,8 @@ bool BookmarksGetTreeFunction::RunOnReady() {
   std::vector<linked_ptr<BookmarkTreeNode> > nodes;
   const BookmarkNode* node =
       BookmarkModelFactory::GetForProfile(GetProfile())->root_node();
-  bookmark_api_helpers::AddNode(GetChromeBookmarkClient(), node, &nodes, true);
+  bookmark_api_helpers::AddNode(GetManagedBookmarkService(), node, &nodes,
+                                true);
   results_ = bookmarks::GetTree::Results::Create(nodes);
   return true;
 }
@@ -574,7 +556,8 @@ bool BookmarksGetSubTreeFunction::RunOnReady() {
     return false;
 
   std::vector<linked_ptr<BookmarkTreeNode> > nodes;
-  bookmark_api_helpers::AddNode(GetChromeBookmarkClient(), node, &nodes, true);
+  bookmark_api_helpers::AddNode(GetManagedBookmarkService(), node, &nodes,
+                                true);
   results_ = bookmarks::GetSubTree::Results::Create(nodes);
   return true;
 }
@@ -619,10 +602,10 @@ bool BookmarksSearchFunction::RunOnReady() {
   }
 
   std::vector<linked_ptr<BookmarkTreeNode> > tree_nodes;
-  ChromeBookmarkClient* client = GetChromeBookmarkClient();
+  ManagedBookmarkService* managed = GetManagedBookmarkService();
   for (std::vector<const BookmarkNode*>::iterator node_iter = nodes.begin();
        node_iter != nodes.end(); ++node_iter) {
-    bookmark_api_helpers::AddNode(client, *node_iter, &tree_nodes, false);
+    bookmark_api_helpers::AddNode(managed, *node_iter, &tree_nodes, false);
   }
 
   results_ = bookmarks::Search::Results::Create(tree_nodes);
@@ -631,12 +614,12 @@ bool BookmarksSearchFunction::RunOnReady() {
 
 // static
 bool BookmarksRemoveFunction::ExtractIds(const base::ListValue* args,
-                                         std::list<int64>* ids,
+                                         std::list<int64_t>* ids,
                                          bool* invalid_id) {
   std::string id_string;
   if (!args->GetString(0, &id_string))
     return false;
-  int64 id;
+  int64_t id;
   if (base::StringToInt64(id_string, &id))
     ids->push_back(id);
   else
@@ -652,7 +635,7 @@ bool BookmarksRemoveFunction::RunOnReady() {
       bookmarks::Remove::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  int64 id;
+  int64_t id;
   if (!GetBookmarkIdAsInt64(params->id, &id))
     return false;
 
@@ -661,11 +644,22 @@ bool BookmarksRemoveFunction::RunOnReady() {
     recursive = true;
 
   BookmarkModel* model = GetBookmarkModel();
-  ChromeBookmarkClient* client = GetChromeBookmarkClient();
-  if (!bookmark_api_helpers::RemoveNode(model, client, id, recursive, &error_))
-    return false;
-
-  return true;
+  if (IsVivaldiApp(extension_id()) == false) {
+    // VB-10596 - Enforce that extensions cannot delete a folder
+    // we are using as a Speed Dial folder.
+    const BookmarkNode* node = ::bookmarks::GetBookmarkNodeByID(model, id);
+    if (node) {
+      std::string is_speeddial;
+      if (node->is_folder() && node->GetMetaInfo("Speeddial", &is_speeddial) &&
+          is_speeddial == "true") {
+        // Ignore the delete request for this Speed Dial folder but pretend it
+        // succeeded.
+        return true;
+      }
+    }
+  }
+  ManagedBookmarkService* managed = GetManagedBookmarkService();
+  return bookmark_api_helpers::MoveNodeToTrash(model, managed, id, 0, &error_);
 }
 
 bool BookmarksCreateFunction::RunOnReady() {
@@ -676,13 +670,27 @@ bool BookmarksCreateFunction::RunOnReady() {
       bookmarks::Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  if (params->bookmark.nickname.get()) {
+    base::string16 nick = base::UTF8ToUTF16(*params->bookmark.nickname.get());
+
+    if (nick.length() > 0) {
+      bool doesNickExists = ::bookmarks::DoesNickExists(
+          BookmarkModelFactory::GetForProfile(GetProfile()), nick, -1);
+
+      if (doesNickExists) {
+        error_ = keys::kNicknameExists;
+        return false;
+      }
+    }
+  }
+
   BookmarkModel* model = BookmarkModelFactory::GetForProfile(GetProfile());
   const BookmarkNode* node = CreateBookmarkNode(model, params->bookmark, NULL);
   if (!node)
     return false;
 
   scoped_ptr<BookmarkTreeNode> ret(bookmark_api_helpers::GetBookmarkTreeNode(
-      GetChromeBookmarkClient(), node, false, false));
+      GetManagedBookmarkService(), node, false, false));
   results_ = bookmarks::Create::Results::Create(*ret);
 
   return true;
@@ -690,7 +698,7 @@ bool BookmarksCreateFunction::RunOnReady() {
 
 // static
 bool BookmarksMoveFunction::ExtractIds(const base::ListValue* args,
-                                       std::list<int64>* ids,
+                                       std::list<int64_t>* ids,
                                        bool* invalid_id) {
   // For now, Move accepts ID parameters in the same way as an Update.
   return BookmarksUpdateFunction::ExtractIds(args, ids, invalid_id);
@@ -719,7 +727,7 @@ bool BookmarksMoveFunction::RunOnReady() {
     // Optional, defaults to current parent.
     parent = node->parent();
   } else {
-    int64 parentId;
+    int64_t parentId;
     if (!GetBookmarkIdAsInt64(*params->destination.parent_id, &parentId))
       return false;
 
@@ -742,8 +750,8 @@ bool BookmarksMoveFunction::RunOnReady() {
   model->Move(node, parent, index);
 
   scoped_ptr<BookmarkTreeNode> tree_node(
-      bookmark_api_helpers::GetBookmarkTreeNode(
-          GetChromeBookmarkClient(), node, false, false));
+      bookmark_api_helpers::GetBookmarkTreeNode(GetManagedBookmarkService(),
+                                                node, false, false));
   results_ = bookmarks::Move::Results::Create(*tree_node);
 
   return true;
@@ -751,7 +759,7 @@ bool BookmarksMoveFunction::RunOnReady() {
 
 // static
 bool BookmarksUpdateFunction::ExtractIds(const base::ListValue* args,
-                                         std::list<int64>* ids,
+                                         std::list<int64_t>* ids,
                                          bool* invalid_id) {
   // For now, Update accepts ID parameters in the same way as an Remove.
   return BookmarksRemoveFunction::ExtractIds(args, ids, invalid_id);
@@ -765,12 +773,42 @@ bool BookmarksUpdateFunction::RunOnReady() {
       bookmarks::Update::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  if (params->changes.nickname.get()) {
+    base::string16 nick = base::UTF8ToUTF16(*params->changes.nickname.get());
+
+    if (nick.length() > 0) {
+      int64_t idToCheck;
+
+      if (!GetBookmarkIdAsInt64(params->id, &idToCheck)) {
+        return false;
+      }
+
+      bool doesNickExists = ::bookmarks::DoesNickExists(
+          BookmarkModelFactory::GetForProfile(GetProfile()), nick, idToCheck);
+
+      if (doesNickExists) {
+        error_ = keys::kNicknameExists;
+        return false;
+      }
+    }
+  }
+
   // Optional but we need to distinguish non present from an empty title.
   base::string16 title;
   bool has_title = false;
   if (params->changes.title.get()) {
     title = base::UTF8ToUTF16(*params->changes.title);
     has_title = true;
+  }
+
+  if (IsVivaldiApp(extension_id()) == false) {
+    // NOTE(pettern): Vivaldi-specific properties, no extension are allowed to
+    // set them.
+    if (params->changes.nickname.get() || params->changes.description.get() ||
+        params->changes.speeddial.get() || params->changes.thumbnail.get()) {
+      error_ = kVivaldiReservedApiError;
+      return false;
+    }
   }
 
   std::string nickname;
@@ -802,8 +840,6 @@ bool BookmarksUpdateFunction::RunOnReady() {
     has_speeddial = true;
   }
 
-  speeddial_str = speeddial ? "true" : "false";
-
   // Optional.
   std::string url_string;
   if (params->changes.url.get())
@@ -825,26 +861,25 @@ bool BookmarksUpdateFunction::RunOnReady() {
   }
   if (has_title)
     model->SetTitle(node, title);
+
   if (!url.is_empty())
     model->SetURL(node, url);
 
-  if(has_nickname)
+  if (has_nickname)
     model->SetNodeMetaInfo(node, "Nickname", nickname);
 
-  if(has_description)
+  if (has_description)
     model->SetNodeMetaInfo(node, "Description", description);
 
-  if(has_thumbnail)
-    model->SetNodeMetaInfo(node, "Thumbnail",
-      ProcessThumbnailUrl(node->url(), thumbnail, GetProfile()));
+  if (has_thumbnail)
+    model->SetNodeMetaInfo(node, "Thumbnail", thumbnail);
 
-  if(has_speeddial)
-    model->SetNodeMetaInfo(node, "Speeddial", speeddial_str);
-
+  if (has_speeddial)
+    model->SetNodeMetaInfo(node, "Speeddial", speeddial ? "true" : "false");
 
   scoped_ptr<BookmarkTreeNode> tree_node(
-      bookmark_api_helpers::GetBookmarkTreeNode(
-          GetChromeBookmarkClient(), node, false, false));
+      bookmark_api_helpers::GetBookmarkTreeNode(GetManagedBookmarkService(),
+                                                node, false, false));
   results_ = bookmarks::Update::Results::Create(*tree_node);
   return true;
 }
@@ -964,38 +999,6 @@ void BookmarksExportFunction::FileSelected(const base::FilePath& path,
                                            void* params) {
   bookmark_html_writer::WriteBookmarks(GetProfile(), path, NULL);
   Release();  // Balanced in BookmarksIOFunction::SelectFile()
-}
-
-BookmarksUpdateSpeedDialsForWindowsJumplistFunction::BookmarksUpdateSpeedDialsForWindowsJumplistFunction() {
-}
-
-BookmarksUpdateSpeedDialsForWindowsJumplistFunction::~BookmarksUpdateSpeedDialsForWindowsJumplistFunction() {
-}
-
-bool BookmarksUpdateSpeedDialsForWindowsJumplistFunction::RunOnReady() {
-  scoped_ptr<bookmarks::UpdateSpeedDialsForWindowsJumplist::Params> params(bookmarks::UpdateSpeedDialsForWindowsJumplist::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-#if defined(OS_WIN)
-  Browser* browser = chrome::FindVivaldiBrowser();
-  if (browser) {
-    if (browser->is_vivaldi()) {
-      VivaldiBrowserWindow* browser_view = VivaldiBrowserWindow::GetBrowserWindowForBrowser(browser);
-      if (browser_view && browser_view->GetJumpList()) {
-        JumpList* jump_list = browser_view->GetJumpList();
-        if (jump_list)
-          jump_list->OnUpdateVivaldiSpeedDials(params->speed_dials);
-      }
-    } else {
-      BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-      if (browser_view && browser_view->GetJumpList()) {
-        JumpList* jump_list = browser_view->GetJumpList();
-        if (jump_list)
-          jump_list->OnUpdateVivaldiSpeedDials(params->speed_dials);
-      }
-    }
-  }
-#endif
-  return true;
 }
 
 }  // namespace extensions

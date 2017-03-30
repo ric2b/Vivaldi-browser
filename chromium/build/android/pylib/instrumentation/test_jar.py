@@ -9,19 +9,15 @@ import logging
 import os
 import pickle
 import re
-import sys
 
-from pylib import cmd_helper
+from devil.android import device_utils
+from devil.android import md5sum
 from pylib import constants
-from pylib.device import device_utils
-from pylib.utils import md5sum
+from pylib.constants import host_paths
 from pylib.utils import proguard
 
-sys.path.insert(0,
-                os.path.join(constants.DIR_SOURCE_ROOT,
-                             'build', 'util', 'lib', 'common'))
-
-import unittest_util # pylint: disable=F0401
+with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
+  import unittest_util # pylint: disable=import-error
 
 # If you change the cached output of proguard, increment this number
 PICKLE_FORMAT_VERSION = 4
@@ -32,6 +28,8 @@ class TestJar(object):
       ['Smoke', 'SmallTest', 'MediumTest', 'LargeTest', 'EnormousTest',
        'FlakyTest', 'DisabledTest', 'Manual', 'PerfTest', 'HostDrivenTest',
        'IntegrationTest'])
+  _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS = frozenset(
+      ['DisabledTest', 'FlakyTest'])
   _DEFAULT_ANNOTATION = 'SmallTest'
   _PROGUARD_CLASS_RE = re.compile(r'\s*?- Program class:\s*([\S]+)$')
   _PROGUARD_SUPERCLASS_RE = re.compile(r'\s*?  Superclass:\s*([\S]+)$')
@@ -45,8 +43,8 @@ class TestJar(object):
     if not os.path.exists(jar_path):
       raise Exception('%s not found, please build it' % jar_path)
 
-    self._PROGUARD_PATH = os.path.join(constants.ANDROID_SDK_ROOT,
-                                       'tools/proguard/lib/proguard.jar')
+    self._PROGUARD_PATH = os.path.join(constants.PROGUARD_ROOT,
+                                       'lib', 'proguard.jar')
     if not os.path.exists(self._PROGUARD_PATH):
       self._PROGUARD_PATH = os.path.join(os.environ['ANDROID_BUILD_TOP'],
                                          'external/proguard/lib/proguard.jar')
@@ -120,7 +118,7 @@ class TestJar(object):
   def GetTestAnnotations(self, test):
     """Returns a list of all annotations for the given |test|. May be empty."""
     if not self._IsTestMethod(test) or not test in self._test_methods:
-      return []
+      return {}
     return self._test_methods[test]['annotations']
 
   @staticmethod
@@ -134,8 +132,11 @@ class TestJar(object):
         key = filters[0]
         value_list = filters[1].split(',')
         for value in value_list:
-          if key in annotations and value == annotations[key]:
-            return True
+          if key in annotations and annotations[key]['value']:
+            annotation_value = annotations[key]['value']
+            if ((isinstance(annotation_value, list) and
+                 value in annotation_value) or value == annotation_value):
+              return True
       elif annotation_filter in annotations:
         return True
     return False
@@ -164,13 +165,15 @@ class TestJar(object):
     return sorted(tests_missing_annotations)
 
   def _IsTestValidForSdkRange(self, test_name, attached_min_sdk_level):
-    required_min_sdk_level = int(
-        self.GetTestAnnotations(test_name).get('MinAndroidSdkLevel', 0))
+    required_min_sdk_level = self.GetTestAnnotations(
+      test_name).get('MinAndroidSdkLevel', None)
+    if required_min_sdk_level:
+      required_min_sdk_level = int(required_min_sdk_level['value'])
     return (required_min_sdk_level is None or
             attached_min_sdk_level >= required_min_sdk_level)
 
   def GetAllMatchingTests(self, annotation_filter_list,
-                          exclude_annotation_list, test_filter):
+                          exclude_annotation_list, test_filter, devices):
     """Get a list of tests matching any of the annotations and the filter.
 
     Args:
@@ -180,6 +183,7 @@ class TestJar(object):
       exclude_annotation_list: List of test annotations. A test must not have
         any of these annotations.
       test_filter: Filter used for partial matching on the test method names.
+      devices: The set of devices against which tests will be run.
 
     Returns:
       List of all matching tests.
@@ -197,9 +201,14 @@ class TestJar(object):
       available_tests = [m for m in self.GetTestMethods()
                          if not self.IsHostDrivenTest(m)]
 
-    if exclude_annotation_list:
-      excluded_tests = self.GetAnnotatedTests(exclude_annotation_list)
-      available_tests = list(set(available_tests) - set(excluded_tests))
+    requested_annotations = set(annotation_filter_list or ())
+    exclude_annotation_list = list(exclude_annotation_list or ())
+
+    exclude_annotation_list.extend([
+        a for a in self._EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS
+        if a not in requested_annotations])
+    excluded_tests = self.GetAnnotatedTests(exclude_annotation_list)
+    available_tests = list(set(available_tests) - set(excluded_tests))
 
     tests = []
     if test_filter:
@@ -218,7 +227,7 @@ class TestJar(object):
 
     # Filter out any tests with SDK level requirements that don't match the set
     # of attached devices.
-    devices = device_utils.DeviceUtils.parallel()
+    devices = device_utils.DeviceUtils.parallel(devices)
     min_sdk_version = min(devices.build_version_sdk.pGet(None))
     tests = [t for t in tests
              if self._IsTestValidForSdkRange(t, min_sdk_version)]

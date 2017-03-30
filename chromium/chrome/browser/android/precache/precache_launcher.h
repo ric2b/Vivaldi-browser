@@ -9,19 +9,22 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 
 class PrecacheLauncher {
  public:
   PrecacheLauncher(JNIEnv* env, jobject obj);
-  void Destroy(JNIEnv* env, jobject obj);
-  void Start(JNIEnv* env, jobject obj);
-  void Cancel(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void Start(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void Cancel(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
  private:
   ~PrecacheLauncher();
-  // Called when precaching completes.
-  void OnPrecacheCompleted();
+  // Called when precaching completes. |try_again_soon| is true iff the precache
+  // failed to start due to a transient error and should be attempted again
+  // soon.
+  void OnPrecacheCompleted(bool try_again_soon);
 
   JavaObjectWeakGlobalRef weak_java_precache_launcher_;
 

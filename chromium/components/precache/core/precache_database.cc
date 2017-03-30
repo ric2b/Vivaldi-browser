@@ -11,6 +11,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "components/history/core/browser/history_constants.h"
 #include "sql/connection.h"
 #include "sql/transaction.h"
 #include "url/gurl.h"
@@ -87,9 +88,13 @@ void PrecacheDatabase::ClearHistory() {
   Flush();
 }
 
-void PrecacheDatabase::RecordURLPrecached(const GURL& url,
-                                          const base::Time& fetch_time,
-                                          int64 size, bool was_cached) {
+void PrecacheDatabase::RecordURLPrefetch(const GURL& url,
+                                         const base::TimeDelta& latency,
+                                         const base::Time& fetch_time,
+                                         int64_t size,
+                                         bool was_cached) {
+  UMA_HISTOGRAM_TIMES("Precache.Latency.Prefetch", latency);
+
   if (!IsDatabaseAccessible()) {
     // Don't track anything if unable to access the database.
     return;
@@ -126,10 +131,25 @@ void PrecacheDatabase::RecordURLPrecached(const GURL& url,
   MaybePostFlush();
 }
 
-void PrecacheDatabase::RecordURLFetched(const GURL& url,
-                                        const base::Time& fetch_time,
-                                        int64 size, bool was_cached,
-                                        bool is_connection_cellular) {
+void PrecacheDatabase::RecordURLNonPrefetch(const GURL& url,
+                                            const base::TimeDelta& latency,
+                                            const base::Time& fetch_time,
+                                            int64_t size,
+                                            bool was_cached,
+                                            int host_rank,
+                                            bool is_connection_cellular) {
+  UMA_HISTOGRAM_TIMES("Precache.Latency.NonPrefetch", latency);
+
+  if (host_rank != history::kMaxTopHosts) {
+    // The resource was loaded on a page that could have been affected by
+    // precaching.
+    UMA_HISTOGRAM_TIMES("Precache.Latency.NonPrefetch.TopHosts", latency);
+  } else {
+    // The resource was loaded on a page that could NOT have been affected by
+    // precaching.
+    UMA_HISTOGRAM_TIMES("Precache.Latency.NonPrefetch.NonTopHosts", latency);
+  }
+
   if (!IsDatabaseAccessible()) {
     // Don't track anything if unable to access the database.
     return;

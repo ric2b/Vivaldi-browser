@@ -4,10 +4,12 @@
 
 #include "chrome/browser/profiles/gaia_info_update_service.h"
 
+#include <stddef.h>
+
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/profiles/profile_downloader.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_info_cache_unittest.h"
@@ -21,6 +23,8 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/common/signin_pref_names.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_unittest_util.h"
@@ -79,9 +83,9 @@ class GAIAInfoUpdateServiceTest : public ProfileInfoCacheTest {
     testing_factories.push_back(std::make_pair(
         ChromeSigninClientFactory::GetInstance(),
         signin::BuildTestSigninClient));
-    Profile* profile = testing_profile_manager_.CreateTestingProfile(name,
-        scoped_ptr<PrefServiceSyncable>(), base::UTF8ToUTF16(name), 0,
-        std::string(), testing_factories);
+    Profile* profile = testing_profile_manager_.CreateTestingProfile(
+        name, scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+        base::UTF8ToUTF16(name), 0, std::string(), testing_factories);
     // The testing manager sets the profile name manually, which counts as
     // a user-customized profile name. Reset this to match the default name
     // we are actually using.
@@ -177,7 +181,7 @@ TEST_F(GAIAInfoUpdateServiceTest, DownloadSuccess) {
   size_t index = GetCache()->GetIndexOfProfileWithPath(profile()->GetPath());
   EXPECT_EQ(name, GetCache()->GetGAIANameOfProfileAtIndex(index));
   EXPECT_EQ(given_name, GetCache()->GetGAIAGivenNameOfProfileAtIndex(index));
-  EXPECT_TRUE(gfx::test::IsEqual(
+  EXPECT_TRUE(gfx::test::AreImagesEqual(
       image, *GetCache()->GetGAIAPictureOfProfileAtIndex(index)));
   EXPECT_EQ(url, service()->GetCachedPictureURL());
   EXPECT_EQ(Profile::kNoHostedDomainFound, profile()->GetPrefs()->
@@ -199,7 +203,7 @@ TEST_F(GAIAInfoUpdateServiceTest, DownloadFailure) {
   EXPECT_EQ(base::string16(), GetCache()->GetGAIANameOfProfileAtIndex(index));
   EXPECT_EQ(base::string16(),
             GetCache()->GetGAIAGivenNameOfProfileAtIndex(index));
-  EXPECT_TRUE(gfx::test::IsEqual(
+  EXPECT_TRUE(gfx::test::AreImagesEqual(
       old_image, GetCache()->GetAvatarIconOfProfileAtIndex(index)));
   EXPECT_EQ(NULL, GetCache()->GetGAIAPictureOfProfileAtIndex(index));
   EXPECT_EQ(std::string(), service()->GetCachedPictureURL());
@@ -305,12 +309,11 @@ TEST_F(GAIAInfoUpdateServiceTest, LogOut) {
 TEST_F(GAIAInfoUpdateServiceTest, LogIn) {
   // Log in.
   EXPECT_CALL(*service(), Update());
-  std::string account_id =
-        AccountTrackerServiceFactory::GetForProfile(profile())
-            ->SeedAccountInfo("gaia_id", "pat@example.com");
+  AccountTrackerServiceFactory::GetForProfile(profile())
+      ->SeedAccountInfo("gaia_id", "pat@example.com");
   SigninManager* signin_manager =
       SigninManagerFactory::GetForProfile(profile());
-  signin_manager->OnExternalSigninCompleted(account_id);
+  signin_manager->OnExternalSigninCompleted("pat@example.com");
 }
 
 #endif

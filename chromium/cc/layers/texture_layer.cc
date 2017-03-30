@@ -8,6 +8,7 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/synchronization/lock.h"
+#include "base/trace_event/trace_event.h"
 #include "cc/base/simple_enclosed_region.h"
 #include "cc/layers/texture_layer_client.h"
 #include "cc/layers/texture_layer_impl.h"
@@ -34,7 +35,6 @@ TextureLayer::TextureLayer(const LayerSettings& settings,
       uv_bottom_right_(1.f, 1.f),
       premultiplied_alpha_(true),
       blend_background_color_(false),
-      rate_limit_context_(false),
       needs_set_mailbox_(false) {
   vertex_opacity_[0] = 1.0f;
   vertex_opacity_[1] = 1.0f;
@@ -46,8 +46,6 @@ TextureLayer::~TextureLayer() {
 }
 
 void TextureLayer::ClearClient() {
-  if (rate_limit_context_ && client_ && layer_tree_host())
-    layer_tree_host()->StopRateLimiter();
   client_ = nullptr;
   ClearTexture();
   UpdateDrawsContent(HasDrawableContent());
@@ -118,13 +116,6 @@ void TextureLayer::SetBlendBackgroundColor(bool blend) {
   SetNeedsCommit();
 }
 
-void TextureLayer::SetRateLimitContext(bool rate_limit) {
-  if (!rate_limit && rate_limit_context_ && client_ && layer_tree_host())
-    layer_tree_host()->StopRateLimiter();
-
-  rate_limit_context_ = rate_limit;
-}
-
 void TextureLayer::SetTextureMailboxInternal(
     const TextureMailbox& mailbox,
     scoped_ptr<SingleReleaseCallback> release_callback,
@@ -138,7 +129,7 @@ void TextureLayer::SetTextureMailboxInternal(
   // If we never commited the mailbox, we need to release it here.
   if (mailbox.IsValid()) {
     holder_ref_ =
-        TextureMailboxHolder::Create(mailbox, release_callback.Pass());
+        TextureMailboxHolder::Create(mailbox, std::move(release_callback));
   } else {
     holder_ref_ = nullptr;
   }
@@ -160,11 +151,12 @@ void TextureLayer::SetTextureMailbox(
     scoped_ptr<SingleReleaseCallback> release_callback) {
   bool requires_commit = true;
   bool allow_mailbox_reuse = false;
-  SetTextureMailboxInternal(
-      mailbox, release_callback.Pass(), requires_commit, allow_mailbox_reuse);
+  SetTextureMailboxInternal(mailbox, std::move(release_callback),
+                            requires_commit, allow_mailbox_reuse);
 }
 
-static void IgnoreReleaseCallback(uint32 sync_point, bool lost) {}
+static void IgnoreReleaseCallback(const gpu::SyncToken& sync_token, bool lost) {
+}
 
 void TextureLayer::SetTextureMailboxWithoutReleaseCallback(
     const TextureMailbox& mailbox) {
@@ -173,21 +165,18 @@ void TextureLayer::SetTextureMailboxWithoutReleaseCallback(
   // multiple times for the same mailbox.
   DCHECK(!mailbox.IsValid() || !holder_ref_ ||
          !mailbox.Equals(holder_ref_->holder()->mailbox()) ||
-         mailbox.sync_point() != holder_ref_->holder()->mailbox().sync_point());
+         mailbox.sync_token() != holder_ref_->holder()->mailbox().sync_token());
   scoped_ptr<SingleReleaseCallback> release;
   bool requires_commit = true;
   bool allow_mailbox_reuse = true;
   if (mailbox.IsValid())
     release = SingleReleaseCallback::Create(base::Bind(&IgnoreReleaseCallback));
-  SetTextureMailboxInternal(
-      mailbox, release.Pass(), requires_commit, allow_mailbox_reuse);
+  SetTextureMailboxInternal(mailbox, std::move(release), requires_commit,
+                            allow_mailbox_reuse);
 }
 
 void TextureLayer::SetNeedsDisplayRect(const gfx::Rect& dirty_rect) {
   Layer::SetNeedsDisplayRect(dirty_rect);
-
-  if (rate_limit_context_ && client_ && layer_tree_host() && DrawsContent())
-    layer_tree_host()->StartRateLimiter();
 }
 
 void TextureLayer::SetLayerTreeHost(LayerTreeHost* host) {
@@ -196,10 +185,6 @@ void TextureLayer::SetLayerTreeHost(LayerTreeHost* host) {
     return;
   }
 
-  if (layer_tree_host()) {
-    if (rate_limit_context_ && client_)
-      layer_tree_host()->StopRateLimiter();
-  }
   // If we're removed from the tree, the TextureLayerImpl will be destroyed, and
   // we will need to set the mailbox again on a new TextureLayerImpl the next
   // time we push.
@@ -228,10 +213,8 @@ bool TextureLayer::Update() {
       // Already within a commit, no need to do another one immediately.
       bool requires_commit = false;
       bool allow_mailbox_reuse = false;
-      SetTextureMailboxInternal(mailbox,
-                                release_callback.Pass(),
-                                requires_commit,
-                                allow_mailbox_reuse);
+      SetTextureMailboxInternal(mailbox, std::move(release_callback),
+                                requires_commit, allow_mailbox_reuse);
       updated = true;
     }
   }
@@ -244,6 +227,7 @@ bool TextureLayer::Update() {
 
 void TextureLayer::PushPropertiesTo(LayerImpl* layer) {
   Layer::PushPropertiesTo(layer);
+  TRACE_EVENT0("cc", "TextureLayer::PushPropertiesTo");
 
   TextureLayerImpl* texture_layer = static_cast<TextureLayerImpl*>(layer);
   texture_layer->SetFlipped(flipped_);
@@ -262,7 +246,7 @@ void TextureLayer::PushPropertiesTo(LayerImpl* layer) {
       release_callback_impl = holder->GetCallbackForImplThread();
     }
     texture_layer->SetTextureMailbox(texture_mailbox,
-                                     release_callback_impl.Pass());
+                                     std::move(release_callback_impl));
     needs_set_mailbox_ = false;
   }
 }
@@ -283,10 +267,9 @@ TextureLayer::TextureMailboxHolder::TextureMailboxHolder(
     scoped_ptr<SingleReleaseCallback> release_callback)
     : internal_references_(0),
       mailbox_(mailbox),
-      release_callback_(release_callback.Pass()),
-      sync_point_(mailbox.sync_point()),
-      is_lost_(false) {
-}
+      release_callback_(std::move(release_callback)),
+      sync_token_(mailbox.sync_token()),
+      is_lost_(false) {}
 
 TextureLayer::TextureMailboxHolder::~TextureMailboxHolder() {
   DCHECK_EQ(0u, internal_references_);
@@ -297,13 +280,14 @@ TextureLayer::TextureMailboxHolder::Create(
     const TextureMailbox& mailbox,
     scoped_ptr<SingleReleaseCallback> release_callback) {
   return make_scoped_ptr(new MainThreadReference(
-      new TextureMailboxHolder(mailbox, release_callback.Pass())));
+      new TextureMailboxHolder(mailbox, std::move(release_callback))));
 }
 
-void TextureLayer::TextureMailboxHolder::Return(uint32 sync_point,
-                                                bool is_lost) {
+void TextureLayer::TextureMailboxHolder::Return(
+    const gpu::SyncToken& sync_token,
+    bool is_lost) {
   base::AutoLock lock(arguments_lock_);
-  sync_point_ = sync_point;
+  sync_token_ = sync_token;
   is_lost_ = is_lost;
 }
 
@@ -324,17 +308,17 @@ void TextureLayer::TextureMailboxHolder::InternalAddRef() {
 void TextureLayer::TextureMailboxHolder::InternalRelease() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   if (!--internal_references_) {
-    release_callback_->Run(sync_point_, is_lost_);
+    release_callback_->Run(sync_token_, is_lost_);
     mailbox_ = TextureMailbox();
     release_callback_ = nullptr;
   }
 }
 
 void TextureLayer::TextureMailboxHolder::ReturnAndReleaseOnImplThread(
-    uint32 sync_point,
+    const gpu::SyncToken& sync_token,
     bool is_lost,
     BlockingTaskRunner* main_thread_task_runner) {
-  Return(sync_point, is_lost);
+  Return(sync_token, is_lost);
   main_thread_task_runner->PostTask(
       FROM_HERE, base::Bind(&TextureMailboxHolder::InternalRelease, this));
 }

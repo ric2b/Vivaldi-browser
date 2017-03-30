@@ -4,6 +4,8 @@
 
 #include "components/content_settings/core/browser/content_settings_origin_identifier_value_map.h"
 
+#include <tuple>
+
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
@@ -61,9 +63,8 @@ OriginIdentifierValueMap::EntryMapKey::EntryMapKey(
 
 bool OriginIdentifierValueMap::EntryMapKey::operator<(
     const OriginIdentifierValueMap::EntryMapKey& other) const {
-  if (content_type != other.content_type)
-    return content_type < other.content_type;
-  return (resource_identifier < other.resource_identifier);
+  return std::tie(content_type, resource_identifier) <
+    std::tie(other.content_type, other.resource_identifier);
 }
 
 OriginIdentifierValueMap::PatternPair::PatternPair(
@@ -78,14 +79,11 @@ bool OriginIdentifierValueMap::PatternPair::operator<(
   // Note that this operator is the other way around than
   // |ContentSettingsPattern::operator<|. It sorts patterns with higher
   // precedence first.
-  if (primary_pattern > other.primary_pattern)
-    return true;
-  else if (other.primary_pattern > primary_pattern)
-    return false;
-  return (secondary_pattern > other.secondary_pattern);
+  return std::tie(primary_pattern, secondary_pattern) >
+         std::tie(other.primary_pattern, other.secondary_pattern);
 }
 
-RuleIterator* OriginIdentifierValueMap::GetRuleIterator(
+scoped_ptr<RuleIterator> OriginIdentifierValueMap::GetRuleIterator(
     ContentSettingsType content_type,
     const ResourceIdentifier& resource_identifier,
     base::Lock* lock) const {
@@ -99,10 +97,9 @@ RuleIterator* OriginIdentifierValueMap::GetRuleIterator(
     auto_lock.reset(new base::AutoLock(*lock));
   EntryMap::const_iterator it = entries_.find(key);
   if (it == entries_.end())
-    return new EmptyRuleIterator();
-  return new RuleIteratorImpl(it->second.begin(),
-                              it->second.end(),
-                              auto_lock.release());
+    return scoped_ptr<RuleIterator>(new EmptyRuleIterator());
+  return scoped_ptr<RuleIterator>(new RuleIteratorImpl(
+      it->second.begin(), it->second.end(), auto_lock.release()));
 }
 
 size_t OriginIdentifierValueMap::size() const {
@@ -149,6 +146,9 @@ void OriginIdentifierValueMap::SetValue(
   DCHECK(primary_pattern.IsValid());
   DCHECK(secondary_pattern.IsValid());
   DCHECK(value);
+  // TODO(raymes): Remove this after we track down the cause of
+  // crbug.com/531548.
+  CHECK_NE(CONTENT_SETTINGS_TYPE_DEFAULT, content_type);
   EntryMapKey key(content_type, resource_identifier);
   PatternPair patterns(primary_pattern, secondary_pattern);
   // This will create the entry and the linked_ptr if needed.
@@ -162,10 +162,12 @@ void OriginIdentifierValueMap::DeleteValue(
       const ResourceIdentifier& resource_identifier) {
   EntryMapKey key(content_type, resource_identifier);
   PatternPair patterns(primary_pattern, secondary_pattern);
-  entries_[key].erase(patterns);
-  if (entries_[key].empty()) {
-    entries_.erase(key);
-  }
+  EntryMap::iterator it = entries_.find(key);
+  if (it == entries_.end())
+    return;
+  it->second.erase(patterns);
+  if (it->second.empty())
+    entries_.erase(it);
 }
 
 void OriginIdentifierValueMap::DeleteValues(

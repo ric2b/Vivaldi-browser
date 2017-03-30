@@ -5,8 +5,10 @@
 #ifndef ASH_ROTATOR_SCREEN_ROTATION_ANIMATOR_H_
 #define ASH_ROTATOR_SCREEN_ROTATION_ANIMATOR_H_
 
+#include <stdint.h>
+
 #include "ash/ash_export.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "ui/gfx/display.h"
 
 namespace ash {
@@ -14,7 +16,7 @@ namespace ash {
 // Utility to perform a screen rotation with an animation.
 class ASH_EXPORT ScreenRotationAnimator {
  public:
-  explicit ScreenRotationAnimator(int64 display_id);
+  explicit ScreenRotationAnimator(int64_t display_id);
   ~ScreenRotationAnimator();
 
   // Returns true if the screen rotation animation can be completed
@@ -25,14 +27,13 @@ class ASH_EXPORT ScreenRotationAnimator {
 
   // Rotates the gfx::Display specified by |display_id_| to the |new_rotation|
   // orientation, for the given |source|. The rotation will also become active.
-  // Clients should only call |Rotate(gfx::Display::Rotation)| if |CanAnimate()|
-  // returns true.
+  // Clients should only call |Rotate()| if |CanAnimate()| returns true.
   void Rotate(gfx::Display::Rotation new_rotation,
               gfx::Display::RotationSource source);
 
  private:
   // The id of the display to rotate.
-  int64 display_id_;
+  int64_t display_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenRotationAnimator);
 };

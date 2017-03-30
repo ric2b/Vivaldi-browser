@@ -5,6 +5,7 @@
 #include "ui/base/default_theme_provider.h"
 
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace ui {
@@ -13,17 +14,12 @@ DefaultThemeProvider::DefaultThemeProvider() {}
 
 DefaultThemeProvider::~DefaultThemeProvider() {}
 
-bool DefaultThemeProvider::UsingSystemTheme() const {
-  return true;
-}
-
 gfx::ImageSkia* DefaultThemeProvider::GetImageSkiaNamed(int id) const {
   return ResourceBundle::GetSharedInstance().GetImageSkiaNamed(id);
 }
 
 SkColor DefaultThemeProvider::GetColor(int id) const {
-  // Return debugging-blue.
-  return 0xff0000ff;
+  return gfx::kPlaceholderColor;
 }
 
 int DefaultThemeProvider::GetDisplayProperty(int id) const {

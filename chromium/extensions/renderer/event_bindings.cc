@@ -4,9 +4,11 @@
 
 #include "extensions/renderer/event_bindings.h"
 
-#include <map>
+#include <stdint.h>
 
-#include "base/basictypes.h"
+#include <map>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
@@ -33,29 +35,30 @@ namespace {
 typedef std::map<std::string, int> EventListenerCounts;
 
 // A map of extension IDs to listener counts for that extension.
-base::LazyInstance<std::map<std::string, EventListenerCounts> >
+base::LazyInstance<std::map<std::string, EventListenerCounts>>
     g_listener_counts = LAZY_INSTANCE_INITIALIZER;
 
-// A map of event names to a (filter -> count) map. The map is used to keep
-// track of which filters are in effect for which events.
-// We notify the browser about filtered event listeners when we transition
-// between 0 and 1.
-typedef std::map<std::string, linked_ptr<ValueCounter> >
-    FilteredEventListenerCounts;
-
-// A map of extension IDs to filtered listener counts for that extension.
-base::LazyInstance<std::map<std::string, FilteredEventListenerCounts> >
-    g_filtered_listener_counts = LAZY_INSTANCE_INITIALIZER;
+// A map of (extension ID, event name) pairs to the filtered listener counts
+// for that pair. The map is used to keep track of which filters are in effect
+// for which events.  We notify the browser about filtered event listeners when
+// we transition between 0 and 1.
+using FilteredEventListenerKey = std::pair<std::string, std::string>;
+using FilteredEventListenerCounts =
+    std::map<FilteredEventListenerKey, scoped_ptr<ValueCounter>>;
+base::LazyInstance<FilteredEventListenerCounts> g_filtered_listener_counts =
+    LAZY_INSTANCE_INITIALIZER;
 
 base::LazyInstance<EventFilter> g_event_filter = LAZY_INSTANCE_INITIALIZER;
 
+// Gets a unique string key identifier for a ScriptContext.
+// TODO(kalman): Just use pointer equality...?
 std::string GetKeyForScriptContext(ScriptContext* script_context) {
   const std::string& extension_id = script_context->GetExtensionID();
   CHECK(crx_file::id_util::IdIsValid(extension_id) ||
-        script_context->GetURL().is_valid());
+        script_context->url().is_valid());
   return crx_file::id_util::IdIsValid(extension_id)
              ? extension_id
-             : script_context->GetURL().spec();
+             : script_context->url().spec();
 }
 
 // Increments the number of event-listeners for the given |event_name| and
@@ -94,6 +97,21 @@ EventFilteringInfo ParseFromObject(v8::Local<v8::Object> object,
     v8::Local<v8::Value> service_type_value(object->Get(service_type));
     info.SetServiceType(*v8::String::Utf8Value(service_type_value));
   }
+  v8::Local<v8::String> window_types(
+      v8::String::NewFromUtf8(isolate, "windowType"));
+  if (object->Has(window_types)) {
+    v8::Local<v8::Value> window_types_value(object->Get(window_types));
+    info.SetWindowType(*v8::String::Utf8Value(window_types_value));
+  }
+
+  v8::Local<v8::String> window_exposed(
+      v8::String::NewFromUtf8(isolate, "windowExposedByDefault"));
+  if (object->Has(window_exposed)) {
+    v8::Local<v8::Value> window_exposed_value(object->Get(window_exposed));
+    info.SetWindowExposedByDefault(
+        window_exposed_value.As<v8::Boolean>()->Value());
+  }
+
   return info;
 }
 
@@ -101,15 +119,16 @@ EventFilteringInfo ParseFromObject(v8::Local<v8::Object> object,
 // was the first filter for that event in that extension.
 bool AddFilter(const std::string& event_name,
                const std::string& extension_id,
-               base::DictionaryValue* filter) {
-  FilteredEventListenerCounts& counts =
-      g_filtered_listener_counts.Get()[extension_id];
-  FilteredEventListenerCounts::iterator it = counts.find(event_name);
-  if (it == counts.end())
-    counts[event_name].reset(new ValueCounter);
-
-  int result = counts[event_name]->Add(*filter);
-  return 1 == result;
+               const base::DictionaryValue& filter) {
+  FilteredEventListenerKey key(extension_id, event_name);
+  FilteredEventListenerCounts& all_counts = g_filtered_listener_counts.Get();
+  FilteredEventListenerCounts::const_iterator counts = all_counts.find(key);
+  if (counts == all_counts.end()) {
+    counts = all_counts.insert(std::make_pair(
+                                   key, make_scoped_ptr(new ValueCounter())))
+                 .first;
+  }
+  return counts->second->Add(filter);
 }
 
 // Remove a filter from |event_name| in |extension_id|, returning true if it
@@ -117,12 +136,20 @@ bool AddFilter(const std::string& event_name,
 bool RemoveFilter(const std::string& event_name,
                   const std::string& extension_id,
                   base::DictionaryValue* filter) {
-  FilteredEventListenerCounts& counts =
-      g_filtered_listener_counts.Get()[extension_id];
-  FilteredEventListenerCounts::iterator it = counts.find(event_name);
-  if (it == counts.end())
+  FilteredEventListenerKey key(extension_id, event_name);
+  FilteredEventListenerCounts& all_counts = g_filtered_listener_counts.Get();
+  FilteredEventListenerCounts::const_iterator counts = all_counts.find(key);
+  if (counts == all_counts.end())
     return false;
-  return 0 == it->second->Remove(*filter);
+  // Note: Remove() returns true if it removed the last filter equivalent to
+  // |filter|. If there are more equivalent filters, or if there weren't any in
+  // the first place, it returns false.
+  if (counts->second->Remove(*filter)) {
+    if (counts->second->is_empty())
+      all_counts.erase(counts);  // Clean up if there are no more filters.
+    return true;
+  }
+  return false;
 }
 
 }  // namespace
@@ -136,9 +163,9 @@ EventBindings::EventBindings(ScriptContext* context)
   RouteFunction(
       "AttachFilteredEvent",
       base::Bind(&EventBindings::AttachFilteredEvent, base::Unretained(this)));
-  RouteFunction(
-      "DetachFilteredEvent",
-      base::Bind(&EventBindings::DetachFilteredEvent, base::Unretained(this)));
+  RouteFunction("DetachFilteredEvent",
+                base::Bind(&EventBindings::DetachFilteredEventHandler,
+                           base::Unretained(this)));
   RouteFunction("MatchAgainstEventFilter",
                 base::Bind(&EventBindings::MatchAgainstEventFilter,
                            base::Unretained(this)));
@@ -174,7 +201,7 @@ void EventBindings::AttachEvent(const std::string& event_name) {
   const std::string& extension_id = context()->GetExtensionID();
   if (IncrementEventListenerCount(context(), event_name) == 1) {
     content::RenderThread::Get()->Send(new ExtensionHostMsg_AddListener(
-        extension_id, context()->GetURL(), event_name));
+        extension_id, context()->url(), event_name));
   }
 
   // This is called the first time the page has added a listener. Since
@@ -202,7 +229,7 @@ void EventBindings::DetachEvent(const std::string& event_name, bool is_manual) {
 
   if (DecrementEventListenerCount(context(), event_name) == 0) {
     content::RenderThread::Get()->Send(new ExtensionHostMsg_RemoveListener(
-        extension_id, context()->GetURL(), event_name));
+        extension_id, context()->url(), event_name));
   }
 
   // DetachEvent is called when the last listener for the context is
@@ -230,56 +257,53 @@ void EventBindings::AttachFilteredEvent(
   if (!context()->HasAccessOrThrowError(event_name))
     return;
 
-  std::string extension_id = context()->GetExtensionID();
-
   scoped_ptr<base::DictionaryValue> filter;
-  scoped_ptr<content::V8ValueConverter> converter(
-      content::V8ValueConverter::create());
-
-  base::DictionaryValue* filter_dict = NULL;
-  base::Value* filter_value = converter->FromV8Value(
-      v8::Local<v8::Object>::Cast(args[1]), context()->v8_context());
-  if (!filter_value) {
-    args.GetReturnValue().Set(static_cast<int32_t>(-1));
-    return;
-  }
-  if (!filter_value->GetAsDictionary(&filter_dict)) {
-    delete filter_value;
-    args.GetReturnValue().Set(static_cast<int32_t>(-1));
-    return;
+  {
+    scoped_ptr<content::V8ValueConverter> converter(
+        content::V8ValueConverter::create());
+    scoped_ptr<base::Value> filter_value(converter->FromV8Value(
+        v8::Local<v8::Object>::Cast(args[1]), context()->v8_context()));
+    if (!filter_value || !filter_value->IsType(base::Value::TYPE_DICTIONARY)) {
+      args.GetReturnValue().Set(static_cast<int32_t>(-1));
+      return;
+    }
+    filter = base::DictionaryValue::From(std::move(filter_value));
   }
 
-  filter.reset(filter_dict);
-  EventFilter& event_filter = g_event_filter.Get();
-  int id =
-      event_filter.AddEventMatcher(event_name, ParseEventMatcher(filter.get()));
+  // Hold onto a weak reference to |filter| so that it can be used after passing
+  // ownership to |event_filter|.
+  base::DictionaryValue* filter_weak = filter.get();
+  int id = g_event_filter.Get().AddEventMatcher(
+      event_name, ParseEventMatcher(std::move(filter)));
+  attached_matcher_ids_.insert(id);
 
   // Only send IPCs the first time a filter gets added.
-  if (AddFilter(event_name, extension_id, filter.get())) {
+  std::string extension_id = context()->GetExtensionID();
+  if (AddFilter(event_name, extension_id, *filter_weak)) {
     bool lazy = ExtensionFrameHelper::IsContextForEventPage(context());
     content::RenderThread::Get()->Send(new ExtensionHostMsg_AddFilteredListener(
-        extension_id, event_name, *filter, lazy));
+        extension_id, event_name, *filter_weak, lazy));
   }
 
   args.GetReturnValue().Set(static_cast<int32_t>(id));
 }
 
-void EventBindings::DetachFilteredEvent(
+void EventBindings::DetachFilteredEventHandler(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   CHECK_EQ(2, args.Length());
   CHECK(args[0]->IsInt32());
   CHECK(args[1]->IsBoolean());
-  bool is_manual = args[1]->BooleanValue();
+  DetachFilteredEvent(args[0]->Int32Value(), args[1]->BooleanValue());
+}
 
-  std::string extension_id = context()->GetExtensionID();
-
-  int matcher_id = args[0]->Int32Value();
+void EventBindings::DetachFilteredEvent(int matcher_id, bool is_manual) {
   EventFilter& event_filter = g_event_filter.Get();
   EventMatcher* event_matcher = event_filter.GetEventMatcher(matcher_id);
 
   const std::string& event_name = event_filter.GetEventName(matcher_id);
 
   // Only send IPCs the last time a filter gets removed.
+  std::string extension_id = context()->GetExtensionID();
   if (RemoveFilter(event_name, extension_id, event_matcher->value())) {
     bool remove_lazy =
         is_manual && ExtensionFrameHelper::IsContextForEventPage(context());
@@ -289,6 +313,7 @@ void EventBindings::DetachFilteredEvent(
   }
 
   event_filter.RemoveEventMatcher(matcher_id);
+  attached_matcher_ids_.erase(matcher_id);
 }
 
 void EventBindings::MatchAgainstEventFilter(
@@ -315,10 +340,9 @@ void EventBindings::MatchAgainstEventFilter(
 }
 
 scoped_ptr<EventMatcher> EventBindings::ParseEventMatcher(
-    base::DictionaryValue* filter_dict) {
-  return scoped_ptr<EventMatcher>(new EventMatcher(
-      scoped_ptr<base::DictionaryValue>(filter_dict->DeepCopy()),
-      context()->GetRenderFrame()->GetRoutingID()));
+    scoped_ptr<base::DictionaryValue> filter) {
+  return make_scoped_ptr(new EventMatcher(
+      std::move(filter), context()->GetRenderFrame()->GetRoutingID()));
 }
 
 void EventBindings::OnInvalidated() {
@@ -330,6 +354,14 @@ void EventBindings::OnInvalidated() {
   }
   DCHECK(attached_event_names_.empty())
       << "Events cannot be attached during invalidation";
+
+  // Same for filtered events.
+  std::set<int> attached_matcher_ids_safe = attached_matcher_ids_;
+  for (int matcher_id : attached_matcher_ids_safe) {
+    DetachFilteredEvent(matcher_id, false /* is_manual */);
+  }
+  DCHECK(attached_matcher_ids_.empty())
+      << "Filtered events cannot be attached during invalidation";
 }
 
 }  // namespace extensions

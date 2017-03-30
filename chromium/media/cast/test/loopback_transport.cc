@@ -4,6 +4,9 @@
 
 #include "media/cast/test/loopback_transport.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/tick_clock.h"
 #include "media/cast/test/utility/udp_proxy.h"
@@ -24,7 +27,7 @@ class LoopBackPacketPipe : public test::PacketPipe {
 
   // PacketPipe implementations.
   void Send(scoped_ptr<Packet> packet) final {
-    packet_receiver_.Run(packet.Pass());
+    packet_receiver_.Run(std::move(packet));
   }
 
  private:
@@ -48,12 +51,12 @@ bool LoopBackTransport::SendPacket(PacketRef packet,
                                    const base::Closure& cb) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
   scoped_ptr<Packet> packet_copy(new Packet(packet->data));
-  packet_pipe_->Send(packet_copy.Pass());
+  packet_pipe_->Send(std::move(packet_copy));
   bytes_sent_ += packet->data.size();
   return true;
 }
 
-int64 LoopBackTransport::GetBytesSent() {
+int64_t LoopBackTransport::GetBytesSent() {
   return bytes_sent_;
 }
 
@@ -66,10 +69,10 @@ void LoopBackTransport::Initialize(
       new LoopBackPacketPipe(packet_receiver));
   if (pipe) {
     // Append the loopback pipe to the end.
-    pipe->AppendToPipe(loopback_pipe.Pass());
-    packet_pipe_ = pipe.Pass();
+    pipe->AppendToPipe(std::move(loopback_pipe));
+    packet_pipe_ = std::move(pipe);
   } else {
-    packet_pipe_ = loopback_pipe.Pass();
+    packet_pipe_ = std::move(loopback_pipe);
   }
   packet_pipe_->InitOnIOThread(task_runner, clock);
 }

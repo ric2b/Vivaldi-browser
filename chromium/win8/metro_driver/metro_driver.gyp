@@ -29,11 +29,12 @@
       },
       'targets': [
         {
+          # GN version: //win8/metro_driver:version_resources
           'target_name': 'metro_driver_version_resources',
           'type': 'none',
           'variables': {
             'output_dir': 'metro_driver',
-            'branding_path': '../../chrome/app/theme/<(branding_path_component)/BRANDING',
+            'branding_path': '<(VIVALDI)/app/resources/theme/vivaldi/BRANDING',
             'template_input_path': '../../chrome/app/chrome_version.rc.version',
           },
           'sources': [
@@ -44,6 +45,7 @@
           ],
         },
         {
+          # GN version: //win8/metro_driver
           'target_name': 'metro_driver',
           'type': 'shared_library',
           'dependencies': [
@@ -53,6 +55,7 @@
             '../../crypto/crypto.gyp:crypto',
             '../../ipc/ipc.gyp:ipc',
             '../../sandbox/sandbox.gyp:sandbox',
+            '../../ui/events/events.gyp:events',
             '../../ui/metro_viewer/metro_viewer.gyp:metro_viewer_messages',
             '../../ui/gfx/gfx.gyp:gfx',
             '../../ui/gfx/gfx.gyp:gfx_geometry',
@@ -113,18 +116,19 @@
           ],
           'copies': [
             {
+              # GN version: //win8/metro_viewer:copy_resources
               'destination': '<(PRODUCT_DIR)',
               'files': [
-                'resources/Vivaldi/Logo.png',
-                'resources/Vivaldi/SecondaryTile.png',
-                'resources/Vivaldi/SmallLogo.png',
-                'resources/Vivaldi/splash-620x300.png',
-                'resources/VisualElementsManifest.xml',
+                '<(VIVALDI)/app/other_resources/win8/Logo.png',
+                '<(VIVALDI)/app/other_resources/win8/SecondaryTile.png',
+                '<(VIVALDI)/app/other_resources/win8/SmallLogo.png',
+                'resources/chrome.VisualElementsManifest.xml',
               ],
             },
           ],
         },
         {
+          # GN version: //win8/metro_driver:metro_driver_unittests
           'target_name': 'metro_driver_unittests',
           'type': 'executable',
           'dependencies': [

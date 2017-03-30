@@ -153,7 +153,7 @@ class PathContext(object):
     elif self.platform in ('win', 'win64'):
       self.archive_name = 'chrome-win32.zip'
       self._archive_extract_dir = 'chrome-win32'
-      self._binary_name = 'vivaldi.exe'
+      self._binary_name = 'chrome.exe'
     else:
       raise Exception('Invalid platform: %s' % self.platform)
 
@@ -192,7 +192,8 @@ class PathContext(object):
           self._listing_platform_dir = 'Linux_ARM_Cross-Compile/'
         elif self.platform == 'chromeos':
           self._listing_platform_dir = 'Linux_ChromiumOS_Full/'
-      elif self.platform == 'mac':
+      # There is no 64-bit distinction for non-official mac builds.
+      elif self.platform in ('mac', 'mac64'):
         self._listing_platform_dir = 'Mac/'
         self._binary_name = 'Chromium.app/Contents/MacOS/Chromium'
       elif self.platform == 'win':
@@ -704,12 +705,15 @@ def AskIsGoodBuild(rev, official_builds, status, stdout, stderr):
   # Loop until we get a response that we can parse.
   while True:
     response = raw_input('Revision %s is '
-                         '[(g)ood/(b)ad/(r)etry/(u)nknown/(q)uit]: ' %
+                         '[(g)ood/(b)ad/(r)etry/(u)nknown/(s)tdout/(q)uit]: ' %
                          str(rev))
-    if response and response in ('g', 'b', 'r', 'u'):
+    if response in ('g', 'b', 'r', 'u'):
       return response
-    if response and response == 'q':
+    if response == 'q':
       raise SystemExit()
+    if response == 's':
+      print stdout
+      print stderr
 
 
 def IsGoodASANBuild(rev, official_builds, status, stdout, stderr):

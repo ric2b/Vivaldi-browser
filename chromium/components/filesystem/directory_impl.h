@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_FILESYSTEM_DIRECTORY_IMPL_H_
 #define COMPONENTS_FILESYSTEM_DIRECTORY_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
@@ -27,6 +29,10 @@ class DirectoryImpl : public Directory {
                 base::FilePath directory_path,
                 scoped_ptr<base::ScopedTempDir> temp_dir);
   ~DirectoryImpl() override;
+
+  void set_connection_error_handler(const mojo::Closure& error_handler) {
+    binding_.set_connection_error_handler(error_handler);
+  }
 
   // |Directory| implementation:
   void Read(const ReadCallback& callback) override;

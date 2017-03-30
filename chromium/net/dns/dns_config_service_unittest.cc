@@ -4,7 +4,6 @@
 
 #include "net/dns/dns_config_service.h"
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/location.h"
@@ -115,7 +114,7 @@ class DnsConfigServiceTest : public testing::Test {
   void OnConfigChanged(const DnsConfig& config) {
     last_config_ = config;
     if (quit_on_config_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
  protected:
@@ -147,7 +146,7 @@ class DnsConfigServiceTest : public testing::Test {
   };
 
   void WaitForConfig(base::TimeDelta timeout) {
-    base::CancelableClosure closure(base::MessageLoop::QuitClosure());
+    base::CancelableClosure closure(base::MessageLoop::QuitWhenIdleClosure());
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, closure.callback(), timeout);
     quit_on_config_ = true;

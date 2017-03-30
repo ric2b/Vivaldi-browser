@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -180,7 +182,8 @@ class HistoryQueryTest : public testing::Test {
 
   void TearDown() override {
     if (history_) {
-      history_->SetOnBackendDestroyTask(base::MessageLoop::QuitClosure());
+      history_->SetOnBackendDestroyTask(
+          base::MessageLoop::QuitWhenIdleClosure());
       history_->Cleanup();
       history_.reset();
       base::MessageLoop::current()->Run();  // Wait for the other thread.
@@ -189,7 +192,8 @@ class HistoryQueryTest : public testing::Test {
 
   void QueryHistoryComplete(QueryResults* results) {
     results->Swap(&last_query_results_);
-    base::MessageLoop::current()->Quit();  // Will return out to QueryHistory.
+    base::MessageLoop::current()
+        ->QuitWhenIdle();  // Will return out to QueryHistory.
   }
 
   base::ScopedTempDir temp_dir_;

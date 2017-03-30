@@ -28,11 +28,39 @@ class RuleIterator;
 
 typedef std::pair<ContentSettingsPattern, ContentSettingsPattern> PatternPair;
 
-std::string GetTypeName(ContentSettingsType type);
+// Helper class to iterate over only the values in a map.
+template <typename IteratorType, typename ReferenceType>
+class MapValueIterator {
+ public:
+  explicit MapValueIterator(IteratorType iterator) : iterator_(iterator) {}
+
+  bool operator!=(const MapValueIterator& other) const {
+    return iterator_ != other.iterator_;
+  }
+
+  MapValueIterator& operator++() {
+    ++iterator_;
+    return *this;
+  }
+
+  ReferenceType operator*() { return iterator_->second.get(); }
+
+ private:
+  IteratorType iterator_;
+};
+
+// These constants are copied from extensions/common/extension_constants.h and
+// content/public/common/url_constants.h to avoid complicated dependencies.
+// TODO(vabr): Get these constants through the ContentSettingsClient.
+const char kChromeDevToolsScheme[] = "chrome-devtools";
+const char kChromeUIScheme[] = "chrome";
+const char kExtensionScheme[] = "chrome-extension";
 
 std::string ContentSettingToString(ContentSetting setting);
 
-ContentSetting ContentSettingFromString(const std::string& name);
+// Converts a content setting string to the corresponding ContentSetting.
+// Returns true if |name| specifies a valid content setting, false otherwise.
+bool ContentSettingFromString(const std::string& name, ContentSetting* setting);
 
 // Converts |Value| to |ContentSetting|.
 ContentSetting ValueToContentSetting(const base::Value* value);
@@ -49,36 +77,14 @@ std::string CreatePatternString(
     const ContentSettingsPattern& item_pattern,
     const ContentSettingsPattern& top_level_frame_pattern);
 
-// Caller takes the ownership of the returned |base::Value*|.
-base::Value* GetContentSettingValueAndPatterns(
-    RuleIterator* rule_iterator,
-    const GURL& primary_url,
-    const GURL& secondary_url,
-    ContentSettingsPattern* primary_pattern,
-    ContentSettingsPattern* secondary_pattern);
-
 // Returns a |base::Value*| representation of |setting| if |setting| is
 // a valid content setting. Otherwise, returns a nullptr.
 scoped_ptr<base::Value> ContentSettingToValue(ContentSetting setting);
-
-base::Value* GetContentSettingValueAndPatterns(
-    const ProviderInterface* provider,
-    const GURL& primary_url,
-    const GURL& secondary_url,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier,
-    bool include_incognito,
-    ContentSettingsPattern* primary_pattern,
-    ContentSettingsPattern* secondary_pattern);
 
 // Populates |rules| with content setting rules for content types that are
 // handled by the renderer.
 void GetRendererContentSettingRules(const HostContentSettingsMap* map,
                                     RendererContentSettingRules* rules);
-
-// Get the flags to use when registering the preference to store |content_type|
-// settings.
-uint32 PrefRegistrationFlagsForType(ContentSettingsType content_type);
 
 }  // namespace content_settings
 

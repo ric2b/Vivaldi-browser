@@ -7,9 +7,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile_window.h"
-#include "chrome/browser/signin/signin_header_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 
 namespace extensions {
@@ -36,7 +37,8 @@ bool PrincipalsPrivateShowAvatarBubbleFunction::RunSyncSafe() {
   if (browser) {
     browser->window()->ShowAvatarBubbleFromAvatarButton(
         BrowserWindow::AVATAR_BUBBLE_MODE_ACCOUNT_MANAGEMENT,
-        signin::ManageAccountsParams());
+        signin::ManageAccountsParams(),
+        signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
   }
   return true;
 }

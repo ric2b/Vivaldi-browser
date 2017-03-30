@@ -4,6 +4,8 @@
 
 #include "cc/test/begin_frame_args_test.h"
 
+#include <stdint.h>
+
 #include "base/time/time.h"
 #include "cc/output/begin_frame_args.h"
 
@@ -26,9 +28,9 @@ BeginFrameArgs CreateBeginFrameArgsForTesting(
 
 BeginFrameArgs CreateBeginFrameArgsForTesting(
     BeginFrameArgs::CreationLocation location,
-    int64 frame_time,
-    int64 deadline,
-    int64 interval) {
+    int64_t frame_time,
+    int64_t deadline,
+    int64_t interval) {
   return BeginFrameArgs::Create(
       location, base::TimeTicks::FromInternalValue(frame_time),
       base::TimeTicks::FromInternalValue(deadline),
@@ -37,22 +39,14 @@ BeginFrameArgs CreateBeginFrameArgsForTesting(
 
 BeginFrameArgs CreateBeginFrameArgsForTesting(
     BeginFrameArgs::CreationLocation location,
-    int64 frame_time,
-    int64 deadline,
-    int64 interval,
+    int64_t frame_time,
+    int64_t deadline,
+    int64_t interval,
     BeginFrameArgs::BeginFrameArgsType type) {
   return BeginFrameArgs::Create(
       location, base::TimeTicks::FromInternalValue(frame_time),
       base::TimeTicks::FromInternalValue(deadline),
       base::TimeDelta::FromInternalValue(interval), type);
-}
-
-BeginFrameArgs CreateExpiredBeginFrameArgsForTesting(
-    BeginFrameArgs::CreationLocation location) {
-  base::TimeTicks now = base::TimeTicks::Now();
-  return BeginFrameArgs::Create(
-      location, now, now - BeginFrameArgs::DefaultInterval(),
-      BeginFrameArgs::DefaultInterval(), BeginFrameArgs::NORMAL);
 }
 
 BeginFrameArgs CreateBeginFrameArgsForTesting(
@@ -62,15 +56,6 @@ BeginFrameArgs CreateBeginFrameArgsForTesting(
   return BeginFrameArgs::Create(
       location, now, now + BeginFrameArgs::DefaultInterval() -
                          BeginFrameArgs::DefaultEstimatedParentDrawTime(),
-      BeginFrameArgs::DefaultInterval(), BeginFrameArgs::NORMAL);
-}
-
-BeginFrameArgs CreateExpiredBeginFrameArgsForTesting(
-    BeginFrameArgs::CreationLocation location,
-    base::SimpleTestTickClock* now_src) {
-  base::TimeTicks now = now_src->NowTicks();
-  return BeginFrameArgs::Create(
-      location, now, now - BeginFrameArgs::DefaultInterval(),
       BeginFrameArgs::DefaultInterval(), BeginFrameArgs::NORMAL);
 }
 

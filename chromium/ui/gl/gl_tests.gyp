@@ -14,6 +14,8 @@
         'test/run_all_unittests.cc',
         'gpu_timing_unittest.cc',
         'gl_api_unittest.cc',
+        'gl_image_ref_counted_memory_unittest.cc',
+        'gl_image_shared_memory_unittest.cc',
       ],
       'include_dirs': [
         '<(DEPTH)/third_party/khronos',
@@ -23,7 +25,11 @@
         '<(DEPTH)/base/base.gyp:test_support_base',
         '<(DEPTH)/testing/gmock.gyp:gmock',
         '<(DEPTH)/testing/gtest.gyp:gtest',
+        '<(DEPTH)/third_party/mesa/mesa.gyp:osmesa',
+        '<(DEPTH)/ui/gfx/gfx.gyp:gfx',
+        '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
         '<(DEPTH)/ui/gl/gl.gyp:gl',
+        '<(DEPTH)/ui/gl/gl.gyp:gl_test_support',
         '<(DEPTH)/ui/gl/gl.gyp:gl_unittest_utils',
       ],
       'conditions': [
@@ -43,9 +49,22 @@
             'glx_api_unittest.cc',
           ],
         }],
+        ['OS == "mac"', {
+          'sources': [
+            'gl_image_io_surface_unittest.cc',
+          ],
+        }],
         ['OS == "win"', {
           'sources': [
             'wgl_api_unittest.cc',
+          ],
+        }],
+        ['use_ozone==1', {
+          'dependencies': [
+            '../ozone/ozone.gyp:ozone',
+          ],
+          'sources': [
+            'gl_image_ozone_native_pixmap_unittest.cc',
           ],
         }],
       ],
@@ -66,8 +85,29 @@
           'includes': [ '../../build/apk_test.gypi' ],
         },
       ],
+      'conditions': [
+        ['test_isolation_mode != "noop"',
+          {
+            'targets': [
+              {
+                'target_name': 'gl_unittests_apk_run',
+                'type': 'none',
+                'dependencies': [
+                  'gl_unittests_apk',
+                ],
+                'includes': [
+                  '../../build/isolate.gypi',
+                ],
+                'sources': [
+                  'gl_unittests_apk.isolate',
+                ],
+              },
+            ]
+          }
+        ],
+      ],
     }],
-    ['test_isolation_mode != "noop"', {
+    ['test_isolation_mode != "noop" and OS != "android"', {
       'targets': [
         {
           'target_name': 'gl_unittests_run',

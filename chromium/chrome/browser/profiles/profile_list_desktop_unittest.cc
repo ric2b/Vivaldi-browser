@@ -7,11 +7,12 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/avatar_menu_observer.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -19,6 +20,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -73,7 +75,7 @@ class ProfileListDesktopTest : public testing::Test {
 
   TestingProfileManager* manager() { return &manager_; }
 
-  void AddOmittedProfile(std::string name) {
+  void AddOmittedProfile(const std::string& name) {
     ProfileInfoCache* cache = manager()->profile_info_cache();
     cache->AddProfileToCache(
         cache->GetUserDataDir().AppendASCII(name), ASCIIToUTF16(name),
@@ -282,37 +284,6 @@ TEST_F(ProfileListDesktopTest, ShowAvatarMenuInTrial) {
 #endif
 }
 
-TEST_F(ProfileListDesktopTest, DontShowOldAvatarMenuForSingleProfile) {
-  switches::DisableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
-
-  manager()->CreateTestingProfile("Test 1");
-
-  EXPECT_FALSE(AvatarMenu::ShouldShowAvatarMenu());
-
-  // If multiprofile mode is enabled, there are no other cases when we wouldn't
-  // show the menu.
-  if (profiles::IsMultipleProfilesEnabled())
-    return;
-
-  manager()->CreateTestingProfile("Test 2");
-
-  EXPECT_FALSE(AvatarMenu::ShouldShowAvatarMenu());
-}
-
-TEST_F(ProfileListDesktopTest, AlwaysShowNewAvatarMenu) {
-  // If multiprofile mode is not enabled then the menu is never shown.
-  if (!profiles::IsMultipleProfilesEnabled())
-    return;
-
-  switches::EnableNewAvatarMenuForTesting(
-      base::CommandLine::ForCurrentProcess());
-
-  manager()->CreateTestingProfile("Test 1");
-
-  EXPECT_TRUE(AvatarMenu::ShouldShowAvatarMenu());
-}
-
 TEST_F(ProfileListDesktopTest, ShowAvatarMenu) {
   // If multiprofile mode is not enabled then the menu is never shown.
   if (!profiles::IsMultipleProfilesEnabled())
@@ -350,7 +321,7 @@ TEST_F(ProfileListDesktopTest, SyncState) {
   // Now check that the username of a supervised user shows the supervised
   // user avatar label instead.
   base::string16 supervised_user_label =
-      l10n_util::GetStringUTF16(IDS_SUPERVISED_USER_AVATAR_LABEL);
+      l10n_util::GetStringUTF16(IDS_LEGACY_SUPERVISED_USER_AVATAR_LABEL);
   const AvatarMenu::Item& item1 = model->GetItemAt(0);
   EXPECT_NE(item1.username, supervised_user_label);
 

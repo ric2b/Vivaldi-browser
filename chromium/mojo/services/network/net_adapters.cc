@@ -4,6 +4,10 @@
 
 #include "mojo/services/network/net_adapters.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "net/base/net_errors.h"
 
 namespace mojo {
@@ -17,9 +21,7 @@ const uint32_t kMaxBufSize = 64 * 1024;
 NetToMojoPendingBuffer::NetToMojoPendingBuffer(
     ScopedDataPipeProducerHandle handle,
     void* buffer)
-    : handle_(handle.Pass()),
-      buffer_(buffer) {
-}
+    : handle_(std::move(handle)), buffer_(buffer) {}
 
 NetToMojoPendingBuffer::~NetToMojoPendingBuffer() {
   if (handle_.is_valid())
@@ -39,7 +41,7 @@ MojoResult NetToMojoPendingBuffer::BeginWrite(
   if (result == MOJO_RESULT_OK) {
     if (*num_bytes > kMaxBufSize)
       *num_bytes = kMaxBufSize;
-    *pending = new NetToMojoPendingBuffer(handle->Pass(), buf);
+    *pending = new NetToMojoPendingBuffer(std::move(*handle), buf);
   }
   return result;
 }
@@ -48,7 +50,7 @@ ScopedDataPipeProducerHandle NetToMojoPendingBuffer::Complete(
     uint32_t num_bytes) {
   EndWriteDataRaw(handle_.get(), num_bytes);
   buffer_ = NULL;
-  return handle_.Pass();
+  return std::move(handle_);
 }
 
 // -----------------------------------------------------------------------------
@@ -67,9 +69,7 @@ NetToMojoIOBuffer::~NetToMojoIOBuffer() {
 MojoToNetPendingBuffer::MojoToNetPendingBuffer(
     ScopedDataPipeConsumerHandle handle,
     const void* buffer)
-    : handle_(handle.Pass()),
-      buffer_(buffer) {
-}
+    : handle_(std::move(handle)), buffer_(buffer) {}
 
 MojoToNetPendingBuffer::~MojoToNetPendingBuffer() {
 }
@@ -84,7 +84,7 @@ MojoResult MojoToNetPendingBuffer::BeginRead(
   MojoResult result = BeginReadDataRaw(handle->get(), &buffer, num_bytes,
                                        MOJO_READ_DATA_FLAG_NONE);
   if (result == MOJO_RESULT_OK)
-    *pending = new MojoToNetPendingBuffer(handle->Pass(), buffer);
+    *pending = new MojoToNetPendingBuffer(std::move(*handle), buffer);
   return result;
 }
 
@@ -92,7 +92,7 @@ ScopedDataPipeConsumerHandle MojoToNetPendingBuffer::Complete(
     uint32_t num_bytes) {
   EndReadDataRaw(handle_.get(), num_bytes);
   buffer_ = NULL;
-  return handle_.Pass();
+  return std::move(handle_);
 }
 
 // -----------------------------------------------------------------------------
@@ -112,7 +112,7 @@ NetworkErrorPtr MakeNetworkError(int error_code) {
   error->code = error_code;
   if (error_code <= 0)
     error->description = net::ErrorToString(error_code);
-  return error.Pass();
+  return error;
 }
 
 }  // namespace mojo

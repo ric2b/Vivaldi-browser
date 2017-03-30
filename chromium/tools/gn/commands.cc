@@ -190,6 +190,10 @@ bool GetTargetTypeFilter(Target::OutputType* type) {
     *type = Target::SHARED_LIBRARY;
     return true;
   }
+  if (value == "loadable_module") {
+    *type = Target::LOADABLE_MODULE;
+    return true;
+  }
   if (value == "static_library") {
     *type = Target::STATIC_LIBRARY;
     return true;
@@ -319,8 +323,6 @@ void PrintTargetsAsOutputs(bool indent,
   const BuildSettings* build_settings =
       targets[0]->settings()->build_settings();
 
-  SourceDir current_dir = SourceDirForCurrentDirectory(
-      build_settings->root_path());
   for (const Target* target : targets) {
     // Use the link output file if there is one, otherwise fall back to the
     // dependency output file (for actions, for example).
@@ -330,7 +332,8 @@ void PrintTargetsAsOutputs(bool indent,
 
     SourceFile output_as_source =
         output_file.AsSourceFile(build_settings);
-    std::string result = RebasePath(output_as_source.value(), current_dir,
+    std::string result = RebasePath(output_as_source.value(),
+                                    build_settings->build_dir(),
                                     build_settings->root_path_utf8());
     if (indent)
       OutputString("  ");

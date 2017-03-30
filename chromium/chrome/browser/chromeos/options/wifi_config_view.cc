@@ -4,7 +4,10 @@
 
 #include "chrome/browser/chromeos/options/wifi_config_view.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -900,8 +903,10 @@ void WifiConfigView::Init(bool show_8021x) {
   const NetworkState* network = GetNetworkState();
   if (network) {
     if (network->type() == shill::kTypeWifi) {
-      if (network->security_class() == shill::kSecurity8021x)
+      if (network->security_class() == shill::kSecurity8021x ||
+          network->IsDynamicWep()) {
         show_8021x = true;
+      }
     } else if (network->type() == shill::kTypeEthernet) {
       show_8021x = true;
     } else {

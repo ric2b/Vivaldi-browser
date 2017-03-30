@@ -6,9 +6,12 @@
 #define CHROME_BROWSER_UI_ANDROID_AUTOFILL_AUTOFILL_KEYBOARD_ACCESSORY_VIEW_H_
 
 #include <jni.h>
+#include <stddef.h>
+#include <vector>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 
 namespace gfx {
@@ -31,9 +34,19 @@ class AutofillKeyboardAccessoryView : public AutofillPopupView {
   // Methods called from Java via JNI
   // --------------------------------------------------------------------------
   // Called when an autofill item was selected.
-  void SuggestionSelected(JNIEnv* env, jobject obj, jint list_index);
+  void SuggestionSelected(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          jint list_index);
 
-  void ViewDismissed(JNIEnv* env, jobject obj);
+  void DeletionRequested(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj,
+                         jint list_index);
+
+  void DeletionConfirmed(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj);
+
+  void ViewDismissed(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj);
 
   static bool RegisterAutofillKeyboardAccessoryView(JNIEnv* env);
 
@@ -48,6 +61,13 @@ class AutofillKeyboardAccessoryView : public AutofillPopupView {
   ~AutofillKeyboardAccessoryView() override;
 
   AutofillPopupController* controller_;  // weak.
+
+  // The index of the last item the user long-pressed (they will be shown a
+  // confirmation dialog).
+  int deleting_index_;
+
+  // Mapping from Java list index to autofill suggestion index.
+  std::vector<int> positions_;
 
   // The corresponding java object.
   base::android::ScopedJavaGlobalRef<jobject> java_object_;

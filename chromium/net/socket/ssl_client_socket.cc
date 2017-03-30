@@ -15,6 +15,10 @@
 #include "net/ssl/ssl_config_service.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 
+#if defined(USE_OPENSSL)
+#include "net/socket/ssl_client_socket_openssl.h"
+#endif
+
 namespace net {
 
 SSLClientSocket::SSLClientSocket()
@@ -28,16 +32,8 @@ NextProto SSLClientSocket::NextProtoFromString(
     const std::string& proto_string) {
   if (proto_string == "http1.1" || proto_string == "http/1.1") {
     return kProtoHTTP11;
-  } else if (proto_string == "spdy/2") {
-    return kProtoDeprecatedSPDY2;
-  } else if (proto_string == "spdy/3") {
-    return kProtoSPDY3;
   } else if (proto_string == "spdy/3.1") {
     return kProtoSPDY31;
-  } else if (proto_string == "h2-14") {
-    // For internal consistency, HTTP/2 is named SPDY4 within Chromium.
-    // This is the HTTP/2 draft-14 identifier.
-    return kProtoHTTP2_14;
   } else if (proto_string == "h2") {
     return kProtoHTTP2;
   } else if (proto_string == "quic/1+spdy/3") {
@@ -52,16 +48,8 @@ const char* SSLClientSocket::NextProtoToString(NextProto next_proto) {
   switch (next_proto) {
     case kProtoHTTP11:
       return "http/1.1";
-    case kProtoDeprecatedSPDY2:
-      return "spdy/2";
-    case kProtoSPDY3:
-      return "spdy/3";
     case kProtoSPDY31:
       return "spdy/3.1";
-    case kProtoHTTP2_14:
-      // For internal consistency, HTTP/2 is named SPDY4 within Chromium.
-      // This is the HTTP/2 draft-14 identifier.
-      return "h2-14";
     case kProtoHTTP2:
       return "h2";
     case kProtoQUIC1SPDY3:
@@ -84,6 +72,17 @@ const char* SSLClientSocket::NextProtoStatusToString(
       return "no-overlap";
   }
   return NULL;
+}
+
+// static
+void SSLClientSocket::SetSSLKeyLogFile(
+    const base::FilePath& path,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
+#if defined(USE_OPENSSL) && !defined(OS_NACL)
+  SSLClientSocketOpenSSL::SetSSLKeyLogFile(path, task_runner);
+#else
+  NOTIMPLEMENTED();
+#endif
 }
 
 bool SSLClientSocket::WasNpnNegotiated() const {
@@ -135,14 +134,13 @@ void SSLClientSocket::RecordNegotiationExtension() {
 void SSLClientSocket::RecordChannelIDSupport(
     ChannelIDService* channel_id_service,
     bool negotiated_channel_id,
-    bool channel_id_enabled,
-    bool supports_ecc) {
+    bool channel_id_enabled) {
   // Since this enum is used for a histogram, do not change or re-use values.
   enum {
     DISABLED = 0,
     CLIENT_ONLY = 1,
     CLIENT_AND_SERVER = 2,
-    CLIENT_NO_ECC = 3,
+    // CLIENT_NO_ECC is unused now.
     // CLIENT_BAD_SYSTEM_TIME is unused now.
     CLIENT_BAD_SYSTEM_TIME = 4,
     CLIENT_NO_CHANNEL_ID_SERVICE = 5,
@@ -153,8 +151,6 @@ void SSLClientSocket::RecordChannelIDSupport(
   } else if (channel_id_enabled) {
     if (!channel_id_service)
       supported = CLIENT_NO_CHANNEL_ID_SERVICE;
-    else if (!supports_ecc)
-      supported = CLIENT_NO_ECC;
     else
       supported = CLIENT_ONLY;
   }
@@ -172,18 +168,14 @@ bool SSLClientSocket::IsChannelIDEnabled(
     DVLOG(1) << "NULL channel_id_service_, not enabling channel ID.";
     return false;
   }
-  if (!crypto::ECPrivateKey::IsSupported()) {
-    DVLOG(1) << "Elliptic Curve not supported, not enabling channel ID.";
-    return false;
-  }
   return true;
 }
 
 // static
 bool SSLClientSocket::HasCipherAdequateForHTTP2(
-    const std::vector<uint16>& cipher_suites) {
-  for (uint16 cipher : cipher_suites) {
-    if (IsSecureTLSCipherSuite(cipher))
+    const std::vector<uint16_t>& cipher_suites) {
+  for (uint16_t cipher : cipher_suites) {
+    if (IsTLSCipherSuiteAllowedByHTTP2(cipher))
       return true;
   }
   return false;
@@ -197,14 +189,9 @@ bool SSLClientSocket::IsTLSVersionAdequateForHTTP2(
 
 // static
 std::vector<uint8_t> SSLClientSocket::SerializeNextProtos(
-    const NextProtoVector& next_protos,
-    bool can_advertise_http2) {
+    const NextProtoVector& next_protos) {
   std::vector<uint8_t> wire_protos;
   for (const NextProto next_proto : next_protos) {
-    if (!can_advertise_http2 && kProtoHTTP2MinimumVersion <= next_proto &&
-        next_proto <= kProtoHTTP2MaximumVersion) {
-      continue;
-    }
     const std::string proto = NextProtoToString(next_proto);
     if (proto.size() > 255) {
       LOG(WARNING) << "Ignoring overlong NPN/ALPN protocol: " << proto;

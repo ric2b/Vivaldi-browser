@@ -8,9 +8,9 @@
 #define BASE_FILES_FILE_PATH_WATCHER_H_
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 
@@ -62,9 +62,8 @@ class BASE_EXPORT FilePathWatcher {
       return task_runner_;
     }
 
-    void set_task_runner(
-        scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-      task_runner_ = task_runner.Pass();
+    void set_task_runner(scoped_refptr<base::SingleThreadTaskRunner> runner) {
+      task_runner_ = std::move(runner);
     }
 
     // Must be called before the PlatformDelegate is deleted.

@@ -4,6 +4,8 @@
 
 #include "content/renderer/media/webrtc_local_audio_track.h"
 
+#include <stdint.h>
+
 #include <limits>
 
 #include "content/public/renderer/media_stream_audio_sink.h"
@@ -21,7 +23,7 @@ WebRtcLocalAudioTrack::WebRtcLocalAudioTrack(
     WebRtcLocalAudioTrackAdapter* adapter,
     const scoped_refptr<WebRtcAudioCapturer>& capturer,
     WebAudioCapturerSource* webaudio_source)
-    : MediaStreamTrack(true),
+    : MediaStreamAudioTrack(true),
       adapter_(adapter),
       capturer_(capturer),
       webaudio_source_(webaudio_source) {
@@ -60,13 +62,14 @@ void WebRtcLocalAudioTrack::Capture(const media::AudioBus& audio_bus,
   // post-processed data that may be all zeros even though the signal contained
   // energy before the processing.  In this case, report nonzero energy even if
   // the energy of the data in |audio_bus| is zero.
-  const float minimum_signal_level = force_report_nonzero_energy ?
-      1.0f / std::numeric_limits<int16>::max() : 0.0f;
+  const float minimum_signal_level =
+      force_report_nonzero_energy ? 1.0f / std::numeric_limits<int16_t>::max()
+                                  : 0.0f;
   const float signal_level = std::max(
       minimum_signal_level,
       std::min(1.0f, level_calculator_->Calculate(audio_bus)));
   const int signal_level_as_pcm16 =
-      static_cast<int>(signal_level * std::numeric_limits<int16>::max() +
+      static_cast<int>(signal_level * std::numeric_limits<int16_t>::max() +
                        0.5f /* rounding to nearest int */);
   adapter_->SetSignalLevel(signal_level_as_pcm16);
 
@@ -90,7 +93,6 @@ void WebRtcLocalAudioTrack::Capture(const media::AudioBus& audio_bus,
   // disabled. This is currently done so to feed input to WebRTC typing
   // detection and should be changed when audio processing is moved from
   // WebRTC to the track.
-  std::vector<int> voe_channels = adapter_->VoeChannels();
   for (const auto& sink : sinks)
     sink->OnData(audio_bus, estimated_capture_time);
 }

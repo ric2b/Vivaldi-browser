@@ -6,6 +6,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
@@ -26,7 +27,7 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "printing/image.h"
 #include "printing/printing_test.h"
 
@@ -80,7 +81,7 @@ class PrintingLayoutTest : public PrintingTest<InProcessBrowserTest>,
       case printing::JobEventDetails::JOB_DONE: {
         // Succeeded.
         base::MessageLoop::current()->PostTask(
-            FROM_HERE, base::MessageLoop::QuitClosure());
+            FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
         break;
       }
       case printing::JobEventDetails::USER_INIT_CANCELED:
@@ -88,7 +89,7 @@ class PrintingLayoutTest : public PrintingTest<InProcessBrowserTest>,
         // Failed.
         ASSERT_TRUE(false);
         base::MessageLoop::current()->PostTask(
-            FROM_HERE, base::MessageLoop::QuitClosure());
+            FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
         break;
       }
       case printing::JobEventDetails::NEW_DOC:
@@ -207,7 +208,7 @@ class PrintingLayoutTest : public PrintingTest<InProcessBrowserTest>,
       base::FilePath file;
       while (!(file = enumerator.Next()).empty()) {
         std::wstring ext = file.Extension();
-        if (base::strcasecmp(base::WideToUTF8(ext).c_str(), ".emf") == 0) {
+        if (base::EqualsCaseInsensitiveASCII(base::WideToUTF8(ext), ".emf")) {
           EXPECT_FALSE(found_emf) << "Found a leftover .EMF file: \"" <<
               emf_file << "\" and \"" << file.value() <<
               "\" when looking for \"" << verification_name << "\"";
@@ -215,7 +216,7 @@ class PrintingLayoutTest : public PrintingTest<InProcessBrowserTest>,
           emf_file = file.value();
           continue;
         }
-        if (base::strcasecmp(base::WideToUTF8(ext).c_str(), ".prn") == 0) {
+        if (base::EqualsCaseInsensitiveASCII(base::WideToUTF8(ext), ".prn")) {
           EXPECT_FALSE(found_prn) << "Found a leftover .PRN file: \"" <<
               prn_file << "\" and \"" << file.value() <<
               "\" when looking for \"" << verification_name << "\"";
@@ -339,10 +340,10 @@ IN_PROC_BROWSER_TEST_F(PrintingLayoutTextTest, DISABLED_Complex) {
                                                    "close_printdlg_thread");
 
   // Print a document, check its output.
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ui_test_utils::NavigateToURL(
-      browser(), test_server()->GetURL("files/printing/test1.html"));
+      browser(), embedded_test_server()->GetURL("/printing/test1.html"));
   close_printdlg_thread.Start();
   PrintNowTab();
   close_printdlg_thread.Join();
@@ -355,12 +356,12 @@ struct TestPool {
 };
 
 const TestPool kTestPool[] = {
-  // ImagesB&W
-  "files/printing/test2.html", L"test2",
-  // ImagesTransparent
-  "files/printing/test3.html", L"test3",
-  // ImageColor
-  "files/printing/test4.html", L"test4",
+    // ImagesB&W
+    "/printing/test2.html", L"test2",
+    // ImagesTransparent
+    "/printing/test3.html", L"test3",
+    // ImageColor
+    "/printing/test4.html", L"test4",
 };
 
 // http://crbug.com/7721
@@ -368,7 +369,7 @@ IN_PROC_BROWSER_TEST_F(PrintingLayoutTest, DISABLED_ManyTimes) {
   if (IsTestCaseDisabled())
     return;
 
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   DismissTheWindow dismisser;
 
@@ -377,7 +378,8 @@ IN_PROC_BROWSER_TEST_F(PrintingLayoutTest, DISABLED_ManyTimes) {
     if (i)
       CleanupDumpDirectory();
     const TestPool& test = kTestPool[i % arraysize(kTestPool)];
-    ui_test_utils::NavigateToURL(browser(), test_server()->GetURL(test.source));
+    ui_test_utils::NavigateToURL(browser(),
+                                 embedded_test_server()->GetURL(test.source));
     base::DelegateSimpleThread close_printdlg_thread1(&dismisser,
                                                       "close_printdlg_thread");
     EXPECT_EQ(NULL, FindDialogWindow(dismisser.owner_process()));
@@ -417,11 +419,12 @@ IN_PROC_BROWSER_TEST_F(PrintingLayoutTest, DISABLED_Delayed) {
   if (IsTestCaseDisabled())
     return;
 
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   {
     bool is_timeout = true;
-    GURL url = test_server()->GetURL("files/printing/popup_delayed_print.htm");
+    GURL url =
+        embedded_test_server()->GetURL("/printing/popup_delayed_print.htm");
     ui_test_utils::NavigateToURL(browser(), url);
 
     DismissTheWindow dismisser;
@@ -431,7 +434,7 @@ IN_PROC_BROWSER_TEST_F(PrintingLayoutTest, DISABLED_Delayed) {
     close_printdlg_thread.Join();
 
     // Force a navigation elsewhere to verify that it's fine with it.
-    url = test_server()->GetURL("files/printing/test1.html");
+    url = embedded_test_server()->GetURL("/printing/test1.html");
     ui_test_utils::NavigateToURL(browser(), url);
   }
   chrome::CloseWindow(browser());
@@ -446,10 +449,10 @@ IN_PROC_BROWSER_TEST_F(PrintingLayoutTest, DISABLED_IFrame) {
   if (IsTestCaseDisabled())
     return;
 
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   {
-    GURL url = test_server()->GetURL("files/printing/iframe.htm");
+    GURL url = embedded_test_server()->GetURL("/printing/iframe.htm");
     ui_test_utils::NavigateToURL(browser(), url);
 
     DismissTheWindow dismisser;
@@ -459,7 +462,7 @@ IN_PROC_BROWSER_TEST_F(PrintingLayoutTest, DISABLED_IFrame) {
     close_printdlg_thread.Join();
 
     // Force a navigation elsewhere to verify that it's fine with it.
-    url = test_server()->GetURL("files/printing/test1.html");
+    url = embedded_test_server()->GetURL("/printing/test1.html");
     ui_test_utils::NavigateToURL(browser(), url);
   }
   chrome::CloseWindow(browser());

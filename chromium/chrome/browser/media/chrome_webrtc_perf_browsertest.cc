@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -20,6 +21,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -59,10 +61,13 @@ class WebRtcPerfBrowserTest : public WebRtcTestBase {
         "    JSON.stringify(peerConnectionDataStore));",
         webrtc_internals_tab);
 
-    base::Value* parsed_json = base::JSONReader::DeprecatedRead(all_stats_json);
+    scoped_ptr<base::Value> parsed_json =
+        base::JSONReader::Read(all_stats_json);
     base::DictionaryValue* result;
-    if (parsed_json && parsed_json->GetAsDictionary(&result))
+    if (parsed_json.get() && parsed_json->GetAsDictionary(&result)) {
+      ignore_result(parsed_json.release());
       return result;
+    }
 
     return NULL;
   }
@@ -101,10 +106,8 @@ class WebRtcPerfBrowserTest : public WebRtcTestBase {
 // This is manual for its long execution time.
 IN_PROC_BROWSER_TEST_F(WebRtcPerfBrowserTest,
                        MANUAL_RunsAudioVideoCall60SecsAndLogsInternalMetrics) {
-  if (OnWinXp()) return;
-
   ASSERT_TRUE(test::HasReferenceFilesInCheckout());
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_GE(TestTimeouts::action_max_timeout().InSeconds(), 100) <<
       "This is a long-running test; you must specify "
@@ -146,10 +149,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcPerfBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(WebRtcPerfBrowserTest,
                        MANUAL_RunsOneWayCall60SecsAndLogsInternalMetrics) {
-  if (OnWinXp()) return;
-
   ASSERT_TRUE(test::HasReferenceFilesInCheckout());
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_GE(TestTimeouts::action_max_timeout().InSeconds(), 100) <<
       "This is a long-running test; you must specify "

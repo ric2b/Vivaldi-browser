@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread.h"
 #include "content/browser/browser_thread_impl.h"
@@ -134,7 +138,7 @@ class ForceCloseDBCallbacks : public IndexedDBCallbacks {
   void OnSuccess(const std::vector<base::string16>&) override {}
   void OnSuccess(scoped_ptr<IndexedDBConnection> connection,
                  const IndexedDBDatabaseMetadata& metadata) override {
-    connection_ = connection.Pass();
+    connection_ = std::move(connection);
     idb_context_->ConnectionOpened(origin_url_, connection_.get());
   }
 
@@ -263,7 +267,7 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailure) {
   scoped_refptr<MockIndexedDBCallbacks> callbacks(new MockIndexedDBCallbacks());
   scoped_refptr<MockIndexedDBDatabaseCallbacks> db_callbacks(
       new MockIndexedDBDatabaseCallbacks());
-  const int64 transaction_id = 1;
+  const int64_t transaction_id = 1;
   IndexedDBPendingConnection connection(
       callbacks,
       db_callbacks,

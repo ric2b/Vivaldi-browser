@@ -4,6 +4,8 @@
 
 #include "media/cast/common/transport_encryption_handler.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "crypto/encryptor.h"
 #include "crypto/symmetric_key.h"
@@ -15,7 +17,7 @@ namespace {
 const size_t kAesBlockSize = 16;
 const size_t kAesKeySize = 16;
 
-std::string GetAesNonce(uint32 frame_id, const std::string& iv_mask) {
+std::string GetAesNonce(uint32_t frame_id, const std::string& iv_mask) {
   std::string aes_nonce(kAesBlockSize, 0);
 
   // Serializing frame_id in big-endian order (aes_nonce[8] is the most
@@ -41,8 +43,8 @@ TransportEncryptionHandler::TransportEncryptionHandler()
 
 TransportEncryptionHandler::~TransportEncryptionHandler() {}
 
-bool TransportEncryptionHandler::Initialize(std::string aes_key,
-                                            std::string aes_iv_mask) {
+bool TransportEncryptionHandler::Initialize(const std::string& aes_key,
+                                            const std::string& aes_iv_mask) {
   is_activated_ = false;
   if (aes_iv_mask.size() == kAesKeySize && aes_key.size() == kAesKeySize) {
     iv_mask_ = aes_iv_mask;
@@ -61,7 +63,7 @@ bool TransportEncryptionHandler::Initialize(std::string aes_key,
   return true;
 }
 
-bool TransportEncryptionHandler::Encrypt(uint32 frame_id,
+bool TransportEncryptionHandler::Encrypt(uint32_t frame_id,
                                          const base::StringPiece& data,
                                          std::string* encrypted_data) {
   if (!is_activated_)
@@ -77,7 +79,7 @@ bool TransportEncryptionHandler::Encrypt(uint32 frame_id,
   return true;
 }
 
-bool TransportEncryptionHandler::Decrypt(uint32 frame_id,
+bool TransportEncryptionHandler::Decrypt(uint32_t frame_id,
                                          const base::StringPiece& ciphertext,
                                          std::string* plaintext) {
   if (!is_activated_) {

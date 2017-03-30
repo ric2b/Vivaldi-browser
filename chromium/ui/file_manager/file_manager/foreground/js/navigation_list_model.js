@@ -16,7 +16,6 @@ var NavigationModelItemType = {
  * @param {string} label
  * @param {NavigationModelItemType} type
  * @constructor
- * @suppress {checkStructDictInheritance}
  * @struct
  */
 function NavigationModelItem(label, type) {
@@ -36,7 +35,6 @@ NavigationModelItem.prototype = /** @struct */ {
  * @param {!DirectoryEntry} entry Entry. Cannot be null.
  * @constructor
  * @extends {NavigationModelItem}
- * @suppress {checkStructDictInheritance}
  * @struct
  */
 function NavigationModelShortcutItem(label, entry) {
@@ -79,7 +77,6 @@ NavigationModelVolumeItem.prototype = /** @struct */ {
  * @param {string} icon Name of an icon on the menu button.
  * @constructor
  * @extends {NavigationModelItem}
- * @suppress {checkStructDictInheritance}
  * @struct
  */
 function NavigationModelMenuItem(label, menu, icon) {
@@ -291,7 +288,7 @@ NavigationListModel.prototype = {
 /**
  * Returns the item at the given index.
  * @param {number} index The index of the entry to get.
- * @return {NavigationModelItem} The item at the given index.
+ * @return {NavigationModelItem|undefined} The item at the given index.
  */
 NavigationListModel.prototype.item = function(index) {
   if (index < this.volumeList_.length)
@@ -300,6 +297,7 @@ NavigationListModel.prototype.item = function(index) {
     return this.shortcutList_[index - this.volumeList_.length];
   if (index === this.length_() - 1)
     return this.menuModel_;
+  return undefined;
 };
 
 /**

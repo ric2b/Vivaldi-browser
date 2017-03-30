@@ -4,9 +4,11 @@
 
 #include "remoting/codec/video_encoder_verbatim.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/stl_util.h"
-#include "base/time/time.h"
 #include "remoting/base/util.h"
 #include "remoting/proto/video.pb.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
@@ -31,8 +33,6 @@ scoped_ptr<VideoPacket> VideoEncoderVerbatim::Encode(
   // we don't need to actually send anything (e.g. nothing to top-off).
   if (frame.updated_region().is_empty())
     return nullptr;
-
-  base::Time encode_start_time = base::Time::Now();
 
   // Create a VideoPacket with common fields (e.g. DPI, rects, shape) set.
   scoped_ptr<VideoPacket> packet(helper_.CreateVideoPacket(frame));
@@ -64,11 +64,7 @@ scoped_ptr<VideoPacket> VideoEncoderVerbatim::Encode(
     }
   }
 
-  // Note the time taken to encode the pixel data.
-  packet->set_encode_time_ms(
-      (base::Time::Now() - encode_start_time).InMillisecondsRoundedUp());
-
-  return packet.Pass();
+  return packet;
 }
 
 }  // namespace remoting

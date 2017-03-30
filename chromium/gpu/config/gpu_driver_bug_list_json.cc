@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "8.19",
+  "version": "8.46",
   "entries": [
     {
       "id": 1,
@@ -317,12 +317,12 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
     {
       "id": 24,
       "cr_bugs": [231082],
-      "description": "Mali-400 drivers throw an error when a buffer object's size is set to 0",
+      "description": "Mali-4xx drivers throw an error when a buffer object's size is set to 0",
       "os": {
         "type": "android"
       },
       "gl_vendor": "ARM.*",
-      "gl_renderer": ".*Mali-400.*",
+      "gl_renderer": ".*Mali-4.*",
       "features": [
         "use_non_zero_size_for_client_side_stream_buffers"
       ]
@@ -405,10 +405,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
     },
     {
       "id": 33,
-      "description": "Share group-related crashes and poor context switching perf on Galaxy Nexus",
-      "os": {
-        "type": "android"
-      },
+      "description": "Share group-related crashes and poor context switching perf on Imagination drivers",
       "gl_vendor": "Imagination.*",
       "features": [
         "use_virtualized_gl_contexts"
@@ -857,7 +854,7 @@ LONG_STRING_CONST(
     },
     {
       "id": 75,
-      "description": "Mali-400 support of EXT_multisampled_render_to_texture is buggy on Android < 4.3",
+      "description": "Mali-4xx support of EXT_multisampled_render_to_texture is buggy on Android < 4.3",
       "cr_bugs": [362435],
       "os": {
         "type": "android",
@@ -867,7 +864,7 @@ LONG_STRING_CONST(
         }
       },
       "gl_vendor": "ARM.*",
-      "gl_renderer": ".*Mali-400.*",
+      "gl_renderer": ".*Mali-4.*",
       "features": [
         "disable_multisampled_render_to_texture"
       ]
@@ -1261,16 +1258,17 @@ LONG_STRING_CONST(
     {
       "id": 108,
       "cr_bugs": [449150],
-      "description": "Mali-400 does not support GL_RGB format",
+      "description": "Mali-4xx does not support GL_RGB format",
       "gl_vendor": "ARM.*",
-      "gl_renderer": ".*Mali-400.*",
+      "gl_renderer": ".*Mali-4.*",
       "features": [
         "disable_gl_rgb_format"
       ]
     },
     {
       "id": 109,
-      "description": "MakeCurrent is slow on Linux",
+      "description": "MakeCurrent is slow on Linux with NVIDIA drivers",
+      "vendor_id": "0x10de",
       "os": {
         "type": "linux"
       },
@@ -1297,13 +1295,13 @@ LONG_STRING_CONST(
     },
     {
       "id": 111,
-      "description": "Discard Framebuffer breaks WebGL on Mali-400 Linux",
+      "description": "Discard Framebuffer breaks WebGL on Mali-4xx Linux",
       "cr_bugs": [485814],
       "os": {
         "type": "linux"
       },
       "gl_vendor": "ARM.*",
-      "gl_renderer": ".*Mali-400.*",
+      "gl_renderer": ".*Mali-4.*",
       "features": [
         "disable_discard_framebuffer"
       ]
@@ -1430,34 +1428,39 @@ LONG_STRING_CONST(
       ]
     },
     {
-      "id": 121,
-      "description": "NSCGLSurface API is buggy on multi-GPU systems",
-      "cr_bugs": [496484],
-      "os": {
-        "type": "macosx"
-      },
-      "gpu_count": {
-        "op": ">",
-        "value": "1"
-      },
-      "features": [
-        "disable_ns_cgl_surface_api"
-      ]
-    },
-    {
-      "id": 122,
-      "description": "NSCGLSurface API unsupported on VMWare drivers",
-      "cr_bugs": [496484],
-      "os": {
-        "type": "macosx"
-      },
-      "vendor_id": "0x15ad",
-      "features": [
-        "disable_ns_cgl_surface_api"
-      ]
-    },
-    {
       "id": 123,
+      "cr_bugs": [344330],
+      "description": "NVIDIA drivers before 346 lack features in NV_path_rendering and related extensions to implement driver level path rendering.",
+      "vendor_id": "0x10de",
+      "os": {
+        "type": "linux"
+      },
+      "driver_version": {
+        "op": "<",
+        "value": "346"
+      },
+      "features": [
+        "disable_gl_path_rendering"
+      ]
+    },
+    {
+      "id": 124,
+      "description": "Certain Adreno 4xx drivers often crash in glProgramBinary.",
+      "cr_bugs": [486117],
+      "os": {
+        "type": "android"
+      },
+      "driver_version": {
+        "op": ">=",
+        "value": "103.0"
+      },
+      "gl_renderer": "Adreno \\(TM\\) 4.*",
+      "features": [
+        "disable_program_cache"
+      ]
+    },
+    {
+      "id": 125,
       "description": "glFinish doesn't clear caches on Android",
       "cr_bugs": [509727],
       "os": {
@@ -1469,19 +1472,271 @@ LONG_STRING_CONST(
       ]
     },
     {
-      "id": 124,
-      "description": "Certain Adreno 4xx drivers often crash in glProgramBinary.",
-      "cr_bugs": [486117],
+      "id": 126,
+      "description": "Program binaries contain incorrect bound attribute locations on Adreno 3xx GPUs",
+      "cr_bugs": [510637],
       "os": {
         "type": "android"
       },
-      "driver_version": {
-        "op": "=",
-        "value": "103.0"
-      },
-      "gl_renderer": "Adreno \\(TM\\) 4.*",
+      "gl_renderer": "Adreno \\(TM\\) 3.*",
       "features": [
         "disable_program_cache"
+      ]
+    },
+    {
+      "id": 127,
+      "description": "Android Adreno crashes on binding incomplete cube map texture to FBO",
+      "cr_bugs": [518889],
+      "os": {
+        "type": "android"
+      },
+      "gl_renderer": "Adreno.*",
+      "features": [
+        "force_cube_map_positive_x_allocation"
+      ]
+    },
+    {
+      "id": 128,
+      "description": "Linux ATI drivers crash on binding incomplete cube map texture to FBO",
+      "cr_bugs": [518889],
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x1002",
+      "features": [
+        "force_cube_map_positive_x_allocation"
+      ]
+    },
+    {
+      "id": 129,
+      // TODO(dshwang): Fix ANGLE crash. crbug.com/518889
+      "description": "ANGLE crash on glReadPixels from incomplete cube map texture",
+      "cr_bugs": [518889],
+      "os": {
+        "type": "win"
+      },
+      "gl_renderer": "ANGLE.*",
+      "features": [
+        "force_cube_complete"
+      ]
+    },
+    {
+      "id": 130,
+      "description": "NVIDIA fails glReadPixels from incomplete cube map texture",
+      "cr_bugs": [518889],
+      "vendor_id": "0x10de",
+      "os": {
+        "type": "linux"
+      },
+      "features": [
+        "force_cube_complete"
+      ]
+    },
+    {
+      "id": 131,
+      "description": "Linux Mesa drivers crash on glTexSubImage2D() to texture storage bound to FBO",
+      "cr_bugs": [521904],
+      "os": {
+        "type": "linux"
+      },
+      "driver_vendor": "Mesa",
+      "driver_version": {
+        "op": "<",
+        "value": "10.6"
+      },
+      "features": [
+        "disable_texture_storage"
+      ]
+    },
+    {
+      "id": 132,
+      "description": "On Intel GPUs MSAA performance is not acceptable for GPU rasterization",
+      "cr_bugs": [527565],
+      "vendor_id": "0x8086",
+      "multi_gpu_category": "active",
+      "features": [
+        "disable_msaa_on_non_webgl_contexts"
+      ]
+    },
+    {
+      "id": 133,
+      "description": "CHROMIUM_copy_texture with 1MB copy per flush to avoid unwanted cache growth on Adreno",
+      "cr_bugs": [542478],
+      "os": {
+        "type": "android"
+      },
+      "gl_renderer": "Adreno.*",
+      "features": [
+        "max_copy_texture_chromium_size_1048576"
+      ]
+    },
+    {
+      "id": 134,
+      "description": "glReadPixels fails on FBOs with SRGB_ALPHA textures",
+      "cr_bugs": [550292],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "5.0"
+        }
+      },
+      "gl_vendor": "Qualcomm.*",
+      "features": [
+        "disable_ext_srgb"
+      ]
+    },
+    {
+      "id": 135,
+      "description": "Screen flickers on 2009 iMacs",
+      "cr_bugs": [543324],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x9440", "0x944a", "0x9488", "0x9490"],
+      "features": [
+        "disable_overlay_ca_layers",
+        "disable_post_sub_buffers_for_onscreen_surfaces"
+      ]
+    },
+    {
+      "id": 136,
+      "description": "glGenerateMipmap fails if the zero texture level is not set on some Mac drivers",
+      "cr_bugs": [560499],
+      "os": {
+        "type": "macosx"
+      },
+      "features": [
+        "set_zero_level_before_generating_mipmap"
+      ]
+    },
+    {
+      "id": 137,
+      "description": "NVIDIA fails glReadPixels from incomplete cube map texture",
+      "cr_bugs": [518889],
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "force_cube_complete"
+      ]
+    },
+    {
+      "id": 138,
+      "description": "NVIDIA drivers before 346 lack features in NV_path_rendering and related extensions to implement driver level path rendering.",
+      "cr_bugs": [344330],
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NVIDIA.*",
+      "driver_version": {
+        "op": "<",
+        "value": "346"
+      },
+      "features": [
+        "disable_gl_path_rendering"
+      ]
+    },
+    {
+      "id": 139,
+      "description": "Mesa drivers wrongly report supporting GL_EXT_texture_rg with GLES 2.0 prior version 11.1",
+      "cr_bugs": [545904],
+      "os": {
+        "type": "linux"
+      },
+      "driver_vendor": "Mesa",
+      "driver_version": {
+        "op": "<",
+        "value": "11.1"
+      },
+      "gl_type": "gles",
+      "gl_version": {
+        "op": "<",
+        "value": "3.0"
+      },
+      "disabled_extensions": [
+        "GL_EXT_texture_rg"
+      ]
+    },
+    {
+      "id": 140,
+      "description": "glReadPixels fails on FBOs with SRGB_ALPHA textures, Nexus 5X",
+      "cr_bugs": [550292, 565179],
+      "os": {
+        "type": "android"
+        // Originally on Android 6.0. Expect it to fail in later versions.
+      },
+      "gl_vendor": "Qualcomm",
+      "gl_renderer": "Adreno \\(TM\\) 4.*", // Originally on 418.
+      "features": [
+        "disable_ext_srgb"
+      ]
+    },
+    {
+      "id": 141,
+      "cr_bugs": [570897],
+      "description": "Framebuffer discarding can hurt performance on non-tilers",
+      "os": {
+        "type": "win"
+      },
+      "features": [
+        "disable_discard_framebuffer"
+      ]
+    },
+    {
+      "id": 142,
+      "cr_bugs": [563714],
+      "description": "Pack parameters work incorrectly with pack buffer bound",
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x10de",
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "pack_parameters_workaround_with_pack_buffer"
+      ]
+    },
+    {
+      "id": 143,
+      "description": "Timer queries crash on Intel GPUs on Linux",
+      "cr_bugs": [540543, 576991],
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x8086",
+      "driver_vendor": "Mesa",
+      "disabled_extensions": [
+        "GL_ARB_timer_query",
+        "GL_EXT_timer_query"
+      ]
+    },
+    {
+      "id": 145,
+      "cr_bugs": [585250],
+      "description": "EGLImage ref counting across EGLContext/threads is broken",
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "Qualcomm.*",
+      "gl_renderer": "Adreno \\(TM\\) 4.*",
+      "driver_version": {
+        "op": "<",
+        "value": "141.0"
+      },
+      "features": [
+        "broken_egl_image_ref_counting"
+      ]
+    },
+    {
+      "id": 147,
+      "description": "Limit max texure size to 4096 on all of Android",
+      "os": {
+        "type": "android"
+      },
+      "features": [
+        "max_texture_size_limit_4096"
       ]
     }
   ]

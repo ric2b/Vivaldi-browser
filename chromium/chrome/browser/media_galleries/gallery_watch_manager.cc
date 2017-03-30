@@ -4,7 +4,12 @@
 
 #include "chrome/browser/media_galleries/gallery_watch_manager.h"
 
+#include <stddef.h>
+
+#include <tuple>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -30,11 +35,11 @@ class ShutdownNotifierFactory
     : public BrowserContextKeyedServiceShutdownNotifierFactory {
  public:
   static ShutdownNotifierFactory* GetInstance() {
-    return Singleton<ShutdownNotifierFactory>::get();
+    return base::Singleton<ShutdownNotifierFactory>::get();
   }
 
  private:
-  friend struct DefaultSingletonTraits<ShutdownNotifierFactory>;
+  friend struct base::DefaultSingletonTraits<ShutdownNotifierFactory>;
 
   ShutdownNotifierFactory()
       : BrowserContextKeyedServiceShutdownNotifierFactory(
@@ -154,8 +159,8 @@ GalleryWatchManager::WatchOwner::WatchOwner(BrowserContext* browser_context,
 }
 
 bool GalleryWatchManager::WatchOwner::operator<(const WatchOwner& other) const {
-  return browser_context < other.browser_context ||
-         extension_id < other.extension_id || gallery_id < other.gallery_id;
+  return std::tie(browser_context, extension_id, gallery_id) <
+    std::tie(other.browser_context, other.extension_id, other.gallery_id);
 }
 
 GalleryWatchManager::NotificationInfo::NotificationInfo()
@@ -342,12 +347,11 @@ void GalleryWatchManager::EnsureBrowserContextSubscription(
     BrowserContext* browser_context) {
   auto it = browser_context_subscription_map_.find(browser_context);
   if (it == browser_context_subscription_map_.end()) {
-    browser_context_subscription_map_.set(
-        browser_context,
+    browser_context_subscription_map_[browser_context] =
         ShutdownNotifierFactory::GetInstance()
             ->Get(browser_context)
             ->Subscribe(base::Bind(&GalleryWatchManager::ShutdownBrowserContext,
-                                   base::Unretained(this), browser_context)));
+                                   base::Unretained(this), browser_context));
   }
 }
 

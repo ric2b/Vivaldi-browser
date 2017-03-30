@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "extensions/browser/api/networking_config/networking_config_service.h"
+
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -13,7 +18,6 @@
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
-#include "extensions/browser/api/networking_config/networking_config_service.h"
 #include "extensions/common/api/networking_config.h"
 
 namespace extensions {
@@ -51,7 +55,7 @@ NetworkingConfigService::NetworkingConfigService(
     ExtensionRegistry* extension_registry)
     : browser_context_(browser_context),
       registry_observer_(this),
-      event_delegate_(event_delegate.Pass()),
+      event_delegate_(std::move(event_delegate)),
       weak_factory_(this) {
   registry_observer_.Add(extension_registry);
 }
@@ -78,7 +82,7 @@ std::string NetworkingConfigService::LookupExtensionIdForHexSsid(
 }
 
 bool NetworkingConfigService::IsRegisteredForCaptivePortalEvent(
-    std::string extension_id) const {
+    const std::string& extension_id) const {
   return event_delegate_->HasExtensionRegisteredForEvent(extension_id);
 }
 
@@ -137,9 +141,8 @@ void NetworkingConfigService::OnGotProperties(
     const base::Closure& authentication_callback,
     const std::string& service_path,
     const base::DictionaryValue& onc_network_config) {
-  authentication_result_ =
-      extensions::NetworkingConfigService::AuthenticationResult(
-          std::string(), guid, extensions::NetworkingConfigService::NOTRY);
+  authentication_result_ = NetworkingConfigService::AuthenticationResult(
+      std::string(), guid, NetworkingConfigService::NOTRY);
   authentication_callback_ = authentication_callback;
 
   // Try to extract |bssid| field.
@@ -156,7 +159,7 @@ void NetworkingConfigService::OnGotProperties(
   }
 
   EventRouter::Get(browser_context_)
-      ->DispatchEventToExtension(extension_id, event.Pass());
+      ->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 void NetworkingConfigService::OnGetPropertiesFailed(
@@ -169,7 +172,7 @@ void NetworkingConfigService::OnGetPropertiesFailed(
   scoped_ptr<Event> event =
       CreatePortalDetectedEventAndDispatch(extension_id, guid, nullptr);
   EventRouter::Get(browser_context_)
-      ->DispatchEventToExtension(extension_id, event.Pass());
+      ->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 scoped_ptr<Event> NetworkingConfigService::CreatePortalDetectedEventAndDispatch(
@@ -183,25 +186,22 @@ scoped_ptr<Event> NetworkingConfigService::CreatePortalDetectedEventAndDispatch(
     return nullptr;
 
   // Populate the NetworkInfo object.
-  extensions::core_api::networking_config::NetworkInfo network_info;
-  network_info.type =
-      extensions::core_api::networking_config::NETWORK_TYPE_WIFI;
+  api::networking_config::NetworkInfo network_info;
+  network_info.type = api::networking_config::NETWORK_TYPE_WIFI;
   const std::vector<uint8_t>& raw_ssid = network->raw_ssid();
-  std::string hex_ssid =
-      base::HexEncode(vector_as_array(&raw_ssid), raw_ssid.size());
+  std::string hex_ssid = base::HexEncode(raw_ssid.data(), raw_ssid.size());
   network_info.hex_ssid = make_scoped_ptr(new std::string(hex_ssid));
   network_info.ssid = make_scoped_ptr(new std::string(network->name()));
   network_info.guid = make_scoped_ptr(new std::string(network->guid()));
   if (bssid)
     network_info.bssid.reset(new std::string(*bssid));
   scoped_ptr<base::ListValue> results =
-      extensions::core_api::networking_config::OnCaptivePortalDetected::Create(
-          network_info);
-  scoped_ptr<Event> event(new Event(events::UNKNOWN,
-                                    extensions::core_api::networking_config::
-                                        OnCaptivePortalDetected::kEventName,
-                                    results.Pass()));
-  return event.Pass();
+      api::networking_config::OnCaptivePortalDetected::Create(network_info);
+  scoped_ptr<Event> event(
+      new Event(events::NETWORKING_CONFIG_ON_CAPTIVE_PORTAL_DETECTED,
+                api::networking_config::OnCaptivePortalDetected::kEventName,
+                std::move(results)));
+  return event;
 }
 
 void NetworkingConfigService::DispatchPortalDetectedEvent(
@@ -220,10 +220,13 @@ void NetworkingConfigService::DispatchPortalDetectedEvent(
     return;
   const std::string service_path = network->path();
 
+  // We do not provide |userhash| here because we only care about properties
+  // that are not affected by policy, i.e BSSID.
   network_handler->managed_network_configuration_handler()->GetProperties(
-      service_path, base::Bind(&NetworkingConfigService::OnGotProperties,
-                               weak_factory_.GetWeakPtr(), extension_id, guid,
-                               authentication_callback),
+      "" /* empty userhash */, service_path,
+      base::Bind(&NetworkingConfigService::OnGotProperties,
+                 weak_factory_.GetWeakPtr(), extension_id, guid,
+                 authentication_callback),
       base::Bind(&NetworkingConfigService::OnGetPropertiesFailed,
                  weak_factory_.GetWeakPtr(), extension_id, guid));
 }

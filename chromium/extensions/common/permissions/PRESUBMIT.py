@@ -30,6 +30,3 @@ def _CreateAPIPermissionIDChecker(input_api, output_api):
 def CheckChangeOnUpload(input_api, output_api):
   return _CreateAPIPermissionIDChecker(input_api, output_api).Run()
 
-def CheckChangeOnCommit(input_api, output_api):
-  return _CreateAPIPermissionIDChecker(input_api, output_api).Run()
-

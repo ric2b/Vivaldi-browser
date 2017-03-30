@@ -4,6 +4,7 @@
 
 """Start and stop Web Page Replay."""
 
+import atexit
 import logging
 import os
 import re
@@ -17,7 +18,7 @@ from telemetry.core import exceptions
 from telemetry.core import util
 
 _REPLAY_DIR = os.path.join(
-    util.GetChromiumSrcDir(), 'third_party', 'webpagereplay')
+    util.GetTelemetryThirdPartyDir(), 'webpagereplay')
 
 
 class ReplayError(Exception):
@@ -202,6 +203,7 @@ class ReplayServer(object):
           preexec_fn=(_ResetInterruptHandler if is_posix else None))
     try:
       util.WaitFor(self._IsStarted, 30)
+      atexit.register(self.StopServer)
       return (
           self._started_ports['http'],
           self._started_ports['https'],
@@ -214,10 +216,14 @@ class ReplayServer(object):
 
   def StopServer(self):
     """Stop Web Page Replay."""
-    try:
-      self._StopReplayProcess()
-    finally:
-      self._CleanUpTempLogFilePath()
+    if self._IsStarted():
+      try:
+        self._StopReplayProcess()
+      finally:
+        # TODO(rnephew): Upload logs to google storage. crbug.com/525787
+        self._CleanUpTempLogFilePath()
+    else:
+      logging.warning('Attempting to stop WPR server that is not running.')
 
   def _StopReplayProcess(self):
     if not self.replay_process:
@@ -237,7 +243,7 @@ class ReplayServer(object):
       try:
         # Use a SIGINT so that it can do graceful cleanup.
         self.replay_process.send_signal(signal.SIGINT)
-      except:  # pylint: disable=W0702
+      except:  # pylint: disable=bare-except
         # On Windows, we are left with no other option than terminate().
         is_primary_nameserver_changed_by_replay = (
             self._use_dns_server and self._replay_host == '127.0.0.1')
@@ -255,7 +261,7 @@ class ReplayServer(object):
               'the primary nameserver. That might not be restored!')
         try:
           self.replay_process.terminate()
-        except:  # pylint: disable=W0702
+        except:  # pylint: disable=bare-except
           pass
       self.replay_process.wait()
 
@@ -266,8 +272,13 @@ class ReplayServer(object):
 
   def _CleanUpTempLogFilePath(self):
     assert self._temp_log_file_path
-    # TODO(nednguyen): print the content of the log file path to telemetry's
-    # output before clearing the file.
+    if logging.getLogger('').isEnabledFor(logging.INFO):
+      with open(self._temp_log_file_path, 'r') as f:
+        wpr_log_content = '\n'.join([
+            '************************** WPR LOG *****************************',
+            f.read(),
+            '************************** END OF WPR LOG **********************'])
+      logging.debug(wpr_log_content)
     os.remove(self._temp_log_file_path)
     self._temp_log_file_path = None
 

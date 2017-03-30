@@ -4,14 +4,18 @@
 
 #include "chrome/browser/chromeos/file_system_provider/request_manager.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -89,7 +93,7 @@ class EventLogger {
    public:
     SuccessEvent(int request_id, scoped_ptr<RequestValue> result, bool has_more)
         : request_id_(request_id),
-          result_(result.Pass()),
+          result_(std::move(result)),
           has_more_(has_more) {}
     virtual ~SuccessEvent() {}
 
@@ -108,7 +112,7 @@ class EventLogger {
     ErrorEvent(int request_id,
                scoped_ptr<RequestValue> result,
                base::File::Error error)
-        : request_id_(request_id), result_(result.Pass()), error_(error) {}
+        : request_id_(request_id), result_(std::move(result)), error_(error) {}
     virtual ~ErrorEvent() {}
 
     int request_id() { return request_id_; }
@@ -132,13 +136,14 @@ class EventLogger {
                  scoped_ptr<RequestValue> result,
                  bool has_more) {
     success_events_.push_back(
-        new SuccessEvent(request_id, result.Pass(), has_more));
+        new SuccessEvent(request_id, std::move(result), has_more));
   }
 
   void OnError(int request_id,
                scoped_ptr<RequestValue> result,
                base::File::Error error) {
-    error_events_.push_back(new ErrorEvent(request_id, result.Pass(), error));
+    error_events_.push_back(
+        new ErrorEvent(request_id, std::move(result), error));
   }
 
   ScopedVector<ExecuteEvent>& execute_events() { return execute_events_; }
@@ -180,7 +185,7 @@ class FakeHandler : public RequestManager::HandlerInterface {
                  scoped_ptr<RequestValue> result,
                  bool has_more) override {
     if (logger_.get())
-      logger_->OnSuccess(request_id, result.Pass(), has_more);
+      logger_->OnSuccess(request_id, std::move(result), has_more);
   }
 
   // RequestManager::Handler overrides.
@@ -188,7 +193,7 @@ class FakeHandler : public RequestManager::HandlerInterface {
                scoped_ptr<RequestValue> result,
                base::File::Error error) override {
     if (logger_.get())
-      logger_->OnError(request_id, result.Pass(), error);
+      logger_->OnError(request_id, std::move(result), error);
   }
 
   ~FakeHandler() override {}
@@ -380,8 +385,8 @@ TEST_F(FileSystemProviderRequestManagerTest, CreateAndFulFill) {
       RequestValue::CreateForTesting("i-like-vanilla"));
   const bool has_more = false;
 
-  const base::File::Error result =
-      request_manager_->FulfillRequest(request_id, response.Pass(), has_more);
+  const base::File::Error result = request_manager_->FulfillRequest(
+      request_id, std::move(response), has_more);
   EXPECT_EQ(base::File::FILE_OK, result);
 
   ASSERT_EQ(1u, observer.fulfilled().size());

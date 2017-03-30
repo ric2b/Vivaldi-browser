@@ -9,8 +9,8 @@
 #include <string>
 
 #include "base/android/jni_weak_ref.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/interstitial_page_delegate.h"
 
@@ -31,8 +31,9 @@ class InterstitialPageDelegateAndroid : public InterstitialPageDelegate {
   void set_interstitial_page(InterstitialPage* page) { page_ = page; }
 
   // Methods called from Java.
-  void Proceed(JNIEnv* env, jobject obj);
-  void DontProceed(JNIEnv* env, jobject obj);
+  void Proceed(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void DontProceed(JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& obj);
 
   // Implementation of InterstitialPageDelegate
   std::string GetHTMLContents() override;

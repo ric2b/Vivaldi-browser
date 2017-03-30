@@ -5,9 +5,11 @@
 #include "remoting/host/clipboard.h"
 
 #include <X11/Xlib.h>
+#undef Status  // Xlib.h #defines this, which breaks protobuf headers.
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "remoting/host/linux/x_server_clipboard.h"
 #include "remoting/proto/event.pb.h"

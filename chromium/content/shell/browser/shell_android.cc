@@ -53,7 +53,7 @@ void Shell::PlatformSetIsLoading(bool loading) {
 }
 
 void Shell::PlatformCreateWindow(int width, int height) {
-  java_object_.Reset(AttachCurrentThread(), CreateShellView(this));
+  java_object_.Reset(CreateShellView(this));
 }
 
 void Shell::PlatformSetContents() {
@@ -104,7 +104,9 @@ bool Shell::Register(JNIEnv* env) {
 }
 
 // static
-void CloseShell(JNIEnv* env, jclass clazz, jlong shellPtr) {
+void CloseShell(JNIEnv* env,
+                const JavaParamRef<jclass>& clazz,
+                jlong shellPtr) {
   Shell* shell = reinterpret_cast<Shell*>(shellPtr);
   shell->Close();
 }

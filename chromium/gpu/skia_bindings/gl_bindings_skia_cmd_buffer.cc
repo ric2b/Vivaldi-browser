@@ -7,6 +7,7 @@
 #ifndef GL_GLEXT_PROTOTYPES
 #define GL_GLEXT_PROTOTYPES
 #endif
+#include "base/logging.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
@@ -14,8 +15,7 @@
 
 namespace skia_bindings {
 
-GrGLInterface* CreateCommandBufferSkiaGLBinding() {
-  GrGLInterface* interface = new GrGLInterface;
+void InitCommandBufferSkiaGLBinding(GrGLInterface* interface) {
   interface->fStandard = kGLES_GrGLStandard;
   interface->fExtensions.init(kGLES_GrGLStandard,
                               glGetString,
@@ -143,13 +143,40 @@ GrGLInterface* CreateCommandBufferSkiaGLBinding() {
     glRenderbufferStorageMultisampleCHROMIUM;
   functions->fRenderbufferStorageMultisampleES2EXT =
     glRenderbufferStorageMultisampleEXT;
+  functions->fBindFragDataLocation = glBindFragDataLocationEXT;
+  functions->fBindFragDataLocationIndexed = glBindFragDataLocationIndexedEXT;
   functions->fBindUniformLocation = glBindUniformLocationCHROMIUM;
   functions->fBlitFramebuffer = glBlitFramebufferCHROMIUM;
   functions->fGenerateMipmap = glGenerateMipmap;
   functions->fMatrixLoadf = glMatrixLoadfCHROMIUM;
   functions->fMatrixLoadIdentity = glMatrixLoadIdentityCHROMIUM;
-
-  return interface;
+  functions->fPathCommands = glPathCommandsCHROMIUM;
+  functions->fPathParameteri = glPathParameteriCHROMIUM;
+  functions->fPathParameterf = glPathParameterfCHROMIUM;
+  functions->fGenPaths = glGenPathsCHROMIUM;
+  functions->fIsPath = glIsPathCHROMIUM;
+  functions->fDeletePaths = glDeletePathsCHROMIUM;
+  functions->fPathStencilFunc = glPathStencilFuncCHROMIUM;
+  functions->fStencilFillPath = glStencilFillPathCHROMIUM;
+  functions->fStencilStrokePath = glStencilStrokePathCHROMIUM;
+  functions->fCoverFillPath = glCoverFillPathCHROMIUM;
+  functions->fCoverStrokePath = glCoverStrokePathCHROMIUM;
+  functions->fStencilThenCoverFillPath = glStencilThenCoverFillPathCHROMIUM;
+  functions->fStencilThenCoverStrokePath =
+      glStencilThenCoverStrokePathCHROMIUM;
+  functions->fStencilFillPathInstanced = glStencilFillPathInstancedCHROMIUM;
+  functions->fStencilStrokePathInstanced =
+      glStencilStrokePathInstancedCHROMIUM;
+  functions->fCoverFillPathInstanced = glCoverFillPathInstancedCHROMIUM;
+  functions->fCoverStrokePathInstanced = glCoverStrokePathInstancedCHROMIUM;
+  functions->fStencilThenCoverFillPathInstanced =
+      glStencilThenCoverFillPathInstancedCHROMIUM;
+  functions->fStencilThenCoverStrokePathInstanced =
+      glStencilThenCoverStrokePathInstancedCHROMIUM;
+  functions->fProgramPathFragmentInputGen =
+      glProgramPathFragmentInputGenCHROMIUM;
+  functions->fBindFragmentInputLocation = glBindFragmentInputLocationCHROMIUM;
+  functions->fCoverageModulation = glCoverageModulationCHROMIUM;
 }
 
 }  // namespace skia

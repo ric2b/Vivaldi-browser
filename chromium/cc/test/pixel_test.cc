@@ -44,10 +44,8 @@ PixelTest::~PixelTest() {}
 bool PixelTest::RunPixelTest(RenderPassList* pass_list,
                              const base::FilePath& ref_file,
                              const PixelComparator& comparator) {
-  return RunPixelTestWithReadbackTarget(pass_list,
-                                        pass_list->back(),
-                                        ref_file,
-                                        comparator);
+  return RunPixelTestWithReadbackTarget(pass_list, pass_list->back().get(),
+                                        ref_file, comparator);
 }
 
 bool PixelTest::RunPixelTestWithReadbackTarget(
@@ -74,7 +72,7 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
                      run_loop.QuitClosure()));
   if (copy_rect)
     request->set_area(*copy_rect);
-  target->copy_requests.push_back(request.Pass());
+  target->copy_requests.push_back(std::move(request));
 
   float device_scale_factor = 1.f;
   gfx::Rect device_viewport_rect =
@@ -100,7 +98,7 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
 void PixelTest::ReadbackResult(base::Closure quit_run_loop,
                                scoped_ptr<CopyOutputResult> result) {
   ASSERT_TRUE(result->HasBitmap());
-  result_bitmap_ = result->TakeBitmap().Pass();
+  result_bitmap_ = result->TakeBitmap();
   quit_run_loop.Run();
 }
 
@@ -135,8 +133,9 @@ void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
   gpu_memory_buffer_manager_.reset(new TestGpuMemoryBufferManager);
   resource_provider_ = ResourceProvider::Create(
       output_surface_.get(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 0,
-      false, 1, false);
+      gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 0, 1,
+      settings_.renderer_settings.use_gpu_memory_buffer_resources,
+      settings_.use_image_texture_targets);
 
   texture_mailbox_deleter_ = make_scoped_ptr(
       new TextureMailboxDeleter(base::ThreadTaskRunnerHandle::Get()));
@@ -171,13 +170,14 @@ void PixelTest::EnableExternalStencilTest() {
 
 void PixelTest::SetUpSoftwareRenderer() {
   scoped_ptr<SoftwareOutputDevice> device(new PixelTestSoftwareOutputDevice());
-  output_surface_.reset(new PixelTestOutputSurface(device.Pass()));
+  output_surface_.reset(new PixelTestOutputSurface(std::move(device)));
   output_surface_->BindToClient(output_surface_client_.get());
   shared_bitmap_manager_.reset(new TestSharedBitmapManager());
   resource_provider_ = ResourceProvider::Create(
       output_surface_.get(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 0,
-      false, 1, false);
+      gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 0, 1,
+      settings_.renderer_settings.use_gpu_memory_buffer_resources,
+      settings_.use_image_texture_targets);
   renderer_ =
       SoftwareRenderer::Create(this, &settings_.renderer_settings,
                                output_surface_.get(), resource_provider_.get());

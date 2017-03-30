@@ -6,6 +6,8 @@
 
 #include <fcntl.h>
 #include <linux/input.h>
+#include <stddef.h>
+#include <utility>
 
 #include "base/stl_util.h"
 #include "base/thread_task_runner_handle.h"
@@ -83,7 +85,6 @@ void SetGestureBoolProperty(GesturePropertyProvider* provider,
 scoped_ptr<EventConverterEvdev> CreateConverter(
     const OpenInputDeviceParams& params,
     int fd,
-    InputDeviceType type,
     const EventDeviceInfo& devinfo) {
 #if defined(USE_EVDEV_GESTURES)
   // Touchpad or mouse: use gestures library.
@@ -94,28 +95,26 @@ scoped_ptr<EventConverterEvdev> CreateConverter(
             params.id, params.cursor, params.gesture_property_provider,
             params.dispatcher));
     return make_scoped_ptr(new EventReaderLibevdevCros(
-        fd, params.path, params.id, type, devinfo, gesture_interp.Pass()));
+        fd, params.path, params.id, devinfo, std::move(gesture_interp)));
   }
 #endif
 
   // Touchscreen: use TouchEventConverterEvdev.
   if (devinfo.HasTouchscreen()) {
     scoped_ptr<TouchEventConverterEvdev> converter(new TouchEventConverterEvdev(
-        fd, params.path, params.id, type, devinfo, params.dispatcher));
+        fd, params.path, params.id, devinfo, params.dispatcher));
     converter->Initialize(devinfo);
-    return converter.Pass();
+    return std::move(converter);
   }
 
   // Graphics tablet
   if (devinfo.HasTablet())
     return make_scoped_ptr<EventConverterEvdev>(new TabletEventConverterEvdev(
-        fd, params.path, params.id, type, params.cursor, devinfo,
-        params.dispatcher));
+        fd, params.path, params.id, params.cursor, devinfo, params.dispatcher));
 
   // Everything else: use EventConverterEvdevImpl.
-  return make_scoped_ptr<EventConverterEvdevImpl>(
-      new EventConverterEvdevImpl(fd, params.path, params.id, type, devinfo,
-                                  params.cursor, params.dispatcher));
+  return make_scoped_ptr<EventConverterEvdevImpl>(new EventConverterEvdevImpl(
+      fd, params.path, params.id, devinfo, params.cursor, params.dispatcher));
 }
 
 // Open an input device. Opening may put the calling thread to sleep, and
@@ -148,17 +147,15 @@ void OpenInputDevice(scoped_ptr<OpenInputDeviceParams> params,
     PLOG(ERROR) << "failed to set CLOCK_MONOTONIC";
 
   EventDeviceInfo devinfo;
-  if (!devinfo.Initialize(fd)) {
-    LOG(ERROR) << "failed to get device information for " << path.value();
+  if (!devinfo.Initialize(fd, path)) {
+    LOG(ERROR) << "Failed to get device information for " << path.value();
     close(fd);
     reply_runner->PostTask(
         FROM_HERE, base::Bind(reply_callback, base::Passed(&converter)));
     return;
   }
 
-  InputDeviceType type = GetInputDeviceTypeFromPath(path);
-
-  converter = CreateConverter(*params, fd, type, devinfo);
+  converter = CreateConverter(*params, fd, devinfo);
 
   // Reply with the constructed converter.
   reply_runner->PostTask(FROM_HERE,
@@ -184,7 +181,7 @@ InputDeviceFactoryEvdev::InputDeviceFactoryEvdev(
 #if defined(USE_EVDEV_GESTURES)
       gesture_property_provider_(new GesturePropertyProvider),
 #endif
-      dispatcher_(dispatcher.Pass()),
+      dispatcher_(std::move(dispatcher)),
       weak_ptr_factory_(this) {
 }
 
@@ -296,7 +293,7 @@ void InputDeviceFactoryEvdev::GetTouchDeviceStatus(
 #if defined(USE_EVDEV_GESTURES)
   DumpTouchDeviceStatus(gesture_property_provider_.get(), status.get());
 #endif
-  reply.Run(status.Pass());
+  reply.Run(std::move(status));
 }
 
 void InputDeviceFactoryEvdev::GetTouchEventLog(
@@ -306,9 +303,9 @@ void InputDeviceFactoryEvdev::GetTouchEventLog(
       new std::vector<base::FilePath>);
 #if defined(USE_EVDEV_GESTURES)
   DumpTouchEventLog(converters_, gesture_property_provider_.get(), out_dir,
-                    log_paths.Pass(), reply);
+                    std::move(log_paths), reply);
 #else
-  reply.Run(log_paths.Pass());
+  reply.Run(std::move(log_paths));
 #endif
 }
 
@@ -370,6 +367,10 @@ bool InputDeviceFactoryEvdev::IsDeviceEnabled(
   if (!input_device_settings_.enable_internal_touchpad &&
       converter->type() == InputDeviceType::INPUT_DEVICE_INTERNAL &&
       converter->HasTouchpad())
+    return false;
+
+  if (!input_device_settings_.enable_touch_screens &&
+      converter->HasTouchscreen())
     return false;
 
   return input_device_settings_.enable_devices;

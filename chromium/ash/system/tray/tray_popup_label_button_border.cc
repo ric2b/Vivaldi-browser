@@ -15,7 +15,7 @@
 namespace ash {
 
 TrayPopupLabelButtonBorder::TrayPopupLabelButtonBorder()
-    : LabelButtonBorder(views::Button::STYLE_TEXTBUTTON) {
+    : LabelButtonAssetBorder(views::Button::STYLE_TEXTBUTTON) {
   const int kTrayPopupLabelButtonBorderImagesNormal[] = {
       IDR_AURA_TRAY_POPUP_LABEL_BUTTON_BORDER,
       IDR_AURA_TRAY_POPUP_LABEL_BUTTON_NORMAL_BACKGROUND,
@@ -89,10 +89,10 @@ void TrayPopupLabelButtonBorder::Paint(const views::View& view,
     canvas->Save();
     canvas->Translate(gfx::Vector2d(view.width(), 0));
     canvas->Scale(-1, 1);
-    LabelButtonBorder::Paint(view, canvas);
+    LabelButtonAssetBorder::Paint(view, canvas);
     canvas->Restore();
   } else {
-    LabelButtonBorder::Paint(view, canvas);
+    LabelButtonAssetBorder::Paint(view, canvas);
   }
 }
 

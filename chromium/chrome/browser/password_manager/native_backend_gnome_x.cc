@@ -6,12 +6,13 @@
 
 #include <dlfcn.h>
 #include <gnome-keyring.h>
-
+#include <stddef.h>
+#include <stdint.h>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
@@ -24,6 +25,7 @@
 #include "base/time/time.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -133,7 +135,7 @@ scoped_ptr<PasswordForm> FormFromAttributes(GnomeKeyringAttributeList* attrs) {
   form->signon_realm = string_attr_map["signon_realm"];
   form->ssl_valid = uint_attr_map["ssl_valid"];
   form->preferred = uint_attr_map["preferred"];
-  int64 date_created = 0;
+  int64_t date_created = 0;
   bool date_ok = base::StringToInt64(string_attr_map["date_created"],
                                      &date_created);
   DCHECK(date_ok);
@@ -150,11 +152,11 @@ scoped_ptr<PasswordForm> FormFromAttributes(GnomeKeyringAttributeList* attrs) {
   form->type = static_cast<PasswordForm::Type>(uint_attr_map["type"]);
   form->times_used = uint_attr_map["times_used"];
   form->scheme = static_cast<PasswordForm::Scheme>(uint_attr_map["scheme"]);
-  int64 date_synced = 0;
+  int64_t date_synced = 0;
   base::StringToInt64(string_attr_map["date_synced"], &date_synced);
   form->date_synced = base::Time::FromInternalValue(date_synced);
   form->display_name = UTF8ToUTF16(string_attr_map["display_name"]);
-  form->avatar_url = GURL(string_attr_map["avatar_url"]);
+  form->icon_url = GURL(string_attr_map["avatar_url"]);
   form->federation_url = GURL(string_attr_map["federation_url"]);
   form->skip_zero_click = uint_attr_map["skip_zero_click"];
   form->generation_upload_status =
@@ -166,7 +168,7 @@ scoped_ptr<PasswordForm> FormFromAttributes(GnomeKeyringAttributeList* attrs) {
     FormDeserializationStatus status = success ? GNOME_SUCCESS : GNOME_FAILURE;
     LogFormDataDeserializationStatus(status);
   }
-  return form.Pass();
+  return form;
 }
 
 // Converts native credentials in |found| to PasswordForms. If not NULL,
@@ -196,17 +198,14 @@ ScopedVector<PasswordForm> ConvertFormList(GList* found,
           continue;
         }
         psl_domain_match_metric = password_manager::PSL_DOMAIN_MATCH_FOUND;
-        form->original_signon_realm = form->signon_realm;
-        form->signon_realm = lookup_form->signon_realm;
-        form->origin = lookup_form->origin;
-        form->action = lookup_form->action;
+        form->is_public_suffix_match = true;
       }
       if (data->secret) {
         form->password_value = UTF8ToUTF16(data->secret);
       } else {
         LOG(WARNING) << "Unable to access password from list element!";
       }
-      forms.push_back(form.Pass());
+      forms.push_back(std::move(form));
     } else {
       LOG(WARNING) << "Could not initialize PasswordForm from attributes!";
     }
@@ -222,7 +221,7 @@ ScopedVector<PasswordForm> ConvertFormList(GList* found,
             : password_manager::PSL_DOMAIN_MATCH_NOT_USED,
         password_manager::PSL_DOMAIN_MATCH_COUNT);
   }
-  return forms.Pass();
+  return forms;
 }
 
 // Schema is analagous to the fields in PasswordForm.
@@ -278,8 +277,7 @@ class GKRMethod : public GnomeKeyringLoader {
   // Action methods. These call gnome_keyring_* functions. Call from UI thread.
   // See GetProfileSpecificAppString() for more information on the app string.
   void AddLogin(const PasswordForm& form, const char* app_string);
-  void AddLoginSearch(const PasswordForm& form, const char* app_string);
-  void UpdateLoginSearch(const PasswordForm& form, const char* app_string);
+  void LoginSearch(const PasswordForm& form, const char* app_string);
   void RemoveLogin(const PasswordForm& form, const char* app_string);
   void GetLogins(const PasswordForm& form, const char* app_string);
   void GetLoginsList(uint32_t blacklisted_by_user, const char* app_string);
@@ -288,8 +286,8 @@ class GKRMethod : public GnomeKeyringLoader {
   // Use after AddLogin, RemoveLogin.
   GnomeKeyringResult WaitResult();
 
-  // Use after AddLoginSearch, UpdateLoginSearch, GetLogins, GetLoginsList,
-  // GetAllLogins. Replaces the content of |forms| with found logins.
+  // Use after LoginSearch, GetLogins, GetLoginsList, GetAllLogins. Replaces the
+  // content of |forms| with found logins.
   GnomeKeyringResult WaitResult(ScopedVector<PasswordForm>* forms);
 
  private:
@@ -338,12 +336,12 @@ class GKRMethod : public GnomeKeyringLoader {
 
 void GKRMethod::AddLogin(const PasswordForm& form, const char* app_string) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  int64 date_created = form.date_created.ToInternalValue();
+  int64_t date_created = form.date_created.ToInternalValue();
   // If we are asked to save a password with 0 date, use the current time.
   // We don't want to actually save passwords as though on January 1, 1601.
   if (!date_created)
     date_created = base::Time::Now().ToInternalValue();
-  int64 date_synced = form.date_synced.ToInternalValue();
+  int64_t date_synced = form.date_synced.ToInternalValue();
   std::string form_data;
   SerializeFormDataToBase64String(form.form_data, &form_data);
   gnome_keyring_store_password(
@@ -370,7 +368,7 @@ void GKRMethod::AddLogin(const PasswordForm& form, const char* app_string) {
       "scheme", form.scheme,
       "date_synced", base::Int64ToString(date_synced).c_str(),
       "display_name", UTF16ToUTF8(form.display_name).c_str(),
-      "avatar_url", form.avatar_url.spec().c_str(),
+      "avatar_url", form.icon_url.spec().c_str(),
       "federation_url", form.federation_url.spec().c_str(),
       "skip_zero_click", form.skip_zero_click,
       "generation_upload_status", form.generation_upload_status,
@@ -379,28 +377,8 @@ void GKRMethod::AddLogin(const PasswordForm& form, const char* app_string) {
       nullptr);
 }
 
-void GKRMethod::AddLoginSearch(const PasswordForm& form,
+void GKRMethod::LoginSearch(const PasswordForm& form,
                                const char* app_string) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  lookup_form_.reset(nullptr);
-  // Search GNOME Keyring for matching passwords to update.
-  ScopedAttributeList attrs(gnome_keyring_attribute_list_new());
-  AppendString(&attrs, "origin_url", form.origin.spec());
-  AppendString(&attrs, "username_element", UTF16ToUTF8(form.username_element));
-  AppendString(&attrs, "username_value", UTF16ToUTF8(form.username_value));
-  AppendString(&attrs, "password_element", UTF16ToUTF8(form.password_element));
-  AppendString(&attrs, "submit_element", UTF16ToUTF8(form.submit_element));
-  AppendString(&attrs, "signon_realm", form.signon_realm);
-  AppendString(&attrs, "application", app_string);
-  gnome_keyring_find_items(GNOME_KEYRING_ITEM_GENERIC_SECRET,
-                           attrs.get(),
-                           OnOperationGetList,
-                           /*data=*/this,
-                           /*destroy_data=*/nullptr);
-}
-
-void GKRMethod::UpdateLoginSearch(const PasswordForm& form,
-                                  const char* app_string) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   lookup_form_.reset(nullptr);
   // Search GNOME Keyring for matching passwords to update.
@@ -430,7 +408,6 @@ void GKRMethod::RemoveLogin(const PasswordForm& form, const char* app_string) {
       "username_element", UTF16ToUTF8(form.username_element).c_str(),
       "username_value", UTF16ToUTF8(form.username_value).c_str(),
       "password_element", UTF16ToUTF8(form.password_element).c_str(),
-      "submit_element", UTF16ToUTF8(form.submit_element).c_str(),
       "signon_realm", form.signon_realm.c_str(),
       "application", app_string,
       nullptr);
@@ -492,7 +469,7 @@ GnomeKeyringResult GKRMethod::WaitResult() {
 GnomeKeyringResult GKRMethod::WaitResult(ScopedVector<PasswordForm>* forms) {
   DCHECK_CURRENTLY_ON(BrowserThread::DB);
   event_.Wait();
-  *forms = forms_.Pass();
+  *forms = std::move(forms_);
   return result_;
 }
 
@@ -585,7 +562,7 @@ password_manager::PasswordStoreChangeList NativeBackendGnome::AddLogin(
   DCHECK_CURRENTLY_ON(BrowserThread::DB);
   GKRMethod method;
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&GKRMethod::AddLoginSearch,
+                          base::Bind(&GKRMethod::LoginSearch,
                                      base::Unretained(&method),
                                      form, app_string_.c_str()));
   ScopedVector<PasswordForm> forms;
@@ -598,15 +575,17 @@ password_manager::PasswordStoreChangeList NativeBackendGnome::AddLogin(
   }
   password_manager::PasswordStoreChangeList changes;
   if (forms.size() > 0) {
+    password_manager::PasswordStoreChangeList temp_changes;
     if (forms.size() > 1) {
       LOG(WARNING) << "Adding login when there are " << forms.size()
-                   << " matching logins already! Will replace only the first.";
+                   << " matching logins already!";
     }
-
-    if (RemoveLogin(*forms[0])) {
-      changes.push_back(password_manager::PasswordStoreChange(
-          password_manager::PasswordStoreChange::REMOVE, *forms[0]));
+    for (const PasswordForm* old_form : forms) {
+      if (!RemoveLogin(*old_form, &temp_changes))
+        return changes;
     }
+    changes.push_back(password_manager::PasswordStoreChange(
+        password_manager::PasswordStoreChange::REMOVE, *forms[0]));
   }
   if (RawAddLogin(form)) {
     changes.push_back(password_manager::PasswordStoreChange(
@@ -626,29 +605,31 @@ bool NativeBackendGnome::UpdateLogin(
   // original, but then the delete might actually delete the newly-added entry!
   DCHECK_CURRENTLY_ON(BrowserThread::DB);
   DCHECK(changes);
-  changes->clear();
   GKRMethod method;
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&GKRMethod::UpdateLoginSearch,
+                          base::Bind(&GKRMethod::LoginSearch,
                                      base::Unretained(&method),
                                      form, app_string_.c_str()));
   ScopedVector<PasswordForm> forms;
   GnomeKeyringResult result = method.WaitResult(&forms);
+  if (result == GNOME_KEYRING_RESULT_NO_MATCH)
+    return true;
   if (result != GNOME_KEYRING_RESULT_OK) {
     LOG(ERROR) << "Keyring find failed: "
                << gnome_keyring_result_to_message(result);
     return false;
   }
-
-  bool removed = false;
-  for (size_t i = 0; i < forms.size(); ++i) {
-    if (*forms[i] != form) {
-      RemoveLogin(*forms[i]);
-      removed = true;
-    }
-  }
-  if (!removed)
+  if (forms.size() == 1 && *forms.front() == form)
     return true;
+
+  password_manager::PasswordStoreChangeList temp_changes;
+  for (const PasswordForm* keychain_form : forms) {
+    // Remove all the obsolete forms. Note that RemoveLogin can remove any form
+    // matching the unique key. Thus, it's important to call it the right number
+    // of times.
+    if (!RemoveLogin(*keychain_form, &temp_changes))
+      return false;
+  }
 
   if (RawAddLogin(form)) {
     password_manager::PasswordStoreChange change(
@@ -659,21 +640,27 @@ bool NativeBackendGnome::UpdateLogin(
   return false;
 }
 
-bool NativeBackendGnome::RemoveLogin(const PasswordForm& form) {
+bool NativeBackendGnome::RemoveLogin(
+    const PasswordForm& form,
+    password_manager::PasswordStoreChangeList* changes) {
   DCHECK_CURRENTLY_ON(BrowserThread::DB);
+  DCHECK(changes);
   GKRMethod method;
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::Bind(&GKRMethod::RemoveLogin,
                                      base::Unretained(&method),
                                      form, app_string_.c_str()));
   GnomeKeyringResult result = method.WaitResult();
+  if (result == GNOME_KEYRING_RESULT_NO_MATCH)
+    return true;
+
   if (result != GNOME_KEYRING_RESULT_OK) {
-    // Warning, not error, because this can sometimes happen due to the user
-    // racing with the daemon to delete the password a second time.
-    LOG(WARNING) << "Keyring delete failed: "
-                 << gnome_keyring_result_to_message(result);
+    LOG(ERROR) << "Keyring delete failed: "
+               << gnome_keyring_result_to_message(result);
     return false;
   }
+  changes->push_back(password_manager::PasswordStoreChange(
+      password_manager::PasswordStoreChange::REMOVE, form));
   return true;
 }
 
@@ -739,6 +726,23 @@ bool NativeBackendGnome::GetLoginsList(bool autofillable,
                << gnome_keyring_result_to_message(result);
     return false;
   }
+
+  // Get rid of the forms with the same sync tags.
+  ScopedVector<autofill::PasswordForm> duplicates;
+  std::vector<std::vector<autofill::PasswordForm*>> tag_groups;
+  password_manager_util::FindDuplicates(forms, &duplicates, &tag_groups);
+  if (duplicates.empty())
+    return true;
+  for (const auto& group : tag_groups) {
+    if (group.size() > 1) {
+      // There are duplicates. Readd the first form. AddLogin() is smart enough
+      // to clean the previous ones.
+      password_manager::PasswordStoreChangeList changes = AddLogin(*group[0]);
+      if (changes.empty() ||
+          changes.back().type() != password_manager::PasswordStoreChange::ADD)
+        return false;
+    }
+  }
   return true;
 }
 
@@ -799,14 +803,9 @@ bool NativeBackendGnome::RemoveLoginsBetween(
   if (!GetLoginsBetween(get_begin, get_end, date_to_compare, &forms))
     return false;
 
-  bool ok = true;
   for (size_t i = 0; i < forms.size(); ++i) {
-    if (RemoveLogin(*forms[i])) {
-      changes->push_back(password_manager::PasswordStoreChange(
-          password_manager::PasswordStoreChange::REMOVE, *forms[i]));
-    } else {
-      ok = false;
-    }
+    if (!RemoveLogin(*forms[i], changes))
+      return false;
   }
-  return ok;
+  return true;
 }

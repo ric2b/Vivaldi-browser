@@ -74,7 +74,7 @@ class ContentCapabilitiesTest : public ExtensionApiTest {
       v.push_back(s1);
     if (!s2.empty())
       v.push_back(s2);
-    std::string list = JoinString(v, "\",\"");
+    std::string list = base::JoinString(v, "\",\"");
     if (!list.empty())
       list = "\"" + list + "\"";
     return "[" + list + "]";
@@ -85,7 +85,7 @@ class ContentCapabilitiesTest : public ExtensionApiTest {
   }
 
   GURL GetTestURLFor(const std::string& host) {
-    std::string port = base::IntToString(embedded_test_server()->port());
+    std::string port = base::UintToString(embedded_test_server()->port());
     GURL::Replacements replacements;
     replacements.SetHostStr(host);
     replacements.SetPortStr(port);
@@ -99,7 +99,7 @@ class ContentCapabilitiesTest : public ExtensionApiTest {
     EXPECT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data));
     embedded_test_server()->ServeFilesFromDirectory(
         test_data.AppendASCII("extensions/content_capabilities"));
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
     host_resolver()->AddRule("*", embedded_test_server()->base_url().host());
   }
 

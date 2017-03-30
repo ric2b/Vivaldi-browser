@@ -4,9 +4,11 @@
 
 #include "chrome/test/base/chrome_unit_test_suite.h"
 
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/update_client/chrome_update_query_params_delegate.h"
 #include "chrome/common/chrome_content_client.h"
@@ -29,11 +31,7 @@
 
 #if !defined(OS_IOS)
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
-#include "ui/gl/gl_surface.h"
-#endif
-
-#if defined(OS_POSIX)
-#include "base/memory/shared_memory.h"
+#include "ui/gl/test/gl_surface_test_support.h"
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
@@ -54,7 +52,7 @@ class ChromeUnitTestSuiteInitializer : public testing::EmptyTestEventListener {
     content::SetContentClient(content_client_.get());
     // TODO(ios): Bring this back once ChromeContentBrowserClient is building.
 #if !defined(OS_IOS)
-    browser_content_client_.reset(new chrome::ChromeContentBrowserClient());
+    browser_content_client_.reset(new ChromeContentBrowserClient());
     content::SetBrowserClientForTesting(browser_content_client_.get());
     utility_content_client_.reset(new ChromeContentUtilityClient());
     content::SetUtilityClientForTesting(utility_content_client_.get());
@@ -80,7 +78,7 @@ class ChromeUnitTestSuiteInitializer : public testing::EmptyTestEventListener {
   scoped_ptr<ChromeContentClient> content_client_;
   // TODO(ios): Bring this back once ChromeContentBrowserClient is building.
 #if !defined(OS_IOS)
-  scoped_ptr<chrome::ChromeContentBrowserClient> browser_content_client_;
+  scoped_ptr<ChromeContentBrowserClient> browser_content_client_;
   scoped_ptr<ChromeContentUtilityClient> utility_content_client_;
 #endif
 
@@ -149,7 +147,7 @@ void ChromeUnitTestSuite::InitializeProviders() {
   content::WebUIControllerFactory::RegisterFactory(
       ChromeWebUIControllerFactory::GetInstance());
 
-  gfx::GLSurface::InitializeOneOffForTests();
+  gfx::GLSurfaceTestSupport::InitializeOneOff();
 
   update_client::UpdateQueryParams::SetDelegate(
       ChromeUpdateQueryParamsDelegate::GetInstance());

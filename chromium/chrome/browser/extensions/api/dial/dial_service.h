@@ -6,10 +6,11 @@
 #define CHROME_BROWSER_EXTENSIONS_API_DIAL_DIAL_SERVICE_H_
 
 #include <string>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
@@ -50,9 +51,6 @@ class DialDeviceData;
 // Calling Discover() again between T1 and Tf has no effect.
 //
 // All relevant constants are defined in dial_service.cc.
-//
-// TODO(mfoltz): Port this into net/.
-// See https://code.google.com/p/chromium/issues/detail?id=164473
 class DialService {
  public:
   enum DialServiceErrorCode {
@@ -244,7 +242,7 @@ class DialServiceImpl : public DialService,
 
   // DialSockets for each network interface whose ip address was
   // successfully bound.
-  ScopedVector<DialSocket> dial_sockets_;
+  std::vector<scoped_ptr<DialSocket>> dial_sockets_;
 
   // The NetLog for this service.
   net::NetLog* net_log_;
@@ -268,14 +266,14 @@ class DialServiceImpl : public DialService,
   int max_requests_;
 
   // Timer for finishing discovery.
-  base::OneShotTimer<DialServiceImpl> finish_timer_;
+  base::OneShotTimer finish_timer_;
 
   // The delay for |finish_timer_|; how long to wait for discovery to finish.
   // Setting this to zero disables the timer.
   base::TimeDelta finish_delay_;
 
   // Timer for sending multiple requests at fixed intervals.
-  base::RepeatingTimer<DialServiceImpl> request_timer_;
+  base::RepeatingTimer request_timer_;
 
   // The delay for |request_timer_|; how long to wait between successive
   // requests.

@@ -5,6 +5,7 @@
 #include "media/audio/android/opensles_input.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "media/audio/android/audio_manager_android.h"
 #include "media/base/audio_bus.h"
@@ -327,7 +328,7 @@ void OpenSLESInputStream::SetupAudioBuffer() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!audio_data_[0]);
   for (int i = 0; i < kMaxNumOfBuffersInQueue; ++i) {
-    audio_data_[i] = new uint8[buffer_size_bytes_];
+    audio_data_[i] = new uint8_t[buffer_size_bytes_];
   }
 }
 

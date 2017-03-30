@@ -4,29 +4,13 @@
 
 #include "components/password_manager/core/common/experiments.h"
 
-#include "base/command_line.h"
-#include "base/metrics/field_trial.h"
-#include "components/password_manager/core/common/password_manager_switches.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 
 namespace password_manager {
 
-bool ManageAccountLinkExperimentEnabled() {
-  std::string group_name =
-      base::FieldTrialList::FindFullName("PasswordLinkInSettings");
-
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kDisablePasswordLink))
-    return false;
-
-  if (command_line->HasSwitch(switches::kEnablePasswordLink))
-    return true;
-
-  return group_name == "Enabled";
-}
-
 bool ForceSavingExperimentEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      password_manager::switches::kEnablePasswordForceSaving);
+  return base::FeatureList::IsEnabled(
+      password_manager::features::kEnablePasswordForceSaving);
 }
 
 }  // namespace password_manager

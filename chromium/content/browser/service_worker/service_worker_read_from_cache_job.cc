@@ -25,40 +25,24 @@ namespace content {
 ServiceWorkerReadFromCacheJob::ServiceWorkerReadFromCacheJob(
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate,
+    ResourceType resource_type,
     base::WeakPtr<ServiceWorkerContextCore> context,
     const scoped_refptr<ServiceWorkerVersion>& version,
-    int64 response_id)
+    int64_t resource_id)
     : net::URLRequestJob(request, network_delegate),
+      resource_type_(resource_type),
+      resource_id_(resource_id),
       context_(context),
       version_(version),
-      response_id_(response_id),
-      has_been_killed_(false),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 ServiceWorkerReadFromCacheJob::~ServiceWorkerReadFromCacheJob() {
 }
 
 void ServiceWorkerReadFromCacheJob::Start() {
-  TRACE_EVENT_ASYNC_BEGIN1("ServiceWorker",
-                           "ServiceWorkerReadFromCacheJob::ReadInfo",
-                           this,
-                           "URL", request_->url().spec());
-  if (!context_) {
-    NotifyStartError(net::URLRequestStatus(
-        net::URLRequestStatus::FAILED, net::ERR_FAILED));
-    return;
-  }
-
-  // Create a response reader and start reading the headers,
-  // we'll continue when thats done.
-  reader_ = context_->storage()->CreateResponseReader(response_id_);
-  http_info_io_buffer_ = new HttpResponseInfoIOBuffer;
-  reader_->ReadInfo(
-      http_info_io_buffer_.get(),
-      base::Bind(&ServiceWorkerReadFromCacheJob::OnReadInfoComplete,
-                 weak_factory_.GetWeakPtr()));
-  SetStatus(net::URLRequestStatus(net::URLRequestStatus::IO_PENDING, 0));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&ServiceWorkerReadFromCacheJob::StartAsync,
+                            weak_factory_.GetWeakPtr()));
 }
 
 void ServiceWorkerReadFromCacheJob::Kill() {
@@ -68,7 +52,7 @@ void ServiceWorkerReadFromCacheJob::Kill() {
   has_been_killed_ = true;
   reader_.reset();
   context_.reset();
-  http_info_io_buffer_ = NULL;
+  http_info_io_buffer_ = nullptr;
   http_info_.reset();
   range_response_info_.reset();
   net::URLRequestJob::Kill();
@@ -120,39 +104,60 @@ void ServiceWorkerReadFromCacheJob::SetExtraRequestHeaders(
     range_requested_ = ranges[0];
 }
 
-bool ServiceWorkerReadFromCacheJob::ReadRawData(
-    net::IOBuffer* buf,
-    int buf_size,
-    int *bytes_read) {
+int ServiceWorkerReadFromCacheJob::ReadRawData(net::IOBuffer* buf,
+                                               int buf_size) {
   DCHECK_NE(buf_size, 0);
-  DCHECK(bytes_read);
   DCHECK(!reader_->IsReadPending());
   TRACE_EVENT_ASYNC_BEGIN1("ServiceWorker",
                            "ServiceWorkerReadFromCacheJob::ReadRawData",
                            this,
                            "URL", request_->url().spec());
-  reader_->ReadData(
-      buf, buf_size, base::Bind(&ServiceWorkerReadFromCacheJob::OnReadComplete,
-                                weak_factory_.GetWeakPtr()));
+  reader_->ReadData(buf, buf_size,
+                    base::Bind(&ServiceWorkerReadFromCacheJob::OnReadComplete,
+                               weak_factory_.GetWeakPtr()));
+  return net::ERR_IO_PENDING;
+}
+
+void ServiceWorkerReadFromCacheJob::StartAsync() {
+  TRACE_EVENT_ASYNC_BEGIN1("ServiceWorker",
+                           "ServiceWorkerReadFromCacheJob::ReadInfo", this,
+                           "URL", request_->url().spec());
+  if (!context_) {
+    // NotifyStartError is not safe to call synchronously in Start.
+    NotifyStartError(
+        net::URLRequestStatus(net::URLRequestStatus::FAILED, net::ERR_FAILED));
+    return;
+  }
+
+  // Create a response reader and start reading the headers,
+  // we'll continue when thats done.
+  if (is_main_script())
+    version_->embedded_worker()->OnScriptReadStarted();
+  reader_ = context_->storage()->CreateResponseReader(resource_id_);
+  http_info_io_buffer_ = new HttpResponseInfoIOBuffer;
+  reader_->ReadInfo(
+      http_info_io_buffer_.get(),
+      base::Bind(&ServiceWorkerReadFromCacheJob::OnReadInfoComplete,
+                 weak_factory_.GetWeakPtr()));
   SetStatus(net::URLRequestStatus(net::URLRequestStatus::IO_PENDING, 0));
-  return false;
 }
 
 const net::HttpResponseInfo* ServiceWorkerReadFromCacheJob::http_info() const {
   if (!http_info_)
-    return NULL;
+    return nullptr;
   if (range_response_info_)
     return range_response_info_.get();
   return http_info_.get();
 }
 
 void ServiceWorkerReadFromCacheJob::OnReadInfoComplete(int result) {
-  scoped_refptr<ServiceWorkerReadFromCacheJob> protect(this);
   if (!http_info_io_buffer_->http_info) {
     DCHECK_LT(result, 0);
     ServiceWorkerMetrics::CountReadResponseResult(
         ServiceWorkerMetrics::READ_HEADERS_ERROR);
     Done(net::URLRequestStatus(net::URLRequestStatus::FAILED, result));
+    NotifyStartError(
+        net::URLRequestStatus(net::URLRequestStatus::FAILED, result));
     return;
   }
   DCHECK_GE(result, 0);
@@ -160,7 +165,7 @@ void ServiceWorkerReadFromCacheJob::OnReadInfoComplete(int result) {
   http_info_.reset(http_info_io_buffer_->http_info.release());
   if (is_range_request())
     SetupRangeResponse(http_info_io_buffer_->response_data_size);
-  http_info_io_buffer_ = NULL;
+  http_info_io_buffer_ = nullptr;
   if (request_->url() == version_->script_url())
     version_->SetMainScriptHttpResponseInfo(*http_info_);
   TRACE_EVENT_ASYNC_END1("ServiceWorker",
@@ -204,23 +209,24 @@ void ServiceWorkerReadFromCacheJob::Done(const net::URLRequestStatus& status) {
       registration->DeleteVersion(version_);
     }
   }
-  NotifyDone(status);
+  if (is_main_script())
+    version_->embedded_worker()->OnScriptReadFinished();
 }
 
 void ServiceWorkerReadFromCacheJob::OnReadComplete(int result) {
   ServiceWorkerMetrics::ReadResponseResult check_result;
-  if (result == 0) {
+
+  if (result >= 0) {
     check_result = ServiceWorkerMetrics::READ_OK;
-    Done(net::URLRequestStatus());
-  } else if (result < 0) {
+    if (result == 0)
+      Done(net::URLRequestStatus());
+  } else {
     check_result = ServiceWorkerMetrics::READ_DATA_ERROR;
     Done(net::URLRequestStatus(net::URLRequestStatus::FAILED, result));
-  } else {
-    check_result = ServiceWorkerMetrics::READ_OK;
-    SetStatus(net::URLRequestStatus());  // Clear the IO_PENDING status
   }
+
   ServiceWorkerMetrics::CountReadResponseResult(check_result);
-  NotifyReadComplete(result);
+  ReadRawDataComplete(result);
   TRACE_EVENT_ASYNC_END1("ServiceWorker",
                          "ServiceWorkerReadFromCacheJob::ReadRawData",
                          this,

@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -31,7 +35,7 @@ namespace chromeos {
 
 namespace {
 
-namespace api_vpn = extensions::core_api::vpn_provider;
+namespace api_vpn = extensions::api::vpn_provider;
 
 const char kNetworkProfilePath[] = "/network/test";
 const char kTestConfig[] = "testconfig";
@@ -114,6 +118,17 @@ class VpnProviderApiTest : public ExtensionApiTest,
   VpnProviderApiTest() {}
   ~VpnProviderApiTest() override {}
 
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    NetworkHandler::Get()->network_configuration_handler()->AddObserver(this);
+  }
+
+  void TearDownOnMainThread() override {
+    ExtensionApiTest::TearDownOnMainThread();
+    NetworkHandler::Get()->network_configuration_handler()->RemoveObserver(
+        this);
+  }
+
   void SetUpInProcessBrowserTestFixture() override {
     ExtensionApiTest::SetUpInProcessBrowserTestFixture();
     test_client_ = new TestShillThirdPartyVpnDriverClient();
@@ -131,7 +146,6 @@ class VpnProviderApiTest : public ExtensionApiTest,
   }
 
   void LoadVpnExtension() {
-    NetworkHandler::Get()->network_configuration_handler()->AddObserver(this);
     extension_ = LoadExtension(test_data_dir_.AppendASCII("vpn_provider"));
     extension_id_ = extension_->id();
     service_ = VpnServiceFactory::GetForBrowserContext(profile());

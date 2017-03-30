@@ -19,7 +19,7 @@ SupervisedUserSettingsServiceFactory::GetForProfile(Profile* profile) {
 // static
 SupervisedUserSettingsServiceFactory*
 SupervisedUserSettingsServiceFactory::GetInstance() {
-  return Singleton<SupervisedUserSettingsServiceFactory>::get();
+  return base::Singleton<SupervisedUserSettingsServiceFactory>::get();
 }
 
 SupervisedUserSettingsServiceFactory::SupervisedUserSettingsServiceFactory()
@@ -33,7 +33,8 @@ SupervisedUserSettingsServiceFactory::
 
 KeyedService* SupervisedUserSettingsServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {
-  return new SupervisedUserSettingsService();
+  return new SupervisedUserSettingsService(
+      Profile::FromBrowserContext(profile));
 }
 
 content::BrowserContext*

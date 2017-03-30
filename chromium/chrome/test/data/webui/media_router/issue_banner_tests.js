@@ -57,49 +57,31 @@ cr.define('issue_banner', function() {
         assertEquals(expected.trim(), banner.$[elementId].textContent.trim());
       };
 
-      // Checks whether |issue| title and message are equal with the title
-      // and message text in the UI.
+      // Checks whether |issue| title are equal with the title text in the UI.
       var checkIssueText = function(issue) {
         if (issue) {
-          checkElementText(issue.title, 'blocking-issue-title');
-          checkElementText(issue.message, 'blocking-issue-message');
-          checkElementText(issue.message, 'non-blocking-message');
+          checkElementText(issue.title, 'title');
 
           checkElementText(loadTimeData.getString(
-              banner.issueActionTypeToButtonTextResource_[
-                  issue.defaultActionType]), 'blocking-default');
-          checkElementText(loadTimeData.getString(
-              banner.issueActionTypeToButtonTextResource_[
-                  issue.defaultActionType]), 'non-blocking-default');
+              banner.actionTypeToButtonTextResource_[
+                  issue.defaultActionType]), 'default-button');
 
           if (issue.secondaryActionType) {
             checkElementText(loadTimeData.getString(
-                banner.issueActionTypeToButtonTextResource_[
-                    issue.secondaryActionType]), 'blocking-opt');
-            checkElementText(loadTimeData.getString(
-                banner.issueActionTypeToButtonTextResource_[
-                    issue.secondaryActionType]), 'non-blocking-opt');
+                banner.actionTypeToButtonTextResource_[
+                    issue.secondaryActionType]), 'opt-button');
           }
         } else {
-          checkElementText('', 'blocking-issue-title');
-          checkElementText('', 'blocking-issue-message');
-          checkElementText('', 'non-blocking-message');
-          checkElementText('', 'blocking-default');
-          checkElementText('', 'non-blocking-default');
+          checkElementText('', 'title');
+          checkElementText('', 'default-button');
+          checkElementText('', 'opt-button');
         }
       };
 
       // Checks whether parts of the UI is visible.
-      var checkVisibility = function(isBlocking, hasOptAction) {
-        assertEquals(!isBlocking, banner.$['blocking-issue'].hidden);
-        assertEquals(isBlocking, banner.$['non-blocking-issue'].hidden);
-        if (isBlocking) {
-          assertEquals(!hasOptAction, banner.$['blocking-issue-buttons']
-              .querySelector('paper-button').hidden);
-        } else {
-          assertEquals(!hasOptAction, banner.$['non-blocking-issue']
-              .querySelector('span').hidden);
-        }
+      var checkButtonVisibility = function(hasOptAction) {
+        assertEquals(!hasOptAction, banner.$['buttons']
+            .querySelector('paper-button').hidden);
       };
 
       // Import issue_banner.html before running suite.
@@ -142,7 +124,7 @@ cr.define('issue_banner', function() {
               data, true);
           done();
         });
-        MockInteractions.tap(banner.$['blocking-default']);
+        MockInteractions.tap(banner.$['default-button']);
       });
 
       // Tests for 'issue-action-click' event firing when a blocking issue
@@ -154,7 +136,7 @@ cr.define('issue_banner', function() {
               data, false);
           done();
         });
-        MockInteractions.tap(banner.$['blocking-opt']);
+        MockInteractions.tap(banner.$['opt-button']);
       });
 
       // Tests for 'issue-action-click' event firing when a non-blocking issue
@@ -166,7 +148,7 @@ cr.define('issue_banner', function() {
               data, true);
           done();
         });
-        MockInteractions.tap(banner.$['non-blocking-default']);
+        MockInteractions.tap(banner.$['default-button']);
       });
 
       // Tests for 'issue-action-click' event firing when a non-blocking issue
@@ -178,23 +160,22 @@ cr.define('issue_banner', function() {
               data, false);
           done();
         });
-        MockInteractions.tap(banner.$['non-blocking-opt']);
+        MockInteractions.tap(banner.$['opt-button']);
       });
 
       // Tests the issue text. While the UI will show only the blocking or
       // non-blocking interface, the issue's info will be set if specified.
       test('issue text', function() {
-        // |issue| is null. Title and message text should be empty.
+        // |issue| is null. Title text should be empty.
         assertEquals(null, banner.issue);
         checkIssueText(banner.issue);
 
-        // Set |issue| to be a blocking issue. Title and message text should
-        // be updated.
+        // Set |issue| to be a blocking issue. Title text should be updated.
         banner.issue = fakeBlockingIssueOne;
         checkIssueText(banner.issue);
 
-        // Set |issue| to be a non-blocking issue. Title and message text
-        // should be updated.
+        // Set |issue| to be a non-blocking issue. Title text should be
+        // updated.
         banner.issue = fakeNonBlockingIssueOne;
         checkIssueText(banner.issue);
       });
@@ -204,23 +185,19 @@ cr.define('issue_banner', function() {
       test('hidden versus visible components', function() {
         // The blocking UI should be shown along with an optional action.
         banner.issue = fakeBlockingIssueOne;
-        checkVisibility(fakeBlockingIssueOne.isBlocking,
-            fakeBlockingIssueOne.secondaryActionType);
+        checkButtonVisibility(fakeBlockingIssueOne.secondaryActionType);
 
-        // The blocking UI should be shown with no an optional action.
+        // The blocking UI should be shown without an optional action.
         banner.issue = fakeBlockingIssueTwo;
-        checkVisibility(fakeBlockingIssueTwo.isBlocking,
-            fakeBlockingIssueTwo.secondaryActionType);
+        checkButtonVisibility(fakeBlockingIssueTwo.secondaryActionType);
 
         // The non-blocking UI should be shown along with an optional action.
         banner.issue = fakeNonBlockingIssueOne;
-        checkVisibility(fakeNonBlockingIssueOne.isBlocking,
-            fakeNonBlockingIssueOne.secondaryActionType);
+        checkButtonVisibility(fakeNonBlockingIssueOne.secondaryActionType);
 
-        // The non-blocking UI should be shown with no an optional action.
+        // The non-blocking UI should be shown without an optional action.
         banner.issue = fakeNonBlockingIssueTwo;
-        checkVisibility(fakeNonBlockingIssueTwo.isBlocking,
-            fakeNonBlockingIssueTwo.secondaryActionType);
+        checkButtonVisibility(fakeNonBlockingIssueTwo.secondaryActionType);
       });
     });
   }

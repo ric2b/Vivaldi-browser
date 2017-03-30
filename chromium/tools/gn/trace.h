@@ -7,14 +7,16 @@
 
 #include <string>
 
-#include "base/basictypes.h"
-#include "base/command_line.h"
-#include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/macros.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 
 class Label;
+
+namespace base {
+class CommandLine;
+class FilePath;
+}
 
 class TraceItem {
  public:
@@ -26,6 +28,7 @@ class TraceItem {
     TRACE_FILE_WRITE,
     TRACE_SCRIPT_EXECUTE,
     TRACE_DEFINE_TARGET,
+    TRACE_ON_RESOLVED,
     TRACE_CHECK_HEADER,  // One file.
     TRACE_CHECK_HEADERS,  // All files.
   };

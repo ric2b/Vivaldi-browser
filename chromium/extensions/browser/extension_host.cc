@@ -42,6 +42,17 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
 
+#include "app/vivaldi_apptools.h"
+
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/host_desktop.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/guest_view/browser/guest_view_manager.h"
+#include "components/guest_view/browser/guest_view_manager_delegate.h"
+#include "extensions/browser/api/extensions_api_client.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
+
 using content::BrowserContext;
 using content::OpenURLParams;
 using content::RenderProcessHost;
@@ -60,6 +71,7 @@ ExtensionHost::ExtensionHost(const Extension* extension,
       extension_id_(extension->id()),
       browser_context_(site_instance->GetBrowserContext()),
       render_view_host_(nullptr),
+      is_render_view_creation_pending_(false),
       has_loaded_once_(false),
       document_element_available_(false),
       initial_url_(url),
@@ -68,9 +80,42 @@ ExtensionHost::ExtensionHost(const Extension* extension,
   DCHECK(host_type == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE ||
          host_type == VIEW_TYPE_EXTENSION_DIALOG ||
          host_type == VIEW_TYPE_EXTENSION_POPUP);
-  host_contents_.reset(WebContents::Create(
-      WebContents::CreateParams(browser_context_, site_instance))),
-  content::WebContentsObserver::Observe(host_contents_.get());
+
+  WebContents::CreateParams create_params =
+      WebContents::CreateParams(browser_context_, site_instance);
+
+  // This is to make sure that the webcontents created by the background page is
+  // created as a guest so we can use this in Vivaldi. Directly without
+  // recreating.
+  if (vivaldi::IsVivaldiRunning() &&
+      extension_host_type_ == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE) {
+
+    auto guest_view_manager =
+        guest_view::GuestViewManager::FromBrowserContext(browser_context_);
+    if (!guest_view_manager) {
+      guest_view_manager = guest_view::GuestViewManager::CreateWithDelegate(
+          browser_context_,
+          ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(
+              browser_context_));
+    }
+
+    if (guest_view_manager) {
+      WebContents::CreateParams r =
+          WebContents::CreateParams(browser_context_, site_instance);
+      r.initially_hidden = true;
+
+      guest_owner_contents_.reset(WebContents::Create(r));
+      content::WebContents *t =
+          guest_view_manager->CreateGuestWithWebContentsParams(
+              WebViewGuest::Type, guest_owner_contents_.get(), create_params);
+      // TODO: Should remove the webview tag so it does not show in taskmanager
+      create_params.guest_delegate = WebViewGuest::FromWebContents(t);
+    }
+  }
+
+  host_contents_.reset(WebContents::Create(create_params)),
+      content::WebContentsObserver::Observe(host_contents_.get());
+
   host_contents_->SetDelegate(this);
   SetViewType(host_contents_.get(), host_type);
 
@@ -119,6 +164,20 @@ ExtensionHost::~ExtensionHost() {
   content::WebContentsObserver::Observe(nullptr);
 }
 
+#ifdef VIVALDI_BUILD
+void ExtensionHost::SetHostContentsAndRenderView(
+    content::WebContents *web_contents) {
+  host_contents_.reset(web_contents);
+  render_view_host_ = web_contents->GetRenderViewHost();
+}
+
+void ExtensionHost::ReleaseHostContents() {
+  // Note(andre@vivaldi.com) : host_contents_ should be released since it's
+  // owned by another object, most likely a webviewguest.
+  ignore_result(host_contents_.release());
+}
+#endif //VIVALDI_BUILD
+
 content::RenderProcessHost* ExtensionHost::render_process_host() const {
   return render_view_host()->GetProcess();
 }
@@ -148,6 +207,13 @@ void ExtensionHost::CreateRenderViewNow() {
   tracked_objects::ScopedTracker tracking_profile1(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "464206 ExtensionHost::CreateRenderViewNow1"));
+  if (!ExtensionRegistry::Get(browser_context_)
+           ->ready_extensions()
+           .Contains(extension_->id())) {
+    is_render_view_creation_pending_ = true;
+    return;
+  }
+  is_render_view_creation_pending_ = false;
   LoadInitialURL();
   if (IsBackgroundPage()) {
     // TODO(robliao): Remove ScopedTracker below once crbug.com/464206 is fixed.
@@ -207,12 +273,12 @@ void ExtensionHost::OnBackgroundEventDispatched(const std::string& event_name,
                     OnBackgroundEventDispatched(this, event_name, event_id));
 }
 
-void ExtensionHost::OnNetworkRequestStarted(uint64 request_id) {
+void ExtensionHost::OnNetworkRequestStarted(uint64_t request_id) {
   FOR_EACH_OBSERVER(ExtensionHostObserver, observer_list_,
                     OnNetworkRequestStarted(this, request_id));
 }
 
-void ExtensionHost::OnNetworkRequestDone(uint64 request_id) {
+void ExtensionHost::OnNetworkRequestDone(uint64_t request_id) {
   FOR_EACH_OBSERVER(ExtensionHostObserver, observer_list_,
                     OnNetworkRequestDone(this, request_id));
 }
@@ -231,6 +297,12 @@ void ExtensionHost::LoadInitialURL() {
 bool ExtensionHost::IsBackgroundPage() const {
   DCHECK_EQ(extension_host_type_, VIEW_TYPE_EXTENSION_BACKGROUND_PAGE);
   return true;
+}
+
+void ExtensionHost::OnExtensionReady(content::BrowserContext* browser_context,
+                                     const Extension* extension) {
+  if (is_render_view_creation_pending_)
+    CreateRenderViewNow();
 }
 
 void ExtensionHost::OnExtensionUnloaded(
@@ -285,7 +357,10 @@ void ExtensionHost::DidStopLoading() {
   bool first_load = !has_loaded_once_;
   has_loaded_once_ = true;
   if (first_load) {
+    // Note(andre@vivaldi.com): We do the startload in a webview in Vivaldi.
+    if(!vivaldi::IsVivaldiRunning()) {
     RecordStopLoadingUMA();
+    }
     OnDidStopFirstLoad();
     content::NotificationService::current()->Notify(
         extensions::NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD,
@@ -298,8 +373,12 @@ void ExtensionHost::DidStopLoading() {
 }
 
 void ExtensionHost::OnDidStopFirstLoad() {
+  if (!vivaldi::IsVivaldiRunning()) {
+  // Vivaldi might use ExtensionHost to set up the renderer for extension popups
+  // used in webviewguests.
   DCHECK_EQ(extension_host_type_, VIEW_TYPE_EXTENSION_BACKGROUND_PAGE);
   // Nothing to do for background pages.
+  }
 }
 
 void ExtensionHost::DocumentAvailableInMainFrame() {
@@ -420,6 +499,8 @@ void ExtensionHost::AddNewContents(WebContents* source,
             new_contents->GetBrowserContext()) {
       WebContentsDelegate* delegate = associated_contents->GetDelegate();
       if (delegate) {
+        // Make sure we do not interfere with script loading.
+        new_contents->delayed_open_url().reset();
         delegate->AddNewContents(
             associated_contents, new_contents, disposition, initial_rect,
             user_gesture, was_blocked);
@@ -430,6 +511,19 @@ void ExtensionHost::AddNewContents(WebContents* source,
 
   delegate_->CreateTab(
       new_contents, extension_id_, disposition, initial_rect, user_gesture);
+}
+
+content::WebContents *ExtensionHost::GetAssociatedWebContents() const {
+  chrome::HostDesktopType active_desktop = chrome::GetActiveDesktop();
+  bool match_original_profiles = true;
+  Profile *profile = Profile::FromBrowserContext(browser_context_);
+  Browser *browser = chrome::FindTabbedBrowser(profile, match_original_profiles,
+                                               active_desktop);
+  if (browser) {
+    TabStripModel *tab_strip = browser->tab_strip_model();
+    return tab_strip->GetActiveWebContents();
+  }
+  return nullptr;
 }
 
 void ExtensionHost::RenderViewReady() {

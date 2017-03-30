@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_MAC_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_MAC_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "extensions/common/manifest_handlers/file_handler_info.h"
@@ -88,6 +90,8 @@ class WebAppShortcutCreator {
   FRIEND_TEST_ALL_PREFIXES(WebAppShortcutCreatorTest, DeleteShortcuts);
   FRIEND_TEST_ALL_PREFIXES(WebAppShortcutCreatorTest, UpdateIcon);
   FRIEND_TEST_ALL_PREFIXES(WebAppShortcutCreatorTest, UpdateShortcuts);
+  FRIEND_TEST_ALL_PREFIXES(WebAppShortcutCreatorTest,
+                           UpdateBookmarkAppShortcut);
 
   // Returns the bundle identifier to use for this app bundle.
   std::string GetBundleIdentifier() const;

@@ -24,9 +24,9 @@ def _LogToFile(results, test_type, suite_name):
       print >> log_file, '\n%s results for %s build %s:' % (
           test_type, os.environ.get('BUILDBOT_BUILDERNAME'),
           os.environ.get('BUILDBOT_BUILDNUMBER'))
-    logging.info('Writing results to %s.' % full_file_name)
+    logging.info('Writing results to %s.', full_file_name)
 
-  logging.info('Writing results to %s.' % full_file_name)
+  logging.info('Writing results to %s.', full_file_name)
   with open(full_file_name, 'a') as log_file:
     shortened_suite_name = suite_name[:25] + (suite_name[25:] and '...')
     print >> log_file, '%s%s' % (shortened_suite_name.ljust(30),
@@ -36,15 +36,16 @@ def _LogToFile(results, test_type, suite_name):
 def _LogToFlakinessDashboard(results, test_type, test_package,
                              flakiness_server):
   """Upload results to the flakiness dashboard"""
-  logging.info('Upload results for test type "%s", test package "%s" to %s' %
-               (test_type, test_package, flakiness_server))
+  logging.info('Upload results for test type "%s", test package "%s" to %s',
+               test_type, test_package, flakiness_server)
 
   try:
-    if test_type == 'Instrumentation':
+    # TODO(jbudorick): remove Instrumentation once instrumentation tests
+    # switch to platform mode.
+    if test_type in ('instrumentation', 'Instrumentation'):
       if flakiness_server == constants.UPSTREAM_FLAKINESS_SERVER:
         assert test_package in ['ContentShellTest',
                                 'ChromePublicTest',
-                                'ChromeShellTest',
                                 'ChromeSyncShellTest',
                                 'AndroidWebViewTest']
         dashboard_test_type = ('%s_instrumentation_tests' %
@@ -53,7 +54,7 @@ def _LogToFlakinessDashboard(results, test_type, test_package,
       else:
         dashboard_test_type = 'Chromium_Android_Instrumentation'
 
-    elif test_type == 'Unit test':
+    elif test_type == 'gtest':
       dashboard_test_type = test_package
 
     else:
@@ -63,8 +64,8 @@ def _LogToFlakinessDashboard(results, test_type, test_package,
     results_uploader.Upload(
         results, flakiness_server, dashboard_test_type)
 
-  except Exception as e:
-    logging.error(e)
+  except Exception: # pylint: disable=broad-except
+    logging.exception('Failure while logging to %s', flakiness_server)
 
 
 def LogFull(results, test_type, test_package, annotation=None,

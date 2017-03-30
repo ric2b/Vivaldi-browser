@@ -5,10 +5,12 @@
 #ifndef NET_SPDY_BUFFERED_SPDY_FRAMER_H_
 #define NET_SPDY_BUFFERED_SPDY_FRAMER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/net_export.h"
 #include "net/socket/next_proto.h"
@@ -78,13 +80,27 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
   // |len| The number of padding octets.
   virtual void OnStreamPadding(SpdyStreamId stream_id, size_t len) = 0;
 
+  // Called just before processing the payload of a frame containing header
+  // data. Should return an implementation of SpdyHeadersHandlerInterface that
+  // will receive headers for stream |stream_id|. The caller will not take
+  // ownership of the headers handler. The same instance should be returned
+  // for all header frames comprising a logical header block (i.e. until
+  // OnHeaderFrameEnd() is called with end_headers == true).
+  virtual SpdyHeadersHandlerInterface* OnHeaderFrameStart(
+      SpdyStreamId stream_id) = 0;
+
+  // Called after processing the payload of a frame containing header data.
+  // |end_headers| is true if there will not be any subsequent CONTINUATION
+  // frames.
+  virtual void OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) = 0;
+
   // Called when a SETTINGS frame is received.
   // |clear_persisted| True if the respective flag is set on the SETTINGS frame.
   virtual void OnSettings(bool clear_persisted) = 0;
 
   // Called when an individual setting within a SETTINGS frame has been parsed
   // and validated.
-  virtual void OnSetting(SpdySettingsIds id, uint8 flags, uint32 value) = 0;
+  virtual void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) = 0;
 
   // Called when a SETTINGS frame is received with the ACK flag set.
   virtual void OnSettingsAck() {}
@@ -101,7 +117,8 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
 
   // Called when a GOAWAY frame has been parsed.
   virtual void OnGoAway(SpdyStreamId last_accepted_stream_id,
-                        SpdyGoAwayStatus status) = 0;
+                        SpdyGoAwayStatus status,
+                        base::StringPiece debug_data) = 0;
 
   // Called when a WINDOW_UPDATE frame has been parsed.
   virtual void OnWindowUpdate(SpdyStreamId stream_id,
@@ -166,14 +183,18 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
                          size_t len,
                          bool fin) override;
   void OnStreamPadding(SpdyStreamId stream_id, size_t len) override;
+  SpdyHeadersHandlerInterface* OnHeaderFrameStart(
+      SpdyStreamId stream_id) override;
+  void OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) override;
   void OnSettings(bool clear_persisted) override;
-  void OnSetting(SpdySettingsIds id, uint8 flags, uint32 value) override;
+  void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) override;
   void OnSettingsAck() override;
   void OnSettingsEnd() override;
   void OnPing(SpdyPingId unique_id, bool is_ack) override;
   void OnRstStream(SpdyStreamId stream_id, SpdyRstStreamStatus status) override;
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
                 SpdyGoAwayStatus status) override;
+  bool OnGoAwayFrameData(const char* goaway_data, size_t len) override;
   void OnWindowUpdate(SpdyStreamId stream_id, int delta_window_size) override;
   void OnPushPromise(SpdyStreamId stream_id,
                      SpdyStreamId promised_stream_id,
@@ -204,19 +225,18 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
                              SpdyRstStreamStatus status) const;
   SpdyFrame* CreateSettings(const SettingsMap& values) const;
   SpdyFrame* CreatePingFrame(SpdyPingId unique_id, bool is_ack) const;
-  SpdyFrame* CreateGoAway(
-      SpdyStreamId last_accepted_stream_id,
-      SpdyGoAwayStatus status) const;
+  SpdyFrame* CreateGoAway(SpdyStreamId last_accepted_stream_id,
+                          SpdyGoAwayStatus status,
+                          base::StringPiece debug_data) const;
   SpdyFrame* CreateHeaders(SpdyStreamId stream_id,
                            SpdyControlFlags flags,
                            SpdyPriority priority,
                            const SpdyHeaderBlock* headers);
-  SpdyFrame* CreateWindowUpdate(
-      SpdyStreamId stream_id,
-      uint32 delta_window_size) const;
+  SpdyFrame* CreateWindowUpdate(SpdyStreamId stream_id,
+                                uint32_t delta_window_size) const;
   SpdyFrame* CreateDataFrame(SpdyStreamId stream_id,
                              const char* data,
-                             uint32 len,
+                             uint32_t len,
                              SpdyDataFlags flags);
   SpdyFrame* CreatePushPromise(SpdyStreamId stream_id,
                                SpdyStreamId promised_stream_id,
@@ -256,17 +276,13 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
   int frames_received() const { return frames_received_; }
 
  private:
-  // The size of the header_buffer_.
-  enum { kHeaderBufferSize = 32 * 1024 };
-
   void InitHeaderStreaming(SpdyStreamId stream_id);
 
   SpdyFramer spdy_framer_;
   BufferedSpdyFramerVisitorInterface* visitor_;
 
   // Header block streaming state:
-  char header_buffer_[kHeaderBufferSize];
-  size_t header_buffer_used_;
+  std::string header_buffer_;
   bool header_buffer_valid_;
   SpdyStreamId header_stream_id_;
   int frames_received_;
@@ -282,11 +298,18 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
     SpdyPriority priority;
     SpdyStreamId parent_stream_id;
     bool exclusive;
-    uint8 credential_slot;
     bool fin;
     bool unidirectional;
   };
   scoped_ptr<ControlFrameFields> control_frame_fields_;
+
+  // Collection of fields of a GOAWAY frame that this class needs to buffer.
+  struct GoAwayFields {
+    SpdyStreamId last_accepted_stream_id;
+    SpdyGoAwayStatus status;
+    std::string debug_data;
+  };
+  scoped_ptr<GoAwayFields> goaway_fields_;
 
   DISALLOW_COPY_AND_ASSIGN(BufferedSpdyFramer);
 };

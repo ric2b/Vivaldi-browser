@@ -12,8 +12,7 @@ extern "C" {
 #include "ui/gl/gl_image_glx.h"
 #include "ui/gl/gl_surface_glx.h"
 
-namespace gfx {
-
+namespace gl {
 namespace {
 
 bool ValidFormat(unsigned internalformat) {
@@ -70,15 +69,9 @@ bool ActualPixmapGeometry(XID pixmap, gfx::Size* size, unsigned* depth) {
   unsigned height_return;
   unsigned border_width_return;
   unsigned depth_return;
-  if (!XGetGeometry(gfx::GetXDisplay(),
-                    pixmap,
-                    &root_return,
-                    &x_return,
-                    &y_return,
-                    &width_return,
-                    &height_return,
-                    &border_width_return,
-                    &depth_return))
+  if (!XGetGeometry(gfx::GetXDisplay(), pixmap, &root_return, &x_return,
+                    &y_return, &width_return, &height_return,
+                    &border_width_return, &depth_return))
     return false;
 
   if (size)
@@ -104,18 +97,17 @@ gfx::Size ActualPixmapSize(XID pixmap) {
   return size;
 }
 
-}  // namespace anonymous
+}  // namespace
 
 GLImageGLX::GLImageGLX(const gfx::Size& size, unsigned internalformat)
-    : glx_pixmap_(0), size_(size), internalformat_(internalformat) {
-}
+    : glx_pixmap_(0), size_(size), internalformat_(internalformat) {}
 
 GLImageGLX::~GLImageGLX() {
   DCHECK_EQ(0u, glx_pixmap_);
 }
 
 bool GLImageGLX::Initialize(XID pixmap) {
-  if (!GLSurfaceGLX::IsTextureFromPixmapSupported()) {
+  if (!gfx::GLSurfaceGLX::IsTextureFromPixmapSupported()) {
     DVLOG(0) << "GLX_EXT_texture_from_pixmap not supported.";
     return false;
   }
@@ -149,8 +141,8 @@ bool GLImageGLX::Initialize(XID pixmap) {
   int pixmap_attribs[] = {GLX_TEXTURE_TARGET_EXT, GLX_TEXTURE_2D_EXT,
                           GLX_TEXTURE_FORMAT_EXT,
                           TextureFormat(internalformat_), 0};
-  glx_pixmap_ = glXCreatePixmap(
-      gfx::GetXDisplay(), *config.get(), pixmap, pixmap_attribs);
+  glx_pixmap_ = glXCreatePixmap(gfx::GetXDisplay(), *config.get(), pixmap,
+                                pixmap_attribs);
   if (!glx_pixmap_) {
     DVLOG(0) << "glXCreatePixmap failed.";
     return false;
@@ -166,7 +158,9 @@ void GLImageGLX::Destroy(bool have_context) {
   }
 }
 
-gfx::Size GLImageGLX::GetSize() { return size_; }
+gfx::Size GLImageGLX::GetSize() {
+  return size_;
+}
 
 unsigned GLImageGLX::GetInternalFormat() { return internalformat_; }
 
@@ -189,18 +183,28 @@ void GLImageGLX::ReleaseTexImage(unsigned target) {
   glXReleaseTexImageEXT(gfx::GetXDisplay(), glx_pixmap_, GLX_FRONT_LEFT_EXT);
 }
 
+bool GLImageGLX::CopyTexImage(unsigned target) {
+  return false;
+}
+
 bool GLImageGLX::CopyTexSubImage(unsigned target,
-                                 const Point& offset,
-                                 const Rect& rect) {
+                                 const gfx::Point& offset,
+                                 const gfx::Rect& rect) {
   return false;
 }
 
 bool GLImageGLX::ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
                                       int z_order,
-                                      OverlayTransform transform,
-                                      const Rect& bounds_rect,
-                                      const RectF& crop_rect) {
+                                      gfx::OverlayTransform transform,
+                                      const gfx::Rect& bounds_rect,
+                                      const gfx::RectF& crop_rect) {
   return false;
 }
 
-}  // namespace gfx
+void GLImageGLX::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
+                              uint64_t process_tracing_id,
+                              const std::string& dump_name) {
+  // TODO(ericrk): Implement GLImage OnMemoryDump. crbug.com/514914
+}
+
+}  // namespace gl

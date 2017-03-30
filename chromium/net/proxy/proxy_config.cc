@@ -4,9 +4,11 @@
 
 #include "net/proxy/proxy_config.h"
 
+#include <utility>
+
 #include "base/logging.h"
-#include "base/strings/string_util.h"
 #include "base/strings/string_tokenizer.h"
+#include "base/strings/string_util.h"
 #include "base/values.h"
 #include "net/proxy/proxy_info.h"
 
@@ -231,7 +233,7 @@ void ProxyConfig::ClearAutomaticSettings() {
   pac_url_ = GURL();
 }
 
-base::DictionaryValue* ProxyConfig::ToValue() const {
+scoped_ptr<base::DictionaryValue> ProxyConfig::ToValue() const {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
   // Output the automatic settings.
@@ -258,7 +260,7 @@ base::DictionaryValue* ProxyConfig::ToValue() const {
         AddProxyListToValue("ftp", proxy_rules_.proxies_for_ftp, dict2.get());
         AddProxyListToValue("fallback", proxy_rules_.fallback_proxies,
                             dict2.get());
-        dict->Set("proxy_per_scheme", dict2.Pass());
+        dict->Set("proxy_per_scheme", std::move(dict2));
         break;
       }
       default:
@@ -286,7 +288,7 @@ base::DictionaryValue* ProxyConfig::ToValue() const {
   // Output the source.
   dict->SetString("source", ProxyConfigSourceToString(source_));
 
-  return dict.release();
+  return dict;
 }
 
 }  // namespace net

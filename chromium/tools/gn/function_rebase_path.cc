@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "tools/gn/build_settings.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/functions.h"
@@ -142,7 +144,7 @@ const char kRebasePath_Help[] =
     "  relative to the source root, so can't also generate source-absolute\n"
     "  paths without more special-cases.\n"
     "\n"
-    "Arguments:\n"
+    "Arguments\n"
     "\n"
     "  input\n"
     "      A string or list of strings representing file or directory names\n"
@@ -172,6 +174,12 @@ const char kRebasePath_Help[] =
     "  string or a list of strings). All relative and source-absolute file\n"
     "  names will be converted to be relative to the requested output\n"
     "  System-absolute paths will be unchanged.\n"
+    "\n"
+    "  Whether an output path will end in a slash will match whether the\n"
+    "  corresponding input path ends in a slash. It will return \".\" or\n"
+    "  \"./\" (depending on whether the input ends in a slash) to avoid\n"
+    "  returning empty strings. This means if you want a root path\n"
+    "  (\"//\" or \"/\") not ending in a slash, you can add a dot (\"//.\").\n"
     "\n"
     "Example\n"
     "\n"

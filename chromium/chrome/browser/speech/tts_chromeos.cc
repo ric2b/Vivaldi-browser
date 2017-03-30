@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "chrome/browser/speech/tts_platform.h"
 
 // Chrome OS doesn't have native TTS, instead it includes a built-in
@@ -48,7 +49,7 @@ class TtsPlatformImplChromeOs : public TtsPlatformImpl {
   TtsPlatformImplChromeOs() {}
   ~TtsPlatformImplChromeOs() override {}
 
-  friend struct DefaultSingletonTraits<TtsPlatformImplChromeOs>;
+  friend struct base::DefaultSingletonTraits<TtsPlatformImplChromeOs>;
 
   DISALLOW_COPY_AND_ASSIGN(TtsPlatformImplChromeOs);
 };
@@ -61,5 +62,5 @@ TtsPlatformImpl* TtsPlatformImpl::GetInstance() {
 // static
 TtsPlatformImplChromeOs*
 TtsPlatformImplChromeOs::GetInstance() {
-  return Singleton<TtsPlatformImplChromeOs>::get();
+  return base::Singleton<TtsPlatformImplChromeOs>::get();
 }

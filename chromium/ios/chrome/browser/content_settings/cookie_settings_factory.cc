@@ -8,11 +8,9 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
+#include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
-
-namespace {
-const char kDummyExtensionScheme[] = ":no-extension-scheme:";
-}
 
 namespace ios {
 
@@ -26,13 +24,14 @@ CookieSettingsFactory::GetForBrowserState(
 
 // static
 CookieSettingsFactory* CookieSettingsFactory::GetInstance() {
-  return Singleton<CookieSettingsFactory>::get();
+  return base::Singleton<CookieSettingsFactory>::get();
 }
 
 CookieSettingsFactory::CookieSettingsFactory()
     : RefcountedBrowserStateKeyedServiceFactory(
           "CookieSettings",
           BrowserStateDependencyManager::GetInstance()) {
+  DependsOn(ios::HostContentSettingsMapFactory::GetInstance());
 }
 
 CookieSettingsFactory::~CookieSettingsFactory() {
@@ -56,8 +55,8 @@ CookieSettingsFactory::BuildServiceInstanceFor(
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
   return new content_settings::CookieSettings(
-      browser_state->GetHostContentSettingsMap(), browser_state->GetPrefs(),
-      kDummyExtensionScheme);
+      ios::HostContentSettingsMapFactory::GetForBrowserState(browser_state),
+      browser_state->GetPrefs(), kDummyExtensionScheme);
 }
 
 }  // namespace ios

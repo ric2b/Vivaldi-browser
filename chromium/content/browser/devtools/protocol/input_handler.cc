@@ -4,8 +4,12 @@
 
 #include "content/browser/devtools/protocol/input_handler.h"
 
+#include <stddef.h>
+
+#include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "cc/output/compositor_frame_metadata.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
@@ -21,12 +25,12 @@ namespace input {
 
 namespace {
 
-gfx::Point CssPixelsToPoint(int x, int y, float page_scale_factor) {
-  return gfx::Point(x * page_scale_factor, y * page_scale_factor);
+gfx::PointF CssPixelsToPointF(int x, int y, float page_scale_factor) {
+  return gfx::PointF(x * page_scale_factor, y * page_scale_factor);
 }
 
-gfx::Vector2d CssPixelsToVector2d(int x, int y, float page_scale_factor) {
-  return gfx::Vector2d(x * page_scale_factor, y * page_scale_factor);
+gfx::Vector2dF CssPixelsToVector2dF(int x, int y, float page_scale_factor) {
+  return gfx::Vector2dF(x * page_scale_factor, y * page_scale_factor);
 }
 
 bool StringToGestureSourceType(const std::string& in,
@@ -202,12 +206,12 @@ Response InputHandler::DispatchKeyEvent(
 
   if (code) {
     event.domCode = static_cast<int>(
-        ui::KeycodeConverter::CodeStringToDomCode(code->c_str()));
+        ui::KeycodeConverter::CodeStringToDomCode(*code));
   }
 
   if (key) {
     event.domKey = static_cast<int>(
-        ui::KeycodeConverter::KeyStringToDomKey(key->c_str()));
+        ui::KeycodeConverter::KeyStringToDomKey(*key));
   }
 
   if (!host_)
@@ -317,7 +321,7 @@ Response InputHandler::SynthesizePinchGesture(
   const int kDefaultRelativeSpeed = 800;
 
   gesture_params.scale_factor = scale_factor;
-  gesture_params.anchor = CssPixelsToPoint(x, y, page_scale_factor_);
+  gesture_params.anchor = CssPixelsToPointF(x, y, page_scale_factor_);
   gesture_params.relative_pointer_speed_in_pixels_s =
       relative_speed ? *relative_speed : kDefaultRelativeSpeed;
 
@@ -345,7 +349,10 @@ Response InputHandler::SynthesizeScrollGesture(
     const int* y_overscroll,
     const bool* prevent_fling,
     const int* speed,
-    const std::string* gesture_source_type) {
+    const std::string* gesture_source_type,
+    const int* repeat_count,
+    const int* repeat_delay_ms,
+    const std::string* interaction_marker_name) {
   if (!host_)
     return Response::ServerError("Could not connect to view");
 
@@ -353,23 +360,21 @@ Response InputHandler::SynthesizeScrollGesture(
   const bool kDefaultPreventFling = true;
   const int kDefaultSpeed = 800;
 
-  gesture_params.anchor = CssPixelsToPoint(x, y, page_scale_factor_);
+  gesture_params.anchor = CssPixelsToPointF(x, y, page_scale_factor_);
   gesture_params.prevent_fling =
       prevent_fling ? *prevent_fling : kDefaultPreventFling;
   gesture_params.speed_in_pixels_s = speed ? *speed : kDefaultSpeed;
 
   if (x_distance || y_distance) {
     gesture_params.distances.push_back(
-        CssPixelsToVector2d(x_distance ? *x_distance : 0,
-                            y_distance ? *y_distance : 0,
-                            page_scale_factor_));
+        CssPixelsToVector2dF(x_distance ? *x_distance : 0,
+                             y_distance ? *y_distance : 0, page_scale_factor_));
   }
 
   if (x_overscroll || y_overscroll) {
-    gesture_params.distances.push_back(
-        CssPixelsToVector2d(x_overscroll ? -*x_overscroll : 0,
-                            y_overscroll ? -*y_overscroll : 0,
-                            page_scale_factor_));
+    gesture_params.distances.push_back(CssPixelsToVector2dF(
+        x_overscroll ? -*x_overscroll : 0, y_overscroll ? -*y_overscroll : 0,
+        page_scale_factor_));
   }
 
   if (!StringToGestureSourceType(
@@ -378,12 +383,56 @@ Response InputHandler::SynthesizeScrollGesture(
     return Response::InvalidParams("gestureSourceType");
   }
 
-  host_->QueueSyntheticGesture(
-      SyntheticGesture::Create(gesture_params),
-      base::Bind(&InputHandler::SendSynthesizeScrollGestureResponse,
-                 weak_factory_.GetWeakPtr(), command_id));
+  SynthesizeRepeatingScroll(
+      gesture_params, repeat_count ? *repeat_count : 0,
+      base::TimeDelta::FromMilliseconds(repeat_delay_ms ? *repeat_delay_ms
+                                                        : 250),
+      interaction_marker_name ? *interaction_marker_name : "", command_id);
 
   return Response::OK();
+}
+
+void InputHandler::SynthesizeRepeatingScroll(
+    SyntheticSmoothScrollGestureParams gesture_params,
+    int repeat_count,
+    base::TimeDelta repeat_delay,
+    std::string interaction_marker_name,
+    DevToolsCommandId command_id) {
+  if (!interaction_marker_name.empty()) {
+    // TODO(alexclarke): Can we move this elsewhere? It doesn't really fit here.
+    TRACE_EVENT_COPY_ASYNC_BEGIN0("benchmark", interaction_marker_name.c_str(),
+                                  command_id.call_id);
+  }
+
+  host_->QueueSyntheticGesture(
+      SyntheticGesture::Create(gesture_params),
+      base::Bind(&InputHandler::OnScrollFinished, weak_factory_.GetWeakPtr(),
+                 gesture_params, repeat_count, repeat_delay,
+                 interaction_marker_name, command_id));
+}
+
+void InputHandler::OnScrollFinished(
+    SyntheticSmoothScrollGestureParams gesture_params,
+    int repeat_count,
+    base::TimeDelta repeat_delay,
+    std::string interaction_marker_name,
+    DevToolsCommandId command_id,
+    SyntheticGesture::Result result) {
+  if (!interaction_marker_name.empty()) {
+    TRACE_EVENT_COPY_ASYNC_END0("benchmark", interaction_marker_name.c_str(),
+                                command_id.call_id);
+  }
+
+  if (repeat_count > 0) {
+    base::MessageLoop::current()->task_runner()->PostDelayedTask(
+        FROM_HERE,
+        base::Bind(&InputHandler::SynthesizeRepeatingScroll,
+                   weak_factory_.GetWeakPtr(), gesture_params, repeat_count - 1,
+                   repeat_delay, interaction_marker_name, command_id),
+        repeat_delay);
+  } else {
+    SendSynthesizeScrollGestureResponse(command_id, result);
+  }
 }
 
 Response InputHandler::SynthesizeTapGesture(
@@ -400,7 +449,7 @@ Response InputHandler::SynthesizeTapGesture(
   const int kDefaultDuration = 50;
   const int kDefaultTapCount = 1;
 
-  gesture_params.position = CssPixelsToPoint(x, y, page_scale_factor_);
+  gesture_params.position = CssPixelsToPointF(x, y, page_scale_factor_);
   gesture_params.duration_ms = duration ? *duration : kDefaultDuration;
 
   if (!StringToGestureSourceType(

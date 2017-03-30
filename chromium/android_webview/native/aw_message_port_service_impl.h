@@ -10,7 +10,7 @@
 
 #include "android_webview/browser/aw_message_port_service.h"
 #include "base/android/jni_weak_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 
@@ -42,10 +42,18 @@ class AwMessagePortServiceImpl : public AwMessagePortService {
   void CleanupPort(int message_port_id) override;
 
   // Methods called from Java.
-  void PostAppToWebMessage(JNIEnv* env, jobject object, int sender_id,
-      jstring message, jintArray sent_ports);
-  void ClosePort(JNIEnv* env, jobject object, int message_port_id);
-  void ReleaseMessages(JNIEnv* env, jobject object, int message_port_id);
+  void PostAppToWebMessage(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& object,
+      int sender_id,
+      const base::android::JavaParamRef<jstring>& message,
+      const base::android::JavaParamRef<jintArray>& sent_ports);
+  void ClosePort(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& object,
+                 int message_port_id);
+  void ReleaseMessages(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& object,
+                       int message_port_id);
 
   void RemoveSentPorts(const std::vector<int>& sent_ports);
 

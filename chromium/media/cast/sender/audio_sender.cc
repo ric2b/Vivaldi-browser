@@ -4,10 +4,12 @@
 
 #include "media/cast/sender/audio_sender.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "media/cast/cast_defines.h"
+#include "media/cast/common/rtp_time.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/sender/audio_encoder.h"
 
@@ -26,6 +28,7 @@ AudioSender::AudioSender(scoped_refptr<CastEnvironment> cast_environment,
                   0,  // |max_frame_rate_| is set after encoder initialization.
                   audio_config.min_playout_delay,
                   audio_config.max_playout_delay,
+                  audio_config.animated_playout_delay,
                   NewFixedCongestionControl(audio_config.bitrate)),
       samples_in_encoder_(0),
       weak_factory_(this) {
@@ -84,13 +87,13 @@ void AudioSender::InsertAudio(scoped_ptr<AudioBus> audio_bus,
   }
 
   const base::TimeDelta next_frame_duration =
-      RtpDeltaToTimeDelta(audio_bus->frames(), rtp_timebase());
+      RtpTimeDelta::FromTicks(audio_bus->frames()).ToTimeDelta(rtp_timebase());
   if (ShouldDropNextFrame(next_frame_duration))
     return;
 
   samples_in_encoder_ += audio_bus->frames();
 
-  audio_encoder_->InsertAudio(audio_bus.Pass(), recorded_time);
+  audio_encoder_->InsertAudio(std::move(audio_bus), recorded_time);
 }
 
 int AudioSender::GetNumberOfFramesInEncoder() const {
@@ -102,10 +105,7 @@ int AudioSender::GetNumberOfFramesInEncoder() const {
 base::TimeDelta AudioSender::GetInFlightMediaDuration() const {
   const int samples_in_flight = samples_in_encoder_ +
       GetUnacknowledgedFrameCount() * audio_encoder_->GetSamplesPerFrame();
-  return RtpDeltaToTimeDelta(samples_in_flight, rtp_timebase());
-}
-
-void AudioSender::OnAck(uint32 frame_id) {
+  return RtpTimeDelta::FromTicks(samples_in_flight).ToTimeDelta(rtp_timebase());
 }
 
 void AudioSender::OnEncodedAudioFrame(
@@ -117,7 +117,7 @@ void AudioSender::OnEncodedAudioFrame(
   samples_in_encoder_ -= audio_encoder_->GetSamplesPerFrame() + samples_skipped;
   DCHECK_GE(samples_in_encoder_, 0);
 
-  SendEncodedFrame(encoder_bitrate, encoded_frame.Pass());
+  SendEncodedFrame(encoder_bitrate, std::move(encoded_frame));
 }
 
 }  // namespace cast

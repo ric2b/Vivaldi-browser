@@ -28,202 +28,205 @@ chrome.automation = {};
  * @enum {string}
  */
 chrome.automation.EventType = {
-  activedescendantchanged: 'activedescendantchanged',
-  alert: 'alert',
-  ariaAttributeChanged: 'ariaAttributeChanged',
-  autocorrectionOccured: 'autocorrectionOccured',
-  blur: 'blur',
-  checkedStateChanged: 'checkedStateChanged',
-  childrenChanged: 'childrenChanged',
-  focus: 'focus',
-  hide: 'hide',
-  hover: 'hover',
-  invalidStatusChanged: 'invalidStatusChanged',
-  layoutComplete: 'layoutComplete',
-  liveRegionChanged: 'liveRegionChanged',
-  loadComplete: 'loadComplete',
-  locationChanged: 'locationChanged',
-  menuEnd: 'menuEnd',
-  menuListItemSelected: 'menuListItemSelected',
-  menuListValueChanged: 'menuListValueChanged',
-  menuPopupEnd: 'menuPopupEnd',
-  menuPopupStart: 'menuPopupStart',
-  menuStart: 'menuStart',
-  rowCollapsed: 'rowCollapsed',
-  rowCountChanged: 'rowCountChanged',
-  rowExpanded: 'rowExpanded',
-  scrollPositionChanged: 'scrollPositionChanged',
-  scrolledToAnchor: 'scrolledToAnchor',
-  selectedChildrenChanged: 'selectedChildrenChanged',
-  selection: 'selection',
-  selectionAdd: 'selectionAdd',
-  selectionRemove: 'selectionRemove',
-  show: 'show',
-  textChanged: 'textChanged',
-  textSelectionChanged: 'textSelectionChanged',
-  treeChanged: 'treeChanged',
-  valueChanged: 'valueChanged',
+  activedescendantchanged: '',
+  alert: '',
+  ariaAttributeChanged: '',
+  autocorrectionOccured: '',
+  blur: '',
+  checkedStateChanged: '',
+  childrenChanged: '',
+  documentSelectionChanged: '',
+  focus: '',
+  hide: '',
+  hover: '',
+  invalidStatusChanged: '',
+  layoutComplete: '',
+  liveRegionChanged: '',
+  loadComplete: '',
+  locationChanged: '',
+  menuEnd: '',
+  menuListItemSelected: '',
+  menuListValueChanged: '',
+  menuPopupEnd: '',
+  menuPopupStart: '',
+  menuStart: '',
+  rowCollapsed: '',
+  rowCountChanged: '',
+  rowExpanded: '',
+  scrollPositionChanged: '',
+  scrolledToAnchor: '',
+  selectedChildrenChanged: '',
+  selection: '',
+  selectionAdd: '',
+  selectionRemove: '',
+  show: '',
+  textChanged: '',
+  textSelectionChanged: '',
+  treeChanged: '',
+  valueChanged: '',
 };
 
 /**
  * @enum {string}
  */
 chrome.automation.RoleType = {
-  alertDialog: 'alertDialog',
-  alert: 'alert',
-  annotation: 'annotation',
-  application: 'application',
-  article: 'article',
-  banner: 'banner',
-  blockquote: 'blockquote',
-  busyIndicator: 'busyIndicator',
-  button: 'button',
-  buttonDropDown: 'buttonDropDown',
-  canvas: 'canvas',
-  caption: 'caption',
-  cell: 'cell',
-  checkBox: 'checkBox',
-  client: 'client',
-  colorWell: 'colorWell',
-  columnHeader: 'columnHeader',
-  column: 'column',
-  comboBox: 'comboBox',
-  complementary: 'complementary',
-  contentInfo: 'contentInfo',
-  date: 'date',
-  dateTime: 'dateTime',
-  definition: 'definition',
-  descriptionListDetail: 'descriptionListDetail',
-  descriptionList: 'descriptionList',
-  descriptionListTerm: 'descriptionListTerm',
-  desktop: 'desktop',
-  details: 'details',
-  dialog: 'dialog',
-  directory: 'directory',
-  disclosureTriangle: 'disclosureTriangle',
-  div: 'div',
-  document: 'document',
-  embeddedObject: 'embeddedObject',
-  figcaption: 'figcaption',
-  figure: 'figure',
-  footer: 'footer',
-  form: 'form',
-  grid: 'grid',
-  group: 'group',
-  heading: 'heading',
-  iframe: 'iframe',
-  iframePresentational: 'iframePresentational',
-  ignored: 'ignored',
-  imageMapLink: 'imageMapLink',
-  imageMap: 'imageMap',
-  image: 'image',
-  inlineTextBox: 'inlineTextBox',
-  labelText: 'labelText',
-  legend: 'legend',
-  lineBreak: 'lineBreak',
-  link: 'link',
-  listBoxOption: 'listBoxOption',
-  listBox: 'listBox',
-  listItem: 'listItem',
-  listMarker: 'listMarker',
-  list: 'list',
-  locationBar: 'locationBar',
-  log: 'log',
-  main: 'main',
-  marquee: 'marquee',
-  math: 'math',
-  menuBar: 'menuBar',
-  menuButton: 'menuButton',
-  menuItem: 'menuItem',
-  menuItemCheckBox: 'menuItemCheckBox',
-  menuItemRadio: 'menuItemRadio',
-  menuListOption: 'menuListOption',
-  menuListPopup: 'menuListPopup',
-  menu: 'menu',
-  meter: 'meter',
-  navigation: 'navigation',
-  note: 'note',
-  outline: 'outline',
-  pane: 'pane',
-  paragraph: 'paragraph',
-  popUpButton: 'popUpButton',
-  pre: 'pre',
-  presentational: 'presentational',
-  progressIndicator: 'progressIndicator',
-  radioButton: 'radioButton',
-  radioGroup: 'radioGroup',
-  region: 'region',
-  rootWebArea: 'rootWebArea',
-  rowHeader: 'rowHeader',
-  row: 'row',
-  ruby: 'ruby',
-  ruler: 'ruler',
-  svgRoot: 'svgRoot',
-  scrollArea: 'scrollArea',
-  scrollBar: 'scrollBar',
-  seamlessWebArea: 'seamlessWebArea',
-  search: 'search',
-  searchBox: 'searchBox',
-  slider: 'slider',
-  sliderThumb: 'sliderThumb',
-  spinButtonPart: 'spinButtonPart',
-  spinButton: 'spinButton',
-  splitter: 'splitter',
-  staticText: 'staticText',
-  status: 'status',
-  switch: 'switch',
-  tabGroup: 'tabGroup',
-  tabList: 'tabList',
-  tabPanel: 'tabPanel',
-  tab: 'tab',
-  tableHeaderContainer: 'tableHeaderContainer',
-  table: 'table',
-  textField: 'textField',
-  time: 'time',
-  timer: 'timer',
-  titleBar: 'titleBar',
-  toggleButton: 'toggleButton',
-  toolbar: 'toolbar',
-  treeGrid: 'treeGrid',
-  treeItem: 'treeItem',
-  tree: 'tree',
-  unknown: 'unknown',
-  tooltip: 'tooltip',
-  webArea: 'webArea',
-  webView: 'webView',
-  window: 'window',
+  alertDialog: '',
+  alert: '',
+  annotation: '',
+  application: '',
+  article: '',
+  banner: '',
+  blockquote: '',
+  busyIndicator: '',
+  button: '',
+  buttonDropDown: '',
+  canvas: '',
+  caption: '',
+  cell: '',
+  checkBox: '',
+  client: '',
+  colorWell: '',
+  columnHeader: '',
+  column: '',
+  comboBox: '',
+  complementary: '',
+  contentInfo: '',
+  date: '',
+  dateTime: '',
+  definition: '',
+  descriptionListDetail: '',
+  descriptionList: '',
+  descriptionListTerm: '',
+  desktop: '',
+  details: '',
+  dialog: '',
+  directory: '',
+  disclosureTriangle: '',
+  div: '',
+  document: '',
+  embeddedObject: '',
+  figcaption: '',
+  figure: '',
+  footer: '',
+  form: '',
+  grid: '',
+  group: '',
+  heading: '',
+  iframe: '',
+  iframePresentational: '',
+  ignored: '',
+  imageMapLink: '',
+  imageMap: '',
+  image: '',
+  inlineTextBox: '',
+  labelText: '',
+  legend: '',
+  lineBreak: '',
+  link: '',
+  listBoxOption: '',
+  listBox: '',
+  listItem: '',
+  listMarker: '',
+  list: '',
+  locationBar: '',
+  log: '',
+  main: '',
+  marquee: '',
+  math: '',
+  menuBar: '',
+  menuButton: '',
+  menuItem: '',
+  menuItemCheckBox: '',
+  menuItemRadio: '',
+  menuListOption: '',
+  menuListPopup: '',
+  menu: '',
+  meter: '',
+  navigation: '',
+  note: '',
+  outline: '',
+  pane: '',
+  paragraph: '',
+  popUpButton: '',
+  pre: '',
+  presentational: '',
+  progressIndicator: '',
+  radioButton: '',
+  radioGroup: '',
+  region: '',
+  rootWebArea: '',
+  rowHeader: '',
+  row: '',
+  ruby: '',
+  ruler: '',
+  svgRoot: '',
+  scrollArea: '',
+  scrollBar: '',
+  seamlessWebArea: '',
+  search: '',
+  searchBox: '',
+  slider: '',
+  sliderThumb: '',
+  spinButtonPart: '',
+  spinButton: '',
+  splitter: '',
+  staticText: '',
+  status: '',
+  switch: '',
+  tabGroup: '',
+  tabList: '',
+  tabPanel: '',
+  tab: '',
+  tableHeaderContainer: '',
+  table: '',
+  textField: '',
+  time: '',
+  timer: '',
+  titleBar: '',
+  toggleButton: '',
+  toolbar: '',
+  treeGrid: '',
+  treeItem: '',
+  tree: '',
+  unknown: '',
+  tooltip: '',
+  webArea: '',
+  webView: '',
+  window: '',
 };
 
 /**
  * @enum {string}
  */
 chrome.automation.StateType = {
-  busy: 'busy',
-  checked: 'checked',
-  collapsed: 'collapsed',
-  default: 'default',
-  disabled: 'disabled',
-  editable: 'editable',
-  enabled: 'enabled',
-  expanded: 'expanded',
-  focusable: 'focusable',
-  focused: 'focused',
-  haspopup: 'haspopup',
-  horizontal: 'horizontal',
-  hovered: 'hovered',
-  indeterminate: 'indeterminate',
-  invisible: 'invisible',
-  linked: 'linked',
-  multiselectable: 'multiselectable',
-  offscreen: 'offscreen',
-  pressed: 'pressed',
-  protected: 'protected',
-  readOnly: 'readOnly',
-  required: 'required',
-  selectable: 'selectable',
-  selected: 'selected',
-  vertical: 'vertical',
-  visited: 'visited',
+  busy: '',
+  checked: '',
+  collapsed: '',
+  default: '',
+  disabled: '',
+  editable: '',
+  enabled: '',
+  expanded: '',
+  focusable: '',
+  focused: '',
+  haspopup: '',
+  horizontal: '',
+  hovered: '',
+  indeterminate: '',
+  invisible: '',
+  linked: '',
+  multiline: '',
+  multiselectable: '',
+  offscreen: '',
+  pressed: '',
+  protected: '',
+  readOnly: '',
+  required: '',
+  richlyEditable: '',
+  selectable: '',
+  selected: '',
+  vertical: '',
+  visited: '',
 };
 
 /**
@@ -261,6 +264,18 @@ chrome.automation.FindParams;
 chrome.automation.AutomationEvent = function() {};
 
 /**
+ * @type {!chrome.automation.AutomationNode}
+ */
+chrome.automation.AutomationEvent.prototype.target;
+
+/**
+ * @type {!chrome.automation.EventType}
+ */
+chrome.automation.AutomationEvent.prototype.type;
+
+chrome.automation.AutomationEvent.prototype.stopPropagation = function() {};
+
+/**
  * @typedef {{
  *   target: chrome.automation.AutomationNode,
  *   type: !chrome.automation.TreeChangeType
@@ -273,109 +288,25 @@ chrome.automation.TreeChange;
  */
 chrome.automation.AutomationNode = function() {};
 
-/**
- * @typedef {{
- *   activedescendant: chrome.automation.AutomationNode
- * }}
- */
-chrome.automation.ActiveDescendantMixin;
 
 /**
- * @typedef {{
- *   url: string
- * }}
- */
-chrome.automation.LinkMixins;
-
-/**
- * @typedef {{
- *   docUrl: string,
- *   docTitle: string,
- *   docLoaded: boolean,
- *   docLoadingProgress: number
- * }}
- */
-chrome.automation.DocumentMixins;
-
-/**
- * @typedef {{
- *   scrollX: number,
- *   scrollXMin: number,
- *   scrollXMax: number,
- *   scrollY: number,
- *   scrollYMin: number,
- *   scrollYMax: number
- * }}
- */
-chrome.automation.ScrollableMixins;
-
-/**
- * @typedef {{
- *   textSelStart: number,
- *   textSelEnd: number
- * }}
- */
-chrome.automation.EditableTextMixins;
-
-/**
- * @typedef {{
- *   valueForRange: number,
- *   minValueForRange: number,
- *   maxValueForRange: number
- * }}
- */
-chrome.automation.RangeMixins;
-
-/**
- * @typedef {{
- *   tableRowCount: number,
- *   tableColumnCount: number
- * }}
- */
-chrome.automation.TableMixins;
-
-/**
- * @typedef {{
- *   tableCellColumnIndex: number,
- *   tableCellColumnSpan: number,
- *   tableCellRowIndex: number,
- *   tableCellRowSpan: number
- * }}
- */
-chrome.automation.TableCellMixins;
-
-/**
- * Get the automation tree for the tab with the given tabId, or the current tab
- * if no tabID is given, enabling automation if necessary. Returns a tree with a
- * placeholder root node; listen for the "loadComplete" event to get a
- * notification that the tree has fully loaded (the previous root node reference
- * will stop working at or before this point).
  * @param {number} tabId
  * @param {function(chrome.automation.AutomationNode):void} callback
- *     Called when the <code>AutomationNode</code> for the page is available.
  */
 chrome.automation.getTree = function(tabId, callback) {};
 
-/**
- * Get the automation tree for the whole desktop which consists of all on screen
- * views. Note this API is currently only supported on Chrome OS.
- * @param {function(chrome.automation.AutomationNode):void} callback
- *     Called when the <code>AutomationNode</code> for the page is available.
- */
+/** @param {function(!chrome.automation.AutomationNode):void} callback */
 chrome.automation.getDesktop = function(callback) {};
 
 /**
- * Add a tree change observer. Tree change observers are static/global,
- * they listen to tree changes across all trees.
- * @param {function(chrome.automation.TreeChange):void} observer
- *     A listener for tree changes on the <code>AutomationNode</code> tree.
+ * @param {string} filter
+ * @param {function(chrome.automation.TreeChange) : void}
+ *    observer
  */
-chrome.automation.addTreeChangeObserver = function(observer) {};
+chrome.automation.addTreeChangeObserver = function(filter, observer) {};
 
 /**
- * Remove a tree change observer.
- * @param {function(chrome.automation.TreeChange):void} observer
- *     A listener for tree changes on the <code>AutomationNode</code> tree.
+ * @param {function(chrome.automation.TreeChange) : void} observer
  */
 chrome.automation.removeTreeChangeObserver = function(observer) {};
 
@@ -408,11 +339,22 @@ chrome.automation.AutomationNode.prototype.indexInParent;
  */
 chrome.automation.AutomationNode.prototype.name;
 
+/**
+ * @type {string}
+ */
+chrome.automation.AutomationNode.prototype.description;
+
 
 /**
  * @type {string}
  */
 chrome.automation.AutomationNode.prototype.url;
+
+
+/**
+ * @type {string}
+ */
+chrome.automation.AutomationNode.prototype.docUrl;
 
 
 /**
@@ -494,8 +436,21 @@ chrome.automation.AutomationNode.prototype.location;
 
 
 /**
+ * @param {number} start
+ * @param {number} end
+ * @return {
+ *     ({top: number, left: number, height: number, width: number})|undefined}
+ */
+chrome.automation.AutomationNode.prototype.boundsForRange =
+    function(start, end) {};
+
+
+chrome.automation.AutomationNode.prototype.makeVisible = function() {};
+
+
+/**
  * @param {chrome.automation.EventType} eventType
- * @param {function(chrome.automation.AutomationNode) : void} callback
+ * @param {function(!chrome.automation.AutomationEvent) : void} callback
  * @param {boolean} capture
  */
 chrome.automation.AutomationNode.prototype.addEventListener =
@@ -504,7 +459,7 @@ chrome.automation.AutomationNode.prototype.addEventListener =
 
 /**
  * @param {chrome.automation.EventType} eventType
- * @param {function(chrome.automation.AutomationNode) : void} callback
+ * @param {function(!chrome.automation.AutomationEvent) : void} callback
  * @param {boolean} capture
  */
 chrome.automation.AutomationNode.prototype.removeEventListener =
@@ -523,22 +478,6 @@ chrome.automation.TreeChange.prototype.target;
 chrome.automation.TreeChange.prototype.type;
 
 
-/**
- * @param {function(chrome.automation.TreeChange) : void}
- *    callback
- */
-chrome.automation.AutomationNode.prototype.addTreeChangeObserver =
-    function(callback) {};
-
-
-/**
- * @param {function(chrome.automation.TreeChange) : void}
- *    callback
- */
-chrome.automation.AutomationNode.prototype.removeTreeChangeObserver =
-    function(callback) {};
-
-
 chrome.automation.AutomationNode.prototype.doDefault = function() {};
 
 
@@ -546,6 +485,14 @@ chrome.automation.AutomationNode.prototype.focus = function() {};
 
 
 chrome.automation.AutomationNode.prototype.showContextMenu = function() {};
+
+
+/**
+ * @param {number} start
+ * @param {number} end
+ */
+chrome.automation.AutomationNode.prototype.setSelection =
+    function(start, end) {};
 
 
 /** @type {string} */
@@ -560,8 +507,50 @@ chrome.automation.AutomationNode.prototype.containerLiveAtomic;
 /** @type {boolean} */
 chrome.automation.AutomationNode.prototype.containerLiveBusy;
 
+/** @type {string} */
+chrome.automation.AutomationNode.prototype.liveStatus;
+
+/** @type {string} */
+chrome.automation.AutomationNode.prototype.liveRelevant;
+
+/** @type {boolean} */
+chrome.automation.AutomationNode.prototype.liveAtomic;
+
+/** @type {boolean} */
+chrome.automation.AutomationNode.prototype.liveBusy;
+
 
 /**
  * @param {Object} findParams
  */
 chrome.automation.AutomationNode.prototype.find = function(findParams) {};
+
+/**
+ * @type {string}
+ */
+chrome.automation.AutomationNode.prototype.inputType;
+
+/**
+ * @type {(chrome.automation.AutomationNode|undefined)}
+ */
+chrome.automation.AutomationNode.prototype.anchorObject;
+
+/**
+ * @type {(number|undefined)}
+ */
+chrome.automation.anchorOffset;
+
+/**
+ * @type {(chrome.automation.AutomationNode|undefined)}
+ */
+chrome.automation.AutomationNode.prototype.focusObject;
+
+/**
+ * @type {(Array<number>|undefined)}
+ */
+chrome.automation.AutomationNode.prototype.lineBreaks;
+
+/**
+ * @type {(number|undefined)}
+ */
+chrome.automation.focusOffset;

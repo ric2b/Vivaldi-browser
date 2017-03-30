@@ -5,6 +5,9 @@
 #ifndef ASH_DISPLAY_DISPLAY_MANAGER_H_
 #define ASH_DISPLAY_DISPLAY_MANAGER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -13,6 +16,7 @@
 #include "ash/display/display_layout.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/gfx/display.h"
@@ -38,7 +42,6 @@ class Screen;
 
 namespace ash {
 class AcceleratorControllerTest;
-class DisplayController;
 class DisplayLayoutStore;
 class MouseWarpController;
 class ScreenAsh;
@@ -93,7 +96,7 @@ class ASH_EXPORT DisplayManager
   };
 
   // The display ID for a virtual display assigned to a unified desktop.
-  static int64 kUnifiedDisplayId;
+  static int64_t kUnifiedDisplayId;
 
   DisplayManager();
 #if defined(OS_CHROMEOS)
@@ -116,7 +119,7 @@ class ASH_EXPORT DisplayManager
   }
 
   // Returns the display id of the first display in the outupt list.
-  int64 first_display_id() const { return first_display_id_; }
+  int64_t first_display_id() const { return first_display_id_; }
 
   // Initializes displays using command line flag. Returns false
   // if no command line flag was provided.
@@ -141,7 +144,7 @@ class ASH_EXPORT DisplayManager
       const DisplayLayout& layout_relative_to_primary);
 
   // Returns display for given |id|;
-  const gfx::Display& GetDisplayForId(int64 id) const;
+  const gfx::Display& GetDisplayForId(int64_t id) const;
 
   // Finds the display that contains |point| in screeen coordinates.
   // Returns invalid display if there is no display that can satisfy
@@ -150,37 +153,28 @@ class ASH_EXPORT DisplayManager
       const gfx::Point& point_in_screen) const;
 
   // Sets the work area's |insets| to the display given by |display_id|.
-  bool UpdateWorkAreaOfDisplay(int64 display_id, const gfx::Insets& insets);
+  bool UpdateWorkAreaOfDisplay(int64_t display_id, const gfx::Insets& insets);
 
   // Registers the overscan insets for the display of the specified ID. Note
   // that the insets size should be specified in DIP size. It also triggers the
   // display's bounds change.
-  void SetOverscanInsets(int64 display_id, const gfx::Insets& insets_in_dip);
+  void SetOverscanInsets(int64_t display_id, const gfx::Insets& insets_in_dip);
 
   // Sets the display's rotation for the given |source|. The new |rotation| will
   // also become active.
-  void SetDisplayRotation(int64 display_id,
+  void SetDisplayRotation(int64_t display_id,
                           gfx::Display::Rotation rotation,
                           gfx::Display::RotationSource source);
-
-  // Sets the display's ui scale. Returns true if it's successful, or
-  // false otherwise.  TODO(mukai): remove this and merge into
-  // SetDisplayMode.
-  bool SetDisplayUIScale(int64 display_id, float ui_scale);
-
-  // Sets the display's resolution.
-  // TODO(mukai): remove this and merge into SetDisplayMode.
-  void SetDisplayResolution(int64 display_id, const gfx::Size& resolution);
 
   // Sets the external display's configuration, including resolution change,
   // ui-scale change, and device scale factor change. Returns true if it changes
   // the display resolution so that the caller needs to show a notification in
   // case the new resolution actually doesn't work.
-  bool SetDisplayMode(int64 display_id, const DisplayMode& display_mode);
+  bool SetDisplayMode(int64_t display_id, const DisplayMode& display_mode);
 
   // Register per display properties. |overscan_insets| is NULL if
   // the display has no custom overscan insets.
-  void RegisterDisplayProperty(int64 display_id,
+  void RegisterDisplayProperty(int64_t display_id,
                                gfx::Display::Rotation rotation,
                                float ui_scale,
                                const gfx::Insets* overscan_insets,
@@ -205,11 +199,11 @@ class ASH_EXPORT DisplayManager
   }
 
   // Returns the display mode of |display_id| which is currently used.
-  DisplayMode GetActiveModeForDisplayId(int64 display_id) const;
+  DisplayMode GetActiveModeForDisplayId(int64_t display_id) const;
 
   // Returns the display's selected mode. This returns false and doesn't
   // set |mode_out| if the display mode is in default.
-  bool GetSelectedModeForDisplayId(int64 display_id,
+  bool GetSelectedModeForDisplayId(int64_t display_id,
                                    DisplayMode* mode_out) const;
 
   // Tells if the virtual resolution feature is enabled.
@@ -218,10 +212,10 @@ class ASH_EXPORT DisplayManager
   // Returns the current overscan insets for the specified |display_id|.
   // Returns an empty insets (0, 0, 0, 0) if no insets are specified for
   // the display.
-  gfx::Insets GetOverscanInsets(int64 display_id) const;
+  gfx::Insets GetOverscanInsets(int64_t display_id) const;
 
   // Sets the color calibration of the display to |profile|.
-  void SetColorCalibrationProfile(int64 display_id,
+  void SetColorCalibrationProfile(int64_t display_id,
                                   ui::ColorCalibrationProfile profile);
 
   // Called when display configuration has changed. The new display
@@ -231,7 +225,7 @@ class ASH_EXPORT DisplayManager
       const std::vector<DisplayInfo>& display_info_list);
 
   // Updates the internal display data and notifies observers about the changes.
-  void UpdateDisplays(const std::vector<DisplayInfo>& display_info_list);
+  void UpdateDisplaysWith(const std::vector<DisplayInfo>& display_info_list);
 
   // Updates current displays using current |display_info_|.
   void UpdateDisplays();
@@ -250,33 +244,43 @@ class ASH_EXPORT DisplayManager
     return active_display_list_;
   }
 
+  // Returns true if the display specified by |display_id| is currently
+  // connected and active. (mirroring display isn't active, for example).
+  bool IsActiveDisplayId(int64_t display_id) const;
+
   // Returns the number of connected displays. This returns 2
   // when displays are mirrored.
   size_t num_connected_displays() const { return num_connected_displays_; }
 
   // Returns the mirroring status.
   bool IsInMirrorMode() const;
-  int64 mirroring_display_id() const { return mirroring_display_id_; }
+  int64_t mirroring_display_id() const { return mirroring_display_id_; }
   const DisplayList& software_mirroring_display_list() const {
     return software_mirroring_display_list_;
   }
+
+  // Sets/gets if the unified desktop feature is enabled.
+  void SetUnifiedDesktopEnabled(bool enabled);
+  bool unified_desktop_enabled() const { return unified_desktop_enabled_; }
+
+  // Returns true if it's in unified desktop mode.
   bool IsInUnifiedMode() const;
 
   // Returns the display used for software mirrroring. Returns invalid
   // display if not found.
-  const gfx::Display GetMirroringDisplayById(int64 id) const;
+  const gfx::Display GetMirroringDisplayById(int64_t id) const;
 
   // Retuns the display info associated with |display_id|.
-  const DisplayInfo& GetDisplayInfo(int64 display_id) const;
+  const DisplayInfo& GetDisplayInfo(int64_t display_id) const;
 
   // Returns the human-readable name for the display |id|.
-  std::string GetDisplayNameForId(int64 id);
+  std::string GetDisplayNameForId(int64_t id);
 
   // Returns the display id that is capable of UI scaling. On device,
   // this returns internal display's ID if its device scale factor is 2,
   // or invalid ID if such internal display doesn't exist. On linux
   // desktop, this returns the first display ID.
-  int64 GetDisplayIdForUIScaling() const;
+  int64_t GetDisplayIdForUIScaling() const;
 
   // Change the mirror mode.
   void SetMirrorMode(bool mirrored);
@@ -292,14 +296,14 @@ class ASH_EXPORT DisplayManager
   bool SoftwareMirroringEnabled() const override;
 #endif
 
-  // Sets/gets multi display mode.
-  void SetMultiDisplayMode(MultiDisplayMode mode);
-
   // Sets/gets default multi display mode.
-  void SetDefaultMultiDisplayMode(MultiDisplayMode mode);
-  MultiDisplayMode default_multi_display_mode() const {
-    return default_multi_display_mode_;
+  void SetDefaultMultiDisplayModeForCurrentDisplays(MultiDisplayMode mode);
+  MultiDisplayMode current_default_multi_display_mode() const {
+    return current_default_multi_display_mode_;
   }
+
+  // Sets multi display mode.
+  void SetMultiDisplayMode(MultiDisplayMode mode);
 
   // Reconfigure display configuration using the same
   // physical display. TODO(oshima): Refactor and move this
@@ -307,8 +311,7 @@ class ASH_EXPORT DisplayManager
   void ReconfigureDisplays();
 
   // Update the bounds of the display given by |display_id|.
-  bool UpdateDisplayBounds(int64 display_id,
-                           const gfx::Rect& new_bounds);
+  bool UpdateDisplayBounds(int64_t display_id, const gfx::Rect& new_bounds);
 
   // Creates mirror window asynchronously if the software mirror mode
   // is enabled.
@@ -356,7 +359,7 @@ private:
   // used to mirror the content is removed from the |display_info_list|.
   void CreateSoftwareMirroringDisplayInfo(DisplayInfoList* display_info_list);
 
-  gfx::Display* FindDisplayForId(int64 id);
+  gfx::Display* FindDisplayForId(int64_t id);
 
   // Add the mirror display's display info if the software based
   // mirroring is in use.
@@ -373,7 +376,15 @@ private:
   void OnDisplayInfoUpdated(const DisplayInfo& display_info);
 
   // Creates a display object from the DisplayInfo for |display_id|.
-  gfx::Display CreateDisplayFromDisplayInfoById(int64 display_id);
+  gfx::Display CreateDisplayFromDisplayInfoById(int64_t display_id);
+
+  // Creates a display object from the DisplayInfo for |display_id| for
+  // mirroring. The size of the display will be scaled using |scale|
+  // with the offset using |origin|.
+  gfx::Display CreateMirroringDisplayFromDisplayInfoById(
+      int64_t display_id,
+      const gfx::Point& origin,
+      float scale);
 
   // Updates the bounds of all non-primary displays in |display_list| and
   // append the indices of displays updated to |updated_indices|.
@@ -400,7 +411,7 @@ private:
 
   scoped_ptr<DisplayLayoutStore> layout_store_;
 
-  int64 first_display_id_;
+  int64_t first_display_id_;
 
   // List of current active displays.
   DisplayList active_display_list_;
@@ -410,10 +421,10 @@ private:
   bool force_bounds_changed_;
 
   // The mapping from the display ID to its internal data.
-  std::map<int64, DisplayInfo> display_info_;
+  std::map<int64_t, DisplayInfo> display_info_;
 
   // Selected display modes for displays. Key is the displays' ID.
-  std::map<int64, DisplayMode> display_modes_;
+  std::map<int64_t, DisplayMode> display_modes_;
 
   // When set to true, the host window's resize event updates
   // the display's size. This is set to true when running on
@@ -423,9 +434,9 @@ private:
   bool change_display_upon_host_resize_;
 
   MultiDisplayMode multi_display_mode_;
-  MultiDisplayMode default_multi_display_mode_;
+  MultiDisplayMode current_default_multi_display_mode_;
 
-  int64 mirroring_display_id_;
+  int64_t mirroring_display_id_;
   DisplayList software_mirroring_display_list_;
 
   // User preference for rotation lock of the internal display.
@@ -433,6 +444,8 @@ private:
 
   // User preference for the rotation of the internal display.
   gfx::Display::Rotation registered_internal_display_rotation_;
+
+  bool unified_desktop_enabled_;
 
   base::WeakPtrFactory<DisplayManager> weak_ptr_factory_;
 

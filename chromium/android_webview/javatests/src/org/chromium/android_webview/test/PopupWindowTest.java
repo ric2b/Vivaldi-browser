@@ -4,13 +4,11 @@
 
 package org.chromium.android_webview.test;
 
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -23,7 +21,6 @@ import java.util.concurrent.Callable;
 /**
  * Tests for pop up window flow.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class PopupWindowTest extends AwTestBase {
     private TestAwContentsClient mParentContentsClient;
     private AwTestContainerView mParentContainerView;
@@ -137,12 +134,12 @@ public class PopupWindowTest extends AwTestBase {
     // Copied from imeTest.java.
     private void assertWaitForSelectActionBarStatus(final boolean show, final ContentViewCore cvc)
             throws InterruptedException {
-        assertTrue(CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return show == cvc.isSelectActionBarShowing();
             }
-        }));
+        });
     }
 
     private void hideSelectActionMode(final ContentViewCore cvc) {

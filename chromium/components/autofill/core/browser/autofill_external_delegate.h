@@ -9,13 +9,14 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "components/autofill/core/browser/autofill_popup_delegate.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 namespace autofill {
 
@@ -109,13 +110,10 @@ class AutofillExternalDelegate : public AutofillPopupDelegate {
   void ApplyAutofillOptions(std::vector<Suggestion>* suggestions);
 
   // Insert the data list values at the start of the given list, including
-  // any required separators.
+  // any required separators. Will also go through |suggestions| and remove
+  // duplicate autocomplete (not Autofill) suggestions, keeping their datalist
+  // version.
   void InsertDataListValues(std::vector<Suggestion>* suggestions);
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // Pings the renderer.
-  void PingRenderer();
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
   AutofillManager* manager_;  // weak.
 

@@ -4,6 +4,8 @@
 
 #include "chromeos/network/network_state_handler.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/format_macros.h"
 #include "base/guid.h"
@@ -65,13 +67,22 @@ std::string ValueAsString(const base::Value& value) {
 const char NetworkStateHandler::kDefaultCheckPortalList[] =
     "ethernet,wifi,cellular";
 
-NetworkStateHandler::NetworkStateHandler() : network_list_sorted_(false) {
-}
+NetworkStateHandler::NetworkStateHandler() {}
 
 NetworkStateHandler::~NetworkStateHandler() {
-  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_, IsShuttingDown());
+  // Normally Shutdown() will get called in ~NetworkHandler, however unit
+  // tests do not use that class so this needs to call Shutdown when we
+  // destry the class.
+  if (!did_shutdown_)
+    Shutdown();
   STLDeleteContainerPointers(network_list_.begin(), network_list_.end());
   STLDeleteContainerPointers(device_list_.begin(), device_list_.end());
+}
+
+void NetworkStateHandler::Shutdown() {
+  DCHECK(!did_shutdown_);
+  did_shutdown_ = true;
+  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_, OnShuttingDown());
 }
 
 void NetworkStateHandler::InitShillPropertyHandler() {
@@ -90,20 +101,21 @@ void NetworkStateHandler::AddObserver(
     NetworkStateHandlerObserver* observer,
     const tracked_objects::Location& from_here) {
   observers_.AddObserver(observer);
-  device_event_log::AddEntry(from_here.file_name(), from_here.line_number(),
-                             device_event_log::LOG_TYPE_NETWORK,
-                             device_event_log::LOG_LEVEL_DEBUG,
-                             "NetworkStateHandler::AddObserver");
+  device_event_log::AddEntry(
+      from_here.file_name(), from_here.line_number(),
+      device_event_log::LOG_TYPE_NETWORK, device_event_log::LOG_LEVEL_DEBUG,
+      base::StringPrintf("NetworkStateHandler::AddObserver: 0x%p", observer));
 }
 
 void NetworkStateHandler::RemoveObserver(
     NetworkStateHandlerObserver* observer,
     const tracked_objects::Location& from_here) {
   observers_.RemoveObserver(observer);
-  device_event_log::AddEntry(from_here.file_name(), from_here.line_number(),
-                             device_event_log::LOG_TYPE_NETWORK,
-                             device_event_log::LOG_LEVEL_DEBUG,
-                             "NetworkStateHandler::RemoveObserver");
+  device_event_log::AddEntry(
+      from_here.file_name(), from_here.line_number(),
+      device_event_log::LOG_TYPE_NETWORK, device_event_log::LOG_LEVEL_DEBUG,
+      base::StringPrintf("NetworkStateHandler::RemoveObserver: 0x%p",
+                         observer));
 }
 
 NetworkStateHandler::TechnologyState NetworkStateHandler::GetTechnologyState(
@@ -114,6 +126,8 @@ NetworkStateHandler::TechnologyState NetworkStateHandler::GetTechnologyState(
     state = TECHNOLOGY_ENABLED;
   else if (shill_property_handler_->IsTechnologyEnabling(technology))
     state = TECHNOLOGY_ENABLING;
+  else if (shill_property_handler_->IsTechnologyProhibited(technology))
+    state = TECHNOLOGY_PROHIBITED;
   else if (shill_property_handler_->IsTechnologyUninitialized(technology))
     state = TECHNOLOGY_UNINITIALIZED;
   else if (shill_property_handler_->IsTechnologyAvailable(technology))
@@ -140,6 +154,15 @@ void NetworkStateHandler::SetTechnologyEnabled(
     shill_property_handler_->SetTechnologyEnabled(*technology, enabled,
                                                   error_callback);
   }
+  // Signal Device/Technology state changed.
+  NotifyDeviceListChanged();
+}
+
+void NetworkStateHandler::SetProhibitedTechnologies(
+    const std::vector<std::string>& prohibited_technologies,
+    const network_handler::ErrorCallback& error_callback) {
+  shill_property_handler_->SetProhibitedTechnologies(prohibited_technologies,
+                                                     error_callback);
   // Signal Device/Technology state changed.
   NotifyDeviceListChanged();
 }
@@ -370,8 +393,7 @@ void NetworkStateHandler::SetCheckPortalList(
 }
 
 void NetworkStateHandler::SetWakeOnLanEnabled(bool enabled) {
-  NET_LOG_EVENT("SetWakeOnLanEnabled",
-                base::StringPrintf("%s", enabled ? "true" : "false"));
+  NET_LOG_EVENT("SetWakeOnLanEnabled", enabled ? "true" : "false");
   shill_property_handler_->SetWakeOnLanEnabled(enabled);
 }
 
@@ -987,7 +1009,7 @@ ScopedVector<std::string> NetworkStateHandler::GetTechnologiesForType(
     technologies.push_back(new std::string(shill::kTypeVPN));
 
   CHECK_GT(technologies.size(), 0ul);
-  return technologies.Pass();
+  return technologies;
 }
 
 }  // namespace chromeos

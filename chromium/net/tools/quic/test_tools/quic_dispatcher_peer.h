@@ -7,6 +7,7 @@
 
 #include "net/tools/quic/quic_dispatcher.h"
 
+#include "base/macros.h"
 #include "net/base/ip_endpoint.h"
 
 namespace net {
@@ -28,10 +29,6 @@ class QuicDispatcherPeer {
 
   static QuicPacketWriter* GetWriter(QuicDispatcher* dispatcher);
 
-  static void SetPacketWriterFactory(
-      QuicDispatcher* dispatcher,
-      QuicDispatcher::PacketWriterFactory* packet_writer_factory);
-
   static QuicConnectionHelperInterface* GetHelper(QuicDispatcher* dispatcher);
 
   static QuicDispatcher::WriteBlockedList* GetWriteBlockedList(
@@ -40,6 +37,9 @@ class QuicDispatcherPeer {
   // Get the dispatcher's record of the last error reported to its framer
   // visitor's OnError() method.  Then set that record to QUIC_NO_ERROR.
   static QuicErrorCode GetAndClearLastError(QuicDispatcher* dispatcher);
+
+  static const QuicDispatcher::SessionMap& session_map(
+      QuicDispatcher* dispatcher);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicDispatcherPeer);

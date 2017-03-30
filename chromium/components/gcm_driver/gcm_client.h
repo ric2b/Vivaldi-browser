@@ -5,13 +5,15 @@
 #ifndef COMPONENTS_GCM_DRIVER_GCM_CLIENT_H_
 #define COMPONENTS_GCM_DRIVER_GCM_CLIENT_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
+#include "components/gcm_driver/common/gcm_messages.h"
 #include "components/gcm_driver/gcm_activity.h"
 #include "components/gcm_driver/registration_info.h"
 
@@ -97,33 +99,6 @@ class GCMClient {
     std::string version;
   };
 
-  // Message data consisting of key-value pairs.
-  typedef std::map<std::string, std::string> MessageData;
-
-  // Message to be delivered to the other party.
-  struct OutgoingMessage {
-    OutgoingMessage();
-    ~OutgoingMessage();
-
-    // Message ID.
-    std::string id;
-    // In seconds.
-    int time_to_live;
-    MessageData data;
-
-    static const int kMaximumTTL;
-  };
-
-  // Message being received from the other party.
-  struct IncomingMessage {
-    IncomingMessage();
-    ~IncomingMessage();
-
-    MessageData data;
-    std::string collapse_key;
-    std::string sender_id;
-  };
-
   // Detailed information of the Send Error event.
   struct SendErrorDetails {
     SendErrorDetails();
@@ -145,7 +120,7 @@ class GCMClient {
     std::string gcm_client_state;
     bool connection_client_created;
     std::string connection_state;
-    uint64 android_id;
+    uint64_t android_id;
     std::vector<std::string> registered_app_ids;
     int send_queue_size;
     int resend_queue_size;
@@ -243,9 +218,10 @@ class GCMClient {
   // |chrome_build_info|: chrome info, i.e., version, channel and etc.
   // |store_path|: path to the GCM store.
   // |blocking_task_runner|: for running blocking file tasks.
-  // |url_request_context_getter|: for url requests.
+  // |url_request_context_getter|: for url requests. The GCMClient must be
+  //     deleted before the Getter's underlying URLRequestContext.
   // |delegate|: the delegate whose methods will be called asynchronously in
-  //             response to events and messages.
+  //     response to events and messages.
   virtual void Initialize(
       const ChromeBuildInfo& chrome_build_info,
       const base::FilePath& store_path,

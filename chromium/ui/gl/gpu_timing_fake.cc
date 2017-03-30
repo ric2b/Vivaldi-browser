@@ -4,6 +4,7 @@
 
 #include "ui/gl/gpu_timing_fake.h"
 
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_mock.h"
 
@@ -16,6 +17,8 @@ using ::testing::Exactly;
 using ::testing::Invoke;
 using ::testing::NotNull;
 
+int64_t GPUTimingFake::fake_cpu_time_ = 0;
+
 GPUTimingFake::GPUTimingFake() {
   Reset();
 }
@@ -24,15 +27,34 @@ GPUTimingFake::~GPUTimingFake() {
 }
 
 void GPUTimingFake::Reset() {
-  current_time_ = 0;
+  current_gl_time_ = 0;
+  gl_cpu_time_offset_ = 0;
   next_query_id_ = 23;
   allocated_queries_.clear();
   query_results_.clear();
   current_elapsed_query_.Reset();
+
+  fake_cpu_time_ = 0;
+}
+
+int64_t GPUTimingFake::GetFakeCPUTime() {
+  return fake_cpu_time_;
+}
+
+void GPUTimingFake::SetCPUGLOffset(int64_t offset) {
+  gl_cpu_time_offset_ = offset;
+}
+
+void GPUTimingFake::SetCurrentCPUTime(int64_t current_time) {
+  fake_cpu_time_ = current_time;
+  current_gl_time_ = (fake_cpu_time_ + gl_cpu_time_offset_) *
+                     base::Time::kNanosecondsPerMicrosecond;
 }
 
 void GPUTimingFake::SetCurrentGLTime(GLint64 current_time) {
-  current_time_ = current_time;
+  current_gl_time_ = current_time;
+  fake_cpu_time_ = (current_gl_time_ / base::Time::kNanosecondsPerMicrosecond) -
+                   gl_cpu_time_offset_;
 }
 
 void GPUTimingFake::SetDisjoint() {
@@ -53,9 +75,48 @@ void GPUTimingFake::ExpectNoDisjointCalls(MockGLInterface& gl) {
   EXPECT_CALL(gl, GetIntegerv(GL_GPU_DISJOINT_EXT, _)).Times(Exactly(0));
 }
 
+void GPUTimingFake::ExpectGPUTimeStampQuery(
+    MockGLInterface& gl, bool elapsed_query) {
+  EXPECT_CALL(gl, GenQueries(1, NotNull())).Times(Exactly(1))
+      .WillRepeatedly(Invoke(this, &GPUTimingFake::FakeGLGenQueries));
+
+  if (!elapsed_query) {
+    // Time Stamp based queries.
+    EXPECT_CALL(gl, GetInteger64v(GL_TIMESTAMP, _))
+        .WillRepeatedly(
+            Invoke(this, &GPUTimingFake::FakeGLGetInteger64v));
+
+    EXPECT_CALL(gl, QueryCounter(_, GL_TIMESTAMP)).Times(Exactly(1))
+        .WillRepeatedly(
+             Invoke(this, &GPUTimingFake::FakeGLQueryCounter));
+  } else {
+    // Time Elapsed based queries.
+    EXPECT_CALL(gl, BeginQuery(GL_TIME_ELAPSED, _)).Times(Exactly(1))
+        .WillRepeatedly(
+            Invoke(this, &GPUTimingFake::FakeGLBeginQuery));
+
+    EXPECT_CALL(gl, EndQuery(GL_TIME_ELAPSED)).Times(Exactly(1))
+      .WillRepeatedly(Invoke(this, &GPUTimingFake::FakeGLEndQuery));
+  }
+
+  EXPECT_CALL(gl, GetQueryObjectuiv(_, GL_QUERY_RESULT_AVAILABLE,
+                                    NotNull()))
+      .WillRepeatedly(
+          Invoke(this, &GPUTimingFake::FakeGLGetQueryObjectuiv));
+
+  EXPECT_CALL(gl, GetQueryObjectui64v(_, GL_QUERY_RESULT, NotNull()))
+      .WillRepeatedly(
+           Invoke(this, &GPUTimingFake::FakeGLGetQueryObjectui64v));
+
+  EXPECT_CALL(gl, DeleteQueries(1, NotNull())).Times(AtLeast(1))
+      .WillRepeatedly(
+           Invoke(this, &GPUTimingFake::FakeGLDeleteQueries));
+}
+
 void GPUTimingFake::ExpectGPUTimerQuery(
     MockGLInterface& gl, bool elapsed_query) {
-  EXPECT_CALL(gl, GenQueries(1, NotNull())).Times(AtLeast(2))
+  EXPECT_CALL(gl, GenQueries(1, NotNull()))
+      .Times(AtLeast(elapsed_query ? 1 : 2))
       .WillRepeatedly(Invoke(this, &GPUTimingFake::FakeGLGenQueries));
 
   if (!elapsed_query) {
@@ -86,7 +147,8 @@ void GPUTimingFake::ExpectGPUTimerQuery(
       .WillRepeatedly(
            Invoke(this, &GPUTimingFake::FakeGLGetQueryObjectui64v));
 
-  EXPECT_CALL(gl, DeleteQueries(1, NotNull())).Times(AtLeast(2))
+  EXPECT_CALL(gl, DeleteQueries(1, NotNull()))
+      .Times(AtLeast(elapsed_query ? 1 : 2))
       .WillRepeatedly(
            Invoke(this, &GPUTimingFake::FakeGLDeleteQueries));
 }
@@ -127,7 +189,7 @@ void GPUTimingFake::FakeGLBeginQuery(GLenum target, GLuint id) {
       current_elapsed_query_.Reset();
       current_elapsed_query_.active_ = true;
       current_elapsed_query_.query_id_ = id;
-      current_elapsed_query_.begin_time_ = current_time_;
+      current_elapsed_query_.begin_time_ = current_gl_time_;
       break;
     default:
       FAIL() << "Invalid target passed to BeginQuery: " << target;
@@ -141,7 +203,7 @@ void GPUTimingFake::FakeGLEndQuery(GLenum target) {
       QueryResult& query = query_results_[current_elapsed_query_.query_id_];
       query.type_ = QueryResult::kQueryResultType_Elapsed;
       query.begin_time_ = current_elapsed_query_.begin_time_;
-      query.value_ = current_time_;
+      query.value_ = current_gl_time_;
       current_elapsed_query_.active_ = false;
     } break;
     default:
@@ -154,7 +216,7 @@ void GPUTimingFake::FakeGLGetQueryObjectuiv(GLuint id, GLenum pname,
   switch (pname) {
     case GL_QUERY_RESULT_AVAILABLE: {
       std::map<GLuint, QueryResult>::iterator it = query_results_.find(id);
-      if (it != query_results_.end() && it->second.value_ <= current_time_)
+      if (it != query_results_.end() && it->second.value_ <= current_gl_time_)
         *params = 1;
       else
         *params = 0;
@@ -170,7 +232,7 @@ void GPUTimingFake::FakeGLQueryCounter(GLuint id, GLenum target) {
       ASSERT_TRUE(allocated_queries_.find(id) != allocated_queries_.end());
       QueryResult& query = query_results_[id];
       query.type_ = QueryResult::kQueryResultType_TimeStamp;
-      query.value_ = current_time_;
+      query.value_ = current_gl_time_;
     } break;
 
     default:
@@ -181,7 +243,7 @@ void GPUTimingFake::FakeGLQueryCounter(GLuint id, GLenum target) {
 void GPUTimingFake::FakeGLGetInteger64v(GLenum pname, GLint64 * data) {
   switch (pname) {
     case GL_TIMESTAMP:
-      *data = current_time_;
+      *data = current_gl_time_;
       break;
     default:
       FAIL() << "Invalid variable passed to GetInteger64v: " << pname;

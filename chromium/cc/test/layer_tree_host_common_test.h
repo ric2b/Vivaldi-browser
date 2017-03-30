@@ -5,10 +5,12 @@
 #ifndef CC_TEST_LAYER_TREE_HOST_COMMON_TEST_H_
 #define CC_TEST_LAYER_TREE_HOST_COMMON_TEST_H_
 
+#include <algorithm>
 #include <vector>
 
 #include "base/memory/scoped_ptr.h"
 #include "cc/layers/layer_lists.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/layer_test_common.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -28,7 +30,6 @@ namespace cc {
 class FakeLayerTreeHost;
 class Layer;
 class LayerImpl;
-class RenderSurfaceLayerList;
 
 class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
  protected:
@@ -53,6 +54,14 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
   }
 
   void SetLayerPropertiesForTesting(Layer* layer,
+                                    const gfx::Transform& transform,
+                                    const gfx::Point3F& transform_origin,
+                                    const gfx::PointF& position,
+                                    const gfx::Size& bounds,
+                                    bool flatten_transform,
+                                    bool is_3d_sorted);
+
+  void SetLayerPropertiesForTesting(LayerImpl* layer,
                                     const gfx::Transform& transform,
                                     const gfx::Point3F& transform_origin,
                                     const gfx::PointF& position,
@@ -111,13 +120,24 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
   void ExecuteCalculateDrawPropertiesWithPropertyTrees(Layer* layer);
   void ExecuteCalculateDrawPropertiesWithPropertyTrees(LayerImpl* layer);
 
-  RenderSurfaceLayerList* render_surface_layer_list() const {
-    return render_surface_layer_list_.get();
-  }
+  void ExecuteCalculateDrawPropertiesWithoutSeparateSurfaces(
+      LayerImpl* root_layer);
 
   LayerImplList* render_surface_layer_list_impl() const {
     return render_surface_layer_list_impl_.get();
   }
+
+  LayerImplList* update_layer_list_impl() const {
+    return update_layer_list_impl_.get();
+  }
+  bool UpdateLayerListImplContains(int id) const {
+    return std::count_if(
+               update_layer_list_impl_->begin(), update_layer_list_impl_->end(),
+               [id](LayerImpl* layer) { return layer->id() == id; }) != 0;
+  }
+
+  const LayerList& update_layer_list() const { return update_layer_list_; }
+  bool UpdateLayerListContains(int id) const;
 
   int render_surface_layer_list_count() const {
     return render_surface_layer_list_count_;
@@ -126,8 +146,9 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
   const LayerSettings& layer_settings() { return layer_settings_; }
 
  private:
-  scoped_ptr<RenderSurfaceLayerList> render_surface_layer_list_;
   scoped_ptr<std::vector<LayerImpl*>> render_surface_layer_list_impl_;
+  LayerList update_layer_list_;
+  scoped_ptr<LayerImplList> update_layer_list_impl_;
   LayerSettings layer_settings_;
 
   int render_surface_layer_list_count_;

@@ -6,9 +6,10 @@
 #define BASE_WIN_STARTUP_INFORMATION_H_
 
 #include <windows.h>
+#include <stddef.h>
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 namespace base {
 namespace win {
@@ -31,7 +32,7 @@ class BASE_EXPORT StartupInformation {
                                  size_t size);
 
   LPSTARTUPINFOW startup_info() { return &startup_info_.StartupInfo; }
-  const LPSTARTUPINFOW startup_info() const {
+  LPSTARTUPINFOW startup_info() const {
     return const_cast<const LPSTARTUPINFOW>(&startup_info_.StartupInfo);
   }
 

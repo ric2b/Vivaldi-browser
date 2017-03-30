@@ -5,7 +5,6 @@
 #ifndef IOS_CHROME_BROWSER_SIGNIN_SIGNIN_CLIENT_IMPL_H_
 #define IOS_CHROME_BROWSER_SIGNIN_SIGNIN_CLIENT_IMPL_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -34,10 +33,8 @@ class SigninClientImpl
                    SigninErrorController* signin_error_controller);
   ~SigninClientImpl() override;
 
-  // Utility methods.
+  // Utility method.
   static bool AllowsSigninCookies(ios::ChromeBrowserState* browser_state);
-  static bool SettingsAllowSigninCookies(
-      content_settings::CookieSettings* cookie_settings);
 
   // If |for_ephemeral| is true, special kind of device ID for ephemeral users
   // is generated.
@@ -80,11 +77,6 @@ class SigninClientImpl
                   const std::string& gaia_id,
                   const std::string& username,
                   const std::string& password) override;
-
-  bool UpdateAccountInfo(
-      AccountTrackerService::AccountInfo* out_account_info) override;
-
-  ios::ProfileOAuth2TokenServiceIOSProvider* GetIOSProvider() override;
 
   // SigninErrorController::Observer implementation.
   void OnErrorChanged() override;

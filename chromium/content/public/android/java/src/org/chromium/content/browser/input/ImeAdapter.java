@@ -5,25 +5,27 @@
 package org.chromium.content.browser.input;
 
 import android.content.res.Configuration;
-import android.os.Handler;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
 import android.text.Editable;
+import android.text.Selection;
 import android.text.SpannableString;
+import android.text.TextUtils;
 import android.text.style.BackgroundColorSpan;
 import android.text.style.CharacterStyle;
 import android.text.style.UnderlineSpan;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.blink_public.web.WebInputEventModifier;
 import org.chromium.blink_public.web.WebInputEventType;
-import org.chromium.blink_public.web.WebTextInputFlags;
 import org.chromium.ui.base.ime.TextInputType;
 import org.chromium.ui.picker.InputDialogContainer;
 
@@ -50,6 +52,10 @@ import org.chromium.ui.picker.InputDialogContainer;
  */
 @JNINamespace("content")
 public class ImeAdapter {
+    private static final String TAG = "cr_Ime";
+    private static final boolean DEBUG_LOGS = false;
+
+    private static final int COMPOSITION_KEY_CODE = 229;
 
     /**
      * Interface for the delegate that needs to be notified of IME changes.
@@ -81,38 +87,26 @@ public class ImeAdapter {
         ResultReceiver getNewShowKeyboardReceiver();
     }
 
-    private static final int COMPOSITION_KEY_CODE = 229;
-
-    // Delay introduced to avoid hiding the keyboard if new show requests are received.
-    // The time required by the unfocus-focus events triggered by tab has been measured in soju:
-    // Mean: 18.633 ms, Standard deviation: 7.9837 ms.
-    // The value here should be higher enough to cover these cases, but not too high to avoid
-    // letting the user perceiving important delays.
-    private static final int INPUT_DISMISS_DELAY = 150;
-    private final Runnable mDismissInputRunnable = new Runnable() {
-        @Override
-        public void run() {
-            dismissInput(true);
-        }
-    };
-
     static char[] sSingleCharArray = new char[1];
     static KeyCharacterMap sKeyCharacterMap;
 
     private long mNativeImeAdapterAndroid;
     private InputMethodManagerWrapper mInputMethodManagerWrapper;
     private AdapterInputConnection mInputConnection;
+    private AdapterInputConnectionFactory mInputConnectionFactory;
     private final ImeAdapterDelegate mViewEmbedder;
-    private final Handler mHandler;
-    private int mTextInputType;
+
+    // This holds the state of editable text (e.g. contents of <input>, contenteditable) of
+    // a focused element.
+    // Every time the user, IME, javascript (Blink), autofill etc. modifies the content, the new
+    // state must be reflected to this to keep consistency.
+    private final Editable mEditable;
+
+    private int mTextInputType = TextInputType.NONE;
     private int mTextInputFlags;
-    private String mLastComposeText;
 
-    @VisibleForTesting
-    int mLastSyntheticKeyCode;
-
-    @VisibleForTesting
-    boolean mIsShowWithoutHideOutstanding = false;
+    // Keep the current configuration to detect the change when onConfigurationChanged() is called.
+    private Configuration mCurrentConfig;
 
     /**
      * @param wrapper InputMethodManagerWrapper that should receive all the call directed to
@@ -122,17 +116,54 @@ public class ImeAdapter {
     public ImeAdapter(InputMethodManagerWrapper wrapper, ImeAdapterDelegate embedder) {
         mInputMethodManagerWrapper = wrapper;
         mViewEmbedder = embedder;
-        mHandler = new Handler();
+        mInputConnectionFactory = new AdapterInputConnectionFactory();
+        mEditable = Editable.Factory.getInstance().newEditable("");
+        Selection.setSelection(mEditable, 0);
+        // Deep copy newConfig so that we can notice the difference.
+        mCurrentConfig = new Configuration(
+                mViewEmbedder.getAttachedView().getResources().getConfiguration());
     }
 
     /**
      * Default factory for AdapterInputConnection classes.
      */
-    public static class AdapterInputConnectionFactory {
-        public AdapterInputConnection get(View view, ImeAdapter imeAdapter,
-                Editable editable, EditorInfo outAttrs) {
-            return new AdapterInputConnection(view, imeAdapter, editable, outAttrs);
+    static class AdapterInputConnectionFactory {
+        AdapterInputConnection get(View view, ImeAdapter imeAdapter, int initialSelStart,
+                int initialSelEnd, EditorInfo outAttrs) {
+            return new AdapterInputConnection(
+                    view, imeAdapter, initialSelStart, initialSelEnd, outAttrs);
         }
+    }
+
+    /**
+     * @see View#onCreateInputConnection(EditorInfo)
+     */
+    public AdapterInputConnection onCreateInputConnection(EditorInfo outAttrs) {
+        // Without this line, some third-party IMEs will try to compose text even when
+        // not on an editable node. Even when we return null here, key events can still go through
+        // ImeAdapter#dispatchKeyEvent().
+        if (mTextInputType == TextInputType.NONE) {
+            mInputConnection = null;
+            if (DEBUG_LOGS) Log.w(TAG, "onCreateInputConnection returns null.");
+            // InputMethodService evaluates fullscreen mode even when the new input connection is
+            // null. This makes sure IME doesn't enter fullscreen mode or open custom UI.
+            outAttrs.imeOptions =
+                    EditorInfo.IME_FLAG_NO_FULLSCREEN | EditorInfo.IME_FLAG_NO_EXTRACT_UI;
+            return null;
+        }
+
+        if (!isTextInputType(mTextInputType)) {
+            // Although onCheckIsTextEditor will return false in this case, the EditorInfo
+            // is still used by the InputMethodService. Need to make sure the IME doesn't
+            // enter fullscreen mode.
+            outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN;
+        }
+        int initialSelStart = Selection.getSelectionStart(mEditable);
+        int initialSelEnd = outAttrs.initialSelEnd = Selection.getSelectionEnd(mEditable);
+        mInputConnection = mInputConnectionFactory.get(
+                mViewEmbedder.getAttachedView(), this, initialSelStart, initialSelEnd, outAttrs);
+        if (DEBUG_LOGS) Log.w(TAG, "onCreateInputConnection");
+        return mInputConnection;
     }
 
     /**
@@ -141,17 +172,13 @@ public class ImeAdapter {
      * @param immw InputMethodManagerWrapper that should be used to call InputMethodManager.
      */
     @VisibleForTesting
-    public void setInputMethodManagerWrapper(InputMethodManagerWrapper immw) {
+    public void setInputMethodManagerWrapperForTest(InputMethodManagerWrapper immw) {
         mInputMethodManagerWrapper = immw;
     }
 
-    /**
-     * Should be only used by AdapterInputConnection.
-     * @return InputMethodManagerWrapper that should receive all the calls directed to
-     *         InputMethodManager.
-     */
-    InputMethodManagerWrapper getInputMethodManagerWrapper() {
-        return mInputMethodManagerWrapper;
+    @VisibleForTesting
+    void setInputConnectionFactory(AdapterInputConnectionFactory factory) {
+        mInputConnectionFactory = factory;
     }
 
     /**
@@ -160,7 +187,21 @@ public class ImeAdapter {
      */
     void setInputConnection(AdapterInputConnection inputConnection) {
         mInputConnection = inputConnection;
-        mLastComposeText = null;
+    }
+
+    /**
+     * Get the current input connection for testing purposes.
+     */
+    @VisibleForTesting
+    public AdapterInputConnection getInputConnectionForTest() {
+        return mInputConnection;
+    }
+
+    /**
+     * @return The Editable instance that will be shared across AdapterInputConnection instances.
+     */
+    Editable getEditable() {
+        return mEditable;
     }
 
     /**
@@ -201,61 +242,52 @@ public class ImeAdapter {
 
     /**
      * Shows or hides the keyboard based on passed parameters.
-     * @param nativeImeAdapter Pointer to the ImeAdapterAndroid object that is sending the update.
      * @param textInputType Text input type for the currently focused field in renderer.
+     * @param textInputFlags Text input flags.
      * @param showIfNeeded Whether the keyboard should be shown if it is currently hidden.
      */
-    public void updateKeyboardVisibility(long nativeImeAdapter, int textInputType,
+    public void updateKeyboardVisibility(int textInputType,
             int textInputFlags, boolean showIfNeeded) {
-        // If current input type is none and showIfNeeded is false, IME should not be shown
-        // and input type should remain as none.
-        if (mTextInputType == TextInputType.NONE && !showIfNeeded) {
-            return;
+        if (DEBUG_LOGS) {
+            Log.w(TAG, "updateKeyboardVisibility: type [%d->%d], flags [%d], show [%b], ",
+                    mTextInputType, textInputType, textInputFlags, showIfNeeded);
+        }
+        mTextInputFlags = textInputFlags;
+        if (mTextInputType != textInputType) {
+            mTextInputType = textInputType;
+            // No need to restart if we are going to hide anyways.
+            if (textInputType != TextInputType.NONE) restartInput();
         }
 
-        if (mNativeImeAdapterAndroid != nativeImeAdapter || mTextInputType != textInputType) {
-            // We have to attach immediately, even if we're going to delay the dismissing of
-            // currently visible keyboard because otherwise we have a race condition: If the
-            // native IME adapter gets destructed before the delayed-dismiss fires, we'll access
-            // an object that has been already released.  http://crbug.com/447287
-            attach(nativeImeAdapter, textInputType, textInputFlags, true);
-
-            if (mTextInputType != TextInputType.NONE) {
-                mInputMethodManagerWrapper.restartInput(mViewEmbedder.getAttachedView());
-                if (showIfNeeded) {
-                    showKeyboard();
-                }
-            }
-        } else if (hasInputType() && showIfNeeded) {
-            showKeyboard();
+        // There is no API for us to get notified of user's dismissal of keyboard.
+        // Therefore, we should try to show keyboard even when text input type hasn't changed.
+        if (textInputType != TextInputType.NONE) {
+            if (showIfNeeded) showSoftKeyboard();
+        } else {
+            hideKeyboard();
         }
     }
 
-    private void attach(long nativeImeAdapter, int textInputType, int textInputFlags,
-            boolean delayDismissInput) {
-        if (mNativeImeAdapterAndroid != 0) {
-            nativeResetImeAdapter(mNativeImeAdapterAndroid);
-        }
-        if (nativeImeAdapter != 0) {
-            nativeAttachImeAdapter(nativeImeAdapter);
-        }
-        mNativeImeAdapterAndroid = nativeImeAdapter;
-        mLastComposeText = null;
-        mTextInputFlags = textInputFlags;
-        if (textInputType == mTextInputType) return;
-        mTextInputType = textInputType;
-        mHandler.removeCallbacks(mDismissInputRunnable);  // okay if not found
-        if (mTextInputType == TextInputType.NONE) {
-            if (delayDismissInput) {
-                // Set a delayed task to do unfocus. This avoids hiding the keyboard when tabbing
-                // through text inputs or when JS rapidly changes focus to another text element.
-                mHandler.postDelayed(mDismissInputRunnable, INPUT_DISMISS_DELAY);
-                mIsShowWithoutHideOutstanding = false;
-            } else {
-                // Some things (including tests) expect the keyboard to be dismissed immediately.
-                dismissInput(true);
-            }
-        }
+    /**
+     * Updates internal representation of the text being edited and its selection and composition
+     * properties.
+     *
+     * @param text The String contents of the field being edited.
+     * @param selectionStart The character offset of the selection start, or the caret position if
+     *                       there is no selection.
+     * @param selectionEnd The character offset of the selection end, or the caret position if there
+     *                     is no selection.
+     * @param compositionStart The character offset of the composition start, or -1 if there is no
+     *                         composition.
+     * @param compositionEnd The character offset of the composition end, or -1 if there is no
+     *                       selection.
+     * @param isNonImeChange True when the update was caused by non-IME (e.g. Javascript).
+     */
+    public void updateState(String text, int selectionStart, int selectionEnd, int compositionStart,
+            int compositionEnd, boolean isNonImeChange) {
+        if (mInputConnection == null) return;
+        mInputConnection.updateState(text, selectionStart, selectionEnd, compositionStart,
+                compositionEnd, isNonImeChange);
     }
 
     /**
@@ -264,11 +296,21 @@ public class ImeAdapter {
      * @param nativeImeAdapter The pointer to the native ImeAdapter object.
      */
     public void attach(long nativeImeAdapter) {
-        attach(nativeImeAdapter, TextInputType.NONE, WebTextInputFlags.None, false);
+        if (mNativeImeAdapterAndroid == nativeImeAdapter) return;
+        if (mNativeImeAdapterAndroid != 0) {
+            nativeResetImeAdapter(mNativeImeAdapterAndroid);
+        }
+        if (nativeImeAdapter != 0) {
+            nativeAttachImeAdapter(nativeImeAdapter);
+        }
+        mNativeImeAdapterAndroid = nativeImeAdapter;
     }
 
-    private void showKeyboard() {
-        mIsShowWithoutHideOutstanding = true;
+    /**
+     * Show soft keyboard only if it is the current keyboard configuration.
+     */
+    private void showSoftKeyboard() {
+        if (DEBUG_LOGS) Log.w(TAG, "showSoftKeyboard");
         mInputMethodManagerWrapper.showSoftInput(
                 mViewEmbedder.getAttachedView(), 0, mViewEmbedder.getNewShowKeyboardReceiver());
         if (mViewEmbedder.getAttachedView().getResources().getConfiguration().keyboard
@@ -277,17 +319,71 @@ public class ImeAdapter {
         }
     }
 
-    private void dismissInput(boolean unzoomIfNeeded) {
-        mIsShowWithoutHideOutstanding = false;
+    /**
+     * Hide soft keyboard.
+     */
+    private void hideKeyboard() {
+        if (DEBUG_LOGS) Log.w(TAG, "hideKeyboard");
         View view = mViewEmbedder.getAttachedView();
         if (mInputMethodManagerWrapper.isActive(view)) {
-            mInputMethodManagerWrapper.hideSoftInputFromWindow(view.getWindowToken(), 0,
-                    unzoomIfNeeded ? mViewEmbedder.getNewShowKeyboardReceiver() : null);
+            // NOTE: we should not set ResultReceiver here. Otherwise, IMM will own ContentViewCore
+            // and ImeAdapter even after input method goes away and result gets received.
+            mInputMethodManagerWrapper.hideSoftInputFromWindow(view.getWindowToken(), 0, null);
+        }
+        // Detach input connection by returning null from onCreateInputConnection().
+        if (mTextInputType == TextInputType.NONE && mInputConnection != null) {
+            restartInput();
         }
     }
 
-    private boolean hasInputType() {
-        return mTextInputType != TextInputType.NONE;
+    /**
+     * Call this when keyboard configuration has changed.
+     */
+    public void onKeyboardConfigurationChanged(Configuration newConfig) {
+        // If configuration unchanged, do nothing.
+        if (mCurrentConfig.keyboard == newConfig.keyboard
+                && mCurrentConfig.keyboardHidden == newConfig.keyboardHidden
+                && mCurrentConfig.hardKeyboardHidden == newConfig.hardKeyboardHidden) {
+            return;
+        }
+
+        // Deep copy newConfig so that we can notice the difference.
+        mCurrentConfig = new Configuration(newConfig);
+        if (DEBUG_LOGS) {
+            Log.w(TAG, "onKeyboardConfigurationChanged: mTextInputType [%d]", mTextInputType);
+        }
+        if (mTextInputType != TextInputType.NONE) {
+            restartInput();
+            // By default, we show soft keyboard on keyboard changes. This is useful
+            // when the user switches from hardware keyboard to software keyboard.
+            // TODO(changwan): check if we can skip this for hardware keyboard configurations.
+            showSoftKeyboard();
+        }
+    }
+
+    /**
+     * Call this when view's focus has changed.
+     * @param gainFocus True if we're gaining focus.
+     */
+    public void onViewFocusChanged(boolean gainFocus) {
+        if (DEBUG_LOGS) Log.w(TAG, "onViewFocusChanged: gainFocus [%b]", gainFocus);
+        if (!gainFocus) hideKeyboard();
+    }
+
+    /**
+     * Move cursor to the end of the current selection.
+     */
+    public void moveCursorToSelectionEnd() {
+        if (DEBUG_LOGS) Log.w(TAG, "movecursorToEnd");
+        if (mInputConnection != null) {
+            int selectionEnd = Selection.getSelectionEnd(mEditable);
+            mInputConnection.setSelection(selectionEnd, selectionEnd);
+        }
+    }
+
+    @VisibleForTesting
+    void setInputTypeForTest(int textInputType) {
+        mTextInputType = textInputType;
     }
 
     private static boolean isTextInputType(int type) {
@@ -298,197 +394,106 @@ public class ImeAdapter {
         return isTextInputType(mTextInputType);
     }
 
-    /**
-     * @return true if the selected text is of password.
-     */
-    public boolean isSelectionPassword() {
-        return mTextInputType == TextInputType.PASSWORD;
-    }
-
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (DEBUG_LOGS) Log.w(TAG, "dispatchKeyEvent: action [%d], keycode [%d]", event.getAction(),
+                event.getKeyCode());
         if (mInputConnection != null) {
             return mInputConnection.sendKeyEvent(event);
         }
-        return translateAndSendNativeEvents(event);
-    }
-
-    private int shouldSendKeyEventWithKeyCode(String text) {
-        if (text.length() != 1) return COMPOSITION_KEY_CODE;
-
-        if (text.equals("\n")) {
-            return KeyEvent.KEYCODE_ENTER;
-        } else if (text.equals("\t")) {
-            return KeyEvent.KEYCODE_TAB;
-        } else {
-            return COMPOSITION_KEY_CODE;
-        }
+        return sendKeyEvent(event);
     }
 
     /**
-     * @return Android KeyEvent for a single unicode character.  Only one KeyEvent is returned
-     * even if the system determined that various modifier keys (like Shift) would also have
-     * been pressed.
+     * Update selection to input method manager.
+     *
+     * @param selectionStart The selection start.
+     * @param selectionEnd The selection end.
+     * @param compositionStart The composition start.
+     * @param compositionEnd The composition end.
      */
-    private static KeyEvent androidKeyEventForCharacter(char chr) {
-        if (sKeyCharacterMap == null) {
-            sKeyCharacterMap = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD);
-        }
-        sSingleCharArray[0] = chr;
-        // TODO: Evaluate cost of this system call.
-        KeyEvent[] events = sKeyCharacterMap.getEvents(sSingleCharArray);
-        if (events == null) {  // No known key sequence will create that character.
-            return null;
-        }
+    void updateSelection(
+            int selectionStart, int selectionEnd, int compositionStart, int compositionEnd) {
+        mInputMethodManagerWrapper.updateSelection(mViewEmbedder.getAttachedView(), selectionStart,
+                selectionEnd, compositionStart, compositionEnd);
+    }
 
-        for (int i = 0; i < events.length; ++i) {
-            if (events[i].getAction() == KeyEvent.ACTION_DOWN
-                    && !KeyEvent.isModifierKey(events[i].getKeyCode())) {
-                return events[i];
-            }
-        }
-
-        return null;  // No printing characters were found.
+    /**
+     * Restart input (finish composition and change EditorInfo, such as input type).
+     */
+    void restartInput() {
+        mInputMethodManagerWrapper.restartInput(mViewEmbedder.getAttachedView());
+        if (mInputConnection != null) mInputConnection.onRestartInput();
     }
 
     /**
      * @see BaseInputConnection#performContextMenuAction(int)
      */
-    public boolean performContextMenuAction(int id) {
+    boolean performContextMenuAction(int id) {
+        if (DEBUG_LOGS) Log.w(TAG, "performContextMenuAction: id [%d]", id);
         return mViewEmbedder.performContextMenuAction(id);
     }
 
-    @VisibleForTesting
-    public static KeyEvent getTypedKeyEventGuess(String oldtext, String newtext) {
-        // Starting typing a new composition should add only a single character.  Any composition
-        // beginning with text longer than that must come from something other than typing so
-        // return 0.
-        if (oldtext == null) {
-            if (newtext.length() == 1) {
-                return androidKeyEventForCharacter(newtext.charAt(0));
-            } else {
-                return null;
-            }
+    boolean performEditorAction(int actionCode) {
+        if (mNativeImeAdapterAndroid == 0) return false;
+        if (actionCode == EditorInfo.IME_ACTION_NEXT) {
+            sendSyntheticKeyPress(KeyEvent.KEYCODE_TAB,
+                    KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE
+                    | KeyEvent.FLAG_EDITOR_ACTION);
+        } else {
+            sendSyntheticKeyPress(KeyEvent.KEYCODE_ENTER,
+                    KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE
+                    | KeyEvent.FLAG_EDITOR_ACTION);
         }
-
-        // The content has grown in length: assume the last character is the key that caused it.
-        if (newtext.length() > oldtext.length() && newtext.startsWith(oldtext)) {
-            return androidKeyEventForCharacter(newtext.charAt(newtext.length() - 1));
-        }
-
-        // The content has shrunk in length: assume that backspace was pressed.
-        if (oldtext.length() > newtext.length() && oldtext.startsWith(newtext)) {
-            return new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL);
-        }
-
-        // The content is unchanged or has undergone a complex change (i.e. not a simple tail
-        // modification) so return an unknown key-code.
-        return null;
+        return true;
     }
 
-    void sendKeyEventWithKeyCode(int keyCode, int flags) {
+    @VisibleForTesting
+    protected void sendSyntheticKeyPress(int keyCode, int flags) {
         long eventTime = SystemClock.uptimeMillis();
-        mLastSyntheticKeyCode = keyCode;
-        translateAndSendNativeEvents(new KeyEvent(eventTime, eventTime,
+        sendKeyEvent(new KeyEvent(eventTime, eventTime,
                 KeyEvent.ACTION_DOWN, keyCode, 0, 0,
                 KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
                 flags));
-        translateAndSendNativeEvents(new KeyEvent(SystemClock.uptimeMillis(), eventTime,
+        sendKeyEvent(new KeyEvent(SystemClock.uptimeMillis(), eventTime,
                 KeyEvent.ACTION_UP, keyCode, 0, 0,
                 KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
                 flags));
     }
 
-    // Calls from Java to C++
-    // TODO: Add performance tracing to more complicated functions.
-
-    boolean checkCompositionQueueAndCallNative(CharSequence text, int newCursorPosition,
-            boolean isCommit) {
+    boolean sendCompositionToNative(CharSequence text, int newCursorPosition, boolean isCommit) {
         if (mNativeImeAdapterAndroid == 0) return false;
-        mViewEmbedder.onImeEvent();
 
-        String textStr = text.toString();
-        int keyCode = shouldSendKeyEventWithKeyCode(textStr);
-        long timeStampMs = SystemClock.uptimeMillis();
-
-        if (keyCode != COMPOSITION_KEY_CODE) {
-            sendKeyEventWithKeyCode(keyCode,
+        // One WebView app detects Enter in JS by looking at KeyDown (http://crbug/577967).
+        if (TextUtils.equals(text, "\n")) {
+            sendSyntheticKeyPress(KeyEvent.KEYCODE_ENTER,
                     KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE);
-        } else {
-            KeyEvent keyEvent = getTypedKeyEventGuess(mLastComposeText, textStr);
-            int modifiers = 0;
-            if (keyEvent != null) {
-                keyCode = keyEvent.getKeyCode();
-                modifiers = getModifiers(keyEvent.getMetaState());
-            } else if (!textStr.equals(mLastComposeText)) {
-                keyCode = KeyEvent.KEYCODE_UNKNOWN;
-            } else {
-                keyCode = -1;
-            }
-
-            // If this is a single-character commit with no previous composition, then treat it as
-            // a native KeyDown/KeyUp pair with no composition rather than a synthetic pair with
-            // composition below.
-            if (keyCode > 0 && isCommit && mLastComposeText == null && textStr.length() == 1) {
-                mLastSyntheticKeyCode = keyCode;
-                return translateAndSendNativeEvents(keyEvent)
-                        && translateAndSendNativeEvents(
-                                KeyEvent.changeAction(keyEvent, KeyEvent.ACTION_UP));
-            }
-
-            // Always send compose events. This is a quick fix for http://crbug.com/476497.
-            keyCode = COMPOSITION_KEY_CODE;
-            modifiers = 0;
-
-            // When typing, there is no issue sending KeyDown and KeyUp events around the
-            // composition event because those key events do nothing (other than call JS
-            // handlers).  Typing does not cause changes outside of a KeyPress event which
-            // we don't call here.  However, if the key-code is a control key such as
-            // KEYCODE_DEL then there never is an associated KeyPress event and the KeyDown
-            // event itself causes the action.  The net result below is that the Renderer calls
-            // cancelComposition() and then Android starts anew with setComposingRegion().
-            // This stopping and restarting of composition could be a source of problems
-            // with 3rd party keyboards.
-            //
-            // An alternative is to *not* call nativeSetComposingText() in the non-commit case
-            // below.  This avoids the restart of composition described above but fails to send
-            // an update to the composition while in composition which, strictly speaking,
-            // does not match the spec.
-            //
-            // For now, the solution is to endure the restarting of composition and only dive
-            // into the alternate solution should there be problems in the field.  --bcwhite
-
-            if (keyCode >= 0) {
-                nativeSendSyntheticKeyEvent(mNativeImeAdapterAndroid, WebInputEventType.RawKeyDown,
-                        timeStampMs, keyCode, modifiers, 0);
-            }
-
-            if (isCommit) {
-                nativeCommitText(mNativeImeAdapterAndroid, textStr);
-                textStr = null;
-            } else {
-                nativeSetComposingText(mNativeImeAdapterAndroid, text, textStr, newCursorPosition);
-            }
-
-            if (keyCode >= 0) {
-                nativeSendSyntheticKeyEvent(mNativeImeAdapterAndroid, WebInputEventType.KeyUp,
-                        timeStampMs, keyCode, modifiers, 0);
-            }
-
-            mLastSyntheticKeyCode = keyCode;
+            return true;
         }
 
-        mLastComposeText = textStr;
+        mViewEmbedder.onImeEvent();
+        long timestampMs = SystemClock.uptimeMillis();
+        nativeSendSyntheticKeyEvent(mNativeImeAdapterAndroid, WebInputEventType.RawKeyDown,
+                timestampMs, COMPOSITION_KEY_CODE, 0, 0);
+
+        if (isCommit) {
+            nativeCommitText(mNativeImeAdapterAndroid, text.toString());
+        } else {
+            nativeSetComposingText(
+                    mNativeImeAdapterAndroid, text, text.toString(), newCursorPosition);
+        }
+
+        nativeSendSyntheticKeyEvent(mNativeImeAdapterAndroid, WebInputEventType.KeyUp,
+                timestampMs, COMPOSITION_KEY_CODE, 0, 0);
         return true;
     }
 
     @VisibleForTesting
-    protected void finishComposingText() {
-        mLastComposeText = null;
+    void finishComposingText() {
         if (mNativeImeAdapterAndroid == 0) return;
         nativeFinishComposingText(mNativeImeAdapterAndroid);
     }
 
-    boolean translateAndSendNativeEvents(KeyEvent event) {
+    boolean sendKeyEvent(KeyEvent event) {
         if (mNativeImeAdapterAndroid == 0) return false;
 
         int action = event.getAction();
@@ -508,16 +513,7 @@ public class ImeAdapter {
         mViewEmbedder.onImeEvent();
         return nativeSendKeyEvent(mNativeImeAdapterAndroid, event, event.getAction(),
                 getModifiers(event.getMetaState()), event.getEventTime(), event.getKeyCode(),
-                             /*isSystemKey=*/false, event.getUnicodeChar());
-    }
-
-    boolean sendSyntheticKeyEvent(int eventType, long timestampMs, int keyCode, int modifiers,
-            int unicodeChar) {
-        if (mNativeImeAdapterAndroid == 0) return false;
-
-        nativeSendSyntheticKeyEvent(
-                mNativeImeAdapterAndroid, eventType, timestampMs, keyCode, modifiers, unicodeChar);
-        return true;
+                             event.getScanCode(), /*isSystemKey=*/false, event.getUnicodeChar());
     }
 
     /**
@@ -531,7 +527,11 @@ public class ImeAdapter {
     boolean deleteSurroundingText(int beforeLength, int afterLength) {
         mViewEmbedder.onImeEvent();
         if (mNativeImeAdapterAndroid == 0) return false;
+        nativeSendSyntheticKeyEvent(mNativeImeAdapterAndroid, WebInputEventType.RawKeyDown,
+                SystemClock.uptimeMillis(), COMPOSITION_KEY_CODE, 0, 0);
         nativeDeleteSurroundingText(mNativeImeAdapterAndroid, beforeLength, afterLength);
+        nativeSendSyntheticKeyEvent(mNativeImeAdapterAndroid,
+                WebInputEventType.KeyUp, SystemClock.uptimeMillis(), COMPOSITION_KEY_CODE, 0, 0);
         return true;
     }
 
@@ -556,19 +556,22 @@ public class ImeAdapter {
     boolean setComposingRegion(CharSequence text, int start, int end) {
         if (mNativeImeAdapterAndroid == 0) return false;
         nativeSetComposingRegion(mNativeImeAdapterAndroid, start, end);
-        mLastComposeText = text != null ? text.toString() : null;
         return true;
     }
 
-    // Calls from C++ to Java
-
     @CalledByNative
     private void focusedNodeChanged(boolean isEditable) {
-        if (mInputConnection != null && isEditable) mInputConnection.restartInput();
+        if (DEBUG_LOGS) Log.w(TAG, "focusedNodeChanged: isEditable [%b]", isEditable);
+        if (mTextInputType != TextInputType.NONE && mInputConnection != null && isEditable) {
+            restartInput();
+        }
     }
 
     @CalledByNative
     private void populateUnderlinesFromSpans(CharSequence text, long underlines) {
+        if (DEBUG_LOGS) {
+            Log.w(TAG, "populateUnderlinesFromSpans: text [%s], underlines [%d]", text, underlines);
+        }
         if (!(text instanceof SpannableString)) return;
 
         SpannableString spannableString = ((SpannableString) text);
@@ -588,23 +591,22 @@ public class ImeAdapter {
 
     @CalledByNative
     private void cancelComposition() {
-        if (mInputConnection != null) mInputConnection.restartInput();
-        mLastComposeText = null;
+        if (DEBUG_LOGS) Log.w(TAG, "cancelComposition");
+        if (mInputConnection != null) restartInput();
     }
 
     @CalledByNative
-    void detach() {
-        mHandler.removeCallbacks(mDismissInputRunnable);
+    private void detach() {
+        if (DEBUG_LOGS) Log.w(TAG, "detach");
         mNativeImeAdapterAndroid = 0;
-        mTextInputType = 0;
     }
 
     private native boolean nativeSendSyntheticKeyEvent(long nativeImeAdapterAndroid,
             int eventType, long timestampMs, int keyCode, int modifiers, int unicodeChar);
 
     private native boolean nativeSendKeyEvent(long nativeImeAdapterAndroid, KeyEvent event,
-            int action, int modifiers, long timestampMs, int keyCode, boolean isSystemKey,
-            int unicodeChar);
+            int action, int modifiers, long timestampMs, int keyCode, int scanCode,
+            boolean isSystemKey, int unicodeChar);
 
     private static native void nativeAppendUnderlineSpan(long underlinePtr, int start, int end);
 

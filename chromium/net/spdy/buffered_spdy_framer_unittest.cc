@@ -21,9 +21,9 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
         syn_reply_frame_count_(0),
         headers_frame_count_(0),
         push_promise_frame_count_(0),
+        goaway_count_(0),
         header_stream_id_(static_cast<SpdyStreamId>(-1)),
-        promised_stream_id_(static_cast<SpdyStreamId>(-1)) {
-  }
+        promised_stream_id_(static_cast<SpdyStreamId>(-1)) {}
 
   void OnError(SpdyFramer::SpdyError error_code) override {
     LOG(INFO) << "SpdyFramer Error: " << error_code;
@@ -88,9 +88,19 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
     LOG(FATAL) << "Unexpected OnStreamPadding call.";
   }
 
+  SpdyHeadersHandlerInterface* OnHeaderFrameStart(
+      SpdyStreamId stream_id) override {
+    LOG(FATAL) << "Unexpected OnHeaderFrameStart call.";
+    return nullptr;
+  }
+
+  void OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) override {
+    LOG(FATAL) << "Unexpected OnHeaderFrameEnd call.";
+  }
+
   void OnSettings(bool clear_persisted) override {}
 
-  void OnSetting(SpdySettingsIds id, uint8 flags, uint32 value) override {
+  void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) override {
     setting_count_++;
   }
 
@@ -100,11 +110,12 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
                    SpdyRstStreamStatus status) override {}
 
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
-                SpdyGoAwayStatus status) override {}
-
-  bool OnCredentialFrameData(const char*, size_t) {
-    LOG(FATAL) << "Unexpected OnCredentialFrameData call.";
-    return false;
+                SpdyGoAwayStatus status,
+                StringPiece debug_data) override {
+    goaway_count_++;
+    goaway_last_accepted_stream_id_ = last_accepted_stream_id;
+    goaway_status_ = status;
+    goaway_debug_data_.assign(debug_data.data(), debug_data.size());
   }
 
   void OnDataFrameHeader(const SpdyFrame* frame) {
@@ -130,8 +141,6 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
   bool OnUnknownFrame(SpdyStreamId stream_id, int frame_type) override {
     return true;
   }
-
-  void OnCredential(const SpdyFrame& frame) {}
 
   // Convenience function which runs a framer simulation with particular input.
   void SimulateInFramer(const unsigned char* input, size_t size) {
@@ -162,6 +171,7 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
   int syn_reply_frame_count_;
   int headers_frame_count_;
   int push_promise_frame_count_;
+  int goaway_count_;
 
   // Header block streaming state:
   SpdyStreamId header_stream_id_;
@@ -170,6 +180,11 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
   // Headers from OnSyn, OnSynReply, OnHeaders and OnPushPromise for
   // verification.
   SpdyHeaderBlock headers_;
+
+  // OnGoAway parameters.
+  SpdyStreamId goaway_last_accepted_stream_id_;
+  SpdyGoAwayStatus goaway_status_;
+  std::string goaway_debug_data_;
 };
 
 }  // namespace
@@ -178,33 +193,6 @@ class BufferedSpdyFramerTest
     : public PlatformTest,
       public ::testing::WithParamInterface<NextProto> {
  protected:
-  // Returns true if the two header blocks have equivalent content.
-  bool CompareHeaderBlocks(const SpdyHeaderBlock* expected,
-                           const SpdyHeaderBlock* actual) {
-    if (expected->size() != actual->size()) {
-      LOG(ERROR) << "Expected " << expected->size() << " headers; actually got "
-                 << actual->size() << ".";
-      return false;
-    }
-    for (SpdyHeaderBlock::const_iterator it = expected->begin();
-         it != expected->end();
-         ++it) {
-      SpdyHeaderBlock::const_iterator it2 = actual->find(it->first);
-      if (it2 == actual->end()) {
-        LOG(ERROR) << "Expected header name '" << it->first << "'.";
-        return false;
-      }
-      if (it->second.compare(it2->second) != 0) {
-        LOG(ERROR) << "Expected header named '" << it->first
-                   << "' to have a value of '" << it->second
-                   << "'. The actual value received was '" << it2->second
-                   << "'.";
-        return false;
-      }
-    }
-    return true;
-  }
-
   SpdyMajorVersion spdy_version() {
     return NextProtoToSpdyMajorVersion(GetParam());
   }
@@ -213,7 +201,6 @@ class BufferedSpdyFramerTest
 INSTANTIATE_TEST_CASE_P(NextProto,
                         BufferedSpdyFramerTest,
                         testing::Values(kProtoSPDY31,
-                                        kProtoHTTP2_14,
                                         kProtoHTTP2));
 
 TEST_P(BufferedSpdyFramerTest, OnSetting) {
@@ -257,7 +244,7 @@ TEST_P(BufferedSpdyFramerTest, ReadSynStreamHeaderBlock) {
   EXPECT_EQ(0, visitor.syn_reply_frame_count_);
   EXPECT_EQ(0, visitor.headers_frame_count_);
   EXPECT_EQ(0, visitor.push_promise_frame_count_);
-  EXPECT_TRUE(CompareHeaderBlocks(&headers, &visitor.headers_));
+  EXPECT_EQ(headers, visitor.headers_);
 }
 
 TEST_P(BufferedSpdyFramerTest, ReadSynReplyHeaderBlock) {
@@ -289,7 +276,7 @@ TEST_P(BufferedSpdyFramerTest, ReadSynReplyHeaderBlock) {
     EXPECT_EQ(0, visitor.syn_reply_frame_count_);
     EXPECT_EQ(1, visitor.headers_frame_count_);
   }
-  EXPECT_TRUE(CompareHeaderBlocks(&headers, &visitor.headers_));
+  EXPECT_EQ(headers, visitor.headers_);
 }
 
 TEST_P(BufferedSpdyFramerTest, ReadHeadersHeaderBlock) {
@@ -313,7 +300,7 @@ TEST_P(BufferedSpdyFramerTest, ReadHeadersHeaderBlock) {
   EXPECT_EQ(0, visitor.syn_reply_frame_count_);
   EXPECT_EQ(1, visitor.headers_frame_count_);
   EXPECT_EQ(0, visitor.push_promise_frame_count_);
-  EXPECT_TRUE(CompareHeaderBlocks(&headers, &visitor.headers_));
+  EXPECT_EQ(headers, visitor.headers_);
 }
 
 TEST_P(BufferedSpdyFramerTest, ReadPushPromiseHeaderBlock) {
@@ -336,9 +323,27 @@ TEST_P(BufferedSpdyFramerTest, ReadPushPromiseHeaderBlock) {
   EXPECT_EQ(0, visitor.syn_reply_frame_count_);
   EXPECT_EQ(0, visitor.headers_frame_count_);
   EXPECT_EQ(1, visitor.push_promise_frame_count_);
-  EXPECT_TRUE(CompareHeaderBlocks(&headers, &visitor.headers_));
+  EXPECT_EQ(headers, visitor.headers_);
   EXPECT_EQ(1u, visitor.header_stream_id_);
   EXPECT_EQ(2u, visitor.promised_stream_id_);
+}
+
+TEST_P(BufferedSpdyFramerTest, GoAwayDebugData) {
+  if (spdy_version() < HTTP2)
+    return;
+  BufferedSpdyFramer framer(spdy_version(), true);
+  scoped_ptr<SpdyFrame> goaway_frame(
+      framer.CreateGoAway(2u, GOAWAY_FRAME_SIZE_ERROR, "foo"));
+
+  TestBufferedSpdyVisitor visitor(spdy_version());
+  visitor.SimulateInFramer(
+      reinterpret_cast<unsigned char*>(goaway_frame.get()->data()),
+      goaway_frame.get()->size());
+  EXPECT_EQ(0, visitor.error_count_);
+  EXPECT_EQ(1, visitor.goaway_count_);
+  EXPECT_EQ(2u, visitor.goaway_last_accepted_stream_id_);
+  EXPECT_EQ(GOAWAY_FRAME_SIZE_ERROR, visitor.goaway_status_);
+  EXPECT_EQ("foo", visitor.goaway_debug_data_);
 }
 
 }  // namespace net

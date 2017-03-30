@@ -4,6 +4,9 @@
 
 #import "content/browser/renderer_host/text_input_client_mac.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
@@ -21,7 +24,7 @@
 namespace content {
 
 namespace {
-const int64 kTaskDelayMs = 200;
+const int64_t kTaskDelayMs = 200;
 
 class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
  public:
@@ -44,11 +47,12 @@ class TextInputClientMacTest : public testing::Test {
       : browser_context_(),
         process_factory_(),
         delegate_(),
-        widget_(&delegate_,
-                process_factory_.CreateRenderProcessHost(
-                    &browser_context_, NULL),
-                MSG_ROUTING_NONE, false),
-        thread_("TextInputClientMacTestThread") {}
+        thread_("TextInputClientMacTestThread") {
+    RenderProcessHost* rph =
+        process_factory_.CreateRenderProcessHost(&browser_context_, nullptr);
+    int32_t routing_id = rph->GetNextRoutingID();
+    widget_.reset(new RenderWidgetHostImpl(&delegate_, rph, routing_id, false));
+  }
 
   // Accessor for the TextInputClientMac instance.
   TextInputClientMac* service() {
@@ -68,9 +72,7 @@ class TextInputClientMacTest : public testing::Test {
     thread_.message_loop()->PostDelayedTask(from_here, task, delay);
   }
 
-  RenderWidgetHostImpl* widget() {
-    return &widget_;
-  }
+  RenderWidgetHostImpl* widget() { return widget_.get(); }
 
   IPC::TestSink& ipc_sink() {
     return static_cast<MockRenderProcessHost*>(widget()->GetProcess())->sink();
@@ -85,7 +87,7 @@ class TextInputClientMacTest : public testing::Test {
   // Gets deleted when the last RWH in the "process" gets destroyed.
   MockRenderProcessHostFactory process_factory_;
   MockRenderWidgetHostDelegate delegate_;
-  RenderWidgetHostImpl widget_;
+  scoped_ptr<RenderWidgetHostImpl> widget_;
 
   base::Thread thread_;
 };
@@ -140,7 +142,7 @@ TEST_F(TextInputClientMacTest, TimeoutCharacterIndex) {
   EXPECT_EQ(1U, ipc_sink().message_count());
   EXPECT_TRUE(ipc_sink().GetUniqueMessageMatching(
       TextInputClientMsg_CharacterIndexForPoint::ID));
-  EXPECT_EQ(NSNotFound, index);
+  EXPECT_EQ(static_cast<NSUInteger>(NSNotFound), index);
 }
 
 TEST_F(TextInputClientMacTest, NotFoundCharacterIndex) {
@@ -168,7 +170,7 @@ TEST_F(TextInputClientMacTest, NotFoundCharacterIndex) {
       widget(), gfx::Point(2, 2));
   EXPECT_EQ(kPreviousValue, index);
   index = service()->GetCharacterIndexAtPoint(widget(), gfx::Point(2, 2));
-  EXPECT_EQ(NSNotFound, index);
+  EXPECT_EQ(static_cast<NSUInteger>(NSNotFound), index);
 
   EXPECT_EQ(2U, ipc_sink().message_count());
   for (size_t i = 0; i < ipc_sink().message_count(); ++i) {
@@ -199,39 +201,6 @@ TEST_F(TextInputClientMacTest, TimeoutRectForRange) {
   EXPECT_TRUE(ipc_sink().GetUniqueMessageMatching(
       TextInputClientMsg_FirstRectForCharacterRange::ID));
   EXPECT_NSEQ(NSZeroRect, rect);
-}
-
-TEST_F(TextInputClientMacTest, GetSubstring) {
-  ScopedTestingThread thread(this);
-  NSDictionary* attributes =
-      [NSDictionary dictionaryWithObject:[NSColor purpleColor]
-                                  forKey:NSForegroundColorAttributeName];
-  base::scoped_nsobject<NSMutableAttributedString> kSuccessValue(
-      [[NSMutableAttributedString alloc]
-          initWithString:@"Barney is a purple dinosaur"
-              attributes:attributes]);
-
-  PostTask(FROM_HERE,
-           base::Bind(&TextInputClientMac::SetSubstringAndSignal,
-                      base::Unretained(service()),
-                      base::Unretained(kSuccessValue.get())));
-  NSAttributedString* string = service()->GetAttributedSubstringFromRange(
-      widget(), NSMakeRange(0, 32));
-
-  EXPECT_NSEQ(kSuccessValue, string);
-  EXPECT_NE(kSuccessValue.get(), string);  // |string| should be a copy.
-  EXPECT_EQ(1U, ipc_sink().message_count());
-  EXPECT_TRUE(ipc_sink().GetUniqueMessageMatching(
-      TextInputClientMsg_StringForRange::ID));
-}
-
-TEST_F(TextInputClientMacTest, TimeoutSubstring) {
-  NSAttributedString* string = service()->GetAttributedSubstringFromRange(
-      widget(), NSMakeRange(0, 32));
-  EXPECT_EQ(nil, string);
-  EXPECT_EQ(1U, ipc_sink().message_count());
-  EXPECT_TRUE(ipc_sink().GetUniqueMessageMatching(
-      TextInputClientMsg_StringForRange::ID));
 }
 
 }  // namespace content

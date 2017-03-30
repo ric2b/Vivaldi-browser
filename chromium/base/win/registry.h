@@ -6,12 +6,12 @@
 #define BASE_WIN_REGISTRY_H_
 
 #include <windows.h>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
-#include "base/stl_util.h"
+#include "base/macros.h"
 #include "base/win/object_watcher.h"
 #include "base/win/scoped_handle.h"
 
@@ -85,13 +85,13 @@ class BASE_EXPORT RegKey {
 
   // Getters:
 
-  // Returns an int32 value. If |name| is NULL or empty, returns the default
+  // Returns an int32_t value. If |name| is NULL or empty, returns the default
   // value, if any.
   LONG ReadValueDW(const wchar_t* name, DWORD* out_value) const;
 
-  // Returns an int64 value. If |name| is NULL or empty, returns the default
+  // Returns an int64_t value. If |name| is NULL or empty, returns the default
   // value, if any.
-  LONG ReadInt64(const wchar_t* name, int64* out_value) const;
+  LONG ReadInt64(const wchar_t* name, int64_t* out_value) const;
 
   // Returns a string value. If |name| is NULL or empty, returns the default
   // value, if any.
@@ -111,7 +111,7 @@ class BASE_EXPORT RegKey {
 
   // Setters:
 
-  // Sets an int32 value.
+  // Sets an int32_t value.
   LONG WriteValue(const wchar_t* name, DWORD in_value);
 
   // Sets a string value.
@@ -180,7 +180,7 @@ class BASE_EXPORT RegistryValueIterator {
   void operator++();
 
   const wchar_t* Name() const { return name_.c_str(); }
-  const wchar_t* Value() const { return vector_as_array(&value_); }
+  const wchar_t* Value() const { return value_.data(); }
   // ValueSize() is in bytes.
   DWORD ValueSize() const { return value_size_; }
   DWORD Type() const { return type_; }

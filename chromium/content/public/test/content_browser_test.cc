@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
@@ -19,7 +20,6 @@
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/renderer/layout_test/layout_test_content_renderer_client.h"
 #include "content/test/test_content_client.h"
-#include "net/test/embedded_test_server/embedded_test_server.h"
 
 #if defined(OS_ANDROID)
 #include "content/shell/app/shell_main_delegate.h"
@@ -35,8 +35,7 @@
 
 namespace content {
 
-ContentBrowserTest::ContentBrowserTest()
-    : setup_called_(false) {
+ContentBrowserTest::ContentBrowserTest() {
 #if defined(OS_MACOSX)
   // See comment in InProcessBrowserTest::InProcessBrowserTest().
   base::FilePath content_shell_path;
@@ -48,16 +47,9 @@ ContentBrowserTest::ContentBrowserTest()
 #endif
   base::FilePath content_test_data(FILE_PATH_LITERAL("content/test/data"));
   CreateTestServer(content_test_data);
-  base::FilePath content_test_data_absolute;
-  CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &content_test_data_absolute));
-  content_test_data_absolute =
-      content_test_data_absolute.Append(content_test_data);
-  embedded_test_server()->ServeFilesFromDirectory(content_test_data_absolute);
 }
 
 ContentBrowserTest::~ContentBrowserTest() {
-  CHECK(setup_called_) << "Overridden SetUp() did not call parent "
-                          "implementation, so test not run.";
 }
 
 void ContentBrowserTest::SetUp() {
@@ -96,8 +88,6 @@ void ContentBrowserTest::SetUp() {
 #if !defined(OS_CHROMEOS) && defined(OS_LINUX)
   ui::InitializeInputMethodForTesting();
 #endif
-
-  setup_called_ = true;
 
   BrowserTestBase::SetUp();
 }

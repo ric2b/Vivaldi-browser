@@ -9,6 +9,7 @@
 
 #include "android_webview/common/aw_hit_test_data.h"
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -80,6 +81,8 @@ class AwRenderViewHostExt : public content::WebContentsObserver,
   void SetBackgroundColor(SkColor c);
   void SetJsOnlineProperty(bool network_up);
 
+  void SmoothScroll(int target_x, int target_y, long duration_ms);
+
  private:
   // content::WebContentsObserver implementation.
   void RenderViewCreated(content::RenderViewHost* view_host) override;
@@ -87,12 +90,17 @@ class AwRenderViewHostExt : public content::WebContentsObserver,
   void DidNavigateAnyFrame(content::RenderFrameHost* render_frame_host,
                            const content::LoadCommittedDetails& details,
                            const content::FrameNavigateParams& params) override;
-  bool OnMessageReceived(const IPC::Message& message) override;
+  void OnPageScaleFactorChanged(float page_scale_factor) override;
+  bool OnMessageReceived(const IPC::Message& message,
+                         content::RenderFrameHost* render_frame_host) override;
 
-  void OnDocumentHasImagesResponse(int msg_id, bool has_images);
-  void OnUpdateHitTestData(const AwHitTestData& hit_test_data);
-  void OnPageScaleFactorChanged(float page_scale_factor);
-  void OnContentsSizeChanged(const gfx::Size& contents_size);
+  void OnDocumentHasImagesResponse(content::RenderFrameHost* render_frame_host,
+                                   int msg_id,
+                                   bool has_images);
+  void OnUpdateHitTestData(content::RenderFrameHost* render_frame_host,
+                           const AwHitTestData& hit_test_data);
+  void OnContentsSizeChanged(content::RenderFrameHost* render_frame_host,
+                             const gfx::Size& contents_size);
 
   bool IsRenderViewReady() const;
 

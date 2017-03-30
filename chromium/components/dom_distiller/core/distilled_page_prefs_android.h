@@ -8,6 +8,7 @@
 #include <jni.h>
 
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 
 namespace dom_distiller {
@@ -20,13 +21,27 @@ class DistilledPagePrefsAndroid {
                             DistilledPagePrefs* distilled_page_prefs_ptr);
   virtual ~DistilledPagePrefsAndroid();
   static bool Register(JNIEnv* env);
-  void SetFontFamily(JNIEnv* env, jobject obj, jint font_family);
-  jint GetFontFamily(JNIEnv* env, jobject obj);
-  void SetTheme(JNIEnv* env, jobject obj, jint theme);
-  jint GetTheme(JNIEnv* env, jobject obj);
+  void SetFontFamily(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj,
+                     jint font_family);
+  jint GetFontFamily(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj);
+  void SetTheme(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& obj,
+                jint theme);
+  jint GetTheme(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void SetFontScaling(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj,
+                      jfloat scaling);
+  jfloat GetFontScaling(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
 
-  void AddObserver(JNIEnv* env, jobject obj, jlong obs);
-  void RemoveObserver(JNIEnv* env, jobject obj, jlong obs);
+  void AddObserver(JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& obj,
+                   jlong obs);
+  void RemoveObserver(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj,
+                      jlong obs);
 
  private:
   DistilledPagePrefs* distilled_page_prefs_;
@@ -43,8 +58,11 @@ class DistilledPagePrefsObserverAndroid : public DistilledPagePrefs::Observer {
   void OnChangeFontFamily(
       DistilledPagePrefs::FontFamily new_font_family) override;
   void OnChangeTheme(DistilledPagePrefs::Theme new_theme) override;
+  void OnChangeFontScaling(float scaling) override;
 
-  virtual void DestroyObserverAndroid(JNIEnv* env, jobject obj);
+  virtual void DestroyObserverAndroid(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;

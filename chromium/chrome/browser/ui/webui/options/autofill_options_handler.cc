@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/options/autofill_options_handler.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/bind.h"
@@ -11,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -20,7 +23,6 @@
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/autofill/country_combobox_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -77,7 +79,7 @@ scoped_ptr<base::DictionaryValue> CreditCardToDictionary(
   value->SetBoolean("isLocal", card.record_type() == CreditCard::LOCAL_CARD);
   value->SetBoolean("isCached",
                     card.record_type() == CreditCard::FULL_SERVER_CARD);
-  return value.Pass();
+  return value;
 }
 
 // Fills |components| with the address UI components that should be used to
@@ -207,9 +209,7 @@ void SetCountryData(const PersonalDataManager& manager,
 
 namespace options {
 
-AutofillOptionsHandler::AutofillOptionsHandler()
-    : personal_data_(NULL), observer_(this) {
-}
+AutofillOptionsHandler::AutofillOptionsHandler() : personal_data_(NULL) {}
 
 AutofillOptionsHandler::~AutofillOptionsHandler() {
   if (personal_data_)
@@ -236,10 +236,6 @@ void AutofillOptionsHandler::GetLocalizedValues(
     { "editAddressTitle", IDS_AUTOFILL_EDIT_ADDRESS_CAPTION },
     { "addCreditCardTitle", IDS_AUTOFILL_ADD_CREDITCARD_CAPTION },
     { "editCreditCardTitle", IDS_AUTOFILL_EDIT_CREDITCARD_CAPTION },
-    { "autofillWalletOption", IDS_AUTOFILL_USE_WALLET_DATA },
-#if defined(OS_MACOSX)
-    { "auxiliaryProfilesEnabled", IDS_AUTOFILL_USE_MAC_ADDRESS_BOOK },
-#endif  // defined(OS_MACOSX)
   };
 
   RegisterStrings(localized_strings, resources, arraysize(resources));
@@ -260,18 +256,6 @@ void AutofillOptionsHandler::GetLocalizedValues(
   localized_strings->SetString(
       "manageWalletPaymentMethodsUrl",
       autofill::wallet::GetManageInstrumentsUrl(0).spec());
-
-  // This is set in loadTimeData to minimize the chance of a load-time flash of
-  // content.
-  ProfileSyncService* service =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(
-          Profile::FromWebUI(web_ui()));
-  if (service)
-    observer_.Add(service);
-
-  localized_strings->SetBoolean("autofillWalletIntegrationAvailable",
-                                autofill::WalletIntegrationAvailableForProfile(
-                                    Profile::FromWebUI(web_ui())));
 }
 
 void AutofillOptionsHandler::InitializeHandler() {
@@ -283,19 +267,9 @@ void AutofillOptionsHandler::InitializeHandler() {
 void AutofillOptionsHandler::InitializePage() {
   if (personal_data_)
     LoadAutofillData();
-
-  // Also update the visibility of the Wallet checkbox (which may have
-  // changed since the localized string dictionary was built).
-  OnStateChanged();
 }
 
 void AutofillOptionsHandler::RegisterMessages() {
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  web_ui()->RegisterMessageCallback(
-      "accessAddressBook",
-      base::Bind(&AutofillOptionsHandler::AccessAddressBook,
-                 base::Unretained(this)));
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
   web_ui()->RegisterMessageCallback(
       "removeData",
       base::Bind(&AutofillOptionsHandler::RemoveData,
@@ -329,14 +303,6 @@ void AutofillOptionsHandler::RegisterMessages() {
 // PersonalDataManagerObserver implementation:
 void AutofillOptionsHandler::OnPersonalDataChanged() {
   LoadAutofillData();
-  OnStateChanged();
-}
-
-void AutofillOptionsHandler::OnStateChanged() {
-  web_ui()->CallJavascriptFunction(
-      "AutofillOptions.walletIntegrationAvailableStateChanged",
-      base::FundamentalValue(autofill::WalletIntegrationAvailableForProfile(
-          Profile::FromWebUI(web_ui()))));
 }
 
 void AutofillOptionsHandler::SetAddressOverlayStrings(
@@ -407,12 +373,6 @@ void AutofillOptionsHandler::LoadAutofillData() {
   web_ui()->CallJavascriptFunction("AutofillOptions.setCreditCardList",
                                    credit_cards);
 }
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-void AutofillOptionsHandler::AccessAddressBook(const base::ListValue* args) {
-  personal_data_->AccessAddressBook();
-}
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
 void AutofillOptionsHandler::RemoveData(const base::ListValue* args) {
   DCHECK(IsPersonalDataLoaded());

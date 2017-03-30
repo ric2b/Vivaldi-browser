@@ -1,16 +1,17 @@
 include_rules = [
   # common must not depend on embedder.
   "-mojo",
-  "+mojo/application/public/cpp",
+  "+mojo/shell/public/cpp",
   "+mojo/common",
-  "+third_party/mojo/src/mojo/public",
+  "+mojo/message_pump",
+  "+mojo/public",
 ]
 
 specific_include_rules = {
   "trace_controller_impl\.h": [
-    "+mojo/services/tracing/tracing.mojom.h"
+    "+mojo/services/tracing/public/interfaces/tracing.mojom.h"
   ],
   "tracing_impl\.h": [
-    "+mojo/services/tracing/tracing.mojom.h"
+    "+mojo/services/tracing/public/interfaces/tracing.mojom.h"
   ],
 }

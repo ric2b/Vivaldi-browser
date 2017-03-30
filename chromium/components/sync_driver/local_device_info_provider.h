@@ -8,11 +8,15 @@
 #include <string>
 #include "base/callback_list.h"
 
+namespace base {
+class TaskRunner;
+}
+
 namespace sync_driver {
 
 class DeviceInfo;
 
-// Interface for providing sync specific informaiton about the
+// Interface for providing sync specific information about the
 // local device.
 class LocalDeviceInfoProvider {
  public:
@@ -27,6 +31,11 @@ class LocalDeviceInfoProvider {
   // is destroyed.
   virtual const DeviceInfo* GetLocalDeviceInfo() const = 0;
 
+  // Constructs a user agent string (ASCII) suitable for use by the syncapi
+  // for any HTTP communication. This string is used by the sync backend for
+  // classifying client types when calculating statistics.
+  virtual std::string GetSyncUserAgent() const = 0;
+
   // Returns a GUID string used for creation of the machine tag for
   // this local session; an empty sting if LocalDeviceInfoProvider hasn't been
   // initialized yet.
@@ -35,7 +44,8 @@ class LocalDeviceInfoProvider {
   // Starts initializing local device info.
   virtual void Initialize(
       const std::string& cache_guid,
-      const std::string& signin_scoped_device_id) = 0;
+      const std::string& signin_scoped_device_id,
+      const scoped_refptr<base::TaskRunner>& blocking_task_runner) = 0;
 
   // Registers a callback to be called when local device info becomes available.
   // The callback will remain registered until the

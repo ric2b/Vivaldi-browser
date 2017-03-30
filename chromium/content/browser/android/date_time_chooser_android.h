@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/android/jni_weak_ref.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/native_widget_types.h"
@@ -38,10 +39,12 @@ class DateTimeChooserAndroid {
                   const std::vector<DateTimeSuggestion>& suggestions);
 
   // Replaces the current value
-  void ReplaceDateTime(JNIEnv* env, jobject, jdouble value);
+  void ReplaceDateTime(JNIEnv* env,
+                       const base::android::JavaRef<jobject>&,
+                       jdouble value);
 
   // Closes the dialog without propagating any changes.
-  void CancelDialog(JNIEnv* env, jobject);
+  void CancelDialog(JNIEnv* env, const base::android::JavaRef<jobject>&);
 
  private:
   RenderViewHost* host_;

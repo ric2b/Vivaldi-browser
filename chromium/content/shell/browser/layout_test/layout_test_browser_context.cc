@@ -4,10 +4,14 @@
 
 #include "content/shell/browser/layout_test/layout_test_browser_context.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "build/build_config.h"
+#include "content/public/browser/background_sync_controller.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/push_messaging_service.h"
 #include "content/public/browser/resource_context.h"
@@ -41,13 +45,10 @@ LayoutTestBrowserContext::CreateURLRequestContextGetter(
     ProtocolHandlerMap* protocol_handlers,
     URLRequestInterceptorScopedVector request_interceptors) {
   return new LayoutTestURLRequestContextGetter(
-      ignore_certificate_errors(),
-      GetPath(),
+      ignore_certificate_errors(), GetPath(),
       BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO),
       BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::FILE),
-      protocol_handlers,
-      request_interceptors.Pass(),
-      net_log());
+      protocol_handlers, std::move(request_interceptors), net_log());
 }
 
 DownloadManagerDelegate*
@@ -73,6 +74,13 @@ PermissionManager* LayoutTestBrowserContext::GetPermissionManager() {
   if (!permission_manager_.get())
     permission_manager_.reset(new LayoutTestPermissionManager());
   return permission_manager_.get();
+}
+
+BackgroundSyncController*
+LayoutTestBrowserContext::GetBackgroundSyncController() {
+  if (!background_sync_controller_)
+    background_sync_controller_.reset(new BackgroundSyncController());
+  return background_sync_controller_.get();
 }
 
 LayoutTestPermissionManager*

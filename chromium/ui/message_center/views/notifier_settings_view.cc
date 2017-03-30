@@ -4,9 +4,13 @@
 
 #include "ui/message_center/views/notifier_settings_view.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "skia/ext/image_operations.h"
@@ -576,7 +580,7 @@ void NotifierSettingsView::UpdateContentsView(
     notifier_group_selector_ =
         new views::MenuButton(NULL, notifier_group_text, this, true);
     notifier_group_selector_->SetBorder(scoped_ptr<views::Border>(
-        new views::LabelButtonBorder(views::Button::STYLE_BUTTON)).Pass());
+        new views::LabelButtonAssetBorder(views::Button::STYLE_BUTTON)));
     notifier_group_selector_->SetFocusPainter(nullptr);
     notifier_group_selector_->set_animate_on_state_change(false);
     notifier_group_selector_->SetFocusable(true);
@@ -604,7 +608,7 @@ void NotifierSettingsView::UpdateContentsView(
                                                 0,
                                                 settings::kEntrySeparatorColor);
     }
-    entry->SetBorder(entry_border.Pass());
+    entry->SetBorder(std::move(entry_border));
     entry->SetFocusable(true);
     contents_view->AddChildView(entry);
     buttons_.insert(button);

@@ -5,20 +5,23 @@
 #ifndef UI_OZONE_COMMON_GPU_OZONE_GPU_MESSAGE_PARAMS_H_
 #define UI_OZONE_COMMON_GPU_OZONE_GPU_MESSAGE_PARAMS_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/overlay_transform.h"
-#include "ui/ozone/ozone_export.h"
+#include "ui/ozone/ozone_base_export.h"
 #include "ui/ozone/public/overlay_candidates_ozone.h"
-#include "ui/ozone/public/surface_factory_ozone.h"
 
 namespace ui {
 
-struct OZONE_EXPORT DisplayMode_Params {
+struct OZONE_BASE_EXPORT DisplayMode_Params {
   DisplayMode_Params();
   ~DisplayMode_Params();
 
@@ -27,7 +30,7 @@ struct OZONE_EXPORT DisplayMode_Params {
   float refresh_rate = 0.0f;
 };
 
-struct OZONE_EXPORT DisplaySnapshot_Params {
+struct OZONE_BASE_EXPORT DisplaySnapshot_Params {
   DisplaySnapshot_Params();
   ~DisplaySnapshot_Params();
 
@@ -38,6 +41,7 @@ struct OZONE_EXPORT DisplaySnapshot_Params {
   bool is_aspect_preserving_scaling = false;
   bool has_overscan = false;
   std::string display_name;
+  base::FilePath sys_path;
   std::vector<DisplayMode_Params> modes;
   bool has_current_mode = false;
   DisplayMode_Params current_mode;
@@ -47,17 +51,22 @@ struct OZONE_EXPORT DisplaySnapshot_Params {
   std::string string_representation;
 };
 
-struct OZONE_EXPORT OverlayCheck_Params {
+struct OZONE_BASE_EXPORT OverlayCheck_Params {
   OverlayCheck_Params();
   OverlayCheck_Params(
       const OverlayCandidatesOzone::OverlaySurfaceCandidate& candidate);
   ~OverlayCheck_Params();
 
+  bool operator<(const OverlayCheck_Params& plane) const;
+
   gfx::Size buffer_size;
   gfx::OverlayTransform transform = gfx::OVERLAY_TRANSFORM_INVALID;
-  SurfaceFactoryOzone::BufferFormat format = SurfaceFactoryOzone::UNKNOWN;
+  gfx::BufferFormat format = gfx::BufferFormat::BGRA_8888;
   gfx::Rect display_rect;
+  gfx::RectF crop_rect;
   int plane_z_order = 0;
+  // By default we mark this configuration valid for promoting it to an overlay.
+  bool is_overlay_candidate = true;
 };
 
 }  // namespace ui

@@ -48,15 +48,17 @@ class TranslateClient {
   // Returns the resource ID of the icon to be shown for the Translate infobars.
   virtual int GetInfobarIconID() const = 0;
 
+#if !defined(USE_AURA)
   // Returns a translate infobar that owns |delegate|.
   virtual scoped_ptr<infobars::InfoBar> CreateInfoBar(
       scoped_ptr<TranslateInfoBarDelegate> delegate) const = 0;
+#endif
 
   // Called when the embedder should present UI to the user corresponding to the
   // user's current |step|.
   virtual void ShowTranslateUI(translate::TranslateStep step,
-                               const std::string source_language,
-                               const std::string target_language,
+                               const std::string& source_language,
+                               const std::string& target_language,
                                TranslateErrors::Type error_type,
                                bool triggered_from_menu) = 0;
 

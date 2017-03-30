@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,7 @@
       this.speed_ = opt_options.speed;
       this.gesture_source_type_ = opt_options.gesture_source_type;
     } else {
-      this.element_ = document.body;
+      this.element_ = document.scrollingElement || document.body;
       this.left_start_ratio_ = 0.5;
       this.top_start_ratio_ = 0.5;
       this.direction_ = 'down';

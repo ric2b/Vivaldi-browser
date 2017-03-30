@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/download/download_history.h"
+
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
-#include "chrome/browser/download/download_history.h"
 #include "components/history/content/browser/download_constants_utils.h"
 #include "components/history/core/browser/download_constants.h"
 #include "components/history/core/browser/download_row.h"
@@ -85,7 +90,7 @@ class FakeHistoryAdapter : public DownloadHistory::HistoryAdapter {
       const history::HistoryService::DownloadQueryCallback& callback) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     CHECK(expect_query_downloads_.get());
-    callback.Run(expect_query_downloads_.Pass());
+    callback.Run(std::move(expect_query_downloads_));
   }
 
   void set_slow_create_download(bool slow) { slow_create_download_ = slow; }
@@ -124,7 +129,7 @@ class FakeHistoryAdapter : public DownloadHistory::HistoryAdapter {
 
   void ExpectWillQueryDownloads(scoped_ptr<InfoVector> infos) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    expect_query_downloads_ = infos.Pass();
+    expect_query_downloads_ = std::move(infos);
   }
 
   void ExpectQueryDownloadsDone() {
@@ -256,7 +261,7 @@ class DownloadHistoryTest : public testing::Test {
     }
     EXPECT_CALL(manager(), CheckForHistoryFilesRemoval());
     history_ = new FakeHistoryAdapter();
-    history_->ExpectWillQueryDownloads(infos.Pass());
+    history_->ExpectWillQueryDownloads(std::move(infos));
     EXPECT_CALL(*manager_.get(), GetAllDownloads(_)).WillRepeatedly(Return());
     download_history_.reset(new DownloadHistory(
         &manager(), scoped_ptr<DownloadHistory::HistoryAdapter>(history_)));
@@ -346,49 +351,37 @@ class DownloadHistoryTest : public testing::Test {
     GURL referrer(referrer_string);
     std::vector<GURL> url_chain;
     url_chain.push_back(url);
-    InitItem(static_cast<uint32>(items_.size() + 1),
-             base::FilePath(path),
-             base::FilePath(path),
-             url_chain,
-             referrer,
-             "application/octet-stream",
-             "application/octet-stream",
+    InitItem(static_cast<uint32_t>(items_.size() + 1), base::FilePath(path),
+             base::FilePath(path), url_chain, referrer,
+             "application/octet-stream", "application/octet-stream",
              (base::Time::Now() - base::TimeDelta::FromMinutes(10)),
-             (base::Time::Now() - base::TimeDelta::FromMinutes(1)),
-             "Etag",
-             "abc",
-             100,
-             100,
-             content::DownloadItem::COMPLETE,
+             (base::Time::Now() - base::TimeDelta::FromMinutes(1)), "Etag",
+             "abc", 100, 100, content::DownloadItem::COMPLETE,
              content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-             content::DOWNLOAD_INTERRUPT_REASON_NONE,
-             false,
-             std::string(),
-             std::string(),
-             info);
+             content::DOWNLOAD_INTERRUPT_REASON_NONE, false, std::string(),
+             std::string(), info);
   }
 
-  void InitItem(
-      uint32 id,
-      const base::FilePath& current_path,
-      const base::FilePath& target_path,
-      const std::vector<GURL>& url_chain,
-      const GURL& referrer,
-      const std::string& mime_type,
-      const std::string& original_mime_type,
-      const base::Time& start_time,
-      const base::Time& end_time,
-      const std::string& etag,
-      const std::string& last_modified,
-      int64 received_bytes,
-      int64 total_bytes,
-      content::DownloadItem::DownloadState state,
-      content::DownloadDangerType danger_type,
-      content::DownloadInterruptReason interrupt_reason,
-      bool opened,
-      const std::string& by_extension_id,
-      const std::string& by_extension_name,
-      history::DownloadRow* info) {
+  void InitItem(uint32_t id,
+                const base::FilePath& current_path,
+                const base::FilePath& target_path,
+                const std::vector<GURL>& url_chain,
+                const GURL& referrer,
+                const std::string& mime_type,
+                const std::string& original_mime_type,
+                const base::Time& start_time,
+                const base::Time& end_time,
+                const std::string& etag,
+                const std::string& last_modified,
+                int64_t received_bytes,
+                int64_t total_bytes,
+                content::DownloadItem::DownloadState state,
+                content::DownloadDangerType danger_type,
+                content::DownloadInterruptReason interrupt_reason,
+                bool opened,
+                const std::string& by_extension_id,
+                const std::string& by_extension_name,
+                history::DownloadRow* info) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     size_t index = items_.size();
@@ -499,7 +492,7 @@ TEST_F(DownloadHistoryTest, DownloadHistoryTest_Load) {
   {
     scoped_ptr<InfoVector> infos(new InfoVector());
     infos->push_back(info);
-    CreateDownloadHistory(infos.Pass());
+    CreateDownloadHistory(std::move(infos));
     ExpectNoDownloadCreated();
   }
   EXPECT_TRUE(DownloadHistory::IsPersisted(&item(0)));
@@ -537,7 +530,7 @@ TEST_F(DownloadHistoryTest, DownloadHistoryTest_WasRestoredFromHistory_True) {
                 &info);
   scoped_ptr<InfoVector> infos(new InfoVector());
   infos->push_back(info);
-  CreateDownloadHistory(infos.Pass());
+  CreateDownloadHistory(std::move(infos));
 
   EXPECT_TRUE(DownloadHistory::IsPersisted(&item(0)));
 }
@@ -793,7 +786,7 @@ TEST_F(DownloadHistoryTest, DownloadHistoryTest_Multiple) {
     scoped_ptr<InfoVector> infos(new InfoVector());
     infos->push_back(info0);
     infos->push_back(info1);
-    CreateDownloadHistory(infos.Pass());
+    CreateDownloadHistory(std::move(infos));
     ExpectNoDownloadCreated();
   }
 

@@ -7,10 +7,10 @@ package org.chromium.chrome.browser.partnercustomizations;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.preference.PreferenceManager;
+import android.support.v7.widget.SwitchCompat;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.view.View;
 import android.widget.Button;
-import android.widget.Checkable;
 import android.widget.EditText;
 
 import org.chromium.base.ThreadUtils;
@@ -19,14 +19,13 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.preferences.HomepageEditor;
 import org.chromium.chrome.browser.preferences.HomepagePreferences;
 import org.chromium.chrome.browser.preferences.Preferences;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.widget.ChromeSwitchCompat;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsProvider;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.TestHttpServerClient;
@@ -107,11 +106,11 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
         // Disable homepage.
         Preferences homepagePreferenceActivity =
                 startPreferences(HomepagePreferences.class.getName());
-        ChromeSwitchCompat homepageSwitch =
-                (ChromeSwitchCompat) homepagePreferenceActivity.findViewById(R.id.switch_widget);
+        SwitchCompat homepageSwitch =
+                (SwitchCompat) homepagePreferenceActivity.findViewById(R.id.switch_widget);
         assertNotNull(homepageSwitch);
         TouchCommon.singleClickView(homepageSwitch);
-        waitForCheckedState(homepageSwitch, false);
+        waitForCheckedState(homepagePreferenceActivity, false);
         homepagePreferenceActivity.finish();
 
         // Assert no homepage button.
@@ -126,11 +125,10 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
 
         // Enable homepage.
         homepagePreferenceActivity = startPreferences(HomepagePreferences.class.getName());
-        homepageSwitch =
-                (ChromeSwitchCompat) homepagePreferenceActivity.findViewById(R.id.switch_widget);
+        homepageSwitch = (SwitchCompat) homepagePreferenceActivity.findViewById(R.id.switch_widget);
         assertNotNull(homepageSwitch);
         TouchCommon.singleClickView(homepageSwitch);
-        waitForCheckedState(homepageSwitch, true);
+        waitForCheckedState(homepagePreferenceActivity, true);
         homepagePreferenceActivity.finish();
 
         // Assert homepage button.
@@ -144,12 +142,16 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
         });
     }
 
-    private boolean waitForCheckedState(final Checkable view, final boolean isChecked)
+    private void waitForCheckedState(final Preferences preferenceActivity, final boolean isChecked)
             throws InterruptedException {
-        return CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return view.isChecked() == isChecked;
+                // The underlying switch view in the preference can change, so we need to fetch
+                // it each time to ensure we are checking the activity view.
+                SwitchCompat homepageSwitch =
+                        (SwitchCompat) preferenceActivity.findViewById(R.id.switch_widget);
+                return homepageSwitch.isChecked() == isChecked;
             }
         });
     }

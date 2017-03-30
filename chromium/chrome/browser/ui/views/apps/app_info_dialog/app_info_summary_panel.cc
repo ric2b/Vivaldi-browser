@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/apps/app_info_dialog/app_info_summary_panel.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -11,6 +13,7 @@
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -66,9 +69,11 @@ LaunchOptionsComboboxModel::LaunchOptionsComboboxModel() {
     launch_type_messages_.push_back(
         l10n_util::GetStringUTF16(IDS_APP_CONTEXT_MENU_OPEN_TAB));
 
-    launch_types_.push_back(extensions::LAUNCH_TYPE_WINDOW);
-    launch_type_messages_.push_back(
-        l10n_util::GetStringUTF16(IDS_APP_CONTEXT_MENU_OPEN_WINDOW));
+    if (extensions::util::CanHostedAppsOpenInWindows()) {
+      launch_types_.push_back(extensions::LAUNCH_TYPE_WINDOW);
+      launch_type_messages_.push_back(
+          l10n_util::GetStringUTF16(IDS_APP_CONTEXT_MENU_OPEN_WINDOW));
+    }
   } else {
     launch_types_.push_back(extensions::LAUNCH_TYPE_REGULAR);
     launch_type_messages_.push_back(
@@ -78,6 +83,11 @@ LaunchOptionsComboboxModel::LaunchOptionsComboboxModel() {
     launch_type_messages_.push_back(
         l10n_util::GetStringUTF16(IDS_APP_CONTEXT_MENU_OPEN_PINNED));
 
+    if (extensions::util::CanHostedAppsOpenInWindows()) {
+      launch_types_.push_back(extensions::LAUNCH_TYPE_WINDOW);
+      launch_type_messages_.push_back(
+          l10n_util::GetStringUTF16(IDS_APP_CONTEXT_MENU_OPEN_WINDOW));
+    }
 #if defined(OS_MACOSX)
     // Mac does not support standalone web app browser windows or maximize
     // unless the new bookmark apps system is enabled.
@@ -85,10 +95,6 @@ LaunchOptionsComboboxModel::LaunchOptionsComboboxModel() {
     launch_type_messages_.push_back(
         l10n_util::GetStringUTF16(IDS_APP_CONTEXT_MENU_OPEN_FULLSCREEN));
 #else
-    launch_types_.push_back(extensions::LAUNCH_TYPE_WINDOW);
-    launch_type_messages_.push_back(
-        l10n_util::GetStringUTF16(IDS_APP_CONTEXT_MENU_OPEN_WINDOW));
-
     // Even though the launch type is Full Screen, it is more accurately
     // described as Maximized in non-Mac OSs.
     launch_types_.push_back(extensions::LAUNCH_TYPE_FULLSCREEN);
@@ -282,7 +288,7 @@ void AppInfoSummaryPanel::StartCalculatingAppSize() {
       base::Bind(&AppInfoSummaryPanel::OnAppSizeCalculated, AsWeakPtr()));
 }
 
-void AppInfoSummaryPanel::OnAppSizeCalculated(int64 app_size_in_bytes) {
+void AppInfoSummaryPanel::OnAppSizeCalculated(int64_t app_size_in_bytes) {
   const int one_mebibyte_in_bytes = 1024 * 1024;
   if (app_size_in_bytes < one_mebibyte_in_bytes) {
     size_value_->SetText(

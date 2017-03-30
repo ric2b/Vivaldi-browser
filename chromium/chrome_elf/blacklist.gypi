@@ -17,27 +17,24 @@
         'blacklist/blacklist_interceptions.h',
       ],
       'dependencies': [
-        # Depend on base_static, but do NOT take a dependency on base.gyp:base
-        # as that would risk pulling in base's link-time dependencies which
-        # chrome_elf cannot do.
-        '../base/base.gyp:base_static',
+        '../base/base.gyp:base',
         '../chrome_elf/chrome_elf.gyp:chrome_elf_breakpad',
         '../chrome_elf/chrome_elf.gyp:chrome_elf_constants',
         '../sandbox/sandbox.gyp:sandbox',
       ],
     },
-    #{
-    #  'target_name': 'blacklist_test_main_dll',
-    #  'type': 'shared_library',
-    #  'sources': [
-    #    'blacklist/test/blacklist_test_main_dll.cc',
-    #    'blacklist/test/blacklist_test_main_dll.def',
-    #  ],
-    #  'dependencies': [
-    #    '../base/base.gyp:base',
-    #    'blacklist',
-    #  ],
-    #},
+    {
+      'target_name': 'blacklist_test_main_dll',
+      'type': 'shared_library',
+      'sources': [
+        'blacklist/test/blacklist_test_main_dll.cc',
+        'blacklist/test/blacklist_test_main_dll.def',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
+        'blacklist',
+      ],
+    },
     {
       'target_name': 'blacklist_test_dll_1',
       'type': 'loadable_module',

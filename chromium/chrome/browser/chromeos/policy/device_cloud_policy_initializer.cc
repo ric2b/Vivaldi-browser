@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/policy/device_cloud_policy_initializer.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -211,7 +213,7 @@ void DeviceCloudPolicyInitializer::EnrollmentCompleted(
   enrollment_handler_.reset();
 
   if (status.status() == EnrollmentStatus::STATUS_SUCCESS) {
-    StartConnection(client.Pass());
+    StartConnection(std::move(client));
   } else {
     // Some attempts to create a client may be blocked because the enrollment
     // was in progress. We give it a try again.
@@ -232,7 +234,6 @@ scoped_ptr<CloudPolicyClient> DeviceCloudPolicyInitializer::CreateClient(
       new CloudPolicyClient(DeviceCloudPolicyManagerChromeOS::GetMachineID(),
                             DeviceCloudPolicyManagerChromeOS::GetMachineModel(),
                             kPolicyVerificationKeyHash,
-                            USER_AFFILIATION_NONE,
                             device_management_service,
                             request_context));
 }
@@ -261,7 +262,7 @@ void DeviceCloudPolicyInitializer::TryToCreateClient() {
 void DeviceCloudPolicyInitializer::StartConnection(
     scoped_ptr<CloudPolicyClient> client) {
   if (!manager_->core()->service())
-    manager_->StartConnection(client.Pass(), install_attributes_);
+    manager_->StartConnection(std::move(client), install_attributes_);
 }
 
 }  // namespace policy

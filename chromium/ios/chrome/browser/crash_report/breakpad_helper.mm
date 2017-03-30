@@ -5,6 +5,7 @@
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
 
 #import <Foundation/Foundation.h>
+#include <stddef.h>
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
@@ -47,6 +48,7 @@ NSString* const kUploadedInRecoveryMode = @"uploaded_in_recovery_mode";
 // These are the values grouped in the user_application_state parameter.
 NSString* const kDataProxyIsEnabled = @"dataproxy";
 NSString* const kOrientationState = @"orient";
+NSString* const kHorizontalSizeClass = @"sizeclass";
 NSString* const kSignedIn = @"signIn";
 NSString* const kIsShowingPDF = @"pdf";
 NSString* const kVideoPlaying = @"avplay";
@@ -270,6 +272,12 @@ void SetCurrentOrientation(int statusBarOrientation, int deviceOrientation) {
   [[CrashReportUserApplicationState sharedInstance]
        setValue:kOrientationState
       withValue:deviceAndUIOrientation];
+}
+
+void SetCurrentHorizontalSizeClass(int horizontalSizeClass) {
+  [[CrashReportUserApplicationState sharedInstance]
+       setValue:kHorizontalSizeClass
+      withValue:horizontalSizeClass];
 }
 
 void SetCurrentlySignedIn(bool signedIn) {

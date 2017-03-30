@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -12,6 +15,7 @@
 #include "chrome/browser/net/url_request_mock_util.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/task_management/task_management_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -26,6 +30,7 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/app_modal_dialog.h"
@@ -41,7 +46,10 @@
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/events/event.h"
 #include "ui/events/event_utils.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/gfx/screen.h"
 
 using content::WebContents;
@@ -254,13 +262,7 @@ class PanelBrowserTest : public BasePanelBrowserTest {
   }
 };
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CheckDockedPanelProperties DISABLED_CheckDockedPanelProperties
-#else
-#define MAYBE_CheckDockedPanelProperties CheckDockedPanelProperties
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_CheckDockedPanelProperties) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, CheckDockedPanelProperties) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
 
@@ -325,13 +327,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_CheckDockedPanelProperties) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CreatePanel DISABLED_CreatePanel
-#else
-#define MAYBE_CreatePanel CreatePanel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_CreatePanel) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, CreatePanel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   EXPECT_EQ(0, panel_manager->num_panels()); // No panels initially.
 
@@ -352,13 +348,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_CreatePanel) {
   EXPECT_EQ(0, panel_manager->num_panels());
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CreateBigPanel DISABLED_CreateBigPanel
-#else
-#define MAYBE_CreateBigPanel CreateBigPanel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_CreateBigPanel) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, CreateBigPanel) {
   gfx::Rect work_area = PanelManager::GetInstance()->
       display_settings_provider()->GetPrimaryWorkArea();
   Panel* panel = CreatePanelWithBounds("BigPanel", work_area);
@@ -488,13 +478,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DISABLED_AutoResize) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ResizePanel DISABLED_ResizePanel
-#else
-#define MAYBE_ResizePanel ResizePanel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ResizePanel) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, ResizePanel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   panel_manager->enable_auto_sizing(true);
 
@@ -527,13 +511,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ResizePanel) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AnimateBounds DISABLED_AnimateBounds
-#else
-#define MAYBE_AnimateBounds AnimateBounds
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_AnimateBounds) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, AnimateBounds) {
   // Create a detached panel, instead of docked panel because it cannot be
   // moved to any location.
   Panel* panel = CreateDetachedPanel("1", gfx::Rect(200, 100, 100, 100));
@@ -565,13 +543,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_AnimateBounds) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_RestoredBounds DISABLED_RestoredBounds
-#else
-#define MAYBE_RestoredBounds RestoredBounds
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_RestoredBounds) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, RestoredBounds) {
   Panel* panel = CreatePanelWithBounds("PanelTest", gfx::Rect(0, 0, 100, 100));
   EXPECT_EQ(Panel::EXPANDED, panel->expansion_state());
   EXPECT_EQ(panel->GetBounds(), panel->GetRestoredBounds());
@@ -628,13 +600,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_RestoredBounds) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_MinimizeRestore DISABLED_MinimizeRestore
-#else
-#define MAYBE_MinimizeRestore MinimizeRestore
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_MinimizeRestore) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MinimizeRestore) {
   // Test with one panel.
   CreatePanelWithBounds("PanelTest1", gfx::Rect(0, 0, 100, 100));
   TestMinimizeRestore();
@@ -642,13 +608,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_MinimizeRestore) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_MinimizeRestoreTwoPanels DISABLED_MinimizeRestoreTwoPanels
-#else
-#define MAYBE_MinimizeRestoreTwoPanels MinimizeRestoreTwoPanels
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_MinimizeRestoreTwoPanels) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MinimizeRestoreTwoPanels) {
   // Test with two panels.
   CreatePanelWithBounds("PanelTest1", gfx::Rect(0, 0, 100, 100));
   CreatePanelWithBounds("PanelTest2", gfx::Rect(0, 0, 110, 110));
@@ -657,13 +617,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_MinimizeRestoreTwoPanels) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_MinimizeRestoreThreePanels DISABLED_MinimizeRestoreThreePanels
-#else
-#define MAYBE_MinimizeRestoreThreePanels MinimizeRestoreThreePanels
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_MinimizeRestoreThreePanels) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MinimizeRestoreThreePanels) {
   // Test with three panels.
   CreatePanelWithBounds("PanelTest1", gfx::Rect(0, 0, 100, 100));
   CreatePanelWithBounds("PanelTest2", gfx::Rect(0, 0, 110, 110));
@@ -673,13 +627,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_MinimizeRestoreThreePanels) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_MinimizeRestoreButtonClick DISABLED_MinimizeRestoreButtonClick
-#else
-#define MAYBE_MinimizeRestoreButtonClick MinimizeRestoreButtonClick
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_MinimizeRestoreButtonClick) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MinimizeRestoreButtonClick) {
   // Test with three panels.
   Panel* panel1 = CreatePanel("PanelTest1");
   Panel* panel2 = CreatePanel("PanelTest2");
@@ -892,14 +840,8 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_RestoreAllWithTitlebarClick) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_MinimizeRestoreOnAutoHidingDesktopBar DISABLED_MinimizeRestoreOnAutoHidingDesktopBar
-#else
-#define MAYBE_MinimizeRestoreOnAutoHidingDesktopBar MinimizeRestoreOnAutoHidingDesktopBar
-#endif
 IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
-                       MAYBE_MinimizeRestoreOnAutoHidingDesktopBar) {
+                       MinimizeRestoreOnAutoHidingDesktopBar) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
   int expected_bottom_on_expanded = docked_collection->work_area().bottom();
@@ -941,13 +883,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ChangeAutoHideTaskBarThickness DISABLED_ChangeAutoHideTaskBarThickness
-#else
-#define MAYBE_ChangeAutoHideTaskBarThickness ChangeAutoHideTaskBarThickness
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ChangeAutoHideTaskBarThickness) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, ChangeAutoHideTaskBarThickness) {
   PanelManager* manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = manager->docked_collection();
   int initial_starting_right_position =
@@ -1016,13 +952,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ChangeAutoHideTaskBarThickness) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ActivatePanelOrTabbedWindow DISABLED_ActivatePanelOrTabbedWindow
-#else
-#define MAYBE_ActivatePanelOrTabbedWindow ActivatePanelOrTabbedWindow
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ActivatePanelOrTabbedWindow) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, ActivatePanelOrTabbedWindow) {
   if (!WmSupportWindowActivation()) {
     LOG(WARNING) << "Skipping test due to WM problems.";
     return;
@@ -1057,8 +987,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ActivatePanelOrTabbedWindow) {
 }
 
 // TODO(jianli): To be enabled for other platforms.
-// TODO reenable test for Vivaldi
-#if defined(OS_WIN) //|| defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX)
 #define MAYBE_ActivateDeactivateBasic ActivateDeactivateBasic
 #else
 #define MAYBE_ActivateDeactivateBasic DISABLED_ActivateDeactivateBasic
@@ -1091,13 +1020,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ActivateDeactivateBasic) {
   // reactivated programmatically once it is deactivated.
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ActivateDeactivateMultiple DISABLED_ActivateDeactivateMultiple
-#else
-#define MAYBE_ActivateDeactivateMultiple ActivateDeactivateMultiple
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ActivateDeactivateMultiple) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, ActivateDeactivateMultiple) {
   if (!WmSupportWindowActivation()) {
     LOG(WARNING) << "Skipping test due to WM problems.";
     return;
@@ -1133,13 +1056,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_ActivateDeactivateMultiple) {
   EXPECT_FALSE(tabbed_window->IsActive());
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_DrawAttentionBasic DISABLED_DrawAttentionBasic
-#else
-#define MAYBE_DrawAttentionBasic DrawAttentionBasic
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionBasic) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DrawAttentionBasic) {
   Panel* panel = CreateInactivePanel("P1");
   scoped_ptr<NativePanelTesting> native_panel_testing(
       CreateNativePanelTesting(panel));
@@ -1173,13 +1090,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionBasic) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_DrawAttentionWhileMinimized DISABLED_DrawAttentionWhileMinimized
-#else
-#define MAYBE_DrawAttentionWhileMinimized DrawAttentionWhileMinimized
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionWhileMinimized) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DrawAttentionWhileMinimized) {
   Panel* panel1 = CreateInactivePanel("P1");
   Panel* panel2 = CreateInactivePanel("P2");
 
@@ -1218,15 +1129,9 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionWhileMinimized) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_StopDrawingAttentionWhileMinimized DISABLED_StopDrawingAttentionWhileMinimized
-#else
-#define MAYBE_StopDrawingAttentionWhileMinimized StopDrawingAttentionWhileMinimized
-#endif
 // Verify that minimized state of a panel is correct after draw attention
 // is stopped when there are other minimized panels.
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_StopDrawingAttentionWhileMinimized) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, StopDrawingAttentionWhileMinimized) {
   Panel* panel1 = CreateInactivePanel("P1");
   Panel* panel2 = CreateInactivePanel("P2");
 
@@ -1295,13 +1200,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_StopDrawingAttentionWhileMinimize
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_DrawAttentionWhenActive DISABLED_DrawAttentionWhenActive
-#else
-#define MAYBE_DrawAttentionWhenActive DrawAttentionWhenActive
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionWhenActive) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DrawAttentionWhenActive) {
   // Create an active panel.
   Panel* panel = CreatePanel("P1");
   scoped_ptr<NativePanelTesting> native_panel_testing(
@@ -1316,13 +1215,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionWhenActive) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_DrawAttentionResetOnActivate DISABLED_DrawAttentionResetOnActivate
-#else
-#define MAYBE_DrawAttentionResetOnActivate DrawAttentionResetOnActivate
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionResetOnActivate) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DrawAttentionResetOnActivate) {
   Panel* panel = CreateInactivePanel("P1");
   scoped_ptr<NativePanelTesting> native_panel_testing(
       CreateNativePanelTesting(panel));
@@ -1340,14 +1233,8 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionResetOnActivate) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_DrawAttentionMinimizedNotResetOnActivate DISABLED_DrawAttentionMinimizedNotResetOnActivate
-#else
-#define MAYBE_DrawAttentionMinimizedNotResetOnActivate DrawAttentionMinimizedNotResetOnActivate
-#endif
 IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
-                       MAYBE_DrawAttentionMinimizedNotResetOnActivate) {
+                       DrawAttentionMinimizedNotResetOnActivate) {
   Panel* panel = CreateInactivePanel("P1");
 
   panel->Minimize();
@@ -1372,13 +1259,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_DrawAttentionResetOnClick DISABLED_DrawAttentionResetOnClick
-#else
-#define MAYBE_DrawAttentionResetOnClick DrawAttentionResetOnClick
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionResetOnClick) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DrawAttentionResetOnClick) {
   Panel* panel = CreateInactivePanel("P1");
   scoped_ptr<NativePanelTesting> native_panel_testing(
       CreateNativePanelTesting(panel));
@@ -1400,8 +1281,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DrawAttentionResetOnClick) {
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_MinimizeImmediatelyAfterRestore \
   DISABLED_MinimizeImmediatelyAfterRestore
 #else
@@ -1429,13 +1309,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_FocusLostOnMinimize DISABLED_FocusLostOnMinimize
-#else
-#define MAYBE_FocusLostOnMinimize FocusLostOnMinimize
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_FocusLostOnMinimize) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, FocusLostOnMinimize) {
   CreatePanelParams params("Initially Active", gfx::Rect(), SHOW_AS_ACTIVE);
   Panel* panel = CreatePanelWithParams(params);
   EXPECT_EQ(Panel::EXPANDED, panel->expansion_state());
@@ -1446,13 +1320,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_FocusLostOnMinimize) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_CreateInactiveSwitchToActive DISABLED_CreateInactiveSwitchToActive
-#else
-#define MAYBE_CreateInactiveSwitchToActive CreateInactiveSwitchToActive
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_CreateInactiveSwitchToActive) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, CreateInactiveSwitchToActive) {
   Panel* panel = CreateInactivePanel("1");
 
   panel->Activate();
@@ -1463,7 +1331,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_CreateInactiveSwitchToActive) {
 
 // TODO(dimich): try/enable on other platforms. See bug 103253 for details on
 // why this is disabled on windows.
-#if 0 //defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_MinimizeTwoPanelsWithoutTabbedWindow \
     MinimizeTwoPanelsWithoutTabbedWindow
 #else
@@ -1513,14 +1381,8 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
   panel2->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_NonExtensionDomainPanelsCloseOnUninstall DISABLED_NonExtensionDomainPanelsCloseOnUninstall
-#else
-#define MAYBE_NonExtensionDomainPanelsCloseOnUninstall NonExtensionDomainPanelsCloseOnUninstall
-#endif
 IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
-                       MAYBE_NonExtensionDomainPanelsCloseOnUninstall) {
+                       NonExtensionDomainPanelsCloseOnUninstall) {
   // Create a test extension.
   base::DictionaryValue empty_value;
   scoped_refptr<extensions::Extension> extension =
@@ -1579,13 +1441,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
   panel_other->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_OnBeforeUnloadOnClose DISABLED_OnBeforeUnloadOnClose
-#else
-#define MAYBE_OnBeforeUnloadOnClose OnBeforeUnloadOnClose
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_OnBeforeUnloadOnClose) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, OnBeforeUnloadOnClose) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   EXPECT_EQ(0, panel_manager->num_panels()); // No panels initially.
 
@@ -1608,8 +1464,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_OnBeforeUnloadOnClose) {
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_SizeClamping DISABLED_SizeClamping
 #else
 #define MAYBE_SizeClamping SizeClamping
@@ -1681,8 +1536,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MACOSX)
 #define MAYBE_DefaultMaxSizeOnDisplaySettingsChange \
         DISABLED_DefaultMaxSizeOnDisplaySettingsChange
 #else
@@ -1713,8 +1567,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MACOSX)
 #define MAYBE_CustomMaxSizeOnDisplaySettingsChange \
         DISABLED_CustomMaxSizeOnDisplaySettingsChange
 #else
@@ -1759,13 +1612,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_DevTools DISABLED_DevTools
-#else
-#define MAYBE_DevTools DevTools
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DevTools) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DevTools) {
   // Create a test panel with web contents loaded.
   CreatePanelParams params("1", gfx::Rect(0, 0, 200, 220), SHOW_AS_ACTIVE);
   GURL url(ui_test_utils::GetTestUrl(
@@ -1799,13 +1646,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DevTools) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if 1
-#define MAYBE_DevToolsConsole DISABLED_DevToolsConsole
-#else
-#define MAYBE_DevToolsConsole DevToolsConsole
-#endif
-IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_DevToolsConsole) {
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DevToolsConsole) {
   // Create a test panel with web contents loaded.
   CreatePanelParams params("1", gfx::Rect(0, 0, 200, 220), SHOW_AS_ACTIVE);
   GURL url(ui_test_utils::GetTestUrl(
@@ -1860,34 +1701,17 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, MAYBE_Accelerator) {
   content::WindowedNotificationObserver signal(
       chrome::NOTIFICATION_PANEL_CLOSED,
       content::Source<Panel>(panel));
-#if defined(USE_AURA)
-  double now = ui::EventTimeForNow().InSecondsF();
-  content::NativeWebKeyboardEvent key_event(
-      ui::ET_KEY_PRESSED,
-      false,
-      ui::VKEY_W,
-      ui::EF_CONTROL_DOWN,
-      now);
-#elif defined(OS_WIN)
-  ::MSG key_msg = { NULL, WM_KEYDOWN, ui::VKEY_W, 0 };
-  content::NativeWebKeyboardEvent key_event(key_msg);
-  key_event.modifiers = content::NativeWebKeyboardEvent::ControlKey;
-#else
-  content::NativeWebKeyboardEvent key_event;
-#endif
+
+  ui::KeyEvent ui_event(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::DomCode::US_W,
+                        ui::EF_CONTROL_DOWN);
+  content::NativeWebKeyboardEvent key_event(ui_event);
   panel->HandleKeyboardEvent(key_event);
   signal.Wait();
   EXPECT_EQ(0, panel_manager->num_panels());
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_HideDockedPanelCreatedBeforeFullScreenMode DISABLED_HideDockedPanelCreatedBeforeFullScreenMode
-#else
-#define MAYBE_HideDockedPanelCreatedBeforeFullScreenMode HideDockedPanelCreatedBeforeFullScreenMode
-#endif
 IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
-                       MAYBE_HideDockedPanelCreatedBeforeFullScreenMode) {
+                       HideDockedPanelCreatedBeforeFullScreenMode) {
   // Create a docked panel.
   Panel* panel = CreatePanel("PanelTest");
   scoped_ptr<NativePanelTesting> panel_testing(CreateNativePanelTesting(panel));
@@ -1906,14 +1730,8 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_HideDockedPanelCreatedOnFullScreenMode DISABLED_HideDockedPanelCreatedOnFullScreenMode
-#else
-#define MAYBE_HideDockedPanelCreatedOnFullScreenMode HideDockedPanelCreatedOnFullScreenMode
-#endif
 IN_PROC_BROWSER_TEST_F(PanelBrowserTest,
-                       MAYBE_HideDockedPanelCreatedOnFullScreenMode) {
+                       HideDockedPanelCreatedOnFullScreenMode) {
   // Enable full-screen mode first.
   mock_display_settings_provider()->EnableFullScreenMode(true);
 
@@ -1958,3 +1776,92 @@ IN_PROC_BROWSER_TEST_F(PanelExtensionApiTest,
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   ASSERT_TRUE(RunExtensionTest("panels/focus_change_on_minimize")) << message_;
 }
+
+#if defined(ENABLE_TASK_MANAGER)
+
+namespace {
+
+base::string16 GetExpectedPrefix() {
+  return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_EXTENSION_PREFIX,
+                                    base::string16());
+}
+
+const std::vector<task_management::WebContentsTag*>& GetTrackedTags() {
+  return task_management::WebContentsTagsManager::GetInstance()->
+      tracked_tags();
+}
+
+// Tests that the task manager tags are recorded correctly as a result of
+// creating panels.
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, TaskManagementTagsBasic) {
+  // Browser tests start with a single tab.
+  EXPECT_EQ(1U, GetTrackedTags().size());
+
+  // Create a bunch of panels.
+  gfx::Rect bounds(300, 200, 250, 200);
+  CreatePanelParams params("PanelTest1", bounds, SHOW_AS_ACTIVE);
+  params.url = GURL("about:blank");
+  CreatePanelWithParams(params);
+  EXPECT_EQ(2U, GetTrackedTags().size());
+
+  params.name = std::string("PanelTest2_Detached");
+  params.wait_for_fully_created = false;
+  params.create_mode = PanelManager::CREATE_AS_DETACHED;
+  CreatePanelWithParams(params);
+  EXPECT_EQ(3U, GetTrackedTags().size());
+
+  params.name = std::string("PanelTest3_Docked");
+  params.create_mode = PanelManager::CREATE_AS_DOCKED;
+  CreatePanelWithParams(params);
+  EXPECT_EQ(4U, GetTrackedTags().size());
+
+  params.name = std::string("PanelTest3_Inactive");
+  params.show_flag = SHOW_AS_INACTIVE;
+  CreatePanelWithParams(params);
+  EXPECT_EQ(5U, GetTrackedTags().size());
+
+  // Close all panels and make sure the tags are removed.
+  PanelManager::GetInstance()->CloseAll();
+  EXPECT_EQ(1U, GetTrackedTags().size());
+}
+
+// Tests that the task manager sees the PanelTasks as a result of creating
+// panels, and removes the PanelTasks as a result of closing panels.
+IN_PROC_BROWSER_TEST_F(PanelBrowserTest, TaskManagementTasksProvided) {
+  task_management::MockWebContentsTaskManager task_manager;
+  // Browser tests start with a single tab.
+  EXPECT_EQ(1U, GetTrackedTags().size());
+
+  // Create a single panel.
+  gfx::Rect bounds(300, 200, 250, 200);
+  CreatePanelParams params("PanelTest1", bounds, SHOW_AS_ACTIVE);
+  params.url = GURL("about:blank");
+  CreatePanelWithParams(params);
+  EXPECT_EQ(2U, GetTrackedTags().size());
+
+  task_manager.StartObserving();
+
+  // The pre-existing tab and panel are provided.
+  EXPECT_EQ(2U, task_manager.tasks().size());
+
+  // Create one more panel.
+  params.name = std::string("PanelTest2");
+  CreatePanelWithParams(params);
+  EXPECT_EQ(3U, GetTrackedTags().size());
+  ASSERT_EQ(3U, task_manager.tasks().size());
+
+  const task_management::Task* task = task_manager.tasks().back();
+  EXPECT_EQ(task_management::Task::EXTENSION, task->GetType());
+  const base::string16 title = task->title();
+  const base::string16 expected_prefix = GetExpectedPrefix();
+  EXPECT_TRUE(base::StartsWith(title,
+                               expected_prefix,
+                               base::CompareCase::INSENSITIVE_ASCII));
+
+  PanelManager::GetInstance()->CloseAll();
+  EXPECT_EQ(1U, task_manager.tasks().size());
+}
+
+}  // namespace
+
+#endif  // defined(ENABLE_TASK_MANAGER)

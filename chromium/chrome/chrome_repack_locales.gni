@@ -31,11 +31,16 @@ template("_repack_one_locale") {
       "${root_gen_dir}/components/strings/components_strings_${locale}.pak",
     ]
     deps = [
-      "//chrome/app/resources:platform_locale_settings",
       "//chrome/app:generated_resources",
       "//chrome/app/resources:locale_settings",
-      "//components/strings",
+      "//chrome/app/resources:platform_locale_settings",
+      "//components/strings:components_strings",
     ]
+
+    # The settings strings are not being treated as strings because they are
+    # not translated (English only), this should change in late 2015.
+    sources += [ "${root_gen_dir}/chrome/settings_strings.pak" ]
+    deps += [ "//chrome/app:settings_strings" ]
 
     if (use_ash) {
       sources += [ "${root_gen_dir}/ash/strings/ash_strings_${locale}.pak" ]
@@ -54,13 +59,15 @@ template("_repack_one_locale") {
     if (!is_ios) {
       sources += [
         "${root_gen_dir}/content/app/strings/content_strings_${locale}.pak",
+        "${root_gen_dir}/device/bluetooth/strings/bluetooth_strings_${locale}.pak",
         "${root_gen_dir}/ui/strings/app_locale_settings_${locale}.pak",
         "${root_gen_dir}/ui/strings/ui_strings_${locale}.pak",
       ]
       deps += [
         "//content/app/strings",
-        "//ui/strings:ui_strings",
+        "//device/bluetooth/strings",
         "//ui/strings:app_locale_settings",
+        "//ui/strings:ui_strings",
       ]
     }
     if (enable_autofill_dialog) {
@@ -69,25 +76,35 @@ template("_repack_one_locale") {
     }
     if (enable_extensions) {
       sources += [
-        "${root_gen_dir}/device/bluetooth/device_bluetooth_strings_${locale}.pak",
-
         # TODO(jamescook): When Android stops building extensions code move
         # this to the OS != 'ios' and OS != 'android' section.
         "${root_gen_dir}/extensions/strings/extensions_strings_${locale}.pak",
       ]
-      deps += [
-        "//device/bluetooth:strings",
-        "//extensions/strings",
-      ]
+      deps += [ "//extensions/strings" ]
     }
 
     if (is_chrome_branded) {
-      sources +=
-          [ "${root_gen_dir}/chrome/google_chrome_strings_${locale}.pak" ]
-      deps += [ "//chrome/app:google_chrome_strings" ]
+      sources += [
+        "${root_gen_dir}/chrome/google_chrome_strings_${locale}.pak",
+        "${root_gen_dir}/chrome/settings_google_chrome_strings.pak",
+        "${root_gen_dir}/components/strings/components_google_chrome_strings_${locale}.pak",
+      ]
+      deps += [
+        "//chrome/app:google_chrome_strings",
+        "//chrome/app:settings_google_chrome_strings",
+        "//components/strings:components_google_chrome_strings",
+      ]
     } else {
-      sources += [ "${root_gen_dir}/chrome/chromium_strings_${locale}.pak" ]
-      deps += [ "//chrome/app:chromium_strings" ]
+      sources += [
+        "${root_gen_dir}/chrome/chromium_strings_${locale}.pak",
+        "${root_gen_dir}/chrome/settings_chromium_strings.pak",
+        "${root_gen_dir}/components/strings/components_chromium_strings_${locale}.pak",
+      ]
+      deps += [
+        "//chrome/app:chromium_strings",
+        "//chrome/app:settings_chromium_strings",
+        "//components/strings:components_chromium_strings",
+      ]
     }
 
     output = invoker.output
@@ -155,9 +172,7 @@ template("chrome_repack_locales") {
 
   # The group that external targets depend on which collects all deps.
   group(group_target_name) {
-    if (defined(invoker.visibility)) {
-      visibility = invoker.visibility
-    }
-    deps = locale_targets
+    forward_variables_from(invoker, [ "visibility" ])
+    public_deps = locale_targets
   }
 }

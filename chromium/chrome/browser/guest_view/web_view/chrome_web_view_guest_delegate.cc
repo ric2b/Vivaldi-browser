@@ -5,12 +5,15 @@
 
 #include "chrome/browser/guest_view/web_view/chrome_web_view_guest_delegate.h"
 
+#include <utility>
+
+#include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
-#include "chrome/browser/favicon/favicon_helper.h"
+#include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "chrome/browser/ui/pdf/chrome_pdf_web_contents_helper_client.h"
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/common/url_constants.h"
 #include "components/browsing_data/storage_partition_http_cache_data_remover.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/renderer_context_menu/context_menu_delegate.h"
@@ -39,7 +42,18 @@ bool ChromeWebViewGuestDelegate::HandleContextMenu(
       ContextMenuDelegate::FromWebContents(guest_web_contents());
   DCHECK(menu_delegate);
 
-  pending_menu_ = menu_delegate->BuildMenu(guest_web_contents(), params);
+  content::ContextMenuParams new_params = params;
+  // The only case where |context_menu_position_| is not initialized is the case
+  // where the input event is directly sent to the guest WebContents without
+  // ever going throught the embedder and BrowserPlugin's
+  // RenderWidgetHostViewGuest. This only happens in some tests, e.g.,
+  // WebViewInteractiveTest.ContextMenuParamCoordinates.
+  if (context_menu_position_) {
+    new_params.x = context_menu_position_->x();
+    new_params.y = context_menu_position_->y();
+  }
+
+  pending_menu_ = menu_delegate->BuildMenu(guest_web_contents(), new_params);
   // It's possible for the returned menu to be null, so early out to avoid
   // a crash. TODO(wjmaclean): find out why it's possible for this to happen
   // in the first place, and if it's an error.
@@ -54,7 +68,7 @@ bool ChromeWebViewGuestDelegate::HandleContextMenu(
   args->Set(webview::kContextMenuItems, items.release());
   args->SetInteger(webview::kRequestId, request_id);
   web_view_guest()->DispatchEventToView(
-      new GuestViewEvent(webview::kEventContextMenuShow, args.Pass()));
+      new GuestViewEvent(webview::kEventContextMenuShow, std::move(args)));
   return true;
 }
 
@@ -82,7 +96,7 @@ scoped_ptr<base::ListValue> ChromeWebViewGuestDelegate::MenuModelToValue(
     item_value->SetString(webview::kMenuItemLabel, menu_model.GetLabelAt(i));
     items->Append(item_value);
   }
-  return items.Pass();
+  return items;
 }
 
 void ChromeWebViewGuestDelegate::OnShowContextMenu(
@@ -100,7 +114,14 @@ void ChromeWebViewGuestDelegate::OnShowContextMenu(
 
   ContextMenuDelegate* menu_delegate =
       ContextMenuDelegate::FromWebContents(guest_web_contents());
-  menu_delegate->ShowMenu(pending_menu_.Pass());
+  menu_delegate->ShowMenu(std::move(pending_menu_));
+}
+
+bool ChromeWebViewGuestDelegate::ShouldHandleFindRequestsForEmbedder() const {
+  // Find requests will be handled by the guest for the Chrome signin page.
+  return web_view_guest_->owner_web_contents()->GetWebUI() != nullptr &&
+         web_view_guest_->GetOwnerSiteURL().GetOrigin().spec() ==
+             chrome::kChromeUIChromeSigninURL;
 }
 
 void ChromeWebViewGuestDelegate::InjectChromeVoxIfNeeded(
@@ -131,5 +152,13 @@ void ChromeWebViewGuestDelegate::OnAccessibilityStatusChanged(
   }
 }
 #endif
+
+void ChromeWebViewGuestDelegate::SetContextMenuPosition(
+    const gfx::Point& position) {
+  if (context_menu_position_ == nullptr)
+    context_menu_position_.reset(new gfx::Point());
+
+  *context_menu_position_ = position;
+}
 
 }  // namespace extensions

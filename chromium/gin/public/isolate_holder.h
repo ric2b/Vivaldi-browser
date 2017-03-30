@@ -5,9 +5,10 @@
 #ifndef GIN_PUBLIC_ISOLATE_HOLDER_H_
 #define GIN_PUBLIC_ISOLATE_HOLDER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "gin/gin_export.h"
+#include "gin/public/v8_idle_task_runner.h"
 #include "v8/include/v8.h"
 
 namespace gin {
@@ -34,6 +35,12 @@ class GIN_EXPORT IsolateHolder {
     kUseLocker
   };
 
+  // Indicates whether V8 works with stable or experimental v8 extras.
+  enum V8ExtrasMode {
+    kStableV8Extras,
+    kStableAndExperimentalV8Extras,
+  };
+
   IsolateHolder();
   explicit IsolateHolder(AccessMode access_mode);
   ~IsolateHolder();
@@ -47,6 +54,7 @@ class GIN_EXPORT IsolateHolder {
   // V8Initializer::LoadV8SnapshotFromFD or
   // V8Initializer::LoadV8Snapshot) before calling this method.
   static void Initialize(ScriptMode mode,
+                         V8ExtrasMode v8_extras_mode,
                          v8::ArrayBuffer::Allocator* allocator);
 
   v8::Isolate* isolate() { return isolate_; }
@@ -65,6 +73,8 @@ class GIN_EXPORT IsolateHolder {
 
   // This method returns if v8::Locker is needed to access isolate.
   AccessMode access_mode() const { return access_mode_; }
+
+  void EnableIdleTasks(scoped_ptr<V8IdleTaskRunner> idle_task_runner);
 
   // This method returns V8IsolateMemoryDumpProvider of this isolate, used for
   // testing.

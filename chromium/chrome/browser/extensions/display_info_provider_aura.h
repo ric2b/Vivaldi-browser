@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_DISPLAY_INFO_PROVIDER_AURA_H_
 #define CHROME_BROWSER_EXTENSIONS_DISPLAY_INFO_PROVIDER_AURA_H_
 
+#include "base/macros.h"
 #include "extensions/browser/api/system_display/display_info_provider.h"
 
 namespace extensions {
@@ -16,11 +17,11 @@ class DisplayInfoProviderAura : public DisplayInfoProvider {
 
   // DisplayInfoProvider implementation.
   bool SetInfo(const std::string& display_id,
-               const core_api::system_display::DisplayProperties& info,
+               const api::system_display::DisplayProperties& info,
                std::string* error) override;
   void UpdateDisplayUnitInfoForPlatform(
       const gfx::Display& display,
-      core_api::system_display::DisplayUnitInfo* unit) override;
+      api::system_display::DisplayUnitInfo* unit) override;
   gfx::Screen* GetActiveScreen() override;
 
  private:

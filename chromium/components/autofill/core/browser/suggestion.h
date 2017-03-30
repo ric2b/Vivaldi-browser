@@ -7,16 +7,16 @@
 
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 
 namespace autofill {
 
-class AutofillProfile;
-class CreditCard;
-
 struct Suggestion {
- public:
+  enum MatchMode {
+    PREFIX_MATCH,    // for prefix matched suggestions;
+    SUBSTRING_MATCH  // for substring matched suggestions;
+  };
+
   Suggestion();
 
   // Copy constructor for STL containers.
@@ -46,6 +46,7 @@ struct Suggestion {
   base::string16 value;
   base::string16 label;
   base::string16 icon;
+  MatchMode match;
 };
 
 }  // namespace autofill

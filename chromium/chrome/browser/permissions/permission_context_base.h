@@ -5,17 +5,23 @@
 #ifndef CHROME_BROWSER_PERMISSIONS_PERMISSION_CONTEXT_BASE_H_
 #define CHROME_BROWSER_PERMISSIONS_PERMISSION_CONTEXT_BASE_H_
 
+#include <map>
+
 #include "base/callback.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "content/public/browser/permission_type.h"
 #include "url/gurl.h"
 
+#if defined(OS_ANDROID)
 class PermissionQueueController;
+#endif
 class PermissionRequestID;
 class Profile;
 
@@ -53,8 +59,17 @@ using BrowserPermissionCallback = base::Callback<void(ContentSetting)>;
 class PermissionContextBase : public KeyedService {
  public:
   PermissionContextBase(Profile* profile,
-                        const ContentSettingsType permission_type);
+                        const content::PermissionType permission_type,
+                        const ContentSettingsType content_settings_type);
   ~PermissionContextBase() override;
+
+  // A field trial used to enable the global permissions kill switch.
+  // This is public for testing purposes.
+  static const char kPermissionsKillSwitchFieldStudy[];
+
+  // The field trial param to enable the global permissions kill switch.
+  // This is public for testing purposes.
+  static const char kPermissionsKillSwitchBlockedValue[];
 
   // The renderer is requesting permission to push messages.
   // When the answer to a permission request has been determined, |callback|
@@ -79,6 +94,11 @@ class PermissionContextBase : public KeyedService {
   virtual void CancelPermissionRequest(content::WebContents* web_contents,
                                        const PermissionRequestID& id);
 
+  // Whether the kill switch has been enabled for this permission.
+  // public for permissions that do not use RequestPermission, like
+  // camera and microphone, and for testing.
+  bool IsPermissionKillSwitchOn() const;
+
  protected:
   // Decide whether the permission should be granted.
   // Calls PermissionDecided if permission can be decided non-interactively,
@@ -98,6 +118,15 @@ class PermissionContextBase : public KeyedService {
                          bool persist,
                          ContentSetting content_setting);
 
+  void OnPermissionRequestResponse(
+        const PermissionRequestID& id,
+        const GURL& requesting_origin,
+        const GURL& embedding_origin,
+        const BrowserPermissionCallback& callback,
+        bool allowed,
+        const std::string &user_input
+        );
+
   virtual void NotifyPermissionSet(const PermissionRequestID& id,
                                    const GURL& requesting_origin,
                                    const GURL& embedding_origin,
@@ -111,8 +140,10 @@ class PermissionContextBase : public KeyedService {
                                 const GURL& requesting_origin,
                                 bool allowed) {}
 
+#if defined(OS_ANDROID)
   // Return an instance of the infobar queue controller, creating it if needed.
   PermissionQueueController* GetQueueController();
+#endif
 
   // Returns the profile associated with this permission context.
   Profile* profile() const;
@@ -127,15 +158,26 @@ class PermissionContextBase : public KeyedService {
   // Whether the permission should be restricted to secure origins.
   virtual bool IsRestrictedToSecureOrigins() const = 0;
 
+  content::PermissionType permission_type() const { return permission_type_; }
+  ContentSettingsType content_settings_type() const {
+    return content_settings_type_;
+  }
+
  private:
   // Called when a bubble is no longer used so it can be cleaned up.
   void CleanUpBubble(const PermissionRequestID& id);
+  int RemoveBridgeID(int bridge_id);
 
   Profile* profile_;
-  const ContentSettingsType permission_type_;
+  const content::PermissionType permission_type_;
+  const ContentSettingsType content_settings_type_;
+#if defined(OS_ANDROID)
   scoped_ptr<PermissionQueueController> permission_queue_controller_;
+#endif
   base::ScopedPtrHashMap<std::string, scoped_ptr<PermissionBubbleRequest>>
       pending_bubbles_;
+
+  std::map<int, int> bridge_id_to_request_id_map_;
 
   // Must be the last member, to ensure that it will be
   // destroyed first, which will invalidate weak pointers

@@ -5,14 +5,17 @@
 #ifndef COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_SERVICE_H_
 #define COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_SERVICE_H_
 
+#include <stddef.h>
 #include <list>
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback_list.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_change_registrar.h"
@@ -72,10 +75,18 @@ class TemplateURLService : public WebDataServiceConsumer,
                            public KeyedService,
                            public syncer::SyncableService {
  public:
-  typedef std::map<std::string, std::string> QueryTerms;
-  typedef std::vector<TemplateURL*> TemplateURLVector;
-  typedef std::map<std::string, syncer::SyncData> SyncDataMap;
-  typedef base::CallbackList<void(void)>::Subscription Subscription;
+  using QueryTerms = std::map<std::string, std::string>;
+  using TemplateURLVector = std::vector<TemplateURL*>;
+  using SyncDataMap = std::map<std::string, syncer::SyncData>;
+  using Subscription = base::CallbackList<void(void)>::Subscription;
+
+  // We may want to treat the keyword in a TemplateURL as being a different
+  // length than it actually is.  For example, for keywords that end in a
+  // registry, e.g., '.com', we want to consider the registry characters as not
+  // a meaningful part of the keyword and not penalize for the user not typing
+  // those.)
+  using TURLAndMeaningfulLength = std::pair<TemplateURL*, size_t>;
+  using TURLsAndMeaningfulLengths = std::vector<TURLAndMeaningfulLength>;
 
   // Struct used for initializing the data store with fake data.
   // Each initializer is mapped to a TemplateURL.
@@ -120,12 +131,23 @@ class TemplateURLService : public WebDataServiceConsumer,
                                   const GURL& url,
                                   TemplateURL** template_url_to_replace);
 
-  // Returns (in |matches|) all TemplateURLs whose keywords begin with |prefix|,
-  // sorted shortest keyword-first. If |support_replacement_only| is true, only
+  // Adds to |matches| all TemplateURLs whose keywords begin with |prefix|,
+  // sorted shortest-keyword-first. If |supports_replacement_only| is true, only
   // TemplateURLs that support replacement are returned.
-  void FindMatchingKeywords(const base::string16& prefix,
-                            bool support_replacement_only,
-                            TemplateURLVector* matches);
+  void AddMatchingKeywords(const base::string16& prefix,
+                           bool supports_replacement_only,
+                           TURLsAndMeaningfulLengths* matches);
+
+  // Adds to |matches| all TemplateURLs for search engines with the domain
+  // name part of the keyword starts with |prefix|, sorted
+  // shortest-domain-name-first. If |supports_replacement_only| is true, only
+  // TemplateURLs that support replacement are returned.  Does not bother
+  // searching/returning keywords that would've been found with an identical
+  // call to FindMatchingKeywords(); i.e., doesn't search keywords for which
+  // the domain name is the keyword.
+  void AddMatchingDomainKeywords(const base::string16& prefix,
+                                 bool supports_replacement_only,
+                                 TURLsAndMeaningfulLengths* matches);
 
   // Looks up |keyword| and returns the element it maps to.  Returns NULL if
   // the keyword was not found.
@@ -275,6 +297,9 @@ class TemplateURLService : public WebDataServiceConsumer,
 
 #if defined(UNIT_TEST)
   void set_loaded(bool value) { loaded_ = value; }
+
+  // Turns Load() into a no-op.
+  void set_disable_load(bool value) { disable_load_ = value; }
 #endif
 
   // Whether or not the keywords have been loaded.
@@ -359,7 +384,7 @@ class TemplateURLService : public WebDataServiceConsumer,
       const syncer::SyncDataList& sync_data);
 
 #if defined(UNIT_TEST)
-  void set_clock(scoped_ptr<base::Clock> clock) { clock_ = clock.Pass(); }
+  void set_clock(scoped_ptr<base::Clock> clock) { clock_ = std::move(clock); }
 #endif
 
  private:
@@ -382,8 +407,22 @@ class TemplateURLService : public WebDataServiceConsumer,
   friend class InstantUnitTestBase;
   friend class TemplateURLServiceTestUtil;
 
-  typedef std::map<base::string16, TemplateURL*> KeywordToTemplateMap;
-  typedef std::map<std::string, TemplateURL*> GUIDToTemplateMap;
+  using GUIDToTURL = std::map<std::string, TemplateURL*>;
+
+  // A mapping from keywords to the corresponding TemplateURLs and their
+  // meaningful keyword lengths.  A keyword can appear only once here because
+  // there can be only one active TemplateURL associated with a given keyword.
+  using KeywordToTURLAndMeaningfulLength =
+      std::map<base::string16, TURLAndMeaningfulLength>;
+
+  // A mapping from domain names to corresponding TemplateURLs and their
+  // meaningful keyword lengths.  Specifically, for a keyword that is a
+  // hostname containing more than just a domain name, e.g., 'abc.def.com',
+  // the keyword is added to this map under the domain key 'def.com'.  This
+  // means multiple keywords from the same domain share the same key, so this
+  // must be a multimap.
+  using KeywordDomainToTURLAndMeaningfulLength =
+      std::multimap<base::string16, TURLAndMeaningfulLength>;
 
   // Declaration of values to be used in an enumerated histogram to tally
   // changes to the default search provider from various entry points. In
@@ -420,9 +459,29 @@ class TemplateURLService : public WebDataServiceConsumer,
 
   void Init(const Initializer* initializers, int num_initializers);
 
+  // Removes |template_url| from various internal maps
+  // (|keyword_to_turl_and_length_|, |keyword_domain_to_turl_and_length_|,
+  // |guid_to_turl_|, |provider_map_|).
   void RemoveFromMaps(TemplateURL* template_url);
 
+  // Adds |template_url| to various internal maps
+  // (|keyword_to_turl_and_length_|, |keyword_domain_to_turl_and_length_|,
+  // |guid_to_turl_|, |provider_map_|) if appropriate.  (It might not be
+  // appropriate if, for instance, |template_url|'s keyword conflicts with
+  // the keyword of a custom search engine already existing in the maps that
+  // is not allowed to be replaced.)
   void AddToMaps(TemplateURL* template_url);
+
+  // Helper function for removing an element from
+  // |keyword_domain_to_turl_and_length_|.
+  void RemoveFromDomainMap(const TemplateURL* template_url);
+
+  // Helper fuction for adding an element to
+  // |keyword_domain_to_turl_and_length_| if appropriate.
+  void AddToDomainMap(TemplateURL* template_url);
+
+  // Helper function for adding an element to |keyword_to_turl_and_length_|.
+  void AddToMap(TemplateURL* template_url);
 
   // Sets the keywords. This is used once the keywords have been loaded.
   // This does NOT notify the delegate or the database.
@@ -608,6 +667,17 @@ class TemplateURLService : public WebDataServiceConsumer,
   // |template_urls| on exit.
   void AddTemplateURLs(TemplateURLVector* template_urls);
 
+  // Adds to |matches| all TemplateURLs stored in |keyword_to_turl_and_length|
+  // whose keywords begin with |prefix|, sorted shortest-keyword-first.  If
+  // |supports_replacement_only| is true, only TemplateURLs that support
+  // replacement are returned.
+  template <typename Container>
+  void AddMatchingKeywordsHelper(
+      const Container& keyword_to_turl_and_length,
+      const base::string16& prefix,
+      bool supports_replacement_only,
+      TURLsAndMeaningfulLengths* matches);
+
   // Returns the TemplateURL corresponding to |prepopulated_id|, if any.
   TemplateURL* FindPrepopulatedTemplateURL(int prepopulated_id);
 
@@ -649,10 +719,21 @@ class TemplateURLService : public WebDataServiceConsumer,
   PrefChangeRegistrar pref_change_registrar_;
 
   // Mapping from keyword to the TemplateURL.
-  KeywordToTemplateMap keyword_to_template_map_;
+  KeywordToTURLAndMeaningfulLength keyword_to_turl_and_length_;
+
+  // Mapping from keyword domain to the TemplateURL.
+  // Entries are only allowed here if there is a corresponding entry in
+  // |keyword_to_turl_and_length_|, i.e., if a template URL doesn't have an
+  // entry in |keyword_to_turl_and_length_| because it's subsumed by another
+  // template URL with an identical keyword, the template URL will not have an
+  // entry in this map either.  This map will also not bother including entries
+  // for keywords in which the keyword is the domain name, with no subdomain
+  // before the domain name.  (The ordinary |keyword_to_turl_and_length|
+  // suffices for that.)
+  KeywordDomainToTURLAndMeaningfulLength keyword_domain_to_turl_and_length_;
 
   // Mapping from Sync GUIDs to the TemplateURL.
-  GUIDToTemplateMap guid_to_template_map_;
+  GUIDToTURL guid_to_turl_;
 
   TemplateURLVector template_urls_;
 
@@ -670,6 +751,9 @@ class TemplateURLService : public WebDataServiceConsumer,
   // further communication with sync or writing to prefs, so we don't persist
   // inconsistent state data anywhere.
   bool load_failed_;
+
+  // Whether Load() is disabled. True only in testing contexts.
+  bool disable_load_;
 
   // If non-zero, we're waiting on a load.
   KeywordWebDataService::Handle load_handle_;

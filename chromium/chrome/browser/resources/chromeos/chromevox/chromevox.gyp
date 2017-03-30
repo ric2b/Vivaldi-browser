@@ -44,11 +44,12 @@
             }],
             ['chromevox_compress_js==1', {
               'dependencies': [
-                'chromevox1_background_script',
-                'chromevox1_content_script',
-                'chromevox1_kbexplorer_script',
-                'chromevox1_options_script',
-                'chromevox2_background_script',
+                'chromevox_background_script',
+                'chromevox_content_script',
+                'chromevox_kbexplorer_script',
+                'chromevox_min_content_script',
+                'chromevox_options_script',
+                'chromevox_panel_script',
               ],
             }, {  # chromevox_compress_js==0
               'dependencies': [
@@ -65,7 +66,6 @@
             {
               'destination': '<(chromevox_dest_dir)/chromevox/background',
               'files': [
-                'chromevox/background/background.html',
                 'chromevox/background/kbexplorer.html',
                 'chromevox/background/options.html',
               ],
@@ -74,6 +74,7 @@
               'destination': '<(chromevox_dest_dir)/cvox2/background',
               'files': [
                 'cvox2/background/background.html',
+                'cvox2/background/panel.html',
               ],
             },
           ],
@@ -136,11 +137,11 @@
             'deps_js_output_file': '<(chromevox_dest_dir)/deps.js',
           },
           'sources': [
-            '<(chromevox1_background_script_loader_file)',
-            '<(chromevox1_content_script_loader_file)',
-            '<(chromevox1_kbexplorer_loader_file)',
-            '<(chromevox1_options_script_loader_file)',
-            '<(chromevox2_background_script_loader_file)',
+            '<(chromevox_content_script_loader_file)',
+            '<(chromevox_kbexplorer_loader_file)',
+            '<(chromevox_options_script_loader_file)',
+            '<(chromevox_background_script_loader_file)',
+            '<(chromevox_panel_script_loader_file)',
           ],
           'includes': ['generate_deps.gypi'],
         },
@@ -166,51 +167,59 @@
         ['chromevox_compress_js==1', {
           'targets': [
             {
-              'target_name': 'chromevox1_content_script',
+              'target_name': 'chromevox_content_script',
               'type': 'none',
               'variables': {
                 'output_file': '<(chromevox_dest_dir)/chromeVoxChromePageScript.js',
               },
-              'sources': [ '<(chromevox1_content_script_loader_file)' ],
+              'sources': [ '<(chromevox_content_script_loader_file)' ],
               'includes': [ 'compress_js.gypi', ],
             },
             {
-              'target_name': 'chromevox1_background_script',
-              'type': 'none',
-              'variables': {
-                'output_file': '<(chromevox_dest_dir)/chromeVoxChromeBackgroundScript.js',
-              },
-              'sources': [ '<(chromevox1_background_script_loader_file)' ],
-              'includes': [ 'compress_js.gypi', ],
-            },
-            {
-              'target_name': 'chromevox1_options_script',
+              'target_name': 'chromevox_options_script',
               'type': 'none',
               'variables': {
                 'output_file': '<(chromevox_dest_dir)/chromeVoxChromeOptionsScript.js',
               },
-              'sources': [ '<(chromevox1_options_script_loader_file)' ],
+              'sources': [ '<(chromevox_options_script_loader_file)' ],
               'includes': [ 'compress_js.gypi', ],
             },
             {
-              'target_name': 'chromevox1_kbexplorer_script',
+              'target_name': 'chromevox_kbexplorer_script',
               'type': 'none',
               'variables': {
                 'output_file': '<(chromevox_dest_dir)/chromeVoxKbExplorerScript.js',
               },
-              'sources': [ '<(chromevox1_kbexplorer_loader_file)' ],
+              'sources': [ '<(chromevox_kbexplorer_loader_file)' ],
               'includes': [ 'compress_js.gypi', ],
             },
             {
-              'target_name': 'chromevox2_background_script',
+              'target_name': 'chromevox_background_script',
               'type': 'none',
               'variables': {
                 'output_file': '<(chromevox_dest_dir)/chromeVox2ChromeBackgroundScript.js',
               },
               'sources': [
-                '<(chromevox1_background_script_loader_file)',
-                '<(chromevox2_background_script_loader_file)',
+                '<(chromevox_background_script_loader_file)',
               ],
+              'includes': [ 'compress_js.gypi', ],
+            },
+            {
+              'target_name': 'chromevox_panel_script',
+              'type': 'none',
+              'variables': {
+                'output_file': '<(chromevox_dest_dir)/chromeVoxPanelScript.js',
+              },
+              'sources': [ '<(chromevox_panel_script_loader_file)' ],
+              'includes': [ 'compress_js.gypi', ],
+            },
+            {
+              'target_name': 'chromevox_min_content_script',
+              'type': 'none',
+              'variables': {
+                'output_file': '<(chromevox_dest_dir)/chromeVox2ChromePageScript.js',
+              },
+              'sources': [ '<(chromevox_min_content_script_loader_file)' ],
               'includes': [ 'compress_js.gypi', ],
             },
           ],
@@ -223,11 +232,11 @@
                 'dest_dir': '<(chromevox_dest_dir)',
               },
               'sources': [
-                '<(chromevox1_background_script_loader_file)',
-                '<(chromevox1_content_script_loader_file)',
-                '<(chromevox1_kbexplorer_loader_file)',
-                '<(chromevox1_options_script_loader_file)',
-                '<(chromevox2_background_script_loader_file)',
+                '<(chromevox_content_script_loader_file)',
+                '<(chromevox_kbexplorer_loader_file)',
+                '<(chromevox_options_script_loader_file)',
+                '<(chromevox_background_script_loader_file)',
+                '<(chromevox_panel_script_loader_file)',
               ],
               'includes': [ 'copy_js.gypi', ],
             },

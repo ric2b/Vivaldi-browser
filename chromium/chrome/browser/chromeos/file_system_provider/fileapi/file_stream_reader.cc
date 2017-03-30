@@ -5,12 +5,14 @@
 #include "chrome/browser/chromeos/file_system_provider/fileapi/file_stream_reader.h"
 
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/chromeos/file_system_provider/abort_callback.h"
 #include "chrome/browser/chromeos/file_system_provider/fileapi/provider_async_file_util.h"
 #include "chrome/browser/chromeos/file_system_provider/mount_path_util.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
+#include "chrome/browser/chromeos/file_system_provider/scoped_file_opener.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -19,24 +21,19 @@ using content::BrowserThread;
 
 namespace chromeos {
 namespace file_system_provider {
-namespace {
-
-// Dicards the callback from CloseFile().
-void EmptyStatusCallback(base::File::Error /* result */) {
-}
 
 // Converts net::CompletionCallback to net::Int64CompletionCallback.
 void Int64ToIntCompletionCallback(net::CompletionCallback callback,
-                                  int64 result) {
+                                  int64_t result) {
   callback.Run(static_cast<int>(result));
 }
 
-}  // namespace
-
 class FileStreamReader::OperationRunner
-    : public base::RefCountedThreadSafe<FileStreamReader::OperationRunner> {
+    : public base::RefCountedThreadSafe<
+          FileStreamReader::OperationRunner,
+          content::BrowserThread::DeleteOnUIThread> {
  public:
-  OperationRunner() : file_handle_(-1) {}
+  OperationRunner() : file_handle_(0) {}
 
   // Opens a file for reading and calls the completion callback. Must be called
   // on UI thread.
@@ -57,23 +54,10 @@ class FileStreamReader::OperationRunner
 
     file_system_ = parser.file_system()->GetWeakPtr();
     file_path_ = parser.file_path();
-    abort_callback_ = parser.file_system()->OpenFile(
-        file_path_, OPEN_FILE_MODE_READ,
+    file_opener_.reset(new ScopedFileOpener(
+        parser.file_system(), parser.file_path(), OPEN_FILE_MODE_READ,
         base::Bind(&OperationRunner::OnOpenFileCompletedOnUIThread, this,
-                   callback));
-  }
-
-  // Closes a file. Ignores result, since it is called from a constructor.
-  // Must be called on UI thread.
-  void CloseFileOnUIThread() {
-    DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    DCHECK(abort_callback_.is_null());
-
-    if (file_system_.get() && file_handle_ != -1) {
-      // Closing a file must not be aborted, since we could end up on files
-      // which are never closed.
-      file_system_->CloseFile(file_handle_, base::Bind(&EmptyStatusCallback));
-    }
+                   callback)));
   }
 
   // Requests reading contents of a file. In case of either success or a failure
@@ -82,7 +66,7 @@ class FileStreamReader::OperationRunner
   // file has not been changed while reading. Must be called on UI thread.
   void ReadFileOnUIThread(
       scoped_refptr<net::IOBuffer> buffer,
-      int64 offset,
+      int64_t offset,
       int length,
       const ProvidedFileSystemInterface::ReadChunkReceivedCallback& callback) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -127,25 +111,31 @@ class FileStreamReader::OperationRunner
 
     abort_callback_ = file_system_->GetMetadata(
         file_path_,
-        ProvidedFileSystemInterface::METADATA_FIELD_DEFAULT,
-        base::Bind(&OperationRunner::OnGetMetadataCompletedOnUIThread,
-                   this,
+        ProvidedFileSystemInterface::METADATA_FIELD_SIZE |
+            ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME,
+        base::Bind(&OperationRunner::OnGetMetadataCompletedOnUIThread, this,
                    callback));
   }
 
-  // Aborts the most recent operation (if exists), and calls the callback.
-  void AbortOnUIThread() {
+  // Aborts the most recent operation (if exists) and closes a file if opened.
+  // The runner must not be used anymore after calling this method.
+  void CloseRunnerOnUIThread() {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    if (abort_callback_.is_null())
-      return;
 
-    const AbortCallback last_abort_callback = abort_callback_;
-    abort_callback_ = AbortCallback();
-    last_abort_callback.Run();
+    if (!abort_callback_.is_null()) {
+      const AbortCallback last_abort_callback = abort_callback_;
+      abort_callback_ = AbortCallback();
+      last_abort_callback.Run();
+    }
+
+    // Close the file (if opened).
+    file_opener_.reset();
   }
 
  private:
-  friend class base::RefCountedThreadSafe<OperationRunner>;
+  friend struct content::BrowserThread::DeleteOnThread<
+      content::BrowserThread::UI>;
+  friend class base::DeleteHelper<OperationRunner>;
 
   virtual ~OperationRunner() {}
 
@@ -199,6 +189,7 @@ class FileStreamReader::OperationRunner
   AbortCallback abort_callback_;
   base::WeakPtr<ProvidedFileSystemInterface> file_system_;
   base::FilePath file_path_;
+  scoped_ptr<ScopedFileOpener> file_opener_;
   int file_handle_;
 
   DISALLOW_COPY_AND_ASSIGN(OperationRunner);
@@ -206,7 +197,7 @@ class FileStreamReader::OperationRunner
 
 FileStreamReader::FileStreamReader(storage::FileSystemContext* context,
                                    const storage::FileSystemURL& url,
-                                   int64 initial_offset,
+                                   int64_t initial_offset,
                                    const base::Time& expected_modification_time)
     : url_(url),
       current_offset_(initial_offset),
@@ -214,20 +205,19 @@ FileStreamReader::FileStreamReader(storage::FileSystemContext* context,
       expected_modification_time_(expected_modification_time),
       runner_(new OperationRunner),
       state_(NOT_INITIALIZED),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 FileStreamReader::~FileStreamReader() {
   // FileStreamReader doesn't have a Cancel() method like in FileStreamWriter.
-  // Therefore, aborting is done from the destructor.
+  // Therefore, aborting and/or closing an opened file is done from the
+  // destructor.
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&OperationRunner::AbortOnUIThread, runner_));
+      base::Bind(&OperationRunner::CloseRunnerOnUIThread, runner_));
 
-  BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&OperationRunner::CloseFileOnUIThread, runner_));
+  // If a read is in progress, mark it as completed.
+  TRACE_EVENT_ASYNC_END0("file_system_provider", "FileStreamReader::Read",
+                         this);
 }
 
 void FileStreamReader::Initialize(
@@ -296,7 +286,7 @@ void FileStreamReader::OnInitializeCompleted(
   // may be changed without affecting the modification time.
   DCHECK(metadata.get());
   if (!expected_modification_time_.is_null() &&
-      metadata->modification_time != expected_modification_time_) {
+      *metadata->modification_time != expected_modification_time_) {
     state_ = FAILED;
     error_callback.Run(net::ERR_UPLOAD_FILE_CHANGED);
     return;
@@ -363,7 +353,7 @@ void FileStreamReader::OnReadCompleted(net::CompletionCallback callback,
       "file_system_provider", "FileStreamReader::Read", this);
 }
 
-int64 FileStreamReader::GetLength(
+int64_t FileStreamReader::GetLength(
     const net::Int64CompletionCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -476,13 +466,13 @@ void FileStreamReader::OnGetMetadataForGetLengthReceived(
   // may be changed without affecting the modification time.
   DCHECK(metadata.get());
   if (!expected_modification_time_.is_null() &&
-      metadata->modification_time != expected_modification_time_) {
+      *metadata->modification_time != expected_modification_time_) {
     callback.Run(net::ERR_UPLOAD_FILE_CHANGED);
     return;
   }
 
   DCHECK_EQ(base::File::FILE_OK, result);
-  callback.Run(metadata->size);
+  callback.Run(*metadata->size);
 }
 
 }  // namespace file_system_provider

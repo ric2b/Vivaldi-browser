@@ -4,7 +4,12 @@
 
 #include "base/sync_socket.h"
 
+#include <limits.h>
+#include <stddef.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
+#include "base/rand_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/win/scoped_handle.h"
 
@@ -39,9 +44,8 @@ bool CreatePairImpl(HANDLE* socket_a, HANDLE* socket_b, bool overlapped) {
     flags |= FILE_FLAG_OVERLAPPED;
 
   do {
-    unsigned int rnd_name;
-    if (rand_s(&rnd_name) != 0)
-      return false;
+    unsigned long rnd_name;
+    RandBytes(&rnd_name, sizeof(rnd_name));
 
     swprintf(name, kPipePathMax,
              kPipeNameFormat,
@@ -121,7 +125,7 @@ size_t CancelableFileOperation(Function operation,
                                DWORD timeout_in_ms) {
   ThreadRestrictions::AssertIOAllowed();
   // The buffer must be byte size or the length check won't make much sense.
-  COMPILE_ASSERT(sizeof(buffer[0]) == sizeof(char), incorrect_buffer_type);
+  static_assert(sizeof(buffer[0]) == sizeof(char), "incorrect buffer type");
   DCHECK_GT(length, 0u);
   DCHECK_LE(length, kMaxMessageLength);
   DCHECK_NE(file, SyncSocket::kInvalidHandle);

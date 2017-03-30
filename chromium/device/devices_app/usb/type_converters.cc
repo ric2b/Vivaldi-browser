@@ -4,13 +4,17 @@
 
 #include "device/devices_app/usb/type_converters.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <utility>
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "device/usb/usb_device.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/array.h"
+#include "mojo/common/url_type_converters.h"
+#include "mojo/public/cpp/bindings/array.h"
 
 namespace mojo {
 
@@ -139,7 +143,7 @@ TypeConverter<device::usb::EndpointInfoPtr, device::UsbEndpointDescriptor>::
       ConvertTo<device::usb::TransferDirection>(endpoint.direction);
   info->type = ConvertTo<device::usb::EndpointType>(endpoint.transfer_type);
   info->packet_size = static_cast<uint32_t>(endpoint.maximum_packet_size);
-  return info.Pass();
+  return info;
 }
 
 // static
@@ -161,7 +165,7 @@ TypeConverter<device::usb::AlternateInterfaceInfoPtr,
       info->endpoints.push_back(device::usb::EndpointInfo::From(endpoint));
   }
 
-  return info.Pass();
+  return info;
 }
 
 // static
@@ -183,12 +187,12 @@ TypeConverter<mojo::Array<device::usb::InterfaceInfoPtr>,
       auto info = device::usb::InterfaceInfo::New();
       iter = interface_map.insert(std::make_pair(interfaces[i].interface_number,
                                                  info.get())).first;
-      infos.push_back(info.Pass());
+      infos.push_back(std::move(info));
     }
-    iter->second->alternates.push_back(alternate.Pass());
+    iter->second->alternates.push_back(std::move(alternate));
   }
 
-  return infos.Pass();
+  return infos;
 }
 
 // static
@@ -200,7 +204,47 @@ TypeConverter<device::usb::ConfigurationInfoPtr, device::UsbConfigDescriptor>::
   info->configuration_value = config.configuration_value;
   info->interfaces =
       mojo::Array<device::usb::InterfaceInfoPtr>::From(config.interfaces);
-  return info.Pass();
+  return info;
+}
+
+// static
+device::usb::WebUsbFunctionSubsetPtr TypeConverter<
+    device::usb::WebUsbFunctionSubsetPtr,
+    device::WebUsbFunctionSubset>::Convert(const device::WebUsbFunctionSubset&
+                                               function) {
+  device::usb::WebUsbFunctionSubsetPtr info =
+      device::usb::WebUsbFunctionSubset::New();
+  info->first_interface = function.first_interface;
+  info->origins = mojo::Array<mojo::String>::From(function.origins);
+  return info;
+}
+
+// static
+device::usb::WebUsbConfigurationSubsetPtr
+TypeConverter<device::usb::WebUsbConfigurationSubsetPtr,
+              device::WebUsbConfigurationSubset>::
+    Convert(const device::WebUsbConfigurationSubset& config) {
+  device::usb::WebUsbConfigurationSubsetPtr info =
+      device::usb::WebUsbConfigurationSubset::New();
+  info->configuration_value = config.configuration_value;
+  info->origins = mojo::Array<mojo::String>::From(config.origins);
+  info->functions =
+      mojo::Array<device::usb::WebUsbFunctionSubsetPtr>::From(config.functions);
+  return info;
+}
+
+// static
+device::usb::WebUsbDescriptorSetPtr TypeConverter<
+    device::usb::WebUsbDescriptorSetPtr,
+    device::WebUsbDescriptorSet>::Convert(const device::WebUsbDescriptorSet&
+                                              set) {
+  device::usb::WebUsbDescriptorSetPtr info =
+      device::usb::WebUsbDescriptorSet::New();
+  info->origins = mojo::Array<mojo::String>::From(set.origins);
+  info->configurations =
+      mojo::Array<device::usb::WebUsbConfigurationSubsetPtr>::From(
+          set.configurations);
+  return info;
 }
 
 // static
@@ -211,10 +255,16 @@ TypeConverter<device::usb::DeviceInfoPtr, device::UsbDevice>::Convert(
   info->guid = device.guid();
   info->vendor_id = device.vendor_id();
   info->product_id = device.product_id();
-  info->manufacturer = base::UTF16ToUTF8(device.manufacturer_string());
-  info->product = base::UTF16ToUTF8(device.product_string());
+  info->manufacturer_name = base::UTF16ToUTF8(device.manufacturer_string());
+  info->product_name = base::UTF16ToUTF8(device.product_string());
   info->serial_number = base::UTF16ToUTF8(device.serial_number());
-  return info.Pass();
+  info->configurations = mojo::Array<device::usb::ConfigurationInfoPtr>::From(
+      device.configurations());
+  if (device.webusb_allowed_origins()) {
+    info->webusb_allowed_origins = device::usb::WebUsbDescriptorSet::From(
+        *device.webusb_allowed_origins());
+  }
+  return info;
 }
 
 }  // namespace mojo

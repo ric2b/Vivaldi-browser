@@ -4,16 +4,17 @@
 
 #include "tools/android/forwarder2/forwarders_manager.h"
 
+#include <stddef.h>
 #include <sys/select.h>
 #include <unistd.h>
-
 #include <algorithm>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "tools/android/forwarder2/forwarder.h"
 #include "tools/android/forwarder2/socket.h"
@@ -49,7 +50,7 @@ void ForwardersManager::CreateNewForwarderOnInternalThread(
     scoped_ptr<Socket> socket1,
     scoped_ptr<Socket> socket2) {
   DCHECK(thread_.task_runner()->RunsTasksOnCurrentThread());
-  forwarders_.push_back(new Forwarder(socket1.Pass(), socket2.Pass()));
+  forwarders_.push_back(new Forwarder(std::move(socket1), std::move(socket2)));
 }
 
 void ForwardersManager::WaitForEventsOnInternalThreadSoon() {

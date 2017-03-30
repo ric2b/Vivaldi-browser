@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/compiler_specific.h"
 #include "chrome/browser/download/download_danger_prompt.h"
+
+#include "base/compiler_specific.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/download_item.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/button/label_button.h"
@@ -21,6 +24,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_client_view.h"
 #include "ui/views/window/dialog_delegate.h"
+#include "url/gurl.h"
 
 using extensions::ExperienceSamplingEvent;
 
@@ -333,6 +337,12 @@ void DownloadDangerPromptViews::RunDone(Action action) {
   OnDone done = done_;
   done_.Reset();
   if (download_ != NULL) {
+    const bool accept = action == DownloadDangerPrompt::ACCEPT;
+    RecordDownloadDangerPrompt(accept, *download_);
+    if (!download_->GetURL().is_empty() &&
+        !download_->GetBrowserContext()->IsOffTheRecord()) {
+      SendSafeBrowsingDownloadRecoveryReport(accept, *download_);
+    }
     download_->RemoveObserver(this);
     download_ = NULL;
   }

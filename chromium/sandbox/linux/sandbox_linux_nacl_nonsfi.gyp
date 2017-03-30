@@ -23,21 +23,20 @@
             'build_irt': 0,
             'build_pnacl_newlib': 0,
             'build_nonsfi_helper': 1,
-
+            'compile_flags': [
+              '-fgnu-inline-asm',
+            ],
             'sources': [
               # This is the subset of linux build target, needed for
               # nacl_helper_nonsfi's sandbox implementation.
               'bpf_dsl/bpf_dsl.cc',
               'bpf_dsl/codegen.cc',
-              'bpf_dsl/dump_bpf.cc',
               'bpf_dsl/policy.cc',
               'bpf_dsl/policy_compiler.cc',
               'bpf_dsl/syscall_set.cc',
-              'bpf_dsl/verifier.cc',
               'seccomp-bpf-helpers/sigsys_handlers.cc',
               'seccomp-bpf-helpers/syscall_parameters_restrictions.cc',
               'seccomp-bpf/die.cc',
-              'seccomp-bpf/errorcode.cc',
               'seccomp-bpf/sandbox_bpf.cc',
               'seccomp-bpf/syscall.cc',
               'seccomp-bpf/trap.cc',

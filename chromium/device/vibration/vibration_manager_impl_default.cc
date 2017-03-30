@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "device/vibration/vibration_manager_impl.h"
+#include <stdint.h>
+#include <utility>
 
-#include "base/basictypes.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "device/vibration/vibration_manager_impl.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace device {
 
@@ -13,7 +14,7 @@ namespace {
 
 class VibrationManagerEmptyImpl : public VibrationManager {
  public:
-  void Vibrate(int64 milliseconds) override {}
+  void Vibrate(int64_t milliseconds) override {}
   void Cancel() override {}
 
  private:
@@ -21,7 +22,7 @@ class VibrationManagerEmptyImpl : public VibrationManager {
 
   explicit VibrationManagerEmptyImpl(
       mojo::InterfaceRequest<VibrationManager> request)
-      : binding_(this, request.Pass()) {}
+      : binding_(this, std::move(request)) {}
   ~VibrationManagerEmptyImpl() override {}
 
   // The binding between this object and the other end of the pipe.
@@ -30,10 +31,10 @@ class VibrationManagerEmptyImpl : public VibrationManager {
 
 }  // namespace
 
-//static
+// static
 void VibrationManagerImpl::Create(
     mojo::InterfaceRequest<VibrationManager> request) {
-  new VibrationManagerEmptyImpl(request.Pass());
+  new VibrationManagerEmptyImpl(std::move(request));
 }
 
 }  // namespace device

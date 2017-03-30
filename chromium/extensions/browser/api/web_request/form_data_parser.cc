@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/web_request/form_data_parser.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/lazy_instance.h"
@@ -13,7 +15,7 @@
 #include "base/values.h"
 #include "net/base/escape.h"
 #include "net/url_request/url_request.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 using base::DictionaryValue;
 using base::ListValue;
@@ -315,11 +317,11 @@ scoped_ptr<FormDataParser> FormDataParser::CreateFromContentTypeHeader(
     const std::string content_type(
         content_type_header->substr(0, content_type_header->find(';')));
 
-    if (base::strcasecmp(
-        content_type.c_str(), "application/x-www-form-urlencoded") == 0) {
+    if (base::EqualsCaseInsensitiveASCII(content_type,
+                                         "application/x-www-form-urlencoded")) {
       choice = URL_ENCODED;
-    } else if (base::strcasecmp(
-        content_type.c_str(), "multipart/form-data") == 0) {
+    } else if (base::EqualsCaseInsensitiveASCII(content_type,
+                                                "multipart/form-data")) {
       static const char kBoundaryString[] = "boundary=";
       size_t offset = content_type_header->find(kBoundaryString);
       if (offset == std::string::npos) {

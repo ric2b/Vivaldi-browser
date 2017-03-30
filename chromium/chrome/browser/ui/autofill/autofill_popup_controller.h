@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_UI_AUTOFILL_AUTOFILL_POPUP_CONTROLLER_H_
 #define CHROME_BROWSER_UI_AUTOFILL_AUTOFILL_POPUP_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view_delegate.h"
 
 namespace gfx {
@@ -37,9 +40,6 @@ class AutofillPopupController : public AutofillPopupViewDelegate {
   // Returns true if the given index refers to an element that is a warning
   // rather than an Autofill suggestion.
   virtual bool IsWarning(size_t index) const = 0;
-
-  // Updates the bounds of the popup and initiates a redraw.
-  virtual void SetPopupBounds(const gfx::Rect& bounds) = 0;
 
   // Returns the bounds of the item at |index| in the popup, relative to
   // the top left of the popup.

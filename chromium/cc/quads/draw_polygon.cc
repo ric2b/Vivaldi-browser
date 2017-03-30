@@ -4,19 +4,18 @@
 
 #include "cc/quads/draw_polygon.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "cc/output/bsp_compare_result.h"
 #include "cc/quads/draw_quad.h"
 
 namespace {
-// This allows for some imperfection in the normal comparison when checking if
-// two pieces of geometry are coplanar.
-static const float coplanar_dot_epsilon = 0.001f;
 // This threshold controls how "thick" a plane is. If a point's distance is
 // <= |compare_threshold|, then it is considered on the plane. Only when this
 // boundary is crossed do we consider doing splitting.
-static const float compare_threshold = 1.0f;
+static const float compare_threshold = 0.1f;
 // |split_threshold| is lower in this case because we want the points created
 // during splitting to be well within the range of |compare_threshold| for
 // comparison purposes. The splitting operation will produce intersection points
@@ -27,7 +26,7 @@ static const float compare_threshold = 1.0f;
 // this range.
 // This is really supposd to be compare_threshold / 2.0f, but that would
 // create another static initializer.
-static const float split_threshold = 0.5f;
+static const float split_threshold = 0.05f;
 
 static const float normalized_threshold = 0.001f;
 }  // namespace
@@ -73,7 +72,7 @@ DrawPolygon::DrawPolygon(const DrawQuad* original_ref,
   for (int i = 0; i < num_vertices_in_clipped_quad; i++) {
     points_.push_back(points[i]);
   }
-  ApplyTransformToNormal(transform);
+  ConstructNormal();
 }
 
 DrawPolygon::~DrawPolygon() {
@@ -88,8 +87,39 @@ scoped_ptr<DrawPolygon> DrawPolygon::CreateCopy() {
   new_polygon->normal_.set_x(normal_.x());
   new_polygon->normal_.set_y(normal_.y());
   new_polygon->normal_.set_z(normal_.z());
-  return new_polygon.Pass();
+  return new_polygon;
 }
+
+//
+// If this were to be more generally used and expected to be applicable
+// replacing this with Newell's algorithm (or an improvement thereof)
+// would be preferable, but usually this is coming in from a rectangle
+// that has been transformed to screen space and clipped.
+// Averaging a few near diagonal cross products is pretty good in that case.
+//
+void DrawPolygon::ConstructNormal() {
+  normal_.set_x(0.0f);
+  normal_.set_y(0.0f);
+  normal_.set_z(0.0f);
+  int delta = points_.size() / 2;
+  for (size_t i = 1; i + delta < points_.size(); i++) {
+    normal_ +=
+        CrossProduct(points_[i] - points_[0], points_[i + delta] - points_[0]);
+  }
+  float normal_magnitude = normal_.Length();
+  if (normal_magnitude != 0 && normal_magnitude != 1) {
+    normal_.Scale(1.0f / normal_magnitude);
+  }
+}
+
+#if defined(OS_WIN)
+//
+// Allows the unittest to invoke this for the more general constructor.
+//
+void DrawPolygon::RecomputeNormalForTesting() {
+  ConstructNormal();
+}
+#endif
 
 float DrawPolygon::SignedPointDistance(const gfx::Point3F& point) const {
   return gfx::DotProduct(point - points_[0], normal_);
@@ -101,48 +131,15 @@ float DrawPolygon::SignedPointDistance(const gfx::Point3F& point) const {
 // Assumes that layers are split and there are no intersecting planes.
 BspCompareResult DrawPolygon::SideCompare(const DrawPolygon& a,
                                           const DrawPolygon& b) {
-  // Let's make sure that both of these are normalized.
-  DCHECK_GE(normalized_threshold, std::abs(a.normal_.LengthSquared() - 1.0f));
+  // Let's make sure that this is normalized.  Without this SignedPointDistance
+  // will not be right, but putting the check in there will validate it
+  // redundantly for each point.
   DCHECK_GE(normalized_threshold, std::abs(b.normal_.LengthSquared() - 1.0f));
-  // Right away let's check if they're coplanar
-  double dot = gfx::DotProduct(a.normal_, b.normal_);
-  float sign = 0.0f;
-  bool normal_match = false;
-  // This check assumes that the normals are normalized.
-  if (std::abs(dot) >= 1.0f - coplanar_dot_epsilon) {
-    normal_match = true;
-    // The normals are matching enough that we only have to test one point.
-    sign = b.SignedPointDistance(a.points_[0]);
-    // Is it on either side of the splitter?
-    if (sign < -compare_threshold) {
-      return BSP_BACK;
-    }
-
-    if (sign > compare_threshold) {
-      return BSP_FRONT;
-    }
-
-    // No it wasn't, so the sign of the dot product of the normals
-    // along with document order determines which side it goes on.
-    if (dot >= 0.0f) {
-      if (a.order_index_ < b.order_index_) {
-        return BSP_COPLANAR_FRONT;
-      }
-      return BSP_COPLANAR_BACK;
-    }
-
-    if (a.order_index_ < b.order_index_) {
-      return BSP_COPLANAR_BACK;
-    }
-    return BSP_COPLANAR_FRONT;
-  }
 
   int pos_count = 0;
   int neg_count = 0;
   for (size_t i = 0; i < a.points_.size(); i++) {
-    if (!normal_match || (normal_match && i > 0)) {
-      sign = gfx::DotProduct(a.points_[i] - b.points_[0], b.normal_);
-    }
+    float sign = b.SignedPointDistance(a.points_[i]);
 
     if (sign < -compare_threshold) {
       ++neg_count;
@@ -158,7 +155,19 @@ BspCompareResult DrawPolygon::SideCompare(const DrawPolygon& a,
   if (pos_count) {
     return BSP_FRONT;
   }
-  return BSP_BACK;
+  if (neg_count) {
+    return BSP_BACK;
+  }
+
+  double dot = gfx::DotProduct(a.normal_, b.normal_);
+  if ((dot >= 0.0f && a.order_index_ >= b.order_index_) ||
+      (dot <= 0.0f && a.order_index_ <= b.order_index_)) {
+    // The sign of the dot product of the normals along with document order
+    // determine which side it goes on, the vertices are ambiguous.
+    return BSP_COPLANAR_BACK;
+  }
+
+  return BSP_COPLANAR_FRONT;
 }
 
 static bool LineIntersectPlane(const gfx::Point3F& line_start,
@@ -234,7 +243,7 @@ void DrawPolygon::ApplyTransform(const gfx::Transform& transform) {
 // be transformed along with the vertices.
 void DrawPolygon::TransformToScreenSpace(const gfx::Transform& transform) {
   ApplyTransform(transform);
-  ApplyTransformToNormal(transform);
+  ConstructNormal();
 }
 
 // In the case of TransformToLayerSpace, we assume that we are giving the
@@ -318,11 +327,11 @@ bool DrawPolygon::Split(const DrawPolygon& splitter,
   DCHECK_GE(poly2->points().size(), 3u);
 
   if (SideCompare(*poly1, splitter) == BSP_FRONT) {
-    *front = poly1.Pass();
-    *back = poly2.Pass();
+    *front = std::move(poly1);
+    *back = std::move(poly2);
   } else {
-    *front = poly2.Pass();
-    *back = poly1.Pass();
+    *front = std::move(poly2);
+    *back = std::move(poly1);
   }
   return true;
 }

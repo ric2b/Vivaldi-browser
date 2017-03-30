@@ -12,7 +12,6 @@
 #include "ash/host/root_window_transformer.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/shell.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/memory/scoped_ptr.h"
 #include "third_party/skia/include/utils/SkMatrix44.h"
@@ -141,8 +140,8 @@ class AshRootWindowTransformer : public RootWindowTransformer {
   AshRootWindowTransformer(aura::Window* root,
                            const gfx::Display& display)
       : root_window_(root) {
-    DisplayInfo info = Shell::GetInstance()->display_manager()->
-        GetDisplayInfo(display.id());
+    DisplayManager* display_manager = Shell::GetInstance()->display_manager();
+    DisplayInfo info = display_manager->GetDisplayInfo(display.id());
     host_insets_ = info.GetOverscanInsetsInPixel();
     root_window_ui_scale_ = info.GetEffectiveUIScale();
     root_window_bounds_transform_ =
@@ -279,10 +278,15 @@ class PartialBoundsRootWindowTransformer : public RootWindowTransformer {
  public:
   PartialBoundsRootWindowTransformer(const gfx::Rect& screen_bounds,
                                      const gfx::Display& display) {
-    gfx::SizeF root_size(display.bounds().size());
-    root_size.Scale(display.device_scale_factor());
-    root_bounds_ = gfx::Rect(gfx::ToFlooredSize(root_size));
-
+    gfx::Display unified_display =
+        Shell::GetInstance()->GetScreen()->GetPrimaryDisplay();
+    DisplayInfo display_info =
+        Shell::GetInstance()->display_manager()->GetDisplayInfo(display.id());
+    root_bounds_ = gfx::Rect(display_info.bounds_in_native().size());
+    float scale = root_bounds_.height() /
+                  static_cast<float>(screen_bounds.height()) /
+                  unified_display.device_scale_factor();
+    transform_.Scale(scale, scale);
     transform_.Translate(-SkIntToMScalar(display.bounds().x()),
                          -SkIntToMScalar(display.bounds().y()));
   }

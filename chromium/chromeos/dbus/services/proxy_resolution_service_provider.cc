@@ -4,8 +4,11 @@
 
 #include "chromeos/dbus/services/proxy_resolution_service_provider.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/thread_task_runner_handle.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
@@ -50,10 +53,9 @@ class ProxyResolverImpl : public ProxyResolverInterface {
   };
 
   explicit ProxyResolverImpl(scoped_ptr<ProxyResolverDelegate> delegate)
-      : delegate_(delegate.Pass()),
+      : delegate_(std::move(delegate)),
         origin_thread_(base::ThreadTaskRunnerHandle::Get()),
-        weak_ptr_factory_(this) {
-  }
+        weak_ptr_factory_(this) {}
 
   ~ProxyResolverImpl() override {
     DCHECK(OnOriginThread());
@@ -266,7 +268,7 @@ void ProxyResolutionServiceProvider::CallResolveProxyHandler(
 ProxyResolutionServiceProvider* ProxyResolutionServiceProvider::Create(
     scoped_ptr<ProxyResolverDelegate> delegate) {
   return new ProxyResolutionServiceProvider(
-      new ProxyResolverImpl(delegate.Pass()));
+      new ProxyResolverImpl(std::move(delegate)));
 }
 
 ProxyResolverInterface::~ProxyResolverInterface() {

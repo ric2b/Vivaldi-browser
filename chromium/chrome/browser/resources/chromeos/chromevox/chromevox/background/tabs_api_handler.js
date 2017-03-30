@@ -9,6 +9,7 @@
 
 goog.provide('cvox.TabsApiHandler');
 
+goog.require('TabsAutomationHandler');
 goog.require('cvox.AbstractEarcons');
 goog.require('cvox.AbstractTts');
 goog.require('cvox.BrailleInterface');
@@ -19,21 +20,10 @@ goog.require('cvox.NavBraille');
 /**
  * Class that adds listeners and handles events from the tabs API.
  * @constructor
- * @param {cvox.TtsInterface} tts The TTS to use for speaking.
- * @param {cvox.BrailleInterface} braille The braille interface to use for
- * brailling.
- * @param {cvox.AbstractEarcons} earcons The earcons object to use for playing
- *        earcons.
  */
-cvox.TabsApiHandler = function(tts, braille, earcons) {
-  /** @type {cvox.TtsInterface} @private */
-  this.tts_ = tts;
-  /** @type {cvox.BrailleInterface} @private */
-  this.braille_ = braille;
-  /** @type {cvox.AbstractEarcons} @private */
-  this.earcons_ = earcons;
+cvox.TabsApiHandler = function() {
   /** @type {function(string, Array<string>=)} @private */
-  this.msg_ = cvox.ChromeVox.msgs.getMsg.bind(cvox.ChromeVox.msgs);
+  this.msg_ = Msgs.getMsg.bind(Msgs);
   /**
    * Tracks whether the active tab has finished loading.
    * @type {boolean}
@@ -46,6 +36,19 @@ cvox.TabsApiHandler = function(tts, braille, earcons) {
   chrome.tabs.onActivated.addListener(this.onActivated.bind(this));
   chrome.tabs.onUpdated.addListener(this.onUpdated.bind(this));
   chrome.windows.onFocusChanged.addListener(this.onFocusChanged.bind(this));
+
+  /**
+   * @type {?number} The window.setInterval ID for checking the loading
+   *     status of the current tab.
+   * @private
+   */
+  this.pageLoadIntervalID_ = null;
+
+  /**
+   * @type {?number} The tab ID of the tab being polled because it's loading.
+   * @private
+   */
+  this.pageLoadTabID_ = null;
 };
 
 cvox.TabsApiHandler.prototype = {
@@ -57,12 +60,13 @@ cvox.TabsApiHandler.prototype = {
     if (!cvox.ChromeVox.isActive) {
       return;
     }
-    this.tts_.speak(this.msg_('chrome_tab_created'),
-                   cvox.QueueMode.FLUSH,
-                   cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
-    this.braille_.write(
+    cvox.ChromeVox.tts.speak(this.msg_('chrome_tab_created'),
+                             cvox.QueueMode.FLUSH,
+                             cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
+    cvox.ChromeVox.braille.write(
         cvox.NavBraille.fromText(this.msg_('chrome_tab_created')));
-    this.earcons_.playEarcon(cvox.AbstractEarcons.OBJECT_OPEN);
+    cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.OBJECT_OPEN);
+    this.refreshAutomationHandler_(tab.id);
   },
 
   /**
@@ -73,7 +77,14 @@ cvox.TabsApiHandler.prototype = {
     if (!cvox.ChromeVox.isActive) {
       return;
     }
-    this.earcons_.playEarcon(cvox.AbstractEarcons.OBJECT_CLOSE);
+    cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.OBJECT_CLOSE);
+
+    chrome.tabs.query({active: true}, function(tabs) {
+      if (tabs.length == 0 && this.isPlayingPageLoadingSound_()) {
+        cvox.ChromeVox.earcons.cancelEarcon(cvox.Earcon.PAGE_START_LOADING);
+        this.cancelPageLoadTimer_();
+      }
+    }.bind(this));
   },
 
   /**
@@ -84,19 +95,36 @@ cvox.TabsApiHandler.prototype = {
     if (!cvox.ChromeVox.isActive) {
       return;
     }
+    this.updateLoadingSoundsWhenTabFocusChanges_(activeInfo.tabId);
     chrome.tabs.get(activeInfo.tabId, function(tab) {
-      this.lastActiveTabLoaded_ = tab.status == 'complete';
-      if (tab.status == 'loading') {
-        return;
-      }
       var title = tab.title ? tab.title : tab.url;
-      this.tts_.speak(this.msg_('chrome_tab_selected',
-                         [title]),
-                     cvox.QueueMode.FLUSH,
-                     cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
-      this.braille_.write(
+      cvox.ChromeVox.tts.speak(this.msg_('chrome_tab_selected',
+                                         [title]),
+                               cvox.QueueMode.FLUSH,
+                               cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
+      cvox.ChromeVox.braille.write(
           cvox.NavBraille.fromText(this.msg_('chrome_tab_selected', [title])));
-      this.earcons_.playEarcon(cvox.AbstractEarcons.OBJECT_SELECT);
+      cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.OBJECT_SELECT);
+      this.refreshAutomationHandler_(tab.id);
+      this.focusTab_(tab.id);
+    }.bind(this));
+  },
+
+  /**
+   * Called when a tab becomes active or focused.
+   * @param {number} tabId the id of the tab that's now focused and active.
+   * @private
+   */
+  updateLoadingSoundsWhenTabFocusChanges_: function(tabId) {
+    chrome.tabs.get(tabId, function(tab) {
+      this.lastActiveTabLoaded_ = tab.status == 'complete';
+      if (tab.status == 'loading' && !this.isPlayingPageLoadingSound_()) {
+        cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.PAGE_START_LOADING);
+        this.startPageLoadTimer_(tabId);
+      } else {
+        cvox.ChromeVox.earcons.cancelEarcon(cvox.Earcon.PAGE_START_LOADING);
+        this.cancelPageLoadTimer_();
+      }
     }.bind(this));
   },
 
@@ -115,11 +143,16 @@ cvox.TabsApiHandler.prototype = {
       }
       if (tab.status == 'loading') {
         this.lastActiveTabLoaded_ = false;
-        this.earcons_.playEarcon(cvox.AbstractEarcons.BUSY_PROGRESS_LOOP);
+        if (!this.isPlayingPageLoadingSound_()) {
+          cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.PAGE_START_LOADING);
+          this.startPageLoadTimer_(tabId);
+        }
       } else if (!this.lastActiveTabLoaded_) {
         this.lastActiveTabLoaded_ = true;
-        this.earcons_.playEarcon(cvox.AbstractEarcons.TASK_SUCCESS);
+        cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.PAGE_FINISH_LOADING);
+        this.cancelPageLoadTimer_();
       }
+      this.refreshAutomationHandler_(tabId);
     }.bind(this));
   },
 
@@ -136,17 +169,91 @@ cvox.TabsApiHandler.prototype = {
     }
     chrome.windows.get(windowId, function(window) {
       chrome.tabs.query({active: true, windowId: windowId}, function(tabs) {
+        if (tabs[0])
+          this.updateLoadingSoundsWhenTabFocusChanges_(tabs[0].id);
+
         var msgId = window.incognito ? 'chrome_incognito_window_selected' :
             'chrome_normal_window_selected';
         var tab = tabs[0] || {};
         var title = tab.title ? tab.title : tab.url;
-        this.tts_.speak(this.msg_(msgId, [title]),
-                       cvox.QueueMode.FLUSH,
-                       cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
-        this.braille_.write(
+        cvox.ChromeVox.tts.speak(this.msg_(msgId, [title]),
+                                 cvox.QueueMode.FLUSH,
+                                 cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
+        cvox.ChromeVox.braille.write(
             cvox.NavBraille.fromText(this.msg_(msgId, [title])));
-        this.earcons_.playEarcon(cvox.AbstractEarcons.OBJECT_SELECT);
+        cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.OBJECT_SELECT);
+        this.refreshAutomationHandler_(tab.id);
+        this.focusTab_(tab.id);
       }.bind(this));
     }.bind(this));
+  },
+
+  /**
+   * Installs a new automation handler for the given tab.
+   * @param {number} tabId
+   * @private
+   */
+  refreshAutomationHandler_: function(tabId) {
+    if (!cvox.ChromeVox.isMac)
+      return;
+
+    chrome.automation.getTree(tabId, function(node) {
+      if (this.handler_)
+        this.handler_.unregister();
+
+      this.handler_ = new TabsAutomationHandler(node);
+    }.bind(this));
+  },
+
+  /**
+   * @param {number} id Tab id to focus.
+   * @private
+   */
+  focusTab_: function(id) {
+    chrome.automation.getTree(id, function(tab) {
+      if (tab.state.focused)
+        ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(tab));
+      global.backgroundObj.refreshMode(tab.docUrl);
+    });
+  },
+
+  /**
+   * The chrome.tabs API doesn't always fire an onUpdated event when a
+   * page finishes loading, so we poll it.
+   * @param {number} tabId The id of the tab to monitor.
+   * @private
+   */
+  startPageLoadTimer_: function(tabId) {
+    if (this.pageLoadIntervalID_) {
+      if (tabId == this.pageLoadTabID_)
+        return;
+      this.cancelPageLoadTimer_();
+    }
+
+    this.pageLoadTabID_ = tabId;
+    this.pageLoadIntervalID_ = window.setInterval(function() {
+      if (this.pageLoadTabID_)
+        this.onUpdated(this.pageLoadTabID_, {});
+    }.bind(this), 1000);
+  },
+
+  /**
+   * Cancel the page loading timer because the active tab is loaded.
+   * @private
+   */
+  cancelPageLoadTimer_: function() {
+    if (this.pageLoadIntervalID_) {
+      window.clearInterval(this.pageLoadIntervalID_);
+      this.pageLoadIntervalID_ = null;
+      this.pageLoadTabID_ = null;
+    }
+  },
+
+  /**
+   * @return {boolean} True if the page loading sound is playing and our
+   * page loading timer is active.
+   */
+  isPlayingPageLoadingSound_: function() {
+    return this.pageLoadIntervalID_ != null;
   }
 };

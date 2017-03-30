@@ -14,6 +14,8 @@
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -60,10 +62,10 @@ struct CGroups {
   }
 };
 
-base::LazyInstance<CGroups> cgroups = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<CGroups> g_cgroups = LAZY_INSTANCE_INITIALIZER;
 #else
 const int kBackgroundPriority = 5;
-#endif
+#endif  // defined(OS_CHROMEOS)
 
 struct CheckForNicePermission {
   CheckForNicePermission() : can_reraise_priority(false) {
@@ -84,9 +86,9 @@ struct CheckForNicePermission {
 // static
 bool Process::CanBackgroundProcesses() {
 #if defined(OS_CHROMEOS)
-  if (cgroups.Get().enabled)
+  if (g_cgroups.Get().enabled)
     return true;
-#endif
+#endif  // defined(OS_CHROMEOS)
 
   static LazyInstance<CheckForNicePermission> check_for_nice_permission =
       LAZY_INSTANCE_INITIALIZER;
@@ -97,21 +99,18 @@ bool Process::IsProcessBackgrounded() const {
   DCHECK(IsValid());
 
 #if defined(OS_CHROMEOS)
-  if (cgroups.Get().enabled) {
+  if (g_cgroups.Get().enabled) {
+    // Used to allow reading the process priority from proc on thread launch.
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     std::string proc;
     if (base::ReadFileToString(
-            base::FilePath(StringPrintf(kProcPath, process_)),
-            &proc)) {
-      std::vector<std::string> proc_parts;
-      base::SplitString(proc, ':', &proc_parts);
-      DCHECK_EQ(proc_parts.size(), 3u);
-      bool ret = proc_parts[2] == std::string(kBackground);
-      return ret;
-    } else {
-      return false;
+            base::FilePath(StringPrintf(kProcPath, process_)), &proc)) {
+      return IsProcessBackgroundedCGroup(proc);
     }
+    return false;
   }
-#endif
+#endif  // defined(OS_CHROMEOS)
+
   return GetPriority() == kBackgroundPriority;
 }
 
@@ -119,14 +118,14 @@ bool Process::SetProcessBackgrounded(bool background) {
   DCHECK(IsValid());
 
 #if defined(OS_CHROMEOS)
-  if (cgroups.Get().enabled) {
+  if (g_cgroups.Get().enabled) {
     std::string pid = IntToString(process_);
     const base::FilePath file =
         background ?
-            cgroups.Get().background_file : cgroups.Get().foreground_file;
+            g_cgroups.Get().background_file : g_cgroups.Get().foreground_file;
     return base::WriteFile(file, pid.c_str(), pid.size()) > 0;
   }
-#endif // OS_CHROMEOS
+#endif  // defined(OS_CHROMEOS)
 
   if (!CanBackgroundProcesses())
     return false;
@@ -136,5 +135,68 @@ bool Process::SetProcessBackgrounded(bool background) {
   DPCHECK(result == 0);
   return result == 0;
 }
+
+#if defined(OS_CHROMEOS)
+bool IsProcessBackgroundedCGroup(const StringPiece& cgroup_contents) {
+  // The process can be part of multiple control groups, and for each cgroup
+  // hierarchy there's an entry in the file. We look for a control group
+  // named "/chrome_renderers/background" to determine if the process is
+  // backgrounded. crbug.com/548818.
+  std::vector<StringPiece> lines = SplitStringPiece(
+      cgroup_contents, "\n", TRIM_WHITESPACE, SPLIT_WANT_NONEMPTY);
+  for (const auto& line : lines) {
+    std::vector<StringPiece> fields =
+        SplitStringPiece(line, ":", TRIM_WHITESPACE, SPLIT_WANT_ALL);
+    if (fields.size() != 3U) {
+      NOTREACHED();
+      continue;
+    }
+    if (fields[2] == kBackground)
+      return true;
+  }
+
+  return false;
+}
+#endif  // defined(OS_CHROMEOS)
+
+#if defined(OS_CHROMEOS)
+// Reads /proc/<pid>/status and returns the PID in its PID namespace.
+// If the process is not in a PID namespace or /proc/<pid>/status does not
+// report NSpid, kNullProcessId is returned.
+ProcessId Process::GetPidInNamespace() const {
+  std::string status;
+  {
+    // Synchronously reading files in /proc does not hit the disk.
+    ThreadRestrictions::ScopedAllowIO allow_io;
+    FilePath status_file =
+        FilePath("/proc").Append(IntToString(process_)).Append("status");
+    if (!ReadFileToString(status_file, &status)) {
+      return kNullProcessId;
+    }
+  }
+
+  StringPairs pairs;
+  SplitStringIntoKeyValuePairs(status, ':', '\n', &pairs);
+  for (const auto& pair : pairs) {
+    const std::string& key = pair.first;
+    const std::string& value_str = pair.second;
+    if (key == "NSpid") {
+      std::vector<StringPiece> split_value_str = SplitStringPiece(
+          value_str, "\t", TRIM_WHITESPACE, SPLIT_WANT_NONEMPTY);
+      if (split_value_str.size() <= 1) {
+        return kNullProcessId;
+      }
+      int value;
+      // The last value in the list is the PID in the namespace.
+      if (!StringToInt(split_value_str.back(), &value)) {
+        NOTREACHED();
+        return kNullProcessId;
+      }
+      return value;
+    }
+  }
+  return kNullProcessId;
+}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace base

@@ -6,6 +6,8 @@
 
 #include <iphlpapi.h>
 #include <objbase.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <wlanapi.h>
 
 #include <set>
@@ -13,6 +15,7 @@
 #include "base/base_paths_win.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
@@ -229,7 +232,7 @@ class WiFiServiceImpl : public WiFiService {
   void GetConnectedNetworkSSID(std::string* ssid, std::string* error) override;
 
  private:
-  typedef int32 EncryptionType;
+  typedef int32_t EncryptionType;
   enum EncryptionTypeEnum {
     kEncryptionTypeAny = 0,
     kEncryptionTypeAES = 1,
@@ -1154,7 +1157,8 @@ DWORD WiFiServiceImpl::FindAdapterIndexMapByGUID(
     if (error == ERROR_SUCCESS) {
       for (int adapter = 0; adapter < interface_info->NumAdapters; ++adapter) {
         if (base::EndsWith(
-                interface_info->Adapter[adapter].Name, guid_string, false)) {
+                interface_info->Adapter[adapter].Name, guid_string,
+                base::CompareCase::INSENSITIVE_ASCII)) {
           *adapter_index_map = interface_info->Adapter[adapter];
           break;
         }

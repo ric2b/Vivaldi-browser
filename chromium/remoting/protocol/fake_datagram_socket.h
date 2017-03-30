@@ -9,11 +9,12 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_callback.h"
-#include "net/socket/socket.h"
 #include "remoting/protocol/datagram_channel_factory.h"
+#include "remoting/protocol/p2p_datagram_socket.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -22,7 +23,7 @@ class SingleThreadTaskRunner;
 namespace remoting {
 namespace protocol {
 
-// FakeDatagramSocket implement net::StreamSocket interface. All data written to
+// FakeDatagramSocket implement P2PStreamSocket interface. All data written to
 // FakeDatagramSocket is stored in a buffer returned by written_packets().
 // Read() reads data from another buffer that can be set with
 // AppendInputPacket(). Pending reads are supported, so if there is a pending
@@ -32,7 +33,7 @@ namespace protocol {
 // PairWith() method, e.g.: a->PairWith(b). After this all data
 // written to |a| can be read from |b| and vice versa. Two connected
 // sockets |a| and |b| must be created and used on the same thread.
-class FakeDatagramSocket : public net::Socket {
+class FakeDatagramSocket : public P2PDatagramSocket {
  public:
   FakeDatagramSocket();
   ~FakeDatagramSocket() override;
@@ -41,10 +42,17 @@ class FakeDatagramSocket : public net::Socket {
     return written_packets_;
   }
 
+  // Enables asynchronous Write().
+  void set_async_send(bool async_send) { async_send_ = async_send; }
+
+  // Set error codes for the next Write() call. Once returned the
+  // value is automatically reset to net::OK .
+  void set_next_send_error(int error) { next_send_error_ = error; }
+
   void AppendInputPacket(const std::string& data);
 
   // Current position in the input in number of packets, i.e. number of finished
-  // Read() calls.
+  // Recv() calls.
   int input_pos() const { return input_pos_; }
 
   // Pairs the socket with |peer_socket|. Deleting either of the paired sockets
@@ -53,18 +61,22 @@ class FakeDatagramSocket : public net::Socket {
 
   base::WeakPtr<FakeDatagramSocket> GetWeakPtr();
 
-  // net::Socket implementation.
-  int Read(net::IOBuffer* buf,
-           int buf_len,
+  // P2PDatagramSocket implementation.
+  int Recv(const scoped_refptr<net::IOBuffer>& buf, int buf_len,
            const net::CompletionCallback& callback) override;
-  int Write(net::IOBuffer* buf,
-            int buf_len,
-            const net::CompletionCallback& callback) override;
-  int SetReceiveBufferSize(int32 size) override;
-  int SetSendBufferSize(int32 size) override;
+  int Send(const scoped_refptr<net::IOBuffer>& buf, int buf_len,
+           const net::CompletionCallback& callback) override;
 
  private:
-  int CopyReadData(net::IOBuffer* buf, int buf_len);
+  int CopyReadData(const scoped_refptr<net::IOBuffer>& buf, int buf_len);
+
+  void DoAsyncSend(const scoped_refptr<net::IOBuffer>& buf, int buf_len,
+                   const net::CompletionCallback& callback);
+  int DoSend(const scoped_refptr<net::IOBuffer>& buf, int buf_len);
+
+  bool async_send_ = false;
+  bool send_pending_ = false;
+  int next_send_error_ = 0;
 
   base::WeakPtr<FakeDatagramSocket> peer_socket_;
 

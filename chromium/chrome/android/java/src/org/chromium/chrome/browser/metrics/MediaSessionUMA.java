@@ -12,7 +12,9 @@ import org.chromium.base.metrics.RecordHistogram;
 public class MediaSessionUMA {
     // MediaSessionAction defined in tools/metrics/histograms/histograms.xml.
     public static final int MEDIA_SESSION_ACTION_SOURCE_MEDIA_NOTIFICATION = 0;
-    public static final int MEDIA_SESSION_ACTION_SOURCE_MAX = 2;
+    public static final int MEDIA_SESSION_ACTION_SOURCE_MEDIA_SESSION = 1;
+    public static final int MEDIA_SESSION_ACTION_SOURCE_HEADSET_UNPLUG = 2;
+    public static final int MEDIA_SESSION_ACTION_SOURCE_MAX = 3;
 
     public static void recordPlay(int action) {
         assert action >= 0 && action < MEDIA_SESSION_ACTION_SOURCE_MAX;
@@ -23,6 +25,12 @@ public class MediaSessionUMA {
     public static void recordPause(int action) {
         assert action >= 0 && action < MEDIA_SESSION_ACTION_SOURCE_MAX;
         RecordHistogram.recordEnumeratedHistogram("Media.Session.Pause", action,
+                MEDIA_SESSION_ACTION_SOURCE_MAX);
+    }
+
+    public static void recordStop(int action) {
+        assert action >= 0 && action < MEDIA_SESSION_ACTION_SOURCE_MAX;
+        RecordHistogram.recordEnumeratedHistogram("Media.Session.Stop", action,
                 MEDIA_SESSION_ACTION_SOURCE_MAX);
     }
 }

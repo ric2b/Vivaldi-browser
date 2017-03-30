@@ -5,8 +5,11 @@
 #ifndef COMPONENTS_DOMAIN_RELIABILITY_MONITOR_H_
 #define COMPONENTS_DOMAIN_RELIABILITY_MONITOR_H_
 
+#include <stddef.h>
+
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -22,7 +25,9 @@
 #include "components/domain_reliability/scheduler.h"
 #include "components/domain_reliability/uploader.h"
 #include "components/domain_reliability/util.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/load_timing_info.h"
+#include "net/base/net_error_details.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_response_info.h"
 #include "net/socket/connection_attempts.h"
@@ -146,7 +151,9 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
     int load_flags;
     net::LoadTimingInfo load_timing_info;
     net::ConnectionAttempts connection_attempts;
-    bool is_upload;
+    net::IPEndPoint remote_endpoint;
+    int upload_depth;
+    net::NetErrorDetails details;
   };
 
   void OnRequestLegComplete(const RequestInfo& info);

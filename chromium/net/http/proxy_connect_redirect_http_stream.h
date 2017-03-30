@@ -5,6 +5,8 @@
 #ifndef NET_HTTP_PROXY_CONNECT_REDIRECT_HTTP_STREAM_H_
 #define NET_HTTP_PROXY_CONNECT_REDIRECT_HTTP_STREAM_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/load_timing_info.h"
@@ -42,22 +44,21 @@ class ProxyConnectRedirectHttpStream : public HttpStream {
 
   bool IsResponseBodyComplete() const override;
 
-  // This function may be called.
-  bool CanFindEndOfResponse() const override;
-
   bool IsConnectionReused() const override;
   void SetConnectionReused() override;
-  bool IsConnectionReusable() const override;
+  bool CanReuseConnection() const override;
 
-  int64 GetTotalReceivedBytes() const override;
+  int64_t GetTotalReceivedBytes() const override;
+  int64_t GetTotalSentBytes() const override;
 
   // This function may be called.
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
 
   void GetSSLInfo(SSLInfo* ssl_info) override;
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
-  bool IsSpdyHttpStream() const override;
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
   void Drain(HttpNetworkSession* session) override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) override;
 
   // This function may be called.
   void SetPriority(RequestPriority priority) override;

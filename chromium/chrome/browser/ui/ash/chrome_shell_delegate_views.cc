@@ -10,6 +10,8 @@
 #include "ash/media_delegate.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
@@ -57,8 +59,7 @@ class MediaDelegateImpl : public ash::MediaDelegate {
   void HandleMediaNextTrack() override {}
   void HandleMediaPlayPause() override {}
   void HandleMediaPrevTrack() override {}
-  ash::MediaCaptureState GetMediaCaptureState(
-      content::BrowserContext* context) override {
+  ash::MediaCaptureState GetMediaCaptureState(ash::UserIndex index) override {
     return ash::MEDIA_CAPTURE_NONE;
   }
 

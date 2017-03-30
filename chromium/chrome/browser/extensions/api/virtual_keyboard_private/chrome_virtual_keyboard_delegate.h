@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_EXTENSIONS_API_VIRTUAL_KEYBOARD_PRIVATE_CHROME_VIRTUAL_KEYBOARD_DELEGATE_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_delegate.h"
 
 namespace extensions {
@@ -18,6 +19,7 @@ class ChromeVirtualKeyboardDelegate : public VirtualKeyboardDelegate {
   bool HideKeyboard() override;
   bool InsertText(const base::string16& text) override;
   bool OnKeyboardLoaded() override;
+  void SetHotrodKeyboard(bool enable) override;
   bool LockKeyboard(bool state) override;
   bool SendKeyEvent(const std::string& type,
                     int char_value,
@@ -27,6 +29,7 @@ class ChromeVirtualKeyboardDelegate : public VirtualKeyboardDelegate {
   bool ShowLanguageSettings() override;
   bool IsLanguageSettingsEnabled() override;
   bool SetVirtualKeyboardMode(int mode_enum) override;
+  bool SetRequestedKeyboardState(int state_enum) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeVirtualKeyboardDelegate);

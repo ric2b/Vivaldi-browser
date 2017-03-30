@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/error_console/error_console.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -13,6 +15,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
+#include "components/version_info/version_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/extension_error.h"
 #include "extensions/browser/extension_error_test_util.h"
@@ -55,8 +58,8 @@ class ErrorConsoleUnitTest : public testing::Test {
 TEST_F(ErrorConsoleUnitTest, EnableAndDisableErrorConsole) {
   // Start in Dev Channel, without the feature switch.
   scoped_ptr<ScopedCurrentChannel> channel_override(
-      new ScopedCurrentChannel(chrome::VersionInfo::CHANNEL_DEV));
-  ASSERT_EQ(chrome::VersionInfo::CHANNEL_DEV, GetCurrentChannel());
+      new ScopedCurrentChannel(version_info::Channel::DEV));
+  ASSERT_EQ(version_info::Channel::DEV, GetCurrentChannel());
   FeatureSwitch::error_console()->SetOverrideValue(
       FeatureSwitch::OVERRIDE_DISABLED);
 
@@ -76,7 +79,7 @@ TEST_F(ErrorConsoleUnitTest, EnableAndDisableErrorConsole) {
   // should be disabled.
   channel_override.reset();
   channel_override.reset(
-      new ScopedCurrentChannel(chrome::VersionInfo::CHANNEL_BETA));
+      new ScopedCurrentChannel(version_info::Channel::BETA));
   profile_->GetPrefs()->SetBoolean(prefs::kExtensionsUIDeveloperMode, true);
   EXPECT_FALSE(error_console_->enabled());
   EXPECT_FALSE(error_console_->IsEnabledForChromeExtensionsPage());
@@ -137,7 +140,7 @@ TEST_F(ErrorConsoleUnitTest, ReportErrors) {
 
   for (size_t i = 0; i < kNumTotalErrors; ++i) {
     error_console_->ReportError(
-        CreateNewManifestError(kId, base::UintToString(i)));
+        CreateNewManifestError(kId, base::SizeTToString(i)));
   }
 
   ASSERT_EQ(kNumTotalErrors, error_console_->GetErrorsForExtension(kId).size());

@@ -113,7 +113,6 @@
     "can_be_recommended": true,
     "test_policy": { "DnsPrefetchingEnabled": false },
     "pref_mappings": [
-      { "pref": "dns_prefetching.enabled" },
       { "pref": "net.network_prediction_options",
         "indicator_tests": [
           { "policy": { "DnsPrefetchingEnabled": false } }
@@ -127,7 +126,6 @@
     "can_be_recommended": true,
     "test_policy": { "NetworkPredictionOptions": 2 },
     "pref_mappings": [
-      { "pref": "dns_prefetching.enabled" },
       { "pref": "net.network_prediction_options",
         "indicator_tests": [
           { "policy": { "NetworkPredictionOptions": 2 } }
@@ -143,7 +141,7 @@
       { "pref": "spdy.disabled" }
     ]
   },
-  
+
   "QuicAllowed": {
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "QuicAllowed": true }
@@ -590,7 +588,7 @@
   },
 
   "AuthSchemes": {
-    "os": ["win", "linux", "mac", "chromeos"],
+    "os": ["win", "linux", "mac", "chromeos", "android"],
     "test_policy": { "AuthSchemes": "AuthSchemes" },
     "pref_mappings": [
       { "pref": "auth.schemes",
@@ -600,7 +598,7 @@
   },
 
   "DisableAuthNegotiateCnameLookup": {
-    "os": ["win", "linux", "mac", "chromeos"],
+    "os": ["win", "linux", "mac", "chromeos", "android"],
     "test_policy": { "DisableAuthNegotiateCnameLookup": true },
     "pref_mappings": [
       { "pref": "auth.disable_negotiate_cname_lookup",
@@ -620,7 +618,7 @@
   },
 
   "AuthServerWhitelist": {
-    "os": ["win", "linux", "mac", "chromeos"],
+    "os": ["win", "linux", "mac", "chromeos", "android"],
     "test_policy": { "AuthServerWhitelist": "localhost" },
     "pref_mappings": [
       { "pref": "auth.server_whitelist",
@@ -630,7 +628,7 @@
   },
 
   "AuthNegotiateDelegateWhitelist": {
-    "os": ["win", "linux", "mac", "chromeos"],
+    "os": ["win", "linux", "mac", "chromeos", "android"],
     "test_policy": { "AuthNegotiateDelegateWhitelist": "localhost" },
     "pref_mappings": [
       { "pref": "auth.negotiate_delegate_whitelist",
@@ -644,6 +642,16 @@
     "test_policy": { "GSSAPILibraryName": "libwhatever.so" },
     "pref_mappings": [
       { "pref": "auth.gssapi_library_name",
+        "local_state": true
+      }
+    ]
+  },
+
+  "AuthAndroidNegotiateAccountType": {
+    "os": ["android"],
+    "test_policy": { "AuthAndroidNegotiateAccountType": "com.example.spnego" },
+    "pref_mappings": [
+      { "pref": "auth.android_negotiate_account_type",
         "local_state": true
       }
     ]
@@ -940,7 +948,7 @@
           { "policy": { "DefaultCookiesSetting": 2 },
             "value": "block"},
           { "policy": { "DefaultCookiesSetting": 4 },
-            "value": "session"}
+            "value": "session_only"}
         ]
       }
     ],
@@ -976,6 +984,24 @@
           { "policy": { "DefaultJavaScriptSetting": 1 },
             "value": "allow"},
           { "policy": { "DefaultJavaScriptSetting": 2 },
+            "value": "block"}
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "DefaultKeygenSetting": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "DefaultKeygenSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.keygen",
+        "indicator_selector": "[content-setting=keygen]",
+        "indicator_tests": [
+          { "policy": { "DefaultKeygenSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultKeygenSetting": 2 },
             "value": "block"}
         ]
       }
@@ -1065,7 +1091,7 @@
     "test_policy": { "DefaultMediaStreamSetting": 2 },
     "pref_mappings": [
       { "pref": "profile.managed_default_content_settings.media_stream",
-        "indicator_selector": "[content-setting=media-stream]",
+        "indicator_selector": "[content-setting=media-stream-mic],[content-setting=media-stream-camera]",
         "indicator_tests": [
           { "policy": { "DefaultMediaStreamSetting": 2 },
             "value": "block"
@@ -1080,14 +1106,64 @@
     "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
   },
 
+  "DefaultMediaStreamSetting.OverriddenByAudioCaptureAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultMediaStreamSetting": 3,
+                     "AudioCaptureAllowed": false },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.media_stream",
+        "indicator_selector": "[content-setting=media-stream-mic]",
+        "indicator_tests": [
+          { "policy": { "AudioCaptureAllowed": false },
+            "value": "block"
+          },
+          { "policy": { "AudioCaptureAllowed": true,
+                        "DefaultMediaStreamSetting": 2 },
+            "value": "block"
+          },
+          { "policy": { "AudioCaptureAllowed": true,
+                        "DefaultMediaStreamSetting": 3 },
+            "value": "ask"
+          }
+        ]
+      }
+    ]
+  },
+
+  "DefaultMediaStreamSetting.OverriddenByVideoCaptureAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultMediaStreamSetting": 3,
+                     "VideoCaptureAllowed": false },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.media_stream",
+        "indicator_selector": "[content-setting=media-stream-camera]",
+        "indicator_tests": [
+          { "policy": { "VideoCaptureAllowed": false },
+            "value": "block"
+          },
+          { "policy": { "VideoCaptureAllowed": true,
+                        "DefaultMediaStreamSetting": 2 },
+            "value": "block"
+          },
+          { "policy": { "VideoCaptureAllowed": true,
+                        "DefaultMediaStreamSetting": 3 },
+            "value": "ask"
+          }
+        ]
+      }
+    ]
+  },
+
   "AudioCaptureAllowed": {
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "AudioCaptureAllowed": false },
     "pref_mappings": [
       { "pref": "hardware.audio_capture_enabled",
-        "indicator_selector": "#media-indicator",
+        "indicator_selector": "[content-setting=media-stream-mic][value=block]",
         "indicator_tests": [
-          { "policy": { "AudioCaptureAllowed": false } }
+          { "policy": { "AudioCaptureAllowed": false },
+            "value": "block"
+          }
         ]
       }
     ]
@@ -1098,7 +1174,11 @@
     "test_policy": { "AudioCaptureAllowedUrls": ["[*.]google.com"] },
     "pref_mappings": [
       {
-        "pref": "hardware.audio_capture_allowed_urls"
+        "pref": "hardware.audio_capture_allowed_urls",
+        "indicator_selector": "[content-exception=media-stream-mic]",
+        "indicator_tests": [
+          { "policy": { "AudioCaptureAllowedUrls": ["[*.]google.com"] } }
+        ]
       }
     ]
   },
@@ -1108,9 +1188,11 @@
     "test_policy": { "VideoCaptureAllowed": false },
     "pref_mappings": [
       { "pref": "hardware.video_capture_enabled",
-        "indicator_selector": "#media-indicator",
+        "indicator_selector": "[content-setting=media-stream-camera][value=block]",
         "indicator_tests": [
-          { "policy": { "VideoCaptureAllowed": false } }
+          { "policy": { "VideoCaptureAllowed": false },
+            "value": "block"
+          }
         ]
       }
     ]
@@ -1121,7 +1203,11 @@
     "test_policy": { "VideoCaptureAllowedUrls": ["[*.]google.com"] },
     "pref_mappings": [
       {
-        "pref": "hardware.video_capture_allowed_urls"
+        "pref": "hardware.video_capture_allowed_urls",
+        "indicator_selector": "[content-exception=media-stream-camera]",
+        "indicator_tests": [
+          { "policy": { "VideoCaptureAllowedUrls": ["[*.]google.com"] } }
+        ]
       }
     ]
   },
@@ -1241,6 +1327,38 @@
         "indicator_selector": "[content-exception=javascript]",
         "indicator_tests": [
           { "policy": { "JavaScriptBlockedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "KeygenAllowedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "KeygenAllowedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_keygen_allowed_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=keygen]').click();",
+        "indicator_selector": "[content-exception=keygen]",
+        "indicator_tests": [
+          { "policy": { "KeygenAllowedForUrls": ["[*.]google.com"] } }
+        ]
+      }
+    ],
+
+    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "KeygenBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "KeygenBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_keygen_blocked_for_urls",
+        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=keygen]').click();",
+        "indicator_selector": "[content-exception=keygen]",
+        "indicator_tests": [
+          { "policy": { "KeygenBlockedForUrls": ["[*.]google.com"] } }
         ]
       }
     ],
@@ -1488,19 +1606,6 @@
     ]
   },
 
-  "ImportNotes": {
-    "os": ["win", "mac", "linux"],
-    "can_be_recommended": true,
-    "test_policy": { "ImportNotes": false },
-    "pref_mappings": [
-      { "pref": "import_notes",
-        "indicator_tests": [
-          { "policy": { "ImportNotes": false } }
-        ]
-      }
-    ]
-  },
-
   "ImportAutofillFormData": {
     "os": ["win", "mac", "linux"],
     "can_be_recommended": true,
@@ -1560,6 +1665,16 @@
     "test_policy": { "DisablePrintPreview": false },
     "pref_mappings": [
       { "pref": "printing.print_preview_disabled" }
+    ]
+  },
+
+  "DefaultPrinterSelection": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": {
+      "DefaultPrinterSelection": "{ 'kind': 'local', 'namePattern': '.*' }"
+    },
+    "pref_mappings": [
+      { "pref": "printing.default_destination_selection_rules" }
     ]
   },
 
@@ -1735,6 +1850,16 @@
     "pref_mappings": []
   },
 
+  "RC4Enabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "RC4Enabled": true },
+    "pref_mappings": [
+      { "pref": "ssl.rc4_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
   "WelcomePageOnOSUpgradeEnabled": {
     "os": ["win"],
     "test_policy": { "WelcomePageOnOSUpgradeEnabled": false },
@@ -1812,7 +1937,7 @@
     "can_be_recommended": true,
     "test_policy": { "PinnedLauncherApps": [] },
     "pref_mappings": [
-      { "pref": "pinned_launcher_apps" }
+      { "pref": "policy_pinned_launcher_apps" }
     ]
   },
 
@@ -2263,7 +2388,38 @@
     ]
   },
 
+  "AllowDinosaurEasterEgg": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AllowDinosaurEasterEgg": true },
+    "pref_mappings": [
+      { "pref": "allow_dinosaur_easter_egg"}
+    ]
+  },
+
   "KeyPermissions": {
+  },
+
+  "HardwareAccelerationModeEnabled": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "HardwareAccelerationModeEnabled": true },
+    "pref_mappings": [
+      { "pref": "hardware_acceleration_mode.enabled",
+        "local_state": true,
+        "indicator_tests": [
+          { "policy": { "HardwareAccelerationModeEnabled": true } },
+          { "policy": { "HardwareAccelerationModeEnabled": false } }
+        ]
+      }
+    ]
+  },
+
+  "UnifiedDesktopEnabledByDefault": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "UnifiedDesktopEnabledByDefault": true },
+    "pref_mappings": [
+      { "pref": "settings.display.unified_desktop_enabled_by_default" }
+    ]
   },
 
   "----- Chrome OS device policies ---------------------------------------": {},
@@ -2275,6 +2431,12 @@
       { "pref": "policy.device_refresh_rate",
         "local_state": true }
     ]
+  },
+
+  "DisplayRotationDefault": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "DisplayRotationDefault": 1 }
   },
 
   "ChromeOsReleaseChannel": {
@@ -2290,6 +2452,9 @@
   },
 
   "HeartbeatFrequency": {
+  },
+
+  "LogUploadEnabled": {
   },
 
   "ReportDeviceVersionInfo": {
@@ -2459,6 +2624,9 @@
   },
 
   "SupervisedUserCreationEnabled": {
+  },
+
+  "SupervisedUserContentProviderEnabled": {
   },
 
   "AutoCleanUpStrategy": {

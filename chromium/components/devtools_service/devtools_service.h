@@ -5,8 +5,11 @@
 #ifndef COMPONENTS_DEVTOOLS_SERVICE_DEVTOOLS_SERVICE_H_
 #define COMPONENTS_DEVTOOLS_SERVICE_DEVTOOLS_SERVICE_H_
 
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "components/devtools_service/devtools_registry_impl.h"
 #include "components/devtools_service/public/interfaces/devtools_service.mojom.h"
 #include "mojo/common/weak_binding_set.h"
 
@@ -17,7 +20,6 @@ class ApplicationImpl;
 namespace devtools_service {
 
 class DevToolsHttpServer;
-class DevToolsRegistryImpl;
 
 // DevToolsService is the central control. It manages the communication with
 // DevTools agents (e.g., Web page renderers). It also starts an HTTP server to
@@ -33,10 +35,7 @@ class DevToolsService : public DevToolsCoordinator {
 
   mojo::ApplicationImpl* application() { return application_; }
 
-  bool IsInitialized() const { return !!http_server_; }
-
-  // Non-null if initialized.
-  DevToolsRegistryImpl* registry() { return registry_.get(); }
+  DevToolsRegistryImpl* registry() { return &registry_; }
 
  private:
   // DevToolsCoordinator implementation.
@@ -48,7 +47,7 @@ class DevToolsService : public DevToolsCoordinator {
   mojo::WeakBindingSet<DevToolsCoordinator> coordinator_bindings_;
 
   scoped_ptr<DevToolsHttpServer> http_server_;
-  scoped_ptr<DevToolsRegistryImpl> registry_;
+  DevToolsRegistryImpl registry_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsService);
 };

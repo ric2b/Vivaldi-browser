@@ -4,6 +4,9 @@
 
 #include "remoting/protocol/channel_socket_adapter.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -33,7 +36,6 @@ class MockTransportChannel : public cricket::TransportChannel {
  public:
   MockTransportChannel() : cricket::TransportChannel(std::string(), 0) {
     set_writable(true);
-    set_readable(true);
   }
 
   MOCK_METHOD4(SendPacket, int(const char* data,
@@ -49,15 +51,17 @@ class MockTransportChannel : public cricket::TransportChannel {
   MOCK_METHOD1(SetSrtpCiphers, bool(const std::vector<std::string>& ciphers));
   MOCK_METHOD1(GetSrtpCipher, bool(std::string* cipher));
   MOCK_METHOD1(GetSslCipher, bool(std::string* cipher));
-  MOCK_CONST_METHOD1(GetLocalIdentity, bool(rtc::SSLIdentity** identity));
-  MOCK_CONST_METHOD1(GetRemoteCertificate,
+  MOCK_CONST_METHOD0(GetLocalCertificate,
+                     rtc::scoped_refptr<rtc::RTCCertificate>());
+  MOCK_CONST_METHOD1(GetRemoteSSLCertificate,
                      bool(rtc::SSLCertificate** cert));
-  MOCK_METHOD6(ExportKeyingMaterial, bool(const std::string& label,
-                                          const uint8* context,
-                                          size_t context_len,
-                                          bool use_context,
-                                          uint8* result,
-                                          size_t result_len));
+  MOCK_METHOD6(ExportKeyingMaterial,
+               bool(const std::string& label,
+                    const uint8_t* context,
+                    size_t context_len,
+                    bool use_context,
+                    uint8_t* result,
+                    size_t result_len));
 };
 
 class TransportChannelSocketAdapterTest : public testing::Test {
@@ -88,7 +92,7 @@ class TransportChannelSocketAdapterTest : public testing::Test {
 TEST_F(TransportChannelSocketAdapterTest, Read) {
   scoped_refptr<IOBuffer> buffer(new IOBuffer(kBufferSize));
 
-  int result = target_->Read(buffer.get(), kBufferSize, callback_);
+  int result = target_->Recv(buffer.get(), kBufferSize, callback_);
   ASSERT_EQ(net::ERR_IO_PENDING, result);
 
   channel_.SignalReadPacket(&channel_, kTestData, kTestDataSize,
@@ -100,30 +104,30 @@ TEST_F(TransportChannelSocketAdapterTest, Read) {
 TEST_F(TransportChannelSocketAdapterTest, ReadClose) {
   scoped_refptr<IOBuffer> buffer(new IOBuffer(kBufferSize));
 
-  int result = target_->Read(buffer.get(), kBufferSize, callback_);
+  int result = target_->Recv(buffer.get(), kBufferSize, callback_);
   ASSERT_EQ(net::ERR_IO_PENDING, result);
 
   target_->Close(kTestError);
   EXPECT_EQ(kTestError, callback_result_);
 
-  // All Read() calls after Close() should return the error.
-  EXPECT_EQ(kTestError, target_->Read(buffer.get(), kBufferSize, callback_));
+  // All Recv() calls after Close() should return the error.
+  EXPECT_EQ(kTestError, target_->Recv(buffer.get(), kBufferSize, callback_));
 }
 
-// Verify that Write sends the packet and returns correct result.
-TEST_F(TransportChannelSocketAdapterTest, Write) {
+// Verify that Send sends the packet and returns correct result.
+TEST_F(TransportChannelSocketAdapterTest, Send) {
   scoped_refptr<IOBuffer> buffer(new IOBuffer(kTestDataSize));
 
   EXPECT_CALL(channel_, SendPacket(buffer->data(), kTestDataSize, _, 0))
       .WillOnce(Return(kTestDataSize));
 
-  int result = target_->Write(buffer.get(), kTestDataSize, callback_);
+  int result = target_->Send(buffer.get(), kTestDataSize, callback_);
   EXPECT_EQ(kTestDataSize, result);
 }
 
-// Verify that the message is still sent if Write() is called while
+// Verify that the message is still sent if Send() is called while
 // socket is not open yet. The result is the packet is lost.
-TEST_F(TransportChannelSocketAdapterTest, WritePending) {
+TEST_F(TransportChannelSocketAdapterTest, SendPending) {
   scoped_refptr<IOBuffer> buffer(new IOBuffer(kTestDataSize));
 
   EXPECT_CALL(channel_, SendPacket(buffer->data(), kTestDataSize, _, 0))
@@ -133,7 +137,7 @@ TEST_F(TransportChannelSocketAdapterTest, WritePending) {
   EXPECT_CALL(channel_, GetError())
       .WillOnce(Return(EWOULDBLOCK));
 
-  int result = target_->Write(buffer.get(), kTestDataSize, callback_);
+  int result = target_->Send(buffer.get(), kTestDataSize, callback_);
   ASSERT_EQ(net::OK, result);
 }
 

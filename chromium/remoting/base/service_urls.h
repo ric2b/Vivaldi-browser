@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 
 namespace remoting {
@@ -37,7 +37,7 @@ class ServiceUrls {
   const std::string& gcd_jid() const;
 
  private:
-  friend struct DefaultSingletonTraits<ServiceUrls>;
+  friend struct base::DefaultSingletonTraits<ServiceUrls>;
 
   ServiceUrls();
   virtual ~ServiceUrls();

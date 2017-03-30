@@ -17,17 +17,16 @@ import android.support.v7.app.MediaRouteChooserDialogFragment;
 import android.support.v7.app.MediaRouteControllerDialogFragment;
 import android.support.v7.app.MediaRouteDialogFactory;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.google.android.gms.cast.CastMediaControlIntent;
 
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.CommandLine;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.media.remote.MediaRouteController.MediaStateListener;
 import org.chromium.chrome.browser.media.remote.RemoteVideoInfo.PlayerState;
+import org.chromium.ui.widget.Toast;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -68,13 +67,6 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
     private RemoteMediaPlayerController() {
         mChromeVideoActivity = new WeakReference<Activity>(null);
         mMediaRouteControllers = new ArrayList<MediaRouteController>();
-    }
-
-    /**
-     * @return Whether the remote playback is enabled.
-     */
-    public static boolean isRemotePlaybackEnabled() {
-        return !CommandLine.getInstance().hasSwitch(ChromeSwitches.DISABLE_CAST);
     }
 
     /**
@@ -203,8 +195,7 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
 
         onStateReset(controller);
         if (controller.shouldResetState(player)) {
-            controller.setMediaStateListener(player);
-            showMediaRouteDialog(controller, currentActivity);
+            showMediaRouteDialog(player, controller, currentActivity);
         }
 
     }
@@ -222,18 +213,19 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
         if (mCurrentRouteController == null) return;
         if (mCurrentRouteController.getMediaStateListener() != player) return;
 
-        showMediaRouteControlDialog(mCurrentRouteController,
-                ApplicationStatus.getLastTrackedFocusedActivity());
+        showMediaRouteControlDialog(ApplicationStatus.getLastTrackedFocusedActivity());
     }
 
-    private void showMediaRouteDialog(MediaRouteController controller, Activity activity) {
+    private void showMediaRouteDialog(MediaStateListener player, MediaRouteController controller,
+            Activity activity) {
 
         FragmentManager fm = ((FragmentActivity) activity).getSupportFragmentManager();
         if (fm == null) {
             throw new IllegalStateException("The activity must be a subclass of FragmentActivity");
         }
 
-        MediaRouteDialogFactory factory = new ChromeMediaRouteDialogFactory();
+        MediaRouteDialogFactory factory = new MediaRouteChooserDialogFactory(player, controller,
+                activity);
 
         if (fm.findFragmentByTag(
                 "android.support.v7.mediarouter:MediaRouteChooserDialogFragment") != null) {
@@ -246,13 +238,13 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
         f.show(fm, "android.support.v7.mediarouter:MediaRouteChooserDialogFragment");
     }
 
-    private void showMediaRouteControlDialog(MediaRouteController controller, Activity activity) {
+    private void showMediaRouteControlDialog(Activity activity) {
 
         FragmentManager fm = ((FragmentActivity) activity).getSupportFragmentManager();
         if (fm == null) {
             throw new IllegalStateException("The activity must be a subclass of FragmentActivity");
         }
-        MediaRouteDialogFactory factory = new ChromeMediaRouteDialogFactory();
+        MediaRouteDialogFactory factory = new MediaRouteControllerDialogFactory();
 
         if (fm.findFragmentByTag(
                 "android.support.v7.mediarouter:MediaRouteControllerDialogFragment") != null) {
@@ -278,41 +270,6 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
         createLockScreen();
         TransportControl lockScreen = getLockScreen();
         if (lockScreen != null) lockScreen.show(initialState);
-    }
-
-    /**
-     * Returns the current remote playback position.
-     *
-     * @return The current position of the remote playback in milliseconds.
-     */
-    public int getPosition() {
-        if (mCurrentRouteController == null) return -1;
-        return mCurrentRouteController.getPosition();
-    }
-
-    /**
-     * @return The stream duration in milliseconds.
-     */
-    public int getDuration() {
-        if (mCurrentRouteController == null) return 0;
-        return mCurrentRouteController.getDuration();
-    }
-
-    /**
-     * @return Whether the video is currently being played.
-     */
-    public boolean isPlaying() {
-        return mCurrentRouteController != null && mCurrentRouteController.isPlaying();
-    }
-
-    /**
-     * Initiates a seek request for the remote playback device to the specified position.
-     *
-     * @param msec The position to seek to, in milliseconds.
-     */
-    public void seekTo(int msec) {
-        if (mCurrentRouteController == null) return;
-        mCurrentRouteController.seekTo(msec);
     }
 
     /**
@@ -383,10 +340,10 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
     }
 
     @Override
-    public void onDurationUpdated(int durationMillis) {}
+    public void onDurationUpdated(long durationMillis) {}
 
     @Override
-    public void onPositionChanged(int positionMillis) {}
+    public void onPositionChanged(long positionMillis) {}
 
     @Override
     public void onTitleChanged(String title) {}

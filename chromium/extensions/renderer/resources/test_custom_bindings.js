@@ -11,11 +11,12 @@ var environmentSpecificBindings = require('test_environment_specific_bindings');
 var GetExtensionAPIDefinitionsForTest =
     requireNative('apiDefinitions').GetExtensionAPIDefinitionsForTest;
 var GetAPIFeatures = requireNative('test_features').GetAPIFeatures;
+var natives = requireNative('test_native_handler');
 var uncaughtExceptionHandler = require('uncaught_exception_handler');
 var userGestures = requireNative('user_gestures');
 
-var RunWithNativesEnabledModuleSystem =
-    requireNative('v8_context').RunWithNativesEnabledModuleSystem;
+var RunWithNativesEnabled = requireNative('v8_context').RunWithNativesEnabled;
+var GetModuleSystem = requireNative('v8_context').GetModuleSystem;
 
 binding.registerCustomHook(function(api) {
   var chromeTest = api.compiledApi;
@@ -122,8 +123,12 @@ binding.registerCustomHook(function(api) {
     testDone();
   });
 
-  apiFunctions.setHandleRequest('runWithModuleSystem', function(callback) {
-    RunWithNativesEnabledModuleSystem(callback);
+  apiFunctions.setHandleRequest('runWithNativesEnabled', function(callback) {
+    RunWithNativesEnabled(callback);
+  });
+
+  apiFunctions.setHandleRequest('getModuleSystem', function(context) {
+    return GetModuleSystem(context);
   });
 
   apiFunctions.setHandleRequest('assertTrue', function(test, message) {
@@ -349,7 +354,11 @@ binding.registerCustomHook(function(api) {
     uncaughtExceptionHandler.setHandler(callback);
   });
 
+  apiFunctions.setHandleRequest('getWakeEventPage', function() {
+    return natives.GetWakeEventPage();
+  });
+
   environmentSpecificBindings.registerHooks(api);
 });
 
-exports.binding = binding.generate();
+exports.$set('binding', binding.generate());

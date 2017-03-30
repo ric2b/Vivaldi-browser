@@ -4,6 +4,8 @@
 
 #include "content/renderer/media/media_stream_dispatcher.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "content/common/media/media_stream_messages.h"
 #include "content/renderer/media/media_stream_dispatcher_eventhandler.h"
@@ -71,14 +73,14 @@ MediaStreamDispatcher::~MediaStreamDispatcher() {}
 void MediaStreamDispatcher::GenerateStream(
     int request_id,
     const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
-    const StreamOptions& components,
+    const StreamControls& controls,
     const GURL& security_origin) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "MediaStreamDispatcher::GenerateStream(" << request_id << ")";
 
   requests_.push_back(Request(event_handler, request_id, next_ipc_id_));
   Send(new MediaStreamHostMsg_GenerateStream(
-      routing_id(), next_ipc_id_++, components, security_origin,
+      routing_id(), next_ipc_id_++, controls, security_origin,
       blink::WebUserGestureIndicator::isProcessingUserGesture()));
 }
 
@@ -401,21 +403,6 @@ int MediaStreamDispatcher::video_session_id(const std::string& label,
     return StreamDeviceInfo::kNoId;
   }
   return it->second.video_array[index].session_id;
-}
-
-bool MediaStreamDispatcher::IsAudioDuckingActive() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  LabelStreamMap::const_iterator stream_it = label_stream_map_.begin();
-  while (stream_it != label_stream_map_.end()) {
-    const StreamDeviceInfoArray& audio_array = stream_it->second.audio_array;
-    for (StreamDeviceInfoArray::const_iterator device_it = audio_array.begin();
-         device_it != audio_array.end(); ++device_it) {
-      if (device_it->device.input.effects & media::AudioParameters::DUCKING)
-        return true;
-    }
-    ++stream_it;
-  }
-  return false;
 }
 
 }  // namespace content

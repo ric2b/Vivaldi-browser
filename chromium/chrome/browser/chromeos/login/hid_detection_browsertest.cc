@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -43,15 +44,11 @@ void SetUpBluetoothMock(
 
 namespace chromeos {
 
-// Boolean parameter is used to run this test for webview (true) and for
-// iframe (false) GAIA sign in.
-class HidDetectionTest : public OobeBaseTest,
-                         public testing::WithParamInterface<bool> {
+class HidDetectionTest : public OobeBaseTest {
  public:
   typedef device::InputServiceLinux::InputDeviceInfo InputDeviceInfo;
 
   HidDetectionTest() : weak_ptr_factory_(this) {
-    set_use_webview(GetParam());
     InputServiceProxy::SetThreadIdForTesting(content::BrowserThread::UI);
     HidDetectionTest::InitInputService();
   }
@@ -116,17 +113,12 @@ class HidDetectionSkipTest : public HidDetectionTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_P(HidDetectionTest, NoDevicesConnected) {
+IN_PROC_BROWSER_TEST_F(HidDetectionTest, NoDevicesConnected) {
   OobeScreenWaiter(OobeDisplay::SCREEN_OOBE_HID_DETECTION).Wait();
 }
 
-IN_PROC_BROWSER_TEST_P(HidDetectionSkipTest, BothDevicesPreConnected) {
+IN_PROC_BROWSER_TEST_F(HidDetectionSkipTest, BothDevicesPreConnected) {
   OobeScreenWaiter(OobeDisplay::SCREEN_OOBE_NETWORK).Wait();
 }
-
-INSTANTIATE_TEST_CASE_P(HidDetectionSuite, HidDetectionTest, testing::Bool());
-INSTANTIATE_TEST_CASE_P(HidDetectionSkipSuite,
-                        HidDetectionSkipTest,
-                        testing::Bool());
 
 }  // namespace chromeos

@@ -5,12 +5,17 @@
 #ifndef MEDIA_BASE_FAKE_AUDIO_RENDERER_SINK_H_
 #define MEDIA_BASE_FAKE_AUDIO_RENDERER_SINK_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "media/audio/audio_parameters.h"
 #include "media/base/audio_renderer_sink.h"
 
 namespace media {
+
+class FakeOutputDevice;
 
 class FakeAudioRendererSink : public AudioRendererSink {
  public:
@@ -32,9 +37,7 @@ class FakeAudioRendererSink : public AudioRendererSink {
   void Pause() override;
   void Play() override;
   bool SetVolume(double volume) override;
-  void SwitchOutputDevice(const std::string& device_id,
-                          const GURL& security_origin,
-                          const SwitchOutputDeviceCB& callback) override;
+  OutputDevice* GetOutputDevice() override;
 
   // Attempts to call Render() on the callback provided to
   // Initialize() with |dest| and |audio_delay_milliseconds|.
@@ -43,7 +46,8 @@ class FakeAudioRendererSink : public AudioRendererSink {
   // Returns false if this object is in a state where calling Render()
   // should not occur. (i.e., in the kPaused or kStopped state.) The
   // value of |frames_written| is undefined if false is returned.
-  bool Render(AudioBus* dest, int audio_delay_milliseconds,
+  bool Render(AudioBus* dest,
+              uint32_t audio_delay_milliseconds,
               int* frames_written);
   void OnRenderError();
 
@@ -57,6 +61,7 @@ class FakeAudioRendererSink : public AudioRendererSink {
 
   State state_;
   RenderCallback* callback_;
+  scoped_ptr<FakeOutputDevice> output_device_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeAudioRendererSink);
 };

@@ -4,11 +4,14 @@
 
 #include "chromeos/network/shill_property_handler.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/values.h"
@@ -499,6 +502,36 @@ TEST_F(ShillPropertyHandlerTest, ShillPropertyHandlerServiceList) {
       shill::kServiceCompleteListProperty)[kTestServicePath2]);
   EXPECT_EQ(1, listener_->property_updates(
       shill::kServiceCompleteListProperty)[kTestServicePath2]);
+}
+
+TEST_F(ShillPropertyHandlerTest, ProhibitedTechnologies) {
+  std::vector<std::string> prohibited_technologies;
+  prohibited_technologies.push_back(shill::kTypeEthernet);
+  EXPECT_TRUE(
+      shill_property_handler_->IsTechnologyEnabled(shill::kTypeEthernet));
+  shill_property_handler_->SetProhibitedTechnologies(
+      prohibited_technologies, network_handler::ErrorCallback());
+  message_loop_.RunUntilIdle();
+  // Disabled
+  EXPECT_FALSE(
+      shill_property_handler_->IsTechnologyEnabled(shill::kTypeEthernet));
+
+  // Can not enable it back
+  shill_property_handler_->SetTechnologyEnabled(
+      shill::kTypeEthernet, true, network_handler::ErrorCallback());
+  message_loop_.RunUntilIdle();
+  EXPECT_FALSE(
+      shill_property_handler_->IsTechnologyEnabled(shill::kTypeEthernet));
+
+  // Can enable it back after policy changes
+  prohibited_technologies.clear();
+  shill_property_handler_->SetProhibitedTechnologies(
+      prohibited_technologies, network_handler::ErrorCallback());
+  shill_property_handler_->SetTechnologyEnabled(
+      shill::kTypeEthernet, true, network_handler::ErrorCallback());
+  message_loop_.RunUntilIdle();
+  EXPECT_TRUE(
+      shill_property_handler_->IsTechnologyEnabled(shill::kTypeEthernet));
 }
 
 }  // namespace chromeos

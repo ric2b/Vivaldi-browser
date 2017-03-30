@@ -19,7 +19,7 @@ namespace remoting {
 namespace protocol {
 
 // ContentDescription used for chromoting sessions. It contains the information
-// from the content description stanza in the session intialization handshake.
+// from the content description stanza in the session initialization handshake.
 //
 // This class also provides a type abstraction so that the Chromotocol Session
 // interface does not need to depend on libjingle.
@@ -42,7 +42,8 @@ class ContentDescription {
   buzz::XmlElement* ToXml() const;
 
   static scoped_ptr<ContentDescription> ParseXml(
-      const buzz::XmlElement* element);
+      const buzz::XmlElement* element,
+      bool webrtc_transport);
 
  private:
   scoped_ptr<const CandidateSessionConfig> candidate_config_;

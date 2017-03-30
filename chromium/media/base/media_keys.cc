@@ -10,4 +10,17 @@ MediaKeys::MediaKeys() {}
 
 MediaKeys::~MediaKeys() {}
 
+CdmContext* MediaKeys::GetCdmContext() {
+  return nullptr;
+}
+
+void MediaKeys::DeleteOnCorrectThread() const {
+  delete this;
+}
+
+// static
+void MediaKeysTraits::Destruct(const MediaKeys* media_keys) {
+  media_keys->DeleteOnCorrectThread();
+}
+
 }  // namespace media

@@ -4,10 +4,14 @@
 
 #include "ui/views/corewm/tooltip_controller.h"
 
+#include <stddef.h>
+
+#include <utility>
 #include <vector>
 
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -28,7 +32,12 @@ namespace {
 
 const int kTooltipTimeoutMs = 500;
 const int kDefaultTooltipShownTimeoutMs = 10000;
+#if defined(OS_WIN)
+// Drawing a long word in tooltip is very slow on Windows. crbug.com/513693
+const size_t kMaxTooltipLength = 1024;
+#else
 const size_t kMaxTooltipLength = 2048;
+#endif
 
 // Returns true if |target| is a valid window to get the tooltip from.
 // |event_target| is the original target from the event and |target| the window
@@ -119,7 +128,7 @@ TooltipController::TooltipController(scoped_ptr<Tooltip> tooltip)
     : tooltip_window_(NULL),
       tooltip_id_(NULL),
       tooltip_window_at_mouse_press_(NULL),
-      tooltip_(tooltip.Pass()),
+      tooltip_(std::move(tooltip)),
       tooltips_enabled_(true) {
   tooltip_timer_.Start(FROM_HERE,
       base::TimeDelta::FromMilliseconds(kTooltipTimeoutMs),

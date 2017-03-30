@@ -4,8 +4,11 @@
 
 #include "chrome/browser/task_manager/web_contents_resource_provider.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prerender/prerender_manager.h"
@@ -324,8 +327,7 @@ class TaskManagerWebContentsEntry : public content::WebContentsObserver,
 WebContentsResourceProvider::WebContentsResourceProvider(
     TaskManager* task_manager,
     scoped_ptr<WebContentsInformation> info)
-    : task_manager_(task_manager), info_(info.Pass()) {
-}
+    : task_manager_(task_manager), info_(std::move(info)) {}
 
 WebContentsResourceProvider::~WebContentsResourceProvider() {}
 

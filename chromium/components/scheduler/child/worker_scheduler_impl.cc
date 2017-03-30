@@ -7,20 +7,19 @@
 #include "base/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "components/scheduler/child/nestable_single_thread_task_runner.h"
+#include "components/scheduler/base/task_queue.h"
+#include "components/scheduler/child/scheduler_tqm_delegate.h"
 
 namespace scheduler {
 
 WorkerSchedulerImpl::WorkerSchedulerImpl(
-    scoped_refptr<NestableSingleThreadTaskRunner> main_task_runner)
+    scoped_refptr<SchedulerTqmDelegate> main_task_runner)
     : helper_(main_task_runner,
               "worker.scheduler",
               TRACE_DISABLED_BY_DEFAULT("worker.scheduler"),
-              TRACE_DISABLED_BY_DEFAULT("worker.scheduler.debug"),
-              TASK_QUEUE_COUNT),
+              TRACE_DISABLED_BY_DEFAULT("worker.scheduler.debug")),
       idle_helper_(&helper_,
                    this,
-                   IDLE_TASK_QUEUE,
                    "worker.scheduler",
                    TRACE_DISABLED_BY_DEFAULT("worker.scheduler"),
                    "WorkerSchedulerIdlePeriod",
@@ -40,7 +39,8 @@ void WorkerSchedulerImpl::Init() {
   idle_helper_.EnableLongIdlePeriod();
 }
 
-scoped_refptr<TaskQueue> WorkerSchedulerImpl::DefaultTaskRunner() {
+scoped_refptr<base::SingleThreadTaskRunner>
+WorkerSchedulerImpl::DefaultTaskRunner() {
   DCHECK(initialized_);
   return helper_.DefaultTaskRunner();
 }

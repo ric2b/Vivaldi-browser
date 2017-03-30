@@ -5,6 +5,7 @@
 #include "extensions/browser/api/declarative_webrequest/webrequest_action.h"
 
 #include <limits>
+#include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -27,7 +28,7 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/http/http_util.h"
 #include "net/url_request/url_request.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 using content::ResourceRequestInfo;
 
@@ -60,7 +61,7 @@ scoped_ptr<helpers::RequestCookie> ParseRequestCookie(
     result->name.reset(new std::string(tmp));
   if (dict->GetString(keys::kValueKey, &tmp))
     result->value.reset(new std::string(tmp));
-  return result.Pass();
+  return result;
 }
 
 void ParseResponseCookieImpl(const base::DictionaryValue* dict,
@@ -90,7 +91,7 @@ scoped_ptr<helpers::ResponseCookie> ParseResponseCookie(
     const base::DictionaryValue* dict) {
   scoped_ptr<helpers::ResponseCookie> result(new helpers::ResponseCookie);
   ParseResponseCookieImpl(dict, result.get());
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<helpers::FilterResponseCookie> ParseFilterResponseCookie(
@@ -107,7 +108,7 @@ scoped_ptr<helpers::FilterResponseCookie> ParseFilterResponseCookie(
     result->age_lower_bound.reset(new int(int_tmp));
   if (dict->GetBoolean(keys::kSessionCookieKey, &bool_tmp))
     result->session_cookie.reset(new bool(bool_tmp));
-  return result.Pass();
+  return result;
 }
 
 // Helper function for WebRequestActions that can be instantiated by just
@@ -159,7 +160,7 @@ scoped_refptr<const WebRequestAction> CreateRedirectRequestByRegExAction(
     return scoped_refptr<const WebRequestAction>(NULL);
   }
   return scoped_refptr<const WebRequestAction>(
-      new WebRequestRedirectByRegExAction(from_pattern.Pass(), to));
+      new WebRequestRedirectByRegExAction(std::move(from_pattern), to));
 }
 
 scoped_refptr<const WebRequestAction> CreateSetRequestHeaderAction(
@@ -698,7 +699,7 @@ WebRequestRedirectByRegExAction::WebRequestRedirectByRegExAction(
                        ACTION_REDIRECT_BY_REGEX_DOCUMENT,
                        std::numeric_limits<int>::min(),
                        STRATEGY_DEFAULT),
-      from_pattern_(from_pattern.Pass()),
+      from_pattern_(std::move(from_pattern)),
       to_pattern_(to_pattern.data(), to_pattern.size()) {}
 
 WebRequestRedirectByRegExAction::~WebRequestRedirectByRegExAction() {}
@@ -970,13 +971,8 @@ WebRequestRemoveResponseHeaderAction::CreateDelta(
   void* iter = NULL;
   std::string current_value;
   while (headers->EnumerateHeader(&iter, name_, &current_value)) {
-    if (has_value_ &&
-           (current_value.size() != value_.size() ||
-            !std::equal(current_value.begin(), current_value.end(),
-                        value_.begin(),
-                        base::CaseInsensitiveCompare<char>()))) {
+    if (has_value_ && !base::EqualsCaseInsensitiveASCII(current_value, value_))
       continue;
-    }
     result->deleted_response_headers.push_back(make_pair(name_, current_value));
   }
   return result;

@@ -18,7 +18,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
@@ -192,6 +192,9 @@ class DownloadItemView : public views::ButtonListener,
     return mode_ == DANGEROUS_MODE || mode_ == MALICIOUS_MODE;
   }
 
+  // Clears or shows the warning dialog as per the state of |model_|.
+  void ToggleWarningDialog();
+
   // Reverts from dangerous mode to normal download mode.
   void ClearWarningDialog();
 
@@ -232,6 +235,9 @@ class DownloadItemView : public views::ButtonListener,
   void AnimateStateTransition(State from, State to,
                               gfx::SlideAnimation* animation);
 
+  // Callback for |progress_timer_|.
+  void ProgressTimerFired();
+
   // The different images used for the background.
   BodyImageSet normal_body_image_set_;
   BodyImageSet hot_body_image_set_;
@@ -264,8 +270,13 @@ class DownloadItemView : public views::ButtonListener,
   // Mode of the download item view.
   Mode mode_;
 
-  // In degrees, for downloads with no known total size.
-  int progress_angle_;
+  // When download progress last began animating (pausing and resuming will
+  // update this). Used for downloads of unknown size.
+  base::TimeTicks progress_start_time_;
+
+  // Keeps the amount of time spent already animating. Used to keep track of
+  // total active time for downloads of unknown size.
+  base::TimeDelta previous_progress_elapsed_;
 
   // The left and right x coordinates of the drop-down button.
   int drop_down_x_left_;
@@ -303,7 +314,7 @@ class DownloadItemView : public views::ButtonListener,
   scoped_ptr<gfx::SlideAnimation> complete_animation_;
 
   // Progress animation
-  base::RepeatingTimer<DownloadItemView> progress_timer_;
+  base::RepeatingTimer progress_timer_;
 
   // Dangerous mode buttons.
   views::LabelButton* save_button_;

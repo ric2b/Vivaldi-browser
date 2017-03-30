@@ -5,12 +5,16 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FILE_SYSTEM_PROVIDER_PROVIDED_FILE_SYSTEM_INTERFACE_H_
 #define CHROME_BROWSER_CHROMEOS_FILE_SYSTEM_PROVIDER_PROVIDED_FILE_SYSTEM_INTERFACE_H_
 
+#include <stdint.h>
+
+#include <map>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -40,12 +44,14 @@ struct EntryMetadata {
   EntryMetadata();
   ~EntryMetadata();
 
-  bool is_directory;
-  std::string name;
-  int64 size;
-  base::Time modification_time;
-  std::string mime_type;
-  std::string thumbnail;
+  // All of the metadata fields are optional. All strings which are set, are
+  // non-empty.
+  scoped_ptr<bool> is_directory;
+  scoped_ptr<std::string> name;
+  scoped_ptr<int64_t> size;
+  scoped_ptr<base::Time> modification_time;
+  scoped_ptr<std::string> mime_type;
+  scoped_ptr<std::string> thumbnail;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EntryMetadata);
@@ -64,7 +70,7 @@ enum OpenFileMode { OPEN_FILE_MODE_READ, OPEN_FILE_MODE_WRITE };
 
 // Contains information about an opened file.
 struct OpenedFile {
-  OpenedFile(const base::FilePath& file_path, OpenFileMode& mode);
+  OpenedFile(const base::FilePath& file_path, OpenFileMode mode);
   OpenedFile();
   ~OpenedFile();
 
@@ -83,12 +89,19 @@ typedef std::map<int, OpenedFile> OpenedFiles;
 // with either a success or an error.
 class ProvidedFileSystemInterface {
  public:
-  // Extra fields to be fetched with metadata.
+  // Fields to be fetched with metadata.
   enum MetadataField {
-    METADATA_FIELD_DEFAULT = 0,
-    METADATA_FIELD_THUMBNAIL = 1 << 0
+    METADATA_FIELD_NONE = 0,
+    METADATA_FIELD_IS_DIRECTORY = 1 << 0,
+    METADATA_FIELD_NAME = 1 << 1,
+    METADATA_FIELD_SIZE = 1 << 2,
+    METADATA_FIELD_MODIFICATION_TIME = 1 << 3,
+    METADATA_FIELD_MIME_TYPE = 1 << 4,
+    METADATA_FIELD_THUMBNAIL = 1 << 5
   };
 
+  // Callback for OpenFile(). In case of an error, file_handle is equal to 0
+  // and result is set to an error code.
   typedef base::Callback<void(int file_handle, base::File::Error result)>
       OpenFileCallback;
 
@@ -119,14 +132,15 @@ class ProvidedFileSystemInterface {
                                     MetadataFieldMask fields,
                                     const GetMetadataCallback& callback) = 0;
 
-  // Requests list of actions for the passed |entry_path|. It can be either a
-  // file or a directory.
-  virtual AbortCallback GetActions(const base::FilePath& entry_path,
-                                   const GetActionsCallback& callback) = 0;
+  // Requests list of actions for the passed list of entries at |entry_paths|.
+  // They can be either files or directories.
+  virtual AbortCallback GetActions(
+      const std::vector<base::FilePath>& entry_paths,
+      const GetActionsCallback& callback) = 0;
 
-  // Executes the |action_id| action on the entry at |entry_path|.
+  // Executes the |action_id| action on the list of entries at |entry_paths|.
   virtual AbortCallback ExecuteAction(
-      const base::FilePath& entry_path,
+      const std::vector<base::FilePath>& entry_paths,
       const std::string& action_id,
       const storage::AsyncFileUtil::StatusCallback& callback) = 0;
 
@@ -137,7 +151,7 @@ class ProvidedFileSystemInterface {
       const storage::AsyncFileUtil::ReadDirectoryCallback& callback) = 0;
 
   // Requests opening a file at |file_path|. If the file doesn't exist, then the
-  // operation will fail.
+  // operation will fail. In case of any error, the returned file handle is 0.
   virtual AbortCallback OpenFile(const base::FilePath& file_path,
                                  OpenFileMode mode,
                                  const OpenFileCallback& callback) = 0;
@@ -154,7 +168,7 @@ class ProvidedFileSystemInterface {
   // return less only in case EOF is encountered.
   virtual AbortCallback ReadFile(int file_handle,
                                  net::IOBuffer* buffer,
-                                 int64 offset,
+                                 int64_t offset,
                                  int length,
                                  const ReadChunkReceivedCallback& callback) = 0;
 
@@ -196,14 +210,14 @@ class ProvidedFileSystemInterface {
   // Requests truncating a file to the desired length.
   virtual AbortCallback Truncate(
       const base::FilePath& file_path,
-      int64 length,
+      int64_t length,
       const storage::AsyncFileUtil::StatusCallback& callback) = 0;
 
   // Requests writing to a file previously opened with |file_handle|.
   virtual AbortCallback WriteFile(
       int file_handle,
       net::IOBuffer* buffer,
-      int64 offset,
+      int64_t offset,
       int length,
       const storage::AsyncFileUtil::StatusCallback& callback) = 0;
 

@@ -68,7 +68,7 @@ void DoParserErrorTest(const char* input, int err_line, int err_char) {
   }
 
   EXPECT_EQ(err_line, err.location().line_number());
-  EXPECT_EQ(err_char, err.location().char_offset());
+  EXPECT_EQ(err_char, err.location().column_number());
 }
 
 // Expects the tokenizer or parser to identify an error at the given line and
@@ -86,7 +86,7 @@ void DoExpressionErrorTest(const char* input, int err_line, int err_char) {
   }
 
   EXPECT_EQ(err_line, err.location().line_number());
-  EXPECT_EQ(err_char, err.location().char_offset());
+  EXPECT_EQ(err_char, err.location().column_number());
 }
 
 }  // namespace
@@ -181,6 +181,9 @@ TEST(Parser, UnaryOp) {
   DoExpressionPrintTest("!foo",
       "UNARY(!)\n"
       " IDENTIFIER(foo)\n");
+
+  // No contents for binary operator.
+  DoExpressionErrorTest("a = !", 1, 5);
 }
 
 TEST(Parser, List) {
@@ -215,6 +218,8 @@ TEST(Parser, Assignment) {
                     " BINARY(=)\n"
                     "  IDENTIFIER(a)\n"
                     "  LITERAL(2)\n");
+
+  DoExpressionErrorTest("a = ", 1, 3);
 }
 
 TEST(Parser, Accessor) {

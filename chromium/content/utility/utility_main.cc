@@ -7,6 +7,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/threading/platform_thread.h"
 #include "base/timer/hi_res_timer_manager.h"
+#include "build/build_config.h"
 #include "content/child/child_process.h"
 #include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/public/common/content_switches.h"
@@ -15,6 +16,7 @@
 #include "content/utility/utility_thread_impl.h"
 
 #if defined(OS_WIN)
+#include "base/rand_util.h"
 #include "sandbox/win/src/sandbox.h"
 #endif
 
@@ -52,6 +54,10 @@ int UtilityMain(const MainFunctionParams& parameters) {
     if (!LoadLibraryA("dbghelp.dll"))
       return false;
 #endif
+    char buffer;
+    // Ensure RtlGenRandom is warm before the token is lowered; otherwise,
+    // base::RandBytes() will CHECK fail when v8 is initialized.
+    base::RandBytes(&buffer, sizeof(buffer));
     target_services->LowerToken();
   }
 #endif

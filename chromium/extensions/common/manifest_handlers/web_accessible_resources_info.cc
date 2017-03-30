@@ -4,6 +4,8 @@
 
 #include "extensions/common/manifest_handlers/web_accessible_resources_info.h"
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -74,7 +76,7 @@ bool WebAccessibleResourcesHandler::Parse(Extension* extension,
     std::string relative_path;
     if (!list_value->GetString(i, &relative_path)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          errors::kInvalidWebAccessibleResource, base::IntToString(i));
+          errors::kInvalidWebAccessibleResource, base::SizeTToString(i));
       return false;
     }
     URLPattern pattern(URLPattern::SCHEME_EXTENSION);

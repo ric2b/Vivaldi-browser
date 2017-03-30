@@ -4,6 +4,8 @@
 
 #include "ash/wm/lock_window_state.h"
 
+#include <utility>
+
 #include "ash/display/display_manager.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
@@ -112,7 +114,7 @@ void LockWindowState::DetachState(wm::WindowState* window_state) {
 wm::WindowState* LockWindowState::SetLockWindowState(aura::Window* window) {
   scoped_ptr<wm::WindowState::State> lock_state(new LockWindowState(window));
   scoped_ptr<wm::WindowState::State> old_state(
-      wm::GetWindowState(window)->SetStateObject(lock_state.Pass()));
+      wm::GetWindowState(window)->SetStateObject(std::move(lock_state)));
   return wm::GetWindowState(window);
 }
 
@@ -190,7 +192,7 @@ void LockWindowState::UpdateBounds(wm::WindowState* window_state) {
     keyboard_bounds = keyboard_controller->current_keyboard_bounds();
   }
   gfx::Rect bounds =
-      ScreenUtil::GetShelfDisplayBoundsInScreen(window_state->window());
+      ScreenUtil::GetShelfDisplayBoundsInRoot(window_state->window());
 
   bounds.set_height(bounds.height() - keyboard_bounds.height());
 

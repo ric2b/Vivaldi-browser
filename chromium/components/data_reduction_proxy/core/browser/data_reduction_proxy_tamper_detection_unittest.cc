@@ -4,17 +4,23 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_tamper_detection.h"
 
-#include <string.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <map>
+#include <string>
 #include <vector>
 
 #include "base/base64.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/histogram_tester.h"
+#include "build/build_config.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers_test_utils.h"
 #include "net/http/http_response_headers.h"
@@ -34,8 +40,9 @@ std::string GetEncoded(const std::string& input) {
   base::MD5Digest digest;
   base::MD5Sum(input.c_str(), input.size(), &digest);
   std::string base64encoded;
-  base::Base64Encode(std::string((char*)digest.a, arraysize(digest.a)),
-                     &base64encoded);
+  base::Base64Encode(
+      std::string(reinterpret_cast<char*>(digest.a), arraysize(digest.a)),
+      &base64encoded);
   return base64encoded;
 }
 
@@ -92,9 +99,7 @@ void InitEnv() {
 
 namespace data_reduction_proxy {
 
-class DataReductionProxyTamperDetectionTest : public testing::Test {
-
-};
+using DataReductionProxyTamperDetectionTest = testing::Test;
 
 // Tests function ValidateChromeProxyHeader.
 TEST_F(DataReductionProxyTamperDetectionTest, ChromeProxy) {
@@ -467,8 +472,8 @@ TEST_F(DataReductionProxyTamperDetectionTest, ContentLength) {
   struct {
     std::string label;
     std::string received_fingerprint;
-    int64 actual_content_length;
-    int64 expected_original_content_length;
+    int64_t actual_content_length;
+    int64_t expected_original_content_length;
     bool expected_tampered_with;
   } test[] = {
     {
@@ -495,7 +500,7 @@ TEST_F(DataReductionProxyTamperDetectionTest, ContentLength) {
 
     DataReductionProxyTamperDetection tamper_detection(headers.get(), true, 0);
 
-    int64 original_content_length;
+    int64_t original_content_length;
     bool tampered = tamper_detection.ValidateContentLength(
         test[i].received_fingerprint,
         test[i].actual_content_length,
@@ -606,45 +611,35 @@ TEST_F(DataReductionProxyTamperDetectionTest, HistogramCount) {
       // Checks the correctness of histogram for Javascript
       {"HTTP/1.1 200 OK\n"
        "Content-Type: text/javascript\n",
-       "_JS",
-       -1,
-       ""},
+       "_JS", -1, ""},
       // Checks the correctness of histogram for CSS
       {"HTTP/1.1 200 OK\n"
        "Content-Type: text/css\n",
-       "_CSS",
-       -1,
-       ""},
+       "_CSS", -1, ""},
       // Checks the correctness of histogram for image
       {"HTTP/1.1 200 OK\n"
        "Content-Type: image/test\n",
-       "_Image",
-       1,
-       "_Image_0_10KB"},
+       "_Image", 1, "_Image_0_10KB"},
       // Checks the correctness of histogram for GIF
       {"HTTP/1.1 200 OK\n"
        "Content-Type: image/gif\n",
-       "_Image_GIF",
-       20 * 1024,
-       "_Image_10_100KB"},
+       "_Image_GIF", 20 * 1024, "_Image_10_100KB"},
       // Checks the correctness of histogram for JPG
       {"HTTP/1.1 200 OK\n"
        "Content-Type: image/jpeg\n",
-       "_Image_JPG",
-       200 * 1024,
-       "_Image_100_500KB"},
+       "_Image_JPG", 200 * 1024, "_Image_100_500KB"},
       // Checks the correctness of histogram for PNG
       {"HTTP/1.1 200 OK\n"
        "Content-Type: image/png\n",
-       "_Image_PNG",
-       600 * 1024,
-       "_Image_500KB"},
+       "_Image_PNG", 600 * 1024, "_Image_500KB"},
       // Checks the correctness of histogram for WebP
       {"HTTP/1.1 200 OK\n"
        "Content-Type: image/webp\n",
-       "_Image_WEBP",
-       -1,
-       ""},
+       "_Image_WEBP", -1, ""},
+      // Checks the correctness of histogram for Video
+      {"HTTP/1.1 200 OK\n"
+       "Content-Type: video/webm\n",
+       "_Video", -1, ""},
   };
 
   const int carrier_id = 100;
@@ -665,33 +660,108 @@ TEST_F(DataReductionProxyTamperDetectionTest, HistogramCount) {
       tamper_detection.ReportUMAForTamperDetectionCount(
           test.original_content_length);
       histogram_tester.ExpectTotalCount(
-          std::string("DataReductionProxy.HeaderTamperDetectionHTTP") +
-              (https ? "S" : "") + test.histogram_name_suffix + "_Total",
+          base::StringPrintf("DataReductionProxy.HeaderTamperDetectionHTTP%s"
+                             "%s_Total",
+                             (https ? "S" : ""),
+                             test.histogram_name_suffix.c_str()),
           1);
       histogram_tester.ExpectUniqueSample(
-          std::string("DataReductionProxy.HeaderTamperDetectionHTTP") +
-              (https ? "S" : "") + test.histogram_name_suffix,
+          base::StringPrintf("DataReductionProxy.HeaderTamperDetectionHTTP%s"
+                             "%s",
+                             (https ? "S" : ""),
+                             test.histogram_name_suffix.c_str()),
           carrier_id, 1);
       histogram_tester.ExpectTotalCount(
-          std::string("DataReductionProxy.HeaderTamperDetectionHTTP") +
-              (https ? "S" : "") + "_Total",
+          base::StringPrintf("DataReductionProxy.HeaderTamperDetectionHTTP%s"
+                             "_Total",
+                             (https ? "S" : "")),
           1);
       histogram_tester.ExpectUniqueSample(
-          std::string("DataReductionProxy.HeaderTamperDetectionHTTP") +
-              (https ? "S" : ""),
+          base::StringPrintf("DataReductionProxy.HeaderTamperDetectionHTTP%s",
+                             (https ? "S" : "")),
           carrier_id, 1);
 
       if (test.original_content_length != -1) {
         histogram_tester.ExpectTotalCount(
-            std::string("DataReductionProxy.HeaderTamperDetectionHTTP") +
-                (https ? "S" : "") + test.image_histogram_name_suffix +
-                "_Total",
+            base::StringPrintf("DataReductionProxy.HeaderTamperDetectionHTTP%s"
+                               "%s_Total",
+                               (https ? "S" : ""),
+                               test.image_histogram_name_suffix.c_str()),
             1);
         histogram_tester.ExpectUniqueSample(
-            std::string("DataReductionProxy.HeaderTamperDetectionHTTP") +
-                (https ? "S" : "") + test.image_histogram_name_suffix,
+            base::StringPrintf("DataReductionProxy.HeaderTamperDetectionHTTP%s"
+                               "%s",
+                               (https ? "S" : ""),
+                               test.image_histogram_name_suffix.c_str()),
             carrier_id, 1);
       }
+    }
+  }
+}
+
+// Tests function ReportUMAForContentLength, with the focus on compression
+// ratio.
+TEST_F(DataReductionProxyTamperDetectionTest, CompressionRatio) {
+  struct {
+    std::string raw_header;
+    std::string histogram_name_suffix;
+    int original_content_length;
+    int content_length;
+    int compression_ratio;
+  } tests[] = {
+      // Checks the correctness of histogram for Video
+      {"HTTP/1.1 200 OK\n"
+       "Content-Type: video/webm\n",
+       "_Video", 1000, 800, 80},
+      // Checks the correctness of histogram for JPEG
+      {"HTTP/1.1 200 OK\n"
+       "Content-Type: image/jpg\n",
+       "_Image_JPG", 1000, 1, 0},
+      // Checks the correctness of histogram for PNG
+      {"HTTP/1.1 200 OK\n"
+       "Content-Type: image/png\n",
+       "_Image_PNG", 1000, 0, 0},
+      // Checks the correctness of histogram for WebP
+      {"HTTP/1.1 200 OK\n"
+       "Content-Type: image/webp\n",
+       "_Image_WEBP", 1000, 5000, 500},
+  };
+
+  const int carrier_id = 100;
+
+  for (auto& test : tests) {
+    std::string raw_headers(test.raw_header);
+    HeadersToRaw(&raw_headers);
+    scoped_refptr<net::HttpResponseHeaders> headers(
+        new net::HttpResponseHeaders(raw_headers));
+
+    // Test HTTPS and HTTP separately.
+    int https_values[] = {true, false};
+    for (auto https : https_values) {
+      base::HistogramTester histogram_tester;
+
+      DataReductionProxyTamperDetection tamper_detection(headers.get(), https,
+                                                         carrier_id);
+      tamper_detection.ReportUMAForContentLength(test.content_length,
+                                                 test.original_content_length);
+      histogram_tester.ExpectTotalCount(
+          base::StringPrintf("DataReductionProxy.HeaderTamperedHTTP%s"
+                             "_ContentLength%s_Total",
+                             (https ? "S" : ""),
+                             test.histogram_name_suffix.c_str()),
+          1);
+      histogram_tester.ExpectUniqueSample(
+          base::StringPrintf("DataReductionProxy.HeaderTamperedHTTP%s"
+                             "_ContentLength%s",
+                             (https ? "S" : ""),
+                             test.histogram_name_suffix.c_str()),
+          carrier_id, 1);
+      histogram_tester.ExpectUniqueSample(
+          base::StringPrintf("DataReductionProxy.HeaderTamperedHTTP%s"
+                             "_CompressionRatio%s",
+                             (https ? "S" : ""),
+                             test.histogram_name_suffix.c_str()),
+          test.compression_ratio, 1);
     }
   }
 }
@@ -701,7 +771,7 @@ TEST_F(DataReductionProxyTamperDetectionTest, DetectAndReport) {
   struct {
     std::string label;
     std::string raw_header;
-    int64 content_length;
+    int64_t content_length;
     bool expected_tampered_with;
   } test[] = {
     {
@@ -775,4 +845,4 @@ TEST_F(DataReductionProxyTamperDetectionTest, DetectAndReport) {
   }
 }
 
-} // namespace
+}  // namespace data_reduction_proxy

@@ -4,7 +4,7 @@
 
 // Integration with OS X built-in spellchecker.
 
-#include "chrome/browser/spellchecker/spellcheck_platform_mac.h"
+#include "chrome/browser/spellchecker/spellcheck_platform.h"
 
 #import <Cocoa/Cocoa.h>
 
@@ -12,11 +12,9 @@
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
-#include "base/mac/scoped_nsexception_enabler.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/common/spellcheck_common.h"
-#include "chrome/common/spellcheck_messages.h"
 #include "chrome/common/spellcheck_result.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
@@ -36,10 +34,11 @@ const unsigned int kShortLanguageCodeSize = 2;
 // spell-checking will not work, but it also will not crash the
 // browser.
 NSSpellChecker* SharedSpellChecker() {
-  return base::mac::ObjCCastStrict<NSSpellChecker>(
-      base::mac::RunBlockIgnoringExceptions(^{
-          return [NSSpellChecker sharedSpellChecker];
-      }));
+  @try {
+    return [NSSpellChecker sharedSpellChecker];
+  } @catch (id exception) {
+    return nil;
+  }
 }
 
 // A private utility function to convert hunspell language codes to OS X
@@ -100,7 +99,7 @@ std::string ConvertLanguageCodeFromMac(NSString* lang_code) {
 
 } // namespace
 
-namespace spellcheck_mac {
+namespace spellcheck_platform {
 
 void GetAvailableLanguages(std::vector<std::string>* spellcheck_languages) {
   NSArray* availableLanguages = [SharedSpellChecker() availableLanguages];
@@ -108,6 +107,10 @@ void GetAvailableLanguages(std::vector<std::string>* spellcheck_languages) {
     spellcheck_languages->push_back(
               ConvertLanguageCodeFromMac(lang_code));
   }
+}
+
+std::string GetSpellCheckerLanguage() {
+  return ConvertLanguageCodeFromMac([SharedSpellChecker() language]);
 }
 
 bool SpellCheckerAvailable() {
@@ -196,13 +199,13 @@ bool CheckSpelling(const base::string16& word_to_check, int tag) {
 void FillSuggestionList(const base::string16& wrong_word,
                         std::vector<base::string16>* optional_suggestions) {
   NSString* ns_wrong_word = base::SysUTF16ToNSString(wrong_word);
-  // The suggested words for |wrong_word|.
-  // TODO(groby): guessesForWord: has been deprecated since OSX 10.6.
-  // http://www.crbug.com/479014.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  NSArray* guesses = [SharedSpellChecker() guessesForWord:ns_wrong_word];
-#pragma clang diagnostic pop
+  NSSpellChecker* checker = SharedSpellChecker();
+  NSString* language = [checker language];
+  NSArray* guesses =
+      [checker guessesForWordRange:NSMakeRange(0, [ns_wrong_word length])
+                          inString:ns_wrong_word
+                          language:language
+            inSpellDocumentWithTag:last_seen_tag_];
   int i = 0;
   for (NSString* guess in guesses) {
     optional_suggestions->push_back(base::SysNSStringToUTF16(guess));
@@ -303,4 +306,4 @@ ScopedEnglishLanguageForTest::~ScopedEnglishLanguageForTest() {
   delete state_;
 }
 
-}  // namespace spellcheck_mac
+}  // namespace spellcheck_platform

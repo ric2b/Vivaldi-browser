@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/debug/leak_annotations.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "extensions/browser/api/system_display/display_info_provider.h"
 #include "extensions/browser/api/system_display/system_display_api.h"
 #include "extensions/browser/api_test_utils.h"
@@ -15,8 +21,8 @@
 
 namespace extensions {
 
-using core_api::system_display::Bounds;
-using core_api::system_display::DisplayUnitInfo;
+using api::system_display::Bounds;
+using api::system_display::DisplayUnitInfo;
 using gfx::Screen;
 
 class MockScreen : public Screen {
@@ -73,7 +79,7 @@ class MockDisplayInfoProvider : public DisplayInfoProvider {
   ~MockDisplayInfoProvider() override {}
 
   bool SetInfo(const std::string& display_id,
-               const core_api::system_display::DisplayProperties& params,
+               const api::system_display::DisplayProperties& params,
                std::string* error) override {
     // Should get called only once per test case.
     EXPECT_FALSE(set_info_value_);
@@ -84,19 +90,25 @@ class MockDisplayInfoProvider : public DisplayInfoProvider {
 
   gfx::Screen* GetActiveScreen() override { return NULL; }
 
+  void EnableUnifiedDesktop(bool enable) override {
+    unified_desktop_enabled_ = enable;
+  }
+
   scoped_ptr<base::DictionaryValue> GetSetInfoValue() {
-    return set_info_value_.Pass();
+    return std::move(set_info_value_);
   }
 
   std::string GetSetInfoDisplayId() const { return set_info_display_id_; }
+
+  bool unified_desktop_enabled() const { return unified_desktop_enabled_; }
 
  private:
   // Update the content of the |unit| obtained for |display| using
   // platform specific method.
   void UpdateDisplayUnitInfoForPlatform(
       const gfx::Display& display,
-      extensions::core_api::system_display::DisplayUnitInfo* unit) override {
-    int64 id = display.id();
+      extensions::api::system_display::DisplayUnitInfo* unit) override {
+    int64_t id = display.id();
     unit->name = "DISPLAY NAME FOR " + base::Int64ToString(id);
     if (id == 1)
       unit->mirroring_source_id = "0";
@@ -116,6 +128,7 @@ class MockDisplayInfoProvider : public DisplayInfoProvider {
 
   scoped_ptr<base::DictionaryValue> set_info_value_;
   std::string set_info_display_id_;
+  bool unified_desktop_enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MockDisplayInfoProvider);
 };
@@ -246,6 +259,47 @@ IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, SetDisplayKioskEnabled) {
 
   EXPECT_EQ("display_id", provider_->GetSetInfoDisplayId());
 }
+
+IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, EnableUnifiedDesktop) {
+  scoped_ptr<base::DictionaryValue> test_extension_value(
+      api_test_utils::ParseDictionary("{\n"
+                                      "  \"name\": \"Test\",\n"
+                                      "  \"version\": \"1.0\",\n"
+                                      "  \"app\": {\n"
+                                      "    \"background\": {\n"
+                                      "      \"scripts\": [\"background.js\"]\n"
+                                      "    }\n"
+                                      "  }\n"
+                                      "}"));
+  scoped_refptr<Extension> test_extension(
+      api_test_utils::CreateExtension(test_extension_value.get()));
+  {
+    scoped_refptr<SystemDisplayEnableUnifiedDesktopFunction>
+        enable_unified_function(
+            new SystemDisplayEnableUnifiedDesktopFunction());
+
+    enable_unified_function->set_has_callback(true);
+    enable_unified_function->set_extension(test_extension.get());
+
+    EXPECT_FALSE(provider_->unified_desktop_enabled());
+
+    ASSERT_TRUE(api_test_utils::RunFunction(enable_unified_function.get(),
+                                            "[true]", browser_context()));
+    EXPECT_TRUE(provider_->unified_desktop_enabled());
+  }
+  {
+    scoped_refptr<SystemDisplayEnableUnifiedDesktopFunction>
+        enable_unified_function(
+            new SystemDisplayEnableUnifiedDesktopFunction());
+
+    enable_unified_function->set_has_callback(true);
+    enable_unified_function->set_extension(test_extension.get());
+    ASSERT_TRUE(api_test_utils::RunFunction(enable_unified_function.get(),
+                                            "[false]", browser_context()));
+    EXPECT_FALSE(provider_->unified_desktop_enabled());
+  }
+}
+
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace extensions

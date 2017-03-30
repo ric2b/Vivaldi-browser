@@ -4,27 +4,28 @@
 
 #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
 
-#include "base/bind.h"
-#include "base/bind_helpers.h"
+#include <utility>
+
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
-#include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
 #include "ui/ozone/platform/drm/gpu/drm_vsync_provider.h"
-#include "ui/ozone/platform/drm/gpu/drm_window.h"
-#include "ui/ozone/platform/drm/gpu/gbm_buffer.h"
-#include "ui/ozone/platform/drm/gpu/hardware_display_controller.h"
+#include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
+#include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
+#include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
 
 namespace ui {
-namespace {
-void EmptyPageFlipCallback(gfx::SwapResult result) {
-}
-}  // namespace
 
-GbmSurfaceless::GbmSurfaceless(DrmWindow* window,
-                               DrmDeviceManager* drm_device_manager)
-    : window_(window), drm_device_manager_(drm_device_manager) {
+GbmSurfaceless::GbmSurfaceless(scoped_ptr<DrmWindowProxy> window,
+                               GbmSurfaceFactory* surface_manager)
+    : window_(std::move(window)), surface_manager_(surface_manager) {
+  surface_manager_->RegisterSurface(window_->widget(), this);
 }
 
 GbmSurfaceless::~GbmSurfaceless() {
+  surface_manager_->UnregisterSurface(window_->widget());
+}
+
+void GbmSurfaceless::QueueOverlayPlane(const OverlayPlane& plane) {
+  planes_.push_back(plane);
 }
 
 intptr_t GbmSurfaceless::GetNativeWindow() {
@@ -37,33 +38,22 @@ bool GbmSurfaceless::ResizeNativeWindow(const gfx::Size& viewport_size) {
 }
 
 bool GbmSurfaceless::OnSwapBuffers() {
-  return window_->SchedulePageFlip(true /* is_sync */,
-                                   base::Bind(&EmptyPageFlipCallback));
+  NOTREACHED();
+  return false;
 }
 
-bool GbmSurfaceless::OnSwapBuffersAsync(
+void GbmSurfaceless::OnSwapBuffersAsync(
     const SwapCompletionCallback& callback) {
-  return window_->SchedulePageFlip(false /* is_sync */, callback);
+  window_->SchedulePageFlip(planes_, callback);
+  planes_.clear();
 }
 
 scoped_ptr<gfx::VSyncProvider> GbmSurfaceless::CreateVSyncProvider() {
-  return make_scoped_ptr(new DrmVSyncProvider(window_));
+  return make_scoped_ptr(new DrmVSyncProvider(window_.get()));
 }
 
 bool GbmSurfaceless::IsUniversalDisplayLinkDevice() {
-  if (!drm_device_manager_)
-    return false;
-  scoped_refptr<DrmDevice> drm_primary =
-      drm_device_manager_->GetDrmDevice(gfx::kNullAcceleratedWidget);
-  DCHECK(drm_primary);
-
-  HardwareDisplayController* controller = window_->GetController();
-  if (!controller)
-    return false;
-  scoped_refptr<DrmDevice> drm = controller->GetAllocationDrmDevice();
-  DCHECK(drm);
-
-  return drm_primary != drm;
+  return planes_.empty() ? false : planes_[0].buffer->RequiresGlFinish();
 }
 
 }  // namespace ui

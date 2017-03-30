@@ -15,22 +15,6 @@
       <!-- KEEP THESE IN ALPHABETICAL ORDER!  DO NOT ADD TO RANDOM PLACES JUST
            BECAUSE YOUR RESOURCES ARE FUNCTIONALLY RELATED OR FALL UNDER THE
            SAME CONDITIONALS. -->
-      <if expr="enable_app_list">
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_ITEM_PROGRESS_BACKGROUND" file="common/app_list_progress_bar_background.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_ITEM_PROGRESS_LEFT" file="common/app_list_progress_bar_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_ITEM_PROGRESS_CENTER" file="common/app_list_progress_bar_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_ITEM_PROGRESS_RIGHT" file="common/app_list_progress_bar_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_TOOLS_HOVER" file="common/app_list_tools_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_TOOLS_NORMAL" file="common/app_list_tools_normal.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_TOOLS_PRESSED" file="common/app_list_tools_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_FOLDER_BACK_NORMAL" file="common/app_list_folder_back_normal.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_SPEECH_MIC_ON" file="common/app_list_mic_on.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_SPEECH_MIC_OFF" file="common/app_list_mic_off.png" />
-        <structure type="chrome_scaled_image" name="IDR_APP_LIST_SPEECH_MIC_RECORDING" file="common/app_list_mic_recording.png" />
-        <if expr="is_win or desktop_linux">
-          <structure type="chrome_scaled_image" name="IDR_APP_LIST_USER_INDICATOR" file="common/app_list_user_indicator.png" />
-        </if>
-      </if>
       <if expr="is_linux and use_aura">
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_BIG_ALIAS" file="common/pointers/alias_big.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_BIG_CELL" file="common/pointers/cell_big.png" />
@@ -86,6 +70,7 @@
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_SOUTH_EAST_RESIZE" file="common/pointers/top_left_corner.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_SOUTH_RESIZE" file="common/pointers/sb_v_double_arrow.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_SOUTH_WEST_RESIZE" file="common/pointers/top_right_corner.png" />
+        <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_THROBBER" file="common/pointers/throbber.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_WEST_RESIZE" file="common/pointers/sb_h_double_arrow.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_XTERM_HORIZ" file="common/pointers/xterm_horiz.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_ZOOM_IN" file="common/pointers/zoom_in.png" />
@@ -134,12 +119,10 @@
       <structure type="chrome_scaled_image" name="IDR_EASY_UNLOCK_UNLOCKED" file="common/easy_unlock_unlocked.png" />
       <structure type="chrome_scaled_image" name="IDR_EASY_UNLOCK_UNLOCKED_HOVER" file="common/easy_unlock_unlocked_hover.png" />
       <structure type="chrome_scaled_image" name="IDR_EASY_UNLOCK_UNLOCKED_PRESSED" file="common/easy_unlock_unlocked_pressed.png" />
-      <structure type="chrome_scaled_image" name="IDR_ERROR" file="common/error.png" />
       <structure type="chrome_scaled_image" name="IDR_FOLDER_CLOSED" file="common/folder_closed.png" />
       <structure type="chrome_scaled_image" name="IDR_FOLDER_CLOSED_RTL" file="common/folder_closed_rtl.png" />
-      <structure type="chrome_scaled_image" name="IDR_MENU_CHECK_CHECKED" file="common/menu_check.png" />
-      <if expr="not is_macosx and not is_ios">
-        <structure type="chrome_scaled_image" name="IDR_MENU_HIERARCHY_ARROW" file="common/menu_hierarchy_arrow.png" />
+      <if expr="is_macosx">
+        <structure type="chrome_scaled_image" name="IDR_MENU_CHECK_CHECKED" file="legacy/menu_check.png" />
       </if>
       <if expr="is_macosx or is_ios">
         <structure type="chrome_scaled_image" name="IDR_MENU_HIERARCHY_ARROW" file="mac/menu_hierarchy_arrow.png" />
@@ -176,13 +159,12 @@
         <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_DO_NOT_DISTURB_HOVER" file="common/notification_do_not_disturb_hover.png"/>
         <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_DO_NOT_DISTURB_PRESSED" file="common/notification_do_not_disturb_pressed.png"/>
         <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_SETTINGS" file="common/notification_settings.png"/>
+        <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_SETTINGS_BUTTON_ICON" file="common/notification_settings_button.png"/>
+        <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_SETTINGS_BUTTON_ICON_HOVER" file="common/notification_settings_button_hover.png"/>
+        <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_SETTINGS_BUTTON_ICON_PRESSED" file="common/notification_settings_button_pressed.png"/>
         <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_SETTINGS_HOVER" file="common/notification_settings_hover.png"/>
         <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_SETTINGS_PRESSED" file="common/notification_settings_pressed.png"/>
       </if>
-      <!-- TODO(calamity): The 1x local ntp resources require a proper version.
-           See crbug.com/363519. -->
-      <structure type="chrome_scaled_image" name="IDR_LOCAL_NTP_IMAGES_LOGO_PNG" file="common/ntp_google_logo.png" />
-      <structure type="chrome_scaled_image" name="IDR_LOCAL_NTP_IMAGES_WHITE_LOGO_PNG" file="common/ntp_white_google_logo.png" />
       <if expr="not is_android and not is_ios">
         <structure type="chrome_scaled_image" name="IDR_NTP_DEFAULT_FAVICON" file="common/ntp_default_favicon.png" />
       </if>
@@ -197,119 +179,19 @@
         <structure type="chrome_scaled_image" name="IDR_PANEL_BOTTOM_LEFT_CORNER" file="panel_bottom_left_corner.png" />
         <structure type="chrome_scaled_image" name="IDR_PANEL_BOTTOM_RIGHT_CORNER" file="panel_bottom_right_corner.png" />
       </if>
-      <if expr="use_aura or toolkit_views or (is_posix and not is_macosx and not is_ios)">
-        <structure type="chrome_scaled_image" name="IDR_PROGRESS_BAR" file="linux/linux-progress-bar.png" />
-        <structure type="chrome_scaled_image" name="IDR_PROGRESS_BORDER_LEFT" file="linux/linux-progress-border-left.png" />
-        <structure type="chrome_scaled_image" name="IDR_PROGRESS_BORDER_RIGHT" file="linux/linux-progress-border-right.png" />
-        <structure type="chrome_scaled_image" name="IDR_PROGRESS_VALUE" file="linux/linux-progress-value.png" />
-      </if>
       <if expr="use_aura">
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_BOTTOM" file="common/aura_scrollbar_arrow_button_base_hover_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_BOTTOM_LEFT" file="common/aura_scrollbar_arrow_button_base_hover_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_BOTTOM_RIGHT" file="common/aura_scrollbar_arrow_button_base_hover_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_CENTER" file="common/aura_scrollbar_arrow_button_base_hover_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_LEFT" file="common/aura_scrollbar_arrow_button_base_hover_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_RIGHT" file="common/aura_scrollbar_arrow_button_base_hover_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_TOP" file="common/aura_scrollbar_arrow_button_base_hover_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_TOP_LEFT" file="common/aura_scrollbar_arrow_button_base_hover_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_TOP_RIGHT" file="common/aura_scrollbar_arrow_button_base_hover_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_BOTTOM" file="common/aura_scrollbar_arrow_button_base_normal_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_BOTTOM_LEFT" file="common/aura_scrollbar_arrow_button_base_normal_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_BOTTOM_RIGHT" file="common/aura_scrollbar_arrow_button_base_normal_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_CENTER" file="common/aura_scrollbar_arrow_button_base_normal_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_LEFT" file="common/aura_scrollbar_arrow_button_base_normal_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_RIGHT" file="common/aura_scrollbar_arrow_button_base_normal_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_TOP" file="common/aura_scrollbar_arrow_button_base_normal_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_TOP_LEFT" file="common/aura_scrollbar_arrow_button_base_normal_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_NORMAL_TOP_RIGHT" file="common/aura_scrollbar_arrow_button_base_normal_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_BOTTOM" file="common/aura_scrollbar_arrow_button_base_pressed_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_BOTTOM_LEFT" file="common/aura_scrollbar_arrow_button_base_pressed_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_BOTTOM_RIGHT" file="common/aura_scrollbar_arrow_button_base_pressed_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_CENTER" file="common/aura_scrollbar_arrow_button_base_pressed_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_LEFT" file="common/aura_scrollbar_arrow_button_base_pressed_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_RIGHT" file="common/aura_scrollbar_arrow_button_base_pressed_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_TOP" file="common/aura_scrollbar_arrow_button_base_pressed_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_TOP_LEFT" file="common/aura_scrollbar_arrow_button_base_pressed_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_PRESSED_TOP_RIGHT" file="common/aura_scrollbar_arrow_button_base_pressed_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_BOTTOM" file="common/aura_scrollbar_base_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_BOTTOM_LEFT" file="common/aura_scrollbar_base_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_BOTTOM_RIGHT" file="common/aura_scrollbar_base_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_CENTER" file="common/aura_scrollbar_base_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_LEFT" file="common/aura_scrollbar_base_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_RIGHT" file="common/aura_scrollbar_base_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_TOP" file="common/aura_scrollbar_base_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_TOP_LEFT" file="common/aura_scrollbar_base_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_BASE_TOP_RIGHT" file="common/aura_scrollbar_base_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_BOTTOM" file="common/aura_scrollbar_overlay_thumb_fill_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_BOTTOM_LEFT" file="common/aura_scrollbar_overlay_thumb_fill_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_BOTTOM_RIGHT" file="common/aura_scrollbar_overlay_thumb_fill_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_CENTER" file="common/aura_scrollbar_overlay_thumb_fill_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_LEFT" file="common/aura_scrollbar_overlay_thumb_fill_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_RIGHT" file="common/aura_scrollbar_overlay_thumb_fill_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_TOP" file="common/aura_scrollbar_overlay_thumb_fill_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_TOP_LEFT" file="common/aura_scrollbar_overlay_thumb_fill_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_FILL_TOP_RIGHT" file="common/aura_scrollbar_overlay_thumb_fill_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_STROKE_BOTTOM" file="common/aura_scrollbar_overlay_thumb_stroke_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_STROKE_BOTTOM_LEFT" file="common/aura_scrollbar_overlay_thumb_stroke_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_STROKE_BOTTOM_RIGHT" file="common/aura_scrollbar_overlay_thumb_stroke_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_STROKE_LEFT" file="common/aura_scrollbar_overlay_thumb_stroke_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_STROKE_RIGHT" file="common/aura_scrollbar_overlay_thumb_stroke_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_STROKE_TOP" file="common/aura_scrollbar_overlay_thumb_stroke_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_STROKE_TOP_LEFT" file="common/aura_scrollbar_overlay_thumb_stroke_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_OVERLAY_THUMB_STROKE_TOP_RIGHT" file="common/aura_scrollbar_overlay_thumb_stroke_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_BOTTOM" file="common/aura_scrollbar_thumb_base_hover_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_BOTTOM_LEFT" file="common/aura_scrollbar_thumb_base_hover_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_BOTTOM_RIGHT" file="common/aura_scrollbar_thumb_base_hover_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_CENTER" file="common/aura_scrollbar_thumb_base_hover_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_LEFT" file="common/aura_scrollbar_thumb_base_hover_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_RIGHT" file="common/aura_scrollbar_thumb_base_hover_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_TOP" file="common/aura_scrollbar_thumb_base_hover_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_TOP_LEFT" file="common/aura_scrollbar_thumb_base_hover_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_HOVER_TOP_RIGHT" file="common/aura_scrollbar_thumb_base_hover_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_BOTTOM" file="common/aura_scrollbar_thumb_base_normal_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_BOTTOM_LEFT" file="common/aura_scrollbar_thumb_base_normal_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_BOTTOM_RIGHT" file="common/aura_scrollbar_thumb_base_normal_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_CENTER" file="common/aura_scrollbar_thumb_base_normal_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_LEFT" file="common/aura_scrollbar_thumb_base_normal_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_RIGHT" file="common/aura_scrollbar_thumb_base_normal_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_TOP" file="common/aura_scrollbar_thumb_base_normal_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_TOP_LEFT" file="common/aura_scrollbar_thumb_base_normal_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_NORMAL_TOP_RIGHT" file="common/aura_scrollbar_thumb_base_normal_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_BOTTOM" file="common/aura_scrollbar_thumb_base_pressed_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_BOTTOM_LEFT" file="common/aura_scrollbar_thumb_base_pressed_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_BOTTOM_RIGHT" file="common/aura_scrollbar_thumb_base_pressed_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_CENTER" file="common/aura_scrollbar_thumb_base_pressed_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_LEFT" file="common/aura_scrollbar_thumb_base_pressed_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_RIGHT" file="common/aura_scrollbar_thumb_base_pressed_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_TOP" file="common/aura_scrollbar_thumb_base_pressed_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_TOP_LEFT" file="common/aura_scrollbar_thumb_base_pressed_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_THUMB_BASE_PRESSED_TOP_RIGHT" file="common/aura_scrollbar_thumb_base_pressed_top_right.png" />
         <structure type="chrome_scaled_image" name="IDR_TEXT_SELECTION_HANDLE_CENTER" file="common/text_selection_handle_center.png" />
         <structure type="chrome_scaled_image" name="IDR_TEXT_SELECTION_HANDLE_LEFT" file="common/text_selection_handle_left.png" />
         <structure type="chrome_scaled_image" name="IDR_TEXT_SELECTION_HANDLE_RIGHT" file="common/text_selection_handle_right.png" />
       </if>
-      <structure type="chrome_scaled_image" name="IDR_THROBBER" file="throbber.png" />
+      <if expr="is_macosx">
+        <structure type="chrome_scaled_image" name="IDR_THROBBER" file="legacy/throbber.png" />
+      </if>
       <if expr="toolkit_views">
         <structure type="chrome_scaled_image" name="IDR_TOUCH_DRAG_TIP_COPY" file="common/drag_tip_copy.png" />
         <structure type="chrome_scaled_image" name="IDR_TOUCH_DRAG_TIP_MOVE" file="common/drag_tip_move.png" />
         <structure type="chrome_scaled_image" name="IDR_TOUCH_DRAG_TIP_LINK" file="common/drag_tip_link.png" />
         <structure type="chrome_scaled_image" name="IDR_TOUCH_DRAG_TIP_NODROP" file="common/drag_tip_nodrop.png" />
-      </if>
-      <if expr="is_macosx or is_ios">
-        <structure type="chrome_scaled_image" name="IDR_DARK_TRAY_ATTENTION" file="mac/notification_dark_tray_attention.png"/>
-        <structure type="chrome_scaled_image" name="IDR_DARK_TRAY_PRESSED" file="mac/notification_dark_tray_pressed.png"/>
-        <structure type="chrome_scaled_image" name="IDR_DARK_TRAY_DO_NOT_DISTURB_ATTENTION" file="mac/notification_dark_tray_do_not_disturb_attention.png"/>
-        <structure type="chrome_scaled_image" name="IDR_DARK_TRAY_DO_NOT_DISTURB_PRESSED" file="mac/notification_dark_tray_do_not_disturb_pressed.png"/>
-        <structure type="chrome_scaled_image" name="IDR_DARK_TRAY_DO_NOT_DISTURB_EMPTY" file="mac/notification_tray_do_not_disturb_empty.png"/>
-        <structure type="chrome_scaled_image" name="IDR_DARK_TRAY_EMPTY" file="mac/notification_dark_tray_empty.png"/>
-        <structure type="chrome_scaled_image" name="IDR_TRAY_ATTENTION" file="mac/notification_tray_attention.png"/>
-        <structure type="chrome_scaled_image" name="IDR_TRAY_ATTENTION_PRESSED" file="mac/notification_tray_attention_pressed.png"/>
-        <structure type="chrome_scaled_image" name="IDR_TRAY_DO_NOT_DISTURB_ATTENTION" file="mac/notification_tray_do_not_disturb_attention.png"/>
-        <structure type="chrome_scaled_image" name="IDR_TRAY_DO_NOT_DISTURB_ATTENTION_PRESSED" file="mac/notification_tray_do_not_disturb_attention_pressed.png"/>
-        <structure type="chrome_scaled_image" name="IDR_TRAY_DO_NOT_DISTURB_EMPTY" file="mac/notification_tray_do_not_disturb_empty.png"/>
-        <structure type="chrome_scaled_image" name="IDR_TRAY_DO_NOT_DISTURB_EMPTY_PRESSED" file="mac/notification_tray_do_not_disturb_empty_pressed.png"/>
-        <structure type="chrome_scaled_image" name="IDR_TRAY_EMPTY" file="mac/notification_tray_empty.png"/>
-        <structure type="chrome_scaled_image" name="IDR_TRAY_EMPTY_PRESSED" file="mac/notification_tray_empty_pressed.png"/>
       </if>
     </structures>
   </release>

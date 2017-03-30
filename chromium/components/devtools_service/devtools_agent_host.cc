@@ -4,18 +4,13 @@
 
 #include "components/devtools_service/devtools_agent_host.h"
 
-#include "base/guid.h"
-#include "base/logging.h"
+#include <utility>
 
 namespace devtools_service {
 
-DevToolsAgentHost::DevToolsAgentHost(DevToolsAgentPtr agent)
-    : id_(base::GenerateGUID()),
-      agent_(agent.Pass()),
-      binding_(this),
-      delegate_(nullptr) {
-  agent_.set_error_handler(this);
-}
+DevToolsAgentHost::DevToolsAgentHost(const std::string& id,
+                                     DevToolsAgentPtr agent)
+    : id_(id), agent_(std::move(agent)), binding_(this), delegate_(nullptr) {}
 
 DevToolsAgentHost::~DevToolsAgentHost() {
   if (delegate_)
@@ -30,7 +25,7 @@ void DevToolsAgentHost::SetDelegate(Delegate* delegate) {
 
     DevToolsAgentClientPtr client;
     binding_.Bind(&client);
-    agent_->SetClient(client.Pass(), id_);
+    agent_->SetClient(std::move(client));
   } else {
     if (!binding_.is_bound())
       return;
@@ -43,12 +38,10 @@ void DevToolsAgentHost::SendProtocolMessageToAgent(const std::string& message) {
   agent_->DispatchProtocolMessage(message);
 }
 
-void DevToolsAgentHost::DispatchProtocolMessage(const mojo::String& message) {
+void DevToolsAgentHost::DispatchProtocolMessage(int32_t call_id,
+                                                const mojo::String& message,
+                                                const mojo::String& state) {
   delegate_->DispatchProtocolMessage(this, message);
-}
-
-void DevToolsAgentHost::OnConnectionError() {
-  agent_connection_error_handler_.Run();
 }
 
 }  // namespace devtools_service

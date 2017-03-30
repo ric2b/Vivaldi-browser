@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
+
 # These arguments can be overridden from the command line (see "gn help args").
 declare_args() {
   # Set this to run the jscompile checks after building the webapp.
@@ -12,10 +14,13 @@ declare_args() {
 }
 
 # Set this to enable cast mode on the android client.
-enable_cast = 0
+enable_cast = false
 
 # Set this to use GCD instead of the remoting directory service.
 remoting_use_gcd = 0
+
+# Set this to enable Android Chromoting Cardboard Activity.
+enable_cardboard = false
 
 # Enable the multi-process host on Windows by default.
 if (is_win) {
@@ -26,11 +31,15 @@ if (is_win) {
 
 remoting_rdp_session = 1
 
-branding_path = "../remoting/branding_<(branding)"
+if (is_chrome_branded) {
+  branding_path = rebase_path("//remoting/branding_Chrome", root_build_dir)
+} else {
+  branding_path = rebase_path("//remoting/branding_Chromium", root_build_dir)
+}
 
 # The ar_service_environment variable is used to define the target
 # environment for the app being built.
-# The allowed values are dev, test, staging, prod, and prod-testing.
+# The allowed values are dev and prod.
 if (is_debug) {
   ar_service_environment = "dev"
 } else {

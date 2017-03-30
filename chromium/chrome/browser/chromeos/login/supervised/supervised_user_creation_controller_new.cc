@@ -20,13 +20,14 @@
 #include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -55,7 +56,7 @@ bool StoreSupervisedUserFiles(const std::string& token,
 
 SupervisedUserCreationControllerNew::SupervisedUserCreationControllerNew(
     SupervisedUserCreationControllerNew::StatusConsumer* consumer,
-    const std::string& manager_id)
+    const AccountId& manager_id)
     : SupervisedUserCreationController(consumer),
       stage_(STAGE_INITIAL),
       weak_factory_(this) {
@@ -162,7 +163,7 @@ void SupervisedUserCreationControllerNew::StartCreationImpl() {
 
   stage_ = TRANSACTION_STARTED;
 
-  manager->CreateUserRecord(creation_context_->manager_id,
+  manager->CreateUserRecord(creation_context_->manager_id.GetUserEmail(),
                             creation_context_->local_user_id,
                             creation_context_->sync_user_id,
                             creation_context_->display_name);
@@ -287,7 +288,8 @@ void SupervisedUserCreationControllerNew::OnMountSuccess(
           std::string(),  // The salt is stored elsewhere.
           creation_context_->salted_master_key);
   key.SetLabel(kCryptohomeMasterKeyLabel);
-  UserContext context(creation_context_->local_user_id);
+  UserContext context(
+      AccountId::FromUserEmail(creation_context_->local_user_id));
   context.SetKey(key);
   context.SetIsUsingOAuth(false);
 
@@ -381,7 +383,7 @@ void SupervisedUserCreationControllerNew::OnSupervisedUserFilesStored(
   // Assume that new token is valid. It will be automatically invalidated if
   // sync service fails to use it.
   user_manager::UserManager::Get()->SaveUserOAuthStatus(
-      creation_context_->local_user_id,
+      AccountId::FromUserEmail(creation_context_->local_user_id),
       user_manager::User::OAUTH2_TOKEN_STATUS_VALID);
 
   stage_ = TOKEN_WRITTEN;

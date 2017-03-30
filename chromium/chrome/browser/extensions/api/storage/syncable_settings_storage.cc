@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/storage/syncable_settings_storage.h"
 
+#include <utility>
+
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/api/storage/settings_sync_processor.h"
 #include "chrome/browser/extensions/api/storage/settings_sync_util.h"
@@ -51,97 +53,84 @@ size_t SyncableSettingsStorage::GetBytesInUse() {
   return delegate_->GetBytesInUse();
 }
 
+template <class T>
+T SyncableSettingsStorage::HandleResult(T result) {
+  if (result->status().restore_status != RESTORE_NONE) {
+    // If we're syncing, stop - we don't want to push the deletion of any data.
+    // At next startup, when we start up the sync service, we'll get back any
+    // data which was stored intact on Sync.
+    // TODO(devlin): Investigate if there's a way we can trigger
+    // MergeDataAndStartSyncing() to immediately get back any data we can, and
+    // continue syncing.
+    StopSyncing();
+  }
+  return result;
+}
+
 ValueStore::ReadResult SyncableSettingsStorage::Get(
     const std::string& key) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  return delegate_->Get(key);
+  return HandleResult(delegate_->Get(key));
 }
 
 ValueStore::ReadResult SyncableSettingsStorage::Get(
     const std::vector<std::string>& keys) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  return delegate_->Get(keys);
+  return HandleResult(delegate_->Get(keys));
 }
 
 ValueStore::ReadResult SyncableSettingsStorage::Get() {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  return delegate_->Get();
+  return HandleResult(delegate_->Get());
 }
 
 ValueStore::WriteResult SyncableSettingsStorage::Set(
     WriteOptions options, const std::string& key, const base::Value& value) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  WriteResult result = delegate_->Set(options, key, value);
-  if (result->HasError()) {
-    return result.Pass();
-  }
+  WriteResult result = HandleResult(delegate_->Set(options, key, value));
+  if (!result->status().ok())
+    return result;
   SyncResultIfEnabled(result);
-  return result.Pass();
+  return result;
 }
 
 ValueStore::WriteResult SyncableSettingsStorage::Set(
     WriteOptions options, const base::DictionaryValue& values) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  WriteResult result = delegate_->Set(options, values);
-  if (result->HasError()) {
-    return result.Pass();
-  }
+  WriteResult result = HandleResult(delegate_->Set(options, values));
+  if (!result->status().ok())
+    return result;
   SyncResultIfEnabled(result);
-  return result.Pass();
+  return result;
 }
 
 ValueStore::WriteResult SyncableSettingsStorage::Remove(
     const std::string& key) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  WriteResult result = delegate_->Remove(key);
-  if (result->HasError()) {
-    return result.Pass();
-  }
+  WriteResult result = HandleResult(delegate_->Remove(key));
+  if (!result->status().ok())
+    return result;
   SyncResultIfEnabled(result);
-  return result.Pass();
+  return result;
 }
 
 ValueStore::WriteResult SyncableSettingsStorage::Remove(
     const std::vector<std::string>& keys) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  WriteResult result = delegate_->Remove(keys);
-  if (result->HasError()) {
-    return result.Pass();
-  }
+  WriteResult result = HandleResult(delegate_->Remove(keys));
+  if (!result->status().ok())
+    return result;
   SyncResultIfEnabled(result);
-  return result.Pass();
+  return result;
 }
 
 ValueStore::WriteResult SyncableSettingsStorage::Clear() {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  WriteResult result = delegate_->Clear();
-  if (result->HasError()) {
-    return result.Pass();
-  }
+  WriteResult result = HandleResult(delegate_->Clear());
+  if (!result->status().ok())
+    return result;
   SyncResultIfEnabled(result);
-  return result.Pass();
-}
-
-bool SyncableSettingsStorage::Restore() {
-  // If we're syncing, stop - we don't want to push the deletion of any data.
-  // At next startup, when we start up the sync service, we'll get back any
-  // data which was stored intact on Sync.
-  // TODO (rdevlin.cronin): Investigate if there's a way we can trigger
-  // MergeDataAndStartSyncing() to immediately get back any data we can,
-  // and continue syncing.
-  StopSyncing();
-  return delegate_->Restore();
-}
-
-bool SyncableSettingsStorage::RestoreKey(const std::string& key) {
-  // If we're syncing, stop - we don't want to push the deletion of any data.
-  // At next startup, when we start up the sync service, we'll get back any
-  // data which was stored intact on Sync.
-  // TODO (rdevlin.cronin): Investigate if there's a way we can trigger
-  // MergeDataAndStartSyncing() to immediately get back any data we can,
-  // and continue syncing.
-  StopSyncing();
-  return delegate_->RestoreKey(key);
+  return result;
 }
 
 void SyncableSettingsStorage::SyncResultIfEnabled(
@@ -170,23 +159,24 @@ syncer::SyncError SyncableSettingsStorage::StartSyncing(
   DCHECK(sync_state);
   DCHECK(!sync_processor_.get());
 
-  sync_processor_ = sync_processor.Pass();
+  sync_processor_ = std::move(sync_processor);
   sync_processor_->Init(*sync_state);
 
   ReadResult maybe_settings = delegate_->Get();
-  if (maybe_settings->HasError()) {
+  if (!maybe_settings->status().ok()) {
     return syncer::SyncError(
         FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
         base::StringPrintf("Failed to get settings: %s",
-                           maybe_settings->error().message.c_str()),
+                           maybe_settings->status().message.c_str()),
         sync_processor_->type());
   }
 
   scoped_ptr<base::DictionaryValue> current_settings =
       maybe_settings->PassSettings();
-  return sync_state->empty() ? SendLocalSettingsToSync(current_settings.Pass())
-                             : OverwriteLocalSettingsWithSync(
-                                   sync_state.Pass(), current_settings.Pass());
+  return sync_state->empty()
+             ? SendLocalSettingsToSync(std::move(current_settings))
+             : OverwriteLocalSettingsWithSync(std::move(sync_state),
+                                              std::move(current_settings));
 }
 
 syncer::SyncError SyncableSettingsStorage::SendLocalSettingsToSync(
@@ -229,9 +219,9 @@ syncer::SyncError SyncableSettingsStorage::OverwriteLocalSettingsWithSync(
         // Sync and local values are the same, no changes to send.
       } else {
         // Sync value is different, update local setting with new value.
-        changes->push_back(
-            new SettingSyncData(syncer::SyncChange::ACTION_UPDATE,
-                                extension_id_, it.key(), sync_value.Pass()));
+        changes->push_back(new SettingSyncData(
+            syncer::SyncChange::ACTION_UPDATE, extension_id_, it.key(),
+            std::move(sync_value)));
       }
     } else {
       // Not synced, delete local setting.
@@ -248,13 +238,13 @@ syncer::SyncError SyncableSettingsStorage::OverwriteLocalSettingsWithSync(
     std::string key = base::DictionaryValue::Iterator(*sync_state).key();
     scoped_ptr<base::Value> value;
     CHECK(sync_state->RemoveWithoutPathExpansion(key, &value));
-    changes->push_back(new SettingSyncData(syncer::SyncChange::ACTION_ADD,
-                                           extension_id_, key, value.Pass()));
+    changes->push_back(new SettingSyncData(
+        syncer::SyncChange::ACTION_ADD, extension_id_, key, std::move(value)));
   }
 
   if (changes->empty())
     return syncer::SyncError();
-  return ProcessSyncChanges(changes.Pass());
+  return ProcessSyncChanges(std::move(changes));
 }
 
 void SyncableSettingsStorage::StopSyncing() {
@@ -287,13 +277,12 @@ syncer::SyncError SyncableSettingsStorage::ProcessSyncChanges(
     scoped_ptr<base::Value> current_value;
     {
       ReadResult maybe_settings = Get(key);
-      if (maybe_settings->HasError()) {
+      if (!maybe_settings->status().ok()) {
         errors.push_back(syncer::SyncError(
-            FROM_HERE,
-            syncer::SyncError::DATATYPE_ERROR,
+            FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
             base::StringPrintf("Error getting current sync state for %s/%s: %s",
-                extension_id_.c_str(), key.c_str(),
-                maybe_settings->error().message.c_str()),
+                               extension_id_.c_str(), key.c_str(),
+                               maybe_settings->status().message.c_str()),
             sync_processor_->type()));
         continue;
       }
@@ -363,13 +352,13 @@ syncer::SyncError SyncableSettingsStorage::OnSyncAdd(
     base::Value* new_value,
     ValueStoreChangeList* changes) {
   DCHECK(new_value);
-  WriteResult result = delegate_->Set(IGNORE_QUOTA, key, *new_value);
-  if (result->HasError()) {
+  WriteResult result =
+      HandleResult(delegate_->Set(IGNORE_QUOTA, key, *new_value));
+  if (!result->status().ok()) {
     return syncer::SyncError(
-        FROM_HERE,
-        syncer::SyncError::DATATYPE_ERROR,
+        FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
         base::StringPrintf("Error pushing sync add to local settings: %s",
-            result->error().message.c_str()),
+                           result->status().message.c_str()),
         sync_processor_->type());
   }
   changes->push_back(ValueStoreChange(key, NULL, new_value));
@@ -383,13 +372,13 @@ syncer::SyncError SyncableSettingsStorage::OnSyncUpdate(
     ValueStoreChangeList* changes) {
   DCHECK(old_value);
   DCHECK(new_value);
-  WriteResult result = delegate_->Set(IGNORE_QUOTA, key, *new_value);
-  if (result->HasError()) {
+  WriteResult result =
+      HandleResult(delegate_->Set(IGNORE_QUOTA, key, *new_value));
+  if (!result->status().ok()) {
     return syncer::SyncError(
-        FROM_HERE,
-        syncer::SyncError::DATATYPE_ERROR,
+        FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
         base::StringPrintf("Error pushing sync update to local settings: %s",
-            result->error().message.c_str()),
+                           result->status().message.c_str()),
         sync_processor_->type());
   }
   changes->push_back(ValueStoreChange(key, old_value, new_value));
@@ -401,13 +390,12 @@ syncer::SyncError SyncableSettingsStorage::OnSyncDelete(
     base::Value* old_value,
     ValueStoreChangeList* changes) {
   DCHECK(old_value);
-  WriteResult result = delegate_->Remove(key);
-  if (result->HasError()) {
+  WriteResult result = HandleResult(delegate_->Remove(key));
+  if (!result->status().ok()) {
     return syncer::SyncError(
-        FROM_HERE,
-        syncer::SyncError::DATATYPE_ERROR,
+        FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
         base::StringPrintf("Error pushing sync remove to local settings: %s",
-            result->error().message.c_str()),
+                           result->status().message.c_str()),
         sync_processor_->type());
   }
   changes->push_back(ValueStoreChange(key, old_value, NULL));

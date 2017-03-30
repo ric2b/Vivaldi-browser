@@ -15,7 +15,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "chrome/installer/util/google_update_settings.h"
-#include "components/crash/app/breakpad_linux.h"
+#include "components/crash/content/app/breakpad_linux.h"
+#include "components/metrics/metrics_pref_names.h"
 #include "grit/components_strings.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -51,7 +52,7 @@ bool FirstRunDialog::Show(Profile* profile) {
   // If the metrics reporting is managed, we won't ask.
   const PrefService::Preference* metrics_reporting_pref =
       g_browser_process->local_state()->FindPreference(
-          prefs::kMetricsReportingEnabled);
+          metrics::prefs::kMetricsReportingEnabled);
 
   if (!metrics_reporting_pref ||
       !metrics_reporting_pref->IsManaged()) {

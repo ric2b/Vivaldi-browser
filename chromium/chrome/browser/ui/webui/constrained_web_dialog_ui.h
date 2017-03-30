@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_WEBUI_CONSTRAINED_WEB_DIALOG_UI_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -99,8 +100,8 @@ ConstrainedWebDialogDelegate* ShowConstrainedWebDialog(
     content::WebContents* overshadowed);
 
 // Create and show a constrained HTML dialog with auto-resize enabled. The
-// dialog is shown automatically with a call to PopupManager->ShowModalDialog()
-// after document load has completed to avoid UI jankiness.
+// dialog is shown automatically after document load has completed to avoid UI
+// jankiness.
 // |browser_context| is used to construct the dialog's WebContents.
 // |delegate| controls the behavior of the dialog.
 // |overshadowed| is the tab being overshadowed by the dialog.

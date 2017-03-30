@@ -7,8 +7,10 @@
 #include "ash/display/event_transformation_handler.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -108,12 +110,8 @@ class TabScrubberTest : public InProcessBrowserTest,
 
     float offset = GetTabCenter(browser, index) -
         GetStartX(browser, active_index, direction);
-    ui::ScrollEvent scroll_event(ui::ET_SCROLL,
-                                 gfx::PointF(0, 0),
-                                 ui::EventTimeForNow(),
-                                 0,
-                                 offset, 0,
-                                 offset, 0,
+    ui::ScrollEvent scroll_event(ui::ET_SCROLL, gfx::Point(0, 0),
+                                 ui::EventTimeForNow(), 0, offset, 0, offset, 0,
                                  3);
     event_generator.Dispatch(&scroll_event);
   }
@@ -236,7 +234,6 @@ class TabScrubberTest : public InProcessBrowserTest,
   void TabBlockedStateChanged(content::WebContents* contents,
                               int index) override {}
   void TabStripEmpty() override {}
-  void TabStripModelDeleted() override {}
 
   // History of tab activation. Scrub() resets it.
   std::vector<int> activation_order_;

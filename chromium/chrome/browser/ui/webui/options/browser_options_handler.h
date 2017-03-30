@@ -7,14 +7,15 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/prefs/pref_member.h"
 #include "base/scoped_observer.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_info_cache_observer.h"
 #include "chrome/browser/shell_integration.h"
@@ -24,6 +25,7 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/signin/core/common/signin_pref_names.h"
 #include "components/sync_driver/sync_service_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -162,23 +164,6 @@ class BrowserOptionsHandler
 
   // Sets the search engine at the given index to be default. Called from WebUI.
   void SetDefaultSearchEngine(const base::ListValue* args);
-
-  // Enables/disables auto-launching of Chrome on computer startup.
-  void ToggleAutoLaunch(const base::ListValue* args);
-
-  // Checks (on the file thread) whether the user is in the auto-launch trial
-  // and whether Chrome is set to auto-launch at login. Gets a reply on the UI
-  // thread (see CheckAutoLaunchCallback). A weak pointer to this is passed in
-  // as a parameter to avoid the need to lock between this function and the
-  // destructor. |profile_path| is the full path to the current profile.
-  static void CheckAutoLaunch(base::WeakPtr<BrowserOptionsHandler> weak_this,
-                              const base::FilePath& profile_path);
-
-  // Sets up (on the UI thread) the necessary bindings for toggling auto-launch
-  // (if the user is part of the auto-launch and makes sure the HTML UI knows
-  // whether Chrome will auto-launch at login.
-  void CheckAutoLaunchCallback(bool is_in_auto_launch_group,
-                               bool will_launch_at_login);
 
   // Returns the string ID for the given default browser state.
   int StatusStringIdForState(ShellIntegration::DefaultWebClientState state);
@@ -367,7 +352,7 @@ class BrowserOptionsHandler
   void SetupExtensionControlledIndicators();
 
   // Setup the value and the disabled property for metrics reporting for (except
-  // CrOS and Android).
+  // Android).
   void SetupMetricsReportingCheckbox();
 
   // Called when the MetricsReportingEnabled checkbox values are changed.
@@ -375,10 +360,12 @@ class BrowserOptionsHandler
   void HandleMetricsReportingChange(const base::ListValue* args);
 
   // Notifies the result of MetricsReportingEnabled change to Javascript layer.
-  void MetricsReportingChangeCallback(bool enabled);
+  void NotifyUIOfMetricsReportingChange(bool enabled);
 
   // Calls a Javascript function to set the state of MetricsReporting checkbox.
-  void SetMetricsReportingCheckbox(bool checked, bool disabled);
+  void SetMetricsReportingCheckbox(bool checked,
+                                   bool policy_managed,
+                                   bool owner_managed);
 
 #if defined(OS_CHROMEOS)
   // Setup the accessibility features for ChromeOS.
@@ -388,6 +375,10 @@ class BrowserOptionsHandler
   // Returns a newly created dictionary with a number of properties that
   // correspond to the status of sync.
   scoped_ptr<base::DictionaryValue> GetSyncStateDictionary();
+
+  // Checks whether on Chrome OS the current user is the device owner. Returns
+  // true on other platforms.
+  bool IsDeviceOwnerProfile();
 
   scoped_refptr<ShellIntegration::DefaultBrowserWorker> default_browser_worker_;
 
@@ -404,12 +395,15 @@ class BrowserOptionsHandler
 
   StringPrefMember auto_open_files_;
 
-  scoped_ptr<chrome::ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
+  scoped_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
       default_zoom_level_subscription_;
 
   PrefChangeRegistrar profile_pref_registrar_;
 #if defined(OS_CHROMEOS)
   scoped_ptr<policy::PolicyChangeRegistrar> policy_registrar_;
+
+  // Whether factory reset can be performed.
+  bool enable_factory_reset_;
 #endif
 
   ScopedObserver<SigninManagerBase, SigninManagerBase::Observer>

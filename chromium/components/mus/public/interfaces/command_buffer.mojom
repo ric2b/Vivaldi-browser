@@ -1,0 +1,58 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mus.mojom;
+
+import "components/mus/public/interfaces/gpu_capabilities.mojom";
+import "ui/mojo/geometry/geometry.mojom";
+
+struct CommandBufferInfo {
+    int32 command_buffer_namespace;
+    uint64 command_buffer_id;
+    GpuCapabilities capabilities;
+};
+
+struct CommandBufferState {
+  int32 num_entries;
+  int32 get_offset;
+  int32 put_offset;
+  int32 token;
+  int32 error;  // TODO(piman): enum
+  int32 context_lost_reason;  // TODO(piman): enum
+  uint32 generation;
+};
+
+interface CommandBufferLostContextObserver {
+  DidLoseContext(int32 context_lost_reason);
+};
+
+
+interface CommandBuffer {
+  // Initialize attempts to initialize the command buffer.
+  // If the context is lost after creation the LostContext method on the
+  // CommandBufferLostContextObserver's will be called then this pipe will be
+  // closed.
+  Initialize(CommandBufferLostContextObserver lost_observer,
+             handle<shared_buffer> shared_state,
+             array<int32> attribs) => (CommandBufferInfo? info);
+  SetGetBuffer(int32 buffer);
+  Flush(int32 put_offset);
+  MakeProgress(int32 last_get_offset) => (CommandBufferState state);
+  RegisterTransferBuffer(
+      int32 id, handle<shared_buffer> transfer_buffer, uint32 size);
+  DestroyTransferBuffer(int32 id);
+
+  // If |retire| is true, the sync point is retired on insertion. Otherwise,
+  // explicitly call RetireSyncPoint to retire it.
+  InsertSyncPoint(bool retire) => (uint32 sync_point);
+  RetireSyncPoint(uint32 sync_point);
+
+  CreateImage(int32 id,
+              handle memory_handle,
+              int32 type,
+              mojo.Size size,
+              int32 format,
+              int32 internal_format);
+  DestroyImage(int32 id);
+};

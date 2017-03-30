@@ -16,12 +16,21 @@ config("libpng_config") {
   }
 
   if (is_win) {
-    if (component_mode == "shared_library") {
+    if (is_component_build) {
       defines += [
         "PNG_USE_DLL",
         "PNG_NO_MODULEDEF",
       ]
     }
+  }
+}
+
+# Must be in a config because of how GN orders flags (otherwise -Wall will
+# appear after this, and turn it back on).
+config("clang_warnings") {
+  if (is_clang) {
+    # Upstream uses self-assignment to avoid warnings.
+    cflags = [ "-Wno-self-assign" ]
   }
 }
 
@@ -62,14 +71,6 @@ source_set("libpng_sources") {
     "//third_party/zlib",
   ]
 
-  # Must be in a config because of how GN orders flags (otherwise -Wall will
-  # appear after this, and turn it back on).
-  config("clang_warnings") {
-    if (is_clang) {
-      # Upstream uses self-assignment to avoid warnings.
-      cflags = [ "-Wno-self-assign" ]
-    }
-  }
   configs += [ ":clang_warnings" ]
 }
 

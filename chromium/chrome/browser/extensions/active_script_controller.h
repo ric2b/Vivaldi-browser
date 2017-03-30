@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_ACTIVE_SCRIPT_CONTROLLER_H_
 #define CHROME_BROWSER_EXTENSIONS_ACTIVE_SCRIPT_CONTROLLER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
@@ -12,6 +14,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -52,13 +55,6 @@ class ActiveScriptController : public content::WebContentsObserver,
   // active tab permissions. This will run any pending injections for that
   // extension.
   void OnActiveTabPermissionGranted(const Extension* extension);
-
-  // Notifies the ActiveScriptController of detected ad injection.
-  void OnAdInjectionDetected(const std::set<std::string>& ad_injectors);
-
-  // Adds the visible origin to |extension|'s active permissions, granting
-  // |extension| permission to always run script injections on the origin.
-  void AlwaysRunOnVisibleOrigin(const Extension* extension);
 
   // Notifies the ActiveScriptController that the action for |extension| has
   // been clicked, running any pending tasks that were previously shelved.
@@ -103,13 +99,12 @@ class ActiveScriptController : public content::WebContentsObserver,
   void RunPendingForExtension(const Extension* extension);
 
   // Handle the RequestScriptInjectionPermission message.
-  void OnRequestScriptInjectionPermission(
-      const std::string& extension_id,
-      UserScript::InjectionType script_type,
-      int64 request_id);
+  void OnRequestScriptInjectionPermission(const std::string& extension_id,
+                                          UserScript::InjectionType script_type,
+                                          int64_t request_id);
 
   // Grants permission for the given request to run.
-  void PermitScriptInjection(int64 request_id);
+  void PermitScriptInjection(int64_t request_id);
 
   // Notifies the ExtensionActionAPI of a change (either that an extension now
   // wants permission to run, or that it has been run).

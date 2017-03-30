@@ -1,0 +1,79 @@
+{
+  "config_type": "BaseConfig",
+  "dependencies": {
+    "crash_service": {
+      "file_info": {
+        "win_AMD64": {
+          "local_paths": [
+            "../../../out/Debug/crash_service.exe",
+            "../../../out/Release/crash_service.exe"
+          ]
+        }
+      }
+    },
+   "crashpad_database_util": {
+      "file_info": {
+        "mac_x86_64": {
+          "local_paths": [
+            "../../../out/Debug/crashpad_database_util",
+            "../../../out/Release/crashpad_database_util"
+          ]
+        }
+      }
+    },
+    "flash": {
+      "file_info": {
+        "linux_x86_64": {
+          "local_paths": [
+            "../../../third_party/adobe/flash/binariesppapi/linux_64/libpepflashplayer.so"
+          ]
+        },
+        "mac_x86_64": {
+          "local_paths": [
+            "../../../third_party/adobe/flash/binariesppapi/mac_64/PepperFlashPlayer.plugin"
+          ]
+        },
+        "win_AMD64": {
+          "local_paths": [
+            "../../../third_party/adobe/flash/binariesppapi/win_x64/pepflashplayer.dll"
+          ]
+        },
+        "win_x86": {
+          "local_paths": [
+            "../../../third_party/adobe/flash/binariesppapi/win/pepflashplayer.dll"
+          ]
+        }
+      }
+    },
+    "generate_breakpad_symbols": {
+      "file_info": {
+        "win_AMD64": {
+          "local_paths": [
+            "../../../components/crash/content/tools/generate_breakpad_symbols.py"
+          ]
+        },
+        "mac_x86_64": {
+          "local_paths": [
+            "../../../components/crash/content/tools/generate_breakpad_symbols.py"
+          ]
+        }
+      }
+    },
+    "memtrack_helper": {
+      "file_info": {
+        "android_armeabi-v7a": {
+          "local_paths": [
+            "../../../out/Debug/memtrack_helper",
+            "../../../out/Release/memtrack_helper"
+          ]
+        },
+        "arm64-v8a": {
+          "local_paths": [
+            "../../../out/Debug/memtrack_helper",
+            "../../../out/Release/memtrack_helper"
+          ]
+        }
+      }
+    }
+  }
+}

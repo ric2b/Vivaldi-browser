@@ -16,7 +16,6 @@ namespace {
 const OncValueSignature kBoolSignature = {base::Value::TYPE_BOOLEAN, NULL};
 const OncValueSignature kStringSignature = {base::Value::TYPE_STRING, NULL};
 const OncValueSignature kIntegerSignature = {base::Value::TYPE_INTEGER, NULL};
-const OncValueSignature kDoubleSignature = {base::Value::TYPE_DOUBLE, NULL};
 const OncValueSignature kStringListSignature = {base::Value::TYPE_LIST,
                                                 NULL,
                                                 &kStringSignature};
@@ -265,7 +264,7 @@ const OncFieldSignature cellular_found_network_fields[] = {
 const OncFieldSignature sim_lock_status_fields[] = {
     {::onc::sim_lock_status::kLockEnabled, &kBoolSignature},
     {::onc::sim_lock_status::kLockType, &kStringSignature},
-    {::onc::sim_lock_status::kRetriesLeft, &kDoubleSignature},
+    {::onc::sim_lock_status::kRetriesLeft, &kIntegerSignature},
     {NULL}};
 
 const OncFieldSignature cellular_fields[] = {
@@ -342,6 +341,9 @@ const OncFieldSignature network_with_state_fields[] = {
 const OncFieldSignature global_network_configuration_fields[] = {
     {::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
      &kBoolSignature},
+    {::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
+     &kBoolSignature},
+    {::onc::global_network_config::kDisableNetworkTypes, &kStringListSignature},
     {NULL}};
 
 const OncFieldSignature certificate_fields[] = {

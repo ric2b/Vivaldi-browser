@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -15,21 +16,22 @@
 #include "remoting/protocol/clipboard_filter.h"
 #include "remoting/protocol/cursor_shape_stub.h"
 #include "remoting/test/remote_connection_observer.h"
-#include "remoting/test/remote_host_info.h"
 
 namespace remoting {
 
 class ClientContext;
 class XmppSignalStrategy;
-class VideoRenderer;
 
 namespace protocol {
 class ClipboardStub;
 class HostStub;
 class InputStub;
-}
+class VideoRenderer;
+}  // namespace protocol
 
 namespace test {
+
+struct ConnectionSetupInfo;
 
 // Manages a chromoting connection to a remote host.  Destroying a
 // TestChromotingClient object with an active connection will close it.
@@ -42,13 +44,12 @@ class TestChromotingClient : public ClientUserInterface,
                              public protocol::CursorShapeStub {
  public:
   TestChromotingClient();
-  explicit TestChromotingClient(scoped_ptr<VideoRenderer> video_renderer);
+  explicit TestChromotingClient(
+      scoped_ptr<protocol::VideoRenderer> video_renderer);
   ~TestChromotingClient() override;
 
-  // Starts a chromoting connection with the specified remote host.
-  void StartConnection(const std::string& user_name,
-                       const std::string& access_token,
-                       const RemoteHostInfo& remote_host_info);
+  // Starts a Chromoting connection using the specified connection setup info.
+  void StartConnection(const ConnectionSetupInfo& connection_setup_info);
 
   // Ends the current remote connection and updates the connection state.
   void EndConnection();
@@ -68,7 +69,8 @@ class TestChromotingClient : public ClientUserInterface,
   // Unregisters an observerer from notifications for remote connection events.
   void RemoveRemoteConnectionObserver(RemoteConnectionObserver* observer);
 
-  // Used to set a fake/mock connection object for TestChromotingClient tests.
+  // Used to set a fake/mock dependencies for tests.
+  void SetSignalStrategyForTests(scoped_ptr<SignalStrategy> signal_strategy);
   void SetConnectionToHostForTests(
       scoped_ptr<protocol::ConnectionToHost> connection_to_host);
 
@@ -113,10 +115,10 @@ class TestChromotingClient : public ClientUserInterface,
   scoped_ptr<ClientContext> client_context_;
 
   // Processes video packets from the host.
-  scoped_ptr<VideoRenderer> video_renderer_;
+  scoped_ptr<protocol::VideoRenderer> video_renderer_;
 
-  // Used to establish an XMPP connection with the google talk service.
-  scoped_ptr<XmppSignalStrategy> signal_strategy_;
+  // SignalStrategy used for connection signaling.
+  scoped_ptr<SignalStrategy> signal_strategy_;
 
   DISALLOW_COPY_AND_ASSIGN(TestChromotingClient);
 };

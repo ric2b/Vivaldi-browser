@@ -18,9 +18,7 @@ gen_spec() {
   # Trunk packages need to install to a custom path so they don't conflict with
   # release channel packages.
   local PACKAGE_FILENAME="${PACKAGE}-${CHANNEL}"
-  if [ "$CHANNEL" == "preview" ]; then
-    local MENUNAME="${MENUNAME} (Beta)"
-  elif [ "$CHANNEL" != "stable" ]; then
+  if [ "$CHANNEL" != "stable" ]; then
     local INSTALLDIR="${INSTALLDIR}-${CHANNEL}"
     local PACKAGE="${PACKAGE}-${CHANNEL}"
     local MENUNAME="${MENUNAME} (${CHANNEL})"
@@ -39,14 +37,17 @@ stage_install_rpm() {
   # TODO(phajdan.jr): Deduplicate this and debian/build.sh .
   # For now duplication is going to help us avoid merge conflicts
   # as changes are frequently merged to older branches related to SxS effort.
-  if [ "$CHANNEL" != "stable" ] && [ "$CHANNEL" != "preview" ]; then
+  if [ "$CHANNEL" != "stable" ]; then
     # This would ideally be compiled into the app, but that's a bit too
     # intrusive of a change for these limited use channels, so we'll just hack
     # it into the wrapper script. The user can still override since it seems to
     # work to specify --user-data-dir multiple times on the command line, with
     # the last occurrence winning.
-    local SXS_USER_DATA_DIR="\${XDG_CONFIG_HOME:-\${HOME}/.config}/${PACKAGE}-${CHANNEL}"
-    local DEFAULT_FLAGS="--user-data-dir=\"${SXS_USER_DATA_DIR}\""
+    # Extra work around for beta to use stable profile (needed until 1st final)
+    if [ "$CHANNEL" == "snapshot" ]; then
+      local SXS_USER_DATA_DIR="\${XDG_CONFIG_HOME:-\${HOME}/.config}/${PACKAGE}-${CHANNEL}"
+      local DEFAULT_FLAGS="--user-data-dir=\"${SXS_USER_DATA_DIR}\""
+    fi
 
     # Avoid file collisions between channels.
     local PACKAGE="${PACKAGE}-${CHANNEL}"
@@ -67,8 +68,8 @@ stage_install_rpm() {
 # Actually generate the package file.
 do_package() {
   echo "Packaging ${ARCHITECTURE}..."
-  if [ "$CHANNEL" == "preview" ]; then
-    PROVIDES="vivaldi-stable"
+  if [ "$CHANNEL" == "stable" ]; then
+    PROVIDES="vivaldi-beta"
   elif [ "$CHANNEL" == "snapshot" ]; then
     PROVIDES="vivaldi-unstable"
   else
@@ -135,8 +136,10 @@ do_package() {
   # https://qa.mandriva.com/show_bug.cgi?id=55714
   # https://bugzilla.redhat.com/show_bug.cgi?id=538158
   # https://bugzilla.novell.com/show_bug.cgi?id=556248
-  DEPENDS="lsb >= 4.0, \
-  libcurl.so.4${EMPTY_VERSION}${PKG_ARCH}, \
+  #
+  # We want to depend on liberation-fonts as well, but there is no such package
+  # for Fedora. https://bugzilla.redhat.com/show_bug.cgi?id=1252564
+  DEPENDS="libcurl.so.4${EMPTY_VERSION}${PKG_ARCH}, \
   libnss3.so(NSS_3.14.3)${PKG_ARCH}, \
   wget, \
   xdg-utils, \
@@ -184,21 +187,18 @@ cleanup() {
 
 usage() {
   echo "usage: $(basename $0) [-c channel] [-a target_arch] [-o 'dir']"
-  echo "                      [-b 'dir']"
+  echo "                      [-b 'dir'] -d branding"
   echo "-c channel the package channel (trunk, asan, unstable, beta, stable)"
   echo "-a arch    package architecture (ia32 or x64)"
   echo "-o dir     package output directory [${OUTPUTDIR}]"
   echo "-b dir     build input directory    [${BUILDDIR}]"
+  echo "-d brand   either chromium or google_chrome"
   echo "-h         this help message"
 }
 
 # Check that the channel name is one of the allowable ones.
 verify_channel() {
   case $CHANNEL in
-    preview )
-      CHANNEL=preview
-      REPLACES="stable <= 1.0.94.3"
-      ;;
     snapshot )
       CHANNEL=snapshot
       REPLACES="unstable <= 1.0.94.3"
@@ -206,7 +206,7 @@ verify_channel() {
     stable )
       CHANNEL=stable
       # TODO(phajdan.jr): Remove REPLACES completely.
-      REPLACES="preview"
+      REPLACES="beta"
       ;;
     unstable|dev|alpha )
       CHANNEL=unstable
@@ -237,7 +237,7 @@ verify_channel() {
 }
 
 process_opts() {
-  while getopts ":o:b:c:a:h" OPTNAME
+  while getopts ":o:b:c:a:d:h" OPTNAME
   do
     case $OPTNAME in
       o )
@@ -253,6 +253,9 @@ process_opts() {
         ;;
       a )
         TARGETARCH="$OPTARG"
+        ;;
+      d )
+        BRANDING="$OPTARG"
         ;;
       h )
         usage
@@ -298,9 +301,9 @@ source ${BUILDDIR}/installer/common/installer.include
 
 get_version_info
 
-if [ "$CHROMIUM_BUILD" = "vivaldi" ]; then
+if [ "$BRANDING" = "vivaldi" ]; then
   source "${BUILDDIR}/installer/common/vivaldi.info"
-elif [ "$CHROMIUM_BUILD" = "_google_chrome" ]; then
+elif [ "$BRANDING" = "_google_chrome" ]; then
   source "${BUILDDIR}/installer/common/google-chrome.info"
 else
   source "${BUILDDIR}/installer/common/chromium-browser.info"

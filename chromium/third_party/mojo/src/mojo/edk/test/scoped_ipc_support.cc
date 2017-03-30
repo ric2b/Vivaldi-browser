@@ -2,18 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/test/scoped_ipc_support.h"
+#include "third_party/mojo/src/mojo/edk/test/scoped_ipc_support.h"
+
+#include <utility>
 
 #include "base/message_loop/message_loop.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 
 namespace mojo {
 namespace test {
 
 namespace internal {
 
-ScopedIPCSupportHelper::ScopedIPCSupportHelper()
-    : event_(true, false) {  // Manual reset.
+ScopedIPCSupportHelper::ScopedIPCSupportHelper() {
 }
 
 ScopedIPCSupportHelper::~ScopedIPCSupportHelper() {
@@ -22,7 +23,7 @@ ScopedIPCSupportHelper::~ScopedIPCSupportHelper() {
     embedder::ShutdownIPCSupportOnIOThread();
   } else {
     embedder::ShutdownIPCSupport();
-    event_.Wait();
+    run_loop_.Run();
   }
 }
 
@@ -33,20 +34,20 @@ void ScopedIPCSupportHelper::Init(
     embedder::ScopedPlatformHandle platform_handle) {
   io_thread_task_runner_ = io_thread_task_runner;
   // Note: Run delegate methods on the I/O thread.
-  embedder::InitIPCSupport(process_type, io_thread_task_runner_,
-                           process_delegate, io_thread_task_runner_,
-                           platform_handle.Pass());
+  embedder::InitIPCSupport(process_type, process_delegate,
+                           io_thread_task_runner_, std::move(platform_handle));
 }
 
 void ScopedIPCSupportHelper::OnShutdownCompleteImpl() {
-  event_.Signal();
+  run_loop_.Quit();
 }
 
 }  // namespace internal
 
 ScopedIPCSupport::ScopedIPCSupport(
     scoped_refptr<base::TaskRunner> io_thread_task_runner) {
-  helper_.Init(embedder::ProcessType::NONE, this, io_thread_task_runner.Pass(),
+  helper_.Init(embedder::ProcessType::NONE, this,
+               std::move(io_thread_task_runner),
                embedder::ScopedPlatformHandle());
 }
 
@@ -60,7 +61,8 @@ void ScopedIPCSupport::OnShutdownComplete() {
 ScopedMasterIPCSupport::ScopedMasterIPCSupport(
     scoped_refptr<base::TaskRunner> io_thread_task_runner) {
   helper_.Init(embedder::ProcessType::MASTER, this,
-               io_thread_task_runner.Pass(), embedder::ScopedPlatformHandle());
+               std::move(io_thread_task_runner),
+               embedder::ScopedPlatformHandle());
 }
 
 ScopedMasterIPCSupport::ScopedMasterIPCSupport(
@@ -68,7 +70,8 @@ ScopedMasterIPCSupport::ScopedMasterIPCSupport(
     base::Callback<void(embedder::SlaveInfo slave_info)> on_slave_disconnect)
     : on_slave_disconnect_(on_slave_disconnect) {
   helper_.Init(embedder::ProcessType::MASTER, this,
-               io_thread_task_runner.Pass(), embedder::ScopedPlatformHandle());
+               std::move(io_thread_task_runner),
+               embedder::ScopedPlatformHandle());
 }
 
 ScopedMasterIPCSupport::~ScopedMasterIPCSupport() {
@@ -86,8 +89,8 @@ void ScopedMasterIPCSupport::OnSlaveDisconnect(embedder::SlaveInfo slave_info) {
 ScopedSlaveIPCSupport::ScopedSlaveIPCSupport(
     scoped_refptr<base::TaskRunner> io_thread_task_runner,
     embedder::ScopedPlatformHandle platform_handle) {
-  helper_.Init(embedder::ProcessType::SLAVE, this, io_thread_task_runner.Pass(),
-               platform_handle.Pass());
+  helper_.Init(embedder::ProcessType::SLAVE, this,
+               std::move(io_thread_task_runner), std::move(platform_handle));
 }
 
 ScopedSlaveIPCSupport::ScopedSlaveIPCSupport(
@@ -95,8 +98,8 @@ ScopedSlaveIPCSupport::ScopedSlaveIPCSupport(
     embedder::ScopedPlatformHandle platform_handle,
     base::Closure on_master_disconnect)
     : on_master_disconnect_(on_master_disconnect) {
-  helper_.Init(embedder::ProcessType::SLAVE, this, io_thread_task_runner.Pass(),
-               platform_handle.Pass());
+  helper_.Init(embedder::ProcessType::SLAVE, this,
+               std::move(io_thread_task_runner), std::move(platform_handle));
 }
 
 ScopedSlaveIPCSupport::~ScopedSlaveIPCSupport() {

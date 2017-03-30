@@ -6,7 +6,7 @@
 #define UI_GFX_ANDROID_SHARED_DEVICE_DISPLAY_INFO_H_
 
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
 
@@ -44,7 +44,7 @@ class SharedDeviceDisplayInfo {
                     jint smallest_dip_width,
                     jint rotation_degrees);
  private:
-  friend struct DefaultSingletonTraits<SharedDeviceDisplayInfo>;
+  friend struct base::DefaultSingletonTraits<SharedDeviceDisplayInfo>;
 
   SharedDeviceDisplayInfo();
   ~SharedDeviceDisplayInfo();

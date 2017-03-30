@@ -7,14 +7,14 @@
 
 #include <string>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/command_updater_delegate.h"
 #include "chrome/browser/ui/panels/panel_constants.h"
-#include "components/sessions/session_id.h"
+#include "components/sessions/core/session_id.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -32,6 +32,7 @@ class Profile;
 class StackedPanelCollection;
 
 namespace content {
+class SiteInstance;
 class WebContents;
 struct NativeWebKeyboardEvent;
 }
@@ -215,7 +216,10 @@ class Panel : public ui::BaseWindow,
   // Panel must be initialized to be "fully created" and ready for use.
   // Only called by PanelManager.
   bool initialized() const { return initialized_; }
-  void Initialize(const GURL& url, const gfx::Rect& bounds, bool always_on_top);
+  void Initialize(const GURL& url,
+                  content::SiteInstance* source_site_instance,
+                  const gfx::Rect& bounds,
+                  bool always_on_top);
 
   // This is different from BaseWindow::SetBounds():
   // * SetPanelBounds() is only called by PanelManager to manage its position.

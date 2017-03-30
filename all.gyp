@@ -16,7 +16,8 @@
       'type': 'none',
       'xcode_create_dependents_test_runner': 1,
       'dependencies': [
-        'chromium/chrome/chrome.gyp:vivaldi',
+        'chromium/chrome/chrome.gyp:chrome',
+        'testing/vivaldi_testing.gyp:*',
         'vivaldi.gyp:*',
       ],
       'conditions': [
@@ -49,7 +50,6 @@
             'chromium/url/url.gyp:url_unittests',
             'chromium/device/device_tests.gyp:device_unittests',
             'chromium/ppapi/ppapi_internal.gyp:ppapi_unittests',
-            'chromium/google_apis/google_apis.gyp:google_apis_unittests',
           ],
         }],
         ['OS=="win"', {

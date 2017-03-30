@@ -13,13 +13,14 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/renderer/spellchecker/custom_dictionary_engine.h"
-#include "chrome/renderer/spellchecker/spellcheck_language.h"
 #include "content/public/renderer/render_process_observer.h"
-#include "ipc/ipc_platform_file.h"
 
+struct SpellCheckBDictLanguage;
+class SpellcheckLanguage;
 struct SpellCheckResult;
 
 namespace blink {
@@ -49,31 +50,31 @@ class SpellCheck : public content::RenderProcessObserver,
   SpellCheck();
   ~SpellCheck() override;
 
-  // TODO: Try to move that all to SpellcheckLanguage.
-  void Init(base::File file,
-            const std::set<std::string>& custom_words,
-            const std::string& language);
+  void AddSpellcheckLanguage(base::File file, const std::string& language);
 
-  // If there is no dictionary file, then this requests one from the browser
+  // If there are no dictionary files, then this requests them from the browser
   // and does not block. In this case it returns true.
-  // If there is a dictionary file, but Hunspell has not been loaded, then
-  // this loads Hunspell.
-  // If Hunspell is already loaded, this does nothing. In both the latter cases
-  // it returns false, meaning that it is OK to continue spellchecking.
+  // If there are dictionary files, but their Hunspell has not been loaded, then
+  // this loads their Hunspell.
+  // If each dictionary file's Hunspell is already loaded, this does nothing. In
+  // both the latter cases it returns false, meaning that it is OK to continue
+  // spellchecking.
   bool InitializeIfNeeded();
 
   // SpellCheck a word.
-  // Returns true if spelled correctly, false otherwise.
-  // If the spellchecker failed to initialize, always returns true.
+  // Returns true if spelled correctly for any language in |languages_|, false
+  // otherwise.
+  // If any spellcheck languages failed to initialize, always returns true.
   // The |tag| parameter should either be a unique identifier for the document
   // that the word came from (if the current platform requires it), or 0.
   // In addition, finds the suggested words for a given word
   // and puts them into |*optional_suggestions|.
   // If the word is spelled correctly, the vector is empty.
   // If optional_suggestions is NULL, suggested words will not be looked up.
-  // Note that Doing suggest lookups can be slow.
-  bool SpellCheckWord(const base::char16* in_word,
-                      int in_word_len,
+  // Note that doing suggest lookups can be slow.
+  bool SpellCheckWord(const base::char16* text_begin,
+                      int position_in_text,
+                      int text_length,
                       int tag,
                       int* misspelling_start,
                       int* misspelling_len,
@@ -86,17 +87,9 @@ class SpellCheck : public content::RenderProcessObserver,
       const base::string16& text,
       blink::WebVector<blink::WebTextCheckingResult>* results);
 
-  // Find a possible correctly spelled word for a misspelled word. Computes an
-  // empty string if input misspelled word is too long, there is ambiguity, or
-  // the correct spelling cannot be determined.
-  // NOTE: If using the platform spellchecker, this will send a *lot* of sync
-  // IPCs. We should probably refactor this if we ever plan to take it out from
-  // behind its command line flag.
-  base::string16 GetAutoCorrectionWord(const base::string16& word, int tag);
-
   // Requests to spellcheck the specified text in the background. This function
   // posts a background task and calls SpellCheckParagraph() in the task.
-#if !defined (OS_MACOSX)
+#if !defined (USE_BROWSER_SPELLCHECKER)
   void RequestTextChecking(const base::string16& text,
                            blink::WebTextCheckingCompletion* completion);
 #endif
@@ -112,7 +105,7 @@ class SpellCheck : public content::RenderProcessObserver,
       const std::vector<SpellCheckResult>& spellcheck_results,
       blink::WebVector<blink::WebTextCheckingResult>* textcheck_results);
 
-  bool is_spellcheck_enabled() { return spellcheck_enabled_; }
+  bool IsSpellcheckEnabled();
 
  private:
    friend class SpellCheckTest;
@@ -120,21 +113,26 @@ class SpellCheck : public content::RenderProcessObserver,
    FRIEND_TEST_ALL_PREFIXES(SpellCheckTest,
        RequestSpellCheckMultipleTimesWithoutInitialization);
 
+   // Evenly fill |optional_suggestions| with a maximum of |kMaxSuggestions|
+   // suggestions from |suggestions_list|. suggestions_list[i][j] is the j-th
+   // suggestion from the i-th language's suggestions. |optional_suggestions|
+   // cannot be null.
+   static void FillSuggestions(
+       const std::vector<std::vector<base::string16>>& suggestions_list,
+       std::vector<base::string16>* optional_suggestions);
+
   // RenderProcessObserver implementation:
    bool OnControlMessageReceived(const IPC::Message& message) override;
 
   // Message handlers.
-   void OnInit(IPC::PlatformFileForTransit bdict_file,
-               const std::set<std::string>& custom_words,
-               const std::string& language,
-               bool auto_spell_correct);
+   void OnInit(const std::vector<SpellCheckBDictLanguage>& bdict_languages,
+               const std::set<std::string>& custom_words);
    void OnCustomDictionaryChanged(const std::set<std::string>& words_added,
                                   const std::set<std::string>& words_removed);
-  void OnEnableAutoSpellCorrect(bool enable);
   void OnEnableSpellCheck(bool enable);
   void OnRequestDocumentMarkers();
 
-#if !defined (OS_MACOSX)
+#if !defined (USE_BROWSER_SPELLCHECKER)
   // Posts delayed spellcheck task and clear it if any.
   // Takes ownership of |request|.
   void PostDelayedSpellCheckTask(SpellcheckRequest* request);
@@ -150,13 +148,12 @@ class SpellCheck : public content::RenderProcessObserver,
   scoped_ptr<SpellcheckRequest> pending_request_param_;
 #endif
 
-  SpellcheckLanguage spellcheck_;  // Language-specific spellchecking code.
+  // A vector of objects used to actually check spelling, one for each enabled
+  // language.
+  ScopedVector<SpellcheckLanguage> languages_;
 
   // Custom dictionary spelling engine.
   CustomDictionaryEngine custom_dictionary_;
-
-  // Remember state for auto spell correct.
-  bool auto_spell_correct_turned_on_;
 
   // Remember state for spellchecking.
   bool spellcheck_enabled_;

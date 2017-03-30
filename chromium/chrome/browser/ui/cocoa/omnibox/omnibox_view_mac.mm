@@ -17,13 +17,16 @@
 #include "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_popup_view_mac.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_controller.h"
-#include "chrome/browser/ui/omnibox/omnibox_popup_model.h"
-#include "chrome/browser/ui/toolbar/toolbar_model.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
+#include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/security_state/security_state_model.h"
+#include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
 #import "third_party/mozilla/NSPasteboard+Utils.h"
@@ -141,7 +144,10 @@ OmniboxViewMac::OmniboxViewMac(OmniboxEditController* controller,
                                Profile* profile,
                                CommandUpdater* command_updater,
                                AutocompleteTextField* field)
-    : OmniboxView(profile, controller, command_updater),
+    : OmniboxView(
+          controller,
+          make_scoped_ptr(new ChromeOmniboxClient(controller, profile))),
+      profile_(profile),
       popup_view_(new OmniboxPopupViewMac(this, model(), field)),
       field_(field),
       saved_temporary_selection_(NSMakeRange(0, 0)),
@@ -517,8 +523,8 @@ void OmniboxViewMac::ApplyTextAttributes(
 
   url::Component scheme, host;
   AutocompleteInput::ParseForEmphasizeComponents(
-      display_text, ChromeAutocompleteSchemeClassifier(profile()),
-      &scheme, &host);
+      display_text, ChromeAutocompleteSchemeClassifier(profile_), &scheme,
+      &host);
   bool grey_out_url = display_text.substr(scheme.begin, scheme.len) ==
       base::UTF8ToUTF16(extensions::kExtensionScheme);
   if (model()->CurrentTextIsURL() &&
@@ -537,23 +543,26 @@ void OmniboxViewMac::ApplyTextAttributes(
   // TODO(shess): GTK has this as a member var, figure out why.
   // [Could it be to not change if no change?  If so, I'm guessing
   // AppKit may already handle that.]
-  const connection_security::SecurityLevel security_level =
+  const security_state::SecurityStateModel::SecurityLevel security_level =
       controller()->GetToolbarModel()->GetSecurityLevel(false);
 
   // Emphasize the scheme for security UI display purposes (if necessary).
   if (!model()->user_input_in_progress() && model()->CurrentTextIsURL() &&
-      scheme.is_nonempty() && (security_level != connection_security::NONE)) {
+      scheme.is_nonempty() &&
+      (security_level != security_state::SecurityStateModel::NONE)) {
     NSColor* color;
-    if (security_level == connection_security::EV_SECURE ||
-        security_level == connection_security::SECURE) {
+    if (security_level == security_state::SecurityStateModel::EV_SECURE ||
+        security_level == security_state::SecurityStateModel::SECURE) {
       color = SecureSchemeColor();
-    } else if (security_level == connection_security::SECURITY_ERROR) {
+    } else if (security_level ==
+               security_state::SecurityStateModel::SECURITY_ERROR) {
       color = SecurityErrorSchemeColor();
       // Add a strikethrough through the scheme.
       [attributedString addAttribute:NSStrikethroughStyleAttributeName
                  value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
                  range:ComponentToNSRange(scheme)];
-    } else if (security_level == connection_security::SECURITY_WARNING) {
+    } else if (security_level ==
+               security_state::SecurityStateModel::SECURITY_WARNING) {
       color = BaseTextColor();
     } else {
       NOTREACHED();
@@ -621,7 +630,7 @@ void OmniboxViewMac::OnBeforePossibleChange() {
   marked_range_before_change_ = GetMarkedRange();
 }
 
-bool OmniboxViewMac::OnAfterPossibleChange() {
+bool OmniboxViewMac::OnAfterPossibleChange(bool allow_keyword_ui_change) {
   // We should only arrive here when the field is focused.
   DCHECK(IsFirstResponder());
 
@@ -655,7 +664,7 @@ bool OmniboxViewMac::OnAfterPossibleChange() {
   const bool something_changed = model()->OnAfterPossibleChange(
       text_before_change_, new_text, new_selection.location,
       NSMaxRange(new_selection), selection_differs, text_differs,
-      just_deleted_text, !IsImeComposing());
+      just_deleted_text, allow_keyword_ui_change && !IsImeComposing());
 
   if (delete_was_pressed_ && at_end_of_edit)
     delete_at_end_pressed_ = true;
@@ -721,7 +730,7 @@ void OmniboxViewMac::OnBeforeChange() {
 
 void OmniboxViewMac::OnDidChange() {
   // Figure out what changed and notify the model.
-  OnAfterPossibleChange();
+  OnAfterPossibleChange(true);
 }
 
 void OmniboxViewMac::OnDidEndEditing() {

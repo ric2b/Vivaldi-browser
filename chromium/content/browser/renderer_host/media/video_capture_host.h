@@ -53,6 +53,7 @@
 
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner_helpers.h"
@@ -82,6 +83,10 @@ class CONTENT_EXPORT VideoCaptureHost
                        base::SharedMemoryHandle handle,
                        int length,
                        int buffer_id) override;
+  void OnBufferCreated2(VideoCaptureControllerID id,
+                        const std::vector<gfx::GpuMemoryBufferHandle>& handles,
+                        const gfx::Size& size,
+                        int buffer_id) override;
   void OnBufferDestroyed(VideoCaptureControllerID id,
                          int buffer_id) override;
   void OnBufferReady(VideoCaptureControllerID id,
@@ -126,7 +131,7 @@ class CONTENT_EXPORT VideoCaptureHost
   // the controller.
   void OnRendererFinishedWithBuffer(int device_id,
                                     int buffer_id,
-                                    uint32 sync_point,
+                                    const gpu::SyncToken& sync_token,
                                     double consumer_resource_utilization);
 
   // IPC message: Get supported formats referenced by |capture_session_id|.

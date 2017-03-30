@@ -1,0 +1,274 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+mojom_generator_root = "//mojo/public/tools/bindings"
+mojom_generator_script = "$mojom_generator_root/mojom_bindings_generator.py"
+mojom_generator_sources = [
+  "$mojom_generator_root/generators/mojom_cpp_generator.py",
+  "$mojom_generator_root/generators/mojom_js_generator.py",
+  "$mojom_generator_root/generators/mojom_java_generator.py",
+  "$mojom_generator_root/pylib/mojom/__init__.py",
+  "$mojom_generator_root/pylib/mojom/error.py",
+  "$mojom_generator_root/pylib/mojom/generate/__init__.py",
+  "$mojom_generator_root/pylib/mojom/generate/constant_resolver.py",
+  "$mojom_generator_root/pylib/mojom/generate/data.py",
+  "$mojom_generator_root/pylib/mojom/generate/generator.py",
+  "$mojom_generator_root/pylib/mojom/generate/module.py",
+  "$mojom_generator_root/pylib/mojom/generate/pack.py",
+  "$mojom_generator_root/pylib/mojom/generate/template_expander.py",
+  "$mojom_generator_root/pylib/mojom/parse/__init__.py",
+  "$mojom_generator_root/pylib/mojom/parse/ast.py",
+  "$mojom_generator_root/pylib/mojom/parse/lexer.py",
+  "$mojom_generator_root/pylib/mojom/parse/parser.py",
+  "$mojom_generator_root/pylib/mojom/parse/translate.py",
+  "$mojom_generator_script",
+]
+
+# Generate C++/JavaScript/Java source files from mojom files. The output files
+# will go under the generated file directory tree with the same path as each
+# input file.
+#
+# Parameters:
+#
+#   sources (optional if one of the deps sets listed below is present)
+#       List of source .mojom files to compile.
+#
+#   deps (optional)
+#       Note: this can contain only other mojom targets.
+#
+#   public_deps (optional)
+#       Note: this can contain only other mojom targets.
+#
+#   import_dirs (optional)
+#       List of import directories that will get added when processing sources.
+#
+#   with_environment (optional)
+#       Set to |false| to omit an implicit bindings dependency on the Chromium
+#       Mojo environment implementation. Defaults to |true| and in general
+#       should only be overridden by mojom targets within the Mojo EDK.
+#
+#   typemaps (optional)
+#       A list of typemap files to apply during bindings generation.
+#
+#   variant (optional)
+#       A variant name to apply to generated bindings. Variant influences
+#       generated source filenames as wells the symbols they define.
+#
+#   testonly (optional)
+#
+#   visibility (optional)
+template("mojom") {
+  assert(
+      defined(invoker.sources) || defined(invoker.deps) ||
+          defined(invoker.public_deps),
+      "\"sources\" or \"deps\" must be defined for the $target_name template.")
+
+  cpp_sources_suffix = "cpp_sources"
+  cpp_sources_target_name = "${target_name}_${cpp_sources_suffix}"
+  if (defined(invoker.sources)) {
+    if (defined(invoker.variant)) {
+      variant = invoker.variant
+      generator_cpp_outputs = [
+        "{{source_gen_dir}}/{{source_name_part}}.mojom-${variant}.cc",
+        "{{source_gen_dir}}/{{source_name_part}}.mojom-${variant}.h",
+        "{{source_gen_dir}}/{{source_name_part}}.mojom-${variant}-internal.h",
+      ]
+      generator_js_outputs = []
+      generator_java_outputs = []
+    } else {
+      generator_cpp_outputs = [
+        "{{source_gen_dir}}/{{source_name_part}}.mojom.cc",
+        "{{source_gen_dir}}/{{source_name_part}}.mojom.h",
+        "{{source_gen_dir}}/{{source_name_part}}.mojom-internal.h",
+      ]
+      generator_js_outputs =
+          [ "{{source_gen_dir}}/{{source_name_part}}.mojom.js" ]
+      generator_java_outputs =
+          [ "{{source_gen_dir}}/{{source_name_part}}.mojom.srcjar" ]
+    }
+  }
+
+  if (defined(invoker.sources)) {
+    generator_target_name = target_name + "__generator"
+    action_foreach(generator_target_name) {
+      script = mojom_generator_script
+      inputs = mojom_generator_sources
+      sources = invoker.sources
+      deps = [
+        "//mojo/public/tools/bindings:precompile_templates",
+      ]
+      outputs =
+          generator_cpp_outputs + generator_java_outputs + generator_js_outputs
+      args = [
+        "--use_bundled_pylibs",
+        "generate",
+        "{{source}}",
+        "-d",
+        rebase_path("//", root_build_dir),
+        "-I",
+        rebase_path("//", root_build_dir),
+        "-o",
+        rebase_path(root_gen_dir),
+        "--bytecode_path",
+        rebase_path("$root_gen_dir/mojo/public/tools/bindings"),
+      ]
+
+      if (defined(invoker.import_dirs)) {
+        foreach(import_dir, invoker.import_dirs) {
+          args += [
+            "-I",
+            rebase_path(import_dir, root_build_dir),
+          ]
+        }
+      }
+
+      if (defined(invoker.variant)) {
+        args += [
+          "--variant",
+          invoker.variant,
+          "-g",
+          "c++",
+        ]
+      } else {
+        args += [
+          "-g",
+          "c++,javascript,java",
+        ]
+      }
+
+      if (defined(invoker.typemaps)) {
+        foreach(typemap, invoker.typemaps) {
+          args += [
+            "--typemap",
+            rebase_path(typemap, root_build_dir),
+          ]
+        }
+      }
+    }
+  }
+
+  source_set(target_name) {
+    if (defined(invoker.visibility)) {
+      visibility = invoker.visibility
+    }
+    if (defined(invoker.testonly)) {
+      testonly = invoker.testonly
+    }
+    if (defined(invoker.sources) && !defined(invoker.variant)) {
+      data = process_file_template(invoker.sources, generator_js_outputs)
+    }
+
+    public_deps = [
+      "//mojo/public/cpp/bindings",
+    ]
+    if (defined(invoker.sources)) {
+      public_deps += [ ":${cpp_sources_target_name}" ]
+    }
+    if (defined(invoker.public_deps)) {
+      public_deps += invoker.public_deps
+    }
+
+    deps = []
+    if (defined(invoker.sources)) {
+      public_deps += [ ":$generator_target_name" ]
+    }
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+  }
+
+  all_deps = []
+  if (defined(invoker.deps)) {
+    all_deps += invoker.deps
+  }
+  if (defined(invoker.public_deps)) {
+    all_deps += invoker.public_deps
+  }
+
+  group("${target_name}__is_mojom") {
+  }
+
+  # Explicitly ensure that all dependencies (invoker.deps and
+  # invoker.public_deps) are mojom targets themselves.
+  group("${target_name}__check_deps_are_all_mojom") {
+    deps = []
+    foreach(d, all_deps) {
+      name = get_label_info(d, "label_no_toolchain")
+      toolchain = get_label_info(d, "toolchain")
+      deps += [ "${name}__is_mojom(${toolchain})" ]
+    }
+  }
+
+  if (defined(invoker.sources)) {
+    # The generated C++ source files. The main reason to introduce this target
+    # is so that mojo/public/cpp/bindings can depend on mojom interfaces without
+    # circular dependencies. It means that the target is missing the dependency
+    # on mojo/public/cpp/bindings. No external targets should depend directly on
+    # this target *except* mojo/public/cpp/bindings and other *_cpp_sources
+    # targets.
+    source_set(cpp_sources_target_name) {
+      if (defined(invoker.testonly)) {
+        testonly = invoker.testonly
+      }
+      sources = process_file_template(invoker.sources, generator_cpp_outputs)
+      deps = [
+        ":$generator_target_name",
+        "//base",
+        "//mojo/public/interfaces/bindings:bindings__generator",
+      ]
+      foreach(d, all_deps) {
+        # Resolve the name, so that a target //mojo/something becomes
+        # //mojo/something:something and we can append cpp_sources_suffix to
+        # get the cpp dependency name.
+        full_name = get_label_info(d, "label_no_toolchain")
+        deps += [ "${full_name}_${cpp_sources_suffix}" ]
+      }
+      if (!defined(invoker.with_environment) || invoker.with_environment) {
+        deps += [ "//mojo/environment:chromium" ]
+      }
+    }
+  }
+
+  if (is_android && !defined(invoker.variant)) {
+    import("//build/config/android/rules.gni")
+
+    java_srcjar_target_name = target_name + "_java_sources"
+    action(java_srcjar_target_name) {
+      script = "//mojo/public/tools/gn/zip.py"
+      inputs = process_file_template(invoker.sources, generator_java_outputs)
+      output = "$target_gen_dir/$target_name.srcjar"
+      outputs = [
+        output,
+      ]
+      rebase_inputs = rebase_path(inputs, root_build_dir)
+      rebase_output = rebase_path(output, root_build_dir)
+      args = [
+        "--zip-inputs=$rebase_inputs",
+        "--output=$rebase_output",
+      ]
+      deps = [
+        ":$generator_target_name",
+      ]
+    }
+
+    java_target_name = target_name + "_java"
+    android_library(java_target_name) {
+      deps = [
+        "//base:base_java",
+        "//mojo/public/java:bindings",
+        "//mojo/public/java:system",
+      ]
+
+      foreach(d, all_deps) {
+        # Resolve the name, so that a target //mojo/something becomes
+        # //mojo/something:something and we can append "_java" to get the java
+        # dependency name.
+        full_name = get_label_info(d, "label_no_toolchain")
+        deps += [ "${full_name}_java" ]
+      }
+
+      srcjar_deps = [ ":$java_srcjar_target_name" ]
+    }
+  }
+}

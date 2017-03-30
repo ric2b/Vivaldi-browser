@@ -4,6 +4,9 @@
 
 #include "components/html_viewer/media_factory.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -21,18 +24,22 @@
 #include "media/blink/webmediaplayer_params.h"
 #include "media/cdm/default_cdm_factory.h"
 #include "media/filters/default_media_permission.h"
-#include "media/mojo/interfaces/media_renderer.mojom.h"
+#include "media/mojo/interfaces/renderer.mojom.h"
 #include "media/mojo/services/mojo_cdm_factory.h"
 #include "media/mojo/services/mojo_renderer_factory.h"
 #include "media/renderers/default_renderer_factory.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
-#include "mojo/application/public/interfaces/shell.mojom.h"
+#include "mojo/shell/public/cpp/connect.h"
+#include "mojo/shell/public/interfaces/shell.mojom.h"
+#include "third_party/WebKit/public/web/WebKit.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "v8/include/v8.h"
 
 namespace html_viewer {
 
 namespace {
 
-// Enable MediaRenderer in media pipeline instead of using the internal
+// Enable mojo media Renderer in media pipeline instead of using the internal
 // media::Renderer implementation.
 // TODO(xhwang): Move this to media_switches.h.
 const char kEnableMojoMediaRenderer[] = "enable-mojo-media-renderer";
@@ -42,6 +49,8 @@ bool AreSecureCodecsSupported() {
   // platform.
   return false;
 }
+
+void OnGotContentHandlerID(uint32_t content_handler_id) {}
 
 }  // namespace
 
@@ -71,6 +80,7 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
     blink::WebLocalFrame* frame,
     const blink::WebURL& url,
     blink::WebMediaPlayerClient* client,
+    blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
     blink::WebContentDecryptionModule* initial_cdm,
     mojo::Shell* shell) {
 #if defined(OS_ANDROID)
@@ -82,7 +92,7 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
 
   if (enable_mojo_media_renderer_) {
     media_renderer_factory.reset(
-        new media::MojoRendererFactory(GetMediaServiceProvider()));
+        new media::MojoRendererFactory(GetMediaServiceFactory()));
   } else {
     media_renderer_factory.reset(
         new media::DefaultRendererFactory(media_log,
@@ -92,14 +102,20 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
 
   media::WebMediaPlayerParams params(
       media::WebMediaPlayerParams::DeferLoadCB(), CreateAudioRendererSink(),
-      media_log, GetMediaThreadTaskRunner(), compositor_task_runner_,
-      media::WebMediaPlayerParams::Context3DCB(), GetMediaPermission(),
-      initial_cdm);
+      media_log, GetMediaThreadTaskRunner(), GetMediaThreadTaskRunner(),
+      compositor_task_runner_, media::WebMediaPlayerParams::Context3DCB(),
+      base::Bind(&v8::Isolate::AdjustAmountOfExternalAllocatedMemory,
+                 base::Unretained(blink::mainThreadIsolate())),
+      GetMediaPermission(), initial_cdm);
   base::WeakPtr<media::WebMediaPlayerDelegate> delegate;
 
-  return new media::WebMediaPlayerImpl(frame, client, delegate,
-                                       media_renderer_factory.Pass(),
-                                       GetCdmFactory(), params);
+  if (!url_index_.get() || url_index_->frame() != frame) {
+    url_index_.reset(new media::UrlIndex(frame));
+  }
+
+  return new media::WebMediaPlayerImpl(
+      frame, client, encrypted_client, delegate,
+      std::move(media_renderer_factory), GetCdmFactory(), url_index_, params);
 #endif  // defined(OS_ANDROID)
 }
 
@@ -112,15 +128,18 @@ blink::WebEncryptedMediaClient* MediaFactory::GetEncryptedMediaClient() {
   return web_encrypted_media_client_.get();
 }
 
-mojo::ServiceProvider* MediaFactory::GetMediaServiceProvider() {
-  if (!media_service_provider_) {
+media::interfaces::ServiceFactory* MediaFactory::GetMediaServiceFactory() {
+  if (!media_service_factory_) {
+    mojo::ServiceProviderPtr service_provider;
     mojo::URLRequestPtr request(mojo::URLRequest::New());
     request->url = mojo::String::From("mojo:media");
-    shell_->ConnectToApplication(request.Pass(),
-                                 GetProxy(&media_service_provider_), nullptr);
+    shell_->ConnectToApplication(std::move(request),
+                                 GetProxy(&service_provider), nullptr, nullptr,
+                                 base::Bind(&OnGotContentHandlerID));
+    mojo::ConnectToService(service_provider.get(), &media_service_factory_);
   }
 
-  return media_service_provider_.get();
+  return media_service_factory_.get();
 }
 
 media::MediaPermission* MediaFactory::GetMediaPermission() {
@@ -136,7 +155,7 @@ media::MediaPermission* MediaFactory::GetMediaPermission() {
 media::CdmFactory* MediaFactory::GetCdmFactory() {
   if (!cdm_factory_) {
     if (enable_mojo_media_renderer_)
-      cdm_factory_.reset(new media::MojoCdmFactory(GetMediaServiceProvider()));
+      cdm_factory_.reset(new media::MojoCdmFactory(GetMediaServiceFactory()));
     else
       cdm_factory_.reset(new media::DefaultCdmFactory());
   }
@@ -149,7 +168,7 @@ const media::AudioHardwareConfig& MediaFactory::GetAudioHardwareConfig() {
   return audio_hardware_config_;
 }
 
-scoped_refptr<media::AudioRendererSink>
+scoped_refptr<media::RestartableAudioRendererSink>
 MediaFactory::CreateAudioRendererSink() {
   // TODO(dalecurtis): Replace this with an interface to an actual mojo service;
   // the AudioOutputStreamSink will not work in sandboxed processes.

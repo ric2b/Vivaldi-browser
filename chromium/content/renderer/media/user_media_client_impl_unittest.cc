@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/renderer/media/user_media_client_impl.h"
+
+#include <stddef.h>
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -10,7 +15,6 @@
 #include "content/renderer/media/media_stream_track.h"
 #include "content/renderer/media/mock_media_stream_dispatcher.h"
 #include "content/renderer/media/mock_media_stream_video_source.h"
-#include "content/renderer/media/user_media_client_impl.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebMediaDeviceInfo.h"
@@ -48,14 +52,14 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
   UserMediaClientImplUnderTest(
       PeerConnectionDependencyFactory* dependency_factory,
       scoped_ptr<MediaStreamDispatcher> media_stream_dispatcher)
-      : UserMediaClientImpl(
-            NULL, dependency_factory, media_stream_dispatcher.Pass()),
+      : UserMediaClientImpl(NULL,
+                            dependency_factory,
+                            std::move(media_stream_dispatcher)),
         state_(REQUEST_NOT_STARTED),
         result_(NUM_MEDIA_REQUEST_RESULTS),
         result_name_(""),
         factory_(dependency_factory),
-        video_source_(NULL) {
-  }
+        video_source_(NULL) {}
 
   void RequestUserMedia() {
     blink::WebUserMediaRequest user_media_request;
@@ -159,7 +163,7 @@ class UserMediaClientImplTest : public ::testing::Test {
     ms_dispatcher_ = new MockMediaStreamDispatcher();
     used_media_impl_.reset(new UserMediaClientImplUnderTest(
         dependency_factory_.get(),
-        scoped_ptr<MediaStreamDispatcher>(ms_dispatcher_).Pass()));
+        scoped_ptr<MediaStreamDispatcher>(ms_dispatcher_)));
   }
 
   void TearDown() override {
@@ -371,7 +375,7 @@ TEST_F(UserMediaClientImplTest, StopSourceWhenMediaStreamGoesOutOfScope) {
   // Makes sure the test itself don't hold a reference to the created
   // MediaStream.
   used_media_impl_->ClearLastGeneratedStream();
-  blink::WebHeap::collectGarbageForTesting();
+  blink::WebHeap::collectAllGarbageForTesting();
 
   // Expect the sources to be stopped when the MediaStream goes out of scope.
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
@@ -385,6 +389,7 @@ TEST_F(UserMediaClientImplTest, FrameWillClose) {
   blink::WebMediaStream mixed_desc = RequestLocalMediaStream();
   blink::WebMediaStream desc2 = RequestLocalMediaStream();
   used_media_impl_->FrameWillClose();
+  blink::WebHeap::collectAllGarbageForTesting();
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_video_device_counter());
 }
@@ -398,7 +403,7 @@ TEST_F(UserMediaClientImplTest, MediaVideoSourceFailToStart) {
             used_media_impl_->request_state());
   EXPECT_EQ(MEDIA_DEVICE_TRACK_START_FAILURE,
             used_media_impl_->error_reason());
-  blink::WebHeap::collectGarbageForTesting();
+  blink::WebHeap::collectAllGarbageForTesting();
   EXPECT_EQ(1, ms_dispatcher_->request_stream_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_video_device_counter());
@@ -414,7 +419,7 @@ TEST_F(UserMediaClientImplTest, MediaAudioSourceFailToInitialize) {
             used_media_impl_->request_state());
   EXPECT_EQ(MEDIA_DEVICE_TRACK_START_FAILURE,
             used_media_impl_->error_reason());
-  blink::WebHeap::collectGarbageForTesting();
+  blink::WebHeap::collectAllGarbageForTesting();
   EXPECT_EQ(1, ms_dispatcher_->request_stream_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_video_device_counter());
@@ -462,6 +467,7 @@ TEST_F(UserMediaClientImplTest, StopTrackAfterReload) {
   blink::WebMediaStream mixed_desc = RequestLocalMediaStream();
   EXPECT_EQ(1, ms_dispatcher_->request_stream_counter());
   used_media_impl_->FrameWillClose();
+  blink::WebHeap::collectAllGarbageForTesting();
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_video_device_counter());
 

@@ -10,6 +10,7 @@
 #include "chrome/browser/extensions/extension_view_host.h"
 #import "chrome/browser/ui/cocoa/chrome_event_processing_window.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_host.h"
@@ -34,8 +35,8 @@ ExtensionViewMac::~ExtensionViewMac() {
 }
 
 void ExtensionViewMac::WindowFrameChanged() {
-  if (render_view_host()->GetView())
-    render_view_host()->GetView()->WindowFrameChanged();
+  if (render_view_host()->GetWidget()->GetView())
+    render_view_host()->GetWidget()->GetView()->WindowFrameChanged();
 }
 
 void ExtensionViewMac::CreateWidgetHostViewIn(gfx::NativeView superview) {
@@ -51,12 +52,13 @@ gfx::NativeView ExtensionViewMac::GetNativeView() {
   return extension_host_->host_contents()->GetNativeView();
 }
 
-void ExtensionViewMac::ResizeDueToAutoResize(const gfx::Size& new_size) {
+void ExtensionViewMac::ResizeDueToAutoResize(content::WebContents* web_contents,
+                                             const gfx::Size& new_size) {
   if (container_)
     container_->OnExtensionSizeChanged(this, new_size);
 }
 
-void ExtensionViewMac::RenderViewCreated() {
+void ExtensionViewMac::RenderViewCreated(content::RenderViewHost* host) {
   extensions::ViewType host_type = extension_host_->extension_host_type();
   if (host_type == extensions::VIEW_TYPE_EXTENSION_POPUP) {
     gfx::Size min_size(ExtensionViewMac::kMinWidth,

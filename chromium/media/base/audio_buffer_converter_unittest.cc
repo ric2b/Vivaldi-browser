@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_buffer_converter.h"
@@ -22,14 +24,9 @@ static scoped_refptr<AudioBuffer> MakeTestBuffer(int sample_rate,
                                                  ChannelLayout channel_layout,
                                                  int channel_count,
                                                  int frames) {
-  return MakeAudioBuffer<uint8>(kSampleFormatU8,
-                                channel_layout,
-                                channel_count,
-                                sample_rate,
-                                0,
-                                1,
-                                frames,
-                                base::TimeDelta::FromSeconds(0));
+  return MakeAudioBuffer<uint8_t>(kSampleFormatU8, channel_layout,
+                                  channel_count, sample_rate, 0, 1, frames,
+                                  base::TimeDelta::FromSeconds(0));
 }
 
 class AudioBufferConverterTest : public ::testing::Test {
@@ -207,13 +204,10 @@ TEST_F(AudioBufferConverterTest, ResetThenConvert) {
 }
 
 TEST_F(AudioBufferConverterTest, DiscreteChannelLayout) {
-  output_params_ = AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                   CHANNEL_LAYOUT_DISCRETE,
-                                   2,
-                                   kOutSampleRate,
-                                   16,
-                                   512,
-                                   0);
+  output_params_ =
+      AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                      CHANNEL_LAYOUT_DISCRETE, kOutSampleRate, 16, 512);
+  output_params_.set_channels_for_discrete(2);
   audio_buffer_converter_.reset(new AudioBufferConverter(output_params_));
   AddInput(MakeTestBuffer(kOutSampleRate, CHANNEL_LAYOUT_STEREO, 2, 512));
   ConsumeAllOutput();

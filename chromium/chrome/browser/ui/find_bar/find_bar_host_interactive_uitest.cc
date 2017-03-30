@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
@@ -17,7 +18,6 @@
 
 using base::WideToUTF16;
 using content::WebContents;
-using net::test_server::EmbeddedTestServer;
 
 namespace {
 
@@ -67,7 +67,7 @@ bool FocusedOnPage(WebContents* web_contents, std::string* result) {
 #define MAYBE_FindInPageEndState FindInPageEndState
 #endif
 IN_PROC_BROWSER_TEST_F(FindInPageInteractiveTest, MAYBE_FindInPageEndState) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // Make sure Chrome is in the foreground, otherwise sending input
   // won't do anything and the test will hang.

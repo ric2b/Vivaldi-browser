@@ -10,6 +10,7 @@
 
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/startup/startup_types.h"
@@ -29,6 +30,7 @@ class WebContents;
 }
 
 namespace internals {
+GURL GetTriggeredResetSettingsURL();
 GURL GetWelcomePageURL();
 }  // namespace internals
 
@@ -65,16 +67,6 @@ class StartupBrowserCreatorImpl {
                              const std::vector<GURL>& urls,
                              chrome::HostDesktopType desktop_type);
 
-  // Creates a tab for each of the Tabs in |tabs|. If browser is non-null
-  // and a tabbed browser, the tabs are added to it. Otherwise a new tabbed
-  // browser is created and the tabs are added to it. The browser the tabs
-  // are added to is returned, which is either |browser| or the newly created
-  // browser.
-  Browser* OpenTabsInBrowser(Browser* browser,
-                             bool process_startup,
-                             const StartupTabs& tabs,
-                             chrome::HostDesktopType desktop_type);
-
  private:
   FRIEND_TEST_ALL_PREFIXES(BrowserTest, RestorePinnedTabs);
   FRIEND_TEST_ALL_PREFIXES(BrowserTest, AppIdSwitch);
@@ -85,6 +77,16 @@ class StartupBrowserCreatorImpl {
     FIRST_RUN_LAST_TAB,  // Inject the welcome page as the last first-run tab.
   };
 
+  // Creates a tab for each of the Tabs in |tabs|. If browser is non-null
+  // and a tabbed browser, the tabs are added to it. Otherwise a new tabbed
+  // browser is created and the tabs are added to it. The browser the tabs
+  // are added to is returned, which is either |browser| or the newly created
+  // browser.
+  Browser* OpenTabsInBrowser(Browser* browser,
+                             bool process_startup,
+                             const StartupTabs& tabs,
+                             chrome::HostDesktopType desktop_type);
+
   // If the process was launched with the web application command line flags,
   // e.g. --app=http://www.google.com/ or --app_id=... return true.
   // In this case |app_url| or |app_id| are populated if they're non-null.
@@ -92,10 +94,8 @@ class StartupBrowserCreatorImpl {
 
   // If IsAppLaunch is true, tries to open an application window.
   // If the app is specified to start in a tab, or IsAppLaunch is false,
-  // returns false to specify default processing. |out_app_contents| is an
-  // optional argument to receive the created WebContents for the app.
-  bool OpenApplicationWindow(Profile* profile,
-                             content::WebContents** out_app_contents);
+  // returns false to specify default processing.
+  bool OpenApplicationWindow(Profile* profile);
 
   // If IsAppLaunch is true and the user set a pref indicating that the app
   // should open in a tab, do so.
@@ -147,12 +147,20 @@ class StartupBrowserCreatorImpl {
   // Adds additional startup URLs to the specified vector.
   void AddStartupURLs(std::vector<GURL>* startup_urls) const;
 
+  // Adds special URLs to the specified vector. These URLs are triggered by
+  // special-case logic, such as profile reset or presentation of the welcome
+  // page.
+  void AddSpecialURLs(std::vector<GURL>* startup_urls) const;
+
   // Initializes |welcome_run_type_| for this launch. Also persists state to
   // suppress injecting the welcome page for future launches.
   void InitializeWelcomeRunType(const std::vector<GURL>& urls_to_open);
 
   // Record Rappor metrics on startup URLs.
   void RecordRapporOnStartupURLs(const std::vector<GURL>& urls_to_open);
+
+  // Checks whether |profile_| has a reset trigger set.
+  bool ProfileHasResetTrigger() const;
 
   const base::FilePath cur_dir_;
   const base::CommandLine& command_line_;

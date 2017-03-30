@@ -4,7 +4,10 @@
 
 #include "remoting/host/single_window_desktop_environment.h"
 
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "remoting/host/single_window_input_injector.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_options.h"
@@ -37,8 +40,7 @@ class SingleWindowDesktopEnvironment : public BasicDesktopEnvironment {
   DISALLOW_COPY_AND_ASSIGN(SingleWindowDesktopEnvironment);
 };
 
-SingleWindowDesktopEnvironment::~SingleWindowDesktopEnvironment() {
-}
+SingleWindowDesktopEnvironment::~SingleWindowDesktopEnvironment() {}
 
 scoped_ptr<webrtc::DesktopCapturer>
 SingleWindowDesktopEnvironment::CreateVideoCapturer() {
@@ -48,11 +50,11 @@ SingleWindowDesktopEnvironment::CreateVideoCapturer() {
       webrtc::DesktopCaptureOptions::CreateDefault();
   options.set_use_update_notifications(true);
 
-  scoped_ptr<webrtc::WindowCapturer>window_capturer(
+  scoped_ptr<webrtc::WindowCapturer> window_capturer(
         webrtc::WindowCapturer::Create(options));
   window_capturer->SelectWindow(window_id_);
 
-  return window_capturer.Pass();
+  return std::move(window_capturer);
 }
 
 scoped_ptr<InputInjector>
@@ -63,7 +65,7 @@ SingleWindowDesktopEnvironment::CreateInputInjector() {
       InputInjector::Create(input_task_runner(),
                             ui_task_runner()));
   return SingleWindowInputInjector::CreateForWindow(
-             window_id_, input_injector.Pass()).Pass();
+             window_id_, std::move(input_injector));
 }
 
 SingleWindowDesktopEnvironment::SingleWindowDesktopEnvironment(
@@ -104,7 +106,7 @@ scoped_ptr<DesktopEnvironment> SingleWindowDesktopEnvironmentFactory::Create(
                                          ui_task_runner(),
                                          window_id_,
                                          supports_touch_events()));
-  return desktop_environment.Pass();
+  return std::move(desktop_environment);
 }
 
 }  // namespace remoting

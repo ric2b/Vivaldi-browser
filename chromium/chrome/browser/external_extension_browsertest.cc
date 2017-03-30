@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -17,15 +21,16 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace {
 
 struct IsSearchProviderTestData {
   IsSearchProviderTestData() : tab(NULL) {}
-  IsSearchProviderTestData(content::WebContents* t, std::string h, GURL url)
-      : tab(t), host(h), test_url(url) {
-  }
+  IsSearchProviderTestData(content::WebContents* t,
+                           const std::string& h,
+                           GURL url)
+      : tab(t), host(h), test_url(url) {}
 
   content::WebContents* tab;
   std::string host;
@@ -39,11 +44,11 @@ class SearchProviderTest : public InProcessBrowserTest {
   SearchProviderTest() {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ASSERT_TRUE(test_server()->Start());
+    ASSERT_TRUE(embedded_test_server()->Start());
 
     // Map all hosts to our local server.
-    std::string host_rule(
-        "MAP * " + test_server()->host_port_pair().ToString());
+    std::string host_rule("MAP * " +
+                          embedded_test_server()->host_port_pair().ToString());
     command_line->AppendSwitchASCII(switches::kHostRules, host_rule);
     // Use no proxy or otherwise this test will fail on a machine that has a
     // proxy configured.
@@ -56,7 +61,7 @@ class SearchProviderTest : public InProcessBrowserTest {
 
     // Get the url for the test page.
     search_provider_test_url_ =
-        test_server()->GetURL("files/is_search_provider_installed.html");
+        embedded_test_server()->GetURL("/is_search_provider_installed.html");
   }
 
   void SetUpOnMainThread() override {
@@ -99,8 +104,7 @@ class SearchProviderTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(SearchProviderTest);
 };
 
-//tomas@vivaldi.com: disabled browser_tests for mac (VB-7468)
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN)
 // This is flaking on XP. See http://crbug.com/159530
 #define MAYBE_TestIsSearchProviderInstalled \
     DISABLED_TestIsSearchProviderInstalled
@@ -153,8 +157,8 @@ IN_PROC_BROWSER_TEST_F(SearchProviderTest,
                        TestIsSearchProviderInstalledWithException) {
   // Change the url for the test page to one that throws an exception when
   // toString is called on the argument given to isSearchProviderInstalled.
-  search_provider_test_url_ = test_server()->GetURL(
-      "files/is_search_provider_installed_with_exception.html");
+  search_provider_test_url_ = embedded_test_server()->GetURL(
+      "/is_search_provider_installed_with_exception.html");
 
   FinishIsSearchProviderInstalledTest(StartIsSearchProviderInstalledTest(
       browser(), "www.google.com", ""));

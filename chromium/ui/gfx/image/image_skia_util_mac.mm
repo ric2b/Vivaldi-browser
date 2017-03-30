@@ -8,6 +8,7 @@
 #include <limits>
 
 #import <AppKit/AppKit.h>
+#include <stddef.h>
 
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsobject.h"
@@ -68,7 +69,7 @@ gfx::ImageSkia ImageSkiaFromResizedNSImage(NSImage* image,
         desired_size_for_scale);
 
     // TODO(dcheng): Should this function take a color space argument?
-    SkBitmap bitmap(gfx::NSImageRepToSkBitmapWithColorSpace(ns_image_rep,
+    SkBitmap bitmap(skia::NSImageRepToSkBitmapWithColorSpace(ns_image_rep,
         desired_size_for_scale, false, base::mac::GetGenericRGBColorSpace()));
     if (bitmap.isNull())
       continue;
@@ -88,7 +89,7 @@ NSImage* NSImageFromImageSkia(const gfx::ImageSkia& image_skia) {
   for (std::vector<gfx::ImageSkiaRep>::const_iterator it = image_reps.begin();
        it != image_reps.end(); ++it) {
     [image addRepresentation:
-        gfx::SkBitmapToNSBitmapImageRep(it->sk_bitmap())];
+        skia::SkBitmapToNSBitmapImageRep(it->sk_bitmap())];
   }
 
   [image setSize:NSMakeSize(image_skia.width(), image_skia.height())];
@@ -106,7 +107,7 @@ NSImage* NSImageFromImageSkiaWithColorSpace(const gfx::ImageSkia& image_skia,
   for (std::vector<gfx::ImageSkiaRep>::const_iterator it = image_reps.begin();
        it != image_reps.end(); ++it) {
     [image addRepresentation:
-        gfx::SkBitmapToNSBitmapImageRepWithColorSpace(it->sk_bitmap(),
+        skia::SkBitmapToNSBitmapImageRepWithColorSpace(it->sk_bitmap(),
                                                       color_space)];
   }
 

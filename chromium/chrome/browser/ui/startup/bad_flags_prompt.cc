@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/simple_message_box.h"
@@ -16,16 +17,19 @@
 #include "chrome/common/switch_utils.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/autofill/core/common/autofill_switches.h"
+#include "components/infobars/core/infobar_delegate.h"
 #include "components/infobars/core/simple_alert_infobar_delegate.h"
 #include "components/invalidation/impl/invalidation_switches.h"
 #include "components/nacl/common/nacl_switches.h"
-#include "components/startup_metric_utils/startup_metric_utils.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/switches.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/vector_icons_public.h"
 
 namespace chrome {
 
@@ -97,10 +101,12 @@ void ShowBadFlagsPrompt(Browser* browser) {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(*flag)) {
       SimpleAlertInfoBarDelegate::Create(
           InfoBarService::FromWebContents(web_contents),
+          infobars::InfoBarDelegate::BAD_FLAGS_PROMPT,
           infobars::InfoBarDelegate::kNoIconID,
-          l10n_util::GetStringFUTF16(IDS_BAD_FLAGS_WARNING_MESSAGE,
-                                     base::UTF8ToUTF16(
-                                         std::string("--") + *flag)),
+          gfx::VectorIconId::VECTOR_ICON_NONE,
+          l10n_util::GetStringFUTF16(
+              IDS_BAD_FLAGS_WARNING_MESSAGE,
+              base::UTF8ToUTF16(std::string("--") + *flag)),
           false);
       return;
     }

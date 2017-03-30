@@ -4,6 +4,10 @@
 
 #include "content/child/site_isolation_stats_gatherer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -38,8 +42,8 @@ void IncrementHistogramCount(const std::string& name) {
 }
 
 void IncrementHistogramEnum(const std::string& name,
-                            uint32 sample,
-                            uint32 boundary_value) {
+                            uint32_t sample,
+                            uint32_t boundary_value) {
   // The default value of min, max, bucket_count are copied from histogram.h.
   base::HistogramBase* histogram_pointer = base::LinearHistogram::FactoryGet(
       name, 1, boundary_value, boundary_value + 1,
@@ -49,7 +53,7 @@ void IncrementHistogramEnum(const std::string& name,
 
 void HistogramCountBlockedResponse(
     const std::string& bucket_prefix,
-    const linked_ptr<SiteIsolationResponseMetaData>& resp_data,
+    const scoped_ptr<SiteIsolationResponseMetaData>& resp_data,
     bool nosniff_block) {
   std::string block_label(nosniff_block ? ".NoSniffBlocked" : ".Blocked");
   IncrementHistogramCount(bucket_prefix + block_label);
@@ -68,7 +72,7 @@ void HistogramCountBlockedResponse(
 
   if (renderable_status_code) {
     IncrementHistogramEnum(
-        bucket_prefix + block_label + ".RenderableStatusCode",
+        bucket_prefix + block_label + ".RenderableStatusCode2",
         resp_data->resource_type, RESOURCE_TYPE_LAST_TYPE);
   } else {
     IncrementHistogramCount(bucket_prefix + block_label +
@@ -92,7 +96,7 @@ void SiteIsolationStatsGatherer::SetEnabled(bool enabled) {
   g_stats_gathering_enabled = enabled;
 }
 
-linked_ptr<SiteIsolationResponseMetaData>
+scoped_ptr<SiteIsolationResponseMetaData>
 SiteIsolationStatsGatherer::OnReceivedResponse(
     const GURL& frame_origin,
     const GURL& response_url,
@@ -100,7 +104,7 @@ SiteIsolationStatsGatherer::OnReceivedResponse(
     int origin_pid,
     const ResourceResponseInfo& info) {
   if (!g_stats_gathering_enabled)
-    return linked_ptr<SiteIsolationResponseMetaData>();
+    return nullptr;
 
   // if |origin_pid| is non-zero, it means that this response is for a plugin
   // spawned from this renderer process. We exclude responses for plugins for
@@ -108,26 +112,26 @@ SiteIsolationStatsGatherer::OnReceivedResponse(
   // the browser process so that we don't apply cross-site document blocking to
   // them.
   if (origin_pid)
-    return linked_ptr<SiteIsolationResponseMetaData>();
+    return nullptr;
 
   UMA_HISTOGRAM_COUNTS("SiteIsolation.AllResponses", 1);
 
   // See if this is for navigation. If it is, don't block it, under the
   // assumption that we will put it in an appropriate process.
   if (IsResourceTypeFrame(resource_type))
-    return linked_ptr<SiteIsolationResponseMetaData>();
+    return nullptr;
 
   if (!CrossSiteDocumentClassifier::IsBlockableScheme(response_url))
-    return linked_ptr<SiteIsolationResponseMetaData>();
+    return nullptr;
 
   if (CrossSiteDocumentClassifier::IsSameSite(frame_origin, response_url))
-    return linked_ptr<SiteIsolationResponseMetaData>();
+    return nullptr;
 
   CrossSiteDocumentMimeType canonical_mime_type =
       CrossSiteDocumentClassifier::GetCanonicalMimeType(info.mime_type);
 
   if (canonical_mime_type == CROSS_SITE_DOCUMENT_MIME_TYPE_OTHERS)
-    return linked_ptr<SiteIsolationResponseMetaData>();
+    return nullptr;
 
   // Every CORS request should have the Access-Control-Allow-Origin header even
   // if it is preceded by a pre-flight request. Therefore, if this is a CORS
@@ -140,13 +144,13 @@ SiteIsolationStatsGatherer::OnReceivedResponse(
                                 &access_control_origin);
   if (CrossSiteDocumentClassifier::IsValidCorsHeaderSet(
           frame_origin, response_url, access_control_origin))
-    return linked_ptr<SiteIsolationResponseMetaData>();
+    return nullptr;
 
   // Real XSD data collection starts from here.
   std::string no_sniff;
   info.headers->EnumerateHeader(NULL, "x-content-type-options", &no_sniff);
 
-  linked_ptr<SiteIsolationResponseMetaData> resp_data(
+  scoped_ptr<SiteIsolationResponseMetaData> resp_data(
       new SiteIsolationResponseMetaData);
   resp_data->frame_origin = frame_origin.spec();
   resp_data->response_url = response_url;
@@ -159,7 +163,7 @@ SiteIsolationStatsGatherer::OnReceivedResponse(
 }
 
 bool SiteIsolationStatsGatherer::OnReceivedFirstChunk(
-    const linked_ptr<SiteIsolationResponseMetaData>& resp_data,
+    const scoped_ptr<SiteIsolationResponseMetaData>& resp_data,
     const char* raw_data,
     int raw_length) {
   if (!g_stats_gathering_enabled)

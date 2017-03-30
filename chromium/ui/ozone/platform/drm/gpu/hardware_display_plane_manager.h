@@ -10,7 +10,7 @@
 #include <xf86drmMode.h>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "ui/ozone/ozone_export.h"
 #include "ui/ozone/platform/drm/common/scoped_drm_types.h"
@@ -63,7 +63,7 @@ struct OZONE_EXPORT HardwareDisplayPlaneList {
   std::vector<PageFlipInfo> legacy_page_flips;
 
 #if defined(USE_DRM_ATOMIC)
-  ScopedDrmPropertySetPtr atomic_property_set;
+  ScopedDrmAtomicReqPtr atomic_property_set;
 #endif  // defined(USE_DRM_ATOMIC)
 };
 
@@ -90,14 +90,19 @@ class OZONE_EXPORT HardwareDisplayPlaneManager {
 
   // Commit the plane states in |plane_list|.
   virtual bool Commit(HardwareDisplayPlaneList* plane_list,
-                      bool is_sync,
                       bool test_only) = 0;
 
-  // Set all planes in |plane_list| owned by |crtc_id| to free.
-  static void ResetPlanes(HardwareDisplayPlaneList* plane_list,
-                          uint32_t crtc_id);
+  const std::vector<scoped_ptr<HardwareDisplayPlane>>& planes() {
+    return planes_;
+  }
 
-  const ScopedVector<HardwareDisplayPlane>& planes() { return planes_; }
+  // Returns all formats which can be scanned out by this PlaneManager. Use
+  // IsFormatSupported to find if a given format is supported on a particular
+  // plane for a given crtc.
+  const std::vector<uint32_t>& GetSupportedFormats() const;
+  bool IsFormatSupported(uint32_t fourcc_format,
+                         uint32_t z_order,
+                         uint32_t crtc_id) const;
 
  protected:
   virtual bool SetPlaneData(HardwareDisplayPlaneList* plane_list,
@@ -112,17 +117,31 @@ class OZONE_EXPORT HardwareDisplayPlaneManager {
 
   // Finds the plane located at or after |*index| that is not in use and can
   // be used with |crtc_index|.
-  HardwareDisplayPlane* FindNextUnusedPlane(size_t* index, uint32_t crtc_index);
+  HardwareDisplayPlane* FindNextUnusedPlane(size_t* index,
+                                            uint32_t crtc_index,
+                                            const OverlayPlane& overlay) const;
 
   // Convert |crtc_id| into an index, returning -1 if the ID couldn't be found.
-  int LookupCrtcIndex(uint32_t crtc_id);
+  int LookupCrtcIndex(uint32_t crtc_id) const;
+
+  // Returns true if |plane| can support |overlay| and compatible with
+  // |crtc_index|.
+  bool IsCompatible(HardwareDisplayPlane* plane,
+                    const OverlayPlane& overlay,
+                    uint32_t crtc_index) const;
+
+  void ResetCurrentPlaneList(HardwareDisplayPlaneList* plane_list) const;
+
+  // Populates scanout formats supported by all planes.
+  void PopulateSupportedFormats();
 
   // Object containing the connection to the graphics device and wraps the API
   // calls to control it. Not owned.
   DrmDevice* drm_;
 
-  ScopedVector<HardwareDisplayPlane> planes_;
+  std::vector<scoped_ptr<HardwareDisplayPlane>> planes_;
   std::vector<uint32_t> crtcs_;
+  std::vector<uint32_t> supported_formats_;
 
   DISALLOW_COPY_AND_ASSIGN(HardwareDisplayPlaneManager);
 };

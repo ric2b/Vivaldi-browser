@@ -5,9 +5,11 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_SESSIONS_SYNC_SESSION_SNAPSHOT_H_
 #define SYNC_INTERNAL_API_PUBLIC_SESSIONS_SYNC_SESSION_SNAPSHOT_H_
 
-#include <string>
+#include <stddef.h>
 
-#include "base/basictypes.h"
+#include <string>
+#include <vector>
+
 #include "base/time/time.h"
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/base/model_type.h"

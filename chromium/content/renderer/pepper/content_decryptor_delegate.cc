@@ -4,10 +4,14 @@
 
 #include "content/renderer/pepper/content_decryptor_delegate.h"
 
+#include <string.h>
+#include <utility>
+#include <vector>
+
 #include "base/callback_helpers.h"
+#include "base/macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "content/renderer/pepper/ppb_buffer_impl.h"
 #include "media/base/audio_buffer.h"
@@ -53,27 +57,25 @@ namespace {
 // reference-count of 0. If |data| is NULL, sets |*resource| to NULL. Returns
 // true upon success and false if any error happened.
 bool MakeBufferResource(PP_Instance instance,
-                        const uint8_t* data,
-                        uint32_t size,
+                        const std::vector<uint8_t>& data,
                         scoped_refptr<PPB_Buffer_Impl>* resource) {
   TRACE_EVENT0("media", "ContentDecryptorDelegate - MakeBufferResource");
   DCHECK(resource);
 
-  if (!data || !size) {
-    DCHECK(!data && !size);
+  if (data.empty()) {
     resource = NULL;
     return true;
   }
 
   scoped_refptr<PPB_Buffer_Impl> buffer(
-      PPB_Buffer_Impl::CreateResource(instance, size));
+      PPB_Buffer_Impl::CreateResource(instance, data.size()));
   if (!buffer.get())
     return false;
 
   BufferAutoMapper mapper(buffer.get());
-  if (!mapper.data() || mapper.size() < size)
+  if (!mapper.data() || mapper.size() < data.size())
     return false;
-  memcpy(mapper.data(), data, size);
+  memcpy(mapper.data(), &data[0], data.size());
 
   *resource = buffer;
   return true;
@@ -189,11 +191,11 @@ PP_VideoCodecProfile MediaVideoCodecProfileToPpVideoCodecProfile(
 }
 
 PP_DecryptedFrameFormat MediaVideoFormatToPpDecryptedFrameFormat(
-    media::VideoFrame::Format format) {
+    media::VideoPixelFormat format) {
   switch (format) {
-    case media::VideoFrame::YV12:
+    case media::PIXEL_FORMAT_YV12:
       return PP_DECRYPTEDFRAMEFORMAT_YV12;
-    case media::VideoFrame::I420:
+    case media::PIXEL_FORMAT_I420:
       return PP_DECRYPTEDFRAMEFORMAT_I420;
     default:
       return PP_DECRYPTEDFRAMEFORMAT_UNKNOWN;
@@ -316,12 +318,14 @@ media::CdmKeyInformation::KeyStatus PpCdmKeyStatusToCdmKeyInformationKeyStatus(
       return media::CdmKeyInformation::INTERNAL_ERROR;
     case PP_CDMKEYSTATUS_EXPIRED:
       return media::CdmKeyInformation::EXPIRED;
-    case PP_CDMKEYSTATUS_OUTPUTNOTALLOWED:
-      return media::CdmKeyInformation::OUTPUT_NOT_ALLOWED;
+    case PP_CDMKEYSTATUS_OUTPUTRESTRICTED:
+      return media::CdmKeyInformation::OUTPUT_RESTRICTED;
     case PP_CDMKEYSTATUS_OUTPUTDOWNSCALED:
       return media::CdmKeyInformation::OUTPUT_DOWNSCALED;
     case PP_CDMKEYSTATUS_STATUSPENDING:
       return media::CdmKeyInformation::KEY_STATUS_PENDING;
+    case PP_CDMKEYSTATUS_RELEASED:
+      return media::CdmKeyInformation::RELEASED;
     default:
       NOTREACHED();
       return media::CdmKeyInformation::INTERNAL_ERROR;
@@ -394,7 +398,7 @@ void ContentDecryptorDelegate::Initialize(
   session_expiration_update_cb_ = session_expiration_update_cb;
   fatal_plugin_error_cb_ = fatal_plugin_error_cb;
 
-  uint32_t promise_id = cdm_promise_adapter_.SavePromise(promise.Pass());
+  uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));
   plugin_decryption_interface_->Initialize(
       pp_instance_, promise_id, StringVar::StringToPPVar(key_system_),
       PP_FromBool(allow_distinctive_identifier),
@@ -416,11 +420,10 @@ void ContentDecryptorDelegate::SetServerCertificate(
     return;
   }
 
-  uint32_t promise_id = cdm_promise_adapter_.SavePromise(promise.Pass());
+  uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));
   PP_Var certificate_array =
       PpapiGlobals::Get()->GetVarTracker()->MakeArrayBufferPPVar(
-          base::checked_cast<uint32>(certificate.size()),
-          vector_as_array(&certificate));
+          base::checked_cast<uint32_t>(certificate.size()), certificate.data());
   plugin_decryption_interface_->SetServerCertificate(
       pp_instance_, promise_id, certificate_array);
 }
@@ -430,11 +433,10 @@ void ContentDecryptorDelegate::CreateSessionAndGenerateRequest(
     media::EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data,
     scoped_ptr<NewSessionCdmPromise> promise) {
-  uint32_t promise_id = cdm_promise_adapter_.SavePromise(promise.Pass());
+  uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));
   PP_Var init_data_array =
       PpapiGlobals::Get()->GetVarTracker()->MakeArrayBufferPPVar(
-          base::checked_cast<uint32>(init_data.size()),
-          vector_as_array(&init_data));
+          base::checked_cast<uint32_t>(init_data.size()), init_data.data());
   plugin_decryption_interface_->CreateSessionAndGenerateRequest(
       pp_instance_, promise_id, MediaSessionTypeToPpSessionType(session_type),
       MediaInitDataTypeToPpInitDataType(init_data_type), init_data_array);
@@ -444,7 +446,7 @@ void ContentDecryptorDelegate::LoadSession(
     media::MediaKeys::SessionType session_type,
     const std::string& session_id,
     scoped_ptr<NewSessionCdmPromise> promise) {
-  uint32_t promise_id = cdm_promise_adapter_.SavePromise(promise.Pass());
+  uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));
   plugin_decryption_interface_->LoadSession(
       pp_instance_, promise_id, MediaSessionTypeToPpSessionType(session_type),
       StringVar::StringToPPVar(session_id));
@@ -454,11 +456,10 @@ void ContentDecryptorDelegate::UpdateSession(
     const std::string& session_id,
     const std::vector<uint8_t>& response,
     scoped_ptr<SimpleCdmPromise> promise) {
-  uint32_t promise_id = cdm_promise_adapter_.SavePromise(promise.Pass());
+  uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));
   PP_Var response_array =
       PpapiGlobals::Get()->GetVarTracker()->MakeArrayBufferPPVar(
-          base::checked_cast<uint32>(response.size()),
-          vector_as_array(&response));
+          base::checked_cast<uint32_t>(response.size()), response.data());
   plugin_decryption_interface_->UpdateSession(
       pp_instance_, promise_id, StringVar::StringToPPVar(session_id),
       response_array);
@@ -473,7 +474,7 @@ void ContentDecryptorDelegate::CloseSession(
     return;
   }
 
-  uint32_t promise_id = cdm_promise_adapter_.SavePromise(promise.Pass());
+  uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));
   plugin_decryption_interface_->CloseSession(
       pp_instance_, promise_id, StringVar::StringToPPVar(session_id));
 }
@@ -487,7 +488,7 @@ void ContentDecryptorDelegate::RemoveSession(
     return;
   }
 
-  uint32_t promise_id = cdm_promise_adapter_.SavePromise(promise.Pass());
+  uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));
   plugin_decryption_interface_->RemoveSession(
       pp_instance_, promise_id, StringVar::StringToPPVar(session_id));
 }
@@ -590,7 +591,6 @@ bool ContentDecryptorDelegate::InitializeAudioDecoder(
   scoped_refptr<PPB_Buffer_Impl> extra_data_resource;
   if (!MakeBufferResource(pp_instance_,
                           decoder_config.extra_data(),
-                          decoder_config.extra_data_size(),
                           &extra_data_resource)) {
     return false;
   }
@@ -619,7 +619,6 @@ bool ContentDecryptorDelegate::InitializeVideoDecoder(
   scoped_refptr<PPB_Buffer_Impl> extra_data_resource;
   if (!MakeBufferResource(pp_instance_,
                           decoder_config.extra_data(),
-                          decoder_config.extra_data_size(),
                           &extra_data_resource)) {
     return false;
   }
@@ -811,18 +810,16 @@ void ContentDecryptorDelegate::OnSessionKeysChange(
   media::CdmKeysInfo keys_info;
   keys_info.reserve(key_count);
   for (uint32_t i = 0; i < key_count; ++i) {
-    scoped_ptr<media::CdmKeyInformation> key_info(new media::CdmKeyInformation);
     const auto& info = key_information[i];
-    key_info->key_id.assign(info.key_id, info.key_id + info.key_id_size);
-    key_info->status =
-        PpCdmKeyStatusToCdmKeyInformationKeyStatus(info.key_status);
-    key_info->system_code = info.system_code;
-    keys_info.push_back(key_info.release());
+    keys_info.push_back(new media::CdmKeyInformation(
+        info.key_id, info.key_id_size,
+        PpCdmKeyStatusToCdmKeyInformationKeyStatus(info.key_status),
+        info.system_code));
   }
 
   session_keys_change_cb_.Run(session_id_string->value(),
                               PP_ToBool(has_additional_usable_key),
-                              keys_info.Pass());
+                              std::move(keys_info));
 }
 
 void ContentDecryptorDelegate::OnSessionExpirationChange(
@@ -1032,11 +1029,8 @@ void ContentDecryptorDelegate::DeliverFrame(
 
   scoped_refptr<media::VideoFrame> decoded_frame =
       media::VideoFrame::WrapExternalYuvData(
-          media::VideoFrame::YV12,
-          frame_size,
-          gfx::Rect(frame_size),
-          natural_size_,
-          frame_info->strides[PP_DECRYPTEDFRAMEPLANES_Y],
+          media::PIXEL_FORMAT_YV12, frame_size, gfx::Rect(frame_size),
+          natural_size_, frame_info->strides[PP_DECRYPTEDFRAMEPLANES_Y],
           frame_info->strides[PP_DECRYPTEDFRAMEPLANES_U],
           frame_info->strides[PP_DECRYPTEDFRAMEPLANES_V],
           frame_data + frame_info->plane_offsets[PP_DECRYPTEDFRAMEPLANES_Y],
@@ -1044,6 +1038,11 @@ void ContentDecryptorDelegate::DeliverFrame(
           frame_data + frame_info->plane_offsets[PP_DECRYPTEDFRAMEPLANES_V],
           base::TimeDelta::FromMicroseconds(
               frame_info->tracking_info.timestamp));
+  if (!decoded_frame) {
+    FreeBuffer(frame_info->tracking_info.buffer_id);
+    video_decode_cb.Run(Decryptor::kError, NULL);
+    return;
+  }
   decoded_frame->AddDestructionObserver(
       media::BindToCurrentLoop(
           base::Bind(&BufferNoLongerNeeded,
@@ -1223,8 +1222,8 @@ bool ContentDecryptorDelegate::DeserializeAudioFrames(
   // Allocate space for the channel pointers given to AudioBuffer.
   std::vector<const uint8_t*> channel_ptrs(audio_channel_count_, nullptr);
   do {
-    int64 timestamp = 0;
-    int64 frame_size = -1;
+    int64_t timestamp = 0;
+    int64_t frame_size = -1;
     const size_t kHeaderSize = sizeof(timestamp) + sizeof(frame_size);
 
     if (bytes_left < kHeaderSize)

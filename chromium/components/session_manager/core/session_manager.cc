@@ -5,12 +5,7 @@
 #include "components/session_manager/core/session_manager.h"
 
 #include "base/logging.h"
-
-#if defined(OS_CHROMEOS)
-#include "base/command_line.h"
-#include "base/sys_info.h"
-#include "chromeos/chromeos_switches.h"
-#endif
+#include "build/build_config.h"
 
 namespace session_manager {
 
@@ -56,17 +51,6 @@ void SessionManager::SetInstance(SessionManager* session_manager) {
 
 void SessionManager::Start() {
   delegate_->Start();
-}
-
-// static
-bool SessionManager::HasBrowserRestarted() {
-#if defined(OS_CHROMEOS)
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return base::SysInfo::IsRunningOnChromeOS() &&
-         command_line->HasSwitch(chromeos::switches::kLoginUser);
-#else
-  return false;
-#endif
 }
 
 SessionManagerDelegate::SessionManagerDelegate() : session_manager_(NULL) {

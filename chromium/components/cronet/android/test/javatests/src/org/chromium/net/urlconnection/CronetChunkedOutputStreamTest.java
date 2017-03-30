@@ -7,13 +7,11 @@ package org.chromium.net.urlconnection;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.test.util.Feature;
-import org.chromium.net.CronetTestActivity;
 import org.chromium.net.CronetTestBase;
+import org.chromium.net.CronetTestFramework;
 import org.chromium.net.NativeTestServer;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.ProtocolException;
@@ -36,10 +34,11 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
     protected void setUp() throws Exception {
         super.setUp();
         String[] commandLineArgs = {
-                CronetTestActivity.LIBRARY_INIT_KEY, CronetTestActivity.LIBRARY_INIT_WRAPPER,
+                CronetTestFramework.LIBRARY_INIT_KEY,
+                CronetTestFramework.LibraryInitType.HTTP_URL_CONNECTION,
         };
-        launchCronetTestAppWithUrlAndCommandLineArgs(null, commandLineArgs);
-        assertTrue(NativeTestServer.startNativeTestServer(getInstrumentation().getTargetContext()));
+        startCronetTestFrameworkWithUrlAndCommandLineArgs(null, commandLineArgs);
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
     @Override
@@ -98,7 +97,7 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         out.write(UPLOAD_DATA);
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        assertEquals(UPLOAD_DATA_STRING, getResponseAsString(connection));
+        assertEquals(UPLOAD_DATA_STRING, TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 
@@ -115,7 +114,7 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         out.write(UPLOAD_DATA);
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        assertEquals("chunked", getResponseAsString(connection));
+        assertEquals("chunked", TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 
@@ -129,11 +128,11 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         connection.setRequestMethod("POST");
         connection.setChunkedStreamingMode(0);
         OutputStream out = connection.getOutputStream();
-        byte[] largeData = getLargeData();
+        byte[] largeData = TestUtil.getLargeData();
         out.write(largeData);
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        checkLargeData(getResponseAsString(connection));
+        TestUtil.checkLargeData(TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 
@@ -152,7 +151,7 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         }
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        assertEquals(UPLOAD_DATA_STRING, getResponseAsString(connection));
+        assertEquals(UPLOAD_DATA_STRING, TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 
@@ -166,13 +165,13 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         connection.setRequestMethod("POST");
         connection.setChunkedStreamingMode(0);
         OutputStream out = connection.getOutputStream();
-        byte[] largeData = getLargeData();
+        byte[] largeData = TestUtil.getLargeData();
         for (int i = 0; i < largeData.length; i++) {
             out.write(largeData[i]);
         }
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        checkLargeData(getResponseAsString(connection));
+        TestUtil.checkLargeData(TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 
@@ -191,49 +190,11 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         assertEquals(0, totalSize % chunkSize);
         connection.setChunkedStreamingMode(chunkSize);
         OutputStream out = connection.getOutputStream();
-        byte[] largeData = getLargeData();
+        byte[] largeData = TestUtil.getLargeData();
         out.write(largeData);
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        checkLargeData(getResponseAsString(connection));
+        TestUtil.checkLargeData(TestUtil.getResponseAsString(connection));
         connection.disconnect();
-    }
-
-    /**
-     * Helper method to extract response body as a string for testing.
-     */
-    private static String getResponseAsString(HttpURLConnection connection) throws Exception {
-        InputStream in = connection.getInputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        int b;
-        while ((b = in.read()) != -1) {
-            out.write(b);
-        }
-        return out.toString();
-    }
-
-    /**
-     * Produces a byte array that contains {@code REPEAT_COUNT} of
-     * {@code UPLOAD_DATA_STRING}.
-     */
-    private static byte[] getLargeData() {
-        byte[] largeData = new byte[REPEAT_COUNT * UPLOAD_DATA.length];
-        for (int i = 0; i < REPEAT_COUNT; i++) {
-            for (int j = 0; j < UPLOAD_DATA.length; j++) {
-                largeData[i * UPLOAD_DATA.length + j] = UPLOAD_DATA[j];
-            }
-        }
-        return largeData;
-    }
-
-    /**
-     * Helper function to check whether {@code data} is a concatenation of
-     * {@code REPEAT_COUNT} {@code UPLOAD_DATA_STRING} strings.
-     */
-    private static void checkLargeData(String data) {
-        for (int i = 0; i < REPEAT_COUNT; i++) {
-            assertEquals(UPLOAD_DATA_STRING, data.substring(UPLOAD_DATA_STRING.length() * i,
-                                                     UPLOAD_DATA_STRING.length() * (i + 1)));
-        }
     }
 }

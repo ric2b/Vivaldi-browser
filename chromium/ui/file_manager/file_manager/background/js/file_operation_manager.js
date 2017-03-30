@@ -5,7 +5,6 @@
 /**
  * @constructor
  * @struct
- * @suppress {checkStructDictInheritance}
  * @extends {cr.EventTarget}
  */
 function FileOperationManager() {
@@ -468,7 +467,7 @@ FileOperationManager.prototype.serviceDeleteTask_ = function(task, callback) {
  * Creates a zip file for the selection of files.
  *
  * @param {!DirectoryEntry} dirEntry The directory containing the selection.
- * @param {Array<Entry>} selectionEntries The selected entries.
+ * @param {!Array<!Entry>} selectionEntries The selected entries.
  */
 FileOperationManager.prototype.zipSelection = function(
     dirEntry, selectionEntries) {

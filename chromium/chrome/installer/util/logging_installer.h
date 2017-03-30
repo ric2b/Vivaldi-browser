@@ -5,7 +5,6 @@
 #ifndef CHROME_INSTALLER_UTIL_LOGGING_INSTALLER_H_
 #define CHROME_INSTALLER_UTIL_LOGGING_INSTALLER_H_
 
-#include "base/basictypes.h"
 
 namespace base {
 class FilePath;
@@ -24,8 +23,9 @@ const int kMaxInstallerLogFileSize = 1024 * 1024;
 // truncation on every update.
 const int kTruncatedInstallerLogFileSize = kMaxInstallerLogFileSize / 2;
 
-COMPILE_ASSERT(kTruncatedInstallerLogFileSize < kMaxInstallerLogFileSize,
-               kTruncatedInstallerLogFileSize_not_lt_kMaxInstallerLogFileSize);
+static_assert(kTruncatedInstallerLogFileSize < kMaxInstallerLogFileSize,
+              "kTruncatedInstallerLogFileSize must be less than "
+              "kMaxInstallerLogFileSize");
 
 enum TruncateResult {
   LOGFILE_UNTOUCHED,

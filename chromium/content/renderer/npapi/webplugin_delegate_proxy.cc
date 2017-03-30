@@ -4,13 +4,15 @@
 
 #include "content/renderer/npapi/webplugin_delegate_proxy.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/auto_reset.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
@@ -18,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "cc/resources/shared_bitmap.h"
 #include "content/child/child_process.h"
 #include "content/child/child_shared_bitmap_manager.h"
@@ -96,25 +99,10 @@ ScopedLogLevel::~ScopedLogLevel() {
 class ResourceClientProxy : public WebPluginResourceClient {
  public:
   ResourceClientProxy(PluginChannelHost* channel, int instance_id)
-    : channel_(channel), instance_id_(instance_id), resource_id_(0),
-      multibyte_response_expected_(false) {
+    : channel_(channel), instance_id_(instance_id), resource_id_(0) {
   }
 
   ~ResourceClientProxy() override {}
-
-  void Initialize(unsigned long resource_id, const GURL& url, int notify_id) {
-    resource_id_ = resource_id;
-    channel_->Send(new PluginMsg_HandleURLRequestReply(
-        instance_id_, resource_id, url, notify_id));
-  }
-
-  void InitializeForSeekableStream(unsigned long resource_id,
-                                   int range_request_id) {
-    resource_id_ = resource_id;
-    multibyte_response_expected_ = true;
-    channel_->Send(new PluginMsg_HTTPRangeRequestReply(
-        instance_id_, resource_id, range_request_id));
-  }
 
   // PluginResourceClient implementation:
   void WillSendRequest(const GURL& url, int http_status_code) override {
@@ -125,8 +113,8 @@ class ResourceClientProxy : public WebPluginResourceClient {
 
   void DidReceiveResponse(const std::string& mime_type,
                           const std::string& headers,
-                          uint32 expected_length,
-                          uint32 last_modified,
+                          uint32_t expected_length,
+                          uint32_t last_modified,
                           bool request_is_seekable) override {
     DCHECK(channel_.get() != NULL);
     PluginMsg_DidReceiveResponseParams params;
@@ -173,19 +161,12 @@ class ResourceClientProxy : public WebPluginResourceClient {
     base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
   }
 
-  bool IsMultiByteResponseExpected() override {
-    return multibyte_response_expected_;
-  }
-
   int ResourceId() override { return resource_id_; }
 
  private:
   scoped_refptr<PluginChannelHost> channel_;
   int instance_id_;
   unsigned long resource_id_;
-  // Set to true if the response expected is a multibyte response.
-  // For e.g. response for a HTTP byte range request.
-  bool multibyte_response_expected_;
 };
 
 }  // namespace
@@ -322,8 +303,7 @@ bool WebPluginDelegateProxy::Initialize(
     }
 
     channel_host = PluginChannelHost::GetPluginChannelHost(
-        channel_handle, ChildProcess::current()->io_task_runner(),
-        RenderThreadImpl::current()->GetAttachmentBroker());
+        channel_handle, ChildProcess::current()->io_task_runner());
     if (!channel_host.get()) {
       LOG(ERROR) << "Couldn't get PluginChannelHost";
       continue;
@@ -387,44 +367,6 @@ bool WebPluginDelegateProxy::Send(IPC::Message* msg) {
   return channel_host_->Send(msg);
 }
 
-void WebPluginDelegateProxy::SendJavaScriptStream(const GURL& url,
-                                                  const std::string& result,
-                                                  bool success,
-                                                  int notify_id) {
-  Send(new PluginMsg_SendJavaScriptStream(
-      instance_id_, url, result, success, notify_id));
-}
-
-void WebPluginDelegateProxy::DidReceiveManualResponse(
-    const GURL& url, const std::string& mime_type,
-    const std::string& headers, uint32 expected_length,
-    uint32 last_modified) {
-  PluginMsg_DidReceiveResponseParams params;
-  params.id = 0;
-  params.mime_type = mime_type;
-  params.headers = headers;
-  params.expected_length = expected_length;
-  params.last_modified = last_modified;
-  Send(new PluginMsg_DidReceiveManualResponse(instance_id_, url, params));
-}
-
-void WebPluginDelegateProxy::DidReceiveManualData(const char* buffer,
-                                                  int length) {
-  DCHECK_GT(length, 0);
-  std::vector<char> data;
-  data.resize(static_cast<size_t>(length));
-  memcpy(&data.front(), buffer, length);
-  Send(new PluginMsg_DidReceiveManualData(instance_id_, data));
-}
-
-void WebPluginDelegateProxy::DidFinishManualLoading() {
-  Send(new PluginMsg_DidFinishManualLoading(instance_id_));
-}
-
-void WebPluginDelegateProxy::DidManualLoadFail() {
-  Send(new PluginMsg_DidManualLoadFail(instance_id_));
-}
-
 bool WebPluginDelegateProxy::OnMessageReceived(const IPC::Message& msg) {
   GetContentClient()->SetActiveURL(page_url_);
 
@@ -439,10 +381,7 @@ bool WebPluginDelegateProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(PluginHostMsg_ResolveProxy, OnResolveProxy)
     IPC_MESSAGE_HANDLER(PluginHostMsg_SetCookie, OnSetCookie)
     IPC_MESSAGE_HANDLER(PluginHostMsg_GetCookies, OnGetCookies)
-    IPC_MESSAGE_HANDLER(PluginHostMsg_URLRequest, OnHandleURLRequest)
     IPC_MESSAGE_HANDLER(PluginHostMsg_CancelDocumentLoad, OnCancelDocumentLoad)
-    IPC_MESSAGE_HANDLER(PluginHostMsg_InitiateHTTPRangeRequest,
-                        OnInitiateHTTPRangeRequest)
     IPC_MESSAGE_HANDLER(PluginHostMsg_DidStartLoading, OnDidStartLoading)
     IPC_MESSAGE_HANDLER(PluginHostMsg_DidStopLoading, OnDidStopLoading)
     IPC_MESSAGE_HANDLER(PluginHostMsg_DeferResourceLoading,
@@ -502,10 +441,7 @@ static void CopySharedMemoryHandleForMessage(
   *handle_out = base::SharedMemory::DuplicateHandle(handle_in);
 #elif defined(OS_WIN)
   // On Windows we need to duplicate the handle for the plugin process.
-  *handle_out = NULL;
-  BrokerDuplicateHandle(handle_in, peer_pid, handle_out,
-                        FILE_MAP_READ | FILE_MAP_WRITE, 0);
-  DCHECK(*handle_out != NULL);
+  BrokerDuplicateSharedMemoryHandle(handle_in, peer_pid, handle_out);
 #else
 #error Shared memory copy not implemented.
 #endif
@@ -560,11 +496,12 @@ void WebPluginDelegateProxy::UpdateGeometry(const gfx::Rect& window_rect,
   // window_rect becomes either a window in native windowing system
   // coords, or a backing buffer.  In either case things will go bad
   // if the rectangle is very large.
-  if (window_rect.width() < 0  || window_rect.width() > kMaxPluginSideLength ||
+  if (window_rect.width() < 0 || window_rect.width() > kMaxPluginSideLength ||
       window_rect.height() < 0 || window_rect.height() > kMaxPluginSideLength ||
       // We know this won't overflow due to above checks.
-      static_cast<uint32>(window_rect.width()) *
-          static_cast<uint32>(window_rect.height()) > kMaxPluginSize) {
+      static_cast<uint32_t>(window_rect.width()) *
+              static_cast<uint32_t>(window_rect.height()) >
+          kMaxPluginSize) {
     return;
   }
 
@@ -575,8 +512,10 @@ void WebPluginDelegateProxy::UpdateGeometry(const gfx::Rect& window_rect,
 
   if (uses_shared_bitmaps_) {
     if (!front_buffer_canvas() ||
-        (window_rect.width() != front_buffer_canvas()->getDevice()->width() ||
-         window_rect.height() != front_buffer_canvas()->getDevice()->height()))
+        (window_rect.width() !=
+             front_buffer_canvas()->getBaseLayerSize().width() ||
+         window_rect.height() !=
+             front_buffer_canvas()->getBaseLayerSize().height()))
     {
       bitmaps_changed = true;
 
@@ -609,15 +548,15 @@ void WebPluginDelegateProxy::ResetWindowlessBitmaps() {
   front_buffer_diff_ = gfx::Rect();
 }
 
+#if !defined(OS_WIN)
 static size_t BitmapSizeForPluginRect(const gfx::Rect& plugin_rect) {
   const size_t stride =
       skia::PlatformCanvasStrideForWidth(plugin_rect.width());
   return stride * plugin_rect.height();
 }
 
-#if !defined(OS_WIN)
 bool WebPluginDelegateProxy::CreateLocalBitmap(
-    std::vector<uint8>* memory,
+    std::vector<uint8_t>* memory,
     scoped_ptr<skia::PlatformCanvas>* canvas) {
   const size_t size = BitmapSizeForPluginRect(plugin_rect_);
   memory->resize(size);
@@ -646,7 +585,8 @@ bool WebPluginDelegateProxy::CreateSharedBitmap(
 #else
   canvas->reset(skia::CreatePlatformCanvas(
       plugin_rect_.width(), plugin_rect_.height(), true,
-      (*memory)->shared_memory()->handle(), skia::RETURN_NULL_ON_FAILURE));
+      (*memory)->shared_memory()->handle().GetHandle(),
+      skia::RETURN_NULL_ON_FAILURE));
 #endif
   return !!canvas->get();
 }
@@ -692,14 +632,13 @@ void WebPluginDelegateProxy::Paint(SkCanvas* canvas,
     UpdateFrontBuffer(offset_rect, false);
   }
 
-  const SkBitmap& bitmap =
-      front_buffer_canvas()->getDevice()->accessBitmap(false);
+  const SkBitmap bitmap = skia::ReadPixels(front_buffer_canvas());
   SkPaint paint;
   paint.setXfermodeMode(
       transparent_ ? SkXfermode::kSrcATop_Mode : SkXfermode::kSrc_Mode);
-  SkIRect src_rect = gfx::RectToSkIRect(offset_rect);
+  SkRect src_rect = gfx::RectToSkRect(offset_rect);
   canvas->drawBitmapRect(bitmap,
-                         &src_rect,
+                         src_rect,
                          gfx::RectToSkRect(rect),
                          &paint);
 
@@ -742,12 +681,6 @@ bool WebPluginDelegateProxy::GetFormValue(base::string16* value) {
   bool success = false;
   Send(new PluginMsg_GetFormValue(instance_id_, value, &success));
   return success;
-}
-
-void WebPluginDelegateProxy::DidFinishLoadWithReason(
-    const GURL& url, NPReason reason, int notify_id) {
-  Send(new PluginMsg_DidFinishLoadWithReason(
-      instance_id_, url, reason, notify_id));
 }
 
 void WebPluginDelegateProxy::SetFocus(bool focused) {
@@ -911,11 +844,12 @@ void WebPluginDelegateProxy::OnNotifyIMEStatus(int input_type,
   if (!render_view_)
     return;
 
-  render_view_->Send(new ViewHostMsg_TextInputTypeChanged(
-      render_view_->routing_id(),
-      static_cast<ui::TextInputType>(input_type),
-      ui::TEXT_INPUT_MODE_DEFAULT,
-      true, 0));
+  ViewHostMsg_TextInputState_Params params;
+  params.type = static_cast<ui::TextInputType>(input_type);
+  params.mode = ui::TEXT_INPUT_MODE_DEFAULT;
+  params.can_compose_inline = true;
+  render_view_->Send(new ViewHostMsg_TextInputStateChanged(
+      render_view_->routing_id(), params));
 
   ViewHostMsg_SelectionBounds_Params bounds_params;
   bounds_params.anchor_rect = bounds_params.focus_rect = caret_rect;
@@ -1004,7 +938,6 @@ void WebPluginDelegateProxy::OnGetCookies(const GURL& url,
 
 void WebPluginDelegateProxy::CopyFromBackBufferToFrontBuffer(
     const gfx::Rect& rect) {
-#if defined(OS_MACOSX)
   // Blitting the bits directly is much faster than going through CG, and since
   // the goal is just to move the raw pixels between two bitmaps with the same
   // pixel format (no compositing, color correction, etc.), it's safe.
@@ -1012,22 +945,16 @@ void WebPluginDelegateProxy::CopyFromBackBufferToFrontBuffer(
       skia::PlatformCanvasStrideForWidth(plugin_rect_.width());
   const size_t chunk_size = 4 * rect.width();
   DCHECK(back_buffer_bitmap() != NULL);
-  uint8* source_data =
+  uint8_t* source_data =
       back_buffer_bitmap()->pixels() + rect.y() * stride + 4 * rect.x();
   DCHECK(front_buffer_bitmap() != NULL);
-  uint8* target_data =
+  uint8_t* target_data =
       front_buffer_bitmap()->pixels() + rect.y() * stride + 4 * rect.x();
   for (int row = 0; row < rect.height(); ++row) {
     memcpy(target_data, source_data, chunk_size);
     source_data += stride;
     target_data += stride;
   }
-#else
-  BlitCanvasToCanvas(front_buffer_canvas(),
-                     rect,
-                     back_buffer_canvas(),
-                     rect.origin());
-#endif
 }
 
 void WebPluginDelegateProxy::UpdateFrontBuffer(
@@ -1067,75 +994,6 @@ void WebPluginDelegateProxy::UpdateFrontBuffer(
   transport_store_painted_.Union(rect);
 }
 
-void WebPluginDelegateProxy::OnHandleURLRequest(
-    const PluginHostMsg_URLRequest_Params& params) {
-  const char* data = NULL;
-  if (params.buffer.size())
-    data = &params.buffer[0];
-
-  const char* target = NULL;
-  if (params.target.length())
-    target = params.target.c_str();
-
-  plugin_->HandleURLRequest(
-      params.url.c_str(), params.method.c_str(), target, data,
-      static_cast<unsigned int>(params.buffer.size()), params.notify_id,
-      params.popups_allowed, params.notify_redirects);
-}
-
-WebPluginResourceClient* WebPluginDelegateProxy::CreateResourceClient(
-    unsigned long resource_id, const GURL& url, int notify_id) {
-  if (!channel_host_.get())
-    return NULL;
-
-  ResourceClientProxy* proxy =
-      new ResourceClientProxy(channel_host_.get(), instance_id_);
-  proxy->Initialize(resource_id, url, notify_id);
-  return proxy;
-}
-
-WebPluginResourceClient* WebPluginDelegateProxy::CreateSeekableResourceClient(
-    unsigned long resource_id, int range_request_id) {
-  if (!channel_host_.get())
-    return NULL;
-
-  ResourceClientProxy* proxy =
-      new ResourceClientProxy(channel_host_.get(), instance_id_);
-  proxy->InitializeForSeekableStream(resource_id, range_request_id);
-  return proxy;
-}
-
-void WebPluginDelegateProxy::FetchURL(unsigned long resource_id,
-                                      int notify_id,
-                                      const GURL& url,
-                                      const GURL& first_party_for_cookies,
-                                      const std::string& method,
-                                      const char* buf,
-                                      unsigned int len,
-                                      const Referrer& referrer,
-                                      bool notify_redirects,
-                                      bool is_plugin_src_load,
-                                      int origin_pid,
-                                      int render_frame_id,
-                                      int render_view_id) {
-  PluginMsg_FetchURL_Params params;
-  params.resource_id = resource_id;
-  params.notify_id = notify_id;
-  params.url = url;
-  params.first_party_for_cookies = first_party_for_cookies;
-  params.method = method;
-  if (len) {
-    params.post_data.resize(len);
-    memcpy(&params.post_data.front(), buf, len);
-  }
-  params.referrer = referrer.url;
-  params.referrer_policy = referrer.policy;
-  params.notify_redirect = notify_redirects;
-  params.is_plugin_src_load = is_plugin_src_load;
-  params.render_frame_id = render_frame_id;
-  Send(new PluginMsg_FetchURL(instance_id_, params));
-}
-
 #if defined(OS_MACOSX)
 void WebPluginDelegateProxy::OnFocusChanged(bool focused) {
   if (render_view_)
@@ -1154,14 +1012,6 @@ gfx::PluginWindowHandle WebPluginDelegateProxy::GetPluginWindowHandle() {
 
 void WebPluginDelegateProxy::OnCancelDocumentLoad() {
   plugin_->CancelDocumentLoad();
-}
-
-void WebPluginDelegateProxy::OnInitiateHTTPRangeRequest(
-    const std::string& url,
-    const std::string& range_info,
-    int range_request_id) {
-  plugin_->InitiateHTTPRangeRequest(
-      url.c_str(), range_info.c_str(), range_request_id);
 }
 
 void WebPluginDelegateProxy::OnDidStartLoading() {
@@ -1184,9 +1034,9 @@ void WebPluginDelegateProxy::OnAcceleratedPluginEnabledRendering() {
 }
 
 void WebPluginDelegateProxy::OnAcceleratedPluginAllocatedIOSurface(
-    int32 width,
-    int32 height,
-    uint32 surface_id) {
+    int32_t width,
+    int32_t height,
+    uint32_t surface_id) {
   if (plugin_)
     plugin_->AcceleratedPluginAllocatedIOSurface(width, height, surface_id);
 }

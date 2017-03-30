@@ -5,15 +5,17 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_SCORED_HISTORY_MATCH_H_
 #define COMPONENTS_OMNIBOX_BROWSER_SCORED_HISTORY_MATCH_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "components/history/core/browser/history_match.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/omnibox/browser/in_memory_url_index_types.h"
-#include "testing/gtest/include/gtest/gtest_prod.h"
 
 class ScoredHistoryMatchTest;
 
@@ -95,9 +97,6 @@ struct ScoredHistoryMatch : public history::HistoryMatch {
   // Term matches within the page title.
   TermMatches title_matches;
 
-  // True if this is a candidate for in-line autocompletion.
-  bool can_inline;
-
  private:
   friend class ScoredHistoryMatchTest;
   FRIEND_TEST_ALL_PREFIXES(ScoredHistoryMatchTest, GetFinalRelevancyScore);
@@ -114,7 +113,8 @@ struct ScoredHistoryMatch : public history::HistoryMatch {
   // the page's title and where they are (e.g., at word boundaries).  Revises
   // url_matches and title_matches in the process so they only reflect matches
   // used for scoring.  (For instance, some mid-word matches are not given
-  // credit in scoring.)
+  // credit in scoring.)  Requires that |url_matches| and |title_matches| are
+  // sorted.
   float GetTopicalityScore(const int num_terms,
                            const base::string16& cleaned_up_url,
                            const WordStarts& terms_to_word_starts_offsets,
@@ -166,7 +166,8 @@ struct ScoredHistoryMatch : public history::HistoryMatch {
   static int bookmark_value_;
 
   // True if we should fix certain bugs in frequency scoring.
-  static bool fix_frequency_bugs_;
+  static bool fix_typed_visit_bug_;
+  static bool fix_few_visits_bug_;
 
   // If true, we allow input terms to match in the TLD (e.g., ".com").
   static bool allow_tld_matches_;
@@ -185,6 +186,10 @@ struct ScoredHistoryMatch : public history::HistoryMatch {
   // If |topicality_threshold_| > 0, then URLs with topicality-score < threshold
   // are given topicality score of 0. By default it is initalized to -1.
   static float topicality_threshold_;
+
+  // |hqp_relevance_buckets_str_| is used to control the hqp score ranges.
+  // It is the string representation of |hqp_relevance_buckets_|.
+  static char hqp_relevance_buckets_str_[];
 
   // |hqp_relevance_buckets_| gives mapping from (topicality*frequency)
   // to the final relevance scoring. Please see GetFinalRelevancyScore()

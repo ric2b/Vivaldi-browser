@@ -19,8 +19,8 @@
 #include "base/strings/string_util.h"
 #include "net/tools/balsa/balsa_frame.h"
 #include "net/tools/balsa/balsa_headers.h"
-#include "net/tools/dump_cache/url_to_filename_encoder.h"
-#include "net/tools/dump_cache/url_utilities.h"
+#include "net/tools/flip_server/url_to_filename_encoder.h"
+#include "net/tools/flip_server/url_utilities.h"
 
 namespace {
 // The directory where cache locates);
@@ -65,15 +65,7 @@ FileData::FileData() {}
 FileData::~FileData() {}
 
 MemoryCache::MemoryCache() : cwd_(FLAGS_cache_base_dir) {}
-
-MemoryCache::~MemoryCache() { ClearFiles(); }
-
-void MemoryCache::CloneFrom(const MemoryCache& mc) {
-  DCHECK_NE(this, &mc);
-  ClearFiles();
-  files_ = mc.files_;
-  cwd_ = mc.cwd_;
-}
+MemoryCache::~MemoryCache() {}
 
 void MemoryCache::AddFiles() {
   std::deque<std::string> paths;
@@ -204,7 +196,7 @@ void MemoryCache::ReadAndStoreFileContents(const char* filename) {
 
 FileData* MemoryCache::GetFileData(const std::string& filename) {
   Files::iterator fi = files_.end();
-  if (base::EndsWith(filename, ".html", true)) {
+  if (base::EndsWith(filename, ".html", base::CompareCase::SENSITIVE)) {
     fi = files_.find(filename.substr(0, filename.size() - 5) + ".http");
   }
   if (fi == files_.end())
@@ -213,7 +205,7 @@ FileData* MemoryCache::GetFileData(const std::string& filename) {
   if (fi == files_.end()) {
     return NULL;
   }
-  return fi->second;
+  return fi->second.get();
 }
 
 bool MemoryCache::AssignFileData(const std::string& filename,
@@ -235,18 +227,11 @@ void MemoryCache::InsertFile(const BalsaHeaders* headers,
 void MemoryCache::InsertFile(FileData* file_data) {
   Files::iterator it = files_.find(file_data->filename());
   if (it != files_.end()) {
-    delete it->second;
-    it->second = file_data;
+    it->second.reset(file_data);
   } else {
-    files_.insert(std::make_pair(file_data->filename(), file_data));
+    files_.insert(
+        std::make_pair(file_data->filename(), make_scoped_ptr(file_data)));
   }
-}
-
-void MemoryCache::ClearFiles() {
-  for (Files::const_iterator i = files_.begin(); i != files_.end(); ++i) {
-    delete i->second;
-  }
-  files_.clear();
 }
 
 }  // namespace net

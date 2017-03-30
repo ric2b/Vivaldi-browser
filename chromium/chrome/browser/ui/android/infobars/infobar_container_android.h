@@ -5,13 +5,15 @@
 #ifndef CHROME_BROWSER_UI_ANDROID_INFOBARS_INFOBAR_CONTAINER_ANDROID_H_
 #define CHROME_BROWSER_UI_ANDROID_INFOBARS_INFOBAR_CONTAINER_ANDROID_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "components/infobars/core/infobar_container.h"
 
 class InfoBarAndroid;
@@ -24,8 +26,10 @@ class InfoBarContainerAndroid : public infobars::InfoBarContainer {
  public:
   InfoBarContainerAndroid(JNIEnv* env,
                           jobject infobar_container);
-  void SetWebContents(JNIEnv* env, jobject obj, jobject web_contents);
-  void Destroy(JNIEnv* env, jobject obj);
+  void SetWebContents(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj,
+                      const base::android::JavaParamRef<jobject>& web_contents);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   JavaObjectWeakGlobalRef java_container() const {
     return weak_java_infobar_container_;

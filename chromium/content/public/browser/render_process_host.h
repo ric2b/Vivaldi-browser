@@ -5,9 +5,11 @@
 #ifndef CONTENT_PUBLIC_BROWSER_RENDER_PROCESS_HOST_H_
 #define CONTENT_PUBLIC_BROWSER_RENDER_PROCESS_HOST_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 
-#include "base/basictypes.h"
 #include "base/id_map.h"
 #include "base/process/kill.h"
 #include "base/process/process_handle.h"
@@ -18,7 +20,6 @@
 #include "ui/gfx/native_widget_types.h"
 
 class GURL;
-struct ViewMsg_SwapOut_Params;
 
 namespace base {
 class TimeDelta;
@@ -30,7 +31,7 @@ union ValueState;
 
 namespace media {
 class AudioOutputController;
-class BrowserCdm;
+class MediaKeys;
 }
 
 namespace content {
@@ -79,8 +80,8 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Used for refcounting, each holder of this object must AddRoute and
   // RemoveRoute. This object should be allocated on the heap; when no
   // listeners own it any more, it will delete itself.
-  virtual void AddRoute(int32 routing_id, IPC::Listener* listener) = 0;
-  virtual void RemoveRoute(int32 routing_id) = 0;
+  virtual void AddRoute(int32_t routing_id, IPC::Listener* listener) = 0;
+  virtual void RemoveRoute(int32_t routing_id) = 0;
 
   // Add and remove observers for lifecycle events. The order in which
   // notifications are sent to observers is undefined. Observers must be sure to
@@ -100,6 +101,9 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void WidgetHidden() = 0;
   virtual int VisibleWidgetCount() const = 0;
 
+  // Called when the audio state changes for this render process host.
+  virtual void AudioStateChanged() = 0;
+
   // Indicates whether the current RenderProcessHost is exclusively hosting
   // guest RenderFrames. Not all guest RenderFrames are created equal.  A guest,
   // as indicated by BrowserPluginGuest::IsGuest, may coexist with other
@@ -115,8 +119,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   // Try to shut down the associated renderer process without running unload
   // handlers, etc, giving it the specified exit code. If |wait| is true, wait
-  // for the process to be actually terminated before returning.
-  // Returns true if it was able to shut down.
+  // for the process to be actually terminated before returning.  Returns true
+  // if it was able to shut down.  On Windows, this must not be called before
+  // RenderProcessReady was called on a RenderProcessHostObserver, otherwise
+  // RenderProcessExited may never be called.
   virtual bool Shutdown(int exit_code, bool wait) = 0;
 
   // Try to shut down the associated renderer process as fast as possible.
@@ -134,8 +140,18 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   //
   // NOTE: this is not necessarily valid immediately after calling Init, as
   // Init starts the process asynchronously.  It's guaranteed to be valid after
-  // the first IPC arrives.
+  // the first IPC arrives or RenderProcessReady was called on a
+  // RenderProcessHostObserver for this. At that point, IsReady() returns true.
   virtual base::ProcessHandle GetHandle() const = 0;
+
+  // Returns whether the process is ready. The process is ready once both
+  // conditions (which can happen in arbitrary order) are true:
+  // 1- the launcher reported a succesful launch
+  // 2- the channel is connected.
+  //
+  // After that point, GetHandle() is valid, and deferred messages have been
+  // sent.
+  virtual bool IsReady() const = 0;
 
   // Returns the user browser context associated with this renderer process.
   virtual content::BrowserContext* GetBrowserContext() const = 0;
@@ -207,8 +223,11 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void FilterURL(bool empty_allowed, GURL* url) = 0;
 
 #if defined(ENABLE_WEBRTC)
-  virtual void EnableAecDump(const base::FilePath& file) = 0;
-  virtual void DisableAecDump() = 0;
+  virtual void EnableAudioDebugRecordings(const base::FilePath& file) = 0;
+  virtual void DisableAudioDebugRecordings() = 0;
+
+  virtual void EnableEventLogRecordings(const base::FilePath& file) = 0;
+  virtual void DisableEventLogRecordings() = 0;
 
   // When set, |callback| receives log messages regarding, for example, media
   // devices (webcams, mics, etc) that were initially requested in the render
@@ -216,7 +235,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void SetWebRtcLogMessageCallback(
       base::Callback<void(const std::string&)> callback) = 0;
 
-  typedef base::Callback<void(scoped_ptr<uint8[]> packet_header,
+  typedef base::Callback<void(scoped_ptr<uint8_t[]> packet_header,
                               size_t header_length,
                               size_t packet_length,
                               bool incoming)> WebRtcRtpPacketCallback;
@@ -273,15 +292,23 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       const GetAudioOutputControllersCallback& callback) const = 0;
 
 #if defined(ENABLE_BROWSER_CDMS)
-  // Returns the ::media::BrowserCdm instance associated with |render_frame_id|
-  // and |cdm_id|, or nullptr if not found.
-  virtual media::BrowserCdm* GetBrowserCdm(int render_frame_id,
-                                           int cdm_id) const = 0;
+  // Returns the CDM instance associated with |render_frame_id| and |cdm_id|,
+  // or nullptr if not found.
+  virtual scoped_refptr<media::MediaKeys> GetCdm(int render_frame_id,
+                                                 int cdm_id) const = 0;
 #endif
+
+  // Returns true if this process currently has backgrounded priority.
+  virtual bool IsProcessBackgrounded() const = 0;
+
+  // Called when the existence of the other renderer process which is connected
+  // to the Worker in this renderer process has changed.
+  virtual void IncrementWorkerRefCount() = 0;
+  virtual void DecrementWorkerRefCount() = 0;
 
   // Returns the current number of active views in this process.  Excludes
   // any RenderViewHosts that are swapped out.
-  int GetActiveViewCount();
+  size_t GetActiveViewCount();
 
   // Static management functions -----------------------------------------------
 

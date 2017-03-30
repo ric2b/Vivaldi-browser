@@ -8,6 +8,7 @@
 #define GPU_COMMAND_BUFFER_SERVICE_GL_STATE_RESTORER_IMPL_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "gpu/gpu_export.h"
 #include "ui/gl/gl_state_restorer.h"
@@ -28,7 +29,10 @@ class GPU_EXPORT GLStateRestorerImpl : public gfx::GLStateRestorer {
    void RestoreState(const gfx::GLStateRestorer* prev_state) override;
    void RestoreAllTextureUnitBindings() override;
    void RestoreActiveTextureUnitBinding(unsigned int target) override;
+   void RestoreAllExternalTextureBindingsIfNeeded() override;
    void RestoreFramebufferBindings() override;
+   void PauseQueries() override;
+   void ResumeQueries() override;
 
  private:
    const gles2::ContextState* GetContextState() const;

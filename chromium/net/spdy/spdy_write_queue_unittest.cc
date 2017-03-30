@@ -7,8 +7,8 @@
 #include <cstddef>
 #include <cstring>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -59,7 +59,7 @@ class RequeingBufferProducer : public SpdyBufferProducer {
         base::Bind(RequeingBufferProducer::ConsumeCallback, queue));
   }
 
-  scoped_ptr<SpdyBuffer> ProduceBuffer() override { return buffer_.Pass(); }
+  scoped_ptr<SpdyBuffer> ProduceBuffer() override { return std::move(buffer_); }
 
   static void ConsumeCallback(SpdyWriteQueue* queue,
                               size_t size,
@@ -68,8 +68,8 @@ class RequeingBufferProducer : public SpdyBufferProducer {
         new SimpleBufferProducer(scoped_ptr<SpdyBuffer>(
             new SpdyBuffer(kRequeued, arraysize(kRequeued)))));
 
-    queue->Enqueue(
-        MEDIUM, RST_STREAM, producer.Pass(), base::WeakPtr<SpdyStream>());
+    queue->Enqueue(MEDIUM, RST_STREAM, std::move(producer),
+                   base::WeakPtr<SpdyStream>());
   }
 
  private:
@@ -87,7 +87,7 @@ std::string ProducerToString(scoped_ptr<SpdyBufferProducer> producer) {
 // data as an int (converted from a string).
 int ProducerToInt(scoped_ptr<SpdyBufferProducer> producer) {
   int i = 0;
-  EXPECT_TRUE(base::StringToInt(ProducerToString(producer.Pass()), &i));
+  EXPECT_TRUE(base::StringToInt(ProducerToString(std::move(producer)), &i));
   return i;
 }
 
@@ -113,31 +113,30 @@ TEST_F(SpdyWriteQueueTest, DequeuesByPriority) {
   scoped_ptr<SpdyStream> stream_highest(MakeTestStream(HIGHEST));
 
   // A NULL stream should still work.
-  write_queue.Enqueue(
-      LOW, SYN_STREAM, producer_low.Pass(), base::WeakPtr<SpdyStream>());
-  write_queue.Enqueue(
-      MEDIUM, SYN_REPLY, producer_medium.Pass(), stream_medium->GetWeakPtr());
-  write_queue.Enqueue(
-      HIGHEST, RST_STREAM, producer_highest.Pass(),
-      stream_highest->GetWeakPtr());
+  write_queue.Enqueue(LOW, SYN_STREAM, std::move(producer_low),
+                      base::WeakPtr<SpdyStream>());
+  write_queue.Enqueue(MEDIUM, SYN_REPLY, std::move(producer_medium),
+                      stream_medium->GetWeakPtr());
+  write_queue.Enqueue(HIGHEST, RST_STREAM, std::move(producer_highest),
+                      stream_highest->GetWeakPtr());
 
   SpdyFrameType frame_type = DATA;
   scoped_ptr<SpdyBufferProducer> frame_producer;
   base::WeakPtr<SpdyStream> stream;
   ASSERT_TRUE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
   EXPECT_EQ(RST_STREAM, frame_type);
-  EXPECT_EQ("HIGHEST", ProducerToString(frame_producer.Pass()));
-  EXPECT_EQ(stream_highest, stream.get());
+  EXPECT_EQ("HIGHEST", ProducerToString(std::move(frame_producer)));
+  EXPECT_EQ(stream_highest.get(), stream.get());
 
   ASSERT_TRUE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
   EXPECT_EQ(SYN_REPLY, frame_type);
-  EXPECT_EQ("MEDIUM", ProducerToString(frame_producer.Pass()));
-  EXPECT_EQ(stream_medium, stream.get());
+  EXPECT_EQ("MEDIUM", ProducerToString(std::move(frame_producer)));
+  EXPECT_EQ(stream_medium.get(), stream.get());
 
   ASSERT_TRUE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
   EXPECT_EQ(SYN_STREAM, frame_type);
-  EXPECT_EQ("LOW", ProducerToString(frame_producer.Pass()));
-  EXPECT_EQ(NULL, stream.get());
+  EXPECT_EQ("LOW", ProducerToString(std::move(frame_producer)));
+  EXPECT_EQ(nullptr, stream.get());
 
   EXPECT_FALSE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
 }
@@ -155,11 +154,11 @@ TEST_F(SpdyWriteQueueTest, DequeuesFIFO) {
   scoped_ptr<SpdyStream> stream2(MakeTestStream(DEFAULT_PRIORITY));
   scoped_ptr<SpdyStream> stream3(MakeTestStream(DEFAULT_PRIORITY));
 
-  write_queue.Enqueue(DEFAULT_PRIORITY, SYN_STREAM, producer1.Pass(),
+  write_queue.Enqueue(DEFAULT_PRIORITY, SYN_STREAM, std::move(producer1),
                       stream1->GetWeakPtr());
-  write_queue.Enqueue(DEFAULT_PRIORITY, SYN_REPLY, producer2.Pass(),
+  write_queue.Enqueue(DEFAULT_PRIORITY, SYN_REPLY, std::move(producer2),
                       stream2->GetWeakPtr());
-  write_queue.Enqueue(DEFAULT_PRIORITY, RST_STREAM, producer3.Pass(),
+  write_queue.Enqueue(DEFAULT_PRIORITY, RST_STREAM, std::move(producer3),
                       stream3->GetWeakPtr());
 
   SpdyFrameType frame_type = DATA;
@@ -167,18 +166,18 @@ TEST_F(SpdyWriteQueueTest, DequeuesFIFO) {
   base::WeakPtr<SpdyStream> stream;
   ASSERT_TRUE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
   EXPECT_EQ(SYN_STREAM, frame_type);
-  EXPECT_EQ(1, ProducerToInt(frame_producer.Pass()));
-  EXPECT_EQ(stream1, stream.get());
+  EXPECT_EQ(1, ProducerToInt(std::move(frame_producer)));
+  EXPECT_EQ(stream1.get(), stream.get());
 
   ASSERT_TRUE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
   EXPECT_EQ(SYN_REPLY, frame_type);
-  EXPECT_EQ(2, ProducerToInt(frame_producer.Pass()));
-  EXPECT_EQ(stream2, stream.get());
+  EXPECT_EQ(2, ProducerToInt(std::move(frame_producer)));
+  EXPECT_EQ(stream2.get(), stream.get());
 
   ASSERT_TRUE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
   EXPECT_EQ(RST_STREAM, frame_type);
-  EXPECT_EQ(3, ProducerToInt(frame_producer.Pass()));
-  EXPECT_EQ(stream3, stream.get());
+  EXPECT_EQ(3, ProducerToInt(std::move(frame_producer)));
+  EXPECT_EQ(stream3.get(), stream.get());
 
   EXPECT_FALSE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
 }
@@ -206,8 +205,8 @@ TEST_F(SpdyWriteQueueTest, RemovePendingWritesForStream) {
     base::WeakPtr<SpdyStream> stream;
     ASSERT_TRUE(write_queue.Dequeue(&frame_type, &frame_producer, &stream));
     EXPECT_EQ(SYN_STREAM, frame_type);
-    EXPECT_EQ(i, ProducerToInt(frame_producer.Pass()));
-    EXPECT_EQ(stream1, stream.get());
+    EXPECT_EQ(i, ProducerToInt(std::move(frame_producer)));
+    EXPECT_EQ(stream1.get(), stream.get());
   }
 
   SpdyFrameType frame_type = DATA;
@@ -250,8 +249,8 @@ TEST_F(SpdyWriteQueueTest, RemovePendingWritesForStreamsAfter) {
     ASSERT_TRUE(write_queue.Dequeue(&frame_type, &frame_producer, &stream))
         << "Unable to Dequeue i: " << i;
     EXPECT_EQ(SYN_STREAM, frame_type);
-    EXPECT_EQ(i, ProducerToInt(frame_producer.Pass()));
-    EXPECT_EQ(stream1, stream.get());
+    EXPECT_EQ(i, ProducerToInt(std::move(frame_producer)));
+    EXPECT_EQ(stream1.get(), stream.get());
   }
 
   SpdyFrameType frame_type = DATA;

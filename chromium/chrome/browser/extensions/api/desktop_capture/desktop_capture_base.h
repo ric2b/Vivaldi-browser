@@ -7,11 +7,11 @@
 
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/media/desktop_media_list.h"
 #include "chrome/browser/media/desktop_media_picker.h"
-#include "chrome/browser/media/native_desktop_media_list.h"
 #include "chrome/common/extensions/api/desktop_capture.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "url/gurl.h"
@@ -97,7 +97,7 @@ class DesktopCaptureRequestsRegistry {
   void CancelRequest(int process_id, int request_id);
 
  private:
-  friend struct DefaultSingletonTraits<DesktopCaptureRequestsRegistry>;
+  friend struct base::DefaultSingletonTraits<DesktopCaptureRequestsRegistry>;
 
   struct RequestId {
     RequestId(int process_id, int request_id);

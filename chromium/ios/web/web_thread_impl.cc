@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -497,7 +498,7 @@ base::MessageLoop* WebThread::UnsafeGetMessageLoopForThread(ID identifier) {
 }
 
 // static
-void WebThreadImpl::SetDelegate(ID identifier, WebThreadDelegate* delegate) {
+void WebThread::SetDelegate(ID identifier, WebThreadDelegate* delegate) {
   using base::subtle::AtomicWord;
   WebThreadGlobals& globals = g_globals.Get();
   AtomicWord* storage =

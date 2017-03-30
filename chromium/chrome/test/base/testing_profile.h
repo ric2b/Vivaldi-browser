@@ -10,11 +10,17 @@
 #include <vector>
 
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/domain_reliability/clear_mode.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+
+class BrowserContextDependencyManager;
+class ExtensionSpecialStoragePolicy;
+class HostContentSettingsMap;
 
 namespace content {
 class MockResourceContext;
@@ -37,11 +43,10 @@ namespace storage {
 class SpecialStoragePolicy;
 }
 
-class BrowserContextDependencyManager;
-class ExtensionSpecialStoragePolicy;
-class HostContentSettingsMap;
+namespace syncable_prefs {
 class PrefServiceSyncable;
 class TestingPrefServiceSyncable;
+}
 
 class TestingProfile : public Profile {
  public:
@@ -94,7 +99,7 @@ class TestingProfile : public Profile {
     void SetPath(const base::FilePath& path);
 
     // Sets the PrefService to be used by this profile.
-    void SetPrefService(scoped_ptr<PrefServiceSyncable> prefs);
+    void SetPrefService(scoped_ptr<syncable_prefs::PrefServiceSyncable> prefs);
 
     // Makes the Profile being built a guest profile.
     void SetGuestSession();
@@ -119,7 +124,7 @@ class TestingProfile : public Profile {
     bool build_called_;
 
     // Various staging variables where values are held until Build() is invoked.
-    scoped_ptr<PrefServiceSyncable> pref_service_;
+    scoped_ptr<syncable_prefs::PrefServiceSyncable> pref_service_;
 #if defined(ENABLE_EXTENSIONS)
     scoped_refptr<ExtensionSpecialStoragePolicy> extension_policy_;
 #endif
@@ -153,7 +158,7 @@ class TestingProfile : public Profile {
 #if defined(ENABLE_EXTENSIONS)
                  scoped_refptr<ExtensionSpecialStoragePolicy> extension_policy,
 #endif
-                 scoped_ptr<PrefServiceSyncable> prefs,
+                 scoped_ptr<syncable_prefs::PrefServiceSyncable> prefs,
                  TestingProfile* parent,
                  bool guest_session,
                  const std::string& supervised_user_id,
@@ -196,7 +201,7 @@ class TestingProfile : public Profile {
   // Allow setting a profile as Guest after-the-fact to simplify some tests.
   void SetGuestSession(bool guest);
 
-  TestingPrefServiceSyncable* GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* GetTestingPrefService();
 
   // Called on the parent of an incognito |profile|. Usually called from the
   // constructor of an incognito TestingProfile, but can also be used by tests
@@ -224,6 +229,7 @@ class TestingProfile : public Profile {
   content::PushMessagingService* GetPushMessagingService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
+  content::BackgroundSyncController* GetBackgroundSyncController() override;
 
   TestingProfile* AsTestingProfile() override;
 
@@ -252,9 +258,9 @@ class TestingProfile : public Profile {
   void DestroyOffTheRecordProfile() override {}
   bool HasOffTheRecordProfile() override;
   Profile* GetOriginalProfile() override;
-  bool IsSupervised() override;
-  bool IsChild() override;
-  bool IsLegacySupervised() override;
+  bool IsSupervised() const override;
+  bool IsChild() const override;
+  bool IsLegacySupervised() const override;
 #if defined(ENABLE_EXTENSIONS)
   void SetExtensionSpecialStoragePolicy(
       ExtensionSpecialStoragePolicy* extension_special_storage_policy);
@@ -267,7 +273,7 @@ class TestingProfile : public Profile {
 
   PrefService* GetPrefs() override;
   const PrefService* GetPrefs() const override;
-  chrome::ChromeZoomLevelPrefs* GetZoomLevelPrefs() override;
+  ChromeZoomLevelPrefs* GetZoomLevelPrefs() override;
 
   net::URLRequestContextGetter* GetMediaRequestContext() override;
   net::URLRequestContextGetter* GetMediaRequestContextForRenderProcess(
@@ -282,7 +288,6 @@ class TestingProfile : public Profile {
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors) override;
   net::SSLConfigService* GetSSLConfigService() override;
-  HostContentSettingsMap* GetHostContentSettingsMap() override;
   void set_last_session_exited_cleanly(bool value) {
     last_session_exited_cleanly_ = value;
   }
@@ -308,7 +313,8 @@ class TestingProfile : public Profile {
   void BlockUntilHistoryProcessesPendingRequests();
 
   chrome_browser_net::Predictor* GetNetworkPredictor() override;
-  DevToolsNetworkController* GetDevToolsNetworkController() override;
+  DevToolsNetworkControllerHandle* GetDevToolsNetworkControllerHandle()
+      override;
   void ClearNetworkingHistorySince(base::Time time,
                                    const base::Closure& completion) override;
   GURL GetHomePage() override;
@@ -319,11 +325,19 @@ class TestingProfile : public Profile {
     profile_name_ = profile_name;
   }
 
+ private:
+  // We use a temporary directory to store testing profile data. This
+  // must be declared before anything that may make use of the
+  // directory so as to ensure files are closed before cleanup.  In a
+  // multi-profile environment, this is invalid and the directory is
+  // managed by the TestingProfileManager.
+  base::ScopedTempDir temp_dir_;
+
  protected:
   base::Time start_time_;
-  scoped_ptr<PrefServiceSyncable> prefs_;
+  scoped_ptr<syncable_prefs::PrefServiceSyncable> prefs_;
   // ref only for right type, lifecycle is managed by prefs_
-  TestingPrefServiceSyncable* testing_prefs_;
+  syncable_prefs::TestingPrefServiceSyncable* testing_prefs_;
 
  private:
   // Creates a temporary directory for use by this profile.
@@ -373,10 +387,6 @@ class TestingProfile : public Profile {
   // The proxy prefs tracker.
   scoped_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker_;
 
-  // We use a temporary directory to store testing profile data. In a multi-
-  // profile environment, this is invalid and the directory is managed by the
-  // TestingProfileManager.
-  base::ScopedTempDir temp_dir_;
   // The path to this profile. This will be valid in either of the two above
   // cases.
   base::FilePath profile_path_;

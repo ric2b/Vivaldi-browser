@@ -6,6 +6,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/guid.h"
 #include "base/location.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -27,6 +28,7 @@
 #include "content/public/common/manifest.h"
 #include "jni/AppBannerInfoBarDelegateAndroid_jni.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "url/gurl.h"
 
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertJavaStringToUTF16;
@@ -37,10 +39,12 @@ namespace banners {
 
 AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
     int event_request_id,
+    scoped_refptr<AppBannerDataFetcherAndroid> data_fetcher,
     const base::string16& app_title,
     SkBitmap* app_icon,
     const content::Manifest& web_app_data)
-    : app_title_(app_title),
+    : data_fetcher_(data_fetcher),
+      app_title_(app_title),
       app_icon_(app_icon),
       event_request_id_(event_request_id),
       web_app_data_(web_app_data),
@@ -54,12 +58,14 @@ AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
     const base::string16& app_title,
     SkBitmap* app_icon,
     const base::android::ScopedJavaGlobalRef<jobject>& native_app_data,
-    const std::string& native_app_package)
+    const std::string& native_app_package,
+    const std::string& referrer)
     : app_title_(app_title),
       app_icon_(app_icon),
       event_request_id_(event_request_id),
       native_app_data_(native_app_data),
       native_app_package_(native_app_package),
+      referrer_(referrer),
       has_user_interaction_(false) {
   DCHECK(!native_app_data_.is_null());
   CreateJavaDelegate();
@@ -80,8 +86,9 @@ AppBannerInfoBarDelegateAndroid::~AppBannerInfoBarDelegateAndroid() {
   java_delegate_.Reset();
 }
 
-void AppBannerInfoBarDelegateAndroid::UpdateInstallState(JNIEnv* env,
-                                                         jobject obj) {
+void AppBannerInfoBarDelegateAndroid::UpdateInstallState(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (native_app_data_.is_null())
     return;
 
@@ -95,7 +102,7 @@ void AppBannerInfoBarDelegateAndroid::UpdateInstallState(JNIEnv* env,
 
 void AppBannerInfoBarDelegateAndroid::OnInstallIntentReturned(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jboolean jis_installing) {
   if (!infobar())
     return;
@@ -122,9 +129,10 @@ void AppBannerInfoBarDelegateAndroid::OnInstallIntentReturned(
   UpdateInstallState(env, obj);
 }
 
-void AppBannerInfoBarDelegateAndroid::OnInstallFinished(JNIEnv* env,
-                                                 jobject obj,
-                                                 jboolean success) {
+void AppBannerInfoBarDelegateAndroid::OnInstallFinished(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jboolean success) {
   if (!infobar())
     return;
 
@@ -152,6 +160,11 @@ void AppBannerInfoBarDelegateAndroid::SendBannerAccepted(
           web_contents->GetMainFrame()->GetRoutingID(),
           event_request_id_,
           platform));
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+AppBannerInfoBarDelegateAndroid::GetIdentifier() const {
+  return APP_BANNER_INFOBAR_DELEGATE_ANDROID;
 }
 
 gfx::Image AppBannerInfoBarDelegateAndroid::GetIcon() const {
@@ -210,12 +223,15 @@ bool AppBannerInfoBarDelegateAndroid::Accept() {
       TrackDismissEvent(DISMISS_EVENT_ERROR);
       return true;
     }
+    ScopedJavaLocalRef<jstring> jreferrer(
+        ConvertUTF8ToJavaString(env, referrer_));
 
     bool was_opened = Java_AppBannerInfoBarDelegateAndroid_installOrOpenNativeApp(
         env,
         java_delegate_.obj(),
         tab->GetJavaObject().obj(),
-        native_app_data_.obj());
+        native_app_data_.obj(),
+        jreferrer.obj());
 
     if (was_opened) {
       TrackDismissEvent(DISMISS_EVENT_APP_OPEN);
@@ -231,15 +247,19 @@ bool AppBannerInfoBarDelegateAndroid::Accept() {
         web_contents, web_app_data_.start_url.spec(),
         AppBannerSettingsHelper::WEB);
 
-    ShortcutInfo info;
+    ShortcutInfo info(GURL::EmptyGURL());
     info.UpdateFromManifest(web_app_data_);
     info.UpdateSource(ShortcutInfo::SOURCE_APP_BANNER);
+
+    const std::string& uid = base::GenerateGUID();
     content::BrowserThread::PostTask(
         content::BrowserThread::IO,
         FROM_HERE,
         base::Bind(&ShortcutHelper::AddShortcutInBackgroundWithSkBitmap,
                    info,
+                   uid,
                    *app_icon_.get()));
+    data_fetcher_->FetchWebappSplashScreenImage(uid);
 
     SendBannerAccepted(web_contents, "web");
     return true;

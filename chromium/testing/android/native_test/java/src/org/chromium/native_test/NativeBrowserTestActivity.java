@@ -15,17 +15,14 @@ import java.io.File;
  */
 public abstract class NativeBrowserTestActivity extends NativeTestActivity {
 
-    private static final String TAG = "cr.native_test";
+    private static final String TAG = "cr_NativeTest";
 
     private static final String BROWSER_TESTS_FLAGS[] = {
         // content::kSingleProcessTestsFlag
         "--single_process",
 
         // switches::kUseFakeDeviceForMediaStream
-        "--use-fake-device-for-media-stream",
-
-        // switches::kUseFakeUIForMediaStream
-        "--use-fake-ui-for-media-stream"
+        "--use-fake-device-for-media-stream"
     };
 
     @Override

@@ -5,6 +5,8 @@
 #ifndef MEDIA_BASE_MEDIA_LOG_EVENT_H_
 #define MEDIA_BASE_MEDIA_LOG_EVENT_H_
 
+#include <stdint.h>
+
 #include "base/time/time.h"
 #include "base/values.h"
 
@@ -95,7 +97,7 @@ struct MediaLogEvent {
     TYPE_LAST = PROPERTY_CHANGE
   };
 
-  int32 id;
+  int32_t id;
   Type type;
   base::DictionaryValue params;
   base::TimeTicks time;

@@ -5,11 +5,14 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_BASE_NODE_H_
 #define SYNC_INTERNAL_API_PUBLIC_BASE_NODE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "sync/api/attachments/attachment.h"
@@ -37,7 +40,7 @@ class PreferenceSpecifics;
 class PasswordSpecificsData;
 class ThemeSpecifics;
 class TypedUrlSpecifics;
-}
+}  // namespace sync_pb
 
 namespace syncer {
 
@@ -46,16 +49,17 @@ class BaseTransaction;
 namespace syncable {
 class BaseTransaction;
 class Entry;
+class Id;
 }
 
 // A valid BaseNode will never have an ID of zero.
-static const int64 kInvalidId = 0;
+static const int64_t kInvalidId = 0;
 
 // BaseNode wraps syncable::Entry, and corresponds to a single object's state.
 // This, like syncable::Entry, is intended for use on the stack.  A valid
 // transaction is necessary to create a BaseNode or any of its children.
 // Unlike syncable::Entry, a sync API BaseNode is identified primarily by its
-// int64 metahandle, which we call an ID here.
+// int64_t metahandle, which we call an ID here.
 class SYNC_EXPORT BaseNode {
  public:
   // Enumerates the possible outcomes of trying to initialize a sync node.
@@ -75,7 +79,7 @@ class SYNC_EXPORT BaseNode {
   // All subclasses of BaseNode must provide a way to initialize themselves by
   // doing an ID lookup.  Returns false on failure.  An invalid or deleted
   // ID will result in failure.
-  virtual InitByLookupResult InitByIdLookup(int64 id) = 0;
+  virtual InitByLookupResult InitByIdLookup(int64_t id) = 0;
 
   // All subclasses of BaseNode must also provide a way to initialize themselves
   // by doing a client tag lookup. Returns false on failure. A deleted node
@@ -88,7 +92,7 @@ class SYNC_EXPORT BaseNode {
   // metahandle).  These ids are strictly local handles.  They will persist
   // on this client, but the same object on a different client may have a
   // different ID value.
-  virtual int64 GetId() const;
+  virtual int64_t GetId() const;
 
   // Returns the modification time of the object.
   base::Time GetModificationTime() const;
@@ -96,11 +100,15 @@ class SYNC_EXPORT BaseNode {
   // Nodes are hierarchically arranged into a single-rooted tree.
   // InitByRootLookup on ReadNode allows access to the root. GetParentId is
   // how you find a node's parent.
-  int64 GetParentId() const;
+  int64_t GetParentId() const;
 
   // Nodes are either folders or not.  This corresponds to the IS_DIR property
   // of syncable::Entry.
   bool GetIsFolder() const;
+
+  // Specifies whether node is a permanent folder. This is true when
+  // UNIQUE_SERVER_TAG property of syncable::Entry is non-empty.
+  bool GetIsPermanentFolder() const;
 
   // Returns the title of the object.
   // Uniqueness of the title is not enforced on siblings -- it is not an error
@@ -134,27 +142,30 @@ class SYNC_EXPORT BaseNode {
   const sync_pb::EntitySpecifics& GetEntitySpecifics() const;
 
   // Returns the local external ID associated with the node.
-  int64 GetExternalId() const;
+  int64_t GetExternalId() const;
+
+  // Returns the internal syncable ID associated with the node.
+  const syncable::Id& GetSyncId() const;
 
   // Returns true iff this node has children.
   bool HasChildren() const;
 
   // Return the ID of the node immediately before this in the sibling order.
   // For the first node in the ordering, return 0.
-  int64 GetPredecessorId() const;
+  int64_t GetPredecessorId() const;
 
   // Return the ID of the node immediately after this in the sibling order.
   // For the last node in the ordering, return 0.
-  int64 GetSuccessorId() const;
+  int64_t GetSuccessorId() const;
 
   // Return the ID of the first child of this node.  If this node has no
   // children, return 0.
-  int64 GetFirstChildId() const;
+  int64_t GetFirstChildId() const;
 
   // Returns the IDs of the children of this node.
   // If this type supports user-defined positions the returned IDs will be in
   // the correct order.
-  void GetChildIds(std::vector<int64>* result) const;
+  void GetChildIds(std::vector<int64_t>* result) const;
 
   // Returns the total number of nodes including and beneath this node.
   // Recursively iterates through all children.
@@ -168,16 +179,16 @@ class SYNC_EXPORT BaseNode {
   // Returns this item's attachment ids.
   const syncer::AttachmentIdList GetAttachmentIds() const;
 
-  // These virtual accessors provide access to data members of derived classes.
-  virtual const syncable::Entry* GetEntry() const = 0;
-  virtual const BaseTransaction* GetTransaction() const = 0;
-
   // Returns a base::DictionaryValue serialization of this node.
   base::DictionaryValue* ToValue() const;
 
  protected:
   BaseNode();
   virtual ~BaseNode();
+
+  // These virtual accessors provide access to data members of derived classes.
+  virtual const syncable::Entry* GetEntry() const = 0;
+  virtual const BaseTransaction* GetTransaction() const = 0;
 
   // Determines whether part of the entry is encrypted, and if so attempts to
   // decrypt it. Unless decryption is necessary and fails, this will always
@@ -200,6 +211,11 @@ class SYNC_EXPORT BaseNode {
   // protected/private BaseNode methods.
   friend class SyncManagerTest;
   FRIEND_TEST_ALL_PREFIXES(SyncApiTest, GenerateSyncableHash);
+  FRIEND_TEST_ALL_PREFIXES(SyncApiTest, WriteEmptyBookmarkTitle);
+  FRIEND_TEST_ALL_PREFIXES(SyncApiTest, WriteEncryptedTitle);
+  FRIEND_TEST_ALL_PREFIXES(SyncBackupManagerTest, NormalizeEntry);
+  FRIEND_TEST_ALL_PREFIXES(SyncBackupManagerTest,
+                           PersistWithSwitchToSyncShutdown);
   FRIEND_TEST_ALL_PREFIXES(SyncManagerTest, UpdateEntryWithEncryption);
   FRIEND_TEST_ALL_PREFIXES(SyncManagerTest,
                            UpdatePasswordSetEntitySpecificsNoChange);

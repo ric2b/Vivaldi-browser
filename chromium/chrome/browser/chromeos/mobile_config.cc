@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/mobile_config.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
@@ -213,8 +215,8 @@ void MobileConfig::LocaleConfig::InitFromDictionary(
 
 // static
 MobileConfig* MobileConfig::GetInstance() {
-  return Singleton<MobileConfig,
-      DefaultSingletonTraits<MobileConfig> >::get();
+  return base::Singleton<MobileConfig,
+                         base::DefaultSingletonTraits<MobileConfig>>::get();
 }
 
 const MobileConfig::Carrier* MobileConfig::GetCarrier(

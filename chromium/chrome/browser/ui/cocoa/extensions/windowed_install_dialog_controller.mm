@@ -4,6 +4,9 @@
 
 #import "chrome/browser/ui/cocoa/extensions/windowed_install_dialog_controller.h"
 
+#include <utility>
+
+#import "base/callback_helpers.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/sys_string_conversions.h"
@@ -25,33 +28,33 @@
 - (id)initWithProfile:(Profile*)profile
             navigator:(content::PageNavigator*)navigator
              delegate:(WindowedInstallDialogController*)delegate
-               prompt:(scoped_refptr<ExtensionInstallPrompt::Prompt>)prompt;
+               prompt:(scoped_ptr<ExtensionInstallPrompt::Prompt>)prompt;
 
 @end
 
 WindowedInstallDialogController::WindowedInstallDialogController(
     ExtensionInstallPromptShowParams* show_params,
-    ExtensionInstallPrompt::Delegate* delegate,
-    scoped_refptr<ExtensionInstallPrompt::Prompt> prompt)
-    : delegate_(delegate) {
+    const ExtensionInstallPrompt::DoneCallback& done_callback,
+    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt)
+    : done_callback_(done_callback) {
   install_controller_.reset([[WindowedInstallController alloc]
       initWithProfile:show_params->profile()
             navigator:show_params->GetParentWebContents()
              delegate:this
-               prompt:prompt]);
+               prompt:std::move(prompt)]);
   [[install_controller_ window] makeKeyAndOrderFront:nil];
 }
 
 WindowedInstallDialogController::~WindowedInstallDialogController() {
   DCHECK(!install_controller_);
-  DCHECK(!delegate_);
+  DCHECK(done_callback_.is_null());
 }
 
 void WindowedInstallDialogController::OnWindowClosing() {
   install_controller_.reset();
-  if (delegate_) {
-    delegate_->InstallUIAbort(false);
-    delegate_ = NULL;
+  if (!done_callback_.is_null()) {
+    base::ResetAndReturn(&done_callback_).Run(
+        ExtensionInstallPrompt::Result::ABORTED);
   }
   base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
 }
@@ -61,15 +64,21 @@ WindowedInstallDialogController::GetViewController() {
   return [install_controller_ viewController];
 }
 
-void WindowedInstallDialogController::InstallUIProceed() {
-  delegate_->InstallUIProceed();
-  delegate_ = NULL;
+void WindowedInstallDialogController::OnOkButtonClicked() {
+  base::ResetAndReturn(&done_callback_).Run(
+      ExtensionInstallPrompt::Result::ACCEPTED);
   [[install_controller_ window] close];
 }
 
-void WindowedInstallDialogController::InstallUIAbort(bool user_initiated) {
-  delegate_->InstallUIAbort(user_initiated);
-  delegate_ = NULL;
+void WindowedInstallDialogController::OnCancelButtonClicked() {
+  base::ResetAndReturn(&done_callback_).Run(
+      ExtensionInstallPrompt::Result::USER_CANCELED);
+  [[install_controller_ window] close];
+}
+
+void WindowedInstallDialogController::OnStoreLinkClicked() {
+  base::ResetAndReturn(&done_callback_).Run(
+      ExtensionInstallPrompt::Result::USER_CANCELED);
   [[install_controller_ window] close];
 }
 
@@ -78,7 +87,7 @@ void WindowedInstallDialogController::InstallUIAbort(bool user_initiated) {
 - (id)initWithProfile:(Profile*)profile
             navigator:(content::PageNavigator*)navigator
              delegate:(WindowedInstallDialogController*)delegate
-               prompt:(scoped_refptr<ExtensionInstallPrompt::Prompt>)prompt {
+               prompt:(scoped_ptr<ExtensionInstallPrompt::Prompt>)prompt {
   base::scoped_nsobject<NSWindow> controlledPanel(
       [[NSPanel alloc] initWithContentRect:ui::kWindowSizeDeterminedLater
                                  styleMask:NSTitledWindowMask
@@ -86,11 +95,12 @@ void WindowedInstallDialogController::InstallUIAbort(bool user_initiated) {
                                      defer:NO]);
   if ((self = [super initWithWindow:controlledPanel])) {
     dialogController_ = delegate;
+    ExtensionInstallPrompt::Prompt* weakPrompt = prompt.get();
     installViewController_.reset([[ExtensionInstallViewController alloc]
         initWithProfile:profile
               navigator:navigator
                delegate:delegate
-                 prompt:prompt]);
+                 prompt:std::move(prompt)]);
     NSWindow* window = [self window];
 
     // Ensure the window does not display behind the app launcher window, and is
@@ -101,7 +111,7 @@ void WindowedInstallDialogController::InstallUIAbort(bool user_initiated) {
     if ([window respondsToSelector:@selector(setAnimationBehavior:)])
       [window setAnimationBehavior:NSWindowAnimationBehaviorAlertPanel];
 
-    [window setTitle:base::SysUTF16ToNSString(prompt->GetDialogTitle())];
+    [window setTitle:base::SysUTF16ToNSString(weakPrompt->GetDialogTitle())];
     NSRect viewFrame = [[installViewController_ view] frame];
     [window setFrame:[window frameRectForContentRect:viewFrame]
              display:NO];

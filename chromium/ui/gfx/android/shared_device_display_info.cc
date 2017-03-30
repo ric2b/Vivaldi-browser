@@ -4,6 +4,7 @@
 
 #include "ui/gfx/android/shared_device_display_info.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/logging.h"
@@ -13,7 +14,7 @@ namespace gfx {
 
 // static JNI call
 static void UpdateSharedDeviceDisplayInfo(JNIEnv* env,
-                                          jobject obj,
+                                          const JavaParamRef<jobject>& obj,
                                           jint display_height,
                                           jint display_width,
                                           jint physical_display_height,
@@ -32,7 +33,7 @@ static void UpdateSharedDeviceDisplayInfo(JNIEnv* env,
 
 // static
 SharedDeviceDisplayInfo* SharedDeviceDisplayInfo::GetInstance() {
-  return Singleton<SharedDeviceDisplayInfo>::get();
+  return base::Singleton<SharedDeviceDisplayInfo>::get();
 }
 
 int SharedDeviceDisplayInfo::GetDisplayHeight() {

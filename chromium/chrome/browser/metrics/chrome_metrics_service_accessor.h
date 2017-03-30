@@ -13,8 +13,8 @@
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "components/metrics/metrics_service_accessor.h"
 
+class BrowserProcessImpl;
 class ChromeExtensionDownloaderFactory;
-class PrefService;
 class Profile;
 
 namespace {
@@ -22,26 +22,46 @@ class CrashesDOMHandler;
 class FlashDOMHandler;
 }
 
+namespace chrome_browser {
+void SetupPreReadFieldTrial();
+}
+
 namespace component_updater {
 class ComponentUpdateService;
-void RegisterSwReporterComponent(ComponentUpdateService* cus);
+}
+
+namespace domain_reliability {
+class DomainReliabilityServiceFactory;
 }
 
 namespace extensions {
-class MetricsPrivateGetIsCrashReportingEnabledFunction;
+class ChromeExtensionWebContentsObserver;
 class FileManagerPrivateIsUMAEnabledFunction;
+class MetricsPrivateGetIsCrashReportingEnabledFunction;
+}
+
+namespace options {
+class BrowserOptionsHandler;
 }
 
 namespace prerender {
 bool IsOmniboxEnabled(Profile* profile);
 }
 
-namespace system_logs {
-class ChromeInternalLogSource;
+namespace safe_browsing {
+class DownloadSBClient;
+class IncidentReportingService;
+class SafeBrowsingService;
+class SafeBrowsingUIManager;
+class SRTFetcher;
 }
 
-namespace options {
-class BrowserOptionsHandler;
+namespace speech {
+class ChromeSpeechRecognitionManagerDelegate;
+}
+
+namespace system_logs {
+class ChromeInternalLogSource;
 }
 
 // This class limits and documents access to metrics service helper methods.
@@ -49,51 +69,50 @@ class BrowserOptionsHandler;
 // as a 'friend' below.
 class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
  private:
-  friend void component_updater::RegisterSwReporterComponent(
-      component_updater::ComponentUpdateService* cus);
-  friend bool prerender::IsOmniboxEnabled(Profile* profile);
-  friend class ChromeExtensionDownloaderFactory;
-  friend class ChromeRenderMessageFilter;
   friend class ::CrashesDOMHandler;
-  friend class DataReductionProxyChromeSettings;
-  friend class extensions::MetricsPrivateGetIsCrashReportingEnabledFunction;
-  friend class extensions::FileManagerPrivateIsUMAEnabledFunction;
   friend class ::FlashDOMHandler;
-  friend class system_logs::ChromeInternalLogSource;
-  friend class UmaSessionStats;
-  friend class options::BrowserOptionsHandler;
+  friend class BrowserProcessImpl;
+  friend void chrome_browser::SetupPreReadFieldTrial();
+  friend class ChromeExtensionDownloaderFactory;
+  friend class ChromeMetricsServicesManagerClient;
+  friend class ChromeRenderMessageFilter;
+  friend class DataReductionProxyChromeSettings;
+  friend class domain_reliability::DomainReliabilityServiceFactory;
+  friend class extensions::ChromeExtensionWebContentsObserver;
+  friend class extensions::FileManagerPrivateIsUMAEnabledFunction;
+  friend class extensions::MetricsPrivateGetIsCrashReportingEnabledFunction;
   friend void InitiateMetricsReportingChange(
       bool, const OnMetricsReportingCallbackType&);
-  friend class MetricsServicesManager;
+  friend class options::BrowserOptionsHandler;
+  friend bool prerender::IsOmniboxEnabled(Profile* profile);
+  friend class safe_browsing::IncidentReportingService;
+  friend class speech::ChromeSpeechRecognitionManagerDelegate;
+  friend class StackSamplingConfiguration;
+  friend class system_logs::ChromeInternalLogSource;
+  friend class UmaSessionStats;
+  friend class safe_browsing::SRTFetcher;
+  friend class safe_browsing::DownloadSBClient;
+  friend class safe_browsing::SafeBrowsingService;
+  friend class safe_browsing::SafeBrowsingUIManager;
 
   FRIEND_TEST_ALL_PREFIXES(ChromeMetricsServiceAccessorTest,
                            MetricsReportingEnabled);
-  FRIEND_TEST_ALL_PREFIXES(ChromeMetricsServiceAccessorTest,
-                           CrashReportingEnabled);
 
-  // Returns true if prefs::kMetricsReportingEnabled is set.
-  // TODO(asvitkine): Consolidate the method in MetricsStateManager.
-  // TODO(asvitkine): This function does not report the correct value on
-  // Android and ChromeOS, see http://crbug.com/362192.
-  static bool IsMetricsReportingEnabled();
+  // Returns true if metrics reporting is enabled.
+  // TODO(gayane): Consolidate metric prefs on all platforms.
+  // http://crbug.com/362192,  http://crbug.com/532084
+  static bool IsMetricsAndCrashReportingEnabled();
 
-  // Returns true if crash reporting is enabled.  This is set at the platform
-  // level for Android and ChromeOS, and otherwise is the same as
-  // IsMetricsReportingEnabled for desktop Chrome.
-  static bool IsCrashReportingEnabled();
-
-  // Registers a field trial name and group to be used to annotate a UMA report
-  // with a particular Chrome configuration state. A UMA report will be
-  // annotated with this trial group if and only if all events in the report
-  // were created after the trial is registered. Only one group name may be
-  // registered at a time for a given trial name. Only the last group name that
-  // is registered for a given trial name will be recorded. The values passed
-  // in must not correspond to any real field trial in the code.
+  // Calls metrics::MetricsServiceAccessor::RegisterSyntheticFieldTrial() with
+  // g_browser_process->metrics_service(). See that function's declaration for
+  // details.
   static bool RegisterSyntheticFieldTrial(const std::string& trial_name,
                                           const std::string& group_name);
 
-  // Same as RegisterSyntheticFieldTrial above, but takes a hash for the trial
-  // name, rather than computing it from the string.
+  // Calls
+  // metrics::MetricsServiceAccessor::RegisterSyntheticFieldTrialWithNameHash()
+  // with g_browser_process->metrics_service(). See that function's declaration
+  // for details.
   static bool RegisterSyntheticFieldTrialWithNameHash(
       uint32_t trial_name_hash,
       const std::string& group_name);

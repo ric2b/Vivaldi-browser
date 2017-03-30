@@ -4,6 +4,7 @@
 
 #include "content/browser/web_contents/aura/overscroll_window_animation.h"
 
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/window.h"
@@ -93,7 +94,7 @@ class OverscrollWindowAnimationTest
       scoped_ptr<aura::Window> window(
           CreateNormalWindow(++last_window_id_, root_window(), nullptr));
       window->SetBounds(bounds);
-      return window.Pass();
+      return window;
     }
     return nullptr;
   }

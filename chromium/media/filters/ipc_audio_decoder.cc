@@ -7,26 +7,75 @@
 #include "media/filters/ipc_audio_decoder.h"
 
 #include <algorithm>
+#include <string>
 
-#include "base/callback_helpers.h"
+#include "base/bind.h"
+#include "base/command_line.h"
+#include "base/location.h"
 #include "media/base/audio_bus.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/data_source.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/demuxer_stream.h"
+#include "media/base/media_switches.h"
+#include "media/base/platform_mime_util.h"
 #include "media/base/sample_format.h"
 #include "media/filters/ffmpeg_glue.h"
 #include "media/filters/platform_media_pipeline_types.h"
 #include "media/filters/protocol_sniffer.h"
 
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#endif
+
 namespace media {
+
+namespace {
+
+bool g_enabled = true;
+
+base::LazyInstance<media::IPCMediaPipelineHost::Creator>::Leaky
+    g_ipc_media_pipeline_host_creator = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<scoped_refptr<base::SequencedTaskRunner>>
+    g_main_task_runner = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<scoped_refptr<base::SequencedTaskRunner>>
+    g_media_task_runner = LAZY_INSTANCE_INITIALIZER;
+
+void RunCreatorOnMainThread(
+    DataSource* data_source,
+    scoped_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host) {
+  *ipc_media_pipeline_host = g_ipc_media_pipeline_host_creator.Get()
+                                .Run(g_media_task_runner.Get(), data_source);
+}
+
+void RunAndSignal(const base::Closure& task, base::WaitableEvent* done) {
+  task.Run();
+  done->Signal();
+}
+
+void PostTaskAndWait(
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+    const tracked_objects::Location& from_here,
+    const base::Closure& task) {
+  base::WaitableEvent done(false, false);
+  task_runner->PostTask(from_here, base::Bind(&RunAndSignal, task, &done));
+  done.Wait();
+}
+
+}  // namespace
+
+IPCAudioDecoder::ScopedDisableForTesting::ScopedDisableForTesting() {
+  g_enabled = false;
+}
+
+IPCAudioDecoder::ScopedDisableForTesting::~ScopedDisableForTesting() {
+  g_enabled = true;
+}
 
 // An implementation of the DataSource interface that is a wrapper around
 // FFmpegURLProtocol.
-class IPCAudioDecoder::InMemoryDataSource : public media::DataSource {
+class IPCAudioDecoder::InMemoryDataSource : public DataSource {
  public:
   explicit InMemoryDataSource(FFmpegURLProtocol* protocol);
-  ~InMemoryDataSource() override;
 
   // DataSource implementation.
   void Read(int64_t position,
@@ -43,8 +92,6 @@ class IPCAudioDecoder::InMemoryDataSource : public media::DataSource {
  private:
   void OnMimeTypeSniffed(const std::string& mime_type);
 
-  base::WaitableEvent mime_type_sniffed_event_;
-
   std::string mime_type_;
   FFmpegURLProtocol* protocol_;
   bool stopped_;
@@ -54,18 +101,13 @@ class IPCAudioDecoder::InMemoryDataSource : public media::DataSource {
 
 IPCAudioDecoder::InMemoryDataSource::InMemoryDataSource(
     FFmpegURLProtocol* protocol)
-    : mime_type_sniffed_event_(false, false),
-      protocol_(protocol),
-      stopped_(false) {
+    : protocol_(protocol), stopped_(false) {
   DCHECK(protocol_);
+
   ProtocolSniffer protocol_sniffer;
   protocol_sniffer.SniffProtocol(
       this, base::Bind(&InMemoryDataSource::OnMimeTypeSniffed,
                        base::Unretained(this)));
-  mime_type_sniffed_event_.Wait();
-}
-
-IPCAudioDecoder::InMemoryDataSource::~InMemoryDataSource() {
 }
 
 void IPCAudioDecoder::InMemoryDataSource::Read(
@@ -86,7 +128,7 @@ void IPCAudioDecoder::InMemoryDataSource::Stop() {
   stopped_ = true;
 }
 
-bool IPCAudioDecoder::InMemoryDataSource::GetSize(int64* size_out) {
+bool IPCAudioDecoder::InMemoryDataSource::GetSize(int64_t* size_out) {
   return protocol_->GetSize(size_out);
 }
 
@@ -101,7 +143,6 @@ void IPCAudioDecoder::InMemoryDataSource::SetBitrate(int bitrate) {
 void IPCAudioDecoder::InMemoryDataSource::OnMimeTypeSniffed(
     const std::string& mime_type) {
   mime_type_ = mime_type;
-  mime_type_sniffed_event_.Signal();
 }
 
 IPCAudioDecoder::IPCAudioDecoder(FFmpegURLProtocol* protocol)
@@ -111,79 +152,85 @@ IPCAudioDecoder::IPCAudioDecoder(FFmpegURLProtocol* protocol)
       number_of_frames_(0),
       bytes_per_frame_(0),
       sample_format_(kUnknownSampleFormat),
-      initialized_successfully_(false),
-      initialization_event_(false, false),
-      destruction_event_(false, false),
-      read_event_(false, false),
       audio_bus_(nullptr),
-      frames_read_(0) {
+      frames_read_(0),
+      media_task_done_(false, false) {
+  DCHECK(IsAvailable());
 }
 
 IPCAudioDecoder::~IPCAudioDecoder() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (ipc_media_pipeline_host_.get()) {
-    media_task_runner_.Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&IPCMediaPipelineHost::Stop,
-                   base::Unretained(ipc_media_pipeline_host_.get())));
 
-    media_task_runner_.Get()->PostTask(
-        FROM_HERE, base::Bind(&IPCAudioDecoder::DestroyPipelineOnMediaThread,
-                              base::Unretained(this)));
-    destruction_event_.Wait();
-  }
+  if (!ipc_media_pipeline_host_)
+    return;
+
+  PostTaskAndWait(g_media_task_runner.Get(), FROM_HERE,
+                  base::Bind(&IPCMediaPipelineHost::Stop,
+                             base::Unretained(ipc_media_pipeline_host_.get())));
+
+  g_media_task_runner.Get()->DeleteSoon(FROM_HERE,
+                                        ipc_media_pipeline_host_.release());
 }
 
-void IPCAudioDecoder::DestroyPipelineOnMediaThread() {
-  DCHECK(media_task_runner_.Get()->BelongsToCurrentThread());
+// static
+bool IPCAudioDecoder::IsAvailable() {
+  if (!g_enabled)
+    return false;
 
-  ipc_media_pipeline_host_.reset();
-  destruction_event_.Signal();
+#if defined(OS_MACOSX)
+  if (!base::mac::IsOSYosemiteOrLater())
+    // The pre-10.10 PlatformMediaPipeline implementation decodes media by
+    // playing them at the regular playback rate.  This is unacceptable for Web
+    // Audio API.
+    return false;
+#endif
+
+  return IsPlatformMediaPipelineAvailable(media::PlatformMediaCheckType::BASIC);
 }
 
-bool IPCAudioDecoder::preinitialized_ = false;
-base::LazyInstance<media::IPCMediaPipelineHost::Creator>::Leaky
-    IPCAudioDecoder::ipc_media_pipeline_host_creator_ =
-        LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<scoped_refptr<base::SingleThreadTaskRunner>>::Leaky
-    IPCAudioDecoder::media_task_runner_ = LAZY_INSTANCE_INITIALIZER;
-
+// static
 void IPCAudioDecoder::Preinitialize(
     const media::IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,
-    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner) {
-  ipc_media_pipeline_host_creator_.Get() = ipc_media_pipeline_host_creator;
-  media_task_runner_.Get() = media_task_runner;
-  preinitialized_ = true;
+    const scoped_refptr<base::SequencedTaskRunner>& main_task_runner,
+    const scoped_refptr<base::SequencedTaskRunner>& media_task_runner) {
+  DCHECK(IsAvailable());
+  DCHECK(!ipc_media_pipeline_host_creator.is_null());
+  DCHECK(main_task_runner);
+  DCHECK(media_task_runner);
+
+  g_ipc_media_pipeline_host_creator.Get() = ipc_media_pipeline_host_creator;
+  g_main_task_runner.Get() = main_task_runner;
+  g_media_task_runner.Get() = media_task_runner;
 }
 
 bool IPCAudioDecoder::Initialize() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (!preinitialized_)
-    return false;
+  DCHECK(g_media_task_runner.Get()) << "Must call Preinitialize() first";
 
-  ipc_media_pipeline_host_ =
-      ipc_media_pipeline_host_creator_.Get()
-          .Run(media_task_runner_.Get(), data_source_.get())
-          .Pass();
-  media_task_runner_.Get()->PostTask(
+  PostTaskAndWait(g_main_task_runner.Get(), FROM_HERE,
+                  base::Bind(&RunCreatorOnMainThread, data_source_.get(),
+                             &ipc_media_pipeline_host_));
+
+  g_media_task_runner.Get()->PostTask(
       FROM_HERE, base::Bind(&IPCMediaPipelineHost::Initialize,
                             base::Unretained(ipc_media_pipeline_host_.get()),
                             data_source_->mime_type(),
                             base::Bind(&IPCAudioDecoder::OnInitialized,
                                        base::Unretained(this))));
-  initialization_event_.Wait();
-  return initialized_successfully_;
+  media_task_done_.Wait();
+
+  return ipc_media_pipeline_host_ != nullptr;
 }
 
-void IPCAudioDecoder::OnInitialized(bool success,
-                                    int bitrate,
-                                    const PlatformMediaTimeInfo& time_info,
-                                    const PlatformAudioConfig& audio_config,
-                                    const PlatformVideoConfig& video_config) {
-  DCHECK(media_task_runner_.Get()->BelongsToCurrentThread());
+void IPCAudioDecoder::OnInitialized(
+    bool success,
+    int bitrate,
+    const PlatformMediaTimeInfo& time_info,
+    const PlatformAudioConfig& audio_config,
+    const PlatformVideoConfig& /* video_config */) {
+  DCHECK(g_media_task_runner.Get()->RunsTasksOnCurrentThread());
 
-  initialized_successfully_ = success && audio_config.is_valid();
-  if (initialized_successfully_) {
+  if (success && audio_config.is_valid()) {
     channels_ = audio_config.channel_count;
     sample_rate_ = audio_config.samples_per_second;
     number_of_frames_ = base::saturated_cast<int>(
@@ -192,29 +239,31 @@ void IPCAudioDecoder::OnInitialized(bool success,
         channels_ * SampleFormatToBytesPerChannel(audio_config.format);
     sample_format_ = audio_config.format;
     duration_ = time_info.duration;
+  } else {
+    ipc_media_pipeline_host_.reset();
   }
 
-  initialization_event_.Signal();
-  return;
+  media_task_done_.Signal();
 }
 
 int IPCAudioDecoder::Read(AudioBus* audio_bus) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (!initialized_successfully_ || audio_bus->channels() != channels_)
+
+  if (!ipc_media_pipeline_host_ || audio_bus->channels() != channels_)
     return 0;
 
   audio_bus_ = audio_bus;
-  frames_read_ = 0;
-  media_task_runner_.Get()->PostTask(
+
+  g_media_task_runner.Get()->PostTask(
       FROM_HERE,
       base::Bind(&IPCAudioDecoder::ReadInternal, base::Unretained(this)));
-  read_event_.Wait();
+  media_task_done_.Wait();
 
   return frames_read_;
 }
 
 void IPCAudioDecoder::ReadInternal() {
-  DCHECK(media_task_runner_.Get()->BelongsToCurrentThread());
+  DCHECK(g_media_task_runner.Get()->RunsTasksOnCurrentThread());
 
   ipc_media_pipeline_host_->ReadDecodedData(
       PLATFORM_MEDIA_AUDIO,
@@ -223,55 +272,58 @@ void IPCAudioDecoder::ReadInternal() {
 
 void IPCAudioDecoder::DataReady(DemuxerStream::Status status,
                                 const scoped_refptr<DecoderBuffer>& buffer) {
-  DCHECK(media_task_runner_.Get()->BelongsToCurrentThread());
+  DCHECK(g_media_task_runner.Get()->RunsTasksOnCurrentThread());
 
   switch (status) {
     case DemuxerStream::Status::kAborted:
       frames_read_ = -1;
-      read_event_.Signal();
+      media_task_done_.Signal();
       break;
+
     case DemuxerStream::Status::kConfigChanged:
       // When config changes the decoder buffer does not contain any useful
       // data, so we need to explicitly ask for more.
       ReadInternal();
       break;
+
     case DemuxerStream::Status::kOk:
       if (buffer->end_of_stream()) {
-        read_event_.Signal();
-      } else {
-        const int frame_count = std::min(buffer->data_size() / bytes_per_frame_,
-                                         audio_bus_->frames() - frames_read_);
-
-        // Deinterleave each channel. The final format should be 32bit
-        // floating-point planar.
-        if (sample_format_ == kSampleFormatF32) {
-          const float* decoded_audio_data =
-              reinterpret_cast<const float*>(buffer->data());
-          for (int channel_index = 0; channel_index < channels_;
-               ++channel_index) {
-            float* bus_data = audio_bus_->channel(channel_index) + frames_read_;
-            for (int frame_index = 0, channel_offset = channel_index;
-                 frame_index < frame_count;
-                 ++frame_index, channel_offset += channels_) {
-              bus_data[frame_index] = decoded_audio_data[channel_offset];
-            }
-          }
-        } else if (sample_format_ == kSampleFormatPlanarF32) {
-          const int channel_size = buffer->data_size() / channels_;
-          for (int channel_index = 0; channel_index < channels_;
-               ++channel_index) {
-            memcpy(audio_bus_->channel(channel_index) + frames_read_,
-                   buffer->data() + channel_index * channel_size,
-                   sizeof(float) * frame_count);
-          }
-        } else {
-          NOTREACHED();
-        }
-
-        frames_read_ += frame_count;
-
-        ReadInternal();
+        media_task_done_.Signal();
+        break;
       }
+
+      const int frame_count = std::min((int) buffer->data_size() / bytes_per_frame_,
+                                       audio_bus_->frames() - frames_read_);
+
+      // Deinterleave each channel. The final format should be 32bit
+      // floating-point planar.
+      if (sample_format_ == kSampleFormatF32) {
+        const float* decoded_audio_data =
+            reinterpret_cast<const float*>(buffer->data());
+        for (int channel_index = 0; channel_index < channels_;
+             ++channel_index) {
+          float* bus_data = audio_bus_->channel(channel_index) + frames_read_;
+          for (int frame_index = 0, channel_offset = channel_index;
+               frame_index < frame_count;
+               ++frame_index, channel_offset += channels_) {
+            bus_data[frame_index] = decoded_audio_data[channel_offset];
+          }
+        }
+      } else if (sample_format_ == kSampleFormatPlanarF32) {
+        const int channel_size = buffer->data_size() / channels_;
+        for (int channel_index = 0; channel_index < channels_;
+             ++channel_index) {
+          memcpy(audio_bus_->channel(channel_index) + frames_read_,
+                 buffer->data() + channel_index * channel_size,
+                 sizeof(float) * frame_count);
+        }
+      } else {
+        NOTREACHED();
+      }
+
+      frames_read_ += frame_count;
+
+      ReadInternal();
       break;
   }
 }

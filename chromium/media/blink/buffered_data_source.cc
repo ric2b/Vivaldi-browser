@@ -4,9 +4,12 @@
 
 #include "media/blink/buffered_data_source.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/media_log.h"
 #include "net/base/net_errors.h"
@@ -33,7 +36,9 @@ namespace media {
 
 class BufferedDataSource::ReadOperation {
  public:
-  ReadOperation(int64 position, int size, uint8* data,
+  ReadOperation(int64_t position,
+                int size,
+                uint8_t* data,
                 const DataSource::ReadCB& callback);
   ~ReadOperation();
 
@@ -45,23 +50,25 @@ class BufferedDataSource::ReadOperation {
   int retries() { return retries_; }
   void IncrementRetries() { ++retries_; }
 
-  int64 position() { return position_; }
+  int64_t position() { return position_; }
   int size() { return size_; }
-  uint8* data() { return data_; }
+  uint8_t* data() { return data_; }
 
  private:
   int retries_;
 
-  const int64 position_;
+  const int64_t position_;
   const int size_;
-  uint8* data_;
+  uint8_t* data_;
   DataSource::ReadCB callback_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(ReadOperation);
 };
 
 BufferedDataSource::ReadOperation::ReadOperation(
-    int64 position, int size, uint8* data,
+    int64_t position,
+    int size,
+    uint8_t* data,
     const DataSource::ReadCB& callback)
     : retries_(0),
       position_(position),
@@ -98,6 +105,7 @@ BufferedDataSource::BufferedDataSource(
       render_task_runner_(task_runner),
       stop_signal_received_(false),
       media_has_played_(false),
+      buffering_strategy_(BUFFERING_STRATEGY_NORMAL),
       preload_(AUTO),
       bitrate_(0),
       playback_rate_(0.0),
@@ -115,11 +123,20 @@ BufferedDataSource::~BufferedDataSource() {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 }
 
+bool BufferedDataSource::media_has_played() const {
+  return media_has_played_;
+}
+
+bool BufferedDataSource::assume_fully_buffered() {
+  return !url_.SchemeIsHTTPOrHTTPS();
+}
+
 // A factory method to create BufferedResourceLoader using the read parameters.
 // This method can be overridden to inject mock BufferedResourceLoader object
 // for testing purpose.
 BufferedResourceLoader* BufferedDataSource::CreateResourceLoader(
-    int64 first_byte_position, int64 last_byte_position) {
+    int64_t first_byte_position,
+    int64_t last_byte_position) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   BufferedResourceLoader::DeferStrategy strategy = preload_ == METADATA ?
@@ -166,6 +183,13 @@ void BufferedDataSource::SetPreload(Preload preload) {
   preload_ = preload;
 }
 
+void BufferedDataSource::SetBufferingStrategy(
+    BufferingStrategy buffering_strategy) {
+  DCHECK(render_task_runner_->BelongsToCurrentThread());
+  buffering_strategy_ = buffering_strategy;
+  UpdateDeferStrategy();
+}
+
 bool BufferedDataSource::HasSingleOrigin() {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
   DCHECK(init_cb_.is_null() && loader_.get())
@@ -201,12 +225,7 @@ void BufferedDataSource::MediaPlaybackRateChanged(double playback_rate) {
 void BufferedDataSource::MediaIsPlaying() {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
   media_has_played_ = true;
-  UpdateDeferStrategy(false);
-}
-
-void BufferedDataSource::MediaIsPaused() {
-  DCHECK(render_task_runner_->BelongsToCurrentThread());
-  UpdateDeferStrategy(true);
+  UpdateDeferStrategy();
 }
 
 void BufferedDataSource::SetTargetBufferDuration(base::TimeDelta behind,
@@ -243,9 +262,15 @@ void BufferedDataSource::OnBufferingHaveEnough() {
     loader_->CancelUponDeferral();
 }
 
-void BufferedDataSource::Read(
-    int64 position, int size, uint8* data,
-    const DataSource::ReadCB& read_cb) {
+int64_t BufferedDataSource::GetMemoryUsage() const {
+  DCHECK(render_task_runner_->BelongsToCurrentThread());
+  return loader_ ? loader_->GetMemoryUsage() : 0;
+}
+
+void BufferedDataSource::Read(int64_t position,
+                              int size,
+                              uint8_t* data,
+                              const DataSource::ReadCB& read_cb) {
   DVLOG(1) << "Read: " << position << " offset, " << size << " bytes";
   DCHECK(!read_cb.is_null());
 
@@ -266,7 +291,7 @@ void BufferedDataSource::Read(
       base::Bind(&BufferedDataSource::ReadTask, weak_factory_.GetWeakPtr()));
 }
 
-bool BufferedDataSource::GetSize(int64* size_out) {
+bool BufferedDataSource::GetSize(int64_t* size_out) {
   if (total_bytes_ != kPositionNotSpecified) {
     *size_out = total_bytes_;
     return true;
@@ -298,7 +323,7 @@ void BufferedDataSource::StopInternal_Locked() {
   init_cb_.Reset();
 
   if (read_op_)
-    ReadOperation::Run(read_op_.Pass(), kReadError);
+    ReadOperation::Run(std::move(read_op_), kReadError);
 }
 
 void BufferedDataSource::StopLoader() {
@@ -320,7 +345,7 @@ void BufferedDataSource::SetBitrateTask(int bitrate) {
 // prior to make this method call.
 void BufferedDataSource::ReadInternal() {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
-  int64 position = 0;
+  int64_t position = 0;
   int size = 0;
   {
     base::AutoLock auto_lock(lock_);
@@ -404,7 +429,8 @@ void BufferedDataSource::StartCallback(
                                    loader_->range_supported());
   }
 
-  base::ResetAndReturn(&init_cb_).Run(success);
+  render_task_runner_->PostTask(
+      FROM_HERE, base::Bind(base::ResetAndReturn(&init_cb_), success));
 }
 
 void BufferedDataSource::PartialReadStartCallback(
@@ -427,7 +453,7 @@ void BufferedDataSource::PartialReadStartCallback(
   base::AutoLock auto_lock(lock_);
   if (stop_signal_received_)
     return;
-  ReadOperation::Run(read_op_.Pass(), kReadError);
+  ReadOperation::Run(std::move(read_op_), kReadError);
 }
 
 bool BufferedDataSource::CheckPartialResponseURL(
@@ -437,9 +463,15 @@ bool BufferedDataSource::CheckPartialResponseURL(
   // generated bytes and the target response. See http://crbug.com/489060#c32
   // for details.
   // If the origin of the new response is different from the first response we
-  // deny the redirected response.
-  return response_original_url_.GetOrigin() ==
-         partial_response_original_url.GetOrigin();
+  // deny the redirected response unless the crossorigin attribute has been set.
+  if ((response_original_url_.GetOrigin() ==
+       partial_response_original_url.GetOrigin()) ||
+      DidPassCORSAccessCheck()) {
+    return true;
+  }
+
+  MEDIA_LOG(ERROR, media_log_) << "BufferedDataSource: origin has changed";
+  return false;
 }
 
 void BufferedDataSource::ReadCallback(
@@ -487,7 +519,7 @@ void BufferedDataSource::ReadCallback(
       return;
     }
 
-    ReadOperation::Run(read_op_.Pass(), kReadError);
+    ReadOperation::Run(std::move(read_op_), kReadError);
     return;
   }
 
@@ -506,7 +538,7 @@ void BufferedDataSource::ReadCallback(
                                   total_bytes_);
     }
   }
-  ReadOperation::Run(read_op_.Pass(), bytes_read);
+  ReadOperation::Run(std::move(read_op_), bytes_read);
 }
 
 void BufferedDataSource::LoadingStateChangedCallback(
@@ -538,7 +570,7 @@ void BufferedDataSource::LoadingStateChangedCallback(
   downloading_cb_.Run(is_downloading_data);
 }
 
-void BufferedDataSource::ProgressCallback(int64 position) {
+void BufferedDataSource::ProgressCallback(int64_t position) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (assume_fully_buffered())
@@ -553,7 +585,10 @@ void BufferedDataSource::ProgressCallback(int64 position) {
   host_->AddBufferedByteRange(loader_->first_byte_position(), position);
 }
 
-void BufferedDataSource::UpdateDeferStrategy(bool paused) {
+void BufferedDataSource::UpdateDeferStrategy() {
+  if (!loader_)
+    return;
+
   // No need to aggressively buffer when we are assuming the resource is fully
   // buffered.
   if (assume_fully_buffered()) {
@@ -562,10 +597,11 @@ void BufferedDataSource::UpdateDeferStrategy(bool paused) {
   }
 
   // If the playback has started (at which point the preload value is ignored)
-  // and we're paused, then try to load as much as possible (the loader will
-  // fall back to kCapacityDefer if it knows the current response won't be
-  // useful from the cache in the future).
-  if (media_has_played_ && paused && loader_->range_supported()) {
+  // and the strategy is aggressive, then try to load as much as possible (the
+  // loader will fall back to kCapacityDefer if it knows the current response
+  // won't be useful from the cache in the future).
+  bool aggressive = (buffering_strategy_ == BUFFERING_STRATEGY_AGGRESSIVE);
+  if (media_has_played_ && aggressive && loader_->range_supported()) {
     loader_->UpdateDeferStrategy(BufferedResourceLoader::kNeverDefer);
     return;
   }

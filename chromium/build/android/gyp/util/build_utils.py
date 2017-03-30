@@ -16,15 +16,19 @@ import sys
 import tempfile
 import zipfile
 
+# Some clients do not add //build/android/gyp to PYTHONPATH.
+import md5_check  # pylint: disable=relative-import
 
-CHROMIUM_SRC = os.path.normpath(
-    os.path.join(os.path.dirname(__file__),
-                 os.pardir, os.pardir, os.pardir, os.pardir))
-COLORAMA_ROOT = os.path.join(CHROMIUM_SRC,
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+from pylib.constants import host_paths
+
+COLORAMA_ROOT = os.path.join(host_paths.DIR_SOURCE_ROOT,
                              'third_party', 'colorama', 'src')
 # aapt should ignore OWNERS files in addition the default ignore pattern.
 AAPT_IGNORE_PATTERN = ('!OWNERS:!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:' +
                        '!CVS:!thumbs.db:!picasa.ini:!*~:!*.d.stamp')
+_HERMETIC_TIMESTAMP = (2001, 1, 1, 0, 0, 0)
+_HERMETIC_FILE_ATTR = (0644 << 16L)
 
 
 @contextlib.contextmanager
@@ -194,7 +198,8 @@ def CheckZipPath(name):
     raise Exception('Absolute zip path: %s' % name)
 
 
-def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None):
+def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None,
+               predicate=None):
   if path is None:
     path = os.getcwd()
   elif not os.path.exists(path):
@@ -207,6 +212,8 @@ def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None):
       if pattern is not None:
         if not fnmatch.fnmatch(name, pattern):
           continue
+      if predicate and not predicate(name):
+        continue
       CheckZipPath(name)
       if no_clobber:
         output_path = os.path.join(path, name)
@@ -214,43 +221,95 @@ def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None):
           raise Exception(
               'Path already exists from zip: %s %s %s'
               % (zip_path, name, output_path))
+      z.extract(name, path)
 
-    z.extractall(path=path)
+
+def AddToZipHermetic(zip_file, zip_path, src_path=None, data=None,
+                     compress=None):
+  """Adds a file to the given ZipFile with a hard-coded modified time.
+
+  Args:
+    zip_file: ZipFile instance to add the file to.
+    zip_path: Destination path within the zip file.
+    src_path: Path of the source file. Mutually exclusive with |data|.
+    data: File data as a string.
+    compress: Whether to enable compression. Default is take from ZipFile
+        constructor.
+  """
+  assert (src_path is None) != (data is None), (
+      '|src_path| and |data| are mutually exclusive.')
+  CheckZipPath(zip_path)
+  zipinfo = zipfile.ZipInfo(filename=zip_path, date_time=_HERMETIC_TIMESTAMP)
+  zipinfo.external_attr = _HERMETIC_FILE_ATTR
+
+  if src_path:
+    with file(src_path) as f:
+      data = f.read()
+
+  # zipfile will deflate even when it makes the file bigger. To avoid
+  # growing files, disable compression at an arbitrary cut off point.
+  if len(data) < 16:
+    compress = False
+
+  # None converts to ZIP_STORED, when passed explicitly rather than the
+  # default passed to the ZipFile constructor.
+  compress_type = zip_file.compression
+  if compress is not None:
+    compress_type = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
+  zip_file.writestr(zipinfo, data, compress_type)
 
 
-def DoZip(inputs, output, base_dir):
+def DoZip(inputs, output, base_dir=None):
+  """Creates a zip file from a list of files.
+
+  Args:
+    inputs: A list of paths to zip, or a list of (zip_path, fs_path) tuples.
+    output: Destination .zip file.
+    base_dir: Prefix to strip from inputs.
+  """
+  input_tuples = []
+  for tup in inputs:
+    if isinstance(tup, basestring):
+      tup = (os.path.relpath(tup, base_dir), tup)
+    input_tuples.append(tup)
+
+  # Sort by zip path to ensure stable zip ordering.
+  input_tuples.sort(key=lambda tup: tup[0])
   with zipfile.ZipFile(output, 'w') as outfile:
-    for f in inputs:
-      CheckZipPath(os.path.relpath(f, base_dir))
-      outfile.write(f, os.path.relpath(f, base_dir))
+    for zip_path, fs_path in input_tuples:
+      AddToZipHermetic(outfile, zip_path, src_path=fs_path)
 
 
 def ZipDir(output, base_dir):
-  with zipfile.ZipFile(output, 'w') as outfile:
-    for root, _, files in os.walk(base_dir):
-      for f in files:
-        path = os.path.join(root, f)
-        archive_path = os.path.relpath(path, base_dir)
-        CheckZipPath(archive_path)
-        outfile.write(path, archive_path)
+  """Creates a zip file from a directory."""
+  inputs = []
+  for root, _, files in os.walk(base_dir):
+    for f in files:
+      inputs.append(os.path.join(root, f))
+  DoZip(inputs, output, base_dir)
 
 
-def MergeZips(output, inputs, exclude_patterns=None):
+def MatchesGlob(path, filters):
+  """Returns whether the given path matches any of the given glob patterns."""
+  return filters and any(fnmatch.fnmatch(path, f) for f in filters)
+
+
+def MergeZips(output, inputs, exclude_patterns=None, path_transform=None):
+  path_transform = path_transform or (lambda p, z: p)
   added_names = set()
-  def Allow(name):
-    if exclude_patterns is not None:
-      for p in exclude_patterns:
-        if fnmatch.fnmatch(name, p):
-          return False
-    return True
 
   with zipfile.ZipFile(output, 'w') as out_zip:
     for in_file in inputs:
       with zipfile.ZipFile(in_file, 'r') as in_zip:
         for name in in_zip.namelist():
-          if name not in added_names and Allow(name):
-            out_zip.writestr(name, in_zip.read(name))
-            added_names.add(name)
+          # Ignore directories.
+          if name[-1] == '/':
+            continue
+          dst_name = path_transform(name, in_file)
+          already_added = dst_name in added_names
+          if not already_added and not MatchesGlob(dst_name, exclude_patterns):
+            AddToZipHermetic(out_zip, dst_name, data=in_zip.read(name))
+            added_names.add(dst_name)
 
 
 def PrintWarning(message):
@@ -310,8 +369,9 @@ def GetPythonDependencies():
 
   abs_module_paths = map(os.path.abspath, module_paths)
 
+  assert os.path.isabs(host_paths.DIR_SOURCE_ROOT)
   non_system_module_paths = [
-      p for p in abs_module_paths if p.startswith(CHROMIUM_SRC)]
+      p for p in abs_module_paths if p.startswith(host_paths.DIR_SOURCE_ROOT)]
   def ConvertPycToPy(s):
     if s.endswith('.pyc'):
       return s[:-1]
@@ -323,9 +383,13 @@ def GetPythonDependencies():
 
 
 def AddDepfileOption(parser):
-  parser.add_option('--depfile',
-                    help='Path to depfile. This must be specified as the '
-                    'action\'s first output.')
+  # TODO(agrieve): Get rid of this once we've moved to argparse.
+  if hasattr(parser, 'add_option'):
+    func = parser.add_option
+  else:
+    func = parser.add_argument
+  func('--depfile',
+       help='Path to depfile. Must be specified as the action\'s first output.')
 
 
 def WriteDepfile(path, dependencies):
@@ -373,4 +437,49 @@ def ExpandFileArgs(args):
     new_args[i] = arg[:match.start()] + str(expansion)
 
   return new_args
+
+
+def CallAndWriteDepfileIfStale(function, options, record_path=None,
+                               input_paths=None, input_strings=None,
+                               output_paths=None, force=False,
+                               pass_changes=False):
+  """Wraps md5_check.CallAndRecordIfStale() and also writes dep & stamp files.
+
+  Depfiles and stamp files are automatically added to output_paths when present
+  in the |options| argument. They are then created after |function| is called.
+  """
+  if not output_paths:
+    raise Exception('At least one output_path must be specified.')
+  input_paths = list(input_paths or [])
+  input_strings = list(input_strings or [])
+  output_paths = list(output_paths or [])
+
+  python_deps = None
+  if hasattr(options, 'depfile') and options.depfile:
+    python_deps = GetPythonDependencies()
+    # List python deps in input_strings rather than input_paths since the
+    # contents of them does not change what gets written to the depfile.
+    input_strings += python_deps
+    output_paths += [options.depfile]
+
+  stamp_file = hasattr(options, 'stamp') and options.stamp
+  if stamp_file:
+    output_paths += [stamp_file]
+
+  def on_stale_md5(changes):
+    args = (changes,) if pass_changes else ()
+    function(*args)
+    if python_deps is not None:
+      WriteDepfile(options.depfile, python_deps + input_paths)
+    if stamp_file:
+      Touch(stamp_file)
+
+  md5_check.CallAndRecordIfStale(
+      on_stale_md5,
+      record_path=record_path,
+      input_paths=input_paths,
+      input_strings=input_strings,
+      output_paths=output_paths,
+      force=force,
+      pass_changes=True)
 

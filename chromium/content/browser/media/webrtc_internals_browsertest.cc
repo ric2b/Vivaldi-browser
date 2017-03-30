@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -63,7 +67,7 @@ struct StatsUnit {
     return ss.str();
   }
 
-  int64 timestamp;
+  int64_t timestamp;
   std::map<string, string> values;
 };
 
@@ -137,7 +141,7 @@ class UserMediaRequestEntry {
   std::string video_constraints;
 };
 
-static const int64 FAKE_TIME_STAMP = 3600000;
+static const int64_t FAKE_TIME_STAMP = 3600000;
 
 #if defined(OS_WIN)
 // All tests are flaky on Windows: crbug.com/277322.
@@ -152,9 +156,8 @@ class MAYBE_WebRtcInternalsBrowserTest: public ContentBrowserTest {
   ~MAYBE_WebRtcInternalsBrowserTest() override {}
 
   void SetUpOnMainThread() override {
-    // Assume this is set by the content test launcher.
-    ASSERT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kUseFakeUIForMediaStream));
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kUseFakeUIForMediaStream);
     ASSERT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
         switches::kUseFakeDeviceForMediaStream));
   }
@@ -233,8 +236,8 @@ class MAYBE_WebRtcInternalsBrowserTest: public ContentBrowserTest {
         "window.domAutomationController.send("
             "JSON.stringify(userMediaRequests));",
         &json_requests));
-    scoped_ptr<base::Value> value_requests;
-    value_requests.reset(base::JSONReader::DeprecatedRead(json_requests));
+    scoped_ptr<base::Value> value_requests =
+        base::JSONReader::Read(json_requests);
 
     EXPECT_EQ(base::Value::TYPE_LIST, value_requests->GetType());
 
@@ -682,7 +685,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcInternalsBrowserTest, ConvertedGraphs) {
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcInternalsBrowserTest,
                        DISABLED_WithRealPeerConnectionCall) {
   // Start a peerconnection call in the first window.
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/media/peerconnection-call.html"));
   NavigateToURL(shell(), url);
   ASSERT_TRUE(ExecuteJavascript("call({video:true});"));
@@ -783,8 +786,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcInternalsBrowserTest, CreatePageDump) {
       "window.domAutomationController.send("
       "JSON.stringify(peerConnectionDataStore));",
       &dump_json));
-  scoped_ptr<base::Value> dump;
-  dump.reset(base::JSONReader::DeprecatedRead(dump_json));
+  scoped_ptr<base::Value> dump = base::JSONReader::Read(dump_json);
   VerifyPageDumpStructure(dump.get(),
                           2 /*peer_connection_number*/,
                           2 /*update_number*/,
@@ -803,7 +805,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcInternalsBrowserTest, CreatePageDump) {
       "window.domAutomationController.send("
       "JSON.stringify(peerConnectionDataStore));",
       &dump_json));
-  dump.reset(base::JSONReader::DeprecatedRead(dump_json));
+  dump = base::JSONReader::Read(dump_json);
   VerifyStatsDump(dump.get(), pc_0, type, id, stats);
 }
 

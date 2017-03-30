@@ -10,26 +10,22 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/sync/glue/sync_backend_host_impl.h"
-#include "chrome/browser/sync/profile_sync_service.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/sync_driver/data_type_manager_impl.h"
+#include "components/sync_driver/glue/sync_backend_host_impl.h"
+#include "components/sync_driver/sync_client.h"
 #include "components/sync_driver/sync_prefs.h"
+#include "content/public/browser/browser_context.h"
 #include "sync/test/engine/test_id_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 class Profile;
 class ProfileOAuth2TokenService;
-class ProfileSyncComponentsFactory;
-class ProfileSyncComponentsFactoryMock;
+class SyncApiComponentFactoryMock;
 
 ACTION(ReturnNewDataTypeManager) {
-  return new sync_driver::DataTypeManagerImpl(base::Closure(),
-                                              arg0,
-                                              arg1,
-                                              arg2,
-                                              arg3,
-                                              arg4);
+  return new sync_driver::DataTypeManagerImpl(arg0, arg1, arg2, arg3, arg4);
 }
 
 namespace browser_sync {
@@ -38,6 +34,8 @@ class SyncBackendHostForProfileSyncTest : public SyncBackendHostImpl {
  public:
   SyncBackendHostForProfileSyncTest(
       Profile* profile,
+      sync_driver::SyncClient* sync_client,
+      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       invalidation::InvalidationService* invalidator,
       const base::WeakPtr<sync_driver::SyncPrefs>& sync_prefs,
       base::Closure callback);
@@ -72,7 +70,6 @@ class TestProfileSyncService : public ProfileSyncService {
   // TODO(tim): Add ability to inject TokenService alongside SigninManager.
   // TODO(rogerta): what does above comment mean?
   TestProfileSyncService(
-      scoped_ptr<ProfileSyncComponentsFactory> factory,
       Profile* profile,
       SigninManagerBase* signin,
       ProfileOAuth2TokenService* oauth2_token_service,
@@ -89,7 +86,7 @@ class TestProfileSyncService : public ProfileSyncService {
   static TestProfileSyncService* BuildAutoStartAsyncInit(
       Profile* profile, base::Closure callback);
 
-  ProfileSyncComponentsFactoryMock* components_factory_mock();
+  SyncApiComponentFactoryMock* GetSyncApiComponentFactoryMock();
 
   syncer::TestIdFactory* id_factory();
 

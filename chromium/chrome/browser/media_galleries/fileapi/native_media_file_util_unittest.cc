@@ -2,19 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/media_galleries/fileapi/native_media_file_util.h"
+
+#include <stddef.h>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
-#include "chrome/browser/media_galleries/fileapi/native_media_file_util.h"
 #include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_file_system_options.h"
@@ -130,7 +134,7 @@ class NativeMediaFileUtilTest : public testing::Test {
         base::ThreadTaskRunnerHandle::Get().get(),
         base::ThreadTaskRunnerHandle::Get().get(),
         storage::ExternalMountPoints::CreateRefCounted().get(),
-        storage_policy.get(), NULL, additional_providers.Pass(),
+        storage_policy.get(), NULL, std::move(additional_providers),
         std::vector<storage::URLRequestAutoMountHandler>(), data_dir_.path(),
         content::CreateAllowFileAccessOptions());
 
@@ -500,10 +504,8 @@ TEST_F(NativeMediaFileUtilTest, GetMetadataFiltering) {
         expectation = base::File::FILE_ERROR_NOT_FOUND;
       }
       operation_runner()->GetMetadata(
-          url,
-          base::Bind(&ExpectMetadataEqHelper,
-                     test_name,
-                     expectation,
+          url, storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY,
+          base::Bind(&ExpectMetadataEqHelper, test_name, expectation,
                      kFilteringTestCases[i].is_directory));
       base::MessageLoop::current()->RunUntilIdle();
     }

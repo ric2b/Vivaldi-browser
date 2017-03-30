@@ -6,10 +6,11 @@
 #define MEDIA_CAST_RECEIVER_AUDIO_DECODER_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/audio_bus.h"
-#include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
+#include "media/cast/constants.h"
 #include "media/cast/net/cast_transport_config.h"
 
 namespace media {
@@ -32,9 +33,9 @@ class AudioDecoder {
                Codec codec);
   virtual ~AudioDecoder();
 
-  // Returns STATUS_INITIALIZED if the decoder was successfully constructed from
-  // the given FrameReceiverConfig.  If this method returns any other value,
-  // calls to DecodeFrame() will not succeed.
+  // Returns STATUS_INITIALIZED if the decoder was successfully constructed.  If
+  // this method returns any other value, calls to DecodeFrame() will not
+  // succeed.
   OperationalStatus InitializationResult() const;
 
   // Decode the payload in |encoded_frame| asynchronously.  |callback| will be

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/dropdown_bar_view.h"
 
+#include "base/macros.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -19,11 +20,6 @@
 #include "ui/views/widget/widget.h"
 
 namespace {
-
-// When we are animating, we draw only the top part of the left and right
-// edges to give the illusion that the find dialog is attached to the
-// window during this animation; this is the height of the items we draw.
-const int kAnimatingEdgeHeight = 5;
 
 // Background to paint toolbar background with rounded corners.
 class DropdownBackground : public views::Background {
@@ -61,7 +57,7 @@ void DropdownBackground::Paint(gfx::Canvas* canvas, views::View* view) const {
   // Finally, calculate the background image tiling offset.
   origin = browser_view_->OffsetPointForToolbarBackgroundImage(origin);
 
-  ui::ThemeProvider* tp = view->GetThemeProvider();
+  const ui::ThemeProvider* tp = view->GetThemeProvider();
   gfx::ImageSkia background = *tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
 
   int left_edge_width = left_alpha_mask_->width();
@@ -87,38 +83,9 @@ void DropdownBackground::Paint(gfx::Canvas* canvas, views::View* view) const {
 
 }  // namespace
 
-DropdownBarView::DropdownBarView(DropdownBarHost* host)
-    : host_(host),
-      animation_offset_(0) {
-}
+DropdownBarView::DropdownBarView(DropdownBarHost* host) : host_(host) {}
 
 DropdownBarView::~DropdownBarView() {
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// DropDownBarView, public:
-
-void DropdownBarView::SetAnimationOffset(int offset) {
-  animation_offset_ = offset;
-  set_clip_insets(gfx::Insets(animation_offset_, 0, 0, 0));
-}
-
-// DropDownBarView, views::View overrides:
-void DropdownBarView::OnPaint(gfx::Canvas* canvas) {
-  OnPaintBackground(canvas);
-  OnPaintBorder(canvas);
-
-  if (animation_offset() > 0) {
-     gfx::Canvas animating_edges(
-         gfx::Size(bounds().width(), kAnimatingEdgeHeight),
-         canvas->image_scale(),
-         false);
-     canvas->Translate(bounds().OffsetFromOrigin());
-     OnPaintBackground(&animating_edges);
-     OnPaintBorder(&animating_edges);
-     canvas->DrawImageInt(gfx::ImageSkia(animating_edges.ExtractImageRep()),
-         bounds().x(), animation_offset());
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

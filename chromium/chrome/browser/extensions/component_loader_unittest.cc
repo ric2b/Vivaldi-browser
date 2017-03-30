@@ -4,19 +4,22 @@
 
 #include "chrome/browser/extensions/component_loader.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_registry_simple.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/test_extension_service.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
@@ -110,7 +113,7 @@ class ComponentLoaderTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
   MockExtensionService extension_service_;
-  TestingPrefServiceSyncable prefs_;
+  syncable_prefs::TestingPrefServiceSyncable prefs_;
   TestingPrefServiceSimple local_state_;
   ComponentLoader component_loader_;
 

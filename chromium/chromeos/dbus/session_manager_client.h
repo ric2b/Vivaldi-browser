@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/dbus_client.h"
@@ -73,8 +74,8 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // Kicks off an attempt to emit the "login-prompt-visible" upstart signal.
   virtual void EmitLoginPromptVisible() = 0;
 
-  // Restarts a job referenced by |pid| with the provided command line.
-  virtual void RestartJob(int pid, const std::string& command_line) = 0;
+  // Restarts the browser job, passing |argv| as the updated command line.
+  virtual void RestartJob(const std::vector<std::string>& argv) = 0;
 
   // Starts the session for the user.
   virtual void StartSession(const std::string& user_email) = 0;
@@ -190,6 +191,24 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // The state keys are returned asynchronously via |callback|. The callback
   // will be invoked with an empty state key vector in case of errors.
   virtual void GetServerBackedStateKeys(const StateKeysCallback& callback) = 0;
+
+  // Used for CheckArcAvailability.  Takes a boolean indicating whether the
+  // operation was successful or not.
+  typedef base::Callback<void(bool)> ArcCallback;
+
+  // Asynchronously checks if starting the ARC instance is available.
+  // The result of the operation is reported through |callback|.
+  virtual void CheckArcAvailability(const ArcCallback& callback) = 0;
+
+  // Asynchronously starts the ARC instance using |socket_path| as the IPC
+  // socket for communication with the instance.  Upon completion, invokes
+  // |callback| with the result.
+  virtual void StartArcInstance(const std::string& socket_path,
+                                const ArcCallback& callback) = 0;
+
+  // Asynchronously stops the ARC instance.  Upon completion, invokes
+  // |callback| with the result.
+  virtual void StopArcInstance(const ArcCallback& callback) = 0;
 
   // Creates the instance.
   static SessionManagerClient* Create(DBusClientImplementationType type);

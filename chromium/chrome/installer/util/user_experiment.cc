@@ -6,11 +6,14 @@
 
 #include <windows.h>
 #include <sddl.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <wtsapi32.h>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/rand_util.h"
@@ -56,7 +59,7 @@ base::string16 LocalizeUrl(const wchar_t* url) {
   base::string16 language;
   if (!GoogleUpdateSettings::GetLanguage(&language))
     language = L"en-US";  // Default to US English.
-  return ReplaceStringPlaceholders(url, language.c_str(), NULL);
+  return base::ReplaceStringPlaceholders(url, language.c_str(), NULL);
 }
 
 base::string16 GetWelcomeBackUrl() {
@@ -350,18 +353,15 @@ bool CreateExperimentDetails(int flavor, ExperimentDetails* experiment) {
   if (!GoogleUpdateSettings::GetBrand(&brand))
     brand.clear();  // Could still be viable for catch-all rules
 
-  for (int i = 0; i < arraysize(kExperiments); ++i) {
+  for (size_t i = 0; i < arraysize(kExperiments); ++i) {
     base::string16 experiment_locale = kExperiments[i].locale;
     if (experiment_locale != locale && experiment_locale != L"*")
       continue;
 
-    std::vector<base::string16> brand_codes;
-    base::SplitString(kExperiments[i].brands, L',', &brand_codes);
-    if (brand_codes.empty())
-      return false;
-    for (std::vector<base::string16>::iterator it = brand_codes.begin();
-         it != brand_codes.end(); ++it) {
-      if (*it != brand && *it != L"*")
+    for (const base::string16& cur : base::SplitString(
+             kExperiments[i].brands, L",",
+             base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+      if (cur != brand && cur != L"*")
         continue;
       // We have found our match.
       const UserExperimentSpecs& match = kExperiments[i];
@@ -502,7 +502,7 @@ void InactiveUserToastExperiment(int flavor,
             options.GetCommandLineString().find(L" -- " + url));
 
   // Launch chrome now. It will show the toast UI.
-  int32 exit_code = 0;
+  int32_t exit_code = 0;
   if (!product.LaunchChromeAndWait(application_path, options, &exit_code))
     return;
 

@@ -5,14 +5,14 @@
 #ifndef COMPONENTS_OWNERSHIP_OWNER_KEY_UTIL_H_
 #define COMPONENTS_OWNERSHIP_OWNER_KEY_UTIL_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/stl_util.h"
 #include "components/ownership/ownership_export.h"
 #include "crypto/scoped_nss_types.h"
 
@@ -29,12 +29,12 @@ class OWNERSHIP_EXPORT PublicKey
  public:
   PublicKey();
 
-  std::vector<uint8>& data() { return data_; }
+  std::vector<uint8_t>& data() { return data_; }
 
   bool is_loaded() const { return !data_.empty(); }
 
   std::string as_string() {
-    return std::string(reinterpret_cast<const char*>(vector_as_array(&data_)),
+    return std::string(reinterpret_cast<const char*>(data_.data()),
                        data_.size());
   }
 
@@ -43,7 +43,7 @@ class OWNERSHIP_EXPORT PublicKey
 
   virtual ~PublicKey();
 
-  std::vector<uint8> data_;
+  std::vector<uint8_t> data_;
 
   DISALLOW_COPY_AND_ASSIGN(PublicKey);
 };
@@ -74,13 +74,13 @@ class OWNERSHIP_EXPORT OwnerKeyUtil
  public:
   // Attempts to read the public key from the file system.  Upon success,
   // returns true and populates |output|.  False on failure.
-  virtual bool ImportPublicKey(std::vector<uint8>* output) = 0;
+  virtual bool ImportPublicKey(std::vector<uint8_t>* output) = 0;
 
   // Looks for the private key associated with |key| in the |slot|
   // and returns it if it can be found.  Returns NULL otherwise.
   // Caller takes ownership.
   virtual crypto::ScopedSECKEYPrivateKey FindPrivateKeyInSlot(
-      const std::vector<uint8>& key,
+      const std::vector<uint8_t>& key,
       PK11SlotInfo* slot) = 0;
 
   // Checks whether the public key is present in the file system.

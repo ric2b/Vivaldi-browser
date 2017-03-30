@@ -4,6 +4,8 @@
 
 #include "content/plugin/plugin_channel.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/process/process_handle.h"
@@ -21,13 +23,10 @@
 #include "content/plugin/webplugin_proxy.h"
 #include "content/public/common/content_switches.h"
 #include "ipc/message_filter.h"
-#include "third_party/WebKit/public/web/WebBindings.h"
 
 #if defined(OS_POSIX)
 #include "ipc/ipc_channel_posix.h"
 #endif
-
-using blink::WebBindings;
 
 namespace content {
 
@@ -141,8 +140,7 @@ class PluginChannel::MessageFilter : public IPC::MessageFilter {
 
 PluginChannel* PluginChannel::GetPluginChannel(
     int renderer_id,
-    base::SingleThreadTaskRunner* ipc_task_runner,
-    IPC::AttachmentBroker* broker) {
+    base::SingleThreadTaskRunner* ipc_task_runner) {
   // Map renderer ID to a (single) channel to that process.
   std::string channel_key = base::StringPrintf(
       "%d.r%d", base::GetCurrentProcId(), renderer_id);
@@ -150,7 +148,7 @@ PluginChannel* PluginChannel::GetPluginChannel(
   PluginChannel* channel =
       static_cast<PluginChannel*>(NPChannelBase::GetChannel(
           channel_key, IPC::Channel::MODE_SERVER, ClassFactory, ipc_task_runner,
-          false, ChildProcess::current()->GetShutDownEvent(), broker));
+          false, ChildProcess::current()->GetShutDownEvent()));
 
   if (channel)
     channel->renderer_id_ = renderer_id;
@@ -226,12 +224,9 @@ void PluginChannel::CleanUp() {
 
 bool PluginChannel::Init(base::SingleThreadTaskRunner* ipc_task_runner,
                          bool create_pipe_now,
-                         base::WaitableEvent* shutdown_event,
-                         IPC::AttachmentBroker* broker) {
-  if (!NPChannelBase::Init(ipc_task_runner, create_pipe_now, shutdown_event,
-                           broker)) {
+                         base::WaitableEvent* shutdown_event) {
+  if (!NPChannelBase::Init(ipc_task_runner, create_pipe_now, shutdown_event))
     return false;
-  }
 
   channel_->AddFilter(filter_.get());
   return true;
@@ -248,10 +243,8 @@ PluginChannel::PluginChannel()
       base::CommandLine::ForCurrentProcess();
   log_messages_ = command_line->HasSwitch(switches::kLogPluginMessages);
 
-  // Register |npp_| as the default owner for any object we receive via IPC,
-  // and register it with WebBindings as a valid owner.
+  // Register |npp_| as the default owner for any object we receive via IPC.
   SetDefaultNPObjectOwner(npp_.get());
-  WebBindings::registerObjectOwner(npp_.get());
 }
 
 bool PluginChannel::OnControlMessageReceived(const IPC::Message& msg) {
@@ -262,7 +255,6 @@ bool PluginChannel::OnControlMessageReceived(const IPC::Message& msg) {
                                     OnDestroyInstance)
     IPC_MESSAGE_HANDLER(PluginMsg_GenerateRouteID, OnGenerateRouteID)
     IPC_MESSAGE_HANDLER(PluginProcessMsg_ClearSiteData, OnClearSiteData)
-    IPC_MESSAGE_HANDLER(PluginHostMsg_DidAbortLoading, OnDidAbortLoading)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   DCHECK(handled);
@@ -314,8 +306,8 @@ void PluginChannel::OnGenerateRouteID(int* route_id) {
 }
 
 void PluginChannel::OnClearSiteData(const std::string& site,
-                                    uint64 flags,
-                                    uint64 max_age) {
+                                    uint64_t flags,
+                                    uint64_t max_age) {
   bool success = false;
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   base::FilePath path = command_line->GetSwitchValuePath(switches::kPluginPath);
@@ -334,15 +326,6 @@ void PluginChannel::OnClearSiteData(const std::string& site,
     }
   }
   Send(new PluginProcessHostMsg_ClearSiteDataResult(success));
-}
-
-void PluginChannel::OnDidAbortLoading(int render_view_id) {
-  for (size_t i = 0; i < plugin_stubs_.size(); ++i) {
-    if (plugin_stubs_[i]->webplugin()->host_render_view_routing_id() ==
-            render_view_id) {
-      plugin_stubs_[i]->delegate()->instance()->CloseStreams();
-    }
-  }
 }
 
 }  // namespace content

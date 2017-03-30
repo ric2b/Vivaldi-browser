@@ -12,17 +12,17 @@
 # to set up feature flags.
 
 declare_args() {
-  # Use OpenSSL instead of NSS. This is used for Android, Mac, NaCl untrusted
-  # code, and Windows, and is experimental in other cases (see
-  # http://crbug.com/62803).
-  use_openssl = is_android || is_mac || is_nacl || is_win
+  # Use OpenSSL instead of NSS. This is used for all platforms but iOS. (See
+  # http://crbug.com/338886).
+  use_openssl = !is_ios
 }
 
 # True when we're using OpenSSL for representing certificates. When targeting
 # Android, the platform certificate library is used for certificate
-# verification. On other targets, this flag also enables OpenSSL for certificate
-# verification, but this configuration is unsupported.
-use_openssl_certs = is_android
+# verification. On NaCl, verification isn't supported. On other targets, this
+# flag also enables OpenSSL for certificate verification, but this configuration
+# is unsupported.
+use_openssl_certs = is_android || is_nacl
 
 # True if NSS is used for certificate verification. Note that this is
 # independent from use_openssl. It is possible to use OpenSSL for the crypto

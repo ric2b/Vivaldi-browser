@@ -5,14 +5,17 @@
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 
 #include <string>
+#include <utility>
 
 #include "base/base64.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,7 +26,9 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
+#include "components/data_reduction_proxy/core/browser/data_store.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/proxy_config/proxy_prefs.h"
 #include "net/base/host_port_pair.h"
 #include "net/proxy/proxy_config.h"
@@ -43,7 +48,8 @@ bool ContainsDataReductionProxyDefaultHostSuffix(
   for (const net::ProxyServer& proxy : proxy_list.GetAll()) {
     if (proxy.is_valid() && !proxy.is_direct() &&
         base::EndsWith(proxy.host_port_pair().host(),
-                       kDataReductionProxyDefaultHostSuffix, true)) {
+                       kDataReductionProxyDefaultHostSuffix,
+                       base::CompareCase::SENSITIVE)) {
       return true;
     }
   }
@@ -91,14 +97,14 @@ void DataReductionProxyChromeSettings::MigrateDataReductionProxyOffProxyPrefs(
 DataReductionProxyChromeSettings::ProxyPrefMigrationResult
 DataReductionProxyChromeSettings::MigrateDataReductionProxyOffProxyPrefsHelper(
     PrefService* prefs) {
-  base::DictionaryValue* dict =
-      (base::DictionaryValue*)prefs->GetUserPrefValue(prefs::kProxy);
+  base::DictionaryValue* dict = (base::DictionaryValue*)prefs->GetUserPrefValue(
+      proxy_config::prefs::kProxy);
   if (!dict)
     return PROXY_PREF_NOT_CLEARED;
 
   // Clear empty "proxy" dictionary created by a bug. See http://crbug/448172.
   if (dict->empty()) {
-    prefs->ClearPref(prefs::kProxy);
+    prefs->ClearPref(proxy_config::prefs::kProxy);
     return PROXY_PREF_CLEARED_EMPTY;
   }
 
@@ -108,7 +114,7 @@ DataReductionProxyChromeSettings::MigrateDataReductionProxyOffProxyPrefsHelper(
   // Clear "system" proxy entry since this is the default. This entry was
   // created by bug (http://crbug/448172).
   if (ProxyModeToString(ProxyPrefs::MODE_SYSTEM) == mode) {
-    prefs->ClearPref(prefs::kProxy);
+    prefs->ClearPref(proxy_config::prefs::kProxy);
     return PROXY_PREF_CLEARED_MODE_SYSTEM;
   }
 
@@ -132,7 +138,7 @@ DataReductionProxyChromeSettings::MigrateDataReductionProxyOffProxyPrefsHelper(
     else
       return PROXY_PREF_NOT_CLEARED;
 
-    prefs->ClearPref(prefs::kProxy);
+    prefs->ClearPref(proxy_config::prefs::kProxy);
     return rv;
   }
 
@@ -154,7 +160,7 @@ DataReductionProxyChromeSettings::MigrateDataReductionProxyOffProxyPrefsHelper(
     if (pac_script.find(".googlezip.net:") == std::string::npos)
       return PROXY_PREF_NOT_CLEARED;
 
-    prefs->ClearPref(prefs::kProxy);
+    prefs->ClearPref(proxy_config::prefs::kProxy);
     return PROXY_PREF_CLEARED_PAC_GOOGLEZIP;
   }
 
@@ -162,21 +168,27 @@ DataReductionProxyChromeSettings::MigrateDataReductionProxyOffProxyPrefsHelper(
 }
 
 DataReductionProxyChromeSettings::DataReductionProxyChromeSettings()
-    : data_reduction_proxy::DataReductionProxySettings() {
+    : data_reduction_proxy::DataReductionProxySettings(),
+      data_reduction_proxy_enabled_pref_name_(prefs::kDataSaverEnabled) {
 }
 
 DataReductionProxyChromeSettings::~DataReductionProxyChromeSettings() {
 }
 
 void DataReductionProxyChromeSettings::Shutdown() {
-  data_reduction_proxy_service()->Shutdown();
+  data_reduction_proxy::DataReductionProxyService* service =
+      data_reduction_proxy_service();
+  if (service)
+    service->Shutdown();
 }
 
 void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
     data_reduction_proxy::DataReductionProxyIOData* io_data,
     PrefService* profile_prefs,
     net::URLRequestContextGetter* request_context_getter,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner) {
+    scoped_ptr<data_reduction_proxy::DataStore> store,
+    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
+    const scoped_refptr<base::SequencedTaskRunner>& db_task_runner) {
 #if defined(OS_ANDROID) || defined(OS_IOS)
   // On mobile we write Data Reduction Proxy prefs directly to the pref service.
   // On desktop we store Data Reduction Proxy prefs in memory, writing to disk
@@ -188,16 +200,15 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
   base::TimeDelta commit_delay = base::TimeDelta::FromMinutes(60);
 #endif
 
-  scoped_ptr<data_reduction_proxy::DataReductionProxyCompressionStats>
-      compression_stats = make_scoped_ptr(
-          new data_reduction_proxy::DataReductionProxyCompressionStats(
-              profile_prefs, ui_task_runner, commit_delay));
   scoped_ptr<data_reduction_proxy::DataReductionProxyService> service =
       make_scoped_ptr(new data_reduction_proxy::DataReductionProxyService(
-          compression_stats.Pass(), this, profile_prefs, request_context_getter,
-          io_data->io_task_runner()));
+          this, profile_prefs, request_context_getter, std::move(store),
+          ui_task_runner, io_data->io_task_runner(), db_task_runner,
+          commit_delay));
   data_reduction_proxy::DataReductionProxySettings::
-      InitDataReductionProxySettings(profile_prefs, io_data, service.Pass());
+      InitDataReductionProxySettings(data_reduction_proxy_enabled_pref_name_,
+                                     profile_prefs, io_data,
+                                     std::move(service));
   io_data->SetDataReductionProxyService(
       data_reduction_proxy_service()->GetWeakPtr());
 

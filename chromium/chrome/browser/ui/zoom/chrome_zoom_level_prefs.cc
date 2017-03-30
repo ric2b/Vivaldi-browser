@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/prefs/json_pref_store.h"
 #include "base/prefs/pref_filter.h"
@@ -21,16 +23,12 @@
 
 namespace {
 
-std::string GetHash(
-    const base::FilePath& relative_path) {
-  size_t int_key =
-      BASE_HASH_NAMESPACE::hash<base::FilePath>()(relative_path);
+std::string GetHash(const base::FilePath& relative_path) {
+  size_t int_key = BASE_HASH_NAMESPACE::hash<base::FilePath>()(relative_path);
   return base::SizeTToString(int_key);
 }
 
 }  // namespace
-
-namespace chrome {
 
 ChromeZoomLevelPrefs::ChromeZoomLevelPrefs(
     PrefService* pref_service,
@@ -205,5 +203,3 @@ void ChromeZoomLevelPrefs::InitHostZoomMap(
   zoom_subscription_ = host_zoom_map_->AddZoomLevelChangedCallback(base::Bind(
       &ChromeZoomLevelPrefs::OnZoomLevelChanged, base::Unretained(this)));
 }
-
-}  // namespace chrome

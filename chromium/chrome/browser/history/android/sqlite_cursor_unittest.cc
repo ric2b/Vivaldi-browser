@@ -5,10 +5,12 @@
 #include "chrome/browser/history/android/sqlite_cursor.h"
 
 #include <jni.h>
+#include <stdint.h>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
@@ -80,11 +82,15 @@ class SQLiteCursorTest : public testing::Test,
   // Override SQLiteCursor::TestObserver.
   void OnPostMoveToTask() override { base::MessageLoop::current()->Run(); }
 
-  void OnGetMoveToResult() override { base::MessageLoop::current()->Quit(); }
+  void OnGetMoveToResult() override {
+    base::MessageLoop::current()->QuitWhenIdle();
+  }
 
   void OnPostGetFaviconTask() override { base::MessageLoop::current()->Run(); }
 
-  void OnGetFaviconResult() override { base::MessageLoop::current()->Quit(); }
+  void OnGetFaviconResult() override {
+    base::MessageLoop::current()->QuitWhenIdle();
+  }
 
  protected:
   TestingProfileManager profile_manager_;
@@ -115,15 +121,15 @@ class CallbackHelper : public base::RefCountedThreadSafe<CallbackHelper> {
     return statement_;
   }
 
-  void OnInserted(int64 id) {
+  void OnInserted(int64_t id) {
     success_ = id != 0;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void OnQueryResult(AndroidStatement* statement) {
     success_ = statement != NULL;
     statement_ = statement;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
  private:
@@ -203,7 +209,7 @@ TEST_F(SQLiteCursorTest, Run) {
   EXPECT_EQ(row.visit_count(), cursor->GetInt(env, NULL, 2));
   base::android::ScopedJavaLocalRef<jbyteArray> data =
       cursor->GetBlob(env, NULL, 3);
-  std::vector<uint8> out;
+  std::vector<uint8_t> out;
   base::android::JavaByteArrayToByteVector(env, data.obj(), &out);
   EXPECT_EQ(data_bytes->data().size(), out.size());
   EXPECT_EQ(data_bytes->data()[0], out[0]);

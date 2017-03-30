@@ -5,13 +5,14 @@
 #include "net/cert_net/cert_net_fetcher_impl.h"
 
 #include <string>
+#include <utility>
 
 #include "base/compiler_specific.h"
 #include "base/run_loop.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_server_properties_impl.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,8 +35,9 @@ class RequestContext : public URLRequestContext {
   RequestContext() : storage_(this) {
     ProxyConfig no_proxy;
     storage_.set_host_resolver(scoped_ptr<HostResolver>(new MockHostResolver));
-    storage_.set_cert_verifier(new MockCertVerifier);
-    storage_.set_transport_security_state(new TransportSecurityState);
+    storage_.set_cert_verifier(make_scoped_ptr(new MockCertVerifier));
+    storage_.set_transport_security_state(
+        make_scoped_ptr(new TransportSecurityState));
     storage_.set_proxy_service(ProxyService::CreateFixed(no_proxy));
     storage_.set_ssl_config_service(new SSLConfigServiceDefaults);
     storage_.set_http_server_properties(
@@ -48,12 +50,12 @@ class RequestContext : public URLRequestContext {
     params.proxy_service = proxy_service();
     params.ssl_config_service = ssl_config_service();
     params.http_server_properties = http_server_properties();
-    scoped_refptr<HttpNetworkSession> network_session(
-        new HttpNetworkSession(params));
-    storage_.set_http_transaction_factory(new HttpCache(
-        network_session.get(), HttpCache::DefaultBackend::InMemory(0)));
-    URLRequestJobFactoryImpl* job_factory = new URLRequestJobFactoryImpl();
-    storage_.set_job_factory(job_factory);
+    storage_.set_http_network_session(
+        make_scoped_ptr(new HttpNetworkSession(params)));
+    storage_.set_http_transaction_factory(make_scoped_ptr(new HttpCache(
+        storage_.http_network_session(), HttpCache::DefaultBackend::InMemory(0),
+        false /* set_up_quic_server_info */)));
+    storage_.set_job_factory(make_scoped_ptr(new URLRequestJobFactoryImpl()));
   }
 
   ~RequestContext() override { AssertNoURLRequests(); }
@@ -101,7 +103,7 @@ class TestFetchCallback {
       run_loop.Run();
       quit_closure_.Reset();
     }
-    return result_.Pass();
+    return std::move(result_);
   }
 
   bool HasResult() const { return result_.get(); }
@@ -134,15 +136,13 @@ class TestFetchCallback {
 
 class CertNetFetcherImplTest : public PlatformTest {
  public:
-  CertNetFetcherImplTest()
-      : test_server_(SpawnedTestServer::TYPE_HTTP,
-                     SpawnedTestServer::kLocalhost,
-                     base::FilePath(kDocRoot)) {
+  CertNetFetcherImplTest() {
+    test_server_.AddDefaultHandlers(base::FilePath(kDocRoot));
     context_.set_network_delegate(&network_delegate_);
   }
 
  protected:
-  SpawnedTestServer test_server_;
+  EmbeddedTestServer test_server_;
   TestNetworkDelegate network_delegate_;
   RequestContext context_;
 };
@@ -167,17 +167,17 @@ TEST_F(CertNetFetcherImplTest, ParallelFetchNoDuplicates) {
   TestFetchCallback callback3;
 
   // Request a URL with Content-Type "application/pkix-cert"
-  GURL url1 = test_server_.GetURL("files/cert.crt");
+  GURL url1 = test_server_.GetURL("/cert.crt");
   scoped_ptr<CertNetFetcher::Request> request1 =
       StartRequest(&fetcher, url1, callback1);
 
   // Request a URL with Content-Type "application/pkix-crl"
-  GURL url2 = test_server_.GetURL("files/root.crl");
+  GURL url2 = test_server_.GetURL("/root.crl");
   scoped_ptr<CertNetFetcher::Request> request2 =
       StartRequest(&fetcher, url2, callback2);
 
   // Request a URL with Content-Type "application/pkcs7-mime"
-  GURL url3 = test_server_.GetURL("files/certs.p7c");
+  GURL url3 = test_server_.GetURL("/certs.p7c");
   scoped_ptr<CertNetFetcher::Request> request3 =
       StartRequest(&fetcher, url3, callback3);
 
@@ -204,7 +204,7 @@ TEST_F(CertNetFetcherImplTest, ContentTypeDoesntMatter) {
   CertNetFetcherImpl fetcher(&context_);
 
   TestFetchCallback callback;
-  GURL url = test_server_.GetURL("files/foo.txt");
+  GURL url = test_server_.GetURL("/foo.txt");
   scoped_ptr<CertNetFetcher::Request> request =
       StartRequest(&fetcher, url, callback);
   scoped_ptr<FetchResult> result = callback.WaitForResult();
@@ -221,7 +221,7 @@ TEST_F(CertNetFetcherImplTest, HttpStatusCode) {
   // Response was HTTP status 404.
   {
     TestFetchCallback callback;
-    GURL url = test_server_.GetURL("files/404.html");
+    GURL url = test_server_.GetURL("/404.html");
     scoped_ptr<CertNetFetcher::Request> request =
         StartRequest(&fetcher, url, callback);
     scoped_ptr<FetchResult> result = callback.WaitForResult();
@@ -231,7 +231,7 @@ TEST_F(CertNetFetcherImplTest, HttpStatusCode) {
   // Response was HTTP status 500.
   {
     TestFetchCallback callback;
-    GURL url = test_server_.GetURL("files/500.html");
+    GURL url = test_server_.GetURL("/500.html");
     scoped_ptr<CertNetFetcher::Request> request =
         StartRequest(&fetcher, url, callback);
     scoped_ptr<FetchResult> result = callback.WaitForResult();
@@ -246,7 +246,7 @@ TEST_F(CertNetFetcherImplTest, ContentDisposition) {
   CertNetFetcherImpl fetcher(&context_);
 
   TestFetchCallback callback;
-  GURL url = test_server_.GetURL("files/downloadable.js");
+  GURL url = test_server_.GetURL("/downloadable.js");
   scoped_ptr<CertNetFetcher::Request> request =
       StartRequest(&fetcher, url, callback);
   scoped_ptr<FetchResult> result = callback.WaitForResult();
@@ -261,7 +261,7 @@ TEST_F(CertNetFetcherImplTest, Cache) {
   CertNetFetcherImpl fetcher(&context_);
 
   // Fetch a URL whose HTTP headers make it cacheable for 1 hour.
-  GURL url(test_server_.GetURL("files/cacheable_1hr.crt"));
+  GURL url(test_server_.GetURL("/cacheable_1hr.crt"));
   {
     TestFetchCallback callback;
 
@@ -274,7 +274,7 @@ TEST_F(CertNetFetcherImplTest, Cache) {
   EXPECT_EQ(1, network_delegate_.created_requests());
 
   // Kill the HTTP server.
-  ASSERT_TRUE(test_server_.Stop());
+  ASSERT_TRUE(test_server_.ShutdownAndWaitUntilComplete());
 
   // Fetch again -- will fail unless served from cache.
   {
@@ -297,7 +297,7 @@ TEST_F(CertNetFetcherImplTest, TooLarge) {
 
   // This file has a response body 12 bytes long. So setting the maximum to 11
   // bytes will cause it to fail.
-  GURL url(test_server_.GetURL("files/certs.p7c"));
+  GURL url(test_server_.GetURL("/certs.p7c"));
   TestFetchCallback callback;
   scoped_ptr<CertNetFetcher::Request> request = fetcher.FetchCaIssuers(
       url, CertNetFetcher::DEFAULT, 11, callback.callback());
@@ -313,7 +313,7 @@ TEST_F(CertNetFetcherImplTest, Hang) {
 
   CertNetFetcherImpl fetcher(&context_);
 
-  GURL url(test_server_.GetURL("slow/certs.p7c?5"));
+  GURL url(test_server_.GetURL("/slow/certs.p7c?5"));
   TestFetchCallback callback;
   scoped_ptr<CertNetFetcher::Request> request = fetcher.FetchCaIssuers(
       url, 10, CertNetFetcher::DEFAULT, callback.callback());
@@ -328,7 +328,7 @@ TEST_F(CertNetFetcherImplTest, Gzip) {
 
   CertNetFetcherImpl fetcher(&context_);
 
-  GURL url(test_server_.GetURL("files/gzipped_crl"));
+  GURL url(test_server_.GetURL("/gzipped_crl"));
   TestFetchCallback callback;
   scoped_ptr<CertNetFetcher::Request> request =
       StartRequest(&fetcher, url, callback);
@@ -362,7 +362,7 @@ TEST_F(CertNetFetcherImplTest, RedirectToHttpsNotAllowed) {
 
   CertNetFetcherImpl fetcher(&context_);
 
-  GURL url(test_server_.GetURL("files/redirect_https"));
+  GURL url(test_server_.GetURL("/redirect_https"));
   TestFetchCallback callback;
 
   scoped_ptr<CertNetFetcher::Request> request =
@@ -408,15 +408,15 @@ TEST_F(CertNetFetcherImplTest, CancelBeforeRunningMessageLoop) {
   TestFetchCallback callback2;
   TestFetchCallback callback3;
 
-  GURL url1 = test_server_.GetURL("files/cert.crt");
+  GURL url1 = test_server_.GetURL("/cert.crt");
   scoped_ptr<CertNetFetcher::Request> request1 =
       StartRequest(&fetcher, url1, callback1);
 
-  GURL url2 = test_server_.GetURL("files/root.crl");
+  GURL url2 = test_server_.GetURL("/root.crl");
   scoped_ptr<CertNetFetcher::Request> request2 =
       StartRequest(&fetcher, url2, callback2);
 
-  GURL url3 = test_server_.GetURL("files/certs.p7c");
+  GURL url3 = test_server_.GetURL("/certs.p7c");
 
   scoped_ptr<CertNetFetcher::Request> request3 =
       StartRequest(&fetcher, url3, callback3);
@@ -460,12 +460,12 @@ TEST_F(CertNetFetcherImplTest, CancelAfterRunningMessageLoop) {
   TestFetchCallback callback2;
   TestFetchCallback callback3;
 
-  GURL url1 = test_server_.GetURL("files/cert.crt");
+  GURL url1 = test_server_.GetURL("/cert.crt");
 
   scoped_ptr<CertNetFetcher::Request> request1 =
       StartRequest(&fetcher, url1, callback1);
 
-  GURL url2 = test_server_.GetURL("files/certs.p7c");
+  GURL url2 = test_server_.GetURL("/certs.p7c");
   scoped_ptr<CertNetFetcher::Request> request2 =
       StartRequest(&fetcher, url2, callback2);
 
@@ -498,7 +498,7 @@ TEST_F(CertNetFetcherImplTest, DeleteCancels) {
 
   scoped_ptr<CertNetFetcherImpl> fetcher(new CertNetFetcherImpl(&context_));
 
-  GURL url(test_server_.GetURL("slow/certs.p7c?20"));
+  GURL url(test_server_.GetURL("/slow/certs.p7c?20"));
   TestFetchCallback callback;
   scoped_ptr<CertNetFetcher::Request> request =
       StartRequest(fetcher.get(), url, callback);
@@ -514,8 +514,8 @@ TEST_F(CertNetFetcherImplTest, ParallelFetchDuplicates) {
 
   CertNetFetcherImpl fetcher(&context_);
 
-  GURL url1 = test_server_.GetURL("files/cert.crt");
-  GURL url2 = test_server_.GetURL("files/root.crl");
+  GURL url1 = test_server_.GetURL("/cert.crt");
+  GURL url2 = test_server_.GetURL("/root.crl");
 
   // Issue 3 requests for url1, and 3 requests for url2
   TestFetchCallback callback1;
@@ -577,7 +577,7 @@ TEST_F(CertNetFetcherImplTest, CancelThenStart) {
   TestFetchCallback callback2;
   TestFetchCallback callback3;
 
-  GURL url = test_server_.GetURL("files/cert.crt");
+  GURL url = test_server_.GetURL("/cert.crt");
 
   scoped_ptr<CertNetFetcher::Request> request1 =
       StartRequest(&fetcher, url, callback1);
@@ -610,7 +610,7 @@ TEST_F(CertNetFetcherImplTest, CancelAll) {
   TestFetchCallback callback[3];
   scoped_ptr<CertNetFetcher::Request> request[3];
 
-  GURL url = test_server_.GetURL("files/cert.crt");
+  GURL url = test_server_.GetURL("/cert.crt");
 
   for (size_t i = 0; i < arraysize(callback); ++i) {
     request[i] = StartRequest(&fetcher, url, callback[i]);
@@ -637,7 +637,7 @@ TEST_F(CertNetFetcherImplTest, DeleteWithinCallback) {
   // Deleted by callback2.
   CertNetFetcher* fetcher = new CertNetFetcherImpl(&context_);
 
-  GURL url = test_server_.GetURL("files/cert.crt");
+  GURL url = test_server_.GetURL("/cert.crt");
 
   TestFetchCallback callback[4];
   scoped_ptr<CertNetFetcher::Request> reqs[4];
@@ -669,7 +669,7 @@ TEST_F(CertNetFetcherImplTest, FetchWithinCallback) {
 
   CertNetFetcherImpl fetcher(&context_);
 
-  GURL url = test_server_.GetURL("files/cert.crt");
+  GURL url = test_server_.GetURL("/cert.crt");
 
   TestFetchCallback callback[5];
   scoped_ptr<CertNetFetcher::Request> req[5];
@@ -701,7 +701,7 @@ TEST_F(CertNetFetcherImplTest, CancelWithinCallback) {
 
   CertNetFetcherImpl fetcher(&context_);
 
-  GURL url = test_server_.GetURL("files/cert.crt");
+  GURL url = test_server_.GetURL("/cert.crt");
 
   TestFetchCallback callback[4];
   scoped_ptr<CertNetFetcher::Request> request[4];
@@ -733,7 +733,7 @@ TEST_F(CertNetFetcherImplTest, CancelLastRequestWithinCallback) {
 
   CertNetFetcherImpl fetcher(&context_);
 
-  GURL url = test_server_.GetURL("files/cert.crt");
+  GURL url = test_server_.GetURL("/cert.crt");
 
   TestFetchCallback callback1;
   scoped_ptr<CertNetFetcher::Request> request1 =

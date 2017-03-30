@@ -1,15 +1,13 @@
 # Copyright 2015 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+
 import unittest
 
 from telemetry import benchmark
 from telemetry import benchmark_runner
-from telemetry.core import util
 from telemetry.testing import stream
-
-util.AddDirToPythonPath(util.GetTelemetryDir(), 'third_party', 'mock')
-import mock # pylint: disable=F0401
+import mock
 
 
 class BenchmarkFoo(benchmark.Benchmark):
@@ -42,8 +40,8 @@ class BenchmarkRunnerUnittest(unittest.TestCase):
   def testPrintBenchmarkListWithNoDisabledBenchmark(self):
     expected_printed_stream = (
         'Available benchmarks for TestBrowser are:\n'
-        '  FooBenchmark      Benchmark Foo for testing.\n'
         '  BarBenchmarkkkkk  Benchmark Bar for testing long description line.\n'
+        '  FooBenchmark      Benchmark Foo for testing.\n'
         'Pass --browser to list benchmarks for another browser.\n\n')
     with mock.patch('telemetry.benchmark_runner.decorators') as mock_module:
       mock_module.IsEnabled.return_value = (True, None)
@@ -52,7 +50,6 @@ class BenchmarkRunnerUnittest(unittest.TestCase):
       self.assertEquals(expected_printed_stream, self._stream.output_data)
 
   def testPrintBenchmarkListWithOneDisabledBenchmark(self):
-    self._mock_possible_browser.browser_type = 'TestBrowser'
     expected_printed_stream = (
         'Available benchmarks for TestBrowser are:\n'
         '  FooBenchmark      Benchmark Foo for testing.\n'
@@ -71,19 +68,48 @@ class BenchmarkRunnerUnittest(unittest.TestCase):
         [BenchmarkFoo, BenchmarkBar], self._mock_possible_browser, self._stream)
       self.assertEquals(expected_printed_stream, self._stream.output_data)
 
-  def testGetMostLikelyMatchedBenchmarks(self):
-    all_benchmarks = [BenchmarkFoo, BenchmarkBar, UnusualBenchmark]
-    self.assertEquals(
-        [BenchmarkFoo, BenchmarkBar],
-        benchmark_runner.GetMostLikelyMatchedBenchmarks(
-            all_benchmarks, 'BenchmarkFooz'))
+  def testShouldDisable(self):
+    """Ensure that overridden ShouldDisable class methods are respected."""
+    expected_printed_stream = (
+        'Available benchmarks for TestBrowser are:\n'
+        '  BarBenchmarkkkkk  Benchmark Bar for testing long description line.\n'
+        '\n'
+        'Disabled benchmarks for TestBrowser are (force run with -d):\n'
+        '  FooBenchmark      Benchmark Foo for testing.\n'
+        'Pass --browser to list benchmarks for another browser.\n\n')
+    @classmethod
+    def FakeShouldDisable(cls, possible_browser):
+      del possible_browser  # unused
+      return cls is BenchmarkFoo
+    BenchmarkFoo.ShouldDisable = FakeShouldDisable
+    BenchmarkBar.ShouldDisable = FakeShouldDisable
+    benchmark_runner.PrintBenchmarkList(
+      [BenchmarkFoo, BenchmarkBar], self._mock_possible_browser, self._stream)
+    self.assertEquals(expected_printed_stream, self._stream.output_data)
 
-    self.assertEquals(
-        [BenchmarkBar, BenchmarkFoo],
-        benchmark_runner.GetMostLikelyMatchedBenchmarks(
-            all_benchmarks, 'BarBenchmark'))
-
-    self.assertEquals(
-        [UnusualBenchmark],
-        benchmark_runner.GetMostLikelyMatchedBenchmarks(
-            all_benchmarks, 'unusual'))
+  def testShouldDisableComplex(self):
+    """Ensure that browser-dependent ShouldDisable overrides are respected."""
+    expected_printed_stream = (
+        # Expected output for 'TestBrowser':
+        'Available benchmarks for TestBrowser are:\n'
+        '  FooBenchmark      Benchmark Foo for testing.\n'
+        '\n'
+        'Disabled benchmarks for TestBrowser are (force run with -d):\n'
+        '  BarBenchmarkkkkk  Benchmark Bar for testing long description line.\n'
+        'Pass --browser to list benchmarks for another browser.\n\n'
+        # Expected output for 'MockBrowser':
+        'Available benchmarks for MockBrowser are:\n'
+        '  BarBenchmarkkkkk  Benchmark Bar for testing long description line.\n'
+        '  FooBenchmark      Benchmark Foo for testing.\n'
+        'Pass --browser to list benchmarks for another browser.\n\n')
+    @classmethod
+    def FakeShouldDisable(cls, possible_browser):
+      return cls is BenchmarkBar and not 'Mock' in possible_browser.browser_type
+    BenchmarkFoo.ShouldDisable = FakeShouldDisable
+    BenchmarkBar.ShouldDisable = FakeShouldDisable
+    benchmark_runner.PrintBenchmarkList(
+      [BenchmarkFoo, BenchmarkBar], self._mock_possible_browser, self._stream)
+    self._mock_possible_browser.browser_type = 'MockBrowser'
+    benchmark_runner.PrintBenchmarkList(
+      [BenchmarkFoo, BenchmarkBar], self._mock_possible_browser, self._stream)
+    self.assertEquals(expected_printed_stream, self._stream.output_data)

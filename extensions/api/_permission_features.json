@@ -1,0 +1,143 @@
+// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+
+// This features file defines permissions for extension APIs implemented
+// under vivaldi/vivaldi_extensions.
+// See extensions/common/features/* to understand this file, in particular
+// feature.h, simple_feature.h, and base_feature_provider.h.
+
+// To add a new whitelisted ID, SHA-1 it and force it to uppercase. In Bash:
+//
+// $ echo -n "aaaabbbbccccddddeeeeffffgggghhhh" | \
+// sha1sum | tr '[:lower:]' '[:upper:]'
+// 9A0417016F345C934A1A88F55CA17C05014EEEBA  -
+
+// If you add a new platform_app permission please update the "stubs_app" test:
+// chrome/test/data/extensions/api_test/stubs_app/manifest.json
+
+{
+  "autoUpdate": {
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "bookmarksPrivate": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "editcommand": {
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "extensionActionUtils": {
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "historySearch": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "importData": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "notes": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "runtimePrivate": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "savedpasswords": {
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "sessionsPrivate": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "settings": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "showMenu": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli", // Vivaldi
+      "nngaafnlpkkdofeeiaeaaojibnemfnml" // showMenu test
+    ]
+  },
+  "tabsPrivate": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "thumbnails": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "zoom": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "utilities": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  }
+}

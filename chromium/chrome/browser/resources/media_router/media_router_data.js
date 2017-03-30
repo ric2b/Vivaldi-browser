@@ -4,38 +4,98 @@
 
 // Any strings used here will already be localized. Values such as
 // CastMode.type or IDs will be defined elsewhere and determined later.
+
+cr.exportPath('media_router');
+
+/**
+ * This corresponds to the C++ MediaCastMode, with the exception of AUTO.
+ * See below for details. Note to support fast bitset operations, the values
+ * here are (1 << [corresponding value in MR]).
+ * @enum {number}
+ */
+media_router.CastModeType = {
+  // Note: AUTO mode is only used to configure the sink list container to show
+  // all sinks. Individual sinks are configured with a specific cast mode
+  // (DEFAULT, TAB_MIRROR, DESKTOP_MIRROR).
+  AUTO: -1,
+  DEFAULT: 0x1,
+  TAB_MIRROR: 0x2,
+  DESKTOP_MIRROR: 0x4,
+};
+
+/**
+ * This corresponds to the C++ MediaRouterMetrics MediaRouterUserAction.
+ * @enum {number}
+ */
+media_router.MediaRouterUserAction = {
+  CHANGE_MODE: 0,
+  START_LOCAL: 1,
+  STOP_LOCAL: 2,
+  CLOSE: 3,
+  STATUS_REMOTE: 4,
+};
+
+/**
+ * The possible states of the Media Router dialog. Used to determine which
+ * components to show.
+ * @enum {string}
+ */
+media_router.MediaRouterView = {
+  CAST_MODE_LIST: 'cast-mode-list',
+  FILTER: 'filter',
+  ISSUE: 'issue',
+  ROUTE_DETAILS: 'route-details',
+  SINK_LIST: 'sink-list',
+};
+
+/**
+ * This corresponds to the C++ MediaSink IconType.
+ * @enum {number}
+ */
+media_router.SinkIconType = {
+  CAST: 0,
+  CAST_AUDIO: 1,
+  CAST_AUDIO_GROUP: 2,
+  GENERIC: 3,
+  HANGOUT: 4,
+};
+
+/**
+ * @enum {string}
+ */
+media_router.SinkStatus = {
+  IDLE: 'idle',
+  ACTIVE: 'active',
+  REQUEST_PENDING: 'request_pending'
+};
+
 cr.define('media_router', function() {
   'use strict';
 
   /**
-   * @enum {string}
-   */
-  var SinkStatus = {
-    IDLE: 'idle',
-    ACTIVE: 'active',
-    REQUEST_PENDING: 'request_pending'
-  };
-
-
-  /**
-   * @param {number} type The type of cast mode. This corresponds to the
-   *   C++ MediaCastMode.
-   * @param {string} title The title of the cast mode.
+   * @param {number} type The type of cast mode.
    * @param {string} description The description of the cast mode.
+   * @param {?string} host The hostname of the site to cast.
    * @constructor
    * @struct
    */
-  var CastMode = function(type, title, description) {
+  var CastMode = function(type, description, host) {
     /** @type {number} */
     this.type = type;
 
     /** @type {string} */
-    this.title = title;
-
-    /** @type {string} */
     this.description = description;
+
+    /** @type {?string} */
+    this.host = host || null;
   };
 
+  /**
+   * Placeholder object for AUTO cast mode. See comment in CastModeType.
+   * @const {!media_router.CastMode}
+   */
+  var AUTO_CAST_MODE = new CastMode(media_router.CastModeType.AUTO,
+      loadTimeData.getString('autoCastMode'), null);
 
   /**
    * @param {string} id The ID of this issue.
@@ -82,14 +142,18 @@ cr.define('media_router', function() {
   /**
    * @param {string} id The media route ID.
    * @param {string} sinkId The ID of the media sink running this route.
-   * @param {string} title The short description of this route.
+   * @param {string} description The short description of this route.
    * @param {?number} tabId The ID of the tab in which web app is running and
    *                  accessing the route.
    * @param {boolean} isLocal True if this is a locally created route.
+   * @param {boolean} canJoin True if this route can be joined.
+   * @param {?string} customControllerPath non-empty if this route has custom
+   *                  controller.
    * @constructor
    * @struct
    */
-  var Route = function(id, sinkId, title, tabId, isLocal) {
+  var Route = function(id, sinkId, description, tabId, isLocal, canJoin,
+      customControllerPath) {
     /** @type {string} */
     this.id = id;
 
@@ -97,35 +161,54 @@ cr.define('media_router', function() {
     this.sinkId = sinkId;
 
     /** @type {string} */
-    this.title = title;
+    this.description = description;
 
     /** @type {?number} */
     this.tabId = tabId;
 
     /** @type {boolean} */
     this.isLocal = isLocal;
+
+    /** @type {boolean} */
+    this.canJoin = canJoin;
+
+    /** @type {?string} */
+    this.customControllerPath = customControllerPath;
   };
 
 
   /**
    * @param {string} id The ID of the media sink.
    * @param {string} name The name of the sink.
+   * @param {?string} description Optional description of the sink.
+   * @param {?string} domain Optional domain of the sink.
+   * @param {media_router.SinkIconType} iconType the type of icon for the sink.
    * @param {media_router.SinkStatus} status The readiness state of the sink.
-   * @param {!Array<number>} castModes Cast modes compatible with the sink.
+   * @param {number} castModes Bitset of cast modes compatible with the sink.
    * @constructor
    * @struct
    */
-  var Sink = function(id, name, status, castModes) {
+  var Sink = function(id, name, description, domain, iconType, status,
+      castModes) {
     /** @type {string} */
     this.id = id;
 
     /** @type {string} */
     this.name = name;
 
-    /** @type {media_router.SinkStatus} */
+    /** @type {?string} */
+    this.description = description;
+
+    /** @type {?string} */
+    this.domain = domain;
+
+    /** @type {!media_router.SinkIconType} */
+    this.iconType = iconType;
+
+    /** @type {!media_router.SinkStatus} */
     this.status = status;
 
-    /** @type {!Array<number>} */
+    /** @type {number} */
     this.castModes = castModes;
   };
 
@@ -145,7 +228,7 @@ cr.define('media_router', function() {
   };
 
   return {
-    SinkStatus: SinkStatus,
+    AUTO_CAST_MODE: AUTO_CAST_MODE,
     CastMode: CastMode,
     Issue: Issue,
     Route: Route,

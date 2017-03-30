@@ -4,17 +4,18 @@
 
 #include "chrome/browser/extensions/api/notification_provider/notification_provider_api.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/guid.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/notifications/desktop_notification_service.h"
-#include "chrome/browser/notifications/desktop_notification_service_factory.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/browser/notifications/notifier_state_tracker.h"
+#include "chrome/browser/notifications/notifier_state_tracker_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature.h"
@@ -65,11 +66,11 @@ void NotificationProviderEventRouter::Create(
           sender_id, notification_id, options);
 
   scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, api::notification_provider::OnCreated::kEventName,
-      args.Pass()));
+      events::NOTIFICATION_PROVIDER_ON_CREATED,
+      api::notification_provider::OnCreated::kEventName, std::move(args)));
 
   EventRouter::Get(profile_)
-      ->DispatchEventToExtension(notification_provider_id, event.Pass());
+      ->DispatchEventToExtension(notification_provider_id, std::move(event));
 }
 
 void NotificationProviderEventRouter::Update(
@@ -82,11 +83,11 @@ void NotificationProviderEventRouter::Update(
           sender_id, notification_id, options);
 
   scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, api::notification_provider::OnUpdated::kEventName,
-      args.Pass()));
+      events::NOTIFICATION_PROVIDER_ON_UPDATED,
+      api::notification_provider::OnUpdated::kEventName, std::move(args)));
 
   EventRouter::Get(profile_)
-      ->DispatchEventToExtension(notification_provider_id, event.Pass());
+      ->DispatchEventToExtension(notification_provider_id, std::move(event));
 }
 
 void NotificationProviderEventRouter::Clear(
@@ -97,11 +98,11 @@ void NotificationProviderEventRouter::Clear(
       api::notification_provider::OnCleared::Create(sender_id, notification_id);
 
   scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, api::notification_provider::OnCleared::kEventName,
-      args.Pass()));
+      events::NOTIFICATION_PROVIDER_ON_CLEARED,
+      api::notification_provider::OnCleared::kEventName, std::move(args)));
 
   EventRouter::Get(profile_)
-      ->DispatchEventToExtension(notification_provider_id, event.Pass());
+      ->DispatchEventToExtension(notification_provider_id, std::move(event));
 }
 
 NotificationProviderNotifyOnClearedFunction::
@@ -215,13 +216,14 @@ NotificationProviderNotifyOnPermissionLevelChangedFunction::Run() {
         (params->level == api::notification_provider::NotifierPermissionLevel::
                               NOTIFIER_PERMISSION_LEVEL_GRANTED);
 
-    DesktopNotificationService* desktop_notification_service =
-        DesktopNotificationServiceFactory::GetForProfile(GetProfile());
+    NotifierStateTracker* notifier_state_tracker =
+        NotifierStateTrackerFactory::GetForProfile(GetProfile());
+
     message_center::NotifierId notifier_id(
         message_center::NotifierId::NotifierType::APPLICATION,
         params->notifier_id);
 
-    desktop_notification_service->SetNotifierEnabled(notifier_id, enabled);
+    notifier_state_tracker->SetNotifierEnabled(notifier_id, enabled);
   }
 
   return RespondNow(

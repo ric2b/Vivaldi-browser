@@ -4,6 +4,8 @@
 
 #include "chrome/browser/apps/drive/drive_app_mapping.h"
 
+#include <stddef.h>
+
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/values.h"
@@ -28,7 +30,7 @@ scoped_ptr<base::DictionaryValue> CreateInfoDict(
   // Only writes non-default value.
   if (generated)
     dict->SetBooleanWithoutPathExpansion(kKeyGenerated, true);
-  return dict.Pass();
+  return dict;
 }
 
 }  // namespace

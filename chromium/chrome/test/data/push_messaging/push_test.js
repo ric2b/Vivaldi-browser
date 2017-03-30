@@ -96,12 +96,32 @@ function removeManifest() {
   }
 }
 
+function swapManifestNoSenderId() {
+  var element = document.querySelector('link[rel="manifest"]');
+  if (element) {
+    element.href = 'manifest_no_sender_id.json';
+    sendResultToTest('sender id removed from manifest');
+  } else {
+    sendResultToTest('unable to find manifest element');
+  }
+}
+
 function subscribePush() {
   navigator.serviceWorker.ready.then(function(swRegistration) {
     return swRegistration.pushManager.subscribe(pushSubscriptionOptions)
         .then(function(subscription) {
           pushSubscription = subscription;
           sendResultToTest(subscription.endpoint);
+        });
+  }).catch(sendErrorToTest);
+}
+
+function GetP256dh() {
+  navigator.serviceWorker.ready.then(function(swRegistration) {
+    return swRegistration.pushManager.getSubscription()
+        .then(function(subscription) {
+          sendResultToTest(btoa(String.fromCharCode.apply(null,
+              new Uint8Array(subscription.getKey('p256dh')))));
         });
   }).catch(sendErrorToTest);
 }

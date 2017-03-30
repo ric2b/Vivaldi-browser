@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include <algorithm>
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/attestation/attestation_signed_data.pb.h"
@@ -49,7 +53,7 @@ class FakeDelegate : public PlatformVerificationFlow::Delegate {
         is_permitted_by_user_(true),
         is_in_supported_mode_(true) {
     // Configure a user for the mock user manager.
-    mock_user_manager_.SetActiveUser(kTestEmail);
+    mock_user_manager_.SetActiveUser(AccountId::FromUserEmail(kTestEmail));
   }
   ~FakeDelegate() override {}
 
@@ -301,15 +305,91 @@ TEST_F(PlatformVerificationFlowTest, Timeout) {
 
 TEST_F(PlatformVerificationFlowTest, ExpiredCert) {
   ExpectAttestationFlow();
-  fake_certificate_list_.resize(2);
-  ASSERT_TRUE(GetFakeCertificate(base::TimeDelta::FromDays(-1),
-                                 &fake_certificate_list_[0]));
-  ASSERT_TRUE(GetFakeCertificate(base::TimeDelta::FromDays(1),
-                                 &fake_certificate_list_[1]));
+  fake_certificate_list_.resize(3);
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(-1),
+                                    &fake_certificate_list_[0]));
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(1),
+                                    &fake_certificate_list_[1]));
+  // This is the opportunistic renewal certificate. Send it back expired to test
+  // that it does not pass through the certificate expiry check again.
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(-1),
+                                    &fake_certificate_list_[2]));
   verifier_->ChallengePlatformKey(NULL, kTestID, kTestChallenge, callback_);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(PlatformVerificationFlow::SUCCESS, result_);
-  EXPECT_EQ(certificate_, fake_certificate_list_[1]);
+  EXPECT_EQ(fake_certificate_list_[1], certificate_);
+  // Once for the expired certificate, once for the almost expired certificate,
+  // and once for the opportunistic renewal attempt.
+  EXPECT_EQ(3ul, fake_certificate_index_);
+}
+
+TEST_F(PlatformVerificationFlowTest, ExpiredIntermediateCert) {
+  ExpectAttestationFlow();
+  fake_certificate_list_.resize(2);
+  std::string leaf_cert;
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(60), &leaf_cert));
+  std::string intermediate_cert;
+  ASSERT_TRUE(
+      GetFakeCertificatePEM(base::TimeDelta::FromDays(-1), &intermediate_cert));
+  fake_certificate_list_[0] = leaf_cert + intermediate_cert;
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(90),
+                                    &fake_certificate_list_[1]));
+  verifier_->ChallengePlatformKey(NULL, kTestID, kTestChallenge, callback_);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(PlatformVerificationFlow::SUCCESS, result_);
+  EXPECT_EQ(fake_certificate_list_[1], certificate_);
+  // Once for the expired intermediate, once for the renewal.
+  EXPECT_EQ(2ul, fake_certificate_index_);
+}
+
+TEST_F(PlatformVerificationFlowTest, AsyncRenewalMultipleHits) {
+  ExpectAttestationFlow();
+  fake_certificate_list_.resize(4);
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(1),
+                                    &fake_certificate_list_[0]));
+  std::fill(fake_certificate_list_.begin() + 1, fake_certificate_list_.end(),
+            fake_certificate_list_[0]);
+  verifier_->ChallengePlatformKey(NULL, kTestID, kTestChallenge, callback_);
+  verifier_->ChallengePlatformKey(NULL, kTestID, kTestChallenge, callback_);
+  verifier_->ChallengePlatformKey(NULL, kTestID, kTestChallenge, callback_);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(PlatformVerificationFlow::SUCCESS, result_);
+  EXPECT_EQ(fake_certificate_list_[0], certificate_);
+  // Once per challenge and only one renewal.
+  EXPECT_EQ(4ul, fake_certificate_index_);
+}
+
+TEST_F(PlatformVerificationFlowTest, CertificateNotPEM) {
+  ExpectAttestationFlow();
+  fake_certificate_list_.push_back("invalid_pem");
+  verifier_->ChallengePlatformKey(NULL, kTestID, kTestChallenge, callback_);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(PlatformVerificationFlow::SUCCESS, result_);
+  EXPECT_EQ(fake_certificate_list_[0], certificate_);
+}
+
+TEST_F(PlatformVerificationFlowTest, CertificateNotX509) {
+  ExpectAttestationFlow();
+  std::string not_x509 =
+      "-----BEGIN CERTIFICATE-----\n"
+      "Vm0wd2QyUXlWa1pOVldoVFYwZDRWVll3WkRSV1JteFZVMjA1VjFadGVEQmFWVll3WVd4YWMx"
+      "TnNiRlZXYkhCUVdWZHplRll5VGtWUwpiSEJPVWpKb1RWZFhkR0ZUTWs1eVRsWmtZUXBTYlZK"
+      "d1ZXcEtiMDFzWkZkV2JVWlVZbFpHTTFSc1dsZFZaM0JwVTBWS2RsWkdZM2hpCk1rbDRWMnhX"
+      "VkdGc1NsaFpiRnBIVGtaYVNFNVZkRmRhTTBKd1ZteGFkMVpXWkZobFIzUnBDazFXY0VoV01X"
+      "aHpZV3hLV1ZWc1ZscGkKUm5Cb1dsZDRXbVZWTlZkYVIyaFdWMFZLVlZacVFsZFRNVnBYV2ta"
+      "b2JGSXpVbGREYlVwWFYydG9WMDF1VW5aWmExcExZMnMxVjFScwpjRmdLVTBWS1dWWnRjRWRq"
+      "TWs1elYyNVNVRll5YUZkV01GWkxWbXhhVlZGc1pGUk5Wa3BJVmpKNGIyRnNTbGxWYkVKRVlr"
+      "VndWbFZ0CmVHOVdNVWw2WVVkb1dGWnNjRXhXTUZwWFpGWk9jd3BhUjJkTFdWUkNkMDVzV2to"
+      "TlZGSmFWbTFTUjFSV1ZsZFdNa3BKVVd4a1YwMUcKV2t4V01uaGhWMGRXU0dSRk9WTk5WWEJa"
+      "Vm1wR2IySXhXblJTV0hCV1lrWktSVmxZY0VkbGJGbDVDbU5GVGxkTlZtdzJWbGMxWVZkdApS"
+      "WGhqUlhSaFZucEdTRlZ0TVZOU2QzQmhVbTFPVEZkWGVGWmtNbEY0VjJ0V1UySkhVbFpVVjNS"
+      "M1pXeFdXR1ZHWkZWaVJYQmFWa2QwCk5GSkdjRFlLVFVSc1JGcDZNRGxEWnowOUNnPT0K\n"
+      "-----END CERTIFICATE-----\n";
+  fake_certificate_list_.push_back(not_x509);
+  verifier_->ChallengePlatformKey(NULL, kTestID, kTestChallenge, callback_);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(PlatformVerificationFlow::SUCCESS, result_);
+  EXPECT_EQ(fake_certificate_list_[0], certificate_);
 }
 
 TEST_F(PlatformVerificationFlowTest, UnsupportedMode) {

@@ -8,12 +8,14 @@
 #ifndef COMPONENTS_METRICS_METRICS_SERVICE_H_
 #define COMPONENTS_METRICS_METRICS_SERVICE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -23,12 +25,13 @@
 #include "base/metrics/user_metrics.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/metrics/clean_exit_beacon.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_manager.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/net/network_metrics_provider.h"
-#include "components/variations/active_field_trials.h"
+#include "components/variations/synthetic_trials.h"
 
 class PrefService;
 class PrefRegistrySimple;
@@ -54,39 +57,6 @@ class MetricsReportingScheduler;
 class MetricsServiceAccessor;
 class MetricsServiceClient;
 class MetricsStateManager;
-
-// A Field Trial and its selected group, which represent a particular
-// Chrome configuration state. For example, the trial name could map to
-// a preference name, and the group name could map to a preference value.
-struct SyntheticTrialGroup {
- public:
-  ~SyntheticTrialGroup();
-
-  variations::ActiveGroupId id;
-  base::TimeTicks start_time;
-
- private:
-  // Synthetic field trial users:
-  friend class MetricsServiceAccessor;
-  friend class MetricsService;
-  FRIEND_TEST_ALL_PREFIXES(MetricsServiceTest, RegisterSyntheticTrial);
-
-  // This constructor is private specifically so as to control which code is
-  // able to access it. New code that wishes to use it should be added as a
-  // friend class.
-  SyntheticTrialGroup(uint32 trial, uint32 group);
-};
-
-// Interface class to observe changes to synthetic trials in MetricsService.
-class SyntheticTrialObserver {
- public:
-  // Called when the list of synthetic field trial groups has changed.
-  virtual void OnSyntheticTrialsChanged(
-      const std::vector<SyntheticTrialGroup>& groups) = 0;
-
- protected:
-  virtual ~SyntheticTrialObserver() {}
-};
 
 // See metrics_service.cc for a detailed description.
 class MetricsService : public base::HistogramFlattener {
@@ -123,10 +93,6 @@ class MetricsService : public base::HistogramFlattener {
   // are turned on.
   void Start();
 
-  // If metrics reporting is enabled, starts the metrics service. Returns
-  // whether the metrics service was started.
-  bool StartIfMetricsReportingEnabled();
-
   // Starts the metrics system in a special test-only mode. Metrics won't ever
   // be uploaded or persisted in this mode, but metrics will be recorded in
   // memory.
@@ -148,11 +114,11 @@ class MetricsService : public base::HistogramFlattener {
   std::string GetClientId();
 
   // Returns the install date of the application, in seconds since the epoch.
-  int64 GetInstallDate();
+  int64_t GetInstallDate();
 
   // Returns the date at which the current metrics client ID was created as
-  // an int64 containing seconds since the epoch.
-  int64 GetMetricsReportingEnabledDate();
+  // an int64_t containing seconds since the epoch.
+  int64_t GetMetricsReportingEnabledDate();
 
   // Returns true if the last session exited cleanly.
   bool WasLastShutdownClean() const;
@@ -220,21 +186,17 @@ class MetricsService : public base::HistogramFlattener {
   // This value should be true when process has completed shutdown.
   static bool UmaMetricsProperlyShutdown();
 
-  // Registers a field trial name and group to be used to annotate a UMA report
-  // with a particular Chrome configuration state. A UMA report will be
-  // annotated with this trial group if and only if all events in the report
-  // were created after the trial is registered. Only one group name may be
-  // registered at a time for a given trial_name. Only the last group name that
-  // is registered for a given trial name will be recorded. The values passed
-  // in must not correspond to any real field trial in the code.
-  // To use this method, SyntheticTrialGroup should friend your class.
-  void RegisterSyntheticFieldTrial(const SyntheticTrialGroup& trial_group);
+  // Public accessor that returns the list of synthetic field trials. It must
+  // only be used for testing.
+  void GetCurrentSyntheticFieldTrialsForTesting(
+      std::vector<variations::ActiveGroupId>* synthetic_trials);
 
   // Adds an observer to be notified when the synthetic trials list changes.
-  void AddSyntheticTrialObserver(SyntheticTrialObserver* observer);
+  void AddSyntheticTrialObserver(variations::SyntheticTrialObserver* observer);
 
   // Removes an existing observer of synthetic trials list changes.
-  void RemoveSyntheticTrialObserver(SyntheticTrialObserver* observer);
+  void RemoveSyntheticTrialObserver(
+      variations::SyntheticTrialObserver* observer);
 
   // Register the specified |provider| to provide additional metrics into the
   // UMA log. Should be called during MetricsService initialization only.
@@ -257,6 +219,8 @@ class MetricsService : public base::HistogramFlattener {
   MetricsLogManager* log_manager() { return &log_manager_; }
 
  private:
+  friend class MetricsServiceAccessor;
+
   // The MetricsService has a lifecycle that is stored as a state.
   // See metrics_service.cc for description of this lifecycle.
   enum State {
@@ -271,14 +235,33 @@ class MetricsService : public base::HistogramFlattener {
     NEED_TO_SHUTDOWN = ~CLEANLY_SHUTDOWN
   };
 
-  typedef std::vector<SyntheticTrialGroup> SyntheticTrialGroups;
+  // The current state of recording for the MetricsService. The state is UNSET
+  // until set to something else, at which point it remains INACTIVE or ACTIVE
+  // for the lifetime of the object.
+  enum RecordingState {
+    INACTIVE,
+    ACTIVE,
+    UNSET
+  };
 
-  // Calls into the client to start metrics gathering.
-  void StartGatheringMetrics();
+  typedef std::vector<variations::SyntheticTrialGroup> SyntheticTrialGroups;
+
+  // Registers a field trial name and group to be used to annotate a UMA report
+  // with a particular Chrome configuration state. A UMA report will be
+  // annotated with this trial group if and only if all events in the report
+  // were created after the trial is registered. Only one group name may be
+  // registered at a time for a given trial_name. Only the last group name that
+  // is registered for a given trial name will be recorded. The values passed
+  // in must not correspond to any real field trial in the code.
+  void RegisterSyntheticFieldTrial(
+      const variations::SyntheticTrialGroup& trial_group);
+
+  // Calls into the client to initialize some system profile metrics.
+  void StartInitTask();
 
   // Callback that moves the state to INIT_TASK_DONE. When this is called, the
   // state should be INIT_TASK_SCHEDULED.
-  void FinishedGatheringInitialMetrics();
+  void FinishedInitTask();
 
   void OnUserAction(const std::string& action);
 
@@ -388,9 +371,9 @@ class MetricsService : public base::HistogramFlattener {
   // Notifies observers on a synthetic trial list change.
   void NotifySyntheticTrialObservers();
 
-  // Returns a list of synthetic field trials that were active for the entire
-  // duration of the current log.
-  void GetCurrentSyntheticFieldTrials(
+  // Returns a list of synthetic field trials that are older than |time|.
+  void GetSyntheticFieldTrialsOlderThan(
+      base::TimeTicks time,
       std::vector<variations::ActiveGroupId>* synthetic_trials);
 
   // Creates a new MetricsLog instance with the given |log_type|.
@@ -437,7 +420,7 @@ class MetricsService : public base::HistogramFlattener {
   // Indicate whether recording and reporting are currently happening.
   // These should not be set directly, but by calling SetRecording and
   // SetReporting.
-  bool recording_active_;
+  RecordingState recording_state_;
   bool reporting_active_;
 
   // Indicate whether test mode is enabled, where the initial log should never
@@ -479,7 +462,8 @@ class MetricsService : public base::HistogramFlattener {
   SyntheticTrialGroups synthetic_trial_groups_;
 
   // List of observers of |synthetic_trial_groups_| changes.
-  base::ObserverList<SyntheticTrialObserver> synthetic_trial_observer_list_;
+  base::ObserverList<variations::SyntheticTrialObserver>
+      synthetic_trial_observer_list_;
 
   // Execution phase the browser is in.
   static ExecutionPhase execution_phase_;

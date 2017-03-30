@@ -8,23 +8,23 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_task_runner_handle.h"
+#include "cc/animation/animation_host.h"
+#include "cc/animation/animation_timeline.h"
 #include "cc/base/switches.h"
+#include "cc/blink/web_compositor_animation_timeline_impl.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/test/pixel_test_output_surface.h"
-#include "cc/test/test_context_provider.h"
 #include "cc/trees/layer_tree_host.h"
 #include "content/test/test_blink_web_unit_test_support.h"
 #include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
 #include "third_party/WebKit/public/platform/WebLayer.h"
 #include "third_party/WebKit/public/platform/WebLayerTreeView.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
+#include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 
 using blink::WebColor;
-using blink::WebGraphicsContext3D;
 using blink::WebRect;
 using blink::WebSize;
 
@@ -43,6 +43,9 @@ void WebLayerTreeViewImplForTesting::Initialize() {
 
   // Accelerated animations are enabled for unit tests.
   settings.accelerated_animation_enabled = true;
+  // External cc::AnimationHost is enabled for unit tests.
+  settings.use_compositor_animation_timelines = true;
+
   cc::LayerTreeHost::InitParams params;
   params.client = this;
   params.settings = &settings;
@@ -62,6 +65,26 @@ void WebLayerTreeViewImplForTesting::clearRootLayer() {
   layer_tree_host_->SetRootLayer(scoped_refptr<cc::Layer>());
 }
 
+void WebLayerTreeViewImplForTesting::attachCompositorAnimationTimeline(
+    blink::WebCompositorAnimationTimeline* compositor_timeline) {
+  DCHECK(compositor_timeline);
+  DCHECK(layer_tree_host_->animation_host());
+  layer_tree_host_->animation_host()->AddAnimationTimeline(
+      static_cast<const cc_blink::WebCompositorAnimationTimelineImpl*>(
+          compositor_timeline)
+          ->animation_timeline());
+}
+
+void WebLayerTreeViewImplForTesting::detachCompositorAnimationTimeline(
+    blink::WebCompositorAnimationTimeline* compositor_timeline) {
+  DCHECK(compositor_timeline);
+  DCHECK(layer_tree_host_->animation_host());
+  layer_tree_host_->animation_host()->RemoveAnimationTimeline(
+      static_cast<const cc_blink::WebCompositorAnimationTimelineImpl*>(
+          compositor_timeline)
+          ->animation_timeline());
+}
+
 void WebLayerTreeViewImplForTesting::setViewportSize(
     const WebSize& unused_deprecated,
     const WebSize& device_viewport_size) {
@@ -73,21 +96,9 @@ void WebLayerTreeViewImplForTesting::setViewportSize(
   layer_tree_host_->SetViewportSize(device_viewport_size);
 }
 
-WebSize WebLayerTreeViewImplForTesting::layoutViewportSize() const {
-  return layer_tree_host_->device_viewport_size();
-}
-
-WebSize WebLayerTreeViewImplForTesting::deviceViewportSize() const {
-  return layer_tree_host_->device_viewport_size();
-}
-
 void WebLayerTreeViewImplForTesting::setDeviceScaleFactor(
     float device_scale_factor) {
   layer_tree_host_->SetDeviceScaleFactor(device_scale_factor);
-}
-
-float WebLayerTreeViewImplForTesting::deviceScaleFactor() const {
-  return layer_tree_host_->device_scale_factor();
 }
 
 void WebLayerTreeViewImplForTesting::setBackgroundColor(WebColor color) {
@@ -123,15 +134,11 @@ void WebLayerTreeViewImplForTesting::setNeedsAnimate() {
 
 void WebLayerTreeViewImplForTesting::didStopFlinging() {}
 
-void WebLayerTreeViewImplForTesting::finishAllRendering() {
-  layer_tree_host_->FinishAllRendering();
-}
-
 void WebLayerTreeViewImplForTesting::setDeferCommits(bool defer_commits) {
   layer_tree_host_->SetDeferCommits(defer_commits);
 }
 
-void WebLayerTreeViewImplForTesting::Layout() {
+void WebLayerTreeViewImplForTesting::UpdateLayerTreeHost() {
 }
 
 void WebLayerTreeViewImplForTesting::ApplyViewportDeltas(
@@ -143,14 +150,11 @@ void WebLayerTreeViewImplForTesting::ApplyViewportDeltas(
 }
 
 void WebLayerTreeViewImplForTesting::RequestNewOutputSurface() {
-  bool flipped_output_surface = false;
-  layer_tree_host_->SetOutputSurface(
-      make_scoped_ptr(new cc::PixelTestOutputSurface(
-          cc::TestContextProvider::Create(), flipped_output_surface)));
+  // Intentionally do not create and set an OutputSurface.
 }
 
 void WebLayerTreeViewImplForTesting::DidFailToInitializeOutputSurface() {
-  RequestNewOutputSurface();
+  NOTREACHED();
 }
 
 void WebLayerTreeViewImplForTesting::registerForAnimations(

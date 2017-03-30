@@ -5,22 +5,27 @@
 # GYP version: components/proximity_auth.gypi:proximity_auth_webui
 static_library("webui") {
   sources = [
-    "cryptauth_enroller_factory_impl.cc",
-    "cryptauth_enroller_factory_impl.h",
     "proximity_auth_ui.cc",
     "proximity_auth_ui.h",
-    "proximity_auth_ui_delegate.h",
     "proximity_auth_webui_handler.cc",
     "proximity_auth_webui_handler.h",
+    "reachable_phone_flow.cc",
+    "reachable_phone_flow.h",
     "url_constants.cc",
     "url_constants.h",
   ]
 
   deps = [
     "//base",
+    "//base:i18n",
+    "//base:prefs",
+    "//components/proximity_auth",
+    "//components/proximity_auth/ble",
     "//components/proximity_auth/cryptauth",
+    "//components/proximity_auth/logging",
     "//components/resources",
     "//content/public/browser",
+    "//device/bluetooth",
     "//ui/resources",
   ]
 }

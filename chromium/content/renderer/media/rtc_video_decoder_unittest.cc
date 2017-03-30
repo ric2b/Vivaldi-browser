@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <string.h>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -27,7 +30,8 @@ class RTCVideoDecoderTest : public ::testing::Test,
                             webrtc::DecodedImageCallback {
  public:
   RTCVideoDecoderTest()
-      : mock_gpu_factories_(new media::MockGpuVideoAcceleratorFactories),
+      : mock_gpu_factories_(
+            new media::MockGpuVideoAcceleratorFactories(nullptr)),
         vda_thread_("vda_thread"),
         idle_waiter_(false, false) {
     memset(&codec_, 0, sizeof(codec_));
@@ -42,15 +46,15 @@ class RTCVideoDecoderTest : public ::testing::Test,
     supported_profile.min_resolution.SetSize(16, 16);
     supported_profile.max_resolution.SetSize(1920, 1088);
     supported_profile.profile = media::H264PROFILE_MAIN;
-    supported_profiles_.push_back(supported_profile);
+    capabilities_.supported_profiles.push_back(supported_profile);
     supported_profile.profile = media::VP8PROFILE_ANY;
-    supported_profiles_.push_back(supported_profile);
+    capabilities_.supported_profiles.push_back(supported_profile);
 
     EXPECT_CALL(*mock_gpu_factories_.get(), GetTaskRunner())
         .WillRepeatedly(Return(vda_task_runner_));
     EXPECT_CALL(*mock_gpu_factories_.get(),
-                GetVideoDecodeAcceleratorSupportedProfiles())
-        .WillRepeatedly(Return(supported_profiles_));
+                GetVideoDecodeAcceleratorCapabilities())
+        .WillRepeatedly(Return(capabilities_));
     EXPECT_CALL(*mock_gpu_factories_.get(), DoCreateVideoDecodeAccelerator())
         .WillRepeatedly(Return(mock_vda_));
     EXPECT_CALL(*mock_vda_, Initialize(_, _))
@@ -79,7 +83,7 @@ class RTCVideoDecoderTest : public ::testing::Test,
     DVLOG(2) << "CreateDecoder";
     codec_.codecType = codec_type;
     rtc_decoder_ =
-        RTCVideoDecoder::Create(codec_type, mock_gpu_factories_);
+        RTCVideoDecoder::Create(codec_type, mock_gpu_factories_.get());
   }
 
   void Initialize() {
@@ -106,12 +110,12 @@ class RTCVideoDecoderTest : public ::testing::Test,
   }
 
  protected:
-  scoped_refptr<media::MockGpuVideoAcceleratorFactories> mock_gpu_factories_;
+  scoped_ptr<media::MockGpuVideoAcceleratorFactories> mock_gpu_factories_;
   media::MockVideoDecodeAccelerator* mock_vda_;
   scoped_ptr<RTCVideoDecoder> rtc_decoder_;
   webrtc::VideoCodec codec_;
   base::Thread vda_thread_;
-  media::VideoDecodeAccelerator::SupportedProfiles supported_profiles_;
+  media::VideoDecodeAccelerator::Capabilities capabilities_;
 
  private:
   scoped_refptr<base::SingleThreadTaskRunner> vda_task_runner_;
@@ -122,8 +126,8 @@ class RTCVideoDecoderTest : public ::testing::Test,
 
 TEST_F(RTCVideoDecoderTest, CreateReturnsNullOnUnsupportedCodec) {
   CreateDecoder(webrtc::kVideoCodecVP8);
-  scoped_ptr<RTCVideoDecoder> null_rtc_decoder(
-      RTCVideoDecoder::Create(webrtc::kVideoCodecI420, mock_gpu_factories_));
+  scoped_ptr<RTCVideoDecoder> null_rtc_decoder(RTCVideoDecoder::Create(
+      webrtc::kVideoCodecI420, mock_gpu_factories_.get()));
   EXPECT_EQ(NULL, null_rtc_decoder.get());
 }
 

@@ -4,8 +4,9 @@
 
 #include "gpu/command_buffer/service/shader_translator.h"
 
-#include <string.h>
 #include <GLES2/gl2.h>
+#include <stddef.h>
+#include <string.h>
 #include <algorithm>
 
 #include "base/at_exit.h"
@@ -16,6 +17,7 @@
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_version_info.h"
 
 namespace gpu {
 namespace gles2 {
@@ -70,6 +72,24 @@ void GetVaryings(ShHandle compiler, VaryingMap* var_map) {
       (*var_map)[(*varyings)[ii].mappedName] = (*varyings)[ii];
   }
 }
+void GetOutputVariables(ShHandle compiler, OutputVariableList* var_list) {
+  if (!var_list)
+    return;
+  *var_list = *ShGetOutputVariables(compiler);
+}
+
+void GetInterfaceBlocks(ShHandle compiler, InterfaceBlockMap* var_map) {
+  if (!var_map)
+    return;
+  var_map->clear();
+  const std::vector<sh::InterfaceBlock>* interface_blocks =
+      ShGetInterfaceBlocks(compiler);
+  if (interface_blocks) {
+    for (const auto& block : *interface_blocks) {
+      (*var_map)[block.mappedName] = block;
+    }
+  }
+}
 
 void GetNameHashingInfo(ShHandle compiler, NameMap* name_map) {
   if (!name_map)
@@ -90,6 +110,50 @@ void GetNameHashingInfo(ShHandle compiler, NameMap* name_map) {
 
 }  // namespace
 
+ShShaderOutput ShaderTranslator::GetShaderOutputLanguageForContext(
+    const gfx::GLVersionInfo& version_info) {
+  if (version_info.is_es) {
+    return SH_ESSL_OUTPUT;
+  }
+
+  // Determine the GLSL version based on OpenGL specification.
+
+  unsigned context_version =
+      version_info.major_version * 100 + version_info.minor_version * 10;
+  if (context_version >= 450) {
+    // OpenGL specs from 4.2 on specify that the core profile is "also
+    // guaranteed to support all previous versions of the OpenGL Shading
+    // Language back to version 1.40". For simplicity, we assume future
+    // specs do not unspecify this. If they did, they could unspecify
+    // glGetStringi(GL_SHADING_LANGUAGE_VERSION, k), too.
+    // Since current context >= 4.5, use GLSL 4.50 core.
+    return SH_GLSL_450_CORE_OUTPUT;
+  } else if (context_version == 440) {
+    return SH_GLSL_440_CORE_OUTPUT;
+  } else if (context_version == 430) {
+    return SH_GLSL_430_CORE_OUTPUT;
+  } else if (context_version == 420) {
+    return SH_GLSL_420_CORE_OUTPUT;
+  } else if (context_version == 410) {
+    return SH_GLSL_410_CORE_OUTPUT;
+  } else if (context_version == 400) {
+    return SH_GLSL_400_CORE_OUTPUT;
+  } else if (context_version == 330) {
+    return SH_GLSL_330_CORE_OUTPUT;
+  } else if (context_version == 320) {
+    return SH_GLSL_150_CORE_OUTPUT;
+  }
+
+  // Before OpenGL 3.2 we use the compatibility profile. Shading
+  // language version 130 restricted how sampler arrays can be indexed
+  // in loops, which causes problems like crbug.com/550487 .
+  //
+  // Also for any future specs that might be introduced between OpenGL
+  // 3.3 and OpenGL 4.0, at the time of writing, we use the
+  // compatibility profile.
+  return SH_GLSL_COMPATIBILITY_OUTPUT;
+}
+
 ShaderTranslator::DestructionObserver::DestructionObserver() {
 }
 
@@ -98,16 +162,14 @@ ShaderTranslator::DestructionObserver::~DestructionObserver() {
 
 ShaderTranslator::ShaderTranslator()
     : compiler_(NULL),
-      implementation_is_glsl_es_(false),
       driver_bug_workarounds_(static_cast<ShCompileOptions>(0)) {
 }
 
-bool ShaderTranslator::Init(
-    GLenum shader_type,
-    ShShaderSpec shader_spec,
-    const ShBuiltInResources* resources,
-    ShaderTranslatorInterface::GlslImplementationType glsl_implementation_type,
-    ShCompileOptions driver_bug_workarounds) {
+bool ShaderTranslator::Init(GLenum shader_type,
+                            ShShaderSpec shader_spec,
+                            const ShBuiltInResources* resources,
+                            ShShaderOutput shader_output_language,
+                            ShCompileOptions driver_bug_workarounds) {
   // Make sure Init is called only once.
   DCHECK(compiler_ == NULL);
   DCHECK(shader_type == GL_FRAGMENT_SHADER || shader_type == GL_VERTEX_SHADER);
@@ -117,27 +179,12 @@ bool ShaderTranslator::Init(
 
   g_translator_initializer.Get();
 
-  ShShaderOutput shader_output;
-  if (glsl_implementation_type == kGlslES) {
-    shader_output = SH_ESSL_OUTPUT;
-  } else {
-    // TODO(kbr): clean up the tests of shader_spec and
-    // gfx::GetGLImplementation(). crbug.com/471960
-    if (shader_spec == SH_WEBGL2_SPEC ||
-        gfx::GetGLImplementation() ==
-            gfx::kGLImplementationDesktopGLCoreProfile) {
-      shader_output = SH_GLSL_410_CORE_OUTPUT;
-    } else {
-      shader_output = SH_GLSL_COMPATIBILITY_OUTPUT;
-    }
-  }
 
   {
     TRACE_EVENT0("gpu", "ShConstructCompiler");
-    compiler_ = ShConstructCompiler(
-        shader_type, shader_spec, shader_output, resources);
+    compiler_ = ShConstructCompiler(shader_type, shader_spec,
+                                    shader_output_language, resources);
   }
-  implementation_is_glsl_es_ = (glsl_implementation_type == kGlslES);
   driver_bug_workarounds_ = driver_bug_workarounds;
   return compiler_ != NULL;
 }
@@ -164,6 +211,8 @@ bool ShaderTranslator::Translate(const std::string& shader_source,
                                  AttributeMap* attrib_map,
                                  UniformMap* uniform_map,
                                  VaryingMap* varying_map,
+                                 InterfaceBlockMap* interface_block_map,
+                                 OutputVariableList* output_variable_list,
                                  NameMap* name_map) const {
   // Make sure this instance is initialized.
   DCHECK(compiler_ != NULL);
@@ -182,10 +231,12 @@ bool ShaderTranslator::Translate(const std::string& shader_source,
     }
     // Get shader version.
     *shader_version = ShGetShaderVersion(compiler_);
-    // Get info for attribs, uniforms, and varyings.
+    // Get info for attribs, uniforms, varyings and output variables.
     GetAttributes(compiler_, attrib_map);
     GetUniforms(compiler_, uniform_map);
     GetVaryings(compiler_, varying_map);
+    GetInterfaceBlocks(compiler_, interface_block_map);
+    GetOutputVariables(compiler_, output_variable_list);
     // Get info for name hashing.
     GetNameHashingInfo(compiler_, name_map);
   }

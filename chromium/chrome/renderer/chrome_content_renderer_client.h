@@ -5,24 +5,26 @@
 #ifndef CHROME_RENDERER_CHROME_CONTENT_RENDERER_CLIENT_H_
 #define CHROME_RENDERER_CHROME_CONTENT_RENDERER_CLIENT_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "ipc/ipc_channel_proxy.h"
+#include "v8/include/v8.h"
 
-class ChromeExtensionsDispatcherDelegate;
 class ChromeRenderProcessObserver;
 #if defined(ENABLE_PRINT_PREVIEW)
 class ChromePDFPrintClient;
 #endif
 class PrescientNetworkingDispatcher;
-class SearchBouncer;
 #if defined(ENABLE_SPELLCHECK)
 class SpellCheck;
 class SpellCheckProvider;
@@ -42,9 +44,6 @@ class PrescientNetworkingDispatcher;
 namespace extensions {
 class Dispatcher;
 class Extension;
-class ExtensionSet;
-class ExtensionsGuestViewContainerDispatcher;
-class RendererPermissionsPolicyDelegate;
 }
 
 namespace prerender {
@@ -88,27 +87,23 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   bool OverrideCreatePlugin(content::RenderFrame* render_frame,
                             blink::WebLocalFrame* frame,
                             const blink::WebPluginParams& params,
-                            blink::WebPlugin** plugin,
-                            ContentSetting override_action) override;
-  scoped_ptr<blink::WebPluginPlaceholder> CreatePluginPlaceholder(
-      content::RenderFrame* render_frame,
-      blink::WebLocalFrame* frame,
-      const blink::WebPluginParams& params) override;
+                            blink::WebPlugin** plugin) override;
   blink::WebPlugin* CreatePluginReplacement(
       content::RenderFrame* render_frame,
       const base::FilePath& plugin_path) override;
   bool HasErrorPage(int http_status_code, std::string* error_domain) override;
   bool ShouldSuppressErrorPage(content::RenderFrame* render_frame,
                                const GURL& url) override;
-  void GetNavigationErrorStrings(content::RenderView* render_view,
-                                 blink::WebFrame* frame,
+  void GetNavigationErrorStrings(content::RenderFrame* render_frame,
                                  const blink::WebURLRequest& failed_request,
                                  const blink::WebURLError& error,
                                  std::string* error_html,
                                  base::string16* error_description) override;
   void DeferMediaLoad(content::RenderFrame* render_frame,
+                      bool has_played_media_before,
                       const base::Closure& closure) override;
   bool RunIdleHandlerWhenWidgetsHidden() override;
+  bool AllowTimerSuspensionWhenProcessBackgrounded() override;
   bool AllowPopup() override;
   bool ShouldFork(blink::WebLocalFrame* frame,
                   const GURL& url,
@@ -155,13 +150,13 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   void AddImageContextMenuProperties(
       const blink::WebURLResponse& response,
       std::map<std::string, std::string>* properties) override;
-
-#if defined(ENABLE_EXTENSIONS)
-  // Takes ownership.
-  void SetExtensionDispatcherForTest(
-      extensions::Dispatcher* extension_dispatcher);
-  extensions::Dispatcher* GetExtensionDispatcherForTest();
-#endif
+  void DidInitializeServiceWorkerContextOnWorkerThread(
+      v8::Local<v8::Context> context,
+      const GURL& url) override;
+  void WillDestroyServiceWorkerContextOnWorkerThread(
+      v8::Local<v8::Context> context,
+      const GURL& url) override;
+  bool ShouldEnforceWebRTCRoutingPreferences() override;
 
 #if defined(ENABLE_SPELLCHECK)
   // Sets a new |spellcheck|. Used for testing only.
@@ -182,27 +177,10 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
       const GURL& url, const std::set<std::string>& whitelist);
 #endif
 
-  static bool WasWebRequestUsedBySomeExtensions();
-
  private:
   FRIEND_TEST_ALL_PREFIXES(ChromeContentRendererClientTest, NaClRestriction);
   FRIEND_TEST_ALL_PREFIXES(ChromeContentRendererClientTest,
                            ShouldSuppressErrorPage);
-
-#if defined(ENABLE_EXTENSIONS)
-  // Gets extension by the given origin, regardless of whether the extension
-  // is active in the current process.
-  const extensions::Extension* GetExtensionByOrigin(
-      const blink::WebSecurityOrigin& origin) const;
-
-  // Returns true if the frame is navigating to an URL either into or out of an
-  // extension app's extent.
-  bool CrossesExtensionExtents(blink::WebLocalFrame* frame,
-                               const GURL& new_url,
-                               const extensions::ExtensionSet& extensions,
-                               bool is_extension_url,
-                               bool is_initial_navigation);
-#endif
 
   static GURL GetNaClContentHandlerURL(const std::string& actual_mime_type,
                                        const content::WebPluginInfo& plugin);
@@ -220,21 +198,11 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   scoped_ptr<ChromeRenderProcessObserver> chrome_observer_;
   scoped_ptr<web_cache::WebCacheRenderProcessObserver> web_cache_observer_;
 
-// TODO(thestig): Extract into a separate file if possible. Cleanup
-// ENABLE_EXTENSIONS ifdefs in the .cc file as well.
-#if defined(ENABLE_EXTENSIONS)
-  scoped_ptr<ChromeExtensionsDispatcherDelegate> extension_dispatcher_delegate_;
-  scoped_ptr<extensions::Dispatcher> extension_dispatcher_;
-  scoped_ptr<extensions::RendererPermissionsPolicyDelegate>
-      permissions_policy_delegate_;
-  scoped_ptr<extensions::ExtensionsGuestViewContainerDispatcher>
-      guest_view_container_dispatcher_;
-#endif
-
   scoped_ptr<network_hints::PrescientNetworkingDispatcher>
       prescient_networking_dispatcher_;
   scoped_ptr<password_manager::CredentialManagerClient>
       credential_manager_client_;
+
 #if defined(ENABLE_SPELLCHECK)
   scoped_ptr<SpellCheck> spellcheck_;
 #endif
@@ -244,7 +212,6 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
 #if defined(ENABLE_WEBRTC)
   scoped_refptr<WebRtcLoggingMessageFilter> webrtc_logging_message_filter_;
 #endif
-  scoped_ptr<SearchBouncer> search_bouncer_;
 #if defined(ENABLE_PRINT_PREVIEW)
   scoped_ptr<ChromePDFPrintClient> pdf_print_client_;
 #endif

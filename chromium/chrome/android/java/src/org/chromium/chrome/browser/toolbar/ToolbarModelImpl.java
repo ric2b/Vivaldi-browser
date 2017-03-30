@@ -5,15 +5,18 @@
 package org.chromium.chrome.browser.toolbar;
 
 import android.content.Context;
+import android.text.TextUtils;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.dom_distiller.DomDistillerServiceFactory;
+import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
 import org.chromium.chrome.browser.ntp.NewTabPage;
-import org.chromium.chrome.browser.tab.BackgroundContentViewHelper;
-import org.chromium.chrome.browser.tab.ChromeTab;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ToolbarModel.ToolbarModelDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.components.dom_distiller.core.DomDistillerService;
+import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -21,9 +24,8 @@ import org.chromium.content_public.browser.WebContents;
  */
 class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, ToolbarModelDelegate {
 
-    private ChromeTab mTab;
+    private Tab mTab;
     private boolean mIsIncognito;
-    private int mLoadProgress;
     private int mPrimaryColor;
     private boolean mIsUsingBrandColor;
 
@@ -36,14 +38,8 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
 
     @Override
     public WebContents getActiveWebContents() {
-        ChromeTab tab = getTab();
+        Tab tab = getTab();
         if (tab == null) return null;
-        BackgroundContentViewHelper backgroundViewHelper = tab.getBackgroundContentViewHelper();
-        boolean hasPendingBackgroundPage =
-                backgroundViewHelper != null && backgroundViewHelper.hasPendingBackgroundPage();
-        if (hasPendingBackgroundPage) {
-            return backgroundViewHelper.getContentViewCore().getWebContents();
-        }
         return tab.getWebContents();
     }
 
@@ -53,7 +49,7 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
      * @param isIncognito Whether the incognito model is currently selected, which must match the
      *                    passed in tab if non-null.
      */
-    public void setTab(ChromeTab tab, boolean isIncognito) {
+    public void setTab(Tab tab, boolean isIncognito) {
         mTab = tab;
         if (mTab != null) {
             assert mTab.isIncognito() == isIncognito;
@@ -62,7 +58,7 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
     }
 
     @Override
-    public ChromeTab getTab() {
+    public Tab getTab() {
         // TODO(dtrainor, tedchoc): Remove the isInitialized() check when we no longer wait for
         // TAB_CLOSED events to remove this tab.  Otherwise there is a chance we use this tab after
         // {@link ChromeTab#destroy()} is called.
@@ -79,24 +75,41 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
     }
 
     @Override
-    public boolean isIncognito() {
-        return mIsIncognito;
+    public String getText() {
+        String displayText = super.getText();
+
+        if (mTab == null) return displayText;
+
+        String url = mTab.getUrl().trim();
+        if (!mTab.isFrozen() && DomDistillerUrlUtils.isDistilledPage(url)) {
+            if (isStoredArticle(url)) {
+                DomDistillerService domDistillerService =
+                        DomDistillerServiceFactory.getForProfile(mTab.getProfile());
+                String originalUrl = domDistillerService.getUrlForEntry(
+                        DomDistillerUrlUtils.getValueForKeyInUrl(url, "entry_id"));
+                displayText =
+                        DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl);
+            } else if (DomDistillerUrlUtils.getOriginalUrlFromDistillerUrl(url) != null) {
+                String originalUrl = DomDistillerUrlUtils.getOriginalUrlFromDistillerUrl(url);
+                displayText =
+                        DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl);
+            }
+        }
+
+        return displayText;
     }
 
-    /**
-     * Set the load progress for the current tab.
-     * @param progress The loading progress for the tab.
-     */
-    public void setLoadProgress(int progress) {
-        assert progress >= 0;
-        assert progress <= 100;
-
-        mLoadProgress = progress;
+    private boolean isStoredArticle(String url) {
+        DomDistillerService domDistillerService =
+                DomDistillerServiceFactory.getForProfile(mTab.getProfile());
+        String entryIdFromUrl = DomDistillerUrlUtils.getValueForKeyInUrl(url, "entry_id");
+        if (TextUtils.isEmpty(entryIdFromUrl)) return false;
+        return domDistillerService.hasEntry(entryIdFromUrl);
     }
 
     @Override
-    public int getLoadProgress() {
-        return mLoadProgress;
+    public boolean isIncognito() {
+        return mIsIncognito;
     }
 
     /**
@@ -106,9 +119,9 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
     public void setPrimaryColor(int color) {
         mPrimaryColor = color;
         Context context = ApplicationStatus.getApplicationContext();
-        mIsUsingBrandColor = FeatureUtilities.isDocumentMode(context)
-                && !isIncognito()
-                && mPrimaryColor != context.getResources().getColor(R.color.default_primary_color)
+        mIsUsingBrandColor = !isIncognito()
+                && mPrimaryColor != ApiCompatibilityUtils.getColor(context.getResources(),
+                        R.color.default_primary_color)
                 && getTab() != null && !getTab().isNativePage();
     }
 

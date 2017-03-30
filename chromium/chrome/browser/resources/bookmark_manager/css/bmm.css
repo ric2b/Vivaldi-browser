@@ -96,7 +96,7 @@ list > .folder > .url:empty::after {
 
 list > * > button {
   -webkit-transition: opacity 150ms;
-  background: #fff -webkit-canvas(drop-down-arrow) no-repeat center center;
+  background: #fff no-repeat center center;
   border: 1px solid hsl(214, 91%, 85%);
   border-radius: 3px;
   bottom: 1px;
@@ -204,6 +204,7 @@ list > .folder > .label,
   border-top: 1px solid rgb(156, 194, 239);
   display: flex;
   flex: 1;
+  min-height: 0;
 }
 
 .pane,
@@ -240,6 +241,7 @@ list > .folder > .label,
 
 #list-pane {
   flex: 1;
+  min-width: 0;
 }
 
 #list-pane > :first-child {
@@ -341,13 +343,21 @@ list > .drag-above {
   -webkit-appearance: none;
   -webkit-padding-end: 11px;
   -webkit-padding-start: 0;
-  background: transparent -webkit-canvas(drop-down-arrow)
-              no-repeat right center;
+  background: transparent no-repeat right center;
   border: 0;
   font: inherit;
   font-weight: bold;
   padding-bottom: 0;
   padding-top: 0;
+}
+
+list > * > button,
+[i18n-processed] #folders-button,
+[i18n-processed] #organize-button,
+[i18n-processed] .splitter button {
+  background-image:
+      url(../../../../../ui/webui/resources/images/drop_down_arrow_black.svg);
+  background-size: 9px 4px;
 }
 
 #folders-button {

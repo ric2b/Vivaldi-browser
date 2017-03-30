@@ -1,0 +1,120 @@
+// Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "tabsPrivate",
+    "description": "Use the <code>vivaldi.tabsPrivate</code> API to update tabs",
+    "compiler_options": {
+      "implemented_in": "extensions/api/tabs/tabs_private_api.h"
+    },
+    "types": [
+      {
+        "id": "UpdateTabInfo",
+        "type": "object",
+        "description": "Object passed to the update and returned in the get function function.",
+        "properties": {
+          "showImages": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Show images for all pages loaded in this tab. Default is true."
+          },
+          "loadFromCacheOnly": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Only load the page from cache. Default is false."
+          },
+          "enablePlugins": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Enable plugins on this tab. Default is true."
+          }
+        }
+      },
+      {
+        "id": "FaviconInfo",
+        "type": "object",
+        "description": "",
+        "properties": {
+          "tabId": {
+            "type": "integer"
+          },
+          "favIcon": {
+            "type": "string",
+            "description": "data-url for the current icon."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "update",
+        "type": "function",
+        "description": "Update the given tab with Vivaldi-specific properties.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          },
+          {
+            "name": "tabInfo",
+            "$ref": "UpdateTabInfo"
+          }
+        ]
+      },
+      {
+        "name": "get",
+        "type": "function",
+        "description": "Get Vivaldi-specific properties from the tab.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "tabInfo",
+                "$ref": "UpdateTabInfo"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onThemeColorChanged",
+        "type": "function",
+        "description": "Fired when a meta theme-color has a value from the web page.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          },
+          {
+            "type": "string",
+            "name": "rgb",
+            "description": "Fired when the theme-color in the meta header field has changed. Format is #rrggbb and provided in css hex."
+          }
+        ]
+      },
+      {
+        "name": "onFaviconUpdated",
+        "type": "function",
+        "description": "Fires when a |WebContent| has an update to the favicon.",
+        "parameters": [
+          {
+            "$ref": "FaviconInfo",
+            "name": "faviconinfo"
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -5,6 +5,7 @@
 #ifndef CC_LAYERS_SCROLLBAR_LAYER_INTERFACE_H_
 #define CC_LAYERS_SCROLLBAR_LAYER_INTERFACE_H_
 
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/input/scrollbar.h"
 
@@ -17,8 +18,6 @@ class CC_EXPORT ScrollbarLayerInterface {
  public:
   virtual int ScrollLayerId() const = 0;
   virtual void SetScrollLayer(int layer_id) = 0;
-  virtual void SetClipLayer(int layer_id) = 0;
-  virtual void PushScrollClipPropertiesTo(LayerImpl* layer) = 0;
 
   virtual ScrollbarOrientation orientation() const = 0;
 

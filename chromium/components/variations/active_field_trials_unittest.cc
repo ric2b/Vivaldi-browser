@@ -4,12 +4,14 @@
 
 #include "components/variations/active_field_trials.h"
 
+#include <stddef.h>
+
 #include "components/variations/metrics_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace variations {
 
-TEST(VariationsUtilTest, GetFieldTrialActiveGroups) {
+TEST(ActiveFieldTrialsTest, GetFieldTrialActiveGroups) {
   typedef std::set<ActiveGroupId, ActiveGroupIdCompare> ActiveGroupIdSet;
   std::string trial_one("trial one");
   std::string group_one("group one");

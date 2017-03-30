@@ -8,7 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/wm/drag_details.h"
 #include "ash/wm/window_state.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/wm/public/window_move_client.h"
@@ -34,7 +34,6 @@ class ASH_EXPORT WindowResizer {
   static const int kBoundsChangeDirection_Horizontal;
   static const int kBoundsChangeDirection_Vertical;
 
-  WindowResizer();
   WindowResizer(wm::WindowState* window_state);
   virtual ~WindowResizer();
 
@@ -93,6 +92,8 @@ class ASH_EXPORT WindowResizer {
 
   // Returns the height of the drag.
   int GetHeightForDrag(int min_height, int* delta_y);
+
+  DISALLOW_COPY_AND_ASSIGN(WindowResizer);
 };
 
 // Creates a WindowResizer for |window|. This can return a scoped_ptr

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 // This module contains constants used in webview.
+var WebViewConstantsPrivate = require('webViewConstantsPrivate');
 
 // Container for the webview constants.
 var WebViewConstants = {
@@ -17,11 +18,6 @@ var WebViewConstants = {
   ATTRIBUTE_NAME: 'name',
   ATTRIBUTE_PARTITION: 'partition',
   ATTRIBUTE_SRC: 'src',
-
-  // Vivaldi specific.
-  ATTRIBUTE_TAB_ID: 'tab_id',
-  ATTRIBUTE_WINDOW_ID: 'window_id',
-  ATTRIBUTE_WASTYPED: 'wasTyped',
 
   // Error/warning messages.
   ERROR_MSG_ALREADY_NAVIGATED: '<webview>: ' +
@@ -42,4 +38,6 @@ var WebViewConstants = {
       'The permission request for "%1" has been denied.'
 };
 
-exports.WebViewConstants = $Object.freeze(WebViewConstants);
+WebViewConstantsPrivate.addPrivateConstants(WebViewConstants);
+
+exports.$set('WebViewConstants', $Object.freeze(WebViewConstants));

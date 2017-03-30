@@ -4,16 +4,18 @@
 
 #include "mojo/shell/static_application_loader.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/simple_thread.h"
-#include "mojo/application/public/cpp/application_delegate.h"
-#include "mojo/application/public/cpp/application_runner.h"
-#include "mojo/application/public/interfaces/application.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/shell/public/cpp/application_delegate.h"
+#include "mojo/shell/public/cpp/application_runner.h"
+#include "mojo/shell/public/interfaces/application.mojom.h"
 
 namespace mojo {
 namespace shell {
@@ -28,7 +30,7 @@ class RunnerThread : public base::SimpleThread {
                const base::Closure& exit_callback,
                const StaticApplicationLoader::ApplicationFactory& factory)
       : base::SimpleThread("Mojo Application: " + url.spec()),
-        request_(request.Pass()),
+        request_(std::move(request)),
         exit_task_runner_(exit_task_runner),
         exit_callback_(exit_callback),
         factory_(factory) {}
@@ -78,9 +80,9 @@ void StaticApplicationLoader::Load(const GURL& url,
   // with a new app instance.
   auto exit_callback = base::Bind(&StaticApplicationLoader::StopAppThread,
                                   weak_factory_.GetWeakPtr());
-  thread_.reset(
-      new RunnerThread(url, request.Pass(), base::ThreadTaskRunnerHandle::Get(),
-                       exit_callback, factory_));
+  thread_.reset(new RunnerThread(url, std::move(request),
+                                 base::ThreadTaskRunnerHandle::Get(),
+                                 exit_callback, factory_));
   thread_->Start();
 }
 

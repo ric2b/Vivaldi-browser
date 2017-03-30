@@ -9,6 +9,7 @@ import os
 
 from pylib import constants
 from pylib import valgrind_tools
+from pylib.constants import host_paths
 from pylib.utils import isolator
 
 def GenerateDepsDirUsingIsolate(suite_name, isolate_file_path,
@@ -30,20 +31,21 @@ def GenerateDepsDirUsingIsolate(suite_name, isolate_file_path,
     if os.path.isabs(isolate_file_path):
       isolate_abs_path = isolate_file_path
     else:
-      isolate_abs_path = os.path.join(constants.DIR_SOURCE_ROOT,
+      isolate_abs_path = os.path.join(host_paths.DIR_SOURCE_ROOT,
                                       isolate_file_path)
   else:
     isolate_rel_path = isolate_file_paths.get(suite_name)
     if not isolate_rel_path:
       logging.info('Did not find an isolate file for the test suite.')
       return
-    isolate_abs_path = os.path.join(constants.DIR_SOURCE_ROOT, isolate_rel_path)
+    isolate_abs_path = os.path.join(host_paths.DIR_SOURCE_ROOT,
+                                    isolate_rel_path)
 
   isolated_abs_path = os.path.join(
       constants.GetOutDirectory(), '%s.isolated' % suite_name)
   assert os.path.exists(isolate_abs_path), 'Cannot find %s' % isolate_abs_path
 
-  i = isolator.Isolator(constants.ISOLATE_DEPS_DIR)
+  i = isolator.Isolator()
   i.Clear()
   i.Remap(isolate_abs_path, isolated_abs_path)
   # We're relying on the fact that timestamps are preserved
@@ -56,8 +58,8 @@ def GenerateDepsDirUsingIsolate(suite_name, isolate_file_path,
   return i
 
 
-def PushDataDeps(device, device_dir, test_options):
+def PushDataDeps(device, host_dir, device_dir, test_options):
   valgrind_tools.PushFilesForTool(test_options.tool, device)
-  if os.path.exists(constants.ISOLATE_DEPS_DIR):
-    device.PushChangedFiles([(constants.ISOLATE_DEPS_DIR, device_dir)],
+  if os.path.exists(host_dir):
+    device.PushChangedFiles([(host_dir, device_dir)],
                             delete_device_stale=test_options.delete_stale_data)

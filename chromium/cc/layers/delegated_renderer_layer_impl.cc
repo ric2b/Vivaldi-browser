@@ -4,6 +4,9 @@
 
 #include "cc/layers/delegated_renderer_layer_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <utility>
 
@@ -87,7 +90,7 @@ void DelegatedRendererLayerImpl::CreateChildIdIfNeeded(
 
 void DelegatedRendererLayerImpl::SetFrameData(
     const DelegatedFrameData* frame_data,
-    const gfx::RectF& damage_in_frame) {
+    const gfx::Rect& damage_in_frame) {
   DCHECK(child_id_) << "CreateChildIdIfNeeded must be called first.";
   DCHECK(frame_data);
   DCHECK(!frame_data->render_pass_list.empty());
@@ -151,13 +154,12 @@ void DelegatedRendererLayerImpl::SetFrameData(
   // Display size is already set so we can compute what the damage rect
   // will be in layer space. The damage may exceed the visible portion of
   // the frame, so intersect the damage to the layer's bounds.
-  RenderPass* new_root_pass = render_pass_list.back();
+  RenderPass* new_root_pass = render_pass_list.back().get();
   gfx::Size frame_size = new_root_pass->output_rect.size();
-  gfx::RectF damage_in_layer = damage_in_frame;
-  damage_in_layer.Scale(inverse_device_scale_factor_);
+  gfx::Rect damage_in_layer =
+      gfx::ScaleToEnclosingRect(damage_in_frame, inverse_device_scale_factor_);
   SetUpdateRect(gfx::IntersectRects(
-      gfx::UnionRects(update_rect(), gfx::ToEnclosingRect(damage_in_layer)),
-      gfx::Rect(bounds())));
+      gfx::UnionRects(update_rect(), damage_in_layer), gfx::Rect(bounds())));
 
   SetRenderPasses(&render_pass_list);
   have_render_passes_to_push_ = true;
@@ -176,14 +178,12 @@ void DelegatedRendererLayerImpl::SetRenderPasses(
     RenderPassList* render_passes_in_draw_order) {
   ClearRenderPasses();
 
-  for (size_t i = 0; i < render_passes_in_draw_order->size(); ++i) {
-    RenderPassList::iterator to_take =
-        render_passes_in_draw_order->begin() + i;
+  size_t i = 0;
+  for (auto& render_pass : *render_passes_in_draw_order) {
     render_passes_index_by_id_.insert(
-        RenderPassToIndexMap::value_type((*to_take)->id, i));
-    scoped_ptr<RenderPass> taken_render_pass =
-        render_passes_in_draw_order->take(to_take);
-    render_passes_in_draw_order_.push_back(taken_render_pass.Pass());
+        RenderPassToIndexMap::value_type(render_pass->id, i));
+    render_passes_in_draw_order_.push_back(std::move(render_pass));
+    ++i;
   }
 
   // Give back an empty array instead of nulls.
@@ -247,9 +247,9 @@ void DelegatedRendererLayerImpl::AppendContributingRenderPasses(
   DCHECK(HasContributingDelegatedRenderPasses());
 
   const RenderPass* root_delegated_render_pass =
-      render_passes_in_draw_order_.back();
+      render_passes_in_draw_order_.back().get();
   gfx::Size frame_size = root_delegated_render_pass->output_rect.size();
-  gfx::Transform delegated_frame_to_root_transform = screen_space_transform();
+  gfx::Transform delegated_frame_to_root_transform = ScreenSpaceTransform();
   delegated_frame_to_root_transform.Scale(inverse_device_scale_factor_,
                                           inverse_device_scale_factor_);
 
@@ -268,7 +268,7 @@ void DelegatedRendererLayerImpl::AppendContributingRenderPasses(
         render_passes_in_draw_order_[i]->Copy(output_render_pass_id);
     copy_pass->transform_to_root_target.ConcatTransform(
         delegated_frame_to_root_transform);
-    render_pass_sink->AppendRenderPass(copy_pass.Pass());
+    render_pass_sink->AppendRenderPass(std::move(copy_pass));
   }
 }
 
@@ -291,7 +291,7 @@ void DelegatedRendererLayerImpl::AppendQuads(
   RenderPassId target_render_pass_id = render_pass->id;
 
   const RenderPass* root_delegated_render_pass =
-      render_passes_in_draw_order_.back();
+      render_passes_in_draw_order_.back().get();
 
   DCHECK(root_delegated_render_pass->output_rect.origin().IsOrigin());
   gfx::Size frame_size = root_delegated_render_pass->output_rect.size();
@@ -315,7 +315,7 @@ void DelegatedRendererLayerImpl::AppendQuads(
 
     size_t render_pass_index = IdToIndex(target_render_pass_id.index);
     const RenderPass* delegated_render_pass =
-        render_passes_in_draw_order_[render_pass_index];
+        render_passes_in_draw_order_[render_pass_index].get();
     AppendRenderPassQuads(render_pass,
                           delegated_render_pass,
                           frame_size);
@@ -417,11 +417,11 @@ void DelegatedRendererLayerImpl::AppendRenderPassQuads(
   const SharedQuadState* delegated_shared_quad_state = nullptr;
   SharedQuadState* output_shared_quad_state = nullptr;
 
-  gfx::Transform delegated_frame_to_target_transform = draw_transform();
+  gfx::Transform delegated_frame_to_target_transform = DrawTransform();
   delegated_frame_to_target_transform.Scale(inverse_device_scale_factor_,
                                             inverse_device_scale_factor_);
   bool is_root_delegated_render_pass =
-      delegated_render_pass == render_passes_in_draw_order_.back();
+      delegated_render_pass == render_passes_in_draw_order_.back().get();
   for (const auto& delegated_quad : delegated_render_pass->quad_list) {
     if (delegated_quad->shared_quad_state != delegated_shared_quad_state) {
       delegated_shared_quad_state = delegated_quad->shared_quad_state;

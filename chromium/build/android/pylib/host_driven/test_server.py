@@ -23,6 +23,7 @@ import time
 import urllib2
 
 from pylib import constants
+from pylib.constants import host_paths
 
 # NOTE: when adding or modifying these lines, omit any leading slashes!
 # Otherwise os.path.join() will (correctly) treat them as absolute paths
@@ -87,7 +88,7 @@ class TestServer(object):
     self.host = _TEST_SERVER_HOST
     self.port = test_server_port + shard_index
 
-    src_dir = constants.DIR_SOURCE_ROOT
+    src_dir = host_paths.DIR_SOURCE_ROOT
     # Make dirs into a list of absolute paths.
     abs_dirs = [os.path.join(src_dir, d) for d in _PYTHONPATH_DIRS]
     # Add the generated python files to the path
@@ -117,11 +118,11 @@ class TestServer(object):
     while retries < 5:
       try:
         d = urllib2.urlopen(test_url).read()
-        logging.info('URL %s GOT: %s' % (test_url, d))
+        logging.info('URL %s GOT: %s', test_url, d)
         if d.startswith(expected_response):
           break
-      except Exception as e:
-        logging.info('URL %s GOT: %s' % (test_url, e))
+      except Exception as e: # pylint: disable=broad-except
+        logging.info('URL %s GOT: %s', test_url, e)
       time.sleep(retries * 0.1)
       retries += 1
 

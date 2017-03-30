@@ -5,11 +5,14 @@
 #ifndef CONTENT_COMMON_GPU_GPU_CHANNEL_MANAGER_H_
 #define CONTENT_COMMON_GPU_GPU_CHANNEL_MANAGER_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <string>
 #include <vector>
 
 #include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -17,6 +20,7 @@
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/gpu/gpu_memory_manager.h"
+#include "content/common/message_router.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -32,9 +36,13 @@ class GLShareGroup;
 }
 
 namespace gpu {
+class PreemptionFlag;
+class SyncPointClient;
 class SyncPointManager;
+struct SyncToken;
 union ValueState;
 namespace gles2 {
+class FramebufferCompletenessCache;
 class MailboxManager;
 class ProgramCache;
 class ShaderTranslatorCache;
@@ -42,18 +50,20 @@ class ShaderTranslatorCache;
 }
 
 namespace IPC {
-class AttachmentBroker;
 struct ChannelHandle;
 class SyncChannel;
 }
 
 struct GPUCreateCommandBufferConfig;
+struct GpuMsg_EstablishChannel_Params;
 
 namespace content {
+#if defined(OS_CHROMEOS)
+class GpuArcVideoService;
+#endif
 class GpuChannel;
 class GpuMemoryBufferFactory;
 class GpuWatchdog;
-class MessageRouter;
 
 // A GpuChannelManager is a thread responsible for issuing rendering commands
 // managing the lifetimes of GPU channels and forwarding IPC requests from the
@@ -61,13 +71,12 @@ class MessageRouter;
 class CONTENT_EXPORT GpuChannelManager : public IPC::Listener,
                           public IPC::Sender {
  public:
-  // |broker| must outlive GpuChannelManager and any channels it creates.
-  GpuChannelManager(MessageRouter* router,
+  GpuChannelManager(IPC::SyncChannel* channel,
                     GpuWatchdog* watchdog,
+                    base::SingleThreadTaskRunner* task_runner,
                     base::SingleThreadTaskRunner* io_task_runner,
                     base::WaitableEvent* shutdown_event,
-                    IPC::SyncChannel* channel,
-                    IPC::AttachmentBroker* broker,
+                    gpu::SyncPointManager* sync_point_manager,
                     GpuMemoryBufferFactory* gpu_memory_buffer_factory);
   ~GpuChannelManager() override;
 
@@ -80,25 +89,19 @@ class CONTENT_EXPORT GpuChannelManager : public IPC::Listener,
   // Sender overrides.
   bool Send(IPC::Message* msg) override;
 
-  bool HandleMessagesScheduled();
-  uint64 MessagesProcessed();
-
   void LoseAllContexts();
 
   int GenerateRouteID();
-  void AddRoute(int32 routing_id, IPC::Listener* listener);
-  void RemoveRoute(int32 routing_id);
+  void AddRoute(int32_t routing_id, IPC::Listener* listener);
+  void RemoveRoute(int32_t routing_id);
 
   gpu::gles2::ProgramCache* program_cache();
   gpu::gles2::ShaderTranslatorCache* shader_translator_cache();
+  gpu::gles2::FramebufferCompletenessCache* framebuffer_completeness_cache();
 
   GpuMemoryManager* gpu_memory_manager() { return &gpu_memory_manager_; }
 
-  GpuChannel* LookupChannel(int32 client_id);
-
-  gpu::SyncPointManager* sync_point_manager() {
-    return sync_point_manager_.get();
-  }
+  GpuChannel* LookupChannel(int32_t client_id) const;
 
   gfx::GLSurface* GetDefaultOffscreenSurface();
 
@@ -106,62 +109,110 @@ class CONTENT_EXPORT GpuChannelManager : public IPC::Listener,
     return gpu_memory_buffer_factory_;
   }
 
- private:
-  typedef base::ScopedPtrHashMap<int, scoped_ptr<GpuChannel>> GpuChannelMap;
+  // Returns the maximum order number for unprocessed IPC messages across all
+  // channels.
+  uint32_t GetUnprocessedOrderNum() const;
 
-  // Message handlers.
-  void OnEstablishChannel(int client_id,
-                          bool share_context,
-                          bool allow_future_sync_points);
-  void OnCloseChannel(const IPC::ChannelHandle& channel_handle);
-  void OnVisibilityChanged(
-      int32 render_view_id, int32 client_id, bool visible);
-  void OnCreateViewCommandBuffer(
-      const gfx::GLSurfaceHandle& window,
-      int32 render_view_id,
-      int32 client_id,
-      const GPUCreateCommandBufferConfig& init_params,
-      int32 route_id);
-  void OnLoadedShader(std::string shader);
-  void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id, int client_id);
-  void DestroyGpuMemoryBufferOnIO(gfx::GpuMemoryBufferId id, int client_id);
-  void OnDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
-                                int client_id,
-                                int32 sync_point);
+  // Returns the maximum order number for processed IPC messages across all
+  // channels.
+  uint32_t GetProcessedOrderNum() const;
 
-  void OnRelinquishResources();
-  void OnResourcesRelinquished();
+#if defined(OS_ANDROID)
+  void DidAccessGpu();
+#endif
 
-  void OnUpdateValueState(int client_id,
-                          unsigned int target,
-                          const gpu::ValueState& state);
+ protected:
+  virtual scoped_ptr<GpuChannel> CreateGpuChannel(int client_id,
+                                                  uint64_t client_tracing_id,
+                                                  bool preempts,
+                                                  bool allow_future_sync_points,
+                                                  bool allow_real_time_streams);
 
-  void OnLoseAllContexts();
-  void CheckRelinquishGpuResources();
+  gpu::SyncPointManager* sync_point_manager() const {
+    return sync_point_manager_;
+  }
 
+  gfx::GLShareGroup* share_group() const { return share_group_.get(); }
+  gpu::gles2::MailboxManager* mailbox_manager() const {
+    return mailbox_manager_.get();
+  }
+  gpu::PreemptionFlag* preemption_flag() const {
+    return preemption_flag_.get();
+  }
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
-  base::WaitableEvent* shutdown_event_;
-
-  // Used to send and receive IPC messages from the browser process.
-  MessageRouter* const router_;
 
   // These objects manage channels to individual renderer processes there is
   // one channel for each renderer process that has connected to this GPU
   // process.
-  GpuChannelMap gpu_channels_;
+  base::ScopedPtrHashMap<int32_t, scoped_ptr<GpuChannel>> gpu_channels_;
+
+ private:
+  // Message handlers.
+  bool OnControlMessageReceived(const IPC::Message& msg);
+  void OnEstablishChannel(const GpuMsg_EstablishChannel_Params& params);
+  void OnCloseChannel(const IPC::ChannelHandle& channel_handle);
+  void OnVisibilityChanged(int32_t render_view_id,
+                           int32_t client_id,
+                           bool visible);
+  void OnCreateViewCommandBuffer(
+      const gfx::GLSurfaceHandle& window,
+      int32_t client_id,
+      const GPUCreateCommandBufferConfig& init_params,
+      int32_t route_id);
+  void OnLoadedShader(const std::string& shader);
+  void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id, int client_id);
+  void DestroyGpuMemoryBufferOnIO(gfx::GpuMemoryBufferId id, int client_id);
+  void OnDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
+                                int client_id,
+                                const gpu::SyncToken& sync_token);
+#if defined(OS_CHROMEOS)
+  void OnCreateArcVideoAcceleratorChannel();
+  void ArcVideoAcceleratorChannelCreated(const IPC::ChannelHandle& handle);
+  void OnShutdownArcVideoService();
+#endif
+
+  void OnUpdateValueState(int client_id,
+                          unsigned int target,
+                          const gpu::ValueState& state);
+#if defined(OS_ANDROID)
+  void OnWakeUpGpu();
+  void ScheduleWakeUpGpu();
+  void DoWakeUpGpu();
+#endif
+  void OnLoseAllContexts();
+
+  // Used to send and receive IPC messages from the browser process.
+  IPC::SyncChannel* const channel_;
+  MessageRouter router_;
+
+  GpuWatchdog* watchdog_;
+
+  base::WaitableEvent* shutdown_event_;
+
   scoped_refptr<gfx::GLShareGroup> share_group_;
   scoped_refptr<gpu::gles2::MailboxManager> mailbox_manager_;
+  scoped_refptr<gpu::PreemptionFlag> preemption_flag_;
   GpuMemoryManager gpu_memory_manager_;
-  GpuWatchdog* watchdog_;
-  scoped_refptr<gpu::SyncPointManager> sync_point_manager_;
+  // SyncPointManager guaranteed to outlive running MessageLoop.
+  gpu::SyncPointManager* sync_point_manager_;
+  scoped_ptr<gpu::SyncPointClient> sync_point_client_waiter_;
   scoped_ptr<gpu::gles2::ProgramCache> program_cache_;
   scoped_refptr<gpu::gles2::ShaderTranslatorCache> shader_translator_cache_;
+  scoped_refptr<gpu::gles2::FramebufferCompletenessCache>
+      framebuffer_completeness_cache_;
   scoped_refptr<gfx::GLSurface> default_offscreen_surface_;
+#if defined(OS_CHROMEOS)
+  scoped_ptr<GpuArcVideoService> gpu_arc_video_service_;
+#endif
   GpuMemoryBufferFactory* const gpu_memory_buffer_factory_;
-  IPC::SyncChannel* channel_;
-  bool relinquish_resources_pending_;
-  // Must outlive this instance of GpuChannelManager.
-  IPC::AttachmentBroker* attachment_broker_;
+#if defined(OS_ANDROID)
+  // Last time we know the GPU was powered on. Global for tracking across all
+  // transport surfaces.
+  base::TimeTicks last_gpu_access_time_;
+  base::TimeTicks begin_wake_up_time_;
+#endif
 
   // Member variables should appear before the WeakPtrFactory, to ensure
   // that any WeakPtrs to Controller are invalidated before its members

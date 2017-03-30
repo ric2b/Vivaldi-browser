@@ -30,7 +30,7 @@ scoped_ptr<GestureDetector> CreateGestureDetector(
   detector->set_longpress_enabled(false);
   detector->set_showpress_enabled(false);
 
-  return detector.Pass();
+  return detector;
 }
 
 }  // namespace
@@ -88,6 +88,9 @@ bool StylusTextSelector::OnTouchEvent(const MotionEvent& event) {
     case MotionEvent::ACTION_POINTER_UP:
     case MotionEvent::ACTION_POINTER_DOWN:
       break;
+    case MotionEvent::ACTION_NONE:
+      NOTREACHED();
+      break;
   }
 
   if (!gesture_detector_)
@@ -100,7 +103,7 @@ bool StylusTextSelector::OnTouchEvent(const MotionEvent& event) {
   return true;
 }
 
-bool StylusTextSelector::OnSingleTapUp(const MotionEvent& e) {
+bool StylusTextSelector::OnSingleTapUp(const MotionEvent& e, int tap_count) {
   DCHECK(text_selection_triggered_);
   DCHECK(!dragging_);
   client_->OnStylusSelectTap(e.GetEventTime(), e.GetX(), e.GetY());

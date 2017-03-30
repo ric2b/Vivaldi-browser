@@ -9,12 +9,12 @@
 #include <set>
 #include <sstream>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/containers/mru_cache.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
@@ -73,8 +73,8 @@ const double Predictor::kDiscardableExpectedValue = 0.05;
 // system that uses a higher trim ratio when the list is large.
 // static
 const double Predictor::kReferrerTrimRatio = 0.97153;
-const int64 Predictor::kDurationBetweenTrimmingsHours = 1;
-const int64 Predictor::kDurationBetweenTrimmingIncrementsSeconds = 15;
+const int64_t Predictor::kDurationBetweenTrimmingsHours = 1;
+const int64_t Predictor::kDurationBetweenTrimmingIncrementsSeconds = 15;
 const size_t Predictor::kUrlsTrimmedPerIncrement = 5u;
 const size_t Predictor::kMaxSpeculativeParallelResolves = 3;
 const int Predictor::kMaxUnusedSocketLifetimeSecondsWithoutAGet = 10;
@@ -86,6 +86,9 @@ const int Predictor::kTypicalSpeculativeGroupSize = 8;
 const int Predictor::kMaxSpeculativeResolveQueueDelayMs =
     (kExpectedResolutionTimeMs * Predictor::kTypicalSpeculativeGroupSize) /
     Predictor::kMaxSpeculativeParallelResolves;
+
+// The default value of the credentials flag when preconnecting.
+static bool kAllowCredentialsOnPreconnectByDefault = true;
 
 static int g_max_queueing_delay_ms =
     Predictor::kMaxSpeculativeResolveQueueDelayMs;
@@ -185,7 +188,6 @@ void Predictor::RegisterProfilePrefs(
 // --------------------- Start UI methods. ------------------------------------
 
 void Predictor::InitNetworkPredictor(PrefService* user_prefs,
-                                     PrefService* local_state,
                                      IOThread* io_thread,
                                      net::URLRequestContextGetter* getter,
                                      ProfileIOData* profile_io_data) {
@@ -195,7 +197,7 @@ void Predictor::InitNetworkPredictor(PrefService* user_prefs,
   url_request_context_getter_ = getter;
 
   // Gather the list of hostnames to prefetch on startup.
-  UrlList urls = GetPredictedUrlListAtStartup(user_prefs, local_state);
+  UrlList urls = GetPredictedUrlListAtStartup(user_prefs);
 
   base::ListValue* referral_list =
       static_cast<base::ListValue*>(user_prefs->GetList(
@@ -265,8 +267,9 @@ void Predictor::AnticipateOmniboxUrl(const GURL& url, bool preconnectable) {
           return;  // We've done a preconnect recently.
         last_omnibox_preconnect_ = now;
         const int kConnectionsNeeded = 1;
-        PreconnectUrl(
-            CanonicalizeUrl(url), GURL(), motivation, kConnectionsNeeded);
+        PreconnectUrl(CanonicalizeUrl(url), GURL(), motivation,
+                      kAllowCredentialsOnPreconnectByDefault,
+                      kConnectionsNeeded);
         return;  // Skip pre-resolution, since we'll open a connection.
       }
     } else {
@@ -305,14 +308,12 @@ void Predictor::PreconnectUrlAndSubresources(const GURL& url,
 
   UrlInfo::ResolutionMotivation motivation(UrlInfo::EARLY_LOAD_MOTIVATED);
   const int kConnectionsNeeded = 1;
-  PreconnectUrl(CanonicalizeUrl(url), first_party_for_cookies,
-                motivation, kConnectionsNeeded);
+  PreconnectUrl(CanonicalizeUrl(url), first_party_for_cookies, motivation,
+                kConnectionsNeeded, kAllowCredentialsOnPreconnectByDefault);
   PredictFrameSubresources(url.GetWithEmptyPath(), first_party_for_cookies);
 }
 
-UrlList Predictor::GetPredictedUrlListAtStartup(
-    PrefService* user_prefs,
-    PrefService* local_state) {
+UrlList Predictor::GetPredictedUrlListAtStartup(PrefService* user_prefs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   UrlList urls;
   // Recall list of URLs we learned about during last session.
@@ -501,10 +502,10 @@ struct RightToLeftStringSorter {
   // "http://com.google.www/xyz".
   static std::string ReverseComponents(const GURL& url) {
     // Reverse the components in the hostname.
-    std::vector<std::string> parts;
-    base::SplitString(url.host(), '.', &parts);
+    std::vector<std::string> parts = base::SplitString(
+        url.host(), ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     std::reverse(parts.begin(), parts.end());
-    std::string reversed_host = JoinString(parts, '.');
+    std::string reversed_host = base::JoinString(parts, ".");
 
     // Return the new URL.
     GURL::Replacements url_components;
@@ -840,19 +841,20 @@ void Predictor::SaveDnsPrefetchStateForNextStartupAndTrim(
 void Predictor::PreconnectUrl(const GURL& url,
                               const GURL& first_party_for_cookies,
                               UrlInfo::ResolutionMotivation motivation,
+                              bool allow_credentials,
                               int count) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
          BrowserThread::CurrentlyOn(BrowserThread::IO));
 
   if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    PreconnectUrlOnIOThread(url, first_party_for_cookies, motivation, count);
+    PreconnectUrlOnIOThread(url, first_party_for_cookies, motivation,
+                            allow_credentials, count);
   } else {
     BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(&Predictor::PreconnectUrlOnIOThread,
-                   base::Unretained(this), url, first_party_for_cookies,
-                   motivation, count));
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&Predictor::PreconnectUrlOnIOThread, base::Unretained(this),
+                   url, first_party_for_cookies, motivation, allow_credentials,
+                   count));
   }
 }
 
@@ -860,6 +862,7 @@ void Predictor::PreconnectUrlOnIOThread(
     const GURL& original_url,
     const GURL& first_party_for_cookies,
     UrlInfo::ResolutionMotivation motivation,
+    bool allow_credentials,
     int count) {
   // Skip the HSTS redirect.
   GURL url = GetHSTSRedirectOnIOThread(original_url);
@@ -869,11 +872,8 @@ void Predictor::PreconnectUrlOnIOThread(
         url, first_party_for_cookies, motivation, count);
   }
 
-  PreconnectOnIOThread(url,
-                       first_party_for_cookies,
-                       motivation,
-                       count,
-                       url_request_context_getter_.get());
+  PreconnectOnIOThread(url, first_party_for_cookies, motivation, count,
+                       url_request_context_getter_.get(), allow_credentials);
 }
 
 void Predictor::PredictFrameSubresources(const GURL& url,
@@ -899,12 +899,14 @@ void Predictor::PredictFrameSubresources(const GURL& url,
 }
 
 bool Predictor::CanPrefetchAndPrerender() const {
+  chrome_browser_net::NetworkPredictionStatus status;
   if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    return chrome_browser_net::CanPrefetchAndPrerenderUI(user_prefs_);
+    status = chrome_browser_net::CanPrefetchAndPrerenderUI(user_prefs_);
   } else {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    return chrome_browser_net::CanPrefetchAndPrerenderIO(profile_io_data_);
+    status = chrome_browser_net::CanPrefetchAndPrerenderIO(profile_io_data_);
   }
+  return status == chrome_browser_net::NetworkPredictionStatus::ENABLED;
 }
 
 bool Predictor::CanPreresolveAndPreconnect() const {
@@ -941,7 +943,8 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
     // provide a more carefully estimated preconnection count.
     if (preconnect_enabled_) {
       PreconnectUrlOnIOThread(url, first_party_for_cookies,
-                              UrlInfo::SELF_REFERAL_MOTIVATED, 2);
+                              UrlInfo::SELF_REFERAL_MOTIVATED,
+                              kAllowCredentialsOnPreconnectByDefault, 2);
     }
     return;
   }
@@ -966,7 +969,8 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
       if (url.host() == future_url->first.host())
         ++count;
       PreconnectUrlOnIOThread(future_url->first, first_party_for_cookies,
-                              motivation, count);
+                              motivation,
+                              kAllowCredentialsOnPreconnectByDefault, count);
     } else if (connection_expectation > kDNSPreresolutionWorthyExpectedValue) {
       evalution = PRERESOLUTION;
       future_url->second.preresolution_increment();
@@ -1038,15 +1042,7 @@ UrlInfo* Predictor::AppendToResolutionQueue(
     return NULL;
   }
 
-  bool would_likely_proxy;
-  {
-    // TODO(ttuttle): Remove ScopedTracker below once crbug.com/436671 is fixed.
-    tracked_objects::ScopedTracker tracking_profile(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION("436671 WouldLikelyProxyURL()"));
-    would_likely_proxy = WouldLikelyProxyURL(url);
-  }
-
-  if (would_likely_proxy) {
+  if (WouldLikelyProxyURL(url)) {
     info->DLogResultsStats("DNS PrefetchForProxiedRequest");
     return NULL;
   }
@@ -1093,15 +1089,7 @@ void Predictor::StartSomeQueuedResolutions() {
 
     LookupRequest* request = new LookupRequest(this, host_resolver_, url);
 
-    int status;
-    {
-      // TODO(ttuttle): Remove ScopedTracker below once crbug.com/436671 is
-      // fixed.
-      tracked_objects::ScopedTracker tracking_profile(
-          FROM_HERE_WITH_EXPLICIT_FUNCTION("436671 LookupRequest::Start()"));
-      status = request->Start();
-    }
-
+    int status = request->Start();
     if (status == net::ERR_IO_PENDING) {
       // Will complete asynchronously.
       pending_lookups_.insert(request);
@@ -1310,7 +1298,6 @@ GURL Predictor::CanonicalizeUrl(const GURL& url) {
 
 void SimplePredictor::InitNetworkPredictor(
     PrefService* user_prefs,
-    PrefService* local_state,
     IOThread* io_thread,
     net::URLRequestContextGetter* getter,
     ProfileIOData* profile_io_data) {

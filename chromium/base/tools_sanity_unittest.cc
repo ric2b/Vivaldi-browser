@@ -6,12 +6,15 @@
 // crashes if the test is ran without special memory testing tools. We use these
 // errors to verify the sanity of the tools.
 
+#include <stddef.h>
+
 #include "base/atomicops.h"
 #include "base/debug/asan_invalid_access.h"
 #include "base/debug/profiler.h"
 #include "base/message_loop/message_loop.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -338,5 +341,20 @@ TEST(ToolsSanityTest, AtomicsAreIgnored) {
   RunInParallel(&thread1, &thread2);
   EXPECT_EQ(kMagicValue, shared);
 }
+
+#if defined(CFI_ENFORCEMENT)
+TEST(ToolsSanityTest, BadCast) {
+  class A {
+    virtual void f() {}
+  };
+
+  class B {
+    virtual void f() {}
+  };
+
+  A a;
+  EXPECT_DEATH((void)(B*)&a, "ILL_ILLOPN");
+}
+#endif
 
 }  // namespace base

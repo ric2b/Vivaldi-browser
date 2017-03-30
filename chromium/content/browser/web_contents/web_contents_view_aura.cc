@@ -4,15 +4,21 @@
 
 #include "content/browser/web_contents/web_contents_view_aura.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/download/drag_download_util.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/dip_util.h"
+#include "content/browser/renderer_host/input/touch_selection_controller_client_aura.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -21,7 +27,6 @@
 #include "content/browser/renderer_host/web_input_event_aura.h"
 #include "content/browser/web_contents/aura/gesture_nav_simple.h"
 #include "content/browser/web_contents/aura/overscroll_navigation_overlay.h"
-#include "content/browser/web_contents/touch_editable_impl_aura.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/notification_observer.h"
@@ -63,8 +68,11 @@
 #include "ui/gfx/image/image_png_rep.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/screen.h"
+#include "ui/touch_selection/touch_selection_controller.h"
 #include "ui/wm/public/drag_drop_client.h"
 #include "ui/wm/public/drag_drop_delegate.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace content {
 WebContentsView* CreateWebContentsView(
@@ -217,10 +225,10 @@ void PrepareDragForDownload(
 }
 #endif  // defined(OS_WIN)
 
-// Returns the CustomFormat to store file system files.
-const ui::OSExchangeData::CustomFormat& GetFileSystemFileCustomFormat() {
+// Returns the FormatType to store file system files.
+const ui::Clipboard::FormatType& GetFileSystemFileFormatType() {
   static const char kFormatString[] = "chromium/x-file-system-files";
-  CR_DEFINE_STATIC_LOCAL(ui::OSExchangeData::CustomFormat,
+  CR_DEFINE_STATIC_LOCAL(ui::Clipboard::FormatType,
                          format,
                          (ui::Clipboard::GetFormatType(kFormatString)));
   return format;
@@ -250,7 +258,7 @@ bool ReadFileSystemFilesFromPickle(
 
   for (size_t i = 0; i < num_files; ++i) {
     std::string url_string;
-    int64 size = 0;
+    int64_t size = 0;
     if (!iter.ReadString(&url_string) || !iter.ReadInt64(&size))
       return false;
 
@@ -297,7 +305,7 @@ void PrepareDragData(const DropData& drop_data,
   if (!drop_data.file_system_files.empty()) {
     base::Pickle pickle;
     WriteFileSystemFilesToPickle(drop_data.file_system_files, &pickle);
-    provider->SetPickledData(GetFileSystemFileCustomFormat(), pickle);
+    provider->SetPickledData(GetFileSystemFileFormatType(), pickle);
   }
   if (!drop_data.custom_data.empty()) {
     base::Pickle pickle;
@@ -337,7 +345,7 @@ void PrepareDropData(DropData* drop_data, const ui::OSExchangeData& data) {
 
   base::Pickle pickle;
   std::vector<DropData::FileSystemFileInfo> file_system_files;
-  if (data.GetPickledData(GetFileSystemFileCustomFormat(), &pickle) &&
+  if (data.GetPickledData(GetFileSystemFileFormatType(), &pickle) &&
       ReadFileSystemFilesFromPickle(pickle, &file_system_files))
     drop_data->file_system_files = file_system_files;
 
@@ -454,7 +462,7 @@ class WebContentsViewAura::WindowObserver
   }
 
   void OnWillRemoveWindow(aura::Window* window) override {
-    if (window == view_->window_)
+    if (window == view_->window_.get())
       return;
 
     window->RemoveObserver(this);
@@ -462,8 +470,7 @@ class WebContentsViewAura::WindowObserver
   }
 
   void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
-    if (window == view_->window_ ||
-        window->parent() == host_window_ ||
+    if (window == view_->window_.get() || window->parent() == host_window_ ||
         window->parent() == view_->window_->GetRootWindow()) {
       UpdateConstrainedWindows(NULL);
     }
@@ -472,7 +479,7 @@ class WebContentsViewAura::WindowObserver
 
   void OnWindowParentChanged(aura::Window* window,
                              aura::Window* parent) override {
-    if (window != view_->window_)
+    if (window != view_->window_.get())
       return;
 
     aura::Window* host_window =
@@ -528,10 +535,14 @@ class WebContentsViewAura::WindowObserver
   void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override {
-    if (window == host_window_ || window == view_->window_) {
+    if (window == host_window_ || window == view_->window_.get()) {
       SendScreenRects();
-      if (view_->touch_editable_)
-        view_->touch_editable_->UpdateEditingController();
+      if (old_bounds.origin() != new_bounds.origin()) {
+        TouchSelectionControllerClientAura* selection_controller_client =
+            view_->GetSelectionControllerClient();
+        if (selection_controller_client)
+          selection_controller_client->OnWindowMoved();
+      }
 #if defined(OS_WIN)
     } else {
       UpdateConstrainedWindows(NULL);
@@ -547,7 +558,7 @@ class WebContentsViewAura::WindowObserver
   }
 
   void OnWindowAddedToRootWindow(aura::Window* window) override {
-    if (window == view_->window_) {
+    if (window == view_->window_.get()) {
       window->GetHost()->AddObserver(this);
 #if defined(OS_WIN)
       if (!window->GetRootWindow()->HasObserver(this))
@@ -558,7 +569,7 @@ class WebContentsViewAura::WindowObserver
 
   void OnWindowRemovingFromRootWindow(aura::Window* window,
                                       aura::Window* new_root) override {
-    if (window == view_->window_) {
+    if (window == view_->window_.get()) {
       window->GetHost()->RemoveObserver(this);
 #if defined(OS_WIN)
       window->GetRootWindow()->RemoveObserver(this);
@@ -566,7 +577,7 @@ class WebContentsViewAura::WindowObserver
       const aura::Window::Windows& root_children =
           window->GetRootWindow()->children();
       for (size_t i = 0; i < root_children.size(); ++i) {
-        if (root_children[i] != view_->window_ &&
+        if (root_children[i] != view_->window_.get() &&
             root_children[i] != host_window_) {
           root_children[i]->RemoveObserver(this);
         }
@@ -588,8 +599,9 @@ class WebContentsViewAura::WindowObserver
 
  private:
   void SendScreenRects() {
-    RenderWidgetHostImpl::From(view_->web_contents_->GetRenderViewHost())->
-        SendScreenRects();
+    RenderWidgetHostImpl::From(
+        view_->web_contents_->GetRenderViewHost()->GetWidget())
+        ->SendScreenRects();
   }
 
 #if defined(OS_WIN)
@@ -649,7 +661,6 @@ WebContentsViewAura::WebContentsViewAura(WebContentsImpl* web_contents,
       current_overscroll_gesture_(OVERSCROLL_NONE),
       completed_overscroll_gesture_(OVERSCROLL_NONE),
       navigation_overlay_(nullptr),
-      touch_editable_(TouchEditableImplAura::Create()),
       is_or_was_visible_(false) {
 }
 
@@ -668,12 +679,6 @@ WebContentsViewAura::~WebContentsViewAura() {
   window_.reset();
 }
 
-void WebContentsViewAura::SetTouchEditableForTest(
-    TouchEditableImplAura* touch_editable) {
-  touch_editable_.reset(touch_editable);
-  AttachTouchEditableToRenderView();
-}
-
 void WebContentsViewAura::SizeChangedCommon(const gfx::Size& size) {
   if (web_contents_->GetInterstitialPage())
     web_contents_->GetInterstitialPage()->SetSize(size);
@@ -689,7 +694,7 @@ void WebContentsViewAura::EndDrag(blink::WebDragOperationsMask ops) {
       gfx::Screen::GetScreenFor(GetNativeView())->GetCursorScreenPoint();
   gfx::Point client_loc = screen_loc;
   RenderViewHost* rvh = web_contents_->GetRenderViewHost();
-  aura::Window* window = rvh->GetView()->GetNativeView();
+  aura::Window* window = rvh->GetWidget()->GetView()->GetNativeView();
   aura::Window::ConvertPointToTarget(root_window, window, &client_loc);
   if (!web_contents_)
     return;
@@ -723,22 +728,29 @@ void WebContentsViewAura::CompleteOverscrollNavigation(OverscrollMode mode) {
   if (!web_contents_->GetRenderWidgetHostView())
     return;
   navigation_overlay_->relay_delegate()->OnOverscrollComplete(mode);
-  if (touch_editable_)
-    touch_editable_->OverscrollCompleted();
-}
-
-void WebContentsViewAura::AttachTouchEditableToRenderView() {
-  if (!touch_editable_)
-    return;
-  RenderWidgetHostViewAura* rwhva = ToRenderWidgetHostViewAura(
-      web_contents_->GetRenderWidgetHostView());
-  touch_editable_->AttachToView(rwhva);
+  ui::TouchSelectionController* selection_controller = GetSelectionController();
+  if (selection_controller)
+    selection_controller->HideAndDisallowShowingAutomatically();
 }
 
 void WebContentsViewAura::OverscrollUpdateForWebContentsDelegate(
     float delta_y) {
   if (web_contents_->GetDelegate() && IsScrollEndEffectEnabled())
     web_contents_->GetDelegate()->OverscrollUpdate(delta_y);
+}
+
+ui::TouchSelectionController* WebContentsViewAura::GetSelectionController()
+    const {
+  RenderWidgetHostViewAura* view =
+      ToRenderWidgetHostViewAura(web_contents_->GetRenderWidgetHostView());
+  return view ? view->selection_controller() : nullptr;
+}
+
+TouchSelectionControllerClientAura*
+WebContentsViewAura::GetSelectionControllerClient() const {
+  RenderWidgetHostViewAura* view =
+      ToRenderWidgetHostViewAura(web_contents_->GetRenderWidgetHostView());
+  return view ? view->selection_controller_client() : nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -825,7 +837,7 @@ void WebContentsViewAura::CreateView(
   // if the bookmark bar is not shown and you create a new tab). The right
   // value is set shortly after this, so its safe to ignore.
 
-  aura::Env::CreateInstance(true);
+  DCHECK(aura::Env::GetInstanceDontCreate());
   window_.reset(new aura::Window(this));
   window_->set_owned_by_parent(false);
   window_->SetType(ui::wm::WINDOW_TYPE_CONTROL);
@@ -842,10 +854,8 @@ void WebContentsViewAura::CreateView(
     // It should be OK to not set a default parent since such users will
     // explicitly add this WebContentsViewAura to their tree after they create
     // us.
-    if (root_window) {
-      aura::client::ParentWindowWithContext(
-          window_.get(), root_window, root_window->GetBoundsInScreen());
-    }
+    aura::client::ParentWindowWithContext(window_.get(), root_window,
+                                          root_window->GetBoundsInScreen());
   }
   window_->layer()->SetMasksToBounds(true);
   window_->SetName("WebContentsViewAura");
@@ -880,8 +890,7 @@ RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForWidget(
 
   RenderWidgetHostViewAura* view =
       new RenderWidgetHostViewAura(render_widget_host, is_guest_view_hack);
-  view->InitAsChild(NULL);
-  GetNativeView()->AddChild(view->GetNativeView());
+  view->InitAsChild(GetNativeView());
 
   RenderWidgetHostImpl* host_impl =
       RenderWidgetHostImpl::From(render_widget_host);
@@ -898,7 +907,6 @@ RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForWidget(
     InstallOverscrollControllerDelegate(view);
   }
 
-  AttachTouchEditableToRenderView();
   return view;
 }
 
@@ -915,7 +923,6 @@ void WebContentsViewAura::RenderViewCreated(RenderViewHost* host) {
 }
 
 void WebContentsViewAura::RenderViewSwappedIn(RenderViewHost* host) {
-  AttachTouchEditableToRenderView();
 }
 
 void WebContentsViewAura::SetOverscrollControllerEnabled(bool enabled) {
@@ -940,8 +947,11 @@ void WebContentsViewAura::SetOverscrollControllerEnabled(bool enabled) {
 
 void WebContentsViewAura::ShowContextMenu(RenderFrameHost* render_frame_host,
                                           const ContextMenuParams& params) {
-  if (touch_editable_) {
-    touch_editable_->EndTouchEditing(false);
+  TouchSelectionControllerClientAura* selection_controller_client =
+      GetSelectionControllerClient();
+  if (selection_controller_client &&
+      selection_controller_client->HandleContextMenu(params)) {
+    return;
   }
   if (delegate_) {
     RenderWidgetHostViewAura* view = ToRenderWidgetHostViewAura(
@@ -966,9 +976,9 @@ void WebContentsViewAura::StartDragging(
     return;
   }
 
-  if (touch_editable_)
-    touch_editable_->EndTouchEditing(false);
-
+  ui::TouchSelectionController* selection_controller = GetSelectionController();
+  if (selection_controller)
+    selection_controller->HideAndDisallowShowingAutomatically();
   ui::OSExchangeData::Provider* provider = ui::OSExchangeData::CreateProvider();
   PrepareDragData(drop_data, provider, web_contents_);
 
@@ -1080,13 +1090,6 @@ void WebContentsViewAura::OnOverscrollModeChange(OverscrollMode old_mode,
   if (old_mode == OVERSCROLL_NORTH || old_mode == OVERSCROLL_SOUTH)
     OverscrollUpdateForWebContentsDelegate(0);
 
-  if (touch_editable_) {
-    if (new_mode == OVERSCROLL_NONE)
-      touch_editable_->OverscrollCompleted();
-    else
-      touch_editable_->OverscrollStarted();
-  }
-
   current_overscroll_gesture_ = new_mode;
   navigation_overlay_->relay_delegate()->OnOverscrollModeChange(old_mode,
                                                                 new_mode);
@@ -1191,20 +1194,14 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
   if (!web_contents_->GetDelegate())
     return;
 
-  switch (event->type()) {
-    case ui::ET_MOUSE_PRESSED:
+  ui::EventType type = event->type();
+  if (type == ui::ET_MOUSE_PRESSED)
       web_contents_->GetDelegate()->ActivateContents(web_contents_);
-      break;
-    case ui::ET_MOUSE_MOVED:
-    case ui::ET_MOUSE_EXITED:
-      web_contents_->GetDelegate()->ContentsMouseEvent(
-          web_contents_,
-          gfx::Screen::GetScreenFor(GetNativeView())->GetCursorScreenPoint(),
-          event->type() == ui::ET_MOUSE_MOVED);
-      break;
-    default:
-      break;
-  }
+
+  web_contents_->GetDelegate()->ContentsMouseEvent(
+      web_contents_,
+      gfx::Screen::GetScreenFor(GetNativeView())->GetCursorScreenPoint(),
+      type == ui::ET_MOUSE_MOVED, type == ui::ET_MOUSE_EXITED);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1298,6 +1295,10 @@ void WebContentsViewAura::OnWindowVisibilityChanged(aura::Window* window,
                                                     bool visible) {
   // Ignore any visibility changes in the hierarchy below.
   if (window != window_.get() && window_->Contains(window))
+    return;
+
+  if (vivaldi::IsVivaldiRunning() &&
+      BrowserPluginGuest::IsGuest(web_contents_))
     return;
 
   UpdateWebContentsVisibility(visible);

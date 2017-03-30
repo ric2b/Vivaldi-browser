@@ -6,6 +6,7 @@
 
 #include "base/run_loop.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
@@ -16,6 +17,7 @@
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema_registry.h"
 #include "policy/policy_constants.h"
 #include "policy/proto/device_management_backend.pb.h"
@@ -46,7 +48,7 @@ class ProfilePolicyConnectorTest : public testing::Test {
   }
 
   void TearDown() override {
-    TestingBrowserProcess::GetGlobal()->SetBrowserPolicyConnector(nullptr);
+    TestingBrowserProcess::GetGlobal()->ShutdownBrowserPolicyConnector();
     cloud_policy_manager_->Shutdown();
   }
 
@@ -97,6 +99,7 @@ TEST_F(ProfilePolicyConnectorTest, IsPolicyFromCloudPolicy) {
   cloud_policy_store_.policy_map_.Set(key::kAutoFillEnabled,
                                       POLICY_LEVEL_MANDATORY,
                                       POLICY_SCOPE_USER,
+                                      POLICY_SOURCE_CLOUD,
                                       new base::FundamentalValue(false),
                                       nullptr);
   cloud_policy_store_.NotifyStoreLoaded();
@@ -113,6 +116,7 @@ TEST_F(ProfilePolicyConnectorTest, IsPolicyFromCloudPolicy) {
   map.Set(key::kAutoFillEnabled,
           POLICY_LEVEL_MANDATORY,
           POLICY_SCOPE_USER,
+          POLICY_SOURCE_CLOUD,
           new base::FundamentalValue(true),
           nullptr);
   mock_provider_.UpdateChromePolicy(map);

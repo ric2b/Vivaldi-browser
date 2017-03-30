@@ -10,16 +10,18 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/login/signin/token_handle_util.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/login/ui/models/user_board_model.h"
 #include "components/proximity_auth/screenlock_bridge.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
-#include "components/user_manager/user_id.h"
 #include "ui/base/user_activity/user_activity_observer.h"
 
+class AccountId;
 class EasyUnlockService;
 
 namespace chromeos {
@@ -42,20 +44,18 @@ class UserSelectionScreen
 
   static const user_manager::UserList PrepareUserListForSending(
       const user_manager::UserList& users,
-      std::string owner,
+      const AccountId& owner,
       bool is_signin_to_add);
 
-
   virtual void Init(const user_manager::UserList& users, bool show_guest);
-  const user_manager::UserList& GetUsers() const;
   void OnUserImageChanged(const user_manager::User& user);
-  void OnBeforeUserRemoved(const std::string& username);
-  void OnUserRemoved(const std::string& username);
+  void OnBeforeUserRemoved(const AccountId& account_id);
+  void OnUserRemoved(const AccountId& account_id);
 
   void OnPasswordClearTimerExpired();
 
   void HandleGetUsers();
-  void CheckUserStatus(const std::string& user_id);
+  void CheckUserStatus(const AccountId& account_id);
 
   // ui::UserActivityDetector implementation:
   void OnUserActivity(const ui::Event* event) override;
@@ -65,28 +65,28 @@ class UserSelectionScreen
   // proximity_auth::ScreenlockBridge::LockHandler implementation:
   void ShowBannerMessage(const base::string16& message) override;
   void ShowUserPodCustomIcon(
-      const std::string& user_email,
+      const AccountId& account_id,
       const proximity_auth::ScreenlockBridge::UserPodCustomIconOptions& icon)
       override;
-  void HideUserPodCustomIcon(const std::string& user_email) override;
+  void HideUserPodCustomIcon(const AccountId& account_id) override;
 
   void EnableInput() override;
-  void SetAuthType(const std::string& user_email,
+  void SetAuthType(const AccountId& account_id,
                    AuthType auth_type,
                    const base::string16& auth_value) override;
-  AuthType GetAuthType(const std::string& user_email) const override;
+  AuthType GetAuthType(const AccountId& account_id) const override;
   ScreenType GetScreenType() const override;
 
-  void Unlock(const std::string& user_email) override;
-  void AttemptEasySignin(const std::string& user_email,
+  void Unlock(const AccountId& account_id) override;
+  void AttemptEasySignin(const AccountId& account_id,
                          const std::string& secret,
                          const std::string& key_label) override;
 
   // UserBoardModel implementation.
   void SendUserList() override;
-  void HardLockPod(const std::string& user_id) override;
-  void AttemptEasyUnlock(const std::string& user_id) override;
-  void RecordClickOnLockIcon(const std::string& user_id) override;
+  void HardLockPod(const AccountId& account_id) override;
+  void AttemptEasyUnlock(const AccountId& account_id) override;
+  void RecordClickOnLockIcon(const AccountId& account_id) override;
 
   // Fills |user_dict| with information about |user|.
   static void FillUserDictionary(
@@ -114,16 +114,16 @@ class UserSelectionScreen
   LoginDisplay::Delegate* login_display_delegate_;
   UserBoardView* view_;
 
-  // Map from public session user IDs to recommended locales set by policy.
-  typedef std::map<std::string, std::vector<std::string> >
+  // Map from public session account IDs to recommended locales set by policy.
+  typedef std::map<AccountId, std::vector<std::string> >
       PublicSessionRecommendedLocaleMap;
   PublicSessionRecommendedLocaleMap public_session_recommended_locales_;
 
  private:
   EasyUnlockService* GetEasyUnlockServiceForUser(
-      const std::string& user_id) const;
+      const AccountId& account_id) const;
 
-  void OnUserStatusChecked(const user_manager::UserID& user_id,
+  void OnUserStatusChecked(const AccountId& account_id,
                            TokenHandleUtil::TokenHandleStatus status);
 
   // Whether to show guest login.
@@ -135,13 +135,13 @@ class UserSelectionScreen
   // Set of Users that are visible.
   user_manager::UserList users_;
 
-  // Map of usernames to their current authentication type. If a user is not
+  // Map of accounnt ids to their current authentication type. If a user is not
   // contained in the map, it is using the default authentication type.
-  std::map<std::string, proximity_auth::ScreenlockBridge::LockHandler::AuthType>
+  std::map<AccountId, proximity_auth::ScreenlockBridge::LockHandler::AuthType>
       user_auth_type_map_;
 
   // Timer for measuring idle state duration before password clear.
-  base::OneShotTimer<UserSelectionScreen> password_clear_timer_;
+  base::OneShotTimer password_clear_timer_;
 
   // Token handler util for checking user OAuth token status.
   scoped_ptr<TokenHandleUtil> token_handle_util_;

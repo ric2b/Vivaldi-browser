@@ -8,14 +8,15 @@
 #include "base/message_loop/message_loop.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
-#include "net/socket/stream_socket.h"
+#include "remoting/protocol/p2p_datagram_socket.h"
+#include "remoting/protocol/p2p_stream_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace remoting {
 namespace protocol {
 
-StreamConnectionTester::StreamConnectionTester(net::StreamSocket* client_socket,
-                                               net::StreamSocket* host_socket,
+StreamConnectionTester::StreamConnectionTester(P2PStreamSocket* client_socket,
+                                               P2PStreamSocket* host_socket,
                                                int message_size,
                                                int message_count)
     : message_loop_(base::MessageLoop::current()),
@@ -52,7 +53,7 @@ void StreamConnectionTester::CheckResults() {
 
 void StreamConnectionTester::Done() {
   done_ = true;
-  message_loop_->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  message_loop_->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
 void StreamConnectionTester::InitBuffers() {
@@ -127,11 +128,12 @@ void StreamConnectionTester::HandleReadResult(int result) {
   }
 }
 
-DatagramConnectionTester::DatagramConnectionTester(net::Socket* client_socket,
-                                                   net::Socket* host_socket,
-                                                   int message_size,
-                                                   int message_count,
-                                                   int delay_ms)
+DatagramConnectionTester::DatagramConnectionTester(
+    P2PDatagramSocket* client_socket,
+    P2PDatagramSocket* host_socket,
+    int message_size,
+    int message_count,
+    int delay_ms)
     : message_loop_(base::MessageLoop::current()),
       host_socket_(host_socket),
       client_socket_(client_socket),
@@ -169,7 +171,7 @@ void DatagramConnectionTester::CheckResults() {
 
 void DatagramConnectionTester::Done() {
   done_ = true;
-  message_loop_->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  message_loop_->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
 void DatagramConnectionTester::DoWrite() {
@@ -186,9 +188,8 @@ void DatagramConnectionTester::DoWrite() {
   // Put index of this packet in the beginning of the packet body.
   memcpy(packet->data(), &packets_sent_, sizeof(packets_sent_));
 
-  int result = client_socket_->Write(
-      packet.get(),
-      message_size_,
+  int result = client_socket_->Send(
+      packet.get(), message_size_,
       base::Bind(&DatagramConnectionTester::OnWritten, base::Unretained(this)));
   HandleWriteResult(result);
 }
@@ -218,9 +219,8 @@ void DatagramConnectionTester::DoRead() {
     int kReadSize = message_size_ * 2;
     read_buffer_ = new net::IOBuffer(kReadSize);
 
-    result = host_socket_->Read(
-        read_buffer_.get(),
-        kReadSize,
+    result = host_socket_->Recv(
+        read_buffer_.get(), kReadSize,
         base::Bind(&DatagramConnectionTester::OnRead, base::Unretained(this)));
     HandleReadResult(result);
   };

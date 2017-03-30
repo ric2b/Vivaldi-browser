@@ -45,10 +45,6 @@ class PermissionBubbleManager
     DISMISS
   };
 
-  // Return the enabled state of permissions bubbles.
-  // Controlled by a flag and FieldTrial.
-  static bool Enabled();
-
   ~PermissionBubbleManager() override;
 
   // Adds a new request to the permission bubble. Ownership of the request
@@ -73,7 +69,7 @@ class PermissionBubbleManager
 
   // Will show a permission bubble if there is a pending permission request on
   // the web contents that the PermissionBubbleManager belongs to.
-  void DisplayPendingRequests(Browser* browser);
+  void DisplayPendingRequests();
 
   // Will reposition the bubble (may change parent if necessary).
   void UpdateAnchorPosition();
@@ -85,12 +81,6 @@ class PermissionBubbleManager
   // Get the native window of the bubble.
   // TODO(hcarmona): Remove this as part of the bubble API work.
   gfx::NativeWindow GetBubbleWindow();
-
-  // Controls whether incoming permission requests require user gestures.
-  // If |required| is false, requests will be displayed as soon as they come in.
-  // If |required| is true, requests will be silently queued until a request
-  // comes in with a user gesture.
-  void RequireUserGesture(bool required);
 
   // For observing the status of the permission bubble manager.
   void AddObserver(Observer* observer);
@@ -109,7 +99,6 @@ class PermissionBubbleManager
   friend class DownloadRequestLimiterTest;
   friend class GeolocationBrowserTest;
   friend class GeolocationPermissionContextTests;
-  friend class GeolocationPermissionContextParamTests;
   friend class MockPermissionBubbleView;
   friend class PermissionBubbleManagerTest;
   friend class PermissionContextBaseTests;
@@ -125,11 +114,6 @@ class PermissionBubbleManager
   void DocumentOnLoadCompletedInMainFrame() override;
   void DocumentLoadedInFrame(
       content::RenderFrameHost* render_frame_host) override;
-
-  // If a page on which permissions requests are pending is navigated,
-  // they will be finalized as if canceled by the user.
-  void NavigationEntryCommitted(
-      const content::LoadCommittedDetails& details) override;
   void WebContentsDestroyed() override;
 
   // PermissionBubbleView::Delegate:
@@ -168,10 +152,6 @@ class PermissionBubbleManager
   void NotifyBubbleAdded();
 
   void DoAutoResponseForTesting();
-
-  // Whether to delay displaying the bubble until a request with a user gesture.
-  // False by default, unless RequireUserGesture(bool) changes the value.
-  bool require_user_gesture_;
 
   // Factory to be used to create views when needed.
   PermissionBubbleView::Factory view_factory_;

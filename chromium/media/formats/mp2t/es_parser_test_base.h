@@ -5,6 +5,9 @@
 #ifndef MEDIA_FORMATS_MP2T_ES_PARSER_TEST_BASE_H_
 #define MEDIA_FORMATS_MP2T_ES_PARSER_TEST_BASE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <sstream>
 #include <string>
 #include <vector>
@@ -64,7 +67,7 @@ class EsParserTestBase {
   std::vector<Packet> GenerateFixedSizePesPacket(size_t pes_size);
 
   // ES stream.
-  std::vector<uint8> stream_;
+  std::vector<uint8_t> stream_;
 
   // Number of decoder configs received from the ES parser.
   size_t config_count_;

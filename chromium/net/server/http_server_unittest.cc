@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <utility>
 #include <vector>
@@ -12,6 +14,8 @@
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
 #include "base/location.h"
+#include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -161,7 +165,7 @@ class TestHttpClient {
       return false;
 
     // Return true if response has data equal to or more than content length.
-    int64 body_size = static_cast<int64>(response.size()) - end_of_headers;
+    int64_t body_size = static_cast<int64_t>(response.size()) - end_of_headers;
     DCHECK_LE(0, body_size);
     scoped_refptr<HttpResponseHeaders> headers(new HttpResponseHeaders(
         HttpUtil::AssembleRawHeaders(response.data(), end_of_headers)));
@@ -185,7 +189,7 @@ class HttpServerTest : public testing::Test,
     scoped_ptr<ServerSocket> server_socket(
         new TCPServerSocket(NULL, NetLog::Source()));
     server_socket->ListenWithAddressAndPort("127.0.0.1", 0, 1);
-    server_.reset(new HttpServer(server_socket.Pass(), this));
+    server_.reset(new HttpServer(std::move(server_socket), this));
     ASSERT_EQ(OK, server_->GetLocalAddress(&server_address_));
   }
 
@@ -297,7 +301,7 @@ TEST_F(HttpServerTest, RequestWithHeaders) {
   ASSERT_EQ("", GetRequest(0).data);
 
   for (size_t i = 0; i < arraysize(kHeaders); ++i) {
-    std::string field = base::StringToLowerASCII(std::string(kHeaders[i][0]));
+    std::string field = base::ToLowerASCII(std::string(kHeaders[i][0]));
     std::string value = kHeaders[i][2];
     ASSERT_EQ(1u, GetRequest(0).headers.count(field)) << field;
     ASSERT_EQ(value, GetRequest(0).headers[field]) << kHeaders[i][0];
@@ -325,7 +329,7 @@ TEST_F(HttpServerTest, RequestWithDuplicateHeaders) {
   ASSERT_EQ("", GetRequest(0).data);
 
   for (size_t i = 0; i < arraysize(kHeaders); ++i) {
-    std::string field = base::StringToLowerASCII(std::string(kHeaders[i][0]));
+    std::string field = base::ToLowerASCII(std::string(kHeaders[i][0]));
     std::string value = (field == "duplicateheader") ? "2,4" : kHeaders[i][2];
     ASSERT_EQ(1u, GetRequest(0).headers.count(field)) << field;
     ASSERT_EQ(value, GetRequest(0).headers[field]) << kHeaders[i][0];
@@ -503,6 +507,10 @@ class MockStreamSocket : public StreamSocket {
   }
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
+  int64_t GetTotalReceivedBytes() const override {
+    NOTIMPLEMENTED();
+    return 0;
+  }
 
   // Socket
   int Read(IOBuffer* buf,
@@ -529,8 +537,10 @@ class MockStreamSocket : public StreamSocket {
             const CompletionCallback& callback) override {
     return ERR_NOT_IMPLEMENTED;
   }
-  int SetReceiveBufferSize(int32 size) override { return ERR_NOT_IMPLEMENTED; }
-  int SetSendBufferSize(int32 size) override { return ERR_NOT_IMPLEMENTED; }
+  int SetReceiveBufferSize(int32_t size) override {
+    return ERR_NOT_IMPLEMENTED;
+  }
+  int SetSendBufferSize(int32_t size) override { return ERR_NOT_IMPLEMENTED; }
 
   void DidRead(const char* data, int data_len) {
     if (!read_buf_.get()) {

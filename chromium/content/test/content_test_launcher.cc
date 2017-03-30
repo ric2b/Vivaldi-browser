@@ -9,10 +9,12 @@
 #include "base/debug/stack_trace.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/process/memory.h"
 #include "base/sys_info.h"
 #include "base/test/test_suite.h"
 #include "base/test/test_timeouts.h"
+#include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/content_test_suite_base.h"
 #include "content/shell/app/shell_main_delegate.h"
@@ -109,7 +111,6 @@ class ContentTestLauncherDelegate : public TestLauncherDelegate {
     command_line->AppendSwitchPath(switches::kContentShellDataPath,
                                    temp_data_dir);
     command_line->AppendSwitch(switches::kUseFakeDeviceForMediaStream);
-    command_line->AppendSwitch(switches::kUseFakeUIForMediaStream);
     return true;
   }
 

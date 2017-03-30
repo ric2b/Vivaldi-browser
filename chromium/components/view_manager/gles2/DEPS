@@ -1,9 +1,0 @@
-include_rules = [
-  "+cc",
-  "+components/gpu",
-  "+gpu",
-  "+mojo/converters",
-  "+mojo/platform_handle",
-  "+third_party/mojo/src/mojo/public",
-  "+ui",
-]

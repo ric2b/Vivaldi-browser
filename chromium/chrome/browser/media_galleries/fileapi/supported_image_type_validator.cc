@@ -4,11 +4,14 @@
 
 #include "chrome/browser/media_galleries/fileapi/supported_image_type_validator.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
@@ -29,12 +32,12 @@ scoped_ptr<std::string> ReadOnFileThread(const base::FilePath& path) {
 
   base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
   if (!file.IsValid())
-    return result.Pass();
+    return result;
 
   base::File::Info file_info;
   if (!file.GetInfo(&file_info) ||
       file_info.size > kMaxImageFileSize) {
-    return result.Pass();
+    return result;
   }
 
   result.reset(new std::string);
@@ -44,7 +47,7 @@ scoped_ptr<std::string> ReadOnFileThread(const base::FilePath& path) {
     result.reset();
   }
 
-  return result.Pass();
+  return result;
 }
 
 class ImageDecoderDelegateAdapter : public ImageDecoder::ImageRequest {
@@ -52,8 +55,7 @@ class ImageDecoderDelegateAdapter : public ImageDecoder::ImageRequest {
   ImageDecoderDelegateAdapter(
       scoped_ptr<std::string> data,
       const storage::CopyOrMoveFileValidator::ResultCallback& callback)
-      : data_(data.Pass()),
-        callback_(callback) {
+      : data_(std::move(data)), callback_(callback) {
     DCHECK(data_);
   }
 
@@ -126,6 +128,6 @@ void SupportedImageTypeValidator::OnFileOpen(scoped_ptr<std::string> data) {
 
   // |adapter| will delete itself after a completion message is received.
   ImageDecoderDelegateAdapter* adapter =
-      new ImageDecoderDelegateAdapter(data.Pass(), callback_);
+      new ImageDecoderDelegateAdapter(std::move(data), callback_);
   ImageDecoder::Start(adapter, adapter->data());
 }

@@ -5,10 +5,11 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PASSWORDS_MANAGE_PASSWORDS_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_PASSWORDS_MANAGE_PASSWORDS_BUBBLE_VIEW_H_
 
-#include "chrome/browser/ui/passwords/manage_passwords_bubble.h"
-#include "chrome/browser/ui/views/managed_full_screen_bubble_delegate_view.h"
+#include "base/macros.h"
+#include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 
-class ManagePasswordsIconView;
+class ManagePasswordsIconViews;
 
 namespace content {
 class WebContents;
@@ -22,8 +23,7 @@ class WebContents;
 // 2. ManageView: Displays the current page's saved credentials.
 // 3. BlacklistedView: Informs the user that the current page is blacklisted.
 //
-class ManagePasswordsBubbleView : public ManagePasswordsBubble,
-                                  public ManagedFullScreenBubbleDelegateView {
+class ManagePasswordsBubbleView : public LocationBarBubbleDelegateView {
  public:
   // Shows the bubble.
   static void ShowBubble(content::WebContents* web_contents,
@@ -52,46 +52,34 @@ class ManagePasswordsBubbleView : public ManagePasswordsBubble,
   }
 #endif
 
+  ManagePasswordsBubbleModel* model() { return &model_; }
+
  private:
   class AccountChooserView;
   class AutoSigninView;
   class BlacklistedView;
-  class ConfirmNeverView;
   class ManageView;
-  class ManageAccountsView;
   class PendingView;
-  class SaveAccountView;
   class SaveConfirmationView;
+  class UpdatePendingView;
   class WebContentMouseHandler;
 
   ManagePasswordsBubbleView(content::WebContents* web_contents,
-                            ManagePasswordsIconView* anchor_view,
+                            ManagePasswordsIconViews* anchor_view,
                             DisplayReason reason);
   ~ManagePasswordsBubbleView() override;
 
-  // ManagedFullScreenBubbleDelegateView:
+  // LocationBarBubbleDelegateView:
   views::View* GetInitiallyFocusedView() override;
   void Init() override;
   void Close() override;
 
-  // WidgetObserver:
-  void OnWidgetClosing(views::Widget* widget) override;
+  // WidgetDelegate:
+  bool ShouldShowCloseButton() const override;
 
   // Refreshes the bubble's state: called to display a confirmation screen after
   // a user selects "Never for this site", for instance.
   void Refresh();
-
-  // Called from PendingView if the user clicks on "Never for this site" in
-  // order to display a confirmation screen.
-  void NotifyNeverForThisSiteClicked();
-
-  // Called from ConfirmNeverView if the user confirms her intention to never
-  // save passwords, and remove existing passwords, for a site.
-  void NotifyConfirmedNeverForThisSite();
-
-  // Called from ConfirmNeverView if the user clicks on "Undo" in order to
-  // undo the action and refresh to PendingView.
-  void NotifyUndoNeverForThisSite();
 
   void set_initially_focused_view(views::View* view) {
     DCHECK(!initially_focused_view_);
@@ -107,7 +95,9 @@ class ManagePasswordsBubbleView : public ManagePasswordsBubble,
   // The timeout in seconds for the auto sign-in toast.
   static int auto_signin_toast_timeout_;
 
-  ManagePasswordsIconView* anchor_view_;
+  ManagePasswordsBubbleModel model_;
+
+  ManagePasswordsIconViews* anchor_view_;
 
   views::View* initially_focused_view_;
 

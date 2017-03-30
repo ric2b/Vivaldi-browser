@@ -11,6 +11,8 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_POPUP_VIEW_H_
 #define COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_POPUP_VIEW_H_
 
+#include <stddef.h>
+
 #include "build/build_config.h"
 
 namespace gfx {
@@ -26,6 +28,9 @@ class OmniboxPopupView {
 
   // Invalidates one line of the autocomplete popup.
   virtual void InvalidateLine(size_t line) = 0;
+
+  // Invoked when the specified line has been selected.
+  virtual void OnLineSelected(size_t line) = 0;
 
   // Redraws the popup window to match any changes in the result set; this may
   // mean opening or closing the window.

@@ -4,6 +4,9 @@
 
 #include "content/gpu/gpu_child_thread.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/threading/worker_pool.h"
@@ -12,6 +15,7 @@
 #include "content/child/thread_safe_sender.h"
 #include "content/common/gpu/gpu_memory_buffer_factory.h"
 #include "content/common/gpu/gpu_messages.h"
+#include "content/gpu/gpu_process_control_impl.h"
 #include "content/gpu/gpu_watchdog_thread.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
@@ -69,6 +73,8 @@ class GpuMemoryBufferMessageFilter : public IPC::MessageFilter {
     bool handled = true;
     IPC_BEGIN_MESSAGE_MAP(GpuMemoryBufferMessageFilter, message)
     IPC_MESSAGE_HANDLER(GpuMsg_CreateGpuMemoryBuffer, OnCreateGpuMemoryBuffer)
+    IPC_MESSAGE_HANDLER(GpuMsg_CreateGpuMemoryBufferFromHandle,
+                        OnCreateGpuMemoryBufferFromHandle)
     IPC_MESSAGE_UNHANDLED(handled = false)
     IPC_END_MESSAGE_MAP()
     return handled;
@@ -80,11 +86,25 @@ class GpuMemoryBufferMessageFilter : public IPC::MessageFilter {
   void OnCreateGpuMemoryBuffer(
       const GpuMsg_CreateGpuMemoryBuffer_Params& params) {
     TRACE_EVENT2("gpu", "GpuMemoryBufferMessageFilter::OnCreateGpuMemoryBuffer",
-                 "id", params.id, "client_id", params.client_id);
+                 "id", params.id.id, "client_id", params.client_id);
+
+    DCHECK(gpu_memory_buffer_factory_);
     sender_->Send(new GpuHostMsg_GpuMemoryBufferCreated(
         gpu_memory_buffer_factory_->CreateGpuMemoryBuffer(
             params.id, params.size, params.format, params.usage,
             params.client_id, params.surface_handle)));
+  }
+
+  void OnCreateGpuMemoryBufferFromHandle(
+      const GpuMsg_CreateGpuMemoryBufferFromHandle_Params& params) {
+    TRACE_EVENT2(
+        "gpu",
+        "GpuMemoryBufferMessageFilter::OnCreateGpuMemoryBufferFromHandle", "id",
+        params.id.id, "client_id", params.client_id);
+    sender_->Send(new GpuHostMsg_GpuMemoryBufferCreated(
+        gpu_memory_buffer_factory_->CreateGpuMemoryBufferFromHandle(
+            params.handle, params.id, params.size, params.format,
+            params.client_id)));
   }
 
   GpuMemoryBufferFactory* const gpu_memory_buffer_factory_;
@@ -116,9 +136,11 @@ GpuChildThread::GpuChildThread(
     bool dead_on_arrival,
     const gpu::GPUInfo& gpu_info,
     const DeferredMessages& deferred_messages,
-    GpuMemoryBufferFactory* gpu_memory_buffer_factory)
+    GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+    gpu::SyncPointManager* sync_point_manager)
     : ChildThreadImpl(GetOptions(gpu_memory_buffer_factory)),
       dead_on_arrival_(dead_on_arrival),
+      sync_point_manager_(sync_point_manager),
       gpu_info_(gpu_info),
       deferred_messages_(deferred_messages),
       in_browser_process_(false),
@@ -132,13 +154,15 @@ GpuChildThread::GpuChildThread(
 
 GpuChildThread::GpuChildThread(
     const InProcessChildThreadParams& params,
-    GpuMemoryBufferFactory* gpu_memory_buffer_factory)
+    GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+    gpu::SyncPointManager* sync_point_manager)
     : ChildThreadImpl(ChildThreadImpl::Options::Builder()
                           .InBrowserProcess(params)
                           .AddStartupFilter(new GpuMemoryBufferMessageFilter(
                               gpu_memory_buffer_factory))
                           .Build()),
       dead_on_arrival_(false),
+      sync_point_manager_(sync_point_manager),
       in_browser_process_(true),
       gpu_memory_buffer_factory_(gpu_memory_buffer_factory) {
 #if defined(OS_WIN)
@@ -156,15 +180,10 @@ GpuChildThread::GpuChildThread(
 }
 
 GpuChildThread::~GpuChildThread() {
-}
-
-// static
-gfx::GpuMemoryBufferType GpuChildThread::GetGpuMemoryBufferFactoryType() {
-  std::vector<gfx::GpuMemoryBufferType> supported_types;
-  GpuMemoryBufferFactory::GetSupportedTypes(&supported_types);
-  DCHECK(!supported_types.empty());
-  // Note: We always use the preferred type.
-  return supported_types[0];
+  while (!deferred_messages_.empty()) {
+    delete deferred_messages_.front();
+    deferred_messages_.pop();
+  }
 }
 
 void GpuChildThread::Shutdown() {
@@ -174,6 +193,12 @@ void GpuChildThread::Shutdown() {
 
 void GpuChildThread::Init(const base::Time& process_start_time) {
   process_start_time_ = process_start_time;
+
+  process_control_.reset(new GpuProcessControlImpl());
+  // Use of base::Unretained(this) is safe here because |service_registry()|
+  // will be destroyed before GpuChildThread is destructed.
+  service_registry()->AddService(base::Bind(
+      &GpuChildThread::BindProcessControlRequest, base::Unretained(this)));
 }
 
 bool GpuChildThread::Send(IPC::Message* msg) {
@@ -188,6 +213,7 @@ bool GpuChildThread::OnControlMessageReceived(const IPC::Message& msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(GpuChildThread, msg)
     IPC_MESSAGE_HANDLER(GpuMsg_Initialize, OnInitialize)
+    IPC_MESSAGE_HANDLER(GpuMsg_Finalize, OnFinalize)
     IPC_MESSAGE_HANDLER(GpuMsg_CollectGraphicsInfo, OnCollectGraphicsInfo)
     IPC_MESSAGE_HANDLER(GpuMsg_GetVideoMemoryUsageStats,
                         OnGetVideoMemoryUsageStats)
@@ -209,8 +235,15 @@ bool GpuChildThread::OnControlMessageReceived(const IPC::Message& msg) {
     return true;
 #endif
 
+  return false;
+}
+
+bool GpuChildThread::OnMessageReceived(const IPC::Message& msg) {
+  if (ChildThreadImpl::OnMessageReceived(msg))
+    return true;
+
   return gpu_channel_manager_.get() &&
-      gpu_channel_manager_->OnMessageReceived(msg);
+         gpu_channel_manager_->OnMessageReceived(msg);
 }
 
 void GpuChildThread::OnInitialize() {
@@ -225,13 +258,12 @@ void GpuChildThread::OnInitialize() {
 
   if (dead_on_arrival_) {
     LOG(ERROR) << "Exiting GPU process due to errors during initialization";
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     return;
   }
 
 #if defined(OS_ANDROID)
-  base::PlatformThread::SetThreadPriority(base::PlatformThread::CurrentHandle(),
-                                          base::ThreadPriority::DISPLAY);
+  base::PlatformThread::SetCurrentThreadPriority(base::ThreadPriority::DISPLAY);
 #endif
 
   // We don't need to pipe log messages if we are running the GPU thread in
@@ -242,17 +274,23 @@ void GpuChildThread::OnInitialize() {
   // Defer creation of the render thread. This is to prevent it from handling
   // IPC messages before the sandbox has been enabled and all other necessary
   // initialization has succeeded.
-  gpu_channel_manager_.reset(new GpuChannelManager(
-      GetRouter(), watchdog_thread_.get(),
-      ChildProcess::current()->io_task_runner(),
-      ChildProcess::current()->GetShutDownEvent(), channel(),
-      GetAttachmentBroker(), gpu_memory_buffer_factory_));
+  gpu_channel_manager_.reset(
+      new GpuChannelManager(channel(), watchdog_thread_.get(),
+                            base::ThreadTaskRunnerHandle::Get().get(),
+                            ChildProcess::current()->io_task_runner(),
+                            ChildProcess::current()->GetShutDownEvent(),
+                            sync_point_manager_, gpu_memory_buffer_factory_));
 
 #if defined(USE_OZONE)
   ui::OzonePlatform::GetInstance()
       ->GetGpuPlatformSupport()
       ->OnChannelEstablished(this);
 #endif
+}
+
+void GpuChildThread::OnFinalize() {
+  // Quit the GPU process
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void GpuChildThread::StopWatchdog() {
@@ -301,7 +339,7 @@ void GpuChildThread::OnCollectGraphicsInfo() {
 #if defined(OS_WIN)
   if (!in_browser_process_) {
     // The unsandboxed GPU process fulfilled its duty.  Rest in peace.
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 #endif  // OS_WIN
 }
@@ -353,5 +391,12 @@ void GpuChildThread::OnGpuSwitched() {
   ui::GpuSwitchingManager::GetInstance()->NotifyGpuSwitched();
 }
 
-}  // namespace content
+void GpuChildThread::BindProcessControlRequest(
+    mojo::InterfaceRequest<ProcessControl> request) {
+  DVLOG(1) << "GPU: Binding ProcessControl request";
+  DCHECK(process_control_);
+  process_control_bindings_.AddBinding(process_control_.get(),
+                                       std::move(request));
+}
 
+}  // namespace content

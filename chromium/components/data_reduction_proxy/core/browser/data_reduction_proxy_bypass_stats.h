@@ -5,7 +5,11 @@
 #ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_BYPASS_STATS_H_
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_BYPASS_STATS_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/network_change_notifier.h"
@@ -108,7 +112,7 @@ class DataReductionProxyBypassStats
   // Given |data_reduction_proxy_enabled|, a |request|, and the
   // |data_reduction_proxy_config| records the number of bypassed bytes for that
   // |request| into UMAs based on bypass type. |data_reduction_proxy_enabled|
-  // tells us the state of the kDataReductionProxyEnabled preference.
+  // tells us the state of the Data Reduction Proxy enabling preference.
   void RecordBypassedBytesHistograms(
       const net::URLRequest& request,
       bool data_reduction_proxy_enabled,
@@ -123,10 +127,9 @@ class DataReductionProxyBypassStats
   void OnNetworkChanged(
       net::NetworkChangeNotifier::ConnectionType type) override;
 
-  void RecordBypassedBytes(
-      DataReductionProxyBypassType bypass_type,
-      BypassedBytesType bypassed_bytes_type,
-      int64 content_length);
+  void RecordBypassedBytes(DataReductionProxyBypassType bypass_type,
+                           BypassedBytesType bypassed_bytes_type,
+                           int64_t content_length);
 
   DataReductionProxyConfig* data_reduction_proxy_config_;
 

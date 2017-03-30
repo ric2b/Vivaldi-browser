@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "chromeos/chromeos_export.h"
 
 namespace chromeos {
@@ -53,7 +53,7 @@ class CHROMEOS_EXPORT NetworkStateHandlerObserver {
 
   // Called just before NetworkStateHandler is destroyed so that observers
   // can safely stop observing.
-  virtual void IsShuttingDown();
+  virtual void OnShuttingDown();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NetworkStateHandlerObserver);

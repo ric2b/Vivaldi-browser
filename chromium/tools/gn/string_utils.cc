@@ -4,7 +4,13 @@
 
 #include "tools/gn/string_utils.h"
 
+#include <stddef.h>
+#include <cctype>
+
+#include "base/strings/string_number_conversions.h"
 #include "tools/gn/err.h"
+#include "tools/gn/input_file.h"
+#include "tools/gn/parser.h"
 #include "tools/gn/scope.h"
 #include "tools/gn/token.h"
 #include "tools/gn/tokenizer.h"
@@ -21,49 +27,160 @@ Err ErrInsideStringToken(const Token& token, size_t offset, size_t size,
   int int_offset = static_cast<int>(offset);
   Location begin_loc(token.location().file(),
                      token.location().line_number(),
-                     token.location().char_offset() + int_offset + 1,
+                     token.location().column_number() + int_offset + 1,
                      token.location().byte() + int_offset + 1);
   Location end_loc(
       token.location().file(),
       token.location().line_number(),
-      token.location().char_offset() + int_offset + 1 + static_cast<int>(size),
+      token.location().column_number() + int_offset + 1 +
+          static_cast<int>(size),
       token.location().byte() + int_offset + 1 + static_cast<int>(size));
   return Err(LocationRange(begin_loc, end_loc), msg, help);
 }
 
-// Given the character input[i] indicating the $ in a string, locates the
-// identifier and places its range in |*identifier|, and updates |*i| to
-// point to the last character consumed.
+// Notes about expression interpolation. This is based loosly on Dart but is
+// slightly less flexible. In Dart, seeing the ${ in a string is something
+// the toplevel parser knows about, and it will recurse into the block
+// treating it as a first-class {...} block. So even things like this work:
+//   "hello ${"foo}"*2+"bar"}"  =>  "hello foo}foo}bar"
+// (you can see it did not get confused by the nested strings or the nested "}"
+// inside the block).
 //
-// On error returns false and sets the error.
-bool LocateInlineIdenfitier(const Token& token,
-                            const char* input, size_t size,
-                            size_t* i,
-                            base::StringPiece* identifier,
-                            Err* err) {
-  size_t dollars_index = *i;
-  (*i)++;
-  if (*i == size) {
-    *err = ErrInsideStringToken(token, dollars_index, 1, "$ at end of string.",
-        "I was expecting an identifier after the $.");
+// This is cool but complicates the parser for almost no benefit for this
+// non-general-purpose programming language. The main reason expressions are
+// supported here at all are to support "${scope.variable}" and "${list[0]}",
+// neither of which have any of these edge-cases.
+//
+// In this simplified approach, we search for the terminating '}' and execute
+// the result. This means we can't support any expressions with embedded '}'
+// or '"'. To keep people from getting confusing about what's supported and
+// what's not, only identifier and accessor expressions are allowed (neither
+// of these run into any of these edge-cases).
+bool AppendInterpolatedExpression(Scope* scope,
+                                  const Token& token,
+                                  const char* input,
+                                  size_t begin_offset,
+                                  size_t end_offset,
+                                  std::string* output,
+                                  Err* err) {
+  SourceFile empty_source_file;  // Prevent most vexing parse.
+  InputFile input_file(empty_source_file);
+  input_file.SetContents(
+      std::string(&input[begin_offset], end_offset - begin_offset));
+
+  // Tokenize.
+  std::vector<Token> tokens = Tokenizer::Tokenize(&input_file, err);
+  if (err->has_error()) {
+    // The error will point into our temporary buffer, rewrite it to refer
+    // to the original token. This will make the location information less
+    // precise, but generally there won't be complicated things in string
+    // interpolations.
+    *err = ErrInsideStringToken(token, begin_offset, end_offset - begin_offset,
+                                err->message(), err->help_text());
     return false;
   }
 
-  bool has_brackets;
-  if (input[*i] == '{') {
-    (*i)++;
-    if (*i == size) {
-      *err = ErrInsideStringToken(token, dollars_index, 2,
-          "${ at end of string.",
-          "I was expecting an identifier inside the ${...}.");
-      return false;
-    }
-    has_brackets = true;
-  } else {
-    has_brackets = false;
+  // Parse.
+  scoped_ptr<ParseNode> node = Parser::ParseExpression(tokens, err);
+  if (err->has_error()) {
+    // Rewrite error as above.
+    *err = ErrInsideStringToken(token, begin_offset, end_offset - begin_offset,
+                                err->message(), err->help_text());
+    return false;
+  }
+  if (!(node->AsIdentifier() || node->AsAccessor())) {
+    *err = ErrInsideStringToken(token, begin_offset, end_offset - begin_offset,
+        "Invalid string interpolation.",
+        "The thing inside the ${} must be an identifier ${foo},\n"
+        "a scope access ${foo.bar}, or a list access ${foo[0]}.");
+    return false;
   }
 
-  // First char is special.
+  // Evaluate.
+  Value result = node->Execute(scope, err);
+  if (err->has_error()) {
+    // Rewrite error as above.
+    *err = ErrInsideStringToken(token, begin_offset, end_offset - begin_offset,
+                                err->message(), err->help_text());
+    return false;
+  }
+
+  output->append(result.ToString(false));
+  return true;
+}
+
+bool AppendInterpolatedIdentifier(Scope* scope,
+                                  const Token& token,
+                                  const char* input,
+                                  size_t begin_offset,
+                                  size_t end_offset,
+                                  std::string* output,
+                                  Err* err) {
+  base::StringPiece identifier(&input[begin_offset],
+                               end_offset - begin_offset);
+  const Value* value = scope->GetValue(identifier, true);
+  if (!value) {
+    // We assume the input points inside the token.
+    *err = ErrInsideStringToken(
+        token, identifier.data() - token.value().data() - 1, identifier.size(),
+        "Undefined identifier in string expansion.",
+        std::string("\"") + identifier + "\" is not currently in scope.");
+    return false;
+  }
+
+  output->append(value->ToString(false));
+  return true;
+}
+
+// Handles string interpolations: $identifier and ${expression}
+//
+// |*i| is the index into |input| after the $. This will be updated to point to
+// the last character consumed on success. The token is the original string
+// to blame on failure.
+//
+// On failure, returns false and sets the error. On success, appends the
+// result of the interpolation to |*output|.
+bool AppendStringInterpolation(Scope* scope,
+                               const Token& token,
+                               const char* input, size_t size,
+                               size_t* i,
+                               std::string* output,
+                               Err* err) {
+  size_t dollars_index = *i - 1;
+
+  if (input[*i] == '{') {
+    // Bracketed expression.
+    (*i)++;
+    size_t begin_offset = *i;
+
+    // Find the closing } and check for non-identifier chars. Don't need to
+    // bother checking for the more-restricted first character of an identifier
+    // since the {} unambiguously denotes the range, and identifiers with
+    // invalid names just won't be found later.
+    bool has_non_ident_chars = false;
+    while (*i < size && input[*i] != '}') {
+      has_non_ident_chars |= Tokenizer::IsIdentifierContinuingChar(input[*i]);
+      (*i)++;
+    }
+    if (*i == size) {
+      *err = ErrInsideStringToken(token, dollars_index, *i - dollars_index,
+                                  "Unterminated ${...");
+      return false;
+    }
+
+    // In the common case, the thing inside the {} will actually be a
+    // simple identifier. Avoid all the complicated parsing of accessors
+    // in this case.
+    if (!has_non_ident_chars) {
+      return AppendInterpolatedIdentifier(scope, token, input, begin_offset,
+                                          *i, output, err);
+    }
+    return AppendInterpolatedExpression(scope, token, input, begin_offset, *i,
+                                        output, err);
+  }
+
+  // Simple identifier.
+  // The first char of an identifier is more restricted.
   if (!Tokenizer::IsIdentifierFirstChar(input[*i])) {
     *err = ErrInsideStringToken(
         token, dollars_index, *i - dollars_index + 1,
@@ -78,46 +195,42 @@ bool LocateInlineIdenfitier(const Token& token,
   while (*i < size && Tokenizer::IsIdentifierContinuingChar(input[*i]))
     (*i)++;
   size_t end_offset = *i;
-
-  // If we started with a bracket, validate that there's an ending one. Leave
-  // *i pointing to the last char we consumed (backing up one).
-  if (has_brackets) {
-    if (*i == size) {
-      *err = ErrInsideStringToken(token, dollars_index, *i - dollars_index,
-                                  "Unterminated ${...");
-      return false;
-    } else if (input[*i] != '}') {
-      *err = ErrInsideStringToken(token, *i, 1, "Not an identifier in string expansion.",
-          "The contents of ${...} should be an identifier. "
-          "This character is out of sorts.");
-      return false;
-    }
-    // We want to consume the bracket but also back up one, so *i is unchanged.
-  } else {
-    (*i)--;
-  }
-
-  *identifier = base::StringPiece(&input[begin_offset],
-                                  end_offset - begin_offset);
-  return true;
+  (*i)--;  // Back up to mark the last character consumed.
+  return AppendInterpolatedIdentifier(scope, token, input, begin_offset,
+                                      end_offset, output, err);
 }
 
-bool AppendIdentifierValue(Scope* scope,
-                           const Token& token,
-                           const base::StringPiece& identifier,
-                           std::string* output,
-                           Err* err) {
-  const Value* value = scope->GetValue(identifier, true);
-  if (!value) {
-    // We assume the identifier points inside the token.
+// Handles a hex literal: $0xFF
+//
+// |*i| is the index into |input| after the $. This will be updated to point to
+// the last character consumed on success. The token is the original string
+// to blame on failure.
+//
+// On failure, returns false and sets the error. On success, appends the
+// char with the given hex value to |*output|.
+bool AppendHexByte(Scope* scope,
+                   const Token& token,
+                   const char* input, size_t size,
+                   size_t* i,
+                   std::string* output,
+                   Err* err) {
+  size_t dollars_index = *i - 1;
+  // "$0" is already known to exist.
+  if (*i + 3 >= size || input[*i + 1] != 'x' || !std::isxdigit(input[*i + 2]) ||
+      !std::isxdigit(input[*i + 3])) {
     *err = ErrInsideStringToken(
-        token, identifier.data() - token.value().data() - 1, identifier.size(),
-        "Undefined identifier in string expansion.",
-        std::string("\"") + identifier + "\" is not currently in scope.");
+        token, dollars_index, *i - dollars_index + 1,
+        "Invalid hex character. Hex values must look like 0xFF.");
     return false;
   }
-
-  output->append(value->ToString(false));
+  int value = 0;
+  if (!base::HexStringToInt(base::StringPiece(&input[*i + 2], 2), &value)) {
+    *err = ErrInsideStringToken(token, dollars_index, *i - dollars_index + 1,
+                                "Could not convert hex value.");
+    return false;
+  }
+  *i += 3;
+  output->push_back(value);
   return true;
 }
 
@@ -153,27 +266,21 @@ bool ExpandStringLiteral(Scope* scope,
       }
       output.push_back(input[i]);
     } else if (input[i] == '$') {
-      base::StringPiece identifier;
-      if (!LocateInlineIdenfitier(literal, input, size, &i, &identifier, err))
+      i++;
+      if (i == size) {
+        *err = ErrInsideStringToken(literal, i - 1, 1, "$ at end of string.",
+            "I was expecting an identifier, 0xFF, or {...} after the $.");
         return false;
-      if (!AppendIdentifierValue(scope, literal, identifier, &output, err))
+      }
+      if (input[i] == '0') {
+        if (!AppendHexByte(scope, literal, input, size, &i, &output, err))
+          return false;
+      } else if (!AppendStringInterpolation(scope, literal, input, size, &i,
+                                     &output, err))
         return false;
     } else {
       output.push_back(input[i]);
     }
   }
   return true;
-}
-
-std::string RemovePrefix(const std::string& str, const std::string& prefix) {
-  CHECK(str.size() >= prefix.size() &&
-        str.compare(0, prefix.size(), prefix) == 0);
-  return str.substr(prefix.size());
-}
-
-void TrimTrailingSlash(std::string* str) {
-  if (!str->empty()) {
-    DCHECK((*str)[str->size() - 1] == '/');
-    str->resize(str->size() - 1);
-  }
 }

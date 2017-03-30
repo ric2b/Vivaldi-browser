@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_EXTENSION_GARBAGE_COLLECTOR_FACTORY_H_
 #define CHROME_BROWSER_EXTENSIONS_EXTENSION_GARBAGE_COLLECTOR_FACTORY_H_
 
+#include "base/macros.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
+namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
+}
 
 class Profile;
 
@@ -28,7 +31,7 @@ class ExtensionGarbageCollectorFactory
       content::BrowserContext* context);
 
  private:
-  friend struct DefaultSingletonTraits<ExtensionGarbageCollectorFactory>;
+  friend struct base::DefaultSingletonTraits<ExtensionGarbageCollectorFactory>;
 
   ExtensionGarbageCollectorFactory();
   ~ExtensionGarbageCollectorFactory() override;

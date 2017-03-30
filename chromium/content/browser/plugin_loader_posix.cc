@@ -141,9 +141,6 @@ void PluginLoaderPosix::LoadPluginsInternal() {
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO).get());
   process_host_ = host->AsWeakPtr();
   process_host_->DisableSandbox();
-#if defined(OS_MACOSX)
-  host->set_child_flags(ChildProcessHost::CHILD_ALLOW_HEAP_EXECUTION);
-#endif
 
   bool launched = LaunchUtilityProcess();
   if (!launched) {
@@ -164,7 +161,7 @@ void PluginLoaderPosix::GetPluginsWrapper(
   GetPlugins(callback);
 }
 
-void PluginLoaderPosix::OnPluginLoaded(uint32 index,
+void PluginLoaderPosix::OnPluginLoaded(uint32_t index,
                                        const WebPluginInfo& plugin) {
   if (index != next_load_index_) {
     LOG(ERROR) << "Received unexpected plugin load message for "
@@ -186,7 +183,7 @@ void PluginLoaderPosix::OnPluginLoaded(uint32 index,
     FinishedLoadingPlugins();
 }
 
-void PluginLoaderPosix::OnPluginLoadFailed(uint32 index,
+void PluginLoaderPosix::OnPluginLoadFailed(uint32_t index,
                                            const base::FilePath& plugin_path) {
   if (index != next_load_index_) {
     LOG(ERROR) << "Received unexpected plugin load failure message for "

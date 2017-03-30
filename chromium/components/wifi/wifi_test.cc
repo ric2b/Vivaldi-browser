@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include <stdio.h>
+
 #include <string>
+#include <utility>
 
 #include "base/at_exit.h"
 #include "base/bind.h"
@@ -20,6 +22,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/wifi/wifi_service.h"
 
 #if defined(OS_MACOSX)
@@ -50,7 +53,7 @@ class WiFiTest {
     DCHECK_NE(RESULT_PENDING, result);
     result_ = result;
     if (base::MessageLoop::current())
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void OnNetworksChanged(
@@ -176,8 +179,8 @@ bool WiFiTest::ParseCommandLine(int argc, const char* argv[]) {
       std::string new_network_guid;
       properties->SetString("WiFi.SSID", network_guid);
       VLOG(0) << "Creating Network: " << *properties;
-      wifi_service_->CreateNetwork(
-          false, properties.Pass(), &new_network_guid, &error);
+      wifi_service_->CreateNetwork(false, std::move(properties),
+                                   &new_network_guid, &error);
       VLOG(0) << error << ":\n" << new_network_guid;
       return true;
     }
@@ -188,7 +191,8 @@ bool WiFiTest::ParseCommandLine(int argc, const char* argv[]) {
       std::string error;
       if (!properties->empty()) {
         VLOG(0) << "Using connect properties: " << *properties;
-        wifi_service_->SetProperties(network_guid, properties.Pass(), &error);
+        wifi_service_->SetProperties(network_guid, std::move(properties),
+                                     &error);
       }
 
       wifi_service_->SetEventObservers(

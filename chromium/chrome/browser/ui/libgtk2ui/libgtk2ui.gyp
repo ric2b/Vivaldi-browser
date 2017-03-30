@@ -16,13 +16,9 @@
         '../../../../base/base.gyp:base_i18n',
         '../../../../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
         '../../../../build/linux/system.gyp:gconf',
-        '../../../../build/linux/system.gyp:gtk',
-        '../../../../build/linux/system.gyp:gtkprint',
         '../../../../build/linux/system.gyp:x11',
         '../../../../components/components_resources.gyp:components_resources',
         '../../../../content/content.gyp:content',
-        '../../../../printing/printing.gyp:cups',
-        '../../../../printing/printing.gyp:printing',
         '../../../../skia/skia.gyp:skia',
         '../../../../ui/aura/aura.gyp:aura',
         '../../../../ui/base/ime/ui_base_ime.gyp:ui_base_ime',
@@ -30,6 +26,7 @@
         '../../../../ui/events/events.gyp:events',
         '../../../../ui/events/events.gyp:events_base',
         '../../../../ui/gfx/gfx.gyp:gfx',
+        '../../../../ui/gfx/gfx.gyp:gfx_geometry',
         '../../../../ui/gfx/x/gfx_x11.gyp:gfx_x11',
         '../../../../ui/native_theme/native_theme.gyp:native_theme',
         '../../../../ui/resources/ui_resources.gyp:ui_resources',
@@ -59,18 +56,12 @@
         'chrome_gtk_frame.h',
         'chrome_gtk_menu_subclasses.cc',
         'chrome_gtk_menu_subclasses.h',
-        'g_object_destructor_filo.cc',
-        'g_object_destructor_filo.h',
         'gconf_listener.cc',
         'gconf_listener.h',
-        'gtk2_border.cc',
-        'gtk2_border.h',
         'gtk2_event_loop.cc',
         'gtk2_event_loop.h',
         'gtk2_key_bindings_handler.cc',
         'gtk2_key_bindings_handler.h',
-        'gtk2_signal_registrar.cc',
-        'gtk2_signal_registrar.h',
         'gtk2_status_icon.cc',
         'gtk2_status_icon.h',
         'gtk2_ui.cc',
@@ -82,8 +73,6 @@
         'menu_util.h',
         'native_theme_gtk2.cc',
         'native_theme_gtk2.h',
-        'owned_widget_gtk2.cc',
-        'owned_widget_gtk2.h',
         'print_dialog_gtk2.cc',
         'print_dialog_gtk2.h',
         'printing_gtk2_util.cc',
@@ -91,6 +80,7 @@
         'select_file_dialog_impl.cc',
         'select_file_dialog_impl.h',
         'select_file_dialog_impl_gtk2.cc',
+        'select_file_dialog_impl_gtk2.h',
         'select_file_dialog_impl_kde.cc',
         'skia_utils_gtk2.cc',
         'skia_utils_gtk2.h',
@@ -106,6 +96,17 @@
             'gconf_listener.h',
           ],
         }],
+        ['use_gtk3==1', {
+          'dependencies': [
+            '../../../../build/linux/system.gyp:gtk3',
+            '../../../../build/linux/system.gyp:gtkprint3',
+          ],
+        }, {
+          'dependencies': [
+            '../../../../build/linux/system.gyp:gtk2',
+            '../../../../build/linux/system.gyp:gtkprint2',
+          ],
+        }],
         [ 'clang==1', {
           'cflags': [
             # G_DEFINE_TYPE automatically generates a *get_instance_private inline function after glib 2.37.
@@ -114,6 +115,16 @@
 
             # G_STATIC_ASSERT uses a typedef as a static_assert.
             '-Wno-unused-local-typedef',
+          ],
+        }],
+        ['enable_basic_printing==1', {
+          'dependencies': [
+            '../../../../printing/printing.gyp:printing',
+          ],
+        }],
+        ['use_cups==1', {
+          'dependencies': [
+            '../../../../printing/printing.gyp:cups',
           ],
         }],
       ],

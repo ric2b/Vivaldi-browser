@@ -5,10 +5,14 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_OPTIONS_PASSWORD_MANAGER_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_OPTIONS_PASSWORD_MANAGER_HANDLER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/prefs/pref_member.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/passwords/password_manager_presenter.h"
 #include "chrome/browser/ui/passwords/password_ui_view.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
@@ -25,7 +29,6 @@ class PasswordManagerHandler : public OptionsPageUIHandler,
   // OptionsPageUIHandler implementation.
   void GetLocalizedValues(base::DictionaryValue* localized_strings) override;
   void InitializeHandler() override;
-  void InitializePage() override;
   void RegisterMessages() override;
 
   // PasswordUIView implementation.
@@ -36,10 +39,11 @@ class PasswordManagerHandler : public OptionsPageUIHandler,
       const std::string& username,
       const base::string16& password_value) override;
   void SetPasswordList(
-      const ScopedVector<autofill::PasswordForm>& password_list,
+      const std::vector<scoped_ptr<autofill::PasswordForm>>& password_list,
       bool show_passwords) override;
-  void SetPasswordExceptionList(const ScopedVector<autofill::PasswordForm>&
-                                    password_exception_list) override;
+  void SetPasswordExceptionList(
+      const std::vector<scoped_ptr<autofill::PasswordForm>>&
+          password_exception_list) override;
 #if !defined(OS_ANDROID)
   gfx::NativeWindow GetNativeWindow() const override;
 #endif

@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+
+#include <utility>
 
 #include "base/logging.h"
 #include "base/threading/platform_thread.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/channel_endpoint_client.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint_client.h"
 
 namespace mojo {
 namespace system {
@@ -16,9 +18,9 @@ namespace system {
 ChannelEndpoint::ChannelEndpoint(ChannelEndpointClient* client,
                                  unsigned client_port,
                                  MessageInTransitQueue* message_queue)
-    : client_(client),
+    : state_(State::PAUSED),
+      client_(client),
       client_port_(client_port),
-      channel_state_(ChannelState::NOT_YET_ATTACHED),
       channel_(nullptr) {
   DCHECK(client_ || message_queue);
 
@@ -29,20 +31,16 @@ ChannelEndpoint::ChannelEndpoint(ChannelEndpointClient* client,
 bool ChannelEndpoint::EnqueueMessage(scoped_ptr<MessageInTransit> message) {
   DCHECK(message);
 
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
 
-  switch (channel_state_) {
-    case ChannelState::NOT_YET_ATTACHED:
-    case ChannelState::DETACHED:
-      // We may reach here if we haven't been attached/run yet.
-      // TODO(vtl): We may also reach here if the channel is shut down early for
-      // some reason (with live message pipes on it). Ideally, we'd return false
-      // (and not enqueue the message), but we currently don't have a way to
-      // check this.
-      channel_message_queue_.AddMessage(message.Pass());
+  switch (state_) {
+    case State::PAUSED:
+      channel_message_queue_.AddMessage(std::move(message));
       return true;
-    case ChannelState::ATTACHED:
-      return WriteMessageNoLock(message.Pass());
+    case State::RUNNING:
+      return WriteMessageNoLock(std::move(message));
+    case State::DEAD:
+      return false;
   }
 
   NOTREACHED();
@@ -53,23 +51,23 @@ bool ChannelEndpoint::ReplaceClient(ChannelEndpointClient* client,
                                     unsigned client_port) {
   DCHECK(client);
 
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
   DCHECK(client_);
   DCHECK(client != client_.get() || client_port != client_port_);
   client_ = client;
   client_port_ = client_port;
-  return channel_state_ != ChannelState::DETACHED;
+  return state_ != State::DEAD;
 }
 
 void ChannelEndpoint::DetachFromClient() {
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
   DCHECK(client_);
   client_ = nullptr;
 
   if (!channel_)
     return;
   channel_->DetachEndpoint(this, local_id_, remote_id_);
-  ResetChannelNoLock();
+  DieNoLock();
 }
 
 void ChannelEndpoint::AttachAndRun(Channel* channel,
@@ -79,12 +77,12 @@ void ChannelEndpoint::AttachAndRun(Channel* channel,
   DCHECK(local_id.is_valid());
   DCHECK(remote_id.is_valid());
 
-  base::AutoLock locker(lock_);
-  DCHECK(channel_state_ == ChannelState::NOT_YET_ATTACHED);
+  MutexLocker locker(&mutex_);
+  DCHECK(state_ == State::PAUSED);
   DCHECK(!channel_);
   DCHECK(!local_id_.is_valid());
   DCHECK(!remote_id_.is_valid());
-  channel_state_ = ChannelState::ATTACHED;
+  state_ = State::RUNNING;
   channel_ = channel;
   local_id_ = local_id;
   remote_id_ = remote_id;
@@ -96,13 +94,13 @@ void ChannelEndpoint::AttachAndRun(Channel* channel,
 
   if (!client_) {
     channel_->DetachEndpoint(this, local_id_, remote_id_);
-    ResetChannelNoLock();
+    DieNoLock();
   }
 }
 
 void ChannelEndpoint::OnReadMessage(scoped_ptr<MessageInTransit> message) {
   if (message->type() == MessageInTransit::Type::ENDPOINT_CLIENT) {
-    OnReadMessageForClient(message.Pass());
+    OnReadMessageForClient(std::move(message));
     return;
   }
 
@@ -119,7 +117,7 @@ void ChannelEndpoint::DetachFromChannel() {
   scoped_refptr<ChannelEndpointClient> client;
   unsigned client_port = 0;
   {
-    base::AutoLock locker(lock_);
+    MutexLocker locker(&mutex_);
 
     if (client_) {
       // Take a ref, and call |OnDetachFromChannel()| outside the lock.
@@ -131,9 +129,9 @@ void ChannelEndpoint::DetachFromChannel() {
     // |DetachFromClient()| by calling |Channel::DetachEndpoint()| (and there
     // are racing detaches).
     if (channel_)
-      ResetChannelNoLock();
+      DieNoLock();
     else
-      DCHECK(channel_state_ == ChannelState::DETACHED);
+      DCHECK(state_ != State::RUNNING);
   }
 
   // If |ReplaceClient()| is called (from another thread) after the above locked
@@ -155,7 +153,7 @@ ChannelEndpoint::~ChannelEndpoint() {
 bool ChannelEndpoint::WriteMessageNoLock(scoped_ptr<MessageInTransit> message) {
   DCHECK(message);
 
-  lock_.AssertAcquired();
+  mutex_.AssertHeld();
 
   DCHECK(channel_);
   DCHECK(local_id_.is_valid());
@@ -164,7 +162,7 @@ bool ChannelEndpoint::WriteMessageNoLock(scoped_ptr<MessageInTransit> message) {
   message->SerializeAndCloseDispatchers(channel_);
   message->set_source_id(local_id_);
   message->set_destination_id(remote_id_);
-  return channel_->WriteMessage(message.Pass());
+  return channel_->WriteMessage(std::move(message));
 }
 
 void ChannelEndpoint::OnReadMessageForClient(
@@ -187,10 +185,10 @@ void ChannelEndpoint::OnReadMessageForClient(
   // -- impose significant cost in the common case.)
   for (;;) {
     {
-      base::AutoLock locker(lock_);
+      MutexLocker locker(&mutex_);
       if (!channel_ || !client_) {
         // This isn't a failure per se. (It just means that, e.g., the other end
-        // of the message point closed first.)
+        // of the message pipe closed first.)
         return;
       }
 
@@ -212,13 +210,13 @@ void ChannelEndpoint::OnReadMessageForClient(
   }
 }
 
-void ChannelEndpoint::ResetChannelNoLock() {
-  DCHECK(channel_state_ == ChannelState::ATTACHED);
+void ChannelEndpoint::DieNoLock() {
+  DCHECK(state_ == State::RUNNING);
   DCHECK(channel_);
   DCHECK(local_id_.is_valid());
   DCHECK(remote_id_.is_valid());
 
-  channel_state_ = ChannelState::DETACHED;
+  state_ = State::DEAD;
   channel_ = nullptr;
   local_id_ = ChannelEndpointId();
   remote_id_ = ChannelEndpointId();

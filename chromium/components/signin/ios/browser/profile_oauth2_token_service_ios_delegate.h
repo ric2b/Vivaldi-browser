@@ -6,19 +6,22 @@
 
 #include <string>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "google_apis/gaia/oauth2_token_service_delegate.h"
 
-namespace ios {
+class AccountTrackerService;
 class ProfileOAuth2TokenServiceIOSProvider;
-}
 
 class ProfileOAuth2TokenServiceIOSDelegate : public OAuth2TokenServiceDelegate {
  public:
   ProfileOAuth2TokenServiceIOSDelegate(
       SigninClient* client,
+      ProfileOAuth2TokenServiceIOSProvider* provider,
+      AccountTrackerService* account_tracker_service,
       SigninErrorController* signin_error_controller);
   ~ProfileOAuth2TokenServiceIOSDelegate() override;
 
@@ -58,26 +61,26 @@ class ProfileOAuth2TokenServiceIOSDelegate : public OAuth2TokenServiceDelegate {
   // |primary_account_id| must not be an empty string.
   void ReloadCredentials(const std::string& primary_account_id);
 
-  // Sets the account that should be ignored by this token service.
-  // |ReloadCredentials| needs to be called for this change to be effective.
-  void ExcludeSecondaryAccount(const std::string& account_id);
-  void IncludeSecondaryAccount(const std::string& account_id);
-  void ExcludeSecondaryAccounts(const std::vector<std::string>& account_ids);
+ protected:
+  // Adds |account_id| to |accounts_| if it does not exist or udpates
+  // the auth error state of |account_id| if it exists. Fires
+  // |OnRefreshTokenAvailable| if the account info is updated.
+  virtual void AddOrUpdateAccount(const std::string& account_id);
 
-  // Excludes all secondary accounts. |ReloadCredentials| needs to be called for
-  // this change to be effective.
-  void ExcludeAllSecondaryAccounts();
+  // Removes |account_id| from |accounts_|. Fires |OnRefreshTokenRevoked|
+  // if the account info is removed.
+  virtual void RemoveAccount(const std::string& account_id);
 
  private:
   friend class ProfileOAuth2TokenServiceIOSDelegateTest;
   FRIEND_TEST_ALL_PREFIXES(ProfileOAuth2TokenServiceIOSDelegateTest,
                            LoadRevokeCredentialsClearsExcludedAccounts);
 
-  class AccountInfo : public SigninErrorController::AuthStatusProvider {
+  class AccountStatus : public SigninErrorController::AuthStatusProvider {
    public:
-    AccountInfo(SigninErrorController* signin_error_controller,
-                const std::string& account_id);
-    ~AccountInfo() override;
+    AccountStatus(SigninErrorController* signin_error_controller,
+                  const std::string& account_id);
+    ~AccountStatus() override;
 
     void SetLastAuthError(const GoogleServiceAuthError& error);
 
@@ -85,41 +88,17 @@ class ProfileOAuth2TokenServiceIOSDelegate : public OAuth2TokenServiceDelegate {
     std::string GetAccountId() const override;
     GoogleServiceAuthError GetAuthStatus() const override;
 
-    bool marked_for_removal() const { return marked_for_removal_; }
-    void set_marked_for_removal(bool marked_for_removal) {
-      marked_for_removal_ = marked_for_removal;
-    }
-
    private:
     SigninErrorController* signin_error_controller_;
     std::string account_id_;
     GoogleServiceAuthError last_auth_error_;
-    bool marked_for_removal_;
 
-    DISALLOW_COPY_AND_ASSIGN(AccountInfo);
+    DISALLOW_COPY_AND_ASSIGN(AccountStatus);
   };
-
-  // Adds |account_id| to |accounts_| if it does not exist or udpates
-  // the auth error state of |account_id| if it exists. Fires
-  // |OnRefreshTokenAvailable| if the account info is updated.
-  void AddOrUpdateAccount(const std::string& account_id);
-
-  // Removes |account_id| from |accounts_|. Fires |OnRefreshTokenRevoked|
-  // if the account info is removed.
-  void RemoveAccount(const std::string& account_id);
 
   // Maps the |account_id| of accounts known to ProfileOAuth2TokenService
   // to information about the account.
-  typedef std::map<std::string, linked_ptr<AccountInfo>> AccountInfoMap;
-
-  // Returns the iOS provider;
-  ios::ProfileOAuth2TokenServiceIOSProvider* GetProvider();
-
-  // Returns the account ids that should be ignored by this token service.
-  std::set<std::string> GetExcludedSecondaryAccounts();
-
-  // Returns true if this token service should exclude all secondary accounts.
-  bool GetExcludeAllSecondaryAccounts();
+  typedef std::map<std::string, linked_ptr<AccountStatus>> AccountStatusMap;
 
   // Clears exclude secondary accounts preferences.
   void ClearExcludedSecondaryAccounts();
@@ -128,7 +107,7 @@ class ProfileOAuth2TokenServiceIOSDelegate : public OAuth2TokenServiceDelegate {
   std::string primary_account_id_;
 
   // Info about the existing accounts.
-  AccountInfoMap accounts_;
+  AccountStatusMap accounts_;
 
   // Calls to this class are expected to be made from the browser UI thread.
   // The purpose of this checker is to detect access to
@@ -137,6 +116,8 @@ class ProfileOAuth2TokenServiceIOSDelegate : public OAuth2TokenServiceDelegate {
 
   // The client with which this instance was initialied, or NULL.
   SigninClient* client_;
+  ProfileOAuth2TokenServiceIOSProvider* provider_;
+  AccountTrackerService* account_tracker_service_;
 
   // The error controller with which this instance was initialized, or NULL.
   SigninErrorController* signin_error_controller_;

@@ -5,12 +5,15 @@
 #ifndef REMOTING_HOST_SETUP_ME2ME_NATIVE_MESSAGING_HOST_H_
 #define REMOTING_HOST_SETUP_ME2ME_NATIVE_MESSAGING_HOST_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "extensions/browser/api/messaging/native_messaging_channel.h"
+#include "remoting/host/native_messaging/log_message_handler.h"
 #include "remoting/host/setup/daemon_controller.h"
 #include "remoting/host/setup/oauth_client.h"
 
@@ -158,7 +161,7 @@ class Me2MeNativeMessagingHost
   scoped_ptr<ElevatedChannelEventHandler> elevated_channel_event_handler_;
 
   // Timer to control the lifetime of the elevated host.
-  base::OneShotTimer<Me2MeNativeMessagingHost> elevated_host_timer_;
+  base::OneShotTimer elevated_host_timer_;
 #endif  // defined(OS_WIN)
 
   bool needs_elevation_;
@@ -173,6 +176,9 @@ class Me2MeNativeMessagingHost
   // Native messaging channel used to communicate with the native message
   // client.
   scoped_ptr<extensions::NativeMessagingChannel> channel_;
+
+  LogMessageHandler log_message_handler_;
+
   scoped_refptr<DaemonController> daemon_controller_;
 
   // Used to load and update the paired clients for this host.

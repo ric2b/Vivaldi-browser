@@ -11,12 +11,12 @@ This will crunch images and generate v14 compatible resources
 """
 
 import codecs
+import collections
 import optparse
 import os
 import re
 import shutil
 import sys
-import zipfile
 
 import generate_v14_compatible_resources
 
@@ -28,7 +28,12 @@ sys.path.insert(1,
 from jinja2 import Template # pylint: disable=F0401
 
 
-def ParseArgs(args):
+# Represents a line from a R.txt file.
+TextSymbolsEntry = collections.namedtuple('RTextEntry',
+    ('java_type', 'resource_type', 'name', 'value'))
+
+
+def _ParseArgs(args):
   """Parses command line options.
 
   Returns:
@@ -37,7 +42,8 @@ def ParseArgs(args):
   parser = optparse.OptionParser()
   build_utils.AddDepfileOption(parser)
 
-  parser.add_option('--android-sdk', help='path to the Android SDK folder')
+  parser.add_option('--android-sdk-jar',
+                    help='the path to android jar file.')
   parser.add_option('--aapt-path',
                     help='path to the Android aapt tool')
   parser.add_option('--non-constant-id', action='store_true')
@@ -49,6 +55,10 @@ def ParseArgs(args):
       action='store_true',
       help='Make a resource package that can be loaded by a different'
       'application at runtime to access the package\'s resources.')
+  parser.add_option(
+      '--app-as-shared-lib',
+      action='store_true',
+      help='Make a resource package that can be loaded as shared library.')
 
   parser.add_option('--resource-dirs',
                     help='Directories containing resources of this target.')
@@ -94,14 +104,14 @@ def ParseArgs(args):
 
   parser.add_option('--stamp', help='File to touch on success')
 
-  (options, args) = parser.parse_args(args)
+  options, positional_args = parser.parse_args(args)
 
-  if args:
+  if positional_args:
     parser.error('No positional arguments should be given.')
 
   # Check that required options have been provided.
   required_options = (
-      'android_sdk',
+      'android_sdk_jar',
       'aapt_path',
       'android_manifest',
       'dependencies_res_zips',
@@ -112,6 +122,23 @@ def ParseArgs(args):
 
   if (options.R_dir is None) == (options.srcjar_out is None):
     raise Exception('Exactly one of --R-dir or --srcjar-out must be specified.')
+
+  options.resource_dirs = build_utils.ParseGypList(options.resource_dirs)
+  options.dependencies_res_zips = (
+      build_utils.ParseGypList(options.dependencies_res_zips))
+
+  # Don't use [] as default value since some script explicitly pass "".
+  if options.extra_res_packages:
+    options.extra_res_packages = (
+        build_utils.ParseGypList(options.extra_res_packages))
+  else:
+    options.extra_res_packages = []
+
+  if options.extra_r_text_files:
+    options.extra_r_text_files = (
+        build_utils.ParseGypList(options.extra_r_text_files))
+  else:
+    options.extra_r_text_files = []
 
   return options
 
@@ -136,42 +163,61 @@ def CreateExtraRJavaFiles(
     if len(extra_packages) != len(extra_r_text_files):
       raise Exception('Need one R.txt file per extra package')
 
-    all_resources = {}
     r_txt_file = os.path.join(r_dir, 'R.txt')
     if not os.path.exists(r_txt_file):
       return
-    with open(r_txt_file) as f:
-      for line in f:
-        m = re.match(r'(int(?:\[\])?) (\w+) (\w+) (.+)$', line)
-        if not m:
-          raise Exception('Unexpected line in R.txt: %s' % line)
-        java_type, resource_type, name, value = m.groups()
-        all_resources[(resource_type, name)] = (java_type, value)
 
+    # Map of (resource_type, name) -> Entry.
+    # Contains the correct values for resources.
+    all_resources = {}
+    for entry in _ParseTextSymbolsFile(r_txt_file):
+      all_resources[(entry.resource_type, entry.name)] = entry
+
+    # Map of package_name->resource_type->entry
+    resources_by_package = (
+        collections.defaultdict(lambda: collections.defaultdict(list)))
+    # Build the R.java files using each package's R.txt file, but replacing
+    # each entry's placeholder value with correct values from all_resources.
     for package, r_text_file in zip(extra_packages, extra_r_text_files):
-      if os.path.exists(r_text_file):
-        package_r_java_dir = os.path.join(r_dir, *package.split('.'))
-        build_utils.MakeDirectory(package_r_java_dir)
-        package_r_java_path = os.path.join(package_r_java_dir, 'R.java')
-        CreateExtraRJavaFile(
-            package, package_r_java_path, r_text_file, all_resources,
-            shared_resources)
+      if not os.path.exists(r_text_file):
+        continue
+      if package in resources_by_package:
+        raise Exception(('Package name "%s" appeared twice. All '
+                         'android_resources() targets must use unique package '
+                         'names, or no package name at all.') % package)
+      resources_by_type = resources_by_package[package]
+      # The sub-R.txt files have the wrong values at this point. Read them to
+      # figure out which entries belong to them, but use the values from the
+      # main R.txt file.
+      for entry in _ParseTextSymbolsFile(r_text_file):
+        entry = all_resources[(entry.resource_type, entry.name)]
+        resources_by_type[entry.resource_type].append(entry)
+
+    for package, resources_by_type in resources_by_package.iteritems():
+      package_r_java_dir = os.path.join(r_dir, *package.split('.'))
+      build_utils.MakeDirectory(package_r_java_dir)
+      package_r_java_path = os.path.join(package_r_java_dir, 'R.java')
+      java_file_contents = _CreateExtraRJavaFile(
+          package, resources_by_type, shared_resources)
+      with open(package_r_java_path, 'w') as f:
+        f.write(java_file_contents)
 
 
-def CreateExtraRJavaFile(
-      package, r_java_path, r_text_file, all_resources, shared_resources):
-  resources = {}
-  with open(r_text_file) as f:
+def _ParseTextSymbolsFile(path):
+  """Given an R.txt file, returns a list of TextSymbolsEntry."""
+  ret = []
+  with open(path) as f:
     for line in f:
-      m = re.match(r'int(?:\[\])? (\w+) (\w+) ', line)
+      m = re.match(r'(int(?:\[\])?) (\w+) (\w+) (.+)$', line)
       if not m:
         raise Exception('Unexpected line in R.txt: %s' % line)
-      resource_type, name = m.groups()
-      java_type, value = all_resources[(resource_type, name)]
-      if resource_type not in resources:
-        resources[resource_type] = []
-      resources[resource_type].append((name, java_type, value))
+      java_type, resource_type, name, value = m.groups()
+      ret.append(TextSymbolsEntry(java_type, resource_type, name, value))
+  return ret
 
+
+def _CreateExtraRJavaFile(package, resources_by_type, shared_resources):
+  """Generates the contents of a R.java file."""
   template = Template("""/* AUTO-GENERATED FILE.  DO NOT MODIFY. */
 
 package {{ package }};
@@ -179,11 +225,11 @@ package {{ package }};
 public final class R {
     {% for resource_type in resources %}
     public static final class {{ resource_type }} {
-        {% for name, java_type, value in resources[resource_type] %}
+        {% for e in resources[resource_type] %}
         {% if shared_resources %}
-        public static {{ java_type }} {{ name }} = {{ value }};
+        public static {{ e.java_type }} {{ e.name }} = {{ e.value }};
         {% else %}
-        public static final {{ java_type }} {{ name }} = {{ value }};
+        public static final {{ e.java_type }} {{ e.name }} = {{ e.value }};
         {% endif %}
         {% endfor %}
     }
@@ -191,16 +237,16 @@ public final class R {
     {% if shared_resources %}
     public static void onResourcesLoaded(int packageId) {
         {% for resource_type in resources %}
-        {% for name, java_type, value in resources[resource_type] %}
-        {% if java_type == 'int[]' %}
-        for(int i = 0; i < {{ resource_type }}.{{ name }}.length; ++i) {
-            {{ resource_type }}.{{ name }}[i] =
-                    ({{ resource_type }}.{{ name }}[i] & 0x00ffffff)
+        {% for e in resources[resource_type] %}
+        {% if e.java_type == 'int[]' %}
+        for(int i = 0; i < {{ e.resource_type }}.{{ e.name }}.length; ++i) {
+            {{ e.resource_type }}.{{ e.name }}[i] =
+                    ({{ e.resource_type }}.{{ e.name }}[i] & 0x00ffffff)
                     | (packageId << 24);
         }
         {% else %}
-        {{ resource_type }}.{{ name }} =
-                ({{ resource_type }}.{{ name }} & 0x00ffffff)
+        {{ e.resource_type }}.{{ e.name }} =
+                ({{ e.resource_type }}.{{ e.name }} & 0x00ffffff)
                 | (packageId << 24);
         {% endif %}
         {% endfor %}
@@ -210,10 +256,8 @@ public final class R {
 }
 """, trim_blocks=True, lstrip_blocks=True)
 
-  output = template.render(package=package, resources=resources,
-                           shared_resources=shared_resources)
-  with open(r_java_path, 'w') as f:
-    f.write(output)
+  return template.render(package=package, resources=resources_by_type,
+                         shared_resources=shared_resources)
 
 
 def CrunchDirectory(aapt, input_dir, output_dir):
@@ -276,12 +320,13 @@ def ZipResources(resource_dirs, zip_path):
   for d in resource_dirs:
     for root, _, files in os.walk(d):
       for f in files:
-        archive_path = os.path.join(os.path.relpath(root, d), f)
+        archive_path = f
+        parent_dir = os.path.relpath(root, d)
+        if parent_dir != '.':
+          archive_path = os.path.join(parent_dir, f)
         path = os.path.join(root, f)
         files_to_zip[archive_path] = path
-  with zipfile.ZipFile(zip_path, 'w') as outzip:
-    for archive_path, path in files_to_zip.iteritems():
-      outzip.write(path, archive_path)
+  build_utils.DoZip(files_to_zip.iteritems(), zip_path)
 
 
 def CombineZips(zip_files, output_path):
@@ -290,23 +335,14 @@ def CombineZips(zip_files, output_path):
   # resources directory. While some resources just clobber others (image files,
   # etc), other resources (particularly .xml files) need to be more
   # intelligently merged. That merging is left up to aapt.
-  with zipfile.ZipFile(output_path, 'w') as outzip:
-    for i, z in enumerate(zip_files):
-      with zipfile.ZipFile(z, 'r') as inzip:
-        for name in inzip.namelist():
-          new_name = '%d/%s' % (i, name)
-          outzip.writestr(new_name, inzip.read(name))
+  def path_transform(name, src_zip):
+    return '%d/%s' % (zip_files.index(src_zip), name)
+
+  build_utils.MergeZips(output_path, zip_files, path_transform=path_transform)
 
 
-def main():
-  args = build_utils.ExpandFileArgs(sys.argv[1:])
-
-  options = ParseArgs(args)
-  android_jar = os.path.join(options.android_sdk, 'android.jar')
+def _OnStaleMd5(options):
   aapt = options.aapt_path
-
-  input_files = []
-
   with build_utils.TempDir() as temp_dir:
     deps_dir = os.path.join(temp_dir, 'deps')
     build_utils.MakeDirectory(deps_dir)
@@ -316,7 +352,7 @@ def main():
     gen_dir = os.path.join(temp_dir, 'gen')
     build_utils.MakeDirectory(gen_dir)
 
-    input_resource_dirs = build_utils.ParseGypList(options.resource_dirs)
+    input_resource_dirs = options.resource_dirs
 
     if not options.v14_skip:
       for resource_dir in input_resource_dirs:
@@ -324,8 +360,7 @@ def main():
             resource_dir,
             v14_dir)
 
-    dep_zips = build_utils.ParseGypList(options.dependencies_res_zips)
-    input_files += dep_zips
+    dep_zips = options.dependencies_res_zips
     dep_subdirs = []
     for z in dep_zips:
       subdir = os.path.join(deps_dir, os.path.basename(z))
@@ -344,7 +379,7 @@ def main():
                        '-m',
                        '-M', options.android_manifest,
                        '--auto-add-overlay',
-                       '-I', android_jar,
+                       '-I', options.android_sdk_jar,
                        '--output-text-symbols', gen_dir,
                        '-J', gen_dir,
                        '--ignore-assets', build_utils.AAPT_IGNORE_PATTERN]
@@ -363,14 +398,16 @@ def main():
       package_command += ['-G', options.proguard_file]
     if options.shared_resources:
       package_command.append('--shared-lib')
+    if options.app_as_shared_lib:
+      package_command.append('--app-as-shared-lib')
     build_utils.CheckOutput(package_command, print_stderr=False)
 
     if options.extra_res_packages:
       CreateExtraRJavaFiles(
           gen_dir,
-          build_utils.ParseGypList(options.extra_res_packages),
-          build_utils.ParseGypList(options.extra_r_text_files),
-          options.shared_resources,
+          options.extra_res_packages,
+          options.extra_r_text_files,
+          options.shared_resources or options.app_as_shared_lib,
           options.include_all_resources)
 
     # This is the list of directories with resources to put in the final .zip
@@ -408,13 +445,50 @@ def main():
       else:
         open(options.r_text_out, 'w').close()
 
-  if options.depfile:
-    input_files += build_utils.GetPythonDependencies()
-    build_utils.WriteDepfile(options.depfile, input_files)
 
-  if options.stamp:
-    build_utils.Touch(options.stamp)
+def main(args):
+  args = build_utils.ExpandFileArgs(args)
+  options = _ParseArgs(args)
+
+  possible_output_paths = [
+    options.resource_zip_out,
+    options.all_resources_zip_out,
+    options.proguard_file,
+    options.r_text_out,
+    options.srcjar_out,
+  ]
+  output_paths = [x for x in possible_output_paths if x]
+
+  # List python deps in input_strings rather than input_paths since the contents
+  # of them does not change what gets written to the depsfile.
+  input_strings = options.extra_res_packages + [
+    options.aapt_path,
+    options.android_sdk_jar,
+    options.app_as_shared_lib,
+    options.custom_package,
+    options.include_all_resources,
+    options.non_constant_id,
+    options.shared_resources,
+    options.v14_skip,
+  ]
+
+  input_paths = [ options.android_manifest ]
+  input_paths.extend(options.dependencies_res_zips)
+  input_paths.extend(p for p in options.extra_r_text_files if os.path.exists(p))
+
+  for d in options.resource_dirs:
+    for root, _, filenames in os.walk(d):
+      input_paths.extend(os.path.join(root, f) for f in filenames)
+
+  build_utils.CallAndWriteDepfileIfStale(
+      lambda: _OnStaleMd5(options),
+      options,
+      input_paths=input_paths,
+      input_strings=input_strings,
+      output_paths=output_paths,
+      # TODO(agrieve): Remove R_dir when it's no longer used (used only by GYP).
+      force=options.R_dir)
 
 
 if __name__ == '__main__':
-  main()
+  main(sys.argv[1:])

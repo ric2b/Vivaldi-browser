@@ -4,6 +4,8 @@
 
 #include "chrome/browser/net/utility_process_mojo_proxy_resolver_factory.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/single_thread_task_runner.h"
@@ -23,9 +25,9 @@ const int kUtilityProcessIdleTimeoutSeconds = 5;
 UtilityProcessMojoProxyResolverFactory*
 UtilityProcessMojoProxyResolverFactory::GetInstance() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  return Singleton<
-      UtilityProcessMojoProxyResolverFactory,
-      LeakySingletonTraits<UtilityProcessMojoProxyResolverFactory>>::get();
+  return base::Singleton<UtilityProcessMojoProxyResolverFactory,
+                         base::LeakySingletonTraits<
+                             UtilityProcessMojoProxyResolverFactory>>::get();
 }
 
 UtilityProcessMojoProxyResolverFactory::
@@ -79,7 +81,8 @@ UtilityProcessMojoProxyResolverFactory::CreateResolver(
   }
   idle_timer_.Stop();
   num_proxy_resolvers_++;
-  resolver_factory_->CreateResolver(pac_script, req.Pass(), client.Pass());
+  resolver_factory_->CreateResolver(pac_script, std::move(req),
+                                    std::move(client));
   return make_scoped_ptr(new base::ScopedClosureRunner(
       base::Bind(&UtilityProcessMojoProxyResolverFactory::OnResolverDestroyed,
                  base::Unretained(this))));

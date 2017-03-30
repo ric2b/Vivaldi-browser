@@ -73,24 +73,19 @@ public class PartnerDisableIncognitoModeIntegrationTest extends
         }
     }
 
-    private boolean waitForParentalControlsEnabledState(final boolean parentalControlsEnabled)
+    private void waitForParentalControlsEnabledState(final boolean parentalControlsEnabled)
             throws InterruptedException {
-        return CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
-                    @Override
-                    public Boolean call() throws Exception {
-                        // areParentalControlsEnabled is updated on a background thread, so we
-                        // also wait on the isIncognitoModeEnabled to ensure the updates on the
-                        // UI thread have also triggered.
-                        boolean retVal = parentalControlsEnabled
-                                == PartnerBrowserCustomizations.isIncognitoDisabled();
-                        retVal &= parentalControlsEnabled
-                                != PrefServiceBridge.getInstance().isIncognitoModeEnabled();
-                        return retVal;
-                    }
-                });
+                // areParentalControlsEnabled is updated on a background thread, so we
+                // also wait on the isIncognitoModeEnabled to ensure the updates on the
+                // UI thread have also triggered.
+                boolean retVal = parentalControlsEnabled
+                        == PartnerBrowserCustomizations.isIncognitoDisabled();
+                retVal &= parentalControlsEnabled
+                        != PrefServiceBridge.getInstance().isIncognitoModeEnabled();
+                return retVal;
             }
         });
     }
@@ -127,7 +122,7 @@ public class PartnerDisableIncognitoModeIntegrationTest extends
     public void testIncognitoEnabledIfNoParentalControls() throws InterruptedException {
         setParentalControlsEnabled(false);
         startMainActivityOnBlankPage();
-        assertTrue(waitForParentalControlsEnabledState(false));
+        waitForParentalControlsEnabledState(false);
         newIncognitoTabFromMenu();
     }
 
@@ -137,12 +132,12 @@ public class PartnerDisableIncognitoModeIntegrationTest extends
             throws InterruptedException, ExecutionException {
         setParentalControlsEnabled(true);
         startMainActivityOnBlankPage();
-        assertTrue(waitForParentalControlsEnabledState(true));
+        waitForParentalControlsEnabledState(true);
         assertIncognitoMenuItemEnabled(false);
 
         setParentalControlsEnabled(false);
         toggleActivityForegroundState();
-        assertTrue(waitForParentalControlsEnabledState(false));
+        waitForParentalControlsEnabledState(false);
         assertIncognitoMenuItemEnabled(true);
     }
 
@@ -151,7 +146,7 @@ public class PartnerDisableIncognitoModeIntegrationTest extends
     public void testEnabledParentalControlsClosesIncognitoTabs() throws InterruptedException {
         setParentalControlsEnabled(false);
         startMainActivityOnBlankPage();
-        assertTrue(waitForParentalControlsEnabledState(false));
+        waitForParentalControlsEnabledState(false);
 
         loadUrlInNewTab(TEST_URLS[0], true);
         loadUrlInNewTab(TEST_URLS[1], true);
@@ -160,14 +155,13 @@ public class PartnerDisableIncognitoModeIntegrationTest extends
 
         setParentalControlsEnabled(true);
         toggleActivityForegroundState();
-        assertTrue(waitForParentalControlsEnabledState(true));
+        waitForParentalControlsEnabledState(true);
 
-        assertTrue("Incognito tabs did not close as expected",
-                CriteriaHelper.pollForCriteria(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return incognitoTabsCount() == 0;
-                    }
-                }));
+        CriteriaHelper.pollForCriteria(new Criteria("Incognito tabs did not close as expected") {
+            @Override
+            public boolean isSatisfied() {
+                return incognitoTabsCount() == 0;
+            }
+        });
     }
 }

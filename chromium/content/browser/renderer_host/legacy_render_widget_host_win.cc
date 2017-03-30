@@ -166,7 +166,7 @@ LRESULT LegacyRenderWidgetHostHWND::OnGetObject(UINT message,
     return static_cast<LRESULT>(0L);
   }
 
-  if (OBJID_CLIENT != obj_id || !host_)
+  if (static_cast<DWORD>(OBJID_CLIENT) != obj_id || !host_)
     return static_cast<LRESULT>(0L);
 
   RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(
@@ -212,7 +212,6 @@ LRESULT LegacyRenderWidgetHostHWND::OnMouseRange(UINT message,
                                                  WPARAM w_param,
                                                  LPARAM l_param,
                                                  BOOL& handled) {
-
   if (message == WM_MOUSEMOVE) {
     if (!mouse_tracking_enabled_) {
       mouse_tracking_enabled_ = true;

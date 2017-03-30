@@ -5,6 +5,7 @@
 #include "google_apis/gcm/engine/connection_factory_impl.h"
 
 #include <cmath>
+#include <utility>
 
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -201,7 +202,7 @@ TestConnectionFactoryImpl::CreateConnectionHandler(
     const ConnectionHandler::ProtoReceivedCallback& read_callback,
     const ConnectionHandler::ProtoSentCallback& write_callback,
     const ConnectionHandler::ConnectionChangedCallback& connection_callback) {
-  return scoped_handler_.Pass();
+  return std::move(scoped_handler_);
 }
 
 base::TimeTicks TestConnectionFactoryImpl::NowTicks() {
@@ -272,9 +273,9 @@ class ConnectionFactoryImplTest
 };
 
 ConnectionFactoryImplTest::ConnectionFactoryImplTest()
-   : factory_(base::Bind(&ConnectionFactoryImplTest::ConnectionsComplete,
+    : factory_(base::Bind(&ConnectionFactoryImplTest::ConnectionsComplete,
                          base::Unretained(this))),
-     run_loop_(new base::RunLoop()) {
+      run_loop_(new base::RunLoop()) {
   factory()->SetConnectionListener(this);
   factory()->Initialize(
       ConnectionFactory::BuildLoginRequestCallback(),
@@ -433,9 +434,8 @@ TEST_F(ConnectionFactoryImplTest, CanarySucceedsRetryDuringLogin) {
   EXPECT_FALSE(factory()->IsEndpointReachable());
 
   // Pump the loop, to ensure the pending backoff retry has no effect.
-  base::MessageLoop::current()->PostDelayedTask(
-      FROM_HERE,
-      base::MessageLoop::QuitClosure(),
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(1));
   WaitForConnections();
 }

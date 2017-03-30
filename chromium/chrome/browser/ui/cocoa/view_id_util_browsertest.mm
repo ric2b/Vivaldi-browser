@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,6 +13,8 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/view_id_util.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -25,7 +26,7 @@ using bookmarks::BookmarkModel;
 using content::OpenURLParams;
 using content::Referrer;
 
-// Basic sanity check of ViewID use on the mac.
+// Basic sanity check of ViewID use on the Mac.
 class ViewIDTest : public InProcessBrowserTest {
  public:
   ViewIDTest() : root_window_(nil) {
@@ -67,13 +68,15 @@ class ViewIDTest : public InProcessBrowserTest {
 
     for (int i = VIEW_ID_TOOLBAR; i < VIEW_ID_PREDEFINED_COUNT; ++i) {
       // Mac implementation does not support following ids yet.
+      // TODO(palmer): crbug.com/536257: Enable VIEW_ID_LOCATION_ICON.
       if (i == VIEW_ID_STAR_BUTTON ||
           i == VIEW_ID_CONTENTS_SPLIT ||
           i == VIEW_ID_BROWSER_ACTION ||
           i == VIEW_ID_FEEDBACK_BUTTON ||
           i == VIEW_ID_SCRIPT_BUBBLE ||
-          i == VIEW_ID_MIC_SEARCH_BUTTON ||
-          i == VIEW_ID_TRANSLATE_BUTTON) {
+          i == VIEW_ID_SAVE_CREDIT_CARD_BUTTON ||
+          i == VIEW_ID_TRANSLATE_BUTTON ||
+          i == VIEW_ID_LOCATION_ICON) {
         continue;
       }
 
@@ -97,7 +100,7 @@ IN_PROC_BROWSER_TEST_F(ViewIDTest, Basic) {
 
 // Flaky on Mac: http://crbug.com/90557.
 IN_PROC_BROWSER_TEST_F(ViewIDTest, DISABLED_Fullscreen) {
-  browser()->window()->EnterFullscreen(
+  browser()->exclusive_access_manager()->context()->EnterFullscreen(
       GURL(), EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION,
       false);
   ASSERT_NO_FATAL_FAILURE(DoTest());

@@ -5,8 +5,9 @@
 #ifndef CHROMECAST_BROWSER_SERVICE_CAST_SERVICE_SIMPLE_H_
 #define CHROMECAST_BROWSER_SERVICE_CAST_SERVICE_SIMPLE_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "chromecast/browser/service/cast_service.h"
+#include "chromecast/service/cast_service.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -14,13 +15,13 @@ class WebContents;
 }
 
 namespace chromecast {
+namespace shell {
 class CastContentWindow;
 
 class CastServiceSimple : public CastService {
  public:
   CastServiceSimple(content::BrowserContext* browser_context,
-                    PrefService* pref_service,
-                    metrics::CastMetricsServiceClient* metrics_service_client);
+                    PrefService* pref_service);
   ~CastServiceSimple() override;
 
  protected:
@@ -38,6 +39,7 @@ class CastServiceSimple : public CastService {
   DISALLOW_COPY_AND_ASSIGN(CastServiceSimple);
 };
 
+}  // namespace shell
 }  // namespace chromecast
 
 #endif  // CHROMECAST_BROWSER_SERVICE_CAST_SERVICE_SIMPLE_H_

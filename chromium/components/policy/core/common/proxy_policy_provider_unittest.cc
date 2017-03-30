@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/proxy_policy_provider.h"
 #include "components/policy/core/common/schema_registry.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -37,7 +38,7 @@ class ProxyPolicyProviderTest : public testing::Test {
   static scoped_ptr<PolicyBundle> CopyBundle(const PolicyBundle& bundle) {
     scoped_ptr<PolicyBundle> copy(new PolicyBundle());
     copy->CopyFrom(bundle);
-    return copy.Pass();
+    return copy;
   }
 
  private:
@@ -55,6 +56,7 @@ TEST_F(ProxyPolicyProviderTest, Delegate) {
       .Set("policy",
            POLICY_LEVEL_MANDATORY,
            POLICY_SCOPE_USER,
+           POLICY_SOURCE_CLOUD,
            new base::StringValue("value"),
            NULL);
   mock_provider_.UpdatePolicy(CopyBundle(bundle));
@@ -69,6 +71,7 @@ TEST_F(ProxyPolicyProviderTest, Delegate) {
       .Set("policy",
            POLICY_LEVEL_MANDATORY,
            POLICY_SCOPE_USER,
+           POLICY_SOURCE_CLOUD,
            new base::StringValue("new value"),
            NULL);
   mock_provider_.UpdatePolicy(CopyBundle(bundle));

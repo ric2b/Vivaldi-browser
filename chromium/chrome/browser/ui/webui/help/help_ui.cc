@@ -11,13 +11,13 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "grit/browser_resources.h"
+#include "grit/theme_resources.h"
 
 namespace {
 
 content::WebUIDataSource* CreateAboutPageHTMLSource() {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIHelpFrameHost);
-
   source->SetJsonPath("strings.js");
   source->AddResourcePath("help.js", IDR_HELP_JS);
   source->AddResourcePath("help_page.js", IDR_HELP_PAGE_JS);

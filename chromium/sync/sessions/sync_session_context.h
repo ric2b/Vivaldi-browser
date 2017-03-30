@@ -15,8 +15,12 @@
 #ifndef SYNC_SESSIONS_SYNC_SESSION_CONTEXT_H_
 #define SYNC_SESSIONS_SYNC_SESSION_CONTEXT_H_
 
-#include <string>
+#include <stdint.h>
 
+#include <string>
+#include <vector>
+
+#include "base/macros.h"
 #include "sync/base/sync_export.h"
 #include "sync/engine/sync_engine_event_listener.h"
 #include "sync/sessions/debug_info_getter.h"
@@ -38,7 +42,7 @@ static const int kDefaultMaxCommitBatchSize = 25;
 namespace sessions {
 class TestScopedSessionEventListener;
 
-class SYNC_EXPORT_PRIVATE SyncSessionContext {
+class SYNC_EXPORT SyncSessionContext {
  public:
   SyncSessionContext(
       ServerConnectionManager* connection_manager,
@@ -80,7 +84,6 @@ class SYNC_EXPORT_PRIVATE SyncSessionContext {
 
   // Account name, set once a directory has been opened.
   void set_account_name(const std::string& name) {
-    DCHECK(account_name_.empty());
     account_name_ = name;
   }
   const std::string& account_name() const { return account_name_; }
@@ -88,7 +91,7 @@ class SYNC_EXPORT_PRIVATE SyncSessionContext {
   void set_max_commit_batch_size(int batch_size) {
     max_commit_batch_size_ = batch_size;
   }
-  int32 max_commit_batch_size() const { return max_commit_batch_size_; }
+  int32_t max_commit_batch_size() const { return max_commit_batch_size_; }
 
   base::ObserverList<SyncEngineEventListener>* listeners() {
     return &listeners_;

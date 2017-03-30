@@ -7,7 +7,7 @@
 
 #include <ApplicationServices/ApplicationServices.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "chrome/browser/extensions/extension_view.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/size.h"
@@ -61,8 +61,9 @@ class ExtensionViewMac : public extensions::ExtensionView {
   // extensions::ExtensionView:
   Browser* GetBrowser() override;
   gfx::NativeView GetNativeView() override;
-  void ResizeDueToAutoResize(const gfx::Size& new_size) override;
-  void RenderViewCreated() override;
+  void ResizeDueToAutoResize(content::WebContents* web_contents,
+                             const gfx::Size& new_size) override;
+  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
   void HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;

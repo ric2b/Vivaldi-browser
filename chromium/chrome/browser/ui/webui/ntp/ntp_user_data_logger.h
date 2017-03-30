@@ -5,8 +5,12 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_NTP_NTP_USER_DATA_LOGGER_H_
 #define CHROME_BROWSER_UI_WEBUI_NTP_NTP_USER_DATA_LOGGER_H_
 
+#include <stddef.h>
+
 #include <string>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "chrome/common/ntp_logging_events.h"
@@ -62,6 +66,11 @@ class NTPUserDataLogger
 
  private:
   friend class content::WebContentsUserData<NTPUserDataLogger>;
+
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
+                           OnMostVisitedItemsChangedFromServer);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
+                           OnMostVisitedItemsChangedFromClient);
 
   // True if at least one iframe came from a server-side suggestion.
   bool has_server_side_suggestions_;

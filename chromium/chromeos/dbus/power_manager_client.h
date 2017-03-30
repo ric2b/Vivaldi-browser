@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "chromeos/chromeos_export.h"
@@ -175,6 +175,10 @@ class CHROMEOS_EXPORT PowerManagerClient : public DBusClient {
   // adjust idleness thresholds and derived, on this side, from the number of
   // video outputs attached.
   virtual void SetIsProjecting(bool is_projecting) = 0;
+
+  // Tells powerd to change the power source to the given ID. An empty string
+  // causes powerd to switch to using the battery on devices with type-C ports.
+  virtual void SetPowerSource(const std::string& id) = 0;
 
   // Returns a callback that can be called by an observer to report
   // readiness for suspend.  See Observer::SuspendImminent().

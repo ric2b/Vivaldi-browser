@@ -7,9 +7,9 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/libjingle/source/talk/app/webrtc/peerconnectioninterface.h"
@@ -61,9 +61,8 @@ class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
     NOTIMPLEMENTED();
     return PeerConnectionInterface::kIceGatheringNew;
   }
-  void Close() override {
-    NOTIMPLEMENTED();
-  }
+
+  MOCK_METHOD0(Close, void());
 
   const webrtc::SessionDescriptionInterface* local_description() const override;
   const webrtc::SessionDescriptionInterface* remote_description()

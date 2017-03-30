@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_controller.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target.h"
@@ -74,8 +78,8 @@ class TouchActionBrowserTest : public ContentBrowserTest {
   ~TouchActionBrowserTest() override {}
 
   RenderWidgetHostImpl* GetWidgetHost() {
-    return RenderWidgetHostImpl::From(shell()->web_contents()->
-                                          GetRenderViewHost());
+    return RenderWidgetHostImpl::From(
+        shell()->web_contents()->GetRenderViewHost()->GetWidget());
   }
 
   void OnSyntheticGestureCompleted(SyntheticGesture::Result result) {
@@ -138,7 +142,7 @@ class TouchActionBrowserTest : public ContentBrowserTest {
 
     SyntheticSmoothScrollGestureParams params;
     params.gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
-    params.anchor = point;
+    params.anchor = gfx::PointF(point);
     params.distances.push_back(-distance);
 
     runner_ = new MessageLoopRunner();
@@ -146,7 +150,7 @@ class TouchActionBrowserTest : public ContentBrowserTest {
     scoped_ptr<SyntheticSmoothScrollGesture> gesture(
         new SyntheticSmoothScrollGesture(params));
     GetWidgetHost()->QueueSyntheticGesture(
-        gesture.Pass(),
+        std::move(gesture),
         base::Bind(&TouchActionBrowserTest::OnSyntheticGestureCompleted,
                    base::Unretained(this)));
 
@@ -172,16 +176,11 @@ class TouchActionBrowserTest : public ContentBrowserTest {
 // Mac doesn't yet have a gesture recognizer, so can't support turning touch
 // events into scroll gestures.
 // Will be fixed with http://crbug.com/337142
-// Flaky on Android, see https://crbug.com/376668.
+// Flaky on all platforms, see https://crbug.com/376668.
 //
 // Verify the test infrastructure works - we can touch-scroll the page and get a
 // touchcancel as expected.
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
-#define MAYBE_DefaultAuto DISABLED_DefaultAuto
-#else
-#define MAYBE_DefaultAuto DefaultAuto
-#endif
-IN_PROC_BROWSER_TEST_F(TouchActionBrowserTest, MAYBE_DefaultAuto) {
+IN_PROC_BROWSER_TEST_F(TouchActionBrowserTest, DISABLED_DefaultAuto) {
   LoadURL();
 
   bool scrolled = DoTouchScroll(gfx::Point(50, 50), gfx::Vector2d(0, 45));

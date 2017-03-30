@@ -5,6 +5,8 @@
 #ifndef NET_SPDY_SPDY_PINNABLE_BUFFER_PIECE_H_
 #define NET_SPDY_SPDY_PINNABLE_BUFFER_PIECE_H_
 
+#include <stddef.h>
+
 #include <memory>
 
 #include "base/memory/scoped_ptr.h"
@@ -39,9 +41,7 @@ struct NET_EXPORT_PRIVATE SpdyPinnableBufferPiece {
   // Allocates and copies the buffer to internal storage.
   void Pin();
 
-  bool IsPinned() const {
-    return storage_.get() != NULL;
-  }
+  bool IsPinned() const { return storage_ != nullptr; }
 
   // Swaps buffers, including internal storage, with |other|.
   void Swap(SpdyPinnableBufferPiece* other);

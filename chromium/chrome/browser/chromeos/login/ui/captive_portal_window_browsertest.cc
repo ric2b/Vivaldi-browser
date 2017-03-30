@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
@@ -182,7 +183,7 @@ class CaptivePortalWindowCtorDtorTest : public LoginManagerTest {
     LoginManagerTest::SetUpInProcessBrowserTestFixture();
 
     network_portal_detector_ = new NetworkPortalDetectorTestImpl();
-    NetworkPortalDetector::InitializeForTesting(network_portal_detector_);
+    network_portal_detector::InitializeForTesting(network_portal_detector_);
     NetworkPortalDetector::CaptivePortalState portal_state;
     portal_state.status = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL;
     portal_state.response_code = 200;

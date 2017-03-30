@@ -56,7 +56,7 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
             "HTTP/1.1 200 OK\nContent-Type: text/javascript");
 
   embedded_test_server()->ServeFilesFromDirectory(service_worker_dir_.path());
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   content::ServiceWorkerContext* sw_context =
       content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
@@ -75,24 +75,16 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
   // do that.
 }
 
-//todo: re-enable on mac in vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_CanCloseIncognitoWindowWithServiceWorkerController \
-  DISABLED_CanCloseIncognitoWindowWithServiceWorkerController
-#else
-#define MAYBE_CanCloseIncognitoWindowWithServiceWorkerController \
-  CanCloseIncognitoWindowWithServiceWorkerController
-#endif
 // http://crbug.com/419290
 IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
-                 MAYBE_CanCloseIncognitoWindowWithServiceWorkerController) {
+                       CanCloseIncognitoWindowWithServiceWorkerController) {
   WriteFile(FILE_PATH_LITERAL("service_worker.js"), "");
   WriteFile(FILE_PATH_LITERAL("service_worker.js.mock-http-headers"),
             "HTTP/1.1 200 OK\nContent-Type: text/javascript");
   WriteFile(FILE_PATH_LITERAL("test.html"), "");
 
   embedded_test_server()->ServeFilesFromDirectory(service_worker_dir_.path());
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   Browser* incognito = CreateIncognitoBrowser();
   content::ServiceWorkerContext* sw_context =

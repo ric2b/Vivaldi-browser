@@ -5,6 +5,8 @@
 #ifndef TOOLS_GN_FILESYSTEM_UTILS_H_
 #define TOOLS_GN_FILESYSTEM_UTILS_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/files/file_path.h"
@@ -15,15 +17,6 @@
 class Err;
 class Location;
 class Value;
-
-// Returns the extension, not including the dot, for the given file type on the
-// given system.
-//
-// Some targets make multiple files (like a .dll and an import library). This
-// function returns the name of the file other targets should depend on and
-// link to (so in this example, the import library).
-const char* GetExtensionForOutputType(Target::OutputType type,
-                                      Settings::TargetOS os);
 
 std::string FilePathToUTF8(const base::FilePath::StringType& str);
 inline std::string FilePathToUTF8(const base::FilePath& path) {
@@ -120,8 +113,15 @@ bool MakeAbsolutePathRelativeIfPossible(const base::StringPiece& source_root,
                                         const base::StringPiece& path,
                                         std::string* dest);
 
-// Collapses "." and sequential "/"s and evaluates "..".
-void NormalizePath(std::string* path);
+// Collapses "." and sequential "/"s and evaluates "..". |path| may be
+// system-absolute, source-absolute, or relative. If |path| is source-absolute
+// and |source_root| is non-empty, |path| may be system absolute after this
+// function returns, if |path| references the filesystem outside of
+// |source_root| (ex. path = "//.."). In this case on Windows, |path| will have
+// a leading slash. Otherwise, |path| will retain its relativity. |source_root|
+// must not end with a slash.
+void NormalizePath(std::string* path,
+                   const base::StringPiece& source_root = base::StringPiece());
 
 // Converts slashes to backslashes for Windows. Keeps the string unchanged
 // for other systems.
@@ -178,6 +178,15 @@ SourceDir GetToolchainGenDir(const BuildSettings* build_settings,
 
 SourceDir GetOutputDirForSourceDir(const Settings* settings,
                                    const SourceDir& source_dir);
+SourceDir GetOutputDirForSourceDir(const BuildSettings* build_settings,
+                                   const SourceDir& source_dir,
+                                   const Label& toolchain_label,
+                                   bool is_default_toolchain);
+OutputFile GetOutputDirForSourceDirAsOutputFile(
+    const BuildSettings* build_settings,
+    const SourceDir& source_dir,
+    const Label& toolchain_label,
+    bool is_default_toolchain);
 OutputFile GetOutputDirForSourceDirAsOutputFile(const Settings* settings,
                                                 const SourceDir& source_dir);
 

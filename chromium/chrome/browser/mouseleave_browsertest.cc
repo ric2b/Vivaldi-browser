@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
@@ -130,7 +132,7 @@ IN_PROC_BROWSER_TEST_F(MouseLeaveTest, MAYBE_ContextMenu) {
   // Wait until the context menu is opened and closed.
   menu_observer.WaitForMenuOpenAndClose();
 
-  tab->GetMainFrame()->ExecuteJavaScript(base::ASCIIToUTF16("done()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::ASCIIToUTF16("done()"));
   const base::string16 success_title = base::ASCIIToUTF16("without mouseleave");
   const base::string16 failure_title = base::ASCIIToUTF16("with mouseleave");
   content::TitleWatcher done_title_watcher(tab, success_title);
@@ -156,12 +158,12 @@ IN_PROC_BROWSER_TEST_F(MouseLeaveTest, MAYBE_ModalDialog) {
 
   EXPECT_NO_FATAL_FAILURE(LoadTestPageAndWaitForMouseOver(tab));
 
-  tab->GetMainFrame()->ExecuteJavaScript(base::UTF8ToUTF16("alert()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16("alert()"));
   app_modal::AppModalDialog* alert = ui_test_utils::WaitForAppModalDialog();
   // Cancel the dialog.
   alert->CloseModalDialog();
 
-  tab->GetMainFrame()->ExecuteJavaScript(base::ASCIIToUTF16("done()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::ASCIIToUTF16("done()"));
   const base::string16 success_title = base::ASCIIToUTF16("without mouseleave");
   const base::string16 failure_title = base::ASCIIToUTF16("with mouseleave");
   content::TitleWatcher done_title_watcher(tab, success_title);

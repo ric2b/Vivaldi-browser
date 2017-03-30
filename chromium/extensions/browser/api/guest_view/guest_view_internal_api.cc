@@ -8,10 +8,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "extensions/browser/guest_view/extensions_guest_view_manager_delegate.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/common/api/guest_view_internal.h"
 #include "extensions/common/permissions/permissions_data.h"
 
@@ -19,7 +20,7 @@ using guest_view::GuestViewBase;
 using guest_view::GuestViewManager;
 using guest_view::GuestViewManagerDelegate;
 
-namespace guest_view_internal = extensions::core_api::guest_view_internal;
+namespace guest_view_internal = extensions::api::guest_view_internal;
 
 namespace extensions {
 
@@ -41,8 +42,7 @@ bool GuestViewInternalCreateGuestFunction::RunAsync() {
   if (!guest_view_manager) {
     guest_view_manager = GuestViewManager::CreateWithDelegate(
         browser_context(),
-        scoped_ptr<GuestViewManagerDelegate>(
-            new ExtensionsGuestViewManagerDelegate(context_)));
+        ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(context_));
   }
 
   GuestViewManager::WebContentsCreatedCallback callback =
@@ -77,10 +77,10 @@ bool GuestViewInternalCreateGuestFunction::RunAsync() {
       callback.Run(contents);
   }
   if(!guest)
-    guest_view_manager->CreateGuest(view_type,
-                                    sender_web_contents,
-                                    *create_params,
-                                    callback);
+  guest_view_manager->CreateGuest(view_type,
+                                  sender_web_contents,
+                                  *create_params,
+                                  callback);
   return true;
 }
 
@@ -92,8 +92,8 @@ void GuestViewInternalCreateGuestFunction::CreateGuestCallback(
     GuestViewBase* guest = GuestViewBase::FromWebContents(guest_web_contents);
     // gisli@vivaldi.com:  For Vivaldi we might delete the guest before the contents.
     if (guest) {
-      guest_instance_id = guest->guest_instance_id();
-      content_window_id = guest->proxy_routing_id();
+    guest_instance_id = guest->guest_instance_id();
+    content_window_id = guest->proxy_routing_id();
     }
   }
   scoped_ptr<base::DictionaryValue> return_params(new base::DictionaryValue());

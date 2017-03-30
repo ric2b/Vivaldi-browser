@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
@@ -58,7 +59,7 @@ class MockPasswordStoreConsumer : public PasswordStoreConsumer {
 };
 
 class MockWebDataServiceConsumer : public WebDataServiceConsumer {
-public:
+ public:
   MOCK_METHOD2(OnWebDataServiceRequestDone,
                void(PasswordWebDataService::Handle, const WDTypedResult*));
 };
@@ -137,7 +138,7 @@ class PasswordStoreWinTest : public testing::Test {
 
   void TearDown() override {
     if (store_.get())
-      store_->Shutdown();
+      store_->ShutdownOnUIThread();
     wds_->ShutdownOnUIThread();
     wdbs_->ShutdownDatabase();
     wds_ = nullptr;
@@ -146,8 +147,8 @@ class PasswordStoreWinTest : public testing::Test {
     BrowserThread::PostTask(BrowserThread::DB, FROM_HERE,
         base::Bind(&base::WaitableEvent::Signal, base::Unretained(&done)));
     done.Wait();
-    base::MessageLoop::current()->PostTask(FROM_HERE,
-                                           base::MessageLoop::QuitClosure());
+    base::MessageLoop::current()->PostTask(
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     base::MessageLoop::current()->Run();
     db_thread_.Stop();
   }
@@ -182,7 +183,7 @@ ACTION(STLDeleteElements0) {
 
 ACTION(QuitUIMessageLoop) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 MATCHER(EmptyWDResult, "") {
@@ -285,7 +286,7 @@ TEST_F(PasswordStoreWinTest, DISABLED_OutstandingWDSQueries) {
   store_->GetLogins(*form, PasswordStore::DISALLOW_PROMPT, &consumer);
 
   // Release the PSW and the WDS before the query can return.
-  store_->Shutdown();
+  store_->ShutdownOnUIThread();
   store_ = nullptr;
   wds_ = nullptr;
 

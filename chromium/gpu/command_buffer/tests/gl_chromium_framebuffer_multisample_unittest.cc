@@ -5,6 +5,7 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <GLES2/gl2extchromium.h>
+#include <stdint.h>
 
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
@@ -44,7 +45,8 @@ TEST_F(GLChromiumFramebufferMultisampleTest, CachedBindingsTest) {
 }
 
 TEST_F(GLChromiumFramebufferMultisampleTest, DrawAndResolve) {
-  if (!GLTestHelper::HasExtension("GL_CHROMIUM_framebuffer_multisample")) {
+  if (!(GLTestHelper::HasExtension("GL_CHROMIUM_framebuffer_multisample") &&
+        GLTestHelper::HasExtension("GL_OES_rgb8_rgba8"))) {
     return;
   }
 
@@ -145,8 +147,8 @@ TEST_F(GLChromiumFramebufferMultisampleTest, DrawAndResolve) {
                             GL_NEAREST);
 
   // Verify.
-  const uint8 green[] = {0, 255, 0, 255};
-  const uint8 black[] = {0, 0, 0, 0};
+  const uint8_t green[] = {0, 255, 0, 255};
+  const uint8_t black[] = {0, 0, 0, 0};
   glBindFramebuffer(GL_READ_FRAMEBUFFER, resolve_fbo);
   EXPECT_TRUE(
       GLTestHelper::CheckPixels(width / 4, (3 * height) / 4, 1, 1, 0, green));

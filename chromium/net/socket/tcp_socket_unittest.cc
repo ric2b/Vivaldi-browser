@@ -9,14 +9,13 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/address_list.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
+#include "net/base/sockaddr_storage.h"
 #include "net/base/test_completion_callback.h"
 #include "net/socket/tcp_client_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -59,7 +58,7 @@ class TCPSocketTest : public PlatformTest {
   }
 
   void ParseAddress(const std::string& ip_str,
-                    uint16 port,
+                    uint16_t port,
                     IPEndPoint* address) {
     IPAddressNumber ip_number;
     bool rv = ParseIPLiteralToNumber(ip_str, &ip_number);

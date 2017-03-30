@@ -5,13 +5,14 @@
 import json
 import optparse
 import os
-import pipes
 import subprocess
 import sys
 
 import bb_annotations
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import devil_chromium # pylint: disable=unused-import
+from devil.utils import cmd_helper
 from pylib import constants
 
 
@@ -24,7 +25,7 @@ BB_BUILD_DIR = os.path.abspath(
 CHROME_SRC = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-# TODO: Figure out how to merge this with pylib.cmd_helper.OutDirectory().
+# TODO: Figure out how to merge this with devil.utils.cmd_helper.OutDirectory().
 CHROME_OUT_DIR = os.path.join(CHROME_SRC, 'out')
 
 GOMA_DIR = os.environ.get('GOMA_DIR', os.path.join(BB_BUILD_DIR, 'goma'))
@@ -33,7 +34,7 @@ GSUTIL_PATH = os.path.join(BB_BUILD_DIR, 'third_party', 'gsutil', 'gsutil')
 
 def CommandToString(command):
   """Returns quoted command that can be run in bash shell."""
-  return ' '.join(map(pipes.quote, command))
+  return ' '.join(cmd_helper.SingleQuote(c) for c in command)
 
 
 def SpawnCmd(command, stdout=None, cwd=CHROME_SRC):

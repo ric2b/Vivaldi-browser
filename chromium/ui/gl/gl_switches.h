@@ -16,6 +16,7 @@ GL_EXPORT extern const char kGLImplementationDesktopName[];
 GL_EXPORT extern const char kGLImplementationOSMesaName[];
 GL_EXPORT extern const char kGLImplementationAppleName[];
 GL_EXPORT extern const char kGLImplementationEGLName[];
+GL_EXPORT extern const char kGLImplementationANGLEName[];
 GL_EXPORT extern const char kGLImplementationSwiftShaderName[];
 extern const char kGLImplementationMockName[];
 
@@ -35,6 +36,7 @@ GL_EXPORT extern const char kDisableGpuVsync[];
 GL_EXPORT extern const char kEnableGPUServiceLogging[];
 GL_EXPORT extern const char kEnableGPUServiceTracing[];
 GL_EXPORT extern const char kGpuNoContextLost[];
+GL_EXPORT extern const char kUseDirectComposition[];
 
 GL_EXPORT extern const char kSupportsDualGpus[];
 

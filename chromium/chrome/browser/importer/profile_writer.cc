@@ -4,6 +4,8 @@
 
 #include "chrome/browser/importer/profile_writer.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <string>
@@ -13,6 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -25,6 +28,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -38,12 +42,13 @@
 #include "components/password_manager/core/browser/webdata/password_web_data_service_win.h"
 #endif
 
+#include "app/vivaldi_resources.h"
+#include "importer/imported_notes_entry.h"
 #include "notes/notesnode.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
-#include "importer/imported_notes_entry.h"
 
-using namespace Vivaldi;
+using namespace vivaldi;
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -70,7 +75,7 @@ base::string16 GenerateUniqueFolderName(BookmarkModel* model,
   // Otherwise iterate until we find a unique name.
   for (size_t i = 1; i <= existing_folder_names.size(); ++i) {
     base::string16 name = folder_name + base::ASCIIToUTF16(" (") +
-        base::IntToString16(i) + base::ASCIIToUTF16(")");
+        base::SizeTToString16(i) + base::ASCIIToUTF16(")");
     if (existing_folder_names.find(name) == existing_folder_names.end())
       return name;
   }
@@ -252,29 +257,26 @@ void ProfileWriter::AddBookmarks(
     ShowBookmarkBar(profile_);
 }
 
-void ProfileWriter::AddNotes(
-      const std::vector<ImportedNotesEntry>& notes,
-      const base::string16& top_level_folder_name)
-{
+void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry> &notes,
+                             const base::string16 &top_level_folder_name) {
   Notes_Model *model = NotesModelFactory::GetForProfile(profile_);
 
-  std::set<const Notes_Node*> folders_added_to;
-  const Notes_Node* top_level_folder = NULL;
-  for (std::vector<ImportedNotesEntry>::const_iterator note =
-           notes.begin();
-       note != notes.end(); ++note)
-  {
+  model->BeginExtensiveChanges();
 
-    const Notes_Node* parent = NULL;
+  std::set<const Notes_Node *> folders_added_to;
+  const Notes_Node *top_level_folder = NULL;
+  for (std::vector<ImportedNotesEntry>::const_iterator note = notes.begin();
+       note != notes.end(); ++note) {
+
+    const Notes_Node *parent = NULL;
     // Add to a folder that will contain all the imported notes.
     // The first time we do so, create the folder.
     if (!top_level_folder) {
       base::string16 name;
-      name  =  l10n_util::GetStringUTF16(IDS_NOTES_GROUP_FROM_OPERA);
-      top_level_folder = model->AddFolder(model->root(),
-                                            model->root()->child_count(),
-                                            name);
-      }
+      name = l10n_util::GetStringUTF16(IDS_NOTES_GROUP_FROM_OPERA);
+      top_level_folder =
+          model->AddFolder(model->root(), model->root()->child_count(), name);
+    }
     parent = top_level_folder;
 
     // Ensure any enclosing folders are present in the model.  The note's
@@ -284,28 +286,24 @@ void ProfileWriter::AddNotes(
              note->path.begin();
          folder_name != note->path.end(); ++folder_name) {
 
-      const Notes_Node* child = NULL;
+      const Notes_Node *child = NULL;
       for (int index = 0; index < parent->child_count(); ++index) {
-        const Notes_Node* node = parent->GetChild(index);
+        const Notes_Node *node = parent->GetChild(index);
         if (node->is_folder() && node->GetTitle() == *folder_name) {
           child = node;
           break;
         }
       }
-      if (!child)
+      if (!child) {
         child = model->AddFolder(parent, parent->child_count(), *folder_name);
+      }
       parent = child;
     }
 
     folders_added_to.insert(parent);
-    if (note->is_folder) {
-      model->AddFolder(parent, parent->child_count(), note->title); // whole text
-    } else {
-      model->AddNote(parent, parent->child_count(),
-                                    note->title, note->url,
-                                    note->content);
-    }
+    model->AddNote(parent, parent->child_count(), note->is_folder, *note);
   }
+  model->EndExtensiveChanges();
 }
 
 void ProfileWriter::AddFavicons(

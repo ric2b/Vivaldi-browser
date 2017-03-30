@@ -39,8 +39,9 @@ public interface SceneOverlay {
      * @param width                  The new width of the viewport available in dp.
      * @param height                 The new height of the viewport available in dp.
      * @param visibleViewportOffsetY The visible viewport Y offset in dp.
+     * @param orientation            The new orientation.
      */
-    void onSizeChanged(float width, float height, float visibleViewportOffsetY);
+    void onSizeChanged(float width, float height, float visibleViewportOffsetY, int orientation);
 
     /**
      * @param views A list of virtual views representing compositor rendered views.
@@ -62,6 +63,11 @@ public interface SceneOverlay {
      * @param title     The new title.
      */
     void tabTitleChanged(int tabId, String title);
+
+    /**
+     * Called when the TabModelSelector has been initialized with an accurate tab count.
+     */
+    void tabStateInitialized();
 
     /**
      * Called when the active {@link TabModel} switched (e.g. standard -> incognito).

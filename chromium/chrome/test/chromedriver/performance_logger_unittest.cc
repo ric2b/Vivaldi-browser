@@ -4,6 +4,8 @@
 
 #include "chrome/test/chromedriver/performance_logger.h"
 
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
 #include "base/json/json_reader.h"
@@ -34,7 +36,7 @@ struct DevToolsCommand {
 class FakeDevToolsClient : public StubDevToolsClient {
  public:
   explicit FakeDevToolsClient(const std::string& id)
-      : id_(id), listener_(NULL), command_index_(0) {}
+      : id_(id), listener_(nullptr), command_index_(0) {}
   ~FakeDevToolsClient() override {}
 
   bool PopSentCommand(DevToolsCommand** out_command) {
@@ -118,15 +120,15 @@ void FakeLog::AddEntryTimestamped(const base::Time& timestamp,
 
 scoped_ptr<base::DictionaryValue> ParseDictionary(const std::string& json) {
   std::string error;
-  scoped_ptr<base::Value> value(base::JSONReader::DeprecatedReadAndReturnError(
-      json, base::JSON_PARSE_RFC, NULL, &error));
-  if (value == NULL) {
+  scoped_ptr<base::Value> value = base::JSONReader::ReadAndReturnError(
+      json, base::JSON_PARSE_RFC, nullptr, &error);
+  if (value == nullptr) {
     SCOPED_TRACE(json.c_str());
     SCOPED_TRACE(error.c_str());
     ADD_FAILURE();
     return scoped_ptr<base::DictionaryValue>();
   }
-  base::DictionaryValue* dict = NULL;
+  base::DictionaryValue* dict = nullptr;
   if (!value->GetAsDictionary(&dict)) {
     SCOPED_TRACE("JSON object is not a dictionary");
     ADD_FAILURE();
@@ -161,14 +163,14 @@ void ValidateLogEntry(const LogEntry *entry,
   ValidateLogEntry(entry, expected_webview, expected_method, empty_params);
 }
 
-void ExpectCommand(FakeDevToolsClient& client, const std::string& method) {
+void ExpectCommand(FakeDevToolsClient* client, const std::string& method) {
   DevToolsCommand* cmd;
   // Use ASSERT so that test fails if no command is returned.
-  ASSERT_TRUE(client.PopSentCommand(&cmd));
+  ASSERT_TRUE(client->PopSentCommand(&cmd));
   EXPECT_EQ(method, cmd->method);
 }
 
-void ExpectEnableDomains(FakeDevToolsClient& client) {
+void ExpectEnableDomains(FakeDevToolsClient* client) {
   ExpectCommand(client, "Network.enable");
   ExpectCommand(client, "Page.enable");
 }
@@ -183,7 +185,7 @@ TEST(PerformanceLogger, OneWebView) {
 
   client.AddListener(&logger);
   logger.OnConnected(&client);
-  ExpectEnableDomains(client);
+  ExpectEnableDomains(&client);
   ASSERT_EQ(kOk, client.TriggerEvent("Network.gaga").code());
   ASSERT_EQ(kOk, client.TriggerEvent("Page.ulala").code());
   // Ignore -- different domain.
@@ -205,11 +207,11 @@ TEST(PerformanceLogger, TwoWebViews) {
   client2.AddListener(&logger);
   logger.OnConnected(&client1);
   logger.OnConnected(&client2);
-  ExpectEnableDomains(client1);
-  ExpectEnableDomains(client2);
+  ExpectEnableDomains(&client1);
+  ExpectEnableDomains(&client2);
   // OnConnected sends the enable command only to that client, not others.
   client1.ConnectIfNecessary();
-  ExpectEnableDomains(client1);
+  ExpectEnableDomains(&client1);
   DevToolsCommand* cmd;
   ASSERT_FALSE(client2.PopSentCommand(&cmd));
 
@@ -234,7 +236,7 @@ TEST(PerformanceLogger, PerfLoggingPrefs) {
 
   client.AddListener(&logger);
   logger.OnConnected(&client);
-  ExpectCommand(client, "Page.enable");
+  ExpectCommand(&client, "Page.enable");
   // Do not expect Timeline.enable command since specifying trace categories
   // implicitly disables Timeline feed.
   DevToolsCommand* cmd;
@@ -294,8 +296,8 @@ TEST(PerformanceLogger, TracingStartStop) {
   // Trigger a dump of the DevTools trace buffer.
   ASSERT_EQ(kOk, logger.BeforeCommand("GetLog").code());
   EXPECT_TRUE(client.events_handled());
-  ExpectCommand(client, "Tracing.end");
-  ExpectCommand(client, "Tracing.start");  // Tracing should re-start.
+  ExpectCommand(&client, "Tracing.end");
+  ExpectCommand(&client, "Tracing.start");  // Tracing should re-start.
   ASSERT_FALSE(client.PopSentCommand(&cmd));
 }
 

@@ -5,8 +5,8 @@
 #ifndef MEDIA_BASE_MEDIA_FILE_CHECKER_H_
 #define MEDIA_BASE_MEDIA_FILE_CHECKER_H_
 
-#include "base/basictypes.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "media/base/media_export.h"
 
 namespace base {

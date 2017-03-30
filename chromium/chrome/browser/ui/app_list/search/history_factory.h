@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_SEARCH_HISTORY_FACTORY_H_
 #define CHROME_BROWSER_UI_APP_LIST_SEARCH_HISTORY_FACTORY_H_
 
+#include "base/macros.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
+namespace base {
 template<typename T> struct DefaultSingletonTraits;
+}
 
 namespace content {
 class BrowserContext;
@@ -27,7 +30,7 @@ class HistoryFactory : public BrowserContextKeyedServiceFactory {
   static History* GetForBrowserContext(content::BrowserContext* context);
 
  private:
-  friend struct DefaultSingletonTraits<HistoryFactory>;
+  friend struct base::DefaultSingletonTraits<HistoryFactory>;
 
   HistoryFactory();
   ~HistoryFactory() override;

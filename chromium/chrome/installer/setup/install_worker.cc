@@ -9,6 +9,8 @@
 
 #include <oaidl.h>
 #include <shlobj.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <time.h>
 
 #include <vector>
@@ -18,13 +20,13 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "base/win/registry.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
@@ -174,46 +176,6 @@ base::string16 GetRegCommandKey(BrowserDistribution* dist,
   return GetRegistrationDataCommandKey(dist->GetAppRegistrationData(), name);
 }
 
-// Adds work items to create (or delete if uninstalling) app commands to launch
-// the app with a switch. The following criteria should be true:
-//  1. The switch takes one parameter.
-//  2. The command send pings.
-//  3. The command is web accessible.
-//  4. The command is run as the user.
-void AddCommandWithParameterWorkItems(const InstallerState& installer_state,
-                                      const InstallationState& machine_state,
-                                      const Version& new_version,
-                                      const Product& product,
-                                      const wchar_t* command_key,
-                                      const wchar_t* app,
-                                      const char* command_with_parameter,
-                                      WorkItemList* work_item_list) {
-  DCHECK(command_key);
-  DCHECK(app);
-  DCHECK(command_with_parameter);
-  DCHECK(work_item_list);
-
-  base::string16 full_cmd_key(
-      GetRegCommandKey(product.distribution(), command_key));
-
-  if (installer_state.operation() == InstallerState::UNINSTALL) {
-    work_item_list->AddDeleteRegKeyWorkItem(installer_state.root_key(),
-                                            full_cmd_key,
-                                            KEY_WOW64_32KEY)
-        ->set_log_message("removing " + base::UTF16ToASCII(command_key) +
-                          " command");
-  } else {
-    base::CommandLine cmd_line(installer_state.target_path().Append(app));
-    cmd_line.AppendSwitchASCII(command_with_parameter, "%1");
-
-    AppCommand cmd(cmd_line.GetCommandLineString());
-    cmd.set_sends_pings(true);
-    cmd.set_is_web_accessible(true);
-    cmd.set_is_run_as_user(true);
-    cmd.AddWorkItems(installer_state.root_key(), full_cmd_key, work_item_list);
-  }
-}
-
 // A callback invoked by |work_item| that adds firewall rules for Chrome. Rules
 // are left in-place on rollback unless |remove_on_rollback| is true. This is
 // the case for new installs only. Updates and overinstalls leave the rule
@@ -294,50 +256,23 @@ void AddProductSpecificWorkItems(const InstallationState& original_state,
 }
 
 // This is called when an MSI installation is run. It may be that a user is
-// attempting to install the MSI on top of a non-MSI managed installation.
-// If so, try and remove any existing uninstallation shortcuts, as we want the
+// attempting to install the MSI on top of a non-MSI managed installation. If
+// so, try and remove any existing "Add/Remove Programs" entry, as we want the
 // uninstall to be managed entirely by the MSI machinery (accessible via the
 // Add/Remove programs dialog).
-void AddDeleteUninstallShortcutsForMSIWorkItems(
+void AddDeleteUninstallEntryForMSIWorkItems(
     const InstallerState& installer_state,
     const Product& product,
-    const base::FilePath& temp_path,
     WorkItemList* work_item_list) {
   DCHECK(installer_state.is_msi())
       << "This must only be called for MSI installations!";
 
-  // First attempt to delete the old installation's ARP dialog entry.
   HKEY reg_root = installer_state.root_key();
   base::string16 uninstall_reg(product.distribution()->GetUninstallRegPath());
 
   WorkItem* delete_reg_key = work_item_list->AddDeleteRegKeyWorkItem(
       reg_root, uninstall_reg, KEY_WOW64_32KEY);
   delete_reg_key->set_ignore_failure(true);
-
-  // Then attempt to delete the old installation's start menu shortcut.
-  base::FilePath uninstall_link;
-  if (installer_state.system_install()) {
-    PathService::Get(base::DIR_COMMON_START_MENU, &uninstall_link);
-  } else {
-    PathService::Get(base::DIR_START_MENU, &uninstall_link);
-  }
-
-  if (uninstall_link.empty()) {
-    LOG(ERROR) << "Failed to get location for shortcut.";
-  } else {
-    uninstall_link = uninstall_link.Append(
-        product.distribution()->GetStartMenuShortcutSubfolder(
-            BrowserDistribution::SUBFOLDER_CHROME));
-    uninstall_link = uninstall_link.Append(
-        product.distribution()->GetUninstallLinkName() + installer::kLnkExt);
-    VLOG(1) << "Deleting old uninstall shortcut (if present): "
-            << uninstall_link.value();
-    WorkItem* delete_link = work_item_list->AddDeleteTreeWorkItem(
-        uninstall_link, temp_path);
-    delete_link->set_ignore_failure(true);
-    delete_link->set_log_message(
-        "Failed to delete old uninstall shortcut.");
-  }
 }
 
 // Adds Chrome specific install work items to |install_list|.
@@ -405,6 +340,17 @@ void AddChromeWorkItems(const InstallationState& original_state,
         WorkItem::ALWAYS_MOVE);
   }
 
+  // Extra executable for crash logging (Google Breakpad).
+  // Install if the kVivaldiCrashLogging commandline option is present.
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  if (cmd_line.HasSwitch(installer::switches::kVivaldiCrashLogging)) {
+    install_list->AddMoveTreeWorkItem(
+        src_path.Append(installer::kCrashServiceExe).value(),
+        target_path.Append(installer::kCrashServiceExe).value(),
+        temp_path.value(),
+        WorkItem::ALWAYS_MOVE);
+  }
+
   // Install kVisualElementsManifest if it is present in |src_path|. No need to
   // make this a conditional work item as if the file is not there now, it will
   // never be.
@@ -444,95 +390,23 @@ void AddChromeWorkItems(const InstallationState& original_state,
           set_ignore_failure(true);
 }
 
-// Probes COM machinery to get an instance of delegate_execute.exe's
-// CommandExecuteImpl class.  This is required so that COM purges its cache of
-// the path to the binary, which changes on updates.  This callback
-// unconditionally returns true since an install should not be aborted if the
-// probe fails.
-bool ProbeCommandExecuteCallback(const base::string16& command_execute_id,
-                                 const CallbackWorkItem& work_item) {
-  // Noop on rollback.
-  if (work_item.IsRollback())
-    return true;
+// Adds work items to remove COM registration for |product|'s deprecated
+// DelegateExecute verb handler.
+void AddCleanupDelegateExecuteWorkItems(const InstallerState& installer_state,
+                                        const Product& product,
+                                        WorkItemList* list) {
+  if (product.is_chrome()) {
+    VLOG(1) << "Adding unregistration items for DelegateExecute verb handler.";
+    const base::string16 handler_class_uuid =
+        product.distribution()->GetCommandExecuteImplClsid();
+    DCHECK(!handler_class_uuid.empty());
 
-  CLSID class_id = {};
-
-  HRESULT hr = CLSIDFromString(command_execute_id.c_str(), &class_id);
-  if (FAILED(hr)) {
-    LOG(DFATAL) << "Failed converting \"" << command_execute_id << "\" to "
-                   "CLSID; hr=0x" << std::hex << hr;
-  } else {
-    base::win::ScopedComPtr<IUnknown> command_execute_impl;
-    hr = command_execute_impl.CreateInstance(class_id, NULL,
-                                             CLSCTX_LOCAL_SERVER);
-    if (hr != REGDB_E_CLASSNOTREG) {
-      LOG(ERROR) << "Unexpected result creating CommandExecuteImpl; hr=0x"
-                 << std::hex << hr;
-    }
-  }
-
-  return true;
-}
-
-void AddUninstallDelegateExecuteWorkItems(
-    HKEY root,
-    const base::string16& delegate_execute_path,
-    WorkItemList* list) {
-  VLOG(1) << "Adding unregistration items for DelegateExecute verb handler in "
-          << root;
-  // Delete both 64 and 32 keys to handle 32->64 or 64->32 migration.
-  list->AddDeleteRegKeyWorkItem(root, delegate_execute_path, KEY_WOW64_32KEY);
-
-  list->AddDeleteRegKeyWorkItem(root, delegate_execute_path, KEY_WOW64_64KEY);
-
-  // In the past, the ICommandExecuteImpl interface and a TypeLib were both
-  // registered.  Remove these since this operation may be updating a machine
-  // that had the old registrations.
-  list->AddDeleteRegKeyWorkItem(root,
-                                L"Software\\Classes\\Interface\\"
-                                L"{0BA0D4E9-2259-4963-B9AE-A839F7CB7544}",
-                                KEY_WOW64_32KEY);
-  list->AddDeleteRegKeyWorkItem(root,
-                                L"Software\\Classes\\TypeLib\\"
-#if defined(GOOGLE_CHROME_BUILD)
-                                L"{4E805ED8-EBA0-4601-9681-12815A56EBFD}",
-#else
-                                L"{7779FB70-B399-454A-AA1A-BAA850032B10}",
-#endif
-                                KEY_WOW64_32KEY);
-}
-
-// Google Chrome Canary, between 20.0.1101.0 (crrev.com/132190) and 20.0.1106.0
-// (exclusively -- crrev.com/132596), registered a DelegateExecute class by
-// mistake (with the same GUID as Chrome). The fix stopped registering the bad
-// value, but didn't delete it. This is a problem for users who had installed
-// Canary before 20.0.1106.0 and now have a system-level Chrome, as the
-// left-behind Canary registrations in HKCU mask the HKLM registrations for the
-// same GUID. Cleanup those registrations if they still exist and belong to this
-// Canary (i.e., the registered delegate_execute's path is under |target_path|).
-void CleanupBadCanaryDelegateExecuteRegistration(
-    const base::FilePath& target_path,
-    WorkItemList* list) {
-  base::string16 google_chrome_delegate_execute_path(
-      L"Software\\Classes\\CLSID\\{5C65F4B0-3651-4514-B207-D10CB699B14B}");
-  base::string16 google_chrome_local_server_32(
-      google_chrome_delegate_execute_path + L"\\LocalServer32");
-
-  RegKey local_server_32_key;
-  base::string16 registered_server;
-  if (local_server_32_key.Open(HKEY_CURRENT_USER,
-                               google_chrome_local_server_32.c_str(),
-                               KEY_QUERY_VALUE) == ERROR_SUCCESS &&
-      local_server_32_key.ReadValue(L"ServerExecutable",
-                                    &registered_server) == ERROR_SUCCESS &&
-      target_path.IsParent(base::FilePath(registered_server))) {
-    scoped_ptr<WorkItemList> no_rollback_list(
-        WorkItem::CreateNoRollbackWorkItemList());
-    AddUninstallDelegateExecuteWorkItems(
-        HKEY_CURRENT_USER, google_chrome_delegate_execute_path,
-        no_rollback_list.get());
-    list->AddWorkItem(no_rollback_list.release());
-    VLOG(1) << "Added deletion items for bad Canary registrations.";
+    const HKEY root = installer_state.root_key();
+    base::string16 delegate_execute_path(L"Software\\Classes\\CLSID\\");
+    delegate_execute_path.append(handler_class_uuid);
+    // Delete both 64 and 32 keys to handle 32->64 or 64->32 migration.
+    list->AddDeleteRegKeyWorkItem(root, delegate_execute_path, KEY_WOW64_32KEY);
+    list->AddDeleteRegKeyWorkItem(root, delegate_execute_path, KEY_WOW64_64KEY);
   }
 }
 
@@ -1029,7 +903,6 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
                             const base::FilePath& setup_path,
                             const Version* current_version,
                             const Version& new_version,
-                            const base::FilePath& temp_path,
                             WorkItemList* post_install_task_list) {
   DCHECK(post_install_task_list);
 
@@ -1157,14 +1030,12 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
       AddSetMsiMarkerWorkItem(installer_state, product->distribution(), true,
                               post_install_task_list);
 
-      // We want MSI installs to take over the Add/Remove Programs shortcut.
-      // Make a best-effort attempt to delete any shortcuts left over from
-      // previous non-MSI installations for the same type of install (system or
-      // per user).
+      // We want MSI installs to take over the Add/Remove Programs entry. Make a
+      // best-effort attempt to delete any entry left over from previous non-MSI
+      // installations for the same type of install (system or per user).
       if (product->ShouldCreateUninstallEntry()) {
-        AddDeleteUninstallShortcutsForMSIWorkItems(installer_state, *product,
-                                                   temp_path,
-                                                   post_install_task_list);
+        AddDeleteUninstallEntryForMSIWorkItems(installer_state, *product,
+                                               post_install_task_list);
       }
     }
   }
@@ -1178,7 +1049,7 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
       installer_state.GetInstallerDirectory(new_version));
     base::FilePath archive(
       installer_dir.Append(installer::kChromeArchive));
-    post_install_task_list->AddDeleteTreeWorkItem(archive, temp_path)->
+    post_install_task_list->AddDeleteTreeWorkItem(archive, setup_path)->
       set_ignore_failure(true);
   }
   return true;
@@ -1235,19 +1106,19 @@ void AddInstallWorkItems(const InstallationState& original_state,
     const Product& product = **it;
 
     if (!installer_state.is_standalone()) { // do not create registry entries for standalone install
-      AddUninstallShortcutWorkItems(installer_state, setup_path, new_version,
-        product, install_list);
+    AddUninstallShortcutWorkItems(installer_state, setup_path, new_version,
+                                  product, install_list);
 
-      BrowserDistribution* dist = product.distribution();
-      AddVersionKeyWorkItems(root,
-        dist->GetVersionKey(),
-        dist->GetDisplayName(),
-        new_version,
-        add_language_identifier,
-        install_list);
+    BrowserDistribution* dist = product.distribution();
+    AddVersionKeyWorkItems(root,
+                           dist->GetVersionKey(),
+                           dist->GetDisplayName(),
+                           new_version,
+                           add_language_identifier,
+                           install_list);
 
-      AddDelegateExecuteWorkItems(installer_state, target_path, new_version,
-        product, install_list);
+    AddCleanupDelegateExecuteWorkItems(installer_state, product, install_list);
+    AddCleanupDeprecatedPerUserRegistrationsWorkItems(product, install_list);
     }
 
     AddActiveSetupWorkItems(installer_state, new_version, product,
@@ -1292,7 +1163,6 @@ void AddInstallWorkItems(const InstallationState& original_state,
                          setup_path,
                          current_version,
                          new_version,
-                         temp_path,
                          install_list);
 }
 
@@ -1335,75 +1205,19 @@ void AddSetMsiMarkerWorkItem(const InstallerState& installer_state,
   set_msi_work_item->set_log_message("Could not write MSI marker!");
 }
 
-void AddDelegateExecuteWorkItems(const InstallerState& installer_state,
-                                 const base::FilePath& target_path,
-                                 const Version& new_version,
-                                 const Product& product,
-                                 WorkItemList* list) {
-  base::string16 handler_class_uuid;
-  BrowserDistribution* dist = product.distribution();
-  if (!dist->GetCommandExecuteImplClsid(&handler_class_uuid)) {
-    if (InstallUtil::IsChromeSxSProcess()) {
-      CleanupBadCanaryDelegateExecuteRegistration(target_path, list);
-    } else {
-      VLOG(1) << "No DelegateExecute verb handler processing to do for "
-              << dist->GetDisplayName();
-    }
-    return;
-  }
+void AddCleanupDeprecatedPerUserRegistrationsWorkItems(const Product& product,
+                                                       WorkItemList* list) {
+  if (product.is_chrome()) {
+    BrowserDistribution* dist = product.distribution();
 
-  HKEY root = installer_state.root_key();
-  base::string16 delegate_execute_path(L"Software\\Classes\\CLSID\\");
-  delegate_execute_path.append(handler_class_uuid);
-
-  // Unconditionally remove registration regardless of whether or not it is
-  // needed since builds after r132190 included it when it wasn't strictly
-  // necessary.  Do this removal before adding in the new key to ensure that
-  // the COM probe/flush below does its job.
-  AddUninstallDelegateExecuteWorkItems(root, delegate_execute_path, list);
-
-  // Add work items to register the handler iff it is present.
-  // See also shell_util.cc's GetProgIdEntries.
-  if (installer_state.operation() != InstallerState::UNINSTALL) {
-    VLOG(1) << "Adding registration items for DelegateExecute verb handler.";
-
-    // Force COM to flush its cache containing the path to the old handler.
-    list->AddCallbackWorkItem(base::Bind(&ProbeCommandExecuteCallback,
-                                         handler_class_uuid));
-
-    // The path to the exe (in the version directory).
-    base::FilePath delegate_execute(target_path);
-    if (new_version.IsValid())
-      delegate_execute = delegate_execute.AppendASCII(new_version.GetString());
-    delegate_execute = delegate_execute.Append(kDelegateExecuteExe);
-
-    // Command-line featuring the quoted path to the exe.
-    base::string16 command(1, L'"');
-    command.append(delegate_execute.value()).append(1, L'"');
-
-    // Register the CommandExecuteImpl class in Software\Classes\CLSID\...
-    list->AddCreateRegKeyWorkItem(
-        root, delegate_execute_path, WorkItem::kWow64Default);
-    list->AddSetRegValueWorkItem(root,
-                                 delegate_execute_path,
-                                 WorkItem::kWow64Default,
-                                 L"",
-                                 L"CommandExecuteImpl Class",
-                                 true);
-    base::string16 subkey(delegate_execute_path);
-    subkey.append(L"\\LocalServer32");
-    list->AddCreateRegKeyWorkItem(root, subkey, WorkItem::kWow64Default);
-    list->AddSetRegValueWorkItem(
-        root, subkey, WorkItem::kWow64Default, L"", command, true);
-    list->AddSetRegValueWorkItem(root,
-                                 subkey,
-                                 WorkItem::kWow64Default,
-                                 L"ServerExecutable",
-                                 delegate_execute.value(),
-                                 true);
-
-    subkey.assign(delegate_execute_path).append(L"\\Programmable");
-    list->AddCreateRegKeyWorkItem(root, subkey, WorkItem::kWow64Default);
+    // TODO(gab): Remove cleanup code for Metro after M53.
+    VLOG(1) << "Adding unregistration items for per-user Metro keys.";
+    list->AddDeleteRegKeyWorkItem(HKEY_CURRENT_USER,
+                                  dist->GetRegistryPath() + L"\\Metro",
+                                  KEY_WOW64_32KEY);
+    list->AddDeleteRegKeyWorkItem(HKEY_CURRENT_USER,
+                                  dist->GetRegistryPath() + L"\\Metro",
+                                  KEY_WOW64_64KEY);
   }
 }
 

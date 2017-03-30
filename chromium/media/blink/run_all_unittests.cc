@@ -2,12 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
+#include "base/rand_util.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "build/build_config.h"
+#include "components/scheduler/child/scheduler_tqm_delegate_impl.h"
+#include "components/scheduler/child/web_task_runner_impl.h"
+#include "components/scheduler/renderer/renderer_scheduler_impl.h"
+#include "components/scheduler/renderer/renderer_web_scheduler_impl.h"
+#include "components/scheduler/test/lazy_scheduler_message_loop_delegate_for_tests.h"
 #include "media/base/media.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/WebScheduler.h"
+#include "third_party/WebKit/public/platform/WebTaskRunner.h"
+#include "third_party/WebKit/public/platform/WebThread.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 
 #if defined(OS_ANDROID)
@@ -20,22 +32,53 @@
 #include "gin/v8_initializer.h"
 #endif
 
+class CurrentThreadMock : public blink::WebThread {
+ public:
+  CurrentThreadMock()
+      : task_runner_delegate_(
+            scheduler::LazySchedulerMessageLoopDelegateForTests::Create()),
+        scheduler_(
+            new scheduler::RendererSchedulerImpl(task_runner_delegate_.get())),
+        web_scheduler_(
+            new scheduler::RendererWebSchedulerImpl(scheduler_.get())),
+        web_task_runner_(
+            new scheduler::WebTaskRunnerImpl(scheduler_->DefaultTaskRunner())) {
+  }
+
+  ~CurrentThreadMock() override {
+    scheduler_->Shutdown();
+  }
+
+  blink::WebTaskRunner* taskRunner() override { return web_task_runner_.get(); }
+
+  bool isCurrentThread() const override { return true; }
+
+  blink::PlatformThreadId threadId() const override { return 17; }
+
+  blink::WebScheduler* scheduler() const override {
+    return web_scheduler_.get();
+  }
+
+ private:
+  scoped_refptr<scheduler::SchedulerTqmDelegate> task_runner_delegate_;
+  scoped_ptr<scheduler::RendererSchedulerImpl> scheduler_;
+  scoped_ptr<blink::WebScheduler> web_scheduler_;
+  scoped_ptr<blink::WebTaskRunner> web_task_runner_;
+};
+
 class TestBlinkPlatformSupport : NON_EXPORTED_BASE(public blink::Platform) {
  public:
-  virtual ~TestBlinkPlatformSupport();
+  ~TestBlinkPlatformSupport() override;
 
-  virtual void cryptographicallyRandomValues(unsigned char* buffer,
-                                             size_t length) override;
-  virtual const unsigned char* getTraceCategoryEnabledFlag(
+  const unsigned char* getTraceCategoryEnabledFlag(
       const char* categoryName) override;
+  blink::WebThread* currentThread() override { return &m_currentThread; }
+
+ private:
+  CurrentThreadMock m_currentThread;
 };
 
 TestBlinkPlatformSupport::~TestBlinkPlatformSupport() {}
-
-void TestBlinkPlatformSupport::cryptographicallyRandomValues(
-    unsigned char* buffer,
-    size_t length) {
-}
 
 const unsigned char* TestBlinkPlatformSupport::getTraceCategoryEnabledFlag(
     const char* categoryName) {

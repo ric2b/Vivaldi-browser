@@ -10,7 +10,7 @@
 #include <string>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
@@ -36,33 +36,42 @@ class SigninManagerAndroid {
   // Registers the SigninManagerAndroid's native methods through JNI.
   static bool Register(JNIEnv* env);
 
-  void CheckPolicyBeforeSignIn(JNIEnv* env, jobject obj, jstring username);
+  void CheckPolicyBeforeSignIn(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& username);
 
-  void FetchPolicyBeforeSignIn(JNIEnv* env, jobject obj);
+  void FetchPolicyBeforeSignIn(JNIEnv* env,
+                               const base::android::JavaParamRef<jobject>& obj);
 
   // Indicates that the user has made the choice to sign-in. |username|
   // contains the email address of the account to use as primary.
-  // |accountIds| and |accoundNames| are two arrays of equal length: one
-  // containing strings of stable account ids and the other containing
-  // strings of account names (or emails).  An account id corresponds
-  // with the account name at the same position in the array.
-  void OnSignInCompleted(JNIEnv* env, jobject obj, jstring username,
-                         jobjectArray accountIds, jobjectArray accountNames);
+  void OnSignInCompleted(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj,
+                         const base::android::JavaParamRef<jstring>& username);
 
-  void SignOut(JNIEnv* env, jobject obj);
+  void SignOut(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
-  base::android::ScopedJavaLocalRef<jstring> GetManagementDomain(JNIEnv* env,
-                                                                 jobject obj);
+  base::android::ScopedJavaLocalRef<jstring> GetManagementDomain(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
-  void WipeProfileData(JNIEnv* env, jobject obj);
+  void WipeProfileData(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       const base::android::JavaParamRef<jobject>& hooks);
 
-  void LogInSignedInUser(JNIEnv* env, jobject obj);
+  void LogInSignedInUser(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj);
 
-  void ClearLastSignedInUser(JNIEnv* env, jobject obj);
+  void ClearLastSignedInUser(JNIEnv* env,
+                             const base::android::JavaParamRef<jobject>& obj);
 
-  jboolean IsSigninAllowedByPolicy(JNIEnv* env, jobject obj);
+  jboolean IsSigninAllowedByPolicy(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
-  jboolean IsSignedInOnNative(JNIEnv* env, jobject obj);
+  jboolean IsSignedInOnNative(JNIEnv* env,
+                              const base::android::JavaParamRef<jobject>& obj);
 
  private:
   ~SigninManagerAndroid();
@@ -73,7 +82,8 @@ class SigninManagerAndroid {
   void OnPolicyFetchDone(bool success);
 #endif
 
-  void OnBrowsingDataRemoverDone();
+  void OnBrowsingDataRemoverDone(
+      const base::android::ScopedJavaGlobalRef<jobject>& callback);
 
   void ClearLastSignedInUser();
 

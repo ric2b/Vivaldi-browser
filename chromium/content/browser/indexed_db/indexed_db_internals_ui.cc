@@ -5,9 +5,11 @@
 #include "content/browser/indexed_db/indexed_db_internals_ui.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/threading/platform_thread.h"
 #include "base/values.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
@@ -311,7 +313,7 @@ void IndexedDBInternalsUI::OnDownloadDataReady(
                                      origin_url,
                                      temp_path,
                                      connection_count));
-  dlm->DownloadUrl(dl_params.Pass());
+  dlm->DownloadUrl(std::move(dl_params));
 }
 
 // The entire purpose of this class is to delete the temp file after

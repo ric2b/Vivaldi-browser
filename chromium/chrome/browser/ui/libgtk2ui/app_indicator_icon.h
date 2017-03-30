@@ -6,8 +6,10 @@
 #define CHROME_BROWSER_UI_LIBGTK2UI_APP_INDICATOR_ICON_H_
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/nix/xdg_util.h"
 #include "chrome/browser/ui/libgtk2ui/gtk2_signal.h"
 #include "ui/views/linux_ui/status_icon_linux.h"
 
@@ -85,8 +87,8 @@ class AppIndicatorIcon : public views::StatusIconLinux {
   std::string id_;
   std::string tool_tip_;
 
-  // Whether the user is using KDE.
-  bool using_kde4_;
+  // Used to select KDE or Unity for image setting.
+  base::nix::DesktopEnvironment desktop_env_;
 
   // Gtk status icon wrapper
   AppIndicator* icon_;

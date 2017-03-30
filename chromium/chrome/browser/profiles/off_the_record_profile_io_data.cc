@@ -4,9 +4,12 @@
 
 #include "chrome/browser/profiles/off_the_record_profile_io_data.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/threading/worker_pool.h"
@@ -15,14 +18,13 @@
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/net/about_protocol_handler.h"
-#include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/chrome_url_request_context_getter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "components/net_log/chrome_net_log.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/resource_context.h"
@@ -54,7 +56,7 @@ OffTheRecordProfileIOData::Handle::Handle(Profile* profile)
 
 OffTheRecordProfileIOData::Handle::~Handle() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  io_data_->ShutdownOnUIThread(GetAllContextGetters().Pass());
+  io_data_->ShutdownOnUIThread(GetAllContextGetters());
 }
 
 content::ResourceContext*
@@ -85,7 +87,7 @@ OffTheRecordProfileIOData::Handle::CreateMainRequestContextGetter(
   LazyInitialize();
   DCHECK(!main_request_context_getter_.get());
   main_request_context_getter_ = ChromeURLRequestContextGetter::Create(
-      profile_, io_data_, protocol_handlers, request_interceptors.Pass());
+      profile_, io_data_, protocol_handlers, std::move(request_interceptors));
   return main_request_context_getter_;
 }
 
@@ -136,21 +138,18 @@ OffTheRecordProfileIOData::Handle::CreateIsolatedAppRequestContextGetter(
               CreateJobInterceptorFactory());
   ChromeURLRequestContextGetter* context =
       ChromeURLRequestContextGetter::CreateForIsolatedApp(
-          profile_,
-          io_data_,
-          descriptor,
-          protocol_handler_interceptor.Pass(),
-          protocol_handlers,
-          request_interceptors.Pass());
+          profile_, io_data_, descriptor,
+          std::move(protocol_handler_interceptor), protocol_handlers,
+          std::move(request_interceptors));
   app_request_context_getter_map_[descriptor] = context;
 
   return context;
 }
 
-DevToolsNetworkController*
-OffTheRecordProfileIOData::Handle::GetDevToolsNetworkController() const {
+DevToolsNetworkControllerHandle*
+OffTheRecordProfileIOData::Handle::GetDevToolsNetworkControllerHandle() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return io_data_->network_controller();
+  return io_data_->network_controller_handle();
 }
 
 void OffTheRecordProfileIOData::Handle::LazyInitialize() const {
@@ -160,12 +159,10 @@ void OffTheRecordProfileIOData::Handle::LazyInitialize() const {
   // Set initialized_ to true at the beginning in case any of the objects
   // below try to get the ResourceContext pointer.
   initialized_ = true;
-#if defined(SAFE_BROWSING_SERVICE)
   io_data_->safe_browsing_enabled()->Init(prefs::kSafeBrowsingEnabled,
       profile_->GetPrefs());
   io_data_->safe_browsing_enabled()->MoveToThread(
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
-#endif
   io_data_->InitializeOnUIThread(profile_);
 }
 
@@ -184,7 +181,7 @@ OffTheRecordProfileIOData::Handle::GetAllContextGetters() {
   if (main_request_context_getter_.get())
     context_getters->push_back(main_request_context_getter_);
 
-  return context_getters.Pass();
+  return context_getters;
 }
 
 OffTheRecordProfileIOData::OffTheRecordProfileIOData(
@@ -213,18 +210,18 @@ void OffTheRecordProfileIOData::InitializeInternal(
 
   main_context->set_network_delegate(chrome_network_delegate.get());
 
-  network_delegate_ = chrome_network_delegate.Pass();
+  network_delegate_ = std::move(chrome_network_delegate);
 
   main_context->set_host_resolver(
       io_thread_globals->host_resolver.get());
   main_context->set_http_auth_handler_factory(
       io_thread_globals->http_auth_handler_factory.get());
-  main_context->set_fraudulent_certificate_reporter(
-      fraudulent_certificate_reporter());
   main_context->set_proxy_service(proxy_service());
 
   main_context->set_cert_transparency_verifier(
       io_thread_globals->cert_transparency_verifier.get());
+  main_context->set_backoff_manager(
+      io_thread_globals->url_request_backoff_manager.get());
 
   // For incognito, we use the default non-persistent HttpServerPropertiesImpl.
   set_http_server_properties(
@@ -248,9 +245,9 @@ void OffTheRecordProfileIOData::InitializeInternal(
           NULL,
           profile_params->cookie_monster_delegate.get())));
 
-  net::HttpCache::BackendFactory* main_backend =
-      net::HttpCache::DefaultBackend::InMemory(0);
-  main_http_factory_ = CreateMainHttpFactory(profile_params, main_backend);
+  http_network_session_ = CreateHttpNetworkSession(*profile_params);
+  main_http_factory_ = CreateMainHttpFactory(
+      http_network_session_.get(), net::HttpCache::DefaultBackend::InMemory(0));
 
   main_context->set_http_transaction_factory(main_http_factory_.get());
 #if !defined(DISABLE_FTP_SUPPORT)
@@ -263,11 +260,9 @@ void OffTheRecordProfileIOData::InitializeInternal(
 
   InstallProtocolHandlers(main_job_factory.get(), protocol_handlers);
   main_job_factory_ = SetUpJobFactoryDefaults(
-      main_job_factory.Pass(),
-      request_interceptors.Pass(),
-      profile_params->protocol_handler_interceptor.Pass(),
-      main_context->network_delegate(),
-      ftp_factory_.get());
+      std::move(main_job_factory), std::move(request_interceptors),
+      std::move(profile_params->protocol_handler_interceptor),
+      main_context->network_delegate(), ftp_factory_.get());
   main_context->set_job_factory(main_job_factory_.get());
 
   // Setup SDCH for this profile.
@@ -296,14 +291,15 @@ void OffTheRecordProfileIOData::
   extensions_context->set_cert_transparency_verifier(
       io_thread_globals->cert_transparency_verifier.get());
 
+  extensions_context->set_backoff_manager(
+      io_thread_globals->url_request_backoff_manager.get());
   // All we care about for extensions is the cookie store. For incognito, we
   // use a non-persistent cookie store.
   net::CookieMonster* extensions_cookie_store =
       content::CreateCookieStore(content::CookieStoreConfig())->
           GetCookieMonster();
-  // Enable cookies for devtools and extension URLs.
+  // Enable cookies for chrome-extension URLs.
   const char* const schemes[] = {
-      content::kChromeDevToolsScheme,
       extensions::kExtensionScheme
   };
   extensions_cookie_store->SetCookieableSchemes(schemes, arraysize(schemes));
@@ -318,10 +314,9 @@ void OffTheRecordProfileIOData::
   // handle the protocol externally. We pass NULL in to
   // SetUpJobFactoryDefaults() to get this effect.
   extensions_job_factory_ = SetUpJobFactoryDefaults(
-      extensions_job_factory.Pass(),
+      std::move(extensions_job_factory),
       content::URLRequestInterceptorScopedVector(),
-      scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>(),
-      NULL,
+      scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>(), NULL,
       ftp_factory_.get());
   extensions_context->set_job_factory(extensions_job_factory_.get());
 }
@@ -345,25 +340,21 @@ net::URLRequestContext* OffTheRecordProfileIOData::InitializeAppRequestContext(
       content::CreateCookieStore(content::CookieStoreConfig()));
 
   // Use a separate in-memory cache for the app.
-  net::HttpCache::BackendFactory* app_backend =
-      net::HttpCache::DefaultBackend::InMemory(0);
-  net::HttpNetworkSession* main_network_session =
-      main_http_factory_->GetSession();
   scoped_ptr<net::HttpCache> app_http_cache =
-      CreateHttpFactory(main_network_session, app_backend);
+      CreateHttpFactory(http_network_session_.get(),
+                        net::HttpCache::DefaultBackend::InMemory(0));
 
-  context->SetHttpTransactionFactory(app_http_cache.Pass());
+  context->SetHttpTransactionFactory(std::move(app_http_cache));
 
   scoped_ptr<net::URLRequestJobFactoryImpl> job_factory(
       new net::URLRequestJobFactoryImpl());
   InstallProtocolHandlers(job_factory.get(), protocol_handlers);
   scoped_ptr<net::URLRequestJobFactory> top_job_factory;
-  top_job_factory = SetUpJobFactoryDefaults(job_factory.Pass(),
-                                            request_interceptors.Pass(),
-                                            protocol_handler_interceptor.Pass(),
-                                            main_context->network_delegate(),
-                                            ftp_factory_.get());
-  context->SetJobFactory(top_job_factory.Pass());
+  top_job_factory = SetUpJobFactoryDefaults(
+      std::move(job_factory), std::move(request_interceptors),
+      std::move(protocol_handler_interceptor), main_context->network_delegate(),
+      ftp_factory_.get());
+  context->SetJobFactory(std::move(top_job_factory));
   return context;
 }
 
@@ -390,12 +381,10 @@ OffTheRecordProfileIOData::AcquireIsolatedAppRequestContext(
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) const {
   // We create per-app contexts on demand, unlike the others above.
-  net::URLRequestContext* app_request_context =
-      InitializeAppRequestContext(main_context,
-                                  partition_descriptor,
-                                  protocol_handler_interceptor.Pass(),
-                                  protocol_handlers,
-                                  request_interceptors.Pass());
+  net::URLRequestContext* app_request_context = InitializeAppRequestContext(
+      main_context, partition_descriptor,
+      std::move(protocol_handler_interceptor), protocol_handlers,
+      std::move(request_interceptors));
   DCHECK(app_request_context);
   return app_request_context;
 }

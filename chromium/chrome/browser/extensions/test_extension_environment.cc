@@ -4,10 +4,14 @@
 
 #include "chrome/browser/extensions/test_extension_environment.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
@@ -21,8 +25,10 @@
 #include "extensions/common/value_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(USE_AURA)
-#include "ui/aura/env.h"
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/login/users/scoped_test_user_manager.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/settings/device_settings_service.h"
 #endif
 
 namespace extensions {
@@ -54,15 +60,30 @@ scoped_ptr<base::DictionaryValue> MakePackagedAppManifest() {
       .Set("name", "Test App Name")
       .Set("version", "2.0")
       .Set("manifest_version", 2)
-      .Set("app", extensions::DictionaryBuilder().Set(
+      .Set("app", std::move(extensions::DictionaryBuilder().Set(
                       "background",
-                      extensions::DictionaryBuilder().Set(
-                          "scripts",
-                          extensions::ListBuilder().Append("background.js"))))
+                      std::move(extensions::DictionaryBuilder().Set(
+                          "scripts", std::move(extensions::ListBuilder().Append(
+                                         "background.js")))))))
       .Build();
 }
 
 }  // namespace
+
+// Extra environment state required for ChromeOS.
+class TestExtensionEnvironment::ChromeOSEnv {
+ public:
+  ChromeOSEnv() {}
+
+ private:
+#if defined(OS_CHROMEOS)
+  chromeos::ScopedTestDeviceSettingsService test_device_settings_service_;
+  chromeos::ScopedTestCrosSettings test_cros_settings_;
+  chromeos::ScopedTestUserManager test_user_manager_;
+#endif
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeOSEnv);
+};
 
 // static
 ExtensionService* TestExtensionEnvironment::CreateExtensionServiceForProfile(
@@ -75,25 +96,25 @@ ExtensionService* TestExtensionEnvironment::CreateExtensionServiceForProfile(
 
 TestExtensionEnvironment::TestExtensionEnvironment()
     : thread_bundle_(new content::TestBrowserThreadBundle),
-      profile_(new TestingProfile),
       extension_service_(nullptr) {
-#if defined(USE_AURA)
-  aura::Env::CreateInstance(true);
-#endif
+  Init();
 }
 
 TestExtensionEnvironment::TestExtensionEnvironment(
     base::MessageLoopForUI* message_loop)
-    : profile_(new TestingProfile), extension_service_(nullptr) {
-#if defined(USE_AURA)
-  aura::Env::CreateInstance(true);
+    : extension_service_(nullptr) {
+  Init();
+}
+
+void TestExtensionEnvironment::Init() {
+  profile_.reset(new TestingProfile);
+#if defined(OS_CHROMEOS)
+  if (!chromeos::DeviceSettingsService::IsInitialized())
+    chromeos_env_.reset(new ChromeOSEnv);
 #endif
 }
 
 TestExtensionEnvironment::~TestExtensionEnvironment() {
-#if defined(USE_AURA)
-  aura::Env::DeleteInstance();
-#endif
 }
 
 TestingProfile* TestExtensionEnvironment::profile() const {
@@ -119,7 +140,7 @@ const Extension* TestExtensionEnvironment::MakeExtension(
   scoped_ptr<base::DictionaryValue> manifest =
       MakeExtensionManifest(manifest_extra);
   scoped_refptr<Extension> result =
-      ExtensionBuilder().SetManifest(manifest.Pass()).Build();
+      ExtensionBuilder().SetManifest(std::move(manifest)).Build();
   GetExtensionService()->AddExtension(result.get());
   return result.get();
 }
@@ -130,7 +151,7 @@ const Extension* TestExtensionEnvironment::MakeExtension(
   scoped_ptr<base::DictionaryValue> manifest =
       MakeExtensionManifest(manifest_extra);
   scoped_refptr<Extension> result =
-      ExtensionBuilder().SetManifest(manifest.Pass()).SetID(id).Build();
+      ExtensionBuilder().SetManifest(std::move(manifest)).SetID(id).Build();
   GetExtensionService()->AddExtension(result.get());
   return result.get();
 }
@@ -140,6 +161,7 @@ scoped_refptr<Extension> TestExtensionEnvironment::MakePackagedApp(
     bool install) {
   scoped_refptr<Extension> result = ExtensionBuilder()
                                         .SetManifest(MakePackagedAppManifest())
+                                        .AddFlags(Extension::FROM_WEBSTORE)
                                         .SetID(id)
                                         .Build();
   if (install)
@@ -152,7 +174,7 @@ scoped_ptr<content::WebContents> TestExtensionEnvironment::MakeTab() const {
       content::WebContentsTester::CreateTestWebContents(profile(), NULL));
   // Create a tab id.
   SessionTabHelper::CreateForWebContents(contents.get());
-  return contents.Pass();
+  return contents;
 }
 
 void TestExtensionEnvironment::DeleteProfile() {

@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_ZYGOTE_HOST_ZYGOTE_HOST_IMPL_LINUX_H_
 #define CONTENT_BROWSER_ZYGOTE_HOST_ZYGOTE_HOST_IMPL_LINUX_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <vector>
@@ -15,8 +17,10 @@
 #include "content/public/browser/file_descriptor_info.h"
 #include "content/public/browser/zygote_host_linux.h"
 
+namespace base {
 template<typename Type>
 struct DefaultSingletonTraits;
+}  // namespace base
 
 namespace content {
 
@@ -60,7 +64,7 @@ class CONTENT_EXPORT ZygoteHostImpl : public ZygoteHost {
                               int score) override;
 
  private:
-  friend struct DefaultSingletonTraits<ZygoteHostImpl>;
+  friend struct base::DefaultSingletonTraits<ZygoteHostImpl>;
 
   ZygoteHostImpl();
   ~ZygoteHostImpl() override;

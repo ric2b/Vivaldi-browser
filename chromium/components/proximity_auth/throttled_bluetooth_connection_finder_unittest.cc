@@ -4,12 +4,15 @@
 
 #include "components/proximity_auth/throttled_bluetooth_connection_finder.h"
 
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
 #include "components/proximity_auth/bluetooth_connection_finder.h"
 #include "components/proximity_auth/bluetooth_throttler.h"
-#include "components/proximity_auth/connection.h"
+#include "components/proximity_auth/fake_connection.h"
 #include "components/proximity_auth/remote_device.h"
 #include "components/proximity_auth/wire_message.h"
 #include "device/bluetooth/bluetooth_uuid.h"
@@ -29,21 +32,8 @@ const char kUuid[] = "DEADBEEF-CAFE-FEED-FOOD-D15EA5EBEEF";
 // A callback that stores a found |connection| into |out|.
 void SaveConnection(scoped_ptr<Connection>* out,
                     scoped_ptr<Connection> connection) {
-  *out = connection.Pass();
+  *out = std::move(connection);
 }
-
-class StubConnection : public Connection {
- public:
-  StubConnection() : Connection(RemoteDevice()) {}
-  ~StubConnection() override {}
-
-  void Connect() override {}
-  void Disconnect() override {}
-  void SendMessageImpl(scoped_ptr<WireMessage> message) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(StubConnection);
-};
 
 class MockBluetoothThrottler : public BluetoothThrottler {
  public:
@@ -67,7 +57,8 @@ class FakeBluetoothConnectionFinder : public BluetoothConnectionFinder {
   ~FakeBluetoothConnectionFinder() override {}
 
   void Find(const ConnectionCallback& connection_callback) override {
-    connection_callback.Run(make_scoped_ptr(new StubConnection));
+    connection_callback.Run(
+        make_scoped_ptr(new FakeConnection(RemoteDevice())));
   }
 
  private:

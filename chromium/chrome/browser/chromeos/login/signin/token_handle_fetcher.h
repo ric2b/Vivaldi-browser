@@ -7,12 +7,13 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "components/user_manager/user_id.h"
+#include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 
@@ -28,12 +29,11 @@ class TokenHandleFetcher : public gaia::GaiaOAuthClient::Delegate,
                            public OAuth2TokenService::Consumer,
                            public OAuth2TokenService::Observer {
  public:
-  TokenHandleFetcher(TokenHandleUtil* util,
-                     const user_manager::UserID& user_id);
+  TokenHandleFetcher(TokenHandleUtil* util, const AccountId& account_id);
   ~TokenHandleFetcher() override;
 
-  typedef base::Callback<void(const user_manager::UserID&, bool success)>
-      TokenFetchingCallback;
+  using TokenFetchingCallback =
+      base::Callback<void(const AccountId&, bool success)>;
 
   // Get token handle for user who have just signed in via GAIA. This
   // request will be performed using signin profile.
@@ -45,7 +45,7 @@ class TokenHandleFetcher : public gaia::GaiaOAuthClient::Delegate,
 
  private:
   // OAuth2TokenService::Observer override:
-  void OnRefreshTokenAvailable(const std::string& account_id) override;
+  void OnRefreshTokenAvailable(const std::string& user_email) override;
 
   // OAuth2TokenService::Consumer overrides:
   void OnGetTokenSuccess(const OAuth2TokenService::Request* request,
@@ -60,20 +60,25 @@ class TokenHandleFetcher : public gaia::GaiaOAuthClient::Delegate,
   void OnGetTokenInfoResponse(
       scoped_ptr<base::DictionaryValue> token_info) override;
 
-  void RequestAccessToken(const std::string& account_id);
+  void RequestAccessToken(const std::string& user_email);
   void FillForAccessToken(const std::string& access_token);
 
-  TokenHandleUtil* token_handle_util_;
-  user_manager::UserID user_id_;
-  OAuth2TokenService* token_service_;
+  // This is called before profile is detroyed.
+  void OnProfileDestroyed();
 
-  bool waiting_for_refresh_token_;
+  TokenHandleUtil* token_handle_util_ = nullptr;
+  AccountId account_id_;
+  OAuth2TokenService* token_service_ = nullptr;
+
+  bool waiting_for_refresh_token_ = false;
   std::string account_without_token_;
-  Profile* profile_;
-  base::TimeTicks tokeninfo_response_start_time_;
+  Profile* profile_ = nullptr;
+  base::TimeTicks tokeninfo_response_start_time_ = base::TimeTicks();
   TokenFetchingCallback callback_;
   scoped_ptr<gaia::GaiaOAuthClient> gaia_client_;
   scoped_ptr<OAuth2TokenService::Request> oauth2_access_token_request_;
+  scoped_ptr<KeyedServiceShutdownNotifier::Subscription>
+      profile_shutdown_notification_;
 
   DISALLOW_COPY_AND_ASSIGN(TokenHandleFetcher);
 };

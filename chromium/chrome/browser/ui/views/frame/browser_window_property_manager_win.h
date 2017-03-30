@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_WINDOW_PROPERTY_MANAGER_WIN_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_WINDOW_PROPERTY_MANAGER_WIN_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 
@@ -16,19 +17,18 @@ class BrowserWindowPropertyManager {
  public:
   virtual ~BrowserWindowPropertyManager();
 
-  void UpdateWindowProperties(HWND hwnd);
-
   static scoped_ptr<BrowserWindowPropertyManager>
-      CreateBrowserWindowPropertyManager(BrowserView* view);
+      CreateBrowserWindowPropertyManager(BrowserView* view, HWND hwnd);
 
  private:
-  explicit BrowserWindowPropertyManager(BrowserView* view);
+  BrowserWindowPropertyManager(BrowserView* view, HWND hwnd);
 
+  void UpdateWindowProperties();
   void OnProfileIconVersionChange();
 
   PrefChangeRegistrar profile_pref_registrar_;
-
   BrowserView* view_;
+  const HWND hwnd_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserWindowPropertyManager);
 };

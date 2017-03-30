@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_APP_LIST_SEARCH_COMMON_WEBSERVICE_SEARCH_PROVIDER_H_
 
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -43,7 +44,7 @@ class WebserviceSearchProvider : public SearchProvider {
   base::Time last_keytyped_;
 
   // The timer to throttle QPS.
-  base::OneShotTimer<WebserviceSearchProvider> query_throttler_;
+  base::OneShotTimer query_throttler_;
 
   // The flag for tests. It prevents the throttling If set to false.
   bool use_throttling_;

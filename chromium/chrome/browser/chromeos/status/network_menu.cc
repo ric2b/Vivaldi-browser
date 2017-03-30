@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/status/network_menu.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "ash/shell.h"
@@ -11,6 +13,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/mobile_config.h"
@@ -41,6 +44,9 @@ namespace {
 // namespace).
 const int kMainIndexMask = 0x1000;
 const int kMoreIndexMask = 0x4000;
+
+const ui::ResourceBundle::FontStyle kAssociatedNetworkFontStyle =
+    ui::ResourceBundle::BoldFont;
 
 // Replace '&' in a string with "&&" to allow it to be a menu item label.
 std::string EscapeAmpersands(const std::string& input) {
@@ -249,7 +255,7 @@ const gfx::FontList* NetworkMenuModel::GetLabelFontListAt(int index) const {
   const gfx::FontList* font_list = NULL;
   if (menu_items_[index].flags & FLAG_ASSOCIATED) {
     ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-    font_list = &rb->GetFontList(browser_defaults::kAssociatedNetworkFontStyle);
+    font_list = &rb->GetFontList(kAssociatedNetworkFontStyle);
   }
 
   return font_list;

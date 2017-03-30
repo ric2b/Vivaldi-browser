@@ -12,18 +12,15 @@
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/sync_context_proxy.h"
 
-namespace syncer {
-
+namespace syncer_v2 {
 class SyncContext;
-class ModelTypeSyncProxyImpl;
-struct DataTypeState;
 
 // Encapsulates a reference to the sync context and the thread it's running on.
 // Used by sync's data types to connect with the sync context.
 //
 // It is expected that this object will be copied to and used on many different
 // threads.  It is small and safe to pass by value.
-class SYNC_EXPORT_PRIVATE SyncContextProxyImpl : public SyncContextProxy {
+class SYNC_EXPORT SyncContextProxyImpl : public SyncContextProxy {
  public:
   SyncContextProxyImpl(
       const scoped_refptr<base::SequencedTaskRunner>& sync_task_runner,
@@ -35,13 +32,9 @@ class SYNC_EXPORT_PRIVATE SyncContextProxyImpl : public SyncContextProxy {
   // This may fail under some unusual circumstances, like shutdown.  Due to the
   // nature of WeakPtrs and cross-thread communication, the caller will be
   // unable to distinguish a slow success from failure.
-  //
-  // Must be called from the thread where the data type lives.
   void ConnectTypeToSync(
       syncer::ModelType type,
-      const DataTypeState& data_type_state,
-      const UpdateResponseDataList& pending_updates,
-      const base::WeakPtr<ModelTypeSyncProxyImpl>& sync_proxy_impl) override;
+      scoped_ptr<ActivationContext> activation_context) override;
 
   // Disables syncing for the given type on the sync thread.
   void Disconnect(syncer::ModelType type) override;
@@ -56,6 +49,6 @@ class SYNC_EXPORT_PRIVATE SyncContextProxyImpl : public SyncContextProxy {
   base::WeakPtr<SyncContext> sync_context_;
 };
 
-}  // namespace syncer
+}  // namespace syncer_v2
 
 #endif  // SYNC_INTERNAL_API_SYNC_CONTEXT_PROXY_IMPL_H_

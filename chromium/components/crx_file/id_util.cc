@@ -4,10 +4,13 @@
 
 #include "components/crx_file/id_util.h"
 
+#include <stdint.h>
+
 #include "base/files/file_path.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "crypto/sha2.h"
 
 namespace {
@@ -37,10 +40,10 @@ namespace id_util {
 const size_t kIdSize = 16;
 
 std::string GenerateId(const std::string& input) {
-  uint8 hash[kIdSize];
+  uint8_t hash[kIdSize];
   crypto::SHA256HashString(input, hash, sizeof(hash));
   std::string output =
-      base::StringToLowerASCII(base::HexEncode(hash, sizeof(hash)));
+      base::ToLowerASCII(base::HexEncode(hash, sizeof(hash)));
   ConvertHexadecimalToIDAlphabet(&output);
 
   return output;
@@ -83,7 +86,7 @@ bool IdIsValid(const std::string& id) {
 
   // We only support lowercase IDs, because IDs can be used as URL components
   // (where GURL will lowercase it).
-  std::string temp = base::StringToLowerASCII(id);
+  std::string temp = base::ToLowerASCII(id);
   for (size_t i = 0; i < temp.size(); i++)
     if (temp[i] < 'a' || temp[i] > 'p')
       return false;

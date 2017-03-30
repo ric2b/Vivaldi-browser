@@ -59,9 +59,9 @@ class DownloadItemModelData : public base::SupportsUserData::Data {
   // for the file type.
   bool should_prefer_opening_in_browser_;
 
-  // Whether the download should be considered dangerous if SafeBrowsing doesn't
-  // come up with a verdict.
-  bool is_dangerous_file_based_on_type_;
+  // Danger level of the file determined based on the file type and whether
+  // there was a user action associated with the download.
+  download_util::DownloadDangerLevel danger_level_;
 
   // Whether the download is currently being revived.
   bool is_being_revived_;
@@ -98,14 +98,14 @@ DownloadItemModelData::DownloadItemModelData()
     : should_show_in_shelf_(true),
       was_ui_notified_(false),
       should_prefer_opening_in_browser_(false),
-      is_dangerous_file_based_on_type_(false),
-      is_being_revived_(false) {
-}
+      danger_level_(download_util::NOT_DANGEROUS),
+      is_being_revived_(false) {}
 
-base::string16 InterruptReasonStatusMessage(int reason) {
+base::string16 InterruptReasonStatusMessage(
+    content::DownloadInterruptReason reason) {
   int string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS;
 
-  switch (static_cast<content::DownloadInterruptReason>(reason)) {
+  switch (reason) {
     case content::DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_ACCESS_DENIED;
       break;
@@ -174,7 +174,6 @@ base::string16 InterruptReasonStatusMessage(int reason) {
       NOTREACHED();
       // fallthrough
     case content::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE:
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_PRECONDITION:
     case content::DOWNLOAD_INTERRUPT_REASON_FILE_FAILED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS;
   }
@@ -182,11 +181,11 @@ base::string16 InterruptReasonStatusMessage(int reason) {
   return l10n_util::GetStringUTF16(string_id);
 }
 
-base::string16 InterruptReasonMessage(int reason) {
+base::string16 InterruptReasonMessage(content::DownloadInterruptReason reason) {
   int string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS;
   base::string16 status_text;
 
-  switch (static_cast<content::DownloadInterruptReason>(reason)) {
+  switch (reason) {
     case content::DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_ACCESS_DENIED;
       break;
@@ -255,7 +254,6 @@ base::string16 InterruptReasonMessage(int reason) {
       NOTREACHED();
       // fallthrough
     case content::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE:
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_PRECONDITION:
     case content::DOWNLOAD_INTERRUPT_REASON_FILE_FAILED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS;
   }
@@ -320,8 +318,8 @@ base::string16 DownloadItemModel::GetStatusText() const {
 }
 
 base::string16 DownloadItemModel::GetTabProgressStatusText() const {
-  int64 total = GetTotalBytes();
-  int64 size = download_->GetReceivedBytes();
+  int64_t total = GetTotalBytes();
+  int64_t size = download_->GetReceivedBytes();
   base::string16 received_size = ui::FormatBytes(size);
   base::string16 amount = received_size;
 
@@ -339,7 +337,7 @@ base::string16 DownloadItemModel::GetTabProgressStatusText() const {
   } else {
     amount.assign(received_size);
   }
-  int64 current_speed = download_->CurrentSpeed();
+  int64_t current_speed = download_->CurrentSpeed();
   base::string16 speed_text = ui::FormatSpeed(current_speed);
   base::i18n::AdjustStringForLocaleDirection(&speed_text);
 
@@ -432,11 +430,11 @@ base::string16 DownloadItemModel::GetWarningConfirmButtonText() const {
   }
 }
 
-int64 DownloadItemModel::GetCompletedBytes() const {
+int64_t DownloadItemModel::GetCompletedBytes() const {
   return download_->GetReceivedBytes();
 }
 
-int64 DownloadItemModel::GetTotalBytes() const {
+int64_t DownloadItemModel::GetTotalBytes() const {
   return download_->AllDataSaved() ? download_->GetReceivedBytes() :
                                      download_->GetTotalBytes();
 }
@@ -610,14 +608,15 @@ void DownloadItemModel::SetShouldPreferOpeningInBrowser(bool preference) {
   data->should_prefer_opening_in_browser_ = preference;
 }
 
-bool DownloadItemModel::IsDangerousFileBasedOnType() const {
+download_util::DownloadDangerLevel DownloadItemModel::GetDangerLevel() const {
   const DownloadItemModelData* data = DownloadItemModelData::Get(download_);
-  return data && data->is_dangerous_file_based_on_type_;
+  return data ? data->danger_level_ : download_util::NOT_DANGEROUS;
 }
 
-void DownloadItemModel::SetIsDangerousFileBasedOnType(bool dangerous) {
+void DownloadItemModel::SetDangerLevel(
+    download_util::DownloadDangerLevel danger_level) {
   DownloadItemModelData* data = DownloadItemModelData::GetOrCreate(download_);
-  data->is_dangerous_file_based_on_type_ = dangerous;
+  data->danger_level_ = danger_level;
 }
 
 bool DownloadItemModel::IsBeingRevived() const {
@@ -632,8 +631,8 @@ void DownloadItemModel::SetIsBeingRevived(bool is_being_revived) {
 
 base::string16 DownloadItemModel::GetProgressSizesString() const {
   base::string16 size_ratio;
-  int64 size = GetCompletedBytes();
-  int64 total = GetTotalBytes();
+  int64_t size = GetCompletedBytes();
+  int64_t total = GetTotalBytes();
   if (total > 0) {
     ui::DataUnits amount_units = ui::GetByteDisplayUnits(total);
     base::string16 simple_size = ui::FormatBytesWithUnits(size, amount_units, false);

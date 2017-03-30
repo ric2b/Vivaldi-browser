@@ -22,12 +22,15 @@ from benchmarks import image_decoding
 from benchmarks import indexeddb_perf
 from benchmarks import jetstream
 from benchmarks import kraken
+from benchmarks import memory
+from benchmarks import new_tab
 from benchmarks import octane
 from benchmarks import rasterize_and_record_micro
 from benchmarks import repaint
 from benchmarks import spaceport
 from benchmarks import speedometer
 from benchmarks import sunspider
+from benchmarks import text_selection
 
 
 def SmokeTestGenerator(benchmark):
@@ -37,16 +40,15 @@ def SmokeTestGenerator(benchmark):
   # failing or flaky benchmark would disable a much wider swath of coverage
   # than is usally intended. Instead, if a particular benchmark is failing,
   # disable it in tools/perf/benchmarks/*.
-  @benchmark_module.Disabled('mac', 'win')
   @benchmark_module.Disabled('chromeos')  # crbug.com/351114
   def BenchmarkSmokeTest(self):
     # Only measure a single page so that this test cycles reasonably quickly.
     benchmark.options['pageset_repeat'] = 1
     benchmark.options['page_repeat'] = 1
 
-    class SinglePageBenchmark(benchmark):  # pylint: disable=W0232
+    class SinglePageBenchmark(benchmark):  # pylint: disable=no-init
       def CreateStorySet(self, options):
-        # pylint: disable=E1002
+        # pylint: disable=super-on-old-class
         story_set = super(SinglePageBenchmark, self).CreateStorySet(options)
         for story in story_set.stories:
           story.skip_waits = True
@@ -57,7 +59,6 @@ def SmokeTestGenerator(benchmark):
     # Set the benchmark's default arguments.
     options = options_for_unittests.GetCopy()
     options.output_format = 'none'
-    options.suppress_gtest_report = True
     parser = options.CreateParser()
 
     benchmark.AddCommandLineArgs(parser)
@@ -78,19 +79,22 @@ def SmokeTestGenerator(benchmark):
 _BLACK_LIST_TEST_MODULES = {
     image_decoding, # Always fails on Mac10.9 Tests builder.
     indexeddb_perf,  # Always fails on Win7 & Android Tests builder.
+    new_tab,  # Fails fairly often on the Linux Tests builder, crbug.com/535664
     octane,  # Often fails & take long time to timeout on cq bot.
     rasterize_and_record_micro,  # Always fails on cq bot.
     repaint,  # Often fails & takes long time to timeout on cq bot.
     spaceport,  # Takes 451 seconds.
     speedometer,  # Takes 101 seconds.
     jetstream,  # Take 206 seconds.
+    text_selection, # Always fails on cq bot.
+    memory  # Flaky on bots, crbug.com/513767
 }
 
 # Some smoke benchmark tests that run quickly on desktop platform can be very
 # slow on Android. So we create a separate set of black list only for Android.
 _ANDROID_BLACK_LIST_MODULES = {
     kraken,  # Takes 275 seconds on Android.
-    sunspider  # Takes 163 seconds on Android.
+    sunspider,  # Takes 163 seconds on Android.
 }
 
 
@@ -124,7 +128,7 @@ def load_tests(loader, standard_tests, pattern):
     method = SmokeTestGenerator(benchmark)
 
     # Make sure any decorators are propagated from the original declaration.
-    # (access to protected members) pylint: disable=W0212
+    # (access to protected members) pylint: disable=protected-access
     # TODO(dpranke): Since we only pick the first test from every class
     # (above), if that test is disabled, we'll end up not running *any*
     # test from the class. We should probably discover all of the tests
@@ -133,19 +137,18 @@ def load_tests(loader, standard_tests, pattern):
     # Merge decorators.
     for attribute in ['_enabled_strings', '_disabled_strings']:
       # Do set union of attributes to eliminate duplicates.
-      merged_attributes = list(set(getattr(method, attribute, []) +
-                                   getattr(benchmark, attribute, [])))
+      merged_attributes = getattr(method, attribute, set()).union(
+          getattr(benchmark, attribute, set()))
       if merged_attributes:
         setattr(method, attribute, merged_attributes)
 
-      # Handle the case where the benchmark is Enabled/Disabled everywhere.
-      if (getattr(method, attribute, None) == [] or
-          getattr(benchmark, attribute, None) == []):
-        setattr(method, attribute, [])
-
     # Disable some tests on android platform only.
     if sys.modules[benchmark.__module__] in _ANDROID_BLACK_LIST_MODULES:
-      method._disabled_strings.append('android')
+      method._disabled_strings.add('android')
+
+    # TODO(bashi): Remove once crrev.com/1266833004 is landed.
+    if benchmark.Name() == 'memory.blink_memory_mobile':
+      method._disabled_strings.add('android')
 
     setattr(BenchmarkSmokeTest, benchmark.Name(), method)
 

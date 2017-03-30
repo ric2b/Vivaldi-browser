@@ -5,19 +5,24 @@
 from telemetry.page import page_test
 from telemetry.timeline import tracing_category_filter
 from telemetry.web_perf import timeline_based_measurement
+from telemetry.web_perf.metrics import smoothness
 
 
 class _CustomResultsWrapper(timeline_based_measurement.ResultsWrapperInterface):
+  def __init__(self):
+    super(_CustomResultsWrapper, self).__init__()
+    self._pages_to_tir_labels = {}
 
   def _AssertNewValueHasSameInteractionLabel(self, new_value):
-    for value in self._results.current_page_run.values:
-      if value.name == new_value.name:
-        assert value.tir_label == new_value.tir_label, (
-          'Smoothness measurement do not support multiple interaction record '
-          'labels per page yet. See crbug.com/453109 for more information.')
+    tir_label = self._pages_to_tir_labels.get(new_value.page)
+    if tir_label:
+      assert tir_label == self._tir_label, (
+        'Smoothness measurement do not support multiple interaction record '
+        'labels per page yet. See crbug.com/453109 for more information.')
+    else:
+      self._pages_to_tir_labels[new_value.page] = self._tir_label
 
   def AddValue(self, value):
-    value.tir_label = self._result_prefix
     self._AssertNewValueHasSameInteractionLabel(value)
     self._results.AddValue(value)
 
@@ -25,6 +30,7 @@ class _CustomResultsWrapper(timeline_based_measurement.ResultsWrapperInterface):
 class Smoothness(page_test.PageTest):
   def __init__(self, needs_browser_restart_after_each_page=False):
     super(Smoothness, self).__init__(needs_browser_restart_after_each_page)
+    self._results_wrapper = _CustomResultsWrapper()
     self._tbm = None
 
   @classmethod
@@ -32,30 +38,29 @@ class Smoothness(page_test.PageTest):
     options.AppendExtraBrowserArgs('--enable-gpu-benchmarking')
     options.AppendExtraBrowserArgs('--touch-events=enabled')
     options.AppendExtraBrowserArgs('--running-performance-benchmark')
-    options.AppendExtraBrowserArgs('--js-flags=--expose-gc')
 
   def WillNavigateToPage(self, page, tab):
-    tracing_controller = tab.browser.platform.tracing_controller
     # FIXME: Remove webkit.console when blink.console lands in chromium and
     # the ref builds are updated. crbug.com/386847
     custom_categories = [
         'webkit.console', 'blink.console', 'benchmark', 'trace_event_overhead']
     category_filter = tracing_category_filter.TracingCategoryFilter(
         ','.join(custom_categories))
+
+    options = timeline_based_measurement.Options(category_filter)
+    options.SetTimelineBasedMetrics([smoothness.SmoothnessMetric()])
+    for delay in page.GetSyntheticDelayCategories():
+      options.category_filter.AddSyntheticDelay(delay)
     self._tbm = timeline_based_measurement.TimelineBasedMeasurement(
-        timeline_based_measurement.Options(category_filter),
-        _CustomResultsWrapper)
-    self._tbm.WillRunStory(
-        tracing_controller, page.GetSyntheticDelayCategories())
+        options, self._results_wrapper)
+    self._tbm.WillRunStory(tab.browser.platform)
 
   def ValidateAndMeasurePage(self, _, tab, results):
-    tracing_controller = tab.browser.platform.tracing_controller
-    self._tbm.Measure(tracing_controller, results)
+    self._tbm.Measure(tab.browser.platform, results)
 
-  def CleanUpAfterPage(self, _, tab):
-    tracing_controller = tab.browser.platform.tracing_controller
-    self._tbm.DidRunStory(tracing_controller)
-    tab.ExecuteJavaScript('window.gc();')
+  def DidRunPage(self, platform):
+    if self._tbm:
+      self._tbm.DidRunStory(platform)
 
 
 class Repaint(Smoothness):

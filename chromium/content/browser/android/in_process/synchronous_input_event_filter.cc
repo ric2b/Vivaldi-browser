@@ -5,10 +5,10 @@
 #include "content/browser/android/in_process/synchronous_input_event_filter.h"
 
 #include "base/callback.h"
-#include "cc/input/input_handler.h"
 #include "content/browser/android/in_process/synchronous_compositor_impl.h"
-#include "content/browser/android/in_process/synchronous_compositor_registry.h"
+#include "content/browser/android/in_process/synchronous_compositor_registry_in_proc.h"
 #include "content/public/browser/browser_thread.h"
+#include "ui/events/blink/synchronous_input_handler_proxy.h"
 #include "ui/events/latency_info.h"
 
 using blink::WebInputEvent;
@@ -48,15 +48,15 @@ void SynchronousInputEventFilter::SetBoundHandlerOnUIThread(
 
 void SynchronousInputEventFilter::DidAddInputHandler(
     int routing_id,
-    cc::InputHandler* input_handler) {
+    ui::SynchronousInputHandlerProxy* synchronous_input_handler_proxy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  SynchronousCompositorRegistry::GetInstance()->RegisterInputHandler(
-      routing_id, input_handler);
+  SynchronousCompositorRegistryInProc::GetInstance()->RegisterInputHandler(
+      routing_id, synchronous_input_handler_proxy);
 }
 
 void SynchronousInputEventFilter::DidRemoveInputHandler(int routing_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  SynchronousCompositorRegistry::GetInstance()->UnregisterInputHandler(
+  SynchronousCompositorRegistryInProc::GetInstance()->UnregisterInputHandler(
       routing_id);
 }
 

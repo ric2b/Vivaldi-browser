@@ -22,11 +22,6 @@ class GnPrepareOut(cr.PrepareOut):
   def priority(self):
     return -1
 
-  @property
-  def enabled(self):
-    # Disabled on Android for now.
-    return not cr.AndroidPlatform.GetInstance().is_active
-
   def UpdateContext(self):
     # Collapse GN_ARGS from all GN_ARG prefixes.
     gn_args = cr.context.Find('GN_ARGS') or ''
@@ -36,6 +31,10 @@ class GnPrepareOut(cr.PrepareOut):
 
     gn_args += (' is_debug=%s' %
         ('true' if cr.context['CR_BUILDTYPE'] == 'Debug' else 'false'))
+
+    arch = cr.context.Find('CR_ENVSETUP_ARCH') or ''
+    if arch:
+      gn_args += ' target_cpu="%s"' % ('x86' if arch == 'ia32' else arch)
 
     # Detect goma.
     goma_binaries = cr.Host.SearchPath('gomacc', [

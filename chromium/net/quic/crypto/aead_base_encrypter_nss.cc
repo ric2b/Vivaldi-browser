@@ -13,18 +13,25 @@ using base::StringPiece;
 
 namespace net {
 
+namespace {
+
+// The maximum size in bytes of the nonce, including 8 bytes of sequence number.
+// ChaCha20 uses only the 8 byte sequence number and AES-GCM uses 12 bytes.
+const size_t kMaxNonceSize = 12;
+
+}  // namespace
+
 AeadBaseEncrypter::AeadBaseEncrypter(CK_MECHANISM_TYPE aead_mechanism,
-                                     PK11_EncryptFunction pk11_encrypt,
                                      size_t key_size,
                                      size_t auth_tag_size,
                                      size_t nonce_prefix_size)
     : aead_mechanism_(aead_mechanism),
-      pk11_encrypt_(pk11_encrypt),
       key_size_(key_size),
       auth_tag_size_(auth_tag_size),
       nonce_prefix_size_(nonce_prefix_size) {
   DCHECK_LE(key_size_, sizeof(key_));
   DCHECK_LE(nonce_prefix_size_, sizeof(nonce_prefix_));
+  DCHECK_GE(kMaxNonceSize, nonce_prefix_size_);
 }
 
 AeadBaseEncrypter::~AeadBaseEncrypter() {}
@@ -51,7 +58,7 @@ bool AeadBaseEncrypter::Encrypt(StringPiece nonce,
                                 StringPiece associated_data,
                                 StringPiece plaintext,
                                 unsigned char* output) {
-  if (nonce.size() != nonce_prefix_size_ + sizeof(QuicPacketSequenceNumber)) {
+  if (nonce.size() != nonce_prefix_size_ + sizeof(QuicPacketNumber)) {
     return false;
   }
 
@@ -64,20 +71,12 @@ bool AeadBaseEncrypter::Encrypt(StringPiece nonce,
   key_item.len = key_size_;
   PK11SlotInfo* slot = PK11_GetInternalSlot();
 
-  // TODO(wtc): For an AES-GCM key, the correct value for |key_mechanism| is
-  // CKM_AES_GCM, but because of NSS bug
-  // https://bugzilla.mozilla.org/show_bug.cgi?id=853285, use CKM_AES_ECB as a
-  // workaround. Remove this when we require NSS 3.15.
-  CK_MECHANISM_TYPE key_mechanism = aead_mechanism_;
-  if (key_mechanism == CKM_AES_GCM) {
-    key_mechanism = CKM_AES_ECB;
-  }
-
   // The exact value of the |origin| argument doesn't matter to NSS as long as
   // it's not PK11_OriginFortezzaHack, so we pass PK11_OriginUnwrap as a
   // placeholder.
-  crypto::ScopedPK11SymKey aead_key(PK11_ImportSymKey(
-      slot, key_mechanism, PK11_OriginUnwrap, CKA_ENCRYPT, &key_item, nullptr));
+  crypto::ScopedPK11SymKey aead_key(
+      PK11_ImportSymKey(slot, aead_mechanism_, PK11_OriginUnwrap, CKA_ENCRYPT,
+                        &key_item, nullptr));
   PK11_FreeSlot(slot);
   slot = nullptr;
   if (!aead_key) {
@@ -93,12 +92,20 @@ bool AeadBaseEncrypter::Encrypt(StringPiece nonce,
   param.data = reinterpret_cast<unsigned char*>(&aead_params.data);
   param.len = aead_params.len;
 
+  if (plaintext.size() > kMaxPacketSize) {
+    DLOG(FATAL) << "Plaintext too large";
+    return false;
+  }
+  // NSS doesn't support inplace encryption, so copy plaintext to a temporary
+  // buffer.
+  unsigned char temp_plaintext[kMaxPacketSize];
+  memcpy(temp_plaintext, plaintext.data(), plaintext.size());
+
   unsigned int output_len;
-  if (pk11_encrypt_(aead_key.get(), aead_mechanism_, &param,
-                    output, &output_len, ciphertext_size,
-                    reinterpret_cast<const unsigned char*>(plaintext.data()),
-                    plaintext.size()) != SECSuccess) {
-    DVLOG(1) << "pk11_encrypt_ failed";
+  if (PK11_Encrypt(aead_key.get(), aead_mechanism_, &param, output, &output_len,
+                   ciphertext_size, temp_plaintext,
+                   plaintext.size()) != SECSuccess) {
+    DVLOG(1) << "PK11_Encrypt failed";
     return false;
   }
 
@@ -110,7 +117,7 @@ bool AeadBaseEncrypter::Encrypt(StringPiece nonce,
   return true;
 }
 
-bool AeadBaseEncrypter::EncryptPacket(QuicPacketSequenceNumber sequence_number,
+bool AeadBaseEncrypter::EncryptPacket(QuicPacketNumber packet_number,
                                       StringPiece associated_data,
                                       StringPiece plaintext,
                                       char* output,
@@ -121,20 +128,23 @@ bool AeadBaseEncrypter::EncryptPacket(QuicPacketSequenceNumber sequence_number,
     return false;
   }
   // TODO(ianswett): Introduce a check to ensure that we don't encrypt with the
-  // same sequence number twice.
-  const size_t nonce_size = nonce_prefix_size_ + sizeof(sequence_number);
-  memcpy(output, nonce_prefix_, nonce_prefix_size_);
-  memcpy(output + nonce_prefix_size_, &sequence_number,
-         sizeof(sequence_number));
-  if (!Encrypt(StringPiece(output, nonce_size), associated_data, plaintext,
-               reinterpret_cast<unsigned char*>(output))) {
+  // same packet number twice.
+  const size_t nonce_size = nonce_prefix_size_ + sizeof(packet_number);
+  ALIGNAS(4) char nonce_buffer[kMaxNonceSize];
+  memcpy(nonce_buffer, nonce_prefix_, nonce_prefix_size_);
+  memcpy(nonce_buffer + nonce_prefix_size_, &packet_number,
+         sizeof(packet_number));
+  if (!Encrypt(StringPiece(nonce_buffer, nonce_size), associated_data,
+               plaintext, reinterpret_cast<unsigned char*>(output))) {
     return false;
   }
   *output_length = ciphertext_size;
   return true;
 }
 
-size_t AeadBaseEncrypter::GetKeySize() const { return key_size_; }
+size_t AeadBaseEncrypter::GetKeySize() const {
+  return key_size_;
+}
 
 size_t AeadBaseEncrypter::GetNoncePrefixSize() const {
   return nonce_prefix_size_;

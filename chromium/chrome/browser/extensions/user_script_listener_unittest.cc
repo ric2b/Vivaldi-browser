@@ -4,6 +4,7 @@
 
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
@@ -48,9 +49,7 @@ class ThrottleController : public base::SupportsUserData::Data,
   }
 
   // ResourceController implementation:
-  void Resume(bool open_when_done, bool ask_for_target) override {
-    request_->Start();
-  }
+  void Resume() override { request_->Start(); }
   void Cancel() override { NOTREACHED(); }
   void CancelAndIgnore() override { NOTREACHED(); }
   void CancelWithError(int error_code) override { NOTREACHED(); }
@@ -76,12 +75,11 @@ class SimpleTestJob : public net::URLRequestTestJob {
 };
 
 // Yoinked from extension_manifest_unittest.cc.
-base::DictionaryValue* LoadManifestFile(const base::FilePath path,
-                                        std::string* error) {
+scoped_ptr<base::DictionaryValue> LoadManifestFile(const base::FilePath path,
+                                                   std::string* error) {
   EXPECT_TRUE(base::PathExists(path));
   JSONFileValueDeserializer deserializer(path);
-  return static_cast<base::DictionaryValue*>(
-      deserializer.Deserialize(NULL, error));
+  return base::DictionaryValue::From(deserializer.Deserialize(NULL, error));
 }
 
 scoped_refptr<Extension> LoadExtension(const std::string& filename,
@@ -92,7 +90,7 @@ scoped_refptr<Extension> LoadExtension(const std::string& filename,
       AppendASCII("extensions").
       AppendASCII("manifest_tests").
       AppendASCII(filename.c_str());
-  scoped_ptr<base::DictionaryValue> value(LoadManifestFile(path, error));
+  scoped_ptr<base::DictionaryValue> value = LoadManifestFile(path, error);
   if (!value)
     return NULL;
   return Extension::Create(path.DirName(), Manifest::UNPACKED, *value,
@@ -177,7 +175,7 @@ class UserScriptListenerTest : public ExtensionServiceTestBase {
     if (!defer)
       request->Start();
 
-    return request.Pass();
+    return request;
   }
 
   void LoadTestExtension() {

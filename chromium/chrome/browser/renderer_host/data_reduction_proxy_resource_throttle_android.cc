@@ -7,9 +7,9 @@
 #include "base/logging.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prerender/prerender_contents.h"
-#include "chrome/browser/renderer_host/safe_browsing_resource_throttle_factory.h"
+#include "chrome/browser/profiles/profile_io_data.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_request_info.h"
@@ -19,13 +19,11 @@
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request.h"
 
-#if defined(SAFE_BROWSING_DB_LOCAL) || defined(SAFE_BROWSING_DB_REMOTE)
-#include "chrome/browser/profiles/profile_io_data.h"
-#include "chrome/browser/renderer_host/safe_browsing_resource_throttle.h"
-#endif
-
 using content::BrowserThread;
 using content::ResourceThrottle;
+using safe_browsing::SafeBrowsingService;
+using safe_browsing::SafeBrowsingUIManager;
+using safe_browsing::SBThreatType;
 
 // TODO(eroman): Downgrade these CHECK()s to DCHECKs once there is more
 //               unit test coverage.
@@ -36,20 +34,22 @@ using content::ResourceThrottle;
 const char* DataReductionProxyResourceThrottle::kUnsafeUrlProceedHeader =
       "X-Unsafe-Url-Proceed";
 
-ResourceThrottle*
-DataReductionProxyResourceThrottleFactory::CreateResourceThrottle(
+// static
+DataReductionProxyResourceThrottle*
+DataReductionProxyResourceThrottle::MaybeCreate(
     net::URLRequest* request,
     content::ResourceContext* resource_context,
     content::ResourceType resource_type,
-    SafeBrowsingService* service) {
-#if defined(SAFE_BROWSING_DB_LOCAL) || defined(SAFE_BROWSING_DB_REMOTE)
+    SafeBrowsingService* sb_service) {
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
+  // Don't create the throttle if we can't handle the request.
   if (io_data->IsOffTheRecord() || !io_data->IsDataReductionProxyEnabled() ||
-      request->url().SchemeIsSecure())
-    return new SafeBrowsingResourceThrottle(request, resource_type, service);
-#endif
+      request->url().SchemeIsCryptographic()) {
+    return NULL;
+  }
+
   return new DataReductionProxyResourceThrottle(request, resource_type,
-                                                service);
+                                                sb_service);
 }
 
 DataReductionProxyResourceThrottle::DataReductionProxyResourceThrottle(
@@ -75,7 +75,7 @@ void DataReductionProxyResourceThrottle::WillRedirectRequest(
 
   // We need to check the new URL before following the redirect.
   SBThreatType threat_type = CheckUrl();
-  if (threat_type == SB_THREAT_TYPE_SAFE)
+  if (threat_type == safe_browsing::SB_THREAT_TYPE_SAFE)
     return;
 
   if (request_->load_flags() & net::LOAD_PREFETCH) {
@@ -95,8 +95,12 @@ void DataReductionProxyResourceThrottle::WillRedirectRequest(
   unsafe_resource.threat_type = threat_type;
   unsafe_resource.callback = base::Bind(
       &DataReductionProxyResourceThrottle::OnBlockingPageComplete, AsWeakPtr());
+  unsafe_resource.callback_thread =
+      content::BrowserThread::GetMessageLoopProxyForThread(
+          content::BrowserThread::IO);
   unsafe_resource.render_process_host_id = info->GetChildID();
-  unsafe_resource.render_view_id = info->GetRouteID();
+  unsafe_resource.render_frame_id = info->GetRenderFrameID();
+  unsafe_resource.threat_source = safe_browsing::ThreatSource::DATA_SAVER;
 
   *defer = true;
 
@@ -116,13 +120,13 @@ void DataReductionProxyResourceThrottle::StartDisplayingBlockingPage(
     const base::WeakPtr<DataReductionProxyResourceThrottle>& throttle,
     scoped_refptr<SafeBrowsingUIManager> ui_manager,
     const SafeBrowsingUIManager::UnsafeResource& resource) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  content::RenderViewHost* rvh = content::RenderViewHost::FromID(
-      resource.render_process_host_id, resource.render_view_id);
-  if (rvh) {
+  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
+      resource.render_process_host_id, resource.render_frame_id);
+  if (rfh) {
     content::WebContents* web_contents =
-        content::WebContents::FromRenderViewHost(rvh);
+        content::WebContents::FromRenderFrameHost(rfh);
     prerender::PrerenderContents* prerender_contents =
         prerender::PrerenderContents::FromWebContents(web_contents);
     if (prerender_contents) {
@@ -151,22 +155,23 @@ void DataReductionProxyResourceThrottle::OnBlockingPageComplete(bool proceed) {
 }
 
 SBThreatType DataReductionProxyResourceThrottle::CheckUrl() {
-  SBThreatType result = SB_THREAT_TYPE_SAFE;
+  SBThreatType result = safe_browsing::SB_THREAT_TYPE_SAFE;
 
   // TODO(sgurun) Check for spdy proxy origin.
   if (request_->response_headers() == NULL)
     return result;
 
   if (request_->response_headers()->HasHeader("X-Phishing-Url"))
-    result = SB_THREAT_TYPE_URL_PHISHING;
+    result = safe_browsing::SB_THREAT_TYPE_URL_PHISHING;
   else if (request_->response_headers()->HasHeader("X-Malware-Url"))
-    result = SB_THREAT_TYPE_URL_MALWARE;
+    result = safe_browsing::SB_THREAT_TYPE_URL_MALWARE;
 
   // If safe browsing is disabled and the request is sent to the DRP server,
   // we need to break the redirect loop by setting the extra header.
-  if (result != SB_THREAT_TYPE_SAFE && !safe_browsing_->enabled()) {
+  if (result != safe_browsing::SB_THREAT_TYPE_SAFE &&
+      !safe_browsing_->enabled()) {
     request_->SetExtraRequestHeaderByName(kUnsafeUrlProceedHeader, "1", true);
-    result = SB_THREAT_TYPE_SAFE;
+    result = safe_browsing::SB_THREAT_TYPE_SAFE;
   }
 
   return result;

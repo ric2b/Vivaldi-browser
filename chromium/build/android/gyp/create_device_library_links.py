@@ -18,14 +18,16 @@ import sys
 from util import build_device
 from util import build_utils
 
-BUILD_ANDROID_DIR = os.path.join(os.path.dirname(__file__), '..')
+BUILD_ANDROID_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(BUILD_ANDROID_DIR)
 
+import devil_chromium
+from devil.android import apk_helper
 from pylib import constants
-from pylib.utils import apk_helper
 
 def RunShellCommand(device, cmd):
-  output = device.RunShellCommand(cmd)
+  output = device.RunShellCommand(cmd, check_return=True)
 
   if output:
     raise Exception(
@@ -64,7 +66,7 @@ def TriggerSymlinkScript(options):
   mkdir_cmd = ('if [ ! -e %(dir)s ]; then mkdir -p %(dir)s; fi ' %
       { 'dir': device_dir })
   RunShellCommand(device, mkdir_cmd)
-  device.PushChangedFiles([(options.script_host_path,
+  device.PushChangedFiles([(os.path.abspath(options.script_host_path),
                             options.script_device_path)])
 
   trigger_cmd = (
@@ -96,12 +98,17 @@ def main(args):
       help='Path to build device configuration.')
   parser.add_option('--configuration-name',
       help='The build CONFIGURATION_NAME')
+  parser.add_option('--output-directory',
+      help='The output directory')
   options, _ = parser.parse_args(args)
 
   required_options = ['apk', 'libraries', 'script_host_path',
       'script_device_path', 'target_dir', 'configuration_name']
   build_utils.CheckOptions(options, parser, required=required_options)
   constants.SetBuildType(options.configuration_name)
+
+  devil_chromium.Initialize(
+      output_directory=os.path.abspath(options.output_directory))
 
   CreateSymlinkScript(options)
   TriggerSymlinkScript(options)

@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.banners;
 
+import org.chromium.base.VisibleForTesting;
+
 /**
  * Fetches data about the given app.
  */
@@ -16,6 +18,7 @@ public abstract class AppDetailsDelegate {
          * Called when the task has finished.
          * @param data Data about the requested package.  Will be null if retrieval failed.
          */
+        @VisibleForTesting
         public void onAppDetailsRetrieved(AppData data);
     }
 
@@ -25,10 +28,11 @@ public abstract class AppDetailsDelegate {
      * @param observer    Informed when the app details have been received.
      * @param url         URL of the page requesting a banner.
      * @param packageName Name of the app's package.
+     * @param referrer    Referrer specified by the page requesting a banner.
      * @param iconSize    Size of the icon to retrieve.
      */
     protected abstract void getAppDetailsAsynchronously(
-            Observer observer, String url, String packageName, int iconSize);
+            Observer observer, String url, String packageName, String referrer, int iconSize);
 
     /**
      * Destroy the delegate, cleaning up any open hooks.

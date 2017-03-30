@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/power/peripheral_battery_observer.h"
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
@@ -35,7 +36,10 @@ class PeripheralBatteryObserverTest : public InProcessBrowserTest {
   PeripheralBatteryObserverTest() {}
   ~PeripheralBatteryObserverTest() override {}
 
-  void SetUp() override { chromeos::DBusThreadManager::Initialize(); }
+  void SetUp() override {
+    InProcessBrowserTest::SetUp();
+    chromeos::DBusThreadManager::Initialize();
+  }
 
   void SetUpInProcessBrowserTestFixture() override {
     InProcessBrowserTest::SetUpInProcessBrowserTestFixture();

@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -19,8 +20,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
-
-namespace {
 
 class SpdySessionPoolTest : public ::testing::Test,
                             public ::testing::WithParamInterface<NextProto> {
@@ -44,14 +43,13 @@ class SpdySessionPoolTest : public ::testing::Test,
   void RunIPPoolingTest(SpdyPoolCloseSessionsType close_sessions_type);
 
   SpdySessionDependencies session_deps_;
-  scoped_refptr<HttpNetworkSession> http_session_;
+  scoped_ptr<HttpNetworkSession> http_session_;
   SpdySessionPool* spdy_session_pool_;
 };
 
 INSTANTIATE_TEST_CASE_P(NextProto,
                         SpdySessionPoolTest,
                         testing::Values(kProtoSPDY31,
-                                        kProtoHTTP2_14,
                                         kProtoHTTP2));
 
 // A delegate that opens a new session when it is closed.
@@ -74,6 +72,8 @@ class SessionOpeningDelegate : public SpdyStream::Delegate {
   void OnDataReceived(scoped_ptr<SpdyBuffer> buffer) override {}
 
   void OnDataSent() override {}
+
+  void OnTrailers(const SpdyHeaderBlock& trailers) override {}
 
   void OnClose(int status) override {
     ignore_result(CreateFakeSpdySession(spdy_session_pool_, key_));
@@ -114,7 +114,7 @@ TEST_P(SpdySessionPoolTest, CloseCurrentSessions) {
 
   // Setup the first session to the first host.
   base::WeakPtr<SpdySession> session =
-      CreateInsecureSpdySession(http_session_, test_key, BoundNetLog());
+      CreateInsecureSpdySession(http_session_.get(), test_key, BoundNetLog());
 
   // Flush the SpdySession::OnReadComplete() task.
   base::MessageLoop::current()->RunUntilIdle();
@@ -144,9 +144,9 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
 
   session_deps_.host_resolver->set_synchronous_mode(true);
 
-  StaticSocketDataProvider data(reads, arraysize(reads), NULL, 0);
-  data.set_connect_data(connect_data);
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  StaticSocketDataProvider data1(reads, arraysize(reads), nullptr, 0);
+  data1.set_connect_data(connect_data);
+  session_deps_.socket_factory->AddSocketDataProvider(&data1);
 
   SSLSocketDataProvider ssl(SYNCHRONOUS, OK);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
@@ -159,7 +159,7 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   SpdySessionKey key1(test_host_port_pair1, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> session1 =
-      CreateInsecureSpdySession(http_session_, key1, BoundNetLog());
+      CreateInsecureSpdySession(http_session_.get(), key1, BoundNetLog());
   GURL url1(kTestHost1);
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM,
@@ -167,13 +167,15 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   ASSERT_TRUE(spdy_stream1.get() != NULL);
 
   // Set up session 2
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  StaticSocketDataProvider data2(reads, arraysize(reads), nullptr, 0);
+  data2.set_connect_data(connect_data);
+  session_deps_.socket_factory->AddSocketDataProvider(&data2);
   const std::string kTestHost2("http://www.b.com");
   HostPortPair test_host_port_pair2(kTestHost2, 80);
   SpdySessionKey key2(test_host_port_pair2, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> session2 =
-      CreateInsecureSpdySession(http_session_, key2, BoundNetLog());
+      CreateInsecureSpdySession(http_session_.get(), key2, BoundNetLog());
   GURL url2(kTestHost2);
   base::WeakPtr<SpdyStream> spdy_stream2 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM,
@@ -181,13 +183,15 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   ASSERT_TRUE(spdy_stream2.get() != NULL);
 
   // Set up session 3
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  StaticSocketDataProvider data3(reads, arraysize(reads), nullptr, 0);
+  data3.set_connect_data(connect_data);
+  session_deps_.socket_factory->AddSocketDataProvider(&data3);
   const std::string kTestHost3("http://www.c.com");
   HostPortPair test_host_port_pair3(kTestHost3, 80);
   SpdySessionKey key3(test_host_port_pair3, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> session3 =
-      CreateInsecureSpdySession(http_session_, key3, BoundNetLog());
+      CreateInsecureSpdySession(http_session_.get(), key3, BoundNetLog());
   GURL url3(kTestHost3);
   base::WeakPtr<SpdyStream> spdy_stream3 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM,
@@ -285,7 +289,7 @@ TEST_P(SpdySessionPoolTest, CloseAllSessions) {
 
   // Setup the first session to the first host.
   base::WeakPtr<SpdySession> session =
-      CreateInsecureSpdySession(http_session_, test_key, BoundNetLog());
+      CreateInsecureSpdySession(http_session_.get(), test_key, BoundNetLog());
 
   // Flush the SpdySession::OnReadComplete() task.
   base::MessageLoop::current()->RunUntilIdle();
@@ -364,9 +368,9 @@ void SpdySessionPoolTest::RunIPPoolingTest(
     MockRead(SYNCHRONOUS, ERR_IO_PENDING)  // Stall forever.
   };
 
-  StaticSocketDataProvider data(reads, arraysize(reads), NULL, 0);
-  data.set_connect_data(connect_data);
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  StaticSocketDataProvider data1(reads, arraysize(reads), NULL, 0);
+  data1.set_connect_data(connect_data);
+  session_deps_.socket_factory->AddSocketDataProvider(&data1);
 
   SSLSocketDataProvider ssl(SYNCHRONOUS, OK);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
@@ -374,9 +378,8 @@ void SpdySessionPoolTest::RunIPPoolingTest(
   CreateNetworkSession();
 
   // Setup the first session to the first host.
-  base::WeakPtr<SpdySession> session =
-      CreateInsecureSpdySession(
-          http_session_, test_hosts[0].key, BoundNetLog());
+  base::WeakPtr<SpdySession> session = CreateInsecureSpdySession(
+      http_session_.get(), test_hosts[0].key, BoundNetLog());
 
   // Flush the SpdySession::OnReadComplete() task.
   base::MessageLoop::current()->RunUntilIdle();
@@ -397,10 +400,11 @@ void SpdySessionPoolTest::RunIPPoolingTest(
   EXPECT_FALSE(HasSpdySession(spdy_session_pool_, test_hosts[2].key));
 
   // Create a new session to host 2.
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
-  base::WeakPtr<SpdySession> session2 =
-      CreateInsecureSpdySession(
-          http_session_, test_hosts[2].key, BoundNetLog());
+  StaticSocketDataProvider data2(reads, arraysize(reads), NULL, 0);
+  data2.set_connect_data(connect_data);
+  session_deps_.socket_factory->AddSocketDataProvider(&data2);
+  base::WeakPtr<SpdySession> session2 = CreateInsecureSpdySession(
+      http_session_.get(), test_hosts[2].key, BoundNetLog());
 
   // Verify that we have sessions for everything.
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, test_hosts[0].key));
@@ -511,7 +515,13 @@ TEST_P(SpdySessionPoolTest, IPPoolingCloseIdleSessions) {
 TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   MockConnect connect_data(SYNCHRONOUS, OK);
   session_deps_.host_resolver->set_synchronous_mode(true);
-  SpdyTestUtil spdy_util(GetParam());
+
+  // This isn't testing anything having to do with SPDY frames; we
+  // can ignore issues of how dependencies are set.  We default to
+  // setting them (when doing the appropriate protocol) since that's
+  // where we're eventually headed for all HTTP/2 connections.
+  SpdyTestUtil spdy_util(GetParam(), true);
+  SpdySession::SetPriorityDependencyDefaultForTesting(true);
 
   MockRead reads[] = {
       MockRead(SYNCHRONOUS, ERR_IO_PENDING)  // Stall forever.
@@ -520,10 +530,10 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
       spdy_util.ConstructSpdyGet("http://www.a.com", false, 1, MEDIUM));
   MockWrite writes[] = {CreateMockWrite(*req, 1)};
 
-  StaticSocketDataProvider data(reads, arraysize(reads), writes,
-                                arraysize(writes));
-  data.set_connect_data(connect_data);
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  StaticSocketDataProvider dataA(reads, arraysize(reads), writes,
+                                 arraysize(writes));
+  dataA.set_connect_data(connect_data);
+  session_deps_.socket_factory->AddSocketDataProvider(&dataA);
 
   SSLSocketDataProvider ssl(SYNCHRONOUS, OK);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
@@ -531,13 +541,12 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   CreateNetworkSession();
 
   // Set up session A: Going away, but with an active stream.
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
   const std::string kTestHostA("http://www.a.com");
   HostPortPair test_host_port_pairA(kTestHostA, 80);
   SpdySessionKey keyA(
       test_host_port_pairA, ProxyServer::Direct(), PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> sessionA =
-      CreateInsecureSpdySession(http_session_, keyA, BoundNetLog());
+      CreateInsecureSpdySession(http_session_.get(), keyA, BoundNetLog());
 
   GURL urlA(kTestHostA);
   base::WeakPtr<SpdyStream> spdy_streamA = CreateStreamSynchronously(
@@ -547,7 +556,7 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
 
   scoped_ptr<SpdyHeaderBlock> headers(
       spdy_util.ConstructGetHeaderBlock(urlA.spec()));
-  spdy_streamA->SendRequestHeaders(headers.Pass(), NO_MORE_DATA_TO_SEND);
+  spdy_streamA->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
   EXPECT_TRUE(spdy_streamA->HasUrlFromHeaders());
 
   base::MessageLoop::current()->RunUntilIdle();  // Allow headers to write.
@@ -558,12 +567,16 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   EXPECT_FALSE(delegateA.StreamIsClosed());
 
   // Set up session B: Available, with a created stream.
+  StaticSocketDataProvider dataB(reads, arraysize(reads), writes,
+                                 arraysize(writes));
+  dataB.set_connect_data(connect_data);
+  session_deps_.socket_factory->AddSocketDataProvider(&dataB);
   const std::string kTestHostB("http://www.b.com");
   HostPortPair test_host_port_pairB(kTestHostB, 80);
   SpdySessionKey keyB(
       test_host_port_pairB, ProxyServer::Direct(), PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> sessionB =
-      CreateInsecureSpdySession(http_session_, keyB, BoundNetLog());
+      CreateInsecureSpdySession(http_session_.get(), keyB, BoundNetLog());
   EXPECT_TRUE(sessionB->IsAvailable());
 
   GURL urlB(kTestHostB);
@@ -573,13 +586,16 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   spdy_streamB->SetDelegate(&delegateB);
 
   // Set up session C: Draining.
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  StaticSocketDataProvider dataC(reads, arraysize(reads), writes,
+                                 arraysize(writes));
+  dataC.set_connect_data(connect_data);
+  session_deps_.socket_factory->AddSocketDataProvider(&dataC);
   const std::string kTestHostC("http://www.c.com");
   HostPortPair test_host_port_pairC(kTestHostC, 80);
   SpdySessionKey keyC(
       test_host_port_pairC, ProxyServer::Direct(), PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> sessionC =
-      CreateInsecureSpdySession(http_session_, keyC, BoundNetLog());
+      CreateInsecureSpdySession(http_session_.get(), keyC, BoundNetLog());
 
   sessionC->CloseSessionOnError(ERR_SPDY_PROTOCOL_ERROR, "Error!");
   EXPECT_TRUE(sessionC->IsDraining());
@@ -614,8 +630,7 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   EXPECT_TRUE(delegateB.StreamIsClosed());
   EXPECT_EQ(ERR_NETWORK_CHANGED, delegateB.WaitForClose());
 #endif  // defined(OS_ANDROID) || defined(OS_WIN) || defined(OS_IOS)
+  SpdySession::SetPriorityDependencyDefaultForTesting(false);
 }
-
-}  // namespace
 
 }  // namespace net

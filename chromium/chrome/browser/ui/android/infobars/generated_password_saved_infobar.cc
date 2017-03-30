@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/android/infobars/generated_password_saved_infobar.h"
 
+#include <utility>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -21,8 +23,7 @@ void GeneratedPasswordSavedInfoBarDelegateAndroid::Create(
 
 GeneratedPasswordSavedInfoBar::GeneratedPasswordSavedInfoBar(
     scoped_ptr<GeneratedPasswordSavedInfoBarDelegateAndroid> delegate)
-    : InfoBarAndroid(delegate.Pass()) {
-}
+    : InfoBarAndroid(std::move(delegate)) {}
 
 GeneratedPasswordSavedInfoBar::~GeneratedPasswordSavedInfoBar() {
 }
@@ -42,7 +43,9 @@ GeneratedPasswordSavedInfoBar::CreateRenderInfoBar(JNIEnv* env) {
           env, infobar_delegate->button_label()).obj());
 }
 
-void GeneratedPasswordSavedInfoBar::OnLinkClicked(JNIEnv* env, jobject obj) {
+void GeneratedPasswordSavedInfoBar::OnLinkClicked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (!owner())
     return;
 
@@ -51,9 +54,7 @@ void GeneratedPasswordSavedInfoBar::OnLinkClicked(JNIEnv* env, jobject obj) {
   RemoveSelf();
 }
 
-void GeneratedPasswordSavedInfoBar::ProcessButton(
-    int action,
-    const std::string& action_value) {
+void GeneratedPasswordSavedInfoBar::ProcessButton(int action) {
   if (!owner())
     return;
 

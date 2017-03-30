@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/generated_resources.h"
@@ -77,7 +78,7 @@ void DisableShellOperationsForTesting() {
 }  // namespace internal
 
 void ShowItemInFolder(Profile* profile, const base::FilePath& full_path) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   file_manager::util::ShowItemInFolder(
       profile, full_path,
       base::Bind(&ShowWarningOnOpenOperationResult, profile, full_path));

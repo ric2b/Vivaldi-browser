@@ -20,6 +20,7 @@
     blur,
     checkedStateChanged,
     childrenChanged,
+    documentSelectionChanged,
     focus,
     hide,
     hover,
@@ -186,7 +187,7 @@
     collapsed,
     default,
     disabled,  // ui/views only
-    editable,  // ui/views only
+    editable,
     enabled,   // content only
     expanded,
     focusable,
@@ -194,7 +195,6 @@
     haspopup,
     horizontal,
     hovered,
-    indeterminate,
     invisible,
     linked,
     multiline,
@@ -204,6 +204,7 @@
     protected,
     readOnly,
     required,
+    richlyEditable,
     selectable,
     selected,
     vertical,
@@ -261,7 +262,7 @@
     object? state;
 
     // A map of attribute name to expected value, for example
-    // <code>{ name: 'Root directory', button_mixed: true }</code>.
+    // <code>{ name: 'Root directory', checkbox_mixed: true }</code>.
     // String attribute values may be specified as a regex, for example
     // <code>{ name: /stralia$/</code> }</code>.
     // Unless specifying a regex, the expected value must be an exact match
@@ -274,6 +275,18 @@
     // <li>boolean</li>
     // </ul>
     object? attributes;
+  };
+
+  // Arguments for the setDocumentSelection() function.
+  [nocompile, noinline_doc] dictionary SetDocumentSelectionParams {
+    // The node where the selection begins.
+    [instanceOf=AutomationNode] object anchorObject;
+    // The offset in the anchor node where the selection begins.
+    long anchorOffset;
+    // The node where the selection ends.
+    [instanceOf=AutomationNode] object focusObject;
+    // The offset within the focus node where the selection ends.
+    long focusOffset;
   };
 
   // Called when the result for a <code>query</code> is available.
@@ -304,6 +317,14 @@
     TreeChangeType type;
   };
 
+  // Possible tree changes to listen to using addTreeChangeObserver.
+  // Note that listening to all tree changes can be expensive.
+  enum TreeChangeObserverFilter {
+    noTreeChanges,
+    liveRegionTreeChanges,
+    allTreeChanges
+  };
+
   // A listener for changes on the <code>AutomationNode</code> tree.
   callback TreeChangeObserver = void(TreeChange treeChange);
 
@@ -312,19 +333,24 @@
     // The root node of the tree containing this AutomationNode.
     AutomationNode root;
 
-    // Whether this AutomationNode is root node.
+    // Whether this AutomationNode is a root node.
     boolean isRootNode;
 
     // The role of this node.
     automation.RoleType role;
 
-    // TODO(aboxhall): expose states as mixins instead
-
     // The $(ref:automation.StateType)s describing this node.
     object state;
 
-    // The rendered location (as a bounding box) of this node within the frame.
+    // The rendered location (as a bounding box) of this node in global
+    // screen coordinates.
     automation.Rect location;
+
+    // Computes the bounding box of a subrange of this node in global screen
+    // coordinates. Returns the same as |location| if range information
+    // is not available. The start and end indices are zero-based offsets
+    // into the node's "name" string attribute.
+    static automation.Rect boundsForRange(long startIndex, long endIndex);
 
     // The purpose of the node, other than the role, if any.
     DOMString description;
@@ -370,18 +396,143 @@
     // name, via the $(ref:automation.AutomationNode.name) attribute.
     AutomationNode[] labelledBy;
 
-    // The nodes, if any, which are to be considered children of this node but
-    // are not children in the DOM tree.
-    AutomationNode[] owns;
+    // The node referred to by <code>aria-activedescendant</code>, where
+    // applicable
+    AutomationNode activedescendant;
 
-    // TODO(aboxhall): Make this private?
+    //
+    // Link attributes.
+    //
 
-    // A collection of this node's other attributes.
-    object? attributes;
+    // The URL that this link will navigate to.
+    DOMString url;
 
-    // The index of this node in its parent node's list of children. If this is
-    // the root node, this will be undefined.
-    long? indexInParent;
+    //
+    // Document attributes.
+    //
+
+    // The URL of this document.
+    DOMString docUrl;
+
+    // The title of this document.
+    DOMString docTitle;
+
+    // Whether this document has finished loading.
+    boolean docLoaded;
+
+    // The proportion (out of 1.0) that this doc has completed loading.
+    double docLoadingProgress;
+
+    //
+    // Scrollable container attributes.
+    //
+
+    long scrollX;
+    long scrollXMin;
+    long scrollXMax;
+    long scrollY;
+    long scrollYMin;
+    long scrollYMax;
+
+    //
+    // Editable text field attributes.
+    //
+
+    // The character index of the start of the selection within this editable
+    // text element; -1 if no selection.
+    long textSelStart;
+
+    // The character index of the end of the selection within this editable
+    // text element; -1 if no selection.
+    long textSelEnd;
+
+    // The input type, like email or number.
+    DOMString textInputType;
+
+    //
+    // Tree selection attributes (available on root nodes only)
+    //
+
+    // The anchor node of the tree selection, if any.
+    AutomationNode? anchorObject;
+    // The anchor offset of the tree selection, if any.
+    long? anchorOffset;
+    // The focus node of the tree selection, if any.
+    AutomationNode? focusObject;
+    // The focus offset of the tree selection, if any.
+    long? focusOffset;
+
+    //
+    // Range attributes.
+    //
+
+    // The current value for this range.
+    double valueForRange;
+
+    // The minimum possible value for this range.
+    double minValueForRange;
+
+    // The maximum possible value for this range.
+    double maxValueForRange;
+
+    //
+    // Table attributes.
+    //
+
+    // The number of rows in this table.
+    long tableRowCount;
+
+    // The number of columns in this table.
+    long tableColumnCount;
+
+    //
+    // Table cell attributes.
+    //
+
+    // The zero-based index of the column that this cell is in.
+    long tableCellColumnIndex;
+
+    // The number of columns that this cell spans (default is 1).
+    long tableCellColumnSpan;
+
+    // The zero-based index of the row that this cell is in.
+    long tableCellRowIndex;
+
+    // The number of rows that this cell spans (default is 1).
+    long tableCellRowSpan;
+
+    //
+    // Live region attributes.
+    //
+
+    // The type of region if this is the root of a live region.
+    // Possible values are 'polite' and 'assertive'.
+    DOMString liveStatus;
+
+    // The value of aria-relevant for a live region.
+    DOMString liveRelevant;
+
+    // The value of aria-atomic for a live region.
+    boolean liveAtomic;
+
+    // The value of aria-busy for a live region.
+    boolean liveBusy;
+
+    // The type of live region if this node is inside a live region.
+    DOMString containerLiveStatus;
+
+    // The value of aria-relevant if this node is inside a live region.
+    DOMString containerLiveRelevant;
+
+    // The value of aria-atomic if this node is inside a live region.
+    boolean containerLiveAtomic;
+
+    // The value of aria-busy if this node is inside a live region.
+    boolean containerLiveBusy;
+
+    //
+    // Walking the tree.
+    //
 
     AutomationNode[] children;
     AutomationNode parent;
@@ -389,6 +540,14 @@
     AutomationNode lastChild;
     AutomationNode previousSibling;
     AutomationNode nextSibling;
+
+    // The index of this node in its parent node's list of children. If this is
+    // the root node, this will be undefined.
+    long? indexInParent;
+
+    //
+    // Actions.
+    //
 
     // Does the default action based on this node's role. This is generally
     // the same action that would result from clicking the node such as
@@ -404,9 +563,6 @@
 
     // Sets selection within a text field.
     static void setSelection(long startIndex, long endIndex);
-
-    // Shows the context menu resulting from a right click on this node.
-    static void showContextMenu();
 
     // Adds a listener for the given event type and event phase.
     static void addEventListener(
@@ -444,100 +600,6 @@
     static boolean matches(FindParams params);
   };
 
-  dictionary ActiveDescendantMixin {
-    // The node referred to by <code>aria-activedescendant</code>, where
-    // applicable
-    AutomationNode activedescendant;
-  };
-
-  // Attributes which are mixed in to an AutomationNode if it is a link.
-  dictionary LinkMixins {
-    // TODO(aboxhall): Add visited state
-
-    // The URL that this link will navigate to.
-    DOMString url;
-  };
-
-  // Attributes which are mixed in to an AutomationNode if it is a document.
-  dictionary DocumentMixins {
-    // The URL of this document.
-    DOMString docUrl;
-
-    // The title of this document.
-    DOMString docTitle;
-
-    // Whether this document has finished loading.
-    boolean docLoaded;
-
-    // The proportion (out of 1.0) that this doc has completed loading.
-    double docLoadingProgress;
-  };
-
-  // TODO(aboxhall): document ScrollableMixins (e.g. what is scrollXMin? is it
-  // ever not 0?)
-
-  // Attributes which are mixed in to an AutomationNode if it is scrollable.
-  dictionary ScrollableMixins {
-    long scrollX;
-    long scrollXMin;
-    long scrollXMax;
-    long scrollY;
-    long scrollYMin;
-    long scrollYMax;
-  };
-
-  // Attributes which are mixed in to an AutomationNode if it is editable text.
-  dictionary EditableTextMixins {
-    // The character index of the start of the selection within this editable
-    // text element; -1 if no selection.
-    long textSelStart;
-
-    // The character index of the end of the selection within this editable
-    // text element; -1 if no selection.
-    long textSelEnd;
-
-    // The input type, like email or number.
-    DOMString textInputType;
-  };
-
-  // Attributes which are mixed in to an AutomationNode if it is a range.
-  dictionary RangeMixins {
-    // The current value for this range.
-    double valueForRange;
-
-    // The minimum possible value for this range.
-    double minValueForRange;
-
-    // The maximum possible value for this range.
-    double maxValueForRange;
-  };
-
-  // TODO(aboxhall): live region mixins.
-
-  // Attributes which are mixed in to an AutomationNode if it is a table.
-  dictionary TableMixins {
-    // The number of rows in this table.
-    long tableRowCount;
-
-    // The number of columns in this table.
-    long tableColumnCount;
-  };
-
-  // Attributes which are mixed in to an AutomationNode if it is a table cell.
-  dictionary TableCellMixins {
-    // The zero-based index of the column that this cell is in.
-    long tableCellColumnIndex;
-
-    // The number of columns that this cell spans (default is 1).
-    long tableCellColumnSpan;
-
-    // The zero-based index of the row that this cell is in.
-    long tableCellRowIndex;
-
-    // The number of rows that this cell spans (default is 1).
-    long tableCellRowSpan;
-  };
-
   // Called when the <code>AutomationNode</code> for the page is available.
   callback RootCallback = void(AutomationNode rootNode);
 
@@ -554,12 +616,25 @@
     [nocompile] static void getDesktop(RootCallback callback);
 
     // Add a tree change observer. Tree change observers are static/global, they
-    // listen to changes across all trees.
+    // listen to changes across all trees. Pass a filter to determine what
+    // specific tree changes to listen to, and note that listnening to all
+    // tree changes can be expensive.
     [nocompile] static void addTreeChangeObserver(
-        TreeChangeObserver observer);
+        TreeChangeObserverFilter filter, TreeChangeObserver observer);
 
     // Remove a tree change observer.
     [nocompile] static void removeTreeChangeObserver(
         TreeChangeObserver observer);
+
+    // Sets the selection in a tree. This creates a selection in a single
+    // tree (anchorObject and focusObject must have the same root).
+    // Everything in the tree between the two node/offset pairs gets included
+    // in the selection. The anchor is where the user started the selection,
+    // while the focus is the point at which the selection gets extended
+    // e.g. when dragging with a mouse or using the keyboard. For nodes with
+    // the role staticText, the offset gives the character offset within
+    // the value where the selection starts or ends, respectively.
+    [nocompile] static void setDocumentSelection(
+        SetDocumentSelectionParams params);
   };
 };

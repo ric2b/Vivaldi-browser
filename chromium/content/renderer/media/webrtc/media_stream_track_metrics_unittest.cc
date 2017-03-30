@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -132,11 +134,11 @@ class MediaStreamTrackMetricsTest : public testing::Test {
   void AddVideoTrack(VideoTrackInterface* track) { AddTrack(track); }
   void RemoveVideoTrack(VideoTrackInterface* track) { RemoveTrack(track); }
 
-  scoped_refptr<MockAudioTrackInterface> MakeAudioTrack(std::string id) {
+  scoped_refptr<MockAudioTrackInterface> MakeAudioTrack(const std::string& id) {
     return new rtc::RefCountedObject<MockAudioTrackInterface>(id);
   }
 
-  scoped_refptr<MockVideoTrackInterface> MakeVideoTrack(std::string id) {
+  scoped_refptr<MockVideoTrackInterface> MakeVideoTrack(const std::string& id) {
     return new rtc::RefCountedObject<MockVideoTrackInterface>(id);
   }
 

@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/pickle.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #import "third_party/mozilla/NSPasteboard+Utils.h"
 #include "url/gurl.h"
 
@@ -62,7 +63,7 @@ void OSExchangeDataProviderMac::SetFilenames(
 }
 
 void OSExchangeDataProviderMac::SetPickledData(
-    const OSExchangeData::CustomFormat& format,
+    const Clipboard::FormatType& format,
     const base::Pickle& data) {
   NSData* ns_data = [NSData dataWithBytes:data.data() length:data.size()];
   [pasteboard_ setData:ns_data forType:format.ToNSString()];
@@ -72,8 +73,17 @@ bool OSExchangeDataProviderMac::GetString(base::string16* data) const {
   DCHECK(data);
   NSArray* items = [pasteboard_ readObjectsForClasses:@[ [NSString class] ]
                                               options:@{ }];
-  if ([items count] == 0)
-    return false;
+
+  // There was no NSString, check for an NSURL.
+  if ([items count] == 0) {
+    GURL url;
+    base::string16 title;
+    bool result =
+        GetURLAndTitle(OSExchangeData::DO_NOT_CONVERT_FILENAMES, &url, &title);
+    if (result)
+      *data = base::UTF8ToUTF16(url.spec());
+    return result;
+  }
 
   *data = base::SysNSStringToUTF16([items objectAtIndex:0]);
   return true;
@@ -125,7 +135,7 @@ bool OSExchangeDataProviderMac::GetFilenames(
 }
 
 bool OSExchangeDataProviderMac::GetPickledData(
-    const OSExchangeData::CustomFormat& format,
+    const Clipboard::FormatType& format,
     base::Pickle* data) const {
   DCHECK(data);
   NSData* ns_data = [pasteboard_ dataForType:format.ToNSString()];
@@ -154,7 +164,7 @@ bool OSExchangeDataProviderMac::HasFile() const {
 }
 
 bool OSExchangeDataProviderMac::HasCustomFormat(
-    const OSExchangeData::CustomFormat& format) const {
+    const Clipboard::FormatType& format) const {
   return [[pasteboard_ types] containsObject:format.ToNSString()];
 }
 

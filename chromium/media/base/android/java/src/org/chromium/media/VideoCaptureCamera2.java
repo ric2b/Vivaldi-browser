@@ -23,8 +23,8 @@ import android.os.HandlerThread;
 import android.util.Size;
 import android.view.Surface;
 
-import org.chromium.base.JNINamespace;
 import org.chromium.base.Log;
+import org.chromium.base.annotations.JNINamespace;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -46,10 +46,9 @@ public class VideoCaptureCamera2 extends VideoCapture {
         @Override
         public void onOpened(CameraDevice cameraDevice) {
             mCameraDevice = cameraDevice;
-            mOpeningCamera = false;
-            mConfiguringCamera = true;
+            changeCameraStateAndNotify(CameraState.CONFIGURING);
             if (!createCaptureObjects()) {
-                mConfiguringCamera = false;
+                changeCameraStateAndNotify(CameraState.STOPPED);
                 nativeOnError(mNativeVideoCaptureDeviceAndroid,
                               "Error configuring camera");
             }
@@ -59,14 +58,14 @@ public class VideoCaptureCamera2 extends VideoCapture {
         public void onDisconnected(CameraDevice cameraDevice) {
             cameraDevice.close();
             mCameraDevice = null;
-            mOpeningCamera = false;
+            changeCameraStateAndNotify(CameraState.STOPPED);
         }
 
         @Override
         public void onError(CameraDevice cameraDevice, int error) {
             cameraDevice.close();
             mCameraDevice = null;
-            mOpeningCamera = false;
+            changeCameraStateAndNotify(CameraState.STOPPED);
             nativeOnError(mNativeVideoCaptureDeviceAndroid,
                           "Camera device error " + Integer.toString(error));
         }
@@ -78,14 +77,15 @@ public class VideoCaptureCamera2 extends VideoCapture {
         public void onConfigured(CameraCaptureSession cameraCaptureSession) {
             Log.d(TAG, "onConfigured");
             mCaptureSession = cameraCaptureSession;
-            mConfiguringCamera = false;
             createCaptureRequest();
+            changeCameraStateAndNotify(CameraState.STARTED);
         }
 
         @Override
         public void onConfigureFailed(CameraCaptureSession cameraCaptureSession) {
             // TODO(mcasas): When signalling error, C++ will tear us down. Is there need for
             // cleanup?
+            changeCameraStateAndNotify(CameraState.STOPPED);
             nativeOnError(mNativeVideoCaptureDeviceAndroid,
                           "Camera session configuration error");
         }
@@ -107,6 +107,12 @@ public class VideoCaptureCamera2 extends VideoCapture {
                     return;
                 }
 
+                if (reader.getWidth() != image.getWidth()
+                        || reader.getHeight() != image.getHeight()) {
+                    throw new IllegalStateException("ImageReader size " + reader.getWidth() + "x"
+                            + reader.getHeight() + " did not match Image size " + image.getWidth()
+                            + "x" + image.getHeight());
+                }
                 readImageIntoBuffer(image, mCapturedData);
                 nativeOnFrameAvailable(mNativeVideoCaptureDeviceAndroid,
                                        mCapturedData,
@@ -125,14 +131,6 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
     private byte[] mCapturedData;
 
-    // |mOpeningCamera| is used to signal the transient between openCamera() and
-    // CrStateListener.onOpened().
-    private boolean mOpeningCamera = false;
-    // |mConfiguringCamera| marks the transient between CrStateListener.onOpened()
-    // and CrCaptureSessionListener.onConfigured(), including the time it takes
-    // to createCaptureObjects().
-    private boolean mConfiguringCamera = false;
-
     private CameraDevice mCameraDevice = null;
     private CaptureRequest.Builder mPreviewBuilder = null;
     private CameraCaptureSession mCaptureSession = null;
@@ -140,6 +138,10 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
     private static final double kNanoSecondsToFps = 1.0E-9;
     private static final String TAG = "cr.media";
+
+    private static enum CameraState {OPENING, CONFIGURING, STARTED, STOPPED}
+    private CameraState mCameraState = CameraState.STOPPED;
+    private final Object mCameraStateLock = new Object();
 
     // Service function to grab CameraCharacteristics and handle exceptions.
     private static CameraCharacteristics getCameraCharacteristics(Context appContext, int id) {
@@ -283,6 +285,13 @@ public class VideoCaptureCamera2 extends VideoCapture {
         }
     }
 
+    private void changeCameraStateAndNotify(CameraState state) {
+        synchronized (mCameraStateLock) {
+            mCameraState = state;
+            mCameraStateLock.notifyAll();
+        }
+    }
+
     static boolean isLegacyDevice(Context appContext, int id) {
         final CameraCharacteristics cameraCharacteristics =
                 getCameraCharacteristics(appContext, id);
@@ -349,8 +358,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
             }
         }
 
-        ArrayList<VideoCaptureFormat> formatList =
-                new ArrayList<VideoCaptureFormat>();
+        ArrayList<VideoCaptureFormat> formatList = new ArrayList<VideoCaptureFormat>();
         final StreamConfigurationMap streamMap =
                 cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
         final int[] formats = streamMap.getOutputFormats();
@@ -360,19 +368,17 @@ public class VideoCaptureCamera2 extends VideoCapture {
             for (Size size : sizes) {
                 double minFrameRate = 0.0f;
                 if (minFrameDurationAvailable) {
-                    final long minFrameDuration =
-                            streamMap.getOutputMinFrameDuration(format, size);
-                    minFrameRate = (minFrameDuration == 0) ? 0.0f :
-                            (1.0 / kNanoSecondsToFps * minFrameDuration);
+                    final long minFrameDuration = streamMap.getOutputMinFrameDuration(format, size);
+                    minFrameRate = (minFrameDuration == 0)
+                            ? 0.0f
+                            : (1.0 / kNanoSecondsToFps * minFrameDuration);
                 } else {
                     // TODO(mcasas): find out where to get the info from in this case.
                     // Hint: perhaps using SCALER_AVAILABLE_PROCESSED_MIN_DURATIONS.
                     minFrameRate = 0.0;
                 }
-                formatList.add(new VideoCaptureFormat(size.getWidth(),
-                                                              size.getHeight(),
-                                                              (int) minFrameRate,
-                                                              0));
+                formatList.add(new VideoCaptureFormat(
+                        size.getWidth(), size.getHeight(), (int) minFrameRate, 0));
             }
         }
         return formatList.toArray(new VideoCaptureFormat[formatList.size()]);
@@ -387,17 +393,42 @@ public class VideoCaptureCamera2 extends VideoCapture {
     @Override
     public boolean allocate(int width, int height, int frameRate) {
         Log.d(TAG, "allocate: requested (%d x %d) @%dfps", width, height, frameRate);
-        if (mOpeningCamera || mConfiguringCamera) {
-            Log.e(TAG, "allocate() invoked while Camera is busy opening/configuring.");
+        synchronized (mCameraStateLock) {
+            if (mCameraState == CameraState.OPENING || mCameraState == CameraState.CONFIGURING) {
+                Log.e(TAG, "allocate() invoked while Camera is busy opening/configuring.");
+                return false;
+            }
+        }
+        final CameraCharacteristics cameraCharacteristics = getCameraCharacteristics(mContext, mId);
+        final StreamConfigurationMap streamMap =
+                cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
+        // Find closest supported size.
+        final Size[] supportedSizes = streamMap.getOutputSizes(ImageFormat.YUV_420_888);
+        if (supportedSizes == null) return false;
+        Size closestSupportedSize = null;
+        int minDiff = Integer.MAX_VALUE;
+        for (Size size : supportedSizes) {
+            final int diff =
+                    Math.abs(size.getWidth() - width) + Math.abs(size.getHeight() - height);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestSupportedSize = size;
+            }
+        }
+        if (minDiff == Integer.MAX_VALUE) {
+            Log.e(TAG, "No supported resolutions.");
             return false;
         }
+        Log.d(TAG, "allocate: matched (%d x %d)", closestSupportedSize.getWidth(),
+                closestSupportedSize.getHeight());
+
         // |mCaptureFormat| is also used to configure the ImageReader.
-        mCaptureFormat = new VideoCaptureFormat(width, height, frameRate, ImageFormat.YUV_420_888);
+        mCaptureFormat = new VideoCaptureFormat(closestSupportedSize.getWidth(),
+                closestSupportedSize.getHeight(), frameRate, ImageFormat.YUV_420_888);
         int expectedFrameSize = mCaptureFormat.mWidth * mCaptureFormat.mHeight
                 * ImageFormat.getBitsPerPixel(mCaptureFormat.mPixelFormat) / 8;
         mCapturedData = new byte[expectedFrameSize];
-        final CameraCharacteristics cameraCharacteristics =
-                getCameraCharacteristics(mContext, mId);
         mCameraNativeOrientation =
                 cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
         // TODO(mcasas): The following line is correct for N5 with prerelease Build,
@@ -411,8 +442,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
     @Override
     public boolean startCapture() {
         Log.d(TAG, "startCapture");
-        mOpeningCamera = true;
-        mConfiguringCamera = false;
+        changeCameraStateAndNotify(CameraState.OPENING);
         final CameraManager manager =
                 (CameraManager) mContext.getSystemService(Context.CAMERA_SERVICE);
         final Handler mainHandler = new Handler(mContext.getMainLooper());
@@ -429,13 +459,28 @@ public class VideoCaptureCamera2 extends VideoCapture {
             Log.e(TAG, "allocate: manager.openCamera: " + ex);
             return false;
         }
+
         return true;
     }
 
     @Override
     public boolean stopCapture() {
         Log.d(TAG, "stopCapture");
-        if (mCaptureSession == null) return false;
+
+        // With Camera2 API, the capture is started asynchronously, which will cause problem if
+        // stopCapture comes too quickly. Without stopping the previous capture properly, the next
+        // startCapture will fail and make Chrome no-responding. So wait camera to be STARTED.
+        synchronized (mCameraStateLock) {
+            while (mCameraState != CameraState.STARTED && mCameraState != CameraState.STOPPED) {
+                try {
+                    mCameraStateLock.wait();
+                } catch (InterruptedException ex) {
+                    Log.e(TAG, "CaptureStartedEvent: " + ex);
+                }
+            }
+            if (mCameraState == CameraState.STOPPED) return true;
+        }
+
         try {
             mCaptureSession.abortCaptures();
         } catch (CameraAccessException ex) {
@@ -447,7 +492,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
         }
         if (mCameraDevice == null) return false;
         mCameraDevice.close();
-
+        changeCameraStateAndNotify(CameraState.STOPPED);
         return true;
     }
 

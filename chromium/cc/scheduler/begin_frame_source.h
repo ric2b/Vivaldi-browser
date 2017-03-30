@@ -5,13 +5,25 @@
 #ifndef CC_SCHEDULER_BEGIN_FRAME_SOURCE_H_
 #define CC_SCHEDULER_BEGIN_FRAME_SOURCE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/scheduler/delay_based_time_source.h"
+
+#ifdef NDEBUG
+#define DEBUG_FRAMES(...)
+#else
+#define DEBUG_FRAMES(name, arg1_name, arg1_val, arg2_name, arg2_val)         \
+  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler.frames"), name, \
+               arg1_name, arg1_val, arg2_name, arg2_val);
+#endif
 
 namespace cc {
 
@@ -47,6 +59,8 @@ class CC_EXPORT BeginFrameObserver {
   // BeginFrameObservers which filter the incoming BeginFrame messages while
   // preventing "double dropping" and other bad side effects.
   virtual const BeginFrameArgs LastUsedBeginFrameArgs() const = 0;
+
+  virtual void OnBeginFrameSourcePausedChanged(bool paused) = 0;
 
   // Tracing support
   virtual void AsValueInto(base::trace_event::TracedValue* dict) const = 0;
@@ -156,6 +170,7 @@ class CC_EXPORT BeginFrameSourceBase : public BeginFrameSource {
   // These methods should be used by subclasses to make the call to the
   // observers.
   void CallOnBeginFrame(const BeginFrameArgs& args);
+  void SetBeginFrameSourcePaused(bool paused);
 
   // This method should be overridden if you want to change some behaviour on
   // needs_begin_frames change.
@@ -163,6 +178,7 @@ class CC_EXPORT BeginFrameSourceBase : public BeginFrameSource {
 
   BeginFrameObserver* observer_;
   bool needs_begin_frames_;
+  bool paused_;
 
  private:
   bool inside_as_value_into_;
@@ -261,6 +277,7 @@ class CC_EXPORT BeginFrameSourceMultiplexer : public BeginFrameSourceBase,
   // sources.
   void OnBeginFrame(const BeginFrameArgs& args) override;
   const BeginFrameArgs LastUsedBeginFrameArgs() const override;
+  void OnBeginFrameSourcePausedChanged(bool paused) override;
 
   // BeginFrameSource
   void DidFinishFrame(size_t remaining_frames) override;

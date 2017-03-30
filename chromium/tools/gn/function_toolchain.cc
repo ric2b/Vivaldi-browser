@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 #include "tools/gn/err.h"
 #include "tools/gn/functions.h"
@@ -20,7 +21,7 @@ namespace functions {
 
 namespace {
 
-// This is jsut a unique value to take the address of to use as the key for
+// This is just a unique value to take the address of to use as the key for
 // the toolchain property on a scope.
 const int kToolchainPropertyKey = 0;
 
@@ -124,12 +125,15 @@ bool ReadPrecompiledHeaderType(Scope* scope, Tool* tool, Err* err) {
   if (value->string_value().empty())
     return true;  // Accept empty string, do nothing (default is "no PCH").
 
-  if (value->string_value() == "msvc") {
+  if (value->string_value() == "gcc") {
+    tool->set_precompiled_header_type(Tool::PCH_GCC);
+    return true;
+  } else if (value->string_value() == "msvc") {
     tool->set_precompiled_header_type(Tool::PCH_MSVC);
     return true;
   }
   *err = Err(*value, "Invalid precompiled_header_type",
-             "Must either be empty or \"msvc\".");
+             "Must either be empty, \"gcc\", or \"msvc\".");
   return false;
 }
 
@@ -192,6 +196,7 @@ bool IsCompilerTool(Toolchain::ToolType type) {
 bool IsLinkerTool(Toolchain::ToolType type) {
   return type == Toolchain::TYPE_ALINK ||
          type == Toolchain::TYPE_SOLINK ||
+         type == Toolchain::TYPE_SOLINK_MODULE ||
          type == Toolchain::TYPE_LINK;
 }
 
@@ -301,6 +306,10 @@ Value RunToolchain(Scope* scope,
                    const std::vector<Value>& args,
                    BlockNode* block,
                    Err* err) {
+  NonNestableBlock non_nestable(scope, function, "toolchain");
+  if (!non_nestable.Enter(err))
+    return Value();
+
   if (!EnsureNotProcessingImport(function, scope, err) ||
       !EnsureNotProcessingBuildConfig(function, scope, err))
     return Value();
@@ -496,7 +505,7 @@ const char kTool_Help[] =
     "    depend_output  [string with substitutions]\n"
     "        Valid for: \"solink\" only (optional)\n"
     "\n"
-    "        These two files specify whch of the outputs from the solink\n"
+    "        These two files specify which of the outputs from the solink\n"
     "        tool should be used for linking and dependency tracking. These\n"
     "        should match entries in the \"outputs\". If unspecified, the\n"
     "        first item in the \"outputs\" array will be used for both. See\n"
@@ -527,12 +536,14 @@ const char kTool_Help[] =
     "\n"
     "        Type of precompiled headers. If undefined or the empty string,\n"
     "        precompiled headers will not be used for this tool. Otherwise\n"
-    "        use \"msvc\" which is the only currently supported value.\n"
+    "        use \"gcc\" or \"msvc\".\n"
     "\n"
     "        For precompiled headers to be used for a given target, the\n"
     "        target (or a config applied to it) must also specify a\n"
     "        \"precompiled_header\" and, for \"msvc\"-style headers, a\n"
-    "        \"precompiled_source\" value.\n"
+    "        \"precompiled_source\" value. If the type is \"gcc\", then both\n"
+    "        \"precompiled_header\" and \"precompiled_source\" must resolve\n"
+    "        to the same file, despite the different formats required for each."
     "\n"
     "        See \"gn help precompiled_header\" for more.\n"
     "\n"
@@ -585,6 +596,13 @@ const char kTool_Help[] =
     "        omitted from the label for targets in the default toolchain, and\n"
     "        will be included for targets in other toolchains.\n"
     "\n"
+    "    {{label_name}}\n"
+    "        The short name of the label of the target. This is the part\n"
+    "        after the colon. For \"//foo/bar:baz\" this will be \"baz\".\n"
+    "        Unlike {{target_output_name}}, this is not affected by the\n"
+    "        \"output_prefix\" in the tool or the \"output_name\" set\n"
+    "        on the target.\n"
+    "\n"
     "    {{output}}\n"
     "        The relative path and name of the output(s) of the current\n"
     "        build step. If there is more than one output, this will expand\n"
@@ -602,6 +620,7 @@ const char kTool_Help[] =
     "        The short name of the current target with no path information,\n"
     "        or the value of the \"output_name\" variable if one is specified\n"
     "        in the target. This will include the \"output_prefix\" if any.\n"
+    "        See also {{label_name}}.\n"
     "        Example: \"libfoo\" for the target named \"foo\" and an\n"
     "        output prefix for the linker tool of \"lib\".\n"
     "\n"
@@ -609,6 +628,7 @@ const char kTool_Help[] =
     "  along with a set of compiler-specific flags. The following expansions\n"
     "  are available:\n"
     "\n"
+    "    {{asmflags}}\n"
     "    {{cflags}}\n"
     "    {{cflags_c}}\n"
     "    {{cflags_cc}}\n"
@@ -837,9 +857,10 @@ Value RunTool(Scope* scope,
   // Validate that the link_output and depend_output refer to items in the
   // outputs and aren't defined for irrelevant tool types.
   if (!tool->link_output().empty()) {
-    if (tool_type != Toolchain::TYPE_SOLINK) {
+    if (tool_type != Toolchain::TYPE_SOLINK &&
+        tool_type != Toolchain::TYPE_SOLINK_MODULE) {
       *err = Err(function, "This tool specifies a link_output.",
-          "This is only valid for solink tools.");
+          "This is only valid for solink and solink_module tools.");
       return Value();
     }
     if (!IsPatternInOutputList(tool->outputs(), tool->link_output())) {
@@ -849,9 +870,10 @@ Value RunTool(Scope* scope,
     }
   }
   if (!tool->depend_output().empty()) {
-    if (tool_type != Toolchain::TYPE_SOLINK) {
+    if (tool_type != Toolchain::TYPE_SOLINK &&
+        tool_type != Toolchain::TYPE_SOLINK_MODULE) {
       *err = Err(function, "This tool specifies a depend_output.",
-          "This is only valid for solink tools.");
+          "This is only valid for solink and solink_module tools.");
       return Value();
     }
     if (!IsPatternInOutputList(tool->outputs(), tool->depend_output())) {
@@ -871,7 +893,7 @@ Value RunTool(Scope* scope,
   if (!block_scope.CheckForUnusedVars(err))
     return Value();
 
-  toolchain->SetTool(tool_type, tool.Pass());
+  toolchain->SetTool(tool_type, std::move(tool));
   return Value();
 }
 

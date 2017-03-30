@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/at_exit.h"
 #include "base/memory/singleton.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+namespace base {
 namespace {
 
-COMPILE_ASSERT(DefaultSingletonTraits<int>::kRegisterAtExit == true, a);
+static_assert(DefaultSingletonTraits<int>::kRegisterAtExit == true,
+              "object must be deleted on process exit");
 
 typedef void (*CallbackFunc)();
 
@@ -115,7 +119,7 @@ class AlignedTestSingleton {
   ~AlignedTestSingleton() {}
   static AlignedTestSingleton* GetInstance() {
     return Singleton<AlignedTestSingleton,
-        StaticMemorySingletonTraits<AlignedTestSingleton> >::get();
+                     StaticMemorySingletonTraits<AlignedTestSingleton>>::get();
   }
 
   Type type_;
@@ -147,7 +151,6 @@ CallbackFunc* GetStaticSingleton() {
   return &CallbackSingletonWithStaticTrait::GetInstance()->callback_;
 }
 
-}  // namespace
 
 class SingletonTest : public testing::Test {
  public:
@@ -207,7 +210,7 @@ TEST_F(SingletonTest, Basic) {
   CallbackFunc* static_singleton;
 
   {
-    base::ShadowingAtExitManager sem;
+    ShadowingAtExitManager sem;
     {
       singleton_int = SingletonInt();
     }
@@ -241,7 +244,7 @@ TEST_F(SingletonTest, Basic) {
   EXPECT_EQ(NULL, GetStaticSingleton());
 
   {
-    base::ShadowingAtExitManager sem;
+    ShadowingAtExitManager sem;
     // Verifiy that the variables were reset.
     {
       singleton_int = SingletonInt();
@@ -271,8 +274,8 @@ TEST_F(SingletonTest, Alignment) {
   // Create some static singletons with increasing sizes and alignment
   // requirements. By ordering this way, the linker will need to do some work to
   // ensure proper alignment of the static data.
-  AlignedTestSingleton<int32>* align4 =
-      AlignedTestSingleton<int32>::GetInstance();
+  AlignedTestSingleton<int32_t>* align4 =
+      AlignedTestSingleton<int32_t>::GetInstance();
   AlignedTestSingleton<AlignedMemory<32, 32> >* align32 =
       AlignedTestSingleton<AlignedMemory<32, 32> >::GetInstance();
   AlignedTestSingleton<AlignedMemory<128, 128> >* align128 =
@@ -285,3 +288,6 @@ TEST_F(SingletonTest, Alignment) {
   EXPECT_ALIGNED(align128, 128);
   EXPECT_ALIGNED(align4096, 4096);
 }
+
+}  // namespace
+}  // namespace base

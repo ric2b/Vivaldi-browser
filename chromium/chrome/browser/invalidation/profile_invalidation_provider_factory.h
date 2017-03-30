@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_INVALIDATION_PROFILE_INVALIDATION_PROVIDER_FACTORY_H_
 #define CHROME_BROWSER_INVALIDATION_PROFILE_INVALIDATION_PROVIDER_FACTORY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -49,7 +49,8 @@ class ProfileInvalidationProviderFactory
  private:
   friend class ProfileInvalidationProviderFactoryTestBase;
   friend class policy::AffiliatedInvalidationServiceProviderImplTest;
-  friend struct DefaultSingletonTraits<ProfileInvalidationProviderFactory>;
+  friend struct base::DefaultSingletonTraits<
+      ProfileInvalidationProviderFactory>;
 
   ProfileInvalidationProviderFactory();
   ~ProfileInvalidationProviderFactory() override;

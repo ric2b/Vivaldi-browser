@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/resources/resource_pool.h"
 #include "cc/tiles/tile.h"
@@ -15,15 +16,15 @@
 namespace cc {
 
 class ContextProvider;
+class DisplayListRasterSource;
 class ResourceProvider;
-class RasterSource;
 
 class CC_EXPORT GpuRasterizer {
  public:
   ~GpuRasterizer();
 
   void RasterizeSource(ResourceProvider::ScopedWriteLockGr* write_lock,
-                       const RasterSource* raster_source,
+                       const DisplayListRasterSource* raster_source,
                        const gfx::Rect& raster_full_rect,
                        const gfx::Rect& playback_rect,
                        float scale);

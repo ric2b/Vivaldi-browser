@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/containers/scoped_ptr_map.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "components/autofill/core/common/form_data.h"
@@ -53,12 +52,14 @@ struct PasswordForm {
   // Enum to differentiate between HTML form based authentication, and dialogs
   // using basic or digest schemes. Default is SCHEME_HTML. Only PasswordForms
   // of the same Scheme will be matched/autofilled against each other.
-  enum Scheme {
+  enum Scheme : int {
     SCHEME_HTML,
     SCHEME_BASIC,
     SCHEME_DIGEST,
     SCHEME_OTHER,
-    SCHEME_LAST = SCHEME_OTHER
+    SCHEME_USERNAME_ONLY,
+
+    SCHEME_LAST = SCHEME_USERNAME_ONLY
   } scheme;
 
   // During form parsing, Chrome tries to partly understand the type of the form
@@ -83,24 +84,6 @@ struct PasswordForm {
   // The signon_realm is effectively the primary key used for retrieving
   // data from the database, so it must not be empty.
   std::string signon_realm;
-
-  // The original "Realm" for the sign-on (scheme, host, port for SCHEME_HTML,
-  // and contains the HTTP realm for dialog-based forms). This realm is only set
-  // when two PasswordForms are matched when trying to find a login/pass pair
-  // for a site. It is only set to a non-empty value during a match of the
-  // original stored login/pass and the current observed form if all these
-  // statements are true:
-  // 1) The full signon_realm is not the same.
-  // 2) The registry controlled domain is the same. For example; example.com,
-  // m.example.com, foo.login.example.com and www.example.com would all resolve
-  // to example.com since .com is the public suffix.
-  // 3) The scheme is the same.
-  // 4) The port is the same.
-  // For example, if there exists a stored password for http://www.example.com
-  // (where .com is the public suffix) and the observed form is
-  // http://m.example.com, |original_signon_realm| must be set to
-  // http://www.example.com.
-  std::string original_signon_realm;
 
   // An origin URL consists of the scheme, host, port and path; the rest is
   // stripped. This is the primary data used by the PasswordManager to decide
@@ -166,12 +149,20 @@ struct PasswordForm {
   // When parsing an HTML form, this is typically empty.
   base::string16 password_value;
 
+  // Whether the password value is the same as specified in the "value"
+  // attribute of the input element. Only used in the renderer.
+  bool password_value_is_default;
+
   // If the form was a sign-up or a change password form, the name of the input
   // element corresponding to the new password. Optional, and not persisted.
   base::string16 new_password_element;
 
   // The new password. Optional, and not persisted.
   base::string16 new_password_value;
+
+  // Whether the password value is the same as specified in the "value"
+  // attribute of the input element. Only used in the renderer.
+  bool new_password_value_is_default;
 
   // Whether the |new_password_element| has an autocomplete=new-password
   // attribute. This is only used in parsed HTML forms.
@@ -246,11 +237,13 @@ struct PasswordForm {
   // User friendly name to show in the UI.
   base::string16 display_name;
 
-  // The URL of the user's avatar to display in the UI. Note that the
-  // corresponding property in the Credential Manager is called icon URL.
-  // TODO(msramek): Rename |avatar_url| to |icon_url| to match the naming
-  // in Credential Manager.
-  GURL avatar_url;
+  // The URL of this credential's icon, such as the user's avatar, to display
+  // in the UI.
+  // TODO(msramek): This field was previously named |avatar_url|. It is still
+  // named this way in the password store backends (e.g. the avatar_url column
+  // in the SQL DB of LoginDatabase) and for the purposes of syncing
+  // (i.e in PasswordSpecificsData). Rename these occurrences.
+  GURL icon_url;
 
   // The URL of identity provider used for federated login.
   GURL federation_url;
@@ -269,12 +262,21 @@ struct PasswordForm {
   // TODO(vabr): Remove |is_alive| once http://crbug.com/486931 is fixed.
   bool is_alive;  // Set on construction, reset on destruction.
 
-  // Returns true if this match was found using public suffix matching.
-  bool IsPublicSuffixMatch() const;
+  // If true, this match was found using public suffix matching.
+  bool is_public_suffix_match;
+
+  // If true, this is a credential saved through an Android application, and
+  // found using affiliation-based match.
+  bool is_affiliation_based_match;
 
   // Return true if we consider this form to be a change password form.
   // We use only client heuristics, so it could include signup forms.
   bool IsPossibleChangePasswordForm() const;
+
+  // Return true if we consider this form to be a change password form
+  // without username field. We use only client heuristics, so it could
+  // include signup forms.
+  bool IsPossibleChangePasswordFormWithoutUsername() const;
 
   // Equality operators for testing.
   bool operator==(const PasswordForm& form) const;
@@ -284,17 +286,26 @@ struct PasswordForm {
   ~PasswordForm();
 };
 
+// True if the unique keys for the forms are the same. The unique key is
+// (origin, username_element, username_value, password_element, signon_realm).
+bool ArePasswordFormUniqueKeyEqual(const PasswordForm& left,
+                                   const PasswordForm& right);
+
+// A comparator for the unique key.
+struct LessThanUniqueKey {
+  bool operator()(const PasswordForm* left, const PasswordForm* right) const;
+};
+
 // Map username to PasswordForm* for convenience. See password_form_manager.h.
-typedef base::ScopedPtrMap<base::string16, scoped_ptr<PasswordForm>>
-    PasswordFormMap;
+using PasswordFormMap = std::map<base::string16, scoped_ptr<PasswordForm>>;
 
 // Like PasswordFormMap, but with weak (not owned) pointers.
-typedef std::map<base::string16, const PasswordForm*> ConstPasswordFormMap;
+using ConstPasswordFormMap = std::map<base::string16, const PasswordForm*>;
 
 // For testing.
 std::ostream& operator<<(std::ostream& os, PasswordForm::Layout layout);
-std::ostream& operator<<(std::ostream& os, const autofill::PasswordForm& form);
-std::ostream& operator<<(std::ostream& os, autofill::PasswordForm* form);
+std::ostream& operator<<(std::ostream& os, const PasswordForm& form);
+std::ostream& operator<<(std::ostream& os, PasswordForm* form);
 
 }  // namespace autofill
 

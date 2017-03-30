@@ -80,9 +80,13 @@ var instance = null;
  */
 remoting.HostListApi.getInstance = function() {
   if (instance == null) {
-    instance = remoting.settings.USE_GCD ?
-        new remoting.GcdHostListApi() :
-        new remoting.LegacyHostListApi();
+    if (remoting.settings.USE_GCD) {
+      var gcdInstance = new remoting.GcdHostListApi();
+      var legacyInstance = new remoting.LegacyHostListApi();
+      instance = new remoting.CombinedHostListApi(legacyInstance, gcdInstance);
+    } else {
+      instance = new remoting.LegacyHostListApi();
+    }
   }
   return instance;
 };
@@ -112,14 +116,10 @@ remoting.HostListApi.setInstance = function(newInstance) {
  *
  * hostId: The ID of the newly registered host.
  *
- * isLegacy: True for registrations in the legacy directory, false for
- *     registrations in GCD.
- *
  * @typedef {{
  *   authCode: string,
  *   email: string,
- *   hostId: string,
- *   isLegacy: boolean
+ *   hostId: string
  * }}
  */
 remoting.HostListApi.RegisterResult;

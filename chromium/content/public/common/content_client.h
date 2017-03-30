@@ -9,12 +9,12 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "ui/base/layout.h"
+#include "url/url_util.h"
 
 class GURL;
 
@@ -89,7 +89,7 @@ class CONTENT_EXPORT ContentClient {
   // Gives the embedder a chance to register its own standard and saveable
   // url schemes early on in the startup sequence.
   virtual void AddAdditionalSchemes(
-      std::vector<std::string>* standard_schemes,
+      std::vector<url::SchemeWithType>* standard_schemes,
       std::vector<std::string>* savable_schemes) {}
 
   // Returns whether the given message should be sent in a swapped out renderer.
@@ -100,7 +100,7 @@ class CONTENT_EXPORT ContentClient {
   // Used as part of the user agent string.
   virtual std::string GetProduct() const;
 
-  // Returns the user agent.
+  // Returns the user agent.  Content may cache this value.
   virtual std::string GetUserAgent() const;
 
   // Returns a string resource given its id.
@@ -140,6 +140,18 @@ class CONTENT_EXPORT ContentClient {
   // See https://www.w3.org/TR/powerful-features/#is-origin-trustworthy.
   virtual void AddSecureSchemesAndOrigins(std::set<std::string>* schemes,
                                           std::set<GURL>* origins) {}
+
+  // Gives the embedder a chance to register additional schemes that
+  // should be allowed to register service workers. Only secure and
+  // trustworthy schemes should be added.
+  virtual void AddServiceWorkerSchemes(std::set<std::string>* schemes) {}
+
+  // Returns true if the embedder wishes to supplement the site isolation policy
+  // used by the content layer. Returning true enables the infrastructure for
+  // out-of-process iframes, and causes the content layer to consult
+  // ContentBrowserClient::DoesSiteRequireDedicatedProcess() when making process
+  // model decisions.
+  virtual bool IsSupplementarySiteIsolationModeEnabled();
 
  private:
   friend class ContentClientInitializer;  // To set these pointers.

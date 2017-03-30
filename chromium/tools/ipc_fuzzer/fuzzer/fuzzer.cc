@@ -8,7 +8,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_switches.h"
@@ -122,7 +124,7 @@ struct FuzzTraits<unsigned long> {
 template <>
 struct FuzzTraits<long long> {
   static bool Fuzz(long long* p, Fuzzer* fuzzer) {
-    fuzzer->FuzzInt64(reinterpret_cast<int64*>(p));
+    fuzzer->FuzzInt64(reinterpret_cast<int64_t*>(p));
     return true;
   }
 };
@@ -130,7 +132,7 @@ struct FuzzTraits<long long> {
 template <>
 struct FuzzTraits<unsigned long long> {
   static bool Fuzz(unsigned long long* p, Fuzzer* fuzzer) {
-    fuzzer->FuzzInt64(reinterpret_cast<int64*>(p));
+    fuzzer->FuzzInt64(reinterpret_cast<int64_t*>(p));
     return true;
   }
 };
@@ -138,7 +140,7 @@ struct FuzzTraits<unsigned long long> {
 template <>
 struct FuzzTraits<short> {
   static bool Fuzz(short* p, Fuzzer* fuzzer) {
-    fuzzer->FuzzUInt16(reinterpret_cast<uint16*>(p));
+    fuzzer->FuzzUInt16(reinterpret_cast<uint16_t*>(p));
     return true;
   }
 };
@@ -146,7 +148,7 @@ struct FuzzTraits<short> {
 template <>
 struct FuzzTraits<unsigned short> {
   static bool Fuzz(unsigned short* p, Fuzzer* fuzzer) {
-    fuzzer->FuzzUInt16(reinterpret_cast<uint16*>(p));
+    fuzzer->FuzzUInt16(reinterpret_cast<uint16_t*>(p));
     return true;
   }
 };
@@ -453,7 +455,7 @@ struct FuzzTraits<base::NullableString16> {
 template <>
 struct FuzzTraits<base::Time> {
   static bool Fuzz(base::Time* p, Fuzzer* fuzzer) {
-    int64 internal_value = p->ToInternalValue();
+    int64_t internal_value = p->ToInternalValue();
     if (!FuzzParam(&internal_value, fuzzer))
       return false;
     *p = base::Time::FromInternalValue(internal_value);
@@ -464,7 +466,7 @@ struct FuzzTraits<base::Time> {
 template <>
 struct FuzzTraits<base::TimeDelta> {
   static bool Fuzz(base::TimeDelta* p, Fuzzer* fuzzer) {
-    int64 internal_value = p->ToInternalValue();
+    int64_t internal_value = p->ToInternalValue();
     if (!FuzzParam(&internal_value, fuzzer))
       return false;
     *p = base::TimeDelta::FromInternalValue(internal_value);
@@ -475,7 +477,7 @@ struct FuzzTraits<base::TimeDelta> {
 template <>
 struct FuzzTraits<base::TimeTicks> {
   static bool Fuzz(base::TimeTicks* p, Fuzzer* fuzzer) {
-    int64 internal_value = p->ToInternalValue();
+    int64_t internal_value = p->ToInternalValue();
     if (!FuzzParam(&internal_value, fuzzer))
       return false;
     *p = base::TimeTicks::FromInternalValue(internal_value);
@@ -672,7 +674,7 @@ struct FuzzTraits<cc::CompositorFrame> {
     if (!FuzzParam(&p->metadata, fuzzer))
       return false;
 
-    switch (RandInRange(4)) {
+    switch (RandInRange(3)) {
       case 0: {
         p->delegated_frame_data.reset(new cc::DelegatedFrameData());
         if (!FuzzParam(p->delegated_frame_data.get(), fuzzer))
@@ -682,12 +684,6 @@ struct FuzzTraits<cc::CompositorFrame> {
       case 1: {
         p->gl_frame_data.reset(new cc::GLFrameData());
         if (!FuzzParam(p->gl_frame_data.get(), fuzzer))
-          return false;
-        return true;
-      }
-      case 2: {
-        p->software_frame_data.reset(new cc::SoftwareFrameData());
-        if (!FuzzParam(p->software_frame_data.get(), fuzzer))
           return false;
         return true;
       }
@@ -702,8 +698,6 @@ template <>
 struct FuzzTraits<cc::CompositorFrameAck> {
   static bool Fuzz(cc::CompositorFrameAck* p, Fuzzer* fuzzer) {
     if (!FuzzParam(&p->resources, fuzzer))
-      return false;
-    if (!FuzzParam(&p->last_software_frame_id, fuzzer))
       return false;
 
     if (!p->gl_frame_data)
@@ -770,7 +764,7 @@ struct FuzzTraits<cc::RenderPassList> {
   static bool Fuzz(cc::RenderPassList* p, Fuzzer* fuzzer) {
     if (!fuzzer->ShouldGenerate()) {
       for (size_t i = 0; i < p->size(); ++i) {
-        if (!FuzzParam(p->at(i), fuzzer))
+        if (!FuzzParam(p->at(i).get(), fuzzer))
           return false;
       }
       return true;
@@ -781,23 +775,8 @@ struct FuzzTraits<cc::RenderPassList> {
       scoped_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
       if (!FuzzParam(render_pass.get(), fuzzer))
         return false;
-      p->push_back(render_pass.Pass());
+      p->push_back(std::move(render_pass));
     }
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<cc::SoftwareFrameData> {
-  static bool Fuzz(cc::SoftwareFrameData* p, Fuzzer* fuzzer) {
-    if (!FuzzParam(&p->id, fuzzer))
-      return false;
-    if (!FuzzParam(&p->size, fuzzer))
-      return false;
-    if (!FuzzParam(&p->damage_rect, fuzzer))
-      return false;
-    if (!FuzzParam(&p->bitmap_id, fuzzer))
-      return false;
     return true;
   }
 };
@@ -1006,7 +985,7 @@ struct FuzzTraits<content::SyntheticGesturePacket> {
         break;
       }
     }
-    p->set_gesture_params(gesture_params.Pass());
+    p->set_gesture_params(std::move(gesture_params));
     return true;
   }
 };
@@ -1030,9 +1009,12 @@ struct FuzzTraits<content::WebCursor> {
 
     // Scale factor is expected to be greater than 0, otherwise we hit
     // a check failure.
-    info.image_scale_factor = fabs(info.image_scale_factor) + 0.001;
+    info.image_scale_factor = fabs(info.image_scale_factor);
+    if (!(info.image_scale_factor > 0.0))
+      info.image_scale_factor = 1;
 
-    *p = content::WebCursor(info);
+    *p = content::WebCursor();
+    p->InitFromCursorInfo(info);
     return true;
   }
 };
@@ -1220,13 +1202,42 @@ struct FuzzTraits<gpu::Mailbox> {
 };
 
 template <>
+struct FuzzTraits<gpu::SyncToken> {
+  static bool Fuzz(gpu::SyncToken* p, Fuzzer* fuzzer) {
+    bool verified_flush = false;
+    gpu::CommandBufferNamespace namespace_id =
+        gpu::CommandBufferNamespace::INVALID;
+    int32_t extra_data_field = 0;
+    uint64_t command_buffer_id = 0;
+    uint64_t release_count = 0;
+
+    if (!FuzzParam(&verified_flush, fuzzer))
+      return false;
+    if (!FuzzParam(&namespace_id, fuzzer))
+      return false;
+    if (!FuzzParam(&extra_data_field, fuzzer))
+      return false;
+    if (!FuzzParam(&command_buffer_id, fuzzer))
+      return false;
+    if (!FuzzParam(&release_count, fuzzer))
+      return false;
+
+    p->Clear();
+    p->Set(namespace_id, extra_data_field, command_buffer_id, release_count);
+    if (verified_flush)
+      p->SetVerifyFlush();
+    return true;
+  }
+};
+
+template <>
 struct FuzzTraits<gpu::MailboxHolder> {
   static bool Fuzz(gpu::MailboxHolder* p, Fuzzer* fuzzer) {
     if (!FuzzParam(&p->mailbox, fuzzer))
       return false;
-    if (!FuzzParam(&p->texture_target, fuzzer))
+    if (!FuzzParam(&p->sync_token, fuzzer))
       return false;
-    if (!FuzzParam(&p->sync_point, fuzzer))
+    if (!FuzzParam(&p->texture_target, fuzzer))
       return false;
     return true;
   }
@@ -1358,16 +1369,19 @@ struct FuzzTraits<LOGFONT> {
 template <>
 struct FuzzTraits<media::AudioParameters> {
   static bool Fuzz(media::AudioParameters* p, Fuzzer* fuzzer) {
-    int format = p->format();
     int channel_layout = p->channel_layout();
+    int format = p->format();
     int sample_rate = p->sample_rate();
     int bits_per_sample = p->bits_per_sample();
     int frames_per_buffer = p->frames_per_buffer();
     int channels = p->channels();
     int effects = p->effects();
+    // TODO(mbarbella): Support ChannelLayout mutation and invalid values.
+    if (fuzzer->ShouldGenerate()) {
+      channel_layout =
+          RandInRange(media::ChannelLayout::CHANNEL_LAYOUT_MAX + 1);
+    }
     if (!FuzzParam(&format, fuzzer))
-      return false;
-    if (!FuzzParam(&channel_layout, fuzzer))
       return false;
     if (!FuzzParam(&sample_rate, fuzzer))
       return false;
@@ -1381,8 +1395,10 @@ struct FuzzTraits<media::AudioParameters> {
       return false;
     media::AudioParameters params(
         static_cast<media::AudioParameters::Format>(format),
-        static_cast<media::ChannelLayout>(channel_layout), channels,
-        sample_rate, bits_per_sample, frames_per_buffer, effects);
+        static_cast<media::ChannelLayout>(channel_layout), sample_rate,
+        bits_per_sample, frames_per_buffer);
+    params.set_channels_for_discrete(channels);
+    params.set_effects(effects);
     *p = params;
     return true;
   }
@@ -1426,7 +1442,7 @@ template <>
 struct FuzzTraits<net::HostPortPair> {
   static bool Fuzz(net::HostPortPair* p, Fuzzer* fuzzer) {
     std::string host = p->host();
-    uint16 port = p->port();
+    uint16_t port = p->port();
     if (!FuzzParam(&host, fuzzer))
       return false;
     if (!FuzzParam(&port, fuzzer))
@@ -1640,7 +1656,7 @@ template <>
 struct FuzzTraits<ppapi::SocketOptionData> {
   static bool Fuzz(ppapi::SocketOptionData* p, Fuzzer* fuzzer) {
     // TODO(mbarbella): This can be improved.
-    int32 tmp;
+    int32_t tmp;
     p->GetInt32(&tmp);
     if (!FuzzParam(&tmp, fuzzer))
       return false;
@@ -1709,8 +1725,8 @@ struct FuzzTraits<storage::DataElement> {
       }
       case storage::DataElement::Type::TYPE_FILE: {
         base::FilePath path;
-        uint64 offset;
-        uint64 length;
+        uint64_t offset;
+        uint64_t length;
         base::Time modification_time;
         if (!FuzzParam(&path, fuzzer))
           return false;
@@ -1725,8 +1741,8 @@ struct FuzzTraits<storage::DataElement> {
       }
       case storage::DataElement::Type::TYPE_BLOB: {
         std::string uuid;
-        uint64 offset;
-        uint64 length;
+        uint64_t offset;
+        uint64_t length;
         if (!FuzzParam(&uuid, fuzzer))
           return false;
         if (!FuzzParam(&offset, fuzzer))
@@ -1738,8 +1754,8 @@ struct FuzzTraits<storage::DataElement> {
       }
       case storage::DataElement::Type::TYPE_FILE_FILESYSTEM: {
         GURL url;
-        uint64 offset;
-        uint64 length;
+        uint64_t offset;
+        uint64_t length;
         base::Time modification_time;
         if (!FuzzParam(&url, fuzzer))
           return false;
@@ -1764,15 +1780,34 @@ template <>
 struct FuzzTraits<ui::LatencyInfo> {
   static bool Fuzz(ui::LatencyInfo* p, Fuzzer* fuzzer) {
     // TODO(inferno): Add param traits for |latency_components|.
-    p->input_coordinates_size = static_cast<uint32>(
+    int64_t trace_id = p->trace_id();
+    bool terminated = p->terminated();
+    uint32_t input_coordinates_size = static_cast<uint32_t>(
         RandInRange(ui::LatencyInfo::kMaxInputCoordinates + 1));
+    ui::LatencyInfo::InputCoordinate
+        input_coordinates[ui::LatencyInfo::kMaxInputCoordinates];
+    uint32_t event_timestamps_size = static_cast<uint32_t>(
+        RandInRange(ui::LatencyInfo::kMaxCoalescedEventTimestamps + 1));
+    double event_timestamps[ui::LatencyInfo::kMaxCoalescedEventTimestamps];
     if (!FuzzParamArray(
-        &p->input_coordinates[0], p->input_coordinates_size, fuzzer))
+        input_coordinates, input_coordinates_size, fuzzer))
       return false;
-    if (!FuzzParam(&p->trace_id, fuzzer))
+    if (!FuzzParamArray(event_timestamps, event_timestamps_size, fuzzer))
       return false;
-    if (!FuzzParam(&p->terminated, fuzzer))
+    if (!FuzzParam(&trace_id, fuzzer))
       return false;
+    if (!FuzzParam(&terminated, fuzzer))
+      return false;
+
+    ui::LatencyInfo latency(trace_id, terminated);
+    for (size_t i = 0; i < input_coordinates_size; i++) {
+      latency.AddInputCoordinate(input_coordinates[i]);
+    }
+    for (size_t i = 0; i < event_timestamps_size; i++) {
+      latency.AddCoalescedEventTimestamp(event_timestamps[i]);
+    }
+    *p = latency;
+
     return true;
   }
 };
@@ -1792,10 +1827,21 @@ struct FuzzTraits<ui::LatencyInfo::InputCoordinate> {
 template <>
 struct FuzzTraits<url::Origin> {
   static bool Fuzz(url::Origin* p, Fuzzer* fuzzer) {
-    std::string origin = p->string();
-    if (!FuzzParam(&origin, fuzzer))
-        return false;
-    *p = url::Origin(origin);
+    std::string scheme = p->scheme();
+    std::string host = p->host();
+    uint16_t port = p->port();
+    if (!FuzzParam(&scheme, fuzzer))
+      return false;
+    if (!FuzzParam(&host, fuzzer))
+      return false;
+    if (!FuzzParam(&port, fuzzer))
+      return false;
+    *p = url::Origin::UnsafelyCreateOriginWithoutNormalization(scheme, host,
+                                                               port);
+
+    // Force a unique origin 1% of the time:
+    if (RandInRange(100) == 1)
+      *p = url::Origin();
     return true;
   }
 };
@@ -2083,7 +2129,7 @@ void PopulateFuzzerFunctionVector(
 #include "tools/ipc_fuzzer/message_lib/all_message_null_macros.h"
 #undef IPC_MESSAGE_DECL
 #define IPC_MESSAGE_DECL(kind, type, name, in, out, ilist, olist) \
-  (*map)[static_cast<uint32>(name::ID)] = fuzzer_for_##name;
+  (*map)[static_cast<uint32_t>(name::ID)] = fuzzer_for_##name;
 
 void PopulateFuzzerFunctionMap(FuzzerFunctionMap* map) {
 #include "tools/ipc_fuzzer/message_lib/all_messages.h"

@@ -5,79 +5,132 @@
 #ifndef CC_RESOURCES_RESOURCE_POOL_H_
 #define CC_RESOURCES_RESOURCE_POOL_H_
 
-#include <deque>
+#include <stddef.h>
+#include <stdint.h>
 
+#include <deque>
+#include <map>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/renderer.h"
 #include "cc/resources/resource.h"
 #include "cc/resources/resource_format.h"
+#include "cc/resources/scoped_resource.h"
 
 namespace cc {
-class ScopedResource;
 
-class CC_EXPORT ResourcePool {
+class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
  public:
-  static scoped_ptr<ResourcePool> Create(ResourceProvider* resource_provider,
-                                         GLenum target) {
-    return make_scoped_ptr(new ResourcePool(resource_provider, target));
+  static scoped_ptr<ResourcePool> CreateForGpuMemoryBufferResources(
+      ResourceProvider* resource_provider,
+      base::SingleThreadTaskRunner* task_runner) {
+    return make_scoped_ptr(
+        new ResourcePool(resource_provider, task_runner, true));
   }
 
-  virtual ~ResourcePool();
+  static scoped_ptr<ResourcePool> Create(
+      ResourceProvider* resource_provider,
+      base::SingleThreadTaskRunner* task_runner) {
+    return make_scoped_ptr(
+        new ResourcePool(resource_provider, task_runner, false));
+  }
 
-  scoped_ptr<ScopedResource> AcquireResource(const gfx::Size& size,
-                                             ResourceFormat format);
-  scoped_ptr<ScopedResource> TryAcquireResourceWithContentId(uint64 content_id);
-  void ReleaseResource(scoped_ptr<ScopedResource> resource,
-                       uint64_t content_id);
+  ~ResourcePool() override;
+
+  Resource* AcquireResource(const gfx::Size& size, ResourceFormat format);
+  Resource* TryAcquireResourceWithContentId(uint64_t content_id);
+  void ReleaseResource(Resource* resource, uint64_t content_id);
 
   void SetResourceUsageLimits(size_t max_memory_usage_bytes,
-                              size_t max_unused_memory_usage_bytes,
                               size_t max_resource_count);
 
   void ReduceResourceUsage();
-  // This might block if |wait_if_needed| is true and one of the currently
-  // busy resources has a read lock fence that needs to be waited upon before
-  // it can be locked for write again.
-  void CheckBusyResources(bool wait_if_needed);
+  void CheckBusyResources();
 
-  size_t total_memory_usage_bytes() const { return memory_usage_bytes_; }
-  size_t acquired_memory_usage_bytes() const {
-    return memory_usage_bytes_ - unused_memory_usage_bytes_;
+  size_t memory_usage_bytes() const { return in_use_memory_usage_bytes_; }
+  size_t resource_count() const { return in_use_resources_.size(); }
+
+  // Overridden from base::trace_event::MemoryDumpProvider:
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
+
+  size_t GetTotalMemoryUsageForTesting() const {
+    return total_memory_usage_bytes_;
   }
-  size_t total_resource_count() const { return resource_count_; }
-  size_t acquired_resource_count() const {
-    return resource_count_ - unused_resources_.size();
+  size_t GetTotalResourceCountForTesting() const {
+    return total_resource_count_;
   }
-  size_t busy_resource_count() const { return busy_resources_.size(); }
+  size_t GetBusyResourceCountForTesting() const {
+    return busy_resources_.size();
+  }
+  void SetResourceExpirationDelayForTesting(base::TimeDelta delay) {
+    resource_expiration_delay_ = delay;
+  }
 
  protected:
-  ResourcePool(ResourceProvider* resource_provider, GLenum target);
+  ResourcePool(ResourceProvider* resource_provider,
+               base::SingleThreadTaskRunner* task_runner,
+               bool use_gpu_memory_buffers);
 
   bool ResourceUsageTooHigh();
 
  private:
-  void DidFinishUsingResource(ScopedResource* resource, uint64_t content_id);
-  void DeleteResource(ScopedResource* resource);
+  class PoolResource : public ScopedResource {
+   public:
+    static scoped_ptr<PoolResource> Create(
+        ResourceProvider* resource_provider) {
+      return make_scoped_ptr(new PoolResource(resource_provider));
+    }
+    void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
+                      const ResourceProvider* resource_provider,
+                      bool is_free) const;
+
+    uint64_t content_id() const { return content_id_; }
+    void set_content_id(uint64_t content_id) { content_id_ = content_id; }
+
+    base::TimeTicks last_usage() const { return last_usage_; }
+    void set_last_usage(base::TimeTicks time) { last_usage_ = time; }
+
+   private:
+    explicit PoolResource(ResourceProvider* resource_provider)
+        : ScopedResource(resource_provider), content_id_(0) {}
+    uint64_t content_id_;
+    base::TimeTicks last_usage_;
+  };
+
+  void DidFinishUsingResource(scoped_ptr<PoolResource> resource);
+  void DeleteResource(scoped_ptr<PoolResource> resource);
+
+  // Functions which manage periodic eviction of expired resources.
+  void ScheduleEvictExpiredResourcesIn(base::TimeDelta time_from_now);
+  void EvictExpiredResources();
+  void EvictResourcesNotUsedSince(base::TimeTicks time_limit);
+  bool HasEvictableResources() const;
+  base::TimeTicks GetUsageTimeForLRUResource() const;
 
   ResourceProvider* resource_provider_;
-  const GLenum target_;
+  bool use_gpu_memory_buffers_;
   size_t max_memory_usage_bytes_;
-  size_t max_unused_memory_usage_bytes_;
   size_t max_resource_count_;
-  size_t memory_usage_bytes_;
-  size_t unused_memory_usage_bytes_;
-  size_t resource_count_;
+  size_t in_use_memory_usage_bytes_;
+  size_t total_memory_usage_bytes_;
+  size_t total_resource_count_;
 
-  struct PoolResource {
-    PoolResource(ScopedResource* resource, uint64_t content_id)
-        : resource(resource), content_id(content_id) {}
-    ScopedResource* resource;
-    uint64_t content_id;
-  };
-  typedef std::deque<PoolResource> ResourceList;
-  ResourceList unused_resources_;
-  ResourceList busy_resources_;
+  // Holds most recently used resources at the front of the queue.
+  using ResourceDeque = std::deque<scoped_ptr<PoolResource>>;
+  ResourceDeque unused_resources_;
+  ResourceDeque busy_resources_;
+
+  std::map<ResourceId, scoped_ptr<PoolResource>> in_use_resources_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  bool evict_expired_resources_pending_;
+  base::TimeDelta resource_expiration_delay_;
+
+  base::WeakPtrFactory<ResourcePool> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourcePool);
 };

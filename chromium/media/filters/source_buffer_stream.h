@@ -10,12 +10,15 @@
 #ifndef MEDIA_FILTERS_SOURCE_BUFFER_STREAM_H_
 #define MEDIA_FILTERS_SOURCE_BUFFER_STREAM_H_
 
+#include <stddef.h>
+
 #include <deque>
 #include <list>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_export.h"
@@ -54,13 +57,13 @@ class MEDIA_EXPORT SourceBufferStream {
   };
 
   SourceBufferStream(const AudioDecoderConfig& audio_config,
-                     const LogCB& log_cb,
+                     const scoped_refptr<MediaLog>& media_log,
                      bool splice_frames_enabled);
   SourceBufferStream(const VideoDecoderConfig& video_config,
-                     const LogCB& log_cb,
+                     const scoped_refptr<MediaLog>& media_log,
                      bool splice_frames_enabled);
   SourceBufferStream(const TextTrackConfig& text_config,
-                     const LogCB& log_cb,
+                     const scoped_refptr<MediaLog>& media_log,
                      bool splice_frames_enabled);
 
   ~SourceBufferStream();
@@ -88,6 +91,11 @@ class MEDIA_EXPORT SourceBufferStream {
   // required by the computation outlined in the spec.
   void Remove(base::TimeDelta start, base::TimeDelta end,
               base::TimeDelta duration);
+
+  // Frees up space if the SourceBufferStream is taking up too much memory.
+  // |media_time| is current playback position.
+  bool GarbageCollectIfNeeded(DecodeTimestamp media_time,
+                              size_t newDataSize);
 
   // Changes the SourceBufferStream's state so that it will start returning
   // buffers starting from the closest keyframe before |timestamp|.
@@ -119,6 +127,9 @@ class MEDIA_EXPORT SourceBufferStream {
   // then base::TimeDelta() is returned.
   base::TimeDelta GetBufferedDuration() const;
 
+  // Returns the size of the buffered data in bytes.
+  size_t GetBufferedSize() const;
+
   // Notifies this object that end of stream has been signalled.
   void MarkEndOfStream();
 
@@ -142,35 +153,36 @@ class MEDIA_EXPORT SourceBufferStream {
   // yet.
   base::TimeDelta GetMaxInterbufferDistance() const;
 
-  void set_memory_limit(int memory_limit) {
+  void set_memory_limit(size_t memory_limit) {
     memory_limit_ = memory_limit;
   }
 
  private:
   friend class SourceBufferStreamTest;
 
-  // Frees up space if the SourceBufferStream is taking up too much memory.
-  void GarbageCollectIfNeeded();
-
   // Attempts to delete approximately |total_bytes_to_free| amount of data
   // |ranges_|, starting at the front of |ranges_| and moving linearly forward
   // through the buffers. Deletes starting from the back if |reverse_direction|
-  // is true. Returns the number of bytes freed.
-  int FreeBuffers(int total_bytes_to_free, bool reverse_direction);
+  // is true. |media_time| is current playback position.
+  // Returns the number of bytes freed.
+  size_t FreeBuffers(size_t total_bytes_to_free,
+                     DecodeTimestamp media_time,
+                     bool reverse_direction);
 
   // Attempts to delete approximately |total_bytes_to_free| amount of data from
   // |ranges_|, starting after the last appended buffer before the current
-  // playback position.
-  int FreeBuffersAfterLastAppended(int total_bytes_to_free);
+  // playback position |media_time|.
+  size_t FreeBuffersAfterLastAppended(size_t total_bytes_to_free,
+                                      DecodeTimestamp media_time);
 
   // Gets the removal range to secure |byte_to_free| from
   // [|start_timestamp|, |end_timestamp|).
   // Returns the size of buffers to secure if future
   // Remove(|start_timestamp|, |removal_end_timestamp|, duration) is called.
   // Will not update |removal_end_timestamp| if the returned size is 0.
-  int GetRemovalRange(DecodeTimestamp start_timestamp,
-      DecodeTimestamp end_timestamp, int byte_to_free,
-      DecodeTimestamp* removal_end_timestamp);
+  size_t GetRemovalRange(DecodeTimestamp start_timestamp,
+                         DecodeTimestamp end_timestamp, size_t byte_to_free,
+                         DecodeTimestamp* removal_end_timestamp);
 
   // Prepares |range_for_next_append_| so |new_buffers| can be appended.
   // This involves removing buffers between the end of the previous append
@@ -318,6 +330,14 @@ class MEDIA_EXPORT SourceBufferStream {
   // additional processing for splice frame or preroll buffers.
   Status GetNextBufferInternal(scoped_refptr<StreamParserBuffer>* out_buffer);
 
+  // If the next buffer's timestamp is significantly beyond the last output
+  // buffer, and if we just exhausted |track_buffer_| on the previous read, this
+  // method logs a warning to |media_log_| that there could be perceivable
+  // delay. Apps can avoid this behavior by not overlap-appending buffers near
+  // current playback position.
+  void WarnIfTrackBufferExhaustionSkipsForward(
+      const scoped_refptr<StreamParserBuffer>& next_buffer);
+
   // Called by PrepareRangesForNextAppend() before pruning overlapped buffers to
   // generate a splice frame with a small portion of the overlapped buffers.  If
   // a splice frame is generated, the first buffer in |new_buffers| will have
@@ -328,9 +348,9 @@ class MEDIA_EXPORT SourceBufferStream {
   // appropriately and returns true.  Otherwise returns false.
   bool SetPendingBuffer(scoped_refptr<StreamParserBuffer>* out_buffer);
 
-  // Callback used to report log messages that can help the web developer figure
-  // out what is wrong with the content.
-  LogCB log_cb_;
+  // Used to report log messages that can help the web developer figure out what
+  // is wrong with the content.
+  scoped_refptr<MediaLog> media_log_;
 
   // List of disjoint buffered ranges, ordered by start time.
   RangeList ranges_;
@@ -339,12 +359,12 @@ class MEDIA_EXPORT SourceBufferStream {
   // GetNextBuffer() is only allows to return buffers that have a
   // config ID that matches this index. If there is a mismatch then
   // it must signal that a config change is needed.
-  int current_config_index_;
+  int current_config_index_ = 0;
 
   // Indicates which decoder config to associate with new buffers
   // being appended. Each new buffer appended has its config ID set
   // to the value of this field.
-  int append_config_index_;
+  int append_config_index_ = 0;
 
   // Holds the audio/video configs for this stream. |current_config_index_|
   // and |append_config_index_| represent indexes into one of these vectors.
@@ -356,10 +376,10 @@ class MEDIA_EXPORT SourceBufferStream {
 
   // True if more data needs to be appended before the Seek() can complete,
   // false if no Seek() has been requested or the Seek() is completed.
-  bool seek_pending_;
+  bool seek_pending_ = false;
 
   // True if the end of the stream has been signalled.
-  bool end_of_stream_;
+  bool end_of_stream_ = false;
 
   // Timestamp of the last request to Seek().
   base::TimeDelta seek_buffer_timestamp_;
@@ -367,11 +387,15 @@ class MEDIA_EXPORT SourceBufferStream {
   // Pointer to the seeked-to Range. This is the range from which
   // GetNextBuffer() calls are fulfilled after the |track_buffer_| has been
   // emptied.
-  SourceBufferRange* selected_range_;
+  SourceBufferRange* selected_range_ = nullptr;
 
   // Queue of the next buffers to be returned from calls to GetNextBuffer(). If
   // |track_buffer_| is empty, return buffers from |selected_range_|.
   BufferQueue track_buffer_;
+
+  // If there has been no intervening Seek, this will be true if the last
+  // emitted buffer emptied |track_buffer_|.
+  bool just_exhausted_track_buffer_ = false;
 
   // The start time of the current media segment being appended.
   DecodeTimestamp media_segment_start_time_;
@@ -380,12 +404,13 @@ class MEDIA_EXPORT SourceBufferStream {
   RangeList::iterator range_for_next_append_;
 
   // True when the next call to Append() begins a new media segment.
-  bool new_media_segment_;
+  bool new_media_segment_ = false;
 
   // The timestamp of the last buffer appended to the media segment, set to
   // kNoDecodeTimestamp() if the beginning of the segment.
-  DecodeTimestamp last_appended_buffer_timestamp_;
-  bool last_appended_buffer_is_keyframe_;
+  DecodeTimestamp last_appended_buffer_timestamp_ = kNoDecodeTimestamp();
+  base::TimeDelta last_appended_buffer_duration_ = kNoTimestamp();
+  bool last_appended_buffer_is_keyframe_ = false;
 
   // The decode timestamp on the last buffer returned by the most recent
   // GetNextBuffer() call. Set to kNoDecodeTimestamp() if GetNextBuffer() hasn't
@@ -396,13 +421,13 @@ class MEDIA_EXPORT SourceBufferStream {
   base::TimeDelta max_interbuffer_distance_;
 
   // The maximum amount of data in bytes the stream will keep in memory.
-  int memory_limit_;
+  size_t memory_limit_;
 
   // Indicates that a kConfigChanged status has been reported by GetNextBuffer()
   // and GetCurrentXXXDecoderConfig() must be called to update the current
   // config. GetNextBuffer() must not be called again until
   // GetCurrentXXXDecoderConfig() has been called.
-  bool config_change_pending_;
+  bool config_change_pending_ = false;
 
   // Used by HandleNextBufferWithSplice() or HandleNextBufferWithPreroll() when
   // a splice frame buffer or buffer with preroll is returned from
@@ -411,13 +436,19 @@ class MEDIA_EXPORT SourceBufferStream {
 
   // Indicates which of the splice buffers in |splice_buffer_| should be
   // handled out next.
-  size_t splice_buffers_index_;
+  size_t splice_buffers_index_ = 0;
 
   // Indicates that all buffers before |pending_buffer_| have been handed out.
-  bool pending_buffers_complete_;
+  bool pending_buffers_complete_ = false;
 
   // Indicates that splice frame generation is enabled.
   const bool splice_frames_enabled_;
+
+  // To prevent log spam, count the number of warnings and successes logged.
+  int num_splice_generation_warning_logs_ = 0;
+  int num_splice_generation_success_logs_ = 0;
+  int num_track_buffer_gap_warning_logs_ = 0;
+  int num_garbage_collect_algorithm_logs_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(SourceBufferStream);
 };

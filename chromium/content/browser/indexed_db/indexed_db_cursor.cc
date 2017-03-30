@@ -4,6 +4,8 @@
 
 #include "content/browser/indexed_db/indexed_db_cursor.h"
 
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -24,7 +26,7 @@ IndexedDBCursor::IndexedDBCursor(
     : task_type_(task_type),
       cursor_type_(cursor_type),
       transaction_(transaction),
-      cursor_(cursor.Pass()),
+      cursor_(std::move(cursor)),
       closed_(false) {
   transaction_->RegisterOpenCursor(this);
 }
@@ -47,7 +49,7 @@ void IndexedDBCursor::Continue(scoped_ptr<IndexedDBKey> key,
                  callbacks));
 }
 
-void IndexedDBCursor::Advance(uint32 count,
+void IndexedDBCursor::Advance(uint32_t count,
                               scoped_refptr<IndexedDBCallbacks> callbacks) {
   IDB_TRACE("IndexedDBCursor::Advance");
 
@@ -58,7 +60,7 @@ void IndexedDBCursor::Advance(uint32 count,
 }
 
 void IndexedDBCursor::CursorAdvanceOperation(
-    uint32 count,
+    uint32_t count,
     scoped_refptr<IndexedDBCallbacks> callbacks,
     IndexedDBTransaction* /*transaction*/) {
   IDB_TRACE("IndexedDBCursor::CursorAdvanceOperation");

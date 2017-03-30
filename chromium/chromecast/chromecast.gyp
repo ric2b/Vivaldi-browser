@@ -11,9 +11,8 @@
     # Refers to enum CastProductType in components/metrics/proto/cast_logs.proto
     'cast_product_type%': 0,  # CAST_PRODUCT_TYPE_UNKNOWN
     'chromium_code': 1,
-    'chromecast_branding%': 'Chromium',
+    'chromecast_branding%': 'public',
     'disable_display%': 0,
-    'enable_default_cast_graphics%': 1,
     'ozone_platform_cast%': 0,
     'use_chromecast_webui%': 0,
   },
@@ -29,6 +28,18 @@
         'defines': ['DISABLE_DISPLAY'],
       }],
     ],
+    'target_conditions': [
+      ['_type=="executable"', {
+        'ldflags': [
+          # Allow  OEMs to override default libraries that are shipped with
+          # cast receiver package by installed OEM-specific libraries in
+          # /oem_cast_shlib.
+          '-Wl,-rpath=/oem_cast_shlib',
+          # Some shlibs are built in same directory of executables.
+          '-Wl,-rpath=\$$ORIGIN',
+        ],
+      }],
+    ],
   },
   'targets': [
     # Public API target for OEM partners to replace shlibs.
@@ -36,6 +47,7 @@
       'target_name': 'cast_public_api',
       'type': '<(component)',
       'sources': [
+        'public/avsettings.h',
         'public/cast_egl_platform.h',
         'public/cast_egl_platform_shlib.h',
         'public/cast_media_shlib.h',
@@ -43,13 +55,26 @@
         'public/chromecast_export.h',
         'public/graphics_properties_shlib.h',
         'public/graphics_types.h',
+        'public/media_codec_support.h',
+        'public/media/cast_decoder_buffer.h',
+        'public/media/cast_decrypt_config.h',
+        'public/media/cast_key_system.h',
         'public/media/decoder_config.h',
+        'public/media/decrypt_context.h',
+        'public/media/media_pipeline_backend.h',
+        'public/media/media_pipeline_device_params.h',
         'public/media/stream_id.h',
         'public/osd_plane.h',
         'public/osd_plane_shlib.h',
         'public/osd_surface.h',
+        'public/task_runner.h',
         'public/video_plane.h',
       ],
+      'direct_dependent_settings': {
+        'include_dirs': [
+          'public/',
+        ],
+      },
     },
     {
       'target_name': 'cast_base',
@@ -58,10 +83,24 @@
         '../base/base.gyp:base',
       ],
       'sources': [
+        'base/android/dumpstate_writer.cc',
+        'base/android/dumpstate_writer.h',
+        'base/android/system_time_change_notifier_android.cc',
+        'base/android/system_time_change_notifier_android.h',
+        'base/bind_to_task_runner.h',
+        'base/cast_constants.cc',
+        'base/cast_constants.h',
         'base/cast_paths.cc',
         'base/cast_paths.h',
+        'base/cast_resource.h',
+        'base/cast_resource.cc',
+        'base/chromecast_config_android.cc',
+        'base/chromecast_config_android.h',
         'base/chromecast_switches.cc',
         'base/chromecast_switches.h',
+        'base/device_capabilities.h',
+        'base/device_capabilities_impl.cc',
+        'base/device_capabilities_impl.h',
         'base/error_codes.cc',
         'base/error_codes.h',
         'base/metrics/cast_histograms.h',
@@ -71,10 +110,25 @@
         'base/metrics/grouped_histogram.h',
         'base/path_utils.cc',
         'base/path_utils.h',
+        'base/pref_names.cc',
+        'base/pref_names.h',
         'base/process_utils.cc',
         'base/process_utils.h',
+        'base/scoped_temp_file.cc',
+        'base/scoped_temp_file.h',
         'base/serializers.cc',
-        'base/serializers.h'
+        'base/serializers.h',
+        'base/system_time_change_notifier.cc',
+        'base/system_time_change_notifier.h',
+        'base/task_runner_impl.cc',
+        'base/task_runner_impl.h',
+      ],
+      'conditions': [
+        ['OS=="android"', {
+          'dependencies': [
+            'cast_jni_headers',
+          ],
+        }],
       ],
     },  # end of target 'cast_base'
     {
@@ -118,15 +172,40 @@
       'type': '<(component)',
       'dependencies': [
         'cast_crash',
+        '../breakpad/breakpad.gyp:breakpad_client',
         '../components/components.gyp:crash_component',
         '../content/content.gyp:content_common',
       ],
+      'include_dirs': [
+        '../breakpad/src',
+      ],
       'sources' : [
-        # TODO(slan): Move android crash_client here as well.
+        'app/android/crash_handler.cc',
+        'app/android/crash_handler.h',
+        'app/android/cast_crash_reporter_client_android.cc',
+        'app/android/cast_crash_reporter_client_android.h',
         'app/linux/cast_crash_reporter_client.cc',
         'app/linux/cast_crash_reporter_client.h',
       ],
+      'conditions': [
+        ['OS=="android"', {
+          'dependencies': [
+            'cast_jni_headers',
+          ],
+        }],
+      ],
     },  # end of target 'cast_crash_client'
+    {
+      'target_name': 'cast_crypto',
+      'type': '<(component)',
+      'dependencies': [
+        '../base/base.gyp:base',
+      ],
+      'sources': [
+        'crypto/signature_cache.cc',
+        'crypto/signature_cache.h',
+      ],
+    },
     {
       'target_name': 'cast_net',
       'type': '<(component)',
@@ -199,10 +278,15 @@
               '<(SHARED_INTERMEDIATE_DIR)/ui/strings/ui_strings_en-US.pak',
             ],
             'conditions': [
-              ['chromecast_branding=="Chrome" and use_chromecast_webui==1', {
+              ['chromecast_branding!="public" and use_chromecast_webui==1', {
                 'pak_inputs': [
                   '<(SHARED_INTERMEDIATE_DIR)/chromecast/app_resources.pak',
                   '<(SHARED_INTERMEDIATE_DIR)/chromecast/cast_webui_resources.pak',
+                ],
+              }],
+              ['chromecast_branding!="public"', {
+                'pak_inputs': [
+                  '<(SHARED_INTERMEDIATE_DIR)/chromecast/sound_resources.pak',
                 ],
               }],
             ],
@@ -212,10 +296,15 @@
         },
       ],
       'conditions': [
-        ['chromecast_branding=="Chrome" and use_chromecast_webui==1', {
+        ['chromecast_branding!="public" and use_chromecast_webui==1', {
           'dependencies': [
             'internal/chromecast_resources.gyp:chromecast_app_resources',
             'internal/chromecast_resources.gyp:chromecast_webui_resources',
+          ],
+        }],
+        ['chromecast_branding!="public"', {
+          'dependencies': [
+            'internal/chromecast_resources.gyp:chromecast_sound_resources',
           ],
         }],
       ],
@@ -250,6 +339,10 @@
         '../components/components.gyp:metrics_gpu',
         '../components/components.gyp:metrics_net',
         '../components/components.gyp:metrics_profiler',
+
+        # TODO(gfhuang): Eliminate this dependency if ScreenInfoMetricsProvider
+        # isn't needed. crbug.com/541577
+        '../components/components.gyp:metrics_ui',
         '../content/content.gyp:content',
         '../content/content.gyp:content_app_both',
         '../skia/skia.gyp:skia',
@@ -259,6 +352,10 @@
       'sources': [
         'app/cast_main_delegate.cc',
         'app/cast_main_delegate.h',
+        'browser/android/cast_window_android.cc',
+        'browser/android/cast_window_android.h',
+        'browser/android/cast_window_manager.cc',
+        'browser/android/cast_window_manager.h',
         'browser/cast_browser_context.cc',
         'browser/cast_browser_context.h',
         'browser/cast_browser_main_parts.cc',
@@ -297,11 +394,10 @@
         'browser/metrics/cast_metrics_service_client.h',
         'browser/metrics/cast_stability_metrics_provider.cc',
         'browser/metrics/cast_stability_metrics_provider.h',
-        'browser/metrics/platform_metrics_providers.h',
         'browser/pref_service_helper.cc',
         'browser/pref_service_helper.h',
-        'browser/service/cast_service.cc',
-        'browser/service/cast_service.h',
+        'browser/service/cast_service_simple.cc',
+        'browser/service/cast_service_simple.h',
         'browser/url_request_context_factory.cc',
         'browser/url_request_context_factory.h',
         'common/cast_content_client.cc',
@@ -312,8 +408,6 @@
         'common/media/cast_message_generator.cc',
         'common/media/cast_message_generator.h',
         'common/platform_client_auth.h',
-        'common/pref_names.cc',
-        'common/pref_names.h',
         'renderer/cast_content_renderer_client.cc',
         'renderer/cast_content_renderer_client.h',
         'renderer/cast_media_load_deferrer.cc',
@@ -324,9 +418,11 @@
         'renderer/key_systems_cast.h',
         'renderer/media/capabilities_message_filter.cc',
         'renderer/media/capabilities_message_filter.h',
+        'service/cast_service.cc',
+        'service/cast_service.h',
       ],
       'conditions': [
-        ['chromecast_branding=="Chrome"', {
+        ['chromecast_branding!="public"', {
           'dependencies': [
             'internal/chromecast_internal.gyp:cast_shell_internal',
           ],
@@ -334,25 +430,9 @@
           'sources': [
             'browser/cast_content_browser_client_simple.cc',
             'browser/cast_network_delegate_simple.cc',
-            'browser/devtools/remote_debugging_server_simple.cc',
-            'browser/metrics/platform_metrics_providers_simple.cc',
             'browser/pref_service_helper_simple.cc',
             'common/platform_client_auth_simple.cc',
             'renderer/cast_content_renderer_client_simple.cc',
-          ],
-          'conditions': [
-            ['OS=="android"', {
-              'sources': [
-                'browser/service/cast_service_android.cc',
-                'browser/service/cast_service_android.h',
-              ],
-            }, {
-              'sources': [
-                'browser/media/cast_browser_cdm_factory_simple.cc',
-                'browser/service/cast_service_simple.cc',
-                'browser/service/cast_service_simple.h',
-              ],
-            }],
           ],
         }],
         # ExternalMetrics not necessary on Android and (as of this writing) uses
@@ -367,12 +447,13 @@
           ],
           'dependencies': [
             '../components/components.gyp:metrics_serialization',
-            '../ui/aura/aura.gyp:aura_test_support',
           ],
         }],
         ['OS=="android"', {
           'dependencies': [
             '../components/components.gyp:cdm_browser',
+            '../components/components.gyp:external_video_surface',
+            'cast_jni_headers',
           ],
         }],
       ],
@@ -388,9 +469,17 @@
         'base/cast_sys_info_util.h',
         'base/cast_sys_info_dummy.cc',
         'base/cast_sys_info_dummy.h',
+        'base/cast_sys_info_android.cc',
+        'base/cast_sys_info_android.h',
       ],
       'conditions': [
-        ['chromecast_branding!="Chrome" and OS!="android"', {
+        ['OS=="android"', {
+          'dependencies': [
+            'cast_jni_headers',
+            'cast_version_header',
+          ],
+        }],
+        ['chromecast_branding=="public" and OS!="android"', {
           'sources': [
             'base/cast_sys_info_util_simple.cc',
           ],
@@ -437,11 +526,27 @@
         },
       ],
     },
+    {
+      'target_name': 'libcast_graphics_1.0',
+      'type': 'shared_library',
+      'dependencies': [
+        'cast_public_api'
+      ],
+      'sources': [
+        'graphics/cast_egl_platform_default.cc',
+        'graphics/graphics_properties_default.cc',
+        'graphics/osd_plane_default.cc'
+      ],
+    }
   ],  # end of targets
 
   # Targets for Android receiver.
   'conditions': [
     ['OS=="android"', {
+      'includes': ['../build/android/v8_external_startup_data_arch_suffix.gypi',],
+      'variables': {
+         'cast_shell_assets_path': '<(PRODUCT_DIR)/assets/cast_shell_apk',
+      },
       'targets': [
         {
           'target_name': 'cast_shell_icudata',
@@ -450,14 +555,23 @@
             '../third_party/icu/icu.gyp:icudata',
             '../v8/tools/gyp/v8.gyp:v8_external_snapshot',
           ],
-          'copies': [{
-            'destination': '<(PRODUCT_DIR)/assets',
-            'files': [
+          'variables': {
+            'dest_path': '<(cast_shell_assets_path)',
+            'src_files': [
               '<(PRODUCT_DIR)/icudtl.dat',
+              '<(PRODUCT_DIR)/assets/cast_shell.pak',
+            ],
+            'renaming_sources': [
               '<(PRODUCT_DIR)/natives_blob.bin',
               '<(PRODUCT_DIR)/snapshot_blob.bin',
             ],
-          }],
+            'renaming_destinations': [
+              'natives_blob_<(arch_suffix).bin',
+              'snapshot_blob_<(arch_suffix).bin',
+            ],
+            'clear': 1,
+          },
+          'includes': ['../build/android/copy_ex.gypi'],
         },
         {
           'target_name': 'libcast_shell_android',
@@ -469,17 +583,11 @@
             'cast_shell_pak',
             'cast_version_header',
             '../base/base.gyp:base',
-            '../breakpad/breakpad.gyp:breakpad_client',
             '../components/components.gyp:breakpad_host',
-            '../components/components.gyp:crash_component',
-            '../components/components.gyp:external_video_surface',
             '../content/content.gyp:content',
             '../skia/skia.gyp:skia',
             '../ui/gfx/gfx.gyp:gfx',
             '../ui/gl/gl.gyp:gl',
-          ],
-          'include_dirs': [
-            '../breakpad/src',
           ],
           'sources': [
             'android/cast_jni_registrar.cc',
@@ -487,22 +595,10 @@
             'android/cast_metrics_helper_android.cc',
             'android/cast_metrics_helper_android.h',
             'android/platform_jni_loader.h',
-            'app/android/cast_crash_reporter_client_android.cc',
-            'app/android/cast_crash_reporter_client_android.h',
             'app/android/cast_jni_loader.cc',
-            'app/android/crash_handler.cc',
-            'app/android/crash_handler.h',
-            'base/cast_sys_info_android.cc',
-            'base/cast_sys_info_android.h',
-            'base/chromecast_config_android.cc',
-            'base/chromecast_config_android.h',
-            'browser/android/cast_window_android.cc',
-            'browser/android/cast_window_android.h',
-            'browser/android/cast_window_manager.cc',
-            'browser/android/cast_window_manager.h',
           ],
           'conditions': [
-            ['chromecast_branding=="Chrome"', {
+            ['chromecast_branding!="public"', {
               'dependencies': [
                 'internal/chromecast_internal.gyp:cast_shell_android_internal'
               ],
@@ -577,8 +673,13 @@
             'android_manifest_path': '<(SHARED_INTERMEDIATE_DIR)/cast_shell_manifest/AndroidManifest.xml',
             'package_name': 'org.chromium.chromecast.shell',
             'native_lib_target': 'libcast_shell_android',
-            'asset_location': '<(PRODUCT_DIR)/assets',
-            'additional_input_paths': ['<(PRODUCT_DIR)/assets/cast_shell.pak'],
+            'asset_location': '<(cast_shell_assets_path)',
+            'additional_input_paths': [
+               '<(asset_location)/cast_shell.pak',
+               '<(asset_location)/icudtl.dat',
+               '<(asset_location)/natives_blob_<(arch_suffix).bin',
+               '<(asset_location)/snapshot_blob_<(arch_suffix).bin',
+            ],
           },
           'includes': [ '../build/java_apk.gypi' ],
         },
@@ -587,6 +688,8 @@
           'type': 'none',
           'sources': [
             'base/java/src/org/chromium/chromecast/base/ChromecastConfigAndroid.java',
+            'base/java/src/org/chromium/chromecast/base/DumpstateWriter.java',
+            'base/java/src/org/chromium/chromecast/base/SystemTimeChangeNotifierAndroid.java',
             'browser/android/apk/src/org/chromium/chromecast/shell/CastCrashHandler.java',
             'browser/android/apk/src/org/chromium/chromecast/shell/CastMetricsHelper.java',
             'browser/android/apk/src/org/chromium/chromecast/shell/CastSysInfoAndroid.java',
@@ -610,6 +713,7 @@
           'target_name': 'cast_shell_media',
           'type': '<(component)',
           'dependencies': [
+            'cast_public_api',
             'media/media.gyp:cast_media',
             '../content/content.gyp:content',
             '../ipc/ipc.gyp:ipc',
@@ -618,6 +722,8 @@
           'sources': [
             'browser/media/cast_browser_cdm_factory.cc',
             'browser/media/cast_browser_cdm_factory.h',
+            'browser/media/cma_media_pipeline_client.cc',
+            'browser/media/cma_media_pipeline_client.h',
             'browser/media/cma_message_filter_host.cc',
             'browser/media/cma_message_filter_host.h',
             'browser/media/media_pipeline_host.cc',
@@ -636,6 +742,12 @@
             'renderer/media/chromecast_media_renderer_factory.h',
             'renderer/media/cma_message_filter_proxy.cc',
             'renderer/media/cma_message_filter_proxy.h',
+            'renderer/media/cma_renderer.cc',
+            'renderer/media/cma_renderer.h',
+            'renderer/media/demuxer_stream_adapter.cc',
+            'renderer/media/demuxer_stream_adapter.h',
+            'renderer/media/hole_frame_factory.cc',
+            'renderer/media/hole_frame_factory.h',
             'renderer/media/media_channel_proxy.cc',
             'renderer/media/media_channel_proxy.h',
             'renderer/media/media_pipeline_proxy.cc',
@@ -672,34 +784,8 @@
           'sources': [
             'app/cast_main.cc',
           ],
-          'ldflags': [
-            # Allow  OEMs to override default libraries that are shipped with
-            # cast receiver package by installed OEM-specific libraries in
-            # /oem_cast_shlib.
-            '-Wl,-rpath=/oem_cast_shlib',
-            # TODO(dougsteed): remove when Chromecast moves to boringssl.
-            # Allow the cast shell to find the NSS module in the same
-            # directory.
-            '-Wl,-rpath=\$$ORIGIN'
-          ],
         },
       ],  # end of targets
-    }],
-    ['enable_default_cast_graphics==1', {
-      'targets': [
-        {
-          'target_name': 'libcast_graphics_1.0',
-          'type': 'shared_library',
-          'dependencies': [
-            'cast_public_api'
-          ],
-          'sources': [
-            'graphics/cast_egl_platform_default.cc',
-            'graphics/graphics_properties_default.cc',
-            'graphics/osd_plane_default.cc'
-          ],
-        }
-      ]
     }],
   ],  # end of conditions
 }

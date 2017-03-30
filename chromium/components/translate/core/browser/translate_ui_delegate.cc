@@ -29,6 +29,20 @@ const char kModifyTargetLang[] = "Translate.ModifyTargetLang";
 const char kDeclineTranslateDismissUI[] = "Translate.DeclineTranslateDismissUI";
 const char kShowErrorUI[] = "Translate.ShowErrorUI";
 
+// Returns a Collator object which helps to sort strings in a given locale or
+// null if unable to find the right collator.
+//
+// TODO(hajimehoshi): Write a test for icu::Collator::createInstance.
+scoped_ptr<icu::Collator> CreateCollator(const std::string& locale) {
+  UErrorCode error = U_ZERO_ERROR;
+  icu::Locale loc(locale.c_str());
+  scoped_ptr<icu::Collator> collator(icu::Collator::createInstance(loc, error));
+  if (!collator || !U_SUCCESS(error))
+    return nullptr;
+  collator->setStrength(icu::Collator::PRIMARY);
+  return collator;
+}
+
 }  // namespace
 
 namespace translate {
@@ -50,12 +64,9 @@ TranslateUIDelegate::TranslateUIDelegate(
   TranslateDownloadManager::GetSupportedLanguages(&language_codes);
 
   // Preparing for the alphabetical order in the locale.
-  UErrorCode error = U_ZERO_ERROR;
   std::string locale =
       TranslateDownloadManager::GetInstance()->application_locale();
-  icu::Locale loc(locale.c_str());
-  scoped_ptr<icu::Collator> collator(icu::Collator::createInstance(loc, error));
-  collator->setStrength(icu::Collator::PRIMARY);
+  scoped_ptr<icu::Collator> collator = CreateCollator(locale);
 
   languages_.reserve(language_codes.size());
   for (std::vector<std::string>::const_iterator iter = language_codes.begin();
@@ -67,10 +78,20 @@ TranslateUIDelegate::TranslateUIDelegate(
         l10n_util::GetDisplayNameForLocale(language_code, locale, true);
     // Insert the language in languages_ in alphabetical order.
     std::vector<LanguageNamePair>::iterator iter2;
-    for (iter2 = languages_.begin(); iter2 != languages_.end(); ++iter2) {
-      if (base::i18n::CompareString16WithCollator(*collator, language_name,
-                                                  iter2->second) == UCOL_LESS) {
-        break;
+    if (collator) {
+      for (iter2 = languages_.begin(); iter2 != languages_.end(); ++iter2) {
+        int result = base::i18n::CompareString16WithCollator(*collator,
+                                                             language_name,
+                                                             iter2->second);
+        if (result == UCOL_LESS)
+          break;
+      }
+    } else {
+      // |locale| may not be supported by ICU collator (crbug/54833). In this
+      // case, let's order the languages in UTF-8.
+      for (iter2 = languages_.begin(); iter2 != languages_.end(); ++iter2) {
+        if (language_name.compare(iter2->second) < 0)
+          break;
       }
     }
     languages_.insert(iter2, LanguageNamePair(language_code, language_name));
@@ -123,6 +144,16 @@ void TranslateUIDelegate::UpdateOriginalLanguageIndex(size_t language_index) {
   original_language_index_ = language_index;
 }
 
+void TranslateUIDelegate::UpdateOriginalLanguage(
+    const std::string& language_code) {
+  for (size_t i = 0; i < languages_.size(); ++i) {
+    if (languages_[i].first.compare(language_code) == 0) {
+      UpdateOriginalLanguageIndex(i);
+      return;
+    }
+  }
+}
+
 size_t TranslateUIDelegate::GetTargetLanguageIndex() const {
   return target_language_index_;
 }
@@ -134,6 +165,16 @@ void TranslateUIDelegate::UpdateTargetLanguageIndex(size_t language_index) {
   DCHECK_LT(language_index, GetNumberOfLanguages());
   UMA_HISTOGRAM_BOOLEAN(kModifyTargetLang, true);
   target_language_index_ = language_index;
+}
+
+void TranslateUIDelegate::UpdateTargetLanguage(
+    const std::string& language_code) {
+  for (size_t i = 0; i < languages_.size(); ++i) {
+    if (languages_[i].first.compare(language_code) == 0) {
+      UpdateTargetLanguageIndex(i);
+      return;
+    }
+  }
 }
 
 std::string TranslateUIDelegate::GetLanguageCodeAt(size_t index) const {
@@ -155,7 +196,9 @@ std::string TranslateUIDelegate::GetOriginalLanguageCode() const {
 }
 
 std::string TranslateUIDelegate::GetTargetLanguageCode() const {
-  return GetLanguageCodeAt(GetTargetLanguageIndex());
+  return (GetTargetLanguageIndex() == kNoIndex)
+             ? translate::kUnknownLanguageCode
+             : GetLanguageCodeAt(GetTargetLanguageIndex());
 }
 
 void TranslateUIDelegate::Translate() {

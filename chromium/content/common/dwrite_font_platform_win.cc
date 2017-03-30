@@ -4,13 +4,19 @@
 
 #include "content/public/common/dwrite_font_platform_win.h"
 
+#include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <dwrite.h>
+#include <wrl/implements.h>
+#include <wrl/wrappers/corewrappers.h>
+
+#include <limits>
 #include <map>
 #include <string>
 #include <utility>
 #include <vector>
-#include <wrl/implements.h>
-#include <wrl/wrappers/corewrappers.h>
 
 #include "base/command_line.h"
 #include "base/debug/alias.h"
@@ -19,17 +25,20 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/memory_mapped_file.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/shared_memory.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_comptr.h"
 #include "content/public/common/content_switches.h"
@@ -373,7 +382,7 @@ class FontCacheWriter {
 
     // We will skip writing entries beyond allowed limit. Following condition
     // doesn't enforce hard file size. We need to write complete font entry.
-    int64 length = static_cache_->GetLength();
+    int64_t length = static_cache_->GetLength();
     if (length == -1 || length >= kArbitraryCacheFileSizeLimit) {
       count_font_entries_ignored_++;
       return false;
@@ -924,27 +933,49 @@ bool FontCollectionLoader::IsFileCached(UINT32 font_key) {
   }
   CacheMap::iterator iter = cache_map_.find(
       GetFontNameFromKey(font_key).c_str());
-  return iter != cache_map_.end();;
+  return iter != cache_map_.end();
 }
 
 bool FontCollectionLoader::LoadCacheFile() {
+  TRACE_EVENT0("startup", "FontCollectionLoader::LoadCacheFile");
+
   std::string font_cache_handle_string =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kFontCacheSharedHandle);
   if (font_cache_handle_string.empty())
     return false;
 
-  base::SharedMemoryHandle font_cache_handle = NULL;
-  base::StringToUint(font_cache_handle_string,
-                     reinterpret_cast<unsigned int*>(&font_cache_handle));
-  DCHECK(font_cache_handle);
+  unsigned int handle_uint;
+  base::StringToUint(font_cache_handle_string, &handle_uint);
+  DCHECK(handle_uint);
+  if (handle_uint > static_cast<unsigned int>(std::numeric_limits<long>::max()))
+    return false;
+  base::SharedMemoryHandle font_cache_handle(LongToHandle(handle_uint),
+                                             base::GetCurrentProcId());
 
   base::SharedMemory* shared_mem = new base::SharedMemory(
       font_cache_handle, true);
-  // Map while file
+  // Map the cache file into memory.
   shared_mem->Map(0);
 
   cache_.reset(shared_mem);
+
+  if (base::StartsWith(base::FieldTrialList::FindFullName("LightSpeed"),
+                       "PrefetchDWriteFontCache",
+                       base::CompareCase::SENSITIVE)) {
+    // Prefetch the cache, to avoid unordered IO when it is used.
+    // PrefetchVirtualMemory() is loaded dynamically because it is only
+    // available from Win8.
+    decltype(PrefetchVirtualMemory)* prefetch_virtual_memory =
+        reinterpret_cast<decltype(PrefetchVirtualMemory)*>(::GetProcAddress(
+            ::GetModuleHandle(L"kernel32.dll"), "PrefetchVirtualMemory"));
+    if (prefetch_virtual_memory != NULL) {
+      WIN32_MEMORY_RANGE_ENTRY memory_range;
+      memory_range.VirtualAddress = shared_mem->memory();
+      memory_range.NumberOfBytes = shared_mem->mapped_size();
+      prefetch_virtual_memory(::GetCurrentProcess(), 1, &memory_range, 0);
+    }
+  }
 
   if (!ValidateAndLoadCacheMap()) {
     cache_.reset();
@@ -1075,6 +1106,8 @@ IDWriteFontCollection* GetCustomFontCollection(IDWriteFactory* factory) {
   if (g_font_collection.Get() != NULL)
     return g_font_collection.Get();
 
+  TRACE_EVENT0("startup", "content::GetCustomFontCollection");
+
   base::TimeTicks start_tick = base::TimeTicks::Now();
 
   FontCollectionLoader::Initialize(factory);
@@ -1104,7 +1137,7 @@ IDWriteFontCollection* GetCustomFontCollection(IDWriteFactory* factory) {
   }
 
   base::TimeDelta time_delta = base::TimeTicks::Now() - start_tick;
-  int64 delta = time_delta.ToInternalValue();
+  int64_t delta = time_delta.ToInternalValue();
   base::debug::Alias(&delta);
   UINT32 size = g_font_loader->GetFontMapSize();
   base::debug::Alias(&size);
@@ -1178,7 +1211,7 @@ bool BuildFontCacheInternal(const WCHAR* file_name) {
   g_font_loader->LeaveStaticCacheMode();
 
   base::TimeDelta time_delta = base::TimeTicks::Now() - start_tick;
-  int64 delta = time_delta.ToInternalValue();
+  int64_t delta = time_delta.ToInternalValue();
   base::debug::Alias(&delta);
   UINT32 size = g_font_loader->GetFontMapSize();
   base::debug::Alias(&size);
@@ -1238,6 +1271,12 @@ bool LoadFontCache(const base::FilePath& path) {
 
 bool BuildFontCache(const base::FilePath& file) {
   return BuildFontCacheInternal(file.value().c_str());
+}
+
+bool ShouldUseDirectWriteFontProxyFieldTrial() {
+  return base::StartsWith(
+      base::FieldTrialList::FindFullName("DirectWriteFontProxy"),
+      "UseDirectWriteFontProxy", base::CompareCase::SENSITIVE);
 }
 
 }  // namespace content

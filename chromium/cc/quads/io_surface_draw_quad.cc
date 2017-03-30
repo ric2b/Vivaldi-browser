@@ -11,8 +11,7 @@
 
 namespace cc {
 
-IOSurfaceDrawQuad::IOSurfaceDrawQuad() : orientation(FLIPPED) {
-}
+IOSurfaceDrawQuad::IOSurfaceDrawQuad() : orientation(FLIPPED) {}
 
 void IOSurfaceDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
                                const gfx::Rect& rect,

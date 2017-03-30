@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <time.h>
 
 #include <algorithm>
@@ -9,6 +10,7 @@
 #include <string>
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -16,6 +18,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/url_info.h"
 #include "components/network_hints/common/network_hints_common.h"
@@ -39,17 +42,16 @@ namespace chrome_browser_net {
 
 class WaitForResolutionHelper;
 
-typedef base::RepeatingTimer<WaitForResolutionHelper> HelperTimer;
-
 class WaitForResolutionHelper {
  public:
-  WaitForResolutionHelper(Predictor* predictor, const UrlList& hosts,
-                          HelperTimer* timer, int checks_until_quit)
+  WaitForResolutionHelper(Predictor* predictor,
+                          const UrlList& hosts,
+                          base::RepeatingTimer* timer,
+                          int checks_until_quit)
       : predictor_(predictor),
         hosts_(hosts),
         timer_(timer),
-        checks_until_quit_(checks_until_quit) {
-  }
+        checks_until_quit_(checks_until_quit) {}
 
   void CheckIfResolutionsDone() {
     if (--checks_until_quit_ > 0) {
@@ -62,7 +64,7 @@ class WaitForResolutionHelper {
     // When all hostnames have been resolved, or we've hit the limit,
     // exit the loop.
     timer_->Stop();
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     delete timer_;
     delete this;
   }
@@ -70,7 +72,7 @@ class WaitForResolutionHelper {
  private:
   Predictor* predictor_;
   const UrlList hosts_;
-  HelperTimer* timer_;
+  base::RepeatingTimer* timer_;
   int checks_until_quit_;
 };
 
@@ -102,7 +104,7 @@ class PredictorTest : public testing::Test {
   }
 
   void WaitForResolution(Predictor* predictor, const UrlList& hosts) {
-    HelperTimer* timer = new HelperTimer();
+    base::RepeatingTimer* timer = new base::RepeatingTimer();
     // By default allow the loop to run for a minute -- 600 iterations.
     timer->Start(FROM_HERE, TimeDelta::FromMilliseconds(100),
                  new WaitForResolutionHelper(predictor, hosts, timer, 600),
@@ -112,7 +114,7 @@ class PredictorTest : public testing::Test {
 
   void WaitForResolutionWithLimit(
       Predictor* predictor, const UrlList& hosts, int limit) {
-    HelperTimer* timer = new HelperTimer();
+    base::RepeatingTimer* timer = new base::RepeatingTimer();
     timer->Start(FROM_HERE, TimeDelta::FromMilliseconds(100),
                  new WaitForResolutionHelper(predictor, hosts, timer, limit),
                  &WaitForResolutionHelper::CheckIfResolutionsDone);
@@ -152,7 +154,7 @@ TEST_F(PredictorTest, ShutdownWhenResolutionIsPendingTest) {
   testing_master.ResolveList(names, UrlInfo::PAGE_SCAN_MOTIVATED);
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(500));
   base::MessageLoop::current()->Run();
 
@@ -731,7 +733,8 @@ TEST_F(PredictorTest, HSTSRedirect) {
   predictor.SetObserver(&observer);
   predictor.SetTransportSecurityState(&state);
 
-  predictor.PreconnectUrl(kHttpUrl, GURL(), UrlInfo::OMNIBOX_MOTIVATED, 2);
+  predictor.PreconnectUrl(kHttpUrl, GURL(), UrlInfo::OMNIBOX_MOTIVATED, true,
+                          2);
   ASSERT_EQ(1u, observer.preconnected_urls_.size());
   EXPECT_EQ(kHttpsUrl, observer.preconnected_urls_[0]);
 
@@ -790,7 +793,9 @@ TEST_F(PredictorTest, ProxyDefinitelyEnabled) {
 
   net::ProxyConfig config;
   config.proxy_rules().ParseFromString("http=socks://localhost:12345");
-  testing_master.proxy_service_ = net::ProxyService::CreateFixed(config);
+  scoped_ptr<net::ProxyService> proxy_service(
+      net::ProxyService::CreateFixed(config));
+  testing_master.proxy_service_ = proxy_service.get();
 
   GURL goog("http://www.google.com:80");
   testing_master.Resolve(goog, UrlInfo::OMNIBOX_MOTIVATED);
@@ -798,7 +803,6 @@ TEST_F(PredictorTest, ProxyDefinitelyEnabled) {
   // Proxy is definitely in use, so there is no need to pre-resolve the domain.
   EXPECT_TRUE(testing_master.work_queue_.IsEmpty());
 
-  delete testing_master.proxy_service_;
   testing_master.Shutdown();
 }
 
@@ -808,7 +812,9 @@ TEST_F(PredictorTest, ProxyDefinitelyNotEnabled) {
 
   Predictor testing_master(true, true);
   net::ProxyConfig config = net::ProxyConfig::CreateDirect();
-  testing_master.proxy_service_ = net::ProxyService::CreateFixed(config);
+  scoped_ptr<net::ProxyService> proxy_service(
+      net::ProxyService::CreateFixed(config));
+  testing_master.proxy_service_ = proxy_service.get();
 
   GURL goog("http://www.google.com:80");
   testing_master.Resolve(goog, UrlInfo::OMNIBOX_MOTIVATED);
@@ -816,7 +822,6 @@ TEST_F(PredictorTest, ProxyDefinitelyNotEnabled) {
   // Proxy is not in use, so the name has been registered for pre-resolve.
   EXPECT_FALSE(testing_master.work_queue_.IsEmpty());
 
-  delete testing_master.proxy_service_;
   testing_master.Shutdown();
 }
 
@@ -827,7 +832,9 @@ TEST_F(PredictorTest, ProxyMaybeEnabled) {
   Predictor testing_master(true, true);
   net::ProxyConfig config = net::ProxyConfig::CreateFromCustomPacURL(GURL(
       "http://foopy/proxy.pac"));
-  testing_master.proxy_service_ = net::ProxyService::CreateFixed(config);
+  scoped_ptr<net::ProxyService> proxy_service(
+      net::ProxyService::CreateFixed(config));
+  testing_master.proxy_service_ = proxy_service.get();
 
   GURL goog("http://www.google.com:80");
   testing_master.Resolve(goog, UrlInfo::OMNIBOX_MOTIVATED);
@@ -836,7 +843,6 @@ TEST_F(PredictorTest, ProxyMaybeEnabled) {
   // name has been registered for pre-resolve.
   EXPECT_FALSE(testing_master.work_queue_.IsEmpty());
 
-  delete testing_master.proxy_service_;
   testing_master.Shutdown();
 }
 

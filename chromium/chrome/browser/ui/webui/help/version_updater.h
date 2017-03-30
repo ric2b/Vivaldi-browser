@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 
 namespace content {
 class WebContents;
@@ -27,6 +28,7 @@ class VersionUpdater {
     FAILED_OFFLINE,
     FAILED_CONNECTION_TYPE_DISALLOWED,
     DISABLED,
+    DISABLED_BY_ADMIN
   };
 
 #if defined(OS_MACOSX)

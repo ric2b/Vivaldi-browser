@@ -5,18 +5,23 @@
 #ifndef CONTENT_BROWSER_DOWNLOAD_SAVE_PACKAGE_H_
 #define CONTENT_BROWSER_DOWNLOAD_SAVE_PACKAGE_H_
 
-#include <queue>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <deque>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "content/browser/download/save_types.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager_delegate.h"
@@ -31,11 +36,13 @@ class GURL;
 namespace content {
 class DownloadItemImpl;
 class DownloadManagerImpl;
-class WebContents;
+class FrameTreeNode;
+class RenderFrameHostImpl;
+struct SavableSubframe;
 class SaveFileManager;
 class SaveItem;
 class SavePackage;
-struct SaveFileCreateInfo;
+class WebContents;
 
 // The SavePackage object manages the process of saving a page as only-html or
 // complete-html or MHTML and providing the information for displaying saving
@@ -103,9 +110,10 @@ class CONTENT_EXPORT SavePackage
 
   // Notifications sent from the file thread to the UI thread.
   void StartSave(const SaveFileCreateInfo* info);
-  bool UpdateSaveProgress(int32 save_id, int64 size, bool write_success);
-  void SaveFinished(int32 save_id, int64 size, bool is_success);
-  void SaveFailed(const GURL& save_url);
+  bool UpdateSaveProgress(SaveItemId save_item_id,
+                          int64_t size,
+                          bool write_success);
+  void SaveFinished(SaveItemId save_item_id, int64_t size, bool is_success);
   void SaveCanceled(SaveItem* save_item);
 
   // Rough percent complete, -1 means we don't know (since we didn't receive a
@@ -115,8 +123,8 @@ class CONTENT_EXPORT SavePackage
   bool canceled() const { return user_canceled_ || disk_error_occurred_; }
   bool finished() const { return finished_; }
   SavePageType save_type() const { return save_type_; }
-  int contents_id() const { return contents_id_; }
-  int id() const { return unique_id_; }
+
+  SavePackageId id() const { return unique_id_; }
 
   void GetSaveInfo();
 
@@ -128,7 +136,7 @@ class CONTENT_EXPORT SavePackage
       DownloadItemImpl* item);
 
   // Callback for WebContents::GenerateMHTML().
-  void OnMHTMLGenerated(int64 size);
+  void OnMHTMLGenerated(int64_t size);
 
   // For testing only.
   SavePackage(WebContents* web_contents,
@@ -146,7 +154,8 @@ class CONTENT_EXPORT SavePackage
   void DoSavingProcess();
 
   // WebContentsObserver implementation.
-  bool OnMessageReceived(const IPC::Message& message) override;
+  bool OnMessageReceived(const IPC::Message& message,
+                         RenderFrameHost* render_frame_host) override;
 
   // DownloadItem::Observer implementation.
   void OnDownloadDestroyed(DownloadItem* download) override;
@@ -161,12 +170,12 @@ class CONTENT_EXPORT SavePackage
   // This is needed on POSIX, which restrict the length of file names in
   // addition to the restriction on the length of path names.
   // |base_dir| is assumed to be a directory name with no trailing slash.
-  static uint32 GetMaxPathLengthForDirectory(const base::FilePath& base_dir);
+  static uint32_t GetMaxPathLengthForDirectory(const base::FilePath& base_dir);
 
   static bool GetSafePureFileName(
       const base::FilePath& dir_path,
       const base::FilePath::StringType& file_name_ext,
-      uint32 max_file_path_len,
+      uint32_t max_file_path_len,
       base::FilePath::StringType* pure_file_name);
 
   // Create a file name based on the response from the server.
@@ -175,15 +184,75 @@ class CONTENT_EXPORT SavePackage
                         bool need_html_ext,
                         base::FilePath::StringType* generated_name);
 
-  // Get all savable resource links from current web page, include main
-  // frame and sub-frame.
-  void GetAllSavableResourceLinksForCurrentPage();
-  // Get html data by serializing all frames of current page with lists
-  // which contain all resource links that have local copy.
-  void GetSerializedHtmlDataForCurrentPageWithLocalLinks();
+  // Main routine that initiates asking all frames for their savable resources.
+  //
+  // Responses are received asynchronously by OnSavableResourceLinks... methods
+  // and pending responses are counted/tracked by
+  // CompleteSavableResourceLinksResponse.
+  //
+  // OnSavableResourceLinksResponse creates SaveItems for each savable resource
+  // and each subframe - these SaveItems get enqueued into |waiting_item_queue_|
+  // with the help of CreatePendingSaveItem, EnqueueSavableResource,
+  // EnqueueFrame.
+  void GetSavableResourceLinks();
 
-  // Look up SaveItem by save id from in progress map.
-  SaveItem* LookupItemInProcessBySaveId(int32 save_id);
+  // Response from |sender| frame to GetSavableResourceLinks request.
+  void OnSavableResourceLinksResponse(
+      RenderFrameHostImpl* sender,
+      const std::vector<GURL>& resources_list,
+      const Referrer& referrer,
+      const std::vector<SavableSubframe>& subframes);
+
+  // Helper for finding or creating a SaveItem with the given parameters.
+  SaveItem* CreatePendingSaveItem(
+      int container_frame_tree_node_id,
+      const GURL& url,
+      const Referrer& referrer,
+      SaveFileCreateInfo::SaveFileSource save_source);
+
+  // Helper for finding a SaveItem with the given url, or falling back to
+  // creating a SaveItem with the given parameters.
+  SaveItem* CreatePendingSaveItemDeduplicatingByUrl(
+      int container_frame_tree_node_id,
+      const GURL& url,
+      const Referrer& referrer,
+      SaveFileCreateInfo::SaveFileSource save_source);
+
+  // Helper to enqueue a savable resource reported by GetSavableResourceLinks.
+  void EnqueueSavableResource(int container_frame_tree_node_id,
+                              const GURL& url,
+                              const Referrer& referrer);
+  // Helper to enqueue a subframe reported by GetSavableResourceLinks.
+  void EnqueueFrame(int container_frame_tree_node_id,
+                    int frame_tree_node_id,
+                    const GURL& frame_original_url);
+
+  // Response to GetSavableResourceLinks that indicates an error when processing
+  // the frame associated with |sender|.
+  void OnSavableResourceLinksError(RenderFrameHostImpl* sender);
+
+  // Helper tracking how many |number_of_frames_pending_response_| we have
+  // left and kicking off the next phase after we got all the
+  // OnSavableResourceLinksResponse messages we were waiting for.
+  void CompleteSavableResourceLinksResponse();
+
+  // For each frame in the current page, ask the renderer process associated
+  // with that frame to serialize that frame into html.
+  void GetSerializedHtmlWithLocalLinks();
+
+  // Ask renderer process to serialize |target_tree_node| into html data
+  // with resource links replaced with a link to a locally saved copy.
+  void GetSerializedHtmlWithLocalLinksForFrame(FrameTreeNode* target_tree_node);
+
+  // Routes html data (sent by renderer process in response to
+  // GetSerializedHtmlWithLocalLinksForFrame above) to the associated local file
+  // (and also keeps track of when all frames have been completed).
+  void OnSerializedHtmlWithLocalLinksResponse(RenderFrameHostImpl* sender,
+                                              const std::string& data,
+                                              bool end_of_data);
+
+  // Look up SaveItem by save item id from in progress map.
+  SaveItem* LookupSaveItemInProcess(SaveItemId save_item_id);
 
   // Remove SaveItem from in progress map and put it to saved map.
   void PutInProgressItemToSavedMap(SaveItem* save_item);
@@ -202,20 +271,13 @@ class CONTENT_EXPORT SavePackage
       const base::FilePath& final_name,
       SavePageType type,
       const SavePackageDownloadCreatedCallback& cb);
-  void OnReceivedSavableResourceLinksForCurrentPage(
-      const std::vector<GURL>& resources_list,
-      const std::vector<Referrer>& referrers_list,
-      const std::vector<GURL>& frames_list);
 
-  void OnReceivedSerializedHtmlData(const GURL& frame_url,
-                                    const std::string& data,
-                                    int32 status);
-
-  typedef base::hash_map<std::string, SaveItem*> SaveUrlItemMap;
+  // Map from SaveItem::id() (aka save_item_id) into a SaveItem.
+  typedef base::hash_map<SaveItemId, SaveItem*> SaveItemIdMap;
   // in_progress_items_ is map of all saving job in in-progress state.
-  SaveUrlItemMap in_progress_items_;
+  SaveItemIdMap in_progress_items_;
   // saved_failed_items_ is map of all saving job which are failed.
-  SaveUrlItemMap saved_failed_items_;
+  SaveItemIdMap saved_failed_items_;
 
   // The number of in process SaveItems.
   int in_process_count() const {
@@ -234,7 +296,7 @@ class CONTENT_EXPORT SavePackage
   // presented by the DownloadItem to the UI as bytes per second, which is
   // not correct but matches the way the total and received number of files is
   // presented as the total and received bytes.
-  int64 CurrentSpeed() const;
+  int64_t CurrentSpeed() const;
 
   // Helper function for preparing suggested name for the SaveAs Dialog. The
   // suggested name is determined by the web document's title.
@@ -257,13 +319,35 @@ class CONTENT_EXPORT SavePackage
   static const base::FilePath::CharType* ExtensionForMimeType(
       const std::string& contents_mime_type);
 
-  typedef std::queue<SaveItem*> SaveItemQueue;
+  typedef std::deque<SaveItem*> SaveItemQueue;
   // A queue for items we are about to start saving.
   SaveItemQueue waiting_item_queue_;
 
-  typedef base::hash_map<int32, SaveItem*> SavedItemMap;
+  // Used to de-dupe urls that are being gathered into |waiting_item_queue_|
+  // and also to find SaveItems to associate with a containing frame.
+  // Note that |url_to_save_item_| does NOT own SaveItems - they
+  // remain owned by waiting_item_queue_, in_progress_items_, etc.
+  std::map<GURL, SaveItem*> url_to_save_item_;
+
+  // Map used to route responses from a given a subframe (i.e.
+  // OnSerializedHtmlWithLocalLinksResponse) to the right SaveItem.
+  // Note that |frame_tree_node_id_to_save_item_| does NOT own SaveItems - they
+  // remain owned by waiting_item_queue_, in_progress_items_, etc.
+  base::hash_map<int, SaveItem*> frame_tree_node_id_to_save_item_;
+
+  // Used to limit which local paths get exposed to which frames
+  // (i.e. to prevent information disclosure to oop frames).
+  // Note that |frame_tree_node_id_to_contained_save_items_| does NOT own
+  // SaveItems - they remain owned by waiting_item_queue_, in_progress_items_,
+  // etc.
+  base::hash_map<int, std::vector<SaveItem*>>
+      frame_tree_node_id_to_contained_save_items_;
+
+  // Number of frames that we still need to get a response from.
+  int number_of_frames_pending_response_;
+
   // saved_success_items_ is map of all saving job which are successfully saved.
-  SavedItemMap saved_success_items_;
+  base::hash_map<SaveItemId, SaveItem*> saved_success_items_;
 
   // Non-owning pointer for handling file writing on the file thread.
   SaveFileManager* file_manager_;
@@ -308,7 +392,7 @@ class CONTENT_EXPORT SavePackage
   // This set is used to eliminate duplicated file names in saving directory.
   FileNameSet file_name_set_;
 
-  typedef base::hash_map<base::FilePath::StringType, uint32> FileNameCountMap;
+  typedef base::hash_map<base::FilePath::StringType, uint32_t> FileNameCountMap;
   // This map is used to track serial number for specified filename.
   FileNameCountMap file_name_count_map_;
 
@@ -316,12 +400,8 @@ class CONTENT_EXPORT SavePackage
   // from outside.
   WaitState wait_state_;
 
-  // Since for one contents, it can only have one SavePackage in same time.
-  // Now we actually use render_process_id as the contents's unique id.
-  const int contents_id_;
-
   // Unique ID for this SavePackage.
-  const int unique_id_;
+  const SavePackageId unique_id_;
 
   // Variables to record errors that happened so we can record them via
   // UMA statistics.

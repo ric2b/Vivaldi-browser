@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
@@ -244,7 +245,7 @@ class ImageDataCache {
   void DidDeleteInstance(PP_Instance instance);
 
  private:
-  friend struct LeakySingletonTraits<ImageDataCache>;
+  friend struct base::LeakySingletonTraits<ImageDataCache>;
 
   // Timer callback to expire entries for the given instance.
   void OnTimer(PP_Instance instance);
@@ -263,8 +264,8 @@ class ImageDataCache {
 
 // static
 ImageDataCache* ImageDataCache::GetInstance() {
-  return Singleton<ImageDataCache,
-                   LeakySingletonTraits<ImageDataCache> >::get();
+  return base::Singleton<ImageDataCache,
+                         base::LeakySingletonTraits<ImageDataCache>>::get();
 }
 
 scoped_refptr<ImageData> ImageDataCache::Get(
@@ -375,7 +376,8 @@ PlatformImageData::PlatformImageData(const HostResource& resource,
                                      ImageHandle handle)
     : ImageData(resource, PPB_ImageData_Shared::PLATFORM, desc) {
 #if defined(OS_WIN)
-  transport_dib_.reset(TransportDIB::CreateWithHandle(handle));
+  transport_dib_.reset(TransportDIB::CreateWithHandle(
+      base::SharedMemoryHandle(handle, base::GetCurrentProcId())));
 #else
   transport_dib_.reset(TransportDIB::Map(handle));
 #endif  // defined(OS_WIN)
@@ -386,16 +388,19 @@ PlatformImageData::~PlatformImageData() {
 
 void* PlatformImageData::Map() {
   if (!mapped_canvas_.get()) {
+    if (!transport_dib_.get())
+      return NULL;
+
+    const bool is_opaque = false;
     mapped_canvas_.reset(transport_dib_->GetPlatformCanvas(desc_.size.width,
-                                                           desc_.size.height));
+                                                           desc_.size.height,
+                                                           is_opaque));
     if (!mapped_canvas_.get())
       return NULL;
   }
-  const SkBitmap& bitmap =
-      skia::GetTopDevice(*mapped_canvas_)->accessBitmap(true);
-
-  bitmap.lockPixels();
-  return bitmap.getAddr(0, 0);
+  SkPixmap pixmap;
+  skia::GetWritablePixels(mapped_canvas_.get(), &pixmap);
+  return pixmap.writable_addr();
 }
 
 void PlatformImageData::Unmap() {
@@ -627,7 +632,11 @@ void PPB_ImageData_Proxy::OnHostMsgCreatePlatform(
                       desc, &image_handle, &byte_count);
   result->SetHostResource(instance, resource);
   if (resource) {
+#if defined(OS_WIN)
+    *result_image_handle = image_handle.GetHandle();
+#else
     *result_image_handle = image_handle;
+#endif
   } else {
     *result_image_handle = PlatformImageData::NullHandle();
   }

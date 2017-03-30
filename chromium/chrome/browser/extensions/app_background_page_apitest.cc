@@ -8,6 +8,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/background/background_contents_service.h"
 #include "chrome/browser/background/background_contents_service_factory.h"
 #include "chrome/browser/background/background_mode_manager.h"
@@ -15,6 +16,7 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/task_manager/task_manager_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -306,6 +308,9 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, NoJsBackgroundPage) {
   // Keep the task manager up through this test to verify that a crash doesn't
   // happen when window.open creates a background page that switches
   // RenderViewHosts. See http://crbug.com/165138.
+  // This test is for the old implementation of the task manager. We must
+  // explicitly disable the new one.
+  task_manager::browsertest_util::EnableOldTaskManager();
   chrome::ShowTaskManager(browser());
 
   // Make sure that no BackgroundContentses get deleted (a signal that repeated
@@ -588,8 +593,9 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, UnloadExtensionWhileHidden) {
   ASSERT_TRUE(WaitForBackgroundMode(false));
 }
 
+// Verify active NaCl embeds cause many keepalive impulses to be sent.
 // Disabled on Windows due to flakiness: http://crbug.com/346278
-#if defined(DISABLE_NACL) || defined(OS_WIN)
+#if defined(OS_WIN)
 #define MAYBE_BackgroundKeepaliveActive DISABLED_BackgroundKeepaliveActive
 #else
 // Disabling other platforms too since the test started failing
@@ -616,9 +622,7 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageNaClTest,
 // Verify that nacl modules that go idle will not send keepalive impulses.
 // Disabled on windows due to Win XP failures:
 // DesktopWindowTreeHostWin::HandleCreate not implemented. crbug.com/331954
-#if defined(DISABLE_NACL)
-#define MAYBE_BackgroundKeepaliveIdle DISABLED_BackgroundKeepaliveIdle
-#elif defined(OS_WIN)
+#if defined(OS_WIN)
 #define MAYBE_BackgroundKeepaliveIdle DISABLED_BackgroundKeepaliveIdle
 #else
 // ASAN errors appearing: https://crbug.com/332440

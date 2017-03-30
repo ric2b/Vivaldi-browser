@@ -17,6 +17,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
+
 import java.util.List;
 import java.util.Set;
 
@@ -24,19 +26,14 @@ import java.util.Set;
  * Dropdown item adapter for DropdownPopupWindow.
  */
 public class DropdownAdapter extends ArrayAdapter<DropdownItem> {
-    private Context mContext;
-    private Set<Integer> mSeparators;
-    private boolean mAreAllItemsEnabled;
+    private final Context mContext;
+    private final Set<Integer> mSeparators;
+    private final boolean mAreAllItemsEnabled;
 
-    public DropdownAdapter(Context context, List<DropdownItem> items, Set<Integer> separators) {
-        super(context, R.layout.dropdown_item, items);
-        mSeparators = separators;
-        mContext = context;
-        mAreAllItemsEnabled = checkAreAllItemsEnabled();
-    }
-
-    public DropdownAdapter(Context context, DropdownItem[] items, Set<Integer> separators) {
-        super(context, R.layout.dropdown_item, items);
+    public DropdownAdapter(
+            Context context, List<? extends DropdownItem> items, Set<Integer> separators) {
+        super(context, R.layout.dropdown_item);
+        addAll(items);
         mSeparators = separators;
         mContext = context;
         mAreAllItemsEnabled = checkAreAllItemsEnabled();
@@ -72,10 +69,10 @@ public class DropdownAdapter extends ArrayAdapter<DropdownItem> {
             height += dividerHeight;
             divider.setHeight(dividerHeight);
             if (mSeparators != null && mSeparators.contains(position)) {
-                divider.setColor(mContext.getResources().getColor(
+                divider.setColor(ApiCompatibilityUtils.getColor(mContext.getResources(),
                         R.color.dropdown_dark_divider_color));
             } else {
-                divider.setColor(mContext.getResources().getColor(
+                divider.setColor(ApiCompatibilityUtils.getColor(mContext.getResources(),
                         R.color.dropdown_divider_color));
             }
         }

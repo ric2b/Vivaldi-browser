@@ -5,6 +5,8 @@
 #ifndef NET_URL_REQUEST_URL_REQUEST_NETLOG_PARAMS_H_
 #define NET_URL_REQUEST_URL_REQUEST_NETLOG_PARAMS_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "net/base/net_export.h"
@@ -25,15 +27,8 @@ NET_EXPORT scoped_ptr<base::Value> NetLogURLRequestStartCallback(
     const std::string* method,
     int load_flags,
     RequestPriority priority,
-    int64 upload_id,
+    int64_t upload_id,
     NetLogCaptureMode /* capture_mode */);
-
-// Attempts to extract the load flags from a Value created by the above
-// function.  On success, sets |load_flags| accordingly and returns true.
-// On failure, sets |load_flags| to 0.
-NET_EXPORT bool StartEventLoadFlagsFromEventParams(
-    const base::Value* event_params,
-    int* load_flags);
 
 }  // namespace net
 

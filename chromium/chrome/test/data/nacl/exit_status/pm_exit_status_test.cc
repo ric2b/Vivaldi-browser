@@ -10,11 +10,12 @@
 #include <string>
 
 #include <assert.h>
+#include <inttypes.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
-#include <sys/fcntl.h>
 #include <string.h>
+#include <sys/fcntl.h>
 #include <unistd.h>
 
 #include "ppapi/cpp/instance.h"
@@ -125,6 +126,7 @@ class MyModule : public pp::Module {
 namespace pp {
 
 // Factory function for your specialization of the Module object.
+__attribute__((visibility("default")))
 Module* CreateModule() {
   printf("hello world from CreateModule\n"); fflush(NULL);
   return new MyModule();

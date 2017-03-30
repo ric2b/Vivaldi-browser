@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/scoped_ptr.h"
@@ -79,7 +81,7 @@ class AppCacheHostTest : public testing::Test {
     }
 
     int last_host_id_;
-    int64 last_cache_id_;
+    int64_t last_cache_id_;
     AppCacheStatus last_status_;
     AppCacheStatus last_status_changed_;
     AppCacheEventID last_event_id_;
@@ -98,7 +100,7 @@ class AppCacheHostTest : public testing::Test {
     void NotifyStorageModified(storage::QuotaClient::ID client_id,
                                const GURL& origin,
                                storage::StorageType type,
-                               int64 delta) override {}
+                               int64_t delta) override {}
     void SetUsageCacheEnabled(storage::QuotaClient::ID client_id,
                               const GURL& origin,
                               storage::StorageType type,
@@ -528,6 +530,19 @@ TEST_F(AppCacheHostTest, SelectCacheBlocked) {
   }
   EXPECT_EQ(0, mock_quota_proxy->GetInUseCount(kDocAndOriginUrl));
   service_.set_quota_manager_proxy(NULL);
+}
+
+TEST_F(AppCacheHostTest, SelectCacheTwice) {
+  AppCacheHost host(1, &mock_frontend_, &service_);
+  const GURL kDocAndOriginUrl(GURL("http://whatever/").GetOrigin());
+
+  EXPECT_TRUE(host.SelectCache(kDocAndOriginUrl, kAppCacheNoCacheId, GURL()));
+
+  // Select methods should bail if cache has already been selected.
+  EXPECT_FALSE(host.SelectCache(kDocAndOriginUrl, kAppCacheNoCacheId, GURL()));
+  EXPECT_FALSE(host.SelectCacheForWorker(0, 0));
+  EXPECT_FALSE(host.SelectCacheForSharedWorker(kAppCacheNoCacheId));
+  EXPECT_FALSE(host.MarkAsForeignEntry(kDocAndOriginUrl, kAppCacheNoCacheId));
 }
 
 }  // namespace content

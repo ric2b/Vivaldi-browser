@@ -5,6 +5,7 @@
 #include "device_light_event_pump.h"
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "content/common/device_sensors/device_light_hardware_buffer.h"
@@ -17,9 +18,9 @@ namespace content {
 class MockDeviceLightListener : public blink::WebDeviceLightListener {
  public:
   MockDeviceLightListener() : did_change_device_light_(false) {}
-  virtual ~MockDeviceLightListener() {}
+  ~MockDeviceLightListener() override {}
 
-  virtual void didChangeDeviceLight(double value) override {
+  void didChangeDeviceLight(double value) override {
     data_.value = value;
     did_change_device_light_ = true;
   }

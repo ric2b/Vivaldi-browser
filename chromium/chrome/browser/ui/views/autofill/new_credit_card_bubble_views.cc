@@ -9,8 +9,8 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/toolbar/wrench_toolbar_button.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -37,7 +37,7 @@ views::View* GetAnchor(NewCreditCardBubbleController* controller) {
   if (!browser)
     return NULL;
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  return browser_view->GetToolbarView()->app_menu();
+  return browser_view->GetToolbarView()->app_menu_button();
 }
 
 views::BubbleBorder::Arrow GetArrow(NewCreditCardBubbleController* controller) {

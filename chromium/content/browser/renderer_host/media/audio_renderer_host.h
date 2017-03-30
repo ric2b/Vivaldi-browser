@@ -5,7 +5,7 @@
 // AudioRendererHost serves audio related requests from AudioRenderer which
 // lives inside the render process and provide access to audio hardware.
 //
-// This class is owned by BrowserRenderProcessHost, and instantiated on UI
+// This class is owned by RenderProcessHostImpl, and instantiated on UI
 // thread, but all other operations and method calls happen on IO thread, so we
 // need to be extra careful about the lifetime of this object. AudioManager is a
 // singleton and created in IO thread, audio output streams are also created in
@@ -16,6 +16,9 @@
 // Here's an example of a typical IPC dialog for audio:
 //
 //   Renderer                     AudioRendererHost
+//      |                               |
+//      |  RequestDeviceAuthorization > |
+//      |    < NotifyDeviceAuthorized   |
 //      |                               |
 //      |         CreateStream >        |
 //      |     < NotifyStreamCreated     |
@@ -39,13 +42,18 @@
 
 #include <map>
 #include <string>
+#include <utility>
+
+#include <stddef.h>
 
 #include "base/atomic_ref_count.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
 #include "base/sequenced_task_runner_helpers.h"
+#include "content/browser/renderer_host/media/audio_output_device_enumerator.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
@@ -55,7 +63,7 @@
 #include "media/audio/audio_logging.h"
 #include "media/audio/audio_output_controller.h"
 #include "media/audio/simple_sources.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace media {
 class AudioManager;
@@ -110,22 +118,42 @@ class CONTENT_EXPORT AudioRendererHost : public BrowserMessageFilter {
   class AudioEntry;
   typedef std::map<int, AudioEntry*> AudioEntryMap;
 
+  // Internal callback type for access requests to output devices.
+  // |have_access| is true only if there is permission to access the device.
+  typedef base::Callback<void(bool have_access)> OutputDeviceAccessCB;
+
+  // Internal callback type for information requests about an output device.
+  // |success| indicates the operation was successful. If true, |device_info|
+  // contains data about the device.
+  typedef base::Callback<void(bool success,
+                              const AudioOutputDeviceInfo& device_info)>
+      OutputDeviceInfoCB;
+
   ~AudioRendererHost() override;
 
   // Methods called on IO thread ----------------------------------------------
 
   // Audio related IPC message handlers.
 
-  // Creates an audio output stream with the specified format whose data is
-  // produced by an entity in the RenderFrame referenced by |render_frame_id|.
+  // Request permission to use an output device for use by a stream produced
+  // in the RenderFrame referenced by |render_frame_id|.
   // |session_id| is used for unified IO to find out which input device to be
   // opened for the stream. For clients that do not use unified IO,
-  // |session_id| will be ignored.
+  // |session_id| will be ignored and the given |device_id| and
+  // |security_origin| will be used to select the output device.
+  // Upon completion of the process, the peer is notified with the device output
+  // parameters via the NotifyDeviceAuthorized message.
+  void OnRequestDeviceAuthorization(int stream_id,
+                                    int render_frame_id,
+                                    int session_id,
+                                    const std::string& device_id,
+                                    const url::Origin& gurl_security_origin);
+
+  // Creates an audio output stream with the specified format.
   // Upon success/failure, the peer is notified via the NotifyStreamCreated
   // message.
   void OnCreateStream(int stream_id,
                       int render_frame_id,
-                      int session_id,
                       const media::AudioParameters& params);
 
   // Play the audio stream referenced by |stream_id|.
@@ -140,37 +168,25 @@ class CONTENT_EXPORT AudioRendererHost : public BrowserMessageFilter {
   // Set the volume of the audio stream referenced by |stream_id|.
   void OnSetVolume(int stream_id, double volume);
 
-  // Set the output device of the audio stream referenced by |stream_id|.
-  void OnSwitchOutputDevice(int stream_id,
-                            int render_frame_id,
-                            const std::string& device_id,
-                            const GURL& security_origin,
-                            int request_id);
+  // Helper methods.
 
-  void OutputDeviceAccessChecked(scoped_ptr<MediaStreamUIProxy> ui_proxy,
-                                 int stream_id,
-                                 const std::string& device_id,
-                                 const GURL& security_origin,
-                                 int render_frame_id,
-                                 int request_id,
-                                 bool have_access);
+  // Proceed with device authorization after checking permissions.
+  void OnDeviceAuthorized(int stream_id,
+                          const std::string& device_id,
+                          const GURL& security_origin,
+                          bool have_access);
 
-  void StartTranslateOutputDeviceName(int stream_id,
-                                      const std::string& device_id,
-                                      const GURL& security_origin,
-                                      int request_id);
+  // Proceed with device authorization after translating device ID.
+  void OnDeviceIDTranslated(int stream_id,
+                            bool device_found,
+                            const AudioOutputDeviceInfo& device_info);
 
-  void FinishTranslateOutputDeviceName(int stream_id,
-                                       const std::string& device_id,
-                                       const GURL& security_origin,
-                                       int request_id,
-                                       media::AudioDeviceNames*);
-
-  void DoSwitchOutputDevice(int stream_id,
-                            const std::string& raw_device_id,
-                            int request_id);
-
-  void DoOutputDeviceSwitched(int stream_id, int request_id);
+  // Start the actual creation of an audio stream, after the device
+  // authorization process is complete.
+  void DoCreateStream(int stream_id,
+                      int render_frame_id,
+                      const media::AudioParameters& params,
+                      const std::string& device_unique_id);
 
   // Complete the process of creating an audio stream. This will set up the
   // shared memory or shared socket in low latency mode and send the
@@ -200,8 +216,26 @@ class CONTENT_EXPORT AudioRendererHost : public BrowserMessageFilter {
   // ResourceScheduler when the renderer starts or stops playing an audiostream.
   void UpdateNumPlayingStreams(AudioEntry* entry, bool is_playing);
 
-  // Checks that the renderer process supplies a URL it is allowed to use
-  bool IsURLAllowed(const GURL& url);
+  // Check if the renderer process has access to the requested output device.
+  void CheckOutputDeviceAccess(int render_frame_id,
+                               const std::string& device_id,
+                               const GURL& gurl_security_origin,
+                               const OutputDeviceAccessCB& callback);
+
+  // Invoke |callback| after permission to use a device has been checked.
+  void AccessChecked(scoped_ptr<MediaStreamUIProxy> ui_proxy,
+                     const OutputDeviceAccessCB& callback,
+                     bool have_access);
+
+  // Translate the hashed |device_id| to a unique device ID.
+  void TranslateDeviceID(const std::string& device_id,
+                         const GURL& gurl_security_origin,
+                         const OutputDeviceInfoCB& callback,
+                         const AudioOutputDeviceEnumeration& enumeration);
+
+  // Helper method to check if the authorization procedure for stream
+  // |stream_id| has started.
+  bool IsAuthorizationStarted(int stream_id);
 
   // ID of the RenderProcessHost that owns this instance.
   const int render_process_id_;
@@ -216,11 +250,22 @@ class CONTENT_EXPORT AudioRendererHost : public BrowserMessageFilter {
   // A map of stream IDs to audio sources.
   AudioEntryMap audio_entries_;
 
-  // The number of streams in the playing state.
+  // The number of streams in the playing state. Atomic read safe from any
+  // thread, but should only be updated from the IO thread.
   base::AtomicRefCount num_playing_streams_;
 
-  // Salt required to translate renderer device IDs to raw device IDs
+  // Salt required to translate renderer device IDs to raw device unique IDs
   ResourceContext::SaltCallback salt_callback_;
+
+  // Map of device authorizations for streams that are not yet created
+  // The key is the stream ID, and the value is a pair. The pair's first element
+  // is a bool that is true if the authorization process completes successfully.
+  // The second element contains the unique ID of the authorized device.
+  std::map<int, std::pair<bool, std::string>> authorizations_;
+
+  // The maximum number of simultaneous streams during the lifetime of this
+  // host. Reported as UMA stat at shutdown.
+  size_t max_simultaneous_streams_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioRendererHost);
 };

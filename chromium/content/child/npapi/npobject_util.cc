@@ -4,6 +4,10 @@
 
 #include "content/child/npapi/npobject_util.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+
 #include "base/strings/string_util.h"
 #include "content/child/npapi/np_channel_base.h"
 #include "content/child/npapi/npobject_proxy.h"
@@ -208,8 +212,9 @@ void CreateNPVariantParam(const NPVariant& variant,
             param->npobject_routing_id = route_id;
           }
 
-          // Include the object's owner.
-          NPP owner = WebBindings::getObjectOwner(variant.value.objectValue);
+          // Include the object's owner, should be the result of
+          // _NPN_GetObjectOwner, but we don't have that.
+          NPP owner = 0;
           param->npobject_owner_id =
               channel->GetExistingRouteForNPObjectOwner(owner);
         } else {

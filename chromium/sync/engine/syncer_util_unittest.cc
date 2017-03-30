@@ -4,6 +4,8 @@
 
 #include "sync/engine/syncer_util.h"
 
+#include <stdint.h>
+
 #include "base/rand_util.h"
 #include "sync/internal_api/public/base/unique_position.h"
 #include "sync/internal_api/public/test/test_entry_factory.h"
@@ -62,7 +64,7 @@ class GetUpdatePositionTest : public ::testing::Test {
     test_position.ToProto(update.mutable_unique_position());
   }
 
-  void InitInt64Position(int64 pos_value) {
+  void InitInt64Position(int64_t pos_value) {
     update.set_position_in_parent(pos_value);
   }
 
@@ -125,13 +127,13 @@ TEST_F(GetUpdatePositionTest, FromProto) {
 
   std::string suffix = GetUniqueBookmarkTagFromUpdate(update);
 
-  // The proto position is not set, so we should get one based on the int64.
+  // The proto position is not set, so we should get one based on the int64_t.
   // It should not match the proto we defined in the test harness.
   UniquePosition int64_pos = GetUpdatePosition(update, suffix);
   EXPECT_FALSE(int64_pos.Equals(test_position));
 
   // Move the test harness' position value into the update proto.
-  // Expect that it takes precedence over the int64-based position.
+  // Expect that it takes precedence over the int64_t-based position.
   InitProtoPosition();
   UniquePosition pos = GetUpdatePosition(update, suffix);
   EXPECT_TRUE(pos.Equals(test_position));
@@ -162,7 +164,7 @@ TEST_F(GetUpdatePositionTest, UpdateServerFieldsFromUpdateTest) {
   InitSuffixIngredients();  // Initialize update with valid data.
 
   std::string root_server_id = syncable::Id::GetRoot().GetServerId();
-  int64 handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
+  int64_t handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
       "I", DefaultBookmarkSpecifics(), root_server_id);
 
   syncable::WriteTransaction trans(FROM_HERE, syncable::UNITTEST, directory());
@@ -185,7 +187,7 @@ TEST_F(GetUpdatePositionTest, UpdateServerFieldsFromInvalidUpdateTest) {
   // Do not initialize data in update, update is invalid.
 
   std::string root_server_id = syncable::Id::GetRoot().GetServerId();
-  int64 handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
+  int64_t handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
       "I", DefaultBookmarkSpecifics(), root_server_id);
 
   syncable::WriteTransaction trans(FROM_HERE, syncable::UNITTEST, directory());
@@ -195,6 +197,32 @@ TEST_F(GetUpdatePositionTest, UpdateServerFieldsFromInvalidUpdateTest) {
   EXPECT_FALSE(UniquePosition::IsValidSuffix(target.GetUniqueBookmarkTag()));
   EXPECT_FALSE(target.GetServerUniquePosition().IsValid());
   UpdateServerFieldsFromUpdate(&target, update, "name");
+
+  // After update, target has valid bookmark tag and unique position.
+  EXPECT_TRUE(UniquePosition::IsValidSuffix(target.GetUniqueBookmarkTag()));
+  EXPECT_TRUE(target.GetServerUniquePosition().IsValid());
+}
+
+TEST_F(GetUpdatePositionTest, UpdateServerFieldsFromInvalidUniquePositionTest) {
+  InitSuffixIngredients();  // Initialize update with valid data.
+  sync_pb::SyncEntity invalid_update(update);
+
+  // Create and Setup an invalid position
+  sync_pb::UniquePosition* invalid_position = new sync_pb::UniquePosition();
+  invalid_position->set_value("");
+  invalid_update.set_allocated_unique_position(invalid_position);
+
+  std::string root_server_id = syncable::Id::GetRoot().GetServerId();
+  int64_t handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
+      "I", DefaultBookmarkSpecifics(), root_server_id);
+
+  syncable::WriteTransaction trans(FROM_HERE, syncable::UNITTEST, directory());
+  syncable::MutableEntry target(&trans, syncable::GET_BY_HANDLE, handle);
+
+  // Before update, target has invalid bookmark tag and unique position.
+  EXPECT_FALSE(UniquePosition::IsValidSuffix(target.GetUniqueBookmarkTag()));
+  EXPECT_FALSE(target.GetServerUniquePosition().IsValid());
+  UpdateServerFieldsFromUpdate(&target, invalid_update, "name");
 
   // After update, target has valid bookmark tag and unique position.
   EXPECT_TRUE(UniquePosition::IsValidSuffix(target.GetUniqueBookmarkTag()));

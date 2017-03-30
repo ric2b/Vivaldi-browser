@@ -7,6 +7,10 @@
 
 #include "content/browser/download/download_file.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -24,7 +28,7 @@ class DownloadDestinationObserver;
 class DownloadManager;
 struct DownloadCreateInfo;
 
-class CONTENT_EXPORT DownloadFileImpl : virtual public DownloadFile {
+class CONTENT_EXPORT DownloadFileImpl : public DownloadFile {
  public:
   // Takes ownership of the object pointed to by |request_handle|.
   // |bound_net_log| will be used for logging the download file's events.
@@ -56,7 +60,7 @@ class CONTENT_EXPORT DownloadFileImpl : virtual public DownloadFile {
   void Cancel() override;
   base::FilePath FullPath() const override;
   bool InProgress() const override;
-  int64 CurrentSpeed() const override;
+  int64_t CurrentSpeed() const override;
   bool GetHash(std::string* hash) override;
   std::string GetHashState() override;
   void SetClientGuid(const std::string& guid) override;
@@ -116,7 +120,7 @@ class CONTENT_EXPORT DownloadFileImpl : virtual public DownloadFile {
   scoped_ptr<ByteStreamReader> stream_reader_;
 
   // Used to trigger progress updates.
-  scoped_ptr<base::RepeatingTimer<DownloadFileImpl> > update_timer_;
+  scoped_ptr<base::RepeatingTimer> update_timer_;
 
   // Statistics
   size_t bytes_seen_;

@@ -94,6 +94,10 @@ elif [ -f "/usr/lib64/chromium/PepperFlash/libpepflashplayer.so" ]; then
   FLASH_PATH="/usr/lib64/chromium/PepperFlash/libpepflashplayer.so" # openSuse 64-bit
 elif [ -f "/usr/lib/pepflashplugin-installer/libpepflashplayer.so" ]; then
   FLASH_PATH="/usr/lib/pepflashplugin-installer/libpepflashplayer.so" # ppa:skunk/pepper-flash
+elif [ -f "/usr/lib/chromium-browser/PepperFlash/libpepflashplayer.so" ]; then
+  FLASH_PATH="/usr/lib/chromium-browser/PepperFlash/libpepflashplayer.so" # rosa/mandriva 32-bit
+elif [ -f "/usr/lib64/chromium-browser/PepperFlash/libpepflashplayer.so" ]; then
+  FLASH_PATH="/usr/lib64/chromium-browser/PepperFlash/libpepflashplayer.so" # rosa/mandriva 64-bit
 fi
 if [ -f $FLASH_PATH ]; then
   FLASH_VERSION=`grep -m 1 -a -o "LNX [[:digit:]]\+,[[:digit:]]\+,[[:digit:]]\+,[[:digit:]]\+" $FLASH_PATH | cut -c 5- | sed -e "s/,/./g"`

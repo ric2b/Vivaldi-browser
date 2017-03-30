@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.support.v7.widget.AppCompatEditText;
 import android.text.Editable;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.AttributeSet;
 
@@ -43,7 +44,7 @@ public class EmptyAlertEditText extends AppCompatEditText {
 
             @Override
             public void afterTextChanged(Editable s) {
-                if (s.toString().trim().length() != 0 && getError() != null) setError(null);
+                validate();
             }
         });
     }
@@ -63,14 +64,20 @@ public class EmptyAlertEditText extends AppCompatEditText {
     }
 
     /**
-     * Checks whether the content is empty. If empty, an alert message will be shown.
      * @return Whether the content is empty.
      */
-    public boolean validate() {
-        if (getTrimmedText().length() == 0) {
+    public boolean isEmpty() {
+        return TextUtils.isEmpty(getTrimmedText());
+    }
+
+    /**
+     * Check the text and show or hide error message if needed.
+     */
+    public void validate() {
+        if (isEmpty()) {
             setError(mAlertMessage);
-            return false;
+        } else {
+            if (getError() != null) setError(null);
         }
-        return true;
     }
 }

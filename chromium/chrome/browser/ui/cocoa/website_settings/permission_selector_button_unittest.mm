@@ -15,7 +15,7 @@
 namespace {
 
 const ContentSettingsType kTestPermissionType =
-    CONTENT_SETTINGS_TYPE_MEDIASTREAM;
+    CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC;
 
 class PermissionSelectorButtonTest : public CocoaTest {
  public:
@@ -25,6 +25,7 @@ class PermissionSelectorButtonTest : public CocoaTest {
     test_info.type = kTestPermissionType;
     test_info.setting = CONTENT_SETTING_BLOCK;
     test_info.source = content_settings::SETTING_SOURCE_USER;
+    test_info.is_incognito = false;
     GURL test_url("http://www.google.com");
     PermissionMenuModel::ChangeCallback callback = base::Bind(
         &PermissionSelectorButtonTest::Callback, base::Unretained(this));

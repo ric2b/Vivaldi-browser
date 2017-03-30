@@ -4,7 +4,9 @@
 
 #include <atlbase.h>
 #include <atlcom.h>
+#include <limits.h>
 #include <oleacc.h>
+#include <stdint.h>
 
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
@@ -422,7 +424,7 @@ STDMETHODIMP AXPlatformNodeWin::get_accState(
 STDMETHODIMP AXPlatformNodeWin::get_accHelp(
     VARIANT var_id, BSTR* help) {
   COM_OBJECT_VALIDATE_VAR_ID_1_ARG(var_id, help);
-  return GetStringAttributeAsBstr(ui::AX_ATTR_HELP, help);
+  return S_FALSE;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_accValue(VARIANT var_id, BSTR* value) {
@@ -967,7 +969,7 @@ int AXPlatformNodeWin::MSAARole() {
 }
 
 int AXPlatformNodeWin::MSAAState() {
-  uint32 state = GetData().state;
+  uint32_t state = GetData().state;
 
   int msaa_state = 0;
   if (state & (1 << ui::AX_STATE_CHECKED))
@@ -1103,7 +1105,7 @@ LONG AXPlatformNodeWin::FindBoundary(
     ui::TextBoundaryDirection direction) {
   HandleSpecialTextOffset(text, &start_offset);
   ui::TextBoundaryType boundary = IA2TextBoundaryToTextBoundary(ia2_boundary);
-  std::vector<int32> line_breaks;
+  std::vector<int32_t> line_breaks;
   return static_cast<LONG>(ui::FindAccessibleTextBoundary(
       text, line_breaks, boundary, start_offset, direction));
 }

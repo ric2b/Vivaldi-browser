@@ -2,17 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/media_browsertest.h"
 #include "chrome/browser/media/test_license_server.h"
 #include "chrome/browser/media/wv_test_license_server_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest-spi.h"
 #if defined(OS_ANDROID)
@@ -39,8 +43,6 @@ const char kClearKeyCdmPluginMimeType[] = "application/x-ppapi-clearkey-cdm";
 const char kClearKeyKeySystem[] = "org.w3.clearkey";
 const char kPrefixedClearKeyKeySystem[] = "webkit-org.w3.clearkey";
 const char kExternalClearKeyKeySystem[] = "org.chromium.externalclearkey";
-const char kExternalClearKeyDecryptOnlyKeySystem[] =
-    "org.chromium.externalclearkey.decryptonly";
 const char kExternalClearKeyFileIOTestKeySystem[] =
     "org.chromium.externalclearkey.fileiotest";
 const char kExternalClearKeyInitializeFailKeySystem[] =
@@ -92,6 +94,14 @@ enum EmeVersion {
 
 // Whether the video should be played once or twice.
 enum class PlayTwice { NO, YES };
+
+// Format of a container when testing different streams.
+enum class EncryptedContainer {
+  CLEAR_WEBM,
+  CLEAR_MP4,
+  ENCRYPTED_WEBM,
+  ENCRYPTED_MP4
+};
 
 // MSE is available on all desktop platforms and on Android 4.1 and later.
 static bool IsMSESupported() {
@@ -208,7 +218,7 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
     scoped_ptr<TestLicenseServerConfig> config = GetServerConfig(key_system);
     if (!config)
       return;
-    license_server_.reset(new TestLicenseServer(config.Pass()));
+    license_server_.reset(new TestLicenseServer(std::move(config)));
     EXPECT_TRUE(license_server_->Start());
     query_params->push_back(
         std::make_pair("licenseServerURL", license_server_->GetServerURL()));
@@ -226,13 +236,12 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
       const std::string& key_system) {
 #if 0 && defined(WIDEVINE_CDM_AVAILABLE)
     if (IsWidevine(key_system)) {
-      scoped_ptr<TestLicenseServerConfig> config =
-         scoped_ptr<TestLicenseServerConfig>(new WVTestLicenseServerConfig());
+      scoped_ptr<TestLicenseServerConfig> config(new WVTestLicenseServerConfig);
       if (config->IsPlatformSupported())
-        return config.Pass();
+        return config;
     }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
-    return scoped_ptr<TestLicenseServerConfig>();
+    return nullptr;
   }
 
  protected:
@@ -256,10 +265,10 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-#if defined(OS_ANDROID)
     command_line->AppendSwitch(
         switches::kDisableGestureRequirementForMediaPlayback);
-#endif  // defined(OS_ANDROID)
+    // For simplicity with respect to parameterized tests, enable for all tests.
+    command_line->AppendSwitch(switches::kEnablePrefixedEncryptedMedia);
   }
 
   void SetUpCommandLineForKeySystem(const std::string& key_system,
@@ -356,7 +365,7 @@ class ECKEncryptedMediaTest : public EncryptedMediaTestBase {
 };
 
 // Tests encrypted media playback using ExternalClearKey key system in
-// decrypt-and-decode mode for unprefixed EME.
+// decrypt-and-decode mode for prefixed EME.
 class ECKPrefixedEncryptedMediaTest : public EncryptedMediaTestBase {
  public:
   // We use special |key_system| names to do non-playback related tests, e.g.
@@ -472,6 +481,36 @@ class EncryptedMediaTest
                               kEnded);
   }
 
+  std::string ConvertContainerFormat(EncryptedContainer format) {
+    switch (format) {
+      case EncryptedContainer::CLEAR_MP4:
+        return "CLEAR_MP4";
+      case EncryptedContainer::CLEAR_WEBM:
+        return "CLEAR_WEBM";
+      case EncryptedContainer::ENCRYPTED_MP4:
+        return "ENCRYPTED_MP4";
+      case EncryptedContainer::ENCRYPTED_WEBM:
+        return "ENCRYPTED_WEBM";
+    }
+    NOTREACHED();
+    return "UNKNOWN";
+  }
+
+  void TestDifferentContainers(EncryptedContainer video_format,
+                               EncryptedContainer audio_format) {
+    DCHECK(IsMSESupported());
+    DCHECK_NE(CurrentEmeVersion(), PREFIXED);
+    base::StringPairs query_params;
+    query_params.push_back(std::make_pair("keySystem", CurrentKeySystem()));
+    query_params.push_back(std::make_pair("runEncrypted", "1"));
+    query_params.push_back(
+        std::make_pair("videoFormat", ConvertContainerFormat(video_format)));
+    query_params.push_back(
+        std::make_pair("audioFormat", ConvertContainerFormat(audio_format)));
+    RunEncryptedMediaTestPage("mse_different_containers.html",
+                              CurrentKeySystem(), query_params, kEnded);
+  }
+
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaTestBase::SetUpCommandLine(command_line);
@@ -519,6 +558,7 @@ INSTANTIATE_TEST_CASE_P(SRC_ExternalClearKey,
                         Combine(Values(kExternalClearKeyKeySystem),
                                 Values(SRC),
                                 Values(UNPREFIXED)));
+
 INSTANTIATE_TEST_CASE_P(MSE_ExternalClearKey_Prefixed,
                         EncryptedMediaTest,
                         Combine(Values(kExternalClearKeyKeySystem),
@@ -529,6 +569,10 @@ INSTANTIATE_TEST_CASE_P(MSE_ExternalClearKey,
                         Combine(Values(kExternalClearKeyKeySystem),
                                 Values(MSE),
                                 Values(UNPREFIXED)));
+
+const char kExternalClearKeyDecryptOnlyKeySystem[] =
+    "org.chromium.externalclearkey.decryptonly";
+
 // To reduce test time, only run ExternalClearKeyDecryptOnly with MSE.
 INSTANTIATE_TEST_CASE_P(MSE_ExternalClearKeyDecryptOnly_Prefixed,
                         EncryptedMediaTest,
@@ -559,11 +603,13 @@ INSTANTIATE_TEST_CASE_P(MSE_Widevine_Prefixed,
                                 Values(PREFIXED)));
 #endif  // !(defined(OS_CHROMEOS) && defined(OFFICIAL_BUILD))
 
+#if !defined(OS_CHROMEOS)
 INSTANTIATE_TEST_CASE_P(MSE_Widevine,
                         EncryptedMediaTest,
                         Combine(Values(kWidevineKeySystem),
                                 Values(MSE),
                                 Values(UNPREFIXED)));
+#endif  // !defined(OS_CHROMEOS)
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 
 IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, Playback_AudioOnly_WebM) {
@@ -626,8 +672,7 @@ IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, ConfigChangeVideo) {
   TestConfigChange();
 }
 
-// TODO: reenable in Vivaldi
-IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, DISABLED_FrameSizeChangeVideo) {
+IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, FrameSizeChangeVideo) {
   // Times out on Windows XP. http://crbug.com/171937
 #if defined(OS_WIN)
   if (base::win::GetVersion() < base::win::VERSION_VISTA)
@@ -658,6 +703,63 @@ IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, Playback_AudioOnly_MP4) {
   }
   TestSimplePlayback("bear-640x360-a_frag-cenc.mp4", kMP4AudioOnly);
 }
+
+IN_PROC_BROWSER_TEST_P(EncryptedMediaTest,
+                       Playback_EncryptedVideo_MP4_ClearAudio_WEBM) {
+  // MP4 without MSE is not support yet, http://crbug.com/170793.
+  if (CurrentSourceType() != MSE) {
+    DVLOG(0) << "Skipping test; Can only play MP4 encrypted streams by MSE.";
+    return;
+  }
+  if (CurrentEmeVersion() != UNPREFIXED) {
+    DVLOG(0) << "Skipping test; Only supported by unprefixed EME";
+    return;
+  }
+  if (!IsPlayBackPossible(CurrentKeySystem())) {
+    DVLOG(0) << "Skipping test - Test requires video playback.";
+    return;
+  }
+  TestDifferentContainers(EncryptedContainer::ENCRYPTED_MP4,
+                          EncryptedContainer::CLEAR_WEBM);
+}
+
+IN_PROC_BROWSER_TEST_P(EncryptedMediaTest,
+                       Playback_ClearVideo_WEBM_EncryptedAudio_MP4) {
+  // MP4 without MSE is not support yet, http://crbug.com/170793.
+  if (CurrentSourceType() != MSE) {
+    DVLOG(0) << "Skipping test; Can only play MP4 encrypted streams by MSE.";
+    return;
+  }
+  if (CurrentEmeVersion() != UNPREFIXED) {
+    DVLOG(0) << "Skipping test; Only supported by unprefixed EME";
+    return;
+  }
+  if (!IsPlayBackPossible(CurrentKeySystem())) {
+    DVLOG(0) << "Skipping test - Test requires video playback.";
+    return;
+  }
+  TestDifferentContainers(EncryptedContainer::CLEAR_WEBM,
+                          EncryptedContainer::ENCRYPTED_MP4);
+}
+
+IN_PROC_BROWSER_TEST_P(EncryptedMediaTest,
+                       Playback_EncryptedVideo_WEBM_EncryptedAudio_MP4) {
+  // MP4 without MSE is not support yet, http://crbug.com/170793.
+  if (CurrentSourceType() != MSE) {
+    DVLOG(0) << "Skipping test; Can only play MP4 encrypted streams by MSE.";
+    return;
+  }
+  if (CurrentEmeVersion() != UNPREFIXED) {
+    DVLOG(0) << "Skipping test; Only supported by unprefixed EME";
+    return;
+  }
+  if (!IsPlayBackPossible(CurrentKeySystem())) {
+    DVLOG(0) << "Skipping test - Test requires video playback.";
+    return;
+  }
+  TestDifferentContainers(EncryptedContainer::ENCRYPTED_WEBM,
+                          EncryptedContainer::ENCRYPTED_MP4);
+}
 #endif  // defined(USE_PROPRIETARY_CODECS)
 
 #if 0 && defined(WIDEVINE_CDM_AVAILABLE)
@@ -668,7 +770,6 @@ IN_PROC_BROWSER_TEST_F(WVEncryptedMediaTest, ParentThrowsException_Prefixed) {
                         PlayTwice::NO, kEmeNotSupportedError);
 }
 
-// TODO(jrummell): http://crbug.com/349181
 // The parent key system cannot be used when creating MediaKeys.
 IN_PROC_BROWSER_TEST_F(WVEncryptedMediaTest, ParentThrowsException) {
   RunEncryptedMediaTest(kDefaultEmePlayer, "bear-a_enc-a.webm", kWebMAudioOnly,

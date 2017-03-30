@@ -7,8 +7,11 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
 
+#include <utility>
+
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
 #include "remoting/proto/event.pb.h"
 #include "third_party/webrtc/modules/desktop_capture/mac/desktop_configuration.h"
 
@@ -48,15 +51,13 @@ SingleWindowInputInjectorMac::SingleWindowInputInjectorMac(
     webrtc::WindowId window_id,
     scoped_ptr<InputInjector> input_injector)
     : window_id_(static_cast<CGWindowID>(window_id)),
-      input_injector_(input_injector.Pass()) {
-}
+      input_injector_(std::move(input_injector)) {}
 
-SingleWindowInputInjectorMac::~SingleWindowInputInjectorMac() {
-}
+SingleWindowInputInjectorMac::~SingleWindowInputInjectorMac() {}
 
 void SingleWindowInputInjectorMac::Start(
     scoped_ptr<protocol::ClipboardStub> client_clipboard) {
-  input_injector_->Start(client_clipboard.Pass());
+  input_injector_->Start(std::move(client_clipboard));
 }
 
 void SingleWindowInputInjectorMac::InjectKeyEvent(const KeyEvent& event) {
@@ -163,9 +164,8 @@ CGRect SingleWindowInputInjectorMac::FindCGRectOfWindow() {
 scoped_ptr<InputInjector> SingleWindowInputInjector::CreateForWindow(
     webrtc::WindowId window_id,
     scoped_ptr<InputInjector> input_injector) {
-  scoped_ptr<SingleWindowInputInjectorMac> injector(
-      new SingleWindowInputInjectorMac(window_id, input_injector.Pass()));
-  return injector.Pass();
+  return make_scoped_ptr(
+      new SingleWindowInputInjectorMac(window_id, std::move(input_injector)));
 }
 
 }  // namespace remoting

@@ -4,10 +4,13 @@
 
 #include "chrome/browser/sync_file_system/local/local_file_change_tracker.h"
 
+#include <stddef.h>
 #include <queue>
+#include <utility>
 
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "chrome/browser/sync_file_system/local/local_file_sync_status.h"
@@ -299,13 +302,13 @@ void LocalFileChangeTracker::ResetForFileSystem(const GURL& origin,
 
   // Fail to apply batch to database wouldn't have critical effect, they'll be
   // just marked deleted on next relaunch.
-  tracker_db_->WriteBatch(batch.Pass());
+  tracker_db_->WriteBatch(std::move(batch));
   UpdateNumChanges();
 }
 
 void LocalFileChangeTracker::UpdateNumChanges() {
   base::AutoLock lock(num_changes_lock_);
-  num_changes_ = static_cast<int64>(change_seqs_.size());
+  num_changes_ = static_cast<int64_t>(change_seqs_.size());
 }
 
 void LocalFileChangeTracker::GetAllChangedURLs(FileSystemURLSet* urls) {
@@ -486,6 +489,9 @@ SyncStatusCode LocalFileChangeTracker::TrackerDB::Init(
     options.env = env_override_;
   leveldb::DB* db;
   leveldb::Status status = leveldb::DB::Open(options, path, &db);
+  UMA_HISTOGRAM_ENUMERATION("SyncFileSystem.TrackerDB.Open",
+                            leveldb_env::GetLevelDBStatusUMAValue(status),
+                            leveldb_env::LEVELDB_STATUS_MAX);
   if (status.ok()) {
     db_.reset(db);
     return SYNC_STATUS_OK;

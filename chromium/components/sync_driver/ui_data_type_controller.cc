@@ -4,6 +4,8 @@
 
 #include "components/sync_driver/ui_data_type_controller.h"
 
+#include <utility>
+
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
@@ -12,7 +14,10 @@
 #include "base/thread_task_runner_handle.h"
 #include "components/sync_driver/generic_change_processor_factory.h"
 #include "components/sync_driver/shared_change_processor_ref.h"
+#include "components/sync_driver/sync_client.h"
+#include "components/sync_driver/sync_service.h"
 #include "sync/api/sync_error.h"
+#include "sync/api/sync_merge_result.h"
 #include "sync/api/syncable_service.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/util/data_type_histogram.h"
@@ -20,33 +25,31 @@
 namespace sync_driver {
 
 UIDataTypeController::UIDataTypeController()
-    : DataTypeController(base::ThreadTaskRunnerHandle::Get(),
-                         base::Closure()),
-      sync_factory_(NULL),
+    : DirectoryDataTypeController(base::ThreadTaskRunnerHandle::Get(),
+                                  base::Closure()),
+      sync_client_(NULL),
       state_(NOT_RUNNING),
-      type_(syncer::UNSPECIFIED) {
-}
+      type_(syncer::UNSPECIFIED) {}
 
 UIDataTypeController::UIDataTypeController(
-    scoped_refptr<base::SingleThreadTaskRunner> ui_thread,
+    const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
     const base::Closure& error_callback,
     syncer::ModelType type,
-    SyncApiComponentFactory* sync_factory)
-    : DataTypeController(ui_thread, error_callback),
-      sync_factory_(sync_factory),
+    SyncClient* sync_client)
+    : DirectoryDataTypeController(ui_thread, error_callback),
+      sync_client_(sync_client),
       state_(NOT_RUNNING),
       type_(type),
       processor_factory_(new GenericChangeProcessorFactory()),
       ui_thread_(ui_thread) {
   DCHECK(ui_thread_->BelongsToCurrentThread());
-  DCHECK(sync_factory);
   DCHECK(syncer::IsRealDataType(type_));
 }
 
 void UIDataTypeController::SetGenericChangeProcessorFactoryForTest(
       scoped_ptr<GenericChangeProcessorFactory> factory) {
   DCHECK_EQ(state_, NOT_RUNNING);
-  processor_factory_ = factory.Pass();
+  processor_factory_ = std::move(factory);
 }
 
 UIDataTypeController::~UIDataTypeController() {
@@ -131,12 +134,10 @@ void UIDataTypeController::Associate() {
 
   // Connect |shared_change_processor_| to the syncer and get the
   // syncer::SyncableService associated with type().
+  DCHECK(sync_client_->GetSyncService());
   local_service_ = shared_change_processor_->Connect(
-      sync_factory_,
-      processor_factory_.get(),
-      user_share(),
-      this,
-      type(),
+      sync_client_, processor_factory_.get(),
+      sync_client_->GetSyncService()->GetUserShare(), this, type(),
       weak_ptr_factory.GetWeakPtr());
   if (!local_service_.get()) {
     syncer::SyncError error(FROM_HERE,
@@ -186,56 +187,56 @@ void UIDataTypeController::Associate() {
     return;
   }
 
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile4(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "471403 UIDataTypeController::Associate4"));
-  base::TimeTicks start_time = base::TimeTicks::Now();
-  syncer::SyncDataList initial_sync_data;
-  syncer::SyncError error =
-      shared_change_processor_->GetAllSyncDataReturnError(
-          type(), &initial_sync_data);
-  if (error.IsSet()) {
-    local_merge_result.set_error(error);
-    StartDone(ASSOCIATION_FAILED,
-              local_merge_result,
-              syncer_merge_result);
-    return;
-  }
+  // Scope for |initial_sync_data| which might be expensive, so we don't want
+  // to keep it in memory longer than necessary.
+  {
+    syncer::SyncDataList initial_sync_data;
 
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile5(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "471403 UIDataTypeController::Associate5"));
-  std::string datatype_context;
-  if (shared_change_processor_->GetDataTypeContext(&datatype_context)) {
-    local_service_->UpdateDataTypeContext(
-        type(), syncer::SyncChangeProcessor::NO_REFRESH, datatype_context);
-  }
+    // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403
+    // is fixed.
+    tracked_objects::ScopedTracker tracking_profile4(
+        FROM_HERE_WITH_EXPLICIT_FUNCTION(
+            "471403 UIDataTypeController::Associate4"));
+    base::TimeTicks start_time = base::TimeTicks::Now();
+    syncer::SyncError error =
+        shared_change_processor_->GetAllSyncDataReturnError(type(),
+                                                            &initial_sync_data);
+    if (error.IsSet()) {
+      local_merge_result.set_error(error);
+      StartDone(ASSOCIATION_FAILED, local_merge_result, syncer_merge_result);
+      return;
+    }
 
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile6(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "471403 UIDataTypeController::Associate6"));
-  syncer_merge_result.set_num_items_before_association(
-      initial_sync_data.size());
-  // Passes a reference to |shared_change_processor_|.
-  local_merge_result = local_service_->MergeDataAndStartSyncing(
-      type(),
-      initial_sync_data,
-      scoped_ptr<syncer::SyncChangeProcessor>(
-          new SharedChangeProcessorRef(shared_change_processor_)),
-      scoped_ptr<syncer::SyncErrorFactory>(
-          new SharedChangeProcessorRef(shared_change_processor_)));
-  RecordAssociationTime(base::TimeTicks::Now() - start_time);
-  if (local_merge_result.error().IsSet()) {
-    StartDone(ASSOCIATION_FAILED,
-              local_merge_result,
-              syncer_merge_result);
-    return;
+    // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403
+    // is fixed.
+    tracked_objects::ScopedTracker tracking_profile5(
+        FROM_HERE_WITH_EXPLICIT_FUNCTION(
+            "471403 UIDataTypeController::Associate5"));
+    std::string datatype_context;
+    if (shared_change_processor_->GetDataTypeContext(&datatype_context)) {
+      local_service_->UpdateDataTypeContext(
+          type(), syncer::SyncChangeProcessor::NO_REFRESH, datatype_context);
+    }
+
+    // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403
+    // is fixed.
+    tracked_objects::ScopedTracker tracking_profile6(
+        FROM_HERE_WITH_EXPLICIT_FUNCTION(
+            "471403 UIDataTypeController::Associate6"));
+    syncer_merge_result.set_num_items_before_association(
+        initial_sync_data.size());
+    // Passes a reference to |shared_change_processor_|.
+    local_merge_result = local_service_->MergeDataAndStartSyncing(
+        type(), initial_sync_data,
+        scoped_ptr<syncer::SyncChangeProcessor>(
+            new SharedChangeProcessorRef(shared_change_processor_)),
+        scoped_ptr<syncer::SyncErrorFactory>(
+            new SharedChangeProcessorRef(shared_change_processor_)));
+    RecordAssociationTime(base::TimeTicks::Now() - start_time);
+    if (local_merge_result.error().IsSet()) {
+      StartDone(ASSOCIATION_FAILED, local_merge_result, syncer_merge_result);
+      return;
+    }
   }
 
   // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403 is

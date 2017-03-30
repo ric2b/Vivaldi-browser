@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_DISK_CACHE_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_DISK_CACHE_H_
 
+#include <stdint.h>
+
 #include "content/browser/appcache/appcache_disk_cache.h"
 #include "content/common/content_export.h"
 
@@ -19,47 +21,33 @@ namespace content {
 class CONTENT_EXPORT ServiceWorkerDiskCache
     : public AppCacheDiskCache {
  public:
-  static scoped_ptr<ServiceWorkerDiskCache> CreateWithBlockFileBackend();
-  static scoped_ptr<ServiceWorkerDiskCache> CreateWithSimpleBackend();
-
- private:
-  friend class ServiceWorkerDiskCacheMigrator;
-  friend class ServiceWorkerDiskCacheMigratorTest;
-  explicit ServiceWorkerDiskCache(bool use_simple_cache);
+  ServiceWorkerDiskCache();
 };
 
 class CONTENT_EXPORT ServiceWorkerResponseReader
     : public AppCacheResponseReader {
  protected:
   // Should only be constructed by the storage class.
-  friend class ServiceWorkerDiskCacheMigrator;
-  friend class ServiceWorkerDiskCacheMigratorTest;
   friend class ServiceWorkerStorage;
-  ServiceWorkerResponseReader(
-      int64 response_id,
-      ServiceWorkerDiskCache* disk_cache);
+  ServiceWorkerResponseReader(int64_t resource_id,
+                              ServiceWorkerDiskCache* disk_cache);
 };
 
 class CONTENT_EXPORT ServiceWorkerResponseWriter
     : public AppCacheResponseWriter {
  protected:
   // Should only be constructed by the storage class.
-  friend class ServiceWorkerDiskCacheMigrator;
-  friend class ServiceWorkerDiskCacheMigratorTest;
   friend class ServiceWorkerStorage;
-  ServiceWorkerResponseWriter(
-      int64 response_id,
-      ServiceWorkerDiskCache* disk_cache);
+  ServiceWorkerResponseWriter(int64_t resource_id,
+                              ServiceWorkerDiskCache* disk_cache);
 };
 
 class CONTENT_EXPORT ServiceWorkerResponseMetadataWriter
     : public AppCacheResponseMetadataWriter {
  protected:
   // Should only be constructed by the storage class.
-  friend class ServiceWorkerDiskCacheMigrator;
-  friend class ServiceWorkerDiskCacheMigratorTest;
   friend class ServiceWorkerStorage;
-  ServiceWorkerResponseMetadataWriter(int64 response_id,
+  ServiceWorkerResponseMetadataWriter(int64_t resource_id,
                                       ServiceWorkerDiskCache* disk_cache);
 };
 

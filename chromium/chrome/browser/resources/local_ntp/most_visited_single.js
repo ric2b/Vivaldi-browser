@@ -96,6 +96,11 @@ var tiles = null;
  */
 var queryArgs = {};
 
+/**
+ * Url to ping when suggestions have been shown.
+ */
+var impressionUrl = null;
+
 
 /**
  * Log an event on the NTP.
@@ -230,8 +235,6 @@ var removeAllOldTiles = function() {
  * we are ready to show the new tiles and drop the old ones.
  */
 var showTiles = function() {
-  removeAllOldTiles();
-
   // Store the tiles on the current closure.
   var cur = tiles;
 
@@ -247,6 +250,7 @@ var showTiles = function() {
   if (old) {
     old.removeAttribute('id');
     old.classList.add('mv-tiles-old');
+    old.style.opacity = 0.0;
     cur.addEventListener('webkitTransitionEnd', function(ev) {
       if (ev.target === cur) {
         removeAllOldTiles();
@@ -265,6 +269,19 @@ var showTiles = function() {
 
   // Make sure the tiles variable contain the next tileset we may use.
   tiles = document.createElement('div');
+
+  if (impressionUrl) {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(impressionUrl);
+    } else {
+      // if sendBeacon is not enabled, we fallback to "a ping".
+      var a = document.createElement('a');
+      a.href = '#';
+      a.ping = impressionUrl;
+      a.click();
+    }
+    impressionUrl = null;
+  }
 };
 
 
@@ -278,14 +295,13 @@ var addTile = function(args) {
   if (args.rid) {
     var data = chrome.embeddedSearch.searchBox.getMostVisitedItemData(args.rid);
     data.tid = data.rid;
-    data.thumbnailUrls = [data.thumbnailUrl];
-    data.faviconUrl = 'chrome-search://favicon/size/16@' +
-        window.devicePixelRatio + 'x/' + data.renderViewId + '/' + data.tid;
+    if (!data.faviconUrl) {
+      data.faviconUrl = 'chrome-search://favicon/size/16@' +
+          window.devicePixelRatio + 'x/' + data.renderViewId + '/' + data.tid;
+    }
     tiles.appendChild(renderTile(data));
-    logEvent(LOG_TYPE.NTP_CLIENT_SIDE_SUGGESTION);
   } else if (args.id) {
     tiles.appendChild(renderTile(args));
-    logEvent(LOG_TYPE.NTP_SERVER_SIDE_SUGGESTION);
   } else {
     tiles.appendChild(renderTile(null));
   }
@@ -338,6 +354,9 @@ var renderTile = function(data) {
 
   tile.href = data.url;
   tile.title = data.title;
+  if (data.impressionUrl) {
+    impressionUrl = data.impressionUrl;
+  }
   if (data.pingUrl) {
     tile.addEventListener('click', function(ev) {
       if (navigator.sendBeacon) {
@@ -351,6 +370,20 @@ var renderTile = function(data) {
       }
     });
   }
+  // For local suggestions, we use navigateContentWindow instead of the default
+  // action, since it includes support for file:// urls.
+  if (data.rid) {
+    tile.addEventListener('click', function(ev) {
+      ev.preventDefault();
+      var disp = chrome.embeddedSearch.newTabPage.getDispositionFromClick(
+        ev.button == 1,  // MIDDLE BUTTON
+        ev.altKey, ev.ctrlKey, ev.metaKey, ev.shiftKey);
+
+      window.chrome.embeddedSearch.newTabPage.navigateContentWindow(this.href,
+                                                                    disp);
+    });
+  }
+
   tile.addEventListener('keydown', function(event) {
     if (event.keyCode == 46 /* DELETE */ ||
         event.keyCode == 8 /* BACKSPACE */) {
@@ -514,19 +547,23 @@ var renderTile = function(data) {
     thumb.appendChild(img);
     logEvent(LOG_TYPE.NTP_THUMBNAIL_TILE);
 
-    // Get all thumbnailUrls for the tile.
-    // They are ordered from best one to be used to worst.
-    for (var i = 0; i < data.thumbnailUrls.length; ++i) {
-      results.push(null);
-    }
-    for (var i = 0; i < data.thumbnailUrls.length; ++i) {
-      if (data.thumbnailUrls[i]) {
-        var image = new Image();
-        image.src = data.thumbnailUrls[i];
-        image.onload = acceptImage(i, data.thumbnailUrls[i]);
-        image.onerror = rejectImage(i);
-      } else {
-        rejectImage(i)(null);
+    if (data.thumbnailUrl) {
+      img.src = data.thumbnailUrl;
+    } else {
+      // Get all thumbnailUrls for the tile.
+      // They are ordered from best one to be used to worst.
+      for (var i = 0; i < data.thumbnailUrls.length; ++i) {
+        results.push(null);
+      }
+      for (var i = 0; i < data.thumbnailUrls.length; ++i) {
+        if (data.thumbnailUrls[i]) {
+          var image = new Image();
+          image.src = data.thumbnailUrls[i];
+          image.onload = acceptImage(i, data.thumbnailUrls[i]);
+          image.onerror = rejectImage(i);
+        } else {
+          rejectImage(i)(null);
+        }
       }
     }
 

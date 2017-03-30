@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/extensions/users_private/users_private_api.h"
 
+#include <stddef.h>
+
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/users_private/users_private_delegate.h"
@@ -170,7 +172,8 @@ UsersPrivateRemoveWhitelistedUserFunction::Run() {
   PrefsUtil* prefs_util = delegate->GetPrefsUtil();
   bool removed = prefs_util->RemoveFromListCrosSetting(
       chromeos::kAccountsPrefUsers, canonical_email);
-  user_manager::UserManager::Get()->RemoveUser(parameters->email, NULL);
+  user_manager::UserManager::Get()->RemoveUser(
+      AccountId::FromUserEmail(parameters->email), NULL);
   return RespondNow(OneArgument(new base::FundamentalValue(removed)));
 }
 

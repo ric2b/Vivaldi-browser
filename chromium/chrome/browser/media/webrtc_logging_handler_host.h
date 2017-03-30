@@ -5,21 +5,26 @@
 #ifndef CHROME_BROWSER_MEDIA_WEBRTC_LOGGING_HANDLER_HOST_H_
 #define CHROME_BROWSER_MEDIA_WEBRTC_LOGGING_HANDLER_HOST_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/rtp_dump_type.h"
 #include "chrome/browser/media/webrtc_rtp_dump_handler.h"
 #include "chrome/common/media/webrtc_logging_message_data.h"
 #include "chrome/common/partial_circular_buffer.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/render_process_host.h"
-#include "net/base/net_util.h"
+#include "net/base/network_interfaces.h"
 
 namespace net {
 class URLRequestContextGetter;
 }  // namespace net
 
 class Profile;
+class WebRtcLogUploader;
 
 #if defined(OS_ANDROID)
 const size_t kWebRtcLogSize = 1 * 1024 * 1024;  // 1 MB
@@ -57,7 +62,7 @@ class WebRtcLogBuffer {
 
  private:
   base::ThreadChecker thread_checker_;
-  uint8 buffer_[kWebRtcLogSize];
+  uint8_t buffer_[kWebRtcLogSize];
   PartialCircularBuffer circular_;
   bool read_only_;
 };
@@ -76,8 +81,12 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
   typedef base::Callback<void(bool, const std::string&)> GenericDoneCallback;
   typedef base::Callback<void(bool, const std::string&, const std::string&)>
       UploadDoneCallback;
+  typedef base::Callback<void(const std::string&)>
+      AudioDebugRecordingsErrorCallback;
+  typedef base::Callback<void(const std::string&, bool, bool)>
+      AudioDebugRecordingsCallback;
 
-  explicit WebRtcLoggingHandlerHost(Profile* profile);
+  WebRtcLoggingHandlerHost(Profile* profile, WebRtcLogUploader* log_uploader);
 
   // Sets meta data that will be uploaded along with the log and also written
   // in the beginning of the log. Must be called on the IO thread before calling
@@ -113,6 +122,7 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
   void StoreLog(const std::string& log_id, const GenericDoneCallback& callback);
 
   // Adds a message to the log.
+  // This method must be called on the IO thread.
   void LogMessage(const std::string& message);
 
   // May be called on any thread. |upload_log_on_render_close_| is used
@@ -139,10 +149,31 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
 
   // Called when an RTP packet is sent or received. Must be called on the UI
   // thread.
-  void OnRtpPacket(scoped_ptr<uint8[]> packet_header,
+  void OnRtpPacket(scoped_ptr<uint8_t[]> packet_header,
                    size_t header_length,
                    size_t packet_length,
                    bool incoming);
+
+  // Starts an audio debug recording. The recording lasts the given |delay|,
+  // unless |delay| is zero, in which case recording will continue until
+  // StopAudioDebugRecordings() is explicitly invoked.
+  // |callback| is invoked once recording stops. If |delay| is zero
+  // |callback| is invoked once recording starts.
+  // If a recording was already in progress, |error_callback| is invoked instead
+  // of |callback|.
+  void StartAudioDebugRecordings(
+      content::RenderProcessHost* host,
+      base::TimeDelta delay,
+      const AudioDebugRecordingsCallback& callback,
+      const AudioDebugRecordingsErrorCallback& error_callback);
+
+  // Stops an audio debug recording. |callback| is invoked once recording
+  // stops. If no recording was in progress, |error_callback| is invoked instead
+  // of |callback|.
+  void StopAudioDebugRecordings(
+      content::RenderProcessHost* host,
+      const AudioDebugRecordingsCallback& callback,
+      const AudioDebugRecordingsErrorCallback& error_callback);
 
  private:
   // States used for protecting from function calls made at non-allowed points
@@ -177,16 +208,9 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
   void OnAddLogMessages(const std::vector<WebRtcLoggingMessageData>& messages);
   void OnLoggingStoppedInRenderer();
 
-  // Handles log message requests from browser process.
-  void AddLogMessageFromBrowser(const WebRtcLoggingMessageData& message);
-
-  void StartLoggingIfAllowed(const GenericDoneCallback& callback);
-  void DoStartLogging(bool permissions_granted,
-                      const GenericDoneCallback& callback);
   void LogInitialInfoOnFileThread(const GenericDoneCallback& callback);
   void LogInitialInfoOnIOThread(const net::NetworkInterfaceList& network_list,
                                 const GenericDoneCallback& callback);
-  void NotifyLoggingStarted(const GenericDoneCallback& callback);
 
   // Called after stopping RTP dumps.
   void StoreLogContinue(const std::string& log_id,
@@ -225,12 +249,34 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
   void DoStartRtpDump(RtpDumpType type, const GenericDoneCallback& callback);
 
   // Adds the packet to the dump on IO thread.
-  void DumpRtpPacketOnIOThread(scoped_ptr<uint8[]> packet_header,
+  void DumpRtpPacketOnIOThread(scoped_ptr<uint8_t[]> packet_header,
                                size_t header_length,
                                size_t packet_length,
                                bool incoming);
 
   bool ReleaseRtpDumps(WebRtcLogPaths* log_paths);
+
+  void FireGenericDoneCallback(
+      const WebRtcLoggingHandlerHost::GenericDoneCallback& callback,
+      bool success,
+      const std::string& error_message);
+
+  // Helper for starting audio debug recordings.
+  void DoStartAudioDebugRecordings(
+      content::RenderProcessHost* host,
+      base::TimeDelta delay,
+      const AudioDebugRecordingsCallback& callback,
+      const AudioDebugRecordingsErrorCallback& error_callback,
+      const base::FilePath& log_directory);
+
+  // Helper for stopping audio debug recordings.
+  void DoStopAudioDebugRecordings(
+      content::RenderProcessHost* host,
+      bool is_manual_stop,
+      uint64_t audio_debug_recordings_id,
+      const AudioDebugRecordingsCallback& callback,
+      const AudioDebugRecordingsErrorCallback& error_callback,
+      const base::FilePath& log_directory);
 
   scoped_ptr<WebRtcLogBuffer> log_buffer_;
 
@@ -268,6 +314,16 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
 
   // The callback to call when StopRtpDump is called.
   content::RenderProcessHost::WebRtcStopRtpDumpCallback stop_rtp_dump_callback_;
+
+  // A pointer to the log uploader that's shared for all profiles.
+  // Ownership lies with the browser process.
+  WebRtcLogUploader* const log_uploader_;
+
+  // Must be accessed on the UI thread.
+  bool is_audio_debug_recordings_in_progress_;
+
+  // This counter allows saving each debug recording in separate files.
+  uint64_t current_audio_debug_recordings_id_;
 
   DISALLOW_COPY_AND_ASSIGN(WebRtcLoggingHandlerHost);
 };

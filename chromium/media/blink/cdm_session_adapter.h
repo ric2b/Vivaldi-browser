@@ -5,12 +5,14 @@
 #ifndef MEDIA_BLINK_CDM_SESSION_ADAPTER_H_
 #define MEDIA_BLINK_CDM_SESSION_ADAPTER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/media_keys.h"
@@ -110,7 +112,8 @@ class CdmSessionAdapter : public base::RefCounted<CdmSessionAdapter> {
 
   // Callback for CreateCdm().
   void OnCdmCreated(const std::string& key_system,
-                    scoped_ptr<MediaKeys> cdm,
+                    base::TimeTicks start_time,
+                    const scoped_refptr<MediaKeys>& cdm,
                     const std::string& error_message);
 
   // Callbacks for firing session events.
@@ -133,12 +136,18 @@ class CdmSessionAdapter : public base::RefCounted<CdmSessionAdapter> {
   WebContentDecryptionModuleSessionImpl* GetSession(
       const std::string& session_id);
 
-  scoped_ptr<MediaKeys> cdm_;
+  void ReportTimeToCreateCdmUMA(base::TimeDelta cdm_creation_time) const;
+
+  scoped_refptr<MediaKeys> cdm_;
 
   SessionMap sessions_;
 
   std::string key_system_;
   std::string key_system_uma_prefix_;
+
+  // A unique ID to trace CdmSessionAdapter::CreateCdm() call and the matching
+  // OnCdmCreated() call.
+  uint32_t trace_id_;
 
   scoped_ptr<blink::WebContentDecryptionModuleResult> cdm_created_result_;
 

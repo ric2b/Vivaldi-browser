@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "webencryptedmediaclient_impl.h"
+#include "media/blink/webencryptedmediaclient_impl.h"
+
+#include <utility>
 
 #include "base/bind.h"
 #include "base/metrics/histogram.h"
@@ -124,7 +126,7 @@ void WebEncryptedMediaClientImpl::CreateCdm(
     const CdmConfig& cdm_config,
     scoped_ptr<blink::WebContentDecryptionModuleResult> result) {
   WebContentDecryptionModuleImpl::Create(
-      cdm_factory_, key_system, security_origin, cdm_config, result.Pass());
+      cdm_factory_, key_system, security_origin, cdm_config, std::move(result));
 }
 
 void WebEncryptedMediaClientImpl::OnRequestSucceeded(
@@ -151,7 +153,7 @@ WebEncryptedMediaClientImpl::Reporter* WebEncryptedMediaClientImpl::GetReporter(
   // TODO(sandersd): Avoid doing ASCII conversion more than once.
   std::string key_system_ascii;
   if (base::IsStringASCII(key_system))
-    key_system_ascii = base::UTF16ToASCII(key_system);
+    key_system_ascii = base::UTF16ToASCII(base::StringPiece16(key_system));
 
   // Return a per-frame singleton so that UMA reports will be once-per-frame.
   std::string uma_name = GetKeySystemNameForUMA(key_system_ascii);

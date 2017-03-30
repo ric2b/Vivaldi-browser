@@ -8,9 +8,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.LayerDrawable;
-import android.graphics.drawable.ScaleDrawable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -19,9 +16,8 @@ import android.widget.FrameLayout;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
 import org.chromium.chrome.browser.contextualsearch.SwipeRecognizer;
+import org.chromium.chrome.browser.widget.ClipDrawableProgressBar.DrawingInfo;
 import org.chromium.chrome.browser.widget.ControlContainer;
-import org.chromium.chrome.browser.widget.SmoothProgressBar;
-import org.chromium.chrome.browser.widget.SmoothProgressBar.ProgressChangeListener;
 import org.chromium.chrome.browser.widget.ViewResourceFrameLayout;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
@@ -39,8 +35,6 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
     private final SwipeRecognizer mSwipeRecognizer;
     private EdgeSwipeHandler mSwipeHandler;
 
-    private ViewResourceAdapter mProgressResourceAdapter;
-
     /**
      * Constructs a new control container.
      * <p>
@@ -56,13 +50,19 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
     }
 
     @Override
-    public ViewResourceAdapter getProgressResourceAdapter() {
-        return mProgressResourceAdapter;
+    public ViewResourceAdapter getToolbarResourceAdapter() {
+        return mToolbarContainer.getResourceAdapter();
     }
 
     @Override
-    public ViewResourceAdapter getToolbarResourceAdapter() {
-        return mToolbarContainer.getResourceAdapter();
+    public void getProgressBarDrawingInfo(DrawingInfo drawingInfoOut) {
+        // TODO(yusufo): Avoid casting to the layout without making the interface bigger.
+        ((ToolbarLayout) mToolbar).getProgressBar().getDrawingInfo(drawingInfoOut);
+    }
+
+    @Override
+    public int getToolbarBackgroundColor() {
+        return ((ToolbarLayout) mToolbar).getToolbarDataProvider().getPrimaryColor();
     }
 
     @Override
@@ -76,13 +76,6 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
         mToolbar = (Toolbar) findViewById(R.id.toolbar);
         mToolbarContainer = (ToolbarViewResourceFrameLayout) findViewById(R.id.toolbar_container);
         mMenuBtn = findViewById(R.id.menu_button);
-
-        // TODO(yusufo): Get rid of the calls below and avoid casting to the layout without making
-        // the interface bigger.
-        SmoothProgressBar progressView = ((ToolbarLayout) mToolbar).getProgressBar();
-        if (progressView != null) {
-            mProgressResourceAdapter = new ProgressViewResourceAdapter(progressView);
-        }
 
         if (mToolbar instanceof ToolbarTablet) {
             // On tablet, draw a fake tab strip and toolbar until the compositor is ready to draw
@@ -135,100 +128,9 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
         }
     }
 
-    private static class ProgressViewResourceAdapter extends ViewResourceAdapter
-            implements ProgressChangeListener {
-
-        private final SmoothProgressBar mProgressView;
-        private final Rect mPreviousDrawBounds = new Rect();
-        private int mProgressVisibility;
-        private int mProgress;
-
-        ProgressViewResourceAdapter(SmoothProgressBar progressView) {
-            super(progressView);
-
-            mProgressView = progressView;
-            mProgressVisibility = mProgressView.getVisibility();
-            progressView.addProgressChangeListener(this);
-        }
-
-        @Override
-        public void onProgressChanged(int progress) {
-            if (mProgressVisibility != View.VISIBLE) return;
-            if (progress < mProgress) {
-                mPreviousDrawBounds.setEmpty();
-            }
-            mProgress = progress;
-            invalidate(null);
-        }
-
-        @Override
-        public void onProgressVisibilityChanged(int visibility) {
-            if (mProgressVisibility == visibility) return;
-
-            if (visibility == View.VISIBLE || mProgressVisibility == View.VISIBLE) {
-                invalidate(null);
-                mPreviousDrawBounds.setEmpty();
-            }
-            mProgressVisibility = visibility;
-        }
-
-        @Override
-        protected void onCaptureStart(Canvas canvas, Rect dirtyRect) {
-            canvas.save();
-            canvas.clipRect(
-                    mPreviousDrawBounds.right, 0,
-                    mProgressView.getWidth(), mProgressView.getHeight());
-            canvas.drawColor(0, PorterDuff.Mode.CLEAR);
-            canvas.restore();
-
-            super.onCaptureStart(canvas, dirtyRect);
-        }
-
-        @Override
-        protected void capture(Canvas canvas) {
-            if (mProgressVisibility != View.VISIBLE) {
-                canvas.drawColor(0, PorterDuff.Mode.CLEAR);
-            } else {
-                super.capture(canvas);
-            }
-        }
-
-        @Override
-        protected void onCaptureEnd() {
-            super.onCaptureEnd();
-            // If we are unable to get accurate draw bounds, then set the draw bounds to
-            // ensure the entire view is cleared.
-            mPreviousDrawBounds.setEmpty();
-
-            // The secondary drawable has an alpha component, so track the bounds of the
-            // primary drawable.  This will allow the subsequent draw call to clear the secondary
-            // portion not overlapped by the primary to prevent the alpha components from
-            // stacking and getting progressively darker.
-            Drawable progressDrawable = mProgressView.getProgressDrawable();
-            if (progressDrawable instanceof LayerDrawable) {
-                LayerDrawable progressLayerDrawable = (LayerDrawable) progressDrawable;
-                for (int i = 0; i < progressLayerDrawable.getNumberOfLayers(); i++) {
-                    if (progressLayerDrawable.getId(i) != android.R.id.progress) continue;
-                    Drawable primaryProgressDrawable = progressLayerDrawable.getDrawable(i);
-                    if (!(primaryProgressDrawable instanceof ScaleDrawable)) continue;
-
-                    ((ScaleDrawable) primaryProgressDrawable).getDrawable().copyBounds(
-                            mPreviousDrawBounds);
-                }
-            }
-        }
-
-        @Override
-        protected void computeContentPadding(Rect outContentPadding) {
-            super.computeContentPadding(outContentPadding);
-            MarginLayoutParams layoutParams =
-                    (MarginLayoutParams) mProgressView.getLayoutParams();
-            outContentPadding.offset(0, layoutParams.topMargin);
-        }
-    }
-
     private static class ToolbarViewResourceAdapter extends ViewResourceAdapter {
         private final int mToolbarActualHeightPx;
+        private final int mTabStripHeightPx;
         private final int[] mTempPosition = new int[2];
 
         private final View mToolbarContainer;
@@ -240,8 +142,14 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
 
             mToolbarContainer = toolbarContainer;
             mToolbar = toolbar;
+            int containerHeightResId = R.dimen.control_container_height;
+            if (mToolbar instanceof CustomTabToolbar) {
+                containerHeightResId = R.dimen.custom_tabs_control_container_height;
+            }
             mToolbarActualHeightPx = toolbarContainer.getResources().getDimensionPixelSize(
-                    R.dimen.control_container_height);
+                    containerHeightResId);
+            mTabStripHeightPx = toolbarContainer.getResources().getDimensionPixelSize(
+                    R.dimen.tab_strip_height);
         }
 
         /**
@@ -259,18 +167,15 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
 
         @Override
         protected void onCaptureStart(Canvas canvas, Rect dirtyRect) {
-            // Erase the shadow component of the bitmap if the clip rect included shadow.  Because
-            // this region is not opaque painting twice would be bad.
-            if (dirtyRect.intersects(
-                    0, mToolbarActualHeightPx,
-                    mToolbarContainer.getWidth(), mToolbarContainer.getHeight())) {
-                canvas.save();
-                canvas.clipRect(
-                        0, mToolbarActualHeightPx,
-                        mToolbarContainer.getWidth(), mToolbarContainer.getHeight());
-                canvas.drawColor(0, PorterDuff.Mode.CLEAR);
-                canvas.restore();
-            }
+            // Erase the canvas because assets drawn are not fully opaque and therefore painting
+            // twice would be bad.
+            canvas.save();
+            canvas.clipRect(
+                    0, 0,
+                    mToolbarContainer.getWidth(), mToolbarContainer.getHeight());
+            canvas.drawColor(0, PorterDuff.Mode.CLEAR);
+            canvas.restore();
+            dirtyRect.set(0, 0, mToolbarContainer.getWidth(), mToolbarContainer.getHeight());
 
             mToolbar.setTextureCaptureMode(true);
 
@@ -280,11 +185,15 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
         @Override
         protected void onCaptureEnd() {
             mToolbar.setTextureCaptureMode(false);
+            // Forcing a texture capture should only be done for one draw. Turn off forced
+            // texture capture.
+            mToolbar.setForceTextureCapture(false);
         }
 
         @Override
         protected void computeContentPadding(Rect outContentPadding) {
-            outContentPadding.set(0, 0, mToolbarContainer.getWidth(), mToolbarActualHeightPx);
+            outContentPadding.set(0, mTabStripHeightPx, mToolbarContainer.getWidth(),
+                    mToolbarActualHeightPx);
         }
 
         @Override

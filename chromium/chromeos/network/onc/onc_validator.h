@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/network/onc/onc_mapper.h"
@@ -163,11 +164,14 @@ class CHROMEOS_EXPORT Validator : public Mapper {
   bool ValidateThirdPartyVPN(base::DictionaryValue* result);
   bool ValidateVerifyX509(base::DictionaryValue* result);
   bool ValidateCertificatePattern(base::DictionaryValue* result);
+  bool ValidateGlobalNetworkConfiguration(base::DictionaryValue* result);
   bool ValidateProxySettings(base::DictionaryValue* result);
   bool ValidateProxyLocation(base::DictionaryValue* result);
   bool ValidateEAP(base::DictionaryValue* result);
   bool ValidateCertificate(base::DictionaryValue* result);
 
+  bool IsValidValue(const std::string& field_value,
+                    const std::vector<const char*>& valid_values);
   bool FieldExistsAndHasNoValidValue(
       const base::DictionaryValue& object,
       const std::string& field_name,
@@ -180,6 +184,11 @@ class CHROMEOS_EXPORT Validator : public Mapper {
 
   bool FieldExistsAndIsEmpty(const base::DictionaryValue& object,
                              const std::string& field_name);
+
+  bool ListFieldContainsValidValues(
+      const base::DictionaryValue& object,
+      const std::string& field_name,
+      const std::vector<const char*>& valid_values);
 
   bool ValidateSSIDAndHexSSID(base::DictionaryValue* object);
 

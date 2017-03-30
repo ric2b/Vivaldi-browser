@@ -24,16 +24,15 @@ const char kExtensionCrx[] = "extension-crx";
 const char kExtensionUnpacked[] = "extension-unpacked";
 }  // namespace
 
+
 namespace media_router {
 
 MediaRouterBaseBrowserTest::MediaRouterBaseBrowserTest()
-    : extension_load_event_(false, false), extension_host_created_(false) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableMediaRouter);
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      extensions::switches::kEnableExtensionActionRedesign);
+    : extension_load_event_(false, false),
+      extension_host_created_(false),
+      feature_override_(extensions::FeatureSwitch::media_router(), true) {
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kEnableBlinkFeatures, "Presentation");
+      switches::kEnableExperimentalWebPlatformFeatures, "Presentation");
 }
 
 MediaRouterBaseBrowserTest::~MediaRouterBaseBrowserTest() {
@@ -49,6 +48,7 @@ void MediaRouterBaseBrowserTest::TearDown() {
 }
 
 void MediaRouterBaseBrowserTest::SetUpOnMainThread() {
+  ExtensionBrowserTest::SetUpOnMainThread();
   extensions::ProcessManager* process_manager =
       extensions::ProcessManager::Get(browser()->profile());
   DCHECK(process_manager);
@@ -63,6 +63,7 @@ void MediaRouterBaseBrowserTest::TearDownOnMainThread() {
       extensions::ProcessManager::Get(browser()->profile());
   DCHECK(process_manager);
   process_manager->RemoveObserver(this);
+  ExtensionBrowserTest::TearDownOnMainThread();
 }
 
 void MediaRouterBaseBrowserTest::InstallAndEnableMRExtension() {
@@ -80,17 +81,22 @@ void MediaRouterBaseBrowserTest::UninstallMRExtension() {
   }
 }
 
-void MediaRouterBaseBrowserTest::ConditionalWait(
+bool MediaRouterBaseBrowserTest::ConditionalWait(
     base::TimeDelta timeout,
     base::TimeDelta interval,
     const base::Callback<bool(void)>& callback) {
   base::ElapsedTimer timer;
-  while (!callback.Run() && timer.Elapsed() < timeout) {
+  do {
+    if (callback.Run())
+      return true;
+
     base::RunLoop run_loop;
     base::MessageLoop::current()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), interval);
     run_loop.Run();
-  }
+  } while (timer.Elapsed() < timeout);
+
+  return false;
 }
 
 void MediaRouterBaseBrowserTest::Wait(base::TimeDelta timeout) {
@@ -117,7 +123,7 @@ void MediaRouterBaseBrowserTest::ParseCommandLine() {
   // Check if there is mr_extension folder under PRODUCT_DIR folder.
   if (extension_crx_.empty() && extension_unpacked_.empty()) {
     base::FilePath base_dir;
-    ASSERT_TRUE(PathService::Get(base::DIR_EXE, &base_dir));
+    ASSERT_TRUE(PathService::Get(base::DIR_MODULE, &base_dir));
     base::FilePath extension_path =
         base_dir.Append(FILE_PATH_LITERAL("mr_extension/"));
     if (PathExists(extension_path)) {

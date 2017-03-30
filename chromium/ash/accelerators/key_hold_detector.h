@@ -6,6 +6,7 @@
 #define ASH_ACCELERATOR_KEY_HOLD_DETECTOR_H_
 
 #include "ash/ash_export.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/event_handler.h"
 
@@ -30,6 +31,9 @@ class ASH_EXPORT KeyHoldDetector : public ui::EventHandler {
 
     // This should return true if the event should start the state transition.
     virtual bool IsStartEvent(const ui::KeyEvent* event) const = 0;
+
+    // Whether to stop event propagation after processing.
+    virtual bool ShouldStopEventPropagation() const = 0;
 
     // Called when the key is held.
     virtual void OnKeyHold(const ui::KeyEvent* event) = 0;

@@ -28,6 +28,7 @@
  * Google Author(s): Behdad Esfahbod
  */
 
+#include "hb-open-type-private.hh"
 #include "hb-ot-layout-private.hh"
 
 #include "hb-ot-layout-gdef-table.hh"
@@ -129,6 +130,8 @@ hb_ot_layout_has_glyph_classes (hb_face_t *face)
 }
 
 /**
+ * hb_ot_layout_get_glyph_class:
+ *
  * Since: 0.9.7
  **/
 hb_ot_layout_glyph_class_t
@@ -139,6 +142,8 @@ hb_ot_layout_get_glyph_class (hb_face_t      *face,
 }
 
 /**
+ * hb_ot_layout_get_glyphs_in_class:
+ *
  * Since: 0.9.7
  **/
 void
@@ -364,6 +369,8 @@ hb_ot_layout_language_get_required_feature_index (hb_face_t    *face,
 }
 
 /**
+ * hb_ot_layout_language_get_required_feature:
+ *
  * Since: 0.9.30
  **/
 hb_bool_t
@@ -451,6 +458,8 @@ hb_ot_layout_language_find_feature (hb_face_t    *face,
 }
 
 /**
+ * hb_ot_layout_feature_get_lookups:
+ *
  * Since: 0.9.7
  **/
 unsigned int
@@ -468,6 +477,8 @@ hb_ot_layout_feature_get_lookups (hb_face_t    *face,
 }
 
 /**
+ * hb_ot_layout_table_get_lookup_count:
+ *
  * Since: 0.9.22
  **/
 unsigned int
@@ -628,6 +639,8 @@ _hb_ot_layout_collect_lookups_languages (hb_face_t      *face,
 }
 
 /**
+ * hb_ot_layout_collect_lookups:
+ *
  * Since: 0.9.8
  **/
 void
@@ -672,6 +685,8 @@ hb_ot_layout_collect_lookups (hb_face_t      *face,
 }
 
 /**
+ * hb_ot_layout_lookup_collect_glyphs:
+ *
  * Since: 0.9.7
  **/
 void
@@ -720,6 +735,8 @@ hb_ot_layout_has_substitution (hb_face_t *face)
 }
 
 /**
+ * hb_ot_layout_lookup_would_substitute:
+ *
  * Since: 0.9.7
  **/
 hb_bool_t
@@ -741,7 +758,7 @@ hb_ot_layout_lookup_would_substitute_fast (hb_face_t            *face,
 					   hb_bool_t             zero_context)
 {
   if (unlikely (lookup_index >= hb_ot_layout_from_face (face)->gsub_lookup_count)) return false;
-  OT::hb_would_apply_context_t c (face, glyphs, glyphs_length, zero_context);
+  OT::hb_would_apply_context_t c (face, glyphs, glyphs_length, (bool) zero_context);
 
   const OT::SubstLookup& l = hb_ot_layout_from_face (face)->gsub->get_lookup (lookup_index);
 
@@ -761,6 +778,8 @@ hb_ot_layout_substitute_finish (hb_font_t *font, hb_buffer_t *buffer)
 }
 
 /**
+ * hb_ot_layout_lookup_substitute_closure:
+ *
  * Since: 0.9.7
  **/
 void
@@ -798,7 +817,9 @@ hb_ot_layout_position_finish (hb_font_t *font, hb_buffer_t *buffer)
 }
 
 /**
- * Since: 0.9.8
+ * hb_ot_layout_get_size_params:
+ *
+ * Since: 0.9.10
  **/
 hb_bool_t
 hb_ot_layout_get_size_params (hb_face_t    *face,
@@ -889,7 +910,7 @@ apply_forward (OT::hb_apply_context_t *c,
 {
   bool ret = false;
   hb_buffer_t *buffer = c->buffer;
-  while (buffer->idx < buffer->len)
+  while (buffer->idx < buffer->len && !buffer->in_error)
   {
     if (accel.may_have (buffer->cur().codepoint) &&
 	(buffer->cur().mask & c->lookup_mask) &&
@@ -925,13 +946,10 @@ apply_backward (OT::hb_apply_context_t *c,
   return ret;
 }
 
-struct hb_apply_forward_context_t
+struct hb_apply_forward_context_t :
+       OT::hb_dispatch_context_t<hb_apply_forward_context_t, bool, HB_DEBUG_APPLY>
 {
   inline const char *get_name (void) { return "APPLY_FWD"; }
-  static const unsigned int max_debug_depth = HB_DEBUG_APPLY;
-  typedef bool return_t;
-  template <typename T, typename F>
-  inline bool may_dispatch (const T *obj, const F *format) { return true; }
   template <typename T>
   inline return_t dispatch (const T &obj) { return apply_forward (c, obj, accel); }
   static return_t default_return_value (void) { return false; }
@@ -959,7 +977,7 @@ apply_string (OT::hb_apply_context_t *c,
   if (unlikely (!buffer->len || !c->lookup_mask))
     return;
 
-  c->set_lookup (lookup);
+  c->set_lookup_props (lookup.get_props ());
 
   if (likely (!lookup.is_reverse ()))
   {
@@ -1011,11 +1029,14 @@ inline void hb_ot_map_t::apply (const Proxy &proxy,
     for (; i < stage->last_lookup; i++)
     {
       unsigned int lookup_index = lookups[table_index][i].index;
+      if (!buffer->message (font, "start lookup %d", lookup_index)) continue;
+      c.set_lookup_index (lookup_index);
       c.set_lookup_mask (lookups[table_index][i].mask);
       c.set_auto_zwj (lookups[table_index][i].auto_zwj);
       apply_string<Proxy> (&c,
 			   proxy.table.get_lookup (lookup_index),
 			   proxy.accels[lookup_index]);
+      (void) buffer->message (font, "end lookup %d", lookup_index);
     }
 
     if (stage->pause_func)

@@ -1,24 +1,20 @@
 # Copyright (c) 2012 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-import json
-import optparse
 import os
-import sys
 
-import webgl_conformance_expectations
+from gpu_tests import gpu_test_base
+from gpu_tests import path_util
+from gpu_tests import webgl_conformance_expectations
+from gpu_tests import webgl2_conformance_expectations
 
-from telemetry import benchmark as benchmark_module
-from telemetry.core import util
 from telemetry.internal.browser import browser_finder
-from telemetry.page import page as page_module
 from telemetry.page import page_test
-from telemetry.page import shared_page_state
 from telemetry.story.story_set import StorySet
 
 
 conformance_path = os.path.join(
-    util.GetChromiumSrcDir(),
+    path_util.GetChromiumSrcDir(),
     'third_party', 'webgl', 'src', 'sdk', 'tests')
 
 conformance_harness_script = r"""
@@ -58,6 +54,7 @@ conformance_harness_script = r"""
     testHarness.reportResults(null, false, message);
     testHarness.notifyFinished(null);
   };
+  window.quietMode = function() { return true; }
 """
 
 def _DidWebGLTestSucceed(tab):
@@ -72,7 +69,7 @@ def _CompareVersion(version1, version2):
   size = min(len(ver_num1), len(ver_num2))
   return cmp(ver_num1[0:size], ver_num2[0:size])
 
-class WebglConformanceValidator(page_test.PageTest):
+class WebglConformanceValidator(gpu_test_base.ValidatorBase):
   def __init__(self):
     super(WebglConformanceValidator, self).__init__()
 
@@ -81,24 +78,28 @@ class WebglConformanceValidator(page_test.PageTest):
       raise page_test.Failure(_WebGLTestMessages(tab))
 
   def CustomizeBrowserOptions(self, options):
+    # --test-type=gpu is used only to suppress the "Google API Keys are missing"
+    # infobar, which causes flakiness in tests.
     options.AppendExtraBrowserArgs([
         '--disable-gesture-requirement-for-media-playback',
         '--disable-domain-blocking-for-3d-apis',
-        '--disable-gpu-process-crash-limit'
+        '--disable-gpu-process-crash-limit',
+        '--js-flags=--expose-gc',
+        '--test-type=gpu'
     ])
     browser = browser_finder.FindBrowser(options.finder_options)
     if (browser.target_os.startswith('android') and
-        browser.browser_type == 'android-webview-shell'):
-        # TODO(kbr): this is overly broad. We'd like to do this only on
-        # Nexus 9. It'll go away shortly anyway. crbug.com/499928
-        #
-        # The --ignore_egl_sync_failures is only there to work around
-        # some strange failure on the Nexus 9 bot, not reproducible on
-        # local hardware.
-        options.AppendExtraBrowserArgs([
-            '--disable-gl-extensions=GL_EXT_disjoint_timer_query',
-            '--ignore_egl_sync_failures'
-        ])
+      browser.browser_type == 'android-webview-shell'):
+      # TODO(kbr): this is overly broad. We'd like to do this only on
+      # Nexus 9. It'll go away shortly anyway. crbug.com/499928
+      #
+      # The --ignore_egl_sync_failures is only there to work around
+      # some strange failure on the Nexus 9 bot, not reproducible on
+      # local hardware.
+      options.AppendExtraBrowserArgs([
+        '--disable-gl-extensions=GL_EXT_disjoint_timer_query',
+        '--ignore_egl_sync_failures',
+      ])
 
 
 class Webgl2ConformanceValidator(WebglConformanceValidator):
@@ -106,47 +107,45 @@ class Webgl2ConformanceValidator(WebglConformanceValidator):
     super(Webgl2ConformanceValidator, self).__init__()
 
   def CustomizeBrowserOptions(self, options):
+    # --test-type=gpu is used only to suppress the "Google API Keys are missing"
+    # infobar, which causes flakiness in tests.
     options.AppendExtraBrowserArgs([
         '--disable-gesture-requirement-for-media-playback',
         '--disable-domain-blocking-for-3d-apis',
         '--disable-gpu-process-crash-limit',
-        '--enable-unsafe-es3-apis'
+        '--js-flags=--expose-gc',
+        '--enable-unsafe-es3-apis',
+        '--test-type=gpu'
     ])
+    browser = browser_finder.FindBrowser(options.finder_options)
+    if browser.target_os == 'darwin':
+      # crbug.com/539993
+      options.AppendExtraBrowserArgs([
+          '--disable-accelerated-video-decode'
+      ])
 
-class WebglConformancePage(page_module.Page):
+class WebglConformancePage(gpu_test_base.PageBase):
   def __init__(self, story_set, test, expectations):
     super(WebglConformancePage, self).__init__(
       url='file://' + test, page_set=story_set, base_dir=story_set.base_dir,
-      shared_page_state_class=shared_page_state.SharedDesktopPageState,
+      shared_page_state_class=gpu_test_base.DesktopGpuSharedPageState,
       name=('WebglConformance.%s' %
               test.replace('/', '_').replace('-', '_').
-                 replace('\\', '_').rpartition('.')[0].replace('.', '_')))
+                 replace('\\', '_').rpartition('.')[0].replace('.', '_')),
+      expectations=expectations)
     self.script_to_evaluate_on_commit = conformance_harness_script
-    self._expectations = expectations
 
   def RunNavigateSteps(self, action_runner):
-    num_tries = 1 + self._expectations.GetFlakyRetriesForPage(
-      self, action_runner.tab.browser)
-    # This loop will run once for tests that aren't marked flaky, and
-    # will fall through to the validator's ValidateAndMeasurePage on
-    # the last iteration.
-    for ii in xrange(0, num_tries):
-      super(WebglConformancePage, self).RunNavigateSteps(action_runner)
-      action_runner.WaitForJavaScriptCondition(
-          'webglTestHarness._finished', timeout_in_seconds=180)
-      if ii < num_tries - 1:
-        if _DidWebGLTestSucceed(action_runner.tab):
-          return
-        else:
-          print 'FLAKY TEST FAILURE, retrying: ' + self.display_name
-          print 'Error messages from test run:'
-          print _WebGLTestMessages(action_runner.tab)
+    super(WebglConformancePage, self).RunNavigateSteps(action_runner)
+    action_runner.WaitForJavaScriptCondition(
+        'webglTestHarness._finished', timeout_in_seconds=180)
 
-class WebglConformance(benchmark_module.Benchmark):
+class WebglConformance(gpu_test_base.TestBase):
   """Conformance with Khronos WebGL Conformance Tests"""
   def __init__(self):
     super(WebglConformance, self).__init__(max_failures=10)
     self._cached_expectations = None
+    self._webgl_version = 0
 
   @classmethod
   def Name(cls):
@@ -172,6 +171,9 @@ class WebglConformance(benchmark_module.Benchmark):
         (options.webgl2_only == 'true'),
         None)
 
+    self._webgl_version = [
+        int(x) for x in options.webgl_conformance_version.split('.')][0]
+
     ps = StorySet(serving_dirs=[''], base_dir=conformance_path)
 
     expectations = self.GetExpectations()
@@ -180,21 +182,21 @@ class WebglConformance(benchmark_module.Benchmark):
 
     return ps
 
-  def GetExpectations(self):
-    if not self._cached_expectations:
-      self._cached_expectations = (
-        webgl_conformance_expectations.WebGLConformanceExpectations(
-          conformance_path))
-    return self._cached_expectations
-
-  def CreateExpectations(self):
-    return self.GetExpectations()
+  def _CreateExpectations(self):
+    assert self._webgl_version == 1 or self._webgl_version == 2
+    if self._webgl_version == 1:
+      return webgl_conformance_expectations.WebGLConformanceExpectations(
+          conformance_path)
+    else:
+      return webgl2_conformance_expectations.WebGL2ConformanceExpectations(
+          conformance_path)
 
   @staticmethod
   def _ParseTests(path, version, webgl2_only, folder_min_version):
     test_paths = []
     current_dir = os.path.dirname(path)
     full_path = os.path.normpath(os.path.join(conformance_path, path))
+    webgl_version = int(version.split('.')[0])
 
     if not os.path.exists(full_path):
       raise Exception('The WebGL conformance test path specified ' +
@@ -228,9 +230,9 @@ class WebglConformance(benchmark_module.Benchmark):
             _CompareVersion(version, min_version_to_compare) < 0):
           continue
 
-        if (webgl2_only and (not ('.txt' in test_name)) and
-            ((not min_version_to_compare) or
-             (not min_version_to_compare.startswith('2')))):
+        if (webgl2_only and not '.txt' in test_name and
+            (not min_version_to_compare or
+             not min_version_to_compare.startswith('2'))):
           continue
 
         if '.txt' in test_name:
@@ -240,6 +242,8 @@ class WebglConformance(benchmark_module.Benchmark):
               include_path, version, webgl2_only, min_version_to_compare)
         else:
           test = os.path.join(current_dir, test_name)
+          if webgl_version > 1:
+            test += '?webglVersion=' + str(webgl_version)
           test_paths.append(test)
 
     return test_paths

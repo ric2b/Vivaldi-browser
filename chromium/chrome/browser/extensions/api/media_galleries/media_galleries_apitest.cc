@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/auto_reset.h"
 #include "base/callback.h"
 #include "base/files/file_util.h"
@@ -12,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/media_galleries/media_galleries_api.h"
@@ -121,7 +124,7 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
     PlatformAppBrowserTest::SetUpOnMainThread();
     ensure_media_directories_exists_.reset(new EnsureMediaDirectoriesExists);
 
-    int64 file_size;
+    int64_t file_size;
     ASSERT_TRUE(base::GetFileSize(GetCommonDataDir().AppendASCII("test.jpg"),
                                   &file_size));
     test_jpg_size_ = base::checked_cast<int>(file_size);
@@ -437,7 +440,7 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
   scoped_ptr<EnsureMediaDirectoriesExists> ensure_media_directories_exists_;
 };
 
-#if !defined(DISABLE_NACL)
+#if !defined(DISABLE_NACL) && !defined(DISABLE_NACL_BROWSERTESTS)
 class MediaGalleriesPlatformAppPpapiTest
     : public MediaGalleriesPlatformAppBrowserTest {
  protected:
@@ -565,9 +568,18 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
   DetachFakeDevice();
 }
 
+// These two tests are flaky, they time out frequently on Win7 bots. See
+// crbug.com/567212.
+#if defined(OS_WIN)
+#define MAYBE_PicasaDefaultLocation DISABLED_PicasaDefaultLocation
+#define MAYBE_PicasaCustomLocation DISABLED_PicasaCustomLocation
+#else
+#define MAYBE_PicasaDefaultLocation PicasaDefaultLocation
+#define MAYBE_PicasaCustomLocation PicasaCustomLocation
+#endif
 #if defined(OS_WIN)|| defined(OS_MACOSX)
 IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
-                       PicasaDefaultLocation) {
+                       MAYBE_PicasaDefaultLocation) {
 #if defined(OS_WIN)
   PopulatePicasaTestData(
       ensure_media_directories_exists()->GetFakeLocalAppDataPath());
@@ -582,7 +594,7 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
-                       PicasaCustomLocation) {
+                       MAYBE_PicasaCustomLocation) {
   base::ScopedTempDir custom_picasa_app_data_root;
   ASSERT_TRUE(custom_picasa_app_data_root.CreateUniqueTempDir());
   ensure_media_directories_exists()->SetCustomPicasaAppDataPath(

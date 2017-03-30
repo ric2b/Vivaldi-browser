@@ -31,8 +31,10 @@ class ChromeManagementAPIDelegate : public extensions::ManagementAPIDelegate {
       extensions::ManagementGetPermissionWarningsByManifestFunction* function,
       const std::string& manifest_str) const override;
   scoped_ptr<extensions::InstallPromptDelegate> SetEnabledFunctionDelegate(
-      extensions::ManagementSetEnabledFunction* function,
-      const extensions::Extension* extension) const override;
+      content::WebContents* web_contents,
+      content::BrowserContext* browser_context,
+      const extensions::Extension* extension,
+      const base::Callback<void(bool)>& callback) const override;
   scoped_ptr<extensions::RequirementsChecker> CreateRequirementsChecker()
       const override;
   scoped_ptr<extensions::UninstallDialogDelegate> UninstallFunctionDelegate(
@@ -47,6 +49,7 @@ class ChromeManagementAPIDelegate : public extensions::ManagementAPIDelegate {
       content::BrowserContext* context,
       const std::string& title,
       const GURL& launch_url) const override;
+  bool CanHostedAppsOpenInWindows() const override;
   bool IsNewBookmarkAppsEnabled() const override;
   void EnableExtension(content::BrowserContext* context,
                        const std::string& extension_id) const override;

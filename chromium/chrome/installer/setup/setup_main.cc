@@ -8,18 +8,22 @@
 #include <msi.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/at_exit.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/process/memory.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -27,24 +31,24 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "base/win/process_startup_helper.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
-#include "breakpad/src/client/windows/handler/exception_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/installer/setup/archive_patch_helper.h"
 #include "chrome/installer/setup/install.h"
 #include "chrome/installer/setup/install_worker.h"
+#include "chrome/installer/setup/installer_crash_reporting.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/uninstall.h"
 #include "chrome/installer/util/browser_distribution.h"
-#include "chrome/installer/util/channel_info.h"
 #include "chrome/installer/util/delete_after_reboot_helper.h"
 #include "chrome/installer/util/delete_tree_work_item.h"
 #include "chrome/installer/util/google_update_constants.h"
@@ -65,12 +69,11 @@
 #include "chrome/installer/util/self_cleaning_temp_dir.h"
 #include "chrome/installer/util/shell_util.h"
 #include "chrome/installer/util/user_experiment.h"
-#include "version.h"  // NOLINT
 
 #include "chrome/installer/util/util_constants.h"
 
-#include "chrome/installer/util/vivaldi_install_dialog.h"
-#include "chrome/installer/util/vivaldi_progress_dialog.h"
+#include "installer/util/vivaldi_install_dialog.h"
+#include "installer/util/vivaldi_progress_dialog.h"
 #include <tlhelp32.h>
 
 #pragma comment(lib, "ComCtl32.lib")
@@ -87,15 +90,87 @@ using installer::Product;
 using installer::ProductState;
 using installer::Products;
 
-const wchar_t kGoogleUpdatePipeName[] = L"\\\\.\\pipe\\GoogleCrashServices\\";
-const wchar_t kSystemPrincipalSid[] = L"S-1-5-18";
-
-const MINIDUMP_TYPE kLargerDumpType = static_cast<MINIDUMP_TYPE>(
-    MiniDumpWithProcessThreadData |  // Get PEB and TEB.
-    MiniDumpWithUnloadedModules |  // Get unloaded modules when available.
-    MiniDumpWithIndirectlyReferencedMemory);  // Get memory referenced by stack.
-
 namespace {
+
+const wchar_t kSystemPrincipalSid[] = L"S-1-5-18";
+const wchar_t kDisplayVersion[] = L"DisplayVersion";
+const wchar_t kMsiDisplayVersionOverwriteDelay[] = L"10";  // seconds as string
+const wchar_t kMsiProductIdPrefix[] = L"EnterpriseProduct";
+
+// Overwrite an existing DisplayVersion as written by the MSI installer
+// with the real version number of Chrome.
+LONG OverwriteDisplayVersion(const base::string16& path,
+                             const base::string16& value,
+                             REGSAM wowkey) {
+  base::win::RegKey key;
+  LONG result = 0;
+  base::string16 existing;
+  if ((result = key.Open(HKEY_LOCAL_MACHINE, path.c_str(),
+                         KEY_QUERY_VALUE | KEY_SET_VALUE | wowkey))
+      != ERROR_SUCCESS) {
+    LOG(ERROR) << "Failed to set DisplayVersion: " << path << " not found";
+    return result;
+  }
+  if ((result = key.ReadValue(kDisplayVersion, &existing)) != ERROR_SUCCESS) {
+    LOG(ERROR) << "Failed to set DisplayVersion: " << kDisplayVersion
+               << " not found under " << path;
+    return result;
+  }
+  if ((result = key.WriteValue(kDisplayVersion, value.c_str()))
+      != ERROR_SUCCESS) {
+    LOG(ERROR) << "Failed to set DisplayVersion: " << kDisplayVersion
+               << " could not be written under " << path;
+    return result;
+  }
+  VLOG(1) << "Set DisplayVersion at " << path << " to " << value
+          << " from " << existing;
+  return ERROR_SUCCESS;
+}
+
+LONG OverwriteDisplayVersions(const base::string16& product,
+                              const base::string16& value) {
+  // The version is held in two places.  Frist change it in the MSI Installer
+  // registry entry.  It is held under a "squashed guid" key.
+  base::string16 reg_path = base::StringPrintf(
+      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\"
+      L"%ls\\Products\\%ls\\InstallProperties", kSystemPrincipalSid,
+      installer::GuidToSquid(product).c_str());
+  LONG result1 = OverwriteDisplayVersion(reg_path, value, KEY_WOW64_64KEY);
+
+  // The display version also exists under the Unininstall registry key with
+  // the original guid.  Check both WOW64_64 and WOW64_32.
+  reg_path = base::StringPrintf(
+      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{%ls}",
+      product.c_str());
+  LONG result2 = OverwriteDisplayVersion(reg_path, value, KEY_WOW64_64KEY);
+  if (result2 != ERROR_SUCCESS)
+    result2 = OverwriteDisplayVersion(reg_path, value, KEY_WOW64_32KEY);
+
+  return result1 != ERROR_SUCCESS ? result1 : result2;
+}
+
+void DelayedOverwriteDisplayVersions(const base::FilePath& setup_exe,
+                                     const std::string& id,
+                                     const Version& version) {
+  // This process has to be able to exit so we launch ourselves with
+  // instructions on what to do and then return.
+  base::CommandLine command_line(setup_exe);
+  command_line.AppendSwitchASCII(installer::switches::kSetDisplayVersionProduct,
+                                 id);
+  command_line.AppendSwitchASCII(installer::switches::kSetDisplayVersionValue,
+                                 version.GetString());
+  command_line.AppendSwitchNative(installer::switches::kDelay,
+                                  kMsiDisplayVersionOverwriteDelay);
+
+  base::LaunchOptions launch_options;
+  launch_options.force_breakaway_from_job_ = true;
+  base::Process writer = base::LaunchProcess(command_line, launch_options);
+  if (!writer.IsValid()) {
+    PLOG(ERROR) << "Failed to set DisplayVersion: "
+                << "could not launch subprocess to make desired changes."
+                << " <<" << command_line.GetCommandLineString() << ">>";
+  }
+}
 
 // Returns NULL if no compressed archive is available for processing, otherwise
 // returns a patch helper configured to uncompress and patch.
@@ -137,6 +212,32 @@ scoped_ptr<installer::ArchivePatchHelper> CreateChromeArchiveHelper(
                                         compressed_archive,
                                         base::FilePath(),
                                         target));
+}
+
+// Returns the MSI product ID from the ClientState key that is populated for MSI
+// installs.  This property is encoded in a value name whose format is
+// "EnterpriseId<GUID>" where <GUID> is the MSI product id.  <GUID> is in the
+// format XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX.  The id will be returned if
+// found otherwise this method will return an empty string.
+//
+// This format is strange and its provenance is shrouded in mystery but it has
+// the data we need, so use it.
+base::string16 FindMsiProductId(const InstallerState& installer_state,
+                                const Product* product) {
+  HKEY reg_root = installer_state.root_key();
+  BrowserDistribution* dist = product->distribution();
+  DCHECK(dist);
+
+  base::win::RegistryValueIterator value_iter(reg_root,
+                                              dist->GetStateKey().c_str());
+  for (; value_iter.Valid(); ++value_iter) {
+    base::string16 value_name(value_iter.Name());
+    if (base::StartsWith(value_name, kMsiProductIdPrefix,
+                         base::CompareCase::INSENSITIVE_ASCII)) {
+      return value_name.substr(arraysize(kMsiProductIdPrefix) - 1);
+    }
+  }
+  return base::string16();
 }
 
 // Workhorse for producing an uncompressed archive (chrome.7z) given a
@@ -738,7 +839,6 @@ installer::InstallStatus InstallProducts(
   const bool system_install = installer_state->system_install();
   installer::InstallStatus install_status = installer::UNKNOWN_STATUS;
   installer::ArchiveType archive_type = installer::UNKNOWN_ARCHIVE_TYPE;
-  bool delegated_to_existing = false;
   installer_state->UpdateStage(installer::PRECONDITIONS);
   // The stage provides more fine-grained information than -multifail, so remove
   // the -multifail suffix from the Google Update "ap" value.
@@ -749,7 +849,7 @@ installer::InstallStatus InstallProducts(
     VLOG(1) << "Installing to " << installer_state->target_path().value();
     install_status = InstallProductsHelper(
         original_state, setup_exe, cmd_line, prefs, *installer_state,
-        installer_directory, &archive_type, &delegated_to_existing);
+        installer_directory, &archive_type);
   } else {
     // CheckPreInstallConditions must set the status on failure.
     DCHECK_NE(install_status, installer::UNKNOWN_STATUS);
@@ -768,11 +868,6 @@ installer::InstallStatus InstallProducts(
       ScheduleFileSystemEntityForDeletion(prefs_path);
     }
   }
-
-  // Early exit if this setup.exe delegated to another, since that one would
-  // have taken care of UpdateInstallStatus and UpdateStage.
-  if (delegated_to_existing)
-    return install_status;
 
   const Products& products = installer_state->products();
   for (Products::const_iterator it = products.begin(); it < products.end();
@@ -890,23 +985,15 @@ installer::InstallStatus RegisterDevChrome(
   if (base::PathExists(chrome_exe)) {
     Product chrome(chrome_dist);
 
-    // Create the Start menu shortcut and pin it to the taskbar.
+    // Create the Start menu shortcut and pin it to the Win7+ taskbar.
     ShellUtil::ShortcutProperties shortcut_properties(ShellUtil::CURRENT_USER);
     chrome.AddDefaultShortcutProperties(chrome_exe, &shortcut_properties);
-    if (InstallUtil::ShouldInstallMetroProperties())
-      shortcut_properties.set_dual_mode(true);
     shortcut_properties.set_pin_to_taskbar(true);
     ShellUtil::CreateOrUpdateShortcut(
-        ShellUtil::SHORTCUT_LOCATION_START_MENU_CHROME_DIR, chrome_dist,
+        ShellUtil::SHORTCUT_LOCATION_START_MENU_ROOT, chrome_dist,
         shortcut_properties, ShellUtil::SHELL_SHORTCUT_CREATE_ALWAYS);
 
     // Register Chrome at user-level and make it default.
-    scoped_ptr<WorkItemList> delegate_execute_list(
-        WorkItem::CreateWorkItemList());
-    installer::AddDelegateExecuteWorkItems(
-        installer_state, chrome_exe.DirName(), Version(), chrome,
-        delegate_execute_list.get());
-    delegate_execute_list->Do();
     if (ShellUtil::CanMakeChromeDefaultUnattended()) {
       ShellUtil::MakeChromeDefault(chrome_dist, ShellUtil::CURRENT_USER,
                                    chrome_exe, true);
@@ -929,6 +1016,18 @@ bool HandleNonInstallCmdLineOptions(const InstallationState& original_state,
                                     const base::CommandLine& cmd_line,
                                     InstallerState* installer_state,
                                     int* exit_code) {
+  // This option is independent of all others so doesn't belong in the if/else
+  // block below.
+  if (cmd_line.HasSwitch(installer::switches::kDelay)) {
+    const std::string delay_seconds_string(
+        cmd_line.GetSwitchValueASCII(installer::switches::kDelay));
+    int delay_seconds;
+    if (base::StringToInt(delay_seconds_string, &delay_seconds) &&
+        delay_seconds > 0) {
+      base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(delay_seconds));
+    }
+  }
+
   // TODO(gab): Add a local |status| variable which each block below sets;
   // only determine the |exit_code| from |status| at the end (this will allow
   // this method to validate that
@@ -1172,118 +1271,20 @@ bool HandleNonInstallCmdLineOptions(const InstallationState& original_state,
     bool updates_enabled = GoogleUpdateSettings::ReenableAutoupdates();
     *exit_code = updates_enabled ? installer::REENABLE_UPDATES_SUCCEEDED :
                                    installer::REENABLE_UPDATES_FAILED;
+  } else if (cmd_line.HasSwitch(
+                 installer::switches::kSetDisplayVersionProduct)) {
+    const base::string16 registry_product(
+        cmd_line.GetSwitchValueNative(
+            installer::switches::kSetDisplayVersionProduct));
+    const base::string16 registry_value(
+        cmd_line.GetSwitchValueNative(
+            installer::switches::kSetDisplayVersionValue));
+    *exit_code = OverwriteDisplayVersions(registry_product, registry_value);
   } else {
     handled = false;
   }
 
   return handled;
-}
-
-bool ShowRebootDialog() {
-  // Get a token for this process.
-  HANDLE token;
-  if (!OpenProcessToken(GetCurrentProcess(),
-                        TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
-                        &token)) {
-    LOG(ERROR) << "Failed to open token.";
-    return false;
-  }
-
-  // Use a ScopedHandle to keep track of and eventually close our handle.
-  // TODO(robertshield): Add a Receive() method to base's ScopedHandle.
-  base::win::ScopedHandle scoped_handle(token);
-
-  // Get the LUID for the shutdown privilege.
-  TOKEN_PRIVILEGES tkp = {0};
-  LookupPrivilegeValue(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid);
-  tkp.PrivilegeCount = 1;
-  tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-  // Get the shutdown privilege for this process.
-  AdjustTokenPrivileges(token, FALSE, &tkp, 0,
-                        reinterpret_cast<PTOKEN_PRIVILEGES>(NULL), 0);
-  if (GetLastError() != ERROR_SUCCESS) {
-    LOG(ERROR) << "Unable to get shutdown privileges.";
-    return false;
-  }
-
-  // Popup a dialog that will prompt to reboot using the default system message.
-  // TODO(robertshield): Add a localized, more specific string to the prompt.
-  RestartDialog(NULL, NULL, EWX_REBOOT | EWX_FORCEIFHUNG);
-  return true;
-}
-
-// Returns the Custom information for the client identified by the exe path
-// passed in. This information is used for crash reporting.
-google_breakpad::CustomClientInfo* GetCustomInfo(const wchar_t* exe_path) {
-  base::string16 version;
-  scoped_ptr<FileVersionInfo> version_info(
-      FileVersionInfo::CreateFileVersionInfo(base::FilePath(exe_path)));
-  if (version_info.get())
-    version = version_info->product_version();
-
-  if (version.empty())
-    version = L"0.1.0.0";
-
-  // Report crashes under the same product name as the browser. This string
-  // MUST match server-side configuration.
-  base::string16 product(base::ASCIIToUTF16(PRODUCT_SHORTNAME_STRING));
-  static google_breakpad::CustomInfoEntry ver_entry(L"ver", version.c_str());
-  static google_breakpad::CustomInfoEntry prod_entry(L"prod", product.c_str());
-  static google_breakpad::CustomInfoEntry plat_entry(L"plat", L"Win32");
-  static google_breakpad::CustomInfoEntry type_entry(L"ptype",
-                                                     L"Chrome Installer");
-  static google_breakpad::CustomInfoEntry entries[] = {
-      ver_entry, prod_entry, plat_entry, type_entry };
-  static google_breakpad::CustomClientInfo custom_info = {
-      entries, arraysize(entries) };
-  return &custom_info;
-}
-
-// Initialize crash reporting for this process. This involves connecting to
-// breakpad, etc.
-scoped_ptr<google_breakpad::ExceptionHandler> InitializeCrashReporting(
-    bool system_install) {
-  // Only report crashes if the user allows it.
-  if (!GoogleUpdateSettings::GetCollectStatsConsent())
-    return scoped_ptr<google_breakpad::ExceptionHandler>();
-
-  // Get the alternate dump directory. We use the temp path.
-  base::FilePath temp_directory;
-  if (!base::GetTempDir(&temp_directory) || temp_directory.empty())
-    return scoped_ptr<google_breakpad::ExceptionHandler>();
-
-  wchar_t exe_path[MAX_PATH * 2] = {0};
-  GetModuleFileName(NULL, exe_path, arraysize(exe_path));
-
-  // Build the pipe name. It can be either:
-  // System-wide install: "NamedPipe\GoogleCrashServices\S-1-5-18"
-  // Per-user install: "NamedPipe\GoogleCrashServices\<user SID>"
-  base::string16 user_sid = kSystemPrincipalSid;
-
-  if (!system_install) {
-    if (!base::win::GetUserSidString(&user_sid)) {
-      return scoped_ptr<google_breakpad::ExceptionHandler>();
-    }
-  }
-
-  base::string16 pipe_name = kGoogleUpdatePipeName;
-  pipe_name += user_sid;
-
-#ifdef _WIN64
-  // The protocol for connecting to the out-of-process Breakpad crash
-  // reporter is different for x86-32 and x86-64: the message sizes
-  // are different because the message struct contains a pointer.  As
-  // a result, there are two different named pipes to connect to.  The
-  // 64-bit one is distinguished with an "-x64" suffix.
-  pipe_name += L"-x64";
-#endif
-
-  return scoped_ptr<google_breakpad::ExceptionHandler>(
-      new google_breakpad::ExceptionHandler(
-          temp_directory.value(), NULL, NULL, NULL,
-          google_breakpad::ExceptionHandler::HANDLER_ALL, kLargerDumpType,
-          pipe_name.c_str(), GetCustomInfo(exe_path)));
 }
 
 // Uninstalls multi-install Chrome Frame if the current operation is a
@@ -1354,10 +1355,8 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
                                     const MasterPreferences& prefs,
                                     const InstallerState& installer_state,
                                     base::FilePath* installer_directory,
-                                    ArchiveType* archive_type,
-                                    bool* delegated_to_existing) {
+                                    ArchiveType* archive_type) {
   DCHECK(archive_type);
-  DCHECK(delegated_to_existing);
   const bool system_install = installer_state.system_install();
   InstallStatus install_status = UNKNOWN_STATUS;
 
@@ -1452,30 +1451,9 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
     VLOG(1) << "version to install: " << installer_version->GetString();
     bool proceed_with_installation = true;
 
-    if (installer_state.operation() == InstallerState::MULTI_INSTALL) {
-      // This is a new install of a multi-install product. Rather than give up
-      // in case a higher version of the binaries (including a single-install
-      // of Chrome, which can safely be migrated to multi-install by way of
-      // CheckMultiInstallConditions) is already installed, delegate to the
-      // installed setup.exe to install the product at hand.
-      base::FilePath existing_setup_exe;
-      if (GetExistingHigherInstaller(original_state, system_install,
-                                     *installer_version, &existing_setup_exe)) {
-        VLOG(1) << "Deferring to existing installer.";
-        installer_state.UpdateStage(DEFERRING_TO_HIGHER_VERSION);
-        if (DeferToExistingInstall(existing_setup_exe, cmd_line,
-                                   installer_state, temp_path.path(),
-                                   &install_status)) {
-          *delegated_to_existing = true;
-          return install_status;
-        }
-      }
-    }
-
-    uint32 higher_products = 0;
-    COMPILE_ASSERT(
-        sizeof(higher_products) * 8 > BrowserDistribution::NUM_TYPES,
-        too_many_distribution_types_);
+    uint32_t higher_products = 0;
+    static_assert(sizeof(higher_products) * 8 > BrowserDistribution::NUM_TYPES,
+                  "too many distribution types");
     const Products& products = installer_state.products();
     for (Products::const_iterator it = products.begin(); it < products.end();
          ++it) {
@@ -1491,10 +1469,10 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
         higher_products |= (1 << product.distribution()->GetType());
       }
     }
-
-    if (higher_products != 0 && !installer_state.is_standalone()) { // (jarle) if standalone install we allow installing lower versions
-      COMPILE_ASSERT(BrowserDistribution::NUM_TYPES == 3,
-                     add_support_for_new_products_here_);
+    // NOTE(jarle@vivaldi): If standalone we allow installing lower versions
+    if (higher_products != 0 && !installer_state.is_standalone()) {
+      static_assert(BrowserDistribution::NUM_TYPES == 3,
+                    "add support for new products here");
       int message_id = IDS_INSTALL_HIGHER_VERSION_BASE;
       proceed_with_installation = false;
       install_status = HIGHER_VERSION_EXISTS;
@@ -1503,26 +1481,24 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
 
     if (proceed_with_installation) {
       base::FilePath prefs_source_path(cmd_line.GetSwitchValueNative(
-        switches::kInstallerData));
+          switches::kInstallerData));
       install_status = InstallOrUpdateProduct(
-        original_state, installer_state, setup_exe, uncompressed_archive,
-        temp_path.path(), src_path, prefs_source_path, prefs,
-        *installer_version);
+          original_state, installer_state, setup_exe, uncompressed_archive,
+          temp_path.path(), src_path, prefs_source_path, prefs,
+          *installer_version);
 
       int install_msg_base = IDS_INSTALL_FAILED_BASE;
       base::FilePath chrome_exe;
       base::string16 quoted_chrome_exe;
       if (install_status == SAME_VERSION_REPAIR_FAILED) {
         install_msg_base = IDS_SAME_VERSION_REPAIR_FAILED_BASE;
-      }
-      else if (install_status != INSTALL_FAILED) {
+      } else if (install_status != INSTALL_FAILED) {
         if (installer_state.target_path().empty()) {
           // If we failed to construct install path, it means the OS call to
           // get %ProgramFiles% or %AppData% failed. Report this as failure.
           install_msg_base = IDS_INSTALL_OS_ERROR_BASE;
           install_status = OS_ERROR;
-        }
-        else {
+        } else {
           chrome_exe = installer_state.target_path().Append(kChromeExe);
           quoted_chrome_exe = L"\"" + chrome_exe.value() + L"\"";
           install_msg_base = 0;
@@ -1535,34 +1511,37 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
       // Chrome was specifically requested (rather than being upgraded as
       // part of a multi-install).
       const Product* chrome_install = prefs.install_chrome() ?
-        installer_state.FindProduct(BrowserDistribution::CHROME_BROWSER) :
-        NULL;
+          installer_state.FindProduct(BrowserDistribution::CHROME_BROWSER) :
+          NULL;
 
       bool do_not_register_for_update_launch = false;
       if (chrome_install) {
         prefs.GetBool(master_preferences::kDoNotRegisterForUpdateLaunch,
-          &do_not_register_for_update_launch);
-      }
-      else {
+                      &do_not_register_for_update_launch);
+      } else {
         do_not_register_for_update_launch = true;  // Never register.
       }
 
       bool write_chrome_launch_string =
-        (!do_not_register_for_update_launch &&
-        install_status != IN_USE_UPDATED);
+          (!do_not_register_for_update_launch &&
+           install_status != IN_USE_UPDATED);
 
       installer_state.WriteInstallerResult(install_status, install_msg_base,
-        write_chrome_launch_string ? &quoted_chrome_exe : NULL);
+          write_chrome_launch_string ? &quoted_chrome_exe : NULL);
 
       // rename the "Profile" folder to "User Data" for standalone builds if
       // the "Profile" folder exists
-      if (installer_state.is_standalone() && (install_status == FIRST_INSTALL_SUCCESS ||
-        install_status == INSTALL_REPAIRED || install_status == NEW_VERSION_UPDATED ||
-        install_status == IN_USE_UPDATED)) {
+      if (installer_state.is_standalone() &&
+          (install_status == FIRST_INSTALL_SUCCESS ||
+          install_status == INSTALL_REPAIRED ||
+          install_status == NEW_VERSION_UPDATED ||
+          install_status == IN_USE_UPDATED)) {
         std::wstring::size_type pos =
-          std::wstring(installer_state.target_path().value()).rfind(L"\\Application");
+          std::wstring(
+            installer_state.target_path().value()).rfind(L"\\Application");
         if (pos != std::wstring::npos) {
-          std::wstring base = std::wstring(installer_state.target_path().value()).substr(0, pos);
+          std::wstring base =
+            std::wstring(installer_state.target_path().value()).substr(0, pos);
           base::FilePath old_profile_dir(base);
           old_profile_dir = old_profile_dir.AppendASCII("Profile");
           base::FilePath new_user_data_dir(base);
@@ -1571,44 +1550,51 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
             if (!::MoveFileEx(old_profile_dir.value().c_str(),
               new_user_data_dir.value().c_str(), MOVEFILE_WRITE_THROUGH)) {
               DWORD error = ::GetLastError();
-              LOG(WARNING) << "Failed to rename old Profile folder to User Data. Error=" << error;
-              base::string16 message(base::StringPrintf(L"Failed to rename 'Profile' folder. Error=%u", error));
-              MessageBox(NULL, message.c_str(), L"Vivaldi Installer", MB_OK | MB_ICONWARNING);
+              LOG(WARNING) <<
+                "Failed to rename old Profile folder to User Data. Error="
+                << error;
+              base::string16 message(base::StringPrintf(
+                  L"Failed to rename 'Profile' folder. Error=%u", error));
+              MessageBox(NULL, message.c_str(), L"Vivaldi Installer",
+                  MB_OK | MB_ICONWARNING);
             }
             else {
-              Sleep(1000); // relax for a sec to be 100% sure that the rename has been flushed to disk ...
+              // relax for a sec to be 100% sure that the rename has been
+              // flushed to disk ...
+              Sleep(1000);
             }
           }
         }
       }
       if (!installer_state.is_vivaldi()) {
-        if (install_status == FIRST_INSTALL_SUCCESS) {
-          VLOG(1) << "First install successful.";
-          if (chrome_install) {
-            // We never want to launch Chrome in system level install mode.
-            bool do_not_launch_chrome = false;
-            prefs.GetBool(master_preferences::kDoNotLaunchChrome,
-              &do_not_launch_chrome);
-
-            if (!system_install && !do_not_launch_chrome)
-              chrome_install->LaunchChrome(installer_state.target_path());
-          }
+      if (install_status == FIRST_INSTALL_SUCCESS) {
+        VLOG(1) << "First install successful.";
+        if (chrome_install) {
+          // We never want to launch Chrome in system level install mode.
+          bool do_not_launch_chrome = false;
+          prefs.GetBool(master_preferences::kDoNotLaunchChrome,
+                        &do_not_launch_chrome);
+          if (!system_install && !do_not_launch_chrome)
+            chrome_install->LaunchChrome(installer_state.target_path());
         }
-        else if ((install_status == NEW_VERSION_UPDATED) ||
-          (install_status == IN_USE_UPDATED)) {
-          const Product* chrome = installer_state.FindProduct(
+      } else if ((install_status == NEW_VERSION_UPDATED) ||
+                 (install_status == IN_USE_UPDATED)) {
+        const Product* chrome = installer_state.FindProduct(
             BrowserDistribution::CHROME_BROWSER);
-          if (chrome != NULL) {
-            DCHECK_NE(chrome_exe.value(), base::string16());
-            RemoveChromeLegacyRegistryKeys(chrome->distribution(), chrome_exe);
-          }
+        if (chrome != NULL) {
+          DCHECK_NE(chrome_exe.value(), base::string16());
+          RemoveChromeLegacyRegistryKeys(chrome->distribution(), chrome_exe);
+        }
         }
       }
       bool force_launch_vivaldi_on_successful_install =
-        base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kVivaldiForceLaunch);
+        base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kVivaldiForceLaunch);
       if (force_launch_vivaldi_on_successful_install &&
-         (install_status == FIRST_INSTALL_SUCCESS || install_status == INSTALL_REPAIRED ||
-          install_status == NEW_VERSION_UPDATED || install_status == IN_USE_UPDATED)) {
+          (install_status == FIRST_INSTALL_SUCCESS ||
+          install_status == INSTALL_REPAIRED ||
+          install_status == NEW_VERSION_UPDATED ||
+          install_status == IN_USE_UPDATED)) {
         chrome_install->LaunchChrome(installer_state.target_path());
       }
     }
@@ -1637,13 +1623,46 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
     }
   }
 
-  // If installation completed successfully, return the path to the directory
-  // containing the newly installed setup.exe and uncompressed archive if the
-  // caller requested it.
-  if (installer_directory &&
-      InstallUtil::GetInstallReturnCode(install_status) == 0) {
-    *installer_directory =
-        installer_state.GetInstallerDirectory(*installer_version);
+  // If the installation completed successfully...
+  if (InstallUtil::GetInstallReturnCode(install_status) == 0) {
+    // Update the DisplayVersion created by an MSI-based install.
+    base::FilePath master_preferences_file(
+      installer_state.target_path().AppendASCII(
+          installer::kDefaultMasterPrefs));
+    std::string install_id;
+    if (prefs.GetString(installer::master_preferences::kMsiProductId,
+                        &install_id)) {
+      // A currently active MSI install will have specified the master-
+      // preferences file on the command-line that includes the product-id.
+      // We must delay the setting of the DisplayVersion until after the
+      // grandparent "msiexec" process has exited.
+      base::FilePath new_setup =
+          installer_state.GetInstallerDirectory(*installer_version)
+          .Append(kSetupExe);
+      DelayedOverwriteDisplayVersions(
+          new_setup, install_id, *installer_version);
+    } else {
+      // Only when called by the MSI installer do we need to delay setting
+      // the DisplayVersion.  In other runs, such as those done by the auto-
+      // update action, we set the value immediately.
+      const Product* chrome = installer_state.FindProduct(
+          BrowserDistribution::CHROME_BROWSER);
+      if (chrome != NULL) {
+        // Get the app's MSI Product-ID from an entry in ClientState.
+        base::string16 app_guid = FindMsiProductId(installer_state, chrome);
+        if (!app_guid.empty()) {
+          OverwriteDisplayVersions(app_guid,
+                                   base::UTF8ToUTF16(
+                                       installer_version->GetString()));
+        }
+      }
+    }
+    // Return the path to the directory containing the newly installed
+    // setup.exe and uncompressed archive if the caller requested it.
+    if (installer_directory) {
+      *installer_directory =
+          installer_state.GetInstallerDirectory(*installer_version);
+    }
   }
 
   // temp_path's dtor will take care of deleting or scheduling itself for
@@ -1688,21 +1707,26 @@ typedef BOOL(WINAPI *LPQueryFullProcessImageName)(
 
 static LPQueryFullProcessImageName fpQueryFullProcessImageName = NULL;
 
-void GetRunningVivaldiProcesses(const std::wstring& path, std::vector<DWORD>& process_ids) {
+void GetRunningVivaldiProcesses(const std::wstring& path,
+                                std::vector<DWORD>& process_ids) {
   process_ids.clear();
   PROCESSENTRY32 entry = { sizeof(PROCESSENTRY32) };
   HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
   if (snapshot && Process32First(snapshot, &entry)) {
     while (Process32Next(snapshot, &entry)) {
       if (!wcsicmp(entry.szExeFile, L"vivaldi.exe")) {
-        if (base::win::GetVersion() >= base::win::VERSION_VISTA && fpQueryFullProcessImageName) {
-          HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, entry.th32ProcessID);
+        if (base::win::GetVersion() >= base::win::VERSION_VISTA &&
+            fpQueryFullProcessImageName) {
+          HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE,
+            entry.th32ProcessID);
           if (process) {
             wchar_t process_image_name[MAX_PATH] = { 0 };
             DWORD size = MAX_PATH;
-            if (fpQueryFullProcessImageName(process, 0, process_image_name, &size)) {
+            if (fpQueryFullProcessImageName(process, 0, process_image_name,
+                &size)) {
               std::wstring process_path(process_image_name);
-              std::wstring::size_type pos = process_path.rfind(L"\\Application");
+              std::wstring::size_type pos =
+                process_path.rfind(L"\\Application");
 
               if (pos != std::wstring::npos)
                 process_path = process_path.substr(0, pos);
@@ -1729,7 +1753,9 @@ bool LoadQueryFullProcessImageName()
   if (!hDLL)
     return false;
 
-  fpQueryFullProcessImageName = (LPQueryFullProcessImageName)GetProcAddress(hDLL, "QueryFullProcessImageNameW");
+  fpQueryFullProcessImageName =
+    (LPQueryFullProcessImageName)GetProcAddress(hDLL,
+      "QueryFullProcessImageNameW");
   if (!fpQueryFullProcessImageName)
     return false;
 
@@ -1756,11 +1782,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
   VLOG(1) << "Command Line: " << cmd_line.GetCommandLineString();
 
-  base::FilePath vivaldi_profile_path(cmd_line.GetSwitchValuePath(installer::switches::kVivaldiInstallDir));
+  base::FilePath vivaldi_profile_path(cmd_line.GetSwitchValuePath(
+    installer::switches::kVivaldiInstallDir));
   const bool is_vivaldi = cmd_line.HasSwitch(installer::switches::kVivaldi);
   const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
-  const bool is_vivaldi_update = cmd_line.HasSwitch(installer::switches::kVivaldiUpdate);
-  const bool is_standalone = cmd_line.HasSwitch(installer::switches::kVivaldiStandalone);
+  const bool is_vivaldi_update = cmd_line.HasSwitch(
+    installer::switches::kVivaldiUpdate);
+  const bool is_standalone = cmd_line.HasSwitch(
+    installer::switches::kVivaldiStandalone);
 
   installer::VivaldiInstallDialog::InstallType install_type;
   if (cmd_line.HasSwitch(installer::switches::kSystemLevel))
@@ -1773,12 +1802,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   if (is_vivaldi && !is_vivaldi_update && !is_uninstall) {
     INITCOMMONCONTROLSEX iccx;
     iccx.dwSize = sizeof(iccx);
-    iccx.dwICC = ICC_COOL_CLASSES | ICC_BAR_CLASSES | ICC_TREEVIEW_CLASSES | ICC_USEREX_CLASSES;
+    iccx.dwICC = ICC_COOL_CLASSES | ICC_BAR_CLASSES | ICC_TREEVIEW_CLASSES |
+        ICC_USEREX_CLASSES;
     ::InitCommonControlsEx(&iccx);
 
-    installer::VivaldiInstallDialog dlg(instance, false, install_type, vivaldi_profile_path.value());
+    installer::VivaldiInstallDialog dlg(instance, false, install_type,
+      vivaldi_profile_path.value());
 
-    const installer::VivaldiInstallDialog::DlgResult dlg_result = dlg.ShowModal();
+    const installer::VivaldiInstallDialog::DlgResult dlg_result =
+      dlg.ShowModal();
     if (dlg_result != installer::VivaldiInstallDialog::INSTALL_DLG_INSTALL) {
       VLOG(1) << "Vivaldi: install cancelled/failed.";
       return installer::INSTALL_FAILED;
@@ -1799,7 +1831,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     switch (install_type)
     {
     case installer::VivaldiInstallDialog::INSTALL_FOR_CURRENT_USER:
-      VLOG(1) << "Vivaldi: install for current user - install dir=" << path.value();
+      VLOG(1) << "Vivaldi: install for current user - install dir=" <<
+        path.value();
       break;
     case installer::VivaldiInstallDialog::INSTALL_FOR_ALL_USERS:
       cmd_line.AppendSwitch(installer::switches::kSystemLevel);
@@ -1829,7 +1862,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
       }
       int choice = IDRETRY;
       while (choice != IDCANCEL && !process_ids.empty()) {
-        choice = MessageBox(NULL, L"Vivaldi is still running.\nPlease close all Vivaldi windows before continuing install.", L"Vivaldi Installer", MB_RETRYCANCEL | MB_ICONEXCLAMATION);
+        choice = MessageBox(NULL,
+          L"Vivaldi is still running.\n"
+          L"Please close all Vivaldi windows before continuing install.",
+          L"Vivaldi Installer", MB_RETRYCANCEL | MB_ICONEXCLAMATION);
         GetRunningVivaldiProcesses(vivaldi_profile_path.value(), process_ids);
       }
       if (choice == IDCANCEL) {
@@ -1842,7 +1878,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     // enable auto-update
     std::wstring update_key(installer::kVivaldiKey);
     update_key.append(L"\\AutoUpdate");
-    base::win::RegKey key(HKEY_CURRENT_USER, update_key.c_str(), KEY_ALL_ACCESS);
+    base::win::RegKey key(HKEY_CURRENT_USER, update_key.c_str(),
+      KEY_ALL_ACCESS);
     if (key.Valid())
       key.WriteValue(L"Enabled", L"1");
   }
@@ -1871,14 +1908,21 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
   VLOG(1) << "multi install is " << prefs.is_multi_install();
 
-  scoped_ptr<google_breakpad::ExceptionHandler> breakpad(
-      InitializeCrashReporting(system_install));
-
   InstallationState original_state;
   original_state.Initialize();
 
   InstallerState installer_state;
   installer_state.Initialize(cmd_line, prefs, original_state);
+
+  installer::ConfigureCrashReporting(installer_state);
+  installer::SetInitialCrashKeys(installer_state);
+  installer::SetCrashKeysFromCommandLine(cmd_line);
+
+  // Make sure the process exits cleanly on unexpected errors.
+  base::EnableTerminationOnHeapCorruption();
+  base::EnableTerminationOnOutOfMemory();
+  base::win::RegisterInvalidParamHandler();
+  base::win::SetupCRT(cmd_line);
 
   // Check to make sure current system is WinXP or later. If not, log
   // error message and get out.
@@ -2000,19 +2044,25 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     return_code = InstallUtil::GetInstallReturnCode(install_status);
   }
 
-  if (return_code == 0 && install_type == installer::VivaldiInstallDialog::INSTALL_STANDALONE) {
-    std::string profile_path_data = vivaldi_profile_path.AsUTF8Unsafe();
-    int size = profile_path_data.size();
+  if (return_code == 0 &&
+      install_type == installer::VivaldiInstallDialog::INSTALL_STANDALONE) {
+    std::string dummy_str("// Vivaldi Standalone");
+    int size = (int)dummy_str.size();
 
-    vivaldi_profile_path = vivaldi_profile_path.Append(L"Application");
-    vivaldi_profile_path = vivaldi_profile_path.Append(installer::kStandaloneProfileHelper);
+    vivaldi_profile_path =
+      vivaldi_profile_path.Append(installer::kInstallBinaryDir);
+    vivaldi_profile_path =
+      vivaldi_profile_path.Append(installer::kStandaloneProfileHelper);
 
-    if (base::WriteFile(vivaldi_profile_path, profile_path_data.c_str(), size) == size) {
-      VLOG(1) << "Successfully wrote " << installer::kStandaloneProfileHelper << " to " << vivaldi_profile_path.value();
+    if (base::WriteFile(
+      vivaldi_profile_path, dummy_str.c_str(), size) == size) {
+      VLOG(1) << "Successfully wrote " <<
+        installer::kStandaloneProfileHelper << " to " <<
+        vivaldi_profile_path.value();
     }
     else {
-      /*DWORD err =*/ GetLastError();
-      PLOG(ERROR) << "Error writing " << installer::kStandaloneProfileHelper << " to " << vivaldi_profile_path.value();
+      PLOG(ERROR) << "Error writing " << installer::kStandaloneProfileHelper <<
+        " to " << vivaldi_profile_path.value();
       return installer::INSTALL_FAILED;
     }
   }

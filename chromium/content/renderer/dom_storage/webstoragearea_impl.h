@@ -5,7 +5,9 @@
 #ifndef CONTENT_RENDERER_DOM_STORAGE_WEBSTORAGEAREA_IMPL_H_
 #define CONTENT_RENDERER_DOM_STORAGE_WEBSTORAGEAREA_IMPL_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/memory/ref_counted.h"
 #include "third_party/WebKit/public/platform/WebStorageArea.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -20,20 +22,21 @@ class WebStorageAreaImpl : public blink::WebStorageArea {
  public:
   static WebStorageAreaImpl* FromConnectionId(int id);
 
-  WebStorageAreaImpl(int64 namespace_id, const GURL& origin);
-  virtual ~WebStorageAreaImpl();
+  WebStorageAreaImpl(int64_t namespace_id, const GURL& origin);
+  ~WebStorageAreaImpl() override;
 
   // See WebStorageArea.h for documentation on these functions.
-  virtual unsigned length();
-  virtual blink::WebString key(unsigned index);
-  virtual blink::WebString getItem(const blink::WebString& key);
-  virtual void setItem(
-      const blink::WebString& key, const blink::WebString& value,
-      const blink::WebURL& page_url, WebStorageArea::Result& result);
-  virtual void removeItem(
-      const blink::WebString& key, const blink::WebURL& page_url);
-  virtual void clear(const blink::WebURL& url);
-  virtual size_t memoryBytesUsedByCache() const;
+  unsigned length() override;
+  blink::WebString key(unsigned index) override;
+  blink::WebString getItem(const blink::WebString& key) override;
+  void setItem(const blink::WebString& key,
+               const blink::WebString& value,
+               const blink::WebURL& page_url,
+               WebStorageArea::Result& result) override;
+  void removeItem(const blink::WebString& key,
+                  const blink::WebURL& page_url) override;
+  void clear(const blink::WebURL& url) override;
+  size_t memoryBytesUsedByCache() const override;
 
  private:
   int connection_id_;

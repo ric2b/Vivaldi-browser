@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -22,7 +23,6 @@ import android.widget.FrameLayout;
 
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.VisibleForTesting;
 
 /**
  * The containing view for {@link ContentViewCore} that exists in the Android UI hierarchy and
@@ -36,12 +36,26 @@ public class ContentView extends FrameLayout
     protected final ContentViewCore mContentViewCore;
 
     /**
+     * Constructs a new ContentView for the appropriate Android version.
+     * @param context The Context the view is running in, through which it can
+     *                access the current theme, resources, etc.
+     * @param cvc A pointer to the content view core managing this content view.
+     * @return an instance of a ContentView.
+     */
+    public static ContentView createContentView(Context context, ContentViewCore cvc) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return new ContentViewApi23(context, cvc);
+        }
+        return new ContentView(context, cvc);
+    }
+
+    /**
      * Creates an instance of a ContentView.
      * @param context The Context the view is running in, through which it can
      *                access the current theme, resources, etc.
      * @param cvc A pointer to the content view core managing this content view.
      */
-    public ContentView(Context context, ContentViewCore cvc) {
+    ContentView(Context context, ContentViewCore cvc) {
         super(context, null, android.R.attr.webViewStyle);
 
         if (getScrollBarStyle() == View.SCROLLBARS_INSIDE_OVERLAY) {
@@ -72,12 +86,6 @@ public class ContentView extends FrameLayout
         } else {
             return super.getAccessibilityNodeProvider();
         }
-    }
-
-    // @Override[ANDROID-M] TODO(sgurun) override and also remove VisibleForTesting. crbug/512264
-    @VisibleForTesting
-    public void onProvideVirtualStructure(final ViewStructure structure) {
-        mContentViewCore.onProvideVirtualStructure(structure);
     }
 
     // Needed by ContentViewCore.InternalAccessDelegate
@@ -189,7 +197,7 @@ public class ContentView extends FrameLayout
      */
     @Override
     public void scrollBy(int x, int y) {
-        mContentViewCore.scrollBy(x, y);
+        mContentViewCore.scrollBy(x, y, false);
     }
 
     @Override
@@ -227,6 +235,25 @@ public class ContentView extends FrameLayout
     @Override
     protected int computeVerticalScrollRange() {
         return mContentViewCore.computeVerticalScrollRange();
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        ContentViewClient client = mContentViewCore.getContentViewClient();
+
+        // Allow the ContentViewClient to override the ContentView's width.
+        int desiredWidthMeasureSpec = client.getDesiredWidthMeasureSpec();
+        if (MeasureSpec.getMode(desiredWidthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            widthMeasureSpec = desiredWidthMeasureSpec;
+        }
+
+        // Allow the ContentViewClient to override the ContentView's height.
+        int desiredHeightMeasureSpec = client.getDesiredHeightMeasureSpec();
+        if (MeasureSpec.getMode(desiredHeightMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            heightMeasureSpec = desiredHeightMeasureSpec;
+        }
+
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
     }
 
     // End FrameLayout overrides.
@@ -329,4 +356,15 @@ public class ContentView extends FrameLayout
     ///////////////////////////////////////////////////////////////////////////////////////////////
     //                End Implementation of ContentViewCore.InternalAccessDelegate               //
     ///////////////////////////////////////////////////////////////////////////////////////////////
+
+    private static class ContentViewApi23 extends ContentView {
+        public ContentViewApi23(Context context, ContentViewCore cvc) {
+            super(context, cvc);
+        }
+
+        @Override
+        public void onProvideVirtualStructure(final ViewStructure structure) {
+            mContentViewCore.onProvideVirtualStructure(structure);
+        }
+    }
 }

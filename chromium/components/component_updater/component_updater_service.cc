@@ -89,6 +89,7 @@ void CrxUpdateService::Stop() {
   DCHECK(thread_checker_.CalledOnValidThread());
   VLOG(1) << "CrxUpdateService stopping";
   timer_.Stop();
+  update_client_->Stop();
 }
 
 // Adds a component to be checked for upgrades. If the component exists it
@@ -351,7 +352,7 @@ scoped_ptr<ComponentUpdateService> ComponentUpdateServiceFactory(
   DCHECK(config);
   auto update_client = update_client::UpdateClientFactory(config);
   return scoped_ptr<ComponentUpdateService>(
-      new CrxUpdateService(config, update_client.Pass()));
+      new CrxUpdateService(config, std::move(update_client)));
 }
 
 }  // namespace component_updater

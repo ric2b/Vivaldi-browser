@@ -51,7 +51,14 @@ ExtensionSettingsWebUITest.prototype = {
 
   /** @override */
   setUp: function() {
+    testing.Test.prototype.setUp.call(this);
     testing.Test.disableAnimationsAndTransitions();
+
+    // Enable when failure is resolved.
+    // AX_ARIA_08: http://crbug.com/560903
+    this.accessibilityAuditConfig.ignoreSelectors(
+      'requiredOwnedAriaRoleMissing',
+      '#kiosk-app-list');
   },
 
   /**
@@ -83,11 +90,14 @@ ExtensionSettingsWebUITest.prototype = {
 
   /** @protected */
   enableDeveloperMode: function() {
-    var next = this.nextStep.bind(this);
+    // Toggling developer mode triggers a page update, so we need to be able to
+    // wait for the update to finish.
+    $('extension-settings-list').resetLoadFinished();
+    var waitForPage = this.waitForPageLoad.bind(this);
     document.addEventListener('devControlsVisibilityUpdated',
                               function devCallback() {
       // Callback should only be handled once.
-      document.removeEventListener(devCallback);
+      document.removeEventListener('devControlsVisibilityUpdated', devCallback);
 
       chrome.developerPrivate.getProfileConfiguration(function(profileInfo) {
         assertTrue(extensionSettings.classList.contains('dev-mode'));
@@ -97,7 +107,7 @@ ExtensionSettingsWebUITest.prototype = {
         // Ensure transition here so that any dependent code does not break.
         ensureTransitionEndEvent($('dev-controls'), 0);
 
-        next();
+        waitForPage();
       });
     });
 
@@ -143,8 +153,7 @@ TEST_F('ExtensionSettingsWebUITest', 'testEmptyExtensionList', function() {
   this.nextStep();
 });
 
-// In Vivaldi this will always break since the relevant code has been removed
-TEST_F('ExtensionSettingsWebUITest', 'DISABLED_testChromeSendHandled', function() {
+TEST_F('ExtensionSettingsWebUITest', 'testChromeSendHandled', function() {
   var testPackExtenion = function() {
     // This dialog should be hidden at first.
     assertFalse($('pack-extension-overlay').classList.contains('showing'));
@@ -247,7 +256,6 @@ TEST_F('BasicExtensionSettingsWebUITest', 'testDeveloperModeManyExtensions',
   this.testDeveloperMode();
 });
 
-
 TEST_F('BasicExtensionSettingsWebUITest', 'testDisable', function() {
   this.steps = [this.waitForPageLoad, this.verifyDisabledWorks, testDone];
   this.nextStep();
@@ -276,6 +284,58 @@ TEST_F('BasicExtensionSettingsWebUITest', 'testNonEmptyExtensionList',
   };
 
   this.steps = [this.waitForPageLoad, verifyListIsNotHiddenAndEmpty, testDone];
+  this.nextStep();
+});
+
+function AutoScrollExtensionSettingsWebUITest() {}
+
+/**
+ * A variation for testing auto-scroll when an id query param is passed in the
+ * url.
+ * @constructor
+ * @extends {BasicExtensionSettingsWebUITest}
+ */
+AutoScrollExtensionSettingsWebUITest.prototype = {
+  __proto__: BasicExtensionSettingsWebUITest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://extensions-frame/?id=' + GOOD_EXTENSION_ID,
+
+  /** @override */
+  testGenPreamble: function() {
+    BasicExtensionSettingsWebUITest.prototype.testGenPreamble.call(this);
+    // The window needs to be sufficiently small in order to ensure a scroll bar
+    // is available.
+    GEN('  ShrinkWebContentsView();');
+  },
+};
+
+TEST_F('AutoScrollExtensionSettingsWebUITest', 'testAutoScroll', function() {
+  var checkHasScrollbar = function() {
+    assertGT(document.body.scrollHeight, document.body.clientHeight);
+    this.nextStep();
+  };
+  var checkIsScrolled = function() {
+    assertGT(document.body.scrollTop, 0);
+    this.nextStep();
+  };
+  var checkScrolledToTop = function() {
+    assertEquals(0, document.body.scrollTop);
+    this.nextStep();
+  };
+  var scrollToTop = function() {
+    document.body.scrollTop = 0;
+    this.nextStep();
+  };
+  // Test that a) autoscroll works on first page load and b) updating the
+  // page doesn't result in autoscroll triggering again.
+  this.steps = [this.waitForPageLoad,
+                checkHasScrollbar,
+                checkIsScrolled,
+                scrollToTop,
+                this.enableDeveloperMode,
+                checkScrolledToTop,
+                testDone];
   this.nextStep();
 });
 
@@ -341,8 +401,7 @@ SettingsCommandsExtensionSettingsWebUITest.prototype = {
   browsePreload: 'chrome://extensions-frame/configureCommands',
 };
 
-// In Vivaldi this will always break since the relevant code has been removed
-TEST_F('SettingsCommandsExtensionSettingsWebUITest', 'DISABLED_testChromeSendHandler',
+TEST_F('SettingsCommandsExtensionSettingsWebUITest', 'testChromeSendHandler',
     function() {
   // Just navigating to the page should trigger the chrome.send().
   var assertOverlayVisible = function() {
@@ -351,6 +410,34 @@ TEST_F('SettingsCommandsExtensionSettingsWebUITest', 'DISABLED_testChromeSendHan
   };
 
   this.steps = [this.waitForPageLoad, assertOverlayVisible, testDone];
+  this.nextStep();
+});
+
+TEST_F('SettingsCommandsExtensionSettingsWebUITest', 'extensionSettingsUri',
+    function() {
+  var closeCommandOverlay = function() {
+    assertTrue($('extension-commands-overlay').classList.contains('showing'));
+    assertEquals(window.location.href,
+                 'chrome://extensions-frame/configureCommands');
+
+    // Close command overlay.
+    $('extension-commands-dismiss').click();
+
+    assertFalse($('extension-commands-overlay').classList.contains('showing'));
+    this.nextStep();
+  };
+
+  var checkExtensionsUrl = function() {
+    // After closing the overlay, the URL shouldn't include commands overlay
+    // reference.
+    assertEquals(window.location.href, 'chrome://extensions-frame/');
+    this.nextStep();
+  };
+
+  this.steps = [this.waitForPageLoad,
+                closeCommandOverlay,
+                checkExtensionsUrl,
+                testDone];
   this.nextStep();
 });
 
@@ -379,8 +466,7 @@ TEST_F('InstallGoodExtensionSettingsWebUITest', 'testAccessibility',
   this.emptyTestForAccessibility();
 });
 
-// tomas@vivaldi.com - disabled test (VB-7468)
-TEST_F('InstallGoodExtensionSettingsWebUITest', 'DISABLED_showOptions', function() {
+TEST_F('InstallGoodExtensionSettingsWebUITest', 'showOptions', function() {
   var showExtensionOptions = function() {
     var optionsOverlay = extensions.ExtensionOptionsOverlay.getInstance();
     optionsOverlay.setExtensionAndShow(GOOD_EXTENSION_ID, 'GOOD!', '',
@@ -429,8 +515,7 @@ OptionsDialogExtensionSettingsWebUITest.prototype = {
       '?options=' + GOOD_EXTENSION_ID,
 };
 
-// tomas@vivaldi.com - disabled test (VB-7468)
-TEST_F('OptionsDialogExtensionSettingsWebUITest', 'DISABLED_testAccessibility',
+TEST_F('OptionsDialogExtensionSettingsWebUITest', 'testAccessibility',
        function() {
   this.emptyTestForAccessibility();
 });

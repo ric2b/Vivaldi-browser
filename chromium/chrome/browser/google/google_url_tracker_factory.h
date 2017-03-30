@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_GOOGLE_GOOGLE_URL_TRACKER_FACTORY_H_
 #define CHROME_BROWSER_GOOGLE_GOOGLE_URL_TRACKER_FACTORY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -22,7 +22,7 @@ class GoogleURLTrackerFactory : public BrowserContextKeyedServiceFactory {
   static GoogleURLTrackerFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<GoogleURLTrackerFactory>;
+  friend struct base::DefaultSingletonTraits<GoogleURLTrackerFactory>;
 
   GoogleURLTrackerFactory();
   ~GoogleURLTrackerFactory() override;

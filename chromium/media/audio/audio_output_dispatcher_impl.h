@@ -13,10 +13,12 @@
 #ifndef MEDIA_AUDIO_AUDIO_OUTPUT_DISPATCHER_IMPL_H_
 #define MEDIA_AUDIO_AUDIO_OUTPUT_DISPATCHER_IMPL_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/timer/timer.h"
 #include "media/audio/audio_io.h"
@@ -63,6 +65,9 @@ class MEDIA_EXPORT AudioOutputDispatcherImpl : public AudioOutputDispatcher {
   // Returns true if there are any open AudioOutputProxy objects.
   bool HasOutputProxies() const;
 
+  // Closes all |idle_streams_|.
+  void CloseAllIdleStreams();
+
  private:
   friend class base::RefCountedThreadSafe<AudioOutputDispatcherImpl>;
   ~AudioOutputDispatcherImpl() override;
@@ -72,8 +77,6 @@ class MEDIA_EXPORT AudioOutputDispatcherImpl : public AudioOutputDispatcher {
   // opened.
   bool CreateAndOpenStream();
 
-  // Closes all |idle_streams_|.
-  void CloseAllIdleStreams();
   // Similar to CloseAllIdleStreams(), but keeps |keep_alive| streams alive.
   void CloseIdleStreams(size_t keep_alive);
 
@@ -83,7 +86,7 @@ class MEDIA_EXPORT AudioOutputDispatcherImpl : public AudioOutputDispatcher {
   // When streams are stopped they're added to |idle_streams_|, if no stream is
   // reused before |close_delay_| elapses |close_timer_| will run
   // CloseIdleStreams().
-  base::DelayTimer<AudioOutputDispatcherImpl> close_timer_;
+  base::DelayTimer close_timer_;
 
   typedef std::map<AudioOutputProxy*, AudioOutputStream*> AudioStreamMap;
   AudioStreamMap proxy_to_physical_map_;

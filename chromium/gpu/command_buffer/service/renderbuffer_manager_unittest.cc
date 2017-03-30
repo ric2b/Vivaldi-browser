@@ -4,6 +4,8 @@
 
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
 
+#include <stdint.h>
+
 #include <set>
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/feature_info.h"
@@ -35,7 +37,7 @@ class RenderbufferManagerTestBase : public GpuServiceTest {
         depth24_supported ? "GL_OES_depth24" : "",
         "",
         use_gles ? "OpenGL ES 2.0" : "OpenGL 2.1");
-    feature_info_->Initialize();
+    feature_info_->InitializeForTesting();
     manager_.reset(new RenderbufferManager(
         memory_tracker, kMaxSize, kMaxSamples, feature_info_.get()));
   }
@@ -72,9 +74,9 @@ class RenderbufferManagerMemoryTrackerTest
   scoped_refptr<MockMemoryTracker> mock_memory_tracker_;
 };
 
-#define EXPECT_MEMORY_ALLOCATION_CHANGE(old_size, new_size, pool)   \
-  EXPECT_CALL(*mock_memory_tracker_.get(),                          \
-              TrackMemoryAllocatedChange(old_size, new_size, pool)) \
+#define EXPECT_MEMORY_ALLOCATION_CHANGE(old_size, new_size)   \
+  EXPECT_CALL(*mock_memory_tracker_.get(),                    \
+              TrackMemoryAllocatedChange(old_size, new_size)) \
       .Times(1).RetiresOnSaturation()
 
 // GCC requires these declarations, but MSVC requires they not be present
@@ -180,7 +182,7 @@ TEST_F(RenderbufferManagerTest, Renderbuffer) {
 TEST_F(RenderbufferManagerMemoryTrackerTest, Basic) {
   const GLuint kClient1Id = 1;
   const GLuint kService1Id = 11;
-  EXPECT_MEMORY_ALLOCATION_CHANGE(0, 0, MemoryTracker::kUnmanaged);
+  EXPECT_MEMORY_ALLOCATION_CHANGE(0, 0);
   manager_->CreateRenderbuffer(kClient1Id, kService1Id);
   Renderbuffer* renderbuffer1 =
       manager_->GetRenderbuffer(kClient1Id);
@@ -191,22 +193,18 @@ TEST_F(RenderbufferManagerMemoryTrackerTest, Basic) {
   const GLsizei kWidth = 128;
   const GLsizei kHeight1 = 64;
   const GLsizei kHeight2 = 32;
-  uint32 expected_size_1 = 0;
-  uint32 expected_size_2 = 0;
+  uint32_t expected_size_1 = 0;
+  uint32_t expected_size_2 = 0;
   manager_->ComputeEstimatedRenderbufferSize(
       kWidth, kHeight1, kSamples, kFormat, &expected_size_1);
   manager_->ComputeEstimatedRenderbufferSize(
       kWidth, kHeight2, kSamples, kFormat, &expected_size_2);
-  EXPECT_MEMORY_ALLOCATION_CHANGE(
-      0, expected_size_1, MemoryTracker::kUnmanaged);
+  EXPECT_MEMORY_ALLOCATION_CHANGE(0, expected_size_1);
   manager_->SetInfo(renderbuffer1, kSamples, kFormat, kWidth, kHeight1);
-  EXPECT_MEMORY_ALLOCATION_CHANGE(
-      expected_size_1, 0, MemoryTracker::kUnmanaged);
-  EXPECT_MEMORY_ALLOCATION_CHANGE(
-      0, expected_size_2, MemoryTracker::kUnmanaged);
+  EXPECT_MEMORY_ALLOCATION_CHANGE(expected_size_1, 0);
+  EXPECT_MEMORY_ALLOCATION_CHANGE(0, expected_size_2);
   manager_->SetInfo(renderbuffer1, kSamples, kFormat, kWidth, kHeight2);
-  EXPECT_MEMORY_ALLOCATION_CHANGE(
-      expected_size_2, 0, MemoryTracker::kUnmanaged);
+  EXPECT_MEMORY_ALLOCATION_CHANGE(expected_size_2, 0);
   EXPECT_CALL(*gl_, DeleteRenderbuffersEXT(1, ::testing::Pointee(kService1Id)))
       .Times(1)
       .RetiresOnSaturation();

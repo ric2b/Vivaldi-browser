@@ -6,14 +6,15 @@
 
 #include <sys/system_properties.h>
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/sequenced_task_runner.h"
@@ -59,8 +60,7 @@ ProxyServer ConstructProxyServer(ProxyServer::Scheme scheme,
     return ProxyServer();
   DCHECK(port_as_int > 0);
   return ProxyServer(
-      scheme,
-      HostPortPair(proxy_host, static_cast<uint16>(port_as_int)));
+      scheme, HostPortPair(proxy_host, static_cast<uint16_t>(port_as_int)));
 }
 
 ProxyServer LookupProxy(const std::string& prefix,
@@ -98,11 +98,6 @@ void AddBypassRules(const std::string& scheme,
   // by | and that use * as a wildcard. For example, setting the
   // http.nonProxyHosts property to *.android.com|*.kernel.org will cause
   // requests to http://developer.android.com to be made without a proxy.
-
-  // Force localhost to be on the proxy exclusion list;
-  // otherwise all localhost traffic is routed through
-  // the proxy which is not desired.
-  bypass_rules->AddRuleToBypassLocal();
 
   std::string non_proxy_hosts =
       get_property.Run(scheme + ".nonProxyHosts");
@@ -302,12 +297,13 @@ class ProxyConfigServiceAndroid::Delegate
     explicit JNIDelegateImpl(Delegate* delegate) : delegate_(delegate) {}
 
     // ProxyConfigServiceAndroid::JNIDelegate overrides.
-    void ProxySettingsChangedTo(JNIEnv* env,
-                                jobject jself,
-                                jstring jhost,
-                                jint jport,
-                                jstring jpac_url,
-                                jobjectArray jexclusion_list) override {
+    void ProxySettingsChangedTo(
+        JNIEnv* env,
+        const JavaParamRef<jobject>& jself,
+        const JavaParamRef<jstring>& jhost,
+        jint jport,
+        const JavaParamRef<jstring>& jpac_url,
+        const JavaParamRef<jobjectArray>& jexclusion_list) override {
       std::string host = ConvertJavaStringToUTF8(env, jhost);
       std::string pac_url;
       if (jpac_url)
@@ -318,7 +314,8 @@ class ProxyConfigServiceAndroid::Delegate
       delegate_->ProxySettingsChangedTo(host, jport, pac_url, exclusion_list);
     }
 
-    void ProxySettingsChanged(JNIEnv* env, jobject self) override {
+    void ProxySettingsChanged(JNIEnv* env,
+                              const JavaParamRef<jobject>& self) override {
       delegate_->ProxySettingsChanged();
     }
 

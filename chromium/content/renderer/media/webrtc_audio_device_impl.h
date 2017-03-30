@@ -5,13 +5,15 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBRTC_AUDIO_DEVICE_IMPL_H_
 #define CONTENT_RENDERER_MEDIA_WEBRTC_AUDIO_DEVICE_IMPL_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -197,6 +199,11 @@ class WebRtcAudioRendererSource {
   // Callback to notify the client that the renderer is going away.
   virtual void RemoveAudioRenderer(WebRtcAudioRenderer* renderer) = 0;
 
+  // Callback to notify the client that the audio renderer thread stopped.
+  // This function must be called only when that thread is actually stopped.
+  // Otherwise a race may occur.
+  virtual void AudioRendererThreadStopped() = 0;
+
  protected:
   virtual ~WebRtcAudioRendererSource() {}
 };
@@ -251,8 +258,8 @@ class CONTENT_EXPORT WebRtcAudioDeviceImpl
   // The creator must call AddRef() after construction and use Release()
   // to release the reference and delete this object.
   // Called on the main render thread.
-  int32_t AddRef() override;
-  int32_t Release() override;
+  int32_t AddRef() const override;
+  int32_t Release() const override;
 
  private:
   // webrtc::AudioDeviceModule implementation.
@@ -341,6 +348,7 @@ class CONTENT_EXPORT WebRtcAudioDeviceImpl
 
   // Called on the main render thread.
   void RemoveAudioRenderer(WebRtcAudioRenderer* renderer) override;
+  void AudioRendererThreadStopped() override;
 
   // WebRtcPlayoutDataSource implementation.
   void AddPlayoutSink(WebRtcPlayoutDataSource::Sink* sink) override;
@@ -351,8 +359,9 @@ class CONTENT_EXPORT WebRtcAudioDeviceImpl
   // Used to check methods that are called on libjingle's signaling thread.
   base::ThreadChecker signaling_thread_checker_;
   base::ThreadChecker worker_thread_checker_;
+  base::ThreadChecker audio_renderer_thread_checker_;
 
-  int ref_count_;
+  mutable int ref_count_;
 
   // List of captures which provides access to the native audio input layer
   // in the browser process.
@@ -378,7 +387,7 @@ class CONTENT_EXPORT WebRtcAudioDeviceImpl
   int output_delay_ms_;
 
   // Protects |recording_|, |output_delay_ms_|, |input_delay_ms_|, |renderer_|
-  // |recording_| and |microphone_volume_|.
+  // |recording_|, |microphone_volume_| and |playout_sinks_|.
   mutable base::Lock lock_;
 
   // Used to protect the racing of calling OnData() since there can be more
@@ -395,7 +404,7 @@ class CONTENT_EXPORT WebRtcAudioDeviceImpl
 
   // Buffer used for temporary storage during render callback.
   // It is only accessed by the audio render thread.
-  std::vector<int16> render_buffer_;
+  std::vector<int16_t> render_buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(WebRtcAudioDeviceImpl);
 };

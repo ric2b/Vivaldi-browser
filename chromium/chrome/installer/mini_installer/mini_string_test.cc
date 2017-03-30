@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 #include <windows.h>
+#include <stddef.h>
 #include <stdlib.h>
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "chrome/installer/mini_installer/mini_string.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -26,7 +26,7 @@ TEST_F(MiniInstallerStringTest, StackStringOverflow) {
   static const wchar_t kTestString[] = L"1234567890";
 
   StackString<MAX_PATH> str;
-  EXPECT_EQ(MAX_PATH, str.capacity());
+  EXPECT_EQ(static_cast<size_t>(MAX_PATH), str.capacity());
 
   std::wstring compare_str;
 

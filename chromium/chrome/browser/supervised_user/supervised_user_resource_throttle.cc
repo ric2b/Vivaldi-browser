@@ -61,6 +61,9 @@ int GetHistogramValueForFilteringBehavior(
           return FILTERING_BEHAVIOR_BLOCK_BLACKLIST;
         case SupervisedUserURLFilter::ASYNC_CHECKER:
           return FILTERING_BEHAVIOR_BLOCK_SAFESITES;
+        case SupervisedUserURLFilter::WHITELIST:
+          NOTREACHED();
+          break;
         case SupervisedUserURLFilter::MANUAL:
           return FILTERING_BEHAVIOR_BLOCK_MANUAL;
         case SupervisedUserURLFilter::DEFAULT:
@@ -142,11 +145,12 @@ void SupervisedUserResourceThrottle::ShowInterstitial(
     SupervisedUserURLFilter::FilteringBehaviorReason reason) {
   const content::ResourceRequestInfo* info =
       content::ResourceRequestInfo::ForRequest(request_);
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-      base::Bind(&SupervisedUserNavigationObserver::OnRequestBlocked,
-                 info->GetChildID(), info->GetRouteID(), url, reason,
-                 base::Bind(
-                     &SupervisedUserResourceThrottle::OnInterstitialResult,
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(
+          &SupervisedUserNavigationObserver::OnRequestBlocked,
+          info->GetWebContentsGetterForRequest(), url, reason,
+          base::Bind(&SupervisedUserResourceThrottle::OnInterstitialResult,
                      weak_ptr_factory_.GetWeakPtr())));
 }
 

@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -38,6 +39,7 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema_registry.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
@@ -143,6 +145,7 @@ void DeviceLocalAccountPolicyServiceTestBase::SetUp() {
   expected_policy_map_.Set(key::kDisableSpdy,
                            POLICY_LEVEL_MANDATORY,
                            POLICY_SCOPE_USER,
+                           POLICY_SOURCE_CLOUD,
                            new base::FundamentalValue(true),
                            NULL);
 
@@ -407,14 +410,12 @@ TEST_F(DeviceLocalAccountPolicyServiceTest, FetchPolicy) {
   EXPECT_CALL(mock_device_management_service_,
               CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
       .WillOnce(mock_device_management_service_.SucceedJob(response));
-  EXPECT_CALL(mock_device_management_service_,
-              StartJob(dm_protocol::kValueRequestPolicy,
-                       std::string(), std::string(),
-                       device_policy_.policy_data().request_token(),
-                       dm_protocol::kValueUserAffiliationManaged,
-                       device_policy_.policy_data().device_id(),
-                       _))
-      .WillOnce(SaveArg<6>(&request));
+  EXPECT_CALL(
+      mock_device_management_service_,
+      StartJob(dm_protocol::kValueRequestPolicy, std::string(), std::string(),
+               device_policy_.policy_data().request_token(),
+               device_policy_.policy_data().device_id(), _))
+      .WillOnce(SaveArg<5>(&request));
   // This will be called twice, because the ComponentCloudPolicyService will
   // also become ready after flushing all the pending tasks.
   EXPECT_CALL(service_observer_, OnPolicyUpdated(account_1_user_id_)).Times(2);
@@ -474,7 +475,7 @@ TEST_F(DeviceLocalAccountPolicyServiceTest, RefreshPolicy) {
       device_local_account_policy_.policy());
   EXPECT_CALL(mock_device_management_service_, CreateJob(_, _))
       .WillOnce(mock_device_management_service_.SucceedJob(response));
-  EXPECT_CALL(mock_device_management_service_, StartJob(_, _, _, _, _, _, _));
+  EXPECT_CALL(mock_device_management_service_, StartJob(_, _, _, _, _, _));
   EXPECT_CALL(*this, OnRefreshDone(true)).Times(1);
   // This will be called twice, because the ComponentCloudPolicyService will
   // also become ready after flushing all the pending tasks.
@@ -808,6 +809,7 @@ void DeviceLocalAccountPolicyProviderTest::SetUp() {
   expected_policy_map_.Set(key::kLidCloseAction,
                            POLICY_LEVEL_MANDATORY,
                            POLICY_SCOPE_MACHINE,
+                           POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
                            new base::FundamentalValue(
                                chromeos::PowerPolicyController::
                                    ACTION_STOP_SESSION),
@@ -815,16 +817,19 @@ void DeviceLocalAccountPolicyProviderTest::SetUp() {
   expected_policy_map_.Set(key::kShelfAutoHideBehavior,
                            POLICY_LEVEL_MANDATORY,
                            POLICY_SCOPE_MACHINE,
+                           POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
                            new base::StringValue("Never"),
                            NULL);
   expected_policy_map_.Set(key::kShowLogoutButtonInTray,
                            POLICY_LEVEL_MANDATORY,
                            POLICY_SCOPE_MACHINE,
+                           POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
                            new base::FundamentalValue(true),
                            NULL);
   expected_policy_map_.Set(key::kFullscreenAllowed,
                            POLICY_LEVEL_MANDATORY,
                            POLICY_SCOPE_MACHINE,
+                           POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
                            new base::FundamentalValue(false),
                            NULL);
 }
@@ -891,6 +896,7 @@ TEST_F(DeviceLocalAccountPolicyProviderTest, Policy) {
       .Set(key::kDisableSpdy,
            POLICY_LEVEL_MANDATORY,
            POLICY_SCOPE_USER,
+           POLICY_SOURCE_CLOUD,
            new base::FundamentalValue(false),
            NULL);
   EXPECT_TRUE(expected_policy_bundle.Equals(provider_->policies()));
@@ -949,7 +955,7 @@ TEST_F(DeviceLocalAccountPolicyProviderTest, RefreshPolicies) {
   EXPECT_CALL(mock_device_management_service_, CreateJob(_, _))
       .WillRepeatedly(
           mock_device_management_service_.FailJob(DM_STATUS_REQUEST_FAILED));
-  EXPECT_CALL(mock_device_management_service_, StartJob(_, _, _, _, _, _, _))
+  EXPECT_CALL(mock_device_management_service_, StartJob(_, _, _, _, _, _))
       .Times(AnyNumber());
   service_->Connect(&mock_device_management_service_);
   FlushDeviceSettings();
@@ -960,7 +966,7 @@ TEST_F(DeviceLocalAccountPolicyProviderTest, RefreshPolicies) {
   MockDeviceManagementJob* request_job;
   EXPECT_CALL(mock_device_management_service_, CreateJob(_, _))
       .WillOnce(mock_device_management_service_.CreateAsyncJob(&request_job));
-  EXPECT_CALL(mock_device_management_service_, StartJob(_, _, _, _, _, _, _));
+  EXPECT_CALL(mock_device_management_service_, StartJob(_, _, _, _, _, _));
   provider_->RefreshPolicies();
   ReloadDeviceSettings();
   Mock::VerifyAndClearExpectations(&provider_observer_);

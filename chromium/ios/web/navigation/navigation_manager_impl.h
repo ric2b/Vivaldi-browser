@@ -5,10 +5,12 @@
 #ifndef IOS_WEB_NAVIGATION_NAVIGATION_MANAGER_IMPL_H_
 #define IOS_WEB_NAVIGATION_NAVIGATION_MANAGER_IMPL_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "ios/web/public/navigation_manager.h"
 #include "ui/base/page_transition_types.h"
@@ -65,46 +67,28 @@ class NavigationManagerImpl : public NavigationManager {
   // Helper functions for communicating with the facade layer.
   // TODO(stuartmorgan): Make these private once the logic triggering them moves
   // into this layer.
+  void OnNavigationItemsPruned(size_t pruned_item_count);
   void OnNavigationItemChanged();
   void OnNavigationItemCommitted();
-
-  // Returns the transient item if any. This is an item which is removed and
-  // discarded if any navigation occurs. Note that the returned item is owned
-  // by the navigation manager and may be deleted at any time.
-  NavigationItem* GetTransientItem() const;
-
-  // Returns the committed NavigationItem at |index|.
-  NavigationItem* GetItemAtIndex(size_t index) const;
 
   // Temporary accessors and content/ class pass-throughs.
   // TODO(stuartmorgan): Re-evaluate this list once the refactorings have
   // settled down.
   CRWSessionController* GetSessionController();
-  int GetCurrentEntryIndex() const;
-  int GetLastCommittedEntryIndex() const;
-  int GetEntryCount() const;
-  bool RemoveEntryAtIndex(int index);
-  void DiscardNonCommittedEntries();
-  int GetPendingEntryIndex() const;
   void LoadURL(const GURL& url,
                const Referrer& referrer,
                ui::PageTransition type);
-  bool CanGoBack() const;
-  bool CanGoForward() const;
-  void GoBack();
-  void GoForward();
 
   // Convenience accessors to get the underlying NavigationItems from the
   // SessionEntries returned from |session_controller_|'s -lastUserEntry and
   // -previousEntry methods.
-  // TODO(marq):Evaluate the long-term utility of these methods.
+  // TODO(crbug.com/546365): Remove these methods.
   NavigationItem* GetLastUserItem() const;
   NavigationItem* GetPreviousItem() const;
 
   // Temporary method. Returns a vector of NavigationItems corresponding to
   // the SessionEntries of the uderlying CRWSessionController.
-  // TOOD(marq): Remove this method and unfork its caller,
-  //     TabRestoreServiceHelper::PopulateTab
+  // TODO(crbug.com/546365): Remove this method.
   std::vector<NavigationItem*> GetItems();
 
   // NavigationManager:
@@ -113,12 +97,27 @@ class NavigationManagerImpl : public NavigationManager {
   NavigationItem* GetVisibleItem() const override;
   NavigationItem* GetLastCommittedItem() const override;
   NavigationItem* GetPendingItem() const override;
+  NavigationItem* GetTransientItem() const override;
+  void DiscardNonCommittedItems() override;
+  void LoadIfNecessary() override;
   void AddTransientURLRewriter(
       BrowserURLRewriter::URLRewriter rewriter) override;
+  int GetItemCount() const override;
+  NavigationItem* GetItemAtIndex(size_t index) const override;
+  int GetCurrentItemIndex() const override;
+  int GetPendingItemIndex() const override;
+  int GetLastCommittedItemIndex() const override;
+  bool RemoveItemAtIndex(int index) override;
+  bool CanGoBack() const override;
+  bool CanGoForward() const override;
+  void GoBack() override;
+  void GoForward() override;
+  void Reload(bool check_for_reposts) override;
 
   // Returns the current list of transient url rewriters, passing ownership to
   // the caller.
-  // TODO(kkhorimoto): remove once NavigationItem creation occurs in this class.
+  // TODO(crbug.com/546197): remove once NavigationItem creation occurs in this
+  // class.
   scoped_ptr<std::vector<BrowserURLRewriter::URLRewriter>>
   GetTransientURLRewriters();
 
@@ -127,9 +126,8 @@ class NavigationManagerImpl : public NavigationManager {
 
   // Copy state from |navigation_manager|, including a copy of that object's
   // CRWSessionController.
-  // TODO(marq): This doesn't deep-copy the SessionEntries in the
-  // CRWSessionController.
   void CopyState(NavigationManagerImpl* navigation_manager);
+
  private:
   // The primary delegate for this manager.
   NavigationManagerDelegate* delegate_;

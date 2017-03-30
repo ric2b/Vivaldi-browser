@@ -5,16 +5,17 @@
 #ifndef CHROME_APP_CHROME_CRASH_REPORTER_CLIENT_H_
 #define CHROME_APP_CHROME_CRASH_REPORTER_CLIENT_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "components/crash/app/crash_reporter_client.h"
+#include "build/build_config.h"
+#include "components/crash/content/app/crash_reporter_client.h"
 
 namespace browser_watcher {
 class CrashReportingMetrics;
 }  // namespace browser_watcher
-
-namespace chrome {
 
 class ChromeCrashReporterClient : public crash_reporter::CrashReporterClient {
  public:
@@ -78,7 +79,5 @@ class ChromeCrashReporterClient : public crash_reporter::CrashReporterClient {
 
   DISALLOW_COPY_AND_ASSIGN(ChromeCrashReporterClient);
 };
-
-}  // namespace chrome
 
 #endif  // CHROME_APP_CHROME_CRASH_REPORTER_CLIENT_H_

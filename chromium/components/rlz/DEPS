@@ -1,0 +1,9 @@
+include_rules = [
+  "+components/google",
+  "+net",
+  "+rlz",
+  "+ui/base",
+
+  # rlz is used on iOS.
+  "-content",
+]

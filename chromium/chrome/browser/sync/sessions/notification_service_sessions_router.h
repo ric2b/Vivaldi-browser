@@ -8,8 +8,9 @@
 #include <set>
 
 #include "base/callback_list.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/sync/sessions/sessions_sync_manager.h"
+#include "components/sync_sessions/sessions_sync_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
@@ -18,6 +19,10 @@ class Profile;
 
 namespace content {
 class WebContents;
+}
+
+namespace sync_sessions {
+class SyncSessionsClient;
 }
 
 namespace browser_sync {
@@ -30,6 +35,7 @@ class NotificationServiceSessionsRouter
  public:
   NotificationServiceSessionsRouter(
       Profile* profile,
+      sync_sessions::SyncSessionsClient* sessions_client_,
       const syncer::SyncableService::StartSyncFlare& flare);
   ~NotificationServiceSessionsRouter() override;
 
@@ -62,6 +68,7 @@ class NotificationServiceSessionsRouter
   LocalSessionEventHandler* handler_;
   content::NotificationRegistrar registrar_;
   Profile* const profile_;
+  sync_sessions::SyncSessionsClient* const sessions_client_;
   syncer::SyncableService::StartSyncFlare flare_;
 
   scoped_ptr<base::CallbackList<void(const std::set<GURL>&,

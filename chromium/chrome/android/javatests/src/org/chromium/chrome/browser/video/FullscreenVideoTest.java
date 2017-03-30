@@ -9,8 +9,8 @@ import android.view.KeyEvent;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.EmptyTabObserver;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.TestHttpServerClient;
 import org.chromium.content.browser.test.util.Criteria;
@@ -75,20 +75,20 @@ public class FullscreenVideoTest extends ChromeActivityTestCaseBase<ChromeActivi
     }
 
     void waitForVideoToEnterFullscreen() throws InterruptedException {
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return mIsTabFullscreen;
             }
-        }, TEST_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL));
+        }, TEST_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
     void waitForTabToExitFullscreen() throws InterruptedException {
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return !mIsTabFullscreen;
             }
-        }, TEST_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL));
+        }, TEST_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 }

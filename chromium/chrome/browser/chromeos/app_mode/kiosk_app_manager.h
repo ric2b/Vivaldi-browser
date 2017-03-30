@@ -5,12 +5,13 @@
 #ifndef CHROME_BROWSER_CHROMEOS_APP_MODE_KIOSK_APP_MANAGER_H_
 #define CHROME_BROWSER_CHROMEOS_APP_MODE_KIOSK_APP_MANAGER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
@@ -34,6 +35,7 @@ class ExternalLoader;
 
 namespace chromeos {
 
+class AppSession;
 class KioskAppData;
 class KioskAppExternalLoader;
 class KioskAppManagerObserver;
@@ -176,12 +178,19 @@ class KioskAppManager : public KioskAppDataDelegate,
   void AddObserver(KioskAppManagerObserver* observer);
   void RemoveObserver(KioskAppManagerObserver* observer);
 
-  // Creates extensions::ExternalLoader for installing kiosk apps during their
-  // first time launch.
+  // Creates extensions::ExternalLoader for installing the primary kiosk app
+  // during its first time launch.
   extensions::ExternalLoader* CreateExternalLoader();
+
+  // Creates extensions::ExternalLoader for installing secondary kiosk apps
+  // before launching the primary app for the first time.
+  extensions::ExternalLoader* CreateSecondaryAppExternalLoader();
 
   // Installs kiosk app with |id| from cache.
   void InstallFromCache(const std::string& id);
+
+  // Installs the secondary apps listed in |ids|.
+  void InstallSecondaryApps(const std::vector<std::string>& ids);
 
   void UpdateExternalCache();
 
@@ -203,6 +212,9 @@ class KioskAppManager : public KioskAppDataDelegate,
       const ExternalCache::PutExternalExtensionCallback& callback);
 
   bool external_loader_created() const { return external_loader_created_; }
+  bool secondary_app_external_loader_created() const {
+    return secondary_app_external_loader_created_;
+  }
 
   // Notifies the KioskAppManager that a given app was auto-launched
   // automatically with no delay on startup. Certain privacy-sensitive
@@ -210,9 +222,14 @@ class KioskAppManager : public KioskAppDataDelegate,
   // kiosk apps that are immediately auto-launched on startup.
   void SetAppWasAutoLaunchedWithZeroDelay(const std::string& app_id);
 
+  // Initialize |app_session_|.
+  void InitSession(Profile* profile, const std::string& app_id);
+
+  AppSession* app_session() { return app_session_.get(); }
+
  private:
   friend struct base::DefaultLazyInstanceTraits<KioskAppManager>;
-  friend struct base::DefaultDeleter<KioskAppManager>;
+  friend std::default_delete<KioskAppManager>;
   friend class KioskAppManagerTest;
   friend class KioskTest;
   friend class KioskUpdateTest;
@@ -288,9 +305,15 @@ class KioskAppManager : public KioskAppDataDelegate,
 
   scoped_ptr<KioskExternalUpdater> usb_stick_updater_;
 
-  // The extension external loader for installing kiosk app.
+  // The extension external loader for deploying primary app.
   bool external_loader_created_;
   base::WeakPtr<KioskAppExternalLoader> external_loader_;
+
+  // The extension external loader for deploying secondary apps.
+  bool secondary_app_external_loader_created_;
+  base::WeakPtr<KioskAppExternalLoader> secondary_app_external_loader_;
+
+  scoped_ptr<AppSession> app_session_;
 
   DISALLOW_COPY_AND_ASSIGN(KioskAppManager);
 };

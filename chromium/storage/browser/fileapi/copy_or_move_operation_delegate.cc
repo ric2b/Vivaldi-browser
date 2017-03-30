@@ -4,8 +4,12 @@
 
 #include "storage/browser/fileapi/copy_or_move_operation_delegate.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "storage/browser/blob/shareable_file_reference.h"
@@ -20,7 +24,7 @@
 
 namespace storage {
 
-const int64 kFlushIntervalInBytes = 10 << 20;  // 10MB.
+const int64_t kFlushIntervalInBytes = 10 << 20;  // 10MB.
 
 class CopyOrMoveOperationDelegate::CopyOrMoveImpl {
  public:
@@ -379,8 +383,8 @@ class StreamCopyOrMoveImpl
         src_url_(src_url),
         dest_url_(dest_url),
         option_(option),
-        reader_(reader.Pass()),
-        writer_(writer.Pass()),
+        reader_(std::move(reader)),
+        writer_(std::move(writer)),
         file_progress_callback_(file_progress_callback),
         cancel_requested_(false),
         weak_factory_(this) {}
@@ -391,7 +395,8 @@ class StreamCopyOrMoveImpl
     // a directory. To check errors before destination file creation,
     // check metadata first.
     operation_runner_->GetMetadata(
-        src_url_,
+        src_url_, FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
+                      FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
         base::Bind(&StreamCopyOrMoveImpl::RunAfterGetMetadataForSource,
                    weak_factory_.GetWeakPtr(), callback));
   }
@@ -498,8 +503,9 @@ class StreamCopyOrMoveImpl
     NotifyOnStartUpdate(dest_url_);
     DCHECK(!copy_helper_);
     copy_helper_.reset(new CopyOrMoveOperationDelegate::StreamCopyHelper(
-        reader_.Pass(), writer_.Pass(), dest_url_.mount_option().flush_policy(),
-        kReadBufferSize, file_progress_callback_,
+        std::move(reader_), std::move(writer_),
+        dest_url_.mount_option().flush_policy(), kReadBufferSize,
+        file_progress_callback_,
         base::TimeDelta::FromMilliseconds(
             kMinProgressCallbackInvocationSpanInMilliseconds)));
     copy_helper_->Run(
@@ -589,8 +595,8 @@ CopyOrMoveOperationDelegate::StreamCopyHelper::StreamCopyHelper(
     int buffer_size,
     const FileSystemOperation::CopyFileProgressCallback& file_progress_callback,
     const base::TimeDelta& min_progress_callback_invocation_span)
-    : reader_(reader.Pass()),
-      writer_(writer.Pass()),
+    : reader_(std::move(reader)),
+      writer_(std::move(writer)),
       flush_policy_(flush_policy),
       file_progress_callback_(file_progress_callback),
       io_buffer_(new net::IOBufferWithSize(buffer_size)),
@@ -599,8 +605,7 @@ CopyOrMoveOperationDelegate::StreamCopyHelper::StreamCopyHelper(
       min_progress_callback_invocation_span_(
           min_progress_callback_invocation_span),
       cancel_requested_(false),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 CopyOrMoveOperationDelegate::StreamCopyHelper::~StreamCopyHelper() {
 }
@@ -820,17 +825,10 @@ void CopyOrMoveOperationDelegate::ProcessFile(
           file_system_context()->CreateFileStreamWriter(dest_url, 0);
       if (reader && writer) {
         impl = new StreamCopyOrMoveImpl(
-            operation_runner(),
-            file_system_context(),
-            operation_type_,
-            src_url,
-            dest_url,
-            option_,
-            reader.Pass(),
-            writer.Pass(),
+            operation_runner(), file_system_context(), operation_type_, src_url,
+            dest_url, option_, std::move(reader), std::move(writer),
             base::Bind(&CopyOrMoveOperationDelegate::OnCopyFileProgress,
-                       weak_factory_.GetWeakPtr(),
-                       src_url));
+                       weak_factory_.GetWeakPtr(), src_url));
       }
     }
 
@@ -884,7 +882,7 @@ void CopyOrMoveOperationDelegate::PostProcessDirectory(
   }
 
   operation_runner()->GetMetadata(
-      src_url,
+      src_url, FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
       base::Bind(
           &CopyOrMoveOperationDelegate::PostProcessDirectoryAfterGetMetadata,
           weak_factory_.GetWeakPtr(), src_url, callback));
@@ -1012,7 +1010,8 @@ void CopyOrMoveOperationDelegate::DidRemoveSourceForMove(
 }
 
 void CopyOrMoveOperationDelegate::OnCopyFileProgress(
-    const FileSystemURL& src_url, int64 size) {
+    const FileSystemURL& src_url,
+    int64_t size) {
   if (!progress_callback_.is_null()) {
     progress_callback_.Run(
         FileSystemOperation::PROGRESS, src_url, FileSystemURL(), size);

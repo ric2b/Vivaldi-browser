@@ -5,7 +5,7 @@
 #include "components/sessions/ios/ios_serialized_navigation_driver.h"
 
 #include "base/memory/singleton.h"
-#include "components/sessions/serialized_navigation_entry.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
 #include "ios/web/public/referrer.h"
 
 namespace sessions {
@@ -25,8 +25,9 @@ SerializedNavigationDriver* SerializedNavigationDriver::Get() {
 // static
 IOSSerializedNavigationDriver*
 IOSSerializedNavigationDriver::GetInstance() {
-  return Singleton<IOSSerializedNavigationDriver,
-      LeakySingletonTraits<IOSSerializedNavigationDriver>>::get();
+  return base::Singleton<
+      IOSSerializedNavigationDriver,
+      base::LeakySingletonTraits<IOSSerializedNavigationDriver>>::get();
 }
 
 IOSSerializedNavigationDriver::IOSSerializedNavigationDriver() {

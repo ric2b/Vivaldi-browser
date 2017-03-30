@@ -47,6 +47,7 @@ class BookmarkCodec {
   base::Value* Encode(const BookmarkNode* bookmark_bar_node,
                       const BookmarkNode* other_folder_node,
                       const BookmarkNode* mobile_folder_node,
+                      const BookmarkNode* trash_folder_node,
                       const BookmarkNode::MetaInfoMap* model_meta_info_map,
                       int64_t sync_transaction_version);
 
@@ -58,6 +59,7 @@ class BookmarkCodec {
   bool Decode(BookmarkNode* bb_node,
               BookmarkNode* other_folder_node,
               BookmarkNode* mobile_folder_node,
+              BookmarkNode* trash_folder_node,
               int64_t* max_node_id,
               const base::Value& value);
 
@@ -86,25 +88,26 @@ class BookmarkCodec {
   bool ids_reassigned() const { return ids_reassigned_; }
 
   // Names of the various keys written to the Value.
-  static const char* kRootsKey;
-  static const char* kRootFolderNameKey;
-  static const char* kOtherBookmarkFolderNameKey;
-  static const char* kMobileBookmarkFolderNameKey;
-  static const char* kVersionKey;
-  static const char* kChecksumKey;
-  static const char* kIdKey;
-  static const char* kTypeKey;
-  static const char* kNameKey;
-  static const char* kDateAddedKey;
-  static const char* kURLKey;
-  static const char* kDateModifiedKey;
-  static const char* kChildrenKey;
-  static const char* kMetaInfo;
-  static const char* kSyncTransactionVersion;
+  static const char kRootsKey[];
+  static const char kRootFolderNameKey[];
+  static const char kOtherBookmarkFolderNameKey[];
+  static const char kMobileBookmarkFolderNameKey[];
+  static const char kTrashBookmarkFolderNameKey[];
+  static const char kVersionKey[];
+  static const char kChecksumKey[];
+  static const char kIdKey[];
+  static const char kTypeKey[];
+  static const char kNameKey[];
+  static const char kDateAddedKey[];
+  static const char kURLKey[];
+  static const char kDateModifiedKey[];
+  static const char kChildrenKey[];
+  static const char kMetaInfo[];
+  static const char kSyncTransactionVersion[];
 
   // Possible values for kTypeKey.
-  static const char* kTypeURL;
-  static const char* kTypeFolder;
+  static const char kTypeURL[];
+  static const char kTypeFolder[];
 
  private:
   // Encodes node and all its children into a Value object and returns it.
@@ -119,6 +122,7 @@ class BookmarkCodec {
   bool DecodeHelper(BookmarkNode* bb_node,
                     BookmarkNode* other_folder_node,
                     BookmarkNode* mobile_folder_node,
+                    BookmarkNode* trash_folder_node,
                     const base::Value& value);
 
   // Decodes the children of the specified node. Returns true on success.
@@ -128,7 +132,8 @@ class BookmarkCodec {
   // Reassigns bookmark IDs for all nodes.
   void ReassignIDs(BookmarkNode* bb_node,
                    BookmarkNode* other_node,
-                   BookmarkNode* mobile_node);
+                   BookmarkNode* mobile_node,
+                   BookmarkNode* trash_node);
 
   // Helper to recursively reassign IDs.
   void ReassignIDsHelper(BookmarkNode* node);

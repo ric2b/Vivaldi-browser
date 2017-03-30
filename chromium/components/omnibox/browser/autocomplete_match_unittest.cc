@@ -4,7 +4,9 @@
 
 #include "components/omnibox/browser/autocomplete_match.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -141,10 +143,10 @@ TEST(AutocompleteMatchTest, Duplicates) {
     { L"g", "http://www.google.com/",  "http://www.google.com",      true },
     { L"g", "http://google.com/",      "http://www.google.com/",     true },
     { L"g", "http://www.google.com/",  "HTTP://www.GOOGLE.com/",     true },
-    { L"g", "http://www.google.com/1", "http://www.google.com/1/",   true },
     { L"g", "http://www.google.com/",  "http://www.google.com",      true },
     { L"g", "https://www.google.com/", "http://google.com",          true },
     { L"g", "http://www.google.com/",  "wss://www.google.com/",      false },
+    { L"g", "http://www.google.com/1", "http://www.google.com/1/",   false },
     { L"g", "http://www.google.com/",  "http://www.google.com/1",    false },
     { L"g", "http://www.google.com/",  "http://www.goo.com/",        false },
     { L"g", "http://www.google.com/",  "http://w2.google.com/",      false },

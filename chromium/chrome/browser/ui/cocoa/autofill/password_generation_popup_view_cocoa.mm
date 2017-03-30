@@ -41,22 +41,22 @@ const CGFloat kDividerHeight = 1;
 const CGFloat kPasswordSectionVerticalSeparation = 5;
 
 NSColor* DividerColor() {
-  return gfx::SkColorToCalibratedNSColor(
+  return skia::SkColorToCalibratedNSColor(
       PasswordGenerationPopupView::kDividerColor);
 }
 
 NSColor* HelpTextBackgroundColor() {
-  return gfx::SkColorToCalibratedNSColor(
+  return skia::SkColorToCalibratedNSColor(
       PasswordGenerationPopupView::kExplanatoryTextBackgroundColor);
 }
 
 NSColor* HelpTextColor() {
-  return gfx::SkColorToCalibratedNSColor(
+  return skia::SkColorToCalibratedNSColor(
       PasswordGenerationPopupView::kExplanatoryTextColor);
 }
 
 NSColor* HelpLinkColor() {
-  return gfx::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
+  return skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
 }
 
 }  // namespace
@@ -107,7 +107,7 @@ NSColor* HelpLinkColor() {
                      withFont:[self textFont]
                  messageColor:HelpTextColor()];
     [helpTextView_ addLinkRange:controller_->HelpTextLinkRange().ToNSRange()
-                       withName:@""
+                        withURL:nil
                       linkColor:HelpLinkColor()];
     [helpTextView_ setDelegate:self];
     [helpTextView_ setDrawsBackground:YES];

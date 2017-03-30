@@ -6,18 +6,17 @@
 #define MOJO_SERVICES_NETWORK_URL_LOADER_FACTORY_IMPL_H_
 
 #include "base/compiler_specific.h"
-#include "mojo/application/public/cpp/app_lifetime_helper.h"
+#include "base/macros.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/services/network/public/interfaces/url_loader_factory.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/shell/public/cpp/app_lifetime_helper.h"
 
 namespace mojo {
-class ApplicationConnection;
 class NetworkContext;
 
 class URLLoaderFactoryImpl : public URLLoaderFactory {
  public:
-  URLLoaderFactoryImpl(ApplicationConnection* connection,
-                       NetworkContext* context,
+  URLLoaderFactoryImpl(NetworkContext* context,
                        scoped_ptr<mojo::AppRefCount> app_refcount,
                        InterfaceRequest<URLLoaderFactory> request);
   ~URLLoaderFactoryImpl() override;

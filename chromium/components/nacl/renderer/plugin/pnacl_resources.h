@@ -5,9 +5,8 @@
 #ifndef COMPONENTS_NACL_RENDERER_PLUGIN_PNACL_RESOURCES_H_
 #define COMPONENTS_NACL_RENDERER_PLUGIN_PNACL_RESOURCES_H_
 
+#include "base/macros.h"
 #include "components/nacl/renderer/ppb_nacl_private.h"
-#include "native_client/src/include/nacl_macros.h"
-#include "native_client/src/trusted/desc/nacl_desc_wrapper.h"
 #include "ppapi/cpp/completion_callback.h"
 
 namespace plugin {
@@ -47,13 +46,13 @@ class PnaclResources {
   PP_NaClFileInfo TakeFileInfo(ResourceType type);
 
  private:
-  NACL_DISALLOW_COPY_AND_ASSIGN(PnaclResources);
-
   // The plugin requesting the resource loading.
   Plugin* plugin_;
   bool use_subzero_;
 
   PnaclResourceEntry resources_[NUM_TYPES + 1];
+
+  DISALLOW_COPY_AND_ASSIGN(PnaclResources);
 };
 
 }  // namespace plugin

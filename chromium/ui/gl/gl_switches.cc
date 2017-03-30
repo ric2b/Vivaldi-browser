@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "ui/gl/gl_switches.h"
-#include "base/basictypes.h"
 
 namespace gfx {
 
@@ -11,6 +11,7 @@ const char kGLImplementationDesktopName[]     = "desktop";
 const char kGLImplementationOSMesaName[]      = "osmesa";
 const char kGLImplementationAppleName[]       = "apple";
 const char kGLImplementationEGLName[]         = "egl";
+const char kGLImplementationANGLEName[]       = "angle";
 const char kGLImplementationSwiftShaderName[] = "swiftshader";
 const char kGLImplementationMockName[]        = "mock";
 
@@ -29,6 +30,10 @@ namespace switches {
 const char kDisableD3D11[]                  = "disable-d3d11";
 
 // Stop the GPU from synchronizing on the vsync before presenting.
+// We can select from the options below:
+//  beginframe : Next frame can start without any delay on cc::scheduler.
+//  gpu : Disable gpu vsync.
+//  default: Set both flags.
 const char kDisableGpuVsync[]               = "disable-gpu-vsync";
 
 // Turns on GPU logging (debug build only).
@@ -61,6 +66,9 @@ const char kSwiftShaderPath[]               = "swiftshader-path";
 // screen saving mode, etc.  Note that this flag does not ensure that a GPU
 // context will never be lost in any situations, say, a GPU reset.
 const char kGpuNoContextLost[]              = "gpu-no-context-lost";
+
+// Turns on the use of DirectComposition to draw to the screen.
+const char kUseDirectComposition[] = "use-direct-composition";
 
 // Indicates whether the dual GPU switching is supported or not.
 const char kSupportsDualGpus[]              = "supports-dual-gpus";
@@ -99,6 +107,7 @@ const char* kGLSwitchesCopiedFromGpuProcessHost[] = {
   kDisableGLDrawingForTests,
   kOverrideUseGLWithOSMesaForTests,
   kUseANGLE,
+  kUseDirectComposition,
 };
 const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
     arraysize(kGLSwitchesCopiedFromGpuProcessHost);

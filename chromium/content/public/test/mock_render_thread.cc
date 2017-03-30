@@ -6,6 +6,7 @@
 
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/common/frame_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/renderer/render_process_observer.h"
@@ -20,12 +21,11 @@ namespace content {
 
 MockRenderThread::MockRenderThread()
     : routing_id_(0),
-      surface_id_(0),
       opener_id_(0),
       new_window_routing_id_(0),
       new_window_main_frame_routing_id_(0),
-      new_frame_routing_id_(0) {
-}
+      new_window_main_frame_widget_routing_id_(0),
+      new_frame_routing_id_(0) {}
 
 MockRenderThread::~MockRenderThread() {
   while (!filters_.empty()) {
@@ -63,10 +63,6 @@ bool MockRenderThread::Send(IPC::Message* msg) {
   return true;
 }
 
-scoped_refptr<base::SingleThreadTaskRunner> MockRenderThread::GetTaskRunner() {
-  return base::ThreadTaskRunnerHandle::Get();
-}
-
 IPC::SyncChannel* MockRenderThread::GetChannel() {
   return NULL;
 }
@@ -84,11 +80,9 @@ MockRenderThread::GetIOMessageLoopProxy() {
   return scoped_refptr<base::SingleThreadTaskRunner>();
 }
 
-void MockRenderThread::AddRoute(int32 routing_id, IPC::Listener* listener) {
-}
+void MockRenderThread::AddRoute(int32_t routing_id, IPC::Listener* listener) {}
 
-void MockRenderThread::RemoveRoute(int32 routing_id) {
-}
+void MockRenderThread::RemoveRoute(int32_t routing_id) {}
 
 int MockRenderThread::GenerateRoutingID() {
   NOTREACHED();
@@ -155,19 +149,17 @@ void MockRenderThread::RegisterExtension(v8::Extension* extension) {
   blink::WebScriptController::registerExtension(extension);
 }
 
-void MockRenderThread::ScheduleIdleHandler(int64 initial_delay_ms) {
-}
+void MockRenderThread::ScheduleIdleHandler(int64_t initial_delay_ms) {}
 
 void MockRenderThread::IdleHandler() {
 }
 
-int64 MockRenderThread::GetIdleNotificationDelayInMs() const {
+int64_t MockRenderThread::GetIdleNotificationDelayInMs() const {
   return 0;
 }
 
 void MockRenderThread::SetIdleNotificationDelayInMs(
-    int64 idle_notification_delay_in_ms) {
-}
+    int64_t idle_notification_delay_in_ms) {}
 
 void MockRenderThread::UpdateHistograms(int sequence_number) {
 }
@@ -193,10 +185,6 @@ void MockRenderThread::ReleaseCachedFonts() {
 
 #endif  // OS_WIN
 
-IPC::AttachmentBroker* MockRenderThread::GetAttachmentBroker() {
-  return nullptr;
-}
-
 ServiceRegistry* MockRenderThread::GetServiceRegistry() {
   return NULL;
 }
@@ -209,32 +197,29 @@ void MockRenderThread::SendCloseMessage() {
 // The Widget expects to be returned valid route_id.
 void MockRenderThread::OnCreateWidget(int opener_id,
                                       blink::WebPopupType popup_type,
-                                      int* route_id,
-                                      int* surface_id) {
+                                      int* route_id) {
   opener_id_ = opener_id;
   *route_id = routing_id_;
-  *surface_id = surface_id_;
 }
 
 // The View expects to be returned a valid route_id different from its own.
 void MockRenderThread::OnCreateWindow(
     const ViewHostMsg_CreateWindow_Params& params,
-    int* route_id,
-    int* main_frame_route_id,
-    int* surface_id,
-    int64* cloned_session_storage_namespace_id) {
-  *route_id = new_window_routing_id_;
-  *main_frame_route_id = new_window_main_frame_routing_id_;
-  *surface_id = surface_id_;
-  *cloned_session_storage_namespace_id = 0;
+    ViewHostMsg_CreateWindow_Reply* reply) {
+  reply->route_id = new_window_routing_id_;
+  reply->main_frame_route_id = new_window_main_frame_routing_id_;
+  reply->main_frame_widget_route_id = new_window_main_frame_widget_routing_id_;
+  reply->cloned_session_storage_namespace_id = 0;
 }
 
 // The Frame expects to be returned a valid route_id different from its own.
-void MockRenderThread::OnCreateChildFrame(int new_frame_routing_id,
-                                          blink::WebTreeScopeType scope,
-                                          const std::string& frame_name,
-                                          blink::WebSandboxFlags sandbox_flags,
-                                          int* new_render_frame_id) {
+void MockRenderThread::OnCreateChildFrame(
+    int new_frame_routing_id,
+    blink::WebTreeScopeType scope,
+    const std::string& frame_name,
+    blink::WebSandboxFlags sandbox_flags,
+    const blink::WebFrameOwnerProperties& frame_owner_properties,
+    int* new_render_frame_id) {
   *new_render_frame_id = new_frame_routing_id_++;
 }
 

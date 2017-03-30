@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_icon_image_loader.h"
 
+#include <utility>
+
 #include "base/strings/string_util.h"
 #include "chrome/browser/chromeos/launcher_search_provider/error_reporter.h"
 #include "extensions/common/constants.h"
@@ -34,8 +36,7 @@ LauncherSearchIconImageLoader::LauncherSearchIconImageLoader(
       extension_(extension),
       icon_url_(icon_url),
       icon_size_(icon_dimension, icon_dimension),
-      error_reporter_(error_reporter.Pass()) {
-}
+      error_reporter_(std::move(error_reporter)) {}
 
 LauncherSearchIconImageLoader::~LauncherSearchIconImageLoader() {
 }
@@ -62,7 +63,7 @@ void LauncherSearchIconImageLoader::LoadResources() {
     params.push_back(GetTruncatedIconUrl(kTruncatedIconUrlMaxSize));
     params.push_back(extensions::kExtensionScheme);
     params.push_back(extension_->id());
-    error_reporter_->Warn(ReplaceStringPlaceholders(
+    error_reporter_->Warn(base::ReplaceStringPlaceholders(
         "$1 Invalid icon URL: $2. Must have a valid URL within $3://$4.",
         params, nullptr));
     return;
@@ -119,7 +120,7 @@ void LauncherSearchIconImageLoader::OnCustomIconLoaded(
     std::vector<std::string> params;
     params.push_back(kWarningMessagePrefix);
     params.push_back(GetTruncatedIconUrl(kTruncatedIconUrlMaxSize));
-    error_reporter_->Warn(ReplaceStringPlaceholders(
+    error_reporter_->Warn(base::ReplaceStringPlaceholders(
         "$1 Failed to load icon URL: $2", params, nullptr));
 
     return;
@@ -149,7 +150,7 @@ void LauncherSearchIconImageLoader::NotifyObserversBadgeIconImageChange() {
 }
 
 std::string LauncherSearchIconImageLoader::GetTruncatedIconUrl(
-    const uint32 max_size) {
+    const uint32_t max_size) {
   CHECK(max_size > 3);
 
   if (icon_url_.spec().size() <= max_size)

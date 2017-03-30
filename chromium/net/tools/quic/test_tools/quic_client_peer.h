@@ -5,7 +5,7 @@
 #ifndef NET_TOOLS_QUIC_TEST_TOOLS_QUIC_CLIENT_PEER_H_
 #define NET_TOOLS_QUIC_TEST_TOOLS_QUIC_CLIENT_PEER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 namespace net {
 
@@ -20,10 +20,8 @@ namespace test {
 
 class QuicClientPeer {
  public:
-  static QuicCryptoClientConfig* GetCryptoConfig(QuicClient* client);
   static bool CreateUDPSocket(QuicClient* client);
   static void SetClientPort(QuicClient* client, int port);
-  static void SetWriter(QuicClient* client, QuicPacketWriter* writer);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicClientPeer);

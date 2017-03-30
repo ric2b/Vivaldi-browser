@@ -18,6 +18,7 @@ PassThroughVideoDecoder::~PassThroughVideoDecoder() {
 
 void PassThroughVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                          bool low_delay,
+                                         const SetCdmReadyCB& set_cdm_ready_cb,
                                          const InitCB& init_cb,
                                          const OutputCB& output_cb) {
   impl_.Initialize(config, init_cb, output_cb);

@@ -4,11 +4,15 @@
 
 #include "chrome/browser/ui/views/profiles/supervised_user_avatar_label.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/signin/signin_header_helper.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/browser/signin_metrics.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/theme_provider.h"
@@ -96,7 +100,7 @@ gfx::Size SupervisedUserAvatarLabelBorder::GetMinimumSize() const {
 
 SupervisedUserAvatarLabel::SupervisedUserAvatarLabel(BrowserView* browser_view)
     : LabelButton(NULL,
-                  l10n_util::GetStringUTF16(IDS_SUPERVISED_USER_AVATAR_LABEL)),
+          l10n_util::GetStringUTF16(IDS_LEGACY_SUPERVISED_USER_AVATAR_LABEL)),
       browser_view_(browser_view) {
   SetLabelOnRight(false);
   UpdateLabelStyle();
@@ -109,8 +113,8 @@ bool SupervisedUserAvatarLabel::OnMousePressed(const ui::MouseEvent& event) {
     return false;
 
   browser_view_->ShowAvatarBubbleFromAvatarButton(
-      BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT,
-      signin::ManageAccountsParams());
+      BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT, signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
   return true;
 }
 

@@ -4,6 +4,7 @@
 
 #include "base/mac/foundation_util.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,7 +12,10 @@
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/mac_logging.h"
+#include "base/macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/sys_string_conversions.h"
+#include "build/build_config.h"
 
 #if !defined(OS_IOS)
 extern "C" {
@@ -428,6 +432,19 @@ FilePath NSStringToFilePath(NSString* str) {
   if (![str length])
     return FilePath();
   return FilePath([str fileSystemRepresentation]);
+}
+
+bool CFRangeToNSRange(CFRange range, NSRange* range_out) {
+  if (base::IsValueInRangeForNumericType<decltype(range_out->location)>(
+          range.location) &&
+      base::IsValueInRangeForNumericType<decltype(range_out->length)>(
+          range.length) &&
+      base::IsValueInRangeForNumericType<decltype(range_out->location)>(
+          range.location + range.length)) {
+    *range_out = NSMakeRange(range.location, range.length);
+    return true;
+  }
+  return false;
 }
 
 }  // namespace mac

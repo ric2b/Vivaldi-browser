@@ -148,24 +148,29 @@ static void check_CMM_type_signature(struct mem_source *src)
 	//uint32_t CMM_type_signature = read_u32(src, 4);
 }
 
-static void check_profile_version(struct mem_source *src)
+static void read_profile_version(qcms_profile *profile, struct mem_source *src)
 {
-	/*
 	uint8_t major_revision = read_u8(src, 8 + 0);
 	uint8_t minor_revision = read_u8(src, 8 + 1);
-	*/
-	uint8_t reserved1      = read_u8(src, 8 + 2);
-	uint8_t reserved2      = read_u8(src, 8 + 3);
-	/* Checking the version doesn't buy us anything
-	if (major_revision != 0x4) {
-		if (major_revision > 0x2)
-			invalid_source(src, "Unsupported major revision");
-		if (minor_revision > 0x40)
-			invalid_source(src, "Unsupported minor revision");
-	}
-	*/
-	if (reserved1 != 0 || reserved2 != 0)
+	uint8_t reserved_byte1 = read_u8(src, 8 + 2);
+	uint8_t reserved_byte2 = read_u8(src, 8 + 3);
+
+	profile->icc_version = major_revision << 8 | minor_revision;
+
+	if (reserved_byte1 || reserved_byte2) {
 		invalid_source(src, "Invalid reserved bytes");
+		return;
+	}
+
+	if (major_revision == 2)
+		return; // ICC V2.X color profile
+	if (major_revision == 4 && qcms_supports_iccv4)
+		return; // ICC V4.X color profile
+
+	/* Checking the version doesn't buy us anything: permit any
+	   version without failure for now */
+	// invalid_source(src, "Unsupported ICC revision");
+	return;
 }
 
 #define INPUT_DEVICE_PROFILE   0x73636e72 // 'scnr'
@@ -248,82 +253,112 @@ static struct tag_index read_tag_table(qcms_profile *profile, struct mem_source 
 	return index;
 }
 
-// Checks a profile for obvious inconsistencies and returns
-// true if the profile looks bogus and should probably be
-// ignored.
+/* Checks a profile for obvious inconsistencies and return true if the
+ * profile looks bogus and should probably be ignored.
+ */
 qcms_bool qcms_profile_is_bogus(qcms_profile *profile)
 {
-       float sum[3], target[3], tolerance[3];
-       float rX, rY, rZ, gX, gY, gZ, bX, bY, bZ;
-       bool negative;
-       unsigned i;
+    float rX, rY, rZ, gX, gY, gZ, bX, bY, bZ;
+    float target[3], tolerance[3], sum[3];
+    unsigned i;
 
-       // We currently only check the bogosity of RGB profiles
-       if (profile->color_space != RGB_SIGNATURE)
-	       return false;
+    // We currently only check the bogosity of RGB profiles.
+    if (profile->color_space != RGB_SIGNATURE)
+        return false;
 
-       if (qcms_supports_iccv4 && (profile->A2B0 || profile->B2A0))
-               return false;
+    if (qcms_supports_iccv4 && (profile->A2B0 || profile->B2A0))
+        return false;
 
-       rX = s15Fixed16Number_to_float(profile->redColorant.X);
-       rY = s15Fixed16Number_to_float(profile->redColorant.Y);
-       rZ = s15Fixed16Number_to_float(profile->redColorant.Z);
+    rX = s15Fixed16Number_to_float(profile->redColorant.X);
+    rY = s15Fixed16Number_to_float(profile->redColorant.Y);
+    rZ = s15Fixed16Number_to_float(profile->redColorant.Z);
 
-       gX = s15Fixed16Number_to_float(profile->greenColorant.X);
-       gY = s15Fixed16Number_to_float(profile->greenColorant.Y);
-       gZ = s15Fixed16Number_to_float(profile->greenColorant.Z);
+    gX = s15Fixed16Number_to_float(profile->greenColorant.X);
+    gY = s15Fixed16Number_to_float(profile->greenColorant.Y);
+    gZ = s15Fixed16Number_to_float(profile->greenColorant.Z);
 
-       bX = s15Fixed16Number_to_float(profile->blueColorant.X);
-       bY = s15Fixed16Number_to_float(profile->blueColorant.Y);
-       bZ = s15Fixed16Number_to_float(profile->blueColorant.Z);
+    bX = s15Fixed16Number_to_float(profile->blueColorant.X);
+    bY = s15Fixed16Number_to_float(profile->blueColorant.Y);
+    bZ = s15Fixed16Number_to_float(profile->blueColorant.Z);
 
-       // Check if any of the XYZ values are negative (see mozilla bug 498245)
-       // CIEXYZ tristimulus values cannot be negative according to the spec.
-       negative =
-	       (rX < 0) || (rY < 0) || (rZ < 0) ||
-	       (gX < 0) || (gY < 0) || (gZ < 0) ||
-	       (bX < 0) || (bY < 0) || (bZ < 0);
+    // Build our target vector: CIE D50 white. See also mozilla bug 460629,
+    // and http://www.color.org/whyd50.xalter "Why is the media white point
+    // of a display profile always D50?"
 
-       if (negative)
-	       return true;
+    target[0] = (float) 0.96420;
+    target[1] = (float) 1.00000;
+    target[2] = (float) 0.82491;
 
+    // Our tolerance vector - Recommended by Chris Murphy [1] based on
+    // conversion from the L*a*b space criterion of no more than 3 in any
+    // one channel. This is similar to, but slightly more tolerant than
+    // Adobe's criterion. [1] https://bugzil.la/460629#c10
 
-       // Sum the values; they should add up to something close to white
-       sum[0] = rX + gX + bX;
-       sum[1] = rY + gY + bY;
-       sum[2] = rZ + gZ + bZ;
+    tolerance[0] = (float) 0.02;
+    tolerance[1] = (float) 0.02;
+    tolerance[2] = (float) 0.04;
 
-#if defined (_MSC_VER)
-#pragma warning(push)
-/* Disable double to float truncation warning 4305 */
-#pragma warning(disable:4305)
+    // Sum the XYZ values: they should add to D50 white, within tolerance.
+
+    // FIXME: this test assumes the TRC RGB curves equal 1.0 for the white
+    // input (255,255,255) RGB test color. For user display profiles, that
+    // is the normal case. Profiles with abnormal TRC exist. A better test
+    // would transform 255,255,255 white through the profile to either XYZ
+    // or L*a*b color and compare the result to D50 in XYZ or L*a*b color.
+
+    sum[0] = rX + gX + bX;
+    sum[1] = rY + gY + bY;
+    sum[2] = rZ + gZ + bZ;
+
+    for (i = 0; i < 3; ++i) {
+        if (!(((sum[i] - tolerance[i]) <= target[i]) &&
+              ((sum[i] + tolerance[i]) >= target[i]))) {
+            return true; // out of tolerance: bogus
+        }
+    }
+
+#ifndef __APPLE__
+    // Check if any of the XYZ values are negative (see mozilla bug 498245)
+    // CIEXYZ tristimulus values cannot be negative according to the spec.
+
+    bool negative =
+        (rX < 0) || (rY < 0) || (rZ < 0) ||
+        (gX < 0) || (gY < 0) || (gZ < 0) ||
+        (bX < 0) || (bY < 0) || (bZ < 0);
+
+    if (negative)
+        return true; // bogus
+#else
+    // Chromatic adaption to D50 can result in negative XYZ, but the white
+    // point D50 tolerance test has passed. Accept negative values herein.
+    // See https://bugzilla.mozilla.org/show_bug.cgi?id=498245#c18 onwards
+    // for discussion about whether profile XYZ can or cannot be negative,
+    // per the spec. Also the https://bugzil.la/450923 user report.
+
+    // FIXME: allow this relaxation on all ports?
 #endif
-       // Build our target vector (see mozilla bug 460629)
-       target[0] = 0.96420;
-       target[1] = 1.00000;
-       target[2] = 0.82491;
+    // All good.
+    return false;
+}
 
-       // Our tolerance vector - Recommended by Chris Murphy based on
-       // conversion from the LAB space criterion of no more than 3 in any one
-       // channel. This is similar to, but slightly more tolerant than Adobe's
-       // criterion.
-       tolerance[0] = 0.02;
-       tolerance[1] = 0.02;
-       tolerance[2] = 0.04;
+qcms_bool qcms_profile_has_white_point(qcms_profile *profile)
+{
+    struct XYZNumber wp = profile->mediaWhitePoint;
 
-#if defined (_MSC_VER)
-/* Restore warnings */
-#pragma warning(pop)
-#endif
-       // Compare with our tolerance
-       for (i = 0; i < 3; ++i) {
-           if (!(((sum[i] - tolerance[i]) <= target[i]) &&
-                 ((sum[i] + tolerance[i]) >= target[i])))
-               return true;
-       }
+    return (wp.X != 0) && (wp.Y != 0) && (wp.Z != 0);
+}
 
-       // All Good
-       return false;
+qcms_xyz_float qcms_profile_get_white_point(qcms_profile *profile)
+{
+    qcms_xyz_float wp = { 0.0f, 0.0f, 0.0f };
+
+    if (qcms_profile_has_white_point(profile)) {
+        wp.X = s15Fixed16Number_to_float(profile->mediaWhitePoint.X);
+        wp.Y = s15Fixed16Number_to_float(profile->mediaWhitePoint.Y);
+        wp.Z = s15Fixed16Number_to_float(profile->mediaWhitePoint.Z);
+    }
+
+    return wp;
 }
 
 #define TAG_bXYZ 0x6258595a
@@ -338,6 +373,7 @@ qcms_bool qcms_profile_is_bogus(qcms_profile *profile)
 #define TAG_CHAD 0x63686164
 #define TAG_desc 0x64657363
 #define TAG_vcgt 0x76636774
+#define TAG_wtpt 0x77747074
 
 static struct tag *find_tag(struct tag_index index, uint32_t tag_id)
 {
@@ -356,57 +392,99 @@ static struct tag *find_tag(struct tag_index index, uint32_t tag_id)
 #define MMOD_TYPE 0x6D6D6F64 // 'mmod'
 #define VCGT_TYPE 0x76636774 // 'vcgt'
 
+enum {
+	VCGT_TYPE_TABLE,
+	VCGT_TYPE_FORMULA,
+	VCGT_TYPE_LAST = VCGT_TYPE_FORMULA
+};
+
 static qcms_bool read_tag_vcgtType(qcms_profile *profile, struct mem_source *src, struct tag_index index)
 {
 	size_t tag_offset = find_tag(index, TAG_vcgt)->offset;
 	uint32_t tag_type = read_u32(src, tag_offset);
 	uint32_t vcgt_type = read_u32(src, tag_offset + 8);
-	uint16_t channels = read_u16(src, tag_offset + 12);
-	uint16_t elements = read_u16(src, tag_offset + 14);
-	uint16_t byte_depth = read_u16(src, tag_offset + 16);
-	size_t table_offset = tag_offset + 18;
-	uint32_t i;
-	uint16_t *dest;
 
 	if (!src->valid || tag_type != VCGT_TYPE)
 		goto invalid_vcgt_tag;
 
-	// Only support 3 channels.
-	if (channels != 3)
-		return true;
-	// Only support single or double byte values.
-	if (byte_depth != 1 && byte_depth != 2)
-		return true;
-	// Only support table data, not equation.
-	if (vcgt_type != 0)
-		return true;
-	// Limit the table to a sensible size; 10-bit gamma is a reasonable
-	// maximum for hardware correction.
-	if (elements > 1024)
+	// Only support table and equation types.
+	if (vcgt_type > VCGT_TYPE_LAST)
 		return true;
 
-	// Empty table is invalid.
-	if (!elements)
-		goto invalid_vcgt_tag;
-
-	profile->vcgt.length = elements;
-	profile->vcgt.data = malloc(3 * elements * sizeof(uint16_t));
-	if (!profile->vcgt.data)
-		return false;
-
-	dest = profile->vcgt.data;
-
-	for (i = 0; i < 3 * elements; ++i) {
-		if (byte_depth == 1) {
-			*dest++ = read_u8(src, table_offset) * 256;
-		} else {
-			*dest++ = read_u16(src, table_offset);
-		}
-
-		table_offset += byte_depth;
+	if (vcgt_type == VCGT_TYPE_TABLE) {
+		uint16_t channels = read_u16(src, tag_offset + 12);
+		uint16_t elements = read_u16(src, tag_offset + 14);
+		uint16_t byte_depth = read_u16(src, tag_offset + 16);
+		size_t table_offset = tag_offset + 18;
+		uint32_t i;
+		uint16_t *dest;
 
 		if (!src->valid)
 			goto invalid_vcgt_tag;
+
+		// Only support 3 channels.
+		if (channels != 3)
+			return true;
+		// Only support single or double byte values.
+		if (byte_depth != 1 && byte_depth != 2)
+			return true;
+		// Limit the table to a sensible size; 10-bit gamma is a reasonable
+		// maximum for hardware correction.
+		if (elements > 1024)
+			return true;
+
+		// Empty table is invalid.
+		if (!elements)
+			goto invalid_vcgt_tag;
+
+		profile->vcgt.length = elements;
+		profile->vcgt.data = malloc(3 * elements * sizeof(uint16_t));
+		if (!profile->vcgt.data)
+			return false;
+
+		dest = profile->vcgt.data;
+
+		for (i = 0; i < 3 * elements; ++i) {
+			if (byte_depth == 1) {
+				*dest++ = read_u8(src, table_offset) * 256;
+			} else {
+				*dest++ = read_u16(src, table_offset);
+			}
+
+			table_offset += byte_depth;
+
+			if (!src->valid)
+				goto invalid_vcgt_tag;
+		}
+	} else {
+		size_t formula_offset = tag_offset + 12;
+		int i, j;
+		uint16_t *dest;
+
+		// For formula always provide an 8-bit lut.
+		profile->vcgt.length = 256;
+		profile->vcgt.data = malloc(3 * profile->vcgt.length * sizeof(uint16_t));
+		if (!profile->vcgt.data)
+			return false;
+
+		dest = profile->vcgt.data;
+		for (i = 0; i < 3; ++i) {
+			float gamma = s15Fixed16Number_to_float(
+					read_s15Fixed16Number(src, formula_offset + 12 * i));
+			float min = s15Fixed16Number_to_float(
+					read_s15Fixed16Number(src, formula_offset + 4 + 12 * i));
+			float max = s15Fixed16Number_to_float(
+					read_s15Fixed16Number(src, formula_offset + 8 + 12 * i));
+			float range = max - min;
+
+			if (!src->valid)
+				goto invalid_vcgt_tag;
+
+			for (j = 0; j < profile->vcgt.length; ++j) {
+				*dest++ = 65535.f *
+					(min + range * pow((float)j / (profile->vcgt.length - 1), gamma));
+			}
+		}
 	}
 
 	return true;
@@ -809,10 +887,12 @@ static struct lutmABType *read_tag_lutmABType(struct mem_source *src, struct tag
 	memset(lut, 0, sizeof(struct lutmABType));
 	lut->clut_table   = &lut->clut_table_data[0];
 
-	for (i = 0; i < num_in_channels; i++) {
-		lut->num_grid_points[i] = read_u8(src, clut_offset + i);
-		if (lut->num_grid_points[i] == 0) {
-			invalid_source(src, "bad grid_points");
+	if (clut_offset) {
+		for (i = 0; i < num_in_channels; i++) {
+			lut->num_grid_points[i] = read_u8(src, clut_offset + i);
+			if (lut->num_grid_points[i] == 0) {
+				invalid_source(src, "bad grid_points");
+			}
 		}
 	}
 
@@ -914,6 +994,11 @@ static struct lutType *read_tag_lutType(struct mem_source *src, struct tag_index
 	clut_size = pow(grid_points, in_chan);
 	if (clut_size > MAX_CLUT_SIZE) {
 		invalid_source(src, "CLUT too large");
+		return NULL;
+	}
+
+	if (clut_size <= 0) {
+		invalid_source(src, "CLUT must not be empty.");
 		return NULL;
 	}
 
@@ -1097,7 +1182,6 @@ qcms_profile* qcms_profile_create_rgb_with_gamma(
 	if (!profile)
 		return NO_MEM_PROFILE;
 
-	//XXX: should store the whitepoint
 	if (!set_rgb_colorants(profile, white_point, primaries)) {
 		qcms_profile_release(profile);
 		return INVALID_PROFILE;
@@ -1111,9 +1195,11 @@ qcms_profile* qcms_profile_create_rgb_with_gamma(
 		qcms_profile_release(profile);
 		return NO_MEM_PROFILE;
 	}
+
 	profile->class = DISPLAY_DEVICE_PROFILE;
 	profile->rendering_intent = QCMS_INTENT_PERCEPTUAL;
 	profile->color_space = RGB_SIGNATURE;
+	profile->pcs = XYZ_SIGNATURE;
 	return profile;
 }
 
@@ -1126,7 +1212,6 @@ qcms_profile* qcms_profile_create_rgb_with_table(
 	if (!profile)
 		return NO_MEM_PROFILE;
 
-	//XXX: should store the whitepoint
 	if (!set_rgb_colorants(profile, white_point, primaries)) {
 		qcms_profile_release(profile);
 		return INVALID_PROFILE;
@@ -1140,9 +1225,11 @@ qcms_profile* qcms_profile_create_rgb_with_table(
 		qcms_profile_release(profile);
 		return NO_MEM_PROFILE;
 	}
+
 	profile->class = DISPLAY_DEVICE_PROFILE;
 	profile->rendering_intent = QCMS_INTENT_PERCEPTUAL;
 	profile->color_space = RGB_SIGNATURE;
+	profile->pcs = XYZ_SIGNATURE;
 	return profile;
 }
 
@@ -1259,7 +1346,7 @@ qcms_profile* qcms_profile_from_memory(const void *mem, size_t size)
 		return NO_MEM_PROFILE;
 
 	check_CMM_type_signature(src);
-	check_profile_version(src);
+	read_profile_version(profile, src);
 	read_class_signature(profile, src);
 	read_rendering_intent(profile, src);
 	read_color_space(profile, src);
@@ -1343,6 +1430,12 @@ qcms_profile* qcms_profile_from_memory(const void *mem, size_t size)
 		goto invalid_tag_table;
 	}
 
+	// Profiles other than DeviceLink should have a media white point.
+	// Here we read it if present.
+	if (find_tag(index, TAG_wtpt)) {
+		profile->mediaWhitePoint = read_tag_XYZType(src, index, TAG_wtpt);
+	}
+
 	if (!src->valid)
 		goto invalid_tag_table;
 
@@ -1375,6 +1468,11 @@ qcms_intent qcms_profile_get_rendering_intent(qcms_profile *profile)
 qcms_color_space qcms_profile_get_color_space(qcms_profile *profile)
 {
 	return profile->color_space;
+}
+
+unsigned qcms_profile_get_version(qcms_profile *profile)
+{
+	return profile->icc_version & 0xffff;
 }
 
 size_t qcms_profile_get_vcgt_channel_length(qcms_profile *profile)

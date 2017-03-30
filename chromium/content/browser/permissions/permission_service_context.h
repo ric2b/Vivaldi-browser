@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
 
 namespace content {
 
@@ -40,9 +40,9 @@ class PermissionServiceContext : public WebContentsObserver {
 
  private:
   // WebContentsObserver
-  void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
   void RenderFrameHostChanged(RenderFrameHost* old_host,
                               RenderFrameHost* new_host) override;
+  void FrameDeleted(RenderFrameHost* render_frame_host) override;
   void DidNavigateAnyFrame(RenderFrameHost* render_frame_host,
                            const LoadCommittedDetails& details,
                            const FrameNavigateParams& params) override;

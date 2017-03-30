@@ -5,7 +5,9 @@
 #ifndef COMPONENTS_TEST_RUNNER_SPELL_CHECK_CLIENT_H_
 #define COMPONENTS_TEST_RUNNER_SPELL_CHECK_CLIENT_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "components/test_runner/mock_spell_check.h"
 #include "components/test_runner/web_task.h"
 #include "third_party/WebKit/public/web/WebSpellCheckClient.h"
@@ -26,21 +28,20 @@ class SpellCheckClient : public blink::WebSpellCheckClient {
   MockSpellCheck* MockSpellCheckWord() { return &spell_check_; }
 
   // blink::WebSpellCheckClient implementation.
-  virtual void spellCheck(
+  void spellCheck(
       const blink::WebString& text,
       int& offset,
       int& length,
-      blink::WebVector<blink::WebString>* optional_suggestions);
-  virtual void checkTextOfParagraph(
+      blink::WebVector<blink::WebString>* optional_suggestions) override;
+  void checkTextOfParagraph(
       const blink::WebString& text,
       blink::WebTextCheckingTypeMask mask,
-      blink::WebVector<blink::WebTextCheckingResult>* web_results);
-  virtual void requestCheckingOfText(
+      blink::WebVector<blink::WebTextCheckingResult>* web_results) override;
+  void requestCheckingOfText(
       const blink::WebString& text,
       const blink::WebVector<uint32_t>& markers,
       const blink::WebVector<unsigned>& marker_offsets,
-      blink::WebTextCheckingCompletion* completion);
-  virtual blink::WebString autoCorrectWord(const blink::WebString& word);
+      blink::WebTextCheckingCompletion* completion) override;
 
  private:
   void FinishLastTextCheck();

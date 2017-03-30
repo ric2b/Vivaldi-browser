@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_AWAKABLE_LIST_H_
-#define MOJO_EDK_SYSTEM_AWAKABLE_LIST_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_AWAKABLE_LIST_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_AWAKABLE_LIST_H_
 
 #include <stdint.h>
 
 #include <vector>
 
-#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace mojo {
 namespace system {
@@ -33,17 +33,17 @@ class MOJO_SYSTEM_IMPL_EXPORT AwakableList {
 
   void AwakeForStateChange(const HandleSignalsState& state);
   void CancelAll();
-  void Add(Awakable* awakable, MojoHandleSignals signals, uint32_t context);
+  void Add(Awakable* awakable, MojoHandleSignals signals, uintptr_t context);
   void Remove(Awakable* awakable);
 
  private:
   struct AwakeInfo {
-    AwakeInfo(Awakable* awakable, MojoHandleSignals signals, uint32_t context)
+    AwakeInfo(Awakable* awakable, MojoHandleSignals signals, uintptr_t context)
         : awakable(awakable), signals(signals), context(context) {}
 
     Awakable* awakable;
     MojoHandleSignals signals;
-    uint32_t context;
+    uintptr_t context;
   };
   using AwakeInfoList = std::vector<AwakeInfo>;
 
@@ -55,4 +55,4 @@ class MOJO_SYSTEM_IMPL_EXPORT AwakableList {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_AWAKABLE_LIST_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_AWAKABLE_LIST_H_

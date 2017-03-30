@@ -14,9 +14,10 @@ import android.test.suitebuilder.annotation.MediumTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
+import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.DisableInTabbedMode;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -47,15 +48,15 @@ public class DocumentModeReferrerTest extends DocumentModeTestBase {
     public void testReferrerExtra() throws Exception {
         Instrumentation.ActivityMonitor monitor = getInstrumentation().addMonitor(
                 DocumentActivity.class.getName(), null, false);
-        launchMainIntent(mContext);
+        ApplicationTestUtils.launchChrome(mContext);
 
         // Wait for tab model to become initialized.
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return ChromeApplication.isDocumentTabModelSelectorInitializedForTests();
             }
-        }));
+        });
 
         DocumentTabModelSelector selector = ChromeApplication.getDocumentTabModelSelector();
         mObserver = new TabModelSelectorTabObserver(selector) {
@@ -85,12 +86,12 @@ public class DocumentModeReferrerTest extends DocumentModeTestBase {
         IntentHandler.addTrustedIntentExtras(intent, mContext);
         mContext.startActivity(intent);
 
-        assertTrue(CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return URL_1.equals(mUrl);
             }
-        }));
+        });
 
         assertEquals(URL_2, mReferrer);
     }
@@ -99,15 +100,15 @@ public class DocumentModeReferrerTest extends DocumentModeTestBase {
     public void testReferrerExtraAndroidApp() throws Exception {
         Instrumentation.ActivityMonitor monitor = getInstrumentation().addMonitor(
                 DocumentActivity.class.getName(), null, false);
-        launchMainIntent(mContext);
+        ApplicationTestUtils.launchChrome(mContext);
 
         // Wait for tab model to become initialized.
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return ChromeApplication.isDocumentTabModelSelectorInitializedForTests();
             }
-        }));
+        });
 
         DocumentTabModelSelector selector = ChromeApplication.getDocumentTabModelSelector();
         mObserver = new TabModelSelectorTabObserver(selector) {
@@ -137,12 +138,12 @@ public class DocumentModeReferrerTest extends DocumentModeTestBase {
         intent.putExtra(Intent.EXTRA_REFERRER, Uri.parse(androidAppReferrer));
         mContext.startActivity(intent);
 
-        assertTrue(CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return URL_1.equals(mUrl);
             }
-        }));
+        });
 
         assertEquals(androidAppReferrer, mReferrer);
     }
@@ -151,15 +152,15 @@ public class DocumentModeReferrerTest extends DocumentModeTestBase {
     public void testReferrerExtraNotAndroidApp() throws Exception {
         Instrumentation.ActivityMonitor monitor = getInstrumentation().addMonitor(
                 DocumentActivity.class.getName(), null, false);
-        launchMainIntent(mContext);
+        ApplicationTestUtils.launchChrome(mContext);
 
         // Wait for tab model to become initialized.
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return ChromeApplication.isDocumentTabModelSelectorInitializedForTests();
             }
-        }));
+        });
 
         DocumentTabModelSelector selector = ChromeApplication.getDocumentTabModelSelector();
         mObserver = new TabModelSelectorTabObserver(selector) {
@@ -189,12 +190,12 @@ public class DocumentModeReferrerTest extends DocumentModeTestBase {
         intent.putExtra(Intent.EXTRA_REFERRER, Uri.parse(nonAppExtra));
         mContext.startActivity(intent);
 
-        assertTrue(CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return URL_1.equals(mUrl);
             }
-        }));
+        });
 
         // Check that referrer is not carried over
         assertNull(mReferrer);
@@ -204,15 +205,15 @@ public class DocumentModeReferrerTest extends DocumentModeTestBase {
     public void testReferrerExtraFromExternalIntent() throws Exception {
         Instrumentation.ActivityMonitor monitor = getInstrumentation().addMonitor(
                 DocumentActivity.class.getName(), null, false);
-        launchMainIntent(mContext);
+        ApplicationTestUtils.launchChrome(mContext);
 
         // Wait for tab model to become initialized.
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return ChromeApplication.isDocumentTabModelSelectorInitializedForTests();
             }
-        }));
+        });
 
         DocumentTabModelSelector selector = ChromeApplication.getDocumentTabModelSelector();
         mObserver = new TabModelSelectorTabObserver(selector) {
@@ -243,12 +244,12 @@ public class DocumentModeReferrerTest extends DocumentModeTestBase {
         IntentHandler.setPendingReferrer(intent, "http://www.google.com");
         mContext.startActivity(intent);
 
-        assertTrue(CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return URL_1.equals(mUrl);
             }
-        }));
+        });
 
         // Check that referrer is not carried over
         assertEquals("http://www.google.com", mReferrer);

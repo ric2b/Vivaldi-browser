@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -26,7 +29,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_browser_thread.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
 
 using content::BrowserThread;
@@ -53,7 +56,9 @@ class WaitForHistoryTask : public history::HistoryDBTask {
     return true;
   }
 
-  void DoneRunOnMainThread() override { base::MessageLoop::current()->Quit(); }
+  void DoneRunOnMainThread() override {
+    base::MessageLoop::current()->QuitWhenIdle();
+  }
 
  private:
   ~WaitForHistoryTask() override {}
@@ -65,12 +70,14 @@ class WaitForHistoryTask : public history::HistoryDBTask {
 
 class HistoryBrowserTest : public InProcessBrowserTest {
  protected:
-  HistoryBrowserTest()
-      : test_server_(net::SpawnedTestServer::TYPE_HTTP,
-                     net::SpawnedTestServer::kLocalhost,
-                     base::FilePath(kDocRoot)) {}
+  HistoryBrowserTest() : test_server_() {
+    test_server_.ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
+  }
 
-  void SetUp() override { ASSERT_TRUE(test_server_.Start()); }
+  void SetUp() override {
+    ASSERT_TRUE(test_server_.Start());
+    InProcessBrowserTest::SetUp();
+  }
 
   PrefService* GetPrefs() {
     return GetProfile()->GetPrefs();
@@ -96,7 +103,7 @@ class HistoryBrowserTest : public InProcessBrowserTest {
     scoped_ptr<history::HistoryDBTask> task(new WaitForHistoryTask());
     history::HistoryService* history = HistoryServiceFactory::GetForProfile(
         GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
-    history->ScheduleDBTask(task.Pass(), &task_tracker);
+    history->ScheduleDBTask(std::move(task), &task_tracker);
     content::RunMessageLoop();
   }
 
@@ -115,11 +122,11 @@ class HistoryBrowserTest : public InProcessBrowserTest {
   }
 
   void LoadAndWaitForFile(const char* filename) {
-    GURL url = test_server_.GetURL(std::string("History") + filename);
+    GURL url = test_server_.GetURL(std::string("/History") + filename);
     LoadAndWaitForURL(url);
   }
 
-  net::SpawnedTestServer test_server_;
+  net::EmbeddedTestServer test_server_;
 };
 
 // Test that the browser history is saved (default setting).
@@ -218,25 +225,25 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, SavingHistoryDisabledThenEnabled) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, VerifyHistoryLength1) {
+// Disabled after fixing this test class. See http://crbug.com/511442 for
+// details.
+IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, DISABLED_VerifyHistoryLength1) {
   // Test the history length for the following page transitions.
   //   -open-> Page 1.
   LoadAndWaitForFile("history_length_test_page_1.html");
 }
 
-IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, VerifyHistoryLength2) {
+// Disabled after fixing this test class. See http://crbug.com/511442 for
+// details.
+IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, DISABLED_VerifyHistoryLength2) {
   // Test the history length for the following page transitions.
   //   -open-> Page 2 -redirect-> Page 3.
   LoadAndWaitForFile("history_length_test_page_2.html");
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_VerifyHistoryLength3 DISABLED_VerifyHistoryLength3
-#else
-#define MAYBE_VerifyHistoryLength3 VerifyHistoryLength3
-#endif
-IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, MAYBE_VerifyHistoryLength3) {
+// Disabled after fixing this test class. See http://crbug.com/511442 for
+// details.
+IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, DISABLED_VerifyHistoryLength3) {
   // Test the history length for the following page transitions.
   // -open-> Page 1 -> open Page 2 -redirect Page 3. open Page 4
   // -navigate_backward-> Page 3 -navigate_backward->Page 1
@@ -246,8 +253,10 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, MAYBE_VerifyHistoryLength3) {
   LoadAndWaitForFile("history_length_test_page_4.html");
 }
 
+// Disabled after fixing this test class. See http://crbug.com/511442 for
+// details.
 IN_PROC_BROWSER_TEST_F(HistoryBrowserTest,
-                       ConsiderRedirectAfterGestureAsUserInitiated) {
+                       DISABLED_ConsiderRedirectAfterGestureAsUserInitiated) {
   // Test the history length for the following page transition.
   //
   // -open-> Page 11 -slow_redirect-> Page 12.
@@ -263,8 +272,10 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest,
   LoadAndWaitForFile("history_length_test_page_11.html");
 }
 
+// Disabled after fixing this test class. See http://crbug.com/511442 for
+// details.
 IN_PROC_BROWSER_TEST_F(HistoryBrowserTest,
-                       ConsiderSlowRedirectAsUserInitiated) {
+                       DISABLED_ConsiderSlowRedirectAsUserInitiated) {
   // Test the history length for the following page transition.
   //
   // -open-> Page 21 -redirect-> Page 22.
@@ -275,9 +286,8 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest,
   LoadAndWaitForFile("history_length_test_page_21.html");
 }
 
-// http://crbug.com/22111
-// TODO(vivaldi) Reenable mac for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+// http://crbug.com/22111 (linux), http://crbug.com/530246 (win)
+#if defined(OS_LINUX) || defined(OS_WIN)
 #define MAYBE_HistorySearchXSS DISABLED_HistorySearchXSS
 #else
 #define MAYBE_HistorySearchXSS HistorySearchXSS
@@ -318,6 +328,19 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, InvalidURLNoHistory) {
       base::FilePath().AppendASCII("History"),
       base::FilePath().AppendASCII("non_existant_file.html"));
   ui_test_utils::NavigateToURL(browser(), non_existant);
+  ExpectEmptyHistory();
+}
+
+// URLs with special schemes should not go in history.
+IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, InvalidSchemeNoHistory) {
+  GURL about_blank("about:blank");
+  ui_test_utils::NavigateToURL(browser(), about_blank);
+  ExpectEmptyHistory();
+  GURL view_source("view-source:about:blank");
+  ui_test_utils::NavigateToURL(browser(), view_source);
+  ExpectEmptyHistory();
+  GURL chrome("chrome://about");
+  ui_test_utils::NavigateToURL(browser(), chrome);
   ExpectEmptyHistory();
 }
 
@@ -493,13 +516,7 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, SubmitFormAddsTargetPage) {
 
 // Verify history shortcut opens only one history tab per window.  Also, make
 // sure that existing history tab is activated.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_OneHistoryTabPerWindow DISABLED_OneHistoryTabPerWindow
-#else
-#define MAYBE_OneHistoryTabPerWindow OneHistoryTabPerWindow
-#endif
-IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, MAYBE_OneHistoryTabPerWindow) {
+IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, OneHistoryTabPerWindow) {
   GURL history_url(chrome::kChromeUIHistoryURL);
 
   // Even after navigate completes, the currently-active tab title is

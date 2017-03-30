@@ -8,13 +8,14 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/prefs/synced_pref_change_registrar.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/syncable_prefs/synced_pref_change_registrar.h"
 
 class PrefRegistrySimple;
 
@@ -29,7 +30,7 @@ class PrefMetricsService : public KeyedService {
     static Factory* GetInstance();
     static PrefMetricsService* GetForProfile(Profile* profile);
    private:
-    friend struct DefaultSingletonTraits<Factory>;
+    friend struct base::DefaultSingletonTraits<Factory>;
 
     Factory();
     ~Factory() override;
@@ -83,7 +84,8 @@ class PrefMetricsService : public KeyedService {
   PrefService* prefs_;
   PrefService* local_state_;
 
-  scoped_ptr<SyncedPrefChangeRegistrar> synced_pref_change_registrar_;
+  scoped_ptr<syncable_prefs::SyncedPrefChangeRegistrar>
+      synced_pref_change_registrar_;
 
   base::WeakPtrFactory<PrefMetricsService> weak_factory_;
 

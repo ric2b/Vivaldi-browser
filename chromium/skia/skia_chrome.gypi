@@ -39,7 +39,6 @@
     'ext/google_logging.cc',
     'ext/image_operations.cc',
     'ext/opacity_filter_canvas.cc',
-    'ext/pixel_ref_utils.cc',
     'ext/platform_canvas.cc',
     'ext/platform_device.cc',
     'ext/platform_device_linux.cc',
@@ -48,12 +47,19 @@
     'ext/recursive_gaussian_convolution.cc',
     'ext/SkDiscardableMemory_chrome.cc',
     'ext/SkMemory_new_handler.cpp',
+    'ext/skia_memory_dump_provider.cc',
+    'ext/skia_trace_memory_dump_impl.cc',
     'ext/skia_utils_base.cc',
     'ext/skia_utils_ios.mm',
     'ext/skia_utils_mac.mm',
     'ext/skia_utils_win.cc',
   ],
   'conditions': [
+    [ 'OS == "ios"', {
+      'sources!': [
+        'ext/platform_canvas.cc',
+      ],
+    }],
     [ 'OS == "android" and '
       'enable_basic_printing==0 and enable_print_preview==0', {
       'sources!': [

@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "content/browser/gamepad/gamepad_standard_mappings.h"
 
 namespace content {
@@ -263,8 +266,9 @@ struct MappingData {
 } AvailableMappings[] = {
     // http://www.linux-usb.org/usb.ids
     {"0079", "0006", MapperDragonRiseGeneric},   // DragonRise Generic USB
-    {"045e", "028e", MapperXbox360Gamepad},      // Xbox 360 Controller
-    {"045e", "028f", MapperXbox360Gamepad},      // Xbox 360 Wireless Controller
+    {"045e", "028e", MapperXbox360Gamepad},      // Xbox 360 Wired
+    {"045e", "028f", MapperXbox360Gamepad},      // Xbox 360 Wireless
+    {"045e", "0719", MapperXbox360Gamepad},      // Xbox 360 Wireless
     {"046d", "c216", MapperDirectInputStyle},    // Logitech F310, D mode
     {"046d", "c218", MapperDirectInputStyle},    // Logitech F510, D mode
     {"046d", "c219", MapperDirectInputStyle},    // Logitech F710, D mode

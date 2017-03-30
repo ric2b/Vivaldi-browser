@@ -8,6 +8,7 @@
 #include <jni.h>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "media/base/android/media_player_bridge.h"
@@ -42,6 +43,8 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   void SeekTo(base::TimeDelta timestamp) override;
   void Release() override;
   void SetVolume(double volume) override;
+  bool HasVideo() const override;
+  bool HasAudio() const override;
   int GetVideoWidth() override;
   int GetVideoHeight() override;
   base::TimeDelta GetCurrentTime() override;
@@ -56,14 +59,32 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
 
   // JNI functions
   base::android::ScopedJavaLocalRef<jstring> GetFrameUrl(
-      JNIEnv* env, jobject obj);
-  void OnPlaying(JNIEnv* env, jobject obj);
-  void OnPaused(JNIEnv* env, jobject obj);
-  void OnRouteSelected(JNIEnv* env, jobject obj, jstring castingMessage);
-  void OnRouteUnselected(JNIEnv* env, jobject obj);
-  void OnPlaybackFinished(JNIEnv* env, jobject obj);
-  void OnRouteAvailabilityChanged(JNIEnv* env, jobject obj, jboolean available);
-  base::android::ScopedJavaLocalRef<jstring> GetTitle(JNIEnv* env, jobject obj);
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void OnPlaying(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void OnPaused(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void OnRouteUnselected(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj);
+  void OnPlaybackFinished(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj);
+  void OnRouteAvailabilityChanged(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean available);
+  base::android::ScopedJavaLocalRef<jstring> GetTitle(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void PauseLocal(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  jint GetLocalPosition(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
+  void OnCastStarting(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& casting_message);
+  void OnCastStopping(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj);
+  void OnSeekCompleted(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj);
 
   // Wrappers for calls to Java used by the remote media player manager
   void RequestRemotePlayback();
@@ -71,11 +92,6 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   void SetNativePlayer();
   void OnPlayerCreated();
   void OnPlayerDestroyed();
-  bool IsRemotePlaybackAvailable() const;
-  bool IsRemotePlaybackPreferredForFrame() const;
-
-  // Returns true if the we can play the media remotely
-  bool IsMediaPlayableRemotely() const;
 
   // Gets the message to display on the embedded player while casting.
   std::string GetCastingMessage();
@@ -88,13 +104,11 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   void OnVideoSizeChanged(int width, int height) override;
   void OnPlaybackComplete() override;
   void OnMediaInterrupted() override;
-  void OnMediaPrepared() override;
 
  private:
   // Functions that implements media player control.
   void StartInternal();
   void PauseInternal();
-  void SeekInternal(base::TimeDelta time);
 
   // Called when |time_update_timer_| fires.
   void OnTimeUpdateTimerFired();
@@ -103,24 +117,11 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   // are retrieved.
   void OnCookiesRetrieved(const std::string& cookies);
 
-  void PendingSeekInternal(const base::TimeDelta& time);
-
-  // Prepare the player for playback, asynchronously. When succeeds,
-  // OnMediaPrepared() will be called. Otherwise, OnMediaError() will
-  // be called with an error type.
-  void Prepare();
-
-  long start_position_millis_;
   MediaPlayerAndroid* local_player_;
-  bool in_use_;
-  bool prepared_;
-  bool pending_play_;
   int width_;
   int height_;
-  base::RepeatingTimer<RemoteMediaPlayerBridge> time_update_timer_;
+  base::RepeatingTimer time_update_timer_;
   base::TimeDelta duration_;
-  bool should_seek_on_prepare_;
-  base::TimeDelta pending_seek_;
 
   // Hide url log from media player.
   bool hide_url_log_;

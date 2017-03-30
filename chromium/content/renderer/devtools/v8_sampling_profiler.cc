@@ -4,6 +4,23 @@
 
 #include "content/renderer/devtools/v8_sampling_profiler.h"
 
+#include <stdint.h>
+#include <string.h>
+
+#include "base/format_macros.h"
+#include "base/location.h"
+#include "base/macros.h"
+#include "base/strings/stringprintf.h"
+#include "base/synchronization/cancellation_flag.h"
+#include "base/thread_task_runner_handle.h"
+#include "base/threading/platform_thread.h"
+#include "base/trace_event/trace_event.h"
+#include "base/trace_event/trace_event_argument.h"
+#include "build/build_config.h"
+#include "content/renderer/devtools/lock_free_circular_queue.h"
+#include "content/renderer/render_thread_impl.h"
+#include "v8/include/v8.h"
+
 #if defined(OS_POSIX)
 #include <signal.h>
 #define USE_SIGNALS
@@ -12,18 +29,6 @@
 #if defined(OS_WIN)
 #include <windows.h>
 #endif
-
-#include "base/format_macros.h"
-#include "base/location.h"
-#include "base/strings/stringprintf.h"
-#include "base/synchronization/cancellation_flag.h"
-#include "base/thread_task_runner_handle.h"
-#include "base/threading/platform_thread.h"
-#include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
-#include "content/renderer/devtools/lock_free_circular_queue.h"
-#include "content/renderer/render_thread_impl.h"
-#include "v8/include/v8.h"
 
 using base::trace_event::ConvertableToTraceFormat;
 using base::trace_event::TraceLog;
@@ -87,7 +92,7 @@ class PlatformData : public PlatformDataCommon {
 
 std::string PtrToString(const void* value) {
   return base::StringPrintf(
-      "0x%" PRIx64, static_cast<uint64>(reinterpret_cast<intptr_t>(value)));
+      "0x%" PRIx64, static_cast<uint64_t>(reinterpret_cast<intptr_t>(value)));
 }
 
 class SampleRecord {
@@ -97,14 +102,14 @@ class SampleRecord {
 
   SampleRecord() {}
 
-  base::TraceTicks timestamp() const { return timestamp_; }
+  base::TimeTicks timestamp() const { return timestamp_; }
   void Collect(v8::Isolate* isolate,
-               base::TraceTicks timestamp,
+               base::TimeTicks timestamp,
                const v8::RegisterState& state);
   scoped_refptr<ConvertableToTraceFormat> ToTraceFormat() const;
 
  private:
-  base::TraceTicks timestamp_;
+  base::TimeTicks timestamp_;
   unsigned vm_state_ : 4;
   unsigned frames_count_ : kMaxFramesCountLog2;
   const void* frames_[kMaxFramesCount];
@@ -113,7 +118,7 @@ class SampleRecord {
 };
 
 void SampleRecord::Collect(v8::Isolate* isolate,
-                           base::TraceTicks timestamp,
+                           base::TimeTicks timestamp,
                            const v8::RegisterState& state) {
   v8::SampleInfo sample_info;
   isolate->GetStackSample(state, (void**)frames_, kMaxFramesCount,
@@ -284,7 +289,7 @@ void Sampler::Sample() {
 void Sampler::DoSample(const v8::RegisterState& state) {
   // Called in the sampled thread signal handler.
   // Because of that it is not allowed to do any memory allocation here.
-  base::TraceTicks timestamp = base::TraceTicks::Now();
+  base::TimeTicks timestamp = base::TimeTicks::Now();
   SampleRecord* record = samples_data_->StartEnqueue();
   if (!record)
     return;
@@ -298,7 +303,7 @@ void Sampler::InjectPendingEvents() {
     TRACE_EVENT_SAMPLE_WITH_TID_AND_TIMESTAMP1(
         TRACE_DISABLED_BY_DEFAULT("v8.cpu_profile"), "V8Sample",
         platform_data_.thread_id(),
-        (record->timestamp() - base::TraceTicks()).InMicroseconds(), "data",
+        (record->timestamp() - base::TimeTicks()).InMicroseconds(), "data",
         record->ToTraceFormat());
     samples_data_->Remove();
     record = samples_data_->Peek();
@@ -637,4 +642,4 @@ void V8SamplingProfiler::WaitSamplingEventForTesting() {
   waitable_event_for_testing_->Wait();
 }
 
-}  // namespace blink
+}  // namespace content

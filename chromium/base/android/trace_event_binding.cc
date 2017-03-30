@@ -8,7 +8,9 @@
 
 #include <set>
 
+#include "base/android/jni_string.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "jni/TraceEvent_jni.h"
@@ -25,32 +27,28 @@ const char kLooperDispatchMessage[] = "Looper.dispatchMessage";
 // Boilerplate for safely converting Java data to TRACE_EVENT data.
 class TraceEventDataConverter {
  public:
-  TraceEventDataConverter(JNIEnv* env,
-                          jstring jname,
-                          jstring jarg)
+  TraceEventDataConverter(JNIEnv* env, jstring jname, jstring jarg)
       : env_(env),
         jname_(jname),
         jarg_(jarg),
-        name_(env->GetStringUTFChars(jname, NULL)),
-        arg_(jarg ? env->GetStringUTFChars(jarg, NULL) : NULL) {
-  }
+        name_(ConvertJavaStringToUTF8(env, jname)),
+        has_arg_(jarg != nullptr),
+        arg_(jarg ? ConvertJavaStringToUTF8(env, jarg) : "") {}
   ~TraceEventDataConverter() {
-    env_->ReleaseStringUTFChars(jname_, name_);
-    if (jarg_)
-      env_->ReleaseStringUTFChars(jarg_, arg_);
   }
 
   // Return saves values to pass to TRACE_EVENT macros.
-  const char* name() { return name_; }
-  const char* arg_name() { return arg_ ? "arg" : NULL; }
-  const char* arg() { return arg_; }
+  const char* name() { return name_.c_str(); }
+  const char* arg_name() { return has_arg_ ? "arg" : nullptr; }
+  const char* arg() { return has_arg_ ? arg_.c_str() : nullptr; }
 
  private:
   JNIEnv* env_;
   jstring jname_;
   jstring jarg_;
-  const char* name_;
-  const char* arg_;
+  std::string name_;
+  bool has_arg_;
+  std::string arg_;
 
   DISALLOW_COPY_AND_ASSIGN(TraceEventDataConverter);
 };
@@ -72,23 +70,26 @@ base::LazyInstance<TraceEnabledObserver>::Leaky g_trace_enabled_state_observer_;
 
 }  // namespace
 
-static void RegisterEnabledObserver(JNIEnv* env, jclass clazz) {
+static void RegisterEnabledObserver(JNIEnv* env,
+                                    const JavaParamRef<jclass>& clazz) {
   bool enabled = trace_event::TraceLog::GetInstance()->IsEnabled();
   base::android::Java_TraceEvent_setEnabled(env, enabled);
   trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(
       g_trace_enabled_state_observer_.Pointer());
 }
 
-static void StartATrace(JNIEnv* env, jclass clazz) {
+static void StartATrace(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   base::trace_event::TraceLog::GetInstance()->StartATrace();
 }
 
-static void StopATrace(JNIEnv* env, jclass clazz) {
+static void StopATrace(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   base::trace_event::TraceLog::GetInstance()->StopATrace();
 }
 
-static void Instant(JNIEnv* env, jclass clazz,
-                    jstring jname, jstring jarg) {
+static void Instant(JNIEnv* env,
+                    const JavaParamRef<jclass>& clazz,
+                    const JavaParamRef<jstring>& jname,
+                    const JavaParamRef<jstring>& jarg) {
   TraceEventDataConverter converter(env, jname, jarg);
   if (converter.arg()) {
     TRACE_EVENT_COPY_INSTANT1(kJavaCategory, converter.name(),
@@ -100,8 +101,10 @@ static void Instant(JNIEnv* env, jclass clazz,
   }
 }
 
-static void Begin(JNIEnv* env, jclass clazz,
-                  jstring jname, jstring jarg) {
+static void Begin(JNIEnv* env,
+                  const JavaParamRef<jclass>& clazz,
+                  const JavaParamRef<jstring>& jname,
+                  const JavaParamRef<jstring>& jarg) {
   TraceEventDataConverter converter(env, jname, jarg);
   if (converter.arg()) {
     TRACE_EVENT_COPY_BEGIN1(kJavaCategory, converter.name(),
@@ -111,8 +114,10 @@ static void Begin(JNIEnv* env, jclass clazz,
   }
 }
 
-static void End(JNIEnv* env, jclass clazz,
-                jstring jname, jstring jarg) {
+static void End(JNIEnv* env,
+                const JavaParamRef<jclass>& clazz,
+                const JavaParamRef<jstring>& jname,
+                const JavaParamRef<jstring>& jarg) {
   TraceEventDataConverter converter(env, jname, jarg);
   if (converter.arg()) {
     TRACE_EVENT_COPY_END1(kJavaCategory, converter.name(),
@@ -122,20 +127,26 @@ static void End(JNIEnv* env, jclass clazz,
   }
 }
 
-static void BeginToplevel(JNIEnv* env, jclass clazz) {
+static void BeginToplevel(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   TRACE_EVENT_BEGIN0(kToplevelCategory, kLooperDispatchMessage);
 }
 
-static void EndToplevel(JNIEnv* env, jclass clazz) {
+static void EndToplevel(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   TRACE_EVENT_END0(kToplevelCategory, kLooperDispatchMessage);
 }
 
-static void StartAsync(JNIEnv* env, jclass clazz, jstring jname, jlong jid) {
+static void StartAsync(JNIEnv* env,
+                       const JavaParamRef<jclass>& clazz,
+                       const JavaParamRef<jstring>& jname,
+                       jlong jid) {
   TraceEventDataConverter converter(env, jname, nullptr);
   TRACE_EVENT_COPY_ASYNC_BEGIN0(kJavaCategory, converter.name(), jid);
 }
 
-static void FinishAsync(JNIEnv* env, jclass clazz, jstring jname, jlong jid) {
+static void FinishAsync(JNIEnv* env,
+                        const JavaParamRef<jclass>& clazz,
+                        const JavaParamRef<jstring>& jname,
+                        jlong jid) {
   TraceEventDataConverter converter(env, jname, nullptr);
   TRACE_EVENT_COPY_ASYNC_END0(kJavaCategory, converter.name(), jid);
 }

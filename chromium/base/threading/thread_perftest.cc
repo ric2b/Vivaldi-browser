@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -44,7 +46,10 @@ class ThreadPerfTest : public testing::Test {
   // To be implemented by each test. Subclass must uses threads_ such that
   // their cpu-time can be measured. Test must return from PingPong() _and_
   // call FinishMeasurement from any thread to complete the test.
-  virtual void Init() {}
+  virtual void Init() {
+    if (ThreadTicks::IsSupported())
+      ThreadTicks::WaitUntilInitialized();
+  }
   virtual void PingPong(int hops) = 0;
   virtual void Reset() {}
 

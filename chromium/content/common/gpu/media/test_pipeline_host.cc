@@ -18,9 +18,9 @@ namespace content {
 
 TestPipelineHost::DataSourceAdapter::~DataSourceAdapter() = default;
 
-void TestPipelineHost::DataSourceAdapter::Read(int64 position,
+void TestPipelineHost::DataSourceAdapter::Read(int64_t position,
                                                int size,
-                                               uint8* data,
+                                               uint8_t* data,
                                                const ReadCB& read_cb) {
   data_source_->Read(position, size, data, read_cb);
 }
@@ -29,7 +29,7 @@ void TestPipelineHost::DataSourceAdapter::Stop() {
   data_source_->Stop();
 }
 
-bool TestPipelineHost::DataSourceAdapter::GetSize(int64* size_out) {
+bool TestPipelineHost::DataSourceAdapter::GetSize(int64_t* size_out) {
   return data_source_->GetSize(size_out);
 }
 
@@ -49,9 +49,8 @@ TestPipelineHost::TestPipelineHost(media::DataSource* data_source)
                      base::Unretained(this)),
           base::Bind(&TestPipelineHost::OnVideoConfigChanged,
                      base::Unretained(this)),
-          media::PLATFORM_MEDIA_DECODING_MODE_SOFTWARE,
-          base::Callback<bool(void)>())) {
-}
+          media::PlatformMediaDecodingMode::SOFTWARE,
+          base::Callback<bool(void)>())) {}
 
 TestPipelineHost::~TestPipelineHost() = default;
 

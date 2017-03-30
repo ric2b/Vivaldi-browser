@@ -5,8 +5,10 @@
 #include "chrome/browser/task_management/providers/browser_process_task.h"
 
 #include "base/command_line.h"
+#include "chrome/browser/task_management/task_manager_observer.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/common/content_switches.h"
 #include "grit/theme_resources.h"
 #include "net/proxy/proxy_resolver_v8.h"
 #include "third_party/sqlite/sqlite3.h"
@@ -41,6 +43,7 @@ bool ReportsV8Stats() {
 
 BrowserProcessTask::BrowserProcessTask()
     : Task(l10n_util::GetStringUTF16(IDS_TASK_MANAGER_WEB_BROWSER_CELL_TEXT),
+           "Browser Process",
            GetDefaultIcon(),
            base::GetCurrentProcessHandle()),
        allocated_v8_memory_(-1),
@@ -52,19 +55,23 @@ BrowserProcessTask::BrowserProcessTask()
 BrowserProcessTask::~BrowserProcessTask() {
 }
 
-void BrowserProcessTask::Refresh(const base::TimeDelta& update_interval) {
-  Task::Refresh(update_interval);
+void BrowserProcessTask::Kill() {
+  // Never kill the browser process.
+}
 
-  // TODO(afakhry): Add code to skip v8 and sqlite stats update if they have
-  // never been requested.
-  if (reports_v8_stats_) {
+void BrowserProcessTask::Refresh(const base::TimeDelta& update_interval,
+                                 int64_t refresh_flags) {
+  Task::Refresh(update_interval, refresh_flags);
+
+  if (reports_v8_stats_ && (refresh_flags & REFRESH_TYPE_V8_MEMORY) != 0) {
     allocated_v8_memory_ =
-        static_cast<int64>(net::ProxyResolverV8::GetTotalHeapSize());
+        static_cast<int64_t>(net::ProxyResolverV8::GetTotalHeapSize());
     used_v8_memory_ =
-        static_cast<int64>(net::ProxyResolverV8::GetUsedHeapSize());
+        static_cast<int64_t>(net::ProxyResolverV8::GetUsedHeapSize());
   }
 
-  used_sqlite_memory_ = static_cast<int64>(sqlite3_memory_used());
+  if ((refresh_flags & REFRESH_TYPE_SQLITE_MEMORY) != 0)
+    used_sqlite_memory_ = static_cast<int64_t>(sqlite3_memory_used());
 }
 
 Task::Type BrowserProcessTask::GetType() const {
@@ -75,15 +82,15 @@ int BrowserProcessTask::GetChildProcessUniqueID() const {
   return 0;
 }
 
-int64 BrowserProcessTask::GetSqliteMemoryUsed() const {
+int64_t BrowserProcessTask::GetSqliteMemoryUsed() const {
   return used_sqlite_memory_;
 }
 
-int64 BrowserProcessTask::GetV8MemoryAllocated() const {
+int64_t BrowserProcessTask::GetV8MemoryAllocated() const {
   return allocated_v8_memory_;
 }
 
-int64 BrowserProcessTask::GetV8MemoryUsed() const {
+int64_t BrowserProcessTask::GetV8MemoryUsed() const {
   return used_v8_memory_;
 }
 

@@ -5,27 +5,30 @@
 #ifndef CHROME_BROWSER_CHROMEOS_EXTENSIONS_FILE_MANAGER_EVENT_ROUTER_H_
 #define CHROME_BROWSER_CHROMEOS_EXTENSIONS_FILE_MANAGER_EVENT_ROUTER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path_watcher.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/file_system_observer.h"
-#include "chrome/browser/chromeos/drive/sync_client.h"
 #include "chrome/browser/chromeos/extensions/file_manager/device_event_router.h"
 #include "chrome/browser/chromeos/extensions/file_manager/job_event_router.h"
 #include "chrome/browser/chromeos/file_manager/file_watcher.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager_observer.h"
-#include "chrome/browser/drive/drive_service_interface.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "chromeos/network/network_state_handler_observer.h"
+#include "chromeos/settings/timezone_settings.h"
+#include "components/drive/file_system_observer.h"
+#include "components/drive/service/drive_service_interface.h"
+#include "components/drive/sync_client.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "storage/browser/fileapi/file_system_operation.h"
 
@@ -52,6 +55,7 @@ namespace file_manager {
 // affecting File Manager. Dispatches appropriate File Browser events.
 class EventRouter : public KeyedService,
                     public chromeos::NetworkStateHandlerObserver,
+                    public chromeos::system::TimezoneSettings::Observer,
                     public drive::FileSystemObserver,
                     public drive::DriveServiceObserver,
                     public VolumeManagerObserver {
@@ -100,7 +104,7 @@ class EventRouter : public KeyedService,
                       storage::FileSystemOperation::CopyProgressType type,
                       const GURL& source_url,
                       const GURL& destination_url,
-                      int64 size);
+                      int64_t size);
 
   // Called when a notification from a watcher manager arrives.
   void OnWatcherManagerNotification(
@@ -110,6 +114,9 @@ class EventRouter : public KeyedService,
 
   // chromeos::NetworkStateHandlerObserver overrides.
   void DefaultNetworkChanged(const chromeos::NetworkState* network) override;
+
+  // chromeos::system::TimezoneSettings::Observer overrides.
+  void TimezoneChanged(const icu::TimeZone& timezone) override;
 
   // drive::DriveServiceObserver overrides.
   void OnRefreshTokenInvalid() override;

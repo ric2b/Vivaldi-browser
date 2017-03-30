@@ -9,7 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
 #include "content/public/renderer/media_stream_video_sink.h"
@@ -47,7 +47,7 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
       const blink::WebMediaConstraints& constraints,
       const MediaStreamVideoSource::ConstraintsCallback& callback,
       bool enabled);
-  virtual ~MediaStreamVideoTrack();
+  ~MediaStreamVideoTrack() override;
 
   void SetEnabled(bool enabled) override;
 
@@ -55,9 +55,7 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
 
   void OnReadyStateChanged(blink::WebMediaStreamSource::ReadyState state);
 
-  const blink::WebMediaConstraints& constraints() const {
-    return constraints_;
-  }
+  const blink::WebMediaConstraints& constraints() const { return constraints_; }
 
  private:
   // MediaStreamVideoSink is a friend to allow it to call AddSink() and
@@ -65,7 +63,7 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
   friend class MediaStreamVideoSink;
   FRIEND_TEST_ALL_PREFIXES(MediaStreamRemoteVideoSourceTest, StartTrack);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamRemoteVideoSourceTest, RemoteTrackStop);
-  FRIEND_TEST_ALL_PREFIXES(VideoDestinationHandlerTest, PutFrame);
+  FRIEND_TEST_ALL_PREFIXES(PepperToVideoTrackAdapterTest, PutFrame);
 
   // Add |sink| to receive state changes on the main render thread and video
   // frames in the |callback| method on the IO-thread.

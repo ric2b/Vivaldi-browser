@@ -4,6 +4,8 @@
 
 #include "net/disk_cache/net_log_parameters.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -20,7 +22,7 @@ scoped_ptr<base::Value> NetLogEntryCreationCallback(
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("key", entry->GetKey());
   dict->SetBoolean("created", created);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> NetLogReadWriteDataCallback(
@@ -35,7 +37,7 @@ scoped_ptr<base::Value> NetLogReadWriteDataCallback(
   dict->SetInteger("buf_len", buf_len);
   if (truncate)
     dict->SetBoolean("truncate", truncate);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> NetLogReadWriteCompleteCallback(
@@ -48,19 +50,19 @@ scoped_ptr<base::Value> NetLogReadWriteCompleteCallback(
   } else {
     dict->SetInteger("bytes_copied", bytes_copied);
   }
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> NetLogSparseOperationCallback(
-    int64 offset,
-    int buff_len,
+    int64_t offset,
+    int buf_len,
     net::NetLogCaptureMode /* capture_mode */) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   // Values can only be created with at most 32-bit integers.  Using a string
   // instead circumvents that restriction.
   dict->SetString("offset", base::Int64ToString(offset));
-  dict->SetInteger("buff_len", buff_len);
-  return dict.Pass();
+  dict->SetInteger("buf_len", buf_len);
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> NetLogSparseReadWriteCallback(
@@ -70,11 +72,11 @@ scoped_ptr<base::Value> NetLogSparseReadWriteCallback(
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   source.AddToEventParameters(dict.get());
   dict->SetInteger("child_len", child_len);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> NetLogGetAvailableRangeResultCallback(
-    int64 start,
+    int64_t start,
     int result,
     net::NetLogCaptureMode /* capture_mode */) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
@@ -84,7 +86,7 @@ scoped_ptr<base::Value> NetLogGetAvailableRangeResultCallback(
   } else {
     dict->SetInteger("net_error", result);
   }
-  return dict.Pass();
+  return std::move(dict);
 }
 
 }  // namespace
@@ -113,9 +115,9 @@ net::NetLog::ParametersCallback CreateNetLogReadWriteCompleteCallback(
 }
 
 net::NetLog::ParametersCallback CreateNetLogSparseOperationCallback(
-    int64 offset,
-    int buff_len) {
-  return base::Bind(&NetLogSparseOperationCallback, offset, buff_len);
+    int64_t offset,
+    int buf_len) {
+  return base::Bind(&NetLogSparseOperationCallback, offset, buf_len);
 }
 
 net::NetLog::ParametersCallback CreateNetLogSparseReadWriteCallback(
@@ -125,7 +127,7 @@ net::NetLog::ParametersCallback CreateNetLogSparseReadWriteCallback(
 }
 
 net::NetLog::ParametersCallback CreateNetLogGetAvailableRangeResultCallback(
-    int64 start,
+    int64_t start,
     int result) {
   return base::Bind(&NetLogGetAvailableRangeResultCallback, start, result);
 }

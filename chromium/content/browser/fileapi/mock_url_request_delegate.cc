@@ -4,6 +4,8 @@
 
 #include "content/browser/fileapi/mock_url_request_delegate.h"
 
+#include <stddef.h>
+
 #include "base/run_loop.h"
 #include "net/base/io_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -66,7 +68,7 @@ void MockURLRequestDelegate::ReceiveData(net::URLRequest* request,
 }
 
 void MockURLRequestDelegate::RequestComplete() {
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 }  // namespace

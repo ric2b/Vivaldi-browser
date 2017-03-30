@@ -5,6 +5,8 @@
 #ifndef BASE_TRACKED_OBJECTS_H_
 #define BASE_TRACKED_OBJECTS_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <stack>
@@ -12,12 +14,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/atomicops.h"
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/process/process_handle.h"
 #include "base/profiler/alternate_timer.h"
 #include "base/profiler/tracked_time.h"
@@ -199,7 +202,7 @@ class BASE_EXPORT BirthOnThread {
  public:
   BirthOnThread(const Location& location, const ThreadData& current);
 
-  const Location location() const { return location_; }
+  const Location& location() const { return location_; }
   const ThreadData* birth_thread() const { return birth_thread_; }
 
  private:
@@ -258,12 +261,12 @@ struct BASE_EXPORT DeathDataSnapshot {
   // a wrapper structure as a param or using an empty constructor for
   // snapshotting DeathData would be less efficient.
   DeathDataSnapshot(int count,
-                    int32 run_duration_sum,
-                    int32 run_duration_max,
-                    int32 run_duration_sample,
-                    int32 queue_duration_sum,
-                    int32 queue_duration_max,
-                    int32 queue_duration_sample);
+                    int32_t run_duration_sum,
+                    int32_t run_duration_max,
+                    int32_t run_duration_sample,
+                    int32_t queue_duration_sum,
+                    int32_t queue_duration_max,
+                    int32_t queue_duration_sample);
   ~DeathDataSnapshot();
 
   // Calculates and returns the delta between this snapshot and an earlier
@@ -271,12 +274,12 @@ struct BASE_EXPORT DeathDataSnapshot {
   DeathDataSnapshot Delta(const DeathDataSnapshot& older) const;
 
   int count;
-  int32 run_duration_sum;
-  int32 run_duration_max;
-  int32 run_duration_sample;
-  int32 queue_duration_sum;
-  int32 queue_duration_max;
-  int32 queue_duration_sample;
+  int32_t run_duration_sum;
+  int32_t run_duration_max;
+  int32_t run_duration_sample;
+  int32_t queue_duration_sum;
+  int32_t queue_duration_max;
+  int32_t queue_duration_sample;
 };
 
 //------------------------------------------------------------------------------
@@ -286,12 +289,12 @@ struct BASE_EXPORT DeathDataSnapshot {
 struct DeathDataPhaseSnapshot {
   DeathDataPhaseSnapshot(int profiling_phase,
                          int count,
-                         int32 run_duration_sum,
-                         int32 run_duration_max,
-                         int32 run_duration_sample,
-                         int32 queue_duration_sum,
-                         int32 queue_duration_max,
-                         int32 queue_duration_sample,
+                         int32_t run_duration_sum,
+                         int32_t run_duration_max,
+                         int32_t run_duration_sample,
+                         int32_t queue_duration_sum,
+                         int32_t queue_duration_max,
+                         int32_t queue_duration_sample,
                          const DeathDataPhaseSnapshot* prev);
 
   // Profiling phase at which completion this snapshot was taken.
@@ -324,19 +327,31 @@ class BASE_EXPORT DeathData {
 
   // Update stats for a task destruction (death) that had a Run() time of
   // |duration|, and has had a queueing delay of |queue_duration|.
-  void RecordDeath(const int32 queue_duration,
-                   const int32 run_duration,
-                   const uint32 random_number);
+  void RecordDeath(const int32_t queue_duration,
+                   const int32_t run_duration,
+                   const uint32_t random_number);
 
   // Metrics and past snapshots accessors, used only for serialization and in
   // tests.
-  int count() const { return count_; }
-  int32 run_duration_sum() const { return run_duration_sum_; }
-  int32 run_duration_max() const { return run_duration_max_; }
-  int32 run_duration_sample() const { return run_duration_sample_; }
-  int32 queue_duration_sum() const { return queue_duration_sum_; }
-  int32 queue_duration_max() const { return queue_duration_max_; }
-  int32 queue_duration_sample() const { return queue_duration_sample_; }
+  int count() const { return base::subtle::NoBarrier_Load(&count_); }
+  int32_t run_duration_sum() const {
+    return base::subtle::NoBarrier_Load(&run_duration_sum_);
+  }
+  int32_t run_duration_max() const {
+    return base::subtle::NoBarrier_Load(&run_duration_max_);
+  }
+  int32_t run_duration_sample() const {
+    return base::subtle::NoBarrier_Load(&run_duration_sample_);
+  }
+  int32_t queue_duration_sum() const {
+    return base::subtle::NoBarrier_Load(&queue_duration_sum_);
+  }
+  int32_t queue_duration_max() const {
+    return base::subtle::NoBarrier_Load(&queue_duration_max_);
+  }
+  int32_t queue_duration_sample() const {
+    return base::subtle::NoBarrier_Load(&queue_duration_sample_);
+  }
   const DeathDataPhaseSnapshot* last_phase_snapshot() const {
     return last_phase_snapshot_;
   }
@@ -351,28 +366,28 @@ class BASE_EXPORT DeathData {
   // frequently used.  This might help a bit with cache lines.
   // Number of runs seen (divisor for calculating averages).
   // Can be incremented only on the death thread.
-  int count_;
+  base::subtle::Atomic32 count_;
 
   // Count used in determining probability of selecting exec/queue times from a
   // recorded death as samples.
   // Gets incremented only on the death thread, but can be set to 0 by
   // OnProfilingPhaseCompleted() on the snapshot thread.
-  int sample_probability_count_;
+  base::subtle::Atomic32 sample_probability_count_;
 
   // Basic tallies, used to compute averages.  Can be incremented only on the
   // death thread.
-  int32 run_duration_sum_;
-  int32 queue_duration_sum_;
+  base::subtle::Atomic32 run_duration_sum_;
+  base::subtle::Atomic32 queue_duration_sum_;
   // Max values, used by local visualization routines.  These are often read,
   // but rarely updated.  The max values get assigned only on the death thread,
   // but these fields can be set to 0 by OnProfilingPhaseCompleted() on the
   // snapshot thread.
-  int32 run_duration_max_;
-  int32 queue_duration_max_;
+  base::subtle::Atomic32 run_duration_max_;
+  base::subtle::Atomic32 queue_duration_max_;
   // Samples, used by crowd sourcing gatherers.  These are almost never read,
   // and rarely updated.  They can be modified only on the death thread.
-  int32 run_duration_sample_;
-  int32 queue_duration_sample_;
+  base::subtle::Atomic32 run_duration_sample_;
+  base::subtle::Atomic32 queue_duration_sample_;
 
   // Snapshot of this death data made at the last profiling phase completion, if
   // any.  DeathData owns the whole list starting with this pointer.
@@ -574,7 +589,7 @@ class BASE_EXPORT ThreadData {
 
   // Find a place to record a death on this thread.
   void TallyADeath(const Births& births,
-                   int32 queue_duration,
+                   int32_t queue_duration,
                    const TaskStopwatch& stopwatch);
 
   // Snapshots (under a lock) the profiled data for the tasks for this thread
@@ -661,7 +676,7 @@ class BASE_EXPORT ThreadData {
   static base::LazyInstance<base::Lock>::Leaky list_lock_;
 
   // We set status_ to SHUTDOWN when we shut down the tracking service.
-  static Status status_;
+  static base::subtle::Atomic32 status_;
 
   // Link to next instance (null terminated list).  Used to globally track all
   // registered instances (corresponds to all registered threads where we keep
@@ -707,7 +722,7 @@ class BASE_EXPORT ThreadData {
   // representative sample in each DeathData instance.  We can't start off with
   // much randomness (because we can't call RandInt() on all our threads), so
   // we stir in more and more as we go.
-  uint32 random_number_;
+  uint32_t random_number_;
 
   // Record of what the incarnation_counter_ was when this instance was created.
   // If the incarnation_counter_ has changed, then we avoid pushing into the
@@ -747,7 +762,7 @@ class BASE_EXPORT TaskStopwatch {
   // and stopping this stopwatch, minus the wallclock durations of any other
   // instances that are immediately nested in this one, started and stopped on
   // this thread during that period.
-  int32 RunDurationMs() const;
+  int32_t RunDurationMs() const;
 
   // Returns tracking info for the current thread.
   ThreadData* GetThreadData() const;
@@ -757,14 +772,14 @@ class BASE_EXPORT TaskStopwatch {
   TrackedTime start_time_;
 
   // Wallclock duration of the task.
-  int32 wallclock_duration_ms_;
+  int32_t wallclock_duration_ms_;
 
   // Tracking info for the current thread.
   ThreadData* current_thread_data_;
 
   // Sum of wallclock durations of all stopwatches that were directly nested in
   // this one.
-  int32 excluded_duration_ms_;
+  int32_t excluded_duration_ms_;
 
   // Stopwatch which was running on our thread when this stopwatch was started.
   // That preexisting stopwatch must be adjusted to the exclude the wallclock

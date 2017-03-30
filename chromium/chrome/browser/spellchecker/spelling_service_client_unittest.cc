@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
@@ -54,9 +57,9 @@ class TestSpellingURLFetcher : public net::TestURLFetcher {
     EXPECT_EQ("application/json", upload_content_type);
 
     // Parse the JSON to be sent to the service, and verify its parameters.
-    scoped_ptr<base::DictionaryValue> value(
-        static_cast<base::DictionaryValue*>(base::JSONReader::DeprecatedRead(
-            upload_content, base::JSON_ALLOW_TRAILING_COMMAS)));
+    scoped_ptr<base::DictionaryValue> value(static_cast<base::DictionaryValue*>(
+        base::JSONReader::Read(upload_content, base::JSON_ALLOW_TRAILING_COMMAS)
+            .release()));
     ASSERT_TRUE(value.get());
     std::string method;
     EXPECT_TRUE(value->GetString("method", &method));
@@ -378,9 +381,8 @@ TEST_F(SpellingServiceClientTest, AvailableServices) {
   EXPECT_FALSE(client_.IsAvailable(&profile_, kSuggest));
   EXPECT_FALSE(client_.IsAvailable(&profile_, kSpellcheck));
 
-#if !defined(OS_MACOSX)
   static const char* kSupported[] = {
-    "en-AU", "en-CA", "en-GB", "en-US",
+      "en-AU", "en-CA", "en-GB", "en-US", "da-DK", "es-ES",
   };
   // If spellcheck is allowed, then suggest is not since spellcheck is a
   // superset of suggest.
@@ -396,13 +398,13 @@ TEST_F(SpellingServiceClientTest, AvailableServices) {
   // This function returns true for suggestions for all and false for
   // spellcheck for unsupported locales.
   static const char* kUnsupported[] = {
-    "af-ZA", "bg-BG", "ca-ES", "cs-CZ", "da-DK", "de-DE", "el-GR", "es-ES",
-    "et-EE", "fo-FO", "fr-FR", "he-IL", "hi-IN", "hr-HR", "hu-HU", "id-ID",
-    "it-IT", "lt-LT", "lv-LV", "nb-NO", "nl-NL", "pl-PL", "pt-BR", "pt-PT",
-    "ro-RO", "ru-RU", "sk-SK", "sl-SI", "sh", "sr", "sv-SE", "tr-TR",
-    "uk-UA", "vi-VN",
+      "af-ZA", "bg-BG", "ca-ES", "cs-CZ", "de-DE", "el-GR", "et-EE", "fo-FO",
+      "fr-FR", "he-IL", "hi-IN", "hr-HR", "hu-HU", "id-ID", "it-IT", "lt-LT",
+      "lv-LV", "nb-NO", "nl-NL", "pl-PL", "pt-BR", "pt-PT", "ro-RO", "ru-RU",
+      "sk-SK", "sl-SI", "sh",    "sr",    "sv-SE", "tr-TR", "uk-UA", "vi-VN",
   };
   for (size_t i = 0; i < arraysize(kUnsupported); ++i) {
+    SCOPED_TRACE(std::string("Expected language ") + kUnsupported[i]);
     base::ListValue dictionary;
     dictionary.AppendString(kUnsupported[i]);
     pref->Set(prefs::kSpellCheckDictionaries, dictionary);
@@ -410,7 +412,6 @@ TEST_F(SpellingServiceClientTest, AvailableServices) {
     EXPECT_TRUE(client_.IsAvailable(&profile_, kSuggest));
     EXPECT_FALSE(client_.IsAvailable(&profile_, kSpellcheck));
   }
-#endif  // !defined(OS_MACOSX)
 }
 
 // Verify that an error in JSON response from spelling service will result in

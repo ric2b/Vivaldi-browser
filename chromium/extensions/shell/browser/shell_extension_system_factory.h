@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_SHELL_BROWSER_SHELL_EXTENSION_SYSTEM_FACTORY_H_
 #define EXTENSIONS_SHELL_BROWSER_SHELL_EXTENSION_SYSTEM_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "extensions/browser/extension_system_provider.h"
 
@@ -20,7 +21,7 @@ class ShellExtensionSystemFactory : public ExtensionSystemProvider {
   static ShellExtensionSystemFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<ShellExtensionSystemFactory>;
+  friend struct base::DefaultSingletonTraits<ShellExtensionSystemFactory>;
 
   ShellExtensionSystemFactory();
   ~ShellExtensionSystemFactory() override;

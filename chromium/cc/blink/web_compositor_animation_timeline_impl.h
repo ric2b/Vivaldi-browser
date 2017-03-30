@@ -5,6 +5,7 @@
 #ifndef CC_BLINK_WEB_COMPOSITOR_ANIMATION_TIMELINE_IMPL_H_
 #define CC_BLINK_WEB_COMPOSITOR_ANIMATION_TIMELINE_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/blink/cc_blink_export.h"
@@ -24,15 +25,15 @@ class WebCompositorAnimationTimelineImpl
     : public blink::WebCompositorAnimationTimeline {
  public:
   CC_BLINK_EXPORT explicit WebCompositorAnimationTimelineImpl();
-  virtual ~WebCompositorAnimationTimelineImpl();
+  ~WebCompositorAnimationTimelineImpl() override;
 
   CC_BLINK_EXPORT cc::AnimationTimeline* animation_timeline() const;
 
   // blink::WebCompositorAnimationTimeline implementation
-  virtual void playerAttached(
-      const blink::WebCompositorAnimationPlayerClient& client);
-  virtual void playerDestroyed(
-      const blink::WebCompositorAnimationPlayerClient& client);
+  void playerAttached(
+      const blink::WebCompositorAnimationPlayerClient& client) override;
+  void playerDestroyed(
+      const blink::WebCompositorAnimationPlayerClient& client) override;
 
  private:
   scoped_refptr<cc::AnimationTimeline> animation_timeline_;

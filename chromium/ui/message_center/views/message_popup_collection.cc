@@ -62,7 +62,7 @@ MessagePopupCollection::MessagePopupCollection(
       context_menu_controller_(new MessageViewContextMenuController(this)),
       weak_factory_(this) {
   DCHECK(message_center_);
-  defer_timer_.reset(new base::OneShotTimer<MessagePopupCollection>);
+  defer_timer_.reset(new base::OneShotTimer);
   message_center_->AddObserver(this);
   alignment_delegate_->set_collection(this);
 }
@@ -103,6 +103,11 @@ void MessagePopupCollection::ClickOnNotificationButton(
   message_center_->ClickOnNotificationButton(notification_id, button_index);
 }
 
+void MessagePopupCollection::ClickOnSettingsButton(
+    const std::string& notification_id) {
+  message_center_->ClickOnSettingsButton(notification_id);
+}
+
 void MessagePopupCollection::MarkAllPopupsShown() {
   std::set<std::string> closed_ids = CloseAllWidgets();
   for (std::set<std::string>::iterator iter = closed_ids.begin();
@@ -112,9 +117,13 @@ void MessagePopupCollection::MarkAllPopupsShown() {
 }
 
 void MessagePopupCollection::UpdateWidgets() {
+  if (message_center_->IsMessageCenterVisible()) {
+    DCHECK_EQ(0u, message_center_->GetPopupNotifications().size());
+    return;
+  }
+
   NotificationList::PopupNotifications popups =
       message_center_->GetPopupNotifications();
-
   if (popups.empty()) {
     CloseAllWidgets();
     return;

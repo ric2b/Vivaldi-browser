@@ -19,6 +19,11 @@ class MemoryMobile(perf_benchmark.PerfBenchmark):
     return 'memory.mobile_memory'
 
 
+# Disable on yosemite due to crbug.com/517806
+# Disable on reference due to crbug.com/539728
+# Disable on all Mac as it's also failing on 10.11 and retina.
+# crbug.com/555045
+@benchmark.Disabled('mac', 'reference')
 class MemoryTop7Stress(perf_benchmark.PerfBenchmark):
   """Use (recorded) real world web sites and measure memory consumption."""
   test = memory.Memory
@@ -28,21 +33,29 @@ class MemoryTop7Stress(perf_benchmark.PerfBenchmark):
   def Name(cls):
     return 'memory.top_7_stress'
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return cls.IsSvelte(possible_browser)  # http://crbug.com/555092
 
-@benchmark.Enabled('has tabs')
-@benchmark.Disabled('android', # Benchmark uses > 700MB of memory.
-                    'linux') # https://crbug.com/490841
-class MemoryIdleMultiTab(perf_benchmark.PerfBenchmark):
+
+class MemoryLongRunningIdleGmail(perf_benchmark.PerfBenchmark):
   """Use (recorded) real world web sites and measure memory consumption
-  with many tabs and idle times. """
+  of long running idle Gmail page """
   test = memory.Memory
-  page_set = page_sets.IdleMultiTabCasesPageSet
-
-  def SetExtraBrowserOptions(self, options):
-    # This benchmark opens tabs from JavaScript, which does not work
-    # with popup-blocking enabled.
-    options.AppendExtraBrowserArgs(['--disable-popup-blocking'])
+  page_set = page_sets.LongRunningIdleGmailPageSet
 
   @classmethod
   def Name(cls):
-    return 'memory.idle_multi_tab'
+    return 'memory.long_running_idle_gmail'
+
+
+@benchmark.Disabled('android') # crbug.com/542682
+class MemoryLongRunningIdleGmailBackground(perf_benchmark.PerfBenchmark):
+  """Use (recorded) real world web sites and measure memory consumption
+  of long running idle Gmail page in background tab"""
+  test = memory.Memory
+  page_set = page_sets.LongRunningIdleGmailBackgroundPageSet
+
+  @classmethod
+  def Name(cls):
+    return 'memory.long_running_idle_gmail_background'

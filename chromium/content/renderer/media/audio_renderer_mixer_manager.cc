@@ -4,8 +4,11 @@
 
 #include "content/renderer/media/audio_renderer_mixer_manager.h"
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "build/build_config.h"
 #include "content/renderer/media/audio_device_factory.h"
 #include "media/audio/audio_output_device.h"
 #include "media/base/audio_hardware_config.h"
@@ -14,11 +17,8 @@
 
 namespace content {
 
-AudioRendererMixerManager::AudioRendererMixerManager(
-    media::AudioHardwareConfig* hardware_config)
-    : hardware_config_(hardware_config),
-      sink_for_testing_(NULL) {
-}
+AudioRendererMixerManager::AudioRendererMixerManager()
+    : sink_for_testing_(nullptr) {}
 
 AudioRendererMixerManager::~AudioRendererMixerManager() {
   // References to AudioRendererMixers may be owned by garbage collected
@@ -27,12 +27,15 @@ AudioRendererMixerManager::~AudioRendererMixerManager() {
 }
 
 media::AudioRendererMixerInput* AudioRendererMixerManager::CreateInput(
-    int source_render_frame_id) {
+    int source_render_frame_id,
+    const std::string& device_id,
+    const url::Origin& security_origin) {
   return new media::AudioRendererMixerInput(
       base::Bind(&AudioRendererMixerManager::GetMixer, base::Unretained(this),
                  source_render_frame_id),
       base::Bind(&AudioRendererMixerManager::RemoveMixer,
-                 base::Unretained(this), source_render_frame_id));
+                 base::Unretained(this), source_render_frame_id),
+      device_id, security_origin);
 }
 
 void AudioRendererMixerManager::SetAudioRendererSinkForTesting(
@@ -42,49 +45,76 @@ void AudioRendererMixerManager::SetAudioRendererSinkForTesting(
 
 media::AudioRendererMixer* AudioRendererMixerManager::GetMixer(
     int source_render_frame_id,
-    const media::AudioParameters& params) {
+    const media::AudioParameters& params,
+    const std::string& device_id,
+    const url::Origin& security_origin,
+    media::OutputDeviceStatus* device_status) {
   // Effects are not passed through to output creation, so ensure none are set.
   DCHECK_EQ(params.effects(), media::AudioParameters::NO_EFFECTS);
 
-  const MixerKey key(source_render_frame_id, params);
+  const MixerKey key(source_render_frame_id, params, device_id,
+                     security_origin);
   base::AutoLock auto_lock(mixers_lock_);
 
   AudioRendererMixerMap::iterator it = mixers_.find(key);
   if (it != mixers_.end()) {
+    if (device_status)
+      *device_status = media::OUTPUT_DEVICE_STATUS_OK;
+
     it->second.ref_count++;
     return it->second.mixer;
   }
 
-  // On ChromeOS we can rely on the playback device to handle resampling, so
-  // don't waste cycles on it here.
-#if defined(OS_CHROMEOS)
+  scoped_refptr<media::AudioRendererSink> sink =
+      sink_for_testing_
+          ? sink_for_testing_
+          : AudioDeviceFactory::NewOutputDevice(source_render_frame_id, 0,
+                                                device_id, security_origin)
+                .get();
+
+  media::OutputDeviceStatus new_device_status =
+      sink->GetOutputDevice()->GetDeviceStatus();
+  if (device_status)
+    *device_status = new_device_status;
+  if (new_device_status != media::OUTPUT_DEVICE_STATUS_OK) {
+    sink->Stop();
+    return nullptr;
+  }
+
+  media::AudioParameters hardware_params =
+      sink->GetOutputDevice()->GetOutputParameters();
+
+// On ChromeOS and Android we can rely on the playback device to handle
+// resampling, so don't waste cycles on it here.
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   int sample_rate = params.sample_rate();
 #else
-  int sample_rate = hardware_config_->GetOutputSampleRate();
+  int sample_rate =
+      hardware_params.format() != media::AudioParameters::AUDIO_FAKE
+          ? hardware_params.sample_rate()
+          : params.sample_rate();
 #endif
+
+  int buffer_size =
+      hardware_params.format() != media::AudioParameters::AUDIO_FAKE
+          ? media::AudioHardwareConfig::GetHighLatencyBufferSize(
+                hardware_params)
+          : params.frames_per_buffer();
 
   // Create output parameters based on the audio hardware configuration for
   // passing on to the output sink.  Force to 16-bit output for now since we
   // know that works everywhere; ChromeOS does not support other bit depths.
   media::AudioParameters output_params(
       media::AudioParameters::AUDIO_PCM_LOW_LATENCY, params.channel_layout(),
-      sample_rate, 16, hardware_config_->GetHighLatencyBufferSize());
+      sample_rate, 16, buffer_size);
 
-  // If we've created invalid output parameters, simply pass on the input params
-  // and let the browser side handle automatic fallback.
+  // If we've created invalid output parameters, simply pass on the input
+  // params and let the browser side handle automatic fallback.
   if (!output_params.IsValid())
     output_params = params;
 
-  media::AudioRendererMixer* mixer;
-  if (sink_for_testing_) {
-    mixer = new media::AudioRendererMixer(
-        params, output_params, sink_for_testing_);
-  } else {
-    mixer = new media::AudioRendererMixer(
-        params, output_params,
-        AudioDeviceFactory::NewOutputDevice(source_render_frame_id));
-  }
-
+  media::AudioRendererMixer* mixer =
+      new media::AudioRendererMixer(output_params, sink);
   AudioRendererMixerReference mixer_reference = { mixer, 1 };
   mixers_[key] = mixer_reference;
   return mixer;
@@ -92,8 +122,11 @@ media::AudioRendererMixer* AudioRendererMixerManager::GetMixer(
 
 void AudioRendererMixerManager::RemoveMixer(
     int source_render_frame_id,
-    const media::AudioParameters& params) {
-  const MixerKey key(source_render_frame_id, params);
+    const media::AudioParameters& params,
+    const std::string& device_id,
+    const url::Origin& security_origin) {
+  const MixerKey key(source_render_frame_id, params, device_id,
+                     security_origin);
   base::AutoLock auto_lock(mixers_lock_);
 
   AudioRendererMixerMap::iterator it = mixers_.find(key);
@@ -106,5 +139,15 @@ void AudioRendererMixerManager::RemoveMixer(
     mixers_.erase(it);
   }
 }
+
+AudioRendererMixerManager::MixerKey::MixerKey(
+    int source_render_frame_id,
+    const media::AudioParameters& params,
+    const std::string& device_id,
+    const url::Origin& security_origin)
+    : source_render_frame_id(source_render_frame_id),
+      params(params),
+      device_id(device_id),
+      security_origin(security_origin) {}
 
 }  // namespace content

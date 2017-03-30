@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/toolbar/back_forward_menu_model.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/prefs/pref_service.h"
@@ -13,6 +15,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
@@ -467,7 +470,7 @@ NavigationEntry* BackForwardMenuModel::GetNavigationEntry(int index) const {
 std::string BackForwardMenuModel::BuildActionName(
     const std::string& action, int index) const {
   DCHECK(!action.empty());
-  DCHECK(index >= -1);
+  DCHECK_GE(index, -1);
   std::string metric_string;
   if (model_type_ == FORWARD_MENU)
     metric_string += "ForwardMenu_";

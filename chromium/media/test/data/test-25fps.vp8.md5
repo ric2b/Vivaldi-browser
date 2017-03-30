@@ -3,4 +3,9 @@
 # ARM - Tegra
 cd355b553ce7660283c52675232e9227
 # Intel - BDW
+bea8039e6921d930bb1c86185f62b1b0
+
+# TODO(llandwerlin): Remove the following hash when the libva-intel-driver
+# is updated.
+# Intel - BDW
 4da7ec5484a99195c2c05b5e591940f9

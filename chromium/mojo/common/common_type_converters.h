@@ -5,12 +5,14 @@
 #ifndef MOJO_COMMON_COMMON_TYPE_CONVERTERS_H_
 #define MOJO_COMMON_COMMON_TYPE_CONVERTERS_H_
 
+#include <stdint.h>
+
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "mojo/common/mojo_common_export.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/array.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/string.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/type_converter.h"
+#include "mojo/public/cpp/bindings/array.h"
+#include "mojo/public/cpp/bindings/string.h"
+#include "mojo/public/cpp/bindings/type_converter.h"
 
 namespace mojo {
 

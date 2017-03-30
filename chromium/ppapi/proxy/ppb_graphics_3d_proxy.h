@@ -5,9 +5,11 @@
 #ifndef PPAPI_PROXY_PPB_GRAPHICS_3D_PROXY_H_
 #define PPAPI_PROXY_PPB_GRAPHICS_3D_PROXY_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/memory/shared_memory.h"
+#include "base/macros.h"
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "ppapi/c/pp_graphics_3d.h"
 #include "ppapi/c/pp_instance.h"
@@ -38,13 +40,14 @@ class PPAPI_PROXY_EXPORT Graphics3D : public PPB_Graphics3D_Shared {
 
   bool Init(gpu::gles2::GLES2Implementation* share_gles2,
             const gpu::Capabilities& capabilities,
-            const SerializedHandle& shared_state);
+            const SerializedHandle& shared_state,
+            uint64_t command_buffer_id);
 
   // Graphics3DTrusted API. These are not implemented in the proxy.
   PP_Bool SetGetBuffer(int32_t shm_id) override;
   PP_Bool Flush(int32_t put_offset) override;
   scoped_refptr<gpu::Buffer> CreateTransferBuffer(uint32_t size,
-                                                  int32* id) override;
+                                                  int32_t* id) override;
   PP_Bool DestroyTransferBuffer(int32_t id) override;
   gpu::CommandBuffer::State WaitForTokenInRange(int32_t start,
                                                 int32_t end) override;
@@ -53,12 +56,13 @@ class PPAPI_PROXY_EXPORT Graphics3D : public PPB_Graphics3D_Shared {
   uint32_t InsertSyncPoint() override;
   uint32_t InsertFutureSyncPoint() override;
   void RetireSyncPoint(uint32_t sync_point) override;
+  void EnsureWorkVisible() override;
 
  private:
   // PPB_Graphics3D_Shared overrides.
   gpu::CommandBuffer* GetCommandBuffer() override;
   gpu::GpuControl* GetGpuControl() override;
-  int32 DoSwapBuffers() override;
+  int32_t DoSwapBuffers(const gpu::SyncToken& sync_token) override;
 
   scoped_ptr<PpapiCommandBufferProxy> command_buffer_;
 
@@ -67,7 +71,7 @@ class PPAPI_PROXY_EXPORT Graphics3D : public PPB_Graphics3D_Shared {
 
 class PPB_Graphics3D_Proxy : public InterfaceProxy {
  public:
-  PPB_Graphics3D_Proxy(Dispatcher* dispatcher);
+  explicit PPB_Graphics3D_Proxy(Dispatcher* dispatcher);
   ~PPB_Graphics3D_Proxy();
 
   static PP_Resource CreateProxyResource(
@@ -86,32 +90,33 @@ class PPB_Graphics3D_Proxy : public InterfaceProxy {
                    const std::vector<int32_t>& attribs,
                    HostResource* result,
                    gpu::Capabilities* capabilities,
-                   SerializedHandle* handle);
-  void OnMsgSetGetBuffer(const HostResource& context,
-                         int32 id);
+                   SerializedHandle* handle,
+                   uint64_t* command_buffer_id);
+  void OnMsgSetGetBuffer(const HostResource& context, int32_t id);
   void OnMsgWaitForTokenInRange(const HostResource& context,
-                                int32 start,
-                                int32 end,
+                                int32_t start,
+                                int32_t end,
                                 gpu::CommandBuffer::State* state,
                                 bool* success);
   void OnMsgWaitForGetOffsetInRange(const HostResource& context,
-                                    int32 start,
-                                    int32 end,
+                                    int32_t start,
+                                    int32_t end,
                                     gpu::CommandBuffer::State* state,
                                     bool* success);
-  void OnMsgAsyncFlush(const HostResource& context, int32 put_offset);
+  void OnMsgAsyncFlush(const HostResource& context, int32_t put_offset);
   void OnMsgCreateTransferBuffer(
       const HostResource& context,
-      uint32 size,
-      int32* id,
+      uint32_t size,
+      int32_t* id,
       ppapi::proxy::SerializedHandle* transfer_buffer);
-  void OnMsgDestroyTransferBuffer(const HostResource& context,
-                                  int32 id);
-  void OnMsgSwapBuffers(const HostResource& context);
-  void OnMsgInsertSyncPoint(const HostResource& context, uint32* sync_point);
+  void OnMsgDestroyTransferBuffer(const HostResource& context, int32_t id);
+  void OnMsgSwapBuffers(const HostResource& context,
+                        const gpu::SyncToken& sync_token);
+  void OnMsgInsertSyncPoint(const HostResource& context, uint32_t* sync_point);
   void OnMsgInsertFutureSyncPoint(const HostResource& context,
-                                  uint32* sync_point);
-  void OnMsgRetireSyncPoint(const HostResource& context, uint32 sync_point);
+                                  uint32_t* sync_point);
+  void OnMsgRetireSyncPoint(const HostResource& context, uint32_t sync_point);
+  void OnMsgEnsureWorkVisible(const HostResource& context);
   // Renderer->plugin message handlers.
   void OnMsgSwapBuffersACK(const HostResource& context,
                            int32_t pp_error);

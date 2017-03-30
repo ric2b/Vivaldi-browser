@@ -4,10 +4,14 @@
 
 #include "extensions/browser/api/system_info/system_info_api.h"
 
+#include <stdint.h>
+
 #include <set>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_util.h"
@@ -26,12 +30,12 @@
 
 namespace extensions {
 
-using core_api::system_storage::StorageUnitInfo;
+using api::system_storage::StorageUnitInfo;
 using content::BrowserThread;
 using storage_monitor::StorageMonitor;
 
-namespace system_display = core_api::system_display;
-namespace system_storage = core_api::system_storage;
+namespace system_display = api::system_display;
+namespace system_storage = api::system_storage;
 
 namespace {
 
@@ -73,7 +77,8 @@ class SystemInfoEventRouter : public gfx::DisplayObserver,
 
   // Called from any thread to dispatch the systemInfo event to all extension
   // processes cross multiple profiles.
-  void DispatchEvent(const std::string& event_name,
+  void DispatchEvent(events::HistogramValue histogram_value,
+                     const std::string& event_name,
                      scoped_ptr<base::ListValue> args);
 
   // Called to dispatch the systemInfo.display.onDisplayChanged event.
@@ -164,7 +169,8 @@ void SystemInfoEventRouter::OnRemovableStorageAttached(
   systeminfo::BuildStorageUnitInfo(info, &unit);
   scoped_ptr<base::ListValue> args(new base::ListValue);
   args->Append(unit.ToValue().release());
-  DispatchEvent(system_storage::OnAttached::kEventName, args.Pass());
+  DispatchEvent(events::SYSTEM_STORAGE_ON_ATTACHED,
+                system_storage::OnAttached::kEventName, std::move(args));
 }
 
 void SystemInfoEventRouter::OnRemovableStorageDetached(
@@ -175,7 +181,8 @@ void SystemInfoEventRouter::OnRemovableStorageDetached(
           info.device_id());
   args->AppendString(transient_id);
 
-  DispatchEvent(system_storage::OnDetached::kEventName, args.Pass());
+  DispatchEvent(events::SYSTEM_STORAGE_ON_DETACHED,
+                system_storage::OnDetached::kEventName, std::move(args));
 }
 
 void SystemInfoEventRouter::OnDisplayAdded(const gfx::Display& new_display) {
@@ -193,13 +200,16 @@ void SystemInfoEventRouter::OnDisplayMetricsChanged(const gfx::Display& display,
 
 void SystemInfoEventRouter::OnDisplayChanged() {
   scoped_ptr<base::ListValue> args(new base::ListValue());
-  DispatchEvent(system_display::OnDisplayChanged::kEventName, args.Pass());
+  DispatchEvent(events::SYSTEM_DISPLAY_ON_DISPLAY_CHANGED,
+                system_display::OnDisplayChanged::kEventName, std::move(args));
 }
 
-void SystemInfoEventRouter::DispatchEvent(const std::string& event_name,
-                                          scoped_ptr<base::ListValue> args) {
-  ExtensionsBrowserClient::Get()->BroadcastEventToRenderers(event_name,
-                                                            args.Pass());
+void SystemInfoEventRouter::DispatchEvent(
+    events::HistogramValue histogram_value,
+    const std::string& event_name,
+    scoped_ptr<base::ListValue> args) {
+  ExtensionsBrowserClient::Get()->BroadcastEventToRenderers(
+      histogram_value, event_name, std::move(args));
 }
 
 void AddEventListener(const std::string& event_name) {

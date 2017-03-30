@@ -128,7 +128,7 @@
           ],
         },
         {
-          'target_name': 'gtk',
+          'target_name': 'gtk2',
           'type': 'none',
           'toolsets': ['host', 'target'],
           'variables': {
@@ -154,22 +154,22 @@
             }, {
               'all_dependent_settings': {
                 'cflags': [
-                  '<!@(pkg-config --cflags <(gtk_packages))',
+                  '<!@(<(pkg-config) --cflags <(gtk_packages))',
                 ],
               },
               'link_settings': {
                 'ldflags': [
-                  '<!@(pkg-config --libs-only-L --libs-only-other <(gtk_packages))',
+                  '<!@(<(pkg-config) --libs-only-L --libs-only-other <(gtk_packages))',
                 ],
                 'libraries': [
-                  '<!@(pkg-config --libs-only-l <(gtk_packages))',
+                  '<!@(<(pkg-config) --libs-only-l <(gtk_packages))',
                 ],
               },
             }],
           ],
         },
         {
-          'target_name': 'gtkprint',
+          'target_name': 'gtkprint2',
           'type': 'none',
           'conditions': [
             ['_toolset=="target"', {
@@ -216,15 +216,15 @@
             }, {
               'direct_dependent_settings': {
                 'cflags': [
-                  '<!@(pkg-config --cflags x11)',
+                  '<!@(<(pkg-config) --cflags x11)',
                 ],
               },
               'link_settings': {
                 'ldflags': [
-                  '<!@(pkg-config --libs-only-L --libs-only-other x11 xi)',
+                  '<!@(<(pkg-config) --libs-only-L --libs-only-other x11 xi)',
                 ],
                 'libraries': [
-                  '<!@(pkg-config --libs-only-l x11 xi)',
+                  '<!@(<(pkg-config) --libs-only-l x11 xi)',
                 ],
               },
             }],
@@ -354,15 +354,15 @@
             }, {
               'direct_dependent_settings': {
                 'cflags': [
-                  '<!@(pkg-config --cflags xrandr)',
+                  '<!@(<(pkg-config) --cflags xrandr)',
                 ],
               },
               'link_settings': {
                 'ldflags': [
-                  '<!@(pkg-config --libs-only-L --libs-only-other xrandr)',
+                  '<!@(<(pkg-config) --libs-only-L --libs-only-other xrandr)',
                 ],
                 'libraries': [
-                  '<!@(pkg-config --libs-only-l xrandr)',
+                  '<!@(<(pkg-config) --libs-only-l xrandr)',
                 ],
               },
             }],
@@ -407,21 +407,89 @@
             }, {
               'direct_dependent_settings': {
                 'cflags': [
-                  '<!@(pkg-config --cflags xtst)',
+                  '<!@(<(pkg-config) --cflags xtst)',
                 ],
               },
               'link_settings': {
                 'ldflags': [
-                  '<!@(pkg-config --libs-only-L --libs-only-other xtst)',
+                  '<!@(<(pkg-config) --libs-only-L --libs-only-other xtst)',
                 ],
                 'libraries': [
-                  '<!@(pkg-config --libs-only-l xtst)',
+                  '<!@(<(pkg-config) --libs-only-l xtst)',
                 ],
               },
             }]
           ]
         }
       ],  # targets
+    }],
+    ['use_gtk3==1', {
+      # Hide GTK3 and related dependencies when use_gtk3==0 because the user
+      # might not have the GTK3 headers yet.
+      'targets': [
+        {
+          'target_name': 'gtk3',
+          'type': 'none',
+          'toolsets': ['host', 'target'],
+          'variables': {
+            # gtk requires gmodule, but it does not list it as a dependency
+            # in some misconfigured systems.
+            'gtk_packages': 'gmodule-2.0 gtk+-3.0 gthread-2.0',
+          },
+          'conditions': [
+            ['_toolset=="target"', {
+              'all_dependent_settings': {
+                'cflags': [
+                  '<!@(<(pkg-config) --cflags <(gtk_packages))',
+                ],
+              },
+              'link_settings': {
+                'ldflags': [
+                  '<!@(<(pkg-config) --libs-only-L --libs-only-other <(gtk_packages))',
+                ],
+                'libraries': [
+                  '<!@(<(pkg-config) --libs-only-l <(gtk_packages))',
+                ],
+              },
+            }, {
+              'all_dependent_settings': {
+                'cflags': [
+                  '<!@(<(pkg-config) --cflags <(gtk_packages))',
+                ],
+              },
+              'link_settings': {
+                'ldflags': [
+                  '<!@(<(pkg-config) --libs-only-L --libs-only-other <(gtk_packages))',
+                ],
+                'libraries': [
+                  '<!@(<(pkg-config) --libs-only-l <(gtk_packages))',
+                ],
+              },
+            }],
+          ],
+        },
+        {
+          'target_name': 'gtkprint3',
+          'type': 'none',
+          'conditions': [
+            ['_toolset=="target"', {
+              'direct_dependent_settings': {
+                'cflags': [
+                  '<!@(<(pkg-config) --cflags gtk+-unix-print-3.0)',
+                ],
+              },
+              'link_settings': {
+                'ldflags': [
+                  '<!@(<(pkg-config) --libs-only-L --libs-only-other gtk+-unix-print-3.0)',
+                ],
+                'libraries': [
+                  '<!@(<(pkg-config) --libs-only-l gtk+-unix-print-3.0)',
+                ],
+              },
+            }],
+          ],
+        },
+      ],
     }],
     ['use_x11==1 and chromeos==0', {
       'targets': [
@@ -503,28 +571,7 @@
         },
       ],
     }],
-    ['ozone_platform_gbm==1', {
-      'targets': [
-        {
-          'target_name': 'gbm',
-          'type': 'none',
-          'direct_dependent_settings': {
-            'cflags': [
-              '<!@(<(pkg-config) --cflags gbm)',
-            ],
-          },
-          'link_settings': {
-            'ldflags': [
-              '<!@(<(pkg-config) --libs-only-L --libs-only-other gbm)',
-            ],
-            'libraries': [
-              '<!@(<(pkg-config) --libs-only-l gbm)',
-            ],
-          },
-        },
-      ],
-    }],
-    ['ozone_platform_dri==1 or ozone_platform_drm==1 or ozone_platform_gbm==1', {
+    ['ozone_platform_gbm==1 or chromeos==1', {
       'targets': [
         {
           'target_name': 'libdrm',
@@ -535,6 +582,9 @@
             ],
           },
           'link_settings': {
+            'ldflags': [
+              '<!@(<(pkg-config) --libs-only-L --libs-only-other libdrm)',
+            ],
             'libraries': [
               '<!@(<(pkg-config) --libs-only-l libdrm)',
             ],
@@ -881,15 +931,15 @@
         }, {
           'direct_dependent_settings': {
             'cflags': [
-              '<!@(pkg-config --cflags <(glib_packages))',
+              '<!@(<(pkg-config) --cflags <(glib_packages))',
             ],
           },
           'link_settings': {
             'ldflags': [
-              '<!@(pkg-config --libs-only-L --libs-only-other <(glib_packages))',
+              '<!@(<(pkg-config) --libs-only-L --libs-only-other <(glib_packages))',
             ],
             'libraries': [
-              '<!@(pkg-config --libs-only-l <(glib_packages))',
+              '<!@(<(pkg-config) --libs-only-l <(glib_packages))',
             ],
           },
         }],
@@ -1147,15 +1197,15 @@
             }, {
               'direct_dependent_settings': {
                 'cflags': [
-                  '<!@(pkg-config --cflags pangocairo pangoft2)',
+                  '<!@(<(pkg-config) --cflags pangocairo pangoft2)',
                 ],
               },
               'link_settings': {
                 'ldflags': [
-                  '<!@(pkg-config --libs-only-L --libs-only-other pangocairo pangoft2)',
+                  '<!@(<(pkg-config) --libs-only-L --libs-only-other pangocairo pangoft2)',
                 ],
                 'libraries': [
-                  '<!@(pkg-config --libs-only-l pangocairo pangoft2)',
+                  '<!@(<(pkg-config) --libs-only-l pangocairo pangoft2)',
                 ],
               },
             }],
@@ -1215,6 +1265,27 @@
               ],
             }],
           ]
+        }],
+      ],
+    },
+    {
+      'target_name': 'libffi',
+      'type': 'none',
+      'conditions': [
+        ['_toolset=="target"', {
+          'direct_dependent_settings': {
+            'cflags': [
+              '<!@(<(pkg-config) --cflags libffi)',
+            ],
+          },
+          'link_settings': {
+            'ldflags': [
+              '<!@(<(pkg-config) --libs-only-L --libs-only-other libffi)',
+            ],
+            'libraries': [
+              '<!@(<(pkg-config) --libs-only-l libffi)',
+            ],
+          },
         }],
       ],
     },

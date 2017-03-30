@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/grit/generated_resources.h"
@@ -125,10 +126,8 @@ void ImageDecoder::DecodeImageInSandbox(
 
   if (!batch_mode_timer_) {
     // Created here so it will call StopBatchMode() on the right thread.
-    batch_mode_timer_.reset(new base::DelayTimer<ImageDecoder>(
-        FROM_HERE,
-        base::TimeDelta::FromSeconds(kBatchModeTimeoutSeconds),
-        this,
+    batch_mode_timer_.reset(new base::DelayTimer(
+        FROM_HERE, base::TimeDelta::FromSeconds(kBatchModeTimeoutSeconds), this,
         &ImageDecoder::StopBatchMode));
   }
   batch_mode_timer_->Reset();

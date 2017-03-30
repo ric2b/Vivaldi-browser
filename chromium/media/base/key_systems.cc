@@ -4,13 +4,16 @@
 
 #include "media/base/key_systems.h"
 
+#include <stddef.h>
 
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "media/base/key_system_info.h"
 #include "media/base/key_systems_support_uma.h"
 #include "media/base/media_client.h"
@@ -188,11 +191,10 @@ class KeySystemsImpl : public KeySystems {
   std::string GetPepperType(const std::string& concrete_key_system) const;
 #endif
 
-  void AddContainerMask(const std::string& container, uint32 mask);
-  void AddCodecMask(
-      EmeMediaType media_type,
-      const std::string& codec,
-      uint32 mask);
+  void AddContainerMask(const std::string& container, uint32_t mask);
+  void AddCodecMask(EmeMediaType media_type,
+                    const std::string& codec,
+                    uint32_t mask);
 
   // Implementation of KeySystems interface.
   bool IsSupportedKeySystem(const std::string& key_system) const override;
@@ -446,7 +448,7 @@ void KeySystemsImpl::AddConcreteSupportedKeySystems(
              EmeFeatureSupport::ALWAYS_ENABLED);
     }
 
-    DCHECK(!IsSupportedKeySystem(info.key_system))
+    DCHECK(!IsConcreteSupportedKeySystem(info.key_system))
         << "Key system '" << info.key_system << "' already registered";
     DCHECK(!parent_key_system_map_.count(info.key_system))
         <<  "'" << info.key_system << "' is already registered as a parent";
@@ -636,18 +638,16 @@ std::string KeySystemsImpl::GetPepperType(
 }
 #endif
 
-void KeySystemsImpl::AddContainerMask(
-    const std::string& container,
-    uint32 mask) {
+void KeySystemsImpl::AddContainerMask(const std::string& container,
+                                      uint32_t mask) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!container_to_codec_mask_map_.count(container));
   container_to_codec_mask_map_[container] = static_cast<EmeCodec>(mask);
 }
 
-void KeySystemsImpl::AddCodecMask(
-    EmeMediaType media_type,
-    const std::string& codec,
-    uint32 mask) {
+void KeySystemsImpl::AddCodecMask(EmeMediaType media_type,
+                                  const std::string& codec,
+                                  uint32_t mask) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!codec_string_map_.count(codec));
   codec_string_map_[codec] = static_cast<EmeCodec>(mask);
@@ -660,7 +660,20 @@ void KeySystemsImpl::AddCodecMask(
 
 bool KeySystemsImpl::IsSupportedKeySystem(const std::string& key_system) const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return concrete_key_system_map_.count(key_system) != 0;
+
+  if (!IsConcreteSupportedKeySystem(key_system))
+    return false;
+
+  // TODO(ddorwin): Move this to where we add key systems when prefixed EME is
+  // removed (crbug.com/249976).
+  if (!IsPotentiallySupportedKeySystem(key_system)) {
+    // If you encounter this path, see the comments for the above function.
+    DLOG(ERROR) << "Unrecognized key system " << key_system
+                << ". See code comments.";
+    return false;
+  }
+
+  return true;
 }
 
 EmeConfigRule KeySystemsImpl::GetContentTypeConfigRule(
@@ -674,12 +687,14 @@ EmeConfigRule KeySystemsImpl::GetContentTypeConfigRule(
   SupportedCodecs media_type_codec_mask = EME_CODEC_NONE;
   switch (media_type) {
     case EmeMediaType::AUDIO:
-      if (!base::StartsWithASCII(container_mime_type, "audio/", true))
+      if (!base::StartsWith(container_mime_type, "audio/",
+                            base::CompareCase::SENSITIVE))
         return EmeConfigRule::NOT_SUPPORTED;
       media_type_codec_mask = audio_codec_mask_;
       break;
     case EmeMediaType::VIDEO:
-      if (!base::StartsWithASCII(container_mime_type, "video/", true))
+      if (!base::StartsWith(container_mime_type, "video/",
+                            base::CompareCase::SENSITIVE))
         return EmeConfigRule::NOT_SUPPORTED;
       media_type_codec_mask = video_codec_mask_;
       break;
@@ -739,8 +754,6 @@ EmeConfigRule KeySystemsImpl::GetRobustnessConfigRule(
   EmeRobustness robustness = ConvertRobustness(requested_robustness);
   if (robustness == EmeRobustness::INVALID)
     return EmeConfigRule::NOT_SUPPORTED;
-  if (robustness == EmeRobustness::EMPTY)
-    return EmeConfigRule::SUPPORTED;
 
   KeySystemInfoMap::const_iterator key_system_iter =
       concrete_key_system_map_.find(key_system);
@@ -770,8 +783,13 @@ EmeConfigRule KeySystemsImpl::GetRobustnessConfigRule(
     return EmeConfigRule::NOT_SUPPORTED;
   }
 
-  if (key_system == kWidevineKeySystem) {
 #if defined(OS_CHROMEOS)
+  if (key_system == kWidevineKeySystem) {
+    // TODO(ddorwin): Remove this once we have confirmed it is not necessary.
+    // See https://crbug.com/482277
+    if (robustness == EmeRobustness::EMPTY)
+      return EmeConfigRule::SUPPORTED;
+
     // Hardware security requires remote attestation.
     if (robustness >= EmeRobustness::HW_SECURE_CRYPTO)
       return EmeConfigRule::IDENTIFIER_REQUIRED;
@@ -784,11 +802,16 @@ EmeConfigRule KeySystemsImpl::GetRobustnessConfigRule(
         max_robustness == EmeRobustness::HW_SECURE_ALL) {
       return EmeConfigRule::IDENTIFIER_RECOMMENDED;
     }
-#elif defined(OS_ANDROID)
-    if (robustness > EmeRobustness::SW_SECURE_CRYPTO)
-      return EmeConfigRule::HW_SECURE_CODECS_REQUIRED;
-#endif  // defined(OS_CHROMEOS)
   }
+#elif defined(OS_ANDROID)
+  // Require hardware secure codecs for Widevine when SW_SECURE_DECODE or above
+  // is specified, or for all other key systems (excluding Clear Key).
+  if ((key_system == kWidevineKeySystem &&
+       robustness >= EmeRobustness::SW_SECURE_DECODE) ||
+      !IsClearKey(key_system)) {
+    return EmeConfigRule::HW_SECURE_CODECS_REQUIRED;
+  }
+#endif  // defined(OS_CHROMEOS)
 
   return EmeConfigRule::SUPPORTED;
 }
@@ -875,22 +898,6 @@ bool PrefixedIsSupportedConcreteKeySystem(const std::string& key_system) {
       key_system);
 }
 
-bool IsSupportedKeySystem(const std::string& key_system) {
-  if (!KeySystemsImpl::GetInstance()->IsSupportedKeySystem(key_system))
-    return false;
-
-  // TODO(ddorwin): Move this to where we add key systems when prefixed EME is
-  // removed (crbug.com/249976).
-  if (!IsPotentiallySupportedKeySystem(key_system)) {
-    // If you encounter this path, see the comments for the above function.
-    NOTREACHED() << "Unrecognized key system " << key_system
-                 << ". See code comments.";
-    return false;
-  }
-
-  return true;
-}
-
 bool IsSupportedKeySystemWithInitDataType(const std::string& key_system,
                                           EmeInitDataType init_data_type) {
   return KeySystemsImpl::GetInstance()->IsSupportedInitDataType(key_system,
@@ -926,14 +933,14 @@ std::string GetPepperType(const std::string& concrete_key_system) {
 // "media" where "UNIT_TEST" is not defined. So we need to specify
 // "MEDIA_EXPORT" here again so that they are visible to tests.
 
-MEDIA_EXPORT void AddContainerMask(const std::string& container, uint32 mask) {
+MEDIA_EXPORT void AddContainerMask(const std::string& container,
+                                   uint32_t mask) {
   KeySystemsImpl::GetInstance()->AddContainerMask(container, mask);
 }
 
-MEDIA_EXPORT void AddCodecMask(
-    EmeMediaType media_type,
-    const std::string& codec,
-    uint32 mask) {
+MEDIA_EXPORT void AddCodecMask(EmeMediaType media_type,
+                               const std::string& codec,
+                               uint32_t mask) {
   KeySystemsImpl::GetInstance()->AddCodecMask(media_type, codec, mask);
 }
 

@@ -17,7 +17,14 @@ struct ChildProcessData;
 class CONTENT_EXPORT BrowserChildProcessObserver {
  public:
   // Called when a child process host has connected to a child process.
+  // Note that |data.handle| may be invalid, if the child process connects to
+  // the pipe before the process launcher's reply arrives.
   virtual void BrowserChildProcessHostConnected(const ChildProcessData& data) {}
+
+  // Called when a child process has successfully launched and has connected to
+  // it child process host. The |data.handle| is guaranteed to be valid.
+  virtual void BrowserChildProcessLaunchedAndConnected(
+      const ChildProcessData& data) {}
 
   // Called after a ChildProcessHost is disconnected from the child process.
   virtual void BrowserChildProcessHostDisconnected(
@@ -27,6 +34,12 @@ class CONTENT_EXPORT BrowserChildProcessObserver {
   // |exit_code| contains the exit code from the process.
   virtual void BrowserChildProcessCrashed(const ChildProcessData& data,
                                           int exit_code) {}
+
+  // Called when a child process disappears unexpectedly as a result of being
+  // killed.
+  // |exit_code| contains the exit code from the process.
+  virtual void BrowserChildProcessKilled(const ChildProcessData& data,
+                                         int exit_code) {}
 
   // Called when an instance of a particular child is created in a page. If one
   // page contains several regions rendered by the same child, this will be

@@ -8,9 +8,9 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/values.h"
 #include "content/browser/webui/url_data_manager.h"
 #include "content/browser/webui/url_data_source_impl.h"
@@ -38,6 +38,7 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   void SetDefaultResource(int resource_id) override;
   void SetRequestFilter(
       const WebUIDataSource::HandleRequestCallback& callback) override;
+  void AddMojoResources() override;
   void DisableReplaceExistingSource() override;
   void DisableContentSecurityPolicy() override;
   void OverrideContentSecurityPolicyObjectSrc(const std::string& data) override;

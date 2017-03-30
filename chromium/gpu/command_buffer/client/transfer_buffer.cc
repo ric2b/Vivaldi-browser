@@ -6,6 +6,9 @@
 
 #include "gpu/command_buffer/client/transfer_buffer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bits.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
@@ -85,9 +88,17 @@ void TransferBuffer::FreePendingToken(void* p, unsigned int token) {
   }
 }
 
+unsigned int TransferBuffer::GetSize() const {
+  return HaveBuffer() ? ring_buffer_->GetLargestFreeOrPendingSize() : 0;
+}
+
+unsigned int TransferBuffer::GetFreeSize() const {
+  return HaveBuffer() ? ring_buffer_->GetTotalFreeSizeNoWaiting() : 0;
+}
+
 void TransferBuffer::AllocateRingBuffer(unsigned int size) {
   for (;size >= min_buffer_size_; size /= 2) {
-    int32 id = -1;
+    int32_t id = -1;
     scoped_refptr<gpu::Buffer> buffer =
         helper_->command_buffer()->CreateTransferBuffer(size, &id);
     if (id != -1) {

@@ -4,14 +4,18 @@
 
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
+#include "browser/menus/vivaldi_menus.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -32,7 +36,7 @@ RenderViewContextMenuViews::RenderViewContextMenuViews(
     : RenderViewContextMenu(render_frame_host, params),
       bidi_submenu_model_(this) {
   scoped_ptr<ToolkitDelegate> delegate(new ToolkitDelegateViews);
-  set_toolkit_delegate(delegate.Pass());
+  set_toolkit_delegate(std::move(delegate));
 }
 
 RenderViewContextMenuViews::~RenderViewContextMenuViews() {
@@ -58,6 +62,10 @@ void RenderViewContextMenuViews::RunMenuAt(views::Widget* parent,
 bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accel) {
+
+  if (vivaldi::VivaldiGetAcceleratorForCommandId(this, command_id, accel))
+    return true;
+
   // There are no formally defined accelerators we can query so we assume
   // that Ctrl+C, Ctrl+V, Ctrl+X, Ctrl-A, etc do what they normally do.
   switch (command_id) {
@@ -146,10 +154,12 @@ void RenderViewContextMenuViews::ExecuteCommand(int command_id,
     case IDC_WRITING_DIRECTION_RTL:
     case IDC_WRITING_DIRECTION_LTR: {
       content::RenderViewHost* view_host = GetRenderViewHost();
-      view_host->UpdateTextDirection((command_id == IDC_WRITING_DIRECTION_RTL) ?
-          blink::WebTextDirectionRightToLeft :
-          blink::WebTextDirectionLeftToRight);
-      view_host->NotifyTextDirection();
+      view_host->GetWidget()->UpdateTextDirection(
+          (command_id == IDC_WRITING_DIRECTION_RTL)
+              ? blink::WebTextDirectionRightToLeft
+              : blink::WebTextDirectionLeftToRight);
+      view_host->GetWidget()->NotifyTextDirection();
+      RenderViewContextMenu::RecordUsedItem(command_id);
       break;
     }
 

@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/common/extensions/extension_test_util.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/common/socket_permission_request.h"
@@ -39,11 +43,10 @@ namespace {
 
 const char kAllHostsPermission[] = "*://*/*";
 
-bool CheckSocketPermission(
-    scoped_refptr<Extension> extension,
-    SocketPermissionRequest::OperationType type,
-    const char* host,
-    uint16 port) {
+bool CheckSocketPermission(scoped_refptr<Extension> extension,
+                           SocketPermissionRequest::OperationType type,
+                           const char* host,
+                           uint16_t port) {
   SocketPermission::CheckParam param(type, host, port);
   return extension->permissions_data()->CheckAPIPermissionWithParam(
       APIPermission::kSocket, &param);
@@ -60,14 +63,13 @@ scoped_refptr<const Extension> GetExtensionWithHostPermission(
     permissions.Append(host_permissions);
 
   return ExtensionBuilder()
-      .SetManifest(
-          DictionaryBuilder()
-              .Set("name", id)
-              .Set("description", "an extension")
-              .Set("manifest_version", 2)
-              .Set("version", "1.0.0")
-              .Set("permissions", permissions.Pass())
-              .Build())
+      .SetManifest(DictionaryBuilder()
+                       .Set("name", id)
+                       .Set("description", "an extension")
+                       .Set("manifest_version", 2)
+                       .Set("version", "1.0.0")
+                       .Set("permissions", std::move(permissions))
+                       .Build())
       .SetLocation(location)
       .SetID(id)
       .Build();
@@ -187,12 +189,12 @@ TEST(PermissionsDataTest, EffectiveHostPermissions) {
   EXPECT_TRUE(hosts.MatchesURL(GURL("http://www.reddit.com")));
   EXPECT_TRUE(extension->permissions_data()
                   ->active_permissions()
-                  ->HasEffectiveAccessToURL(GURL("http://www.reddit.com")));
+                  .HasEffectiveAccessToURL(GURL("http://www.reddit.com")));
   EXPECT_TRUE(hosts.MatchesURL(GURL("http://news.ycombinator.com")));
   EXPECT_TRUE(
       extension->permissions_data()
           ->active_permissions()
-          ->HasEffectiveAccessToURL(GURL("http://news.ycombinator.com")));
+          .HasEffectiveAccessToURL(GURL("http://news.ycombinator.com")));
   EXPECT_FALSE(extension->permissions_data()->HasEffectiveAccessToAllHosts());
 
   extension = LoadManifest("effective_host_permissions", "all_hosts.json");
@@ -220,11 +222,8 @@ TEST(PermissionsDataTest, EffectiveHostPermissions) {
   URLPatternSet new_hosts;
   new_hosts.AddOrigin(URLPattern::SCHEME_ALL, tab_url);
   extension->permissions_data()->UpdateTabSpecificPermissions(
-      1,
-      new PermissionSet(APIPermissionSet(),
-                        ManifestPermissionSet(),
-                        new_hosts,
-                        URLPatternSet()));
+      1, PermissionSet(APIPermissionSet(), ManifestPermissionSet(), new_hosts,
+                       URLPatternSet()));
   EXPECT_TRUE(extension->permissions_data()->GetEffectiveHostPermissions().
       MatchesURL(tab_url));
   extension->permissions_data()->ClearTabSpecificPermissions(1);
@@ -695,9 +694,9 @@ TEST_F(ExtensionScriptAndCaptureVisibleTest, TabSpecific) {
       LoadManifestStrict("script_and_capture", "tab_specific.json");
 
   const PermissionsData* permissions_data = extension->permissions_data();
-  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(0).get());
-  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(1).get());
-  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(2).get());
+  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(0));
+  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(1));
+  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(2));
 
   std::set<GURL> no_urls;
 
@@ -716,11 +715,10 @@ TEST_F(ExtensionScriptAndCaptureVisibleTest, TabSpecific) {
   allowed_urls.insert(http_url_with_path);
 
   {
-    scoped_refptr<PermissionSet> permissions(
-        new PermissionSet(APIPermissionSet(), ManifestPermissionSet(),
-                          allowed_hosts, URLPatternSet()));
+    PermissionSet permissions(APIPermissionSet(), ManifestPermissionSet(),
+                              allowed_hosts, URLPatternSet());
     permissions_data->UpdateTabSpecificPermissions(0, permissions);
-    EXPECT_EQ(permissions->explicit_hosts(),
+    EXPECT_EQ(permissions.explicit_hosts(),
               permissions_data->GetTabSpecificPermissionsForTesting(0)
                   ->explicit_hosts());
   }
@@ -730,7 +728,7 @@ TEST_F(ExtensionScriptAndCaptureVisibleTest, TabSpecific) {
   EXPECT_TRUE(ScriptAllowedExclusivelyOnTab(extension.get(), no_urls, 2));
 
   permissions_data->ClearTabSpecificPermissions(0);
-  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(0).get());
+  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(0));
 
   EXPECT_TRUE(ScriptAllowedExclusivelyOnTab(extension.get(), no_urls, 0));
   EXPECT_TRUE(ScriptAllowedExclusivelyOnTab(extension.get(), no_urls, 1));
@@ -743,20 +741,17 @@ TEST_F(ExtensionScriptAndCaptureVisibleTest, TabSpecific) {
                                            https_url.spec()));
 
   {
-    scoped_refptr<PermissionSet> permissions(
-        new PermissionSet(APIPermissionSet(),  ManifestPermissionSet(),
-                          allowed_hosts, URLPatternSet()));
-    permissions_data->UpdateTabSpecificPermissions(0, permissions);
-    EXPECT_EQ(permissions->explicit_hosts(),
+    PermissionSet permissions1(APIPermissionSet(), ManifestPermissionSet(),
+                               allowed_hosts, URLPatternSet());
+    permissions_data->UpdateTabSpecificPermissions(0, permissions1);
+    EXPECT_EQ(permissions1.explicit_hosts(),
               permissions_data->GetTabSpecificPermissionsForTesting(0)
                   ->explicit_hosts());
 
-    permissions = new PermissionSet(APIPermissionSet(),
-                                    ManifestPermissionSet(),
-                                    more_allowed_hosts,
-                                    URLPatternSet());
-    permissions_data->UpdateTabSpecificPermissions(1, permissions);
-    EXPECT_EQ(permissions->explicit_hosts(),
+    PermissionSet permissions2(APIPermissionSet(), ManifestPermissionSet(),
+                               more_allowed_hosts, URLPatternSet());
+    permissions_data->UpdateTabSpecificPermissions(1, permissions2);
+    EXPECT_EQ(permissions2.explicit_hosts(),
               permissions_data->GetTabSpecificPermissionsForTesting(1)
                   ->explicit_hosts());
   }
@@ -767,7 +762,7 @@ TEST_F(ExtensionScriptAndCaptureVisibleTest, TabSpecific) {
   EXPECT_TRUE(ScriptAllowedExclusivelyOnTab(extension.get(), no_urls, 2));
 
   permissions_data->ClearTabSpecificPermissions(0);
-  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(0).get());
+  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(0));
 
   EXPECT_TRUE(ScriptAllowedExclusivelyOnTab(extension.get(), no_urls, 0));
   EXPECT_TRUE(
@@ -775,7 +770,7 @@ TEST_F(ExtensionScriptAndCaptureVisibleTest, TabSpecific) {
   EXPECT_TRUE(ScriptAllowedExclusivelyOnTab(extension.get(), no_urls, 2));
 
   permissions_data->ClearTabSpecificPermissions(1);
-  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(1).get());
+  EXPECT_FALSE(permissions_data->GetTabSpecificPermissionsForTesting(1));
 
   EXPECT_TRUE(ScriptAllowedExclusivelyOnTab(extension.get(), no_urls, 0));
   EXPECT_TRUE(ScriptAllowedExclusivelyOnTab(extension.get(), no_urls, 1));

@@ -1780,8 +1780,6 @@ content.dll!content::RenderProcessHostImpl::CreateMessageFilters
 content.dll!content::RenderProcessHostImpl::Init
 ...
 content.dll!content::NavigationControllerImpl::LoadEntry
-...
-*!extensions::ExtensionHost::LoadInitialURL
 
 UNINITIALIZED READ
 name=bug_414268
@@ -1821,11 +1819,6 @@ name=bug_436131_c
 *!ash::test::ShelfViewTest_OverflowBubbleSize_Test::TestBody
 *!testing::internal::HandleExceptionsInMethodIfSupported<>
 
-UNADDRESSABLE ACCESS
-name=bug_442969
-*!testing::internal::CmpHelperNE<>
-*!extensions::WebrtcAudioPrivateTest_GetAndSetWithMediaStream_Test::RunTestOnMainThread
-
 UNINITIALIZED READ
 name=bug_455417
 *!std::char_traits<>::compare
@@ -1838,13 +1831,6 @@ name=bug_468169
 *!encode_nonrd_sb_row
 *!vp9_encode_tile
 
-UNADDRESSABLE ACCESS
-name=bug_470055
-blink_web.dll!blink::*::focused*Frame
-blink_web.dll!blink::WebFrameWidgetImpl::selectionBounds
-content.dll!content::RenderWidget::UpdateSelectionBounds
-content.dll!content::RenderWidget::willBeginCompositorFrame
-
 UNINITIALIZED READ
 name=bug_470848
 blink_platform.dll!blink::Heap::RegionTree::lookup
@@ -1856,7 +1842,7 @@ system call NtDuplicateObject
 KERNELBASE.dll!DuplicateHandle
 KERNEL32.dll!DuplicateHandle
 base.dll!base::SharedMemory::ShareToProcessCommon
-gl_wrapper.dll!gfx::GLImageSharedMemory::Initialize
+gl_wrapper.dll!gl::GLImageSharedMemory::Initialize
 content.dll!content::GpuChannel::CreateImageForGpuMemoryBuffer
 content.dll!content::GpuCommandBufferStub::OnCreateImage
 
@@ -1880,13 +1866,13 @@ USER32.dll!UnregisterClassW
 USER32.dll!CreateWindowExW
 gfx.dll!gfx::WindowImpl::Init
 win_window.dll!ui::WinWindow::WinWindow
-aura.dll!aura::WindowTreeHostWin::WindowTreeHostWin
+aura.dll!aura::WindowTreeHostPlatform::WindowTreeHostPlatform
 aura.dll!aura::WindowTreeHost::Create
 
 UNINITIALIZED READ
 name=bug_492821
 *!blink::CSSPropertyParser::validUnit
-*!blink::CSSPropertyParser::validWidthOrHeight
+...
 *!blink::CSSPropertyParser::parseValue
 *!blink::CSSPropertyParser::parseValue
 *!blink::CSSParserImpl::consumeDeclarationValue
@@ -1911,7 +1897,8 @@ KERNEL32.dll!WriteFile
 *!base::File::WriteAtCurrentPos
 *!sessions::SessionBackend::AppendCommandsToFile
 *!sessions::SessionBackend::AppendCommands
-*!base::internal::RunnableAdapter<>::Run
+*!base::internal::InvokeHelper<>::MakeItSo
+*!base::internal::Invoker<>::Run
 
 UNADDRESSABLE ACCESS
 name=bug_505734
@@ -2010,5 +1997,137 @@ MSVCR120.dll!vsnwprintf_s_l
 MSVCR120.dll!vsnwprintf_s
 *!base::`anonymous namespace'::StringAppendVT<>
 *!base::StringPrintf
-*!content::AccessibilityTreeFormatter::ToString
+*!content::AccessibilityTreeFormatterWin::ToString
 *!content::AccessibilityTreeFormatter::RecursiveFormatAccessibilityTree
+
+UNADDRESSABLE ACCESS
+name=bug_534881
+...
+v8.dll!v8::internal::`anonymous namespace'::Invoke
+v8.dll!v8::internal::Execution::Call
+v8.dll!v8::Function::Call
+webcore_shared.dll!blink::V8ScriptRunner::callFunction
+webcore_shared.dll!blink::ScriptController::callFunction
+...
+webcore_shared.dll!blink::LocalDOMWindow::dispatchEvent
+
+UNINITIALIZED READ
+name=bug_519041_a
+ntdll.dll!RtlSetLastWin32ErrorAndNtStatusFromNtStatus
+
+UNINITIALIZED READ
+name=bug_519041_b
+ntdll.dll!RtlDecodePointer
+
+UNADDRESSABLE ACCESS
+name=bug_545273
+v8.dll!v8::internal::LookupIterator::LookupIterator
+v8.dll!v8::internal::LookupIterator::PropertyOrElement
+v8.dll!v8::internal::Runtime::GetObjectProperty
+v8.dll!v8::internal::KeyedLoadIC::Load
+v8.dll!v8::internal::Runtime_KeyedLoadIC_Miss
+v8.dll!v8::internal::`anonymous namespace'::Invoke
+v8.dll!v8::internal::Execution::Call
+...
+net_with_v8.dll!net::ProxyResolverV8::Context::*
+
+HANDLE LEAK
+name=bug_548039
+system call NtCreateSection
+KERNELBASE.dll!CreateFileMappingW
+base.dll!base::SharedMemory::Create
+content.dll!content::ChildThreadImpl::AllocateSharedMemory
+content.dll!content::RenderThreadImpl::HostAllocateSharedMemoryBuffer
+content.dll!content::RenderThreadImpl::AllocateSharedMemory
+...
+content.dll!content::WebGraphicsContext3DCommandBufferImpl::CreateContext
+content.dll!content::WebGraphicsContext3DCommandBufferImpl::MaybeInitializeGL
+
+# Dr. Memory does not yet propagate uninits through ymm registers so we
+# avoid any false positives in the meantime that might show up in
+# libyuv and other code:
+UNINITIALIZED READ
+name=https://github.com/DynamoRIO/drmemory/issues/1485
+instruction=*ymm*
+media.dll!*
+
+HANDLE LEAK
+name=bug_562701
+system call NtCreateSection
+KERNELBASE.dll!CreateFileMappingW
+base.dll!base::SharedMemory::Create
+content.dll!content::ChildThreadImpl::AllocateSharedMemory
+content.dll!content::RenderThreadImpl::HostAllocateSharedMemoryBuffer
+content.dll!content::ImageDataPlatformBackend::Init
+content.dll!content::PPB_ImageData_Impl::Init
+content.dll!content::PPB_ImageData_Impl::Create
+content.dll!content::ResourceCreationImpl::CreateImageData
+ppapi_proxy.dll!ppapi::proxy::PPB_ImageData_Proxy::CreateImageData
+ppapi_proxy.dll!ppapi::proxy::PPB_ImageData_Proxy::OnHostMsgCreatePlatform
+
+UNINITIALIZED READ
+name=bug_571280
+content.dll!CopyRow_AVX
+content.dll!CopyPlane
+content.dll!I420Copy
+content.dll!content::`anonymous namespace'::CopyFrameToI420
+content.dll!content::WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopy
+
+INVALID HEAP ARGUMENT
+name=bug_571551_a
+...
+media.dll!mkvmuxer::Segment::DoNewClusterProcessing
+media.dll!mkvmuxer::Segment::AddGenericFrame
+media.dll!mkvmuxer::Segment::AddFrame
+media.dll!media::WebmMuxer::AddFrame
+media.dll!media::WebmMuxer::OnEncodedVideo
+content.dll!content::MediaRecorderHandler::OnEncodedVideo
+content.dll!base::internal::RunnableAdapter<>::Run
+
+UNADDRESSABLE ACCESS
+name=bug_571551_b
+...
+media.dll!mkvmuxer::Segment::DoNewClusterProcessing
+media.dll!mkvmuxer::Segment::AddGenericFrame
+media.dll!mkvmuxer::Segment::AddFrame
+media.dll!media::WebmMuxer::AddFrame
+media.dll!media::WebmMuxer::OnEncodedVideo
+content.dll!content::MediaRecorderHandler::OnEncodedVideo
+content.dll!base::internal::RunnableAdapter<>::Run
+
+HANDLE LEAK
+name=bug_571553
+system call NtUserWindowFromPoint
+content.dll!content::RenderWidgetHostViewAura::UpdateCursorIfOverSelf
+content.dll!content::RenderWidgetHostViewAura::SetIsLoading
+content.dll!content::RenderWidgetHostImpl::SetIsLoading
+content.dll!content::RenderFrameHostManager::SetIsLoading
+content.dll!content::WebContentsImpl::SetIsLoading
+content.dll!content::WebContentsImpl::DidStopLoading
+content.dll!content::FrameTreeNode::DidStopLoading
+
+HANDLE LEAK
+name=bug_571554_a
+system call NtGdiCreateDIBSection
+GDI32.dll!CreateDIBSection
+skia.dll!`anonymous namespace'::CreateHBitmap
+skia.dll!skia::BitmapPlatformDevice::Create
+skia.dll!skia::CreatePlatformCanvas
+surface.dll!TransportDIB::GetPlatformCanvas
+content.dll!content::ImageDataPlatformBackend::Map
+content.dll!content::PepperGraphics2DHost::Init
+content.dll!content::PepperGraphics2DHost::Create
+content.dll!content::ContentRendererPepperHostFactory::CreateResourceHost
+
+HANDLE LEAK
+name=bug_571554_b
+system call NtCreateSection
+KERNELBASE.dll!CreateFileMappingW
+base.dll!base::SharedMemory::Create
+content.dll!content::ChildThreadImpl::AllocateSharedMemory
+content.dll!content::RenderThreadImpl::HostAllocateSharedMemoryBuffer
+content.dll!content::ImageDataPlatformBackend::Init
+content.dll!content::PPB_ImageData_Impl::Init
+content.dll!content::PepperGraphics2DHost::Init
+content.dll!content::PepperGraphics2DHost::Create
+content.dll!content::ContentRendererPepperHostFactory::CreateResourceHost

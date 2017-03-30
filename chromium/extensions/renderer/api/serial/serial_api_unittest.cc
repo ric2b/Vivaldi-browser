@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
+#include "base/macros.h"
 #include "base/thread_task_runner_handle.h"
 #include "device/serial/serial_device_enumerator.h"
 #include "device/serial/serial_service_impl.h"
@@ -38,7 +44,7 @@ class FakeSerialDeviceEnumerator : public device::SerialDeviceEnumerator {
     result[2] = device::serial::DeviceInfo::New();
     result[2]->path = "";
     result[2]->display_name = "";
-    return result.Pass();
+    return result;
   }
 };
 
@@ -166,7 +172,7 @@ class GetControlSignalsTestIoHandler : public TestIoHandlerBase {
     signals->ri = num_calls() & 4;
     signals->dsr = num_calls() & 8;
     record_call();
-    return signals.Pass();
+    return signals;
   }
 
  private:
@@ -442,7 +448,7 @@ class SerialApiTest : public ApiTestBase {
             base::ThreadTaskRunnerHandle::Get()),
         scoped_ptr<device::SerialDeviceEnumerator>(
             new FakeSerialDeviceEnumerator),
-        request.Pass());
+        std::move(request));
   }
 
   DISALLOW_COPY_AND_ASSIGN(SerialApiTest);
@@ -602,6 +608,36 @@ TEST_F(SerialApiTest, ReceiveErrorDeviceLost) {
   RunTest("serial_unittest.js", "testReceiveErrorDeviceLost");
 }
 
+TEST_F(SerialApiTest, ReceiveErrorBreak) {
+  io_handler_ =
+      new ReceiveErrorTestIoHandler(device::serial::RECEIVE_ERROR_BREAK);
+  RunTest("serial_unittest.js", "testReceiveErrorBreak");
+}
+
+TEST_F(SerialApiTest, ReceiveErrorFrameError) {
+  io_handler_ =
+      new ReceiveErrorTestIoHandler(device::serial::RECEIVE_ERROR_FRAME_ERROR);
+  RunTest("serial_unittest.js", "testReceiveErrorFrameError");
+}
+
+TEST_F(SerialApiTest, ReceiveErrorOverrun) {
+  io_handler_ =
+      new ReceiveErrorTestIoHandler(device::serial::RECEIVE_ERROR_OVERRUN);
+  RunTest("serial_unittest.js", "testReceiveErrorOverrun");
+}
+
+TEST_F(SerialApiTest, ReceiveErrorBufferOverflow) {
+  io_handler_ = new ReceiveErrorTestIoHandler(
+      device::serial::RECEIVE_ERROR_BUFFER_OVERFLOW);
+  RunTest("serial_unittest.js", "testReceiveErrorBufferOverflow");
+}
+
+TEST_F(SerialApiTest, ReceiveErrorParityError) {
+  io_handler_ =
+      new ReceiveErrorTestIoHandler(device::serial::RECEIVE_ERROR_PARITY_ERROR);
+  RunTest("serial_unittest.js", "testReceiveErrorParityError");
+}
+
 TEST_F(SerialApiTest, ReceiveErrorSystemError) {
   io_handler_ =
       new ReceiveErrorTestIoHandler(device::serial::RECEIVE_ERROR_SYSTEM_ERROR);
@@ -652,21 +688,22 @@ TEST_F(SerialApiTest, SendUnknownConnectionId) {
   RunTest("serial_unittest.js", "testSendUnknownConnectionId");
 }
 
-TEST_F(SerialApiTest, StashAndRestoreDuringEcho) {
+// Note: these tests are disabled, since there is no good story for persisting
+// the stashed handles when an extension process is shut down. See
+// https://crbug.com/538774
+TEST_F(SerialApiTest, DISABLED_StashAndRestoreDuringEcho) {
   ASSERT_NO_FATAL_FAILURE(RunTest("serial_unittest.js", "testSendAndStash"));
-  env()->context()->DispatchOnUnloadEvent();
   scoped_ptr<ModuleSystemTestEnvironment> new_env(CreateEnvironment());
   ApiTestEnvironment new_api_test_env(new_env.get());
   PrepareEnvironment(&new_api_test_env, stash_backend_.get());
   new_api_test_env.RunTest("serial_unittest.js", "testRestoreAndReceive");
 }
 
-TEST_F(SerialApiTest, StashAndRestoreDuringEchoError) {
+TEST_F(SerialApiTest, DISABLED_StashAndRestoreDuringEchoError) {
   io_handler_ =
       new ReceiveErrorTestIoHandler(device::serial::RECEIVE_ERROR_DEVICE_LOST);
   ASSERT_NO_FATAL_FAILURE(
       RunTest("serial_unittest.js", "testRestoreAndReceiveErrorSetUp"));
-  env()->context()->DispatchOnUnloadEvent();
   scoped_ptr<ModuleSystemTestEnvironment> new_env(CreateEnvironment());
   ApiTestEnvironment new_api_test_env(new_env.get());
   PrepareEnvironment(&new_api_test_env, stash_backend_.get());
@@ -676,7 +713,6 @@ TEST_F(SerialApiTest, StashAndRestoreDuringEchoError) {
 TEST_F(SerialApiTest, StashAndRestoreNoConnections) {
   ASSERT_NO_FATAL_FAILURE(
       RunTest("serial_unittest.js", "testStashNoConnections"));
-  env()->context()->DispatchOnUnloadEvent();
   io_handler_ = nullptr;
   scoped_ptr<ModuleSystemTestEnvironment> new_env(CreateEnvironment());
   ApiTestEnvironment new_api_test_env(new_env.get());

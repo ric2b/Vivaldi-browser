@@ -4,11 +4,14 @@
 
 #include "chrome/browser/extensions/api/storage/managed_value_store_cache.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/storage/policy_value_store.h"
@@ -43,7 +46,7 @@ using content::BrowserThread;
 namespace extensions {
 class ExtensionRegistry;
 
-namespace storage = core_api::storage;
+namespace storage = api::storage;
 
 namespace {
 
@@ -75,7 +78,6 @@ class ManagedValueStoreCache::ExtensionTracker
   void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
                                   const Extension* extension,
                                   bool is_update,
-                                  bool from_ephemeral,
                                   const std::string& old_name) override;
   void OnExtensionUninstalled(content::BrowserContext* browser_context,
                               const Extension* extension,
@@ -122,7 +124,6 @@ void ManagedValueStoreCache::ExtensionTracker::OnExtensionWillBeInstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     bool is_update,
-    bool from_ephemeral,
     const std::string& old_name) {
   // Some extensions are installed on the first run before the ExtensionSystem
   // becomes ready. Wait until all of them are ready before registering the
@@ -132,7 +133,7 @@ void ManagedValueStoreCache::ExtensionTracker::OnExtensionWillBeInstalled(
     return;
   scoped_ptr<ExtensionSet> added(new ExtensionSet);
   added->Insert(extension);
-  LoadSchemas(added.Pass());
+  LoadSchemas(std::move(added));
 }
 
 void ManagedValueStoreCache::ExtensionTracker::OnExtensionUninstalled(

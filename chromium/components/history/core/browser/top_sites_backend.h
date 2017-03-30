@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/history/core/browser/history_types.h"
@@ -70,6 +71,9 @@ class TopSitesBackend : public base::RefCountedThreadSafe<TopSitesBackend> {
   // finished processing a request.
   void DoEmptyRequest(const base::Closure& reply,
                       base::CancelableTaskTracker* tracker);
+
+  // Vivaldi: Vacuums the database.
+  void VacuumDatabase();
 
  private:
   friend class base::RefCountedThreadSafe<TopSitesBackend>;

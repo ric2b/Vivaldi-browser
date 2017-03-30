@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/ui/browser.h"
@@ -75,7 +77,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest,
       DictionaryBuilder()
           .Set("manifest_version", 2)
           .Set("name", "Extension for options param test")
-          .Set("options_ui", DictionaryBuilder().Set("page", "options.html"))
+          .Set("options_ui",
+               std::move(DictionaryBuilder().Set("page", "options.html")))
           .Set("version", "1")
           .ToJSON());
 

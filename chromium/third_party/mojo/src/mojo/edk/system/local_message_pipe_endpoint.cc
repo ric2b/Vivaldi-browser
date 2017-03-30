@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/local_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/local_message_pipe_endpoint.h"
 
 #include <string.h>
+#include <utility>
 
 #include "base/logging.h"
-#include "mojo/edk/system/dispatcher.h"
-#include "mojo/edk/system/message_in_transit.h"
+#include "third_party/mojo/src/mojo/edk/system/dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit.h"
 
 namespace mojo {
 namespace system {
@@ -49,7 +50,7 @@ void LocalMessagePipeEndpoint::EnqueueMessage(
   DCHECK(is_peer_open_);
 
   bool was_empty = message_queue_.IsEmpty();
-  message_queue_.AddMessage(message.Pass());
+  message_queue_.AddMessage(std::move(message));
   if (was_empty)
     awakable_list_.AwakeForStateChange(GetHandleSignalsState());
 }
@@ -150,7 +151,7 @@ HandleSignalsState LocalMessagePipeEndpoint::GetHandleSignalsState() const {
 MojoResult LocalMessagePipeEndpoint::AddAwakable(
     Awakable* awakable,
     MojoHandleSignals signals,
-    uint32_t context,
+    uintptr_t context,
     HandleSignalsState* signals_state) {
   DCHECK(is_open_);
 

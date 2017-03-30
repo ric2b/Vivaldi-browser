@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/i18n/time_formatting.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/identity/identity_api.h"
@@ -139,11 +140,17 @@ IdentityInternalsUIMessageHandler::~IdentityInternalsUIMessageHandler() {}
 
 void IdentityInternalsUIMessageHandler::OnTokenRevokerDone(
     IdentityInternalsTokenRevoker* token_revoker) {
+  extensions::IdentityAPI* api =
+      extensions::IdentityAPI::GetFactoryInstance()->Get(
+          Profile::FromWebUI(web_ui()));
+  // API can be null in incognito, but then we shouldn't be in this function.
+  // This case is handled because this is called from a renderer process
+  // which could conceivably be compromised.
+  CHECK(api);
+
   // Remove token from the cache.
-  extensions::IdentityAPI::GetFactoryInstance()
-      ->Get(Profile::FromWebUI(web_ui()))
-      ->EraseCachedToken(token_revoker->extension_id(),
-                         token_revoker->access_token());
+  api->EraseCachedToken(token_revoker->extension_id(),
+                        token_revoker->access_token());
 
   // Update view about the token being removed.
   base::ListValue result;
@@ -219,10 +226,13 @@ base::DictionaryValue* IdentityInternalsUIMessageHandler::GetInfoForToken(
 void IdentityInternalsUIMessageHandler::GetInfoForAllTokens(
     const base::ListValue* args) {
   base::ListValue results;
-  extensions::IdentityAPI::CachedTokens tokens =
-      extensions::IdentityAPI::GetFactoryInstance()
-          ->Get(Profile::FromWebUI(web_ui()))
-          ->GetAllCachedTokens();
+  extensions::IdentityAPI::CachedTokens tokens;
+  // The API can be null in incognito.
+  extensions::IdentityAPI* api =
+      extensions::IdentityAPI::GetFactoryInstance()->Get(
+          Profile::FromWebUI(web_ui()));
+  if (api)
+    tokens = api->GetAllCachedTokens();
   for (extensions::IdentityAPI::CachedTokens::const_iterator
            iter = tokens.begin(); iter != tokens.end(); ++iter) {
     results.Append(GetInfoForToken(iter->first, iter->second));

@@ -4,7 +4,10 @@
 
 #include "content/renderer/pepper/pepper_file_chooser_host.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/pepper_file_ref_renderer_host.h"
@@ -27,10 +30,10 @@ class PepperFileChooserHost::CompletionHandler
   explicit CompletionHandler(const base::WeakPtr<PepperFileChooserHost>& host)
       : host_(host) {}
 
-  virtual ~CompletionHandler() {}
+  ~CompletionHandler() override {}
 
-  virtual void didChooseFile(
-      const blink::WebVector<blink::WebString>& file_names) {
+  void didChooseFile(
+      const blink::WebVector<blink::WebString>& file_names) override {
     if (host_.get()) {
       std::vector<PepperFileChooserHost::ChosenFileInfo> files;
       for (size_t i = 0; i < file_names.size(); i++) {
@@ -43,8 +46,8 @@ class PepperFileChooserHost::CompletionHandler
     // It is the responsibility of this method to delete the instance.
     delete this;
   }
-  virtual void didChooseFile(
-      const blink::WebVector<SelectedFileInfo>& file_names) {
+  void didChooseFile(
+      const blink::WebVector<SelectedFileInfo>& file_names) override {
     if (host_.get()) {
       std::vector<PepperFileChooserHost::ChosenFileInfo> files;
       for (size_t i = 0; i < file_names.size(); i++) {
@@ -149,6 +152,7 @@ int32_t PepperFileChooserHost::OnShow(
   params.acceptTypes = mime_types;
   params.directory = false;
   params.needLocalPath = true;
+  params.requestor = renderer_ppapi_host_->GetDocumentURL(pp_instance());
 
   handler_ = new CompletionHandler(AsWeakPtr());
   RenderViewImpl* render_view = static_cast<RenderViewImpl*>(

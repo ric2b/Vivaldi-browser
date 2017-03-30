@@ -50,7 +50,6 @@ cr.define('options', function() {
       $('import-browsers').onchange = function() {
         self.updateCheckboxes_();
         self.validateCommitButton_();
-        self.updateBottomBar_();
       };
 
       $('import-data-commit').onclick = function() {
@@ -60,11 +59,7 @@ cr.define('options', function() {
             String($('import-favorites').checked),
             String($('import-passwords').checked),
             String($('import-search').checked),
-            String($('import-autofill-form-data').checked),
-            String($('import-notes').checked),
-            String($('useOperaDefaultLocation').checked),
-            String() // master password
-        ]);
+            String($('import-autofill-form-data').checked)]);
       };
 
       $('import-data-cancel').onclick = function() {
@@ -72,8 +67,7 @@ cr.define('options', function() {
       };
 
       $('import-choose-file').onclick = function() {
-          chrome.send('chooseBookmarksFile', [ 
-              String($('import-browsers').selectedIndex)]);
+        chrome.send('chooseBookmarksFile');
       };
 
       $('import-data-confirm').onclick = function() {
@@ -92,8 +86,7 @@ cr.define('options', function() {
       var somethingToImport =
           importable('history') || importable('favorites') ||
           importable('passwords') || importable('search') ||
-          importable('autofill-form-data') ||
-          importable('notes');
+          importable('autofill-form-data');
       $('import-data-commit').disabled = !somethingToImport;
       $('import-choose-file').disabled = !$('import-favorites').checked;
     },
@@ -109,9 +102,6 @@ cr.define('options', function() {
         this.setUpCheckboxState_(checkboxes[i], enabled);
       $('import-data-commit').disabled = !enabled;
       $('import-choose-file').hidden = !enabled;
-<if expr="is_macosx">
-      $('mac-password-keychain').hidden = !enabled;
-</if>
     },
 
     /**
@@ -126,21 +116,14 @@ cr.define('options', function() {
     },
 
     /**
-     * Update the enabled and checked states of all checkboxes.
+     * Update the enabled and visible states of all the checkboxes.
      * @private
      */
     updateCheckboxes_: function() {
       var index = $('import-browsers').selectedIndex;
-      var bookmarksFileSelected = (index == this.browserProfiles.length - 1 || index == this.browserProfiles.length - 2);
+      var bookmarksFileSelected = index == this.browserProfiles.length - 1;
       $('import-choose-file').hidden = !bookmarksFileSelected;
       $('import-data-commit').hidden = bookmarksFileSelected;
-    
-      var x = $('import-browsers').options;
- 
-      var indexTest = x[index].text;        
-
-      var operaDefaultProfil = (indexTest == "Opera");
-      $('useOperaDefault').hidden = !operaDefaultProfil;
 
       var browserProfile;
       if (this.browserProfiles.length > index)
@@ -149,30 +132,13 @@ cr.define('options', function() {
                            'favorites',
                            'passwords',
                            'search',
-                           'autofill-form-data',
-                           'notes'
-                           ];
+                           'autofill-form-data'];
       for (var i = 0; i < importOptions.length; i++) {
         var id = 'import-' + importOptions[i];
         var enable = browserProfile && browserProfile[importOptions[i]];
         this.setUpCheckboxState_($(id), enable);
         $(id + '-with-label').hidden = !enable;
       }
-    },
-
-    /**
-     * Show or hide gray message at the bottom.
-     * @private
-     */
-    updateBottomBar_: function() {
-      var index = $('import-browsers').selectedIndex;
-      var browserProfile;
-      if (this.browserProfiles.length > index)
-        browserProfile = this.browserProfiles[index];
-      var enable = browserProfile && browserProfile['show_bottom_bar'];
-<if expr="is_macosx">
-      $('mac-password-keychain').hidden = !enable;
-</if>
     },
 
     /**
@@ -184,7 +150,6 @@ cr.define('options', function() {
       this.browserProfiles = browsers;
       var browserSelect = $('import-browsers');
       browserSelect.remove(0);  // Remove the 'Loading...' option.
-
       browserSelect.textContent = '';
       var browserCount = browsers.length;
 
@@ -203,7 +168,6 @@ cr.define('options', function() {
 
         this.updateCheckboxes_();
         this.validateCommitButton_();
-        this.updateBottomBar_();
       }
     },
 
@@ -218,8 +182,7 @@ cr.define('options', function() {
                          'import_bookmarks',
                          'import_saved_passwords',
                          'import_search_engine',
-                         'import_autofill_form_data',
-						 'import_notes'];
+                         'import_autofill_form_data'];
       for (var i = 0; i < importPrefs.length; i++)
         Preferences.clearPref(importPrefs[i], true);
     },
@@ -243,18 +206,6 @@ cr.define('options', function() {
   ImportDataOverlay.clearUserPrefs = function() {
     ImportDataOverlay.getInstance().clearUserPrefs_();
   };
-
-
-    /**
-   * Gets state if a default Opera profile is 
-   * @param bool if default Opera profile is found
-   */
-  ImportDataOverlay.operaProfile = function(foundOperaProfile) {
-      $('useOperaDefaultLocation').disabled = !foundOperaProfile;
-      if(foundOperaProfile)
-        $('useOperaDefaultLocation').checked = true;
-  };
-
 
   /**
    * Update the supported browsers popup with given entries.

@@ -7,10 +7,9 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 
 namespace remoting {
-
-const char kDaemonPipeSwitchName[] = "daemon-pipe";
 
 const base::FilePath::CharType kHostBinaryName[] =
     FILE_PATH_LITERAL("remoting_host");

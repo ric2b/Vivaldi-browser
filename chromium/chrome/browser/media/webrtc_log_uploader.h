@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_MEDIA_WEBRTC_LOG_UPLOADER_H_
 #define CHROME_BROWSER_MEDIA_WEBRTC_LOG_UPLOADER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/media/webrtc_logging_handler_host.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -46,12 +48,6 @@ class WebRtcLogUploader : public net::URLFetcherDelegate {
  public:
   WebRtcLogUploader();
   ~WebRtcLogUploader() override;
-
-  // net::URLFetcherDelegate implementation.
-  void OnURLFetchComplete(const net::URLFetcher* source) override;
-  void OnURLFetchUploadProgress(const net::URLFetcher* source,
-                                int64 current,
-                                int64 total) override;
 
   // Returns true is number of logs limit is not reached yet. Increases log
   // count if true is returned. Must be called before UploadLog().
@@ -107,6 +103,12 @@ class WebRtcLogUploader : public net::URLFetcherDelegate {
   FRIEND_TEST_ALL_PREFIXES(WebRtcLogUploaderTest,
                            AddUploadedLogInfoToUploadListFile);
 
+  // net::URLFetcherDelegate implementation.
+  void OnURLFetchComplete(const net::URLFetcher* source) override;
+  void OnURLFetchUploadProgress(const net::URLFetcher* source,
+                                int64_t current,
+                                int64_t total) override;
+
   // Sets up a multipart body to be uploaded. The body is produced according
   // to RFC 2046.
   void SetupMultipart(std::string* post_data,
@@ -121,17 +123,26 @@ class WebRtcLogUploader : public net::URLFetcherDelegate {
   void ResizeForNextOutput(std::string* compressed_log,
                            z_stream* stream);
 
-  void CreateAndStartURLFetcher(
+  void UploadCompressedLog(
       const WebRtcLogUploadDoneData& upload_done_data,
       scoped_ptr<std::string> post_data);
 
+  // A couple of helper functions due to having to hop to the UI thread
+  // to fetch the system_request_context and back again to the IO thread.
+  void SetRequestContextOnUIThread(
+      net::URLFetcher* url_fetcher, const WebRtcLogUploadDoneData& data);
+  void StartAndTrackRequestContext(
+      net::URLFetcher* url_fetcher, const WebRtcLogUploadDoneData& data);
+
   void DecreaseLogCount();
+
+  void ShutdownOnIOThread();
 
   // Must be called on the FILE thread.
   void WriteCompressedLogToFile(const std::string& compressed_log,
                                 const base::FilePath& log_file_path);
 
-  void UploadCompressedLog(
+  void PrepareMultipartPostData(
       const std::string& compressed_log,
       scoped_ptr<MetaDataMap> meta_data,
       const WebRtcLogUploadDoneData& upload_done_data);
@@ -170,7 +181,7 @@ class WebRtcLogUploader : public net::URLFetcherDelegate {
   // This is the FILE thread for Chromium. Some other thread for tests.
   base::ThreadChecker file_thread_checker_;
 
-  // Keeps track of number of currently open logs. Must be accessed on the UI
+  // Keeps track of number of currently open logs. Must be accessed on the IO
   // thread.
   int log_count_;
 
@@ -180,7 +191,7 @@ class WebRtcLogUploader : public net::URLFetcherDelegate {
 
   typedef std::map<const net::URLFetcher*, WebRtcLogUploadDoneData>
       UploadDoneDataMap;
-  // Only accessed on the UI thread.
+  // Only accessed on the IO thread.
   UploadDoneDataMap upload_done_data_;
 
   // When shutting down, don't create new URLFetchers.

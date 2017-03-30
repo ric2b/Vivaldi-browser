@@ -4,13 +4,17 @@
 
 #include "chrome/browser/supervised_user/legacy/supervised_user_registration_utility.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
@@ -171,10 +175,8 @@ SupervisedUserRegistrationUtility::Create(Profile* profile) {
   SupervisedUserSharedSettingsService* supervised_user_shared_settings_service =
       SupervisedUserSharedSettingsServiceFactory::GetForBrowserContext(profile);
   return make_scoped_ptr(SupervisedUserRegistrationUtility::CreateImpl(
-      profile->GetPrefs(),
-      token_fetcher.Pass(),
-      supervised_user_sync_service,
-      supervised_user_shared_settings_service));
+      profile->GetPrefs(), std::move(token_fetcher),
+      supervised_user_sync_service, supervised_user_shared_settings_service));
 }
 
 // static
@@ -199,10 +201,8 @@ SupervisedUserRegistrationUtility::CreateImpl(
       scoped_ptr<SupervisedUserRefreshTokenFetcher> token_fetcher,
       SupervisedUserSyncService* service,
       SupervisedUserSharedSettingsService* shared_settings_service) {
-  return new SupervisedUserRegistrationUtilityImpl(prefs,
-                                                   token_fetcher.Pass(),
-                                                   service,
-                                                   shared_settings_service);
+  return new SupervisedUserRegistrationUtilityImpl(
+      prefs, std::move(token_fetcher), service, shared_settings_service);
 }
 
 namespace {
@@ -213,7 +213,7 @@ SupervisedUserRegistrationUtilityImpl::SupervisedUserRegistrationUtilityImpl(
     SupervisedUserSyncService* service,
     SupervisedUserSharedSettingsService* shared_settings_service)
     : prefs_(prefs),
-      token_fetcher_(token_fetcher.Pass()),
+      token_fetcher_(std::move(token_fetcher)),
       supervised_user_sync_service_(service),
       supervised_user_shared_settings_service_(shared_settings_service),
       pending_supervised_user_acknowledged_(false),

@@ -5,9 +5,8 @@
 #ifndef COMPONENTS_UI_ZOOM_ZOOM_CONTROLLER_H_
 #define COMPONENTS_UI_ZOOM_ZOOM_CONTROLLER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -28,6 +27,7 @@ class ZoomObserver;
 class ZoomRequestClient : public base::RefCounted<ZoomRequestClient> {
  public:
   ZoomRequestClient() {}
+  virtual bool ShouldSuppressBubble() const = 0;
 
  protected:
   virtual ~ZoomRequestClient() {}

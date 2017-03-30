@@ -8,47 +8,41 @@
 #include "base/time/time.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/eme_constants.h"
-#include "media/base/media_export.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/ranges.h"
-#include "third_party/WebKit/public/platform/WebCallbacks.h"
+#include "media/blink/media_blink_export.h"
 #include "third_party/WebKit/public/platform/WebEncryptedMediaTypes.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
-#include "third_party/WebKit/public/platform/WebSetSinkIdError.h"
+#include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
 #include "third_party/WebKit/public/platform/WebTimeRange.h"
 #include "url/gurl.h"
 
 namespace media {
 
-// Platform independent method for converting and rounding floating point
-// seconds to an int64 timestamp.
-//
-// Refer to https://bugs.webkit.org/show_bug.cgi?id=52697 for details.
-base::TimeDelta MEDIA_EXPORT ConvertSecondsToTimestamp(double seconds);
+blink::WebTimeRanges MEDIA_BLINK_EXPORT
+ConvertToWebTimeRanges(const Ranges<base::TimeDelta>& ranges);
 
-blink::WebTimeRanges MEDIA_EXPORT ConvertToWebTimeRanges(
-    const Ranges<base::TimeDelta>& ranges);
-
-blink::WebMediaPlayer::NetworkState MEDIA_EXPORT PipelineErrorToNetworkState(
-    PipelineStatus error);
+blink::WebMediaPlayer::NetworkState MEDIA_BLINK_EXPORT
+PipelineErrorToNetworkState(PipelineStatus error);
 
 // Report various metrics to UMA and RAPPOR.
-void MEDIA_EXPORT ReportMetrics(blink::WebMediaPlayer::LoadType load_type,
-                                const GURL& url,
-                                const GURL& origin_url);
+void MEDIA_BLINK_EXPORT ReportMetrics(blink::WebMediaPlayer::LoadType load_type,
+                                      const GURL& url,
+                                      const GURL& origin_url);
+
+// Record a RAPPOR metric for the origin of an HLS playback.
+void MEDIA_BLINK_EXPORT RecordOriginOfHLSPlayback(const GURL& origin_url);
 
 // Convert Initialization Data Types.
-EmeInitDataType MEDIA_EXPORT
+EmeInitDataType MEDIA_BLINK_EXPORT
 ConvertToEmeInitDataType(blink::WebEncryptedMediaInitDataType init_data_type);
-blink::WebEncryptedMediaInitDataType MEDIA_EXPORT
+blink::WebEncryptedMediaInitDataType MEDIA_BLINK_EXPORT
 ConvertToWebInitDataType(EmeInitDataType init_data_type);
 
-typedef blink::WebCallbacks<void, blink::WebSetSinkIdError> WebSetSinkIdCB;
-
-// Wraps a WebSetSinkIdCB into a media::SwitchOutputDeviceCB
+// Wraps a blink::WebSetSinkIdCallbacks into a media::SwitchOutputDeviceCB
 // and binds it to the current thread
-SwitchOutputDeviceCB MEDIA_EXPORT
-ConvertToSwitchOutputDeviceCB(WebSetSinkIdCB* web_callbacks);
+SwitchOutputDeviceCB MEDIA_BLINK_EXPORT
+ConvertToSwitchOutputDeviceCB(blink::WebSetSinkIdCallbacks* web_callbacks);
 
 }  // namespace media
 

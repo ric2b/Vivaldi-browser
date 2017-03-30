@@ -6,18 +6,26 @@
 #define CONTENT_PUBLIC_TEST_TEST_UTILS_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/browser/web_contents_observer.h"
+
+#if defined(OS_ANDROID)
+#include <jni.h>
+#endif
 
 namespace base {
 class Value;
+class CommandLine;
 }  // namespace base
 
 // A collection of functions designed for use with unit and browser tests.
@@ -58,6 +66,20 @@ base::Closure GetQuitTaskForRunLoop(base::RunLoop* run_loop);
 // browser_test_utils is preferable.
 scoped_ptr<base::Value> ExecuteScriptAndGetValue(
     RenderFrameHost* render_frame_host, const std::string& script);
+
+// Returns true if all sites are isolated. Typically used to bail from a test
+// that is incompatible with --site-per-process.
+bool AreAllSitesIsolatedForTesting();
+
+// Appends --site-per-process to the command line, enabling tests to exercise
+// site isolation and cross-process iframes. This must be called early in
+// the test; the flag will be read on the first real navigation.
+void IsolateAllSitesForTesting(base::CommandLine* command_line);
+
+#if defined(OS_ANDROID)
+// Registers content/browser JNI bindings necessary for some types of tests.
+bool RegisterJniForTesting(JNIEnv* env);
+#endif
 
 // Helper class to Run and Quit the message loop. Run and Quit can only happen
 // once per instance. Make a new instance for each use. Calling Quit after Run
@@ -215,6 +237,46 @@ class InProcessUtilityThreadHelper : public BrowserChildProcessObserver {
   scoped_refptr<MessageLoopRunner> runner_;
 
   DISALLOW_COPY_AND_ASSIGN(InProcessUtilityThreadHelper);
+};
+
+// This observer keeps track of the last deleted RenderFrame to avoid
+// accessing it and causing use-after-free condition.
+class RenderFrameDeletedObserver : public WebContentsObserver {
+ public:
+  RenderFrameDeletedObserver(RenderFrameHost* rfh);
+  ~RenderFrameDeletedObserver() override;
+
+  // Overridden WebContentsObserver methods.
+  void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
+
+  void WaitUntilDeleted();
+  bool deleted();
+
+ private:
+  int process_id_;
+  int routing_id_;
+  bool deleted_;
+  scoped_ptr<base::RunLoop> runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderFrameDeletedObserver);
+};
+
+// Watches a WebContents and blocks until it is destroyed.
+class WebContentsDestroyedWatcher : public WebContentsObserver {
+ public:
+  explicit WebContentsDestroyedWatcher(WebContents* web_contents);
+  ~WebContentsDestroyedWatcher() override;
+
+  // Waits until the WebContents is destroyed.
+  void Wait();
+
+ private:
+  // Overridden WebContentsObserver methods.
+  void WebContentsDestroyed() override;
+
+  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebContentsDestroyedWatcher);
 };
 
 }  // namespace content

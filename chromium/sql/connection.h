@@ -5,6 +5,7 @@
 #ifndef SQL_CONNECTION_H_
 #define SQL_CONNECTION_H_
 
+#include <stddef.h>
 #include <stdint.h>
 #include <map>
 #include <set>
@@ -13,6 +14,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -30,6 +32,7 @@ class HistogramBase;
 
 namespace sql {
 
+class ConnectionMemoryDumpProvider;
 class Recovery;
 class Statement;
 
@@ -146,6 +149,12 @@ class SQL_EXPORT Connection {
   // other platforms.
   void set_restrict_to_user() { restrict_to_user_ = true; }
 
+  // Call to opt out of memory-mapped file I/O on per connection basis.
+  void set_mmap_disabled() { mmap_disabled_ = true; }
+
+  // Call to opt out of memory-mapped file I/O on all connections.
+  static void set_mmap_disabled_by_default();
+
   // Set an error-handling callback.  On errors, the error number (and
   // statement, if available) will be passed to the callback.
   //
@@ -198,6 +207,19 @@ class SQL_EXPORT Connection {
     EVENT_BEGIN,
     EVENT_COMMIT,
     EVENT_ROLLBACK,
+
+    // Track success and failure in GetAppropriateMmapSize().
+    // GetAppropriateMmapSize() should record at most one of these per run.  The
+    // case of mapping everything is not recorded.
+    EVENT_MMAP_META_MISSING,         // No meta table present.
+    EVENT_MMAP_META_FAILURE_READ,    // Failed reading meta table.
+    EVENT_MMAP_META_FAILURE_UPDATE,  // Failed updating meta table.
+    EVENT_MMAP_VFS_FAILURE,          // Failed to access VFS.
+    EVENT_MMAP_FAILED,               // Failure from past run.
+    EVENT_MMAP_FAILED_NEW,           // Read error in this run.
+    EVENT_MMAP_SUCCESS_NEW,          // Read to EOF in this run.
+    EVENT_MMAP_SUCCESS_PARTIAL,      // Read but did not reach EOF.
+    EVENT_MMAP_SUCCESS_NO_PROGRESS,  // Read quota exhausted.
 
     // Leave this at the end.
     // TODO(shess): |EVENT_MAX| causes compile fail on Windows.
@@ -461,6 +483,15 @@ class SQL_EXPORT Connection {
   // tests.
   static bool ShouldIgnoreSqliteError(int error);
 
+  // Additionally ignores errors which are unlikely to be caused by problems
+  // with the syntax of a SQL statement, or problems with the database schema.
+  static bool ShouldIgnoreSqliteCompileError(int error);
+
+  // Collect various diagnostic information and post a crash dump to aid
+  // debugging.  Dump rate per database is limited to prevent overwhelming the
+  // crash server.
+  void ReportDiagnosticInfo(int extended_error, Statement* stmt);
+
  private:
   // For recovery module.
   friend class Recovery;
@@ -475,6 +506,11 @@ class SQL_EXPORT Connection {
   friend class test::ScopedCommitHook;
   friend class test::ScopedScalarFunction;
   friend class test::ScopedMockTimeSource;
+
+  FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, CollectDiagnosticInfo);
+  FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, GetAppropriateMmapSize);
+  FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, OnMemoryDump);
+  FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, RegisterIntentToUpload);
 
   // Internal initialize function used by both Init and InitInMemory. The file
   // name is always 8 bits since we want to use the 8-bit version of
@@ -495,7 +531,7 @@ class SQL_EXPORT Connection {
   // Check whether the current thread is allowed to make IO calls, but only
   // if database wasn't open in memory. Function is inlined to be a no-op in
   // official build.
-  void AssertIOAllowed() {
+  void AssertIOAllowed() const {
     if (!in_memory_)
       base::ThreadRestrictions::AssertIOAllowed();
   }
@@ -638,6 +674,49 @@ class SQL_EXPORT Connection {
     return clock_->Now();
   }
 
+  // Release page-cache memory if memory-mapped I/O is enabled and the database
+  // was changed.  Passing true for |implicit_change_performed| allows
+  // overriding the change detection for cases like DDL (CREATE, DROP, etc),
+  // which do not participate in the total-rows-changed tracking.
+  void ReleaseCacheMemoryIfNeeded(bool implicit_change_performed);
+
+  // Returns the results of sqlite3_db_filename(), which should match the path
+  // passed to Open().
+  base::FilePath DbPath() const;
+
+  // Helper to prevent uploading too many diagnostic dumps for a given database,
+  // since every dump will likely show the same problem.  Returns |true| if this
+  // function was not previously called for this database, and the persistent
+  // storage which tracks state was updated.
+  //
+  // |false| is returned if the function was previously called for this
+  // database, even across restarts.  |false| is also returned if the persistent
+  // storage cannot be updated, possibly indicating problems requiring user or
+  // admin intervention, such as filesystem corruption or disk full.  |false| is
+  // also returned if the persistent storage contains invalid data or is not
+  // readable.
+  //
+  // TODO(shess): It would make sense to reset the persistent state if the
+  // database is razed or recovered, or if the diagnostic code adds new
+  // capabilities.
+  bool RegisterIntentToUpload() const;
+
+  // Helper to collect diagnostic info for a corrupt database.
+  std::string CollectCorruptionInfo();
+
+  // Helper to collect diagnostic info for errors.
+  std::string CollectErrorInfo(int error, Statement* stmt) const;
+
+  // Calculates a value appropriate to pass to "PRAGMA mmap_size = ".  So errors
+  // can make it unsafe to map a file, so the file is read using regular I/O,
+  // with any errors causing 0 (don't map anything) to be returned.  If the
+  // entire file is read without error, a large value is returned which will
+  // allow the entire file to be mapped in most cases.
+  //
+  // Results are recorded in the database's meta table for future reference, so
+  // the file should only be read through once.
+  size_t GetAppropriateMmapSize();
+
   // The actual sqlite database. Will be NULL before Init has been called or if
   // Init resulted in an error.
   sqlite3* db_;
@@ -679,6 +758,17 @@ class SQL_EXPORT Connection {
   // databases.
   bool poisoned_;
 
+  // |true| if SQLite memory-mapped I/O is not desired for this connection.
+  bool mmap_disabled_;
+
+  // |true| if SQLite memory-mapped I/O was enabled for this connection.
+  // Used by ReleaseCacheMemoryIfNeeded().
+  bool mmap_enabled_;
+
+  // Used by ReleaseCacheMemoryIfNeeded() to track if new changes have happened
+  // since memory was last released.
+  int total_changes_at_last_release_;
+
   ErrorCallback error_callback_;
 
   // Tag for auxiliary histograms.
@@ -703,6 +793,9 @@ class SQL_EXPORT Connection {
   // Source for timing information, provided to allow tests to inject time
   // changes.
   scoped_ptr<TimeSource> clock_;
+
+  // Stores the dump provider object when db is open.
+  scoped_ptr<ConnectionMemoryDumpProvider> memory_dump_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(Connection);
 };

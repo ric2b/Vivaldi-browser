@@ -6,6 +6,7 @@
 #define CC_LAYERS_DELEGATED_RENDERER_LAYER_H_
 
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
@@ -44,7 +45,7 @@ class CC_EXPORT DelegatedRendererLayer : public Layer {
   bool should_collect_new_frame_;
 
   DelegatedFrameData* frame_data_;
-  gfx::RectF frame_damage_;
+  gfx::Rect frame_damage_;
 
   base::WeakPtrFactory<DelegatedRendererLayer> weak_ptrs_;
 

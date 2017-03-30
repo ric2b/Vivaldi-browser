@@ -14,9 +14,7 @@
 #include "base/memory/ref_counted_delete_on_message_loop.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "components/sync_driver/data_type_error_handler.h"
-#include "sync/api/sync_merge_result.h"
 #include "sync/internal_api/public/base/model_type.h"
-#include "sync/internal_api/public/engine/model_safe_worker.h"
 #include "sync/internal_api/public/util/unrecoverable_error_handler.h"
 
 namespace base {
@@ -25,12 +23,11 @@ class SingleThreadTaskRunner;
 
 namespace syncer {
 class SyncError;
-struct UserShare;
+class SyncMergeResult;
 }
 
 namespace sync_driver {
-
-class ChangeProcessor;
+class BackendDataTypeConfigurer;
 
 // Data type controllers need to be refcounted threadsafe, as they may
 // need to run model associator or change processor on other threads.
@@ -39,20 +36,20 @@ class DataTypeController
       public DataTypeErrorHandler {
  public:
   enum State {
-    NOT_RUNNING,    // The controller has never been started or has
-                    // previously been stopped.  Must be in this state to start.
-    MODEL_STARTING, // The controller is waiting on dependent services
-                    // that need to be available before model
-                    // association.
-    MODEL_LOADED,   // The model has finished loading and can start
-                    // associating now.
-    ASSOCIATING,    // Model association is in progress.
-    RUNNING,        // The controller is running and the data type is
-                    // in sync with the cloud.
-    STOPPING,       // The controller is in the process of stopping
-                    // and is waiting for dependent services to stop.
-    DISABLED        // The controller was started but encountered an error
-                    // so it is disabled waiting for it to be stopped.
+    NOT_RUNNING,     // The controller has never been started or has previously
+                     // been stopped.  Must be in this state to start.
+    MODEL_STARTING,  // The controller is waiting on dependent services
+                     // that need to be available before model
+                     // association.
+    MODEL_LOADED,    // The model has finished loading and can start
+                     // associating now.
+    ASSOCIATING,     // Model association is in progress.
+    RUNNING,         // The controller is running and the data type is
+                     // in sync with the cloud.
+    STOPPING,        // The controller is in the process of stopping
+                     // and is waiting for dependent services to stop.
+    DISABLED         // The controller was started but encountered an error
+                     // so it is disabled waiting for it to be stopped.
   };
 
   // This enum is used for "Sync.*ConfigureFailre" histograms so the order
@@ -78,9 +75,6 @@ class DataTypeController
   typedef base::Callback<void(syncer::ModelType,
                               syncer::SyncError)> ModelLoadCallback;
 
-  typedef base::Callback<void(const tracked_objects::Location& location,
-                              const std::string&)> DisableTypeCallback;
-
   typedef std::map<syncer::ModelType,
                    scoped_refptr<DataTypeController> > TypeMap;
   typedef std::map<syncer::ModelType, DataTypeController::State> StateMap;
@@ -104,6 +98,16 @@ class DataTypeController
   // be invoked.
   virtual void StartAssociating(const StartCallback& start_callback) = 0;
 
+  // Called by DataTypeManager to activate the controlled data type using
+  // one of the implementation specific methods provided by the |configurer|.
+  // This is called (on UI thread) after the data type configuration has
+  // completed successfully.
+  virtual void ActivateDataType(BackendDataTypeConfigurer* configurer) = 0;
+
+  // Called by DataTypeManager to deactivate the controlled data type.
+  // See comments for ModelAssociationManager::OnSingleDataTypeWillStop.
+  virtual void DeactivateDataType(BackendDataTypeConfigurer* configurer) = 0;
+
   // Synchronously stops the data type. If StartAssociating has already been
   // called but is not done yet it will be aborted. Similarly if LoadModels
   // has not completed it will also be aborted.
@@ -120,15 +124,6 @@ class DataTypeController
   // Name of this data type.  For logging purposes only.
   virtual std::string name() const = 0;
 
-  // The model safe group of this data type.  This should reflect the
-  // thread that should be used to modify the data type's native
-  // model.
-  virtual syncer::ModelSafeGroup model_safe_group() const = 0;
-
-  // Access to the ChangeProcessor for the type being controlled by |this|.
-  // Returns NULL if the ChangeProcessor isn't created or connected.
-  virtual ChangeProcessor* GetChangeProcessor() const = 0;
-
   // Current state of the data type controller.
   virtual State state() const = 0;
 
@@ -138,10 +133,6 @@ class DataTypeController
       const tracked_objects::Location& location,
       const std::string& message,
       syncer::ModelType type) override;
-
-  // Called when the sync backend has initialized. |share| is the
-  // UserShare handle to associate model data with.
-  void OnUserShareReady(syncer::UserShare* share);
 
   // Whether the DataTypeController is ready to start. This is useful if the
   // datatype itself must make the decision about whether it should be enabled
@@ -154,24 +145,22 @@ class DataTypeController
   friend class base::RefCountedDeleteOnMessageLoop<DataTypeController>;
   friend class base::DeleteHelper<DataTypeController>;
 
-  DataTypeController(scoped_refptr<base::SingleThreadTaskRunner> ui_thread,
-                     const base::Closure& error_callback);
-
-  // If the DTC is waiting for models to load, once the models are
-  // loaded the datatype service will call this function on DTC to let
-  // us know that it is safe to start associating.
-  virtual void OnModelLoaded() = 0;
+  DataTypeController(
+      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
+      const base::Closure& error_callback);
 
   ~DataTypeController() override;
 
-  syncer::UserShare* user_share() const;
+  const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread() const {
+    return ui_thread_;
+  }
 
   // The callback that will be invoked when an unrecoverable error occurs.
   // TODO(sync): protected for use by legacy controllers.
   base::Closure error_callback_;
 
  private:
-  syncer::UserShare* user_share_;
+  const scoped_refptr<base::SingleThreadTaskRunner> ui_thread_;
 };
 
 }  // namespace sync_driver

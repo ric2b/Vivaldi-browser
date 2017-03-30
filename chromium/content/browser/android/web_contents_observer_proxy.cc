@@ -36,7 +36,9 @@ WebContentsObserverProxy::WebContentsObserverProxy(JNIEnv* env,
 WebContentsObserverProxy::~WebContentsObserverProxy() {
 }
 
-jlong Init(JNIEnv* env, jobject obj, jobject java_web_contents) {
+jlong Init(JNIEnv* env,
+           const JavaParamRef<jobject>& obj,
+           const JavaParamRef<jobject>& java_web_contents) {
   WebContents* web_contents =
       WebContents::FromJavaWebContents(java_web_contents);
   CHECK(web_contents);
@@ -46,7 +48,8 @@ jlong Init(JNIEnv* env, jobject obj, jobject java_web_contents) {
   return reinterpret_cast<intptr_t>(native_observer);
 }
 
-void WebContentsObserverProxy::Destroy(JNIEnv* env, jobject obj) {
+void WebContentsObserverProxy::Destroy(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
@@ -78,6 +81,9 @@ void WebContentsObserverProxy::DidStartLoading() {
   ScopedJavaLocalRef<jobject> obj(java_observer_);
   ScopedJavaLocalRef<jstring> jstring_url(
       ConvertUTF8ToJavaString(env, web_contents()->GetVisibleURL().spec()));
+  if (auto entry = web_contents()->GetController().GetPendingEntry()) {
+    base_url_of_last_started_data_url_ = entry->GetBaseURLForDataURL();
+  }
   Java_WebContentsObserverProxy_didStartLoading(env, obj.obj(),
                                                 jstring_url.obj());
 }
@@ -85,8 +91,12 @@ void WebContentsObserverProxy::DidStartLoading() {
 void WebContentsObserverProxy::DidStopLoading() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj(java_observer_);
+  std::string url_string = web_contents()->GetLastCommittedURL().spec();
+  SetToBaseURLForDataURLIfNeeded(&url_string);
+  // DidStopLoading is the last event we should get.
+  base_url_of_last_started_data_url_ = GURL::EmptyGURL();
   ScopedJavaLocalRef<jstring> jstring_url(ConvertUTF8ToJavaString(
-      env, web_contents()->GetLastCommittedURL().spec()));
+      env, url_string));
   Java_WebContentsObserverProxy_didStopLoading(env, obj.obj(),
                                                jstring_url.obj());
 }
@@ -203,11 +213,7 @@ void WebContentsObserverProxy::DidFinishLoad(RenderFrameHost* render_frame_host,
   ScopedJavaLocalRef<jobject> obj(java_observer_);
 
   std::string url_string = validated_url.spec();
-  NavigationEntry* entry =
-      web_contents()->GetController().GetLastCommittedEntry();
-  // Note that GetBaseURLForDataURL is only used by the Android WebView.
-  if (entry && !entry->GetBaseURLForDataURL().is_empty())
-    url_string = entry->GetBaseURLForDataURL().possibly_invalid_spec();
+  SetToBaseURLForDataURLIfNeeded(&url_string);
 
   ScopedJavaLocalRef<jstring> jstring_url(
       ConvertUTF8ToJavaString(env, url_string));
@@ -221,7 +227,8 @@ void WebContentsObserverProxy::DocumentLoadedInFrame(
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj(java_observer_);
   Java_WebContentsObserverProxy_documentLoadedInFrame(
-      env, obj.obj(), render_frame_host->GetRoutingID());
+      env, obj.obj(), render_frame_host->GetRoutingID(),
+      !render_frame_host->GetParent());
 }
 
 void WebContentsObserverProxy::NavigationEntryCommitted(
@@ -295,6 +302,23 @@ void WebContentsObserverProxy::MediaSessionStateChanged(bool is_controllable,
 
   Java_WebContentsObserverProxy_mediaSessionStateChanged(
       env, obj.obj(), is_controllable, is_suspended);
+}
+
+void WebContentsObserverProxy::SetToBaseURLForDataURLIfNeeded(
+    std::string* url) {
+  NavigationEntry* entry =
+      web_contents()->GetController().GetLastCommittedEntry();
+  // Note that GetBaseURLForDataURL is only used by the Android WebView.
+  // FIXME: Should we only return valid specs and "about:blank" for invalid
+  // ones? This may break apps.
+  if (entry && !entry->GetBaseURLForDataURL().is_empty()) {
+    *url = entry->GetBaseURLForDataURL().possibly_invalid_spec();
+  } else if (!base_url_of_last_started_data_url_.is_empty()) {
+    // NavigationController can lose the pending entry and recreate it without
+    // a base URL if there has been a loadUrl("javascript:...") after
+    // loadDataWithBaseUrl.
+    *url = base_url_of_last_started_data_url_.possibly_invalid_spec();
+  }
 }
 
 bool RegisterWebContentsObserverProxy(JNIEnv* env) {

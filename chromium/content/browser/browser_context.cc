@@ -4,6 +4,12 @@
 
 #include "content/public/browser/browser_context.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
+#include "build/build_config.h"
+
 #if !defined(OS_IOS)
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/fileapi/chrome_blob_storage_context.h"
@@ -36,7 +42,7 @@ namespace {
 
 // Key names on BrowserContext.
 const char kDownloadManagerKeyName[] = "download_manager";
-const char kStorageParitionMapKeyName[] = "content_storage_partition_map";
+const char kStoragePartitionMapKeyName[] = "content_storage_partition_map";
 
 #if defined(OS_CHROMEOS)
 const char kMountPointsKey[] = "mount_points";
@@ -46,10 +52,10 @@ StoragePartitionImplMap* GetStoragePartitionMap(
     BrowserContext* browser_context) {
   StoragePartitionImplMap* partition_map =
       static_cast<StoragePartitionImplMap*>(
-          browser_context->GetUserData(kStorageParitionMapKeyName));
+          browser_context->GetUserData(kStoragePartitionMapKeyName));
   if (!partition_map) {
     partition_map = new StoragePartitionImplMap(browser_context);
-    browser_context->SetUserData(kStorageParitionMapKeyName, partition_map);
+    browser_context->SetUserData(kStoragePartitionMapKeyName, partition_map);
   }
   return partition_map;
 }
@@ -91,6 +97,13 @@ void ShutdownServiceWorkerContext(StoragePartition* partition) {
   wrapper->process_manager()->Shutdown();
 }
 
+void SetDownloadManager(BrowserContext* context,
+                        content::DownloadManager* download_manager) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(download_manager);
+  context->SetUserData(kDownloadManagerKeyName, download_manager);
+}
+
 }  // namespace
 
 // static
@@ -107,23 +120,19 @@ void BrowserContext::GarbageCollectStoragePartitions(
       BrowserContext* browser_context,
       scoped_ptr<base::hash_set<base::FilePath> > active_paths,
       const base::Closure& done) {
-  GetStoragePartitionMap(browser_context)->GarbageCollect(
-      active_paths.Pass(), done);
+  GetStoragePartitionMap(browser_context)
+      ->GarbageCollect(std::move(active_paths), done);
 }
 
 DownloadManager* BrowserContext::GetDownloadManager(
     BrowserContext* context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!context->GetUserData(kDownloadManagerKeyName)) {
-    ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
-    DCHECK(rdh);
     DownloadManager* download_manager =
         new DownloadManagerImpl(
             GetContentClient()->browser()->GetNetLog(), context);
 
-    context->SetUserData(
-        kDownloadManagerKeyName,
-        download_manager);
+    SetDownloadManager(context, download_manager);
     download_manager->SetDelegate(context->GetDownloadManagerDelegate());
   }
 
@@ -194,7 +203,7 @@ void BrowserContext::ForEachStoragePartition(
     const StoragePartitionCallback& callback) {
   StoragePartitionImplMap* partition_map =
       static_cast<StoragePartitionImplMap*>(
-          browser_context->GetUserData(kStorageParitionMapKeyName));
+          browser_context->GetUserData(kStoragePartitionMapKeyName));
   if (!partition_map)
     return;
 
@@ -245,7 +254,7 @@ void BrowserContext::CreateFileBackedBlob(
 void BrowserContext::DeliverPushMessage(
     BrowserContext* browser_context,
     const GURL& origin,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const std::string& data,
     const base::Callback<void(PushDeliveryStatus)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -305,6 +314,12 @@ void BrowserContext::SaveSessionState(BrowserContext* browser_context) {
         base::Bind(&SaveSessionStateOnIndexedDBThread,
                    make_scoped_refptr(indexed_db_context_impl)));
   }
+}
+
+void BrowserContext::SetDownloadManagerForTesting(
+    BrowserContext* browser_context,
+    DownloadManager* download_manager) {
+  SetDownloadManager(browser_context, download_manager);
 }
 
 #endif  // !OS_IOS

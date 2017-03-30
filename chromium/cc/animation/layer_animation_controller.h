@@ -5,16 +5,17 @@
 #ifndef CC_ANIMATION_LAYER_ANIMATION_CONTROLLER_H_
 #define CC_ANIMATION_LAYER_ANIMATION_CONTROLLER_H_
 
-#include "base/basictypes.h"
+#include <vector>
+
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
-#include "cc/animation/animation_events.h"
+#include "cc/animation/animation.h"
 #include "cc/animation/layer_animation_event_observer.h"
 #include "cc/base/cc_export.h"
-#include "cc/base/scoped_ptr_vector.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/transform.h"
 
@@ -25,8 +26,8 @@ class Transform;
 
 namespace cc {
 
-class Animation;
 class AnimationDelegate;
+class AnimationEvents;
 class AnimationRegistrar;
 class FilterOperations;
 class KeyframeValueList;
@@ -36,6 +37,8 @@ class LayerAnimationValueProvider;
 class CC_EXPORT LayerAnimationController
     : public base::RefCounted<LayerAnimationController> {
  public:
+  enum class ObserverType { ACTIVE, PENDING };
+
   static scoped_refptr<LayerAnimationController> Create(int id);
 
   int id() const { return id_; }
@@ -45,6 +48,7 @@ class CC_EXPORT LayerAnimationController
   void RemoveAnimation(int animation_id);
   void RemoveAnimation(int animation_id,
                        Animation::TargetProperty target_property);
+  void AbortAnimation(int animation_id);
   void AbortAnimations(Animation::TargetProperty target_property);
 
   // Ensures that the list of active animations on the main thread and the impl
@@ -55,10 +59,9 @@ class CC_EXPORT LayerAnimationController
 
   void Animate(base::TimeTicks monotonic_time);
   void AccumulatePropertyUpdates(base::TimeTicks monotonic_time,
-                                 AnimationEventsVector* events);
+                                 AnimationEvents* events);
 
-  void UpdateState(bool start_ready_animations,
-                   AnimationEventsVector* events);
+  void UpdateState(bool start_ready_animations, AnimationEvents* events);
 
   // Make animations affect active observers if and only if they affect
   // pending observers. Any animations that no longer affect any observers
@@ -79,10 +82,16 @@ class CC_EXPORT LayerAnimationController
   // Returns true if there are any animations at all to process.
   bool has_any_animation() const { return !animations_.empty(); }
 
-  // Returns true if there is an animation currently animating the given
-  // property, or if there is an animation scheduled to animate this property in
-  // the future.
-  bool IsAnimatingProperty(Animation::TargetProperty target_property) const;
+  // Returns true if there is an animation that is either currently animating
+  // the given property or scheduled to animate this property in the future, and
+  // that affects the given observer type.
+  bool IsPotentiallyAnimatingProperty(Animation::TargetProperty target_property,
+                                      ObserverType observer_type) const;
+
+  // Returns true if there is an animation that is currently animating the given
+  // property and that affects the given observer type.
+  bool IsCurrentlyAnimatingProperty(Animation::TargetProperty target_property,
+                                    ObserverType observer_type) const;
 
   void SetAnimationRegistrar(AnimationRegistrar* registrar);
   AnimationRegistrar* animation_registrar() { return registrar_; }
@@ -130,19 +139,21 @@ class CC_EXPORT LayerAnimationController
 
   bool HasAnimationThatAffectsScale() const;
 
-  bool HasOnlyTranslationTransforms() const;
+  bool HasOnlyTranslationTransforms(ObserverType observer_type) const;
 
   bool AnimationsPreserveAxisAlignment() const;
 
   // Sets |start_scale| to the maximum of starting animation scale along any
   // dimension at any destination in active animations. Returns false if the
   // starting scale cannot be computed.
-  bool AnimationStartScale(float* start_scale) const;
+  bool AnimationStartScale(ObserverType observer_type,
+                           float* start_scale) const;
 
   // Sets |max_scale| to the maximum scale along any dimension at any
   // destination in active animations. Returns false if the maximum scale cannot
   // be computed.
-  bool MaximumTargetScale(float* max_scale) const;
+  bool MaximumTargetScale(ObserverType event_observers_,
+                          float* max_scale) const;
 
   // When a scroll animation is removed on the main thread, its compositor
   // thread counterpart continues producing scroll deltas until activation.
@@ -170,16 +181,18 @@ class CC_EXPORT LayerAnimationController
 
   void PushNewAnimationsToImplThread(
       LayerAnimationController* controller_impl) const;
+  void MarkAbortedAnimationsForDeletion(
+      LayerAnimationController* controller_impl) const;
   void RemoveAnimationsCompletedOnMainThread(
       LayerAnimationController* controller_impl) const;
   void PushPropertiesToImplThread(LayerAnimationController* controller_impl);
 
   void StartAnimations(base::TimeTicks monotonic_time);
   void PromoteStartedAnimations(base::TimeTicks monotonic_time,
-                                AnimationEventsVector* events);
+                                AnimationEvents* events);
   void MarkFinishedAnimations(base::TimeTicks monotonic_time);
   void MarkAnimationsForDeletion(base::TimeTicks monotonic_time,
-                                 AnimationEventsVector* events);
+                                 AnimationEvents* events);
   void PurgeAnimationsMarkedForDeletion();
 
   void TickAnimations(base::TimeTicks monotonic_time);
@@ -203,12 +216,18 @@ class CC_EXPORT LayerAnimationController
 
   void NotifyObserversAnimationWaitingForDeletion();
 
+  void NotifyObserversTransformIsPotentiallyAnimatingChanged(
+      bool notify_active_observers,
+      bool notify_pending_observers);
+
+  void UpdatePotentiallyAnimatingTransform();
+
   bool HasValueObserver();
   bool HasActiveValueObserver();
 
   AnimationRegistrar* registrar_;
   int id_;
-  ScopedPtrVector<Animation> animations_;
+  std::vector<scoped_ptr<Animation>> animations_;
 
   // This is used to ensure that we don't spam the registrar.
   bool is_active_;
@@ -227,6 +246,9 @@ class CC_EXPORT LayerAnimationController
   bool needs_to_start_animations_;
 
   bool scroll_offset_animation_was_interrupted_;
+
+  bool potentially_animating_transform_for_active_observers_;
+  bool potentially_animating_transform_for_pending_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerAnimationController);
 };

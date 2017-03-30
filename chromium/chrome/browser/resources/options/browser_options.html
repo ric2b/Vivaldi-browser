@@ -2,11 +2,10 @@
   <header>
     <h1 i18n-content="settingsTitle" hidden></h1>
   </header>
-  <include src="reset_profile_settings_banner.html">
   <include src="automatic_settings_reset_banner.html">
 <if expr="chromeos">
-  <link rel="import" href="chrome://resources/cr_elements/v1_0/cr_network_icon/cr_network_icon.html">
-  <link rel="import" href="chrome://resources/cr_elements/v1_0/cr_onc/cr_onc_types.html">
+  <link rel="import" href="chrome://resources/cr_elements/network/cr_network_icon.html">
+  <link rel="import" href="chrome://resources/cr_elements/network/cr_onc_types.html">
   <include src="secondary_user_banner.html">
   <section>
     <div id="network-section-header" class="section-header">
@@ -107,10 +106,6 @@
     <h3 i18n-content="sectionTitleDevice"></h3>
     <div>
       <span i18n-content="deviceGroupDescription"></span>
-      <div class="settings-row" id="power-row" hidden>
-        <a is="action-link" id="power-settings-button"
-            i18n-content="powerSettingsButton"></a>
-      </div>
       <div id="touchpad-settings" class="settings-row" hidden>
         <span class="option-name" i18n-content="touchpadSpeed"></span>
         <input id="touchpad-sensitivity-range" type="range" min="1" max="5"
@@ -134,6 +129,10 @@
           <button id="display-options" i18n-content="displayOptions" disabled>
           </button>
         </span>
+      </div>
+      <div id="power-row" hidden>
+        <a is="action-link" id="power-settings-link"
+            i18n-content="powerSettingsButton"></a>
       </div>
     </div>
   </section>
@@ -277,12 +276,6 @@
           i18n-content="defaultBrowserUseAsDefault" hidden>
       </button>
       <div id="default-browser-state" i18n-content="defaultBrowserUnknown">
-      </div>
-      <div id="auto-launch-option" class="checkbox" hidden>
-        <label id="auto-launch-label">
-          <input id="auto-launch" type="checkbox">
-          <span i18n-content="autoLaunchText"></span>
-        </label>
       </div>
     </div>
   </section>
@@ -432,18 +425,6 @@
 <if expr="_google_chrome">
       <div id="metrics-reporting-setting"
           class="checkbox controlled-setting-with-label">
-<if expr="chromeos">
-        <label>
-          <input id="metrics-reporting-enabled"
-              pref="cros.metrics.reportingEnabled" type="checkbox">
-          <span>
-            <span i18n-content="enableLogging"></span>
-            <span class="controlled-setting-indicator"
-                pref="cros.metrics.reportingEnabled"></span>
-          </span>
-        </label>
-</if>
-<if expr="not chromeos">
         <label>
           <input id="metrics-reporting-enabled" type="checkbox">
           <span>
@@ -452,12 +433,13 @@
                 class="controlled-setting-indicator"></span>
           </span>
         </label>
+<if expr="not chromeos">
         <span id="metrics-reporting-reset-restart" hidden>
           <!-- Text filled by JavaScript -->
           <span></span><a is="action-link" role="button"
               class="standalone-action-link"></a><span></span>
         </span>
-</if>
+</if>  <!-- not chromeos -->
       </div>
 </if>  <!-- _google_chrome -->
       <div class="checkbox">
@@ -503,12 +485,12 @@
         <label>
           <input id="wake-on-wifi-checkbox" type="checkbox"
               metric="Options_WakeOnWifiSsid"
-              pref="settings.internet.wake_on_wifi_ssid">
+              pref="settings.internet.wake_on_wifi_darkconnect">
           <span>
             <span i18n-content="wakeOnWifiLabel"></span>
             <span id="wake-on-wifi-indicator"
                 class="controlled-setting-indicator"
-                pref="settings.internet.wake_on_wifi_ssid"></span>
+                pref="settings.internet.wake_on_wifi_darkconnect"></span>
           </span>
         </label>
       </div>
@@ -804,7 +786,8 @@
     <p id="accessibility-explanation" class="settings-row">
       <span i18n-content="accessibilityExplanation"></span>
       <a id="accessibility-learn-more" target="_blank"
-         i18n-content="learnMore"></a>
+          i18n-values="href:accessibilityLearnMoreURL"
+          i18n-content="learnMore"></a>
     </p>
     <div class="option-name">
       <div class="checkbox controlled-setting-with-label">
@@ -1006,7 +989,11 @@
       <label>
         <input id="gpu-mode-checkbox"
             pref="hardware_acceleration_mode.enabled" type="checkbox">
-        <span i18n-content="gpuModeCheckbox">
+        <span>
+          <span i18n-content="gpuModeCheckbox"></span>
+          <span class="controlled-setting-indicator"
+              pref="hardware_acceleration_mode.enabled"></span>
+        </span>
       </label>
       <span id="gpu-mode-reset-restart"
           i18n-values=".innerHTML:gpuModeResetRestart"></span>

@@ -51,6 +51,7 @@ cr.define('print_preview', function() {
     IS_HEADER_FOOTER_ENABLED: 'isHeaderFooterEnabled',
     IS_LANDSCAPE_ENABLED: 'isLandscapeEnabled',
     IS_COLLATE_ENABLED: 'isCollateEnabled',
+    IS_FIT_TO_PAGE_ENABLED: 'isFitToPageEnabled',
     IS_CSS_BACKGROUND_ENABLED: 'isCssBackgroundEnabled',
     VENDOR_OPTIONS: 'vendorOptions'
   };
@@ -148,29 +149,21 @@ cr.define('print_preview', function() {
      * layer.
      * @param {?string} serializedAppStateStr Serialized string representation
      *     of the app state.
-     * @param {?string} systemDefaultDestinationId ID of the system default
-     *     destination.
      */
-    init: function(serializedAppStateStr, systemDefaultDestinationId) {
+    init: function(serializedAppStateStr) {
       if (serializedAppStateStr) {
-        var state = JSON.parse(serializedAppStateStr);
-        if (state[AppState.Field.VERSION] == AppState.VERSION_) {
-          this.state_ = state;
+        try {
+          var state = JSON.parse(serializedAppStateStr);
+          if (state[AppState.Field.VERSION] == AppState.VERSION_) {
+            this.state_ = state;
+          }
+        } catch(e) {
+          console.error('Unable to parse state: ' + e);
+          // Proceed with default state.
         }
       } else {
         // Set some state defaults.
         this.state_[AppState.Field.IS_GCP_PROMO_DISMISSED] = false;
-      }
-      // Default to system destination, if no destination was selected.
-      if (!this.state_[AppState.Field.SELECTED_DESTINATION_ID] ||
-          !this.state_[AppState.Field.SELECTED_DESTINATION_ORIGIN]) {
-        if (systemDefaultDestinationId) {
-          this.state_[AppState.Field.SELECTED_DESTINATION_ID] =
-              systemDefaultDestinationId;
-          this.state_[AppState.Field.SELECTED_DESTINATION_ORIGIN] =
-              print_preview.Destination.Origin.LOCAL;
-          this.state_[AppState.Field.SELECTED_DESTINATION_ACCOUNT] = '';
-        }
       }
     },
 

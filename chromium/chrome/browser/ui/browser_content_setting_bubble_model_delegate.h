@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_CONTENT_SETTING_BUBBLE_MODEL_DELEGATE_H_
 #define CHROME_BROWSER_UI_BROWSER_CONTENT_SETTING_BUBBLE_MODEL_DELEGATE_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model_delegate.h"
 
 class Browser;
@@ -22,6 +22,7 @@ class BrowserContentSettingBubbleModelDelegate
   // ContentSettingBubbleModelDelegate implementation:
   void ShowCollectedCookiesDialog(content::WebContents* web_contents) override;
   void ShowContentSettingsPage(ContentSettingsType type) override;
+  void ShowMediaSettingsPage() override;
   void ShowLearnMorePage(ContentSettingsType type) override;
 
  private:

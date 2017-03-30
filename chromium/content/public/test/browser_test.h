@@ -14,6 +14,7 @@
 #if defined(HAS_OUT_OF_PROC_TEST_RUNNER)
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #define IN_PROC_BROWSER_TEST_(                                               \
@@ -40,6 +41,7 @@
           #test_name,                                                        \
           "",                                                                \
           "",                                                                \
+          ::testing::internal::CodeLocation(__FILE__, __LINE__),             \
           (parent_id),                                                       \
           parent_class::SetUpTestCase,                                       \
           parent_class::TearDownTestCase,                                    \
@@ -66,7 +68,8 @@
       ::testing::UnitTest::GetInstance()                                       \
           ->parameterized_test_registry()                                      \
           .GetTestCasePatternHolder<test_case_name>(                           \
-               #test_case_name, __FILE__, __LINE__)                            \
+               #test_case_name,                                                \
+               ::testing::internal::CodeLocation(__FILE__, __LINE__))          \
           ->AddTestPattern(                                                    \
               #test_case_name,                                                 \
               #test_name,                                                      \

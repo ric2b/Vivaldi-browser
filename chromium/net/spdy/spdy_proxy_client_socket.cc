@@ -5,6 +5,7 @@
 #include "net/spdy/spdy_proxy_client_socket.h"
 
 #include <algorithm>  // min
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -34,15 +35,11 @@ SpdyProxyClientSocket::SpdyProxyClientSocket(
     const HostPortPair& endpoint,
     const HostPortPair& proxy_server,
     const BoundNetLog& source_net_log,
-    HttpAuthCache* auth_cache,
-    HttpAuthHandlerFactory* auth_handler_factory)
+    HttpAuthController* auth_controller)
     : next_state_(STATE_DISCONNECTED),
       spdy_stream_(spdy_stream),
       endpoint_(endpoint),
-      auth_(new HttpAuthController(HttpAuth::AUTH_PROXY,
-                                   GURL("https://" + proxy_server.ToString()),
-                                   auth_cache,
-                                   auth_handler_factory)),
+      auth_(auth_controller),
       user_agent_(user_agent),
       user_buffer_len_(0),
       write_buffer_len_(0),
@@ -198,6 +195,11 @@ void SpdyProxyClientSocket::GetConnectionAttempts(
   out->clear();
 }
 
+int64_t SpdyProxyClientSocket::GetTotalReceivedBytes() const {
+  NOTIMPLEMENTED();
+  return 0;
+}
+
 int SpdyProxyClientSocket::Read(IOBuffer* buf, int buf_len,
                                 const CompletionCallback& callback) {
   DCHECK(read_callback_.is_null());
@@ -243,13 +245,13 @@ int SpdyProxyClientSocket::Write(IOBuffer* buf, int buf_len,
   return ERR_IO_PENDING;
 }
 
-int SpdyProxyClientSocket::SetReceiveBufferSize(int32 size) {
+int SpdyProxyClientSocket::SetReceiveBufferSize(int32_t size) {
   // Since this StreamSocket sits on top of a shared SpdySession, it
   // is not safe for callers to change this underlying socket.
   return ERR_NOT_IMPLEMENTED;
 }
 
-int SpdyProxyClientSocket::SetSendBufferSize(int32 size) {
+int SpdyProxyClientSocket::SetSendBufferSize(int32_t size) {
   // Since this StreamSocket sits on top of a shared SpdySession, it
   // is not safe for callers to change this underlying socket.
   return ERR_NOT_IMPLEMENTED;
@@ -372,7 +374,8 @@ int SpdyProxyClientSocket::DoSendRequest() {
                                    spdy_stream_->GetProtocolVersion(), true,
                                    headers.get());
 
-  return spdy_stream_->SendRequestHeaders(headers.Pass(), MORE_DATA_TO_SEND);
+  return spdy_stream_->SendRequestHeaders(std::move(headers),
+                                          MORE_DATA_TO_SEND);
 }
 
 int SpdyProxyClientSocket::DoSendRequestComplete(int result) {
@@ -392,7 +395,7 @@ int SpdyProxyClientSocket::DoReadReplyComplete(int result) {
     return result;
 
   // Require the "HTTP/1.x" status line for SSL CONNECT.
-  if (response_.headers->GetParsedHttpVersion() < HttpVersion(1, 0))
+  if (response_.headers->GetHttpVersion() < HttpVersion(1, 0))
     return ERR_TUNNEL_CONNECTION_FAILED;
 
   net_log_.AddEvent(
@@ -467,7 +470,7 @@ void SpdyProxyClientSocket::OnDataReceived(scoped_ptr<SpdyBuffer> buffer) {
     net_log_.AddByteTransferEvent(NetLog::TYPE_SOCKET_BYTES_RECEIVED,
                                   buffer->GetRemainingSize(),
                                   buffer->GetRemainingData());
-    read_buffer_queue_.Enqueue(buffer.Pass());
+    read_buffer_queue_.Enqueue(std::move(buffer));
   } else {
     net_log_.AddByteTransferEvent(NetLog::TYPE_SOCKET_BYTES_RECEIVED, 0, NULL);
   }
@@ -494,6 +497,12 @@ void SpdyProxyClientSocket::OnDataSent()  {
       FROM_HERE, base::Bind(&SpdyProxyClientSocket::RunCallback,
                             write_callback_weak_factory_.GetWeakPtr(),
                             ResetAndReturn(&write_callback_), rv));
+}
+
+void SpdyProxyClientSocket::OnTrailers(const SpdyHeaderBlock& trailers) {
+  // |spdy_stream_| is of type SPDY_BIDIRECTIONAL_STREAM, so trailers are
+  // combined with response headers and this method will not be calld.
+  NOTREACHED();
 }
 
 void SpdyProxyClientSocket::OnClose(int status)  {

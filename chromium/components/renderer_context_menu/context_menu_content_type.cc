@@ -9,7 +9,7 @@
 #include "content/public/common/url_constants.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 
-#include "base/command_line.h"
+#include "app/vivaldi_apptools.h"
 
 using blink::WebContextMenuData;
 using content::WebContents;
@@ -109,7 +109,7 @@ bool ContextMenuContentType::SupportsGroupInternal(int group) {
 
     case ITEM_GROUP_SEARCHWEBFORIMAGE:
       // Image menu items imply search web for image item.
-      if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+      if (vivaldi::IsVivaldiRunning()) {
         return false;
       }
       return SupportsGroupInternal(ITEM_GROUP_MEDIA_IMAGE);
@@ -140,10 +140,6 @@ bool ContextMenuContentType::SupportsGroupInternal(int group) {
       return !params_.is_editable && has_selection;
 
     case ITEM_GROUP_SEARCH_PROVIDER:
-      //NOTE(arnar@vivaldi.com): Search context menu is now
-      //created in javascript.
-      if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
-        return false;
       return has_selection;
 
     case ITEM_GROUP_PRINT: {

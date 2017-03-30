@@ -93,6 +93,9 @@ enum {
 
   RESPONSE_INFO_UNUSED_SINCE_PREFETCH = 1 << 21,
 
+  // This bit is set if the response has a key-exchange-info field at the end.
+  RESPONSE_INFO_HAS_KEY_EXCHANGE_INFO = 1 << 22,
+
   // TODO(darin): Add other bits to indicate alternate request methods.
   // For now, we don't support storing those.
 };
@@ -106,8 +109,8 @@ HttpResponseInfo::HttpResponseInfo()
       was_fetched_via_proxy(false),
       did_use_http_auth(false),
       unused_since_prefetch(false),
-      connection_info(CONNECTION_INFO_UNKNOWN) {
-}
+      async_revalidation_required(false),
+      connection_info(CONNECTION_INFO_UNKNOWN) {}
 
 HttpResponseInfo::HttpResponseInfo(const HttpResponseInfo& rhs)
     : was_cached(rhs.was_cached),
@@ -119,6 +122,7 @@ HttpResponseInfo::HttpResponseInfo(const HttpResponseInfo& rhs)
       proxy_server(rhs.proxy_server),
       did_use_http_auth(rhs.did_use_http_auth),
       unused_since_prefetch(rhs.unused_since_prefetch),
+      async_revalidation_required(rhs.async_revalidation_required),
       socket_address(rhs.socket_address),
       npn_negotiated_protocol(rhs.npn_negotiated_protocol),
       connection_info(rhs.connection_info),
@@ -129,8 +133,7 @@ HttpResponseInfo::HttpResponseInfo(const HttpResponseInfo& rhs)
       ssl_info(rhs.ssl_info),
       headers(rhs.headers),
       vary_data(rhs.vary_data),
-      metadata(rhs.metadata) {
-}
+      metadata(rhs.metadata) {}
 
 HttpResponseInfo::~HttpResponseInfo() {
 }
@@ -145,6 +148,7 @@ HttpResponseInfo& HttpResponseInfo::operator=(const HttpResponseInfo& rhs) {
   was_fetched_via_proxy = rhs.was_fetched_via_proxy;
   did_use_http_auth = rhs.did_use_http_auth;
   unused_since_prefetch = rhs.unused_since_prefetch;
+  async_revalidation_required = rhs.async_revalidation_required;
   socket_address = rhs.socket_address;
   npn_negotiated_protocol = rhs.npn_negotiated_protocol;
   connection_info = rhs.connection_info;
@@ -175,7 +179,7 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
   }
 
   // Read request-time
-  int64 time_val;
+  int64_t time_val;
   if (!iter.ReadInt64(&time_val))
     return false;
   request_time = Time::FromInternalValue(time_val);
@@ -225,7 +229,7 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
     for (int i = 0; i < num_scts; ++i) {
       scoped_refptr<ct::SignedCertificateTimestamp> sct(
           ct::SignedCertificateTimestamp::CreateFromPickle(&iter));
-      uint16 status;
+      uint16_t status;
       if (!sct.get() || !iter.ReadUInt16(&status))
         return false;
       ssl_info.signed_certificate_timestamps.push_back(
@@ -244,7 +248,7 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
   std::string socket_address_host;
   if (iter.ReadString(&socket_address_host)) {
     // If the host was written, we always expect the port to follow.
-    uint16 socket_address_port;
+    uint16_t socket_address_port;
     if (!iter.ReadUInt16(&socket_address_port))
       return false;
     socket_address = HostPortPair(socket_address_host, socket_address_port);
@@ -272,6 +276,14 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
     }
   }
 
+  // Read key_exchange_info
+  if (flags & RESPONSE_INFO_HAS_KEY_EXCHANGE_INFO) {
+    int key_exchange_info;
+    if (!iter.ReadInt(&key_exchange_info))
+      return false;
+    ssl_info.key_exchange_info = key_exchange_info;
+  }
+
   was_fetched_via_spdy = (flags & RESPONSE_INFO_WAS_SPDY) != 0;
 
   was_npn_negotiated = (flags & RESPONSE_INFO_WAS_NPN) != 0;
@@ -296,6 +308,8 @@ void HttpResponseInfo::Persist(base::Pickle* pickle,
     flags |= RESPONSE_INFO_HAS_CERT_STATUS;
     if (ssl_info.security_bits != -1)
       flags |= RESPONSE_INFO_HAS_SECURITY_BITS;
+    if (ssl_info.key_exchange_info != 0)
+      flags |= RESPONSE_INFO_HAS_KEY_EXCHANGE_INFO;
     if (ssl_info.connection_status != 0)
       flags |= RESPONSE_INFO_HAS_SSL_CONNECTION_STATUS;
   }
@@ -351,7 +365,7 @@ void HttpResponseInfo::Persist(base::Pickle* pickle,
            ssl_info.signed_certificate_timestamps.begin(); it !=
            ssl_info.signed_certificate_timestamps.end(); ++it) {
         it->sct->Persist(pickle);
-        pickle->WriteUInt16(static_cast<uint16>(it->status));
+        pickle->WriteUInt16(static_cast<uint16_t>(it->status));
       }
     }
   }
@@ -367,18 +381,16 @@ void HttpResponseInfo::Persist(base::Pickle* pickle,
 
   if (connection_info != CONNECTION_INFO_UNKNOWN)
     pickle->WriteInt(static_cast<int>(connection_info));
+
+  if (ssl_info.is_valid() && ssl_info.key_exchange_info != 0)
+    pickle->WriteInt(ssl_info.key_exchange_info);
 }
 
 HttpResponseInfo::ConnectionInfo HttpResponseInfo::ConnectionInfoFromNextProto(
     NextProto next_proto) {
   switch (next_proto) {
-    case kProtoDeprecatedSPDY2:
-      return CONNECTION_INFO_DEPRECATED_SPDY2;
-    case kProtoSPDY3:
     case kProtoSPDY31:
       return CONNECTION_INFO_SPDY3;
-    case kProtoHTTP2_14:
-      return CONNECTION_INFO_HTTP2_14;
     case kProtoHTTP2:
       return CONNECTION_INFO_HTTP2;
     case kProtoQUIC1SPDY3:
@@ -402,18 +414,16 @@ std::string HttpResponseInfo::ConnectionInfoToString(
     case CONNECTION_INFO_HTTP1:
       return "http/1";
     case CONNECTION_INFO_DEPRECATED_SPDY2:
-      return "spdy/2";
+      NOTREACHED();
+      return "";
     case CONNECTION_INFO_SPDY3:
       return "spdy/3";
+    // Since ConnectionInfo is persisted to disk, deprecated values have to be
+    // handled. Note that h2-14 and h2-15 are essentially wire compatible with
+    // h2.
+    // Intentional fallthrough.
     case CONNECTION_INFO_HTTP2_14:
-      // For internal consistency, HTTP/2 is named SPDY4 within Chromium.
-      // This is the HTTP/2 draft-14 identifier.
-      return "h2-14";
     case CONNECTION_INFO_HTTP2_15:
-      // Since ConnectionInfo is persisted to disk, this value has to be
-      // handled, but h2-15 is removed.  Note that h2-14 and h2-15 are wire
-      // compatible for all practical purposes.
-      return "h2-14";
     case CONNECTION_INFO_HTTP2:
       return "h2";
     case CONNECTION_INFO_QUIC1_SPDY3:

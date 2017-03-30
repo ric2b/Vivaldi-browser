@@ -42,7 +42,7 @@ class PlatformMediaPipeline;
 class IPCMediaPipeline : public IPC::Listener {
  public:
   IPCMediaPipeline(IPC::Sender* channel,
-                   int32 routing_id,
+                   int32_t routing_id,
                    GpuCommandBufferStub* command_buffer);
   ~IPCMediaPipeline() override;
 
@@ -62,7 +62,7 @@ class IPCMediaPipeline : public IPC::Listener {
   //   DECODING -------------------------------------------
   enum State { CONSTRUCTED, BUSY, DECODING, STOPPED };
 
-  void OnInitialize(int64 data_source_size,
+  void OnInitialize(int64_t data_source_size,
                     bool is_data_source_streaming,
                     const std::string& mime_type);
   void Initialized(bool success,
@@ -106,7 +106,7 @@ class IPCMediaPipeline : public IPC::Listener {
       media::PlatformMediaDataType type) const {
     return type == media::PLATFORM_MEDIA_VIDEO &&
            video_config_.decoding_mode ==
-               media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE;
+               media::PlatformMediaDecodingMode::HARDWARE;
   }
 
   bool ClientToServiceTextureId(uint32_t client_texture_id,
@@ -117,7 +117,7 @@ class IPCMediaPipeline : public IPC::Listener {
   bool has_media_type_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   IPC::Sender* const channel_;
-  const int32 routing_id_;
+  const int32_t routing_id_;
 
   scoped_ptr<IPCDataSourceImpl> data_source_;
   scoped_ptr<PlatformMediaPipeline> media_pipeline_;

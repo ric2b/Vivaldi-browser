@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "storage/browser/fileapi/sandbox_origin_database_interface.h"
 
 namespace storage {
@@ -16,7 +17,7 @@ class SandboxOriginDatabase;
 
 // This origin database implementation supports only one origin
 // (therefore is expected to run very fast).
-class STORAGE_EXPORT_PRIVATE SandboxIsolatedOriginDatabase
+class STORAGE_EXPORT SandboxIsolatedOriginDatabase
     : public SandboxOriginDatabaseInterface {
  public:
   static const base::FilePath::CharType kObsoleteOriginDirectory[];

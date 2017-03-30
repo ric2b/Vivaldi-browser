@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/format_macros.h"
 #include "base/guid.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/stl_util.h"
@@ -15,7 +17,7 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "components/autofill/core/common/form_field_data.h" 
+#include "components/autofill/core/common/form_field_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::ASCIIToUTF16;
@@ -24,12 +26,6 @@ using base::UTF8ToUTF16;
 namespace autofill {
 
 namespace {
-// TODO: Vivaldi reneable for Mac when locale loading is fixed for tests
-#if defined(OS_MACOSX)
-#define MAYBE_LOCALE(test_name) DISABLED_##test_name
-#else
-#define MAYBE_LOCALE(test_name) test_name
-#endif
 
 base::string16 GetLabel(AutofillProfile* profile) {
   std::vector<AutofillProfile*> profiles;
@@ -72,11 +68,19 @@ struct TestCase {
   std::vector<NameParts> expected_result;
 };
 
+void SetupTestProfile(AutofillProfile& profile) {
+  profile.set_guid(base::GenerateGUID());
+  profile.set_origin("Chrome settings");
+  test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
+                       "marion@me.xyz", "Fox", "123 Zoo St.", "unit 5",
+                       "Hollywood", "CA", "91601", "US", "12345678910");
+}
+
 }  // namespace
 
 // Tests different possibilities for summary string generation.
 // Based on existence of first name, last name, and address line 1.
-TEST(AutofillProfileTest, MAYBE_LOCALE(PreviewSummaryString)) {
+TEST(AutofillProfileTest, PreviewSummaryString) {
   // Case 0/null: ""
   AutofillProfile profile0(base::GenerateGUID(), "https://www.example.com/");
   // Empty profile - nothing to update.
@@ -178,7 +182,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(PreviewSummaryString)) {
       "Marion Mitchell Morrison, 123 Zoo St., marion@me.xyz"), summary7a);
 }
 
-TEST(AutofillProfileTest, MAYBE_LOCALE(AdjustInferredLabels)) {
+TEST(AutofillProfileTest, AdjustInferredLabels) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -333,7 +337,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(AdjustInferredLabels)) {
             labels[4]);
 }
 
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_CH)) {
+TEST(AutofillProfileTest, CreateInferredLabelsI18n_CH) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -362,7 +366,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_CH)) {
     "Beispiel Inc, H. R. Giger, Brandschenkestrasse 110, CH-8002 Zurich, "
         "Switzerland, hrgiger@beispiel.com",
     "Beispiel Inc, H. R. Giger, Brandschenkestrasse 110, CH-8002 Zurich, "
-        "Switzerland, hrgiger@beispiel.com, +41446681800",
+        "Switzerland, hrgiger@beispiel.com, +41 44-668-1800",
   };
 
   std::vector<base::string16> labels;
@@ -375,7 +379,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_CH)) {
 }
 
 
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_FR)) {
+TEST(AutofillProfileTest, CreateInferredLabelsI18n_FR) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -408,9 +412,9 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_FR)) {
       "Exemple Inc, Antoine de Saint-Exupéry, 8 Rue de Londres, 75009 Paris "
           "CEDEX, France, antoine@exemple.com",
       "Exemple Inc, Antoine de Saint-Exupéry, 8 Rue de Londres, 75009 Paris "
-          "CEDEX, France, antoine@exemple.com, +33142685300",
+          "CEDEX, France, antoine@exemple.com, +33 (0) 1 42 68 53 00",
       "Exemple Inc, Antoine de Saint-Exupéry, 8 Rue de Londres, 75009 Paris "
-          "CEDEX, France, antoine@exemple.com, +33142685300",
+          "CEDEX, France, antoine@exemple.com, +33 (0) 1 42 68 53 00",
   };
 
   std::vector<base::string16> labels;
@@ -422,7 +426,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_FR)) {
   }
 }
 
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_KR)) {
+TEST(AutofillProfileTest, CreateInferredLabelsI18n_KR) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -463,7 +467,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_KR)) {
           "park@yeleul.com",
       "Park Jae-sang, Yeleul Inc, Gangnam Finance Center, 152 Teheran-ro, "
           "Yeoksam-Dong, Gangnam-Gu, Seoul, 135-984, South Korea, "
-          "park@yeleul.com, +8225319000",
+          "park@yeleul.com, +82-2-531-9000",
   };
 
   std::vector<base::string16> labels;
@@ -475,7 +479,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_KR)) {
   }
 }
 
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_JP_Latn)) {
+TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_Latn) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -509,7 +513,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_JP_Latn)) {
     "Miku Hatsune, Rei Inc, Roppongi Hills Mori Tower, 6-10-1 Roppongi, "
         "Minato-ku, Tokyo, 106-6126, Japan, miku@rei.com",
     "Miku Hatsune, Rei Inc, Roppongi Hills Mori Tower, 6-10-1 Roppongi, "
-        "Minato-ku, Tokyo, 106-6126, Japan, miku@rei.com, +81363849000",
+        "Minato-ku, Tokyo, 106-6126, Japan, miku@rei.com, +81-3-6384-9000",
   };
 
   std::vector<base::string16> labels;
@@ -521,7 +525,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_JP_Latn)) {
   }
 }
 
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_JP_ja)) {
+TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_ja) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -551,7 +555,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsI18n_JP_ja)) {
     "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例ミク 初音, Japan, "
         "miku@rei.com",
     "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例ミク 初音, Japan, "
-        "miku@rei.com, 0363849000",
+        "miku@rei.com, 03-6384-9000",
   };
 
   std::vector<base::string16> labels;
@@ -677,7 +681,7 @@ TEST(AutofillProfileTest, CreateInferredLabels) {
 
 // Test that we fall back to using the full name if there are no other
 // distinguishing fields, but only if it makes sense given the suggested fields.
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsFallsBackToFullName)) {
+TEST(AutofillProfileTest, CreateInferredLabelsFallsBackToFullName) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -713,7 +717,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsFallsBackToFullName))
 }
 
 // Test that we do not show duplicate fields in the labels.
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsNoDuplicatedFields)) {
+TEST(AutofillProfileTest, CreateInferredLabelsNoDuplicatedFields) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -741,7 +745,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsNoDuplicatedFields)) 
 }
 
 // Make sure that empty fields are not treated as distinguishing fields.
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsSkipsEmptyFields)) {
+TEST(AutofillProfileTest, CreateInferredLabelsSkipsEmptyFields) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -780,7 +784,7 @@ TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsSkipsEmptyFields)) {
 }
 
 // Test that labels that would otherwise have multiline values are flattened.
-TEST(AutofillProfileTest, MAYBE_LOCALE(CreateInferredLabelsFlattensMultiLineValues)) {
+TEST(AutofillProfileTest, CreateInferredLabelsFlattensMultiLineValues) {
   ScopedVector<AutofillProfile> profiles;
   profiles.push_back(
       new AutofillProfile(base::GenerateGUID(), "https://www.example.com/"));
@@ -836,12 +840,9 @@ TEST(AutofillProfileTest, IsSubsetOf) {
   EXPECT_FALSE(a->IsSubsetOf(*b, "en-US"));
 }
 
-TEST(AutofillProfileTest, OverwriteWith) {
-  AutofillProfile a(base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(&a, "Marion", "Mitchell", "Morrison",
-                       "marion@me.xyz", "Fox", "123 Zoo St.", "unit 5",
-                       "Hollywood", "CA", "91601", "US",
-                       "12345678910");
+TEST(AutofillProfileTest, OverwriteWith_DifferentProfile) {
+  AutofillProfile a;
+  SetupTestProfile(a);
 
   // Create an identical profile except that the new profile:
   //   (1) Has a different origin,
@@ -858,13 +859,44 @@ TEST(AutofillProfileTest, OverwriteWith) {
   b.SetRawInfo(NAME_FULL, ASCIIToUTF16("Marion M. Morrison"));
   b.set_language_code("en");
 
-  a.OverwriteWith(b, "en-US");
+  EXPECT_TRUE(a.OverwriteWith(b, "en-US"));
   EXPECT_EQ("Chrome settings", a.origin());
   EXPECT_EQ(ASCIIToUTF16("area 51"), a.GetRawInfo(ADDRESS_HOME_LINE2));
   EXPECT_EQ(ASCIIToUTF16("Fox"), a.GetRawInfo(COMPANY_NAME));
   base::string16 name = a.GetInfo(AutofillType(NAME_FULL), "en-US");
   EXPECT_EQ(ASCIIToUTF16("Marion M. Morrison"), name);
   EXPECT_EQ("en", a.language_code());
+}
+
+TEST(AutofillProfileTest, OverwriteWith_SameProfile) {
+  AutofillProfile a;
+  SetupTestProfile(a);
+
+  AutofillProfile b = a;
+  b.set_guid(base::GenerateGUID());
+  EXPECT_FALSE(a.OverwriteWith(b, "en-US"));
+}
+
+TEST(AutofillProfileTest, OverwriteWith_DifferentName) {
+  AutofillProfile a;
+  SetupTestProfile(a);
+
+  AutofillProfile b = a;
+  b.SetRawInfo(NAME_FIRST, ASCIIToUTF16("Mario"));
+  EXPECT_TRUE(a.OverwriteWith(b, "en-US"));
+  base::string16 name_full = a.GetInfo(AutofillType(NAME_FULL), "en-US");
+  EXPECT_EQ(ASCIIToUTF16("Mario Mitchell Morrison"), name_full);
+}
+
+TEST(AutofillProfileTest, OverwriteWith_DifferentAddress) {
+  AutofillProfile a;
+  SetupTestProfile(a);
+
+  AutofillProfile b = a;
+  b.SetRawInfo(ADDRESS_HOME_LINE1, ASCIIToUTF16("123 Aquarium St."));
+  EXPECT_TRUE(a.OverwriteWith(b, "en-US"));
+  base::string16 address = a.GetRawInfo(ADDRESS_HOME_LINE1);
+  EXPECT_EQ(ASCIIToUTF16("123 Aquarium St."), address);
 }
 
 TEST(AutofillProfileTest, AssignmentOperator) {
@@ -1075,6 +1107,11 @@ TEST(AutofillProfileTest, CanonicalizeProfileString) {
   EXPECT_EQ(ASCIIToUTF16("mid island plaza"),
             AutofillProfile::CanonicalizeProfileString(base::WideToUTF16(
                 L"Mid\x2013Island\x2003 Plaza")));
+
+  // Newline character removed.
+  EXPECT_EQ(ASCIIToUTF16("1600 amphitheatre pkwy app 2"),
+            AutofillProfile::CanonicalizeProfileString(
+                ASCIIToUTF16("1600 amphitheatre pkwy \n App. 2")));
 }
 
 }  // namespace autofill

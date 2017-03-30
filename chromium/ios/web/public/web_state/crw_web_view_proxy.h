@@ -11,19 +11,31 @@
 
 @class CRWWebViewScrollViewProxy;
 
-// Provides an interface for embedders to access the WebState's UIWebView in a
+// Provides an interface for embedders to access the WebState's web view in a
 // limited and controlled manner.
-// TODO(kkhorimoto): rename protocol to CRWContentViewProxy.
+// TODO(crbug.com/546152): rename protocol to CRWContentViewProxy.
 @protocol CRWWebViewProxy<NSObject>
 
-// The UIWebView's bounding rectangle (relative to its parent).
+// The web view's bounding rectangle (relative to its parent).
 @property(readonly, assign) CGRect bounds;
+
+// The web view's frame rectangle.
+@property(readonly, assign) CGRect frame;
+
+// Adds a top padding to content view. Implementations of this protocol can
+// implement this method using UIScrollView.contentInset (where applicable) or
+// via resizing a subview's frame. Changing this property may impact performance
+// if implementation resizes its subview. Can be used as a workaround for
+// WKWebView bug, where UIScrollView.content inset does not work
+// (rdar://23584409). TODO(crbug.com/569349) remove this property once radar is
+// fixed.
+@property(nonatomic, assign) CGFloat topContentPadding;
 
 // A Boolean value indicating whether web content can programmatically display
 // the keyboard.
 @property(nonatomic, assign) BOOL keyboardDisplayRequiresUserAction;
 
-// Gives the embedder access to the UIWebView's UIScrollView in a limited and
+// Gives the embedder access to the web view's UIScrollView in a limited and
 // controlled manner.
 @property(nonatomic, readonly) CRWWebViewScrollViewProxy* scrollViewProxy;
 
@@ -32,6 +44,11 @@
 
 // Retuns the type of the web view this proxy manages.
 @property(nonatomic, readonly) web::WebViewType webViewType;
+
+// Whether or not the content view should use the content inset when setting
+// |topContentPadding|. Implementations may or may not respect the setting
+// of this property.
+@property(nonatomic, assign) BOOL shouldUseInsetForTopPadding;
 
 // Register the given insets for the given caller.
 - (void)registerInsets:(UIEdgeInsets)insets forCaller:(id)caller;
@@ -46,7 +63,13 @@
 - (BOOL)hasSearchableTextContent;
 
 // Returns the currently visible keyboard accessory, or nil.
-- (UIView*)getKeyboardAccessory;
+- (UIView*)keyboardAccessory;
+
+// Returns the currently visible keyboard input assistant item, or nil. Only
+// valid on iOS 9 or above.
+#if defined(__IPHONE_9_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_9_0
+- (UITextInputAssistantItem*)inputAssistantItem;
+#endif
 
 @end
 

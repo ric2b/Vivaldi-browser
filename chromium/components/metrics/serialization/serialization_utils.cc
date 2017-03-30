@@ -4,9 +4,11 @@
 
 #include "components/metrics/serialization/serialization_utils.h"
 
+#include <errno.h>
+#include <stdint.h>
 #include <sys/file.h>
-
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -91,8 +93,9 @@ scoped_ptr<MetricSample> SerializationUtils::ParseSample(
   if (sample.empty())
     return scoped_ptr<MetricSample>();
 
-  std::vector<std::string> parts;
-  base::SplitString(sample, '\0', &parts);
+  std::vector<std::string> parts = base::SplitString(
+      sample, std::string(1, '\0'),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   // We should have two null terminated strings so split should produce
   // three chunks.
   if (parts.size() != 3) {
@@ -158,7 +161,7 @@ void SerializationUtils::ReadAndTruncateMetricsFromFile(
 
     scoped_ptr<MetricSample> sample = ParseSample(message);
     if (sample)
-      metrics->push_back(sample.Pass());
+      metrics->push_back(std::move(sample));
   }
 
   result = ftruncate(fd.get(), 0);
@@ -194,7 +197,7 @@ bool SerializationUtils::WriteMetricToFile(const MetricSample& sample,
   }
 
   std::string msg = sample.ToString();
-  int32 size = msg.length() + sizeof(int32);
+  int32_t size = msg.length() + sizeof(int32_t);
   if (size > kMessageMaxLength) {
     DPLOG(ERROR) << "cannot write message: too long: " << filename;
     return false;

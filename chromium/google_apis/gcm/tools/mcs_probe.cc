@@ -5,9 +5,11 @@
 // A standalone tool for testing MCS connections and the MCS client on their
 // own.
 
+#include <stdint.h>
 #include <cstddef>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/at_exit.h"
@@ -25,6 +27,7 @@
 #include "base/threading/worker_pool.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "google_apis/gcm/base/fake_encryptor.h"
 #include "google_apis/gcm/base/mcs_message.h"
 #include "google_apis/gcm/base/mcs_util.h"
@@ -38,6 +41,8 @@
 #include "net/cert/cert_verifier.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
+#include "net/http/http_auth_preferences.h"
+#include "net/http/http_auth_scheme.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/transport_security_state.h"
@@ -88,7 +93,7 @@ const char kChromeVersion[] = "Chrome MCS Probe";
 
 // The default server to communicate with.
 const char kMCSServerHost[] = "mtalk.google.com";
-const uint16 kMCSServerPort = 5228;
+const uint16_t kMCSServerPort = 5228;
 
 // Command line switches.
 const char kRMQFileName[] = "rmq_file";
@@ -120,7 +125,7 @@ void MessageReceivedCallback(const MCSMessage& message) {
   }
 }
 
-void MessageSentCallback(int64 user_serial_number,
+void MessageSentCallback(int64_t user_serial_number,
                          const std::string& app_id,
                          const std::string& message_id,
                          MCSClient::MessageSendStatus status) {
@@ -137,7 +142,7 @@ class MyTestURLRequestContext : public net::TestURLRequestContext {
     context_storage_.set_host_resolver(
         net::HostResolver::CreateDefaultResolver(NULL));
     context_storage_.set_transport_security_state(
-        new net::TransportSecurityState());
+        make_scoped_ptr(new net::TransportSecurityState()));
     Init();
   }
 
@@ -183,6 +188,27 @@ class MyTestCertVerifier : public net::CertVerifier {
   }
 };
 
+class MCSProbeAuthPreferences : public net::HttpAuthPreferences {
+ public:
+  MCSProbeAuthPreferences()
+      : HttpAuthPreferences(std::vector<std::string>()
+#if defined(OS_POSIX) && !defined(OS_ANDROID)
+                                ,
+                            std::string()
+#endif
+                                ) {
+  }
+  bool IsSupportedScheme(const std::string& scheme) const override {
+    return scheme == std::string(net::kBasicAuthScheme);
+  }
+  bool NegotiateDisableCnameLookup() const override { return false; }
+  bool NegotiateEnablePort() const override { return false; }
+  bool CanUseDefaultCredentials(const GURL& auth_origin) const override {
+    return false;
+  }
+  bool CanDelegate(const GURL& auth_origin) const override { return false; }
+};
+
 class MCSProbe {
  public:
   MCSProbe(
@@ -192,8 +218,8 @@ class MCSProbe {
 
   void Start();
 
-  uint64 android_id() const { return android_id_; }
-  uint64 secret() const { return secret_; }
+  uint64_t android_id() const { return android_id_; }
+  uint64_t secret() const { return secret_; }
 
  private:
   void CheckIn();
@@ -212,8 +238,8 @@ class MCSProbe {
   base::CommandLine command_line_;
 
   base::FilePath gcm_store_path_;
-  uint64 android_id_;
-  uint64 secret_;
+  uint64_t android_id_;
+  uint64_t secret_;
   std::string server_host_;
   int server_port_;
 
@@ -225,11 +251,11 @@ class MCSProbe {
   scoped_ptr<net::CertVerifier> cert_verifier_;
   scoped_ptr<net::ChannelIDService> system_channel_id_service_;
   scoped_ptr<net::TransportSecurityState> transport_security_state_;
-  scoped_ptr<net::URLSecurityManager> url_security_manager_;
+  MCSProbeAuthPreferences http_auth_preferences_;
   scoped_ptr<net::HttpAuthHandlerFactory> http_auth_handler_factory_;
   scoped_ptr<net::HttpServerPropertiesImpl> http_server_properties_;
   scoped_ptr<net::HostMappingRules> host_mapping_rules_;
-  scoped_refptr<net::HttpNetworkSession> network_session_;
+  scoped_ptr<net::HttpNetworkSession> network_session_;
   scoped_ptr<net::ProxyService> proxy_service_;
 
   FakeGCMStatsRecorder recorder_;
@@ -293,7 +319,7 @@ void MCSProbe::Start() {
   connection_factory_.reset(
       new ConnectionFactoryImpl(endpoints,
                                 kDefaultBackoffPolicy,
-                                network_session_,
+                                network_session_.get(),
                                 NULL,
                                 &net_log_,
                                 &recorder_));
@@ -330,9 +356,8 @@ void MCSProbe::LoadCallback(scoped_ptr<GCMStore::LoadResult> load_result) {
   }
   mcs_client_->Initialize(
       base::Bind(&MCSProbe::ErrorCallback, base::Unretained(this)),
-      base::Bind(&MessageReceivedCallback),
-      base::Bind(&MessageSentCallback),
-      load_result.Pass());
+      base::Bind(&MessageReceivedCallback), base::Bind(&MessageSentCallback),
+      std::move(load_result));
 
   if (!android_id_ || !secret_) {
     DVLOG(1) << "Checkin to generate new MCS credentials.";
@@ -360,7 +385,7 @@ void MCSProbe::InitializeNetworkState() {
     logger_.reset(new net::WriteToFileNetLogObserver());
     logger_->set_capture_mode(
         net::NetLogCaptureMode::IncludeCookiesAndCredentials());
-    logger_->StartObserving(&net_log_, log_file.Pass(), nullptr, nullptr);
+    logger_->StartObserving(&net_log_, std::move(log_file), nullptr, nullptr);
   }
 
   host_resolver_ = net::HostResolver::CreateDefaultResolver(&net_log_);
@@ -368,7 +393,7 @@ void MCSProbe::InitializeNetworkState() {
   if (command_line_.HasSwitch(kIgnoreCertSwitch)) {
     cert_verifier_.reset(new MyTestCertVerifier());
   } else {
-    cert_verifier_.reset(net::CertVerifier::CreateDefault());
+    cert_verifier_ = net::CertVerifier::CreateDefault();
   }
   system_channel_id_service_.reset(
       new net::ChannelIDService(
@@ -376,13 +401,11 @@ void MCSProbe::InitializeNetworkState() {
           base::WorkerPool::GetTaskRunner(true)));
 
   transport_security_state_.reset(new net::TransportSecurityState());
-  url_security_manager_.reset(net::URLSecurityManager::Create(NULL, NULL));
-  http_auth_handler_factory_.reset(net::HttpAuthHandlerRegistryFactory::Create(
-      std::vector<std::string>(1, "basic"), url_security_manager_.get(),
-      host_resolver_.get(), std::string(), std::string(), false, false));
+  http_auth_handler_factory_ = net::HttpAuthHandlerRegistryFactory::Create(
+      &http_auth_preferences_, host_resolver_.get());
   http_server_properties_.reset(new net::HttpServerPropertiesImpl());
   host_mapping_rules_.reset(new net::HostMappingRules());
-  proxy_service_.reset(net::ProxyService::CreateDirectWithNetLog(&net_log_));
+  proxy_service_ = net::ProxyService::CreateDirectWithNetLog(&net_log_);
 }
 
 void MCSProbe::BuildNetworkSession() {
@@ -403,7 +426,7 @@ void MCSProbe::BuildNetworkSession() {
   session_params.net_log = &net_log_;
   session_params.proxy_service = proxy_service_.get();
 
-  network_session_ = new net::HttpNetworkSession(session_params);
+  network_session_.reset(new net::HttpNetworkSession(session_params));
 }
 
 void MCSProbe::ErrorCallback() {
@@ -426,7 +449,7 @@ void MCSProbe::CheckIn() {
                                            chrome_build_proto);
 
   checkin_request_.reset(new CheckinRequest(
-      GServicesSettings::DefaultCheckinURL(),
+      GServicesSettings().GetCheckinURL(),
       request_info,
       kDefaultBackoffPolicy,
       base::Bind(&MCSProbe::OnCheckInCompleted, base::Unretained(this)),

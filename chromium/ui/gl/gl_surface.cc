@@ -4,22 +4,18 @@
 
 #include "ui/gl/gl_surface.h"
 
-#include <algorithm>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_local.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
-
-#if defined(USE_X11)
-#include <X11/Xlib.h>
-#endif
 
 namespace gfx {
 
@@ -32,7 +28,7 @@ base::LazyInstance<base::ThreadLocalPointer<GLSurface> >::Leaky
 bool GLSurface::InitializeOneOff() {
   DCHECK_EQ(kGLImplementationNone, GetGLImplementation());
 
-  TRACE_EVENT0("gpu", "GLSurface::InitializeOneOff");
+  TRACE_EVENT0("gpu,startup", "GLSurface::InitializeOneOff");
 
   std::vector<GLImplementation> allowed_impls;
   GetAllowedGLImplementations(&allowed_impls);
@@ -50,13 +46,13 @@ bool GLSurface::InitializeOneOff() {
         cmd->GetSwitchValueASCII(switches::kUseGL);
     if (requested_implementation_name == "any") {
       fallback_to_osmesa = true;
-    } else if (requested_implementation_name == "swiftshader") {
+    } else if (requested_implementation_name ==
+                   kGLImplementationSwiftShaderName ||
+               requested_implementation_name == kGLImplementationANGLEName) {
       impl = kGLImplementationEGLGLES2;
     } else {
       impl = GetNamedGLImplementation(requested_implementation_name);
-      if (std::find(allowed_impls.begin(),
-                    allowed_impls.end(),
-                    impl) == allowed_impls.end()) {
+      if (!ContainsValue(allowed_impls, impl)) {
         LOG(ERROR) << "Requested GL implementation is not available.";
         return false;
       }
@@ -97,81 +93,15 @@ bool GLSurface::InitializeOneOffImplementation(GLImplementation impl,
   return initialized;
 }
 
-// static
-void GLSurface::InitializeOneOffForTests() {
-  DCHECK_EQ(kGLImplementationNone, GetGLImplementation());
-
-#if defined(USE_X11)
-  XInitThreads();
-#endif
-
-  bool use_osmesa = true;
-
-  // We usually use OSMesa as this works on all bots. The command line can
-  // override this behaviour to use hardware GL.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseGpuInTests))
-    use_osmesa = false;
-
-#if defined(OS_ANDROID)
-  // On Android we always use hardware GL.
-  use_osmesa = false;
-#endif
-
-  std::vector<GLImplementation> allowed_impls;
-  GetAllowedGLImplementations(&allowed_impls);
-  DCHECK(!allowed_impls.empty());
-
-  GLImplementation impl = allowed_impls[0];
-  if (use_osmesa)
-    impl = kGLImplementationOSMesaGL;
-
-  DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kUseGL))
-      << "kUseGL has not effect in tests";
-
-  bool fallback_to_osmesa = false;
-  bool gpu_service_logging = false;
-  bool disable_gl_drawing = true;
-
-  CHECK(InitializeOneOffImplementation(
-      impl, fallback_to_osmesa, gpu_service_logging, disable_gl_drawing));
-}
-
-// static
-void GLSurface::InitializeOneOffWithMockBindingsForTests() {
-  DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kUseGL))
-      << "kUseGL has not effect in tests";
-
-  // This method may be called multiple times in the same process to set up
-  // mock bindings in different ways.
-  ClearGLBindings();
-
-  bool fallback_to_osmesa = false;
-  bool gpu_service_logging = false;
-  bool disable_gl_drawing = false;
-
-  CHECK(InitializeOneOffImplementation(kGLImplementationMockGL,
-                                       fallback_to_osmesa,
-                                       gpu_service_logging,
-                                       disable_gl_drawing));
-}
-
-// static
-void GLSurface::InitializeDynamicMockBindingsForTests(GLContext* context) {
-  CHECK(InitializeDynamicGLBindings(kGLImplementationMockGL, context));
-}
-
 GLSurface::GLSurface() {}
 
 bool GLSurface::Initialize() {
   return true;
 }
 
-void GLSurface::DestroyAndTerminateDisplay() {
-  Destroy();
-}
-
-bool GLSurface::Resize(const gfx::Size& size) {
+bool GLSurface::Resize(const gfx::Size& size,
+                       float scale_factor,
+                       bool has_alpha) {
   NOTIMPLEMENTED();
   return false;
 }
@@ -189,29 +119,42 @@ bool GLSurface::SupportsPostSubBuffer() {
   return false;
 }
 
+bool GLSurface::SupportsCommitOverlayPlanes() {
+  return false;
+}
+
+bool GLSurface::SupportsAsyncSwap() {
+  return false;
+}
+
 unsigned int GLSurface::GetBackingFrameBufferObject() {
   return 0;
 }
 
-bool GLSurface::SwapBuffersAsync(const SwapCompletionCallback& callback) {
-  DCHECK(!IsSurfaceless());
-  gfx::SwapResult result = SwapBuffers();
-  callback.Run(result);
-  return result == gfx::SwapResult::SWAP_ACK;
+void GLSurface::SwapBuffersAsync(const SwapCompletionCallback& callback) {
+  NOTREACHED();
 }
 
 gfx::SwapResult GLSurface::PostSubBuffer(int x, int y, int width, int height) {
   return gfx::SwapResult::SWAP_FAILED;
 }
 
-bool GLSurface::PostSubBufferAsync(int x,
+void GLSurface::PostSubBufferAsync(int x,
                                    int y,
                                    int width,
                                    int height,
                                    const SwapCompletionCallback& callback) {
-  gfx::SwapResult result = PostSubBuffer(x, y, width, height);
-  callback.Run(result);
-  return result == gfx::SwapResult::SWAP_ACK;
+  NOTREACHED();
+}
+
+gfx::SwapResult GLSurface::CommitOverlayPlanes() {
+  NOTREACHED();
+  return gfx::SwapResult::SWAP_FAILED;
+}
+
+void GLSurface::CommitOverlayPlanesAsync(
+    const SwapCompletionCallback& callback) {
+  NOTREACHED();
 }
 
 bool GLSurface::OnMakeCurrent(GLContext* context) {
@@ -254,14 +197,32 @@ VSyncProvider* GLSurface::GetVSyncProvider() {
 
 bool GLSurface::ScheduleOverlayPlane(int z_order,
                                      OverlayTransform transform,
-                                     GLImage* image,
+                                     gl::GLImage* image,
                                      const Rect& bounds_rect,
                                      const RectF& crop_rect) {
   NOTIMPLEMENTED();
   return false;
 }
 
+bool GLSurface::ScheduleCALayer(gl::GLImage* contents_image,
+                                const RectF& contents_rect,
+                                float opacity,
+                                unsigned background_color,
+                                unsigned edge_aa_mask,
+                                const RectF& rect,
+                                bool is_clipped,
+                                const RectF& clip_rect,
+                                const Transform& transform,
+                                int sorting_content_id) {
+  NOTIMPLEMENTED();
+  return false;
+}
+
 bool GLSurface::IsSurfaceless() const {
+  return false;
+}
+
+bool GLSurface::FlipsVertically() const {
   return false;
 }
 
@@ -304,8 +265,10 @@ void GLSurfaceAdapter::Destroy() {
   surface_->Destroy();
 }
 
-bool GLSurfaceAdapter::Resize(const gfx::Size& size) {
-  return surface_->Resize(size);
+bool GLSurfaceAdapter::Resize(const gfx::Size& size,
+                              float scale_factor,
+                              bool has_alpha) {
+  return surface_->Resize(size, scale_factor, has_alpha);
 }
 
 bool GLSurfaceAdapter::Recreate() {
@@ -324,9 +287,9 @@ gfx::SwapResult GLSurfaceAdapter::SwapBuffers() {
   return surface_->SwapBuffers();
 }
 
-bool GLSurfaceAdapter::SwapBuffersAsync(
+void GLSurfaceAdapter::SwapBuffersAsync(
     const SwapCompletionCallback& callback) {
-  return surface_->SwapBuffersAsync(callback);
+  surface_->SwapBuffersAsync(callback);
 }
 
 gfx::SwapResult GLSurfaceAdapter::PostSubBuffer(int x,
@@ -336,14 +299,34 @@ gfx::SwapResult GLSurfaceAdapter::PostSubBuffer(int x,
   return surface_->PostSubBuffer(x, y, width, height);
 }
 
-bool GLSurfaceAdapter::PostSubBufferAsync(
-    int x, int y, int width, int height,
-        const SwapCompletionCallback& callback) {
-  return surface_->PostSubBufferAsync(x, y, width, height, callback);
+void GLSurfaceAdapter::PostSubBufferAsync(
+    int x,
+    int y,
+    int width,
+    int height,
+    const SwapCompletionCallback& callback) {
+  surface_->PostSubBufferAsync(x, y, width, height, callback);
+}
+
+gfx::SwapResult GLSurfaceAdapter::CommitOverlayPlanes() {
+  return surface_->CommitOverlayPlanes();
+}
+
+void GLSurfaceAdapter::CommitOverlayPlanesAsync(
+    const SwapCompletionCallback& callback) {
+  surface_->CommitOverlayPlanesAsync(callback);
 }
 
 bool GLSurfaceAdapter::SupportsPostSubBuffer() {
   return surface_->SupportsPostSubBuffer();
+}
+
+bool GLSurfaceAdapter::SupportsCommitOverlayPlanes() {
+  return surface_->SupportsCommitOverlayPlanes();
+}
+
+bool GLSurfaceAdapter::SupportsAsyncSwap() {
+  return surface_->SupportsAsyncSwap();
 }
 
 gfx::Size GLSurfaceAdapter::GetSize() {
@@ -392,7 +375,7 @@ VSyncProvider* GLSurfaceAdapter::GetVSyncProvider() {
 
 bool GLSurfaceAdapter::ScheduleOverlayPlane(int z_order,
                                             OverlayTransform transform,
-                                            GLImage* image,
+                                            gl::GLImage* image,
                                             const Rect& bounds_rect,
                                             const RectF& crop_rect) {
   return surface_->ScheduleOverlayPlane(
@@ -401,6 +384,10 @@ bool GLSurfaceAdapter::ScheduleOverlayPlane(int z_order,
 
 bool GLSurfaceAdapter::IsSurfaceless() const {
   return surface_->IsSurfaceless();
+}
+
+bool GLSurfaceAdapter::FlipsVertically() const {
+  return surface_->FlipsVertically();
 }
 
 GLSurfaceAdapter::~GLSurfaceAdapter() {}

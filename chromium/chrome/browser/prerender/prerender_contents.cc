@@ -4,12 +4,15 @@
 
 #include "chrome/browser/prerender/prerender_contents.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <functional>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/prerender/prerender_field_trial.h"
@@ -33,6 +36,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/resource_request_details.h"
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/web_contents.h"
@@ -91,13 +95,19 @@ class PrerenderContents::WebContentsDelegateImpl
                               const OpenURLParams& params) override {
     // |OpenURLFromTab| is typically called when a frame performs a navigation
     // that requires the browser to perform the transition instead of WebKit.
-    // Examples include prerendering a site that redirects to an app URL, or if
-    // --site-per-process is specified and the prerendered frame redirects to a
-    // different origin.
+    // Examples include client redirects to hosted app URLs.
     // TODO(cbentzel): Consider supporting this for CURRENT_TAB dispositions, if
     // it is a common case during prerenders.
     prerender_contents_->Destroy(FINAL_STATUS_OPEN_URL);
     return NULL;
+  }
+
+  bool ShouldTransferNavigation() override {
+    // Cancel the prerender if the navigation attempts to transfer to a
+    // different process.  Examples include server redirects to privileged pages
+    // or cross-site subframe navigations in --site-per-process.
+    prerender_contents_->Destroy(FINAL_STATUS_OPEN_URL);
+    return false;
   }
 
   void CloseContents(content::WebContents* contents) override {
@@ -106,17 +116,17 @@ class PrerenderContents::WebContentsDelegateImpl
 
   void CanDownload(const GURL& url,
                    const std::string& request_method,
-                   const content::DownloadInformation& info,
-                   const base::Callback<void(const content::DownloadItemAction&)>& callback)  override {
+                   const base::Callback<void(bool)>& callback) override {
     prerender_contents_->Destroy(FINAL_STATUS_DOWNLOAD);
     // Cancel the download.
-    callback.Run(content::DownloadItemAction(false, false, false));
+    callback.Run(false);
   }
 
   bool ShouldCreateWebContents(
       WebContents* web_contents,
-      int route_id,
-      int main_frame_route_id,
+      int32_t route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
       WindowContainerType window_container_type,
       const std::string& frame_name,
       const GURL& target_url,
@@ -196,7 +206,6 @@ PrerenderContents::PrerenderContents(
       prerender_url_(url),
       referrer_(referrer),
       profile_(profile),
-      page_id_(0),
       has_stopped_loading_(false),
       has_finished_loading_(false),
       final_status_(FINAL_STATUS_MAX),
@@ -420,7 +429,7 @@ void PrerenderContents::Observe(int type,
         // thread of the browser process.  When the RenderView receives its
         // size, is also sets itself to be visible, which would then break the
         // visibility API.
-        new_render_view_host->WasResized();
+        new_render_view_host->GetWidget()->WasResized();
         prerender_contents_->WasHidden();
       }
       break;
@@ -525,8 +534,8 @@ bool PrerenderContents::Matches(
       session_storage_namespace_id_ != session_storage_namespace->id()) {
     return false;
   }
-  return std::count_if(alias_urls_.begin(), alias_urls_.end(),
-                       std::bind2nd(std::equal_to<GURL>(), url)) != 0;
+  return std::find(alias_urls_.begin(), alias_urls_.end(), url) !=
+         alias_urls_.end();
 }
 
 void PrerenderContents::RenderProcessGone(base::TerminationStatus status) {
@@ -753,7 +762,7 @@ void PrerenderContents::AddResourceThrottle(
   resource_throttles_.push_back(throttle);
 }
 
-void PrerenderContents::AddNetworkBytes(int64 bytes) {
+void PrerenderContents::AddNetworkBytes(int64_t bytes) {
   network_bytes_ += bytes;
 }
 

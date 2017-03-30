@@ -4,13 +4,13 @@
 
 #include "chrome/common/extensions/chrome_manifest_url_handlers.h"
 
-#include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/url_constants.h"
 #include "extensions/common/error_utils.h"
@@ -22,8 +22,10 @@
 #include "extensions/common/permissions/api_permission.h"
 
 #if defined(USE_AURA)
-#include "ui/keyboard/keyboard_constants.h"
+#include "ui/keyboard/content/keyboard_constants.h"  // nogncheck
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace extensions {
 
@@ -103,7 +105,7 @@ bool URLOverridesHandler::Parse(Extension* extension, base::string16* error) {
     std::string page = iter.key();
     std::string val;
     // Restrict override pages to a list of supported URLs.
-    bool is_override = !base::CommandLine::ForCurrentProcess()->IsRunningVivaldi() &&
+    bool is_override = !vivaldi::IsVivaldiRunning() &&
                        (page != chrome::kChromeUINewTabHost &&
                         page != chrome::kChromeUIBookmarksHost &&
                         page != chrome::kChromeUIHistoryHost);
@@ -138,7 +140,7 @@ bool URLOverridesHandler::Parse(Extension* extension, base::string16* error) {
   }
 
   // An extension may override at most one page.
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi() &&
+  if (!vivaldi::IsVivaldiRunning() &&
     overrides->size() > 1) {
     *error = base::ASCIIToUTF16(errors::kMultipleOverrides);
     return false;

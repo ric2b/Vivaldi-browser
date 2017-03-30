@@ -5,14 +5,16 @@
 #ifndef TOOLS_GN_TEST_WITH_SCOPE_H_
 #define TOOLS_GN_TEST_WITH_SCOPE_H_
 
+#include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/err.h"
 #include "tools/gn/input_file.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scope.h"
+#include "tools/gn/scope_per_file_provider.h"
 #include "tools/gn/settings.h"
 #include "tools/gn/target.h"
 #include "tools/gn/token.h"
@@ -28,7 +30,9 @@ class TestWithScope {
 
   BuildSettings* build_settings() { return &build_settings_; }
   Settings* settings() { return &settings_; }
+  const Settings* settings() const { return &settings_; }
   Toolchain* toolchain() { return &toolchain_; }
+  const Toolchain* toolchain() const { return &toolchain_; }
   Scope* scope() { return &scope_; }
 
   // This buffer accumulates output from any print() commands executed in the
@@ -58,6 +62,9 @@ class TestWithScope {
   Settings settings_;
   Toolchain toolchain_;
   Scope scope_;
+
+  // Supplies the scope with built-in variables like root_out_dir.
+  ScopePerFileProvider scope_progammatic_provider_;
 
   std::string print_output_;
 
@@ -97,7 +104,7 @@ class TestParseInput {
 // default to public visibility.
 class TestTarget : public Target {
  public:
-  TestTarget(TestWithScope& setup,
+  TestTarget(const TestWithScope& setup,
              const std::string& label_string,
              Target::OutputType type);
   ~TestTarget() override;

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/global_error_bubble_view.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
@@ -12,8 +14,8 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/views/elevation_icon_setter.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/toolbar/wrench_toolbar_button.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -33,7 +35,7 @@ enum {
 
 const int kMaxBubbleViewWidth = 262;
 
-// The vertical inset of the wrench bubble anchor from the wrench menu button.
+// The vertical inset of the app bubble anchor from the app menu button.
 const int kAnchorVerticalInset = 5;
 
 const int kBubblePadding = 19;
@@ -50,12 +52,9 @@ GlobalErrorBubbleViewBase* GlobalErrorBubbleViewBase::ShowStandardBubbleView(
     Browser* browser,
     const base::WeakPtr<GlobalErrorWithStandardBubble>& error) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  views::View* wrench_button = browser_view->toolbar()->app_menu();
-  GlobalErrorBubbleView* bubble_view =
-      new GlobalErrorBubbleView(wrench_button,
-                                views::BubbleBorder::TOP_RIGHT,
-                                browser,
-                                error);
+  views::View* app_menu_button = browser_view->toolbar()->app_menu_button();
+  GlobalErrorBubbleView* bubble_view = new GlobalErrorBubbleView(
+      app_menu_button, views::BubbleBorder::TOP_RIGHT, browser, error);
   views::BubbleDelegateView::CreateBubble(bubble_view);
   bubble_view->GetWidget()->Show();
   return bubble_view;
@@ -92,7 +91,6 @@ GlobalErrorBubbleView::GlobalErrorBubbleView(
   base::string16 accept_string(error_->GetBubbleViewAcceptButtonLabel());
   scoped_ptr<views::BlueButton> accept_button(
       new views::BlueButton(this, accept_string));
-  accept_button->SetStyle(views::Button::STYLE_BUTTON);
   accept_button->SetIsDefault(true);
   accept_button->set_tag(TAG_ACCEPT_BUTTON);
 

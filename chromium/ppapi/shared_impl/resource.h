@@ -9,7 +9,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "ppapi/c/pp_instance.h"
 #include "ppapi/c/pp_resource.h"
@@ -22,6 +22,7 @@
   F(PPB_Audio_API)                      \
   F(PPB_AudioBuffer_API)                \
   F(PPB_AudioConfig_API)                \
+  F(PPB_AudioEncoder_API)               \
   F(PPB_AudioInput_API)                 \
   F(PPB_AudioTrusted_API)               \
   F(PPB_Broker_API)                     \

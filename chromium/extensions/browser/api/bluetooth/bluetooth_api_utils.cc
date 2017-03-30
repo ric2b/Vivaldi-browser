@@ -10,7 +10,7 @@
 #include "device/bluetooth/bluetooth_device.h"
 #include "extensions/common/api/bluetooth.h"
 
-namespace bluetooth = extensions::core_api::bluetooth;
+namespace bluetooth = extensions::api::bluetooth;
 
 using device::BluetoothDevice;
 using bluetooth::VendorIdSource;
@@ -88,7 +88,7 @@ bool ConvertDeviceTypeToApi(const BluetoothDevice::DeviceType& input,
 }  // namespace
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace bluetooth {
 
 void BluetoothDeviceToApiDevice(const device::BluetoothDevice& device,
@@ -111,6 +111,8 @@ void BluetoothDeviceToApiDevice(const device::BluetoothDevice& device,
 
   out->paired.reset(new bool(device.IsPaired()));
   out->connected.reset(new bool(device.IsConnected()));
+  out->connecting.reset(new bool(device.IsConnecting()));
+  out->connectable.reset(new bool(device.IsConnectable()));
 
   std::vector<std::string>* string_uuids = new std::vector<std::string>();
   const device::BluetoothDevice::UUIDList& uuids = device.GetUUIDs();
@@ -140,5 +142,5 @@ void PopulateAdapterState(const device::BluetoothAdapter& adapter,
 }
 
 }  // namespace bluetooth
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

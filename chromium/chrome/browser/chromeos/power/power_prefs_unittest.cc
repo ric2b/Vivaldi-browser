@@ -5,9 +5,11 @@
 #include "chrome/browser/chromeos/power/power_prefs.h"
 
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -16,19 +18,19 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_special_storage_policy.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/policy.pb.h"
 #include "chromeos/dbus/power_policy_controller.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -172,13 +174,13 @@ bool PowerPrefsTest::GetExpectedAllowScreenWakeLocksForProfile(
 
 TEST_F(PowerPrefsTest, LoginScreen) {
   // Set up login profile.
-  scoped_ptr<TestingPrefServiceSyncable> login_profile_prefs(
-      new TestingPrefServiceSyncable);
+  scoped_ptr<syncable_prefs::TestingPrefServiceSyncable> login_profile_prefs(
+      new syncable_prefs::TestingPrefServiceSyncable);
   chrome::RegisterLoginProfilePrefs(login_profile_prefs->registry());
   TestingProfile::Builder builder;
   builder.SetPath(
       profile_manager_.profiles_dir().AppendASCII(chrome::kInitialProfile));
-  builder.SetPrefService(login_profile_prefs.Pass());
+  builder.SetPrefService(std::move(login_profile_prefs));
   TestingProfile* login_profile = builder.BuildIncognito(
       profile_manager_.CreateTestingProfile(chrome::kInitialProfile));
 
@@ -241,10 +243,11 @@ TEST_F(PowerPrefsTest, UserSession) {
 
   // Set up user profile.
   const char test_user1[] = "test-user1@example.com";
-  user_manager->AddUser(test_user1);
-  user_manager->LoginUser(test_user1);
+  const AccountId test_account_id1(AccountId::FromUserEmail(test_user1));
+  user_manager->AddUser(test_account_id1);
+  user_manager->LoginUser(test_account_id1);
   TestingProfile* user_profile =
-      profile_manager_.CreateTestingProfile(test_user1);
+      profile_manager_.CreateTestingProfile(test_account_id1.GetUserEmail());
 
   profile_manager_.SetLoggedIn(true);
 
@@ -260,10 +263,11 @@ TEST_F(PowerPrefsTest, UserSession) {
             GetCurrentAllowScreenWakeLocks());
 
   const char test_user2[] = "test-user2@example.com";
-  user_manager->AddUser(test_user2);
-  user_manager->LoginUser(test_user2);
+  const AccountId test_account_id2(AccountId::FromUserEmail(test_user2));
+  user_manager->AddUser(test_account_id2);
+  user_manager->LoginUser(test_account_id2);
   TestingProfile* other_profile =
-      profile_manager_.CreateTestingProfile(test_user2);
+      profile_manager_.CreateTestingProfile(test_account_id2.GetUserEmail());
 
   // Inform power_prefs_ that an unrelated profile has been destroyed.
   power_prefs_->Observe(chrome::NOTIFICATION_PROFILE_DESTROYED,

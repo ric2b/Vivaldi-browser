@@ -7,13 +7,6 @@
 
 // TODO: crbug/115375 to track implementation for following methods.
 // static
-ShellIntegration::DefaultWebClientSetPermission
-    ShellIntegration::CanSetAsDefaultBrowser() {
-  NOTIMPLEMENTED();
-  return SET_DEFAULT_NOT_ALLOWED;
-}
-
-// static
 bool ShellIntegration::SetAsDefaultBrowser() {
   NOTIMPLEMENTED();
   return false;
@@ -26,14 +19,14 @@ bool ShellIntegration::SetAsDefaultProtocolClient(const std::string& protocol) {
 }
 
 // static
-ShellIntegration::DefaultWebClientState ShellIntegration::GetDefaultBrowser() {
+ShellIntegration::DefaultWebClientSetPermission
+    ShellIntegration::CanSetAsDefaultBrowser() {
   NOTIMPLEMENTED();
-  return UNKNOWN_DEFAULT;
+  return SET_DEFAULT_NOT_ALLOWED;
 }
 
 // static
-ShellIntegration::DefaultWebClientState
-ShellIntegration::IsDefaultProtocolClient(const std::string& protocol) {
+ShellIntegration::DefaultWebClientState ShellIntegration::GetDefaultBrowser() {
   NOTIMPLEMENTED();
   return UNKNOWN_DEFAULT;
 }
@@ -41,6 +34,13 @@ ShellIntegration::IsDefaultProtocolClient(const std::string& protocol) {
 // static
 bool ShellIntegration::IsFirefoxDefaultBrowser() {
   return false;
+}
+
+// static
+ShellIntegration::DefaultWebClientState
+ShellIntegration::IsDefaultProtocolClient(const std::string& protocol) {
+  NOTIMPLEMENTED();
+  return UNKNOWN_DEFAULT;
 }
 
 // static
@@ -52,4 +52,3 @@ bool ShellIntegration::IsChromeDefaultBrowser() {
 bool ShellIntegration::IsOperaDefaultBrowser() {
   return false;
 }
-

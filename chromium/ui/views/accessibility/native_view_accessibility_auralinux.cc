@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "base/stl_util.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_platform_node_auralinux.h"
@@ -33,7 +35,7 @@ class AuraLinuxApplication
  public:
   // Get the single instance of this class.
   static AuraLinuxApplication* GetInstance() {
-    return Singleton<AuraLinuxApplication>::get();
+    return base::Singleton<AuraLinuxApplication>::get();
   }
 
   // Called every time we create a new accessibility on a View.
@@ -44,7 +46,7 @@ class AuraLinuxApplication
       return;
 
     widget = widget->GetTopLevelWidget();
-    if (std::find(widgets_.begin(), widgets_.end(), widget) != widgets_.end())
+    if (ContainsValue(widgets_, widget))
       return;
 
     widgets_.push_back(widget);
@@ -114,7 +116,7 @@ class AuraLinuxApplication
   }
 
  private:
-  friend struct DefaultSingletonTraits<AuraLinuxApplication>;
+  friend struct base::DefaultSingletonTraits<AuraLinuxApplication>;
 
   AuraLinuxApplication()
       : platform_node_(ui::AXPlatformNode::Create(this)) {

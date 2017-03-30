@@ -4,17 +4,18 @@
 
 #include "ui/accessibility/platform/ax_platform_node.h"
 
+#include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 
 namespace ui {
 
-#if !defined(OS_MACOSX) && !defined(OS_WIN) && !(defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if !defined(PLATFORM_HAS_AX_PLATFORM_NODE_IMPL)
 // static
 AXPlatformNode* AXPlatformNode::Create(AXPlatformNodeDelegate* delegate) {
   return nullptr;
 }
-#endif
+#endif  // !defined(PLATFORM_HAS_AX_PLATFORM_NODE_IMPL)
 
 #if !defined(OS_WIN)
 // This is the default implementation for platforms where native views

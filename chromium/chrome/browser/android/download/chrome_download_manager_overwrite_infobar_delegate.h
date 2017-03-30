@@ -8,6 +8,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "chrome/browser/android/download/download_overwrite_infobar_delegate.h"
 #include "chrome/browser/download/download_target_determiner_delegate.h"
 #include "components/infobars/core/infobar_delegate.h"
@@ -37,6 +38,7 @@ class ChromeDownloadManagerOverwriteInfoBarDelegate
       const DownloadTargetDeterminerDelegate::FileSelectedCallback& callback);
 
   // DownloadOverwriteInfoBarDelegate:
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   bool OverwriteExistingFile() override;
   bool CreateNewFile() override;
   std::string GetFileName() const override;

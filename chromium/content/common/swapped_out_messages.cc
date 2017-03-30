@@ -27,11 +27,12 @@ bool SwappedOutMessages::CanSendWhileSwappedOut(const IPC::Message* msg) {
     // Handled by RenderViewHost.
     case ViewHostMsg_ClosePage_ACK::ID:
     case ViewHostMsg_SwapCompositorFrame::ID:
-    // Handled by WorkerMessageFilter (or by SharedWorkerMessageFilter when
-    // embedded-shared-worker is enabled).
+    // Handled by SharedWorkerMessageFilter.
     case ViewHostMsg_DocumentDetached::ID:
     // Allow cross-process JavaScript calls.
     case ViewHostMsg_RouteCloseEvent::ID:
+    // Send page scale factor reset notification upon cross-process navigations.
+    case ViewHostMsg_PageScaleFactorChanged::ID:
     // Handled by RenderFrameHost.
     case FrameHostMsg_BeforeUnload_ACK::ID:
     case FrameHostMsg_SwapOut_ACK::ID:
@@ -47,6 +48,8 @@ bool SwappedOutMessages::CanSendWhileSwappedOut(const IPC::Message* msg) {
     // The browser should always have an accurate mirror of the renderer's
     // notion of the current page id.
     case FrameHostMsg_DidAssignPageId::ID:
+    // A swapped-out frame's opener might be updated with window.open.
+    case FrameHostMsg_DidChangeOpener::ID:
     // Used in layout tests; handled in BlinkTestController.
     case ShellViewHostMsg_PrintMessage::ID:
       return true;
@@ -78,8 +81,6 @@ bool SwappedOutMessages::CanHandleWhileSwappedOut(
     case ViewHostMsg_ShowWidget::ID:
     // Sends an ACK.
     case ViewHostMsg_ShowFullscreenWidget::ID:
-    // Updates browser state.
-    case ViewHostMsg_RenderViewReady::ID:
     // Updates the previous navigation entry.
     case ViewHostMsg_UpdateState::ID:
     // Sends an ACK.

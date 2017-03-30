@@ -6,6 +6,7 @@
 #define MEDIA_BASE_PIPELINE_H_
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
@@ -62,21 +63,34 @@ typedef base::Callback<void(PipelineMetadata)> PipelineMetadataCB;
 //   [ InitXXX (for each filter) ]      [ Stopping ]
 //         |                                 |
 //         V                                 V
-//   [ Playing ] <-- [ Seeking ]        [ Stopped ]
-//         |               ^
-//         `---------------'
-//              Seek()
+//   [ Playing ] <---------.            [ Stopped ]
+//     |     | Seek()      |
+//     |     V             |
+//     |   [ Seeking ] ----'
+//     |                   ^
+//     | Suspend()         |
+//     V                   |
+//   [ Suspending ]        |
+//     |                   |
+//     V                   |
+//   [ Suspended ]         |
+//     | Resume()          |
+//     V                   |
+//   [ Resuming ] ---------'
 //
 // Initialization is a series of state transitions from "Created" through each
 // filter initialization state.  When all filter initialization states have
-// completed, we are implicitly in a "Paused" state.  At that point we simulate
-// a Seek() to the beginning of the media to give filters a chance to preroll.
-// From then on the normal Seek() transitions are carried out and we start
-// playing the media.
+// completed, we simulate a Seek() to the beginning of the media to give filters
+// a chance to preroll. From then on the normal Seek() transitions are carried
+// out and we start playing the media.
 //
 // If any error ever happens, this object will transition to the "Error" state
 // from any state. If Stop() is ever called, this object will transition to
 // "Stopped" state.
+//
+// TODO(sandersd): It should be possible to pass through Suspended when going
+// from InitDemuxer to InitRenderer, thereby eliminating the Resuming state.
+// Some annoying differences between the two paths need to be removed first.
 class MEDIA_EXPORT Pipeline : public DemuxerHost {
  public:
   // Used to paint VideoFrame.
@@ -132,7 +146,8 @@ class MEDIA_EXPORT Pipeline : public DemuxerHost {
   // Clients are expected to call GetMediaTime() to check whether the seek
   // succeeded.
   //
-  // It is an error to call this method if the pipeline has not started.
+  // It is an error to call this method if the pipeline has not started or
+  // is suspended.
   void Seek(base::TimeDelta time, const PipelineStatusCB& seek_cb);
 
   // Returns true if the pipeline has been started via Start().  If IsRunning()
@@ -152,6 +167,20 @@ class MEDIA_EXPORT Pipeline : public DemuxerHost {
   //
   // TODO(scherkus): What about maximum rate?  Does HTML5 specify a max?
   void SetPlaybackRate(double playback_rate);
+
+  // Suspend the pipeline, discarding the current renderer.
+  //
+  // While suspended, GetMediaTime() returns the presentation timestamp of the
+  // last rendered frame.
+  //
+  // It is an error to call this method if the pipeline has not started or is
+  // seeking.
+  void Suspend(const PipelineStatusCB& suspend_cb);
+
+  // Resume the pipeline with a new renderer, and initialize it with a seek.
+  void Resume(scoped_ptr<Renderer> renderer,
+              base::TimeDelta timestamp,
+              const PipelineStatusCB& seek_cb);
 
   // Gets the current volume setting being used by the audio renderer.  When
   // the pipeline is started, this value will be 1.0f.  Valid values range
@@ -201,6 +230,9 @@ class MEDIA_EXPORT Pipeline : public DemuxerHost {
     kPlaying,
     kStopping,
     kStopped,
+    kSuspending,
+    kSuspended,
+    kResuming,
   };
 
   // Updates |state_|. All state transitions should use this call.
@@ -214,8 +246,8 @@ class MEDIA_EXPORT Pipeline : public DemuxerHost {
   void FinishSeek();
 
   // DemuxerHost implementaion.
-  void AddBufferedTimeRange(base::TimeDelta start,
-                            base::TimeDelta end) override;
+  void OnBufferedTimeRangesChanged(
+      const Ranges<base::TimeDelta>& ranges) override;
   void SetDuration(base::TimeDelta duration) override;
   void OnDemuxerError(PipelineStatus error) override;
   void AddTextStream(DemuxerStream* text_stream,
@@ -227,12 +259,20 @@ class MEDIA_EXPORT Pipeline : public DemuxerHost {
   void OnError(PipelineStatus error);
 
   // Callback executed by filters to update statistics.
-  void OnUpdateStatistics(const PipelineStatistics& stats);
+  void OnUpdateStatistics(const PipelineStatistics& stats_delta);
 
   // The following "task" methods correspond to the public methods, but these
   // methods are run as the result of posting a task to the Pipeline's
   // task runner.
   void StartTask();
+
+  // Suspends the pipeline, discarding the current renderer.
+  void SuspendTask(const PipelineStatusCB& suspend_cb);
+
+  // Resumes the pipeline with a new renderer, and initializes it with a seek.
+  void ResumeTask(scoped_ptr<Renderer> renderer,
+                  base::TimeDelta timestamp,
+                  const PipelineStatusCB& seek_sb);
 
   // Stops and destroys all filters, placing the pipeline in the kStopped state.
   void StopTask(const base::Closure& stop_cb);
@@ -310,7 +350,7 @@ class MEDIA_EXPORT Pipeline : public DemuxerHost {
   // Amount of available buffered data as reported by |demuxer_|.
   Ranges<base::TimeDelta> buffered_time_ranges_;
 
-  // True when AddBufferedTimeRange() has been called more recently than
+  // True when OnBufferedTimeRangesChanged() has been called more recently than
   // DidLoadingProgress().
   bool did_loading_progress_;
 
@@ -339,18 +379,26 @@ class MEDIA_EXPORT Pipeline : public DemuxerHost {
   // Member that tracks the current state.
   State state_;
 
-  // The timestamp to start playback from after starting/seeking has completed.
+  // The timestamp to start playback from after starting/seeking/resuming has
+  // completed.
   base::TimeDelta start_timestamp_;
+
+  // The media timestamp to return while the pipeline is suspended. Otherwise
+  // set to kNoTimestamp().
+  base::TimeDelta suspend_timestamp_;
 
   // Whether we've received the audio/video/text ended events.
   bool renderer_ended_;
   bool text_renderer_ended_;
 
-  // Temporary callback used for Start() and Seek().
+  // Temporary callback used for Start(), Seek(), and Resume().
   PipelineStatusCB seek_cb_;
 
   // Temporary callback used for Stop().
   base::Closure stop_cb_;
+
+  // Temporary callback used for Suspend().
+  PipelineStatusCB suspend_cb_;
 
   // Permanent callbacks passed in via Start().
   base::Closure ended_cb_;

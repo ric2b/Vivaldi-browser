@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <map>
+#include <utility>
 
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf.h"
@@ -268,7 +269,7 @@ PanelLayoutManager::PanelLayoutManager(aura::Window* panel_container)
   DCHECK(panel_container);
   aura::client::GetActivationClient(Shell::GetPrimaryRootWindow())->
       AddObserver(this);
-  Shell::GetInstance()->display_controller()->AddObserver(this);
+  Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
   Shell::GetInstance()->AddShellObserver(this);
 }
 
@@ -290,7 +291,7 @@ void PanelLayoutManager::Shutdown() {
   shelf_ = NULL;
   aura::client::GetActivationClient(Shell::GetPrimaryRootWindow())->
       RemoveObserver(this);
-  Shell::GetInstance()->display_controller()->RemoveObserver(this);
+  Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
   Shell::GetInstance()->RemoveShellObserver(this);
 }
 
@@ -526,7 +527,7 @@ void PanelLayoutManager::OnWindowActivated(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// PanelLayoutManager, DisplayController::Observer implementation:
+// PanelLayoutManager, WindowTreeHostManager::Observer implementation:
 
 void PanelLayoutManager::OnDisplayConfigurationChanged() {
   Relayout();
@@ -544,10 +545,10 @@ void PanelLayoutManager::WillChangeVisibilityState(
   if (!shelf_hidden) {
     if (restore_windows_on_shelf_visible_) {
       scoped_ptr<aura::WindowTracker> restore_windows(
-          restore_windows_on_shelf_visible_.Pass());
-      for (aura::WindowTracker::Windows::const_iterator iter =
-           restore_windows->windows().begin(); iter !=
-           restore_windows->windows().end(); ++iter) {
+          std::move(restore_windows_on_shelf_visible_));
+      for (aura::Window::Windows::const_iterator iter =
+               restore_windows->windows().begin();
+           iter != restore_windows->windows().end(); ++iter) {
         RestorePanel(*iter);
       }
     }
@@ -568,7 +569,7 @@ void PanelLayoutManager::WillChangeVisibilityState(
       wm::GetWindowState(window)->Minimize();
     }
   }
-  restore_windows_on_shelf_visible_ = minimized_windows.Pass();
+  restore_windows_on_shelf_visible_ = std::move(minimized_windows);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

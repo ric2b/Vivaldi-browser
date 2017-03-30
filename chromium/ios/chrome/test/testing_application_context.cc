@@ -5,34 +5,67 @@
 #include "ios/chrome/test/testing_application_context.h"
 
 #include "base/logging.h"
+#include "base/time/default_tick_clock.h"
+#include "components/network_time/network_time_tracker.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 
 TestingApplicationContext::TestingApplicationContext()
     : application_locale_("en"),
       local_state_(nullptr),
-      chrome_browser_state_manager_(nullptr) {
+      chrome_browser_state_manager_(nullptr),
+      was_last_shutdown_clean_(false) {
   DCHECK(!GetApplicationContext());
   SetApplicationContext(this);
 }
 
 TestingApplicationContext::~TestingApplicationContext() {
   DCHECK_EQ(this, GetApplicationContext());
+  DCHECK(!local_state_);
   SetApplicationContext(nullptr);
-}
-
-void TestingApplicationContext::SetLocalState(PrefService* local_state) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  local_state_ = local_state;
-}
-
-void TestingApplicationContext::SetChromeBrowserStateManager(
-    ios::ChromeBrowserStateManager* manager) {
-  chrome_browser_state_manager_ = manager;
 }
 
 // static
 TestingApplicationContext* TestingApplicationContext::GetGlobal() {
   return static_cast<TestingApplicationContext*>(GetApplicationContext());
+}
+
+void TestingApplicationContext::SetLocalState(PrefService* local_state) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!local_state) {
+    // The local state is owned outside of TestingApplicationContext, but
+    // some of the members of TestingApplicationContext hold references to it.
+    // Given our test infrastructure which tears down individual tests before
+    // freeing the TestingApplicationContext, there's no good way to make the
+    // local state outlive these dependencies. As a workaround, whenever
+    // local state is cleared (assumedly as part of exiting the test) any
+    // components owned by TestingApplicationContext that depends on the local
+    // state are also freed.
+    network_time_tracker_.reset();
+  }
+  local_state_ = local_state;
+}
+
+void TestingApplicationContext::SetLastShutdownClean(bool clean) {
+  was_last_shutdown_clean_ = clean;
+}
+
+void TestingApplicationContext::SetChromeBrowserStateManager(
+    ios::ChromeBrowserStateManager* manager) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  chrome_browser_state_manager_ = manager;
+}
+
+void TestingApplicationContext::OnAppEnterForeground() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+}
+
+void TestingApplicationContext::OnAppEnterBackground() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+}
+
+bool TestingApplicationContext::WasLastShutdownClean() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return was_last_shutdown_clean_;
 }
 
 PrefService* TestingApplicationContext::GetLocalState() {
@@ -43,7 +76,7 @@ PrefService* TestingApplicationContext::GetLocalState() {
 net::URLRequestContextGetter*
 TestingApplicationContext::GetSystemURLRequestContext() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return ios::GetChromeBrowserProvider()->GetSystemURLRequestContext();
+  return nullptr;
 }
 
 const std::string& TestingApplicationContext::GetApplicationLocale() {
@@ -54,9 +87,77 @@ const std::string& TestingApplicationContext::GetApplicationLocale() {
 
 ios::ChromeBrowserStateManager*
 TestingApplicationContext::GetChromeBrowserStateManager() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   return chrome_browser_state_manager_;
 }
 
+metrics_services_manager::MetricsServicesManager*
+TestingApplicationContext::GetMetricsServicesManager() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
 metrics::MetricsService* TestingApplicationContext::GetMetricsService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+variations::VariationsService*
+TestingApplicationContext::GetVariationsService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+rappor::RapporService* TestingApplicationContext::GetRapporService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+net_log::ChromeNetLog* TestingApplicationContext::GetNetLog() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+network_time::NetworkTimeTracker*
+TestingApplicationContext::GetNetworkTimeTracker() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!network_time_tracker_) {
+    DCHECK(local_state_);
+    network_time_tracker_.reset(new network_time::NetworkTimeTracker(
+        make_scoped_ptr(new base::DefaultTickClock), local_state_));
+  }
+  return network_time_tracker_.get();
+}
+
+IOSChromeIOThread* TestingApplicationContext::GetIOSChromeIOThread() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+gcm::GCMDriver* TestingApplicationContext::GetGCMDriver() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+web_resource::PromoResourceService*
+TestingApplicationContext::GetPromoResourceService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+component_updater::ComponentUpdateService*
+TestingApplicationContext::GetComponentUpdateService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+CRLSetFetcher* TestingApplicationContext::GetCRLSetFetcher() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+safe_browsing::SafeBrowsingService*
+TestingApplicationContext::GetSafeBrowsingService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   return nullptr;
 }

@@ -5,8 +5,11 @@
 #ifndef MEDIA_BASE_DEMUXER_H_
 #define MEDIA_BASE_DEMUXER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/data_source.h"
 #include "media/base/demuxer_stream.h"
@@ -14,6 +17,7 @@
 #include "media/base/eme_constants.h"
 #include "media/base/media_export.h"
 #include "media/base/pipeline_status.h"
+#include "media/base/ranges.h"
 
 namespace media {
 
@@ -21,9 +25,13 @@ class TextTrackConfig;
 
 class MEDIA_EXPORT DemuxerHost {
  public:
-  // Notify the host that time range [start,end] has been buffered.
-  virtual void AddBufferedTimeRange(base::TimeDelta start,
-                                    base::TimeDelta end) = 0;
+  // Notify the host that buffered time ranges have changed. Note that buffered
+  // time ranges can grow (when new media data is appended), but they can also
+  // shrink (when buffering reaches limit capacity and some buffered data
+  // becomes evicted, e.g. due to MSE GC algorithm, or by explicit removal of
+  // ranges directed by MSE web app).
+  virtual void OnBufferedTimeRangesChanged(
+      const Ranges<base::TimeDelta>& ranges) = 0;
 
   // Sets the duration of the media in microseconds.
   // Duration may be kInfiniteDuration() if the duration is not known.
@@ -50,7 +58,7 @@ class MEDIA_EXPORT Demuxer : public DemuxerStreamProvider {
   // First parameter - The type of initialization data.
   // Second parameter - The initialization data associated with the stream.
   typedef base::Callback<void(EmeInitDataType type,
-                              const std::vector<uint8>& init_data)>
+                              const std::vector<uint8_t>& init_data)>
       EncryptedMediaInitDataCB;
 
   Demuxer();
@@ -86,6 +94,9 @@ class MEDIA_EXPORT Demuxer : public DemuxerStreamProvider {
   // If the timstamps are not associated with a Time, then
   // a null Time is returned.
   virtual base::Time GetTimelineOffset() const = 0;
+
+  // Returns the memory usage in bytes for the demuxer.
+  virtual int64_t GetMemoryUsage() const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(Demuxer);

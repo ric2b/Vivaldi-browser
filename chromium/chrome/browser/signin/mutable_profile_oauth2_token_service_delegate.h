@@ -5,21 +5,27 @@
 #ifndef CHROME_BROWSER_SIGNIN_MUTABLE_PROFILE_OAUTH2_TOKEN_SERVICE_DELEGATE_H_
 #define CHROME_BROWSER_SIGNIN_MUTABLE_PROFILE_OAUTH2_TOKEN_SERVICE_DELEGATE_H_
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/threading/thread_checker.h"
+#include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/webdata/common/web_data_service_base.h"
 #include "components/webdata/common/web_data_service_consumer.h"
 #include "net/base/backoff_entry.h"
+#include "net/base/network_change_notifier.h"
 
 class MutableProfileOAuth2TokenServiceDelegate
     : public OAuth2TokenServiceDelegate,
-      public WebDataServiceConsumer {
+      public WebDataServiceConsumer,
+      public net::NetworkChangeNotifier::NetworkChangeObserver {
  public:
   MutableProfileOAuth2TokenServiceDelegate(
       SigninClient* client,
-      SigninErrorController* signin_error_controller);
+      SigninErrorController* signin_error_controller,
+      AccountTrackerService* account_tracker_service);
   ~MutableProfileOAuth2TokenServiceDelegate() override;
 
   // OAuth2TokenServiceDelegate overrides.
@@ -49,17 +55,24 @@ class MutableProfileOAuth2TokenServiceDelegate
   // Overridden from OAuth2TokenServiceDelegate.
   void Shutdown() override;
 
+  // Overridden from NetworkChangeObserver.
+  void OnNetworkChanged(net::NetworkChangeNotifier::ConnectionType type)
+      override;
+
+  // Overridden from OAuth2TokenServiceDelegate.
+  const net::BackoffEntry* BackoffEntry() const override;
+
  private:
   friend class MutableProfileOAuth2TokenServiceDelegateTest;
 
   class RevokeServerRefreshToken;
 
-  class AccountInfo : public SigninErrorController::AuthStatusProvider {
+  class AccountStatus : public SigninErrorController::AuthStatusProvider {
    public:
-    AccountInfo(SigninErrorController* signin_error_controller,
-                const std::string& account_id,
-                const std::string& refresh_token);
-    ~AccountInfo() override;
+    AccountStatus(SigninErrorController* signin_error_controller,
+                  const std::string& account_id,
+                  const std::string& refresh_token);
+    ~AccountStatus() override;
 
     const std::string& refresh_token() const { return refresh_token_; }
     void set_refresh_token(const std::string& token) { refresh_token_ = token; }
@@ -76,7 +89,7 @@ class MutableProfileOAuth2TokenServiceDelegate
     std::string refresh_token_;
     GoogleServiceAuthError last_auth_error_;
 
-    DISALLOW_COPY_AND_ASSIGN(AccountInfo);
+    DISALLOW_COPY_AND_ASSIGN(AccountStatus);
   };
 
   FRIEND_TEST_ALL_PREFIXES(MutableProfileOAuth2TokenServiceDelegateTest,
@@ -123,9 +136,9 @@ class MutableProfileOAuth2TokenServiceDelegate
 
   // Maps the |account_id| of accounts known to ProfileOAuth2TokenService
   // to information about the account.
-  typedef std::map<std::string, linked_ptr<AccountInfo>> AccountInfoMap;
+  typedef std::map<std::string, linked_ptr<AccountStatus>> AccountStatusMap;
   // In memory refresh token store mapping account_id to refresh_token.
-  AccountInfoMap refresh_tokens_;
+  AccountStatusMap refresh_tokens_;
 
   // Handle to the request reading tokens from database.
   WebDataServiceBase::Handle web_data_service_request_;
@@ -147,6 +160,7 @@ class MutableProfileOAuth2TokenServiceDelegate
 
   SigninClient* client_;
   SigninErrorController* signin_error_controller_;
+  AccountTrackerService* account_tracker_service_;
 
   DISALLOW_COPY_AND_ASSIGN(MutableProfileOAuth2TokenServiceDelegate);
 };

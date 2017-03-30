@@ -5,22 +5,33 @@
 #ifndef CONTENT_COMMON_NAVIGATION_PARAMS_H_
 #define CONTENT_COMMON_NAVIGATION_PARAMS_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/request_context_type.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
-namespace base {
-class RefCountedMemory;
-}
-
 namespace content {
+
+// The LoFi state which determines whether to add the Lo-Fi header.
+enum LoFiState {
+  // Let the browser process decide whether or not to request the Lo-Fi version.
+  LOFI_UNSPECIFIED = 0,
+
+  // Request a normal (non-Lo-Fi) version of the resource.
+  LOFI_OFF,
+
+  // Request a Lo-Fi version of the resource.
+  LOFI_ON,
+};
 
 // PlzNavigate
 // Helper function to determine if the navigation to |url| should make a request
@@ -42,10 +53,13 @@ struct CONTENT_EXPORT CommonNavigationParams {
                          ui::PageTransition transition,
                          FrameMsg_Navigate_Type::Value navigation_type,
                          bool allow_download,
+                         bool should_replace_current_entry,
                          base::TimeTicks ui_timestamp,
                          FrameMsg_UILoadMetricsReportType::Value report_type,
                          const GURL& base_url_for_data_url,
-                         const GURL& history_url_for_data_url);
+                         const GURL& history_url_for_data_url,
+                         LoFiState lofi_state,
+                         const base::TimeTicks& navigation_start);
   ~CommonNavigationParams();
 
   // The URL to navigate to.
@@ -66,6 +80,13 @@ struct CONTENT_EXPORT CommonNavigationParams {
   // Avoid downloading when in view-source mode.
   bool allow_download;
 
+  // Informs the RenderView the pending navigation should replace the current
+  // history entry when it commits. This is used for cross-process redirects so
+  // the transferred navigation can recover the navigation state.
+  // PlzNavigate: this is used by client-side redirects to indicate that when
+  // the navigation commits, it should commit in the existing page.
+  bool should_replace_current_entry;
+
   // Timestamp of the user input event that triggered this navigation. Empty if
   // the navigation was not triggered by clicking on a link or by receiving an
   // intent on Android.
@@ -81,6 +102,17 @@ struct CONTENT_EXPORT CommonNavigationParams {
   // History URL for use in Blink's SubstituteData.
   // Is only used with data: URLs.
   GURL history_url_for_data_url;
+
+  // Whether or not to request a LoFi version of the document or let the browser
+  // decide.
+  LoFiState lofi_state;
+
+  // The navigationStart time exposed through the Navigation Timing API to JS.
+  // If this is for a browser-initiated navigation, this can override the
+  // navigation_start value in Blink.
+  // PlzNavigate: For renderer initiated navigations, this will be set on the
+  // renderer side and sent with FrameHostMsg_BeginNavigation.
+  base::TimeTicks navigation_start;
 };
 
 // Provided by the renderer ----------------------------------------------------
@@ -99,7 +131,9 @@ struct CONTENT_EXPORT BeginNavigationParams {
   BeginNavigationParams(std::string method,
                         std::string headers,
                         int load_flags,
-                        bool has_user_gesture);
+                        bool has_user_gesture,
+                        bool skip_service_worker,
+                        RequestContextType request_context_type);
 
   // The request method: GET, POST, etc.
   std::string method;
@@ -112,6 +146,12 @@ struct CONTENT_EXPORT BeginNavigationParams {
 
   // True if the request was user initiated.
   bool has_user_gesture;
+
+  // True if the ServiceWorker should be skipped.
+  bool skip_service_worker;
+
+  // Indicates the request context type.
+  RequestContextType request_context_type;
 };
 
 // Provided by the browser -----------------------------------------------------
@@ -134,7 +174,9 @@ struct CONTENT_EXPORT StartNavigationParams {
       bool is_post,
       const std::string& extra_headers,
       const std::vector<unsigned char>& browser_initiated_post_data,
-      bool should_replace_current_entry,
+#if defined(OS_ANDROID)
+      bool has_user_gesture,
+#endif
       int transferred_request_child_id,
       int transferred_request_request_id);
   ~StartNavigationParams();
@@ -149,10 +191,9 @@ struct CONTENT_EXPORT StartNavigationParams {
   // otherwise.
   std::vector<unsigned char> browser_initiated_post_data;
 
-  // Informs the RenderView the pending navigation should replace the current
-  // history entry when it commits. This is used for cross-process redirects so
-  // the transferred navigation can recover the navigation state.
-  bool should_replace_current_entry;
+#if defined(OS_ANDROID)
+  bool has_user_gesture;
+#endif
 
   // The following two members identify a previous request that has been
   // created before this navigation is being transferred to a new render view.
@@ -169,12 +210,11 @@ struct CONTENT_EXPORT StartNavigationParams {
 struct CONTENT_EXPORT RequestNavigationParams {
   RequestNavigationParams();
   RequestNavigationParams(bool is_overriding_user_agent,
-                          base::TimeTicks navigation_start,
                           const std::vector<GURL>& redirects,
                           bool can_load_local_resources,
                           base::Time request_time,
                           const PageState& page_state,
-                          int32 page_id,
+                          int32_t page_id,
                           int nav_entry_id,
                           bool is_same_document_history_load,
                           bool has_committed_real_load,
@@ -182,14 +222,12 @@ struct CONTENT_EXPORT RequestNavigationParams {
                           int pending_history_list_offset,
                           int current_history_list_offset,
                           int current_history_list_length,
+                          bool is_view_source,
                           bool should_clear_history_list);
   ~RequestNavigationParams();
 
   // Whether or not the user agent override string should be used.
   bool is_overriding_user_agent;
-
-  // The navigationStart time to expose through the Navigation Timing API to JS.
-  base::TimeTicks browser_navigation_start;
 
   // Any redirect URLs that occurred before |url|. Useful for cross-process
   // navigations; defaults to empty.
@@ -211,7 +249,7 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // Forward, and Reload navigations should have a valid page_id.  If the load
   // succeeds, then this page_id will be reflected in the resultant
   // FrameHostMsg_DidCommitProvisionalLoad message.
-  int32 page_id;
+  int32_t page_id;
 
   // For browser-initiated navigations, this is the unique id of the
   // NavigationEntry being navigated to. (For renderer-initiated navigations it
@@ -244,10 +282,35 @@ struct CONTENT_EXPORT RequestNavigationParams {
   int current_history_list_offset;
   int current_history_list_length;
 
+  // Indicates whether the navigation is to a view-source:// scheme or not.
+  // It is a separate boolean as the view-source scheme is stripped from the
+  // URL before it is sent to the renderer process and the RenderFrame needs
+  // to be put in special view source mode.
+  bool is_view_source;
+
   // Whether session history should be cleared. In that case, the RenderView
   // needs to notify the browser that the clearing was succesful when the
   // navigation commits.
   bool should_clear_history_list;
+
+  // PlzNavigate
+  // Whether a ServiceWorkerProviderHost should be created for the window.
+  bool should_create_service_worker;
+
+  // PlzNavigate
+  // The ServiceWorkerProviderHost ID used for navigations, if it was already
+  // created by the browser. Set to kInvalidServiceWorkerProviderId otherwise.
+  // This parameter is not used in the current navigation architecture, where
+  // it will always be equal to kInvalidServiceWorkerProviderId.
+  int service_worker_provider_id;
+
+#if defined(OS_ANDROID)
+  // The real content of the data: URL. Only used in Android WebView for
+  // implementing LoadDataWithBaseUrl API method to circumvent the restriction
+  // on the GURL max length in the IPC layer. Short data: URLs can still be
+  // passed in the |CommonNavigationParams::url| field.
+  std::string data_url_as_string;
+#endif
 };
 
 // Helper struct keeping track in one place of all the parameters the browser

@@ -208,12 +208,6 @@ class BASE_EXPORT CommandLine {
   void ParseFromString(const base::string16& command_line);
 #endif
 
-  // Is this a vivaldi_run?
-  bool IsRunningVivaldi() const{return is_vivaldi_;}
-
-  // Are we debugging Vivaldi?
-  bool IsDebuggingVivaldi() const{return is_debugging_vivaldi_;}
-
  private:
   // Disallow default constructor; a program name must be explicitly specified.
   CommandLine();
@@ -252,12 +246,6 @@ class BASE_EXPORT CommandLine {
 
   // The index after the program and switches, any arguments start here.
   size_t begin_args_;
-
-  // Is this a vivaldi_run?
-  bool is_vivaldi_;
-
-  // Are debugging Vivaldi (not autostarting the extension)?
-  bool is_debugging_vivaldi_;
 };
 
 }  // namespace base

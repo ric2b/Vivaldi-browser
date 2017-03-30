@@ -5,13 +5,15 @@
 #ifndef CONTENT_PUBLIC_BROWSER_NAVIGATION_CONTROLLER_H_
 #define CONTENT_PUBLIC_BROWSER_NAVIGATION_CONTROLLER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/session_storage_namespace.h"
@@ -23,6 +25,7 @@
 namespace base {
 
 class RefCountedMemory;
+class RefCountedString;
 
 }  // namespace base
 
@@ -30,7 +33,6 @@ namespace content {
 
 class BrowserContext;
 class NavigationEntry;
-class NavigationEntryImpl;
 class WebContents;
 
 // A NavigationController maintains the back-forward list for a WebContents and
@@ -44,7 +46,8 @@ class NavigationController {
     NO_RELOAD,                   // Normal load.
     RELOAD,                      // Normal (cache-validating) reload.
     RELOAD_IGNORING_CACHE,       // Reload bypassing the cache (shift-reload).
-    RELOAD_ORIGINAL_REQUEST_URL  // Reload using the original request URL.
+    RELOAD_ORIGINAL_REQUEST_URL, // Reload using the original request URL.
+    RELOAD_DISABLE_LOFI_MODE     // Reload with Lo-Fi mode disabled.
   };
 
   // Load type used in LoadURLParams.
@@ -162,6 +165,14 @@ class NavigationController {
     // data loads.
     GURL virtual_url_for_data_url;
 
+#if defined(OS_ANDROID)
+    // Used in LOAD_TYPE_DATA loads only. The real data URI is represented
+    // as a string to circumvent the restriction on GURL size. This is only
+    // needed to pass URLs that exceed the IPC limit (kMaxURLChars). Short
+    // data: URLs can be passed in the |url| field.
+    scoped_refptr<base::RefCountedString> data_url_as_string;
+#endif
+
     // Used in LOAD_TYPE_BROWSER_INITIATED_HTTP_POST loads only. Carries the
     // post data of the load. Ownership is transferred to NavigationController
     // after LoadURLWithParams call.
@@ -178,6 +189,17 @@ class NavigationController {
     // navigated. This is currently only used in tests.
     std::string frame_name;
 
+#if defined(OS_ANDROID)
+    // On Android, for a load triggered by an intent, the time Chrome received
+    // the original intent that prompted the load (in milliseconds active time
+    // since boot).
+    int64_t intent_received_timestamp;
+
+    // When Chrome launches the intent chooser, user can select Chrome itself to
+    // open the intent. In this case, we should carry over the user gesture.
+    bool has_user_gesture;
+#endif
+
     // Indicates that during this navigation, the session history should be
     // cleared such that the resulting page is the first and only entry of the
     // session history.
@@ -185,13 +207,6 @@ class NavigationController {
     // The clearing is done asynchronously, and completes when this navigation
     // commits.
     bool should_clear_history_list;
-
-#if defined(OS_ANDROID)
-    // On Android, for a load triggered by an intent, the time Chrome received
-    // the original intent that prompted the load (in milliseconds active time
-    // since boot).
-    int64 intent_received_timestamp;
-#endif
 
     explicit LoadURLParams(const GURL& url);
     ~LoadURLParams();
@@ -223,7 +238,7 @@ class NavigationController {
   // restore.
   virtual void Restore(int selected_navigation,
                        RestoreType type,
-                       ScopedVector<NavigationEntry>* entries) = 0;
+                       std::vector<scoped_ptr<NavigationEntry>>* entries) = 0;
 
   // Entries -------------------------------------------------------------------
 
@@ -294,11 +309,6 @@ class NavigationController {
   // currently in progress, or null if there is none.
   virtual NavigationEntry* GetPendingEntry() const = 0;
 
-  // Allow renderer-initiated navigations to create a pending entry when the
-  // provisional load starts.
-  virtual void SetPendingEntry(scoped_ptr<NavigationEntryImpl> entry)=0;
-
-
   // Returns the index of the pending entry or -1 if the pending entry
   // corresponds to a new navigation (created via LoadURL).
   virtual int GetPendingEntryIndex() const = 0;
@@ -359,6 +369,12 @@ class NavigationController {
   // is showing, initiates a new navigation to its URL.
   virtual void Reload(bool check_for_repost) = 0;
 
+  // Like Reload(), but for refreshing page content and may not need to
+  // validate cache content.
+  // TODO(kinuko): Update the comment once we fix the cache validation
+  // behavior.
+  virtual void ReloadToRefreshContent(bool check_for_repost) = 0;
+
   // Like Reload(), but don't use caches (aka "shift-reload").
   virtual void ReloadIgnoringCache(bool check_for_repost) = 0;
 
@@ -366,6 +382,9 @@ class NavigationController {
   // is used for cases where the user wants to refresh a page using a different
   // user agent after following a redirect.
   virtual void ReloadOriginalRequestURL(bool check_for_repost) = 0;
+
+  // Like Reload(), but disables Lo-Fi.
+  virtual void ReloadDisableLoFi(bool check_for_repost) = 0;
 
   // Removing of entries -------------------------------------------------------
 
@@ -391,11 +410,11 @@ class NavigationController {
 
   // Sets the max restored page ID this NavigationController has seen, if it
   // was restored from a previous session.
-  virtual void SetMaxRestoredPageID(int32 max_id) = 0;
+  virtual void SetMaxRestoredPageID(int32_t max_id) = 0;
 
   // Returns the largest restored page ID seen in this navigation controller,
   // if it was restored from a previous session.  (-1 otherwise)
-  virtual int32 GetMaxRestoredPageID() const = 0;
+  virtual int32_t GetMaxRestoredPageID() const = 0;
 
   // Returns true if a reload happens when activated (SetActive(true) is
   // invoked). This is true for session/tab restore, cloned tabs and tabs that
@@ -412,9 +431,14 @@ class NavigationController {
   // Continues a repost that brought up a warning.
   virtual void ContinuePendingReload() = 0;
 
-  // Returns true if we are navigating to the URL the tab is opened with.
-  // Returns false after the initial navigation has committed.
+  // Returns true if this is a newly created tab or a cloned tab, which has not
+  // yet committed a real page. Returns false after the initial navigation has
+  // committed.
   virtual bool IsInitialNavigation() const = 0;
+
+  // Returns true if this is a newly created tab (not a clone) that has not yet
+  // committed a real page.
+  virtual bool IsInitialBlankNavigation() const = 0;
 
   // Broadcasts the NOTIFICATION_NAV_ENTRY_CHANGED notification for the given
   // entry. This will keep things in sync like the saved session.

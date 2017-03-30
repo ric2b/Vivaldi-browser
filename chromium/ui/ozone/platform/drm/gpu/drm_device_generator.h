@@ -6,6 +6,7 @@
 #define UI_OZONE_PLATFORM_DRM_GPU_DRM_DEVICE_GENERATOR_H_
 
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 
 namespace ui {
@@ -21,7 +22,8 @@ class DrmDeviceGenerator {
   // the DRM device.
   virtual scoped_refptr<DrmDevice> CreateDevice(
       const base::FilePath& device_path,
-      base::File file);
+      base::File file,
+      bool is_primary_device);
 
  public:
   DISALLOW_COPY_AND_ASSIGN(DrmDeviceGenerator);

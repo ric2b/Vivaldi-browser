@@ -5,11 +5,14 @@
 #ifndef COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_H_
 #define COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
@@ -144,19 +147,12 @@ class TemplateURLRef {
     // the request was issued.  Set to base::string16::npos if not used.
     size_t cursor_position;
 
-    // True to enable the start-edge margin of the omnibox, used in extended
-    // Instant to align the preview contents with the omnibox.
-    bool enable_omnibox_start_margin;
-
     // The URL of the current webpage to be used for experimental zero-prefix
     // suggestions.
     std::string current_page_url;
 
     // Which omnibox the user used to type the prefix.
     metrics::OmniboxEventProto::PageClassification page_classification;
-
-    // True for searches issued with the bookmark bar pref set to shown.
-    bool bookmark_bar_pinned;
 
     // Optional session token.
     std::string session_token;
@@ -308,7 +304,6 @@ class TemplateURLRef {
   FRIEND_TEST_ALL_PREFIXES(TemplateURLTest, ParseURLTwoParameters);
   FRIEND_TEST_ALL_PREFIXES(TemplateURLTest, ParseURLNestedParameter);
   FRIEND_TEST_ALL_PREFIXES(TemplateURLTest, URLRefTestImageURLWithPOST);
-  FRIEND_TEST_ALL_PREFIXES(TemplateURLTest, ReflectsBookmarkBarPinned);
 
   // Enumeration of the known types.
   enum ReplacementType {
@@ -316,7 +311,6 @@ class TemplateURLRef {
     GOOGLE_ASSISTED_QUERY_STATS,
     GOOGLE_BASE_URL,
     GOOGLE_BASE_SUGGEST_URL,
-    GOOGLE_BOOKMARK_BAR_PINNED,
     GOOGLE_CURRENT_PAGE_URL,
     GOOGLE_CURSOR_POSITION,
     GOOGLE_FORCE_INSTANT_RESULTS,
@@ -328,7 +322,6 @@ class TemplateURLRef {
     GOOGLE_INPUT_TYPE,
     GOOGLE_INSTANT_EXTENDED_ENABLED,
     GOOGLE_NTP_IS_THEMED,
-    GOOGLE_OMNIBOX_START_MARGIN,
     GOOGLE_CONTEXTUAL_SEARCH_VERSION,
     GOOGLE_CONTEXTUAL_SEARCH_CONTEXT_DATA,
     GOOGLE_ORIGINAL_QUERY_FOR_SUGGESTION,
@@ -523,7 +516,10 @@ class TemplateURL {
   // Generates a suitable keyword for the specified url, which must be valid.
   // This is guaranteed not to return an empty string, since TemplateURLs should
   // never have an empty keyword.
-  static base::string16 GenerateKeyword(const GURL& url);
+  // |accept_languages| is a list of languages, which will be used in
+  // IDN-decoding of |url|'s hostname.
+  static base::string16 GenerateKeyword(const GURL& url,
+                                        const std::string& accept_languages);
 
   // Generates a favicon URL from the specified url.
   static GURL GenerateFaviconURL(const GURL& url);
@@ -613,7 +609,7 @@ class TemplateURL {
   // This setter shouldn't be used except by TemplateURLService and
   // TemplateURLServiceClient implementations.
   void set_extension_info(scoped_ptr<AssociatedExtensionInfo> extension_info) {
-    extension_info_ = extension_info.Pass();
+    extension_info_ = std::move(extension_info);
   }
 
   // Returns true if |url| supports replacement.
@@ -708,7 +704,6 @@ class TemplateURL {
 
  private:
   friend class TemplateURLService;
-  FRIEND_TEST_ALL_PREFIXES(TemplateURLTest, ReflectsBookmarkBarPinned);
 
   void CopyFrom(const TemplateURL& other);
 

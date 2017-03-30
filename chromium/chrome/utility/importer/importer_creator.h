@@ -5,6 +5,7 @@
 #ifndef CHROME_UTILITY_IMPORTER_IMPORTER_CREATOR_H_
 #define CHROME_UTILITY_IMPORTER_IMPORTER_CREATOR_H_
 
+#include "base/memory/ref_counted.h"
 #include "chrome/common/importer/importer_type.h"
 
 class Importer;
@@ -13,7 +14,7 @@ namespace importer {
 struct ImportConfig;
 
 // Creates an Importer of the specified |type|.
-Importer* CreateImporterByType(ImporterType type, const ImportConfig &import_config);
+scoped_refptr<Importer> CreateImporterByType(ImporterType type, const ImportConfig &import_config);
 
 }  // namespace importer
 

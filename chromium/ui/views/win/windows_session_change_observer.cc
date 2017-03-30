@@ -11,6 +11,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
@@ -25,7 +26,7 @@ namespace views {
 class WindowsSessionChangeObserver::WtsRegistrationNotificationManager {
  public:
   static WtsRegistrationNotificationManager* GetInstance() {
-    return Singleton<WtsRegistrationNotificationManager>::get();
+    return base::Singleton<WtsRegistrationNotificationManager>::get();
   }
 
   WtsRegistrationNotificationManager() {
@@ -46,7 +47,8 @@ class WindowsSessionChangeObserver::WtsRegistrationNotificationManager {
   }
 
  private:
-  friend struct DefaultSingletonTraits<WtsRegistrationNotificationManager>;
+  friend struct base::DefaultSingletonTraits<
+      WtsRegistrationNotificationManager>;
 
   void OnWndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {

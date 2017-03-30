@@ -10,35 +10,48 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "components/gcm_driver/gcm_driver.h"
+#include "components/gcm_driver/gcm_stats_recorder_android.h"
+
+namespace base {
+class FilePath;
+class SequencedTaskRunner;
+}
 
 namespace gcm {
 
 // GCMDriver implementation for Android, using Android GCM APIs.
-class GCMDriverAndroid : public GCMDriver {
+class GCMDriverAndroid : public GCMDriver,
+                         public GCMStatsRecorderAndroid::Delegate {
  public:
-  GCMDriverAndroid();
+  GCMDriverAndroid(
+      const base::FilePath& store_path,
+      const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner);
   ~GCMDriverAndroid() override;
 
   // Methods called from Java via JNI:
-  void OnRegisterFinished(JNIEnv* env,
-                          jobject obj,
-                          jstring app_id,
-                          jstring registration_id,
-                          jboolean success);
+  void OnRegisterFinished(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& app_id,
+      const base::android::JavaParamRef<jstring>& registration_id,
+      jboolean success);
   void OnUnregisterFinished(JNIEnv* env,
-                           jobject obj,
-                           jstring app_id,
-                           jboolean success);
-  void OnMessageReceived(JNIEnv* env,
-                         jobject obj,
-                         jstring app_id,
-                         jstring sender_id,
-                         jstring collapse_key,
-                         jobjectArray data_keys_and_values);
+                            const base::android::JavaParamRef<jobject>& obj,
+                            const base::android::JavaParamRef<jstring>& app_id,
+                            jboolean success);
+  void OnMessageReceived(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& app_id,
+      const base::android::JavaParamRef<jstring>& sender_id,
+      const base::android::JavaParamRef<jstring>& collapse_key,
+      const base::android::JavaParamRef<jbyteArray>& raw_data,
+      const base::android::JavaParamRef<jobjectArray>& data_keys_and_values);
   void OnMessagesDeleted(JNIEnv* env,
-                         jobject obj,
-                         jstring app_id);
+                         const base::android::JavaParamRef<jobject>& obj,
+                         const base::android::JavaParamRef<jstring>& app_id);
 
   // Register JNI methods.
   static bool RegisterBindings(JNIEnv* env);
@@ -54,7 +67,7 @@ class GCMDriverAndroid : public GCMDriver {
   bool IsStarted() const override;
   bool IsConnected() const override;
   void GetGCMStatistics(const GetGCMStatisticsCallback& callback,
-                        bool clear_logs) override;
+                        ClearActivityLogs clear_logs) override;
   void SetGCMRecording(const GetGCMStatisticsCallback& callback,
                        bool recording) override;
   void SetAccountTokens(
@@ -68,6 +81,9 @@ class GCMDriverAndroid : public GCMDriver {
   void AddHeartbeatInterval(const std::string& scope, int interval_ms) override;
   void RemoveHeartbeatInterval(const std::string& scope) override;
 
+  // GCMStatsRecorder::Delegate implementation:
+  void OnActivityRecorded() override;
+
  protected:
   // GCMDriver implementation:
   GCMClient::Result EnsureStarted(GCMClient::StartMode start_mode) override;
@@ -78,10 +94,16 @@ class GCMDriverAndroid : public GCMDriver {
                                   const std::string& sender_id) override;
   void SendImpl(const std::string& app_id,
                 const std::string& receiver_id,
-                const GCMClient::OutgoingMessage& message) override;
+                const OutgoingMessage& message) override;
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;
+
+  // Callback for GetGCMStatistics.
+  GetGCMStatisticsCallback get_gcm_statistics_callback_;
+
+  // Recorder that logs GCM activities.
+  GCMStatsRecorderAndroid recorder_;
 
   DISALLOW_COPY_AND_ASSIGN(GCMDriverAndroid);
 };

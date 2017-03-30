@@ -4,10 +4,16 @@
 
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
+#include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/field_trial.h"
 #include "base/prefs/overlay_user_pref_store.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/prefs/pref_service.h"
@@ -15,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -29,6 +36,7 @@
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
@@ -61,6 +69,7 @@ const char* kPrefsToObserve[] = {
 #if defined(ENABLE_EXTENSIONS)
   prefs::kAnimationPolicy,
 #endif
+  prefs::kDataSaverEnabled,
   prefs::kDefaultCharset,
   prefs::kDisable3DAPIs,
   prefs::kEnableHyperlinkAuditing,
@@ -76,7 +85,6 @@ const char* kPrefsToObserve[] = {
 #endif
   prefs::kWebKitJavascriptCanOpenWindowsAutomatically,
   prefs::kWebKitJavascriptEnabled,
-  prefs::kWebKitJavaEnabled,
   prefs::kWebKitLoadsImagesAutomatically,
   prefs::kWebKitMinimumFontSize,
   prefs::kWebKitMinimumLogicalFontSize,
@@ -247,30 +255,9 @@ UScriptCode GetScriptOfFontPref(const char* pref_name) {
   size_t len = strlen(pref_name);
   DCHECK_GT(len, kScriptNameLength);
   const char* scriptName = &pref_name[len - kScriptNameLength];
-  int32 code = u_getPropertyValueEnum(UCHAR_SCRIPT, scriptName);
+  int32_t code = u_getPropertyValueEnum(UCHAR_SCRIPT, scriptName);
   DCHECK(code >= 0 && code < USCRIPT_CODE_LIMIT);
   return static_cast<UScriptCode>(code);
-}
-
-// If |scriptCode| is a member of a family of "similar" script codes, returns
-// the script code in that family that is used in font pref names.  For example,
-// USCRIPT_HANGUL and USCRIPT_KOREAN are considered equivalent for the purposes
-// of font selection.  Chrome uses the script code USCRIPT_HANGUL (script name
-// "Hang") in Korean font pref names (for example,
-// "webkit.webprefs.fonts.serif.Hang").  So, if |scriptCode| is USCRIPT_KOREAN,
-// the function returns USCRIPT_HANGUL.  If |scriptCode| is not a member of such
-// a family, returns |scriptCode|.
-UScriptCode GetScriptForFontPrefMatching(UScriptCode scriptCode) {
-  switch (scriptCode) {
-  case USCRIPT_HIRAGANA:
-  case USCRIPT_KATAKANA:
-  case USCRIPT_KATAKANA_OR_HIRAGANA:
-    return USCRIPT_JAPANESE;
-  case USCRIPT_KOREAN:
-    return USCRIPT_HANGUL;
-  default:
-    return scriptCode;
-  }
 }
 
 // Returns the primary script used by the browser's UI locale.  For example, if
@@ -286,16 +273,22 @@ UScriptCode GetScriptOfBrowserLocale() {
     return USCRIPT_SIMPLIFIED_HAN;
   if (locale == "zh-TW")
     return USCRIPT_TRADITIONAL_HAN;
+  // For Korean and Japanese, multiple scripts are returned by
+  // |uscript_getCode|, but we're passing a one entry buffer leading
+  // the buffer to be filled by USCRIPT_INVALID_CODE. We need to
+  // hard-code the results for them.
+  if (locale == "ko")
+    return USCRIPT_HANGUL;
+  if (locale == "ja")
+    return USCRIPT_JAPANESE;
 
   UScriptCode code = USCRIPT_INVALID_CODE;
   UErrorCode err = U_ZERO_ERROR;
   uscript_getCode(locale.c_str(), &code, 1, &err);
 
-  // Ignore the error that multiple scripts could be returned, since we only
-  // want one script.
-  if (U_FAILURE(err) && err != U_BUFFER_OVERFLOW_ERROR)
+  if (U_FAILURE(err))
     code = USCRIPT_INVALID_CODE;
-  return GetScriptForFontPrefMatching(code);
+  return code;
 }
 
 // Sets a font family pref in |prefs| to |pref_value|.
@@ -333,6 +326,14 @@ void RegisterLocalizedFontPref(user_prefs::PrefRegistrySyncable* registry,
   registry->RegisterIntegerPref(path, val);
 }
 
+bool IsAutodetectEncodingEnabledByDefault() {
+  const std::string group_name = base::FieldTrialList::FindFullName(
+      "AutodetectEncoding");
+  return base::StartsWith(group_name,
+                          "Enabled",
+                          base::CompareCase::INSENSITIVE_ASCII);
+}
+
 }  // namespace
 
 // Watching all these settings per tab is slow when a user has a lot of tabs and
@@ -351,6 +352,10 @@ class PrefWatcher : public KeyedService {
 
 #if defined(ENABLE_WEBRTC)
     pref_change_registrar_.Add(prefs::kWebRTCMultipleRoutesEnabled,
+                               renderer_callback);
+    pref_change_registrar_.Add(prefs::kWebRTCNonProxiedUdpEnabled,
+                               renderer_callback);
+    pref_change_registrar_.Add(prefs::kWebRTCIPHandlingPolicy,
                                renderer_callback);
 #endif
 
@@ -427,11 +432,11 @@ class PrefWatcherFactory : public BrowserContextKeyedServiceFactory {
   }
 
   static PrefWatcherFactory* GetInstance() {
-    return Singleton<PrefWatcherFactory>::get();
+    return base::Singleton<PrefWatcherFactory>::get();
   }
 
  private:
-  friend struct DefaultSingletonTraits<PrefWatcherFactory>;
+  friend struct base::DefaultSingletonTraits<PrefWatcherFactory>;
 
   PrefWatcherFactory() : BrowserContextKeyedServiceFactory(
       "PrefWatcher",
@@ -466,7 +471,7 @@ PrefsTabHelper::PrefsTabHelper(WebContents* contents)
     // If the tab is in an incognito profile, we track changes in the default
     // zoom level of the parent profile instead.
     Profile* profile_to_track = profile_->GetOriginalProfile();
-    chrome::ChromeZoomLevelPrefs* zoom_level_prefs =
+    ChromeZoomLevelPrefs* zoom_level_prefs =
         profile_to_track->GetZoomLevelPrefs();
 
     base::Closure renderer_callback = base::Bind(
@@ -504,19 +509,6 @@ PrefsTabHelper::~PrefsTabHelper() {
 }
 
 // static
-void PrefsTabHelper::InitIncognitoUserPrefStore(
-    OverlayUserPrefStore* pref_store) {
-  // List of keys that cannot be changed in the user prefs file by the incognito
-  // profile.  All preferences that store information about the browsing history
-  // or behavior of the user should have this property.
-  pref_store->RegisterOverlayPref(prefs::kBrowserWindowPlacement);
-  pref_store->RegisterOverlayPref(prefs::kSaveFileDefaultDirectory);
-#if defined(OS_ANDROID) || defined(OS_IOS)
-  pref_store->RegisterOverlayPref(prefs::kProxy);
-#endif  // defined(OS_ANDROID) || defined(OS_IOS)
-}
-
-// static
 void PrefsTabHelper::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   WebPreferences pref_defaults;
@@ -534,8 +526,6 @@ void PrefsTabHelper::RegisterProfilePrefs(
                                 pref_defaults.dom_paste_enabled);
   registry->RegisterBooleanPref(prefs::kWebKitTextAreasAreResizable,
                                 pref_defaults.text_areas_are_resizable);
-  registry->RegisterBooleanPref(prefs::kWebKitJavaEnabled,
-                                pref_defaults.java_enabled);
   registry->RegisterBooleanPref(prefs::kWebkitTabsToLinks,
                                 pref_defaults.tabs_to_links);
   registry->RegisterBooleanPref(prefs::kWebKitAllowRunningInsecureContent,
@@ -607,9 +597,11 @@ void PrefsTabHelper::RegisterProfilePrefs(
                             IDS_MINIMUM_FONT_SIZE);
   RegisterLocalizedFontPref(registry, prefs::kWebKitMinimumLogicalFontSize,
                             IDS_MINIMUM_LOGICAL_FONT_SIZE);
+  bool uses_universal_detector = IsAutodetectEncodingEnabledByDefault() ||
+      l10n_util::GetStringUTF8(IDS_USES_UNIVERSAL_DETECTOR) == "true";
   registry->RegisterBooleanPref(
       prefs::kWebKitUsesUniversalDetector,
-      l10n_util::GetStringUTF8(IDS_USES_UNIVERSAL_DETECTOR) == "true",
+      uses_universal_detector,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterStringPref(
       prefs::kStaticEncodings,

@@ -20,17 +20,8 @@ BrowserAccessibilityMac::BrowserAccessibilityMac()
     : browser_accessibility_cocoa_(NULL) {
 }
 
-void BrowserAccessibilityMac::OnDataChanged() {
-  BrowserAccessibility::OnDataChanged();
-
-  if (browser_accessibility_cocoa_) {
-    [browser_accessibility_cocoa_ childrenChanged];
-    return;
-  }
-
-  // We take ownership of the cocoa obj here.
-  browser_accessibility_cocoa_ = [[BrowserAccessibilityCocoa alloc]
-      initWithObject:this];
+bool BrowserAccessibilityMac::IsNative() const {
+  return true;
 }
 
 void BrowserAccessibilityMac::NativeReleaseReference() {
@@ -44,8 +35,17 @@ void BrowserAccessibilityMac::NativeReleaseReference() {
   delete this;
 }
 
-bool BrowserAccessibilityMac::IsNative() const {
-  return true;
+void BrowserAccessibilityMac::OnDataChanged() {
+  BrowserAccessibility::OnDataChanged();
+
+  if (browser_accessibility_cocoa_) {
+    [browser_accessibility_cocoa_ childrenChanged];
+    return;
+  }
+
+  // We take ownership of the Cocoa object here.
+  browser_accessibility_cocoa_ =
+      [[BrowserAccessibilityCocoa alloc] initWithObject:this];
 }
 
 void BrowserAccessibilityMac::RecreateNativeObject() {
@@ -61,6 +61,11 @@ void BrowserAccessibilityMac::RecreateNativeObject() {
   browser_accessibility_cocoa_ = [[BrowserAccessibilityCocoa alloc]
       initWithObject:this];
   [browser_accessibility_cocoa_ swapChildren:&children];
+}
+
+const BrowserAccessibilityCocoa*
+BrowserAccessibility::ToBrowserAccessibilityCocoa() const {
+  return static_cast<const BrowserAccessibilityMac*>(this)->native_view();
 }
 
 BrowserAccessibilityCocoa* BrowserAccessibility::ToBrowserAccessibilityCocoa() {

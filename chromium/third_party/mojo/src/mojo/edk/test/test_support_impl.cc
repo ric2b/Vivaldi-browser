@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/test/test_support_impl.h"
+#include "third_party/mojo/src/mojo/edk/test/test_support_impl.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -28,12 +28,10 @@ base::FilePath ResolveSourceRootRelativePath(const char* relative_path) {
   if (!PathService::Get(base::DIR_SOURCE_ROOT, &path))
     return base::FilePath();
 
-  std::vector<std::string> components;
-  base::SplitString(relative_path, '/', &components);
-
-  for (size_t i = 0; i < components.size(); ++i) {
-    if (!components[i].empty())
-      path = path.AppendASCII(components[i]);
+  for (const base::StringPiece& component : base::SplitStringPiece(
+           relative_path, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    if (!component.empty())
+      path = path.AppendASCII(component);
   }
 
   return path;

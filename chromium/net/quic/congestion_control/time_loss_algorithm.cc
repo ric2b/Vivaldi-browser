@@ -21,34 +21,34 @@ static const double kLossDelayMultiplier = 1.25;
 }  // namespace
 
 TimeLossAlgorithm::TimeLossAlgorithm()
-    : loss_detection_timeout_(QuicTime::Zero()) { }
+    : loss_detection_timeout_(QuicTime::Zero()) {}
 
 LossDetectionType TimeLossAlgorithm::GetLossDetectionType() const {
   return kTime;
 }
 
-SequenceNumberSet TimeLossAlgorithm::DetectLostPackets(
+PacketNumberSet TimeLossAlgorithm::DetectLostPackets(
     const QuicUnackedPacketMap& unacked_packets,
     const QuicTime& time,
-    QuicPacketSequenceNumber largest_observed,
+    QuicPacketNumber largest_observed,
     const RttStats& rtt_stats) {
-  SequenceNumberSet lost_packets;
+  PacketNumberSet lost_packets;
   loss_detection_timeout_ = QuicTime::Zero();
   QuicTime::Delta loss_delay = QuicTime::Delta::Max(
       QuicTime::Delta::FromMilliseconds(kMinLossDelayMs),
       QuicTime::Delta::Max(rtt_stats.smoothed_rtt(), rtt_stats.latest_rtt())
           .Multiply(kLossDelayMultiplier));
 
-  QuicPacketSequenceNumber sequence_number = unacked_packets.GetLeastUnacked();
+  QuicPacketNumber packet_number = unacked_packets.GetLeastUnacked();
   for (QuicUnackedPacketMap::const_iterator it = unacked_packets.begin();
-       it != unacked_packets.end() && sequence_number <= largest_observed;
-       ++it, ++sequence_number) {
+       it != unacked_packets.end() && packet_number <= largest_observed;
+       ++it, ++packet_number) {
     if (!it->in_flight) {
       continue;
     }
     LOG_IF(DFATAL, it->nack_count == 0 && it->sent_time.IsInitialized())
         << "All packets less than largest observed should have been nacked."
-        << "sequence_number:" << sequence_number
+        << "packet_number:" << packet_number
         << " largest_observed:" << largest_observed;
 
     // Packets are sent in order, so break when we haven't waited long enough
@@ -58,10 +58,18 @@ SequenceNumberSet TimeLossAlgorithm::DetectLostPackets(
       loss_detection_timeout_ = when_lost;
       break;
     }
-    lost_packets.insert(sequence_number);
+    lost_packets.insert(packet_number);
   }
 
   return lost_packets;
+}
+
+void TimeLossAlgorithm::DetectLosses(
+    const QuicUnackedPacketMap& unacked_packets,
+    const QuicTime& time,
+    const RttStats& rtt_stats,
+    SendAlgorithmInterface::CongestionVector* packets_lost) {
+  LOG(DFATAL) << "DetectLoss is unsupported by TimeLossAlgorithm.";
 }
 
 // loss_time_ is updated in DetectLostPackets, which must be called every time

@@ -15,7 +15,6 @@
 #include <string>
 
 #include "echo_server.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "nacl_io/kernel_intercept.h"
 #include "nacl_io/kernel_proxy.h"
@@ -219,7 +218,7 @@ TEST_F(SocketTestUDP, Bind) {
   EXPECT_EQ(EINVAL, Bind(sock2_, LOCAL_HOST, PORT1));
 }
 
-TEST_F(SocketTestUDP, SendRcv) {
+TEST_F(SocketTestUDP, SendRecv) {
   char outbuf[256];
   char inbuf[512];
 
@@ -252,7 +251,7 @@ TEST_F(SocketTestUDP, SendRcv) {
   EXPECT_EQ(0, memcmp(outbuf, inbuf, sizeof(outbuf)));
 }
 
-TEST_F(SocketTestUDP, SendRcvUnbound) {
+TEST_F(SocketTestUDP, SendRecvUnbound) {
   char outbuf[256];
   char inbuf[512];
 
@@ -405,6 +404,8 @@ TEST_F(SocketTestTCP, TCPConnectFails) {
 TEST_F(SocketTest, Getsockopt) {
   sock1_ = ki_socket(AF_INET, SOCK_STREAM, 0);
   EXPECT_GT(sock1_, -1);
+  sock2_ = ki_socket(AF_INET, SOCK_DGRAM, 0);
+  EXPECT_GT(sock1_, -1);
   int socket_error = 99;
   socklen_t len = sizeof(socket_error);
 
@@ -414,6 +415,20 @@ TEST_F(SocketTest, Getsockopt) {
                              &socket_error, &len));
   ASSERT_EQ(0, socket_error);
   ASSERT_EQ(sizeof(socket_error), len);
+
+  // Check SO_TYPE for TCP sockets
+  int socket_type = 0;
+  len = sizeof(socket_type);
+  ASSERT_EQ(0, ki_getsockopt(sock1_, SOL_SOCKET, SO_TYPE, &socket_type, &len));
+  ASSERT_EQ(SOCK_STREAM, socket_type);
+  ASSERT_EQ(sizeof(socket_type), len);
+
+  // Check SO_TYPE for UDP sockets
+  socket_type = 0;
+  len = sizeof(socket_type);
+  ASSERT_EQ(0, ki_getsockopt(sock2_, SOL_SOCKET, SO_TYPE, &socket_type, &len));
+  ASSERT_EQ(SOCK_DGRAM, socket_type);
+  ASSERT_EQ(sizeof(socket_type), len);
 
   // Test for an invalid option (-1)
   ASSERT_EQ(-1, ki_getsockopt(sock1_, SOL_SOCKET, -1, &socket_error, &len));
@@ -826,6 +841,11 @@ TEST_F(SocketTestTCP, SendRecvAfterRemoteShutdown) {
   // Close the new socket
   ASSERT_EQ(0, ki_close(new_sock));
 
+  // Sleep for 10 milliseconds. This is designed to allow the shutdown
+  // event to make its way to the client socket beofre the recv below().
+  // TODO(sbc): Find a way to test this that doesn't rely on arbitrary sleep.
+  usleep(100 * 1000);
+
   // Recv remainder
   int bytes_remaining = strlen(send_buf) - 10;
   ASSERT_EQ(bytes_remaining, ki_recv(client_sock, buf, 256, 0));
@@ -940,6 +960,56 @@ TEST_F(SocketTestTCP, Sockopt_BUFSIZE) {
       << "failed with: " << strerror(errno);
   ASSERT_EQ(0, ki_setsockopt(sock2_, SOL_SOCKET, SO_SNDBUF, &option, len))
       << "failed with: " << strerror(errno);
+}
+
+TEST_F(SocketTest, Sockopt_IP_MULTICAST) {
+  int ttl = 1;
+  socklen_t ttl_len = sizeof(ttl);
+  int loop = 1;
+  socklen_t loop_len = sizeof(loop);
+
+  // Modify the test to verify the change by calling getsockopt
+  // once UDPInterface supports GetOption() call
+  //
+  // Setting multicast options on TCP socket should fail
+  sock1_ = ki_socket(AF_INET, SOCK_STREAM, 0);
+  ASSERT_GT(sock1_, -1);
+  ASSERT_EQ(-1,
+            ki_setsockopt(sock1_, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, ttl_len));
+  ASSERT_EQ(ENOPROTOOPT, errno);
+  ASSERT_EQ(-1, ki_setsockopt(sock1_, IPPROTO_IP, IP_MULTICAST_LOOP, &loop,
+                              loop_len));
+  ASSERT_EQ(ENOPROTOOPT, errno);
+  EXPECT_EQ(0, Bind(sock1_, LOCAL_HOST, PORT1));
+
+  // Setting SO_BROADCAST on UDP socket should work
+  sock2_ = ki_socket(AF_INET, SOCK_DGRAM, 0);
+  ASSERT_GT(sock2_, -1);
+
+  // Test invalid values for IP_MULTICAST_TTL (0 <= ttl < 256)
+  ttl = -1;
+  ASSERT_EQ(-1,
+            ki_setsockopt(sock2_, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, ttl_len));
+  ASSERT_EQ(EINVAL, errno);
+  ttl = 256;
+  ASSERT_EQ(-1,
+            ki_setsockopt(sock2_, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, ttl_len));
+  ASSERT_EQ(EINVAL, errno);
+
+  // Valid IP_MULTICAST_TTL value
+  ttl = 1;
+  ASSERT_EQ(0,
+            ki_setsockopt(sock2_, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, ttl_len));
+  ASSERT_EQ(1, ttl);
+  ASSERT_EQ(sizeof(ttl), ttl_len);
+
+  // IP_MULTICAST_LOOP
+  ASSERT_EQ(
+      0, ki_setsockopt(sock2_, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, loop_len));
+  ASSERT_EQ(1, loop);
+  ASSERT_EQ(sizeof(loop), loop_len);
+
+  EXPECT_EQ(0, Bind(sock2_, LOCAL_HOST, PORT2));
 }
 
 #endif  // PROVIDES_SOCKET_API

@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/time/time.h"
-#include "media/base/buffers.h"
 #include "media/base/media_log.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/formats/mp2t/es_parser_mpeg1audio.h"
@@ -40,9 +40,8 @@ bool EsParserMpeg1AudioTest::Process(
   EsParserMpeg1Audio es_parser(
       base::Bind(&EsParserMpeg1AudioTest::NewAudioConfig,
                  base::Unretained(this)),
-      base::Bind(&EsParserMpeg1AudioTest::EmitBuffer,
-                 base::Unretained(this)),
-      LogCB());
+      base::Bind(&EsParserMpeg1AudioTest::EmitBuffer, base::Unretained(this)),
+      new MediaLog());
   return ProcessPesPackets(&es_parser, pes_packets, force_timing);
 }
 

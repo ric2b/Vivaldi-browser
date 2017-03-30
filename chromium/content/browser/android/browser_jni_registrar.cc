@@ -6,14 +6,21 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_registrar.h"
-#include "content/browser/accessibility/browser_accessibility_android.h"
-#include "content/browser/accessibility/browser_accessibility_manager_android.h"
-#include "content/browser/android/background_sync_launcher_android.h"
+#include "base/macros.h"
 #include "content/browser/android/browser_startup_controller.h"
 #include "content/browser/android/child_process_launcher_android.h"
-#include "content/browser/android/composited_touch_handle_drawable.h"
-#include "content/browser/android/content_readback_handler.h"
 #include "content/browser/android/content_video_view.h"
+#include "content/browser/media/android/media_resource_getter_impl.h"
+#include "content/browser/media/android/media_session.h"
+#include "content/browser/mojo/service_registrar_android.h"
+#include "content/browser/mojo/service_registry_android.h"
+#include "mojo/android/system/core_impl.h"
+
+#if !defined(USE_AURA)
+#include "content/browser/accessibility/browser_accessibility_android.h"
+#include "content/browser/accessibility/browser_accessibility_manager_android.h"
+#include "content/browser/android/background_sync_network_observer_android.h"
+#include "content/browser/android/composited_touch_handle_drawable.h"
 #include "content/browser/android/content_view_core_impl.h"
 #include "content/browser/android/content_view_render_view.h"
 #include "content/browser/android/content_view_statics.h"
@@ -28,38 +35,40 @@
 #include "content/browser/frame_host/navigation_controller_android.h"
 #include "content/browser/gamepad/gamepad_platform_data_fetcher_android.h"
 #include "content/browser/geolocation/location_api_adapter_android.h"
-#include "content/browser/media/android/media_drm_credential_manager.h"
-#include "content/browser/media/android/media_resource_getter_impl.h"
-#include "content/browser/media/android/media_session.h"
-#include "content/browser/mojo/service_registrar_android.h"
-#include "content/browser/mojo/service_registry_android.h"
 #include "content/browser/power_save_blocker_android.h"
 #include "content/browser/renderer_host/ime_adapter_android.h"
-#include "content/browser/renderer_host/input/motion_event_android.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_android.h"
 #include "content/browser/screen_orientation/screen_orientation_delegate_android.h"
 #include "content/browser/speech/speech_recognizer_impl_android.h"
 #include "content/browser/time_zone_monitor_android.h"
+#include "content/browser/vr/android/cardboard/cardboard_vr_device.h"
 #include "content/browser/web_contents/web_contents_android.h"
-#include "mojo/android/system/core_impl.h"
+#endif
 
 namespace {
 base::android::RegistrationMethod kContentRegisteredMethods[] = {
-    {"AndroidLocationApiAdapter",
-     content::AndroidLocationApiAdapter::RegisterGeolocationService},
-    {"BackgroundSyncLauncherAndroid",
-     content::BackgroundSyncLauncherAndroid::RegisterLauncher},
-    {"BrowserAccessibilityManager",
-     content::RegisterBrowserAccessibilityManager},
     {"BrowserStartupController", content::RegisterBrowserStartupController},
     {"ChildProcessLauncher", content::RegisterChildProcessLauncher},
-    {"ContentReadbackHandler",
-     content::ContentReadbackHandler::RegisterContentReadbackHandler},
     {"ContentVideoView", content::ContentVideoView::RegisterContentVideoView},
+    {"CoreImpl", mojo::android::RegisterCoreImpl},
+    {"MediaResourceGetterImpl",
+     content::MediaResourceGetterImpl::RegisterMediaResourceGetter},
+    {"MediaSession", content::MediaSession::RegisterMediaSession},
+#if !defined(USE_AURA)
+    {"AndroidLocationApiAdapter",
+     content::AndroidLocationApiAdapter::RegisterGeolocationService},
+    {"BackgroundSyncNetworkObserverAndroid",
+     content::BackgroundSyncNetworkObserverAndroid::Observer::
+         RegisterNetworkObserver},
+    {"BrowserAccessibilityManager",
+     content::RegisterBrowserAccessibilityManager},
+#if defined(ENABLE_WEBVR)
+    {"CardboardVRDevice",
+     content::CardboardVRDevice::RegisterCardboardVRDevice},
+#endif
     {"ContentViewCore", content::RegisterContentViewCore},
     {"ContentViewRenderView",
      content::ContentViewRenderView::RegisterContentViewRenderView},
-    {"CoreImpl", mojo::android::RegisterCoreImpl},
     {"DateTimePickerAndroid", content::RegisterDateTimeChooserAndroid},
     {"DownloadControllerAndroidImpl",
      content::DownloadControllerAndroidImpl::RegisterDownloadController},
@@ -72,13 +81,6 @@ base::android::RegistrationMethod kContentRegisteredMethods[] = {
      content::InterstitialPageDelegateAndroid::
          RegisterInterstitialPageDelegateAndroid},
     {"LoadUrlParams", content::RegisterLoadUrlParams},
-    {"MediaDrmCredentialManager",
-     content::MediaDrmCredentialManager::RegisterMediaDrmCredentialManager},
-    {"MediaResourceGetterImpl",
-     content::MediaResourceGetterImpl::RegisterMediaResourceGetter},
-    {"MediaSession", content::MediaSession::RegisterMediaSession},
-    {"MotionEventAndroid",
-     content::MotionEventAndroid::RegisterMotionEventAndroid},
     {"MotionEventSynthesizer",
      content::SyntheticGestureTargetAndroid::RegisterMotionEventSynthesizer},
     {"NavigationControllerAndroid",
@@ -99,6 +101,7 @@ base::android::RegistrationMethod kContentRegisteredMethods[] = {
     {"WebContentsAndroid", content::WebContentsAndroid::Register},
     {"WebContentsObserver", content::RegisterWebContentsObserverProxy},
     {"WebViewStatics", content::RegisterWebViewStatics},
+#endif  // !USE_AURA
 };
 
 }  // namespace

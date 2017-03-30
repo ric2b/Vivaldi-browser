@@ -5,26 +5,48 @@
 #include <windows.h>
 #include <malloc.h>
 #include <shellscalingapi.h>
+#include <stddef.h>
 #include <tchar.h>
 
+#include <algorithm>
 #include <string>
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
+#include "base/strings/string16.h"
+#include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/win/windows_version.h"
-#include "chrome/app/client_util.h"
+#include "chrome/app/chrome_crash_reporter_client.h"
+#include "chrome/app/main_dll_loader_win.h"
 #include "chrome/browser/chrome_process_finder_win.h"
 #include "chrome/browser/policy/policy_path_parser.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/installer/util/browser_distribution.h"
 #include "chrome_elf/chrome_elf_main.h"
-#include "components/startup_metric_utils/startup_metric_utils.h"
+#include "components/crash/content/app/crash_reporter_client.h"
+#include "components/crash/content/app/crashpad.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
+#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
+#include "third_party/crashpad/crashpad/handler/handler_main.h"
 #include "ui/gfx/win/dpi.h"
 
 namespace {
+
+base::LazyInstance<ChromeCrashReporterClient>::Leaky g_chrome_crash_client =
+    LAZY_INSTANCE_INITIALIZER;
+
+base::LazyInstance<std::vector<crash_reporter::UploadedReport>>::Leaky
+    g_uploaded_reports = LAZY_INSTANCE_INITIALIZER;
+
 // List of switches that it's safe to rendezvous early with. Fast start should
 // not be done if a command line contains a switch not in this set.
 // Note this is currently stored as a list of two because it's probably faster
@@ -120,25 +142,105 @@ void SwitchToLFHeap() {
   }
 }
 
+int RunAsCrashpadHandler(const base::CommandLine& command_line) {
+  std::vector<base::string16> argv = command_line.argv();
+  base::string16 process_type =
+      L"--" + base::UTF8ToUTF16(switches::kProcessType) + L"=";
+  argv.erase(std::remove_if(argv.begin(), argv.end(),
+                            [&process_type](const base::string16& str) {
+                              return str.compare(0, process_type.size(),
+                                                 process_type) == 0;
+                            }),
+             argv.end());
+
+  scoped_ptr<char* []> argv_as_utf8(new char*[argv.size() + 1]);
+  std::vector<std::string> storage;
+  storage.reserve(argv.size());
+
+  size_t arg_append_index = 0;
+  for (size_t i = 0; i < argv.size(); ++i) {
+    // Remove arguments starting with '/' as they are not supported by crashpad.
+    if (!argv[i].empty() && argv[i].front() == L'/')
+      continue;
+
+    storage.push_back(base::UTF16ToUTF8(argv[i]));
+    argv_as_utf8[arg_append_index] = &storage[arg_append_index][0];
+    ++arg_append_index;
+  }
+  argv_as_utf8[arg_append_index] = nullptr;
+
+  return crashpad::HandlerMain(static_cast<int>(storage.size()),
+                               argv_as_utf8.get());
+}
+
+// Returns true if |command_line| contains a /prefetch:# argument where # is in
+// [1, 8].
+bool HasValidWindowsPrefetchArgument(const base::CommandLine& command_line) {
+  const base::char16 kPrefetchArgumentPrefix[] = L"/prefetch:";
+
+  for (const auto& arg : command_line.argv()) {
+    if (arg.size() == arraysize(kPrefetchArgumentPrefix) &&
+        base::StartsWith(arg, kPrefetchArgumentPrefix,
+                         base::CompareCase::SENSITIVE)) {
+      return arg[arraysize(kPrefetchArgumentPrefix) - 1] >= L'1' &&
+             arg[arraysize(kPrefetchArgumentPrefix) - 1] <= L'8';
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
-#if !defined(ADDRESS_SANITIZER)
+// This helper is looked up in the browser to retrieve the crash reports. See
+// CrashUploadListCrashpad. Note that we do not pass an std::vector here,
+// because we do not want to allocate/free in different modules. The returned
+// pointer is read-only.
+extern "C" __declspec(dllexport) void GetUploadedReportsImpl(
+    const crash_reporter::UploadedReport** reports,
+    size_t* report_count) {
+  crash_reporter::GetUploadedReports(g_uploaded_reports.Pointer());
+  *reports = g_uploaded_reports.Pointer()->data();
+  *report_count = g_uploaded_reports.Pointer()->size();
+}
+
+#if !defined(WIN_CONSOLE_APP)
 int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE prev, wchar_t*, int) {
 #else
-// The AddressSanitizer build should be a console program as it prints out stuff
-// on stderr.
 int main() {
-  HINSTANCE instance = GetModuleHandle(NULL);
+  HINSTANCE instance = GetModuleHandle(nullptr);
 #endif
+  // Initialize the CommandLine singleton from the environment.
+  base::CommandLine::Init(0, nullptr);
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+
+  const std::string process_type =
+      command_line->GetSwitchValueASCII(switches::kProcessType);
+
+  startup_metric_utils::InitializePreReadOptions(
+      BrowserDistribution::GetDistribution()->GetRegistryPath());
+
+  // Confirm that an explicit prefetch profile is used for all process types
+  // except for the browser process. Any new process type will have to assign
+  // itself a prefetch id. See kPrefetchArgument* constants in
+  // content_switches.cc for details.
+  DCHECK(!startup_metric_utils::GetPreReadOptions().use_prefetch_argument ||
+         process_type.empty() ||
+         HasValidWindowsPrefetchArgument(*command_line));
+
+  if (process_type == switches::kCrashpadHandler)
+    return RunAsCrashpadHandler(*base::CommandLine::ForCurrentProcess());
+
+  crash_reporter::SetCrashReporterClient(g_chrome_crash_client.Pointer());
+  crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
+
   SwitchToLFHeap();
 
-  startup_metric_utils::RecordExeMainEntryTime();
+  startup_metric_utils::RecordExeMainEntryPointTime(base::Time::Now());
 
   // Signal Chrome Elf that Chrome has begun to start.
   SignalChromeElf();
 
-  // Initialize the commandline singleton from the environment.
-  base::CommandLine::Init(0, NULL);
   // The exit manager is in charge of calling the dtors of singletons.
   base::AtExitManager exit_manager;
 
@@ -148,7 +250,7 @@ int main() {
   if (base::win::GetVersion() >= base::win::VERSION_WIN7)
     EnableHighDPISupport();
 
-  if (AttemptFastNotify(*base::CommandLine::ForCurrentProcess()))
+  if (AttemptFastNotify(*command_line))
     return 0;
 
   // Load and launch the chrome dll. *Everything* happens inside.

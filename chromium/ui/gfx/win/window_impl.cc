@@ -8,8 +8,8 @@
 
 #include "base/bind.h"
 #include "base/debug/alias.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/win/wrapped_window_proc.h"
@@ -81,7 +81,7 @@ class ClassRegistrar {
   };
 
   ClassRegistrar();
-  friend struct DefaultSingletonTraits<ClassRegistrar>;
+  friend struct base::DefaultSingletonTraits<ClassRegistrar>;
 
   typedef std::list<RegisteredClass> RegisteredClasses;
   RegisteredClasses registered_classes_;
@@ -98,8 +98,8 @@ ClassRegistrar::~ClassRegistrar() {}
 
 // static
 ClassRegistrar* ClassRegistrar::GetInstance() {
-  return Singleton<ClassRegistrar,
-      LeakySingletonTraits<ClassRegistrar> >::get();
+  return base::Singleton<ClassRegistrar,
+                         base::LeakySingletonTraits<ClassRegistrar>>::get();
 }
 
 void ClassRegistrar::UnregisterClasses() {
@@ -283,10 +283,6 @@ LRESULT CALLBACK WindowImpl::WndProc(HWND hwnd,
                                      UINT message,
                                      WPARAM w_param,
                                      LPARAM l_param) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("440919 WindowImpl::WndProc"));
-
   if (message == WM_NCCREATE) {
     CREATESTRUCT* cs = reinterpret_cast<CREATESTRUCT*>(l_param);
     WindowImpl* window = reinterpret_cast<WindowImpl*>(cs->lpCreateParams);

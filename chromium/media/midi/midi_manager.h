@@ -5,10 +5,13 @@
 #ifndef MEDIA_MIDI_MIDI_MANAGER_H_
 #define MEDIA_MIDI_MIDI_MANAGER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
@@ -38,8 +41,8 @@ class MIDI_EXPORT MidiManagerClient {
 
   // SetInputPortState() and SetOutputPortState() are called to notify a known
   // device gets disconnected, or connected again.
-  virtual void SetInputPortState(uint32 port_index, MidiPortState state) = 0;
-  virtual void SetOutputPortState(uint32 port_index, MidiPortState state) = 0;
+  virtual void SetInputPortState(uint32_t port_index, MidiPortState state) = 0;
+  virtual void SetOutputPortState(uint32_t port_index, MidiPortState state) = 0;
 
   // CompleteStartSession() is called when platform dependent preparation is
   // finished.
@@ -51,8 +54,8 @@ class MIDI_EXPORT MidiManagerClient {
   // |data| represents a series of bytes encoding one or more MIDI messages.
   // |length| is the number of bytes in |data|.
   // |timestamp| is the time the data was received, in seconds.
-  virtual void ReceiveMidiData(uint32 port_index,
-                               const uint8* data,
+  virtual void ReceiveMidiData(uint32_t port_index,
+                               const uint8_t* data,
                                size_t length,
                                double timestamp) = 0;
 
@@ -61,6 +64,10 @@ class MIDI_EXPORT MidiManagerClient {
   // This happens as a result of the client having previously called
   // MidiManager::DispatchSendMidiData().
   virtual void AccumulateMidiBytesSent(size_t n) = 0;
+
+  // Detach() is called when MidiManager is going to shutdown immediately.
+  // Client should not touch MidiManager instance after Detach() is called.
+  virtual void Detach() = 0;
 };
 
 // Manages access to all MIDI hardware.
@@ -74,6 +81,10 @@ class MIDI_EXPORT MidiManager {
   // The constructor and the destructor will be called on the CrBrowserMain
   // thread.
   static MidiManager* Create();
+
+  // Called on the CrBrowserMain thread to notify the Chrome_IOThread will stop
+  // and the instance will be destructed on the CrBrowserMain thread soon.
+  void Shutdown();
 
   // A client calls StartSession() to receive and send MIDI data.
   // If the session is ready to start, the MIDI system is lazily initialized
@@ -101,8 +112,8 @@ class MIDI_EXPORT MidiManager {
   // means send "now" or as soon as possible.
   // The default implementation is for unsupported platforms.
   virtual void DispatchSendMidiData(MidiManagerClient* client,
-                                    uint32 port_index,
-                                    const std::vector<uint8>& data,
+                                    uint32_t port_index,
+                                    const std::vector<uint8_t>& data,
                                     double timestamp);
 
  protected:
@@ -119,6 +130,12 @@ class MIDI_EXPORT MidiManager {
   // |result| should be Result::OK on success, otherwise a proper Result.
   virtual void StartInitialization();
 
+  // Finalizes the platform dependent MIDI system. Called on Chrome_IOThread
+  // thread and the thread will stop immediately after this call.
+  // Platform dependent resources that were allocated on the Chrome_IOThread
+  // should be disposed inside this method.
+  virtual void Finalize() {}
+
   // Called from a platform dependent implementation of StartInitialization().
   // It invokes CompleteInitializationInternal() on the thread that calls
   // StartSession() and distributes |result| to MIDIManagerClient objects in
@@ -127,19 +144,19 @@ class MIDI_EXPORT MidiManager {
 
   void AddInputPort(const MidiPortInfo& info);
   void AddOutputPort(const MidiPortInfo& info);
-  void SetInputPortState(uint32 port_index, MidiPortState state);
-  void SetOutputPortState(uint32 port_index, MidiPortState state);
+  void SetInputPortState(uint32_t port_index, MidiPortState state);
+  void SetOutputPortState(uint32_t port_index, MidiPortState state);
 
   // Dispatches to all clients.
   // TODO(toyoshim): Fix the mac implementation to use
   // |ReceiveMidiData(..., base::TimeTicks)|.
-  void ReceiveMidiData(uint32 port_index,
-                       const uint8* data,
+  void ReceiveMidiData(uint32_t port_index,
+                       const uint8_t* data,
                        size_t length,
                        double timestamp);
 
-  void ReceiveMidiData(uint32 port_index,
-                       const uint8* data,
+  void ReceiveMidiData(uint32_t port_index,
+                       const uint8_t* data,
                        size_t length,
                        base::TimeTicks time) {
     ReceiveMidiData(port_index, data, length,
@@ -151,9 +168,13 @@ class MIDI_EXPORT MidiManager {
     return pending_clients_.size();
   }
 
+  const MidiPortInfoList& input_ports() const { return input_ports_; }
+  const MidiPortInfoList& output_ports() const { return output_ports_; }
+
  private:
   void CompleteInitializationInternal(Result result);
   void AddInitialPorts(MidiManagerClient* client);
+  void ShutdownOnSessionThread();
 
   // Keeps track of all clients who wish to receive MIDI data.
   typedef std::set<MidiManagerClient*> ClientSet;
@@ -169,6 +190,9 @@ class MIDI_EXPORT MidiManager {
   // Keeps true if platform dependent initialization is already completed.
   bool initialized_;
 
+  // Keeps false until Finalize() is called.
+  bool finalized_;
+
   // Keeps the platform dependent initialization result if initialization is
   // completed. Otherwise keeps Result::NOT_INITIALIZED.
   Result result_;
@@ -177,8 +201,9 @@ class MIDI_EXPORT MidiManager {
   MidiPortInfoList input_ports_;
   MidiPortInfoList output_ports_;
 
-  // Protects access to |clients_|, |pending_clients_|, |initialized_|,
-  // |result_|, |input_ports_| and |output_ports_|.
+  // Protects access to |clients_|, |pending_clients_|,
+  // |session_thread_runner_|, |initialized_|, |finalize_|, |result_|,
+  // |input_ports_| and |output_ports_|.
   base::Lock lock_;
 
   DISALLOW_COPY_AND_ASSIGN(MidiManager);

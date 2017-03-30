@@ -4,6 +4,8 @@
 
 #include "cc/base/math_util.h"
 
+#include <stdint.h>
+
 #include <cmath>
 
 #include "cc/test/geometry_test_utils.h"
@@ -30,6 +32,32 @@ TEST(MathUtilTest, ProjectionOfPerpendicularPlane) {
   EXPECT_EQ(0, projected_rect.x());
   EXPECT_EQ(0, projected_rect.y());
   EXPECT_TRUE(projected_rect.IsEmpty());
+}
+
+TEST(MathUtilTest, ProjectionOfAlmostPerpendicularPlane) {
+  // In this case, the m33() element of the transform becomes almost zero, which
+  // could cause a divide-by-zero when projecting points/quads.
+
+  gfx::Transform transform;
+  // The transform is from an actual test page:
+  // [ +1.0000 +0.0000 -1.0000 +3144132.0000
+  //   +0.0000 +1.0000 +0.0000 +0.0000
+  //   +16331238407143424.0000 +0.0000 -0.0000 +51346917453137000267776.0000
+  //   +0.0000 +0.0000 +0.0000 +1.0000 ]
+  transform.MakeIdentity();
+  transform.matrix().set(0, 2, static_cast<SkMScalar>(-1));
+  transform.matrix().set(0, 3, static_cast<SkMScalar>(3144132.0));
+  transform.matrix().set(2, 0, static_cast<SkMScalar>(16331238407143424.0));
+  transform.matrix().set(2, 2, static_cast<SkMScalar>(-1e-33));
+  transform.matrix().set(2, 3,
+                         static_cast<SkMScalar>(51346917453137000267776.0));
+
+  gfx::RectF rect = gfx::RectF(0, 0, 1, 1);
+  gfx::RectF projected_rect = MathUtil::ProjectClippedRect(transform, rect);
+
+  EXPECT_EQ(0, projected_rect.x());
+  EXPECT_EQ(0, projected_rect.y());
+  EXPECT_TRUE(projected_rect.IsEmpty()) << projected_rect.ToString();
 }
 
 TEST(MathUtilTest, EnclosingClippedRectUsesCorrectInitialBounds) {
@@ -193,6 +221,104 @@ TEST(MathUtilTest, MapEnclosedRectWith2dAxisAlignedTransform) {
   EXPECT_EQ(gfx::Rect(2, 4, 6, 8), output);
 }
 
+TEST(MathUtilTest, MapEnclosingRectWithLargeTransforms) {
+  gfx::Rect input(1, 2, 100, 200);
+  gfx::Rect output;
+
+  gfx::Transform large_x_scale;
+  large_x_scale.Scale(SkDoubleToMScalar(1e37), 1.0);
+
+  gfx::Transform infinite_x_scale;
+  infinite_x_scale = large_x_scale * large_x_scale;
+
+  gfx::Transform large_y_scale;
+  large_y_scale.Scale(1.0, SkDoubleToMScalar(1e37));
+
+  gfx::Transform infinite_y_scale;
+  infinite_y_scale = large_y_scale * large_y_scale;
+
+  gfx::Transform rotation;
+  rotation.RotateAboutYAxis(170.0);
+
+  int max_int = std::numeric_limits<int>::max();
+
+  output = MathUtil::MapEnclosingClippedRect(large_x_scale, input);
+  EXPECT_EQ(gfx::Rect(max_int, 2, 0, 200), output);
+
+  output = MathUtil::MapEnclosingClippedRect(large_x_scale * rotation, input);
+  EXPECT_EQ(gfx::Rect(), output);
+
+  output = MathUtil::MapEnclosingClippedRect(infinite_x_scale, input);
+  EXPECT_EQ(gfx::Rect(max_int, 2, 0, 200), output);
+
+  output =
+      MathUtil::MapEnclosingClippedRect(infinite_x_scale * rotation, input);
+  EXPECT_EQ(gfx::Rect(), output);
+
+  output = MathUtil::MapEnclosingClippedRect(large_y_scale, input);
+  EXPECT_EQ(gfx::Rect(1, max_int, 100, 0), output);
+
+  output = MathUtil::MapEnclosingClippedRect(large_y_scale * rotation, input);
+  EXPECT_EQ(gfx::Rect(-100, max_int, 100, 0), output);
+
+  output = MathUtil::MapEnclosingClippedRect(infinite_y_scale, input);
+  EXPECT_EQ(gfx::Rect(1, max_int, 100, 0), output);
+
+  output =
+      MathUtil::MapEnclosingClippedRect(infinite_y_scale * rotation, input);
+  EXPECT_EQ(gfx::Rect(), output);
+}
+
+TEST(MathUtilTest, ProjectEnclosingRectWithLargeTransforms) {
+  gfx::Rect input(1, 2, 100, 200);
+  gfx::Rect output;
+
+  gfx::Transform large_x_scale;
+  large_x_scale.Scale(SkDoubleToMScalar(1e37), 1.0);
+
+  gfx::Transform infinite_x_scale;
+  infinite_x_scale = large_x_scale * large_x_scale;
+
+  gfx::Transform large_y_scale;
+  large_y_scale.Scale(1.0, SkDoubleToMScalar(1e37));
+
+  gfx::Transform infinite_y_scale;
+  infinite_y_scale = large_y_scale * large_y_scale;
+
+  gfx::Transform rotation;
+  rotation.RotateAboutYAxis(170.0);
+
+  int max_int = std::numeric_limits<int>::max();
+
+  output = MathUtil::ProjectEnclosingClippedRect(large_x_scale, input);
+  EXPECT_EQ(gfx::Rect(max_int, 2, 0, 200), output);
+
+  output =
+      MathUtil::ProjectEnclosingClippedRect(large_x_scale * rotation, input);
+  EXPECT_EQ(gfx::Rect(), output);
+
+  output = MathUtil::ProjectEnclosingClippedRect(infinite_x_scale, input);
+  EXPECT_EQ(gfx::Rect(max_int, 2, 0, 200), output);
+
+  output =
+      MathUtil::ProjectEnclosingClippedRect(infinite_x_scale * rotation, input);
+  EXPECT_EQ(gfx::Rect(), output);
+
+  output = MathUtil::ProjectEnclosingClippedRect(large_y_scale, input);
+  EXPECT_EQ(gfx::Rect(1, max_int, 100, 0), output);
+
+  output =
+      MathUtil::ProjectEnclosingClippedRect(large_y_scale * rotation, input);
+  EXPECT_EQ(gfx::Rect(-103, max_int, 102, 0), output);
+
+  output = MathUtil::ProjectEnclosingClippedRect(infinite_y_scale, input);
+  EXPECT_EQ(gfx::Rect(1, max_int, 100, 0), output);
+
+  output =
+      MathUtil::ProjectEnclosingClippedRect(infinite_y_scale * rotation, input);
+  EXPECT_EQ(gfx::Rect(), output);
+}
+
 TEST(MathUtilTest, RoundUp) {
   for (int multiplier = 1; multiplier <= 10; ++multiplier) {
     // Try attempts in descending order, so that we can
@@ -201,7 +327,7 @@ TEST(MathUtilTest, RoundUp) {
     for (int attempt = 5 * multiplier; attempt >= -5 * multiplier; --attempt) {
       if ((attempt % multiplier) == 0)
         correct = attempt;
-      EXPECT_EQ(correct, MathUtil::RoundUp(attempt, multiplier))
+      EXPECT_EQ(correct, MathUtil::UncheckedRoundUp(attempt, multiplier))
           << "attempt=" << attempt << " multiplier=" << multiplier;
     }
   }
@@ -213,12 +339,18 @@ TEST(MathUtilTest, RoundUp) {
     for (unsigned attempt = 5 * multiplier; attempt > 0; --attempt) {
       if ((attempt % multiplier) == 0)
         correct = attempt;
-      EXPECT_EQ(correct, MathUtil::RoundUp(attempt, multiplier))
+      EXPECT_EQ(correct, MathUtil::UncheckedRoundUp(attempt, multiplier))
           << "attempt=" << attempt << " multiplier=" << multiplier;
     }
-    EXPECT_EQ(0u, MathUtil::RoundUp(0u, multiplier))
+    EXPECT_EQ(0u, MathUtil::UncheckedRoundUp(0u, multiplier))
         << "attempt=0 multiplier=" << multiplier;
   }
+}
+
+TEST(MathUtilTest, RoundUpOverflow) {
+  // Rounding up 123 by 50 is 150, which overflows int8_t, but fits in uint8_t.
+  EXPECT_FALSE(MathUtil::VerifyRoundup<int8_t>(123, 50));
+  EXPECT_TRUE(MathUtil::VerifyRoundup<uint8_t>(123, 50));
 }
 
 TEST(MathUtilTest, RoundDown) {
@@ -229,7 +361,7 @@ TEST(MathUtilTest, RoundDown) {
     for (int attempt = -5 * multiplier; attempt <= 5 * multiplier; ++attempt) {
       if ((attempt % multiplier) == 0)
         correct = attempt;
-      EXPECT_EQ(correct, MathUtil::RoundDown(attempt, multiplier))
+      EXPECT_EQ(correct, MathUtil::UncheckedRoundDown(attempt, multiplier))
           << "attempt=" << attempt << " multiplier=" << multiplier;
     }
   }
@@ -241,10 +373,17 @@ TEST(MathUtilTest, RoundDown) {
     for (unsigned attempt = 0; attempt <= 5 * multiplier; ++attempt) {
       if ((attempt % multiplier) == 0)
         correct = attempt;
-      EXPECT_EQ(correct, MathUtil::RoundDown(attempt, multiplier))
+      EXPECT_EQ(correct, MathUtil::UncheckedRoundDown(attempt, multiplier))
           << "attempt=" << attempt << " multiplier=" << multiplier;
     }
   }
+}
+
+TEST(MathUtilTest, RoundDownUnderflow) {
+  // Rounding down -123 by 50 is -150, which underflows int8_t, but fits in
+  // int16_t.
+  EXPECT_FALSE(MathUtil::VerifyRoundDown<int8_t>(-123, 50));
+  EXPECT_TRUE(MathUtil::VerifyRoundDown<int16_t>(-123, 50));
 }
 
 }  // namespace

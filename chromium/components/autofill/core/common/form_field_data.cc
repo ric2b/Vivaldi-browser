@@ -116,6 +116,11 @@ bool FormFieldData::SameFieldAs(const FormFieldData& field) const {
 }
 
 bool FormFieldData::operator<(const FormFieldData& field) const {
+  // This does not use std::tie() as that generates more implicit variables
+  // than the max-vartrack-size for var-tracking-assignments when compiling
+  // for Android, producing build warnings. (See https://crbug.com/555171 for
+  // context.)
+
   // Like operator==, this ignores the value.
   if (label < field.label) return true;
   if (label > field.label) return false;

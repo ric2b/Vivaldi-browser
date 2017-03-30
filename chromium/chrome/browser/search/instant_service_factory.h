@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_SEARCH_INSTANT_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_SEARCH_INSTANT_SERVICE_FACTORY_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -22,7 +22,7 @@ class InstantServiceFactory : public BrowserContextKeyedServiceFactory {
   static InstantServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<InstantServiceFactory>;
+  friend struct base::DefaultSingletonTraits<InstantServiceFactory>;
 
   InstantServiceFactory();
   ~InstantServiceFactory() override;

@@ -4,6 +4,7 @@
 
 #include "ui/views/test/widget_test.h"
 
+#include "build/build_config.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/widget/root_view.h"
 
@@ -109,6 +110,45 @@ View* WidgetTest::GetMouseMoveHandler(internal::RootView* root_view) {
 
 View* WidgetTest::GetGestureHandler(internal::RootView* root_view) {
   return root_view->gesture_handler_;
+}
+
+TestDesktopWidgetDelegate::TestDesktopWidgetDelegate() : widget_(new Widget) {
+}
+
+TestDesktopWidgetDelegate::~TestDesktopWidgetDelegate() {
+  if (widget_)
+    widget_->CloseNow();
+  EXPECT_FALSE(widget_);
+}
+
+void TestDesktopWidgetDelegate::InitWidget(Widget::InitParams init_params) {
+  init_params.delegate = this;
+#if !defined(OS_CHROMEOS)
+  init_params.native_widget = new PlatformDesktopNativeWidget(widget_);
+#endif
+  init_params.bounds = initial_bounds_;
+  widget_->Init(init_params);
+}
+
+void TestDesktopWidgetDelegate::WindowClosing() {
+  window_closing_count_++;
+  widget_ = nullptr;
+}
+
+Widget* TestDesktopWidgetDelegate::GetWidget() {
+  return widget_;
+}
+
+const Widget* TestDesktopWidgetDelegate::GetWidget() const {
+  return widget_;
+}
+
+View* TestDesktopWidgetDelegate::GetContentsView() {
+  return contents_view_ ? contents_view_ : WidgetDelegate::GetContentsView();
+}
+
+bool TestDesktopWidgetDelegate::ShouldAdvanceFocusToTopLevelWidget() const {
+  return true;  // Same default as DefaultWidgetDelegate in widget.cc.
 }
 
 }  // namespace test

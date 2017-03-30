@@ -4,7 +4,11 @@
 
 #include "chrome/browser/devtools/device/adb/mock_adb_server.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -171,7 +175,7 @@ char kSampleWebViewPages[] = "[ {\n"
     "}]";
 
 static const int kBufferSize = 16*1024;
-static const uint16 kAdbPort = 5037;
+static const uint16_t kAdbPort = 5037;
 
 static const int kAdbMessageHeaderSize = 4;
 
@@ -601,19 +605,16 @@ void MockAndroidConnection::SendHTTPResponse(const std::string& body) {
 
 void StartMockAdbServer(FlushMode flush_mode) {
   BrowserThread::PostTaskAndReply(
-      BrowserThread::IO,
-      FROM_HERE,
+      BrowserThread::IO, FROM_HERE,
       base::Bind(&StartMockAdbServerOnIOThread, flush_mode),
-      base::MessageLoop::QuitClosure());
+      base::MessageLoop::QuitWhenIdleClosure());
   content::RunMessageLoop();
 }
 
 void StopMockAdbServer() {
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&StopMockAdbServerOnIOThread),
-      base::MessageLoop::QuitClosure());
+  BrowserThread::PostTaskAndReply(BrowserThread::IO, FROM_HERE,
+                                  base::Bind(&StopMockAdbServerOnIOThread),
+                                  base::MessageLoop::QuitWhenIdleClosure());
   content::RunMessageLoop();
 }
 

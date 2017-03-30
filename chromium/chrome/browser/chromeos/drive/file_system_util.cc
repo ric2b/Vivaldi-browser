@@ -4,10 +4,11 @@
 
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
@@ -15,6 +16,7 @@
 #include "base/i18n/icu_string_conversions.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -23,12 +25,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/drive/drive.pb.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/drive_pref_names.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
-#include "chrome/browser/chromeos/drive/job_list.h"
 #include "chrome/browser/chromeos/drive/write_on_cache_file.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/profiles/profile_util.h"
@@ -37,8 +34,14 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chromeos/chromeos_constants.h"
+#include "components/drive/drive.pb.h"
+#include "components/drive/drive_pref_names.h"
+#include "components/drive/file_system_core_util.h"
+#include "components/drive/file_system_interface.h"
+#include "components/drive/job_list.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "net/base/escape.h"
 #include "storage/browser/fileapi/file_system_url.h"
 
 using content::BrowserThread;
@@ -78,6 +81,41 @@ base::FilePath GetDriveMountPointPath(Profile* profile) {
   return GetDriveMountPointPathForUserIdHash(id);
 }
 
+base::FilePath GetDriveMountPointPathForUserIdHash(
+    const std::string& user_id_hash) {
+  static const base::FilePath::CharType kSpecialMountPointRoot[] =
+      FILE_PATH_LITERAL("/special");
+  static const char kDriveMountPointNameBase[] = "drive";
+  return base::FilePath(kSpecialMountPointRoot)
+      .AppendASCII(net::EscapeQueryParamValue(
+          kDriveMountPointNameBase +
+              (user_id_hash.empty() ? "" : "-" + user_id_hash),
+          false));
+}
+
+bool IsUnderDriveMountPoint(const base::FilePath& path) {
+  return !ExtractDrivePath(path).empty();
+}
+
+base::FilePath ExtractDrivePath(const base::FilePath& path) {
+  std::vector<base::FilePath::StringType> components;
+  path.GetComponents(&components);
+  if (components.size() < 3)
+    return base::FilePath();
+  if (components[0] != FILE_PATH_LITERAL("/"))
+    return base::FilePath();
+  if (components[1] != FILE_PATH_LITERAL("special"))
+    return base::FilePath();
+  static const base::FilePath::CharType kPrefix[] = FILE_PATH_LITERAL("drive");
+  if (components[2].compare(0, arraysize(kPrefix) - 1, kPrefix) != 0)
+    return base::FilePath();
+
+  base::FilePath drive_path = GetDriveGrandRootPath();
+  for (size_t i = 3; i < components.size(); ++i)
+    drive_path = drive_path.Append(components[i]);
+  return drive_path;
+}
+
 FileSystemInterface* GetFileSystemByProfile(Profile* profile) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -91,9 +129,9 @@ FileSystemInterface* GetFileSystemByProfileId(void* profile_id) {
 
   // |profile_id| needs to be checked with ProfileManager::IsValidProfile
   // before using it.
-  Profile* profile = reinterpret_cast<Profile*>(profile_id);
-  if (!g_browser_process->profile_manager()->IsValidProfile(profile))
+  if (!g_browser_process->profile_manager()->IsValidProfile(profile_id))
     return NULL;
+  Profile* profile = reinterpret_cast<Profile*>(profile_id);
   return GetFileSystemByProfile(profile);
 }
 

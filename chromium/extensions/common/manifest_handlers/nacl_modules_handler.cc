@@ -4,6 +4,8 @@
 
 #include "extensions/common/manifest_handlers/nacl_modules_handler.h"
 
+#include <stddef.h>
+
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -60,7 +62,7 @@ bool NaClModulesHandler::Parse(Extension* extension, base::string16* error) {
     std::string path_str;
     if (!module_value->GetString(keys::kNaClModulesPath, &path_str)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          errors::kInvalidNaClModulesPath, base::IntToString(i));
+          errors::kInvalidNaClModulesPath, base::SizeTToString(i));
       return false;
     }
 
@@ -68,7 +70,7 @@ bool NaClModulesHandler::Parse(Extension* extension, base::string16* error) {
     std::string mime_type;
     if (!module_value->GetString(keys::kNaClModulesMIMEType, &mime_type)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          errors::kInvalidNaClModulesMIMEType, base::IntToString(i));
+          errors::kInvalidNaClModulesMIMEType, base::SizeTToString(i));
       return false;
     }
 

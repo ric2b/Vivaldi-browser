@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/defaults.h"
 
 namespace browser_defaults {
-
-const int kOmniboxFontPixelSize = 16;
 
 #if defined(OS_CHROMEOS) || defined(OS_MACOSX)
 const bool kBrowserAliveWithNoWindows = true;
@@ -52,9 +51,6 @@ const bool kScrollEventChangesTab = true;
 #else
 const bool kScrollEventChangesTab = false;
 #endif
-
-const ui::ResourceBundle::FontStyle kAssociatedNetworkFontStyle =
-    ui::ResourceBundle::BoldFont;
 
 #if !defined(OS_ANDROID)
 const bool kPasswordEchoEnabled = false;

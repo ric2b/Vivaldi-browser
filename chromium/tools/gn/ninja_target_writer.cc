@@ -9,6 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
 #include "tools/gn/err.h"
+#include "tools/gn/escape.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/ninja_action_target_writer.h"
 #include "tools/gn/ninja_binary_target_writer.h"
@@ -51,7 +52,7 @@ void NinjaTargetWriter::RunAndWriteFile(const Target* target) {
 
   base::CreateDirectory(ninja_file.DirName());
 
-  // It's rediculously faster to write to a string and then write that to
+  // It's ridiculously faster to write to a string and then write that to
   // disk in one operation than to use an fstream here.
   std::stringstream file;
 
@@ -67,13 +68,14 @@ void NinjaTargetWriter::RunAndWriteFile(const Target* target) {
     NinjaGroupTargetWriter writer(target, file);
     writer.Run();
   } else if (target->output_type() == Target::EXECUTABLE ||
+             target->output_type() == Target::LOADABLE_MODULE ||
              target->output_type() == Target::STATIC_LIBRARY ||
              target->output_type() == Target::SHARED_LIBRARY ||
              target->output_type() == Target::SOURCE_SET) {
     NinjaBinaryTargetWriter writer(target, file);
     writer.Run();
   } else {
-    CHECK(0);
+    CHECK(0) << "Output type of target not handled.";
   }
 
   std::string contents = file.str();
@@ -81,60 +83,59 @@ void NinjaTargetWriter::RunAndWriteFile(const Target* target) {
                   static_cast<int>(contents.size()));
 }
 
+void NinjaTargetWriter::WriteEscapedSubstitution(SubstitutionType type) {
+  EscapeOptions opts;
+  opts.mode = ESCAPE_NINJA;
+
+  out_ << kSubstitutionNinjaNames[type] << " = ";
+  EscapeStringToStream(out_,
+      SubstitutionWriter::GetTargetSubstitution(target_, type),
+      opts);
+  out_ << std::endl;
+}
+
 void NinjaTargetWriter::WriteSharedVars(const SubstitutionBits& bits) {
   bool written_anything = false;
 
   // Target label.
   if (bits.used[SUBSTITUTION_LABEL]) {
-    out_ << kSubstitutionNinjaNames[SUBSTITUTION_LABEL] << " = "
-         << SubstitutionWriter::GetTargetSubstitution(
-                target_, SUBSTITUTION_LABEL)
-         << std::endl;
+    WriteEscapedSubstitution(SUBSTITUTION_LABEL);
+    written_anything = true;
+  }
+
+  // Target label name
+  if (bits.used[SUBSTITUTION_LABEL_NAME]) {
+    WriteEscapedSubstitution(SUBSTITUTION_LABEL_NAME);
     written_anything = true;
   }
 
   // Root gen dir.
   if (bits.used[SUBSTITUTION_ROOT_GEN_DIR]) {
-    out_ << kSubstitutionNinjaNames[SUBSTITUTION_ROOT_GEN_DIR] << " = "
-         << SubstitutionWriter::GetTargetSubstitution(
-                target_, SUBSTITUTION_ROOT_GEN_DIR)
-         << std::endl;
+    WriteEscapedSubstitution(SUBSTITUTION_ROOT_GEN_DIR);
     written_anything = true;
   }
 
   // Root out dir.
   if (bits.used[SUBSTITUTION_ROOT_OUT_DIR]) {
-    out_ << kSubstitutionNinjaNames[SUBSTITUTION_ROOT_OUT_DIR] << " = "
-         << SubstitutionWriter::GetTargetSubstitution(
-                target_, SUBSTITUTION_ROOT_OUT_DIR)
-         << std::endl;
+    WriteEscapedSubstitution(SUBSTITUTION_ROOT_OUT_DIR);
     written_anything = true;
   }
 
   // Target gen dir.
   if (bits.used[SUBSTITUTION_TARGET_GEN_DIR]) {
-    out_ << kSubstitutionNinjaNames[SUBSTITUTION_TARGET_GEN_DIR] << " = "
-         << SubstitutionWriter::GetTargetSubstitution(
-                target_, SUBSTITUTION_TARGET_GEN_DIR)
-         << std::endl;
+    WriteEscapedSubstitution(SUBSTITUTION_TARGET_GEN_DIR);
     written_anything = true;
   }
 
   // Target out dir.
   if (bits.used[SUBSTITUTION_TARGET_OUT_DIR]) {
-    out_ << kSubstitutionNinjaNames[SUBSTITUTION_TARGET_OUT_DIR] << " = "
-         << SubstitutionWriter::GetTargetSubstitution(
-                target_, SUBSTITUTION_TARGET_OUT_DIR)
-         << std::endl;
+    WriteEscapedSubstitution(SUBSTITUTION_TARGET_OUT_DIR);
     written_anything = true;
   }
 
   // Target output name.
   if (bits.used[SUBSTITUTION_TARGET_OUTPUT_NAME]) {
-    out_ << kSubstitutionNinjaNames[SUBSTITUTION_TARGET_OUTPUT_NAME] << " = "
-         << SubstitutionWriter::GetTargetSubstitution(
-                target_, SUBSTITUTION_TARGET_OUTPUT_NAME)
-         << std::endl;
+    WriteEscapedSubstitution(SUBSTITUTION_TARGET_OUTPUT_NAME);
     written_anything = true;
   }
 
@@ -206,26 +207,42 @@ OutputFile NinjaTargetWriter::WriteInputDepsStampAndGetDep(
   }
 
   // The different souces of input deps may duplicate some targets, so uniquify
-  // them (ordering doesn't matter for this case).
-  std::set<const Target*> unique_deps;
+  // them. These are sorted so the generated files are deterministic.
+  std::vector<const Target*> sorted_deps;
 
   // Hard dependencies that are direct or indirect dependencies.
-  const std::set<const Target*>& hard_deps = target_->recursive_hard_deps();
-  for (const auto& dep : hard_deps)
-    unique_deps.insert(dep);
+  // These are large (up to 100s), hence why we check other
+  const std::set<const Target*>& hard_deps(target_->recursive_hard_deps());
 
-  // Extra hard dependencies passed in.
-  unique_deps.insert(extra_hard_deps.begin(), extra_hard_deps.end());
+  // Extra hard dependencies passed in. Note that these are usually empty/small.
+  for (const Target* target : extra_hard_deps) {
+    if (!hard_deps.count(target))
+      sorted_deps.push_back(target);
+  }
 
   // Toolchain dependencies. These must be resolved before doing anything.
-  // This just writs all toolchain deps for simplicity. If we find that
+  // This just writes all toolchain deps for simplicity. If we find that
   // toolchains often have more than one dependency, we could consider writing
   // a toolchain-specific stamp file and only include the stamp here.
+  // Note that these are usually empty/small.
   const LabelTargetVector& toolchain_deps = target_->toolchain()->deps();
-  for (const auto& toolchain_dep : toolchain_deps)
-    unique_deps.insert(toolchain_dep.ptr);
+  for (const auto& toolchain_dep : toolchain_deps) {
+    // This could theoretically duplicate dependencies already in the list,
+    // but shouldn't happen in practice, is inconvenient to check for,
+    // and only results in harmless redundant dependencies listed.
+    if (!hard_deps.count(toolchain_dep.ptr))
+      sorted_deps.push_back(toolchain_dep.ptr);
+  }
 
-  for (const auto& dep : unique_deps) {
+  for (const Target* target : hard_deps) {
+    sorted_deps.push_back(target);
+  }
+
+  std::sort(
+      sorted_deps.begin(), sorted_deps.end(),
+      [](const Target* a, const Target* b) { return a->label() < b->label(); });
+
+  for (const auto& dep : sorted_deps) {
     DCHECK(!dep->dependency_output_file().value().empty());
     out_ << " ";
     path_output_.WriteFile(out_, dep->dependency_output_file());
@@ -242,7 +259,8 @@ void NinjaTargetWriter::WriteStampForTarget(
 
   // First validate that the target's dependency is a stamp file. Otherwise,
   // we shouldn't have gotten here!
-  CHECK(base::EndsWith(stamp_file.value(), ".stamp", false))
+  CHECK(base::EndsWith(stamp_file.value(), ".stamp",
+                       base::CompareCase::INSENSITIVE_ASCII))
       << "Output should end in \".stamp\" for stamp file output. Instead got: "
       << "\"" << stamp_file.value() << "\"";
 

@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <string>
 
+#include "base/macros.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "components/mime_util/mime_util.h"
 #include "net/base/mime_util.h"
 
@@ -126,15 +128,12 @@ bool MediaPathFilter::ShouldSkip(const base::FilePath& path) {
   const char win_98_recycle_bin_name[] = "RECYCLED";
   const char win_xp_recycle_bin_name[] = "RECYCLER";
   const char win_vista_recycle_bin_name[] = "$Recycle.bin";
-  if ((base::strncasecmp(base_name.c_str(),
-                         win_98_recycle_bin_name,
-                         strlen(win_98_recycle_bin_name)) == 0) ||
-      (base::strncasecmp(base_name.c_str(),
-                         win_xp_recycle_bin_name,
-                         strlen(win_xp_recycle_bin_name)) == 0) ||
-      (base::strncasecmp(base_name.c_str(),
-                         win_vista_recycle_bin_name,
-                         strlen(win_vista_recycle_bin_name)) == 0))
+  if (base::StartsWith(base_name, win_98_recycle_bin_name,
+                       base::CompareCase::INSENSITIVE_ASCII) ||
+      base::StartsWith(base_name, win_xp_recycle_bin_name,
+                       base::CompareCase::INSENSITIVE_ASCII) ||
+      base::StartsWith(base_name, win_vista_recycle_bin_name,
+                       base::CompareCase::INSENSITIVE_ASCII))
     return true;
 #endif  // defined(OS_WIN)
   return false;
@@ -155,8 +154,7 @@ bool MediaPathFilter::Match(const base::FilePath& path) {
 MediaGalleryScanFileType MediaPathFilter::GetType(const base::FilePath& path) {
   EnsureInitialized();
   MediaFileExtensionMap::const_iterator it =
-      media_file_extensions_map_.find(
-          base::StringToLowerASCII(path.Extension()));
+      media_file_extensions_map_.find(base::ToLowerASCII(path.Extension()));
   if (it == media_file_extensions_map_.end())
     return MEDIA_GALLERY_SCAN_FILE_TYPE_UNKNOWN;
   return static_cast<MediaGalleryScanFileType>(it->second);

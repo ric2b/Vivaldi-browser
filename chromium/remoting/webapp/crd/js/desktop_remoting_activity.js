@@ -15,11 +15,12 @@ var remoting = remoting || {};
  * session state changes to the |parentActivity|.
  *
  * @param {remoting.Activity} parentActivity
+ * @param {remoting.SessionLogger} logger
  * @implements {remoting.ClientSession.EventHandler}
  * @implements {base.Disposable}
  * @constructor
  */
-remoting.DesktopRemotingActivity = function(parentActivity) {
+remoting.DesktopRemotingActivity = function(parentActivity, logger) {
   /** @private */
   this.parentActivity_ = parentActivity;
   /** @private {remoting.DesktopConnectedView} */
@@ -33,8 +34,14 @@ remoting.DesktopRemotingActivity = function(parentActivity) {
   /** @private {remoting.ClientSession} */
   this.session_ = null;
   /** @private {remoting.ConnectingDialog} */
-  this.connectingDialog_ =
-      new remoting.ConnectingDialog(parentActivity.stop.bind(parentActivity));
+  this.connectingDialog_ = remoting.modalDialogFactory.createConnectingDialog(
+      parentActivity.stop.bind(parentActivity));
+
+  /** @private */
+  this.isStopped_ = false;
+
+  /** @private */
+  this.logger_ = logger;
 };
 
 /**
@@ -42,27 +49,20 @@ remoting.DesktopRemotingActivity = function(parentActivity) {
  *
  * @param {remoting.Host} host the Host to connect to.
  * @param {remoting.CredentialsProvider} credentialsProvider
- * @param {boolean=} opt_suppressOfflineError
  * @return {void} Nothing.
  */
 remoting.DesktopRemotingActivity.prototype.start =
-    function(host, credentialsProvider, opt_suppressOfflineError) {
+    function(host, credentialsProvider) {
   var that = this;
-  var useApiaryForLogging = host.loggingChannel === 'APIARY';
-  this.sessionFactory_.createSession(this, useApiaryForLogging).then(
+  this.isStopped_ = false;
+  this.sessionFactory_.createSession(this, this.logger_).then(
     function(/** remoting.ClientSession */ session) {
-      that.session_ = session;
-      session.logHostOfflineErrors(!opt_suppressOfflineError);
-      session.getLogger().setHostVersion(host.hostVersion);
-
-      var Mode = remoting.ChromotingEvent.Mode;
-      if (that.parentActivity_ instanceof remoting.It2MeActivity) {
-        session.getLogger().setLogEntryMode(Mode.IT2ME);
-      } else if (that.parentActivity_ instanceof remoting.Me2MeActivity) {
-        session.getLogger().setLogEntryMode(Mode.ME2ME);
+      if (that.isStopped_) {
+        base.dispose(session);
+      } else {
+        that.session_ = session;
+        session.connect(host, credentialsProvider);
       }
-
-      session.connect(host, credentialsProvider);
   }).catch(remoting.Error.handler(
     function(/** !remoting.Error */ error) {
       that.parentActivity_.onConnectionFailed(error);
@@ -70,9 +70,15 @@ remoting.DesktopRemotingActivity.prototype.start =
 };
 
 remoting.DesktopRemotingActivity.prototype.stop = function() {
+  this.isStopped_ = true;
   if (this.session_) {
     this.session_.disconnect(remoting.Error.none());
     console.log('Disconnected.');
+  } else {
+    console.log('Canceled.');
+    // Session creation in process, just report it as canceled.
+    this.logger_.logSessionStateChange(
+      remoting.ChromotingEvent.SessionState.CONNECTION_CANCELED);
   }
 };
 
@@ -88,16 +94,12 @@ remoting.DesktopRemotingActivity.prototype.onConnected =
     remoting.toolbar.preview();
   }
 
-  this.connectedView_ = new remoting.DesktopConnectedView(
+  this.connectedView_ = remoting.DesktopConnectedView.create(
       document.getElementById('client-container'), connectionInfo);
 
   // Apply the default or previously-specified keyboard remapping.
-  var remapping = connectionInfo.host().options.remapKeys;
-  if (base.isEmptyObject(remapping) && remoting.platformIsChromeOS()) {
-    // Under ChromeOS, remap the right Control key to the right Win/Cmd key.
-    remapping = {0x0700e4: 0x0700e7};
-  }
-  connectionInfo.plugin().setRemapKeys(remapping);
+  var remapping = connectionInfo.host().options.getRemapKeys();
+  this.connectedView_.setRemapKeys(remapping);
 
   if (connectionInfo.plugin().hasCapability(
           remoting.ClientSession.Capability.VIDEO_RECORDER)) {

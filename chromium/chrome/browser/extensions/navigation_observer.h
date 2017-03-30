@@ -8,7 +8,9 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -25,8 +27,7 @@ namespace extensions {
 // navigates into an extension that has been disabled due to a permission
 // increase, it prompts the user to accept the new permissions and re-enables
 // the extension.
-class NavigationObserver : public ExtensionInstallPrompt::Delegate,
-                           public content::NotificationObserver {
+class NavigationObserver : public content::NotificationObserver {
  public:
   explicit NavigationObserver(Profile* profile);
   ~NavigationObserver() override;
@@ -46,9 +47,7 @@ class NavigationObserver : public ExtensionInstallPrompt::Delegate,
   void PromptToEnableExtensionIfNecessary(
       content::NavigationController* nav_controller);
 
-  // ExtensionInstallPrompt::Delegate callbacks used for the permissions prompt.
-  void InstallUIProceed() override;
-  void InstallUIAbort(bool user_initiated) override;
+  void OnInstallPromptDone(ExtensionInstallPrompt::Result result);
 
   content::NotificationRegistrar registrar_;
 
@@ -63,6 +62,8 @@ class NavigationObserver : public ExtensionInstallPrompt::Delegate,
 
   // The extension ids we've already prompted the user about.
   std::set<std::string> prompted_extensions_;
+
+  base::WeakPtrFactory<NavigationObserver> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationObserver);
 };

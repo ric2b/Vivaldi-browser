@@ -7,17 +7,17 @@
 // increase tolerance and reduce observed flakiness (though doing so reduces the
 // meaningfulness of the test).
 
-#include "mojo/edk/system/simple_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/simple_dispatcher.h"
 
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/synchronization/lock.h"
-#include "mojo/edk/system/test_utils.h"
-#include "mojo/edk/system/waiter.h"
-#include "mojo/edk/system/waiter_test_utils.h"
 #include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/system/test_utils.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter_test_utils.h"
 
 namespace mojo {
 namespace system {
@@ -28,9 +28,11 @@ class MockSimpleDispatcher final : public SimpleDispatcher {
   MockSimpleDispatcher()
       : state_(MOJO_HANDLE_SIGNAL_NONE,
                MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_WRITABLE) {}
+  explicit MockSimpleDispatcher(const HandleSignalsState& state)
+      : state_(state) {}
 
   void SetSatisfiedSignals(MojoHandleSignals new_satisfied_signals) {
-    base::AutoLock locker(lock());
+    MutexLocker locker(&mutex());
 
     // Any new signals that are set should be satisfiable.
     CHECK_EQ(new_satisfied_signals & ~state_.satisfied_signals,
@@ -45,7 +47,7 @@ class MockSimpleDispatcher final : public SimpleDispatcher {
   }
 
   void SetSatisfiableSignals(MojoHandleSignals new_satisfiable_signals) {
-    base::AutoLock locker(lock());
+    MutexLocker locker(&mutex());
 
     // Satisfied implies satisfiable.
     CHECK_EQ(new_satisfiable_signals & state_.satisfied_signals,
@@ -66,19 +68,17 @@ class MockSimpleDispatcher final : public SimpleDispatcher {
 
   scoped_refptr<Dispatcher> CreateEquivalentDispatcherAndCloseImplNoLock()
       override {
-    scoped_refptr<MockSimpleDispatcher> rv(new MockSimpleDispatcher());
-    rv->state_ = state_;
+    scoped_refptr<MockSimpleDispatcher> rv(new MockSimpleDispatcher(state_));
     return scoped_refptr<Dispatcher>(rv.get());
   }
 
   // |Dispatcher| override:
   HandleSignalsState GetHandleSignalsStateImplNoLock() const override {
-    lock().AssertAcquired();
+    mutex().AssertHeld();
     return state_;
   }
 
-  // Protected by |lock()|:
-  HandleSignalsState state_;
+  HandleSignalsState state_ MOJO_GUARDED_BY(mutex());
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(MockSimpleDispatcher);
 };
@@ -94,7 +94,7 @@ TEST(SimpleDispatcherTest, MAYBE_Basic) {
 
   scoped_refptr<MockSimpleDispatcher> d(new MockSimpleDispatcher());
   Waiter w;
-  uint32_t context = 0;
+  uintptr_t context = 0;
   HandleSignalsState hss;
 
   // Try adding a readable waiter when already readable.
@@ -196,7 +196,7 @@ TEST(SimpleDispatcherTest, BasicUnsatisfiable) {
 
   scoped_refptr<MockSimpleDispatcher> d(new MockSimpleDispatcher());
   Waiter w;
-  uint32_t context = 0;
+  uintptr_t context = 0;
   HandleSignalsState hss;
 
   // Try adding a writable waiter when it can never be writable.
@@ -269,7 +269,7 @@ TEST(SimpleDispatcherTest, BasicClosed) {
 
   scoped_refptr<MockSimpleDispatcher> d;
   Waiter w;
-  uint32_t context = 0;
+  uintptr_t context = 0;
   HandleSignalsState hss;
 
   // Try adding a writable waiter when the dispatcher has been closed.
@@ -332,7 +332,7 @@ TEST(SimpleDispatcherTest, MAYBE_BasicThreaded) {
   test::Stopwatch stopwatch;
   bool did_wait;
   MojoResult result;
-  uint32_t context;
+  uintptr_t context;
   HandleSignalsState hss;
 
   // Wait for readable (already readable).
@@ -460,7 +460,7 @@ TEST(SimpleDispatcherTest, MAYBE_MultipleWaiters) {
 
   bool did_wait[kNumWaiters];
   MojoResult result[kNumWaiters];
-  uint32_t context[kNumWaiters];
+  uintptr_t context[kNumWaiters];
   HandleSignalsState hss[kNumWaiters];
 
   // All wait for readable and becomes readable after some time.

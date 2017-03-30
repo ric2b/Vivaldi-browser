@@ -5,7 +5,6 @@
 #ifndef EXTENSIONS_COMMON_PERMISSIONS_API_PERMISSION_H_
 #define EXTENSIONS_COMMON_PERMISSIONS_API_PERMISSION_H_
 
-#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -14,7 +13,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/pickle.h"
 #include "base/values.h"
-#include "extensions/common/permissions/permission_message.h"
 
 namespace IPC {
 class Message;
@@ -25,6 +23,7 @@ namespace extensions {
 class PermissionIDSet;
 class APIPermissionInfo;
 class ChromeAPIPermissions;
+class VivaldiAPIPermissions;
 
 // APIPermission is for handling some complex permissions. Please refer to
 // extensions::SocketPermission as an example.
@@ -120,7 +119,7 @@ class APIPermission {
     kFileSystemRequestFileSystem,
     kFileSystemRetainEntries,
     kFileSystemWrite,
-    kFileSystemWriteDirectory,
+    kDeleted_FileSystemWriteDirectory,
     kFirstRunPrivate,
     kFontSettings,
     kFullscreen,
@@ -140,7 +139,7 @@ class APIPermission {
     kInlineInstallPrivate,
     kInput,
     kInputMethodPrivate,
-    kInterceptAllKeys,
+    kDeleted_InterceptAllKeys,
     kLauncherSearchProvider,
     kLocation,
     kLogPrivate,
@@ -169,7 +168,7 @@ class APIPermission {
     kProcesses,
     kProxy,
     kImageWriterPrivate,
-    kReadingListPrivate,
+    kDeleted_ReadingListPrivate,
     kRtcPrivate,
     kSearchProvider,
     kSearchEnginesPrivate,
@@ -236,26 +235,20 @@ class APIPermission {
     kSocketAnyHost,
     kSocketDomainHosts,
     kSocketSpecificHosts,
-    kUsbDeviceList,
+    kDeleted_UsbDeviceList,
     kUsbDeviceUnknownProduct,
     kUsbDeviceUnknownVendor,
     kUsersPrivate,
     kPasswordsPrivate,
+    kLanguageSettingsPrivate,
+    kEnterpriseDeviceAttributes,
+    kCertificateProvider,
+    kResourcesPrivate,
+    kDisplaySource,
 
     // vivaldi permissions
-    // remember to add new permissions to PermissionsTest.PermissionMessages in
-    // chrome/common/extensions/permissions/permission_set_unittest.cc
-    kAutoUpdate,
-    kExtensionActionUtils,
-    kImportData,
-    kEditCommand,
-    kUIZoom,
-    kNotes,
-    kSavedPasswords,
-    kSettings,
-    kShowMenu,
-    kThumbnails,
-    kUtilities,
+
+#   include "extensions/permissions/vivaldi_api_permission_enums.inc"
 
     // Last entry: Add new entries above and ensure to update the
     // "ExtensionPermission3" enum in tools/metrics/histograms/histograms.xml
@@ -302,14 +295,6 @@ class APIPermission {
   // ChromePermissionMessageProvider.
   virtual PermissionIDSet GetPermissions() const = 0;
 
-  // Returns true if this permission has any PermissionMessages.
-  // TODO(sashab): Deprecate this in favor of GetPermissions() above.
-  virtual bool HasMessages() const = 0;
-
-  // Returns the localized permission messages of this permission.
-  // TODO(sashab): Deprecate this in favor of GetPermissions() above.
-  virtual PermissionMessages GetMessages() const = 0;
-
   // Returns true if the given permission is allowed.
   virtual bool Check(const CheckParam* param) const = 0;
 
@@ -352,11 +337,6 @@ class APIPermission {
 
   // Logs this permission.
   virtual void Log(std::string* log) const = 0;
-
- protected:
-  // Returns the localized permission message associated with this api.
-  // Use GetMessage_ to avoid name conflict with macro GetMessage on Windows.
-  PermissionMessage GetMessage_() const;
 
  private:
   const APIPermissionInfo* const info_;
@@ -402,11 +382,6 @@ class APIPermissionInfo {
 
   APIPermission::ID id() const { return id_; }
 
-  // Returns the message id associated with this permission.
-  PermissionMessage::ID message_id() const {
-    return message_id_;
-  }
-
   // Returns the name of this permission.
   const char* name() const { return name_; }
 
@@ -442,6 +417,7 @@ class APIPermissionInfo {
   // Instances should only be constructed from within a PermissionsProvider.
   friend class ChromeAPIPermissions;
   friend class ExtensionsAPIPermissions;
+  friend class VivaldiAPIPermissions;
   // Implementations of APIPermission will want to get the permission message,
   // but this class's implementation should be hidden from everyone else.
   friend class APIPermission;
@@ -454,22 +430,14 @@ class APIPermissionInfo {
     APIPermission::ID id;
     const char* name;
     int flags;
-    int l10n_message_id;
-    PermissionMessage::ID message_id;
     APIPermissionInfo::APIPermissionConstructor constructor;
   };
 
   explicit APIPermissionInfo(const InitInfo& info);
 
-  // Returns the localized permission message associated with this api.
-  // Use GetMessage_ to avoid name conflict with macro GetMessage on Windows.
-  PermissionMessage GetMessage_() const;
-
   const APIPermission::ID id_;
   const char* const name_;
   const int flags_;
-  const int l10n_message_id_;
-  const PermissionMessage::ID message_id_;
   const APIPermissionConstructor api_permission_constructor_;
 };
 

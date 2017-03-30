@@ -5,8 +5,12 @@
 #ifndef SYNC_SYNCABLE_DIRECTORY_BACKING_STORE_H_
 #define SYNC_SYNCABLE_DIRECTORY_BACKING_STORE_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "sql/connection.h"
@@ -24,7 +28,8 @@ class EntitySpecifics;
 namespace syncer {
 namespace syncable {
 
-SYNC_EXPORT_PRIVATE extern const int32 kCurrentDBVersion;
+SYNC_EXPORT extern const int32_t kCurrentDBVersion;
+SYNC_EXPORT extern const int32_t kCurrentPageSizeKB;
 
 struct ColumnSpec;
 
@@ -43,7 +48,7 @@ struct ColumnSpec;
 // This class is abstract so that we can extend it in interesting ways for use
 // in tests.  The concrete class used in non-test scenarios is
 // OnDiskDirectoryBackingStore.
-class SYNC_EXPORT_PRIVATE DirectoryBackingStore : public base::NonThreadSafe {
+class SYNC_EXPORT DirectoryBackingStore : public base::NonThreadSafe {
  public:
   explicit DirectoryBackingStore(const std::string& dir_name);
   virtual ~DirectoryBackingStore();
@@ -92,6 +97,9 @@ class SYNC_EXPORT_PRIVATE DirectoryBackingStore : public base::NonThreadSafe {
   // |catastrophic_error_handler|.
   virtual void SetCatastrophicErrorHandler(
       const base::Closure& catastrophic_error_handler);
+
+  // Returns true on success, false on error.
+  bool GetDatabasePageSize(int* page_size);
 
  protected:
   // For test classes.
@@ -172,6 +180,7 @@ class SYNC_EXPORT_PRIVATE DirectoryBackingStore : public base::NonThreadSafe {
   bool MigrateVersion86To87();
   bool MigrateVersion87To88();
   bool MigrateVersion88To89();
+  bool MigrateVersion89To90();
 
   // Accessor for needs_column_refresh_.  Used in tests.
   bool needs_column_refresh() const;
@@ -180,8 +189,8 @@ class SYNC_EXPORT_PRIVATE DirectoryBackingStore : public base::NonThreadSafe {
   void ResetAndCreateConnection();
 
  private:
-  friend class TestDirectoryBackingStore;
   friend class DirectoryBackingStoreTest;
+  friend class TestDirectoryBackingStore;
   FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest,
                            IncreaseDatabasePageSizeFrom4KTo32K);
   FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest,
@@ -191,6 +200,7 @@ class SYNC_EXPORT_PRIVATE DirectoryBackingStore : public base::NonThreadSafe {
   FRIEND_TEST_ALL_PREFIXES(
       DirectoryBackingStoreTest,
       CatastrophicErrorHandler_InvocationDuringSaveChanges);
+  FRIEND_TEST_ALL_PREFIXES(MigrationTest, ToCurrentVersion);
 
   // Drop all tables in preparation for reinitialization.
   void DropAllTables();
@@ -230,10 +240,7 @@ class SYNC_EXPORT_PRIVATE DirectoryBackingStore : public base::NonThreadSafe {
   bool Vacuum();
 
   // Returns true on success, false on error.
-  bool IncreasePageSizeTo32K();
-
-  // Returns true on success, false on error.
-  bool GetDatabasePageSize(int* page_size);
+  bool UpdatePageSizeIfNecessary();
 
   // Prepares |save_statement| for saving entries in |table|.
   void PrepareSaveEntryStatement(EntryTable table,
@@ -248,7 +255,8 @@ class SYNC_EXPORT_PRIVATE DirectoryBackingStore : public base::NonThreadSafe {
 
   // Set to true if migration left some old columns around that need to be
   // discarded.
-  bool needs_column_refresh_;
+  bool needs_metas_column_refresh_;
+  bool needs_share_info_column_refresh_;
 
   // We keep a copy of the Closure so we reinstall it when the underlying
   // sql::Connection is destroyed/recreated.

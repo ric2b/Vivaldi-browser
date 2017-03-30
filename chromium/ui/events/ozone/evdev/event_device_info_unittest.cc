@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -141,6 +142,17 @@ TEST_F(EventDeviceInfoTest, AbsoluteMouseTouchscreen) {
   EXPECT_TRUE(CapabilitiesToDeviceInfo(kElo_TouchSystems_2700, &devinfo));
 
   // This touchscreen uses BTN_LEFT for touch contact.
+  EXPECT_FALSE(devinfo.HasKeyboard());
+  EXPECT_FALSE(devinfo.HasMouse());
+  EXPECT_FALSE(devinfo.HasTouchpad());
+  EXPECT_TRUE(devinfo.HasTouchscreen());
+  EXPECT_FALSE(devinfo.HasTablet());
+}
+
+TEST_F(EventDeviceInfoTest, OnScreenStylus) {
+  EventDeviceInfo devinfo;
+  EXPECT_TRUE(CapabilitiesToDeviceInfo(kWilsonBeachActiveStylus, &devinfo));
+
   EXPECT_FALSE(devinfo.HasKeyboard());
   EXPECT_FALSE(devinfo.HasMouse());
   EXPECT_FALSE(devinfo.HasTouchpad());

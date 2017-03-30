@@ -4,6 +4,9 @@
 
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "content/browser/service_worker/service_worker_register_job_base.h"
@@ -105,9 +108,8 @@ void ServiceWorkerJobCoordinator::Register(
     const ServiceWorkerRegisterJob::RegistrationCallback& callback) {
   scoped_ptr<ServiceWorkerRegisterJobBase> job(
       new ServiceWorkerRegisterJob(context_, pattern, script_url));
-  ServiceWorkerRegisterJob* queued_job =
-      static_cast<ServiceWorkerRegisterJob*>(
-          job_queues_[pattern].Push(job.Pass()));
+  ServiceWorkerRegisterJob* queued_job = static_cast<ServiceWorkerRegisterJob*>(
+      job_queues_[pattern].Push(std::move(job)));
   queued_job->AddCallback(callback, provider_host);
 }
 
@@ -118,7 +120,7 @@ void ServiceWorkerJobCoordinator::Unregister(
       new ServiceWorkerUnregisterJob(context_, pattern));
   ServiceWorkerUnregisterJob* queued_job =
       static_cast<ServiceWorkerUnregisterJob*>(
-          job_queues_[pattern].Push(job.Pass()));
+          job_queues_[pattern].Push(std::move(job)));
   queued_job->AddCallback(callback);
 }
 
@@ -130,7 +132,25 @@ void ServiceWorkerJobCoordinator::Update(
   job_queues_[registration->pattern()].Push(
       make_scoped_ptr<ServiceWorkerRegisterJobBase>(
           new ServiceWorkerRegisterJob(context_, registration,
-                                       force_bypass_cache)));
+                                       force_bypass_cache,
+                                       false /* skip_script_comparison */)));
+}
+
+void ServiceWorkerJobCoordinator::Update(
+    ServiceWorkerRegistration* registration,
+    bool force_bypass_cache,
+    bool skip_script_comparison,
+    ServiceWorkerProviderHost* provider_host,
+    const ServiceWorkerRegisterJob::RegistrationCallback& callback) {
+  DCHECK(registration);
+  DCHECK(registration->GetNewestVersion());
+  ServiceWorkerRegisterJob* queued_job = static_cast<ServiceWorkerRegisterJob*>(
+      job_queues_[registration->pattern()].Push(
+          make_scoped_ptr<ServiceWorkerRegisterJobBase>(
+              new ServiceWorkerRegisterJob(context_, registration,
+                                           force_bypass_cache,
+                                           skip_script_comparison))));
+  queued_job->AddCallback(callback, provider_host);
 }
 
 void ServiceWorkerJobCoordinator::AbortAll() {

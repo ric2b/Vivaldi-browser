@@ -5,11 +5,14 @@
 #ifndef DEVICE_BLUETOOTH_BLUETOOTH_DEVICE_MAC_H_
 #define DEVICE_BLUETOOTH_BLUETOOTH_DEVICE_MAC_H_
 
+#include "base/macros.h"
 #include "device/bluetooth/bluetooth_device.h"
 
 @class NSDate;
 
 namespace device {
+
+class BluetoothAdapterMac;
 
 class BluetoothDeviceMac : public BluetoothDevice {
  public:
@@ -20,7 +23,7 @@ class BluetoothDeviceMac : public BluetoothDevice {
   virtual NSDate* GetLastUpdateTime() const = 0;
 
  protected:
-  BluetoothDeviceMac();
+  BluetoothDeviceMac(BluetoothAdapterMac* adapter);
 
   DISALLOW_COPY_AND_ASSIGN(BluetoothDeviceMac);
 };

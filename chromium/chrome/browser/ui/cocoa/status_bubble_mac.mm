@@ -17,8 +17,8 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "chrome/browser/ui/cocoa/bubble_view.h"
-#include "chrome/browser/ui/elide_url.h"
-#include "net/base/net_util.h"
+#include "components/url_formatter/elide_url.h"
+#include "components/url_formatter/url_formatter.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSBezierPath+RoundRect.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSColor+Luminance.h"
@@ -46,8 +46,8 @@ const int kTextPadding = 3;
 const CGFloat kBubbleOpacity = 1.0;
 
 // Delay before showing or hiding the bubble after a SetStatus or SetURL call.
-const int64 kShowDelayMS = 80;
-const int64 kHideDelayMS = 250;
+const int64_t kShowDelayMS = 80;
+const int64_t kHideDelayMS = 250;
 
 // How long each fade should last.
 const NSTimeInterval kShowFadeInDurationSeconds = 0.120;
@@ -235,9 +235,9 @@ void StatusBubbleMac::SetURL(const GURL& url, const std::string& languages) {
   gfx::FontList font_list_chr(
       gfx::Font(gfx::PlatformFont::CreateFromNativeFont(font)));
 
-  base::string16 original_url_text = net::FormatUrl(url, languages);
+  base::string16 original_url_text = url_formatter::FormatUrl(url, languages);
   base::string16 status =
-      ElideUrl(url, font_list_chr, text_width, languages);
+      url_formatter::ElideUrl(url, font_list_chr, text_width, languages);
 
   SetText(status, true);
 
@@ -595,7 +595,7 @@ void StatusBubbleMac::AnimateWindowAlpha(CGFloat alpha,
       }];
 }
 
-void StatusBubbleMac::StartTimer(int64 delay_ms) {
+void StatusBubbleMac::StartTimer(int64_t delay_ms) {
   DCHECK([NSThread isMainThread]);
   DCHECK(state_ == kBubbleShowingTimer || state_ == kBubbleHidingTimer);
 
@@ -706,7 +706,7 @@ void StatusBubbleMac::ExpandBubble() {
   NSFont* font = [[window_ contentView] font];
   gfx::FontList font_list_chr(
       gfx::Font(gfx::PlatformFont::CreateFromNativeFont(font)));
-  base::string16 expanded_url = ElideUrl(
+  base::string16 expanded_url = url_formatter::ElideUrl(
       url_, font_list_chr, max_bubble_width, languages_);
 
   // Scale width from gfx::Font in view coordinates to window coordinates.

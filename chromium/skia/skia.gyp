@@ -13,6 +13,13 @@
         {
           'target_name': 'skia_library',
           'type': 'static_library',
+          # The optimize: 'max' scattered throughout are particularly
+          # important when compiled by MSVC 2013, which seems 
+          # to mis-link-time-compile code that's built with
+          # different optimization levels. http://crbug.com/543583
+          'variables': {
+            'optimize': 'max',
+          },
           'includes': [
             'skia_common.gypi',
             'skia_library.gypi',
@@ -20,7 +27,7 @@
             # Disable LTO due to compiler error
             # in mems_in_disjoint_alias_sets_p, at alias.c:393
             # crbug.com/422255
-            '../build/android/disable_lto.gypi',
+            '../build/android/disable_gcc_lto.gypi',
           ],
         },
       ],
@@ -29,6 +36,13 @@
       'targets': [
         {
           'target_name': 'skia',
+          # The optimize: 'max' scattered throughout are particularly
+          # important when compiled by MSVC 2013, which seems 
+          # to mis-link-time-compile code that's built with
+          # different optimization levels. http://crbug.com/543583
+          'variables': {
+            'optimize': 'max',
+          },
           'type': 'none',
           'dependencies': [
             'skia_library',
@@ -38,6 +52,15 @@
             'skia_library',
             'skia_chrome',
           ],
+          'direct_dependent_settings': {
+            'conditions': [
+              [ 'OS == "win"', {
+                'defines': [
+                  'GR_GL_FUNCTION_TYPE=__stdcall',
+                ],
+              }],
+            ],
+          },
         },
         {
           'target_name': 'skia_chrome',
@@ -54,6 +77,13 @@
       'targets': [
         {
           'target_name': 'skia',
+          # The optimize: 'max' scattered throughout are particularly
+          # important when compiled by MSVC 2013, which seems 
+          # to mis-link-time-compile code that's built with
+          # different optimization levels. http://crbug.com/543583
+          'variables': {
+            'optimize': 'max',
+          },
           'type': 'shared_library',
           'includes': [
             # Include skia_common.gypi first since it contains filename
@@ -70,6 +100,13 @@
             'GR_GL_IGNORE_ES3_MSAA=0',
           ],
           'direct_dependent_settings': {
+            'conditions': [
+              [ 'OS == "win"', {
+                'defines': [
+                  'GR_GL_FUNCTION_TYPE=__stdcall',
+                ],
+              }],
+            ],
             'defines': [
               'SKIA_DLL',
               'GR_GL_IGNORE_ES3_MSAA=0',
@@ -90,38 +127,59 @@
 
   # targets that are not dependent upon the component type
   'targets': [
-    #{
-    #  'target_name': 'image_operations_bench',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../base/base.gyp:base',
-    #    'skia',
-    #  ],
-    #  'include_dirs': [
-    #    '..',
-    #  ],
-    #  'sources': [
-    #    'ext/image_operations_bench.cc',
-    #  ],
-    #},
-    #{
-    #  'target_name': 'filter_fuzz_stub',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../base/base.gyp:base',
-    #    '../base/base.gyp:test_support_base',
-    #    'skia.gyp:skia',
-    #  ],
-    #  'sources': [
-    #    'tools/filter_fuzz_stub/filter_fuzz_stub.cc',
-    #  ],
-    #  'includes': [
-    #    '../build/android/increase_size_for_speed.gypi',
-    #  ],
-    #},
+    {
+      'target_name': 'image_operations_bench',
+      # The optimize: 'max' scattered throughout are particularly
+      # important when compiled by MSVC 2013, which seems 
+      # to mis-link-time-compile code that's built with
+      # different optimization levels. http://crbug.com/543583
+      'variables': {
+        'optimize': 'max',
+      },
+      'type': 'executable',
+      'dependencies': [
+        '../base/base.gyp:base',
+        'skia',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'sources': [
+        'ext/image_operations_bench.cc',
+      ],
+    },
+    {
+      'target_name': 'filter_fuzz_stub',
+      'type': 'executable',
+      # The optimize: 'max' scattered throughout are particularly
+      # important when compiled by MSVC 2013, which seems 
+      # to mis-link-time-compile code that's built with
+      # different optimization levels. http://crbug.com/543583
+      'variables': {
+        'optimize': 'max',
+      },
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../base/base.gyp:test_support_base',
+        'skia.gyp:skia',
+      ],
+      'sources': [
+        'tools/filter_fuzz_stub/filter_fuzz_stub.cc',
+      ],
+      'includes': [
+        '../build/android/increase_size_for_speed.gypi',
+      ],
+    },
     {
       'target_name': 'skia_mojo',
       'type': 'static_library',
+      # The optimize: 'max' scattered throughout are particularly
+      # important when compiled by MSVC 2013, which seems 
+      # to mis-link-time-compile code that's built with
+      # different optimization levels. http://crbug.com/543583
+      'variables': {
+        'optimize': 'max',
+      },
       'dependencies': [
         'skia',
         '../base/base.gyp:base',

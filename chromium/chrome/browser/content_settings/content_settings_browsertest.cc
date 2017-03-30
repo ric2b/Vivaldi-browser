@@ -6,8 +6,10 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/net/url_request_mock_util.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
@@ -16,7 +18,6 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/render_messages.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -33,7 +34,8 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/dns/mock_host_resolver.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
@@ -45,13 +47,23 @@
 using content::BrowserThread;
 using net::URLRequestMockHTTPJob;
 
+namespace {
+
+const LocalSharedObjectsContainer* GetSiteSettingsCookieContainer(
+    Browser* browser) {
+  TabSpecificContentSettings* settings =
+      TabSpecificContentSettings::FromWebContents(
+          browser->tab_strip_model()->GetWebContentsAt(0));
+  return static_cast<const LocalSharedObjectsContainer*>(
+      &settings->allowed_local_shared_objects());
+}
+
+}  // namespace
+
 class ContentSettingsTest : public InProcessBrowserTest {
  public:
-  ContentSettingsTest()
-      : https_server_(net::SpawnedTestServer::TYPE_HTTPS,
-                      net::SpawnedTestServer::SSLOptions(
-                          net::SpawnedTestServer::SSLOptions::CERT_OK),
-                      base::FilePath(FILE_PATH_LITERAL("chrome/test/data"))) {
+  ContentSettingsTest() : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
+    https_server_.ServeFilesFromSourceDirectory("chrome/test/data");
   }
 
   void SetUpOnMainThread() override {
@@ -94,66 +106,42 @@ class ContentSettingsTest : public InProcessBrowserTest {
     ASSERT_FALSE(GetCookies(browser()->profile(), url).empty());
   }
 
-  net::SpawnedTestServer https_server_;
+  net::EmbeddedTestServer https_server_;
 };
 
 // Sanity check on cookies before we do other tests. While these can be written
 // in content_browsertests, we want to verify Chrome's cookie storage and how it
 // handles incognito windows.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_PRE_BasicCookies DISABLED_PRE_BasicCookies
-#else
-#define MAYBE_PRE_BasicCookies PRE_BasicCookies
-#endif
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, MAYBE_PRE_BasicCookies) {
-  ASSERT_TRUE(test_server()->Start());
-  GURL http_url = test_server()->GetURL("files/setcookie.html");
+IN_PROC_BROWSER_TEST_F(ContentSettingsTest, PRE_BasicCookies) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL http_url = embedded_test_server()->GetURL("/setcookie.html");
   PreBasic(http_url);
 }
 
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_BasicCookies DISABLED_BasicCookies
-#else
-#define MAYBE_BasicCookies BasicCookies
-#endif
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, MAYBE_BasicCookies) {
-  ASSERT_TRUE(test_server()->Start());
-  GURL http_url = test_server()->GetURL("files/setcookie.html");
+IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BasicCookies) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL http_url = embedded_test_server()->GetURL("/setcookie.html");
   Basic(http_url);
 }
 
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_PRE_BasicCookiesHttps DISABLED_PRE_BasicCookiesHttps
-#else
-#define MAYBE_PRE_BasicCookiesHttps PRE_BasicCookiesHttps
-#endif
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, MAYBE_PRE_BasicCookiesHttps) {
+IN_PROC_BROWSER_TEST_F(ContentSettingsTest, PRE_BasicCookiesHttps) {
   ASSERT_TRUE(https_server_.Start());
-  GURL https_url = https_server_.GetURL("files/setcookie.html");
+  GURL https_url = https_server_.GetURL("/setcookie.html");
   PreBasic(https_url);
 }
 
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_BasicCookiesHttps DISABLED_BasicCookiesHttps
-#else
-#define MAYBE_BasicCookiesHttps BasicCookiesHttps
-#endif
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, MAYBE_BasicCookiesHttps) {
+IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BasicCookiesHttps) {
   ASSERT_TRUE(https_server_.Start());
-  GURL https_url = https_server_.GetURL("files/setcookie.html");
+  GURL https_url = https_server_.GetURL("/setcookie.html");
   Basic(https_url);
 }
 
 // Verify that cookies are being blocked.
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest, PRE_BlockCookies) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   CookieSettingsFactory::GetForProfile(browser()->profile())
       ->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
-  GURL url = test_server()->GetURL("files/setcookie.html");
+  GURL url = embedded_test_server()->GetURL("/setcookie.html");
   ui_test_utils::NavigateToURL(browser(), url);
   ASSERT_TRUE(GetCookies(browser()->profile(), url).empty());
   CookieCheckIncognitoWindow(url, false);
@@ -169,8 +157,8 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BlockCookies) {
 // Verify that cookies can be allowed and set using exceptions for particular
 // website(s) when all others are blocked.
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest, AllowCookiesUsingExceptions) {
-  ASSERT_TRUE(test_server()->Start());
-  GURL url = test_server()->GetURL("files/setcookie.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL("/setcookie.html");
   content_settings::CookieSettings* settings =
       CookieSettingsFactory::GetForProfile(browser()->profile()).get();
   settings->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
@@ -188,8 +176,8 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, AllowCookiesUsingExceptions) {
 
 // Verify that cookies can be blocked for a specific website using exceptions.
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BlockCookiesUsingExceptions) {
-  ASSERT_TRUE(test_server()->Start());
-  GURL url = test_server()->GetURL("files/setcookie.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL("/setcookie.html");
   content_settings::CookieSettings* settings =
       CookieSettingsFactory::GetForProfile(browser()->profile()).get();
   settings->SetCookieSetting(ContentSettingsPattern::FromURL(url),
@@ -200,7 +188,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BlockCookiesUsingExceptions) {
   ASSERT_TRUE(GetCookies(browser()->profile(), url).empty());
 
   ASSERT_TRUE(https_server_.Start());
-  GURL unblocked_url = https_server_.GetURL("files/cookie1.html");
+  GURL unblocked_url = https_server_.GetURL("/cookie1.html");
 
   ui_test_utils::NavigateToURL(browser(), unblocked_url);
   ASSERT_FALSE(GetCookies(browser()->profile(), unblocked_url).empty());
@@ -216,8 +204,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest,
                        PRE_AllowCookiesForASessionUsingExceptions) {
   // NOTE: don't use test_server here, since we need the port to be the same
   // across the restart.
-  GURL url = URLRequestMockHTTPJob::GetMockUrl(
-      base::FilePath(FILE_PATH_LITERAL("setcookie.html")));
+  GURL url = URLRequestMockHTTPJob::GetMockUrl("setcookie.html");
   content_settings::CookieSettings* settings =
       CookieSettingsFactory::GetForProfile(browser()->profile()).get();
   settings->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
@@ -234,8 +221,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest,
 
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest,
                        AllowCookiesForASessionUsingExceptions) {
-  GURL url = URLRequestMockHTTPJob::GetMockUrl(
-      base::FilePath(FILE_PATH_LITERAL("setcookie.html")));
+  GURL url = URLRequestMockHTTPJob::GetMockUrl("setcookie.html");
   ASSERT_TRUE(GetCookies(browser()->profile(), url).empty());
 }
 
@@ -243,9 +229,9 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest,
 
 // Regression test for http://crbug.com/63649.
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest, RedirectLoopCookies) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
-  GURL test_url = test_server()->GetURL("files/redirect-loop.html");
+  GURL test_url = embedded_test_server()->GetURL("/redirect-loop.html");
 
   CookieSettingsFactory::GetForProfile(browser()->profile())
       ->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
@@ -261,11 +247,44 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, RedirectLoopCookies) {
       IsContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES));
 }
 
+// TODO(jww): This should be removed after strict secure cookies is enabled for
+// all and this test should be moved into ContentSettingsTest above.
+class ContentSettingsStrictSecureCookiesBrowserTest
+    : public ContentSettingsTest {
+ protected:
+  void SetUpCommandLine(base::CommandLine* cmd) override {
+    cmd->AppendSwitch(switches::kEnableExperimentalWebPlatformFeatures);
+  }
+};
+
+// This test verifies that if strict secure cookies is enabled, the site
+// settings accurately reflect that an attempt to create a secure cookie by an
+// insecure origin fails.
+IN_PROC_BROWSER_TEST_F(ContentSettingsStrictSecureCookiesBrowserTest, Cookies) {
+  host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(https_server.Start());
+
+  GURL http_url = embedded_test_server()->GetURL("/setsecurecookie.html");
+  GURL https_url = https_server.GetURL("/setsecurecookie.html");
+
+  ui_test_utils::NavigateToURL(browser(), http_url);
+  EXPECT_TRUE(GetSiteSettingsCookieContainer(browser())->cookies()->empty());
+
+  ui_test_utils::NavigateToURL(browser(),
+                               https_server.GetURL("/setsecurecookie.html"));
+  EXPECT_FALSE(GetSiteSettingsCookieContainer(browser())->cookies()->empty());
+};
+
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest, ContentSettingsBlockDataURLs) {
   GURL url("data:text/html,<title>Data URL</title><script>alert(1)</script>");
 
-  browser()->profile()->GetHostContentSettingsMap()->SetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_JAVASCRIPT, CONTENT_SETTING_BLOCK);
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+      ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+                                 CONTENT_SETTING_BLOCK);
 
   ui_test_utils::NavigateToURL(browser(), url);
 
@@ -280,15 +299,15 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, ContentSettingsBlockDataURLs) {
 // Tests that if redirect across origins occurs, the new process still gets the
 // content settings before the resource headers.
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest, RedirectCrossOrigin) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
-  net::HostPortPair host_port = test_server()->host_port_pair();
+  net::HostPortPair host_port = embedded_test_server()->host_port_pair();
   DCHECK_EQ(host_port.host(), std::string("127.0.0.1"));
 
   std::string redirect(base::StringPrintf(
-      "http://localhost:%d/files/redirect-cross-origin.html",
-      host_port.port()));
-  GURL test_url = test_server()->GetURL("server-redirect?" + redirect);
+      "http://localhost:%d/redirect-cross-origin.html", host_port.port()));
+  GURL test_url =
+      embedded_test_server()->GetURL("/server-redirect?" + redirect);
 
   CookieSettingsFactory::GetForProfile(browser()->profile())
       ->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
@@ -305,7 +324,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, RedirectCrossOrigin) {
 #if defined(ENABLE_PLUGINS)
 class PepperContentSettingsSpecialCasesTest : public ContentSettingsTest {
  protected:
-  static const char* const kExternalClearKeyMimeType;
+  static const char kExternalClearKeyMimeType[];
 
   // Registers any CDM plugins not registered by default.
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -447,8 +466,8 @@ class PepperContentSettingsSpecialCasesTest : public ContentSettingsTest {
   }
 };
 
-const char* const
-PepperContentSettingsSpecialCasesTest::kExternalClearKeyMimeType =
+const char
+PepperContentSettingsSpecialCasesTest::kExternalClearKeyMimeType[] =
     "application/x-ppapi-clearkey-cdm";
 
 class PepperContentSettingsSpecialCasesPluginsBlockedTest
@@ -456,8 +475,9 @@ class PepperContentSettingsSpecialCasesPluginsBlockedTest
  public:
   void SetUpOnMainThread() override {
     PepperContentSettingsSpecialCasesTest::SetUpOnMainThread();
-    browser()->profile()->GetHostContentSettingsMap()->SetDefaultContentSetting(
-        CONTENT_SETTINGS_TYPE_PLUGINS, CONTENT_SETTING_BLOCK);
+    HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+        ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
+                                   CONTENT_SETTING_BLOCK);
   }
 };
 
@@ -466,10 +486,12 @@ class PepperContentSettingsSpecialCasesJavaScriptBlockedTest
  public:
   void SetUpOnMainThread() override {
     PepperContentSettingsSpecialCasesTest::SetUpOnMainThread();
-    browser()->profile()->GetHostContentSettingsMap()->SetDefaultContentSetting(
-        CONTENT_SETTINGS_TYPE_PLUGINS, CONTENT_SETTING_ALLOW);
-    browser()->profile()->GetHostContentSettingsMap()->SetDefaultContentSetting(
-        CONTENT_SETTINGS_TYPE_JAVASCRIPT, CONTENT_SETTING_BLOCK);
+    HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+        ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
+                                   CONTENT_SETTING_ALLOW);
+    HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+        ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+                                   CONTENT_SETTING_BLOCK);
   }
 };
 
@@ -483,8 +505,9 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesTest, Baseline) {
           switches::kAshBrowserTests))
     return;
 #endif
-  browser()->profile()->GetHostContentSettingsMap()->SetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_PLUGINS, CONTENT_SETTING_ALLOW);
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+      ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
+                                 CONTENT_SETTING_ALLOW);
 
   RunLoadPepperPluginTest(kExternalClearKeyMimeType, true);
 }
@@ -506,7 +529,7 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesPluginsBlockedTest,
   RunLoadPepperPluginTest(kExternalClearKeyMimeType, false);
 }
 
-#if 0 && defined(WIDEVINE_CDM_AVAILABLE)
+#if defined(WIDEVINE_CDM_AVAILABLE) && !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesPluginsBlockedTest,
                        WidevineCdm) {
 #if defined(OS_WIN) && defined(USE_ASH)
@@ -517,7 +540,7 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesPluginsBlockedTest,
 #endif
   RunLoadPepperPluginTest(kWidevineCdmPluginMimeType, true);
 }
-#endif  // defined(WIDEVINE_CDM_AVAILABLE)
+#endif  // defined(WIDEVINE_CDM_AVAILABLE) && !defined(OS_CHROMEOS)
 #endif  // defined(ENABLE_PEPPER_CDMS)
 
 #if !defined(DISABLE_NACL)
@@ -549,7 +572,7 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,
   RunJavaScriptBlockedTest("load_clearkey_no_js.html", false);
 }
 
-#if 0 && defined(WIDEVINE_CDM_AVAILABLE)
+#if defined(WIDEVINE_CDM_AVAILABLE)
 IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,
                        WidevineCdm) {
 #if defined(OS_WIN) && defined(USE_ASH)

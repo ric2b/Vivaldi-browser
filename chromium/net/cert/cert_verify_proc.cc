@@ -9,6 +9,7 @@
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sha1.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -165,6 +166,18 @@ bool ExaminePublicKeys(const scoped_refptr<X509Certificate>& cert,
   return weak_key;
 }
 
+// Beginning with Ballot 118, ratified in the Baseline Requirements v1.2.1,
+// CAs MUST NOT issue SHA-1 certificates beginning on 1 January 2016.
+bool IsPastSHA1DeprecationDate(const X509Certificate& cert) {
+  const base::Time& start = cert.valid_start();
+  if (start.is_max() || start.is_null())
+    return true;
+  // 2016-01-01 00:00:00 UTC.
+  const base::Time kSHA1DeprecationDate =
+      base::Time::FromInternalValue(INT64_C(13096080000000000));
+  return start >= kSHA1DeprecationDate;
+}
+
 }  // namespace
 
 // static
@@ -262,8 +275,19 @@ int CertVerifyProc::Verify(X509Certificate* cert,
     rv = MapCertStatusToNetError(verify_result->cert_status);
   }
 
+  if (verify_result->has_sha1)
+    verify_result->cert_status |= CERT_STATUS_SHA1_SIGNATURE_PRESENT;
+
   // Flag certificates using weak signature algorithms.
-  if (verify_result->has_md5) {
+  // The CA/Browser Forum Baseline Requirements (beginning with v1.2.1)
+  // prohibits SHA-1 certificates from being issued beginning on
+  // 1 January 2016. Ideally, all of SHA-1 in new certificates would be
+  // disabled on this date, but enterprises need more time to transition.
+  // As the risk is greatest for publicly trusted certificates, prevent
+  // those certificates from being trusted from that date forward.
+  if (verify_result->has_md5 ||
+      (verify_result->has_sha1_leaf && verify_result->is_issued_by_known_root &&
+       IsPastSHA1DeprecationDate(*cert))) {
     verify_result->cert_status |= CERT_STATUS_WEAK_SIGNATURE_ALGORITHM;
     // Avoid replacing a more serious error, such as an OS/library failure,
     // by ensuring that if verification failed, it failed with a certificate
@@ -271,9 +295,6 @@ int CertVerifyProc::Verify(X509Certificate* cert,
     if (rv == OK || IsCertificateError(rv))
       rv = MapCertStatusToNetError(verify_result->cert_status);
   }
-
-  if (verify_result->has_sha1)
-    verify_result->cert_status |= CERT_STATUS_SHA1_SIGNATURE_PRESENT;
 
   // Flag certificates from publicly-trusted CAs that are issued to intranet
   // hosts. While the CA/Browser Forum Baseline Requirements (v1.1) permit
@@ -388,8 +409,8 @@ bool CertVerifyProc::IsBlacklisted(X509Certificate* cert) {
 // NOTE: This implementation assumes and enforces that the hashes are SHA1.
 bool CertVerifyProc::IsPublicKeyBlacklisted(
     const HashValueVector& public_key_hashes) {
-  static const unsigned kNumHashes = 17;
-  static const uint8_t kHashes[kNumHashes][base::kSHA1Length] = {
+  static const unsigned kNumSHA1Hashes = 14;
+  static const uint8_t kSHA1Hashes[kNumSHA1Hashes][base::kSHA1Length] = {
     // Subject: CN=DigiNotar Root CA
     // Issuer: CN=Entrust.net x2 and self-signed
     {0x41, 0x0f, 0x36, 0x36, 0x32, 0x58, 0xf3, 0x0b, 0x34, 0x7d,
@@ -410,16 +431,6 @@ bool CertVerifyProc::IsPublicKeyBlacklisted(
     // Issuer: CN=Staat der Nederlanden Overheid CA
     {0xe8, 0xf9, 0x12, 0x00, 0xc6, 0x5c, 0xee, 0x16, 0xe0, 0x39,
      0xb9, 0xf8, 0x83, 0x84, 0x16, 0x61, 0x63, 0x5f, 0x81, 0xc5},
-    // Subject: O=Digicert Sdn. Bhd.
-    // Issuer: CN=GTE CyberTrust Global Root
-    // Expires: Jul 17 15:16:54 2012 GMT
-    {0x01, 0x29, 0xbc, 0xd5, 0xb4, 0x48, 0xae, 0x8d, 0x24, 0x96,
-     0xd1, 0xc3, 0xe1, 0x97, 0x23, 0x91, 0x90, 0x88, 0xe1, 0x52},
-    // Subject: O=Digicert Sdn. Bhd.
-    // Issuer: CN=Entrust.net Certification Authority (2048)
-    // Expires: Jul 16 17:53:37 2015 GMT
-    {0xd3, 0x3c, 0x5b, 0x41, 0xe4, 0x5c, 0xc4, 0xb3, 0xbe, 0x9a,
-     0xd6, 0x95, 0x2c, 0x4e, 0xcc, 0x25, 0x28, 0x03, 0x29, 0x81},
     // Issuer: CN=Trustwave Organization Issuing CA, Level 2
     // Covers two certificates, the latter of which expires Apr 15 21:09:30
     // 2021 GMT.
@@ -442,11 +453,6 @@ bool CertVerifyProc::IsPublicKeyBlacklisted(
      0xf0, 0x6a, 0x81, 0x04, 0x31, 0xba, 0x6f, 0x72, 0xc0, 0x41},
     {0x93, 0xd1, 0x53, 0x22, 0x29, 0xcc, 0x2a, 0xbd, 0x21, 0xdf,
      0xf5, 0x97, 0xee, 0x32, 0x0f, 0xe4, 0x24, 0x6f, 0x3d, 0x0c},
-    // C=IN, O=National Informatics Centre, OU=NICCA, CN=NIC Certifying
-    // Authority. Issued by C=IN, O=India PKI, CN=CCA India 2007.
-    // Expires July 4th, 2015.
-    {0xf5, 0x71, 0x79, 0xfa, 0xea, 0x10, 0xc5, 0x43, 0x8c, 0xb0,
-     0xc6, 0xe1, 0xcc, 0x27, 0x7b, 0x6e, 0x0d, 0xb2, 0xff, 0x54},
     // C=IN, O=National Informatics Centre, CN=NIC CA 2011. Issued by
     // C=IN, O=India PKI, CN=CCA India 2011.
     // Expires March 11th 2016.
@@ -466,11 +472,54 @@ bool CertVerifyProc::IsPublicKeyBlacklisted(
      0x86, 0xd0, 0x18, 0x51, 0x9f, 0x58, 0x9f, 0x1e, 0x9e, 0x25},
   };
 
-  for (unsigned i = 0; i < kNumHashes; i++) {
+  static const unsigned kNumSHA256Hashes = 4;
+  static const uint8_t kSHA256Hashes[kNumSHA256Hashes][crypto::kSHA256Length] =
+  {
+    // Two intermediates issued by TurkTrust to *.ego.gov.tr and
+    // e-islem.kktcmerkezbankasi.org. Expires July 6 2021 and August 5 2021,
+    // respectively.
+    // See http://googleonlinesecurity.blogspot.com/2013/01/enhancing-digital-certificate-security.html
+    {0x3e, 0xdb, 0xd9, 0xac, 0xe6, 0x39, 0xba, 0x1a,
+     0x2d, 0x4a, 0xd0, 0x47, 0x18, 0x71, 0x1f, 0xda,
+     0x23, 0xe8, 0x59, 0xb2, 0xfb, 0xf5, 0xd1, 0x37,
+     0xd4, 0x24, 0x04, 0x5e, 0x79, 0x19, 0xdf, 0xb9},
+    {0xc1, 0x73, 0xf0, 0x62, 0x64, 0x56, 0xca, 0x85,
+     0x4f, 0xf2, 0xa7, 0xf0, 0xb1, 0x33, 0xa7, 0xcf,
+     0x4d, 0x02, 0x11, 0xe5, 0x52, 0xf2, 0x4b, 0x3e,
+     0x33, 0xad, 0xe8, 0xc5, 0x9f, 0x0a, 0x42, 0x4c},
+
+    // xs4all certificate. Expires March 19 2016.
+    // https://raymii.org/s/blog/How_I_got_a_valid_SSL_certificate_for_my_ISPs_main_website.html
+    {0xf2, 0xbb, 0xe0, 0x4c, 0x5d, 0xc7, 0x0d, 0x76,
+     0x3e, 0x89, 0xc5, 0xa0, 0x52, 0x70, 0x48, 0xcd,
+     0x9e, 0xcd, 0x39, 0xeb, 0x62, 0x1e, 0x20, 0x72,
+     0xff, 0x9a, 0x5f, 0x84, 0x32, 0x57, 0x1a, 0xa0},
+
+    // Japanese National Institute of Informatics intermediate. No suggestion
+    // of compromise, it's just being discontinued.
+    // Expires March 27th 2019
+    // See https://bugzilla.mozilla.org/show_bug.cgi?id=1188582
+    {0x5c, 0x72, 0x2c, 0xb7, 0x0f, 0xb3, 0x11, 0xf2,
+     0x1e, 0x0d, 0xa0, 0xe7, 0xd1, 0x2e, 0xbc, 0x8e,
+     0x05, 0xf6, 0x07, 0x96, 0xbc, 0x49, 0xcf, 0x51,
+     0x18, 0x49, 0xd5, 0xbc, 0x62, 0x03, 0x03, 0x82},
+  };
+
+  for (unsigned i = 0; i < kNumSHA1Hashes; i++) {
     for (HashValueVector::const_iterator j = public_key_hashes.begin();
          j != public_key_hashes.end(); ++j) {
       if (j->tag == HASH_VALUE_SHA1 &&
-          memcmp(j->data(), kHashes[i], base::kSHA1Length) == 0) {
+          memcmp(j->data(), kSHA1Hashes[i], base::kSHA1Length) == 0) {
+        return true;
+      }
+    }
+  }
+
+  for (unsigned i = 0; i < kNumSHA256Hashes; i++) {
+    for (HashValueVector::const_iterator j = public_key_hashes.begin();
+         j != public_key_hashes.end(); ++j) {
+      if (j->tag == HASH_VALUE_SHA256 &&
+          memcmp(j->data(), kSHA256Hashes[i], crypto::kSHA256Length) == 0) {
         return true;
       }
     }
@@ -509,7 +558,8 @@ static bool CheckNameConstraints(const std::vector<std::string>& dns_names,
       if (i->size() <= (1 /* period before domain */ + domain_length))
         continue;
 
-      const char* suffix = &dns_name[i->size() - domain_length - 1];
+      std::string suffix =
+          base::ToLowerASCII(&(*i)[i->size() - domain_length - 1]);
       if (suffix[0] != '.')
         continue;
       if (memcmp(&suffix[1], domains[j], domain_length) != 0)
@@ -573,41 +623,41 @@ bool CertVerifyProc::HasNameConstraintsViolation(
   };
 
   static const PublicKeyDomainLimitation kLimits[] = {
-    // C=FR, ST=France, L=Paris, O=PM/SGDN, OU=DCSSI,
-    // CN=IGC/A/emailAddress=igca@sgdn.pm.gouv.fr
-    {
-      {0x79, 0x23, 0xd5, 0x8d, 0x0f, 0xe0, 0x3c, 0xe6, 0xab, 0xad,
-       0xae, 0x27, 0x1a, 0x6d, 0x94, 0xf4, 0x14, 0xd1, 0xa8, 0x73},
-      kDomainsANSSI,
-    },
-    // C=IN, O=India PKI, CN=CCA India 2007
-    // Expires: July 4th 2015.
-    {
-      {0xfe, 0xe3, 0x95, 0x21, 0x2d, 0x5f, 0xea, 0xfc, 0x7e, 0xdc,
-       0xcf, 0x88, 0x3f, 0x1e, 0xc0, 0x58, 0x27, 0xd8, 0xb8, 0xe4},
-      kDomainsIndiaCCA,
-    },
-    // C=IN, O=India PKI, CN=CCA India 2011
-    // Expires: March 11 2016.
-    {
-      {0xf1, 0x42, 0xf6, 0xa2, 0x7d, 0x29, 0x3e, 0xa8, 0xf9, 0x64,
-       0x52, 0x56, 0xed, 0x07, 0xa8, 0x63, 0xf2, 0xdb, 0x1c, 0xdf},
-      kDomainsIndiaCCA,
-    },
-    // C=IN, O=India PKI, CN=CCA India 2014
-    // Expires: March 5 2024.
-    {
-      {0x36, 0x8c, 0x4a, 0x1e, 0x2d, 0xb7, 0x81, 0xe8, 0x6b, 0xed,
-       0x5a, 0x0a, 0x42, 0xb8, 0xc5, 0xcf, 0x6d, 0xb3, 0x57, 0xe1},
-      kDomainsIndiaCCA,
-    },
-    // Not a real certificate - just for testing. This is the SPKI hash of
-    // the keys used in net/data/ssl/certificates/name_constraint_*.crt.
-    {
-      {0x61, 0xec, 0x82, 0x8b, 0xdb, 0x5c, 0x78, 0x2a, 0x8f, 0xcc,
-       0x4f, 0x0f, 0x14, 0xbb, 0x85, 0x31, 0x93, 0x9f, 0xf7, 0x3d},
-      kDomainsTest,
-    },
+      // C=FR, ST=France, L=Paris, O=PM/SGDN, OU=DCSSI,
+      // CN=IGC/A/emailAddress=igca@sgdn.pm.gouv.fr
+      {
+          {0x79, 0x23, 0xd5, 0x8d, 0x0f, 0xe0, 0x3c, 0xe6, 0xab, 0xad, 0xae,
+           0x27, 0x1a, 0x6d, 0x94, 0xf4, 0x14, 0xd1, 0xa8, 0x73},
+          kDomainsANSSI,
+      },
+      // C=IN, O=India PKI, CN=CCA India 2007
+      // Expires: July 4th 2015.
+      {
+          {0xfe, 0xe3, 0x95, 0x21, 0x2d, 0x5f, 0xea, 0xfc, 0x7e, 0xdc, 0xcf,
+           0x88, 0x3f, 0x1e, 0xc0, 0x58, 0x27, 0xd8, 0xb8, 0xe4},
+          kDomainsIndiaCCA,
+      },
+      // C=IN, O=India PKI, CN=CCA India 2011
+      // Expires: March 11 2016.
+      {
+          {0xf1, 0x42, 0xf6, 0xa2, 0x7d, 0x29, 0x3e, 0xa8, 0xf9, 0x64, 0x52,
+           0x56, 0xed, 0x07, 0xa8, 0x63, 0xf2, 0xdb, 0x1c, 0xdf},
+          kDomainsIndiaCCA,
+      },
+      // C=IN, O=India PKI, CN=CCA India 2014
+      // Expires: March 5 2024.
+      {
+          {0x36, 0x8c, 0x4a, 0x1e, 0x2d, 0xb7, 0x81, 0xe8, 0x6b, 0xed, 0x5a,
+           0x0a, 0x42, 0xb8, 0xc5, 0xcf, 0x6d, 0xb3, 0x57, 0xe1},
+          kDomainsIndiaCCA,
+      },
+      // Not a real certificate - just for testing. This is the SPKI hash of
+      // the keys used in net/data/ssl/certificates/name_constraint_*.crt.
+      {
+          {0x48, 0x49, 0x4a, 0xc5, 0x5a, 0x3e, 0xcd, 0xc5, 0x62, 0x9f, 0xef,
+           0x23, 0x14, 0xad, 0x05, 0xa9, 0x2a, 0x5c, 0x39, 0xc0},
+          kDomainsTest,
+      },
   };
 
   for (unsigned i = 0; i < arraysize(kLimits); ++i) {

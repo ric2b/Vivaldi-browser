@@ -4,11 +4,14 @@
 
 #include "base/environment.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 
 #if defined(OS_POSIX)
 #include <stdlib.h>
@@ -33,9 +36,9 @@ class EnvironmentImpl : public Environment {
     char first_char = variable_name[0];
     std::string alternate_case_var;
     if (first_char >= 'a' && first_char <= 'z')
-      alternate_case_var = StringToUpperASCII(std::string(variable_name));
+      alternate_case_var = ToUpperASCII(variable_name);
     else if (first_char >= 'A' && first_char <= 'Z')
-      alternate_case_var = StringToLowerASCII(std::string(variable_name));
+      alternate_case_var = ToLowerASCII(variable_name);
     else
       return false;
     return GetVarImpl(alternate_case_var.c_str(), result);
@@ -228,7 +231,7 @@ scoped_ptr<char*[]> AlterEnvironment(const char* const* const env,
     result[i] = &storage_data[result_indices[i]];
   result[result_indices.size()] = 0;  // Null terminator.
 
-  return result.Pass();
+  return result;
 }
 
 #endif  // OS_POSIX

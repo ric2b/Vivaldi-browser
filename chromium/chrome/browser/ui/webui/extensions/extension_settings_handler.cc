@@ -35,6 +35,11 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
+#if defined(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#endif
+
 namespace extensions {
 
 ExtensionSettingsHandler::ExtensionSettingsHandler()
@@ -94,6 +99,8 @@ void ExtensionSettingsHandler::GetLocalizedValues(
       l10n_util::GetStringUTF16(IDS_EXTENSIONS_VIEW_INCOGNITO));
   source->AddString("viewInactive",
       l10n_util::GetStringUTF16(IDS_EXTENSIONS_VIEW_INACTIVE));
+  source->AddString("viewIframe",
+      l10n_util::GetStringUTF16(IDS_EXTENSIONS_VIEW_IFRAME));
   source->AddString("backgroundPage",
       l10n_util::GetStringUTF16(IDS_EXTENSIONS_BACKGROUND_PAGE));
   source->AddString("extensionSettingsEnable",
@@ -140,8 +147,12 @@ void ExtensionSettingsHandler::GetLocalizedValues(
       l10n_util::GetStringUTF16(IDS_EXTENSIONS_POLICY_RECOMMENDED));
   source->AddString("extensionSettingsDependentExtensions",
       l10n_util::GetStringUTF16(IDS_EXTENSIONS_DEPENDENT_EXTENSIONS));
+#if defined(ENABLE_SUPERVISED_USERS)
+  const SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForProfile(Profile::FromWebUI(web_ui()));
   source->AddString("extensionSettingsSupervisedUser",
-      l10n_util::GetStringUTF16(IDS_EXTENSIONS_LOCKED_SUPERVISED_USER));
+                    supervised_user_service->GetExtensionsLockedMessage());
+#endif
   source->AddString("loading",
       l10n_util::GetStringUTF16(IDS_EXTENSIONS_LOADING));
   source->AddString("extensionSettingsCorruptInstall",
@@ -181,6 +192,13 @@ void ExtensionSettingsHandler::GetLocalizedValues(
   source->AddString("extensionSettingsUpdateRequiredBePolicy",
                     l10n_util::GetStringUTF16(
                         IDS_EXTENSIONS_DISABLED_UPDATE_REQUIRED_BY_POLICY));
+
+  source->AddLocalizedString("extensionLogLevelInfo",
+                             IDS_EXTENSIONS_LOG_LEVEL_INFO);
+  source->AddLocalizedString("extensionLogLevelWarn",
+                             IDS_EXTENSIONS_LOG_LEVEL_WARN);
+  source->AddLocalizedString("extensionLogLevelError",
+                             IDS_EXTENSIONS_LOG_LEVEL_ERROR);
 
   // TODO(estade): comb through the above strings to find ones no longer used in
   // uber extensions.
@@ -274,6 +292,8 @@ void ExtensionSettingsHandler::RegisterMessages() {
   // TODO(devlin): Take this out when everyone's been updated.
   Profile::FromWebUI(web_ui())->GetPrefs()->ClearPref(
       prefs::kExtensionsUIDismissedADTPromo);
+
+  content::WebContentsObserver::Observe(web_ui()->GetWebContents());
 }
 
 void ExtensionSettingsHandler::ReloadUnpackedExtensions() {

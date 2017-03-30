@@ -18,8 +18,8 @@ import android.widget.TextView;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.AccountFirstRunView;
 import org.chromium.chrome.browser.firstrun.ProfileDataCache;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.AccountAdder;
+import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.sync.ui.ConfirmAccountChangeFragment;
 import org.chromium.sync.AndroidSyncSettings.AndroidSyncSettingsObserver;
 
@@ -69,6 +69,16 @@ public class RecentTabsPromoView extends FrameLayout implements AndroidSyncSetti
          * updates.
          */
         public void unregisterForSyncUpdates(AndroidSyncSettingsObserver changeListener);
+
+        /**
+         * @return A ProfileDataCache to retrieve user account info.
+         */
+        public ProfileDataCache getProfileDataCache();
+
+        /**
+        * @return the access point of creating this view.
+        */
+        public int getAccessPoint();
     }
 
     /**
@@ -237,9 +247,7 @@ public class RecentTabsPromoView extends FrameLayout implements AndroidSyncSetti
     private View createSignInPromoView() {
         AccountFirstRunView signInPromoView = (AccountFirstRunView)
                 LayoutInflater.from(getContext()).inflate(R.layout.fre_choose_account, this, false);
-        ProfileDataCache profileData = new ProfileDataCache(
-                mActivity, Profile.getLastUsedProfile());
-        signInPromoView.init(profileData);
+        signInPromoView.init(mModel.getProfileDataCache());
         signInPromoView.getLayoutParams().height = LayoutParams.WRAP_CONTENT;
         ((FrameLayout.LayoutParams) signInPromoView.getLayoutParams()).gravity = Gravity.CENTER;
         signInPromoView.configureForRecentTabsPage();
@@ -280,7 +288,7 @@ public class RecentTabsPromoView extends FrameLayout implements AndroidSyncSetti
                 assert false : "No forced accounts in SignInPromoView";
             }
         });
-
+        SigninManager.logSigninStartAccessPoint(mModel.getAccessPoint());
         return signInPromoView;
     }
 }

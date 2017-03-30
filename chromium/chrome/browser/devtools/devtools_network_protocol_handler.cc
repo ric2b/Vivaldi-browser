@@ -4,9 +4,11 @@
 
 #include "chrome/browser/devtools/devtools_network_protocol_handler.h"
 
+#include <utility>
+
 #include "base/values.h"
 #include "chrome/browser/devtools/devtools_network_conditions.h"
-#include "chrome/browser/devtools/devtools_network_controller.h"
+#include "chrome/browser/devtools/devtools_network_controller_handle.h"
 #include "chrome/browser/devtools/devtools_protocol_constants.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -23,7 +25,7 @@ base::DictionaryValue* DevToolsNetworkProtocolHandler::HandleCommand(
     base::DictionaryValue* command_dict) {
   int id = 0;
   std::string method;
-  const base::DictionaryValue* params = nullptr;
+  base::DictionaryValue* params = nullptr;
   if (!DevToolsProtocol::ParseCommand(command_dict, &id, &method, &params))
     return nullptr;
 
@@ -42,17 +44,17 @@ scoped_ptr<base::DictionaryValue>
 DevToolsNetworkProtocolHandler::CanEmulateNetworkConditions(
     content::DevToolsAgentHost* agent_host,
     int command_id,
-    const base::DictionaryValue* params) {
+    base::DictionaryValue* params) {
   scoped_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   result->SetBoolean(chrome::devtools::kResult, true);
-  return DevToolsProtocol::CreateSuccessResponse(command_id, result.Pass());
+  return DevToolsProtocol::CreateSuccessResponse(command_id, std::move(result));
 }
 
 scoped_ptr<base::DictionaryValue>
 DevToolsNetworkProtocolHandler::EmulateNetworkConditions(
     content::DevToolsAgentHost* agent_host,
     int command_id,
-    const base::DictionaryValue* params) {
+    base::DictionaryValue* params) {
   namespace names = ::chrome::devtools::Network::emulateNetworkConditions;
 
   bool offline = false;
@@ -89,7 +91,7 @@ DevToolsNetworkProtocolHandler::EmulateNetworkConditions(
       new DevToolsNetworkConditions(
           offline, latency, download_throughput, upload_throughput));
 
-  UpdateNetworkState(agent_host, conditions.Pass());
+  UpdateNetworkState(agent_host, std::move(conditions));
   return scoped_ptr<base::DictionaryValue>();
 }
 
@@ -100,8 +102,8 @@ void DevToolsNetworkProtocolHandler::UpdateNetworkState(
       agent_host->GetBrowserContext());
   if (!profile)
     return;
-  profile->GetDevToolsNetworkController()->SetNetworkState(
-      agent_host->GetId(), conditions.Pass());
+  profile->GetDevToolsNetworkControllerHandle()->SetNetworkState(
+      agent_host->GetId(), std::move(conditions));
 }
 
 void DevToolsNetworkProtocolHandler::DevToolsAgentStateChanged(
@@ -110,5 +112,5 @@ void DevToolsNetworkProtocolHandler::DevToolsAgentStateChanged(
   scoped_ptr<DevToolsNetworkConditions> conditions;
   if (attached)
     conditions.reset(new DevToolsNetworkConditions());
-  UpdateNetworkState(agent_host, conditions.Pass());
+  UpdateNetworkState(agent_host, std::move(conditions));
 }

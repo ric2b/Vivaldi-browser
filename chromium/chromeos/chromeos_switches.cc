@@ -104,6 +104,9 @@ const char kDisableNetworkPortalNotification[] =
 const char kEafeUrl[] = "eafe-url";
 const char kEafePath[] = "eafe-path";
 
+// Enables starting the ARC instance upon session start.
+const char kEnableArc[] = "enable-arc";
+
 // Enables consumer management, which allows user to enroll, remotely lock and
 // locate the device.
 const char kEnableConsumerManagement[] = "enable-consumer-management";
@@ -185,10 +188,6 @@ const char kGuestSession[] = "bwsi";
 const char kGuestWallpaperLarge[] = "guest-wallpaper-large";
 const char kGuestWallpaperSmall[] = "guest-wallpaper-small";
 
-// If true, the Chromebook has a Chrome OS keyboard. Don't use the flag for
-// Chromeboxes.
-const char kHasChromeOSKeyboard[] = "has-chromeos-keyboard";
-
 // If true, the Chromebook has a keyboard with a diamond key.
 const char kHasChromeOSDiamondKey[] = "has-chromeos-diamond-key";
 
@@ -204,10 +203,6 @@ const char kHostPairingOobe[] = "host-pairing-oobe";
 // turn on multi-profile feature on ChromeOS.
 const char kIgnoreUserProfileMappingForTests[] =
     "ignore-user-profile-mapping-for-tests";
-
-// File to load internal display ICC file from.
-const char kInternalDisplayColorProfileFile[] =
-    "internal-display-color-profile-file";
 
 // Enables Chrome-as-a-login-manager behavior.
 const char kLoginManager[] = "login-manager";
@@ -247,6 +242,10 @@ const char kOobeTimerInterval[] = "oobe-timer-interval";
 
 // Indicates that a guest session has been started before OOBE completion.
 const char kOobeGuestSession[] = "oobe-guest-session";
+
+// Indicates that if we should start bootstrapping Master/Slave OOBE.
+const char kOobeBootstrappingMaster[] = "oobe-bootstrapping-master";
+const char kOobeBootstrappingSlave[] = "oobe-bootstrapping-slave";
 
 // Specifies power stub behavior:
 //  'cycle=2' - Cycles power states every 2 seconds.
@@ -293,8 +292,9 @@ const char kForceFirstRunUI[] = "force-first-run-ui";
 // Enables testing for auto update UI.
 const char kTestAutoUpdateUI[] = "test-auto-update-ui";
 
-// Enables waking the device based on the receipt of some network packets.
-const char kWakeOnPackets[] = "wake-on-packets";
+// Enables wake on wifi packet feature, which wakes the device on the receipt
+// of network packets from whitelisted sources.
+const char kWakeOnWifiPacket[] = "wake-on-wifi-packet";
 
 // Screenshot testing: specifies the directory where the golden screenshots are
 // stored.
@@ -311,13 +311,31 @@ const char kDisableCaptivePortalBypassProxy[] =
 const char kDisableTimeZoneTrackingOption[] =
     "disable-timezone-tracking-option";
 
-// Disable new GAIA sign-in flow.
-const char kDisableWebviewSigninFlow[] = "disable-webview-signin-flow";
-
 // Switches and optional value for Data Saver prompt on cellular networks.
 const char kDisableDataSaverPrompt[] = "disable-datasaver-prompt";
 const char kEnableDataSaverPrompt[] = "enable-datasaver-prompt";
 const char kDataSaverPromptDemoMode[] = "demo";
+
+// Control regions data load:
+// ""         - default
+// "override" - regions data is read first
+// "hide"     - VPD values are hidden
+const char kCrosRegionsMode[] = "cros-regions-mode";
+const char kCrosRegionsModeOverride[] = "override";
+const char kCrosRegionsModeHide[] = "hide";
+
+// Forces CrOS region value.
+const char kCrosRegion[] = "cros-region";
+
+// Enables IME menu
+const char kEnableImeMenu[] = "enable-ime-menu";
+
+// Controls CrOS GaiaId migration for tests:
+// ""        - default,
+// "started" - migration started (i.e. all stored user keys will be converted
+//             to GaiaId).
+const char kTestCrosGaiaIdMigration[] = "test-cros-gaia-id-migration";
+const char kTestCrosGaiaIdMigrationStarted[] = "started";
 
 bool WakeOnWifiEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableWakeOnWifi);
@@ -363,6 +381,19 @@ GetMemoryPressureThresholds() {
     return MemoryPressureMonitor::THRESHOLD_AGGRESSIVE;
 
   return MemoryPressureMonitor::THRESHOLD_DEFAULT;
+}
+
+bool IsImeMenuEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(kEnableImeMenu);
+}
+
+bool IsGaiaIdMigrationStarted() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(kTestCrosGaiaIdMigration))
+    return false;
+
+  return command_line->GetSwitchValueASCII(kTestCrosGaiaIdMigration) ==
+         kTestCrosGaiaIdMigrationStarted;
 }
 
 }  // namespace switches

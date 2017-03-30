@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -76,7 +77,7 @@ void TextInputTestHelper::OnTextInputTypeChanged(
   latest_text_input_type_ =
       client ? client->GetTextInputType() : ui::TEXT_INPUT_TYPE_NONE;
   if (waiting_type_ == WAIT_ON_TEXT_INPUT_TYPE_CHANGED)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void TextInputTestHelper::OnShowImeIfNeeded() {
@@ -89,13 +90,13 @@ void TextInputTestHelper::OnInputMethodDestroyed(
 void TextInputTestHelper::OnFocus() {
   focus_state_ = true;
   if (waiting_type_ == WAIT_ON_FOCUS)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void TextInputTestHelper::OnBlur() {
   focus_state_ = false;
   if (waiting_type_ == WAIT_ON_BLUR)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void TextInputTestHelper::OnCaretBoundsChanged(
@@ -109,7 +110,7 @@ void TextInputTestHelper::OnCaretBoundsChanged(
       return;
   }
   if (waiting_type_ == WAIT_ON_CARET_BOUNDS_CHANGED)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void TextInputTestHelper::OnTextInputStateChanged(
@@ -201,10 +202,10 @@ bool TextInputTestHelper::ClickElement(const std::string& id,
   mouse_event.x = rect.CenterPoint().x();
   mouse_event.y = rect.CenterPoint().y();
   mouse_event.clickCount = 1;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   mouse_event.type = blink::WebInputEvent::MouseUp;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
   return true;
 }
 

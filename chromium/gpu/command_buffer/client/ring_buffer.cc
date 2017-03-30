@@ -6,6 +6,8 @@
 
 #include "gpu/command_buffer/client/ring_buffer.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
@@ -13,8 +15,10 @@
 
 namespace gpu {
 
-RingBuffer::RingBuffer(unsigned int alignment, Offset base_offset,
-                       unsigned int size, CommandBufferHelper* helper,
+RingBuffer::RingBuffer(unsigned int alignment,
+                       Offset base_offset,
+                       unsigned int size,
+                       CommandBufferHelper* helper,
                        void* base)
     : helper_(helper),
       base_offset_(base_offset),
@@ -22,8 +26,7 @@ RingBuffer::RingBuffer(unsigned int alignment, Offset base_offset,
       free_offset_(0),
       in_use_offset_(0),
       alignment_(alignment),
-      base_(static_cast<int8*>(base) - base_offset) {
-}
+      base_(static_cast<int8_t*>(base) - base_offset) {}
 
 RingBuffer::~RingBuffer() {
   // Free blocks pending tokens.
@@ -164,6 +167,16 @@ unsigned int RingBuffer::GetLargestFreeSizeNoWaiting() {
   } else {
     // It's free from free_offset_ -> in_use_offset_;
     return in_use_offset_ - free_offset_;
+  }
+}
+
+unsigned int RingBuffer::GetTotalFreeSizeNoWaiting() {
+  unsigned int largest_free_size = GetLargestFreeSizeNoWaiting();
+  if (free_offset_ > in_use_offset_) {
+    // It's free from free_offset_ to size_ and from 0 to in_use_offset_.
+    return size_ - free_offset_ + in_use_offset_;
+  } else {
+    return largest_free_size;
   }
 }
 

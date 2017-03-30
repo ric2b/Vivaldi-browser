@@ -5,12 +5,15 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_CONTEXT_CORE_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_CONTEXT_CORE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list_threadsafe.h"
@@ -20,6 +23,7 @@
 #include "content/browser/service_worker/service_worker_registration_status.h"
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/service_worker_context.h"
 
 class GURL;
 
@@ -42,6 +46,7 @@ class ServiceWorkerContextWrapper;
 class ServiceWorkerDatabaseTaskManager;
 class ServiceWorkerHandle;
 class ServiceWorkerJobCoordinator;
+class ServiceWorkerNavigationHandleCore;
 class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
 class ServiceWorkerStorage;
@@ -54,10 +59,14 @@ class ServiceWorkerStorage;
 class CONTENT_EXPORT ServiceWorkerContextCore
     : NON_EXPORTED_BASE(public ServiceWorkerVersion::Listener) {
  public:
+  using BoolCallback = base::Callback<void(bool)>;
   typedef base::Callback<void(ServiceWorkerStatusCode status)> StatusCallback;
   typedef base::Callback<void(ServiceWorkerStatusCode status,
                               const std::string& status_message,
-                              int64 registration_id)> RegistrationCallback;
+                              int64_t registration_id)> RegistrationCallback;
+  typedef base::Callback<void(ServiceWorkerStatusCode status,
+                              const std::string& status_message,
+                              int64_t registration_id)> UpdateCallback;
   typedef base::Callback<
       void(ServiceWorkerStatusCode status)> UnregistrationCallback;
   typedef IDMap<ServiceWorkerProviderHost, IDMapOwnPointer> ProviderMap;
@@ -156,6 +165,11 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   scoped_ptr<ProviderHostIterator> GetClientProviderHostIterator(
       const GURL& origin);
 
+  // Runs the callback with true if there is a ProviderHost for |origin| of type
+  // SERVICE_WORKER_PROVIDER_FOR_WINDOW which is a main (top-level) frame.
+  void HasMainFrameProviderHost(const GURL& origin,
+                                const BoolCallback& callback) const;
+
   // Maintains a map from Client UUID to ProviderHost.
   // (Note: instead of maintaining 2 maps we might be able to uniformly use
   // UUID instead of process_id+provider_id elsewhere. For now I'm leaving
@@ -175,29 +189,55 @@ class CONTENT_EXPORT ServiceWorkerContextCore
                              const RegistrationCallback& callback);
   void UnregisterServiceWorker(const GURL& pattern,
                                const UnregistrationCallback& callback);
+
   // Callback is called issued after all unregistrations occur.  The Status
   // is populated as SERVICE_WORKER_OK if all succeed, or SERVICE_WORKER_FAILED
   // if any did not succeed.
   void UnregisterServiceWorkers(const GURL& origin,
                                 const UnregistrationCallback& callback);
+
+  // Updates the service worker. If |force_bypass_cache| is true or 24 hours
+  // have passed since the last update, bypasses the browser cache.
   void UpdateServiceWorker(ServiceWorkerRegistration* registration,
                            bool force_bypass_cache);
+  void UpdateServiceWorker(ServiceWorkerRegistration* registration,
+                           bool force_bypass_cache,
+                           bool skip_script_comparison,
+                           ServiceWorkerProviderHost* provider_host,
+                           const UpdateCallback& callback);
+
+  // Used in DevTools to update the service worker registration without
+  // consulting the browser cache while loading the controlled page. The loading
+  // is delayed until the update completes and the new worker is activated. The
+  // new worker skips the waiting state and immediately becomes active after
+  // installed.
+  void SetForceUpdateOnPageLoad(int64_t registration_id,
+                                bool force_update_on_page_load);
 
   // This class maintains collections of live instances, this class
   // does not own these object or influence their lifetime.
-  ServiceWorkerRegistration* GetLiveRegistration(int64 registration_id);
+  ServiceWorkerRegistration* GetLiveRegistration(int64_t registration_id);
   void AddLiveRegistration(ServiceWorkerRegistration* registration);
-  void RemoveLiveRegistration(int64 registration_id);
-  const std::map<int64, ServiceWorkerRegistration*>& GetLiveRegistrations()
+  void RemoveLiveRegistration(int64_t registration_id);
+  const std::map<int64_t, ServiceWorkerRegistration*>& GetLiveRegistrations()
       const {
     return live_registrations_;
   }
-  ServiceWorkerVersion* GetLiveVersion(int64 version_id);
+  ServiceWorkerVersion* GetLiveVersion(int64_t version_id);
   void AddLiveVersion(ServiceWorkerVersion* version);
-  void RemoveLiveVersion(int64 registration_id);
-  const std::map<int64, ServiceWorkerVersion*>& GetLiveVersions() const {
+  void RemoveLiveVersion(int64_t registration_id);
+  const std::map<int64_t, ServiceWorkerVersion*>& GetLiveVersions() const {
     return live_versions_;
   }
+
+  // PlzNavigate
+  // Methods to manage the map keeping track of all
+  // ServiceWorkerNavigationHandleCores registered for ongoing navigations.
+  void AddNavigationHandleCore(int service_worker_provider_id,
+                               ServiceWorkerNavigationHandleCore* handle);
+  void RemoveNavigationHandleCore(int service_worker_provider_id);
+  ServiceWorkerNavigationHandleCore* GetNavigationHandleCore(
+      int service_worker_provider_id);
 
   std::vector<ServiceWorkerRegistrationInfo> GetAllLiveRegistrationInfo();
   std::vector<ServiceWorkerVersionInfo> GetAllLiveVersionInfo();
@@ -205,7 +245,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   // ProtectVersion holds a reference to |version| until UnprotectVersion is
   // called.
   void ProtectVersion(const scoped_refptr<ServiceWorkerVersion>& version);
-  void UnprotectVersion(int64 version_id);
+  void UnprotectVersion(int64_t version_id);
 
   // Returns new context-local unique ID.
   int GetNewServiceWorkerHandleId();
@@ -226,14 +266,23 @@ class CONTENT_EXPORT ServiceWorkerContextCore
       int new_host_id,
       scoped_ptr<ServiceWorkerProviderHost> provider_host);
 
+  void ClearAllServiceWorkersForTest(const base::Closure& callback);
+
+  // Determines if there is a ServiceWorker registration that matches |url|, and
+  // if |other_url| falls inside the scope of the same registration. See
+  // ServiceWorkerContext::CheckHasServiceWorker for more details.
+  void CheckHasServiceWorker(
+      const GURL& url,
+      const GURL& other_url,
+      const ServiceWorkerContext::CheckHasServiceWorkerCallback callback);
+
   base::WeakPtr<ServiceWorkerContextCore> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
 
  private:
-  friend class ServiceWorkerContext;
-  typedef std::map<int64, ServiceWorkerRegistration*> RegistrationsMap;
-  typedef std::map<int64, ServiceWorkerVersion*> VersionMap;
+  typedef std::map<int64_t, ServiceWorkerRegistration*> RegistrationsMap;
+  typedef std::map<int64_t, ServiceWorkerVersion*> VersionMap;
 
   ProviderMap* GetProviderMapForProcess(int process_id) {
     return providers_->Lookup(process_id);
@@ -245,15 +294,29 @@ class CONTENT_EXPORT ServiceWorkerContextCore
                             const std::string& status_message,
                             ServiceWorkerRegistration* registration);
 
+  void UpdateComplete(const UpdateCallback& callback,
+                      ServiceWorkerStatusCode status,
+                      const std::string& status_message,
+                      ServiceWorkerRegistration* registration);
+
   void UnregistrationComplete(const GURL& pattern,
                               const UnregistrationCallback& callback,
-                              int64 registration_id,
+                              int64_t registration_id,
                               ServiceWorkerStatusCode status);
 
   void DidGetAllRegistrationsForUnregisterForOrigin(
       const UnregistrationCallback& result,
       const GURL& origin,
       const std::vector<ServiceWorkerRegistrationInfo>& registrations);
+
+  void DidFindRegistrationForCheckHasServiceWorker(
+      const GURL& other_url,
+      const ServiceWorkerContext::CheckHasServiceWorkerCallback callback,
+      ServiceWorkerStatusCode status,
+      const scoped_refptr<ServiceWorkerRegistration>& registration);
+  void OnRegistrationFinishedForCheckHasServiceWorker(
+      const ServiceWorkerContext::CheckHasServiceWorkerCallback callback,
+      const scoped_refptr<ServiceWorkerRegistration>& registration);
 
   // It's safe to store a raw pointer instead of a scoped_refptr to |wrapper_|
   // because the Wrapper::Shutdown call that hops threads to destroy |this| uses
@@ -264,11 +327,21 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   scoped_ptr<ServiceWorkerStorage> storage_;
   scoped_refptr<EmbeddedWorkerRegistry> embedded_worker_registry_;
   scoped_ptr<ServiceWorkerJobCoordinator> job_coordinator_;
-  std::map<int64, ServiceWorkerRegistration*> live_registrations_;
-  std::map<int64, ServiceWorkerVersion*> live_versions_;
-  std::map<int64, scoped_refptr<ServiceWorkerVersion>> protected_versions_;
+  std::map<int64_t, ServiceWorkerRegistration*> live_registrations_;
+  std::map<int64_t, ServiceWorkerVersion*> live_versions_;
+  std::map<int64_t, scoped_refptr<ServiceWorkerVersion>> protected_versions_;
+
+  // PlzNavigate
+  // Map of ServiceWorkerNavigationHandleCores used for navigation requests.
+  std::map<int, ServiceWorkerNavigationHandleCore*>
+      navigation_handle_cores_map_;
+
   int next_handle_id_;
   int next_registration_handle_id_;
+  // Set in RegisterServiceWorker(), cleared in ClearAllServiceWorkersForTest().
+  // This is used to avoid unnecessary disk read operation in tests. This value
+  // is false if Chrome was relaunched after service workers were registered.
+  bool was_service_worker_registered_;
   scoped_refptr<base::ObserverListThreadSafe<ServiceWorkerContextObserver>>
       observer_list_;
   base::WeakPtrFactory<ServiceWorkerContextCore> weak_factory_;

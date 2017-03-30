@@ -6,7 +6,9 @@ import logging
 
 from telemetry.core import exceptions
 from telemetry.page import action_runner as action_runner_module
-from telemetry.page import test_expectations
+
+# Export story_test.Failure to this page_test module
+from telemetry.web_perf.story_test import Failure
 
 
 class TestNotSupportedOnPlatformError(Exception):
@@ -22,10 +24,6 @@ class MultiTabTestAppCrashError(Exception):
 
   Used to abort the test rather than try to recover from an unknown state.
   """
-
-
-class Failure(Exception):
-  """PageTest Exception raised when an undesired but designed-for problem."""
 
 
 class MeasurementFailure(Failure):
@@ -44,22 +42,16 @@ class PageTest(object):
              'document.body.children.length')
          results.AddValue(scalar.ScalarValue(
              page, 'body_children', 'count', body_child_count))
-
-  Args:
-    discard_first_run: Discard the first run of this page. This is
-        usually used with page_repeat and pageset_repeat options.
   """
 
   def __init__(self,
                needs_browser_restart_after_each_page=False,
-               discard_first_result=False,
                clear_cache_before_each_run=False):
     super(PageTest, self).__init__()
 
     self.options = None
     self._needs_browser_restart_after_each_page = (
         needs_browser_restart_after_each_page)
-    self._discard_first_result = discard_first_result
     self._clear_cache_before_each_run = clear_cache_before_each_run
     self._close_tabs_before_run = True
 
@@ -73,17 +65,6 @@ class PageTest(object):
     (e.g., how many tabs are open, etc.) is unknown after crashes.
     """
     return self.TabForPage.__func__ is not PageTest.TabForPage.__func__
-
-  @property
-  def discard_first_result(self):
-    """When set to True, the first run of the test is discarded.  This is
-    useful for cases where it's desirable to have some test resource cached so
-    the first run of the test can warm things up. """
-    return self._discard_first_result
-
-  @discard_first_result.setter
-  def discard_first_result(self, discard):
-    self._discard_first_result = discard
 
   @property
   def clear_cache_before_each_run(self):
@@ -109,7 +90,7 @@ class PageTest(object):
     """
     return self._needs_browser_restart_after_each_page
 
-  def StopBrowserAfterPage(self, browser, page):  # pylint: disable=W0613
+  def StopBrowserAfterPage(self, browser, page):
     """Should the browser be stopped after the page is run?
 
     This is called after a page is run to decide whether the browser needs to
@@ -119,6 +100,7 @@ class PageTest(object):
     A test that overrides this can look at both the page and the browser to
     decide whether it needs to stop the browser.
     """
+    del browser, page  # unused
     return False
 
   def CustomizeBrowserOptions(self, options):
@@ -145,15 +127,10 @@ class PageTest(object):
     """Override to do operations right after the page is navigated and after
     all waiting for completion has occurred."""
 
-  def CleanUpAfterPage(self, page, tab):
+  def DidRunPage(self, platform):
     """Called after the test run method was run, even if it failed."""
 
-  def CreateExpectations(self, page_set):   # pylint: disable=W0613
-    """Override to make this test generate its own expectations instead of
-    any that may have been defined in the page set."""
-    return test_expectations.TestExpectations()
-
-  def TabForPage(self, page, browser):   # pylint: disable=W0613
+  def TabForPage(self, page, browser):   # pylint: disable=unused-argument
     """Override to select a different tab for the page.  For instance, to
     create a new tab for every page, return browser.tabs.New()."""
     try:

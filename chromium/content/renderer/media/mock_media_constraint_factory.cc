@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "content/renderer/media/media_stream_audio_processor_options.h"
 #include "content/renderer/media/mock_media_constraint_factory.h"
 #include "third_party/libjingle/source/talk/app/webrtc/mediaconstraintsinterface.h"
 
@@ -23,11 +27,13 @@ MockMediaConstraintFactory::~MockMediaConstraintFactory() {
 }
 
 blink::WebMediaConstraints
-MockMediaConstraintFactory::CreateWebMediaConstraints() {
+MockMediaConstraintFactory::CreateWebMediaConstraints() const {
   blink::WebVector<blink::WebMediaConstraint> mandatory(mandatory_);
   blink::WebVector<blink::WebMediaConstraint> optional(optional_);
   blink::WebMediaConstraints constraints;
-  constraints.initialize(optional, mandatory);
+  blink::WebMediaTrackConstraintSet basic;
+  blink::WebVector<blink::WebMediaTrackConstraintSet> advanced;
+  constraints.initialize(optional, mandatory, basic, advanced);
   return constraints;
 }
 
@@ -90,7 +96,9 @@ void MockMediaConstraintFactory::DisableDefaultAudioConstraints() {
       webrtc::MediaConstraintsInterface::kNoiseSuppression,
       webrtc::MediaConstraintsInterface::kHighpassFilter,
       webrtc::MediaConstraintsInterface::kTypingNoiseDetection,
-      webrtc::MediaConstraintsInterface::kExperimentalNoiseSuppression
+      webrtc::MediaConstraintsInterface::kExperimentalNoiseSuppression,
+      // This isn't part of the MediaConstraintsInterface.
+      MediaAudioConstraints::kGoogBeamforming
   };
   MockMediaConstraintFactory factory;
   for (size_t i = 0; i < arraysize(kDefaultAudioConstraints); ++i) {

@@ -18,6 +18,7 @@ import org.chromium.net.ConnectionType;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -31,24 +32,25 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
     @MediumTest
     @Feature({"Feedback"})
     public void testNormalCaseShouldWork() throws InterruptedException {
-        final AtomicReference<ConnectivityTask> task = new AtomicReference<>();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                // Intentionally make HTTPS-connection fail which should result in NOT_CONNECTED.
-                ConnectivityChecker.overrideUrlsForTest(GENERATE_204_URL, GENERATE_404_URL);
+        final ConnectivityTask task = ThreadUtils.runOnUiThreadBlockingNoException(
+                new Callable<ConnectivityTask>() {
+                    @Override
+                    public ConnectivityTask call() {
+                        // Intentionally make HTTPS-connection fail which should result in
+                        // NOT_CONNECTED.
+                        ConnectivityChecker.overrideUrlsForTest(GENERATE_204_URL,
+                                GENERATE_404_URL);
+                        return ConnectivityTask.create(Profile.getLastUsedProfile(), TIMEOUT_MS,
+                                null);
+                    }
+                });
 
-                task.set(ConnectivityTask.create(Profile.getLastUsedProfile(), TIMEOUT_MS, null));
-            }
-        });
-
-        boolean gotResult = CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Should be finished by now.") {
             @Override
             public boolean isSatisfied() {
-                return task.get().isDone();
+                return task.isDone();
             }
         }, TIMEOUT_MS, RESULT_CHECK_INTERVAL_MS);
-        assertTrue("Should be finished by now.", gotResult);
         FeedbackData feedback = getResult(task);
         verifyConnections(feedback, ConnectivityCheckResult.NOT_CONNECTED);
         assertEquals("The timeout value is wrong.", TIMEOUT_MS, feedback.getTimeoutMs());
@@ -84,7 +86,6 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
     @Feature({"Feedback"})
     public void testCallbackNormalCaseShouldWork() throws InterruptedException {
         final Semaphore semaphore = new Semaphore(0);
-        final AtomicReference<ConnectivityTask> task = new AtomicReference<>();
         final AtomicReference<FeedbackData> feedbackRef = new AtomicReference<>();
         final ConnectivityTask.ConnectivityResult callback =
                 new ConnectivityTask.ConnectivityResult() {
@@ -99,12 +100,9 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
             public void run() {
                 // Intentionally make HTTPS-connection fail which should result in NOT_CONNECTED.
                 ConnectivityChecker.overrideUrlsForTest(GENERATE_204_URL, GENERATE_404_URL);
-
-                task.set(ConnectivityTask.create(
-                        Profile.getLastUsedProfile(), TIMEOUT_MS, callback));
+                ConnectivityTask.create(Profile.getLastUsedProfile(), TIMEOUT_MS, callback);
             }
         });
-
         if (!semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
             fail("Failed to acquire semaphore.");
         }
@@ -118,7 +116,6 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
     public void testCallbackTwoTimeouts() throws InterruptedException {
         final int checkTimeoutMs = 100;
         final Semaphore semaphore = new Semaphore(0);
-        final AtomicReference<ConnectivityTask> task = new AtomicReference<>();
         final AtomicReference<FeedbackData> feedbackRef = new AtomicReference<>();
         final ConnectivityTask.ConnectivityResult callback =
                 new ConnectivityTask.ConnectivityResult() {
@@ -132,13 +129,11 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
             @Override
             public void run() {
                 // Intentionally make HTTPS connections slow which should result in TIMEOUT.
-                ConnectivityChecker.overrideUrlsForTest(GENERATE_204_URL, GENERATE_204_SLOW_URL);
-
-                task.set(ConnectivityTask.create(
-                        Profile.getLastUsedProfile(), checkTimeoutMs, callback));
+                ConnectivityChecker.overrideUrlsForTest(GENERATE_204_URL,
+                        GENERATE_204_SLOW_URL);
+                ConnectivityTask.create(Profile.getLastUsedProfile(), checkTimeoutMs, callback);
             }
         });
-
         if (!semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
             fail("Failed to acquire semaphore.");
         }
@@ -152,24 +147,29 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
     @MediumTest
     @Feature({"Feedback"})
     public void testTwoTimeoutsShouldFillInTheRest() throws InterruptedException {
-        final AtomicReference<ConnectivityTask> task = new AtomicReference<>();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                // Intentionally make HTTPS connections slow which should result in UNKNOWN.
-                ConnectivityChecker.overrideUrlsForTest(GENERATE_204_URL, GENERATE_204_SLOW_URL);
-
-                task.set(ConnectivityTask.create(Profile.getLastUsedProfile(), TIMEOUT_MS, null));
-            }
-        });
-
-        boolean gotResult = CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return task.get().isDone();
-            }
-        }, TIMEOUT_MS / 5, RESULT_CHECK_INTERVAL_MS);
-        assertFalse("Should not be finished by now.", gotResult);
+        final ConnectivityTask task = ThreadUtils.runOnUiThreadBlockingNoException(
+                new Callable<ConnectivityTask>() {
+                    @Override
+                    public ConnectivityTask call() {
+                        // Intentionally make HTTPS connections slow which should result in
+                        // UNKNOWN.
+                        ConnectivityChecker.overrideUrlsForTest(GENERATE_204_URL,
+                                GENERATE_204_SLOW_URL);
+                        return ConnectivityTask.create(Profile.getLastUsedProfile(), TIMEOUT_MS,
+                                null);
+                    }
+                });
+        try {
+            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+                @Override
+                public boolean isSatisfied() {
+                    return task.isDone();
+                }
+            }, TIMEOUT_MS / 5, RESULT_CHECK_INTERVAL_MS);
+            fail("Should not be finished by now.");
+        } catch (AssertionError e) {
+            // TODO(tedchoc): This is horrible and should never timeout to determine success.
+        }
         FeedbackData feedback = getResult(task);
         verifyConnections(feedback, ConnectivityCheckResult.UNKNOWN);
         assertEquals("The timeout value is wrong.", TIMEOUT_MS, feedback.getTimeoutMs());
@@ -203,14 +203,14 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
         assertEquals("WiFi", map.get(ConnectivityTask.CONNECTION_TYPE_KEY));
     }
 
-    private static FeedbackData getResult(final AtomicReference<ConnectivityTask> task) {
-        final AtomicReference<FeedbackData> result = new AtomicReference<>();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                result.set(task.get().get());
-            }
-        });
-        return result.get();
+    private static FeedbackData getResult(final ConnectivityTask task) {
+        final FeedbackData result = ThreadUtils.runOnUiThreadBlockingNoException(
+                new Callable<FeedbackData>() {
+                    @Override
+                    public FeedbackData call() {
+                        return task.get();
+                    }
+                });
+        return result;
     }
 }

@@ -4,6 +4,9 @@
 
 #include "extensions/common/file_util.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
@@ -16,6 +19,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
@@ -45,24 +49,29 @@ namespace extensions {
 namespace file_util {
 namespace {
 
+enum SafeInstallationFlag {
+  DEFAULT,   // Default case, controlled by a field trial.
+  DISABLED,  // Safe installation is disabled.
+  ENABLED,   // Safe installation is enabled.
+};
+SafeInstallationFlag g_use_safe_installation = DEFAULT;
+
 // Returns true if the given file path exists and is not zero-length.
 bool ValidateFilePath(const base::FilePath& path) {
-  int64 size = 0;
-  if (!base::PathExists(path) ||
-      !base::GetFileSize(path, &size) ||
-      size == 0) {
-    return false;
-  }
-
-  return true;
+  int64_t size = 0;
+  return base::PathExists(path) && base::GetFileSize(path, &size) && size != 0;
 }
 
 // Returns true if the extension installation should flush all files and the
 // directory.
 bool UseSafeInstallation() {
-  const char kFieldTrialName[] = "ExtensionUseSafeInstallation";
-  const char kEnable[] = "Enable";
-  return base::FieldTrialList::FindFullName(kFieldTrialName) == kEnable;
+  if (g_use_safe_installation == DEFAULT) {
+    const char kFieldTrialName[] = "ExtensionUseSafeInstallation";
+    const char kEnable[] = "Enable";
+    return base::FieldTrialList::FindFullName(kFieldTrialName) == kEnable;
+  }
+
+  return g_use_safe_installation == ENABLED;
 }
 
 enum FlushOneOrAllFiles {
@@ -96,6 +105,10 @@ void FlushFilesInDir(const base::FilePath& path,
 }  // namespace
 
 const base::FilePath::CharType kTempDirectoryName[] = FILE_PATH_LITERAL("Temp");
+
+void SetUseSafeInstallation(bool use_safe_installation) {
+  g_use_safe_installation = use_safe_installation ? ENABLED : DISABLED;
+}
 
 base::FilePath InstallExtension(const base::FilePath& unpacked_source_dir,
                                 const std::string& id,
@@ -194,8 +207,8 @@ scoped_refptr<Extension> LoadExtension(const base::FilePath& extension_path,
                                        Manifest::Location location,
                                        int flags,
                                        std::string* error) {
-  scoped_ptr<base::DictionaryValue> manifest(
-      LoadManifest(extension_path, error));
+  scoped_ptr<base::DictionaryValue> manifest =
+      LoadManifest(extension_path, error);
   if (!manifest.get())
     return NULL;
   if (!extension_l10n_util::LocalizeExtension(
@@ -216,12 +229,13 @@ scoped_refptr<Extension> LoadExtension(const base::FilePath& extension_path,
   return extension;
 }
 
-base::DictionaryValue* LoadManifest(const base::FilePath& extension_path,
-                                    std::string* error) {
+scoped_ptr<base::DictionaryValue> LoadManifest(
+    const base::FilePath& extension_path,
+    std::string* error) {
   return LoadManifest(extension_path, kManifestFilename, error);
 }
 
-base::DictionaryValue* LoadManifest(
+scoped_ptr<base::DictionaryValue> LoadManifest(
     const base::FilePath& extension_path,
     const base::FilePath::CharType* manifest_filename,
     std::string* error) {
@@ -252,7 +266,7 @@ base::DictionaryValue* LoadManifest(
     return NULL;
   }
 
-  return static_cast<base::DictionaryValue*>(root.release());
+  return base::DictionaryValue::From(std::move(root));
 }
 
 bool ValidateExtension(const Extension* extension,
@@ -492,11 +506,13 @@ MessageBundle* LoadMessageBundle(
   if (!base::PathExists(locale_path))
     return NULL;
 
-  std::set<std::string> locales;
-  if (!extension_l10n_util::GetValidLocales(locale_path, &locales, error))
-    return NULL;
+  std::set<std::string> chrome_locales;
+  extension_l10n_util::GetAllLocales(&chrome_locales);
 
-  if (default_locale.empty() || locales.find(default_locale) == locales.end()) {
+  base::FilePath default_locale_path = locale_path.AppendASCII(default_locale);
+  if (default_locale.empty() ||
+      chrome_locales.find(default_locale) == chrome_locales.end() ||
+      !base::PathExists(default_locale_path)) {
     *error = l10n_util::GetStringUTF8(
         IDS_EXTENSION_LOCALES_NO_DEFAULT_LOCALE_SPECIFIED);
     return NULL;
@@ -507,7 +523,6 @@ MessageBundle* LoadMessageBundle(
           locale_path,
           default_locale,
           extension_l10n_util::CurrentLocaleOrDefault(),
-          locales,
           error);
 
   return message_bundle;

@@ -4,31 +4,38 @@
 
 #include "chrome/test/base/in_process_browser_test.h"
 
+#include "ash/ash_switches.h"
 #include "base/auto_reset.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_file_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/non_thread_safe.h"
+#include "build/build_config.h"
+#include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/host_desktop.h"
@@ -45,13 +52,14 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/os_crypt/os_crypt.h"
+#include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -62,8 +70,6 @@
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/windows_version.h"
 #include "ui/base/win/atl_module.h"
-#include "win8/test/metro_registration_helper.h"
-#include "win8/test/test_registrar_constants.h"
 #endif
 
 #if defined(ENABLE_CAPTIVE_PORTAL_DETECTION)
@@ -76,6 +82,10 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
+#endif
+
+#if defined(USE_ASH)
+#include "chrome/test/base/default_ash_event_generator_delegate.h"
 #endif
 
 namespace {
@@ -181,16 +191,19 @@ InProcessBrowserTest::InProcessBrowserTest()
   CreateTestServer(base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
   base::FilePath src_dir;
   CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &src_dir));
-  base::FilePath test_data_dir = src_dir.AppendASCII("chrome/test/data");
-  embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
 
   // chrome::DIR_TEST_DATA isn't going to be setup until after we call
   // ContentMain. However that is after tests' constructors or SetUp methods,
   // which sometimes need it. So just override it.
-  CHECK(PathService::Override(chrome::DIR_TEST_DATA, test_data_dir));
+  CHECK(PathService::Override(chrome::DIR_TEST_DATA,
+                              src_dir.AppendASCII("chrome/test/data")));
 
 #if defined(OS_MACOSX)
   bundle_swizzler_.reset(new ScopedBundleSwizzlerMac);
+#endif
+
+#if defined(USE_ASH)
+  DefaultAshEventGeneratorDelegate::GetInstance();
 #endif
 }
 
@@ -200,6 +213,11 @@ InProcessBrowserTest::~InProcessBrowserTest() {
 void InProcessBrowserTest::SetUp() {
   // Browser tests will create their own g_browser_process later.
   DCHECK(!g_browser_process);
+
+  // Clear the FeatureList instance from base/test/test_suite.cc. Since this is
+  // a browser test, a FeatureList will be registered as part of normal browser
+  // start up in ChromeBrowserMainParts::SetupMetricsAndFieldTrials().
+  base::FeatureList::ClearInstanceForTesting();
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
@@ -229,6 +247,12 @@ void InProcessBrowserTest::SetUp() {
   base::CreateDirectory(log_dir);
   // Disable IME extension loading to avoid many browser tests failures.
   chromeos::input_method::DisableExtensionLoading();
+  if (!command_line->HasSwitch(ash::switches::kAshHostWindowBounds)) {
+    // Adjusting window location & size so that the ash desktop window fits
+    // inside the Xvfb'x defualt resolution.
+    command_line->AppendSwitchASCII(ash::switches::kAshHostWindowBounds,
+                                    "0+0-1280x800");
+  }
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_MACOSX)
@@ -257,8 +281,6 @@ void InProcessBrowserTest::SetUp() {
           switches::kAshBrowserTests)) {
     com_initializer_.reset(new base::win::ScopedCOMInitializer());
     ui::win::CreateATLModuleIfNeeded();
-    if (version >= base::win::VERSION_WIN8)
-      ASSERT_TRUE(win8::MakeTestDefaultBrowserSynchronously());
   }
 #endif
 
@@ -273,17 +295,6 @@ void InProcessBrowserTest::PrepareTestCommandLine(
   // This is a Browser test.
   command_line->AppendSwitchASCII(switches::kTestType, kBrowserTestType);
 
-#if defined(OS_WIN)
-  if (command_line->HasSwitch(switches::kAshBrowserTests)) {
-    command_line->AppendSwitchNative(switches::kViewerLaunchViaAppId,
-                                     win8::test::kDefaultTestAppUserModelId);
-    // Ash already launches with a single browser opened, add kSilentLaunch to
-    // make sure StartupBrowserCreator doesn't attempt to launch a browser on
-    // the native desktop on startup.
-    command_line->AppendSwitch(switches::kSilentLaunch);
-  }
-#endif
-
 #if defined(OS_MACOSX)
   // Explicitly set the path of the binary used for child processes, otherwise
   // they'll try to use browser_tests which doesn't contain ChromeMain.
@@ -293,7 +304,11 @@ void InProcessBrowserTest::PrepareTestCommandLine(
   subprocess_path = subprocess_path.DirName().DirName();
   DCHECK_EQ(subprocess_path.BaseName().value(), "Contents");
   subprocess_path =
+#if defined(VIVALDI_BUILD)
+      subprocess_path.Append("Versions").Append(chrome::kVivaldiVersion);
+#else
       subprocess_path.Append("Versions").Append(chrome::kChromeVersion);
+#endif
   subprocess_path =
       subprocess_path.Append(chrome::kHelperProcessExecutablePath);
   command_line->AppendSwitchPath(switches::kBrowserSubprocessPath,
@@ -440,6 +455,26 @@ bool InProcessBrowserTest::SetUpUserDataDirectory() {
   return true;
 }
 
+#if !defined(OS_MACOSX)
+void InProcessBrowserTest::OpenDevToolsWindow(
+    content::WebContents* web_contents) {
+  ASSERT_FALSE(content::DevToolsAgentHost::HasFor(web_contents));
+  DevToolsWindow::OpenDevToolsWindow(web_contents);
+  ASSERT_TRUE(content::DevToolsAgentHost::HasFor(web_contents));
+}
+
+Browser* InProcessBrowserTest::OpenURLOffTheRecord(Profile* profile,
+                                                   const GURL& url) {
+  chrome::HostDesktopType active_desktop = chrome::GetActiveDesktop();
+  chrome::OpenURLOffTheRecord(profile, url, active_desktop);
+  Browser* browser = chrome::FindTabbedBrowser(
+      profile->GetOffTheRecordProfile(), false, active_desktop);
+  content::TestNavigationObserver observer(
+      browser->tab_strip_model()->GetActiveWebContents());
+  observer.Wait();
+  return browser;
+}
+
 // Creates a browser with a single tab (about:blank), waits for the tab to
 // finish loading and shows the browser.
 Browser* InProcessBrowserTest::CreateBrowser(Profile* profile) {
@@ -476,6 +511,7 @@ Browser* InProcessBrowserTest::CreateBrowserForApp(
   AddBlankTabAndShow(browser);
   return browser;
 }
+#endif  // !defined(OS_MACOSX)
 
 void InProcessBrowserTest::AddBlankTabAndShow(Browser* browser) {
   content::WindowedNotificationObserver observer(
@@ -513,6 +549,8 @@ base::CommandLine InProcessBrowserTest::GetCommandLineForRelaunch() {
 #endif
 
 void InProcessBrowserTest::RunTestOnMainThreadLoop() {
+  AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting();
+
   // Pump startup related events.
   content::RunAllPendingInMessageLoop();
 

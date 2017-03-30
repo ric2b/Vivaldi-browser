@@ -24,23 +24,16 @@ ServiceWorkerScriptCacheMap::ServiceWorkerScriptCacheMap(
 ServiceWorkerScriptCacheMap::~ServiceWorkerScriptCacheMap() {
 }
 
-int64 ServiceWorkerScriptCacheMap::LookupResourceId(const GURL& url) {
+int64_t ServiceWorkerScriptCacheMap::LookupResourceId(const GURL& url) {
   ResourceMap::const_iterator found = resource_map_.find(url);
   if (found == resource_map_.end())
-    return kInvalidServiceWorkerResponseId;
+    return kInvalidServiceWorkerResourceId;
   return found->second.resource_id;
 }
 
-int64 ServiceWorkerScriptCacheMap::LookupResourceSize(const GURL& url) {
-  ResourceMap::const_iterator found = resource_map_.find(url);
-  if (found == resource_map_.end())
-    return kInvalidServiceWorkerResponseId;
-  return found->second.size_bytes;
-}
-
-void ServiceWorkerScriptCacheMap::NotifyStartedCaching(
-    const GURL& url, int64 resource_id) {
-  DCHECK_EQ(kInvalidServiceWorkerResponseId, LookupResourceId(url));
+void ServiceWorkerScriptCacheMap::NotifyStartedCaching(const GURL& url,
+                                                       int64_t resource_id) {
+  DCHECK_EQ(kInvalidServiceWorkerResourceId, LookupResourceId(url));
   DCHECK(owner_->status() == ServiceWorkerVersion::NEW ||
          owner_->status() == ServiceWorkerVersion::INSTALLING)
       << owner_->status();
@@ -48,22 +41,22 @@ void ServiceWorkerScriptCacheMap::NotifyStartedCaching(
     return;  // Our storage has been wiped via DeleteAndStartOver.
   resource_map_[url] =
       ServiceWorkerDatabase::ResourceRecord(resource_id, url, -1);
-  context_->storage()->StoreUncommittedResponseId(resource_id);
+  context_->storage()->StoreUncommittedResourceId(resource_id);
 }
 
 void ServiceWorkerScriptCacheMap::NotifyFinishedCaching(
     const GURL& url,
-    int64 size_bytes,
+    int64_t size_bytes,
     const net::URLRequestStatus& status,
     const std::string& status_message) {
-  DCHECK_NE(kInvalidServiceWorkerResponseId, LookupResourceId(url));
+  DCHECK_NE(kInvalidServiceWorkerResourceId, LookupResourceId(url));
   DCHECK(owner_->status() == ServiceWorkerVersion::NEW ||
          owner_->status() == ServiceWorkerVersion::INSTALLING ||
          owner_->status() == ServiceWorkerVersion::REDUNDANT);
   if (!context_)
     return;  // Our storage has been wiped via DeleteAndStartOver.
   if (!status.is_success()) {
-    context_->storage()->DoomUncommittedResponse(LookupResourceId(url));
+    context_->storage()->DoomUncommittedResource(LookupResourceId(url));
     resource_map_.erase(url);
     if (owner_->script_url() == url) {
       main_script_status_ = status;
@@ -100,7 +93,7 @@ void ServiceWorkerScriptCacheMap::WriteMetadata(
     const net::CompletionCallback& callback) {
   ResourceMap::iterator found = resource_map_.find(url);
   if (found == resource_map_.end() ||
-      found->second.resource_id == kInvalidServiceWorkerResponseId) {
+      found->second.resource_id == kInvalidServiceWorkerResourceId) {
     callback.Run(net::ERR_FILE_NOT_FOUND);
     return;
   }
@@ -114,7 +107,7 @@ void ServiceWorkerScriptCacheMap::WriteMetadata(
   raw_writer->WriteMetadata(
       buffer.get(), data.size(),
       base::Bind(&ServiceWorkerScriptCacheMap::OnMetadataWritten,
-                 weak_factory_.GetWeakPtr(), Passed(&writer), callback));
+                 weak_factory_.GetWeakPtr(), base::Passed(&writer), callback));
 }
 
 void ServiceWorkerScriptCacheMap::ClearMetadata(

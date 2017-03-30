@@ -7,7 +7,12 @@
 
 namespace switches {
 
-// Intentionally empty in case Android WebView needs switches in the future.
+extern const char kDisablePageVisibility[];
+extern const char kWebViewSandboxedRenderer[];
+
+// Please note that if you are adding a flag that is intended for a renderer,
+// you also need to add it into
+// AwContentBrowserClient::AppendExtraCommandLineSwitches.
 
 }  // namespace switches
 

@@ -40,45 +40,18 @@ Polymer((function() {
 Polymer({
   is: 'controller-pairing-page',
 
-  behaviors: [
-    Polymer.NeonSharedElementAnimatableBehavior
-  ],
+  behaviors: [Polymer.NeonAnimatableBehavior],
 
   properties: {
-    sharedElements: {
-      value: function() {
-        return {
-          'top-hero': this.$.top,
-          'bottom-hero': this.$.bottom
-        };
-      }
-    },
-
     animationConfig: {
       value: function() {
         return {
           'entry': [{
-            name: 'hero-animation',
-            id: 'top-hero',
-            toPage: this
-          }, {
-            name: 'hero-animation',
-            id: 'bottom-hero',
-            toPage: this
-          }, {
             name: 'fade-in-animation',
             node: this
           }],
 
           'exit': [{
-            name: 'hero-animation',
-            id: 'top-hero',
-            fromPage: this
-          }, {
-            name: 'hero-animation',
-            id: 'bottom-hero',
-            fromPage: this
-          }, {
             name: 'fade-out-animation',
             node: this
           }]
@@ -142,6 +115,10 @@ Polymer((function() {
       this.commitContextChanges();
     },
 
+    i18n: function(args) {
+      return loadTimeData.getStringF.apply(loadTimeData, args);
+    },
+
     deviceListChanged_: function() {
       this.selectedDevice = this.context.get(CONTEXT_KEY_SELECTED_DEVICE, null);
     },
@@ -157,11 +134,13 @@ Polymer((function() {
     },
 
     getHostEnrollmentStepTitle_: function(domain) {
-      return this.i18n(['enrollmentInProgress', domain]);
+      return this.i18n(['loginControllerPairingScreenEnrollmentInProgress',
+                       domain]);
     },
 
     getSuccessMessage_: function(selectedDevice) {
-      return this.i18n(['successText', selectedDevice]);
+      return this.i18n(['loginControllerPairingScreenSuccessText',
+                       selectedDevice]);
     }
   };
 })());

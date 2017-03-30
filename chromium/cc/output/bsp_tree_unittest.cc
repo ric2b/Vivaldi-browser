@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include <deque>
+
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "cc/base/scoped_ptr_deque.h"
-#include "cc/base/scoped_ptr_vector.h"
 #include "cc/output/bsp_tree.h"
 #include "cc/output/bsp_walk_action.h"
 #include "cc/quads/draw_polygon.h"
@@ -30,7 +32,7 @@ namespace {
 
 class BspTreeTest {
  public:
-  static void RunTest(ScopedPtrDeque<DrawPolygon>* test_polygons,
+  static void RunTest(std::deque<scoped_ptr<DrawPolygon>>* test_polygons,
                       const std::vector<int>& compare_list) {
     BspTree bsp_tree(test_polygons);
 
@@ -113,10 +115,10 @@ TEST(BspTreeTest, NoSplit) {
   scoped_ptr<DrawPolygon> polygon_c(
       CREATE_DRAW_POLYGON(vertices_c, gfx::Vector3dF(0.0f, 0.0f, 1.0f), 2));
 
-  ScopedPtrDeque<DrawPolygon> polygon_list;
-  polygon_list.push_back(polygon_a.Pass());
-  polygon_list.push_back(polygon_b.Pass());
-  polygon_list.push_back(polygon_c.Pass());
+  std::deque<scoped_ptr<DrawPolygon>> polygon_list;
+  polygon_list.push_back(std::move(polygon_a));
+  polygon_list.push_back(std::move(polygon_b));
+  polygon_list.push_back(std::move(polygon_c));
 
   int compare_ids[] = {1, 0, 2};
   std::vector<int> compare_list = INT_VECTOR_FROM_ARRAY(compare_ids);
@@ -141,9 +143,9 @@ TEST(BspTreeTest, BasicSplit) {
   scoped_ptr<DrawPolygon> polygon_b(
       CREATE_DRAW_POLYGON(vertices_b, gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1));
 
-  ScopedPtrDeque<DrawPolygon> polygon_list;
-  polygon_list.push_back(polygon_a.Pass());
-  polygon_list.push_back(polygon_b.Pass());
+  std::deque<scoped_ptr<DrawPolygon>> polygon_list;
+  polygon_list.push_back(std::move(polygon_a));
+  polygon_list.push_back(std::move(polygon_b));
 
   int compare_ids[] = {1, 0, 1};
   std::vector<int> compare_list = INT_VECTOR_FROM_ARRAY(compare_ids);
@@ -170,9 +172,9 @@ TEST(BspTreeTest, QuadOffset) {
   scoped_ptr<DrawPolygon> polygon_b(
       CREATE_DRAW_POLYGON(vertices_b, gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1));
 
-  ScopedPtrDeque<DrawPolygon> polygon_list;
-  polygon_list.push_back(polygon_a.Pass());
-  polygon_list.push_back(polygon_b.Pass());
+  std::deque<scoped_ptr<DrawPolygon>> polygon_list;
+  polygon_list.push_back(std::move(polygon_a));
+  polygon_list.push_back(std::move(polygon_b));
 
   int compare_ids[] = {1, 0};
   std::vector<int> compare_list = INT_VECTOR_FROM_ARRAY(compare_ids);
@@ -199,9 +201,9 @@ TEST(BspTreeTest, QuadOffsetSplit) {
   scoped_ptr<DrawPolygon> polygon_b(
       CREATE_DRAW_POLYGON(vertices_b, gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1));
 
-  ScopedPtrDeque<DrawPolygon> polygon_list;
-  polygon_list.push_back(polygon_b.Pass());
-  polygon_list.push_back(polygon_a.Pass());
+  std::deque<scoped_ptr<DrawPolygon>> polygon_list;
+  polygon_list.push_back(std::move(polygon_b));
+  polygon_list.push_back(std::move(polygon_a));
 
   int compare_ids[] = {0, 1, 0};
   std::vector<int> compare_list = INT_VECTOR_FROM_ARRAY(compare_ids);
@@ -235,10 +237,10 @@ TEST(BspTreeTest, ThreeWaySplit) {
   scoped_ptr<DrawPolygon> polygon_c(
       CREATE_DRAW_POLYGON(vertices_c, gfx::Vector3dF(0.0f, 1.0f, 0.0f), 2));
 
-  ScopedPtrDeque<DrawPolygon> polygon_list;
-  polygon_list.push_back(polygon_a.Pass());
-  polygon_list.push_back(polygon_b.Pass());
-  polygon_list.push_back(polygon_c.Pass());
+  std::deque<scoped_ptr<DrawPolygon>> polygon_list;
+  polygon_list.push_back(std::move(polygon_a));
+  polygon_list.push_back(std::move(polygon_b));
+  polygon_list.push_back(std::move(polygon_c));
 
   int compare_ids[] = {2, 1, 2, 0, 2, 1, 2};
   std::vector<int> compare_list = INT_VECTOR_FROM_ARRAY(compare_ids);
@@ -276,10 +278,10 @@ TEST(BspTreeTest, Coplanar) {
   scoped_ptr<DrawPolygon> polygon_f = polygon_c->CreateCopy();
 
   {
-    ScopedPtrDeque<DrawPolygon> polygon_list;
-    polygon_list.push_back(polygon_a.Pass());
-    polygon_list.push_back(polygon_b.Pass());
-    polygon_list.push_back(polygon_c.Pass());
+    std::deque<scoped_ptr<DrawPolygon>> polygon_list;
+    polygon_list.push_back(std::move(polygon_a));
+    polygon_list.push_back(std::move(polygon_b));
+    polygon_list.push_back(std::move(polygon_c));
 
     int compare_ids[] = {0, 1, 2};
     std::vector<int> compare_list = INT_VECTOR_FROM_ARRAY(compare_ids);
@@ -288,10 +290,10 @@ TEST(BspTreeTest, Coplanar) {
 
   // Now check a different order and ensure we get that back as well
   {
-    ScopedPtrDeque<DrawPolygon> polygon_list;
-    polygon_list.push_back(polygon_f.Pass());
-    polygon_list.push_back(polygon_d.Pass());
-    polygon_list.push_back(polygon_e.Pass());
+    std::deque<scoped_ptr<DrawPolygon>> polygon_list;
+    polygon_list.push_back(std::move(polygon_f));
+    polygon_list.push_back(std::move(polygon_d));
+    polygon_list.push_back(std::move(polygon_e));
 
     int compare_ids[] = {0, 1, 2};
     std::vector<int> compare_list = INT_VECTOR_FROM_ARRAY(compare_ids);
@@ -333,11 +335,11 @@ TEST(BspTreeTest, CoplanarSplit) {
   scoped_ptr<DrawPolygon> polygon_d(
       CREATE_DRAW_POLYGON(vertices_d, gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 3));
 
-  ScopedPtrDeque<DrawPolygon> polygon_list;
-  polygon_list.push_back(polygon_a.Pass());
-  polygon_list.push_back(polygon_b.Pass());
-  polygon_list.push_back(polygon_c.Pass());
-  polygon_list.push_back(polygon_d.Pass());
+  std::deque<scoped_ptr<DrawPolygon>> polygon_list;
+  polygon_list.push_back(std::move(polygon_a));
+  polygon_list.push_back(std::move(polygon_b));
+  polygon_list.push_back(std::move(polygon_c));
+  polygon_list.push_back(std::move(polygon_d));
 
   int compare_ids[] = {3, 0, 1, 2, 3};
   std::vector<int> compare_list = INT_VECTOR_FROM_ARRAY(compare_ids);

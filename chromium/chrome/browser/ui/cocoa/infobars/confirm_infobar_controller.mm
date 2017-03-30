@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/cocoa/infobars/confirm_infobar_controller.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -124,9 +126,9 @@
   [view setMessage:message withFont:font messageColor:[NSColor blackColor]];
   if (linkLength != 0) {
     NSColor* linkColor =
-        gfx::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
+        skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
     [view addLinkRange:NSMakeRange(linkOffset, linkLength)
-              withName:@""
+               withURL:base::SysUTF8ToNSString(delegate->GetLinkURL().spec())
              linkColor:linkColor];
   }
 }
@@ -147,9 +149,9 @@
 
 scoped_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
     scoped_ptr<ConfirmInfoBarDelegate> delegate) {
-  scoped_ptr<InfoBarCocoa> infobar(new InfoBarCocoa(delegate.Pass()));
+  scoped_ptr<InfoBarCocoa> infobar(new InfoBarCocoa(std::move(delegate)));
   base::scoped_nsobject<ConfirmInfoBarController> controller(
       [[ConfirmInfoBarController alloc] initWithInfoBar:infobar.get()]);
   infobar->set_controller(controller);
-  return infobar.Pass();
+  return std::move(infobar);
 }

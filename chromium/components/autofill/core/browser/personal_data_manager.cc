@@ -4,26 +4,29 @@
 
 #include "components/autofill/core/browser/personal_data_manager.h"
 
+#include <stddef.h>
 #include <algorithm>
-#include <functional>
-#include <iterator>
+#include <list>
+#include <map>
+#include <string>
+#include <utility>
 
-#include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/timezone.h"
-#include "base/logging.h"
-#include "base/memory/ref_counted.h"
 #include "base/prefs/pref_service.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/address_i18n.h"
 #include "components/autofill/core/browser/autofill-inl.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
+#include "components/autofill/core/browser/country_data.h"
+#include "components/autofill/core/browser/country_names.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/phone_number.h"
@@ -31,8 +34,11 @@
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/autofill/core/common/autofill_util.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "components/variations/variations_associated_data.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_data.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_formatter.h"
 
@@ -190,19 +196,10 @@ static bool CompareVotes(const std::pair<std::string, int>& a,
   return a.second < b.second;
 }
 
-// Ranks two data models according to their recency of use. Currently this will
-// place all server (Wallet) cards and addresses below all locally saved ones,
-// which is probably not what we want. TODO(estade): figure out relative ranking
-// of server data.
-bool RankByMfu(const AutofillDataModel* a, const AutofillDataModel* b) {
-  if (a->use_count() != b->use_count())
-    return a->use_count() > b->use_count();
-
-  // Ties are broken by MRU.
-  return a->use_date() > b->use_date();
-}
-
 }  // namespace
+
+const char kFrecencyFieldTrialName[] = "AutofillProfileOrderByFrecency";
+const char kFrecencyFieldTrialLimitParam[] = "limit";
 
 PersonalDataManager::PersonalDataManager(const std::string& app_locale)
     : database_(NULL),
@@ -220,10 +217,14 @@ PersonalDataManager::PersonalDataManager(const std::string& app_locale)
 void PersonalDataManager::Init(scoped_refptr<AutofillWebDataService> database,
                                PrefService* pref_service,
                                AccountTrackerService* account_tracker,
+                               SigninManagerBase* signin_manager,
                                bool is_off_the_record) {
+  CountryNames::SetLocaleString(app_locale_);
+
   database_ = database;
   SetPrefService(pref_service);
   account_tracker_ = account_tracker;
+  signin_manager_ = signin_manager;
   is_off_the_record_ = is_off_the_record;
 
   if (!is_off_the_record_)
@@ -281,8 +282,7 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
                               &server_profiles_);
 
         if (!server_profiles_.empty()) {
-          std::string account_id =
-              pref_service_->GetString(::prefs::kGoogleServicesAccountId);
+          std::string account_id = signin_manager_->GetAuthenticatedAccountId();
           base::string16 email =
               base::UTF8ToUTF16(
                   account_tracker_->GetAccountInfo(account_id).email);
@@ -335,6 +335,7 @@ void PersonalDataManager::RemoveObserver(
 
 bool PersonalDataManager::ImportFormData(
     const FormStructure& form,
+    bool should_return_local_card,
     scoped_ptr<CreditCard>* imported_credit_card) {
   scoped_ptr<AutofillProfile> imported_profile(new AutofillProfile);
   scoped_ptr<CreditCard> local_imported_credit_card(new CreditCard);
@@ -442,8 +443,11 @@ bool PersonalDataManager::ImportFormData(
     local_imported_credit_card.reset();
   }
 
-  // Don't import if we already have this info.
-  // Don't present an infobar if we have already saved this card number.
+  // Don't import if we already have this info. Don't present a prompt if we
+  // have already saved this card number, unless should_return_local_card is
+  // true which indicates that upload is enabled. In this case, it's useful to
+  // present the upload prompt to the user to promote the card from a local card
+  // to a synced server card.
   bool merged_credit_card = false;
   if (local_imported_credit_card) {
     for (CreditCard* card : local_credit_cards_) {
@@ -454,7 +458,8 @@ bool PersonalDataManager::ImportFormData(
                                            app_locale_)) {
         merged_credit_card = true;
         UpdateCreditCard(card_copy);
-        local_imported_credit_card.reset();
+        if (!should_return_local_card)
+          local_imported_credit_card.reset();
         break;
       }
     }
@@ -478,7 +483,7 @@ bool PersonalDataManager::ImportFormData(
     // We always save imported profiles.
     SaveImportedProfile(*imported_profile);
   }
-  *imported_credit_card = local_imported_credit_card.Pass();
+  *imported_credit_card = std::move(local_imported_credit_card);
 
   if (imported_profile.get() || *imported_credit_card || merged_credit_card)
     return true;
@@ -494,7 +499,7 @@ void PersonalDataManager::RecordUseOf(const AutofillDataModel& data_model) {
 
   CreditCard* credit_card = GetCreditCardByGUID(data_model.guid());
   if (credit_card) {
-    credit_card->RecordUse();
+    credit_card->RecordAndLogUse();
 
     if (credit_card->record_type() == CreditCard::LOCAL_CARD)
       database_->UpdateCreditCard(*credit_card);
@@ -507,7 +512,7 @@ void PersonalDataManager::RecordUseOf(const AutofillDataModel& data_model) {
 
   AutofillProfile* profile = GetProfileByGUID(data_model.guid());
   if (profile) {
-    profile->RecordUse();
+    profile->RecordAndLogUse();
 
     if (profile->record_type() == AutofillProfile::LOCAL_PROFILE)
       database_->UpdateAutofillProfile(*profile);
@@ -785,7 +790,14 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
       AutofillProfile::CanonicalizeProfileString(field_contents);
 
   std::vector<AutofillProfile*> profiles = GetProfiles(true);
-  std::sort(profiles.begin(), profiles.end(), RankByMfu);
+
+  // Rank the suggestions by frecency (see AutofillDataModel for details).
+  base::Time comparison_time = base::Time::Now();
+  std::sort(profiles.begin(), profiles.end(),
+            [comparison_time](const AutofillDataModel* a,
+                              const AutofillDataModel* b) {
+              return a->CompareFrecency(b, comparison_time);
+            });
 
   std::vector<Suggestion> suggestions;
   // Match based on a prefix search.
@@ -796,13 +808,26 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
       continue;
     base::string16 value_canon =
         AutofillProfile::CanonicalizeProfileString(value);
-    if (base::StartsWith(value_canon, field_contents_canon,
-                         base::CompareCase::SENSITIVE)) {
-      // Prefix match, add suggestion.
+    bool prefix_matched_suggestion = base::StartsWith(
+        value_canon, field_contents_canon, base::CompareCase::SENSITIVE);
+    if (prefix_matched_suggestion ||
+        FieldIsSuggestionSubstringStartingOnTokenBoundary(value, field_contents,
+                                                          false)) {
       matched_profiles.push_back(profile);
       suggestions.push_back(Suggestion(value));
       suggestions.back().backend_id = profile->guid();
+      suggestions.back().match = prefix_matched_suggestion
+                                     ? Suggestion::PREFIX_MATCH
+                                     : Suggestion::SUBSTRING_MATCH;
     }
+  }
+
+  // Prefix matches should precede other token matches.
+  if (IsFeatureSubstringMatchEnabled()) {
+    std::stable_sort(suggestions.begin(), suggestions.end(),
+                     [](const Suggestion& a, const Suggestion& b) {
+                       return a.match < b.match;
+                     });
   }
 
   // Don't show two suggestions if one is a subset of the other.
@@ -846,6 +871,14 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
   for (size_t i = 0; i < labels.size(); i++)
     unique_suggestions[i].label = labels[i];
 
+  // Get the profile suggestions limit value set for the current frecency field
+  // trial group or SIZE_MAX if no limit is defined.
+  std::string limit_str = variations::GetVariationParamValue(
+      kFrecencyFieldTrialName, kFrecencyFieldTrialLimitParam);
+  size_t limit = base::StringToSizeT(limit_str, &limit) ? limit : SIZE_MAX;
+
+  unique_suggestions.resize(std::min(unique_suggestions.size(), limit));
+
   return unique_suggestions;
 }
 
@@ -856,6 +889,7 @@ std::vector<Suggestion> PersonalDataManager::GetCreditCardSuggestions(
     return std::vector<Suggestion>();
 
   std::list<const CreditCard*> cards_to_suggest;
+  std::list<const CreditCard*> substring_matched_cards;
   base::string16 field_contents_lower = base::i18n::ToLower(field_contents);
   for (const CreditCard* credit_card : GetCreditCards()) {
     // The value of the stored data for this field type in the |credit_card|.
@@ -878,20 +912,40 @@ std::vector<Suggestion> PersonalDataManager::GetCreditCardSuggestions(
            field_contents.size() >= 6)) {
         continue;
       }
-    } else if (!base::StartsWith(creditcard_field_lower, field_contents_lower,
-                                 base::CompareCase::SENSITIVE)) {
-      continue;
+      cards_to_suggest.push_back(credit_card);
+    } else if (base::StartsWith(creditcard_field_lower, field_contents_lower,
+                                base::CompareCase::SENSITIVE)) {
+      cards_to_suggest.push_back(credit_card);
+    } else if (FieldIsSuggestionSubstringStartingOnTokenBoundary(
+                   creditcard_field_lower, field_contents_lower, true)) {
+      substring_matched_cards.push_back(credit_card);
     }
-
-    cards_to_suggest.push_back(credit_card);
   }
 
+  // Rank the suggestions by frecency (see AutofillDataModel for details).
+  base::Time comparison_time = base::Time::Now();
+  cards_to_suggest.sort([comparison_time](const AutofillDataModel* a,
+                                          const AutofillDataModel* b) {
+    return a->CompareFrecency(b, comparison_time);
+  });
+
+  // Prefix matches should precede other token matches.
+  if (IsFeatureSubstringMatchEnabled()) {
+    substring_matched_cards.sort([comparison_time](const AutofillDataModel* a,
+                                                   const AutofillDataModel* b) {
+      return a->CompareFrecency(b, comparison_time);
+    });
+    cards_to_suggest.insert(cards_to_suggest.end(),
+                            substring_matched_cards.begin(),
+                            substring_matched_cards.end());
+  }
+
+  // TODO(crbug.com/576300) Refactor the credit card deduping logic.
   // De-dupe card suggestions. Full server cards shadow local cards, and
   // local cards shadow masked server cards.
   for (auto outer_it = cards_to_suggest.begin();
        outer_it != cards_to_suggest.end();
        ++outer_it) {
-
     if ((*outer_it)->record_type() == CreditCard::FULL_SERVER_CARD) {
       for (auto inner_it = cards_to_suggest.begin();
            inner_it != cards_to_suggest.end();) {
@@ -910,8 +964,6 @@ std::vector<Suggestion> PersonalDataManager::GetCreditCardSuggestions(
       }
     }
   }
-
-  cards_to_suggest.sort(RankByMfu);
 
   std::vector<Suggestion> suggestions;
   for (const CreditCard* credit_card : cards_to_suggest) {
@@ -1018,13 +1070,28 @@ std::string PersonalDataManager::MergeProfile(
       // verified profile, just drop it.
       matching_profile_found = true;
       guid = existing_profile->guid();
+
+      // We set the modification date so that immediate requests for profiles
+      // will properly reflect the fact that this profile has been modified
+      // recently. After writing to the database and refreshing the local copies
+      // the profile will have a very slightly newer time reflecting what's
+      // actually stored in the database.
+      existing_profile->set_modification_date(base::Time::Now());
+
+      existing_profile->RecordAndLogUse();
     }
     merged_profiles->push_back(*existing_profile);
   }
 
   // If the new profile was not merged with an existing one, add it to the list.
-  if (!matching_profile_found)
+  if (!matching_profile_found) {
     merged_profiles->push_back(new_profile);
+    // Similar to updating merged profiles above, set the modification date on
+    // new profiles.
+    merged_profiles->back().set_modification_date(base::Time::Now());
+    AutofillMetrics::LogProfileActionOnFormSubmitted(
+        AutofillMetrics::NEW_PROFILE_CREATED);
+  }
 
   return guid;
 }
@@ -1036,23 +1103,22 @@ bool PersonalDataManager::IsCountryOfInterest(const std::string& country_code)
   const std::vector<AutofillProfile*>& profiles = web_profiles();
   std::list<std::string> country_codes;
   for (size_t i = 0; i < profiles.size(); ++i) {
-    country_codes.push_back(base::StringToLowerASCII(base::UTF16ToASCII(
+    country_codes.push_back(base::ToLowerASCII(base::UTF16ToASCII(
         profiles[i]->GetRawInfo(ADDRESS_HOME_COUNTRY))));
   }
 
   std::string timezone_country = CountryCodeForCurrentTimezone();
   if (!timezone_country.empty())
-    country_codes.push_back(base::StringToLowerASCII(timezone_country));
+    country_codes.push_back(base::ToLowerASCII(timezone_country));
 
   // Only take the locale into consideration if all else fails.
   if (country_codes.empty()) {
-    country_codes.push_back(base::StringToLowerASCII(
+    country_codes.push_back(base::ToLowerASCII(
         AutofillCountry::CountryCodeForLocale(app_locale())));
   }
 
   return std::find(country_codes.begin(), country_codes.end(),
-                   base::StringToLowerASCII(country_code)) !=
-                       country_codes.end();
+                   base::ToLowerASCII(country_code)) != country_codes.end();
 }
 
 const std::string& PersonalDataManager::GetDefaultCountryCodeForNewAddress()
@@ -1096,33 +1162,28 @@ void PersonalDataManager::SetProfiles(std::vector<AutofillProfile>* profiles) {
 
   // Any profiles that are not in the new profile list should be removed from
   // the web database.
-  for (std::vector<AutofillProfile*>::const_iterator iter =
-           web_profiles_.begin();
-       iter != web_profiles_.end(); ++iter) {
-    if (!FindByGUID<AutofillProfile>(*profiles, (*iter)->guid()))
-      database_->RemoveAutofillProfile((*iter)->guid());
+  for (const AutofillProfile* it : web_profiles_) {
+    if (!FindByGUID<AutofillProfile>(*profiles, it->guid()))
+      database_->RemoveAutofillProfile(it->guid());
   }
 
   // Update the web database with the existing profiles.
-  for (std::vector<AutofillProfile>::iterator iter = profiles->begin();
-       iter != profiles->end(); ++iter) {
-    if (FindByGUID<AutofillProfile>(web_profiles_, iter->guid()))
-      database_->UpdateAutofillProfile(*iter);
+  for (const AutofillProfile& it : *profiles) {
+    if (FindByGUID<AutofillProfile>(web_profiles_, it.guid()))
+      database_->UpdateAutofillProfile(it);
   }
 
   // Add the new profiles to the web database.  Don't add a duplicate.
-  for (std::vector<AutofillProfile>::iterator iter = profiles->begin();
-       iter != profiles->end(); ++iter) {
-    if (!FindByGUID<AutofillProfile>(web_profiles_, iter->guid()) &&
-        !FindByContents(web_profiles_, *iter))
-      database_->AddAutofillProfile(*iter);
+  for (const AutofillProfile& it : *profiles) {
+    if (!FindByGUID<AutofillProfile>(web_profiles_, it.guid()) &&
+        !FindByContents(web_profiles_, it))
+      database_->AddAutofillProfile(it);
   }
 
   // Copy in the new profiles.
   web_profiles_.clear();
-  for (std::vector<AutofillProfile>::iterator iter = profiles->begin();
-       iter != profiles->end(); ++iter) {
-    web_profiles_.push_back(new AutofillProfile(*iter));
+  for (const AutofillProfile& it : *profiles) {
+    web_profiles_.push_back(new AutofillProfile(it));
   }
 
   // Refresh our local cache and send notifications to observers.
@@ -1184,13 +1245,6 @@ void PersonalDataManager::LoadProfiles() {
   pending_server_profiles_query_ = database_->GetServerProfiles(this);
 }
 
-// Win, Linux, Android and iOS implementations do nothing. Mac implementation
-// fills in the contents of |auxiliary_profiles_|.
-#if defined(OS_IOS) || !defined(OS_MACOSX)
-void PersonalDataManager::LoadAuxiliaryProfiles(bool record_metrics) const {
-}
-#endif
-
 void PersonalDataManager::LoadCreditCards() {
   if (!database_.get()) {
     NOTREACHED();
@@ -1221,23 +1275,18 @@ std::string PersonalDataManager::SaveImportedProfile(
   if (is_off_the_record_)
     return std::string();
 
-  // Don't save a web profile if the data in the profile is a subset of an
-  // auxiliary profile...
-  for (AutofillProfile* profile : auxiliary_profiles_) {
-    if (imported_profile.IsSubsetOf(*profile, app_locale_))
+  // Don't save a web profile if the data in the profile is a subset of a
+  // server profile, but do record the fact that it was used.
+  for (const AutofillProfile* profile : server_profiles_) {
+    if (imported_profile.IsSubsetOf(*profile, app_locale_)) {
+      RecordUseOf(*profile);
       return profile->guid();
-  }
-
-  // ...or server profile.
-  for (AutofillProfile* profile : server_profiles_) {
-    if (imported_profile.IsSubsetOf(*profile, app_locale_))
-      return profile->guid();
+    }
   }
 
   std::vector<AutofillProfile> profiles;
-  std::string guid =
-      MergeProfile(imported_profile, web_profiles_.get(), app_locale_,
-                   &profiles);
+  std::string guid = MergeProfile(imported_profile, web_profiles_.get(),
+                                  app_locale_, &profiles);
   SetProfiles(&profiles);
   return guid;
 }
@@ -1292,10 +1341,10 @@ std::string PersonalDataManager::MostCommonCountryCodeFromProfiles() const {
   // TODO(estade): can we make this GetProfiles() instead? It seems to cause
   // errors in tests on mac trybots. See http://crbug.com/57221
   const std::vector<AutofillProfile*>& profiles = web_profiles();
-  std::vector<std::string> country_codes;
-  AutofillCountry::GetAvailableCountries(&country_codes);
+  const std::vector<std::string>& country_codes =
+      CountryDataMap::GetInstance()->country_codes();
   for (size_t i = 0; i < profiles.size(); ++i) {
-    std::string country_code = base::StringToUpperASCII(base::UTF16ToASCII(
+    std::string country_code = base::ToUpperASCII(base::UTF16ToASCII(
         profiles[i]->GetRawInfo(ADDRESS_HOME_COUNTRY)));
 
     if (std::find(country_codes.begin(), country_codes.end(), country_code) !=
@@ -1327,23 +1376,9 @@ void PersonalDataManager::EnabledPrefChanged() {
 
 const std::vector<AutofillProfile*>& PersonalDataManager::GetProfiles(
     bool record_metrics) const {
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  bool use_auxiliary_profiles =
-      pref_service_->GetBoolean(prefs::kAutofillUseMacAddressBook);
-#else
-  bool use_auxiliary_profiles =
-      pref_service_->GetBoolean(prefs::kAutofillAuxiliaryProfilesEnabled);
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
-
   profiles_.clear();
   profiles_.insert(profiles_.end(), web_profiles().begin(),
                    web_profiles().end());
-  if (use_auxiliary_profiles) {
-    LoadAuxiliaryProfiles(record_metrics);
-    profiles_.insert(
-        profiles_.end(), auxiliary_profiles_.begin(),
-        auxiliary_profiles_.end());
-  }
   if (IsExperimentalWalletIntegrationEnabled() &&
       pref_service_->GetBoolean(prefs::kAutofillWalletImportEnabled)) {
     profiles_.insert(

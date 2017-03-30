@@ -4,6 +4,8 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 
+#include <algorithm>
+#include <map>
 #include <vector>
 
 #include "base/bind.h"
@@ -15,13 +17,14 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_client_config_parser.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/data_reduction_proxy/core/common/version.h"
-#include "components/data_reduction_proxy/proto/client_config.pb.h"
+#include "components/variations/variations_associated_data.h"
 #include "crypto/random.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
@@ -47,7 +50,6 @@ const char kSecureSessionHeaderOption[] = "s";
 const char kBuildNumberHeaderOption[] = "b";
 const char kPatchNumberHeaderOption[] = "p";
 const char kClientHeaderOption[] = "c";
-const char kLoFiHeaderOption[] = "q";
 const char kExperimentsOption[] = "exp";
 
 // The empty version for the authentication protocol. Currently used by
@@ -73,29 +75,6 @@ bool DataReductionProxyRequestOptions::IsKeySetOnCommandLine() {
       *base::CommandLine::ForCurrentProcess();
   return command_line.HasSwitch(
       data_reduction_proxy::switches::kDataReductionProxyKey);
-}
-
-// static
-std::string DataReductionProxyRequestOptions::CreateLocalSessionKey(
-    const std::string& session,
-    const std::string& credentials) {
-  return base::StringPrintf("%s|%s", session.c_str(), credentials.c_str());
-}
-
-// static
-bool DataReductionProxyRequestOptions::ParseLocalSessionKey(
-    const std::string& session_key,
-    std::string* session,
-    std::string* credentials) {
-  std::vector<std::string> auth_values;
-  base::SplitString(session_key, '|', &auth_values);
-  if (auth_values.size() == 2) {
-    *session = auth_values[0];
-    *credentials = auth_values[1];
-    return true;
-  }
-
-  return false;
 }
 
 DataReductionProxyRequestOptions::DataReductionProxyRequestOptions(
@@ -145,12 +124,12 @@ void DataReductionProxyRequestOptions::GetChromiumBuildAndPatch(
     const std::string& version,
     std::string* build,
     std::string* patch) const {
-  std::vector<std::string> version_parts;
-  base::SplitString(version, '.', &version_parts);
+  std::vector<base::StringPiece> version_parts = base::SplitStringPiece(
+      version, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (version_parts.size() != 4)
     return;
-  *build = version_parts[2];
-  *patch = version_parts[3];
+  version_parts[2].CopyToString(build);
+  version_parts[3].CopyToString(patch);
 }
 
 void DataReductionProxyRequestOptions::UpdateVersion() {
@@ -158,50 +137,33 @@ void DataReductionProxyRequestOptions::UpdateVersion() {
   RegenerateRequestHeaderValue();
 }
 
-void DataReductionProxyRequestOptions::MayRegenerateHeaderBasedOnLoFi(
-    const net::URLRequest* request) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (!data_reduction_proxy_config_)
-    return;
-
-  bool lofi_now_enabled =
-      !(request && request->load_flags() & net::LOAD_BYPASS_CACHE) &&
-      data_reduction_proxy_config_->ShouldUseLoFiHeaderForRequests();
-
-  // Lo-Fi was not enabled, but now is. Add the header option.
-  if (lofi_.empty() && lofi_now_enabled) {
-    lofi_ = "low";
-    RegenerateRequestHeaderValue();
-    return;
-  }
-
-  // Lo-Fi was enabled, but no longer is. Remove the header option.
-  if (!lofi_.empty() && !lofi_now_enabled) {
-    lofi_ = std::string();
-    RegenerateRequestHeaderValue();
-    return;
-  }
-}
-
 void DataReductionProxyRequestOptions::UpdateExperiments() {
   std::string experiments =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           data_reduction_proxy::switches::kDataReductionProxyExperiment);
-  if (experiments.empty())
-    return;
-  base::StringTokenizer experiment_tokenizer(experiments, ", ");
-  experiment_tokenizer.set_quote_chars("\"");
-  while (experiment_tokenizer.GetNext()) {
-    if (!experiment_tokenizer.token().empty())
-      experiments_.push_back(experiment_tokenizer.token());
+  if (!experiments.empty()) {
+    base::StringTokenizer experiment_tokenizer(experiments, ", ");
+    experiment_tokenizer.set_quote_chars("\"");
+    while (experiment_tokenizer.GetNext()) {
+      if (!experiment_tokenizer.token().empty())
+        experiments_.push_back(experiment_tokenizer.token());
+    }
+  } else {
+    AddExperimentFromFieldTrial();
   }
   RegenerateRequestHeaderValue();
 }
 
+void DataReductionProxyRequestOptions::AddExperimentFromFieldTrial() {
+  std::string server_experiment = variations::GetVariationParamValue(
+      params::GetServerExperimentsFieldTrialName(), "exp");
+  if (!server_experiment.empty())
+    experiments_.push_back(server_experiment);
+}
+
 // static
 base::string16 DataReductionProxyRequestOptions::AuthHashForSalt(
-    int64 salt,
+    int64_t salt,
     const std::string& key) {
   std::string salted_key =
       base::StringPrintf("%lld%s%lld",
@@ -221,7 +183,6 @@ void DataReductionProxyRequestOptions::RandBytes(void* output,
 }
 
 void DataReductionProxyRequestOptions::MaybeAddRequestHeader(
-    net::URLRequest* request,
     const net::ProxyServer& proxy_server,
     net::HttpRequestHeaders* request_headers) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -229,7 +190,7 @@ void DataReductionProxyRequestOptions::MaybeAddRequestHeader(
     return;
   if (proxy_server.is_direct())
     return;
-  MaybeAddRequestHeaderImpl(request, proxy_server.host_port_pair(), false,
+  MaybeAddRequestHeaderImpl(proxy_server.host_port_pair(), false,
                             request_headers);
 }
 
@@ -237,17 +198,15 @@ void DataReductionProxyRequestOptions::MaybeAddProxyTunnelRequestHandler(
     const net::HostPortPair& proxy_server,
     net::HttpRequestHeaders* request_headers) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  MaybeAddRequestHeaderImpl(nullptr, proxy_server, true, request_headers);
+  MaybeAddRequestHeaderImpl(proxy_server, true, request_headers);
 }
 
 void DataReductionProxyRequestOptions::SetHeader(
-    const net::URLRequest* request,
     net::HttpRequestHeaders* headers) {
   base::Time now = Now();
   // Authorization credentials must be regenerated if they are expired.
   if (!use_assigned_credentials_ && (now > credentials_expiration_time_))
     UpdateCredentials();
-  MayRegenerateHeaderBasedOnLoFi(request);
   const char kChromeProxyHeader[] = "Chrome-Proxy";
   std::string header_value;
   if (headers->HasHeader(kChromeProxyHeader)) {
@@ -265,10 +224,9 @@ void DataReductionProxyRequestOptions::ComputeCredentials(
     std::string* credentials) const {
   DCHECK(session);
   DCHECK(credentials);
-  int64 timestamp =
-      (now - base::Time::UnixEpoch()).InMilliseconds() / 1000;
+  int64_t timestamp = (now - base::Time::UnixEpoch()).InMilliseconds() / 1000;
 
-  int32 rand[3];
+  int32_t rand[3];
   RandBytes(rand, 3 * sizeof(rand[0]));
   *session = base::StringPrintf("%lld-%u-%u-%u",
                                 static_cast<long long>(timestamp),
@@ -294,32 +252,6 @@ void DataReductionProxyRequestOptions::SetKeyOnIO(const std::string& key) {
     key_ = key;
     UpdateCredentials();
   }
-}
-
-void DataReductionProxyRequestOptions::PopulateConfigResponse(
-    ClientConfig* config) const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  std::string session;
-  std::string credentials;
-  base::Time now = Now();
-  base::Time expiration_time = now + base::TimeDelta::FromHours(24);
-  ComputeCredentials(now, &session, &credentials);
-  config->set_session_key(CreateLocalSessionKey(session, credentials));
-  config_parser::TimetoTimestamp(expiration_time,
-                                 config->mutable_expire_time());
-}
-
-void DataReductionProxyRequestOptions::SetCredentials(
-    const std::string& session,
-    const std::string& credentials) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  session_ = session;
-  credentials_ = credentials;
-  secure_session_.clear();
-  // Force skipping of credential regeneration. It should be handled by the
-  // caller.
-  use_assigned_credentials_ = true;
-  RegenerateRequestHeaderValue();
 }
 
 void DataReductionProxyRequestOptions::SetSecureSession(
@@ -364,7 +296,6 @@ const std::string& DataReductionProxyRequestOptions::GetSecureSession() const {
 }
 
 void DataReductionProxyRequestOptions::MaybeAddRequestHeaderImpl(
-    const net::URLRequest* request,
     const net::HostPortPair& proxy_server,
     bool expect_ssl,
     net::HttpRequestHeaders* request_headers) {
@@ -373,7 +304,7 @@ void DataReductionProxyRequestOptions::MaybeAddRequestHeaderImpl(
   if (data_reduction_proxy_config_->IsDataReductionProxy(proxy_server, NULL) &&
       data_reduction_proxy_config_->UsingHTTPTunnel(proxy_server) ==
           expect_ssl) {
-    SetHeader(request, request_headers);
+    SetHeader(request_headers);
   }
 }
 
@@ -393,12 +324,10 @@ void DataReductionProxyRequestOptions::RegenerateRequestHeaderValue() {
     headers.push_back(FormatOption(kBuildNumberHeaderOption, build_));
     headers.push_back(FormatOption(kPatchNumberHeaderOption, patch_));
   }
-  if (!lofi_.empty())
-    headers.push_back(FormatOption(kLoFiHeaderOption, lofi_));
   for (const auto& experiment : experiments_)
     headers.push_back(FormatOption(kExperimentsOption, experiment));
 
-  header_value_ = JoinString(headers, ", ");
+  header_value_ = base::JoinString(headers, ", ");
 }
 
 }  // namespace data_reduction_proxy

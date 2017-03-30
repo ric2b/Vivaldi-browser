@@ -4,9 +4,13 @@
 
 #include "chrome/browser/ui/settings_window_manager.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -73,7 +77,7 @@ class SettingsWindowManagerTest : public InProcessBrowserTest {
                    base::Unretained(this),
                    run_loop.QuitClosure()),
         base::string16(),
-        base::string16(),
+        std::string(),
         std::string());
     run_loop.Run();
 
@@ -116,13 +120,7 @@ class SettingsWindowManagerTest : public InProcessBrowserTest {
 };
 
 
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_OpenSettingsWindow DISABLED_OpenSettingsWindow
-#else
-#define MAYBE_OpenSettingsWindow OpenSettingsWindow
-#endif
-IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, MAYBE_OpenSettingsWindow) {
+IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, OpenSettingsWindow) {
   // Open a settings window.
   ShowSettingsForProfile(browser()->profile());
   Browser* settings_browser =
@@ -153,13 +151,7 @@ IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, MAYBE_OpenSettingsWindow) {
 }
 
 #if !defined(OS_CHROMEOS)
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_SettingsWindowMultiProfile DISABLED_SettingsWindowMultiProfile
-#else
-#define MAYBE_SettingsWindowMultiProfile SettingsWindowMultiProfile
-#endif
-IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, MAYBE_SettingsWindowMultiProfile) {
+IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, SettingsWindowMultiProfile) {
   Profile* test_profile = CreateTestProfile();
   ASSERT_TRUE(test_profile);
 
@@ -186,13 +178,7 @@ IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, MAYBE_SettingsWindowMultiProfi
 }
 #endif
 
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_OpenChromePages DISABLED_OpenChromePages
-#else
-#define MAYBE_OpenChromePages OpenChromePages
-#endif
-IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, MAYBE_OpenChromePages) {
+IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, OpenChromePages) {
   EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
 
   // History should open in the existing browser window.

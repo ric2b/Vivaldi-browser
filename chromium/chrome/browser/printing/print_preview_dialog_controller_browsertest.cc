@@ -4,19 +4,23 @@
 
 #include "base/bind_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
+#include "chrome/browser/task_management/task_management_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/printing/common/print_messages.h"
@@ -26,6 +30,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "ipc/ipc_message_macros.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
 using content::WebContents;
@@ -146,7 +151,7 @@ void CheckPdfPluginForRenderFrame(content::RenderFrameHost* frame) {
 
 class PrintPreviewDialogControllerBrowserTest : public InProcessBrowserTest {
  public:
-  PrintPreviewDialogControllerBrowserTest() : initiator_(NULL) {}
+  PrintPreviewDialogControllerBrowserTest() : initiator_(nullptr) {}
   ~PrintPreviewDialogControllerBrowserTest() override {}
 
   WebContents* initiator() {
@@ -190,7 +195,7 @@ class PrintPreviewDialogControllerBrowserTest : public InProcessBrowserTest {
 
   void TearDownOnMainThread() override {
     cloned_tab_observer_.reset();
-    initiator_ = NULL;
+    initiator_ = nullptr;
   }
 
   RequestPrintPreviewObserver* request_preview_dialog_observer() {
@@ -211,9 +216,8 @@ class PrintPreviewDialogControllerBrowserTest : public InProcessBrowserTest {
 #else
 #define MAYBE_NavigateFromInitiatorTab NavigateFromInitiatorTab
 #endif
-// tomas@vivaldi.com - disabled test (VB-7468)
 IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
-                       DISABLED_NavigateFromInitiatorTab) {
+                       MAYBE_NavigateFromInitiatorTab) {
   // Print for the first time.
   PrintPreview();
 
@@ -248,9 +252,8 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
 #else
 #define MAYBE_ReloadInitiatorTab ReloadInitiatorTab
 #endif
-// tomas@vivaldi.com - disabled test (VB-7468)
 IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
-                       DISABLED_ReloadInitiatorTab) {
+                       MAYBE_ReloadInitiatorTab) {
   // Print for the first time.
   PrintPreview();
 
@@ -278,9 +281,8 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
 
 // Test to verify that after print preview works even when the PDF plugin is
 // disabled for webpages.
-// tomas@vivaldi.com - disabled test (VB-7468)
 IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
-                       DISABLED_PdfPluginDisabled) {
+                       PdfPluginDisabled) {
   // Make sure plugins are loaded.
   {
     base::RunLoop run_loop;
@@ -333,3 +335,63 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   // Make sure all the frames in the dialog has access to the PDF plugin.
   preview_dialog->ForEachFrame(base::Bind(&CheckPdfPluginForRenderFrame));
 }
+
+#if defined(ENABLE_TASK_MANAGER)
+
+namespace {
+
+base::string16 GetExpectedPrefix() {
+  return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_PRINT_PREFIX,
+                                    base::string16());
+}
+
+const std::vector<task_management::WebContentsTag*>& GetTrackedTags() {
+  return task_management::WebContentsTagsManager::GetInstance()->
+      tracked_tags();
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
+                       TaskManagementTest) {
+  // This test starts with two tabs open.
+  EXPECT_EQ(2U, GetTrackedTags().size());
+
+  PrintPreview();
+  EXPECT_EQ(3U, GetTrackedTags().size());
+
+  // Create a task manager and expect the pre-existing print previews are
+  // provided.
+  task_management::MockWebContentsTaskManager task_manager;
+  EXPECT_TRUE(task_manager.tasks().empty());
+  task_manager.StartObserving();
+  EXPECT_EQ(3U, task_manager.tasks().size());
+  const task_management::Task* pre_existing_task = task_manager.tasks().back();
+  EXPECT_EQ(task_management::Task::RENDERER, pre_existing_task->GetType());
+  const base::string16 pre_existing_title = pre_existing_task->title();
+  const base::string16 expected_prefix = GetExpectedPrefix();
+  EXPECT_TRUE(base::StartsWith(pre_existing_title,
+                               expected_prefix,
+                               base::CompareCase::INSENSITIVE_ASCII));
+
+  // Navigating away from the current page in the current tab for which a print
+  // preview is displayed will cancel the print preview and hence the task
+  // manger shouldn't show a printing task.
+  ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
+  EXPECT_EQ(2U, GetTrackedTags().size());
+  EXPECT_EQ(2U, task_manager.tasks().size());
+
+  // Now start another print preview after the had already been created and
+  // validated that a corresponding task is reported.
+  PrintPreview();
+  EXPECT_EQ(3U, GetTrackedTags().size());
+  EXPECT_EQ(3U, task_manager.tasks().size());
+  const task_management::Task* task = task_manager.tasks().back();
+  EXPECT_EQ(task_management::Task::RENDERER, task->GetType());
+  const base::string16 title = task->title();
+  EXPECT_TRUE(base::StartsWith(title,
+                               expected_prefix,
+                               base::CompareCase::INSENSITIVE_ASCII));
+}
+
+}  // namespace
+
+#endif  // defined(ENABLE_TASK_MANAGER)

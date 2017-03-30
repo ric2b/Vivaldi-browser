@@ -57,9 +57,8 @@ class LayerControlView : public views::View {
     DisplayManager* display_manager = Shell::GetInstance()->display_manager();
     DisplayInfo info = display_manager->GetDisplayInfo(display.id());
     float ui_scale = info.GetEffectiveUIScale();
-    gfx::SizeF pixel_size = display.size();
-    pixel_size.Scale(1.0f / ui_scale);
-    gfx::Size rounded_size = gfx::ToFlooredSize(pixel_size);
+    gfx::Size rounded_size =
+        gfx::ScaleToFlooredSize(display.size(), 1.f / ui_scale);
     DCHECK_EQ(1, child_count());
     views::View* child = child_at(0);
     child->SetBounds(0, 0, rounded_size.width(), rounded_size.height());
@@ -142,21 +141,6 @@ void DesktopBackgroundView::OnPaint(gfx::Canvas* canvas) {
     return;
   }
 
-  gfx::NativeView native_view = GetWidget()->GetNativeView();
-  gfx::Display display = gfx::Screen::GetScreenFor(native_view)->
-      GetDisplayNearestWindow(native_view);
-
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  DisplayInfo display_info = display_manager->GetDisplayInfo(display.id());
-  float scaling = display_info.GetEffectiveUIScale();
-  if (scaling <= 1.0f)
-    scaling = 1.0f;
-  // Allow scaling up to the UI scaling.
-  // TODO(oshima): Create separate layer that fits to the image and then
-  // scale to avoid artifacts and be more efficient when clipped.
-  gfx::Rect wallpaper_rect(
-      0, 0, wallpaper.width() * scaling, wallpaper.height() * scaling);
-
   if (wallpaper_layout == WALLPAPER_LAYOUT_CENTER_CROPPED) {
     // The dimension with the smallest ratio must be cropped, the other one
     // is preserved. Both are set in gfx::Size cropped_size.
@@ -193,6 +177,9 @@ void DesktopBackgroundView::OnPaint(gfx::Canvas* canvas) {
   } else {
     // Fill with black to make sure that the entire area is opaque.
     canvas->FillRect(GetLocalBounds(), SK_ColorBLACK);
+    float image_scale = canvas->image_scale();
+    gfx::Rect wallpaper_rect(0, 0, wallpaper.width() / image_scale,
+                             wallpaper.height() / image_scale);
     // All other are simply centered, and not scaled (but may be clipped).
     canvas->DrawImageInt(
         wallpaper,

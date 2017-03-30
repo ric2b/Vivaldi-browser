@@ -10,22 +10,31 @@ assert(is_android)
 component("android") {
   output_name = "ui_android"
   sources = [
+    "animation_utils.h",
+    "edge_effect.cc",
+    "edge_effect.h",
+    "edge_effect_base.cc",
+    "edge_effect_base.h",
+    "edge_effect_l.cc",
+    "edge_effect_l.h",
+    "overscroll_glow.cc",
+    "overscroll_glow.h",
+    "overscroll_refresh.cc",
+    "overscroll_refresh.h",
+    "resources/crushed_sprite_resource.cc",
+    "resources/crushed_sprite_resource.h",
     "resources/resource_manager.cc",
     "resources/resource_manager.h",
     "resources/resource_manager_impl.cc",
     "resources/resource_manager_impl.h",
-    "resources/ui_resource_android.cc",
-    "resources/ui_resource_android.h",
-    "resources/ui_resource_client_android.h",
-    "resources/ui_resource_provider.cc",
     "resources/ui_resource_provider.h",
     "ui_android_export.h",
     "ui_android_jni_registrar.cc",
     "ui_android_jni_registrar.h",
-    "view_android.cc",
     "view_android.h",
     "window_android.cc",
     "window_android.h",
+    "window_android_compositor.cc",
     "window_android_compositor.h",
     "window_android_observer.h",
   ]
@@ -33,12 +42,13 @@ component("android") {
   defines = [ "UI_ANDROID_IMPLEMENTATION" ]
 
   deps = [
+    ":java_enums_srcjar",
+    ":ui_android_jni_headers",
     "//base",
     "//cc",
     "//skia",
     "//ui/gfx",
     "//ui/gfx/geometry",
-    ":ui_android_jni_headers",
   ]
 }
 
@@ -59,16 +69,6 @@ java_cpp_enum("java_enums_srcjar") {
     "../gfx/android/java_bitmap.h",
     "resources/resource_manager.h",
     "resources/system_ui_resource_type.h",
-  ]
-  outputs = [
-    "org/chromium/ui/WindowOpenDisposition.java",
-    "org/chromium/ui/base/PageTransition.java",
-    "org/chromium/ui/base/HoverType.java",
-    "org/chromium/ui/base/PointerType.java",
-    "org/chromium/ui/base/ime/TextInputType.java",
-    "org/chromium/ui/gfx/BitmapFormat.java",
-    "org/chromium/ui/resources/AndroidResourceType.java",
-    "org/chromium/ui/resources/SystemUIResourceType.java",
   ]
 }
 
@@ -143,8 +143,8 @@ android_library("ui_javatests") {
   DEPRECATED_java_in_dir = "javatests/src"
   testonly = true
   deps = [
-    ":ui_java_resources",
     ":ui_java",
+    ":ui_java_resources",
     "//base:base_java",
     "//base:base_java_test_support",
   ]
@@ -152,19 +152,23 @@ android_library("ui_javatests") {
 
 test("ui_android_unittests") {
   sources = [
+    "overscroll_refresh_unittest.cc",
     "resources/resource_manager_impl_unittest.cc",
     "run_all_unittests.cc",
   ]
   deps = [
     ":android",
+    ":java_enums_srcjar",
+    ":ui_java",
     "//base",
     "//base/test:test_support",
     "//cc",
+    "//cc:test_support",
     "//skia",
+    "//testing/gmock",
     "//testing/gtest",
     "//ui/base",
     "//ui/gfx",
     "//ui/resources:ui_test_pak",
   ]
-  apk_deps = [ ":ui_java" ]
 }

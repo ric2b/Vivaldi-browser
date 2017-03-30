@@ -4,16 +4,18 @@
 
 #include "chrome/browser/sync/sync_global_error.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/sync/profile_sync_service_mock.h"
-#include "chrome/browser/sync/sync_error_controller.h"
+#include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/sync/sync_global_error_factory.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/sync_driver/sync_error_controller.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
@@ -61,7 +63,7 @@ class SyncGlobalErrorTest : public BrowserWithTestWindowTest {
   ~SyncGlobalErrorTest() override {}
 
   void SetUp() override {
-    profile_.reset(ProfileSyncServiceMock::MakeSignedInTestingProfile());
+    profile_ = MakeSignedInTestingProfile();
 
     BrowserWithTestWindowTest::SetUp();
   }
@@ -76,7 +78,7 @@ class SyncGlobalErrorTest : public BrowserWithTestWindowTest {
 
 // Utility function to test that SyncGlobalError behaves correctly for the given
 // error condition.
-void VerifySyncGlobalErrorResult(NiceMock<ProfileSyncServiceMock>* service,
+void VerifySyncGlobalErrorResult(ProfileSyncServiceMock* service,
                                  FakeLoginUIService* login_ui_service,
                                  Browser* browser,
                                  SyncErrorController* error,
@@ -118,11 +120,12 @@ void VerifySyncGlobalErrorResult(NiceMock<ProfileSyncServiceMock>* service,
   }
 }
 
-} // namespace
+}  // namespace
 
 // Test that SyncGlobalError shows an error if a passphrase is required.
 TEST_F(SyncGlobalErrorTest, PassphraseGlobalError) {
-  NiceMock<ProfileSyncServiceMock> service(profile());
+  ProfileSyncServiceMock service(
+      CreateProfileSyncServiceParamsForTest(profile()));
 
   FakeLoginUIService* login_ui_service = static_cast<FakeLoginUIService*>(
       LoginUIServiceFactory::GetInstance()->SetTestingFactoryAndUse(
@@ -131,7 +134,9 @@ TEST_F(SyncGlobalErrorTest, PassphraseGlobalError) {
   login_ui_service->SetLoginUI(&login_ui);
 
   SyncErrorController error(&service);
-  SyncGlobalError global_error(&error, &service);
+  SyncGlobalError global_error(
+      GlobalErrorServiceFactory::GetForProfile(profile()), login_ui_service,
+      &error, &service);
 
   browser_sync::SyncBackendHost::Status status;
   EXPECT_CALL(service, QueryDetailedSyncStatus(_))

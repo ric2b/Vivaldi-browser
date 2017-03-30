@@ -4,12 +4,20 @@
 
 #include "chrome/browser/download/download_commands.h"
 
+#include <stdint.h>
+
+#include "base/base64.h"
+#include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_crx_util.h"
 #include "chrome/browser/download/download_extensions.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_prefs.h"
+#include "chrome/browser/image_decoder.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/download_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -18,8 +26,10 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/mime_util/mime_util.h"
 #include "grit/theme_resources.h"
 #include "net/base/url_util.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -27,6 +37,87 @@
 #include "chrome/browser/download/download_target_determiner.h"
 #include "chrome/browser/ui/pdf/adobe_reader_info_win.h"
 #endif
+
+namespace {
+
+// Maximum size (compressed) of image to be copied to the clipboard. If the
+// image exceeds this size, the image is not copied.
+const int64_t kMaxImageClipboardSize = 20 * 1024 * 1024;  // 20 MB
+
+class ImageClipboardCopyManager : public ImageDecoder::ImageRequest {
+ public:
+  static void Start(const base::FilePath& file_path) {
+    new ImageClipboardCopyManager(file_path);
+  }
+
+ private:
+  explicit ImageClipboardCopyManager(const base::FilePath& file_path)
+      : file_path_(file_path) {
+    // Constructor must be called in the UI thread.
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    content::BrowserThread::GetBlockingPool()->PostTask(
+        FROM_HERE,
+        base::Bind(&ImageClipboardCopyManager::StartDecoding,
+                   base::Unretained(this)));
+  }
+
+  void StartDecoding() {
+    DCHECK(content::BrowserThread::GetBlockingPool()->
+        RunsTasksOnCurrentThread());
+
+    // Re-check the filesize since the file may be modified after downloaded.
+    int64_t filesize;
+    if (!GetFileSize(file_path_, &filesize) ||
+        filesize > kMaxImageClipboardSize) {
+      OnFailedBeforeDecoding();
+      return;
+    }
+
+    std::string data;
+    bool ret = base::ReadFileToString(file_path_, &data);
+    if (!ret || data.empty()) {
+      OnFailedBeforeDecoding();
+      return;
+    }
+
+    // Note: An image over 128MB (uncompressed) may fail, due to the limitation
+    // of IPC message size.
+    ImageDecoder::Start(this, data);
+  }
+
+  void OnImageDecoded(const SkBitmap& decoded_image) override {
+    // This method is called on the same thread as constructor (the UI thread).
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    ui::ScopedClipboardWriter scw(ui::CLIPBOARD_TYPE_COPY_PASTE);
+    scw.Reset();
+
+    if (!decoded_image.empty() && !decoded_image.isNull())
+      scw.WriteImage(decoded_image);
+
+    delete this;
+  }
+
+  void OnDecodeImageFailed() override {
+    // This method is called on the same thread as constructor (the UI thread).
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    delete this;
+  }
+
+  void OnFailedBeforeDecoding() {
+    // We don't need to cancel the job, since it shouldn't be started here.
+
+    task_runner()->DeleteSoon(FROM_HERE, this);
+  }
+
+  const base::FilePath file_path_;
+
+  DISALLOW_IMPLICIT_CONSTRUCTORS(ImageClipboardCopyManager);
+};
+
+}  // anonymous namespace
 
 DownloadCommands::DownloadCommands(content::DownloadItem* download_item)
     : download_item_(download_item) {
@@ -38,7 +129,7 @@ int DownloadCommands::GetCommandIconId(Command command) const {
     case PAUSE:
       return IDR_DOWNLOAD_NOTIFICATION_MENU_PAUSE;
     case RESUME:
-      return IDR_DOWNLOAD_NOTIFICATION_MENU_RESUME;
+      return IDR_DOWNLOAD_NOTIFICATION_MENU_DOWNLOAD;
     case SHOW_IN_FOLDER:
       return IDR_DOWNLOAD_NOTIFICATION_MENU_FOLDER;
     case KEEP:
@@ -46,14 +137,14 @@ int DownloadCommands::GetCommandIconId(Command command) const {
     case DISCARD:
       return IDR_DOWNLOAD_NOTIFICATION_MENU_DELETE;
     case CANCEL:
-      // TODO(yoshiki): This is a temporary image for Download Notification
-      // feature behind the flag. We have to replace the image with proper one
-      // before the feature launch. http://crbug.com/468559
-      return IDR_DOWNLOAD_NOTIFICATION_MENU_DELETE;
+      return IDR_DOWNLOAD_NOTIFICATION_MENU_CANCEL;
+    case LEARN_MORE_SCANNING:
+      return IDR_NOTIFICATION_WELCOME_LEARN_MORE;
+    case COPY_TO_CLIPBOARD:
+      return IDR_DOWNLOAD_NOTIFICATION_MENU_COPY_TO_CLIPBOARD;
     case OPEN_WHEN_COMPLETE:
     case ALWAYS_OPEN_TYPE:
     case PLATFORM_OPEN:
-    case LEARN_MORE_SCANNING:
     case LEARN_MORE_INTERRUPTED:
       return -1;
   }
@@ -100,6 +191,9 @@ bool DownloadCommands::IsCommandEnabled(Command command) const {
       return download_item_->CanResume() &&
              (download_item_->IsPaused() ||
               download_item_->GetState() != content::DownloadItem::IN_PROGRESS);
+    case COPY_TO_CLIPBOARD:
+      return (download_item_->GetState() == content::DownloadItem::COMPLETE &&
+              download_item_->GetReceivedBytes() <= kMaxImageClipboardSize);
     case DISCARD:
     case KEEP:
     case LEARN_MORE_SCANNING:
@@ -135,6 +229,7 @@ bool DownloadCommands::IsCommandChecked(Command command) const {
     case KEEP:
     case LEARN_MORE_SCANNING:
     case LEARN_MORE_INTERRUPTED:
+    case COPY_TO_CLIPBOARD:
       return false;
   }
   return false;
@@ -191,7 +286,7 @@ void DownloadCommands::ExecuteCommand(Command command) {
 #if defined(FULL_SAFE_BROWSING)
       using safe_browsing::DownloadProtectionService;
 
-      SafeBrowsingService* sb_service =
+      safe_browsing::SafeBrowsingService* sb_service =
           g_browser_process->safe_browsing_service();
       DownloadProtectionService* protection_service =
           (sb_service ? sb_service->download_protection_service() : nullptr);
@@ -214,6 +309,9 @@ void DownloadCommands::ExecuteCommand(Command command) {
       break;
     case RESUME:
       download_item_->Resume();
+      break;
+    case COPY_TO_CLIPBOARD:
+      CopyFileAsImageToClipboard();
       break;
   }
 }
@@ -247,4 +345,29 @@ bool DownloadCommands::CanOpenPdfInSystemViewer() const {
 #elif defined(OS_MACOSX) || defined(OS_LINUX)
   return IsDownloadPdf();
 #endif
+}
+
+void DownloadCommands::CopyFileAsImageToClipboard() const {
+  if (download_item_->GetState() != content::DownloadItem::COMPLETE ||
+      download_item_->GetReceivedBytes() > kMaxImageClipboardSize) {
+      return;
+  }
+
+  // TODO(yoshiki): Refine the code by combining the common logic with the
+  // preview in DownloadItemNotification.
+  std::string mime = download_item_->GetMimeType();
+  if (!mime_util::IsSupportedImageMimeType(mime)) {
+    base::FilePath::StringType extension_with_dot =
+        download_item_->GetTargetFilePath().FinalExtension();
+    if (extension_with_dot.empty() ||
+        !net::GetWellKnownMimeTypeFromExtension(extension_with_dot.substr(1),
+                                                &mime) ||
+        !mime_util::IsSupportedImageMimeType(mime)) {
+      // It seems a non-image file.
+      return;
+    }
+  }
+
+  base::FilePath file_path = download_item_->GetFullPath();
+  ImageClipboardCopyManager::Start(file_path);
 }

@@ -5,9 +5,12 @@
 #ifndef CONTENT_PUBLIC_COMMON_CHILD_PROCESS_HOST_H_
 #define CONTENT_PUBLIC_COMMON_CHILD_PROCESS_HOST_H_
 
+#include <stdint.h>
+
 #include "base/files/scoped_file.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
+#include "ipc/attachment_broker_privileged.h"
 #include "ipc/ipc_channel_proxy.h"
 
 namespace base {
@@ -15,7 +18,6 @@ class FilePath;
 }
 
 namespace IPC {
-class AttachmentBroker;
 class MessageFilter;
 }
 
@@ -33,6 +35,11 @@ class CONTENT_EXPORT ChildProcessHost : public IPC::Sender {
   // This is a value never returned as the unique id of any child processes of
   // any kind, including the values returned by RenderProcessHost::GetID().
   static int kInvalidUniqueID;
+
+  // This value is used as the tracing id of the browser process for identifying
+  // cross-process shared memory segments when tracing.
+  // Note: In single-process mode all the clients of tracing will use this id.
+  static uint64_t kBrowserTracingProcessId;
 
   // Used to create a child process host. The delegate must outlive this object.
   static ChildProcessHost* Create(ChildProcessHostDelegate* delegate);
@@ -52,24 +59,7 @@ class CONTENT_EXPORT ChildProcessHost : public IPC::Sender {
     // gdb). In this case, you'd use GetChildPath to get the real executable
     // file name, and then prepend the GDB command to the command line.
     CHILD_ALLOW_SELF = 1 << 0,
-#elif defined(OS_MACOSX)
-
-    // Requests that the child run in a process that does not have the
-    // PIE (position-independent executable) bit set, effectively disabling
-    // ASLR. For process types that need to allocate a large contiguous
-    // region, ASLR may not leave a large enough "hole" for the purpose. This
-    // option should be used sparingly, and only when absolutely necessary.
-    // This option is currently incompatible with CHILD_ALLOW_HEAP_EXECUTION.
-    CHILD_NO_PIE = 1 << 1,
-
-    // Requests that the child run in a process that does not protect the
-    // heap against execution. Normally, heap pages may be made executable
-    // with mprotect, so this mode should be used sparingly. It is intended
-    // for processes that may host plugins that expect an executable heap
-    // without having to call mprotect. This option is currently incompatible
-    // with CHILD_NO_PIE.
-    CHILD_ALLOW_HEAP_EXECUTION = 1 << 2,
-#endif
+#endif  // defined(OS_LINUX)
   };
 
   // Returns the pathname to be used for a child process.  If a subprocess
@@ -77,16 +67,11 @@ class CONTENT_EXPORT ChildProcessHost : public IPC::Sender {
   // the default child process pathname will be returned.  On most platforms,
   // this will be the same as the currently-executing process.
   //
-  // The |flags| argument accepts one or more flags such as CHILD_ALLOW_SELF
-  // and CHILD_ALLOW_HEAP_EXECUTION as defined above. Pass only CHILD_NORMAL
-  // if none of these special behaviors are required.
+  // The |flags| argument accepts one or more flags such as CHILD_ALLOW_SELF.
+  // Pass only CHILD_NORMAL if none of these special behaviors are required.
   //
   // On failure, returns an empty FilePath.
   static base::FilePath GetChildPath(int flags);
-
-  // Returns an AttachmentBroker used to broker attachments of IPC messages to
-  // child processes.
-  static IPC::AttachmentBroker* GetAttachmentBroker();
 
   // Send the shutdown message to the child process.
   // Does not check with the delegate's CanShutdown.

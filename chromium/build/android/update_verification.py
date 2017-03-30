@@ -26,22 +26,22 @@ and ask the user to verify that all of the app data was preserved.
 
 import argparse
 import logging
-import os
 import sys
-import time
 
-from pylib import constants
-from pylib.device import device_errors
-from pylib.device import device_utils
-from pylib.utils import apk_helper
-from pylib.utils import run_tests_helper
+import devil_chromium
+
+from devil.android import apk_helper
+from devil.android import device_blacklist
+from devil.android import device_errors
+from devil.android import device_utils
+from devil.utils import run_tests_helper
 
 def CreateAppData(device, old_apk, app_data, package_name):
   device.Install(old_apk)
   raw_input('Set the application state. Once ready, press enter and '
             'select "Backup my data" on the device.')
   device.adb.Backup(app_data, packages=[package_name])
-  logging.critical('Application data saved to %s' % app_data)
+  logging.critical('Application data saved to %s', app_data)
 
 def TestUpdate(device, old_apk, new_apk, app_data, package_name):
   device.Install(old_apk)
@@ -64,6 +64,7 @@ def main():
       description="Script to do semi-automated upgrade testing.")
   parser.add_argument('-v', '--verbose', action='count',
                       help='Print verbose log information.')
+  parser.add_argument('--blacklist-file', help='Device blacklist JSON file.')
   command_parsers = parser.add_subparsers(dest='command')
 
   subparser = command_parsers.add_parser('create_app_data')
@@ -88,11 +89,17 @@ def main():
   args = parser.parse_args()
   run_tests_helper.SetLogLevel(args.verbose)
 
-  devices = device_utils.DeviceUtils.HealthyDevices()
+  devil_chromium.Initialize()
+
+  blacklist = (device_blacklist.Blacklist(args.blacklist_file)
+               if args.blacklist_file
+               else None)
+
+  devices = device_utils.DeviceUtils.HealthyDevices(blacklist)
   if not devices:
     raise device_errors.NoDevicesError()
   device = devices[0]
-  logging.info('Using device %s for testing.' % str(device))
+  logging.info('Using device %s for testing.', str(device))
 
   package_name = (args.package_name if args.package_name
                   else apk_helper.GetPackageName(args.old_apk))

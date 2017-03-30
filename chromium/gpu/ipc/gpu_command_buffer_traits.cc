@@ -4,7 +4,11 @@
 
 #include "gpu/ipc/gpu_command_buffer_traits.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "gpu/command_buffer/common/mailbox_holder.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/common/value_state.h"
 
 // Generate param traits write methods.
@@ -31,19 +35,17 @@ void ParamTraits<gpu::CommandBuffer::State> ::Write(Message* m,
                                                     const param_type& p) {
   WriteParam(m, p.get_offset);
   WriteParam(m, p.token);
-  WriteParam(m, static_cast<int32>(p.error));
+  WriteParam(m, p.error);
   WriteParam(m, p.generation);
 }
 
 bool ParamTraits<gpu::CommandBuffer::State> ::Read(const Message* m,
                                                    base::PickleIterator* iter,
                                                    param_type* p) {
-  int32 temp;
   if (ReadParam(m, iter, &p->get_offset) &&
       ReadParam(m, iter, &p->token) &&
-      ReadParam(m, iter, &temp) &&
+      ReadParam(m, iter, &p->error) &&
       ReadParam(m, iter, &p->generation)) {
-    p->error = static_cast<gpu::error::Error>(temp);
     return true;
   } else {
     return false;
@@ -53,6 +55,48 @@ bool ParamTraits<gpu::CommandBuffer::State> ::Read(const Message* m,
 void ParamTraits<gpu::CommandBuffer::State> ::Log(const param_type& p,
                                                   std::string* l) {
   l->append("<CommandBuffer::State>");
+}
+
+void ParamTraits<gpu::SyncToken>::Write(Message* m, const param_type& p) {
+  DCHECK(!p.HasData() || p.verified_flush());
+
+  WriteParam(m, p.verified_flush());
+  WriteParam(m, p.namespace_id());
+  WriteParam(m, p.command_buffer_id());
+  WriteParam(m, p.release_count());
+}
+
+bool ParamTraits<gpu::SyncToken>::Read(const Message* m,
+                                       base::PickleIterator* iter,
+                                       param_type* p) {
+  bool verified_flush = false;
+  gpu::CommandBufferNamespace namespace_id =
+      gpu::CommandBufferNamespace::INVALID;
+  uint64_t command_buffer_id = 0;
+  uint64_t release_count = 0;
+
+  if (!ReadParam(m, iter, &verified_flush) ||
+      !ReadParam(m, iter, &namespace_id) ||
+      !ReadParam(m, iter, &command_buffer_id) ||
+      !ReadParam(m, iter, &release_count)) {
+    return false;
+  }
+
+  p->Set(namespace_id, 0, command_buffer_id, release_count);
+  if (p->HasData()) {
+    if (!verified_flush)
+      return false;
+    p->SetVerifyFlush();
+  }
+
+  return true;
+}
+
+void ParamTraits<gpu::SyncToken>::Log(const param_type& p, std::string* l) {
+  *l +=
+      base::StringPrintf("[%d:%llX] %llu", static_cast<int>(p.namespace_id()),
+                         static_cast<unsigned long long>(p.command_buffer_id()),
+                         static_cast<unsigned long long>(p.release_count()));
 }
 
 void ParamTraits<gpu::Mailbox>::Write(Message* m, const param_type& p) {
@@ -77,23 +121,23 @@ void ParamTraits<gpu::Mailbox>::Log(const param_type& p, std::string* l) {
 
 void ParamTraits<gpu::MailboxHolder>::Write(Message* m, const param_type& p) {
   WriteParam(m, p.mailbox);
+  WriteParam(m, p.sync_token);
   WriteParam(m, p.texture_target);
-  WriteParam(m, p.sync_point);
 }
 
 bool ParamTraits<gpu::MailboxHolder> ::Read(const Message* m,
                                             base::PickleIterator* iter,
                                             param_type* p) {
-  if (!ReadParam(m, iter, &p->mailbox) ||
-      !ReadParam(m, iter, &p->texture_target) ||
-      !ReadParam(m, iter, &p->sync_point))
+  if (!ReadParam(m, iter, &p->mailbox) || !ReadParam(m, iter, &p->sync_token) ||
+      !ReadParam(m, iter, &p->texture_target))
     return false;
   return true;
 }
 
 void ParamTraits<gpu::MailboxHolder>::Log(const param_type& p, std::string* l) {
-  ParamTraits<gpu::Mailbox>::Log(p.mailbox, l);
-  *l += base::StringPrintf(":%04x@%d", p.texture_target, p.sync_point);
+  LogParam(p.mailbox, l);
+  LogParam(p.sync_token, l);
+  *l += base::StringPrintf(":%04x@", p.texture_target);
 }
 
 void ParamTraits<gpu::ValueState>::Write(Message* m, const param_type& p) {
@@ -115,11 +159,11 @@ bool ParamTraits<gpu::ValueState> ::Read(const Message* m,
 
 void ParamTraits<gpu::ValueState>::Log(const param_type& p, std::string* l) {
   l->append("<ValueState (");
-  for (size_t i = 0; i < sizeof(p.int_value); ++i)
-    *l += base::StringPrintf("%i ", p.int_value[i]);
+  for (int value : p.int_value)
+    *l += base::StringPrintf("%i ", value);
   l->append(" int values ");
-  for (size_t i = 0; i < sizeof(p.float_value); ++i)
-    *l += base::StringPrintf("%f ", p.float_value[i]);
+  for (float value : p.float_value)
+    *l += base::StringPrintf("%f ", value);
   l->append(" float values)>");
 }
 

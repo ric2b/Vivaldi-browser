@@ -5,9 +5,11 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_GESTURE_EVENT_QUEUE_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_GESTURE_EVENT_QUEUE_H_
 
+#include <stddef.h>
+
 #include <deque>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
@@ -192,7 +194,7 @@ class CONTENT_EXPORT GestureEventQueue {
   GestureQueue coalesced_gesture_events_;
 
   // Timer to release a previously deferred gesture event.
-  base::OneShotTimer<GestureEventQueue> debounce_deferring_timer_;
+  base::OneShotTimer debounce_deferring_timer_;
 
   // Queue of events that have been deferred for debounce.
   GestureQueue debouncing_deferral_queue_;

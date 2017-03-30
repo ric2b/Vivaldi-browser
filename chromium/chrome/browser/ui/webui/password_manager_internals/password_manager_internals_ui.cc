@@ -29,6 +29,9 @@ content::WebUIDataSource* CreatePasswordManagerInternalsHTMLSource() {
   source->AddResourcePath(
       "password_manager_internals.js",
       IDR_PASSWORD_MANAGER_INTERNALS_PASSWORD_MANAGER_INTERNALS_JS);
+  source->AddResourcePath(
+      "password_manager_internals.css",
+      IDR_PASSWORD_MANAGER_INTERNALS_PASSWORD_MANAGER_INTERNALS_CSS);
   source->SetDefaultResource(
       IDR_PASSWORD_MANAGER_INTERNALS_PASSWORD_MANAGER_INTERNALS_HTML);
   return source;
@@ -60,8 +63,13 @@ void PasswordManagerInternalsUI::DidStopLoading() {
   PasswordManagerInternalsService* service =
       PasswordManagerInternalsServiceFactory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()));
+  // No service means the WebUI is displayed in Incognito.
+  base::FundamentalValue is_incognito(!service);
+  web_ui()->CallJavascriptFunction("notifyAboutIncognito", is_incognito);
+
   if (service) {
     registered_with_logging_service_ = true;
+
     std::string past_logs(service->RegisterReceiver(this));
     LogSavePasswordProgress(past_logs);
   }
@@ -69,7 +77,7 @@ void PasswordManagerInternalsUI::DidStopLoading() {
 
 void PasswordManagerInternalsUI::LogSavePasswordProgress(
     const std::string& text) {
-  if (!registered_with_logging_service_)
+  if (!registered_with_logging_service_ || text.empty())
     return;
   std::string no_quotes(text);
   std::replace(no_quotes.begin(), no_quotes.end(), '"', ' ');

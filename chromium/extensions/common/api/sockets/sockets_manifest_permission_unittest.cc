@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 #include <set>
+#include <tuple>
 
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/pickle.h"
 #include "base/values.h"
 #include "extensions/common/api/sockets/sockets_manifest_permission.h"
@@ -34,14 +36,14 @@ static void AssertEmptyPermission(const SocketsManifestPermission* permission) {
   EXPECT_TRUE(permission);
   EXPECT_EQ(std::string(extensions::manifest_keys::kSockets), permission->id());
   EXPECT_EQ(permission->id(), permission->name());
-  EXPECT_FALSE(permission->HasMessages());
+  EXPECT_TRUE(permission->GetPermissions().empty());
   EXPECT_EQ(0u, permission->entries().size());
 }
 
 static scoped_ptr<base::Value> ParsePermissionJSON(const std::string& json) {
   scoped_ptr<base::Value> result(base::JSONReader::Read(json));
   EXPECT_TRUE(result) << "Invalid JSON string: " << json;
-  return result.Pass();
+  return result;
 }
 
 static scoped_ptr<SocketsManifestPermission> PermissionFromValue(
@@ -50,7 +52,7 @@ static scoped_ptr<SocketsManifestPermission> PermissionFromValue(
   scoped_ptr<SocketsManifestPermission> permission(
       SocketsManifestPermission::FromValue(value, &error16));
   EXPECT_TRUE(permission) << "Error parsing Value into permission: " << error16;
-  return permission.Pass();
+  return permission;
 }
 
 static scoped_ptr<SocketsManifestPermission> PermissionFromJSON(
@@ -67,10 +69,8 @@ struct CheckFormatEntry {
   // operators <, == are needed by container std::set and algorithms
   // std::set_includes and std::set_differences.
   bool operator<(const CheckFormatEntry& rhs) const {
-    if (operation_type == rhs.operation_type)
-      return host_pattern < rhs.host_pattern;
-
-    return operation_type < rhs.operation_type;
+    return std::tie(operation_type, host_pattern) <
+           std::tie(rhs.operation_type, rhs.host_pattern);
   }
 
   bool operator==(const CheckFormatEntry& rhs) const {

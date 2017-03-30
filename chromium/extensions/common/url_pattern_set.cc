@@ -25,35 +25,47 @@ const char kInvalidURLPatternError[] = "Invalid url pattern '*'";
 }  // namespace
 
 // static
-void URLPatternSet::CreateDifference(const URLPatternSet& set1,
-                                     const URLPatternSet& set2,
-                                     URLPatternSet* out) {
-  out->patterns_ = base::STLSetDifference<std::set<URLPattern> >(
-      set1.patterns_, set2.patterns_);
+URLPatternSet URLPatternSet::CreateDifference(const URLPatternSet& set1,
+                                              const URLPatternSet& set2) {
+  return URLPatternSet(base::STLSetDifference<std::set<URLPattern>>(
+      set1.patterns_, set2.patterns_));
 }
 
 // static
-void URLPatternSet::CreateIntersection(const URLPatternSet& set1,
-                                       const URLPatternSet& set2,
-                                       URLPatternSet* out) {
-  out->patterns_ = base::STLSetIntersection<std::set<URLPattern> >(
-      set1.patterns_, set2.patterns_);
+URLPatternSet URLPatternSet::CreateIntersection(const URLPatternSet& set1,
+                                                const URLPatternSet& set2) {
+  return URLPatternSet(base::STLSetIntersection<std::set<URLPattern>>(
+      set1.patterns_, set2.patterns_));
+}
+
+URLPatternSet URLPatternSet::CreateSemanticIntersection(
+    const URLPatternSet& set1,
+    const URLPatternSet& set2) {
+  URLPatternSet result;
+  for (const URLPattern& pattern : set1) {
+    if (set2.ContainsPattern(pattern))
+      result.patterns_.insert(pattern);
+  }
+  for (const URLPattern& pattern : set2) {
+    if (set1.ContainsPattern(pattern))
+      result.patterns_.insert(pattern);
+  }
+  return result;
 }
 
 // static
-void URLPatternSet::CreateUnion(const URLPatternSet& set1,
-                                const URLPatternSet& set2,
-                                URLPatternSet* out) {
-  out->patterns_ = base::STLSetUnion<std::set<URLPattern> >(
-      set1.patterns_, set2.patterns_);
+URLPatternSet URLPatternSet::CreateUnion(const URLPatternSet& set1,
+                                         const URLPatternSet& set2) {
+  return URLPatternSet(
+      base::STLSetUnion<std::set<URLPattern>>(set1.patterns_, set2.patterns_));
 }
 
 // static
-void URLPatternSet::CreateUnion(const std::vector<URLPatternSet>& sets,
-                                URLPatternSet* out) {
-  out->ClearPatterns();
+URLPatternSet URLPatternSet::CreateUnion(
+    const std::vector<URLPatternSet>& sets) {
+  URLPatternSet result;
   if (sets.empty())
-    return;
+    return result;
 
   // N-way union algorithm is basic O(nlog(n)) merge algorithm.
   //
@@ -61,24 +73,21 @@ void URLPatternSet::CreateUnion(const std::vector<URLPatternSet>& sets,
   // the input.
   std::vector<URLPatternSet> working;
   for (size_t i = 0; i < sets.size(); i += 2) {
-    if (i + 1 < sets.size()) {
-      URLPatternSet u;
-      URLPatternSet::CreateUnion(sets[i], sets[i + 1], &u);
-      working.push_back(u);
-    } else {
+    if (i + 1 < sets.size())
+      working.push_back(CreateUnion(sets[i], sets[i + 1]));
+    else
       working.push_back(sets[i]);
-    }
   }
 
   for (size_t skip = 1; skip < working.size(); skip *= 2) {
     for (size_t i = 0; i < (working.size() - skip); i += skip) {
-      URLPatternSet u;
-      URLPatternSet::CreateUnion(working[i], working[i + skip], &u);
+      URLPatternSet u = CreateUnion(working[i], working[i + skip]);
       working[i].patterns_.swap(u.patterns_);
     }
   }
 
-  out->patterns_.swap(working[0].patterns_);
+  result.patterns_.swap(working[0].patterns_);
+  return result;
 }
 
 URLPatternSet::URLPatternSet() {}
@@ -222,7 +231,7 @@ scoped_ptr<base::ListValue> URLPatternSet::ToValue() const {
   for (URLPatternSet::const_iterator i = patterns_.begin();
        i != patterns_.end(); ++i)
     value->AppendIfNotPresent(new base::StringValue(i->GetAsString()));
-  return value.Pass();
+  return value;
 }
 
 bool URLPatternSet::Populate(const std::vector<std::string>& patterns,
@@ -257,8 +266,7 @@ scoped_ptr<std::vector<std::string> > URLPatternSet::ToStringVector() const {
        ++i) {
     value->push_back(i->GetAsString());
   }
-  std::unique(value->begin(), value->end());
-  return value.Pass();
+  return value;
 }
 
 bool URLPatternSet::Populate(const base::ListValue& value,

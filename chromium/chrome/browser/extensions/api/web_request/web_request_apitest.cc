@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -10,12 +12,13 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/login/login_prompt.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/extension_system.h"
@@ -97,6 +100,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestComplex) {
       message_;
 }
 
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestTypes) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_types.html")) << message_;
+}
+
 // Flaky (sometimes crash): http://crbug.com/140976
 IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
                        DISABLED_WebRequestAuthRequired) {
@@ -108,8 +116,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
 }
 
 // This test times out regularly on win_rel trybots. See http://crbug.com/122178
-// TODO(vivaldi) Reenable mac for Vivaldi
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN)
 #define MAYBE_WebRequestBlocking DISABLED_WebRequestBlocking
 #else
 #define MAYBE_WebRequestBlocking WebRequestBlocking
@@ -153,9 +160,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, MAYBE_WebRequestNewTab) {
   mouse_event.x = 7;
   mouse_event.y = 7;
   mouse_event.clickCount = 1;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
   mouse_event.type = blink::WebInputEvent::MouseUp;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
@@ -219,8 +226,8 @@ void ExtensionWebRequestApiTest::RunPermissionTest(
   EXPECT_EQ(expected_content_regular_window, body);
 
   // Test that navigation in OTR window is properly redirected.
-  Browser* otr_browser = ui_test_utils::OpenURLOffTheRecord(
-      browser()->profile(), GURL("about:blank"));
+  Browser* otr_browser =
+      OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
 
   if (wait_for_extension_loaded_in_incognito)
     EXPECT_TRUE(listener_incognito.WaitUntilSatisfied());
@@ -310,7 +317,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, IncognitoSplitModeReload) {
       test_data_dir_.AppendASCII("webrequest_reload"),
       kFlagEnableIncognito);
   ASSERT_TRUE(extension);
-  ui_test_utils::OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
+  OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
 
   EXPECT_TRUE(listener.WaitUntilSatisfied());
   EXPECT_TRUE(listener_incognito.WaitUntilSatisfied());
@@ -353,6 +360,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, ExtensionRequests) {
   ExtensionTestMessageListener listener_pageready("contentscript_ready", true);
   ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL(
           "/extensions/test_file.html?match_webrequest_test"));
+  EXPECT_TRUE(listener_pageready.WaitUntilSatisfied());
 
   // The extension and app-generated requests should not have triggered any
   // webRequest event filtered by type 'xmlhttprequest'.
@@ -363,15 +371,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, ExtensionRequests) {
   EXPECT_TRUE(listener_result.WaitUntilSatisfied());
   EXPECT_EQ("Did not intercept any requests.", listener_result.message());
 
-  // Proceed with the final tests: Let the content script fire a request.
-  EXPECT_TRUE(listener_pageready.WaitUntilSatisfied());
-  listener_pageready.Reply("");
-
   ExtensionTestMessageListener listener_contentscript("contentscript_done",
-                                                      true);
+                                                      false);
   ExtensionTestMessageListener listener_framescript("framescript_done", false);
+
+  // Proceed with the final tests: Let the content script fire a request and
+  // then load an iframe which also fires a XHR request.
+  listener_pageready.Reply("");
   EXPECT_TRUE(listener_contentscript.WaitUntilSatisfied());
-  listener_contentscript.Reply("");
   EXPECT_TRUE(listener_framescript.WaitUntilSatisfied());
 
   // Collect the visited URLs. The content script and subframe does not run in
@@ -380,8 +387,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, ExtensionRequests) {
   listener_result.Reset();
   listener_main2.Reply("");
   EXPECT_TRUE(listener_result.WaitUntilSatisfied());
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSitePerProcess)) {
+  if (content::AreAllSitesIsolatedForTesting() ||
+      extensions::IsIsolateExtensionsEnabled()) {
     // With --site-per-process, the extension frame does run in the extension's
     // process.
     EXPECT_EQ("Intercepted requests: ?contentscript",
@@ -399,14 +406,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, HostedAppRequest) {
           "/extensions/api_test/webrequest_hosted_app/index.html"));
   scoped_refptr<extensions::Extension> hosted_app =
       extensions::ExtensionBuilder()
-      .SetManifest(extensions::DictionaryBuilder()
-          .Set("name", "Some hosted app")
-          .Set("version", "1")
-          .Set("manifest_version", 2)
-          .Set("app", extensions::DictionaryBuilder()
-              .Set("launch", extensions::DictionaryBuilder()
-                  .Set("web_url", hosted_app_url.spec()))))
-      .Build();
+          .SetManifest(std::move(
+              extensions::DictionaryBuilder()
+                  .Set("name", "Some hosted app")
+                  .Set("version", "1")
+                  .Set("manifest_version", 2)
+                  .Set("app", std::move(extensions::DictionaryBuilder().Set(
+                                  "launch",
+                                  std::move(extensions::DictionaryBuilder().Set(
+                                      "web_url", hosted_app_url.spec())))))))
+          .Build();
   extensions::ExtensionSystem::Get(browser()->profile())->extension_service()
       ->AddExtension(hosted_app.get());
 

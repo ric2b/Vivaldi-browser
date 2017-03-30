@@ -6,10 +6,12 @@
 #define CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_UI_MANAGER_ANDROID_H_
 
 #include <jni.h>
+#include <stdint.h>
 #include <map>
 #include <string>
 
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 
 // Implementation of the Notification UI Manager for Android, which defers to
@@ -30,18 +32,26 @@ class NotificationUIManagerAndroid : public NotificationUIManager {
   ~NotificationUIManagerAndroid() override;
 
   // Called by the Java implementation when the notification has been clicked.
-  bool OnNotificationClicked(JNIEnv* env,
-                             jobject java_object,
-                             jlong persistent_notification_id,
-                             jstring java_origin,
-                             jstring java_tag);
+  void OnNotificationClicked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& java_object,
+      jlong persistent_notification_id,
+      const base::android::JavaParamRef<jstring>& java_origin,
+      const base::android::JavaParamRef<jstring>& java_profile_id,
+      jboolean incognito,
+      const base::android::JavaParamRef<jstring>& java_tag,
+      jint action_index);
 
   // Called by the Java implementation when the notification has been closed.
-  bool OnNotificationClosed(JNIEnv* env,
-                            jobject java_object,
-                            jlong persistent_notification_id,
-                            jstring java_origin,
-                            jstring java_tag);
+  void OnNotificationClosed(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& java_object,
+      jlong persistent_notification_id,
+      const base::android::JavaParamRef<jstring>& java_origin,
+      const base::android::JavaParamRef<jstring>& java_profile_id,
+      jboolean incognito,
+      const base::android::JavaParamRef<jstring>& java_tag,
+      jboolean by_user);
 
   // NotificationUIManager implementation.
   void Add(const Notification& notification, Profile* profile) override;

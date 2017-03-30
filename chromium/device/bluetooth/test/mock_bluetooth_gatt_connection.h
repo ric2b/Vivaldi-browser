@@ -10,14 +10,17 @@
 
 namespace device {
 
+class BluetoothAdapter;
+
 class MockBluetoothGattConnection : public BluetoothGattConnection {
  public:
-  MockBluetoothGattConnection(const std::string& device_address);
+  MockBluetoothGattConnection(scoped_refptr<device::BluetoothAdapter> adapter,
+                              const std::string& device_address);
   virtual ~MockBluetoothGattConnection();
 
   MOCK_CONST_METHOD0(GetDeviceAddress, std::string());
   MOCK_METHOD0(IsConnected, bool());
-  MOCK_METHOD1(Disconnect, void(const base::Closure&));
+  MOCK_METHOD0(Disconnect, void());
 };
 
 }  // namespace device

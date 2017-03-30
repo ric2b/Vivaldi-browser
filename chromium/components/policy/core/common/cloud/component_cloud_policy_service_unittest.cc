@@ -6,6 +6,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/files/scoped_temp_dir.h"
@@ -108,7 +109,7 @@ class ComponentCloudPolicyServiceTest : public testing::Test {
       : request_context_(new TestURLRequestContextGetter(loop_.task_runner())),
         cache_(nullptr),
         client_(nullptr),
-        core_(GetChromeUserPolicyType(),
+        core_(dm_protocol::kChromeUserPolicyType,
               std::string(),
               &store_,
               loop_.task_runner()) {}
@@ -129,11 +130,13 @@ class ComponentCloudPolicyServiceTest : public testing::Test {
     expected_policy_.Set("Name",
                          POLICY_LEVEL_MANDATORY,
                          POLICY_SCOPE_USER,
+                         POLICY_SOURCE_CLOUD,
                          new base::StringValue("disabled"),
                          nullptr);
     expected_policy_.Set("Second",
                          POLICY_LEVEL_RECOMMENDED,
                          POLICY_SCOPE_USER,
+                         POLICY_SOURCE_CLOUD,
                          new base::StringValue("maybe"),
                          nullptr);
   }
@@ -151,7 +154,7 @@ class ComponentCloudPolicyServiceTest : public testing::Test {
   void Connect() {
     client_ = new MockCloudPolicyClient();
     service_.reset(new ComponentCloudPolicyService(
-        &delegate_, &registry_, &core_, client_, owned_cache_.Pass(),
+        &delegate_, &registry_, &core_, client_, std::move(owned_cache_),
         request_context_, loop_.task_runner(), loop_.task_runner()));
 
     client_->SetDMToken(ComponentPolicyBuilder::kFakeToken);
@@ -514,6 +517,7 @@ TEST_F(ComponentCloudPolicyServiceTest, LoadInvalidPolicyFromCache) {
   expected_bundle.Get(ns).Set("Name",
                               POLICY_LEVEL_MANDATORY,
                               POLICY_SCOPE_USER,
+                              POLICY_SOURCE_CLOUD,
                               new base::StringValue("published"),
                               nullptr);
   EXPECT_TRUE(service_->policy().Equals(expected_bundle));

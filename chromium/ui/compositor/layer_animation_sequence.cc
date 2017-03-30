@@ -8,6 +8,7 @@
 #include <iterator>
 
 #include "base/trace_event/trace_event.h"
+#include "cc/animation/animation_events.h"
 #include "cc/animation/animation_id_provider.h"
 #include "ui/compositor/layer_animation_delegate.h"
 #include "ui/compositor/layer_animation_element.h"
@@ -47,6 +48,8 @@ void LayerAnimationSequence::Start(LayerAnimationDelegate* delegate) {
   last_progressed_fraction_ = 0.0;
   if (elements_.empty())
     return;
+
+  NotifyStarted();
 
   elements_[0]->set_requested_start_time(start_time_);
   elements_[0]->Start(delegate, animation_group_id_);
@@ -256,6 +259,11 @@ void LayerAnimationSequence::NotifyScheduled() {
   FOR_EACH_OBSERVER(LayerAnimationObserver,
                     observers_,
                     OnLayerAnimationScheduled(this));
+}
+
+void LayerAnimationSequence::NotifyStarted() {
+  FOR_EACH_OBSERVER(LayerAnimationObserver, observers_,
+                    OnLayerAnimationStarted(this));
 }
 
 void LayerAnimationSequence::NotifyEnded() {

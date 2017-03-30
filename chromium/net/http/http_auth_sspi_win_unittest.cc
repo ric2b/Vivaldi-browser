@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_auth_challenge_tokenizer.h"
 #include "net/http/http_auth_sspi_win.h"
@@ -48,7 +47,7 @@ TEST(HttpAuthSSPITest, DetermineMaxTokenLength_Normal) {
   ULONG max_token_length = kMaxTokenLength;
   int rv = DetermineMaxTokenLength(&mock_library, L"NTLM", &max_token_length);
   EXPECT_EQ(OK, rv);
-  EXPECT_EQ(1337, max_token_length);
+  EXPECT_EQ(1337u, max_token_length);
 }
 
 TEST(HttpAuthSSPITest, DetermineMaxTokenLength_InvalidPackage) {
@@ -60,7 +59,7 @@ TEST(HttpAuthSSPITest, DetermineMaxTokenLength_InvalidPackage) {
   EXPECT_EQ(ERR_UNSUPPORTED_AUTH_SCHEME, rv);
   // |DetermineMaxTokenLength()| interface states that |max_token_length| should
   // not change on failure.
-  EXPECT_EQ(100, max_token_length);
+  EXPECT_EQ(100u, max_token_length);
 }
 
 TEST(HttpAuthSSPITest, ParseChallenge_FirstRound) {

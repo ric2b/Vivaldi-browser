@@ -4,6 +4,10 @@
 
 #include "extensions/browser/state_store.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "content/public/browser/browser_context.h"
@@ -65,9 +69,11 @@ void StateStore::DelayedTaskQueue::SetReady() {
 }
 
 StateStore::StateStore(content::BrowserContext* context,
+                       const std::string& uma_client_name,
                        const base::FilePath& db_path,
                        bool deferred_load)
     : db_path_(db_path),
+      uma_client_name_(uma_client_name),
       task_queue_(new DelayedTaskQueue()),
       extension_registry_observer_(this) {
   extension_registry_observer_.Add(ExtensionRegistry::Get(context));
@@ -86,7 +92,7 @@ StateStore::StateStore(content::BrowserContext* context,
 
 StateStore::StateStore(content::BrowserContext* context,
                        scoped_ptr<ValueStore> value_store)
-    : store_(value_store.Pass()),
+    : store_(std::move(value_store)),
       task_queue_(new DelayedTaskQueue()),
       extension_registry_observer_(this) {
   extension_registry_observer_.Add(ExtensionRegistry::Get(context));
@@ -147,7 +153,6 @@ void StateStore::OnExtensionWillBeInstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     bool is_update,
-    bool from_ephemeral,
     const std::string& old_name) {
   RemoveKeysForExtension(extension->id());
 }
@@ -166,7 +171,7 @@ void StateStore::Init() {
     return;
 
   if (!db_path_.empty())
-    store_.Init(db_path_);
+    store_.Init(uma_client_name_, db_path_);
   task_queue_->SetReady();
 }
 

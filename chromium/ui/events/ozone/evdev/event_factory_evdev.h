@@ -8,6 +8,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_runner.h"
 #include "ui/events/ozone/device/device_event_observer.h"
@@ -67,6 +68,7 @@ class EVENTS_OZONE_EVDEV_EXPORT EventFactoryEvdev : public DeviceEventObserver,
   void DispatchMouseMoveEvent(const MouseMoveEventParams& params);
   void DispatchMouseButtonEvent(const MouseButtonEventParams& params);
   void DispatchMouseWheelEvent(const MouseWheelEventParams& params);
+  void DispatchPinchEvent(const PinchEventParams& params);
   void DispatchScrollEvent(const ScrollEventParams& params);
   void DispatchTouchEvent(const TouchEventParams& params);
 

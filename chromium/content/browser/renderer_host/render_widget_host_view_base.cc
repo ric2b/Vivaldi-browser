@@ -5,7 +5,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 
 #include "base/logging.h"
-#include "base/profiler/scoped_tracker.h"
+#include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_base.h"
@@ -383,6 +383,10 @@ RenderWidgetHostViewBase::~RenderWidgetHostViewBase() {
   DCHECK(!mouse_locked_);
 }
 
+bool RenderWidgetHostViewBase::IsAura() const {
+  return false;
+}
+
 bool RenderWidgetHostViewBase::OnMessageReceived(const IPC::Message& msg){
   return false;
 }
@@ -403,8 +407,8 @@ gfx::Size RenderWidgetHostViewBase::GetPhysicalBackingSize() const {
   gfx::NativeView view = GetNativeView();
   gfx::Display display =
       gfx::Screen::GetScreenFor(view)->GetDisplayNearestWindow(view);
-  return gfx::ToCeiledSize(gfx::ScaleSize(GetRequestedRendererSize(),
-                                          display.device_scale_factor()));
+  return gfx::ScaleToCeiledSize(GetRequestedRendererSize(),
+                                display.device_scale_factor());
 }
 
 bool RenderWidgetHostViewBase::DoTopControlsShrinkBlinkSize() const {
@@ -562,43 +566,17 @@ RenderWidgetHostViewBase::CreateSyntheticGestureTarget() {
       new SyntheticGestureTargetBase(host));
 }
 
-// Platform implementation should override this method to allow frame
-// subscription. Frame subscriber is set to RenderProcessHost, which is
-// platform independent. It should be set to the specific presenter on each
-// platform.
-bool RenderWidgetHostViewBase::CanSubscribeFrame() const {
-  NOTIMPLEMENTED();
-  return false;
-}
-
-// Base implementation for this method sets the subscriber to RenderProcessHost,
-// which is platform independent. Note: Implementation only support subscribing
-// to accelerated composited frames.
+// Base implementation is unimplemented.
 void RenderWidgetHostViewBase::BeginFrameSubscription(
     scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) {
-  RenderWidgetHostImpl* impl = NULL;
-  if (GetRenderWidgetHost())
-    impl = RenderWidgetHostImpl::From(GetRenderWidgetHost());
-  if (!impl)
-    return;
-  RenderProcessHostImpl* render_process_host =
-      static_cast<RenderProcessHostImpl*>(impl->GetProcess());
-  render_process_host->BeginFrameSubscription(impl->GetRoutingID(),
-                                              subscriber.Pass());
+  NOTREACHED();
 }
 
 void RenderWidgetHostViewBase::EndFrameSubscription() {
-  RenderWidgetHostImpl* impl = NULL;
-  if (GetRenderWidgetHost())
-    impl = RenderWidgetHostImpl::From(GetRenderWidgetHost());
-  if (!impl)
-    return;
-  RenderProcessHostImpl* render_process_host =
-      static_cast<RenderProcessHostImpl*>(impl->GetProcess());
-  render_process_host->EndFrameSubscription(impl->GetRoutingID());
+  NOTREACHED();
 }
 
-uint32 RenderWidgetHostViewBase::RendererFrameNumber() {
+uint32_t RenderWidgetHostViewBase::RendererFrameNumber() {
   return renderer_frame_number_;
 }
 
@@ -702,6 +680,26 @@ void RenderWidgetHostViewBase::OnDidNavigateMainFrameToNewPage() {
 
 uint32_t RenderWidgetHostViewBase::GetSurfaceIdNamespace() {
   return 0;
+}
+
+uint32_t RenderWidgetHostViewBase::SurfaceIdNamespaceAtPoint(
+    const gfx::Point& point,
+    gfx::Point* transformed_point) {
+  NOTREACHED();
+  return 0;
+}
+
+void RenderWidgetHostViewBase::TransformPointToRootCoordSpace(
+    const gfx::Point& point,
+    gfx::Point* transformed_point) {
+  *transformed_point = point;
+}
+
+void RenderWidgetHostViewBase::TransformPointToLocalCoordSpace(
+    const gfx::Point& point,
+    cc::SurfaceId original_surface,
+    gfx::Point* transformed_point) {
+  *transformed_point = point;
 }
 
 }  // namespace content

@@ -18,11 +18,6 @@
 #include "base/time/time.h"
 #include "ui/base/work_area_watcher_observer.h"
 
-//vivaldi
-#include "extensions/browser/api/storage/settings_namespace.h"
-#include "extensions/browser/value_store/value_store_frontend.h"
-#include "extensions/browser/api/storage/storage_frontend.h"
-
 class AppControllerProfileObserver;
 @class AppShimMenuController;
 class BookmarkMenuBridge;
@@ -45,7 +40,6 @@ class WorkAreaWatcherObserver;
 @interface AppController : NSObject<NSUserInterfaceValidations,
                                     NSMenuDelegate,
                                     NSApplicationDelegate> {
-
  @private
   // Manages the state of the command menu items.
   scoped_ptr<CommandUpdater> menuState_;
@@ -97,11 +91,6 @@ class WorkAreaWatcherObserver;
 
   // Observers that listen to the work area changes.
   base::ObserverList<ui::WorkAreaWatcherObserver> workAreaChangeObservers_;
-
-  // vivaldi additions
-  scoped_ptr<extensions::SettingsObserver> vivaldi_settings_observer_;
-  NSTimer* vivaldiMenuTimer_;
-  // end vivaldi addition
 
   scoped_ptr<PrefChangeRegistrar> profilePrefRegistrar_;
   PrefChangeRegistrar localPrefRegistrar_;
@@ -158,9 +147,6 @@ class WorkAreaWatcherObserver;
 // Toggles the "Confirm to Quit" preference.
 - (IBAction)toggleConfirmToQuit:(id)sender;
 
-// Toggles the "Hide Notifications Icon" preference.
-- (IBAction)toggleDisplayMessageCenter:(id)sender;
-
 // Delegate method to return the dock menu.
 - (NSMenu*)applicationDockMenu:(NSApplication*)sender;
 
@@ -184,8 +170,7 @@ class WorkAreaWatcherObserver;
 // the original profile and never incognito.
 - (void)windowChangedToProfile:(Profile*)profile;
 
-- (void)buildVivaldiMenu;
-- (void)activateVivaldiMenu:(NSMenu*)menu;
+- (void)setVivaldiMenuItemAction:(NSMenuItem*)item;
 @end
 
 #endif  // __OBJC__

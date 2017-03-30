@@ -4,10 +4,13 @@
 
 #include "chrome/browser/extensions/webstore_installer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <limits>
 #include <set>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -21,6 +24,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/download/download_crx_util.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -45,6 +49,7 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -60,7 +65,7 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
+#include "chrome/browser/chromeos/drive/file_system_util.h"
 #endif
 
 using content::BrowserContext;
@@ -120,8 +125,8 @@ void GetDownloadFilePath(
   // filename and when the download starts writing to it (think concurrently
   // running sharded browser tests installing the same test file, for
   // instance).
-  std::string random_number =
-      base::Uint64ToString(base::RandGenerator(kuint16max));
+  std::string random_number = base::Uint64ToString(
+      base::RandGenerator(std::numeric_limits<uint16_t>::max()));
 
   base::FilePath file =
       download_directory.AppendASCII(id + "_" + random_number + ".crx");
@@ -217,7 +222,8 @@ GURL WebstoreInstaller::GetWebstoreInstallURL(
   GURL url(url_string + "?response=redirect&" +
            update_client::UpdateQueryParams::Get(
                update_client::UpdateQueryParams::CRX) +
-           "&x=" + net::EscapeQueryParamValue(JoinString(params, '&'), true));
+           "&x=" + net::EscapeQueryParamValue(base::JoinString(params, "&"),
+                                              true));
   DCHECK(url.is_valid());
 
   return url;
@@ -239,15 +245,14 @@ WebstoreInstaller::Approval::Approval()
       skip_post_install_ui(false),
       skip_install_dialog(false),
       enable_launcher(false),
-      manifest_check_level(MANIFEST_CHECK_LEVEL_STRICT),
-      is_ephemeral(false) {
+      manifest_check_level(MANIFEST_CHECK_LEVEL_STRICT) {
 }
 
 scoped_ptr<WebstoreInstaller::Approval>
 WebstoreInstaller::Approval::CreateWithInstallPrompt(Profile* profile) {
   scoped_ptr<Approval> result(new Approval());
   result->profile = profile;
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<WebstoreInstaller::Approval>
@@ -257,7 +262,7 @@ WebstoreInstaller::Approval::CreateForSharedModule(Profile* profile) {
   result->skip_install_dialog = true;
   result->skip_post_install_ui = true;
   result->manifest_check_level = MANIFEST_CHECK_LEVEL_NONE;
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<WebstoreInstaller::Approval>
@@ -276,7 +281,7 @@ WebstoreInstaller::Approval::CreateWithNoInstallPrompt(
   result->skip_install_dialog = true;
   result->manifest_check_level = strict_manifest_check ?
     MANIFEST_CHECK_LEVEL_STRICT : MANIFEST_CHECK_LEVEL_LOOSE;
-  return result.Pass();
+  return result;
 }
 
 WebstoreInstaller::Approval::~Approval() {}
@@ -356,7 +361,6 @@ void WebstoreInstaller::Start() {
       approval_->installing_icon,
       approval_->manifest->is_app(),
       approval_->manifest->is_platform_app());
-  params.is_ephemeral = approval_->is_ephemeral;
   tracker->OnBeginExtensionInstall(params);
 
   tracker->OnBeginExtensionDownload(id_);
@@ -524,25 +528,29 @@ void WebstoreInstaller::OnDownloadUpdated(DownloadItem* download) {
           FAILURE_REASON_OTHER);
       break;
     case DownloadItem::COMPLETE:
-      // Wait for other notifications if the download is really an extension.
-      if (!download_crx_util::IsExtensionDownload(*download)) {
-        ReportFailure(kInvalidDownloadError, FAILURE_REASON_OTHER);
-      } else {
-        if (crx_installer_.get())
-          return;  // DownloadItemImpl calls the observer twice, ignore it.
-        StartCrxInstaller(*download);
-
-        if (pending_modules_.size() == 1) {
-          // The download is the last module - the extension main module.
-          if (delegate_)
-            delegate_->OnExtensionDownloadProgress(id_, download);
-          extensions::InstallTracker* tracker =
-              extensions::InstallTrackerFactory::GetForBrowserContext(profile_);
-          tracker->OnDownloadProgress(id_, 100);
-        }
-      }
       // Stop the progress timer if it's running.
       download_progress_timer_.Stop();
+
+      // Only wait for other notifications if the download is really
+      // an extension.
+      if (!download_crx_util::IsExtensionDownload(*download)) {
+        ReportFailure(kInvalidDownloadError, FAILURE_REASON_OTHER);
+        return;
+      }
+
+      if (crx_installer_.get())
+        return;  // DownloadItemImpl calls the observer twice, ignore it.
+
+      StartCrxInstaller(*download);
+
+      if (pending_modules_.size() == 1) {
+        // The download is the last module - the extension main module.
+        if (delegate_)
+          delegate_->OnExtensionDownloadProgress(id_, download);
+        extensions::InstallTracker* tracker =
+            extensions::InstallTrackerFactory::GetForBrowserContext(profile_);
+        tracker->OnDownloadProgress(id_, 100);
+      }
       break;
     case DownloadItem::IN_PROGRESS: {
       if (delegate_ && pending_modules_.size() == 1) {
@@ -661,7 +669,8 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
   scoped_ptr<DownloadUrlParameters> params(new DownloadUrlParameters(
       download_url_,
       render_process_host_id,
-      render_view_host_routing_id ,
+      render_view_host_routing_id,
+      contents->GetMainFrame()->GetRoutingID(),
       resource_context));
   params->set_file_path(file);
   if (controller.GetVisibleEntry())
@@ -671,7 +680,7 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
   params->set_callback(base::Bind(&WebstoreInstaller::OnDownloadStarted,
                                   this,
                                   extension_id));
-  download_manager->DownloadUrl(params.Pass());
+  download_manager->DownloadUrl(std::move(params));
 }
 
 void WebstoreInstaller::UpdateDownloadProgress() {
@@ -767,14 +776,14 @@ void WebstoreInstaller::RecordInterrupt(const DownloadItem* download) const {
 
   // Use logarithmic bin sizes up to 1 TB.
   const int kNumBuckets = 30;
-  const int64 kMaxSizeKb = 1 << kNumBuckets;
+  const int64_t kMaxSizeKb = 1 << kNumBuckets;
   UMA_HISTOGRAM_CUSTOM_COUNTS(
       "Extensions.WebstoreDownload.InterruptReceivedKBytes",
       download->GetReceivedBytes() / 1024,
       1,
       kMaxSizeKb,
       kNumBuckets);
-  int64 total_bytes = download->GetTotalBytes();
+  int64_t total_bytes = download->GetTotalBytes();
   if (total_bytes >= 0) {
     UMA_HISTOGRAM_CUSTOM_COUNTS(
         "Extensions.WebstoreDownload.InterruptTotalKBytes",

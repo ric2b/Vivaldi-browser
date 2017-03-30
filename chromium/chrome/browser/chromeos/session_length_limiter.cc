@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/browser_process.h"
@@ -204,7 +205,7 @@ void SessionLengthLimiter::UpdateLimit() {
   }
 
   // Set a timer to log out the user when the session length limit is reached.
-  timer_.reset(new base::OneShotTimer<SessionLengthLimiter::Delegate>);
+  timer_.reset(new base::OneShotTimer);
   timer_->Start(FROM_HERE, remaining, delegate_.get(),
                 &SessionLengthLimiter::Delegate::StopSession);
 }

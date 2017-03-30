@@ -4,17 +4,21 @@
 
 #include "chrome/browser/ui/sync/one_click_signin_sync_starter.h"
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/fake_signin_manager.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
+#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/fake_signin_manager.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -71,17 +75,10 @@ class OneClickSigninSyncStarterTest : public ChromeRenderViewHostTestHarness {
   void CreateSyncStarter(OneClickSigninSyncStarter::Callback callback,
                          const GURL& continue_url) {
     sync_starter_ = new OneClickSigninSyncStarter(
-        profile(),
-        NULL,
-        kTestingGaiaId,
-        kTestingUsername,
-        std::string(),
-        "refresh_token",
-        OneClickSigninSyncStarter::SYNC_WITH_DEFAULT_SETTINGS,
-        web_contents(),
-        OneClickSigninSyncStarter::NO_CONFIRMATION,
-        continue_url,
-        callback);
+        profile(), NULL, kTestingGaiaId, kTestingUsername, std::string(),
+        "refresh_token", OneClickSigninSyncStarter::SYNC_WITH_DEFAULT_SETTINGS,
+        web_contents(), OneClickSigninSyncStarter::NO_CONFIRMATION, GURL(),
+        continue_url, callback);
   }
 
   // Deletes itself when SigninFailed() or SigninSuccess() is called.
@@ -95,9 +92,13 @@ class OneClickSigninSyncStarterTest : public ChromeRenderViewHostTestHarness {
 
  private:
   static scoped_ptr<KeyedService> BuildSigninManager(
-      content::BrowserContext* profile) {
-    return make_scoped_ptr(
-        new FakeSigninManager(static_cast<Profile*>(profile)));
+      content::BrowserContext* context) {
+    Profile* profile = static_cast<Profile*>(context);
+    return make_scoped_ptr(new FakeSigninManager(
+        ChromeSigninClientFactory::GetForProfile(profile),
+        ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
+        AccountTrackerServiceFactory::GetForProfile(profile),
+        GaiaCookieManagerServiceFactory::GetForProfile(profile)));
   }
 
   DISALLOW_COPY_AND_ASSIGN(OneClickSigninSyncStarterTest);

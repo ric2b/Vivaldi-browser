@@ -4,11 +4,13 @@
 
 #include "media/base/time_delta_interpolator.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
 #include "base/time/tick_clock.h"
-#include "media/base/buffers.h"
+#include "media/base/timestamp_constants.h"
 
 namespace media {
 
@@ -65,8 +67,8 @@ base::TimeDelta TimeDeltaInterpolator::GetInterpolatedTime() {
   if (!interpolating_)
     return lower_bound_;
 
-  int64 now_us = (tick_clock_->NowTicks() - reference_).InMicroseconds();
-  now_us = static_cast<int64>(now_us * playback_rate_);
+  int64_t now_us = (tick_clock_->NowTicks() - reference_).InMicroseconds();
+  now_us = static_cast<int64_t>(now_us * playback_rate_);
   base::TimeDelta interpolated_time =
       lower_bound_ + base::TimeDelta::FromMicroseconds(now_us);
 

@@ -5,10 +5,12 @@
 #include "content/browser/renderer_host/pepper/pepper_udp_socket_message_filter.h"
 
 #include <cstring>
+#include <utility>
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_impl.h"
 #include "content/browser/renderer_host/pepper/pepper_socket_utils.h"
 #include "content/public/browser/browser_thread.h"
@@ -32,6 +34,10 @@
 #include "ppapi/proxy/udp_socket_resource_base.h"
 #include "ppapi/shared_impl/private/net_address_private_impl.h"
 #include "ppapi/shared_impl/socket_option_data.h"
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/network/firewall_hole.h"
+#endif  // defined(OS_CHROMEOS)
 
 using ppapi::NetAddressPrivateImpl;
 using ppapi::host::NetErrorToPepperError;
@@ -61,8 +67,7 @@ PepperUDPSocketMessageFilter::PepperUDPSocketMessageFilter(
     BrowserPpapiHostImpl* host,
     PP_Instance instance,
     bool private_api)
-    : host_(host),
-      socket_options_(0),
+    : socket_options_(0),
       rcvbuf_size_(0),
       sndbuf_size_(0),
       multicast_ttl_(0),
@@ -357,7 +362,7 @@ int32_t PepperUDPSocketMessageFilter::OnMsgJoinGroup(
     return PP_ERROR_FAILED;
 
   net::IPAddressNumber group;
-  uint16 port;
+  uint16_t port;
 
   if (!NetAddressPrivateImpl::NetAddressToIPEndPoint(addr, &group, &port))
     return PP_ERROR_ADDRESS_INVALID;
@@ -378,7 +383,7 @@ int32_t PepperUDPSocketMessageFilter::OnMsgLeaveGroup(
     return PP_ERROR_FAILED;
 
   net::IPAddressNumber group;
-  uint16 port;
+  uint16_t port;
 
   if (!NetAddressPrivateImpl::NetAddressToIPEndPoint(addr, &group, &port))
     return PP_ERROR_ADDRESS_INVALID;
@@ -401,7 +406,7 @@ void PepperUDPSocketMessageFilter::DoBind(
       NULL, net::NetLog::Source()));
 
   net::IPAddressNumber address;
-  uint16 port;
+  uint16_t port;
   if (!NetAddressPrivateImpl::NetAddressToIPEndPoint(addr, &address, &port)) {
     SendBindError(context, PP_ERROR_ADDRESS_INVALID);
     return;
@@ -492,11 +497,50 @@ void PepperUDPSocketMessageFilter::DoBind(
     return;
   }
 
+#if defined(OS_CHROMEOS)
+  OpenFirewallHole(
+      bound_address,
+      base::Bind(&PepperUDPSocketMessageFilter::OnBindComplete, this,
+                 base::Passed(&socket), context, net_address));
+#else
+  OnBindComplete(std::move(socket), context, net_address);
+#endif
+}
+
+void PepperUDPSocketMessageFilter::OnBindComplete(
+    scoped_ptr<net::UDPSocket> socket,
+    const ppapi::host::ReplyMessageContext& context,
+    const PP_NetAddress_Private& net_address) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   socket_.swap(socket);
   SendBindReply(context, PP_OK, net_address);
 
   DoRecvFrom();
 }
+
+#if defined(OS_CHROMEOS)
+void PepperUDPSocketMessageFilter::OpenFirewallHole(
+    const net::IPEndPoint& local_address,
+    base::Closure bind_complete) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  pepper_socket_utils::FirewallHoleOpenCallback callback = base::Bind(
+      &PepperUDPSocketMessageFilter::OnFirewallHoleOpened, this, bind_complete);
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::Bind(&pepper_socket_utils::OpenUDPFirewallHole,
+                                     local_address, callback));
+}
+
+void PepperUDPSocketMessageFilter::OnFirewallHoleOpened(
+    base::Closure bind_complete,
+    scoped_ptr<chromeos::FirewallHole> hole) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  LOG_IF(WARNING, !hole.get()) << "Firewall hole could not be opened.";
+  firewall_hole_.reset(hole.release());
+
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE, bind_complete);
+}
+#endif  // defined(OS_CHROMEOS)
 
 void PepperUDPSocketMessageFilter::DoRecvFrom() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -542,7 +586,7 @@ void PepperUDPSocketMessageFilter::DoSendTo(
   }
 
   net::IPAddressNumber address;
-  uint16 port;
+  uint16_t port;
   if (!NetAddressPrivateImpl::NetAddressToIPEndPoint(addr, &address, &port)) {
     SendSendToError(context, PP_ERROR_ADDRESS_INVALID);
     return;

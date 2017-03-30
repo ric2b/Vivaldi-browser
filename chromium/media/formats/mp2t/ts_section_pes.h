@@ -5,8 +5,10 @@
 #ifndef MEDIA_FORMATS_MP2T_TS_SECTION_PES_H_
 #define MEDIA_FORMATS_MP2T_TS_SECTION_PES_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/byte_queue.h"
 #include "media/formats/mp2t/ts_section.h"
@@ -25,7 +27,8 @@ class TsSectionPes : public TsSection {
 
   // TsSection implementation.
   bool Parse(bool payload_unit_start_indicator,
-                     const uint8* buf, int size) override;
+             const uint8_t* buf,
+             int size) override;
   void Flush() override;
   void Reset() override;
 
@@ -37,7 +40,7 @@ class TsSectionPes : public TsSection {
   bool Emit(bool emit_for_unknown_size);
 
   // Parse a PES packet, return true if successful.
-  bool ParseInternal(const uint8* raw_pes, int raw_pes_size);
+  bool ParseInternal(const uint8_t* raw_pes, int raw_pes_size);
 
   void ResetPesState();
 

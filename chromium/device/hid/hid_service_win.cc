@@ -8,6 +8,7 @@
 
 #include <dbt.h>
 #include <setupapi.h>
+#include <stddef.h>
 #include <winioctl.h>
 
 #include "base/bind.h"
@@ -29,13 +30,6 @@
 
 namespace device {
 
-namespace {
-
-void Noop() {
-  // This function does nothing.
-}
-}
-
 HidServiceWin::HidServiceWin(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner)
     : file_task_runner_(file_task_runner),
@@ -52,6 +46,8 @@ HidServiceWin::HidServiceWin(
       FROM_HERE, base::Bind(&HidServiceWin::EnumerateOnFileThread,
                             weak_factory_.GetWeakPtr(), task_runner_));
 }
+
+HidServiceWin::~HidServiceWin() {}
 
 void HidServiceWin::Connect(const HidDeviceId& device_id,
                             const ConnectCallback& callback) {
@@ -73,9 +69,6 @@ void HidServiceWin::Connect(const HidDeviceId& device_id,
   task_runner_->PostTask(
       FROM_HERE,
       base::Bind(callback, new HidConnectionWin(device_info, file.Pass())));
-}
-
-HidServiceWin::~HidServiceWin() {
 }
 
 // static
@@ -121,7 +114,7 @@ void HidServiceWin::EnumerateOnFileThread(
           base::SysWideToUTF8(device_interface_detail_data->DevicePath));
       DCHECK(base::IsStringASCII(device_path));
       AddDeviceOnFileThread(service, task_runner,
-                            base::StringToLowerASCII(device_path));
+                            base::ToLowerASCII(device_path));
     }
   }
 
@@ -286,7 +279,7 @@ void HidServiceWin::OnDeviceRemoved(const GUID& class_guid,
   // Execute a no-op closure on the file task runner to synchronize with any
   // devices that are still being enumerated.
   file_task_runner_->PostTaskAndReply(
-      FROM_HERE, base::Bind(&Noop),
+      FROM_HERE, base::Bind(&base::DoNothing),
       base::Bind(&HidServiceWin::RemoveDevice, weak_factory_.GetWeakPtr(),
                  device_path));
 }
@@ -298,8 +291,7 @@ base::win::ScopedHandle HidServiceWin::OpenDevice(
       CreateFileA(device_path.c_str(), GENERIC_WRITE | GENERIC_READ,
                   FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
                   FILE_FLAG_OVERLAPPED, NULL));
-  if (!file.IsValid() &&
-      GetLastError() == base::File::FILE_ERROR_ACCESS_DENIED) {
+  if (!file.IsValid() && GetLastError() == ERROR_ACCESS_DENIED) {
     file.Set(CreateFileA(device_path.c_str(), GENERIC_READ, FILE_SHARE_READ,
                          NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL));
   }

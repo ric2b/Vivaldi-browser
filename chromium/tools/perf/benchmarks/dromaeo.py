@@ -174,6 +174,7 @@ class DromaeoDomCoreTraverse(_DromaeoBenchmark):
     return 'dromaeo.domcoretraverse'
 
 
+@benchmark.Disabled('win')  # crbug.com/523276
 class DromaeoJslibAttrJquery(_DromaeoBenchmark):
   """Dromaeo JSLib attr jquery JavaScript benchmark.
 
@@ -202,6 +203,7 @@ class DromaeoJslibAttrPrototype(_DromaeoBenchmark):
     return 'dromaeo.jslibattrprototype'
 
 
+@benchmark.Disabled('win')  # crbug.com/523276
 class DromaeoJslibEventJquery(_DromaeoBenchmark):
   """Dromaeo JSLib event jquery JavaScript benchmark.
 
@@ -232,7 +234,9 @@ class DromaeoJslibEventPrototype(_DromaeoBenchmark):
 
 # xp: crbug.com/389731
 # win7: http://crbug.com/479796
-@benchmark.Disabled('xp', 'win7')
+# android: http://crbug.com/503138
+# win8: crbug.com/529330
+@benchmark.Disabled('xp', 'win7', 'android', 'win8')
 class DromaeoJslibModifyJquery(_DromaeoBenchmark):
   """Dromaeo JSLib modify jquery JavaScript benchmark.
 
@@ -261,6 +265,7 @@ class DromaeoJslibModifyPrototype(_DromaeoBenchmark):
     return 'dromaeo.jslibmodifyprototype'
 
 
+@benchmark.Disabled('win')  # crbug.com/523276
 class DromaeoJslibStyleJquery(_DromaeoBenchmark):
   """Dromaeo JSLib style jquery JavaScript benchmark.
 
@@ -328,4 +333,3 @@ class DromaeoCSSQueryJquery(_DromaeoBenchmark):
   @classmethod
   def Name(cls):
     return 'dromaeo.cssqueryjquery'
-

@@ -5,8 +5,8 @@
 #ifndef CONTENT_PUBLIC_RENDERER_RENDER_VIEW_OBSERVER_H_
 #define CONTENT_PUBLIC_RENDERER_RENDER_VIEW_OBSERVER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/common/content_export.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
@@ -75,6 +75,7 @@ class CONTENT_EXPORT RenderViewObserver : public IPC::Listener,
   virtual void FocusChangeComplete() {}
 
   virtual void OnStop() {}
+  virtual void OnZoomLevelChanged() {}
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;

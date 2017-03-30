@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -54,6 +55,7 @@ class LocationBarBrowserTest : public ExtensionBrowserTest {
 
  private:
   scoped_ptr<extensions::FeatureSwitch::ScopedOverride> enable_override_;
+  scoped_ptr<extensions::FeatureSwitch::ScopedOverride> enable_redesign_;
 
   DISALLOW_COPY_AND_ASSIGN(LocationBarBrowserTest);
 };
@@ -63,6 +65,10 @@ void LocationBarBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
   // enable the switch.
   enable_override_.reset(new extensions::FeatureSwitch::ScopedOverride(
       extensions::FeatureSwitch::enable_override_bookmarks_ui(), true));
+  // For testing page actions in the location bar, we also have to be sure to
+  // *not* have the redesign turned on.
+  enable_redesign_.reset(new extensions::FeatureSwitch::ScopedOverride(
+      extensions::FeatureSwitch::extension_action_redesign(), false));
   ExtensionBrowserTest::SetUpCommandLine(command_line);
 }
 
@@ -140,18 +146,19 @@ IN_PROC_BROWSER_TEST_F(LocationBarBrowserTest,
 
   // Create and install an extension that overrides the bookmark star.
   extensions::DictionaryBuilder chrome_ui_overrides;
-  chrome_ui_overrides.Set(
-      "bookmarks_ui",
-      extensions::DictionaryBuilder().SetBoolean("remove_button", true));
+  chrome_ui_overrides.Set("bookmarks_ui",
+                          std::move(extensions::DictionaryBuilder().SetBoolean(
+                              "remove_button", true)));
   scoped_refptr<const extensions::Extension> extension =
-      extensions::ExtensionBuilder().
-          SetManifest(extensions::DictionaryBuilder().
-                          Set("name", "overrides star").
-                          Set("manifest_version", 2).
-                          Set("version", "0.1").
-                          Set("description", "override the star").
-                          Set("chrome_ui_overrides",
-                              chrome_ui_overrides.Pass())).Build();
+      extensions::ExtensionBuilder()
+          .SetManifest(std::move(
+              extensions::DictionaryBuilder()
+                  .Set("name", "overrides star")
+                  .Set("manifest_version", 2)
+                  .Set("version", "0.1")
+                  .Set("description", "override the star")
+                  .Set("chrome_ui_overrides", std::move(chrome_ui_overrides))))
+          .Build();
   extension_service()->AddExtension(extension.get());
 
   // The star should now be hidden.

@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/android/rules.gni")
+import("//third_party/ijar/ijar.gni")
 
 sun_tools_jar_path = "$root_gen_dir/sun_tools_jar/tools.jar"
 
@@ -23,4 +24,54 @@ action("find_sun_tools_jar") {
 
 java_prebuilt("sun_tools_java") {
   jar_path = sun_tools_jar_path
+  jar_dep = ":find_sun_tools_jar"
+}
+
+generate_interface_jar("android_ijar") {
+  input_jar = android_sdk_jar
+  output_jar = "$root_out_dir/lib.java/android.interface.jar"
+}
+
+# Copy to the lib.unstripped directory so that gdb can easily find it.
+copy("cpplib_unstripped") {
+  _soname = "libc++_shared.so"
+  sources = [
+    "${android_libcpp_root}/libs/${android_app_abi}/${_soname}",
+  ]
+  outputs = [
+    "${root_out_dir}/lib.unstripped/${_soname}",
+  ]
+}
+
+action("cpplib_stripped") {
+  _strip_bin = "${android_tool_prefix}strip"
+  _soname = "libc++_shared.so"
+  _input_so = "${root_out_dir}/lib.unstripped/${_soname}"
+  _output_so = "${root_shlib_dir}/${_soname}"
+
+  deps = [
+    ":cpplib_unstripped",
+  ]
+
+  script = "//build/gn_run_binary.py"
+  inputs = [
+    _strip_bin,
+  ]
+  sources = [
+    _input_so,
+  ]
+  outputs = [
+    _output_so,
+  ]
+
+  _rebased_strip_bin = rebase_path(_strip_bin, root_out_dir)
+  _rebased_input_so = rebase_path(_input_so, root_out_dir)
+  _rebased_output_so = rebase_path(_output_so, root_out_dir)
+  args = [
+    _rebased_strip_bin,
+    "--strip-unneeded",
+    "-o",
+    _rebased_output_so,
+    _rebased_input_so,
+  ]
 }

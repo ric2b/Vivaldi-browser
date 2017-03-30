@@ -5,13 +5,15 @@
 #ifndef STORAGE_BROWSER_QUOTA_QUOTA_DATABASE_H_
 #define STORAGE_BROWSER_QUOTA_QUOTA_DATABASE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -35,8 +37,22 @@ namespace storage {
 class SpecialStoragePolicy;
 
 // All the methods of this class must run on the DB thread.
-class STORAGE_EXPORT_PRIVATE QuotaDatabase {
+class STORAGE_EXPORT QuotaDatabase {
  public:
+  struct STORAGE_EXPORT OriginInfoTableEntry {
+    OriginInfoTableEntry();
+    OriginInfoTableEntry(const GURL& origin,
+                         StorageType type,
+                         int used_count,
+                         const base::Time& last_access_time,
+                         const base::Time& last_modified_time);
+    GURL origin;
+    StorageType type;
+    int used_count;
+    base::Time last_access_time;
+    base::Time last_modified_time;
+  };
+
   // Constants for {Get,Set}QuotaConfigValue keys.
   static const char kDesiredAvailableSpaceKey[];
   static const char kTemporaryQuotaOverrideKey[];
@@ -47,8 +63,11 @@ class STORAGE_EXPORT_PRIVATE QuotaDatabase {
 
   void CloseConnection();
 
-  bool GetHostQuota(const std::string& host, StorageType type, int64* quota);
-  bool SetHostQuota(const std::string& host, StorageType type, int64 quota);
+  // Returns whether the record could be found.
+  bool GetHostQuota(const std::string& host, StorageType type, int64_t* quota);
+
+  // Returns whether the operation succeeded.
+  bool SetHostQuota(const std::string& host, StorageType type, int64_t quota);
   bool DeleteHostQuota(const std::string& host, StorageType type);
 
   bool SetOriginLastAccessTime(const GURL& origin,
@@ -59,16 +78,35 @@ class STORAGE_EXPORT_PRIVATE QuotaDatabase {
                                  StorageType type,
                                  base::Time last_modified_time);
 
+  // Gets the time |origin| was last evicted. Returns whether the record could
+  // be found.
+  bool GetOriginLastEvictionTime(const GURL& origin,
+                                 StorageType type,
+                                 base::Time* last_eviction_time);
+
+  // Sets the time the origin was last evicted. Returns whether the operation
+  // succeeded.
+  bool SetOriginLastEvictionTime(const GURL& origin,
+                                 StorageType type,
+                                 base::Time last_eviction_time);
+  bool DeleteOriginLastEvictionTime(const GURL& origin, StorageType type);
+
   // Register initial |origins| info |type| to the database.
   // This method is assumed to be called only after the installation or
   // the database schema reset.
   bool RegisterInitialOriginInfo(
       const std::set<GURL>& origins, StorageType type);
 
+  // Gets the OriginInfoTableEntry for |origin|. Returns whether the record
+  // could be found.
+  bool GetOriginInfo(const GURL& origin,
+                     StorageType type,
+                     OriginInfoTableEntry* entry);
+
   bool DeleteOriginInfo(const GURL& origin, StorageType type);
 
-  bool GetQuotaConfigValue(const char* key, int64* value);
-  bool SetQuotaConfigValue(const char* key, int64 value);
+  bool GetQuotaConfigValue(const char* key, int64_t* value);
+  bool SetQuotaConfigValue(const char* key, int64_t value);
 
   // Sets |origin| to the least recently used origin of origins not included
   // in |exceptions| and not granted the special unlimited storage right.
@@ -80,7 +118,7 @@ class STORAGE_EXPORT_PRIVATE QuotaDatabase {
                     GURL* origin);
 
   // Populates |origins| with the ones that have been modified since
-  // the |modified_since|.
+  // the |modified_since|. Returns whether the operation succeeded.
   bool GetOriginsModifiedSince(StorageType type,
                                std::set<GURL>* origins,
                                base::Time modified_since);
@@ -92,34 +130,16 @@ class STORAGE_EXPORT_PRIVATE QuotaDatabase {
   bool SetOriginDatabaseBootstrapped(bool bootstrap_flag);
 
  private:
-  struct STORAGE_EXPORT_PRIVATE QuotaTableEntry {
+  struct STORAGE_EXPORT QuotaTableEntry {
     QuotaTableEntry();
-    QuotaTableEntry(
-        const std::string& host,
-        StorageType type,
-        int64 quota);
+    QuotaTableEntry(const std::string& host, StorageType type, int64_t quota);
     std::string host;
     StorageType type;
-    int64 quota;
+    int64_t quota;
   };
-  friend STORAGE_EXPORT_PRIVATE bool operator <(
+  friend STORAGE_EXPORT bool operator <(
       const QuotaTableEntry& lhs, const QuotaTableEntry& rhs);
-
-  struct STORAGE_EXPORT_PRIVATE OriginInfoTableEntry {
-    OriginInfoTableEntry();
-    OriginInfoTableEntry(
-        const GURL& origin,
-        StorageType type,
-        int used_count,
-        const base::Time& last_access_time,
-        const base::Time& last_modified_time);
-    GURL origin;
-    StorageType type;
-    int used_count;
-    base::Time last_access_time;
-    base::Time last_modified_time;
-  };
-  friend STORAGE_EXPORT_PRIVATE bool operator <(
+  friend STORAGE_EXPORT bool operator <(
       const OriginInfoTableEntry& lhs, const OriginInfoTableEntry& rhs);
 
   // Structures used for CreateSchema.
@@ -147,14 +167,13 @@ class STORAGE_EXPORT_PRIVATE QuotaDatabase {
   void Commit();
   void ScheduleCommit();
 
-  bool FindOriginUsedCount(const GURL& origin,
-                           StorageType type,
-                           int* used_count);
-
   bool LazyOpen(bool create_if_needed);
   bool EnsureDatabaseVersion();
   bool ResetSchema();
   bool UpgradeSchema(int current_version);
+  bool InsertOrReplaceHostQuota(const std::string& host,
+                                StorageType type,
+                                int64_t quota);
 
   static bool CreateSchema(
       sql::Connection* database,
@@ -174,7 +193,7 @@ class STORAGE_EXPORT_PRIVATE QuotaDatabase {
   bool is_recreating_;
   bool is_disabled_;
 
-  base::OneShotTimer<QuotaDatabase> timer_;
+  base::OneShotTimer timer_;
 
   friend class content::QuotaDatabaseTest;
   friend class QuotaManager;

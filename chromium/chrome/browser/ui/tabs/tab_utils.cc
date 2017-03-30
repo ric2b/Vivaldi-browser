@@ -4,24 +4,39 @@
 
 #include "chrome/browser/ui/tabs/tab_utils.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/media_stream_capture_indicator.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
+#include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/multi_animation.h"
+#include "ui/gfx/image/image.h"
+#include "ui/gfx/vector_icons_public.h"
+#include "ui/native_theme/common_theme.h"
+#include "ui/native_theme/native_theme.h"
+
+#if defined(OS_MACOSX)
+#include "grit/theme_resources.h"
+#include "ui/base/resource/resource_bundle.h"
+#else
+#include "ui/gfx/paint_vector_icon.h"
+#endif
 
 struct LastMuteMetadata
     : public content::WebContentsUserData<LastMuteMetadata> {
-  std::string cause;  // Extension ID or constant from header file
-                      // or empty string
+  TabMutedReason reason = TAB_MUTED_REASON_NONE;
+  std::string extension_id;
+
  private:
   explicit LastMuteMetadata(content::WebContents* contents) {}
   friend class content::WebContentsUserData<LastMuteMetadata>;
@@ -30,9 +45,6 @@ struct LastMuteMetadata
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(LastMuteMetadata);
 
 namespace chrome {
-
-const char kMutedToggleCauseUser[] = "user";
-const char kMutedToggleCauseCapture[] = "capture";
 
 namespace {
 
@@ -89,7 +101,7 @@ TabRecordingIndicatorAnimation::Create() {
   scoped_ptr<TabRecordingIndicatorAnimation> animation(
       new TabRecordingIndicatorAnimation(parts, interval));
   animation->set_continuous(false);
-  return animation.Pass();
+  return animation;
 }
 
 }  // namespace
@@ -134,10 +146,6 @@ bool ShouldTabShowCloseButton(int capacity,
     return capacity >= 3;
 }
 
-bool IsPlayingAudio(content::WebContents* contents) {
-  return contents->WasRecentlyAudible();
-}
-
 TabMediaState GetTabMediaStateForContents(content::WebContents* contents) {
   if (!contents || !static_cast<content::WebContentsImpl*>(contents)->GetRenderProcessHost())
     return TAB_MEDIA_STATE_NONE;
@@ -152,46 +160,69 @@ TabMediaState GetTabMediaStateForContents(content::WebContents* contents) {
       return TAB_MEDIA_STATE_RECORDING;
   }
 
-  if (IsTabAudioMutingFeatureEnabled() && contents->IsAudioMuted())
+  if (contents->IsAudioMuted())
     return TAB_MEDIA_STATE_AUDIO_MUTING;
-  if (IsPlayingAudio(contents))
+  if (contents->WasRecentlyAudible())
     return TAB_MEDIA_STATE_AUDIO_PLAYING;
 
   return TAB_MEDIA_STATE_NONE;
 }
 
-const gfx::Image& GetTabMediaIndicatorImage(TabMediaState media_state) {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+gfx::Image GetTabMediaIndicatorImage(TabMediaState media_state,
+                                     SkColor button_color) {
+#if defined(OS_MACOSX)
+  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
   switch (media_state) {
     case TAB_MEDIA_STATE_AUDIO_PLAYING:
-      return rb.GetNativeImageNamed(IDR_TAB_AUDIO_INDICATOR);
+      return rb->GetNativeImageNamed(IDR_TAB_AUDIO_INDICATOR);
     case TAB_MEDIA_STATE_AUDIO_MUTING:
-      return rb.GetNativeImageNamed(IDR_TAB_AUDIO_MUTING_INDICATOR);
+      return rb->GetNativeImageNamed(IDR_TAB_AUDIO_MUTING_INDICATOR);
     case TAB_MEDIA_STATE_RECORDING:
-      return rb.GetNativeImageNamed(IDR_TAB_RECORDING_INDICATOR);
+      return rb->GetNativeImageNamed(IDR_TAB_RECORDING_INDICATOR);
     case TAB_MEDIA_STATE_CAPTURING:
-      return rb.GetNativeImageNamed(IDR_TAB_CAPTURE_INDICATOR);
+      return rb->GetNativeImageNamed(IDR_TAB_CAPTURE_INDICATOR);
     case TAB_MEDIA_STATE_NONE:
       break;
   }
-  NOTREACHED();
-  return rb.GetNativeImageNamed(IDR_SAD_FAVICON);
-}
-
-const gfx::Image& GetTabMediaIndicatorAffordanceImage(
-    TabMediaState media_state) {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+#else
+  gfx::VectorIconId icon_id = gfx::VectorIconId::VECTOR_ICON_NONE;
   switch (media_state) {
     case TAB_MEDIA_STATE_AUDIO_PLAYING:
+      icon_id = gfx::VectorIconId::TAB_AUDIO;
+      break;
     case TAB_MEDIA_STATE_AUDIO_MUTING:
-      return rb.GetNativeImageNamed(IDR_TAB_AUDIO_MUTING_AFFORDANCE);
+      icon_id = gfx::VectorIconId::TAB_AUDIO_MUTING;
+      break;
+    case TAB_MEDIA_STATE_RECORDING:
+      icon_id = gfx::VectorIconId::TAB_MEDIA_RECORDING;
+      break;
+    case TAB_MEDIA_STATE_CAPTURING:
+      icon_id = gfx::VectorIconId::TAB_MEDIA_CAPTURING;
+      break;
+    case TAB_MEDIA_STATE_NONE:
+      break;
+  }
+  if (icon_id != gfx::VectorIconId::VECTOR_ICON_NONE)
+    return gfx::Image(gfx::CreateVectorIcon(icon_id, 16, button_color));
+#endif
+  NOTREACHED();
+  return gfx::Image();
+}
+
+gfx::Image GetTabMediaIndicatorAffordanceImage(TabMediaState media_state,
+                                               SkColor button_color) {
+  switch (media_state) {
+    case TAB_MEDIA_STATE_AUDIO_PLAYING:
+      return GetTabMediaIndicatorImage(TAB_MEDIA_STATE_AUDIO_MUTING,
+                                       button_color);
+    case TAB_MEDIA_STATE_AUDIO_MUTING:
     case TAB_MEDIA_STATE_NONE:
     case TAB_MEDIA_STATE_RECORDING:
     case TAB_MEDIA_STATE_CAPTURING:
-      return GetTabMediaIndicatorImage(media_state);
+      return GetTabMediaIndicatorImage(media_state, button_color);
   }
   NOTREACHED();
-  return GetTabMediaIndicatorImage(media_state);
+  return GetTabMediaIndicatorImage(media_state, button_color);
 }
 
 scoped_ptr<gfx::Animation> CreateTabMediaIndicatorFadeAnimation(
@@ -213,7 +244,7 @@ scoped_ptr<gfx::Animation> CreateTabMediaIndicatorFadeAnimation(
   scoped_ptr<gfx::MultiAnimation> animation(
       new gfx::MultiAnimation(parts, interval));
   animation->set_continuous(false);
-  return animation.Pass();
+  return std::move(animation);
 }
 
 base::string16 AssembleTabTooltipText(const base::string16& title,
@@ -248,7 +279,7 @@ base::string16 AssembleTabTooltipText(const base::string16& title,
   return result;
 }
 
-bool IsTabAudioMutingFeatureEnabled() {
+bool AreExperimentalMuteControlsEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableTabAudioMuting);
 }
@@ -258,7 +289,7 @@ bool CanToggleAudioMute(content::WebContents* contents) {
     case TAB_MEDIA_STATE_NONE:
     case TAB_MEDIA_STATE_AUDIO_PLAYING:
     case TAB_MEDIA_STATE_AUDIO_MUTING:
-      return IsTabAudioMutingFeatureEnabled();
+      return true;
     case TAB_MEDIA_STATE_RECORDING:
     case TAB_MEDIA_STATE_CAPTURING:
       return false;
@@ -267,37 +298,71 @@ bool CanToggleAudioMute(content::WebContents* contents) {
   return false;
 }
 
-const std::string& GetTabAudioMutedCause(content::WebContents* contents) {
-  LastMuteMetadata::CreateForWebContents(contents);  // Create if not exists.
+TabMutedReason GetTabAudioMutedReason(content::WebContents* contents) {
+  LastMuteMetadata::CreateForWebContents(contents);  // Ensures metadata exists.
+  LastMuteMetadata* const metadata =
+      LastMuteMetadata::FromWebContents(contents);
   if (GetTabMediaStateForContents(contents) == TAB_MEDIA_STATE_CAPTURING) {
     // For tab capture, libcontent forces muting off.
-    LastMuteMetadata::FromWebContents(contents)->cause =
-        kMutedToggleCauseCapture;
+    metadata->reason = TAB_MUTED_REASON_MEDIA_CAPTURE;
+    metadata->extension_id.clear();
   }
-  return LastMuteMetadata::FromWebContents(contents)->cause;
+  return metadata->reason;
 }
 
-void SetTabAudioMuted(content::WebContents* contents,
-                      bool mute,
-                      const std::string& cause) {
-  if (!contents || !chrome::CanToggleAudioMute(contents))
-    return;
+const std::string& GetExtensionIdForMutedTab(content::WebContents* contents) {
+  DCHECK_EQ(GetTabAudioMutedReason(contents) != TAB_MUTED_REASON_EXTENSION,
+            LastMuteMetadata::FromWebContents(contents)->extension_id.empty());
+  return LastMuteMetadata::FromWebContents(contents)->extension_id;
+}
 
-  LastMuteMetadata::CreateForWebContents(contents);  // Create if not exists.
-  LastMuteMetadata::FromWebContents(contents)->cause = cause;
+TabMutedResult SetTabAudioMuted(content::WebContents* contents,
+                                bool mute,
+                                TabMutedReason reason,
+                                const std::string& extension_id) {
+  DCHECK(contents);
+  DCHECK_NE(TAB_MUTED_REASON_NONE, reason);
+
+  if (reason == TAB_MUTED_REASON_AUDIO_INDICATOR &&
+      !AreExperimentalMuteControlsEnabled()) {
+    return TAB_MUTED_RESULT_FAIL_NOT_ENABLED;
+  }
+
+  if (!chrome::CanToggleAudioMute(contents))
+    return TAB_MUTED_RESULT_FAIL_TABCAPTURE;
 
   contents->SetAudioMuted(mute);
+
+  LastMuteMetadata::CreateForWebContents(contents);  // Ensures metadata exists.
+  LastMuteMetadata* const metadata =
+      LastMuteMetadata::FromWebContents(contents);
+  metadata->reason = reason;
+  if (reason == TAB_MUTED_REASON_EXTENSION) {
+    DCHECK(!extension_id.empty());
+    metadata->extension_id = extension_id;
+  } else {
+    metadata->extension_id.clear();
+  }
+
+  return TAB_MUTED_RESULT_SUCCESS;
 }
 
-bool IsTabAudioMuted(content::WebContents* contents) {
-  return contents && contents->IsAudioMuted();
+void UnmuteIfMutedByExtension(content::WebContents* contents,
+                              const std::string& extension_id) {
+  LastMuteMetadata::CreateForWebContents(contents);  // Ensures metadata exists.
+  LastMuteMetadata* const metadata =
+      LastMuteMetadata::FromWebContents(contents);
+  if (metadata->reason == TAB_MUTED_REASON_EXTENSION &&
+      metadata->extension_id == extension_id) {
+    SetTabAudioMuted(contents, false, TAB_MUTED_REASON_EXTENSION, extension_id);
+  }
 }
 
 bool AreAllTabsMuted(const TabStripModel& tab_strip,
                      const std::vector<int>& indices) {
   for (std::vector<int>::const_iterator i = indices.begin(); i != indices.end();
        ++i) {
-    if (!IsTabAudioMuted(tab_strip.GetWebContentsAt(*i)))
+    if (!tab_strip.GetWebContentsAt(*i)->IsAudioMuted())
       return false;
   }
   return true;

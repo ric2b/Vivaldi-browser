@@ -5,26 +5,29 @@
 #ifndef CONTENT_BROWSER_ANDROID_CONTENT_VIEW_CORE_IMPL_H_
 #define CONTENT_BROWSER_ANDROID_CONTENT_VIEW_CORE_IMPL_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
-#include "content/browser/android/overscroll_refresh.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "ui/android/overscroll_refresh.h"
+#include "ui/android/view_android.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "url/gurl.h"
 
 namespace ui {
-class ViewAndroid;
 class WindowAndroid;
 }
 
@@ -36,7 +39,7 @@ class RenderWidgetHostViewAndroid;
 struct MenuItem;
 
 class ContentViewCoreImpl : public ContentViewCore,
-                            public OverscrollRefreshHandler,
+                            public ui::OverscrollRefreshHandler,
                             public WebContentsObserver {
  public:
   static ContentViewCoreImpl* FromWebContents(WebContents* web_contents);
@@ -50,15 +53,14 @@ class ContentViewCoreImpl : public ContentViewCore,
   // ContentViewCore implementation.
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject() override;
   WebContents* GetWebContents() const override;
-  ui::ViewAndroid* GetViewAndroid() const override;
   ui::WindowAndroid* GetWindowAndroid() const override;
   const scoped_refptr<cc::Layer>& GetLayer() const override;
-  void ShowPastePopup(int x, int y) override;
+  bool ShowPastePopup(int x, int y) override;
   void GetScaledContentBitmap(
       float scale,
       SkColorType preferred_color_type,
       const gfx::Rect& src_subrect,
-      ReadbackRequestCallback& result_callback) override;
+      const ReadbackRequestCallback& result_callback) override;
   float GetDpiScale() const override;
   void PauseOrResumeGeolocation(bool should_pause) override;
   void RequestTextSurroundingSelection(
@@ -67,148 +69,220 @@ class ContentViewCoreImpl : public ContentViewCore,
                                 int start_offset,
                                 int end_offset)>& callback) override;
 
+  // ViewAndroid implementation
+  base::android::ScopedJavaLocalRef<jobject> GetViewAndroidDelegate()
+      const override;
+
   // --------------------------------------------------------------------------
   // Methods called from Java via JNI
   // --------------------------------------------------------------------------
 
-  base::android::ScopedJavaLocalRef<jobject> GetWebContentsAndroid(JNIEnv* env,
-                                                                   jobject obj);
-  base::android::ScopedJavaLocalRef<jobject> GetJavaWindowAndroid(JNIEnv* env,
-                                                                  jobject obj);
+  base::android::ScopedJavaLocalRef<jobject> GetWebContentsAndroid(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  base::android::ScopedJavaLocalRef<jobject> GetJavaWindowAndroid(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
-  void OnJavaContentViewCoreDestroyed(JNIEnv* env, jobject obj);
+  void OnJavaContentViewCoreDestroyed(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   // Notifies the ContentViewCore that items were selected in the currently
   // showing select popup.
-  void SelectPopupMenuItems(JNIEnv* env, jobject obj,
-                            jlong selectPopupSourceFrame,
-                            jintArray indices);
+  void SelectPopupMenuItems(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jlong selectPopupSourceFrame,
+      const base::android::JavaParamRef<jintArray>& indices);
 
-  void SendOrientationChangeEvent(JNIEnv* env, jobject obj, jint orientation);
-  jboolean OnTouchEvent(JNIEnv* env,
-                        jobject obj,
-                        jobject motion_event,
-                        jlong time_ms,
-                        jint android_action,
-                        jint pointer_count,
-                        jint history_size,
-                        jint action_index,
-                        jfloat pos_x_0,
-                        jfloat pos_y_0,
-                        jfloat pos_x_1,
-                        jfloat pos_y_1,
-                        jint pointer_id_0,
-                        jint pointer_id_1,
-                        jfloat touch_major_0,
-                        jfloat touch_major_1,
-                        jfloat touch_minor_0,
-                        jfloat touch_minor_1,
-                        jfloat orientation_0,
-                        jfloat orientation_1,
-                        jfloat raw_pos_x,
-                        jfloat raw_pos_y,
-                        jint android_tool_type_0,
-                        jint android_tool_type_1,
-                        jint android_button_state,
-                        jint android_meta_state,
-                        jboolean is_touch_handle_event);
+  void SendOrientationChangeEvent(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint orientation);
+  jboolean OnTouchEvent(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& motion_event,
+      jlong time_ms,
+      jint android_action,
+      jint pointer_count,
+      jint history_size,
+      jint action_index,
+      jfloat pos_x_0,
+      jfloat pos_y_0,
+      jfloat pos_x_1,
+      jfloat pos_y_1,
+      jint pointer_id_0,
+      jint pointer_id_1,
+      jfloat touch_major_0,
+      jfloat touch_major_1,
+      jfloat touch_minor_0,
+      jfloat touch_minor_1,
+      jfloat orientation_0,
+      jfloat orientation_1,
+      jfloat tilt_0,
+      jfloat tilt_1,
+      jfloat raw_pos_x,
+      jfloat raw_pos_y,
+      jint android_tool_type_0,
+      jint android_tool_type_1,
+      jint android_button_state,
+      jint android_meta_state,
+      jboolean is_touch_handle_event);
   jboolean SendMouseMoveEvent(JNIEnv* env,
-                              jobject obj,
+                              const base::android::JavaParamRef<jobject>& obj,
                               jlong time_ms,
                               jfloat x,
                               jfloat y);
   jboolean SendMouseWheelEvent(JNIEnv* env,
-                               jobject obj,
+                               const base::android::JavaParamRef<jobject>& obj,
                                jlong time_ms,
                                jfloat x,
                                jfloat y,
-                               jfloat vertical_axis,
-                               jfloat horizontal_axis);
+                               jfloat ticks_x,
+                               jfloat ticks_y,
+                               jfloat pixels_per_tick);
   void ScrollBegin(JNIEnv* env,
-                   jobject obj,
+                   const base::android::JavaParamRef<jobject>& obj,
                    jlong time_ms,
                    jfloat x,
                    jfloat y,
                    jfloat hintx,
                    jfloat hinty,
                    jboolean target_viewport);
-  void ScrollEnd(JNIEnv* env, jobject obj, jlong time_ms);
-  void ScrollBy(JNIEnv* env, jobject obj, jlong time_ms,
-                jfloat x, jfloat y, jfloat dx, jfloat dy);
+  void ScrollEnd(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& obj,
+                 jlong time_ms);
+  void ScrollBy(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& obj,
+                jlong time_ms,
+                jfloat x,
+                jfloat y,
+                jfloat dx,
+                jfloat dy);
   void FlingStart(JNIEnv* env,
-                  jobject obj,
+                  const base::android::JavaParamRef<jobject>& obj,
                   jlong time_ms,
                   jfloat x,
                   jfloat y,
                   jfloat vx,
                   jfloat vy,
                   jboolean target_viewport);
-  void FlingCancel(JNIEnv* env, jobject obj, jlong time_ms);
-  void SingleTap(JNIEnv* env, jobject obj, jlong time_ms,
-                 jfloat x, jfloat y);
-  void DoubleTap(JNIEnv* env, jobject obj, jlong time_ms,
-                 jfloat x, jfloat y) ;
-  void LongPress(JNIEnv* env, jobject obj, jlong time_ms,
-                 jfloat x, jfloat y);
-  void PinchBegin(JNIEnv* env, jobject obj, jlong time_ms, jfloat x, jfloat y);
-  void PinchEnd(JNIEnv* env, jobject obj, jlong time_ms);
-  void PinchBy(JNIEnv* env, jobject obj, jlong time_ms,
-               jfloat x, jfloat y, jfloat delta);
-  void SelectBetweenCoordinates(JNIEnv* env, jobject obj,
-                                jfloat x1, jfloat y1,
-                                jfloat x2, jfloat y2);
-  void MoveCaret(JNIEnv* env, jobject obj, jfloat x, jfloat y);
-  void DismissTextHandles(JNIEnv* env, jobject obj);
-  void SetTextHandlesTemporarilyHidden(JNIEnv* env,
-                                       jobject obj,
-                                       jboolean hidden);
+  void FlingCancel(JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& obj,
+                   jlong time_ms);
+  void SingleTap(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& obj,
+                 jlong time_ms,
+                 jfloat x,
+                 jfloat y);
+  void DoubleTap(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& obj,
+                 jlong time_ms,
+                 jfloat x,
+                 jfloat y);
+  void LongPress(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& obj,
+                 jlong time_ms,
+                 jfloat x,
+                 jfloat y);
+  void PinchBegin(JNIEnv* env,
+                  const base::android::JavaParamRef<jobject>& obj,
+                  jlong time_ms,
+                  jfloat x,
+                  jfloat y);
+  void PinchEnd(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& obj,
+                jlong time_ms);
+  void PinchBy(JNIEnv* env,
+               const base::android::JavaParamRef<jobject>& obj,
+               jlong time_ms,
+               jfloat x,
+               jfloat y,
+               jfloat delta);
+  void SelectBetweenCoordinates(JNIEnv* env,
+                                const base::android::JavaParamRef<jobject>& obj,
+                                jfloat x1,
+                                jfloat y1,
+                                jfloat x2,
+                                jfloat y2);
+  void MoveCaret(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& obj,
+                 jfloat x,
+                 jfloat y);
+  void DismissTextHandles(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj);
+  void SetTextHandlesTemporarilyHidden(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean hidden);
 
-  void ResetGestureDetection(JNIEnv* env, jobject obj);
-  void SetDoubleTapSupportEnabled(JNIEnv* env, jobject obj, jboolean enabled);
-  void SetMultiTouchZoomSupportEnabled(JNIEnv* env,
-                                       jobject obj,
-                                       jboolean enabled);
+  void ResetGestureDetection(JNIEnv* env,
+                             const base::android::JavaParamRef<jobject>& obj);
+  void SetDoubleTapSupportEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean enabled);
+  void SetMultiTouchZoomSupportEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean enabled);
 
-  long GetNativeImeAdapter(JNIEnv* env, jobject obj);
-  void SetFocus(JNIEnv* env, jobject obj, jboolean focused);
+  long GetNativeImeAdapter(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& obj);
+  void SetFocus(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& obj,
+                jboolean focused);
 
   jint GetBackgroundColor(JNIEnv* env, jobject obj);
   void SetBackgroundColor(JNIEnv* env, jobject obj, jint color);
-  void SetAllowJavascriptInterfacesInspection(JNIEnv* env,
-                                              jobject obj,
-                                              jboolean allow);
-  void AddJavascriptInterface(JNIEnv* env,
-                              jobject obj,
-                              jobject object,
-                              jstring name,
-                              jclass safe_annotation_clazz);
-  void RemoveJavascriptInterface(JNIEnv* env, jobject obj, jstring name);
-  void WasResized(JNIEnv* env, jobject obj);
+  void SetAllowJavascriptInterfacesInspection(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean allow);
+  void AddJavascriptInterface(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& object,
+      const base::android::JavaParamRef<jstring>& name,
+      const base::android::JavaParamRef<jclass>& safe_annotation_clazz);
+  void RemoveJavascriptInterface(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& name);
+  void WasResized(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
-  void SetAccessibilityEnabled(JNIEnv* env, jobject obj, bool enabled);
+  void SetAccessibilityEnabled(JNIEnv* env,
+                               const base::android::JavaParamRef<jobject>& obj,
+                               bool enabled);
 
-  void SetTextTrackSettings(JNIEnv* env,
-                            jobject obj,
-                            jboolean textTracksEnabled,
-                            jstring textTrackBackgroundColor,
-                            jstring textTrackFontFamily,
-                            jstring textTrackFontStyle,
-                            jstring textTrackFontVariant,
-                            jstring textTrackTextColor,
-                            jstring textTrackTextShadow,
-                            jstring textTrackTextSize);
+  void SetTextTrackSettings(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean textTracksEnabled,
+      const base::android::JavaParamRef<jstring>& textTrackBackgroundColor,
+      const base::android::JavaParamRef<jstring>& textTrackFontFamily,
+      const base::android::JavaParamRef<jstring>& textTrackFontStyle,
+      const base::android::JavaParamRef<jstring>& textTrackFontVariant,
+      const base::android::JavaParamRef<jstring>& textTrackTextColor,
+      const base::android::JavaParamRef<jstring>& textTrackTextShadow,
+      const base::android::JavaParamRef<jstring>& textTrackTextSize);
 
   void ExtractSmartClipData(JNIEnv* env,
-                            jobject obj,
+                            const base::android::JavaParamRef<jobject>& obj,
                             jint x,
                             jint y,
                             jint width,
                             jint height);
 
-  void SetBackgroundOpaque(JNIEnv* env, jobject jobj, jboolean opaque);
-  void SetDrawsContent(JNIEnv* env, jobject jobj, jboolean draws);
+  void SetBackgroundOpaque(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& jobj,
+                           jboolean opaque);
 
-  jint GetCurrentRenderProcessId(JNIEnv* env, jobject obj);
+  jint GetCurrentRenderProcessId(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   // --------------------------------------------------------------------------
   // Public methods that call to Java via JNI
@@ -226,7 +300,8 @@ class ContentViewCoreImpl : public ContentViewCore,
                            const gfx::Rect& bounds,
                            const std::vector<MenuItem>& items,
                            int selected_item,
-                           bool multiple);
+                           bool multiple,
+                           bool right_aligned);
   // Hides a visible popup menu.
   void HideSelectPopupMenu();
 
@@ -263,9 +338,8 @@ class ContentViewCoreImpl : public ContentViewCore,
   void OnSelectionEvent(ui::SelectionEventType event,
                         const gfx::PointF& selection_anchor,
                         const gfx::RectF& selection_rect);
-  scoped_ptr<ui::TouchHandleDrawable> CreatePopupTouchHandleDrawable();
 
-  void StartContentIntent(const GURL& content_url);
+  void StartContentIntent(const GURL& content_url, bool is_main_frame);
 
   // Shows the disambiguation popup
   // |rect_pixels|   --> window coordinates which |zoomed_bitmap| represents
@@ -340,8 +414,10 @@ class ContentViewCoreImpl : public ContentViewCore,
 
   RenderWidgetHostViewAndroid* GetRenderWidgetHostViewAndroid() const;
 
-  blink::WebGestureEvent MakeGestureEvent(
-      blink::WebInputEvent::Type type, int64 time_ms, float x, float y) const;
+  blink::WebGestureEvent MakeGestureEvent(blink::WebInputEvent::Type type,
+                                          int64_t time_ms,
+                                          float x,
+                                          float y) const;
 
   gfx::Size GetViewportSizePix() const;
   int GetTopControlsHeightPix() const;
@@ -366,15 +442,14 @@ class ContentViewCoreImpl : public ContentViewCore,
   // A compositor layer containing any layer that should be shown.
   scoped_refptr<cc::Layer> root_layer_;
 
-  // Device scale factor.
-  float dpi_scale_;
-
   // Page scale factor.
   float page_scale_;
 
-  // The Android view that can be used to add and remove decoration layers
-  // like AutofillPopup.
-  scoped_ptr<ui::ViewAndroid> view_android_;
+  // Java delegate to acquire and release anchor views from the NativeView
+  base::android::ScopedJavaGlobalRef<jobject> view_android_delegate_;
+
+  // Device scale factor.
+  const float dpi_scale_;
 
   // The owning window that has a hold of main application activity.
   ui::WindowAndroid* window_android_;

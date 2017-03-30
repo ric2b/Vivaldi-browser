@@ -4,6 +4,8 @@
 
 #include "chrome/browser/status_icons/desktop_notification_balloon.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -11,13 +13,14 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/notifications/desktop_notification_service.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_delegate.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/message_center/notification_types.h"
+#include "ui/message_center/notifier_settings.h"
 
 namespace {
 
@@ -72,7 +75,8 @@ DesktopNotificationBalloon::~DesktopNotificationBalloon() {
 void DesktopNotificationBalloon::DisplayBalloon(
     const gfx::ImageSkia& icon,
     const base::string16& title,
-    const base::string16& contents) {
+    const base::string16& contents,
+    const message_center::NotifierId& notifier_id) {
   // Allowing IO access is required here to cover the corner case where
   // there is no last used profile and the default one is loaded.
   // IO access won't be required for normal uses.
@@ -84,8 +88,9 @@ void DesktopNotificationBalloon::DisplayBalloon(
 
   NotificationDelegate* delegate =
       new DummyNotificationDelegate(base::IntToString(id_count_++), profile_);
-  Notification notification(GURL(), title, contents, gfx::Image(icon),
-      base::string16(), std::string(), delegate);
+  Notification notification(message_center::NOTIFICATION_TYPE_SIMPLE, title,
+      contents, gfx::Image(icon), notifier_id, base::string16(), GURL(),
+      std::string(), message_center::RichNotificationData(), delegate);
 
   g_browser_process->notification_ui_manager()->Add(notification, profile);
 

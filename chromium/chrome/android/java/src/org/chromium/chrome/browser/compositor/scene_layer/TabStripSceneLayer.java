@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.compositor.scene_layer;
 
 import android.content.Context;
+import android.os.Build;
 
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
@@ -23,6 +24,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     private long mNativePtr;
     private final float mDpToPx;
     private SceneLayer mChildSceneLayer;
+    private int mOrientation;
+    private int mNumReaddBackground;
 
     public TabStripSceneLayer(Context context) {
         mDpToPx = context.getResources().getDisplayMetrics().density;
@@ -58,17 +61,38 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             StripLayoutTab[] stripLayoutTabsToRender, float yOffset) {
         if (mNativePtr == 0) return;
 
-        nativeBeginBuildingFrame(mNativePtr);
-        pushButtonsAndBackground(layoutHelper, resourceManager, yOffset);
-        pushStripTabs(layoutHelper, layerTitleCache, resourceManager, stripLayoutTabsToRender);
+        final boolean visible = yOffset > -layoutHelper.getHeight();
+        // This will hide the tab strips if necessary.
+        nativeBeginBuildingFrame(mNativePtr, visible);
+        // When strip tabs are completely off screen, we don't need to update it.
+        if (visible) {
+            pushButtonsAndBackground(layoutHelper, resourceManager, yOffset);
+            pushStripTabs(layoutHelper, layerTitleCache, resourceManager, stripLayoutTabsToRender);
+        }
         nativeFinishBuildingFrame(mNativePtr);
+    }
+
+    private boolean shouldReaddBackground(int orientation) {
+        // Sometimes layer trees do not get updated on rotation on Nexus 10.
+        // This is a workaround that readds the background to prevent it.
+        // See https://crbug.com/503930 for more.
+        if (Build.MODEL == null || !Build.MODEL.contains("Nexus 10")) return false;
+        if (mOrientation != orientation) {
+            // This is a random number. Empirically this is enough.
+            mNumReaddBackground = 10;
+            mOrientation = orientation;
+        }
+        mNumReaddBackground--;
+        return mNumReaddBackground >= 0;
     }
 
     private void pushButtonsAndBackground(StripLayoutHelperManager layoutHelper,
             ResourceManager resourceManager, float yOffset) {
-        nativeUpdateTabStripLayer(mNativePtr, layoutHelper.getWidth() * mDpToPx,
-                layoutHelper.getHeight() * mDpToPx, yOffset * mDpToPx,
-                layoutHelper.getStripBrightness());
+        final float width = layoutHelper.getWidth() * mDpToPx;
+        final float height = layoutHelper.getHeight() * mDpToPx;
+        nativeUpdateTabStripLayer(mNativePtr, width, height, yOffset * mDpToPx,
+                layoutHelper.getBackgroundTabBrightness(), layoutHelper.getBrightness(),
+                shouldReaddBackground(layoutHelper.getOrientation()));
 
         CompositorButton newTabButton = layoutHelper.getNewTabButton();
         CompositorButton modelSelectorButton = layoutHelper.getModelSelectorButton();
@@ -110,10 +134,11 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     }
 
     private native long nativeInit();
-    private native void nativeBeginBuildingFrame(long nativeTabStripSceneLayer);
+    private native void nativeBeginBuildingFrame(long nativeTabStripSceneLayer, boolean visible);
     private native void nativeFinishBuildingFrame(long nativeTabStripSceneLayer);
     private native void nativeUpdateTabStripLayer(long nativeTabStripSceneLayer, float width,
-            float height, float yOffset, float stripBrightness);
+            float height, float yOffset, float backgroundTabBrightness, float brightness,
+            boolean shouldReaddBackground);
     private native void nativeUpdateNewTabButton(long nativeTabStripSceneLayer, int resourceId,
             float x, float y, float width, float height, boolean visible,
             ResourceManager resourceManager);

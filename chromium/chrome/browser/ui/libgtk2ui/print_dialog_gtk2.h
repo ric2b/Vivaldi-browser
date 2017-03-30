@@ -10,6 +10,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "chrome/browser/ui/libgtk2ui/gtk2_signal.h"
@@ -48,6 +49,9 @@ class PrintDialogGtk2
   void AddRefToDialog() override;
   void ReleaseDialog() override;
 
+  // Handles print job response.
+  void OnJobCompleted(GtkPrintJob* print_job, const GError* error);
+
  private:
   friend struct content::BrowserThread::DeleteOnThread<
       content::BrowserThread::UI>;
@@ -61,12 +65,6 @@ class PrintDialogGtk2
 
   // Prints document named |document_name|.
   void SendDocumentToPrinter(const base::string16& document_name);
-
-  // Handles print job response.
-  static void OnJobCompletedThunk(GtkPrintJob* print_job,
-                                  gpointer user_data,
-                                  GError* error);
-  void OnJobCompleted(GtkPrintJob* print_job, GError* error);
 
   // Helper function for initializing |context_|'s PrintSettings with a given
   // |settings|.

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_icon_image_loader_impl.h"
 
+#include <utility>
+
 #include "chrome/browser/extensions/extension_util.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/file_util.h"
@@ -22,9 +24,8 @@ LauncherSearchIconImageLoaderImpl::LauncherSearchIconImageLoaderImpl(
                                     profile,
                                     extension,
                                     icon_dimension,
-                                    error_reporter.Pass()),
-      weak_ptr_factory_(this) {
-}
+                                    std::move(error_reporter)),
+      weak_ptr_factory_(this) {}
 
 LauncherSearchIconImageLoaderImpl::~LauncherSearchIconImageLoaderImpl() {
 }
@@ -58,7 +59,7 @@ void LauncherSearchIconImageLoaderImpl::LoadIconResourceFromExtension() {
 
 void LauncherSearchIconImageLoaderImpl::OnExtensionIconImageChanged(
     extensions::IconImage* image) {
-  DCHECK_EQ(extension_icon_image_, image);
+  DCHECK_EQ(extension_icon_image_.get(), image);
   OnExtensionIconChanged(extension_icon_image_->image_skia());
 }
 

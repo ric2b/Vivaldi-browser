@@ -3,11 +3,13 @@
 // found in the LICENSE file.
 
 #include "base/scoped_native_library.h"
+
+#include "build/build_config.h"
+#include "testing/gtest/include/gtest/gtest.h"
+
 #if defined(OS_WIN)
 #include "base/files/file_path.h"
 #endif
-
-#include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
 
@@ -28,6 +30,8 @@ TEST(ScopedNativeLibrary, Basic) {
     FilePath path(GetNativeLibraryName(L"ddraw"));
     native_library = LoadNativeLibrary(path, NULL);
     ScopedNativeLibrary library(native_library);
+    EXPECT_TRUE(library.is_valid());
+    EXPECT_EQ(native_library, library.get());
     FARPROC test_function =
         reinterpret_cast<FARPROC>(library.GetFunctionPointer(kFunctionName));
     EXPECT_EQ(0, IsBadCodePtr(test_function));

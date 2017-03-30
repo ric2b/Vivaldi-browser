@@ -7,81 +7,106 @@
 # The entries in |tests| are dictionaries of the following form:
 #   {
 #     # Required URL for apptest.
-#     "test": "mojo:test_app_url",
-#     # Optional display name (otherwise the entry for "test" above is used).
-#     "name": "mojo:test_app_url (more details)",
+#     'test': 'mojo:test_app_url',
+#     # Optional display name (otherwise the entry for 'test' above is used).
+#     'name': 'mojo:test_app_url (more details)',
 #     # Optional test type. Valid values:
-#     #   * "gtest": (default)
-#     #   * "gtest_isolated": like "gtest", but run with fixture isolation.
+#     #   * 'gtest': (default)
+#     #   * 'gtest_isolated': like 'gtest', but run with fixture isolation.
 #     #                       i.e., each test in a fresh mojo_shell
-#     "type": "gtest",
+#     'type': 'gtest',
 #     # Optional arguments for the shell or test.
-#     "args": ["--some-flag-for-the-shell", "--some-flag-for-the-test"],
+#     'args': ['--some-flag-for-the-shell', '--some-flag-for-the-test'],
 #   }
 #
 # TODO(vtl|msw): Add a way of specifying data dependencies.
 
+mus_apptests = { 'test': 'mojo:mus_apptests' }
+# osmesa is not used on android, so no flags are needed for
+# mus_apptests.
+if config.target_os != config.OS_ANDROID:
+  mus_apptests['args'] = [ '--use-x11-test-config',
+                           '--override-use-gl-with-osmesa-for-tests' ]
+
 tests = [
   {
-    "test": "mojo:clipboard_apptests",
-    "type": "gtest_isolated",
+    'test': 'mojo:clipboard_apptests',
+    'type': 'gtest_isolated',
   },
   {
-    "test": "mojo:network_service_apptests",
-    "type": "gtest_isolated",
+    'test': 'mojo:network_service_apptests',
+    'type': 'gtest_isolated',
+  },
+  {
+    'test': 'mojo:resource_provider_apptests',
+    'type': 'gtest_isolated',
   },
   # TODO(msw|jam): Fix and enable the runner_apptests: http://crbug.com/479316
   #{
-  #  "test": "mojo:runner_apptests",
-  #  "type": "gtest_isolated",
+  #  'test': 'mojo:runner_apptests',
+  #  'type': 'gtest_isolated',
   #},
-  {
-    "test": "mojo:view_manager_apptests",
-    "type": "gtest_isolated",
-    "args": ["--use-headless-config"]
-  },
 ]
 
 # TODO(msw): Get these tests passing on Android too. http://crbug.com/486220
 if config.target_os != config.OS_ANDROID:
   tests += [
     {
-      "test": "mojo:filesystem_apptests",
-      "type": "gtest_isolated",
+      'test': 'mojo:filesystem_apptests',
+      'type': 'gtest_isolated',
     },
     {
-      "test": "mojo:html_viewer_apptests",
-      "type": "gtest_isolated",
-      "args": ["--use-test-config"]
+      'test': 'mojo:html_viewer_apptests',
+      'name': 'mojo:html_viewer_apptests',
+      'type': 'gtest_isolated',
+      'args': ['--enable-html-viewer-test-interface',
+               '--use-x11-test-config',
+               '--override-use-gl-with-osmesa-for-tests']
     },
     {
-      "test": "mojo:html_viewer_apptests",
-      "type": "gtest_isolated",
-      "args": ["--use-test-config", "--oopifs",
-               "--enable-html-viewer-test-interface"]
+      'test': 'mojo:html_viewer_apptests',
+      'name': 'mojo:html_viewer_apptests new frame',
+      'type': 'gtest_isolated',
+      'args': ['--oopif-always-create-new-frame-tree',
+               '--enable-html-viewer-test-interface',
+               '--use-x11-test-config',
+               '--override-use-gl-with-osmesa-for-tests']
     },
     {
-      "test": "mojo:mandoline_browser_apptests",
-      "type": "gtest_isolated",
-      "args": ["--use-headless-config"]
+      'test': 'mojo:mandoline_browser_apptests',
+      'type': 'gtest_isolated',
     },
-    {
-      "test": "mojo:mandoline_frame_apptests",
-      "type": "gtest_isolated",
-      "args": ["--use-headless-config"]
-    },
+    # TODO(sky): reenable when 569367 is fixed.
+#    {
+#      'test': 'mojo:mash_wm_apptests',
+#      'type': 'gtest_isolated',
+#      'args': ['--use-x11-test-config',
+#               '--override-use-gl-with-osmesa-for-tests']
+#    },
     # TODO(xhwang): Fix and enable mojo:media_pipeline_integration_apptests.
     # http://crbug.com/501417
     {
-      "test": "mojo:media_apptests",
-      "type": "gtest_isolated",
+      'test': 'mojo:media_apptests',
+      'type': 'gtest_isolated',
     },
+    # TODO(crbug.com/560626): Fix and enable mus_apptests on Android.
+    mus_apptests,
     {
-      "test": "mojo:resource_provider_apptests",
-      "type": "gtest_isolated",
+      'test': 'mojo:sql_apptests',
+      'type': 'gtest_isolated',
     },
+    # TODO(sky): enable when works (http://crbug.com/577274 and likely
+    # http://crbug.com/569367).
+#    {
+#      'test': 'mojo:views_apptests',
+#      'type': 'gtest_isolated',
+#      'args': ['--use-x11-test-config',
+#               '--override-use-gl-with-osmesa-for-tests', '--enable-logging']
+#    },
     {
-      "test": "mojo:sql_apptests",
-      "type": "gtest_isolated",
+      'test': 'mojo:web_view_apptests',
+      'type': 'gtest_isolated',
+      'args': ['--use-x11-test-config',
+               '--override-use-gl-with-osmesa-for-tests']
     },
   ]

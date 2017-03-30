@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/i18n/icu_util.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "gin/array_buffer.h"
 #include "gin/modules/console.h"
@@ -68,6 +69,7 @@ int main(int argc, char** argv) {
   base::MessageLoop message_loop;
 
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,
+                                 gin::IsolateHolder::kStableV8Extras,
                                  gin::ArrayBufferAllocator::SharedInstance());
   gin::IsolateHolder instance;
 

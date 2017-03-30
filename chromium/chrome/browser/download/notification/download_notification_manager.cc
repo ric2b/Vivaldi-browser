@@ -4,11 +4,12 @@
 
 #include "chrome/browser/download/notification/download_notification_manager.h"
 
+#include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_item_model.h"
-#include "chrome/browser/download/notification/download_group_notification.h"
 #include "chrome/browser/download/notification/download_item_notification.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/grit/chromium_strings.h"
 #include "content/public/browser/download_item.h"
 #include "grit/theme_resources.h"
@@ -22,6 +23,11 @@
 // DownloadNotificationManager implementation:
 ///////////////////////////////////////////////////////////////////////////////
 
+bool DownloadNotificationManager::IsEnabled() {
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableDownloadNotification);
+}
+
 DownloadNotificationManager::DownloadNotificationManager(Profile* profile)
     : main_profile_(profile),
       items_deleter_(&manager_for_profile_) {
@@ -30,7 +36,7 @@ DownloadNotificationManager::DownloadNotificationManager(Profile* profile)
 DownloadNotificationManager::~DownloadNotificationManager() {
 }
 
-void DownloadNotificationManager::OnAllDownloadsRemoved(Profile* profile) {
+void DownloadNotificationManager::OnAllDownloadsRemoving(Profile* profile) {
   DownloadNotificationManagerForProfile* manager_for_profile =
       manager_for_profile_[profile];
   manager_for_profile_.erase(profile);
@@ -64,14 +70,13 @@ DownloadNotificationManagerForProfile::DownloadNotificationManagerForProfile(
     DownloadNotificationManager* parent_manager)
     : profile_(profile),
       parent_manager_(parent_manager),
+      message_center_(g_browser_process->message_center()),
       items_deleter_(&items_) {
-  group_notification_.reset(
-      new DownloadGroupNotification(profile_, this));
 }
 
 DownloadNotificationManagerForProfile::
     ~DownloadNotificationManagerForProfile() {
-  for (auto download : items_) {
+  for (const auto& download : items_) {
     download.first->RemoveObserver(this);
   }
 }
@@ -81,13 +86,11 @@ void DownloadNotificationManagerForProfile::OnDownloadUpdated(
   DCHECK(items_.find(changed_download) != items_.end());
 
   items_[changed_download]->OnDownloadUpdated(changed_download);
-  group_notification_->OnDownloadUpdated(changed_download);
 }
 
 void DownloadNotificationManagerForProfile::OnDownloadOpened(
     content::DownloadItem* changed_download) {
   items_[changed_download]->OnDownloadUpdated(changed_download);
-  group_notification_->OnDownloadUpdated(changed_download);
 }
 
 void DownloadNotificationManagerForProfile::OnDownloadRemoved(
@@ -101,12 +104,13 @@ void DownloadNotificationManagerForProfile::OnDownloadRemoved(
 
   // notify
   item->OnDownloadRemoved(download);
-  group_notification_->OnDownloadRemoved(download);
 
-  delete item;
+  // This removing might be initiated from DownloadNotificationItem, so delaying
+  // deleting for item to do remaining cleanups.
+  base::MessageLoop::current()->DeleteSoon(FROM_HERE, item);
 
   if (items_.size() == 0 && parent_manager_)
-    parent_manager_->OnAllDownloadsRemoved(profile_);
+    parent_manager_->OnAllDownloadsRemoving(profile_);
 }
 
 void DownloadNotificationManagerForProfile::OnDownloadDestroyed(
@@ -116,12 +120,13 @@ void DownloadNotificationManagerForProfile::OnDownloadDestroyed(
   items_.erase(download);
 
   item->OnDownloadRemoved(download);
-  group_notification_->OnDownloadRemoved(download);
 
-  delete item;
+  // This removing might be initiated from DownloadNotificationItem, so delaying
+  // deleting for item to do remaining cleanups.
+  base::MessageLoop::current()->DeleteSoon(FROM_HERE, item);
 
   if (items_.size() == 0 && parent_manager_)
-    parent_manager_->OnAllDownloadsRemoved(profile_);
+    parent_manager_->OnAllDownloadsRemoving(profile_);
 }
 
 void DownloadNotificationManagerForProfile::OnNewDownloadReady(
@@ -131,15 +136,19 @@ void DownloadNotificationManagerForProfile::OnNewDownloadReady(
 
   download->AddObserver(this);
 
-  // |item| object will be inserted to |items_| by |OnCreated()| called in the
-  // constructor.
+  for (auto& item : items_) {
+    content::DownloadItem* download_item = item.first;
+    DownloadItemNotification* download_notification = item.second;
+    if (download_item->GetState() == content::DownloadItem::IN_PROGRESS)
+      download_notification->DisablePopup();
+  }
+
   DownloadItemNotification* item = new DownloadItemNotification(download, this);
   items_.insert(std::make_pair(download, item));
-
-  group_notification_->OnDownloadAdded(download);
 }
 
-DownloadGroupNotification*
-DownloadNotificationManagerForProfile::GetGroupNotification() const {
-  return group_notification_.get();
+void DownloadNotificationManagerForProfile::OverrideMessageCenterForTest(
+    message_center::MessageCenter* message_center) {
+  DCHECK(message_center);
+  message_center_ = message_center;
 }

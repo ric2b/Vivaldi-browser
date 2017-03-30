@@ -14,6 +14,7 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
+        '../chrome/chrome_resources.gyp:chrome_strings',
         '../net/net.gyp:net',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
@@ -26,7 +27,7 @@
         'keyed_service_core',
         'pref_registry',
         'query_parser',
-        'startup_metric_utils',
+        'url_formatter/url_formatter.gyp:url_formatter',
       ],
       'sources': [
         'bookmarks/browser/base_bookmark_model_observer.cc',
@@ -55,6 +56,8 @@
         'bookmarks/browser/bookmark_pasteboard_helper_mac.mm',
         'bookmarks/browser/bookmark_storage.cc',
         'bookmarks/browser/bookmark_storage.h',
+        'bookmarks/browser/bookmark_undo_delegate.h',
+        'bookmarks/browser/bookmark_undo_provider.h',
         'bookmarks/browser/bookmark_utils.cc',
         'bookmarks/browser/bookmark_utils.h',
         'bookmarks/browser/scoped_group_bookmark_actions.cc',
@@ -112,8 +115,13 @@
       'dependencies': [
         'bookmarks_browser',
         'components_strings.gyp:components_strings',
+        'keyed_service_core',
       ],
       'sources': [
+        'bookmarks/managed/managed_bookmark_service.cc',
+        'bookmarks/managed/managed_bookmark_service.h',
+        'bookmarks/managed/managed_bookmark_util.cc',
+        'bookmarks/managed/managed_bookmark_util.h',
         'bookmarks/managed/managed_bookmarks_tracker.cc',
         'bookmarks/managed/managed_bookmarks_tracker.h',
       ],

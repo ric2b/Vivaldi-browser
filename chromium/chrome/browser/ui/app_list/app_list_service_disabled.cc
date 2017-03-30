@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
 
@@ -11,12 +12,13 @@ namespace {
 class AppListServiceDisabled : public AppListService {
  public:
   static AppListServiceDisabled* GetInstance() {
-    return Singleton<AppListServiceDisabled,
-                     LeakySingletonTraits<AppListServiceDisabled> >::get();
+    return base::Singleton<
+        AppListServiceDisabled,
+        base::LeakySingletonTraits<AppListServiceDisabled>>::get();
   }
 
  private:
-  friend struct DefaultSingletonTraits<AppListServiceDisabled>;
+  friend struct base::DefaultSingletonTraits<AppListServiceDisabled>;
 
   AppListServiceDisabled() {}
 

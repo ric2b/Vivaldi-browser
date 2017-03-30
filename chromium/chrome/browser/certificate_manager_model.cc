@@ -4,10 +4,13 @@
 
 #include "chrome/browser/certificate_manager_model.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/net/nss_context.h"
 #include "chrome/browser/ui/crypto_module_password_dialog_nss.h"
 #include "chrome/common/net/x509_certificate_model.h"
@@ -52,7 +55,7 @@ void CertificateManagerModel::Create(
     content::BrowserContext* browser_context,
     CertificateManagerModel::Observer* observer,
     const CreationCallback& callback) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserThread::PostTask(
       BrowserThread::IO,
       FROM_HERE,
@@ -71,7 +74,7 @@ CertificateManagerModel::CertificateManagerModel(
       is_user_db_available_(is_user_db_available),
       is_tpm_available_(is_tpm_available),
       observer_(observer) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
 CertificateManagerModel::~CertificateManagerModel() {
@@ -166,6 +169,13 @@ int CertificateManagerModel::ImportFromPKCS12(net::CryptoModule* module,
   return result;
 }
 
+int CertificateManagerModel::ImportUserCert(const std::string& data) {
+  int result = cert_db_->ImportUserCert(data);
+  if (result == net::OK)
+    Refresh();
+  return result;
+}
+
 bool CertificateManagerModel::ImportCACerts(
     const net::CertificateList& certificates,
     net::NSSCertDatabase::TrustBits trust_bits,
@@ -213,11 +223,11 @@ void CertificateManagerModel::DidGetCertDBOnUIThread(
     bool is_tpm_available,
     CertificateManagerModel::Observer* observer,
     const CreationCallback& callback) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   scoped_ptr<CertificateManagerModel> model(new CertificateManagerModel(
       cert_db, is_user_db_available, is_tpm_available, observer));
-  callback.Run(model.Pass());
+  callback.Run(std::move(model));
 }
 
 // static
@@ -225,7 +235,7 @@ void CertificateManagerModel::DidGetCertDBOnIOThread(
     CertificateManagerModel::Observer* observer,
     const CreationCallback& callback,
     net::NSSCertDatabase* cert_db) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   bool is_user_db_available = cert_db->GetPublicSlot();
   bool is_tpm_available = false;
@@ -248,7 +258,7 @@ void CertificateManagerModel::GetCertDBOnIOThread(
     content::ResourceContext* context,
     CertificateManagerModel::Observer* observer,
     const CreationCallback& callback) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::NSSCertDatabase* cert_db = GetNSSCertDatabaseForResourceContext(
       context,
       base::Bind(&CertificateManagerModel::DidGetCertDBOnIOThread,

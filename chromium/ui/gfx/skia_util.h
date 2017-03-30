@@ -22,12 +22,17 @@ class SkDrawLooper;
 namespace gfx {
 
 class ImageSkiaRep;
+class Point;
+class PointF;
 class Rect;
 class RectF;
 class ShadowValue;
 class Transform;
 
-// Convert between Skia and gfx rect types.
+// Convert between Skia and gfx types.
+GFX_EXPORT SkPoint PointToSkPoint(const Point& point);
+GFX_EXPORT SkIPoint PointToSkIPoint(const Point& point);
+GFX_EXPORT SkPoint PointFToSkPoint(const PointF& point);
 GFX_EXPORT SkRect RectToSkRect(const Rect& rect);
 GFX_EXPORT SkIRect RectToSkIRect(const Rect& rect);
 GFX_EXPORT Rect SkIRectToRect(const SkIRect& rect);
@@ -35,6 +40,7 @@ GFX_EXPORT SkRect RectFToSkRect(const RectF& rect);
 GFX_EXPORT RectF SkRectToRectF(const SkRect& rect);
 GFX_EXPORT SkSize SizeFToSkSize(const SizeF& size);
 GFX_EXPORT SizeF SkSizeToSizeF(const SkSize& size);
+GFX_EXPORT Size SkISizeToSize(const SkISize& size);
 
 GFX_EXPORT void QuadFToSkPoints(const gfx::QuadF& quad, SkPoint points[4]);
 

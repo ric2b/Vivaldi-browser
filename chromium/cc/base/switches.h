@@ -17,29 +17,24 @@ namespace switches {
 
 // Switches for the renderer compositor only.
 CC_EXPORT extern const char kDisableThreadedAnimation[];
+CC_EXPORT extern const char kDisableCachedPictureRaster[];
 CC_EXPORT extern const char kDisableCompositedAntialiasing[];
 CC_EXPORT extern const char kDisableMainFrameBeforeActivation[];
 CC_EXPORT extern const char kEnableMainFrameBeforeActivation[];
-CC_EXPORT extern const char kJankInsteadOfCheckerboard[];
 CC_EXPORT extern const char kTopControlsHideThreshold[];
 CC_EXPORT extern const char kTopControlsShowThreshold[];
 CC_EXPORT extern const char kSlowDownRasterScaleFactor[];
-CC_EXPORT extern const char kCompositeToMailbox[];
-CC_EXPORT extern const char kMaxTilesForInterestArea[];
-CC_EXPORT extern const char kMaxUnusedResourceMemoryUsagePercentage[];
 CC_EXPORT extern const char kStrictLayerPropertyChangeChecking[];
 CC_EXPORT extern const char kEnablePropertyTreeVerification[];
 
 // Switches for both the renderer and ui compositors.
-CC_EXPORT extern const char kUIDisablePartialSwap[];
 CC_EXPORT extern const char kEnableBeginFrameScheduling[];
 CC_EXPORT extern const char kEnableGpuBenchmarking[];
+CC_EXPORT extern const char kDisableCompositorPropertyTrees[];
 
 // Debug visualizations.
 CC_EXPORT extern const char kShowCompositedLayerBorders[];
 CC_EXPORT extern const char kUIShowCompositedLayerBorders[];
-CC_EXPORT extern const char kShowFPSCounter[];
-CC_EXPORT extern const char kUIShowFPSCounter[];
 CC_EXPORT extern const char kShowLayerAnimationBounds[];
 CC_EXPORT extern const char kUIShowLayerAnimationBounds[];
 CC_EXPORT extern const char kShowPropertyChangedRects[];

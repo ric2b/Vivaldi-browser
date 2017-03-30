@@ -20,7 +20,6 @@ irrespective of any --enable-packing setting.  Typically this would be
 
 import optparse
 import os
-import shlex
 import shutil
 import sys
 import tempfile
@@ -65,11 +64,14 @@ def main(args):
   parser.add_option('--libraries', action='append',
       help='List of libraries')
   parser.add_option('--stamp', help='Path to touch on success')
+  parser.add_option('--filelistjson',
+                    help='Output path of filelist.json to write')
 
   options, _ = parser.parse_args(args)
   enable_packing = (options.enable_packing == '1' and
                     options.configuration_name == 'Release')
-  exclude_packing_set = set(shlex.split(options.exclude_packing_list))
+  exclude_packing_set = set(build_utils.ParseGypList(
+      options.exclude_packing_list))
 
   libraries = []
   for libs_arg in options.libraries:
@@ -80,10 +82,12 @@ def main(args):
 
   build_utils.MakeDirectory(options.packed_libraries_dir)
 
+  output_paths = []
   for library in libraries:
     library_path = os.path.join(options.stripped_libraries_dir, library)
     output_path = os.path.join(
         options.packed_libraries_dir, os.path.basename(library))
+    output_paths.append(output_path)
 
     if enable_packing and library not in exclude_packing_set:
       PackLibraryRelocations(options.android_pack_relocations,
@@ -91,6 +95,9 @@ def main(args):
                              output_path)
     else:
       CopyLibraryUnchanged(library_path, output_path)
+
+  if options.filelistjson:
+    build_utils.WriteJson({ 'files': output_paths }, options.filelistjson)
 
   if options.depfile:
     build_utils.WriteDepfile(

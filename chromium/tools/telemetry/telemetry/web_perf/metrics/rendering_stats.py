@@ -25,7 +25,7 @@ FORWARD_SCROLL_UPDATE_COMP_NAME = (
 END_COMP_NAME = 'INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT'
 
 # Name for a main thread scroll update latency event.
-SCROLL_UPDATE_EVENT_NAME = 'Latency::ScrollUpdate'
+MAIN_THREAD_SCROLL_UPDATE_EVENT_NAME = 'Latency::ScrollUpdate'
 # Name for a gesture scroll update latency event.
 GESTURE_SCROLL_UPDATE_EVENT_NAME = 'InputLatency::GestureScrollUpdate'
 
@@ -46,7 +46,7 @@ def GetLatencyEvents(process, timeline_range):
 
   Input events dump their LatencyInfo into trace buffer as async trace event
   of name starting with "InputLatency". Non-input events with name starting
-  with "Latency". The trace event has a memeber 'data' containing its latency
+  with "Latency". The trace event has a member 'data' containing its latency
   history.
 
   """
@@ -68,7 +68,7 @@ def ComputeEventLatencies(input_events):
 
   Input event latency is the time from when the input event is created to
   when its resulted page is swap buffered.
-  Input event on differnt platforms uses different LatencyInfo component to
+  Input event on different platforms uses different LatencyInfo component to
   record its creation timestamp. We go through the following component list
   to find the creation timestamp:
   1. INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT -- when event is created in OS
@@ -174,7 +174,7 @@ class RenderingStats(object):
     self.frame_queueing_durations = []
     # Latency from when a scroll update is sent to the main thread until the
     # resulting frame is swapped.
-    self.scroll_update_latency = []
+    self.main_thread_scroll_latency = []
     # Latency for a GestureScrollUpdate input event.
     self.gesture_scroll_update_latency = []
 
@@ -184,7 +184,7 @@ class RenderingStats(object):
       self.approximated_pixel_percentages.append([])
       self.checkerboarded_pixel_percentages.append([])
       self.input_event_latency.append([])
-      self.scroll_update_latency.append([])
+      self.main_thread_scroll_latency.append([])
       self.gesture_scroll_update_latency.append([])
 
       if timeline_range.is_empty:
@@ -214,10 +214,10 @@ class RenderingStats(object):
     # input events and would therefore add noise to overall latency numbers.
     self.input_event_latency[-1] = [
         latency for name, latency in event_latencies
-        if name != SCROLL_UPDATE_EVENT_NAME]
-    self.scroll_update_latency[-1] = [
+        if name != MAIN_THREAD_SCROLL_UPDATE_EVENT_NAME]
+    self.main_thread_scroll_latency[-1] = [
         latency for name, latency in event_latencies
-        if name == SCROLL_UPDATE_EVENT_NAME]
+        if name == MAIN_THREAD_SCROLL_UPDATE_EVENT_NAME]
     self.gesture_scroll_update_latency[-1] = [
         latency for name, latency in event_latencies
         if name == GESTURE_SCROLL_UPDATE_EVENT_NAME]
@@ -240,8 +240,8 @@ class RenderingStats(object):
       self.frame_timestamps[-1].append(
           event.start)
       if len(self.frame_timestamps[-1]) >= 2:
-        self.frame_times[-1].append(round(self.frame_timestamps[-1][-1] -
-                                          self.frame_timestamps[-1][-2], 2))
+        self.frame_times[-1].append(
+            self.frame_timestamps[-1][-1] - self.frame_timestamps[-1][-2])
 
   def _InitFrameTimestampsFromTimeline(
       self, process, timestamp_event_name, timeline_range):

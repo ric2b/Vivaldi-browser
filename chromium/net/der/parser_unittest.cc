@@ -196,6 +196,31 @@ TEST(ParserTest, CannotAdvanceAfterReadOptionalTag) {
   ASSERT_FALSE(parser.Advance());
 }
 
+// Reads a valid BIT STRING with 1 unused bit.
+TEST(ParserTest, ReadBitString) {
+  const uint8_t der[] = {0x03, 0x03, 0x01, 0xAA, 0xBE};
+  Parser parser((Input(der)));
+
+  BitString bit_string;
+  ASSERT_TRUE(parser.ReadBitString(&bit_string));
+  EXPECT_FALSE(parser.HasMore());
+
+  EXPECT_EQ(1u, bit_string.unused_bits());
+  ASSERT_EQ(2u, bit_string.bytes().Length());
+  EXPECT_EQ(0xAA, bit_string.bytes().UnsafeData()[0]);
+  EXPECT_EQ(0xBE, bit_string.bytes().UnsafeData()[1]);
+}
+
+// Tries reading a BIT STRING. This should fail because the tag is not for a
+// BIT STRING.
+TEST(ParserTest, ReadBitStringBadTag) {
+  const uint8_t der[] = {0x05, 0x03, 0x01, 0xAA, 0xBE};
+  Parser parser((Input(der)));
+
+  BitString bit_string;
+  EXPECT_FALSE(parser.ReadBitString(&bit_string));
+}
+
 }  // namespace test
 }  // namespace der
 }  // namespace net

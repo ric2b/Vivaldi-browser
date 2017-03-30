@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/wifi_credentials_helper.h"
-#include "chrome/common/chrome_switches.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/wifi_sync/wifi_credential.h"
 #include "components/wifi_sync/wifi_security_class.h"
 

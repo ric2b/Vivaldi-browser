@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_POLICY_CLOUD_POLICY_HEADER_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_POLICY_CLOUD_POLICY_HEADER_SERVICE_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -31,7 +32,7 @@ class PolicyHeaderServiceFactory : public BrowserContextKeyedServiceFactory {
       content::BrowserContext* profile) const override;
 
  private:
-  friend struct DefaultSingletonTraits<PolicyHeaderServiceFactory>;
+  friend struct base::DefaultSingletonTraits<PolicyHeaderServiceFactory>;
 
   PolicyHeaderServiceFactory();
   ~PolicyHeaderServiceFactory() override;

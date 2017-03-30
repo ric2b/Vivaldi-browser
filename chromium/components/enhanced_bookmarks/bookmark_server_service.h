@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "components/enhanced_bookmarks/enhanced_bookmark_model_observer.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -96,11 +97,6 @@ class BookmarkServerService : protected net::URLFetcherDelegate,
   base::ObserverList<BookmarkServerServiceObserver> observers_;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(BookmarkServerServiceTest, Cluster);
-  FRIEND_TEST_ALL_PREFIXES(BookmarkServerServiceTest, SignOut);
-  FRIEND_TEST_ALL_PREFIXES(BookmarkServerServiceTest,
-                           ClearClusterMapOnRemoveAllBookmarks);
-
   // net::URLFetcherDelegate methods. Called when the query is finished.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
 

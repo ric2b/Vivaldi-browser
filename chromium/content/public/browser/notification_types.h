@@ -89,13 +89,6 @@ enum NotificationType {
   // DEPRECATED: Use WebContentsObserver::DidStopLoading()
   NOTIFICATION_LOAD_STOP,
 
-  // A response has been received for a resource request.  The source will be
-  // a Source<WebContents> corresponding to the tab in which the request was
-  // issued.  Details in the form of a ResourceRequestDetails object are
-  // provided.
-  // DEPRECATED: Use WebContentsObserver::DidGetResourceResponseStart()
-  NOTIFICATION_RESOURCE_RESPONSE_STARTED,
-
   // A redirect was received while requesting a resource.  The source will be
   // a Source<WebContents> corresponding to the tab in which the request was
   // issued.  Details in the form of a ResourceRedirectDetails are provided.
@@ -121,12 +114,6 @@ enum NotificationType {
   // WebContentsObserver::WebContentsDestroyed()
   NOTIFICATION_WEB_CONTENTS_DISCONNECTED,
 
-  // This notification is sent after WebContents' title is updated. The source
-  // is a Source<WebContents> with a pointer to the WebContents. The details
-  // is a std::pair<NavigationEntry*, bool> that contains more information.
-  // DEPRECATED: Use WebContentsObserver::TitleWasSet()
-  NOTIFICATION_WEB_CONTENTS_TITLE_UPDATED,
-
   // This notification is sent when a WebContents is being destroyed. Any
   // object holding a reference to a WebContents can listen to that
   // notification to properly reset the reference. The source is a
@@ -148,11 +135,6 @@ enum NotificationType {
   // RenderProcessHost that corresponds to the process.
   NOTIFICATION_RENDERER_PROCESS_TERMINATED,
 
-  // Indicates that a render process is starting to exit, such that it should
-  // not be used for future navigations.  The source will be the
-  // RenderProcessHost that corresponds to the process.
-  NOTIFICATION_RENDERER_PROCESS_CLOSING,
-
   // Indicates that a render process was closed (meaning it exited, but the
   // RenderProcessHost might be reused).  The source will be the corresponding
   // RenderProcessHost.  The details will be a RendererClosedDetails struct.
@@ -172,13 +154,6 @@ enum NotificationType {
   // painted. The source is the RenderWidgetHost, the details are not used.
   NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE,
 
-  // This notifies the observer that a HandleInputEventACK was received. The
-  // source is the RenderWidgetHost, the details are the type of event
-  // received.
-  // Note: The RenderWidgetHost may be deallocated at this point.
-  // Used only in testing.
-  NOTIFICATION_RENDER_WIDGET_HOST_DID_RECEIVE_INPUT_EVENT_ACK,
-
   // Sent from RenderViewHost::ClosePage.  The hosted RenderView has
   // processed the onbeforeunload handler and is about to be sent a
   // ViewMsg_ClosePage message to complete the tear-down process.  The source
@@ -186,11 +161,6 @@ enum NotificationType {
   // Note:  This message is not sent in response to RenderView closure
   // initiated by window.close().
   NOTIFICATION_RENDER_VIEW_HOST_WILL_CLOSE_RENDER_VIEW,
-
-  // This notifies the observer that the drag operation ack in a drag and
-  // drop operation was received. The source is the RenderViewHost.
-  // Note: Used only in testing.
-  NOTIFICATION_RENDER_VIEW_HOST_DID_RECEIVE_DRAG_TARGET_DROP_ACK,
 
   // Indicates a RenderWidgetHost has been hidden or restored. The source is
   // the RWH whose visibility changed, the details is a bool set to true if
@@ -204,10 +174,11 @@ enum NotificationType {
 
   // Notification from WebContents that we have received a response from the
   // renderer in response to a dom automation controller action. The source is
-  // the RenderViewHost, and the details is a DomOperationNotificationDetails.
+  // the RenderViewHost, and the details is a string with the response.
   NOTIFICATION_DOM_OPERATION_RESPONSE,
 
   // Sent when contents extdata is updated (Vivaldi).
+  // DEPRECATED: Use WebContentsObserver::ExtDataSet()
   NOTIFICATION_EXTDATA_UPDATED,
 
   // Custom notifications used by the embedder should start from here.

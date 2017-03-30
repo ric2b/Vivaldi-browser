@@ -5,6 +5,9 @@
 #ifndef UI_COMPOSITOR_TEST_IN_PROCESS_CONTEXT_FACTORY_H_
 #define UI_COMPOSITOR_TEST_IN_PROCESS_CONTEXT_FACTORY_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_image_factory.h"
 #include "cc/test/test_shared_bitmap_manager.h"
@@ -21,6 +24,7 @@ class SurfaceManager;
 }
 
 namespace ui {
+class InProcessContextProvider;
 
 class InProcessContextFactory : public ContextFactory {
  public:
@@ -46,8 +50,8 @@ class InProcessContextFactory : public ContextFactory {
   scoped_refptr<cc::ContextProvider> SharedMainThreadContextProvider() override;
   void RemoveCompositor(Compositor* compositor) override;
   bool DoesCreateTestContexts() override;
-  uint32 GetImageTextureTarget(gfx::GpuMemoryBuffer::Format format,
-                               gfx::GpuMemoryBuffer::Usage usage) override;
+  uint32_t GetImageTextureTarget(gfx::BufferFormat format,
+                                 gfx::BufferUsage usage) override;
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
@@ -56,7 +60,8 @@ class InProcessContextFactory : public ContextFactory {
                      const gfx::Size& size) override;
 
  private:
-  scoped_refptr<cc::ContextProvider> shared_main_thread_contexts_;
+  scoped_refptr<InProcessContextProvider> shared_main_thread_contexts_;
+  scoped_refptr<InProcessContextProvider> shared_worker_context_provider_;
   cc::TestSharedBitmapManager shared_bitmap_manager_;
   cc::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   cc::TestImageFactory image_factory_;

@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 
@@ -20,31 +19,18 @@ namespace test {
 
 namespace {
 
-//const char kContentEncoding[] = "content-encoding";
+// const char kContentEncoding[] = "content-encoding";
 const char kContentLength[] = "content-length";
 const char kTransferCoding[] = "transfer-encoding";
 
 // Both kHTTPVersionString and kMethodString arrays are constructed to match
 // the enum values defined in Version and Method of HTTPMessage.
-const char* const kHTTPVersionString[] = {
-  "",
-  "HTTP/0.9",
-  "HTTP/1.0",
-  "HTTP/1.1"
-};
+const char* const kHTTPVersionString[] = {"", "HTTP/0.9", "HTTP/1.0",
+                                          "HTTP/1.1"};
 
 const char* const kMethodString[] = {
-  "",
-  "OPTIONS",
-  "GET",
-  "HEAD",
-  "POST",
-  "PUT",
-  "DELETE",
-  "TRACE",
-  "CONNECT",
-  "MKCOL",
-  "UNLOCK",
+    "",       "OPTIONS", "GET",     "HEAD",  "POST",   "PUT",
+    "DELETE", "TRACE",   "CONNECT", "MKCOL", "UNLOCK",
 };
 
 // Returns true if the message represents a complete request or response.
@@ -101,8 +87,7 @@ const char* HTTPMessage::VersionToString(Version version) {
   return kHTTPVersionString[version];
 }
 
-HTTPMessage::HTTPMessage()
-    : is_request_(true) {
+HTTPMessage::HTTPMessage() : is_request_(true) {
   InitializeFields();
 }
 
@@ -116,8 +101,7 @@ HTTPMessage::HTTPMessage(Version ver, Method request, const string& path)
   headers()->SetRequestUri(path);
 }
 
-HTTPMessage::~HTTPMessage() {
-}
+HTTPMessage::~HTTPMessage() {}
 
 void HTTPMessage::InitializeFields() {
   has_complete_message_ = true;
@@ -156,10 +140,10 @@ void HTTPMessage::ValidateMessage() const {
   headers()->GetAllOfHeader(kTransferCoding, &transfer_encodings);
   CHECK_GE(1ul, transfer_encodings.size());
   for (vector<StringPiece>::iterator it = transfer_encodings.begin();
-       it != transfer_encodings.end();
-       ++it) {
-    CHECK(StringPieceUtils::EqualIgnoreCase("identity", *it) ||
-          StringPieceUtils::EqualIgnoreCase("chunked", *it)) << *it;
+       it != transfer_encodings.end(); ++it) {
+    CHECK(base::EqualsCaseInsensitiveASCII("identity", *it) ||
+          base::EqualsCaseInsensitiveASCII("chunked", *it))
+        << *it;
   }
 
   vector<StringPiece> content_lengths;

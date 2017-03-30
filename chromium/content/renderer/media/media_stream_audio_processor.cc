@@ -4,10 +4,16 @@
 
 #include "content/renderer/media/media_stream_audio_processor.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "content/renderer/media/media_stream_audio_processor_options.h"
 #include "content/renderer/media/rtc_media_constraints.h"
@@ -20,10 +26,6 @@
 #include "third_party/libjingle/source/talk/app/webrtc/mediaconstraintsinterface.h"
 #include "third_party/webrtc/modules/audio_processing/typing_detection.h"
 
-#if defined(OS_CHROMEOS)
-#include "base/sys_info.h"
-#endif
-
 namespace content {
 
 namespace {
@@ -32,6 +34,32 @@ using webrtc::AudioProcessing;
 using webrtc::NoiseSuppression;
 
 const int kAudioProcessingNumberOfChannels = 1;
+
+// Minimum duration of any detectable audio repetition.
+const int kMinLengthMs = 1;
+
+// The following variables defines the look back time of audio repetitions that
+// will be logged. The complexity of the detector is proportional to the number
+// of look back times we keep track.
+const int kMinLookbackTimeMs = 10;
+const int kMaxLookbackTimeMs = 200;
+const int kLookbackTimeStepMs = 10;
+
+// Maximum frames of any input chunk of audio. Used by
+// |MediaStreamAudioProcessor::audio_repetition_detector_|. Input longer than
+// |kMaxFrames| won't cause any problem, and will only affect computational
+// efficiency.
+const size_t kMaxFrames = 480;  // 10 ms * 48 kHz
+
+// Send UMA report on an audio repetition being detected. |look_back_ms|
+// provides the look back time of the detected repetition. This function is
+// called back by |MediaStreamAudioProcessor::audio_repetition_detector_|.
+void ReportRepetition(int look_back_ms) {
+  UMA_HISTOGRAM_CUSTOM_COUNTS(
+      "Media.AudioCapturerRepetition", look_back_ms,
+      kMinLookbackTimeMs, kMaxLookbackTimeMs,
+      (kMaxLookbackTimeMs - kMinLookbackTimeMs) / kLookbackTimeStepMs + 1);
+}
 
 AudioProcessing::ChannelLayout MapLayout(media::ChannelLayout media_layout) {
   switch (media_layout) {
@@ -74,23 +102,19 @@ void RecordProcessingState(AudioTrackProcessingStates state) {
 }
 
 bool IsDelayAgnosticAecEnabled() {
-  // Note: It's important to query the field trial state first, to ensure that
-  // UMA reports the correct group.
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("UseDelayAgnosticAEC");
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableDelayAgnosticAec))
-    return true;
-  if (command_line->HasSwitch(switches::kDisableDelayAgnosticAec))
-    return false;
-
-  return (group_name == "Enabled" || group_name == "DefaultEnabled");
+  return !command_line->HasSwitch(switches::kDisableDelayAgnosticAec);
 }
 
-bool IsBeamformingEnabled(const MediaAudioConstraints& audio_constraints) {
-  return base::FieldTrialList::FindFullName("ChromebookBeamforming") ==
-             "Enabled" ||
-         audio_constraints.GetProperty(MediaAudioConstraints::kGoogBeamforming);
+// Checks if the default minimum starting volume value for the AGC is overridden
+// on the command line.
+bool GetStartupMinVolumeForAgc(int* startup_min_volume) {
+  DCHECK(startup_min_volume);
+  std::string min_volume_str(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kAgcStartupMinVolume));
+  return !min_volume_str.empty() &&
+         base::StringToInt(min_volume_str, startup_min_volume);
 }
 
 }  // namespace
@@ -149,7 +173,8 @@ class MediaStreamAudioFifo {
            new MediaStreamAudioBus(destination_channels, destination_frames)),
        data_available_(false) {
     DCHECK_GE(source_channels, destination_channels);
-    DCHECK_GT(sample_rate_, 0);
+    DCHECK_GE(sample_rate_, 8000);
+    DCHECK_LE(sample_rate_, 48000);
 
     if (source_channels > destination_channels) {
       audio_source_intermediate_ =
@@ -186,10 +211,12 @@ class MediaStreamAudioFifo {
     }
 
     if (fifo_) {
+      CHECK_LT(fifo_->frames(), destination_->bus()->frames());
       next_audio_delay_ = audio_delay +
           fifo_->frames() * base::TimeDelta::FromSeconds(1) / sample_rate_;
       fifo_->Push(source_to_push);
     } else {
+      CHECK(!data_available_);
       source_to_push->CopyTo(destination_->bus());
       next_audio_delay_ = audio_delay;
       data_available_ = true;
@@ -244,7 +271,7 @@ class MediaStreamAudioFifo {
 
 MediaStreamAudioProcessor::MediaStreamAudioProcessor(
     const blink::WebMediaConstraints& constraints,
-    int effects,
+    const MediaStreamDevice::AudioDeviceParameters& input_params,
     WebRtcPlayoutDataSource* playout_data_source)
     : render_delay_ms_(0),
       playout_data_source_(playout_data_source),
@@ -253,7 +280,7 @@ MediaStreamAudioProcessor::MediaStreamAudioProcessor(
       stopped_(false) {
   capture_thread_checker_.DetachFromThread();
   render_thread_checker_.DetachFromThread();
-  InitializeAudioProcessingModule(constraints, effects);
+  InitializeAudioProcessingModule(constraints, input_params);
 
   aec_dump_message_filter_ = AecDumpMessageFilter::Get();
   // In unit tests not creating a message filter, |aec_dump_message_filter_|
@@ -261,6 +288,16 @@ MediaStreamAudioProcessor::MediaStreamAudioProcessor(
   // ensure that we do get the filter when we should.
   if (aec_dump_message_filter_.get())
     aec_dump_message_filter_->AddDelegate(this);
+
+  // Create and configure |audio_repetition_detector_|.
+  std::vector<int> look_back_times;
+  for (int time = kMaxLookbackTimeMs; time >= kMinLookbackTimeMs;
+       time -= kLookbackTimeStepMs) {
+    look_back_times.push_back(time);
+  }
+  audio_repetition_detector_.reset(
+      new AudioRepetitionDetector(kMinLengthMs, kMaxFrames, look_back_times,
+                                  base::Bind(&ReportRepetition)));
 }
 
 MediaStreamAudioProcessor::~MediaStreamAudioProcessor() {
@@ -305,6 +342,13 @@ bool MediaStreamAudioProcessor::ProcessAndConsumeData(
   MediaStreamAudioBus* process_bus;
   if (!capture_fifo_->Consume(&process_bus, capture_delay))
     return false;
+
+  // Detect bit-exact repetition of audio present in the captured audio.
+  // We detect only one channel.
+  audio_repetition_detector_->Detect(process_bus->bus()->channel(0),
+                                     process_bus->bus()->frames(),
+                                     1,  // number of channels
+                                     input_format_.sample_rate());
 
   // Use the process bus directly if audio processing is disabled.
   MediaStreamAudioBus* output_bus = process_bus;
@@ -368,7 +412,7 @@ void MediaStreamAudioProcessor::OnAecDumpFile(
   DCHECK(file.IsValid());
 
   if (audio_processing_)
-    StartEchoCancellationDump(audio_processing_.get(), file.Pass());
+    StartEchoCancellationDump(audio_processing_.get(), std::move(file));
   else
     file.Close();
 }
@@ -428,11 +472,12 @@ void MediaStreamAudioProcessor::GetStats(AudioProcessorStats* stats) {
 }
 
 void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
-    const blink::WebMediaConstraints& constraints, int effects) {
+    const blink::WebMediaConstraints& constraints,
+    const MediaStreamDevice::AudioDeviceParameters& input_params) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   DCHECK(!audio_processing_);
 
-  MediaAudioConstraints audio_constraints(constraints, effects);
+  MediaAudioConstraints audio_constraints(constraints, input_params.effects);
 
   // Audio mirroring can be enabled even though audio processing is otherwise
   // disabled.
@@ -464,7 +509,8 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
       MediaAudioConstraints::kGoogNoiseSuppression);
   const bool goog_experimental_ns = audio_constraints.GetProperty(
       MediaAudioConstraints::kGoogExperimentalNoiseSuppression);
-  const bool goog_beamforming = IsBeamformingEnabled(audio_constraints);
+  const bool goog_beamforming = audio_constraints.GetProperty(
+      MediaAudioConstraints::kGoogBeamforming);
   const bool goog_high_pass_filter = audio_constraints.GetProperty(
       MediaAudioConstraints::kGoogHighpassFilter);
   // Return immediately if no goog constraint is enabled.
@@ -477,15 +523,29 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
 
   // Experimental options provided at creation.
   webrtc::Config config;
-  if (goog_experimental_aec)
-    config.Set<webrtc::ExtendedFilter>(new webrtc::ExtendedFilter(true));
-  if (goog_experimental_ns)
-    config.Set<webrtc::ExperimentalNs>(new webrtc::ExperimentalNs(true));
+  config.Set<webrtc::ExtendedFilter>(
+      new webrtc::ExtendedFilter(goog_experimental_aec));
+  config.Set<webrtc::ExperimentalNs>(
+      new webrtc::ExperimentalNs(goog_experimental_ns));
   if (IsDelayAgnosticAecEnabled())
     config.Set<webrtc::DelayAgnostic>(new webrtc::DelayAgnostic(true));
   if (goog_beamforming) {
-    ConfigureBeamforming(&config, audio_constraints.GetPropertyAsString(
-        MediaAudioConstraints::kGoogArrayGeometry));
+    const auto& geometry =
+        GetArrayGeometryPreferringConstraints(audio_constraints, input_params);
+
+    // Only enable beamforming if we have at least two mics.
+    config.Set<webrtc::Beamforming>(
+        new webrtc::Beamforming(geometry.size() > 1, geometry));
+  }
+
+  // If the experimental AGC is enabled, check for overridden config params.
+  if (audio_constraints.GetProperty(
+          MediaAudioConstraints::kGoogExperimentalAutoGainControl)) {
+    int startup_min_volume = 0;
+    if (GetStartupMinVolumeForAgc(&startup_min_volume)) {
+      config.Set<webrtc::ExperimentalAgc>(
+          new webrtc::ExperimentalAgc(true, startup_min_volume));
+    }
   }
 
   // Create and configure the webrtc::AudioProcessing.
@@ -527,50 +587,6 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
     EnableAutomaticGainControl(audio_processing_.get());
 
   RecordProcessingState(AUDIO_PROCESSING_ENABLED);
-}
-
-void MediaStreamAudioProcessor::ConfigureBeamforming(
-    webrtc::Config* config,
-    const std::string& geometry_str) const {
-  std::vector<webrtc::Point> geometry = ParseArrayGeometry(geometry_str);
-#if defined(OS_CHROMEOS)
-  if (geometry.size() == 0) {
-    const std::string board = base::SysInfo::GetLsbReleaseBoard();
-    if (board.find("nyan_kitty") != std::string::npos) {
-      geometry.push_back(webrtc::Point(-0.03f, 0.f, 0.f));
-      geometry.push_back(webrtc::Point(0.03f, 0.f, 0.f));
-    } else if (board.find("peach_pi") != std::string::npos) {
-      geometry.push_back(webrtc::Point(-0.025f, 0.f, 0.f));
-      geometry.push_back(webrtc::Point(0.025f, 0.f, 0.f));
-    } else if (board.find("samus") != std::string::npos) {
-      geometry.push_back(webrtc::Point(-0.032f, 0.f, 0.f));
-      geometry.push_back(webrtc::Point(0.032f, 0.f, 0.f));
-    } else if (board.find("swanky") != std::string::npos) {
-      geometry.push_back(webrtc::Point(-0.026f, 0.f, 0.f));
-      geometry.push_back(webrtc::Point(0.026f, 0.f, 0.f));
-    }
-  }
-#endif
-  config->Set<webrtc::Beamforming>(new webrtc::Beamforming(geometry.size() > 1,
-                                                           geometry));
-}
-
-std::vector<webrtc::Point> MediaStreamAudioProcessor::ParseArrayGeometry(
-    const std::string& geometry_str) const {
-  std::vector<webrtc::Point> result;
-  std::vector<float> values;
-  std::istringstream str(geometry_str);
-  std::copy(std::istream_iterator<float>(str),
-            std::istream_iterator<float>(),
-            std::back_inserter(values));
-  if (values.size() % 3 == 0) {
-    for (size_t i = 0; i < values.size(); i += 3) {
-      result.push_back(webrtc::Point(values[i + 0],
-                                     values[i + 1],
-                                     values[i + 2]));
-    }
-  }
-  return result;
 }
 
 void MediaStreamAudioProcessor::InitializeCaptureFifo(
@@ -619,7 +635,7 @@ void MediaStreamAudioProcessor::InitializeCaptureFifo(
   // 10 ms chunks regardless, while WebAudio sinks want less, and we're assuming
   // we can identify WebAudio sinks by the input chunk size. Less fragile would
   // be to have the sink actually tell us how much it wants (as in the above
-  // TODO).
+  // todo).
   int processing_frames = input_format.sample_rate() / 100;
   int output_frames = output_sample_rate / 100;
   if (!audio_processing_ && input_format.frames_per_buffer() < output_frames) {
@@ -687,7 +703,7 @@ int MediaStreamAudioProcessor::ProcessData(const float* const* process_ptrs,
 
   base::subtle::Atomic32 render_delay_ms =
       base::subtle::Acquire_Load(&render_delay_ms_);
-  int64 capture_delay_ms = capture_delay.InMilliseconds();
+  int64_t capture_delay_ms = capture_delay.InMilliseconds();
   DCHECK_LT(capture_delay_ms,
             std::numeric_limits<base::subtle::Atomic32>::max());
   int total_delay_ms =  capture_delay_ms + render_delay_ms;

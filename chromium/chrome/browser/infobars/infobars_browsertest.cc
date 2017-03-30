@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
@@ -19,7 +22,9 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/test_extension_registry_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
 class InfoBarsTest : public InProcessBrowserTest {
@@ -33,18 +38,17 @@ class InfoBarsTest : public InProcessBrowserTest {
     ExtensionService* service = extensions::ExtensionSystem::Get(
         browser()->profile())->extension_service();
 
-    content::WindowedNotificationObserver observer(
-        extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
-        content::NotificationService::AllSources());
+    extensions::TestExtensionRegistryObserver observer(
+        extensions::ExtensionRegistry::Get(browser()->profile()));
 
     scoped_ptr<ExtensionInstallPrompt> client(new ExtensionInstallPrompt(
         browser()->tab_strip_model()->GetActiveWebContents()));
     scoped_refptr<extensions::CrxInstaller> installer(
-        extensions::CrxInstaller::Create(service, client.Pass()));
+        extensions::CrxInstaller::Create(service, std::move(client)));
     installer->set_install_cause(extension_misc::INSTALL_CAUSE_AUTOMATION);
     installer->InstallCrx(path);
 
-    observer.Wait();
+    observer.WaitForExtensionLoaded();
   }
 };
 
@@ -59,7 +63,7 @@ IN_PROC_BROWSER_TEST_F(InfoBarsTest, TestInfoBarsCloseOnNewTheme) {
     return;
 #endif
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/simple.html"));

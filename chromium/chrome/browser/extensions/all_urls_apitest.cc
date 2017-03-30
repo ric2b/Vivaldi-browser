@@ -3,7 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/test_switches.h"
@@ -15,18 +18,58 @@
 #include "extensions/test/extension_test_message_listener.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
+namespace extensions {
+
+namespace {
 const std::string kAllUrlsTarget = "/extensions/api_test/all_urls/index.html";
+}
 
-typedef ExtensionApiTest AllUrlsApiTest;
+class AllUrlsApiTest : public ExtensionApiTest {
+ protected:
+  AllUrlsApiTest() {}
+  ~AllUrlsApiTest() override {}
 
-// TODO(vivaldi) Reenable macfor Vivaldi
-#if (defined(OS_WIN) && !defined(NDEBUG)) || defined(OS_MACOSX)
-// http://crbug.com/174341
-#define MAYBE_WhitelistedExtension DISABLED_WhitelistedExtension
-#else
-#define MAYBE_WhitelistedExtension WhitelistedExtension
-#endif
-IN_PROC_BROWSER_TEST_F(AllUrlsApiTest, MAYBE_WhitelistedExtension) {
+  const Extension* content_script() const { return content_script_.get(); }
+  const Extension* execute_script() const { return execute_script_.get(); }
+
+  void WhitelistExtensions() {
+    ExtensionsClient::ScriptingWhitelist whitelist;
+    whitelist.push_back(content_script_->id());
+    whitelist.push_back(execute_script_->id());
+    ExtensionsClient::Get()->SetScriptingWhitelist(whitelist);
+    // Extensions will have certain permissions withheld at initialization if
+    // they aren't whitelisted, so we need to reload them.
+    ExtensionTestMessageListener listener("execute: ready", false);
+    extension_service()->ReloadExtension(content_script_->id());
+    extension_service()->ReloadExtension(execute_script_->id());
+    ASSERT_TRUE(listener.WaitUntilSatisfied());
+  }
+
+  void NavigateAndWait(const std::string& url) {
+    ExtensionTestMessageListener listener_a("content script: " + url, false);
+    ExtensionTestMessageListener listener_b("execute: " + url, false);
+    ui_test_utils::NavigateToURL(browser(), GURL(url));
+    ASSERT_TRUE(listener_a.WaitUntilSatisfied());
+    ASSERT_TRUE(listener_b.WaitUntilSatisfied());
+  }
+
+ private:
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    base::FilePath data_dir = test_data_dir_.AppendASCII("all_urls");
+    content_script_ = LoadExtension(data_dir.AppendASCII("content_script"));
+    ASSERT_TRUE(content_script_);
+    execute_script_ = LoadExtension(data_dir.AppendASCII("execute_script"));
+    ASSERT_TRUE(execute_script_);
+  }
+
+  scoped_refptr<const Extension> content_script_;
+  scoped_refptr<const Extension> execute_script_;
+
+  DISALLOW_COPY_AND_ASSIGN(AllUrlsApiTest);
+};
+
+IN_PROC_BROWSER_TEST_F(AllUrlsApiTest, WhitelistedExtension) {
 #if defined(OS_WIN) && defined(USE_ASH)
   // Disable this test in Metro+Ash for now (http://crbug.com/262796).
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -34,100 +77,35 @@ IN_PROC_BROWSER_TEST_F(AllUrlsApiTest, MAYBE_WhitelistedExtension) {
     return;
 #endif
 
-  // First setup the two extensions.
-  base::FilePath extension_dir1 = test_data_dir_.AppendASCII("all_urls")
-                                          .AppendASCII("content_script");
-  base::FilePath extension_dir2 = test_data_dir_.AppendASCII("all_urls")
-                                          .AppendASCII("execute_script");
+  WhitelistExtensions();
 
-  // Then add the two extensions to the whitelist.
-  extensions::ExtensionsClient::ScriptingWhitelist whitelist;
-  whitelist.push_back(crx_file::id_util::GenerateIdForPath(extension_dir1));
-  whitelist.push_back(crx_file::id_util::GenerateIdForPath(extension_dir2));
-  extensions::ExtensionsClient::Get()->SetScriptingWhitelist(whitelist);
+  auto bystander = LoadExtension(
+      test_data_dir_.AppendASCII("all_urls").AppendASCII("bystander"));
+  ASSERT_TRUE(bystander);
 
-  // Then load extensions.
-  extensions::ExtensionRegistry* registry =
-      extensions::ExtensionRegistry::Get(browser()->profile());
-  const size_t size_before = registry->enabled_extensions().size();
-  ASSERT_TRUE(LoadExtension(extension_dir1));
-  ASSERT_TRUE(LoadExtension(extension_dir2));
-  EXPECT_EQ(size_before + 2, registry->enabled_extensions().size());
-
-  std::string url;
-
-  // Now verify we run content scripts on chrome://newtab/.
-  url = "chrome://newtab/";
-  ExtensionTestMessageListener listener1a("content script: " + url, false);
-  ExtensionTestMessageListener listener1b("execute: " + url, false);
-  ui_test_utils::NavigateToURL(browser(), GURL(url));
-  ASSERT_TRUE(listener1a.WaitUntilSatisfied());
-  ASSERT_TRUE(listener1b.WaitUntilSatisfied());
-
-  // Now verify data: urls.
-  url = "data:text/html;charset=utf-8,<html>asdf</html>";
-  ExtensionTestMessageListener listener2a("content script: " + url, false);
-  ExtensionTestMessageListener listener2b("execute: " + url, false);
-  ui_test_utils::NavigateToURL(browser(), GURL(url));
-  ASSERT_TRUE(listener2a.WaitUntilSatisfied());
-  ASSERT_TRUE(listener2b.WaitUntilSatisfied());
-
-  // Now verify chrome://version/.
-  url = "chrome://version/";
-  ExtensionTestMessageListener listener3a("content script: " + url, false);
-  ExtensionTestMessageListener listener3b("execute: " + url, false);
-  ui_test_utils::NavigateToURL(browser(), GURL(url));
-  ASSERT_TRUE(listener3a.WaitUntilSatisfied());
-  ASSERT_TRUE(listener3b.WaitUntilSatisfied());
-
-  // Now verify about:blank.
-  url = "about:blank";
-  ExtensionTestMessageListener listener4a("content script: " + url, false);
-  ExtensionTestMessageListener listener4b("execute: " + url, false);
-  ui_test_utils::NavigateToURL(browser(), GURL(url));
-  ASSERT_TRUE(listener4a.WaitUntilSatisfied());
-  ASSERT_TRUE(listener4b.WaitUntilSatisfied());
-
-  // Now verify we can script a regular http page.
   ASSERT_TRUE(StartEmbeddedTestServer());
-  GURL page_url = embedded_test_server()->GetURL(kAllUrlsTarget);
-  ExtensionTestMessageListener listener5a("content script: " + page_url.spec(),
-                                          false);
-  ExtensionTestMessageListener listener5b("execute: " + page_url.spec(), false);
-  ui_test_utils::NavigateToURL(browser(), page_url);
-  ASSERT_TRUE(listener5a.WaitUntilSatisfied());
-  ASSERT_TRUE(listener5b.WaitUntilSatisfied());
+
+  // Now verify that we run content scripts on different URLs, including
+  // internal pages, data URLs, regular HTTP pages, and resource URLs from
+  // extensions.
+  const std::string test_urls[] = {
+    "chrome://newtab/",
+    "data:text/html;charset=utf-8,<html>asdf</html>",
+    "chrome://version/",
+    "about:blank",
+    embedded_test_server()->GetURL(kAllUrlsTarget).spec(),
+    bystander->GetResourceURL("page.html").spec()
+  };
+  for (auto test_url : test_urls)
+    NavigateAndWait(test_url);
 }
 
 // Test that an extension NOT whitelisted for scripting can ask for <all_urls>
 // and run scripts on non-restricted all pages.
-// TODO: Reenable for Windows
-#if defined(OS_WIN)
-#define MAYBE_RegularExtensions DISABLED_RegularExtensions
-#else
-#define MAYBE_RegularExtensions RegularExtensions
-#endif
-IN_PROC_BROWSER_TEST_F(AllUrlsApiTest, MAYBE_RegularExtensions) {
-  // First load the two extensions.
-  base::FilePath extension_dir1 = test_data_dir_.AppendASCII("all_urls")
-                                          .AppendASCII("content_script");
-  base::FilePath extension_dir2 = test_data_dir_.AppendASCII("all_urls")
-                                          .AppendASCII("execute_script");
-
-  extensions::ExtensionRegistry* registry =
-      extensions::ExtensionRegistry::Get(browser()->profile());
-  const size_t size_before = registry->enabled_extensions().size();
-  ASSERT_TRUE(LoadExtension(extension_dir1));
-  ASSERT_TRUE(LoadExtension(extension_dir2));
-  EXPECT_EQ(size_before + 2, registry->enabled_extensions().size());
-
+IN_PROC_BROWSER_TEST_F(AllUrlsApiTest, RegularExtensions) {
   // Now verify we can script a regular http page.
   ASSERT_TRUE(StartEmbeddedTestServer());
-  GURL page_url = embedded_test_server()->GetURL(kAllUrlsTarget);
-  ExtensionTestMessageListener listener1a("content script: " + page_url.spec(),
-                                          false);
-  ExtensionTestMessageListener listener1b("execute: " + page_url.spec(), false);
-  ui_test_utils::NavigateToURL(browser(), page_url);
-  ASSERT_TRUE(listener1a.WaitUntilSatisfied());
-  ASSERT_TRUE(listener1b.WaitUntilSatisfied());
+  NavigateAndWait(embedded_test_server()->GetURL(kAllUrlsTarget).spec());
 }
+
+}  // namespace extensions

@@ -4,13 +4,15 @@
 
 #include "content/child/indexed_db/webidbdatabase_impl.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "content/child/indexed_db/indexed_db_dispatcher.h"
 #include "content/child/indexed_db/indexed_db_key_builders.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/child/worker_task_runner.h"
+#include "content/child/worker_thread_registry.h"
 #include "content/common/indexed_db/indexed_db_messages.h"
 #include "third_party/WebKit/public/platform/WebBlobInfo.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -32,8 +34,8 @@ using blink::WebVector;
 
 namespace content {
 
-WebIDBDatabaseImpl::WebIDBDatabaseImpl(int32 ipc_database_id,
-                                       int32 ipc_database_callbacks_id,
+WebIDBDatabaseImpl::WebIDBDatabaseImpl(int32_t ipc_database_id,
+                                       int32_t ipc_database_callbacks_id,
                                        ThreadSafeSender* thread_safe_sender)
     : ipc_database_id_(ipc_database_id),
       ipc_database_callbacks_id_(ipc_database_callbacks_id),
@@ -183,8 +185,8 @@ void WebIDBDatabaseImpl::setIndexesReady(
     long long transaction_id,
     long long object_store_id,
     const WebVector<long long>& web_index_ids) {
-  std::vector<int64> index_ids(web_index_ids.data(),
-                               web_index_ids.data() + web_index_ids.size());
+  std::vector<int64_t> index_ids(web_index_ids.data(),
+                                 web_index_ids.data() + web_index_ids.size());
   thread_safe_sender_->Send(new IndexedDBHostMsg_DatabaseSetIndexesReady(
       ipc_database_id_, transaction_id, object_store_id, index_ids));
 }

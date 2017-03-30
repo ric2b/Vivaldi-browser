@@ -4,8 +4,11 @@
 
 #include "content/browser/service_worker/service_worker_provider_host.h"
 
+#include <utility>
+
 #include "base/guid.h"
 #include "base/stl_util.h"
+#include "base/time/time.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -16,15 +19,16 @@
 #include "content/browser/service_worker/service_worker_dispatcher_host.h"
 #include "content/browser/service_worker/service_worker_handle.h"
 #include "content/browser/service_worker/service_worker_registration_handle.h"
-#include "content/browser/service_worker/service_worker_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/resource_request_body.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
 
 namespace content {
@@ -44,7 +48,8 @@ ServiceWorkerClientInfo FocusOnUIThread(int render_process_id,
   FrameTreeNode* frame_tree_node = render_frame_host->frame_tree_node();
 
   // Focus the frame in the frame tree node, in case it has changed.
-  frame_tree_node->frame_tree()->SetFocusedFrame(frame_tree_node);
+  frame_tree_node->frame_tree()->SetFocusedFrame(
+      frame_tree_node, render_frame_host->GetSiteInstance());
 
   // Focus the frame's view to make sure the frame is now considered as focused.
   render_frame_host->GetView()->Focus();
@@ -56,6 +61,11 @@ ServiceWorkerClientInfo FocusOnUIThread(int render_process_id,
                                                             render_frame_id);
 }
 
+// PlzNavigate
+// Next ServiceWorkerProviderHost ID for navigations, starts at -2 and keeps
+// going down.
+int g_next_navigation_provider_id = -2;
+
 }  // anonymous namespace
 
 ServiceWorkerProviderHost::OneShotGetReadyCallback::OneShotGetReadyCallback(
@@ -65,6 +75,18 @@ ServiceWorkerProviderHost::OneShotGetReadyCallback::OneShotGetReadyCallback(
 }
 
 ServiceWorkerProviderHost::OneShotGetReadyCallback::~OneShotGetReadyCallback() {
+}
+
+// static
+scoped_ptr<ServiceWorkerProviderHost>
+ServiceWorkerProviderHost::PreCreateNavigationHost(
+    base::WeakPtr<ServiceWorkerContextCore> context) {
+  CHECK(IsBrowserSideNavigationEnabled());
+  // Generate a new browser-assigned id for the host.
+  int provider_id = g_next_navigation_provider_id--;
+  return scoped_ptr<ServiceWorkerProviderHost>(new ServiceWorkerProviderHost(
+      ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE, provider_id,
+      SERVICE_WORKER_PROVIDER_FOR_WINDOW, context, nullptr));
 }
 
 ServiceWorkerProviderHost::ServiceWorkerProviderHost(
@@ -83,9 +105,13 @@ ServiceWorkerProviderHost::ServiceWorkerProviderHost(
       context_(context),
       dispatcher_host_(dispatcher_host),
       allow_association_(true) {
-  DCHECK_NE(ChildProcessHost::kInvalidUniqueID, render_process_id_);
   DCHECK_NE(SERVICE_WORKER_PROVIDER_UNKNOWN, provider_type_);
   DCHECK_NE(SERVICE_WORKER_PROVIDER_FOR_SANDBOXED_FRAME, provider_type_);
+
+  // PlzNavigate
+  CHECK(render_process_id != ChildProcessHost::kInvalidUniqueID ||
+        IsBrowserSideNavigationEnabled());
+
   if (provider_type_ == SERVICE_WORKER_PROVIDER_FOR_CONTROLLER) {
     // Actual thread id is set when the service worker context gets started.
     render_thread_id_ = kInvalidEmbeddedWorkerThreadId;
@@ -192,7 +218,7 @@ void ServiceWorkerProviderHost::SetControllerVersionAttribute(
       notify_controllerchange));
 }
 
-bool ServiceWorkerProviderHost::SetHostedVersionId(int64 version_id) {
+bool ServiceWorkerProviderHost::SetHostedVersionId(int64_t version_id) {
   if (!context_)
     return true;  // System is shutting down.
   if (active_version())
@@ -299,7 +325,7 @@ void ServiceWorkerProviderHost::RemoveMatchingRegistration(
 
 void ServiceWorkerProviderHost::AddAllMatchingRegistrations() {
   DCHECK(context_);
-  const std::map<int64, ServiceWorkerRegistration*>& registrations =
+  const std::map<int64_t, ServiceWorkerRegistration*>& registrations =
       context_->GetLiveRegistrations();
   for (const auto& key_registration : registrations) {
     ServiceWorkerRegistration* registration = key_registration.second;
@@ -332,6 +358,7 @@ scoped_ptr<ServiceWorkerRequestHandler>
 ServiceWorkerProviderHost::CreateRequestHandler(
     FetchRequestMode request_mode,
     FetchCredentialsMode credentials_mode,
+    FetchRedirectMode redirect_mode,
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
@@ -345,15 +372,10 @@ ServiceWorkerProviderHost::CreateRequestHandler(
   if (ServiceWorkerUtils::IsMainResourceType(resource_type) ||
       controlling_version()) {
     return scoped_ptr<ServiceWorkerRequestHandler>(
-        new ServiceWorkerControlleeRequestHandler(context_,
-                                                  AsWeakPtr(),
-                                                  blob_storage_context,
-                                                  request_mode,
-                                                  credentials_mode,
-                                                  resource_type,
-                                                  request_context_type,
-                                                  frame_type,
-                                                  body));
+        new ServiceWorkerControlleeRequestHandler(
+            context_, AsWeakPtr(), blob_storage_context, request_mode,
+            credentials_mode, redirect_mode, resource_type,
+            request_context_type, frame_type, body));
   }
   return scoped_ptr<ServiceWorkerRequestHandler>();
 }
@@ -374,7 +396,7 @@ ServiceWorkerProviderHost::GetOrCreateServiceWorkerHandle(
   scoped_ptr<ServiceWorkerHandle> new_handle(
       ServiceWorkerHandle::Create(context_, AsWeakPtr(), version));
   handle = new_handle.get();
-  dispatcher_host_->RegisterServiceWorkerHandle(new_handle.Pass());
+  dispatcher_host_->RegisterServiceWorkerHandle(std::move(new_handle));
   return handle->GetObjectInfo();
 }
 
@@ -389,7 +411,7 @@ bool ServiceWorkerProviderHost::CanAssociateRegistration(
   return true;
 }
 
-void ServiceWorkerProviderHost::PostMessage(
+void ServiceWorkerProviderHost::PostMessageToClient(
     ServiceWorkerVersion* version,
     const base::string16& message,
     const std::vector<TransferredMessagePort>& sent_message_ports) {
@@ -447,11 +469,11 @@ ServiceWorkerClientInfo ServiceWorkerProviderHost::GetWindowClientInfoOnUI(
   // for a frame that is actually being navigated and isn't exactly what we are
   // expecting.
   return ServiceWorkerClientInfo(
-      render_frame_host->GetVisibilityState(),
-      render_frame_host->IsFocused(),
+      render_frame_host->GetVisibilityState(), render_frame_host->IsFocused(),
       render_frame_host->GetLastCommittedURL(),
       render_frame_host->GetParent() ? REQUEST_CONTEXT_FRAME_TYPE_NESTED
                                      : REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
+      render_frame_host->frame_tree_node()->last_focus_time(),
       blink::WebServiceWorkerClientTypeWindow);
 }
 
@@ -519,29 +541,27 @@ void ServiceWorkerProviderHost::CompleteCrossSiteTransfer(
   DCHECK_NE(ChildProcessHost::kInvalidUniqueID, new_process_id);
   DCHECK_NE(MSG_ROUTING_NONE, new_frame_id);
 
-  render_process_id_ = new_process_id;
-  route_id_ = new_frame_id;
   render_thread_id_ = kDocumentMainThreadId;
   provider_id_ = new_provider_id;
   provider_type_ = new_provider_type;
-  dispatcher_host_ = new_dispatcher_host;
 
-  for (const GURL& pattern : associated_patterns_)
-    IncreaseProcessReference(pattern);
+  FinalizeInitialization(new_process_id, new_frame_id, new_dispatcher_host);
+}
 
-  for (auto& key_registration : matching_registrations_)
-    IncreaseProcessReference(key_registration.second->pattern());
+// PlzNavigate
+void ServiceWorkerProviderHost::CompleteNavigationInitialized(
+    int process_id,
+    int frame_routing_id,
+    ServiceWorkerDispatcherHost* dispatcher_host) {
+  CHECK(IsBrowserSideNavigationEnabled());
+  DCHECK_EQ(ChildProcessHost::kInvalidUniqueID, render_process_id_);
+  DCHECK_EQ(SERVICE_WORKER_PROVIDER_FOR_WINDOW, provider_type_);
+  DCHECK_EQ(kDocumentMainThreadId, render_thread_id_);
 
-  if (associated_registration_.get()) {
-    SendAssociateRegistrationMessage();
-    if (dispatcher_host_ && associated_registration_->active_version()) {
-      Send(new ServiceWorkerMsg_SetControllerServiceWorker(
-          render_thread_id_, provider_id(),
-          GetOrCreateServiceWorkerHandle(
-              associated_registration_->active_version()),
-          false /* shouldNotifyControllerChange */));
-    }
-  }
+  DCHECK_NE(ChildProcessHost::kInvalidUniqueID, process_id);
+  DCHECK_NE(MSG_ROUTING_NONE, frame_routing_id);
+
+  FinalizeInitialization(process_id, frame_routing_id, dispatcher_host);
 }
 
 void ServiceWorkerProviderHost::SendUpdateFoundMessage(
@@ -590,8 +610,8 @@ void ServiceWorkerProviderHost::SendSetVersionAttributesMessage(
     attrs.active = GetOrCreateServiceWorkerHandle(active_version);
 
   Send(new ServiceWorkerMsg_SetVersionAttributes(
-      render_thread_id_, provider_id_, registration_handle_id,
-      changed_mask.changed(), attrs));
+      render_thread_id_, registration_handle_id, changed_mask.changed(),
+      attrs));
 }
 
 void ServiceWorkerProviderHost::SendServiceWorkerStateChangedMessage(
@@ -685,6 +705,32 @@ void ServiceWorkerProviderHost::Send(IPC::Message* message) const {
   DCHECK(dispatcher_host_);
   DCHECK(IsReadyToSendMessages());
   dispatcher_host_->Send(message);
+}
+
+void ServiceWorkerProviderHost::FinalizeInitialization(
+    int process_id,
+    int frame_routing_id,
+    ServiceWorkerDispatcherHost* dispatcher_host) {
+  render_process_id_ = process_id;
+  route_id_ = frame_routing_id;
+  dispatcher_host_ = dispatcher_host;
+
+  for (const GURL& pattern : associated_patterns_)
+    IncreaseProcessReference(pattern);
+
+  for (auto& key_registration : matching_registrations_)
+    IncreaseProcessReference(key_registration.second->pattern());
+
+  if (associated_registration_.get()) {
+    SendAssociateRegistrationMessage();
+    if (dispatcher_host_ && associated_registration_->active_version()) {
+      Send(new ServiceWorkerMsg_SetControllerServiceWorker(
+          render_thread_id_, provider_id(),
+          GetOrCreateServiceWorkerHandle(
+              associated_registration_->active_version()),
+          false /* shouldNotifyControllerChange */));
+    }
+  }
 }
 
 }  // namespace content

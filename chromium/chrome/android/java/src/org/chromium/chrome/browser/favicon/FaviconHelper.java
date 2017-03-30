@@ -7,8 +7,9 @@ package org.chromium.chrome.browser.favicon;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 
-import org.chromium.base.CalledByNative;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.content_public.browser.WebContents;
 
 /**
  * This is a helper class to use favicon_service.cc's functionality.
@@ -42,6 +43,19 @@ public class FaviconHelper {
     }
 
     /**
+     * Callback interface for the result of the ensureIconIsAvailable method.
+     */
+    public interface IconAvailabilityCallback {
+        /**
+         * This method will be called when the availability of the icon has been checked.
+         * @param newlyAvailable true if the icon was downloaded and is now available,
+         *            false if the favicon was already there or the download failed.
+         */
+        @CalledByNative("IconAvailabilityCallback")
+        public void onIconAvailabilityChecked(boolean newlyAvailable);
+    }
+
+    /**
      * Allocate and initialize the C++ side of this class.
      */
     public FaviconHelper() {
@@ -62,7 +76,6 @@ public class FaviconHelper {
      * has visited on the current device.
      * @param profile               Profile used for the FaviconService construction.
      * @param pageUrl               The target Page URL to get the favicon.
-     * @param iconTypes             One of the IconType class values.
      * @param desiredSizeInPixel    The size of the favicon in pixel we want to get.
      * @param faviconImageCallback  A method to be called back when the result is available.
      *                              Note that this callback is not called if this method returns
@@ -70,34 +83,11 @@ public class FaviconHelper {
      * @return                      True if GetLocalFaviconImageForURL is successfully called.
      */
     public boolean getLocalFaviconImageForURL(
-            Profile profile, String pageUrl, int iconTypes,
-            int desiredSizeInPixel, FaviconImageCallback faviconImageCallback) {
-        assert mNativeFaviconHelper != 0;
-        return nativeGetLocalFaviconImageForURL(mNativeFaviconHelper, profile, pageUrl, iconTypes,
-                desiredSizeInPixel, faviconImageCallback);
-    }
-
-    /**
-     * Fetches the first available favicon for a URL that exceeds the minimum size threshold.  If
-     * no favicons are larger (or equal) to the threshold, the largest favicon of any type is
-     * fetched.
-     *
-     * @param profile              Profile used for the FaviconService construction.
-     * @param pageUrl              The target Page URL to get the favicon.
-     * @param iconTypes            The list of icon types (each entry can be a bitmasked collection
-     *                             of types) that should be fetched in order.  As soon as one of
-     *                             the buckets exceeds the minimum size threshold, that favicon
-     *                             will be returned.
-     * @param minSizeThresholdPx   The size threshold (inclusive) used to early exit out fetching
-     *                             subsequent favicon types.
-     * @param faviconImageCallback The callback to be notified with the best matching favicon.
-     */
-    public void getLargestRawFaviconForUrl(
-            Profile profile, String pageUrl, int[] iconTypes, int minSizeThresholdPx,
+            Profile profile, String pageUrl, int desiredSizeInPixel,
             FaviconImageCallback faviconImageCallback) {
         assert mNativeFaviconHelper != 0;
-        nativeGetLargestRawFaviconForUrl(
-                mNativeFaviconHelper, profile, pageUrl, iconTypes, minSizeThresholdPx - 1,
+        return nativeGetLocalFaviconImageForURL(mNativeFaviconHelper, profile, pageUrl,
+                FAVICON | TOUCH_ICON | TOUCH_PRECOMPOSED_ICON, desiredSizeInPixel,
                 faviconImageCallback);
     }
 
@@ -124,15 +114,21 @@ public class FaviconHelper {
         return nativeGetSyncedFaviconImageForURL(mNativeFaviconHelper, profile, pageUrl);
     }
 
+    public void ensureIconIsAvailable(Profile profile, WebContents webContents, String pageUrl,
+            String iconUrl, boolean isLargeIcon, IconAvailabilityCallback callback) {
+        nativeEnsureIconIsAvailable(mNativeFaviconHelper, profile, webContents, pageUrl, iconUrl,
+                isLargeIcon, callback);
+    }
+
     private static native long nativeInit();
     private static native void nativeDestroy(long nativeFaviconHelper);
     private static native boolean nativeGetLocalFaviconImageForURL(long nativeFaviconHelper,
             Profile profile, String pageUrl, int iconTypes, int desiredSizeInDip,
             FaviconImageCallback faviconImageCallback);
-    private static native void nativeGetLargestRawFaviconForUrl(long nativeFaviconHelper,
-            Profile profile, String pageUrl, int[] iconTypes, int minSizeThresholdPx,
-            FaviconImageCallback faviconImageCallback);
     private static native Bitmap nativeGetSyncedFaviconImageForURL(long nativeFaviconHelper,
             Profile profile, String pageUrl);
     private static native int nativeGetDominantColorForBitmap(Bitmap image);
+    private static native void nativeEnsureIconIsAvailable(long nativeFaviconHelper,
+            Profile profile, WebContents webContents, String pageUrl, String iconUrl,
+            boolean isLargeIcon, IconAvailabilityCallback callback);
 }

@@ -7,6 +7,8 @@
 #include "cc/debug/micro_benchmark.h"
 #include "cc/debug/micro_benchmark_controller.h"
 #include "cc/layers/layer.h"
+#include "cc/layers/layer_settings.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_proxy.h"
@@ -22,20 +24,24 @@ class MicroBenchmarkControllerTest : public testing::Test {
       : layer_tree_host_client_(FakeLayerTreeHostClient::DIRECT_3D) {}
 
   void SetUp() override {
-    impl_proxy_ = make_scoped_ptr(new FakeImplProxy);
+    impl_task_runner_provider_ =
+        make_scoped_ptr(new FakeImplTaskRunnerProvider);
     layer_tree_host_impl_ = make_scoped_ptr(new FakeLayerTreeHostImpl(
-        impl_proxy_.get(), &shared_bitmap_manager_, &task_graph_runner_));
+        impl_task_runner_provider_.get(), &shared_bitmap_manager_,
+        &task_graph_runner_));
 
     layer_tree_host_ = FakeLayerTreeHost::Create(&layer_tree_host_client_,
                                                  &task_graph_runner_);
     layer_tree_host_->SetRootLayer(Layer::Create(LayerSettings()));
-    layer_tree_host_->InitializeForTesting(scoped_ptr<Proxy>(new FakeProxy));
+    layer_tree_host_->InitializeForTesting(
+        TaskRunnerProvider::Create(nullptr, nullptr),
+        scoped_ptr<Proxy>(new FakeProxy), nullptr);
   }
 
   void TearDown() override {
     layer_tree_host_impl_ = nullptr;
     layer_tree_host_ = nullptr;
-    impl_proxy_ = nullptr;
+    impl_task_runner_provider_ = nullptr;
   }
 
   FakeLayerTreeHostClient layer_tree_host_client_;
@@ -43,7 +49,7 @@ class MicroBenchmarkControllerTest : public testing::Test {
   TestSharedBitmapManager shared_bitmap_manager_;
   scoped_ptr<FakeLayerTreeHost> layer_tree_host_;
   scoped_ptr<FakeLayerTreeHostImpl> layer_tree_host_impl_;
-  scoped_ptr<FakeImplProxy> impl_proxy_;
+  scoped_ptr<FakeImplTaskRunnerProvider> impl_task_runner_provider_;
 };
 
 void Noop(scoped_ptr<base::Value> value) {
@@ -124,8 +130,7 @@ TEST_F(MicroBenchmarkControllerTest, BenchmarkImplRan) {
 
   // Schedule a main thread benchmark.
   int id = layer_tree_host_->ScheduleMicroBenchmark(
-      "unittest_only_benchmark",
-      settings.Pass(),
+      "unittest_only_benchmark", std::move(settings),
       base::Bind(&IncrementCallCount, base::Unretained(&run_count)));
   EXPECT_GT(id, 0);
 
@@ -147,7 +152,7 @@ TEST_F(MicroBenchmarkControllerTest, SendMessage) {
   scoped_ptr<base::DictionaryValue> message(new base::DictionaryValue);
   message->SetBoolean("can_handle", true);
   bool message_handled =
-      layer_tree_host_->SendMessageToMicroBenchmark(0, message.Pass());
+      layer_tree_host_->SendMessageToMicroBenchmark(0, std::move(message));
   EXPECT_FALSE(message_handled);
 
   // Schedule a benchmark
@@ -162,14 +167,14 @@ TEST_F(MicroBenchmarkControllerTest, SendMessage) {
   message = make_scoped_ptr(new base::DictionaryValue);
   message->SetBoolean("can_handle", true);
   message_handled =
-      layer_tree_host_->SendMessageToMicroBenchmark(id, message.Pass());
+      layer_tree_host_->SendMessageToMicroBenchmark(id, std::move(message));
   EXPECT_TRUE(message_handled);
 
   // Send invalid message to valid benchmark
   message = make_scoped_ptr(new base::DictionaryValue);
   message->SetBoolean("can_handle", false);
   message_handled =
-      layer_tree_host_->SendMessageToMicroBenchmark(id, message.Pass());
+      layer_tree_host_->SendMessageToMicroBenchmark(id, std::move(message));
   EXPECT_FALSE(message_handled);
 }
 

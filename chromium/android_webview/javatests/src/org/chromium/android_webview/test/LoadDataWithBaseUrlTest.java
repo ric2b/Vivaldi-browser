@@ -5,15 +5,12 @@
 package org.chromium.android_webview.test;
 
 import android.graphics.Bitmap;
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.test.util.CommonResources;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.content.browser.test.util.HistoryUtils;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.WebContents;
@@ -27,7 +24,6 @@ import java.util.concurrent.Callable;
  * Tests for the {@link android.webkit.WebView#loadDataWithBaseURL(String, String, String, String,
  * String)} method.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class LoadDataWithBaseUrlTest extends AwTestBase {
 
     private TestAwContentsClient mContentsClient;
@@ -175,6 +171,17 @@ public class LoadDataWithBaseUrlTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    public void testInvalidBaseUrl() throws Throwable {
+        final String invalidBaseUrl = "http://";
+        getAwSettingsOnUiThread(mAwContents).setJavaScriptEnabled(true);
+        loadDataWithBaseUrlSync(
+                CommonResources.ABOUT_HTML, "text/html", false, invalidBaseUrl, null);
+        // Verify that the load succeeds. The actual base url is undefined.
+        assertEquals(CommonResources.ABOUT_TITLE, getTitleOnUiThread(mAwContents));
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
     public void testloadDataWithBaseUrlCallsOnPageStarted() throws Throwable {
         final String baseUrl = "http://base.com/";
         TestCallbackHelperContainer.OnPageStartedHelper onPageStartedHelper =
@@ -226,12 +233,8 @@ public class LoadDataWithBaseUrlTest extends AwTestBase {
                 getInstrumentation(), mWebContents));
     }
 
-    /*
     @SmallTest
     @Feature({"AndroidWebView"})
-    http://crbug.com/173274
-    */
-    @DisabledTest
     public void testHistoryUrlNavigation() throws Throwable {
         TestWebServer webServer = TestWebServer.start();
         try {
@@ -349,5 +352,58 @@ public class LoadDataWithBaseUrlTest extends AwTestBase {
         } finally {
             if (!tempImage.delete()) throw new AssertionError();
         }
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testLoadLargeData() throws Throwable {
+        // Chrome only allows URLs up to 2MB in IPC. Test something larger than this.
+        // Note that the real URI may be significantly large if it gets encoded into
+        // base64.
+        final int kDataLength = 5 * 1024 * 1024;
+        StringBuilder doc = new StringBuilder();
+        doc.append("<html><head></head><body><!-- ");
+        int i = doc.length();
+        doc.setLength(i + kDataLength);
+        while (i < doc.length()) doc.setCharAt(i++, 'A');
+        doc.append("--><script>window.gotToEndOfBody=true;</script></body></html>");
+
+        enableJavaScriptOnUiThread(mAwContents);
+        loadDataWithBaseUrlSync(doc.toString(), "text/html", false, null, null);
+        assertEquals("true", executeJavaScriptAndWaitForResult(mAwContents, mContentsClient,
+                        "window.gotToEndOfBody"));
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testOnPageFinishedWhenInterrupted() throws Throwable {
+        // See crbug.com/594001 -- when a javascript: URL is loaded, the pending entry
+        // gets discarded and the previous load goes through a different path
+        // inside NavigationController.
+        final String pageHtml = "<html><body>Hello, world!</body></html>";
+        final String baseUrl = "http://example.com/";
+        final TestCallbackHelperContainer.OnPageFinishedHelper onPageFinishedHelper =
+                mContentsClient.getOnPageFinishedHelper();
+        final int callCount = onPageFinishedHelper.getCallCount();
+        loadDataWithBaseUrlAsync(mAwContents, pageHtml, "text/html", false, baseUrl, null);
+        loadUrlAsync(mAwContents, "javascript:42");
+        onPageFinishedHelper.waitForCallback(callCount);
+        assertEquals(baseUrl, onPageFinishedHelper.getUrl());
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testOnPageFinishedWithInvalidBaseUrlWhenInterrupted() throws Throwable {
+        final String pageHtml = CommonResources.ABOUT_HTML;
+        final String invalidBaseUrl = "http://";
+        final TestCallbackHelperContainer.OnPageFinishedHelper onPageFinishedHelper =
+                mContentsClient.getOnPageFinishedHelper();
+        final int callCount = onPageFinishedHelper.getCallCount();
+        getAwSettingsOnUiThread(mAwContents).setJavaScriptEnabled(true);
+        loadDataWithBaseUrlAsync(mAwContents, pageHtml, "text/html", false, invalidBaseUrl, null);
+        loadUrlAsync(mAwContents, "javascript:42");
+        onPageFinishedHelper.waitForCallback(callCount);
+        // Verify that the load succeeds. The actual base url is undefined.
+        assertEquals(CommonResources.ABOUT_TITLE, getTitleOnUiThread(mAwContents));
     }
 }

@@ -5,9 +5,17 @@
 #ifndef COMPONENTS_CRX_FILE_CRX_FILE_H_
 #define COMPONENTS_CRX_FILE_CRX_FILE_H_
 
+#include <string>
+#include <vector>
+
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
+
+namespace base {
+class FilePath;
+}
 
 namespace crx_file {
 
@@ -25,9 +33,9 @@ class CrxFile {
   // a struct without manual parsing.
   struct Header {
     char magic[kCrxFileHeaderMagicSize];
-    uint32 version;
-    uint32 key_size;  // The size of the public key, in bytes.
-    uint32 signature_size;  // The size of the signature, in bytes.
+    uint32_t version;
+    uint32_t key_size;        // The size of the public key, in bytes.
+    uint32_t signature_size;  // The size of the signature, in bytes.
     // An ASN.1-encoded PublicKeyInfo structure follows.
     // The signature follows.
   };
@@ -52,8 +60,8 @@ class CrxFile {
   // additional information.
   // Use this constructor and then .header() to obtain the Header
   // for writing out to a CRX file.
-  static scoped_ptr<CrxFile> Create(const uint32 key_size,
-                                    const uint32 signature_size,
+  static scoped_ptr<CrxFile> Create(const uint32_t key_size,
+                                    const uint32_t signature_size,
                                     Error* error);
 
   // Returns the header structure for writing out to a CRX file.
@@ -62,6 +70,37 @@ class CrxFile {
   // Checks a valid |header| to determine whether or not the CRX represents a
   // differential CRX.
   static bool HeaderIsDelta(const Header& header);
+
+  enum class ValidateError {
+    NONE,
+    CRX_FILE_NOT_READABLE,
+    CRX_HEADER_INVALID,
+    CRX_MAGIC_NUMBER_INVALID,
+    CRX_VERSION_NUMBER_INVALID,
+    CRX_EXCESSIVELY_LARGE_KEY_OR_SIGNATURE,
+    CRX_ZERO_KEY_LENGTH,
+    CRX_ZERO_SIGNATURE_LENGTH,
+    CRX_PUBLIC_KEY_INVALID,
+    CRX_SIGNATURE_INVALID,
+    CRX_SIGNATURE_VERIFICATION_INITIALIZATION_FAILED,
+    CRX_SIGNATURE_VERIFICATION_FAILED,
+    CRX_HASH_VERIFICATION_FAILED,
+  };
+
+  // Validates that the .crx file at |crx_path| is properly signed.  If
+  // |expected_hash| is non-empty, it should specify a hex-encoded SHA256 hash
+  // for the entire .crx file which will be checked as we read it, and any
+  // mismatch will cause a CRX_HASH_VERIFICATION_FAILED result.  The
+  // |public_key| argument can be provided to receive a copy of the
+  // base64-encoded public key pem bytes extracted from the .crx. The
+  // |extension_id| argument can be provided to receive the extension id (which
+  // is computed as a hash of the public key provided in the .crx). The
+  // |header| argument can be provided to receive a copy of the crx header.
+  static ValidateError ValidateSignature(const base::FilePath& crx_path,
+                                         const std::string& expected_hash,
+                                         std::string* public_key,
+                                         std::string* extension_id,
+                                         CrxFile::Header* header);
 
  private:
   Header header_;

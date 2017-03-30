@@ -4,6 +4,7 @@
 
 #include "content/browser/web_contents/aura/overscroll_window_delegate.h"
 
+#include "base/macros.h"
 #include "content/browser/renderer_host/overscroll_controller_delegate.h"
 #include "content/public/browser/overscroll_configuration.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -54,11 +55,9 @@ class OverscrollWindowDelegateTest : public aura::test::AuraTestBase,
 
   OverscrollMode current_mode() { return current_mode_; }
 
-  const float touch_start_threshold() {
-    return touch_start_threshold_;
-  }
+  float touch_start_threshold() { return touch_start_threshold_; }
 
-  const float touch_complete_threshold() {
+  float touch_complete_threshold() {
     return kTestWindowWidth * touch_complete_threshold_;
   }
 

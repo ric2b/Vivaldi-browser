@@ -142,10 +142,11 @@ bool ParseFtpDirectoryListingLs(
     if (columns.size() == 2 && !received_total_line) {
       received_total_line = true;
 
-      int64 total_number;
+      // Some FTP servers incorrectly return a negative integer for "n". Since
+      // this value is ignored anyway, just check any valid integer was
+      // provided.
+      int64_t total_number;
       if (!base::StringToInt64(columns[1], &total_number))
-        return false;
-      if (total_number < 0)
         return false;
 
       continue;
@@ -187,8 +188,7 @@ bool ParseFtpDirectoryListingLs(
       // entry, but can't really get the size (What if the group is named
       // "group1", and the size is in fact 234? We can't distinguish between
       // that and "group" with size 1234). Use a dummy value for the size.
-      // TODO(phajdan.jr): Use a value that means "unknown" instead of 0 bytes.
-      entry.size = 0;
+      entry.size = -1;
     }
     if (entry.size < 0) {
       // Some FTP servers have bugs that cause them to display the file size

@@ -11,8 +11,7 @@
 
 // Tests that background pages are marked as never visible to prevent GPU
 // resource allocation. See crbug.com/362165 and crbug.com/163698.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, DISABLED_BackgroundPageIsNeverVisible) {
+IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, BackgroundPageIsNeverVisible) {
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("good").AppendASCII("Extensions")
                     .AppendASCII("behllobkkfkfnphdnhnkndlbkcpglgmj")

@@ -4,8 +4,6 @@
 
 #include "base/memory/ref_counted_memory.h"
 
-#include <stdlib.h>
-
 #include "base/logging.h"
 
 namespace base {
@@ -64,8 +62,9 @@ RefCountedString::RefCountedString() {}
 RefCountedString::~RefCountedString() {}
 
 // static
-RefCountedString* RefCountedString::TakeString(std::string* to_destroy) {
-  RefCountedString* self = new RefCountedString;
+scoped_refptr<RefCountedString> RefCountedString::TakeString(
+    std::string* to_destroy) {
+  scoped_refptr<RefCountedString> self(new RefCountedString);
   to_destroy->swap(self->data_);
   return self;
 }
@@ -77,24 +76,6 @@ const unsigned char* RefCountedString::front() const {
 
 size_t RefCountedString::size() const {
   return data_.size();
-}
-
-RefCountedMallocedMemory::RefCountedMallocedMemory(
-    void* data, size_t length)
-    : data_(reinterpret_cast<unsigned char*>(data)), length_(length) {
-  DCHECK(data || length == 0);
-}
-
-const unsigned char* RefCountedMallocedMemory::front() const {
-  return length_ ? data_ : NULL;
-}
-
-size_t RefCountedMallocedMemory::size() const {
-  return length_;
-}
-
-RefCountedMallocedMemory::~RefCountedMallocedMemory() {
-  free(data_);
 }
 
 }  //  namespace base

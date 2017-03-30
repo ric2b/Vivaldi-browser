@@ -23,6 +23,7 @@
     'api_gen_dir': '<(DEPTH)/tools/json_schema_compiler',
     'api_gen': '<(api_gen_dir)/compiler.py',
     'schema_include_rules': [],
+    'actual_root%':'<(DEPTH)',
   },
   'rules': [
     {
@@ -56,7 +57,7 @@
         'python',
         '<(api_gen)',
         '<(RULE_INPUT_PATH)',
-        '--root=<(DEPTH)',
+        '--root=<(actual_root)',
         '--destdir=<(SHARED_INTERMEDIATE_DIR)',
         '--namespace=<(root_namespace)',
         '--generator=cpp',
@@ -95,7 +96,7 @@
         'python',
         '<(api_gen)',
         '<(RULE_INPUT_PATH)',
-        '--root=<(DEPTH)',
+        '--root=<(actual_root)',
         '--destdir=<(SHARED_INTERMEDIATE_DIR)',
         '--namespace=<(root_namespace)',
         '--generator=cpp',

@@ -7,9 +7,11 @@
 #include <map>
 #include <string>
 
+#include "base/base64.h"
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -59,54 +61,54 @@ class MimeUtil : public PlatformMimeUtil {
 static base::LazyInstance<MimeUtil>::Leaky g_mime_util =
     LAZY_INSTANCE_INITIALIZER;
 
-static const MimeInfo primary_mappings[] = {
-  { "text/html", "html,htm,shtml,shtm" },
-  { "text/css", "css" },
-  { "text/xml", "xml" },
-  { "image/gif", "gif" },
-  { "image/jpeg", "jpeg,jpg" },
-  { "image/webp", "webp" },
-  { "image/png", "png" },
-  { "video/mp4", "mp4,m4v" },
-  { "audio/x-m4a", "m4a" },
-  { "audio/mp3", "mp3" },
-  { "video/ogg", "ogv,ogm" },
-  { "audio/ogg", "ogg,oga,opus" },
-  { "video/webm", "webm" },
-  { "audio/webm", "webm" },
-  { "audio/wav", "wav" },
-  { "audio/flac", "flac" },
-  { "application/xhtml+xml", "xhtml,xht,xhtm" },
-  { "application/x-chrome-extension", "crx" },
-  { "multipart/related", "mhtml,mht" }
-};
+static const MimeInfo kPrimaryMappings[] = {
+    {"text/html", "html,htm,shtml,shtm"},
+    {"text/css", "css"},
+    {"text/xml", "xml"},
+    {"image/gif", "gif"},
+    {"image/jpeg", "jpeg,jpg"},
+    {"image/webp", "webp"},
+    {"image/png", "png"},
+    {"video/mp4", "mp4,m4v"},
+    {"audio/x-m4a", "m4a"},
+    {"audio/mp3", "mp3"},
+    {"video/ogg", "ogv,ogm"},
+    {"audio/ogg", "ogg,oga,opus"},
+    {"video/webm", "webm"},
+    {"audio/webm", "webm"},
+    {"audio/wav", "wav"},
+    {"audio/flac", "flac"},
+    {"application/xhtml+xml", "xhtml,xht,xhtm"},
+    {"application/x-chrome-extension", "crx"},
+    {"multipart/related", "mhtml,mht"}};
 
-static const MimeInfo secondary_mappings[] = {
-  { "application/octet-stream", "exe,com,bin" },
-  { "application/gzip", "gz" },
-  { "application/pdf", "pdf" },
-  { "application/postscript", "ps,eps,ai" },
-  { "application/javascript", "js" },
-  { "application/font-woff", "woff" },
-  { "image/bmp", "bmp" },
-  { "image/x-icon", "ico" },
-  { "image/vnd.microsoft.icon", "ico" },
-  { "image/jpeg", "jfif,pjpeg,pjp" },
-  { "image/tiff", "tiff,tif" },
-  { "image/x-xbitmap", "xbm" },
-  { "image/svg+xml", "svg,svgz" },
-  { "image/x-png", "png"},
-  { "message/rfc822", "eml" },
-  { "text/plain", "txt,text" },
-  { "text/html", "ehtml" },
-  { "application/rss+xml", "rss" },
-  { "application/rdf+xml", "rdf" },
-  { "text/xml", "xsl,xbl,xslt" },
-  { "application/vnd.mozilla.xul+xml", "xul" },
-  { "application/x-shockwave-flash", "swf,swl" },
-  { "application/pkcs7-mime", "p7m,p7c,p7z" },
-  { "application/pkcs7-signature", "p7s" },
-  { "application/x-mpegurl", "m3u8" },
+static const MimeInfo kSecondaryMappings[] = {
+    {"application/octet-stream", "exe,com,bin"},
+    {"application/gzip", "gz,tgz"},
+    {"application/x-gzip", "gz,tgz"},
+    {"application/pdf", "pdf"},
+    {"application/postscript", "ps,eps,ai"},
+    {"application/javascript", "js"},
+    {"application/font-woff", "woff"},
+    {"image/bmp", "bmp"},
+    {"image/x-icon", "ico"},
+    {"image/vnd.microsoft.icon", "ico"},
+    {"image/jpeg", "jfif,pjpeg,pjp"},
+    {"image/tiff", "tiff,tif"},
+    {"image/x-xbitmap", "xbm"},
+    {"image/svg+xml", "svg,svgz"},
+    {"image/x-png", "png"},
+    {"message/rfc822", "eml"},
+    {"text/plain", "txt,text"},
+    {"text/html", "ehtml"},
+    {"application/rss+xml", "rss"},
+    {"application/rdf+xml", "rdf"},
+    {"text/xml", "xsl,xbl,xslt"},
+    {"application/vnd.mozilla.xul+xml", "xul"},
+    {"application/x-shockwave-flash", "swf,swl"},
+    {"application/pkcs7-mime", "p7m,p7c,p7z"},
+    {"application/pkcs7-signature", "p7s"},
+    {"application/x-mpegurl", "m3u8"},
 };
 
 const char* FindMimeType(const MimeInfo* mappings,
@@ -116,8 +118,11 @@ const char* FindMimeType(const MimeInfo* mappings,
     const char* extensions = mappings[i].extensions;
     for (;;) {
       size_t end_pos = strcspn(extensions, ",");
+      // The length check is required to prevent the StringPiece below from
+      // including uninitialized memory if ext is longer than extensions.
       if (end_pos == ext.size() &&
-          base::strncasecmp(extensions, ext.data(), ext.size()) == 0)
+          base::EqualsCaseInsensitiveASCII(
+              base::StringPiece(extensions, ext.size()), ext))
         return mappings[i].mime_type;
       extensions += end_pos;
       if (!*extensions)
@@ -171,7 +176,7 @@ bool MimeUtil::GetMimeTypeFromExtensionHelper(
   base::FilePath path_ext(ext);
   const string ext_narrow_str = path_ext.AsUTF8Unsafe();
   const char* mime_type = FindMimeType(
-      primary_mappings, arraysize(primary_mappings), ext_narrow_str);
+      kPrimaryMappings, arraysize(kPrimaryMappings), ext_narrow_str);
   if (mime_type) {
     *result = mime_type;
     return true;
@@ -180,7 +185,7 @@ bool MimeUtil::GetMimeTypeFromExtensionHelper(
   if (include_platform_types && GetPlatformMimeTypeFromExtension(ext, result))
     return true;
 
-  mime_type = FindMimeType(secondary_mappings, arraysize(secondary_mappings),
+  mime_type = FindMimeType(kSecondaryMappings, arraysize(kSecondaryMappings),
                            ext_narrow_str);
   if (mime_type) {
     *result = mime_type;
@@ -221,12 +226,12 @@ bool MatchesMimeTypeParameters(const std::string& mime_type_pattern,
     // Put the parameters to maps with the keys converted to lower case.
     StringPairMap pattern_parameter_map;
     for (const auto& pair : pattern_parameters) {
-      pattern_parameter_map[base::StringToLowerASCII(pair.first)] = pair.second;
+      pattern_parameter_map[base::ToLowerASCII(pair.first)] = pair.second;
     }
 
     StringPairMap test_parameter_map;
     for (const auto& pair : test_parameters) {
-      test_parameter_map[base::StringToLowerASCII(pair.first)] = pair.second;
+      test_parameter_map[base::ToLowerASCII(pair.first)] = pair.second;
     }
 
     if (pattern_parameter_map.size() > test_parameter_map.size())
@@ -268,13 +273,10 @@ bool MimeUtil::MatchesMimeType(const std::string& mime_type_pattern,
 
   const std::string::size_type star = base_pattern.find('*');
   if (star == std::string::npos) {
-    if (base_pattern.size() == base_type.size() &&
-        base::strncasecmp(base_pattern.data(), base_type.data(),
-                          base_pattern.size()) == 0) {
+    if (base::EqualsCaseInsensitiveASCII(base_pattern, base_type))
       return MatchesMimeTypeParameters(mime_type_pattern, mime_type);
-    } else {
+    else
       return false;
-    }
   }
 
   // Test length to prevent overlap between |left| and |right|.
@@ -327,7 +329,7 @@ bool MimeUtil::ParseMimeTypeWithoutParameter(
 }
 
 bool MimeUtil::IsValidTopLevelMimeType(const std::string& type_string) const {
-  std::string lower_type = base::StringToLowerASCII(type_string);
+  std::string lower_type = base::ToLowerASCII(type_string);
   for (size_t i = 0; i < arraysize(legal_top_level_types); ++i) {
     if (lower_type.compare(legal_top_level_types[i]) == 0)
       return true;
@@ -490,15 +492,13 @@ void GetExtensionsHelper(
 
   // Also look up the extensions from hard-coded mappings in case that some
   // supported extensions are not registered in the system registry, like ogg.
-  GetExtensionsFromHardCodedMappings(primary_mappings,
-                                     arraysize(primary_mappings),
-                                     leading_mime_type,
-                                     extensions);
+  GetExtensionsFromHardCodedMappings(kPrimaryMappings,
+                                     arraysize(kPrimaryMappings),
+                                     leading_mime_type, extensions);
 
-  GetExtensionsFromHardCodedMappings(secondary_mappings,
-                                     arraysize(secondary_mappings),
-                                     leading_mime_type,
-                                     extensions);
+  GetExtensionsFromHardCodedMappings(kSecondaryMappings,
+                                     arraysize(kSecondaryMappings),
+                                     leading_mime_type, extensions);
 }
 
 // Note that the elements in the source set will be appended to the target
@@ -513,6 +513,19 @@ void HashSetToVector(base::hash_set<T>* source, std::vector<T>* target) {
     (*target)[old_target_size + i] = *iter;
 }
 
+// Characters to be used for mime multipart boundary.
+//
+// TODO(rsleevi): crbug.com/575779: Follow the spec or fix the spec.
+// The RFC 2046 spec says the alphanumeric characters plus the
+// following characters are legal for boundaries:  '()+_,-./:=?
+// However the following characters, though legal, cause some sites
+// to fail: (),./:=+
+const char kMimeBoundaryCharacters[] =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// Size of mime multipart boundary.
+const size_t kMimeBoundarySize = 69;
+
 }  // namespace
 
 void GetExtensionsForMimeType(
@@ -521,10 +534,10 @@ void GetExtensionsForMimeType(
   if (unsafe_mime_type == "*/*" || unsafe_mime_type == "*")
     return;
 
-  const std::string mime_type = base::StringToLowerASCII(unsafe_mime_type);
+  const std::string mime_type = base::ToLowerASCII(unsafe_mime_type);
   base::hash_set<base::FilePath::StringType> unique_extensions;
 
-  if (base::EndsWith(mime_type, "/*", false)) {
+  if (base::EndsWith(mime_type, "/*", base::CompareCase::INSENSITIVE_ASCII)) {
     std::string leading_mime_type = mime_type.substr(0, mime_type.length() - 1);
 
     // Find the matching StandardType from within kStandardTypes, or fall
@@ -547,18 +560,52 @@ void GetExtensionsForMimeType(
 
     // Also look up the extensions from hard-coded mappings in case that some
     // supported extensions are not registered in the system registry, like ogg.
-    GetExtensionsFromHardCodedMappings(primary_mappings,
-                                       arraysize(primary_mappings),
-                                       mime_type,
+    GetExtensionsFromHardCodedMappings(kPrimaryMappings,
+                                       arraysize(kPrimaryMappings), mime_type,
                                        &unique_extensions);
 
-    GetExtensionsFromHardCodedMappings(secondary_mappings,
-                                       arraysize(secondary_mappings),
-                                       mime_type,
+    GetExtensionsFromHardCodedMappings(kSecondaryMappings,
+                                       arraysize(kSecondaryMappings), mime_type,
                                        &unique_extensions);
   }
 
   HashSetToVector(&unique_extensions, extensions);
+}
+
+NET_EXPORT std::string GenerateMimeMultipartBoundary() {
+  // Based on RFC 1341, section "7.2.1 Multipart: The common syntax":
+  //   Because encapsulation boundaries must not appear in the body parts being
+  //   encapsulated, a user agent must exercise care to choose a unique
+  //   boundary. The boundary in the example above could have been the result of
+  //   an algorithm designed to produce boundaries with a very low probability
+  //   of already existing in the data to be encapsulated without having to
+  //   prescan the data.
+  //   [...]
+  //   the boundary parameter [...] consists of 1 to 70 characters from a set of
+  //   characters known to be very robust through email gateways, and NOT ending
+  //   with white space.
+  //   [...]
+  //   boundary := 0*69<bchars> bcharsnospace
+  //   bchars := bcharsnospace / " "
+  //   bcharsnospace := DIGIT / ALPHA / "'" / "(" / ")" / "+" /
+  //            "_" / "," / "-" / "." / "/" / ":" / "=" / "?"
+
+  std::string result;
+  result.reserve(kMimeBoundarySize);
+  result.append("----MultipartBoundary--");
+  while (result.size() < (kMimeBoundarySize - 4)) {
+    // Subtract 2 from the array size to 1) exclude '\0', and 2) turn the size
+    // into the last index.
+    const int last_char_index = sizeof(kMimeBoundaryCharacters) - 2;
+    char c = kMimeBoundaryCharacters[base::RandInt(0, last_char_index)];
+    result.push_back(c);
+  }
+  result.append("----");
+
+  // Not a strict requirement - documentation only.
+  DCHECK_EQ(kMimeBoundarySize, result.size());
+
+  return result;
 }
 
 void AddMultipartValueForUpload(const std::string& value_name,

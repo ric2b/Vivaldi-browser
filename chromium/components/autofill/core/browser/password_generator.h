@@ -7,10 +7,15 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 
 namespace autofill {
+
+// Make sure that there is at least one upper case and one number in the
+// password. |password| must not be null, and must point to a string containing
+// at least 3 lower-case letters.
+extern void ForceFixPassword(std::string* password);
 
 // Class to generate random passwords. Currently we just use a generic algorithm
 // for all sites, but eventually we can incorporate additional information to

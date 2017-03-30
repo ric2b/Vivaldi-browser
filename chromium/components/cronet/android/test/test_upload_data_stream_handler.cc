@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "test_upload_data_stream_handler.h"
+#include "components/cronet/android/test/test_upload_data_stream_handler.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
@@ -24,7 +26,7 @@ TestUploadDataStreamHandler::TestUploadDataStreamHandler(
       read_callback_invoked_(false),
       bytes_read_(0),
       network_thread_(new base::Thread("network")) {
-  upload_data_stream_ = upload_data_stream.Pass();
+  upload_data_stream_ = std::move(upload_data_stream);
   base::Thread::Options options;
   options.message_loop_type = base::MessageLoop::TYPE_IO;
   network_thread_->StartWithOptions(options);
@@ -35,11 +37,13 @@ TestUploadDataStreamHandler::TestUploadDataStreamHandler(
 TestUploadDataStreamHandler::~TestUploadDataStreamHandler() {
 }
 
-void TestUploadDataStreamHandler::Destroy(JNIEnv* env, jobject jcaller) {
+void TestUploadDataStreamHandler::Destroy(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller) {
   DCHECK(!network_thread_->task_runner()->BelongsToCurrentThread());
   // Stick network_thread_ in a local, so |this| may be destroyed from the
   // network thread before the network thread is destroyed.
-  scoped_ptr<base::Thread> network_thread = network_thread_.Pass();
+  scoped_ptr<base::Thread> network_thread = std::move(network_thread_);
   network_thread->task_runner()->DeleteSoon(FROM_HERE, this);
   // Deleting thread stops it after all tasks are completed.
   network_thread.reset();
@@ -60,29 +64,33 @@ void TestUploadDataStreamHandler::OnReadCompleted(int res) {
   NotifyJavaReadCompleted();
 }
 
-void TestUploadDataStreamHandler::Init(JNIEnv* env, jobject jcaller) {
+void TestUploadDataStreamHandler::Init(JNIEnv* env,
+                                       const JavaParamRef<jobject>& jcaller) {
   DCHECK(!network_thread_->task_runner()->BelongsToCurrentThread());
   network_thread_->task_runner()->PostTask(
       FROM_HERE, base::Bind(&TestUploadDataStreamHandler::InitOnNetworkThread,
                             base::Unretained(this)));
 }
 
-void TestUploadDataStreamHandler::Read(JNIEnv* env, jobject jcaller) {
+void TestUploadDataStreamHandler::Read(JNIEnv* env,
+                                       const JavaParamRef<jobject>& jcaller) {
   DCHECK(!network_thread_->task_runner()->BelongsToCurrentThread());
   network_thread_->task_runner()->PostTask(
       FROM_HERE, base::Bind(&TestUploadDataStreamHandler::ReadOnNetworkThread,
                             base::Unretained(this)));
 }
 
-void TestUploadDataStreamHandler::Reset(JNIEnv* env, jobject jcaller) {
+void TestUploadDataStreamHandler::Reset(JNIEnv* env,
+                                        const JavaParamRef<jobject>& jcaller) {
   DCHECK(!network_thread_->task_runner()->BelongsToCurrentThread());
   network_thread_->task_runner()->PostTask(
       FROM_HERE, base::Bind(&TestUploadDataStreamHandler::ResetOnNetworkThread,
                             base::Unretained(this)));
 }
 
-void TestUploadDataStreamHandler::CheckInitCallbackNotInvoked(JNIEnv* env,
-                                                              jobject jcaller) {
+void TestUploadDataStreamHandler::CheckInitCallbackNotInvoked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller) {
   DCHECK(!network_thread_->task_runner()->BelongsToCurrentThread());
   network_thread_->task_runner()->PostTask(
       FROM_HERE, base::Bind(&TestUploadDataStreamHandler::
@@ -90,8 +98,9 @@ void TestUploadDataStreamHandler::CheckInitCallbackNotInvoked(JNIEnv* env,
                             base::Unretained(this)));
 }
 
-void TestUploadDataStreamHandler::CheckReadCallbackNotInvoked(JNIEnv* env,
-                                                              jobject jcaller) {
+void TestUploadDataStreamHandler::CheckReadCallbackNotInvoked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller) {
   DCHECK(!network_thread_->task_runner()->BelongsToCurrentThread());
   network_thread_->task_runner()->PostTask(
       FROM_HERE, base::Bind(&TestUploadDataStreamHandler::
@@ -164,17 +173,17 @@ void TestUploadDataStreamHandler::NotifyJavaReadCompleted() {
     data_read = std::string(read_buffer_->data(), bytes_read_);
   cronet::Java_TestUploadDataStreamHandler_onReadCompleted(
       env, jtest_upload_data_stream_handler_.obj(), bytes_read_,
-      base::android::ConvertUTF8ToJavaString(env, data_read).Release());
+      base::android::ConvertUTF8ToJavaString(env, data_read).obj());
 }
 
 static jlong CreateTestUploadDataStreamHandler(
     JNIEnv* env,
-    jobject jtest_upload_data_stream_handler,
+    const JavaParamRef<jobject>& jtest_upload_data_stream_handler,
     jlong jupload_data_stream) {
   scoped_ptr<net::UploadDataStream> upload_data_stream(
       reinterpret_cast<net::UploadDataStream*>(jupload_data_stream));
   TestUploadDataStreamHandler* handler = new TestUploadDataStreamHandler(
-      upload_data_stream.Pass(), env, jtest_upload_data_stream_handler);
+      std::move(upload_data_stream), env, jtest_upload_data_stream_handler);
   return reinterpret_cast<jlong>(handler);
 }
 

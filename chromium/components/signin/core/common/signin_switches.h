@@ -15,12 +15,11 @@ namespace switches {
 // alongside the definition of their values in the .cc file.
 extern const char kClearTokenService[];
 extern const char kDisableAccountConsistency[];
-extern const char kDisableNewAvatarMenu[];
+extern const char kDisablePasswordSeparatedSigninFlow[];
 extern const char kDisableNewProfileManagement[];
 extern const char kDisableSigninScopedDeviceId[];
 extern const char kEnableAccountConsistency[];
-extern const char kEnableIframeBasedSignin[];
-extern const char kEnableNewAvatarMenu[];
+extern const char kEnablePasswordSeparatedSigninFlow[];
 extern const char kEnableNewProfileManagement[];
 extern const char kEnableRefreshTokenAnnotationRequest[];
 extern const char kExtensionsMultiAccount[];

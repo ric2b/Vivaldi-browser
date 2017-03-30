@@ -5,18 +5,25 @@
 #ifndef COMPONENTS_VARIATIONS_VARIATIONS_SEED_PROCESSOR_H_
 #define COMPONENTS_VARIATIONS_VARIATIONS_SEED_PROCESSOR_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/version.h"
 #include "components/variations/proto/study.pb.h"
 #include "components/variations/proto/variations_seed.pb.h"
+
+namespace base {
+class FeatureList;
+}
 
 namespace variations {
 
@@ -32,8 +39,7 @@ class VariationsSeedProcessor {
   virtual ~VariationsSeedProcessor();
 
   // Creates field trials from the specified variations |seed|, based on the
-  // specified configuration (locale, current date, version, channel, form
-  // factor, hardware_class, and permanent_consistency_country).
+  // specified configuration, as specified in the parameters.
   void CreateTrialsFromSeed(const VariationsSeed& seed,
                             const std::string& locale,
                             const base::Time& reference_date,
@@ -41,8 +47,10 @@ class VariationsSeedProcessor {
                             Study_Channel channel,
                             Study_FormFactor form_factor,
                             const std::string& hardware_class,
+                            const std::string& session_consistency_country,
                             const std::string& permanent_consistency_country,
-                            const UIStringOverrideCallback& override_callback);
+                            const UIStringOverrideCallback& override_callback,
+                            base::FeatureList* feature_list);
 
  private:
   friend class VariationsSeedProcessorTest;
@@ -71,7 +79,8 @@ class VariationsSeedProcessor {
   // Creates and registers a field trial from the |processed_study| data.
   // Disables the trial if |processed_study.is_expired| is true.
   void CreateTrialFromStudy(const ProcessedStudy& processed_study,
-                            const UIStringOverrideCallback& override_callback);
+                            const UIStringOverrideCallback& override_callback,
+                            base::FeatureList* feature_list);
 
   DISALLOW_COPY_AND_ASSIGN(VariationsSeedProcessor);
 };

@@ -5,24 +5,30 @@
 #ifndef UI_OZONE_PLATFORM_DRM_GPU_GBM_SURFACE_FACTORY_H_
 #define UI_OZONE_PLATFORM_DRM_GPU_GBM_SURFACE_FACTORY_H_
 
-#include "ui/ozone/platform/drm/gpu/drm_surface_factory.h"
+#include <stdint.h>
+
+#include <map>
+
+#include "base/macros.h"
+#include "base/threading/thread_checker.h"
+#include "ui/ozone/public/surface_factory_ozone.h"
 
 namespace ui {
 
-class DrmDeviceManager;
-class DrmWindow;
+class DrmThreadProxy;
 class GbmDevice;
-class ScreenManager;
+class GbmSurfaceless;
 
-class GbmSurfaceFactory : public DrmSurfaceFactory {
+class GbmSurfaceFactory : public SurfaceFactoryOzone {
  public:
-  GbmSurfaceFactory(bool allow_surfaceless);
+  GbmSurfaceFactory(DrmThreadProxy* drm_thread);
   ~GbmSurfaceFactory() override;
 
-  void InitializeGpu(DrmDeviceManager* drm_device_manager,
-                     ScreenManager* screen_manager);
+  void RegisterSurface(gfx::AcceleratedWidget widget, GbmSurfaceless* surface);
+  void UnregisterSurface(gfx::AcceleratedWidget widget);
+  GbmSurfaceless* GetSurface(gfx::AcceleratedWidget widget) const;
 
-  // DrmSurfaceFactory:
+  // SurfaceFactoryOzone:
   intptr_t GetNativeDisplay() override;
   const int32_t* GetEGLSurfaceProperties(const int32_t* desired_list) override;
   bool LoadEGLGLES2Bindings(
@@ -37,17 +43,17 @@ class GbmSurfaceFactory : public DrmSurfaceFactory {
   scoped_refptr<ui::NativePixmap> CreateNativePixmap(
       gfx::AcceleratedWidget widget,
       gfx::Size size,
-      BufferFormat format,
-      BufferUsage usage) override;
-  bool CanShowPrimaryPlaneAsOverlay() override;
-  bool CanCreateNativePixmap(BufferUsage usage) override;
+      gfx::BufferFormat format,
+      gfx::BufferUsage usage) override;
+  scoped_refptr<NativePixmap> CreateNativePixmapFromHandle(
+      const gfx::NativePixmapHandle& handle) override;
 
  private:
-  scoped_refptr<GbmDevice> GetGbmDevice(gfx::AcceleratedWidget widget);
+  base::ThreadChecker thread_checker_;
 
-  bool allow_surfaceless_;
+  DrmThreadProxy* drm_thread_;
 
-  DrmDeviceManager* drm_device_manager_;  // Not owned.
+  std::map<gfx::AcceleratedWidget, GbmSurfaceless*> widget_to_surface_map_;
 
   DISALLOW_COPY_AND_ASSIGN(GbmSurfaceFactory);
 };

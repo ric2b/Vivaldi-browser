@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_SYNC_DRIVER_LOCAL_DEVICE_INFO_PROVIDER_MOCK_H_
 #define COMPONENTS_SYNC_DRIVER_LOCAL_DEVICE_INFO_PROVIDER_MOCK_H_
 
+#include <string>
+
 #include "components/sync_driver/device_info.h"
 #include "components/sync_driver/local_device_info_provider.h"
 
@@ -26,12 +28,16 @@ class LocalDeviceInfoProviderMock
   ~LocalDeviceInfoProviderMock() override;
 
   const DeviceInfo* GetLocalDeviceInfo() const override;
+  std::string GetSyncUserAgent() const override;
   std::string GetLocalSyncCacheGUID() const override;
-  void Initialize(const std::string& cache_guid,
-                  const std::string& signin_scoped_device_id) override;
+  void Initialize(
+      const std::string& cache_guid,
+      const std::string& signin_scoped_device_id,
+      const scoped_refptr<base::TaskRunner>& blocking_task_runner) override;
   scoped_ptr<Subscription> RegisterOnInitializedCallback(
       const base::Closure& callback) override;
 
+  void Initialize(scoped_ptr<DeviceInfo> local_device_info);
   void SetInitialized(bool is_initialized);
 
  private:

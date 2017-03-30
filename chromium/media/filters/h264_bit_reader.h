@@ -7,9 +7,11 @@
 #ifndef MEDIA_FILTERS_H264_BIT_READER_H_
 #define MEDIA_FILTERS_H264_BIT_READER_H_
 
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -28,7 +30,7 @@ class MEDIA_EXPORT H264BitReader {
   // Return false on insufficient size of stream..
   // TODO(posciak,fischman): consider replacing Initialize() with
   // heap-allocating and creating bit readers on demand instead.
-  bool Initialize(const uint8* data, off_t size);
+  bool Initialize(const uint8_t* data, off_t size);
 
   // Read |num_bits| next bits from stream and return in |*out|, first bit
   // from the stream starting at |num_bits| position in |*out|.
@@ -52,7 +54,7 @@ class MEDIA_EXPORT H264BitReader {
   bool UpdateCurrByte();
 
   // Pointer to the next unread (not in curr_byte_) byte in the stream.
-  const uint8* data_;
+  const uint8_t* data_;
 
   // Bytes left in the stream (without the curr_byte_).
   off_t bytes_left_;

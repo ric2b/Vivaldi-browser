@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -19,7 +23,7 @@
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/test_completion_callback.h"
-#include "net/cookies/cookie_monster.h"
+#include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/quota/quota_manager.h"
@@ -56,7 +60,7 @@ const storage::StorageType kPersistent = storage::kStorageTypePersistent;
 
 const storage::QuotaClient::ID kClientFile = storage::QuotaClient::kFileSystem;
 
-const uint32 kAllQuotaRemoveMask =
+const uint32_t kAllQuotaRemoveMask =
     StoragePartition::REMOVE_DATA_MASK_APPCACHE |
     StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS |
     StoragePartition::REMOVE_DATA_MASK_INDEXEDDB |
@@ -81,7 +85,7 @@ class AwaitCompletionHelper {
   void Notify() {
     if (start_) {
       DCHECK(!already_quit_);
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
       start_ = false;
     } else {
       DCHECK(!already_quit_);
@@ -101,15 +105,15 @@ class AwaitCompletionHelper {
 class RemoveCookieTester {
  public:
   explicit RemoveCookieTester(TestBrowserContext* context)
-      : get_cookie_success_(false), monster_(NULL) {
-    SetMonster(context->GetRequestContext()->GetURLRequestContext()->
-                   cookie_store()->GetCookieMonster());
-  }
+      : get_cookie_success_(false),
+        cookie_store_(context->GetRequestContext()
+                          ->GetURLRequestContext()
+                          ->cookie_store()) {}
 
   // Returns true, if the given cookie exists in the cookie store.
   bool ContainsCookie() {
     get_cookie_success_ = false;
-    monster_->GetCookiesWithOptionsAsync(
+    cookie_store_->GetCookiesWithOptionsAsync(
         kOrigin1, net::CookieOptions(),
         base::Bind(&RemoveCookieTester::GetCookieCallback,
                    base::Unretained(this)));
@@ -118,16 +122,11 @@ class RemoveCookieTester {
   }
 
   void AddCookie() {
-    monster_->SetCookieWithOptionsAsync(
+    cookie_store_->SetCookieWithOptionsAsync(
         kOrigin1, "A=1", net::CookieOptions(),
         base::Bind(&RemoveCookieTester::SetCookieCallback,
                    base::Unretained(this)));
     await_completion_.BlockUntilNotified();
-  }
-
- protected:
-  void SetMonster(net::CookieStore* monster) {
-    monster_ = monster;
   }
 
  private:
@@ -148,7 +147,7 @@ class RemoveCookieTester {
 
   bool get_cookie_success_;
   AwaitCompletionHelper await_completion_;
-  net::CookieStore* monster_;
+  net::CookieStore* cookie_store_;
 
   DISALLOW_COPY_AND_ASSIGN(RemoveCookieTester);
 };
@@ -299,7 +298,7 @@ void ClearCookies(content::StoragePartition* partition,
       delete_begin, delete_end, run_loop->QuitClosure());
 }
 
-void ClearStuff(uint32 remove_mask,
+void ClearStuff(uint32_t remove_mask,
                 content::StoragePartition* partition,
                 const base::Time delete_begin,
                 const base::Time delete_end,

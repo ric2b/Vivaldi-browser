@@ -25,8 +25,11 @@ GestureEventDataPacket::GestureSource ToGestureSource(
       return GestureEventDataPacket::TOUCH_START;
     case ui::MotionEvent::ACTION_POINTER_UP:
       return GestureEventDataPacket::TOUCH_END;
+    case ui::MotionEvent::ACTION_NONE:
+      NOTREACHED();
+      return GestureEventDataPacket::INVALID;
   };
-  NOTREACHED() << "Invalid ui::MotionEvent action: " << event.GetAction();
+  NOTREACHED();
   return GestureEventDataPacket::INVALID;
 }
 
@@ -43,7 +46,7 @@ GestureEventDataPacket::GestureEventDataPacket(
     GestureSource source,
     const gfx::PointF& touch_location,
     const gfx::PointF& raw_touch_location,
-    uint32 unique_touch_event_id)
+    uint32_t unique_touch_event_id)
     : timestamp_(timestamp),
       touch_location_(touch_location),
       raw_touch_location_(raw_touch_location),

@@ -4,6 +4,8 @@
 
 #include "extensions/browser/guest_view/app_view/app_view_guest.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "content/public/browser/render_process_host.h"
@@ -24,7 +26,7 @@
 #include "extensions/strings/grit/extensions_strings.h"
 #include "ipc/ipc_message_macros.h"
 
-namespace app_runtime = extensions::core_api::app_runtime;
+namespace app_runtime = extensions::api::app_runtime;
 
 using content::RenderFrameHost;
 using content::WebContents;
@@ -96,14 +98,14 @@ bool AppViewGuest::CompletePendingRequest(
 }
 
 // static
-GuestViewBase* AppViewGuest::Create(content::WebContents* owner_web_contents) {
+GuestViewBase* AppViewGuest::Create(WebContents* owner_web_contents) {
   return new AppViewGuest(owner_web_contents);
 }
 
-AppViewGuest::AppViewGuest(content::WebContents* owner_web_contents)
+AppViewGuest::AppViewGuest(WebContents* owner_web_contents)
     : GuestView<AppViewGuest>(owner_web_contents),
-      app_view_guest_delegate_(
-          ExtensionsAPIClient::Get()->CreateAppViewGuestDelegate()),
+      app_view_guest_delegate_(ExtensionsAPIClient::Get()
+                                   ->CreateAppViewGuestDelegate()),
       weak_ptr_factory_(this) {
   if (app_view_guest_delegate_)
     app_delegate_.reset(app_view_guest_delegate_->CreateAppDelegate());
@@ -120,7 +122,7 @@ bool AppViewGuest::HandleContextMenu(const content::ContextMenuParams& params) {
 }
 
 void AppViewGuest::RequestMediaAccessPermission(
-    content::WebContents* web_contents,
+    WebContents* web_contents,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
   if (!app_delegate_) {
@@ -137,10 +139,9 @@ void AppViewGuest::RequestMediaAccessPermission(
                                               guest_extension);
 }
 
-bool AppViewGuest::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
-    const GURL& security_origin,
-    content::MediaStreamType type) {
+bool AppViewGuest::CheckMediaAccessPermission(WebContents* web_contents,
+                                              const GURL& security_origin,
+                                              content::MediaStreamType type) {
   if (!app_delegate_) {
     return WebContentsDelegate::CheckMediaAccessPermission(
         web_contents, security_origin, type);
@@ -271,7 +272,7 @@ void AppViewGuest::LaunchAppAndFireEvent(
   embed_request->SetString(appview::kEmbedderID, owner_host());
   embed_request->Set(appview::kData, data.release());
   AppRuntimeEventRouter::DispatchOnEmbedRequestedEvent(
-      browser_context(), embed_request.Pass(), extension_host->extension());
+      browser_context(), std::move(embed_request), extension_host->extension());
 }
 
 void AppViewGuest::SetAppDelegateForTest(AppDelegate* delegate) {

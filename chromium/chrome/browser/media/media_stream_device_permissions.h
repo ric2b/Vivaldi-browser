@@ -19,15 +19,10 @@ enum MediaStreamDevicePolicy {
 };
 
 // Returns true if the given media content setting should be persisted.
+// TODO(raymes): Remove |is_pepper_request| after crbug.com/526324 is fixed.
 bool ShouldPersistContentSetting(ContentSetting setting,
                                  const GURL& origin,
-                                 content::MediaStreamRequestType type);
-
-// Returns true if security origin is from internal objects like
-// chrome://URLs, otherwise returns false.
-bool CheckAllowAllMediaStreamContentForOrigin(Profile* profile,
-                                              const GURL& security_origin,
-                                              ContentSettingsType type);
+                                 bool is_pepper_request);
 
 // Get the device policy for |security_origin| and |profile|.
 MediaStreamDevicePolicy GetDevicePolicy(const Profile* profile,

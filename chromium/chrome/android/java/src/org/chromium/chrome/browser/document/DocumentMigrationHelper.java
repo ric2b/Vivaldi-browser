@@ -21,6 +21,7 @@ import android.text.TextUtils;
 import android.util.Pair;
 import android.util.SparseArray;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ImportantFileWriterAndroid;
 import org.chromium.base.Log;
@@ -28,10 +29,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ApplicationLifetime;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.TabState;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.UrlUtilities;
 import org.chromium.chrome.browser.compositor.layouts.content.ContentOffsetProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager.DecompressThumbnailCallback;
@@ -41,11 +40,13 @@ import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.ntp.NativePageFactory;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabIdManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.OnTabStateReadCallback;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
+import org.chromium.chrome.browser.tabmodel.document.ActivityDelegateImpl;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel.Entry;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel.InitializationObserver;
@@ -54,6 +55,7 @@ import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.OffTheRecordDocumentTabModel;
 import org.chromium.chrome.browser.tabmodel.document.StorageDelegate;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
+import org.chromium.chrome.browser.util.UrlUtilities;
 
 import java.io.File;
 import java.io.IOException;
@@ -66,10 +68,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
 public class DocumentMigrationHelper {
-    private static final String TAG = "cr.DocumentMigration";
-    private static final int[] ICON_TYPES = {FaviconHelper.FAVICON,
-        FaviconHelper.TOUCH_ICON | FaviconHelper.TOUCH_PRECOMPOSED_ICON};
-    private static final int DESIRED_ICON_SIZE_DP = 32;
+    private static final String TAG = "DocumentMigration";
 
     public static final int FINALIZE_MODE_NO_ACTION = 0;
     public static final int FINALIZE_MODE_FINISH_ACTIVITY = 1;
@@ -82,8 +81,8 @@ public class DocumentMigrationHelper {
         private int mSelectedTabId = Tab.INVALID_TAB_ID;
 
         @Override
-        public void onDetailsRead(int index, int id, String url, boolean isStandardActiveIndex,
-                boolean isIncognitoActiveIndex) {
+        public void onDetailsRead(int index, int id, String url, Boolean isIncognito,
+                boolean isStandardActiveIndex, boolean isIncognitoActiveIndex) {
             TabIdManager.getInstance().incrementIdCounterTo(id + 1);
             if (!isStandardActiveIndex) return;
             // If the current tab read is the active standard tab, set the last used
@@ -101,7 +100,7 @@ public class DocumentMigrationHelper {
      * Stores a list of "tasks" that are meant to be returned by the ActivityManager for migration.
      * The tasks are inserted manually during the migration from classic mode to document mode.
      */
-    private static class MigrationActivityDelegate extends ActivityDelegate {
+    private static class MigrationActivityDelegate extends ActivityDelegateImpl {
         private final List<Entry> mEntries;
         private final int mSelectedTabId;
 
@@ -188,7 +187,7 @@ public class DocumentMigrationHelper {
         private final String mTitle;
         private final int mFinalizeMode;
 
-        private Bitmap mFavicon;
+        private Bitmap mIcon;
 
         public MigrationImageCallback(final AtomicInteger completedCount, final Activity activity,
                 final TabContentManager tabContentManager, final MigrationTabModel tabModel,
@@ -203,30 +202,20 @@ public class DocumentMigrationHelper {
             mFinalizeMode = finalizeMode;
         }
 
-        protected void finalize() throws Throwable {
-            // TODO(dfalcantara): Remove this log.  crbug.com/513130
-            Log.w(TAG, "Finalizing MigrationImageCallback: " + this);
-            super.finalize();
-        }
-
         @Override
         public void onFaviconAvailable(final Bitmap favicon, String iconUrl) {
-            mFavicon = favicon;
+            mIcon = new DocumentActivityIcon(mActivity).getBitmap(mUrl, favicon);
             mTabContentManager.getThumbnailForId(mTabId, this);
         }
 
         @Override
         public void onFinishGetBitmap(Bitmap bitmap) {
-            // TODO(dfalcantara): Remove this log.  crbug.com/513130
-            Log.w(TAG, "MigrationImageCallback.onFinishGetBitmap: " + this + ", "
-                    + mCompletedCount.get() + "/" + mTabModel.getCount());
-
             // Even if the favicon or thumbnail are null, we still add the AppTask: the framework
             // handles null favicons and addAppTask() below handles null thumbnails.
             if (!NativePageFactory.isNativePageUrl(mUrl, false)
                     && !mUrl.startsWith(UrlConstants.CHROME_SCHEME)) {
                 addAppTask(mActivity, mTabId, mTabModel.getTabStateForDocument(mTabId), mUrl,
-                        mTitle, mFavicon, bitmap);
+                        mTitle, mIcon, bitmap);
             }
 
             if (mCompletedCount.incrementAndGet() == mTabModel.getCount()) {
@@ -277,21 +266,23 @@ public class DocumentMigrationHelper {
         // All the TabStates (incognito or not) live in the same directory.
         File[] allTabs = normalTabModel.getStorageDelegate().getStateDirectory().listFiles();
         try {
-            for (int i = 0; i < allTabs.length; i++) {
-                String fileName = allTabs[i].getName();
-                Pair<Integer, Boolean> tabInfo = TabState.parseInfoFromFilename(fileName);
-                if (tabInfo == null) continue;
-                int tabId = tabInfo.first;
+            if (allTabs != null) {
+                for (int i = 0; i < allTabs.length; i++) {
+                    String fileName = allTabs[i].getName();
+                    Pair<Integer, Boolean> tabInfo = TabState.parseInfoFromFilename(fileName);
+                    if (tabInfo == null) continue;
+                    int tabId = tabInfo.first;
 
-                // Also remove the tab state file for the closed tabs.
-                boolean success;
-                if (!tabIdsToRemove.contains(tabId)) {
-                    success = allTabs[i].renameTo(new File(migratedFolder, fileName));
-                } else {
-                    success = allTabs[i].delete();
+                    // Also remove the tab state file for the closed tabs.
+                    boolean success;
+                    if (!tabIdsToRemove.contains(tabId)) {
+                        success = allTabs[i].renameTo(new File(migratedFolder, fileName));
+                    } else {
+                        success = allTabs[i].delete();
+                    }
+
+                    if (!success) Log.e(TAG, "Failed to move/delete file for tab ID: " + tabId);
                 }
-
-                if (!success) Log.e(TAG, "Failed to move/delete file for tab ID: " + tabId);
             }
 
             if (normalTabModel.getCount() != 0) {
@@ -349,7 +340,9 @@ public class DocumentMigrationHelper {
      */
     public static boolean migrateTabsToDocumentForUpgrade(Activity activity,
             int finalizeMode) {
-        // Temporarily allowing disk access. TODO: Fix. See http://crbug.com/493157
+        // Allow StrictMode violations here as state file read/write is on the critical path. This
+        // is also a one-time migration, so optimizing further does not improve daily experience.
+        // See http://crbug.com/493157 for more context.
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         StrictMode.allowThreadDiskWrites();
         try {
@@ -396,10 +389,11 @@ public class DocumentMigrationHelper {
         // Create maps for all tabs that will be used during TabModel initialization.
         final List<Entry> normalEntryMap = new ArrayList<Entry>();
 
-        int currentSelectorIndex = 0;
-        File currentFolder = TabPersistentStore.getStateDirectory(activity, currentSelectorIndex);
+        File currentFolder = null;
         MigrationTabStateReadCallback callback = new MigrationTabStateReadCallback();
-        while (currentFolder.listFiles() != null && currentFolder.listFiles().length != 0) {
+        for (int currentSelectorIndex = 0;
+                (currentFolder = getNextNonEmptyFolder(activity, currentSelectorIndex)) != null;
+                ++currentSelectorIndex) {
             File[] allTabs = TabPersistentStore
                     .getStateDirectory(activity, currentSelectorIndex).listFiles();
             try {
@@ -408,27 +402,33 @@ public class DocumentMigrationHelper {
                 Log.e(TAG, "IO Exception while trying to get the last used tab id");
             }
 
-            for (int i = 0; i < allTabs.length; i++) {
-                // Move tab state file to the document side folder.
-                String fileName = allTabs[i].getName();
-                Pair<Integer, Boolean> tabInfo = TabState.parseInfoFromFilename(fileName);
-                if (tabInfo == null) continue;
+            if (allTabs != null) {
+                for (int i = 0; i < allTabs.length; i++) {
+                    // Move tab state file to the document side folder.
+                    String fileName = allTabs[i].getName();
+                    Pair<Integer, Boolean> tabInfo = TabState.parseInfoFromFilename(fileName);
+                    if (tabInfo == null) continue;
 
-                boolean success;
-                if (tabInfo.second) {
-                    success = allTabs[i].delete();
-                } else {
-                    success = allTabs[i].renameTo(new File(migratedFolder, fileName));
-                    normalEntryMap.add(new Entry(tabInfo.first, UrlConstants.NTP_URL));
+                    boolean success;
+                    if (tabInfo.second) {
+                        success = allTabs[i].delete();
+                    } else {
+                        success = allTabs[i].renameTo(new File(migratedFolder, fileName));
+                        normalEntryMap.add(new Entry(tabInfo.first, UrlConstants.NTP_URL));
+                    }
+
+                    if (!success) Log.e(TAG, "Failed to move/delete file: " + fileName);
                 }
-
-                if (!success) Log.e(TAG, "Failed to move/delete file: " + fileName);
             }
-            currentSelectorIndex++;
-            currentFolder = TabPersistentStore.getStateDirectory(activity, currentSelectorIndex);
         }
 
         return new MigrationActivityDelegate(normalEntryMap, callback.getSelectedTabId());
+    }
+
+    private static File getNextNonEmptyFolder(Activity activity, int currentSelectorIndex) {
+        File folder = TabPersistentStore.getStateDirectory(activity, currentSelectorIndex);
+        File[] files = folder.listFiles();
+        return (files == null || files.length == 0) ? null : folder;
     }
 
     private static void addAppTasksFromFiles(final Activity activity,
@@ -465,9 +465,9 @@ public class DocumentMigrationHelper {
 
             MigrationImageCallback imageCallback = new MigrationImageCallback(completedCount,
                     activity, contentManager, tabModel, tabId, url, title, finalizeMode);
-            faviconHelper.getLargestRawFaviconForUrl(
+            faviconHelper.getLocalFaviconImageForURL(
                     Profile.getLastUsedProfile().getOriginalProfile(),
-                    url, ICON_TYPES, DESIRED_ICON_SIZE_DP, imageCallback);
+                    url, 0, imageCallback);
             sMigrationCallbacks.add(imageCallback);
         }
     }
@@ -497,7 +497,8 @@ public class DocumentMigrationHelper {
             canvas.drawBitmap(bitmap, 0, 0, null);
         }
         TaskDescription taskDescription = new TaskDescription(title, favicon,
-                activity.getResources().getColor(R.color.default_primary_color));
+                ApiCompatibilityUtils.getColor(activity.getResources(),
+                        R.color.default_primary_color));
         am.addAppTask(activity, intent, taskDescription, thumbnail);
         Entry entry = new Entry(tabId, tabState);
         DocumentTabModelImpl tabModel = (DocumentTabModelImpl) ChromeApplication
@@ -515,7 +516,7 @@ public class DocumentMigrationHelper {
      */
     public static void migrateTabs(boolean toDocumentMode, final Activity activity,
             boolean terminate) {
-        // Temporarily allowing disk access. TODO: Fix. See http://crbug.com/493157
+        // Allowing StrictMode violations as above. See http://crbug.com/493157 for context.
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         StrictMode.allowThreadDiskWrites();
         try {

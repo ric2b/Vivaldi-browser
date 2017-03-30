@@ -5,12 +5,14 @@
 #ifndef UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_WINDOW_TREE_HOST_X11_H_
 #define UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_WINDOW_TREE_HOST_X11_H_
 
+#include <stddef.h>
+#include <stdint.h>
 #include <X11/extensions/shape.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 
-#include "base/basictypes.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "ui/aura/window_tree_host.h"
@@ -209,6 +211,9 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   // and dispatched to that host instead.
   void DispatchTouchEvent(ui::TouchEvent* event);
 
+  // Dispatches a key event.
+  void DispatchKeyEvent(ui::KeyEvent* event);
+
   // Updates the location of |located_event| to be in |host|'s coordinate system
   // so that it can be dispatched to |host|.
   void ConvertEventToDifferentHost(ui::LocatedEvent* located_event,
@@ -220,10 +225,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   // Serializes an image to the format used by _NET_WM_ICON.
   void SerializeImageRepresentation(const gfx::ImageSkiaRep& rep,
                                     std::vector<unsigned long>* data);
-
-  // Returns an 8888 ARGB visual. Can return NULL if there is no matching
-  // visual on this display.
-  Visual* GetARGBVisual();
 
   // See comment for variable open_windows_.
   static std::list<XID>& open_windows();
@@ -343,6 +344,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   // attention to the window or completely ignore the hint. We stop flashing
   // the frame when |xwindow_| gains focus or handles a mouse button event.
   bool urgency_hint_set_;
+
+  bool activatable_;
 
   base::CancelableCallback<void()> delayed_resize_task_;
 

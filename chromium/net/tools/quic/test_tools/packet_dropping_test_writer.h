@@ -5,11 +5,14 @@
 #ifndef NET_TOOLS_QUIC_TEST_TOOLS_PACKET_DROPPING_TEST_WRITER_H_
 #define NET_TOOLS_QUIC_TEST_TOOLS_PACKET_DROPPING_TEST_WRITER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/synchronization/lock.h"
 #include "net/quic/quic_alarm.h"
@@ -17,7 +20,6 @@
 #include "net/tools/quic/quic_epoll_clock.h"
 #include "net/tools/quic/quic_packet_writer_wrapper.h"
 #include "net/tools/quic/test_tools/quic_test_client.h"
-#include "net/tools/quic/test_tools/quic_test_utils.h"
 
 namespace net {
 namespace tools {
@@ -31,7 +33,6 @@ class PacketDroppingTestWriter : public QuicPacketWriterWrapper {
   class Delegate {
    public:
     virtual ~Delegate() {}
-    virtual void OnPacketSent(WriteResult result) = 0;
     virtual void OnCanWrite() = 0;
   };
 
@@ -64,14 +65,14 @@ class PacketDroppingTestWriter : public QuicPacketWriterWrapper {
   void OnCanWrite();
 
   // The percent of time a packet is simulated as being lost.
-  void set_fake_packet_loss_percentage(int32 fake_packet_loss_percentage) {
+  void set_fake_packet_loss_percentage(int32_t fake_packet_loss_percentage) {
     base::AutoLock locked(config_mutex_);
     fake_packet_loss_percentage_ = fake_packet_loss_percentage;
   }
 
   // Simulate dropping the first n packets unconditionally.
   // Subsequent packets will be lost at fake_packet_loss_percentage_ if set.
-  void set_fake_drop_first_n_packets(int32 fake_drop_first_n_packets) {
+  void set_fake_drop_first_n_packets(int32_t fake_drop_first_n_packets) {
     base::AutoLock locked(config_mutex_);
     fake_drop_first_n_packets_ = fake_drop_first_n_packets;
   }
@@ -79,14 +80,14 @@ class PacketDroppingTestWriter : public QuicPacketWriterWrapper {
   // The percent of time WritePacket will block and set WriteResult's status
   // to WRITE_STATUS_BLOCKED.
   void set_fake_blocked_socket_percentage(
-      int32 fake_blocked_socket_percentage) {
+      int32_t fake_blocked_socket_percentage) {
     DCHECK(clock_);
     base::AutoLock locked(config_mutex_);
-    fake_blocked_socket_percentage_  = fake_blocked_socket_percentage;
+    fake_blocked_socket_percentage_ = fake_blocked_socket_percentage;
   }
 
   // The percent of time a packet is simulated as being reordered.
-  void set_fake_reorder_percentage(int32 fake_packet_reorder_percentage) {
+  void set_fake_reorder_percentage(int32_t fake_packet_reorder_percentage) {
     DCHECK(clock_);
     base::AutoLock locked(config_mutex_);
     DCHECK(!fake_packet_delay_.IsZero());
@@ -97,7 +98,7 @@ class PacketDroppingTestWriter : public QuicPacketWriterWrapper {
   void set_fake_packet_delay(QuicTime::Delta fake_packet_delay) {
     DCHECK(clock_);
     base::AutoLock locked(config_mutex_);
-    fake_packet_delay_  = fake_packet_delay;
+    fake_packet_delay_ = fake_packet_delay;
   }
 
   // The maximum bandwidth and buffer size of the connection.  When these are
@@ -113,9 +114,7 @@ class PacketDroppingTestWriter : public QuicPacketWriterWrapper {
   }
 
   // Useful for reproducing very flaky issues.
-  void set_seed(uint64 seed) {
-    simple_random_.set_seed(seed);
-  }
+  void set_seed(uint64_t seed) { simple_random_.set_seed(seed); }
 
  private:
   // Writes out the next packet to the contained writer and returns the time
@@ -148,13 +147,13 @@ class PacketDroppingTestWriter : public QuicPacketWriterWrapper {
   // Stored packets delayed by fake packet delay or bandwidth restrictions.
   DelayedPacketList delayed_packets_;
   QuicByteCount cur_buffer_size_;
-  uint64 num_calls_to_write_;
+  uint64_t num_calls_to_write_;
 
   base::Lock config_mutex_;
-  int32 fake_packet_loss_percentage_;
-  int32 fake_drop_first_n_packets_;
-  int32 fake_blocked_socket_percentage_;
-  int32 fake_packet_reorder_percentage_;
+  int32_t fake_packet_loss_percentage_;
+  int32_t fake_drop_first_n_packets_;
+  int32_t fake_blocked_socket_percentage_;
+  int32_t fake_packet_reorder_percentage_;
   QuicTime::Delta fake_packet_delay_;
   QuicBandwidth fake_bandwidth_;
   QuicByteCount buffer_size_;

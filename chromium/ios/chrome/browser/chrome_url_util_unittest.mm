@@ -4,7 +4,8 @@
 
 #import "ios/chrome/browser/chrome_url_util.h"
 
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#include "base/macros.h"
+#include "ios/chrome/browser/chrome_url_constants.h"
 #import "net/base/mac/url_conversions.h"
 #import "testing/gtest_mac.h"
 #include "url/gurl.h"
@@ -12,8 +13,8 @@
 namespace {
 
 TEST(ChromeURLUtilTest, TestIsExternalFileReference) {
-  GURL external_url("uischeme://external-file/foo/bar");
-  GURL not_external_url("uischeme://foo/bar");
+  GURL external_url("chrome://external-file/foo/bar");
+  GURL not_external_url("chrome://foo/bar");
   GURL still_not_external_url("http://external-file/foo/bar");
   EXPECT_TRUE(UrlIsExternalFileReference(external_url));
   EXPECT_FALSE(UrlIsExternalFileReference(not_external_url));
@@ -48,7 +49,7 @@ const char* kSchemeTestData[] = {
     "https://foo.com",
     "data:text/html;charset=utf-8,Hello",
     "about:blank",
-    "uischeme://settings",
+    "chrome://settings",
 };
 
 TEST(ChromeURLUtilTest, NSURLHasChromeScheme) {
@@ -56,8 +57,7 @@ TEST(ChromeURLUtilTest, NSURLHasChromeScheme) {
     const char* url = kSchemeTestData[i];
     bool nsurl_result = UrlHasChromeScheme(
         [NSURL URLWithString:[NSString stringWithUTF8String:url]]);
-    bool gurl_result = GURL(url).SchemeIs(
-        ios::GetChromeBrowserProvider()->GetChromeUIScheme());
+    bool gurl_result = GURL(url).SchemeIs(kChromeUIScheme);
     EXPECT_EQ(gurl_result, nsurl_result) << "Scheme check failed for " << url;
   }
 }

@@ -10,6 +10,14 @@ function addToPage(html) {
   div.innerHTML = html;
   document.getElementById('content').appendChild(div);
   fillYouTubePlaceholders();
+
+  if (typeof navigate_on_initial_content_load !== 'undefined' &&
+      navigate_on_initial_content_load) {
+    navigate_on_initial_content_load = false;
+    setTimeout(function() {
+        window.location = window.location + "#loaded";
+    }, 0);
+  }
 }
 
 function fillYouTubePlaceholders() {
@@ -40,7 +48,6 @@ function fillYouTubePlaceholders() {
 function showLoadingIndicator(isLastPage) {
   document.getElementById('loadingIndicator').className =
       isLastPage ? 'hidden' : 'visible';
-  updateLoadingIndicator(isLastPage);
 }
 
 // Sets the title.
@@ -88,25 +95,29 @@ function useTheme(theme) {
   // Family class.
   var fontFamilyClass = document.body.className.split(" ")[1];
   document.body.className = cssClass + " " + fontFamilyClass;
+
+  updateToolbarColor();
 }
 
-var updateLoadingIndicator = function() {
-  var colors = ["red", "yellow", "green", "blue"];
-  return function(isLastPage) {
-    if (!isLastPage && typeof this.colorShuffle == "undefined") {
-      var loader = document.getElementById("loader");
-      if (loader) {
-        var colorIndex = -1;
-        this.colorShuffle = setInterval(function() {
-          colorIndex = (colorIndex + 1) % colors.length;
-          loader.className = colors[colorIndex];
-        }, 600);
-      }
-    } else if (isLastPage && typeof this.colorShuffle != "undefined") {
-      clearInterval(this.colorShuffle);
-    }
-  };
-}();
+function updateToolbarColor() {
+  // Relies on the classname order of the body being Theme class, then Font
+  // Family class.
+  var themeClass = document.body.className.split(" ")[0];
+
+  var toolbarColor;
+  if (themeClass == "sepia") {
+    toolbarColor = "#BF9A73";
+  } else if (themeClass == "dark") {
+    toolbarColor = "#1A1A1A";
+  } else {
+    toolbarColor = "#F5F5F5";
+  }
+  document.getElementById('theme-color').content = toolbarColor;
+}
+
+function useFontScaling(scaling) {
+  pincher.useFontScaling(scaling);
+}
 
 /**
  * Show the distiller feedback form.
@@ -123,51 +134,44 @@ function showFeedbackForm(questionText, yesText, noText) {
   document.getElementById('feedbackNo').innerText = noText;
   document.getElementById('feedbackQuestion').innerText = questionText;
 
-  document.getElementById('contentWrap').style.paddingBottom = '120px';
-  document.getElementById('feedbackContainer').style.display = 'block';
-}
-
-/**
- * Send feedback about this distilled article.
- * @param good True if the feedback was positive, false if negative.
- */
-function sendFeedback(good) {
-  var img = document.createElement('img');
-  if (good) {
-    img.src = '/feedbackgood';
-  } else {
-    img.src = '/feedbackbad';
-  }
-  img.style.display = "none";
-  document.body.appendChild(img);
+  document.getElementById('feedbackContainer').classList.remove("hidden");
 }
 
 // Add a listener to the "View Original" link to report opt-outs.
 document.getElementById('closeReaderView').addEventListener('click',
     function(e) {
-      var img = document.createElement('img');
-      img.src = "/vieworiginal";
-      img.style.display = "none";
-      document.body.appendChild(img);
+      if (distiller) {
+        distiller.closePanel(true);
+      }
     }, true);
 
 document.getElementById('feedbackYes').addEventListener('click', function(e) {
-  sendFeedback(true);
+  if (distiller) {
+    distiller.sendFeedback(true);
+  }
   document.getElementById('feedbackContainer').className += " fadeOut";
 }, true);
 
 document.getElementById('feedbackNo').addEventListener('click', function(e) {
-  sendFeedback(false);
+  if (distiller) {
+    distiller.sendFeedback(false);
+  }
   document.getElementById('feedbackContainer').className += " fadeOut";
 }, true);
 
 document.getElementById('feedbackContainer').addEventListener('animationend',
     function(e) {
-      document.getElementById('feedbackContainer').style.display = 'none';
-      // Close the gap where the feedback form was.
-      var contentWrap = document.getElementById('contentWrap');
-      contentWrap.style.transition = '0.5s';
-      contentWrap.style.paddingBottom = '0px';
+      var feedbackContainer = document.getElementById('feedbackContainer');
+      feedbackContainer.classList.remove("fadeOut");
+      document.getElementById('contentWrap').style.paddingBottom =
+        window.getComputedStyle(feedbackContainer).height;
+      feedbackContainer.className += " hidden";
+      setTimeout(function() {
+        // Close the gap where the feedback form was.
+        var contentWrap = document.getElementById('contentWrap');
+        contentWrap.style.transition = '0.5s';
+        contentWrap.style.paddingBottom = '';
+      }, 0);
     }, true);
 
 document.getElementById('contentWrap').addEventListener('transitionend',
@@ -175,6 +179,8 @@ document.getElementById('contentWrap').addEventListener('transitionend',
       var contentWrap = document.getElementById('contentWrap');
       contentWrap.style.transition = '';
     }, true);
+
+updateToolbarColor();
 
 var pincher = (function() {
   'use strict';
@@ -212,6 +218,7 @@ var pincher = (function() {
 
   // The zooming speed relative to pinching speed.
   var FONT_SCALE_MULTIPLIER = 0.5;
+
   var MIN_SPAN_LENGTH = 20;
 
   // The font size is guaranteed to be in px.
@@ -220,7 +227,7 @@ var pincher = (function() {
 
   var refreshTransform = function() {
     var slowedScale = Math.exp(Math.log(scale) * FONT_SCALE_MULTIPLIER);
-    clampedScale = Math.max(0.4, Math.min(2.5, fontSizeAnchor * slowedScale));
+    clampedScale = Math.max(0.5, Math.min(2.0, fontSizeAnchor * slowedScale));
 
     // Use "fake" 3D transform so that the layer is not repainted.
     // With 2D transform, the frame rate would be much lower.
@@ -230,6 +237,22 @@ var pincher = (function() {
         'scale(' + clampedScale/fontSizeAnchor + ')';
   };
 
+  function saveCenter(clientMid) {
+    // Try to preserve the pinching center after text reflow.
+    // This is accurate to the HTML element level.
+    focusElement = document.elementFromPoint(clientMid.x, clientMid.y);
+    var rect = focusElement.getBoundingClientRect();
+    initClientMid = clientMid;
+    focusPos = (initClientMid.y - rect.top) / (rect.bottom - rect.top);
+  }
+
+  function restoreCenter() {
+    var rect = focusElement.getBoundingClientRect();
+    var targetTop = focusPos * (rect.bottom - rect.top) + rect.top +
+        document.body.scrollTop - (initClientMid.y + shiftY);
+    document.body.scrollTop = targetTop;
+  }
+
   function endPinch() {
     pinching = false;
 
@@ -237,10 +260,16 @@ var pincher = (function() {
     document.body.style.transform = '';
     document.documentElement.style.fontSize = clampedScale * baseSize + "px";
 
-    var rect = focusElement.getBoundingClientRect();
-    var targetTop = focusPos * (rect.bottom - rect.top) + rect.top +
-        document.body.scrollTop - (initClientMid.y + shiftY);
-    document.body.scrollTop = targetTop;
+    restoreCenter();
+
+    var img = document.getElementById('fontscaling-img');
+    if (!img) {
+      img = document.createElement('img');
+      img.id = 'fontscaling-img';
+      img.style.display = 'none';
+      document.body.appendChild(img);
+    }
+    img.src = "/savefontscaling/" + clampedScale;
   }
 
   function touchSpan(e) {
@@ -301,12 +330,7 @@ var pincher = (function() {
       document.body.style.transformOrigin =
           pinchOrigin.x + 'px ' + pinchOrigin.y  + 'px';
 
-      // Try to preserve the pinching center after text reflow.
-      // This is accurate to the HTML element level.
-      focusElement = document.elementFromPoint(clientMid.x, clientMid.y);
-      var rect = focusElement.getBoundingClientRect();
-      initClientMid = clientMid;
-      focusPos = (initClientMid.y - rect.top) / (rect.bottom - rect.top);
+      saveCenter(clientMid);
 
       lastSpan = span;
       lastClientMid = clientMid;
@@ -350,6 +374,7 @@ var pincher = (function() {
     },
 
     handleTouchCancel: function(e) {
+      if (!pinching) return;
       endPinch();
     },
 
@@ -368,6 +393,15 @@ var pincher = (function() {
         shiftX: shiftX,
         shiftY: shiftY
       };
+    },
+
+    useFontScaling: function(scaling) {
+      saveCenter({x: window.innerWidth/2, y: window.innerHeight/2});
+      shiftX = 0;
+      shiftY = 0;
+      document.documentElement.style.fontSize = scaling * baseSize + "px";
+      clampedScale = scaling;
+      restoreCenter();
     }
   };
 }());

@@ -2,13 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "build/build_config.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_image_layer.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/layers/solid_color_layer.h"
+#include "cc/playback/display_item_list_settings.h"
+#include "cc/playback/drawing_display_item.h"
 #include "cc/test/layer_tree_pixel_resource_test.h"
 #include "cc/test/pixel_comparator.h"
+#include "third_party/skia/include/core/SkImage.h"
+#include "third_party/skia/include/core/SkPictureRecorder.h"
+#include "third_party/skia/include/core/SkSurface.h"
 
 #if !defined(OS_ANDROID)
 
@@ -25,10 +32,16 @@ class MaskContentLayerClient : public ContentLayerClient {
   ~MaskContentLayerClient() override {}
 
   bool FillsBoundsCompletely() const override { return false; }
+  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
 
-  void PaintContents(SkCanvas* canvas,
-                     const gfx::Rect& rect,
-                     PaintingControlSetting picture_control) override {
+  gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
+
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
+      PaintingControlSetting picture_control) override {
+    SkPictureRecorder recorder;
+    skia::RefPtr<SkCanvas> canvas = skia::SharePtr(
+        recorder.beginRecording(gfx::RectToSkRect(gfx::Rect(bounds_))));
+
     SkPaint paint;
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(SkIntToScalar(2));
@@ -44,13 +57,14 @@ class MaskContentLayerClient : public ContentLayerClient {
           paint);
       inset_rect.Inset(3, 3, 2, 2);
     }
-  }
 
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      const gfx::Rect& clip,
-      PaintingControlSetting picture_control) override {
-    NOTIMPLEMENTED();
-    return nullptr;
+    scoped_refptr<DisplayItemList> display_list =
+        DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
+    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
+
+    display_list->Finalize();
+    return display_list;
   }
 
  private:
@@ -90,14 +104,18 @@ TEST_P(LayerTreeHostMasksPixelTest, ImageMaskOfLayer) {
   mask->SetIsMask(true);
   mask->SetBounds(mask_bounds);
 
-  SkBitmap bitmap;
-  bitmap.allocN32Pixels(200, 200);
-  SkCanvas canvas(bitmap);
-  canvas.scale(SkIntToScalar(4), SkIntToScalar(4));
+  skia::RefPtr<SkSurface> surface =
+      skia::AdoptRef(SkSurface::NewRasterN32Premul(200, 200));
+  SkCanvas* canvas = surface->getCanvas();
+  canvas->scale(SkIntToScalar(4), SkIntToScalar(4));
   MaskContentLayerClient client(mask_bounds);
-  client.PaintContents(&canvas, gfx::Rect(mask_bounds),
-                       ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
-  mask->SetBitmap(bitmap);
+  scoped_refptr<DisplayItemList> mask_display_list =
+      client.PaintContentsToDisplayList(
+          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  mask_display_list->Raster(canvas, nullptr, gfx::Rect(mask_bounds), 1.0f);
+  skia::RefPtr<const SkImage> image =
+      skia::AdoptRef(surface->newImageSnapshot());
+  mask->SetImage(std::move(image));
 
   scoped_refptr<SolidColorLayer> green = CreateSolidColorLayerWithBorder(
       gfx::Rect(25, 25, 50, 50), kCSSGreen, 1, SK_ColorBLACK);
@@ -114,7 +132,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfClippedLayer) {
 
   // Clip to the top half of the green layer.
   scoped_refptr<Layer> clip = Layer::Create(layer_settings());
-  clip->SetPosition(gfx::Point(0, 0));
+  clip->SetPosition(gfx::PointF());
   clip->SetBounds(gfx::Size(100, 50));
   clip->SetMasksToBounds(true);
   background->AddChild(clip);
@@ -159,7 +177,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskWithReplica) {
 
   scoped_refptr<Layer> replica = Layer::Create(layer_settings());
   replica->SetTransformOrigin(gfx::Point3F(25.f, 25.f, 0.f));
-  replica->SetPosition(gfx::Point(50, 50));
+  replica->SetPosition(gfx::PointF(50.f, 50.f));
   replica->SetTransform(replica_transform);
   green->SetReplicaLayer(replica.get());
 
@@ -182,7 +200,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskWithReplicaOfClippedLayer) {
   // Clip to the bottom half of the green layer, and the left half of the
   // replica.
   scoped_refptr<Layer> clip = Layer::Create(layer_settings());
-  clip->SetPosition(gfx::Point(0, 25));
+  clip->SetPosition(gfx::PointF(0.f, 25.f));
   clip->SetBounds(gfx::Size(75, 75));
   clip->SetMasksToBounds(true);
   background->AddChild(clip);
@@ -197,7 +215,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskWithReplicaOfClippedLayer) {
 
   scoped_refptr<Layer> replica = Layer::Create(layer_settings());
   replica->SetTransformOrigin(gfx::Point3F(25.f, 25.f, 0.f));
-  replica->SetPosition(gfx::Point(50, 50));
+  replica->SetPosition(gfx::PointF(50.f, 50.f));
   replica->SetTransform(replica_transform);
   green->SetReplicaLayer(replica.get());
 
@@ -232,7 +250,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfReplica) {
 
   scoped_refptr<Layer> replica = Layer::Create(layer_settings());
   replica->SetTransformOrigin(gfx::Point3F(50.f, 50.f, 0.f));
-  replica->SetPosition(gfx::Point());
+  replica->SetPosition(gfx::PointF());
   replica->SetTransform(replica_transform);
   replica->SetMaskLayer(mask.get());
   green->SetReplicaLayer(replica.get());
@@ -255,7 +273,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfReplicaOfClippedLayer) {
 
   // Clip to the bottom 3/4 of the green layer, and the top 3/4 of the replica.
   scoped_refptr<Layer> clip = Layer::Create(layer_settings());
-  clip->SetPosition(gfx::Point(0, 12));
+  clip->SetPosition(gfx::PointF(0.f, 12.f));
   clip->SetBounds(gfx::Size(100, 75));
   clip->SetMasksToBounds(true);
   background->AddChild(clip);
@@ -274,7 +292,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfReplicaOfClippedLayer) {
 
   scoped_refptr<Layer> replica = Layer::Create(layer_settings());
   replica->SetTransformOrigin(gfx::Point3F(50.f, 50.f, 0.f));
-  replica->SetPosition(gfx::Point());
+  replica->SetPosition(gfx::PointF());
   replica->SetTransform(replica_transform);
   replica->SetMaskLayer(mask.get());
   green->SetReplicaLayer(replica.get());
@@ -292,9 +310,14 @@ class CheckerContentLayerClient : public ContentLayerClient {
       : bounds_(bounds), color_(color), vertical_(vertical) {}
   ~CheckerContentLayerClient() override {}
   bool FillsBoundsCompletely() const override { return false; }
-  void PaintContents(SkCanvas* canvas,
-                     const gfx::Rect& rect,
-                     PaintingControlSetting picture_control) override {
+  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
+  gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
+      PaintingControlSetting picture_control) override {
+    SkPictureRecorder recorder;
+    skia::RefPtr<SkCanvas> canvas = skia::SharePtr(
+        recorder.beginRecording(gfx::RectToSkRect(gfx::Rect(bounds_))));
+
     SkPaint paint;
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(SkIntToScalar(4));
@@ -309,12 +332,14 @@ class CheckerContentLayerClient : public ContentLayerClient {
         canvas->drawLine(0, i, bounds_.width(), i, paint);
       }
     }
-  }
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      const gfx::Rect& clip,
-      PaintingControlSetting picture_control) override {
-    NOTIMPLEMENTED();
-    return nullptr;
+
+    scoped_refptr<DisplayItemList> display_list =
+        DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
+    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
+
+    display_list->Finalize();
+    return display_list;
   }
 
  private:
@@ -329,9 +354,14 @@ class CircleContentLayerClient : public ContentLayerClient {
       : bounds_(bounds) {}
   ~CircleContentLayerClient() override {}
   bool FillsBoundsCompletely() const override { return false; }
-  void PaintContents(SkCanvas* canvas,
-                     const gfx::Rect& rect,
-                     PaintingControlSetting picture_control) override {
+  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
+  gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
+      PaintingControlSetting picture_control) override {
+    SkPictureRecorder recorder;
+    skia::RefPtr<SkCanvas> canvas = skia::SharePtr(
+        recorder.beginRecording(gfx::RectToSkRect(gfx::Rect(bounds_))));
+
     SkPaint paint;
     paint.setStyle(SkPaint::kFill_Style);
     paint.setColor(SK_ColorWHITE);
@@ -340,12 +370,14 @@ class CircleContentLayerClient : public ContentLayerClient {
                        bounds_.height() / 2,
                        bounds_.width() / 4,
                        paint);
-  }
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      const gfx::Rect& clip,
-      PaintingControlSetting picture_control) override {
-    NOTIMPLEMENTED();
-    return nullptr;
+
+    scoped_refptr<DisplayItemList> display_list =
+        DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
+    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
+
+    display_list->Finalize();
+    return display_list;
   }
 
  private:
@@ -355,19 +387,16 @@ class CircleContentLayerClient : public ContentLayerClient {
 using LayerTreeHostMasksForBackgroundFiltersPixelTest =
     ParameterizedPixelResourceTest;
 
-INSTANTIATE_TEST_CASE_P(
-    PixelResourceTest,
-    LayerTreeHostMasksForBackgroundFiltersPixelTest,
-    ::testing::Values(
-        // SOFTWARE, Background filters aren't implemented in software
-        GL_GPU_RASTER_2D_DRAW,
-        GL_ONE_COPY_2D_STAGING_2D_DRAW,
-        GL_ONE_COPY_RECT_STAGING_2D_DRAW,
-        GL_ONE_COPY_EXTERNAL_STAGING_2D_DRAW,
-        GL_ZERO_COPY_2D_DRAW,
-        GL_ZERO_COPY_RECT_DRAW,
-        GL_ZERO_COPY_EXTERNAL_DRAW,
-        GL_ASYNC_UPLOAD_2D_DRAW));
+INSTANTIATE_TEST_CASE_P(PixelResourceTest,
+                        LayerTreeHostMasksForBackgroundFiltersPixelTest,
+                        ::testing::Values(SOFTWARE,
+                                          GL_GPU_RASTER_2D_DRAW,
+                                          GL_ONE_COPY_2D_STAGING_2D_DRAW,
+                                          GL_ONE_COPY_RECT_STAGING_2D_DRAW,
+                                          GL_ONE_COPY_EXTERNAL_STAGING_2D_DRAW,
+                                          GL_ZERO_COPY_2D_DRAW,
+                                          GL_ZERO_COPY_RECT_DRAW,
+                                          GL_ZERO_COPY_EXTERNAL_DRAW));
 
 TEST_P(LayerTreeHostMasksForBackgroundFiltersPixelTest,
        MaskOfLayerWithBackgroundFilter) {
@@ -387,7 +416,7 @@ TEST_P(LayerTreeHostMasksForBackgroundFiltersPixelTest,
   background->AddChild(blur);
 
   FilterOperations filters;
-  filters.Append(FilterOperation::CreateBlurFilter(1.5f));
+  filters.Append(FilterOperation::CreateGrayscaleFilter(1.0));
   blur->SetBackgroundFilters(filters);
 
   gfx::Size mask_bounds(100, 100);

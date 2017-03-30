@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/tab_contents/chrome_web_contents_view_delegate_views.h"
 
+#include <utility>
+
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/ui/aura/tab_contents/web_drag_bookmark_handler_aura.h"
 #include "chrome/browser/ui/browser.h"
@@ -13,7 +15,7 @@
 #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_delegate.h"
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
 #include "chrome/browser/ui/views/sad_tab_view.h"
-#include "components/web_modal/popup_manager.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -67,10 +69,10 @@ bool ChromeWebContentsViewDelegateViews::Focus() {
     }
   }
 
-  web_modal::PopupManager* popup_manager =
-      web_modal::PopupManager::FromWebContents(web_contents_);
-  if (popup_manager)
-    popup_manager->WasFocused(web_contents_);
+  const web_modal::WebContentsModalDialogManager* manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents_);
+  if (manager && manager->IsDialogActive())
+    manager->FocusTopmostDialog();
 
   return false;
 }
@@ -131,12 +133,12 @@ ChromeWebContentsViewDelegateViews::BuildMenu(
     menu.reset(RenderViewContextMenuViews::Create(focused_frame, params));
     menu->Init();
   }
-  return menu.Pass();
+  return menu;
 }
 
 void ChromeWebContentsViewDelegateViews::ShowMenu(
     scoped_ptr<RenderViewContextMenuBase> menu) {
-  context_menu_ = menu.Pass();
+  context_menu_ = std::move(menu);
   if (!context_menu_)
     return;
 

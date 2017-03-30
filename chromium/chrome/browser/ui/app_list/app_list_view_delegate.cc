@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/app_list_view_delegate.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "apps/custom_launcher_page_contents.h"
@@ -14,6 +16,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/scoped_keep_alive.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -47,6 +50,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/speech_recognition_session_preamble.h"
 #include "content/public/browser/user_metrics.h"
@@ -381,7 +385,7 @@ void AppListViewDelegate::OnHotwordRecognized(
     const scoped_refptr<content::SpeechRecognitionSessionPreamble>& preamble) {
   DCHECK_EQ(app_list::SPEECH_RECOGNITION_HOTWORD_LISTENING,
             speech_ui_->state());
-  ToggleSpeechRecognitionForHotword(preamble);
+  StartSpeechRecognitionForHotword(preamble);
 }
 
 void AppListViewDelegate::SigninManagerCreated(SigninManagerBase* manager) {
@@ -600,11 +604,18 @@ void AppListViewDelegate::OpenFeedback() {
                            chrome::kAppLauncherCategoryTag);
 }
 
-void AppListViewDelegate::ToggleSpeechRecognition() {
-  ToggleSpeechRecognitionForHotword(nullptr);
+void AppListViewDelegate::StartSpeechRecognition() {
+  StartSpeechRecognitionForHotword(nullptr);
 }
 
-void AppListViewDelegate::ToggleSpeechRecognitionForHotword(
+void AppListViewDelegate::StopSpeechRecognition() {
+  app_list::StartPageService* service =
+      app_list::StartPageService::Get(profile_);
+  if (service)
+    service->StopSpeechRecognition();
+}
+
+void AppListViewDelegate::StartSpeechRecognitionForHotword(
     const scoped_refptr<content::SpeechRecognitionSessionPreamble>& preamble) {
   app_list::StartPageService* service =
       app_list::StartPageService::Get(profile_);
@@ -617,7 +628,7 @@ void AppListViewDelegate::ToggleSpeechRecognitionForHotword(
           app_list::SPEECH_RECOGNITION_NETWORK_ERROR, true);
       return;
     }
-    service->ToggleSpeechRecognition(preamble);
+    service->StartSpeechRecognition(preamble);
   }
 
   // With the new hotword extension, stop the hotword session. With the launcher
@@ -653,7 +664,7 @@ void AppListViewDelegate::OnSpeechResult(const base::string16& result,
   }
 }
 
-void AppListViewDelegate::OnSpeechSoundLevelChanged(int16 level) {
+void AppListViewDelegate::OnSpeechSoundLevelChanged(int16_t level) {
   speech_ui_->UpdateSoundLevel(level);
 }
 
@@ -715,7 +726,7 @@ std::vector<views::View*> AppListViewDelegate::CreateCustomPageWebViews(
 
     // Make the webview transparent.
     content::RenderWidgetHostView* render_view_host_view =
-        web_contents->GetRenderViewHost()->GetView();
+        web_contents->GetRenderViewHost()->GetWidget()->GetView();
     // The RenderWidgetHostView may be null if the renderer has crashed.
     if (render_view_host_view)
       render_view_host_view->SetBackgroundColor(SK_ColorTRANSPARENT);

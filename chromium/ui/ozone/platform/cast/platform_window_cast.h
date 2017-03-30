@@ -5,6 +5,7 @@
 #ifndef UI_OZONE_PLATFORM_CAST_PLATFORM_WINDOW_CAST_H_
 #define UI_OZONE_PLATFORM_CAST_PLATFORM_WINDOW_CAST_H_
 
+#include "base/macros.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/platform_window/platform_window.h"
@@ -19,6 +20,7 @@ class PlatformWindowCast : public PlatformWindow {
   // PlatformWindow implementation:
   gfx::Rect GetBounds() override;
   void SetBounds(const gfx::Rect& bounds) override;
+  void SetTitle(const base::string16& title) override;
   void Show() override {}
   void Hide() override {}
   void Close() override {}
@@ -31,6 +33,7 @@ class PlatformWindowCast : public PlatformWindow {
   void SetCursor(PlatformCursor cursor) override {}
   void MoveCursorTo(const gfx::Point& location) override {}
   void ConfineCursorToBounds(const gfx::Rect& bounds) override {}
+  PlatformImeController* GetPlatformImeController() override;
 
  private:
   PlatformWindowDelegate* delegate_;

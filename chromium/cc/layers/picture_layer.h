@@ -5,6 +5,7 @@
 #ifndef CC_LAYERS_PICTURE_LAYER_H_
 #define CC_LAYERS_PICTURE_LAYER_H_
 
+#include "base/macros.h"
 #include "cc/base/invalidation_region.h"
 #include "cc/debug/devtools_instrumentation.h"
 #include "cc/debug/micro_benchmark_controller.h"
@@ -13,7 +14,7 @@
 namespace cc {
 
 class ContentLayerClient;
-class RecordingSource;
+class DisplayListRecordingSource;
 class ResourceUpdateQueue;
 
 class CC_EXPORT PictureLayer : public Layer {
@@ -39,7 +40,7 @@ class CC_EXPORT PictureLayer : public Layer {
 
   ContentLayerClient* client() { return client_; }
 
-  RecordingSource* GetRecordingSourceForTesting() {
+  DisplayListRecordingSource* GetDisplayListRecordingSourceForTesting() {
     return recording_source_.get();
   }
 
@@ -48,23 +49,31 @@ class CC_EXPORT PictureLayer : public Layer {
   // Allow tests to inject a recording source.
   PictureLayer(const LayerSettings& settings,
                ContentLayerClient* client,
-               scoped_ptr<RecordingSource> source);
+               scoped_ptr<DisplayListRecordingSource> source);
   ~PictureLayer() override;
 
   bool HasDrawableContent() const override;
+  void SetTypeForProtoSerialization(proto::LayerNode* proto) const override;
+  void LayerSpecificPropertiesToProto(proto::LayerProperties* proto) override;
+  void FromLayerSpecificPropertiesProto(
+      const proto::LayerProperties& proto) override;
 
   bool is_mask() const { return is_mask_; }
 
  private:
+  friend class TestSerializationPictureLayer;
+
+  void DropRecordingSourceContentIfInvalid();
+
   ContentLayerClient* client_;
-  scoped_ptr<RecordingSource> recording_source_;
+  scoped_ptr<DisplayListRecordingSource> recording_source_;
   devtools_instrumentation::
       ScopedLayerObjectTracker instrumentation_object_tracker_;
-  // Invalidation to use the next time update is called.
-  InvalidationRegion pending_invalidation_;
-  // Invalidation from the last time update was called.
-  Region recording_invalidation_;
+
+  // These store the last visible layer and invalidation computed via a call
+  // to Update().
   gfx::Rect last_updated_visible_layer_rect_;
+  Region last_updated_invalidation_;
 
   int update_source_frame_number_;
   bool is_mask_;

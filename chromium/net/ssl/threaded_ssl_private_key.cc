@@ -5,6 +5,7 @@
 #include "net/ssl/threaded_ssl_private_key.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -30,7 +31,7 @@ class ThreadedSSLPrivateKey::Core
     : public base::RefCountedThreadSafe<ThreadedSSLPrivateKey::Core> {
  public:
   Core(scoped_ptr<ThreadedSSLPrivateKey::Delegate> delegate)
-      : delegate_(delegate.Pass()) {}
+      : delegate_(std::move(delegate)) {}
 
   ThreadedSSLPrivateKey::Delegate* delegate() { return delegate_.get(); }
 
@@ -50,20 +51,16 @@ class ThreadedSSLPrivateKey::Core
 ThreadedSSLPrivateKey::ThreadedSSLPrivateKey(
     scoped_ptr<ThreadedSSLPrivateKey::Delegate> delegate,
     scoped_refptr<base::TaskRunner> task_runner)
-    : core_(new Core(delegate.Pass())),
-      task_runner_(task_runner.Pass()),
-      weak_factory_(this) {
-}
-
-ThreadedSSLPrivateKey::~ThreadedSSLPrivateKey() {
-}
+    : core_(new Core(std::move(delegate))),
+      task_runner_(std::move(task_runner)),
+      weak_factory_(this) {}
 
 SSLPrivateKey::Type ThreadedSSLPrivateKey::GetType() {
   return core_->delegate()->GetType();
 }
 
-bool ThreadedSSLPrivateKey::SupportsHash(SSLPrivateKey::Hash hash) {
-  return core_->delegate()->SupportsHash(hash);
+std::vector<SSLPrivateKey::Hash> ThreadedSSLPrivateKey::GetDigestPreferences() {
+  return core_->delegate()->GetDigestPreferences();
 }
 
 size_t ThreadedSSLPrivateKey::GetMaxSignatureLengthInBytes() {
@@ -82,5 +79,7 @@ void ThreadedSSLPrivateKey::SignDigest(
       base::Bind(&DoCallback, weak_factory_.GetWeakPtr(), callback,
                  base::Owned(signature)));
 }
+
+ThreadedSSLPrivateKey::~ThreadedSSLPrivateKey() {}
 
 }  // namespace net

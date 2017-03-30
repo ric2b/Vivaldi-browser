@@ -29,11 +29,11 @@ class TestOutputSurface : public OutputSurface {
       : OutputSurface(worker_context_provider) {}
 
   explicit TestOutputSurface(scoped_ptr<SoftwareOutputDevice> software_device)
-      : OutputSurface(software_device.Pass()) {}
+      : OutputSurface(std::move(software_device)) {}
 
   TestOutputSurface(scoped_refptr<ContextProvider> context_provider,
                     scoped_ptr<SoftwareOutputDevice> software_device)
-      : OutputSurface(context_provider, software_device.Pass()) {}
+      : OutputSurface(context_provider, std::move(software_device)) {}
 
   void SwapBuffers(CompositorFrame* frame) override {
     client_->DidSwapBuffers();
@@ -150,37 +150,6 @@ TEST(OutputSurfaceTest, ClientPointerIndicatesWorkerBindToClientFailure) {
   FakeOutputSurfaceClient client;
   EXPECT_FALSE(output_surface.BindToClient(&client));
   EXPECT_FALSE(output_surface.HasClient());
-}
-
-TEST(OutputSurfaceTest, MemoryAllocation) {
-  scoped_refptr<TestContextProvider> context_provider =
-      TestContextProvider::Create();
-
-  TestOutputSurface output_surface(context_provider);
-
-  FakeOutputSurfaceClient client;
-  EXPECT_TRUE(output_surface.BindToClient(&client));
-
-  ManagedMemoryPolicy policy(0);
-  policy.bytes_limit_when_visible = 1234;
-  policy.priority_cutoff_when_visible =
-      gpu::MemoryAllocation::CUTOFF_ALLOW_REQUIRED_ONLY;
-
-  context_provider->SetMemoryAllocation(policy);
-  EXPECT_EQ(1234u, client.memory_policy().bytes_limit_when_visible);
-  EXPECT_EQ(gpu::MemoryAllocation::CUTOFF_ALLOW_REQUIRED_ONLY,
-            client.memory_policy().priority_cutoff_when_visible);
-
-  policy.priority_cutoff_when_visible =
-      gpu::MemoryAllocation::CUTOFF_ALLOW_EVERYTHING;
-  context_provider->SetMemoryAllocation(policy);
-  EXPECT_EQ(gpu::MemoryAllocation::CUTOFF_ALLOW_EVERYTHING,
-            client.memory_policy().priority_cutoff_when_visible);
-
-  // 0 bytes limit should be ignored.
-  policy.bytes_limit_when_visible = 0;
-  context_provider->SetMemoryAllocation(policy);
-  EXPECT_EQ(1234u, client.memory_policy().bytes_limit_when_visible);
 }
 
 TEST(OutputSurfaceTest, SoftwareOutputDeviceBackbufferManagement) {

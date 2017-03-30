@@ -23,14 +23,19 @@ class CastStabilityMetricsProvider;
 // process to upload metrics via reading/writing to a known shared file.
 class ExternalMetrics {
  public:
-  explicit ExternalMetrics(CastStabilityMetricsProvider* stability_provider);
-
+  explicit ExternalMetrics(CastStabilityMetricsProvider* stability_provider,
+                           const std::string& uma_events_file);
   // Begins external data collection. Calls to RecordAction originate in the
   // File thread but are executed in the UI thread.
   void Start();
 
   // Destroys itself in appropriate thread.
   void StopAndDestroy();
+
+  // Processes all events from shared file. This should be used to consume all
+  // events in the file before shutdown. This function is safe to call from any
+  // thread.
+  void ProcessExternalEvents(const base::Closure& cb);
 
  private:
   friend class base::DeleteHelper<ExternalMetrics>;
@@ -55,14 +60,11 @@ class ExternalMetrics {
   // Calls CollectEvents and reschedules a future collection.
   void CollectEventsAndReschedule();
 
-  // Schedules a metrics event collection in the future.
-  void ScheduleCollector();
-
   // Reference to stability metrics provider, for reporting external crashes.
-  CastStabilityMetricsProvider* stability_provider_;
+  CastStabilityMetricsProvider* const stability_provider_;
 
   // File used by libmetrics to send metrics to the browser process.
-  std::string uma_events_file_;
+  const std::string uma_events_file_;
 
   base::WeakPtrFactory<ExternalMetrics> weak_factory_;
 

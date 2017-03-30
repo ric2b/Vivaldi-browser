@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/policy/cloud_external_data_manager_base_test_util.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -23,7 +25,7 @@ namespace test {
 void ExternalDataFetchCallback(scoped_ptr<std::string>* destination,
                                const base::Closure& done_callback,
                                scoped_ptr<std::string> data) {
-  *destination = data.Pass();
+  *destination = std::move(data);
   done_callback.Run();
 }
 
@@ -35,7 +37,7 @@ scoped_ptr<base::DictionaryValue> ConstructExternalDataReference(
   metadata->SetStringWithoutPathExpansion("url", url);
   metadata->SetStringWithoutPathExpansion("hash", base::HexEncode(hash.c_str(),
                                                                   hash.size()));
-  return metadata.Pass();
+  return metadata;
 }
 
 void SetExternalDataReference(CloudPolicyCore* core,
@@ -45,7 +47,7 @@ void SetExternalDataReference(CloudPolicyCore* core,
   ASSERT_TRUE(store);
   PolicyMap policy_map;
   policy_map.Set(policy,
-                 POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                  metadata.release(),
                  new ExternalDataFetcher(store->external_data_manager(),
                                          policy));

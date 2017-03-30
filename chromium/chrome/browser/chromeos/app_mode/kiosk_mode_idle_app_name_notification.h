@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_APP_MODE_KIOSK_MODE_IDLE_APP_NAME_NOTIFICATION_H_
 #define CHROME_BROWSER_CHROMEOS_APP_MODE_KIOSK_MODE_IDLE_APP_NAME_NOTIFICATION_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "chromeos/dbus/power_manager_client.h"
@@ -45,7 +45,7 @@ class KioskModeIdleAppNameNotification : public ui::UserActivityObserver,
   // Invoked by |timer_| to display the application idle message.
   void OnTimeout();
 
-  base::OneShotTimer<KioskModeIdleAppNameNotification> timer_;
+  base::OneShotTimer timer_;
 
   // If set the notification should get shown upon next user activity.
   bool show_notification_upon_next_user_activity_;

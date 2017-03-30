@@ -6,11 +6,15 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <utility>
 
+#include "base/files/dir_reader_posix.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/process/internal_linux.h"
@@ -20,6 +24,7 @@
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -35,13 +40,13 @@ void TrimKeyValuePairs(StringPairs* pairs) {
 }
 
 #if defined(OS_CHROMEOS)
-// Read a file with a single number string and return the number as a uint64.
-static uint64 ReadFileToUint64(const FilePath file) {
+// Read a file with a single number string and return the number as a uint64_t.
+static uint64_t ReadFileToUint64(const FilePath file) {
   std::string file_as_string;
   if (!ReadFileToString(file, &file_as_string))
     return 0;
   TrimWhitespaceASCII(file_as_string, TRIM_ALL, &file_as_string);
-  uint64 file_as_uint64 = 0;
+  uint64_t file_as_uint64 = 0;
   if (!StringToUint64(file_as_string, &file_as_uint64))
     return 0;
   return file_as_uint64;
@@ -67,8 +72,8 @@ size_t ReadProcStatusAndGetFieldAsSizeT(pid_t pid, const std::string& field) {
     const std::string& key = pairs[i].first;
     const std::string& value_str = pairs[i].second;
     if (key == field) {
-      std::vector<std::string> split_value_str;
-      SplitString(value_str, ' ', &split_value_str);
+      std::vector<StringPiece> split_value_str = SplitStringPiece(
+          value_str, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       if (split_value_str.size() != 2 || split_value_str[1] != "kB") {
         NOTREACHED();
         return 0;
@@ -91,7 +96,7 @@ size_t ReadProcStatusAndGetFieldAsSizeT(pid_t pid, const std::string& field) {
 // Only works for fields in the form of "field    :     uint_value"
 bool ReadProcSchedAndGetFieldAsUint64(pid_t pid,
                                       const std::string& field,
-                                      uint64* result) {
+                                      uint64_t* result) {
   std::string sched_data;
   {
     // Synchronously reading files in /proc does not hit the disk.
@@ -108,7 +113,7 @@ bool ReadProcSchedAndGetFieldAsUint64(pid_t pid,
     const std::string& key = pairs[i].first;
     const std::string& value_str = pairs[i].second;
     if (key == field) {
-      uint64 value;
+      uint64_t value;
       if (!StringToUint64(value_str, &value))
         return false;
       *result = value;
@@ -213,13 +218,14 @@ double ProcessMetrics::GetCPUUsage() {
     // First call, just set the last values.
     last_cpu_time_ = time;
     last_cpu_ = GetProcessCPU(process_);
-    return 0;
+    return 0.0;
   }
 
-  int64 time_delta = (time - last_cpu_time_).InMicroseconds();
-  DCHECK_NE(time_delta, 0);
-  if (time_delta == 0)
-    return 0;
+  TimeDelta time_delta = time - last_cpu_time_;
+  if (time_delta.is_zero()) {
+    NOTREACHED();
+    return 0.0;
+  }
 
   int cpu = GetProcessCPU(process_);
 
@@ -228,8 +234,18 @@ double ProcessMetrics::GetCPUUsage() {
   // are together adding to more than one CPU's worth.
   TimeDelta cpu_time = internal::ClockTicksToTimeDelta(cpu);
   TimeDelta last_cpu_time = internal::ClockTicksToTimeDelta(last_cpu_);
-  double percentage = 100.0 * (cpu_time - last_cpu_time).InSecondsF() /
-      TimeDelta::FromMicroseconds(time_delta).InSecondsF();
+
+  // If the number of threads running in the process has decreased since the
+  // last time this function was called, |last_cpu_time| will be greater than
+  // |cpu_time| which will result in a negative value in the below percentage
+  // calculation. We prevent this by clamping to 0. crbug.com/546565.
+  // This computation is known to be shaky when threads are destroyed between
+  // "last" and "now", but for our current purposes, it's all right.
+  double percentage = 0.0;
+  if (last_cpu_time < cpu_time) {
+    percentage = 100.0 * (cpu_time - last_cpu_time).InSecondsF() /
+        time_delta.InSecondsF();
+  }
 
   last_cpu_time_ = time;
   last_cpu_ = cpu;
@@ -257,7 +273,7 @@ bool ProcessMetrics::GetIOCounters(IoCounters* io_counters) const {
   for (size_t i = 0; i < pairs.size(); ++i) {
     const std::string& key = pairs[i].first;
     const std::string& value_str = pairs[i].second;
-    uint64* target_counter = NULL;
+    uint64_t* target_counter = NULL;
     if (key == "syscr")
       target_counter = &io_counters->ReadOperationCount;
     else if (key == "syscw")
@@ -273,6 +289,26 @@ bool ProcessMetrics::GetIOCounters(IoCounters* io_counters) const {
   }
   return true;
 }
+
+#if defined(OS_LINUX)
+int ProcessMetrics::GetOpenFdCount() const {
+  // Use /proc/<pid>/fd to count the number of entries there.
+  FilePath fd_path = internal::GetProcPidDir(process_).Append("fd");
+
+  DirReaderPosix dir_reader(fd_path.value().c_str());
+  if (!dir_reader.IsValid())
+    return -1;
+
+  int total_count = 0;
+  for (; dir_reader.Next(); ) {
+    const char* name = dir_reader.name();
+    if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0)
+      ++total_count;
+  }
+
+  return total_count;
+}
+#endif  // defined(OS_LINUX)
 
 ProcessMetrics::ProcessMetrics(ProcessHandle process)
     : process_(process),
@@ -316,8 +352,9 @@ bool ProcessMetrics::GetWorkingSetKBytesTotmaps(WorkingSetKBytes *ws_usage)
       return false;
   }
 
-  std::vector<std::string> totmaps_fields;
-  SplitStringAlongWhitespace(totmaps_data, &totmaps_fields);
+  std::vector<std::string> totmaps_fields = SplitString(
+      totmaps_data, base::kWhitespaceASCII, base::KEEP_WHITESPACE,
+      base::SPLIT_WANT_NONEMPTY);
 
   DCHECK_EQ("Pss:", totmaps_fields[kPssIndex-1]);
   DCHECK_EQ("Private_Clean:", totmaps_fields[kPrivate_CleanIndex - 1]);
@@ -368,8 +405,8 @@ bool ProcessMetrics::GetWorkingSetKBytesStatm(WorkingSetKBytes* ws_usage)
       return false;
   }
 
-  std::vector<std::string> statm_vec;
-  SplitString(statm, ' ', &statm_vec);
+  std::vector<StringPiece> statm_vec = SplitStringPiece(
+      statm, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (statm_vec.size() != 7)
     return false;  // Not the format we expect.
 
@@ -543,7 +580,7 @@ scoped_ptr<Value> SystemMemoryInfoKB::ToValue() const {
   res->SetInteger("gem_size", gem_size);
 #endif
 
-  return res.Pass();
+  return std::move(res);
 }
 
 // exposed for testing
@@ -732,7 +769,7 @@ SystemDiskInfo::SystemDiskInfo() {
 scoped_ptr<Value> SystemDiskInfo::ToValue() const {
   scoped_ptr<DictionaryValue> res(new DictionaryValue());
 
-  // Write out uint64 variables as doubles.
+  // Write out uint64_t variables as doubles.
   // Note: this may discard some precision, but for JS there's no other option.
   res->SetDouble("reads", static_cast<double>(reads));
   res->SetDouble("reads_merged", static_cast<double>(reads_merged));
@@ -746,7 +783,7 @@ scoped_ptr<Value> SystemDiskInfo::ToValue() const {
   res->SetDouble("io_time", static_cast<double>(io_time));
   res->SetDouble("weighted_io_time", static_cast<double>(weighted_io_time));
 
-  return res.Pass();
+  return std::move(res);
 }
 
 bool IsValidDiskName(const std::string& candidate) {
@@ -807,17 +844,17 @@ bool GetSystemDiskInfo(SystemDiskInfo* diskinfo) {
   diskinfo->io_time = 0;
   diskinfo->weighted_io_time = 0;
 
-  uint64 reads = 0;
-  uint64 reads_merged = 0;
-  uint64 sectors_read = 0;
-  uint64 read_time = 0;
-  uint64 writes = 0;
-  uint64 writes_merged = 0;
-  uint64 sectors_written = 0;
-  uint64 write_time = 0;
-  uint64 io = 0;
-  uint64 io_time = 0;
-  uint64 weighted_io_time = 0;
+  uint64_t reads = 0;
+  uint64_t reads_merged = 0;
+  uint64_t sectors_read = 0;
+  uint64_t read_time = 0;
+  uint64_t writes = 0;
+  uint64_t writes_merged = 0;
+  uint64_t sectors_written = 0;
+  uint64_t write_time = 0;
+  uint64_t io = 0;
+  uint64_t io_time = 0;
+  uint64_t weighted_io_time = 0;
 
   for (const StringPiece& line : diskinfo_lines) {
     std::vector<StringPiece> disk_fields = SplitStringPiece(
@@ -858,7 +895,7 @@ bool GetSystemDiskInfo(SystemDiskInfo* diskinfo) {
 scoped_ptr<Value> SwapInfo::ToValue() const {
   scoped_ptr<DictionaryValue> res(new DictionaryValue());
 
-  // Write out uint64 variables as doubles.
+  // Write out uint64_t variables as doubles.
   // Note: this may discard some precision, but for JS there's no other option.
   res->SetDouble("num_reads", static_cast<double>(num_reads));
   res->SetDouble("num_writes", static_cast<double>(num_writes));
@@ -871,7 +908,7 @@ scoped_ptr<Value> SwapInfo::ToValue() const {
   else
     res->SetDouble("compression_ratio", 0);
 
-  return res.Pass();
+  return std::move(res);
 }
 
 void GetSwapInfo(SwapInfo* swap_info) {
@@ -879,7 +916,8 @@ void GetSwapInfo(SwapInfo* swap_info) {
   ThreadRestrictions::ScopedAllowIO allow_io;
 
   FilePath zram_path("/sys/block/zram0");
-  uint64 orig_data_size = ReadFileToUint64(zram_path.Append("orig_data_size"));
+  uint64_t orig_data_size =
+      ReadFileToUint64(zram_path.Append("orig_data_size"));
   if (orig_data_size <= 4096) {
     // A single page is compressed at startup, and has a high compression
     // ratio. We ignore this as it doesn't indicate any real swapping.
@@ -902,7 +940,7 @@ void GetSwapInfo(SwapInfo* swap_info) {
 
 #if defined(OS_LINUX)
 int ProcessMetrics::GetIdleWakeupsPerSecond() {
-  uint64 wake_ups;
+  uint64_t wake_ups;
   const char kWakeupStat[] = "se.statistics.nr_wakeups";
   return ReadProcSchedAndGetFieldAsUint64(process_, kWakeupStat, &wake_ups) ?
       CalculateIdleWakeupsPerSecond(wake_ups) : 0;

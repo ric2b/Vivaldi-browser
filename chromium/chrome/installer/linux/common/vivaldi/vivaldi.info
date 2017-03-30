@@ -21,7 +21,7 @@ MENUNAME="Vivaldi"
 SHORTDESC="A new browser for our friends"
 
 # Detailed package description.
-FULLDESC="Vivaldi browser is made for power users in mind by people who love the Web."
+FULLDESC="Vivaldi browser is made with power users in mind by people who love the Web."
 
 # Package maintainer information.
 # TODO(mmoss) Setup a mailbox for this address

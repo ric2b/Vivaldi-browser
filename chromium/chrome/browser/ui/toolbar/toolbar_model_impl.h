@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_MODEL_IMPL_H_
 #define CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_MODEL_IMPL_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/ui/toolbar/toolbar_model.h"
+#include "components/toolbar/toolbar_model.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -40,11 +42,10 @@ class ToolbarModelImpl : public ToolbarModel {
   base::string16 GetCorpusNameForMobile() const override;
   GURL GetURL() const override;
   bool WouldPerformSearchTermReplacement(bool ignore_editing) const override;
-  connection_security::SecurityLevel GetSecurityLevel(
+  security_state::SecurityStateModel::SecurityLevel GetSecurityLevel(
       bool ignore_editing) const override;
   int GetIcon() const override;
-  int GetIconForSecurityLevel(
-      connection_security::SecurityLevel level) const override;
+  gfx::VectorIconId GetVectorIcon() const override;
   base::string16 GetEVCertName() const override;
   bool ShouldDisplayURL() const override;
 
@@ -56,7 +57,7 @@ class ToolbarModelImpl : public ToolbarModel {
   // Helper method to extract the profile from the navigation controller.
   Profile* GetProfile() const;
 
-  // Returns search terms as in chrome::GetSearchTerms() if such terms should
+  // Returns search terms as in search::GetSearchTerms() if such terms should
   // appear in the omnibox (i.e. the page is sufficiently secure, search term
   // replacement is enabled, editing is not in progress, etc.).  If
   // |ignore_editing| is true, the "editing not in progress" check is skipped.

@@ -6,12 +6,14 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_GPU_TRACER_H_
 #define GPU_COMMAND_BUFFER_SERVICE_GPU_TRACER_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <stack>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
@@ -33,7 +35,6 @@ class GPUTrace;
 enum GpuTracerSource {
   kTraceGroupInvalid = -1,
 
-  kTraceGroupMarker,
   kTraceCHROMIUM,
   kTraceDecoder,
   kTraceDisjoint, // Used internally.
@@ -73,6 +74,9 @@ class GPU_EXPORT GPUTracer
   // End the last started trace marker.
   bool End(GpuTracerSource source);
 
+  bool HasTracesToProcess();
+  void ProcessTraces();
+
   virtual bool IsTracing();
 
   // Retrieve the name of the current open trace.
@@ -83,14 +87,9 @@ class GPU_EXPORT GPUTracer
  protected:
   // Trace Processing.
   virtual scoped_refptr<Outputter> CreateOutputter(const std::string& name);
-  virtual void PostTask();
 
-  void Process();
-  void ProcessTraces();
   bool CheckDisjointStatus();
   void ClearOngoingTraces(bool have_context);
-
-  void IssueProcessTask();
 
   scoped_refptr<gfx::GPUTimingClient> gpu_timing_client_;
   scoped_refptr<Outputter> outputter_;
@@ -100,10 +99,9 @@ class GPU_EXPORT GPUTracer
   const unsigned char* gpu_trace_srv_category;
   const unsigned char* gpu_trace_dev_category;
   gles2::GLES2Decoder* decoder_;
-  int64 disjoint_time_ = 0;
+  int64_t disjoint_time_ = 0;
 
   bool gpu_executing_ = false;
-  bool process_posted_ = false;
   bool began_device_traces_ = false;
 
  private:
@@ -115,8 +113,8 @@ class Outputter : public base::RefCounted<Outputter> {
   virtual void TraceDevice(GpuTracerSource source,
                            const std::string& category,
                            const std::string& name,
-                           int64 start_time,
-                           int64 end_time) = 0;
+                           int64_t start_time,
+                           int64_t end_time) = 0;
 
   virtual void TraceServiceBegin(GpuTracerSource source,
                                  const std::string& category,
@@ -137,8 +135,8 @@ class TraceOutputter : public Outputter {
   void TraceDevice(GpuTracerSource source,
                    const std::string& category,
                    const std::string& name,
-                   int64 start_time,
-                   int64 end_time) override;
+                   int64_t start_time,
+                   int64_t end_time) override;
 
   void TraceServiceBegin(GpuTracerSource source,
                          const std::string& category,
@@ -154,10 +152,10 @@ class TraceOutputter : public Outputter {
   ~TraceOutputter() override;
 
   base::Thread named_thread_;
-  uint64 local_trace_device_id_ = 0;
-  uint64 local_trace_service_id_ = 0;
+  uint64_t local_trace_device_id_ = 0;
+  uint64_t local_trace_service_id_ = 0;
 
-  std::stack<uint64> trace_service_id_stack_[NUM_TRACER_SOURCES];
+  std::stack<uint64_t> trace_service_id_stack_[NUM_TRACER_SOURCES];
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TraceOutputter);

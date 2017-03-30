@@ -4,10 +4,14 @@
 
 #include "ash/system/chromeos/power/tray_power.h"
 
+#include <utility>
+
 #include "ash/accessibility_delegate.h"
 #include "ash/ash_switches.h"
 #include "ash/shell.h"
+#include "ash/system/chromeos/devicetype_utils.h"
 #include "ash/system/chromeos/power/battery_notification.h"
+#include "ash/system/chromeos/power/dual_role_notification.h"
 #include "ash/system/date/date_view.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/system_tray_delegate.h"
@@ -23,6 +27,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
+#include "ui/message_center/notification_delegate.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/view.h"
 
@@ -30,6 +35,27 @@ using message_center::MessageCenter;
 using message_center::Notification;
 
 namespace ash {
+
+// Informs the TrayPower instance when a USB notification is closed.
+class UsbNotificationDelegate : public message_center::NotificationDelegate {
+ public:
+  explicit UsbNotificationDelegate(TrayPower* tray_power)
+      : tray_power_(tray_power) {}
+
+  // Overridden from message_center::NotificationDelegate.
+  void Close(bool by_user) override {
+    if (by_user)
+      tray_power_->NotifyUsbNotificationClosedByUser();
+  }
+
+ private:
+  ~UsbNotificationDelegate() override {}
+
+  TrayPower* tray_power_;
+
+  DISALLOW_COPY_AND_ASSIGN(UsbNotificationDelegate);
+};
+
 namespace {
 
 std::string GetNotificationStateString(
@@ -108,18 +134,22 @@ const int TrayPower::kCriticalPercentage = 5;
 const int TrayPower::kLowPowerPercentage = 10;
 const int TrayPower::kNoWarningPercentage = 15;
 
+const char TrayPower::kUsbNotificationId[] = "usb-charger";
+
 TrayPower::TrayPower(SystemTray* system_tray, MessageCenter* message_center)
     : SystemTrayItem(system_tray),
       message_center_(message_center),
       power_tray_(NULL),
       notification_state_(NOTIFICATION_NONE),
       usb_charger_was_connected_(false),
-      line_power_was_connected_(false) {
+      line_power_was_connected_(false),
+      usb_notification_dismissed_(false) {
   PowerStatus::Get()->AddObserver(this);
 }
 
 TrayPower::~TrayPower() {
   PowerStatus::Get()->RemoveObserver(this);
+  message_center_->RemoveNotification(kUsbNotificationId, false);
 }
 
 views::View* TrayPower::CreateTrayView(user::LoginStatus status) {
@@ -163,6 +193,7 @@ void TrayPower::OnPowerStatusChanged() {
     return;
 
   MaybeShowUsbChargerNotification();
+  MaybeShowDualRoleNotification();
 
   if (battery_alert) {
     // Remove any existing notification so it's dismissed before adding a new
@@ -183,35 +214,47 @@ void TrayPower::OnPowerStatusChanged() {
 
 bool TrayPower::MaybeShowUsbChargerNotification() {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  const char kNotificationId[] = "usb-charger";
-  bool usb_charger_is_connected = PowerStatus::Get()->IsUsbChargerConnected();
+  const PowerStatus& status = *PowerStatus::Get();
+
+  bool usb_charger_is_connected = status.IsUsbChargerConnected();
 
   // Check for a USB charger being connected.
-  if (usb_charger_is_connected && !usb_charger_was_connected_) {
+  if (usb_charger_is_connected && !usb_charger_was_connected_ &&
+      !usb_notification_dismissed_) {
     scoped_ptr<Notification> notification(new Notification(
-        message_center::NOTIFICATION_TYPE_SIMPLE,
-        kNotificationId,
+        message_center::NOTIFICATION_TYPE_SIMPLE, kUsbNotificationId,
         rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_LOW_POWER_CHARGER_TITLE),
-        rb.GetLocalizedString(
+        ash::SubstituteChromeOSDeviceType(
             IDS_ASH_STATUS_TRAY_LOW_POWER_CHARGER_MESSAGE_SHORT),
         rb.GetImageNamed(IDR_AURA_NOTIFICATION_LOW_POWER_CHARGER),
-        base::string16(),
-        message_center::NotifierId(
-            message_center::NotifierId::SYSTEM_COMPONENT,
-            system_notifier::kNotifierPower),
+        base::string16(), GURL(),
+        message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                   system_notifier::kNotifierPower),
         message_center::RichNotificationData(),
-        NULL));
-    message_center_->AddNotification(notification.Pass());
+        new UsbNotificationDelegate(this)));
+    message_center_->AddNotification(std::move(notification));
     return true;
-  }
-
-  // Check for unplug of a USB charger while the USB charger notification is
-  // showing.
-  if (!usb_charger_is_connected && usb_charger_was_connected_) {
-    message_center_->RemoveNotification(kNotificationId, false);
+  } else if (!usb_charger_is_connected && usb_charger_was_connected_) {
+    // USB charger was unplugged or was identified as a different type while
+    // the USB charger notification was showing.
+    message_center_->RemoveNotification(kUsbNotificationId, false);
+    if (!status.IsLinePowerConnected())
+      usb_notification_dismissed_ = false;
     return true;
   }
   return false;
+}
+
+void TrayPower::MaybeShowDualRoleNotification() {
+  const PowerStatus& status = *PowerStatus::Get();
+  if (!status.HasDualRoleDevices()) {
+    dual_role_notification_.reset();
+    return;
+  }
+
+  if (!dual_role_notification_)
+    dual_role_notification_.reset(new DualRoleNotification(message_center_));
+  dual_role_notification_->Update();
 }
 
 bool TrayPower::UpdateNotificationState() {
@@ -304,6 +347,10 @@ bool TrayPower::UpdateNotificationStateForRemainingPercentage() {
   }
   NOTREACHED();
   return false;
+}
+
+void TrayPower::NotifyUsbNotificationClosedByUser() {
+  usb_notification_dismissed_ = true;
 }
 
 }  // namespace ash

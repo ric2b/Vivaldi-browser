@@ -5,9 +5,11 @@
 package org.chromium.chrome.browser.webapps;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.util.AttributeSet;
 
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
+import org.chromium.chrome.browser.widget.ClipDrawableProgressBar.DrawingInfo;
 import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.chrome.browser.widget.ViewResourceFrameLayout;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
@@ -29,11 +31,15 @@ public class WebappControlContainer extends ViewResourceFrameLayout
     }
 
     @Override
-    public ViewResourceAdapter getProgressResourceAdapter() {
-        return null;
+    public void getProgressBarDrawingInfo(DrawingInfo drawingInfoOut) {
     }
 
     @Override
     public void setSwipeHandler(EdgeSwipeHandler handler) {
+    }
+
+    @Override
+    public int getToolbarBackgroundColor() {
+        return Color.WHITE;
     }
 }

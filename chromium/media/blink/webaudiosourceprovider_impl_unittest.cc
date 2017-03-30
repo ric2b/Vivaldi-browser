@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "media/audio/audio_parameters.h"
@@ -162,7 +165,7 @@ TEST_F(WebAudioSourceProviderImplTest, ProvideInput) {
   // Point the WebVector into memory owned by |bus1|.
   blink::WebVector<float*> audio_data(static_cast<size_t>(bus1->channels()));
   for (size_t i = 0; i < audio_data.size(); ++i)
-    audio_data[i] = bus1->channel(i);
+    audio_data[i] = bus1->channel(static_cast<int>(i));
 
   // Verify provideInput() works before Initialize() and returns silence.
   bus1->channel(0)[0] = 1;
@@ -197,7 +200,7 @@ TEST_F(WebAudioSourceProviderImplTest, ProvideInput) {
 
   // Ensure volume adjustment is working.
   fake_callback_.reset();
-  fake_callback_.Render(bus2.get(), 0);
+  fake_callback_.Render(bus2.get(), 0, 0);
   bus2->Scale(kTestVolume);
 
   fake_callback_.reset();
@@ -216,9 +219,9 @@ TEST_F(WebAudioSourceProviderImplTest, ProvideInput) {
   // configuring the fake callback to return half the data.  After these calls
   // bus1 is full of junk data, and bus2 is partially filled.
   wasp_impl_->SetVolume(1);
-  fake_callback_.Render(bus1.get(), 0);
+  fake_callback_.Render(bus1.get(), 0, 0);
   fake_callback_.reset();
-  fake_callback_.Render(bus2.get(), 0);
+  fake_callback_.Render(bus2.get(), 0, 0);
   bus2->ZeroFramesPartial(bus2->frames() / 2,
                           bus2->frames() - bus2->frames() / 2);
   fake_callback_.reset();

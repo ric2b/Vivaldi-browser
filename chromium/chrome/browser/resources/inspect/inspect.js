@@ -748,6 +748,7 @@ function createConfigLine(port, location) {
     var newSelection = line.nextElementSibling;
     line.parentNode.removeChild(line);
     selectLine(newSelection);
+    commitPortForwardingConfig(false);
   });
   line.appendChild(lineDelete);
 
@@ -911,10 +912,22 @@ function populatePortStatus(devicesStatusMap) {
     updateUsernameVisibility(deviceSection);
   }
 
+  function clearBrowserPorts(browserSection) {
+    var icon = browserSection.querySelector('.used-for-port-forwarding');
+    if (icon)
+      icon.hidden = true;
+    updateBrowserVisibility(browserSection);
+  }
+
   function clearPorts(deviceSection) {
     if (deviceSection.id in devicesStatusMap)
       return;
-    deviceSection.querySelector('.device-ports').textContent = '';
+    var devicePorts = deviceSection.querySelector('.device-ports');
+    devicePorts.textContent = '';
+    delete devicePorts.cachedJSON;
+
+    Array.prototype.forEach.call(
+        deviceSection.querySelectorAll('.browser'), clearBrowserPorts);
   }
 
   Array.prototype.forEach.call(

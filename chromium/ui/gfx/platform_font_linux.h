@@ -8,7 +8,9 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "skia/ext/refptr.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/font_render_params.h"
@@ -40,12 +42,12 @@ class GFX_EXPORT PlatformFontLinux : public PlatformFont {
 
   // Overridden from PlatformFont:
   Font DeriveFont(int size_delta, int style) const override;
-  int GetHeight() const override;
-  int GetBaseline() const override;
-  int GetCapHeight() const override;
-  int GetExpectedTextWidth(int length) const override;
+  int GetHeight() override;
+  int GetBaseline() override;
+  int GetCapHeight() override;
+  int GetExpectedTextWidth(int length) override;
   int GetStyle() const override;
-  std::string GetFontName() const override;
+  const std::string& GetFontName() const override;
   std::string GetActualFontNameForTesting() const override;
   int GetFontSize() const override;
   const FontRenderParams& GetFontRenderParams() override;
@@ -72,6 +74,9 @@ class GFX_EXPORT PlatformFontLinux : public PlatformFont {
   // Initializes this object as a copy of another PlatformFontLinux.
   void InitFromPlatformFont(const PlatformFontLinux* other);
 
+  // Computes the metrics if they have not yet been computed.
+  void ComputeMetricsIfNecessary();
+
   skia::RefPtr<SkTypeface> typeface_;
 
   // Additional information about the face.
@@ -86,7 +91,8 @@ class GFX_EXPORT PlatformFontLinux : public PlatformFont {
   // Information describing how the font should be rendered.
   FontRenderParams font_render_params_;
 
-  // Cached metrics, generated at construction.
+  // Cached metrics, generated on demand.
+  bool metrics_need_computation_ = true;
   int ascent_pixels_;
   int height_pixels_;
   int cap_height_pixels_;

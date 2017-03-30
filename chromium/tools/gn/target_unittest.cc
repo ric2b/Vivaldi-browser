@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "tools/gn/target.h"
+
+#include <utility>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/config.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/settings.h"
-#include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
 #include "tools/gn/toolchain.h"
 
@@ -35,7 +38,7 @@ TEST(Target, LibInheritance) {
   TestWithScope setup;
   Err err;
 
-  const std::string lib("foo");
+  const LibFile lib("foo");
   const SourceDir libdir("/foo_dir/");
 
   // Leaf target with ldflags set.
@@ -52,7 +55,7 @@ TEST(Target, LibInheritance) {
 
   // Shared library target should inherit the libs from the static library
   // and its own. Its own flag should be before the inherited one.
-  const std::string second_lib("bar");
+  const LibFile second_lib("bar");
   const SourceDir second_libdir("/bar_dir/");
   TestTarget shared(setup, "//foo:shared", Target::SHARED_LIBRARY);
   shared.config_values().libs().push_back(second_lib);
@@ -75,8 +78,7 @@ TEST(Target, LibInheritance) {
   EXPECT_EQ(0u, exec.all_lib_dirs().size());
 }
 
-// Test all_dependent_configs, public_config inheritance, and
-// forward_dependent_configs_from
+// Test all_dependent_configs and public_config inheritance.
 TEST(Target, DependentConfigs) {
   TestWithScope setup;
   Err err;
@@ -90,14 +92,17 @@ TEST(Target, DependentConfigs) {
 
   // Normal non-inherited config.
   Config config(setup.settings(), Label(SourceDir("//foo/"), "config"));
+  ASSERT_TRUE(config.OnResolved(&err));
   c.configs().push_back(LabelConfigPair(&config));
 
   // All dependent config.
   Config all(setup.settings(), Label(SourceDir("//foo/"), "all"));
+  ASSERT_TRUE(all.OnResolved(&err));
   c.all_dependent_configs().push_back(LabelConfigPair(&all));
 
   // Direct dependent config.
   Config direct(setup.settings(), Label(SourceDir("//foo/"), "direct"));
+  ASSERT_TRUE(direct.OnResolved(&err));
   c.public_configs().push_back(LabelConfigPair(&direct));
 
   ASSERT_TRUE(c.OnResolved(&err));
@@ -121,15 +126,13 @@ TEST(Target, DependentConfigs) {
   TestTarget b_fwd(setup, "//foo:b_fwd", Target::STATIC_LIBRARY);
   a_fwd.private_deps().push_back(LabelTargetPair(&b_fwd));
   b_fwd.private_deps().push_back(LabelTargetPair(&c));
-  b_fwd.forward_dependent_configs().push_back(LabelTargetPair(&c));
 
   ASSERT_TRUE(b_fwd.OnResolved(&err));
   ASSERT_TRUE(a_fwd.OnResolved(&err));
 
   // A_fwd should now have both configs.
-  ASSERT_EQ(2u, a_fwd.configs().size());
+  ASSERT_EQ(1u, a_fwd.configs().size());
   EXPECT_EQ(&all, a_fwd.configs()[0].ptr);
-  EXPECT_EQ(&direct, a_fwd.configs()[1].ptr);
   ASSERT_EQ(1u, a_fwd.all_dependent_configs().size());
   EXPECT_EQ(&all, a_fwd.all_dependent_configs()[0].ptr);
 }
@@ -232,6 +235,31 @@ TEST(Target, InheritCompleteStaticLibNoIheritedStaticLibDeps) {
   ASSERT_TRUE(c.OnResolved(&err));
   ASSERT_TRUE(b.OnResolved(&err));
   ASSERT_FALSE(a.OnResolved(&err));
+}
+
+TEST(Target, NoActionDepPropgation) {
+  TestWithScope setup;
+  Err err;
+
+  // Create a dependency chain:
+  //   A (exe) -> B (action) -> C (source_set)
+  {
+    TestTarget a(setup, "//foo:a", Target::EXECUTABLE);
+    TestTarget b(setup, "//foo:b", Target::ACTION);
+    TestTarget c(setup, "//foo:c", Target::SOURCE_SET);
+
+    a.private_deps().push_back(LabelTargetPair(&b));
+    b.private_deps().push_back(LabelTargetPair(&c));
+
+    ASSERT_TRUE(c.OnResolved(&err));
+    ASSERT_TRUE(b.OnResolved(&err));
+    ASSERT_TRUE(a.OnResolved(&err));
+
+    // The executable should not have inherited the source set across the
+    // action.
+    std::vector<const Target*> libs = a.inherited_libraries().GetOrdered();
+    ASSERT_TRUE(libs.empty());
+  }
 }
 
 TEST(Target, GetComputedOutputName) {
@@ -361,6 +389,9 @@ TEST(Target, PublicConfigs) {
 
   Label pub_config_label(SourceDir("//a/"), "pubconfig");
   Config pub_config(setup.settings(), pub_config_label);
+  LibFile lib_name("testlib");
+  pub_config.own_values().libs().push_back(lib_name);
+  ASSERT_TRUE(pub_config.OnResolved(&err));
 
   // This is the destination target that has a public config.
   TestTarget dest(setup, "//a:a", Target::SOURCE_SET);
@@ -380,18 +411,15 @@ TEST(Target, PublicConfigs) {
   ASSERT_EQ(1u, dep_on_pub.configs().size());
   EXPECT_EQ(&pub_config, dep_on_pub.configs()[0].ptr);
 
+  // Libs have special handling, check that they were forwarded from the
+  // public config to all_libs.
+  ASSERT_EQ(1u, dep_on_pub.all_libs().size());
+  ASSERT_EQ(lib_name, dep_on_pub.all_libs()[0]);
+
   // This target has a private dependency on dest for forwards configs.
   TestTarget forward(setup, "//a:f", Target::SOURCE_SET);
   forward.private_deps().push_back(LabelTargetPair(&dest));
-  forward.forward_dependent_configs().push_back(LabelTargetPair(&dest));
   ASSERT_TRUE(forward.OnResolved(&err));
-
-  // Depending on the forward target should apply the config.
-  TestTarget dep_on_forward(setup, "//a:dof", Target::SOURCE_SET);
-  dep_on_forward.private_deps().push_back(LabelTargetPair(&forward));
-  ASSERT_TRUE(dep_on_forward.OnResolved(&err));
-  ASSERT_EQ(1u, dep_on_forward.configs().size());
-  EXPECT_EQ(&pub_config, dep_on_forward.configs()[0].ptr);
 }
 
 // Tests that different link/depend outputs work for solink tools.
@@ -420,7 +448,7 @@ TEST(Target, LinkAndDepOutputs) {
   solink_tool->set_outputs(SubstitutionList::MakeForTest(
       kLinkPattern, kDependPattern));
 
-  toolchain.SetTool(Toolchain::TYPE_SOLINK, solink_tool.Pass());
+  toolchain.SetTool(Toolchain::TYPE_SOLINK, std::move(solink_tool));
 
   Target target(setup.settings(), Label(SourceDir("//a/"), "a"));
   target.set_output_type(Target::SHARED_LIBRARY);
@@ -572,8 +600,9 @@ TEST(Target, ResolvePrecompiledHeaders) {
   Config config_1(setup.settings(), Label(SourceDir("//foo/"), "c1"));
   std::string pch_1("pch.h");
   SourceFile pcs_1("//pcs.cc");
-  config_1.config_values().set_precompiled_header(pch_1);
-  config_1.config_values().set_precompiled_source(pcs_1);
+  config_1.own_values().set_precompiled_header(pch_1);
+  config_1.own_values().set_precompiled_source(pcs_1);
+  ASSERT_TRUE(config_1.OnResolved(&err));
   target.configs().push_back(LabelConfigPair(&config_1));
 
   // No PCH info specified on target, but the config specifies one, the
@@ -592,8 +621,9 @@ TEST(Target, ResolvePrecompiledHeaders) {
   Config config_2(setup.settings(), Label(SourceDir("//foo/"), "c2"));
   std::string pch_2("pch2.h");
   SourceFile pcs_2("//pcs2.cc");
-  config_2.config_values().set_precompiled_header(pch_2);
-  config_2.config_values().set_precompiled_source(pcs_2);
+  config_2.own_values().set_precompiled_header(pch_2);
+  config_2.own_values().set_precompiled_source(pcs_2);
+  ASSERT_TRUE(config_2.OnResolved(&err));
   target.configs().push_back(LabelConfigPair(&config_2));
 
   // This should be an error since they don't match.

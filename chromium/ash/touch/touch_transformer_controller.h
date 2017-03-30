@@ -5,8 +5,12 @@
 #ifndef ASH_TOUCH_TOUCH_TRANSFORMER_CONTROLLER_H_
 #define ASH_TOUCH_TOUCH_TRANSFORMER_CONTROLLER_H_
 
+#include <stdint.h>
+
 #include "ash/ash_export.h"
-#include "ash/display/display_controller.h"
+#include "ash/display/window_tree_host_manager.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "ui/gfx/transform.h"
 
 namespace ui {
@@ -18,7 +22,7 @@ namespace ash {
 // TouchTransformerController listens to display configuration change
 // and updates the touch transformation for touch displays.
 class ASH_EXPORT TouchTransformerController
-    : public DisplayController::Observer {
+    : public WindowTreeHostManager::Observer {
  public:
   TouchTransformerController();
   ~TouchTransformerController() override;
@@ -27,7 +31,7 @@ class ASH_EXPORT TouchTransformerController
   // TouchTransformer into device manager.
   void UpdateTouchTransformer() const;
 
-  // DisplayController::Observer:
+  // WindowTreeHostManager::Observer:
   void OnDisplaysInitialized() override;
   void OnDisplayConfigurationChanged() override;
 

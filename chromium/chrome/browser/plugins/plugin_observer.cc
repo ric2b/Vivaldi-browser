@@ -4,16 +4,18 @@
 
 #include "chrome/browser/plugins/plugin_observer.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/debug/crash_logging.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/metrics/metrics_services_manager.h"
 #include "chrome/browser/plugins/plugin_finder.h"
 #include "chrome/browser/plugins/plugin_infobar_delegates.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,7 +27,9 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
+#include "components/infobars/core/infobar_delegate.h"
 #include "components/infobars/core/simple_alert_infobar_delegate.h"
+#include "components/metrics_services_manager/metrics_services_manager.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -34,11 +38,9 @@
 #include "content/public/common/webplugininfo.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/vector_icons_public.h"
 
 #if defined(ENABLE_PLUGIN_INSTALLATION)
-#if defined(OS_WIN)
-#include "base/win/metro.h"
-#endif
 #include "chrome/browser/plugins/plugin_installer.h"
 #include "chrome/browser/plugins/plugin_installer_observer.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
@@ -87,8 +89,7 @@ ConfirmInstallDialogDelegate::ConfirmInstallDialogDelegate(
     : TabModalConfirmDialogDelegate(web_contents),
       WeakPluginInstallerObserver(installer),
       web_contents_(web_contents),
-      plugin_metadata_(plugin_metadata.Pass()) {
-}
+      plugin_metadata_(std::move(plugin_metadata)) {}
 
 base::string16 ConfirmInstallDialogDelegate::GetTitle() {
   return l10n_util::GetStringFUTF16(
@@ -135,7 +136,9 @@ class ReloadPluginInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~ReloadPluginInfoBarDelegate() override;
 
   // ConfirmInfobarDelegate:
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
+  gfx::VectorIconId GetVectorIconId() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
@@ -163,8 +166,21 @@ ReloadPluginInfoBarDelegate::ReloadPluginInfoBarDelegate(
 
 ReloadPluginInfoBarDelegate::~ReloadPluginInfoBarDelegate(){ }
 
-int ReloadPluginInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::InfoBarIdentifier
+ReloadPluginInfoBarDelegate::GetIdentifier() const {
+  return RELOAD_PLUGIN_INFOBAR_DELEGATE;
+}
+
+int ReloadPluginInfoBarDelegate::GetIconId() const {
   return IDR_INFOBAR_PLUGIN_CRASHED;
+}
+
+gfx::VectorIconId ReloadPluginInfoBarDelegate::GetVectorIconId() const {
+#if !defined(OS_MACOSX) && !defined(OS_IOS) && !defined(OS_ANDROID)
+  return gfx::VectorIconId::EXTENSION_CRASHED;
+#else
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
+#endif
 }
 
 base::string16 ReloadPluginInfoBarDelegate::GetMessageText() const {
@@ -345,8 +361,6 @@ bool PluginObserver::OnMessageReceived(
                         OnOpenAboutPlugins)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_CouldNotLoadPlugin,
                         OnCouldNotLoadPlugin)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_NPAPINotSupported,
-                        OnNPAPINotSupported)
 
     IPC_MESSAGE_UNHANDLED(return false)
   IPC_END_MESSAGE_MAP()
@@ -364,8 +378,9 @@ void PluginObserver::OnBlockedOutdatedPlugin(int placeholder_id,
   if (finder->FindPluginWithIdentifier(identifier, &installer, &plugin)) {
     plugin_placeholders_[placeholder_id] = new PluginPlaceholderHost(
         this, placeholder_id, plugin->name(), installer);
-    OutdatedPluginInfoBarDelegate::Create(InfoBarService::FromWebContents(
-        web_contents()), installer, plugin.Pass());
+    OutdatedPluginInfoBarDelegate::Create(
+        InfoBarService::FromWebContents(web_contents()), installer,
+        std::move(plugin));
   } else {
     NOTREACHED();
   }
@@ -406,38 +421,14 @@ void PluginObserver::OnCouldNotLoadPlugin(const base::FilePath& plugin_path) {
       PluginService::GetInstance()->GetPluginDisplayNameByPath(plugin_path);
   SimpleAlertInfoBarDelegate::Create(
       InfoBarService::FromWebContents(web_contents()),
+      infobars::InfoBarDelegate::PLUGIN_OBSERVER,
       IDR_INFOBAR_PLUGIN_CRASHED,
+#if !defined(OS_MACOSX) && !defined(OS_IOS) && !defined(OS_ANDROID)
+      gfx::VectorIconId::EXTENSION_CRASHED,
+#else
+      gfx::VectorIconId::VECTOR_ICON_NONE,
+#endif
       l10n_util::GetStringFUTF16(IDS_PLUGIN_INITIALIZATION_ERROR_PROMPT,
                                  plugin_name),
       true);
-}
-
-void PluginObserver::OnNPAPINotSupported(const std::string& identifier) {
-#if defined(OS_WIN) && defined(ENABLE_PLUGIN_INSTALLATION)
-#if !defined(USE_AURA)
-  DCHECK(base::win::IsMetroProcess());
-#endif
-
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  if (profile->IsOffTheRecord())
-    return;
-  HostContentSettingsMap* content_settings =
-      profile->GetHostContentSettingsMap();
-  if (content_settings->GetContentSetting(
-      web_contents()->GetURL(),
-      web_contents()->GetURL(),
-      CONTENT_SETTINGS_TYPE_METRO_SWITCH_TO_DESKTOP,
-      std::string()) == CONTENT_SETTING_BLOCK)
-    return;
-
-  scoped_ptr<PluginMetadata> plugin;
-  bool ret = PluginFinder::GetInstance()->FindPluginWithIdentifier(
-      identifier, NULL, &plugin);
-  DCHECK(ret);
-
-  PluginMetroModeInfoBarDelegate::Create(
-      InfoBarService::FromWebContents(web_contents()),
-      PluginMetroModeInfoBarDelegate::DESKTOP_MODE_REQUIRED, plugin->name());
-#endif
 }

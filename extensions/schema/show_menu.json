@@ -1,0 +1,192 @@
+//
+// Copyright (c) 2014-2015 Vivaldi Technologies AS. All rights reserved.
+//
+
+[
+  {
+    "namespace": "showMenu",
+    "description": "Use the <code>vivaldi.showMenu</code> API to show a popup-menu.",
+    "types": [
+      {
+        "id": "MenuItem",
+        "type": "object",
+        "description": "One menu item.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Text in item."
+          },
+          "id": {
+            "type": "integer",
+            "description": "The unique id of item."
+          },
+          "items": {
+            "type": "array",
+            "optional": true,
+            "items": {"$ref": "MenuItem"},
+            "description": "Child menu items."
+          },
+           "selected": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether this menu item is initially selected."
+          },
+          "visible": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether this menu item is visible or not. Defaults to true."
+          },
+          "type": {
+            "type": "string",
+            "optional": true,
+            "description": "'normal' or 'checkbox'. Defaults to 'normal'."
+          },
+          "checked": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the checkbox is checked, otherwise false. Only applies for type='checkbox'."
+          },
+          "disabled": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the item should appear as grayed out."
+          },
+          "emphasized": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the item should appear in an emphasized style (typically bold)."
+          },
+          "shortcut": {
+            "type": "string",
+            "optional": true,
+            "description": "String which illustrates a shortcut. The presence of a string will not execute menu action."
+          },
+          "url": {
+            "type": "string",
+            "optional": true,
+            "description": "Url that can be used to determine a corresponding icon."
+          },
+          "parameter": {
+            "type": "string",
+            "optional": true,
+            "description": "Parameter to command. Sent back unaltered."
+          },
+          "icon": {
+            "type": "string",
+            "optional": true,
+            "description": "Icon in PNG format encoded as base64"
+          }
+        }
+      },
+      {
+        "id": "Response",
+        "type": "object",
+        "description": "Describes what menu item was activated and event state.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Command id. Will be -1 on cancelation."
+          },
+          "ctrl": {
+            "type": "boolean",
+            "description": "true if the Ctrl key is pressed when activating the menu."
+          },
+          "shift": {
+            "type": "boolean",
+            "description": "true if the Shift key is pressed when activating the menu."
+          },
+          "alt": {
+            "type": "boolean",
+            "description": "true if the Alt key is pressed when activating the menu."
+          },
+          "command": {
+            "type": "boolean",
+            "description": "true if the Command key (Mac) is pressed when activating the menu."
+          },
+          "left": {
+            "type": "boolean",
+            "description": "true if the left mouse button activated the menu."
+          },
+          "right": {
+            "type": "boolean",
+            "description": "true if the right mouse button activated the menu."
+          },
+          "center": {
+            "type": "boolean",
+            "description": "true if the center mouse button activated the menu."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "create",
+        "type": "function",
+        "description": "Creates a new context menu.",
+        "parameters": [
+          {
+            "type": "object",
+            "name": "createProperties",
+            "properties": {
+                "mode": {"type": "string", "description": "Menu mode. 'context' or 'menubar'"},
+                "left": {"type": "integer", "description": "Left position of menu, screen coordinates."},
+                "top": {"type": "integer", "description": "Top position of menu, screen coordinates."},
+                "items": {"type": "array", "items": {"$ref": "MenuItem"}, "description": "Menu items with string label. When clicked a callback is called with a zero based index."}
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": false,
+            "parameters": [
+              {
+                "$ref": "Response",
+                "name": "response",
+                "description": "Contains id of activated item and button/modifier state. An id equal to -1 means the reponse is invalid (menu got canceled)."
+              }
+            ]
+          }
+
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onMainMenuCommand",
+        "type": "function",
+        "description": "Fired when a main menu command is selected.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "commandId",
+            "minimum": 0,
+            "description":"id of the command selected."
+          },
+          {
+            "type": "string",
+            "name": "parameter",
+            "description": "Free format parameter to commandId. Can be empty"
+          }
+        ]
+      },
+      {
+        "name": "onOpen",
+        "type": "function",
+        "description": "Fired when a menu opens.",
+        "parameters": []
+      },
+      {
+        "name": "onUrlHighlighted",
+        "type": "function",
+        "description": "Fired when a menu item with a url is highlighted",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string",
+            "description": "Url in menu item"
+          }
+        ]
+      }
+    ]
+  }
+]

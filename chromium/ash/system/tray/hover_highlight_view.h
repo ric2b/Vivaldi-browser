@@ -6,8 +6,8 @@
 #define ASH_SYSTEM_TRAY_HOVER_HIGHLIGHT_VIEW_H_
 
 #include "ash/system/tray/actionable_view.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/text_constants.h"
 
@@ -25,6 +25,10 @@ class HoverHighlightView : public ActionableView {
  public:
   explicit HoverHighlightView(ViewClickListener* listener);
   ~HoverHighlightView() override;
+
+  // views::View
+  bool GetTooltipText(const gfx::Point& p,
+                      base::string16* tooltip) const override;
 
   // Convenience function for adding an icon and a label. This also sets the
   // accessible name.
@@ -66,6 +70,8 @@ class HoverHighlightView : public ActionableView {
 
   bool hover() const { return hover_; }
 
+  void set_tooltip(const base::string16& tooltip) { tooltip_ = tooltip; }
+
  protected:
   // Overridden from views::View.
   void GetAccessibleState(ui::AXViewState* state) override;
@@ -103,6 +109,7 @@ class HoverHighlightView : public ActionableView {
   bool expandable_;
   bool checkable_;
   bool checked_;
+  base::string16 tooltip_;
 
   DISALLOW_COPY_AND_ASSIGN(HoverHighlightView);
 };

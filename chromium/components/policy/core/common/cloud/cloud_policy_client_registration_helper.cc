@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -170,7 +171,7 @@ void CloudPolicyClientRegistrationHelper::StartRegistration(
     OAuth2TokenService* token_service,
     const std::string& account_id,
     const base::Closure& callback) {
-  DVLOG(1) << "Starting registration process with username";
+  DVLOG(1) << "Starting registration process with account_id";
   DCHECK(!client_->is_registered());
   callback_ = callback;
   client_->AddObserver(this);

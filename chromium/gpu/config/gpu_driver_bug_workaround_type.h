@@ -12,6 +12,8 @@
 #define GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)                   \
   GPU_OP(AVOID_EGL_IMAGE_TARGET_TEXTURE_REUSE,               \
          avoid_egl_image_target_texture_reuse)               \
+  GPU_OP(BROKEN_EGL_IMAGE_REF_COUNTING,                      \
+         broken_egl_image_ref_counting)                      \
   GPU_OP(CLEAR_ALPHA_IN_READPIXELS,                          \
          clear_alpha_in_readpixels)                          \
   GPU_OP(CLEAR_UNIFORMS_BEFORE_FIRST_PROGRAM_USE,            \
@@ -34,24 +36,36 @@
          disable_discard_framebuffer)                        \
   GPU_OP(DISABLE_EXT_DRAW_BUFFERS,                           \
          disable_ext_draw_buffers)                           \
+  GPU_OP(DISABLE_EXT_SRGB,                                   \
+         disable_ext_srgb)                                   \
+  GPU_OP(DISABLE_GL_PATH_RENDERING,                          \
+         disable_gl_path_rendering)                          \
   GPU_OP(DISABLE_GL_RGB_FORMAT,                              \
          disable_gl_rgb_format)                              \
+  GPU_OP(DISABLE_MSAA_ON_NON_WEBGL_CONTEXTS,                 \
+         disable_msaa_on_non_webgl_contexts)                 \
   GPU_OP(DISABLE_MULTIMONITOR_MULTISAMPLING,                 \
          disable_multimonitor_multisampling)                 \
   GPU_OP(DISABLE_MULTISAMPLED_RENDER_TO_TEXTURE,             \
          disable_multisampled_render_to_texture)             \
-  GPU_OP(DISABLE_NS_CGL_SURFACE_API,                         \
-         disable_ns_cgl_surface_api)                         \
+  GPU_OP(DISABLE_OVERLAY_CA_LAYERS,                          \
+         disable_overlay_ca_layers)                          \
   GPU_OP(DISABLE_POST_SUB_BUFFERS_FOR_ONSCREEN_SURFACES,     \
          disable_post_sub_buffers_for_onscreen_surfaces)     \
   GPU_OP(DISABLE_PROGRAM_CACHE,                              \
          disable_program_cache)                              \
+  GPU_OP(DISABLE_TEXTURE_STORAGE,                            \
+         disable_texture_storage)                            \
   GPU_OP(DISABLE_TIMESTAMP_QUERIES,                          \
          disable_timestamp_queries)                          \
   GPU_OP(ETC1_POWER_OF_TWO_ONLY,                             \
          etc1_power_of_two_only)                             \
   GPU_OP(EXIT_ON_CONTEXT_LOST,                               \
          exit_on_context_lost)                               \
+  GPU_OP(FORCE_CUBE_COMPLETE,                                \
+         force_cube_complete)                                \
+  GPU_OP(FORCE_CUBE_MAP_POSITIVE_X_ALLOCATION,               \
+         force_cube_map_positive_x_allocation)               \
   GPU_OP(FORCE_DISCRETE_GPU,                                 \
          force_discrete_gpu)                                 \
   GPU_OP(FORCE_GL_FINISH_AFTER_COMPOSITING,                  \
@@ -72,6 +86,8 @@
          init_varyings_without_static_use)                   \
   GPU_OP(INIT_VERTEX_ATTRIBUTES,                             \
          init_vertex_attributes)                             \
+  GPU_OP(MAX_COPY_TEXTURE_CHROMIUM_SIZE_1048576,             \
+         max_copy_texture_chromium_size_1048576)             \
   GPU_OP(MAX_COPY_TEXTURE_CHROMIUM_SIZE_262144,              \
          max_copy_texture_chromium_size_262144)              \
   GPU_OP(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_1024,               \
@@ -92,6 +108,8 @@
          needs_glsl_built_in_function_emulation)             \
   GPU_OP(NEEDS_OFFSCREEN_BUFFER_WORKAROUND,                  \
          needs_offscreen_buffer_workaround)                  \
+  GPU_OP(PACK_PARAMETERS_WORKAROUND_WITH_PACK_BUFFER,        \
+         pack_parameters_workaround_with_pack_buffer)        \
   GPU_OP(REGENERATE_STRUCT_NAMES,                            \
          regenerate_struct_names)                            \
   GPU_OP(REMOVE_POW_WITH_CONSTANT_EXPONENT,                  \
@@ -132,6 +150,8 @@
          wake_up_gpu_before_drawing)                         \
   GPU_OP(UNBIND_EGL_CONTEXT_TO_FLUSH_DRIVER_CACHES,          \
          unbind_egl_context_to_flush_driver_caches)          \
+  GPU_OP(SET_ZERO_LEVEL_BEFORE_GENERATING_MIPMAP,            \
+         set_zero_level_before_generating_mipmap)            \
 
 namespace gpu {
 

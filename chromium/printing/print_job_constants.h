@@ -26,6 +26,7 @@ PRINTING_EXPORT extern const char kSettingContentWidth[];
 PRINTING_EXPORT extern const char kSettingCopies[];
 PRINTING_EXPORT extern const char kSettingDeviceName[];
 PRINTING_EXPORT extern const char kSettingDisableScaling[];
+PRINTING_EXPORT extern const char kSettingDistillPageEnabled[];
 PRINTING_EXPORT extern const char kSettingDuplexMode[];
 PRINTING_EXPORT extern const char kSettingFitToPageEnabled[];
 PRINTING_EXPORT extern const char kSettingGenerateDraftData[];
@@ -66,7 +67,9 @@ PRINTING_EXPORT extern const char kSettingPrinterOptions[];
 PRINTING_EXPORT extern const char kSettingTicket[];
 PRINTING_EXPORT extern const char kSettingShouldPrintBackgrounds[];
 PRINTING_EXPORT extern const char kSettingShouldPrintSelectionOnly[];
+#if defined(ENABLE_BASIC_PRINTING)
 PRINTING_EXPORT extern const char kSettingShowSystemDialog[];
+#endif
 
 PRINTING_EXPORT extern const int FIRST_PAGE_INDEX;
 PRINTING_EXPORT extern const int COMPLETE_PREVIEW_DOCUMENT_INDEX;

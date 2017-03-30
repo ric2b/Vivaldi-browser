@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_CUSTOMIZATION_CUSTOMIZATION_WALLPAPER_DOWNLOADER_H_
 #define CHROME_BROWSER_CHROMEOS_CUSTOMIZATION_CUSTOMIZATION_WALLPAPER_DOWNLOADER_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/bind.h"
@@ -93,7 +95,7 @@ class CustomizationWallpaperDownloader : public net::URLFetcherDelegate {
   const base::FilePath wallpaper_temporary_file_;
 
   // Pending retry.
-  base::OneShotTimer<CustomizationWallpaperDownloader> request_scheduled_;
+  base::OneShotTimer request_scheduled_;
 
   // Number of download retries (first attempt is not counted as retry).
   size_t retries_;

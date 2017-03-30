@@ -4,6 +4,13 @@
 
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 
+#include <utility>
+
+#include "base/command_line.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -13,6 +20,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
+#include "extensions/helper/vivaldi_app_helper.h"
 
 using content::BrowserPluginGuestDelegate;
 using content::RenderViewHost;
@@ -31,6 +39,8 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
       return webview::kPermissionTypeFullscreen;
     case WEB_VIEW_PERMISSION_TYPE_GEOLOCATION:
       return webview::kPermissionTypeGeolocation;
+    case WEB_VIEW_PERMISSION_TYPE_NOTIFICATION:
+      return "notifications";
     case WEB_VIEW_PERMISSION_TYPE_JAVASCRIPT_DIALOG:
       return webview::kPermissionTypeDialog;
     case WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN:
@@ -80,6 +90,7 @@ void RecordUserInitiatedUMA(
       case WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN:
         content::RecordAction(
             UserMetricsAction("WebView.Guest.PermissionAllow.PluginLoad"));
+        break;
       case WEB_VIEW_PERMISSION_TYPE_MEDIA:
         content::RecordAction(
             UserMetricsAction("WebView.PermissionAllow.Media"));
@@ -202,6 +213,57 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     content::WebContents* source,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
+
+  extensions::VivaldiAppHelper* helper =
+      extensions::VivaldiAppHelper::FromWebContents(web_view_guest()->
+        embedder_web_contents());
+  if (helper) do {
+    Profile* profile =
+        chrome::FindBrowserWithWebContents(web_contents())->profile();
+
+    ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
+    ContentSetting camera_setting = CONTENT_SETTING_DEFAULT;
+
+    if (request.audio_type != content::MEDIA_NO_SERVICE) {
+      audio_setting = HostContentSettingsMapFactory::GetForProfile(profile)->
+        GetContentSetting(
+            request.security_origin, GURL(),
+            CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string());
+      if (audio_setting != CONTENT_SETTING_ALLOW &&
+          audio_setting != CONTENT_SETTING_BLOCK)
+        break;
+    }
+    if (request.video_type  != content::MEDIA_NO_SERVICE) {
+      camera_setting = HostContentSettingsMapFactory::GetForProfile(profile)->
+        GetContentSetting(
+            request.security_origin, GURL(),
+            CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string());
+      if (camera_setting != CONTENT_SETTING_ALLOW &&
+          camera_setting != CONTENT_SETTING_BLOCK)
+        break;
+    }
+    // Only default (not requested), allow and block allowed.
+    // Others are "always ask".
+    if (audio_setting == CONTENT_SETTING_BLOCK ||
+        camera_setting == CONTENT_SETTING_BLOCK) {
+      callback.Run(content::MediaStreamDevices(),
+                 content::MEDIA_DEVICE_PERMISSION_DENIED,
+                 scoped_ptr<content::MediaStreamUI>());
+      return;
+    }
+    if (audio_setting == CONTENT_SETTING_ALLOW ||
+        camera_setting == CONTENT_SETTING_ALLOW) {
+      web_view_guest()
+          ->embedder_web_contents()
+          ->GetDelegate()
+          ->RequestMediaAccessPermission(
+              web_view_guest()->embedder_web_contents(), request, callback);
+      return;
+    }
+
+
+  } while(false);
+
   base::DictionaryValue request_info;
   request_info.SetString(guest_view::kUrl, request.security_origin.spec());
   RequestPermission(
@@ -234,6 +296,30 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
     const content::MediaResponseCallback& callback,
     bool allow,
     const std::string& user_input) {
+  ContentSettingsPattern primary_pattern =
+      ContentSettingsPattern::FromURLNoWildcard(request.security_origin);
+
+  extensions::VivaldiAppHelper* helper =
+      extensions::VivaldiAppHelper::FromWebContents(
+          web_view_guest()->embedder_web_contents());
+  if (helper) {
+    Profile* profile =
+        chrome::FindBrowserWithWebContents(web_contents())->profile();
+
+    if (request.audio_type != content::MEDIA_NO_SERVICE) {
+      HostContentSettingsMapFactory::GetForProfile(profile)->SetContentSetting(
+          primary_pattern, ContentSettingsPattern::Wildcard(),
+          CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string(),
+          allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
+    }
+    if (request.video_type  != content::MEDIA_NO_SERVICE) {
+      HostContentSettingsMapFactory::GetForProfile(profile)->SetContentSetting(
+          primary_pattern, ContentSettingsPattern::Wildcard(),
+          CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(),
+          allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
+    }
+  }
+
   if (!allow) {
     callback.Run(content::MediaStreamDevices(),
                  content::MEDIA_DEVICE_PERMISSION_DENIED,
@@ -286,6 +372,21 @@ void WebViewPermissionHelper::RequestGeolocationPermission(
 void WebViewPermissionHelper::CancelGeolocationPermissionRequest(
     int bridge_id) {
   web_view_permission_helper_delegate_->CancelGeolocationPermissionRequest(
+      bridge_id);
+}
+
+void WebViewPermissionHelper::RequestNotificationPermission(
+    int bridge_id,
+    const GURL& requesting_frame,
+    bool user_gesture,
+    const base::Callback<void(bool)>& callback) {
+  web_view_permission_helper_delegate_->RequestNotificationPermission(
+      bridge_id, requesting_frame, user_gesture, callback);
+}
+
+void WebViewPermissionHelper::CancelNotificationPermissionRequest(
+    int bridge_id) {
+  web_view_permission_helper_delegate_->CancelNotificationPermissionRequest(
       bridge_id);
 }
 
@@ -345,19 +446,19 @@ int WebViewPermissionHelper::RequestPermission(
   switch (permission_type) {
     case WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW: {
       web_view_guest_->DispatchEventToView(
-          new GuestViewEvent(webview::kEventNewWindow, args.Pass()));
+          new GuestViewEvent(webview::kEventNewWindow, std::move(args)));
       break;
     }
     case WEB_VIEW_PERMISSION_TYPE_JAVASCRIPT_DIALOG: {
       web_view_guest_->DispatchEventToView(
-          new GuestViewEvent(webview::kEventDialog, args.Pass()));
+          new GuestViewEvent(webview::kEventDialog, std::move(args)));
       break;
     }
     default: {
       args->SetString(webview::kPermission,
                       PermissionTypeToString(permission_type));
       web_view_guest_->DispatchEventToView(new GuestViewEvent(
-          webview::kEventPermissionRequest, args.Pass()));
+          webview::kEventPermissionRequest, std::move(args)));
       break;
     }
   }

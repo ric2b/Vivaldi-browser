@@ -26,19 +26,25 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "base/gtest_prod_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/prefs/pref_member.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/signin_internals_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
 class AccountTrackerService;
+class PrefRegistrySimple;
 class PrefService;
 class SigninClient;
+
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
 
 class SigninManagerBase : public KeyedService {
  public:
@@ -64,6 +70,12 @@ class SigninManagerBase : public KeyedService {
                     AccountTrackerService* account_tracker_service);
   ~SigninManagerBase() override;
 
+  // Registers per-profile prefs.
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+  // Registers per-install prefs.
+  static void RegisterPrefs(PrefRegistrySimple* registry);
+
   // If user was signed in, load tokens from DB if available.
   virtual void Initialize(PrefService* local_state);
   bool IsInitialized() const;
@@ -77,9 +89,8 @@ class SigninManagerBase : public KeyedService {
   virtual bool IsSigninAllowed() const;
 
   // If a user has previously signed in (and has not signed out), this returns
-  // the normalized email address of the account. Otherwise, it returns an empty
-  // string.
-  std::string GetAuthenticatedUsername() const;
+  // the know information of the account. Otherwise, it returns an empty struct.
+  AccountInfo GetAuthenticatedAccountInfo() const;
 
   // If a user has previously signed in (and has not signed out), this returns
   // the account id. Otherwise, it returns an empty string.  This id can be used
@@ -88,13 +99,13 @@ class SigninManagerBase : public KeyedService {
   //
   // TODO(rogerta): eventually the account id should be an obfuscated gaia id.
   // For now though, this function returns the same value as
-  // GetAuthenticatedUsername() since lots of code assumes the unique id for an
-  // account is the username.  For code that needs a unique id to represent the
-  // connected account, call this method. Example: the AccountInfoMap type
-  // in MutableProfileOAuth2TokenService.  For code that needs to know the
-  // normalized email address of the connected account, use
-  // GetAuthenticatedUsername().  Example: to show the string "Signed in as XXX"
-  // in the hotdog menu.
+  // GetAuthenticatedAccountInfo().email since lots of code assumes the unique
+  // id for an account is the username.  For code that needs a unique id to
+  // represent the connected account, call this method. Example: the
+  // AccountStatusMap type in MutableProfileOAuth2TokenService.  For code that
+  // needs to know the normalized email address of the connected account, use
+  // GetAuthenticatedAccountInfo().email.  Example: to show the string "Signed
+  // in as XXX" in the hotdog menu.
   const std::string& GetAuthenticatedAccountId() const;
 
   // Sets the authenticated user's Gaia ID and display email.  Internally,
@@ -122,12 +133,13 @@ class SigninManagerBase : public KeyedService {
   void RemoveSigninDiagnosticsObserver(
       signin_internals_util::SigninDiagnosticsObserver* observer);
 
+  // Gives access to the SigninClient instance associated with this instance.
+  SigninClient* signin_client() const { return client_; }
+
  protected:
   AccountTrackerService* account_tracker_service() const {
     return account_tracker_service_;
   }
-
-  SigninClient* signin_client() const { return client_; }
 
   // Sets the authenticated user's account id.
   void SetAuthenticatedAccountId(const std::string& account_id);

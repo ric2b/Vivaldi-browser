@@ -5,14 +5,14 @@
 #ifndef CONTENT_PUBLIC_BROWSER_RENDER_WIDGET_HOST_VIEW_H_
 #define CONTENT_PUBLIC_BROWSER_RENDER_WIDGET_HOST_VIEW_H_
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
+#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkRegion.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/gfx/native_widget_types.h"
 
 class GURL;
@@ -92,6 +92,14 @@ class CONTENT_EXPORT RenderWidgetHostView {
 
   // Whether the view is showing.
   virtual bool IsShowing() = 0;
+
+  // Whether the derived class is Aura or not. The type check, using IsAura(),
+  // is done in WebContentsImpl::ShowCreatedWidget() to determine if we have a
+  // RenderWidgetHostViewAura view or a RenderWidgetHostViewGuest view passed
+  // into this method. Since we can't use RTTI and dynamic_cast/typeid in
+  // Chromium, this is a way to determine the object type at runtime.
+  // Ref. VB-12348.
+  virtual bool IsAura() const = 0;
 
   // Indicates if the view is currently occluded (e.g, not visible because it's
   // covered up by other windows), and as a result the view's renderer may be

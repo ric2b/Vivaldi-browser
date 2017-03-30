@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
@@ -20,11 +21,12 @@ namespace {
 // Creates a very simple extension with a background page.
 scoped_refptr<Extension> CreateExtensionWithBackgroundPage() {
   return ExtensionBuilder()
-      .SetManifest(
-           DictionaryBuilder()
-             .Set("name", "test")
-             .Set("version", "0.1")
-             .Set("background", DictionaryBuilder().Set("page", "bg.html")))
+      .SetManifest(std::move(
+          DictionaryBuilder()
+              .Set("name", "test")
+              .Set("version", "0.1")
+              .Set("background",
+                   std::move(DictionaryBuilder().Set("page", "bg.html")))))
       .SetID("id2")
       .Build();
 }

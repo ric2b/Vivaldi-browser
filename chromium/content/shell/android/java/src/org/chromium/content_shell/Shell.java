@@ -20,8 +20,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.TextView.OnEditorActionListener;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content.browser.ContentView;
 import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
@@ -287,7 +287,7 @@ public class Shell extends LinearLayout {
     private void initFromNativeTabContents(WebContents webContents) {
         Context context = getContext();
         mContentViewCore = new ContentViewCore(context);
-        ContentView cv = new ContentView(context, mContentViewCore);
+        ContentView cv = ContentView.createContentView(context, mContentViewCore);
         mContentViewCore.initialize(cv, cv, webContents, mWindow);
         mContentViewCore.setContentViewClient(mContentViewClient);
         mWebContents = mContentViewCore.getWebContents();

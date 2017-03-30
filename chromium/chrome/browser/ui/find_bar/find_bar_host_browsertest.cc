@@ -2,19 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -24,6 +27,7 @@
 #include "chrome/browser/ui/find_bar/find_notification_details.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/find_in_page_observer.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -81,6 +85,13 @@ class FindInPageControllerTest : public InProcessBrowserTest {
  public:
   FindInPageControllerTest() {
     chrome::DisableFindBarAnimationsDuringTesting(true);
+  }
+
+  // Disable new downloads UI as it is very very slow. https://crbug.com/526577
+  // TODO(dbeam): remove this once the downloads UI is not slow.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(switches::kDisableMaterialDesignDownloads);
   }
 
  protected:
@@ -190,7 +201,7 @@ class FindInPageControllerTest : public InProcessBrowserTest {
     HistoryServiceFactory::GetForProfile(browser()->profile(),
                                          ServiceAccessType::IMPLICIT_ACCESS)
         ->FlushForTest(base::Bind(
-            &base::MessageLoop::Quit,
+            &base::MessageLoop::QuitWhenIdle,
             base::Unretained(base::MessageLoop::current()->current())));
     content::RunMessageLoop();
   }
@@ -336,16 +347,10 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_SearchWithinSpecialURL) {
                                kFwd, kIgnoreCase, NULL));
 }
 
-#if defined(OS_MACOSX)
-// Disabled due to http://crbug.com/419769.
-#define MAYBE_FindInPageSpecialURLs DISABLED_FindInPageSpecialURLs
-#else
-#define MAYBE_FindInPageSpecialURLs FindInPageSpecialURLs
-#endif
 // Verify search selection coordinates. The data file used is set-up such that
 // the text occurs on the same line, and we verify their positions by verifying
 // their relative positions.
-IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_FindInPageSpecialURLs) {
+IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindInPageSpecialURLs) {
   const std::wstring search_string(L"\u5728\u897f\u660c\u536b\u661f\u53d1");
   gfx::Rect first, second, first_reverse;
   WebContents* web_contents =
@@ -371,16 +376,9 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_FindInPageSpecialURLs) {
   ASSERT_EQ(first, first_reverse);
 }
 
-#if defined(OS_MACOSX)
-// Disabled due to http://crbug.com/419769.
-#define MAYBE_CommentsAndMetaDataNotSearchable \
-  DISABLED_CommentsAndMetaDataNotSearchable
-#else
-#define MAYBE_CommentsAndMetaDataNotSearchable CommentsAndMetaDataNotSearchable
-#endif
 // Verifies that comments and meta data are not searchable.
 IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
-                       MAYBE_CommentsAndMetaDataNotSearchable) {
+                       CommentsAndMetaDataNotSearchable) {
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ui_test_utils::NavigateToURL(browser(), GetURL("specialchar.html"));
@@ -409,8 +407,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, SpanAndListsSearchable) {
 }
 
 // Find in a very large page.
-// Disabled due to http://crbug.com/398017
-IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, DISABLED_LargePage) {
+IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, LargePage) {
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ui_test_utils::NavigateToURL(browser(), GetURL("largepage.html"));

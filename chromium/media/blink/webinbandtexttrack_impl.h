@@ -5,6 +5,7 @@
 #ifndef MEDIA_BLINK_WEBINBANDTEXTTRACK_IMPL_H_
 #define MEDIA_BLINK_WEBINBANDTEXTTRACK_IMPL_H_
 
+#include "base/macros.h"
 #include "third_party/WebKit/public/platform/WebInbandTextTrack.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 
@@ -16,16 +17,16 @@ class WebInbandTextTrackImpl : public blink::WebInbandTextTrack {
                          const blink::WebString& label,
                          const blink::WebString& language,
                          const blink::WebString& id);
-  virtual ~WebInbandTextTrackImpl();
+  ~WebInbandTextTrackImpl() override;
 
-  virtual void setClient(blink::WebInbandTextTrackClient* client);
-  virtual blink::WebInbandTextTrackClient* client();
+  void setClient(blink::WebInbandTextTrackClient* client) override;
+  blink::WebInbandTextTrackClient* client() override;
 
-  virtual Kind kind() const;
+  Kind kind() const override;
 
-  virtual blink::WebString label() const;
-  virtual blink::WebString language() const;
-  virtual blink::WebString id() const;
+  blink::WebString label() const override;
+  blink::WebString language() const override;
+  blink::WebString id() const override;
 
  private:
   blink::WebInbandTextTrackClient* client_;

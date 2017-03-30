@@ -5,11 +5,12 @@
 #ifndef CONTENT_RENDERER_RENDER_FRAME_PROXY_H_
 #define CONTENT_RENDERER_RENDER_FRAME_PROXY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/web/WebRemoteFrame.h"
 #include "third_party/WebKit/public/web/WebRemoteFrameClient.h"
 #include "url/origin.h"
@@ -19,6 +20,7 @@ struct FrameMsg_CompositorFrameSwapped_Params;
 
 namespace blink {
 class WebInputEvent;
+struct WebRect;
 }
 
 namespace cc {
@@ -73,18 +75,20 @@ class CONTENT_EXPORT RenderFrameProxy
   // representation of a RenderFrame that has been created in another process --
   // for example, after a cross-process navigation or after the addition of a
   // new frame local to some other process. |routing_id| will be the ID of the
-  // newly created RenderFrameProxy. |parent_routing_id| is the routing ID of
-  // the RenderFrameProxy to which the new frame is parented.
-  // |render_view_routing_id| identifies the RenderView to be associated with
-  // this frame.
+  // newly created RenderFrameProxy. |render_view_routing_id| identifies the
+  // RenderView to be associated with this frame.  |opener_routing_id|, if
+  // valid, is the routing ID of the new frame's opener.  |parent_routing_id|
+  // is the routing ID of the RenderFrameProxy to which the new frame is
+  // parented.
   //
   // |parent_routing_id| always identifies a RenderFrameProxy (never a
   // RenderFrame) because a new child of a local frame should always start out
   // as a frame, not a proxy.
   static RenderFrameProxy* CreateFrameProxy(
       int routing_id,
-      int parent_routing_id,
       int render_view_routing_id,
+      int opener_routing_id,
+      int parent_routing_id,
       const FrameReplicationState& replicated_state);
 
   // Returns the RenderFrameProxy for the given routing ID.
@@ -92,18 +96,6 @@ class CONTENT_EXPORT RenderFrameProxy
 
   // Returns the RenderFrameProxy given a WebFrame.
   static RenderFrameProxy* FromWebFrame(blink::WebFrame* web_frame);
-
-  // Returns true if we are currently in a mode where the swapped out state
-  // should not be used. Currently (as an implementation strategy) swapped out
-  // is forbidden under --site-per-process, but our goal is to eliminate the
-  // mode entirely. In code that deals with the swapped out state, prefer calls
-  // to this function over consulting the switches directly. It will be easier
-  // to grep, and easier to rip out.
-  //
-  // TODO(nasko): When swappedout:// is eliminated entirely, this function (and
-  // its equivalent in RenderFrameHostManager) should be removed and its callers
-  // cleaned up.
-  static bool IsSwappedOutStateForbidden();
 
   ~RenderFrameProxy() override;
 
@@ -129,18 +121,22 @@ class CONTENT_EXPORT RenderFrameProxy
   blink::WebRemoteFrame* web_frame() { return web_frame_; }
 
   // blink::WebRemoteFrameClient implementation:
-  virtual void frameDetached(DetachType type);
-  virtual void postMessageEvent(
-      blink::WebLocalFrame* sourceFrame,
-      blink::WebRemoteFrame* targetFrame,
-      blink::WebSecurityOrigin target,
-      blink::WebDOMMessageEvent event);
-  virtual void initializeChildFrame(
-      const blink::WebRect& frame_rect,
-      float scale_factor);
-  virtual void navigate(const blink::WebURLRequest& request,
-                        bool should_replace_current_entry);
-  virtual void forwardInputEvent(const blink::WebInputEvent* event);
+  void frameDetached(DetachType type) override;
+  void postMessageEvent(blink::WebLocalFrame* sourceFrame,
+                        blink::WebRemoteFrame* targetFrame,
+                        blink::WebSecurityOrigin target,
+                        blink::WebDOMMessageEvent event) override;
+  void initializeChildFrame(const blink::WebRect& frame_rect,
+                            float scale_factor) override;
+  void navigate(const blink::WebURLRequest& request,
+                bool should_replace_current_entry) override;
+  void forwardInputEvent(const blink::WebInputEvent* event) override;
+  void frameRectsChanged(const blink::WebRect& frame_rect) override;
+  void visibilityChanged(bool visible) override;
+  void didChangeOpener(blink::WebFrame* opener) override;
+  void advanceFocus(blink::WebFocusType type,
+                    blink::WebLocalFrame* source) override;
+  void frameFocused() override;
 
   // IPC handlers
   void OnDidStartLoading();
@@ -161,12 +157,15 @@ class CONTENT_EXPORT RenderFrameProxy
                               const gfx::Size& frame_size,
                               float scale_factor,
                               const cc::SurfaceSequence& sequence);
-  void OnDisownOpener();
+  void OnUpdateOpener(int opener_routing_id);
   void OnDidStopLoading();
   void OnDidUpdateSandboxFlags(blink::WebSandboxFlags flags);
   void OnDispatchLoad();
   void OnDidUpdateName(const std::string& name);
+  void OnEnforceStrictMixedContentChecking(bool should_enforce);
   void OnDidUpdateOrigin(const url::Origin& origin);
+  void OnSetPageFocus(bool is_focused);
+  void OnSetFocusedFrame();
 
   // The routing ID by which this RenderFrameProxy is known.
   const int routing_id_;

@@ -4,6 +4,9 @@
 
 #include "components/sync_driver/device_info_sync_service.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "components/sync_driver/local_device_info_provider.h"
@@ -75,8 +78,8 @@ SyncMergeResult DeviceInfoSyncService::MergeDataAndStartSyncing(
 
   DCHECK(!IsSyncing());
 
-  sync_processor_ = sync_processor.Pass();
-  error_handler_ = error_handler.Pass();
+  sync_processor_ = std::move(sync_processor);
+  error_handler_ = std::move(error_handler);
 
   // Initialization should be completed before this type is enabled
   // and local device info must be available.
@@ -108,7 +111,7 @@ SyncMergeResult DeviceInfoSyncService::MergeDataAndStartSyncing(
       // Retrieve local device backup timestamp value from the sync data.
       bool has_synced_backup_time =
           iter->GetSpecifics().device_info().has_backup_timestamp();
-      int64 synced_backup_time =
+      int64_t synced_backup_time =
           has_synced_backup_time
               ? iter->GetSpecifics().device_info().backup_timestamp()
               : -1;
@@ -266,7 +269,7 @@ ScopedVector<DeviceInfo> DeviceInfoSyncService::GetAllDeviceInfo() const {
     list.push_back(CreateDeviceInfo(iter->second));
   }
 
-  return list.Pass();
+  return list;
 }
 
 void DeviceInfoSyncService::AddObserver(Observer* observer) {
@@ -361,7 +364,7 @@ SyncData DeviceInfoSyncService::CreateLocalData(
 }
 
 DeviceInfo* DeviceInfoSyncService::CreateDeviceInfo(
-    const syncer::SyncData sync_data) {
+    const syncer::SyncData& sync_data) {
   const sync_pb::DeviceInfoSpecifics& specifics =
       sync_data.GetSpecifics().device_info();
 

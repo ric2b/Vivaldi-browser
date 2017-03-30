@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/browser_view_layout.h"
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -11,6 +12,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/download/download_shelf_view.h"
@@ -23,6 +25,7 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/scrollbar_size.h"
@@ -113,9 +116,6 @@ class BrowserViewLayout::WebContentsModalDialogHostViews
   DISALLOW_COPY_AND_ASSIGN(WebContentsModalDialogHostViews);
 };
 
-// static
-const int BrowserViewLayout::kToolbarTabStripVerticalOverlap = 3;
-
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserViewLayout, public:
 
@@ -174,7 +174,7 @@ gfx::Size BrowserViewLayout::GetMinimumSize() {
        browser()->SupportsWindowFeature(Browser::FEATURE_LOCATIONBAR)) ?
            toolbar_->GetMinimumSize() : gfx::Size());
   if (tabstrip_size.height() && toolbar_size.height())
-    toolbar_size.Enlarge(0, -kToolbarTabStripVerticalOverlap);
+    toolbar_size.Enlarge(0, -GetLayoutConstant(TABSTRIP_TOOLBAR_OVERLAP));
   gfx::Size bookmark_bar_size;
   if (bookmark_bar_ &&
       bookmark_bar_->visible() &&
@@ -187,7 +187,7 @@ gfx::Size BrowserViewLayout::GetMinimumSize() {
 
   gfx::Size contents_size(contents_container_->GetMinimumSize());
 
-  int min_height = delegate_->GetTopInsetInBrowserView() +
+  int min_height = delegate_->GetTopInsetInBrowserView(false) +
       tabstrip_size.height() + toolbar_size.height() +
       bookmark_bar_size.height() + infobar_container_size.height() +
       contents_size.height();
@@ -225,10 +225,11 @@ gfx::Rect BrowserViewLayout::GetFindBarBoundingBox() const {
     // find bar and the tab strip.
     find_bar_y = top_container_bounds.bottom();
   } else {
-    // Position the find bar 1 pixel above the bottom of the top container
-    // so that it occludes the border between the content area and the top
-    // container and looks connected to the top container.
-    find_bar_y = top_container_bounds.bottom() - 1;
+    // Overlap the find bar atop |top_container_|.
+    // The find bar should look connected to the top container when material
+    // design is not enabled.
+    find_bar_y = top_container_bounds.bottom() -
+                 GetLayoutConstant(FIND_BAR_TOOLBAR_OVERLAP);
   }
 
   // Grow the height of |bounding_box| by the height of any elements between
@@ -318,14 +319,21 @@ int BrowserViewLayout::NonClientHitTest(const gfx::Point& point) {
 
 void BrowserViewLayout::Layout(views::View* browser_view) {
   vertical_layout_rect_ = browser_view->GetLocalBounds();
-  int top = delegate_->GetTopInsetInBrowserView();
-  top = LayoutTabStripRegion(top);
+  int top = LayoutTabStripRegion(delegate_->GetTopInsetInBrowserView(false));
   if (delegate_->IsTabStripVisible()) {
-    int x = tab_strip_->GetMirroredX() +
-        browser_view_->GetMirroredX() +
-        delegate_->GetThemeBackgroundXInset();
-    int y = browser_view_->y() + delegate_->GetTopInsetInBrowserView();
-    tab_strip_->SetBackgroundOffset(gfx::Point(x, y));
+    // By passing true to GetTopInsetInBrowserView(), we position the tab
+    // background to vertically align with the frame background image of a
+    // restored-mode frame, even in a maximized window.  Then in the frame code,
+    // we position the frame so the portion of the image that's behind the
+    // restored-mode tabstrip is always behind the tabstrip.  Together these
+    // ensure that the tab and frame images are always aligned, and that their
+    // relative alignment with the toolbar image is always the same, so themes
+    // which try to align all three will look correct in both restored and
+    // maximized windows.
+    tab_strip_->SetBackgroundOffset(gfx::Point(
+        tab_strip_->GetMirroredX() + browser_view_->GetMirroredX() +
+            delegate_->GetThemeBackgroundXInset(),
+        browser_view_->y() + delegate_->GetTopInsetInBrowserView(true)));
   }
   top = LayoutToolbar(top);
 
@@ -398,7 +406,7 @@ int BrowserViewLayout::LayoutToolbar(int top) {
   bool toolbar_visible = delegate_->IsToolbarVisible();
   int y = top;
   y -= (toolbar_visible && delegate_->IsTabStripVisible()) ?
-        kToolbarTabStripVerticalOverlap : 0;
+      GetLayoutConstant(TABSTRIP_TOOLBAR_OVERLAP) : 0;
   int height = toolbar_visible ? toolbar_->GetPreferredSize().height() : 0;
   toolbar_->SetVisible(toolbar_visible);
   toolbar_->SetBounds(vertical_layout_rect_.x(), y, browser_view_width, height);
@@ -499,7 +507,7 @@ void BrowserViewLayout::UpdateTopContainerBounds() {
   // Ensure that the top container view reaches the topmost view in the
   // ClientView because the bounds of the top container view are used in
   // layout and we assume that this is the case.
-  height = std::max(height, delegate_->GetTopInsetInBrowserView());
+  height = std::max(height, delegate_->GetTopInsetInBrowserView(false));
 
   gfx::Rect top_container_bounds(vertical_layout_rect_.width(), height);
 
@@ -522,7 +530,7 @@ int BrowserViewLayout::GetContentsOffsetForBookmarkBar() {
 
   // Offset for the detached bookmark bar.
   return bookmark_bar_->height() -
-      bookmark_bar_->GetFullyDetachedToolbarOverlap();
+      views::NonClientFrameView::kClientEdgeThickness;
 }
 
 int BrowserViewLayout::LayoutDownloadShelf(int bottom) {

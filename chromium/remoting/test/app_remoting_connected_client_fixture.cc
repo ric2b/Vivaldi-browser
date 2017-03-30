@@ -4,6 +4,9 @@
 
 #include "remoting/test/app_remoting_connected_client_fixture.h"
 
+#include <utility>
+
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
@@ -38,16 +41,19 @@ namespace test {
 AppRemotingConnectedClientFixture::AppRemotingConnectedClientFixture()
     : application_details_(
           AppRemotingSharedData->GetDetailsFromAppName(GetParam())),
-      timer_(new base::Timer(true, false)) {
-}
+      timer_(new base::Timer(true, false)) {}
 
-AppRemotingConnectedClientFixture::~AppRemotingConnectedClientFixture() {
-}
+AppRemotingConnectedClientFixture::~AppRemotingConnectedClientFixture() {}
 
 void AppRemotingConnectedClientFixture::SetUp() {
   connection_helper_.reset(
       new AppRemotingConnectionHelper(application_details_));
-  connection_helper_->Initialize(make_scoped_ptr(new TestChromotingClient()));
+  scoped_ptr<TestChromotingClient> test_chromoting_client(
+      new TestChromotingClient());
+
+  test_chromoting_client->AddRemoteConnectionObserver(this);
+
+  connection_helper_->Initialize(std::move(test_chromoting_client));
   if (!connection_helper_->StartConnection()) {
     LOG(ERROR) << "Remote host connection could not be established.";
     FAIL();
@@ -55,7 +61,18 @@ void AppRemotingConnectedClientFixture::SetUp() {
 }
 
 void AppRemotingConnectedClientFixture::TearDown() {
+  connection_helper_->test_chromoting_client()->RemoveRemoteConnectionObserver(
+      this);
   connection_helper_.reset();
+}
+
+void AppRemotingConnectedClientFixture::HostMessageReceived(
+    const protocol::ExtensionMessage& message) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (!host_message_received_callback_.is_null()) {
+    host_message_received_callback_.Run(message);
+  }
 }
 
 bool AppRemotingConnectedClientFixture::VerifyResponseForSimpleHostMessage(
@@ -70,11 +87,9 @@ bool AppRemotingConnectedClientFixture::VerifyResponseForSimpleHostMessage(
   DCHECK(!run_loop_ || !run_loop_->running());
   run_loop_.reset(new base::RunLoop());
 
-  HostMessageReceivedCallback host_message_received_callback_ =
+  host_message_received_callback_ =
       base::Bind(&SimpleHostMessageHandler, message_response_title,
                  message_payload, run_loop_->QuitClosure(), &message_received);
-  connection_helper_->SetHostMessageReceivedCallback(
-      host_message_received_callback_);
 
   protocol::ExtensionMessage message;
   message.set_type(message_request_title);
@@ -86,8 +101,8 @@ bool AppRemotingConnectedClientFixture::VerifyResponseForSimpleHostMessage(
 
   run_loop_->Run();
   timer_->Stop();
+  host_message_received_callback_.Reset();
 
-  connection_helper_->ResetHostMessageReceivedCallback();
   return message_received;
 }
 

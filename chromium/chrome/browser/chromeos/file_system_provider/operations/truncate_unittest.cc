@@ -4,13 +4,14 @@
 
 #include "chrome/browser/chromeos/file_system_provider/operations/truncate.h"
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "chrome/browser/chromeos/file_system_provider/operations/test_util.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
 #include "chrome/common/extensions/api/file_system_provider.h"
@@ -30,7 +31,7 @@ const char kFileSystemId[] = "testing-file-system";
 const int kRequestId = 2;
 const base::FilePath::CharType kFilePath[] =
     FILE_PATH_LITERAL("/kitty/and/puppy/happy");
-const int64 kTruncateLength = 64;
+const int64_t kTruncateLength = 64;
 
 }  // namespace
 

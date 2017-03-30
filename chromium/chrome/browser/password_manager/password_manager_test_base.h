@@ -5,11 +5,16 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_MANAGER_TEST_BASE_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_MANAGER_TEST_BASE_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/test_utils.h"
+
+namespace autofill {
+struct PasswordForm;
+}
 
 class NavigationObserver : public content::WebContentsObserver {
  public:
@@ -30,6 +35,9 @@ class NavigationObserver : public content::WebContentsObserver {
   // Wait for navigation to succeed.
   void Wait();
 
+  // Returns the RenderFrameHost that navigated.
+  content::RenderFrameHost* render_frame_host() { return render_frame_host_; }
+
   // content::WebContentsObserver:
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
@@ -38,6 +46,7 @@ class NavigationObserver : public content::WebContentsObserver {
 
  private:
   std::string wait_for_path_;
+  content::RenderFrameHost* render_frame_host_;
   bool quit_on_entry_committed_;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 
@@ -51,12 +60,19 @@ class PromptObserver {
  public:
   virtual ~PromptObserver();
 
-  // Checks if the prompt is being currently shown.
+  // Checks if the save prompt is being currently shown.
   virtual bool IsShowingPrompt() const = 0;
+
+  // Checks if the update prompt is being currently shown.
+  virtual bool IsShowingUpdatePrompt() const;
 
   // Expecting that the prompt is shown, saves the password. Checks that the
   // prompt is no longer visible afterwards.
   void Accept() const;
+
+  // Expecting that the prompt is shown, update |form| with the password from
+  // observed form. Checks that the prompt is no longer visible afterwards.
+  void AcceptUpdatePrompt(const autofill::PasswordForm& form) const;
 
   // Chooses the right implementation of PromptObserver and creates an instance
   // of it.
@@ -69,6 +85,14 @@ class PromptObserver {
   // currently shown, but is required to verify that the prompt is eventually
   // closed.
   virtual void AcceptImpl() const = 0;
+
+  // Accepts the password update. The implementation can assume that the prompt
+  // is currently shown, but is required to verify that the prompt is eventually
+  // closed.
+  // TODO(dvadym): Make this method pure virtual as soon as update UI is
+  // implemented for infobar. http://crbug.com/359315
+  virtual void AcceptUpdatePromptImpl(
+      const autofill::PasswordForm& form) const {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PromptObserver);
@@ -90,6 +114,14 @@ class PasswordManagerBrowserTestBase : public InProcessBrowserTest {
   // would sometimes see the DidFinishLoad event from a previous navigation and
   // return immediately.
   void NavigateToFile(const std::string& path);
+
+  // Navigates to |filename| and runs |submission_script| to submit. Navigates
+  // back to |filename| and then verifies that |expected_element| has
+  // |expected_value|.
+  void VerifyPasswordIsSavedAndFilled(const std::string& filename,
+                                      const std::string& submission_script,
+                                      const std::string& expected_element,
+                                      const std::string& expected_value);
 
   // Waits until the "value" attribute of the HTML element with |element_id| is
   // equal to |expected_value|. If the current value is not as expected, this

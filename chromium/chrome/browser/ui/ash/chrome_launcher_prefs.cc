@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -16,7 +18,6 @@ namespace {
 // App ID of default pinned apps.
 const char* kDefaultPinnedApps[] = {
   extension_misc::kGmailAppId,
-  extension_misc::kGoogleSearchAppId,
   extension_misc::kGoogleDocAppId,
   extension_misc::kYoutubeAppId,
 };
@@ -34,14 +35,15 @@ base::ListValue* CreateDefaultPinnedAppsList() {
 namespace ash {
 
 const char kPinnedAppsPrefAppIDPath[] = "id";
+const char kPinnedAppsPrefPinnedByPolicy[] = "pinned_by_policy";
 
 const char kShelfAutoHideBehaviorAlways[] = "Always";
 const char kShelfAutoHideBehaviorNever[] = "Never";
 
-extern const char kShelfAlignmentBottom[] = "Bottom";
-extern const char kShelfAlignmentLeft[] = "Left";
-extern const char kShelfAlignmentRight[] = "Right";
-extern const char kShelfAlignmentTop[] = "Top";
+const char kShelfAlignmentBottom[] = "Bottom";
+const char kShelfAlignmentLeft[] = "Left";
+const char kShelfAlignmentRight[] = "Right";
+const char kShelfAlignmentTop[] = "Top";
 
 void RegisterChromeLauncherUserPrefs(
     user_prefs::PrefRegistrySyncable* registry) {
@@ -54,6 +56,7 @@ void RegisterChromeLauncherUserPrefs(
   registry->RegisterListPref(prefs::kPinnedLauncherApps,
                              CreateDefaultPinnedAppsList(),
                              user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterListPref(prefs::kPolicyPinnedLauncherApps);
   registry->RegisterStringPref(prefs::kShelfAutoHideBehavior,
                                kShelfAutoHideBehaviorNever,
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);

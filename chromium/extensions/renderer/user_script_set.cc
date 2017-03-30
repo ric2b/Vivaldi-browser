@@ -4,17 +4,21 @@
 
 #include "extensions/renderer/user_script_set.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/memory/ref_counted.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "extensions/common/extension.h"
-#include "extensions/common/extension_set.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/renderer/extension_injection_host.h"
 #include "extensions/renderer/extensions_renderer_client.h"
 #include "extensions/renderer/injection_host.h"
+#include "extensions/renderer/renderer_extension_registry.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_injection.h"
 #include "extensions/renderer/user_script_injector.h"
@@ -39,9 +43,7 @@ GURL GetDocumentUrlForFrame(blink::WebLocalFrame* frame) {
 
 }  // namespace
 
-UserScriptSet::UserScriptSet(const ExtensionSet* extensions)
-    : extensions_(extensions) {
-}
+UserScriptSet::UserScriptSet() {}
 
 UserScriptSet::~UserScriptSet() {
 }
@@ -65,7 +67,7 @@ void UserScriptSet::GetActiveExtensionIds(
 }
 
 void UserScriptSet::GetInjections(
-    ScopedVector<ScriptInjection>* injections,
+    std::vector<scoped_ptr<ScriptInjection>>* injections,
     content::RenderFrame* render_frame,
     int tab_id,
     UserScript::RunLocation run_location) {
@@ -79,7 +81,7 @@ void UserScriptSet::GetInjections(
         document_url,
         false /* is_declarative */);
     if (injection.get())
-      injections->push_back(injection.Pass());
+      injections->push_back(std::move(injection));
   }
 }
 
@@ -140,14 +142,15 @@ bool UserScriptSet::UpdateUserScripts(base::SharedMemoryHandle shared_memory,
     if (only_inject_incognito && !script->is_incognito_enabled())
       continue;  // This script shouldn't run in an incognito tab.
 
-    const Extension* extension = extensions_->GetByID(script->extension_id());
+    const Extension* extension =
+        RendererExtensionRegistry::Get()->GetByID(script->extension_id());
     if (whitelisted_only &&
         (!extension ||
          !PermissionsData::CanExecuteScriptEverywhere(extension))) {
       continue;
     }
 
-    scripts_.push_back(script.Pass());
+    scripts_.push_back(std::move(script));
   }
 
   FOR_EACH_OBSERVER(Observer,
@@ -188,22 +191,22 @@ scoped_ptr<ScriptInjection> UserScriptSet::GetInjectionForScript(
 
   const HostID& host_id = script->host_id();
   if (host_id.type() == HostID::EXTENSIONS) {
-    injection_host = ExtensionInjectionHost::Create(host_id.id(), extensions_);
+    injection_host = ExtensionInjectionHost::Create(host_id.id());
     if (!injection_host)
-      return injection.Pass();
+      return injection;
   } else {
     DCHECK_EQ(host_id.type(), HostID::WEBUI);
     injection_host.reset(new WebUIInjectionHost(host_id));
   }
 
   if (web_frame->parent() && !script->match_all_frames())
-    return injection.Pass();  // Only match subframes if the script declared it.
+    return injection;  // Only match subframes if the script declared it.
 
   GURL effective_document_url = ScriptContext::GetEffectiveDocumentURL(
       web_frame, document_url, script->match_about_blank());
 
   if (!script->MatchesURL(effective_document_url))
-    return injection.Pass();
+    return injection;
 
   scoped_ptr<ScriptInjector> injector(new UserScriptInjector(script,
                                                              this,
@@ -212,9 +215,9 @@ scoped_ptr<ScriptInjection> UserScriptSet::GetInjectionForScript(
   if (injector->CanExecuteOnFrame(
           injection_host.get(),
           web_frame,
-          -1 /* Content scripts are not tab-specific. */) ==
+          tab_id) ==
       PermissionsData::ACCESS_DENIED) {
-    return injection.Pass();
+    return injection;
   }
 
   bool inject_css = !script->css_scripts().empty() &&
@@ -222,14 +225,11 @@ scoped_ptr<ScriptInjection> UserScriptSet::GetInjectionForScript(
   bool inject_js =
       !script->js_scripts().empty() && script->run_location() == run_location;
   if (inject_css || inject_js) {
-    injection.reset(new ScriptInjection(
-        injector.Pass(),
-        render_frame,
-        injection_host.Pass(),
-        run_location,
-        tab_id));
+    injection.reset(new ScriptInjection(std::move(injector), render_frame,
+                                        std::move(injection_host),
+                                        run_location));
   }
-  return injection.Pass();
+  return injection;
 }
 
 }  // namespace extensions

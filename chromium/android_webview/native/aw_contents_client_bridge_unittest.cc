@@ -19,7 +19,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-
 using base::android::AttachCurrentThread;
 using base::android::ScopedJavaLocalRef;
 using net::SSLCertRequestInfo;
@@ -81,7 +80,7 @@ void AwContentsClientBridgeTest::SetUp() {
   jbridge_.Reset(env_,
       Java_MockAwContentsClientBridge_getAwContentsClientBridge(env_).obj());
   bridge_.reset(new AwContentsClientBridge(env_, jbridge_.obj()));
-  selected_cert_ = NULL;
+  selected_cert_ = nullptr;
   cert_selected_callbacks_ = 0;
   cert_request_info_ = new net::SSLCertRequestInfo;
 }
@@ -129,18 +128,18 @@ TEST_F(AwContentsClientBridgeTest,
   bridge_->SelectClientCertificate(
       cert_request_info_.get(),
       make_scoped_ptr(new TestClientCertificateDelegate(this)));
-  bridge_->ProvideClientCertificateResponse(env_, jbridge_.obj(),
+  bridge_->ProvideClientCertificateResponse(
+      env_, jbridge_,
       Java_MockAwContentsClientBridge_getRequestId(env_, jbridge_.obj()),
-      Java_MockAwContentsClientBridge_createTestCertChain(
-          env_, jbridge_.obj()).obj(),
-      NULL);
+      Java_MockAwContentsClientBridge_createTestCertChain(env_, jbridge_.obj()),
+      nullptr);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(NULL, selected_cert_);
+  EXPECT_EQ(nullptr, selected_cert_);
   EXPECT_EQ(1, cert_selected_callbacks_);
 }
 
 // Verify that ProvideClientCertificateResponse calls the callback with
-// NULL parameters when private key is not provided.
+// null parameters when private key is not provided.
 TEST_F(AwContentsClientBridgeTest,
     TestProvideClientCertificateResponseCallsCallbackOnNullChain) {
   // Call SelectClientCertificate to create a callback id that mock java object
@@ -150,13 +149,10 @@ TEST_F(AwContentsClientBridgeTest,
       make_scoped_ptr(new TestClientCertificateDelegate(this)));
   int requestId =
     Java_MockAwContentsClientBridge_getRequestId(env_, jbridge_.obj());
-  bridge_->ProvideClientCertificateResponse(env_, jbridge_.obj(),
-      requestId,
-      NULL,
-      Java_MockAwContentsClientBridge_createTestPrivateKey(
-          env_, jbridge_.obj()).obj());
+  bridge_->ProvideClientCertificateResponse(env_, jbridge_, requestId, nullptr,
+                                            nullptr);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(NULL, selected_cert_);
+  EXPECT_EQ(nullptr, selected_cert_);
   EXPECT_EQ(1, cert_selected_callbacks_);
 }
 

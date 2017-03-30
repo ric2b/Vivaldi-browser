@@ -5,6 +5,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -180,7 +181,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserTransactionCleanupTest,
   ASSERT_EQ(3UL, user_manager::UserManager::Get()->GetUsers().size());
 
   // We wait for token now. Press cancel button at this point.
-  JSEvalOrExitBrowser("$('cancel-add-user-button').click()");
+  JSEvalOrExitBrowser("$('supervised-user-creation').cancel()");
 }
 
 IN_PROC_BROWSER_TEST_(

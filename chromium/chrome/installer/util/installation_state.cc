@@ -224,14 +224,14 @@ InstallationState::InstallationState() {
 
 // static
 int InstallationState::IndexFromDistType(BrowserDistribution::Type type) {
-  COMPILE_ASSERT(BrowserDistribution::CHROME_BROWSER == CHROME_BROWSER_INDEX,
-                 unexpected_chrome_browser_distribution_value_);
+  static_assert(BrowserDistribution::CHROME_BROWSER == CHROME_BROWSER_INDEX,
+                "unexpected_chrome_browser_distribution_value_");
 #ifndef OMIT_CHROME_FRAME
-  COMPILE_ASSERT(BrowserDistribution::CHROME_FRAME == CHROME_FRAME_INDEX,
-                 unexpected_chrome_frame_distribution_value_);
+  static_assert(BrowserDistribution::CHROME_FRAME == CHROME_FRAME_INDEX,
+                "unexpected_chrome_frame_distribution_value_");
 #endif
-  COMPILE_ASSERT(BrowserDistribution::CHROME_BINARIES == CHROME_BINARIES_INDEX,
-                 unexpected_chrome_frame_distribution_value_);
+  static_assert(BrowserDistribution::CHROME_BINARIES == CHROME_BINARIES_INDEX,
+                "unexpected_chrome_frame_distribution_value_");
 #ifndef OMIT_CHROME_FRAME
   DCHECK(type == BrowserDistribution::CHROME_BROWSER ||
          type == BrowserDistribution::CHROME_FRAME ||

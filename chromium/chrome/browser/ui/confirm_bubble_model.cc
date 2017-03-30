@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "chrome/grit/generated_resources.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 ConfirmBubbleModel::ConfirmBubbleModel() {
@@ -30,6 +31,10 @@ void ConfirmBubbleModel::Cancel() {
 
 base::string16 ConfirmBubbleModel::GetLinkText() const {
   return base::string16();
+}
+
+GURL ConfirmBubbleModel::GetLinkURL() const {
+  return GURL();
 }
 
 void ConfirmBubbleModel::LinkClicked() {

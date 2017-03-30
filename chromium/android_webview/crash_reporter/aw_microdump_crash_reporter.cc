@@ -5,10 +5,15 @@
 #include "android_webview/crash_reporter/aw_microdump_crash_reporter.h"
 
 #include "android_webview/common/aw_version_info_values.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/files/file_path.h"
 #include "base/lazy_instance.h"
+#include "base/scoped_native_library.h"
+#include "base/synchronization/lock.h"
 #include "build/build_config.h"
-#include "components/crash/app/breakpad_linux.h"
-#include "components/crash/app/crash_reporter_client.h"
+#include "components/crash/content/app/breakpad_linux.h"
+#include "components/crash/content/app/crash_reporter_client.h"
+#include "content/public/common/content_switches.h"
 
 namespace android_webview {
 namespace crash_reporter {
@@ -17,7 +22,10 @@ namespace {
 
 class AwCrashReporterClient : public ::crash_reporter::CrashReporterClient {
  public:
-  AwCrashReporterClient() {}
+  AwCrashReporterClient() : dump_fd_(-1) {}
+
+  // Does not use lock, can only be called immediately after creation.
+  void set_crash_signal_fd(int fd) { dump_fd_ = fd; }
 
   // crash_reporter::CrashReporterClient implementation.
   bool IsRunningUnattended() override { return false; }
@@ -33,7 +41,20 @@ class AwCrashReporterClient : public ::crash_reporter::CrashReporterClient {
   // only when NO_UNWIND_TABLES == 1).
   bool ShouldEnableBreakpadMicrodumps() override { return true; }
 
+  int GetAndroidMinidumpDescriptor() override { return dump_fd_; }
+
+  bool DumpWithoutCrashingToFd(int fd) {
+    DCHECK(dump_fd_ == -1);
+    base::AutoLock lock(dump_lock_);
+    dump_fd_ = fd;
+    base::debug::DumpWithoutCrashing();
+    dump_fd_ = -1;
+    return true;
+  }
+
  private:
+  int dump_fd_;
+  base::Lock dump_lock_;
   DISALLOW_COPY_AND_ASSIGN(AwCrashReporterClient);
 };
 
@@ -42,26 +63,88 @@ base::LazyInstance<AwCrashReporterClient>::Leaky g_crash_reporter_client =
 
 bool g_enabled = false;
 
-}  // namespace
-
-void EnableMicrodumpCrashReporter() {
 #if defined(ARCH_CPU_X86_FAMILY)
-  // Don't install signal handler on X86/64 because this breaks binary
-  // translators that handle SIGSEGV in userspace and get chained after our
-  // handler. See crbug.com/477444
-  return;
+bool SafeToUseSignalHandler() {
+  // On X86/64 there are binary translators that handle SIGSEGV in userspace and
+  // may get chained after our handler - see http://crbug.com/477444
+  // We attempt to detect this to work out when it's safe to install breakpad.
+  // If anything doesn't seem right we assume it's not safe.
+
+  // type and mangled name of android::NativeBridgeInitialized
+  typedef bool (*InitializedFunc)();
+  const char kInitializedSymbol[] = "_ZN7android23NativeBridgeInitializedEv";
+  // type and mangled name of android::NativeBridgeGetVersion
+  typedef uint32_t (*VersionFunc)();
+  const char kVersionSymbol[] = "_ZN7android22NativeBridgeGetVersionEv";
+
+  base::ScopedNativeLibrary lib_native_bridge(
+      base::FilePath("libnativebridge.so"));
+  if (!lib_native_bridge.is_valid()) {
+    DLOG(WARNING) << "Couldn't load libnativebridge";
+    return false;
+  }
+
+  InitializedFunc NativeBridgeInitialized = reinterpret_cast<InitializedFunc>(
+      lib_native_bridge.GetFunctionPointer(kInitializedSymbol));
+  if (NativeBridgeInitialized == nullptr) {
+    DLOG(WARNING) << "Couldn't tell if native bridge initialized";
+    return false;
+  }
+  if (!NativeBridgeInitialized()) {
+    // Native process, safe to use breakpad.
+    return true;
+  }
+
+  VersionFunc NativeBridgeGetVersion = reinterpret_cast<VersionFunc>(
+      lib_native_bridge.GetFunctionPointer(kVersionSymbol));
+  if (NativeBridgeGetVersion == nullptr) {
+    DLOG(WARNING) << "Couldn't get native bridge version";
+    return false;
+  }
+  uint32_t version = NativeBridgeGetVersion();
+  if (version >= 2) {
+    // Native bridge at least version 2, safe to use breakpad.
+    return true;
+  } else {
+    DLOG(WARNING) << "Native bridge ver=" << version << "; too low";
+    return false;
+  }
+}
 #endif
 
+}  // namespace
+
+void EnableMicrodumpCrashReporter(const std::string& process_type,
+                                  int crash_signal_fd) {
   if (g_enabled) {
     NOTREACHED() << "EnableMicrodumpCrashReporter called more than once";
     return;
   }
 
-  ::crash_reporter::SetCrashReporterClient(g_crash_reporter_client.Pointer());
+#if defined(ARCH_CPU_X86_FAMILY)
+  if (!SafeToUseSignalHandler()) {
+    LOG(WARNING) << "Can't use breakpad to handle WebView crashes";
+    return;
+  }
+#endif
 
-  // |process_type| is not really relevant here, as long as it not empty.
-  breakpad::InitNonBrowserCrashReporterForAndroid("webview" /* process_type */);
+  AwCrashReporterClient* client = g_crash_reporter_client.Pointer();
+  if (process_type == switches::kRendererProcess && crash_signal_fd != -1) {
+    client->set_crash_signal_fd(crash_signal_fd);
+  }
+  ::crash_reporter::SetCrashReporterClient(client);
+
+  breakpad::InitMicrodumpCrashHandlerIfNecessary(process_type);
   g_enabled = true;
+}
+
+void AddGpuFingerprintToMicrodumpCrashHandler(
+    const std::string& gpu_fingerprint) {
+  breakpad::AddGpuFingerprintToMicrodumpCrashHandler(gpu_fingerprint);
+}
+
+bool DumpWithoutCrashingToFd(int fd) {
+  return g_crash_reporter_client.Pointer()->DumpWithoutCrashingToFd(fd);
 }
 
 }  // namespace crash_reporter

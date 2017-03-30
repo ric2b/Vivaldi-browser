@@ -1,4 +1,6 @@
-<?xml version="1.0" ?><!DOCTYPE translationbundle><translationbundle lang="hr">
+<?xml version="1.0" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="hr">
 <translation id="1555130319947370107">Plava</translation>
 <translation id="161042844686301425">Cijan</translation>
 <translation id="1768717197362323622">milisekunda</translation>
@@ -15,6 +17,7 @@
 <translation id="4768459022382175196">sekunda</translation>
 <translation id="4842092870884894799">Prikazuje se skočni prozor generiranja zaporke</translation>
 <translation id="4932733599132424254">Datum</translation>
+<translation id="5779929835642192302">Dostupni su prijedlozi</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5901630391730855834">Žuta</translation>
 <translation id="5966707198760109579">Tjedan</translation>

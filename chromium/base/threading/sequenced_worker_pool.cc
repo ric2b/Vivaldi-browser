@@ -4,6 +4,8 @@
 
 #include "base/threading/sequenced_worker_pool.h"
 
+#include <stdint.h>
+
 #include <list>
 #include <map>
 #include <set>
@@ -16,6 +18,7 @@
 #include "base/critical_closure.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -29,6 +32,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -62,7 +66,7 @@ struct SequencedTask : public TrackingInfo  {
 
   int sequence_token_id;
   int trace_id;
-  int64 sequence_task_number;
+  int64_t sequence_task_number;
   SequencedWorkerPool::WorkerShutdown shutdown_behavior;
   tracked_objects::Location posted_from;
   Closure task;
@@ -213,15 +217,10 @@ bool SequencedWorkerPoolSequencedTaskRunner::PostNonNestableDelayedTask(
 // Create a process-wide unique ID to represent this task in trace events. This
 // will be mangled with a Process ID hash to reduce the likelyhood of colliding
 // with MessageLoop pointers on other processes.
-uint64 GetTaskTraceID(const SequencedTask& task,
-                      void* pool) {
-  return (static_cast<uint64>(task.trace_id) << 32) |
-         static_cast<uint64>(reinterpret_cast<intptr_t>(pool));
+uint64_t GetTaskTraceID(const SequencedTask& task, void* pool) {
+  return (static_cast<uint64_t>(task.trace_id) << 32) |
+         static_cast<uint64_t>(reinterpret_cast<intptr_t>(pool));
 }
-
-base::LazyInstance<base::ThreadLocalPointer<
-    SequencedWorkerPool::SequenceToken> >::Leaky g_lazy_tls_ptr =
-        LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -238,6 +237,9 @@ class SequencedWorkerPool::Worker : public SimpleThread {
 
   // SimpleThread implementation. This actually runs the background thread.
   void Run() override;
+
+  // Gets the worker for the current thread out of thread-local storage.
+  static Worker* GetForCurrentThread();
 
   // Indicates that a task is about to be run. The parameters provide
   // additional metainformation about the task being run.
@@ -264,7 +266,14 @@ class SequencedWorkerPool::Worker : public SimpleThread {
     return task_shutdown_behavior_;
   }
 
+  scoped_refptr<SequencedWorkerPool> worker_pool() const {
+    return worker_pool_;
+  }
+
  private:
+  static LazyInstance<ThreadLocalPointer<SequencedWorkerPool::Worker>>::Leaky
+      lazy_tls_ptr_;
+
   scoped_refptr<SequencedWorkerPool> worker_pool_;
   // The sequence token of the task being processed. Only valid when
   // is_processing_task_ is true.
@@ -290,7 +299,7 @@ class SequencedWorkerPool::Inner {
 
   ~Inner();
 
-  SequenceToken GetSequenceToken();
+  static SequenceToken GetSequenceToken();
 
   SequenceToken GetNamedSequenceToken(const std::string& name);
 
@@ -307,6 +316,11 @@ class SequencedWorkerPool::Inner {
   bool RunsTasksOnCurrentThread() const;
 
   bool IsRunningSequenceOnCurrentThread(SequenceToken sequence_token) const;
+
+  bool IsRunningSequence(SequenceToken sequence_token) const;
+
+  void SetRunningTaskInfoForCurrentThread(SequenceToken sequence_token,
+                                          WorkerShutdown shutdown_behavior);
 
   void CleanupForTesting();
 
@@ -341,7 +355,7 @@ class SequencedWorkerPool::Inner {
   int LockedGetNamedTokenID(const std::string& name);
 
   // Called from within the lock, this returns the next sequence task number.
-  int64 LockedGetNextSequenceTaskNumber();
+  int64_t LockedGetNextSequenceTaskNumber();
 
   // Gets new task. There are 3 cases depending on the return value:
   //
@@ -457,7 +471,7 @@ class SequencedWorkerPool::Inner {
   PendingTaskSet pending_tasks_;
 
   // The next sequence number for a new sequenced task.
-  int64 next_sequence_task_number_;
+  int64_t next_sequence_task_number_;
 
   // Number of tasks in the pending_tasks_ list that are marked as blocking
   // shutdown.
@@ -508,9 +522,10 @@ void SequencedWorkerPool::Worker::Run() {
   win::ScopedCOMInitializer com_initializer;
 #endif
 
-  // Store a pointer to the running sequence in thread local storage for
-  // static function access.
-  g_lazy_tls_ptr.Get().Set(&task_sequence_token_);
+  // Store a pointer to this worker in thread local storage for static function
+  // access.
+  DCHECK(!lazy_tls_ptr_.Get().Get());
+  lazy_tls_ptr_.Get().Set(this);
 
   // Just jump back to the Inner object to run the thread, since it has all the
   // tracking information and queues. It might be more natural to implement
@@ -519,8 +534,22 @@ void SequencedWorkerPool::Worker::Run() {
   // send thread-specific information easily to the thread loop.
   worker_pool_->inner_->ThreadLoop(this);
   // Release our cyclic reference once we're done.
-  worker_pool_ = NULL;
+  worker_pool_ = nullptr;
 }
+
+// static
+SequencedWorkerPool::Worker*
+SequencedWorkerPool::Worker::GetForCurrentThread() {
+  // Don't construct lazy instance on check.
+  if (lazy_tls_ptr_ == nullptr)
+    return nullptr;
+
+  return lazy_tls_ptr_.Get().Get();
+}
+
+// static
+LazyInstance<ThreadLocalPointer<SequencedWorkerPool::Worker>>::Leaky
+    SequencedWorkerPool::Worker::lazy_tls_ptr_ = LAZY_INSTANCE_INITIALIZER;
 
 // Inner definitions ---------------------------------------------------------
 
@@ -562,6 +591,7 @@ SequencedWorkerPool::Inner::~Inner() {
     testing_observer_->OnDestruct();
 }
 
+// static
 SequencedWorkerPool::SequenceToken
 SequencedWorkerPool::Inner::GetSequenceToken() {
   // Need to add one because StaticAtomicSequenceNumber starts at zero, which
@@ -619,9 +649,10 @@ bool SequencedWorkerPool::Inner::PostTask(
     // The trace_id is used for identifying the task in about:tracing.
     sequenced.trace_id = trace_id_++;
 
-    TRACE_EVENT_FLOW_BEGIN0(TRACE_DISABLED_BY_DEFAULT("toplevel.flow"),
-        "SequencedWorkerPool::PostTask",
-        TRACE_ID_MANGLE(GetTaskTraceID(sequenced, static_cast<void*>(this))));
+    TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("toplevel.flow"),
+        "SequencedWorkerPool::Inner::PostTask",
+        TRACE_ID_MANGLE(GetTaskTraceID(sequenced, static_cast<void*>(this))),
+        TRACE_EVENT_FLAG_FLOW_OUT);
 
     sequenced.sequence_task_number = LockedGetNextSequenceTaskNumber();
 
@@ -659,6 +690,28 @@ bool SequencedWorkerPool::Inner::IsRunningSequenceOnCurrentThread(
     return false;
   return found->second->is_processing_task() &&
          sequence_token.Equals(found->second->task_sequence_token());
+}
+
+bool SequencedWorkerPool::Inner::IsRunningSequence(
+    SequenceToken sequence_token) const {
+  DCHECK(sequence_token.IsValid());
+  AutoLock lock(lock_);
+  return !IsSequenceTokenRunnable(sequence_token.id_);
+}
+
+void SequencedWorkerPool::Inner::SetRunningTaskInfoForCurrentThread(
+    SequenceToken sequence_token,
+    WorkerShutdown shutdown_behavior) {
+  AutoLock lock(lock_);
+  ThreadMap::const_iterator found = threads_.find(PlatformThread::CurrentId());
+  DCHECK(found != threads_.end());
+  DCHECK(found->second->is_processing_task());
+  DCHECK(!found->second->task_sequence_token().IsValid());
+  found->second->set_running_task_info(sequence_token, shutdown_behavior);
+
+  // Mark the sequence token as in use.
+  bool success = current_sequences_.insert(sequence_token.id_).second;
+  DCHECK(success);
 }
 
 // See https://code.google.com/p/chromium/issues/detail?id=168415
@@ -754,12 +807,12 @@ void SequencedWorkerPool::Inner::ThreadLoop(Worker* this_worker) {
       GetWorkStatus status =
           GetWork(&task, &wait_time, &delete_these_outside_lock);
       if (status == GET_WORK_FOUND) {
-        TRACE_EVENT_FLOW_END0(TRACE_DISABLED_BY_DEFAULT("toplevel.flow"),
-            "SequencedWorkerPool::PostTask",
-            TRACE_ID_MANGLE(GetTaskTraceID(task, static_cast<void*>(this))));
-        TRACE_EVENT2("toplevel", "SequencedWorkerPool::ThreadLoop",
-                     "src_file", task.posted_from.file_name(),
-                     "src_func", task.posted_from.function_name());
+        TRACE_EVENT_WITH_FLOW2(TRACE_DISABLED_BY_DEFAULT("toplevel.flow"),
+            "SequencedWorkerPool::Inner::ThreadLoop",
+            TRACE_ID_MANGLE(GetTaskTraceID(task, static_cast<void*>(this))),
+            TRACE_EVENT_FLAG_FLOW_IN,
+            "src_file", task.posted_from.file_name(),
+            "src_func", task.posted_from.function_name());
         int new_thread_id = WillRunWorkerTask(task);
         {
           AutoUnlock unlock(lock_);
@@ -784,6 +837,11 @@ void SequencedWorkerPool::Inner::ThreadLoop(Worker* this_worker) {
 
           tracked_objects::ThreadData::TallyRunOnNamedThreadIfTracking(
               task, stopwatch);
+
+          // Update the sequence token in case it has been set from within the
+          // task, so it can be removed from the set of currently running
+          // sequences in DidRunWorkerTask() below.
+          task.sequence_token_id = this_worker->task_sequence_token().id_;
 
           // Make sure our task is erased outside the lock for the
           // same reason we do this with delete_these_oustide_lock.
@@ -919,7 +977,7 @@ int SequencedWorkerPool::Inner::LockedGetNamedTokenID(
   return result.id_;
 }
 
-int64 SequencedWorkerPool::Inner::LockedGetNextSequenceTaskNumber() {
+int64_t SequencedWorkerPool::Inner::LockedGetNextSequenceTaskNumber() {
   lock_.AssertAcquired();
   // We assume that we never create enough tasks to wrap around.
   return next_sequence_task_number_++;
@@ -1144,17 +1202,55 @@ SequencedWorkerPool::Inner::g_last_sequence_number_;
 
 // SequencedWorkerPool --------------------------------------------------------
 
+std::string SequencedWorkerPool::SequenceToken::ToString() const {
+  return base::StringPrintf("[%d]", id_);
+}
+
 // static
 SequencedWorkerPool::SequenceToken
 SequencedWorkerPool::GetSequenceTokenForCurrentThread() {
-  // Don't construct lazy instance on check.
-  if (g_lazy_tls_ptr == NULL)
+  Worker* worker = Worker::GetForCurrentThread();
+  if (!worker)
     return SequenceToken();
 
-  SequencedWorkerPool::SequenceToken* token = g_lazy_tls_ptr.Get().Get();
-  if (!token)
-    return SequenceToken();
-  return *token;
+  return worker->task_sequence_token();
+}
+
+// static
+scoped_refptr<SequencedWorkerPool>
+SequencedWorkerPool::GetWorkerPoolForCurrentThread() {
+  Worker* worker = Worker::GetForCurrentThread();
+  if (!worker)
+    return nullptr;
+
+  return worker->worker_pool();
+}
+
+// static
+scoped_refptr<SequencedTaskRunner>
+SequencedWorkerPool::GetSequencedTaskRunnerForCurrentThread() {
+  Worker* worker = Worker::GetForCurrentThread();
+
+  // If there is no worker, this thread is not a worker thread. Otherwise, it is
+  // currently running a task (sequenced or unsequenced).
+  if (!worker)
+    return nullptr;
+
+  scoped_refptr<SequencedWorkerPool> pool = worker->worker_pool();
+  SequenceToken sequence_token = worker->task_sequence_token();
+  WorkerShutdown shutdown_behavior = worker->task_shutdown_behavior();
+  if (!sequence_token.IsValid()) {
+    // Create a new sequence token and bind this thread to it, to make sure that
+    // a task posted to the SequencedTaskRunner we are going to return is not
+    // immediately going to run on a different thread.
+    sequence_token = Inner::GetSequenceToken();
+    pool->inner_->SetRunningTaskInfoForCurrentThread(sequence_token,
+                                                     shutdown_behavior);
+  }
+
+  DCHECK(pool->IsRunningSequenceOnCurrentThread(sequence_token));
+  return new SequencedWorkerPoolSequencedTaskRunner(
+      std::move(pool), sequence_token, shutdown_behavior);
 }
 
 SequencedWorkerPool::SequencedWorkerPool(size_t max_threads,
@@ -1173,8 +1269,7 @@ SequencedWorkerPool::SequencedWorkerPool(size_t max_threads,
 SequencedWorkerPool::~SequencedWorkerPool() {}
 
 void SequencedWorkerPool::OnDestruct() const {
-  // Avoid deleting ourselves on a worker thread (which would
-  // deadlock).
+  // Avoid deleting ourselves on a worker thread (which would deadlock).
   if (RunsTasksOnCurrentThread()) {
     constructor_task_runner_->DeleteSoon(FROM_HERE, this);
   } else {
@@ -1182,8 +1277,9 @@ void SequencedWorkerPool::OnDestruct() const {
   }
 }
 
+// static
 SequencedWorkerPool::SequenceToken SequencedWorkerPool::GetSequenceToken() {
-  return inner_->GetSequenceToken();
+  return Inner::GetSequenceToken();
 }
 
 SequencedWorkerPool::SequenceToken SequencedWorkerPool::GetNamedSequenceToken(
@@ -1285,6 +1381,11 @@ bool SequencedWorkerPool::RunsTasksOnCurrentThread() const {
 bool SequencedWorkerPool::IsRunningSequenceOnCurrentThread(
     SequenceToken sequence_token) const {
   return inner_->IsRunningSequenceOnCurrentThread(sequence_token);
+}
+
+bool SequencedWorkerPool::IsRunningSequence(
+    SequenceToken sequence_token) const {
+  return inner_->IsRunningSequence(sequence_token);
 }
 
 void SequencedWorkerPool::FlushForTesting() {

@@ -5,10 +5,10 @@
 #ifndef CHROME_BROWSER_PROFILES_OFF_THE_RECORD_PROFILE_IO_DATA_H_
 #define CHROME_BROWSER_PROFILES_OFF_THE_RECORD_PROFILE_IO_DATA_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
@@ -20,6 +20,7 @@ class Profile;
 
 namespace net {
 class FtpTransactionFactory;
+class HttpNetworkSession;
 class HttpTransactionFactory;
 class SdchManager;
 class SdchOwner;
@@ -66,8 +67,8 @@ class OffTheRecordProfileIOData : public ProfileIOData {
             content::URLRequestInterceptorScopedVector
                 request_interceptors) const;
 
-    // Returns the DevToolsNetworkController attached to ProfileIOData.
-    DevToolsNetworkController* GetDevToolsNetworkController() const;
+    // Returns the DevToolsNetworkControllerHandle attached to ProfileIOData.
+    DevToolsNetworkControllerHandle* GetDevToolsNetworkControllerHandle() const;
 
    private:
     typedef std::map<StoragePartitionDescriptor,
@@ -144,6 +145,7 @@ class OffTheRecordProfileIOData : public ProfileIOData {
 
   mutable scoped_ptr<ChromeNetworkDelegate> network_delegate_;
 
+  mutable scoped_ptr<net::HttpNetworkSession> http_network_session_;
   mutable scoped_ptr<net::HttpTransactionFactory> main_http_factory_;
   mutable scoped_ptr<net::FtpTransactionFactory> ftp_factory_;
 

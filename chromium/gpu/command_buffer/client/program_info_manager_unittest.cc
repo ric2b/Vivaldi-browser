@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "gpu/command_buffer/client/program_info_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
 
-uint32 ComputeOffset(const void* start, const void* position) {
-  return static_cast<const uint8*>(position) -
-         static_cast<const uint8*>(start);
+uint32_t ComputeOffset(const void* start, const void* position) {
+  return static_cast<const uint8_t*>(position) -
+         static_cast<const uint8_t*>(start);
 }
 
 const GLuint kClientProgramId = 321;
@@ -148,6 +151,7 @@ class ProgramInfoManagerTest : public testing::Test {
     // The names needs to be of size 4*k-1 to avoid padding in the struct Data.
     // This is a testing only problem.
     const char* kName[] = { "cow", "chicken" };
+    data->header.transform_feedback_buffer_mode = GL_SEPARATE_ATTRIBS;
     data->header.num_transform_feedback_varyings = 2;
     data->entry[0].size = 1;
     data->entry[0].type = GL_FLOAT_VEC2;
@@ -170,7 +174,7 @@ TEST_F(ProgramInfoManagerTest, UpdateES2) {
   SetupProgramES2Data(&data);
   const std::string kNames[] = { data.uniform_name0, data.uniform_name1 };
   const int32_t* kLocs[] = { data.uniform_loc0, data.uniform_loc1 };
-  std::vector<int8> result(sizeof(data));
+  std::vector<int8_t> result(sizeof(data));
   memcpy(&result[0], &data, sizeof(data));
   EXPECT_FALSE(program_->IsCached(ProgramInfoManager::kES2));
   program_->UpdateES2(result);
@@ -216,7 +220,7 @@ TEST_F(ProgramInfoManagerTest, UpdateES3UniformBlocks) {
   SetupUniformBlocksData(&data);
   const std::string kName[] = { data.name0, data.name1 };
   const uint32_t* kIndices[] = { data.indices0, data.indices1 };
-  std::vector<int8> result(sizeof(data));
+  std::vector<int8_t> result(sizeof(data));
   memcpy(&result[0], &data, sizeof(data));
   EXPECT_FALSE(program_->IsCached(ProgramInfoManager::kES3UniformBlocks));
   program_->UpdateES3UniformBlocks(result);
@@ -257,7 +261,7 @@ TEST_F(ProgramInfoManagerTest, UpdateES3TransformFeedbackVaryings) {
   TransformFeedbackVaryingsData data;
   SetupTransformFeedbackVaryingsData(&data);
   const std::string kName[] = { data.name0, data.name1 };
-  std::vector<int8> result(sizeof(data));
+  std::vector<int8_t> result(sizeof(data));
   memcpy(&result[0], &data, sizeof(data));
   EXPECT_FALSE(program_->IsCached(
       ProgramInfoManager::kES3TransformFeedbackVaryings));
@@ -265,6 +269,11 @@ TEST_F(ProgramInfoManagerTest, UpdateES3TransformFeedbackVaryings) {
   EXPECT_TRUE(program_->IsCached(
       ProgramInfoManager::kES3TransformFeedbackVaryings));
 
+  GLint transform_feedback_buffer_mode = 0;
+  EXPECT_TRUE(program_->GetProgramiv(
+      GL_TRANSFORM_FEEDBACK_BUFFER_MODE, &transform_feedback_buffer_mode));
+  EXPECT_EQ(data.header.transform_feedback_buffer_mode,
+            static_cast<uint32_t>(transform_feedback_buffer_mode));
   GLint transform_feedback_varying_count = 0;
   EXPECT_TRUE(program_->GetProgramiv(
       GL_TRANSFORM_FEEDBACK_VARYINGS, &transform_feedback_varying_count));
@@ -290,7 +299,7 @@ TEST_F(ProgramInfoManagerTest, UpdateES3TransformFeedbackVaryings) {
 TEST_F(ProgramInfoManagerTest, GetUniformBlockIndexCached) {
   UniformBlocksData data;
   SetupUniformBlocksData(&data);
-  std::vector<int8> result(sizeof(data));
+  std::vector<int8_t> result(sizeof(data));
   memcpy(&result[0], &data, sizeof(data));
   program_->UpdateES3UniformBlocks(result);
 
@@ -305,7 +314,7 @@ TEST_F(ProgramInfoManagerTest, GetUniformBlockIndexCached) {
 TEST_F(ProgramInfoManagerTest, GetActiveUniformBlockNameCached) {
   UniformBlocksData data;
   SetupUniformBlocksData(&data);
-  std::vector<int8> result(sizeof(data));
+  std::vector<int8_t> result(sizeof(data));
   memcpy(&result[0], &data, sizeof(data));
   program_->UpdateES3UniformBlocks(result);
 
@@ -343,7 +352,7 @@ TEST_F(ProgramInfoManagerTest, GetActiveUniformBlockNameCached) {
 TEST_F(ProgramInfoManagerTest, GetActiveUniformBlockivCached) {
   UniformBlocksData data;
   SetupUniformBlocksData(&data);
-  std::vector<int8> result(sizeof(data));
+  std::vector<int8_t> result(sizeof(data));
   memcpy(&result[0], &data, sizeof(data));
   program_->UpdateES3UniformBlocks(result);
   const char* kName[] = { data.name0, data.name1 };
@@ -392,7 +401,7 @@ TEST_F(ProgramInfoManagerTest, GetActiveUniformBlockivCached) {
 TEST_F(ProgramInfoManagerTest, GetTransformFeedbackVaryingCached) {
   TransformFeedbackVaryingsData data;
   SetupTransformFeedbackVaryingsData(&data);
-  std::vector<int8> result(sizeof(data));
+  std::vector<int8_t> result(sizeof(data));
   memcpy(&result[0], &data, sizeof(data));
   program_->UpdateES3TransformFeedbackVaryings(result);
   const char* kName[] = { data.name0, data.name1 };
@@ -416,7 +425,7 @@ TEST_F(ProgramInfoManagerTest, GetTransformFeedbackVaryingCached) {
 TEST_F(ProgramInfoManagerTest, GetUniformIndices) {
   ProgramES2Data data;
   SetupProgramES2Data(&data);
-  std::vector<int8> result(sizeof(data));
+  std::vector<int8_t> result(sizeof(data));
   memcpy(&result[0], &data, sizeof(data));
   program_->UpdateES2(result);
 
@@ -474,7 +483,7 @@ TEST_F(ProgramInfoManagerTest, GetActiveUniformsivCached) {
   // ES3 only parameters.
   UniformsES3Data data_es3;
   SetupUniformsES3Data(&data_es3);
-  std::vector<int8> result(sizeof(data_es3));
+  std::vector<int8_t> result(sizeof(data_es3));
   memcpy(&result[0], &data_es3, sizeof(data_es3));
   EXPECT_FALSE(program_->IsCached(ProgramInfoManager::kES3Uniformsiv));
   program_->UpdateES3Uniformsiv(result);

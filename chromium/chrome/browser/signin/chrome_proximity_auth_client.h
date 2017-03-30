@@ -8,7 +8,9 @@
 #include "base/macros.h"
 #include "components/proximity_auth/proximity_auth_client.h"
 
+class PrefService;
 class Profile;
+class EasyUnlockServiceRegular;
 
 // A Chrome-specific implementation of the ProximityAuthClient interface.
 // There is one |ChromeProximityAuthClient| per |Profile|.
@@ -19,8 +21,29 @@ class ChromeProximityAuthClient : public proximity_auth::ProximityAuthClient {
 
   // proximity_auth::ProximityAuthClient:
   std::string GetAuthenticatedUsername() const override;
+  void UpdateScreenlockState(proximity_auth::ScreenlockState state) override;
+  void FinalizeUnlock(bool success) override;
+  PrefService* GetPrefService() override;
+  scoped_ptr<proximity_auth::SecureMessageDelegate>
+  CreateSecureMessageDelegate() override;
+  scoped_ptr<proximity_auth::CryptAuthClientFactory>
+  CreateCryptAuthClientFactory() override;
+  cryptauth::DeviceClassifier GetDeviceClassifier() override;
+  std::string GetAccountId() override;
+  proximity_auth::CryptAuthEnrollmentManager* GetCryptAuthEnrollmentManager()
+      override;
+  proximity_auth::CryptAuthDeviceManager* GetCryptAuthDeviceManager() override;
+  void FinalizeSignin(const std::string& secret) override;
+  void GetChallengeForUserAndDevice(
+      const std::string& user_id,
+      const std::string& remote_public_key,
+      const std::string& nonce,
+      base::Callback<void(const std::string& challenge)> callback) override;
 
  private:
+  // Returns the EasyUnlockService instance used inside user sessions.
+  EasyUnlockServiceRegular* GetEasyUnlockServiceRegular();
+
   Profile* const profile_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeProximityAuthClient);

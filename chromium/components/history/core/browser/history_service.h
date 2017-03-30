@@ -5,16 +5,19 @@
 #ifndef COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_SERVICE_H_
 #define COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_SERVICE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -23,6 +26,7 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/favicon_base/favicon_callback.h"
 #include "components/favicon_base/favicon_usage_data.h"
 #include "components/history/core/browser/delete_directive_handler.h"
@@ -146,10 +150,14 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Returns a pointer to the TypedUrlSyncableService owned by HistoryBackend.
   // This method should only be called from the history thread, because the
   // returned service is intended to be accessed only via the history thread.
-  TypedUrlSyncableService* GetTypedUrlSyncableService() const;
+  virtual TypedUrlSyncableService* GetTypedUrlSyncableService() const;
 
   // KeyedService:
   void Shutdown() override;
+
+  // Callback for value asynchronously returned by GetCountsForOrigins().
+  typedef base::Callback<void(const OriginCountMap&)>
+      GetCountsForOriginsCallback;
 
   // Computes the |num_hosts| most-visited hostnames in the past 30 days and
   // returns a list of those hosts paired with their visit counts. The following
@@ -163,7 +171,22 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // 4. Only http://, https://, and ftp:// URLs are counted.
   //
   // Note: Virtual needed for mocking.
-  virtual void TopHosts(int num_hosts, const TopHostsCallback& callback) const;
+  virtual void TopHosts(size_t num_hosts,
+                        const TopHostsCallback& callback) const;
+
+  // Gets the counts of URLs that belong to |origins| in the history database.
+  void GetCountsForOrigins(const std::set<GURL>& origins,
+                           const GetCountsForOriginsCallback& callback) const;
+
+  // Returns, for the given URL, a 0-based index into the list produced by
+  // TopHosts(), corresponding to that URL's host. If TopHosts() has not
+  // previously been run, or the host is not in the top kMaxTopHosts, returns
+  // kMaxTopHosts.
+  //
+  // Note: Virtual needed for mocking.
+  virtual void HostRankIfAvailable(
+      const GURL& url,
+      const base::Callback<void(int)>& callback) const;
 
   // Navigation ----------------------------------------------------------------
 
@@ -338,6 +361,20 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
       const QueryFilteredURLsCallback& callback,
       base::CancelableTaskTracker* tracker);
 
+  // Statistics ----------------------------------------------------------------
+
+  // Gets the number of URLs as seen in chrome://history within the time range
+  // [|begin_time|, |end_time|). Each URL is counted only once per day. For
+  // determination of the date, timestamps are converted to dates using local
+  // time.
+  typedef base::Callback<void(HistoryCountResult)> GetHistoryCountCallback;
+
+  base::CancelableTaskTracker::TaskId GetHistoryCount(
+      const base::Time& begin_time,
+      const base::Time& end_time,
+      const GetHistoryCountCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
   // Database management operations --------------------------------------------
 
   // Delete all the information related to a single url.
@@ -400,7 +437,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
 
   // Implemented by the caller of 'GetNextDownloadId' below, and is called with
   // the maximum id of all downloads records in the database plus 1.
-  typedef base::Callback<void(uint32)> DownloadIdCallback;
+  typedef base::Callback<void(uint32_t)> DownloadIdCallback;
 
   // Responds on the calling thread with the maximum id of all downloads records
   // in the database plus 1.
@@ -424,7 +461,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
 
   // Permanently remove some downloads from the history system. This is a 'fire
   // and forget' operation.
-  void RemoveDownloads(const std::set<uint32>& ids);
+  void RemoveDownloads(const std::set<uint32_t>& ids);
 
   // Keyword search terms -----------------------------------------------------
 
@@ -575,7 +612,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
 
   // Called by the HistoryURLProvider class to schedule an autocomplete, it
   // will be called back on the internal history thread with the history
-  // database so it can query. See history_autocomplete.cc for a diagram.
+  // database so it can query. See history_url_provider.h for a diagram.
   void ScheduleAutocomplete(
       const base::Callback<void(HistoryBackend*, URLDatabase*)>& callback);
 

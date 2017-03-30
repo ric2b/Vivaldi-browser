@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_GUEST_VIEW_MIME_HANDLER_VIEW_MIME_HANDLER_VIEW_GUEST_H_
 #define EXTENSIONS_BROWSER_GUEST_VIEW_MIME_HANDLER_VIEW_MIME_HANDLER_VIEW_GUEST_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/guest_view/browser/guest_view.h"
 
@@ -57,49 +58,42 @@ class MimeHandlerViewGuest :
 
   static const char Type[];
 
-  // GuestViewBase implementation.
-  const char* GetAPINamespace() const override;
-  int GetTaskPrefix() const override;
-  void CreateWebContents(const base::DictionaryValue& create_params,
-                         const WebContentsCreatedCallback& callback) override;
-  void DidAttachToEmbedder() override;
-  void DidInitialize(const base::DictionaryValue& create_params) override;
-  bool ZoomPropagatesFromEmbedderToGuest() const override;
-
-  // content::BrowserPluginGuestDelegate implementation
-  bool Find(int request_id,
-            const base::string16& search_text,
-            const blink::WebFindOptions& options) override;
-  bool StopFinding(content::StopFindAction action) override;
-
-  // WebContentsDelegate implementation.
-  content::WebContents* OpenURLFromTab(
-      content::WebContents* source,
-      const content::OpenURLParams& params) override;
-  bool HandleContextMenu(const content::ContextMenuParams& params) override;
-  bool PreHandleGestureEvent(content::WebContents* source,
-                             const blink::WebGestureEvent& event) override;
-  content::JavaScriptDialogManager* GetJavaScriptDialogManager(
-      content::WebContents* source) override;
-  void FindReply(content::WebContents* web_contents,
-                 int request_id,
-                 int number_of_matches,
-                 const gfx::Rect& selection_rect,
-                 int active_match_ordinal,
-                 bool final_update) override;
-  bool SaveFrame(const GURL& url, const content::Referrer& referrer) override;
-
-  // content::WebContentsObserver implementation.
-  void DocumentOnLoadCompletedInMainFrame() override;
-
-  std::string view_id() const { return view_id_; }
-  base::WeakPtr<StreamContainer> GetStream() const;
-
  protected:
   explicit MimeHandlerViewGuest(content::WebContents* owner_web_contents);
   ~MimeHandlerViewGuest() override;
 
  private:
+  friend class TestMimeHandlerViewGuest;
+
+  // GuestViewBase implementation.
+  const char* GetAPINamespace() const final;
+  int GetTaskPrefix() const final;
+  void CreateWebContents(const base::DictionaryValue& create_params,
+                         const WebContentsCreatedCallback& callback) override;
+  void DidAttachToEmbedder() override;
+  void DidInitialize(const base::DictionaryValue& create_params) final;
+  bool ShouldHandleFindRequestsForEmbedder() const final;
+  bool ZoomPropagatesFromEmbedderToGuest() const final;
+
+  // WebContentsDelegate implementation.
+  content::WebContents* OpenURLFromTab(
+      content::WebContents* source,
+      const content::OpenURLParams& params) final;
+  void NavigationStateChanged(content::WebContents* source,
+                              content::InvalidateTypes changed_flags) final;
+  bool HandleContextMenu(const content::ContextMenuParams& params) final;
+  bool PreHandleGestureEvent(content::WebContents* source,
+                             const blink::WebGestureEvent& event) final;
+  content::JavaScriptDialogManager* GetJavaScriptDialogManager(
+      content::WebContents* source) final;
+  bool SaveFrame(const GURL& url, const content::Referrer& referrer) final;
+
+  // content::WebContentsObserver implementation.
+  void DocumentOnLoadCompletedInMainFrame() final;
+
+  std::string view_id() const { return view_id_; }
+  base::WeakPtr<StreamContainer> GetStream() const;
+
   scoped_ptr<MimeHandlerViewGuestDelegate> delegate_;
   scoped_ptr<StreamContainer> stream_;
   std::string view_id_;

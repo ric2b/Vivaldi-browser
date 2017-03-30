@@ -11,7 +11,17 @@ disable=I0010,I0011,abstract-class-little-used,abstract-class-not-used,anomalous
 reports=no
 
 
+[VARIABLES]
+
+# Google style
+dummy-variables-rgx=_$|unused_
+
+
 [FORMAT]
 
 # We use two spaces for indents, instead of the usual four spaces or tab.
 indent-string='  '
+
+# We suppress long line check for lines that contain only the URL (with or
+# without quote).
+ignore-long-lines=^\s*'?https?://\S+'?$

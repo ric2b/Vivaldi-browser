@@ -8,13 +8,16 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
-#include "content/browser/android/content_view_core_impl.h"
 #include "content/browser/media/android/browser_media_player_manager.h"
 #include "content/browser/power_save_blocker_impl.h"
 #include "content/common/android/surface_texture_peer.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_switches.h"
 #include "jni/ContentVideoView_jni.h"
+
+#if !defined(USE_AURA)
+#include "content/browser/android/content_view_core_impl.h"
+#endif
 
 using base::android::AttachCurrentThread;
 using base::android::CheckException;
@@ -31,11 +34,13 @@ ContentVideoView* g_content_video_view = NULL;
 
 }  // namespace
 
-static jobject GetSingletonJavaContentVideoView(JNIEnv*env, jclass) {
+static ScopedJavaLocalRef<jobject> GetSingletonJavaContentVideoView(
+    JNIEnv* env,
+    const JavaParamRef<jclass>&) {
   if (g_content_video_view)
-    return g_content_video_view->GetJavaObject(env).Release();
+    return g_content_video_view->GetJavaObject(env);
   else
-    return NULL;
+    return ScopedJavaLocalRef<jobject>();
 }
 
 bool ContentVideoView::RegisterContentVideoView(JNIEnv* env) {
@@ -93,15 +98,6 @@ void ContentVideoView::OnVideoSizeChanged(int width, int height) {
   }
 }
 
-void ContentVideoView::OnBufferingUpdate(int percent) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> content_video_view = GetJavaObject(env);
-  if (!content_video_view.is_null()) {
-    Java_ContentVideoView_onBufferingUpdate(env, content_video_view.obj(),
-        percent);
-  }
-}
-
 void ContentVideoView::OnPlaybackComplete() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> content_video_view = GetJavaObject(env);
@@ -117,8 +113,10 @@ void ContentVideoView::OnExitFullscreen() {
     Java_ContentVideoView_onExitFullscreen(env, content_video_view.obj());
 }
 
-void ContentVideoView::RecordFullscreenPlayback(
-    JNIEnv*, jobject, bool is_portrait_video, bool is_orientation_portrait) {
+void ContentVideoView::RecordFullscreenPlayback(JNIEnv*,
+                                                const JavaParamRef<jobject>&,
+                                                bool is_portrait_video,
+                                                bool is_orientation_portrait) {
   UMA_HISTOGRAM_BOOLEAN("MobileFullscreenVideo.OrientationPortrait",
                         is_orientation_portrait);
   UMA_HISTOGRAM_BOOLEAN("MobileFullscreenVideo.VideoPortrait",
@@ -126,7 +124,9 @@ void ContentVideoView::RecordFullscreenPlayback(
 }
 
 void ContentVideoView::RecordExitFullscreenPlayback(
-    JNIEnv*, jobject, bool is_portrait_video,
+    JNIEnv*,
+    const JavaParamRef<jobject>&,
+    bool is_portrait_video,
     long playback_duration_in_milliseconds_before_orientation_change,
     long playback_duration_in_milliseconds_after_orientation_change) {
   bool orientation_changed = (
@@ -167,24 +167,27 @@ void ContentVideoView::UpdateMediaMetadata() {
   }
 }
 
-bool ContentVideoView::IsPlaying(JNIEnv*, jobject obj) {
+bool ContentVideoView::IsPlaying(JNIEnv*, const JavaParamRef<jobject>& obj) {
   media::MediaPlayerAndroid* player = manager_->GetFullscreenPlayer();
   return player ? player->IsPlaying() : false;
 }
 
-void ContentVideoView::ExitFullscreen(
-    JNIEnv*, jobject, jboolean release_media_player) {
+void ContentVideoView::ExitFullscreen(JNIEnv*,
+                                      const JavaParamRef<jobject>&,
+                                      jboolean release_media_player) {
   j_content_video_view_.reset();
   manager_->ExitFullscreen(release_media_player);
 }
 
-void ContentVideoView::SetSurface(JNIEnv* env, jobject obj,
-                                  jobject surface) {
+void ContentVideoView::SetSurface(JNIEnv* env,
+                                  const JavaParamRef<jobject>& obj,
+                                  const JavaParamRef<jobject>& surface) {
   manager_->SetVideoSurface(
       gfx::ScopedJavaSurface::AcquireExternalSurface(surface));
 }
 
-void ContentVideoView::RequestMediaMetadata(JNIEnv* env, jobject obj) {
+void ContentVideoView::RequestMediaMetadata(JNIEnv* env,
+                                            const JavaParamRef<jobject>& obj) {
   base::MessageLoop::current()->PostTask(
       FROM_HERE,
       base::Bind(&ContentVideoView::UpdateMediaMetadata,
@@ -196,11 +199,15 @@ ScopedJavaLocalRef<jobject> ContentVideoView::GetJavaObject(JNIEnv* env) {
 }
 
 JavaObjectWeakGlobalRef ContentVideoView::CreateJavaObject() {
-  ContentViewCore* content_view_core = manager_->GetContentViewCore();
-  JNIEnv* env = AttachCurrentThread();
 
-  base::android::ScopedJavaLocalRef<jobject> j_content_view_core =
-      content_view_core->GetJavaObject();
+  JNIEnv* env = AttachCurrentThread();
+  base::android::ScopedJavaLocalRef<jobject> j_content_view_core;
+
+#if !defined(USE_AURA)
+  ContentViewCore* content_view_core = manager_->GetContentViewCore();
+  j_content_view_core = content_view_core->GetJavaObject();
+#endif
+
   if (j_content_view_core.is_null())
     return JavaObjectWeakGlobalRef(env, nullptr);
 

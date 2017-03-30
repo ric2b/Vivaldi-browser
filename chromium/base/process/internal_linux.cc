@@ -4,6 +4,7 @@
 
 #include "base/process/internal_linux.h"
 
+#include <limits.h>
 #include <unistd.h>
 
 #include <map>
@@ -97,8 +98,9 @@ bool ParseProcStats(const std::string& stats_data,
                         close_parens_idx - (open_parens_idx + 1)));
 
   // Split the rest.
-  std::vector<std::string> other_stats;
-  SplitString(stats_data.substr(close_parens_idx + 2), ' ', &other_stats);
+  std::vector<std::string> other_stats = SplitString(
+      stats_data.substr(close_parens_idx + 2), " ",
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   for (size_t i = 0; i < other_stats.size(); ++i)
     proc_stats->push_back(other_stats[i]);
   return true;
@@ -113,12 +115,12 @@ void ParseProcStat(const std::string& contents, ProcStatMap* output) {
   }
 }
 
-int64 GetProcStatsFieldAsInt64(const std::vector<std::string>& proc_stats,
-                               ProcStatsFields field_num) {
+int64_t GetProcStatsFieldAsInt64(const std::vector<std::string>& proc_stats,
+                                 ProcStatsFields field_num) {
   DCHECK_GE(field_num, VM_PPID);
   CHECK_LT(static_cast<size_t>(field_num), proc_stats.size());
 
-  int64 value;
+  int64_t value;
   return StringToInt64(proc_stats[field_num], &value) ? value : 0;
 }
 
@@ -131,7 +133,7 @@ size_t GetProcStatsFieldAsSizeT(const std::vector<std::string>& proc_stats,
   return StringToSizeT(proc_stats[field_num], &value) ? value : 0;
 }
 
-int64 ReadProcStatsAndGetFieldAsInt64(pid_t pid, ProcStatsFields field_num) {
+int64_t ReadProcStatsAndGetFieldAsInt64(pid_t pid, ProcStatsFields field_num) {
   std::string stats_data;
   if (!ReadProcStats(pid, &stats_data))
     return 0;

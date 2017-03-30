@@ -5,14 +5,17 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_MEDIA_VIDEO_CAPTURE_BUFFER_POOL_H_
 #define CONTENT_BROWSER_RENDERER_HOST_MEDIA_VIDEO_CAPTURE_BUFFER_POOL_H_
 
+#include <stddef.h>
+
 #include <map>
 
-#include "base/basictypes.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "base/process/process.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "media/base/video_capture_types.h"
 #include "media/base/video_frame.h"
@@ -47,13 +50,15 @@ class CONTENT_EXPORT VideoCaptureBufferPool
   static const int kInvalidId;
 
   // Abstraction of a pool's buffer data buffer and size for clients.
+  // TODO(emircan): See https://crbug.com/521059, refactor this class.
   class BufferHandle {
    public:
     virtual ~BufferHandle() {}
-    virtual size_t size() const = 0;
-    virtual void* data() = 0;
-    virtual ClientBuffer AsClientBuffer() = 0;
-#if defined(OS_POSIX)
+    virtual gfx::Size dimensions() const = 0;
+    virtual size_t mapped_size() const = 0;
+    virtual void* data(int plane) = 0;
+    virtual ClientBuffer AsClientBuffer(int plane) = 0;
+#if defined(OS_POSIX) && !(defined(OS_MACOSX) && !defined(OS_IOS))
     virtual base::FileDescriptor AsPlatformFile() = 0;
 #endif
   };
@@ -61,11 +66,14 @@ class CONTENT_EXPORT VideoCaptureBufferPool
   explicit VideoCaptureBufferPool(int count);
 
   // One-time (per client/per-buffer) initialization to share a particular
-  // buffer to a process. The size of the allocation is returned as
-  // |memory_size|.
-  base::SharedMemoryHandle ShareToProcess(int buffer_id,
-                                          base::ProcessHandle process_handle,
-                                          size_t* memory_size);
+  // buffer to a process. The shared handle is returned as |new_handle|.
+  bool ShareToProcess(int buffer_id,
+                      base::ProcessHandle process_handle,
+                      base::SharedMemoryHandle* new_handle);
+  bool ShareToProcess2(int buffer_id,
+                       int plane,
+                       base::ProcessHandle process_handle,
+                       gfx::GpuMemoryBufferHandle* new_handle);
 
   // Try and obtain a BufferHandle for |buffer_id|.
   scoped_ptr<BufferHandle> GetBufferHandle(int buffer_id);
@@ -114,18 +122,21 @@ class CONTENT_EXPORT VideoCaptureBufferPool
   // Tracker carries indication of pixel format and storage type.
   class Tracker {
    public:
-    static scoped_ptr<Tracker> CreateTracker(bool use_gmb);
+    static scoped_ptr<Tracker> CreateTracker(media::VideoPixelStorage storage);
 
     Tracker()
         : pixel_count_(0), held_by_producer_(false), consumer_hold_count_(0) {}
     virtual bool Init(media::VideoPixelFormat format,
                       media::VideoPixelStorage storage_type,
-                      const gfx::Size& dimensions) = 0;
+                      const gfx::Size& dimensions,
+                      base::Lock* lock) = 0;
     virtual ~Tracker();
 
     size_t pixel_count() const { return pixel_count_; }
     void set_pixel_count(size_t count) { pixel_count_ = count; }
-    media::VideoPixelFormat pixel_format() const { return pixel_format_; }
+    media::VideoPixelFormat pixel_format() const {
+      return pixel_format_;
+    }
     void set_pixel_format(media::VideoPixelFormat format) {
       pixel_format_ = format;
     }
@@ -141,11 +152,12 @@ class CONTENT_EXPORT VideoCaptureBufferPool
     // Returns a handle to the underlying storage, be that a block of Shared
     // Memory, or a GpuMemoryBuffer.
     virtual scoped_ptr<BufferHandle> GetBufferHandle() = 0;
-    // The actual size of the underlying backing resource.
-    virtual size_t mapped_size() const = 0;
 
     virtual bool ShareToProcess(base::ProcessHandle process_handle,
                                 base::SharedMemoryHandle* new_handle) = 0;
+    virtual bool ShareToProcess2(int plane,
+                                 base::ProcessHandle process_handle,
+                                 gfx::GpuMemoryBufferHandle* new_handle) = 0;
 
    private:
     size_t pixel_count_;

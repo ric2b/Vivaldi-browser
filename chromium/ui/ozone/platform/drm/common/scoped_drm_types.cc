@@ -4,6 +4,7 @@
 
 #include "ui/ozone/platform/drm/common/scoped_drm_types.h"
 
+#include <stdint.h>  // required by xf86drmMode.h
 #include <xf86drmMode.h>
 
 namespace ui {
@@ -42,8 +43,8 @@ void DrmPropertyDeleter::operator()(drmModePropertyRes* property) const {
 }
 
 #if defined(USE_DRM_ATOMIC)
-void DrmPropertySetDeleter::operator()(drmModePropertySet* property) const {
-  drmModePropertySetFree(property);
+void DrmAtomicReqDeleter::operator()(drmModeAtomicReq* property) const {
+  drmModeAtomicFree(property);
 }
 #endif  // defined(USE_DRM_ATOMIC)
 

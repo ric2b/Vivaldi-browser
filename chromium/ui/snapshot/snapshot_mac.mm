@@ -20,7 +20,7 @@ bool GrabViewSnapshot(gfx::NativeView view,
                       std::vector<unsigned char>* png_representation,
                       const gfx::Rect& snapshot_bounds) {
   NSWindow* window = [view window];
-  NSScreen* screen = [[NSScreen screens] objectAtIndex:0];
+  NSScreen* screen = [[NSScreen screens] firstObject];
   gfx::Rect screen_bounds = gfx::Rect(NSRectToCGRect([screen frame]));
 
 
@@ -54,7 +54,7 @@ bool GrabViewSnapshot(gfx::NativeView view,
 
   base::scoped_nsobject<NSBitmapImageRep> rep(
       [[NSBitmapImageRep alloc] initWithCGImage:windowSnapshot]);
-  NSData* data = [rep representationUsingType:NSPNGFileType properties:nil];
+  NSData* data = [rep representationUsingType:NSPNGFileType properties:@{}];
   const unsigned char* buf = static_cast<const unsigned char*>([data bytes]);
   NSUInteger length = [data length];
   if (buf == NULL || length == 0)

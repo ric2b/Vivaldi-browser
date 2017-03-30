@@ -5,7 +5,8 @@
 #ifndef MEDIA_CAST_SENDER_SOFTWARE_VIDEO_ENCODER_H_
 #define MEDIA_CAST_SENDER_SOFTWARE_VIDEO_ENCODER_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/memory/ref_counted.h"
 #include "media/cast/sender/sender_encoded_frame.h"
 
@@ -34,13 +35,10 @@ class SoftwareVideoEncoder {
                       SenderEncodedFrame* encoded_frame) = 0;
 
   // Update the encoder with a new target bit rate.
-  virtual void UpdateRates(uint32 new_bitrate) = 0;
+  virtual void UpdateRates(uint32_t new_bitrate) = 0;
 
   // Set the next frame to be a key frame.
   virtual void GenerateKeyFrame() = 0;
-
-  // Set the last frame to reference.
-  virtual void LatestFrameIdToReference(uint32 frame_id) = 0;
 };
 
 }  // namespace cast

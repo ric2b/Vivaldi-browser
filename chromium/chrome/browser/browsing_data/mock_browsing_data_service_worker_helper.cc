@@ -8,6 +8,7 @@
 
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -23,8 +24,8 @@ MockBrowsingDataServiceWorkerHelper::MockBrowsingDataServiceWorkerHelper(
 MockBrowsingDataServiceWorkerHelper::~MockBrowsingDataServiceWorkerHelper() {
 }
 
-void MockBrowsingDataServiceWorkerHelper::StartFetching(const base::Callback<
-    void(const std::list<content::ServiceWorkerUsageInfo>&)>& callback) {
+void MockBrowsingDataServiceWorkerHelper::StartFetching(
+    const FetchCallback& callback) {
   ASSERT_FALSE(callback.is_null());
   ASSERT_TRUE(callback_.is_null());
   callback_ = callback;
@@ -33,7 +34,7 @@ void MockBrowsingDataServiceWorkerHelper::StartFetching(const base::Callback<
 void MockBrowsingDataServiceWorkerHelper::DeleteServiceWorkers(
     const GURL& origin) {
   ASSERT_FALSE(callback_.is_null());
-  ASSERT_TRUE(origins_.find(origin) != origins_.end());
+  ASSERT_TRUE(ContainsKey(origins_, origin));
   origins_[origin] = false;
 }
 
@@ -60,15 +61,14 @@ void MockBrowsingDataServiceWorkerHelper::Notify() {
 }
 
 void MockBrowsingDataServiceWorkerHelper::Reset() {
-  for (std::map<GURL, bool>::iterator i = origins_.begin();
-       i != origins_.end(); ++i)
-    i->second = true;
+  for (auto& pair : origins_)
+    pair.second = true;
 }
 
 bool MockBrowsingDataServiceWorkerHelper::AllDeleted() {
-  for (std::map<GURL, bool>::const_iterator i = origins_.begin();
-       i != origins_.end(); ++i)
-    if (i->second)
+  for (const auto& pair : origins_) {
+    if (pair.second)
       return false;
+  }
   return true;
 }

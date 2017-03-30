@@ -4,28 +4,49 @@
 
 #include "components/html_viewer/touch_handler.h"
 
+#include "components/mus/public/interfaces/input_events.mojom.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebWidget.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/events/gesture_detection/motion_event_generic.h"
-#include "ui/mojo/events/input_events.mojom.h"
 
 namespace html_viewer {
 namespace {
 
-void SetPropertiesFromEvent(const mojo::Event& event,
+// TODO(rjkroege): Gesture recognition currently happens in the html_viewer.
+// In phase2, it will be relocated to MUS. Update this code at that time.
+void SetPropertiesFromEvent(const mus::mojom::Event& event,
                             ui::PointerProperties* properties) {
-  properties->id = event.pointer_data->pointer_id;
-  properties->x = event.pointer_data->x;
-  properties->y = event.pointer_data->y;
-  properties->raw_x = event.pointer_data->screen_x;
-  properties->raw_y = event.pointer_data->screen_y;
-  properties->pressure = event.pointer_data->pressure;
-  properties->SetAxesAndOrientation(event.pointer_data->radius_major,
-                                    event.pointer_data->radius_minor,
-                                    event.pointer_data->orientation);
+  if (event.pointer_data) {
+    properties->id = event.pointer_data->pointer_id;
+    if (event.pointer_data->location) {
+      properties->x = event.pointer_data->location->x;
+      properties->y = event.pointer_data->location->y;
+      properties->raw_x = event.pointer_data->location->screen_x;
+      properties->raw_y = event.pointer_data->location->screen_y;
+    }
+  }
+
+  if (event.pointer_data && event.pointer_data->brush_data &&
+      (event.pointer_data->kind == mus::mojom::POINTER_KIND_TOUCH ||
+       event.pointer_data->kind == mus::mojom::POINTER_KIND_PEN)) {
+    properties->pressure = event.pointer_data->brush_data->pressure;
+
+    // TODO(rjkroege): vary orientation for width, height.
+    properties->SetAxesAndOrientation(event.pointer_data->brush_data->width,
+                                      event.pointer_data->brush_data->height,
+                                      0.0);
+  } else {
+    if (event.flags & mus::mojom::EVENT_FLAGS_LEFT_MOUSE_BUTTON ||
+        event.flags & mus::mojom::EVENT_FLAGS_MIDDLE_MOUSE_BUTTON ||
+        event.flags & mus::mojom::EVENT_FLAGS_MIDDLE_MOUSE_BUTTON) {
+      properties->pressure = 0.5;
+    } else {
+      properties->pressure = 0.0;
+    }
+  }
   // TODO(sky): Add support for tool_type.
 }
 
@@ -41,7 +62,7 @@ TouchHandler::TouchHandler(blink::WebWidget* web_widget)
 TouchHandler::~TouchHandler() {
 }
 
-void TouchHandler::OnTouchEvent(const mojo::Event& event) {
+void TouchHandler::OnTouchEvent(const mus::mojom::Event& event) {
   if (!UpdateMotionEvent(event))
     return;
 
@@ -64,7 +85,7 @@ void TouchHandler::OnGestureEvent(const ui::GestureEventData& gesture) {
   web_widget_->handleInputEvent(web_gesture);
 }
 
-bool TouchHandler::UpdateMotionEvent(const mojo::Event& event) {
+bool TouchHandler::UpdateMotionEvent(const mus::mojom::Event& event) {
   ui::PointerProperties properties;
   SetPropertiesFromEvent(event, &properties);
 
@@ -76,7 +97,7 @@ bool TouchHandler::UpdateMotionEvent(const mojo::Event& event) {
   }
 
   switch (event.action) {
-    case mojo::EVENT_TYPE_POINTER_DOWN:
+    case mus::mojom::EVENT_TYPE_POINTER_DOWN:
       if (!current_motion_event_.get()) {
         current_motion_event_.reset(new ui::MotionEventGeneric(
             ui::MotionEvent::ACTION_DOWN, timestamp, properties));
@@ -94,7 +115,7 @@ bool TouchHandler::UpdateMotionEvent(const mojo::Event& event) {
       }
       return true;
 
-    case mojo::EVENT_TYPE_POINTER_UP: {
+    case mus::mojom::EVENT_TYPE_POINTER_UP: {
       if (!current_motion_event_.get()) {
         DVLOG(1) << "pointer up with no event, id=" << properties.id;
         return false;
@@ -114,7 +135,7 @@ bool TouchHandler::UpdateMotionEvent(const mojo::Event& event) {
       return true;
     }
 
-    case mojo::EVENT_TYPE_POINTER_MOVE: {
+    case mus::mojom::EVENT_TYPE_POINTER_MOVE: {
       if (!current_motion_event_.get()) {
         DVLOG(1) << "pointer move with no event, id=" << properties.id;
         return false;
@@ -131,7 +152,7 @@ bool TouchHandler::UpdateMotionEvent(const mojo::Event& event) {
       return true;
     }
 
-    case mojo::EVENT_TYPE_POINTER_CANCEL: {
+    case mus::mojom::EVENT_TYPE_POINTER_CANCEL: {
       if (!current_motion_event_.get()) {
         DVLOG(1) << "canel with no event, id=" << properties.id;
         return false;
@@ -163,21 +184,24 @@ void TouchHandler::SendMotionEventToGestureProvider() {
   blink::WebTouchEvent web_event = ui::CreateWebTouchEventFromMotionEvent(
       *current_motion_event_, result.did_generate_scroll);
   gesture_provider_.OnTouchEventAck(web_event.uniqueTouchEventId,
-                                    web_widget_->handleInputEvent(web_event));
+                                    web_widget_->handleInputEvent(web_event) !=
+                                        blink::WebInputEventResult::NotHandled);
 }
 
-void TouchHandler::PostProcessMotionEvent(const mojo::Event& event) {
+void TouchHandler::PostProcessMotionEvent(const mus::mojom::Event& event) {
   switch (event.action) {
-    case mojo::EVENT_TYPE_POINTER_UP: {
-      const int index = current_motion_event_->FindPointerIndexOfId(
-          event.pointer_data->pointer_id);
-      current_motion_event_->RemovePointerAt(index);
+    case mus::mojom::EVENT_TYPE_POINTER_UP: {
+      if (event.pointer_data) {
+        const int index = current_motion_event_->FindPointerIndexOfId(
+            event.pointer_data->pointer_id);
+        current_motion_event_->RemovePointerAt(index);
+      }
       if (current_motion_event_->GetPointerCount() == 0)
         current_motion_event_.reset();
       break;
     }
 
-    case mojo::EVENT_TYPE_POINTER_CANCEL:
+    case mus::mojom::EVENT_TYPE_POINTER_CANCEL:
       current_motion_event_.reset();
       break;
 

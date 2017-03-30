@@ -6,8 +6,10 @@
 #define CHROME_BROWSER_UI_WEBUI_OPTIONS_SYNC_SETUP_HANDLER_H_
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/sync/sync_startup_tracker.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
@@ -18,6 +20,10 @@ class SigninManagerBase;
 
 namespace content {
 class WebContents;
+}
+
+namespace signin_metrics {
+enum class AccessPoint;
 }
 
 class SyncSetupHandler : public options::OptionsPageUIHandler,
@@ -44,7 +50,7 @@ class SyncSetupHandler : public options::OptionsPageUIHandler,
       content::WebUI* web_ui);
 
   // Initializes the sync setup flow and shows the setup UI.
-  void OpenSyncSetup();
+  void OpenSyncSetup(const base::ListValue* args);
 
   // Shows advanced configuration dialog without going through sign in dialog.
   // Kicks the sync backend if necessary with showing spinner dialog until it
@@ -105,11 +111,12 @@ class SyncSetupHandler : public options::OptionsPageUIHandler,
   void HandleCloseTimeout(const base::ListValue* args);
 #if !defined(OS_CHROMEOS)
   // Displays the GAIA login form.
-  void DisplayGaiaLogin();
+  void DisplayGaiaLogin(signin_metrics::AccessPoint access_point);
 
   // When web-flow is enabled, displays the Gaia login form in a new tab.
   // This function is virtual so that tests can override.
-  virtual void DisplayGaiaLoginInNewTabOrWindow();
+  virtual void DisplayGaiaLoginInNewTabOrWindow(
+      signin_metrics::AccessPoint access_point);
 #endif
 
   // Helper routine that gets the Profile associated with this object (virtual
@@ -152,7 +159,7 @@ class SyncSetupHandler : public options::OptionsPageUIHandler,
 
   // The OneShotTimer object used to timeout of starting the sync backend
   // service.
-  scoped_ptr<base::OneShotTimer<SyncSetupHandler> > backend_start_timer_;
+  scoped_ptr<base::OneShotTimer> backend_start_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncSetupHandler);
 };

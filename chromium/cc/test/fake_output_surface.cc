@@ -23,11 +23,9 @@ FakeOutputSurface::FakeOutputSurface(
       num_sent_frames_(0),
       has_external_stencil_test_(false),
       suspended_for_recycle_(false),
-      framebuffer_(0) {
-  if (delegated_rendering) {
-    capabilities_.delegated_rendering = true;
-    capabilities_.max_frames_pending = 1;
-  }
+      framebuffer_(0),
+      overlay_candidate_validator_(nullptr) {
+  capabilities_.delegated_rendering = delegated_rendering;
 }
 
 FakeOutputSurface::FakeOutputSurface(
@@ -38,49 +36,42 @@ FakeOutputSurface::FakeOutputSurface(
       num_sent_frames_(0),
       has_external_stencil_test_(false),
       suspended_for_recycle_(false),
-      framebuffer_(0) {
-  if (delegated_rendering) {
-    capabilities_.delegated_rendering = true;
-    capabilities_.max_frames_pending = 1;
-  }
+      framebuffer_(0),
+      overlay_candidate_validator_(nullptr) {
+  capabilities_.delegated_rendering = delegated_rendering;
 }
 
 FakeOutputSurface::FakeOutputSurface(
     scoped_ptr<SoftwareOutputDevice> software_device,
     bool delegated_rendering)
-    : OutputSurface(software_device.Pass()),
+    : OutputSurface(std::move(software_device)),
       client_(NULL),
       num_sent_frames_(0),
       has_external_stencil_test_(false),
       suspended_for_recycle_(false),
-      framebuffer_(0) {
-  if (delegated_rendering) {
-    capabilities_.delegated_rendering = true;
-    capabilities_.max_frames_pending = 1;
-  }
+      framebuffer_(0),
+      overlay_candidate_validator_(nullptr) {
+  capabilities_.delegated_rendering = delegated_rendering;
 }
 
 FakeOutputSurface::FakeOutputSurface(
     scoped_refptr<ContextProvider> context_provider,
     scoped_ptr<SoftwareOutputDevice> software_device,
     bool delegated_rendering)
-    : OutputSurface(context_provider, software_device.Pass()),
+    : OutputSurface(context_provider, std::move(software_device)),
       client_(NULL),
       num_sent_frames_(0),
       has_external_stencil_test_(false),
       suspended_for_recycle_(false),
-      framebuffer_(0) {
-  if (delegated_rendering) {
-    capabilities_.delegated_rendering = true;
-    capabilities_.max_frames_pending = 1;
-  }
+      framebuffer_(0),
+      overlay_candidate_validator_(nullptr) {
+  capabilities_.delegated_rendering = delegated_rendering;
 }
 
 FakeOutputSurface::~FakeOutputSurface() {}
 
 void FakeOutputSurface::SwapBuffers(CompositorFrame* frame) {
-  if (frame->software_frame_data || frame->delegated_frame_data ||
-      !context_provider()) {
+  if (frame->delegated_frame_data || !context_provider()) {
     frame->AssignTo(&last_sent_frame_);
 
     if (last_sent_frame_.delegated_frame_data) {
@@ -146,6 +137,11 @@ bool FakeOutputSurface::HasExternalStencilTest() const {
 
 bool FakeOutputSurface::SurfaceIsSuspendForRecycle() const {
   return suspended_for_recycle_;
+}
+
+OverlayCandidateValidator* FakeOutputSurface::GetOverlayCandidateValidator()
+    const {
+  return overlay_candidate_validator_;
 }
 
 void FakeOutputSurface::SetMemoryPolicyToSetAtBind(

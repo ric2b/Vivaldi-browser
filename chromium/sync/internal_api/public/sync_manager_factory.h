@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/base/sync_export.h"
 
@@ -23,10 +24,10 @@ class SYNC_EXPORT SyncManagerFactory {
     ROLLBACK,   // Rollback sync manager
   };
 
-  SyncManagerFactory(MANAGER_TYPE type);
+  explicit SyncManagerFactory(MANAGER_TYPE type);
   virtual ~SyncManagerFactory();
 
-  virtual scoped_ptr<SyncManager> CreateSyncManager(std::string name);
+  virtual scoped_ptr<SyncManager> CreateSyncManager(const std::string& name);
 
  private:
   MANAGER_TYPE type_;

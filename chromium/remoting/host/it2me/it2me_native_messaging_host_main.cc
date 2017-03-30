@@ -4,25 +4,30 @@
 
 #include "remoting/host/it2me/it2me_native_messaging_host_main.h"
 
+#include <utility>
+
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "net/socket/ssl_server_socket.h"
 #include "remoting/base/breakpad.h"
-#include "remoting/base/resources.h"
 #include "remoting/host/chromoting_host_context.h"
 #include "remoting/host/host_exit_codes.h"
 #include "remoting/host/it2me/it2me_native_messaging_host.h"
 #include "remoting/host/logging.h"
 #include "remoting/host/native_messaging/native_messaging_pipe.h"
 #include "remoting/host/native_messaging/pipe_messaging_channel.h"
+#include "remoting/host/resources.h"
 #include "remoting/host/usage_stats_consent.h"
 
 #if defined(OS_LINUX)
 #include <gtk/gtk.h>
 #include <X11/Xlib.h>
+
+#include "base/linux_util.h"
 #endif  // defined(OS_LINUX)
 
 #if defined(OS_MACOSX)
@@ -65,7 +70,6 @@ int StartIt2MeNativeMessagingHost() {
 
   remoting::LoadResources("");
 
-  // Cannot use TOOLKIT_GTK because it is not defined when aura is enabled.
 #if defined(OS_LINUX)
   // Required in order for us to run multiple X11 threads.
   XInitThreads();
@@ -74,6 +78,10 @@ int StartIt2MeNativeMessagingHost() {
   // Continue windows. Calling with nullptr arguments because we don't have
   // any command line arguments for gtk to consume.
   gtk_init(nullptr, nullptr);
+
+  // Need to prime the host OS version value for linux to prevent IO on the
+  // network thread. base::GetLinuxDistro() caches the result.
+  base::GetLinuxDistro();
 #endif  // OS_LINUX
 
   // Enable support for SSL server sockets, which must be done while still
@@ -116,17 +124,17 @@ int StartIt2MeNativeMessagingHost() {
 
   // Set up the native messaging channel.
   scoped_ptr<extensions::NativeMessagingChannel> channel(
-      new PipeMessagingChannel(read_file.Pass(), write_file.Pass()));
+      new PipeMessagingChannel(std::move(read_file), std::move(write_file)));
 
   scoped_ptr<ChromotingHostContext> context =
       ChromotingHostContext::Create(new remoting::AutoThreadTaskRunner(
           message_loop.task_runner(), run_loop.QuitClosure()));
   scoped_ptr<extensions::NativeMessageHost> host(
-      new It2MeNativeMessagingHost(context.Pass(), factory.Pass()));
+      new It2MeNativeMessagingHost(std::move(context), std::move(factory)));
 
   host->Start(native_messaging_pipe.get());
 
-  native_messaging_pipe->Start(host.Pass(), channel.Pass());
+  native_messaging_pipe->Start(std::move(host), std::move(channel));
 
   // Run the loop until channel is alive.
   run_loop.Run();

@@ -4,7 +4,13 @@
 
 #include "sync/engine/process_updates_util.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <string>
+
 #include "base/location.h"
+#include "base/metrics/sparse_histogram.h"
 #include "sync/engine/syncer_proto_util.h"
 #include "sync/engine/syncer_types.h"
 #include "sync/engine/syncer_util.h"
@@ -15,6 +21,7 @@
 #include "sync/syncable/syncable_proto_util.h"
 #include "sync/syncable/syncable_util.h"
 #include "sync/util/cryptographer.h"
+#include "sync/util/data_type_histogram.h"
 
 namespace syncer {
 
@@ -47,7 +54,7 @@ namespace {
 // For more information, see FindLocalIdToUpdate().
 bool UpdateContainsNewVersion(syncable::BaseTransaction *trans,
                               const sync_pb::SyncEntity &update) {
-  int64 existing_version = -1; // The server always sends positive versions.
+  int64_t existing_version = -1;  // The server always sends positive versions.
   syncable::Entry existing_entry(trans, GET_BY_ID,
                                  SyncableIdFromProto(update.id_string()));
   if (existing_entry.good())
@@ -157,7 +164,6 @@ VerifyResult VerifyUpdate(
 bool ReverifyEntry(syncable::ModelNeutralWriteTransaction* trans,
                    const sync_pb::SyncEntity& entry,
                    syncable::ModelNeutralMutableEntry* same_id) {
-
   const bool deleted = entry.has_deleted() && entry.deleted();
   const bool is_directory = IsFolder(entry);
   const ModelType model_type = GetModelType(entry);
@@ -303,13 +309,20 @@ void ProcessDownloadedUpdates(
     if (verify_result != VERIFY_SUCCESS && verify_result != VERIFY_UNDELETE)
       continue;
     ProcessUpdate(**update_it, dir->GetCryptographer(trans), trans);
+    if ((*update_it)->ByteSize() > 0) {
+      SyncRecordDatatypeBin("DataUse.Sync.Download.Bytes",
+                            ModelTypeToHistogramInt(type),
+                            (*update_it)->ByteSize());
+    }
+    UMA_HISTOGRAM_SPARSE_SLOWLY("DataUse.Sync.Download.Count",
+                                ModelTypeToHistogramInt(type));
   }
 }
 
 void ExpireEntriesByVersion(syncable::Directory* dir,
                             syncable::ModelNeutralWriteTransaction* trans,
                             ModelType type,
-                            int64 version_watermark) {
+                            int64_t version_watermark) {
   syncable::Directory::Metahandles handles;
   dir->GetMetaHandlesOfType(trans, type, &handles);
   for (size_t i = 0; i < handles.size(); ++i) {

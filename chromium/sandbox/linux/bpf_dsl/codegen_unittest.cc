@@ -4,6 +4,9 @@
 
 #include "sandbox/linux/bpf_dsl/codegen.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <utility>
 #include <vector>
@@ -127,8 +130,7 @@ class ProgramTest : public ::testing::Test {
   // test case.
   void RunTest(CodeGen::Node head) {
     // Compile the program
-    CodeGen::Program program;
-    gen_.Compile(head, &program);
+    CodeGen::Program program = gen_.Compile(head);
 
     // Walk the program backwards, and compute the hash for each instruction.
     std::vector<Hash> prog_hashes(program.size());

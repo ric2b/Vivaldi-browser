@@ -8,6 +8,7 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/browser_url_handler.h"
@@ -49,7 +50,8 @@ void ShowSingletonTabOverwritingNTP(Browser* browser,
       browser->tab_strip_model()->GetActiveWebContents();
   if (contents) {
     const GURL& contents_url = contents->GetURL();
-    if ((contents_url == GURL(kChromeUINewTabURL) || IsInstantNTP(contents) ||
+    if ((contents_url == GURL(kChromeUINewTabURL) ||
+         search::IsInstantNTP(contents) ||
          contents_url == GURL(url::kAboutBlankURL)) &&
         GetIndexOfSingletonTab(&local_params) < 0) {
       local_params.disposition = CURRENT_TAB;

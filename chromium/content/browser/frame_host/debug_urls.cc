@@ -22,6 +22,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/url_constants.h"
 #include "ppapi/proxy/ppapi_messages.h"
+#include "third_party/kasko/kasko_features.h"
 #include "url/gurl.h"
 
 #if defined(ENABLE_PLUGINS)
@@ -42,7 +43,7 @@ const char kAsanCorruptHeapBlock[] = "/browser-corrupt-heap-block";
 const char kAsanCorruptHeap[] = "/browser-corrupt-heap";
 #endif
 
-#if defined(KASKO)
+#if BUILDFLAG(ENABLE_KASKO)
 // Define the Kasko debug URLs.
 const char kKaskoCrashDomain[] = "kasko";
 const char kKaskoSendReport[] = "/send-report";
@@ -66,9 +67,9 @@ void HandlePpapiFlashDebugURL(const GURL& url) {
 }
 
 bool IsKaskoDebugURL(const GURL& url) {
-#if defined(KASKO)
+#if BUILDFLAG(ENABLE_KASKO)
   return (url.is_valid() && url.SchemeIs(kChromeUIScheme) &&
-          url.DomainIs(kKaskoCrashDomain, sizeof(kKaskoCrashDomain) - 1) &&
+          url.DomainIs(kKaskoCrashDomain) &&
           url.path() == kKaskoSendReport);
 #else
   return false;
@@ -76,12 +77,27 @@ bool IsKaskoDebugURL(const GURL& url) {
 }
 
 void HandleKaskoDebugURL() {
-#if defined(KASKO)
+#if BUILDFLAG(ENABLE_KASKO)
+  // Signature of the exported crash key setting function.
+  using SetCrashKeyValueImplPtr = void(__cdecl *)(const wchar_t*,
+                                                  const wchar_t*);
   // Signature of an enhanced crash reporting function.
-  typedef void(__cdecl * ReportCrashWithProtobufPtr)(EXCEPTION_POINTERS*,
+  using ReportCrashWithProtobufPtr = void(__cdecl *)(EXCEPTION_POINTERS*,
                                                      const char*);
 
   HMODULE exe_hmodule = ::GetModuleHandle(NULL);
+
+  // First, set a crash key using the exported function reserved for Kasko
+  // clients (SyzyASAN for now).
+  SetCrashKeyValueImplPtr set_crash_key_value_impl =
+      reinterpret_cast<SetCrashKeyValueImplPtr>(
+          ::GetProcAddress(exe_hmodule, "SetCrashKeyValueImpl"));
+  if (set_crash_key_value_impl)
+    set_crash_key_value_impl(L"kasko-set-crash-key-value-impl", L"true");
+  else
+    NOTREACHED();
+
+  // Next, invoke a crash report via Kasko.
   ReportCrashWithProtobufPtr report_crash_with_protobuf =
       reinterpret_cast<ReportCrashWithProtobufPtr>(
           ::GetProcAddress(exe_hmodule, "ReportCrashWithProtobuf"));
@@ -101,7 +117,7 @@ bool IsAsanDebugURL(const GURL& url) {
 #endif
 
   if (!(url.is_valid() && url.SchemeIs(kChromeUIScheme) &&
-        url.DomainIs(kAsanCrashDomain, sizeof(kAsanCrashDomain) - 1) &&
+        url.DomainIs(kAsanCrashDomain) &&
         url.has_path())) {
     return false;
   }
@@ -162,7 +178,7 @@ bool HandleDebugURL(const GURL& url, ui::PageTransition transition) {
   bool is_telemetry_navigation =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           cc::switches::kEnableGpuBenchmarking) &&
-      (transition & ui::PAGE_TRANSITION_TYPED);
+      (PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED));
 
   if (!(transition & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR) &&
       !is_telemetry_navigation)
@@ -226,7 +242,8 @@ bool IsRendererDebugURL(const GURL& url) {
   if (url.SchemeIs(url::kJavaScriptScheme))
     return true;
 
-  return url == GURL(kChromeUICrashURL) ||
+  return url == GURL(kChromeUIBadCastCrashURL) ||
+         url == GURL(kChromeUICrashURL) ||
          url == GURL(kChromeUIDumpURL) ||
          url == GURL(kChromeUIKillURL) ||
          url == GURL(kChromeUIHangURL) ||

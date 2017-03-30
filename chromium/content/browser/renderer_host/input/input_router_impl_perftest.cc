@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/renderer_host/input/input_ack_handler.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
@@ -31,8 +34,12 @@ class NullInputAckHandler : public InputAckHandler {
   ~NullInputAckHandler() override {}
 
   // InputAckHandler
-  void OnKeyboardEventAck(const NativeWebKeyboardEvent& event,
+  void OnKeyboardEventAck(const NativeWebKeyboardEventWithLatencyInfo& event,
                           InputEventAckState ack_result) override {
+    ++ack_count_;
+  }
+  void OnMouseEventAck(const MouseEventWithLatencyInfo& event,
+                       InputEventAckState ack_result) override {
     ++ack_count_;
   }
   void OnWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
@@ -105,7 +112,6 @@ class NullIPCSender : public IPC::Sender {
   size_t sent_count_;
 };
 
-// TODO(jdduke): Use synthetic gesture pipeline, crbug.com/344598.
 typedef std::vector<WebGestureEvent> Gestures;
 Gestures BuildScrollSequence(size_t steps,
                              const gfx::Vector2dF& origin,
@@ -169,7 +175,7 @@ Touches BuildTouchSequence(size_t steps,
 
 class InputEventTimer {
  public:
-  InputEventTimer(const char* test_name, int64 event_count)
+  InputEventTimer(const char* test_name, int64_t event_count)
       : test_name_(test_name),
         event_count_(event_count),
         start_(base::TimeTicks::Now()) {}
@@ -187,7 +193,7 @@ class InputEventTimer {
 
  private:
   const char* test_name_;
-  int64 event_count_;
+  int64_t event_count_;
   base::TimeTicks start_;
   DISALLOW_COPY_AND_ASSIGN(InputEventTimer);
 };
@@ -253,7 +259,7 @@ class InputRouterImplPerfTest : public testing::Test {
 
   size_t AckCount() const { return ack_handler_->ack_count(); }
 
-  int64 NextLatencyID() { return ++last_input_id_; }
+  int64_t NextLatencyID() { return ++last_input_id_; }
 
   ui::LatencyInfo CreateLatencyInfo() {
     ui::LatencyInfo latency;
@@ -264,7 +270,6 @@ class InputRouterImplPerfTest : public testing::Test {
     return latency;
   }
 
-  // TODO(jdduke): Use synthetic gesture pipeline, crbug.com/344598.
   template <typename EventType>
   void SimulateEventSequence(const char* test_name,
                              const std::vector<EventType>& events,
@@ -327,7 +332,7 @@ class InputRouterImplPerfTest : public testing::Test {
   }
 
  private:
-  int64 last_input_id_;
+  int64_t last_input_id_;
   scoped_ptr<NullIPCSender> sender_;
   scoped_ptr<NullInputRouterClient> client_;
   scoped_ptr<NullInputAckHandler> ack_handler_;

@@ -5,7 +5,12 @@
 #ifndef CONTENT_BROWSER_APPCACHE_APPCACHE_REQUEST_HANDLER_H_
 #define CONTENT_BROWSER_APPCACHE_APPCACHE_REQUEST_HANDLER_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
 #include "content/browser/appcache/appcache_entry.h"
 #include "content/browser/appcache/appcache_host.h"
@@ -36,15 +41,17 @@ class CONTENT_EXPORT AppCacheRequestHandler
 
   // These are called on each request intercept opportunity.
   AppCacheURLRequestJob* MaybeLoadResource(
-      net::URLRequest* request, net::NetworkDelegate* network_delegate);
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate);
   AppCacheURLRequestJob* MaybeLoadFallbackForRedirect(
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate,
       const GURL& location);
   AppCacheURLRequestJob* MaybeLoadFallbackForResponse(
-      net::URLRequest* request, net::NetworkDelegate* network_delegate);
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate);
 
-  void GetExtraResponseInfo(int64* cache_id, GURL* manifest_url);
+  void GetExtraResponseInfo(int64_t* cache_id, GURL* manifest_url);
 
   // Methods to support cross site navigations.
   void PrepareForCrossSiteTransfer(int old_process_id);
@@ -68,12 +75,24 @@ class CONTENT_EXPORT AppCacheRequestHandler
 
   // Helpers to instruct a waiting job with what response to
   // deliver for the request we're handling.
-  void DeliverAppCachedResponse(const AppCacheEntry& entry, int64 cache_id,
-                                int64 group_id, const GURL& manifest_url,
+  void DeliverAppCachedResponse(const AppCacheEntry& entry,
+                                int64_t cache_id,
+                                int64_t group_id,
+                                const GURL& manifest_url,
                                 bool is_fallback,
                                 const GURL& namespace_entry_url);
   void DeliverNetworkResponse();
   void DeliverErrorResponse();
+
+  // Called just before the request is restarted. Grabs the reason for
+  // restarting, so can correctly continue to handle the request.
+  void OnPrepareToRestart();
+
+  // Helper method to create an AppCacheURLRequestJob and populate job_.
+  // Caller takes ownership of returned value.
+  scoped_ptr<AppCacheURLRequestJob> CreateJob(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate);
 
   // Helper to retrieve a pointer to the storage object.
   AppCacheStorage* storage() const;
@@ -85,23 +104,25 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // Main-resource loading -------------------------------------
   // Frame and SharedWorker main resources are handled here.
 
-  void MaybeLoadMainResource(net::URLRequest* request,
-                             net::NetworkDelegate* network_delegate);
+  scoped_ptr<AppCacheURLRequestJob> MaybeLoadMainResource(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate);
 
   // AppCacheStorage::Delegate methods
   void OnMainResponseFound(const GURL& url,
                            const AppCacheEntry& entry,
                            const GURL& fallback_url,
                            const AppCacheEntry& fallback_entry,
-                           int64 cache_id,
-                           int64 group_id,
+                           int64_t cache_id,
+                           int64_t group_id,
                            const GURL& mainfest_url) override;
 
   // Sub-resource loading -------------------------------------
   // Dedicated worker and all manner of sub-resources are handled here.
 
-  void MaybeLoadSubResource(net::URLRequest* request,
-                            net::NetworkDelegate* network_delegate);
+  scoped_ptr<AppCacheURLRequestJob> MaybeLoadSubResource(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate);
   void ContinueMaybeLoadSubResource();
 
   // AppCacheHost::Observer override
@@ -123,8 +144,8 @@ class CONTENT_EXPORT AppCacheRequestHandler
 
   // Info about the type of response we found for delivery.
   // These are relevant for both main and subresource requests.
-  int64 found_group_id_;
-  int64 found_cache_id_;
+  int64_t found_group_id_;
+  int64_t found_cache_id_;
   AppCacheEntry found_entry_;
   AppCacheEntry found_fallback_entry_;
   GURL found_namespace_entry_url_;
@@ -137,17 +158,30 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // request and any redirects will be handled by the network library.
   bool cache_entry_not_found_;
 
+  // True if the next time this request is started, the response should be
+  // delivered from the network, bypassing the AppCache. Cleared after the next
+  // intercept opportunity.
+  bool is_delivering_network_response_;
+
   // True if this->MaybeLoadResource(...) has been called in the past.
   bool maybe_load_resource_executed_;
 
-  // The job we use to deliver a response.
-  scoped_refptr<AppCacheURLRequestJob> job_;
+  // The job we use to deliver a response. Only NULL during the following times:
+  // 1) Before request has started a job.
+  // 2) Request is not being handled by appcache.
+  // 3) Request has been cancelled, and the job killed.
+  base::WeakPtr<AppCacheURLRequestJob> job_;
 
   // During a cross site navigation, we transfer ownership the AppcacheHost
   // from the old processes structures over to the new structures.
   scoped_ptr<AppCacheHost> host_for_cross_site_transfer_;
   int old_process_id_;
   int old_host_id_;
+
+  // Cached information about the response being currently served by the
+  // AppCache, if there is one.
+  int cache_id_;
+  GURL manifest_url_;
 
   friend class content::AppCacheRequestHandlerTest;
   DISALLOW_COPY_AND_ASSIGN(AppCacheRequestHandler);

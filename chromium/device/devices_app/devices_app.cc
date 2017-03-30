@@ -4,6 +4,9 @@
 
 #include "device/devices_app/devices_app.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
@@ -13,12 +16,10 @@
 #include "base/time/time.h"
 #include "device/core/device_client.h"
 #include "device/devices_app/usb/device_manager_impl.h"
-#include "device/devices_app/usb/public/cpp/device_manager_delegate.h"
 #include "device/usb/usb_service.h"
-#include "mojo/application/public/cpp/application_connection.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/error_handler.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/application_impl.h"
 #include "url/gurl.h"
 
 namespace device {
@@ -27,37 +28,7 @@ namespace {
 
 // The number of seconds to wait without any bound DeviceManagers before
 // exiting the app.
-const int64 kIdleTimeoutInSeconds = 10;
-
-// A usb::DeviceManagerDelegate implementation which provides origin-based
-// device access control.
-class USBDeviceManagerDelegate : public usb::DeviceManagerDelegate {
- public:
-  explicit USBDeviceManagerDelegate(const GURL& remote_url)
-      : remote_url_(remote_url) {}
-  ~USBDeviceManagerDelegate() override {}
-
- private:
-  // usb::DeviceManagerDelegate:
-  bool IsDeviceAllowed(const usb::DeviceInfo& device) override {
-    // Limited set of conditions to allow localhost connection for testing. This
-    // does not presume to catch all common local host strings.
-    if (remote_url_.host() == "127.0.0.1" || remote_url_.host() == "localhost")
-      return true;
-
-    // Also let browser apps and mojo apptests talk to all devices.
-    if (remote_url_.SchemeIs("system") ||
-        remote_url_ == GURL("mojo://devices_apptests/"))
-      return true;
-
-    // TODO(rockot/reillyg): Implement origin-based device access control.
-    return false;
-  }
-
-  GURL remote_url_;
-
-  DISALLOW_COPY_AND_ASSIGN(USBDeviceManagerDelegate);
-};
+const int64_t kIdleTimeoutInSeconds = 10;
 
 // A DeviceClient implementation to be constructed iff the app is not running
 // in an embedder that provides a DeviceClient (i.e. running as a standalone
@@ -66,14 +37,20 @@ class AppDeviceClient : public DeviceClient {
  public:
   explicit AppDeviceClient(
       scoped_refptr<base::SequencedTaskRunner> blocking_task_runner)
-      : usb_service_(UsbService::GetInstance(blocking_task_runner)) {}
+      : blocking_task_runner_(blocking_task_runner) {}
   ~AppDeviceClient() override {}
 
  private:
   // DeviceClient:
-  UsbService* GetUsbService() override { return usb_service_; }
+  UsbService* GetUsbService() override {
+    if (!usb_service_) {
+      usb_service_ = UsbService::Create(blocking_task_runner_);
+    }
+    return usb_service_.get();
+  }
 
-  UsbService* usb_service_;
+  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
+  scoped_ptr<UsbService> usb_service_;
 };
 
 }  // namespace
@@ -98,22 +75,15 @@ class DevicesApp::USBServiceInitializer {
   DISALLOW_COPY_AND_ASSIGN(USBServiceInitializer);
 };
 
-DevicesApp::DevicesApp(
-    scoped_refptr<base::SequencedTaskRunner> service_task_runner)
-    : app_impl_(nullptr),
-      service_task_runner_(service_task_runner),
-      active_device_manager_count_(0) {
-}
+DevicesApp::DevicesApp()
+    : app_impl_(nullptr), active_device_manager_count_(0) {}
 
 DevicesApp::~DevicesApp() {
 }
 
 void DevicesApp::Initialize(mojo::ApplicationImpl* app) {
   app_impl_ = app;
-  if (!service_task_runner_) {
-    service_initializer_.reset(new USBServiceInitializer);
-    service_task_runner_ = base::ThreadTaskRunnerHandle::Get();
-  }
+  service_initializer_.reset(new USBServiceInitializer);
   StartIdleTimer();
 }
 
@@ -130,13 +100,16 @@ void DevicesApp::Quit() {
 
 void DevicesApp::Create(mojo::ApplicationConnection* connection,
                         mojo::InterfaceRequest<usb::DeviceManager> request) {
-  scoped_ptr<usb::DeviceManagerDelegate> delegate(new USBDeviceManagerDelegate(
-      GURL(connection->GetRemoteApplicationURL())));
+  // Bind the new device manager to the connecting application's permission
+  // provider.
+  usb::PermissionProviderPtr permission_provider;
+  connection->ConnectToService(&permission_provider);
 
   // Owned by its message pipe.
   usb::DeviceManagerImpl* device_manager = new usb::DeviceManagerImpl(
-      request.Pass(), delegate.Pass(), service_task_runner_);
-  device_manager->set_error_handler(this);
+      std::move(permission_provider), std::move(request));
+  device_manager->set_connection_error_handler(
+      base::Bind(&DevicesApp::OnConnectionError, base::Unretained(this)));
 
   active_device_manager_count_++;
   idle_timeout_callback_.Cancel();
@@ -156,7 +129,7 @@ void DevicesApp::StartIdleTimer() {
   // Passing unretained |app_impl_| is safe here because |app_impl_| is
   // guaranteed to outlive |this|, and the callback is canceled if |this| is
   // destroyed.
-  idle_timeout_callback_.Reset(base::Bind(&mojo::ApplicationImpl::Terminate,
+  idle_timeout_callback_.Reset(base::Bind(&mojo::ApplicationImpl::Quit,
                                           base::Unretained(app_impl_)));
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, idle_timeout_callback_.callback(),

@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
@@ -60,7 +61,7 @@ bool ViewsContentMainDelegate::BasicStartupComplete(int* exit_code) {
 
 void ViewsContentMainDelegate::PreSandboxStartup() {
   base::FilePath ui_test_pak_path;
-  DCHECK(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+  CHECK(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
   ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 
   // Load content resources to provide, e.g., sandbox configuration data on Mac.

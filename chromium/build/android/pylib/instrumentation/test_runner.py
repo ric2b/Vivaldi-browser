@@ -4,26 +4,26 @@
 
 """Class for running instrumentation tests on a single device."""
 
+import collections
 import logging
 import os
 import re
-import sys
 import time
 
+from devil.android import device_errors
 from pylib import constants
 from pylib import flag_changer
 from pylib import valgrind_tools
 from pylib.base import base_test_result
 from pylib.base import base_test_runner
-from pylib.device import device_errors
+from pylib.constants import host_paths
 from pylib.instrumentation import instrumentation_test_instance
 from pylib.instrumentation import json_perf_parser
 from pylib.instrumentation import test_result
 from pylib.local.device import local_device_instrumentation_test_run
 
-sys.path.append(os.path.join(constants.DIR_SOURCE_ROOT, 'build', 'util', 'lib',
-                             'common'))
-import perf_tests_results_helper # pylint: disable=F0401
+with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
+  import perf_tests_results_helper # pylint: disable=import-error
 
 
 _PERF_TEST_ANNOTATION = 'PerfTest'
@@ -56,13 +56,17 @@ class TestRunner(base_test_runner.BaseTestRunner):
     self.coverage_dir = test_options.coverage_dir
     self.coverage_host_file = None
     self.options = test_options
+    package_info_candidates = [a for a in constants.PACKAGE_INFO.itervalues()
+                               if a.test_package == test_pkg.GetPackageName()]
+    assert len(package_info_candidates) < 2, (
+        'Multiple packages have the same test package')
+    self.package_info = (package_info_candidates[0] if package_info_candidates
+                         else None)
     self.test_pkg = test_pkg
     # Use the correct command line file for the package under test.
-    cmdline_file = [a.cmdline_file for a in constants.PACKAGE_INFO.itervalues()
-                    if a.test_package == self.test_pkg.GetPackageName()]
-    assert len(cmdline_file) < 2, 'Multiple packages have the same test package'
-    if len(cmdline_file) and cmdline_file[0]:
-      self.flags = flag_changer.FlagChanger(self.device, cmdline_file[0])
+    if self.package_info and self.package_info.cmdline_file:
+      self.flags = flag_changer.FlagChanger(
+          self.device, self.package_info.cmdline_file)
       if additional_flags:
         self.flags.AddFlags(additional_flags)
     else:
@@ -92,12 +96,10 @@ class TestRunner(base_test_runner.BaseTestRunner):
     """Sets up the test harness and device before all tests are run."""
     super(TestRunner, self).SetUp()
     if not self.device.HasRoot():
-      logging.warning('Unable to enable java asserts for %s, non rooted device',
+      logging.warning('Unable to enable java asserts for %s; run `adb root`.',
                       str(self.device))
     else:
       if self.device.SetJavaAsserts(self.options.set_asserts):
-        # TODO(jbudorick) How to best do shell restart after the
-        #                 android_commands refactor?
         self.device.RunShellCommand('stop')
         self.device.RunShellCommand('start')
         self.device.WaitUntilFullyBooted()
@@ -106,13 +108,16 @@ class TestRunner(base_test_runner.BaseTestRunner):
     # because it may have race condition when multiple processes are trying to
     # launch lighttpd with same port at same time.
     self.LaunchTestHttpServer(
-        os.path.join(constants.DIR_SOURCE_ROOT), self._lighttp_port)
+        os.path.join(host_paths.DIR_SOURCE_ROOT), self._lighttp_port)
     if self.flags:
-      self.flags.AddFlags(['--disable-fre', '--enable-test-intents'])
+      flags_to_add = ['--disable-fre', '--enable-test-intents']
+      if self.options.strict_mode and self.options.strict_mode != 'off':
+        flags_to_add.append('--strict-mode=' + self.options.strict_mode)
       if self.options.device_flags:
         with open(self.options.device_flags) as device_flags_file:
           stripped_flags = (l.strip() for l in device_flags_file)
-          self.flags.AddFlags([flag for flag in stripped_flags if flag])
+          flags_to_add.extend([flag for flag in stripped_flags if flag])
+      self.flags.AddFlags(flags_to_add)
 
   def TearDown(self):
     """Cleans up the test harness and saves outstanding data from test run."""
@@ -120,7 +125,7 @@ class TestRunner(base_test_runner.BaseTestRunner):
       self.flags.Restore()
     super(TestRunner, self).TearDown()
 
-  def TestSetup(self, test):
+  def TestSetup(self, test, flag_modifiers):
     """Sets up the test harness for running a particular test.
 
     Args:
@@ -130,8 +135,8 @@ class TestRunner(base_test_runner.BaseTestRunner):
     self._SetupIndividualTestTimeoutScale(test)
     self.tool.SetupEnvironment()
 
-    if self.flags and self._IsFreTest(test):
-      self.flags.RemoveFlags(['--disable-fre'])
+    if self.flags:
+      self.flags.PushFlags(add=flag_modifiers.add, remove=flag_modifiers.remove)
 
     # Make sure the forwarder is still running.
     self._RestartHttpServerForwarderIfNecessary()
@@ -154,7 +159,8 @@ class TestRunner(base_test_runner.BaseTestRunner):
       Whether the feature being tested is FirstRunExperience.
     """
     annotations = self.test_pkg.GetTestAnnotations(test)
-    return 'FirstRunExperience' == annotations.get('Feature', None)
+    feature = annotations.get('Feature', None)
+    return feature and 'FirstRunExperience' in feature['value']
 
   def _IsPerfTest(self, test):
     """Determines whether a test is a performance test.
@@ -166,6 +172,23 @@ class TestRunner(base_test_runner.BaseTestRunner):
       Whether the test is annotated as a performance test.
     """
     return _PERF_TEST_ANNOTATION in self.test_pkg.GetTestAnnotations(test)
+
+  def _GetTestCmdlineParameters(self, test):
+    """Determines whether the test is parameterized to be run with different
+       command-line flags.
+
+    Args:
+      test: The name of the test to be checked.
+
+    Returns:
+      The list of parameters.
+    """
+    annotations = self.test_pkg.GetTestAnnotations(test)
+    params = instrumentation_test_instance.ParseCommandLineFlagParameters(
+      annotations)
+    if not params:
+      params = [collections.namedtuple('Dummy', ['add', 'remove'])([], [])]
+    return params
 
   def SetupPerfMonitoringIfNeeded(self, test):
     """Sets up performance monitoring if the specified test requires it.
@@ -180,7 +203,7 @@ class TestRunner(base_test_runner.BaseTestRunner):
     self._logcat_monitor = self.device.GetLogcatMonitor()
     self._logcat_monitor.Start()
 
-  def TestTeardown(self, test, result):
+  def TestTeardown(self, test, results):
     """Cleans up the test harness after running a particular test.
 
     Depending on the options of this TestRunner this might handle performance
@@ -188,25 +211,29 @@ class TestRunner(base_test_runner.BaseTestRunner):
 
     Args:
       test: The name of the test that was just run.
-      result: result for this test.
+      results: results for this test.
     """
 
     self.tool.CleanUpEnvironment()
 
-    # The logic below relies on the test passing.
-    if not result or not result.DidRunPass():
+    if self.flags:
+      self.flags.Restore()
+
+    if not results:
       return
+    if results.DidRunPass():
+      self.TearDownPerfMonitoring(test)
 
-    self.TearDownPerfMonitoring(test)
-
-    if self.flags and self._IsFreTest(test):
-      self.flags.AddFlags(['--disable-fre'])
-
-    if self.coverage_dir:
-      self.device.PullFile(
-          self.coverage_device_file, self.coverage_host_file)
-      self.device.RunShellCommand(
-          'rm -f %s' % self.coverage_device_file)
+      if self.coverage_dir:
+        self.device.PullFile(
+            self.coverage_device_file, self.coverage_host_file)
+        self.device.RunShellCommand(
+            'rm -f %s' % self.coverage_device_file)
+    elif self.package_info:
+      apk_under_test = self.test_pkg.GetApkUnderTest()
+      permissions = apk_under_test.GetPermissions() if apk_under_test else None
+      self.device.ClearApplicationState(
+          self.package_info.package, permissions=permissions)
 
   def TearDownPerfMonitoring(self, test):
     """Cleans up performance monitoring if the specified test required it.
@@ -265,7 +292,8 @@ class TestRunner(base_test_runner.BaseTestRunner):
                                                     result['units'])
 
   def _SetupIndividualTestTimeoutScale(self, test):
-    timeout_scale = self._GetIndividualTestTimeoutScale(test)
+    timeout_scale = self.options.timeout_scale or 1
+    timeout_scale *= self._GetIndividualTestTimeoutScale(test)
     valgrind_tools.SetChromeTimeoutScale(self.device, timeout_scale)
 
   def _GetIndividualTestTimeoutScale(self, test):
@@ -274,14 +302,15 @@ class TestRunner(base_test_runner.BaseTestRunner):
     timeout_scale = 1
     if 'TimeoutScale' in annotations:
       try:
-        timeout_scale = int(annotations['TimeoutScale'])
+        timeout_scale = int(annotations['TimeoutScale']['value'])
       except ValueError:
-        logging.warning('Non-integer value of TimeoutScale ignored. (%s)'
-                        % annotations['TimeoutScale'])
+        logging.warning('Non-integer value of TimeoutScale ignored. (%s)',
+                        annotations['TimeoutScale']['value'])
     if self.options.wait_for_debugger:
       timeout_scale *= 100
     return timeout_scale
 
+  # pylint: disable=too-many-return-statements
   def _GetIndividualTestTimeoutSecs(self, test):
     """Returns the timeout in seconds for the given |test|."""
     annotations = self.test_pkg.GetTestAnnotations(test)
@@ -300,8 +329,8 @@ class TestRunner(base_test_runner.BaseTestRunner):
     if 'SmallTest' in annotations:
       return 1 * 60
 
-    logging.warn(("Test size not found in annotations for test '%s', using " +
-                  "1 minute for timeout.") % test)
+    logging.warn("Test size not found in annotations for test '%s', using " +
+                 "1 minute for timeout.", test)
     return 1 * 60
 
   def _RunTest(self, test, timeout):
@@ -318,8 +347,9 @@ class TestRunner(base_test_runner.BaseTestRunner):
     extras['class'] = test
     return self.device.StartInstrumentation(
         '%s/%s' % (self.test_pkg.GetPackageName(), self.options.test_runner),
-        raw=True, extras=extras, timeout=timeout, retries=3)
+        raw=True, extras=extras, timeout=timeout, retries=0)
 
+  # pylint: disable=no-self-use
   def _GenerateTestResult(self, test, instr_result_code, instr_result_bundle,
                           statuses, start_ms, duration_ms):
     results = instrumentation_test_instance.GenerateTestResults(
@@ -338,37 +368,57 @@ class TestRunner(base_test_runner.BaseTestRunner):
                self._GetIndividualTestTimeoutScale(test) *
                self.tool.GetTimeoutScale())
 
-    start_ms = 0
-    duration_ms = 0
-    try:
-      self.TestSetup(test)
-
+    cmdline_parameters = self._GetTestCmdlineParameters(test)
+    for flag_modifiers in cmdline_parameters:
+      start_ms = 0
+      duration_ms = 0
       try:
-        self.device.GoHome()
-      except device_errors.CommandTimeoutError:
-        logging.exception('Failed to focus the launcher.')
+        if self._IsFreTest(test):
+          flag_modifiers.remove.append('--disable-fre')
+        self.TestSetup(test, flag_modifiers)
 
-      time_ms = lambda: int(time.time() * 1000)
-      start_ms = time_ms()
-      raw_output = self._RunTest(test, timeout)
-      duration_ms = time_ms() - start_ms
+        try:
+          self.device.GoHome()
+        except device_errors.CommandTimeoutError:
+          logging.exception('Failed to focus the launcher.')
 
-      # Parse the test output
-      result_code, result_bundle, statuses = (
-          instrumentation_test_instance.ParseAmInstrumentRawOutput(raw_output))
-      result = self._GenerateTestResult(
-          test, result_code, result_bundle, statuses, start_ms, duration_ms)
-      if local_device_instrumentation_test_run.DidPackageCrashOnDevice(
-          self.test_pkg.GetPackageName(), self.device):
-        result.SetType(base_test_result.ResultType.CRASH)
-      results.AddResult(result)
-    except device_errors.CommandTimeoutError as e:
-      results.AddResult(test_result.InstrumentationTestResult(
+        time_ms = lambda: int(time.time() * 1000)
+        start_ms = time_ms()
+        raw_output = self._RunTest(test, timeout)
+        duration_ms = time_ms() - start_ms
+
+        # Parse the test output
+        result_code, result_bundle, statuses = (
+            instrumentation_test_instance.ParseAmInstrumentRawOutput(
+              raw_output))
+        result = self._GenerateTestResult(
+            test, result_code, result_bundle, statuses, start_ms, duration_ms)
+        if local_device_instrumentation_test_run.DidPackageCrashOnDevice(
+            self.test_pkg.GetPackageName(), self.device):
+          result.SetType(base_test_result.ResultType.CRASH)
+      except device_errors.CommandTimeoutError as e:
+        result = test_result.InstrumentationTestResult(
           test, base_test_result.ResultType.TIMEOUT, start_ms, duration_ms,
-          log=str(e) or 'No information'))
-    except device_errors.DeviceUnreachableError as e:
-      results.AddResult(test_result.InstrumentationTestResult(
-          test, base_test_result.ResultType.CRASH, start_ms, duration_ms,
-          log=str(e) or 'No information'))
-    self.TestTeardown(test, results)
+          log=str(e) or 'No information')
+        if self.package_info:
+          self.device.ForceStop(self.package_info.package)
+          self.device.ForceStop(self.package_info.test_package)
+      except device_errors.DeviceUnreachableError as e:
+        result = test_result.InstrumentationTestResult(
+            test, base_test_result.ResultType.CRASH, start_ms, duration_ms,
+            log=str(e) or 'No information')
+      if len(cmdline_parameters) > 1:
+        # Specify commandline flag modifications used in the test run
+        result_name = result.GetName()
+        if flag_modifiers.add:
+          result_name = '%s with {%s}' % (
+            result_name, ' '.join(flag_modifiers.add))
+        if flag_modifiers.remove:
+          result_name = '%s without {%s}' % (
+            result_name, ' '.join(flag_modifiers.remove))
+        result.SetName(result_name)
+      results.AddResult(result)
+
+      self.TestTeardown(test, results)
+
     return (results, None if results.DidRunPass() else test)

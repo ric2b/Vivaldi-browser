@@ -5,10 +5,12 @@
 #ifndef CC_TEST_FAKE_PICTURE_LAYER_H_
 #define CC_TEST_FAKE_PICTURE_LAYER_H_
 
+#include <stddef.h>
+
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/layers/picture_layer.h"
-#include "cc/playback/recording_source.h"
+#include "cc/playback/display_list_recording_source.h"
 
 namespace cc {
 class FakePictureLayer : public PictureLayer {
@@ -21,9 +23,9 @@ class FakePictureLayer : public PictureLayer {
   static scoped_refptr<FakePictureLayer> CreateWithRecordingSource(
       const LayerSettings& settings,
       ContentLayerClient* client,
-      scoped_ptr<RecordingSource> source) {
+      scoped_ptr<DisplayListRecordingSource> source) {
     return make_scoped_refptr(
-        new FakePictureLayer(settings, client, source.Pass()));
+        new FakePictureLayer(settings, client, std::move(source)));
   }
 
   scoped_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
@@ -38,29 +40,20 @@ class FakePictureLayer : public PictureLayer {
     always_update_resources_ = always_update_resources;
   }
 
-  void disable_lcd_text() { disable_lcd_text_ = true; }
-
   bool Update() override;
 
   void PushPropertiesTo(LayerImpl* layer) override;
-
-  void OnOutputSurfaceCreated() override;
-  size_t output_surface_created_count() const {
-    return output_surface_created_count_;
-  }
 
  private:
   FakePictureLayer(const LayerSettings& settings, ContentLayerClient* client);
   FakePictureLayer(const LayerSettings& settings,
                    ContentLayerClient* client,
-                   scoped_ptr<RecordingSource> source);
+                   scoped_ptr<DisplayListRecordingSource> source);
   ~FakePictureLayer() override;
 
   int update_count_;
   size_t push_properties_count_;
-  size_t output_surface_created_count_;
   bool always_update_resources_;
-  bool disable_lcd_text_;
 };
 
 }  // namespace cc

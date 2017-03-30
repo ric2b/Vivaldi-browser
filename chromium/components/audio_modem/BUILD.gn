@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-static_library("audio_modem") {
+source_set("audio_modem") {
   sources = [
     "audio_modem_switches.cc",
     "audio_modem_switches.h",
@@ -22,13 +22,15 @@ static_library("audio_modem") {
 
   deps = [
     "//base",
-    "//content",
+    "//content/public/browser",
     "//media",
+    "//media:shared_memory_support",
     "//third_party/webrtc/common_audio",
   ]
 }
 
-static_library("audio_modem_test_support") {
+source_set("test_support") {
+  testonly = true
   sources = [
     "test/random_samples.cc",
     "test/random_samples.h",
@@ -38,8 +40,32 @@ static_library("audio_modem_test_support") {
     "test/stub_whispernet_client.h",
   ]
 
+  public_deps = [
+    ":audio_modem",
+  ]
   deps = [
     "//base",
     "//media",
+    "//media:shared_memory_support",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "audio_player_unittest.cc",
+    "audio_recorder_unittest.cc",
+    "modem_unittest.cc",
+  ]
+
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    ":test_support",
+    "//base",
+    "//content/test:test_support",
+    "//media",
+    "//media:shared_memory_support",
+    "//testing/gtest",
   ]
 }

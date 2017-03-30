@@ -6,6 +6,7 @@
 
 #include "base/mac/scoped_nsobject.h"
 #import "ios/web/public/test/crw_test_js_injection_receiver.h"
+#include "ios/web/public/test/scoped_testing_web_client.h"
 #include "ios/web/public/web_client.h"
 #import "ios/web/web_state/js/page_script_util.h"
 #import "testing/gtest_mac.h"
@@ -15,24 +16,23 @@ namespace web {
 namespace {
 
 class CRWJSEarlyScriptManagerTest : public PlatformTest {
+ public:
+  CRWJSEarlyScriptManagerTest() : web_client_(make_scoped_ptr(new WebClient)) {}
+
  protected:
   void SetUp() override {
     PlatformTest::SetUp();
-    SetWebClient(&web_client_);
     receiver_.reset([[CRWTestJSInjectionReceiver alloc] init]);
     earlyScriptManager_.reset(static_cast<CRWJSEarlyScriptManager*>(
         [[receiver_ instanceOfClass:[CRWJSEarlyScriptManager class]] retain]));
   }
-  void TearDown() override {
-    SetWebClient(nullptr);
-    PlatformTest::TearDown();
-  }
+
   // Required for CRWJSEarlyScriptManager creation.
   base::scoped_nsobject<CRWTestJSInjectionReceiver> receiver_;
   // Testable CRWJSEarlyScriptManager.
   base::scoped_nsobject<CRWJSEarlyScriptManager> earlyScriptManager_;
   // WebClient required for getting early page script.
-  WebClient web_client_;
+  ScopedTestingWebClient web_client_;
 };
 
 // Tests that CRWJSEarlyScriptManager's content is the same as returned by
@@ -43,9 +43,6 @@ TEST_F(CRWJSEarlyScriptManagerTest, Content) {
   // |earlyScript| is a substring of |injectionContent|. The latter wraps the
   // former with "if (typeof __gCrWeb !== 'object')" check to avoid multiple
   // injections.
-  // TODO(justincohen): Cast indexOfObject to work around Xcode beta bugs.
-  // Revisit in future betas where hopefully these types match again.
-  // crbug.com/498825
   EXPECT_NE(NSNotFound,
             static_cast<NSInteger>(
                 [injectionContent rangeOfString:earlyScript].location));

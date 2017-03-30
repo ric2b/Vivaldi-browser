@@ -377,6 +377,18 @@ message PolicyData {
   // The unique directory api ID of the device which was generated on the
   // server-side.
   optional string directory_api_id = 22;
+  
+  // List of device affiliation IDs. If exists overlap between user
+  // affiliation IDs and device affiliation IDs, we consider that the user is
+  // affiliated on the device. Otherwise the user is not affiliated on the
+  // device. Should be fetched with device policy. Ignored if fetched with 
+  // other polices.
+  repeated string device_affiliation_ids = 23;
+  
+  // List of user affiliation IDs. The list is used to define if current user
+  // is affiliated on the device. See device_affiliation_ids for details. 
+  // Should be fetched with user policy. Ignored if fetched with other polices.
+  repeated string user_affiliation_ids = 24;
 }
 
 message PolicyFetchResponse {
@@ -674,6 +686,14 @@ message VolumeInfo {
   optional int64 storage_free = 3;
 }
 
+// Information about a single CPU temperature channel.
+message CPUTempInfo {
+  // Temperature channel label.
+  optional string cpu_label = 1;
+  // CPU temperature in Celsius.
+  optional int32 cpu_temp = 2;
+}
+
 // Report device level status.
 message DeviceStatusReportRequest {
   // The OS version reported by the device is a platform version
@@ -722,6 +742,9 @@ message DeviceStatusReportRequest {
 
   // Samples of free RAM [in bytes] (unreliable due to GC).
   repeated int64 system_ram_free = 15;
+
+  // CPU temp information.
+  repeated CPUTempInfo cpu_temp_info = 16;
 }
 
 // Provides status information for an installed app/extension.
@@ -998,6 +1021,15 @@ message DeviceAttributeUpdateResponse {
   optional ResultType result = 1;
 }
 
+// Sent by the client to server to update the mapping from GCM id to device_id
+// on the server side.
+message GcmIdUpdateRequest {
+  optional string gcm_id = 1;
+}
+
+// Response for GcmIdUpdateRequest, an empty message for now.
+message GcmIdUpdateResponse {}
+
 // Request from the DMAgent on the device to the DMServer.  This is
 // container for all requests from device to server.  The overall HTTP
 // request MUST be in the following format:
@@ -1020,6 +1052,7 @@ message DeviceAttributeUpdateResponse {
 //     * remote_commands
 //     * attribute_update_permission
 //     * attribute_update
+//     * gcm_id_update
 //
 //   * devicetype: MUST BE "1" for Android or "2" for Chrome OS.
 //   * apptype: MUST BE Android or Chrome.
@@ -1029,7 +1062,8 @@ message DeviceAttributeUpdateResponse {
 //   * For register and ping requests
 //     Authorization: GoogleLogin auth=<auth cookie for Mobile Sync>
 //
-//   * For unregister, policy, status, cert_upload and remote commands requests
+//   * For unregister, policy, status, cert_upload, remote commands requests,
+//     and gcm id update requests
 //      Authorization: GoogleDMToken token=<dm token from register>
 //
 //   * The Authorization header isn't used for enterprise_check
@@ -1052,6 +1086,7 @@ message DeviceAttributeUpdateResponse {
 //   remote_commands: remote_command_request
 //   attribute_update_permission: device_attribute_update_permission_request
 //   attribute_update: device_attribute_update_request
+//   gcm_id_update: gcm_id_update_request
 //
 message DeviceManagementRequest {
   // Register request.
@@ -1098,6 +1133,9 @@ message DeviceManagementRequest {
   // Update device attribute.
   optional DeviceAttributeUpdateRequest device_attribute_update_request
       = 15;
+
+  // Update the GCM id to device_id mapping.
+  optional GcmIdUpdateRequest gcm_id_update_request = 16;
 }
 
 // Response from server to device.
@@ -1162,4 +1200,7 @@ message DeviceManagementResponse {
 
   // Response to update device attribute.
   optional DeviceAttributeUpdateResponse device_attribute_update_response = 16;
+
+  // Response to GCM id update request.
+  optional GcmIdUpdateResponse gcm_id_update_response = 17;
 }

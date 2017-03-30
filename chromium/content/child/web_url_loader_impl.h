@@ -9,6 +9,7 @@
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "content/public/common/resource_response.h"
+#include "net/url_request/redirect_info.h"
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "url/gurl.h"
 
@@ -35,15 +36,22 @@ struct StreamOverrideParameters {
 class CONTENT_EXPORT WebURLLoaderImpl
     : public NON_EXPORTED_BASE(blink::WebURLLoader) {
  public:
-  explicit WebURLLoaderImpl(
-      ResourceDispatcher* resource_dispatcher,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+
+  // Takes ownership of |web_task_runner|.
+  WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
+                   scoped_ptr<blink::WebTaskRunner> web_task_runner);
   ~WebURLLoaderImpl() override;
 
-  static void PopulateURLResponse(
-      const GURL& url,
-      const ResourceResponseInfo& info,
-      blink::WebURLResponse* response);
+  static void PopulateURLResponse(const GURL& url,
+                                  const ResourceResponseInfo& info,
+                                  blink::WebURLResponse* response,
+                                  bool report_security_info);
+  static void PopulateURLRequestForRedirect(
+      const blink::WebURLRequest& request,
+      const net::RedirectInfo& redirect_info,
+      blink::WebReferrerPolicy referrer_policy,
+      bool skip_service_worker,
+      blink::WebURLRequest* new_request);
 
   // WebURLLoader methods:
   void loadSynchronously(
@@ -60,6 +68,7 @@ class CONTENT_EXPORT WebURLLoaderImpl
                          int intra_priority_value) override;
   bool attachThreadedDataReceiver(
       blink::WebThreadedDataReceiver* threaded_data_receiver) override;
+  void setLoadingTaskRunner(blink::WebTaskRunner* loading_task_runner) override;
 
  private:
   class Context;

@@ -4,9 +4,12 @@
 
 #include "ui/gfx/path_win.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/win/scoped_gdi_object.h"
 #include "skia/ext/skia_utils_win.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -79,7 +82,7 @@ TEST(CreateHRGNFromSkPathTest, RoundCornerTest) {
   rrect.setRectXY(SkRect::MakeWH(50, 50), 20, 20);
   path.addRRect(rrect);
   base::win::ScopedRegion region(CreateHRGNFromSkPath(path));
-  const std::vector<SkIRect>& region_rects = GetRectsFromHRGN(region);
+  const std::vector<SkIRect>& region_rects = GetRectsFromHRGN(region.get());
   EXPECT_EQ(arraysize(rects), region_rects.size());
   for (size_t i = 0; i < arraysize(rects) && i < region_rects.size(); ++i)
     EXPECT_EQ(rects[i], region_rects[i]);
@@ -98,7 +101,7 @@ TEST(CreateHRGNFromSkPathTest, NonContiguousPath) {
     path.addRect(SkRect::Make(rect));
   }
   base::win::ScopedRegion region(CreateHRGNFromSkPath(path));
-  const std::vector<SkIRect>& region_rects = GetRectsFromHRGN(region);
+  const std::vector<SkIRect>& region_rects = GetRectsFromHRGN(region.get());
   ASSERT_EQ(arraysize(rects), region_rects.size());
   for (size_t i = 0; i < arraysize(rects); ++i)
     EXPECT_EQ(rects[i], region_rects[i]);
@@ -109,7 +112,7 @@ TEST(CreateHRGNFromSkPathTest, EmptyPath) {
   Path path;
   base::win::ScopedRegion empty_region(::CreateRectRgn(0, 0, 0, 0));
   base::win::ScopedRegion region(CreateHRGNFromSkPath(path));
-  EXPECT_TRUE(::EqualRgn(empty_region, region));
+  EXPECT_TRUE(::EqualRgn(empty_region.get(), region.get()));
 }
 
 }  // namespace gfx

@@ -7,10 +7,11 @@
 
 #include <map>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"
+#include "media/base/media_log.h"
 #include "media/base/stream_parser.h"
 #include "media/filters/chunk_demuxer.h"
 
@@ -33,7 +34,8 @@ class MEDIA_EXPORT FrameProcessor {
     kVideoTrackId = -3
   };
 
-  explicit FrameProcessor(const UpdateDurationCB& update_duration_cb);
+  FrameProcessor(const UpdateDurationCB& update_duration_cb,
+                 const scoped_refptr<MediaLog>& media_log);
   ~FrameProcessor();
 
   // Get/set the current append mode, which if true means "sequence" and if
@@ -151,7 +153,7 @@ class MEDIA_EXPORT FrameProcessor {
   // Per http://www.w3.org/TR/media-source/#widl-SourceBuffer-mode:
   // Controls how a sequence of media segments are handled. This is initially
   // set to false ("segments").
-  bool sequence_mode_;
+  bool sequence_mode_ = false;
 
   // Tracks the MSE coded frame processing variable of same name.
   // Initially kNoTimestamp(), meaning "unset".
@@ -164,6 +166,13 @@ class MEDIA_EXPORT FrameProcessor {
   base::TimeDelta group_end_timestamp_;
 
   UpdateDurationCB update_duration_cb_;
+
+  // MediaLog for reporting messages and properties to debug content and engine.
+  scoped_refptr<MediaLog> media_log_;
+
+  // Counters that limit spam to |media_log_| for frame processor warnings.
+  int num_dropped_preroll_warnings_ = 0;
+  int num_dts_beyond_pts_warnings_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(FrameProcessor);
 };

@@ -5,10 +5,13 @@
 #ifndef EXTENSIONS_BROWSER_EXTENSION_HOST_H_
 #define EXTENSIONS_BROWSER_EXTENSION_HOST_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/timer/elapsed_timer.h"
@@ -91,11 +94,11 @@ class ExtensionHost : public DeferredStartRenderHost,
 
   // Called by the ProcessManager when a network request is started by the
   // extension corresponding to this ExtensionHost.
-  void OnNetworkRequestStarted(uint64 request_id);
+  void OnNetworkRequestStarted(uint64_t request_id);
 
   // Called by the ProcessManager when a previously started network request is
   // finished.
-  void OnNetworkRequestDone(uint64 request_id);
+  void OnNetworkRequestDone(uint64_t request_id);
 
   // content::WebContentsObserver:
   bool OnMessageReceived(const IPC::Message& message,
@@ -128,9 +131,14 @@ class ExtensionHost : public DeferredStartRenderHost,
   bool IsNeverVisible(content::WebContents* web_contents) override;
 
   // ExtensionRegistryObserver:
+  void OnExtensionReady(content::BrowserContext* browser_context,
+                        const Extension* extension) override;
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const Extension* extension,
                            UnloadedExtensionInfo::Reason reason) override;
+
+  // ExtensionFunctionDispatcher::Delegate
+  content::WebContents* GetAssociatedWebContents() const override;
 
  protected:
   // Called each time this ExtensionHost completes a load finishes loading,
@@ -142,6 +150,13 @@ class ExtensionHost : public DeferredStartRenderHost,
 
   // Returns true if we're hosting a background page.
   virtual bool IsBackgroundPage() const;
+
+#ifdef VIVALDI_BUILD
+  // Sets the |host_contents_| and |render_view_| members.
+  void SetHostContentsAndRenderView(content::WebContents *web_contents);
+  // Releases the |host_contents_| member.
+  void ReleaseHostContents();
+#endif //VIVALDI_BUILD
 
  private:
   // DeferredStartRenderHost:
@@ -174,10 +189,16 @@ class ExtensionHost : public DeferredStartRenderHost,
   // The host for our HTML content.
   scoped_ptr<content::WebContents> host_contents_;
 
+  // NOTE(andre@vivaldi.com): The owner used when creating guest WebContents.
+  scoped_ptr<content::WebContents> guest_owner_contents_;
+
   // A weak pointer to the current or pending RenderViewHost. We don't access
   // this through the host_contents because we want to deal with the pending
   // host, so we can send messages to it before it finishes loading.
   content::RenderViewHost* render_view_host_;
+
+  // Whether CreateRenderViewNow was called before the extension was ready.
+  bool is_render_view_creation_pending_;
 
   // Whether the ExtensionHost has finished loading some content at least once.
   // There may be subsequent loads - such as reloads and navigations - and this

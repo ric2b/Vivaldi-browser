@@ -3,13 +3,6 @@
 # found in the LICENSE file.
 {
   'conditions': [
-    ['OS=="android"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/locales/en-US.pak',
-        ],
-      },
-    }],
     ['OS=="linux" or OS=="mac" or OS=="win"', {
       'variables': {
         'command': [
@@ -29,7 +22,6 @@
           '../third_party/pywebsocket/',
           '../third_party/tlslite/',
           '<(PRODUCT_DIR)/pyproto/google/',
-          '<(PRODUCT_DIR)/sync_unit_tests<(EXECUTABLE_SUFFIX)',
         ],
       },
     }],

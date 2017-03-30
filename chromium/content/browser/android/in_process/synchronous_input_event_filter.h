@@ -5,7 +5,6 @@
 #ifndef CONTENT_BROWSER_ANDROID_IN_PROCESS_SYNCHRONOUS_INPUT_EVENT_FILTER_H_
 #define CONTENT_BROWSER_ANDROID_IN_PROCESS_SYNCHRONOUS_INPUT_EVENT_FILTER_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "content/common/input/input_event_ack_state.h"
@@ -14,6 +13,10 @@
 
 namespace blink {
 class WebInputEvent;
+}
+
+namespace ui {
+class SynchronousInputHandlerProxy;
 }
 
 namespace content {
@@ -33,8 +36,10 @@ class SynchronousInputEventFilter : public InputHandlerManagerClient {
 
   // InputHandlerManagerClient implementation.
   void SetBoundHandler(const Handler& handler) override;
-  void DidAddInputHandler(int routing_id,
-                          cc::InputHandler* input_handler) override;
+  void DidAddInputHandler(
+      int routing_id,
+      ui::SynchronousInputHandlerProxy*
+          synchronous_input_handler_proxy) override;
   void DidRemoveInputHandler(int routing_id) override;
   void DidOverscroll(int routing_id,
                      const DidOverscrollParams& params) override;

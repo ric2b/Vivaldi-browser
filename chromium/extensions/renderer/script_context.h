@@ -6,11 +6,13 @@
 #define EXTENSIONS_RENDERER_SCRIPT_CONTEXT_H_
 
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/threading/thread_checker.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/renderer/module_system.h"
@@ -31,11 +33,18 @@ class RenderFrame;
 
 namespace extensions {
 class Extension;
-class ExtensionSet;
 
-// Extensions wrapper for a v8 context.
+// Extensions wrapper for a v8::Context.
+//
+// v8::Contexts can be constructed on any thread, and must only be accessed or
+// destroyed that thread.
+//
+// Note that ScriptContexts bound to worker threads will not have the full
+// functionality as those bound to the main RenderThread.
 class ScriptContext : public RequestSender::Source {
  public:
+  using RunScriptExceptionHandler = base::Callback<void(const v8::TryCatch&)>;
+
   ScriptContext(const v8::Local<v8::Context>& context,
                 blink::WebLocalFrame* frame,
                 const Extension* extension,
@@ -48,8 +57,7 @@ class ScriptContext : public RequestSender::Source {
   // as declared in each Extension's manifest.
   // TODO(kalman): Delete this when crbug.com/466373 is fixed.
   // See comment in HasAccessOrThrowError.
-  static bool IsSandboxedPage(const ExtensionSet& extension_set,
-                              const GURL& url);
+  static bool IsSandboxedPage(const GURL& url);
 
   // Clears the WebFrame for this contexts and invalidates the associated
   // ModuleSystem.
@@ -82,7 +90,7 @@ class ScriptContext : public RequestSender::Source {
   }
 
   void set_module_system(scoped_ptr<ModuleSystem> module_system) {
-    module_system_ = module_system.Pass();
+    module_system_ = std::move(module_system);
   }
 
   ModuleSystem* module_system() { return module_system_.get(); }
@@ -111,9 +119,6 @@ class ScriptContext : public RequestSender::Source {
 
   void DispatchEvent(const char* event_name, v8::Local<v8::Array> args) const;
 
-  // Fires the onunload event on the unload_event module.
-  void DispatchOnUnloadEvent();
-
   // Returns the availability of the API |api_name|.
   Feature::Availability GetAvailability(const std::string& api_name);
 
@@ -131,10 +136,16 @@ class ScriptContext : public RequestSender::Source {
   // of WebDocument::securityOrigin():
   //  - The URL can change (e.g. pushState) but the origin cannot. Luckily it
   //    appears as though callers don't make security decisions based on the
-  //    result of GetURL() so it's not a problem... yet.
+  //    result of url() so it's not a problem... yet.
   //  - Origin is the correct check to be making.
   //  - It might let us remove the about:blank resolving?
-  GURL GetURL() const;
+  const GURL& url() const { return url_; }
+
+  // Sets the URL of this ScriptContext. Usually this will automatically be set
+  // on construction, unless this isn't constructed with enough information to
+  // determine the URL (e.g. frame was null).
+  // TODO(kalman): Make this a constructor parameter (as an origin).
+  void set_url(const GURL& url) { url_ = url; }
 
   // Returns whether the API |api| or any part of the API could be
   // available in this context without taking into account the context's
@@ -162,7 +173,9 @@ class ScriptContext : public RequestSender::Source {
                           const std::string& error) override;
 
   // Grants a set of content capabilities to this context.
-  void SetContentCapabilities(const APIPermissionSet& permissions);
+  void set_content_capabilities(const APIPermissionSet& capabilities) {
+    content_capabilities_ = capabilities;
+  }
 
   // Indicates if this context has an effective API permission either by being
   // a context for an extension which has that permission, or by being a web
@@ -177,6 +190,17 @@ class ScriptContext : public RequestSender::Source {
 
   // Returns a string representation of this ScriptContext, for debugging.
   std::string GetDebugString() const;
+
+  // Gets the current stack trace as a multi-line string to be logged.
+  std::string GetStackTraceAsString() const;
+
+  // Runs |code|, labelling the script that gets created as |name| (the name is
+  // used in the devtools and stack traces). |exception_handler| will be called
+  // re-entrantly if an exception is thrown during the script's execution.
+  v8::Local<v8::Value> RunScript(
+      v8::Local<v8::String> name,
+      v8::Local<v8::String> code,
+      const RunScriptExceptionHandler& exception_handler);
 
  private:
   class Runner;
@@ -224,6 +248,8 @@ class ScriptContext : public RequestSender::Source {
   GURL url_;
 
   scoped_ptr<Runner> runner_;
+
+  base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(ScriptContext);
 };

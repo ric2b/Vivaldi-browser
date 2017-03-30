@@ -5,6 +5,8 @@
 #ifndef UI_MESSAGE_CENTER_NOTIFICATION_H_
 #define UI_MESSAGE_CENTER_NOTIFICATION_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -16,6 +18,7 @@
 #include "ui/message_center/notification_delegate.h"
 #include "ui/message_center/notification_types.h"
 #include "ui/message_center/notifier_settings.h"
+#include "url/gurl.h"
 
 namespace message_center {
 
@@ -62,6 +65,7 @@ class MESSAGE_CENTER_EXPORT Notification {
                const base::string16& message,
                const gfx::Image& icon,
                const base::string16& display_source,
+               const GURL& origin_url,
                const NotifierId& notifier_id,
                const RichNotificationData& optional_fields,
                NotificationDelegate* delegate);
@@ -73,7 +77,7 @@ class MESSAGE_CENTER_EXPORT Notification {
   virtual ~Notification();
 
   // Copies the internal on-memory state from |base|, i.e. shown_as_popup,
-  // is_read, and never_timeout.
+  // is_read and never_timeout.
   void CopyState(Notification* base);
 
   NotificationType type() const { return type_; }
@@ -91,6 +95,11 @@ class MESSAGE_CENTER_EXPORT Notification {
 
   const base::string16& message() const { return message_; }
   void set_message(const base::string16& message) { message_ = message; }
+
+  // The origin URL of the script which requested the notification.
+  // Can be empty if the notification is requested by an extension or
+  // Chrome app.
+  const GURL& origin_url() const { return origin_url_; }
 
   // A display string for the source of the notification.
   const base::string16& display_source() const { return display_source_; }
@@ -123,12 +132,16 @@ class MESSAGE_CENTER_EXPORT Notification {
     optional_fields_.timestamp = timestamp;
   }
 
-  const base::string16& context_message() const {
+  const base::string16 context_message() const {
     return optional_fields_.context_message;
   }
+
   void set_context_message(const base::string16& context_message) {
     optional_fields_.context_message = context_message;
   }
+
+  // Decides if the notification origin should be used as a context message
+  bool UseOriginAsContextMessage() const;
 
   const std::vector<NotificationItem>& items() const {
     return optional_fields_.items;
@@ -144,6 +157,13 @@ class MESSAGE_CENTER_EXPORT Notification {
   // Images fetched asynchronously.
   const gfx::Image& icon() const { return icon_; }
   void set_icon(const gfx::Image& icon) { icon_ = icon; }
+
+  // Gets and sets whether to adjust the icon before displaying. The adjustment
+  // is designed to accomodate legacy HTML icons but isn't necessary for
+  // Chrome's hardcoded notifications. NB: this is currently ignored outside of
+  // Views.
+  bool adjust_icon() const { return adjust_icon_; }
+  void set_adjust_icon(bool adjust) { adjust_icon_ = adjust; }
 
   const gfx::Image& image() const { return optional_fields_.image; }
   void set_image(const gfx::Image& image) { optional_fields_.image = image; }
@@ -175,13 +195,11 @@ class MESSAGE_CENTER_EXPORT Notification {
   // The notification with lesser serial_number is considered 'older'.
   unsigned serial_number() { return serial_number_; }
 
-  // Marks this explicitly to prevent the timeout dismiss of notification.
-  // This is used by webkit notifications to keep the existing behavior.
+  // Gets and sets whether the notifiction should remain onscreen permanently.
+  bool never_timeout() const { return optional_fields_.never_timeout; }
   void set_never_timeout(bool never_timeout) {
     optional_fields_.never_timeout = never_timeout;
   }
-
-  bool never_timeout() const { return optional_fields_.never_timeout; }
 
   bool clickable() const { return optional_fields_.clickable; }
   void set_clickable(bool clickable) {
@@ -228,11 +246,19 @@ class MESSAGE_CENTER_EXPORT Notification {
   // Image data for the associated icon, used by Ash when available.
   gfx::Image icon_;
 
+  // True by default; controls whether to apply adjustments such as BG color and
+  // size scaling to |icon_|.
+  bool adjust_icon_;
+
   // The display string for the source of the notification.  Could be
   // the same as origin_url_, or the name of an extension.
   base::string16 display_source_;
 
  private:
+  // The origin URL of the script which requested the notification.
+  // Can be empty if requested through a chrome app or extension or if
+  // it's a system notification.
+  GURL origin_url_;
   NotifierId notifier_id_;
   unsigned serial_number_;
   RichNotificationData optional_fields_;

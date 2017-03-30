@@ -4,6 +4,8 @@
 
 #include "cc/layers/video_layer_impl.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "cc/layers/video_frame_provider_client_impl.h"
@@ -15,7 +17,7 @@
 #include "cc/resources/single_release_callback_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
-#include "cc/trees/proxy.h"
+#include "cc/trees/task_runner_provider.h"
 #include "media/base/video_frame.h"
 
 #if defined(VIDEO_HOLE)
@@ -30,8 +32,8 @@ scoped_ptr<VideoLayerImpl> VideoLayerImpl::Create(
     int id,
     VideoFrameProvider* provider,
     media::VideoRotation video_rotation) {
-  DCHECK(tree_impl->proxy()->IsMainThreadBlocked());
-  DCHECK(tree_impl->proxy()->IsImplThread());
+  DCHECK(tree_impl->task_runner_provider()->IsMainThreadBlocked());
+  DCHECK(tree_impl->task_runner_provider()->IsImplThread());
 
   scoped_refptr<VideoFrameProviderClientImpl> provider_client_impl =
       VideoFrameProviderClientImpl::Create(
@@ -59,8 +61,8 @@ VideoLayerImpl::~VideoLayerImpl() {
     // on the VideoFrameProviderClientImpl, but we stop when the first
     // LayerImpl (the one on the pending tree) is destroyed since we know
     // the main thread is blocked for this commit.
-    DCHECK(layer_tree_impl()->proxy()->IsImplThread());
-    DCHECK(layer_tree_impl()->proxy()->IsMainThreadBlocked());
+    DCHECK(layer_tree_impl()->task_runner_provider()->IsImplThread());
+    DCHECK(layer_tree_impl()->task_runner_provider()->IsMainThreadBlocked());
     provider_client_impl_->Stop();
   }
 }
@@ -128,7 +130,7 @@ bool VideoLayerImpl::WillDraw(DrawMode draw_mode,
         external_resources.read_lock_fences_enabled);
     frame_resources_.push_back(FrameResource(
         resource_id, external_resources.mailboxes[i].size_in_pixels(),
-        external_resources.mailboxes[i].allow_overlay()));
+        external_resources.mailboxes[i].is_overlay_candidate()));
   }
 
   return true;
@@ -138,7 +140,7 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
                                  AppendQuadsData* append_quads_data) {
   DCHECK(frame_.get());
 
-  gfx::Transform transform = draw_transform();
+  gfx::Transform transform = DrawTransform();
   gfx::Size rotated_size = bounds();
 
   switch (video_rotation_) {
@@ -225,35 +227,28 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
       int videoframe_color_space;
       if (frame_->metadata()->GetInteger(media::VideoFrameMetadata::COLOR_SPACE,
                                          &videoframe_color_space)) {
-        if (videoframe_color_space == media::VideoFrame::COLOR_SPACE_JPEG) {
+        if (videoframe_color_space == media::COLOR_SPACE_JPEG) {
           color_space = YUVVideoDrawQuad::JPEG;
-        } else if (videoframe_color_space ==
-                   media::VideoFrame::COLOR_SPACE_HD_REC709) {
+        } else if (videoframe_color_space == media::COLOR_SPACE_HD_REC709) {
           color_space = YUVVideoDrawQuad::REC_709;
         }
       }
 
       const gfx::Size ya_tex_size = coded_size;
-      gfx::Size uv_tex_size;
+      gfx::Size uv_tex_size = media::VideoFrame::PlaneSize(
+          frame_->format(), media::VideoFrame::kUPlane, coded_size);
 
       if (frame_->HasTextures()) {
-        DCHECK_EQ(media::VideoFrame::I420, frame_->format());
+        DCHECK_EQ(media::PIXEL_FORMAT_I420, frame_->format());
         DCHECK_EQ(3u, frame_resources_.size());  // Alpha is not supported yet.
-        DCHECK(visible_rect.origin().IsOrigin());
-        DCHECK(visible_rect.size() == coded_size);
-        uv_tex_size.SetSize((ya_tex_size.width() + 1) / 2,
-                            (ya_tex_size.height() + 1) / 2);
       } else {
-        uv_tex_size = media::VideoFrame::PlaneSize(
-            frame_->format(), media::VideoFrame::kUPlane, coded_size);
         DCHECK(uv_tex_size ==
                media::VideoFrame::PlaneSize(
                    frame_->format(), media::VideoFrame::kVPlane, coded_size));
-        DCHECK_IMPLIES(
-            frame_resources_.size() > 3,
-            ya_tex_size ==
-                media::VideoFrame::PlaneSize(
-                    frame_->format(), media::VideoFrame::kAPlane, coded_size));
+        DCHECK(frame_resources_.size() <= 3 ||
+               ya_tex_size == media::VideoFrame::PlaneSize(
+                                  frame_->format(), media::VideoFrame::kAPlane,
+                                  coded_size));
       }
 
       // Compute the UV sub-sampling factor based on the ratio between
@@ -282,12 +277,14 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
       break;
     }
     case VideoFrameExternalResources::RGBA_RESOURCE:
+    case VideoFrameExternalResources::RGBA_PREMULTIPLIED_RESOURCE:
     case VideoFrameExternalResources::RGB_RESOURCE: {
       DCHECK_EQ(frame_resources_.size(), 1u);
       if (frame_resources_.size() < 1u)
         break;
       bool premultiplied_alpha =
-          (frame_resource_type_ == VideoFrameExternalResources::RGBA_RESOURCE);
+          frame_resource_type_ ==
+          VideoFrameExternalResources::RGBA_PREMULTIPLIED_RESOURCE;
       gfx::PointF uv_top_left(0.f, 0.f);
       gfx::PointF uv_bottom_right(tex_width_scale, tex_height_scale);
       float opacity[] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -314,7 +311,6 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
       stream_video_quad->SetNew(
           shared_quad_state, quad_rect, opaque_rect, visible_quad_rect,
           frame_resources_[0].id, frame_resources_[0].size_in_pixels,
-          frame_resources_[0].allow_overlay,
           scale * provider_client_impl_->StreamTextureMatrix());
       ValidateQuadResources(stream_video_quad);
       break;
@@ -371,8 +367,10 @@ void VideoLayerImpl::DidDraw(ResourceProvider* resource_provider) {
   if (frame_resource_type_ ==
       VideoFrameExternalResources::SOFTWARE_RESOURCE) {
     for (size_t i = 0; i < software_resources_.size(); ++i) {
-      software_release_callback_.Run(
-          0, false, layer_tree_impl()->BlockingMainThreadTaskRunner());
+      software_release_callback_.Run(gpu::SyncToken(), false,
+                                     layer_tree_impl()
+                                         ->task_runner_provider()
+                                         ->blocking_main_thread_task_runner());
     }
 
     software_resources_.clear();

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_EXTENSIONS_EXTENSION_SETTINGS_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_EXTENSIONS_EXTENSION_SETTINGS_HANDLER_H_
 
+#include "base/macros.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -31,6 +32,8 @@ class ExtensionSettingsHandler : public content::WebUIMessageHandler,
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
+  // Note: This uses |web_ui()| from |WebUIMessageHandler|, so it must only be
+  // called after |web_ui->AddMessageHandler(this)| has been called.
   void GetLocalizedValues(content::WebUIDataSource* source);
 
  private:

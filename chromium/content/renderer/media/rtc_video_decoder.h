@@ -5,14 +5,17 @@
 #ifndef CONTENT_RENDERER_MEDIA_RTC_VIDEO_DECODER_H_
 #define CONTENT_RENDERER_MEDIA_RTC_VIDEO_DECODER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <list>
 #include <map>
 #include <set>
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
@@ -21,7 +24,8 @@
 #include "media/base/video_decoder.h"
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
-#include "third_party/webrtc/modules/video_coding/codecs/interface/video_codec_interface.h"
+#include "third_party/webrtc/modules/video_coding/include/video_codec_interface.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace base {
 class WaitableEvent;
@@ -30,6 +34,10 @@ class WaitableEvent;
 namespace media {
 class DecoderBuffer;
 class GpuVideoAcceleratorFactories;
+}
+
+namespace gpu {
+struct SyncToken;
 }
 
 namespace content {
@@ -46,11 +54,14 @@ class CONTENT_EXPORT RTCVideoDecoder
  public:
   ~RTCVideoDecoder() override;
 
-  // Creates a RTCVideoDecoder. Returns NULL if failed. The video decoder will
-  // run on the message loop of |factories|.
+  // Creates a RTCVideoDecoder on the message loop of |factories|. Returns NULL
+  // if failed. The video decoder will run on the message loop of |factories|.
   static scoped_ptr<RTCVideoDecoder> Create(
       webrtc::VideoCodecType type,
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories);
+      media::GpuVideoAcceleratorFactories* factories);
+  // Destroys |decoder| on the loop of |factories|
+  static void Destroy(webrtc::VideoDecoder* decoder,
+                      media::GpuVideoAcceleratorFactories* factories);
 
   // webrtc::VideoDecoder implementation.
   // Called on WebRTC DecodingThread.
@@ -73,36 +84,36 @@ class CONTENT_EXPORT RTCVideoDecoder
   int32_t Reset() override;
 
   // VideoDecodeAccelerator::Client implementation.
-  void ProvidePictureBuffers(uint32 count,
+  void ProvidePictureBuffers(uint32_t count,
                              const gfx::Size& size,
-                             uint32 texture_target) override;
-  void DismissPictureBuffer(int32 id) override;
+                             uint32_t texture_target) override;
+  void DismissPictureBuffer(int32_t id) override;
   void PictureReady(const media::Picture& picture) override;
-  void NotifyEndOfBitstreamBuffer(int32 id) override;
+  void NotifyEndOfBitstreamBuffer(int32_t id) override;
   void NotifyFlushDone() override;
   void NotifyResetDone() override;
   void NotifyError(media::VideoDecodeAccelerator::Error error) override;
 
  private:
-  class SHMBuffer;
   // Metadata of a bitstream buffer.
   struct BufferData {
-    BufferData(int32 bitstream_buffer_id,
+    BufferData(int32_t bitstream_buffer_id,
                uint32_t timestamp,
-               size_t size);
+               size_t size,
+               const gfx::Rect& visible_rect);
     BufferData();
     ~BufferData();
-    int32 bitstream_buffer_id;
+    int32_t bitstream_buffer_id;
     uint32_t timestamp;  // in 90KHz
     size_t size;  // buffer size
+    gfx::Rect visible_rect;
   };
 
   FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, IsBufferAfterReset);
   FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, IsFirstBufferAfterReset);
 
-  RTCVideoDecoder(
-      webrtc::VideoCodecType type,
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories);
+  RTCVideoDecoder(webrtc::VideoCodecType type,
+                  media::GpuVideoAcceleratorFactories* factories);
 
   // Requests a buffer to be decoded by VDA.
   void RequestBufferDecode();
@@ -111,15 +122,15 @@ class CONTENT_EXPORT RTCVideoDecoder
 
   // Returns true if bitstream buffer id |id_buffer| comes after |id_reset|.
   // This handles the wraparound.
-  bool IsBufferAfterReset(int32 id_buffer, int32 id_reset);
+  bool IsBufferAfterReset(int32_t id_buffer, int32_t id_reset);
 
   // Returns true if bitstream buffer |id_buffer| is the first buffer after
   // |id_reset|.
-  bool IsFirstBufferAfterReset(int32 id_buffer, int32 id_reset);
+  bool IsFirstBufferAfterReset(int32_t id_buffer, int32_t id_reset);
 
   // Saves a WebRTC buffer in |decode_buffers_| for decode.
   void SaveToDecodeBuffers_Locked(const webrtc::EncodedImage& input_image,
-                                  scoped_ptr<SHMBuffer> shm_buffer,
+                                  scoped_ptr<base::SharedMemory> shm_buffer,
                                   const BufferData& buffer_data);
 
   // Saves a WebRTC buffer in |pending_buffers_| waiting for SHM available.
@@ -133,20 +144,20 @@ class CONTENT_EXPORT RTCVideoDecoder
   scoped_refptr<media::VideoFrame> CreateVideoFrame(
       const media::Picture& picture,
       const media::PictureBuffer& pb,
-      uint32_t timestamp);
+      uint32_t timestamp,
+      const gfx::Rect& visible_rect);
 
   // Resets VDA.
   void ResetInternal();
 
   // Static method is to allow it to run even after RVD is deleted.
-  static void ReleaseMailbox(
-      base::WeakPtr<RTCVideoDecoder> decoder,
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories,
-      int64 picture_buffer_id,
-      uint32 texture_id,
-      uint32 release_sync_point);
+  static void ReleaseMailbox(base::WeakPtr<RTCVideoDecoder> decoder,
+                             media::GpuVideoAcceleratorFactories* factories,
+                             int64_t picture_buffer_id,
+                             uint32_t texture_id,
+                             const gpu::SyncToken& release_sync_token);
   // Tells VDA that a picture buffer can be recycled.
-  void ReusePictureBuffer(int64 picture_buffer_id);
+  void ReusePictureBuffer(int64_t picture_buffer_id);
 
   // Create |vda_| on |vda_loop_proxy_|.
   void CreateVDA(media::VideoCodecProfile profile, base::WaitableEvent* waiter);
@@ -157,10 +168,10 @@ class CONTENT_EXPORT RTCVideoDecoder
   // Gets a shared-memory segment of at least |min_size| bytes from
   // |available_shm_segments_|. Returns NULL if there is no buffer or the
   // buffer is not big enough.
-  scoped_ptr<SHMBuffer> GetSHM_Locked(size_t min_size);
+  scoped_ptr<base::SharedMemory> GetSHM_Locked(size_t min_size);
 
   // Returns a shared-memory segment to the available pool.
-  void PutSHM_Locked(scoped_ptr<SHMBuffer> shm_buffer);
+  void PutSHM_Locked(scoped_ptr<base::SharedMemory> shm_buffer);
 
   // Allocates |count| shared memory buffers of |size| bytes.
   void CreateSHM(size_t count, size_t size);
@@ -168,7 +179,9 @@ class CONTENT_EXPORT RTCVideoDecoder
   // Stores the buffer metadata to |input_buffer_data_|.
   void RecordBufferData(const BufferData& buffer_data);
   // Gets the buffer metadata from |input_buffer_data_|.
-  void GetBufferData(int32 bitstream_buffer_id, uint32_t* timestamp);
+  void GetBufferData(int32_t bitstream_buffer_id,
+                     uint32_t* timestamp,
+                     gfx::Rect* visible_rect);
 
   // Records the result of InitDecode to UMA and returns |status|.
   int32_t RecordInitDecodeUMA(int32_t status);
@@ -191,9 +204,9 @@ class CONTENT_EXPORT RTCVideoDecoder
     DECODE_ERROR,   // Decoding error happened.
   };
 
-  static const int32 ID_LAST;     // maximum bitstream buffer id
-  static const int32 ID_HALF;     // half of the maximum bitstream buffer id
-  static const int32 ID_INVALID;  // indicates Reset or Release never occurred
+  static const int32_t ID_LAST;     // maximum bitstream buffer id
+  static const int32_t ID_HALF;     // half of the maximum bitstream buffer id
+  static const int32_t ID_INVALID;  // indicates Reset or Release never occurred
 
   // The hardware video decoder.
   scoped_ptr<media::VideoDecodeAccelerator> vda_;
@@ -204,30 +217,30 @@ class CONTENT_EXPORT RTCVideoDecoder
   // The size of the incoming video frames.
   gfx::Size frame_size_;
 
-  scoped_refptr<media::GpuVideoAcceleratorFactories> factories_;
+  media::GpuVideoAcceleratorFactories* const factories_;
 
   // The texture target used for decoded pictures.
-  uint32 decoder_texture_target_;
+  uint32_t decoder_texture_target_;
 
   // Metadata of the buffers that have been sent for decode.
   std::list<BufferData> input_buffer_data_;
 
   // A map from bitstream buffer IDs to bitstream buffers that are being
   // processed by VDA. The map owns SHM buffers.
-  std::map<int32, SHMBuffer*> bitstream_buffers_in_decoder_;
+  std::map<int32_t, base::SharedMemory*> bitstream_buffers_in_decoder_;
 
   // A map from picture buffer IDs to texture-backed picture buffers.
-  std::map<int32, media::PictureBuffer> assigned_picture_buffers_;
+  std::map<int32_t, media::PictureBuffer> assigned_picture_buffers_;
 
   // PictureBuffers given to us by VDA via PictureReady, which we sent forward
   // as VideoFrames to be rendered via read_cb_, and which will be returned
   // to us via ReusePictureBuffer.
-  typedef std::map<int32 /* picture_buffer_id */, uint32 /* texture_id */>
+  typedef std::map<int32_t /* picture_buffer_id */, uint32_t /* texture_id */>
       PictureBufferTextureMap;
   PictureBufferTextureMap picture_buffers_at_display_;
 
   // The id that will be given to the next picture buffer.
-  int32 next_picture_buffer_id_;
+  int32_t next_picture_buffer_id_;
 
   // Protects |state_|, |decode_complete_callback_| , |num_shm_buffers_|,
   // |available_shm_segments_|, |pending_buffers_|, |decode_buffers_|,
@@ -247,22 +260,22 @@ class CONTENT_EXPORT RTCVideoDecoder
   // round-trip to the browser process, we keep allocation out of the
   // steady-state of the decoder. The vector owns SHM buffers. Guarded by
   // |lock_|.
-  std::vector<SHMBuffer*> available_shm_segments_;
+  std::vector<base::SharedMemory*> available_shm_segments_;
 
   // A queue storing WebRTC encoding images (and their metadata) that are
   // waiting for the shared memory. Guarded by |lock_|.
-  std::deque<std::pair<webrtc::EncodedImage, BufferData> > pending_buffers_;
+  std::deque<std::pair<webrtc::EncodedImage, BufferData>> pending_buffers_;
 
   // A queue storing buffers (and their metadata) that will be sent to VDA for
   // decode. The queue owns SHM buffers. Guarded by |lock_|.
-  std::deque<std::pair<SHMBuffer*, BufferData> > decode_buffers_;
+  std::deque<std::pair<base::SharedMemory*, BufferData>> decode_buffers_;
 
   // The id that will be given to the next bitstream buffer. Guarded by |lock_|.
-  int32 next_bitstream_buffer_id_;
+  int32_t next_bitstream_buffer_id_;
 
   // A buffer that has an id less than this should be dropped because Reset or
   // Release has been called. Guarded by |lock_|.
-  int32 reset_bitstream_buffer_id_;
+  int32_t reset_bitstream_buffer_id_;
 
   // Minimum and maximum supported resolutions for the current profile/VDA.
   gfx::Size min_resolution_;

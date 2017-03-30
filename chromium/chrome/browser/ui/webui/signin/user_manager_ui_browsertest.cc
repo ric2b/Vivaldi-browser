@@ -26,25 +26,9 @@ class UserManagerUIBrowserTest : public InProcessBrowserTest,
                                  public testing::WithParamInterface<bool> {
  public:
   UserManagerUIBrowserTest() {}
-
- protected:
-  void SetUp() override {
-    InProcessBrowserTest::SetUp();
-    DCHECK(switches::IsNewAvatarMenu());
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    switches::EnableNewAvatarMenuForTesting(command_line);
-  }
 };
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_PageLoads DISABLED_PageLoads
-#else
-#define MAYBE_PageLoads PageLoads
-#endif
-IN_PROC_BROWSER_TEST_F(UserManagerUIBrowserTest, MAYBE_PageLoads) {
+IN_PROC_BROWSER_TEST_F(UserManagerUIBrowserTest, PageLoads) {
   ui_test_utils::NavigateToURL(
       browser(), GURL(chrome::kChromeUIUserManagerURL));
   content::WebContents* web_contents =
@@ -97,7 +81,7 @@ IN_PROC_BROWSER_TEST_F(UserManagerUIBrowserTest, PageRedirectsToAboutChrome) {
   content::WebContents* about_chrome_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   GURL current_URL = about_chrome_contents->GetVisibleURL();
-  EXPECT_EQ(GURL(chrome::kChromeUIUberURL), current_URL);
+  EXPECT_EQ(GURL(chrome::kChromeUIHelpURL), current_URL);
 }
 
 // TODO(mlerman): Test that unlocking a locked profile causes the extensions

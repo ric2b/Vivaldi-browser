@@ -5,7 +5,7 @@
 #ifndef SYNC_SYNCABLE_SCOPED_KERNEL_LOCK_H_
 #define SYNC_SYNCABLE_SCOPED_KERNEL_LOCK_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 
 namespace syncer {
@@ -20,6 +20,8 @@ class ScopedKernelLock {
 
   base::AutoLock scoped_lock_;
   const Directory* const dir_;
+
+ private:
   DISALLOW_COPY_AND_ASSIGN(ScopedKernelLock);
 };
 

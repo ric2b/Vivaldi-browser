@@ -5,6 +5,8 @@
 #ifndef CONTENT_COMMON_SANDBOX_WIN_H_
 #define CONTENT_COMMON_SANDBOX_WIN_H_
 
+#include <stdint.h>
+
 #include "content/common/content_export.h"
 #include "sandbox/win/src/security_level.h"
 
@@ -24,7 +26,7 @@ namespace content {
 // should be let to run without a job object assigned.
 void SetJobLevel(const base::CommandLine& cmd_line,
                  sandbox::JobLevel job_level,
-                 uint32 ui_exceptions,
+                 uint32_t ui_exceptions,
                  sandbox::TargetPolicy* policy);
 
 // Closes handles that are opened at process creation and initialization.
@@ -32,6 +34,9 @@ void AddBaseHandleClosePolicy(sandbox::TargetPolicy* policy);
 
 // Add AppContainer policy for |sid| on supported OS.
 void AddAppContainerPolicy(sandbox::TargetPolicy* policy, const wchar_t* sid);
+
+// Add the win32k lockdown policy on supported OS.
+bool AddWin32kLockdownPolicy(sandbox::TargetPolicy* policy);
 
 bool InitBrokerServices(sandbox::BrokerServices* broker_services);
 

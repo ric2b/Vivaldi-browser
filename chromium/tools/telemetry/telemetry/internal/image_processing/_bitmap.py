@@ -12,14 +12,12 @@ import cStringIO
 import struct
 import subprocess
 
-from catapult_base import support_binaries
+from telemetry.internal.util import binary_manager
 from telemetry.core import platform
-from telemetry.core import util
 from telemetry.util import color_histogram
 from telemetry.util import rgba_color
 
-util.AddDirToPythonPath(util.GetTelemetryDir(), 'third_party', 'png')
-import png  # pylint: disable=F0401
+import png
 
 
 class _BitmapTools(object):
@@ -29,7 +27,7 @@ class _BitmapTools(object):
   BOUNDING_BOX = 2
 
   def __init__(self, dimensions, pixels):
-    binary = support_binaries.FindPath(
+    binary = binary_manager.FetchPath(
         'bitmaptools',
         platform.GetHostPlatform().GetArchName(),
         platform.GetHostPlatform().GetOSName())

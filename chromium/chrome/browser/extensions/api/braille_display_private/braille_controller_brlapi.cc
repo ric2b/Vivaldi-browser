@@ -4,14 +4,17 @@
 
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller_brlapi.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/stl_util.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/extensions/api/braille_display_private/brlapi_connection.h"
 #include "chrome/browser/extensions/api/braille_display_private/brlapi_keycode_map.h"
@@ -27,10 +30,10 @@ namespace braille_display_private {
 namespace {
 // Delay between detecting a directory update and trying to connect
 // to the brlapi.
-const int64 kConnectionDelayMs = 500;
+const int64_t kConnectionDelayMs = 500;
 // How long to periodically retry connecting after a brltty restart.
 // Some displays are slow to connect.
-const int64 kConnectRetryTimeout = 20000;
+const int64_t kConnectRetryTimeout = 20000;
 }  // namespace
 
 BrailleController::BrailleController() {
@@ -46,8 +49,9 @@ BrailleController* BrailleController::GetInstance() {
 
 // static
 BrailleControllerImpl* BrailleControllerImpl::GetInstance() {
-  return Singleton<BrailleControllerImpl,
-                   LeakySingletonTraits<BrailleControllerImpl> >::get();
+  return base::Singleton<
+      BrailleControllerImpl,
+      base::LeakySingletonTraits<BrailleControllerImpl>>::get();
 }
 
 BrailleControllerImpl::BrailleControllerImpl()
@@ -91,7 +95,7 @@ scoped_ptr<DisplayState> BrailleControllerImpl::GetDisplayState() {
       display_state->text_cell_count.reset(new int(size));
     }
   }
-  return display_state.Pass();
+  return display_state;
 }
 
 void BrailleControllerImpl::WriteDots(const std::vector<char>& cells) {
@@ -102,8 +106,7 @@ void BrailleControllerImpl::WriteDots(const std::vector<char>& cells) {
       Disconnect();
     }
     std::vector<unsigned char> sizedCells(size);
-    std::memcpy(&sizedCells[0], vector_as_array(&cells),
-                std::min(cells.size(), size));
+    std::memcpy(&sizedCells[0], cells.data(), std::min(cells.size(), size));
     if (size > cells.size())
       std::fill(sizedCells.begin() + cells.size(), sizedCells.end(), 0);
     if (!connection_->WriteDots(&sizedCells[0]))
@@ -284,7 +287,7 @@ void BrailleControllerImpl::DispatchKeys() {
     }
     scoped_ptr<KeyEvent> event = BrlapiKeyCodeToEvent(code);
     if (event)
-      DispatchKeyEvent(event.Pass());
+      DispatchKeyEvent(std::move(event));
   }
 }
 

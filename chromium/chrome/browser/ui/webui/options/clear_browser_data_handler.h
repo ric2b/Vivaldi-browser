@@ -5,15 +5,20 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_OPTIONS_CLEAR_BROWSER_DATA_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_OPTIONS_CLEAR_BROWSER_DATA_HANDLER_H_
 
+#include "base/macros.h"
+#include "base/memory/scoped_vector.h"
 #include "base/prefs/pref_member.h"
+#include "chrome/browser/browsing_data/browsing_data_counter.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 
 namespace options {
 
 // Clear browser data handler page UI handler.
 class ClearBrowserDataHandler : public OptionsPageUIHandler,
-                                public BrowsingDataRemover::Observer {
+                                public BrowsingDataRemover::Observer,
+                                public sync_driver::SyncServiceObserver {
  public:
   ClearBrowserDataHandler();
   ~ClearBrowserDataHandler() override;
@@ -29,6 +34,10 @@ class ClearBrowserDataHandler : public OptionsPageUIHandler,
   void UpdateInfoBannerVisibility();
 
  private:
+  // Javascript callback for when the CBD dialog is opened. The caller does
+  // not provide any parameters, so |value| is unused.
+  void OnPageOpened(const base::ListValue* value);
+
   // Javascript callback to start clearing data.
   void HandleClearBrowserData(const base::ListValue* value);
 
@@ -39,8 +48,17 @@ class ClearBrowserDataHandler : public OptionsPageUIHandler,
   // Updates UI when the pref to allow clearing history changes.
   virtual void OnBrowsingHistoryPrefChanged();
 
-  // If non-null it means removal is in progress. BrowsingDataRemover takes care
-  // of deleting itself when done.
+  // Adds a |counter| for browsing data.
+  void AddCounter(scoped_ptr<BrowsingDataCounter> counter);
+
+  // Updates a counter in the UI according to the |result|.
+  void UpdateCounterText(scoped_ptr<BrowsingDataCounter::Result> result);
+
+  // Implementation of SyncServiceObserver. Updates the support string at the
+  // bottom of the dialog.
+  void OnStateChanged() override;
+
+  // If non-null it means removal is in progress.
   BrowsingDataRemover* remover_;
 
   // Keeps track of whether clearing LSO data is supported.
@@ -52,6 +70,12 @@ class ClearBrowserDataHandler : public OptionsPageUIHandler,
 
   // Keeps track of whether deleting browsing history and downloads is allowed.
   BooleanPrefMember allow_deleting_browser_history_;
+
+  // Counters that calculate the data volume for some of the data types.
+  ScopedVector<BrowsingDataCounter> counters_;
+
+  // Informs us whether the user is syncing their data.
+  ProfileSyncService* sync_service_;
 
   DISALLOW_COPY_AND_ASSIGN(ClearBrowserDataHandler);
 };

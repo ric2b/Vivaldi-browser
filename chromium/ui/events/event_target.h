@@ -7,8 +7,8 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/events_export.h"
@@ -20,7 +20,7 @@ class EventTargeter;
 class EventTargetIterator;
 class LocatedEvent;
 
-class EVENTS_EXPORT EventTarget : public EventHandler {
+class EVENTS_EXPORT EventTarget {
  public:
   class DispatcherApi {
    public:
@@ -38,7 +38,7 @@ class EVENTS_EXPORT EventTarget : public EventHandler {
   };
 
   EventTarget();
-  ~EventTarget() override;
+  virtual ~EventTarget();
 
   virtual bool CanAcceptEvent(const Event& event) = 0;
 
@@ -77,20 +77,11 @@ class EVENTS_EXPORT EventTarget : public EventHandler {
   // Returns true if the event pre target list is empty.
   bool IsPreTargetListEmpty() const;
 
-  void set_target_handler(EventHandler* handler) {
-    target_handler_ = handler;
-  }
+  // Sets |target_handler| as |target_handler_| and returns the old handler.
+  EventHandler* SetTargetHandler(EventHandler* target_handler);
 
  protected:
   EventHandler* target_handler() { return target_handler_; }
-
-  // Overridden from EventHandler:
-  void OnEvent(Event* event) override;
-  void OnKeyEvent(KeyEvent* event) override;
-  void OnMouseEvent(MouseEvent* event) override;
-  void OnScrollEvent(ScrollEvent* event) override;
-  void OnTouchEvent(TouchEvent* event) override;
-  void OnGestureEvent(GestureEvent* event) override;
 
  private:
   friend class EventDispatcher;

@@ -125,6 +125,7 @@ bool GestureEventQueue::ShouldForwardForBounceReduction(
       scrolling_in_progress_ = true;
       debouncing_deferral_queue_.clear();
       return true;
+
     case WebInputEvent::GesturePinchBegin:
     case WebInputEvent::GesturePinchEnd:
     case WebInputEvent::GesturePinchUpdate:
@@ -206,7 +207,6 @@ void GestureEventQueue::ProcessGestureAck(InputEventAckState ack_result,
 
   // It's possible that the ack for the second event in an in-flight, coalesced
   // Gesture{Scroll,Pinch}Update pair is received prior to the first event ack.
-  // TODO(jdduke): Unify GSU/GPU pairs into a single event, crbug.com/359115.
   size_t event_index = 0;
   if (ignore_next_ack_ &&
       coalesced_gesture_events_.size() > 1 &&
@@ -247,7 +247,6 @@ void GestureEventQueue::ProcessGestureAck(InputEventAckState ack_result,
   const GestureEventWithLatencyInfo& first_gesture_event =
       coalesced_gesture_events_.front();
 
-  // TODO(jdduke): Unify GSU/GPU pairs into a single event, crbug.com/359115.
   // Check for the coupled GesturePinchUpdate before sending either event,
   // handling the case where the first GestureScrollUpdate ack is synchronous.
   GestureEventWithLatencyInfo second_gesture_event;
@@ -335,7 +334,7 @@ void GestureEventQueue::QueueScrollOrPinchAndForwardIfNecessary(
   scroll_event.event.sourceDevice = gesture_event.event.sourceDevice;
   scroll_event.event.timeStampSeconds = gesture_event.event.timeStampSeconds;
   // Keep the oldest LatencyInfo.
-  DCHECK_LE(last_event->latency.trace_id, gesture_event.latency.trace_id);
+  DCHECK_LE(last_event->latency.trace_id(), gesture_event.latency.trace_id());
   scroll_event.latency = last_event->latency;
   pinch_event = scroll_event;
   scroll_event.event.type = WebInputEvent::GestureScrollUpdate;
@@ -355,8 +354,8 @@ void GestureEventQueue::QueueScrollOrPinchAndForwardIfNecessary(
         coalesced_gesture_events_[coalesced_gesture_events_.size() - 2];
     if (IsCompatibleScrollorPinch(gesture_event, second_last_event)) {
       // Keep the oldest LatencyInfo.
-      DCHECK_LE(second_last_event.latency.trace_id,
-                scroll_event.latency.trace_id);
+      DCHECK_LE(second_last_event.latency.trace_id(),
+                scroll_event.latency.trace_id());
       scroll_event.latency = second_last_event.latency;
       pinch_event.latency = second_last_event.latency;
       combined_scroll_pinch.PreconcatTransform(

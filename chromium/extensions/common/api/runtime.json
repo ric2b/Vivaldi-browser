@@ -205,7 +205,7 @@
       },
       {
         "name": "reload",
-        "description": "Reloads the app or extension.",
+        "description": "Reloads the app or extension. This method is not supported in kiosk mode. For kiosk mode, use chrome.runtime.restart() method.",
         "type": "function",
         "parameters": []
       },
@@ -242,12 +242,6 @@
       {
         "name": "restart",
         "description": "Restart the ChromeOS device when the app runs in kiosk mode. Otherwise, it's no-op.",
-        "type": "function",
-        "parameters": []
-      },
-      {
-        "name": "exit",
-        "description": "Close all browsers and exit the application.",
         "type": "function",
         "parameters": []
       },

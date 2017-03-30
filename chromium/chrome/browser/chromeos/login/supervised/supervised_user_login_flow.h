@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SUPERVISED_SUPERVISED_USER_LOGIN_FLOW_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SUPERVISED_SUPERVISED_USER_LOGIN_FLOW_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
@@ -20,7 +20,7 @@ class SupervisedUserLoginFlow
     : public ExtendedUserFlow,
       public ExtendedAuthenticator::NewAuthStatusConsumer {
  public:
-  explicit SupervisedUserLoginFlow(const std::string& user_id);
+  explicit SupervisedUserLoginFlow(const AccountId& account_id);
   ~SupervisedUserLoginFlow() override;
 
   // ExtendedUserFlow overrides.
@@ -51,9 +51,9 @@ class SupervisedUserLoginFlow
 
   scoped_refptr<ExtendedAuthenticator> authenticator_;
 
-  bool data_loaded_;
+  bool data_loaded_ = false;
   UserContext context_;
-  Profile* profile_;
+  Profile* profile_ = nullptr;
   base::WeakPtrFactory<SupervisedUserLoginFlow> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SupervisedUserLoginFlow);

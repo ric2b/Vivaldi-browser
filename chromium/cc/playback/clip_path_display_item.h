@@ -5,6 +5,8 @@
 #ifndef CC_PLAYBACK_CLIP_PATH_DISPLAY_ITEM_H_
 #define CC_PLAYBACK_CLIP_PATH_DISPLAY_ITEM_H_
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
 #include "cc/playback/display_item.h"
@@ -17,17 +19,24 @@ namespace cc {
 
 class CC_EXPORT ClipPathDisplayItem : public DisplayItem {
  public:
-  ClipPathDisplayItem();
+  ClipPathDisplayItem(const SkPath& path, SkRegion::Op clip_op, bool antialias);
+  explicit ClipPathDisplayItem(const proto::DisplayItem& proto);
   ~ClipPathDisplayItem() override;
 
-  void SetNew(const SkPath& path, SkRegion::Op clip_op, bool antialias);
-
+  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               const gfx::Rect& canvas_target_playback_rect,
               SkPicture::AbortCallback* callback) const override;
-  void AsValueInto(base::trace_event::TracedValue* array) const override;
+  void AsValueInto(const gfx::Rect& visual_rect,
+                   base::trace_event::TracedValue* array) const override;
+  size_t ExternalMemoryUsage() const override;
+
+  int ApproximateOpCount() const { return 1; }
+  bool IsSuitableForGpuRasterization() const { return true; }
 
  private:
+  void SetNew(const SkPath& path, SkRegion::Op clip_op, bool antialias);
+
   SkPath clip_path_;
   SkRegion::Op clip_op_;
   bool antialias_;
@@ -36,16 +45,23 @@ class CC_EXPORT ClipPathDisplayItem : public DisplayItem {
 class CC_EXPORT EndClipPathDisplayItem : public DisplayItem {
  public:
   EndClipPathDisplayItem();
+  explicit EndClipPathDisplayItem(const proto::DisplayItem& proto);
   ~EndClipPathDisplayItem() override;
 
   static scoped_ptr<EndClipPathDisplayItem> Create() {
     return make_scoped_ptr(new EndClipPathDisplayItem());
   }
 
+  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               const gfx::Rect& canvas_target_playback_rect,
               SkPicture::AbortCallback* callback) const override;
-  void AsValueInto(base::trace_event::TracedValue* array) const override;
+  void AsValueInto(const gfx::Rect& visual_rect,
+                   base::trace_event::TracedValue* array) const override;
+  size_t ExternalMemoryUsage() const override;
+
+  int ApproximateOpCount() const { return 0; }
+  bool IsSuitableForGpuRasterization() const { return true; }
 };
 
 }  // namespace cc

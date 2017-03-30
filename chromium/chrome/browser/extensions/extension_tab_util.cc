@@ -4,19 +4,26 @@
 
 #include "chrome/browser/extensions/extension_tab_util.h"
 
+#include <stddef.h>
+
+#include "app/vivaldi_apptools.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/extensions/window_controller_list.h"
+#include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
@@ -25,7 +32,7 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "chrome/common/url_constants.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -106,6 +113,16 @@ Browser* CreateBrowser(ChromeUIThreadExtensionFunction* function,
   Browser* browser = new Browser(params);
   browser->window()->Show();
   return browser;
+}
+
+// Use this function for reporting a tab id to an extension. It will
+// take care of setting the id to TAB_ID_NONE if necessary (for
+// example with devtools).
+int GetTabIdForExtensions(const WebContents* web_contents) {
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (browser && !ExtensionTabUtil::BrowserSupportsTabs(browser))
+    return -1;
+  return SessionTabHelper::IdForTab(web_contents);
 }
 
 }  // namespace
@@ -190,7 +207,7 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
   }
 
   // Don't let extensions crash the browser or renderers.
-  if (ExtensionTabUtil::IsCrashURL(url)) {
+  if (ExtensionTabUtil::IsKillURL(url)) {
     *error = keys::kNoCrashBrowserError;
     return NULL;
   }
@@ -212,7 +229,7 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
   // We let "Vivaldi" go through because adding "incognito split" to the
   // manifest does not work. Note there might be other methods we need to fix
   // but this was the most glaring one while adding VB-235.
-  if (function->extension_id() != "mpognobbkildjkofajifpdfhcoklimli" &&
+  if (!vivaldi::IsVivaldiApp(function->extension_id()) &&
       url.SchemeIs(kExtensionScheme) &&
       !IncognitoInfo::IsSplitMode(function->extension()) &&
       browser->profile()->IsOffTheRecord()) {
@@ -239,6 +256,8 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
 
   int add_types = active ? TabStripModel::ADD_ACTIVE : TabStripModel::ADD_NONE;
   add_types |= TabStripModel::ADD_FORCE_INDEX;
+  if (opener)
+    add_types |= TabStripModel::ADD_INHERIT_OPENER;
   if (pinned)
     add_types |= TabStripModel::ADD_PINNED;
   chrome::NavigateParams navigate_params(
@@ -395,7 +414,7 @@ base::DictionaryValue* ExtensionTabUtil::CreateTabValue(
 
   base::DictionaryValue* result = new base::DictionaryValue();
   bool is_loading = contents->IsLoading();
-  result->SetInteger(keys::kIdKey, GetTabId(contents));
+  result->SetInteger(keys::kIdKey, GetTabIdForExtensions(contents));
   result->SetInteger(keys::kIndexKey, tab_index);
   //result->SetInteger(keys::kWindowIdKey, GetWindowIdOfTab(contents));
   result->SetInteger(keys::kWindowIdKey, window_id);
@@ -408,18 +427,15 @@ base::DictionaryValue* ExtensionTabUtil::CreateTabValue(
                    tab_strip && tab_strip->IsTabSelected(tab_index));
   result->SetBoolean(keys::kPinnedKey,
                      tab_strip && tab_strip->IsTabPinned(tab_index));
-  result->SetBoolean(keys::kAudibleKey,
-                     tab_strip && chrome::IsPlayingAudio(contents));
-  result->SetBoolean(keys::kMutedKey,
-                     tab_strip && chrome::IsTabAudioMuted(contents));
-  result->SetString(keys::kMutedCauseKey,
-                    chrome::GetTabAudioMutedCause(contents));
+  result->SetBoolean(keys::kAudibleKey, contents->WasRecentlyAudible());
+  result->Set(keys::kMutedInfoKey, CreateMutedInfo(contents));
   result->SetBoolean(keys::kIncognitoKey,
                      contents->GetBrowserContext()->IsOffTheRecord());
   result->SetInteger(keys::kWidthKey,
                      contents->GetContainerBounds().size().width());
   result->SetInteger(keys::kHeightKey,
                      contents->GetContainerBounds().size().height());
+  result->SetBoolean(keys::kDiscardedKey, IsDiscarded(contents));
 
   // Privacy-sensitive fields: these should be stripped off by
   // ScrubTabValueForExtension if the extension should not see them.
@@ -433,7 +449,7 @@ base::DictionaryValue* ExtensionTabUtil::CreateTabValue(
   if (tab_strip) {
     WebContents* opener = tab_strip->GetOpenerOfWebContentsAt(tab_index);
     if (opener)
-      result->SetInteger(keys::kOpenerTabIdKey, GetTabId(opener));
+      result->SetInteger(keys::kOpenerTabIdKey, GetTabIdForExtensions(opener));
   }
 
   result->SetString(keys::kExtDataKey,
@@ -445,13 +461,45 @@ base::DictionaryValue* ExtensionTabUtil::CreateTabValue(
   return result;
 }
 
+// static
+bool ExtensionTabUtil::IsDiscarded(content::WebContents *contents) {
+  memory::TabManager *tab_manager = g_browser_process->GetTabManager();
+  return (tab_manager && tab_manager->IsTabDiscarded(contents));
+}
+
+// static
+scoped_ptr<base::DictionaryValue> ExtensionTabUtil::CreateMutedInfo(
+    content::WebContents* contents) {
+  DCHECK(contents);
+  api::tabs::MutedInfo info;
+  info.muted = contents->IsAudioMuted();
+  switch (chrome::GetTabAudioMutedReason(contents)) {
+    case TAB_MUTED_REASON_NONE:
+      break;
+    case TAB_MUTED_REASON_CONTEXT_MENU:
+    case TAB_MUTED_REASON_AUDIO_INDICATOR:
+      info.reason = api::tabs::MUTED_INFO_REASON_USER;
+      break;
+    case TAB_MUTED_REASON_MEDIA_CAPTURE:
+      info.reason = api::tabs::MUTED_INFO_REASON_CAPTURE;
+      break;
+    case TAB_MUTED_REASON_EXTENSION:
+      info.reason = api::tabs::MUTED_INFO_REASON_EXTENSION;
+      info.extension_id.reset(
+          new std::string(chrome::GetExtensionIdForMutedTab(contents)));
+      break;
+  }
+  return info.ToValue();
+}
+
 void ExtensionTabUtil::ScrubTabValueForExtension(
     WebContents* contents,
     const Extension* extension,
     base::DictionaryValue* tab_info) {
-  bool has_permission = extension &&
+  int tab_id = GetTabId(contents);
+  bool has_permission = tab_id >= 0 && extension &&
                         extension->permissions_data()->HasAPIPermissionForTab(
-                            GetTabId(contents), APIPermission::kTab);
+                            tab_id, APIPermission::kTab);
 
   if (!has_permission) {
     tab_info->Remove(keys::kUrlKey, NULL);
@@ -517,6 +565,8 @@ bool ExtensionTabUtil::GetTabById(int tab_id,
                                   TabStripModel** tab_strip,
                                   WebContents** contents,
                                   int* tab_index) {
+  if (tab_id == api::tabs::TAB_ID_NONE)
+    return false;
   Profile* profile = Profile::FromBrowserContext(browser_context);
   Profile* incognito_profile =
       include_incognito && profile->HasOffTheRecordProfile() ?
@@ -554,13 +604,29 @@ GURL ExtensionTabUtil::ResolvePossiblyRelativeURL(const std::string& url_string,
   return url;
 }
 
-bool ExtensionTabUtil::IsCrashURL(const GURL& url) {
+bool ExtensionTabUtil::IsKillURL(const GURL& url) {
+  static const char* kill_hosts[] = {
+      chrome::kChromeUICrashHost,
+      chrome::kChromeUIHangUIHost,
+      chrome::kChromeUIKillHost,
+      chrome::kChromeUIQuitHost,
+      chrome::kChromeUIRestartHost,
+      content::kChromeUIBrowserCrashHost,
+  };
+
   // Check a fixed-up URL, to normalize the scheme and parse hosts correctly.
   GURL fixed_url =
-      url_fixer::FixupURL(url.possibly_invalid_spec(), std::string());
-  return (fixed_url.SchemeIs(content::kChromeUIScheme) &&
-          (fixed_url.host() == content::kChromeUIBrowserCrashHost ||
-           fixed_url.host() == chrome::kChromeUICrashHost));
+      url_formatter::FixupURL(url.possibly_invalid_spec(), std::string());
+  if (!fixed_url.SchemeIs(content::kChromeUIScheme))
+    return false;
+
+  base::StringPiece fixed_host = fixed_url.host_piece();
+  for (size_t i = 0; i < arraysize(kill_hosts); ++i) {
+    if (fixed_host == kill_hosts[i])
+      return true;
+  }
+
+  return false;
 }
 
 void ExtensionTabUtil::CreateTab(WebContents* web_contents,
@@ -649,6 +715,11 @@ bool ExtensionTabUtil::OpenOptionsPage(const Extension* extension,
   params.url = url_to_navigate;
   chrome::ShowSingletonTabOverwritingNTP(browser, params);
   return true;
+}
+
+// static
+bool ExtensionTabUtil::BrowserSupportsTabs(Browser* browser) {
+  return browser && browser->tab_strip_model() && !browser->is_devtools();
 }
 
 }  // namespace extensions

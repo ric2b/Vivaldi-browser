@@ -5,11 +5,15 @@
 #ifndef UI_OZONE_PLATFORM_DRM_HOST_OVERLAY_CANDIDATES_H_
 #define UI_OZONE_PLATFORM_DRM_HOST_OVERLAY_CANDIDATES_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <map>
 #include <vector>
 
 #include "base/containers/mru_cache.h"
+#include "base/macros.h"
+#include "base/memory/scoped_vector.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/overlay_candidates_ozone.h"
@@ -17,6 +21,7 @@
 namespace ui {
 
 class DrmGpuPlatformSupportHost;
+class DrmWindowHost;
 
 // This is an implementation of OverlayCandidatesOzone where the driver is asked
 // about overlay capabilities via IPC. We have no way of querying abstract
@@ -33,13 +38,9 @@ class DrmGpuPlatformSupportHost;
 // sequence number so that replies can be routed to the correct object.
 class DrmOverlayCandidatesHost : public OverlayCandidatesOzone,
                                  public GpuPlatformSupportHost {
-  struct OverlayCompare {
-    bool operator()(const OverlayCheck_Params& l, const OverlayCheck_Params& r);
-  };
-
  public:
-  DrmOverlayCandidatesHost(gfx::AcceleratedWidget widget,
-                           DrmGpuPlatformSupportHost* platform_support);
+  DrmOverlayCandidatesHost(DrmGpuPlatformSupportHost* platform_support,
+                           DrmWindowHost* window);
   ~DrmOverlayCandidatesHost() override;
 
   // OverlayCandidatesOzone:
@@ -53,29 +54,24 @@ class DrmOverlayCandidatesHost : public OverlayCandidatesOzone,
   void OnChannelDestroyed(int host_id) override;
   bool OnMessageReceived(const IPC::Message& message) override;
 
+  void ResetCache();
+
  private:
-  void SendRequest(const OverlaySurfaceCandidateList& candidates,
-                   const OverlayCheck_Params& check);
+  void SendOverlayValidationRequest(
+      const std::vector<OverlayCheck_Params>& list) const;
   void OnOverlayResult(bool* handled,
                        gfx::AcceleratedWidget widget,
-                       bool result);
-  void ProcessResult(const OverlayCheck_Params& check, bool result);
+                       const std::vector<OverlayCheck_Params>& params);
+  bool CanHandleCandidate(const OverlaySurfaceCandidate& candidate) const;
 
-  void CheckSingleOverlay(OverlaySurfaceCandidateList* candidates);
-
-  gfx::AcceleratedWidget widget_;
   DrmGpuPlatformSupportHost* platform_support_;  // Not owned.
+  DrmWindowHost* window_;                        // Not owned.
 
-  std::deque<OverlayCheck_Params> pending_checks_;
-
-  template <class KeyType, class ValueType>
-  struct OverlayMap {
-    typedef std::map<KeyType, ValueType, OverlayCompare> Type;
-  };
-  base::MRUCacheBase<OverlayCheck_Params,
+  // List of all OverlayCheck_Params which have been validated in GPU side.
+  // Value is set to true if we are waiting for validation results from GPU.
+  base::MRUCacheBase<std::vector<OverlayCheck_Params>,
                      bool,
-                     base::MRUCacheNullDeletor<bool>,
-                     OverlayMap> cache_;
+                     base::MRUCacheNullDeletor<bool>> cache_;
 
   DISALLOW_COPY_AND_ASSIGN(DrmOverlayCandidatesHost);
 };

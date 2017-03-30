@@ -5,10 +5,14 @@
 #include "components/metrics/metrics_state_manager.h"
 
 #include <ctype.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/prefs/testing_pref_service.h"
 #include "components/metrics/client_info.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -34,7 +38,7 @@ class MetricsStateManagerTest : public testing::Test {
         base::Bind(&MetricsStateManagerTest::MockStoreClientInfoBackup,
                    base::Unretained(this)),
         base::Bind(&MetricsStateManagerTest::LoadFakeClientInfoBackup,
-                   base::Unretained(this))).Pass();
+                   base::Unretained(this)));
   }
 
   // Sets metrics reporting as enabled for testing.
@@ -86,7 +90,7 @@ class MetricsStateManagerTest : public testing::Test {
         fake_client_info_backup_->installation_date;
     backup_copy->reporting_enabled_date =
         fake_client_info_backup_->reporting_enabled_date;
-    return backup_copy.Pass();
+    return backup_copy;
   }
 
   bool is_metrics_reporting_enabled_;
@@ -143,7 +147,8 @@ TEST_F(MetricsStateManagerTest,
        PermutedEntropyCacheClearedWhenLowEntropyReset) {
   const PrefService::Preference* low_entropy_pref =
       prefs_.FindPreference(prefs::kMetricsLowEntropySource);
-  const char* kCachePrefName = prefs::kVariationsPermutedEntropyCache;
+  const char* kCachePrefName =
+      variations::prefs::kVariationsPermutedEntropyCache;
   int low_entropy_value = -1;
 
   // First, generate an initial low entropy source value.
@@ -217,10 +222,10 @@ TEST_F(MetricsStateManagerTest, ResetMetricsIDs) {
 }
 
 TEST_F(MetricsStateManagerTest, ForceClientIdCreation) {
-  const int64 kFakeInstallationDate = 12345;
+  const int64_t kFakeInstallationDate = 12345;
   prefs_.SetInt64(prefs::kInstallDate, kFakeInstallationDate);
 
-  const int64 test_begin_time = base::Time::Now().ToTimeT();
+  const int64_t test_begin_time = base::Time::Now().ToTimeT();
 
   // Holds ClientInfo from previous scoped test for extra checks.
   scoped_ptr<ClientInfo> previous_client_info;
@@ -249,7 +254,7 @@ TEST_F(MetricsStateManagerTest, ForceClientIdCreation) {
     EXPECT_EQ(prefs_.GetInt64(prefs::kMetricsReportingEnabledTimestamp),
               stored_client_info_backup_->reporting_enabled_date);
 
-    previous_client_info = stored_client_info_backup_.Pass();
+    previous_client_info = std::move(stored_client_info_backup_);
   }
 
   EnableMetricsReporting();
@@ -280,8 +285,8 @@ TEST_F(MetricsStateManagerTest, ForceClientIdCreation) {
     EXPECT_EQ(previous_client_info->client_id, state_manager->client_id());
   }
 
-  const int64 kBackupInstallationDate = 1111;
-  const int64 kBackupReportingEnabledDate = 2222;
+  const int64_t kBackupInstallationDate = 1111;
+  const int64_t kBackupReportingEnabledDate = 2222;
   const char kBackupClientId[] = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE";
   fake_client_info_backup_.reset(new ClientInfo);
   fake_client_info_backup_->client_id = kBackupClientId;
@@ -349,7 +354,7 @@ TEST_F(MetricsStateManagerTest, ForceClientIdCreation) {
               test_begin_time);
 
     EXPECT_TRUE(stored_client_info_backup_);
-    previous_client_info = stored_client_info_backup_.Pass();
+    previous_client_info = std::move(stored_client_info_backup_);
   }
 
   prefs_.SetBoolean(prefs::kMetricsResetIds, true);

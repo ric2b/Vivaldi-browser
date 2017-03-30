@@ -5,11 +5,12 @@
 #include "content/browser/appcache/appcache_histograms.h"
 
 #include "base/metrics/histogram.h"
+#include "content/public/common/origin_util.h"
 
 namespace content {
 
 static std::string OriginToCustomHistogramSuffix(const GURL& origin_url) {
-  if (origin_url.host() == "docs.google.com")
+  if (origin_url.host_piece() == "docs.google.com")
     return ".Docs";
   return std::string();
 }
@@ -59,6 +60,9 @@ void AppCacheHistograms::CountResponseRetrieval(
   if (is_main_resource) {
     label = "appcache.MainResourceResponseRetrieval";
     UMA_HISTOGRAM_BOOLEAN(label, success);
+
+    // Also count HTTP vs HTTPS appcache usage.
+    UMA_HISTOGRAM_BOOLEAN("appcache.MainPageLoad", IsOriginSecure(origin_url));
   } else {
     label = "appcache.SubResourceResponseRetrieval";
     UMA_HISTOGRAM_BOOLEAN(label, success);

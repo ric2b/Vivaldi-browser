@@ -4,12 +4,15 @@
 
 #include "content/browser/media/media_internals.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/audio/audio_parameters.h"
 #include "media/base/channel_layout.h"
@@ -151,14 +154,15 @@ TEST_F(MediaInternalsVideoCaptureDeviceTest,
   // be updated at the same time as the media internals JS files.
   const float kFrameRate = 30.0f;
   const gfx::Size kFrameSize(1280, 720);
-  const media::VideoPixelFormat kPixelFormat = media::PIXEL_FORMAT_I420;
+  const media::VideoPixelFormat kPixelFormat =
+      media::PIXEL_FORMAT_I420;
   const media::VideoPixelStorage kPixelStorage = media::PIXEL_STORAGE_CPU;
   const media::VideoCaptureFormat capture_format(kFrameSize, kFrameRate,
                                                  kPixelFormat, kPixelStorage);
   const std::string expected_string = base::StringPrintf(
-      "(%s)@%.3ffps, pixel format: %s storage: %s.",
+      "(%s)@%.3ffps, pixel format: %s, storage: %s",
       kFrameSize.ToString().c_str(), kFrameRate,
-      media::VideoCaptureFormat::PixelFormatToString(kPixelFormat).c_str(),
+      media::VideoPixelFormatToString(kPixelFormat).c_str(),
       media::VideoCaptureFormat::PixelStorageToString(kPixelStorage).c_str());
   EXPECT_EQ(expected_string,
             media::VideoCaptureFormat::ToString(capture_format));
@@ -169,7 +173,8 @@ TEST_F(MediaInternalsVideoCaptureDeviceTest,
   const int kWidth = 1280;
   const int kHeight = 720;
   const float kFrameRate = 30.0f;
-  const media::VideoPixelFormat kPixelFormat = media::PIXEL_FORMAT_I420;
+  const media::VideoPixelFormat kPixelFormat =
+      media::PIXEL_FORMAT_I420;
   const media::VideoCaptureFormat format_hd({kWidth, kHeight},
       kFrameRate, kPixelFormat);
   media::VideoCaptureFormats formats{};
@@ -225,18 +230,12 @@ class MediaInternalsAudioLogTest
     : public MediaInternalsTestBase,
       public testing::TestWithParam<media::AudioLogFactory::AudioComponent> {
  public:
-  MediaInternalsAudioLogTest() :
-      update_cb_(base::Bind(&MediaInternalsAudioLogTest::UpdateCallbackImpl,
-                            base::Unretained(this))),
-      test_params_(media::AudioParameters::AUDIO_PCM_LINEAR,
-                   media::CHANNEL_LAYOUT_MONO,
-                   48000,
-                   16,
-                   128,
-                   media::AudioParameters::ECHO_CANCELLER |
-                   media::AudioParameters::DUCKING),
-      test_component_(GetParam()),
-      audio_log_(media_internals_->CreateAudioLog(test_component_)) {
+  MediaInternalsAudioLogTest()
+      : update_cb_(base::Bind(&MediaInternalsAudioLogTest::UpdateCallbackImpl,
+                              base::Unretained(this))),
+        test_params_(MakeAudioParams()),
+        test_component_(GetParam()),
+        audio_log_(media_internals_->CreateAudioLog(test_component_)) {
     media_internals_->AddUpdateCallback(update_cb_);
   }
 
@@ -249,6 +248,15 @@ class MediaInternalsAudioLogTest
   const media::AudioParameters test_params_;
   const media::AudioLogFactory::AudioComponent test_component_;
   scoped_ptr<media::AudioLog> audio_log_;
+
+ private:
+  static media::AudioParameters MakeAudioParams() {
+    media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LINEAR,
+                                  media::CHANNEL_LAYOUT_MONO, 48000, 16, 128);
+    params.set_effects(media::AudioParameters::ECHO_CANCELLER |
+                       media::AudioParameters::DUCKING);
+    return params;
+  }
 };
 
 TEST_P(MediaInternalsAudioLogTest, AudioLogCreateStartStopErrorClose) {

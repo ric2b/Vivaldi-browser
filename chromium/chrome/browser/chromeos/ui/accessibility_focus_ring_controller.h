@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/singleton.h"
 #include "base/time/time.h"
@@ -74,7 +74,7 @@ class AccessibilityFocusRingController
   base::TimeTicks focus_change_time_;
   ui::Compositor* compositor_;
 
-  friend struct DefaultSingletonTraits<AccessibilityFocusRingController>;
+  friend struct base::DefaultSingletonTraits<AccessibilityFocusRingController>;
 
   DISALLOW_COPY_AND_ASSIGN(AccessibilityFocusRingController);
 };

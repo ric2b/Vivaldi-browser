@@ -13,8 +13,8 @@
         '../base/base.gyp:base',
         '../content/content.gyp:content_browser',
         '../net/net.gyp:net',
-        'browser/devtools/webrtc_device_provider_resources.gyp:webrtc_device_provider_resources',
         'browser/devtools/devtools_protocol_constants.gyp:devtools_protocol_constants',
+        'chrome_features.gyp:chrome_common_features',
       ],
       'include_dirs': [
         '..',
@@ -29,6 +29,8 @@
         'browser/devtools/devtools_network_conditions.h',
         'browser/devtools/devtools_network_controller.cc',
         'browser/devtools/devtools_network_controller.h',
+        'browser/devtools/devtools_network_controller_handle.cc',
+        'browser/devtools/devtools_network_controller_handle.h',
         'browser/devtools/devtools_network_interceptor.cc',
         'browser/devtools/devtools_network_interceptor.h',
         'browser/devtools/devtools_network_protocol_handler.cc',
@@ -37,6 +39,8 @@
         'browser/devtools/devtools_network_transaction.h',
         'browser/devtools/devtools_network_transaction_factory.cc',
         'browser/devtools/devtools_network_transaction_factory.h',
+        'browser/devtools/devtools_network_upload_data_stream.cc',
+        'browser/devtools/devtools_network_upload_data_stream.h',
         'browser/devtools/devtools_protocol.cc',
         'browser/devtools/devtools_protocol.h',
       ],
@@ -57,8 +61,6 @@
             'common/extensions/api/api.gyp:chrome_api',
           ],
           'sources': [
-            '<(SHARED_INTERMEDIATE_DIR)/chrome/grit/webrtc_device_provider_resources_map.cc',
-            '<(SHARED_INTERMEDIATE_DIR)/chrome/grit/webrtc_device_provider_resources_map.h',
             'browser/devtools/chrome_devtools_discovery_provider.cc',
             'browser/devtools/chrome_devtools_discovery_provider.h',
             'browser/devtools/device/adb/adb_client_socket.cc',
@@ -83,14 +85,6 @@
             'browser/devtools/device/usb/android_usb_socket.h',
             'browser/devtools/device/usb/usb_device_provider.cc',
             'browser/devtools/device/usb/usb_device_provider.h',
-            'browser/devtools/device/webrtc/devtools_bridge_client.cc',
-            'browser/devtools/device/webrtc/devtools_bridge_client.h',
-            'browser/devtools/device/webrtc/devtools_bridge_instances_request.cc',
-            'browser/devtools/device/webrtc/devtools_bridge_instances_request.h',
-            'browser/devtools/device/webrtc/send_command_request.cc',
-            'browser/devtools/device/webrtc/send_command_request.h',
-            'browser/devtools/device/webrtc/webrtc_device_provider.cc',
-            'browser/devtools/device/webrtc/webrtc_device_provider.h',
             'browser/devtools/devtools_contents_resizing_strategy.cc',
             'browser/devtools/devtools_contents_resizing_strategy.h',
             'browser/devtools/devtools_embedder_message_dispatcher.cc',
@@ -99,6 +93,8 @@
             'browser/devtools/devtools_file_helper.h',
             'browser/devtools/devtools_file_system_indexer.cc',
             'browser/devtools/devtools_file_system_indexer.h',
+            'browser/devtools/devtools_file_watcher.cc',
+            'browser/devtools/devtools_file_watcher.h',
             'browser/devtools/devtools_target_impl.cc',
             'browser/devtools/devtools_target_impl.h',
             'browser/devtools/devtools_targets_ui.cc',
@@ -109,9 +105,20 @@
             'browser/devtools/devtools_ui_bindings.h',
             'browser/devtools/devtools_window.cc',
             'browser/devtools/devtools_window.h',
+            'browser/devtools/global_confirm_info_bar.cc',
+            'browser/devtools/global_confirm_info_bar.h',
             'browser/devtools/remote_debugging_server.cc',
             'browser/devtools/remote_debugging_server.h',
           ],
+          'conditions': [
+            ['enable_service_discovery==1', {
+              'sources': [
+                'browser/devtools/device/cast_device_provider.cc',
+                'browser/devtools/device/cast_device_provider.h',
+              ],
+            }],
+          ],
+
         }], # OS!="android"
         ['debug_devtools==1', {
           'defines': [

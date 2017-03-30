@@ -5,10 +5,12 @@
 #ifndef MOJO_SERVICES_NETWORK_PUBLIC_CPP_UDP_SOCKET_WRAPPER_H_
 #define MOJO_SERVICES_NETWORK_PUBLIC_CPP_UDP_SOCKET_WRAPPER_H_
 
+#include <stdint.h>
+
 #include <queue>
 
+#include "mojo/public/cpp/bindings/binding.h"
 #include "network/public/interfaces/udp_socket.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
 
 namespace mojo {
 

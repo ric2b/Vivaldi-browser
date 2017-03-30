@@ -8,12 +8,14 @@
 // inefficient. However, it makes these tests a good fit for scenarios which
 // require special server configurations.
 
+#include <stdint.h>
 #include <string>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -23,6 +25,7 @@
 #include "net/base/network_delegate.h"
 #include "net/base/test_data_directory.h"
 #include "net/proxy/proxy_service.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/url_request/url_request_test_util.h"
 #include "net/websockets/websocket_channel.h"
@@ -68,12 +71,12 @@ class ConnectTestingEventInterface : public WebSocketEventInterface {
                            WebSocketMessageType type,
                            const std::vector<char>& data) override;
 
-  ChannelState OnFlowControl(int64 quota) override;
+  ChannelState OnFlowControl(int64_t quota) override;
 
   ChannelState OnClosingHandshake() override;
 
   ChannelState OnDropChannel(bool was_clean,
-                             uint16 code,
+                             uint16_t code,
                              const std::string& reason) override;
 
   ChannelState OnFailChannel(const std::string& message) override;
@@ -141,7 +144,7 @@ ChannelState ConnectTestingEventInterface::OnDataFrame(
   return CHANNEL_ALIVE;
 }
 
-ChannelState ConnectTestingEventInterface::OnFlowControl(int64 quota) {
+ChannelState ConnectTestingEventInterface::OnFlowControl(int64_t quota) {
   return CHANNEL_ALIVE;
 }
 
@@ -151,7 +154,7 @@ ChannelState ConnectTestingEventInterface::OnClosingHandshake() {
 
 ChannelState ConnectTestingEventInterface::OnDropChannel(
     bool was_clean,
-    uint16 code,
+    uint16_t code,
     const std::string& reason) {
   return CHANNEL_DELETED;
 }
@@ -244,7 +247,7 @@ class WebSocketEndToEndTest : public ::testing::Test {
     if (!initialised_context_) {
       InitialiseContext();
     }
-    url::Origin origin("http://localhost");
+    url::Origin origin(GURL("http://localhost"));
     event_interface_ = new ConnectTestingEventInterface;
     channel_.reset(
         new WebSocketChannel(make_scoped_ptr(event_interface_), &context_));
@@ -387,22 +390,22 @@ TEST_F(WebSocketEndToEndTest, DISABLED_ON_ANDROID(TruncatedResponse)) {
 
 // Regression test for crbug.com/455215 "HSTS not applied to WebSocket"
 TEST_F(WebSocketEndToEndTest, DISABLED_ON_ANDROID(HstsHttpsToWebSocket)) {
+  EmbeddedTestServer https_server(net::EmbeddedTestServer::Type::TYPE_HTTPS);
+  https_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_server.ServeFilesFromSourceDirectory("net/data/url_request_unittest");
+
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_COMMON_NAME_IS_DOMAIN);
-  SpawnedTestServer https_server(
-      SpawnedTestServer::TYPE_HTTPS, ssl_options,
-      base::FilePath(FILE_PATH_LITERAL("net/data/url_request_unittest")));
   SpawnedTestServer wss_server(SpawnedTestServer::TYPE_WSS, ssl_options,
                                GetWebSocketTestDataDirectory());
 
-  ASSERT_TRUE(https_server.StartInBackground());
-  ASSERT_TRUE(wss_server.StartInBackground());
-  ASSERT_TRUE(https_server.BlockUntilStarted());
-  ASSERT_TRUE(wss_server.BlockUntilStarted());
+  ASSERT_TRUE(https_server.Start());
+  ASSERT_TRUE(wss_server.Start());
   InitialiseContext();
   // Set HSTS via https:
   TestDelegate delegate;
-  GURL https_page = https_server.GetURL("files/hsts-headers.html");
+  GURL https_page = https_server.GetURL("/hsts-headers.html");
   scoped_ptr<URLRequest> request(
       context_.CreateRequest(https_page, DEFAULT_PRIORITY, &delegate));
   request->Start();
@@ -417,17 +420,17 @@ TEST_F(WebSocketEndToEndTest, DISABLED_ON_ANDROID(HstsHttpsToWebSocket)) {
 }
 
 TEST_F(WebSocketEndToEndTest, DISABLED_ON_ANDROID(HstsWebSocketToHttps)) {
+  EmbeddedTestServer https_server(net::EmbeddedTestServer::Type::TYPE_HTTPS);
+  https_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_server.ServeFilesFromSourceDirectory("net/data/url_request_unittest");
+
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_COMMON_NAME_IS_DOMAIN);
-  SpawnedTestServer https_server(
-      SpawnedTestServer::TYPE_HTTPS, ssl_options,
-      base::FilePath(FILE_PATH_LITERAL("net/data/url_request_unittest")));
   SpawnedTestServer wss_server(SpawnedTestServer::TYPE_WSS, ssl_options,
                                GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(https_server.StartInBackground());
-  ASSERT_TRUE(wss_server.StartInBackground());
-  ASSERT_TRUE(https_server.BlockUntilStarted());
-  ASSERT_TRUE(wss_server.BlockUntilStarted());
+  ASSERT_TRUE(https_server.Start());
+  ASSERT_TRUE(wss_server.Start());
   InitialiseContext();
   // Set HSTS via wss:
   GURL wss_url = wss_server.GetURL("set-hsts");
@@ -436,7 +439,7 @@ TEST_F(WebSocketEndToEndTest, DISABLED_ON_ANDROID(HstsWebSocketToHttps)) {
   // Verify via http:
   TestDelegate delegate;
   GURL http_page =
-      ReplaceUrlScheme(https_server.GetURL("files/simple.html"), "http");
+      ReplaceUrlScheme(https_server.GetURL("/simple.html"), "http");
   scoped_ptr<URLRequest> request(
       context_.CreateRequest(http_page, DEFAULT_PRIORITY, &delegate));
   request->Start();

@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_CHROMEOS_INPUT_METHOD_MOCK_INPUT_METHOD_MANAGER_H_
 #define CHROME_BROWSER_CHROMEOS_INPUT_METHOD_MOCK_INPUT_METHOD_MANAGER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/fake_ime_keyboard.h"
@@ -23,9 +26,10 @@ class MockInputMethodManager : public InputMethodManager {
     explicit State(MockInputMethodManager* manager);
 
     scoped_refptr<InputMethodManager::State> Clone() const override;
-    void AddInputMethodExtension(const std::string& extension_id,
-                                 const InputMethodDescriptors& descriptors,
-                                 InputMethodEngineInterface* instance) override;
+    void AddInputMethodExtension(
+        const std::string& extension_id,
+        const InputMethodDescriptors& descriptors,
+        ui::IMEEngineHandlerInterface* instance) override;
     void RemoveInputMethodExtension(const std::string& extension_id) override;
     void ChangeInputMethod(const std::string& input_method_id,
                            bool show_message) override;

@@ -4,10 +4,10 @@
 
 #include "chrome/browser/download/download_shelf_context_menu.h"
 
-#include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/grit/generated_resources.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/content_features.h"
 #include "extensions/common/extension.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -21,8 +21,7 @@ namespace {
 
 // Returns true if downloads resumption is enabled.
 bool IsDownloadResumptionEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableDownloadResumption);
+  return base::FeatureList::IsEnabled(features::kDownloadResumption);
 }
 
 }  // namespace
@@ -164,6 +163,10 @@ base::string16 DownloadShelfContextMenu::GetLabelForCommandId(
       break;
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
       id = IDS_DOWNLOAD_MENU_LEARN_MORE_INTERRUPTED;
+      break;
+    case DownloadCommands::COPY_TO_CLIPBOARD:
+      // This command is implemented only for Donwload Notification.
+      NOTREACHED();
       break;
   }
   CHECK(id != -1);

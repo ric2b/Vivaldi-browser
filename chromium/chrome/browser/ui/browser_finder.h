@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_FINDER_H_
 #define CHROME_BROWSER_UI_BROWSER_FINDER_H_
 
+#include <stddef.h>
+
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "ui/gfx/native_widget_types.h"
@@ -76,9 +78,6 @@ Browser* FindLastActiveWithProfile(Profile* profile, HostDesktopType type);
 // returns NULL.
 // WARNING #2: this will always be NULL in unit tests run on the bots.
 Browser* FindLastActiveWithHostDesktopType(HostDesktopType type);
-
-// Find first available Vivaldi browser.
-Browser* FindVivaldiBrowser();
 
 // Returns the number of browsers across all profiles and desktops.
 size_t GetTotalBrowserCount();

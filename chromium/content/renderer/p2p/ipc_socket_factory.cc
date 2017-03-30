@@ -4,10 +4,13 @@
 
 #include "content/renderer/p2p/ipc_socket_factory.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <list>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
@@ -609,6 +612,14 @@ void IpcPacketSocket::OnSendComplete(const P2PSendPacketMetrics& send_metrics) {
   in_flight_packet_records_.pop_front();
   TraceSendThrottlingState();
 
+  int64_t send_time_ms = -1;
+  if (send_metrics.rtc_packet_id >= 0) {
+    send_time_ms = (send_metrics.send_time - base::TimeTicks::UnixEpoch())
+                       .InMilliseconds();
+  }
+  SignalSentPacket(this, rtc::SentPacket(send_metrics.rtc_packet_id,
+                                         send_time_ms));
+
   if (writable_signal_expected_ && send_bytes_available_ > 0) {
     WebRtcLogMessage(base::StringPrintf(
         "IpcPacketSocket: sending is unblocked. %d packets in flight.",
@@ -728,7 +739,9 @@ IpcPacketSocketFactory::~IpcPacketSocketFactory() {
 }
 
 rtc::AsyncPacketSocket* IpcPacketSocketFactory::CreateUdpSocket(
-    const rtc::SocketAddress& local_address, uint16 min_port, uint16 max_port) {
+    const rtc::SocketAddress& local_address,
+    uint16_t min_port,
+    uint16_t max_port) {
   rtc::SocketAddress crome_address;
   P2PSocketClientImpl* socket_client =
       new P2PSocketClientImpl(socket_dispatcher_);
@@ -743,7 +756,9 @@ rtc::AsyncPacketSocket* IpcPacketSocketFactory::CreateUdpSocket(
 }
 
 rtc::AsyncPacketSocket* IpcPacketSocketFactory::CreateServerTcpSocket(
-    const rtc::SocketAddress& local_address, uint16 min_port, uint16 max_port,
+    const rtc::SocketAddress& local_address,
+    uint16_t min_port,
+    uint16_t max_port,
     int opts) {
   // TODO(sergeyu): Implement SSL support.
   if (opts & rtc::PacketSocketFactory::OPT_SSLTCP)

@@ -5,8 +5,11 @@
 #ifndef CHROME_RENDERER_PLUGINS_PLUGIN_UMA_H_
 #define CHROME_RENDERER_PLUGINS_PLUGIN_UMA_H_
 
+#include <stddef.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "url/gurl.h"
@@ -59,7 +62,7 @@ class PluginUMAReporter {
                             const GURL& plugin_src);
 
  private:
-  friend struct DefaultSingletonTraits<PluginUMAReporter>;
+  friend struct base::DefaultSingletonTraits<PluginUMAReporter>;
   friend class PluginUMATest;
 
   PluginUMAReporter();

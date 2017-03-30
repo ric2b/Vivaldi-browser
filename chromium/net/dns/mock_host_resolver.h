@@ -5,10 +5,14 @@
 #ifndef NET_DNS_MOCK_HOST_RESOLVER_H_
 #define NET_DNS_MOCK_HOST_RESOLVER_H_
 
+#include <stddef.h>
+
 #include <list>
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/non_thread_safe.h"
 #include "net/dns/host_resolver.h"
@@ -162,6 +166,9 @@ class MockCachingHostResolver : public MockHostResolverBase {
 // a replacement host string. It then uses the system host resolver to return
 // a socket address. Generally the replacement should be an IPv4 literal so
 // there is no network dependency.
+//
+// RuleBasedHostResolverProc is thread-safe, to a limited degree. Rules can be
+// added or removed on any thread.
 class RuleBasedHostResolverProc : public HostResolverProc {
  public:
   explicit RuleBasedHostResolverProc(HostResolverProc* previous);
@@ -214,7 +221,12 @@ class RuleBasedHostResolverProc : public HostResolverProc {
 
   ~RuleBasedHostResolverProc() override;
 
+  void AddRuleInternal(const Rule& rule);
+
   RuleList rules_;
+
+  // Must be obtained before writing to or reading from |rules_|.
+  base::Lock rule_lock_;
 };
 
 // Create rules that map all requests to localhost.

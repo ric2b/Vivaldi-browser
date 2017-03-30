@@ -4,7 +4,10 @@
 
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
 
+#include <utility>
+
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/values.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -30,9 +33,11 @@ class TabCaptureRegistry::LiveRequest : public content::WebContentsObserver {
  public:
   LiveRequest(content::WebContents* target_contents,
               const std::string& extension_id,
+              bool is_anonymous,
               TabCaptureRegistry* registry)
       : content::WebContentsObserver(target_contents),
         extension_id_(extension_id),
+        is_anonymous_(is_anonymous),
         registry_(registry),
         capture_state_(tab_capture::TAB_CAPTURE_STATE_NONE),
         is_verified_(false),
@@ -50,6 +55,9 @@ class TabCaptureRegistry::LiveRequest : public content::WebContentsObserver {
   // Accessors.
   const std::string& extension_id() const {
     return extension_id_;
+  }
+  bool is_anonymous() const {
+    return is_anonymous_;
   }
   TabCaptureState capture_state() const {
     return capture_state_;
@@ -120,6 +128,7 @@ class TabCaptureRegistry::LiveRequest : public content::WebContentsObserver {
 
  private:
   const std::string extension_id_;
+  const bool is_anonymous_;
   TabCaptureRegistry* const registry_;
   TabCaptureState capture_state_;
   bool is_verified_;
@@ -164,13 +173,13 @@ void TabCaptureRegistry::GetCapturedTabs(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(list_of_capture_info);
   list_of_capture_info->Clear();
-  for (ScopedVector<LiveRequest>::const_iterator it = requests_.begin();
-       it != requests_.end(); ++it) {
-    if ((*it)->is_verified() && (*it)->extension_id() == extension_id) {
-      tab_capture::CaptureInfo info;
-      (*it)->GetCaptureInfo(&info);
-      list_of_capture_info->Append(info.ToValue().release());
-    }
+  for (const LiveRequest* request : requests_) {
+    if (request->is_anonymous() || !request->is_verified() ||
+        request->extension_id() != extension_id)
+      continue;
+    tab_capture::CaptureInfo info;
+    request->GetCaptureInfo(&info);
+    list_of_capture_info->Append(info.ToValue().release());
   }
 }
 
@@ -190,7 +199,8 @@ void TabCaptureRegistry::OnExtensionUnloaded(
 }
 
 bool TabCaptureRegistry::AddRequest(content::WebContents* target_contents,
-                                    const std::string& extension_id) {
+                                    const std::string& extension_id,
+                                    bool is_anonymous) {
   LiveRequest* const request = FindRequest(target_contents);
 
   // Currently, we do not allow multiple active captures for same tab.
@@ -204,7 +214,8 @@ bool TabCaptureRegistry::AddRequest(content::WebContents* target_contents,
     }
   }
 
-  requests_.push_back(new LiveRequest(target_contents, extension_id, this));
+  requests_.push_back(
+      new LiveRequest(target_contents, extension_id, is_anonymous, this));
   return true;
 }
 
@@ -305,6 +316,9 @@ void TabCaptureRegistry::OnRequestUpdate(
 
 void TabCaptureRegistry::DispatchStatusChangeEvent(
     const LiveRequest* request) const {
+  if (request->is_anonymous())
+    return;
+
   EventRouter* router = EventRouter::Get(browser_context_);
   if (!router)
     return;
@@ -313,11 +327,12 @@ void TabCaptureRegistry::DispatchStatusChangeEvent(
   tab_capture::CaptureInfo info;
   request->GetCaptureInfo(&info);
   args->Append(info.ToValue().release());
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, tab_capture::OnStatusChanged::kEventName, args.Pass()));
+  scoped_ptr<Event> event(new Event(events::TAB_CAPTURE_ON_STATUS_CHANGED,
+                                    tab_capture::OnStatusChanged::kEventName,
+                                    std::move(args)));
   event->restrict_to_browser_context = browser_context_;
 
-  router->DispatchEventToExtension(request->extension_id(), event.Pass());
+  router->DispatchEventToExtension(request->extension_id(), std::move(event));
 }
 
 TabCaptureRegistry::LiveRequest* TabCaptureRegistry::FindRequest(

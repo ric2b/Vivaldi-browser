@@ -7,8 +7,8 @@
 
 #include <CoreAudio/AudioHardware.h>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/media_export.h"
 

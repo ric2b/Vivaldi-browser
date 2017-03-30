@@ -4,16 +4,19 @@
 
 #include "chrome/browser/chromeos/drive/fileapi/fileapi_worker.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/task_runner_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "chrome/browser/chromeos/drive/drive.pb.h"
-#include "chrome/browser/chromeos/drive/file_errors.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
-#include "chrome/browser/chromeos/drive/resource_entry_conversion.h"
+#include "components/drive/drive.pb.h"
+#include "components/drive/file_errors.h"
+#include "components/drive/file_system_interface.h"
+#include "components/drive/resource_entry_conversion.h"
 #include "content/public/browser/browser_thread.h"
 #include "storage/browser/fileapi/file_system_url.h"
 #include "storage/common/fileapi/directory_entry.h"
@@ -82,9 +85,6 @@ void RunReadDirectoryCallbackWithEntries(
 
     const PlatformFileInfoProto& file_info = resource_entry.file_info();
     entry.is_directory = file_info.is_directory();
-    entry.size = file_info.size();
-    entry.last_modified_time =
-        base::Time::FromInternalValue(file_info.last_modified());
     entries.push_back(entry);
   }
 
@@ -149,7 +149,7 @@ void RunCreateWritableSnapshotFileCallback(
 void RunOpenFileCallback(const OpenFileCallback& callback,
                          const base::Closure& close_callback,
                          base::File file) {
-  callback.Run(file.Pass(), close_callback);
+  callback.Run(std::move(file), close_callback);
 }
 
 base::File OpenFile(const base::FilePath& path, int flags) {
@@ -296,7 +296,7 @@ void CreateFile(const base::FilePath& file_path,
 }
 
 void Truncate(const base::FilePath& file_path,
-              int64 length,
+              int64_t length,
               const StatusCallback& callback,
               FileSystemInterface* file_system) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);

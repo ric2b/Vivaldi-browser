@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/file_manager_browsertest_base.h"
@@ -164,6 +167,66 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
                       "deleteMenuItemIsDisabledWhenNoItemIsSelected"),
         TestParameter(NOT_IN_GUEST_MODE, "deleteOneItemFromToolbar")));
 
+#if defined(DISABLE_SLOW_FILESAPP_TESTS)
+#define MAYBE_DirectoryTreeContextMenu DISABLED_DirectoryTreeContextMenu
+#else
+#define MAYBE_DirectoryTreeContextMenu DirectoryTreeContextMenu
+#endif
+WRAPPED_INSTANTIATE_TEST_CASE_P(
+    MAYBE_DirectoryTreeContextMenu,
+    FileManagerBrowserTest,
+    ::testing::Values(
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "copyFromDirectoryTreeWithContextMenu"),
+        TestParameter(IN_GUEST_MODE, "copyFromDirectoryTreeWithContextMenu"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "copyFromDirectoryTreeWithKeyboardShortcut"),
+        TestParameter(IN_GUEST_MODE,
+                      "copyFromDirectoryTreeWithKeyboardShortcut"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "copyFromDirectoryTreeWithoutChaningCurrentDirectory"),
+        TestParameter(NOT_IN_GUEST_MODE, "cutFromDirectoryTreeWithContextMenu"),
+        TestParameter(IN_GUEST_MODE, "cutFromDirectoryTreeWithContextMenu"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "cutFromDirectoryTreeWithKeyboardShortcut"),
+        TestParameter(IN_GUEST_MODE,
+                      "cutFromDirectoryTreeWithKeyboardShortcut"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "cutFromDirectoryTreeWithoutChaningCurrentDirectory"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "pasteIntoFolderFromDirectoryTreeWithContextMenu"),
+        TestParameter(IN_GUEST_MODE,
+                      "pasteIntoFolderFromDirectoryTreeWithContextMenu"),
+        TestParameter(
+            NOT_IN_GUEST_MODE,
+            "pasteIntoFolderFromDirectoryTreeWithoutChaningCurrentDirectory"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "renameDirectoryFromDirectoryTreeWithContextMenu"),
+        TestParameter(IN_GUEST_MODE,
+                      "renameDirectoryFromDirectoryTreeWithContextMenu"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "renameDirectoryFromDirectoryTreeWithKeyboardShortcut"),
+        TestParameter(IN_GUEST_MODE,
+                      "renameDirectoryFromDirectoryTreeWithKeyboardShortcut"),
+        TestParameter(
+            NOT_IN_GUEST_MODE,
+            "renameDirectoryFromDirectoryTreeWithoutChangingCurrentDirectory"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "renameDirectoryToEmptyStringFromDirectoryTree"),
+        TestParameter(IN_GUEST_MODE,
+                      "renameDirectoryToEmptyStringFromDirectoryTree"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "renameDirectoryToExistingOneFromDirectoryTree"),
+        TestParameter(IN_GUEST_MODE,
+                      "renameDirectoryToExistingOneFromDirectoryTree"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "createDirectoryFromDirectoryTreeWithContextMenu"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "createDirectoryFromDirectoryTreeWithKeyboardShortcut"),
+        TestParameter(NOT_IN_GUEST_MODE,
+                      "createDirectoryFromDirectoryTreeWithoutChangingCurrentDi"
+                      "rectory")));
+
 // Fails on official build. http://crbug.com/429294
 #if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
 #define MAYBE_DriveSpecific DISABLED_DriveSpecific
@@ -279,24 +342,24 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
 #else
 #define MAYBE_ExecuteDefaultTaskOnDrive ExecuteDefaultTaskOnDrive
 #endif
-INSTANTIATE_TEST_CASE_P(
+WRAPPED_INSTANTIATE_TEST_CASE_P(
     MAYBE_ExecuteDefaultTaskOnDrive,
     FileManagerBrowserTest,
-    ::testing::Values(
-        TestParameter(NOT_IN_GUEST_MODE, "executeDefaultTaskOnDrive")));
+    ::testing::Values(TestParameter(NOT_IN_GUEST_MODE,
+                                    "executeDefaultTaskOnDrive")));
 
 #if defined(DISABLE_SLOW_FILESAPP_TESTS)
-#define MAYBE_DefaultActionDialog DISABLED_DefaultActionDialog
+#define MAYBE_DefaultTaskDialog DISABLED_DefaultTaskDialog
 #else
-#define MAYBE_DefaultActionDialog DefaultActionDialog
+#define MAYBE_DefaultTaskDialog DefaultTaskDialog
 #endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    MAYBE_DefaultActionDialog,
+    MAYBE_DefaultTaskDialog,
     FileManagerBrowserTest,
     ::testing::Values(
-        TestParameter(NOT_IN_GUEST_MODE, "defaultActionDialogOnDownloads"),
-        TestParameter(IN_GUEST_MODE, "defaultActionDialogOnDownloads"),
-        TestParameter(NOT_IN_GUEST_MODE, "defaultActionDialogOnDrive")));
+        TestParameter(NOT_IN_GUEST_MODE, "defaultTaskDialogOnDownloads"),
+        TestParameter(IN_GUEST_MODE, "defaultTaskDialogOnDownloads"),
+        TestParameter(NOT_IN_GUEST_MODE, "defaultTaskDialogOnDrive")));
 
 #if defined(DISABLE_SLOW_FILESAPP_TESTS)
 #define MAYBE_GenericTask DISABLED_GenericTask
@@ -334,8 +397,13 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "sortColumns"),
                       TestParameter(IN_GUEST_MODE, "sortColumns")));
 
-INSTANTIATE_TEST_CASE_P(
-    TabIndex,
+#if defined(DISABLE_SLOW_FILESAPP_TESTS)
+#define MAYBE_TabIndex DISABLED_TabIndex
+#else
+#define MAYBE_TabIndex TabIndex
+#endif
+WRAPPED_INSTANTIATE_TEST_CASE_P(
+    MAYBE_TabIndex,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "searchBoxFocus")));
 
@@ -349,8 +417,13 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "tabindexFocus")));
 
-INSTANTIATE_TEST_CASE_P(
-    TabindexFocusDownloads,
+#if defined(DISABLE_SLOW_FILESAPP_TESTS)
+#define MAYBE_TabindexFocusDownloads DISABLED_TabindexFocusDownloads
+#else
+#define MAYBE_TabindexFocusDownloads TabindexFocusDownloads
+#endif
+WRAPPED_INSTANTIATE_TEST_CASE_P(
+    MAYBE_TabindexFocusDownloads,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE,
                                     "tabindexFocusDownloads"),
@@ -369,7 +442,7 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
                                     "tabindexFocusDirectorySelected")));
 
 // Fails on official cros trunk build. http://crbug.com/480491
-#if defined(OFFICIAL_BUILD)
+#if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
 #define MAYBE_TabindexOpenDialog DISABLED_TabindexOpenDialog
 #else
 #define MAYBE_TabindexOpenDialog TabindexOpenDialog
@@ -383,7 +456,7 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
         TestParameter(IN_GUEST_MODE, "tabindexOpenDialogDownloads")));
 
 // Fails on official build. http://crbug.com/482121.
-#if defined(OFFICIAL_BUILD)
+#if defined(DISABLE_SLOW_FILESAPP_TESTS) || defined(OFFICIAL_BUILD)
 #define MAYBE_TabindexSaveFileDialog DISABLED_TabindexSaveFileDialog
 #else
 #define MAYBE_TabindexSaveFileDialog TabindexSaveFileDialog
@@ -446,14 +519,32 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
                       TestParameter(IN_GUEST_MODE, "showGridViewDownloads"),
                       TestParameter(NOT_IN_GUEST_MODE, "showGridViewDrive")));
 
+#if defined(DISABLE_SLOW_FILESAPP_TESTS)
+#define MAYBE_Providers DISABLED_Providers
+#else
+#define MAYBE_Providers Providers
+#endif
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    Providers,
+    MAYBE_Providers,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "requestMount"),
         TestParameter(NOT_IN_GUEST_MODE, "requestMountMultipleMounts"),
         TestParameter(NOT_IN_GUEST_MODE, "requestMountSourceDevice"),
         TestParameter(NOT_IN_GUEST_MODE, "requestMountSourceFile")));
+
+#if defined(DISABLE_SLOW_FILESAPP_TESTS)
+#define MAYBE_GearMenu DISABLED_GearMenu
+#else
+#define MAYBE_GearMenu GearMenu
+#endif
+WRAPPED_INSTANTIATE_TEST_CASE_P(
+    MAYBE_GearMenu,
+    FileManagerBrowserTest,
+    ::testing::Values(
+        TestParameter(NOT_IN_GUEST_MODE, "showHiddenFilesOnDownloads"),
+        TestParameter(NOT_IN_GUEST_MODE, "showHiddenFilesOnDrive"),
+        TestParameter(NOT_IN_GUEST_MODE, "hideGoogleDocs")));
 
 // Structure to describe an account info.
 struct TestAccountInfo {
@@ -521,9 +612,10 @@ class MultiProfileFileManagerBrowserTest : public FileManagerBrowserTestBase {
   void AddUser(const TestAccountInfo& info, bool log_in) {
     user_manager::UserManager* const user_manager =
         user_manager::UserManager::Get();
+    const AccountId account_id(AccountId::FromUserEmail(info.email));
     if (log_in)
-      user_manager->UserLoggedIn(info.email, info.hash, false);
-    user_manager->SaveUserDisplayName(info.email,
+      user_manager->UserLoggedIn(account_id, info.hash, false);
+    user_manager->SaveUserDisplayName(account_id,
                                       base::UTF8ToUTF16(info.display_name));
     SigninManagerFactory::GetForProfile(
         chromeos::ProfileHelper::GetProfileByUserIdHash(info.hash))

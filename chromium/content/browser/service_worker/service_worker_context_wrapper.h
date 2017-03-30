@@ -5,9 +5,12 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_CONTEXT_WRAPPER_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_CONTEXT_WRAPPER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
@@ -28,6 +31,7 @@ class SpecialStoragePolicy;
 namespace content {
 
 class BrowserContext;
+class ResourceContext;
 class ServiceWorkerContextCore;
 class ServiceWorkerContextObserver;
 class StoragePartitionImpl;
@@ -41,6 +45,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       public base::RefCountedThreadSafe<ServiceWorkerContextWrapper> {
  public:
   using StatusCallback = base::Callback<void(ServiceWorkerStatusCode)>;
+  using BoolCallback = base::Callback<void(bool)>;
   using FindRegistrationCallback =
       ServiceWorkerStorage::FindRegistrationCallback;
   using GetRegistrationsInfosCallback =
@@ -69,6 +74,13 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   void set_storage_partition(StoragePartitionImpl* storage_partition);
 
+  // The ResourceContext for the associated BrowserContext. This should only
+  // be accessed on the IO thread, and can be null during initialization and
+  // shutdown.
+  ResourceContext* resource_context();
+
+  void set_resource_context(ResourceContext* resource_context);
+
   // The process manager can be used on either UI or IO.
   ServiceWorkerProcessManager* process_manager() {
     return process_manager_.get();
@@ -80,27 +92,50 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
                              const ResultCallback& continuation) override;
   void UnregisterServiceWorker(const GURL& pattern,
                                const ResultCallback& continuation) override;
-  void CanHandleMainResourceOffline(
-      const GURL& url,
-      const GURL& first_party,
-      const net::CompletionCallback& callback) override;
   void GetAllOriginsInfo(const GetUsageInfoCallback& callback) override;
-  void DeleteForOrigin(const GURL& origin) override;
+  void DeleteForOrigin(const GURL& origin,
+                       const ResultCallback& callback) override;
   void CheckHasServiceWorker(
       const GURL& url,
       const GURL& other_url,
       const CheckHasServiceWorkerCallback& callback) override;
+  void StopAllServiceWorkersForOrigin(const GURL& origin) override;
+  void ClearAllServiceWorkersForTest(const base::Closure& callback) override;
 
   ServiceWorkerRegistration* GetLiveRegistration(int64_t registration_id);
   ServiceWorkerVersion* GetLiveVersion(int64_t version_id);
   std::vector<ServiceWorkerRegistrationInfo> GetAllLiveRegistrationInfo();
   std::vector<ServiceWorkerVersionInfo> GetAllLiveVersionInfo();
 
-  void FindRegistrationForDocument(const GURL& document_url,
-                                   const FindRegistrationCallback& callback);
-  void FindRegistrationForId(int64_t registration_id,
-                             const GURL& origin,
-                             const FindRegistrationCallback& callback);
+  void HasMainFrameProviderHost(const GURL& origin,
+                                const BoolCallback& callback) const;
+
+  // Returns the registration whose scope longest matches |document_url|. It is
+  // guaranteed that the returned registration has the activated worker.
+  //
+  //  - If the registration is not found, returns ERROR_NOT_FOUND.
+  //  - If the registration has neither the waiting version nor the active
+  //    version, returns ERROR_NOT_FOUND.
+  //  - If the registration does not have the active version but has the waiting
+  //    version, activates the waiting version and runs |callback| when it is
+  //    activated.
+  void FindReadyRegistrationForDocument(
+      const GURL& document_url,
+      const FindRegistrationCallback& callback);
+
+  // Returns the registration for |registration_id|. It is guaranteed that the
+  // returned registration has the activated worker.
+  //
+  //  - If the registration is not found, returns ERROR_NOT_FOUND.
+  //  - If the registration has neither the waiting version nor the active
+  //    version, returns ERROR_NOT_FOUND.
+  //  - If the registration does not have the active version but has the waiting
+  //    version, activates the waiting version and runs |callback| when it is
+  //    activated.
+  void FindReadyRegistrationForId(int64_t registration_id,
+                                  const GURL& origin,
+                                  const FindRegistrationCallback& callback);
+
   void GetAllRegistrations(const GetRegistrationsInfosCallback& callback);
   void GetRegistrationUserData(int64_t registration_id,
                                const std::string& key,
@@ -117,17 +152,16 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const std::string& key,
       const GetUserDataForAllRegistrationsCallback& callback);
 
-  // DeleteForOrigin with completion callback.  Does not exit early, and returns
-  // false if one or more of the deletions fail.
-  virtual void DeleteForOrigin(const GURL& origin, const ResultCallback& done);
-
   void StartServiceWorker(const GURL& pattern, const StatusCallback& callback);
   void UpdateRegistration(const GURL& pattern);
-  void SimulateSkipWaiting(int64_t version_id);
+  void SetForceUpdateOnPageLoad(int64_t registration_id,
+                                bool force_update_on_page_load);
   void AddObserver(ServiceWorkerContextObserver* observer);
   void RemoveObserver(ServiceWorkerContextObserver* observer);
 
   bool is_incognito() const { return is_incognito_; }
+
+  bool OriginHasForeignFetchRegistrations(const GURL& origin);
 
  private:
   friend class BackgroundSyncManagerTest;
@@ -136,6 +170,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   friend class EmbeddedWorkerBrowserTest;
   friend class ServiceWorkerDispatcherHost;
   friend class ServiceWorkerInternalsUI;
+  friend class ServiceWorkerNavigationHandleCore;
   friend class ServiceWorkerProcessManager;
   friend class ServiceWorkerRequestHandler;
   friend class ServiceWorkerVersionBrowserTest;
@@ -151,17 +186,22 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       storage::SpecialStoragePolicy* special_storage_policy);
   void ShutdownOnIO();
 
+  void DidFindRegistrationForFindReady(
+      const FindRegistrationCallback& callback,
+      ServiceWorkerStatusCode status,
+      const scoped_refptr<ServiceWorkerRegistration>& registration);
+  void OnStatusChangedForFindReadyRegistration(
+      const FindRegistrationCallback& callback,
+      const scoped_refptr<ServiceWorkerRegistration>& registration);
+
   void DidDeleteAndStartOver(ServiceWorkerStatusCode status);
 
   void DidGetAllRegistrationsForGetAllOrigins(
       const GetUsageInfoCallback& callback,
       const std::vector<ServiceWorkerRegistrationInfo>& registrations);
 
-  void DidFindRegistrationForCheckHasServiceWorker(
-      const GURL& other_url,
-      const CheckHasServiceWorkerCallback& callback,
-      ServiceWorkerStatusCode status,
-      const scoped_refptr<ServiceWorkerRegistration>& registration);
+  void DidCheckHasServiceWorker(const CheckHasServiceWorkerCallback& callback,
+                                bool has_service_worker);
 
   void DidFindRegistrationForUpdate(
       ServiceWorkerStatusCode status,
@@ -183,6 +223,11 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   // Raw pointer to the StoragePartitionImpl owning |this|.
   StoragePartitionImpl* storage_partition_;
+
+  // The ResourceContext associated with this context.
+  ResourceContext* resource_context_;
+
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerContextWrapper);
 };
 
 }  // namespace content

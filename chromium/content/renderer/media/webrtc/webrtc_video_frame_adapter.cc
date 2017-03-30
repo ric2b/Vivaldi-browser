@@ -43,23 +43,31 @@ const uint8_t* WebRtcVideoFrameAdapter::data(webrtc::PlaneType type) const {
   return frame_->visible_data(WebRtcToMediaPlaneType(type));
 }
 
-uint8_t* WebRtcVideoFrameAdapter::data(webrtc::PlaneType type) {
-  NOTREACHED();
-  return nullptr;
-}
-
 int WebRtcVideoFrameAdapter::stride(webrtc::PlaneType type) const {
   return frame_->stride(WebRtcToMediaPlaneType(type));
 }
 
 void* WebRtcVideoFrameAdapter::native_handle() const {
-  return frame_->HasTextures() ? frame_.get() : nullptr;
+  if (frame_->HasTextures() ||
+      frame_->storage_type() == media::VideoFrame::STORAGE_GPU_MEMORY_BUFFERS ||
+      frame_->storage_type() == media::VideoFrame::STORAGE_SHMEM)
+    return frame_.get();
+  return nullptr;
 }
 
 rtc::scoped_refptr<webrtc::VideoFrameBuffer>
 WebRtcVideoFrameAdapter::NativeToI420Buffer() {
-  NOTREACHED();
-  return nullptr;
+  CHECK(media::VideoFrame::IsValidConfig(
+      frame_->format(), frame_->storage_type(), frame_->coded_size(),
+      frame_->visible_rect(), frame_->natural_size()));
+  CHECK_EQ(media::PIXEL_FORMAT_I420, frame_->format());
+  CHECK(reinterpret_cast<void*>(frame_->data(media::VideoFrame::kYPlane)));
+  CHECK(reinterpret_cast<void*>(frame_->data(media::VideoFrame::kUPlane)));
+  CHECK(reinterpret_cast<void*>(frame_->data(media::VideoFrame::kVPlane)));
+  CHECK(frame_->stride(media::VideoFrame::kYPlane));
+  CHECK(frame_->stride(media::VideoFrame::kUPlane));
+  CHECK(frame_->stride(media::VideoFrame::kVPlane));
+  return this;
 }
 
 }  // namespace content

@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_BROWSER_TRANSLATE_TRANSLATE_ACCEPT_LANGUAGES_H_
-#define CHROME_BROWSER_TRANSLATE_TRANSLATE_ACCEPT_LANGUAGES_H_
+#ifndef COMPONENTS_TRANSLATE_CORE_BROWSER_TRANSLATE_ACCEPT_LANGUAGES_H_
+#define COMPONENTS_TRANSLATE_CORE_BROWSER_TRANSLATE_ACCEPT_LANGUAGES_H_
 
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 
 class PrefService;
@@ -19,7 +19,6 @@ namespace translate {
 // header.
 class TranslateAcceptLanguages {
  public:
-
   // |accept_languages_pref| is the path to the preference storing the accept
   // languages.
   TranslateAcceptLanguages(PrefService* prefs,
@@ -54,4 +53,4 @@ class TranslateAcceptLanguages {
 
 }  // namespace translate
 
-#endif  // CHROME_BROWSER_TRANSLATE_TRANSLATE_ACCEPT_LANGUAGES_H_
+#endif  // COMPONENTS_TRANSLATE_CORE_BROWSER_TRANSLATE_ACCEPT_LANGUAGES_H_

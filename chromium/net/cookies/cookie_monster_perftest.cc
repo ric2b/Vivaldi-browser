@@ -284,7 +284,7 @@ TEST_F(CookieMonsterTest, TestImport) {
 
   // We want to setup a fairly large backing store, with 300 domains of 50
   // cookies each.  Creation times must be unique.
-  int64 time_tick(base::Time::Now().ToInternalValue());
+  int64_t time_tick(base::Time::Now().ToInternalValue());
 
   for (int domain_num = 0; domain_num < 300; domain_num++) {
     std::string domain_name(base::StringPrintf(".Domain_%d.com", domain_num));
@@ -371,7 +371,7 @@ TEST_F(CookieMonsterTest, TestGCTimes) {
   for (int ci = 0; ci < static_cast<int>(arraysize(test_cases)); ++ci) {
     const TestCase& test_case(test_cases[ci]);
     scoped_refptr<CookieMonster> cm(CreateMonsterFromStoreForGC(
-        test_case.num_cookies, test_case.num_old_cookies,
+        test_case.num_cookies, test_case.num_old_cookies, 0, 0,
         CookieMonster::kSafeFromGlobalPurgeDays * 2));
 
     GURL gurl("http://google.com");

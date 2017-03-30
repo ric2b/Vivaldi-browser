@@ -5,11 +5,12 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -378,6 +379,9 @@ TEST(CommandLineTest, ProgramQuotes) {
 
 // Calling Init multiple times should not modify the previous CommandLine.
 TEST(CommandLineTest, Init) {
+  // Call Init without checking output once so we know it's been called
+  // whether or not the test runner does so.
+  CommandLine::Init(0, NULL);
   CommandLine* initial = CommandLine::ForCurrentProcess();
   EXPECT_FALSE(CommandLine::Init(0, NULL));
   CommandLine* current = CommandLine::ForCurrentProcess();

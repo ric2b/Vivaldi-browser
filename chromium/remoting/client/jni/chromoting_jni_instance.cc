@@ -5,6 +5,9 @@
 #include "remoting/client/jni/chromoting_jni_instance.h"
 
 #include <android/log.h>
+#include <stdint.h>
+
+#include <utility>
 
 #include "base/bind.h"
 #include "base/logging.h"
@@ -15,15 +18,18 @@
 #include "remoting/client/client_status_logger.h"
 #include "remoting/client/jni/android_keymap.h"
 #include "remoting/client/jni/chromoting_jni_runtime.h"
+#include "remoting/client/jni/jni_frame_consumer.h"
 #include "remoting/client/software_video_renderer.h"
 #include "remoting/client/token_fetcher_proxy.h"
 #include "remoting/protocol/chromium_port_allocator.h"
 #include "remoting/protocol/chromium_socket_factory.h"
 #include "remoting/protocol/host_stub.h"
-#include "remoting/protocol/libjingle_transport_factory.h"
 #include "remoting/protocol/negotiating_client_authenticator.h"
 #include "remoting/protocol/network_settings.h"
+#include "remoting/protocol/performance_tracker.h"
+#include "remoting/protocol/transport_context.h"
 #include "remoting/signaling/server_log_entry.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
 
 namespace remoting {
 
@@ -82,13 +88,12 @@ ChromotingJniInstance::ChromotingJniInstance(ChromotingJniRuntime* jni_runtime,
   authenticator_.reset(new protocol::NegotiatingClientAuthenticator(
       pairing_id, pairing_secret, host_id_,
       base::Bind(&ChromotingJniInstance::FetchSecret, this),
-      token_fetcher.Pass(), auth_methods));
+      std::move(token_fetcher), auth_methods));
 
   // Post a task to start connection
-  jni_runtime_->display_task_runner()->PostTask(
+  jni_runtime_->network_task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&ChromotingJniInstance::ConnectToHostOnDisplayThread,
-                 this));
+      base::Bind(&ChromotingJniInstance::ConnectToHostOnNetworkThread, this));
 }
 
 ChromotingJniInstance::~ChromotingJniInstance() {
@@ -105,23 +110,26 @@ ChromotingJniInstance::~ChromotingJniInstance() {
 }
 
 void ChromotingJniInstance::Disconnect() {
-  if (!jni_runtime_->display_task_runner()->BelongsToCurrentThread()) {
-    jni_runtime_->display_task_runner()->PostTask(
+  if (!jni_runtime_->network_task_runner()->BelongsToCurrentThread()) {
+    jni_runtime_->network_task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&ChromotingJniInstance::Disconnect, this));
     return;
   }
 
-  // This must be destroyed on the display thread before the producer is gone.
+  host_id_.clear();
+
+  stats_logging_enabled_ = false;
+
+  // |client_| must be torn down before |signaling_|.
+  client_.reset();
+  client_status_logger_.reset();
+  video_renderer_.reset();
   view_.reset();
-
-  // The weak pointers must be invalidated on the same thread they were used.
-  view_weak_factory_->InvalidateWeakPtrs();
-
-  jni_runtime_->network_task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&ChromotingJniInstance::DisconnectFromHostOnNetworkThread,
-                 this));
+  authenticator_.reset();
+  signaling_.reset();
+  perf_tracker_.reset();
+  client_context_.reset();
 }
 
 void ChromotingJniInstance::FetchThirdPartyToken(
@@ -227,10 +235,17 @@ void ChromotingJniInstance::SendMouseWheelEvent(int delta_x, int delta_y) {
   client_->input_stub()->InjectMouseEvent(event);
 }
 
-bool ChromotingJniInstance::SendKeyEvent(int key_code, bool key_down) {
-  uint32 usb_key_code = AndroidKeycodeToUsbKeycode(key_code);
+bool ChromotingJniInstance::SendKeyEvent(int scan_code,
+                                         int key_code,
+                                         bool key_down) {
+  // For software keyboards |scan_code| is set to 0, in which case the
+  // |key_code| is used instead.
+  uint32_t usb_key_code =
+      scan_code ? ui::KeycodeConverter::NativeKeycodeToUsbKeycode(scan_code)
+                : AndroidKeycodeToUsbKeycode(key_code);
   if (!usb_key_code) {
-    LOG(WARNING) << "Ignoring unknown keycode: " << key_code;
+    LOG(WARNING) << "Ignoring unknown key code: " << key_code
+                 << " scan code: " << scan_code;
     return false;
   }
 
@@ -249,6 +264,18 @@ void ChromotingJniInstance::SendTextEvent(const std::string& text) {
   protocol::TextEvent event;
   event.set_text(text);
   client_->input_stub()->InjectTextEvent(event);
+}
+
+void ChromotingJniInstance::SendTouchEvent(
+    const protocol::TouchEvent& touch_event) {
+  if (!jni_runtime_->network_task_runner()->BelongsToCurrentThread()) {
+    jni_runtime_->network_task_runner()->PostTask(
+        FROM_HERE,
+        base::Bind(&ChromotingJniInstance::SendTouchEvent, this, touch_event));
+    return;
+  }
+
+  client_->input_stub()->InjectTouchEvent(touch_event);
 }
 
 void ChromotingJniInstance::EnableVideoChannel(bool enable) {
@@ -278,18 +305,6 @@ void ChromotingJniInstance::SendClientMessage(const std::string& type,
   extension_message.set_type(type);
   extension_message.set_data(data);
   client_->host_stub()->DeliverClientMessage(extension_message);
-}
-
-void ChromotingJniInstance::RecordPaintTime(int64 paint_time_ms) {
-  if (!jni_runtime_->network_task_runner()->BelongsToCurrentThread()) {
-    jni_runtime_->network_task_runner()->PostTask(
-        FROM_HERE, base::Bind(&ChromotingJniInstance::RecordPaintTime, this,
-                              paint_time_ms));
-    return;
-  }
-
-  if (stats_logging_enabled_)
-    video_renderer_->GetStats()->video_paint_ms()->Record(paint_time_ms);
 }
 
 void ChromotingJniInstance::OnConnectionState(
@@ -381,36 +396,19 @@ void ChromotingJniInstance::SetCursorShape(
   jni_runtime_->UpdateCursorShape(shape);
 }
 
-void ChromotingJniInstance::ConnectToHostOnDisplayThread() {
-  DCHECK(jni_runtime_->display_task_runner()->BelongsToCurrentThread());
-
-  view_.reset(new JniFrameConsumer(jni_runtime_, this));
-  view_weak_factory_.reset(new base::WeakPtrFactory<JniFrameConsumer>(
-      view_.get()));
-  frame_consumer_ = new FrameConsumerProxy(jni_runtime_->display_task_runner(),
-                                           view_weak_factory_->GetWeakPtr());
-
-  jni_runtime_->network_task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&ChromotingJniInstance::ConnectToHostOnNetworkThread,
-                 this));
-}
-
 void ChromotingJniInstance::ConnectToHostOnNetworkThread() {
   DCHECK(jni_runtime_->network_task_runner()->BelongsToCurrentThread());
 
   jingle_glue::JingleThreadWrapper::EnsureForCurrentMessageLoop();
 
-  client_context_.reset(new ClientContext(
-      jni_runtime_->network_task_runner().get()));
+  client_context_.reset(new ClientContext(jni_runtime_->network_task_runner()));
   client_context_->Start();
 
-  SoftwareVideoRenderer* renderer =
-      new SoftwareVideoRenderer(client_context_->main_task_runner(),
-                                client_context_->decode_task_runner(),
-                                frame_consumer_);
-  view_->set_frame_producer(renderer);
-  video_renderer_.reset(renderer);
+  perf_tracker_.reset(new protocol::PerformanceTracker());
+
+  view_.reset(new JniFrameConsumer(jni_runtime_));
+  video_renderer_.reset(new SoftwareVideoRenderer(
+      client_context_->decode_task_runner(), view_.get(), perf_tracker_.get()));
 
   client_.reset(new ChromotingClient(
       client_context_.get(), this, video_renderer_.get(), nullptr));
@@ -428,33 +426,17 @@ void ChromotingJniInstance::ConnectToHostOnNetworkThread() {
       protocol::NetworkSettings::NAT_TRAVERSAL_FULL);
 
   // Use Chrome's network stack to allocate ports for peer-to-peer channels.
-  scoped_ptr<protocol::ChromiumPortAllocator> port_allocator(
-      protocol::ChromiumPortAllocator::Create(jni_runtime_->url_requester(),
-                                              network_settings));
+  scoped_ptr<protocol::ChromiumPortAllocatorFactory> port_allocator_factory(
+      new protocol::ChromiumPortAllocatorFactory(
+          jni_runtime_->url_requester()));
 
-  scoped_ptr<protocol::TransportFactory> transport_factory(
-      new protocol::LibjingleTransportFactory(
-          signaling_.get(), port_allocator.Pass(), network_settings,
-          protocol::TransportRole::CLIENT));
+  scoped_refptr<protocol::TransportContext> transport_context =
+      new protocol::TransportContext(
+          signaling_.get(), std::move(port_allocator_factory), network_settings,
+          protocol::TransportRole::CLIENT);
 
-  client_->Start(signaling_.get(), authenticator_.Pass(),
-                 transport_factory.Pass(), host_jid_, capabilities_);
-}
-
-void ChromotingJniInstance::DisconnectFromHostOnNetworkThread() {
-  DCHECK(jni_runtime_->network_task_runner()->BelongsToCurrentThread());
-
-  host_id_.clear();
-
-  stats_logging_enabled_ = false;
-
-  // |client_| must be torn down before |signaling_|.
-  client_.reset();
-  client_status_logger_.reset();
-  video_renderer_.reset();
-  authenticator_.reset();
-  signaling_.reset();
-  client_context_.reset();
+  client_->Start(signaling_.get(), std::move(authenticator_), transport_context,
+                 host_jid_, capabilities_);
 }
 
 void ChromotingJniInstance::FetchSecret(
@@ -494,7 +476,6 @@ void ChromotingJniInstance::SendKeyEventInternal(int usb_key_code,
     return;
   }
 
-
   protocol::KeyEvent event;
   event.set_usb_keycode(usb_key_code);
   event.set_pressed(key_down);
@@ -518,19 +499,16 @@ void ChromotingJniInstance::LogPerfStats() {
   if (!stats_logging_enabled_)
     return;
 
-  ChromotingStats* stats = video_renderer_->GetStats();
-  __android_log_print(ANDROID_LOG_INFO, "stats",
-                      "Bandwidth:%.0f FrameRate:%.1f Capture:%.1f Encode:%.1f "
-                      "Decode:%.1f Render:%.1f Latency:%.0f",
-                      stats->video_bandwidth()->Rate(),
-                      stats->video_frame_rate()->Rate(),
-                      stats->video_capture_ms()->Average(),
-                      stats->video_encode_ms()->Average(),
-                      stats->video_decode_ms()->Average(),
-                      stats->video_paint_ms()->Average(),
-                      stats->round_trip_ms()->Average());
+  __android_log_print(
+      ANDROID_LOG_INFO, "stats",
+      "Bandwidth:%.0f FrameRate:%.1f Capture:%.1f Encode:%.1f "
+      "Decode:%.1f Render:%.1f Latency:%.0f",
+      perf_tracker_->video_bandwidth(), perf_tracker_->video_frame_rate(),
+      perf_tracker_->video_capture_ms(), perf_tracker_->video_encode_ms(),
+      perf_tracker_->video_decode_ms(), perf_tracker_->video_paint_ms(),
+      perf_tracker_->round_trip_ms());
 
-  client_status_logger_->LogStatistics(stats);
+  client_status_logger_->LogStatistics(perf_tracker_.get());
 
   jni_runtime_->network_task_runner()->PostDelayedTask(
       FROM_HERE, base::Bind(&ChromotingJniInstance::LogPerfStats, this),

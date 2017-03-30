@@ -11,7 +11,7 @@
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "components/bookmarks/browser/bookmark_expanded_state_tracker.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
 
 using bookmarks::BookmarkExpandedStateTracker;
@@ -59,17 +59,11 @@ using bookmarks::BookmarkNode;
 }
 
 - (void)awakeFromNib {
-  // Check if NSTextFieldCell supports the method. This check is in place as
-  // only 10.6 and greater support the setUsesSingleLineMode method.
-  // TODO(kushi.p): Remove this when the project hits a 10.6+ only state.
   NSTextFieldCell* nameFieldCell_ = [nameTextField_ cell];
-  if ([nameFieldCell_
-          respondsToSelector:@selector(setUsesSingleLineMode:)]) {
-    [nameFieldCell_ setUsesSingleLineMode:YES];
-  }
+  [nameFieldCell_ setUsesSingleLineMode:YES];
 
-  // Set text fields to match our bookmark.  If the node is NULL we
-  // arrived here from an "Add Page..." item in a context menu.
+  // Set text fields to match our bookmark.  If the node is NULL we arrived here
+  // from an "Add Page..." item in a context menu.
   if (node_) {
     [self setInitialName:base::SysUTF16ToNSString(node_->GetTitle())];
     PrefService* prefs = [self profile] ?
@@ -104,7 +98,7 @@ using bookmarks::BookmarkNode;
 // If possible, return a valid GURL from the URL text field.
 - (GURL)GURLFromUrlField {
   NSString* url = [self displayURL];
-  return url_fixer::FixupURL([url UTF8String], std::string());
+  return url_formatter::FixupURL([url UTF8String], std::string());
 }
 
 // Enable the OK button if there is a valid URL.

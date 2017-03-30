@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "base/base64.h"
@@ -10,8 +11,9 @@
 #include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/synchronization/lock.h"
+#include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -25,6 +27,7 @@
 #include "net/base/net_errors.h"
 #include "net/dns/host_resolver_proc.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/socket/stream_socket.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/embedded_test_server_connection_listener.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -57,8 +60,7 @@ class ConnectionListener
 
   // Get called from the EmbeddedTestServer thread to be notified that
   // a connection was accepted.
-  void AcceptedSocket(
-      const net::test_server::StreamListenSocket& connection) override {
+  void AcceptedSocket(const net::StreamSocket& connection) override {
     base::AutoLock lock(lock_);
     uint16_t socket = GetPort(connection);
     EXPECT_TRUE(sockets_.find(socket) == sockets_.end());
@@ -69,8 +71,7 @@ class ConnectionListener
 
   // Get called from the EmbeddedTestServer thread to be notified that
   // a connection was read from.
-  void ReadFromSocket(
-      const net::test_server::StreamListenSocket& connection) override {
+  void ReadFromSocket(const net::StreamSocket& connection) override {
     base::AutoLock lock(lock_);
     uint16_t socket = GetPort(connection);
     EXPECT_FALSE(sockets_.find(socket) == sockets_.end());
@@ -101,10 +102,17 @@ class ConnectionListener
   void WaitUntilFirstConnectionRead() { read_loop_.Run(); }
 
  private:
-  static uint16_t GetPort(
-      const net::test_server::StreamListenSocket& connection) {
+  static uint16_t GetPort(const net::StreamSocket& connection) {
+    // Get the remote port of the peer, since the local port will always be the
+    // port the test server is listening on. This isn't strictly correct - it's
+    // possible for multiple peers to connect with the same remote port but
+    // different remote IPs - but the tests here assume that connections to the
+    // test server (running on localhost) will always come from localhost, and
+    // thus the peer port is all thats needed to distinguish two connections.
+    // This also would be problematic if the OS reused ports, but that's not
+    // something to worry about for these tests.
     net::IPEndPoint address;
-    EXPECT_EQ(net::OK, connection.GetLocalAddress(&address));
+    EXPECT_EQ(net::OK, connection.GetPeerAddress(&address));
     return address.port();
   }
 
@@ -175,7 +183,7 @@ class HostResolutionRequestRecorder : public net::HostResolverProc {
     if (is_waiting_for_hostname_ && waiting_for_hostname_ == hostname) {
       is_waiting_for_hostname_ = false;
       waiting_for_hostname_.clear();
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
     }
   }
 
@@ -224,7 +232,7 @@ class PredictorBrowserTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override {
     connection_listener_.reset(new ConnectionListener());
     embedded_test_server()->SetConnectionListener(connection_listener_.get());
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
   void TearDownOnMainThread() override {
@@ -337,11 +345,10 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, ShutdownStartupCycle) {
 #define MAYBE_DnsPrefetch DnsPrefetch
 #endif
 IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, MAYBE_DnsPrefetch) {
-  ASSERT_TRUE(test_server()->Start());
   int hostnames_requested_before_load = RequestedHostnameCount();
   ui_test_utils::NavigateToURL(
       browser(),
-      GURL(test_server()->GetURL("files/predictor/dns_prefetch.html")));
+      GURL(embedded_test_server()->GetURL("/predictor/dns_prefetch.html")));
   WaitUntilHostHasBeenRequested(kChromiumHostname);
   ASSERT_FALSE(HasHostBeenRequested(kInvalidLongHostname));
   ASSERT_EQ(hostnames_requested_before_load + 1, RequestedHostnameCount());
@@ -350,7 +357,7 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, MAYBE_DnsPrefetch) {
 // Tests that preconnect warms up a socket connection to a test server.
 // Note: This test uses a data URI to serve the preconnect hint, to make sure
 // that the network stack doesn't just re-use its connection to the test server.
-IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, Preconnect) {
+IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PreconnectNonCORS) {
   GURL preconnect_url = embedded_test_server()->base_url();
   std::string preconnect_content =
       "<link rel=\"preconnect\" href=\"" + preconnect_url.spec() + "\">";
@@ -364,7 +371,7 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, Preconnect) {
 // and that that socket is later used when fetching a resource.
 // Note: This test uses a data URI to serve the preconnect hint, to make sure
 // that the network stack doesn't just re-use its connection to the test server.
-IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PreconnectAndUse) {
+IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PreconnectAndFetchNonCORS) {
   GURL preconnect_url = embedded_test_server()->base_url();
   // First navigation to content with a preconnect hint.
   std::string preconnect_content =
@@ -383,5 +390,75 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PreconnectAndUse) {
   EXPECT_EQ(1u, connection_listener_->GetReadSocketCount());
 }
 
-}  // namespace chrome_browser_net
+// Tests that preconnect warms up a CORS connection to a test
+// server, and that socket is later used when fetching a CORS resource.
+// Note: This test uses a data URI to serve the preconnect hint, to make sure
+// that the network stack doesn't just re-use its connection to the test server.
+IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PreconnectAndFetchCORS) {
+  GURL preconnect_url = embedded_test_server()->base_url();
+  // First navigation to content with a preconnect hint.
+  std::string preconnect_content = "<link rel=\"preconnect\" href=\"" +
+                                   preconnect_url.spec() + "\" crossorigin>";
+  NavigateToDataURLWithContent(preconnect_content);
+  connection_listener_->WaitUntilFirstConnectionAccepted();
+  EXPECT_EQ(1u, connection_listener_->GetAcceptedSocketCount());
+  EXPECT_EQ(0u, connection_listener_->GetReadSocketCount());
 
+  // Second navigation to content with a font.
+  std::string font_content = "<script>var font = new FontFace('FontA', 'url(" +
+                             preconnect_url.spec() +
+                             "test.woff2)');font.load();</script>";
+  NavigateToDataURLWithContent(font_content);
+  connection_listener_->WaitUntilFirstConnectionRead();
+  EXPECT_EQ(1u, connection_listener_->GetAcceptedSocketCount());
+  EXPECT_EQ(1u, connection_listener_->GetReadSocketCount());
+}
+
+// Tests that preconnect warms up a non-CORS connection to a test
+// server, but that socket is not used when fetching a CORS resource.
+// Note: This test uses a data URI to serve the preconnect hint, to make sure
+// that the network stack doesn't just re-use its connection to the test server.
+IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PreconnectNonCORSAndFetchCORS) {
+  GURL preconnect_url = embedded_test_server()->base_url();
+  // First navigation to content with a preconnect hint.
+  std::string preconnect_content =
+      "<link rel=\"preconnect\" href=\"" + preconnect_url.spec() + "\">";
+  NavigateToDataURLWithContent(preconnect_content);
+  connection_listener_->WaitUntilFirstConnectionAccepted();
+  EXPECT_EQ(1u, connection_listener_->GetAcceptedSocketCount());
+  EXPECT_EQ(0u, connection_listener_->GetReadSocketCount());
+
+  // Second navigation to content with a font.
+  std::string font_content = "<script>var font = new FontFace('FontA', 'url(" +
+                             preconnect_url.spec() +
+                             "test.woff2)');font.load();</script>";
+  NavigateToDataURLWithContent(font_content);
+  connection_listener_->WaitUntilFirstConnectionRead();
+  EXPECT_EQ(2u, connection_listener_->GetAcceptedSocketCount());
+  EXPECT_EQ(1u, connection_listener_->GetReadSocketCount());
+}
+
+// Tests that preconnect warms up a CORS connection to a test server,
+// but that socket is not used when fetching a non-CORS resource.
+// Note: This test uses a data URI to serve the preconnect hint, to make sure
+// that the network stack doesn't just re-use its connection to the test server.
+IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PreconnectCORSAndFetchNonCORS) {
+  GURL preconnect_url = embedded_test_server()->base_url();
+  // First navigation to content with a preconnect hint.
+  std::string preconnect_content = "<link rel=\"preconnect\" href=\"" +
+                                   preconnect_url.spec() + "\" crossorigin>";
+  NavigateToDataURLWithContent(preconnect_content);
+  connection_listener_->WaitUntilFirstConnectionAccepted();
+  EXPECT_EQ(1u, connection_listener_->GetAcceptedSocketCount());
+  EXPECT_EQ(0u, connection_listener_->GetReadSocketCount());
+
+  // Second navigation to content with an img.
+  std::string img_content =
+      "<img src=\"" + preconnect_url.spec() + "test.gif\">";
+  NavigateToDataURLWithContent(img_content);
+  connection_listener_->WaitUntilFirstConnectionRead();
+  EXPECT_EQ(2u, connection_listener_->GetAcceptedSocketCount());
+  EXPECT_EQ(1u, connection_listener_->GetReadSocketCount());
+}
+
+}  // namespace chrome_browser_net

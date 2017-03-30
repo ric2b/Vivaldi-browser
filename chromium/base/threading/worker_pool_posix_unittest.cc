@@ -8,10 +8,11 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
-#include "base/threading/platform_thread.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/threading/platform_thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -90,7 +91,7 @@ void BlockingIncrementingTask(const BlockingIncrementingTaskArgs& args) {
 class PosixDynamicThreadPoolTest : public testing::Test {
  protected:
   PosixDynamicThreadPoolTest()
-      : pool_(new base::PosixDynamicThreadPool("dynamic_pool", 60*60)),
+      : pool_(new base::PosixDynamicThreadPool("dynamic_pool", 60 * 60)),
         peer_(pool_.get()),
         counter_(0),
         num_waiting_to_start_(0),
@@ -103,7 +104,8 @@ class PosixDynamicThreadPoolTest : public testing::Test {
 
   void TearDown() override {
     // Wake up the idle threads so they can terminate.
-    if (pool_.get()) pool_->Terminate();
+    if (pool_.get())
+      pool_->Terminate();
   }
 
   void WaitForTasksToStart(int num_tasks) {

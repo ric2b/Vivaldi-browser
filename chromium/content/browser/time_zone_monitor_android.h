@@ -10,7 +10,7 @@
 #include <jni.h>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 namespace content {
 
@@ -23,7 +23,9 @@ class TimeZoneMonitorAndroid : public TimeZoneMonitor {
   static bool Register(JNIEnv* env);
 
   // Called by the Java implementation when the system time zone changes.
-  void TimeZoneChangedFromJava(JNIEnv* env, jobject caller);
+  void TimeZoneChangedFromJava(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller);
 
  private:
   // Java provider of system time zone change notifications.

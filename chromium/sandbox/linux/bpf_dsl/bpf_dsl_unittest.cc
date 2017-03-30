@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <stdint.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <sys/utsname.h>
@@ -20,12 +21,13 @@
 #include "build/build_config.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl_impl.h"
 #include "sandbox/linux/bpf_dsl/codegen.h"
+#include "sandbox/linux/bpf_dsl/dump_bpf.h"
+#include "sandbox/linux/bpf_dsl/golden/golden_files.h"
 #include "sandbox/linux/bpf_dsl/policy.h"
 #include "sandbox/linux/bpf_dsl/policy_compiler.h"
 #include "sandbox/linux/bpf_dsl/seccomp_macros.h"
-#include "sandbox/linux/bpf_dsl/trap_registry.h"
+#include "sandbox/linux/bpf_dsl/test_trap_registry.h"
 #include "sandbox/linux/bpf_dsl/verifier.h"
-#include "sandbox/linux/seccomp-bpf/errorcode.h"
 #include "sandbox/linux/system_headers/linux_filter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -37,12 +39,12 @@ namespace {
 
 // Helper function to construct fake arch_seccomp_data objects.
 struct arch_seccomp_data FakeSyscall(int nr,
-                                     uint64_t p0 = 0,
-                                     uint64_t p1 = 0,
-                                     uint64_t p2 = 0,
-                                     uint64_t p3 = 0,
-                                     uint64_t p4 = 0,
-                                     uint64_t p5 = 0) {
+                                     uintptr_t p0 = 0,
+                                     uintptr_t p1 = 0,
+                                     uintptr_t p2 = 0,
+                                     uintptr_t p3 = 0,
+                                     uintptr_t p4 = 0,
+                                     uintptr_t p5 = 0) {
   // Made up program counter for syscall address.
   const uint64_t kFakePC = 0x543210;
 
@@ -58,64 +60,44 @@ struct arch_seccomp_data FakeSyscall(int nr,
   return data;
 }
 
-class FakeTrapRegistry : public TrapRegistry {
+class PolicyEmulator {
  public:
-  FakeTrapRegistry() : map_() {}
-  virtual ~FakeTrapRegistry() {}
+  PolicyEmulator(const golden::Golden& golden, const Policy& policy)
+      : program_() {
+    TestTrapRegistry traps;
+    program_ = PolicyCompiler(&policy, &traps).Compile();
 
-  uint16_t Add(TrapFnc fnc, const void* aux, bool safe) override {
-    EXPECT_TRUE(safe);
+    // TODO(mdempsky): Generalize to more arches.
+    const char* expected = nullptr;
+#if defined(ARCH_CPU_X86)
+    expected = golden.i386_dump;
+#elif defined(ARCH_CPU_X86_64)
+    expected = golden.x86_64_dump;
+#endif
 
-    const uint16_t next_id = map_.size() + 1;
-    return map_.insert(std::make_pair(Key(fnc, aux), next_id)).first->second;
+    if (expected != nullptr) {
+      const std::string actual = DumpBPF::StringPrintProgram(program_);
+      EXPECT_EQ(expected, actual);
+    } else {
+      LOG(WARNING) << "Missing golden file data entry";
+    }
   }
 
-  bool EnableUnsafeTraps() override {
-    ADD_FAILURE() << "Unimplemented";
-    return false;
+  ~PolicyEmulator() {}
+
+  void ExpectAllow(const struct arch_seccomp_data& data) const {
+    EXPECT_EQ(SECCOMP_RET_ALLOW, Emulate(data));
+  }
+
+  void ExpectErrno(uint16_t err, const struct arch_seccomp_data& data) const {
+    EXPECT_EQ(SECCOMP_RET_ERRNO | err, Emulate(data));
+  }
+
+  void ExpectKill(const struct arch_seccomp_data& data) const {
+    EXPECT_EQ(SECCOMP_RET_KILL, Emulate(data));
   }
 
  private:
-  using Key = std::pair<TrapFnc, const void*>;
-
-  std::map<Key, uint16_t> map_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeTrapRegistry);
-};
-
-intptr_t FakeTrapFuncOne(const arch_seccomp_data& data, void* aux) { return 1; }
-intptr_t FakeTrapFuncTwo(const arch_seccomp_data& data, void* aux) { return 2; }
-
-// Test that FakeTrapRegistry correctly assigns trap IDs to trap handlers.
-TEST(FakeTrapRegistry, TrapIDs) {
-  struct {
-    TrapRegistry::TrapFnc fnc;
-    const void* aux;
-  } funcs[] = {
-      {FakeTrapFuncOne, nullptr},
-      {FakeTrapFuncTwo, nullptr},
-      {FakeTrapFuncOne, funcs},
-      {FakeTrapFuncTwo, funcs},
-  };
-
-  FakeTrapRegistry traps;
-
-  // Add traps twice to test that IDs are reused correctly.
-  for (int i = 0; i < 2; ++i) {
-    for (size_t j = 0; j < arraysize(funcs); ++j) {
-      // Trap IDs start at 1.
-      EXPECT_EQ(j + 1, traps.Add(funcs[j].fnc, funcs[j].aux, true));
-    }
-  }
-}
-
-class PolicyEmulator {
- public:
-  explicit PolicyEmulator(const Policy* policy) : program_(), traps_() {
-    program_ = *PolicyCompiler(policy, &traps_).Compile(true /* verify */);
-  }
-  ~PolicyEmulator() {}
-
   uint32_t Emulate(const struct arch_seccomp_data& data) const {
     const char* err = nullptr;
     uint32_t res = Verifier::EvaluateBPF(program_, data, &err);
@@ -126,17 +108,7 @@ class PolicyEmulator {
     return res;
   }
 
-  void ExpectAllow(const struct arch_seccomp_data& data) const {
-    EXPECT_EQ(SECCOMP_RET_ALLOW, Emulate(data));
-  }
-
-  void ExpectErrno(uint16_t err, const struct arch_seccomp_data& data) const {
-    EXPECT_EQ(SECCOMP_RET_ERRNO | err, Emulate(data));
-  }
-
- private:
   CodeGen::Program program_;
-  FakeTrapRegistry traps_;
 
   DISALLOW_COPY_AND_ASSIGN(PolicyEmulator);
 };
@@ -152,7 +124,7 @@ class BasicPolicy : public Policy {
     }
     if (sysno == __NR_setuid) {
       const Arg<uid_t> uid(0);
-      return If(uid != 42, Error(ESRCH)).Else(Error(ENOMEM));
+      return If(uid != 42, Kill()).Else(Allow());
     }
     return Allow();
   }
@@ -162,14 +134,13 @@ class BasicPolicy : public Policy {
 };
 
 TEST(BPFDSL, Basic) {
-  BasicPolicy policy;
-  PolicyEmulator emulator(&policy);
+  PolicyEmulator emulator(golden::kBasicPolicy, BasicPolicy());
 
   emulator.ExpectErrno(EPERM, FakeSyscall(__NR_getpgid, 0));
   emulator.ExpectErrno(EINVAL, FakeSyscall(__NR_getpgid, 1));
 
-  emulator.ExpectErrno(ENOMEM, FakeSyscall(__NR_setuid, 42));
-  emulator.ExpectErrno(ESRCH, FakeSyscall(__NR_setuid, 43));
+  emulator.ExpectAllow(FakeSyscall(__NR_setuid, 42));
+  emulator.ExpectKill(FakeSyscall(__NR_setuid, 43));
 }
 
 /* On IA-32, socketpair() is implemented via socketcall(). :-( */
@@ -181,10 +152,11 @@ class BooleanLogicPolicy : public Policy {
   ResultExpr EvaluateSyscall(int sysno) const override {
     if (sysno == __NR_socketpair) {
       const Arg<int> domain(0), type(1), protocol(2);
-      return If(domain == AF_UNIX &&
-                    (type == SOCK_STREAM || type == SOCK_DGRAM) &&
-                    protocol == 0,
-                Error(EPERM)).Else(Error(EINVAL));
+      return If(AllOf(domain == AF_UNIX,
+                      AnyOf(type == SOCK_STREAM, type == SOCK_DGRAM),
+                      protocol == 0),
+                Error(EPERM))
+          .Else(Error(EINVAL));
     }
     return Allow();
   }
@@ -194,8 +166,7 @@ class BooleanLogicPolicy : public Policy {
 };
 
 TEST(BPFDSL, BooleanLogic) {
-  BooleanLogicPolicy policy;
-  PolicyEmulator emulator(&policy);
+  PolicyEmulator emulator(golden::kBooleanLogicPolicy, BooleanLogicPolicy());
 
   const intptr_t kFakeSV = 0x12345;
 
@@ -227,8 +198,8 @@ class MoreBooleanLogicPolicy : public Policy {
   ResultExpr EvaluateSyscall(int sysno) const override {
     if (sysno == __NR_setresuid) {
       const Arg<uid_t> ruid(0), euid(1), suid(2);
-      return If(ruid == 0 || euid == 0 || suid == 0, Error(EPERM))
-          .ElseIf(ruid == 1 && euid == 1 && suid == 1, Error(EAGAIN))
+      return If(AnyOf(ruid == 0, euid == 0, suid == 0), Error(EPERM))
+          .ElseIf(AllOf(ruid == 1, euid == 1, suid == 1), Error(EAGAIN))
           .Else(Error(EINVAL));
     }
     return Allow();
@@ -239,8 +210,8 @@ class MoreBooleanLogicPolicy : public Policy {
 };
 
 TEST(BPFDSL, MoreBooleanLogic) {
-  MoreBooleanLogicPolicy policy;
-  PolicyEmulator emulator(&policy);
+  PolicyEmulator emulator(golden::kMoreBooleanLogicPolicy,
+                          MoreBooleanLogicPolicy());
 
   // Expect EPERM if any set to 0.
   emulator.ExpectErrno(EPERM, FakeSyscall(__NR_setresuid, 0, 5, 5));
@@ -277,11 +248,35 @@ class ArgSizePolicy : public Policy {
 };
 
 TEST(BPFDSL, ArgSizeTest) {
-  ArgSizePolicy policy;
-  PolicyEmulator emulator(&policy);
+  PolicyEmulator emulator(golden::kArgSizePolicy, ArgSizePolicy());
 
   emulator.ExpectAllow(FakeSyscall(__NR_uname, 0));
   emulator.ExpectErrno(EPERM, FakeSyscall(__NR_uname, kDeadBeefAddr));
+}
+
+class NegativeConstantsPolicy : public Policy {
+ public:
+  NegativeConstantsPolicy() {}
+  ~NegativeConstantsPolicy() override {}
+  ResultExpr EvaluateSyscall(int sysno) const override {
+    if (sysno == __NR_fcntl) {
+      const Arg<int> fd(0);
+      return If(fd == -314, Error(EPERM)).Else(Allow());
+    }
+    return Allow();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NegativeConstantsPolicy);
+};
+
+TEST(BPFDSL, NegativeConstantsTest) {
+  PolicyEmulator emulator(golden::kNegativeConstantsPolicy,
+                          NegativeConstantsPolicy());
+
+  emulator.ExpectAllow(FakeSyscall(__NR_fcntl, -5, F_DUPFD));
+  emulator.ExpectAllow(FakeSyscall(__NR_fcntl, 20, F_DUPFD));
+  emulator.ExpectErrno(EPERM, FakeSyscall(__NR_fcntl, -314, F_DUPFD));
 }
 
 #if 0
@@ -343,8 +338,7 @@ class MaskingPolicy : public Policy {
 };
 
 TEST(BPFDSL, MaskTest) {
-  MaskingPolicy policy;
-  PolicyEmulator emulator(&policy);
+  PolicyEmulator emulator(golden::kMaskingPolicy, MaskingPolicy());
 
   for (uid_t uid = 0; uid < 0x100; ++uid) {
     const int expect_errno = (uid & 0xf) == 0 ? EINVAL : EACCES;
@@ -382,8 +376,7 @@ class ElseIfPolicy : public Policy {
 };
 
 TEST(BPFDSL, ElseIfTest) {
-  ElseIfPolicy policy;
-  PolicyEmulator emulator(&policy);
+  PolicyEmulator emulator(golden::kElseIfPolicy, ElseIfPolicy());
 
   emulator.ExpectErrno(0, FakeSyscall(__NR_setuid, 0));
 
@@ -419,8 +412,7 @@ class SwitchPolicy : public Policy {
 };
 
 TEST(BPFDSL, SwitchTest) {
-  SwitchPolicy policy;
-  PolicyEmulator emulator(&policy);
+  PolicyEmulator emulator(golden::kSwitchPolicy, SwitchPolicy());
 
   const int kFakeSockFD = 42;
 

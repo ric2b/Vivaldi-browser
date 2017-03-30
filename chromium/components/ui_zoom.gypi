@@ -5,6 +5,7 @@
 {
   'targets': [
     {
+      # GN version: //components/ui/zoom
       'target_name': 'ui_zoom',
       'type': 'static_library',
       'include_dirs': [
@@ -29,6 +30,23 @@
         'ui/zoom/zoom_event_manager.h',
         'ui/zoom/zoom_event_manager_observer.h',
         'ui/zoom/zoom_observer.h'
+      ],
+    },
+    {
+      'target_name': 'ui_zoom_test_support',
+      'type': 'static_library',
+      'include_dirs': [
+        '..',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../content/content.gyp:content_browser',
+        '../content/content.gyp:content_common',
+        '../components/components.gyp:ui_zoom',
+      ],
+      'sources': [
+        'ui/zoom/test/zoom_test_utils.cc',
+        'ui/zoom/test/zoom_test_utils.h'
       ],
     }
   ],

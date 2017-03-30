@@ -4,12 +4,15 @@
 
 #include "sync/test/fake_server/fake_server.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
@@ -71,7 +74,7 @@ class UpdateSieve {
   // markers from the original GetUpdatesMessage and |new_version| (the latest
   // version in the entries sent back).
   void UpdateProgressMarkers(
-      int64 new_version,
+      int64_t new_version,
       sync_pb::GetUpdatesResponse* get_updates_response) const {
     ModelTypeToVersionMap::const_iterator it;
     for (it = request_from_version_.begin(); it != request_from_version_.end();
@@ -81,7 +84,7 @@ class UpdateSieve {
       new_marker->set_data_type_id(
           GetSpecificsFieldNumberFromModelType(it->first));
 
-      int64 version = std::max(new_version, it->second);
+      int64_t version = std::max(new_version, it->second);
       new_marker->set_token(base::Int64ToString(version));
     }
   }
@@ -89,7 +92,7 @@ class UpdateSieve {
   // Determines whether the server should send an |entity| to the client as
   // part of a GetUpdatesResponse.
   bool ClientWantsItem(const FakeServerEntity& entity) const {
-    int64 version = entity.GetVersion();
+    int64_t version = entity.GetVersion();
     if (version <= min_version_) {
       return false;
     } else if (entity.IsDeleted()) {
@@ -103,18 +106,16 @@ class UpdateSieve {
   }
 
   // Returns the minimum version seen across all types.
-  int64 GetMinVersion() const {
-    return min_version_;
-  }
+  int64_t GetMinVersion() const { return min_version_; }
 
  private:
-  typedef std::map<ModelType, int64> ModelTypeToVersionMap;
+  typedef std::map<ModelType, int64_t> ModelTypeToVersionMap;
 
   // Creates an UpdateSieve.
   UpdateSieve(const ModelTypeToVersionMap request_from_version,
-              const int64 min_version)
+              const int64_t min_version)
       : request_from_version_(request_from_version),
-        min_version_(min_version) { }
+        min_version_(min_version) {}
 
   // Maps data type IDs to the latest version seen for that type.
   const ModelTypeToVersionMap request_from_version_;
@@ -129,12 +130,12 @@ scoped_ptr<UpdateSieve> UpdateSieve::Create(
       << "A GetUpdates request must have at least one progress marker.";
 
   UpdateSieve::ModelTypeToVersionMap request_from_version;
-  int64 min_version = std::numeric_limits<int64>::max();
+  int64_t min_version = std::numeric_limits<int64_t>::max();
   for (int i = 0; i < get_updates_message.from_progress_marker_size(); i++) {
     sync_pb::DataTypeProgressMarker marker =
         get_updates_message.from_progress_marker(i);
 
-    int64 version = 0;
+    int64_t version = 0;
     // Let the version remain zero if there is no token or an empty token (the
     // first request for this type).
     if (marker.has_token() && !marker.token().empty()) {
@@ -169,13 +170,17 @@ FakeServer::FakeServer() : version_(0),
                            request_counter_(0),
                            network_enabled_(true),
                            weak_ptr_factory_(this) {
+  Init();
+}
+
+FakeServer::~FakeServer() {}
+
+void FakeServer::Init() {
   keystore_keys_.push_back(kDefaultKeystoreKey);
 
   const bool create_result = CreateDefaultPermanentItems();
   DCHECK(create_result) << "Permanent items were not created successfully.";
 }
-
-FakeServer::~FakeServer() {}
 
 bool FakeServer::CreatePermanentBookmarkFolder(const std::string& server_tag,
                                                const std::string& name) {
@@ -186,20 +191,26 @@ bool FakeServer::CreatePermanentBookmarkFolder(const std::string& server_tag,
   if (!entity)
     return false;
 
-  SaveEntity(entity.Pass());
+  SaveEntity(std::move(entity));
   return true;
 }
 
 bool FakeServer::CreateDefaultPermanentItems() {
-  ModelTypeSet all_types = syncer::ProtocolTypes();
-  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
+  // Permanent folders are always required for Bookmarks (hierarchical
+  // structure) and Nigori (data stored in permanent root folder).
+  ModelTypeSet permanent_folder_types =
+      ModelTypeSet(syncer::BOOKMARKS, syncer::NIGORI);
+
+  for (ModelTypeSet::Iterator it = permanent_folder_types.First(); it.Good();
+       it.Inc()) {
     ModelType model_type = it.Get();
+
     scoped_ptr<FakeServerEntity> top_level_entity =
         PermanentEntity::CreateTopLevel(model_type);
     if (!top_level_entity) {
       return false;
     }
-    SaveEntity(top_level_entity.Pass());
+    SaveEntity(std::move(top_level_entity));
 
     if (model_type == syncer::BOOKMARKS) {
       if (!CreatePermanentBookmarkFolder(kBookmarkBarFolderServerTag,
@@ -220,8 +231,7 @@ void FakeServer::UpdateEntityVersion(FakeServerEntity* entity) {
 
 void FakeServer::SaveEntity(scoped_ptr<FakeServerEntity> entity) {
   UpdateEntityVersion(entity.get());
-  const string id = entity->GetId();
-  entities_.set(id, entity.Pass());
+  entities_[entity->GetId()] = std::move(entity);
 }
 
 void FakeServer::HandleCommand(const string& request,
@@ -327,13 +337,14 @@ bool FakeServer::HandleGetUpdatesRequest(
   }
 
   bool send_encryption_keys_based_on_nigori = false;
-  int64 max_response_version = 0;
+  int64_t max_response_version = 0;
   for (EntityMap::const_iterator it = entities_.begin(); it != entities_.end();
        ++it) {
     const FakeServerEntity& entity = *it->second;
     if (sieve->ClientWantsItem(entity)) {
       sync_pb::SyncEntity* response_entity = response->add_entries();
       entity.SerializeAsProto(response_entity);
+
       max_response_version = std::max(max_response_version,
                                       response_entity->version());
 
@@ -397,7 +408,7 @@ string FakeServer::CommitEntity(
   }
 
   const std::string id = entity->GetId();
-  SaveEntity(entity.Pass());
+  SaveEntity(std::move(entity));
   BuildEntryResponseForSuccessfulCommit(id, entry_response);
   return id;
 }
@@ -520,7 +531,7 @@ scoped_ptr<base::DictionaryValue> FakeServer::GetEntitiesAsDictionaryValue() {
     list_value->Append(new base::StringValue(entity.GetName()));
   }
 
-  return dictionary.Pass();
+  return dictionary;
 }
 
 std::vector<sync_pb::SyncEntity> FakeServer::GetSyncEntitiesByModelType(
@@ -541,7 +552,7 @@ std::vector<sync_pb::SyncEntity> FakeServer::GetSyncEntitiesByModelType(
 
 void FakeServer::InjectEntity(scoped_ptr<FakeServerEntity> entity) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  SaveEntity(entity.Pass());
+  SaveEntity(std::move(entity));
 }
 
 bool FakeServer::ModifyEntitySpecifics(
@@ -554,13 +565,31 @@ bool FakeServer::ModifyEntitySpecifics(
     return false;
   }
 
-  scoped_ptr<FakeServerEntity> entity = entities_.take_and_erase(iter);
+  FakeServerEntity* entity = iter->second.get();
+  entity->SetSpecifics(updated_specifics);
+  UpdateEntityVersion(entity);
+  return true;
+}
+
+bool FakeServer::ModifyBookmarkEntity(
+    const std::string& id,
+    const std::string& parent_id,
+    const sync_pb::EntitySpecifics& updated_specifics) {
+  EntityMap::const_iterator iter = entities_.find(id);
+  if (iter == entities_.end() ||
+      iter->second->GetModelType() != syncer::BOOKMARKS ||
+      GetModelTypeFromSpecifics(updated_specifics) != syncer::BOOKMARKS) {
+    return false;
+  }
+
+  BookmarkEntity* entity = static_cast<BookmarkEntity*>(iter->second.get());
+
+  entity->SetParentId(parent_id);
   entity->SetSpecifics(updated_specifics);
   if (updated_specifics.has_bookmark()) {
     entity->SetName(updated_specifics.bookmark().title());
   }
-  UpdateEntityVersion(entity.get());
-  entities_.insert(id, entity.Pass());
+  UpdateEntityVersion(entity);
   return true;
 }
 
@@ -569,6 +598,7 @@ void FakeServer::ClearServerData() {
   entities_.clear();
   keystore_keys_.clear();
   ++store_birthday_;
+  Init();
 }
 
 void FakeServer::SetAuthenticated() {
@@ -660,7 +690,7 @@ std::string FakeServer::GetBookmarkBarFolderId() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   for (EntityMap::const_iterator it = entities_.begin(); it != entities_.end();
        ++it) {
-    FakeServerEntity* entity = it->second;
+    FakeServerEntity* entity = it->second.get();
     if (entity->GetName() == kBookmarkBarFolderName &&
         entity->IsFolder() &&
         entity->GetModelType() == syncer::BOOKMARKS) {

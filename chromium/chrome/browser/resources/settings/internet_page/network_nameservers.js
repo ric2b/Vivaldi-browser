@@ -5,19 +5,21 @@
 /**
  * @fileoverview Polymer element for displaying network nameserver options.
  */
+(function() {
+'use strict';
+
 Polymer({
   is: 'network-nameservers',
 
   properties: {
     /**
-     * The current state containing the IP Config properties to display and
-     * modify.
-     * @type {?CrOnc.NetworkStateProperties}
+     * The network properties dictionary containing the nameserver properties to
+     * display and modify.
+     * @type {!CrOnc.NetworkProperties|undefined}
      */
-    networkState: {
+    networkProperties: {
       type: Object,
-      value: null,
-      observer: 'networkStateChanged_'
+      observer: 'networkPropertiesChanged_'
     },
 
     /**
@@ -64,10 +66,10 @@ Polymer({
   savedNameservers_: [],
 
   /**
-   * Polymer networkState changed method.
+   * Polymer networkProperties changed method.
    */
-  networkStateChanged_: function(newValue, oldValue) {
-    if (!this.networkState)
+  networkPropertiesChanged_: function(newValue, oldValue) {
+    if (!this.networkProperties)
       return;
 
     if (!oldValue || newValue.GUID != oldValue.GUID)
@@ -75,15 +77,16 @@ Polymer({
 
     // Update the 'nameservers' property.
     var nameservers = [];
-    var ipv4 = CrOnc.getIPConfigForType(this.networkState, CrOnc.IPType.IPV4);
+    var ipv4 =
+        CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV4);
     if (ipv4 && ipv4.NameServers)
       nameservers = ipv4.NameServers;
 
     // Update the 'nameserversType' property.
     var configType =
-        CrOnc.getActiveValue(this.networkState, 'NameServersConfigType');
+        CrOnc.getActiveValue(this.networkProperties.NameServersConfigType);
     var type;
-    if (configType == 'Static') {
+    if (configType == CrOnc.IPConfigType.STATIC) {
       if (nameservers.join(',') == this.GoogleNameservers.join(','))
         type = 'google';
       else
@@ -136,18 +139,18 @@ Polymer({
 
   /**
    * Event triggered when the selected type changes. Updates nameservers and
-   * sends the changed value if necessary.
-   * @param {Event} event The select node changed event.
+   * sends the change value if necessary.
+   * @param {Event} event The select node change event.
    * @private
    */
-  onTypeChanged_: function(event) {
+  onTypeChange_: function(event) {
     if (this.nameserversType == 'custom')
       this.savedNameservers_ = this.nameservers;
     var type = this.nameserverTypeNames_[event.target.selectedIndex];
     this.nameserversType = type;
     if (type == 'custom') {
       if (this.savedNameservers_.length == 0)
-        return;  // Don't change nameservers until onValueChanged_().
+        return;  // Don't change nameservers until onValueChange_().
       // Restore the saved nameservers and send them.
       this.nameservers = this.savedNameservers_;
     }
@@ -158,7 +161,7 @@ Polymer({
    * Event triggered when a nameserver value changes.
    * @private
    */
-  onValueChanged_: function() {
+  onValueChange_: function() {
     if (this.nameserversType != 'custom') {
       // If a user inputs Google nameservers in the custom nameservers fields,
       // |nameserversType| will change to 'google' so don't send the values.
@@ -173,33 +176,33 @@ Polymer({
    */
   sendNameServers_: function() {
     var type = this.nameserversType;
-    console.debug('NameServers.sendNameServers: ' + type);
 
     var nameservers;
     if (type == 'custom') {
       nameservers = [];
-      for (var i = 0; i < 4; ++i) {
-        var id = 'nameserver' + i;
-        var nameserver = this.$$('#' + id).value;
+      for (let i = 0; i < 4; ++i) {
+        let id = 'nameserver' + i;
+        let nameserver = this.$$('#' + id).value;
         if (nameserver)
           nameservers.push(nameserver);
       }
-      this.fire('changed', {
+      this.fire('nameservers-change', {
         field: 'NameServers',
         value: nameservers
       });
     } else if (type == 'google') {
       nameservers = this.GoogleNameservers;
-      this.fire('changed', {
+      this.fire('nameservers-change', {
         field: 'NameServers',
         value: nameservers
       });
     } else {
       // automatic
-      this.fire('changed', {
+      this.fire('nameservers-change', {
         field: 'NameServersConfigType',
-        value: 'DHCP'
+        value: CrOnc.IPConfigType.DHCP
       });
     }
   },
 });
+})();

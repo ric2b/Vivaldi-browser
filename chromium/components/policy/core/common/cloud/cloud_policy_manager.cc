@@ -4,12 +4,15 @@
 
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/cloud/cloud_policy_service.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
@@ -98,7 +101,7 @@ void CloudPolicyManager::CheckAndPublishPolicy() {
         &bundle->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string())));
     if (component_policy_service_)
       bundle->MergeFrom(component_policy_service_->policy());
-    UpdatePolicy(bundle.Pass());
+    UpdatePolicy(std::move(bundle));
   }
 }
 
@@ -131,14 +134,8 @@ void CloudPolicyManager::CreateComponentCloudPolicyService(
   scoped_ptr<ResourceCache> resource_cache(
       new ResourceCache(policy_cache_path, file_task_runner_));
   component_policy_service_.reset(new ComponentCloudPolicyService(
-      this,
-      schema_registry(),
-      core(),
-      client,
-      resource_cache.Pass(),
-      request_context,
-      file_task_runner_,
-      io_task_runner_));
+      this, schema_registry(), core(), client, std::move(resource_cache),
+      request_context, file_task_runner_, io_task_runner_));
 #endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 }
 

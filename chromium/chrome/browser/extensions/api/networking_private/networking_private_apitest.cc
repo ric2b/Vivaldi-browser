@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <map>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/onc/onc_constants.h"
@@ -35,7 +39,7 @@ const char kGuid[] = "SOME_GUID";
 class TestDelegate : public NetworkingPrivateDelegate {
  public:
   explicit TestDelegate(scoped_ptr<VerifyDelegate> verify_delegate)
-      : NetworkingPrivateDelegate(verify_delegate.Pass()), fail_(false) {}
+      : NetworkingPrivateDelegate(std::move(verify_delegate)), fail_(false) {}
 
   ~TestDelegate() override {}
 
@@ -93,7 +97,7 @@ class TestDelegate : public NetworkingPrivateDelegate {
                          ::onc::network_config::kEthernet);
       network->SetString(::onc::network_config::kGUID, kGuid);
       result->Append(network.release());
-      success_callback.Run(result.Pass());
+      success_callback.Run(std::move(result));
     }
   }
 
@@ -137,6 +141,23 @@ class TestDelegate : public NetworkingPrivateDelegate {
     StringResult(success_callback, failure_callback);
   }
 
+  void UnlockCellularSim(const std::string& guid,
+                         const std::string& pin,
+                         const std::string& puk,
+                         const VoidCallback& success_callback,
+                         const FailureCallback& failure_callback) override {
+    VoidResult(success_callback, failure_callback);
+  }
+
+  void SetCellularSimState(const std::string& guid,
+                           bool require_pin,
+                           const std::string& current_pin,
+                           const std::string& new_pin,
+                           const VoidCallback& success_callback,
+                           const FailureCallback& failure_callback) override {
+    VoidResult(success_callback, failure_callback);
+  }
+
   // Synchronous methods
   scoped_ptr<base::ListValue> GetEnabledNetworkTypes() override {
     scoped_ptr<base::ListValue> result;
@@ -144,20 +165,20 @@ class TestDelegate : public NetworkingPrivateDelegate {
       result.reset(new base::ListValue);
       result->AppendString(::onc::network_config::kEthernet);
     }
-    return result.Pass();
+    return result;
   }
 
   scoped_ptr<DeviceStateList> GetDeviceStateList() override {
     scoped_ptr<DeviceStateList> result;
     if (fail_)
-      return result.Pass();
+      return result;
     result.reset(new DeviceStateList);
-    scoped_ptr<core_api::networking_private::DeviceStateProperties> properties(
-        new core_api::networking_private::DeviceStateProperties);
-    properties->type = core_api::networking_private::NETWORK_TYPE_ETHERNET;
-    properties->state = core_api::networking_private::DEVICE_STATE_TYPE_ENABLED;
-    result->push_back(properties.Pass());
-    return result.Pass();
+    scoped_ptr<api::networking_private::DeviceStateProperties> properties(
+        new api::networking_private::DeviceStateProperties);
+    properties->type = api::networking_private::NETWORK_TYPE_ETHERNET;
+    properties->state = api::networking_private::DEVICE_STATE_TYPE_ENABLED;
+    result->push_back(std::move(properties));
+    return result;
   }
 
   bool EnableNetworkType(const std::string& type) override {
@@ -190,7 +211,7 @@ class TestDelegate : public NetworkingPrivateDelegate {
       result->SetString(::onc::network_config::kGUID, guid);
       result->SetString(::onc::network_config::kType,
                         ::onc::network_config::kWiFi);
-      success_callback.Run(result.Pass());
+      success_callback.Run(std::move(result));
     }
   }
 
@@ -272,7 +293,7 @@ class NetworkingPrivateApiTest : public ExtensionApiTest {
       TestVerifyDelegate* verify_delegate = new TestVerifyDelegate;
       scoped_ptr<NetworkingPrivateDelegate::VerifyDelegate> verify_delegate_ptr(
           verify_delegate);
-      s_test_delegate_ = new TestDelegate(verify_delegate_ptr.Pass());
+      s_test_delegate_ = new TestDelegate(std::move(verify_delegate_ptr));
       verify_delegate->set_owner(s_test_delegate_);
     }
   }
@@ -431,6 +452,14 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateApiTest, GetCaptivePortalStatus) {
   EXPECT_TRUE(RunNetworkingSubtest("getCaptivePortalStatus")) << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateApiTest, UnlockCellularSim) {
+  EXPECT_TRUE(RunNetworkingSubtest("unlockCellularSim")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateApiTest, SetCellularSimState) {
+  EXPECT_TRUE(RunNetworkingSubtest("setCellularSimState")) << message_;
+}
+
 // Test failure case
 
 class NetworkingPrivateApiTestFail : public NetworkingPrivateApiTest {
@@ -521,6 +550,14 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateApiTestFail, GetWifiTDLSStatus) {
 
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateApiTestFail, GetCaptivePortalStatus) {
   EXPECT_FALSE(RunNetworkingSubtest("getCaptivePortalStatus")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateApiTestFail, UnlockCellularSim) {
+  EXPECT_FALSE(RunNetworkingSubtest("unlockCellularSim")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateApiTestFail, SetCellularSimState) {
+  EXPECT_FALSE(RunNetworkingSubtest("setCellularSimState")) << message_;
 }
 
 #endif // defined(OS_WIN)

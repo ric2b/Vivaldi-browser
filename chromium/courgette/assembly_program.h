@@ -5,41 +5,58 @@
 #ifndef COURGETTE_ASSEMBLY_PROGRAM_H_
 #define COURGETTE_ASSEMBLY_PROGRAM_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-
 #include "courgette/disassembler.h"
+#include "courgette/image_utils.h"
 #include "courgette/memory_allocator.h"
 
 namespace courgette {
 
 class EncodedProgram;
-class Instruction;
-
-typedef NoThrowBuffer<Instruction*> InstructionVector;
-
-// A Label is a symbolic reference to an address.  Unlike a conventional
-// assembly language, we always know the address.  The address will later be
-// stored in a table and the Label will be replaced with the index into the
-// table.
-//
-// TODO(sra): Make fields private and add setters and getters.
-class Label {
- public:
-  static const int kNoIndex = -1;
-  Label() : rva_(0), index_(kNoIndex), count_(0) {}
-  explicit Label(RVA rva) : rva_(rva), index_(kNoIndex), count_(0) {}
-
-  RVA rva_;    // Address referred to by the label.
-  int index_;  // Index of address in address table, kNoIndex until assigned.
-  int count_;
-};
 
 typedef std::map<RVA, Label*> RVAToLabel;
+
+// Opcodes of simple assembly language
+enum OP {
+  ORIGIN,         // ORIGIN <rva> - set current address for assembly.
+  MAKEPERELOCS,   // Generates a base relocation table.
+  MAKEELFRELOCS,  // Generates a base relocation table.
+  DEFBYTE,        // DEFBYTE <value> - emit a byte literal.
+  REL32,          // REL32 <label> - emit a rel32 encoded reference to 'label'.
+  ABS32,          // ABS32 <label> - emit an abs32 encoded reference to 'label'.
+  REL32ARM,       // REL32ARM <c_op> <label> - arm-specific rel32 reference
+  MAKEELFARMRELOCS,  // Generates a base relocation table.
+  DEFBYTES,       // Emits any number of byte literals
+  ABS64,          // ABS64 <label> - emit an abs64 encoded reference to 'label'.
+  LAST_OP
+};
+
+// Base class for instructions.  Because we have so many instructions we want to
+// keep them as small as possible.  For this reason we avoid virtual functions.
+class Instruction {
+ public:
+  OP op() const { return static_cast<OP>(op_); }
+
+ protected:
+  explicit Instruction(OP op) : op_(op), info_(0) {}
+  Instruction(OP op, unsigned int info) : op_(op), info_(info) {}
+
+  uint32_t op_ : 4;     // A few bits to store the OP code.
+  uint32_t info_ : 28;  // Remaining bits in first word available to subclass.
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(Instruction);
+};
+
+typedef NoThrowBuffer<Instruction*> InstructionVector;
 
 // An AssemblyProgram is the result of disassembling an executable file.
 //
@@ -67,7 +84,7 @@ class AssemblyProgram {
 
   ExecutableType kind() const { return kind_; }
 
-  void set_image_base(uint64 image_base) { image_base_ = image_base; }
+  void set_image_base(uint64_t image_base) { image_base_ = image_base; }
 
   // Instructions will be assembled in the order they are emitted.
 
@@ -84,19 +101,21 @@ class AssemblyProgram {
   CheckBool EmitOriginInstruction(RVA rva) WARN_UNUSED_RESULT;
 
   // Generates a single byte of data or machine instruction.
-  CheckBool EmitByteInstruction(uint8 byte) WARN_UNUSED_RESULT;
+  CheckBool EmitByteInstruction(uint8_t byte) WARN_UNUSED_RESULT;
 
   // Generates multiple bytes of data or machine instructions.
-  CheckBool EmitBytesInstruction(const uint8* value, size_t len)
-      WARN_UNUSED_RESULT;
+  CheckBool EmitBytesInstruction(const uint8_t* value,
+                                 size_t len) WARN_UNUSED_RESULT;
 
   // Generates 4-byte relative reference to address of 'label'.
   CheckBool EmitRel32(Label* label) WARN_UNUSED_RESULT;
 
   // Generates 4-byte relative reference to address of 'label' for
   // ARM.
-  CheckBool EmitRel32ARM(uint16 op, Label* label, const uint8* arm_op,
-                         uint16 op_size) WARN_UNUSED_RESULT;
+  CheckBool EmitRel32ARM(uint16_t op,
+                         Label* label,
+                         const uint8_t* arm_op,
+                         uint16_t op_size) WARN_UNUSED_RESULT;
 
   // Generates 4-byte absolute reference to address of 'label'.
   CheckBool EmitAbs32(Label* label) WARN_UNUSED_RESULT;
@@ -137,9 +156,13 @@ class AssemblyProgram {
   CheckBool TrimLabels();
 
  private:
+  using ScopedInstruction =
+      scoped_ptr<Instruction, UncheckedDeleter<Instruction>>;
+
   ExecutableType kind_;
 
-  CheckBool Emit(Instruction* instruction) WARN_UNUSED_RESULT;
+  CheckBool Emit(ScopedInstruction instruction) WARN_UNUSED_RESULT;
+  CheckBool EmitShared(Instruction* instruction) WARN_UNUSED_RESULT;
 
   static const int kLabelLowerLimit;
 
@@ -152,10 +175,10 @@ class AssemblyProgram {
   static void AssignRemainingIndexes(RVAToLabel* labels);
 
   // Sharing instructions that emit a single byte saves a lot of space.
-  Instruction* GetByteInstruction(uint8 byte);
-  scoped_ptr<Instruction*[]> byte_instruction_cache_;
+  Instruction* GetByteInstruction(uint8_t byte);
+  scoped_ptr<Instruction* [], base::FreeDeleter> byte_instruction_cache_;
 
-  uint64 image_base_;  // Desired or mandated base address of image.
+  uint64_t image_base_;  // Desired or mandated base address of image.
 
   InstructionVector instructions_;  // All the instructions in program.
 

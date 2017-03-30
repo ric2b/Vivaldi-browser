@@ -5,9 +5,14 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_PROVIDER_HOST_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_PROVIDER_HOST_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -50,6 +55,13 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       base::Callback<void(const ServiceWorkerClientInfo&)>;
   using GetRegistrationForReadyCallback =
       base::Callback<void(ServiceWorkerRegistration* reigstration)>;
+
+  // PlzNavigate
+  // Used to pre-create a ServiceWorkerProviderHost for a navigation. The
+  // ServiceWorkerNetworkProvider will later be created in the renderer, should
+  // the navigation succeed.
+  static scoped_ptr<ServiceWorkerProviderHost> PreCreateNavigationHost(
+      base::WeakPtr<ServiceWorkerContextCore> context);
 
   // When this provider host is for a Service Worker context, |route_id| is
   // MSG_ROUTING_NONE. When this provider host is for a Document,
@@ -123,13 +135,14 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
 
   // Returns false if the version is not in the expected STARTING in our
   // process state. That would be indicative of a bad IPC message.
-  bool SetHostedVersionId(int64 versions_id);
+  bool SetHostedVersionId(int64_t versions_id);
 
   // Returns a handler for a request, the handler may return NULL if
   // the request doesn't require special handling.
   scoped_ptr<ServiceWorkerRequestHandler> CreateRequestHandler(
       FetchRequestMode request_mode,
       FetchCredentialsMode credentials_mode,
+      FetchRedirectMode redirect_mode,
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
@@ -157,7 +170,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   bool IsContextAlive();
 
   // Dispatches message event to the document.
-  void PostMessage(
+  void PostMessageToClient(
       ServiceWorkerVersion* version,
       const base::string16& message,
       const std::vector<TransferredMessagePort>& sent_message_ports);
@@ -199,6 +212,13 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   ServiceWorkerDispatcherHost* dispatcher_host() const {
     return dispatcher_host_;
   }
+
+  // PlzNavigate
+  // Completes initialization of provider hosts used for navigation requests.
+  void CompleteNavigationInitialized(
+      int process_id,
+      int frame_routing_id,
+      ServiceWorkerDispatcherHost* dispatcher_host);
 
   // Sends event messages to the renderer. Events for the worker are queued up
   // until the worker thread id is known via SetReadyToSendMessagesToWorker().
@@ -286,6 +306,11 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
 
   bool IsReadyToSendMessages() const;
   void Send(IPC::Message* message) const;
+
+  // Finalizes cross-site transfers and navigation-initalized hosts.
+  void FinalizeInitialization(int process_id,
+                              int frame_routing_id,
+                              ServiceWorkerDispatcherHost* dispatcher_host);
 
   std::string client_uuid_;
   int render_process_id_;

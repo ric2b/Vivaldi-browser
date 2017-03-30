@@ -5,14 +5,18 @@
 #ifndef MEDIA_CDM_PROXY_DECRYPTOR_H_
 #define MEDIA_CDM_PROXY_DECRYPTOR_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "media/base/cdm_context.h"
 #include "media/base/decryptor.h"
 #include "media/base/eme_constants.h"
@@ -43,9 +47,9 @@ class MEDIA_EXPORT ProxyDecryptor {
   typedef base::Callback<void(const std::string& session_id)> KeyAddedCB;
   typedef base::Callback<void(const std::string& session_id,
                               MediaKeys::KeyError error_code,
-                              uint32 system_code)> KeyErrorCB;
+                              uint32_t system_code)> KeyErrorCB;
   typedef base::Callback<void(const std::string& session_id,
-                              const std::vector<uint8>& message,
+                              const std::vector<uint8_t>& message,
                               const GURL& destination_url)> KeyMessageCB;
 
   ProxyDecryptor(MediaPermission* media_permission,
@@ -65,10 +69,12 @@ class MEDIA_EXPORT ProxyDecryptor {
 
   // May only be called after CreateCDM().
   void GenerateKeyRequest(EmeInitDataType init_data_type,
-                          const uint8* init_data,
+                          const uint8_t* init_data,
                           int init_data_length);
-  void AddKey(const uint8* key, int key_length,
-              const uint8* init_data, int init_data_length,
+  void AddKey(const uint8_t* key,
+              int key_length,
+              const uint8_t* init_data,
+              int init_data_length,
               const std::string& session_id);
   void CancelKeyRequest(const std::string& session_id);
 
@@ -77,16 +83,16 @@ class MEDIA_EXPORT ProxyDecryptor {
   void OnCdmCreated(const std::string& key_system,
                     const GURL& security_origin,
                     const CdmContextReadyCB& cdm_context_ready_cb,
-                    scoped_ptr<MediaKeys> cdm,
+                    const scoped_refptr<MediaKeys>& cdm,
                     const std::string& error_message);
 
   void GenerateKeyRequestInternal(EmeInitDataType init_data_type,
-                                  const std::vector<uint8>& init_data);
+                                  const std::vector<uint8_t>& init_data);
 
   // Callbacks for firing session events.
   void OnSessionMessage(const std::string& session_id,
                         MediaKeys::MessageType message_type,
-                        const std::vector<uint8>& message,
+                        const std::vector<uint8_t>& message,
                         const GURL& legacy_destination_url);
   void OnSessionKeysChange(const std::string& session_id,
                            bool has_additional_usable_key,
@@ -97,13 +103,13 @@ class MEDIA_EXPORT ProxyDecryptor {
   void OnSessionClosed(const std::string& session_id);
   void OnLegacySessionError(const std::string& session_id,
                             MediaKeys::Exception exception_code,
-                            uint32 system_code,
+                            uint32_t system_code,
                             const std::string& error_message);
 
   // Callback for permission request.
   void OnPermissionStatus(MediaKeys::SessionType session_type,
                           EmeInitDataType init_data_type,
-                          const std::vector<uint8>& init_data,
+                          const std::vector<uint8_t>& init_data,
                           scoped_ptr<NewSessionCdmPromise> promise,
                           bool granted);
 
@@ -119,17 +125,17 @@ class MEDIA_EXPORT ProxyDecryptor {
 
   struct PendingGenerateKeyRequestData {
     PendingGenerateKeyRequestData(EmeInitDataType init_data_type,
-                                  const std::vector<uint8>& init_data);
+                                  const std::vector<uint8_t>& init_data);
     ~PendingGenerateKeyRequestData();
 
     const EmeInitDataType init_data_type;
-    const std::vector<uint8> init_data;
+    const std::vector<uint8_t> init_data;
   };
 
   bool is_creating_cdm_;
 
   // The real MediaKeys that manages key operations for the ProxyDecryptor.
-  scoped_ptr<MediaKeys> media_keys_;
+  scoped_refptr<MediaKeys> media_keys_;
 
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   MediaPermission* media_permission_;

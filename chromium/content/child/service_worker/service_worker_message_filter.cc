@@ -4,6 +4,8 @@
 
 #include "content/child/service_worker/service_worker_message_filter.h"
 
+#include <stddef.h>
+
 #include "content/child/service_worker/service_worker_dispatcher.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/service_worker/service_worker_messages.h"
@@ -50,7 +52,8 @@ bool ServiceWorkerMessageFilter::ShouldHandleMessage(
 void ServiceWorkerMessageFilter::OnFilteredMessageReceived(
     const IPC::Message& msg) {
   ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
-      thread_safe_sender())->OnMessageReceived(msg);
+      thread_safe_sender(), main_thread_task_runner())
+      ->OnMessageReceived(msg);
 }
 
 bool ServiceWorkerMessageFilter::GetWorkerThreadIdForMessage(
@@ -64,16 +67,40 @@ void ServiceWorkerMessageFilter::OnStaleMessageReceived(
   // Specifically handle some messages in case we failed to post task
   // to the thread (meaning that the context on the thread is now gone).
   IPC_BEGIN_MESSAGE_MAP(ServiceWorkerMessageFilter, msg)
+    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_AssociateRegistration,
+                        OnStaleAssociateRegistration)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ServiceWorkerRegistered,
-                        OnStaleRegistered)
+                        OnStaleGetRegistration)
+    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DidGetRegistration,
+                        OnStaleGetRegistration)
+    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DidGetRegistrations,
+                        OnStaleGetRegistrations)
+    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DidGetRegistrationForReady,
+                        OnStaleGetRegistration)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_SetVersionAttributes,
                         OnStaleSetVersionAttributes)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_SetControllerServiceWorker,
                         OnStaleSetControllerServiceWorker)
+    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_MessageToDocument,
+                        OnStaleMessageToDocument)
   IPC_END_MESSAGE_MAP()
 }
 
-void ServiceWorkerMessageFilter::OnStaleRegistered(
+void ServiceWorkerMessageFilter::OnStaleAssociateRegistration(
+    int thread_id,
+    int provider_id,
+    const ServiceWorkerRegistrationObjectInfo& info,
+    const ServiceWorkerVersionAttributes& attrs) {
+  SendServiceWorkerObjectDestroyed(thread_safe_sender(),
+                                   attrs.installing.handle_id);
+  SendServiceWorkerObjectDestroyed(thread_safe_sender(),
+                                   attrs.waiting.handle_id);
+  SendServiceWorkerObjectDestroyed(thread_safe_sender(),
+                                   attrs.active.handle_id);
+  SendRegistrationObjectDestroyed(thread_safe_sender(), info.handle_id);
+}
+
+void ServiceWorkerMessageFilter::OnStaleGetRegistration(
     int thread_id,
     int request_id,
     const ServiceWorkerRegistrationObjectInfo& info,
@@ -87,9 +114,18 @@ void ServiceWorkerMessageFilter::OnStaleRegistered(
   SendRegistrationObjectDestroyed(thread_safe_sender(), info.handle_id);
 }
 
+void ServiceWorkerMessageFilter::OnStaleGetRegistrations(
+    int thread_id,
+    int request_id,
+    const std::vector<ServiceWorkerRegistrationObjectInfo>& infos,
+    const std::vector<ServiceWorkerVersionAttributes>& attrs) {
+  DCHECK_EQ(infos.size(), attrs.size());
+  for (size_t i = 0; i < infos.size(); ++i)
+    OnStaleGetRegistration(thread_id, request_id, infos[i], attrs[i]);
+}
+
 void ServiceWorkerMessageFilter::OnStaleSetVersionAttributes(
     int thread_id,
-    int provider_id,
     int registration_handle_id,
     int changed_mask,
     const ServiceWorkerVersionAttributes& attrs) {
@@ -109,6 +145,12 @@ void ServiceWorkerMessageFilter::OnStaleSetControllerServiceWorker(
     const ServiceWorkerObjectInfo& info,
     bool should_notify_controllerchange) {
   SendServiceWorkerObjectDestroyed(thread_safe_sender(), info.handle_id);
+}
+
+void ServiceWorkerMessageFilter::OnStaleMessageToDocument(
+    const ServiceWorkerMsg_MessageToDocument_Params& params) {
+  SendServiceWorkerObjectDestroyed(thread_safe_sender(),
+                                   params.service_worker_info.handle_id);
 }
 
 }  // namespace content

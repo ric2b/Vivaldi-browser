@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_MEDIA_MEDIA_CAPTURE_DEVICES_IMPL_H_
 #define CONTENT_BROWSER_RENDERER_HOST_MEDIA_MEDIA_CAPTURE_DEVICES_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/media_capture_devices.h"
 
@@ -24,7 +25,7 @@ class MediaCaptureDevicesImpl : public MediaCaptureDevices {
   void OnVideoCaptureDevicesChanged(const MediaStreamDevices& devices);
 
  private:
-  friend struct DefaultSingletonTraits<MediaCaptureDevicesImpl>;
+  friend struct base::DefaultSingletonTraits<MediaCaptureDevicesImpl>;
   MediaCaptureDevicesImpl();
   ~MediaCaptureDevicesImpl() override;
 

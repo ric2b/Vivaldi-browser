@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FILEAPI_EXTERNAL_FILE_URL_REQUEST_JOB_H_
 #define CHROME_BROWSER_CHROMEOS_FILEAPI_EXTERNAL_FILE_URL_REQUEST_JOB_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/chromeos/drive/file_errors.h"
+#include "components/drive/file_errors.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_byte_range.h"
 #include "net/url_request/url_request_job.h"
@@ -63,12 +65,17 @@ class ExternalFileURLRequestJob : public net::URLRequestJob {
   void Kill() override;
   bool GetMimeType(std::string* mime_type) const override;
   bool IsRedirectResponse(GURL* location, int* http_status_code) override;
-  bool ReadRawData(net::IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(net::IOBuffer* buf, int buf_size) override;
 
  protected:
   ~ExternalFileURLRequestJob() override;
 
  private:
+  // Helper method to start the job. Should be called asynchronously because
+  // NotifyStartError() is not legal to call synchronously in
+  // URLRequestJob::Start().
+  void StartAsync();
+
   // Called from an internal helper class defined in drive_url_request_job.cc,
   // which is running on the UI thread.
   void OnHelperResultObtained(
@@ -91,8 +98,9 @@ class ExternalFileURLRequestJob : public net::URLRequestJob {
   void* const profile_id_;
 
   // The range of the file to be returned.
+  net::Error range_parse_result_;
   net::HttpByteRange byte_range_;
-  int64 remaining_bytes_;
+  int64_t remaining_bytes_;
 
   scoped_refptr<storage::FileSystemContext> file_system_context_;
   scoped_ptr<IsolatedFileSystemScope> isolated_file_system_scope_;

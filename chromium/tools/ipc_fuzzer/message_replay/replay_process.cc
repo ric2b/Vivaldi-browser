@@ -11,25 +11,22 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/posix/global_descriptors.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
 #include "ipc/ipc_descriptors.h"
 #include "ipc/ipc_switches.h"
 #include "ipc/mojo/ipc_channel_mojo.h"
-#include "third_party/mojo/src/mojo/edk/embedder/configuration.h"
 #include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
-#include "third_party/mojo/src/mojo/edk/embedder/simple_platform_support.h"
 
 namespace ipc_fuzzer {
 
 // TODO(morrita): content::InitializeMojo() should be used once it becomes
 // a public API. See src/content/app/mojo/mojo_init.cc
 void InitializeMojo() {
-  mojo::embedder::GetConfiguration()->max_message_num_bytes =
-      64 * 1024 * 1024;
-  mojo::embedder::Init(scoped_ptr<mojo::embedder::PlatformSupport>(
-      new mojo::embedder::SimplePlatformSupport()));
+  mojo::embedder::SetMaxMessageSize(64 * 1024 * 1024);
+  mojo::embedder::Init();
 }
 
 ReplayProcess::ReplayProcess()
@@ -112,7 +109,7 @@ bool ReplayProcess::OpenTestcase() {
 
 void ReplayProcess::SendNextMessage() {
   if (message_index_ >= messages_.size()) {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     return;
   }
 
@@ -123,7 +120,7 @@ void ReplayProcess::SendNextMessage() {
   if (!channel_->Send(message)) {
     LOG(ERROR) << "ChannelProxy::Send() failed after "
                << message_index_ << " messages";
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 }
 
@@ -143,7 +140,7 @@ bool ReplayProcess::OnMessageReceived(const IPC::Message& msg) {
 void ReplayProcess::OnChannelError() {
   LOG(ERROR) << "Channel error, quitting after "
              << message_index_ << " messages";
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 }  // namespace ipc_fuzzer

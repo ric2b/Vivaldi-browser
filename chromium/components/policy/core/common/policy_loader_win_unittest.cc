@@ -5,6 +5,8 @@
 #include "components/policy/core/common/policy_loader_win.h"
 
 #include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <userenv.h>
 
 #include <algorithm>
@@ -19,6 +21,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string16.h"
@@ -34,6 +37,7 @@
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/preg_parser_win.h"
 #include "components/policy/core/common/schema_map.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -254,8 +258,8 @@ class PRegTestHarness : public PolicyProviderTestHarness,
   static PolicyProviderTestHarness* Create();
 
  private:
-  // Helper to append a base::string16 to an uint8 buffer.
-  static void AppendChars(std::vector<uint8>* buffer,
+  // Helper to append a base::string16 to an uint8_t buffer.
+  static void AppendChars(std::vector<uint8_t>* buffer,
                           const base::string16& chars);
 
   // Appends a record with the given fields to the PReg file.
@@ -263,7 +267,7 @@ class PRegTestHarness : public PolicyProviderTestHarness,
                               const std::string& key,
                               DWORD type,
                               DWORD size,
-                              uint8* data);
+                              uint8_t* data);
 
   // Appends the given DWORD |value| for |path| + |key| to the PReg file.
   void AppendDWORDToPRegFile(const base::string16& path,
@@ -333,7 +337,10 @@ void ScopedGroupPolicyRegistrySandbox::DeleteKeys() {
 }
 
 RegistryTestHarness::RegistryTestHarness(HKEY hive, PolicyScope scope)
-    : PolicyProviderTestHarness(POLICY_LEVEL_MANDATORY, scope), hive_(hive) {}
+    : PolicyProviderTestHarness(POLICY_LEVEL_MANDATORY, scope,
+                                POLICY_SOURCE_PLATFORM),
+      hive_(hive) {
+}
 
 RegistryTestHarness::~RegistryTestHarness() {}
 
@@ -455,7 +462,9 @@ PolicyProviderTestHarness* RegistryTestHarness::CreateHKLM() {
 }
 
 PRegTestHarness::PRegTestHarness()
-    : PolicyProviderTestHarness(POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE) {}
+    : PolicyProviderTestHarness(POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                                POLICY_SOURCE_PLATFORM) {
+}
 
 PRegTestHarness::~PRegTestHarness() {}
 
@@ -553,7 +562,7 @@ PolicyProviderTestHarness* PRegTestHarness::Create() {
 }
 
 // static
-void PRegTestHarness::AppendChars(std::vector<uint8>* buffer,
+void PRegTestHarness::AppendChars(std::vector<uint8_t>* buffer,
                                   const base::string16& chars) {
   for (base::string16::const_iterator c(chars.begin()); c != chars.end(); ++c) {
     buffer->push_back(*c & 0xff);
@@ -565,28 +574,27 @@ void PRegTestHarness::AppendRecordToPRegFile(const base::string16& path,
                                              const std::string& key,
                                              DWORD type,
                                              DWORD size,
-                                             uint8* data) {
-  std::vector<uint8> buffer;
+                                             uint8_t* data) {
+  std::vector<uint8_t> buffer;
   AppendChars(&buffer, L"[");
   AppendChars(&buffer, path);
   AppendChars(&buffer, base::string16(L"\0;", 2));
   AppendChars(&buffer, UTF8ToUTF16(key));
   AppendChars(&buffer, base::string16(L"\0;", 2));
   type = base::ByteSwapToLE32(type);
-  uint8* type_data = reinterpret_cast<uint8*>(&type);
+  uint8_t* type_data = reinterpret_cast<uint8_t*>(&type);
   buffer.insert(buffer.end(), type_data, type_data + sizeof(DWORD));
   AppendChars(&buffer, L";");
   size = base::ByteSwapToLE32(size);
-  uint8* size_data = reinterpret_cast<uint8*>(&size);
+  uint8_t* size_data = reinterpret_cast<uint8_t*>(&size);
   buffer.insert(buffer.end(), size_data, size_data + sizeof(DWORD));
   AppendChars(&buffer, L";");
   buffer.insert(buffer.end(), data, data + size);
   AppendChars(&buffer, L"]");
 
-  ASSERT_TRUE(base::AppendToFile(
-      preg_file_path_,
-      reinterpret_cast<const char*>(vector_as_array(&buffer)),
-      buffer.size()));
+  ASSERT_TRUE(base::AppendToFile(preg_file_path_,
+                                 reinterpret_cast<const char*>(buffer.data()),
+                                 buffer.size()));
 }
 
 void PRegTestHarness::AppendDWORDToPRegFile(const base::string16& path,
@@ -594,7 +602,7 @@ void PRegTestHarness::AppendDWORDToPRegFile(const base::string16& path,
                                             DWORD value) {
   value = base::ByteSwapToLE32(value);
   AppendRecordToPRegFile(path, key, REG_DWORD, sizeof(DWORD),
-                         reinterpret_cast<uint8*>(&value));
+                         reinterpret_cast<uint8_t*>(&value));
 }
 
 void PRegTestHarness::AppendStringToPRegFile(const base::string16& path,
@@ -607,7 +615,7 @@ void PRegTestHarness::AppendStringToPRegFile(const base::string16& path,
   data.push_back(base::ByteSwapToLE16(L'\0'));
 
   AppendRecordToPRegFile(path, key, REG_SZ, data.size() * sizeof(base::char16),
-                         reinterpret_cast<uint8*>(vector_as_array(&data)));
+                         reinterpret_cast<uint8_t*>(data.data()));
 }
 
 void PRegTestHarness::AppendPolicyToPRegFile(const base::string16& path,
@@ -758,7 +766,8 @@ class PolicyLoaderWinTest : public PolicyTestBase,
     expected_policy.SetString(test_keys::kKeyString, "registry");
     PolicyBundle expected;
     expected.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
-        .LoadFrom(&expected_policy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER);
+        .LoadFrom(&expected_policy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                  POLICY_SOURCE_PLATFORM);
     return Matches(expected);
   }
 
@@ -774,7 +783,7 @@ class PolicyLoaderWinTest : public PolicyTestBase,
     PolicyBundle expected;
     expected.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
         .LoadFrom(&expected_policy, POLICY_LEVEL_MANDATORY,
-                  POLICY_SCOPE_MACHINE);
+                  POLICY_SCOPE_MACHINE, POLICY_SOURCE_PLATFORM);
     return Matches(expected);
   }
 
@@ -803,6 +812,7 @@ TEST_F(PolicyLoaderWinTest, HKLMOverHKCU) {
       .Set(test_keys::kKeyString,
            POLICY_LEVEL_MANDATORY,
            POLICY_SCOPE_MACHINE,
+           POLICY_SOURCE_PLATFORM,
            new base::StringValue("hklm"),
            NULL);
   EXPECT_TRUE(Matches(expected));
@@ -857,21 +867,25 @@ TEST_F(PolicyLoaderWinTest, Merge3rdPartyPolicies) {
   expected_policy.Set("a",
                       POLICY_LEVEL_MANDATORY,
                       POLICY_SCOPE_MACHINE,
+                      POLICY_SOURCE_PLATFORM,
                       new base::StringValue(kMachineMandatory),
                       NULL);
   expected_policy.Set("b",
                       POLICY_LEVEL_MANDATORY,
                       POLICY_SCOPE_USER,
+                      POLICY_SOURCE_PLATFORM,
                       new base::StringValue(kUserMandatory),
                       NULL);
   expected_policy.Set("c",
                       POLICY_LEVEL_RECOMMENDED,
                       POLICY_SCOPE_MACHINE,
+                      POLICY_SOURCE_PLATFORM,
                       new base::StringValue(kMachineRecommended),
                       NULL);
   expected_policy.Set("d",
                       POLICY_LEVEL_RECOMMENDED,
                       POLICY_SCOPE_USER,
+                      POLICY_SOURCE_PLATFORM,
                       new base::StringValue(kUserRecommended),
                       NULL);
   EXPECT_TRUE(Matches(expected));
@@ -930,7 +944,8 @@ TEST_F(PolicyLoaderWinTest, LoadStringEncodedValues) {
       InstallValue(encoded_policy, HKEY_CURRENT_USER, kPathSuffix, kMandatory));
 
   PolicyBundle expected;
-  expected.Get(ns).LoadFrom(&policy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER);
+  expected.Get(ns).LoadFrom(&policy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                            POLICY_SOURCE_PLATFORM);
   EXPECT_TRUE(Matches(expected));
 }
 
@@ -962,7 +977,8 @@ TEST_F(PolicyLoaderWinTest, LoadIntegerEncodedValues) {
   policy.SetInteger("int", 123);
   policy.SetDouble("double", 456.0);
   PolicyBundle expected;
-  expected.Get(ns).LoadFrom(&policy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER);
+  expected.Get(ns).LoadFrom(&policy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                            POLICY_SOURCE_PLATFORM);
   EXPECT_TRUE(Matches(expected));
 }
 
@@ -1012,8 +1028,8 @@ TEST_F(PolicyLoaderWinTest, DefaultPropertySchemaType) {
   base::DictionaryValue expected_policies;
   expected_policies.Set("policy", expected_policy.DeepCopy());
   PolicyBundle expected;
-  expected.Get(ns).LoadFrom(
-      &expected_policies, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER);
+  expected.Get(ns).LoadFrom(&expected_policies, POLICY_LEVEL_MANDATORY,
+                            POLICY_SCOPE_USER, POLICY_SOURCE_PLATFORM);
   EXPECT_TRUE(Matches(expected));
 }
 
@@ -1178,12 +1194,12 @@ TEST_F(PolicyLoaderWinTest, LoadExtensionPolicyAlternativeSpelling) {
   base::DictionaryValue expected_a;
   expected_a.SetInteger("policy 1", 3);
   expected_a.SetInteger("policy 2", 3);
-  expected.Get(ns_a).LoadFrom(
-      &expected_a, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE);
+  expected.Get(ns_a).LoadFrom(&expected_a, POLICY_LEVEL_MANDATORY,
+                              POLICY_SCOPE_MACHINE, POLICY_SOURCE_PLATFORM);
   base::DictionaryValue expected_b;
   expected_b.SetInteger("policy 1", 2);
-  expected.Get(ns_b).LoadFrom(
-      &expected_b, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE);
+  expected.Get(ns_b).LoadFrom(&expected_b, POLICY_LEVEL_MANDATORY,
+                              POLICY_SCOPE_MACHINE, POLICY_SOURCE_PLATFORM);
   EXPECT_TRUE(Matches(expected));
 }
 
@@ -1219,9 +1235,10 @@ TEST_F(PolicyLoaderWinTest, LBSSupport) {
   PolicyMap& expected_policy = expected.Get(ns);
   expected_policy.Set("alternative_browser_path",
                       POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                      POLICY_SOURCE_PLATFORM,
                       new base::StringValue("c:\\legacy\\browser.exe"), NULL);
   expected_policy.Set("url_list", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-                      list.DeepCopy(), NULL);
+                      POLICY_SOURCE_PLATFORM, list.DeepCopy(), nullptr);
   EXPECT_TRUE(Matches(expected));
 }
 

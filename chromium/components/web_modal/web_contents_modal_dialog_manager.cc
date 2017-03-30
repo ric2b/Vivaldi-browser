@@ -4,10 +4,13 @@
 
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 
+#include <utility>
+
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 
@@ -35,7 +38,7 @@ void WebContentsModalDialogManager::SetDelegate(
 void WebContentsModalDialogManager::ShowModalDialog(gfx::NativeWindow dialog) {
   scoped_ptr<SingleWebContentsDialogManager> mgr(
       CreateNativeWebModalManager(dialog, this));
-  ShowDialogWithManager(dialog, mgr.Pass());
+  ShowDialogWithManager(dialog, std::move(mgr));
 }
 
 // TODO(gbillock): Maybe "ShowBubbleWithManager"?
@@ -44,7 +47,7 @@ void WebContentsModalDialogManager::ShowDialogWithManager(
     scoped_ptr<SingleWebContentsDialogManager> manager) {
   if (delegate_)
     manager->HostChanged(delegate_->GetWebContentsModalDialogHost());
-  child_dialogs_.push_back(new DialogState(dialog, manager.Pass()));
+  child_dialogs_.push_back(new DialogState(dialog, std::move(manager)));
 
   if (child_dialogs_.size() == 1) {
     BlockWebContentsInteraction(true);
@@ -126,7 +129,7 @@ void WebContentsModalDialogManager::BlockWebContentsInteraction(bool blocked) {
   // RenderViewHost may be NULL during shutdown.
   content::RenderViewHost* host = contents->GetRenderViewHost();
   if (host)
-    host->SetIgnoreInputEvents(blocked);
+    host->GetWidget()->SetIgnoreInputEvents(blocked);
   if (delegate_)
     delegate_->SetWebContentsBlocked(contents, blocked);
 }
@@ -177,10 +180,7 @@ void WebContentsModalDialogManager::WebContentsDestroyed() {
 }
 
 void WebContentsModalDialogManager::DidAttachInterstitialPage() {
-  // TODO(wittman): Test closing on interstitial webui works properly on Mac.
-#if defined(USE_AURA)
   CloseAllDialogs();
-#endif
 }
 
 }  // namespace web_modal

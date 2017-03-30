@@ -5,9 +5,10 @@
 #ifndef CONTENT_CHILD_NPAPI_WEBPLUGIN_RESOURCE_CLIENT_H_
 #define CONTENT_CHILD_NPAPI_WEBPLUGIN_RESOURCE_CLIENT_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 
 class GURL;
 
@@ -23,8 +24,8 @@ class WebPluginResourceClient {
   // can be issued for the underlying stream.
   virtual void DidReceiveResponse(const std::string& mime_type,
                                   const std::string& headers,
-                                  uint32 expected_length,
-                                  uint32 last_modified,
+                                  uint32_t expected_length,
+                                  uint32_t last_modified,
                                   bool request_is_seekable) = 0;
   virtual void DidReceiveData(const char* buffer, int length,
                               int data_offset) = 0;
@@ -32,7 +33,6 @@ class WebPluginResourceClient {
   // is cleared. This applies for seekable streams.
   virtual void DidFinishLoading(unsigned long resource_id) = 0;
   virtual void DidFail(unsigned long resource_id) = 0;
-  virtual bool IsMultiByteResponseExpected() = 0;
   virtual int ResourceId() = 0;
   // Tells this object that it will get responses from multiple resources.
   // This is necessary since the plugin process uses a single instance of

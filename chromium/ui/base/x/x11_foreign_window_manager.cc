@@ -4,6 +4,7 @@
 
 #include "ui/base/x/x11_foreign_window_manager.h"
 
+#include <stddef.h>
 #include <X11/Xlib.h>
 
 #include "base/compiler_specific.h"
@@ -13,7 +14,7 @@ namespace ui {
 
 // static
 XForeignWindowManager* XForeignWindowManager::GetInstance() {
-  return Singleton<XForeignWindowManager>::get();
+  return base::Singleton<XForeignWindowManager>::get();
 }
 
 int XForeignWindowManager::RequestEvents(XID xid, long event_mask) {

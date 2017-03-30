@@ -17,6 +17,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "build/build_config.h"
 #include "third_party/icu/source/common/unicode/putil.h"
 #include "third_party/icu/source/common/unicode/udata.h"
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -25,6 +26,10 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
+#endif
+
+#if defined(OS_IOS)
+#include "base/ios/ios_util.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -123,6 +128,12 @@ void LazyInitIcuDataFile() {
   ScopedCFTypeRef<CFStringRef> data_file_name(
       SysUTF8ToCFStringRef(kIcuDataFileName));
   FilePath data_path = mac::PathForFrameworkBundleResource(data_file_name);
+#if defined(OS_IOS)
+  FilePath override_data_path = base::ios::FilePathOfEmbeddedICU();
+  if (!override_data_path.empty()) {
+    data_path = override_data_path;
+  }
+#endif  // !defined(OS_IOS)
   if (data_path.empty()) {
     LOG(ERROR) << kIcuDataFileName << " not found in bundle";
     return;
@@ -143,6 +154,7 @@ bool InitializeICUWithFileDescriptorInternal(
     return true;
   }
   if (data_fd == kInvalidPlatformFile) {
+    LOG(ERROR) << "Invalid file descriptor to ICU data received.";
     return false;
   }
 
@@ -154,7 +166,7 @@ bool InitializeICUWithFileDescriptorInternal(
   g_icudtl_mapped_file = icudtl_mapped_file.release();
 
   UErrorCode err = U_ZERO_ERROR;
-  udata_setCommonData(const_cast<uint8*>(g_icudtl_mapped_file->data()), &err);
+  udata_setCommonData(const_cast<uint8_t*>(g_icudtl_mapped_file->data()), &err);
   return err == U_ZERO_ERROR;
 }
 #endif  // ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_FILE
@@ -164,6 +176,7 @@ bool InitializeICUWithFileDescriptorInternal(
 
 #if !defined(OS_NACL)
 #if ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_FILE
+#if defined(OS_ANDROID)
 bool InitializeICUWithFileDescriptor(
     PlatformFile data_fd,
     const MemoryMappedFile::Region& data_region) {
@@ -179,6 +192,28 @@ PlatformFile GetIcuDataFileHandle(MemoryMappedFile::Region* out_region) {
   *out_region = g_icudtl_region;
   return g_icudtl_pf;
 }
+#endif
+
+const uint8_t* GetRawIcuMemory() {
+  CHECK(g_icudtl_mapped_file);
+  return g_icudtl_mapped_file->data();
+}
+
+bool InitializeICUFromRawMemory(const uint8_t* raw_memory) {
+#if !defined(COMPONENT_BUILD)
+#if !defined(NDEBUG)
+  DCHECK(!g_check_called_once || !g_called_once);
+  g_called_once = true;
+#endif
+
+  UErrorCode err = U_ZERO_ERROR;
+  udata_setCommonData(const_cast<uint8_t*>(raw_memory), &err);
+  return err == U_ZERO_ERROR;
+#else
+  return true;
+#endif
+}
+
 #endif  // ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_FILE
 
 bool InitializeICU() {

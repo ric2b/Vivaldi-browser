@@ -6,14 +6,14 @@
 
 import logging
 
+from telemetry.core import cros_interface
 from telemetry.core import platform as platform_module
-from telemetry.core.platform import cros_device
-from telemetry.core.platform import cros_interface
 from telemetry.internal.backends.chrome import cros_browser_backend
 from telemetry.internal.backends.chrome import cros_browser_with_oobe
 from telemetry.internal.browser import browser
 from telemetry.internal.browser import browser_finder_exceptions
 from telemetry.internal.browser import possible_browser
+from telemetry.internal.platform import cros_device
 
 
 class PossibleCrOSBrowser(possible_browser.PossibleBrowser):
@@ -25,7 +25,7 @@ class PossibleCrOSBrowser(possible_browser.PossibleBrowser):
          browser_type)
     self._platform = cros_platform
     self._platform_backend = (
-        cros_platform._platform_backend)  # pylint: disable=W0212
+        cros_platform._platform_backend)  # pylint: disable=protected-access
     self._is_guest = is_guest
 
   def __repr__(self):
@@ -95,7 +95,18 @@ def FindAllAvailableBrowsers(finder_options, device):
 
   # Check ssh
   try:
-    platform = platform_module.GetPlatformForDevice(device, finder_options)
+    # Retries required because of DNS issue in the lab documented in
+    # http://crbug/484726
+    retries = 0
+    while True:
+      try:
+        platform = platform_module.GetPlatformForDevice(device, finder_options)
+        break
+      except cros_interface.DNSFailureException, ex:
+        logging.warn('DNS Failure: %s', str(ex))
+        retries += 1
+        if retries > 1:
+          raise ex
   except cros_interface.LoginException, ex:
     if isinstance(ex, cros_interface.KeylessLoginRequiredException):
       logging.warn('Could not ssh into %s. Your device must be configured',

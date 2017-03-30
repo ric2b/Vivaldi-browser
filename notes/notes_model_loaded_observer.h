@@ -6,24 +6,27 @@
 #ifndef VIVALDI_NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
 #define VIVALDI_NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
-#include "notes/notes_base_model_observer.h"
+#include "base/macros.h"
+#include "notes/notes_model_observer.h"
 
 class Profile;
 
-class NotesModelLoadedObserver : public Vivaldi::NotesBaseModelObserver {
+namespace vivaldi {
+
+class NotesModelLoadedObserver : public NotesModelObserver {
  public:
   explicit NotesModelLoadedObserver(Profile* profile);
 
  private:
-  void NotesModelChanged() override;
-  void Loaded(Vivaldi::Notes_Model* model, bool ids_reassigned) override;
-  void NotesModelBeingDeleted(Vivaldi::Notes_Model* model) override;
+  void Loaded(Notes_Model* model, bool ids_reassigned) override;
+  void NotesModelBeingDeleted(Notes_Model* model) override;
 
   Profile* profile_;
 
   DISALLOW_COPY_AND_ASSIGN(NotesModelLoadedObserver);
 };
+
+}  // namespace vivaldi
 
 #endif  // VIVALDI_NOTES_NOTES_MODEL_LOADED_OBSERVER_H_

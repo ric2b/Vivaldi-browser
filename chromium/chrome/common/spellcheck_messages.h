@@ -5,6 +5,9 @@
 // IPC messages for spellcheck.
 // Multiply-included message file, hence no include guard.
 
+#include <stdint.h>
+
+#include "chrome/common/spellcheck_bdict_language.h"
 #include "chrome/common/spellcheck_marker.h"
 #include "chrome/common/spellcheck_result.h"
 #include "ipc/ipc_message_macros.h"
@@ -31,6 +34,11 @@ IPC_STRUCT_TRAITS_BEGIN(SpellCheckMarker)
   IPC_STRUCT_TRAITS_MEMBER(offset)
 IPC_STRUCT_TRAITS_END()
 
+IPC_STRUCT_TRAITS_BEGIN(SpellCheckBDictLanguage)
+  IPC_STRUCT_TRAITS_MEMBER(file)
+  IPC_STRUCT_TRAITS_MEMBER(language)
+IPC_STRUCT_TRAITS_END()
+
 // Messages sent from the browser to the renderer.
 
 IPC_MESSAGE_CONTROL1(SpellCheckMsg_EnableSpellCheck,
@@ -39,21 +47,15 @@ IPC_MESSAGE_CONTROL1(SpellCheckMsg_EnableSpellCheck,
 // Passes some initialization params from the browser to the renderer's
 // spellchecker. This can be called directly after startup or in (async)
 // response to a RequestDictionary ViewHost message.
-IPC_MESSAGE_CONTROL4(SpellCheckMsg_Init,
-                     IPC::PlatformFileForTransit /* bdict_file */,
-                     std::set<std::string> /* custom_dict_words */,
-                     std::string /* language */,
-                     bool /* auto spell correct */)
+IPC_MESSAGE_CONTROL2(SpellCheckMsg_Init,
+                     std::vector<SpellCheckBDictLanguage> /* bdict_languages */,
+                     std::set<std::string> /* custom_dict_words */)
 
 // Words have been added and removed in the custom dictionary; update the local
 // custom word list.
 IPC_MESSAGE_CONTROL2(SpellCheckMsg_CustomDictionaryChanged,
                      std::set<std::string> /* words_added */,
                      std::set<std::string> /* words_removed */)
-
-// Toggle the auto spell correct functionality.
-IPC_MESSAGE_CONTROL1(SpellCheckMsg_EnableAutoSpellCorrect,
-                     bool /* enable */)
 
 // Request a list of all document markers in the renderer for spelling service
 // feedback.
@@ -62,9 +64,9 @@ IPC_MESSAGE_CONTROL0(SpellCheckMsg_RequestDocumentMarkers)
 // Send a list of document markers in the renderer to the spelling service
 // feedback sender.
 IPC_MESSAGE_CONTROL1(SpellCheckHostMsg_RespondDocumentMarkers,
-                     std::vector<uint32> /* document marker identifiers */)
+                     std::vector<uint32_t> /* document marker identifiers */)
 
-#if !defined(USE_PLATFORM_SPELLCHECKER)
+#if !defined(USE_BROWSER_SPELLCHECKER)
 // Sends text-check results from the Spelling service when the service finishes
 // checking text received by a SpellCheckHostMsg_CallSpellingService message.
 // If the service is not available, the 4th parameter should be false and the
@@ -76,15 +78,16 @@ IPC_MESSAGE_ROUTED4(SpellCheckMsg_RespondSpellingService,
                     std::vector<SpellCheckResult>)
 #endif
 
-#if defined(USE_PLATFORM_SPELLCHECKER)
+#if defined(USE_BROWSER_SPELLCHECKER)
 // This message tells the renderer to advance to the next misspelling. It is
 // sent when the user clicks the "Find Next" button on the spelling panel.
 IPC_MESSAGE_ROUTED0(SpellCheckMsg_AdvanceToNextMisspelling)
 
 // Sends when NSSpellChecker finishes checking text received by a preceding
 // SpellCheckHostMsg_RequestTextCheck message.
-IPC_MESSAGE_ROUTED2(SpellCheckMsg_RespondTextCheck,
-                    int        /* request identifier given by WebKit */,
+IPC_MESSAGE_ROUTED3(SpellCheckMsg_RespondTextCheck,
+                    int             /* request identifier given by WebKit */,
+                    base::string16  /* sentence */,
                     std::vector<SpellCheckResult>)
 
 IPC_MESSAGE_ROUTED1(SpellCheckMsg_ToggleSpellPanel,
@@ -103,7 +106,7 @@ IPC_MESSAGE_ROUTED2(SpellCheckHostMsg_NotifyChecked,
                     base::string16 /* word */,
                     bool /* true if checked word is misspelled */)
 
-#if !defined(USE_PLATFORM_SPELLCHECKER)
+#if !defined(USE_BROWSER_SPELLCHECKER)
 // Asks the Spelling service to check text. When the service finishes checking
 // the input text, it sends a SpellingCheckMsg_RespondSpellingService with
 // text-check results.
@@ -114,7 +117,7 @@ IPC_MESSAGE_CONTROL4(SpellCheckHostMsg_CallSpellingService,
                      std::vector<SpellCheckMarker> /* markers */)
 #endif
 
-#if defined(USE_PLATFORM_SPELLCHECKER)
+#if defined(USE_BROWSER_SPELLCHECKER)
 // Tells the browser to display or not display the SpellingPanel
 IPC_MESSAGE_ROUTED1(SpellCheckHostMsg_ShowSpellingPanel,
                     bool /* if true, then show it, otherwise hide it*/)
@@ -142,4 +145,4 @@ IPC_MESSAGE_CONTROL4(SpellCheckHostMsg_RequestTextCheck,
 IPC_MESSAGE_ROUTED2(SpellCheckHostMsg_ToggleSpellCheck,
                     bool /* enabled */,
                     bool /* checked */)
-#endif  // USE_PLATFORM_SPELLCHECKER
+#endif  // USE_BROWSER_SPELLCHECKER

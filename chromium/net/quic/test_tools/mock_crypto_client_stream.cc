@@ -5,6 +5,7 @@
 #include "net/quic/test_tools/mock_crypto_client_stream.h"
 
 #include "net/quic/crypto/quic_decrypter.h"
+#include "net/quic/crypto/quic_encrypter.h"
 #include "net/quic/quic_client_session_base.h"
 #include "net/quic/quic_server_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,15 +23,14 @@ MockCryptoClientStream::MockCryptoClientStream(
     const ProofVerifyDetails* proof_verify_details)
     : QuicCryptoClientStream(server_id, session, verify_context, crypto_config),
       handshake_mode_(handshake_mode),
-      proof_verify_details_(proof_verify_details) {
-}
+      proof_verify_details_(proof_verify_details) {}
 
-MockCryptoClientStream::~MockCryptoClientStream() {
-}
+MockCryptoClientStream::~MockCryptoClientStream() {}
 
 void MockCryptoClientStream::OnHandshakeMessage(
     const CryptoHandshakeMessage& message) {
-  CloseConnection(QUIC_CRYPTO_MESSAGE_AFTER_HANDSHAKE_COMPLETE);
+  CloseConnectionWithDetails(QUIC_CRYPTO_MESSAGE_AFTER_HANDSHAKE_COMPLETE,
+                             "Forced mock failure");
 }
 
 void MockCryptoClientStream::CryptoConnect() {
@@ -38,8 +38,16 @@ void MockCryptoClientStream::CryptoConnect() {
     case ZERO_RTT: {
       encryption_established_ = true;
       handshake_confirmed_ = false;
+      crypto_negotiated_params_.key_exchange = kC255;
+      crypto_negotiated_params_.aead = kAESG;
+      if (proof_verify_details_) {
+        client_session()->OnProofVerifyDetailsAvailable(*proof_verify_details_);
+      }
       session()->connection()->SetDecrypter(ENCRYPTION_INITIAL,
                                             QuicDecrypter::Create(kNULL));
+      session()->connection()->SetEncrypter(ENCRYPTION_INITIAL,
+                                            QuicEncrypter::Create(kNULL));
+      session()->connection()->SetDefaultEncryptionLevel(ENCRYPTION_INITIAL);
       session()->OnCryptoHandshakeEvent(
           QuicSession::ENCRYPTION_FIRST_ESTABLISHED);
       break;
@@ -56,6 +64,10 @@ void MockCryptoClientStream::CryptoConnect() {
       SetConfigNegotiated();
       session()->connection()->SetDecrypter(ENCRYPTION_FORWARD_SECURE,
                                             QuicDecrypter::Create(kNULL));
+      session()->connection()->SetEncrypter(ENCRYPTION_FORWARD_SECURE,
+                                            QuicEncrypter::Create(kNULL));
+      session()->connection()->SetDefaultEncryptionLevel(
+          ENCRYPTION_FORWARD_SECURE);
       session()->OnCryptoHandshakeEvent(QuicSession::HANDSHAKE_CONFIRMED);
       break;
     }
@@ -81,7 +93,7 @@ void MockCryptoClientStream::SendOnCryptoHandshakeEvent(
 void MockCryptoClientStream::SetConfigNegotiated() {
   ASSERT_FALSE(session()->config()->negotiated());
   QuicTagVector cgst;
-  // TODO(rtenneti): Enable the following code after BBR code is checked in.
+// TODO(rtenneti): Enable the following code after BBR code is checked in.
 #if 0
   cgst.push_back(kTBBR);
 #endif

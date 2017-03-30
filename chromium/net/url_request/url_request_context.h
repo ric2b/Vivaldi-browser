@@ -13,6 +13,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -31,7 +32,6 @@ class CertVerifier;
 class ChannelIDService;
 class CookieStore;
 class CTVerifier;
-class FraudulentCertificateReporter;
 class HostResolver;
 class HttpAuthHandlerFactory;
 class HttpTransactionFactory;
@@ -41,6 +41,7 @@ class NetworkQualityEstimator;
 class SdchManager;
 class ProxyService;
 class URLRequest;
+class URLRequestBackoffManager;
 class URLRequestJobFactory;
 class URLRequestThrottlerManager;
 
@@ -96,14 +97,6 @@ class NET_EXPORT URLRequestContext
   void set_channel_id_service(
       ChannelIDService* channel_id_service) {
     channel_id_service_ = channel_id_service;
-  }
-
-  FraudulentCertificateReporter* fraudulent_certificate_reporter() const {
-    return fraudulent_certificate_reporter_;
-  }
-  void set_fraudulent_certificate_reporter(
-      FraudulentCertificateReporter* fraudulent_certificate_reporter) {
-    fraudulent_certificate_reporter_ = fraudulent_certificate_reporter;
   }
 
   // Get the proxy service for this context.
@@ -184,6 +177,12 @@ class NET_EXPORT URLRequestContext
   }
 
   // May return nullptr.
+  URLRequestBackoffManager* backoff_manager() const { return backoff_manager_; }
+  void set_backoff_manager(URLRequestBackoffManager* backoff_manager) {
+    backoff_manager_ = backoff_manager;
+  }
+
+  // May return nullptr.
   SdchManager* sdch_manager() const { return sdch_manager_; }
   void set_sdch_manager(SdchManager* sdch_manager) {
     sdch_manager_ = sdch_manager;
@@ -232,7 +231,6 @@ class NET_EXPORT URLRequestContext
   HostResolver* host_resolver_;
   CertVerifier* cert_verifier_;
   ChannelIDService* channel_id_service_;
-  FraudulentCertificateReporter* fraudulent_certificate_reporter_;
   HttpAuthHandlerFactory* http_auth_handler_factory_;
   ProxyService* proxy_service_;
   scoped_refptr<SSLConfigService> ssl_config_service_;
@@ -245,6 +243,7 @@ class NET_EXPORT URLRequestContext
   HttpTransactionFactory* http_transaction_factory_;
   const URLRequestJobFactory* job_factory_;
   URLRequestThrottlerManager* throttler_manager_;
+  URLRequestBackoffManager* backoff_manager_;
   SdchManager* sdch_manager_;
   NetworkQualityEstimator* network_quality_estimator_;
 

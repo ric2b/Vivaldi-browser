@@ -12,9 +12,11 @@
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
+#include "chrome/browser/ui/ash/chrome_shell_content_state.h"
 #include "chrome/browser/ui/ash/chrome_shell_delegate.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
@@ -52,17 +54,21 @@ void OpenAsh(gfx::AcceleratedWidget remote_window) {
     ash::Shell::set_initially_hide_cursor(true);
 #endif
 
+  // Balanced by a call to DestroyInstance() in CloseAsh() below.
+  ash::ShellContentState::SetInstance(new ChromeShellContentState);
+
   ash::ShellInitParams shell_init_params;
   // Shell takes ownership of ChromeShellDelegate.
   shell_init_params.delegate = new ChromeShellDelegate;
   shell_init_params.context_factory = content::GetContextFactory();
+  shell_init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
 #if defined(OS_WIN)
   shell_init_params.remote_hwnd = remote_window;
 #endif
 
   ash::Shell* shell = ash::Shell::CreateInstance(shell_init_params);
   shell->accelerator_controller()->SetScreenshotDelegate(
-      scoped_ptr<ash::ScreenshotDelegate>(new ChromeScreenshotGrabber).Pass());
+      scoped_ptr<ash::ScreenshotDelegate>(new ChromeScreenshotGrabber));
 #if defined(OS_CHROMEOS)
   // TODO(flackr): Investigate exposing a blocking pool task runner to chromeos.
   chromeos::AccelerometerReader::GetInstance()->Initialize(
@@ -71,7 +77,7 @@ void OpenAsh(gfx::AcceleratedWidget remote_window) {
               content::BrowserThread::GetBlockingPool()->GetSequenceToken(),
               base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
   shell->accelerator_controller()->SetImeControlDelegate(
-      scoped_ptr<ash::ImeControlDelegate>(new ImeController).Pass());
+      scoped_ptr<ash::ImeControlDelegate>(new ImeController));
   shell->high_contrast_controller()->SetEnabled(
       chromeos::AccessibilityManager::Get()->IsHighContrastEnabled());
 
@@ -94,8 +100,10 @@ void OpenAsh(gfx::AcceleratedWidget remote_window) {
 }
 
 void CloseAsh() {
-  if (ash::Shell::HasInstance())
+  if (ash::Shell::HasInstance()) {
     ash::Shell::DeleteInstance();
+    ash::ShellContentState::DestroyInstance();
+  }
 }
 
 }  // namespace chrome

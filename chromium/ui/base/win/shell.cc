@@ -16,7 +16,6 @@
 #include "base/native_library.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/win/metro.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
@@ -97,15 +96,15 @@ bool OpenFolderViaShell(const base::FilePath& full_path) {
 }
 
 bool PreventWindowFromPinning(HWND hwnd) {
-  // This functionality is only available on Win7+. It also doesn't make sense
-  // to do this for Chrome Metro.
-  if (base::win::GetVersion() < base::win::VERSION_WIN7 ||
-      base::win::IsMetroProcess())
+  DCHECK(hwnd);
+
+  // This functionality is only available on Win7+.
+  if (base::win::GetVersion() < base::win::VERSION_WIN7)
     return false;
+
   base::win::ScopedComPtr<IPropertyStore> pps;
-  HRESULT result = SHGetPropertyStoreForWindow(
-      hwnd, __uuidof(*pps), reinterpret_cast<void**>(pps.Receive()));
-  if (FAILED(result))
+  if (FAILED(SHGetPropertyStoreForWindow(hwnd,
+                                         IID_PPV_ARGS(pps.Receive()))))
     return false;
 
   return base::win::SetBooleanValueForPropertyStore(
@@ -119,31 +118,32 @@ void SetAppDetailsForWindow(const base::string16& app_id,
                             const base::string16& relaunch_command,
                             const base::string16& relaunch_display_name,
                             HWND hwnd) {
-  // This functionality is only available on Win7+. It also doesn't make sense
-  // to do this for Chrome Metro.
-  if (base::win::GetVersion() < base::win::VERSION_WIN7 ||
-      base::win::IsMetroProcess())
+  DCHECK(hwnd);
+
+  // This functionality is only available on Win7+.
+  if (base::win::GetVersion() < base::win::VERSION_WIN7)
     return;
+
   base::win::ScopedComPtr<IPropertyStore> pps;
-  HRESULT result = SHGetPropertyStoreForWindow(
-      hwnd, __uuidof(*pps), reinterpret_cast<void**>(pps.Receive()));
-  if (S_OK == result) {
-    if (!app_id.empty())
-      base::win::SetAppIdForPropertyStore(pps.get(), app_id.c_str());
-    if (!app_icon.empty()) {
-      base::win::SetStringValueForPropertyStore(
-          pps.get(), PKEY_AppUserModel_RelaunchIconResource, app_icon.c_str());
-    }
-    if (!relaunch_command.empty()) {
-      base::win::SetStringValueForPropertyStore(
-          pps.get(), PKEY_AppUserModel_RelaunchCommand,
-          relaunch_command.c_str());
-    }
-    if (!relaunch_display_name.empty()) {
-      base::win::SetStringValueForPropertyStore(
-          pps.get(), PKEY_AppUserModel_RelaunchDisplayNameResource,
-          relaunch_display_name.c_str());
-    }
+  if (FAILED(SHGetPropertyStoreForWindow(hwnd,
+                                         IID_PPV_ARGS(pps.Receive()))))
+    return;
+
+  if (!app_id.empty())
+    base::win::SetAppIdForPropertyStore(pps.get(), app_id.c_str());
+  if (!app_icon.empty()) {
+    base::win::SetStringValueForPropertyStore(
+        pps.get(), PKEY_AppUserModel_RelaunchIconResource, app_icon.c_str());
+  }
+  if (!relaunch_command.empty()) {
+    base::win::SetStringValueForPropertyStore(
+        pps.get(), PKEY_AppUserModel_RelaunchCommand,
+        relaunch_command.c_str());
+  }
+  if (!relaunch_display_name.empty()) {
+    base::win::SetStringValueForPropertyStore(
+        pps.get(), PKEY_AppUserModel_RelaunchDisplayNameResource,
+        relaunch_display_name.c_str());
   }
 }
 
@@ -171,6 +171,32 @@ void SetRelaunchDetailsForWindow(const base::string16& relaunch_command,
                          relaunch_command,
                          display_name,
                          hwnd);
+}
+
+void ClearWindowPropertyStore(HWND hwnd) {
+  DCHECK(hwnd);
+
+  // This functionality is only available on Win7+.
+  if (base::win::GetVersion() < base::win::VERSION_WIN7)
+    return;
+
+  base::win::ScopedComPtr<IPropertyStore> pps;
+  if (FAILED(SHGetPropertyStoreForWindow(hwnd,
+                                         IID_PPV_ARGS(pps.Receive()))))
+    return;
+
+  DWORD property_count;
+  if (FAILED(pps->GetCount(&property_count)))
+    return;
+
+  PROPVARIANT empty_property_variant = {};
+  for (DWORD i = 0; i < property_count; i++) {
+    PROPERTYKEY key;
+    if (SUCCEEDED(pps->GetAt(i, &key)))
+      pps->SetValue(key, empty_property_variant);
+  }
+
+  pps->Commit();
 }
 
 bool IsAeroGlassEnabled() {

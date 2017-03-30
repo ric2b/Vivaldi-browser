@@ -68,11 +68,10 @@ public class DOMUtils {
      * Waits until the playback of the media with given {@code id} has started.
      * @param webContents The WebContents in which the media element lives.
      * @param id The element's id to check.
-     * @return Whether the playback has started.
      */
-    public static boolean waitForMediaPlay(final WebContents webContents, final String id)
+    public static void waitForMediaPlay(final WebContents webContents, final String id)
             throws InterruptedException {
-        return CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {
@@ -92,11 +91,10 @@ public class DOMUtils {
      * Waits until the playback of the media with given {@code id} has stopped.
      * @param webContents The WebContents in which the media element lives.
      * @param id The element's id to check.
-     * @return Whether the playback has paused.
      */
-    public static boolean waitForMediaPause(final WebContents webContents, final String id)
+    public static void waitForMediaPause(final WebContents webContents, final String id)
             throws InterruptedException {
-        return CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {
@@ -194,7 +192,7 @@ public class DOMUtils {
     }
 
     /**
-     * Click a DOM node by its id.
+     * Click a DOM node by its id, scrolling it into view first.
      * @param activityTestCase The ActivityInstrumentationTestCase2 to instrument.
      * @param viewCore The ContentViewCore in which the node lives.
      * @param nodeId The id of the node.
@@ -202,12 +200,27 @@ public class DOMUtils {
     public static void clickNode(ActivityInstrumentationTestCase2 activityTestCase,
             final ContentViewCore viewCore, String nodeId)
             throws InterruptedException, TimeoutException {
+        scrollNodeIntoView(viewCore.getWebContents(), nodeId);
         int[] clickTarget = getClickTargetForNode(viewCore, nodeId);
         TouchCommon.singleClickView(viewCore.getContainerView(), clickTarget[0], clickTarget[1]);
     }
 
     /**
-     * Long-press a DOM node by its id.
+     * Click a DOM node returned by JS code, scrolling it into view first.
+     * @param activityTestCase The ActivityInstrumentationTestCase2 to instrument.
+     * @param viewCore The ContentViewCore in which the node lives.
+     * @param jsCode The JS code to find the node.
+     */
+    public static void clickNodeByJs(ActivityInstrumentationTestCase2 activityTestCase,
+            final ContentViewCore viewCore, String jsCode)
+            throws InterruptedException, TimeoutException {
+        scrollNodeIntoViewByJs(viewCore.getWebContents(), jsCode);
+        int[] clickTarget = getClickTargetForNodeByJs(viewCore, jsCode);
+        TouchCommon.singleClickView(viewCore.getContainerView(), clickTarget[0], clickTarget[1]);
+    }
+
+    /**
+     * Long-press a DOM node by its id, scrolling it into view first.
      * @param activityTestCase The ActivityInstrumentationTestCase2 to instrument.
      * @param viewCore The ContentViewCore in which the node lives.
      * @param nodeId The id of the node.
@@ -215,12 +228,15 @@ public class DOMUtils {
     public static void longPressNode(ActivityInstrumentationTestCase2 activityTestCase,
             final ContentViewCore viewCore, String nodeId)
             throws InterruptedException, TimeoutException {
+        scrollNodeIntoView(viewCore.getWebContents(), nodeId);
         String jsCode = "document.getElementById('" + nodeId + "')";
         longPressNodeByJs(activityTestCase, viewCore, jsCode);
     }
 
     /**
      * Long-press a DOM node by its id.
+     * <p>Note that content view should be located in the current position for a foreseeable
+     * amount of time because this involves sleep to simulate touch to long press transition.
      * @param activityTestCase The ActivityInstrumentationTestCase2 to instrument.
      * @param viewCore The ContentViewCore in which the node lives.
      * @param nodeId The id of the node.
@@ -239,8 +255,18 @@ public class DOMUtils {
      */
     public static void scrollNodeIntoView(WebContents webContents, String nodeId)
             throws InterruptedException, TimeoutException {
+        scrollNodeIntoViewByJs(webContents, "document.getElementById('" + nodeId + "')");
+    }
+
+    /**
+     * Scrolls the view to ensure that the required DOM node is visible.
+     * @param webContents The WebContents in which the node lives.
+     * @param jsCode The JS code to find the node.
+     */
+    public static void scrollNodeIntoViewByJs(WebContents webContents, String jsCode)
+            throws InterruptedException, TimeoutException {
         JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
-                "document.getElementById('" + nodeId + "').scrollIntoView()");
+                jsCode + ".scrollIntoView()");
     }
 
     /**
@@ -282,12 +308,11 @@ public class DOMUtils {
      * Wait until a given node has non-zero bounds.
      * @param webContents The WebContents in which the node lives.
      * @param nodeId The id of the node.
-     * @return Whether the node started having non-zero bounds.
      */
-    public static boolean waitForNonZeroNodeBounds(final WebContents webContents,
+    public static void waitForNonZeroNodeBounds(final WebContents webContents,
             final String nodeId)
             throws InterruptedException {
-        return CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {

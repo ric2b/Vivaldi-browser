@@ -4,11 +4,18 @@
 
 #import "ios/net/crn_http_protocol_handler.h"
 
+#include <stdint.h>
+
+#include <utility>
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -55,7 +62,7 @@ void DoNothing(bool flag) {}
 @interface CRWHTTPStreamDelegate : NSObject<NSStreamDelegate> {
  @private
   // The object is owned by |_core| and has a weak reference to it.
-  __weak net::HttpProtocolHandlerCore* _core;
+  net::HttpProtocolHandlerCore* _core;  // weak
 }
 - (instancetype)initWithHttpProtocolHandlerCore:
     (net::HttpProtocolHandlerCore*)core;
@@ -142,7 +149,7 @@ class HttpProtocolHandlerCore
                               SSLCertRequestInfo* cert_request_info) override;
   void OnSSLCertificateError(URLRequest* request,
                              const SSLInfo& ssl_info,
-                             bool is_hsts_host) override;
+                             bool fatal) override;
   void OnResponseStarted(URLRequest* request) override;
   void OnReadCompleted(URLRequest* request, int bytes_read) override;
 
@@ -193,7 +200,7 @@ class HttpProtocolHandlerCore
   // Stream delegate to read the HTTPBodyStream.
   base::scoped_nsobject<CRWHTTPStreamDelegate> stream_delegate_;
   // Vector of readers used to accumulate a POST data stream.
-  ScopedVector<UploadElementReader> post_data_readers_;
+  std::vector<scoped_ptr<UploadElementReader>> post_data_readers_;
 
   // This cannot be a scoped pointer because it must be deleted on the IO
   // thread.
@@ -238,7 +245,7 @@ void HttpProtocolHandlerCore::HandleStreamEvent(NSStream* stream,
         // NOTE: This call will result in |post_data_readers_| being cleared,
         // which is the desired behavior.
         net_request_->set_upload(make_scoped_ptr(
-            new ElementsUploadDataStream(post_data_readers_.Pass(), 0)));
+            new ElementsUploadDataStream(std::move(post_data_readers_), 0)));
         DCHECK(post_data_readers_.empty());
       }
       net_request_->Start();
@@ -253,7 +260,7 @@ void HttpProtocolHandlerCore::HandleStreamEvent(NSStream* stream,
       if (length) {
         std::vector<char> owned_data(buffer_->data(), buffer_->data() + length);
         post_data_readers_.push_back(
-            new UploadOwnedBytesElementReader(&owned_data));
+            make_scoped_ptr(new UploadOwnedBytesElementReader(&owned_data)));
       }
       break;
     }
@@ -419,10 +426,10 @@ void HttpProtocolHandlerCore::HostStateCallback(bool carryOn) {
 
 void HttpProtocolHandlerCore::OnSSLCertificateError(URLRequest* request,
                                                     const SSLInfo& ssl_info,
-                                                    bool is_hsts_host) {
+                                                    bool fatal) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (is_hsts_host) {
+  if (fatal) {
     if (tracker_) {
       tracker_->OnSSLCertificateError(request, ssl_info, false,
                                       base::Bind(&DoNothing));
@@ -442,7 +449,7 @@ void HttpProtocolHandlerCore::OnSSLCertificateError(URLRequest* request,
     RequestTracker::SSLCallback callback =
         base::Bind(&HttpProtocolHandlerCore::SSLErrorCallback, this);
     DCHECK(tracker_);
-    tracker_->OnSSLCertificateError(request, ssl_info, !is_hsts_host, callback);
+    tracker_->OnSSLCertificateError(request, ssl_info, !fatal, callback);
   }
 }
 
@@ -583,9 +590,8 @@ void HttpProtocolHandlerCore::Destruct(const HttpProtocolHandlerCore* x) {
 
 void HttpProtocolHandlerCore::SetLoadFlags() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  int load_flags = LOAD_NORMAL;
 
-  int load_flags = LOAD_VERIFY_EV_CERT;
-  // TODO(droger) Support MAIN_FRAME and SUB_FRAME flags.
   if (![request_ HTTPShouldHandleCookies])
     load_flags |= LOAD_DO_NOT_SEND_COOKIES | LOAD_DO_NOT_SAVE_COOKIES;
 
@@ -625,8 +631,8 @@ void HttpProtocolHandlerCore::SetLoadFlags() {
       case NSURLRequestReloadRevalidatingCacheData:
         load_flags |= LOAD_VALIDATE_CACHE;
         break;
-      default:
-        // For the NSURLRequestUseProtocolCachePolicy case.
+      case NSURLRequestUseProtocolCachePolicy:
+        // Do nothing, normal load.
         break;
     }
   }
@@ -719,7 +725,7 @@ void HttpProtocolHandlerCore::Start(id<CRNNetworkClientProtocol> base_client) {
     scoped_ptr<UploadElementReader> reader(
         new UploadOwnedBytesElementReader(&owned_data));
     net_request_->set_upload(
-        ElementsUploadDataStream::CreateWithReader(reader.Pass(), 0));
+        ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
   }
 
   net_request_->Start();

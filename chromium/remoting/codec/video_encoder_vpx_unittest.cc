@@ -4,6 +4,8 @@
 
 #include "remoting/codec/video_encoder_vpx.h"
 
+#include <stdint.h>
+
 #include <limits>
 #include <vector>
 
@@ -16,8 +18,8 @@
 namespace remoting {
 
 // xRGB pixel colors for use by tests.
-const uint32 kBlueColor = 0x0000ff;
-const uint32 kGreenColor = 0x00ff00;
+const uint32_t kBlueColor = 0x0000ff;
+const uint32_t kGreenColor = 0x00ff00;
 
 // Creates a frame stippled between blue and red pixels, which is useful for
 // lossy/lossless encode and color tests. By default all pixels in the frame
@@ -28,15 +30,15 @@ static scoped_ptr<webrtc::DesktopFrame> CreateTestFrame(
       new webrtc::BasicDesktopFrame(frame_size));
   for (int x = 0; x < frame_size.width(); ++x) {
     for (int y = 0; y < frame_size.height(); ++y) {
-      uint8* pixel_u8 = frame->data() + (y * frame->stride()) +
-          (x * webrtc::DesktopFrame::kBytesPerPixel);
-      *(reinterpret_cast<uint32*>(pixel_u8)) =
+      uint8_t* pixel_u8 = frame->data() + (y * frame->stride()) +
+                          (x * webrtc::DesktopFrame::kBytesPerPixel);
+      *(reinterpret_cast<uint32_t*>(pixel_u8)) =
           ((x + y) & 1) ? kGreenColor : kBlueColor;
     }
   }
   frame->mutable_updated_region()->SetRect(
       webrtc::DesktopRect::MakeSize(frame_size));
-  return frame.Pass();
+  return frame;
 }
 
 TEST(VideoEncoderVpxTest, Vp8) {
@@ -54,7 +56,7 @@ TEST(VideoEncoderVpxTest, Vp9) {
 TEST(VideoEncoderVpxTest, Vp9LossyEncodeSwitching) {
   scoped_ptr<VideoEncoderVpx> encoder(VideoEncoderVpx::CreateForVP9());
 
-  webrtc::DesktopSize frame_size(1024, 768);
+  webrtc::DesktopSize frame_size(100, 100);
   scoped_ptr<webrtc::DesktopFrame> frame(CreateTestFrame(frame_size));
 
   // Lossy encode the first frame.
@@ -80,7 +82,7 @@ TEST(VideoEncoderVpxTest, Vp9LossyEncodeSwitching) {
 TEST(VideoEncoderVpxTest, Vp9LossyColorSwitching) {
   scoped_ptr<VideoEncoderVpx> encoder(VideoEncoderVpx::CreateForVP9());
 
-  webrtc::DesktopSize frame_size(1024, 768);
+  webrtc::DesktopSize frame_size(100, 100);
   scoped_ptr<webrtc::DesktopFrame> frame(CreateTestFrame(frame_size));
 
   // Lossy encode the first frame.
@@ -100,7 +102,7 @@ TEST(VideoEncoderVpxTest, Vp9LossyColorSwitching) {
 TEST(VideoEncoderVpxTest, Vp8IgnoreLossy) {
   scoped_ptr<VideoEncoderVpx> encoder(VideoEncoderVpx::CreateForVP8());
 
-  webrtc::DesktopSize frame_size(1024, 768);
+  webrtc::DesktopSize frame_size(100, 100);
   scoped_ptr<webrtc::DesktopFrame> frame(CreateTestFrame(frame_size));
 
   // Encode a frame, to give the encoder a chance to crash if misconfigured.
@@ -113,7 +115,7 @@ TEST(VideoEncoderVpxTest, Vp8IgnoreLossy) {
 // Test that calling Encode with a larger frame size than the initial one
 // does not cause VP8 to crash.
 TEST(VideoEncoderVpxTest, Vp8SizeChangeNoCrash) {
-  webrtc::DesktopSize frame_size(1000, 1000);
+  webrtc::DesktopSize frame_size(100, 100);
 
   scoped_ptr<VideoEncoderVpx> encoder(VideoEncoderVpx::CreateForVP8());
 
@@ -132,7 +134,7 @@ TEST(VideoEncoderVpxTest, Vp8SizeChangeNoCrash) {
 // Test that calling Encode with a larger frame size than the initial one
 // does not cause VP9 to crash.
 TEST(VideoEncoderVpxTest, Vp9SizeChangeNoCrash) {
-  webrtc::DesktopSize frame_size(1000, 1000);
+  webrtc::DesktopSize frame_size(100, 100);
 
   scoped_ptr<VideoEncoderVpx> encoder(VideoEncoderVpx::CreateForVP9());
 
@@ -149,7 +151,7 @@ TEST(VideoEncoderVpxTest, Vp9SizeChangeNoCrash) {
 }
 
 // Test that the DPI information is correctly propagated from the
-// media::ScreenCaptureData to the VideoPacket.
+// webrtc::DesktopFrame to the VideoPacket.
 TEST(VideoEncoderVpxTest, DpiPropagation) {
   webrtc::DesktopSize frame_size(32, 32);
 

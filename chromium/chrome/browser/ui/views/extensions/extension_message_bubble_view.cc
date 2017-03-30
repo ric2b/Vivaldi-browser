@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/extensions/extension_message_bubble_view.h"
 
+#include <utility>
+
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -32,7 +34,7 @@ const int kHeadlineRowPadding = 10;
 const int kMessageBubblePadding = 11;
 
 // How long to wait until showing the bubble (in seconds).
-const int kBubbleAppearanceWaitTime = 5;
+int g_bubble_appearance_wait_time = 5;
 
 }  // namespace
 
@@ -43,7 +45,7 @@ ExtensionMessageBubbleView::ExtensionMessageBubbleView(
     views::BubbleBorder::Arrow arrow_location,
     scoped_ptr<extensions::ExtensionMessageBubbleController> controller)
     : BubbleDelegateView(anchor_view, arrow_location),
-      controller_(controller.Pass()),
+      controller_(std::move(controller)),
       anchor_view_(anchor_view),
       headline_(NULL),
       learn_more_(NULL),
@@ -71,14 +73,21 @@ void ExtensionMessageBubbleView::Show() {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&ExtensionMessageBubbleView::ShowBubble,
                             weak_factory_.GetWeakPtr()),
-      base::TimeDelta::FromSeconds(kBubbleAppearanceWaitTime));
+      base::TimeDelta::FromSeconds(g_bubble_appearance_wait_time));
 }
 
 void ExtensionMessageBubbleView::OnWidgetDestroying(views::Widget* widget) {
   // To catch Esc, we monitor destroy message. Unless the link has been clicked,
   // we assume Dismiss was the action taken.
-  if (!link_clicked_ && !action_taken_)
-    controller_->OnBubbleDismiss();
+  if (!link_clicked_ && !action_taken_) {
+    bool closed_on_deactivation = close_reason() == CloseReason::DEACTIVATION;
+    controller_->OnBubbleDismiss(closed_on_deactivation);
+  }
+}
+
+void ExtensionMessageBubbleView::set_bubble_appearance_wait_time_for_testing(
+    int time_in_seconds) {
+  g_bubble_appearance_wait_time = time_in_seconds;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,7 +96,14 @@ void ExtensionMessageBubbleView::OnWidgetDestroying(views::Widget* widget) {
 ExtensionMessageBubbleView::~ExtensionMessageBubbleView() {}
 
 void ExtensionMessageBubbleView::ShowBubble() {
-  GetWidget()->Show();
+  // Since we delay in showing the bubble, the applicable extension(s) may
+  // have been removed.
+  if (controller_->ShouldShow()) {
+    controller_->OnShown();
+    GetWidget()->Show();
+  } else {
+    GetWidget()->Close();
+  }
 }
 
 void ExtensionMessageBubbleView::Init() {
@@ -174,7 +190,7 @@ void ExtensionMessageBubbleView::Init() {
   layout->AddView(learn_more_);
 
   if (!action_button.empty()) {
-    action_button_ = new views::LabelButton(this, action_button.c_str());
+    action_button_ = new views::LabelButton(this, action_button);
     action_button_->SetStyle(views::Button::STYLE_BUTTON);
     layout->AddView(action_button_);
   }
@@ -187,11 +203,12 @@ void ExtensionMessageBubbleView::Init() {
 
 void ExtensionMessageBubbleView::ButtonPressed(views::Button* sender,
                                                const ui::Event& event) {
+  action_taken_ = true;
   if (sender == action_button_) {
-    action_taken_ = true;
     controller_->OnBubbleAction();
   } else {
     DCHECK_EQ(dismiss_button_, sender);
+    controller_->OnBubbleDismiss(false /* not closed by deactivation */ );
   }
   GetWidget()->Close();
 }

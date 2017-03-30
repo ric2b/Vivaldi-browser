@@ -3,7 +3,12 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//build/config/nacl/config.gni")
 import("//testing/test.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
 
 declare_args() {
   compile_suid_client = is_linux
@@ -14,21 +19,29 @@ declare_args() {
   use_base_test_suite = is_linux
 }
 
+if (is_nacl_nonsfi) {
+  config("nacl_nonsfi_warnings") {
+    # There are number of platform specific functions in
+    # seccomp-bpf syscall helpers, which are not being used.
+    cflags = [ "-Wno-unused-function" ]
+  }
+}
+
 # We have two principal targets: sandbox and sandbox_linux_unittests
 # All other targets are listed as dependencies.
 # There is one notable exception: for historical reasons, chrome_sandbox is
 # the setuid sandbox and is its own target.
 
 group("sandbox") {
-  deps = [
+  public_deps = [
     ":sandbox_services",
   ]
 
-  if (compile_suid_client) {
-    deps += [ ":suid_sandbox_client" ]
+  if (compile_suid_client || is_nacl_nonsfi) {
+    public_deps += [ ":suid_sandbox_client" ]
   }
-  if (use_seccomp_bpf) {
-    deps += [
+  if (use_seccomp_bpf || is_nacl_nonsfi) {
+    public_deps += [
       ":seccomp_bpf",
       ":seccomp_bpf_helpers",
     ]
@@ -42,8 +55,6 @@ source_set("sandbox_linux_test_utils") {
     "tests/sandbox_test_runner.h",
     "tests/sandbox_test_runner_function_pointer.cc",
     "tests/sandbox_test_runner_function_pointer.h",
-    "tests/test_utils.cc",
-    "tests/test_utils.h",
     "tests/unit_tests.cc",
     "tests/unit_tests.h",
   ]
@@ -52,7 +63,14 @@ source_set("sandbox_linux_test_utils") {
     "//testing/gtest",
   ]
 
-  if (use_seccomp_bpf) {
+  if (!is_nacl_nonsfi) {
+    sources += [
+      "tests/test_utils.cc",
+      "tests/test_utils.h",
+    ]
+  }
+
+  if (use_seccomp_bpf || is_nacl_nonsfi) {
     sources += [
       "seccomp-bpf/bpf_tester_compatibility_delegate.h",
       "seccomp-bpf/bpf_tests.h",
@@ -68,7 +86,7 @@ source_set("sandbox_linux_test_utils") {
   }
 }
 
-# Sources shared by sandbox_linux_unittests and sandbox_linux_jni_unittests.
+# Sources for sandbox_linux_unittests.
 source_set("sandbox_linux_unittests_sources") {
   testonly = true
 
@@ -101,11 +119,6 @@ source_set("sandbox_linux_unittests_sources") {
     defines = [ "SANDBOX_USES_BASE_TEST_SUITE" ]
   }
 
-  if (is_linux) {
-    # Don't use this on Android.
-    libs = [ "rt" ]
-  }
-
   if (compile_suid_client) {
     sources += [
       "suid/client/setuid_sandbox_client_unittest.cc",
@@ -117,17 +130,24 @@ source_set("sandbox_linux_unittests_sources") {
       "bpf_dsl/bpf_dsl_unittest.cc",
       "bpf_dsl/codegen_unittest.cc",
       "bpf_dsl/cons_unittest.cc",
+      "bpf_dsl/dump_bpf.cc",
+      "bpf_dsl/dump_bpf.h",
       "bpf_dsl/syscall_set_unittest.cc",
+      "bpf_dsl/test_trap_registry.cc",
+      "bpf_dsl/test_trap_registry.h",
+      "bpf_dsl/test_trap_registry_unittest.cc",
+      "bpf_dsl/verifier.cc",
+      "bpf_dsl/verifier.h",
       "integration_tests/bpf_dsl_seccomp_unittest.cc",
       "integration_tests/seccomp_broker_process_unittest.cc",
       "seccomp-bpf-helpers/baseline_policy_unittest.cc",
       "seccomp-bpf-helpers/syscall_parameters_restrictions_unittests.cc",
       "seccomp-bpf/bpf_tests_unittest.cc",
-      "seccomp-bpf/errorcode_unittest.cc",
       "seccomp-bpf/sandbox_bpf_unittest.cc",
       "seccomp-bpf/syscall_unittest.cc",
       "seccomp-bpf/trap_unittest.cc",
     ]
+    deps += [ ":bpf_dsl_golden" ]
   }
   if (compile_credentials) {
     sources += [
@@ -146,23 +166,50 @@ source_set("sandbox_linux_unittests_sources") {
   }
 }
 
-# The main sandboxing test target.
-test("sandbox_linux_unittests") {
+action("bpf_dsl_golden") {
+  script = "bpf_dsl/golden/generate.py"
+  inputs = [
+    "bpf_dsl/golden/i386/ArgSizePolicy.txt",
+    "bpf_dsl/golden/i386/BasicPolicy.txt",
+    "bpf_dsl/golden/i386/ElseIfPolicy.txt",
+    "bpf_dsl/golden/i386/MaskingPolicy.txt",
+    "bpf_dsl/golden/i386/MoreBooleanLogicPolicy.txt",
+    "bpf_dsl/golden/i386/NegativeConstantsPolicy.txt",
+    "bpf_dsl/golden/i386/SwitchPolicy.txt",
+    "bpf_dsl/golden/x86-64/ArgSizePolicy.txt",
+    "bpf_dsl/golden/x86-64/BasicPolicy.txt",
+    "bpf_dsl/golden/x86-64/BooleanLogicPolicy.txt",
+    "bpf_dsl/golden/x86-64/ElseIfPolicy.txt",
+    "bpf_dsl/golden/x86-64/MaskingPolicy.txt",
+    "bpf_dsl/golden/x86-64/MoreBooleanLogicPolicy.txt",
+    "bpf_dsl/golden/x86-64/NegativeConstantsPolicy.txt",
+    "bpf_dsl/golden/x86-64/SwitchPolicy.txt",
+  ]
+  outputs = [
+    "$target_gen_dir/bpf_dsl/golden/golden_files.h",
+  ]
+  args =
+      rebase_path(outputs, root_build_dir) + rebase_path(inputs, root_build_dir)
+}
+
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("sandbox_linux_unittests_run") {
+  testonly = true
   deps = [
-    ":sandbox_linux_unittests_sources",
+    ":sandbox_linux_unittests",
   ]
 }
 
-# This target is the shared library used by Android APK (i.e.
-# JNI-friendly) tests.
-shared_library("sandbox_linux_jni_unittests") {
+# The main sandboxing test target. "sandbox_linux_unittests" cannot use the
+# test() template because the test is run as an executable not as an APK on
+# Android.
+executable("sandbox_linux_unittests") {
   testonly = true
   deps = [
     ":sandbox_linux_unittests_sources",
+    "//build/config/sanitizers:deps",
   ]
-  if (is_android) {
-    deps += [ "//testing/android/native_test:native_test_native_code" ]
-  }
 }
 
 component("seccomp_bpf") {
@@ -174,8 +221,7 @@ component("seccomp_bpf") {
     "bpf_dsl/codegen.cc",
     "bpf_dsl/codegen.h",
     "bpf_dsl/cons.h",
-    "bpf_dsl/dump_bpf.cc",
-    "bpf_dsl/dump_bpf.h",
+    "bpf_dsl/errorcode.h",
     "bpf_dsl/linux_syscall_ranges.h",
     "bpf_dsl/policy.cc",
     "bpf_dsl/policy.h",
@@ -185,12 +231,8 @@ component("seccomp_bpf") {
     "bpf_dsl/syscall_set.cc",
     "bpf_dsl/syscall_set.h",
     "bpf_dsl/trap_registry.h",
-    "bpf_dsl/verifier.cc",
-    "bpf_dsl/verifier.h",
     "seccomp-bpf/die.cc",
     "seccomp-bpf/die.h",
-    "seccomp-bpf/errorcode.cc",
-    "seccomp-bpf/errorcode.h",
     "seccomp-bpf/sandbox_bpf.cc",
     "seccomp-bpf/sandbox_bpf.h",
     "seccomp-bpf/syscall.cc",
@@ -205,6 +247,19 @@ component("seccomp_bpf") {
     ":sandbox_services_headers",
     "//base",
   ]
+
+  if (is_nacl_nonsfi) {
+    cflags = [ "-fgnu-inline-asm" ]
+    sources -= [
+      "bpf_dsl/bpf_dsl_forward.h",
+      "bpf_dsl/bpf_dsl_impl.h",
+      "bpf_dsl/cons.h",
+      "bpf_dsl/errorcode.h",
+      "bpf_dsl/linux_syscall_ranges.h",
+      "bpf_dsl/seccomp_macros.h",
+      "bpf_dsl/trap_registry.h",
+    ]
+  }
 }
 
 component("seccomp_bpf_helpers") {
@@ -221,10 +276,20 @@ component("seccomp_bpf_helpers") {
   defines = [ "SANDBOX_IMPLEMENTATION" ]
 
   deps = [
-    "//base",
     ":sandbox_services",
     ":seccomp_bpf",
+    "//base",
   ]
+
+  if (is_nacl_nonsfi) {
+    sources -= [
+      "seccomp-bpf-helpers/baseline_policy.cc",
+      "seccomp-bpf-helpers/baseline_policy.h",
+      "seccomp-bpf-helpers/syscall_sets.cc",
+      "seccomp-bpf-helpers/syscall_sets.h",
+    ]
+    configs += [ ":nacl_nonsfi_warnings" ]
+  }
 }
 
 if (is_linux) {
@@ -245,6 +310,10 @@ if (is_linux) {
       # These files have a suspicious comparison.
       # TODO fix this and re-enable this warning.
       "-Wno-sign-compare",
+    ]
+
+    deps = [
+      "//build/config/sanitizers:deps",
     ]
   }
 }
@@ -286,7 +355,7 @@ component("sandbox_services") {
     "//base",
   ]
 
-  if (compile_credentials) {
+  if (compile_credentials || is_nacl_nonsfi) {
     sources += [
       "services/credentials.cc",
       "services/credentials.h",
@@ -297,6 +366,32 @@ component("sandbox_services") {
     ]
 
     deps += [ ":sandbox_services_headers" ]
+  }
+
+  if (is_nacl_nonsfi) {
+    cflags = [ "-fgnu-inline-asm" ]
+
+    sources -= [
+      "services/init_process_reaper.cc",
+      "services/init_process_reaper.h",
+      "services/scoped_process.cc",
+      "services/scoped_process.h",
+      "services/yama.cc",
+      "services/yama.h",
+      "syscall_broker/broker_channel.cc",
+      "syscall_broker/broker_channel.h",
+      "syscall_broker/broker_client.cc",
+      "syscall_broker/broker_client.h",
+      "syscall_broker/broker_common.h",
+      "syscall_broker/broker_file_permission.cc",
+      "syscall_broker/broker_file_permission.h",
+      "syscall_broker/broker_host.cc",
+      "syscall_broker/broker_host.h",
+      "syscall_broker/broker_policy.cc",
+      "syscall_broker/broker_policy.h",
+      "syscall_broker/broker_process.cc",
+      "syscall_broker/broker_process.h",
+    ]
   }
 }
 
@@ -318,18 +413,7 @@ source_set("sandbox_services_headers") {
   ]
 }
 
-# We make this its own target so that it does not interfere with our tests.
-source_set("libc_urandom_override") {
-  sources = [
-    "services/libc_urandom_override.cc",
-    "services/libc_urandom_override.h",
-  ]
-  deps = [
-    "//base",
-  ]
-}
-
-if (compile_suid_client) {
+if (compile_suid_client || is_nacl_nonsfi) {
   component("suid_sandbox_client") {
     sources = [
       "suid/client/setuid_sandbox_client.cc",
@@ -345,38 +429,36 @@ if (compile_suid_client) {
       ":sandbox_services",
       "//base",
     ]
+
+    if (is_nacl_nonsfi) {
+      sources -= [
+        "suid/client/setuid_sandbox_host.cc",
+        "suid/client/setuid_sandbox_host.h",
+        "suid/common/sandbox.h",
+        "suid/common/suid_unsafe_environment_variables.h",
+      ]
+    }
   }
 }
 
 if (is_android) {
-  # TODO(GYP) enable this. Needs an android_strip wrapper python script.
-  #action("sandbox_linux_unittests_stripped") {
-  #  script = "android_stip.py"
-  #
-  #  in_file = "$root_out_dir/sandbox_linux_unittests"
-  #
-  #  out_file = "$root_out_dir/sandbox_linux_unittests_stripped"
-  #  outputs = [ out_file ]
-  #
-  #  args = [
-  #    rebase_path(in_file, root_build_dir),
-  #    "-o", rebase_path(out_file, root_build_dir),
-  #  ]
-  #
-  #  deps = [
-  #    ":sandbox_linux_unittests",
-  #  ]
-  #}
-  # TODO(GYP) convert this.
-  #      {
-  #      'target_name': 'sandbox_linux_jni_unittests_apk',
-  #      'type': 'none',
-  #      'variables': {
-  #        'test_suite_name': 'sandbox_linux_jni_unittests',
-  #      },
-  #      'dependencies': [
-  #        'sandbox_linux_jni_unittests',
-  #      ],
-  #      'includes': [ '../../build/apk_test.gypi' ],
-  #      }
+  create_native_executable_dist("sandbox_linux_unittests_deps") {
+    testonly = true
+    dist_dir = "$root_out_dir/sandbox_linux_unittests_deps"
+    binary = "$root_out_dir/sandbox_linux_unittests"
+    deps = [
+      ":sandbox_linux_unittests",
+    ]
+
+    if (is_component_build) {
+      deps += [ "//build/android:cpplib_stripped" ]
+    }
+  }
+
+  test_runner_script("sandbox_linux_unittests__test_runner_script") {
+    test_name = "sandbox_linux_unittests"
+    test_type = "gtest"
+    test_suite = "sandbox_linux_unittests"
+    isolate_file = "//sandbox/sandbox_linux_unittests_android.isolate"
+  }
 }

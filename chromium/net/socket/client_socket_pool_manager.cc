@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/load_flags.h"
@@ -18,6 +17,7 @@
 #include "net/socket/socks_client_socket_pool.h"
 #include "net/socket/ssl_client_socket_pool.h"
 #include "net/socket/transport_client_socket_pool.h"
+#include "net/ssl/ssl_config.h"
 
 namespace net {
 
@@ -38,14 +38,12 @@ static_assert(arraysize(g_max_sockets_per_pool) ==
 // as home routers blocking the connections!?!?  See http://crbug.com/12066.
 //
 // WebSocket connections are long-lived, and should be treated differently
-// than normal other connections. 6 connections per group sounded too small
-// for such use, thus we use a larger limit which was determined somewhat
-// arbitrarily.
-// TODO(yutak): Look at the usage and determine the right value after
-// WebSocket protocol stack starts to work.
+// than normal other connections. Use a limit of 255, so the limit for wss will
+// be the same as the limit for ws. Also note that Firefox uses a limit of 200.
+// See http://crbug.com/486800
 int g_max_sockets_per_group[] = {
   6,  // NORMAL_SOCKET_POOL
-  30  // WEBSOCKET_SOCKET_POOL
+  255 // WEBSOCKET_SOCKET_POOL
 };
 
 static_assert(arraysize(g_max_sockets_per_group) ==
@@ -127,8 +125,7 @@ int InitSocketPoolHelper(ClientSocketPoolManager::SocketGroupType group_type,
     // should be the same for all connections, whereas version_max may
     // change for version fallbacks.
     std::string prefix = "ssl/";
-    if (ssl_config_for_origin.version_max !=
-        SSLClientSocket::GetMaxSupportedSSLVersion()) {
+    if (ssl_config_for_origin.version_max != kDefaultSSLVersionMax) {
       switch (ssl_config_for_origin.version_max) {
         case SSL_PROTOCOL_VERSION_TLS1_2:
           prefix = "ssl(max:3.3)/";
@@ -146,7 +143,7 @@ int InitSocketPoolHelper(ClientSocketPoolManager::SocketGroupType group_type,
     }
     // Place sockets with and without deprecated ciphers into separate
     // connection groups.
-    if (ssl_config_for_origin.enable_deprecated_cipher_suites)
+    if (ssl_config_for_origin.deprecated_cipher_suites_enabled)
       prefix += "deprecatedciphers/";
     connection_group = prefix + connection_group;
   }

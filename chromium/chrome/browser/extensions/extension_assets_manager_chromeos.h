@@ -7,9 +7,13 @@
 
 #include <map>
 
+#include "base/macros.h"
 #include "chrome/browser/extensions/extension_assets_manager.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
+
 class PrefRegistrySimple;
 
 namespace base {
@@ -64,7 +68,7 @@ class ExtensionAssetsManagerChromeOS : public ExtensionAssetsManager {
   static void SetSharedInstallDirForTesting(const base::FilePath& install_dir);
 
  private:
-  friend struct DefaultSingletonTraits<ExtensionAssetsManagerChromeOS>;
+  friend struct base::DefaultSingletonTraits<ExtensionAssetsManagerChromeOS>;
 
   ExtensionAssetsManagerChromeOS();
   ~ExtensionAssetsManagerChromeOS() override;

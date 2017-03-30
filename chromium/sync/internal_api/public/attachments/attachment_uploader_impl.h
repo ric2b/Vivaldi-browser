@@ -5,8 +5,12 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_ATTACHMENT_UPLOADER_IMPL_H_
 #define SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_ATTACHMENT_UPLOADER_IMPL_H_
 
+#include <stdint.h>
+
+#include <string>
+
 #include "base/containers/scoped_ptr_hash_map.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "google_apis/gaia/oauth2_token_service_request.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -80,11 +84,6 @@ class SYNC_EXPORT AttachmentUploaderImpl : public AttachmentUploader,
   typedef base::ScopedPtrHashMap<UniqueId, scoped_ptr<UploadState>> StateMap;
 
   void OnUploadStateStopped(const UniqueId& unique_id);
-
-  // Encodes |input| into |output| using URL safe base64, no padding.
-  // NOTE: Safe to use the same variable for both |input| and |output|.
-  static void Base64URLSafeEncode(const std::string& input,
-                                  std::string* output);
 
   GURL sync_service_url_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;

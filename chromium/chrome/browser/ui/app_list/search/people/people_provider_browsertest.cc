@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#include "chrome/browser/ui/app_list/search/people/people_provider.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/app_list/search/people/people_provider.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -25,7 +28,6 @@ using content::BrowserThread;
 using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;
 using net::test_server::HttpResponse;
-using net::test_server::EmbeddedTestServer;
 
 namespace app_list {
 namespace test {
@@ -167,12 +169,10 @@ class PeopleProviderTest : public InProcessBrowserTest {
 
   // InProcessBrowserTest overrides:
   void SetUpOnMainThread() override {
-    test_server_.reset(new EmbeddedTestServer);
-
-    ASSERT_TRUE(test_server_->InitializeAndWaitUntilReady());
-    test_server_->RegisterRequestHandler(
+    embedded_test_server()->RegisterRequestHandler(
         base::Bind(&PeopleProviderTest::HandleRequest,
                    base::Unretained(this)));
+    ASSERT_TRUE(embedded_test_server()->Start());
 
     people_provider_.reset(new PeopleProvider(
         ProfileManager::GetActiveUserProfile(), &test_controller_));
@@ -180,13 +180,8 @@ class PeopleProviderTest : public InProcessBrowserTest {
     people_provider_->SetupForTest(
         base::Bind(&PeopleProviderTest::OnSearchResultsFetched,
                    base::Unretained(this)),
-        test_server_->base_url());
+        embedded_test_server()->base_url());
     people_provider_->set_use_throttling(false);
-  }
-
-  void TearDownOnMainThread() override {
-    EXPECT_TRUE(test_server_->ShutdownAndWaitUntilComplete());
-    test_server_.reset();
   }
 
   std::string RunQuery(const std::string& query,
@@ -229,7 +224,7 @@ class PeopleProviderTest : public InProcessBrowserTest {
     response->set_code(net::HTTP_OK);
     response->set_content(mock_server_response_);
 
-    return response.Pass();
+    return std::move(response);
   }
 
   void OnSearchResultsFetched() {
@@ -237,7 +232,6 @@ class PeopleProviderTest : public InProcessBrowserTest {
       run_loop_->Quit();
   }
 
-  scoped_ptr<EmbeddedTestServer> test_server_;
   scoped_ptr<base::RunLoop> run_loop_;
 
   std::string mock_server_response_;

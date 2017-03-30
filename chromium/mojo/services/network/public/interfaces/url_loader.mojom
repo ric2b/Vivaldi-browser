@@ -35,6 +35,9 @@ struct URLRequest {
   // servers to also not satisfy the request from their cache.  This has the
   // effect of forcing a full end-to-end fetch.
   bool bypass_cache = false;
+
+  // The time when this request originated. 0 indicates that it is not recorded.
+  int64 originating_time_ticks = 0;
 };
 
 struct URLResponse {
@@ -83,6 +86,11 @@ struct URLLoaderStatus {
   // is encountered or the response body is completely copied to the response
   // body stream.
   bool is_loading;
+
+  // The length in bytes of the content as reported by the HTTP response header,
+  // and the number of bytes read by the URLLoader thus far.
+  int64 content_length;
+  int64 bytes_read;
 
   // TODO(darin): Add further details about the stages of loading (e.g.,
   // "resolving host") that happen prior to receiving bytes.

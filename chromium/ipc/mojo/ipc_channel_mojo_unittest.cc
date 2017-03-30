@@ -4,6 +4,10 @@
 
 #include "ipc/mojo/ipc_channel_mojo.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/base_paths.h"
 #include "base/files/file.h"
 #include "base/location.h"
@@ -14,6 +18,7 @@
 #include "base/test/test_timeouts.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_test_base.h"
 #include "ipc/ipc_test_channel_listener.h"
@@ -42,7 +47,7 @@ class ListenerThatExpectsOK : public IPC::Listener {
     EXPECT_TRUE(iter.ReadString(&should_be_ok));
     EXPECT_EQ(should_be_ok, "OK");
     received_ok_ = true;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     return true;
   }
 
@@ -67,9 +72,9 @@ class ListenerThatExpectsOK : public IPC::Listener {
 class ChannelClient {
  public:
   explicit ChannelClient(IPC::Listener* listener, const char* name) {
-    channel_ = IPC::ChannelMojo::Create(
-        main_message_loop_.task_runner(), IPCTestBase::GetChannelName(name),
-        IPC::Channel::MODE_CLIENT, listener, nullptr);
+    channel_ = IPC::ChannelMojo::Create(main_message_loop_.task_runner(),
+                                        IPCTestBase::GetChannelName(name),
+                                        IPC::Channel::MODE_CLIENT, listener);
   }
 
   void Connect() {
@@ -114,8 +119,7 @@ class IPCChannelMojoTest : public IPCChannelMojoTestBase {
   scoped_ptr<IPC::ChannelFactory> CreateChannelFactory(
       const IPC::ChannelHandle& handle,
       base::SequencedTaskRunner* runner) override {
-    return IPC::ChannelMojo::CreateServerFactory(task_runner(), handle,
-                                                 nullptr);
+    return IPC::ChannelMojo::CreateServerFactory(task_runner(), handle);
   }
 
   bool DidStartClient() override {
@@ -133,7 +137,7 @@ class TestChannelListenerWithExtraExpectations
       : is_connected_called_(false) {
   }
 
-  void OnChannelConnected(int32 peer_pid) override {
+  void OnChannelConnected(int32_t peer_pid) override {
     IPC::TestChannelListener::OnChannelConnected(peer_pid);
     EXPECT_TRUE(base::kNullProcessId != peer_pid);
     is_connected_called_ = true;
@@ -200,15 +204,15 @@ class ListenerExpectingErrors : public IPC::Listener {
       : has_error_(false) {
   }
 
-  void OnChannelConnected(int32 peer_pid) override {
-    base::MessageLoop::current()->Quit();
+  void OnChannelConnected(int32_t peer_pid) override {
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   bool OnMessageReceived(const IPC::Message& message) override { return true; }
 
   void OnChannelError() override {
     has_error_ = true;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   bool has_error() const { return has_error_; }
@@ -223,8 +227,7 @@ class IPCChannelMojoErrorTest : public IPCChannelMojoTestBase {
   scoped_ptr<IPC::ChannelFactory> CreateChannelFactory(
       const IPC::ChannelHandle& handle,
       base::SequencedTaskRunner* runner) override {
-    return IPC::ChannelMojo::CreateServerFactory(task_runner(), handle,
-                                                 nullptr);
+    return IPC::ChannelMojo::CreateServerFactory(task_runner(), handle);
   }
 
   bool DidStartClient() override {
@@ -243,8 +246,8 @@ class ListenerThatQuits : public IPC::Listener {
     return true;
   }
 
-  void OnChannelConnected(int32 peer_pid) override {
-    base::MessageLoop::current()->Quit();
+  void OnChannelConnected(int32_t peer_pid) override {
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 };
 
@@ -314,8 +317,8 @@ class HandleSendingHelper {
               mojo::WriteMessageRaw(pipe->self.get(), &content[0],
                                     static_cast<uint32_t>(content.size()),
                                     nullptr, 0, 0));
-    EXPECT_TRUE(
-        IPC::MojoMessageHelper::WriteMessagePipeTo(message, pipe->peer.Pass()));
+    EXPECT_TRUE(IPC::MojoMessageHelper::WriteMessagePipeTo(
+        message, std::move(pipe->peer)));
   }
 
   static void WritePipeThenSend(IPC::Sender* sender, TestingMessagePipe* pipe) {
@@ -394,7 +397,7 @@ class ListenerThatExpectsMessagePipe : public IPC::Listener {
   bool OnMessageReceived(const IPC::Message& message) override {
     base::PickleIterator iter(message);
     HandleSendingHelper::ReadReceivedPipe(message, &iter);
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     ListenerThatExpectsOK::SendOK(sender_);
     return true;
   }
@@ -478,7 +481,7 @@ class ListenerThatExpectsMessagePipeUsingParamTrait : public IPC::Listener {
       MojoClose(handle.value());
     }
 
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     ListenerThatExpectsOK::SendOK(sender_);
     return true;
   }
@@ -595,9 +598,9 @@ class ListenerSendingOneOk : public IPC::Listener {
     return true;
   }
 
-  void OnChannelConnected(int32 peer_pid) override {
+  void OnChannelConnected(int32_t peer_pid) override {
     ListenerThatExpectsOK::SendOK(sender_);
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void set_sender(IPC::Sender* sender) { sender_ = sender; }
@@ -625,8 +628,7 @@ class IPCChannelMojoDeadHandleTest : public IPCChannelMojoTestBase {
   scoped_ptr<IPC::ChannelFactory> CreateChannelFactory(
       const IPC::ChannelHandle& handle,
       base::SequencedTaskRunner* runner) override {
-    return IPC::ChannelMojo::CreateServerFactory(task_runner(), handle,
-                                                 nullptr);
+    return IPC::ChannelMojo::CreateServerFactory(task_runner(), handle);
   }
 
   bool DidStartClient() override {
@@ -687,7 +689,7 @@ class ListenerThatExpectsFile : public IPC::Listener {
   bool OnMessageReceived(const IPC::Message& message) override {
     base::PickleIterator iter(message);
     HandleSendingHelper::ReadReceivedFile(message, &iter);
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     ListenerThatExpectsOK::SendOK(sender_);
     return true;
   }
@@ -752,7 +754,7 @@ class ListenerThatExpectsFileAndPipe : public IPC::Listener {
     base::PickleIterator iter(message);
     HandleSendingHelper::ReadReceivedFile(message, &iter);
     HandleSendingHelper::ReadReceivedPipe(message, &iter);
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     ListenerThatExpectsOK::SendOK(sender_);
     return true;
   }
@@ -815,9 +817,9 @@ const base::ProcessId kMagicChildId = 54321;
 
 class ListenerThatVerifiesPeerPid : public IPC::Listener {
  public:
-  void OnChannelConnected(int32 peer_pid) override {
+  void OnChannelConnected(int32_t peer_pid) override {
     EXPECT_EQ(peer_pid, kMagicChildId);
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   bool OnMessageReceived(const IPC::Message& message) override {

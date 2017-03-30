@@ -4,7 +4,11 @@
 
 #include "content/renderer/pepper/plugin_module.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 #include <set>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -13,7 +17,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "content/common/view_messages.h"
+#include "content/common/frame_messages.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/pepper/host_dispatcher_wrapper.h"
 #include "content/renderer/pepper/host_globals.h"
@@ -54,6 +58,7 @@
 #include "ppapi/c/ppb_audio.h"
 #include "ppapi/c/ppb_audio_buffer.h"
 #include "ppapi/c/ppb_audio_config.h"
+#include "ppapi/c/ppb_audio_encoder.h"
 #include "ppapi/c/ppb_compositor.h"
 #include "ppapi/c/ppb_compositor_layer.h"
 #include "ppapi/c/ppb_console.h"
@@ -110,7 +115,6 @@
 #include "ppapi/c/private/ppb_flash_message_loop.h"
 #include "ppapi/c/private/ppb_flash_print.h"
 #include "ppapi/c/private/ppb_host_resolver_private.h"
-#include "ppapi/c/private/ppb_input_event_private.h"
 #include "ppapi/c/private/ppb_instance_private.h"
 #include "ppapi/c/private/ppb_isolated_file_system_private.h"
 #include "ppapi/c/private/ppb_output_protection_private.h"
@@ -371,9 +375,11 @@ void SetMinimumArrayBufferSizeForShmem(PP_Instance /*instance*/,
   // Does nothing. Not needed in-process.
 }
 
-void RunV8GC(PP_Instance instance) {
-  content::PepperPluginInstance::Get(instance)->GetIsolate()->
-      RequestGarbageCollectionForTesting(v8::Isolate::kFullGarbageCollection);
+void RunV8GC(PP_Instance pp_instance) {
+  PepperPluginInstanceImpl* instance =
+      content::PepperPluginInstanceImpl::GetForTesting(pp_instance);
+  instance->GetIsolate()->RequestGarbageCollectionForTesting(
+      v8::Isolate::kFullGarbageCollection);
 }
 
 const PPB_Testing_Private testing_interface = {
@@ -554,7 +560,7 @@ PluginModule::~PluginModule() {
 
 void PluginModule::SetRendererPpapiHost(
     scoped_ptr<RendererPpapiHostImpl> host) {
-  renderer_ppapi_host_ = host.Pass();
+  renderer_ppapi_host_ = std::move(host);
 }
 
 bool PluginModule::InitAsInternalPlugin(
@@ -797,7 +803,7 @@ scoped_refptr<PluginModule> PluginModule::Create(
   IPC::ChannelHandle channel_handle;
   base::ProcessId peer_pid = 0;
   int plugin_child_id = 0;
-  render_frame->Send(new ViewHostMsg_OpenChannelToPepperPlugin(
+  render_frame->Send(new FrameHostMsg_OpenChannelToPepperPlugin(
       path, &channel_handle, &peer_pid, &plugin_child_id));
   if (channel_handle.name.empty()) {
     // Couldn't be initialized.

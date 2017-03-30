@@ -5,6 +5,8 @@
 #ifndef CHROME_TEST_CHROMEDRIVER_CAPABILITIES_H_
 #define CHROME_TEST_CHROMEDRIVER_CAPABILITIES_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <string>
@@ -15,6 +17,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/test/chromedriver/chrome/device_metrics.h"
+#include "chrome/test/chromedriver/chrome/devtools_http_client.h"
 #include "chrome/test/chromedriver/chrome/log.h"
 #include "chrome/test/chromedriver/net/net_util.h"
 
@@ -143,6 +146,8 @@ struct Capabilities {
   scoped_ptr<base::DictionaryValue> prefs;
 
   Switches switches;
+
+  std::set<WebViewInfo::Type> window_types;
 };
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CAPABILITIES_H_

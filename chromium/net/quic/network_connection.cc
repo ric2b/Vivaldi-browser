@@ -4,14 +4,13 @@
 
 #include "net/quic/network_connection.h"
 
-#include "net/base/net_util.h"
+#include "net/base/network_interfaces.h"
 
 namespace net {
 
 NetworkConnection::NetworkConnection()
     : connection_type_(NetworkChangeNotifier::CONNECTION_UNKNOWN),
-      connection_description_(nullptr) {
-}
+      connection_description_(nullptr) {}
 
 const char* NetworkConnection::GetDescription() {
   NetworkChangeNotifier::ConnectionType type =

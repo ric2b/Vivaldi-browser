@@ -4,7 +4,10 @@
 
 #include "content/renderer/gpu/render_widget_compositor.h"
 
+#include <utility>
+
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "cc/output/begin_frame_args.h"
@@ -27,33 +30,38 @@ namespace {
 
 class MockWebWidget : public blink::WebWidget {
  public:
-  MOCK_METHOD1(beginFrame, void(const blink::WebBeginFrameArgs& args));
+  MOCK_METHOD1(beginFrame, void(double lastFrameTimeMonotonic));
 };
 
 class TestRenderWidget : public RenderWidget {
  public:
-  TestRenderWidget()
-      : RenderWidget(blink::WebPopupTypeNone,
+  explicit TestRenderWidget(CompositorDependencies* compositor_deps)
+      : RenderWidget(compositor_deps,
+                     blink::WebPopupTypeNone,
                      blink::WebScreenInfo(),
                      true,
                      false,
                      false) {
     webwidget_ = &mock_webwidget_;
+    SetRoutingID(++next_routing_id_);
   }
 
   MockWebWidget mock_webwidget_;
 
  protected:
   ~TestRenderWidget() override { webwidget_ = NULL; }
+  static int next_routing_id_;
 
   DISALLOW_COPY_AND_ASSIGN(TestRenderWidget);
 };
 
+int TestRenderWidget::next_routing_id_ = 0;
+
 class RenderWidgetCompositorTest : public testing::Test {
  public:
   RenderWidgetCompositorTest()
-      : render_widget_(make_scoped_refptr(new TestRenderWidget())),
-        compositor_deps_(make_scoped_ptr(new FakeCompositorDependencies)),
+      : compositor_deps_(new FakeCompositorDependencies),
+        render_widget_(new TestRenderWidget(compositor_deps_.get())),
         render_widget_compositor_(
             RenderWidgetCompositor::Create(render_widget_.get(),
                                            compositor_deps_.get())) {}
@@ -62,8 +70,8 @@ class RenderWidgetCompositorTest : public testing::Test {
  protected:
   base::MessageLoop loop_;
   MockRenderThread render_thread_;
-  scoped_refptr<TestRenderWidget> render_widget_;
   scoped_ptr<FakeCompositorDependencies> compositor_deps_;
+  scoped_refptr<TestRenderWidget> render_widget_;
   scoped_ptr<RenderWidgetCompositor> render_widget_compositor_;
 
  private:
@@ -79,11 +87,7 @@ TEST_F(RenderWidgetCompositorTest, BeginMainFrame) {
       cc::BeginFrameArgs::Create(BEGINFRAME_FROM_HERE, frame_time, deadline,
                                  interval, cc::BeginFrameArgs::NORMAL));
 
-  EXPECT_CALL(render_widget_->mock_webwidget_,
-              beginFrame(AllOf(
-                  Field(&blink::WebBeginFrameArgs::lastFrameTimeMonotonic, 1),
-                  Field(&blink::WebBeginFrameArgs::deadline, 2),
-                  Field(&blink::WebBeginFrameArgs::interval, 3))));
+  EXPECT_CALL(render_widget_->mock_webwidget_, beginFrame(1));
 
   render_widget_compositor_->BeginMainFrame(args);
 }
@@ -92,7 +96,8 @@ class RenderWidgetCompositorOutputSurface;
 
 class RenderWidgetOutputSurface : public TestRenderWidget {
  public:
-  RenderWidgetOutputSurface() : compositor_(NULL) {}
+  explicit RenderWidgetOutputSurface(CompositorDependencies* compositor_deps)
+      : TestRenderWidget(compositor_deps), compositor_(NULL) {}
   void SetCompositor(RenderWidgetCompositorOutputSurface* compositor);
 
   scoped_ptr<cc::OutputSurface> CreateOutputSurface(bool fallback) override;
@@ -143,7 +148,7 @@ class RenderWidgetCompositorOutputSurface : public RenderWidgetCompositor {
       // Image support required for synchronous compositing.
       context->set_support_image(true);
       // Create delegating surface so that max_pending_frames = 1.
-      return cc::FakeOutputSurface::CreateDelegating3d(context.Pass());
+      return cc::FakeOutputSurface::CreateDelegating3d(std::move(context));
     }
     return use_null_output_surface_
                ? nullptr
@@ -206,7 +211,7 @@ class RenderWidgetCompositorOutputSurface : public RenderWidgetCompositor {
                          expected_fallback_successes_;
   }
 
-  void EndTest() { base::MessageLoop::current()->Quit(); }
+  void EndTest() { base::MessageLoop::current()->QuitWhenIdle(); }
 
   void AfterTest() {
     EXPECT_EQ(num_failures_before_success_, num_failures_);
@@ -234,8 +239,8 @@ class RenderWidgetCompositorOutputSurface : public RenderWidgetCompositor {
 class RenderWidgetCompositorOutputSurfaceTest : public testing::Test {
  public:
   RenderWidgetCompositorOutputSurfaceTest()
-      : render_widget_(make_scoped_refptr(new RenderWidgetOutputSurface)),
-        compositor_deps_(make_scoped_ptr(new FakeCompositorDependencies)) {
+      : compositor_deps_(new FakeCompositorDependencies),
+        render_widget_(new RenderWidgetOutputSurface(compositor_deps_.get())) {
     render_widget_compositor_.reset(new RenderWidgetCompositorOutputSurface(
         render_widget_.get(), compositor_deps_.get()));
     render_widget_compositor_->Initialize();
@@ -249,7 +254,7 @@ class RenderWidgetCompositorOutputSurfaceTest : public testing::Test {
     render_widget_compositor_->SetUp(
         use_null_output_surface, num_failures_before_success,
         expected_successes, expected_fallback_succeses);
-    render_widget_compositor_->StartCompositor();
+    render_widget_compositor_->setVisible(true);
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&RenderWidgetCompositorOutputSurface::SynchronousComposite,
@@ -261,8 +266,8 @@ class RenderWidgetCompositorOutputSurfaceTest : public testing::Test {
  protected:
   base::MessageLoop ye_olde_message_loope_;
   MockRenderThread render_thread_;
-  scoped_refptr<RenderWidgetOutputSurface> render_widget_;
   scoped_ptr<FakeCompositorDependencies> compositor_deps_;
+  scoped_refptr<RenderWidgetOutputSurface> render_widget_;
   scoped_ptr<RenderWidgetCompositorOutputSurface> render_widget_compositor_;
 
  private:

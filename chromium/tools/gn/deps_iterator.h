@@ -5,7 +5,8 @@
 #ifndef TOOLS_GN_DEPS_ITERATOR_H_
 #define TOOLS_GN_DEPS_ITERATOR_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "tools/gn/label_ptr.h"
 
 class Target;

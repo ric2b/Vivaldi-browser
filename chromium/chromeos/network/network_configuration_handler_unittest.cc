@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 
 #include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -185,11 +188,11 @@ class NetworkConfigurationHandlerTest : public testing::Test {
     mock_profile_client_ = new MockShillProfileClient();
     mock_service_client_ = new MockShillServiceClient();
     dbus_setter->SetShillManagerClient(
-        scoped_ptr<ShillManagerClient>(mock_manager_client_).Pass());
+        scoped_ptr<ShillManagerClient>(mock_manager_client_));
     dbus_setter->SetShillProfileClient(
-        scoped_ptr<ShillProfileClient>(mock_profile_client_).Pass());
+        scoped_ptr<ShillProfileClient>(mock_profile_client_));
     dbus_setter->SetShillServiceClient(
-        scoped_ptr<ShillServiceClient>(mock_service_client_).Pass());
+        scoped_ptr<ShillServiceClient>(mock_service_client_));
 
     EXPECT_CALL(*mock_service_client_, GetProperties(_, _)).Times(AnyNumber());
     EXPECT_CALL(*mock_manager_client_, GetProperties(_)).Times(AnyNumber());

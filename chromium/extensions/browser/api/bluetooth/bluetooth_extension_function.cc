@@ -6,10 +6,13 @@
 
 #include "base/memory/ref_counted.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "extensions/browser/api/bluetooth/bluetooth_api.h"
 #include "extensions/browser/api/bluetooth/bluetooth_event_router.h"
+#include "url/gurl.h"
 
 using content::BrowserThread;
 
@@ -38,7 +41,7 @@ void GetAdapter(const device::BluetoothAdapterFactory::AdapterCallback callback,
 }  // namespace
 
 namespace extensions {
-namespace core_api {
+namespace api {
 
 BluetoothExtensionFunction::BluetoothExtensionFunction() {
 }
@@ -59,11 +62,17 @@ bool BluetoothExtensionFunction::RunAsync() {
   return true;
 }
 
+std::string BluetoothExtensionFunction::GetExtensionId() {
+  if (extension())
+    return extension()->id();
+  return render_frame_host()->GetLastCommittedURL().host();
+}
+
 void BluetoothExtensionFunction::RunOnAdapterReady(
     scoped_refptr<device::BluetoothAdapter> adapter) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DoWork(adapter);
 }
 
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

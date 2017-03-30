@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
@@ -37,11 +38,13 @@ BrowserNonClientFrameView::BrowserNonClientFrameView(BrowserFrame* frame,
                                                      BrowserView* browser_view)
     : frame_(frame),
       browser_view_(browser_view),
-      avatar_button_(nullptr),
 #if defined(ENABLE_SUPERVISED_USERS)
       supervised_user_avatar_label_(nullptr),
 #endif
-      new_avatar_button_(nullptr) {
+#if defined(FRAME_AVATAR_BUTTON)
+      new_avatar_button_(nullptr),
+#endif
+      avatar_button_(nullptr) {
   // The profile manager may by null in tests.
   if (g_browser_process->profile_manager()) {
     ProfileInfoCache& cache =
@@ -59,6 +62,8 @@ BrowserNonClientFrameView::~BrowserNonClientFrameView() {
   }
 }
 
+void BrowserNonClientFrameView::OnBrowserViewInitViewsComplete() {}
+
 void BrowserNonClientFrameView::UpdateToolbar() {
 }
 
@@ -71,27 +76,37 @@ void BrowserNonClientFrameView::VisibilityChanged(views::View* starting_from,
   if (!is_visible)
     return;
 
-  // The first time UpdateOldAvatarButton() is called the window is not visible
-  // so DrawTaskBarDecoration() has no effect. Therefore we need to call it
-  // again once the window is visible.
-  if (!browser_view_->IsRegularOrGuestSession() ||
-      !switches::IsNewAvatarMenu()) {
+#if defined(OS_CHROMEOS)
+  // On ChromeOS we always need to give the old avatar button a chance to update
+  // in case we're in a teleported window. On desktop, the old avatar button
+  // only shows up when in incognito mode.
+  UpdateOldAvatarButton();
+  OnProfileAvatarChanged(base::FilePath());
+#else
+  if (!browser_view_->IsRegularOrGuestSession()) {
+    // The first time UpdateOldAvatarButton() is called the window is not
+    // visible so DrawTaskBarDecoration() has no effect. Therefore we need to
+    // call it again once the window is visible.
     UpdateOldAvatarButton();
   }
 
-  // Make sure the task bar icon is correctly updated call
-  // |OnProfileAvatarChanged()| in this case, but only for non guest profiles.
-  if (!browser_view_->IsGuestSession() || !switches::IsNewAvatarMenu())
+  // Call OnProfileAvatarChanged() in this case to make sure the task bar icon
+  // is correctly updated. Guest profiles don't badge the icon so no need to do
+  // this in guest mode.
+  if (!browser_view_->IsGuestSession())
     OnProfileAvatarChanged(base::FilePath());
+#endif
 }
 
 void BrowserNonClientFrameView::ChildPreferredSizeChanged(View* child) {
+#if defined(FRAME_AVATAR_BUTTON)
   // Only perform a re-layout if the avatar button has changed, since that
   // can affect the size of the tabs.
   if (child == new_avatar_button_) {
     InvalidateLayout();
     frame_->GetRootView()->Layout();
   }
+#endif
 }
 
 #if defined(ENABLE_SUPERVISED_USERS)
@@ -106,17 +121,12 @@ bool BrowserNonClientFrameView::ShouldPaintAsThemed() const {
 }
 
 SkColor BrowserNonClientFrameView::GetFrameColor() const {
-  const bool incognito = browser_view_->IsOffTheRecord();
-  ThemeProperties::OverwritableByUserThemeProperty color_id;
-  if (ShouldPaintAsActive()) {
-    color_id = incognito ? ThemeProperties::COLOR_FRAME_INCOGNITO
-                         : ThemeProperties::COLOR_FRAME;
-  } else {
-    color_id = incognito ? ThemeProperties::COLOR_FRAME_INCOGNITO_INACTIVE
-                         : ThemeProperties::COLOR_FRAME_INACTIVE;
-  }
+  ThemeProperties::OverwritableByUserThemeProperty color_id =
+      ShouldPaintAsActive() ? ThemeProperties::COLOR_FRAME
+                            : ThemeProperties::COLOR_FRAME_INACTIVE;
   return ShouldPaintAsThemed() ? GetThemeProvider()->GetColor(color_id)
-                               : ThemeProperties::GetDefaultColor(color_id);
+                               : ThemeProperties::GetDefaultColor(
+                                     color_id, browser_view_->IsOffTheRecord());
 }
 
 gfx::ImageSkia* BrowserNonClientFrameView::GetFrameImage() const {
@@ -154,7 +164,7 @@ gfx::ImageSkia* BrowserNonClientFrameView::GetFrameImage() const {
 }
 
 gfx::ImageSkia* BrowserNonClientFrameView::GetFrameOverlayImage() const {
-  ui::ThemeProvider* tp = GetThemeProvider();
+  const ui::ThemeProvider* tp = GetThemeProvider();
   if (tp->HasCustomImage(IDR_THEME_FRAME_OVERLAY) &&
       browser_view_->IsBrowserTypeNormal() &&
       !browser_view_->IsOffTheRecord()) {
@@ -175,9 +185,11 @@ int BrowserNonClientFrameView::GetTopAreaHeight() const {
 }
 
 void BrowserNonClientFrameView::UpdateAvatar() {
-  if (browser_view()->IsRegularOrGuestSession() && switches::IsNewAvatarMenu())
+#if !defined(OS_CHROMEOS)
+  if (browser_view()->IsRegularOrGuestSession())
     UpdateNewAvatarButtonImpl();
   else
+#endif
     UpdateOldAvatarButton();
 }
 
@@ -194,8 +206,7 @@ void BrowserNonClientFrameView::UpdateOldAvatarButton() {
         AddChildView(supervised_user_avatar_label_);
       }
 #endif
-      avatar_button_ = new AvatarMenuButton(
-          browser_view_->browser(), !browser_view_->IsRegularOrGuestSession());
+      avatar_button_ = new AvatarMenuButton(browser_view_);
       avatar_button_->set_id(VIEW_ID_AVATAR_BUTTON);
       AddChildView(avatar_button_);
       // Invalidate here because adding a child does not invalidate the layout.
@@ -225,9 +236,9 @@ void BrowserNonClientFrameView::UpdateOldAvatarButton() {
   bool should_show_avatar_menu =
       avatar_button_ || AvatarMenu::ShouldShowAvatarMenu();
 
-  if (!AvatarMenuButton::GetAvatarImages(
-          browser_view_->browser()->profile(), should_show_avatar_menu, &avatar,
-          &taskbar_badge_avatar, &is_rectangle)) {
+  if (!AvatarMenuButton::GetAvatarImages(browser_view_, should_show_avatar_menu,
+                                         &avatar, &taskbar_badge_avatar,
+                                         &is_rectangle)) {
     return;
   }
 
@@ -238,10 +249,10 @@ void BrowserNonClientFrameView::UpdateOldAvatarButton() {
     avatar_button_->SetAvatarIcon(avatar, is_rectangle);
 }
 
+#if defined(FRAME_AVATAR_BUTTON)
 void BrowserNonClientFrameView::UpdateNewAvatarButton(
     views::ButtonListener* listener,
     const NewAvatarButton::AvatarButtonStyle style) {
-  DCHECK(switches::IsNewAvatarMenu());
   // This should never be called in incognito mode.
   DCHECK(browser_view_->IsRegularOrGuestSession());
 
@@ -259,6 +270,7 @@ void BrowserNonClientFrameView::UpdateNewAvatarButton(
     frame_->GetRootView()->Layout();
   }
 }
+#endif
 
 void BrowserNonClientFrameView::OnProfileAdded(
     const base::FilePath& profile_path) {
@@ -276,11 +288,12 @@ void BrowserNonClientFrameView::OnProfileWasRemoved(
 void BrowserNonClientFrameView::OnProfileAvatarChanged(
     const base::FilePath& profile_path) {
   UpdateTaskbarDecoration();
-  // Profile avatars are only displayed in the old UI or incognito.
-  if ((!browser_view()->IsGuestSession() && browser_view()->IsOffTheRecord()) ||
-      !switches::IsNewAvatarMenu()) {
+  // Profile avatars are only displayed in incognito or on ChromeOS teleported
+  // windows.
+#if !defined(OS_CHROMEOS)
+  if (!browser_view()->IsGuestSession() && browser_view()->IsOffTheRecord())
+#endif
     UpdateOldAvatarButton();
-  }
 }
 
 void BrowserNonClientFrameView::UpdateTaskbarDecoration() {
@@ -291,10 +304,9 @@ void BrowserNonClientFrameView::UpdateTaskbarDecoration() {
   // returns false, don't bother trying to update the taskbar decoration since
   // the returned images are not initialized.  This can happen if the user
   // deletes the current profile.
-  if (AvatarMenuButton::GetAvatarImages(browser_view_->browser()->profile(),
-                                        AvatarMenu::ShouldShowAvatarMenu(),
-                                        &avatar, &taskbar_badge_avatar,
-                                        &is_rectangle)) {
+  if (AvatarMenuButton::GetAvatarImages(
+          browser_view_, AvatarMenu::ShouldShowAvatarMenu(), &avatar,
+          &taskbar_badge_avatar, &is_rectangle)) {
     // For popups and panels which don't have the avatar button, we still
     // need to draw the taskbar decoration. Even though we have an icon on the
     // window's relaunch details, we draw over it because the user may have

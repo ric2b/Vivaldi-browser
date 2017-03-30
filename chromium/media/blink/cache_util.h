@@ -5,10 +5,12 @@
 #ifndef MEDIA_BLINK_CACHE_UTIL_H_
 #define MEDIA_BLINK_CACHE_UTIL_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
-#include "media/base/media_export.h"
+#include "base/time/time.h"
+#include "media/blink/media_blink_export.h"
 
 namespace blink {
 class WebURLResponse;
@@ -33,8 +35,15 @@ enum UncacheableReason {
 
 // Return the logical OR of the reasons "response" cannot be used for a future
 // request (using the disk cache), or 0 if it might be useful.
-uint32 MEDIA_EXPORT GetReasonsForUncacheability(
-    const blink::WebURLResponse& response);
+uint32_t MEDIA_BLINK_EXPORT
+GetReasonsForUncacheability(const blink::WebURLResponse& response);
+
+// Returns when we should evict data from this response from our
+// memory cache. Note that we may still cache data longer if
+// a audio/video tag is currently using it. Returns a TimeDelta
+// which is should be added to base::Time::Now() or base::TimeTicks::Now().
+base::TimeDelta MEDIA_BLINK_EXPORT
+GetCacheValidUntil(const blink::WebURLResponse& response);
 
 }  // namespace media
 

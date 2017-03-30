@@ -4,6 +4,7 @@
 
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_web_graphics_context_3d.h"
@@ -74,8 +75,12 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
       const scoped_refptr<cc::ContextProvider>& context_provider,
       const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager)
       : BrowserCompositorOutputSurface(context_provider,
+                                       nullptr,
                                        vsync_manager,
-                                       CreateTestValidatorOzone().Pass()) {}
+                                       CreateTestValidatorOzone()) {
+    surface_size_ = gfx::Size(256, 256);
+    device_scale_factor_ = 1.f;
+  }
 
   void SetFlip(bool flip) { capabilities_.flipped_output_surface = flip; }
 
@@ -90,15 +95,18 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
     }
   }
 
+  void OnGpuSwapBuffersCompleted(
+      const std::vector<ui::LatencyInfo>& latency_info,
+      gfx::SwapResult result) override {
+    NOTREACHED();
+  }
+
 #if defined(OS_MACOSX)
-  void OnSurfaceDisplayed() override {}
   void SetSurfaceSuspendedForRecycle(bool suspended) override {}
   bool SurfaceShouldNotShowFramesAfterSuspendForRecycle() const override {
     return false;
   }
 #endif
-
-  gfx::Size SurfaceSize() const override { return gfx::Size(256, 256); }
 
  private:
   scoped_ptr<ReflectorTexture> reflector_texture_;
@@ -120,15 +128,13 @@ class ReflectorImplTest : public testing::Test {
     message_loop_.reset(new base::MessageLoop());
     task_runner_ = message_loop_->task_runner();
     compositor_task_runner_ = new FakeTaskRunner();
-    compositor_.reset(new ui::Compositor(gfx::kNullAcceleratedWidget,
-                                         context_factory,
-                                         compositor_task_runner_.get()));
-    context_provider_ = cc::TestContextProvider::Create(
-        cc::TestWebGraphicsContext3D::Create().Pass());
-    output_surface_ =
-        scoped_ptr<TestOutputSurface>(
-            new TestOutputSurface(context_provider_,
-                                  compositor_->vsync_manager())).Pass();
+    compositor_.reset(
+        new ui::Compositor(context_factory, compositor_task_runner_.get()));
+    compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
+    context_provider_ =
+        cc::TestContextProvider::Create(cc::TestWebGraphicsContext3D::Create());
+    output_surface_ = scoped_ptr<TestOutputSurface>(
+        new TestOutputSurface(context_provider_, compositor_->vsync_manager()));
     CHECK(output_surface_->BindToClient(&output_surface_client_));
 
     root_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
@@ -151,7 +157,7 @@ class ReflectorImplTest : public testing::Test {
     cc::TextureMailbox mailbox;
     scoped_ptr<cc::SingleReleaseCallback> release;
     if (mirroring_layer_->PrepareTextureMailbox(&mailbox, &release, false)) {
-      release->Run(0, false);
+      release->Run(gpu::SyncToken(), false);
     }
     compositor_.reset();
     ui::TerminateContextFactoryForTests();

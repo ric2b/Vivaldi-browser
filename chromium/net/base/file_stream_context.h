@@ -27,7 +27,10 @@
 #ifndef NET_BASE_FILE_STREAM_CONTEXT_H_
 #define NET_BASE_FILE_STREAM_CONTEXT_H_
 
+#include <stdint.h>
+
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/move.h"
@@ -110,13 +113,12 @@ class FileStream::Context {
   };
 
   struct OpenResult {
-    MOVE_ONLY_TYPE_FOR_CPP_03(OpenResult, RValue)
+    MOVE_ONLY_TYPE_FOR_CPP_03(OpenResult)
    public:
     OpenResult();
     OpenResult(base::File file, IOResult error_code);
-    // C++03 move emulation of this type.
-    OpenResult(RValue other);
-    OpenResult& operator=(RValue other);
+    OpenResult(OpenResult&& other);
+    OpenResult& operator=(OpenResult&& other);
 
     base::File file;
     IOResult error_code;

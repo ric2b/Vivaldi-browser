@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
@@ -62,7 +61,7 @@ scoped_ptr<base::DictionaryValue> DaemonControllerDelegateMac::GetConfig() {
     config->SetString(kHostIdConfigPath, value);
   if (host_config->GetString(kXmppLoginConfigPath, &value))
     config->SetString(kXmppLoginConfigPath, value);
-  return config.Pass();
+  return config;
 }
 
 void DaemonControllerDelegateMac::SetConfigAndStart(
@@ -250,9 +249,8 @@ void DaemonControllerDelegateMac::PreferencePaneCallback(
 }
 
 scoped_refptr<DaemonController> DaemonController::Create() {
-  scoped_ptr<DaemonController::Delegate> delegate(
-      new DaemonControllerDelegateMac());
-  return new DaemonController(delegate.Pass());
+  return new DaemonController(
+      make_scoped_ptr(new DaemonControllerDelegateMac()));
 }
 
 }  // namespace remoting

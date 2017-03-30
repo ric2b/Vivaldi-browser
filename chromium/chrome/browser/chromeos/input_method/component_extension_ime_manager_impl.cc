@@ -4,11 +4,14 @@
 
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
@@ -36,39 +39,49 @@ struct WhitelistedComponentExtensionIME {
   const char* id;
   int manifest_resource_id;
 } whitelisted_component_extension[] = {
-      {// ChromeOS Hangul Input.
-       extension_ime_util::kHangulExtensionId, IDR_HANGUL_MANIFEST,
-      },
 #if defined(GOOGLE_CHROME_BUILD)
-      {// Official Google XKB Input.
-       extension_ime_util::kXkbExtensionId, IDR_GOOGLE_XKB_MANIFEST,
-      },
-      {// Google input tools.
-       extension_ime_util::kT13nExtensionId, IDR_GOOGLE_INPUT_TOOLS_MANIFEST,
-      },
+    {
+        // Official Google XKB Input.
+        extension_ime_util::kXkbExtensionId, IDR_GOOGLE_XKB_MANIFEST,
+    },
+    {
+        // Google input tools.
+        extension_ime_util::kT13nExtensionId, IDR_GOOGLE_INPUT_TOOLS_MANIFEST,
+    },
 #else
-      {// Open-sourced ChromeOS xkb extension.
-       extension_ime_util::kXkbExtensionId, IDR_XKB_MANIFEST,
-      },
-      {// Open-sourced ChromeOS Keyboards extension.
-       extension_ime_util::kM17nExtensionId, IDR_M17N_MANIFEST,
-      },
-      {// Open-sourced Pinyin Chinese Input Method.
-       extension_ime_util::kChinesePinyinExtensionId, IDR_PINYIN_MANIFEST,
-      },
-      {// Open-sourced Zhuyin Chinese Input Method.
-       extension_ime_util::kChineseZhuyinExtensionId, IDR_ZHUYIN_MANIFEST,
-      },
-      {// Open-sourced Cangjie Chinese Input Method.
-       extension_ime_util::kChineseCangjieExtensionId, IDR_CANGJIE_MANIFEST,
-      },
-      {// Japanese Mozc Input.
-       extension_ime_util::kMozcExtensionId, IDR_MOZC_MANIFEST,
-      },
+    {
+        // Open-sourced ChromeOS xkb extension.
+        extension_ime_util::kXkbExtensionId, IDR_XKB_MANIFEST,
+    },
+    {
+        // Open-sourced ChromeOS Keyboards extension.
+        extension_ime_util::kM17nExtensionId, IDR_M17N_MANIFEST,
+    },
+    {
+        // Open-sourced Pinyin Chinese Input Method.
+        extension_ime_util::kChinesePinyinExtensionId, IDR_PINYIN_MANIFEST,
+    },
+    {
+        // Open-sourced Zhuyin Chinese Input Method.
+        extension_ime_util::kChineseZhuyinExtensionId, IDR_ZHUYIN_MANIFEST,
+    },
+    {
+        // Open-sourced Cangjie Chinese Input Method.
+        extension_ime_util::kChineseCangjieExtensionId, IDR_CANGJIE_MANIFEST,
+    },
+    {
+        // Open-sourced Japanese Mozc Input.
+        extension_ime_util::kMozcExtensionId, IDR_MOZC_MANIFEST,
+    },
+    {
+        // Open-sourced Hangul Input.
+        extension_ime_util::kHangulExtensionId, IDR_HANGUL_MANIFEST,
+    },
 #endif
-      {// Braille hardware keyboard IME that works together with ChromeVox.
-       extension_misc::kBrailleImeExtensionId, IDR_BRAILLE_MANIFEST,
-      },
+    {
+        // Braille hardware keyboard IME that works together with ChromeVox.
+        extension_misc::kBrailleImeExtensionId, IDR_BRAILLE_MANIFEST,
+    },
 };
 
 const char kImePathKeyName[] = "ime_path";
@@ -104,10 +117,12 @@ void OnFilePathChecked(Profile* profile,
                        const std::string* manifest,
                        const base::FilePath* file_path,
                        bool result) {
-  if (result)
+  if (result) {
     DoLoadExtension(profile, *extension_id, *manifest, *file_path);
-  else
-    LOG(ERROR) << "IME extension file path not exists: " << file_path->value();
+  } else {
+    LOG_IF(ERROR, base::SysInfo::IsRunningOnChromeOS())
+        << "IME extension file path does not exist: " << file_path->value();
+  }
 }
 
 }  // namespace
@@ -155,12 +170,12 @@ scoped_ptr<base::DictionaryValue> ComponentExtensionIMEManagerImpl::GetManifest(
     const std::string& manifest_string) {
   std::string error;
   JSONStringValueDeserializer deserializer(manifest_string);
-  scoped_ptr<base::Value> manifest(deserializer.Deserialize(NULL, &error));
+  scoped_ptr<base::Value> manifest = deserializer.Deserialize(NULL, &error);
   if (!manifest.get())
     LOG(ERROR) << "Failed at getting manifest";
 
   return scoped_ptr<base::DictionaryValue>(
-             static_cast<base::DictionaryValue*>(manifest.release())).Pass();
+      static_cast<base::DictionaryValue*>(manifest.release()));
 }
 
 // static

@@ -55,7 +55,9 @@ Capabilities::Capabilities()
       num_program_binary_formats(0),
       uniform_buffer_offset_alignment(1),
       post_sub_buffer(false),
+      commit_overlay_planes(false),
       egl_image_external(false),
+      texture_format_astc(false),
       texture_format_atc(false),
       texture_format_bgra8888(false),
       texture_format_dxt1(false),
@@ -73,10 +75,13 @@ Capabilities::Capabilities()
       blend_equation_advanced(false),
       blend_equation_advanced_coherent(false),
       texture_rg(false),
+      image_ycbcr_422(false),
       render_buffer_format_bgra8888(false),
       occlusion_query_boolean(false),
+      timer_queries(false),
+      surfaceless(false),
+      flips_vertically(false),
       major_version(2),
-      minor_version(0) {
-}
+      minor_version(0) {}
 
 }  // namespace gpu

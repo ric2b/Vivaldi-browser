@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/storage/policy_value_store.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/values.h"
 #include "components/policy/core/common/policy_map.h"
@@ -11,19 +13,16 @@
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/storage/settings_namespace.h"
 #include "extensions/browser/value_store/value_store_change.h"
-#include "extensions/browser/value_store/value_store_util.h"
 
 using content::BrowserThread;
-
-namespace util = value_store_util;
 
 namespace extensions {
 
 namespace {
 
-scoped_ptr<ValueStore::Error> ReadOnlyError(scoped_ptr<std::string> key) {
-  return make_scoped_ptr(new ValueStore::Error(
-      ValueStore::READ_ONLY, "This is a read-only store.", key.Pass()));
+ValueStore::Status ReadOnlyError() {
+  return ValueStore::Status(ValueStore::READ_ONLY,
+                            "This is a read-only store.");
 }
 
 }  // namespace
@@ -34,7 +33,7 @@ PolicyValueStore::PolicyValueStore(
     scoped_ptr<ValueStore> delegate)
     : extension_id_(extension_id),
       observers_(observers),
-      delegate_(delegate.Pass()) {}
+      delegate_(std::move(delegate)) {}
 
 PolicyValueStore::~PolicyValueStore() {}
 
@@ -58,19 +57,9 @@ void PolicyValueStore::SetCurrentPolicy(const policy::PolicyMap& policy) {
   base::DictionaryValue previous_policy;
   ValueStore::ReadResult read_result = delegate_->Get();
 
-  // If the database is corrupted, try to restore it.
-  // This may have the unfortunate side-effect of incorrectly informing the
-  // extension of a "new" key, which isn't new and was corrupted. Unfortunately,
-  // there's not always a way around this - if the database is corrupted, there
-  // may be no way of telling which keys were previously present.
-  if (read_result->IsCorrupted()) {
-    if (delegate_->Restore())
-      read_result = delegate_->Get();
-  }
-
-  if (read_result->HasError()) {
+  if (!read_result->status().ok()) {
     LOG(WARNING) << "Failed to read managed settings for extension "
-        << extension_id_ << ": " << read_result->error().message;
+                 << extension_id_ << ": " << read_result->status().message;
     // Leave |previous_policy| empty, so that events are generated for every
     // policy in |current_policy|.
   } else {
@@ -90,7 +79,7 @@ void PolicyValueStore::SetCurrentPolicy(const policy::PolicyMap& policy) {
   ValueStoreChangeList changes;
 
   WriteResult result = delegate_->Remove(removed_keys);
-  if (!result->HasError()) {
+  if (result->status().ok()) {
     changes.insert(
         changes.end(), result->changes().begin(), result->changes().end());
   }
@@ -99,7 +88,7 @@ void PolicyValueStore::SetCurrentPolicy(const policy::PolicyMap& policy) {
   // are configured by the domain administrator.
   ValueStore::WriteOptions options = ValueStore::IGNORE_QUOTA;
   result = delegate_->Set(options, current_policy);
-  if (!result->HasError()) {
+  if (result->status().ok()) {
     changes.insert(
         changes.end(), result->changes().begin(), result->changes().end());
   }
@@ -149,31 +138,25 @@ ValueStore::ReadResult PolicyValueStore::Get() {
 
 ValueStore::WriteResult PolicyValueStore::Set(
     WriteOptions options, const std::string& key, const base::Value& value) {
-  return MakeWriteResult(ReadOnlyError(util::NewKey(key)));
+  return MakeWriteResult(ReadOnlyError());
 }
 
 ValueStore::WriteResult PolicyValueStore::Set(
     WriteOptions options, const base::DictionaryValue& settings) {
-  return MakeWriteResult(ReadOnlyError(util::NoKey()));
+  return MakeWriteResult(ReadOnlyError());
 }
 
 ValueStore::WriteResult PolicyValueStore::Remove(const std::string& key) {
-  return MakeWriteResult(ReadOnlyError(util::NewKey(key)));
+  return MakeWriteResult(ReadOnlyError());
 }
 
 ValueStore::WriteResult PolicyValueStore::Remove(
     const std::vector<std::string>& keys) {
-  return MakeWriteResult(ReadOnlyError(util::NoKey()));
+  return MakeWriteResult(ReadOnlyError());
 }
 
 ValueStore::WriteResult PolicyValueStore::Clear() {
-  return MakeWriteResult(ReadOnlyError(util::NoKey()));
-}
-
-bool PolicyValueStore::Restore() { return delegate_->Restore(); }
-
-bool PolicyValueStore::RestoreKey(const std::string& key) {
-  return delegate_->RestoreKey(key);
+  return MakeWriteResult(ReadOnlyError());
 }
 
 }  // namespace extensions

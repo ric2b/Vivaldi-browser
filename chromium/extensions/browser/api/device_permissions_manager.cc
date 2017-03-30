@@ -4,6 +4,10 @@
 
 #include "extensions/browser/api/device_permissions_manager.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
@@ -214,7 +218,7 @@ scoped_refptr<DevicePermissionEntry> ReadDevicePermissionEntry(
   // If a last used time is not stored in ExtensionPrefs last_used.is_null()
   // will be true.
   std::string last_used_str;
-  int64 last_used_i64 = 0;
+  int64_t last_used_i64 = 0;
   base::Time last_used;
   if (entry->GetStringWithoutPathExpansion(kDeviceLastUsed, &last_used_str) &&
       base::StringToInt64(last_used_str, &last_used_i64)) {
@@ -334,7 +338,7 @@ scoped_ptr<base::Value> DevicePermissionEntry::ToValue() const {
         kDeviceLastUsed, base::Int64ToString(last_used_.ToInternalValue()));
   }
 
-  return entry_dict.Pass();
+  return std::move(entry_dict);
 }
 
 base::string16 DevicePermissionEntry::GetPermissionMessageString() const {
@@ -405,8 +409,8 @@ DevicePermissionsManager* DevicePermissionsManager::Get(
 
 // static
 base::string16 DevicePermissionsManager::GetPermissionMessage(
-    uint16 vendor_id,
-    uint16 product_id,
+    uint16_t vendor_id,
+    uint16_t product_id,
     const base::string16& manufacturer_string,
     const base::string16& product_string,
     const base::string16& serial_number,
@@ -701,7 +705,7 @@ DevicePermissionsManager* DevicePermissionsManagerFactory::GetForBrowserContext(
 // static
 DevicePermissionsManagerFactory*
 DevicePermissionsManagerFactory::GetInstance() {
-  return Singleton<DevicePermissionsManagerFactory>::get();
+  return base::Singleton<DevicePermissionsManagerFactory>::get();
 }
 
 DevicePermissionsManagerFactory::DevicePermissionsManagerFactory()

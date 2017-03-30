@@ -5,11 +5,14 @@
 #ifndef CONTENT_BROWSER_LOADER_RESOURCE_SCHEDULER_H_
 #define CONTENT_BROWSER_LOADER_RESOURCE_SCHEDULER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/timer/timer.h"
@@ -44,9 +47,9 @@ class ResourceThrottle;
 // Each Client may have many Requests in flight. Requests are uniquely
 // identified within a Client by its ScheduledResourceRequest.
 //
-// Users should call ScheduleRequest() to notify this ResourceScheduler of a
-// new request. The returned ResourceThrottle should be destroyed when the load
-// finishes or is canceled.
+// Users should call ScheduleRequest() to notify this ResourceScheduler of a new
+// request. The returned ResourceThrottle should be destroyed when the load
+// finishes or is canceled, before the net::URLRequest.
 //
 // The scheduler may defer issuing the request via the ResourceThrottle
 // interface or it may alter the request's priority by calling set_priority() on
@@ -78,14 +81,6 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
     ACTIVE_AND_LOADING,
   };
 
-  enum RequestClassification {
-    NORMAL_REQUEST,
-    // Low priority in-flight requests
-    IN_FLIGHT_DELAYABLE_REQUEST,
-    // High-priority requests received before the renderer has a <body>
-    LAYOUT_BLOCKING_REQUEST,
-  };
-
   ResourceScheduler();
   ~ResourceScheduler();
 
@@ -104,9 +99,11 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
 
   // Requests that this ResourceScheduler schedule, and eventually loads, the
   // specified |url_request|. Caller should delete the returned ResourceThrottle
-  // when the load completes or is canceled.
-  scoped_ptr<ResourceThrottle> ScheduleRequest(
-      int child_id, int route_id, net::URLRequest* url_request);
+  // when the load completes or is canceled, before |url_request| is deleted.
+  scoped_ptr<ResourceThrottle> ScheduleRequest(int child_id,
+                                               int route_id,
+                                               bool is_async,
+                                               net::URLRequest* url_request);
 
   // Signals from the UI thread, posted as tasks on the IO thread:
 
@@ -153,6 +150,12 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
   // Returns true if at least one client is currently loading.
   bool HasLoadingClients() const;
 
+  // Update the priority for |request|. Modifies request->priority(), and may
+  // start the request loading if it wasn't already started.
+  void ReprioritizeRequest(net::URLRequest* request,
+                           net::RequestPriority new_priority,
+                           int intra_priority_value);
+
  private:
   // Returns true if limiting of outstanding requests is enabled.
   bool limit_outstanding_requests() const {
@@ -163,6 +166,41 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
   // |IsLimitingOutstandingRequests()|.
   size_t outstanding_request_limit() const {
     return outstanding_request_limit_;
+  }
+
+  // Returns the priority level above which resources are considered
+  // layout-blocking if the html_body has not started.  It is also the threshold
+  // below which resources are considered delayable (and for completeness,
+  // a request that matches the threshold level is a high-priority but not
+  // layout-blocking request).
+  net::RequestPriority non_delayable_threshold() const {
+    return non_delayable_threshold_;
+  }
+
+  // Returns true if all delayable requests should be blocked while at least
+  // in_flight_layout_blocking_threshold() layout-blocking requests are
+  // in-flight during the layout-blocking phase of loading.
+  bool enable_in_flight_non_delayable_threshold() const {
+    return enable_in_flight_non_delayable_threshold_;
+  }
+
+  // Returns the number of in-flight layout-blocking requests above which
+  // all delayable requests should be blocked when
+  // enable_layout_blocking_threshold is set.
+  size_t in_flight_non_delayable_threshold() const {
+    return in_flight_non_delayable_threshold_;
+  }
+
+  // Returns the maximum number of delayable requests to allow be in-flight
+  // at any point in time while in the layout-blocking phase of loading.
+  size_t max_num_delayable_while_layout_blocking() const {
+    return max_num_delayable_while_layout_blocking_;
+  }
+
+  // Returns the maximum number of delayable requests to all be in-flight at
+  // any point in time (across all hosts).
+  size_t max_num_delayable_requests() const {
+    return max_num_delayable_requests_;
   }
 
   enum ClientState {
@@ -183,7 +221,7 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
   };
   class Client;
 
-  typedef int64 ClientId;
+  typedef int64_t ClientId;
   typedef std::map<ClientId, Client*> ClientMap;
   typedef std::set<ScheduledResourceRequest*> RequestSet;
 
@@ -215,16 +253,6 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
   // whether the client is ACTIVE (user-observable) or BACKGROUND.
   ClientState GetClientState(ClientId client_id) const;
 
-  // Update the queue position for |request|, possibly causing it to start
-  // loading.
-  //
-  // Queues are maintained for each priority level. When |request| is
-  // reprioritized, it will move to the end of the queue for that priority
-  // level.
-  void ReprioritizeRequest(ScheduledResourceRequest* request,
-                           net::RequestPriority new_priority,
-                           int intra_priority_value);
-
   // Returns the client ID for the given |child_id| and |route_id| combo.
   ClientId MakeClientId(int child_id, int route_id);
 
@@ -238,9 +266,16 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
   size_t coalesced_clients_;
   bool limit_outstanding_requests_;
   size_t outstanding_request_limit_;
+  net::RequestPriority non_delayable_threshold_;
+  bool enable_in_flight_non_delayable_threshold_;
+  size_t in_flight_non_delayable_threshold_;
+  size_t max_num_delayable_while_layout_blocking_;
+  size_t max_num_delayable_requests_;
   // This is a repeating timer to initiate requests on COALESCED Clients.
   scoped_ptr<base::Timer> coalescing_timer_;
   RequestSet unowned_requests_;
+
+  DISALLOW_COPY_AND_ASSIGN(ResourceScheduler);
 };
 
 }  // namespace content

@@ -76,6 +76,16 @@
       this.onDestroy_();
     privates(this.onDisconnect).impl.destroy_();
     privates(this.onMessage).impl.destroy_();
+    // TODO(robwu): Remove port lifetime management because it is completely
+    // handled in the browser. The renderer's only roles are
+    // 1) rejecting ports so that the browser knows that the renderer is not
+    //    interested in the port (this is merely an optimization)
+    // 2) acknowledging port creations, so that the browser knows that the port
+    //    was successfully created (from the perspective of the extension), but
+    //    then closed for some non-fatal reason.
+    // 3) notifying the browser of explicit port closure via .disconnect().
+    // In other cases (navigations), the browser automatically cleans up the
+    //    port.
     messagingNatives.PortRelease(this.portId_);
     delete ports[this.portId_];
   };
@@ -325,9 +335,13 @@
       return;
     }
 
-    // Ensure the callback exists for the older sendRequest API.
-    if (!responseCallback)
-      responseCallback = function() {};
+    function sendResponseAndClearCallback(response) {
+      // Save a reference so that we don't re-entrantly call responseCallback.
+      var sendResponse = responseCallback;
+      responseCallback = null;
+      sendResponse(response);
+    }
+
 
     // Note: make sure to manually remove the onMessage/onDisconnect listeners
     // that we added before destroying the Port, a workaround to a bug in Port
@@ -336,14 +350,27 @@
     // http://crbug.com/320723 tracks a sustainable fix.
 
     function disconnectListener() {
-      // For onDisconnects, we only notify the callback if there was an error.
-      if (chrome.runtime && chrome.runtime.lastError)
-        responseCallback();
+      if (!responseCallback)
+        return;
+
+      if (lastError.hasError(chrome)) {
+        sendResponseAndClearCallback();
+      } else {
+        lastError.set(
+            port.name, 'The message port closed before a reponse was received.',
+            null, chrome);
+        try {
+          sendResponseAndClearCallback();
+        } finally {
+          lastError.clear(chrome);
+        }
+      }
     }
 
     function messageListener(response) {
       try {
-        responseCallback(response);
+        if (responseCallback)
+          sendResponseAndClearCallback(response);
       } finally {
         port.disconnect();
       }
@@ -377,16 +404,16 @@ var Port = utils.expose('Port', PortImpl, { functions: [
     'onMessage'
   ] });
 
-exports.kRequestChannel = kRequestChannel;
-exports.kMessageChannel = kMessageChannel;
-exports.kNativeMessageChannel = kNativeMessageChannel;
-exports.Port = Port;
-exports.createPort = createPort;
-exports.sendMessageImpl = sendMessageImpl;
-exports.sendMessageUpdateArguments = sendMessageUpdateArguments;
+exports.$set('kRequestChannel', kRequestChannel);
+exports.$set('kMessageChannel', kMessageChannel);
+exports.$set('kNativeMessageChannel', kNativeMessageChannel);
+exports.$set('Port', Port);
+exports.$set('createPort', createPort);
+exports.$set('sendMessageImpl', sendMessageImpl);
+exports.$set('sendMessageUpdateArguments', sendMessageUpdateArguments);
 
 // For C++ code to call.
-exports.hasPort = hasPort;
-exports.dispatchOnConnect = dispatchOnConnect;
-exports.dispatchOnDisconnect = dispatchOnDisconnect;
-exports.dispatchOnMessage = dispatchOnMessage;
+exports.$set('hasPort', hasPort);
+exports.$set('dispatchOnConnect', dispatchOnConnect);
+exports.$set('dispatchOnDisconnect', dispatchOnDisconnect);
+exports.$set('dispatchOnMessage', dispatchOnMessage);

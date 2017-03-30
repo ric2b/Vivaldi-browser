@@ -4,11 +4,14 @@
 
 #include "content/browser/compositor/software_browser_compositor_output_surface.h"
 
+#include <utility>
+
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface_client.h"
 #include "cc/output/software_output_device.h"
@@ -21,10 +24,8 @@ namespace content {
 SoftwareBrowserCompositorOutputSurface::SoftwareBrowserCompositorOutputSurface(
     scoped_ptr<cc::SoftwareOutputDevice> software_device,
     const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager)
-    : BrowserCompositorOutputSurface(software_device.Pass(),
-                                     vsync_manager),
-      weak_factory_(this) {
-}
+    : BrowserCompositorOutputSurface(std::move(software_device), vsync_manager),
+      weak_factory_(this) {}
 
 SoftwareBrowserCompositorOutputSurface::
     ~SoftwareBrowserCompositorOutputSurface() {
@@ -54,12 +55,13 @@ void SoftwareBrowserCompositorOutputSurface::SwapBuffers(
   client_->DidSwapBuffers();
 }
 
-#if defined(OS_MACOSX)
-void SoftwareBrowserCompositorOutputSurface::OnSurfaceDisplayed() {
-  // See GpuBrowserCompositorOutputSurface for when and how this is used.
-  NOTREACHED() << "Not expected for software surfaces.";
+void SoftwareBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
+    const std::vector<ui::LatencyInfo>& latency_info,
+    gfx::SwapResult result) {
+  NOTREACHED();
 }
 
+#if defined(OS_MACOSX)
 void SoftwareBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
     bool suspended) {
 }

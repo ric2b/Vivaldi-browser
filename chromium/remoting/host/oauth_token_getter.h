@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
-
+#include "base/macros.h"
 
 namespace remoting {
 
@@ -55,6 +55,10 @@ class OAuthTokenGetter {
   // Call |on_access_token| with an access token, or the failure status.
   virtual void CallWithToken(
       const OAuthTokenGetter::TokenCallback& on_access_token) = 0;
+
+  // Invalidates the cache, so the next CallWithToken() will get a fresh access
+  // token.
+  virtual void InvalidateCache() = 0;
 
   DISALLOW_COPY_AND_ASSIGN(OAuthTokenGetter);
 };

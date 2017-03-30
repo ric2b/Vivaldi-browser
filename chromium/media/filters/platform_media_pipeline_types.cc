@@ -10,8 +10,7 @@ namespace media {
 
 PlatformVideoConfig::PlatformVideoConfig()
     : rotation(VIDEO_ROTATION_0),
-      decoding_mode(PLATFORM_MEDIA_DECODING_MODE_SOFTWARE) {
-}
+      decoding_mode(PlatformMediaDecodingMode::SOFTWARE) {}
 
 PlatformVideoConfig::~PlatformVideoConfig() {
 }

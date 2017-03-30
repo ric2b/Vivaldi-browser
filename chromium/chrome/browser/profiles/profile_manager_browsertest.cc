@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_info_cache_observer.h"
@@ -54,7 +58,7 @@ void ProfileCreationComplete(Profile* profile, Profile::CreateStatus status) {
   EXPECT_EQ(chrome::GetTotalBrowserCountForProfile(profile), 0U);
   EXPECT_EQ(chrome::GetTotalBrowserCount(), 1U);
   if (status == Profile::CREATE_STATUS_INITIALIZED)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void EphemeralProfileCreationComplete(Profile* profile,
@@ -198,7 +202,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_DeleteAllProfiles) {
   base::RunLoop run_loop;
   profile_manager->CreateProfileAsync(
       new_path, base::Bind(&OnUnblockOnProfileCreation, &run_loop),
-      base::string16(), base::string16(), std::string());
+      base::string16(), std::string(), std::string());
 
   // Run the message loop to allow profile creation to take place; the loop is
   // terminated by OnUnblockOnProfileCreation when the profile is created.
@@ -270,7 +274,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
   // invoked (so they can do things like sign in the profile, etc).
   ProfileManager::CreateMultiProfileAsync(
       base::string16(), // name
-      base::string16(), // icon url
+      std::string(), // icon url
       base::Bind(ProfileCreationComplete),
       std::string());
   // Wait for profile to finish loading.
@@ -286,9 +290,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
   }
 }
 
-//tomas@vivaldi.com: disabled browser_tests (VB-7468)
 IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
-                       DISABLED_SwitchToProfile) {
+                       SwitchToProfile) {
 #if defined(OS_WIN) && defined(USE_ASH)
   // Disable this test in Metro+Ash for now (http://crbug.com/262796).
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -314,7 +317,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
   base::RunLoop run_loop;
   profile_manager->CreateProfileAsync(
       path_profile2, base::Bind(&OnUnblockOnProfileCreation, &run_loop),
-      base::string16(), base::string16(), std::string());
+      base::string16(), std::string(), std::string());
 
   // Run the message loop to allow profile creation to take place; the loop is
   // terminated by OnUnblockOnProfileCreation when the profile is created.
@@ -353,9 +356,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
 }
 
 // Flakes on Windows: http://crbug.com/314905
-// TODO: Re-enable Mac & linux for Vivaldi
-//tomas@vivaldi.com: disabled browser_tests for linux & mac (VB-7468)
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN)
 #define MAYBE_EphemeralProfile DISABLED_EphemeralProfile
 #else
 #define MAYBE_EphemeralProfile EphemeralProfile
@@ -386,7 +387,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_EphemeralProfile) {
   profile_manager->CreateProfileAsync(
       path_profile2,
       base::Bind(&EphemeralProfileCreationComplete),
-      base::string16(), base::string16(), std::string());
+      base::string16(), std::string(), std::string());
 
   // Spin to allow profile creation to take place.
   content::RunMessageLoop();
@@ -427,8 +428,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_EphemeralProfile) {
 }
 
 // The test makes sense on those platforms where the keychain exists.
-// TODO renable for Vivaldi
-#if 0 && !defined(OS_WIN) && !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_WIN) && !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeletePasswords) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   ASSERT_TRUE(profile);

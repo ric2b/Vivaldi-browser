@@ -4,9 +4,12 @@
 
 #include "chrome/browser/task_manager/child_process_resource_provider.h"
 
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/process_resource_usage.h"
@@ -77,8 +80,6 @@ class ChildProcessResource : public Resource {
   // plugins.
   static gfx::ImageSkia* default_icon_;
 
-  base::WeakPtrFactory<ChildProcessResource> weak_factory_;
-
   DISALLOW_COPY_AND_ASSIGN(ChildProcessResource);
 };
 
@@ -97,7 +98,7 @@ void ChildProcessResource::ConnectResourceReporterOnIOThread(
   if (!registry)
     return;
 
-  registry->ConnectToRemoteService(req.Pass());
+  registry->ConnectToRemoteService(std::move(req));
 }
 
 ChildProcessResource::ChildProcessResource(int process_type,
@@ -108,8 +109,7 @@ ChildProcessResource::ChildProcessResource(int process_type,
       name_(name),
       handle_(handle),
       unique_process_id_(unique_process_id),
-      network_usage_support_(false),
-      weak_factory_(this) {
+      network_usage_support_(false) {
   // We cache the process id because it's not cheap to calculate, and it won't
   // be available when we get the plugin disconnected notification.
   pid_ = base::GetProcId(handle);
@@ -125,7 +125,7 @@ ChildProcessResource::ChildProcessResource(int process_type,
       BrowserThread::IO, FROM_HERE,
       base::Bind(&ChildProcessResource::ConnectResourceReporterOnIOThread,
                  unique_process_id, base::Passed(&request)));
-  resource_usage_.reset(new ProcessResourceUsage(service.Pass()));
+  resource_usage_.reset(new ProcessResourceUsage(std::move(service)));
 }
 
 ChildProcessResource::~ChildProcessResource() {

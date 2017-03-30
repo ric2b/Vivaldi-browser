@@ -10,6 +10,7 @@
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/website_settings/website_settings.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_context.h"
@@ -30,13 +31,14 @@ using base::android::ScopedJavaLocalRef;
 using content::CertStore;
 using content::WebContents;
 
-static jobjectArray GetCertificateChain(JNIEnv* env,
-                                        jobject obj,
-                                        jobject java_web_contents) {
+static ScopedJavaLocalRef<jobjectArray> GetCertificateChain(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& java_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(java_web_contents);
   if (!web_contents)
-    return NULL;
+    return ScopedJavaLocalRef<jobjectArray>();
 
   int cert_id =
       web_contents->GetController().GetVisibleEntry()->GetSSL().cert_id;
@@ -62,15 +64,14 @@ static jobjectArray GetCertificateChain(JNIEnv* env,
     cert_chain.push_back(cert_bytes);
   }
 
-  // OK to release, JNI binding.
-  return base::android::ToJavaArrayOfByteArray(env, cert_chain).Release();
+  return base::android::ToJavaArrayOfByteArray(env, cert_chain);
 }
 
 // static
 static jlong Init(JNIEnv* env,
-                  jclass clazz,
-                  jobject obj,
-                  jobject java_web_contents) {
+                  const JavaParamRef<jclass>& clazz,
+                  const JavaParamRef<jobject>& obj,
+                  const JavaParamRef<jobject>& java_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(java_web_contents);
 
@@ -90,27 +91,29 @@ ConnectionInfoPopupAndroid::ConnectionInfoPopupAndroid(
 
   popup_jobject_.Reset(env, java_website_settings_pop);
 
+  ChromeSecurityStateModelClient* security_model_client =
+      ChromeSecurityStateModelClient::FromWebContents(web_contents);
+  DCHECK(security_model_client);
+
   presenter_.reset(new WebsiteSettings(
-      this,
-      Profile::FromBrowserContext(web_contents->GetBrowserContext()),
-      TabSpecificContentSettings::FromWebContents(web_contents),
-      InfoBarService::FromWebContents(web_contents),
-      nav_entry->GetURL(),
-      nav_entry->GetSSL(),
+      this, Profile::FromBrowserContext(web_contents->GetBrowserContext()),
+      TabSpecificContentSettings::FromWebContents(web_contents), web_contents,
+      nav_entry->GetURL(), security_model_client->GetSecurityInfo(),
       content::CertStore::GetInstance()));
 }
 
 ConnectionInfoPopupAndroid::~ConnectionInfoPopupAndroid() {
 }
 
-void ConnectionInfoPopupAndroid::Destroy(JNIEnv* env, jobject obj) {
+void ConnectionInfoPopupAndroid::Destroy(JNIEnv* env,
+                                         const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
 void ConnectionInfoPopupAndroid::ResetCertDecisions(
     JNIEnv* env,
-    jobject obj,
-    jobject java_web_contents) {
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& java_web_contents) {
   presenter_->OnRevokeSSLErrorBypassButtonPressed();
 }
 
@@ -179,7 +182,8 @@ void ConnectionInfoPopupAndroid::SetCookieInfo(
 }
 
 void ConnectionInfoPopupAndroid::SetPermissionInfo(
-    const PermissionInfoList& permission_info_list) {
+    const PermissionInfoList& permission_info_list,
+    const ChosenObjectInfoList& chosen_object_info_list) {
   NOTIMPLEMENTED();
 }
 

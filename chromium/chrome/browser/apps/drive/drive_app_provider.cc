@@ -4,6 +4,8 @@
 
 #include "chrome/browser/apps/drive/drive_app_provider.h"
 
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -17,10 +19,10 @@
 #include "chrome/browser/apps/drive/drive_app_mapping.h"
 #include "chrome/browser/apps/drive/drive_app_uninstall_sync_service.h"
 #include "chrome/browser/apps/drive/drive_service_bridge.h"
-#include "chrome/browser/drive/drive_app_registry.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
+#include "components/drive/drive_app_registry.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/extension_system.h"
@@ -42,7 +44,7 @@ DriveAppProvider::DriveAppProvider(
     DriveAppUninstallSyncService* uninstall_sync_service)
     : profile_(profile),
       uninstall_sync_service_(uninstall_sync_service),
-      service_bridge_(DriveServiceBridge::Create(profile).Pass()),
+      service_bridge_(DriveServiceBridge::Create(profile)),
       mapping_(new DriveAppMapping(profile->GetPrefs())),
       drive_app_registry_updated_(false),
       weak_ptr_factory_(this) {
@@ -65,7 +67,7 @@ void DriveAppProvider::AppendDependsOnFactories(
 void DriveAppProvider::SetDriveServiceBridgeForTest(
     scoped_ptr<DriveServiceBridge> test_bridge) {
   service_bridge_->GetAppRegistry()->RemoveObserver(this);
-  service_bridge_ = test_bridge.Pass();
+  service_bridge_ = std::move(test_bridge);
   service_bridge_->GetAppRegistry()->AddObserver(this);
 }
 

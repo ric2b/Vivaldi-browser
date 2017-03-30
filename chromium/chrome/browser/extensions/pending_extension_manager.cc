@@ -89,6 +89,7 @@ bool PendingExtensionManager::HasPendingExtensionFromSync() const {
 bool PendingExtensionManager::AddFromSync(
     const std::string& id,
     const GURL& update_url,
+    const base::Version& version,
     PendingExtensionInfo::ShouldAllowInstallPredicate should_allow_install,
     bool remote_install,
     bool installed_by_custodian) {
@@ -121,7 +122,7 @@ bool PendingExtensionManager::AddFromSync(
   return AddExtensionImpl(id,
                           std::string(),
                           update_url,
-                          Version(),
+                          version,
                           should_allow_install,
                           kIsFromSync,
                           kSyncLocation,
@@ -240,8 +241,10 @@ void PendingExtensionManager::GetPendingIdsForUpdateCheck(
     // not be fetched from an update URL, so don't include them in the
     // set of ids.
     if (install_source == Manifest::EXTERNAL_PREF ||
-        install_source == Manifest::EXTERNAL_REGISTRY)
+        install_source == Manifest::EXTERNAL_REGISTRY ||
+        install_source == Manifest::EXTERNAL_POLICY) {
       continue;
+    }
 
     out_ids_for_update_check->push_back(iter->id());
   }

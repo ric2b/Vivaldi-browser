@@ -3,7 +3,9 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
+import("//build/config/win/manifest.gni")
 import("//tools/grit/repack.gni")
 import("//tools/grit/grit_rule.gni")
 if (is_android) {
@@ -12,25 +14,24 @@ if (is_android) {
 
 declare_args() {
   content_shell_product_name = "Content Shell"
+  content_shell_version = "99.77.34.5"
+}
 
-  # The "19" is so that sites that sniff for version think that this is
-  # something reasonably current; the "77.34.5" is a hint that this isn't a
-  # standard Chrome.
-  content_shell_version = "19.77.34.5"
+config("content_shell_lib_warnings") {
+  if (is_clang) {
+    # TODO(thakis): Remove this once http://crbug.com/383820 is figured out
+    cflags = [ "-Wno-nonnull" ]
+  }
 }
 
 static_library("content_shell_lib") {
   testonly = true
   sources = [
+    "android/shell_descriptors.h",
     "android/shell_jni_registrar.cc",
     "android/shell_jni_registrar.h",
     "android/shell_manager.cc",
     "android/shell_manager.h",
-    "app/blink_test_platform_support.h",
-    "app/blink_test_platform_support_android.cc",
-    "app/blink_test_platform_support_linux.cc",
-    "app/blink_test_platform_support_mac.mm",
-    "app/blink_test_platform_support_win.cc",
     "app/paths_mac.h",
     "app/paths_mac.mm",
     "app/shell_crash_reporter_client.cc",
@@ -41,12 +42,12 @@ static_library("content_shell_lib") {
     "app/shell_main_delegate_mac.mm",
     "browser/blink_test_controller.cc",
     "browser/blink_test_controller.h",
-    "browser/ipc_echo_message_filter.cc",
-    "browser/ipc_echo_message_filter.h",
     "browser/layout_test/layout_test_android.cc",
     "browser/layout_test/layout_test_android.h",
     "browser/layout_test/layout_test_bluetooth_adapter_provider.cc",
     "browser/layout_test/layout_test_bluetooth_adapter_provider.h",
+    "browser/layout_test/layout_test_bluetooth_chooser_factory.cc",
+    "browser/layout_test/layout_test_bluetooth_chooser_factory.h",
     "browser/layout_test/layout_test_browser_context.cc",
     "browser/layout_test/layout_test_browser_context.h",
     "browser/layout_test/layout_test_browser_main.cc",
@@ -144,14 +145,10 @@ static_library("content_shell_lib") {
     "common/shell_switches.h",
     "common/shell_test_configuration.cc",
     "common/shell_test_configuration.h",
-    "renderer/ipc_echo.cc",
-    "renderer/ipc_echo.h",
     "renderer/layout_test/blink_test_helpers.cc",
     "renderer/layout_test/blink_test_helpers.h",
     "renderer/layout_test/blink_test_runner.cc",
     "renderer/layout_test/blink_test_runner.h",
-    "renderer/layout_test/gc_controller.cc",
-    "renderer/layout_test/gc_controller.h",
     "renderer/layout_test/layout_test_content_renderer_client.cc",
     "renderer/layout_test/layout_test_content_renderer_client.h",
     "renderer/layout_test/layout_test_render_frame_observer.cc",
@@ -172,8 +169,13 @@ static_library("content_shell_lib") {
     "utility/shell_content_utility_client.h",
   ]
 
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  configs += [
+    ":content_shell_lib_warnings",
+    "//build/config:precompiled_headers",
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
 
   defines = [ "CONTENT_SHELL_VERSION=\"$content_shell_version\"" ]
 
@@ -193,11 +195,12 @@ static_library("content_shell_lib") {
     "//base/allocator",
     "//base/third_party/dynamic_annotations",
     "//cc",
-    "//components/crash/app",
+    "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
     "//components/devtools_discovery",
     "//components/devtools_http_handler",
     "//components/plugins/renderer",
     "//components/test_runner:test_runner",
+    "//components/url_formatter",
     "//components/web_cache/renderer",
     "//content:resources",
     "//content/app/resources",
@@ -234,7 +237,10 @@ static_library("content_shell_lib") {
     #'copy_test_netscape_plugin',  TODO(GYP)
   ]
   if (enable_plugins) {
-    deps += [ "//content/ppapi_plugin" ]
+    deps += [
+      "//content/ppapi_plugin",
+      "//ppapi:blink_test_plugin",
+    ]
   }
 
   if (is_win) {
@@ -246,13 +252,13 @@ static_library("content_shell_lib") {
   }
 
   if (is_linux) {
-    configs += [ "//build/config/linux:fontconfig" ]
+    deps += [ "//build/linux:fontconfig" ]
   }
 
   if (use_x11) {
     # Some tests rely on this tool at runtime. Note: it might be better if
     # the tests that needed it had this as a dep instead of adding it here.
-    datadeps = [
+    data_deps = [
       "//tools/xdisplaycheck",
     ]
 
@@ -265,7 +271,7 @@ static_library("content_shell_lib") {
   }
 
   if (is_posix && !is_mac) {
-    deps += [ "//components/crash/browser" ]
+    deps += [ "//components/crash/content/browser" ]
   }
 
   if (use_aura) {
@@ -281,9 +287,9 @@ static_library("content_shell_lib") {
       sources += [ "browser/shell_views.cc" ]
       deps += [
         "//ui/resources",
-        "//ui/views/controls/webview",
         "//ui/views",
         "//ui/views:test_support",
+        "//ui/views/controls/webview",
       ]
     } else {
       sources += [ "browser/shell_aura.cc" ]
@@ -307,7 +313,7 @@ static_library("content_shell_lib") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux && !is_chromecast) {
     deps += [ "//third_party/freetype2" ]
   }
 
@@ -325,7 +331,6 @@ grit("content_shell_resources_grit") {
   outputs = [
     "grit/shell_resources.h",
     "shell_resources.pak",
-    "shell_resources.rc",
   ]
 }
 
@@ -394,12 +399,13 @@ repack("pak") {
 # TODO(GYP): Figure out what this should be on android
 # and make linking this work on the Mac.
 if (!is_android && !is_mac) {
+  # TODO(brettw) when GYP is no longer necessary, delete
+  # content/shell/app/shell.exe.manifest. This file is not used in GN.
   executable("content_shell") {
     testonly = true
 
     # TODO(GYP) mac resource bundle stuff for this target.
     # TODO(GYP) Windows content shell settings:
-    #  - Manifest.
     #  - RC file.
     #  - 'LinkIncremental': '<(msvs_large_module_debug_link_mode)',
     sources = [
@@ -410,6 +416,8 @@ if (!is_android && !is_mac) {
       ":content_shell_lib",
       ":pak",
       "//base/allocator",
+      "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
     ]
 
     if (is_win) {
@@ -421,13 +429,18 @@ if (!is_android && !is_mac) {
     }
 
     if (is_mac) {
-      # TODO(GYP) lots of stuff from GYP file here.
+      # TODO(GYP) lots of stuff from GYP file here including helper_app and
+      # postbuilds.
+      output_name = content_shell_product_name
+      deps = [
+        ":framework",
+      ]
     }
 
     if (is_android) {
       # Some tests rely on this tool. It might be nicer if these tests relied on
       # image diff rather than having content shell depend on it.
-      datadeps = [
+      data_deps = [
         "//tools/imagediff($host_toolchain)",
       ]
     }
@@ -443,17 +456,39 @@ if (!is_android && !is_mac) {
 
 if (is_win) {
   # GYP version: content/content_shell_and_tests.gyp:content_shell_crash_service
-  executable("crash_service") {
+  executable("content_shell_crash_service") {
     sources = [
       "tools/content_shell_crash_service.cc",
     ]
 
     deps = [
       "//base",
-      "//components/crash/tools:crash_service",
+      "//build/config/sanitizers:deps",
+      "//components/crash/content/tools:crash_service",
     ]
 
     configs -= [ "//build/config/win:console" ]
     configs += [ "//build/config/win:windowed" ]
+  }
+}
+
+if (is_mac) {
+  # TODO(GYP) this should be a bundle. Lots of other stuff in this target.
+  # GYP version: content/content_shell.gypi:content_shell_framework
+  shared_library("framework") {
+    testonly = true
+
+    # TODO(GYP) bug 546894: Fix GN and toolchains to handle spaces here.
+    #output_name = "$content_shell_product_name Framework"
+    output_name = "content_shell_framework"  # Temporary one with no spaces.
+
+    sources = [
+      "app/shell_content_main.cc",
+      "app/shell_content_main.h",
+    ]
+
+    deps = [
+      ":content_shell_lib",
+    ]
   }
 }

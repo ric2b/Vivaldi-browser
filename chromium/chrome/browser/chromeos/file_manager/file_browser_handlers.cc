@@ -4,15 +4,18 @@
 
 #include "chrome/browser/chromeos/file_manager/file_browser_handlers.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <set>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/i18n/case_conversion.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
+#include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/open_with_browser.h"
@@ -120,9 +123,6 @@ FileBrowserHandlerList FindFileBrowserHandlersForURL(
     if (profile->IsOffTheRecord() &&
         !extensions::util::IsIncognitoEnabled(extension->id(), profile))
       continue;
-    if (extensions::util::IsEphemeralApp(extension->id(), profile))
-      continue;
-
     FileBrowserHandler::List* handler_list =
         FileBrowserHandler::GetHandlers(extension.get());
     if (!handler_list)
@@ -262,7 +262,7 @@ FileBrowserHandlerExecutor::SetupFileAccessPermissions(
     file_definition_list->push_back(file_definition);
   }
 
-  return file_definition_list.Pass();
+  return file_definition_list;
 }
 
 FileBrowserHandlerExecutor::FileBrowserHandlerExecutor(
@@ -341,10 +341,9 @@ void FileBrowserHandlerExecutor::ExecuteFileActionsOnUIThread(
   }
 
   if (handler_pid > 0) {
-    SetupPermissionsAndDispatchEvent(file_definition_list.Pass(),
-                                     entry_definition_list.Pass(),
-                                     handler_pid,
-                                     NULL);
+    SetupPermissionsAndDispatchEvent(std::move(file_definition_list),
+                                     std::move(entry_definition_list),
+                                     handler_pid, NULL);
   } else {
     // We have to wake the handler background page before we proceed.
     extensions::LazyBackgroundTaskQueue* queue =
@@ -354,14 +353,12 @@ void FileBrowserHandlerExecutor::ExecuteFileActionsOnUIThread(
       return;
     }
     queue->AddPendingTask(
-        profile_,
-        extension_->id(),
+        profile_, extension_->id(),
         base::Bind(
             &FileBrowserHandlerExecutor::SetupPermissionsAndDispatchEvent,
             weak_ptr_factory_.GetWeakPtr(),
-            base::Passed(file_definition_list.Pass()),
-            base::Passed(entry_definition_list.Pass()),
-            handler_pid));
+            base::Passed(std::move(file_definition_list)),
+            base::Passed(std::move(entry_definition_list)), handler_pid));
   }
 }
 
@@ -409,11 +406,11 @@ void FileBrowserHandlerExecutor::SetupPermissionsAndDispatchEvent(
     file_def->SetBoolean("fileIsDirectory", iter->is_directory);
   }
 
-  scoped_ptr<extensions::Event> event(
-      new extensions::Event(extensions::events::FILE_BROWSER_HANDLER_ON_EXECUTE,
-                            "fileBrowserHandler.onExecute", event_args.Pass()));
+  scoped_ptr<extensions::Event> event(new extensions::Event(
+      extensions::events::FILE_BROWSER_HANDLER_ON_EXECUTE,
+      "fileBrowserHandler.onExecute", std::move(event_args)));
   event->restrict_to_browser_context = profile_;
-  router->DispatchEventToExtension(extension_->id(), event.Pass());
+  router->DispatchEventToExtension(extension_->id(), std::move(event));
 
   ExecuteDoneOnUIThread(true);
 }

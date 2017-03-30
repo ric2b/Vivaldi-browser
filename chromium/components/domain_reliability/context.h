@@ -5,9 +5,12 @@
 #ifndef COMPONENTS_DOMAIN_RELIABILITY_CONTEXT_H_
 #define COMPONENTS_DOMAIN_RELIABILITY_CONTEXT_H_
 
+#include <stddef.h>
+
 #include <deque>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -30,9 +33,14 @@ class DomainReliabilityUploader;
 class MockableTime;
 
 // The per-domain context for the Domain Reliability client; includes the
-// domain's config and per-resource beacon queues.
+// domain's config and beacon queue.
 class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
  public:
+  // Maximum upload depth to schedule an upload. If a beacon is based on a more
+  // deeply nested upload, it will be reported eventually, but will not itself
+  // trigger a new upload.
+  static const int kMaxUploadDepthToSchedule;
+
   class DOMAIN_RELIABILITY_EXPORT Factory {
    public:
     virtual ~Factory();
@@ -53,7 +61,7 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
   // Notifies the context of a beacon on its domain(s); may or may not save the
   // actual beacon to be uploaded, depending on the sample rates in the config,
   // but will increment one of the request counters in any case.
-  void OnBeacon(const GURL& url, const DomainReliabilityBeacon& beacon);
+  void OnBeacon(scoped_ptr<DomainReliabilityBeacon> beacon);
 
   // Called to clear browsing data, since beacons are like browsing history.
   void ClearBeacons();
@@ -62,13 +70,11 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
   // debugging purposes.
   scoped_ptr<base::Value> GetWebUIData() const;
 
+  // Gets the beacons queued for upload in this context. |*beacons_out| will be
+  // cleared and filled with pointers to the beacons; the pointers remain valid
+  // as long as no other requests are reported to the DomainReliabilityMonitor.
   void GetQueuedBeaconsForTesting(
-      std::vector<DomainReliabilityBeacon>* beacons_out) const;
-
-  void GetRequestCountsForTesting(
-      size_t resource_index,
-      uint32* successful_requests_out,
-      uint32* failed_requests_out) const;
+      std::vector<const DomainReliabilityBeacon*>* beacons_out) const;
 
   const DomainReliabilityConfig& config() const { return *config_.get(); }
 
@@ -77,18 +83,16 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
   static const size_t kMaxQueuedBeacons;
 
  private:
-  class ResourceState;
+  // Deque of beacons owned by this context. (Deleted after uploading.)
+  typedef std::deque<DomainReliabilityBeacon*> BeaconDeque;
 
-  typedef std::deque<DomainReliabilityBeacon> BeaconDeque;
-  typedef ScopedVector<ResourceState> ResourceStateVector;
-  typedef ResourceStateVector::const_iterator ResourceStateIterator;
-
-  void InitializeResourceStates();
   void ScheduleUpload(base::TimeDelta min_delay, base::TimeDelta max_delay);
   void StartUpload();
   void OnUploadComplete(const DomainReliabilityUploader::UploadResult& result);
 
-  scoped_ptr<const base::Value> CreateReport(base::TimeTicks upload_time) const;
+  scoped_ptr<const base::Value> CreateReport(base::TimeTicks upload_time,
+                                             const GURL& collector_url,
+                                             int* max_beacon_depth_out) const;
 
   // Remembers the current state of the context when an upload starts. Can be
   // called multiple times in a row (without |CommitUpload|) if uploads fail
@@ -114,9 +118,6 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
 
   BeaconDeque beacons_;
   size_t uploading_beacons_size_;
-  // Each ResourceState in |states_| corresponds to the Resource of the same
-  // index in the config.
-  ResourceStateVector states_;
   base::TimeTicks upload_time_;
   base::TimeTicks last_upload_time_;
   // The last network change time is not tracked per-context, so this is a

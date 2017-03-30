@@ -2,14 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_controller.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
 #include "chrome/browser/ui/toolbar/test_toolbar_model.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -22,12 +26,9 @@ namespace {
 class TestingOmniboxView : public OmniboxView {
  public:
   explicit TestingOmniboxView(OmniboxEditController* controller)
-      : OmniboxView(NULL, controller, NULL) {}
+      : OmniboxView(controller, nullptr) {}
 
   // OmniboxView:
-  void SaveStateToTab(WebContents* tab) override {}
-  void OnTabChanged(const WebContents* web_contents) override {}
-  void ResetTabState(WebContents* web_contents) override {}
   void Update() override {}
   void OpenMatch(const AutocompleteMatch& match,
                  WindowOpenDisposition disposition,
@@ -72,7 +73,9 @@ class TestingOmniboxView : public OmniboxView {
   }
   void OnRevertTemporaryText() override {}
   void OnBeforePossibleChange() override {}
-  bool OnAfterPossibleChange() override { return false; }
+  bool OnAfterPossibleChange(bool allow_keyword_ui_change) override {
+    return false;
+  }
   gfx::NativeView GetNativeView() const override { return NULL; }
   gfx::NativeView GetRelativeWindowForPopup() const override { return NULL; }
   void SetGrayTextAutocompletion(const base::string16& input) override {}
@@ -96,25 +99,22 @@ class TestingOmniboxView : public OmniboxView {
   DISALLOW_COPY_AND_ASSIGN(TestingOmniboxView);
 };
 
-class TestingOmniboxEditController : public OmniboxEditController {
+class TestingOmniboxEditController : public ChromeOmniboxEditController {
  public:
   explicit TestingOmniboxEditController(ToolbarModel* toolbar_model)
-      : OmniboxEditController(NULL),
-        toolbar_model_(toolbar_model) {
-  }
+      : ChromeOmniboxEditController(NULL), toolbar_model_(toolbar_model) {}
 
  protected:
-  // OmniboxEditController:
-  void Update(const content::WebContents* contents) override {}
+  // ChromeOmniboxEditController:
+  void UpdateWithoutTabRestore() override {}
   void OnChanged() override {}
   void OnSetFocus() override {}
   void ShowURL() override {}
-  InstantController* GetInstant() override { return NULL; }
-  WebContents* GetWebContents() override { return NULL; }
   ToolbarModel* GetToolbarModel() override { return toolbar_model_; }
   const ToolbarModel* GetToolbarModel() const override {
     return toolbar_model_;
   }
+  WebContents* GetWebContents() override { return nullptr; }
 
  private:
   ToolbarModel* toolbar_model_;
@@ -197,7 +197,9 @@ TEST_F(AutocompleteEditTest, AdjustTextForCopy) {
       &profile, &TemplateURLServiceFactory::BuildInstanceFor);
   AutocompleteClassifierFactory::GetInstance()->SetTestingFactory(
       &profile, &AutocompleteClassifierFactory::BuildInstanceFor);
-  OmniboxEditModel model(&view, &controller, &profile);
+  OmniboxEditModel model(
+      &view, &controller,
+      make_scoped_ptr(new ChromeOmniboxClient(&controller, &profile)));
 
   for (size_t i = 0; i < arraysize(input); ++i) {
     toolbar_model()->set_text(ASCIIToUTF16(input[i].perm_text));
@@ -229,7 +231,9 @@ TEST_F(AutocompleteEditTest, InlineAutocompleteText) {
       &profile, &TemplateURLServiceFactory::BuildInstanceFor);
   AutocompleteClassifierFactory::GetInstance()->SetTestingFactory(
       &profile, &AutocompleteClassifierFactory::BuildInstanceFor);
-  OmniboxEditModel model(&view, &controller, &profile);
+  OmniboxEditModel model(
+      &view, &controller,
+      make_scoped_ptr(new ChromeOmniboxClient(&controller, &profile)));
 
   // Test if the model updates the inline autocomplete text in the view.
   EXPECT_EQ(base::string16(), view.inline_autocomplete_text());

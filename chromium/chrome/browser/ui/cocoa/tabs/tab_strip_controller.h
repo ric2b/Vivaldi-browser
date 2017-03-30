@@ -13,8 +13,10 @@
 #import "chrome/browser/ui/cocoa/tabs/tab_controller_target.h"
 #import "chrome/browser/ui/cocoa/url_drop_target.h"
 #include "chrome/browser/ui/tabs/hover_tab_selector.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
 
 @class CrTrackingArea;
+@class CustomWindowControlsView;
 @class NewTabButton;
 @class TabContentsController;
 @class TabView;
@@ -147,7 +149,8 @@ class WebContents;
 
   // A container view for custom traffic light buttons, which must be manually
   // added in fullscreen in 10.10+.
-  base::scoped_nsobject<NSView> customWindowControls_;
+  base::scoped_nsobject<CustomWindowControlsView> customWindowControls_;
+  base::scoped_nsobject<CrTrackingArea> customWindowControlsTrackingArea_;
 }
 
 @property(nonatomic) CGFloat leftIndentForControls;
@@ -233,6 +236,10 @@ class WebContents;
 // is visible.
 - (BOOL)isTabFullyVisible:(TabView*)tab;
 
+// Returns the right edge of the tab strip's tab area (i.e. the width of the
+// tab strip, less the right indent for controls).
+- (CGFloat)tabAreaRightEdge;
+
 // Show or hide the new tab button. The button is hidden immediately, but
 // waits until the next call to |-layoutTabs| to show it again.
 - (void)showNewTabButton:(BOOL)show;
@@ -264,6 +271,20 @@ class WebContents;
 
 // Removes custom traffic light buttons from the tab strip. Idempotent.
 - (void)removeCustomWindowControls;
+
+// Gets the tab and the media state to check whether the window
+// media state should be updated or not. If the tab media state is
+// AUDIO_PLAYING, the window media state should be set to AUDIO_PLAYING.
+// If the tab media state is AUDIO_MUTING, this method would check if the
+// window has no other tab with state AUDIO_PLAYING, then the window
+// media state will be set to AUDIO_MUTING. If the tab media state is NONE,
+// this method checks if the window has no playing or muting tab, then window
+// media state will be set as NONE.
+- (void)updateWindowMediaState:(TabMediaState)mediaState
+                forWebContents:(content::WebContents*)changed;
+
+// Returns the media state associated with the contents.
+- (TabMediaState)mediaStateForContents:(content::WebContents*)contents;
 
 @end
 

@@ -4,11 +4,16 @@
 
 #include "chrome/browser/extensions/extension_service_test_base.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_garbage_collector_factory.h"
@@ -16,13 +21,13 @@
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/prefs/pref_service_mock_factory.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_mock_factory.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -43,18 +48,18 @@ scoped_ptr<TestingProfile> BuildTestingProfile(
     const ExtensionServiceTestBase::ExtensionServiceInitParams& params) {
   TestingProfile::Builder profile_builder;
   // Create a PrefService that only contains user defined preference values.
-  PrefServiceMockFactory factory;
+  syncable_prefs::PrefServiceMockFactory factory;
   // If pref_file is empty, TestingProfile automatically creates
-  // TestingPrefServiceSyncable instance.
+  // syncable_prefs::TestingPrefServiceSyncable instance.
   if (!params.pref_file.empty()) {
     factory.SetUserPrefsFile(params.pref_file,
                              base::ThreadTaskRunnerHandle::Get().get());
     scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
         new user_prefs::PrefRegistrySyncable);
-    scoped_ptr<PrefServiceSyncable> prefs(
+    scoped_ptr<syncable_prefs::PrefServiceSyncable> prefs(
         factory.CreateSyncable(registry.get()));
     chrome::RegisterUserProfilePrefs(registry.get());
-    profile_builder.SetPrefService(prefs.Pass());
+    profile_builder.SetPrefService(std::move(prefs));
   }
 
   if (params.profile_is_supervised)
@@ -185,6 +190,93 @@ void ExtensionServiceTestBase::ResetThreadBundle(int options) {
   did_reset_thread_bundle_ = true;
   thread_bundle_.reset();
   thread_bundle_.reset(new content::TestBrowserThreadBundle(options));
+}
+
+size_t ExtensionServiceTestBase::GetPrefKeyCount() {
+  const base::DictionaryValue* dict =
+      profile()->GetPrefs()->GetDictionary("extensions.settings");
+  if (!dict) {
+    ADD_FAILURE();
+    return 0;
+  }
+  return dict->size();
+}
+
+void ExtensionServiceTestBase::ValidatePrefKeyCount(size_t count) {
+  EXPECT_EQ(count, GetPrefKeyCount());
+}
+
+testing::AssertionResult ExtensionServiceTestBase::ValidateBooleanPref(
+    const std::string& extension_id,
+    const std::string& pref_path,
+    bool expected_val) {
+  std::string msg = base::StringPrintf("while checking: %s %s == %s",
+                                       extension_id.c_str(), pref_path.c_str(),
+                                       expected_val ? "true" : "false");
+
+  PrefService* prefs = profile()->GetPrefs();
+  const base::DictionaryValue* dict =
+      prefs->GetDictionary("extensions.settings");
+  if (!dict) {
+    return testing::AssertionFailure()
+        << "extension.settings does not exist " << msg;
+  }
+
+  const base::DictionaryValue* pref = NULL;
+  if (!dict->GetDictionary(extension_id, &pref)) {
+    return testing::AssertionFailure()
+        << "extension pref does not exist " << msg;
+  }
+
+  bool val = false;
+  if (!pref->GetBoolean(pref_path, &val)) {
+    return testing::AssertionFailure()
+        << pref_path << " pref not found " << msg;
+  }
+
+  return expected_val == val
+      ? testing::AssertionSuccess()
+      : testing::AssertionFailure() << "base::Value is incorrect " << msg;
+}
+
+void ExtensionServiceTestBase::ValidateIntegerPref(
+    const std::string& extension_id,
+    const std::string& pref_path,
+    int expected_val) {
+  std::string msg = base::StringPrintf("while checking: %s %s == %s",
+                                       extension_id.c_str(), pref_path.c_str(),
+                                       base::IntToString(expected_val).c_str());
+
+  PrefService* prefs = profile()->GetPrefs();
+  const base::DictionaryValue* dict =
+      prefs->GetDictionary("extensions.settings");
+  ASSERT_TRUE(dict != NULL) << msg;
+  const base::DictionaryValue* pref = NULL;
+  ASSERT_TRUE(dict->GetDictionary(extension_id, &pref)) << msg;
+  EXPECT_TRUE(pref != NULL) << msg;
+  int val;
+  ASSERT_TRUE(pref->GetInteger(pref_path, &val)) << msg;
+  EXPECT_EQ(expected_val, val) << msg;
+}
+
+void ExtensionServiceTestBase::ValidateStringPref(
+    const std::string& extension_id,
+    const std::string& pref_path,
+    const std::string& expected_val) {
+  std::string msg = base::StringPrintf("while checking: %s.manifest.%s == %s",
+                                       extension_id.c_str(), pref_path.c_str(),
+                                       expected_val.c_str());
+
+  const base::DictionaryValue* dict =
+      profile()->GetPrefs()->GetDictionary("extensions.settings");
+  ASSERT_TRUE(dict != NULL) << msg;
+  const base::DictionaryValue* pref = NULL;
+  std::string manifest_path = extension_id + ".manifest";
+  ASSERT_TRUE(dict->GetDictionary(manifest_path, &pref)) << msg;
+  EXPECT_TRUE(pref != NULL) << msg;
+  std::string val;
+  ASSERT_TRUE(pref->GetString(pref_path, &val)) << msg;
+  EXPECT_EQ(expected_val, val) << msg;
 }
 
 void ExtensionServiceTestBase::SetUp() {

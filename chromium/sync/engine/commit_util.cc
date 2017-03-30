@@ -4,11 +4,14 @@
 
 #include "sync/engine/commit_util.h"
 
+#include <stdint.h>
+
 #include <limits>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/strings/string_util.h"
 #include "sync/engine/syncer_proto_util.h"
 #include "sync/internal_api/public/base/attachment_id_proto.h"
@@ -32,14 +35,8 @@ using std::vector;
 
 namespace syncer {
 
-using sessions::SyncSession;
 using syncable::Entry;
-using syncable::IS_DEL;
-using syncable::IS_UNAPPLIED_UPDATE;
-using syncable::IS_UNSYNCED;
 using syncable::Id;
-using syncable::SPECIFICS;
-using syncable::UNIQUE_POSITION;
 
 namespace commit_util {
 
@@ -157,7 +154,7 @@ void BuildCommitItem(
     sync_entry->set_old_parent_id(SyncableIdToProto(server_parent_id));
   }
 
-  int64 version = meta_entry.GetBaseVersion();
+  int64_t version = meta_entry.GetBaseVersion();
   if (syncable::CHANGES_VERSION == version || 0 == version) {
     // Undeletions are only supported for items that have a client tag.
     DCHECK(!id.ServerKnows() ||
@@ -190,6 +187,10 @@ void BuildCommitItem(
           meta_entry.GetUniquePosition().ToInt64());
       meta_entry.GetUniquePosition().ToProto(
           sync_entry->mutable_unique_position());
+      if (!meta_entry.GetUniquePosition().IsValid()) {
+        // Should never upload invalid unique position for bookmark to server.
+        base::debug::DumpWithoutCrashing();
+      }
     }
     // Always send specifics for bookmarks.
     SetEntrySpecifics(meta_entry, sync_entry);
@@ -233,8 +234,8 @@ bool UpdateVersionAfterCommit(
     const sync_pb::CommitResponse_EntryResponse& entry_response,
     const syncable::Id& pre_commit_id,
     syncable::ModelNeutralMutableEntry* local_entry) {
-  int64 old_version = local_entry->GetBaseVersion();
-  int64 new_version = entry_response.version();
+  int64_t old_version = local_entry->GetBaseVersion();
+  int64_t new_version = entry_response.version();
   bool bad_commit_version = false;
   if (committed_entry.deleted() &&
       !local_entry->GetUniqueClientTag().empty()) {
@@ -392,12 +393,11 @@ void ProcessSuccessfulCommitResponse(
 
 }  // namespace
 
-sync_pb::CommitResponse::ResponseType
-ProcessSingleCommitResponse(
+sync_pb::CommitResponse::ResponseType ProcessSingleCommitResponse(
     syncable::BaseWriteTransaction* trans,
     const sync_pb::CommitResponse_EntryResponse& server_entry,
     const sync_pb::SyncEntity& commit_request_entry,
-    int64 metahandle,
+    int64_t metahandle,
     set<syncable::Id>* deleted_folders) {
   syncable::ModelNeutralMutableEntry local_entry(
       trans,

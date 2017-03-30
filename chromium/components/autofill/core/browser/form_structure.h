@@ -5,20 +5,24 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_STRUCTURE_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_STRUCTURE_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "components/autofill/core/common/web_element_descriptor.h"
 #include "url/gurl.h"
+
+class XmlWriter;
 
 enum UploadRequired {
   UPLOAD_NOT_REQUIRED,
@@ -55,8 +59,12 @@ class FormStructure {
   void DetermineHeuristicTypes();
 
   // Encodes the XML upload request from this FormStructure.
+  // In some cases, a |login_form_signature| is included as part of the upload.
+  // This field is empty when sending upload requests for non-login forms.
   bool EncodeUploadRequest(const ServerFieldTypeSet& available_field_types,
                            bool form_was_autofilled,
+                           const std::string& login_form_signature,
+                           bool observed_submission,
                            std::string* encoded_xml) const;
 
   // Encodes a XML block contains autofill field type from this FormStructure.
@@ -66,11 +74,13 @@ class FormStructure {
   bool EncodeFieldAssignments(const ServerFieldTypeSet& available_field_types,
                               std::string* encoded_xml) const;
 
-  // Encodes the XML query request for the set of forms.
-  // All fields are returned in one XML. For example, there are three forms,
-  // with 2, 4, and 3 fields. The returned XML would have type info for 9
-  // fields, first two of which would be for the first form, next 4 for the
-  // second, and the rest is for the third.
+  // Encodes the XML query request for the set of |forms| that are valid (see
+  // implementation for details on which forms are not included in the query).
+  // The form signatures used in the Query request are output in
+  // |encoded_signatures|. All valid fields are encoded in |encoded_xml|. For
+  // example, there are three valid forms, with 2, 4, and 3 fields. The returned
+  // XML would have type info for 9 fields, first two of which would be for the
+  // first form, next 4 for the second, and the rest is for the third.
   static bool EncodeQueryRequest(const std::vector<FormStructure*>& forms,
                                  std::vector<std::string>* encoded_signatures,
                                  std::string* encoded_xml);
@@ -78,7 +88,7 @@ class FormStructure {
   // Parses the field types from the server query response. |forms| must be the
   // same as the one passed to EncodeQueryRequest when constructing the query.
   // |rappor_service| may be null.
-  static void ParseQueryResponse(const std::string& response_xml,
+  static void ParseQueryResponse(std::string response_xml,
                                  const std::vector<FormStructure*>& forms,
                                  rappor::RapporService* rappor_service);
 
@@ -120,21 +130,26 @@ class FormStructure {
   // This method should only be called after the possible field types have been
   // set for each field.  |interaction_time| should be a timestamp corresponding
   // to the user's first interaction with the form.  |submission_time| should be
-  // a timestamp corresponding to the form's submission.
+  // a timestamp corresponding to the form's submission. |observed_submission|
+  // indicates whether this method is called as a result of observing a
+  // submission event (otherwise, it may be that an upload was triggered after
+  // a form was unfocused or a navigation occurred).
   void LogQualityMetrics(const base::TimeTicks& load_time,
                          const base::TimeTicks& interaction_time,
                          const base::TimeTicks& submission_time,
-                         rappor::RapporService* rappor_service) const;
+                         rappor::RapporService* rappor_service,
+                         bool did_show_suggestions,
+                         bool observed_submission) const;
 
   // Classifies each field in |fields_| based upon its |autocomplete| attribute,
   // if the attribute is available.  The association is stored into the field's
   // |heuristic_type|.
-  // Fills |found_types| with |true| if the attribute is available and neither
-  // empty nor set to the special values "on" or "off" for at least one field.
-  // Fills |found_sections| with |true| if the attribute specifies a section for
+  // Fills |has_author_specified_types_| with |true| if the attribute is
+  // available and neither empty nor set to the special values "on" or "off" for
   // at least one field.
-  void ParseFieldTypesFromAutocompleteAttributes(bool* found_types,
-                                                 bool* found_sections);
+  // Fills |has_author_specified_sections_| with |true| if the attribute
+  // specifies a section for at least one field.
+  void ParseFieldTypesFromAutocompleteAttributes();
 
   // Determines whether |type| and |field| match.
   typedef base::Callback<bool(ServerFieldType type,
@@ -168,6 +183,10 @@ class FormStructure {
   AutofillField* field(size_t index);
   size_t field_count() const;
 
+  // Returns the number of fields that are part of the form signature and that
+  // are included in queries to the Autofill server.
+  size_t active_field_count() const;
+
   // Returns the number of fields that are able to be autofilled.
   size_t autofill_count() const { return autofill_count_; }
 
@@ -183,7 +202,13 @@ class FormStructure {
 
   const GURL& source_url() const { return source_url_; }
 
-  bool has_password_field() const { return has_password_field_; }
+  const GURL& target_url() const { return target_url_; }
+
+  bool has_author_specified_types() { return has_author_specified_types_; }
+
+  bool has_author_specified_sections() {
+    return has_author_specified_sections_;
+  }
 
   void set_upload_required(UploadRequired required) {
     upload_required_ = required;
@@ -191,7 +216,6 @@ class FormStructure {
   UploadRequired upload_required() const { return upload_required_; }
 
   // Returns a FormData containing the data this form structure knows about.
-  // |user_submitted| is currently always false.
   FormData ToFormData() const;
 
   bool operator==(const FormData& form) const;
@@ -210,10 +234,14 @@ class FormStructure {
     FIELD_ASSIGNMENTS,
   };
 
-  // Adds form info to |encompassing_xml_element|. |request_type| indicates if
-  // it is a query or upload.
+  // Returns true if the form has no fields, or too many.
+  bool IsMalformed() const;
+
+  // Takes |xml_writer| and writes description for |fields_|, according to
+  // |request_type|. Returns false on failure, including when there are no
+  // fields, and true on success.
   bool EncodeFormRequest(EncodeRequestType request_type,
-                         buzz::XmlElement* encompassing_xml_element) const;
+                         XmlWriter* xml_writer) const;
 
   // Classifies each field in |fields_| into a logical section.
   // Sections are identified by the heuristic that a logical section should not
@@ -226,8 +254,6 @@ class FormStructure {
 
   // Returns true if field should be skipped when talking to Autofill server.
   bool ShouldSkipField(const FormFieldData& field) const;
-
-  size_t active_field_count() const;
 
   // The name of the form.
   base::string16 form_name_;
@@ -244,8 +270,8 @@ class FormStructure {
   // A vector of all the input fields in the form.
   ScopedVector<AutofillField> fields_;
 
-  // The number of fields counted towards form signature and request to Autofill
-  // server.
+  // The number of fields that are part of the form signature and that are
+  // included in queries to the Autofill server.
   size_t active_field_count_;
 
   // The names of the form input elements, that are part of the form signature.
@@ -261,11 +287,23 @@ class FormStructure {
   // author, via the |autocompletetype| attribute.
   bool has_author_specified_types_;
 
+  // Whether the form includes any sections explicitly specified by the site
+  // author, via the autocomplete attribute.
+  bool has_author_specified_sections_;
+
+  // Whether the form was parsed for autocomplete attribute, thus assigning
+  // the real values of |has_author_specified_types_| and
+  // |has_author_specified_sections_|.
+  bool was_parsed_for_autocomplete_attributes_;
+
   // True if the form contains at least one password field.
   bool has_password_field_;
 
   // True if the form is a <form>.
   bool is_form_tag_;
+
+  // True if the form is made of unowned fields in a non checkout flow.
+  bool is_formless_checkout_;
 
   DISALLOW_COPY_AND_ASSIGN(FormStructure);
 };

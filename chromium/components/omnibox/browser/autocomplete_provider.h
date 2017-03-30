@@ -5,7 +5,10 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_PROVIDER_H_
 #define COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_PROVIDER_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
@@ -134,6 +137,7 @@ class AutocompleteProvider
     TYPE_SEARCH           = 1 << 5,
     TYPE_SHORTCUTS        = 1 << 6,
     TYPE_ZERO_SUGGEST     = 1 << 7,
+    TYPE_CLIPBOARD_URL    = 1 << 8,
   };
 
   explicit AutocompleteProvider(Type type);

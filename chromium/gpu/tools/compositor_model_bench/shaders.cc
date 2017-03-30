@@ -4,6 +4,8 @@
 
 #include "gpu/tools/compositor_model_bench/shaders.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "gpu/tools/compositor_model_bench/render_model_utils.h"
@@ -81,7 +83,7 @@ static void TranslateInPlace(float* m, float tx, float ty, float tz) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-ShaderID ShaderIDFromString(std::string name) {
+ShaderID ShaderIDFromString(const std::string& name) {
   if (name == "VertexShaderPosTexYUVStretch")
     return VERTEX_SHADER_POS_TEX_YUV_STRETCH;
   if (name == "VertexShaderPosTex")

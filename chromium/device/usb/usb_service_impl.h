@@ -4,11 +4,15 @@
 
 #include "device/usb/usb_service.h"
 
+#include <stddef.h>
+
 #include <map>
+#include <queue>
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "device/usb/usb_context.h"
 #include "device/usb/usb_device_impl.h"
 #include "third_party/libusb/src/libusb/libusb.h"
@@ -31,21 +35,17 @@ namespace device {
 typedef struct libusb_device* PlatformUsbDevice;
 typedef struct libusb_context* PlatformUsbContext;
 
-class UsbServiceImpl : public UsbService,
+class UsbServiceImpl :
 #if defined(OS_WIN)
-                       public DeviceMonitorWin::Observer,
+    public DeviceMonitorWin::Observer,
 #endif  // OS_WIN
-                       public base::MessageLoop::DestructionObserver {
+    public UsbService {
  public:
-  static UsbService* Create(
-      scoped_refptr<base::SequencedTaskRunner> blocking_task_runner);
-
- private:
   explicit UsbServiceImpl(
-      PlatformUsbContext context,
       scoped_refptr<base::SequencedTaskRunner> blocking_task_runner);
   ~UsbServiceImpl() override;
 
+ private:
   // device::UsbService implementation
   scoped_refptr<UsbDevice> GetDevice(const std::string& guid) override;
   void GetDevices(const GetDevicesCallback& callback) override;
@@ -57,9 +57,6 @@ class UsbServiceImpl : public UsbService,
   void OnDeviceRemoved(const GUID& class_guid,
                        const std::string& device_path) override;
 #endif  // OS_WIN
-
-  // base::MessageLoop::DestructionObserver implementation
-  void WillDestroyCurrentMessageLoop() override;
 
   // Enumerate USB devices from OS and update devices_ map.
   void RefreshDevices();

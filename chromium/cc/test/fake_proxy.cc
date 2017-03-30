@@ -24,6 +24,8 @@ RendererCapabilities& FakeProxy::GetRendererCapabilities() {
   return capabilities_;
 }
 
+void FakeProxy::ReleaseOutputSurface() {}
+
 bool FakeProxy::BeginMainFrameRequested() const { return false; }
 
 bool FakeProxy::CommitRequested() const { return false; }

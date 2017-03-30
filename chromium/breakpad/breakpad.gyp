@@ -24,8 +24,6 @@
             'src/processor/basic_code_modules.cc',
             'src/processor/basic_code_modules.h',
             'src/processor/basic_source_line_resolver.cc',
-            'src/processor/binarystream.cc',
-            'src/processor/binarystream.h',
             'src/processor/call_stack.cc',
             'src/processor/cfi_frame_info.cc',
             'src/processor/cfi_frame_info.h',
@@ -38,6 +36,7 @@
             'src/processor/pathname_stripper.cc',
             'src/processor/pathname_stripper.h',
             'src/processor/process_state.cc',
+            'src/processor/proc_maps_linux.cc',
             'src/processor/simple_symbol_supplier.cc',
             'src/processor/simple_symbol_supplier.h',
             'src/processor/source_line_resolver_base.cc',
@@ -157,6 +156,7 @@
             'src/processor/minidump_dump.cc',
             'src/processor/pathname_stripper.cc',
             'src/processor/pathname_stripper.h',
+            'src/processor/proc_maps_linux.cc',
           ],
           'conditions': [
             ['OS=="ios"', {
@@ -199,7 +199,7 @@
             'src/common/language.cc',
             'src/common/mac/arch_utilities.cc',
             'src/common/mac/arch_utilities.h',
-            'src/common/mac/dump_syms.mm',
+            'src/common/mac/dump_syms.cc',
             'src/common/mac/file_id.cc',
             'src/common/mac/macho_id.cc',
             'src/common/mac/macho_reader.cc',
@@ -209,7 +209,7 @@
             'src/common/module.cc',
             'src/common/stabs_reader.cc',
             'src/common/stabs_to_module.cc',
-            'src/tools/mac/dump_syms/dump_syms_tool.mm',
+            'src/tools/mac/dump_syms/dump_syms_tool.cc',
           ],
           'defines': [
             # For src/common/stabs_reader.h.
@@ -305,17 +305,6 @@
             'src/common/md5.cc',
             'src/common/simple_string_dictionary.cc',
             'src/common/string_conversion.cc',
-          ],
-          'conditions': [
-            ['OS=="ios"', {
-              'xcode_settings' : {
-                'WARNING_CFLAGS': [
-                  # MinidumpGenerator uses an API deprecated in iOS 7.
-                  # crbug.com/408562
-                  '-Wno-deprecated-declarations',
-                ],
-              },
-            }],
           ],
         },
         {
@@ -518,8 +507,6 @@
             'src/client/linux/log/log.cc',
             'src/client/linux/log/log.h',
             'src/client/linux/dump_writer_common/mapping_info.h',
-            'src/client/linux/dump_writer_common/seccomp_unwinder.cc',
-            'src/client/linux/dump_writer_common/seccomp_unwinder.h',
             'src/client/linux/dump_writer_common/thread_info.cc',
             'src/client/linux/dump_writer_common/thread_info.h',
             'src/client/linux/dump_writer_common/ucontext_reader.cc',
@@ -597,6 +584,14 @@
                 ],
               },
             }],
+            ['clang==1 and target_arch=="ia32"', {
+              'cflags!': [
+                # Clang's -mstackrealign doesn't work well with
+                # linux_syscall_support.h hand written asm syscalls.
+                # See https://crbug.com/556393
+                '-mstackrealign',
+              ],
+            }],
           ],
 
           'include_dirs': [
@@ -624,6 +619,7 @@
             'src/processor/minidump.cc',
             'src/processor/pathname_stripper.cc',
             'src/processor/pathname_stripper.h',
+            'src/processor/proc_maps_linux.cc',
           ],
 
           'include_dirs': [
@@ -704,6 +700,14 @@
                 'isolate_file': 'breakpad_unittests.isolate',
               },
               'includes': [ '../build/android/test_runner.gypi' ],
+            }],
+            ['clang==1 and target_arch=="ia32"', {
+              'cflags!': [
+                # Clang's -mstackrealign doesn't work well with
+                # linux_syscall_support.h hand written asm syscalls.
+                # See https://crbug.com/556393
+                '-mstackrealign',
+              ],
             }],
           ],
         },
@@ -983,6 +987,27 @@
             '../build/android/native_app_dependencies.gypi'
           ],
         }
+      ],
+      'conditions': [
+        ['test_isolation_mode != "noop"',
+          {
+            'targets': [
+              {
+                'target_name': 'breakpad_unittests_apk_run',
+                'type': 'none',
+                'dependencies': [
+                  'breakpad_unittests',
+                ],
+                'includes': [
+                  '../build/isolate.gypi',
+                ],
+                'sources': [
+                  'breakpad_unittests_apk.isolate',
+                ],
+              },
+            ]
+          }
+        ],
       ],
     }],
   ],

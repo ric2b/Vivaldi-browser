@@ -6,7 +6,9 @@
 
 #include "base/bind.h"
 #include "components/favicon/content/favicon_url_util.h"
+#include "components/favicon/core/favicon_service.h"
 #include "components/favicon/core/favicon_url.h"
+#include "components/history/core/browser/history_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
@@ -31,6 +33,29 @@ void ContentFaviconDriver::CreateForWebContents(
   web_contents->SetUserData(
       UserDataKey(), new ContentFaviconDriver(web_contents, favicon_service,
                                               history_service, bookmark_model));
+}
+
+void ContentFaviconDriver::SaveFavicon() {
+  content::NavigationEntry* entry =
+      web_contents()->GetController().GetLastCommittedEntry();
+  if (!entry)
+    return;
+
+  // Make sure the page is in history, otherwise adding the favicon does
+  // nothing.
+  if (!history_service())
+    return;
+  GURL page_url = entry->GetURL();
+  history_service()->AddPageNoVisitForBookmark(page_url, entry->GetTitle());
+
+  const content::FaviconStatus& favicon_status = entry->GetFavicon();
+  if (!favicon_service() || !favicon_status.valid ||
+      favicon_status.url.is_empty() || favicon_status.image.IsEmpty()) {
+    return;
+  }
+
+  favicon_service()->SetFavicons(page_url, favicon_status.url,
+                                 favicon_base::FAVICON, favicon_status.image);
 }
 
 gfx::Image ContentFaviconDriver::GetFavicon() const {
@@ -88,41 +113,6 @@ GURL ContentFaviconDriver::GetActiveURL() {
   return entry ? entry->GetURL() : GURL();
 }
 
-base::string16 ContentFaviconDriver::GetActiveTitle() {
-  content::NavigationEntry* entry =
-      web_contents()->GetController().GetLastCommittedEntry();
-  return entry ? entry->GetTitle() : base::string16();
-}
-
-bool ContentFaviconDriver::GetActiveFaviconValidity() {
-  return GetFaviconStatus().valid;
-}
-
-void ContentFaviconDriver::SetActiveFaviconValidity(bool valid) {
-  GetFaviconStatus().valid = valid;
-}
-
-GURL ContentFaviconDriver::GetActiveFaviconURL() {
-  return GetFaviconStatus().url;
-}
-
-void ContentFaviconDriver::SetActiveFaviconURL(const GURL& url) {
-  GetFaviconStatus().url = url;
-}
-
-gfx::Image ContentFaviconDriver::GetActiveFaviconImage() {
-  return GetFaviconStatus().image;
-}
-
-void ContentFaviconDriver::SetActiveFaviconImage(const gfx::Image& image) {
-  GetFaviconStatus().image = image;
-}
-
-content::FaviconStatus& ContentFaviconDriver::GetFaviconStatus() {
-  DCHECK(web_contents()->GetController().GetLastCommittedEntry());
-  return web_contents()->GetController().GetLastCommittedEntry()->GetFavicon();
-}
-
 ContentFaviconDriver::ContentFaviconDriver(
     content::WebContents* web_contents,
     FaviconService* favicon_service,
@@ -135,16 +125,41 @@ ContentFaviconDriver::ContentFaviconDriver(
 ContentFaviconDriver::~ContentFaviconDriver() {
 }
 
-void ContentFaviconDriver::NotifyFaviconUpdated(bool icon_url_changed) {
-  FaviconDriverImpl::NotifyFaviconUpdated(icon_url_changed);
-  web_contents()->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TAB);
+void ContentFaviconDriver::OnFaviconUpdated(
+    const GURL& page_url,
+    FaviconDriverObserver::NotificationIconType notification_icon_type,
+    const GURL& icon_url,
+    bool icon_url_changed,
+    const gfx::Image& image) {
+  content::NavigationEntry* entry =
+      web_contents()->GetController().GetLastCommittedEntry();
+  DCHECK(entry && entry->GetURL() == page_url);
+
+  if (notification_icon_type == FaviconDriverObserver::NON_TOUCH_16_DIP) {
+    entry->GetFavicon().valid = true;
+    entry->GetFavicon().url = icon_url;
+    entry->GetFavicon().image = image;
+    web_contents()->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TAB);
+  }
+
+  NotifyFaviconUpdatedObservers(notification_icon_type, icon_url,
+                                icon_url_changed, image);
 }
 
 void ContentFaviconDriver::DidUpdateFaviconURL(
     const std::vector<content::FaviconURL>& candidates) {
   DCHECK(!candidates.empty());
+
+  // Ignore the update if there is no last committed navigation entry. This can
+  // occur when loading an initially blank page.
+  content::NavigationEntry* entry =
+      web_contents()->GetController().GetLastCommittedEntry();
+  if (!entry)
+    return;
+
   favicon_urls_ = candidates;
-  OnUpdateFaviconURL(FaviconURLsFromContentFaviconURLs(candidates));
+  OnUpdateFaviconURL(entry->GetURL(),
+                     FaviconURLsFromContentFaviconURLs(candidates));
 }
 
 void ContentFaviconDriver::DidStartNavigationToPendingEntry(

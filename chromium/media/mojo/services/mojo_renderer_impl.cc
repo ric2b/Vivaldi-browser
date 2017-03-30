@@ -4,6 +4,8 @@
 
 #include "media/mojo/services/mojo_renderer_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
@@ -11,18 +13,16 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/demuxer_stream_provider.h"
 #include "media/mojo/services/mojo_demuxer_stream_impl.h"
-#include "mojo/application/public/cpp/connect.h"
-#include "mojo/application/public/interfaces/service_provider.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_impl.h"
+#include "mojo/shell/public/cpp/connect.h"
+#include "mojo/shell/public/interfaces/service_provider.mojom.h"
 
 namespace media {
 
 MojoRendererImpl::MojoRendererImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    mojo::MediaRendererPtr remote_media_renderer)
+    interfaces::RendererPtr remote_renderer)
     : task_runner_(task_runner),
-      remote_media_renderer_(remote_media_renderer.Pass()),
-      binding_(this),
+      remote_renderer_(std::move(remote_renderer)),
       weak_factory_(this) {
   DVLOG(1) << __FUNCTION__;
 }
@@ -30,7 +30,7 @@ MojoRendererImpl::MojoRendererImpl(
 MojoRendererImpl::~MojoRendererImpl() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  // Connection to |remote_media_renderer_| will error-out here.
+  // Connection to |remote_renderer_| will error-out here.
 }
 
 // TODO(xhwang): Support |waiting_for_decryption_key_cb| if needed.
@@ -52,27 +52,26 @@ void MojoRendererImpl::Initialize(
   error_cb_ = error_cb;
   buffering_state_cb_ = buffering_state_cb;
 
-  // Create audio and video mojo::DemuxerStream and bind its lifetime to the
-  // pipe.
+  // Create audio and video interfaces::DemuxerStream and bind its lifetime to
+  // the pipe.
   DemuxerStream* const audio =
       demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO);
   DemuxerStream* const video =
       demuxer_stream_provider_->GetStream(DemuxerStream::VIDEO);
 
-  mojo::DemuxerStreamPtr audio_stream;
+  interfaces::DemuxerStreamPtr audio_stream;
   if (audio)
     new MojoDemuxerStreamImpl(audio, GetProxy(&audio_stream));
 
-  mojo::DemuxerStreamPtr video_stream;
+  interfaces::DemuxerStreamPtr video_stream;
   if (video)
     new MojoDemuxerStreamImpl(video, GetProxy(&video_stream));
 
-  mojo::MediaRendererClientPtr client_ptr;
-  binding_.Bind(GetProxy(&client_ptr));
-  remote_media_renderer_->Initialize(
-      client_ptr.Pass(),
-      audio_stream.Pass(),
-      video_stream.Pass(),
+  interfaces::RendererClientPtr client_ptr;
+  binding_.reset(
+      new mojo::Binding<RendererClient>(this, GetProxy(&client_ptr)));
+  remote_renderer_->Initialize(
+      std::move(client_ptr), std::move(audio_stream), std::move(video_stream),
       BindToCurrentLoop(base::Bind(&MojoRendererImpl::OnInitialized,
                                    weak_factory_.GetWeakPtr())));
 }
@@ -90,13 +89,13 @@ void MojoRendererImpl::SetCdm(CdmContext* cdm_context,
     return;
   }
 
-  remote_media_renderer_->SetCdm(cdm_id, cdm_attached_cb);
+  remote_renderer_->SetCdm(cdm_id, cdm_attached_cb);
 }
 
 void MojoRendererImpl::Flush(const base::Closure& flush_cb) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  remote_media_renderer_->Flush(flush_cb);
+  remote_renderer_->Flush(flush_cb);
 }
 
 void MojoRendererImpl::StartPlayingFrom(base::TimeDelta time) {
@@ -108,19 +107,19 @@ void MojoRendererImpl::StartPlayingFrom(base::TimeDelta time) {
     time_ = time;
   }
 
-  remote_media_renderer_->StartPlayingFrom(time.InMicroseconds());
+  remote_renderer_->StartPlayingFrom(time.InMicroseconds());
 }
 
 void MojoRendererImpl::SetPlaybackRate(double playback_rate) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  remote_media_renderer_->SetPlaybackRate(playback_rate);
+  remote_renderer_->SetPlaybackRate(playback_rate);
 }
 
 void MojoRendererImpl::SetVolume(float volume) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  remote_media_renderer_->SetVolume(volume);
+  remote_renderer_->SetVolume(volume);
 }
 
 base::TimeDelta MojoRendererImpl::GetMediaTime() {
@@ -132,7 +131,7 @@ base::TimeDelta MojoRendererImpl::GetMediaTime() {
 bool MojoRendererImpl::HasAudio() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  DCHECK(remote_media_renderer_.get());  // We always bind the renderer.
+  DCHECK(remote_renderer_.get());  // We always bind the renderer.
   return !!demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO);
 }
 
@@ -159,7 +158,8 @@ void MojoRendererImpl::OnTimeUpdate(int64_t time_usec, int64_t max_time_usec) {
   max_time_ = base::TimeDelta::FromMicroseconds(max_time_usec);
 }
 
-void MojoRendererImpl::OnBufferingStateChange(mojo::BufferingState state) {
+void MojoRendererImpl::OnBufferingStateChange(
+    interfaces::BufferingState state) {
   DVLOG(2) << __FUNCTION__;
 
   if (!task_runner_->BelongsToCurrentThread()) {
@@ -188,6 +188,7 @@ void MojoRendererImpl::OnEnded() {
 
 void MojoRendererImpl::OnError() {
   DVLOG(1) << __FUNCTION__;
+  DCHECK(init_cb_.is_null());
 
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
@@ -198,17 +199,16 @@ void MojoRendererImpl::OnError() {
 
   // TODO(tim): Should we plumb error code from remote renderer?
   // http://crbug.com/410451.
-  if (init_cb_.is_null())  // We have initialized already.
-    error_cb_.Run(PIPELINE_ERROR_DECODE);
-  else
-    init_cb_.Run(PIPELINE_ERROR_COULD_NOT_RENDER);
+  error_cb_.Run(PIPELINE_ERROR_DECODE);
 }
 
-void MojoRendererImpl::OnInitialized() {
+void MojoRendererImpl::OnInitialized(bool success) {
   DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  if (!init_cb_.is_null())
-    base::ResetAndReturn(&init_cb_).Run(PIPELINE_OK);
+  DCHECK(!init_cb_.is_null());
+
+  base::ResetAndReturn(&init_cb_)
+      .Run(success ? PIPELINE_OK : PIPELINE_ERROR_INITIALIZATION_FAILED);
 }
 
 }  // namespace media

@@ -8,6 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/frame/caption_buttons/frame_caption_button.h"
 #include "ash/frame/caption_buttons/frame_size_button_delegate.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 
 namespace views {
@@ -97,7 +98,7 @@ class ASH_EXPORT FrameSizeButton : public FrameCaptionButton {
   // right.
   int set_buttons_to_snap_mode_delay_ms_;
 
-  base::OneShotTimer<FrameSizeButton> set_buttons_to_snap_mode_timer_;
+  base::OneShotTimer set_buttons_to_snap_mode_timer_;
 
   // Whether the buttons adjacent to the size button snap the window left and
   // right.

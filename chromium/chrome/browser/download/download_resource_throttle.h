@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_DOWNLOAD_DOWNLOAD_RESOURCE_THROTTLE_H_
 #define CHROME_BROWSER_DOWNLOAD_DOWNLOAD_RESOURCE_THROTTLE_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/download/download_request_limiter.h"
 #include "content/public/browser/resource_throttle.h"
+#include "content/public/browser/web_contents_delegate.h"
 
 class GURL;
 
@@ -22,12 +24,35 @@ class DownloadResourceThrottle
     : public content::ResourceThrottle,
       public base::SupportsWeakPtr<DownloadResourceThrottle> {
  public:
-  DownloadResourceThrottle(DownloadRequestLimiter* limiter,
-                           int render_process_id,
-                           int render_view_id,
-                           const GURL& url,
-                           const std::string& request_method,
-                           const content::DownloadInformation& info);
+  // Information passed between callbacks to check whether download can proceed.
+  struct DownloadRequestInfo {
+    DownloadRequestInfo(
+        scoped_refptr<DownloadRequestLimiter> limiter,
+        const content::ResourceRequestInfo::WebContentsGetter&
+            web_contents_getter,
+        const GURL& url,
+        const std::string& request_method,
+        const content::DownloadInformation &download_info,
+        const DownloadRequestLimiter::Callback& continue_callback);
+    ~DownloadRequestInfo();
+
+    scoped_refptr<DownloadRequestLimiter> limiter;
+    content::ResourceRequestInfo::WebContentsGetter web_contents_getter;
+    GURL url;
+    std::string request_method;
+    content::DownloadInformation download_info;
+    DownloadRequestLimiter::Callback continue_callback;
+   private:
+    DISALLOW_COPY_AND_ASSIGN(DownloadRequestInfo);
+  };
+
+  DownloadResourceThrottle(
+      scoped_refptr<DownloadRequestLimiter> limiter,
+      const content::ResourceRequestInfo::WebContentsGetter&
+          web_contents_getter,
+      const GURL& url,
+      const std::string& request_method,
+      const content::DownloadInformation& info);
 
   // content::ResourceThrottle implementation:
   void WillStartRequest(bool* defer) override;
@@ -36,11 +61,12 @@ class DownloadResourceThrottle
   void WillProcessResponse(bool* defer) override;
   const char* GetNameForLogging() const override;
 
+  void ContinueDownload(const content::DownloadItemAction&);
+
  private:
   ~DownloadResourceThrottle() override;
 
   void WillDownload(bool* defer);
-  void ContinueDownload(const content::DownloadItemAction& action);
 
   // Set to true when we are querying the DownloadRequestLimiter.
   bool querying_limiter_;

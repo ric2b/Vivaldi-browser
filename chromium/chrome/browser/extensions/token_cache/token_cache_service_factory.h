@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_EXTENSIONS_TOKEN_CACHE_TOKEN_CACHE_SERVICE_FACTORY_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -24,7 +25,7 @@ class TokenCacheServiceFactory : public BrowserContextKeyedServiceFactory {
   TokenCacheServiceFactory();
   ~TokenCacheServiceFactory() override;
 
-  friend struct DefaultSingletonTraits<TokenCacheServiceFactory>;
+  friend struct base::DefaultSingletonTraits<TokenCacheServiceFactory>;
 
   // Inherited from BrowserContextKeyedServiceFactory:
   KeyedService* BuildServiceInstanceFor(

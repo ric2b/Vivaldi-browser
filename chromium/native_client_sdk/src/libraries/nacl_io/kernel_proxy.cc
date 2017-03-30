@@ -39,6 +39,7 @@
 #include "nacl_io/pipe/pipe_node.h"
 #include "nacl_io/socket/tcp_node.h"
 #include "nacl_io/socket/udp_node.h"
+#include "nacl_io/socket/unix_node.h"
 #include "nacl_io/stream/stream_fs.h"
 #include "nacl_io/typed_fs_factory.h"
 #include "sdk_util/auto_lock.h"
@@ -422,6 +423,14 @@ int KernelProxy::stat(const char* path, struct stat* buf) {
     return -1;
   }
 
+  /*
+   * newlib's scandir() assumes that directories are empty if st_size == 0.
+   * This is probably a bad assumption, but until we fix newlib always return
+   * a non-zero directory size.
+   */
+  if (node->IsaDir() && buf->st_size == 0)
+    buf->st_size = 4096;
+
   return 0;
 }
 
@@ -588,10 +597,18 @@ int KernelProxy::fstat(int fd, struct stat* buf) {
     return -1;
   }
 
+  /*
+   * newlib's scandir() assumes that directories are empty if st_size == 0.
+   * This is probably a bad assumption, but until we fix newlib always return
+   * a non-zero directory size.
+   */
+  if (handle->node()->IsaDir() && buf->st_size == 0)
+    buf->st_size = 4096;
+
   return 0;
 }
 
-int KernelProxy::getdents(int fd, void* buf, unsigned int count) {
+int KernelProxy::getdents(int fd, struct dirent* buf, unsigned int count) {
   ScopedKernelHandle handle;
   Error error = AcquireHandle(fd, &handle);
   if (error) {
@@ -600,7 +617,7 @@ int KernelProxy::getdents(int fd, void* buf, unsigned int count) {
   }
 
   int cnt = 0;
-  error = handle->GetDents(static_cast<dirent*>(buf), count, &cnt);
+  error = handle->GetDents(buf, count, &cnt);
   if (error)
     errno = error;
 
@@ -1136,11 +1153,13 @@ int KernelProxy::kill(pid_t pid, int sig) {
 int KernelProxy::sigaction(int signum,
                            const struct sigaction* action,
                            struct sigaction* oaction) {
+#if defined(SA_SIGINFO)
   if (action && action->sa_flags & SA_SIGINFO) {
     // We don't support SA_SIGINFO (sa_sigaction field) yet
     errno = EINVAL;
     return -1;
   }
+#endif
 
   switch (signum) {
     // Handled signals.
@@ -1795,21 +1814,73 @@ int KernelProxy::socketpair(int domain, int type, int protocol, int* sv) {
     return -1;
   }
 
-  // Catch-22: We don't support AF_UNIX, but any other AF doesn't support
-  // socket pairs. Thus, this function always fails.
-  if (AF_UNIX != domain) {
-    errno = EPROTONOSUPPORT;
+  if (AF_INET == domain || AF_INET6 == domain) {
+    errno = EOPNOTSUPP;
     return -1;
   }
 
-  if (AF_INET != domain && AF_INET6 != domain) {
+  if (AF_UNIX != domain) {
     errno = EAFNOSUPPORT;
     return -1;
   }
 
-  // We cannot reach this point.
-  errno = ENOSYS;
-  return -1;
+  if (SOCK_STREAM != type) {
+    errno = EPROTOTYPE;
+    return -1;
+  }
+
+  int open_flags = O_RDWR;
+
+#if defined(SOCK_CLOEXEC)
+  if (type & SOCK_CLOEXEC) {
+#if defined(O_CLOEXEC)
+    // The NaCl newlib version of fcntl.h doesn't currently define
+    // O_CLOEXEC.
+    // TODO(sbc): remove this guard once it gets added.
+    open_flags |= O_CLOEXEC;
+#endif
+    type &= ~SOCK_CLOEXEC;
+  }
+#endif
+
+#if defined(SOCK_NONBLOCK)
+  if (type & SOCK_NONBLOCK) {
+    open_flags |= O_NONBLOCK;
+    type &= ~SOCK_NONBLOCK;
+  }
+#endif
+
+  UnixNode* socket = new UnixNode(stream_fs_.get());
+  Error rtn = socket->Init(O_RDWR);
+  if (rtn != 0) {
+    errno = rtn;
+    return -1;
+  }
+  ScopedNode node0(socket);
+  socket = new UnixNode(stream_fs_.get(), *socket);
+  rtn = socket->Init(O_RDWR);
+  if (rtn != 0) {
+    errno = rtn;
+    return -1;
+  }
+  ScopedNode node1(socket);
+  ScopedKernelHandle handle0(new KernelHandle(stream_fs_, node0));
+  rtn = handle0->Init(open_flags);
+  if (rtn != 0) {
+    errno = rtn;
+    return -1;
+  }
+  ScopedKernelHandle handle1(new KernelHandle(stream_fs_, node1));
+  rtn = handle1->Init(open_flags);
+  if (rtn != 0) {
+    errno = rtn;
+    return -1;
+  }
+
+  sv[0] = AllocateFD(handle0);
+  sv[1] = AllocateFD(handle1);
+
+  return 0;
 }
 
 int KernelProxy::AcquireSocketHandle(int fd, ScopedKernelHandle* handle) {

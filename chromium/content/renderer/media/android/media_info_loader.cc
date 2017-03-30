@@ -4,6 +4,8 @@
 
 #include "content/renderer/media/android/media_info_loader.h"
 
+#include <utility>
+
 #include "base/bits.h"
 #include "base/callback_helpers.h"
 #include "base/metrics/histogram.h"
@@ -59,7 +61,7 @@ void MediaInfoLoader::Start(blink::WebFrame* frame) {
 
   scoped_ptr<WebURLLoader> loader;
   if (test_loader_) {
-    loader = test_loader_.Pass();
+    loader = std::move(test_loader_);
   } else {
     WebURLLoaderOptions options;
     if (cors_mode_ == blink::WebMediaPlayer::CORSModeUnspecified) {
@@ -83,12 +85,12 @@ void MediaInfoLoader::Start(blink::WebFrame* frame) {
 
   // Start the resource loading.
   loader->loadAsynchronously(request, this);
-  active_loader_.reset(new media::ActiveLoader(loader.Pass()));
+  active_loader_.reset(new media::ActiveLoader(std::move(loader)));
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // blink::WebURLLoaderClient implementation.
-void MediaInfoLoader::willSendRequest(
+void MediaInfoLoader::willFollowRedirect(
     WebURLLoader* loader,
     WebURLRequest& newRequest,
     const WebURLResponse& redirectResponse) {
@@ -120,10 +122,14 @@ void MediaInfoLoader::didReceiveResponse(
     WebURLLoader* loader,
     const WebURLResponse& response) {
   DVLOG(1) << "didReceiveResponse: HTTP/"
-           << (response.httpVersion() == WebURLResponse::HTTP_0_9 ? "0.9" :
-               response.httpVersion() == WebURLResponse::HTTP_1_0 ? "1.0" :
-               response.httpVersion() == WebURLResponse::HTTP_1_1 ? "1.1" :
-               "Unknown")
+           << (response.httpVersion() == WebURLResponse::HTTPVersion_0_9
+                   ? "0.9"
+                   : response.httpVersion() == WebURLResponse::HTTPVersion_1_0
+                         ? "1.0"
+                         : response.httpVersion() ==
+                                   WebURLResponse::HTTPVersion_1_1
+                               ? "1.1"
+                               : "Unknown")
            << " " << response.httpStatusCode();
   DCHECK(active_loader_.get());
   if (!url_.SchemeIs(url::kHttpScheme) && !url_.SchemeIs(url::kHttpsScheme)) {

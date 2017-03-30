@@ -4,11 +4,16 @@
 
 #include "remoting/host/daemon_process.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
@@ -71,7 +76,7 @@ class DaemonProcessWin : public DaemonProcess {
   ~DaemonProcessWin() override;
 
   // WorkerProcessIpcDelegate implementation.
-  void OnChannelConnected(int32 peer_pid) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   void OnPermanentError(int exit_code) override;
 
   // DaemonProcess overrides.
@@ -123,7 +128,7 @@ DaemonProcessWin::DaemonProcessWin(
 DaemonProcessWin::~DaemonProcessWin() {
 }
 
-void DaemonProcessWin::OnChannelConnected(int32 peer_pid) {
+void DaemonProcessWin::OnChannelConnected(int32_t peer_pid) {
   // Obtain the handle of the network process.
   network_process_.Set(OpenProcess(PROCESS_DUP_HANDLE, false, peer_pid));
   if (!network_process_.IsValid()) {
@@ -226,8 +231,8 @@ void DaemonProcessWin::LaunchNetworkProcess() {
                            kCopiedSwitchNames, arraysize(kCopiedSwitchNames));
 
   scoped_ptr<UnprivilegedProcessDelegate> delegate(
-      new UnprivilegedProcessDelegate(io_task_runner(), target.Pass()));
-  network_launcher_.reset(new WorkerProcessLauncher(delegate.Pass(), this));
+      new UnprivilegedProcessDelegate(io_task_runner(), std::move(target)));
+  network_launcher_.reset(new WorkerProcessLauncher(std::move(delegate), this));
 }
 
 scoped_ptr<DaemonProcess> DaemonProcess::Create(
@@ -238,7 +243,7 @@ scoped_ptr<DaemonProcess> DaemonProcess::Create(
       new DaemonProcessWin(caller_task_runner, io_task_runner,
                            stopped_callback));
   daemon_process->Initialize();
-  return daemon_process.Pass();
+  return std::move(daemon_process);
 }
 
 void DaemonProcessWin::DisableAutoStart() {

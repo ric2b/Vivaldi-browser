@@ -5,12 +5,14 @@
 #ifndef COMPONENTS_PRECACHE_CORE_PRECACHE_DATABASE_H_
 #define COMPONENTS_PRECACHE_CORE_PRECACHE_DATABASE_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -50,15 +52,22 @@ class PrecacheDatabase : public base::RefCountedThreadSafe<PrecacheDatabase> {
 
   // Report precache-related metrics in response to a URL being fetched, where
   // the fetch was motivated by precaching.
-  void RecordURLPrecached(const GURL& url, const base::Time& fetch_time,
-                          int64 size, bool was_cached);
+  void RecordURLPrefetch(const GURL& url,
+                         const base::TimeDelta& latency,
+                         const base::Time& fetch_time,
+                         int64_t size,
+                         bool was_cached);
 
   // Report precache-related metrics in response to a URL being fetched, where
   // the fetch was not motivated by precaching. |is_connection_cellular|
   // indicates whether the current network connection is a cellular network.
-  void RecordURLFetched(const GURL& url, const base::Time& fetch_time,
-                        int64 size, bool was_cached,
-                        bool is_connection_cellular);
+  void RecordURLNonPrefetch(const GURL& url,
+                            const base::TimeDelta& latency,
+                            const base::Time& fetch_time,
+                            int64_t size,
+                            bool was_cached,
+                            int host_rank,
+                            bool is_connection_cellular);
 
  private:
   friend class base::RefCountedThreadSafe<PrecacheDatabase>;

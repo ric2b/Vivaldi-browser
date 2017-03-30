@@ -4,9 +4,12 @@
 
 // Unit test for VideoCaptureManager.
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
@@ -15,13 +18,15 @@
 #include "content/browser/renderer_host/media/video_capture_controller_event_handler.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
 #include "content/common/media/media_stream_options.h"
-#include "media/video/capture/fake_video_capture_device_factory.h"
+#include "media/capture/video/fake_video_capture_device_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::_;
 using ::testing::AnyNumber;
+using ::testing::DoAll;
 using ::testing::InSequence;
+using ::testing::InvokeWithoutArgs;
 using ::testing::Return;
 using ::testing::SaveArg;
 
@@ -48,6 +53,10 @@ class MockFrameObserver : public VideoCaptureControllerEventHandler {
   void OnBufferCreated(VideoCaptureControllerID id,
                        base::SharedMemoryHandle handle,
                        int length, int buffer_id) override {}
+  void OnBufferCreated2(VideoCaptureControllerID id,
+                        const std::vector<gfx::GpuMemoryBufferHandle>& handles,
+                        const gfx::Size& size,
+                        int buffer_id) override {}
   void OnBufferDestroyed(VideoCaptureControllerID id, int buffer_id) override {}
   void OnBufferReady(VideoCaptureControllerID id,
                      int buffer_id,
@@ -68,6 +77,8 @@ class VideoCaptureManagerTest : public testing::Test {
   void SetUp() override {
     listener_.reset(new MockMediaStreamProviderListener());
     message_loop_.reset(new base::MessageLoopForIO);
+    ui_thread_.reset(new BrowserThreadImpl(BrowserThread::UI,
+                                           message_loop_.get()));
     io_thread_.reset(new BrowserThreadImpl(BrowserThread::IO,
                                            message_loop_.get()));
     vcm_ = new VideoCaptureManager(scoped_ptr<media::VideoCaptureDeviceFactory>(
@@ -75,7 +86,7 @@ class VideoCaptureManagerTest : public testing::Test {
     video_capture_device_factory_ =
         static_cast<media::FakeVideoCaptureDeviceFactory*>(
             vcm_->video_capture_device_factory());
-    const int32 kNumberOfFakeDevices = 2;
+    const int32_t kNumberOfFakeDevices = 2;
     video_capture_device_factory_->set_number_of_devices(kNumberOfFakeDevices);
     vcm_->Register(listener_.get(), message_loop_->task_runner().get());
     frame_observer_.reset(new MockFrameObserver());
@@ -127,11 +138,32 @@ class VideoCaptureManagerTest : public testing::Test {
     controllers_.erase(client_id);
   }
 
+  void ResumeClient(int session_id, int client_id) {
+    ASSERT_EQ(1u, controllers_.count(client_id));
+    media::VideoCaptureParams params;
+    params.requested_format = media::VideoCaptureFormat(
+        gfx::Size(320, 240), 30, media::PIXEL_FORMAT_I420);
+
+    vcm_->ResumeCaptureForClient(
+        session_id,
+        params,
+        controllers_[client_id],
+        client_id,
+        frame_observer_.get());
+  }
+
+  void PauseClient(VideoCaptureControllerID client_id) {
+    ASSERT_EQ(1u, controllers_.count(client_id));
+    vcm_->PauseCaptureForClient(controllers_[client_id], client_id,
+                               frame_observer_.get());
+  }
+
   int next_client_id_;
   std::map<VideoCaptureControllerID, VideoCaptureController*> controllers_;
   scoped_refptr<VideoCaptureManager> vcm_;
   scoped_ptr<MockMediaStreamProviderListener> listener_;
   scoped_ptr<base::MessageLoop> message_loop_;
+  scoped_ptr<BrowserThreadImpl> ui_thread_;
   scoped_ptr<BrowserThreadImpl> io_thread_;
   scoped_ptr<MockFrameObserver> frame_observer_;
   media::FakeVideoCaptureDeviceFactory* video_capture_device_factory_;
@@ -441,8 +473,8 @@ TEST_F(VideoCaptureManagerTest, OpenNotExisting) {
   InSequence s;
   EXPECT_CALL(*listener_, DevicesEnumerated(MEDIA_DEVICE_VIDEO_CAPTURE, _))
       .WillOnce(SaveArg<1>(&devices));
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
   EXPECT_CALL(*frame_observer_, OnError(_));
+  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
   EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
 
   vcm_->EnumerateDevices(MEDIA_DEVICE_VIDEO_CAPTURE);
@@ -479,6 +511,38 @@ TEST_F(VideoCaptureManagerTest, StartInvalidSession) {
 // Open and start a device, close it before calling Stop.
 TEST_F(VideoCaptureManagerTest, CloseWithoutStop) {
   StreamDeviceInfoArray devices;
+  base::RunLoop run_loop;
+
+  InSequence s;
+  EXPECT_CALL(*listener_, DevicesEnumerated(MEDIA_DEVICE_VIDEO_CAPTURE, _))
+      .WillOnce(
+          DoAll(SaveArg<1>(&devices),
+                InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit)));
+  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+
+  vcm_->EnumerateDevices(MEDIA_DEVICE_VIDEO_CAPTURE);
+
+  // Wait to get device callback.
+  run_loop.Run();
+  ASSERT_FALSE(devices.empty());
+  int video_session_id = vcm_->Open(devices.front());
+
+  VideoCaptureControllerID client_id = StartClient(video_session_id, true);
+
+  // Close will stop the running device, an assert will be triggered in
+  // VideoCaptureManager destructor otherwise.
+  vcm_->Close(video_session_id);
+  StopClient(client_id);
+
+  // Wait to check callbacks before removing the listener
+  message_loop_->RunUntilIdle();
+  vcm_->Unregister();
+}
+
+// Try to open, start, pause and resume a device.
+TEST_F(VideoCaptureManagerTest, PauseAndResume) {
+  StreamDeviceInfoArray devices;
 
   InSequence s;
   EXPECT_CALL(*listener_, DevicesEnumerated(MEDIA_DEVICE_VIDEO_CAPTURE, _))
@@ -492,15 +556,17 @@ TEST_F(VideoCaptureManagerTest, CloseWithoutStop) {
   message_loop_->RunUntilIdle();
 
   int video_session_id = vcm_->Open(devices.front());
-
   VideoCaptureControllerID client_id = StartClient(video_session_id, true);
 
-  // Close will stop the running device, an assert will be triggered in
-  // VideoCaptureManager destructor otherwise.
-  vcm_->Close(video_session_id);
-  StopClient(client_id);
+  // Resume client a second time should cause no problem.
+  PauseClient(client_id);
+  ResumeClient(video_session_id, client_id);
+  ResumeClient(video_session_id, client_id);
 
-  // Wait to check callbacks before removing the listener
+  StopClient(client_id);
+  vcm_->Close(video_session_id);
+
+  // Wait to check callbacks before removing the listener.
   message_loop_->RunUntilIdle();
   vcm_->Unregister();
 }

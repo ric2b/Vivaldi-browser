@@ -1,0 +1,52 @@
+/* Copyright 2015 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+/**
+ * @fileoverview
+ * Common styles for Settings pages.
+ */
+:host {
+  display: block;
+}
+
+:host(.expanded) {
+  height: 100%;
+}
+
+:host(.expanded) #header {
+  display: none;
+}
+
+#header .title {
+  @apply(--paper-font-body2);
+}
+
+paper-material {
+  background-color: white;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+paper-material,
+#placeholder {
+  margin-bottom: 16px;
+}
+
+:host(.neon-animating) paper-material {
+  position: fixed;
+  z-index: 1;
+}
+
+:host(.expanded) paper-material {
+  margin-bottom: 0;
+  min-height: 100%;
+}
+
+#placeholder {
+  visibility: hidden;
+}
+
+:host(:not(.neon-animating)) #placeholder {
+  position: absolute;
+}

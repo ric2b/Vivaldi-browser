@@ -18,6 +18,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
@@ -197,7 +198,7 @@ void ScreenLocker::OnAuthFailure(const AuthFailure& error) {
 void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
   incorrect_passwords_count_ = 0;
   if (authentication_start_time_.is_null()) {
-    if (!user_context.GetUserID().empty())
+    if (user_context.GetAccountId().is_valid())
       LOG(ERROR) << "Start time is not set at authentication success";
   } else {
     base::TimeDelta delta = base::Time::Now() - authentication_start_time_;
@@ -206,12 +207,12 @@ void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
   }
 
   const user_manager::User* user =
-      user_manager::UserManager::Get()->FindUser(user_context.GetUserID());
+      user_manager::UserManager::Get()->FindUser(user_context.GetAccountId());
   if (user) {
     if (!user->is_active()) {
       saved_ime_state_ = NULL;
       user_manager::UserManager::Get()->SwitchActiveUser(
-          user_context.GetUserID());
+          user_context.GetAccountId());
     }
     UserSessionManager::GetInstance()->UpdateEasyUnlockKeys(user_context);
   } else {
@@ -250,7 +251,7 @@ void ScreenLocker::UnlockOnLoginSuccess() {
 }
 
 void ScreenLocker::Authenticate(const UserContext& user_context) {
-  LOG_ASSERT(IsUserLoggedIn(user_context.GetUserID()))
+  LOG_ASSERT(IsUserLoggedIn(user_context.GetAccountId().GetUserEmail()))
       << "Invalid user trying to unlock.";
 
   authentication_start_time_ = base::Time::Now();
@@ -259,7 +260,7 @@ void ScreenLocker::Authenticate(const UserContext& user_context) {
 
   // Special case: supervised users. Use special authenticator.
   if (const user_manager::User* user =
-          FindUnlockUser(user_context.GetUserID())) {
+          FindUnlockUser(user_context.GetAccountId().GetUserEmail())) {
     if (user->GetType() == user_manager::USER_TYPE_SUPERVISED) {
       UserContext updated_context = ChromeUserManager::Get()
                                         ->GetSupervisedUserManager()
@@ -368,7 +369,7 @@ void ScreenLocker::HandleLockScreenRequest() {
     DBusThreadManager::Get()->GetSessionManagerClient()->StopSession();
   }
   // Close captive portal window and clear signin profile.
-  NetworkPortalDetector::Get()->OnLockScreenRequest();
+  network_portal_detector::GetInstance()->OnLockScreenRequest();
 }
 
 // static

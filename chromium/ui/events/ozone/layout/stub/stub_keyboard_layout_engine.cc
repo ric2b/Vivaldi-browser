@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/strings/string16.h"
-#include "ui/events/event.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -41,11 +40,8 @@ bool StubKeyboardLayoutEngine::UsesAltGr() const {
 bool StubKeyboardLayoutEngine::Lookup(DomCode dom_code,
                                       int flags,
                                       DomKey* out_dom_key,
-                                      base::char16* out_character,
-                                      KeyboardCode* out_key_code,
-                                      uint32* platform_keycode) const {
-  return DomCodeToUsLayoutMeaning(dom_code, flags, out_dom_key, out_character,
-                                  out_key_code);
+                                      KeyboardCode* out_key_code) const {
+  return DomCodeToUsLayoutDomKey(dom_code, flags, out_dom_key, out_key_code);
 }
 
 }  // namespace ui

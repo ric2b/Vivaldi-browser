@@ -7,10 +7,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
-#include "chrome/browser/download/download_permission_request.h"
-#include "chrome/browser/download/download_request_infobar_delegate.h"
-#include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -22,10 +19,19 @@
 #include "content/public/common/frame_navigate_params.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/download/download_request_infobar_delegate_android.h"
+#include "chrome/browser/infobars/infobar_service.h"
+#else
+#include "chrome/browser/download/download_permission_request.h"
+#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
+#endif
+
 using content::WebContents;
 
 class DownloadRequestLimiterTest;
 
+#if !defined(OS_ANDROID)
 class FakePermissionBubbleView : public PermissionBubbleView {
  public:
   class Factory : public base::RefCounted<FakePermissionBubbleView::Factory> {
@@ -71,6 +77,7 @@ class FakePermissionBubbleView : public PermissionBubbleView {
   DownloadRequestLimiterTest* test_;
   Delegate* delegate_;
 };
+#endif
 
 class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
  public:
@@ -83,23 +90,29 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     profile_.reset(new TestingProfile());
-    InfoBarService::CreateForWebContents(web_contents());
 
+#if !defined(OS_ANDROID)
     PermissionBubbleManager::CreateForWebContents(web_contents());
     scoped_refptr<FakePermissionBubbleView::Factory> factory =
         new FakePermissionBubbleView::Factory(this);
     PermissionBubbleManager::FromWebContents(web_contents())->view_factory_ =
         base::Bind(&FakePermissionBubbleView::Factory::Create, factory);
     PermissionBubbleManager::FromWebContents(web_contents())
-        ->DisplayPendingRequests(nullptr);
+        ->DisplayPendingRequests();
+#endif
 
     testing_action_ = ACCEPT;
     ask_allow_count_ = cancel_count_ = continue_count_ = 0;
     download_request_limiter_ = new DownloadRequestLimiter();
+
+#if defined(OS_ANDROID)
+    InfoBarService::CreateForWebContents(web_contents());
     fake_create_callback_ = base::Bind(
         &DownloadRequestLimiterTest::FakeCreate, base::Unretained(this));
-    DownloadRequestInfoBarDelegate::SetCallbackForTesting(
+    DownloadRequestInfoBarDelegateAndroid::SetCallbackForTesting(
         &fake_create_callback_);
+#endif
+
     content_settings_ = new HostContentSettingsMap(profile_->GetPrefs(), false);
     DownloadRequestLimiter::SetContentSettingsForTesting(
         content_settings_.get());
@@ -113,6 +126,16 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
     ask_allow_count_++;
   }
 
+  void TearDown() override {
+    content_settings_->ShutdownOnUIThread();
+    content_settings_ = NULL;
+#if defined(OS_ANDROID)
+    UnsetDelegate();
+#endif
+    ChromeRenderViewHostTestHarness::TearDown();
+  }
+
+#if defined(OS_ANDROID)
   void FakeCreate(
       InfoBarService* infobar_service,
       base::WeakPtr<DownloadRequestLimiter::TabDownloadState> host) {
@@ -129,16 +152,10 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
     }
   }
 
-  void TearDown() override {
-    content_settings_->ShutdownOnUIThread();
-    content_settings_ = NULL;
-    UnsetDelegate();
-    ChromeRenderViewHostTestHarness::TearDown();
-  }
-
   virtual void UnsetDelegate() {
-    DownloadRequestInfoBarDelegate::SetCallbackForTesting(NULL);
+    DownloadRequestInfoBarDelegateAndroid::SetCallbackForTesting(NULL);
   }
+#endif
 
   void CanDownload() {
     CanDownloadFor(web_contents());
@@ -193,11 +210,11 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
         setting);
   }
 
-  void BubbleManagerDocumentLoadCompleted(bool bubbles_enabled) {
-    if (!bubbles_enabled)
-      return;
+  void BubbleManagerDocumentLoadCompleted() {
+#if !defined(OS_ANDROID)
     PermissionBubbleManager::FromWebContents(web_contents())->
         DocumentOnLoadCompletedInMainFrame();
+#endif
   }
 
   scoped_refptr<DownloadRequestLimiter> download_request_limiter_;
@@ -217,10 +234,15 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
   scoped_refptr<HostContentSettingsMap> content_settings_;
 
  private:
-  DownloadRequestInfoBarDelegate::FakeCreateCallback fake_create_callback_;
+#if defined(OS_ANDROID)
+  DownloadRequestInfoBarDelegateAndroid::FakeCreateCallback
+      fake_create_callback_;
+#endif
+
   scoped_ptr<TestingProfile> profile_;
 };
 
+#if !defined(OS_ANDROID)
 void FakePermissionBubbleView::Show(
     const std::vector<PermissionBubbleRequest*>& requests,
     const std::vector<bool>& accept_state) {
@@ -236,41 +258,9 @@ void FakePermissionBubbleView::Show(
     delegate_->Closing();
   }
 }
-
-class DownloadRequestLimiterParamTests
-    : public DownloadRequestLimiterTest,
-      public ::testing::WithParamInterface<bool> {
- protected:
-  DownloadRequestLimiterParamTests() {}
-  ~DownloadRequestLimiterParamTests() override {}
-
-  void SetUp() override {
-    DownloadRequestLimiterTest::SetUp();
-#if !defined(OS_ANDROID)
-    if (GetParam()) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kEnablePermissionsBubbles);
-      EXPECT_TRUE(PermissionBubbleManager::Enabled());
-    } else {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kDisablePermissionsBubbles);
-    }
 #endif
-  }
 
-  void BubbleManagerDocumentLoadCompleted() {
-#if defined(OS_ANDROID)
-    DownloadRequestLimiterTest::BubbleManagerDocumentLoadCompleted(false);
-#else
-    DownloadRequestLimiterTest::BubbleManagerDocumentLoadCompleted(GetParam());
-#endif
-  }
- private:
-  DISALLOW_COPY_AND_ASSIGN(DownloadRequestLimiterParamTests);
-};
-
-TEST_P(DownloadRequestLimiterParamTests,
-       DownloadRequestLimiter_Allow) {
+TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_Allow) {
   BubbleManagerDocumentLoadCompleted();
 
   // All tabs should initially start at ALLOW_ONE_DOWNLOAD.
@@ -302,8 +292,7 @@ TEST_P(DownloadRequestLimiterParamTests,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 }
 
-TEST_P(DownloadRequestLimiterParamTests,
-       DownloadRequestLimiter_ResetOnNavigation) {
+TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_ResetOnNavigation) {
   NavigateAndCommit(GURL("http://foo.com/bar"));
   BubbleManagerDocumentLoadCompleted();
 
@@ -362,8 +351,7 @@ TEST_P(DownloadRequestLimiterParamTests,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 }
 
-TEST_P(DownloadRequestLimiterParamTests,
-       DownloadRequestLimiter_ResetOnUserGesture) {
+TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_ResetOnUserGesture) {
   NavigateAndCommit(GURL("http://foo.com/bar"));
   BubbleManagerDocumentLoadCompleted();
 
@@ -403,8 +391,7 @@ TEST_P(DownloadRequestLimiterParamTests,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 }
 
-TEST_P(DownloadRequestLimiterParamTests,
-       DownloadRequestLimiter_ResetOnReload) {
+TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_ResetOnReload) {
   NavigateAndCommit(GURL("http://foo.com/bar"));
   BubbleManagerDocumentLoadCompleted();
   ASSERT_EQ(DownloadRequestLimiter::ALLOW_ONE_DOWNLOAD,
@@ -454,8 +441,8 @@ TEST_P(DownloadRequestLimiterParamTests,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 }
 
-TEST_P(DownloadRequestLimiterParamTests,
-       DownloadRequestLimiter_RawWebContents) {
+#if defined(OS_ANDROID)
+TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_RawWebContents) {
   scoped_ptr<WebContents> web_contents(CreateTestWebContents());
 
   // DownloadRequestLimiter won't try to make a permission bubble if there's
@@ -492,8 +479,9 @@ TEST_P(DownloadRequestLimiterParamTests,
   EXPECT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
             download_request_limiter_->GetDownloadStatus(web_contents.get()));
 }
+#endif
 
-TEST_P(DownloadRequestLimiterParamTests,
+TEST_F(DownloadRequestLimiterTest,
        DownloadRequestLimiter_SetHostContentSetting) {
   NavigateAndCommit(GURL("http://foo.com/bar"));
   BubbleManagerDocumentLoadCompleted();
@@ -521,7 +509,3 @@ TEST_P(DownloadRequestLimiterParamTests,
   ASSERT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 }
-
-INSTANTIATE_TEST_CASE_P(DownloadRequestLimiterTestsWithAndWithoutBubbles,
-                        DownloadRequestLimiterParamTests,
-                        ::testing::Values(false, true));

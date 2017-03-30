@@ -5,6 +5,7 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_AW_GL_SURFACE_H_
 #define ANDROID_WEBVIEW_BROWSER_AW_GL_SURFACE_H_
 
+#include "base/macros.h"
 #include "ui/gl/gl_surface.h"
 
 namespace android_webview {
@@ -26,7 +27,6 @@ class GL_EXPORT AwGLSurface : public gfx::GLSurface {
   void* GetDisplay() override;
 
   void SetBackingFrameBufferObject(unsigned int fbo);
-  void ResetBackingFrameBufferObject();
 
  protected:
   ~AwGLSurface() override;

@@ -5,6 +5,7 @@
 #include "chromeos/network/host_resolver_impl_chromeos.h"
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -19,6 +20,7 @@
 #include "chromeos/network/network_state_handler.h"
 #include "dbus/object_path.h"
 #include "net/base/net_errors.h"
+#include "net/base/net_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 

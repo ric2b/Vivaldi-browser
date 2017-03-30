@@ -56,9 +56,11 @@ void NetworkDelegateImpl::OnBeforeRedirect(URLRequest* request,
 void NetworkDelegateImpl::OnResponseStarted(URLRequest* request) {
 }
 
-void NetworkDelegateImpl::OnRawBytesRead(const URLRequest& request,
-                                         int bytes_read) {
-}
+void NetworkDelegateImpl::OnNetworkBytesReceived(URLRequest* request,
+                                                 int64_t bytes_received) {}
+
+void NetworkDelegateImpl::OnNetworkBytesSent(URLRequest* request,
+                                             int64_t bytes_sent) {}
 
 void NetworkDelegateImpl::OnCompleted(URLRequest* request, bool started) {
 }
@@ -100,7 +102,11 @@ bool NetworkDelegateImpl::OnCanEnablePrivacyMode(
   return false;
 }
 
-bool NetworkDelegateImpl::OnFirstPartyOnlyCookieExperimentEnabled() const {
+bool NetworkDelegateImpl::OnAreExperimentalCookieFeaturesEnabled() const {
+  return false;
+}
+
+bool NetworkDelegateImpl::OnAreStrictSecureCookiesEnabled() const {
   return false;
 }
 

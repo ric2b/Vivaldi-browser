@@ -3,20 +3,86 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
+import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
+import("//build/config/win/manifest.gni")
 import("//chrome/chrome_repack_locales.gni")
 import("//chrome/version.gni")
+
+declare_args() {
+  # If true, builds as a console app (rather than a windowed app), which allows
+  # logging to be printed to the user. This will cause a terminal window to pop
+  # up when Chrome is not run from the command line, so should only be used for
+  # development. Only has an effect on Windows builds.
+  win_console_app = false
+
+  # Specify the current PGO phase, only used for the Windows MSVS build. Here's
+  # the different values that can be used:
+  #     0 : Means that PGO is turned off.
+  #     1 : Used during the PGI (instrumentation) phase.
+  #     2 : Used during the PGO (optimization) phase.
+  #
+  # TODO(sebmarchand): Add support for the PGU (update) phase.
+  chrome_pgo_phase = 0
+}
 
 if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+if (is_win) {
+  action("reorder_imports") {
+    script = "//build/win/reorder-imports.py"
+
+    # See comment in chrome_dll.gypi in the hardlink_to_output
+    # target for why this cannot be 'initial' like the DLL.
+    inputs = [
+      "$root_out_dir/initialexe/chrome.exe",
+    ]
+    outputs = [
+      "$root_out_dir/chrome.exe",
+      "$root_out_dir/chrome.exe.pdb",
+    ]
+    args = [
+      "-i",
+      rebase_path("$root_out_dir/initialexe", root_build_dir),
+      "-o",
+      rebase_path("$root_out_dir", root_build_dir),
+      "-a",
+      target_cpu,
+    ]
+    deps = [
+      ":chrome_initial",
+    ]
+  }
+
+  # The AddressSanitizer build should be a console program as it prints out
+  # stuff on stderr.
+  if (is_asan) {
+    win_console_app = true
+  }
+}
+
 if (!is_android) {
-  # TODO(GYP) for Windows need to the the reorder-imports step which probably
-  # means adding another target and renaming this to chrome_initial like in GYP.
-  executable("chrome") {
+  group("chrome") {
+    public_deps = [
+      ":chrome_initial",
+    ]
+    if (is_win) {
+      public_deps += [ ":reorder_imports" ]
+    }
+  }
+
+  executable("chrome_initial") {
+    if (is_win) {
+      output_name = "initialexe/chrome"
+    } else {
+      output_name = "chrome"
+    }
+
     # Because the sources list varies so significantly per-platform, generally
     # each platform lists its own files rather than relying on filtering or
     # removing unused files.
@@ -24,17 +90,28 @@ if (!is_android) {
       "app/chrome_exe_resource.h",
     ]
     defines = []
-    deps = []
+    public_deps = []
+    deps = [
+      "//build/config/sanitizers:deps",
+    ]
+
+    data = [
+      "$root_out_dir/resources.pak",
+    ]
+    if (is_linux || is_win) {
+      data += [
+        "$root_out_dir/chrome_100_percent.pak",
+        "$root_out_dir/locales/en-US.pak",
+        "$root_out_dir/locales/fr.pak",
+      ]
+    }
+
     data_deps = []
 
     # TODO(GYP) mac_bundle_resources, xcode_settings
 
-    # TODO(GYP) order_profiling, order_text_section
-
     if (is_win) {
       sources += [
-        "//content/public/common/content_switches.cc",
-        "//content/public/common/content_switches.h",
         "app/chrome_crash_reporter_client.cc",
         "app/chrome_crash_reporter_client.h",
         "app/chrome_exe.rc",
@@ -44,51 +121,56 @@ if (!is_android) {
         "app/chrome_watcher_client_win.h",
         "app/chrome_watcher_command_line_win.cc",
         "app/chrome_watcher_command_line_win.h",
-        "app/client_util.cc",
-        "app/client_util.h",
         "app/kasko_client.cc",
         "app/kasko_client.h",
-        "app/signature_validator_win.cc",
-        "app/signature_validator_win.h",
+        "app/main_dll_loader_win.cc",
+        "app/main_dll_loader_win.h",
         "common/crash_keys.cc",
         "common/crash_keys.h",
       ]
 
-      if (is_component_build) {
-        # This is necessary to make content_switches compile without DLL
-        # linkage errors in a component build.
-        defines += [ "COMPILE_CONTENT_STATICALLY" ]
-      }
-
       deps += [
+        ":chrome_dll",
         ":chrome_exe_version",
-        ":image_pre_reader",
-        ":main_dll",
+        ":file_pre_reader",
 
-        # 'chrome_nacl_win64" TODO(GYP)
-        # '../win8/delegate_execute/delegate_execute.gyp:*', TODO(GYP)
-        # '../win8/metro_driver/metro_driver.gyp:metro_driver', TODO(GYP)
+        # 'chrome_nacl_win64" TODO(GYP) bug 512869
         "//base",
         "//breakpad:breakpad_handler",
         "//breakpad:breakpad_sender",
+        "//chrome/app/version_assembly:chrome_exe_manifest",
         "//chrome/browser:chrome_process_finder",
         "//chrome/chrome_watcher",
         "//chrome/chrome_watcher:client",
-        "//chrome/installer/util",
+        "//chrome/installer/util:with_no_strings",
         "//chrome_elf",
         "//components/browser_watcher:browser_watcher_client",
-        "//components/crash/app",
-        "//content:startup_helper_win",
+        "//components/crash/content/app",
+        "//components/crash/core/common",
+        "//components/flags_ui:switches",
+        "//components/startup_metric_utils/common",
+        "//content:sandbox_helper_win",
+        "//content/public/common:static_switches",
         "//crypto",
         "//sandbox",
+        "//third_party/crashpad/crashpad/handler:handler_lib",
+        "//third_party/kasko",
         "//ui/gfx",
+        "//win8/delegate_execute",
+        "//win8/metro_driver",
       ]
-      libs = [
-        "wintrust.lib",
-        "crypt32.lib",
+      data_deps = [
+        "//chrome/app/version_assembly:version_assembly_manifest",
       ]
-      configs -= [ "//build/config/win:console" ]
-      configs += [ "//build/config/win:windowed" ]
+
+      if (win_console_app) {
+        defines += [ "WIN_CONSOLE_APP" ]
+      } else {
+        # Set /SUBSYSTEM:WINDOWS for chrome.exe itself, unless a console build
+        # has been requested.
+        configs -= [ "//build/config/win:console" ]
+        configs += [ "//build/config/win:windowed" ]
+      }
     } else if (use_aura) {
       # Non-Windows aura entrypoint.
       sources += [ "app/chrome_exe_main_aura.cc" ]
@@ -111,8 +193,15 @@ if (!is_android) {
         "//base/allocator",
 
         # Needed to use the master_preferences functions
-        "//chrome/installer/util",
+        "//chrome/installer/util:with_no_strings",
         "//content/public/app:both",
+      ]
+      if (enable_plugins && enable_pdf) {
+        deps += [ "//pdf" ]
+      }
+
+      public_deps = [
+        ":xdg_mime",  # Needs to be public for installer to consume files.
       ]
 
       # Needed for chrome_main.cc initialization of libraries.
@@ -131,13 +220,18 @@ if (!is_android) {
     }
 
     if (is_mac) {
-      sources += [ "app/chrome_exe_main_mac.cc" ]
+      sources += [ "app/chrome_exe_main_mac.c" ]
+      deps += [ ":chrome_dll" ]
+
       # TODO(GYP) lots more stuff in the is_mac block.
     } else {  # Non-Mac.
-      deps += [
+      # These files are used by the installer so we need a public dep.
+      public_deps += [
         ":packed_extra_resources",
         ":packed_resources",
-        "//components/startup_metric_utils",
+      ]
+      deps += [
+        "//components/startup_metric_utils/browser:lib",
 
         # Precompiled plugins that need to get copied to the output directory.
         # On Mac, internal plugins go inside the framework, so these
@@ -147,10 +241,6 @@ if (!is_android) {
       ]
     }
 
-    if (is_linux && enable_plugins) {
-      deps += [ "//pdf" ]
-    }
-
     if (is_multi_dll_chrome) {
       defines += [ "CHROME_MULTIPLE_DLL" ]
       data_deps += [ ":chrome_child" ]
@@ -158,16 +248,46 @@ if (!is_android) {
   }
 }  # !is_android
 
-shared_library("main_dll") {
-  configs += [ "//build/config/compiler:wexit_time_destructors" ]
-  defines = []
+if (is_mac) {
+  if (is_component_build) {
+    # On Mac component builds, this target is the bundle, and the main dll is
+    # just another shared library. This speeds up incremental builds by
+    # not requiring re-doing the bundle every time main_dll changes.
+    # See https://codereview.chromium.org/11420019
 
-  deps = [
-    ":browser_dependencies",
-    "//base/allocator",
-  ]
-  if (is_win) {
-    output_name = "chrome"
+    # TODO(GYP) chrome_dll for Mac component build.
+    assert(false)
+  } else {
+    # On Mac non-component builds, this is a no-op forwarding target.
+    group("chrome_dll") {
+      public_deps = [
+        ":main_dll",
+      ]
+    }
+  }
+}
+
+if (is_win) {
+  # This target is a forwarding target to compile the necessary DLLs used
+  # by Chrome.
+  group("chrome_dll") {
+    # TODO(GYP) support incremental_chrome_dll on Windows for faster links in
+    # developer component builds. When that's supported, this target will need
+    # to become more complicated.
+    data_deps = [
+      ":main_dll",
+    ]
+    if (is_multi_dll_chrome) {
+      data_deps += [ ":chrome_child" ]
+    }
+  }
+}
+
+if (is_mac || is_win) {
+  shared_library("main_dll") {
+    configs += [ "//build/config/compiler:wexit_time_destructors" ]
+    defines = []
+    ldflags = []
 
     sources = [
       "//base/win/dllmain.cc",
@@ -177,141 +297,181 @@ shared_library("main_dll") {
       "app/chrome_main.cc",
       "app/chrome_main_delegate.cc",
       "app/chrome_main_delegate.h",
-      "app/close_handle_hook_win.cc",
-      "app/close_handle_hook_win.h",
+      "app/chrome_main_mac.h",
+      "app/chrome_main_mac.mm",
       "app/delay_load_hook_win.cc",
       "app/delay_load_hook_win.h",
     ]
 
-    deps += [
-      ":chrome_dll_version",
-      "//base/trace_event/etw_manifest:chrome_events_win",
-      "//chrome/app/theme:chrome_unscaled_resources",
-      "//chrome_elf",
-      "//content/app/resources",
-      "//crypto",
-      "//net:net_resources",
-      "//third_party/wtl",
-      "//ui/views",
+    deps = [
+      ":browser_dependencies",
+      "//base/allocator",
+      "//build/config/sanitizers:deps",
     ]
-    if (enable_configuration_policy) {
-      deps += [ "//components/policy" ]
+    if (is_win) {
+      output_name = "chrome"
+
+      deps += [
+        ":chrome_dll_manifest",
+        ":chrome_dll_version",
+        "//base/trace_event/etw_manifest:chrome_events_win",
+        "//chrome/app/theme:chrome_unscaled_resources",
+        "//chrome_elf",
+        "//components/crash/content/app",
+        "//content/app/resources",
+        "//crypto",
+        "//net:net_resources",
+        "//third_party/wtl",
+        "//ui/views",
+      ]
+      if (enable_configuration_policy) {
+        deps += [ "//components/policy" ]
+      }
+      if (current_cpu == "x86") {
+        # TODO(GYP) bug 512861: Lots of VCLinkerTool stuff on Windows.
+        #deps += [ 'chrome_user32_delay_imports' ]  TODO(GYP)
+      }
+
+      # This is a large module that can't do incremental linking in some cases.
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs +=
+          [ "//build/config/win:default_large_module_incremental_linking" ]
     }
-    if (current_cpu == "x86") {
-      # Add a dependency to custom import library for user32 delay imports only
-      # in x86 builds.
-      #deps += [ 'chrome_user32_delay_imports' ]  TODO(GYP)
+
+    if (use_aura) {
+      deps += [ "//ui/compositor" ]
     }
 
-    # This is a large module that can't do incremental linking in some cases.
-    configs -= [ "//build/config/win:default_incremental_linking" ]
-    configs += [ "//build/config/win:default_large_module_incremental_linking" ]
+    if (is_multi_dll_chrome) {
+      defines += [ "CHROME_MULTIPLE_DLL_BROWSER" ]
+      deps += [ "//content/public/app:browser" ]
+    } else {
+      deps += [
+        ":child_dependencies",
+        "//content/public/app:both",
+      ]
+    }
 
-    # TODO(GYP) Lots of VCLinkerTool stuff on Windows.
+    if (cld_version == 2) {
+      deps += [ "//third_party/cld_2" ]
+    }
 
-    # TODO(GYP) chrome_pgo_phase on Windows.
-  }
+    if (is_mac) {
+      #['OS=="mac" and component!="shared_library"', {  TODO(GYP)
+      #  'includes': [ 'chrome_dll_bundle.gypi' ],
+      #}],
+      # TODO(GYP) Lots of other stuff in the OS=="mac" block.
+      sources += [
+        "app/chrome_crash_reporter_client.cc",
+        "app/chrome_crash_reporter_client.h",
+        "app/chrome_crash_reporter_client_mac.mm",
+      ]
+      deps += [
+        "//components/crash/content/app",
+        "//components/policy",
+      ]
 
-  if (use_aura) {
-    deps += [ "//ui/compositor" ]
+      # Define the order of symbols within the framework.
+      ldflags += [
+        "-Wl,-order_file",
+        "-Wl," + rebase_path("app/framework.order", root_build_dir),
+      ]
+    }
+
+    if (enable_plugins && enable_pdf && !is_multi_dll_chrome) {
+      deps += [ "//pdf" ]
+    }
   }
 
   if (is_multi_dll_chrome) {
-    defines += [ "CHROME_MULTIPLE_DLL_BROWSER" ]
-    deps += [ "//content/public/app:browser" ]
-  } else {
-    deps += [
-      ":child_dependencies",
-      "//content/public/app:both",
-    ]
-  }
-
-  if (cld_version == 0 || cld_version == 2) {
-    deps += [ "//third_party/cld_2" ]
-  }
-
-  if (is_mac) {
-    #['OS=="mac" and component!="shared_library"', {  TODO(GYP)
-    #  'includes': [ 'chrome_dll_bundle.gypi' ],
-    #}],
-    # TODO(GYP) Lots of other stuff in the OS=="mac" block.
-  }
-
-  if (enable_plugins && !is_multi_dll_chrome) {
-    deps += [ "//pdf" ]
-  }
-}
-
-if (is_multi_dll_chrome) {
-  shared_library("chrome_child") {
-    sources = [
-      "app/chrome_main.cc",
-      "app/chrome_main_delegate.cc",
-      "app/chrome_main_delegate.h",
-      "app/close_handle_hook_win.cc",
-      "app/close_handle_hook_win.h",
-    ]
-
-    configs += [ "//build/config/compiler:wexit_time_destructors" ]
-    defines = [ "CHROME_MULTIPLE_DLL_CHILD" ]
-
-    deps = [
-      ":child_dependencies",
-      ":chrome_dll_version",
-      "//chrome/browser/policy:path_parser",
-      "//content/public/app:child",
-    ]
-
-    if (is_win) {
-      # TODO(GYP): PGO on Windows.
-      # ['chrome_pgo_phase==1', {
-      #   'msvs_settings': {
-      #     'VCLinkerTool': {
-      #       'LinkTimeCodeGeneration': '2',
-      #     },
-      #   },
-      # }],
-      # ['chrome_pgo_phase==2', {
-      #   'msvs_settings': {
-      #     'VCLinkerTool': {
-      #       'LinkTimeCodeGeneration': '3',
-      #     },
-      #   },
-      # }],
+    # This manifest matches what GYP produces. It may not even be necessary.
+    windows_manifest("chrome_child_manifest") {
+      sources = [
+        as_invoker_manifest,
+      ]
+      type = "dll"
     }
-    if (enable_plugins) {
-      deps += [ "//pdf" ]
+
+    shared_library("chrome_child") {
+      sources = [
+        "app/chrome_main.cc",
+        "app/chrome_main_delegate.cc",
+        "app/chrome_main_delegate.h",
+      ]
+
+      configs += [ "//build/config/compiler:wexit_time_destructors" ]
+      defines = [ "CHROME_MULTIPLE_DLL_CHILD" ]
+
+      deps = [
+        ":child_dependencies",
+        ":chrome_child_manifest",
+        ":chrome_dll_version",
+        "//base/allocator",
+        "//build/config/sanitizers:deps",
+        "//components/browser_watcher:browser_watcher_client",
+        "//components/crash/content/app",
+        "//content/public/app:child",
+      ]
+
+      if (is_win) {
+        if (symbol_level == 2) {
+          # Incremental linking doesn't work on this target in debug mode with
+          # full symbols, but does work in other cases, including minimal
+          # symbols.
+          configs -= [ "//build/config/win:default_incremental_linking" ]
+          configs += [ "//build/config/win:no_incremental_linking" ]
+        }
+        if (chrome_pgo_phase > 0) {
+          configs += [ "//build/config/compiler:optimize_max" ]
+        }
+        if (chrome_pgo_phase == 1) {
+          ldflags = [
+            "/LTCG:PGINSTRUMENT",
+            "/PogoSafeMode",
+          ]
+        } else if (chrome_pgo_phase == 2) {
+          ldflags = [ "/LTCG:PGOPTIMIZE" ]
+        }
+      }
+
+      if (enable_configuration_policy) {
+        deps += [ "//chrome/browser/policy:path_parser" ]
+      }
+
+      if (enable_plugins && enable_pdf) {
+        deps += [ "//pdf" ]
+      }
     }
   }
 }
 
 # GYP version: chromium_browser_dependencies variable in chrome.gyp
 group("browser_dependencies") {
-  deps = [
+  public_deps = [
     "//chrome/browser",
     "//chrome/common",
     "//sync",
   ]
-  if (!is_ios) {
-    deps += [ "//ppapi/host" ]
+  if (enable_plugins) {
+    public_deps += [ "//ppapi/host" ]
   }
 
   if (enable_basic_printing || enable_print_preview) {
-    deps += [ "//printing" ]
+    public_deps += [ "//printing" ]
     if (enable_print_preview) {
-      deps += [ "//chrome/service" ]
+      public_deps += [ "//chrome/service" ]
     }
   }
 }
 
 # GYP version: chromium_child_dependencies variable in chrome.gyp
 group("child_dependencies") {
-  deps = [
+  public_deps = [
     "//chrome/common",
     "//sync",
   ]
   if (!is_ios) {
-    deps += [
+    public_deps += [
       "//chrome/browser/devtools",
       "//chrome/child",
       "//chrome/plugin",
@@ -321,36 +481,18 @@ group("child_dependencies") {
       "//third_party/WebKit/public:blink_devtools_frontend_resources",
     ]
   }
-  if (cld_version == 0 || cld_version == 2) {
-    deps += [ "//third_party/cld_2:cld2_platform_impl" ]
+  if (cld_version == 2) {
+    public_deps += [ "//third_party/cld_2:cld2_platform_impl" ]
   }
 
   if (enable_nacl) {
-    deps += [ "//components/nacl/renderer/plugin:nacl_trusted_plugin" ]
-  }
-  if (enable_remoting) {
-    deps += [ "//remoting/client/plugin" ]
+    public_deps += [ "//components/nacl/renderer/plugin:nacl_trusted_plugin" ]
   }
 }
 
 if (is_win) {
-  # TODO(brettw) this duplicates "//chrome/common:version" which applies to
-  # Linux.
-  process_version("version_header") {
-    # TODO(brettW) this should have more reduced visibility, but chrome/browser
-    # currently depends on this.
-    #visibility = [ ":*" ]
-
-    # This one just uses the custom template and no separate sources.
-    sources = []
-    template_file = "version.h.in"
-
-    # TODO(brettw) this should move to $target_gen_dir/version.h and
-    # source files including it should reference it via "chrome/version.h"
-    output = "$root_gen_dir/version.h"
-  }
-
   process_version("chrome_exe_version") {
+    template_file = chrome_version_rc_template
     sources = [
       "app/chrome_exe.ver",
     ]
@@ -358,13 +500,24 @@ if (is_win) {
   }
 
   process_version("chrome_dll_version") {
+    template_file = chrome_version_rc_template
     sources = [
       "app/chrome_dll.ver",
     ]
     output = "$target_gen_dir/chrome_dll_version.rc"
   }
 
+  # This manifest matches what GYP produces. It may not even be necessary.
+  windows_manifest("chrome_dll_manifest") {
+    sources = [
+      as_invoker_manifest,
+      common_controls_manifest,
+    ]
+    type = "dll"
+  }
+
   process_version("nacl64_exe_version") {
+    template_file = chrome_version_rc_template
     sources = [
       "app/nacl64_exe.ver",
     ]
@@ -372,16 +525,17 @@ if (is_win) {
   }
 
   process_version("other_version") {
+    template_file = chrome_version_rc_template
     sources = [
       "app/other.ver",
     ]
     output = "$target_gen_dir/other_version.rc"
   }
 
-  source_set("image_pre_reader") {
+  source_set("file_pre_reader") {
     sources = [
-      "app/image_pre_reader_win.cc",
-      "app/image_pre_reader_win.h",
+      "app/file_pre_reader_win.cc",
+      "app/file_pre_reader_win.h",
     ]
     deps = [
       "//base",
@@ -391,7 +545,7 @@ if (is_win) {
 
 # GYP version: chrome/chrome_resources.gyp:chrome_resources
 group("resources") {
-  deps = [
+  public_deps = [
     # Note: GYP lists some dependencies in addition to these actions. However,
     # these are just dependencies for the actions themselves, which our actions
     # list individually when needed.
@@ -401,23 +555,23 @@ group("resources") {
   ]
 
   if (enable_extensions) {
-    deps += [ "//chrome/common:extensions_api_resources" ]
+    public_deps += [ "//chrome/common:extensions_api_resources" ]
   }
 }
 
 # GYP version: chrome/chrome_resources.gyp:chrome_extra_resources
 group("extra_resources") {
-  deps = [
+  public_deps = [
     "//chrome/browser/resources:invalidations_resources",
     "//chrome/browser/resources:memory_internals_resources",
     "//chrome/browser/resources:net_internals_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
+    "//chrome/browser/resources:policy_resources",
     "//chrome/browser/resources:signin_internals_resources",
-    "//chrome/browser/resources:sync_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
   ]
   if (!is_ios) {
-    deps += [
+    public_deps += [
       "//chrome/browser/resources:component_extension_resources",
       "//chrome/browser/resources:options_resources",
       "//chrome/browser/resources:settings_resources",
@@ -425,11 +579,11 @@ group("extra_resources") {
   }
 
   if (is_chromeos) {
-    deps += [ "//chrome/browser/resources/chromeos/chromevox" ]
+    public_deps += [ "//chrome/browser/resources/chromeos/chromevox" ]
   }
 
   if (enable_extensions) {
-    deps += [
+    public_deps += [
       "//chrome/browser/resources:quota_internals_resources",
       "//chrome/browser/resources:sync_file_system_internals_resources",
     ]
@@ -444,35 +598,37 @@ if (is_chrome_branded) {
       "browser/resources/default_apps/drive.crx",
       "browser/resources/default_apps/external_extensions.json",
       "browser/resources/default_apps/gmail.crx",
-      "browser/resources/default_apps/search.crx",
       "browser/resources/default_apps/youtube.crx",
     ]
     outputs = [
       "$root_out_dir/default_apps/{{source_file_part}}",
     ]
+
+    # Force anybody that depends on this to get the default apps as data files.
+    data = process_file_template(sources, outputs)
   }
 }
 
 group("packed_resources") {
-  deps = [
+  public_deps = [
+    ":repack_chrome_100_percent",
     ":repack_locales_pack",
     ":repack_pseudo_locales_pack",
-    ":repack_chrome_100_percent",
   ]
 
   if (is_chrome_branded) {
-    deps += [ ":default_apps" ]
+    public_deps += [ ":default_apps" ]
   }
 
   if (enable_hidpi) {
-    deps += [ ":repack_chrome_200_percent" ]
+    public_deps += [ ":repack_chrome_200_percent" ]
   }
 
   if (enable_topchrome_md) {
-    deps += [ ":repack_chrome_material_100_percent" ]
+    public_deps += [ ":repack_chrome_material_100_percent" ]
 
     if (enable_hidpi) {
-      deps += [ ":repack_chrome_material_200_percent" ]
+      public_deps += [ ":repack_chrome_material_200_percent" ]
     }
   }
 }
@@ -487,24 +643,24 @@ repack("packed_extra_resources") {
     "$root_gen_dir/chrome/memory_internals_resources.pak",
     "$root_gen_dir/chrome/net_internals_resources.pak",
     "$root_gen_dir/chrome/password_manager_internals_resources.pak",
+    "$root_gen_dir/chrome/policy_resources.pak",
     "$root_gen_dir/chrome/signin_internals_resources.pak",
-    "$root_gen_dir/chrome/sync_internals_resources.pak",
     "$root_gen_dir/chrome/translate_internals_resources.pak",
     "$root_gen_dir/components/components_resources.pak",
     "$root_gen_dir/net/net_resources.pak",
     "$root_gen_dir/ui/resources/webui_resources.pak",
   ]
   deps = [
-    "//chrome/browser:resources",
     "//chrome/app/theme:chrome_unscaled_resources",
-    "//chrome/common:resources",
+    "//chrome/browser:resources",
     "//chrome/browser/resources:invalidations_resources",
     "//chrome/browser/resources:memory_internals_resources",
     "//chrome/browser/resources:net_internals_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
+    "//chrome/browser/resources:policy_resources",
     "//chrome/browser/resources:signin_internals_resources",
-    "//chrome/browser/resources:sync_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
+    "//chrome/common:resources",
     "//components/resources",
     "//net:net_resources",
     "//ui/resources",
@@ -519,14 +675,12 @@ repack("packed_extra_resources") {
       "$root_gen_dir/chrome/quota_internals_resources.pak",
       "$root_gen_dir/chrome/settings_resources.pak",
       "$root_gen_dir/chrome/sync_file_system_internals_resources.pak",
-      "$root_gen_dir/chrome/webrtc_device_provider_resources.pak",
     ]
     deps += [
-      "//chrome/browser/devtools:webrtc_device_provider_resources",
       "//chrome/browser/resources:component_extension_resources",
       "//chrome/browser/resources:options_resources",
-      "//chrome/browser/resources:settings_resources",
       "//chrome/browser/resources:quota_internals_resources",
+      "//chrome/browser/resources:settings_resources",
       "//chrome/browser/resources:sync_file_system_internals_resources",
       "//content/browser/devtools:devtools_resources",
     ]
@@ -573,10 +727,12 @@ repack("packed_extra_resources") {
 repack("browser_tests_pak") {
   sources = [
     "$root_gen_dir/chrome/options_test_resources.pak",
+    "$root_gen_dir/chrome/webui_test_resources.pak",
   ]
   output = "$root_out_dir/browser_tests.pak"
   deps = [
     "//chrome/browser/resources:options_test_resources",
+    "//chrome/test/data:webui_test_resources",
   ]
 }
 
@@ -673,6 +829,10 @@ template("chrome_repack_percent") {
       sources += [ "$root_gen_dir/extensions/extensions_browser_resources_${percent}_percent.pak" ]
       deps += [ "//extensions:extensions_browser_resources" ]
     }
+    if (enable_app_list) {
+      sources += [ "$root_gen_dir/ui/app_list/resources/app_list_resources_${percent}_percent.pak" ]
+      deps += [ "//ui/app_list/resources" ]
+    }
 
     output = repack_output_file
   }
@@ -719,10 +879,12 @@ template("chrome_repack_material_percent") {
     # All sources should also have deps for completeness.
     sources = [
       "$root_gen_dir/chrome/theme_resources_material_${percent}_percent.pak",
+      "$root_gen_dir/components/components_resources_material_${percent}_percent.pak",
     ]
 
     deps = [
       "//chrome/app/theme:theme_resources",
+      "//components/resources",
     ]
 
     output = repack_output_file
@@ -756,10 +918,13 @@ if (enable_topchrome_md) {
 
 # GYP version: chrome/chrome_resources.gyp:chrome_strings
 group("strings") {
-  deps = [
+  public_deps = [
     "//chrome/app:chromium_strings",
     "//chrome/app:generated_resources",
     "//chrome/app:google_chrome_strings",
+    "//chrome/app:settings_chromium_strings",
+    "//chrome/app:settings_google_chrome_strings",
+    "//chrome/app:settings_strings",
     "//chrome/app/resources:locale_settings",
   ]
 }
@@ -770,9 +935,6 @@ if (is_android) {
     sources = [
       "../components/content_settings/core/common/content_settings.h",
     ]
-    outputs = [
-      "org/chromium/chrome/browser/ContentSetting.java",
-    ]
   }
 
   # GYP: //chrome/chrome.gyp:content_settings_type_java
@@ -780,8 +942,12 @@ if (is_android) {
     sources = [
       "../components/content_settings/core/common/content_settings_types.h",
     ]
-    outputs = [
-      "org/chromium/chrome/browser/ContentSettingsType.java",
+  }
+
+  # GYP: //chrome/chrome.gyp:signin_metrics_enum_java
+  java_cpp_enum("signin_metrics_enum_javagen") {
+    sources = [
+      "../components/signin/core/browser/signin_metrics.h",
     ]
   }
 
@@ -790,13 +956,16 @@ if (is_android) {
     sources = [
       "browser/ui/android/website_settings_popup_android.h",
     ]
-    outputs = [
-      "org/chromium/chrome/browser/PageInfoConnectionType.java",
-    ]
+  }
+
+  # Some android targets still depend on --gc-sections to link.
+  # TODO: remove --gc-sections for Debug builds (crbug.com/159847).
+  config("gc_sections") {
+    ldflags = [ "-Wl,--gc-sections" ]
   }
 
   # GYP: //chrome/chrome_android.gypi:chrome_android_core
-  static_library("chrome_android_core") {
+  source_set("chrome_android_core") {
     sources = [
       "app/android/chrome_android_initializer.cc",
       "app/android/chrome_android_initializer.h",
@@ -807,6 +976,7 @@ if (is_android) {
       "app/chrome_main_delegate.cc",
       "app/chrome_main_delegate.h",
     ]
+    public_configs = [ ":gc_sections" ]
 
     include_dirs = [ android_ndk_include_dir ]
 
@@ -819,6 +989,7 @@ if (is_android) {
       "//chrome/browser",
       "//chrome/browser/ui",
       "//chrome/child",
+      "//chrome/common",
       "//chrome/plugin",
       "//chrome/renderer",
       "//chrome/utility",
@@ -860,39 +1031,54 @@ if (is_linux) {
     ]
   }
 
-  action("linux_symbols") {
-    script = "//build/linux/dump_app_syms.py"
+  if (is_official_build) {
+    action("linux_symbols") {
+      script = "//build/linux/dump_app_syms.py"
 
-    dump_syms_label = "//breakpad:dump_syms($host_toolchain)"
-    dump_syms_binary =
-        get_label_info(dump_syms_label, "root_out_dir") + "/" + "dump_syms"
+      dump_syms_label = "//breakpad:dump_syms($host_toolchain)"
+      dump_syms_binary =
+          get_label_info(dump_syms_label, "root_out_dir") + "/" + "dump_syms"
 
-    chrome_binary = "$root_out_dir/chrome"
-    if (current_cpu == "x86") {
-      # Use "ia32" instead of "x86" for GYP compat.
-      symbol_file = "$root_out_dir/chrome.breakpad.ia32"
-    } else {
-      symbol_file = "$root_out_dir/chrome.breakpad.$current_cpu"
+      chrome_binary = "$root_out_dir/chrome"
+      if (current_cpu == "x86") {
+        # Use "ia32" instead of "x86" for GYP compat.
+        symbol_file = "$root_out_dir/chrome.breakpad.ia32"
+      } else {
+        symbol_file = "$root_out_dir/chrome.breakpad.$current_cpu"
+      }
+
+      inputs = [
+        chrome_binary,
+        dump_syms_binary,
+      ]
+      outputs = [
+        symbol_file,
+      ]
+
+      args = [
+        "./" + rebase_path(dump_syms_binary, root_build_dir),
+        "0",  # TODO(GYP) This is linux_strip_binary if it is needed.
+        rebase_path(chrome_binary, root_build_dir),
+        rebase_path(symbol_file, root_build_dir),
+      ]
+
+      deps = [
+        ":chrome",
+        dump_syms_label,
+      ]
     }
+  }
 
-    inputs = [
-      chrome_binary,
-      dump_syms_binary,
+  # Copies some scripts and resources that are used for desktop integration.
+  copy("xdg_mime") {
+    sources = [
+      "//chrome/app/theme/$branding_path_component/product_logo_48.png",
+      "//chrome/tools/build/linux/chrome-wrapper",
+      "//third_party/xdg-utils/scripts/xdg-mime",
+      "//third_party/xdg-utils/scripts/xdg-settings",
     ]
     outputs = [
-      symbol_file,
-    ]
-
-    args = [
-      "./" + rebase_path(dump_syms_binary, root_build_dir),
-      "0",  # TODO(GYP) This is linux_strip_binary if it is needed.
-      rebase_path(chrome_binary, root_build_dir),
-      rebase_path(symbol_file, root_build_dir),
-    ]
-
-    deps = [
-      ":chrome",
-      dump_syms_label,
+      "$root_out_dir/{{source_file_part}}",
     ]
   }
 }

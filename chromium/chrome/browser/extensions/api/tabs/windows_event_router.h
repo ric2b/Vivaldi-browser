@@ -5,13 +5,18 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_TABS_WINDOWS_EVENT_ROUTER_H_
 #define CHROME_BROWSER_EXTENSIONS_API_TABS_WINDOWS_EVENT_ROUTER_H_
 
+#include <map>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/scoped_observer.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/window_controller_list_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "extensions/browser/app_window/app_window_registry.h"
+#include "extensions/browser/extension_event_histogram_value.h"
 
 #if !defined(OS_MACOSX)
 #include "ui/views/focus/widget_focus_manager.h"
@@ -25,18 +30,32 @@ class ListValue;
 
 namespace extensions {
 
+class AppWindow;
+class AppWindowController;
+class WindowControllerList;
+
 // The WindowsEventRouter sends chrome.windows.* events to listeners
 // inside extension process renderers. The router listens to *all* events,
 // but will only route events within a profile to extension processes in the
 // same profile.
-class WindowsEventRouter : public WindowControllerListObserver,
+class WindowsEventRouter : public AppWindowRegistry::Observer,
+                           public WindowControllerListObserver,
 #if !defined(OS_MACOSX)
-                          public views::WidgetFocusChangeListener,
+                           public views::WidgetFocusChangeListener,
 #endif
-                          public content::NotificationObserver {
+                           public content::NotificationObserver {
  public:
   explicit WindowsEventRouter(Profile* profile);
   ~WindowsEventRouter() override;
+
+  // |window_controller| is NULL to indicate a focused window has lost focus.
+  void OnActiveWindowChanged(WindowController* window_controller);
+
+ private:
+  // extensions::AppWindowRegistry::Observer:
+  void OnAppWindowAdded(extensions::AppWindow* app_window) override;
+  void OnAppWindowRemoved(extensions::AppWindow* app_window) override;
+  void OnAppWindowActivated(extensions::AppWindow* app_window) override;
 
   // WindowControllerListObserver methods:
   void OnWindowControllerAdded(WindowController* window_controller) override;
@@ -51,14 +70,12 @@ class WindowsEventRouter : public WindowControllerListObserver,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // |window_controller| is NULL to indicate a focused window has lost focus.
-  void OnActiveWindowChanged(WindowController* window_controller);
-
- private:
-  void DispatchEvent(const std::string& event_name,
-                     Profile* profile,
+  void DispatchEvent(events::HistogramValue histogram_value,
+                     const std::string& event_name,
+                     WindowController* window_controller,
                      scoped_ptr<base::ListValue> args);
   bool HasEventListener(const std::string& event_name);
+  void AddAppWindow(extensions::AppWindow* app_window);
 
   content::NotificationRegistrar registrar_;
 
@@ -73,6 +90,18 @@ class WindowsEventRouter : public WindowControllerListObserver,
   // The currently focused window. We keep this so as to avoid sending multiple
   // windows.onFocusChanged events with the same windowId.
   int focused_window_id_;
+
+  using AppWindowMap = std::map<int, scoped_ptr<AppWindowController>>;
+  // Map of application windows, the key to the session of the app window.
+  AppWindowMap app_windows_;
+
+  // Observed AppWindowRegistry.
+  ScopedObserver<AppWindowRegistry, AppWindowRegistry::Observer>
+      observed_app_registry_;
+
+  // Observed WindowControllerList.
+  ScopedObserver<WindowControllerList, WindowControllerListObserver>
+      observed_controller_list_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowsEventRouter);
 };

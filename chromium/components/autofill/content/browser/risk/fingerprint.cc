@@ -12,10 +12,13 @@
 
 #include "components/autofill/content/browser/risk/fingerprint.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/cpu.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string_split.h"
@@ -49,7 +52,7 @@ namespace risk {
 
 namespace {
 
-const int32 kFingerprinterVersion = 1;
+const int32_t kFingerprinterVersion = 1;
 
 // Maximum amount of time, in seconds, to wait for loading asynchronous
 // fingerprint data.
@@ -75,12 +78,11 @@ std::string GetOperatingSystemVersion() {
 // Adds the list of |fonts| to the |machine|.
 void AddFontsToFingerprint(const base::ListValue& fonts,
                            Fingerprint::MachineCharacteristics* machine) {
-  for (base::ListValue::const_iterator it = fonts.begin();
-       it != fonts.end(); ++it) {
+  for (const auto& it : fonts) {
     // Each item in the list is a two-element list such that the first element
     // is the font family and the second is the font name.
     const base::ListValue* font_description = NULL;
-    bool success = (*it)->GetAsList(&font_description);
+    bool success = it->GetAsList(&font_description);
     DCHECK(success);
 
     std::string font_name;
@@ -94,18 +96,14 @@ void AddFontsToFingerprint(const base::ListValue& fonts,
 // Adds the list of |plugins| to the |machine|.
 void AddPluginsToFingerprint(const std::vector<content::WebPluginInfo>& plugins,
                              Fingerprint::MachineCharacteristics* machine) {
-  for (std::vector<content::WebPluginInfo>::const_iterator it = plugins.begin();
-       it != plugins.end(); ++it) {
+  for (const content::WebPluginInfo& it : plugins) {
     Fingerprint::MachineCharacteristics::Plugin* plugin =
         machine->add_plugin();
-    plugin->set_name(base::UTF16ToUTF8(it->name));
-    plugin->set_description(base::UTF16ToUTF8(it->desc));
-    for (std::vector<content::WebPluginMimeType>::const_iterator mime_type =
-             it->mime_types.begin();
-         mime_type != it->mime_types.end(); ++mime_type) {
-      plugin->add_mime_type(mime_type->mime_type);
-    }
-    plugin->set_version(base::UTF16ToUTF8(it->version));
+    plugin->set_name(base::UTF16ToUTF8(it.name));
+    plugin->set_description(base::UTF16ToUTF8(it.desc));
+    for (const content::WebPluginMimeType& mime_type : it.mime_types)
+      plugin->add_mime_type(mime_type.mime_type);
+    plugin->set_version(base::UTF16ToUTF8(it.version));
   }
 }
 
@@ -113,12 +111,10 @@ void AddPluginsToFingerprint(const std::vector<content::WebPluginInfo>& plugins,
 void AddAcceptLanguagesToFingerprint(
     const std::string& accept_languages_str,
     Fingerprint::MachineCharacteristics* machine) {
-  std::vector<std::string> accept_languages;
-  base::SplitString(accept_languages_str, ',', &accept_languages);
-  for (std::vector<std::string>::const_iterator it = accept_languages.begin();
-       it != accept_languages.end(); ++it) {
-    machine->add_requested_language(*it);
-  }
+  for (const std::string& lang :
+       base::SplitString(accept_languages_str, ",", base::TRIM_WHITESPACE,
+                         base::SPLIT_WANT_ALL))
+    machine->add_requested_language(lang);
 }
 
 // This function writes
@@ -179,7 +175,7 @@ void AddGpuInfoToFingerprint(Fingerprint::MachineCharacteristics* machine,
 class FingerprintDataLoader : public content::GpuDataManagerObserver {
  public:
   FingerprintDataLoader(
-      uint64 obfuscated_gaia_id,
+      uint64_t obfuscated_gaia_id,
       const gfx::Rect& window_bounds,
       const gfx::Rect& content_bounds,
       const WebScreenInfo& screen_info,
@@ -220,7 +216,7 @@ class FingerprintDataLoader : public content::GpuDataManagerObserver {
 
   // Data that will be passed on to the next loading phase.  See the comment for
   // GetFingerprint() for a description of these variables.
-  const uint64 obfuscated_gaia_id_;
+  const uint64_t obfuscated_gaia_id_;
   const gfx::Rect window_bounds_;
   const gfx::Rect content_bounds_;
   const WebScreenInfo screen_info_;
@@ -239,7 +235,7 @@ class FingerprintDataLoader : public content::GpuDataManagerObserver {
 
   // Timer to enforce a maximum timeout before the |callback_| is called, even
   // if not all asynchronous data has been loaded.
-  base::OneShotTimer<FingerprintDataLoader> timeout_timer_;
+  base::OneShotTimer timeout_timer_;
 
   // The callback that will be called once all the data is available.
   base::Callback<void(scoped_ptr<Fingerprint>)> callback_;
@@ -256,7 +252,7 @@ class FingerprintDataLoader : public content::GpuDataManagerObserver {
 };
 
 FingerprintDataLoader::FingerprintDataLoader(
-    uint64 obfuscated_gaia_id,
+    uint64_t obfuscated_gaia_id,
     const gfx::Rect& window_bounds,
     const gfx::Rect& content_bounds,
     const WebScreenInfo& screen_info,
@@ -428,7 +424,7 @@ void FingerprintDataLoader::FillFingerprint() {
   metadata->set_obfuscated_gaia_id(obfuscated_gaia_id_);
   metadata->set_fingerprinter_version(kFingerprinterVersion);
 
-  callback_.Run(fingerprint.Pass());
+  callback_.Run(std::move(fingerprint));
 }
 
 }  // namespace
@@ -436,7 +432,7 @@ void FingerprintDataLoader::FillFingerprint() {
 namespace internal {
 
 void GetFingerprintInternal(
-    uint64 obfuscated_gaia_id,
+    uint64_t obfuscated_gaia_id,
     const gfx::Rect& window_bounds,
     const gfx::Rect& content_bounds,
     const blink::WebScreenInfo& screen_info,
@@ -459,7 +455,7 @@ void GetFingerprintInternal(
 }  // namespace internal
 
 void GetFingerprint(
-    uint64 obfuscated_gaia_id,
+    uint64_t obfuscated_gaia_id,
     const gfx::Rect& window_bounds,
     content::WebContents* web_contents,
     const std::string& version,

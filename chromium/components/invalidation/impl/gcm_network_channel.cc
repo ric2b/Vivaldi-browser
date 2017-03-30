@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/base64.h"
+#include "components/invalidation/impl/gcm_network_channel.h"
+
+#include <utility>
+
+#include "base/base64url.h"
 #include "base/i18n/time_formatting.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
@@ -11,6 +15,14 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
+#include "components/invalidation/impl/gcm_network_channel_delegate.h"
+#include "google_apis/gaia/google_service_auth_error.h"
+#include "net/http/http_status_code.h"
+#include "net/url_request/url_fetcher.h"
+#include "net/url_request/url_request_status.h"
+
 #if !defined(OS_ANDROID)
 // channel_common.proto defines ANDROID constant that conflicts with Android
 // build. At the same time TiclInvalidationService is not used on Android so it
@@ -19,12 +31,6 @@
 #include "google/cacheinvalidation/channel_common.pb.h"
 #include "google/cacheinvalidation/types.pb.h"
 #endif
-#include "components/invalidation/impl/gcm_network_channel.h"
-#include "components/invalidation/impl/gcm_network_channel_delegate.h"
-#include "google_apis/gaia/google_service_auth_error.h"
-#include "net/http/http_status_code.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_request_status.h"
 
 namespace syncer {
 
@@ -108,7 +114,7 @@ GCMNetworkChannel::GCMNetworkChannel(
     scoped_refptr<net::URLRequestContextGetter> request_context_getter,
     scoped_ptr<GCMNetworkChannelDelegate> delegate)
     : request_context_getter_(request_context_getter),
-      delegate_(delegate.Pass()),
+      delegate_(std::move(delegate)),
       register_backoff_entry_(new net::BackoffEntry(&kRegisterBackoffPolicy)),
       gcm_channel_online_(false),
       http_channel_online_(false),
@@ -211,6 +217,8 @@ void GCMNetworkChannel::OnGetTokenComplete(
   DVLOG(2) << "Got access token, sending message";
   fetcher_ = net::URLFetcher::Create(BuildUrl(registration_id_),
                                      net::URLFetcher::POST, this);
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher_.get(), data_use_measurement::DataUseUserData::INVALIDATION);
   fetcher_->SetRequestContext(request_context_getter_.get());
   const std::string auth_header("Authorization: Bearer " + access_token_);
   fetcher_->AddExtraRequestHeader(auth_header);
@@ -226,9 +234,9 @@ void GCMNetworkChannel::OnGetTokenComplete(
 
 void GCMNetworkChannel::OnURLFetchComplete(const net::URLFetcher* source) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(fetcher_, source);
+  DCHECK_EQ(fetcher_.get(), source);
   // Free fetcher at the end of function.
-  scoped_ptr<net::URLFetcher> fetcher = fetcher_.Pass();
+  scoped_ptr<net::URLFetcher> fetcher = std::move(fetcher_);
 
   net::URLRequestStatus status = fetcher->GetStatus();
   diagnostic_info_.last_post_response_code_ =
@@ -269,7 +277,8 @@ void GCMNetworkChannel::OnIncomingMessage(const std::string& message,
     return;
   }
   std::string data;
-  if (!Base64DecodeURLSafe(message, &data)) {
+  if (!base::Base64UrlDecode(
+          message, base::Base64UrlDecodePolicy::IGNORE_PADDING, &data)) {
     RecordIncomingMessageStatus(INVALID_ENCODING);
     return;
   }
@@ -342,7 +351,9 @@ GURL GCMNetworkChannel::BuildUrl(const std::string& registration_id) {
   network_endpoint_id.SerializeToString(&network_endpoint_id_buffer);
 
   std::string base64URLPiece;
-  Base64EncodeURLSafe(network_endpoint_id_buffer, &base64URLPiece);
+  base::Base64UrlEncode(
+      network_endpoint_id_buffer, base::Base64UrlEncodePolicy::OMIT_PADDING,
+      &base64URLPiece);
 
   std::string url(kCacheInvalidationEndpointUrl);
   url += base64URLPiece;
@@ -352,31 +363,6 @@ GURL GCMNetworkChannel::BuildUrl(const std::string& registration_id) {
   NOTREACHED();
   return GURL();
 #endif
-}
-
-void GCMNetworkChannel::Base64EncodeURLSafe(const std::string& input,
-                                            std::string* output) {
-  base::Base64Encode(input, output);
-  // Covert to url safe alphabet.
-  base::ReplaceChars(*output, "+", "-", output);
-  base::ReplaceChars(*output, "/", "_", output);
-  // Trim padding.
-  size_t padding_size = 0;
-  for (size_t i = output->size(); i > 0 && (*output)[i - 1] == '='; --i)
-    ++padding_size;
-  output->resize(output->size() - padding_size);
-}
-
-bool GCMNetworkChannel::Base64DecodeURLSafe(const std::string& input,
-                                            std::string* output) {
-  // Add padding.
-  size_t padded_size = (input.size() + 3) - (input.size() + 3) % 4;
-  std::string padded_input(input);
-  padded_input.resize(padded_size, '=');
-  // Convert to standard base64 alphabet.
-  base::ReplaceChars(padded_input, "-", "+", &padded_input);
-  base::ReplaceChars(padded_input, "_", "/", &padded_input);
-  return base::Base64Decode(padded_input, output);
 }
 
 void GCMNetworkChannel::SetMessageReceiver(
@@ -436,7 +422,7 @@ GCMNetworkChannelDiagnostic::CollectDebugData() const {
   status->SetInteger("GCMNetworkChannel.SentMessages", sent_messages_count_);
   status->SetInteger("GCMNetworkChannel.ReceivedMessages",
                      parent_->GetReceivedMessagesCount());
-  return status.Pass();
+  return status;
 }
 
 std::string GCMNetworkChannelDiagnostic::GCMClientResultToString(

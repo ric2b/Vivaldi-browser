@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/flash_ui.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <vector>
@@ -11,6 +13,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/i18n/time_formatting.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,14 +22,16 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/crash_upload_list.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
 #include "content/public/browser/plugin_service.h"
@@ -39,6 +44,7 @@
 #include "content/public/common/webplugininfo.h"
 #include "gpu/config/gpu_info.h"
 #include "grit/browser_resources.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_WIN)
@@ -112,7 +118,7 @@ class FlashDOMHandler : public WebUIMessageHandler,
   void OnTimeout();
 
   // A timer to keep track of when the data fetching times out.
-  base::OneShotTimer<FlashDOMHandler> timeout_;
+  base::OneShotTimer timeout_;
 
   // Crash list.
   scoped_refptr<CrashUploadList> upload_list_;
@@ -138,7 +144,7 @@ FlashDOMHandler::FlashDOMHandler()
       has_plugin_info_(false),
       weak_ptr_factory_(this) {
         // Request Crash data asynchronously.
-  upload_list_ = CrashUploadList::Create(this);
+  upload_list_ = CreateCrashUploadList(this);
   upload_list_->LoadUploadListAsynchronously();
 
   // Watch for changes in GPUInfo.
@@ -233,19 +239,16 @@ void FlashDOMHandler::MaybeRespondToPage() {
   // need to jump through hoops to offload this to the IO thread.
   base::ThreadRestrictions::ScopedAllowIO allow_io;
 
-  // Obtain the Chrome version info.
-  chrome::VersionInfo version_info;
-
   base::ListValue* list = new base::ListValue();
 
   // Chrome version information.
   AddPair(list,
           l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
-          version_info.Version() + " (" +
-          chrome::VersionInfo::GetVersionStringModifier() + ")");
+          version_info::GetVersionNumber() + " (" +
+          chrome::GetChannelString() + ")");
 
   // OS version information.
-  std::string os_label = version_info.OSType();
+  std::string os_label = version_info::GetOSType();
 #if defined(OS_WIN)
   base::win::OSInfo* os = base::win::OSInfo::GetInstance();
   switch (os->version()) {
@@ -264,7 +267,7 @@ void FlashDOMHandler::MaybeRespondToPage() {
   if (os->architecture() == base::win::OSInfo::X64_ARCHITECTURE)
     os_label += " 64 bit";
 #endif
-  AddPair(list, l10n_util::GetStringUTF16(IDS_ABOUT_VERSION_OS), os_label);
+  AddPair(list, l10n_util::GetStringUTF16(IDS_VERSION_UI_OS), os_label);
 
   // Obtain the version of the Flash plugins.
   std::vector<content::WebPluginInfo> info_array;
@@ -296,16 +299,16 @@ void FlashDOMHandler::MaybeRespondToPage() {
   // Crash information.
   AddPair(list, base::string16(), "--- Crash data ---");
   bool crash_reporting_enabled =
-      ChromeMetricsServiceAccessor::IsCrashReportingEnabled();
+      ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
   if (crash_reporting_enabled) {
     std::vector<CrashUploadList::UploadInfo> crashes;
     upload_list_->GetUploads(10, &crashes);
 
     for (std::vector<CrashUploadList::UploadInfo>::iterator i = crashes.begin();
          i != crashes.end(); ++i) {
-      base::string16 crash_string(ASCIIToUTF16(i->id));
+      base::string16 crash_string(ASCIIToUTF16(i->upload_id));
       crash_string += ASCIIToUTF16(" ");
-      crash_string += base::TimeFormatFriendlyDateAndTime(i->time);
+      crash_string += base::TimeFormatFriendlyDateAndTime(i->upload_time);
       AddPair(list, ASCIIToUTF16("crash id"), crash_string);
     }
   } else {

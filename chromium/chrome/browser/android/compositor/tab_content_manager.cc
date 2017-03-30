@@ -5,12 +5,15 @@
 #include "chrome/browser/android/compositor/tab_content_manager.h"
 
 #include <android/bitmap.h>
+#include <stddef.h>
+#include <utility>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "cc/layers/layer.h"
 #include "chrome/browser/android/compositor/layer/thumbnail_layer.h"
 #include "chrome/browser/android/tab_android.h"
@@ -18,6 +21,7 @@
 #include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/readback_types.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/TabContentManager_jni.h"
 #include "ui/android/resources/ui_resource_provider.h"
@@ -71,7 +75,10 @@ class TabContentManager::TabReadbackRequest {
     }
 
     DCHECK(view->GetWebContents());
-    view->GetWebContents()->GetRenderViewHost()->LockBackingStore();
+    view->GetWebContents()
+        ->GetRenderViewHost()
+        ->GetWidget()
+        ->LockBackingStore();
 
     SkColorType color_type = kN32_SkColorType;
 
@@ -91,10 +98,12 @@ class TabContentManager::TabReadbackRequest {
 
     if (view) {
       DCHECK(view->GetWebContents());
-      view->GetWebContents()->GetRenderViewHost()->UnlockBackingStore();
+      view->GetWebContents()
+          ->GetRenderViewHost()
+          ->GetWidget()
+          ->UnlockBackingStore();
     }
 
-    // TODO(jdduke): Tailor response to different failure values appropriately.
     if (response != content::READBACK_SUCCESS || drop_after_readback_) {
       end_callback_.Run(0.f, SkBitmap());
       return;
@@ -145,17 +154,9 @@ TabContentManager::TabContentManager(JNIEnv* env,
 TabContentManager::~TabContentManager() {
 }
 
-void TabContentManager::Destroy(JNIEnv* env, jobject obj) {
+void TabContentManager::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   thumbnail_cache_->RemoveThumbnailCacheObserver(this);
   delete this;
-}
-
-void TabContentManager::SetUIResourceProvider(JNIEnv* env,
-                                              jobject obj,
-                                              jlong ui_resource_provider_ptr) {
-  ui::UIResourceProvider* ui_resource_provider =
-      reinterpret_cast<ui::UIResourceProvider*>(ui_resource_provider_ptr);
-  SetUIResourceProvider(ui_resource_provider);
 }
 
 void TabContentManager::SetUIResourceProvider(
@@ -234,16 +235,17 @@ void TabContentManager::OnFinishDecompressThumbnail(int tab_id,
       java_bitmap.obj());
 }
 
-jboolean TabContentManager::HasFullCachedThumbnail(JNIEnv* env,
-                                                   jobject obj,
-                                                   jint tab_id) {
+jboolean TabContentManager::HasFullCachedThumbnail(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint tab_id) {
   return thumbnail_cache_->Get(tab_id, false, false) != nullptr;
 }
 
 void TabContentManager::CacheTab(JNIEnv* env,
-                                 jobject obj,
-                                 jobject tab,
-                                 jobject content_view_core,
+                                 const JavaParamRef<jobject>& obj,
+                                 const JavaParamRef<jobject>& tab,
+                                 const JavaParamRef<jobject>& content_view_core,
                                  jfloat thumbnail_scale) {
   TabAndroid* tab_android = TabAndroid::GetNativeTab(env, tab);
   DCHECK(tab_android);
@@ -258,6 +260,7 @@ void TabContentManager::CacheTab(JNIEnv* env,
     if (!view ||
         !view->GetWebContents()
              ->GetRenderViewHost()
+             ->GetWidget()
              ->CanCopyFromBackingStore() ||
         pending_tab_readbacks_.find(tab_id) != pending_tab_readbacks_.end() ||
         pending_tab_readbacks_.size() >= kMaxReadbacks) {
@@ -271,15 +274,15 @@ void TabContentManager::CacheTab(JNIEnv* env,
     scoped_ptr<TabReadbackRequest> readback_request =
         make_scoped_ptr(new TabReadbackRequest(
             content_view_core, thumbnail_scale, readback_done_callback));
-    pending_tab_readbacks_.set(tab_id, readback_request.Pass());
+    pending_tab_readbacks_.set(tab_id, std::move(readback_request));
     pending_tab_readbacks_.get(tab_id)->Run();
   }
 }
 
 void TabContentManager::CacheTabWithBitmap(JNIEnv* env,
-                                           jobject obj,
-                                           jobject tab,
-                                           jobject bitmap,
+                                           const JavaParamRef<jobject>& obj,
+                                           const JavaParamRef<jobject>& tab,
+                                           const JavaParamRef<jobject>& bitmap,
                                            jfloat thumbnail_scale) {
   TabAndroid* tab_android = TabAndroid::GetNativeTab(env, tab);
   DCHECK(tab_android);
@@ -295,16 +298,17 @@ void TabContentManager::CacheTabWithBitmap(JNIEnv* env,
 }
 
 void TabContentManager::InvalidateIfChanged(JNIEnv* env,
-                                            jobject obj,
+                                            const JavaParamRef<jobject>& obj,
                                             jint tab_id,
-                                            jstring jurl) {
+                                            const JavaParamRef<jstring>& jurl) {
   thumbnail_cache_->InvalidateThumbnailIfChanged(
       tab_id, GURL(base::android::ConvertJavaStringToUTF8(env, jurl)));
 }
 
-void TabContentManager::UpdateVisibleIds(JNIEnv* env,
-                                         jobject obj,
-                                         jintArray priority) {
+void TabContentManager::UpdateVisibleIds(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jintArray>& priority) {
   std::list<int> priority_ids;
   jsize length = env->GetArrayLength(priority);
   jint* ints = env->GetIntArrayElements(priority, NULL);
@@ -316,7 +320,7 @@ void TabContentManager::UpdateVisibleIds(JNIEnv* env,
 }
 
 void TabContentManager::RemoveTabThumbnail(JNIEnv* env,
-                                           jobject obj,
+                                           const JavaParamRef<jobject>& obj,
                                            jint tab_id) {
   TabReadbackRequestMap::iterator readback_iter =
       pending_tab_readbacks_.find(tab_id);
@@ -327,19 +331,24 @@ void TabContentManager::RemoveTabThumbnail(JNIEnv* env,
 
 void TabContentManager::RemoveTabThumbnailFromDiskAtAndAboveId(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jint min_forbidden_id) {
   thumbnail_cache_->RemoveFromDiskAtAndAboveId(min_forbidden_id);
 }
 
-void TabContentManager::GetDecompressedThumbnail(JNIEnv* env,
-                                                 jobject obj,
-                                                 jint tab_id) {
+void TabContentManager::GetDecompressedThumbnail(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint tab_id) {
   base::Callback<void(bool, SkBitmap)> decompress_done_callback =
       base::Bind(&TabContentManager::OnFinishDecompressThumbnail,
                  weak_factory_.GetWeakPtr(), reinterpret_cast<int>(tab_id));
   thumbnail_cache_->DecompressThumbnailFromFile(reinterpret_cast<int>(tab_id),
                                                 decompress_done_callback);
+}
+
+void TabContentManager::OnUIResourcesWereEvicted() {
+  thumbnail_cache_->OnUIResourcesWereEvicted();
 }
 
 void TabContentManager::OnFinishedThumbnailRead(int tab_id) {
@@ -370,7 +379,7 @@ bool RegisterTabContentManager(JNIEnv* env) {
 // ----------------------------------------------------------------------------
 
 jlong Init(JNIEnv* env,
-           jobject obj,
+           const JavaParamRef<jobject>& obj,
            jint default_cache_size,
            jint approximation_cache_size,
            jint compression_queue_max_size,

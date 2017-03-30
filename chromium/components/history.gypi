@@ -29,6 +29,8 @@
         'keyed_service_core',
         'query_parser',
         'signin_core_browser',
+        'sync_driver',
+        'url_formatter/url_formatter.gyp:url_formatter',
       ],
       'export_dependent_settings': [
         '../skia/skia.gyp:skia',
@@ -60,8 +62,12 @@
         'history/core/browser/history_database_params.cc',
         'history/core/browser/history_database_params.h',
         'history/core/browser/history_db_task.h',
+        'history/core/browser/history_delete_directives_data_type_controller.cc',
+        'history/core/browser/history_delete_directives_data_type_controller.h',
         'history/core/browser/history_match.cc',
         'history/core/browser/history_match.h',
+        'history/core/browser/history_model_worker.cc',
+        'history/core/browser/history_model_worker.h',
         'history/core/browser/history_service.cc',
         'history/core/browser/history_service.h',
         'history/core/browser/history_service_observer.h',
@@ -89,6 +95,8 @@
         'history/core/browser/top_sites_impl.cc',
         'history/core/browser/top_sites_impl.h',
         'history/core/browser/top_sites_observer.h',
+        'history/core/browser/typed_url_data_type_controller.cc',
+        'history/core/browser/typed_url_data_type_controller.h',
         'history/core/browser/typed_url_syncable_service.cc',
         'history/core/browser/typed_url_syncable_service.h',
         'history/core/browser/url_database.cc',
@@ -159,6 +167,7 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
+        '../net/net.gyp:net',
         '../skia/skia.gyp:skia',
         '../sql/sql.gyp:sql',
         '../sql/sql.gyp:test_support_sql',
@@ -172,6 +181,8 @@
         # Note: sources list duplicated in GN build.
         'history/core/test/database_test_utils.cc',
         'history/core/test/database_test_utils.h',
+        'history/core/test/fake_web_history_service.cc',
+        'history/core/test/fake_web_history_service.h',
         'history/core/test/history_backend_db_base_test.cc',
         'history/core/test/history_backend_db_base_test.h',
         'history/core/test/history_client_fake_bookmarks.cc',
@@ -231,6 +242,7 @@
     ['OS=="ios"', {
       'targets': [
         {
+          # GN version: //components/history/ios/browser
           'target_name': 'history_ios_browser',
           'type': 'static_library',
           'include_dirs': [

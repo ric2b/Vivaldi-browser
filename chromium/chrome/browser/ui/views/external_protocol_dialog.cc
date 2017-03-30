@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/external_protocol_dialog.h"
 
+#include <utility>
+
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -43,8 +45,8 @@ void ExternalProtocolHandler::RunExternalProtocolDialog(
   }
 
   // Windowing system takes ownership.
-  new ExternalProtocolDialog(
-      delegate.Pass(), render_process_host_id, routing_id);
+  new ExternalProtocolDialog(std::move(delegate), render_process_host_id,
+                             routing_id);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -114,6 +116,10 @@ const views::Widget* ExternalProtocolDialog::GetWidget() const {
   return message_box_view_->GetWidget();
 }
 
+ui::ModalType ExternalProtocolDialog::GetModalType() const {
+  return ui::MODAL_TYPE_CHILD;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // ExternalProtocolDialog, private:
 
@@ -121,7 +127,7 @@ ExternalProtocolDialog::ExternalProtocolDialog(
     scoped_ptr<const ProtocolDialogDelegate> delegate,
     int render_process_host_id,
     int routing_id)
-    : delegate_(delegate.Pass()),
+    : delegate_(std::move(delegate)),
       render_process_host_id_(render_process_host_id),
       routing_id_(routing_id),
       creation_time_(base::TimeTicks::Now()) {
@@ -130,12 +136,10 @@ ExternalProtocolDialog::ExternalProtocolDialog(
   message_box_view_ = new views::MessageBoxView(params);
   message_box_view_->SetCheckBoxLabel(delegate_->GetCheckboxText());
 
-  // Dialog is top level if we don't have a web_contents associated with us.
   WebContents* web_contents = tab_util::GetWebContentsByID(
       render_process_host_id_, routing_id_);
-  gfx::NativeWindow parent_window = NULL;
+  // Only launch the dialog if there is a web contents associated with the
+  // request.
   if (web_contents)
-    parent_window = web_contents->GetTopLevelNativeWindow();
-  constrained_window::CreateBrowserModalDialogViews(this,
-                                                    parent_window)->Show();
+    constrained_window::ShowWebModalDialogViews(this, web_contents);
 }

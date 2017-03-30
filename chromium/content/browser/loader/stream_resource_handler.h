@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_LOADER_STREAM_RESOURCE_HANDLER_H_
 #define CONTENT_BROWSER_LOADER_STREAM_RESOURCE_HANDLER_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/loader/resource_handler.h"
@@ -31,17 +32,12 @@ class StreamResourceHandler : public ResourceHandler {
 
   void SetController(ResourceController* controller) override;
 
-  bool OnUploadProgress(uint64 position, uint64 size) override;
-
   // Not needed, as this event handler ought to be the final resource.
   bool OnRequestRedirected(const net::RedirectInfo& redirect_info,
                            ResourceResponse* resp,
                            bool* defer) override;
 
-  bool OnResponseStarted(ResourceResponse* resp,
-                                 bool* defer,
-                                 bool open_when_done,
-                                 bool ask_for_target) override;
+  bool OnResponseStarted(ResourceResponse* resp, bool* defer) override;
 
   bool OnWillStart(const GURL& url, bool* defer) override;
 

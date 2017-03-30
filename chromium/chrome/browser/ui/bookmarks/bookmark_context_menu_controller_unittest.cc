@@ -4,24 +4,27 @@
 
 #include "chrome/browser/ui/bookmarks/bookmark_context_menu_controller.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/memory/scoped_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
-#include "chrome/common/pref_names.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
+#include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/test/test_browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard.h"
 
@@ -46,11 +49,7 @@ class TestingPageNavigator : public PageNavigator {
 
 class BookmarkContextMenuControllerTest : public testing::Test {
  public:
-  BookmarkContextMenuControllerTest()
-      : ui_thread_(BrowserThread::UI, &message_loop_),
-        file_thread_(BrowserThread::FILE, &message_loop_),
-        model_(NULL) {
-  }
+  BookmarkContextMenuControllerTest() : model_(nullptr) {}
 
   void SetUp() override {
     TestingProfile::Builder builder;
@@ -63,9 +62,6 @@ class BookmarkContextMenuControllerTest : public testing::Test {
 
   void TearDown() override {
     ui::Clipboard::DestroyClipboardForCurrentThread();
-
-    // Flush the message loop to make application verifiers happy.
-    message_loop_.RunUntilIdle();
   }
 
   // Creates the following structure:
@@ -93,9 +89,7 @@ class BookmarkContextMenuControllerTest : public testing::Test {
   }
 
  protected:
-  base::MessageLoopForUI message_loop_;
-  content::TestBrowserThread ui_thread_;
-  content::TestBrowserThread file_thread_;
+  content::TestBrowserThreadBundle thread_bundle_;
   scoped_ptr<TestingProfile> profile_;
   BookmarkModel* model_;
   TestingPageNavigator navigator_;
@@ -344,7 +338,8 @@ TEST_F(BookmarkContextMenuControllerTest,
       std::vector<const BookmarkNode*>());
 
   // By default, the pref is not managed and the command is enabled.
-  TestingPrefServiceSyncable* prefs = profile_->GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_->GetTestingPrefService();
   EXPECT_FALSE(prefs->IsManagedPreference(
       bookmarks::prefs::kShowAppsShortcutInBookmarkBar));
   EXPECT_TRUE(

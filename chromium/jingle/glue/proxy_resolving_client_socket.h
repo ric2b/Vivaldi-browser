@@ -8,8 +8,10 @@
 #ifndef JINGLE_GLUE_PROXY_RESOLVING_CLIENT_SOCKET_H_
 #define JINGLE_GLUE_PROXY_RESOLVING_CLIENT_SOCKET_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_callback.h"
@@ -54,8 +56,8 @@ class ProxyResolvingClientSocket : public net::StreamSocket {
   int Write(net::IOBuffer* buf,
             int buf_len,
             const net::CompletionCallback& callback) override;
-  int SetReceiveBufferSize(int32 size) override;
-  int SetSendBufferSize(int32 size) override;
+  int SetReceiveBufferSize(int32_t size) override;
+  int SetSendBufferSize(int32_t size) override;
   int Connect(const net::CompletionCallback& callback) override;
   void Disconnect() override;
   bool IsConnected() const override;
@@ -74,6 +76,7 @@ class ProxyResolvingClientSocket : public net::StreamSocket {
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const net::ConnectionAttempts& attempts) override {
   }
+  int64_t GetTotalReceivedBytes() const override;
 
  private:
   // Proxy resolution and connection functions.
@@ -89,7 +92,7 @@ class ProxyResolvingClientSocket : public net::StreamSocket {
   net::CompletionCallback proxy_resolve_callback_;
   net::CompletionCallback connect_callback_;
 
-  scoped_refptr<net::HttpNetworkSession> network_session_;
+  scoped_ptr<net::HttpNetworkSession> network_session_;
 
   // The transport socket.
   scoped_ptr<net::ClientSocketHandle> transport_;

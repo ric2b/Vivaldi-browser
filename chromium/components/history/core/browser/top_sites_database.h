@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "components/history/core/browser/history_types.h"
 #include "sql/meta_table.h"
 
@@ -56,6 +57,12 @@ class TopSitesDatabase {
   // Remove the record for this URL. Returns true iff removed successfully.
   bool RemoveURL(const MostVisitedURL& url);
 
+  // Vivaldi:: Rebuilds the database, removing any free/deleted pages.
+  void Vacuum();
+
+  // Vivaldi: Deletes all data except for bookmark thumbnails
+  bool DeleteDataExceptBookmarkThumbnails();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TopSitesDatabaseTest, Version1);
   FRIEND_TEST_ALL_PREFIXES(TopSitesDatabaseTest, Version2);
@@ -95,6 +102,9 @@ class TopSitesDatabase {
   // Init() to retry in case of failure, since some failures will
   // invoke recovery code.
   bool InitImpl(const base::FilePath& db_name);
+
+  // Vivaldi: Trim the thumbnail data down to a managable size
+  bool TrimThumbnailData();
 
   sql::Connection* CreateDB(const base::FilePath& db_name);
 

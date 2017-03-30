@@ -2,19 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/sync_file_system/drive_backend/sync_task_manager.h"
+
+#include <stdint.h>
 #include <deque>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/drive_backend/sync_task.h"
-#include "chrome/browser/sync_file_system/drive_backend/sync_task_manager.h"
 #include "chrome/browser/sync_file_system/drive_backend/sync_task_token.h"
 #include "chrome/browser/sync_file_system/sync_file_system_test_util.h"
 #include "storage/common/fileapi/file_system_util.h"
@@ -57,7 +60,7 @@ class TaskManagerClient
     : public SyncTaskManager::Client,
       public base::SupportsWeakPtr<TaskManagerClient> {
  public:
-  explicit TaskManagerClient(int64 maximum_background_task)
+  explicit TaskManagerClient(int64_t maximum_background_task)
       : maybe_schedule_next_task_count_(0),
         task_scheduled_count_(0),
         idle_task_scheduled_count_(0),
@@ -169,9 +172,9 @@ class MultihopSyncTask : public ExclusiveTask {
 class BackgroundTask : public SyncTask {
  public:
   struct Stats {
-    int64 running_background_task;
-    int64 finished_task;
-    int64 max_parallel_task;
+    int64_t running_background_task;
+    int64_t finished_task;
+    int64_t max_parallel_task;
 
     Stats()
         : running_background_task(0),
@@ -196,7 +199,7 @@ class BackgroundTask : public SyncTask {
     task_blocker->paths.push_back(path_);
 
     SyncTaskManager::UpdateTaskBlocker(
-        token.Pass(), task_blocker.Pass(),
+        std::move(token), std::move(task_blocker),
         base::Bind(&BackgroundTask::RunAsBackgroundTask,
                    weak_ptr_factory_.GetWeakPtr()));
   }
@@ -216,7 +219,7 @@ class BackgroundTask : public SyncTask {
   void CompleteTask(scoped_ptr<SyncTaskToken> token) {
     ++(stats_->finished_task);
     --(stats_->running_background_task);
-    SyncTaskManager::NotifyTaskDone(token.Pass(), SYNC_STATUS_OK);
+    SyncTaskManager::NotifyTaskDone(std::move(token), SYNC_STATUS_OK);
   }
 
   std::string app_id_;
@@ -246,14 +249,14 @@ class BlockerUpdateTestHelper : public SyncTask {
   ~BlockerUpdateTestHelper() override {}
 
   void RunPreflight(scoped_ptr<SyncTaskToken> token) override {
-    UpdateBlocker(token.Pass());
+    UpdateBlocker(std::move(token));
   }
 
  private:
   void UpdateBlocker(scoped_ptr<SyncTaskToken> token) {
     if (paths_.empty()) {
       log_->push_back(name_ + ": finished");
-      SyncTaskManager::NotifyTaskDone(token.Pass(), SYNC_STATUS_OK);
+      SyncTaskManager::NotifyTaskDone(std::move(token), SYNC_STATUS_OK);
       return;
     }
 
@@ -269,10 +272,9 @@ class BlockerUpdateTestHelper : public SyncTask {
             base::FilePath::FromUTF8Unsafe(updating_to))));
 
     SyncTaskManager::UpdateTaskBlocker(
-        token.Pass(), task_blocker.Pass(),
+        std::move(token), std::move(task_blocker),
         base::Bind(&BlockerUpdateTestHelper::UpdateBlockerSoon,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   updating_to));
+                   weak_ptr_factory_.GetWeakPtr(), updating_to));
   }
 
   void UpdateBlockerSoon(const std::string& updated_to,

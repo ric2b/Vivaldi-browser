@@ -4,7 +4,9 @@
 
 #include "components/omnibox/browser/autocomplete_input.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -83,7 +85,6 @@ TEST(AutocompleteInputTest, InputType) {
     { ASCIIToUTF16("user@foo:45"), metrics::OmniboxInputType::URL },
     { ASCIIToUTF16("user:pass@1.2:45"), metrics::OmniboxInputType::URL },
     { ASCIIToUTF16("host?query"), metrics::OmniboxInputType::UNKNOWN },
-    { ASCIIToUTF16("host#ref"), metrics::OmniboxInputType::QUERY },
     { ASCIIToUTF16("host#"), metrics::OmniboxInputType::QUERY },
     { ASCIIToUTF16("host#ref"), metrics::OmniboxInputType::QUERY },
     { ASCIIToUTF16("host# ref"), metrics::OmniboxInputType::QUERY },

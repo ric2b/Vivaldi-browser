@@ -4,8 +4,6 @@
 
 #include "net/dns/dns_query.h"
 
-#include "base/bind.h"
-#include "net/base/dns_util.h"
 #include "net/base/io_buffer.h"
 #include "net/dns/dns_protocol.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -17,24 +15,19 @@ namespace {
 TEST(DnsQueryTest, Constructor) {
   // This includes \0 at the end.
   const char qname_data[] = "\x03""www""\x07""example""\x03""com";
-  const uint8 query_data[] = {
-    // Header
-    0xbe, 0xef,
-    0x01, 0x00,               // Flags -- set RD (recursion desired) bit.
-    0x00, 0x01,               // Set QDCOUNT (question count) to 1, all the
-                              // rest are 0 for a query.
-    0x00, 0x00,
-    0x00, 0x00,
-    0x00, 0x00,
+  const uint8_t query_data[] = {
+      // Header
+      0xbe, 0xef, 0x01, 0x00,  // Flags -- set RD (recursion desired) bit.
+      0x00, 0x01,              // Set QDCOUNT (question count) to 1, all the
+                               // rest are 0 for a query.
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
-    // Question
-    0x03, 'w', 'w', 'w',      // QNAME: www.example.com in DNS format.
-    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
-    0x03, 'c', 'o', 'm',
-    0x00,
+      // Question
+      0x03, 'w', 'w', 'w',  // QNAME: www.example.com in DNS format.
+      0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 0x03, 'c', 'o', 'm', 0x00,
 
-    0x00, 0x01,               // QTYPE: A query.
-    0x00, 0x01,               // QCLASS: IN class.
+      0x00, 0x01,  // QTYPE: A query.
+      0x00, 0x01,  // QCLASS: IN class.
   };
 
   base::StringPiece qname(qname_data, sizeof(qname_data));
@@ -57,7 +50,7 @@ TEST(DnsQueryTest, Clone) {
 
   DnsQuery q1(0, qname, dns_protocol::kTypeA);
   EXPECT_EQ(0, q1.id());
-  scoped_ptr<DnsQuery> q2(q1.CloneWithNewId(42));
+  scoped_ptr<DnsQuery> q2 = q1.CloneWithNewId(42);
   EXPECT_EQ(42, q2->id());
   EXPECT_EQ(q1.io_buffer()->size(), q2->io_buffer()->size());
   EXPECT_EQ(q1.qtype(), q2->qtype());

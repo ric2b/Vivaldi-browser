@@ -4,7 +4,9 @@
 
 #include "cc/resources/video_resource_updater.h"
 
-#include "base/memory/shared_memory.h"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "cc/resources/resource_provider.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
@@ -33,11 +35,25 @@ class WebGraphicsContext3DUploadCounter : public TestWebGraphicsContext3D {
     ++upload_count_;
   }
 
+  GLuint createTexture() override {
+    ++created_texture_count_;
+    return TestWebGraphicsContext3D::createTexture();
+  }
+
+  void deleteTexture(GLuint texture) override {
+    --created_texture_count_;
+    TestWebGraphicsContext3D::deleteTexture(texture);
+  }
+
   int UploadCount() { return upload_count_; }
   void ResetUploadCount() { upload_count_ = 0; }
 
+  int TextureCreationCount() { return created_texture_count_; }
+  void ResetTextureCreationCount() { created_texture_count_ = 0; }
+
  private:
   int upload_count_;
+  int created_texture_count_;
 };
 
 class SharedBitmapManagerAllocationCounter : public TestSharedBitmapManager {
@@ -63,8 +79,7 @@ class VideoResourceUpdaterTest : public testing::Test {
 
     context3d_ = context3d.get();
 
-    output_surface3d_ =
-        FakeOutputSurface::Create3d(context3d.Pass());
+    output_surface3d_ = FakeOutputSurface::Create3d(std::move(context3d));
     CHECK(output_surface3d_->BindToClient(&client_));
 
     output_surface_software_ = FakeOutputSurface::CreateSoftware(
@@ -82,43 +97,62 @@ class VideoResourceUpdaterTest : public testing::Test {
   scoped_refptr<media::VideoFrame> CreateTestYUVVideoFrame() {
     const int kDimension = 10;
     gfx::Size size(kDimension, kDimension);
-    static uint8 y_data[kDimension * kDimension] = { 0 };
-    static uint8 u_data[kDimension * kDimension / 2] = { 0 };
-    static uint8 v_data[kDimension * kDimension / 2] = { 0 };
+    static uint8_t y_data[kDimension * kDimension] = {0};
+    static uint8_t u_data[kDimension * kDimension / 2] = {0};
+    static uint8_t v_data[kDimension * kDimension / 2] = {0};
 
-    return media::VideoFrame::WrapExternalYuvData(
-        media::VideoFrame::YV16,  // format
-        size,                     // coded_size
-        gfx::Rect(size),          // visible_rect
-        size,                     // natural_size
-        size.width(),             // y_stride
-        size.width() / 2,         // u_stride
-        size.width() / 2,         // v_stride
-        y_data,                   // y_data
-        u_data,                   // u_data
-        v_data,                   // v_data
-        base::TimeDelta());       // timestamp
+    scoped_refptr<media::VideoFrame> video_frame =
+        media::VideoFrame::WrapExternalYuvData(
+            media::PIXEL_FORMAT_YV16,  // format
+            size,                      // coded_size
+            gfx::Rect(size),           // visible_rect
+            size,                      // natural_size
+            size.width(),              // y_stride
+            size.width() / 2,          // u_stride
+            size.width() / 2,          // v_stride
+            y_data,                    // y_data
+            u_data,                    // u_data
+            v_data,                    // v_data
+            base::TimeDelta());        // timestamp
+    EXPECT_TRUE(video_frame);
+    return video_frame;
   }
 
-  static void ReleaseMailboxCB(unsigned sync_point) {}
+  static void ReleaseMailboxCB(const gpu::SyncToken& sync_token) {}
 
-  scoped_refptr<media::VideoFrame> CreateTestRGBAHardwareVideoFrame() {
+  scoped_refptr<media::VideoFrame> CreateTestHardwareVideoFrame(
+      unsigned target) {
     const int kDimension = 10;
     gfx::Size size(kDimension, kDimension);
 
     gpu::Mailbox mailbox;
     mailbox.name[0] = 51;
 
-    const unsigned sync_point = 7;
-    const unsigned target = GL_TEXTURE_2D;
-    return media::VideoFrame::WrapNativeTexture(
-        media::VideoFrame::ARGB,
-        gpu::MailboxHolder(mailbox, target, sync_point),
-        base::Bind(&ReleaseMailboxCB),
-        size,                // coded_size
-        gfx::Rect(size),     // visible_rect
-        size,                // natural_size
-        base::TimeDelta());  // timestamp
+    const gpu::SyncToken sync_token(7);
+    scoped_refptr<media::VideoFrame> video_frame =
+        media::VideoFrame::WrapNativeTexture(
+            media::PIXEL_FORMAT_ARGB,
+            gpu::MailboxHolder(mailbox, sync_token, target),
+            base::Bind(&ReleaseMailboxCB),
+            size,                // coded_size
+            gfx::Rect(size),     // visible_rect
+            size,                // natural_size
+            base::TimeDelta());  // timestamp
+    EXPECT_TRUE(video_frame);
+    return video_frame;
+  }
+
+  scoped_refptr<media::VideoFrame> CreateTestRGBAHardwareVideoFrame() {
+    return CreateTestHardwareVideoFrame(GL_TEXTURE_2D);
+  }
+
+  scoped_refptr<media::VideoFrame> CreateTestStreamTextureHardwareVideoFrame(
+      bool needs_copy) {
+    scoped_refptr<media::VideoFrame> video_frame =
+        CreateTestHardwareVideoFrame(GL_TEXTURE_EXTERNAL_OES);
+    video_frame->metadata()->SetBoolean(
+        media::VideoFrameMetadata::COPY_REQUIRED, needs_copy);
+    return video_frame;
   }
 
   scoped_refptr<media::VideoFrame> CreateTestYUVHardareVideoFrame() {
@@ -130,20 +164,23 @@ class VideoResourceUpdaterTest : public testing::Test {
     for (int i = 0; i < kPlanesNum; ++i) {
       mailbox[i].name[0] = 50 + 1;
     }
-    const unsigned sync_point = 7;
+    const gpu::SyncToken sync_token(7);
     const unsigned target = GL_TEXTURE_RECTANGLE_ARB;
-    return media::VideoFrame::WrapYUV420NativeTextures(
-        gpu::MailboxHolder(mailbox[media::VideoFrame::kYPlane], target,
-                           sync_point),
-        gpu::MailboxHolder(mailbox[media::VideoFrame::kUPlane], target,
-                           sync_point),
-        gpu::MailboxHolder(mailbox[media::VideoFrame::kVPlane], target,
-                           sync_point),
-        base::Bind(&ReleaseMailboxCB),
-        size,                // coded_size
-        gfx::Rect(size),     // visible_rect
-        size,                // natural_size
-        base::TimeDelta());  // timestamp
+    scoped_refptr<media::VideoFrame> video_frame =
+        media::VideoFrame::WrapYUV420NativeTextures(
+            gpu::MailboxHolder(mailbox[media::VideoFrame::kYPlane], sync_token,
+                               target),
+            gpu::MailboxHolder(mailbox[media::VideoFrame::kUPlane], sync_token,
+                               target),
+            gpu::MailboxHolder(mailbox[media::VideoFrame::kVPlane], sync_token,
+                               target),
+            base::Bind(&ReleaseMailboxCB),
+            size,                // coded_size
+            gfx::Rect(size),     // visible_rect
+            size,                // natural_size
+            base::TimeDelta());  // timestamp
+    EXPECT_TRUE(video_frame);
+    return video_frame;
   }
 
   WebGraphicsContext3DUploadCounter* context3d_;
@@ -185,7 +222,7 @@ TEST_F(VideoResourceUpdaterTest, ReuseResource) {
   // Simulate the ResourceProvider releasing the resources back to the video
   // updater.
   for (ReleaseCallbackImpl& release_callback : resources.release_callbacks)
-    release_callback.Run(0, false, nullptr);
+    release_callback.Run(gpu::SyncToken(), false, nullptr);
 
   // Allocate resources for the same frame.
   context3d_->ResetUploadCount();
@@ -251,7 +288,7 @@ TEST_F(VideoResourceUpdaterTest, ReuseResourceSoftwareCompositor) {
 
   // Simulate the ResourceProvider releasing the resource back to the video
   // updater.
-  resources.software_release_callback.Run(0, false, nullptr);
+  resources.software_release_callback.Run(gpu::SyncToken(), false, nullptr);
 
   // Allocate resources for the same frame.
   shared_bitmap_manager_->ResetAllocationCount();
@@ -300,7 +337,8 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes) {
 
   VideoFrameExternalResources resources =
       updater.CreateExternalResourcesFromVideoFrame(video_frame);
-  EXPECT_EQ(VideoFrameExternalResources::RGBA_RESOURCE, resources.type);
+  EXPECT_EQ(VideoFrameExternalResources::RGBA_PREMULTIPLIED_RESOURCE,
+            resources.type);
   EXPECT_EQ(1u, resources.mailboxes.size());
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(0u, resources.software_resources.size());
@@ -313,6 +351,37 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes) {
   EXPECT_EQ(3u, resources.mailboxes.size());
   EXPECT_EQ(3u, resources.release_callbacks.size());
   EXPECT_EQ(0u, resources.software_resources.size());
+}
+
+TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_StreamTexture) {
+  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+                               resource_provider3d_.get());
+  context3d_->ResetTextureCreationCount();
+  scoped_refptr<media::VideoFrame> video_frame =
+      CreateTestStreamTextureHardwareVideoFrame(false);
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::STREAM_TEXTURE_RESOURCE,
+            resources.type);
+  EXPECT_EQ(1u, resources.mailboxes.size());
+  EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES, resources.mailboxes[0].target());
+  EXPECT_EQ(1u, resources.release_callbacks.size());
+  EXPECT_EQ(0u, resources.software_resources.size());
+  EXPECT_EQ(0, context3d_->TextureCreationCount());
+
+  // A copied stream texture should return an RGBA resource in a new
+  // GL_TEXTURE_2D texture.
+  context3d_->ResetTextureCreationCount();
+  video_frame = CreateTestStreamTextureHardwareVideoFrame(true);
+
+  resources = updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::RGBA_RESOURCE, resources.type);
+  EXPECT_EQ(1u, resources.mailboxes.size());
+  EXPECT_EQ((GLenum)GL_TEXTURE_2D, resources.mailboxes[0].target());
+  EXPECT_EQ(1u, resources.release_callbacks.size());
+  EXPECT_EQ(0u, resources.software_resources.size());
+  EXPECT_EQ(1, context3d_->TextureCreationCount());
 }
 }  // namespace
 }  // namespace cc

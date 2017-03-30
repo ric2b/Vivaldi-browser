@@ -7,6 +7,7 @@
 #include <gdk/gdk.h>
 #include <gdk/gdkx.h>
 #include <gtk/gtk.h>
+#include <stddef.h>
 
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
@@ -71,11 +72,6 @@ std::string GetDesktopName(base::Environment* env) {
 #endif
 }
 
-void SetAlwaysShowImage(GtkWidget* image_menu_item) {
-  gtk_image_menu_item_set_always_show_image(
-      GTK_IMAGE_MENU_ITEM(image_menu_item), TRUE);
-}
-
 guint GetGdkKeyCodeForAccelerator(const ui::Accelerator& accelerator) {
   // The second parameter is false because accelerator keys are expressed in
   // terms of the non-shift-modified key.
@@ -97,15 +93,24 @@ GdkModifierType GetGdkModifierForAccelerator(
 
 int EventFlagsFromGdkState(guint state) {
   int flags = ui::EF_NONE;
-  flags |= (state & GDK_LOCK_MASK) ? ui::EF_CAPS_LOCK_DOWN : ui::EF_NONE;
-  flags |= (state & GDK_CONTROL_MASK) ? ui::EF_CONTROL_DOWN : ui::EF_NONE;
   flags |= (state & GDK_SHIFT_MASK) ? ui::EF_SHIFT_DOWN : ui::EF_NONE;
+  flags |= (state & GDK_LOCK_MASK) ? ui::EF_CAPS_LOCK_ON : ui::EF_NONE;
+  flags |= (state & GDK_CONTROL_MASK) ? ui::EF_CONTROL_DOWN : ui::EF_NONE;
   flags |= (state & GDK_MOD1_MASK) ? ui::EF_ALT_DOWN : ui::EF_NONE;
   flags |= (state & GDK_BUTTON1_MASK) ? ui::EF_LEFT_MOUSE_BUTTON : ui::EF_NONE;
   flags |=
       (state & GDK_BUTTON2_MASK) ? ui::EF_MIDDLE_MOUSE_BUTTON : ui::EF_NONE;
   flags |= (state & GDK_BUTTON3_MASK) ? ui::EF_RIGHT_MOUSE_BUTTON : ui::EF_NONE;
   return flags;
+}
+
+void TurnButtonBlue(GtkWidget* button) {
+#if GTK_MAJOR_VERSION == 2
+  gtk_widget_set_can_default(button, true);
+#else
+  gtk_style_context_add_class(gtk_widget_get_style_context(button),
+                              "suggested-action");
+#endif
 }
 
 void SetGtkTransientForAura(GtkWidget* dialog, aura::Window* parent) {
@@ -133,17 +138,6 @@ aura::Window* GetAuraTransientParent(GtkWidget* dialog) {
 
 void ClearAuraTransientParent(GtkWidget* dialog) {
   g_object_set_data(G_OBJECT(dialog), kAuraTransientParent, NULL);
-}
-
-GtkStateType GetGtkState(ui::NativeTheme::State state) {
-  switch (state) {
-    case ui::NativeTheme::kDisabled:  return GTK_STATE_INSENSITIVE;
-    case ui::NativeTheme::kHovered:   return GTK_STATE_PRELIGHT;
-    case ui::NativeTheme::kNormal:    return GTK_STATE_NORMAL;
-    case ui::NativeTheme::kPressed:   return GTK_STATE_ACTIVE;
-    case ui::NativeTheme::kNumStates: NOTREACHED();
-  }
-  return GTK_STATE_NORMAL;
 }
 
 }  // namespace libgtk2ui

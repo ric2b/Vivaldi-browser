@@ -83,6 +83,8 @@
         'cocoa/base_view.mm',
         'cocoa/cocoa_base_utils.h',
         'cocoa/cocoa_base_utils.mm',
+        'cocoa/command_dispatcher.h',
+        'cocoa/command_dispatcher.mm',
         'cocoa/constrained_window/constrained_window_animation.h',
         'cocoa/constrained_window/constrained_window_animation.mm',
         'cocoa/controls/blue_label_button.h',
@@ -121,6 +123,8 @@
         'cocoa/nsview_additions.mm',
         'cocoa/remote_layer_api.h',
         'cocoa/remote_layer_api.mm',
+        'cocoa/scoped_cg_context_smooth_fonts.h',
+        'cocoa/scoped_cg_context_smooth_fonts.mm',
         'cocoa/three_part_image.h',
         'cocoa/three_part_image.mm',
         'cocoa/tool_tip_base_view.h',
@@ -129,6 +133,7 @@
         'cocoa/tracking_area.mm',
         'cocoa/underlay_opengl_hosting_window.h',
         'cocoa/underlay_opengl_hosting_window.mm',
+        'cocoa/user_interface_item_command_handler.h',
         'cocoa/view_description.h',
         'cocoa/view_description.mm',
         'cocoa/window_size_constants.h',
@@ -137,6 +142,7 @@
         'cursor/cursor.h',
         'cursor/cursor_android.cc',
         'cursor/cursor_loader.h',
+        'cursor/cursor_loader_android.cc',
         'cursor/cursor_loader_ozone.cc',
         'cursor/cursor_loader_ozone.h',
         'cursor/cursor_loader_win.cc',
@@ -192,6 +198,7 @@
         'hit_test.h',
         'idle/idle.cc',
         'idle/idle.h',
+        'idle/idle_android.cc',
         'idle/idle_chromeos.cc',
         'idle/idle_linux.cc',
         'idle/idle_mac.mm',
@@ -215,8 +222,6 @@
         'l10n/l10n_util_collator.h',
         'l10n/l10n_util_mac.h',
         'l10n/l10n_util_mac.mm',
-        'l10n/l10n_util_plurals.cc',
-        'l10n/l10n_util_plurals.h',
         'l10n/l10n_util_posix.cc',
         'l10n/l10n_util_win.cc',
         'l10n/l10n_util_win.h',
@@ -270,6 +275,8 @@
         'resource/resource_data_dll_win.cc',
         'resource/resource_data_dll_win.h',
         'resource/resource_handle.h',
+        'template_expressions.cc',
+        'template_expressions.h',
         'text/bytes_formatting.cc',
         'text/bytes_formatting.h',
         'theme_provider.cc',
@@ -279,6 +286,7 @@
         'touch/touch_device.cc',
         'touch/touch_device.h',
         'touch/touch_device_android.cc',
+        'touch/touch_device_ios.cc',
         'touch/touch_device_linux.cc',
         'touch/touch_device_win.cc',
         'touch/touch_editing_controller.cc',
@@ -367,6 +375,7 @@
             ['include', '^layout'],
             ['include', '^page_transition_type'],
             ['include', '^resource/'],
+            ['include', 'template_expressions.cc'],
             ['include', '^ui_base_'],
             ['include', '^webui/'],
             ['include', '^window_open_disposition\\.cc'],
@@ -387,6 +396,7 @@
           'sources!': [
             'cursor/cursor.cc',
             'cursor/cursor.h',
+            'cursor/cursor_loader_android.cc',
             'cursor/cursor_loader_x11.cc',
             'cursor/cursor_loader_x11.h',
             'cursor/cursor_win.cc',
@@ -422,7 +432,7 @@
             '../../build/linux/system.gyp:glib',
           ],
         }],
-        ['desktop_linux == 1 or chromeos == 1', {
+        ['OS=="linux"', {
           'conditions': [
             ['toolkit_views==0 and use_aura==0', {
               # Note: because of gyp predence rules this has to be defined as
@@ -575,8 +585,6 @@
             'default_theme_provider.cc',
             'dragdrop/drag_utils.cc',
             'dragdrop/drag_utils.h',
-            'idle/idle.cc',
-            'idle/idle.h',
             'l10n/l10n_font_util.cc',
             'models/button_menu_item_model.cc',
             'models/dialog_model.cc',
@@ -597,7 +605,10 @@
         }],
         ['OS=="android" and use_aura==0', {
           'sources!': [
-            'cursor/cursor_android.cc'
+            'cursor/cursor_android.cc',
+            'idle/idle.cc',
+            'idle/idle.h',
+            'idle/idle_android.cc',
           ],
         }],
         ['OS=="android" and use_aura==1', {
@@ -678,6 +689,8 @@
             'ime/dummy_text_input_client.h',
             'test/nswindow_fullscreen_notification_waiter.h',
             'test/nswindow_fullscreen_notification_waiter.mm',
+            'test/scoped_fake_nswindow_focus.h',
+            'test/scoped_fake_nswindow_focus.mm',
             'test/scoped_fake_nswindow_fullscreen.h',
             'test/scoped_fake_nswindow_fullscreen.mm',
             'test/windowed_nsnotification_observer.h',

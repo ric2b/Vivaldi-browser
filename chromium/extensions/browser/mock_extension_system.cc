@@ -30,6 +30,10 @@ ManagementPolicy* MockExtensionSystem::management_policy() {
   return nullptr;
 }
 
+ServiceWorkerManager* MockExtensionSystem::service_worker_manager() {
+  return nullptr;
+}
+
 SharedUserScriptMaster* MockExtensionSystem::shared_user_script_master() {
   return nullptr;
 }
@@ -50,6 +54,10 @@ QuotaService* MockExtensionSystem::quota_service() {
   return nullptr;
 }
 
+AppSorting* MockExtensionSystem::app_sorting() {
+  return nullptr;
+}
+
 const OneShotEvent& MockExtensionSystem::ready() const {
   return ready_;
 }
@@ -61,6 +69,11 @@ ContentVerifier* MockExtensionSystem::content_verifier() {
 scoped_ptr<ExtensionSet> MockExtensionSystem::GetDependentExtensions(
     const Extension* extension) {
   return scoped_ptr<ExtensionSet>();
+}
+
+void MockExtensionSystem::InstallUpdate(const std::string& extension_id,
+                                        const base::FilePath& temp_dir) {
+  NOTREACHED();
 }
 
 }  // namespace extensions

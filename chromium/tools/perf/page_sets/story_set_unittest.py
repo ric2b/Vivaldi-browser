@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+﻿# Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -17,21 +17,19 @@ class StorySetUnitTest(story_set_smoke_test.StorySetSmokeTest):
     self.story_sets_dir = os.path.dirname(os.path.realpath(__file__))
     self.top_level_dir = os.path.dirname(self.story_sets_dir)
 
-  # Disabled in Vivaldi
-  @decorators.Disabled
   # TODO(tbarzic): crbug.com/386416.
   @decorators.Disabled('chromeos')
   def testSmoke(self):
     self.RunSmokeTest(self.story_sets_dir, self.top_level_dir)
 
-  # Disabled in Vivaldi
-  @decorators.Disabled
   # TODO(nednguyen): Remove this test once crbug.com/508538 is fixed.
+  # TODO(tbarzic): crbug.com/386416.
+  @decorators.Disabled('chromeos')
   def testNoPageDefinedSyntheticDelay(self):
     for story_set_class in self.GetAllStorySetClasses(self.story_sets_dir,
                                                       self.top_level_dir):
       if story_set_class is page_sets.ToughSchedulingCasesPageSet:
-       continue
+        continue
       story_set = story_set_class()
       for story in story_set:
         if isinstance(story, page.Page):

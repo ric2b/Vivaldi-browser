@@ -4,104 +4,50 @@
 
 #include "remoting/test/fake_port_allocator.h"
 
+#include "base/macros.h"
+#include "remoting/protocol/transport_context.h"
 #include "remoting/test/fake_network_dispatcher.h"
 #include "remoting/test/fake_network_manager.h"
 #include "remoting/test/fake_socket_factory.h"
+#include "third_party/webrtc/p2p/client/basicportallocator.h"
 
 namespace remoting {
 
 namespace {
 
-class FakePortAllocatorSession
-    : public cricket::HttpPortAllocatorSessionBase {
+class FakePortAllocatorSession : public cricket::BasicPortAllocatorSession {
  public:
-  FakePortAllocatorSession(
-      cricket::HttpPortAllocatorBase* allocator,
-      const std::string& content_name,
-      int component,
-      const std::string& ice_username_fragment,
-      const std::string& ice_password,
-      const std::vector<rtc::SocketAddress>& stun_hosts,
-      const std::vector<std::string>& relay_hosts,
-      const std::string& relay);
+  FakePortAllocatorSession(FakePortAllocator* allocator,
+                           const std::string& content_name,
+                           int component,
+                           const std::string& ice_username_fragment,
+                           const std::string& ice_password);
   ~FakePortAllocatorSession() override;
-
-  // cricket::HttpPortAllocatorBase overrides.
-  void ConfigReady(cricket::PortConfiguration* config) override;
-  void SendSessionRequest(const std::string& host, int port) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakePortAllocatorSession);
 };
 
 FakePortAllocatorSession::FakePortAllocatorSession(
-    cricket::HttpPortAllocatorBase* allocator,
+    FakePortAllocator* allocator,
     const std::string& content_name,
     int component,
     const std::string& ice_username_fragment,
-    const std::string& ice_password,
-    const std::vector<rtc::SocketAddress>& stun_hosts,
-    const std::vector<std::string>& relay_hosts,
-    const std::string& relay)
-    : HttpPortAllocatorSessionBase(allocator,
-                                   content_name,
-                                   component,
-                                   ice_username_fragment,
-                                   ice_password,
-                                   stun_hosts,
-                                   relay_hosts,
-                                   relay,
-                                   std::string()) {
-}
+    const std::string& ice_password)
+    : BasicPortAllocatorSession(allocator,
+                                content_name,
+                                component,
+                                ice_username_fragment,
+                                ice_password) {}
 
-FakePortAllocatorSession::~FakePortAllocatorSession() {
-}
-
-void FakePortAllocatorSession::ConfigReady(
-    cricket::PortConfiguration* config) {
-  // Filter out non-UDP relay ports, so that we don't try using TCP.
-  for (cricket::PortConfiguration::RelayList::iterator relay =
-           config->relays.begin(); relay != config->relays.end(); ++relay) {
-    cricket::PortList filtered_ports;
-    for (cricket::PortList::iterator port =
-             relay->ports.begin(); port != relay->ports.end(); ++port) {
-      if (port->proto == cricket::PROTO_UDP) {
-        filtered_ports.push_back(*port);
-      }
-    }
-    relay->ports = filtered_ports;
-  }
-  cricket::BasicPortAllocatorSession::ConfigReady(config);
-}
-
-void FakePortAllocatorSession::SendSessionRequest(
-    const std::string& host,
-    int port) {
-  ReceiveSessionResponse(std::string());
-}
+FakePortAllocatorSession::~FakePortAllocatorSession() {}
 
 }  // namespace
 
-// static
-scoped_ptr<FakePortAllocator> FakePortAllocator::Create(
-    scoped_refptr<FakeNetworkDispatcher> fake_network_dispatcher) {
-  scoped_ptr<FakePacketSocketFactory> socket_factory(
-      new FakePacketSocketFactory(fake_network_dispatcher.get()));
-  scoped_ptr<rtc::NetworkManager> network_manager(
-      new FakeNetworkManager(socket_factory->GetAddress()));
-
-  return make_scoped_ptr(
-      new FakePortAllocator(network_manager.Pass(), socket_factory.Pass()));
-}
-
 FakePortAllocator::FakePortAllocator(
-    scoped_ptr<rtc::NetworkManager> network_manager,
-    scoped_ptr<FakePacketSocketFactory> socket_factory)
-    : HttpPortAllocatorBase(network_manager.get(),
-                            socket_factory.get(),
-                            std::string()),
-      network_manager_(network_manager.Pass()),
-      socket_factory_(socket_factory.Pass()) {
+    rtc::NetworkManager* network_manager,
+    rtc::PacketSocketFactory* socket_factory)
+    : BasicPortAllocator(network_manager, socket_factory) {
   set_flags(cricket::PORTALLOCATOR_DISABLE_TCP |
             cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG |
             cricket::PORTALLOCATOR_ENABLE_IPV6 |
@@ -109,17 +55,31 @@ FakePortAllocator::FakePortAllocator(
             cricket::PORTALLOCATOR_DISABLE_RELAY);
 }
 
-FakePortAllocator::~FakePortAllocator() {
-}
+FakePortAllocator::~FakePortAllocator() {}
 
 cricket::PortAllocatorSession* FakePortAllocator::CreateSessionInternal(
     const std::string& content_name,
     int component,
     const std::string& ice_username_fragment,
     const std::string& ice_password) {
-  return new FakePortAllocatorSession(
-      this, content_name, component, ice_username_fragment, ice_password,
-      stun_hosts(), relay_hosts(), relay_token());
+  return new FakePortAllocatorSession(this, content_name, component,
+                                      ice_username_fragment, ice_password);
+}
+
+FakePortAllocatorFactory::FakePortAllocatorFactory(
+    scoped_refptr<FakeNetworkDispatcher> fake_network_dispatcher) {
+  socket_factory_.reset(
+      new FakePacketSocketFactory(fake_network_dispatcher.get()));
+  network_manager_.reset(new FakeNetworkManager(socket_factory_->GetAddress()));
+}
+
+FakePortAllocatorFactory::~FakePortAllocatorFactory() {}
+
+scoped_ptr<cricket::PortAllocator>
+FakePortAllocatorFactory::CreatePortAllocator(
+    scoped_refptr<protocol::TransportContext> transport_context) {
+  return make_scoped_ptr(
+      new FakePortAllocator(network_manager_.get(), socket_factory_.get()));
 }
 
 }  // namespace remoting

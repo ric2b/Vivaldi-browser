@@ -23,12 +23,9 @@ MenuMessagePumpDispatcher::~MenuMessagePumpDispatcher() {}
 uint32_t MenuMessagePumpDispatcher::Dispatch(const MSG& msg) {
   DCHECK(menu_controller_->IsBlockingRun());
 
-  bool should_quit = false;
   bool should_perform_default = true;
-  if (menu_controller_->exit_type() == MenuController::EXIT_ALL ||
-      menu_controller_->exit_type() == MenuController::EXIT_DESTROYED) {
-    should_quit = true;
-  } else {
+  if (menu_controller_->exit_type() != MenuController::EXIT_ALL &&
+      menu_controller_->exit_type() != MenuController::EXIT_DESTROYED) {
     // NOTE: we don't get WM_ACTIVATE or anything else interesting in here.
     switch (msg.message) {
       case WM_CONTEXTMENU: {
@@ -42,7 +39,6 @@ uint32_t MenuMessagePumpDispatcher::Dispatch(const MSG& msg) {
           item->GetDelegate()->ShowContextMenu(
               item, item->GetCommand(), screen_loc, source_type);
         }
-        should_quit = false;
         should_perform_default = false;
         break;
       }
@@ -50,16 +46,13 @@ uint32_t MenuMessagePumpDispatcher::Dispatch(const MSG& msg) {
       // NOTE: focus wasn't changed when the menu was shown. As such, don't
       // dispatch key events otherwise the focused window will get the events.
       case WM_KEYDOWN: {
-        bool result =
-            menu_controller_->OnKeyDown(ui::KeyboardCodeFromNative(msg));
+        menu_controller_->OnKeyDown(ui::KeyboardCodeFromNative(msg));
         TranslateMessage(&msg);
         should_perform_default = false;
-        should_quit = !result;
         break;
       }
       case WM_CHAR: {
-        should_quit = menu_controller_->SelectByChar(
-            static_cast<base::char16>(msg.wParam));
+        menu_controller_->SelectByChar(static_cast<base::char16>(msg.wParam));
         should_perform_default = false;
         break;
       }
@@ -68,7 +61,6 @@ uint32_t MenuMessagePumpDispatcher::Dispatch(const MSG& msg) {
         // We may have been shown on a system key, as such don't do anything
         // here. If another system key is pushed we'll get a WM_SYSKEYDOWN and
         // close the menu.
-        should_quit = false;
         should_perform_default = false;
         break;
 
@@ -76,7 +68,6 @@ uint32_t MenuMessagePumpDispatcher::Dispatch(const MSG& msg) {
       case WM_SYSKEYDOWN:
         // Exit immediately on system keys.
         menu_controller_->Cancel(MenuController::EXIT_ALL);
-        should_quit = true;
         should_perform_default = false;
         break;
 
@@ -85,8 +76,7 @@ uint32_t MenuMessagePumpDispatcher::Dispatch(const MSG& msg) {
     }
   }
 
-  if (should_quit || menu_controller_->exit_type() != MenuController::EXIT_NONE)
-    menu_controller_->TerminateNestedMessageLoop();
+  menu_controller_->TerminateNestedMessageLoopIfNecessary();
   return should_perform_default ? POST_DISPATCH_PERFORM_DEFAULT
                                 : POST_DISPATCH_NONE;
 }

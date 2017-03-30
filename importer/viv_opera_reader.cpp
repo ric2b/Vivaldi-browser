@@ -64,13 +64,13 @@ void OperaAdrFileReader::LoadFile(base::FilePath &file)
 			}
 
 			// #foo
-			category = base::StringToLowerASCII(line.substr(1)); // Strip away leading'#'
+			category = base::ToLowerASCII(line.substr(1)); // Strip away leading'#'
 			continue;
 		}
 		size_t equal = line.find_first_of('=');
 		if (equal != std::string::npos)
         {
-            std::string key = base::StringToLowerASCII(line.substr(0,equal));
+            std::string key = base::ToLowerASCII(line.substr(0,equal));
             std::string val = line.substr(equal+1);
             entries.SetString(key, val);
         }

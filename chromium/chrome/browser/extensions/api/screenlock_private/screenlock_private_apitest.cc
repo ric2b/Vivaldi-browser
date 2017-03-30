@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/screenlock_private/screenlock_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -56,8 +60,8 @@ class ScreenlockPrivateApiTest : public ExtensionApiTest,
         g_browser_process->profile_manager()->GetProfileInfoCache();
     size_t index = info_cache.GetIndexOfProfileWithPath(profile()->GetPath());
     ASSERT_NE(std::string::npos, index);
-    info_cache.SetAuthInfoOfProfileAtIndex(index, kTestGaiaId,
-                                           base::UTF8ToUTF16(kTestUser));
+    info_cache.SetAuthInfoOfProfileAtIndex(
+        index, kTestGaiaId, base::UTF8ToUTF16(test_account_id_.GetUserEmail()));
     ExtensionApiTest::SetUpOnMainThread();
   }
 
@@ -78,9 +82,10 @@ class ScreenlockPrivateApiTest : public ExtensionApiTest,
     const std::string& content = *content::Details<std::string>(details).ptr();
     if (content == kAttemptClickAuthMessage) {
       proximity_auth::ScreenlockBridge::Get()->lock_handler()->SetAuthType(
-          kTestUser, proximity_auth::ScreenlockBridge::LockHandler::USER_CLICK,
+          test_account_id_,
+          proximity_auth::ScreenlockBridge::LockHandler::USER_CLICK,
           base::string16());
-      EasyUnlockService::Get(profile())->AttemptAuth(kTestUser);
+      EasyUnlockService::Get(profile())->AttemptAuth(test_account_id_);
     }
   }
 
@@ -90,6 +95,8 @@ class ScreenlockPrivateApiTest : public ExtensionApiTest,
   }
 
  private:
+  const AccountId test_account_id_ =
+      AccountId::FromUserEmailGaiaId(kTestUser, kTestGaiaId);
   content::NotificationRegistrar registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenlockPrivateApiTest);
@@ -98,21 +105,18 @@ class ScreenlockPrivateApiTest : public ExtensionApiTest,
 // Locking is currently implemented only on ChromeOS.
 #if defined(OS_CHROMEOS)
 
-// Time out under MSan. http://crbug.com/478091
-// Flaky under LSan on ChromeOS. http://crbug.com/482002
-#if defined(MEMORY_SANITIZER) || defined(LEAK_SANITIZER) && defined(OS_CHROMEOS)
+// Flaky under MSan. http://crbug.com/478091
+#if defined(MEMORY_SANITIZER)
 #define MAYBE_LockUnlock DISABLED_LockUnlock
-#define MAYBE_AuthType DISABLED_AuthType
 #else
 #define MAYBE_LockUnlock LockUnlock
-#define MAYBE_AuthType AuthType
 #endif
 
 IN_PROC_BROWSER_TEST_F(ScreenlockPrivateApiTest, MAYBE_LockUnlock) {
   RunTest("screenlock_private/lock_unlock");
 }
 
-IN_PROC_BROWSER_TEST_F(ScreenlockPrivateApiTest, MAYBE_AuthType) {
+IN_PROC_BROWSER_TEST_F(ScreenlockPrivateApiTest, AuthType) {
   RunTest("screenlock_private/auth_type");
 }
 

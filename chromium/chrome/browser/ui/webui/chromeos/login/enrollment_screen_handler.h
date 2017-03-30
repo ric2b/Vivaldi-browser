@@ -7,15 +7,12 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen_actor.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
 #include "chrome/browser/chromeos/login/screens/network_error_model.h"
-#include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
-#include "chrome/browser/extensions/signin/scoped_gaia_auth_extension.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "net/base/net_errors.h"
@@ -29,8 +26,7 @@ class ErrorScreensHistogramHelper;
 class EnrollmentScreenHandler
     : public BaseScreenHandler,
       public EnrollmentScreenActor,
-      public NetworkStateInformer::NetworkStateInformerObserver,
-      public WebUILoginView::FrameObserver {
+      public NetworkStateInformer::NetworkStateInformerObserver {
  public:
   EnrollmentScreenHandler(
       const scoped_refptr<NetworkStateInformer>& network_state_informer,
@@ -63,18 +59,15 @@ class EnrollmentScreenHandler
   // Implements NetworkStateInformer::NetworkStateInformerObserver
   void UpdateState(NetworkError::ErrorReason reason) override;
 
-  // Implements WebUILoginView::FrameObserver
-  void OnFrameError(const std::string& frame_unique_name) override;
-
  private:
   // Handlers for WebUI messages.
   void HandleClose(const std::string& reason);
   void HandleCompleteLogin(const std::string& user,
                            const std::string& auth_code);
   void HandleRetry();
-  void HandleFrameLoadingCompleted(int status);
+  void HandleFrameLoadingCompleted();
   void HandleDeviceAttributesProvided(const std::string& asset_id,
-                          const std::string& location);
+                                      const std::string& location);
   void HandleOnLearnMore();
 
   void UpdateStateInternal(NetworkError::ErrorReason reason, bool force_update);
@@ -83,7 +76,6 @@ class EnrollmentScreenHandler
   void HideOfflineMessage(NetworkStateInformer::State state,
                           NetworkError::ErrorReason reason);
 
-  net::Error frame_error() const { return frame_error_; }
   // Shows a given enrollment step.
   void ShowStep(const char* step);
 
@@ -117,9 +109,6 @@ class EnrollmentScreenHandler
   // The enrollment configuration.
   policy::EnrollmentConfig config_;
 
-  // Latest enrollment frame error.
-  net::Error frame_error_;
-
   // True if screen was not shown yet.
   bool first_show_;
 
@@ -133,9 +122,6 @@ class EnrollmentScreenHandler
   NetworkErrorModel* network_error_model_;
 
   scoped_ptr<ErrorScreensHistogramHelper> histogram_helper_;
-
-  // GAIA extension loader.
-  scoped_ptr<ScopedGaiaAuthExtension> auth_extension_;
 
   // Help application used for help dialogs.
   scoped_refptr<HelpAppLauncher> help_app_;

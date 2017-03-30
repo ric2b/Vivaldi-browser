@@ -5,11 +5,11 @@
 #ifndef BASE_TRACE_EVENT_PROCESS_MEMORY_MAPS_DUMP_PROVIDER_H_
 #define BASE_TRACE_EVENT_PROCESS_MEMORY_MAPS_DUMP_PROVIDER_H_
 
-#include <istream>
-
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/trace_event/memory_dump_provider.h"
+#include "build/build_config.h"
 
 namespace base {
 namespace trace_event {
@@ -20,14 +20,15 @@ class BASE_EXPORT ProcessMemoryMapsDumpProvider : public MemoryDumpProvider {
   static ProcessMemoryMapsDumpProvider* GetInstance();
 
   // MemoryDumpProvider implementation.
-  bool OnMemoryDump(ProcessMemoryDump* pmd) override;
+  bool OnMemoryDump(const MemoryDumpArgs& args,
+                    ProcessMemoryDump* pmd) override;
 
  private:
   friend struct DefaultSingletonTraits<ProcessMemoryMapsDumpProvider>;
   FRIEND_TEST_ALL_PREFIXES(ProcessMemoryMapsDumpProviderTest, ParseProcSmaps);
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
-  static std::istream* proc_smaps_for_testing;
+#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_NACL)
+  static FILE* proc_smaps_for_testing;
 #endif
 
   ProcessMemoryMapsDumpProvider();

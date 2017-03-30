@@ -8,10 +8,11 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "chrome/browser/sync/profile_sync_service.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
+#include "base/scoped_observer.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
-#include "components/sync_driver/sync_service_observer.h"
 
 namespace autofill {
 class AutofillProfile;
@@ -26,8 +27,7 @@ class ListValue;
 namespace options {
 
 class AutofillOptionsHandler : public OptionsPageUIHandler,
-                               public autofill::PersonalDataManagerObserver,
-                               public sync_driver::SyncServiceObserver {
+                               public autofill::PersonalDataManagerObserver {
  public:
   AutofillOptionsHandler();
   ~AutofillOptionsHandler() override;
@@ -41,9 +41,6 @@ class AutofillOptionsHandler : public OptionsPageUIHandler,
   // PersonalDataManagerObserver implementation.
   void OnPersonalDataChanged() override;
 
-  // sync_driver::SyncServiceObserver implementation.
-  void OnStateChanged() override;
-
  private:
   FRIEND_TEST_ALL_PREFIXES(AutofillOptionsHandlerTest, AddressToDictionary);
 
@@ -53,13 +50,6 @@ class AutofillOptionsHandler : public OptionsPageUIHandler,
 
   // Loads Autofill addresses and credit cards using the PersonalDataManager.
   void LoadAutofillData();
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // The user wants to grant Chrome access to the user's Address Book.
-  // Immediately try to access the Address Book so that the blocking dialog is
-  // shown in context, rather than at a later, surprising time.
-  void AccessAddressBook(const base::ListValue* args);
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
   // Removes data from the PersonalDataManager.
   // |args| - A string, the GUID of the address or credit card to remove.
@@ -115,9 +105,6 @@ class AutofillOptionsHandler : public OptionsPageUIHandler,
   // The personal data manager, used to load Autofill profiles and credit cards.
   // Unowned pointer, may not be NULL.
   autofill::PersonalDataManager* personal_data_;
-
-  ScopedObserver<ProfileSyncService, sync_driver::SyncServiceObserver>
-      observer_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillOptionsHandler);
 };

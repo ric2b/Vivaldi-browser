@@ -10,6 +10,12 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/transform.h"
 
+using mus::mojom::Pass;
+using mus::mojom::PassPtr;
+using mus::mojom::RenderPassId;
+using mus::mojom::SharedQuadState;
+using mus::mojom::SharedQuadStatePtr;
+
 namespace mojo {
 
 SharedQuadStatePtr CreateDefaultSQS(const gfx::Size& size) {
@@ -20,9 +26,9 @@ SharedQuadStatePtr CreateDefaultSQS(const gfx::Size& size) {
   sqs->clip_rect = Rect::From(gfx::Rect(size));
   sqs->is_clipped = false;
   sqs->opacity = 1.f;
-  sqs->blend_mode = mojo::SK_XFERMODE_kSrc_Mode;
+  sqs->blend_mode = mus::mojom::SK_XFERMODE_kSrc_Mode;
   sqs->sorting_context_id = 0;
-  return sqs.Pass();
+  return sqs;
 }
 
 PassPtr CreateDefaultPass(int id, const gfx::Rect& rect) {
@@ -35,7 +41,7 @@ PassPtr CreateDefaultPass(int id, const gfx::Rect& rect) {
   pass->damage_rect = Rect::From(rect);
   pass->transform_to_root_target = Transform::From(gfx::Transform());
   pass->has_transparent_background = false;
-  return pass.Pass();
+  return pass;
 }
 
 }  // namespace mojo

@@ -8,7 +8,7 @@
 #include <list>
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/font_list.h"
@@ -44,7 +44,8 @@ class VIEWS_EXPORT StyledLabel : public View, public LinkListener {
     // values defined in gfx::Font::FontStyle (BOLD, ITALIC, UNDERLINE).
     int font_style;
 
-    // The text color for the range.
+    // The text color for the range. Default is SK_ColorTRANSPARENT, indicating
+    // the theme's default color should be used.
     SkColor color;
 
     // Tooltip for the range.

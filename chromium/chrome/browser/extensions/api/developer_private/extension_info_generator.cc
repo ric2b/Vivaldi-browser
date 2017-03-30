@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/developer_private/extension_info_generator.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -17,17 +19,20 @@
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/path_util.h"
+#include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/render_frame_host.h"
 #include "extensions/browser/extension_error.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/browser/warning_service.h"
 #include "extensions/common/extension_set.h"
@@ -399,13 +404,16 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   info->id = extension.id();
 
   // Incognito access.
-  info->incognito_access.is_enabled = extension.can_be_incognito_enabled();
+  info->incognito_access.is_enabled = util::CanBeIncognitoEnabled(&extension);
   info->incognito_access.is_active =
       util::IsIncognitoEnabled(extension.id(), browser_context_);
 
-  // Install warnings (only if unpacked and no error console).
+  // Install warnings, but only if unpacked, the error console isn't enabled
+  // (otherwise it shows these), and we're in developer mode (normal users don't
+  // need to see these).
   if (!error_console_enabled &&
-      Manifest::IsUnpackedLocation(extension.location())) {
+      Manifest::IsUnpackedLocation(extension.location()) &&
+      profile->GetPrefs()->GetBoolean(prefs::kExtensionsUIDeveloperMode)) {
     const std::vector<InstallWarning>& install_warnings =
         extension.install_warnings();
     for (const InstallWarning& warning : install_warnings)
@@ -493,13 +501,13 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   }
 
   // Runs on all urls.
+  ScriptingPermissionsModifier permissions_modifier(
+      browser_context_, make_scoped_refptr(&extension));
   info->run_on_all_urls.is_enabled =
       (FeatureSwitch::scripts_require_action()->IsEnabled() &&
-       PermissionsData::ScriptsMayRequireActionForExtension(
-           &extension,
-           extension.permissions_data()->active_permissions().get())) ||
-      extension.permissions_data()->HasWithheldImpliedAllHosts() ||
-      util::HasSetAllowedScriptingOnAllUrls(extension.id(), browser_context_);
+       permissions_modifier.CanAffectExtension(
+           extension.permissions_data()->active_permissions())) ||
+      permissions_modifier.HasAffectedExtension();
   info->run_on_all_urls.is_active =
       util::AllowedScriptingOnAllUrls(extension.id(), browser_context_);
 
@@ -540,12 +548,9 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
     // used by the url is 48x48).
     gfx::Size max_size(128, 128);
     image_loader_->LoadImageAsync(
-        &extension,
-        icon,
-        max_size,
+        &extension, icon, max_size,
         base::Bind(&ExtensionInfoGenerator::OnImageLoaded,
-                   weak_factory_.GetWeakPtr(),
-                   base::Passed(info.Pass())));
+                   weak_factory_.GetWeakPtr(), base::Passed(std::move(info))));
   }
 }
 

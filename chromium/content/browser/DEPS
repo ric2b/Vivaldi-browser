@@ -1,24 +1,30 @@
 include_rules = [
   # Allow inclusion of specific components that we depend on. We may only
   # depend on components which we share with the mojo html_viewer.
+  "+components/arc",
   "+components/mime_util",
+  "+components/mus/public/interfaces",
+  "+components/mus/public",
   "+components/scheduler/common",
   "+components/tracing",
+  "+components/url_formatter",
 
   "+content/app/strings/grit",  # For generated headers
   "+content/public/browser",
   "+device/battery",  # For battery status service.
   "+device/vibration",  # For Vibration API
   "+gin/v8_initializer.h",
+  "+media/media_features.h",
   "+media/audio",  # For audio input for speech input feature.
   "+media/base",  # For Android JNI registration.
   "+media/filters",  # For reporting GPU decoding UMA.
   "+media/midi",  # For Web MIDI API
   "+media/mojo",  # For mojo media services.
-  "+media/video",  # For Video Device monitoring in Mac.
+  "+media/capture/video",  # For Video Device monitoring in Mac.
   "+mojo",
   "+sql",
   "+ui/aura_extra",
+  "+ui/views/mus",  # http://crbug.com/555767
   "+ui/webui",
   "+win8/util",
 
@@ -26,12 +32,14 @@ include_rules = [
   # This is the an exception.
   "+device/udev_linux",  # For udev utility and wrapper library.
 
+  # Explicitly disallow using SyncMessageFilter to prevent browser from
+  # sending synchronous IPC messages on non-UI threads.
+  "-ipc/ipc_sync_message_filter.h",
+
   # Other libraries.
   "+third_party/iaccessible2",
   "+third_party/isimpledom",
   "+third_party/khronos",   # For enum definitions only
-  "+third_party/power_gadget",
-  "+third_party/speex",
   "+third_party/re2",
 
   # Allow non-browser Chrome OS code to be used.
@@ -52,21 +60,20 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebLockOrientationError.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
-  "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
-  "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h",
-  "+third_party/WebKit/public/platform/WebServiceWorkerCacheError.h",
-  "+third_party/WebKit/public/platform/WebServiceWorkerError.h",
-  "+third_party/WebKit/public/platform/WebServiceWorkerEventResult.h",
-  "+third_party/WebKit/public/platform/WebServiceWorkerResponseError.h",
-  "+third_party/WebKit/public/platform/WebServiceWorkerResponseType.h",
-  "+third_party/WebKit/public/platform/WebServiceWorkerState.h",
   "+third_party/WebKit/public/platform/WebString.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationPermission.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
+  "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
+  "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h",
+  "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerCacheError.h",
+  "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h",
+  "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerEventResult.h",
+  "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseError.h",
+  "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseType.h",
+  "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerState.h",
   "+third_party/WebKit/public/platform/modules/vr/WebVR.h",
-  "+third_party/WebKit/public/web/mac/WebScrollbarTheme.h",
   "+third_party/WebKit/public/web/WebAXEnums.h",
   "+third_party/WebKit/public/web/WebCompositionUnderline.h",
   "+third_party/WebKit/public/web/WebConsoleMessage.h",
@@ -75,19 +82,19 @@ include_rules = [
   "+third_party/WebKit/public/web/WebDragOperation.h",
   "+third_party/WebKit/public/web/WebDragStatus.h",
   "+third_party/WebKit/public/web/WebFindOptions.h",
+  "+third_party/WebKit/public/web/WebFrameOwnerProperties.h",
   "+third_party/WebKit/public/web/WebInputEvent.h",
   "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
-  "+third_party/WebKit/public/web/WebPageSerializerClient.h",
   "+third_party/WebKit/public/web/WebPluginAction.h",
   "+third_party/WebKit/public/web/WebPopupType.h",
   "+third_party/WebKit/public/web/WebSandboxFlags.h",
   "+third_party/WebKit/public/web/WebSerializedScriptValueVersion.h",
+  "+third_party/WebKit/public/web/WebSharedWorkerCreationContextType.h",
+  "+third_party/WebKit/public/web/WebSharedWorkerCreationErrors.h",
   "+third_party/WebKit/public/web/WebTextDirection.h",
   "+third_party/WebKit/public/web/WebTextInputType.h",
   "+third_party/WebKit/public/web/WebTreeScopeType.h",
-
-  # These should be burned down. http://crbug.com/237267
-  "!third_party/WebKit/public/web/mac/WebInputEventFactory.h",
+  "+third_party/WebKit/public/web/mac/WebScrollbarTheme.h",
 
   # DO NOT ADD ANY CHROME OR COMPONENTS INCLUDES HERE!!!
   # See https://sites.google.com/a/chromium.org/dev/developers/content-module

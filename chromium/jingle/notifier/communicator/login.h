@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -121,7 +122,7 @@ class Login : public net::NetworkChangeNotifier::IPAddressObserver,
 
   // reconnection state.
   base::TimeDelta reconnect_interval_;
-  base::OneShotTimer<Login> reconnect_timer_;
+  base::OneShotTimer reconnect_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(Login);
 };

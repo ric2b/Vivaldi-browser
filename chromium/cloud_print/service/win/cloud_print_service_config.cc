@@ -4,6 +4,8 @@
 
 #include <atlbase.h>
 #include <atlapp.h>  // NOLINT
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/at_exit.h"
 #include "base/bind.h"
@@ -17,7 +19,7 @@
 #include "base/threading/thread.h"
 #include "chrome/common/chrome_constants.h"
 #include "cloud_print/common/win/cloud_print_utils.h"
-#include "cloud_print/resources.h"
+#include "cloud_print/service/resources.h"
 #include "cloud_print/service/service_state.h"
 #include "cloud_print/service/win/chrome_launcher.h"
 #include "cloud_print/service/win/service_controller.h"
@@ -179,6 +181,8 @@ void SetupDialog::SetState(ServiceController::State status,
   case ServiceController::STATE_RUNNING:
     status_string = IDS_SERVICE_RUNNING;
     break;
+  case ServiceController::STATE_UNKNOWN:
+    break;
   }
   SetDlgItemText(IDC_STATUS,
                  status_string ? LoadLocalString(status_string).c_str() : L"");
@@ -278,8 +282,8 @@ LRESULT SetupDialog::OnCancel(UINT, INT nIdentifier, HWND, BOOL& handled) {
 
 LRESULT SetupDialog::OnDestroy(UINT message, WPARAM wparam, LPARAM lparam,
                                BOOL& handled) {
-  base::MessageLoop::current()->PostTask(FROM_HERE,
-                                         base::MessageLoop::QuitClosure());
+  base::MessageLoop::current()->PostTask(
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   return 1;
 }
 
@@ -295,7 +299,8 @@ base::string16 SetupDialog::GetDlgItemText(int id) const {
   const ATL::CWindow& item = GetDlgItem(id);
   size_t length = item.GetWindowTextLength();
   base::string16 result(length + 1, L'\0');
-  result.resize(item.GetWindowText(&result[0], result.size()));
+  result.resize(item.GetWindowText(&result[0],
+                                   static_cast<int>(result.size())));
   return result;
 }
 
@@ -394,7 +399,7 @@ void SetupDialog::Install(const base::string16& user,
     return ShowError(IDS_ERROR_FAILED_CREATE_CONFIG);
 
   size_t written = base::WriteFile(file, contents.c_str(),
-                                        contents.size());
+                                   static_cast<int>(contents.size()));
   if (written != contents.size()) {
     DWORD last_error = GetLastError();
     if (!last_error)

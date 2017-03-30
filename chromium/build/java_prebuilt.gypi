@@ -24,7 +24,6 @@
   ],
   'variables': {
     'dex_path': '<(PRODUCT_DIR)/lib.java/<(_target_name).dex.jar',
-    'intermediate_dir': '<(SHARED_INTERMEDIATE_DIR)/<(_target_name)',
     'android_jar': '<(android_sdk)/android.jar',
     'input_jars_paths': [ '<(android_jar)' ],
     'neverlink%': 0,
@@ -36,9 +35,9 @@
       },
       'conditions': [
         ['proguard_preprocess == 1', {
-          'dex_input_jar_path': '<(intermediate_dir)/<(_target_name).pre.jar'
+          'dex_input_jar_path': '<(PRODUCT_DIR)/lib.java/<(_target_name).pre.jar',
         }, {
-          'dex_input_jar_path': '<(jar_path)'
+          'dex_input_jar_path': '<(jar_path)',
         }],
       ],
     },
@@ -63,7 +62,7 @@
           'action_name': 'proguard_<(_target_name)',
           'message': 'Proguard preprocessing <(_target_name) jar',
           'inputs': [
-            '<(android_sdk_root)/tools/proguard/lib/proguard.jar',
+            '<(DEPTH)/third_party/proguard/lib/proguard.jar',
             '<(DEPTH)/build/android/gyp/util/build_utils.py',
             '<(DEPTH)/build/android/gyp/proguard.py',
             '<(jar_path)',
@@ -74,7 +73,7 @@
           ],
           'action': [
             'python', '<(DEPTH)/build/android/gyp/proguard.py',
-            '--proguard-path=<(android_sdk_root)/tools/proguard/lib/proguard.jar',
+            '--proguard-path=<(DEPTH)/third_party/proguard/lib/proguard.jar',
             '--input-path=<(jar_path)',
             '--output-path=<(dex_input_jar_path)',
             '--proguard-config=<(proguard_config)',

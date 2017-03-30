@@ -4,6 +4,9 @@
 
 #include "cc/blink/web_layer_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <utility>
 #include <vector>
 
@@ -13,6 +16,7 @@
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "cc/animation/animation.h"
+#include "cc/animation/mutable_properties.h"
 #include "cc/base/region.h"
 #include "cc/base/switches.h"
 #include "cc/blink/web_animation_impl.h"
@@ -21,11 +25,11 @@
 #include "cc/blink/web_to_cc_animation_delegate_adapter.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_position_constraint.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/trees/layer_tree_host.h"
+#include "third_party/WebKit/public/platform/WebCompositorMutableProperties.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
-#include "third_party/WebKit/public/platform/WebGraphicsLayerDebugInfo.h"
-#include "third_party/WebKit/public/platform/WebLayerClient.h"
 #include "third_party/WebKit/public/platform/WebLayerPositionConstraint.h"
 #include "third_party/WebKit/public/platform/WebLayerScrollClient.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
@@ -51,21 +55,18 @@ base::LazyInstance<cc::LayerSettings> g_layer_settings =
 
 }  // namespace
 
-WebLayerImpl::WebLayerImpl() : layer_(Layer::Create(LayerSettings())) {
-  web_layer_client_ = nullptr;
-  layer_->SetLayerClient(this);
+WebLayerImpl::WebLayerImpl()
+    : layer_(Layer::Create(LayerSettings())), contents_opaque_is_fixed_(false) {
 }
 
-WebLayerImpl::WebLayerImpl(scoped_refptr<Layer> layer) : layer_(layer) {
-  web_layer_client_ = nullptr;
-  layer_->SetLayerClient(this);
+WebLayerImpl::WebLayerImpl(scoped_refptr<Layer> layer)
+    : layer_(layer), contents_opaque_is_fixed_(false) {
 }
 
 WebLayerImpl::~WebLayerImpl() {
-  layer_->ClearRenderSurface();
   if (animation_delegate_adapter_.get())
     layer_->set_layer_animation_delegate(nullptr);
-  web_layer_client_ = nullptr;
+  layer_->SetLayerClient(nullptr);
 }
 
 // static
@@ -162,6 +163,8 @@ bool WebLayerImpl::isRootForIsolatedGroup() {
 }
 
 void WebLayerImpl::setOpaque(bool opaque) {
+  if (contents_opaque_is_fixed_)
+    return;
   layer_->SetContentsOpaque(opaque);
 }
 
@@ -204,6 +207,10 @@ bool WebLayerImpl::drawsContent() const {
   return layer_->DrawsContent();
 }
 
+void WebLayerImpl::setDoubleSided(bool double_sided) {
+  layer_->SetDoubleSided(double_sided);
+}
+
 void WebLayerImpl::setShouldFlattenTransform(bool flatten) {
   layer_->SetShouldFlattenTransform(flatten);
 }
@@ -239,6 +246,11 @@ void WebLayerImpl::setBackgroundFilters(const WebFilterOperations& filters) {
 
 void WebLayerImpl::setAnimationDelegate(
     blink::WebCompositorAnimationDelegate* delegate) {
+  if (!delegate) {
+    animation_delegate_adapter_.reset();
+    layer_->set_layer_animation_delegate(nullptr);
+    return;
+  }
   animation_delegate_adapter_.reset(
       new WebToCCAnimationDelegateAdapter(delegate));
   layer_->set_layer_animation_delegate(animation_delegate_adapter_.get());
@@ -264,6 +276,10 @@ void WebLayerImpl::removeAnimation(
 
 void WebLayerImpl::pauseAnimation(int animation_id, double time_offset) {
   layer_->PauseAnimation(animation_id, time_offset);
+}
+
+void WebLayerImpl::abortAnimation(int animation_id) {
+  layer_->AbortAnimation(animation_id);
 }
 
 bool WebLayerImpl::hasActiveAnimation() {
@@ -484,39 +500,57 @@ bool WebLayerImpl::isOrphan() const {
   return !layer_->layer_tree_host();
 }
 
-void WebLayerImpl::setWebLayerClient(blink::WebLayerClient* client) {
-  web_layer_client_ = client;
+void WebLayerImpl::setLayerClient(cc::LayerClient* client) {
+  layer_->SetLayerClient(client);
 }
 
-class TracedDebugInfo : public base::trace_event::ConvertableToTraceFormat {
- public:
-  // This object takes ownership of the debug_info object.
-  explicit TracedDebugInfo(blink::WebGraphicsLayerDebugInfo* debug_info)
-      : debug_info_(debug_info) {}
-  void AppendAsTraceFormat(std::string* out) const override {
-    DCHECK(thread_checker_.CalledOnValidThread());
-    blink::WebString web_string;
-    debug_info_->appendAsTraceFormat(&web_string);
-    out->append(web_string.utf8());
-  }
+const cc::Layer* WebLayerImpl::ccLayer() const {
+  return layer_.get();
+}
 
- private:
-  ~TracedDebugInfo() override {}
-  scoped_ptr<blink::WebGraphicsLayerDebugInfo> debug_info_;
-  base::ThreadChecker thread_checker_;
-};
+void WebLayerImpl::setElementId(uint64_t id) {
+  layer_->SetElementId(id);
+}
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
-WebLayerImpl::TakeDebugInfo() {
-  if (!web_layer_client_)
-    return nullptr;
-  blink::WebGraphicsLayerDebugInfo* debug_info =
-      web_layer_client_->takeDebugInfoFor(this);
+uint64_t WebLayerImpl::elementId() const {
+  return layer_->element_id();
+}
 
-  if (debug_info)
-    return new TracedDebugInfo(debug_info);
-  else
-    return nullptr;
+static_assert(
+    static_cast<cc::MutableProperty>(blink::WebCompositorMutablePropertyNone) ==
+        cc::kMutablePropertyNone,
+    "MutableProperty and WebCompositorMutableProperty enums must match");
+
+static_assert(
+    static_cast<cc::MutableProperty>(
+        blink::WebCompositorMutablePropertyOpacity) ==
+        cc::kMutablePropertyOpacity,
+    "MutableProperty and WebCompositorMutableProperty enums must match");
+
+static_assert(
+    static_cast<cc::MutableProperty>(
+        blink::WebCompositorMutablePropertyScrollLeft) ==
+        cc::kMutablePropertyScrollLeft,
+    "MutableProperty and WebCompositorMutableProperty enums must match");
+
+static_assert(
+    static_cast<cc::MutableProperty>(
+        blink::WebCompositorMutablePropertyScrollTop) ==
+        cc::kMutablePropertyScrollTop,
+    "MutableProperty and WebCompositorMutableProperty enums must match");
+
+static_assert(
+    static_cast<cc::MutableProperty>(
+        blink::WebCompositorMutablePropertyTransform) ==
+        cc::kMutablePropertyTransform,
+    "MutableProperty and WebCompositorMutableProperty enums must match");
+
+void WebLayerImpl::setCompositorMutableProperties(uint32_t properties) {
+  layer_->SetMutableProperties(properties);
+}
+
+uint32_t WebLayerImpl::compositorMutableProperties() const {
+  return layer_->mutable_properties();
 }
 
 void WebLayerImpl::setScrollParent(blink::WebLayer* parent) {
@@ -535,6 +569,10 @@ void WebLayerImpl::setClipParent(blink::WebLayer* parent) {
 
 Layer* WebLayerImpl::layer() const {
   return layer_.get();
+}
+
+void WebLayerImpl::SetContentsOpaqueIsFixed(bool fixed) {
+  contents_opaque_is_fixed_ = fixed;
 }
 
 }  // namespace cc_blink

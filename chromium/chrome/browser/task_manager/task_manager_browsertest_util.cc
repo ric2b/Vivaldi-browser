@@ -4,6 +4,7 @@
 
 #include "chrome/browser/task_manager/task_manager_browsertest_util.h"
 
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/task_manager/resource_provider.h"
 #include "chrome/browser/task_manager/task_manager.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/strings/grit/extensions_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -172,10 +174,15 @@ class ResourceChangeObserver : public TaskManagerModelObserver {
   const ColumnSpecifier column_specifier_;
   const size_t min_column_value_;
   base::RunLoop run_loop_;
-  base::OneShotTimer<ResourceChangeObserver> timer_;
+  base::OneShotTimer timer_;
 };
 
 }  // namespace
+
+void EnableOldTaskManager() {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableNewTaskManager);
+}
 
 void WaitForTaskManagerRows(int required_count,
                             const base::string16& title_pattern) {

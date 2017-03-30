@@ -4,25 +4,27 @@
 
 #include "components/metrics/cloned_install_detector.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
 #include "components/metrics/machine_id_provider.h"
-#include "components/metrics/metrics_hashes.h"
 #include "components/metrics/metrics_pref_names.h"
 
 namespace metrics {
 
 namespace {
 
-uint32 HashRawId(const std::string& value) {
-  uint64 hash = HashMetricName(value);
+uint32_t HashRawId(const std::string& value) {
+  uint64_t hash = base::HashMetricName(value);
 
   // Only use 24 bits from the 64-bit hash.
   return hash & ((1 << 24) - 1);
@@ -65,7 +67,7 @@ void ClonedInstallDetector::CheckForClonedInstall(
 }
 
 void ClonedInstallDetector::SaveMachineId(PrefService* local_state,
-                                          std::string raw_id) {
+                                          const std::string& raw_id) {
   if (raw_id.empty()) {
     LogMachineIdState(ID_GENERATION_FAILED);
     local_state->ClearPref(prefs::kMetricsMachineId);

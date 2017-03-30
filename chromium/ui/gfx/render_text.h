@@ -5,6 +5,9 @@
 #ifndef UI_GFX_RENDER_TEXT_H_
 #define UI_GFX_RENDER_TEXT_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <cstring>
 #include <string>
@@ -13,6 +16,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "skia/ext/refptr.h"
@@ -38,10 +42,12 @@ class SkShader;
 class SkTypeface;
 
 namespace gfx {
+namespace test {
+class RenderTextTestApi;
+}
 
 class Canvas;
 class Font;
-class RenderTextTest;
 
 namespace internal {
 
@@ -56,7 +62,7 @@ class GFX_EXPORT SkiaTextRenderer {
                            bool subpixel_rendering_suppressed);
   void SetTypeface(SkTypeface* typeface);
   void SetTextSize(SkScalar size);
-  void SetFontFamilyWithStyle(const std::string& family, int font_style);
+  void SetFontWithStyle(const Font& font, int font_style);
   void SetForegroundColor(SkColor foreground);
   void SetShader(SkShader* shader);
   // Sets underline metrics to use if the text will be drawn with an underline.
@@ -65,7 +71,7 @@ class GFX_EXPORT SkiaTextRenderer {
   void SetUnderlineMetrics(SkScalar thickness, SkScalar position);
   void DrawSelection(const std::vector<Rect>& selection, SkColor color);
   virtual void DrawPosText(const SkPoint* pos,
-                           const uint16* glyphs,
+                           const uint16_t* glyphs,
                            size_t glyph_count);
   // Draw underline and strike-through text decorations.
   // Based on |SkCanvas::DrawTextDecorations()| and constants from:
@@ -78,6 +84,8 @@ class GFX_EXPORT SkiaTextRenderer {
   void DrawStrike(int x, int y, int width) const;
 
  private:
+  friend class test::RenderTextTestApi;
+
   // Helper class to draw a diagonal line with multiple pieces of different
   // lengths and colors; to support text selection appearances.
   class DiagonalStrike {
@@ -177,10 +185,9 @@ struct Line {
   int baseline;
 };
 
-// Creates an SkTypeface from a font |family| name and a |gfx::Font::FontStyle|.
+// Creates an SkTypeface from a font and a |gfx::Font::FontStyle|.
 // May return NULL.
-skia::RefPtr<SkTypeface> CreateSkiaTypeface(const std::string& family,
-                                            int style);
+skia::RefPtr<SkTypeface> CreateSkiaTypeface(const gfx::Font& font, int style);
 
 // Applies the given FontRenderParams to a Skia |paint|.
 void ApplyRenderParams(const FontRenderParams& params,
@@ -559,11 +566,14 @@ class GFX_EXPORT RenderText {
   // Notifies that attributes that affect the display text shape have changed.
   virtual void OnDisplayTextAttributeChanged() = 0;
 
+  // Called when the text color changes.
+  virtual void OnTextColorChanged();
+
   // Ensure the text is laid out, lines are computed, and |lines_| is valid.
   virtual void EnsureLayout() = 0;
 
   // Draw the text.
-  virtual void DrawVisualText(Canvas* canvas) = 0;
+  virtual void DrawVisualText(internal::SkiaTextRenderer* renderer) = 0;
 
   // Update the display text.
   void UpdateDisplayText(float text_width);
@@ -615,7 +625,7 @@ class GFX_EXPORT RenderText {
                                  LogicalCursorDirection caret_affinity);
 
  private:
-  friend class RenderTextTest;
+  friend class test::RenderTextTestApi;
   FRIEND_TEST_ALL_PREFIXES(RenderTextTest, DefaultStyles);
   FRIEND_TEST_ALL_PREFIXES(RenderTextTest, SetStyles);
   FRIEND_TEST_ALL_PREFIXES(RenderTextTest, ApplyStyles);

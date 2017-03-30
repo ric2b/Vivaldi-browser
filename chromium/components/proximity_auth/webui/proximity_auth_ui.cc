@@ -16,7 +16,7 @@
 namespace proximity_auth {
 
 ProximityAuthUI::ProximityAuthUI(content::WebUI* web_ui,
-                                 ProximityAuthUIDelegate* delegate)
+                                 ProximityAuthClient* delegate)
     : content::WebUIController(web_ui) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(kChromeUIProximityAuthHost);
@@ -41,6 +41,10 @@ ProximityAuthUI::ProximityAuthUI(content::WebUI* web_ui,
                           IDR_PROXIMITY_AUTH_ELIGIBLE_DEVICES_HTML);
   source->AddResourcePath("eligible-devices.js",
                           IDR_PROXIMITY_AUTH_ELIGIBLE_DEVICES_JS);
+  source->AddResourcePath("reachable-devices.html",
+                          IDR_PROXIMITY_AUTH_REACHABLE_DEVICES_HTML);
+  source->AddResourcePath("reachable-devices.js",
+                          IDR_PROXIMITY_AUTH_REACHABLE_DEVICES_JS);
   source->AddResourcePath("cryptauth_interface.js",
                           IDR_PROXIMITY_AUTH_CRYPTAUTH_INTERFACE_JS);
 

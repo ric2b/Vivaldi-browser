@@ -4,31 +4,45 @@
 
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
+import("//build/config/sysroot.gni")
 
 gypi_values = exec_script("//build/gypi_to_gn.py",
                           [ rebase_path("../chrome_utility.gypi") ],
                           "scope",
                           [ "../chrome_utility.gypi" ])
 
+# Provides a way for the utility library to push ldflags to dependents.
+config("utility_ldflags") {
+  if (is_mac && safe_browsing_mode == 1) {
+    ldflags = [ "/usr/lib/libbz2.dylib" ]
+  }
+}
+
 static_library("utility") {
   sources = rebase_path(gypi_values.chrome_utility_sources, ".", "..")
   defines = []
+  configs += [ "//build/config:precompiled_headers" ]
+  all_dependent_configs = [ ":utility_ldflags" ]
 
   public_deps = []
   deps = [
     "//base",
-    "//components/safe_json:safe_json_parser_message_filter",
-    "//components/search_engines",
-    "//components/strings",
-    "//components/url_fixer",
-    "//content/public/common",
-    "//content/public/utility",
-    "//media",
-    "//skia",
-    "//third_party/libxml",
     "//chrome:resources",
     "//chrome:strings",
     "//chrome/common",
+    "//components/safe_json:safe_json_parser_message_filter",
+    "//components/search_engines",
+    "//components/strings",
+    "//components/url_formatter",
+    "//content/public/child",
+    "//content/public/common",
+    "//content/public/utility",
+    "//courgette:courgette_lib",
+    "//media",
+    "//net:net_with_v8",
+    "//skia",
+    "//sql",
+    "//third_party/libxml",
   ]
 
   if (!is_android) {
@@ -56,6 +70,10 @@ static_library("utility") {
     # Prevent wininet from loading in the renderer. http://crbug.com/460679
     if (is_win) {
       ldflags = [ "/DELAYLOAD:wininet.dll" ]
+
+      # Add ESE library for Edge Import support.
+      libs = [ "esent.lib" ]
+      ldflags += [ "/DELAYLOAD:esent.dll" ]
     }
 
     if (is_win || is_mac) {
@@ -76,7 +94,7 @@ static_library("utility") {
     }
 
     # Linux should use system libexif
-    if (!is_linux) {
+    if (!is_linux || is_chromeos) {
       # TODO(thestig): Properly support building on Linux and ChromeOS.
       deps += [ "//third_party/libexif" ]
     }
@@ -100,10 +118,13 @@ static_library("utility") {
     ]
   }
 
-  if (!enable_mdns) {
-    sources -= [
-      "local_discovery/service_discovery_message_handler.cc",
-      "local_discovery/service_discovery_message_handler.h",
-    ]
+  if (safe_browsing_mode == 1) {
+    sources +=
+        rebase_path(gypi_values.chrome_utility_safe_browsing_sources, ".", "..")
+    deps += [ "//third_party/zlib" ]
+  }
+
+  if (enable_pdf) {
+    deps += [ "//pdf" ]
   }
 }

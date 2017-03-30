@@ -5,11 +5,17 @@
 #ifndef CHROME_COMMON_CRASH_KEYS_H_
 #define CHROME_COMMON_CRASH_KEYS_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/debug/crash_logging.h"
+#include "base/macros.h"
+#include "build/build_config.h"
+#include "components/crash/core/common/crash_keys.h"
+#include "third_party/kasko/kasko_features.h"
 
 namespace base {
 class CommandLine;
@@ -21,17 +27,9 @@ namespace crash_keys {
 // reporting server. Returns the size of the union of all keys.
 size_t RegisterChromeCrashKeys();
 
-// Sets the ID (which may either be a full GUID or a GUID that was already
-// stripped from its dashes -- in either case this method will strip remaining
-// dashes before setting the crash key).
-void SetMetricsClientIdFromGUID(const std::string& metrics_client_guid);
-void ClearMetricsClientId();
-
-// Sets the kSwitch and kNumSwitches keys based on the given |command_line|.
-void SetSwitchesFromCommandLine(const base::CommandLine* command_line);
-
-// Sets the list of active experiment/variations info.
-void SetVariationsList(const std::vector<std::string>& variations);
+// Sets the kNumSwitches key and the set of keys named using kSwitchFormat based
+// on the given |command_line|.
+void SetCrashKeysFromCommandLine(const base::CommandLine& command_line);
 
 // Sets the list of "active" extensions in this process. We overload "active" to
 // mean different things depending on the process type:
@@ -54,37 +52,8 @@ class ScopedPrinterInfo {
 
 // Crash Key Name Constants ////////////////////////////////////////////////////
 
-// The GUID used to identify this client to the crash system.
-#if defined(OS_MACOSX)
-// On Mac OS X, the crash reporting client ID is the responsibility of Crashpad.
-// It is not set directly by Chrome. To make the metrics client ID available on
-// the server, it's stored in a distinct key.
-extern const char kMetricsClientID[];
-#else
-// When using Breakpad instead of Crashpad, the crash reporting client ID is the
-// same as the metrics client ID.
-extern const char kClientID[];
-#endif
-
-// The product release/distribution channel.
-extern const char kChannel[];
-
 // The URL of the active tab.
 extern const char kActiveURL[];
-
-// Process command line switches. |kSwitch| should be formatted with an integer,
-// in the range [1, kSwitchesMaxCount].
-const size_t kSwitchesMaxCount = 15;
-extern const char kSwitch[];
-// The total number of switches, used to report the total in case more than
-// |kSwitchesMaxCount| are present.
-extern const char kNumSwitches[];
-
-// The total number of experiments the instance has.
-extern const char kNumVariations[];
-// The experiments chunk. Hashed experiment names separated by |,|. This is
-// typically set by SetExperimentList.
-extern const char kVariations[];
 
 // Installed extensions. |kExtensionID| should be formatted with an integer,
 // in the range [0, kExtensionIDMaxCount).
@@ -112,6 +81,10 @@ extern const char kGPUGLVersion[];
 #elif defined(OS_POSIX)
 extern const char kGPUVendor[];
 extern const char kGPURenderer[];
+#endif
+
+#if defined(OS_WIN)
+extern const char kHungAudioThreadDetails[];
 #endif
 
 // The user's printers, up to kPrinterInfoCount. Should be set with
@@ -143,15 +116,10 @@ extern const char kNSExceptionTrace[];
 // target-action.
 extern const char kSendAction[];
 
-// Records Cocoa zombie/used-after-freed objects that resulted in a
-// deliberate crash.
-extern const char kZombie[];
-extern const char kZombieTrace[];
-
 }  // namespace mac
 #endif
 
-#if defined(KASKO)
+#if BUILDFLAG(ENABLE_KASKO)
 // Used to correlate a report sent via Kasko with one sent via Breakpad.
 extern const char kKaskoGuid[];
 extern const char kKaskoEquivalentGuid[];
@@ -159,6 +127,10 @@ extern const char kKaskoEquivalentGuid[];
 
 // Numbers of active views.
 extern const char kViewCount[];
+
+// TEMPORARY: The encoder/frame details at the time a zero-length encoded frame
+// was encountered.  http://crbug.com/519022
+extern const char kZeroEncodeDetails[];
 
 }  // namespace crash_keys
 

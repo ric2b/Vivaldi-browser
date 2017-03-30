@@ -8,8 +8,8 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/test/chromedriver/chrome/devtools_event_listener.h"
 
 namespace base {
@@ -26,7 +26,6 @@ class FrameTracker : public DevToolsEventListener {
   explicit FrameTracker(DevToolsClient* client);
   ~FrameTracker() override;
 
-  Status GetFrameForContextId(int context_id, std::string* frame_id);
   Status GetContextIdForFrame(const std::string& frame_id, int* context_id);
 
   // Overridden from DevToolsEventListener:

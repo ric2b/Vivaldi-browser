@@ -5,11 +5,13 @@
 #ifndef BASE_TRACE_EVENT_MEMORY_ALLOCATOR_DUMP_H_
 #define BASE_TRACE_EVENT_MEMORY_ALLOCATOR_DUMP_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/values.h"
@@ -34,7 +36,7 @@ class BASE_EXPORT MemoryAllocatorDump {
 
   // Standard attribute |name|s for the AddScalar and AddString() methods.
   static const char kNameSize[];          // To represent allocated space.
-  static const char kNameObjectsCount[];  // To represent number of objects.
+  static const char kNameObjectCount[];   // To represent number of objects.
 
   // Standard attribute |unit|s for the AddScalar and AddString() methods.
   static const char kUnitsBytes[];    // Unit name to represent bytes.
@@ -51,7 +53,7 @@ class BASE_EXPORT MemoryAllocatorDump {
   //    AddScalar("number_of_freelist_entires", kUnitsObjects, 42)
   // - Other informational column (will not be auto-added in the UI)
   //    AddScalarF("kittens_ratio", "ratio", 42.0f)
-  void AddScalar(const char* name, const char* units, uint64 value);
+  void AddScalar(const char* name, const char* units, uint64_t value);
   void AddScalarF(const char* name, const char* units, double value);
   void AddString(const char* name, const char* units, const std::string& value);
 

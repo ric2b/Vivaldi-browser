@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
                        ExtensionFullscreenAccessFail) {
@@ -26,18 +29,24 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_ExtensionFullscreenAccessPass) {
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
                        FocusWindowDoesNotExitFullscreen) {
-  browser()->window()->EnterFullscreen(
+  browser()->exclusive_access_manager()->context()->EnterFullscreen(
       GURL(), EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION,
       false);
-  bool is_fullscreen = browser()->window()->IsFullscreen();
+  ASSERT_TRUE(browser()->window()->IsFullscreen());
   ASSERT_TRUE(RunExtensionTest("window_update/focus")) << message_;
-  ASSERT_EQ(is_fullscreen, browser()->window()->IsFullscreen());
+  ASSERT_TRUE(browser()->window()->IsFullscreen());
 }
 
-// Fails flakily: http://crbug.com/308041
+#if defined(OS_MACOSX)
+// Fails flakily on Mac: http://crbug.com/308041
+#define MAYBE_UpdateWindowSizeExitsFullscreen \
+    DISABLED_UpdateWindowSizeExitsFullscreen
+#else
+#define MAYBE_UpdateWindowSizeExitsFullscreen UpdateWindowSizeExitsFullscreen
+#endif  // defined(OS_MACOSX)
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
-                       DISABLED_UpdateWindowSizeExitsFullscreen) {
-  browser()->window()->EnterFullscreen(
+                       MAYBE_UpdateWindowSizeExitsFullscreen) {
+  browser()->exclusive_access_manager()->context()->EnterFullscreen(
       GURL(), EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION,
       false);
   ASSERT_TRUE(RunExtensionTest("window_update/sizing")) << message_;

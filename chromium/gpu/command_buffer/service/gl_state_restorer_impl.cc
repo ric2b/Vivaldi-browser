@@ -5,6 +5,7 @@
 #include "gpu/command_buffer/service/gl_state_restorer_impl.h"
 
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
+#include "gpu/command_buffer/service/query_manager.h"
 
 namespace gpu {
 
@@ -25,6 +26,7 @@ void GLStateRestorerImpl::RestoreState(const gfx::GLStateRestorer* prev_state) {
   DCHECK(decoder_.get());
   const GLStateRestorerImpl* restorer_impl =
       static_cast<const GLStateRestorerImpl*>(prev_state);
+
   decoder_->RestoreState(
       restorer_impl ? restorer_impl->GetContextState() : NULL);
 }
@@ -39,9 +41,24 @@ void GLStateRestorerImpl::RestoreActiveTextureUnitBinding(unsigned int target) {
   decoder_->RestoreActiveTextureUnitBinding(target);
 }
 
+void GLStateRestorerImpl::RestoreAllExternalTextureBindingsIfNeeded() {
+  DCHECK(decoder_.get());
+  decoder_->RestoreAllExternalTextureBindingsIfNeeded();
+}
+
 void GLStateRestorerImpl::RestoreFramebufferBindings() {
   DCHECK(decoder_.get());
   decoder_->RestoreFramebufferBindings();
+}
+
+void GLStateRestorerImpl::PauseQueries() {
+  DCHECK(decoder_.get());
+  decoder_->GetQueryManager()->PauseQueries();
+}
+
+void GLStateRestorerImpl::ResumeQueries() {
+  DCHECK(decoder_.get());
+  decoder_->GetQueryManager()->ResumeQueries();
 }
 
 const gles2::ContextState* GLStateRestorerImpl::GetContextState() const {

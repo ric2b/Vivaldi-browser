@@ -13,6 +13,7 @@ goog.provide('cursors.Range');
 goog.provide('cursors.Unit');
 
 goog.require('AutomationUtil');
+goog.require('constants');
 
 /**
  * The special index that represents a cursor pointing to a node without
@@ -34,6 +35,9 @@ cursors.Unit = {
   /** A leaf node. */
   NODE: 'node',
 
+  /** A leaf DOM-node. */
+  DOM_NODE: 'dom_node',
+
   /** Formed by a set of leaf nodes that are inline. */
   LINE: 'line'
 };
@@ -52,19 +56,18 @@ cursors.Movement = {
 
 goog.scope(function() {
 var AutomationNode = chrome.automation.AutomationNode;
-var Dir = AutomationUtil.Dir;
+var Dir = constants.Dir;
 var Movement = cursors.Movement;
-var Role = chrome.automation.RoleType;
+var RoleType = chrome.automation.RoleType;
 var Unit = cursors.Unit;
 
 /**
  * Represents a position within the automation tree.
  * @constructor
  * @param {!AutomationNode} node
- * @param {number} index A 0-based index into either this cursor's name or value
- * attribute. Relies on the fact that a node has either a name or a value but
- * not both. An index of |cursors.NODE_INDEX| means the node as a whole is
- * pointed to and covers the case where the accessible text is empty.
+ * @param {number} index A 0-based index into this cursor node's primary
+ * accessible name. An index of |cursors.NODE_INDEX| means the node as a whole
+ * is pointed to and covers the case where the accessible text is empty.
  */
 cursors.Cursor = function(node, index) {
   /** @type {!AutomationNode} @private */
@@ -89,37 +92,34 @@ cursors.Cursor.prototype = {
    * @return {boolean}
    */
   equals: function(rhs) {
-    return this.node_ === rhs.getNode() &&
-        this.index_ === rhs.getIndex();
+    return this.node_ === rhs.node &&
+        this.index_ === rhs.index;
   },
 
   /**
    * @return {!AutomationNode}
    */
-  getNode: function() {
+  get node() {
     return this.node_;
   },
 
   /**
    * @return {number}
    */
-  getIndex: function() {
+  get index() {
     return this.index_;
   },
 
   /**
    * Gets the accessible text of the node associated with this cursor.
    *
-   * Note that only one of |name| or |value| attribute is ever nonempty on an
-   * automation node. If either contains whitespace, we still treat it as we do
-   * for a nonempty string.
    * @param {!AutomationNode=} opt_node Use this node rather than this cursor's
    * node.
    * @return {string}
    */
   getText: function(opt_node) {
     var node = opt_node || this.node_;
-    return node.name || node.value || '';
+    return node.name || '';
   },
 
   /**
@@ -134,7 +134,8 @@ cursors.Cursor.prototype = {
     var newNode = this.node_;
     var newIndex = this.index_;
 
-    if (unit != Unit.NODE && newIndex === cursors.NODE_INDEX)
+    if ((unit != Unit.NODE || unit != Unit.DOM_NODE) &&
+        newIndex === cursors.NODE_INDEX)
       newIndex = 0;
 
     switch (unit) {
@@ -156,7 +157,7 @@ cursors.Cursor.prototype = {
       case Unit.WORD:
         switch (movement) {
           case Movement.BOUND:
-            if (newNode.role == Role.inlineTextBox) {
+            if (newNode.role == RoleType.inlineTextBox) {
               var start, end;
               for (var i = 0; i < newNode.wordStarts.length; i++) {
                 if (newIndex >= newNode.wordStarts[i] &&
@@ -173,7 +174,7 @@ cursors.Cursor.prototype = {
             }
             break;
           case Movement.DIRECTIONAL:
-            if (newNode.role == Role.inlineTextBox) {
+            if (newNode.role == RoleType.inlineTextBox) {
               var start, end;
               for (var i = 0; i < newNode.wordStarts.length; i++) {
                 if (newIndex >= newNode.wordStarts[i] &&
@@ -196,7 +197,7 @@ cursors.Cursor.prototype = {
                   if (newNode) {
                     newIndex = 0;
                     if (dir == Dir.BACKWARD &&
-                        newNode.role == Role.inlineTextBox) {
+                        newNode.role == RoleType.inlineTextBox) {
                       var starts = newNode.wordStarts;
                       newIndex = starts[starts.length - 1] || 0;
                     } else {
@@ -211,13 +212,16 @@ cursors.Cursor.prototype = {
         }
         break;
       case Unit.NODE:
+      case Unit.DOM_NODE:
         switch (movement) {
           case Movement.BOUND:
             newIndex = dir == Dir.FORWARD ? this.getText().length - 1 : 0;
             break;
           case Movement.DIRECTIONAL:
+            var pred = unit == Unit.NODE ?
+                AutomationPredicate.leaf : AutomationPredicate.element;
             newNode = AutomationUtil.findNextNode(
-                newNode, dir, AutomationPredicate.leaf) || this.node_;
+                newNode, dir, pred) || this.node_;
             newIndex = cursors.NODE_INDEX;
             break;
         }
@@ -248,6 +252,51 @@ cursors.Cursor.prototype = {
 };
 
 /**
+ * A cursors.Cursor that wraps from beginning to end and vice versa when moved.
+ * @constructor
+ * @param {!AutomationNode} node
+ * @param {number} index A 0-based index into this cursor node's primary
+ * accessible name. An index of |cursors.NODE_INDEX| means the node as a whole
+ * is pointed to and covers the case where the accessible text is empty.
+ * @extends {cursors.Cursor}
+ */
+cursors.WrappingCursor = function(node, index) {
+  cursors.Cursor.call(this, node, index);
+};
+
+
+/**
+ * Convenience method to construct a Cursor from a node.
+ * @param {!AutomationNode} node
+ * @return {!cursors.WrappingCursor}
+ */
+cursors.WrappingCursor.fromNode = function(node) {
+  return new cursors.WrappingCursor(node, cursors.NODE_INDEX);
+};
+
+cursors.WrappingCursor.prototype = {
+  __proto__: cursors.Cursor.prototype,
+
+  /** @override */
+  move: function(unit, movement, dir) {
+    var result = cursors.Cursor.prototype.move.call(this, unit, movement, dir);
+    if (movement == Movement.DIRECTIONAL && result.equals(this)) {
+      var pred = unit == Unit.DOM_NODE ?
+          AutomationPredicate.leafDomNode : AutomationPredicate.leaf;
+      var root = this.node;
+      while (!AutomationUtil.isTraversalRoot(root) && root.parent)
+        root = root.parent;
+      var wrappedNode = AutomationUtil.findNodePre(root, dir, pred);
+      if (wrappedNode) {
+        cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.WRAP);
+        return new cursors.WrappingCursor(wrappedNode, cursors.NODE_INDEX);
+      }
+    }
+    return new cursors.WrappingCursor(result.node, result.index);
+  }
+};
+
+/**
  * Represents a range in the automation tree. There is no visible selection on
  * the page caused by usage of this object.
  * It is assumed that the caller provides |start| and |end| in document order.
@@ -268,7 +317,7 @@ cursors.Range = function(start, end) {
  * @return {!cursors.Range}
  */
 cursors.Range.fromNode = function(node) {
-  var cursor = cursors.Cursor.fromNode(node);
+  var cursor = cursors.WrappingCursor.fromNode(node);
   return new cursors.Range(cursor, cursor);
 };
 
@@ -284,16 +333,16 @@ cursors.Range.getDirection = function(rangeA, rangeB) {
     return Dir.FORWARD;
 
   // They are the same range.
-  if (rangeA.getStart().getNode() === rangeB.getStart().getNode() &&
-      rangeB.getEnd().getNode() === rangeA.getEnd().getNode())
+  if (rangeA.start.node === rangeB.start.node &&
+      rangeB.end.node === rangeA.end.node)
     return Dir.FORWARD;
 
   var testDirA =
       AutomationUtil.getDirection(
-          rangeA.getStart().getNode(), rangeB.getEnd().getNode());
+          rangeA.start.node, rangeB.end.node);
   var testDirB =
       AutomationUtil.getDirection(
-          rangeB.getStart().getNode(), rangeA.getEnd().getNode());
+          rangeB.start.node, rangeA.end.node);
 
   // The two ranges are either partly overlapping or non overlapping.
   if (testDirA == Dir.FORWARD && testDirB == Dir.BACKWARD)
@@ -311,8 +360,8 @@ cursors.Range.prototype = {
    * @return {boolean}
    */
   equals: function(rhs) {
-    return this.start_.equals(rhs.getStart()) &&
-        this.end_.equals(rhs.getEnd());
+    return this.start_.equals(rhs.start) &&
+        this.end_.equals(rhs.end);
   },
 
   /**
@@ -332,14 +381,14 @@ cursors.Range.prototype = {
   /**
    * @return {!cursors.Cursor}
    */
-  getStart: function() {
+  get start() {
     return this.start_;
   },
 
   /**
    * @return {!cursors.Cursor}
    */
-  getEnd: function() {
+  get end() {
     return this.end_;
   },
 
@@ -348,9 +397,9 @@ cursors.Range.prototype = {
    * @return {boolean}
    */
   isSubNode: function() {
-    return this.getStart().getNode() === this.getEnd().getNode() &&
-        this.getStart().getIndex() > -1 &&
-        this.getEnd().getIndex() > -1;
+    return this.start.node === this.end.node &&
+        this.start.index > -1 &&
+        this.end.index > -1;
   },
 
   /**
@@ -368,7 +417,7 @@ cursors.Range.prototype = {
         newStart = newStart.move(unit, Movement.BOUND, dir);
         newEnd = newStart.move(unit, Movement.BOUND, Dir.FORWARD);
         // Character crossed a node; collapses to the end of the node.
-        if (newStart.getNode() !== newEnd.getNode())
+        if (newStart.node !== newEnd.node)
           newEnd = newStart;
         break;
       case Unit.WORD:
@@ -378,11 +427,21 @@ cursors.Range.prototype = {
         newEnd = newStart.move(unit, Movement.BOUND, Dir.FORWARD);
         break;
       case Unit.NODE:
+      case Unit.DOM_NODE:
         newStart = newStart.move(unit, Movement.DIRECTIONAL, dir);
         newEnd = newStart;
         break;
     }
     return new cursors.Range(newStart, newEnd);
+  },
+
+  /**
+   * Returns true if this range has either cursor end on web content.
+   * @return {boolean}
+  */
+  isWebRange: function() {
+    return this.start.node.root.role != RoleType.desktop ||
+        this.end.node.root.role != RoleType.desktop;
   }
 };
 

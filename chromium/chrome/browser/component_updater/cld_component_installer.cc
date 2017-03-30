@@ -5,6 +5,7 @@
 #include "chrome/browser/component_updater/cld_component_installer.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -12,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "components/component_updater/component_updater_paths.h"
 #include "components/translate/content/browser/browser_cld_data_provider.h"
@@ -123,7 +125,7 @@ void RegisterCldComponent(ComponentUpdateService* cus) {
       new CldComponentInstallerTraits());
   // |cus| will take ownership of |installer| during installer->Register(cus).
   DefaultComponentInstaller* installer =
-      new DefaultComponentInstaller(traits.Pass());
+      new DefaultComponentInstaller(std::move(traits));
   installer->Register(cus, base::Closure());
 }
 

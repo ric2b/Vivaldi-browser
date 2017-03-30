@@ -5,8 +5,11 @@
 #ifndef MEDIA_BASE_AUDIO_BUS_H_
 #define MEDIA_BASE_AUDIO_BUS_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -58,7 +61,8 @@ class MEDIA_EXPORT AudioBus {
   // data.  Expects interleaving to be [ch0, ch1, ..., chN, ch0, ch1, ...] with
   // |bytes_per_sample| per value.  Values are scaled and bias corrected during
   // conversion.  ToInterleaved() will also clip values to format range.
-  // Handles uint8, int16, and int32 currently.  FromInterleaved() will zero out
+  // Handles uint8_t, int16_t, and int32_t currently.  FromInterleaved() will
+  // zero out
   // any unfilled frames when |frames| is less than frames().
   void FromInterleaved(const void* source, int frames, int bytes_per_sample);
   void ToInterleaved(int frames, int bytes_per_sample, void* dest) const;

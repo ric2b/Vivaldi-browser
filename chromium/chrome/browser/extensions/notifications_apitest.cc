@@ -31,11 +31,11 @@ class NotificationIdleTest : public ExtensionApiTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_NotificationsNoPermission) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, NotificationsNoPermission) {
   ASSERT_TRUE(RunExtensionTest("notifications/has_not_permission")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_NotificationsHasPermission) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, NotificationsHasPermission) {
   DesktopNotificationProfileUtil::GrantPermission(browser()->profile(),
       GURL("chrome-extension://peoadpeiejnhkmpaakpnompolbglelel"));
 
@@ -44,8 +44,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_NotificationsHasPermission) {
 }
 
   // MessaceCenter-specific test.
-// TODO reenable test for Vivaldi
-#if 0 && defined(RUN_MESSAGE_CENTER_TESTS)
+#if defined(RUN_MESSAGE_CENTER_TESTS)
 #define MAYBE_NotificationsAllowUnload NotificationsAllowUnload
 #else
 #define MAYBE_NotificationsAllowUnload DISABLED_NotificationsAllowUnload

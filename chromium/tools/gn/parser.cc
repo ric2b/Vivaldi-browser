@@ -4,6 +4,8 @@
 
 #include "tools/gn/parser.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/operators.h"
@@ -56,10 +58,14 @@ const char kGrammar_Help[] =
     "  A string literal represents a string value consisting of the quoted\n"
     "  characters with possible escape sequences and variable expansions.\n"
     "\n"
-    "      string    = `\"` { char | escape | expansion } `\"` .\n"
-    "      escape    = `\\` ( \"$\" | `\"` | char ) .\n"
-    "      expansion = \"$\" ( identifier | \"{\" identifier \"}\" ) .\n"
-    "      char      = /* any character except \"$\", `\"`, or newline */ .\n"
+    "      string           = `\"` { char | escape | expansion } `\"` .\n"
+    "      escape           = `\\` ( \"$\" | `\"` | char ) .\n"
+    "      BracketExpansion = \"{\" ( identifier | ArrayAccess | ScopeAccess "
+                              ") \"}\" .\n"
+    "      Hex              = \"0x\" [0-9A-Fa-f][0-9A-Fa-f]\n"
+    "      expansion        = \"$\" ( identifier | BracketExpansion | Hex ) .\n"
+    "      char             = /* any character except \"$\", `\"`, or newline "
+                             "*/ .\n"
     "\n"
     "  After a backslash, certain sequences represent special characters:\n"
     "\n"
@@ -68,6 +74,9 @@ const char kGrammar_Help[] =
     "          \\\\    U+005C    backslash\n"
     "\n"
     "  All other backslashes represent themselves.\n"
+    "\n"
+    "  To insert an arbitrary byte value, use $0xFF. For example, to\n"
+    "  insert a newline character: \"Line one$0x0ALine two\".\n"
     "\n"
     "Punctuation\n"
     "\n"
@@ -92,11 +101,12 @@ const char kGrammar_Help[] =
     "      Block         = \"{\" StatementList \"}\" .\n"
     "      StatementList = { Statement } .\n"
     "\n"
+    "      ArrayAccess = identifier \"[\" { identifier | integer } \"]\" .\n"
+    "      ScopeAccess = identifier \".\" identifier .\n"
     "      Expr        = UnaryExpr | Expr BinaryOp Expr .\n"
     "      UnaryExpr   = PrimaryExpr | UnaryOp UnaryExpr .\n"
     "      PrimaryExpr = identifier | integer | string | Call\n"
-    "                  | identifier \"[\" Expr \"]\"\n"
-    "                  | identifier \".\" identifier\n"
+    "                  | ArrayAccess | ScopeAccess\n"
     "                  | \"(\" Expr \")\"\n"
     "                  | \"[\" [ ExprList [ \",\" ] ] \"]\" .\n"
     "      ExprList    = Expr { \",\" Expr } .\n"
@@ -211,7 +221,7 @@ scoped_ptr<ParseNode> Parser::ParseExpression(const std::vector<Token>& tokens,
     *err = Err(p.cur_token(), "Trailing garbage");
     return nullptr;
   }
-  return expr.Pass();
+  return expr;
 }
 
 // static
@@ -324,7 +334,7 @@ scoped_ptr<ParseNode> Parser::ParseExpression(int precedence) {
 
   scoped_ptr<ParseNode> left = (this->*prefix)(token);
   if (has_error())
-    return left.Pass();
+    return left;
 
   while (!at_end() && !IsStatementBreak(cur_token().type()) &&
          precedence <= expressions_[cur_token().type()].precedence) {
@@ -336,12 +346,12 @@ scoped_ptr<ParseNode> Parser::ParseExpression(int precedence) {
                       token.value().as_string() + std::string("'"));
       return scoped_ptr<ParseNode>();
     }
-    left = (this->*infix)(left.Pass(), token);
+    left = (this->*infix)(std::move(left), token);
     if (has_error())
       return scoped_ptr<ParseNode>();
   }
 
-  return left.Pass();
+  return left;
 }
 
 scoped_ptr<ParseNode> Parser::Literal(Token token) {
@@ -349,13 +359,13 @@ scoped_ptr<ParseNode> Parser::Literal(Token token) {
 }
 
 scoped_ptr<ParseNode> Parser::Name(Token token) {
-  return IdentifierOrCall(scoped_ptr<ParseNode>(), token).Pass();
+  return IdentifierOrCall(scoped_ptr<ParseNode>(), token);
 }
 
 scoped_ptr<ParseNode> Parser::BlockComment(Token token) {
   scoped_ptr<BlockCommentNode> comment(new BlockCommentNode());
   comment->set_comment(token);
-  return comment.Pass();
+  return std::move(comment);
 }
 
 scoped_ptr<ParseNode> Parser::Group(Token token) {
@@ -363,24 +373,29 @@ scoped_ptr<ParseNode> Parser::Group(Token token) {
   if (has_error())
     return scoped_ptr<ParseNode>();
   Consume(Token::RIGHT_PAREN, "Expected ')'");
-  return expr.Pass();
+  return expr;
 }
 
 scoped_ptr<ParseNode> Parser::Not(Token token) {
   scoped_ptr<ParseNode> expr = ParseExpression(PRECEDENCE_PREFIX + 1);
   if (has_error())
     return scoped_ptr<ParseNode>();
+  if (!expr) {
+    if (!has_error())
+      *err_ = Err(token, "Expected right-hand side for '!'.");
+    return scoped_ptr<ParseNode>();
+  }
   scoped_ptr<UnaryOpNode> unary_op(new UnaryOpNode);
   unary_op->set_op(token);
-  unary_op->set_operand(expr.Pass());
-  return unary_op.Pass();
+  unary_op->set_operand(std::move(expr));
+  return std::move(unary_op);
 }
 
 scoped_ptr<ParseNode> Parser::List(Token node) {
   scoped_ptr<ParseNode> list(ParseList(node, Token::RIGHT_BRACKET, true));
   if (!has_error() && !at_end())
     Consume(Token::RIGHT_BRACKET, "Expected ']'");
-  return list.Pass();
+  return list;
 }
 
 scoped_ptr<ParseNode> Parser::BinaryOperator(scoped_ptr<ParseNode> left,
@@ -389,16 +404,16 @@ scoped_ptr<ParseNode> Parser::BinaryOperator(scoped_ptr<ParseNode> left,
       ParseExpression(expressions_[token.type()].precedence + 1);
   if (!right) {
     if (!has_error()) {
-      *err_ = Err(token, "Expected right hand side for '" +
+      *err_ = Err(token, "Expected right-hand side for '" +
                              token.value().as_string() + "'");
     }
     return scoped_ptr<ParseNode>();
   }
   scoped_ptr<BinaryOpNode> binary_op(new BinaryOpNode);
   binary_op->set_op(token);
-  binary_op->set_left(left.Pass());
-  binary_op->set_right(right.Pass());
-  return binary_op.Pass();
+  binary_op->set_left(std::move(left));
+  binary_op->set_right(std::move(right));
+  return std::move(binary_op);
 }
 
 scoped_ptr<ParseNode> Parser::IdentifierOrCall(scoped_ptr<ParseNode> left,
@@ -430,14 +445,14 @@ scoped_ptr<ParseNode> Parser::IdentifierOrCall(scoped_ptr<ParseNode> left,
 
   if (!left && !has_arg) {
     // Not a function call, just a standalone identifier.
-    return scoped_ptr<ParseNode>(new IdentifierNode(token)).Pass();
+    return scoped_ptr<ParseNode>(new IdentifierNode(token));
   }
   scoped_ptr<FunctionCallNode> func_call(new FunctionCallNode);
   func_call->set_function(token);
-  func_call->set_args(list.Pass());
+  func_call->set_args(std::move(list));
   if (block)
-    func_call->set_block(block.Pass());
-  return func_call.Pass();
+    func_call->set_block(std::move(block));
+  return std::move(func_call);
 }
 
 scoped_ptr<ParseNode> Parser::Assignment(scoped_ptr<ParseNode> left,
@@ -447,11 +462,16 @@ scoped_ptr<ParseNode> Parser::Assignment(scoped_ptr<ParseNode> left,
     return scoped_ptr<ParseNode>();
   }
   scoped_ptr<ParseNode> value = ParseExpression(PRECEDENCE_ASSIGNMENT);
+  if (!value) {
+    if (!has_error())
+      *err_ = Err(token, "Expected right-hand side for assignment.");
+    return scoped_ptr<ParseNode>();
+  }
   scoped_ptr<BinaryOpNode> assign(new BinaryOpNode);
   assign->set_op(token);
-  assign->set_left(left.Pass());
-  assign->set_right(value.Pass());
-  return assign.Pass();
+  assign->set_left(std::move(left));
+  assign->set_right(std::move(value));
+  return std::move(assign);
 }
 
 scoped_ptr<ParseNode> Parser::Subscript(scoped_ptr<ParseNode> left,
@@ -469,8 +489,8 @@ scoped_ptr<ParseNode> Parser::Subscript(scoped_ptr<ParseNode> left,
   Consume(Token::RIGHT_BRACKET, "Expecting ']' after subscript.");
   scoped_ptr<AccessorNode> accessor(new AccessorNode);
   accessor->set_base(left->AsIdentifier()->value());
-  accessor->set_index(value.Pass());
-  return accessor.Pass();
+  accessor->set_index(std::move(value));
+  return std::move(accessor);
 }
 
 scoped_ptr<ParseNode> Parser::DotOperator(scoped_ptr<ParseNode> left,
@@ -494,7 +514,7 @@ scoped_ptr<ParseNode> Parser::DotOperator(scoped_ptr<ParseNode> left,
   accessor->set_base(left->AsIdentifier()->value());
   accessor->set_member(scoped_ptr<IdentifierNode>(
       static_cast<IdentifierNode*>(right.release())));
-  return accessor.Pass();
+  return std::move(accessor);
 }
 
 // Does not Consume the start or end token.
@@ -539,7 +559,7 @@ scoped_ptr<ListNode> Parser::ParseList(Token start_token,
     return scoped_ptr<ListNode>();
   }
   list->set_end(make_scoped_ptr(new EndNode(cur_token())));
-  return list.Pass();
+  return list;
 }
 
 scoped_ptr<ParseNode> Parser::ParseFile() {
@@ -550,7 +570,7 @@ scoped_ptr<ParseNode> Parser::ParseFile() {
     scoped_ptr<ParseNode> statement = ParseStatement();
     if (!statement)
       break;
-    file->append_statement(statement.Pass());
+    file->append_statement(std::move(statement));
   }
   if (!at_end() && !has_error())
     *err_ = Err(cur_token(), "Unexpected here, should be newline.");
@@ -563,7 +583,7 @@ scoped_ptr<ParseNode> Parser::ParseFile() {
   // ignorant of them.
   AssignComments(file.get());
 
-  return file.Pass();
+  return std::move(file);
 }
 
 scoped_ptr<ParseNode> Parser::ParseStatement() {
@@ -577,7 +597,7 @@ scoped_ptr<ParseNode> Parser::ParseStatement() {
     scoped_ptr<ParseNode> stmt = ParseExpression();
     if (stmt) {
       if (stmt->AsFunctionCall() || IsAssignment(stmt.get()))
-        return stmt.Pass();
+        return stmt;
     }
     if (!has_error()) {
       Token token = at_end() ? tokens_[tokens_.size() - 1] : cur_token();
@@ -604,9 +624,9 @@ scoped_ptr<BlockNode> Parser::ParseBlock() {
     scoped_ptr<ParseNode> statement = ParseStatement();
     if (!statement)
       return scoped_ptr<BlockNode>();
-    block->append_statement(statement.Pass());
+    block->append_statement(std::move(statement));
   }
-  return block.Pass();
+  return block;
 }
 
 scoped_ptr<ParseNode> Parser::ParseCondition() {
@@ -617,12 +637,12 @@ scoped_ptr<ParseNode> Parser::ParseCondition() {
   if (IsAssignment(condition->condition()))
     *err_ = Err(condition->condition(), "Assignment not allowed in 'if'.");
   Consume(Token::RIGHT_PAREN, "Expected ')' after condition of 'if'.");
-  condition->set_if_true(ParseBlock().Pass());
+  condition->set_if_true(ParseBlock());
   if (Match(Token::ELSE)) {
     if (LookAhead(Token::LEFT_BRACE)) {
-      condition->set_if_false(ParseBlock().Pass());
+      condition->set_if_false(ParseBlock());
     } else if (LookAhead(Token::IF)) {
-      condition->set_if_false(ParseStatement().Pass());
+      condition->set_if_false(ParseStatement());
     } else {
       *err_ = Err(cur_token(), "Expected '{' or 'if' after 'else'.");
       return scoped_ptr<ParseNode>();
@@ -630,7 +650,7 @@ scoped_ptr<ParseNode> Parser::ParseCondition() {
   }
   if (has_error())
     return scoped_ptr<ParseNode>();
-  return condition.Pass();
+  return std::move(condition);
 }
 
 void Parser::TraverseOrder(const ParseNode* root,

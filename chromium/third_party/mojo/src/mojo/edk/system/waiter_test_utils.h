@@ -2,18 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_WAITER_TEST_UTILS_H_
-#define MOJO_EDK_SYSTEM_WAITER_TEST_UTILS_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_WAITER_TEST_UTILS_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_WAITER_TEST_UTILS_H_
 
 #include <stdint.h>
 
 #include "base/memory/ref_counted.h"
 #include "base/threading/simple_thread.h"
-#include "mojo/edk/system/dispatcher.h"
-#include "mojo/edk/system/handle_signals_state.h"
-#include "mojo/edk/system/waiter.h"
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/handle_signals_state.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter.h"
 
 namespace mojo {
 namespace system {
@@ -47,7 +47,7 @@ class SimpleWaiterThread : public base::SimpleThread {
  public:
   // For the duration of the lifetime of this object, |*result| belongs to it
   // (in the sense that it will write to it whenever it wants).
-  SimpleWaiterThread(MojoResult* result, uint32_t* context);
+  SimpleWaiterThread(MojoResult* result, uintptr_t* context);
   ~SimpleWaiterThread() override;  // Joins the thread.
 
   Waiter* waiter() { return &waiter_; }
@@ -56,7 +56,7 @@ class SimpleWaiterThread : public base::SimpleThread {
   void Run() override;
 
   MojoResult* const result_;
-  uint32_t* const context_;
+  uintptr_t* const context_;
   Waiter waiter_;
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(SimpleWaiterThread);
@@ -73,10 +73,10 @@ class WaiterThread : public base::SimpleThread {
   WaiterThread(scoped_refptr<Dispatcher> dispatcher,
                MojoHandleSignals handle_signals,
                MojoDeadline deadline,
-               uint32_t context,
+               uintptr_t context,
                bool* did_wait_out,
                MojoResult* result_out,
-               uint32_t* context_out,
+               uintptr_t* context_out,
                HandleSignalsState* signals_state_out);
   ~WaiterThread() override;
 
@@ -89,7 +89,7 @@ class WaiterThread : public base::SimpleThread {
   const uint32_t context_;
   bool* const did_wait_out_;
   MojoResult* const result_out_;
-  uint32_t* const context_out_;
+  uintptr_t* const context_out_;
   HandleSignalsState* const signals_state_out_;
 
   Waiter waiter_;
@@ -101,4 +101,4 @@ class WaiterThread : public base::SimpleThread {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_WAITER_TEST_UTILS_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_WAITER_TEST_UTILS_H_

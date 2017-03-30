@@ -31,41 +31,41 @@ cvox.AriaUtil = function() {
  * @type {Object<string>}
  */
 cvox.AriaUtil.WIDGET_ROLE_TO_NAME = {
-  'alert' : 'aria_role_alert',
-  'alertdialog' : 'aria_role_alertdialog',
-  'button' : 'aria_role_button',
-  'checkbox' : 'aria_role_checkbox',
-  'columnheader' : 'aria_role_columnheader',
-  'combobox' : 'aria_role_combobox',
-  'dialog' : 'aria_role_dialog',
-  'grid' : 'aria_role_grid',
-  'gridcell' : 'aria_role_gridcell',
-  'link' : 'aria_role_link',
-  'listbox' : 'aria_role_listbox',
-  'log' : 'aria_role_log',
-  'marquee' : 'aria_role_marquee',
-  'menu' : 'aria_role_menu',
-  'menubar' : 'aria_role_menubar',
-  'menuitem' : 'aria_role_menuitem',
-  'menuitemcheckbox' : 'aria_role_menuitemcheckbox',
-  'menuitemradio' : 'aria_role_menuitemradio',
-  'option' : 'aria_role_option',
-  'progressbar' : 'aria_role_progressbar',
-  'radio' : 'aria_role_radio',
-  'radiogroup' : 'aria_role_radiogroup',
-  'rowheader' : 'aria_role_rowheader',
-  'scrollbar' : 'aria_role_scrollbar',
-  'slider' : 'aria_role_slider',
-  'spinbutton' : 'aria_role_spinbutton',
-  'status' : 'aria_role_status',
-  'tab' : 'aria_role_tab',
-  'tablist' : 'aria_role_tablist',
-  'tabpanel' : 'aria_role_tabpanel',
-  'textbox' : 'aria_role_textbox',
-  'timer' : 'aria_role_timer',
-  'toolbar' : 'aria_role_toolbar',
-  'tooltip' : 'aria_role_tooltip',
-  'treeitem' : 'aria_role_treeitem'
+  'alert' : 'role_alert',
+  'alertdialog' : 'role_alertdialog',
+  'button' : 'role_button',
+  'checkbox' : 'role_checkbox',
+  'columnheader' : 'role_columnheader',
+  'combobox' : 'role_combobox',
+  'dialog' : 'role_dialog',
+  'grid' : 'role_grid',
+  'gridcell' : 'role_gridcell',
+  'link' : 'role_link',
+  'listbox' : 'role_listbox',
+  'log' : 'role_log',
+  'marquee' : 'role_marquee',
+  'menu' : 'role_menu',
+  'menubar' : 'role_menubar',
+  'menuitem' : 'role_menuitem',
+  'menuitemcheckbox' : 'role_menuitemcheckbox',
+  'menuitemradio' : 'role_menuitemradio',
+  'option' : 'role_option',
+  'progressbar' : 'role_progressbar',
+  'radio' : 'role_radio',
+  'radiogroup' : 'role_radiogroup',
+  'rowheader' : 'role_rowheader',
+  'scrollbar' : 'role_scrollbar',
+  'slider' : 'role_slider',
+  'spinbutton' : 'role_spinbutton',
+  'status' : 'role_status',
+  'tab' : 'role_tab',
+  'tablist' : 'role_tablist',
+  'tabpanel' : 'role_tabpanel',
+  'textbox' : 'role_textbox',
+  'timer' : 'role_timer',
+  'toolbar' : 'role_toolbar',
+  'tooltip' : 'role_tooltip',
+  'treeitem' : 'role_treeitem'
 };
 
 
@@ -76,29 +76,29 @@ cvox.AriaUtil.WIDGET_ROLE_TO_NAME = {
  * @type {Object<string>}
  */
 cvox.AriaUtil.STRUCTURE_ROLE_TO_NAME = {
-  'article' : 'aria_role_article',
-  'application' : 'aria_role_application',
-  'banner' : 'aria_role_banner',
-  'columnheader' : 'aria_role_columnheader',
-  'complementary' : 'aria_role_complementary',
-  'contentinfo' : 'aria_role_contentinfo',
-  'definition' : 'aria_role_definition',
-  'directory' : 'aria_role_directory',
-  'document' : 'aria_role_document',
-  'form' : 'aria_role_form',
-  'group' : 'aria_role_group',
-  'heading' : 'aria_role_heading',
-  'img' : 'aria_role_img',
-  'list' : 'aria_role_list',
-  'listitem' : 'aria_role_listitem',
-  'main' : 'aria_role_main',
-  'math' : 'aria_role_math',
-  'navigation' : 'aria_role_navigation',
-  'note' : 'aria_role_note',
-  'region' : 'aria_role_region',
-  'rowheader' : 'aria_role_rowheader',
-  'search' : 'aria_role_search',
-  'separator' : 'aria_role_separator'
+  'article' : 'role_article',
+  'application' : 'role_application',
+  'banner' : 'role_banner',
+  'columnheader' : 'role_columnheader',
+  'complementary' : 'role_complementary',
+  'contentinfo' : 'role_contentinfo',
+  'definition' : 'role_definition',
+  'directory' : 'role_directory',
+  'document' : 'role_document',
+  'form' : 'role_form',
+  'group' : 'role_group',
+  'heading' : 'role_heading',
+  'img' : 'role_img',
+  'list' : 'role_list',
+  'listitem' : 'role_listitem',
+  'main' : 'role_main',
+  'math' : 'role_math',
+  'navigation' : 'role_navigation',
+  'note' : 'role_note',
+  'region' : 'role_region',
+  'rowheader' : 'role_rowheader',
+  'search' : 'role_search',
+  'separator' : 'role_separator'
 };
 
 
@@ -215,17 +215,13 @@ cvox.AriaUtil.isForcedVisibleRecursive = function(targetNode) {
 /**
  * Checks if a node should be treated as a leaf node because of its ARIA
  * markup. Does not check recursively, and does not check isControlWidget.
- * Note that elements with aria-label are treated as leaf elements. See:
- * http://www.w3.org/TR/wai-aria/roles#textalternativecomputation
  *
  * @param {Element} targetElement The node to check.
  * @return {boolean} True if the targetNode should be treated as a leaf node.
  */
 cvox.AriaUtil.isLeafElement = function(targetElement) {
   var role = targetElement.getAttribute('role');
-  var hasArialLabel = targetElement.hasAttribute('aria-label') &&
-      (targetElement.getAttribute('aria-label').length > 0);
-  return (role == 'img' || role == 'progressbar' || hasArialLabel);
+  return role == 'img' || role == 'progressbar';
 };
 
 
@@ -299,7 +295,7 @@ cvox.AriaUtil.getRoleNameMsg = function(targetNode) {
     // Special case for pop-up buttons.
     if (targetNode.getAttribute('aria-haspopup') == 'true' &&
         cvox.AriaUtil.isButton(targetNode)) {
-      return 'aria_role_popup_button';
+      return 'role_popup_button';
     }
 
     if (role) {
@@ -345,7 +341,7 @@ cvox.AriaUtil.getRoleNameMsg = function(targetNode) {
  */
 cvox.AriaUtil.getRoleName = function(targetNode) {
   var roleMsg = cvox.AriaUtil.getRoleNameMsg(targetNode);
-  var roleName = cvox.ChromeVox.msgs.getMsg(roleMsg);
+  var roleName = Msgs.getMsg(roleMsg);
   var role = cvox.AriaUtil.getRoleAttribute(targetNode);
   if ((role == 'heading') && (targetNode.hasAttribute('aria-level'))) {
     roleName += ' ' + targetNode.getAttribute('aria-level');
@@ -541,7 +537,7 @@ cvox.AriaUtil.getGridState_ = function(targetNode, parentControl) {
       for (var k = 0; k < gridcells.length; k++) {
         if (gridcells[k] == activeDescendant) {
           return /** @type {cvox.NodeState} */ (
-                  [['aria_role_gridcell_pos', j + 1, k + 1]]);
+                  [['role_gridcell_pos', j + 1, k + 1]]);
         }
       }
     }
@@ -905,7 +901,7 @@ cvox.AriaUtil.isGrid = function(node) {
  * Returns the id of an earcon to play along with the description for a node.
  *
  * @param {Node} node The node to get the earcon for.
- * @return {number?} The earcon id, or null if none applies.
+ * @return {cvox.Earcon?} The earcon id, or null if none applies.
  */
 cvox.AriaUtil.getEarcon = function(node) {
   if (!node || !node.getAttribute) {
@@ -914,26 +910,26 @@ cvox.AriaUtil.getEarcon = function(node) {
   var role = cvox.AriaUtil.getRoleAttribute(node);
   switch (role) {
     case 'button':
-      return cvox.AbstractEarcons.BUTTON;
+      return cvox.Earcon.BUTTON;
     case 'checkbox':
     case 'radio':
     case 'menuitemcheckbox':
     case 'menuitemradio':
       var checked = node.getAttribute('aria-checked');
       if (checked == 'true') {
-        return cvox.AbstractEarcons.CHECK_ON;
+        return cvox.Earcon.CHECK_ON;
       } else {
-        return cvox.AbstractEarcons.CHECK_OFF;
+        return cvox.Earcon.CHECK_OFF;
       }
     case 'combobox':
     case 'listbox':
-      return cvox.AbstractEarcons.LISTBOX;
+      return cvox.Earcon.LISTBOX;
     case 'textbox':
-      return cvox.AbstractEarcons.EDITABLE_TEXT;
+      return cvox.Earcon.EDITABLE_TEXT;
     case 'listitem':
-      return cvox.AbstractEarcons.BULLET;
+      return cvox.Earcon.LIST_ITEM;
     case 'link':
-      return cvox.AbstractEarcons.LINK;
+      return cvox.Earcon.LINK;
   }
 
   return null;

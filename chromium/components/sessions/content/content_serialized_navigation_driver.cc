@@ -5,7 +5,8 @@
 #include "components/sessions/content/content_serialized_navigation_driver.h"
 
 #include "base/memory/singleton.h"
-#include "components/sessions/serialized_navigation_entry.h"
+#include "build/build_config.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/url_constants.h"
@@ -27,8 +28,9 @@ SerializedNavigationDriver* SerializedNavigationDriver::Get() {
 // static
 ContentSerializedNavigationDriver*
 ContentSerializedNavigationDriver::GetInstance() {
-  return Singleton<ContentSerializedNavigationDriver,
-      LeakySingletonTraits<ContentSerializedNavigationDriver>>::get();
+  return base::Singleton<
+      ContentSerializedNavigationDriver,
+      base::LeakySingletonTraits<ContentSerializedNavigationDriver>>::get();
 }
 
 ContentSerializedNavigationDriver::ContentSerializedNavigationDriver() {

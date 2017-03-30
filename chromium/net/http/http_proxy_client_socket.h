@@ -5,9 +5,11 @@
 #ifndef NET_HTTP_HTTP_PROXY_CLIENT_SOCKET_H_
 #define NET_HTTP_HTTP_PROXY_CLIENT_SOCKET_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
@@ -25,7 +27,6 @@ namespace net {
 class AddressList;
 class ClientSocketHandle;
 class GrowableIOBuffer;
-class HttpAuthCache;
 class HttpStream;
 class HttpStreamParser;
 class IOBuffer;
@@ -40,8 +41,7 @@ class HttpProxyClientSocket : public ProxyClientSocket {
                         const std::string& user_agent,
                         const HostPortPair& endpoint,
                         const HostPortPair& proxy_server,
-                        HttpAuthCache* http_auth_cache,
-                        HttpAuthHandlerFactory* http_auth_handler_factory,
+                        HttpAuthController* http_auth_controller,
                         bool tunnel,
                         bool using_spdy,
                         NextProto protocol_negotiated,
@@ -75,6 +75,7 @@ class HttpProxyClientSocket : public ProxyClientSocket {
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
+  int64_t GetTotalReceivedBytes() const override;
 
   // Socket implementation.
   int Read(IOBuffer* buf,
@@ -83,8 +84,8 @@ class HttpProxyClientSocket : public ProxyClientSocket {
   int Write(IOBuffer* buf,
             int buf_len,
             const CompletionCallback& callback) override;
-  int SetReceiveBufferSize(int32 size) override;
-  int SetSendBufferSize(int32 size) override;
+  int SetReceiveBufferSize(int32_t size) override;
+  int SetSendBufferSize(int32_t size) override;
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
 
@@ -99,8 +100,6 @@ class HttpProxyClientSocket : public ProxyClientSocket {
     STATE_READ_HEADERS_COMPLETE,
     STATE_DRAIN_BODY,
     STATE_DRAIN_BODY_COMPLETE,
-    STATE_TCP_RESTART,
-    STATE_TCP_RESTART_COMPLETE,
     STATE_DONE,
   };
 
@@ -110,7 +109,7 @@ class HttpProxyClientSocket : public ProxyClientSocket {
   static const int kDrainBodyBufferSize = 1024;
 
   int PrepareForAuthRestart();
-  int DidDrainBodyForAuthRestart(bool keep_alive);
+  int DidDrainBodyForAuthRestart();
 
   void LogBlockedTunnelResponse() const;
 
@@ -126,8 +125,6 @@ class HttpProxyClientSocket : public ProxyClientSocket {
   int DoReadHeadersComplete(int result);
   int DoDrainBody();
   int DoDrainBodyComplete(int result);
-  int DoTCPRestart();
-  int DoTCPRestartComplete(int result);
 
   CompletionCallback io_callback_;
   State next_state_;

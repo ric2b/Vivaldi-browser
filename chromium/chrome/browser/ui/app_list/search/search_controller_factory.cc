@@ -4,10 +4,13 @@
 
 #include "chrome/browser/ui/app_list/search/search_controller_factory.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
 #include "base/time/default_clock.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/search/app_search_provider.h"
 #include "chrome/browser/ui/app_list/search/history_factory.h"
@@ -103,10 +106,11 @@ scoped_ptr<SearchController> CreateSearchController(
             new SuggestionsSearchProvider(profile, list_controller)));
   }
 
-  // LauncherSearchProvider is added only when flag is enabled and running on
-  // Chrome OS.
+  // LauncherSearchProvider is added only when flag is enabled, not in guest
+  // session and running on Chrome OS.
 #if defined(OS_CHROMEOS)
-  if (app_list::switches::IsDriveSearchInChromeLauncherEnabled()) {
+  if (app_list::switches::IsDriveSearchInChromeLauncherEnabled() &&
+      !profile->IsGuestSession()) {
     size_t search_api_group_id =
         controller->AddGroup(kMaxLauncherSearchResults, 0.0, 1.0);
     controller->AddProvider(
@@ -115,7 +119,7 @@ scoped_ptr<SearchController> CreateSearchController(
   }
 #endif
 
-  return controller.Pass();
+  return controller;
 }
 
 }  // namespace app_list

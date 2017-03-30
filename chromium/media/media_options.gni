@@ -2,6 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromecast_build.gni")
+import("//build/config/features.gni")
+import("//build/config/headless_build.gni")
+
 declare_args() {
   # Allows distributions to link pulseaudio directly (DT_NEEDED) instead of
   # using dlopen. This helps with automated detection of ABI mismatches and
@@ -17,8 +21,8 @@ declare_args() {
   # decoding of VP9 and VP8A type content.
   media_use_libvpx = true
 
-  # Neither Android nor iOS use ffmpeg or libvpx.
-  if (is_android || is_ios) {
+  # iOS doesn't use ffmpeg, libvpx.
+  if (is_ios) {
     media_use_ffmpeg = false
     media_use_libvpx = false
   }
@@ -32,23 +36,35 @@ declare_args() {
   # Enables runtime selection of ALSA library for audio.
   use_alsa = false
 
-  # TODO(GYP): How to handled the "embedded" use case?
-  # Original conditional: (OS=="linux" or OS=="freebsd" or OS=="solaris") and embedded!=1
-  if (is_posix && !is_android && !is_mac) {
+  # Alsa should be used on non-Android, non-Mac POSIX systems, and Chromecast
+  # builds for desktop Linux.
+  if (is_posix && !is_headless && !is_android && !is_mac &&
+      (!is_chromecast || is_cast_desktop_build)) {
     use_alsa = true
     if (!use_cras) {
       use_pulseaudio = true
     }
   }
 
-  # Enables the MPEG2-TS stream parser for use with Media Source. Disabled by
-  # default since it's not available on the normal Web Platform and costs money.
-  enable_mpeg2ts_stream_parser = false
+  # Use low-memory buffers on non-Android builds of Chromecast.
+  use_low_memory_buffer = is_chromecast && !is_android
+
+  # Enables AC3/EAC3 audio demuxing. This is enabled only on Chromecast, since
+  # it only provides demuxing, and is only useful for AC3/EAC3 audio
+  # pass-through to HDMI sink on Chromecast.
+  enable_ac3_eac3_audio_demuxing = proprietary_codecs && is_chromecast
+
+  enable_mse_mpeg2ts_stream_parser = proprietary_codecs && is_chromecast
+
+  # Enable HEVC/H265 demuxing. Actual decoding must be provided by the
+  # platform. Enable by default for Chromecast.
+  enable_hevc_demuxing = proprietary_codecs && is_chromecast
 
   # Experiment to enable mojo media application: http://crbug.com/431776
   # Valid options are:
   # - "none": Do not use mojo media application.
   # - "browser": Use mojo media application hosted in the browser process.
+  # - "gpu": Use mojo media application hosted in the gpu process.
   # - "utility": Use mojo media application hosted in the utility process.
   enable_mojo_media = "none"
 

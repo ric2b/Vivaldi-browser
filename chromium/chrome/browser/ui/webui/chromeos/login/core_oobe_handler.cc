@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/core_oobe_handler.h"
 
 #include "ash/shell.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
@@ -19,12 +20,14 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_constants.h"
 #include "components/login/localized_values_builder.h"
+#include "components/version_info/version_info.h"
+#include "google_apis/google_api_keys.h"
 #include "grit/components_strings.h"
 #include "ui/chromeos/accessibility_types.h"
 #include "ui/gfx/display.h"
@@ -95,6 +98,9 @@ void CoreOobeHandler::DeclareLocalizedValues(
 
   // Strings for Asset Identifier shown in version string.
   builder->Add("assetIdLabel", IDS_OOBE_ASSET_ID_LABEL);
+
+  builder->AddF("missingAPIKeysNotice", IDS_LOGIN_API_KEYS_NOTICE,
+                base::ASCIIToUTF16(google_apis::kAPIKeysDevelopersHowToURL));
 }
 
 void CoreOobeHandler::Initialize() {
@@ -342,11 +348,16 @@ void CoreOobeHandler::UpdateA11yState() {
 }
 
 void CoreOobeHandler::UpdateOobeUIVisibility() {
+  const std::string& display = oobe_ui_->display_type();
+  CallJS("showAPIKeysNotice", !google_apis::HasKeysConfigured() &&
+                                  (display == OobeUI::kOobeDisplay ||
+                                   display == OobeUI::kLoginDisplay));
+
   // Don't show version label on the stable channel by default.
   bool should_show_version = true;
-  chrome::VersionInfo::Channel channel = chrome::VersionInfo::GetChannel();
-  if (channel == chrome::VersionInfo::CHANNEL_STABLE ||
-      channel == chrome::VersionInfo::CHANNEL_BETA) {
+  version_info::Channel channel = chrome::GetChannel();
+  if (channel == version_info::Channel::STABLE ||
+      channel == version_info::Channel::BETA) {
     should_show_version = false;
   }
   CallJS("showVersion", should_show_version);

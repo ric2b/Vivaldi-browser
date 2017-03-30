@@ -7,20 +7,20 @@
 
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "chrome/browser/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bar.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bar_instructions_delegate.h"
-#include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view_observer.h"
+#include "chrome/browser/ui/bookmarks/bookmark_bubble_observer.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_controller_observer.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #include "ui/gfx/animation/animation_delegate.h"
+#include "ui/gfx/animation/slide_animation.h"
 #include "ui/views/accessible_pane_view.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
@@ -33,19 +33,15 @@ class BookmarkBarViewTestHelper;
 class BookmarkContextMenu;
 class Browser;
 class BrowserView;
-class ChromeBookmarkClient;
 class Profile;
 
 namespace bookmarks {
 class BookmarkModel;
+class ManagedBookmarkService;
 }
 
 namespace content {
 class PageNavigator;
-}
-
-namespace gfx {
-class SlideAnimation;
 }
 
 namespace views {
@@ -71,7 +67,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
                         public gfx::AnimationDelegate,
                         public BookmarkMenuControllerObserver,
                         public BookmarkBarInstructionsDelegate,
-                        public BookmarkBubbleViewObserver {
+                        public bookmarks::BookmarkBubbleObserver {
  public:
   // The internal view class name.
   static const char kViewClassName[];
@@ -102,12 +98,6 @@ class BookmarkBarView : public views::AccessiblePaneView,
   void SetBookmarkBarState(BookmarkBar::State state,
                            BookmarkBar::AnimateChangeType animate_type);
 
-  // Returns the toolbar overlap when fully detached.
-  int GetFullyDetachedToolbarOverlap() const;
-
-  // Whether or not we are animating.
-  bool is_animating();
-
   // If |loc| is over a bookmark button the node is returned corresponding to
   // the button and |model_start_index| is set to 0. If a overflow button is
   // showing and |loc| is over the overflow button, the bookmark bar node is
@@ -132,6 +122,10 @@ class BookmarkBarView : public views::AccessiblePaneView,
 
   // Returns the button used when not all the items on the bookmark bar fit.
   views::MenuButton* overflow_button() const { return overflow_button_; }
+
+  const gfx::Animation& size_animation() {
+    return size_animation_;
+  }
 
   // Returns the active MenuItemView, or NULL if a menu isn't showing.
   views::MenuItemView* GetMenu();
@@ -166,9 +160,6 @@ class BookmarkBarView : public views::AccessiblePaneView,
   // Returns true if Bookmarks Bar is currently detached from the Toolbar.
   bool IsDetached() const;
 
-  // Returns the current state of the resize animation (show/hide).
-  double GetAnimationValue() const;
-
   // Returns the current amount of overlap atop the browser toolbar.
   int GetToolbarOverlap() const;
 
@@ -182,7 +173,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
   void PaintChildren(const ui::PaintContext& context) override;
   bool GetDropFormats(
       int* formats,
-      std::set<ui::OSExchangeData::CustomFormat>* custom_formats) override;
+      std::set<ui::Clipboard::FormatType>* format_types) override;
   bool AreDropTypesRequired() override;
   bool CanDrop(const ui::OSExchangeData& data) override;
   void OnDragEntered(const ui::DropTargetEvent& event) override;
@@ -207,8 +198,8 @@ class BookmarkBarView : public views::AccessiblePaneView,
   // BookmarkBarInstructionsDelegate:
   void OnImportBookmarks() override;
 
-  // BookmarkBubbleViewObserver:
-  void OnBookmarkBubbleShown(const GURL& url) override;
+  // bookmarks::BookmarkBubbleObserver:
+  void OnBookmarkBubbleShown(const bookmarks::BookmarkNode* node) override;
   void OnBookmarkBubbleHidden() override;
 
   // bookmarks::BookmarkModelObserver:
@@ -374,8 +365,9 @@ class BookmarkBarView : public views::AccessiblePaneView,
       const bookmarks::BookmarkNode* parent,
       int old_index);
 
-  // Updates the colors for all the child objects in the bookmarks bar.
-  void UpdateColors();
+  // Sets/updates the colors and icons for all the child objects in the
+  // bookmarks bar.
+  void UpdateAppearanceForTheme();
 
   // Updates the visibility of |other_bookmarks_button_|,
   // |managed_bookmarks_button_|, and |supervised_bookmarks_button_|. Also
@@ -406,8 +398,8 @@ class BookmarkBarView : public views::AccessiblePaneView,
   // view. This is owned by the Profile.
   bookmarks::BookmarkModel* model_;
 
-  // ChromeBookmarkClient. This is owned by the Profile.
-  ChromeBookmarkClient* client_;
+  // ManagedBookmarkService. This is owned by the Profile.
+  bookmarks::ManagedBookmarkService* managed_;
 
   // Used to manage showing a Menu, either for the most recently bookmarked
   // entries, or for the starred folder.
@@ -453,7 +445,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
   bool infobar_visible_;
 
   // Animation controlling showing and hiding of the bar.
-  scoped_ptr<gfx::SlideAnimation> size_animation_;
+  gfx::SlideAnimation size_animation_;
 
   // If the bookmark bubble is showing, this is the visible ancestor of the URL.
   // The visible ancestor is either the |other_bookmarks_button_|,

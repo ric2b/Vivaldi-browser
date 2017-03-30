@@ -7,9 +7,9 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "content/public/renderer/resource_fetcher.h"
@@ -49,7 +49,7 @@ class ResourceFetcherImpl : public ResourceFetcher,
 
   explicit ResourceFetcherImpl(const GURL& url);
 
-  virtual ~ResourceFetcherImpl();
+  ~ResourceFetcherImpl() override;
 
   // Callback for timer that limits how long we wait for the server.  If this
   // timer fires and the request hasn't completed, we kill the request.
@@ -71,7 +71,7 @@ class ResourceFetcherImpl : public ResourceFetcher,
   Callback callback_;
 
   // Limit how long to wait for the server.
-  base::OneShotTimer<ResourceFetcherImpl> timeout_timer_;
+  base::OneShotTimer timeout_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceFetcherImpl);
 };

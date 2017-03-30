@@ -25,11 +25,18 @@ typedef struct SECKEYPublicKeyStr SECKEYPublicKey;
 namespace net {
 
 namespace ct {
+
 struct SignedTreeHead;
+struct MerkleConsistencyProof;
+
 }  // namespace ct
 
-// Class for verifying Signed Certificate Timestamps (SCTs) provided by a
-// specific log (whose identity is provided during construction).
+// Class for verifying signatures of a single Certificate Transparency
+// log, whose identity is provided during construction.
+// Currently can verify Signed Certificate Timestamp (SCT) and Signed
+// Tree Head (STH) signatures.
+// Immutable: Does not hold any state beyond the log information it was
+// initialized with.
 class NET_EXPORT CTLogVerifier
     : public base::RefCountedThreadSafe<CTLogVerifier> {
  public:
@@ -37,7 +44,7 @@ class NET_EXPORT CTLogVerifier
   // using |public_key|, which is a DER-encoded SubjectPublicKeyInfo.
   // If |public_key| refers to an unsupported public key, returns NULL.
   // |description| is a textual description of the log.
-  static scoped_refptr<CTLogVerifier> Create(
+  static scoped_refptr<const CTLogVerifier> Create(
       const base::StringPiece& public_key,
       const base::StringPiece& description,
       const base::StringPiece& url);
@@ -49,12 +56,21 @@ class NET_EXPORT CTLogVerifier
   // Returns the log's URL
   const GURL& url() const { return url_; }
 
-  // Verifies that |sct| contains a valid signature for |entry|.
+  // Verifies that |sct| is valid for |entry| and was signed by this log.
   bool Verify(const ct::LogEntry& entry,
-              const ct::SignedCertificateTimestamp& sct);
+              const ct::SignedCertificateTimestamp& sct) const;
 
-  // Returns true if the signature in |signed_tree_head| verifies.
-  bool VerifySignedTreeHead(const ct::SignedTreeHead& signed_tree_head);
+  // Verifies that |signed_tree_head| is a valid Signed Tree Head (RFC 6962,
+  // Section 3.5) for this log.
+  bool VerifySignedTreeHead(const ct::SignedTreeHead& signed_tree_head) const;
+
+  // Verifies that |proof| is a valid consistency proof (RFC 6962, Section
+  // 2.1.2) for this log, and which proves that |old_tree_hash| has
+  // been fully incorporated into the Merkle tree represented by
+  // |new_tree_hash|.
+  bool VerifyConsistencyProof(const ct::MerkleConsistencyProof& proof,
+                              const std::string& old_tree_hash,
+                              const std::string& new_tree_hash) const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(CTLogVerifierTest, VerifySignature);
@@ -70,11 +86,11 @@ class NET_EXPORT CTLogVerifier
   // that |signature| contains the raw signature data (eg: without any
   // DigitallySigned struct encoding).
   bool VerifySignature(const base::StringPiece& data_to_sign,
-                       const base::StringPiece& signature);
+                       const base::StringPiece& signature) const;
 
   // Returns true if the signature and hash algorithms in |signature|
   // match those of the log
-  bool SignatureParametersMatch(const ct::DigitallySigned& signature);
+  bool SignatureParametersMatch(const ct::DigitallySigned& signature) const;
 
   std::string key_id_;
   std::string description_;

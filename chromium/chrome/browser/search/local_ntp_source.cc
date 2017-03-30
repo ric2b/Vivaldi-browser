@@ -4,9 +4,12 @@
 
 #include "chrome/browser/search/local_ntp_source.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
@@ -14,9 +17,15 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/search/instant_io_context.h"
+#include "chrome/browser/search/local_files_ntp_source.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
@@ -24,6 +33,7 @@
 #include "grit/browser_resources.h"
 #include "grit/theme_resources.h"
 #include "net/url_request/url_request.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
@@ -38,26 +48,25 @@ namespace {
 const int kLocalResource = -1;
 
 const char kConfigDataFilename[] = "config.js";
+const char kThemeCSSFilename[] = "theme.css";
 
 const struct Resource{
   const char* filename;
   int identifier;
   const char* mime_type;
 } kResources[] = {
-  { "local-ntp.html", IDR_LOCAL_NTP_HTML, "text/html" },
-  { "local-ntp.js", IDR_LOCAL_NTP_JS, "application/javascript" },
-  { kConfigDataFilename, kLocalResource, "application/javascript" },
-  { "local-ntp.css", IDR_LOCAL_NTP_CSS, "text/css" },
-  { "images/close_2.png", IDR_CLOSE_2, "image/png" },
-  { "images/close_2_hover.png", IDR_CLOSE_2_H, "image/png" },
-  { "images/close_2_active.png", IDR_CLOSE_2_P, "image/png" },
-  { "images/close_2_white.png", IDR_CLOSE_2_MASK, "image/png" },
-  { "images/close_3_mask.png", IDR_CLOSE_3_MASK, "image/png" },
-  { "images/close_4_button.png", IDR_CLOSE_4_BUTTON, "image/png" },
-  { "images/google_logo.png", IDR_LOCAL_NTP_IMAGES_LOGO_PNG, "image/png" },
-  { "images/white_google_logo.png",
-    IDR_LOCAL_NTP_IMAGES_WHITE_LOGO_PNG, "image/png" },
-  { "images/ntp_default_favicon.png", IDR_NTP_DEFAULT_FAVICON, "image/png" },
+    {"local-ntp.html", IDR_LOCAL_NTP_HTML, "text/html"},
+    {"local-ntp.js", IDR_LOCAL_NTP_JS, "application/javascript"},
+    {kConfigDataFilename, kLocalResource, "application/javascript"},
+    {kThemeCSSFilename, kLocalResource, "text/css"},
+    {"local-ntp.css", IDR_LOCAL_NTP_CSS, "text/css"},
+    {"images/close_2.png", IDR_CLOSE_2, "image/png"},
+    {"images/close_2_hover.png", IDR_CLOSE_2_H, "image/png"},
+    {"images/close_2_active.png", IDR_CLOSE_2_P, "image/png"},
+    {"images/close_2_white.png", IDR_CLOSE_2_MASK, "image/png"},
+    {"images/close_3_mask.png", IDR_CLOSE_3_MASK, "image/png"},
+    {"images/close_4_button.png", IDR_CLOSE_4_BUTTON, "image/png"},
+    {"images/ntp_default_favicon.png", IDR_NTP_DEFAULT_FAVICON, "image/png"},
 };
 
 // Strips any query parameters from the specified path.
@@ -132,14 +141,14 @@ scoped_ptr<base::DictionaryValue> GetTranslatedStrings(bool is_google) {
   if (is_google)
     AddGoogleSearchboxPlaceholderString(translated_strings.get());
 
-  return translated_strings.Pass();
+  return translated_strings;
 }
 
 // Returns a JS dictionary of configuration data for the local NTP.
 std::string GetConfigData(Profile* profile) {
   base::DictionaryValue config_data;
   bool is_google = DefaultSearchProviderIsGoogle(profile) &&
-      chrome::ShouldShowGoogleLocalNTP();
+                   search::ShouldShowGoogleLocalNTP();
   config_data.Set("translatedStrings",
                   GetTranslatedStrings(is_google).release());
   config_data.SetBoolean("isGooglePage", is_google);
@@ -155,6 +164,17 @@ std::string GetConfigData(Profile* profile) {
   config_data_js.append(js_text);
   config_data_js.append(";");
   return config_data_js;
+}
+
+std::string GetThemeCSS(Profile* profile) {
+  SkColor background_color =
+      ThemeService::GetThemeProviderForProfile(profile)
+          .GetColor(ThemeProperties::COLOR_NTP_BACKGROUND);
+
+  return base::StringPrintf("body { background-color: #%02X%02X%02X; }",
+                            SkColorGetR(background_color),
+                            SkColorGetG(background_color),
+                            SkColorGetB(background_color));
 }
 
 std::string GetLocalNtpPath() {
@@ -179,17 +199,36 @@ void LocalNtpSource::StartDataRequest(
     int render_process_id,
     int render_frame_id,
     const content::URLDataSource::GotDataCallback& callback) {
-  const std::string stripped_path = StripParameters(path);
+  std::string stripped_path = StripParameters(path);
   if (stripped_path == kConfigDataFilename) {
     std::string config_data_js = GetConfigData(profile_);
     callback.Run(base::RefCountedString::TakeString(&config_data_js));
     return;
   }
+  if (stripped_path == kThemeCSSFilename) {
+    std::string theme_css = GetThemeCSS(profile_);
+    callback.Run(base::RefCountedString::TakeString(&theme_css));
+    return;
+  }
+
+#if !defined(GOOGLE_CHROME_BUILD) && !defined(OS_IOS) && !defined(OFFICIAL_BUILD) && !defined(VIVALDI_BUILD)
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kLocalNtpReload)) {
+    if (stripped_path == "local-ntp.html" || stripped_path == "local-ntp.js" ||
+        stripped_path == "local-ntp.css") {
+      base::ReplaceChars(stripped_path, "-", "_", &stripped_path);
+      local_ntp::SendLocalFileResource(stripped_path, callback);
+      return;
+    }
+  }
+#endif  // !defined(GOOGLE_CHROME_BUILD) && !defined(OS_IOS)
+
   float scale = 1.0f;
   std::string filename;
   webui::ParsePathAndScale(
       GURL(GetLocalNtpPath() + stripped_path), &filename, &scale);
   ui::ScaleFactor scale_factor = ui::GetSupportedScaleFactor(scale);
+
   for (size_t i = 0; i < arraysize(kResources); ++i) {
     if (filename == kResources[i].filename) {
       scoped_refptr<base::RefCountedStaticMemory> response(

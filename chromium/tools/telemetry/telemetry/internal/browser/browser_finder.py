@@ -7,23 +7,23 @@
 import logging
 import operator
 
-from telemetry.core import device_finder
 from telemetry import decorators
 from telemetry.internal.backends.chrome import android_browser_finder
 from telemetry.internal.backends.chrome import cros_browser_finder
 from telemetry.internal.backends.chrome import desktop_browser_finder
 from telemetry.internal.backends.chrome import ios_browser_finder
+from telemetry.internal.backends.mandoline import android_mandoline_finder
 from telemetry.internal.backends.mandoline import desktop_mandoline_finder
-from telemetry.internal.backends.remote import trybot_browser_finder
 from telemetry.internal.browser import browser_finder_exceptions
+from telemetry.internal.platform import device_finder
 
 BROWSER_FINDERS = [
   desktop_browser_finder,
   android_browser_finder,
   cros_browser_finder,
   ios_browser_finder,
-  trybot_browser_finder,
   desktop_mandoline_finder,
+  android_mandoline_finder,
   ]
 
 
@@ -45,6 +45,8 @@ def FindBrowser(options):
   Raises:
     BrowserFinderException: Options improperly set, or an error occurred.
   """
+  if options.__class__.__name__ == '_FakeBrowserFinderOptions':
+    return options.fake_possible_browser
   if options.browser_type == 'exact' and options.browser_executable == None:
     raise browser_finder_exceptions.BrowserFinderException(
         '--browser=exact requires --browser-executable to be set.')
@@ -168,6 +170,13 @@ def GetAllAvailableBrowserTypes(options):
   for device in devices:
     possible_browsers.extend(GetAllAvailableBrowsers(options, device))
   type_list = set([browser.browser_type for browser in possible_browsers])
+  # The reference build should be available for mac, linux and win, but the
+  # desktop browser finder won't return it in the list of browsers.
+  for browser in possible_browsers:
+    if (browser.target_os == 'darwin' or browser.target_os.startswith('linux')
+        or browser.target_os.startswith('win')):
+      type_list.add('reference')
+      break
   type_list = list(type_list)
   type_list.sort()
   return type_list

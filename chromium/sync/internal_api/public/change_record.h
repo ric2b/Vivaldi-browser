@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef SYNC_INTERNAL_PUBLIC_API_CHANGE_RECORD_H_
-#define SYNC_INTERNAL_PUBLIC_API_CHANGE_RECORD_H_
+#ifndef SYNC_INTERNAL_API_PUBLIC_CHANGE_RECORD_H_
+#define SYNC_INTERNAL_API_PUBLIC_CHANGE_RECORD_H_
+
+#include <stdint.h>
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/base/sync_export.h"
@@ -41,7 +42,7 @@ class SYNC_EXPORT ExtraPasswordChangeRecordData {
 // operation.  This gives the sync id of the node that changed, and the type
 // of change.  To get the actual property values after an ADD or UPDATE, the
 // client should get the node with InitByIdLookup(), using the provided id.
-struct SYNC_EXPORT_PRIVATE ChangeRecord {
+struct SYNC_EXPORT ChangeRecord {
   enum Action {
     ACTION_ADD,
     ACTION_DELETE,
@@ -52,7 +53,7 @@ struct SYNC_EXPORT_PRIVATE ChangeRecord {
 
   scoped_ptr<base::DictionaryValue> ToValue() const;
 
-  int64 id;
+  int64_t id;
   Action action;
   sync_pb::EntitySpecifics specifics;
   linked_ptr<ExtraPasswordChangeRecordData> extra;

@@ -12,21 +12,22 @@
 #include "base/debug/stack_trace.h"
 #import "base/logging.h"
 #include "base/mac/call_with_eh_frame.h"
-#import "base/mac/scoped_nsexception_enabler.h"
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
+#include "base/macros.h"
 #import "base/metrics/histogram.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #import "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
-#import "chrome/common/mac/objc_zombie.h"
+#import "components/crash/core/common/objc_zombie.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace chrome_browser_application_mac {
 
@@ -132,19 +133,10 @@ void CancelTerminate() {
 
 }  // namespace chrome_browser_application_mac
 
-// These methods are being exposed for the purposes of overriding.
+// Method exposed for the purposes of overriding.
 // Used to determine when a Panel window can become the key window.
 @interface NSApplication (PanelsCanBecomeKey)
 - (void)_cycleWindowsReversed:(BOOL)arg1;
-- (id)_removeWindow:(NSWindow*)window;
-- (id)_setKeyWindow:(NSWindow*)window;
-@end
-
-@interface BrowserCrApplication (PrivateInternal)
-
-// This must be called under the protection of previousKeyWindowsLock_.
-- (void)removePreviousKeyWindow:(NSWindow*)window;
-
 @end
 
 @implementation BrowserCrApplication
@@ -320,23 +312,8 @@ void CancelTerminate() {
       static_cast<long>(tag),
       [actionString UTF8String],
       aTarget);
-
   base::debug::ScopedCrashKey key(crash_keys::mac::kSendAction, value);
 
-  // Certain third-party code, such as print drivers, can still throw
-  // exceptions and Chromium cannot fix them.  This provides a way to
-  // work around those on a spot basis.
-  bool enableNSExceptions = false;
-
-  // http://crbug.com/80686 , an Epson printer driver.
-  if (anAction == @selector(selectPDE:)) {
-    enableNSExceptions = true;
-  }
-
-  // Minimize the window by keeping this close to the super call.
-  scoped_ptr<base::mac::ScopedNSExceptionEnabler> enabler;
-  if (enableNSExceptions)
-    enabler.reset(new base::mac::ScopedNSExceptionEnabler());
   return [super sendAction:anAction to:aTarget from:sender];
 }
 
@@ -350,9 +327,6 @@ void CancelTerminate() {
 
 - (void)sendEvent:(NSEvent*)event {
   base::mac::CallWithEHFrame(^{
-    // tracked_objects::ScopedTracker does not support parameterized
-    // instrumentations, so a big switch with each bunch instrumented is
-    // required.
     switch (event.type) {
       case NSLeftMouseDown:
       case NSRightMouseDown: {
@@ -365,80 +339,14 @@ void CancelTerminate() {
         if (kioskMode && ([event type] == NSRightMouseDown || ctrlDown))
           break;
       }
-      // FALL THROUGH
-      case NSLeftMouseUp:
-      case NSRightMouseUp:
-      case NSMouseMoved:
-      case NSLeftMouseDragged:
-      case NSRightMouseDragged:
-      case NSMouseEntered:
-      case NSMouseExited:
-      case NSOtherMouseDown:
-      case NSOtherMouseUp:
-      case NSOtherMouseDragged: {
-        tracked_objects::ScopedTracker tracking_profile(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "463272 -[BrowserCrApplication sendEvent:] Mouse"));
-        base::mac::ScopedSendingEvent sendingEventScoper;
-        [super sendEvent:event];
-        break;
-      }
-
-      case NSKeyDown:
-      case NSKeyUp: {
-        tracked_objects::ScopedTracker tracking_profile(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "463272 -[BrowserCrApplication sendEvent:] Key"));
-        base::mac::ScopedSendingEvent sendingEventScoper;
-        [super sendEvent:event];
-        break;
-      }
-
-      case NSScrollWheel: {
-        tracked_objects::ScopedTracker tracking_profile(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "463272 -[BrowserCrApplication sendEvent:] ScrollWheel"));
-        base::mac::ScopedSendingEvent sendingEventScoper;
-        [super sendEvent:event];
-        break;
-      }
-
-      case NSEventTypeGesture:
-      case NSEventTypeMagnify:
-      case NSEventTypeSwipe:
-      case NSEventTypeRotate:
-      case NSEventTypeBeginGesture:
-      case NSEventTypeEndGesture: {
-        tracked_objects::ScopedTracker tracking_profile(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "463272 -[BrowserCrApplication sendEvent:] Gesture"));
-        base::mac::ScopedSendingEvent sendingEventScoper;
-        [super sendEvent:event];
-        break;
-      }
-
-      case NSAppKitDefined: {
-        tracked_objects::ScopedTracker tracking_profile(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "463272 -[BrowserCrApplication sendEvent:] AppKit"));
-        base::mac::ScopedSendingEvent sendingEventScoper;
-        [super sendEvent:event];
-        break;
-      }
-
-      case NSSystemDefined: {
-        tracked_objects::ScopedTracker tracking_profile(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "463272 -[BrowserCrApplication sendEvent:] System"));
-        base::mac::ScopedSendingEvent sendingEventScoper;
-        [super sendEvent:event];
-        break;
-      }
 
       default: {
-        tracked_objects::ScopedTracker tracking_profile(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "463272 -[BrowserCrApplication sendEvent:] Other"));
+        if (vivaldi::IsVivaldiRunning()) {
+          if (event.type == NSEventTypeSmartMagnify) {
+            // Disables the two finger zoom.
+            break;
+          }
+        }
         base::mac::ScopedSendingEvent sendingEventScoper;
         [super sendEvent:event];
       }
@@ -466,47 +374,6 @@ void CancelTerminate() {
 
 - (BOOL)isCyclingWindows {
   return cyclingWindows_;
-}
-
-- (id)_removeWindow:(NSWindow*)window {
-  // Note _removeWindow is called from -[NSWindow dealloc], which can happen at
-  // unpredictable times due to reference counting. Just update state.
-  {
-    base::AutoLock lock(previousKeyWindowsLock_);
-    [self removePreviousKeyWindow:window];
-  }
-  return [super _removeWindow:window];
-}
-
-- (id)_setKeyWindow:(NSWindow*)window {
-  // |window| is nil when the current key window is being closed.
-  // A separate call follows with a new value when a new key window is set.
-  // Closed windows are not tracked in previousKeyWindows_.
-  if (window != nil) {
-    base::AutoLock lock(previousKeyWindowsLock_);
-    [self removePreviousKeyWindow:window];
-    NSWindow* currentKeyWindow = [self keyWindow];
-    if (currentKeyWindow != nil && currentKeyWindow != window)
-      previousKeyWindows_.push_back(currentKeyWindow);
-  }
-
-  return [super _setKeyWindow:window];
-}
-
-- (NSWindow*)previousKeyWindow {
-  base::AutoLock lock(previousKeyWindowsLock_);
-  return previousKeyWindows_.empty() ? nil : previousKeyWindows_.back();
-}
-
-- (void)removePreviousKeyWindow:(NSWindow*)window {
-  previousKeyWindowsLock_.AssertAcquired();
-  std::vector<NSWindow*>::iterator window_iterator =
-      std::find(previousKeyWindows_.begin(),
-                previousKeyWindows_.end(),
-                window);
-  if (window_iterator != previousKeyWindows_.end()) {
-    previousKeyWindows_.erase(window_iterator);
-  }
 }
 
 @end

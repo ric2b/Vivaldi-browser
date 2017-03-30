@@ -8,6 +8,7 @@
 #include <map>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 
 namespace content {
@@ -47,12 +48,14 @@ class AwResourceDispatcherHostDelegate
   content::ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
       net::AuthChallengeInfo* auth_info,
       net::URLRequest* request) override;
-  bool HandleExternalProtocol(const GURL& url,
-                              int child_id,
-                              int route_id,
-                              bool is_main_frame,
-                              ui::PageTransition page_transition,
-                              bool has_user_gesture) override;
+  bool HandleExternalProtocol(
+      const GURL& url,
+      int child_id,
+      const content::ResourceRequestInfo::WebContentsGetter&
+          web_contents_getter,
+      bool is_main_frame,
+      ui::PageTransition page_transition,
+      bool has_user_gesture) override;
   void OnResponseStarted(net::URLRequest* request,
                          content::ResourceContext* resource_context,
                          content::ResourceResponse* response,

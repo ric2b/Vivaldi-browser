@@ -4,7 +4,9 @@
 
 #include "chromeos/timezone/timezone_request.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram.h"
@@ -175,9 +177,8 @@ bool ParseServerResponse(const GURL& server_url,
 
   // Parse the response, ignoring comments.
   std::string error_msg;
-  scoped_ptr<base::Value> response_value(
-      base::JSONReader::DeprecatedReadAndReturnError(
-          response_body, base::JSON_PARSE_RFC, NULL, &error_msg));
+  scoped_ptr<base::Value> response_value = base::JSONReader::ReadAndReturnError(
+      response_body, base::JSON_PARSE_RFC, NULL, &error_msg);
   if (response_value == NULL) {
     PrintTimeZoneError(server_url, "JSONReader failed: " + error_msg, timezone);
     RecordUmaEvent(TIMEZONE_REQUEST_EVENT_RESPONSE_MALFORMED);
@@ -274,21 +275,21 @@ scoped_ptr<TimeZoneResponseData> GetTimeZoneFromResponse(
   if (!http_success) {
     PrintTimeZoneError(server_url, "No response received", timezone.get());
     RecordUmaEvent(TIMEZONE_REQUEST_EVENT_RESPONSE_EMPTY);
-    return timezone.Pass();
+    return timezone;
   }
   if (status_code != net::HTTP_OK) {
     std::string message = "Returned error code ";
     message += base::IntToString(status_code);
     PrintTimeZoneError(server_url, message, timezone.get());
     RecordUmaEvent(TIMEZONE_REQUEST_EVENT_RESPONSE_NOT_OK);
-    return timezone.Pass();
+    return timezone;
   }
 
   if (!ParseServerResponse(server_url, response_body, timezone.get()))
-    return timezone.Pass();
+    return timezone;
 
   RecordUmaEvent(TIMEZONE_REQUEST_EVENT_RESPONSE_SUCCESS);
-  return timezone.Pass();
+  return timezone;
 }
 
 }  // namespace
@@ -399,7 +400,7 @@ void TimeZoneRequest::OnURLFetchComplete(const net::URLFetcher* source) {
 
   // callback.Run() usually destroys TimeZoneRequest, because this is the way
   // callback is implemented in TimeZoneProvider.
-  callback.Run(timezone.Pass(), server_error);
+  callback.Run(std::move(timezone), server_error);
   // "this" is already destroyed here.
 }
 

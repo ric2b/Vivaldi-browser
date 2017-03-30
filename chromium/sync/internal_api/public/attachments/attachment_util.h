@@ -5,6 +5,8 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_ATTACHMENT_UTIL_H_
 #define SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_ATTACHMENT_UTIL_H_
 
+#include <stdint.h>
+
 #include "base/memory/ref_counted.h"
 #include "sync/base/sync_export.h"
 
@@ -20,7 +22,7 @@ namespace syncer {
 // Ideally this function should be static function in Attachment class, but
 // include_rules from sync/api/DEPS don't allow direct dependency on
 // third_party.
-SYNC_EXPORT_PRIVATE uint32_t
+SYNC_EXPORT uint32_t
 ComputeCrc32c(const scoped_refptr<base::RefCountedMemory>& data);
 
 }  // namespace syncer

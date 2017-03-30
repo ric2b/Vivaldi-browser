@@ -4,6 +4,8 @@
 
 #include "ash/accelerators/magnifier_key_scroller.h"
 
+#include <utility>
+
 #include "ash/accelerators/key_hold_detector.h"
 #include "ash/ash_switches.h"
 #include "ash/magnifier/magnification_controller.h"
@@ -36,7 +38,7 @@ void MagnifierKeyScroller::SetEnabled(bool enabled) {
 // static
 scoped_ptr<ui::EventHandler> MagnifierKeyScroller::CreateHandler() {
   scoped_ptr<KeyHoldDetector::Delegate> delegate(new MagnifierKeyScroller());
-  return scoped_ptr<ui::EventHandler>(new KeyHoldDetector(delegate.Pass()));
+  return scoped_ptr<ui::EventHandler>(new KeyHoldDetector(std::move(delegate)));
 }
 
 bool MagnifierKeyScroller::ShouldProcessEvent(const ui::KeyEvent* event) const {
@@ -50,6 +52,10 @@ bool MagnifierKeyScroller::ShouldProcessEvent(const ui::KeyEvent* event) const {
 bool MagnifierKeyScroller::IsStartEvent(const ui::KeyEvent* event) const {
   return event->type() == ui::ET_KEY_PRESSED &&
       event->flags() & ui::EF_SHIFT_DOWN;
+}
+
+bool MagnifierKeyScroller::ShouldStopEventPropagation() const {
+  return true;
 }
 
 void MagnifierKeyScroller::OnKeyHold(const ui::KeyEvent* event) {

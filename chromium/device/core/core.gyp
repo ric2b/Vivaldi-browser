@@ -9,18 +9,38 @@
   'targets': [
     {
       'target_name': 'device_core',
-      'type': 'static_library',
+      'type': '<(component)',
       'include_dirs': [
         '../..',
+      ],
+      'defines': [
+        'DEVICE_CORE_IMPLEMENTATION',
       ],
       'sources': [
         'device_client.cc',
         'device_client.h',
+        'device_info_query_win.cc',
+        'device_info_query_win.h',
         'device_monitor_win.cc',
         'device_monitor_win.h',
       ],
       'dependencies': [
-        '<(DEPTH)/third_party/mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../../base/base.gyp:base',
+      ]
+    },
+    {
+      'target_name': 'device_core_mocks',
+      'type': 'static_library',
+      'include_dirs': [
+        '../..',
+      ],
+      'dependencies': [
+        '../../testing/gmock.gyp:gmock',
+        'device_core',
+      ],
+      'sources': [
+        'mock_device_client.cc',
+        'mock_device_client.h',
       ],
     },
   ],

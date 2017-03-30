@@ -5,14 +5,18 @@
 #ifndef IPC_IPC_CHANNEL_PROXY_H_
 #define IPC_IPC_CHANNEL_PROXY_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/non_thread_safe.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_handle.h"
+#include "ipc/ipc_endpoint.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 
@@ -63,7 +67,7 @@ class SendCallbackHelper;
 // |channel_lifetime_lock_| is used to protect it. The locking overhead is only
 // paid if the underlying channel supports thread-safe |Send|.
 //
-class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
+class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
  public:
 #if defined(ENABLE_IPC_FUZZER)
   // Interface for a filter to be imposed on outgoing messages which can
@@ -82,15 +86,11 @@ class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
   // on the background thread.  Any message not handled by the filter will be
   // dispatched to the listener.  The given task runner correspond to a thread
   // on which IPC::Channel is created and used (e.g. IO thread).
-  // TODO(erikchen): Remove default parameter for |broker|. It exists only to
-  // make the upcoming refactor decomposable into smaller CLs.
-  // http://crbug.com/493414.
   static scoped_ptr<ChannelProxy> Create(
       const IPC::ChannelHandle& channel_handle,
       Channel::Mode mode,
       Listener* listener,
-      const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
-      AttachmentBroker* broker = nullptr);
+      const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner);
 
   static scoped_ptr<ChannelProxy> Create(
       scoped_ptr<ChannelFactory> factory,
@@ -103,13 +103,9 @@ class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
   // proxy that was not initialized in its constructor. If create_pipe_now is
   // true, the pipe is created synchronously. Otherwise it's created on the IO
   // thread.
-  // TODO(erikchen): Remove default parameter for |broker|. It exists only to
-  // make the upcoming refactor decomposable into smaller CLs.
-  // http://crbug.com/493414.
   void Init(const IPC::ChannelHandle& channel_handle,
             Channel::Mode mode,
-            bool create_pipe_now,
-            AttachmentBroker* broker = nullptr);
+            bool create_pipe_now);
   void Init(scoped_ptr<ChannelFactory> factory, bool create_pipe_now);
 
   // Close the IPC::Channel.  This operation completes asynchronously, once the
@@ -144,18 +140,12 @@ class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
   }
 #endif
 
-  // Set the task runner on which dispatched messages are posted. Both the new
-  // task runner and the existing task runner must run on the same thread, and
-  // must belong to the calling thread.
-  void SetListenerTaskRunner(
-    scoped_refptr<base::SingleThreadTaskRunner> listener_task_runner);
-
   // Called to clear the pointer to the IPC task runner when it's going away.
   void ClearIPCTaskRunner();
 
-  // Get the process ID for the connected peer.
-  // Returns base::kNullProcessId if the peer is not connected yet.
-  base::ProcessId GetPeerPID() const { return context_->peer_pid_; }
+  // Endpoint overrides.
+  base::ProcessId GetPeerPID() const override;
+  void OnSetAttachmentBrokerEndpoint() override;
 
 #if defined(OS_POSIX) && !defined(OS_NACL_SFI)
   // Calls through to the underlying channel's methods.
@@ -180,8 +170,6 @@ class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
     Context(Listener* listener,
             const scoped_refptr<base::SingleThreadTaskRunner>& ipc_thread);
     void ClearIPCTaskRunner();
-    void SetListenerTaskRunner(
-      scoped_refptr<base::SingleThreadTaskRunner> listener_task_runner);
     base::SingleThreadTaskRunner* ipc_task_runner() const {
       return ipc_task_runner_.get();
     }
@@ -193,13 +181,16 @@ class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
     // Sends |message| from appropriate thread.
     void Send(Message* message);
 
+    // Indicates if the underlying channel's Send is thread-safe.
+    bool IsChannelSendThreadSafe() const;
+
    protected:
     friend class base::RefCountedThreadSafe<Context>;
     ~Context() override;
 
     // IPC::Listener methods:
     bool OnMessageReceived(const Message& message) override;
-    void OnChannelConnected(int32 peer_pid) override;
+    void OnChannelConnected(int32_t peer_pid) override;
     void OnChannelError() override;
 
     // Like OnMessageReceived but doesn't try the filters.
@@ -224,6 +215,12 @@ class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
 
     // Create the Channel
     void CreateChannel(scoped_ptr<ChannelFactory> factory);
+
+    void set_attachment_broker_endpoint(bool is_endpoint) {
+      attachment_broker_endpoint_ = is_endpoint;
+      if (channel_)
+        channel_->SetAttachmentBrokerEndpoint(is_endpoint);
+    }
 
     // Methods called on the IO thread.
     void OnSendMessage(scoped_ptr<Message> message_ptr);
@@ -274,6 +271,10 @@ class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
     // Cached copy of the peer process ID. Set on IPC but read on both IPC and
     // listener threads.
     base::ProcessId peer_pid_;
+
+    // Whether this channel is used as an endpoint for sending and receiving
+    // brokerable attachment messages to/from the broker process.
+    bool attachment_broker_endpoint_;
   };
 
   Context* context() { return context_.get(); }
@@ -284,8 +285,14 @@ class IPC_EXPORT ChannelProxy : public Sender, public base::NonThreadSafe {
   }
 #endif
 
+ protected:
+  bool did_init() const { return did_init_; }
+
  private:
   friend class IpcSecurityTestUtil;
+
+  // Always called once immediately after Init.
+  virtual void OnChannelInit();
 
   // By maintaining this indirection (ref-counted) to our internal state, we
   // can safely be destroyed while the background thread continues to do stuff

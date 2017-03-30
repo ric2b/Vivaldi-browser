@@ -4,22 +4,19 @@
 
 #include "components/gcm_driver/fake_gcm_driver.h"
 
+#include "base/files/file_path.h"
+
 namespace gcm {
 
-FakeGCMDriver::FakeGCMDriver() {
+FakeGCMDriver::FakeGCMDriver() : GCMDriver(base::FilePath(), nullptr) {
+}
+
+FakeGCMDriver::FakeGCMDriver(
+    const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner)
+    : GCMDriver(base::FilePath(), blocking_task_runner) {
 }
 
 FakeGCMDriver::~FakeGCMDriver() {
-}
-
-void FakeGCMDriver::Shutdown() {
-}
-
-void FakeGCMDriver::AddAppHandler(
-    const std::string& app_id, GCMAppHandler* handler) {
-}
-
-void FakeGCMDriver::RemoveAppHandler(const std::string& app_id) {
 }
 
 void FakeGCMDriver::OnSignedIn() {
@@ -53,7 +50,7 @@ bool FakeGCMDriver::IsConnected() const {
 }
 
 void FakeGCMDriver::GetGCMStatistics(const GetGCMStatisticsCallback& callback,
-                                     bool clear_logs) {
+                                     ClearActivityLogs clear_logs) {
 }
 
 void FakeGCMDriver::SetGCMRecording(const GetGCMStatisticsCallback& callback,
@@ -74,7 +71,7 @@ void FakeGCMDriver::UnregisterImpl(const std::string& app_id) {
 
 void FakeGCMDriver::SendImpl(const std::string& app_id,
                              const std::string& receiver_id,
-                             const GCMClient::OutgoingMessage& message) {
+                             const OutgoingMessage& message) {
 }
 
 void FakeGCMDriver::SetAccountTokens(

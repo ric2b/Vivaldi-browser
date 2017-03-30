@@ -4,6 +4,7 @@
 
 #include "cc/animation/element_animations.h"
 
+#include "base/macros.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_player.h"
 #include "cc/animation/animation_registrar.h"
@@ -39,6 +40,11 @@ class ElementAnimations::ValueObserver : public LayerAnimationValueObserver {
   void OnAnimationWaitingForDeletion() override {
     // TODO(loyso): See Layer::OnAnimationWaitingForDeletion. But we always do
     // PushProperties for AnimationTimelines for now.
+  }
+
+  void OnTransformIsPotentiallyAnimatingChanged(bool is_animating) override {
+    element_animations_->SetTransformIsPotentiallyAnimatingChanged(
+        tree_type_, is_animating);
   }
 
   bool IsActive() const override { return tree_type_ == LayerTreeType::ACTIVE; }
@@ -88,6 +94,11 @@ void ElementAnimations::CreateLayerAnimationController(int layer_id) {
 
 void ElementAnimations::DestroyLayerAnimationController() {
   DCHECK(animation_host_);
+
+  if (active_value_observer_)
+    SetTransformIsPotentiallyAnimatingChanged(LayerTreeType::ACTIVE, false);
+  if (pending_value_observer_)
+    SetTransformIsPotentiallyAnimatingChanged(LayerTreeType::PENDING, false);
 
   DestroyPendingValueObserver();
   DestroyActiveValueObserver();
@@ -184,6 +195,18 @@ void ElementAnimations::SetScrollOffsetMutated(
       layer_id(), tree_type, scroll_offset);
 }
 
+void ElementAnimations::SetTransformIsPotentiallyAnimatingChanged(
+    LayerTreeType tree_type,
+    bool is_animating) {
+  DCHECK(layer_id());
+  DCHECK(animation_host());
+  DCHECK(animation_host()->mutator_host_client());
+  animation_host()
+      ->mutator_host_client()
+      ->LayerTransformIsPotentiallyAnimatingChanged(layer_id(), tree_type,
+                                                    is_animating);
+}
+
 void ElementAnimations::CreateActiveValueObserver() {
   DCHECK(layer_animation_controller_);
   DCHECK(!active_value_observer_);
@@ -233,6 +256,17 @@ void ElementAnimations::NotifyAnimationFinished(
        node != players_list_->end(); node = node->next()) {
     AnimationPlayer* player = node->value();
     player->NotifyAnimationFinished(monotonic_time, target_property, group);
+  }
+}
+
+void ElementAnimations::NotifyAnimationAborted(
+    base::TimeTicks monotonic_time,
+    Animation::TargetProperty target_property,
+    int group) {
+  for (PlayersListNode* node = players_list_->head();
+       node != players_list_->end(); node = node->next()) {
+    AnimationPlayer* player = node->value();
+    player->NotifyAnimationAborted(monotonic_time, target_property, group);
   }
 }
 

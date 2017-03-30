@@ -5,6 +5,8 @@
 #ifndef SERVICES_TEST_SERVICE_TEST_SERVICE_IMPL_H_
 #define SERVICES_TEST_SERVICE_TEST_SERVICE_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/macros.h"
@@ -17,7 +19,7 @@ namespace test {
 class TrackedService;
 class TestServiceApplication;
 
-class TestServiceImpl : public TestService, ErrorHandler {
+class TestServiceImpl : public TestService {
  public:
   TestServiceImpl(ApplicationImpl* app_impl,
                   TestServiceApplication* application,
@@ -30,9 +32,6 @@ class TestServiceImpl : public TestService, ErrorHandler {
       const mojo::String& app_url,
       const mojo::Callback<void(int64_t)>& callback) override;
   void StartTrackingRequests(const mojo::Callback<void()>& callback) override;
-
-  // ErrorHandler methods:
-  void OnConnectionError() override;
 
  private:
   TestServiceApplication* const application_;

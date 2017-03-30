@@ -8,6 +8,7 @@
 #include <libevdev/libevdev.h>
 #include <linux/input.h>
 
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/timer/timer.h"
 #include "ui/events/event.h"
@@ -270,8 +271,10 @@ void GestureInterpreterLibevdevCros::OnGestureMove(const Gesture* gesture,
 
   cursor_->MoveCursor(gfx::Vector2dF(move->dx, move->dy));
   // TODO(spang): Use move->ordinal_dx, move->ordinal_dy
-  dispatcher_->DispatchMouseMoveEvent(MouseMoveEventParams(
-      id_, cursor_->GetLocation(), StimeToTimedelta(gesture->end_time)));
+  dispatcher_->DispatchMouseMoveEvent(
+      MouseMoveEventParams(id_, cursor_->GetLocation(),
+                           PointerDetails(EventPointerType::POINTER_TYPE_MOUSE),
+                           StimeToTimedelta(gesture->end_time)));
 }
 
 void GestureInterpreterLibevdevCros::OnGestureScroll(
@@ -385,7 +388,9 @@ void GestureInterpreterLibevdevCros::OnGesturePinch(const Gesture* gesture,
   if (!cursor_)
     return;  // No cursor!
 
-  NOTIMPLEMENTED();
+  dispatcher_->DispatchPinchEvent(
+      PinchEventParams(id_, ET_GESTURE_PINCH_UPDATE, cursor_->GetLocation(),
+                       pinch->dz, StimeToTimedelta(gesture->end_time)));
 }
 
 void GestureInterpreterLibevdevCros::OnGestureMetrics(
@@ -420,9 +425,10 @@ void GestureInterpreterLibevdevCros::DispatchMouseButton(unsigned int button,
     return;  // No change.
 
   bool allow_remap = is_mouse_;
-  dispatcher_->DispatchMouseButtonEvent(
-      MouseButtonEventParams(id_, cursor_->GetLocation(), button, down,
-                             allow_remap, StimeToTimedelta(time)));
+  dispatcher_->DispatchMouseButtonEvent(MouseButtonEventParams(
+      id_, cursor_->GetLocation(), button, down, allow_remap,
+      PointerDetails(EventPointerType::POINTER_TYPE_MOUSE),
+      StimeToTimedelta(time)));
 }
 
 void GestureInterpreterLibevdevCros::DispatchChangedKeys(

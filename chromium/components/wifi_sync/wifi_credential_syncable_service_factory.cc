@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/wifi_sync/wifi_config_delegate.h"
 #include "components/wifi_sync/wifi_credential_syncable_service.h"
@@ -60,7 +61,7 @@ WifiCredentialSyncableServiceFactory::GetForBrowserContext(
 // static
 WifiCredentialSyncableServiceFactory*
 WifiCredentialSyncableServiceFactory::GetInstance() {
-  return Singleton<WifiCredentialSyncableServiceFactory>::get();
+  return base::Singleton<WifiCredentialSyncableServiceFactory>::get();
 }
 
 // Private methods.

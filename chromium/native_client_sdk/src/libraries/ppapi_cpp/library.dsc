@@ -17,6 +17,7 @@
         'audio.cc',
         'audio_buffer.cc',
         'audio_config.cc',
+        'audio_encoder.cc',
         'compositor.cc',
         'compositor_layer.cc',
         'core.cc',
@@ -65,7 +66,6 @@
         # ppapi/cpp/dev
         'cursor_control_dev.cc',
         'file_chooser_dev.cc',
-        'font_dev.cc',
         'memory_dev.cc',
         'printing_dev.cc',
         'scriptable_object_deprecated.cc',
@@ -91,6 +91,7 @@
         'array_output.h',
         'audio_buffer.h',
         'audio_config.h',
+        'audio_encoder.h',
         'audio.h',
         'completion_callback.h',
         'compositor.h',
@@ -152,7 +153,6 @@
       'FILES': [
         'cursor_control_dev.h',
         'file_chooser_dev.h',
-        'font_dev.h',
         'memory_dev.h',
         'printing_dev.h',
         'scriptable_object_deprecated.h',

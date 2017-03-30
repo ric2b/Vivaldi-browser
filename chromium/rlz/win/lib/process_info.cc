@@ -7,7 +7,9 @@
 #include "rlz/win/lib/process_info.h"
 
 #include <windows.h>
+#include <stddef.h>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process_info.h"
 #include "base/strings/string16.h"
@@ -59,7 +61,7 @@ bool GetUserGroup(long* group) {
                           DOMAIN_ALIAS_RID_POWER_USERS};
   SID_IDENTIFIER_AUTHORITY nt_authority = {SECURITY_NT_AUTHORITY};
 
-  for (int i = 0; i < arraysize(user_groups) && *group == 0; ++i) {
+  for (size_t i = 0; i < arraysize(user_groups) && *group == 0; ++i) {
     PSID current_group;
     if (AllocateAndInitializeSid(&nt_authority, 2,
                                  SECURITY_BUILTIN_DOMAIN_RID,

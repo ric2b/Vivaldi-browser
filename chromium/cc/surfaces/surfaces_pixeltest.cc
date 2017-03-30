@@ -24,6 +24,14 @@ namespace {
 class EmptySurfaceFactoryClient : public SurfaceFactoryClient {
  public:
   void ReturnResources(const ReturnedResourceArray& resources) override {}
+  void SetBeginFrameSource(SurfaceId surface_id,
+                           BeginFrameSource* begin_frame_source) override {}
+};
+
+class EmptySurfaceAggregatorClient : public SurfaceAggregatorClient {
+ public:
+  void AddSurface(Surface* surface) override {}
+  void RemoveSurface(Surface* surface) override {}
 };
 
 class SurfacesPixelTest : public RendererPixelTest<GLRenderer> {
@@ -73,17 +81,19 @@ TEST_F(SurfacesPixelTest, DrawSimpleFrame) {
                      force_anti_aliasing_off);
 
   scoped_ptr<DelegatedFrameData> delegated_frame_data(new DelegatedFrameData);
-  delegated_frame_data->render_pass_list.push_back(pass.Pass());
+  delegated_frame_data->render_pass_list.push_back(std::move(pass));
 
   scoped_ptr<CompositorFrame> root_frame(new CompositorFrame);
-  root_frame->delegated_frame_data = delegated_frame_data.Pass();
+  root_frame->delegated_frame_data = std::move(delegated_frame_data);
 
   SurfaceId root_surface_id = allocator_.GenerateId();
   factory_.Create(root_surface_id);
-  factory_.SubmitFrame(root_surface_id, root_frame.Pass(),
-                       SurfaceFactory::DrawCallback());
+  factory_.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
+                                 SurfaceFactory::DrawCallback());
 
-  SurfaceAggregator aggregator(&manager_, resource_provider_.get());
+  EmptySurfaceAggregatorClient surface_aggregator_client;
+  SurfaceAggregator aggregator(&surface_aggregator_client, &manager_,
+                               resource_provider_.get(), true);
   scoped_ptr<CompositorFrame> aggregated_frame =
       aggregator.Aggregate(root_surface_id);
   factory_.Destroy(root_surface_id);
@@ -130,13 +140,13 @@ TEST_F(SurfacesPixelTest, DrawSimpleAggregatedFrame) {
                        force_anti_aliasing_off);
 
     scoped_ptr<DelegatedFrameData> delegated_frame_data(new DelegatedFrameData);
-    delegated_frame_data->render_pass_list.push_back(pass.Pass());
+    delegated_frame_data->render_pass_list.push_back(std::move(pass));
 
     scoped_ptr<CompositorFrame> root_frame(new CompositorFrame);
-    root_frame->delegated_frame_data = delegated_frame_data.Pass();
+    root_frame->delegated_frame_data = std::move(delegated_frame_data);
 
-    factory_.SubmitFrame(root_surface_id, root_frame.Pass(),
-                         SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
+                                   SurfaceFactory::DrawCallback());
   }
 
   {
@@ -158,16 +168,18 @@ TEST_F(SurfacesPixelTest, DrawSimpleAggregatedFrame) {
                        force_anti_aliasing_off);
 
     scoped_ptr<DelegatedFrameData> delegated_frame_data(new DelegatedFrameData);
-    delegated_frame_data->render_pass_list.push_back(pass.Pass());
+    delegated_frame_data->render_pass_list.push_back(std::move(pass));
 
     scoped_ptr<CompositorFrame> child_frame(new CompositorFrame);
-    child_frame->delegated_frame_data = delegated_frame_data.Pass();
+    child_frame->delegated_frame_data = std::move(delegated_frame_data);
 
-    factory_.SubmitFrame(child_surface_id, child_frame.Pass(),
-                         SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(child_surface_id, std::move(child_frame),
+                                   SurfaceFactory::DrawCallback());
   }
 
-  SurfaceAggregator aggregator(&manager_, resource_provider_.get());
+  EmptySurfaceAggregatorClient surface_aggregator_client;
+  SurfaceAggregator aggregator(&surface_aggregator_client, &manager_,
+                               resource_provider_.get(), true);
   scoped_ptr<CompositorFrame> aggregated_frame =
       aggregator.Aggregate(root_surface_id);
 
@@ -229,13 +241,13 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
                                right_child_id);
 
     scoped_ptr<DelegatedFrameData> delegated_frame_data(new DelegatedFrameData);
-    delegated_frame_data->render_pass_list.push_back(pass.Pass());
+    delegated_frame_data->render_pass_list.push_back(std::move(pass));
 
     scoped_ptr<CompositorFrame> root_frame(new CompositorFrame);
-    root_frame->delegated_frame_data = delegated_frame_data.Pass();
+    root_frame->delegated_frame_data = std::move(delegated_frame_data);
 
-    factory_.SubmitFrame(root_surface_id, root_frame.Pass(),
-                         SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
+                                   SurfaceFactory::DrawCallback());
   }
 
   {
@@ -265,13 +277,13 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
                               force_anti_aliasing_off);
 
     scoped_ptr<DelegatedFrameData> delegated_frame_data(new DelegatedFrameData);
-    delegated_frame_data->render_pass_list.push_back(pass.Pass());
+    delegated_frame_data->render_pass_list.push_back(std::move(pass));
 
     scoped_ptr<CompositorFrame> child_frame(new CompositorFrame);
-    child_frame->delegated_frame_data = delegated_frame_data.Pass();
+    child_frame->delegated_frame_data = std::move(delegated_frame_data);
 
-    factory_.SubmitFrame(left_child_id, child_frame.Pass(),
-                         SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(left_child_id, std::move(child_frame),
+                                   SurfaceFactory::DrawCallback());
   }
 
   {
@@ -301,16 +313,18 @@ TEST_F(SurfacesPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
                               force_anti_aliasing_off);
 
     scoped_ptr<DelegatedFrameData> delegated_frame_data(new DelegatedFrameData);
-    delegated_frame_data->render_pass_list.push_back(pass.Pass());
+    delegated_frame_data->render_pass_list.push_back(std::move(pass));
 
     scoped_ptr<CompositorFrame> child_frame(new CompositorFrame);
-    child_frame->delegated_frame_data = delegated_frame_data.Pass();
+    child_frame->delegated_frame_data = std::move(delegated_frame_data);
 
-    factory_.SubmitFrame(right_child_id, child_frame.Pass(),
-                         SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(right_child_id, std::move(child_frame),
+                                   SurfaceFactory::DrawCallback());
   }
 
-  SurfaceAggregator aggregator(&manager_, resource_provider_.get());
+  EmptySurfaceAggregatorClient surface_aggregator_client;
+  SurfaceAggregator aggregator(&surface_aggregator_client, &manager_,
+                               resource_provider_.get(), true);
   scoped_ptr<CompositorFrame> aggregated_frame =
       aggregator.Aggregate(root_surface_id);
 

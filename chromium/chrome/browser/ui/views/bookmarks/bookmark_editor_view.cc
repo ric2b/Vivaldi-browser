@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
@@ -14,13 +13,15 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
+#include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -49,17 +50,6 @@ namespace {
 const SkColor kErrorColor = SkColorSetRGB(0xFF, 0xBC, 0xBC);
 
 }  // namespace
-
-// static
-void BookmarkEditor::Show(gfx::NativeWindow parent_window,
-                          Profile* profile,
-                          const EditDetails& details,
-                          Configuration configuration) {
-  DCHECK(profile);
-  BookmarkEditorView* editor = new BookmarkEditorView(profile,
-      details.parent_node, details, configuration);
-  editor->Show(parent_window);
-}
 
 BookmarkEditorView::BookmarkEditorView(
     Profile* profile,
@@ -356,8 +346,8 @@ void BookmarkEditorView::Init() {
   const int buttons_column_set_id = 2;
 
   views::ColumnSet* column_set = layout->AddColumnSet(labels_column_set_id);
-  column_set->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
-                        GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(views::kControlLabelGridAlignment, GridLayout::CENTER,
+                        0, GridLayout::USE_PREF, 0, 0);
   column_set->AddPaddingColumn(0, views::kRelatedControlHorizontalSpacing);
   column_set->AddColumn(GridLayout::FILL, GridLayout::CENTER, 1,
                         GridLayout::USE_PREF, 0, 0);
@@ -440,7 +430,8 @@ void BookmarkEditorView::Reset() {
 GURL BookmarkEditorView::GetInputURL() const {
   if (details_.GetNodeType() == BookmarkNode::FOLDER)
     return GURL();
-  return url_fixer::FixupURL(base::UTF16ToUTF8(url_tf_->text()), std::string());
+  return url_formatter::FixupURL(base::UTF16ToUTF8(url_tf_->text()),
+                                 std::string());
 }
 
 void BookmarkEditorView::UserInputChanged() {
@@ -489,7 +480,7 @@ void BookmarkEditorView::ExpandAndSelect() {
   const BookmarkNode* to_select = parent_;
   if (details_.type == EditDetails::EXISTING_NODE)
     to_select = details_.existing_node->parent();
-  int64 folder_id_to_select = to_select->id();
+  int64_t folder_id_to_select = to_select->id();
   EditorNode* b_node =
       FindNodeWithID(tree_model_->GetRoot(), folder_id_to_select);
   if (!b_node)
@@ -526,7 +517,7 @@ void BookmarkEditorView::CreateNodes(const BookmarkNode* bb_node,
 
 BookmarkEditorView::EditorNode* BookmarkEditorView::FindNodeWithID(
     BookmarkEditorView::EditorNode* node,
-    int64 id) {
+    int64_t id) {
   if (node->value == id)
     return node;
   for (int i = 0; i < node->child_count(); ++i) {
@@ -653,3 +644,17 @@ void BookmarkEditorView::EditorTreeModel::SetTitle(
   if (!title.empty())
     ui::TreeNodeModel<EditorNode>::SetTitle(node, title);
 }
+
+namespace chrome {
+
+void ShowBookmarkEditorViews(gfx::NativeWindow parent_window,
+                             Profile* profile,
+                             const BookmarkEditor::EditDetails& details,
+                             BookmarkEditor::Configuration configuration) {
+  DCHECK(profile);
+  BookmarkEditorView* editor = new BookmarkEditorView(
+      profile, details.parent_node, details, configuration);
+  editor->Show(parent_window);
+}
+
+}  // namespace chrome

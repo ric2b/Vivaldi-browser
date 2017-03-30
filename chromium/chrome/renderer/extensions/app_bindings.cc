@@ -5,6 +5,7 @@
 #include "chrome/renderer/extensions/app_bindings.h"
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -20,40 +21,18 @@
 #include "extensions/renderer/console.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/extension_helper.h"
+#include "extensions/renderer/renderer_extension_registry.h"
 #include "extensions/renderer/script_context.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "v8/include/v8.h"
 
 using blink::WebFrame;
-using blink::WebLocalFrame;
 using content::V8ValueConverter;
 
 namespace extensions {
 
 namespace {
-
-bool IsCheckoutURL(const std::string& url_spec) {
-  std::string checkout_url_prefix =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kAppsCheckoutURL);
-  if (checkout_url_prefix.empty())
-    checkout_url_prefix = "https://checkout.google.com/";
-
-  return base::StartsWith(url_spec, checkout_url_prefix,
-                          base::CompareCase::INSENSITIVE_ASCII);
-}
-
-bool CheckAccessToAppDetails(WebFrame* frame, v8::Isolate* isolate) {
-  if (!IsCheckoutURL(frame->document().url().spec())) {
-    std::string error("Access denied for URL: ");
-    error += frame->document().url().spec();
-    isolate->ThrowException(v8::String::NewFromUtf8(isolate, error.c_str()));
-    return false;
-  }
-
-  return true;
-}
 
 const char kInvalidCallbackIdError[] = "Invalid callbackId";
 
@@ -66,8 +45,6 @@ AppBindings::AppBindings(Dispatcher* dispatcher, ScriptContext* context)
       base::Bind(&AppBindings::GetIsInstalled, base::Unretained(this)));
   RouteFunction("GetDetails",
       base::Bind(&AppBindings::GetDetails, base::Unretained(this)));
-  RouteFunction("GetDetailsForFrame",
-      base::Bind(&AppBindings::GetDetailsForFrame, base::Unretained(this)));
   RouteFunction("GetInstallState",
       base::Bind(&AppBindings::GetInstallState, base::Unretained(this)));
   RouteFunction("GetRunningState",
@@ -89,52 +66,18 @@ void AppBindings::GetIsInstalled(
 
 void AppBindings::GetDetails(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  CHECK(context()->web_frame());
-  args.GetReturnValue().Set(GetDetailsForFrameImpl(context()->web_frame()));
+  blink::WebLocalFrame* web_frame = context()->web_frame();
+  CHECK(web_frame);
+  args.GetReturnValue().Set(GetDetailsImpl(web_frame));
 }
 
-void AppBindings::GetDetailsForFrame(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  CHECK(context()->web_frame());
-  if (!CheckAccessToAppDetails(context()->web_frame(), context()->isolate()))
-    return;
-
-  if (args.Length() < 0) {
-    context()->isolate()->ThrowException(
-        v8::String::NewFromUtf8(context()->isolate(), "Not enough arguments."));
-    return;
-  }
-
-  if (!args[0]->IsObject()) {
-    context()->isolate()->ThrowException(v8::String::NewFromUtf8(
-        context()->isolate(), "Argument 0 must be an object."));
-    return;
-  }
-
-  v8::Local<v8::Context> context =
-      v8::Local<v8::Object>::Cast(args[0])->CreationContext();
-  CHECK(!context.IsEmpty());
-
-  WebLocalFrame* target_frame = WebLocalFrame::frameForContext(context);
-  if (!target_frame) {
-    ScriptContext* script_context = ScriptContextSet::GetContextByV8Context(
-        args.GetIsolate()->GetCallingContext());
-    console::Error(script_context ? script_context->GetRenderFrame() : nullptr,
-                   "Could not find frame for specified object.");
-    return;
-  }
-
-  args.GetReturnValue().Set(GetDetailsForFrameImpl(target_frame));
-}
-
-v8::Local<v8::Value> AppBindings::GetDetailsForFrameImpl(
-    WebFrame* frame) {
+v8::Local<v8::Value> AppBindings::GetDetailsImpl(blink::WebLocalFrame* frame) {
   v8::Isolate* isolate = frame->mainWorldScriptContext()->GetIsolate();
   if (frame->document().securityOrigin().isUnique())
     return v8::Null(isolate);
 
   const Extension* extension =
-      dispatcher_->extensions()->GetExtensionOrAppByURL(
+      RendererExtensionRegistry::Get()->GetExtensionOrAppByURL(
           frame->document().url());
 
   if (!extension)
@@ -175,7 +118,8 @@ void AppBindings::GetRunningState(
   // from the top frame.
   blink::WebSecurityOrigin top_frame_security_origin =
       context()->web_frame()->top()->securityOrigin();
-  const ExtensionSet* extensions = dispatcher_->extensions();
+  const RendererExtensionRegistry* extensions =
+      RendererExtensionRegistry::Get();
 
   // The app associated with the top level frame.
   const Extension* top_app = extensions->GetHostedAppByURL(

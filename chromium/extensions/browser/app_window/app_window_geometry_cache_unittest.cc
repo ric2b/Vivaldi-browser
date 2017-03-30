@@ -4,6 +4,10 @@
 
 #include "extensions/browser/app_window/app_window_geometry_cache.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/mock_pref_change_callback.h"
@@ -17,7 +21,6 @@
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_test.h"
-#include "extensions/browser/null_app_sorting.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/value_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,8 +36,8 @@ const char kWindowId2[] = "windowid2";
 // Create a very simple extension with id.
 scoped_refptr<Extension> CreateExtension(const std::string& id) {
   return ExtensionBuilder()
-      .SetManifest(DictionaryBuilder().Set("name", "test").Set(
-          "version", "0.1"))
+      .SetManifest(std::move(
+          DictionaryBuilder().Set("name", "test").Set("version", "0.1")))
       .SetID(id)
       .Build();
 }
@@ -89,14 +92,12 @@ void AppWindowGeometryCacheTest::SetUp() {
       new user_prefs::PrefRegistrySyncable;
   // Prefs should be registered before the PrefService is created.
   ExtensionPrefs::RegisterProfilePrefs(pref_registry);
-  pref_service_ = factory.Create(pref_registry).Pass();
+  pref_service_ = factory.Create(pref_registry);
 
   extension_prefs_.reset(ExtensionPrefs::Create(
-      pref_service_.get(),
+      browser_context(), pref_service_.get(),
       browser_context()->GetPath().AppendASCII("Extensions"),
-      extension_pref_value_map_.get(),
-      scoped_ptr<AppSorting>(new NullAppSorting),
-      false /* extensions_disabled */,
+      extension_pref_value_map_.get(), false /* extensions_disabled */,
       std::vector<ExtensionPrefsObserver*>()));
 
   cache_.reset(
@@ -131,7 +132,7 @@ void AppWindowGeometryCacheTest::AddGeometryAndLoadExtension(
   value->SetInteger("screen_bounds_h", screen_bounds.height());
   value->SetInteger("state", state);
   dict->SetWithoutPathExpansion(window_id, value);
-  extension_prefs_->SetGeometryCache(extension_id, dict.Pass());
+  extension_prefs_->SetGeometryCache(extension_id, std::move(dict));
   LoadExtension(extension_id);
 }
 
@@ -162,8 +163,8 @@ std::string AppWindowGeometryCacheTest::AddExtensionWithPrefs(
       browser_context()->GetPath().AppendASCII("Extensions").AppendASCII(name);
   scoped_refptr<Extension> extension =
       ExtensionBuilder()
-          .SetManifest(
-               DictionaryBuilder().Set("name", "test").Set("version", "0.1"))
+          .SetManifest(std::move(
+              DictionaryBuilder().Set("name", "test").Set("version", "0.1")))
           .SetPath(path)
           .Build();
 
@@ -413,7 +414,7 @@ TEST_F(AppWindowGeometryCacheTest, MaxWindows) {
   gfx::Rect bounds(4, 5, 31, 43);
   gfx::Rect screen_bounds(0, 0, 1600, 900);
   for (size_t i = 0; i < AppWindowGeometryCache::kMaxCachedWindows + 1; ++i) {
-    std::string window_id = "window_" + base::IntToString(i);
+    std::string window_id = "window_" + base::SizeTToString(i);
     cache_->SaveGeometry(
         extension_id, window_id, bounds, screen_bounds, ui::SHOW_STATE_NORMAL);
   }
@@ -422,7 +423,7 @@ TEST_F(AppWindowGeometryCacheTest, MaxWindows) {
   EXPECT_FALSE(cache_->GetGeometry(extension_id, "window_0", NULL, NULL, NULL));
   // All other windows should still exist.
   for (size_t i = 1; i < AppWindowGeometryCache::kMaxCachedWindows + 1; ++i) {
-    std::string window_id = "window_" + base::IntToString(i);
+    std::string window_id = "window_" + base::SizeTToString(i);
     EXPECT_TRUE(cache_->GetGeometry(extension_id, window_id, NULL, NULL, NULL));
   }
 }

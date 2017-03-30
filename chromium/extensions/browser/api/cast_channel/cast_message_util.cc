@@ -20,7 +20,7 @@ static const char kPlatformReceiverId[] = "receiver-0";
 }  // namespace
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 
 bool MessageInfoToCastMessage(const MessageInfo& message,
@@ -122,9 +122,9 @@ std::string AuthMessageToString(const DeviceAuthMessage& message) {
   }
   if (message.has_response()) {
     out += "response: {signature: (";
-    out += base::UintToString(message.response().signature().length());
+    out += base::SizeTToString(message.response().signature().length());
     out += " bytes), certificate: (";
-    out += base::UintToString(
+    out += base::SizeTToString(
         message.response().client_auth_certificate().length());
     out += " bytes)}";
   }
@@ -157,5 +157,5 @@ bool IsAuthMessage(const CastMessage& message) {
 }
 
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

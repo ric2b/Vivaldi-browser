@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -11,6 +12,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -169,8 +171,7 @@ extern const char kImportDefault[] =
 typedef FirstRunMasterPrefsBrowserTestT<kImportDefault>
     FirstRunMasterPrefsImportDefault;
 // http://crbug.com/314221
-// TODO reenable test for Vivaldi
-#if (1 || defined(GOOGLE_CHROME_BUILD)) && (defined(OS_MACOSX) || defined(OS_LINUX))
+#if defined(OS_MACOSX) || (defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX))
 #define MAYBE_ImportDefault DISABLED_ImportDefault
 #else
 #define MAYBE_ImportDefault ImportDefault
@@ -193,8 +194,7 @@ extern const char kImportBookmarksFile[] =
 typedef FirstRunMasterPrefsBrowserTestT<kImportBookmarksFile>
     FirstRunMasterPrefsImportBookmarksFile;
 // http://crbug.com/314221
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX)) || defined(OS_MACOSX)
+#if (defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX)) || defined(OS_MACOSX)
 #define MAYBE_ImportBookmarksFile DISABLED_ImportBookmarksFile
 #else
 #define MAYBE_ImportBookmarksFile ImportBookmarksFile
@@ -224,8 +224,7 @@ extern const char kImportNothing[] =
 typedef FirstRunMasterPrefsBrowserTestT<kImportNothing>
     FirstRunMasterPrefsImportNothing;
 // http://crbug.com/314221
-// TODO reenable test for Vivaldi
-#if (1 || defined(GOOGLE_CHROME_BUILD)) && (defined(OS_MACOSX) || defined(OS_LINUX))
+#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_MACOSX) || defined(OS_LINUX))
 #define MAYBE_ImportNothingAndShowNewTabPage \
     DISABLED_ImportNothingAndShowNewTabPage
 #else
@@ -276,8 +275,7 @@ class FirstRunMasterPrefsWithTrackedPreferences
 };
 
 // http://crbug.com/314221
-// TODO reenable test for Vivaldi
-#if (1 || defined(GOOGLE_CHROME_BUILD)) && (defined(OS_MACOSX) || defined(OS_LINUX))
+#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_MACOSX) || defined(OS_LINUX))
 #define MAYBE_TrackedPreferencesSurviveFirstRun \
     DISABLED_TrackedPreferencesSurviveFirstRun
 #else

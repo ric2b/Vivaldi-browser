@@ -4,12 +4,14 @@
 
 #include "content/renderer/gpu/gpu_benchmarking_extension.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "cc/layers/layer.h"
 #include "content/common/input/synthetic_gesture_params.h"
@@ -18,8 +20,8 @@
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/common/input/synthetic_tap_gesture_params.h"
 #include "content/public/child/v8_value_converter.h"
+#include "content/public/renderer/chrome_object_extensions_utils.h"
 #include "content/public/renderer/render_thread.h"
-#include "content/renderer/chrome_object_extensions_utils.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -55,12 +57,12 @@ class PNGSerializer : public SkPixelSerializer {
  protected:
   bool onUseEncodedData(const void* data, size_t len) override { return true; }
 
-  SkData* onEncodePixels(const SkImageInfo& info,
-                         const void* pixels,
-                         size_t row_bytes) override {
+  SkData* onEncode(const SkPixmap& pixmap) override {
     SkBitmap bm;
     // The const_cast is fine, since we only read from the bitmap.
-    if (bm.installPixels(info, const_cast<void*>(pixels), row_bytes)) {
+    if (bm.installPixels(pixmap.info(),
+                         const_cast<void*>(pixmap.addr()),
+                         pixmap.rowBytes())) {
       std::vector<unsigned char> vector;
       if (gfx::PNGCodec::EncodeBGRASkBitmap(bm, false, &vector)) {
         return SkData::NewWithCopy(&vector.front(), vector.size());
@@ -105,6 +107,7 @@ class SkPictureSerializer {
 
     PNGSerializer serializer;
     picture->serialize(&file, &serializer);
+    file.fsync();
   }
 
  private:
@@ -358,7 +361,7 @@ bool BeginSmoothScroll(v8::Isolate* isolate,
   // progress, we will leak the callback and context. This needs to be fixed,
   // somehow.
   context.render_view_impl()->QueueSyntheticGesture(
-      gesture_params.Pass(),
+      std::move(gesture_params),
       base::Bind(&OnSyntheticGestureCompleted, callback_and_context));
 
   return true;
@@ -400,7 +403,7 @@ bool BeginSmoothDrag(v8::Isolate* isolate,
   // progress, we will leak the callback and context. This needs to be fixed,
   // somehow.
   context.render_view_impl()->QueueSyntheticGesture(
-      gesture_params.Pass(),
+      std::move(gesture_params),
       base::Bind(&OnSyntheticGestureCompleted, callback_and_context));
 
   return true;
@@ -457,6 +460,8 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
       //                 stable.
       .SetValue("newPinchInterface", true)
       .SetMethod("pinchBy", &GpuBenchmarking::PinchBy)
+      .SetMethod("visualViewportHeight", &GpuBenchmarking::VisualViewportHeight)
+      .SetMethod("visualViewportWidth", &GpuBenchmarking::VisualViewportWidth)
       .SetMethod("tap", &GpuBenchmarking::Tap)
       .SetMethod("clearImageCache", &GpuBenchmarking::ClearImageCache)
       .SetMethod("runMicroBenchmark", &GpuBenchmarking::RunMicroBenchmark)
@@ -691,7 +696,7 @@ bool GpuBenchmarking::ScrollBounce(gin::Arguments* args) {
   // progress, we will leak the callback and context. This needs to be fixed,
   // somehow.
   context.render_view_impl()->QueueSyntheticGesture(
-      gesture_params.Pass(),
+      std::move(gesture_params),
       base::Bind(&OnSyntheticGestureCompleted, callback_and_context));
 
   return true;
@@ -739,10 +744,24 @@ bool GpuBenchmarking::PinchBy(gin::Arguments* args) {
   // progress, we will leak the callback and context. This needs to be fixed,
   // somehow.
   context.render_view_impl()->QueueSyntheticGesture(
-      gesture_params.Pass(),
+      std::move(gesture_params),
       base::Bind(&OnSyntheticGestureCompleted, callback_and_context));
 
   return true;
+}
+
+float GpuBenchmarking::VisualViewportHeight() {
+  GpuBenchmarkingContext context;
+  if (!context.Init(false))
+    return 0.0;
+  return context.web_view()->visualViewportSize().height;
+}
+
+float GpuBenchmarking::VisualViewportWidth() {
+  GpuBenchmarkingContext context;
+  if (!context.Init(false))
+    return 0.0;
+  return context.web_view()->visualViewportSize().width;
 }
 
 bool GpuBenchmarking::Tap(gin::Arguments* args) {
@@ -791,7 +810,7 @@ bool GpuBenchmarking::Tap(gin::Arguments* args) {
   // progress, we will leak the callback and context. This needs to be fixed,
   // somehow.
   context.render_view_impl()->QueueSyntheticGesture(
-      gesture_params.Pass(),
+      std::move(gesture_params),
       base::Bind(&OnSyntheticGestureCompleted, callback_and_context));
 
   return true;
@@ -827,8 +846,7 @@ int GpuBenchmarking::RunMicroBenchmark(gin::Arguments* args) {
       make_scoped_ptr(converter->FromV8Value(arguments, v8_context));
 
   return context.compositor()->ScheduleMicroBenchmark(
-      name,
-      value.Pass(),
+      name, std::move(value),
       base::Bind(&OnMicroBenchmarkCompleted, callback_and_context));
 }
 
@@ -846,7 +864,8 @@ bool GpuBenchmarking::SendMessageToMicroBenchmark(
   scoped_ptr<base::Value> value =
       make_scoped_ptr(converter->FromV8Value(message, v8_context));
 
-  return context.compositor()->SendMessageToMicroBenchmark(id, value.Pass());
+  return context.compositor()->SendMessageToMicroBenchmark(id,
+                                                           std::move(value));
 }
 
 bool GpuBenchmarking::HasGpuProcess() {

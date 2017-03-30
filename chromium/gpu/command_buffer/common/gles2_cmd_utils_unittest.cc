@@ -9,6 +9,7 @@
 #include <GLES2/gl2ext.h>
 #include <GLES2/gl2extchromium.h>
 #include <GLES3/gl3.h>
+#include <stdint.h>
 
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -235,6 +236,18 @@ TEST_F(GLES2UtilTest, ComputeImageDataSizeTypes) {
   EXPECT_EQ(kWidth * kHeight * 8, size);
   EXPECT_EQ(kWidth * 8, padded_row_size);
   EXPECT_EQ(padded_row_size, unpadded_row_size);
+  EXPECT_TRUE(GLES2Util::ComputeImageDataSizes(
+      kWidth, kHeight, 1, GL_RGBA, GL_HALF_FLOAT,
+      1, &size, &unpadded_row_size, &padded_row_size));
+  EXPECT_EQ(kWidth * kHeight * 8, size);
+  EXPECT_EQ(kWidth * 8, padded_row_size);
+  EXPECT_EQ(padded_row_size, unpadded_row_size);
+  EXPECT_TRUE(GLES2Util::ComputeImageDataSizes(
+      kWidth, kHeight, 1, GL_RGBA, GL_HALF_FLOAT_OES,
+      1, &size, &unpadded_row_size, &padded_row_size));
+  EXPECT_EQ(kWidth * kHeight * 8, size);
+  EXPECT_EQ(kWidth * 8, padded_row_size);
+  EXPECT_EQ(padded_row_size, unpadded_row_size);
 }
 
 TEST_F(GLES2UtilTest, ComputeImageDataSizesUnpackAlignment) {
@@ -308,6 +321,131 @@ TEST_F(GLES2UtilTest, ComputeImageDataSizeDepth) {
   EXPECT_EQ(kWidth * 3 + 7, padded_row_size);
 }
 
+TEST_F(GLES2UtilTest, ComputeImageDataSizePixelStoreParams) {
+  const uint32_t kWidth = 3;
+  const uint32_t kHeight = 3;
+  const uint32_t kDepth = 3;
+  uint32_t size;
+  uint32_t unpadded_row_size;
+  uint32_t padded_row_size;
+  uint32_t skip_size;
+  uint32_t padding;
+
+  {  // Default
+    PixelStoreParams params;
+    EXPECT_TRUE(GLES2Util::ComputeImageDataSizesES3(
+        kWidth, kHeight, kDepth, GL_RGB, GL_UNSIGNED_BYTE, params,
+        &size, &unpadded_row_size, &padded_row_size, &skip_size, &padding));
+    EXPECT_EQ(kWidth * 3, unpadded_row_size);
+    EXPECT_EQ(kWidth * 3 + 3, padded_row_size);
+    EXPECT_EQ(padded_row_size * (kHeight * kDepth - 1) + unpadded_row_size,
+              size);
+    EXPECT_EQ(0u, skip_size);
+    EXPECT_EQ(3u, padding);
+  }
+
+  {  // row_length > width
+    PixelStoreParams params;
+    params.row_length = kWidth + 2;
+    uint32_t kPadding = 1;  // 5 * 3 = 15 -> 16
+    EXPECT_TRUE(GLES2Util::ComputeImageDataSizesES3(
+        kWidth, kHeight, kDepth, GL_RGB, GL_UNSIGNED_BYTE, params,
+        &size, &unpadded_row_size, &padded_row_size, &skip_size, &padding));
+    EXPECT_EQ(static_cast<uint32_t>(kWidth * 3), unpadded_row_size);
+    EXPECT_EQ(static_cast<uint32_t>(params.row_length * 3 + kPadding),
+              padded_row_size);
+    EXPECT_EQ(padded_row_size * (kHeight * kDepth - 1) + unpadded_row_size,
+              size);
+    EXPECT_EQ(0u, skip_size);
+    EXPECT_EQ(kPadding, padding);
+  }
+
+  {  // row_length < width
+    PixelStoreParams params;
+    params.row_length = kWidth - 1;
+    uint32_t kPadding = 2;  // 2 * 3 = 6 -> 8
+    EXPECT_TRUE(GLES2Util::ComputeImageDataSizesES3(
+        kWidth, kHeight, kDepth, GL_RGB, GL_UNSIGNED_BYTE, params,
+        &size, &unpadded_row_size, &padded_row_size, &skip_size, &padding));
+    EXPECT_EQ(static_cast<uint32_t>(kWidth * 3), unpadded_row_size);
+    EXPECT_EQ(static_cast<uint32_t>(params.row_length * 3 + kPadding),
+              padded_row_size);
+    EXPECT_EQ(padded_row_size * (kHeight * kDepth - 1) + unpadded_row_size,
+              size);
+    EXPECT_EQ(0u, skip_size);
+    EXPECT_EQ(kPadding, padding);
+  }
+
+  {  // image_height > height
+    PixelStoreParams params;
+    params.image_height = kHeight + 1;
+    uint32_t kPadding = 3; // 3 * 3 = 9 -> 21
+    EXPECT_TRUE(GLES2Util::ComputeImageDataSizesES3(
+        kWidth, kHeight, kDepth, GL_RGB, GL_UNSIGNED_BYTE, params,
+        &size, &unpadded_row_size, &padded_row_size, &skip_size, &padding));
+    EXPECT_EQ(kWidth * 3, unpadded_row_size);
+    EXPECT_EQ(kWidth * 3 + kPadding, padded_row_size);
+    EXPECT_EQ((params.image_height * (kDepth - 1) + kHeight - 1) *
+              padded_row_size + unpadded_row_size, size);
+    EXPECT_EQ(0u, skip_size);
+    EXPECT_EQ(kPadding, padding);
+  }
+
+  {  // image_height < height
+    PixelStoreParams params;
+    params.image_height = kHeight - 1;
+    uint32_t kPadding = 3; // 3 * 3 = 9 -> 12
+    EXPECT_TRUE(GLES2Util::ComputeImageDataSizesES3(
+        kWidth, kHeight, kDepth, GL_RGB, GL_UNSIGNED_BYTE, params,
+        &size, &unpadded_row_size, &padded_row_size, &skip_size, &padding));
+    EXPECT_EQ(kWidth * 3, unpadded_row_size);
+    EXPECT_EQ(kWidth * 3 + kPadding, padded_row_size);
+    EXPECT_EQ((params.image_height * (kDepth - 1) + kHeight - 1) *
+              padded_row_size + unpadded_row_size, size);
+    EXPECT_EQ(0u, skip_size);
+    EXPECT_EQ(kPadding, padding);
+  }
+
+  {  // skip_pixels, skip_rows, skip_images, alignment = 4, RGB
+    PixelStoreParams params;
+    params.skip_pixels = 1;
+    params.skip_rows = 10;
+    params.skip_images = 2;
+    uint32_t kPadding = 3; // 3 * 3 = 9 -> 12
+    EXPECT_TRUE(GLES2Util::ComputeImageDataSizesES3(
+        kWidth, kHeight, kDepth, GL_RGB, GL_UNSIGNED_BYTE, params,
+        &size, &unpadded_row_size, &padded_row_size, &skip_size, &padding));
+    EXPECT_EQ(kWidth * 3, unpadded_row_size);
+    EXPECT_EQ(kWidth * 3 + kPadding, padded_row_size);
+    EXPECT_EQ(padded_row_size * kHeight * params.skip_images +
+              padded_row_size * params.skip_rows + 3 * params.skip_pixels,
+              skip_size);
+    EXPECT_EQ(padded_row_size * (kWidth * kDepth - 1) + unpadded_row_size,
+              size);
+    EXPECT_EQ(kPadding, padding);
+  }
+
+  {  // skip_pixels, skip_rows, skip_images, alignment = 8, RGBA
+    PixelStoreParams params;
+    params.skip_pixels = 1;
+    params.skip_rows = 10;
+    params.skip_images = 2;
+    params.alignment = 8;
+    uint32_t kPadding = 4; // 3 * 4 = 12 -> 16
+    EXPECT_TRUE(GLES2Util::ComputeImageDataSizesES3(
+        kWidth, kHeight, kDepth, GL_RGBA, GL_UNSIGNED_BYTE, params,
+        &size, &unpadded_row_size, &padded_row_size, &skip_size, &padding));
+    EXPECT_EQ(kWidth * 4, unpadded_row_size);
+    EXPECT_EQ(kWidth * 4 + kPadding, padded_row_size);
+    EXPECT_EQ(padded_row_size * kHeight * params.skip_images +
+              padded_row_size * params.skip_rows + 4 * params.skip_pixels,
+              skip_size);
+    EXPECT_EQ(padded_row_size * (kWidth * kDepth - 1) + unpadded_row_size,
+              size);
+    EXPECT_EQ(kPadding, padding);
+  }
+}
+
 TEST_F(GLES2UtilTest, RenderbufferBytesPerPixel) {
    EXPECT_EQ(1u, GLES2Util::RenderbufferBytesPerPixel(GL_STENCIL_INDEX8));
    EXPECT_EQ(2u, GLES2Util::RenderbufferBytesPerPixel(GL_RGBA4));
@@ -350,47 +488,44 @@ TEST_F(GLES2UtilTest, GetChannelsForCompressedFormat) {
       GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG));
 }
 
-namespace {
-
-void CheckParseUniformName(
-    const char* name,
-    bool expected_success,
-    size_t expected_array_pos,
-    int expected_index,
-    bool expected_getting_array) {
-  int index = 1234;
-  size_t array_pos = 1244;
-  bool getting_array = false;
-  bool success = GLES2Util::ParseUniformName(
-      name, &array_pos, &index, &getting_array);
-  EXPECT_EQ(expected_success, success);
-  if (success) {
-    EXPECT_EQ(expected_array_pos, array_pos);
-    EXPECT_EQ(expected_index, index);
-    EXPECT_EQ(expected_getting_array, getting_array);
+TEST_F(GLES2UtilTest, GLSLArrayNameParsingNotArray) {
+  const char* kNotArrayNames[] = {
+      "u_name",     "u_name[]",    "u_name]", "u_name[0a]",
+      "u_name[a0]", "u_name[0a0]", "[3]",     ""};
+  for (auto name : kNotArrayNames) {
+    GLSLArrayName parsed_name(name);
+    EXPECT_FALSE(parsed_name.IsArrayName());
   }
 }
 
-}  // anonymous namespace
-
-TEST_F(GLES2UtilTest, ParseUniformName) {
-  CheckParseUniformName("u_name", true, std::string::npos, 0, false);
-  CheckParseUniformName("u_name[]", false, std::string::npos, 0, false);
-  CheckParseUniformName("u_name]", false, std::string::npos, 0, false);
-  CheckParseUniformName("u_name[0a]", false, std::string::npos, 0, false);
-  CheckParseUniformName("u_name[a0]", false, std::string::npos, 0, false);
-  CheckParseUniformName("u_name[0a0]", false, std::string::npos, 0, false);
-  CheckParseUniformName("u_name[0]", true, 6u, 0, true);
-  CheckParseUniformName("u_name[2]", true, 6u, 2, true);
-  CheckParseUniformName("u_name[02]", true, 6u, 2, true);
-  CheckParseUniformName("u_name[20]", true, 6u, 20, true);
-  CheckParseUniformName("u_name[020]", true, 6u, 20, true);
-  CheckParseUniformName("u_name[0][0]", true, 9u, 0, true);
-  CheckParseUniformName("u_name[3][2]", true, 9u, 2, true);
-  CheckParseUniformName("u_name[03][02]", true, 10u, 2, true);
-  CheckParseUniformName("u_name[30][20]", true, 10u, 20, true);
-  CheckParseUniformName("u_name[030][020]", true, 11u, 20, true);
-  CheckParseUniformName("", false, std::string::npos, 0, false);
+TEST_F(GLES2UtilTest, GLSLArrayNameParsing) {
+  struct {
+    const char* name;
+    const char* base_name;
+    int element_index;
+  } testcases[] = {{"u_name[0]", "u_name", 0},
+                   {"u_name[2]", "u_name", 2},
+                   {
+                       "u_name[02]", "u_name", 2,
+                   },
+                   {
+                       "u_name[20]", "u_name", 20,
+                   },
+                   {"u_name[020]", "u_name", 20},
+                   {"u_name[0][0]", "u_name[0]", 0},
+                   {"u_name[3][2]", "u_name[3]", 2},
+                   {"u_name[03][02]", "u_name[03]", 2},
+                   {"u_name[30][20]", "u_name[30]", 20},
+                   {"u_name[030][020]", "u_name[030]", 20}};
+  for (auto& testcase : testcases) {
+    GLSLArrayName parsed_name(testcase.name);
+    EXPECT_TRUE(parsed_name.IsArrayName());
+    if (!parsed_name.IsArrayName()) {
+      continue;
+    }
+    EXPECT_EQ(testcase.base_name, parsed_name.base_name());
+    EXPECT_EQ(testcase.element_index, parsed_name.element_index());
+  }
 }
 
 }  // namespace gles2

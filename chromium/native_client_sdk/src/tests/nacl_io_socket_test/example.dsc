@@ -1,5 +1,5 @@
 {
-  'TOOLS': ['newlib', 'glibc', 'pnacl', 'linux', 'mac'],
+  'TOOLS': ['clang-newlib', 'glibc', 'pnacl', 'linux', 'mac'],
   'TARGETS': [
     {
       'NAME' : 'nacl_io_socket_test',
@@ -10,10 +10,13 @@
         'echo_server.cc',
         'echo_server.h',
       ],
-      'DEPS': ['ppapi_simple', 'nacl_io'],
-      # Order matters here: gtest has a "main" function that will be used if
-      # referenced before ppapi.
-      'LIBS': ['ppapi_simple_cpp', 'ppapi_cpp', 'gmock', 'ppapi', 'gtest', 'nacl_io', 'pthread'],
+      'DEPS': ['ppapi_simple_cpp', 'nacl_io'],
+      'LIBS': ['ppapi_simple_cpp', 'ppapi_cpp', 'ppapi', 'nacl_io', 'pthread'],
+      'EXTRA_SOURCES' : ['../../src/gtest/src/gtest-all.cc'],
+      'INCLUDES': [
+        '../../src/gtest/include',
+        '../../src/gtest'
+      ],
       'CXXFLAGS': ['-Wno-sign-compare']
     }
   ],

@@ -5,13 +5,11 @@
 // IPC messages for android media player.
 // Multiply-included message file, hence no include guard.
 
-#include "base/basictypes.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
-#include "content/common/media/media_player_messages_enums_android.h"
 #include "ipc/ipc_message_macros.h"
 #include "media/base/android/demuxer_stream_player_params.h"
-#include "media/base/android/media_player_android.h"
+#include "media/blink/renderer_media_player_interface.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "url/gurl.h"
 
@@ -58,18 +56,12 @@ IPC_STRUCT_TRAITS_BEGIN(media::AccessUnit)
   IPC_STRUCT_TRAITS_MEMBER(is_key_frame)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(media::SubsampleEntry)
-  IPC_STRUCT_TRAITS_MEMBER(clear_bytes)
-  IPC_STRUCT_TRAITS_MEMBER(cypher_bytes)
-IPC_STRUCT_TRAITS_END()
-
 IPC_ENUM_TRAITS_MAX_VALUE(MediaPlayerHostMsg_Initialize_Type,
                           MEDIA_PLAYER_TYPE_LAST)
 
 // Parameters to describe a media player
 IPC_STRUCT_BEGIN(MediaPlayerHostMsg_Initialize_Params)
   IPC_STRUCT_MEMBER(MediaPlayerHostMsg_Initialize_Type, type)
-  IPC_STRUCT_MEMBER(base::SharedMemoryHandle, metafile_data_handle)
   IPC_STRUCT_MEMBER(int, player_id)
   IPC_STRUCT_MEMBER(int, demuxer_client_id)
   IPC_STRUCT_MEMBER(GURL, url)
@@ -215,15 +207,15 @@ IPC_MESSAGE_ROUTED1(MediaPlayerHostMsg_DestroyMediaPlayer,
 // Initialize a media player object.
 IPC_MESSAGE_ROUTED1(
     MediaPlayerHostMsg_Initialize,
-    MediaPlayerHostMsg_Initialize_Params);
+    MediaPlayerHostMsg_Initialize_Params)
 
 // Pause the player.
 IPC_MESSAGE_ROUTED2(MediaPlayerHostMsg_Pause,
                     int /* player_id */,
                     bool /* is_media_related_action */)
 
-// Release player resources, but keep the object for future usage.
-IPC_MESSAGE_ROUTED1(MediaPlayerHostMsg_Release, int /* player_id */)
+// Release player resources after it was suspended.
+IPC_MESSAGE_ROUTED1(MediaPlayerHostMsg_SuspendAndRelease, int /* player_id */)
 
 // Perform a seek.
 IPC_MESSAGE_ROUTED2(MediaPlayerHostMsg_Seek,
@@ -257,7 +249,7 @@ IPC_MESSAGE_ROUTED1(MediaPlayerHostMsg_RequestRemotePlaybackControl,
 // Requests the player with |player_id| to use the CDM with |cdm_id|.
 IPC_MESSAGE_ROUTED2(MediaPlayerHostMsg_SetCdm,
                     int /* player_id */,
-                    int /* cdm_id */);
+                    int /* cdm_id */)
 
 // Sent after the renderer demuxer has seeked.
 IPC_MESSAGE_CONTROL2(MediaPlayerHostMsg_DemuxerSeekDone,

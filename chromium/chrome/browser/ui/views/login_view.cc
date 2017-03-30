@@ -20,20 +20,23 @@ using views::GridLayout;
 ///////////////////////////////////////////////////////////////////////////////
 // LoginView, public:
 
-LoginView::LoginView(const base::string16& explanation,
-                     LoginModel* model)
+LoginView::LoginView(const base::string16& authority,
+                     const base::string16& explanation,
+                     LoginHandler::LoginModelData* login_model_data)
     : username_field_(new views::Textfield()),
       password_field_(new views::Textfield()),
       username_label_(new views::Label(
           l10n_util::GetStringUTF16(IDS_LOGIN_DIALOG_USERNAME_FIELD))),
       password_label_(new views::Label(
           l10n_util::GetStringUTF16(IDS_LOGIN_DIALOG_PASSWORD_FIELD))),
-      message_label_(new views::Label(explanation)),
-      login_model_(model) {
+      authority_label_(new views::Label(authority)),
+      message_label_(nullptr),
+      login_model_(login_model_data ? login_model_data->model : nullptr) {
   password_field_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
-  message_label_->SetMultiLine(true);
-  message_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  message_label_->SetAllowCharacterBreak(true);
+
+  authority_label_->SetMultiLine(true);
+  authority_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  authority_label_->SetAllowCharacterBreak(true);
 
   // Initialize the Grid Layout Manager used for this dialog box.
   GridLayout* layout = GridLayout::CreatePanel(this);
@@ -51,15 +54,24 @@ LoginView::LoginView(const base::string16& explanation,
   const int labels_column_set_id = 1;
   column_set = layout->AddColumnSet(labels_column_set_id);
   column_set->AddPaddingColumn(0, kTextfieldStackHorizontalSpacing);
-  column_set->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
-                        GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(views::kControlLabelGridAlignment, GridLayout::CENTER,
+                        0, GridLayout::USE_PREF, 0, 0);
   column_set->AddPaddingColumn(0, views::kRelatedControlHorizontalSpacing);
   column_set->AddColumn(GridLayout::FILL, GridLayout::CENTER, 1,
                         GridLayout::USE_PREF, 0, 0);
   column_set->AddPaddingColumn(0, kTextfieldStackHorizontalSpacing);
 
   layout->StartRow(0, single_column_view_set_id);
-  layout->AddView(message_label_);
+  layout->AddView(authority_label_);
+  if (!explanation.empty()) {
+    message_label_ = new views::Label(explanation);
+    message_label_->SetMultiLine(true);
+    message_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    message_label_->SetAllowCharacterBreak(true);
+    layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+    layout->StartRow(0, single_column_view_set_id);
+    layout->AddView(message_label_);
+  }
 
   layout->AddPaddingRow(0, views::kUnrelatedControlLargeVerticalSpacing);
 
@@ -75,8 +87,10 @@ LoginView::LoginView(const base::string16& explanation,
 
   layout->AddPaddingRow(0, views::kUnrelatedControlVerticalSpacing);
 
-  if (login_model_)
-    login_model_->AddObserver(this);
+  if (login_model_data) {
+    login_model_->AddObserverAndDeliverCredentials(this,
+                                                   login_model_data->form);
+  }
 }
 
 LoginView::~LoginView() {
@@ -99,8 +113,9 @@ views::View* LoginView::GetInitiallyFocusedView() {
 ///////////////////////////////////////////////////////////////////////////////
 // LoginView, views::View, password_manager::LoginModelObserver overrides:
 
-void LoginView::OnAutofillDataAvailable(const base::string16& username,
-                                        const base::string16& password) {
+void LoginView::OnAutofillDataAvailableInternal(
+    const base::string16& username,
+    const base::string16& password) {
   if (username_field_->text().empty()) {
     username_field_->SetText(username);
     password_field_->SetText(password);

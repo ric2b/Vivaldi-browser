@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "gin/gin_export.h"
 
@@ -24,10 +25,12 @@ class V8IsolateMemoryDumpProvider
 
   // MemoryDumpProvider implementation.
   bool OnMemoryDump(
+      const base::trace_event::MemoryDumpArgs& args,
       base::trace_event::ProcessMemoryDump* process_memory_dump) override;
 
  private:
   void DumpHeapStatistics(
+      const base::trace_event::MemoryDumpArgs& args,
       base::trace_event::ProcessMemoryDump* process_memory_dump);
 
   IsolateHolder* isolate_holder_;  // Not owned.

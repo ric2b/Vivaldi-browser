@@ -4,11 +4,13 @@
 
 package org.chromium.content.browser;
 
+import android.Manifest.permission;
 import android.content.Context;
+import android.content.pm.PackageManager;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
-import org.chromium.ui.base.WindowAndroid.FileAccessCallback;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
+import org.chromium.ui.base.WindowAndroid.PermissionCallback;
 
 /**
  * Java counterpart of android DownloadController.
@@ -63,7 +65,7 @@ public class DownloadController {
      * The download delegate is expected to handle the download.
      */
     @CalledByNative
-    public void newHttpGetDownload(ContentViewCore view, String url,
+    private void newHttpGetDownload(ContentViewCore view, String url,
             String userAgent, String contentDisposition, String mimeType,
             String cookie, String referer, boolean hasUserGesture,
             String filename, long contentLength) {
@@ -94,7 +96,7 @@ public class DownloadController {
      * @param mimeType Mime of the downloaded item.
      */
     @CalledByNative
-    public void onDownloadStarted(ContentViewCore view, String filename, String mimeType) {
+    private void onDownloadStarted(ContentViewCore view, String filename, String mimeType) {
         ContentViewDownloadDelegate downloadDelegate = downloadDelegateFromView(view);
 
         if (downloadDelegate != null) {
@@ -107,7 +109,7 @@ public class DownloadController {
      * download. This can be either a POST download or a GET download with authentication.
      */
     @CalledByNative
-    public void onDownloadCompleted(Context context, String url, String mimeType,
+    private void onDownloadCompleted(Context context, String url, String mimeType,
             String filename, String path, long contentLength, boolean successful, int downloadId,
             boolean hasUserGesture) {
         if (sDownloadNotificationService != null) {
@@ -132,7 +134,7 @@ public class DownloadController {
      * network stack use custom notification to display the progress of downloads.
      */
     @CalledByNative
-    public void onDownloadUpdated(Context context, String url, String mimeType,
+    private void onDownloadUpdated(Context context, String url, String mimeType,
             String filename, String path, long contentLength, boolean successful, int downloadId,
             int percentCompleted, long timeRemainingInMs, boolean hasUserGesture) {
         if (sDownloadNotificationService != null) {
@@ -158,7 +160,7 @@ public class DownloadController {
      * Notifies the download delegate that a dangerous download started.
      */
     @CalledByNative
-    public void onDangerousDownload(ContentViewCore view, String filename,
+    private void onDangerousDownload(ContentViewCore view, String filename,
             int downloadId) {
         ContentViewDownloadDelegate downloadDelegate = downloadDelegateFromView(view);
         if (downloadDelegate != null) {
@@ -174,7 +176,7 @@ public class DownloadController {
      */
     @CalledByNative
     private boolean hasFileAccess(ContentViewCore view) {
-        return view.getWindowAndroid().hasFileAccess();
+        return view.getWindowAndroid().hasPermission(permission.WRITE_EXTERNAL_STORAGE);
     }
 
     /**
@@ -184,14 +186,31 @@ public class DownloadController {
      * @param callbackId The native callback function pointer.
      */
     @CalledByNative
-    private void requestFileAccess(ContentViewCore view, final long callbackId) {
-        FileAccessCallback callback = new FileAccessCallback() {
-            @Override
-            public void onFileAccessResult(boolean granted) {
-                nativeOnRequestFileAccessResult(callbackId, granted);
-            }
-        };
-        view.getWindowAndroid().requestFileAccess(callback);
+    private void requestFileAccess(final ContentViewCore view, final long callbackId) {
+        ContentViewDownloadDelegate downloadDelegate = downloadDelegateFromView(view);
+        if (downloadDelegate != null) {
+            downloadDelegate.requestFileAccess(callbackId);
+        } else {
+            PermissionCallback permissionCallback = new PermissionCallback() {
+                @Override
+                public void onRequestPermissionsResult(String[] permissions, int[] grantResults) {
+                    onRequestFileAccessResult(callbackId, grantResults.length > 0
+                            && grantResults[0] == PackageManager.PERMISSION_GRANTED);
+                }
+            };
+            view.getWindowAndroid().requestPermissions(
+                    new String[] {android.Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                    permissionCallback);
+        }
+    }
+
+    /**
+     * Notify the results of a file access request.
+     * @param callbackId The ID of the callback.
+     * @param granted Whether access was granted.
+     */
+    public void onRequestFileAccessResult(long callbackId, boolean granted) {
+        nativeOnRequestFileAccessResult(callbackId, granted);
     }
 
     // native methods

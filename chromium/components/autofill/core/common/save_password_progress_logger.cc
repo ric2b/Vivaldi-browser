@@ -43,7 +43,7 @@ bool IsUnwantedInElementID(char c) {
 std::string ScrubElementID8Bit(std::string element_id) {
   std::replace_if(
       element_id.begin(), element_id.end(), IsUnwantedInElementID, ' ');
-  return base::StringToLowerASCII(element_id);
+  return base::ToLowerASCII(element_id);
 }
 
 SavePasswordProgressLogger::StringID FormSchemeToStringID(
@@ -57,6 +57,8 @@ SavePasswordProgressLogger::StringID FormSchemeToStringID(
       return SavePasswordProgressLogger::STRING_SCHEME_DIGEST;
     case PasswordForm::SCHEME_OTHER:
       return SavePasswordProgressLogger::STRING_OTHER;
+    case PasswordForm::SCHEME_USERNAME_ONLY:
+      return SavePasswordProgressLogger::STRING_SCHEME_USERNAME_ONLY;
   }
   NOTREACHED();
   return SavePasswordProgressLogger::STRING_INVALID;
@@ -80,8 +82,6 @@ void SavePasswordProgressLogger::LogPasswordForm(
                 GetStringFromID(FormSchemeToStringID(form.scheme)));
   log.SetString(GetStringFromID(STRING_SIGNON_REALM),
                 ScrubURL(GURL(form.signon_realm)));
-  log.SetString(GetStringFromID(STRING_ORIGINAL_SIGNON_REALM),
-                ScrubURL(GURL(form.original_signon_realm)));
   log.SetString(GetStringFromID(STRING_ORIGIN), ScrubURL(form.origin));
   log.SetString(GetStringFromID(STRING_ACTION), ScrubURL(form.action));
   log.SetString(GetStringFromID(STRING_USERNAME_ELEMENT),
@@ -94,7 +94,8 @@ void SavePasswordProgressLogger::LogPasswordForm(
   log.SetBoolean(GetStringFromID(STRING_PASSWORD_GENERATED),
                  form.type == PasswordForm::TYPE_GENERATED);
   log.SetInteger(GetStringFromID(STRING_TIMES_USED), form.times_used);
-  log.SetBoolean(GetStringFromID(STRING_PSL_MATCH), form.IsPublicSuffixMatch());
+  log.SetBoolean(GetStringFromID(STRING_PSL_MATCH),
+                 form.is_public_suffix_match);
   LogValue(label, log);
 }
 
@@ -180,12 +181,12 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "Basic";
     case SavePasswordProgressLogger::STRING_SCHEME_DIGEST:
       return "Digest";
+    case SavePasswordProgressLogger::STRING_SCHEME_USERNAME_ONLY:
+      return "Username only";
     case SavePasswordProgressLogger::STRING_SCHEME_MESSAGE:
       return "Scheme";
     case SavePasswordProgressLogger::STRING_SIGNON_REALM:
       return "Signon realm";
-    case SavePasswordProgressLogger::STRING_ORIGINAL_SIGNON_REALM:
-      return "Original signon realm";
     case SavePasswordProgressLogger::STRING_ORIGIN:
       return "Origin";
     case SavePasswordProgressLogger::STRING_ACTION:
@@ -255,7 +256,7 @@ std::string SavePasswordProgressLogger::GetStringFromID(
     case SavePasswordProgressLogger::STRING_PROVISIONALLY_SAVE_PASSWORD_FORM:
       return "ProvisionallySavePassword form";
     case SavePasswordProgressLogger::STRING_IS_SAVING_ENABLED:
-      return "IsSavingEnabledForCurrentPage";
+      return "IsSavingAndFillingEnabledForCurrentPage";
     case SavePasswordProgressLogger::STRING_EMPTY_PASSWORD:
       return "Empty password";
     case SavePasswordProgressLogger::STRING_EXACT_MATCH:
@@ -302,6 +303,8 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "Show password prompt";
     case SavePasswordProgressLogger::STRING_PASSWORDMANAGER_AUTOFILL:
       return "PasswordManager::Autofill";
+    case SavePasswordProgressLogger::STRING_PASSWORDMANAGER_AUTOFILLHTTPAUTH:
+      return "PasswordManager::AutofillHttpAuth";
     case SavePasswordProgressLogger::STRING_WAIT_FOR_USERNAME:
       return "wait_for_username";
     case SavePasswordProgressLogger::STRING_LOGINMODELOBSERVER_PRESENT:
@@ -347,8 +350,13 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "PasswordFormManager::ProcessFrame";
     case SavePasswordProgressLogger::STRING_FORM_SIGNATURE:
       return "Signature of form, followed by field signatures";
+    case SavePasswordProgressLogger::STRING_FORM_MANAGER_STATE:
+      return "PasswordFormManager::state_";
     case SavePasswordProgressLogger::STRING_ADDING_SIGNATURE:
       return "Adding manager for form with this signature";
+    case SavePasswordProgressLogger::STRING_UNOWNED_INPUTS_VISIBLE:
+      return "Some control elements not associated to a form element are "
+             "visible";
     case SavePasswordProgressLogger::STRING_INVALID:
       return "INVALID";
       // Intentionally no default: clause here -- all IDs need to get covered.

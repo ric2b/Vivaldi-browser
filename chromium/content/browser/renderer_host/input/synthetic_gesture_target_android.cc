@@ -9,7 +9,6 @@
 #include "jni/MotionEventSynthesizer_jni.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/gfx/android/view_configuration.h"
-#include "ui/gfx/screen.h"
 
 using blink::WebTouchEvent;
 
@@ -45,8 +44,10 @@ void SyntheticGestureTargetAndroid::TouchSetScrollDeltas(
       env, touch_event_synthesizer_.obj(), x, y, dx, dy);
 }
 
-void SyntheticGestureTargetAndroid::TouchInject(
-    JNIEnv* env, Action action, int pointer_count, int64 time_in_ms) {
+void SyntheticGestureTargetAndroid::TouchInject(JNIEnv* env,
+                                                Action action,
+                                                int pointer_count,
+                                                int64_t time_in_ms) {
   TRACE_EVENT0("input", "SyntheticGestureTargetAndroid::TouchInject");
   Java_MotionEventSynthesizer_inject(env, touch_event_synthesizer_.obj(),
                                     static_cast<int>(action), pointer_count,
@@ -82,7 +83,7 @@ void SyntheticGestureTargetAndroid::DispatchWebTouchEventToPlatform(
   }
 
   TouchInject(env, action, num_touches,
-              static_cast<int64>(web_touch.timeStampSeconds * 1000.0));
+              static_cast<int64_t>(web_touch.timeStampSeconds * 1000.0));
 }
 
 void SyntheticGestureTargetAndroid::DispatchWebMouseWheelEventToPlatform(
@@ -92,8 +93,8 @@ void SyntheticGestureTargetAndroid::DispatchWebMouseWheelEventToPlatform(
                        web_wheel.deltaY);
   Java_MotionEventSynthesizer_inject(
       env, touch_event_synthesizer_.obj(),
-      static_cast<int>(SyntheticGestureTargetAndroid::ActionScroll),
-      1, static_cast<int64>(web_wheel.timeStampSeconds * 1000.0));
+      static_cast<int>(SyntheticGestureTargetAndroid::ActionScroll), 1,
+      static_cast<int64_t>(web_wheel.timeStampSeconds * 1000.0));
 }
 
 void SyntheticGestureTargetAndroid::DispatchWebMouseEventToPlatform(
@@ -107,10 +108,14 @@ SyntheticGestureTargetAndroid::GetDefaultSyntheticGestureSourceType() const {
 }
 
 float SyntheticGestureTargetAndroid::GetTouchSlopInDips() const {
+  // TODO(jdduke): Have all targets use the same ui::GestureConfiguration
+  // codepath.
   return gfx::ViewConfiguration::GetTouchSlopInDips();
 }
 
 float SyntheticGestureTargetAndroid::GetMinScalingSpanInDips() const {
+  // TODO(jdduke): Have all targets use the same ui::GestureConfiguration
+  // codepath.
   return gfx::ViewConfiguration::GetMinScalingSpanInDips();
 }
 

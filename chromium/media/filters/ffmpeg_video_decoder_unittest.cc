@@ -2,18 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <list>
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/gmock_callback_support.h"
 #include "media/base/limits.h"
+#include "media/base/media_util.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_data_util.h"
 #include "media/base/test_helpers.h"
@@ -36,7 +40,7 @@ using ::testing::StrictMock;
 
 namespace media {
 
-static const VideoFrame::Format kVideoFormat = VideoFrame::YV12;
+static const VideoPixelFormat kVideoFormat = PIXEL_FORMAT_YV12;
 static const gfx::Size kCodedSize(320, 240);
 static const gfx::Rect kVisibleRect(320, 240);
 static const gfx::Size kNaturalSize(320, 240);
@@ -48,13 +52,13 @@ ACTION_P(ReturnBuffer, buffer) {
 class FFmpegVideoDecoderTest : public testing::Test {
  public:
   FFmpegVideoDecoderTest()
-      : decoder_(new FFmpegVideoDecoder(message_loop_.task_runner())),
+      : decoder_(new FFmpegVideoDecoder()),
         decode_cb_(base::Bind(&FFmpegVideoDecoderTest::DecodeDone,
                               base::Unretained(this))) {
     FFmpegGlue::InitializeFFmpeg();
 
     // Initialize various test buffers.
-    frame_buffer_.reset(new uint8[kCodedSize.GetArea()]);
+    frame_buffer_.reset(new uint8_t[kCodedSize.GetArea()]);
     end_of_stream_buffer_ = DecoderBuffer::CreateEOSBuffer();
     i_frame_buffer_ = ReadTestDataFile("vp8-I-frame-320x240");
     corrupt_i_frame_buffer_ = ReadTestDataFile("vp8-corrupt-I-frame");
@@ -70,7 +74,8 @@ class FFmpegVideoDecoderTest : public testing::Test {
 
   void InitializeWithConfigWithResult(const VideoDecoderConfig& config,
                                       bool success) {
-    decoder_->Initialize(config, false, NewExpectedBoolCB(success),
+    decoder_->Initialize(config, false, SetCdmReadyCB(),
+                         NewExpectedBoolCB(success),
                          base::Bind(&FFmpegVideoDecoderTest::FrameReady,
                                     base::Unretained(this)));
     message_loop_.RunUntilIdle();
@@ -215,112 +220,11 @@ TEST_F(FFmpegVideoDecoderTest, Initialize_Normal) {
   Initialize();
 }
 
-TEST_F(FFmpegVideoDecoderTest, Initialize_UnsupportedDecoder) {
-  // Test avcodec_find_decoder() returning NULL.
-  InitializeWithConfigWithResult(TestVideoConfig::Invalid(), false);
-}
-
-TEST_F(FFmpegVideoDecoderTest, Initialize_UnsupportedPixelFormat) {
-  // Ensure decoder handles unsupported pixel formats without crashing.
-  VideoDecoderConfig config(kCodecVP8, VIDEO_CODEC_PROFILE_UNKNOWN,
-                            VideoFrame::UNKNOWN,
-                            kCodedSize, kVisibleRect, kNaturalSize,
-                            NULL, 0, false);
-  InitializeWithConfigWithResult(config, false);
-}
-
 TEST_F(FFmpegVideoDecoderTest, Initialize_OpenDecoderFails) {
   // Specify Theora w/o extra data so that avcodec_open2() fails.
   VideoDecoderConfig config(kCodecTheora, VIDEO_CODEC_PROFILE_UNKNOWN,
-                            kVideoFormat,
-                            kCodedSize, kVisibleRect, kNaturalSize,
-                            NULL, 0, false);
-  InitializeWithConfigWithResult(config, false);
-}
-
-TEST_F(FFmpegVideoDecoderTest, Initialize_AspectRatioNumeratorZero) {
-  gfx::Size natural_size = GetNaturalSize(kVisibleRect.size(), 0, 1);
-  VideoDecoderConfig config(kCodecVP8,
-                            VP8PROFILE_ANY,
-                            kVideoFormat,
-                            kCodedSize,
-                            kVisibleRect,
-                            natural_size,
-                            NULL,
-                            0,
-                            false);
-  InitializeWithConfigWithResult(config, false);
-}
-
-TEST_F(FFmpegVideoDecoderTest, Initialize_AspectRatioDenominatorZero) {
-  gfx::Size natural_size = GetNaturalSize(kVisibleRect.size(), 1, 0);
-  VideoDecoderConfig config(kCodecVP8,
-                            VP8PROFILE_ANY,
-                            kVideoFormat,
-                            kCodedSize,
-                            kVisibleRect,
-                            natural_size,
-                            NULL,
-                            0,
-                            false);
-  InitializeWithConfigWithResult(config, false);
-}
-
-TEST_F(FFmpegVideoDecoderTest, Initialize_AspectRatioNumeratorNegative) {
-  gfx::Size natural_size = GetNaturalSize(kVisibleRect.size(), -1, 1);
-  VideoDecoderConfig config(kCodecVP8,
-                            VP8PROFILE_ANY,
-                            kVideoFormat,
-                            kCodedSize,
-                            kVisibleRect,
-                            natural_size,
-                            NULL,
-                            0,
-                            false);
-  InitializeWithConfigWithResult(config, false);
-}
-
-TEST_F(FFmpegVideoDecoderTest, Initialize_AspectRatioDenominatorNegative) {
-  gfx::Size natural_size = GetNaturalSize(kVisibleRect.size(), 1, -1);
-  VideoDecoderConfig config(kCodecVP8,
-                            VP8PROFILE_ANY,
-                            kVideoFormat,
-                            kCodedSize,
-                            kVisibleRect,
-                            natural_size,
-                            NULL,
-                            0,
-                            false);
-  InitializeWithConfigWithResult(config, false);
-}
-
-TEST_F(FFmpegVideoDecoderTest, Initialize_AspectRatioNumeratorTooLarge) {
-  int width = kVisibleRect.size().width();
-  int num = ceil(static_cast<double>(limits::kMaxDimension + 1) / width);
-  gfx::Size natural_size = GetNaturalSize(kVisibleRect.size(), num, 1);
-  VideoDecoderConfig config(kCodecVP8,
-                            VP8PROFILE_ANY,
-                            kVideoFormat,
-                            kCodedSize,
-                            kVisibleRect,
-                            natural_size,
-                            NULL,
-                            0,
-                            false);
-  InitializeWithConfigWithResult(config, false);
-}
-
-TEST_F(FFmpegVideoDecoderTest, Initialize_AspectRatioDenominatorTooLarge) {
-  int den = kVisibleRect.size().width() + 1;
-  gfx::Size natural_size = GetNaturalSize(kVisibleRect.size(), 1, den);
-  VideoDecoderConfig config(kCodecVP8,
-                            VP8PROFILE_ANY,
-                            kVideoFormat,
-                            kCodedSize,
-                            kVisibleRect,
-                            natural_size,
-                            NULL,
-                            0,
+                            kVideoFormat, COLOR_SPACE_UNSPECIFIED, kCodedSize,
+                            kVisibleRect, kNaturalSize, EmptyExtraData(),
                             false);
   InitializeWithConfigWithResult(config, false);
 }
@@ -328,11 +232,6 @@ TEST_F(FFmpegVideoDecoderTest, Initialize_AspectRatioDenominatorTooLarge) {
 TEST_F(FFmpegVideoDecoderTest, Reinitialize_Normal) {
   Initialize();
   Reinitialize();
-}
-
-TEST_F(FFmpegVideoDecoderTest, Reinitialize_Failure) {
-  Initialize();
-  InitializeWithConfigWithResult(TestVideoConfig::Invalid(), false);
 }
 
 TEST_F(FFmpegVideoDecoderTest, Reinitialize_AfterDecodeFrame) {
@@ -392,15 +291,12 @@ TEST_F(FFmpegVideoDecoderTest, DecodeFrame_DecodeError) {
   EXPECT_TRUE(output_frames_.empty());
 }
 
-// Multi-threaded decoders have different behavior than single-threaded
-// decoders at the end of the stream. Multithreaded decoders hide errors
-// that happen on the last |codec_context_->thread_count| frames to avoid
-// prematurely signalling EOS. This test just exposes that behavior so we can
-// detect if it changes.
+// A corrupt frame followed by an EOS buffer should raise a decode error.
 TEST_F(FFmpegVideoDecoderTest, DecodeFrame_DecodeErrorAtEndOfStream) {
   Initialize();
 
-  EXPECT_EQ(VideoDecoder::kOk, DecodeSingleFrame(corrupt_i_frame_buffer_));
+  EXPECT_EQ(VideoDecoder::kDecodeError,
+            DecodeSingleFrame(corrupt_i_frame_buffer_));
 }
 
 // Decode |i_frame_buffer_| and then a frame with a larger width and verify

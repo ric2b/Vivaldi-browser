@@ -3,181 +3,67 @@
 // found in the LICENSE file.
 
 cr.define('downloads', function() {
-  /**
-   * Class to own and manage download items.
-   * @constructor
-   */
-  function Manager() {}
+  var Manager = Polymer({
+    is: 'downloads-manager',
 
-  cr.addSingletonGetter(Manager);
+    properties: {
+      hasDownloads_: {
+        observer: 'hasDownloadsChanged_',
+        type: Boolean,
+      },
 
-  Manager.prototype = {
-    /** @private {string} */
-    searchText_: '',
-
-    /**
-     * Sets the search text, updates related UIs, and tells the browser.
-     * @param {string} searchText Text we're searching for.
-     * @private
-     */
-    setSearchText_: function(searchText) {
-      this.searchText_ = searchText;
-
-      $('downloads-summary-text').textContent = this.searchText_ ?
-          loadTimeData.getStringF('searchResultsFor', this.searchText_) : '';
-
-      // Split quoted terms (e.g., 'The "lazy" dog' => ['The', 'lazy', 'dog']).
-      function trim(s) { return s.trim(); }
-      chrome.send('getDownloads', searchText.split(/"([^"]*)"/).map(trim));
+      items_: {
+        type: Array,
+        value: function() { return []; },
+      },
     },
 
-    /**
-     * @return {number} A guess at how many items could be visible at once.
-     * @private
-     */
-    guesstimateNumberOfVisibleItems_: function() {
-      var toolbarHeight = $('downloads-toolbar').offsetHeight;
-      var summaryHeight = $('downloads-summary').offsetHeight;
-      var nonItemSpace = toolbarHeight + summaryHeight;
-      return Math.floor((window.innerHeight - nonItemSpace) / 46) + 1;
+    hostAttributes: {
+      loading: true,
     },
 
-    /**
-     * Called when all items need to be updated.
-     * @param {!Array<!downloads.Data>} list A list of new download data.
-     * @private
-     */
-    updateAll_: function(list) {
-      var oldIdMap = this.idMap_ || {};
-
-      /** @private {!Object<!downloads.ItemView>} */
-      this.idMap_ = {};
-
-      /** @private {!Array<!downloads.ItemView>} */
-      this.items_ = [];
-
-      if (!this.iconLoader_) {
-        var guesstimate = Math.max(this.guesstimateNumberOfVisibleItems_(), 1);
-        /** @private {downloads.ThrottledIconLoader} */
-        this.iconLoader_ = new downloads.ThrottledIconLoader(guesstimate);
-      }
-
-      for (var i = 0; i < list.length; ++i) {
-        var data = list[i];
-        var id = data.id;
-
-        // Re-use old items when possible (saves work, preserves focus).
-        var item = oldIdMap[id] || new downloads.ItemView(this.iconLoader_);
-
-        this.idMap_[id] = item;  // Associated by ID for fast lookup.
-        this.items_.push(item);  // Add to sorted list for order.
-
-        // Render |item| but don't actually add to the DOM yet. |this.items_|
-        // must be fully created to be able to find the right spot to insert.
-        item.update(data);
-
-        // Collapse redundant dates.
-        var prev = list[i - 1];
-        item.hideDate = !!prev && prev.date_string == data.date_string;
-
-        delete oldIdMap[id];
-      }
-
-      // Remove stale, previously rendered items from the DOM.
-      for (var id in oldIdMap) {
-        if (oldIdMap[id].parentNode)
-          oldIdMap[id].parentNode.removeChild(oldIdMap[id]);
-        delete oldIdMap[id];
-      }
-
-      for (var i = 0; i < this.items_.length; ++i) {
-        var item = this.items_[i];
-        if (item.parentNode)  // Already in the DOM; skip.
-          continue;
-
-        var before = null;
-        // Find the next rendered item after this one, and insert before it.
-        for (var j = i + 1; !before && j < this.items_.length; ++j) {
-          if (this.items_[j].parentNode)
-            before = this.items_[j];
-        }
-        // If |before| is null, |item| will just get added at the end.
-        this.node_.insertBefore(item, before);
-      }
-
-      var noDownloadsOrResults = $('no-downloads-or-results');
-      noDownloadsOrResults.textContent = loadTimeData.getString(
-          this.searchText_ ? 'noSearchResults' : 'noDownloads');
-
-      var hasDownloads = this.size_() > 0;
-      this.node_.hidden = !hasDownloads;
-      noDownloadsOrResults.hidden = hasDownloads;
-
-      if (loadTimeData.getBoolean('allowDeletingHistory'))
-        $('clear-all').hidden = !hasDownloads || this.searchText_.length > 0;
+    listeners: {
+      'downloads-list.scroll': 'onListScroll_',
     },
 
-    /**
-     * @param {!downloads.Data} data
-     * @private
-     */
-    updateItem_: function(data) {
-      this.idMap_[data.id].update(data);
-    },
-
-    /**
-     * @return {number} The number of downloads shown on the page.
-     * @private
-     */
-    size_: function() {
-      return this.items_.length;
-    },
+    observers: [
+      'itemsChanged_(items_.*)',
+    ],
 
     /** @private */
     clearAll_: function() {
-      if (loadTimeData.getBoolean('allowDeletingHistory')) {
-        chrome.send('clearAll');
-        this.setSearchText_('');
-      }
+      this.set('items_', []);
     },
 
     /** @private */
-    onLoad_: function() {
-      this.node_ = $('downloads-display');
+    hasDownloadsChanged_: function() {
+      if (loadTimeData.getBoolean('allowDeletingHistory'))
+        this.$.toolbar.downloadsShowing = this.hasDownloads_;
 
-      $('clear-all').onclick = function() {
-        this.clearAll_();
-      }.bind(this);
+      if (this.hasDownloads_) {
+        this.$['downloads-list'].fire('iron-resize');
+      } else {
+        var isSearching = downloads.ActionService.getInstance().isSearching();
+        var messageToShow = isSearching ? 'noSearchResults' : 'noDownloads';
+        this.$['no-downloads'].querySelector('span').textContent =
+            loadTimeData.getString(messageToShow);
+      }
+    },
 
-      $('open-downloads-folder').onclick = function() {
-        chrome.send('openDownloadsFolder');
-      };
+    /**
+     * @param {number} index
+     * @param {!Array<!downloads.Data>} list
+     * @private
+     */
+    insertItems_: function(index, list) {
+      this.splice.apply(this, ['items_', index, 0].concat(list));
+      this.updateHideDates_(index, index + list.length);
+      this.removeAttribute('loading');
+    },
 
-      $('search-button').onclick = function() {
-        if (!$('search-term').hidden)
-          return;
-        $('clear-search').hidden = false;
-        $('search-term').hidden = false;
-      };
-
-      $('clear-search').onclick = function() {
-        $('clear-search').hidden = true;
-        $('search-term').hidden = true;
-        $('search-term').value = '';
-        this.setSearchText_('');
-      }.bind(this);
-
-      // TODO(dbeam): this previously used onsearch, which batches keystrokes
-      // together. This should probably be re-instated eventually.
-      $('search-term').oninput = function(e) {
-        this.setSearchText_($('search-term').value);
-      }.bind(this);
-
-      cr.ui.decorate('command', cr.ui.Command);
-      document.addEventListener('canExecute', this.onCanExecute_.bind(this));
-      document.addEventListener('command', this.onCommand_.bind(this));
-
-      this.setSearchText_('');
+    /** @private */
+    itemsChanged_: function() {
+      this.hasDownloads_ = this.items_.length > 0;
     },
 
     /**
@@ -188,10 +74,10 @@ cr.define('downloads', function() {
       e = /** @type {cr.ui.CanExecuteEvent} */(e);
       switch (e.command.id) {
         case 'undo-command':
-          e.canExecute = !$('search-term').contains(document.activeElement);
+          e.canExecute = this.$.toolbar.canUndo();
           break;
         case 'clear-all-command':
-          e.canExecute = true;
+          e.canExecute = this.$.toolbar.canClearAll();
           break;
       }
     },
@@ -201,34 +87,92 @@ cr.define('downloads', function() {
      * @private
      */
     onCommand_: function(e) {
-      if (e.command.id == 'undo-command')
-        chrome.send('undo');
-      else if (e.command.id == 'clear-all-command')
-        this.clearAll_();
+      if (e.command.id == 'clear-all-command')
+        downloads.ActionService.getInstance().clearAll();
+      else if (e.command.id == 'undo-command')
+        downloads.ActionService.getInstance().undo();
     },
+
+    /** @private */
+    onListScroll_: function() {
+      var list = this.$['downloads-list'];
+      if (list.scrollHeight - list.scrollTop - list.offsetHeight <= 100) {
+        // Approaching the end of the scrollback. Attempt to load more items.
+        downloads.ActionService.getInstance().loadMore();
+      }
+    },
+
+    /** @private */
+    onLoad_: function() {
+      cr.ui.decorate('command', cr.ui.Command);
+      document.addEventListener('canExecute', this.onCanExecute_.bind(this));
+      document.addEventListener('command', this.onCommand_.bind(this));
+
+      downloads.ActionService.getInstance().loadMore();
+    },
+
+    /**
+     * @param {number} index
+     * @private
+     */
+    removeItem_: function(index) {
+      this.splice('items_', index, 1);
+      this.updateHideDates_(index, index);
+      this.onListScroll_();
+    },
+
+    /**
+     * @param {number} start
+     * @param {number} end
+     * @private
+     */
+    updateHideDates_: function(start, end) {
+      for (var i = start; i <= end; ++i) {
+        var current = this.items_[i];
+        if (!current)
+          continue;
+        var prev = this.items_[i - 1];
+        current.hideDate = !!prev && prev.date_string == current.date_string;
+      }
+    },
+
+    /**
+     * @param {number} index
+     * @param {!downloads.Data} data
+     * @private
+     */
+    updateItem_: function(index, data) {
+      this.set('items_.' + index, data);
+      this.updateHideDates_(index, index);
+      this.$['downloads-list'].updateSizeForItem(index);
+    },
+  });
+
+  Manager.clearAll = function() {
+    Manager.get().clearAll_();
   };
 
-  Manager.updateAll = function(list) {
-    Manager.getInstance().updateAll_(list);
+  /** @return {!downloads.Manager} */
+  Manager.get = function() {
+    return /** @type {!downloads.Manager} */(
+        queryRequiredElement('downloads-manager'));
   };
 
-  Manager.updateItem = function(item) {
-    Manager.getInstance().updateItem_(item);
-  };
-
-  Manager.setSearchText = function(searchText) {
-    Manager.getInstance().setSearchText_(searchText);
+  Manager.insertItems = function(index, list) {
+    Manager.get().insertItems_(index, list);
   };
 
   Manager.onLoad = function() {
-    Manager.getInstance().onLoad_();
+    Manager.get().onLoad_();
   };
 
-  Manager.size = function() {
-    return Manager.getInstance().size_();
+  Manager.removeItem = function(index) {
+    Manager.get().removeItem_(index);
+  };
+
+  Manager.updateItem = function(index, data) {
+    Manager.get().updateItem_(index, data);
   };
 
   return {Manager: Manager};
 });
-
-window.addEventListener('load', downloads.Manager.onLoad);

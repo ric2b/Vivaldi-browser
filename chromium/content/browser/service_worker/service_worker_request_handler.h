@@ -5,7 +5,7 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_REQUEST_HANDLER_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_REQUEST_HANDLER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
@@ -33,6 +33,7 @@ class ResourceContext;
 class ResourceRequestBody;
 class ServiceWorkerContextCore;
 class ServiceWorkerContextWrapper;
+class ServiceWorkerNavigationHandleCore;
 class ServiceWorkerProviderHost;
 struct ResourceResponseInfo;
 
@@ -41,6 +42,19 @@ struct ResourceResponseInfo;
 class CONTENT_EXPORT ServiceWorkerRequestHandler
     : public base::SupportsUserData::Data {
  public:
+  // PlzNavigate
+  // Attaches a newly created handler if the given |request| needs to be handled
+  // by ServiceWorker.
+  static void InitializeForNavigation(
+      net::URLRequest* request,
+      ServiceWorkerNavigationHandleCore* navigation_handle_core,
+      storage::BlobStorageContext* blob_storage_context,
+      bool skip_service_worker,
+      ResourceType resource_type,
+      RequestContextType request_context_type,
+      RequestContextFrameType frame_type,
+      scoped_refptr<ResourceRequestBody> body);
+
   // Attaches a newly created handler if the given |request| needs to
   // be handled by ServiceWorker.
   // TODO(kinuko): While utilizing UserData to attach data to URLRequest
@@ -56,6 +70,7 @@ class CONTENT_EXPORT ServiceWorkerRequestHandler
       bool skip_service_worker,
       FetchRequestMode request_mode,
       FetchCredentialsMode credentials_mode,
+      FetchRedirectMode redirect_mode,
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
@@ -93,8 +108,6 @@ class CONTENT_EXPORT ServiceWorkerRequestHandler
                                  int new_provider_id);
   void MaybeCompleteCrossSiteTransferInOldProcess(
       int old_process_id);
-
-  ServiceWorkerContextCore* context() const { return context_.get(); }
 
  protected:
   ServiceWorkerRequestHandler(

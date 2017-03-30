@@ -4,9 +4,7 @@
 
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 
-#if defined(OS_WIN)
-#include <windowsx.h>
-#endif
+#include <stddef.h>
 
 #include <algorithm>
 #include <iterator>
@@ -15,28 +13,40 @@
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/defaults.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/host_desktop.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/stacked_tab_strip_layout.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_layout.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_observer.h"
 #include "chrome/browser/ui/views/touch_uma/touch_uma.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/user_metrics.h"
+#include "content/public/common/content_switches.h"
 #include "grit/theme_resources.h"
+#include "third_party/skia/include/core/SkColorFilter.h"
+#include "third_party/skia/include/effects/SkBlurMaskFilter.h"
+#include "third_party/skia/include/effects/SkLayerDrawLooper.h"
+#include "third_party/skia/include/pathops/SkPathOps.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/default_theme_provider.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/list_selection_model.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/compositing_recorder.h"
 #include "ui/compositor/paint_recorder.h"
@@ -49,6 +59,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/path.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/screen.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/views/controls/image_view.h"
@@ -73,36 +84,22 @@ using ui::DropTargetEvent;
 
 namespace {
 
-static const int kTabStripAnimationVSlop = 40;
-// Inactive tabs in a native frame are slightly transparent.
-static const uint8_t kGlassFrameInactiveTabAlpha = 200;
-// If there are multiple tabs selected then make non-selected inactive tabs
-// even more transparent.
-static const int kGlassFrameInactiveTabAlphaMultiSelection = 150;
-
-// Alpha applied to all elements save the selected tabs.
-static const uint8_t kInactiveTabAndNewTabButtonAlphaAsh = 230;
-static const uint8_t kInactiveTabAndNewTabButtonAlpha = 255;
+const int kTabStripAnimationVSlop = 40;
 
 // Inverse ratio of the width of a tab edge to the width of the tab. When
 // hovering over the left or right edge of a tab, the drop indicator will
 // point between tabs.
-static const int kTabEdgeRatioInverse = 4;
+const int kTabEdgeRatioInverse = 4;
 
 // Size of the drop indicator.
-static int drop_indicator_width;
-static int drop_indicator_height;
-
-static inline int Round(double x) {
-  // Why oh why is this not in a standard header?
-  return static_cast<int>(floor(x + 0.5));
-}
+int drop_indicator_width;
+int drop_indicator_height;
 
 // Max number of stacked tabs.
-static const int kMaxStackedCount = 4;
+const int kMaxStackedCount = 4;
 
 // Padding between stacked tabs.
-static const int kStackedPadding = 6;
+const int kStackedPadding = 6;
 
 // See UpdateLayoutTypeFromMouseEvent() for a description of these.
 #if !defined(USE_ASH)
@@ -113,29 +110,54 @@ const int kMouseMoveCountBeforeConsiderReal = 3;
 // Amount of time we delay before resizing after a close from a touch.
 const int kTouchResizeLayoutTimeMS = 2000;
 
-// Amount the left edge of a tab is offset from the rectangle of the tab's
-// favicon/title/close box.  Related to the width of IDR_TAB_ACTIVE_LEFT.
-// Affects the size of the "V" between adjacent tabs.
-#if defined(OS_MACOSX)
-const int kTabHorizontalOffset = -19;
-#else
-const int kTabHorizontalOffset = -26;
-#endif
-
 // Amount to adjust the clip by when the tab is stacked before the active index.
 const int kStackedTabLeftClip = 20;
 
 // Amount to adjust the clip by when the tab is stacked after the active index.
 const int kStackedTabRightClip = 20;
 
-base::string16 GetClipboardText() {
-  if (!ui::Clipboard::IsSupportedClipboardType(ui::CLIPBOARD_TYPE_SELECTION))
-    return base::string16();
-  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
-  CHECK(clipboard);
-  base::string16 clipboard_text;
-  clipboard->ReadText(ui::CLIPBOARD_TYPE_SELECTION, &clipboard_text);
-  return clipboard_text;
+#if defined(OS_MACOSX)
+const int kPinnedToNonPinnedOffset = 2;
+#else
+const int kPinnedToNonPinnedOffset = 3;
+#endif
+
+// Returns the offset from the top of the tabstrip at which the new tab button's
+// visible region begins.
+int GetNewTabButtonTopOffset() {
+  // The vertical distance between the bottom of the new tab button and the
+  // bottom of the tabstrip.
+  const int kNewTabButtonBottomOffset = 4;
+  return Tab::GetMinimumInactiveSize().height() - kNewTabButtonBottomOffset -
+      GetLayoutSize(NEW_TAB_BUTTON).height();
+}
+
+// Returns the width needed for the new tab button (and padding).
+int GetNewTabButtonWidth() {
+  return GetLayoutSize(NEW_TAB_BUTTON).width() -
+      GetLayoutConstant(TABSTRIP_NEW_TAB_BUTTON_OVERLAP);
+}
+
+skia::RefPtr<SkDrawLooper> CreateShadowDrawLooper(SkAlpha alpha) {
+  SkLayerDrawLooper::Builder looper_builder;
+  looper_builder.addLayer();
+
+  SkLayerDrawLooper::LayerInfo layer_info;
+  layer_info.fPaintBits |= SkLayerDrawLooper::kMaskFilter_Bit;
+  layer_info.fPaintBits |= SkLayerDrawLooper::kColorFilter_Bit;
+  layer_info.fColorMode = SkXfermode::kDst_Mode;
+  layer_info.fOffset.set(0, 1);
+  skia::RefPtr<SkMaskFilter> blur_mask =
+      skia::AdoptRef(SkBlurMaskFilter::Create(
+          kNormal_SkBlurStyle, 0.5, SkBlurMaskFilter::kHighQuality_BlurFlag));
+  skia::RefPtr<SkColorFilter> color_filter =
+      skia::AdoptRef(SkColorFilter::CreateModeFilter(
+          SkColorSetA(SK_ColorBLACK, alpha), SkXfermode::kSrcIn_Mode));
+  SkPaint* layer_paint = looper_builder.addLayer(layer_info);
+  layer_paint->setMaskFilter(blur_mask.get());
+  layer_paint->setColorFilter(color_filter.get());
+
+  return skia::AdoptRef(looper_builder.detachLooper());
 }
 
 // Animation delegate used for any automatic tab movement.  Hides the tab if it
@@ -233,6 +255,21 @@ TabDragController::EventSource EventSourceFromEvent(
       TabDragController::EVENT_SOURCE_MOUSE;
 }
 
+const TabSizeInfo& GetTabSizeInfo() {
+  static TabSizeInfo* tab_size_info = nullptr;
+  if (tab_size_info)
+    return *tab_size_info;
+
+  tab_size_info = new TabSizeInfo;
+  tab_size_info->pinned_tab_width = Tab::GetPinnedWidth();
+  tab_size_info->min_active_width = Tab::GetMinimumActiveSize().width();
+  tab_size_info->min_inactive_width = Tab::GetMinimumInactiveSize().width();
+  tab_size_info->max_size = Tab::GetStandardSize();
+  tab_size_info->tab_overlap = GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
+  tab_size_info->pinned_to_normal_offset = kPinnedToNonPinnedOffset;
+  return *tab_size_info;
+}
+
 }  // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -253,26 +290,33 @@ class NewTabButton : public views::ImageButton,
     background_offset_ = offset;
   }
 
- protected:
-  // views::View:
+ private:
+  // views::ImageButton:
 #if defined(OS_WIN)
   void OnMouseReleased(const ui::MouseEvent& event) override;
 #endif
+  void OnGestureEvent(ui::GestureEvent* event) override;
   void OnPaint(gfx::Canvas* canvas) override;
 
-  // ui::EventHandler:
-  void OnGestureEvent(ui::GestureEvent* event) override;
-
- private:
   // views::MaskedTargeterDelegate:
   bool GetHitTestMask(gfx::Path* mask) const override;
 
-  bool ShouldWindowContentsBeTransparent() const;
-  gfx::ImageSkia GetBackgroundImage(views::CustomButton::ButtonState state,
-                                    float scale) const;
-  gfx::ImageSkia GetImageForState(views::CustomButton::ButtonState state,
-                                  float scale) const;
-  gfx::ImageSkia GetImageForScale(float scale) const;
+  // Computes a path corresponding to the button's outer border for a given
+  // |scale| and stores it in |path|.  |button_y| is used as the y-coordinate
+  // for the top of the button.  If |extend_to_top| is true, the path is
+  // extended vertically to y = 0.  The caller uses this for Fitts' Law purposes
+  // in maximized/fullscreen mode.
+  void GetBorderPath(float button_y,
+                     float scale,
+                     bool extend_to_top,
+                     SkPath* path) const;
+
+  // Paints the fill region of the button into |canvas|, according to the
+  // supplied values from GetImage() and the given |fill| path.
+  void PaintFill(bool pressed,
+                 float scale,
+                 const SkPath& fill,
+                 gfx::Canvas* canvas) const;
 
   // Tab strip that contains this button.
   TabStrip* tab_strip_;
@@ -321,11 +365,6 @@ void NewTabButton::OnMouseReleased(const ui::MouseEvent& event) {
 }
 #endif
 
-void NewTabButton::OnPaint(gfx::Canvas* canvas) {
-  gfx::ImageSkia image = GetImageForScale(canvas->image_scale());
-  canvas->DrawImageInt(image, 0, height() - image.height());
-}
-
 void NewTabButton::OnGestureEvent(ui::GestureEvent* event) {
   // Consume all gesture events here so that the parent (Tab) does not
   // start consuming gestures.
@@ -333,149 +372,247 @@ void NewTabButton::OnGestureEvent(ui::GestureEvent* event) {
   event->SetHandled();
 }
 
+void NewTabButton::OnPaint(gfx::Canvas* canvas) {
+  gfx::ScopedCanvas scoped_canvas(canvas);
+  const int visible_height = GetLayoutSize(NEW_TAB_BUTTON).height();
+  canvas->Translate(gfx::Vector2d(0, height() - visible_height));
+
+  const bool pressed = state() == views::CustomButton::STATE_PRESSED;
+  const float scale = canvas->image_scale();
+
+  SkPath fill;
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    // Fill.
+    const float fill_bottom = (visible_height - 2) * scale;
+    const float diag_height = fill_bottom - 3.5 * scale;
+    const float diag_width = diag_height * Tab::GetInverseDiagonalSlope();
+    fill.moveTo(diag_width + 4 * scale, fill_bottom);
+    fill.rCubicTo(-0.75 * scale, 0, -1.625 * scale, -0.5 * scale, -2 * scale,
+                  -1.5 * scale);
+    fill.rLineTo(-diag_width, -diag_height);
+    fill.rCubicTo(0, -0.5 * scale, 0.25 * scale, -scale, scale, -scale);
+    fill.lineTo((width() - 4) * scale - diag_width, scale);
+    fill.rCubicTo(0.75 * scale, 0, 1.625 * scale, 0.5 * scale, 2 * scale,
+                  1.5 * scale);
+    fill.rLineTo(diag_width, diag_height);
+    fill.rCubicTo(0, 0.5 * scale, -0.25 * scale, scale, -scale, scale);
+    fill.close();
+    PaintFill(pressed, scale, fill, canvas);
+
+    // Stroke.
+    gfx::ScopedCanvas scoped_canvas(canvas);
+    canvas->UndoDeviceScaleFactor();
+    SkPath stroke;
+    GetBorderPath(0, scale, false, &stroke);
+    // We want to draw a drop shadow either inside or outside the stroke,
+    // depending on whether we're pressed; so, either clip out what's outside
+    // the stroke, or clip out the fill inside it.
+    if (pressed)
+      canvas->ClipPath(stroke, true);
+    Op(stroke, fill, kDifference_SkPathOp, &stroke);
+    if (!pressed)
+      canvas->sk_canvas()->clipPath(fill, SkRegion::kDifference_Op, true);
+    // Now draw the stroke and shadow; the stroke will always be visible, while
+    // the shadow will be affected by the clip we set above.
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    skia::RefPtr<SkDrawLooper> stroke_looper = CreateShadowDrawLooper(0x8C);
+    paint.setLooper(stroke_looper.get());
+    paint.setColor(SkColorSetA(SK_ColorBLACK, pressed ? 0x38 : 0x27));
+    canvas->DrawPath(stroke, paint);
+  } else {
+    // Fill.
+    gfx::ImageSkia* mask =
+        GetThemeProvider()->GetImageSkiaNamed(IDR_NEWTAB_BUTTON_MASK);
+    // The canvas and mask have to use the same scale factor.
+    const float fill_canvas_scale = mask->HasRepresentation(scale) ?
+        scale : ui::GetScaleForScaleFactor(ui::SCALE_FACTOR_100P);
+    gfx::Canvas fill_canvas(GetLayoutSize(NEW_TAB_BUTTON), fill_canvas_scale,
+                            false);
+    PaintFill(pressed, fill_canvas_scale, fill, &fill_canvas);
+    gfx::ImageSkia image(fill_canvas.ExtractImageRep());
+    canvas->DrawImageInt(
+        gfx::ImageSkiaOperations::CreateMaskedImage(image, *mask), 0, 0);
+
+    // Stroke.  Draw the button border with a slight alpha.
+    static const SkAlpha kGlassFrameOverlayAlpha = 178;
+    static const SkAlpha kOpaqueFrameOverlayAlpha = 230;
+    const SkAlpha alpha = GetWidget()->ShouldWindowContentsBeTransparent() ?
+        kGlassFrameOverlayAlpha : kOpaqueFrameOverlayAlpha;
+    const int overlay_id = pressed ? IDR_NEWTAB_BUTTON_P : IDR_NEWTAB_BUTTON;
+    canvas->DrawImageInt(*GetThemeProvider()->GetImageSkiaNamed(overlay_id), 0,
+                         0, alpha);
+  }
+}
+
 bool NewTabButton::GetHitTestMask(gfx::Path* mask) const {
   DCHECK(mask);
 
-  // When the button is sized to the top of the tab strip, we want the hit
-  // test mask to be defined as the complete (rectangular) bounds of the
-  // button.
-  if (tab_strip_->SizeTabButtonToTopOfTabStrip()) {
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    SkPath border;
+    const float scale = GetWidget()->GetCompositor()->device_scale_factor();
+    GetBorderPath(GetNewTabButtonTopOffset() * scale, scale,
+                  tab_strip_->SizeTabButtonToTopOfTabStrip(), &border);
+    mask->addPath(border, SkMatrix::MakeScale(1 / scale));
+  } else if (tab_strip_->SizeTabButtonToTopOfTabStrip()) {
+    // When the button is sized to the top of the tab strip, we want the hit
+    // test mask to be defined as the complete (rectangular) bounds of the
+    // button.
     gfx::Rect button_bounds(GetContentsBounds());
     button_bounds.set_x(GetMirroredXForRect(button_bounds));
     mask->addRect(RectToSkRect(button_bounds));
-    return true;
+  } else {
+    SkScalar w = SkIntToScalar(width());
+    SkScalar v_offset = SkIntToScalar(GetNewTabButtonTopOffset());
+
+    // These values are defined by the shape of the new tab image. Should that
+    // image ever change, these values will need to be updated. They're so
+    // custom it's not really worth defining constants for.
+    // These values are correct for regular and USE_ASH versions of the image.
+    mask->moveTo(0, v_offset + 1);
+    mask->lineTo(w - 7, v_offset + 1);
+    mask->lineTo(w - 4, v_offset + 4);
+    mask->lineTo(w, v_offset + 16);
+    mask->lineTo(w - 1, v_offset + 17);
+    mask->lineTo(7, v_offset + 17);
+    mask->lineTo(4, v_offset + 13);
+    mask->lineTo(0, v_offset + 1);
+    mask->close();
   }
-
-  SkScalar w = SkIntToScalar(width());
-  SkScalar v_offset = SkIntToScalar(TabStrip::kNewTabButtonVerticalOffset);
-
-  // These values are defined by the shape of the new tab image. Should that
-  // image ever change, these values will need to be updated. They're so
-  // custom it's not really worth defining constants for.
-  // These values are correct for regular and USE_ASH versions of the image.
-  mask->moveTo(0, v_offset + 1);
-  mask->lineTo(w - 7, v_offset + 1);
-  mask->lineTo(w - 4, v_offset + 4);
-  mask->lineTo(w, v_offset + 16);
-  mask->lineTo(w - 1, v_offset + 17);
-  mask->lineTo(7, v_offset + 17);
-  mask->lineTo(4, v_offset + 13);
-  mask->lineTo(0, v_offset + 1);
-  mask->close();
 
   return true;
 }
 
-bool NewTabButton::ShouldWindowContentsBeTransparent() const {
-  return GetWidget() &&
-         GetWidget()->GetTopLevelWidget()->ShouldWindowContentsBeTransparent();
+void NewTabButton::GetBorderPath(float button_y,
+                                 float scale,
+                                 bool extend_to_top,
+                                 SkPath* path) const {
+  const float inverse_slope = Tab::GetInverseDiagonalSlope();
+  const float fill_bottom =
+      (GetLayoutSize(NEW_TAB_BUTTON).height() - 2) * scale;
+  const float stroke_bottom = button_y + fill_bottom + 1;
+  const float diag_height = fill_bottom - 3.5 * scale;
+  const float diag_width = diag_height * inverse_slope;
+  path->moveTo(diag_width + 4 * scale - 1, stroke_bottom);
+  path->rCubicTo(-0.75 * scale, 0, -1.625 * scale, -0.5 * scale, -2 * scale,
+                 -1.5 * scale);
+  path->rLineTo(-diag_width, -diag_height);
+  if (extend_to_top) {
+    // Create the vertical extension by extending the side diagonals at the
+    // upper left and lower right corners until they reach the top and bottom of
+    // the border, respectively (in other words, "un-round-off" those corners
+    // and turn them into sharp points).  Then extend upward from the corner
+    // points to the top of the bounds.
+    const float dy = scale + 2;
+    const float dx = inverse_slope * dy;
+    path->rLineTo(-dx, -dy);
+    path->rLineTo(0, -button_y - scale + 1);
+    path->lineTo((width() - 2) * scale + 1 + dx, 0);
+    path->rLineTo(0, stroke_bottom);
+  } else {
+    path->rCubicTo(-0.5 * scale, -1.125 * scale, 0.5 * scale, -scale - 2, scale,
+                   -scale - 2);
+    path->lineTo((width() - 4) * scale - diag_width + 1, button_y + scale - 1);
+    path->rCubicTo(0.75 * scale, 0, 1.625 * scale, 0.5 * scale, 2 * scale,
+                   1.5 * scale);
+    path->rLineTo(diag_width, diag_height);
+    path->rCubicTo(0.5 * scale, 1.125 * scale, -0.5 * scale, scale + 2, -scale,
+                   scale + 2);
+  }
+  path->close();
 }
 
-gfx::ImageSkia NewTabButton::GetBackgroundImage(
-    views::CustomButton::ButtonState state,
-    float scale) const {
-  int background_id = 0;
-  if (ShouldWindowContentsBeTransparent()) {
-    background_id = IDR_THEME_TAB_BACKGROUND_V;
-  } else if (tab_strip_->controller()->IsIncognito()) {
-    background_id = IDR_THEME_TAB_BACKGROUND_INCOGNITO;
-  } else {
-    background_id = IDR_THEME_TAB_BACKGROUND;
+void NewTabButton::PaintFill(bool pressed,
+                             float scale,
+                             const SkPath& fill,
+                             gfx::Canvas* canvas) const {
+  bool custom_image;
+  const int bg_id = tab_strip_->GetBackgroundResourceId(&custom_image);
+
+  gfx::ScopedCanvas scoped_canvas(canvas);
+
+  const bool md = ui::MaterialDesignController::IsModeMaterial();
+  if (md) {
+    canvas->UndoDeviceScaleFactor();
+
+    // For unpressed buttons, draw the fill and its shadow.
+    if (!pressed) {
+      gfx::ScopedCanvas scoped_canvas(canvas);
+
+      // For custom themes, clip out the fill path itself so only the shadow
+      // around it is drawn.  We'll draw the fill image below.
+      if (custom_image)
+        canvas->sk_canvas()->clipPath(fill, SkRegion::kDifference_Op, true);
+
+      SkPaint paint;
+      paint.setAntiAlias(true);
+      skia::RefPtr<SkDrawLooper> looper = CreateShadowDrawLooper(0x26);
+      paint.setLooper(looper.get());
+      paint.setColor(Tab::kInactiveTabColor);
+      canvas->DrawPath(fill, paint);
+    }
+
+    // Clip to just the fill region for any theme drawing and hover/pressed
+    // state overlay drawing below.  In non-MD mode, this is done on the caller
+    // side using image masking operations.
+    canvas->ClipPath(fill, true);
+    canvas->sk_canvas()->scale(scale, scale);
   }
 
-  int alpha = 0;
-  switch (state) {
-    case views::CustomButton::STATE_NORMAL:
-    case views::CustomButton::STATE_HOVERED:
-      alpha = ShouldWindowContentsBeTransparent() ? kGlassFrameInactiveTabAlpha
-                                                  : 255;
-      break;
-    case views::CustomButton::STATE_PRESSED:
-      alpha = 145;
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
+  // Draw the fill background image.
+  const gfx::Size size(GetLayoutSize(NEW_TAB_BUTTON));
+  if (custom_image || !md) {
+    const ui::ThemeProvider* theme_provider = GetThemeProvider();
+    gfx::ImageSkia* background = theme_provider->GetImageSkiaNamed(bg_id);
+    // For custom tab backgrounds the background starts at the top of the tab
+    // strip. Otherwise the background starts at the top of the frame.
+    const int offset_y = theme_provider->HasCustomImage(bg_id) ?
+        -GetLayoutConstant(TAB_TOP_EXCLUSION_HEIGHT) : background_offset_.y();
 
-  gfx::ImageSkia* mask =
-      GetThemeProvider()->GetImageSkiaNamed(IDR_NEWTAB_BUTTON_MASK);
-  int height = mask->height();
-  int width = mask->width();
-  // The canvas and mask has to use the same scale factor.
-  if (!mask->HasRepresentation(scale))
-    scale = ui::GetScaleForScaleFactor(ui::SCALE_FACTOR_100P);
+    // The new tab background is mirrored in RTL mode, but the theme background
+    // should never be mirrored. Mirror it here to compensate.
+    float x_scale = 1.0f;
+    int x = GetMirroredX() + background_offset_.x();
+    if (base::i18n::IsRTL()) {
+      x_scale = -1.0f;
+      // Offset by |width| such that the same region is painted as if there was
+      // no flip.
+      x += size.width();
+    }
+    canvas->TileImageInt(*background, x, GetNewTabButtonTopOffset() + offset_y,
+                         x_scale, 1.0f, 0, 0, size.width(), size.height());
 
-  gfx::Canvas canvas(gfx::Size(width, height), scale, false);
-
-  // For custom images the background starts at the top of the tab strip.
-  // Otherwise the background starts at the top of the frame.
-  gfx::ImageSkia* background =
-      GetThemeProvider()->GetImageSkiaNamed(background_id);
-  int offset_y = GetThemeProvider()->HasCustomImage(background_id) ?
-      0 : background_offset_.y();
-
-  // The new tab background is mirrored in RTL mode, but the theme background
-  // should never be mirrored. Mirror it here to compensate.
-  float x_scale = 1.0f;
-  int x = GetMirroredX() + background_offset_.x();
-  if (base::i18n::IsRTL()) {
-    x_scale = -1.0f;
-    // Offset by |width| such that the same region is painted as if there was no
-    // flip.
-    x += width;
-  }
-  canvas.TileImageInt(*background, x,
-                      TabStrip::kNewTabButtonVerticalOffset + offset_y,
-                      x_scale, 1.0f, 0, 0, width, height);
-
-  if (alpha != 255) {
-    SkPaint paint;
-    paint.setColor(SkColorSetARGB(alpha, 255, 255, 255));
-    paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
-    paint.setStyle(SkPaint::kFill_Style);
-    canvas.DrawRect(gfx::Rect(0, 0, width, height), paint);
+    // For non-MD, adjust the alpha of the fill to match that of inactive tabs
+    // (except for pressed buttons, which get a different value).  For MD, we do
+    // this with an opacity recorder in TabStrip::PaintChildren() so the fill
+    // and stroke are both affected, to better match how tabs are handled, but
+    // in non-MD, the button stroke is already lighter than the tab stroke, and
+    // using the opacity recorder washes it out too much.
+    static const SkAlpha kPressedAlpha = 145;
+    const SkAlpha alpha =
+        pressed ? kPressedAlpha : tab_strip_->GetInactiveAlpha(true);
+    if (alpha != 255 && !md) {
+      SkPaint paint;
+      paint.setAlpha(alpha);
+      paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
+      paint.setStyle(SkPaint::kFill_Style);
+      canvas->DrawRect(gfx::Rect(size), paint);
+    }
   }
 
   // White highlight on hover.
-  if (state == views::CustomButton::STATE_HOVERED)
-    canvas.FillRect(GetLocalBounds(), SkColorSetARGB(64, 255, 255, 255));
+  const SkAlpha alpha = static_cast<SkAlpha>(
+      hover_animation().CurrentValueBetween(0x00, md ? 0x4D : 0x40));
+  if (alpha != SK_AlphaTRANSPARENT)
+    canvas->FillRect(GetLocalBounds(), SkColorSetA(SK_ColorWHITE, alpha));
 
-  return gfx::ImageSkiaOperations::CreateMaskedImage(
-      gfx::ImageSkia(canvas.ExtractImageRep()), *mask);
-}
-
-gfx::ImageSkia NewTabButton::GetImageForState(
-    views::CustomButton::ButtonState state,
-    float scale) const {
-  const int overlay_id = state == views::CustomButton::STATE_PRESSED ?
-        IDR_NEWTAB_BUTTON_P : IDR_NEWTAB_BUTTON;
-  gfx::ImageSkia* overlay = GetThemeProvider()->GetImageSkiaNamed(overlay_id);
-
-  gfx::Canvas canvas(
-      gfx::Size(overlay->width(), overlay->height()),
-      scale,
-      false);
-  canvas.DrawImageInt(GetBackgroundImage(state, scale), 0, 0);
-
-  // Draw the button border with a slight alpha.
-  const uint8_t kGlassFrameOverlayAlpha = 178;
-  const uint8_t kOpaqueFrameOverlayAlpha = 230;
-  uint8_t alpha = ShouldWindowContentsBeTransparent()
-                      ? kGlassFrameOverlayAlpha
-                      : kOpaqueFrameOverlayAlpha;
-  canvas.DrawImageInt(*overlay, 0, 0, alpha);
-
-  return gfx::ImageSkia(canvas.ExtractImageRep());
-}
-
-gfx::ImageSkia NewTabButton::GetImageForScale(float scale) const {
-  if (!hover_animation_->is_animating())
-    return GetImageForState(state(), scale);
-  return gfx::ImageSkiaOperations::CreateBlendedImage(
-      GetImageForState(views::CustomButton::STATE_NORMAL, scale),
-      GetImageForState(views::CustomButton::STATE_HOVERED, scale),
-      hover_animation_->GetCurrentValue());
+  // For MD, most states' opacities are adjusted using an opacity recorder in
+  // TabStrip::PaintChildren(), but the pressed state is excluded there and
+  // instead rendered using a dark overlay here.  This produces a different
+  // effect than for non-MD, and avoiding the use of the opacity recorder keeps
+  // the stroke more visible in this state.
+  if (md && pressed)
+    canvas->FillRect(GetLocalBounds(), SkColorSetA(SK_ColorBLACK, 0x14));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -526,24 +663,11 @@ void TabStrip::RemoveTabDelegate::AnimationCanceled(
 ///////////////////////////////////////////////////////////////////////////////
 // TabStrip, public:
 
-// static
-const char TabStrip::kViewClassName[] = "TabStrip";
-const int TabStrip::kNewTabButtonVerticalOffset = 7;
-const int TabStrip::kNewTabButtonAssetWidth = 34;
-const int TabStrip::kNewTabButtonAssetHeight = 18;
-#if defined(OS_MACOSX)
-const int TabStrip::kNewTabButtonHorizontalOffset = -8;
-const int TabStrip::kPinnedToNonPinnedGap = 2;
-#else
-const int TabStrip::kNewTabButtonHorizontalOffset = -11;
-const int TabStrip::kPinnedToNonPinnedGap = 3;
-#endif
-
 TabStrip::TabStrip(TabStripController* controller)
     : controller_(controller),
       newtab_button_(NULL),
-      current_unselected_width_(Tab::GetStandardSize().width()),
-      current_selected_width_(Tab::GetStandardSize().width()),
+      current_inactive_width_(Tab::GetStandardSize().width()),
+      current_active_width_(Tab::GetStandardSize().width()),
       available_width_for_tabs_(-1),
       in_tab_close_(false),
       animation_container_(new gfx::AnimationContainer()),
@@ -605,6 +729,9 @@ void TabStrip::SetStackedLayout(bool stacked_layout) {
         active_center - ideal_bounds(active_index).width() / 2);
     AnimateToIdealBounds();
   }
+
+  for (int i = 0; i < tab_count(); ++i)
+    tab_at(i)->HideCloseButtonForInactiveTabsChanged();
 }
 
 gfx::Rect TabStrip::GetNewTabButtonBounds() {
@@ -631,10 +758,10 @@ void TabStrip::AddTabAt(int model_index,
                         const TabRendererData& data,
                         bool is_active) {
   Tab* tab = CreateTab();
+  AddChildView(tab);
   tab->SetData(data);
   UpdateTabsClosingMap(model_index, 1);
   tabs_.Add(tab, model_index);
-  AddChildView(tab);
 
   if (touch_layout_) {
     GenerateIdealBoundsForPinnedTabs(NULL);
@@ -760,7 +887,7 @@ bool TabStrip::ShouldTabBeVisible(const Tab* tab) const {
   // to "pop in" when the button disappears.
   // TODO: Probably doesn't work for RTL
   int right_edge = tab->bounds().right();
-  const int visible_width = tab->dragging() ? width() : tab_area_width();
+  const int visible_width = tab->dragging() ? width() : GetTabAreaWidth();
   if (right_edge > visible_width)
     return false;
 
@@ -789,8 +916,8 @@ bool TabStrip::ShouldTabBeVisible(const Tab* tab) const {
 
   // We need to check what would happen if the active tab were to move to this
   // tab or before.
-  return (right_edge + current_selected_width_ - current_unselected_width_) <=
-      tab_area_width();
+  return (right_edge + current_active_width_ - current_inactive_width_) <=
+          GetTabAreaWidth();
 }
 
 void TabStrip::PrepareForCloseAt(int model_index, CloseTabSource source) {
@@ -812,10 +939,10 @@ void TabStrip::PrepareForCloseAt(int model_index, CloseTabSource source) {
     Tab* last_tab = tab_at(model_count - 1);
     Tab* tab_being_removed = tab_at(model_index);
     available_width_for_tabs_ = last_tab->x() + last_tab->width() -
-        tab_being_removed->width() - kTabHorizontalOffset;
+        tab_being_removed->width() + GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
     if (model_index == 0 && tab_being_removed->data().pinned &&
         !tab_at(1)->data().pinned) {
-      available_width_for_tabs_ -= kPinnedToNonPinnedGap;
+      available_width_for_tabs_ -= kPinnedToNonPinnedOffset;
     }
   }
 
@@ -848,7 +975,7 @@ void TabStrip::SetSelection(const ui::ListSelectionModel& old_selection,
   } else {
     // We have "tiny tabs" if the tabs are so tiny that the unselected ones are
     // a different size to the selected ones.
-    bool tiny_tabs = current_unselected_width_ != current_selected_width_;
+    bool tiny_tabs = current_inactive_width_ != current_active_width_;
     if (!IsAnimating() && (!in_tab_close_ || tiny_tabs)) {
       DoLayout();
     } else {
@@ -966,6 +1093,23 @@ void TabStrip::SetImmersiveStyle(bool enable) {
   immersive_style_ = enable;
 }
 
+SkAlpha TabStrip::GetInactiveAlpha(bool for_new_tab_button) const {
+  static const SkAlpha kInactiveTabAlphaAsh = 230;
+  static const SkAlpha kInactiveTabAlphaGlass = 200;
+  static const SkAlpha kInactiveTabAlphaOpaque = 255;
+  static const double kMultiSelectionMultiplier = 0.6;
+
+  const chrome::HostDesktopType host_desktop_type =
+      chrome::GetHostDesktopTypeForNativeView(GetWidget()->GetNativeView());
+  SkAlpha base_alpha = kInactiveTabAlphaOpaque;
+  if (host_desktop_type == chrome::HOST_DESKTOP_TYPE_ASH)
+    base_alpha = kInactiveTabAlphaAsh;
+  else if (GetWidget()->ShouldWindowContentsBeTransparent())
+    base_alpha = kInactiveTabAlphaGlass;
+  return (for_new_tab_button || (GetSelectionModel().size() <= 1)) ?
+      base_alpha : static_cast<SkAlpha>(kMultiSelectionMultiplier * base_alpha);
+}
+
 bool TabStrip::IsAnimating() const {
   return bounds_animator_.IsAnimating();
 }
@@ -985,7 +1129,7 @@ void TabStrip::FileSupported(const GURL& url, bool supported) {
     drop_info_->file_supported = supported;
 }
 
-const ui::ListSelectionModel& TabStrip::GetSelectionModel() {
+const ui::ListSelectionModel& TabStrip::GetSelectionModel() const {
   return controller_->GetSelectionModel();
 }
 
@@ -1216,7 +1360,8 @@ bool TabStrip::ShouldPaintTab(const Tab* tab, gfx::Rect* clip) {
     if (tab_bounds.x() < previous_tab_bounds.x())
       return true;  // Can happen during dragging.
 
-    if (previous_tab_bounds.right() + kTabHorizontalOffset != tab_bounds.x()) {
+    if (previous_tab_bounds.right() - GetLayoutConstant(TABSTRIP_TAB_OVERLAP) !=
+        tab_bounds.x()) {
       int x = previous_tab_bounds.right() - tab_bounds.x() -
           kStackedTabRightClip;
       clip->SetRect(x, 0, tab_bounds.width() - x, tab_bounds.height());
@@ -1225,8 +1370,44 @@ bool TabStrip::ShouldPaintTab(const Tab* tab, gfx::Rect* clip) {
   return true;
 }
 
+bool TabStrip::CanPaintThrobberToLayer() const {
+  // Disable layer-painting of throbbers if dragging, if any tab animation is in
+  // progress, or if stacked tabs are enabled. Also disable in fullscreen: when
+  // "immersive" the tab strip could be sliding in or out while transitioning to
+  // or away from |immersive_style_| and, for other modes, there's no tab strip.
+  const bool dragging = drag_controller_ && drag_controller_->started_drag();
+  const views::Widget* widget = GetWidget();
+  return widget && !touch_layout_ && !dragging && !IsAnimating() &&
+         !widget->IsFullscreen();
+}
+
 bool TabStrip::IsImmersiveStyle() const {
   return immersive_style_;
+}
+
+int TabStrip::GetBackgroundResourceId(bool* custom_image) const {
+  const ui::ThemeProvider* theme_provider = GetThemeProvider();
+
+  if (GetWidget()->ShouldWindowContentsBeTransparent()) {
+    const int kBackgroundIdGlass = IDR_THEME_TAB_BACKGROUND_V;
+    *custom_image = theme_provider->HasCustomImage(kBackgroundIdGlass);
+    return kBackgroundIdGlass;
+  }
+
+  // If a custom theme does not provide a replacement tab background, but does
+  // provide a replacement frame image, HasCustomImage() on the tab background
+  // ID will return false, but the theme provider will make a custom image from
+  // the frame image.  Furthermore, since the theme provider will create the
+  // incognito frame image from the normal frame image, in incognito mode we
+  // need to look for a custom incognito _or_ regular frame image.
+  const bool incognito = controller()->IsIncognito();
+  const int id = incognito ?
+      IDR_THEME_TAB_BACKGROUND_INCOGNITO : IDR_THEME_TAB_BACKGROUND;
+  *custom_image = theme_provider->HasCustomImage(id) ||
+      theme_provider->HasCustomImage(
+          incognito ? IDR_THEME_FRAME_INCOGNITO : IDR_THEME_FRAME) ||
+      (incognito && theme_provider->HasCustomImage(IDR_THEME_FRAME));
+  return id;
 }
 
 void TabStrip::UpdateTabAccessibilityState(const Tab* tab,
@@ -1260,29 +1441,23 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
   // The view order doesn't match the paint order (tabs_ contains the tab
   // ordering). Additionally we need to paint the tabs that are closing in
   // |tabs_closing_map_|.
+  bool is_dragging = false;
   Tab* active_tab = NULL;
   Tabs tabs_dragging;
   Tabs selected_tabs;
-  int selected_tab_count = 0;
-  bool is_dragging = false;
-  int active_tab_index = -1;
-
-  const chrome::HostDesktopType host_desktop_type =
-      chrome::GetHostDesktopTypeForNativeView(GetWidget()->GetNativeView());
-  const uint8_t inactive_tab_alpha =
-      (host_desktop_type == chrome::HOST_DESKTOP_TYPE_ASH)
-          ? kInactiveTabAndNewTabButtonAlphaAsh
-          : kInactiveTabAndNewTabButtonAlpha;
 
   {
-    ui::CompositingRecorder opacity_recorder(context, inactive_tab_alpha);
+    // We pass false for |lcd_text_requires_opaque_layer| so that background
+    // tab titles will get LCD AA.  These are rendered opaquely on an opaque tab
+    // background before the layer is composited, so this is safe.
+    ui::CompositingRecorder opacity_recorder(context, size(),
+                                             GetInactiveAlpha(false), false);
 
     PaintClosingTabs(tab_count(), context);
 
+    int active_tab_index = -1;
     for (int i = tab_count() - 1; i >= 0; --i) {
       Tab* tab = tab_at(i);
-      if (tab->IsSelected())
-        selected_tab_count++;
       if (tab->dragging() && !stacked_layout_) {
         is_dragging = true;
         if (tab->IsActive()) {
@@ -1319,30 +1494,6 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
     }
   }
 
-  if (GetWidget()->ShouldWindowContentsBeTransparent()) {
-    ui::PaintRecorder recorder(context, size());
-    // Make sure non-active tabs are somewhat transparent.
-    SkPaint paint;
-    // If there are multiple tabs selected, fade non-selected tabs more to make
-    // the selected tabs more noticable.
-    uint8_t alpha = selected_tab_count > 1
-                        ? kGlassFrameInactiveTabAlphaMultiSelection
-                        : kGlassFrameInactiveTabAlpha;
-    paint.setColor(SkColorSetARGB(alpha, 255, 255, 255));
-    paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
-    paint.setStyle(SkPaint::kFill_Style);
-
-    // The tab graphics include some shadows at the top, so the actual
-    // tabstrip top is 4 px. above the apparent top of the tab, to provide room
-    // to draw these. Exclude this region when trying to make tabs transparent
-    // as it's transparent enough already, and drawing in this region can
-    // overlap the avatar button, leading to visual artifacts.
-    const int kTopOffset = 4;
-    // The tabstrip area overlaps the toolbar area by 2 px.
-    recorder.canvas()->DrawRect(
-        gfx::Rect(0, kTopOffset, width(), height() - kTopOffset - 2), paint);
-  }
-
   // Now selected but not active. We don't want these dimmed if using native
   // frame, so they're painted after initial pass.
   for (size_t i = 0; i < selected_tabs.size(); ++i)
@@ -1353,8 +1504,16 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
     active_tab->Paint(context);
 
   // Paint the New Tab button.
-  {
-    ui::CompositingRecorder opacity_recorder(context, inactive_tab_alpha);
+  const bool md = ui::MaterialDesignController::IsModeMaterial();
+  if (md && (newtab_button_->state() != views::CustomButton::STATE_PRESSED)) {
+    // Match the inactive tab opacity for non-pressed states.  See comments in
+    // NewTabButton::PaintFill() for why we don't do this for the pressed state.
+    // This call doesn't need to set |lcd_text_requires_opaque_layer| to false
+    // because no text will be drawn.
+    ui::CompositingRecorder opacity_recorder(context, size(),
+                                             GetInactiveAlpha(true), true);
+    newtab_button_->Paint(context);
+  } else {
     newtab_button_->Paint(context);
   }
 
@@ -1365,9 +1524,25 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
   // If the active tab is being dragged, it goes last.
   if (active_tab && is_dragging)
     active_tab->Paint(context);
+
+  if (md) {
+    ui::PaintRecorder recorder(context, size());
+    gfx::Canvas* canvas = recorder.canvas();
+    if (active_tab) {
+      canvas->sk_canvas()->clipRect(
+          gfx::RectToSkRect(active_tab->GetMirroredBounds()),
+          SkRegion::kDifference_Op);
+    }
+    BrowserView::Paint1pxHorizontalLine(
+        canvas,
+        GetThemeProvider()->GetColor(
+            ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR),
+        GetLocalBounds(), true);
+  }
 }
 
 const char* TabStrip::GetClassName() const {
+  static const char kViewClassName[] = "TabStrip";
   return kViewClassName;
 }
 
@@ -1383,26 +1558,26 @@ gfx::Size TabStrip::GetPreferredSize() const {
     const int pinned_tab_count = GetPinnedTabCount();
     needed_tab_width = pinned_tab_count * Tab::GetPinnedWidth();
     const int remaining_tab_count = tab_count() - pinned_tab_count;
-    const int min_selected_width = Tab::GetMinimumSelectedSize().width();
-    const int min_unselected_width = Tab::GetMinimumUnselectedSize().width();
+    const int min_selected_width = Tab::GetMinimumActiveSize().width();
+    const int min_unselected_width = Tab::GetMinimumInactiveSize().width();
     if (remaining_tab_count > 0) {
-      needed_tab_width += kPinnedToNonPinnedGap + min_selected_width +
-          ((remaining_tab_count - 1) * min_unselected_width);
+      needed_tab_width += kPinnedToNonPinnedOffset + min_selected_width +
+                          ((remaining_tab_count - 1) * min_unselected_width);
     }
+    const int tab_overlap = GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
     if (tab_count() > 1)
-      needed_tab_width += (tab_count() - 1) * kTabHorizontalOffset;
+      needed_tab_width -= (tab_count() - 1) * tab_overlap;
 
     // Don't let the tabstrip shrink smaller than is necessary to show one tab,
     // and don't force it to be larger than is necessary to show 20 tabs.
     const int largest_min_tab_width =
-        min_selected_width + 19 * (min_unselected_width + kTabHorizontalOffset);
+        min_selected_width + 19 * (min_unselected_width - tab_overlap);
     needed_tab_width = std::min(
         std::max(needed_tab_width, min_selected_width), largest_min_tab_width);
   }
-  return gfx::Size(
-      needed_tab_width + new_tab_button_width(),
-      immersive_style_ ?
-          Tab::GetImmersiveHeight() : Tab::GetMinimumUnselectedSize().height());
+  return gfx::Size(needed_tab_width + GetNewTabButtonWidth(),
+                   immersive_style_ ? Tab::GetImmersiveHeight()
+                                    : Tab::GetMinimumInactiveSize().height());
 }
 
 void TabStrip::OnDragEntered(const DropTargetEvent& event) {
@@ -1511,11 +1686,9 @@ void TabStrip::Init() {
   set_id(VIEW_ID_TAB_STRIP);
   // So we get enter/exit on children to switch stacked layout on and off.
   set_notify_enter_exit_on_child(true);
-  newtab_button_bounds_.SetRect(0,
-                                0,
-                                kNewTabButtonAssetWidth,
-                                kNewTabButtonAssetHeight +
-                                    kNewTabButtonVerticalOffset);
+
+  newtab_button_bounds_.set_size(GetLayoutSize(NEW_TAB_BUTTON));
+  newtab_button_bounds_.Inset(0, 0, 0, -GetNewTabButtonTopOffset());
   newtab_button_ = new NewTabButton(this, this);
   newtab_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_TOOLTIP_NEW_TAB));
@@ -1537,7 +1710,7 @@ void TabStrip::Init() {
 
 Tab* TabStrip::CreateTab() {
   Tab* tab = new Tab(this);
-  tab->set_animation_container(animation_container_.get());
+  tab->SetAnimationContainer(animation_container_.get());
   return tab;
 }
 
@@ -1556,9 +1729,9 @@ void TabStrip::StartInsertTabAnimation(int model_index) {
                    ideal_bounds(model_index).height());
   } else {
     Tab* last_tab = tab_at(model_index - 1);
-    tab->SetBounds(last_tab->bounds().right() + kTabHorizontalOffset,
-                   ideal_bounds(model_index).y(), 0,
-                   ideal_bounds(model_index).height());
+    tab->SetBounds(
+        last_tab->bounds().right() - GetLayoutConstant(TABSTRIP_TAB_OVERLAP),
+        ideal_bounds(model_index).y(), 0, ideal_bounds(model_index).height());
   }
 
   AnimateToIdealBounds();
@@ -1631,7 +1804,7 @@ void TabStrip::DoLayout() {
   SwapLayoutIfNecessary();
 
   if (touch_layout_)
-    touch_layout_->SetWidth(tab_area_width());
+    touch_layout_->SetWidth(GetTabAreaWidth());
 
   GenerateIdealBounds();
 
@@ -1719,7 +1892,7 @@ void TabStrip::StackDraggedTabs(int delta) {
   } else {
     // Drag the tabs to the right, stacking tabs after the active tab.
     const int last_tab_width = ideal_bounds(tab_count() - 1).width();
-    const int last_tab_x = tab_area_width() - last_tab_width;
+    const int last_tab_x = GetTabAreaWidth() - last_tab_width;
     if (active_index == tab_count() - 1 &&
         ideal_bounds(tab_count() - 1).x() == last_tab_x)
       return;
@@ -1803,11 +1976,11 @@ void TabStrip::CalculateBoundsForDraggedTabs(const Tabs& tabs,
   for (size_t i = 0; i < tabs.size(); ++i) {
     Tab* tab = tabs[i];
     if (i > 0 && tab->data().pinned != tabs[i - 1]->data().pinned)
-      x += kPinnedToNonPinnedGap;
+      x += kPinnedToNonPinnedOffset;
     gfx::Rect new_bounds = tab->bounds();
     new_bounds.set_origin(gfx::Point(x, 0));
     bounds->push_back(new_bounds);
-    x += tab->width() + kTabHorizontalOffset;
+    x += tab->width() - GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
   }
 }
 
@@ -1817,10 +1990,10 @@ int TabStrip::GetSizeNeededForTabs(const Tabs& tabs) {
     Tab* tab = tabs[i];
     width += tab->width();
     if (i > 0 && tab->data().pinned != tabs[i - 1]->data().pinned)
-      width += kPinnedToNonPinnedGap;
+      width += kPinnedToNonPinnedOffset;
   }
-  if (tabs.size() > 0)
-    width += kTabHorizontalOffset * static_cast<int>(tabs.size() - 1);
+  if (!tabs.empty())
+    width -= GetLayoutConstant(TABSTRIP_TAB_OVERLAP) * (tabs.size() - 1);
   return width;
 }
 
@@ -2084,73 +2257,6 @@ void TabStrip::UpdateStackedLayoutFromMouseEvent(views::View* source,
   }
 }
 
-void TabStrip::GetCurrentTabWidths(double* unselected_width,
-                                   double* selected_width) const {
-  *unselected_width = current_unselected_width_;
-  *selected_width = current_selected_width_;
-}
-
-void TabStrip::GetDesiredTabWidths(int tab_count,
-                                   int pinned_tab_count,
-                                   double* unselected_width,
-                                   double* selected_width) const {
-  DCHECK(tab_count >= 0 && pinned_tab_count >= 0 &&
-         pinned_tab_count <= tab_count);
-  const double min_unselected_width = Tab::GetMinimumUnselectedSize().width();
-  const double min_selected_width = Tab::GetMinimumSelectedSize().width();
-
-  *unselected_width = min_unselected_width;
-  *selected_width = min_selected_width;
-
-  if (tab_count == 0) {
-    // Return immediately to avoid divide-by-zero below.
-    return;
-  }
-
-  // Determine how much space we can actually allocate to tabs.
-  int available_width = (available_width_for_tabs_ < 0) ?
-      tab_area_width() : available_width_for_tabs_;
-  if (pinned_tab_count > 0) {
-    available_width -=
-        pinned_tab_count * (Tab::GetPinnedWidth() + kTabHorizontalOffset);
-    tab_count -= pinned_tab_count;
-    if (tab_count == 0) {
-      *selected_width = *unselected_width = Tab::GetStandardSize().width();
-      return;
-    }
-    // Account for gap between the last pinned tab and first non-pinned tab.
-    available_width -= kPinnedToNonPinnedGap;
-  }
-
-  // Calculate the desired tab widths by dividing the available space into equal
-  // portions.  Don't let tabs get larger than the "standard width" or smaller
-  // than the minimum width for each type, respectively.
-  const int total_offset = kTabHorizontalOffset * (tab_count - 1);
-  const double desired_tab_width = std::min((static_cast<double>(
-      available_width - total_offset) / static_cast<double>(tab_count)),
-      static_cast<double>(Tab::GetStandardSize().width()));
-  *unselected_width = std::max(desired_tab_width, min_unselected_width);
-  *selected_width = std::max(desired_tab_width, min_selected_width);
-
-  // When there are multiple tabs, we'll have one selected and some unselected
-  // tabs.  If the desired width was between the minimum sizes of these types,
-  // try to shrink the tabs with the smaller minimum.  For example, if we have
-  // a strip of width 10 with 4 tabs, the desired width per tab will be 2.5.  If
-  // selected tabs have a minimum width of 4 and unselected tabs have a minimum
-  // width of 1, the above code would set *unselected_width = 2.5,
-  // *selected_width = 4, which results in a total width of 11.5.  Instead, we
-  // want to set *unselected_width = 2, *selected_width = 4, for a total width
-  // of 10.
-  if (tab_count > 1) {
-    if (desired_tab_width < min_selected_width) {
-      // Unselected width = (total width - selected width) / (num_tabs - 1)
-      *unselected_width = std::max(static_cast<double>(
-          available_width - total_offset - min_selected_width) /
-          static_cast<double>(tab_count - 1), min_unselected_width);
-    }
-  }
-}
-
 void TabStrip::ResizeLayoutTabs() {
   // We've been called back after the TabStrip has been emptied out (probably
   // just prior to the window being destroyed). We need to do nothing here or
@@ -2222,15 +2328,13 @@ gfx::Rect TabStrip::GetDropBounds(int drop_index,
                                   bool* is_beneath) {
   DCHECK_NE(drop_index, -1);
   int center_x;
+  const int tab_overlap = GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
   if (drop_index < tab_count()) {
     Tab* tab = tab_at(drop_index);
-    if (drop_before)
-      center_x = tab->x() - (kTabHorizontalOffset / 2);
-    else
-      center_x = tab->x() + (tab->width() / 2);
+    center_x = tab->x() + ((drop_before ? tab_overlap : tab->width()) / 2);
   } else {
     Tab* last_tab = tab_at(drop_index - 1);
-    center_x = last_tab->x() + last_tab->width() + (kTabHorizontalOffset / 2);
+    center_x = last_tab->x() + last_tab->width() - (tab_overlap / 2);
   }
 
   // Mirror the center point if necessary.
@@ -2370,70 +2474,53 @@ void TabStrip::PrepareForAnimation() {
 }
 
 void TabStrip::GenerateIdealBounds() {
-  int new_tab_y = 0;
+  if (tab_count() == 0)
+    return;  // Should only happen during creation/destruction, ignore.
 
-  if (touch_layout_) {
-    if (tabs_.view_size() == 0)
-      return;
+  if (!touch_layout_) {
+    const int available_width = (available_width_for_tabs_ < 0)
+                                    ?  GetTabAreaWidth()
+                                    : available_width_for_tabs_;
+    const std::vector<gfx::Rect> tabs_bounds =
+        CalculateBounds(GetTabSizeInfo(), GetPinnedTabCount(), tab_count(),
+                        controller_->GetActiveIndex(), available_width,
+                        &current_active_width_, &current_inactive_width_);
+    DCHECK_EQ(static_cast<size_t>(tab_count()), tabs_bounds.size());
 
-    int new_tab_x = tabs_.ideal_bounds(tabs_.view_size() - 1).right() +
-        kNewTabButtonHorizontalOffset;
-    newtab_button_bounds_.set_origin(gfx::Point(new_tab_x, new_tab_y));
-    return;
+    for (size_t i = 0; i < tabs_bounds.size(); ++i)
+      tabs_.set_ideal_bounds(i, tabs_bounds[i]);
   }
 
-  GetDesiredTabWidths(tab_count(), GetPinnedTabCount(),
-                      &current_unselected_width_, &current_selected_width_);
-
-  // NOTE: This currently assumes a tab's height doesn't differ based on
-  // selected state or the number of tabs in the strip!
-  int tab_height = Tab::GetStandardSize().height();
-  int first_non_pinned_index = 0;
-  double tab_x = GenerateIdealBoundsForPinnedTabs(&first_non_pinned_index);
-  for (int i = first_non_pinned_index; i < tab_count(); ++i) {
-    Tab* tab = tab_at(i);
-    DCHECK(!tab->data().pinned);
-    double tab_width =
-        tab->IsActive() ? current_selected_width_ : current_unselected_width_;
-    double end_of_tab = tab_x + tab_width;
-    int rounded_tab_x = Round(tab_x);
-    tabs_.set_ideal_bounds(
-        i,
-        gfx::Rect(rounded_tab_x, 0, Round(end_of_tab) - rounded_tab_x,
-                  tab_height));
-    tab_x = end_of_tab + kTabHorizontalOffset;
-  }
-
-  // Update bounds of new tab button.
-  int new_tab_x;
-  if ((Tab::GetStandardSize().width() - Round(current_unselected_width_)) > 1 &&
-      !in_tab_close_) {
-    // We're shrinking tabs, so we need to anchor the New Tab button to the
-    // right edge of the TabStrip's bounds, rather than the right edge of the
-    // right-most Tab, otherwise it'll bounce when animating.
-    new_tab_x = width() - newtab_button_bounds_.width();
-  } else {
-    new_tab_x = Round(tab_x - kTabHorizontalOffset) +
-        kNewTabButtonHorizontalOffset;
-  }
-  newtab_button_bounds_.set_origin(gfx::Point(new_tab_x, new_tab_y));
+  const int new_tab_x = tabs_.ideal_bounds(tabs_.view_size() - 1).right() -
+                        GetLayoutConstant(TABSTRIP_NEW_TAB_BUTTON_OVERLAP);
+  const int old_max_x = newtab_button_bounds_.right();
+  newtab_button_bounds_.set_origin(gfx::Point(new_tab_x, 0));
+  if (newtab_button_bounds_.right() != old_max_x)
+    FOR_EACH_OBSERVER(TabStripObserver, observers_, TabStripMaxXChanged(this));
 }
 
 int TabStrip::GenerateIdealBoundsForPinnedTabs(int* first_non_pinned_index) {
-  int next_x = 0;
-  int pinned_width = Tab::GetPinnedWidth();
-  int tab_height = Tab::GetStandardSize().height();
-  int index = 0;
-  for (; index < tab_count() && tab_at(index)->data().pinned; ++index) {
-    tabs_.set_ideal_bounds(index,
-                           gfx::Rect(next_x, 0, pinned_width, tab_height));
-    next_x += pinned_width + kTabHorizontalOffset;
-  }
-  if (index > 0 && index < tab_count())
-    next_x += kPinnedToNonPinnedGap;
+  const int num_pinned_tabs = GetPinnedTabCount();
+
   if (first_non_pinned_index)
-    *first_non_pinned_index = index;
-  return next_x;
+    *first_non_pinned_index = num_pinned_tabs;
+
+  if (num_pinned_tabs == 0)
+    return 0;
+
+  std::vector<gfx::Rect> tab_bounds(tab_count());
+  CalculateBoundsForPinnedTabs(GetTabSizeInfo(), num_pinned_tabs, tab_count(),
+                               &tab_bounds);
+  for (int i = 0; i < num_pinned_tabs; ++i)
+    tabs_.set_ideal_bounds(i, tab_bounds[i]);
+  return (num_pinned_tabs < tab_count())
+             ? tab_bounds[num_pinned_tabs].x()
+             : tab_bounds[num_pinned_tabs - 1].right() -
+                   GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
+}
+
+int TabStrip::GetTabAreaWidth() const {
+  return width() - GetNewTabButtonWidth();
 }
 
 void TabStrip::StartResizeLayoutAnimation() {
@@ -2456,12 +2543,12 @@ void TabStrip::StartMouseInitiatedRemoveTabAnimation(int model_index) {
   // The user initiated the close. We want to persist the bounds of all the
   // existing tabs, so we manually shift ideal_bounds then animate.
   Tab* tab_closing = tab_at(model_index);
-  int delta = tab_closing->width() + kTabHorizontalOffset;
+  int delta = tab_closing->width() - GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
   // If the tab being closed is a pinned tab next to a non-pinned tab, be sure
   // to add the extra padding.
   DCHECK_LT(model_index, tab_count() - 1);
   if (tab_closing->data().pinned && !tab_at(model_index + 1)->data().pinned)
-    delta += kPinnedToNonPinnedGap;
+    delta += kPinnedToNonPinnedOffset;
 
   for (int i = model_index + 1; i < tab_count(); ++i) {
     gfx::Rect bounds = ideal_bounds(i);
@@ -2474,7 +2561,8 @@ void TabStrip::StartMouseInitiatedRemoveTabAnimation(int model_index) {
   // the new tab button should stay where it is.
   newtab_button_bounds_.set_x(std::min(
       width() - newtab_button_bounds_.width(),
-      ideal_bounds(tab_count() - 1).right() + kNewTabButtonHorizontalOffset));
+      ideal_bounds(tab_count() - 1).right() -
+          GetLayoutConstant(TABSTRIP_NEW_TAB_BUTTON_OVERLAP)));
 
   PrepareForAnimation();
 
@@ -2509,8 +2597,9 @@ int TabStrip::GetStartXForNormalTabs() const {
   int pinned_tab_count = GetPinnedTabCount();
   if (pinned_tab_count == 0)
     return 0;
-  return pinned_tab_count * (Tab::GetPinnedWidth() + kTabHorizontalOffset) +
-      kPinnedToNonPinnedGap;
+  const int overlap = GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
+  return pinned_tab_count * (Tab::GetPinnedWidth() - overlap) +
+         kPinnedToNonPinnedOffset;
 }
 
 Tab* TabStrip::FindTabForEvent(const gfx::Point& point) {
@@ -2576,15 +2665,15 @@ void TabStrip::SwapLayoutIfNecessary() {
     return;
 
   if (needs_touch) {
-    gfx::Size tab_size(Tab::GetMinimumSelectedSize());
+    gfx::Size tab_size(Tab::GetMinimumActiveSize());
     tab_size.set_width(Tab::GetTouchWidth());
     touch_layout_.reset(new StackedTabStripLayout(
                             tab_size,
-                            kTabHorizontalOffset,
+                            GetLayoutConstant(TABSTRIP_TAB_OVERLAP),
                             kStackedPadding,
                             kMaxStackedCount,
                             &tabs_));
-    touch_layout_->SetWidth(tab_area_width());
+    touch_layout_->SetWidth(GetTabAreaWidth());
     // This has to be after SetWidth() as SetWidth() is going to reset the
     // bounds of the pinned tabs (since StackedTabStripLayout doesn't yet know
     // how many pinned tabs there are).
@@ -2611,10 +2700,9 @@ bool TabStrip::NeedsTouchLayout() const {
   int normal_count = tab_count() - pinned_tab_count;
   if (normal_count <= 1 || normal_count == pinned_tab_count)
     return false;
-  int x = GetStartXForNormalTabs();
-  int available_width = tab_area_width() - x;
-  return (Tab::GetTouchWidth() * normal_count +
-          kTabHorizontalOffset * (normal_count - 1)) > available_width;
+  const int overlap = GetLayoutConstant(TABSTRIP_TAB_OVERLAP);
+  return (Tab::GetTouchWidth() * normal_count - overlap * (normal_count - 1)) >
+      GetTabAreaWidth() - GetStartXForNormalTabs();
 }
 
 void TabStrip::SetResetToShrinkOnExit(bool value) {
@@ -2643,9 +2731,15 @@ void TabStrip::ButtonPressed(views::Button* sender, const ui::Event& event) {
     if (event.IsMouseEvent()) {
       const ui::MouseEvent& mouse = static_cast<const ui::MouseEvent&>(event);
       if (mouse.IsOnlyMiddleMouseButton()) {
-        base::string16 clipboard_text = GetClipboardText();
-        if (!clipboard_text.empty())
-          controller()->CreateNewTabWithLocation(clipboard_text);
+        if (ui::Clipboard::IsSupportedClipboardType(
+            ui::CLIPBOARD_TYPE_SELECTION)) {
+          ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
+          CHECK(clipboard);
+          base::string16 clipboard_text;
+          clipboard->ReadText(ui::CLIPBOARD_TYPE_SELECTION, &clipboard_text);
+          if (!clipboard_text.empty())
+            controller()->CreateNewTabWithLocation(clipboard_text);
+        }
         return;
       }
     }

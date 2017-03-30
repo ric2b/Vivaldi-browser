@@ -1,0 +1,309 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+component("blimp_client") {
+  sources = [
+    "blimp_client_export.h",
+    "blimp_client_switches.cc",
+    "blimp_client_switches.h",
+    "blimp_startup.cc",
+    "blimp_startup.h",
+    "compositor/blimp_compositor.cc",
+    "compositor/blimp_compositor.h",
+    "compositor/blimp_context_provider.cc",
+    "compositor/blimp_context_provider.h",
+    "compositor/blimp_layer_tree_settings.cc",
+    "compositor/blimp_layer_tree_settings.h",
+    "compositor/blimp_output_surface.cc",
+    "compositor/blimp_output_surface.h",
+    "compositor/test/dummy_layer_driver.cc",
+    "compositor/test/dummy_layer_driver.h",
+    "input/blimp_input_handler_wrapper.cc",
+    "input/blimp_input_handler_wrapper.h",
+    "input/blimp_input_manager.cc",
+    "input/blimp_input_manager.h",
+    "session/blimp_client_session.cc",
+    "session/blimp_client_session.h",
+    "session/navigation_feature.cc",
+    "session/navigation_feature.h",
+    "session/render_widget_feature.cc",
+    "session/render_widget_feature.h",
+    "session/tab_control_feature.cc",
+    "session/tab_control_feature.h",
+  ]
+
+  defines = [ "BLIMP_CLIENT_IMPLEMENTATION=1" ]
+
+  public_deps = [
+    "//ui/events",
+  ]
+
+  deps = [
+    "//base",
+    "//blimp/common:blimp_common",
+    "//blimp/common/proto",
+    "//blimp/net:blimp_net",
+    "//cc",
+    "//cc/proto",
+    "//gpu/command_buffer/client:gl_in_process_context",
+    "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/skia_bindings",
+    "//net",
+    "//ui/events/blink",
+    "//ui/events/gestures/blink",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+    "//url:url",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "session/navigation_feature_unittest.cc",
+    "session/render_widget_feature_unittest.cc",
+    "session/tab_control_feature_unittest.cc",
+  ]
+
+  deps = [
+    ":blimp_client",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//blimp/common:blimp_common",
+    "//blimp/common/proto",
+    "//blimp/net:blimp_net",
+    "//blimp/net:test_support",
+    "//cc/proto",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+if (is_linux && !is_chromeos && use_x11) {
+  executable("blimp_shell") {
+    sources = [
+      "linux/blimp_display_manager.cc",
+      "linux/blimp_display_manager.h",
+      "linux/blimp_main.cc",
+      "session/blimp_client_session_linux.cc",
+      "session/blimp_client_session_linux.h",
+    ]
+
+    deps = [
+      ":blimp_client",
+      "//base",
+      "//blimp/net:blimp_net",
+      "//net",
+      "//ui/events/platform/x11",
+      "//ui/platform_window/x11",
+    ]
+
+    public_configs = [ "//build/config/linux:x11" ]
+    public_deps = [
+      "//ui/events/platform/x11",
+    ]
+  }
+}
+
+if (is_android) {
+  manifest_package = "org.chromium.blimp"
+  blimp_apk_manifest = "$target_gen_dir/blimp_apk_manifest/AndroidManifest.xml"
+  blimp_test_apk_manifest =
+      "$target_gen_dir/blimp_test_apk_manifest/AndroidManifest.xml"
+
+  jinja_variables = [ "manifest_package=$manifest_package" ]
+
+  jinja_template("blimp_apk_manifest") {
+    input = "android/AndroidManifest.xml.jinja2"
+    output = blimp_apk_manifest
+    variables = jinja_variables
+  }
+
+  jinja_template("blimp_test_apk_manifest") {
+    input = "android/javatests/AndroidManifest.xml.jinja2"
+    output = blimp_test_apk_manifest
+    variables = jinja_variables
+  }
+
+  generate_jni("jni_headers") {
+    sources = [
+      "android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
+      "android/java/src/org/chromium/blimp/BlimpView.java",
+      "android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
+      "android/java/src/org/chromium/blimp/session/TabControlFeature.java",
+      "android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
+    ]
+
+    jni_package = "blimp"
+  }
+
+  android_resources("blimp_java_resources") {
+    resource_dirs = [ "android/java/res" ]
+    deps = [
+      ":blimp_strings_grd",
+    ]
+    custom_package = "org.chromium.blimp"
+  }
+
+  java_strings_grd("blimp_strings_grd") {
+    grd_file = "android/java/strings/android_blimp_strings.grd"
+    outputs = [
+      "values-am/android_blimp_strings.xml",
+      "values-ar/android_blimp_strings.xml",
+      "values-bg/android_blimp_strings.xml",
+      "values-ca/android_blimp_strings.xml",
+      "values-cs/android_blimp_strings.xml",
+      "values-da/android_blimp_strings.xml",
+      "values-de/android_blimp_strings.xml",
+      "values-el/android_blimp_strings.xml",
+      "values/android_blimp_strings.xml",
+      "values-en-rGB/android_blimp_strings.xml",
+      "values-es/android_blimp_strings.xml",
+      "values-es-rUS/android_blimp_strings.xml",
+      "values-fa/android_blimp_strings.xml",
+      "values-fi/android_blimp_strings.xml",
+      "values-tl/android_blimp_strings.xml",
+      "values-fr/android_blimp_strings.xml",
+      "values-hi/android_blimp_strings.xml",
+      "values-hr/android_blimp_strings.xml",
+      "values-hu/android_blimp_strings.xml",
+      "values-in/android_blimp_strings.xml",
+      "values-it/android_blimp_strings.xml",
+      "values-iw/android_blimp_strings.xml",
+      "values-ja/android_blimp_strings.xml",
+      "values-ko/android_blimp_strings.xml",
+      "values-lt/android_blimp_strings.xml",
+      "values-lv/android_blimp_strings.xml",
+      "values-nl/android_blimp_strings.xml",
+      "values-nb/android_blimp_strings.xml",
+      "values-pl/android_blimp_strings.xml",
+      "values-pt-rBR/android_blimp_strings.xml",
+      "values-pt-rPT/android_blimp_strings.xml",
+      "values-ro/android_blimp_strings.xml",
+      "values-ru/android_blimp_strings.xml",
+      "values-sk/android_blimp_strings.xml",
+      "values-sl/android_blimp_strings.xml",
+      "values-sr/android_blimp_strings.xml",
+      "values-sv/android_blimp_strings.xml",
+      "values-sw/android_blimp_strings.xml",
+      "values-th/android_blimp_strings.xml",
+      "values-tr/android_blimp_strings.xml",
+      "values-uk/android_blimp_strings.xml",
+      "values-vi/android_blimp_strings.xml",
+      "values-zh-rCN/android_blimp_strings.xml",
+      "values-zh-rTW/android_blimp_strings.xml",
+    ]
+  }
+
+  android_library("blimp_java") {
+    deps = [
+      ":blimp_java_resources",
+      "//base:base_java",
+
+      # TODO(dtrainor): Remove the ui_java target once no more Android Toast
+      # notifications are used.
+      "//ui/android:ui_java",
+      google_play_services_library,
+    ]
+
+    java_files = [
+      "android/java/src/org/chromium/blimp/auth/RetryingTokenSource.java",
+      "android/java/src/org/chromium/blimp/auth/TokenSource.java",
+      "android/java/src/org/chromium/blimp/auth/TokenSourceImpl.java",
+      "android/java/src/org/chromium/blimp/BlimpApplication.java",
+      "android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
+      "android/java/src/org/chromium/blimp/BlimpRendererActivity.java",
+      "android/java/src/org/chromium/blimp/BlimpView.java",
+      "android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
+      "android/java/src/org/chromium/blimp/session/TabControlFeature.java",
+      "android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
+      "android/java/src/org/chromium/blimp/toolbar/UrlBar.java",
+    ]
+  }
+
+  android_library("blimp_test_java") {
+    testonly = true
+
+    deps = [
+      ":blimp_java",
+      ":blimp_java_resources",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      google_play_services_library,
+    ]
+
+    java_files = [
+      "android/javatests/src/org/chromium/blimp/auth/MockTokenSource.java",
+      "android/javatests/src/org/chromium/blimp/auth/RetryingTokenSourceTest.java",
+    ]
+  }
+
+  shared_library("blimp_client_android") {
+    deps = [
+      ":blimp_client",
+      ":jni_headers",
+      "//base",
+      "//blimp/common/proto",
+      "//blimp/net:blimp_net",
+      "//skia",
+      "//ui/gfx/geometry",
+      "//ui/gl",
+      "//url:url",
+    ]
+
+    sources = [
+      "android/blimp_jni_registrar.cc",
+      "android/blimp_jni_registrar.h",
+      "android/blimp_library_loader.cc",
+      "android/blimp_library_loader.h",
+      "android/blimp_view.cc",
+      "android/blimp_view.h",
+      "android/toolbar.cc",
+      "android/toolbar.h",
+      "compositor/blimp_compositor_android.cc",
+      "compositor/blimp_compositor_android.h",
+      "session/blimp_client_session_android.cc",
+      "session/blimp_client_session_android.h",
+      "session/tab_control_feature_android.cc",
+      "session/tab_control_feature_android.h",
+    ]
+
+    libs = [ "android" ]
+  }
+
+  android_apk("blimp_apk") {
+    deps = [
+      ":blimp_apk_manifest",
+      ":blimp_client_android",
+      ":blimp_java",
+      ":blimp_java_resources",
+      "//base:base_java",
+      google_play_services_resources,
+    ]
+    apk_name = "Blimp"
+    android_manifest = blimp_apk_manifest
+    native_libs = [ "libblimp_client_android.so" ]
+  }
+
+  instrumentation_test_apk("blimp_test_apk") {
+    apk_name = "BlimpTest"
+    apk_under_test = ":blimp_apk"
+    android_manifest = blimp_test_apk_manifest
+    deps = [
+      ":blimp_test_apk_manifest",
+      ":blimp_test_java",
+      google_play_services_resources,
+    ]
+  }
+}

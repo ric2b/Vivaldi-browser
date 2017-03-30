@@ -13,8 +13,8 @@
 
 #include "ppapi/c/pp_instance.h"
 #include "ppapi/c/pp_module.h"
-#include "ppapi/c/pp_size.h"
 #include "ppapi/c/pp_rect.h"
+#include "ppapi/c/pp_size.h"
 #include "ppapi/c/pp_var.h"
 #include "ppapi/c/ppb_core.h"
 #include "ppapi/c/ppb_graphics_2d.h"

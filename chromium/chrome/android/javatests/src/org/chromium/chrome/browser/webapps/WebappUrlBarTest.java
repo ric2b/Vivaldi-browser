@@ -9,7 +9,8 @@ import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.chrome.browser.ssl.ConnectionSecurityLevel;
+import org.chromium.chrome.browser.ShortcutSource;
+import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content_public.common.ScreenOrientationValues;
 
 /**
@@ -22,9 +23,12 @@ public class WebappUrlBarTest extends WebappActivityTestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
+        startWebappActivity();
 
-        WebappInfo mockInfo = WebappInfo.create(WEBAPP_ID, WEBAPP_URL, null, null,
-                ScreenOrientationValues.DEFAULT, ShortcutHelper.SOURCE_UNKNOWN);
+        WebappInfo mockInfo = WebappInfo.create(WEBAPP_ID, WEBAPP_URL, null, null, null,
+                ScreenOrientationValues.DEFAULT, ShortcutSource.UNKNOWN,
+                ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING,
+                ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, false);
         getActivity().getWebappInfo().copy(mockInfo);
         mUrlBar = getActivity().getUrlBarForTests();
     }
@@ -33,7 +37,7 @@ public class WebappUrlBarTest extends WebappActivityTestBase {
     @MediumTest
     @Feature({"Webapps"})
     public void testUrlDisplay() {
-        final String scheme = "somescheme://";
+        final String scheme = "https://";
         final String host = "lorem.com";
         final String path = "/stuff/and/things.html";
         final String url = scheme + host + path;
@@ -46,7 +50,7 @@ public class WebappUrlBarTest extends WebappActivityTestBase {
                 ConnectionSecurityLevel.SECURITY_ERROR};
 
         for (int i : securityLevels) {
-            // http://crbug.com/297249
+            // TODO(palmer): http://crbug.com/297249
             if (i == ConnectionSecurityLevel.SECURITY_POLICY_WARNING) continue;
             mUrlBar.update(url, i);
 

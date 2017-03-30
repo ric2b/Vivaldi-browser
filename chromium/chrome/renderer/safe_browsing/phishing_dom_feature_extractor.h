@@ -12,8 +12,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -22,10 +22,6 @@ class GURL;
 
 namespace blink {
 class WebElement;
-}
-
-namespace content {
-class RenderView;
 }
 
 namespace safe_browsing {
@@ -38,23 +34,21 @@ class PhishingDOMFeatureExtractor {
   // argument is true if extraction was successful, false otherwise.
   typedef base::Callback<void(bool)> DoneCallback;
 
-  // Creates a PhishingDOMFeatureExtractor for the specified RenderView.
-  // The PhishingDOMFeatureExtrator should be destroyed prior to destroying
-  // the RenderView.  |clock| is used for timing feature extractor operations,
-  // and may be mocked for testing.  The caller maintains ownership of the
-  // clock.
-  PhishingDOMFeatureExtractor(content::RenderView* render_view,
-                              FeatureExtractorClock* clock);
+  // Creates a PhishingDOMFeatureExtractor instance.
+  // |clock| is used for timing feature extractor operations, and may be
+  // mocked for testing.  The caller maintains ownership of the clock.
+  explicit PhishingDOMFeatureExtractor(FeatureExtractorClock* clock);
   ~PhishingDOMFeatureExtractor();
 
-  // Begins extracting features into the given FeatureMap for the page
-  // currently loaded in this object's RenderView.  To avoid blocking the
-  // render thread for too long, the feature extractor may run in several
-  // chunks of work, posting a task to the current MessageLoop to continue
-  // processing.  Once feature extraction is complete, |done_callback|
-  // is run on the current thread.  PhishingDOMFeatureExtractor takes
-  // ownership of the callback.
-  void ExtractFeatures(FeatureMap* features, const DoneCallback& done_callback);
+  // Begins extracting features into the given FeatureMap for the page.
+  // To avoid blocking the render thread for too long, the feature extractor
+  // may run in several chunks of work, posting a task to the current
+  // MessageLoop to continue processing.  Once feature extraction is complete,
+  // |done_callback| is run on the current thread.  PhishingDOMFeatureExtractor
+  // takes ownership of the callback.
+  void ExtractFeatures(blink::WebDocument document,
+                       FeatureMap* features,
+                       const DoneCallback& done_callback);
 
   // Cancels any pending feature extraction.  The DoneCallback will not be run.
   // Must be called if there is a feature extraction in progress when the page
@@ -116,15 +110,18 @@ class PhishingDOMFeatureExtractor {
   // Given a URL, checks whether the domain is different from the domain of
   // the current frame's URL.  If so, stores the domain in |domain| and returns
   // true, otherwise returns false.
-  bool IsExternalDomain(const GURL& url, std::string* domain) const;
+  virtual bool IsExternalDomain(const GURL& url, std::string* domain) const;
+
+  // Given a partial URL, extend it to a full url based on the current frame's
+  // URL.
+  virtual blink::WebURL CompleteURL(const blink::WebElement& element,
+                                    const blink::WebString& partial_url);
 
   // Called once all frames have been processed to compute features from the
   // PageFeatureState and add them to |features_|.  See features.h for a
   // description of which features are computed.
   void InsertFeatures();
 
-  // Non-owned pointer to the view that we will extract features from.
-  content::RenderView* render_view_;
 
   // Non-owned pointer to our clock.
   FeatureExtractorClock* clock_;

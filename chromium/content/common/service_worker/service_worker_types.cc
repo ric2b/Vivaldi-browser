@@ -8,6 +8,8 @@ namespace content {
 
 const char kServiceWorkerRegisterErrorPrefix[] =
     "Failed to register a ServiceWorker: ";
+const char kServiceWorkerUpdateErrorPrefix[] =
+    "Failed to update a ServiceWorker: ";
 const char kServiceWorkerUnregisterErrorPrefix[] =
     "Failed to unregister a ServiceWorkerRegistration: ";
 const char kServiceWorkerGetRegistrationErrorPrefix[] =
@@ -19,12 +21,13 @@ const char kFetchScriptError[] =
 
 ServiceWorkerFetchRequest::ServiceWorkerFetchRequest()
     : mode(FETCH_REQUEST_MODE_NO_CORS),
+      is_main_resource_load(false),
       request_context_type(REQUEST_CONTEXT_TYPE_UNSPECIFIED),
       frame_type(REQUEST_CONTEXT_FRAME_TYPE_NONE),
       blob_size(0),
       credentials_mode(FETCH_CREDENTIALS_MODE_OMIT),
-      is_reload(false) {
-}
+      redirect_mode(FetchRedirectMode::FOLLOW_MODE),
+      is_reload(false) {}
 
 ServiceWorkerFetchRequest::ServiceWorkerFetchRequest(
     const GURL& url,
@@ -33,6 +36,7 @@ ServiceWorkerFetchRequest::ServiceWorkerFetchRequest(
     const Referrer& referrer,
     bool is_reload)
     : mode(FETCH_REQUEST_MODE_NO_CORS),
+      is_main_resource_load(false),
       request_context_type(REQUEST_CONTEXT_TYPE_UNSPECIFIED),
       frame_type(REQUEST_CONTEXT_FRAME_TYPE_NONE),
       url(url),
@@ -41,8 +45,8 @@ ServiceWorkerFetchRequest::ServiceWorkerFetchRequest(
       blob_size(0),
       referrer(referrer),
       credentials_mode(FETCH_CREDENTIALS_MODE_OMIT),
-      is_reload(is_reload) {
-}
+      redirect_mode(FetchRedirectMode::FOLLOW_MODE),
+      is_reload(is_reload) {}
 
 ServiceWorkerFetchRequest::~ServiceWorkerFetchRequest() {}
 
@@ -60,7 +64,7 @@ ServiceWorkerResponse::ServiceWorkerResponse(
     blink::WebServiceWorkerResponseType response_type,
     const ServiceWorkerHeaderMap& headers,
     const std::string& blob_uuid,
-    uint64 blob_size,
+    uint64_t blob_size,
     const GURL& stream_url,
     blink::WebServiceWorkerResponseError error)
     : url(url),
@@ -71,8 +75,7 @@ ServiceWorkerResponse::ServiceWorkerResponse(
       blob_uuid(blob_uuid),
       blob_size(blob_size),
       stream_url(stream_url),
-      error(error) {
-}
+      error(error) {}
 
 ServiceWorkerResponse::~ServiceWorkerResponse() {}
 

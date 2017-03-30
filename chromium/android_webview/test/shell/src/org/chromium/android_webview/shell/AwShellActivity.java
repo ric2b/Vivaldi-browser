@@ -10,7 +10,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.view.ActionMode;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -21,6 +20,7 @@ import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.WebChromeClient;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -38,11 +38,11 @@ import org.chromium.android_webview.AwDevToolsServer;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.test.AwTestContainerView;
 import org.chromium.android_webview.test.NullContentsClient;
+import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
-import org.chromium.content.browser.SelectActionMode;
-import org.chromium.content.browser.SelectActionModeCallback;
-import org.chromium.content.browser.SelectActionModeCallback.ActionHandler;
-import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.base.Log;
+import org.chromium.base.TraceEvent;
+import org.chromium.content.app.ContentApplication;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
 
@@ -53,6 +53,7 @@ import java.net.URISyntaxException;
  * This is a lightweight activity for tests that only require WebView functionality.
  */
 public class AwShellActivity extends Activity {
+    private static final String TAG = "cr.AwShellActivity";
     private static final String PREFERENCES_NAME = "AwShellPrefs";
     private static final String INITIAL_URL = "about:blank";
     private AwBrowserContext mBrowserContext;
@@ -72,6 +73,18 @@ public class AwShellActivity extends Activity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        AwShellResourceProvider.registerResources(this);
+
+        ContentApplication.initCommandLine(this);
+        waitForDebuggerIfNeeded();
+
+        AwBrowserProcess.loadLibrary(this);
+
+        if (CommandLine.getInstance().hasSwitch(AwShellSwitches.ENABLE_ATRACE)) {
+            Log.e(TAG, "Enabling Android trace.");
+            TraceEvent.setATraceEnabled(true);
+        }
 
         setContentView(R.layout.testshell_activity);
 
@@ -93,7 +106,7 @@ public class AwShellActivity extends Activity {
             startupUrl = INITIAL_URL;
         }
 
-        mAwTestContainerView.getAwContents().loadUrl(new LoadUrlParams(startupUrl));
+        mAwTestContainerView.getAwContents().loadUrl(startupUrl);
         AwContents.setShouldDownloadFavicons();
         mUrlTextView.setText(startupUrl);
 
@@ -104,6 +117,15 @@ public class AwShellActivity extends Activity {
                 AwContentsStatics.setDataReductionProxyEnabled(true);
             }
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        if (mDevToolsServer != null) {
+            mDevToolsServer.destroy();
+            mDevToolsServer = null;
+        }
+        super.onDestroy();
     }
 
     private AwTestContainerView createAwTestContainerView() {
@@ -150,20 +172,16 @@ public class AwShellActivity extends Activity {
             }
 
             @Override
-            public SelectActionMode startActionMode(
-                    View view, ActionHandler actionHandler, boolean floating) {
-                if (floating) return null;
-                ActionMode.Callback callback =
-                        new SelectActionModeCallback(view.getContext(), actionHandler);
-                ActionMode actionMode = view.startActionMode(callback);
-                return actionMode != null ? new SelectActionMode(actionMode) : null;
+            public void onGeolocationPermissionsShowPrompt(String origin,
+                    GeolocationPermissions.Callback callback) {
+                callback.invoke(origin, false, false);
             }
         };
 
         SharedPreferences sharedPreferences =
                 getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE);
         if (mBrowserContext == null) {
-            mBrowserContext = new AwBrowserContext(sharedPreferences);
+            mBrowserContext = new AwBrowserContext(sharedPreferences, getApplicationContext());
         }
         final AwSettings awSettings = new AwSettings(this /*context*/,
                 false /*isAccessFromFileURLsGrantedByDefault*/, false /*supportsLegacyQuirks*/);
@@ -223,7 +241,7 @@ public class AwShellActivity extends Activity {
                 } catch (URISyntaxException e) {
                     // Ignore syntax errors.
                 }
-                mAwTestContainerView.getAwContents().loadUrl(new LoadUrlParams(url));
+                mAwTestContainerView.getAwContents().loadUrl(url);
                 mUrlTextView.clearFocus();
                 setKeyboardVisibilityForUrl(false);
                 mAwTestContainerView.requestFocus();
@@ -275,5 +293,13 @@ public class AwShellActivity extends Activity {
         }
 
         return super.onKeyUp(keyCode, event);
+    }
+
+    private void waitForDebuggerIfNeeded() {
+        if (CommandLine.getInstance().hasSwitch(BaseSwitches.WAIT_FOR_JAVA_DEBUGGER)) {
+            Log.e(TAG, "Waiting for Java debugger to connect...");
+            android.os.Debug.waitForDebugger();
+            Log.e(TAG, "Java debugger connected. Resuming execution.");
+        }
     }
 }

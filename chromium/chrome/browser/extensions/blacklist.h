@@ -12,11 +12,12 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "chrome/browser/safe_browsing/database_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/safe_browsing_db/database_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/blacklist_state.h"
@@ -53,12 +54,13 @@ class Blacklist : public KeyedService,
   class ScopedDatabaseManagerForTest {
    public:
     explicit ScopedDatabaseManagerForTest(
-        scoped_refptr<SafeBrowsingDatabaseManager> database_manager);
+        scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+            database_manager);
 
     ~ScopedDatabaseManagerForTest();
 
    private:
-    scoped_refptr<SafeBrowsingDatabaseManager> original_;
+    scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> original_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedDatabaseManagerForTest);
   };
@@ -116,8 +118,10 @@ class Blacklist : public KeyedService,
  private:
   // Use via ScopedDatabaseManagerForTest.
   static void SetDatabaseManager(
-      scoped_refptr<SafeBrowsingDatabaseManager> database_manager);
-  static scoped_refptr<SafeBrowsingDatabaseManager> GetDatabaseManager();
+      scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+          database_manager);
+  static scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+      GetDatabaseManager();
 
   // content::NotificationObserver
   void Observe(int type,

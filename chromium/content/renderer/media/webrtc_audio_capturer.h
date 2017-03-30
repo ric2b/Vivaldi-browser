@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
@@ -129,7 +130,7 @@ class CONTENT_EXPORT WebRtcAudioCapturer
                int audio_delay_milliseconds,
                double volume,
                bool key_pressed) override;
-  void OnCaptureError() override;
+  void OnCaptureError(const std::string& message) override;
 
   // Initializes the default audio capturing source using the provided render
   // frame id and device information. Return true if success, otherwise false.

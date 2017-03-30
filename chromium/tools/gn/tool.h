@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "tools/gn/substitution_list.h"
 #include "tools/gn/substitution_pattern.h"
 
@@ -21,7 +21,8 @@ class Tool {
 
   enum PrecompiledHeaderType {
     PCH_NONE = 0,
-    PCH_MSVC = 1
+    PCH_GCC = 1,
+    PCH_MSVC = 2
   };
 
   Tool();

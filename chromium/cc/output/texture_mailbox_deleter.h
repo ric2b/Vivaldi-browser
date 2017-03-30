@@ -5,12 +5,17 @@
 #ifndef CC_OUTPUT_TEXTURE_MAILBOX_DELETER_H_
 #define CC_OUTPUT_TEXTURE_MAILBOX_DELETER_H_
 
+#include <vector>
+
 #include "base/memory/weak_ptr.h"
 #include "cc/base/cc_export.h"
-#include "cc/base/scoped_ptr_vector.h"
 
 namespace base {
 class SingleThreadTaskRunner;
+}
+
+namespace gpu {
+struct SyncToken;
 }
 
 namespace cc {
@@ -40,11 +45,11 @@ class CC_EXPORT TextureMailboxDeleter {
   // Runs the |impl_callback| to delete the texture and removes the callback
   // from the |impl_callbacks_| list.
   void RunDeleteTextureOnImplThread(SingleReleaseCallback* impl_callback,
-                                    uint32 sync_point,
+                                    const gpu::SyncToken& sync_token,
                                     bool is_lost);
 
   scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner_;
-  ScopedPtrVector<SingleReleaseCallback> impl_callbacks_;
+  std::vector<scoped_ptr<SingleReleaseCallback>> impl_callbacks_;
   base::WeakPtrFactory<TextureMailboxDeleter> weak_ptr_factory_;
 };
 

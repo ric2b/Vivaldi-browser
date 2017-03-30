@@ -4,6 +4,9 @@
 
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/bind.h"
@@ -20,6 +23,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/sys_info.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
@@ -80,6 +84,11 @@ const std::string GetTabUrl(RenderWidgetHost* rwh) {
 // written, or -1 on error.
 // TODO(satorux): Move this to file_util.
 int AppendFile(const base::FilePath& file_path, const char* data, int size) {
+  // Appending boot times to (probably) a symlink in /tmp is a security risk for
+  // developers with chromeos=1 builds.
+  if (!base::SysInfo::IsRunningOnChromeOS())
+    return -1;
+
   FILE* file = base::OpenFile(file_path, "a");
   if (!file)
     return -1;
@@ -107,7 +116,7 @@ static const base::FilePath::CharType kDiskPrefix[] = FPL("disk-");
 // Name of the time that Chrome's main() is called.
 static const base::FilePath::CharType kChromeMain[] = FPL("chrome-main");
 // Delay in milliseconds before writing the login times to disk.
-static const int64 kLoginTimeWriteDelayMs = 3000;
+static const int64_t kLoginTimeWriteDelayMs = 3000;
 
 // Names of login stats files.
 static const base::FilePath::CharType kLoginSuccess[] = FPL("login-success");

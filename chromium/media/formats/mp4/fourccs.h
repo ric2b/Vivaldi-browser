@@ -7,11 +7,17 @@
 
 #include <string>
 
+#include "media/media_features.h"
+
 namespace media {
 namespace mp4 {
 
 enum FourCC {
   FOURCC_NULL = 0,
+#if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
+  FOURCC_AC3 = 0x61632d33,   // "ac-3"
+  FOURCC_EAC3 = 0x65632d33,  // "ec-3"
+#endif
   FOURCC_AVC1 = 0x61766331,
   FOURCC_AVC3 = 0x61766333,
   FOURCC_AVCC = 0x61766343,
@@ -31,6 +37,11 @@ enum FourCC {
   FOURCC_FTYP = 0x66747970,
   FOURCC_HDLR = 0x68646c72,
   FOURCC_HINT = 0x68696e74,
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+  FOURCC_HEV1 = 0x68657631,
+  FOURCC_HVC1 = 0x68766331,
+  FOURCC_HVCC = 0x68766343,
+#endif
   FOURCC_IODS = 0x696f6473,
   FOURCC_MDAT = 0x6d646174,
   FOURCC_MDHD = 0x6d646864,

@@ -70,6 +70,7 @@ component("wm") {
     "wm_export.h",
   ]
 
+  configs += [ "//build/config:precompiled_headers" ]
   defines = [ "WM_IMPLEMENTATION" ]
 
   deps = [
@@ -80,9 +81,9 @@ component("wm") {
     "//ui/base/ime",
     "//ui/compositor",
     "//ui/events",
+    "//ui/events:events_base",
     "//ui/events/devices",
     "//ui/events/platform",
-    "//ui/events:events_base",
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -91,6 +92,16 @@ component("wm") {
 
   if (use_x11) {
     configs += [ "//build/config/linux:x11" ]
+  }
+
+  if (is_android) {
+    sources -= [
+      "core/nested_accelerator_controller.cc",
+      "core/nested_accelerator_controller.h",
+      "core/nested_accelerator_delegate.h",
+      "core/nested_accelerator_dispatcher.cc",
+      "core/nested_accelerator_dispatcher.h",
+    ]
   }
 }
 
@@ -113,6 +124,15 @@ static_library("test_support") {
   ]
 }
 
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("wm_unittests_run") {
+  testonly = true
+  deps = [
+    ":wm_unittests",
+  ]
+}
+
 test("wm_unittests") {
   sources = [
     "core/capture_controller_unittest.cc",
@@ -122,10 +142,12 @@ test("wm_unittests") {
     "core/image_grid_unittest.cc",
     "core/nested_accelerator_controller_unittest.cc",
     "core/shadow_controller_unittest.cc",
+    "core/shadow_unittest.cc",
     "core/transient_window_manager_unittest.cc",
     "core/transient_window_stacking_client_unittest.cc",
     "core/visibility_controller_unittest.cc",
     "core/window_animations_unittest.cc",
+    "core/window_util_unittest.cc",
     "test/run_all_unittests.cc",
   ]
 
@@ -144,6 +166,11 @@ test("wm_unittests") {
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
-    "//ui/gl",
+    "//ui/gl:test_support",
+    "//ui/resources",
+  ]
+
+  data_deps = [
+    "//ui/resources:ui_test_pak_data",
   ]
 }

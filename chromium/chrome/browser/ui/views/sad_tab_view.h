@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_SAD_TAB_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_SAD_TAB_VIEW_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/sad_tab.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/link_listener.h"
@@ -74,6 +74,7 @@ class SadTabView : public chrome::SadTab,
   views::LabelButton* action_button_;
   views::Label* title_;
   views::StyledLabel* help_message_;
+  static int total_crashes_;
 
   DISALLOW_COPY_AND_ASSIGN(SadTabView);
 };

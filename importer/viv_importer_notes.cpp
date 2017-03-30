@@ -18,28 +18,27 @@
 #include "grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_resources.h"
+#include "importer/imported_notes_entry.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_importer.h"
-#include "importer/imported_notes_entry.h"
-
 #include "importer/viv_opera_reader.h"
 
-class OperaNotesReader : public OperaAdrFileReader
-{
+
+class OperaNotesReader : public OperaAdrFileReader {
 public:
   OperaNotesReader(){};
-  ~OperaNotesReader() override {};
+  ~OperaNotesReader() override{};
 
   void AddNote(std::vector<base::string16> &current_folder,
-    const base::DictionaryValue &entries,
-    bool is_folder,
-    base::string16 *item_name = NULL
-    );
+               const base::DictionaryValue &entries, bool is_folder,
+               base::string16 *item_name = NULL);
 
   const std::vector<ImportedNotesEntry> &Notes() const { return notes; }
 
 protected:
-  void HandleEntry(const std::string &category, const base::DictionaryValue &entries) override;
+  void HandleEntry(const std::string &category,
+                   const base::DictionaryValue &entries) override;
 
 private:
   std::vector<base::string16> current_folder;
@@ -48,30 +47,22 @@ private:
   DISALLOW_COPY_AND_ASSIGN(OperaNotesReader);
 };
 
-void OperaNotesReader::HandleEntry(const std::string &category, const base::DictionaryValue &entries)
-{
-  if (base::LowerCaseEqualsASCII(category, "folder"))
-  {
+void OperaNotesReader::HandleEntry(const std::string &category,
+                                   const base::DictionaryValue &entries) {
+  if (base::LowerCaseEqualsASCII(category, "folder")) {
     base::string16 foldername;
     AddNote(current_folder, entries, true, &foldername);
     current_folder.push_back(foldername);
-  }
-  else if (base::LowerCaseEqualsASCII(category, "note"))
-  {
+  } else if (base::LowerCaseEqualsASCII(category, "note")) {
     AddNote(current_folder, entries, false);
-  }
-  else if (category == "-")
-  {
+  } else if (category == "-") {
     current_folder.pop_back();
   }
 }
 
 void OperaNotesReader::AddNote(std::vector<base::string16> &current_folder,
-  const base::DictionaryValue &entries,
-  bool is_folder,
-  base::string16 *item_name
-  )
-{
+                               const base::DictionaryValue &entries,
+                               bool is_folder, base::string16 *item_name) {
   std::string temp;
   base::string16 wtemp;
   base::string16 title;
@@ -89,10 +80,11 @@ void OperaNotesReader::AddNote(std::vector<base::string16> &current_folder,
     wtemp = url;
 
   int line_end = -1;
-  for (base::string16::iterator it = wtemp.begin(); it != wtemp.end(); it++){
-    if (*it == 0x02) // LF is coded as 0x02 char in the file, to prevent linebreak. treat 2 sequential 0x02s as CRLF
-    {
-      if (it + 1 != wtemp.end() && it[1] == 0x02){
+  for (base::string16::iterator it = wtemp.begin(); it != wtemp.end(); it++) {
+    // LF is coded as 0x02 char in the file, to prevent
+    // linebreak. treat 2 sequential 0x02s as CRLF
+    if (*it == 0x02) {
+      if (it + 1 != wtemp.end() && it[1] == 0x02) {
         it = wtemp.erase(it);
       }
       *it = '\n';

@@ -5,7 +5,9 @@
 #ifndef CONTENT_CHILD_WEB_MEMORY_ALLOCATOR_DUMP_IMPL_H_
 #define CONTENT_CHILD_WEB_MEMORY_ALLOCATOR_DUMP_IMPL_H_
 
-#include "base/memory/scoped_vector.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "third_party/WebKit/public/platform/WebMemoryAllocatorDump.h"
 
 namespace base {
@@ -23,20 +25,16 @@ class WebMemoryAllocatorDumpImpl : public blink::WebMemoryAllocatorDump {
  public:
   explicit WebMemoryAllocatorDumpImpl(
       base::trace_event::MemoryAllocatorDump* memory_allocator_dump);
-  virtual ~WebMemoryAllocatorDumpImpl();
+  ~WebMemoryAllocatorDumpImpl() override;
 
   // blink::WebMemoryAllocatorDump implementation.
-  virtual void AddScalar(const char* name,
-                         const char* units,
-                         uint64 value);
-  virtual void AddScalarF(const char* name,
-                          const char* units,
-                          double value);
-  virtual void AddString(const char* name,
-                         const char* units,
-                         const blink::WebString& value);
+  void addScalar(const char* name, const char* units, uint64_t value) override;
+  void addScalarF(const char* name, const char* units, double value) override;
+  void addString(const char* name,
+                 const char* units,
+                 const blink::WebString& value) override;
 
-  virtual blink::WebMemoryAllocatorDumpGuid guid() const;
+  blink::WebMemoryAllocatorDumpGuid guid() const override;
 
  private:
   base::trace_event::MemoryAllocatorDump* memory_allocator_dump_;  // Not owned.

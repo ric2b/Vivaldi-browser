@@ -4,14 +4,18 @@
 
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
+#include "base/macros.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/filesystem_api_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/drive/file_system_core_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
@@ -119,7 +123,7 @@ FileDefinitionListConverter::FileDefinitionListConverter(
   // either, if the conversion is finished, or ResolveURL() is terminated, and
   // the callback not called because of shutdown.
   scoped_ptr<FileDefinitionListConverter> self_deleter(this);
-  ConvertNextIterator(self_deleter.Pass(), file_definition_list_.begin());
+  ConvertNextIterator(std::move(self_deleter), file_definition_list_.begin());
 }
 
 void FileDefinitionListConverter::ConvertNextIterator(
@@ -128,13 +132,12 @@ void FileDefinitionListConverter::ConvertNextIterator(
   if (iterator == file_definition_list_.end()) {
     // The converter object will be destroyed since |self_deleter| gets out of
     // scope.
-    callback_.Run(result_.Pass());
+    callback_.Run(std::move(result_));
     return;
   }
 
   if (!file_system_context_.get()) {
-    OnIteratorConverted(self_deleter.Pass(),
-                        iterator,
+    OnIteratorConverted(std::move(self_deleter), iterator,
                         CreateEntryDefinitionWithError(
                             base::File::FILE_ERROR_INVALID_OPERATION));
     return;
@@ -166,8 +169,7 @@ void FileDefinitionListConverter::OnResolvedURL(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (error != base::File::FILE_OK) {
-    OnIteratorConverted(self_deleter.Pass(),
-                        iterator,
+    OnIteratorConverted(std::move(self_deleter), iterator,
                         CreateEntryDefinitionWithError(error));
     return;
   }
@@ -198,7 +200,7 @@ void FileDefinitionListConverter::OnResolvedURL(
   root_virtual_path.AppendRelativePath(iterator->virtual_path, &full_path);
   entry_definition.full_path = full_path;
 
-  OnIteratorConverted(self_deleter.Pass(), iterator, entry_definition);
+  OnIteratorConverted(std::move(self_deleter), iterator, entry_definition);
 }
 
 void FileDefinitionListConverter::OnIteratorConverted(
@@ -206,7 +208,7 @@ void FileDefinitionListConverter::OnIteratorConverted(
     FileDefinitionList::const_iterator iterator,
     const EntryDefinition& entry_definition) {
   result_->push_back(entry_definition);
-  ConvertNextIterator(self_deleter.Pass(), ++iterator);
+  ConvertNextIterator(std::move(self_deleter), ++iterator);
 }
 
 // Helper function to return the converted definition entry directly, without
@@ -279,14 +281,14 @@ class ConvertSelectedFileInfoListToFileChooserFileInfoListImpl {
       base::FilePath virtual_path;
       if (!context->external_backend()->GetVirtualPath(
               selected_info_list[i].file_path, &virtual_path)) {
-        NotifyError(lifetime.Pass());
+        NotifyError(std::move(lifetime));
         return;
       }
 
       const GURL url = CreateIsolatedURLFromVirtualPath(
                            *context_, origin, virtual_path).ToGURL();
       if (!url.is_valid()) {
-        NotifyError(lifetime.Pass());
+        NotifyError(std::move(lifetime));
         return;
       }
 
@@ -310,7 +312,7 @@ class ConvertSelectedFileInfoListToFileChooserFileInfoListImpl {
       return;
     }
 
-    NotifyComplete(lifetime.Pass());
+    NotifyComplete(std::move(lifetime));
   }
 
   ~ConvertSelectedFileInfoListToFileChooserFileInfoListImpl() {
@@ -343,17 +345,18 @@ class ConvertSelectedFileInfoListToFileChooserFileInfoListImpl {
     }
 
     if (!it->file_system_url.is_valid()) {
-      FillMetadataOnIOThread(lifetime.Pass(), it + 1);
+      FillMetadataOnIOThread(std::move(lifetime), it + 1);
       return;
     }
 
     context_->operation_runner()->GetMetadata(
         context_->CrackURL(it->file_system_url),
+        storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
+            storage::FileSystemOperation::GET_METADATA_FIELD_SIZE |
+            storage::FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
         base::Bind(&ConvertSelectedFileInfoListToFileChooserFileInfoListImpl::
                        OnGotMetadataOnIOThread,
-                   base::Unretained(this),
-                   base::Passed(&lifetime),
-                   it));
+                   base::Unretained(this), base::Passed(&lifetime), it));
   }
 
   // Callback invoked after GetMetadata.
@@ -377,7 +380,7 @@ class ConvertSelectedFileInfoListToFileChooserFileInfoListImpl {
     it->length = file_info.size;
     it->modification_time = file_info.last_modified;
     it->is_directory = file_info.is_directory;
-    FillMetadataOnIOThread(lifetime.Pass(), it + 1);
+    FillMetadataOnIOThread(std::move(lifetime), it + 1);
   }
 
   // Returns a result to the |callback_|.
@@ -554,6 +557,7 @@ void CheckIfDirectoryExists(
 void GetMetadataForPath(
     scoped_refptr<storage::FileSystemContext> file_system_context,
     const base::FilePath& entry_path,
+    int fields,
     const storage::FileSystemOperationRunner::GetMetadataCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -568,7 +572,7 @@ void GetMetadataForPath(
       base::Bind(
           base::IgnoreResult(&storage::FileSystemOperationRunner::GetMetadata),
           file_system_context->operation_runner()->AsWeakPtr(), internal_url,
-          google_apis::CreateRelayCallback(callback)));
+          fields, google_apis::CreateRelayCallback(callback)));
 }
 
 storage::FileSystemURL CreateIsolatedURLFromVirtualPath(

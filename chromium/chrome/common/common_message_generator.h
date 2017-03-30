@@ -9,16 +9,13 @@
 #include "chrome/common/mac/app_shim_messages.h"
 #include "chrome/common/prerender_messages.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/common/safe_browsing/safebrowsing_messages.h"
 #include "chrome/common/tts_messages.h"
 
 #if defined(ENABLE_EXTENSIONS)
 #include "chrome/common/cast_messages.h"
 #include "chrome/common/extensions/chrome_extension_messages.h"
 #include "chrome/common/extensions/chrome_utility_extensions_messages.h"
-#endif
-
-#if defined(ENABLE_MDNS)
-#include "chrome/common/local_discovery/local_discovery_messages.h"
 #endif
 
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -37,6 +34,3 @@
 #include "chrome/common/media/webrtc_logging_messages.h"
 #endif
 
-#if defined(SAFE_BROWSING_SERVICE)
-#include "chrome/common/safe_browsing/safebrowsing_messages.h"
-#endif

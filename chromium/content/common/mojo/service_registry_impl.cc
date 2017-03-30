@@ -4,14 +4,14 @@
 
 #include "content/common/mojo/service_registry_impl.h"
 
+#include <utility>
+
 #include "mojo/common/common_type_converters.h"
 
 namespace content {
 
 ServiceRegistryImpl::ServiceRegistryImpl()
-    : binding_(this), weak_factory_(this) {
-  binding_.set_error_handler(this);
-}
+    : binding_(this), weak_factory_(this) {}
 
 ServiceRegistryImpl::~ServiceRegistryImpl() {
   while (!pending_connects_.empty()) {
@@ -22,13 +22,15 @@ ServiceRegistryImpl::~ServiceRegistryImpl() {
 
 void ServiceRegistryImpl::Bind(
     mojo::InterfaceRequest<mojo::ServiceProvider> request) {
-  binding_.Bind(request.Pass());
+  binding_.Bind(std::move(request));
+  binding_.set_connection_error_handler(base::Bind(
+      &ServiceRegistryImpl::OnConnectionError, base::Unretained(this)));
 }
 
 void ServiceRegistryImpl::BindRemoteServiceProvider(
     mojo::ServiceProviderPtr service_provider) {
   CHECK(!remote_provider_);
-  remote_provider_ = service_provider.Pass();
+  remote_provider_ = std::move(service_provider);
   while (!pending_connects_.empty()) {
     remote_provider_->ConnectToService(
         mojo::String::From(pending_connects_.front().first),
@@ -55,8 +57,8 @@ void ServiceRegistryImpl::ConnectToRemoteService(
         std::make_pair(service_name.as_string(), handle.release()));
     return;
   }
-  remote_provider_->ConnectToService(mojo::String::From(service_name),
-                                     handle.Pass());
+  remote_provider_->ConnectToService(
+      mojo::String::From(service_name.as_string()), std::move(handle));
 }
 
 bool ServiceRegistryImpl::IsBound() const {
@@ -76,7 +78,14 @@ void ServiceRegistryImpl::ConnectToService(
   if (it == service_factories_.end())
     return;
 
-  it->second.Run(client_handle.Pass());
+  // It's possible and effectively unavoidable that under certain conditions
+  // an invalid handle may be received. Don't invoke the factory in that case.
+  if (!client_handle.is_valid()) {
+    DVLOG(2) << "Invalid pipe handle for " << name << " interface request.";
+    return;
+  }
+
+  it->second.Run(std::move(client_handle));
 }
 
 void ServiceRegistryImpl::OnConnectionError() {

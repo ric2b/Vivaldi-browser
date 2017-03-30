@@ -5,13 +5,16 @@
 #ifndef CHROME_BROWSER_CUSTOM_HANDLERS_PROTOCOL_HANDLER_REGISTRY_FACTORY_H_
 #define CHROME_BROWSER_CUSTOM_HANDLERS_PROTOCOL_HANDLER_REGISTRY_FACTORY_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
 class Profile;
 class ProtocolHandlerRegistry;
+
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 // Singleton that owns all ProtocolHandlerRegistrys and associates them with
 // Profiles. Listens for the Profile's destruction notification and cleans up
@@ -35,7 +38,7 @@ class ProtocolHandlerRegistryFactory
   bool ServiceIsNULLWhileTesting() const override;
 
  private:
-  friend struct DefaultSingletonTraits<ProtocolHandlerRegistryFactory>;
+  friend struct base::DefaultSingletonTraits<ProtocolHandlerRegistryFactory>;
 
   ProtocolHandlerRegistryFactory();
   ~ProtocolHandlerRegistryFactory() override;

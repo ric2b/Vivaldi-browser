@@ -6,16 +6,21 @@
 
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
-#include <algorithm>
+#include <IOKit/pwr_mgt/IOPMLib.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
+#include <algorithm>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "remoting/host/clipboard.h"
 #include "remoting/proto/internal.pb.h"
 #include "remoting/protocol/message_decoder.h"
@@ -33,12 +38,12 @@ void SetOrClearBit(uint64_t &value, uint64_t bit, bool set_bit) {
 
 void CreateAndPostKeyEvent(int keycode,
                            bool pressed,
-                           int flags,
+                           uint64_t flags,
                            const base::string16& unicode) {
   base::ScopedCFTypeRef<CGEventRef> eventRef(
       CGEventCreateKeyboardEvent(nullptr, keycode, pressed));
   if (eventRef) {
-    CGEventSetFlags(eventRef, flags);
+    CGEventSetFlags(eventRef, static_cast<CGEventFlags>(flags));
     if (!unicode.empty())
       CGEventKeyboardSetUnicodeString(eventRef, unicode.size(), &(unicode[0]));
     CGEventPost(kCGSessionEventTap, eventRef);
@@ -49,6 +54,10 @@ void CreateAndPostKeyEvent(int keycode,
 // added there will be a handy compilation error to remind us to remove this
 // definition.
 const int kVK_RightCommand = 0x36;
+
+// Determines the minimum amount of time between attempts to waken the display
+// in response to an input event.
+const int kWakeUpDisplayIntervalMs = 1000;
 
 using protocol::ClipboardEvent;
 using protocol::KeyEvent;
@@ -98,12 +107,15 @@ class InputInjectorMac : public InputInjector {
     friend class base::RefCountedThreadSafe<Core>;
     virtual ~Core();
 
+    void WakeUpDisplay();
+
     scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
     webrtc::DesktopVector mouse_pos_;
-    uint32 mouse_button_state_;
+    uint32_t mouse_button_state_;
     scoped_ptr<Clipboard> clipboard_;
-    CGEventFlags left_modifiers_;
-    CGEventFlags right_modifiers_;
+    uint64_t left_modifiers_;
+    uint64_t right_modifiers_;
+    base::TimeTicks last_time_display_woken_;
 
     DISALLOW_COPY_AND_ASSIGN(Core);
   };
@@ -144,7 +156,7 @@ void InputInjectorMac::InjectTouchEvent(const TouchEvent& event) {
 
 void InputInjectorMac::Start(
     scoped_ptr<protocol::ClipboardStub> client_clipboard) {
-  core_->Start(client_clipboard.Pass());
+  core_->Start(std::move(client_clipboard));
 }
 
 InputInjectorMac::Core::Core(
@@ -183,6 +195,8 @@ void InputInjectorMac::Core::InjectKeyEvent(const KeyEvent& event) {
   // HostEventDispatcher should filter events missing the pressed field.
   if (!event.has_pressed() || !event.has_usb_keycode())
     return;
+
+  WakeUpDisplay();
 
   int keycode =
       ui::KeycodeConverter::UsbKeycodeToNativeKeycode(event.usb_keycode());
@@ -225,15 +239,20 @@ void InputInjectorMac::Core::InjectKeyEvent(const KeyEvent& event) {
 
 void InputInjectorMac::Core::InjectTextEvent(const TextEvent& event) {
   DCHECK(event.has_text());
+
+  WakeUpDisplay();
+
   base::string16 text = base::UTF8ToUTF16(event.text());
 
   // Applications that ignore UnicodeString field will see the text event as
   // Space key.
-  CreateAndPostKeyEvent(kVK_Space, true, 0, text);
-  CreateAndPostKeyEvent(kVK_Space, false, 0, text);
+  CreateAndPostKeyEvent(kVK_Space, /*pressed=*/true, 0, text);
+  CreateAndPostKeyEvent(kVK_Space, /*pressed=*/false, 0, text);
 }
 
 void InputInjectorMac::Core::InjectMouseEvent(const MouseEvent& event) {
+  WakeUpDisplay();
+
   if (event.has_x() && event.has_y()) {
     // On multi-monitor systems (0,0) refers to the top-left of the "main"
     // display, whereas our coordinate scheme places (0,0) at the top-left of
@@ -324,7 +343,7 @@ void InputInjectorMac::Core::Start(
     return;
   }
 
-  clipboard_->Start(client_clipboard.Pass());
+  clipboard_->Start(std::move(client_clipboard));
 }
 
 void InputInjectorMac::Core::Stop() {
@@ -334,6 +353,34 @@ void InputInjectorMac::Core::Stop() {
   }
 
   clipboard_.reset();
+}
+
+void InputInjectorMac::Core::WakeUpDisplay() {
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (now - last_time_display_woken_ <
+      base::TimeDelta::FromMilliseconds(kWakeUpDisplayIntervalMs)) {
+    return;
+  }
+
+  last_time_display_woken_ = now;
+
+  // TODO(dcaiafa): Consolidate power management with webrtc::ScreenCapturer
+  // (crbug.com/535769)
+
+  // Normally one would want to create a power assertion and hold it for the
+  // duration of the session. An active power assertion prevents the display
+  // from going to sleep automatically, but it doesn't prevent the user from
+  // forcing it to sleep (e.g. by going to a hot corner). The display is only
+  // re-awaken at the moment the assertion is created.
+  IOPMAssertionID power_assertion_id = kIOPMNullAssertionID;
+  IOReturn result = IOPMAssertionCreateWithName(
+      CFSTR("UserIsActive"),
+      kIOPMAssertionLevelOn,
+      CFSTR("Chrome Remote Desktop connection active"),
+      &power_assertion_id);
+  if (result == kIOReturnSuccess) {
+    IOPMAssertionRelease(power_assertion_id);
+  }
 }
 
 InputInjectorMac::Core::~Core() {}

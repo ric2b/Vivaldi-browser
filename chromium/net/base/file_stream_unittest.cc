@@ -4,18 +4,21 @@
 
 #include "net/base/file_stream.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/sequenced_worker_pool_owner.h"
 #include "base/test/test_timeouts.h"
 #include "base/thread_task_runner_handle.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -116,7 +119,7 @@ TEST_F(FileStreamTest, UseFileHandle) {
 
   // Seek to the beginning of the file and read.
   scoped_ptr<FileStream> read_stream(
-      new FileStream(file.Pass(), base::ThreadTaskRunnerHandle::Get()));
+      new FileStream(std::move(file), base::ThreadTaskRunnerHandle::Get()));
   ASSERT_EQ(ERR_IO_PENDING, read_stream->Seek(0, callback64.callback()));
   ASSERT_EQ(0, callback64.WaitForResult());
   // Read into buffer and compare.
@@ -134,7 +137,7 @@ TEST_F(FileStreamTest, UseFileHandle) {
   file.Initialize(temp_file_path(), flags);
 
   scoped_ptr<FileStream> write_stream(
-      new FileStream(file.Pass(), base::ThreadTaskRunnerHandle::Get()));
+      new FileStream(std::move(file), base::ThreadTaskRunnerHandle::Get()));
   ASSERT_EQ(ERR_IO_PENDING, write_stream->Seek(0, callback64.callback()));
   ASSERT_EQ(0, callback64.WaitForResult());
   scoped_refptr<IOBufferWithSize> write_buffer = CreateTestDataBuffer();
@@ -557,7 +560,7 @@ class TestWriteReadCompletionCallback {
     result_ = *total_bytes_written_;
     have_result_ = true;
     if (waiting_for_result_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   int result_;
@@ -665,7 +668,7 @@ class TestWriteCloseCompletionCallback {
     result_ = *total_bytes_written_;
     have_result_ = true;
     if (waiting_for_result_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   int result_;
@@ -714,11 +717,10 @@ TEST_F(FileStreamTest, WriteClose) {
 }
 
 TEST_F(FileStreamTest, OpenAndDelete) {
-  scoped_refptr<base::SequencedWorkerPool> pool(
-      new base::SequencedWorkerPool(1, "StreamTest"));
+  base::SequencedWorkerPoolOwner pool_owner(1, "StreamTest");
 
   bool prev = base::ThreadRestrictions::SetIOAllowed(false);
-  scoped_ptr<FileStream> stream(new FileStream(pool.get()));
+  scoped_ptr<FileStream> stream(new FileStream(pool_owner.pool()));
   int flags = base::File::FLAG_OPEN | base::File::FLAG_WRITE |
               base::File::FLAG_ASYNC;
   TestCompletionCallback open_callback;
@@ -730,13 +732,11 @@ TEST_F(FileStreamTest, OpenAndDelete) {
   stream.reset();
 
   // Force an operation through the pool.
-  scoped_ptr<FileStream> stream2(new FileStream(pool.get()));
+  scoped_ptr<FileStream> stream2(new FileStream(pool_owner.pool()));
   TestCompletionCallback open_callback2;
   rv = stream2->Open(temp_file_path(), flags, open_callback2.callback());
   EXPECT_EQ(OK, open_callback2.GetResult(rv));
   stream2.reset();
-
-  pool->Shutdown();
 
   // open_callback won't be called.
   base::RunLoop().RunUntilIdle();
@@ -754,7 +754,7 @@ TEST_F(FileStreamTest, WriteError) {
   ASSERT_TRUE(file.IsValid());
 
   scoped_ptr<FileStream> stream(
-      new FileStream(file.Pass(), base::ThreadTaskRunnerHandle::Get()));
+      new FileStream(std::move(file), base::ThreadTaskRunnerHandle::Get()));
 
   scoped_refptr<IOBuffer> buf = new IOBuffer(1);
   buf->data()[0] = 0;
@@ -779,7 +779,7 @@ TEST_F(FileStreamTest, ReadError) {
   ASSERT_TRUE(file.IsValid());
 
   scoped_ptr<FileStream> stream(
-      new FileStream(file.Pass(), base::ThreadTaskRunnerHandle::Get()));
+      new FileStream(std::move(file), base::ThreadTaskRunnerHandle::Get()));
 
   scoped_refptr<IOBuffer> buf = new IOBuffer(1);
   TestCompletionCallback callback;

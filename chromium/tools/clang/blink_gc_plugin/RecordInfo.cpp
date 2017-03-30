@@ -186,6 +186,16 @@ bool RecordInfo::IsEagerlyFinalized() {
   return is_eagerly_finalized_;
 }
 
+bool RecordInfo::IsGCRefCounted() {
+  if (!IsGCDerived())
+    return false;
+  for (const auto& gc_base : gc_base_names_) {
+    if (Config::IsGCRefCountedBase(gc_base))
+      return true;
+  }
+  return false;
+}
+
 bool RecordInfo::HasDefinition() {
   return record_->hasDefinition();
 }
@@ -353,26 +363,6 @@ bool RecordInfo::DeclaresLocalTraceMethod() {
     }
   }
   return is_declaring_local_trace_;
-}
-
-bool RecordInfo::IsGCMixinInstance() {
-  assert(IsGCDerived());
-  if (record_->isAbstract())
-    return false;
-
-  assert(!IsGCMixin());
-
-  // true iff the class derives from GCMixin and
-  // one or more other GC base classes.
-  bool seen_gc_mixin = false;
-  bool seen_gc_derived = false;
-  for (const auto& gc_base : gc_base_names_) {
-    if (Config::IsGCMixinBase(gc_base))
-      seen_gc_mixin = true;
-    else if (Config::IsGCBase(gc_base))
-      seen_gc_derived = true;
-  }
-  return seen_gc_derived && seen_gc_mixin;
 }
 
 // A (non-virtual) class is considered abstract in Blink if it has
@@ -592,9 +582,9 @@ Edge* RecordInfo::CreateEdge(const Type* type) {
     return 0;
   }
 
-  if (type->isPointerType()) {
+  if (type->isPointerType() || type->isReferenceType()) {
     if (Edge* ptr = CreateEdge(type->getPointeeType().getTypePtrOrNull()))
-      return new RawPtr(ptr, false);
+      return new RawPtr(ptr, false, type->isReferenceType());
     return 0;
   }
 
@@ -609,7 +599,7 @@ Edge* RecordInfo::CreateEdge(const Type* type) {
 
   if (Config::IsRawPtr(info->name()) && info->GetTemplateArgs(1, &args)) {
     if (Edge* ptr = CreateEdge(args[0]))
-      return new RawPtr(ptr, true);
+      return new RawPtr(ptr, true, false);
     return 0;
   }
 

@@ -8,17 +8,20 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/translate/language_combobox_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_model.h"
-#include "chrome/browser/ui/views/managed_full_screen_bubble_delegate_view.h"
+#include "chrome/browser/ui/translate/translate_bubble_test_utils.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 #include "components/translate/core/common/translate_errors.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/combobox/combobox_listener.h"
 #include "ui/views/controls/link_listener.h"
 
+class Browser;
 class PrefService;
 
 namespace views {
@@ -33,12 +36,21 @@ namespace ui {
 class SimpleComboboxModel;
 }
 
-class TranslateBubbleView : public ManagedFullScreenBubbleDelegateView,
+class TranslateBubbleView : public LocationBarBubbleDelegateView,
                             public views::ButtonListener,
                             public views::ComboboxListener,
                             public views::LinkListener,
                             public content::WebContentsObserver {
  public:
+  // Commands shown in the action-style combobox. The value corresponds to the
+  // position in the combobox menu. Gaps will become separators.
+  enum class DenialComboboxIndex {
+    DONT_TRANSLATE = 0,
+    NEVER_TRANSLATE_LANGUAGE = 1,
+    NEVER_TRANSLATE_SITE = 3,
+    MENU_SIZE = 4,
+  };
+
   ~TranslateBubbleView() override;
 
   // Shows the Translate bubble.
@@ -49,7 +61,7 @@ class TranslateBubbleView : public ManagedFullScreenBubbleDelegateView,
                          content::WebContents* web_contents,
                          translate::TranslateStep step,
                          translate::TranslateErrors::Type error_type,
-                         bool is_user_gesture);
+                         DisplayReason reason);
 
   // Closes the current bubble if existing.
   static void CloseBubble();
@@ -104,6 +116,7 @@ class TranslateBubbleView : public ManagedFullScreenBubbleDelegateView,
   };
 
   friend class TranslateBubbleViewTest;
+  friend void ::translate::test_utils::PressTranslate(::Browser*);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, TranslateButton);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, AdvancedLink);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, ShowOriginalButton);

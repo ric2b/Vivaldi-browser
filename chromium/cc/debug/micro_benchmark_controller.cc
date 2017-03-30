@@ -11,7 +11,6 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "cc/debug/invalidation_benchmark.h"
-#include "cc/debug/picture_record_benchmark.h"
 #include "cc/debug/rasterize_and_record_benchmark.h"
 #include "cc/debug/unittest_only_benchmark.h"
 #include "cc/trees/layer_tree_host.h"
@@ -28,27 +27,17 @@ scoped_ptr<MicroBenchmark> CreateBenchmark(
     scoped_ptr<base::Value> value,
     const MicroBenchmark::DoneCallback& callback) {
   if (name == "invalidation_benchmark") {
-    return make_scoped_ptr(new InvalidationBenchmark(value.Pass(), callback));
-  } else if (name == "picture_record_benchmark") {
-    return make_scoped_ptr(new PictureRecordBenchmark(value.Pass(), callback));
+    return make_scoped_ptr(
+        new InvalidationBenchmark(std::move(value), callback));
   } else if (name == "rasterize_and_record_benchmark") {
     return make_scoped_ptr(
-        new RasterizeAndRecordBenchmark(value.Pass(), callback));
+        new RasterizeAndRecordBenchmark(std::move(value), callback));
   } else if (name == "unittest_only_benchmark") {
-    return make_scoped_ptr(new UnittestOnlyBenchmark(value.Pass(), callback));
+    return make_scoped_ptr(
+        new UnittestOnlyBenchmark(std::move(value), callback));
   }
   return nullptr;
 }
-
-class IsDonePredicate {
- public:
-  typedef const MicroBenchmark* argument_type;
-  typedef bool result_type;
-
-  result_type operator()(argument_type benchmark) const {
-    return benchmark->IsDone();
-  }
-};
 
 }  // namespace
 
@@ -67,11 +56,11 @@ int MicroBenchmarkController::ScheduleRun(
     scoped_ptr<base::Value> value,
     const MicroBenchmark::DoneCallback& callback) {
   scoped_ptr<MicroBenchmark> benchmark =
-      CreateBenchmark(micro_benchmark_name, value.Pass(), callback);
+      CreateBenchmark(micro_benchmark_name, std::move(value), callback);
   if (benchmark.get()) {
     int id = GetNextIdAndIncrement();
     benchmark->set_id(id);
-    benchmarks_.push_back(benchmark.Pass());
+    benchmarks_.push_back(std::move(benchmark));
     host_->SetNeedsCommit();
     return id;
   }
@@ -88,36 +77,33 @@ int MicroBenchmarkController::GetNextIdAndIncrement() {
 
 bool MicroBenchmarkController::SendMessage(int id,
                                            scoped_ptr<base::Value> value) {
-  for (ScopedPtrVector<MicroBenchmark>::iterator it = benchmarks_.begin();
-       it != benchmarks_.end();
-       ++it) {
-    if ((*it)->id() == id)
-      return (*it)->ProcessMessage(value.Pass());
-  }
-  return false;
+  auto it = std::find_if(benchmarks_.begin(), benchmarks_.end(),
+                         [id](const scoped_ptr<MicroBenchmark>& benchmark) {
+                           return benchmark->id() == id;
+                         });
+  if (it == benchmarks_.end())
+    return false;
+  return (*it)->ProcessMessage(std::move(value));
 }
 
 void MicroBenchmarkController::ScheduleImplBenchmarks(
     LayerTreeHostImpl* host_impl) {
-  for (ScopedPtrVector<MicroBenchmark>::iterator it = benchmarks_.begin();
-       it != benchmarks_.end();
-       ++it) {
+  for (const auto& benchmark : benchmarks_) {
     scoped_ptr<MicroBenchmarkImpl> benchmark_impl;
-    if (!(*it)->ProcessedForBenchmarkImpl()) {
-      benchmark_impl = (*it)->GetBenchmarkImpl(main_controller_task_runner_);
+    if (!benchmark->ProcessedForBenchmarkImpl()) {
+      benchmark_impl =
+          benchmark->GetBenchmarkImpl(main_controller_task_runner_);
     }
 
     if (benchmark_impl.get())
-      host_impl->ScheduleMicroBenchmark(benchmark_impl.Pass());
+      host_impl->ScheduleMicroBenchmark(std::move(benchmark_impl));
   }
 }
 
 void MicroBenchmarkController::DidUpdateLayers() {
-  for (ScopedPtrVector<MicroBenchmark>::iterator it = benchmarks_.begin();
-       it != benchmarks_.end();
-       ++it) {
-    if (!(*it)->IsDone())
-      (*it)->DidUpdateLayers(host_);
+  for (const auto& benchmark : benchmarks_) {
+    if (!benchmark->IsDone())
+      benchmark->DidUpdateLayers(host_);
   }
 
   CleanUpFinishedBenchmarks();
@@ -125,7 +111,10 @@ void MicroBenchmarkController::DidUpdateLayers() {
 
 void MicroBenchmarkController::CleanUpFinishedBenchmarks() {
   benchmarks_.erase(
-      benchmarks_.partition(std::not1(IsDonePredicate())),
+      std::remove_if(benchmarks_.begin(), benchmarks_.end(),
+                     [](const scoped_ptr<MicroBenchmark>& benchmark) {
+                       return benchmark->IsDone();
+                     }),
       benchmarks_.end());
 }
 

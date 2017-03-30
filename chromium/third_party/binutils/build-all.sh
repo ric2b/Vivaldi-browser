@@ -22,7 +22,7 @@ if [ ! -d "$OUTPUTDIR" ]; then
 fi
 
 # Download the source
-VERSION=2.24
+VERSION=2.25
 wget -c http://ftp.gnu.org/gnu/binutils/binutils-$VERSION.tar.bz2
 
 # Verify the signature
@@ -36,21 +36,32 @@ if ! gpg --verify binutils-$VERSION.tar.bz2.sig; then
 fi
 
 
-if [ ! -d binutils-$VERSION ]; then
-  # Extract the source
-  tar jxf binutils-$VERSION.tar.bz2
+# Extract the source
+rm -rf binutils-$VERSION
+tar jxf binutils-$VERSION.tar.bz2
 
-  # Patch the source
-  (
-    cd binutils-$VERSION
-    patch -p1 < ../ehframe-race.patch
-    patch -p1 < ../unlock-thin.patch
-    patch -p1 < ../plugin-dso-fix.patch
-  )
-fi
+# Patch the source
+(
+  cd binutils-$VERSION
+  echo "unlock-thin.patch"
+  echo "=================================="
+  patch -p1 < ../unlock-thin.patch
+  echo "----------------------------------"
+  echo
+  echo "plugin-dso-fix.patch"
+  echo "=================================="
+  patch -p1 < ../plugin-dso-fix.patch
+  echo "----------------------------------"
+  echo
+  echo "long-plt.patch"
+  echo "=================================="
+  patch -p1 < ../long-plt.patch
+  echo "----------------------------------"
+  echo
+)
 
 for ARCH in i386 amd64; do
-  if [ ! -d lucid-chroot-$ARCH ]; then
+  if [ ! -d precise-chroot-$ARCH ]; then
     # Refresh sudo credentials
     sudo -v
 
@@ -61,11 +72,11 @@ for ARCH in i386 amd64; do
     sudo debootstrap \
         --arch=$ARCH \
         --include=build-essential,flex,bison \
-        lucid lucid-chroot-$ARCH
+        precise precise-chroot-$ARCH
     echo "============================="
   fi
 
-  BUILDDIR=lucid-chroot-$ARCH/build
+  BUILDDIR=precise-chroot-$ARCH/build
 
   # Clean up any previous failed build attempts inside chroot
   if [ -d "$BUILDDIR" ]; then
@@ -92,7 +103,7 @@ for ARCH in i386 amd64; do
   echo ""
   echo "Building binutils for $ARCH"
   LOGFILE="$OUTPUTDIR/build-$ARCH.log"
-  if ! sudo $PREFIX chroot lucid-chroot-$ARCH /build/build-one.sh /build/binutils-$VERSION > $LOGFILE 2>&1; then
+  if ! sudo $PREFIX chroot precise-chroot-$ARCH /build/build-one.sh /build/binutils-$VERSION > $LOGFILE 2>&1; then
     echo "Build failed! See $LOGFILE for details."
     exit 1
   fi

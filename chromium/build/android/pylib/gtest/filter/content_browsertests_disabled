@@ -30,27 +30,19 @@ DumpAccessibilityTreeTest.AccessibilityModalDialogInIframeOpened
 RendererAccessibilityTest.EventOnObjectNotInTree
 
 # http://crbug.com/187500
-RenderViewImplTest.*
+RenderViewImplTest.ImeComposition
+RenderViewImplTest.InsertCharacters
+RenderViewImplTest.OnHandleKeyboardEvent
+RenderViewImplTest.OnNavStateChanged
+# ZoomLevel is not used on Android
+RenderViewImplTest.ZoomLimit
 RendererAccessibilityTest.SendFullAccessibilityTreeOnReload
 RendererAccessibilityTest.HideAccessibilityObject
 RendererAccessibilityTest.ShowAccessibilityObject
-
-# http://crbug.com/215894
-DownloadContentTest.CancelInterruptedDownload
-DownloadContentTest.CancelResumingDownload
-DownloadContentTest.RemoveDownload
-DownloadContentTest.RemoveResumingDownload
-DownloadContentTest.ResumeInterruptedDownload
-DownloadContentTest.ResumeInterruptedDownloadNoRange
-DownloadContentTest.ResumeInterruptedDownloadNoVerifiers
-DownloadContentTest.ResumeInterruptedDownloadBadPrecondition
-DownloadContentTest.ResumeWithDeletedFile
+RendererAccessibilityTest.TextSelectionShouldSendRoot
 
 # http://crbug.com/386227
 IndexedDBBrowserTest.VersionChangeCrashResilience
-
-# http://crbug.com/386222
-IndexedDBBrowserTest.DoesntHangTest
 
 # http://crbug.com/233118
 IndexedDBBrowserTest.NullKeyPathPersistence

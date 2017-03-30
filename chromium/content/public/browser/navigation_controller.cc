@@ -5,6 +5,7 @@
 #include "content/public/browser/navigation_controller.h"
 
 #include "base/memory/ref_counted_memory.h"
+#include "build/build_config.h"
 
 namespace content {
 
@@ -18,10 +19,11 @@ NavigationController::LoadURLParams::LoadURLParams(const GURL& url)
       browser_initiated_post_data(nullptr),
       can_load_local_resources(false),
       should_replace_current_entry(false),
-      should_clear_history_list(false) {
 #if defined(OS_ANDROID)
-  intent_received_timestamp = 0;
+      intent_received_timestamp(0),
+      has_user_gesture(false),
 #endif
+      should_clear_history_list(false) {
 }
 
 NavigationController::LoadURLParams::~LoadURLParams() {
@@ -42,10 +44,11 @@ NavigationController::LoadURLParams::LoadURLParams(
       virtual_url_for_data_url(other.virtual_url_for_data_url),
       browser_initiated_post_data(other.browser_initiated_post_data),
       should_replace_current_entry(false),
-      should_clear_history_list(false) {
 #if defined(OS_ANDROID)
-  intent_received_timestamp = other.intent_received_timestamp;
+      intent_received_timestamp(other.intent_received_timestamp),
+      has_user_gesture(other.has_user_gesture),
 #endif
+      should_clear_history_list(false) {
 }
 
 NavigationController::LoadURLParams&
@@ -68,6 +71,7 @@ NavigationController::LoadURLParams::operator=(
   should_clear_history_list = other.should_clear_history_list;
 #if defined(OS_ANDROID)
   intent_received_timestamp = other.intent_received_timestamp;
+  has_user_gesture = other.has_user_gesture;
 #endif
 
   return *this;

@@ -4,8 +4,10 @@
 
 #include "build/build_config.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -17,7 +19,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/browser/dom_operation_notification_details.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -31,7 +32,6 @@
 #import "base/mac/mac_util.h"
 #endif
 
-using content::DomOperationNotificationDetails;
 using content::NavigationController;
 
 namespace {
@@ -113,13 +113,13 @@ class TestFinishObserver : public content::NotificationObserver {
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override {
     DCHECK(type == content::NOTIFICATION_DOM_OPERATION_RESPONSE);
-    content::Details<DomOperationNotificationDetails> dom_op_details(details);
+    content::Details<std::string> dom_op_result(details);
     // We might receive responses for other script execution, but we only
     // care about the test finished message.
-    if (dom_op_details->json == "\"FINISHED\"") {
+    if (*dom_op_result.ptr() == "\"FINISHED\"") {
       finished_ = true;
       if (waiting_)
-        base::MessageLoopForUI::current()->Quit();
+        base::MessageLoopForUI::current()->QuitWhenIdle();
     }
   }
 
@@ -355,7 +355,7 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, DISABLED_NormalKeyEvents) {
         "U 65 0 false false false false" } },
   };
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   GURL url = embedded_test_server()->GetURL(kTestingPage);
@@ -449,7 +449,7 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, MAYBE_CtrlKeyEvents) {
       "U 17 0 true false false false" }
   };
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   GURL url = embedded_test_server()->GetURL(kTestingPage);
@@ -495,7 +495,7 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, DISABLED_CommandKeyEvents) {
       "U 91 0 false false false true" }
   };
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   GURL url = embedded_test_server()->GetURL(kTestingPage);
@@ -595,7 +595,7 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, DISABLED_AccessKeys) {
 #endif
 #endif
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   GURL url = embedded_test_server()->GetURL(kTestingPage);
@@ -663,7 +663,7 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, DISABLED_AccessKeys) {
 #define MAYBE_ReservedAccelerators ReservedAccelerators
 #endif
 IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, MAYBE_ReservedAccelerators) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   GURL url = embedded_test_server()->GetURL(kTestingPage);
@@ -763,7 +763,7 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, EditorKeyBindings) {
       "U 17 0 true false false false" }
   };
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   GURL url = embedded_test_server()->GetURL(kTestingPage);
@@ -801,7 +801,7 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, DISABLED_PageUpDownKeys) {
       "U 34 0 false false false false" }
   };
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   GURL url = embedded_test_server()->GetURL(kTestingPage);
@@ -817,10 +817,11 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, DISABLED_PageUpDownKeys) {
   EXPECT_NO_FATAL_FAILURE(CheckTextBoxValue(tab_index, L"A", L""));
 }
 
-#if defined(OS_WIN)
 // AltKey is enabled only on Windows. See crbug.com/114537.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, DISABLED_FocusMenuBarByAltKey) {
+#if defined(OS_WIN)
+// If this flakes, disable and log details in http://crbug.com/523255.
+// TODO(sky): remove comment if proves stable and reenable other tests.
+IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, FocusMenuBarByAltKey) {
   static const KeyEventTestData kTestAltKey = {
     ui::VKEY_MENU, false, false, false, false,
     false, false, false, false, 2,
@@ -844,7 +845,7 @@ IN_PROC_BROWSER_TEST_F(BrowserKeyEventsTest, DISABLED_FocusMenuBarByAltKey) {
       "U 17 0 true false false false" }
   };
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   GURL url = embedded_test_server()->GetURL(kTestingPage);

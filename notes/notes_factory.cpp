@@ -12,22 +12,17 @@
 #include "notes/notes_model.h"
 #include "notes/notes_factory.h"
 
-namespace Vivaldi {
+namespace vivaldi {
 
-NotesModelFactory::NotesModelFactory() :
-	BrowserContextKeyedServiceFactory(
-		"Notes_Model",
-		BrowserContextDependencyManager::GetInstance())
-{
-}
+NotesModelFactory::NotesModelFactory()
+    : BrowserContextKeyedServiceFactory(
+          "Notes_Model", BrowserContextDependencyManager::GetInstance()) {}
 
-NotesModelFactory::~NotesModelFactory()
-{
-}
+NotesModelFactory::~NotesModelFactory() {}
 
 // static
-Notes_Model* NotesModelFactory::GetForProfile(Profile* profile) {
-  return static_cast<Notes_Model*>(
+Notes_Model *NotesModelFactory::GetForProfile(Profile *profile) {
+  return static_cast<Notes_Model *>(
       GetInstance()->GetServiceForBrowserContext(profile, true));
 }
 
@@ -39,13 +34,12 @@ Notes_Model* NotesModelFactory::GetForProfileIfExists(Profile* profile) {
 
 // static
 NotesModelFactory* NotesModelFactory::GetInstance() {
-  return Singleton<NotesModelFactory>::get();
+  return base::Singleton<NotesModelFactory>::get();
 }
 
-KeyedService* NotesModelFactory::BuildServiceInstanceFor(
-				content::BrowserContext* context) const
-{
-  Profile* profile = static_cast<Profile*>(context);
+KeyedService *NotesModelFactory::BuildServiceInstanceFor(
+    content::BrowserContext *context) const {
+  Profile *profile = static_cast<Profile *>(context);
   Notes_Model* notes_model = new Notes_Model(profile);
   notes_model->Load(StartupTaskRunnerServiceFactory::GetForProfile(profile)->
       GetBookmarkTaskRunner());
@@ -53,20 +47,15 @@ KeyedService* NotesModelFactory::BuildServiceInstanceFor(
 }
 
 void NotesModelFactory::RegisterProfilePrefs(
-				user_prefs::PrefRegistrySyncable* registry)
-{
+    user_prefs::PrefRegistrySyncable *registry) {}
+
+content::BrowserContext *NotesModelFactory::GetBrowserContextToUse(
+    content::BrowserContext *context) const {
+  return chrome::GetBrowserContextRedirectedInIncognito(context);
 }
 
-content::BrowserContext* NotesModelFactory::GetBrowserContextToUse(
-				content::BrowserContext* context) const
-{
-	return chrome::GetBrowserContextRedirectedInIncognito(context);
+bool NotesModelFactory::ServiceIsNULLWhileTesting() const {
+  return true;
 }
 
-bool NotesModelFactory::ServiceIsNULLWhileTesting() const
-{
-	return true;
-}
-
-
-}
+}  // namespace vivaldi

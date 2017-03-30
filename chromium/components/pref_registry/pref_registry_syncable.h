@@ -5,11 +5,13 @@
 #ifndef COMPONENTS_PREF_REGISTRY_PREF_REGISTRY_SYNCABLE_H_
 #define COMPONENTS_PREF_REGISTRY_PREF_REGISTRY_SYNCABLE_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/prefs/pref_registry_simple.h"
-#include "components/pref_registry/pref_registry_export.h"
 
 namespace base {
 class DictionaryValue;
@@ -36,14 +38,14 @@ namespace user_prefs {
 // logic which is only required to support pref registration after the
 // PrefService has been created which is only used by tests. We can remove this
 // entire class and those tests with some work.
-class PREF_REGISTRY_EXPORT PrefRegistrySyncable : public PrefRegistrySimple {
+class PrefRegistrySyncable : public PrefRegistrySimple {
  public:
   // Enum of flags used when registering preferences to determine if it should
   // be synced or not. These flags are mutually exclusive, only one of them
   // should ever be specified.
   //
   // Note: These must NOT overlap with PrefRegistry::PrefRegistrationFlags.
-  enum PrefRegistrationFlags : uint32 {
+  enum PrefRegistrationFlags : uint32_t {
     // The pref will be synced.
     SYNCABLE_PREF = 1 << 0,
 
@@ -54,7 +56,7 @@ class PREF_REGISTRY_EXPORT PrefRegistrySyncable : public PrefRegistrySimple {
     SYNCABLE_PRIORITY_PREF = 1 << 1,
   };
 
-  typedef base::Callback<void(const std::string& path, uint32 flags)>
+  typedef base::Callback<void(const std::string& path, uint32_t flags)>
       SyncableRegistrationCallback;
 
   PrefRegistrySyncable();
@@ -78,7 +80,7 @@ class PREF_REGISTRY_EXPORT PrefRegistrySyncable : public PrefRegistrySimple {
   // PrefRegistrySimple overrides.
   void OnPrefRegistered(const std::string& path,
                         base::Value* default_value,
-                        uint32 flags) override;
+                        uint32_t flags) override;
 
   SyncableRegistrationCallback callback_;
 

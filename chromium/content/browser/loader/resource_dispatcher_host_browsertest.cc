@@ -2,15 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/public/browser/resource_dispatcher_host.h"
+
+#include <utility>
+
+#include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
@@ -18,6 +26,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_content_browser_client.h"
@@ -28,6 +37,8 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/url_request/url_request_failed_job.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
+#include "net/url_request/url_request.h"
+#include "url/gurl.h"
 
 using base::ASCIIToUTF16;
 
@@ -55,11 +66,6 @@ class ResourceDispatcherHostBrowserTest : public ContentBrowserTest,
                          DownloadItem* item) override {
     if (!got_downloads_)
       got_downloads_ = !!manager->InProgressCount();
-  }
-
-  GURL GetMockURL(const std::string& file) {
-    return net::URLRequestMockHTTPJob::GetMockUrl(
-        base::FilePath().AppendASCII(file));
   }
 
   void CheckTitleTest(const GURL& url,
@@ -98,7 +104,7 @@ class ResourceDispatcherHostBrowserTest : public ContentBrowserTest,
 // Test title for content created by javascript window.open().
 // See http://crbug.com/5988
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, DynamicTitle1) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/dynamic1.html"));
   base::string16 title;
@@ -111,7 +117,7 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, DynamicTitle1) {
 // Test title for content created by javascript window.open().
 // See http://crbug.com/5988
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, DynamicTitle2) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/dynamic2.html"));
   base::string16 title;
@@ -123,26 +129,29 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, DynamicTitle2) {
 
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        SniffHTMLWithNoContentType) {
-  CheckTitleTest(GetMockURL("content-sniffer-test0.html"),
-                 "Content Sniffer Test 0");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-sniffer-test0.html"),
+      "Content Sniffer Test 0");
 }
 
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        RespectNoSniffDirective) {
-  CheckTitleTest(GetMockURL("nosniff-test.html"),
+  CheckTitleTest(net::URLRequestMockHTTPJob::GetMockUrl("nosniff-test.html"),
                  "mock.http/nosniff-test.html");
 }
 
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        DoNotSniffHTMLFromTextPlain) {
-  CheckTitleTest(GetMockURL("content-sniffer-test1.html"),
-                 "mock.http/content-sniffer-test1.html");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-sniffer-test1.html"),
+      "mock.http/content-sniffer-test1.html");
 }
 
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        DoNotSniffHTMLFromImageGIF) {
-  CheckTitleTest(GetMockURL("content-sniffer-test2.html"),
-                 "mock.http/content-sniffer-test2.html");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-sniffer-test2.html"),
+      "mock.http/content-sniffer-test2.html");
 }
 
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
@@ -150,25 +159,30 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
   // Make sure no downloads start.
   BrowserContext::GetDownloadManager(
       shell()->web_contents()->GetBrowserContext())->AddObserver(this);
-  CheckTitleTest(GetMockURL("content-sniffer-test3.html"),
-                 "Content Sniffer Test 3");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-sniffer-test3.html"),
+      "Content Sniffer Test 3");
   EXPECT_EQ(1u, Shell::windows().size());
   ASSERT_FALSE(got_downloads());
 }
 
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        ContentDispositionEmpty) {
-  CheckTitleTest(GetMockURL("content-disposition-empty.html"), "success");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-disposition-empty.html"),
+      "success");
 }
 
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        ContentDispositionInline) {
-  CheckTitleTest(GetMockURL("content-disposition-inline.html"), "success");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-disposition-inline.html"),
+      "success");
 }
 
 // Test for bug #1091358.
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, SyncXMLHttpRequest) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   NavigateToURL(
       shell(), embedded_test_server()->GetURL("/sync_xmlhttprequest.html"));
 
@@ -184,7 +198,7 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, SyncXMLHttpRequest) {
 // If this flakes, use http://crbug.com/62776.
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        SyncXMLHttpRequest_Disallowed) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   NavigateToURL(
       shell(),
       embedded_test_server()->GetURL("/sync_xmlhttprequest_disallowed.html"));
@@ -210,7 +224,7 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        MAYBE_SyncXMLHttpRequest_DuringUnload) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   BrowserContext::GetDownloadManager(
       shell()->web_contents()->GetBrowserContext())->AddObserver(this);
 
@@ -230,15 +244,16 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
 // Tests that onunload is run for cross-site requests.  (Bug 1114994)
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        DISABLED_CrossSiteOnunloadCookie) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url = embedded_test_server()->GetURL("/onunload_cookie.html");
   CheckTitleTest(url, "set cookie on unload");
 
   // Navigate to a new cross-site page, to dispatch unload event and set the
   // cookie.
-  CheckTitleTest(GetMockURL("content-sniffer-test0.html"),
-                 "Content Sniffer Test 0");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-sniffer-test0.html"),
+      "Content Sniffer Test 0");
 
   // Check that the cookie was set.
   EXPECT_EQ("onunloadCookie=foo", GetCookies(url));
@@ -249,7 +264,7 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
 // without network loads (e.g., about:blank, data URLs).
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        DISABLED_CrossSiteImmediateLoadOnunloadCookie) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url = embedded_test_server()->GetURL("/onunload_cookie.html");
   CheckTitleTest(url, "set cookie on unload");
@@ -275,7 +290,7 @@ scoped_ptr<net::test_server::HttpResponse> NoContentResponseHandler(
   scoped_ptr<net::test_server::BasicHttpResponse> http_response(
       new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_NO_CONTENT);
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 }  // namespace
@@ -284,7 +299,7 @@ scoped_ptr<net::test_server::HttpResponse> NoContentResponseHandler(
 // If this flakes use http://crbug.com/80596.
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        CrossSiteNoUnloadOn204) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // Start with a URL that sets a cookie in its unload handler.
   GURL url = embedded_test_server()->GetURL("/onunload_cookie.html");
@@ -328,8 +343,9 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
 
   // Navigate to a new cross-site page.  The browser should not wait around for
   // the old renderer's on{before}unload handlers to run.
-  CheckTitleTest(GetMockURL("content-sniffer-test0.html"),
-                 "Content Sniffer Test 0");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-sniffer-test0.html"),
+      "Content Sniffer Test 0");
 }
 
 // Tests that cross-site navigations work when the new page does not go through
@@ -337,8 +353,9 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        CrossSiteNavigationNonBuffered) {
   // Start with an HTTP page.
-  CheckTitleTest(GetMockURL("content-sniffer-test0.html"),
-                 "Content Sniffer Test 0");
+  CheckTitleTest(
+      net::URLRequestMockHTTPJob::GetMockUrl("content-sniffer-test0.html"),
+      "Content Sniffer Test 0");
 
   // Now load a file:// page, which does not use the BufferedEventHandler.
   // Make sure that the page loads and displays a title, and doesn't get stuck.
@@ -352,7 +369,7 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
 // away from the link doctor page.  (Bug 1235537)
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        DISABLED_CrossSiteNavigationErrorPage) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/onunload_cookie.html"));
   CheckTitleTest(url, "set cookie on unload");
@@ -397,7 +414,7 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        CrossSiteNavigationErrorPage2) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/title2.html"));
   CheckTitleTest(url, "Title Of Awesomeness");
@@ -428,7 +445,8 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
   //
   // If the redirect in #2 were not blocked, we'd also see a request
   // for http://mock.http:4000/title2.html, and the title would be different.
-  CheckTitleTest(GetMockURL("cross-origin-redirect-blocked.html"),
+  CheckTitleTest(net::URLRequestMockHTTPJob::GetMockUrl(
+                     "cross-origin-redirect-blocked.html"),
                  "Title Of More Awesomeness");
 }
 
@@ -459,7 +477,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleRedirectRequest(
   http_response->set_code(net::HTTP_FOUND);
   http_response->AddCustomHeader(
       "Location", request.relative_url.substr(request_path.length()));
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 }  // namespace
@@ -467,7 +485,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleRedirectRequest(
 // Test that we update the cookie policy URLs correctly when transferring
 // navigations.
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, CookiePolicy) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&HandleRedirectRequest, "/redirect?"));
 
@@ -511,7 +529,7 @@ class PageTransitionResourceDispatcherHostDelegate
 // when encountering a meta refresh tag.
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        PageTransitionClientRedirect) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   PageTransitionResourceDispatcherHostDelegate delegate(
       embedded_test_server()->GetURL("/title1.html"));
@@ -524,6 +542,217 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
 
   EXPECT_TRUE(
       delegate.page_transition() & ui::PAGE_TRANSITION_CLIENT_REDIRECT);
+}
+
+namespace {
+
+// Checks whether the given urls are requested, and that IsUsingLofi() returns
+// the appropriate value when the Lo-Fi state is set.
+class LoFiModeResourceDispatcherHostDelegate
+    : public ResourceDispatcherHostDelegate {
+ public:
+  LoFiModeResourceDispatcherHostDelegate(const GURL& main_frame_url,
+                                         const GURL& subresource_url,
+                                         const GURL& iframe_url)
+      : main_frame_url_(main_frame_url),
+        subresource_url_(subresource_url),
+        iframe_url_(iframe_url),
+        main_frame_url_seen_(false),
+        subresource_url_seen_(false),
+        iframe_url_seen_(false),
+        use_lofi_(false),
+        should_enable_lofi_mode_called_(false) {}
+
+  ~LoFiModeResourceDispatcherHostDelegate() override {}
+
+  // ResourceDispatcherHostDelegate implementation:
+  void RequestBeginning(net::URLRequest* request,
+                        ResourceContext* resource_context,
+                        AppCacheService* appcache_service,
+                        ResourceType resource_type,
+                        ScopedVector<ResourceThrottle>* throttles) override {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
+    if (request->url() != main_frame_url_ && request->url() != subresource_url_
+        && request->url() != iframe_url_)
+      return;
+    if (request->url() == main_frame_url_) {
+      EXPECT_FALSE(main_frame_url_seen_);
+      main_frame_url_seen_ = true;
+    } else if (request->url() == subresource_url_) {
+      EXPECT_TRUE(main_frame_url_seen_);
+      EXPECT_FALSE(subresource_url_seen_);
+      subresource_url_seen_ = true;
+    } else if (request->url() == iframe_url_) {
+      EXPECT_TRUE(main_frame_url_seen_);
+      EXPECT_FALSE(iframe_url_seen_);
+      iframe_url_seen_ = true;
+    }
+    EXPECT_EQ(use_lofi_, info->IsUsingLoFi());
+  }
+
+  void SetDelegate() {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    ResourceDispatcherHost::Get()->SetDelegate(this);
+  }
+
+  bool ShouldEnableLoFiMode(
+      const net::URLRequest& request,
+      content::ResourceContext* resource_context) override {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    EXPECT_FALSE(should_enable_lofi_mode_called_);
+    should_enable_lofi_mode_called_ = true;
+    EXPECT_EQ(main_frame_url_, request.url());
+    return use_lofi_;
+  }
+
+  void Reset(bool use_lofi) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    main_frame_url_seen_ = false;
+    subresource_url_seen_ = false;
+    iframe_url_seen_ = false;
+    use_lofi_ = use_lofi;
+    should_enable_lofi_mode_called_ = false;
+  }
+
+  void CheckResourcesRequested(bool should_enable_lofi_mode_called) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    EXPECT_EQ(should_enable_lofi_mode_called, should_enable_lofi_mode_called_);
+    EXPECT_TRUE(main_frame_url_seen_);
+    EXPECT_TRUE(subresource_url_seen_);
+    EXPECT_TRUE(iframe_url_seen_);
+  }
+
+ private:
+  const GURL main_frame_url_;
+  const GURL subresource_url_;
+  const GURL iframe_url_;
+
+  bool main_frame_url_seen_;
+  bool subresource_url_seen_;
+  bool iframe_url_seen_;
+  bool use_lofi_;
+  bool should_enable_lofi_mode_called_;
+
+  DISALLOW_COPY_AND_ASSIGN(LoFiModeResourceDispatcherHostDelegate);
+};
+
+}  // namespace
+
+class LoFiResourceDispatcherHostBrowserTest : public ContentBrowserTest {
+ public:
+  ~LoFiResourceDispatcherHostBrowserTest() override {}
+
+ protected:
+  void SetUpOnMainThread() override {
+    ContentBrowserTest::SetUpOnMainThread();
+
+    ASSERT_TRUE(embedded_test_server()->Start());
+
+    delegate_.reset(new LoFiModeResourceDispatcherHostDelegate(
+        embedded_test_server()->GetURL("/page_with_iframe.html"),
+        embedded_test_server()->GetURL("/image.jpg"),
+        embedded_test_server()->GetURL("/title1.html")));
+
+    content::BrowserThread::PostTask(
+           content::BrowserThread::IO,
+           FROM_HERE,
+           base::Bind(&LoFiModeResourceDispatcherHostDelegate::SetDelegate,
+                      base::Unretained(delegate_.get())));
+  }
+
+  void Reset(bool use_lofi) {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::Bind(&LoFiModeResourceDispatcherHostDelegate::Reset,
+                   base::Unretained(delegate_.get()), use_lofi));
+  }
+
+  void CheckResourcesRequested(
+      bool should_enable_lofi_mode_called) {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::Bind(
+            &LoFiModeResourceDispatcherHostDelegate::CheckResourcesRequested,
+            base::Unretained(delegate_.get()), should_enable_lofi_mode_called));
+  }
+
+ private:
+  scoped_ptr<LoFiModeResourceDispatcherHostDelegate> delegate_;
+};
+
+// Test that navigating with ShouldEnableLoFiMode returning true fetches the
+// resources with LOFI_ON.
+IN_PROC_BROWSER_TEST_F(LoFiResourceDispatcherHostBrowserTest,
+                       ShouldEnableLoFiModeOn) {
+  // Navigate with ShouldEnableLoFiMode returning true.
+  Reset(true);
+  NavigateToURLBlockUntilNavigationsComplete(
+      shell(), embedded_test_server()->GetURL("/page_with_iframe.html"), 1);
+  CheckResourcesRequested(true);
+}
+
+// Test that navigating with ShouldEnableLoFiMode returning false fetches the
+// resources with LOFI_OFF.
+IN_PROC_BROWSER_TEST_F(LoFiResourceDispatcherHostBrowserTest,
+                       ShouldEnableLoFiModeOff) {
+  // Navigate with ShouldEnableLoFiMode returning false.
+  NavigateToURLBlockUntilNavigationsComplete(
+      shell(), embedded_test_server()->GetURL("/page_with_iframe.html"), 1);
+  CheckResourcesRequested(true);
+}
+
+// Test that reloading calls ShouldEnableLoFiMode again and changes the Lo-Fi
+// state.
+IN_PROC_BROWSER_TEST_F(LoFiResourceDispatcherHostBrowserTest,
+                       ShouldEnableLoFiModeReload) {
+  // Navigate with ShouldEnableLoFiMode returning false.
+  NavigateToURLBlockUntilNavigationsComplete(
+      shell(), embedded_test_server()->GetURL("/page_with_iframe.html"), 1);
+  CheckResourcesRequested(true);
+
+  // Reload. ShouldEnableLoFiMode should be called.
+  Reset(true);
+  ReloadBlockUntilNavigationsComplete(shell(), 1);
+  CheckResourcesRequested(true);
+}
+
+// Test that navigating backwards calls ShouldEnableLoFiMode again and changes
+// the Lo-Fi state.
+IN_PROC_BROWSER_TEST_F(LoFiResourceDispatcherHostBrowserTest,
+                       ShouldEnableLoFiModeNavigateBackThenForward) {
+  // Navigate with ShouldEnableLoFiMode returning false.
+  NavigateToURLBlockUntilNavigationsComplete(
+      shell(), embedded_test_server()->GetURL("/page_with_iframe.html"), 1);
+  CheckResourcesRequested(true);
+
+  // Go to a different page.
+  NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
+
+  // Go back with ShouldEnableLoFiMode returning true.
+  Reset(true);
+  TestNavigationObserver tab_observer(shell()->web_contents(), 1);
+  shell()->GoBackOrForward(-1);
+  tab_observer.Wait();
+  CheckResourcesRequested(true);
+}
+
+// Test that reloading with Lo-Fi disabled doesn't call ShouldEnableLoFiMode and
+// already has LOFI_OFF.
+IN_PROC_BROWSER_TEST_F(LoFiResourceDispatcherHostBrowserTest,
+                       ShouldEnableLoFiModeReloadDisableLoFi) {
+  // Navigate with ShouldEnableLoFiMode returning true.
+  Reset(true);
+  NavigateToURLBlockUntilNavigationsComplete(
+      shell(), embedded_test_server()->GetURL("/page_with_iframe.html"), 1);
+  CheckResourcesRequested(true);
+
+  // Reload with Lo-Fi disabled.
+  Reset(false);
+  TestNavigationObserver tab_observer(shell()->web_contents(), 1);
+  shell()->web_contents()->GetController().ReloadDisableLoFi(true);
+  tab_observer.Wait();
+  CheckResourcesRequested(false);
 }
 
 }  // namespace content

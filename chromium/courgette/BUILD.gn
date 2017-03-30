@@ -11,6 +11,7 @@ static_library("courgette_lib") {
     "adjustment_method_2.cc",
     "assembly_program.cc",
     "assembly_program.h",
+    "consecutive_range_visitor.h",
     "courgette.h",
     "crc.cc",
     "crc.h",
@@ -34,11 +35,16 @@ static_library("courgette_lib") {
     "ensemble.h",
     "ensemble_apply.cc",
     "ensemble_create.cc",
+    "image_utils.h",
+    "label_manager.cc",
+    "label_manager.h",
     "memory_allocator.cc",
     "memory_allocator.h",
     "patch_generator_x86_32.h",
     "patcher_x86_32.h",
     "region.h",
+    "rel32_finder_win32_x86.cc",
+    "rel32_finder_win32_x86.h",
     "simple_delta.cc",
     "simple_delta.h",
     "streams.cc",
@@ -47,6 +53,7 @@ static_library("courgette_lib") {
     "third_party/bsdiff_apply.cc",
     "third_party/bsdiff_create.cc",
     "third_party/paged_array.h",
+    "third_party/qsufsort.h",
     "types_elf.h",
     "types_win_pe.h",
   ]
@@ -74,6 +81,7 @@ executable("courgette") {
   deps = [
     ":courgette_lib",
     "//base",
+    "//build/config/sanitizers:deps",
   ]
 }
 
@@ -85,6 +93,7 @@ executable("courgette_minimal_tool") {
   deps = [
     ":courgette_lib",
     "//base",
+    "//build/config/sanitizers:deps",
   ]
 }
 
@@ -94,6 +103,7 @@ test("courgette_unittests") {
     "base_test_unittest.cc",
     "base_test_unittest.h",
     "bsdiff_memory_unittest.cc",
+    "consecutive_range_visitor_unittest.cc",
     "difference_estimator_unittest.cc",
     "disassembler_elf_32_x86_unittest.cc",
     "disassembler_win32_x64_unittest.cc",
@@ -101,8 +111,13 @@ test("courgette_unittests") {
     "encode_decode_unittest.cc",
     "encoded_program_unittest.cc",
     "ensemble_unittest.cc",
+    "image_utils_unittest.cc",
+    "label_manager_unittest.cc",
+    "memory_allocator_unittest.cc",
+    "rel32_finder_win32_x86_unittest.cc",
     "streams_unittest.cc",
     "third_party/paged_array_unittest.cc",
+    "third_party/qsufsort_unittest.cc",
     "typedrva_unittest.cc",
     "versioning_unittest.cc",
   ]

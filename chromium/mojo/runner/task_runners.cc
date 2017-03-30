@@ -4,6 +4,8 @@
 
 #include "mojo/runner/task_runners.h"
 
+#include <stddef.h>
+
 #include "base/threading/sequenced_worker_pool.h"
 
 namespace mojo {
@@ -18,7 +20,7 @@ scoped_ptr<base::Thread> CreateIOThread(const char* name) {
   base::Thread::Options options;
   options.message_loop_type = base::MessageLoop::TYPE_IO;
   thread->StartWithOptions(options);
-  return thread.Pass();
+  return thread;
 }
 
 }  // namespace

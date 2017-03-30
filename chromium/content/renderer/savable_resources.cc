@@ -9,6 +9,7 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "content/renderer/web_frame_utils.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -17,7 +18,6 @@
 #include "third_party/WebKit/public/web/WebInputElement.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebNodeList.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
 using blink::WebDocument;
@@ -27,7 +27,6 @@ using blink::WebFrame;
 using blink::WebInputElement;
 using blink::WebLocalFrame;
 using blink::WebNode;
-using blink::WebNodeList;
 using blink::WebString;
 using blink::WebVector;
 using blink::WebView;
@@ -35,83 +34,76 @@ using blink::WebView;
 namespace content {
 namespace {
 
-// Structure for storage the unique set of all savable resource links for
-// making sure that no duplicated resource link in final result. The consumer
-// of the SavableResourcesUniqueCheck is responsible for keeping these pointers
-// valid for the lifetime of the SavableResourcesUniqueCheck instance.
-struct SavableResourcesUniqueCheck {
-  // Unique set of all sub resource links.
-  std::set<GURL>* resources_set;
-  // Unique set of all frame links.
-  std::set<GURL>* frames_set;
-  // Collection of all frames we go through when getting all savable resource
-  // links.
-  std::vector<WebFrame*>* frames;
+// Returns |true| if |web_frame| contains (or should be assumed to contain)
+// a html document.
+bool DoesFrameContainHtmlDocument(const WebFrame& web_frame,
+                                  const WebElement& element) {
+  if (web_frame.isWebLocalFrame()) {
+    WebDocument doc = web_frame.document();
+    return doc.isHTMLDocument() || doc.isXHTMLDocument();
+  }
 
-  SavableResourcesUniqueCheck()
-      : resources_set(NULL),
-        frames_set(NULL),
-        frames(NULL) {}
+  // Cannot inspect contents of a remote frame, so we use a heuristic:
+  // Assume that <iframe> and <frame> elements contain a html document,
+  // and other elements (i.e. <object>) contain plugins or other resources.
+  // If the heuristic is wrong (i.e. the remote frame in <object> does
+  // contain an html document), then things will still work, but with the
+  // following caveats: 1) original frame content will be saved and 2) links
+  // in frame's html doc will not be rewritten to point to locally saved
+  // files.
+  return element.hasHTMLTagName("iframe") || element.hasHTMLTagName("frame");
+}
 
-  SavableResourcesUniqueCheck(std::set<GURL>* resources_set,
-      std::set<GURL>* frames_set, std::vector<WebFrame*>* frames)
-      : resources_set(resources_set),
-        frames_set(frames_set),
-        frames(frames) {}
-};
-
-// Get all savable resource links from current element. One element might
-// have more than one resource link. It is possible to have some links
-// in one CSS stylesheet.
+// If present and valid, then push the link associated with |element|
+// into either SavableResourcesResult::subframes or
+// SavableResourcesResult::resources_list.
 void GetSavableResourceLinkForElement(
     const WebElement& element,
     const WebDocument& current_doc,
-    SavableResourcesUniqueCheck* unique_check,
     SavableResourcesResult* result) {
-
-  // Handle frame and iframe tag.
-  if (element.hasHTMLTagName("iframe") ||
-      element.hasHTMLTagName("frame")) {
-    WebFrame* sub_frame = WebLocalFrame::fromFrameOwnerElement(element);
-    if (sub_frame)
-      unique_check->frames->push_back(sub_frame);
-    return;
-  }
-
   // Check whether the node has sub resource URL or not.
   WebString value = GetSubResourceLinkFromElement(element);
   if (value.isNull())
     return;
+
   // Get absolute URL.
-  GURL u = current_doc.completeURL(value);
-  // ignore invalid URL
-  if (!u.is_valid())
+  GURL element_url = current_doc.completeURL(value);
+
+  // See whether to report this element as a subframe.
+  WebFrame* web_frame = WebFrame::fromFrameOwnerElement(element);
+  if (web_frame && DoesFrameContainHtmlDocument(*web_frame, element)) {
+    SavableSubframe subframe;
+    subframe.original_url = element_url;
+    subframe.routing_id = GetRoutingIdForFrameOrProxy(web_frame);
+    result->subframes->push_back(subframe);
     return;
+  }
+
+  // Ignore invalid URL.
+  if (!element_url.is_valid())
+    return;
+
   // Ignore those URLs which are not standard protocols. Because FTP
   // protocol does no have cache mechanism, we will skip all
   // sub-resources if they use FTP protocol.
-  if (!u.SchemeIsHTTPOrHTTPS() && !u.SchemeIs(url::kFileScheme))
+  if (!element_url.SchemeIsHTTPOrHTTPS() &&
+      !element_url.SchemeIs(url::kFileScheme))
     return;
-  // Ignore duplicated resource link.
-  if (!unique_check->resources_set->insert(u).second)
-    return;
-  result->resources_list->push_back(u);
-  // Insert referrer for above new resource link.
-  result->referrer_urls_list->push_back(GURL());
-  result->referrer_policies_list->push_back(blink::WebReferrerPolicyDefault);
+
+  result->resources_list->push_back(element_url);
 }
 
-// Get all savable resource links from current WebFrameImpl object pointer.
-void GetAllSavableResourceLinksForFrame(WebFrame* current_frame,
-    SavableResourcesUniqueCheck* unique_check,
-    SavableResourcesResult* result,
-    const char** savable_schemes) {
+}  // namespace
+
+bool GetSavableResourceLinksForFrame(WebFrame* current_frame,
+                                     SavableResourcesResult* result,
+                                     const char** savable_schemes) {
   // Get current frame's URL.
   GURL current_frame_url = current_frame->document().url();
 
   // If url of current frame is invalid, ignore it.
   if (!current_frame_url.is_valid())
-    return;
+    return false;
 
   // If url of current frame is not a savable protocol, ignore it.
   bool is_valid_protocol = false;
@@ -122,11 +114,7 @@ void GetAllSavableResourceLinksForFrame(WebFrame* current_frame,
     }
   }
   if (!is_valid_protocol)
-    return;
-
-  // If find same frame we have recorded, ignore it.
-  if (!unique_check->frames_set->insert(current_frame_url).second)
-    return;
+    return false;
 
   // Get current using document.
   WebDocument current_doc = current_frame->document();
@@ -137,16 +125,17 @@ void GetAllSavableResourceLinksForFrame(WebFrame* current_frame,
        element = all.nextItem()) {
     GetSavableResourceLinkForElement(element,
                                      current_doc,
-                                     unique_check,
                                      result);
   }
-}
 
-}  // namespace
+  return true;
+}
 
 WebString GetSubResourceLinkFromElement(const WebElement& element) {
   const char* attribute_name = NULL;
   if (element.hasHTMLTagName("img") ||
+      element.hasHTMLTagName("frame") ||
+      element.hasHTMLTagName("iframe") ||
       element.hasHTMLTagName("script")) {
     attribute_name = "src";
   } else if (element.hasHTMLTagName("input")) {
@@ -164,10 +153,14 @@ WebString GetSubResourceLinkFromElement(const WebElement& element) {
              element.hasHTMLTagName("del") ||
              element.hasHTMLTagName("ins")) {
     attribute_name = "cite";
+  } else if (element.hasHTMLTagName("object")) {
+    attribute_name = "data";
   } else if (element.hasHTMLTagName("link")) {
     // If the link element is not linked to css, ignore it.
-    if (base::LowerCaseEqualsASCII(element.getAttribute("type"), "text/css") ||
-        base::LowerCaseEqualsASCII(element.getAttribute("rel"), "stylesheet")) {
+    if (base::LowerCaseEqualsASCII(
+            base::StringPiece16(element.getAttribute("type")), "text/css") ||
+        base::LowerCaseEqualsASCII(
+            base::StringPiece16(element.getAttribute("rel")), "stylesheet")) {
       // TODO(jnd): Add support for extracting links of sub-resources which
       // are inside style-sheet such as @import, url(), etc.
       // See bug: http://b/issue?id=1111667.
@@ -180,57 +173,11 @@ WebString GetSubResourceLinkFromElement(const WebElement& element) {
   // If value has content and not start with "javascript:" then return it,
   // otherwise return NULL.
   if (!value.isNull() && !value.isEmpty() &&
-      !base::StartsWithASCII(value.utf8(), "javascript:", false))
+      !base::StartsWith(value.utf8(), "javascript:",
+                        base::CompareCase::INSENSITIVE_ASCII))
     return value;
 
   return WebString();
-}
-
-// Get all savable resource links from current webview, include main
-// frame and sub-frame
-bool GetAllSavableResourceLinksForCurrentPage(WebView* view,
-    const GURL& page_url, SavableResourcesResult* result,
-    const char** savable_schemes) {
-  WebFrame* main_frame = view->mainFrame();
-  if (!main_frame)
-    return false;
-
-  std::set<GURL> resources_set;
-  std::set<GURL> frames_set;
-  std::vector<WebFrame*> frames;
-  SavableResourcesUniqueCheck unique_check(&resources_set,
-                                           &frames_set,
-                                           &frames);
-
-  GURL main_page_gurl(main_frame->document().url());
-
-  // Make sure we are saving same page between embedder and webkit.
-  // If page has being navigated, embedder will get three empty vector,
-  // which will make the saving page job ended.
-  if (page_url != main_page_gurl)
-    return true;
-
-  // First, process main frame.
-  frames.push_back(main_frame);
-
-  // Check all resource in this page, include sub-frame.
-  for (int i = 0; i < static_cast<int>(frames.size()); ++i) {
-    // Get current frame's all savable resource links.
-    GetAllSavableResourceLinksForFrame(frames[i], &unique_check, result,
-                                       savable_schemes);
-  }
-
-  // Since frame's src can also point to sub-resources link, so it is possible
-  // that some URLs in frames_list are also in resources_list. For those
-  // URLs, we will remove it from frame_list, only keep them in resources_list.
-  for (std::set<GURL>::iterator it = frames_set.begin();
-       it != frames_set.end(); ++it) {
-    // Append unique frame source to savable frame list.
-    if (resources_set.find(*it) == resources_set.end())
-      result->frames_list->push_back(*it);
-  }
-
-  return true;
 }
 
 }  // namespace content

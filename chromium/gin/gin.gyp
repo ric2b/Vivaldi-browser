@@ -107,70 +107,90 @@
       },
       'includes': [ '../gin/fingerprint/fingerprint_v8_snapshot.gypi' ],
     },
-    #{
-    #  'target_name': 'gin_shell',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../base/base.gyp:base',
-    #    '../base/base.gyp:base_i18n',
-    #    '../v8/tools/gyp/v8.gyp:v8',
-    #    'gin',
-    #  ],
-    #  'sources': [
-    #    'shell/gin_main.cc',
-    #  ],
-    #  'msvs_settings': {
-    #    'VCLinkerTool': {
-    #      'SubSystem': '1', # /SUBSYSTEM:CONSOLE
-    #    },
-    #  },
-    #},
-    #{
-    #  'target_name': 'gin_test',
-    #  'type': 'static_library',
-    #  'dependencies': [
-    #    '../testing/gtest.gyp:gtest',
-    #    '../v8/tools/gyp/v8.gyp:v8',
-    #    'gin',
-    #  ],
-    #  'export_dependent_settings': [
-    #    '../testing/gtest.gyp:gtest',
-    #    'gin',
-    #  ],
-    #  'sources': [
-    #    'test/file.cc',
-    #    'test/file.h',
-    #    'test/file_runner.cc',
-    #    'test/file_runner.h',
-    #    'test/gc.cc',
-    #    'test/gc.h',
-    #    'test/gtest.cc',
-    #    'test/gtest.h',
-    #    'test/v8_test.cc',
-    #    'test/v8_test.h',
-    #  ],
-    #},
-    #{
-    #  'target_name': 'gin_unittests',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../base/base.gyp:test_support_base',
-    #    '../v8/tools/gyp/v8.gyp:v8',
-    #    'gin_test',
-    #  ],
-    #  'sources': [
-    #    'converter_unittest.cc',
-    #    'interceptor_unittest.cc',
-    #    'modules/module_registry_unittest.cc',
-    #    'modules/timer_unittest.cc',
-    #    'per_context_data_unittest.cc',
-    #    'shell_runner_unittest.cc',
-    #    'shell/gin_shell_unittest.cc',
-    #    'test/run_all_unittests.cc',
-    #    'test/run_js_tests.cc',
-    #    'v8_isolate_memory_dump_provider_unittest.cc',
-    #    'wrappable_unittest.cc',
-    #  ],
-    #},
+    {
+      'target_name': 'gin_shell',
+      'type': 'executable',
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../base/base.gyp:base_i18n',
+        '../v8/tools/gyp/v8.gyp:v8',
+        'gin',
+      ],
+      'sources': [
+        'shell/gin_main.cc',
+      ],
+      'msvs_settings': {
+        'VCLinkerTool': {
+          'SubSystem': '1', # /SUBSYSTEM:CONSOLE
+        },
+      },
+    },
+    {
+      'target_name': 'gin_test',
+      'type': 'static_library',
+      'dependencies': [
+        '../testing/gtest.gyp:gtest',
+        '../v8/tools/gyp/v8.gyp:v8',
+        'gin',
+      ],
+      'export_dependent_settings': [
+        '../testing/gtest.gyp:gtest',
+        'gin',
+      ],
+      'sources': [
+        'test/file.cc',
+        'test/file.h',
+        'test/file_runner.cc',
+        'test/file_runner.h',
+        'test/gc.cc',
+        'test/gc.h',
+        'test/gtest.cc',
+        'test/gtest.h',
+        'test/v8_test.cc',
+        'test/v8_test.h',
+      ],
+    },
+    {
+      'target_name': 'gin_unittests',
+      'type': 'executable',
+      'dependencies': [
+        '../base/base.gyp:test_support_base',
+        '../v8/tools/gyp/v8.gyp:v8',
+        'gin_shell',
+        'gin_test',
+      ],
+      'sources': [
+        'converter_unittest.cc',
+        'interceptor_unittest.cc',
+        'modules/module_registry_unittest.cc',
+        'modules/timer_unittest.cc',
+        'per_context_data_unittest.cc',
+        'shell_runner_unittest.cc',
+        'shell/gin_shell_unittest.cc',
+        'test/run_all_unittests.cc',
+        'test/run_js_tests.cc',
+        'v8_isolate_memory_dump_provider_unittest.cc',
+        'wrappable_unittest.cc',
+      ],
+    },
+  ],
+  'conditions': [
+    ['test_isolation_mode != "noop"', {
+      'targets': [
+        {
+          'target_name': 'gin_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'gin_unittests',
+          ],
+          'includes': [
+            '../build/isolate.gypi',
+          ],
+          'sources': [
+            'gin_unittests.isolate',
+          ],
+        },
+      ],
+    }],
   ],
 }

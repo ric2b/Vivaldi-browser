@@ -4,12 +4,15 @@
 
 #include "chrome/browser/signin/easy_unlock_service.h"
 
+#include <utility>
+
 #include "apps/app_lifetime_monitor.h"
 #include "apps/app_lifetime_monitor_factory.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
@@ -19,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/chrome_proximity_auth_client.h"
@@ -28,20 +32,22 @@
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/proximity_auth/ble/proximity_auth_ble_system.h"
 #include "components/proximity_auth/cryptauth/cryptauth_client_impl.h"
 #include "components/proximity_auth/cryptauth/cryptauth_device_manager.h"
 #include "components/proximity_auth/cryptauth/cryptauth_enrollment_manager.h"
 #include "components/proximity_auth/cryptauth/secure_message_delegate.h"
+#include "components/proximity_auth/logging/logging.h"
+#include "components/proximity_auth/proximity_auth_pref_manager.h"
+#include "components/proximity_auth/proximity_auth_system.h"
 #include "components/proximity_auth/screenlock_bridge.h"
 #include "components/proximity_auth/switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/user.h"
+#include "components/version_info/version_info.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 
@@ -54,6 +60,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -101,12 +108,6 @@ EasyUnlockService* EasyUnlockService::GetForUser(
 #else
   return NULL;
 #endif
-}
-
-// static
-bool EasyUnlockService::IsSignInEnabled() {
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      proximity_auth::switches::kDisableEasyUnlock);
 }
 
 class EasyUnlockService::BluetoothDetector
@@ -286,12 +287,13 @@ void EasyUnlockService::RegisterProfilePrefs(
       false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
+  proximity_auth::CryptAuthGCMManager::RegisterPrefs(registry);
   proximity_auth::CryptAuthDeviceManager::RegisterPrefs(registry);
   proximity_auth::CryptAuthEnrollmentManager::RegisterPrefs(registry);
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery))
-    proximity_auth::ProximityAuthBleSystem::RegisterPrefs(registry);
+    proximity_auth::ProximityAuthPrefManager::RegisterPrefs(registry);
 }
 
 // static
@@ -305,25 +307,25 @@ void EasyUnlockService::RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 // static
-void EasyUnlockService::ResetLocalStateForUser(const std::string& user_id) {
-  DCHECK(!user_id.empty());
+void EasyUnlockService::ResetLocalStateForUser(const AccountId& account_id) {
+  DCHECK(account_id.is_valid());
 
   PrefService* local_state = GetLocalState();
   if (!local_state)
     return;
 
   DictionaryPrefUpdate update(local_state, prefs::kEasyUnlockHardlockState);
-  update->RemoveWithoutPathExpansion(user_id, NULL);
+  update->RemoveWithoutPathExpansion(account_id.GetUserEmail(), NULL);
 
 #if defined(OS_CHROMEOS)
-  EasyUnlockTpmKeyManager::ResetLocalStateForUser(user_id);
+  EasyUnlockTpmKeyManager::ResetLocalStateForUser(account_id);
 #endif
 }
 
 // static
 EasyUnlockService::UserSettings EasyUnlockService::GetUserSettings(
-    const std::string& user_id) {
-  DCHECK(!user_id.empty());
+    const AccountId& account_id) {
+  DCHECK(account_id.is_valid());
   UserSettings user_settings;
 
   PrefService* local_state = GetLocalState();
@@ -336,8 +338,8 @@ EasyUnlockService::UserSettings EasyUnlockService::GetUserSettings(
     return user_settings;
 
   const base::DictionaryValue* user_prefs_dict;
-  if (!all_user_prefs_dict->GetDictionaryWithoutPathExpansion(user_id,
-                                                              &user_prefs_dict))
+  if (!all_user_prefs_dict->GetDictionaryWithoutPathExpansion(
+          account_id.GetUserEmail(), &user_prefs_dict))
     return user_settings;
 
   user_prefs_dict->GetBooleanWithoutPathExpansion(
@@ -363,7 +365,7 @@ std::string EasyUnlockService::GetDeviceId() {
 
 void EasyUnlockService::Initialize(
     scoped_ptr<EasyUnlockAppManager> app_manager) {
-  app_manager_ = app_manager.Pass();
+  app_manager_ = std::move(app_manager);
   app_manager_->EnsureReady(
       base::Bind(&EasyUnlockService::InitializeOnAppManagerReady,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -372,11 +374,6 @@ void EasyUnlockService::Initialize(
 bool EasyUnlockService::IsAllowed() const {
   if (shut_down_)
     return false;
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          proximity_auth::switches::kDisableEasyUnlock)) {
-    return false;
-  }
 
   if (!IsAllowedInternal())
     return false;
@@ -404,14 +401,14 @@ void EasyUnlockService::OpenSetupApp() {
 
 void EasyUnlockService::SetHardlockState(
     EasyUnlockScreenlockStateHandler::HardlockState state) {
-  const std::string user_id = GetUserEmail();
-  if (user_id.empty())
+  const AccountId& account_id = GetAccountId();
+  if (!account_id.is_valid())
     return;
 
   if (state == GetHardlockState())
     return;
 
-  SetHardlockStateForUser(user_id, state);
+  SetHardlockStateForUser(account_id, state);
 }
 
 EasyUnlockScreenlockStateHandler::HardlockState
@@ -425,8 +422,8 @@ EasyUnlockService::GetHardlockState() const {
 
 bool EasyUnlockService::GetPersistedHardlockState(
     EasyUnlockScreenlockStateHandler::HardlockState* state) const {
-  std::string user_id = GetUserEmail();
-  if (user_id.empty())
+  const AccountId& account_id = GetAccountId();
+  if (!account_id.is_valid())
     return false;
 
   PrefService* local_state = GetLocalState();
@@ -436,7 +433,9 @@ bool EasyUnlockService::GetPersistedHardlockState(
   const base::DictionaryValue* dict =
       local_state->GetDictionary(prefs::kEasyUnlockHardlockState);
   int state_int;
-  if (dict && dict->GetIntegerWithoutPathExpansion(user_id, &state_int)) {
+  if (dict &&
+      dict->GetIntegerWithoutPathExpansion(account_id.GetUserEmail(),
+                                           &state_int)) {
     *state =
         static_cast<EasyUnlockScreenlockStateHandler::HardlockState>(state_int);
     return true;
@@ -468,7 +467,7 @@ EasyUnlockScreenlockStateHandler*
     return NULL;
   if (!screenlock_state_handler_) {
     screenlock_state_handler_.reset(new EasyUnlockScreenlockStateHandler(
-        GetUserEmail(), GetHardlockState(),
+        GetAccountId(), GetHardlockState(),
         proximity_auth::ScreenlockBridge::Get()));
   }
   return screenlock_state_handler_.get();
@@ -492,7 +491,7 @@ bool EasyUnlockService::UpdateScreenlockState(ScreenlockState state) {
     auth_attempt_.reset();
 
     if (!handler->InStateValidOnRemoteAuthFailure())
-      HandleAuthFailure(GetUserEmail());
+      HandleAuthFailure(GetAccountId());
   }
 
   FOR_EACH_OBSERVER(
@@ -508,32 +507,42 @@ ScreenlockState EasyUnlockService::GetScreenlockState() {
   return handler->state();
 }
 
-void EasyUnlockService::AttemptAuth(const std::string& user_id) {
-  AttemptAuth(user_id, AttemptAuthCallback());
+void EasyUnlockService::AttemptAuth(const AccountId& account_id) {
+  AttemptAuth(account_id, AttemptAuthCallback());
 }
 
-void EasyUnlockService::AttemptAuth(const std::string& user_id,
+void EasyUnlockService::AttemptAuth(const AccountId& account_id,
                                     const AttemptAuthCallback& callback) {
   const EasyUnlockAuthAttempt::Type auth_attempt_type =
       GetType() == TYPE_REGULAR ? EasyUnlockAuthAttempt::TYPE_UNLOCK
                                 : EasyUnlockAuthAttempt::TYPE_SIGNIN;
-  const std::string user_email = GetUserEmail();
-  if (user_email.empty()) {
-    LOG(ERROR) << "Empty user email. Refresh token might go bad.";
+  if (!GetAccountId().is_valid()) {
+    LOG(ERROR) << "Empty user account. Refresh token might go bad.";
     if (!callback.is_null()) {
       const bool kFailure = false;
-      callback.Run(auth_attempt_type, kFailure, user_id, std::string(),
+      callback.Run(auth_attempt_type, kFailure, account_id, std::string(),
                    std::string());
     }
     return;
   }
 
-  CHECK_EQ(GetUserEmail(), user_id);
+  CHECK(GetAccountId() == account_id)
+      << "Check failed: " << GetAccountId().Serialize() << " vs "
+      << account_id.Serialize();
 
-  auth_attempt_.reset(new EasyUnlockAuthAttempt(app_manager_.get(), user_id,
+  auth_attempt_.reset(new EasyUnlockAuthAttempt(app_manager_.get(), account_id,
                                                 auth_attempt_type, callback));
   if (!auth_attempt_->Start())
     auth_attempt_.reset();
+
+  // TODO(tengs): We notify ProximityAuthSystem whenever unlock attempts are
+  // attempted. However, we ideally should refactor the auth attempt logic to
+  // the proximity_auth component.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery) &&
+      proximity_auth_system_) {
+    proximity_auth_system_->OnAuthAttempted(account_id);
+  }
 }
 
 void EasyUnlockService::FinalizeUnlock(bool success) {
@@ -541,7 +550,7 @@ void EasyUnlockService::FinalizeUnlock(bool success) {
     return;
 
   this->OnWillFinalizeUnlock(success);
-  auth_attempt_->FinalizeUnlock(GetUserEmail(), success);
+  auth_attempt_->FinalizeUnlock(GetAccountId(), success);
   auth_attempt_.reset();
   // TODO(isherman): If observing screen unlock events, is there a race
   // condition in terms of reading the service's state vs. the app setting the
@@ -550,7 +559,7 @@ void EasyUnlockService::FinalizeUnlock(bool success) {
   // Make sure that the lock screen is updated on failure.
   if (!success) {
     RecordEasyUnlockScreenUnlockEvent(EASY_UNLOCK_FAILURE);
-    HandleAuthFailure(GetUserEmail());
+    HandleAuthFailure(GetAccountId());
   }
 }
 
@@ -559,18 +568,18 @@ void EasyUnlockService::FinalizeSignin(const std::string& key) {
     return;
   std::string wrapped_secret = GetWrappedSecret();
   if (!wrapped_secret.empty())
-    auth_attempt_->FinalizeSignin(GetUserEmail(), wrapped_secret, key);
+    auth_attempt_->FinalizeSignin(GetAccountId(), wrapped_secret, key);
   auth_attempt_.reset();
 
   // Processing empty key is equivalent to auth cancellation. In this case the
   // signin request will not actually be processed by login stack, so the lock
   // screen state should be set from here.
   if (key.empty())
-    HandleAuthFailure(GetUserEmail());
+    HandleAuthFailure(GetAccountId());
 }
 
-void EasyUnlockService::HandleAuthFailure(const std::string& user_id) {
-  if (user_id != GetUserEmail())
+void EasyUnlockService::HandleAuthFailure(const AccountId& account_id) {
+  if (account_id != GetAccountId())
     return;
 
   if (!screenlock_state_handler_.get())
@@ -582,8 +591,8 @@ void EasyUnlockService::HandleAuthFailure(const std::string& user_id) {
 
 void EasyUnlockService::CheckCryptohomeKeysAndMaybeHardlock() {
 #if defined(OS_CHROMEOS)
-  std::string user_id = GetUserEmail();
-  if (user_id.empty())
+  const AccountId& account_id = GetAccountId();
+  if (!account_id.is_valid())
     return;
 
   const base::ListValue* device_list = GetRemoteDevices();
@@ -611,11 +620,9 @@ void EasyUnlockService::CheckCryptohomeKeysAndMaybeHardlock() {
   DCHECK(key_manager);
 
   key_manager->GetDeviceDataList(
-      chromeos::UserContext(user_id),
+      chromeos::UserContext(account_id),
       base::Bind(&EasyUnlockService::OnCryptohomeKeysFetchedForChecking,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 user_id,
-                 paired_devices));
+                 weak_ptr_factory_.GetWeakPtr(), account_id, paired_devices));
 #endif
 }
 
@@ -640,51 +647,6 @@ void EasyUnlockService::RemoveObserver(EasyUnlockServiceObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-PrefService* EasyUnlockService::GetPrefService() {
-  return profile()->GetPrefs();
-}
-
-scoped_ptr<proximity_auth::SecureMessageDelegate>
-EasyUnlockService::CreateSecureMessageDelegate() {
-#if defined(OS_CHROMEOS)
-  return make_scoped_ptr(new chromeos::SecureMessageDelegateChromeOS());
-#else
-  return nullptr;
-#endif
-}
-
-scoped_ptr<proximity_auth::CryptAuthClientFactory>
-EasyUnlockService::CreateCryptAuthClientFactory() {
-  return make_scoped_ptr(new proximity_auth::CryptAuthClientFactoryImpl(
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile()),
-      SigninManagerFactory::GetForProfile(profile())
-          ->GetAuthenticatedAccountId(),
-      profile()->GetRequestContext(), GetDeviceClassifier()));
-}
-
-cryptauth::DeviceClassifier EasyUnlockService::GetDeviceClassifier() {
-  cryptauth::DeviceClassifier device_classifier;
-
-#if defined(OS_CHROMEOS)
-  int32 major_version, minor_version, bugfix_version;
-  // TODO(tengs): base::OperatingSystemVersionNumbers only works for ChromeOS.
-  // We need to get different numbers for other platforms.
-  base::SysInfo::OperatingSystemVersionNumbers(&major_version, &minor_version,
-                                               &bugfix_version);
-  device_classifier.set_device_os_version_code(major_version);
-  device_classifier.set_device_type(cryptauth::CHROME);
-#endif
-
-  chrome::VersionInfo version_info;
-  const std::vector<uint32_t>& version_components =
-      base::Version(version_info.Version()).components();
-  if (version_components.size() > 0)
-    device_classifier.set_device_software_version_code(version_components[0]);
-
-  device_classifier.set_device_software_package(version_info.Name());
-  return device_classifier;
-}
-
 void EasyUnlockService::Shutdown() {
   if (shut_down_)
     return;
@@ -694,6 +656,7 @@ void EasyUnlockService::Shutdown() {
 
   ResetScreenlockState();
   bluetooth_detector_.reset();
+  proximity_auth_system_.reset();
 #if defined(OS_CHROMEOS)
   power_monitor_.reset();
 #endif
@@ -714,15 +677,8 @@ void EasyUnlockService::UpdateAppState() {
     app_manager_->LoadApp();
     NotifyUserUpdated();
 
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery) &&
-        GetType() == EasyUnlockService::TYPE_REGULAR &&
-        !proximity_auth_ble_system_) {
-      proximity_auth_ble_system_.reset(
-          new proximity_auth::ProximityAuthBleSystem(
-              proximity_auth::ScreenlockBridge::Get(), &proximity_auth_client_,
-              CreateCryptAuthClientFactory(), profile_->GetPrefs()));
-    }
+    if (proximity_auth_system_)
+      proximity_auth_system_->Start();
 
 #if defined(OS_CHROMEOS)
     if (!power_monitor_)
@@ -741,8 +697,8 @@ void EasyUnlockService::UpdateAppState() {
 
     if (!bluetooth_waking_up) {
       app_manager_->DisableAppIfLoaded();
-      ResetScreenlockState();
-      proximity_auth_ble_system_.reset();
+      if (proximity_auth_system_)
+        proximity_auth_system_->Stop();
 #if defined(OS_CHROMEOS)
       power_monitor_.reset();
 #endif
@@ -755,14 +711,15 @@ void EasyUnlockService::DisableAppWithoutResettingScreenlockState() {
 }
 
 void EasyUnlockService::NotifyUserUpdated() {
-  std::string user_id = GetUserEmail();
-  if (user_id.empty())
+  const AccountId& account_id = GetAccountId();
+  if (!account_id.is_valid())
     return;
 
   // Notify the easy unlock app that the user info changed.
   bool logged_in = GetType() == TYPE_REGULAR;
   bool data_ready = logged_in || GetRemoteDevices() != NULL;
-  app_manager_->SendUserUpdatedEvent(user_id, logged_in, data_ready);
+  app_manager_->SendUserUpdatedEvent(account_id.GetUserEmail(), logged_in,
+                                     data_ready);
 }
 
 void EasyUnlockService::NotifyTurnOffOperationStatusChanged() {
@@ -815,18 +772,19 @@ void EasyUnlockService::OnBluetoothAdapterPresentChanged() {
 }
 
 void EasyUnlockService::SetHardlockStateForUser(
-      const std::string& user_id,
-      EasyUnlockScreenlockStateHandler::HardlockState state) {
-  DCHECK(!user_id.empty());
+    const AccountId& account_id,
+    EasyUnlockScreenlockStateHandler::HardlockState state) {
+  DCHECK(account_id.is_valid());
 
   PrefService* local_state = GetLocalState();
   if (!local_state)
     return;
 
   DictionaryPrefUpdate update(local_state, prefs::kEasyUnlockHardlockState);
-  update->SetIntegerWithoutPathExpansion(user_id, static_cast<int>(state));
+  update->SetIntegerWithoutPathExpansion(account_id.GetUserEmail(),
+                                         static_cast<int>(state));
 
-  if (GetUserEmail() == user_id)
+  if (GetAccountId() == account_id)
     SetScreenlockHardlockedState(state);
 }
 
@@ -884,16 +842,36 @@ EasyUnlockAuthEvent EasyUnlockService::GetPasswordAuthEvent() const {
   return EASY_UNLOCK_AUTH_EVENT_COUNT;
 }
 
+void EasyUnlockService::SetProximityAuthDevices(
+    const AccountId& account_id,
+    const proximity_auth::RemoteDeviceList& remote_devices) {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableBluetoothLowEnergyDiscovery))
+    return;
+
+  if (!proximity_auth_system_) {
+    PA_LOG(INFO) << "Creating ProximityAuthSystem.";
+    proximity_auth_system_.reset(new proximity_auth::ProximityAuthSystem(
+        GetType() == TYPE_SIGNIN
+            ? proximity_auth::ProximityAuthSystem::SIGN_IN
+            : proximity_auth::ProximityAuthSystem::SESSION_LOCK,
+        proximity_auth_client()));
+  }
+
+  proximity_auth_system_->SetRemoteDevicesForUser(account_id, remote_devices);
+  proximity_auth_system_->Start();
+}
+
 #if defined(OS_CHROMEOS)
 void EasyUnlockService::OnCryptohomeKeysFetchedForChecking(
-    const std::string& user_id,
+    const AccountId& account_id,
     const std::set<std::string> paired_devices,
     bool success,
     const chromeos::EasyUnlockDeviceKeyDataList& key_data_list) {
-  DCHECK(!user_id.empty() && !paired_devices.empty());
+  DCHECK(account_id.is_valid() && !paired_devices.empty());
 
   if (!success) {
-    SetHardlockStateForUser(user_id,
+    SetHardlockStateForUser(account_id,
                             EasyUnlockScreenlockStateHandler::NO_PAIRING);
     return;
   }
@@ -905,10 +883,9 @@ void EasyUnlockService::OnCryptohomeKeysFetchedForChecking(
   if (paired_devices != devices_in_cryptohome ||
       GetHardlockState() == EasyUnlockScreenlockStateHandler::NO_PAIRING) {
     SetHardlockStateForUser(
-        user_id,
-        devices_in_cryptohome.empty()
-            ? EasyUnlockScreenlockStateHandler::PAIRING_ADDED
-            : EasyUnlockScreenlockStateHandler::PAIRING_CHANGED);
+        account_id, devices_in_cryptohome.empty()
+                        ? EasyUnlockScreenlockStateHandler::PAIRING_ADDED
+                        : EasyUnlockScreenlockStateHandler::PAIRING_CHANGED);
   }
 }
 #endif
@@ -917,10 +894,17 @@ void EasyUnlockService::PrepareForSuspend() {
   app_manager_->DisableAppIfLoaded();
   if (screenlock_state_handler_ && screenlock_state_handler_->IsActive())
     UpdateScreenlockState(ScreenlockState::BLUETOOTH_CONNECTING);
+  if (proximity_auth_system_)
+    proximity_auth_system_->OnSuspend();
+}
+
+void EasyUnlockService::OnSuspendDone() {
+  if (proximity_auth_system_)
+    proximity_auth_system_->OnSuspendDone();
 }
 
 void EasyUnlockService::EnsureTpmKeyPresentIfNeeded() {
-  if (tpm_key_checked_ || GetType() != TYPE_REGULAR || GetUserEmail().empty() ||
+  if (tpm_key_checked_ || GetType() != TYPE_REGULAR || GetAccountId().empty() ||
       GetHardlockState() == EasyUnlockScreenlockStateHandler::NO_PAIRING) {
     return;
   }

@@ -11,13 +11,15 @@
 #include <shobjidl.h>
 
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
-#include "base/win/metro.h"
 #include "base/win/scoped_co_mem.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "components/nacl/common/nacl_switches.h"
+
+#include "browser/win/vivaldi_standalone.h"
 
 namespace chrome {
 
@@ -43,6 +45,10 @@ bool GetUserDirectory(int csidl_folder, base::FilePath* result) {
 }  // namespace
 
 bool GetDefaultUserDataDirectory(base::FilePath* result) {
+#if defined(OS_WIN)
+  if (vivaldi::GetVivaldiStandaloneUserDataDirectory(result))
+    return true;
+#endif
   if (!PathService::Get(base::DIR_LOCAL_APP_DATA, result))
     return false;
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
@@ -117,6 +123,20 @@ bool ProcessNeedsProfileDir(const std::string& process_type) {
 #endif
 
   return false;
+}
+
+bool GetDefaultCrashDumpLocation(base::FilePath* crash_dir) {
+  // In order to be able to start crash handling very early, we do not rely on
+  // chrome's PathService entries (for DIR_CRASH_DUMPS) being available on
+  // Windows. See https://crbug.com/564398.
+  if (!GetDefaultUserDataDirectory(crash_dir))
+    return false;
+  // We have to make sure the user data dir exists on first run. See
+  // http://crbug.com/591504.
+  if (!PathExists(*crash_dir) && !CreateDirectory(*crash_dir))
+    return false;
+  *crash_dir = crash_dir->Append(FILE_PATH_LITERAL("Crashpad"));
+  return true;
 }
 
 }  // namespace chrome

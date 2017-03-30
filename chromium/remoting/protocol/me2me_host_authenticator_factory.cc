@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/me2me_host_authenticator_factory.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/strings/string_util.h"
 #include "remoting/base/rsa_key_pair.h"
@@ -47,6 +49,11 @@ class RejectingAuthenticator : public Authenticator {
     return nullptr;
   }
 
+  const std::string& GetAuthKey() const override {
+    NOTREACHED();
+    return auth_key_;
+  };
+
   scoped_ptr<ChannelAuthenticator> CreateChannelAuthenticator() const override {
     NOTREACHED();
     return nullptr;
@@ -54,6 +61,7 @@ class RejectingAuthenticator : public Authenticator {
 
  protected:
   State state_;
+  std::string auth_key_;
 };
 
 }  // namespace
@@ -75,7 +83,7 @@ Me2MeHostAuthenticatorFactory::CreateWithSharedSecret(
   result->key_pair_ = key_pair;
   result->shared_secret_hash_ = shared_secret_hash;
   result->pairing_registry_ = pairing_registry;
-  return result.Pass();
+  return std::move(result);
 }
 
 
@@ -94,8 +102,8 @@ Me2MeHostAuthenticatorFactory::CreateWithThirdPartyAuth(
   result->host_owner_ = host_owner;
   result->local_cert_ = local_cert;
   result->key_pair_ = key_pair;
-  result->token_validator_factory_ = token_validator_factory.Pass();
-  return result.Pass();
+  result->token_validator_factory_ = std::move(token_validator_factory);
+  return std::move(result);
 }
 
 Me2MeHostAuthenticatorFactory::Me2MeHostAuthenticatorFactory() {
@@ -129,7 +137,8 @@ scoped_ptr<Authenticator> Me2MeHostAuthenticatorFactory::CreateAuthenticator(
   // Verify that the client's jid is an ASCII string, and then check that the
   // client JID has the expected prefix. Comparison is case insensitive.
   if (!base::IsStringASCII(remote_jid) ||
-      !base::StartsWithASCII(remote_jid, remote_jid_prefix + '/', false)) {
+      !base::StartsWith(remote_jid, remote_jid_prefix + '/',
+                        base::CompareCase::INSENSITIVE_ASCII)) {
     LOG(ERROR) << "Rejecting incoming connection from " << remote_jid;
     return make_scoped_ptr(new RejectingAuthenticator());
   }

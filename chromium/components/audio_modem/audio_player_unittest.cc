@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "components/audio_modem/audio_player_impl.h"
@@ -51,7 +52,7 @@ class TestAudioOutputStream : public media::AudioOutputStream {
       // Call back into the player to get samples that it wants us to play.
       scoped_ptr<media::AudioBus> dest =
           media::AudioBus::Create(1, default_frame_count_);
-      frames = callback_->OnMoreData(dest.get(), 0);
+      frames = callback_->OnMoreData(dest.get(), 0, 0);
       total_frames += frames;
       // Send the samples given to us by the player to the gather callback.
       caller_loop_->task_runner()->PostTask(

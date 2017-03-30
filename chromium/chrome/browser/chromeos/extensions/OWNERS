@@ -4,9 +4,7 @@ mek@chromium.org
 reillyg@chromium.org
 benwells@chromium.org
 rdevlin.cronin@chromium.org
-miket@chromium.org
 finnur@chromium.org
-kalman@chromium.org
 asargent@chromium.org
 
 # Additional ChromeOS-specific reviewers
@@ -19,3 +17,7 @@ bshe@chromium.org
 # input method related reviewers. shuchen@ is primary, and nona@ is backup.
 per-file input_method*=shuchen@chromium.org
 per-file input_method*=nona@chromium.org
+
+# DeviceLocalAccount reviewers. bartfab@ is primary, atwilson@ is backup.
+per-file device_local_account*=atwilson@chromium.org
+per-file device_local_account*=bartfab@chromium.org

@@ -10,12 +10,14 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_event_histogram_value.h"
 
 class Profile;
 
@@ -40,6 +42,7 @@ class FontSettingsEventRouter {
   // event |event_name| to extensions. A JavaScript object is passed to the
   // extension event function with the new value of the pref in property |key|.
   void AddPrefToObserve(const char* pref_name,
+                        events::HistogramValue histogram_value,
                         const char* event_name,
                         const char* key);
 
@@ -58,7 +61,8 @@ class FontSettingsEventRouter {
   // value of the setting is the value of browser pref |pref_name|. This value
   // is passed in the JavaScript object argument to the extension event function
   // under the key |key|.
-  void OnFontPrefChanged(const std::string& event_name,
+  void OnFontPrefChanged(events::HistogramValue histogram_value,
+                         const std::string& event_name,
                          const std::string& key,
                          const std::string& pref_name);
 

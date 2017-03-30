@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/plugins/plugin_finder.h"
@@ -76,10 +77,12 @@ class NPAPIRemovalInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~NPAPIRemovalInfoBarDelegate() override;
 
   // ConfirmInfobarDelegate:
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;
   base::string16 GetLinkText() const override;
+  GURL GetLinkURL() const override;
   bool LinkClicked(WindowOpenDisposition disposition) override;
 
   base::string16 plugin_name_;
@@ -149,7 +152,12 @@ NPAPIRemovalInfoBarDelegate::NPAPIRemovalInfoBarDelegate(
 NPAPIRemovalInfoBarDelegate::~NPAPIRemovalInfoBarDelegate() {
 }
 
-int NPAPIRemovalInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::InfoBarIdentifier
+NPAPIRemovalInfoBarDelegate::GetIdentifier() const {
+  return NPAPI_REMOVAL_INFOBAR_DELEGATE;
+}
+
+int NPAPIRemovalInfoBarDelegate::GetIconId() const {
   return IDR_INFOBAR_WARNING;
 }
 
@@ -165,14 +173,14 @@ base::string16 NPAPIRemovalInfoBarDelegate::GetLinkText() const {
   return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
 }
 
+GURL NPAPIRemovalInfoBarDelegate::GetLinkURL() const {
+  return GURL(kLearnMoreUrl);
+}
+
 bool NPAPIRemovalInfoBarDelegate::LinkClicked(
     WindowOpenDisposition disposition) {
-  InfoBarService::WebContentsFromInfoBar(infobar())
-      ->OpenURL(content::OpenURLParams(
-          GURL(kLearnMoreUrl), content::Referrer(),
-          (disposition == CURRENT_TAB) ? NEW_FOREGROUND_TAB : disposition,
-          ui::PAGE_TRANSITION_LINK, false));
   content::RecordAction(UserMetricsAction("NPAPIRemovalInfobar.LearnMore"));
+  ConfirmInfoBarDelegate::LinkClicked(disposition);
   return true;
 }
 
@@ -180,7 +188,7 @@ bool NPAPIRemovalInfoBarDelegate::LinkClicked(
 
 // static
 ChromePluginServiceFilter* ChromePluginServiceFilter::GetInstance() {
-  return Singleton<ChromePluginServiceFilter>::get();
+  return base::Singleton<ChromePluginServiceFilter>::get();
 }
 
 void ChromePluginServiceFilter::RegisterResourceContext(

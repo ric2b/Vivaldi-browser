@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
 #include "chrome/common/extensions/command.h"
@@ -200,6 +200,10 @@ class CommandService : public BrowserContextKeyedAPI,
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
+  void UpdateKeybindingsForTest(const Extension* extension) {
+    UpdateKeybindings(extension);
+  }
+
  private:
   friend class BrowserContextKeyedAPIFactory<CommandService>;
 
@@ -213,7 +217,6 @@ class CommandService : public BrowserContextKeyedAPI,
   void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
                                   const Extension* extension,
                                   bool is_update,
-                                  bool from_ephemeral,
                                   const std::string& old_name) override;
   void OnExtensionUninstalled(content::BrowserContext* browser_context,
                               const Extension* extension,

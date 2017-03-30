@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/name_field.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -121,7 +122,7 @@ scoped_ptr<FirstLastNameField> FirstLastNameField::ParseSpecificName(
       v->last_name_ = next;
     }
 
-    return v.Pass();
+    return v;
   }
 
   scanner->Rewind();
@@ -184,7 +185,7 @@ scoped_ptr<FirstLastNameField> FirstLastNameField::ParseComponentNames(
   // Consider the match to be successful if we detected both first and last name
   // fields.
   if (v->first_name_ && v->last_name_)
-    return v.Pass();
+    return v;
 
   scanner->Rewind();
   return NULL;

@@ -4,17 +4,24 @@
 
 #include "chrome/browser/ui/views/toolbar/reload_button.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/grit/generated_resources.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/metrics.h"
 #include "ui/views/widget/widget.h"
 
@@ -36,8 +43,8 @@ const int kReloadMenuItems[]  = {
 // static
 const char ReloadButton::kViewClassName[] = "ReloadButton";
 
-ReloadButton::ReloadButton(CommandUpdater* command_updater)
-    : ToolbarButton(this, CreateMenuModel()),
+ReloadButton::ReloadButton(Profile* profile, CommandUpdater* command_updater)
+    : ToolbarButton(profile, this, CreateMenuModel()),
       command_updater_(command_updater),
       intended_mode_(MODE_RELOAD),
       visible_mode_(MODE_RELOAD),
@@ -46,8 +53,7 @@ ReloadButton::ReloadButton(CommandUpdater* command_updater)
       stop_to_reload_timer_delay_(base::TimeDelta::FromMilliseconds(1350)),
       menu_enabled_(false),
       testing_mouse_hovered_(false),
-      testing_reload_count_(0) {
-}
+      testing_reload_count_(0) {}
 
 ReloadButton::~ReloadButton() {
 }
@@ -222,13 +228,30 @@ void ReloadButton::ExecuteBrowserCommand(int command, int event_flags) {
 }
 
 void ReloadButton::ChangeModeInternal(Mode mode) {
-  ui::ThemeProvider* tp = GetThemeProvider();
+  const ui::ThemeProvider* tp = GetThemeProvider();
   // |tp| can be NULL in unit tests.
   if (tp) {
-    SetImage(views::Button::STATE_NORMAL, *(tp->GetImageSkiaNamed(
-        (mode == MODE_RELOAD) ? IDR_RELOAD : IDR_STOP)));
-    SetImage(views::Button::STATE_DISABLED, *(tp->GetImageSkiaNamed(
-        (mode == MODE_RELOAD) ? IDR_RELOAD_D : IDR_STOP_D)));
+    if (ui::MaterialDesignController::IsModeMaterial()) {
+      const gfx::VectorIconId icon_id = (mode == MODE_RELOAD)
+                                            ? gfx::VectorIconId::NAVIGATE_RELOAD
+                                            : gfx::VectorIconId::NAVIGATE_STOP;
+      const int kButtonSize = 16;
+      const SkColor normal_color =
+          tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
+      const SkColor disabled_color =
+          tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON_INACTIVE);
+      SetImage(views::Button::STATE_NORMAL,
+               gfx::CreateVectorIcon(icon_id, kButtonSize, normal_color));
+      SetImage(views::Button::STATE_DISABLED,
+               gfx::CreateVectorIcon(icon_id, kButtonSize, disabled_color));
+    } else {
+      SetImage(views::Button::STATE_NORMAL,
+               *(tp->GetImageSkiaNamed((mode == MODE_RELOAD) ? IDR_RELOAD
+                                                             : IDR_STOP)));
+      SetImage(views::Button::STATE_DISABLED,
+               *(tp->GetImageSkiaNamed((mode == MODE_RELOAD) ? IDR_RELOAD_D
+                                                             : IDR_STOP_D)));
+    }
   }
 
   visible_mode_ = mode;

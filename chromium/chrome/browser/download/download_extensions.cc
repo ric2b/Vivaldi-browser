@@ -7,55 +7,14 @@
 
 #include "chrome/browser/download/download_extensions.h"
 
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "net/base/mime_util.h"
 #include "net/base/net_util.h"
 
 namespace download_util {
-
-// For file extensions taken from mozilla:
-
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Communicator client code, released
- * March 31, 1998.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-1999
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Doug Turner <dougt@netscape.com>
- *   Dean Tessman <dean_tessman@hotmail.com>
- *   Brodie Thiesfield <brofield@jellycan.com>
- *   Jungshik Shin <jshin@i18nl10n.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
 
 namespace {
 
@@ -109,6 +68,102 @@ const struct FileType {
     // open automatically because Chrome displays a prompt prior to
     // installation.
     {"crx", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
+
+    // Included for parity with kSafeBrowsingFileTypes.
+    {"bin", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"rtf", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+
+    // Archive file types. Not inherently dangerous, but could contain dangerous
+    // files. Included for parity with kSafeBrowsingFileTypes.
+    {"001", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"7z", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"ace", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"arc", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"arj", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"b64", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"balz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"bhx", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"bz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"bz2", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"bzip2", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"cab", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"cpio", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"fat", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"gz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"gzip", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"hfs", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"hqx", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"iso", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"lha", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"lpaq1", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"lpaq5", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"lpaq8", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"lzh", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"lzma", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"mim", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"ntfs", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"paq8f", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"paq8jd", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"paq8l", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"paq8o", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"pea", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"quad", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r00", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r01", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r02", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r03", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r04", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r05", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r06", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r07", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r08", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r09", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r10", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r11", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r12", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r13", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r14", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r15", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r16", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r17", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r18", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r19", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r20", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r21", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r22", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r23", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r24", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r25", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r26", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r27", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r28", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"r29", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"rar", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"squashfs", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"swm", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"tar", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"taz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"tbz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"tbz2", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"tgz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"tpz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"txz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"tz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"udf", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"uu", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"uue", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"vhd", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"vhdx", NOT_DANGEROUS, ALLOW_AUTO_OPEN},  // Opens in IE, drops MOTW
+    {"vmdk", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"wim", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"wrc", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"xar", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"xxe", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"xz", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"z", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"zip", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"zipx", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"zpaq", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
 
     // Windows, all file categories. The list is in alphabetical order of
     // extensions. Exceptions are made for logical groupings of file types.
@@ -180,6 +235,11 @@ const struct FileType {
     // Windows executables.
     {"dll", DANGEROUS, DISALLOW_AUTO_OPEN},
     {"drv", DANGEROUS, DISALLOW_AUTO_OPEN},
+
+    // Opens in Outlook. Not common, but could be exploited (CVE-2015-6172)
+    {"eml", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
+
+    // Windows executable
     {"exe", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 
     // Font file, uses Portable Executable or New Executable format. Not
@@ -215,8 +275,19 @@ const struct FileType {
     // Microsoft IIS Internet Communication Settings.
     {"ins", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
 
+    // InstallShield Compiled Script.
+    {"inx", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+
+    // InstallShield Uninstaller Script.
+    {"isu", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+
     // Microsoft IIS Internet Service Provider Settings.
     {"isp", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
+
+    // Windows Task Scheduler Job file. No handler is registered by default, so
+    // this is probably normally not dangerous unless saved into the task
+    // scheduler directory.
+    {"job", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 
     // JavaScript file. May open using Windows Script Host with user level
     // privileges.
@@ -252,6 +323,9 @@ const struct FileType {
     // Microsoft Management Console Snap-in. Contains executable code.
     {"msc", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 
+    // Opens in Outlook. Not common, but could be exploited (CVE-2015-6172)
+    {"msg", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
+
     // Microsoft Shell.
     {"msh", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
     {"msh1", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
@@ -270,6 +344,18 @@ const struct FileType {
 
     // Microsoft Office Profile Settings File.
     {"ops", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
+
+    // Portable Application Installer File.
+    {"paf", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+
+    // Extensions that will open in IE even when chrome is set as default
+    // browser.
+    {"partial", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    {"xrm-ms", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    {"rels", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    {"svg", NOT_DANGEROUS, ALLOW_AUTO_OPEN},
+    {"xml", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    {"xsl", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 
     // Microsoft Visual Test.
     {"pcd", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
@@ -305,6 +391,9 @@ const struct FileType {
     // DISALLOW_AUTO_OPEN restriction.
     {"reg", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 
+    // Registry Script Windows.
+    {"rgs", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+
     // Microsoft Windows Explorer Command.
     // See https://support.microsoft.com/kb/190355 for an example.
     {"scf", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
@@ -328,6 +417,9 @@ const struct FileType {
     // types of files.
     {"sys", DANGEROUS, DISALLOW_AUTO_OPEN},
 
+    // U3 Smart Application.
+    {"u3p", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+
     // Internet Shortcut (new since IE9). Both .url and .website are .ini files
     // that describe a shortcut that points to a URL. They can point at
     // anything. Dropping a download of this type and opening it automatically
@@ -340,6 +432,8 @@ const struct FileType {
     {"vb", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
     {"vbe", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
     {"vbs", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    // Some sites claim .vbscript is a valid extension for vbs files.
+    {"vbscript", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 
     {"vsd", ALLOW_ON_USER_GESTURE, ALLOW_AUTO_OPEN},
 
@@ -394,7 +488,13 @@ const struct FileType {
     {"tcsh", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 #endif
 #if defined(OS_MACOSX)
+    // Automator Action.
+    {"action", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+
     {"command", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+
+    // Automator Workflow.
+    {"workflow", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 #endif
 
   // Package management formats. OS_WIN package formats are handled above.
@@ -403,7 +503,16 @@ const struct FileType {
 #endif
 #if defined(OS_LINUX)
     {"deb", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    {"pet", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    {"pup", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
     {"rpm", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    {"slp", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+
+    // "common" executable file extensions for linux. There's not really much
+    // reason to block since they require execute bit to actually run. Included
+    // for histograms and to match kSafeBrowsingFileTypes.
+    {"out", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
+    {"run", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},
 #endif
 #if defined(OS_ANDROID)
     {"dex", ALLOW_ON_USER_GESTURE, DISALLOW_AUTO_OPEN},

@@ -98,9 +98,12 @@ class SystemBubbleWrapper {
         views::BubbleBorder::PAINT_NONE);
     is_persistent_ = is_persistent;
 
-    // If ChromeVox is enabled, focus the default item if no item is focused.
-    if (Shell::GetInstance()->accessibility_delegate()->
-        IsSpokenFeedbackEnabled()) {
+    // If ChromeVox is enabled, focus the default item if no item is focused and
+    // there isn't a delayed close.
+    if (Shell::GetInstance()
+            ->accessibility_delegate()
+            ->IsSpokenFeedbackEnabled() &&
+        !is_persistent) {
       bubble_->FocusDefaultIfNeeded();
     }
   }
@@ -182,7 +185,8 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   AddTrayItem(new TrayVPN(this));
   AddTrayItem(new TraySms(this));
   AddTrayItem(new TrayBluetooth(this));
-  AddTrayItem(new TrayCast(this));
+  tray_cast_ = new TrayCast(this);
+  AddTrayItem(tray_cast_);
   AddTrayItem(new TrayDisplay(this));
   screen_capture_tray_item_ = new ScreenCaptureTrayItem(this);
   AddTrayItem(screen_capture_tray_item_);
@@ -205,7 +209,6 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
 #elif defined(OS_LINUX)
   AddTrayItem(tray_accessibility_);
   AddTrayItem(new TrayBluetooth(this));
-  AddTrayItem(new TrayCast(this));
   AddTrayItem(new TrayUpdate(this));
   AddTrayItem(tray_date_);
 #endif
@@ -474,6 +477,11 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
       system_bubble_->bubble()->FocusDefaultIfNeeded();
     }
   } else {
+    // Cleanup the existing bubble before showing a new one. Otherwise, it's
+    // possible to confuse the new system bubble with the old one during
+    // destruction, leading to subtle errors/crashes such as crbug.com/545166.
+    DestroySystemBubble();
+
     // Remember if the menu is a single property (like e.g. volume) or the
     // full tray menu. Note that in case of the |BUBBLE_USE_EXISTING| case
     // above, |full_system_tray_menu_| does not get changed since the fact that
@@ -507,6 +515,7 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
     if (items.size() == 1 && items[0]->ShouldHideArrow())
       init_params.arrow_paint_type = views::BubbleBorder::PAINT_TRANSPARENT;
     SystemTrayBubble* bubble = new SystemTrayBubble(this, items, bubble_type);
+
     system_bubble_.reset(new SystemBubbleWrapper(bubble));
     system_bubble_->InitView(this, tray_container(), &init_params, persistent);
   }
@@ -693,6 +702,8 @@ views::View* SystemTray::GetTrayItemViewForTest(SystemTrayItem* item) {
       tray_item_map_.find(item);
   return it == tray_item_map_.end() ? NULL : it->second;
 }
+
+TrayCast* SystemTray::GetTrayCastForTesting() const { return tray_cast_; }
 
 TrayDate* SystemTray::GetTrayDateForTesting() const { return tray_date_; }
 

@@ -8,6 +8,7 @@
 #import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#include <stddef.h>
 
 #include "base/command_line.h"
 #include "base/mac/foundation_util.h"
@@ -25,9 +26,11 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.h"
 #include "chrome/browser/ui/cocoa/history_menu_bridge.h"
+#include "chrome/browser/ui/cocoa/run_loop_testing.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/user_manager.h"
@@ -156,10 +159,12 @@ IN_PROC_BROWSER_TEST_F(AppControllerPlatformAppBrowserTest,
                              ->GetNativeWindow();
   NSWindow* browser_window = browser()->window()->GetNativeWindow();
 
+  chrome::testing::NSRunLoopRunAllPending();
   EXPECT_LE([[NSApp orderedWindows] indexOfObject:app_window],
             [[NSApp orderedWindows] indexOfObject:browser_window]);
   [app_controller applicationShouldHandleReopen:NSApp
                               hasVisibleWindows:YES];
+  chrome::testing::NSRunLoopRunAllPending();
   EXPECT_LE([[NSApp orderedWindows] indexOfObject:browser_window],
             [[NSApp orderedWindows] indexOfObject:app_window]);
 }
@@ -214,12 +219,12 @@ void CreateProfileCallback(const base::Closure& quit_closure,
 void CreateAndWaitForSystemProfile() {
   ProfileManager::CreateCallback create_callback =
       base::Bind(&CreateProfileCallback,
-                 base::MessageLoop::current()->QuitClosure());
+                 base::MessageLoop::current()->QuitWhenIdleClosure());
   g_browser_process->profile_manager()->CreateProfileAsync(
       ProfileManager::GetSystemProfilePath(),
       create_callback,
       base::string16(),
-      base::string16(),
+      std::string(),
       std::string());
   base::RunLoop().Run();
 }
@@ -367,7 +372,7 @@ class AppControllerOpenShortcutBrowserTest : public InProcessBrowserTest {
 
     method_exchangeImplementations(original, destination);
 
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
     g_open_shortcut_url = embedded_test_server()->GetURL("/simple.html");
   }
 
@@ -391,7 +396,7 @@ class AppControllerReplaceNTPBrowserTest : public InProcessBrowserTest {
   AppControllerReplaceNTPBrowserTest() {}
 
   void SetUpInProcessBrowserTestFixture() override {
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -451,9 +456,9 @@ IN_PROC_BROWSER_TEST_F(AppControllerMainMenuBrowserTest,
       profile2_path,
       base::Bind(&RunClosureWhenProfileInitialized,
                  run_loop.QuitClosure()),
-                 base::string16(),
-                 base::string16(),
-                 std::string());
+      base::string16(),
+      std::string(),
+      std::string());
   run_loop.Run();
   Profile* profile2 = profile_manager->GetProfileByPath(profile2_path);
   ASSERT_TRUE(profile2);
@@ -629,7 +634,7 @@ class AppControllerHandoffBrowserTest : public InProcessBrowserTest {
 // switches between browser windows, the correct URL is being passed to the
 // Handoff.
 IN_PROC_BROWSER_TEST_F(AppControllerHandoffBrowserTest, TestHandoffURLs) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   EXPECT_EQ(g_handoff_url, GURL(url::kAboutBlankURL));
 
   // Test that navigating to a URL updates the handoff URL.

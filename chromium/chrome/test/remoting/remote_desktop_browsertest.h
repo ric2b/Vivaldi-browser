@@ -107,10 +107,11 @@ class RemoteDesktopBrowserTest : public extensions::PlatformAppBrowserTest {
   void DisconnectMe2Me();
 
   // Simulate a key event.
-  void SimulateKeyPressWithCode(ui::KeyboardCode keyCode, const char* code);
+  void SimulateKeyPressWithCode(ui::KeyboardCode keyCode,
+                                const std::string& code);
 
   void SimulateKeyPressWithCode(ui::KeyboardCode keyCode,
-                                const char* code,
+                                const std::string& code,
                                 bool control,
                                 bool shift,
                                 bool alt,
@@ -309,6 +310,9 @@ class RemoteDesktopBrowserTest : public extensions::PlatformAppBrowserTest {
 
   // Wait for the me2me connection to be established.
   void WaitForConnection();
+
+  // Checking whether the host is online.
+  bool IsHostOnline(const std::string& element_id);
 
   // Checking whether the localHost has been initialized.
   bool IsLocalHostReady();

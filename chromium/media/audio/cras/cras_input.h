@@ -6,10 +6,13 @@
 #define MEDIA_AUDIO_CRAS_CRAS_INPUT_H_
 
 #include <cras_client.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "media/audio/agc_audio_stream.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_parameters.h"
@@ -49,7 +52,7 @@ class MEDIA_EXPORT CrasInputStream : public AgcAudioStream<AudioInputStream> {
   // called by the audio server when it has samples ready.
   static int SamplesReady(cras_client* client,
                           cras_stream_id_t stream_id,
-                          uint8* samples,
+                          uint8_t* samples,
                           size_t frames,
                           const timespec* sample_ts,
                           void* arg);
@@ -62,7 +65,7 @@ class MEDIA_EXPORT CrasInputStream : public AgcAudioStream<AudioInputStream> {
 
   // Reads one or more buffers of audio from the device, passes on to the
   // registered callback. Called from SamplesReady().
-  void ReadAudio(size_t frames, uint8* buffer, const timespec* sample_ts);
+  void ReadAudio(size_t frames, uint8_t* buffer, const timespec* sample_ts);
 
   // Deals with an error that occured in the stream.  Called from StreamError().
   void NotifyStreamError(int err);
@@ -81,7 +84,7 @@ class MEDIA_EXPORT CrasInputStream : public AgcAudioStream<AudioInputStream> {
   AudioManagerCras* const audio_manager_;
 
   // Size of frame in bytes.
-  uint32 bytes_per_frame_;
+  uint32_t bytes_per_frame_;
 
   // Callback to pass audio samples too, valid while recording.
   AudioInputCallback* callback_;

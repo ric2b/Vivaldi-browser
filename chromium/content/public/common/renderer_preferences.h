@@ -12,10 +12,13 @@
 #ifndef CONTENT_PUBLIC_COMMON_RENDERER_PREFERENCES_H_
 #define CONTENT_PUBLIC_COMMON_RENDERER_PREFERENCES_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/font_render_params.h"
@@ -32,7 +35,6 @@ enum TapMultipleTargetsStrategy {
 
 struct CONTENT_EXPORT RendererPreferences {
   RendererPreferences();
-
   ~RendererPreferences();
 
   // Whether the renderer's current browser context accept drops from the OS
@@ -62,6 +64,9 @@ struct CONTENT_EXPORT RendererPreferences {
   // might be allow, block or ask.
   bool should_ask_plugin_content;
 
+  // Should plugins be enabled.
+  bool should_enable_plugin_content;
+
   // The type of subpixel rendering to use for text.
   // Currently only used by Linux and Windows.
   gfx::FontRenderParams::SubpixelRendering subpixel_rendering;
@@ -85,9 +90,6 @@ struct CONTENT_EXPORT RendererPreferences {
   SkColor inactive_selection_bg_color;
   SkColor inactive_selection_fg_color;
 
-  // Browser wants a look at all non-local top level navigation requests.
-  bool browser_handles_non_local_top_level_requests;
-
   // Browser wants a look at all top-level navigation requests.
   bool browser_handles_all_top_level_requests;
 
@@ -105,8 +107,10 @@ struct CONTENT_EXPORT RendererPreferences {
   // Set to true to indicate that the preference to set DNT to 1 is enabled.
   bool enable_do_not_track;
 
-  // Set to false to indicate that WebRTC should use the OS default routing.
-  bool enable_webrtc_multiple_routes;
+  // This is the IP handling policy override for WebRTC. The value must be one
+  // of the strings defined in privacy.json. The allowed values are specified
+  // in webrtc_ip_handling_policy.h.
+  std::string webrtc_ip_handling_policy;
 
   // Default page zoom level.
   double default_zoom_level;
@@ -151,32 +155,35 @@ struct CONTENT_EXPORT RendererPreferences {
   // The default system font settings for caption, small caption, menu and
   // status messages. Used only by Windows.
   base::string16 caption_font_family_name;
-  int32 caption_font_height;
+  int32_t caption_font_height;
 
   base::string16 small_caption_font_family_name;
-  int32 small_caption_font_height;
+  int32_t small_caption_font_height;
 
   base::string16 menu_font_family_name;
-  int32 menu_font_height;
+  int32_t menu_font_height;
 
   base::string16 status_font_family_name;
-  int32 status_font_height;
+  int32_t status_font_height;
 
   base::string16 message_font_family_name;
-  int32 message_font_height;
+  int32_t message_font_height;
 
   // The width of a vertical scroll bar in dips.
-  int32 vertical_scroll_bar_width_in_dips;
+  int32_t vertical_scroll_bar_width_in_dips;
 
   // The height of a horizontal scroll bar in dips.
-  int32 horizontal_scroll_bar_height_in_dips;
+  int32_t horizontal_scroll_bar_height_in_dips;
 
   // The height of the arrow bitmap on a vertical scroll bar in dips.
-  int32 arrow_bitmap_height_vertical_scroll_bar_in_dips;
+  int32_t arrow_bitmap_height_vertical_scroll_bar_in_dips;
 
   // The width of the arrow bitmap on a horizontal scroll bar in dips.
-  int32 arrow_bitmap_width_horizontal_scroll_bar_in_dips;
+  int32_t arrow_bitmap_width_horizontal_scroll_bar_in_dips;
 #endif
+
+  // The default font size used for rendering on Linux.
+  int default_font_size;
 
   bool serve_resources_only_from_cache;
 };

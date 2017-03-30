@@ -2,21 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "components/resource_provider/public/cpp/resource_loader.h"
 #include "components/resource_provider/public/interfaces/resource_provider.mojom.h"
-#include "mojo/application/public/cpp/application_delegate.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/application_test_base.h"
-#include "mojo/application/public/cpp/service_provider_impl.h"
 #include "mojo/common/common_type_converters.h"
 #include "mojo/platform_handle/platform_handle_functions.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/array.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/macros.h"
+#include "mojo/public/cpp/bindings/array.h"
+#include "mojo/public/cpp/system/macros.h"
+#include "mojo/shell/public/cpp/application_delegate.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/application_test_base.h"
+#include "mojo/shell/public/cpp/service_provider_impl.h"
 
 namespace resource_provider {
 namespace {
@@ -56,7 +58,7 @@ class ResourceProviderApplicationTest : public mojo::test::ApplicationTestBase {
   // resources are returned. The return map maps from the path to the contents
   // of the file at the specified path.
   ResourceContentsMap GetResources(const std::set<std::string>& paths) {
-    ResourceLoader loader(application_impl()->shell(), paths);
+    ResourceLoader loader(application_impl(), paths);
     loader.BlockUntilLoaded();
 
     // Load the contents of each of the handles.

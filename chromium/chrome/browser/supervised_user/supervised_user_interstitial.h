@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/supervised_user/supervised_user_service_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
@@ -34,6 +35,10 @@ class SupervisedUserInterstitial : public content::InterstitialPageDelegate,
                    const GURL& url,
                    SupervisedUserURLFilter::FilteringBehaviorReason reason,
                    const base::Callback<void(bool)>& callback);
+
+  static std::string GetHTMLContents(
+      Profile* profile,
+      SupervisedUserURLFilter::FilteringBehaviorReason reason);
 
  private:
   SupervisedUserInterstitial(

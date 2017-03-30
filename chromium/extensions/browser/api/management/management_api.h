@@ -6,12 +6,14 @@
 #define EXTENSIONS_BROWSER_API_MANAGEMENT_MANAGEMENT_API_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/browser/api/management/management_api_delegate.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_registry_observer.h"
 
@@ -112,9 +114,6 @@ class ManagementSetEnabledFunction : public UIThreadExtensionFunction {
 
   ManagementSetEnabledFunction();
 
-  void InstallUIProceed();
-  void InstallUIAbort(bool user_initiated);
-
  protected:
   ~ManagementSetEnabledFunction() override;
 
@@ -122,6 +121,8 @@ class ManagementSetEnabledFunction : public UIThreadExtensionFunction {
   ResponseAction Run() override;
 
  private:
+  void OnInstallPromptDone(bool did_accept);
+
   void OnRequirementsChecked(const std::vector<std::string>& requirements);
 
   std::string extension_id_;
@@ -243,7 +244,9 @@ class ManagementEventRouter : public ExtensionRegistryObserver {
                               extensions::UninstallReason reason) override;
 
   // Dispatches management api events to listening extensions.
-  void BroadcastEvent(const Extension* extension, const char* event_name);
+  void BroadcastEvent(const Extension* extension,
+                      events::HistogramValue histogram_value,
+                      const char* event_name);
 
   content::BrowserContext* browser_context_;
 

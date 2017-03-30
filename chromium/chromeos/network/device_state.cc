@@ -20,7 +20,6 @@ DeviceState::DeviceState(const std::string& path)
       support_network_scan_(false),
       scanning_(false),
       sim_retries_left_(0),
-      sim_lock_enabled_(false),
       sim_present_(true),
       eap_authentication_completed_(false) {
 }
@@ -53,7 +52,7 @@ bool DeviceState::PropertyChanged(const std::string& key,
   } else if (key == shill::kCarrierProperty) {
     return GetStringValue(key, value, &carrier_);
   } else if (key == shill::kFoundNetworksProperty) {
-    const base::ListValue* list = NULL;
+    const base::ListValue* list = nullptr;
     if (!value.GetAsList(&list))
       return false;
     CellularScanResults parsed_results;
@@ -62,35 +61,25 @@ bool DeviceState::PropertyChanged(const std::string& key,
     scan_results_.swap(parsed_results);
     return true;
   } else if (key == shill::kSIMLockStatusProperty) {
-    const base::DictionaryValue* dict = NULL;
+    const base::DictionaryValue* dict = nullptr;
     if (!value.GetAsDictionary(&dict))
       return false;
 
-    // Return true if at least one of the property values changed.
-    bool property_changed = false;
-    const base::Value* out_value = NULL;
-    if (!dict->GetWithoutPathExpansion(shill::kSIMLockRetriesLeftProperty,
-                                       &out_value))
-      return false;
-    if (GetUInt32Value(shill::kSIMLockRetriesLeftProperty,
-                       *out_value, &sim_retries_left_))
-      property_changed = true;
+    // Set default values for SIM properties.
+    sim_lock_type_.erase();
+    sim_retries_left_ = 0;
 
-    if (!dict->GetWithoutPathExpansion(shill::kSIMLockTypeProperty,
-                                       &out_value))
-      return false;
-    if (GetStringValue(shill::kSIMLockTypeProperty,
-                       *out_value, &sim_lock_type_))
-      property_changed = true;
-
-    if (!dict->GetWithoutPathExpansion(shill::kSIMLockEnabledProperty,
-                                       &out_value))
-      return false;
-    if (GetBooleanValue(shill::kSIMLockEnabledProperty,
-                        *out_value, &sim_lock_enabled_))
-      property_changed = true;
-
-    return property_changed;
+    const base::Value* out_value = nullptr;
+    if (dict->GetWithoutPathExpansion(shill::kSIMLockTypeProperty,
+                                      &out_value)) {
+      GetStringValue(shill::kSIMLockTypeProperty, *out_value, &sim_lock_type_);
+    }
+    if (dict->GetWithoutPathExpansion(shill::kSIMLockRetriesLeftProperty,
+                                      &out_value)) {
+      GetUInt32Value(shill::kSIMLockRetriesLeftProperty, *out_value,
+                     &sim_retries_left_);
+    }
+    return true;
   } else if (key == shill::kMeidProperty) {
     return GetStringValue(key, value, &meid_);
   } else if (key == shill::kImeiProperty) {
@@ -126,7 +115,7 @@ bool DeviceState::InitialPropertiesReceived(
 void DeviceState::IPConfigPropertiesChanged(
     const std::string& ip_config_path,
     const base::DictionaryValue& properties) {
-  base::DictionaryValue* ip_config = NULL;
+  base::DictionaryValue* ip_config = nullptr;
   if (ip_configs_.GetDictionaryWithoutPathExpansion(
           ip_config_path, &ip_config)) {
     NET_LOG_EVENT("IPConfig Updated: " + ip_config_path, path());
@@ -137,6 +126,27 @@ void DeviceState::IPConfigPropertiesChanged(
     ip_configs_.SetWithoutPathExpansion(ip_config_path, ip_config);
   }
   ip_config->MergeDictionary(&properties);
+}
+
+std::string DeviceState::GetIpAddressByType(const std::string& type) const {
+  for (base::DictionaryValue::Iterator iter(ip_configs_); !iter.IsAtEnd();
+       iter.Advance()) {
+    const base::DictionaryValue* ip_config;
+    if (!iter.value().GetAsDictionary(&ip_config))
+      continue;
+    std::string ip_config_method;
+    if (!ip_config->GetString(shill::kMethodProperty, &ip_config_method))
+      continue;
+    if (type == ip_config_method ||
+        (type == shill::kTypeIPv4 && ip_config_method == shill::kTypeDHCP) ||
+        (type == shill::kTypeIPv6 && ip_config_method == shill::kTypeDHCP6)) {
+      std::string address;
+      if (!ip_config->GetString(shill::kAddressProperty, &address))
+        continue;
+      return address;
+    }
+  }
+  return std::string();
 }
 
 bool DeviceState::IsSimAbsent() const {

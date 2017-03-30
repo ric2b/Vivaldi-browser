@@ -4,6 +4,8 @@
 
 #include "android_webview/browser/net/aw_url_request_job_factory.h"
 
+#include <utility>
+
 #include "net/base/net_errors.h"
 #include "net/url_request/url_request_error_job.h"
 #include "net/url_request/url_request_job_factory_impl.h"
@@ -73,8 +75,8 @@ net::URLRequestJob* AwURLRequestJobFactory::MaybeInterceptResponse(
 
 bool AwURLRequestJobFactory::SetProtocolHandler(
     const std::string& scheme,
-    ProtocolHandler* protocol_handler) {
-  return next_factory_->SetProtocolHandler(scheme, protocol_handler);
+    scoped_ptr<ProtocolHandler> protocol_handler) {
+  return next_factory_->SetProtocolHandler(scheme, std::move(protocol_handler));
 }
 
 bool AwURLRequestJobFactory::IsSafeRedirectTarget(const GURL& location) const {

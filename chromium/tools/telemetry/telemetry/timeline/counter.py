@@ -14,6 +14,10 @@ class CounterSample(object):
     self._sample_index = sample_index
 
   @property
+  def category(self):
+    return self._counter.category
+
+  @property
   def name(self):
     return self._counter.full_name
 
@@ -65,7 +69,7 @@ class Counter(event_container.TimelineEventContainer):
 
   def IterChildContainers(self):
     return
-    yield # pylint: disable=W0101
+    yield # pylint: disable=unreachable
 
   def IterEventsInThisContainer(self, event_type_predicate, event_predicate):
     if not event_type_predicate(CounterSample) or not self.timestamps:

@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/cloud_print/cloud_print_constants.h"
 #include "chrome/common/cloud_print/cloud_print_helpers.h"
 #include "chrome/grit/generated_resources.h"
@@ -683,8 +684,7 @@ void PrinterJobHandler::OnReceivePrinterCaps(
     printer_watcher_->GetCurrentPrinterInfo(&printer_info);
 
   std::string post_data;
-  std::string mime_boundary;
-  CreateMimeBoundaryForUpload(&mime_boundary);
+  std::string mime_boundary = net::GenerateMimeMultipartBoundary();
 
   if (succeeded) {
     std::string caps_hash =

@@ -4,7 +4,11 @@
 
 #include "extensions/browser/api/audio/audio_service.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "chromeos/audio/audio_device.h"
@@ -15,9 +19,9 @@ using content::BrowserThread;
 
 namespace extensions {
 
-using core_api::audio::OutputDeviceInfo;
-using core_api::audio::InputDeviceInfo;
-using core_api::audio::AudioDeviceInfo;
+using api::audio::OutputDeviceInfo;
+using api::audio::InputDeviceInfo;
+using api::audio::AudioDeviceInfo;
 
 class AudioServiceImpl : public AudioService,
                          public chromeos::CrasAudioHandler::AudioObserver {

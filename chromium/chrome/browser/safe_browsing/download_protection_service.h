@@ -8,19 +8,22 @@
 #ifndef CHROME_BROWSER_SAFE_BROWSING_DOWNLOAD_PROTECTION_SERVICE_H_
 #define CHROME_BROWSER_SAFE_BROWSING_DOWNLOAD_PROTECTION_SERVICE_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/safe_browsing/database_manager.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
+#include "components/safe_browsing_db/database_manager.h"
+#include "net/url_request/url_request_context_getter.h"
 #include "url/gurl.h"
 
 
@@ -30,7 +33,6 @@ class PageNavigator;
 }
 
 namespace net {
-class URLRequestContextGetter;
 class X509Certificate;
 }  // namespace net
 
@@ -80,6 +82,13 @@ class DownloadProtectionService {
 
   virtual ~DownloadProtectionService();
 
+  // Parse a flag of blacklisted sha256 hashes to check at each download.
+  // This is used for testing, to hunt for safe-browsing by-pass bugs.
+  virtual void ParseManualBlacklistFlag();
+
+  // Return true if this hash value is blacklisted via flag (for testing).
+  virtual bool IsHashManuallyBlacklisted(const std::string& sha256_hash) const;
+
   // Checks whether the given client download is likely to be malicious or not.
   // The result is delivered asynchronously via the given callback.  This
   // method must be called on the UI thread, and the callback will also be
@@ -118,7 +127,7 @@ class DownloadProtectionService {
   }
 
   // Returns the timeout that is used by CheckClientDownload().
-  int64 download_request_timeout_ms() const {
+  int64_t download_request_timeout_ms() const {
     return download_request_timeout_ms_;
   }
 
@@ -158,12 +167,14 @@ class DownloadProtectionService {
     REASON_DOWNLOAD_DANGEROUS_HOST,
     REASON_DOWNLOAD_POTENTIALLY_UNWANTED,
     REASON_UNSUPPORTED_URL_SCHEME,
+    REASON_MANUAL_BLACKLIST,
     REASON_MAX  // Always add new values before this one.
   };
 
  private:
   class CheckClientDownloadRequest;  // Per-request state
   friend class DownloadProtectionServiceTest;
+
   FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
                            CheckClientDownloadWhitelistedUrl);
   FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
@@ -184,6 +195,9 @@ class DownloadProtectionService {
                            TestDownloadRequestTimeout);
   FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
                            CheckClientCrxDownloadSuccess);
+  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceFlagTest,
+                           CheckClientDownloadOverridenByFlag);
+
   static const char kDownloadRequestUrl[];
 
   // Cancels all requests in |download_requests_|, and empties it, releasing
@@ -223,13 +237,17 @@ class DownloadProtectionService {
   // BinaryFeatureExtractor object, may be overridden for testing.
   scoped_refptr<BinaryFeatureExtractor> binary_feature_extractor_;
 
-  int64 download_request_timeout_ms_;
+  int64_t download_request_timeout_ms_;
 
   scoped_ptr<DownloadFeedbackService> feedback_service_;
 
   // A list of callbacks to be run on the main thread when a
   // ClientDownloadRequest has been formed.
   ClientDownloadRequestCallbackList client_download_request_callbacks_;
+
+  // List of 8-byte hashes that are blacklisted manually by flag.
+  // Normally empty.
+  std::set<std::string> manual_blacklist_hashes_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadProtectionService);
 };

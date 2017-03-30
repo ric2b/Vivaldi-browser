@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_TERMS_OF_SERVICE_SCREEN_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_TERMS_OF_SERVICE_SCREEN_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
@@ -60,7 +60,7 @@ class TermsOfServiceScreen : public BaseScreen,
 
   // Timer that enforces a custom (shorter) timeout on the attempt to download
   // the Terms of Service.
-  base::OneShotTimer<TermsOfServiceScreen> download_timer_;
+  base::OneShotTimer download_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(TermsOfServiceScreen);
 };

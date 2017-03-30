@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -17,25 +17,25 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/test/test_io_thread.h"
-#include "build/build_config.h"              // TODO(vtl): Remove this.
-#include "mojo/edk/embedder/platform_channel_pair.h"
-#include "mojo/edk/embedder/platform_shared_buffer.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/edk/embedder/simple_platform_support.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/channel_endpoint.h"
-#include "mojo/edk/system/channel_endpoint_id.h"
-#include "mojo/edk/system/incoming_endpoint.h"
-#include "mojo/edk/system/message_pipe.h"
-#include "mojo/edk/system/message_pipe_dispatcher.h"
-#include "mojo/edk/system/platform_handle_dispatcher.h"
-#include "mojo/edk/system/raw_channel.h"
-#include "mojo/edk/system/shared_buffer_dispatcher.h"
-#include "mojo/edk/system/test_utils.h"
-#include "mojo/edk/system/waiter.h"
-#include "mojo/edk/test/test_utils.h"
+#include "build/build_config.h"  // TODO(vtl): Remove this.
 #include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_channel_pair.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_shared_buffer.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/embedder/simple_platform_support.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint_id.h"
+#include "third_party/mojo/src/mojo/edk/system/incoming_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/platform_handle_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/raw_channel.h"
+#include "third_party/mojo/src/mojo/edk/system/shared_buffer_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/test_utils.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter.h"
+#include "third_party/mojo/src/mojo/edk/test/test_utils.h"
 
 namespace mojo {
 namespace system {
@@ -127,7 +127,7 @@ class RemoteMessagePipeTest : public testing::Test {
 
     channels_[channel_index] = new Channel(&platform_support_);
     channels_[channel_index]->Init(
-        RawChannel::Create(platform_handles_[channel_index].Pass()));
+        RawChannel::Create(std::move(platform_handles_[channel_index])));
   }
 
   void BootstrapChannelEndpointsOnIOThread(scoped_refptr<ChannelEndpoint> ep0,
@@ -174,7 +174,7 @@ TEST_F(RemoteMessagePipeTest, Basic) {
   uint32_t buffer_size = static_cast<uint32_t>(sizeof(buffer));
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   // Connect message pipes. MP 0, port 1 will be attached to channel 0 and
   // connected to MP 1, port 0, which will be attached to channel 1. This leaves
@@ -273,7 +273,7 @@ TEST_F(RemoteMessagePipeTest, Basic) {
 TEST_F(RemoteMessagePipeTest, PeerClosed) {
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   // Connect message pipes. MP 0, port 1 will be attached to channel 0 and
   // connected to MP 1, port 0, which will be attached to channel 1. This leaves
@@ -313,7 +313,7 @@ TEST_F(RemoteMessagePipeTest, Multiplex) {
   uint32_t buffer_size = static_cast<uint32_t>(sizeof(buffer));
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   // Connect message pipes as in the |Basic| test.
 
@@ -484,7 +484,7 @@ TEST_F(RemoteMessagePipeTest, CloseBeforeAttachAndRun) {
   uint32_t buffer_size = static_cast<uint32_t>(sizeof(buffer));
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   // Connect message pipes. MP 0, port 1 will be attached to channel 0 and
   // connected to MP 1, port 0, which will be attached to channel 1. This leaves
@@ -546,7 +546,7 @@ TEST_F(RemoteMessagePipeTest, CloseBeforeConnect) {
   uint32_t buffer_size = static_cast<uint32_t>(sizeof(buffer));
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   // Connect message pipes. MP 0, port 1 will be attached to channel 0 and
   // connected to MP 1, port 0, which will be attached to channel 1. This leaves
@@ -606,7 +606,7 @@ TEST_F(RemoteMessagePipeTest, HandlePassing) {
   static const char kHello[] = "hello";
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   scoped_refptr<ChannelEndpoint> ep0;
   scoped_refptr<MessagePipe> mp0(MessagePipe::CreateLocalProxy(&ep0));
@@ -757,7 +757,7 @@ TEST_F(RemoteMessagePipeTest, HandlePassingHalfClosed) {
   static const char kWorld[] = "world!";
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   // We'll try to pass this dispatcher.
   scoped_refptr<MessagePipeDispatcher> dispatcher =
@@ -903,7 +903,7 @@ TEST_F(RemoteMessagePipeTest, MAYBE_SharedBufferPassing) {
   static const char kHello[] = "hello";
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   scoped_refptr<ChannelEndpoint> ep0;
   scoped_refptr<MessagePipe> mp0(MessagePipe::CreateLocalProxy(&ep0));
@@ -1030,7 +1030,7 @@ TEST_F(RemoteMessagePipeTest, MAYBE_PlatformHandlePassing) {
   static const char kHello[] = "hello";
   static const char kWorld[] = "world";
   Waiter waiter;
-  uint32_t context = 0;
+  uintptr_t context = 0;
   HandleSignalsState hss;
 
   scoped_refptr<ChannelEndpoint> ep0;
@@ -1047,7 +1047,7 @@ TEST_F(RemoteMessagePipeTest, MAYBE_PlatformHandlePassing) {
   // be passed.
   scoped_refptr<PlatformHandleDispatcher> dispatcher =
       PlatformHandleDispatcher::Create(
-          mojo::test::PlatformHandleFromFILE(fp.Pass()));
+          mojo::test::PlatformHandleFromFILE(std::move(fp)));
 
   // Prepare to wait on MP 1, port 1. (Add the waiter now. Otherwise, if we do
   // it later, it might already be readable.)
@@ -1106,10 +1106,10 @@ TEST_F(RemoteMessagePipeTest, MAYBE_PlatformHandlePassing) {
   dispatcher =
       static_cast<PlatformHandleDispatcher*>(read_dispatchers[0].get());
 
-  embedder::ScopedPlatformHandle h = dispatcher->PassPlatformHandle().Pass();
+  embedder::ScopedPlatformHandle h = dispatcher->PassPlatformHandle();
   EXPECT_TRUE(h.is_valid());
 
-  fp = mojo::test::FILEFromPlatformHandle(h.Pass(), "rb").Pass();
+  fp = mojo::test::FILEFromPlatformHandle(std::move(h), "rb");
   EXPECT_FALSE(h.is_valid());
   EXPECT_TRUE(fp);
 
@@ -1172,7 +1172,7 @@ TEST_F(RemoteMessagePipeTest, PassMessagePipeHandleAcrossAndBack) {
   static const char kWorld[] = "world";
   Waiter waiter;
   HandleSignalsState hss;
-  uint32_t context = 0;
+  uintptr_t context = 0;
 
   scoped_refptr<ChannelEndpoint> ep0;
   scoped_refptr<MessagePipe> mp0(MessagePipe::CreateLocalProxy(&ep0));

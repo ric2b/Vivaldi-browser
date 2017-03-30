@@ -54,13 +54,13 @@ function onGetActionsRequested(options, onSuccess, onError) {
     return;
   }
 
-  if (options.entryPath === '/' + TESTING_ACTIONS_DIR.name) {
-    onSuccess(TESTING_ACTIONS_DIR_ACTIONS);
+  if (options.entryPaths.indexOf('/' + TESTING_NO_ACTIONS_DIR.name) !== -1) {
+    onSuccess([]);
     return;
   }
 
-  if (options.entryPath === '/' + TESTING_NO_ACTIONS_DIR.name) {
-    onSuccess([]);
+  if (options.entryPaths.indexOf('/' + TESTING_ACTIONS_DIR.name) !== -1) {
+    onSuccess(TESTING_ACTIONS_DIR_ACTIONS);
     return;
   }
 
@@ -99,22 +99,18 @@ function runTests() {
           TESTING_ACTIONS_DIR.name,
           {create: false},
           chrome.test.callbackPass(function(dirEntry) {
-            test_util.toExternalEntry(dirEntry).then(
-                chrome.test.callbackPass(function(externalEntry) {
-                  chrome.test.assertTrue(!!externalEntry);
-                  chrome.fileManagerPrivate.getEntryActions(
-                      externalEntry.toURL(),
-                      chrome.test.callbackPass(function(actions) {
-                        chrome.test.assertEq(2, actions.length);
-                        chrome.test.assertEq(TESTING_ACTIONS_DIR_ACTIONS[0].id,
-                            actions[0].id);
-                        chrome.test.assertFalse(!!actions[0].title);
-                        chrome.test.assertEq(TESTING_ACTIONS_DIR_ACTIONS[1].id,
-                            actions[1].id);
-                        chrome.test.assertEq(
-                            TESTING_ACTIONS_DIR_ACTIONS[1].title,
-                            actions[1].title);
-                      }));
+            chrome.fileManagerPrivate.getCustomActions(
+                [dirEntry],
+                chrome.test.callbackPass(function(actions) {
+                  chrome.test.assertEq(2, actions.length);
+                  chrome.test.assertEq(TESTING_ACTIONS_DIR_ACTIONS[0].id,
+                      actions[0].id);
+                  chrome.test.assertFalse(!!actions[0].title);
+                  chrome.test.assertEq(TESTING_ACTIONS_DIR_ACTIONS[1].id,
+                      actions[1].id);
+                  chrome.test.assertEq(
+                      TESTING_ACTIONS_DIR_ACTIONS[1].title,
+                      actions[1].title);
                 }));
           }),
           function(error) {
@@ -128,15 +124,36 @@ function runTests() {
           TESTING_NO_ACTIONS_DIR.name,
           {create: false},
           chrome.test.callbackPass(function(dirEntry) {
-            test_util.toExternalEntry(dirEntry).then(
-                chrome.test.callbackPass(function(externalEntry) {
-                  chrome.test.assertTrue(!!externalEntry);
-                  chrome.fileManagerPrivate.getEntryActions(
-                      externalEntry.toURL(),
+            chrome.fileManagerPrivate.getCustomActions(
+                [dirEntry],
+                chrome.test.callbackPass(function(actions) {
+                  chrome.test.assertEq(0, actions.length);
+                }));
+          }),
+          function(error) {
+            chrome.test.fail(error.name);
+          });
+    },
+
+    // Get actions for multiple entries.
+    function getNoActionsMultipleSuccess() {
+      test_util.fileSystem.root.getDirectory(
+          TESTING_ACTIONS_DIR.name,
+          {create: false},
+          chrome.test.callbackPass(function(dirEntry) {
+            test_util.fileSystem.root.getDirectory(
+                TESTING_NO_ACTIONS_DIR.name,
+                {create: false},
+                chrome.test.callbackPass(function(dirEntry2) {
+                  chrome.fileManagerPrivate.getCustomActions(
+                      [dirEntry, dirEntry2],
                       chrome.test.callbackPass(function(actions) {
                         chrome.test.assertEq(0, actions.length);
                       }));
-                }));
+                }),
+                function(error) {
+                  chrome.test.fail(error.name);
+                });
           }),
           function(error) {
             chrome.test.fail(error.name);

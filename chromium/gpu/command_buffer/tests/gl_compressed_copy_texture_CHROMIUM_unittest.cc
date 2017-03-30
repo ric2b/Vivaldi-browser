@@ -9,8 +9,8 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <GLES2/gl2extchromium.h>
+#include <stdint.h>
 
-#include "base/memory/scoped_vector.h"
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -22,34 +22,34 @@ namespace gpu {
 
 namespace {
 
-const uint8 kCompressedImageColor[4] = { 255u, 0u, 0u, 255u };
+const uint8_t kCompressedImageColor[4] = {255u, 0u, 0u, 255u};
 
 // Single compressed ATC block of source pixels all set to:
 // kCompressedImageColor.
-const uint8 kCompressedImageATC[8] = {
-    0x0, 0x7c, 0x0, 0xf8, 0x55, 0x55, 0x55, 0x55 };
+const uint8_t kCompressedImageATC[8] = {0x0,  0x7c, 0x0,  0xf8,
+                                        0x55, 0x55, 0x55, 0x55};
 
 // Single compressed ATCIA block of source pixels all set to:
 // kCompressedImageColor.
-const uint8 kCompressedImageATCIA[16] = {
-    0xff, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-    0x7c, 0x0, 0xf8, 0x55, 0x55, 0x55, 0x55 };
+const uint8_t kCompressedImageATCIA[16] = {0xff, 0xff, 0x0,  0x0,  0x0, 0x0,
+                                           0x0,  0x0,  0x0,  0x7c, 0x0, 0xf8,
+                                           0x55, 0x55, 0x55, 0x55};
 
 // Single compressed DXT1 block of source pixels all set to:
 // kCompressedImageColor.
-const uint8 kCompressedImageDXT1[8] = {
-    0x00, 0xf8, 0x00, 0xf8, 0xaa, 0xaa, 0xaa, 0xaa };
+const uint8_t kCompressedImageDXT1[8] = {0x00, 0xf8, 0x00, 0xf8,
+                                         0xaa, 0xaa, 0xaa, 0xaa};
 
 // Single compressed DXT5 block of source pixels all set to:
 // kCompressedImageColor.
-const uint8 kCompressedImageDXT5[16] = {
-    0xff, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-    0xf8, 0x0, 0xf8, 0xaa, 0xaa, 0xaa, 0xaa };
+const uint8_t kCompressedImageDXT5[16] = {0xff, 0xff, 0x0,  0x0,  0x0, 0x0,
+                                          0x0,  0x0,  0x0,  0xf8, 0x0, 0xf8,
+                                          0xaa, 0xaa, 0xaa, 0xaa};
 
 // Single compressed DXT1 block of source pixels all set to:
 // kCompressedImageColor.
-const uint8 kCompressedImageETC1[8] = {
-    0x0, 0x0, 0xf8, 0x2, 0xff, 0xff, 0x0, 0x0 };
+const uint8_t kCompressedImageETC1[8] = {0x0,  0x0,  0xf8, 0x2,
+                                         0xff, 0xff, 0x0,  0x0};
 
 void glEnableDisable(GLint param, GLboolean value) {
   if (value)
@@ -123,7 +123,7 @@ TEST_F(GLCompressedCopyTextureCHROMIUMTest, Basic) {
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glCompressedCopyTextureCHROMIUM(GL_TEXTURE_2D, textures_[0], textures_[1]);
+  glCompressedCopyTextureCHROMIUM(textures_[0], textures_[1]);
   EXPECT_TRUE(glGetError() == GL_NO_ERROR);
 
   // Load shader program.
@@ -155,46 +155,46 @@ TEST_F(GLCompressedCopyTextureCHROMIUMTest, Basic) {
 TEST_F(GLCompressedCopyTextureCHROMIUMTest, InternalFormat) {
   struct Image {
     const GLint format;
-    const uint8* data;
+    const uint8_t* data;
     const GLsizei data_size;
 
-    Image(const GLint format, const uint8* data, const GLsizei data_size) :
-      format(format), data(data), data_size(data_size) {}
+    Image(const GLint format, const uint8_t* data, const GLsizei data_size)
+        : format(format), data(data), data_size(data_size) {}
   };
-  ScopedVector<Image> supported_formats;
+  std::vector<scoped_ptr<Image>> supported_formats;
 
   if (GLTestHelper::HasExtension("GL_AMD_compressed_ATC_texture") ||
       GLTestHelper::HasExtension("GL_ATI_texture_compression_atitc")) {
-    supported_formats.push_back(new Image(
+    supported_formats.push_back(make_scoped_ptr(new Image(
         GL_ATC_RGB_AMD,
         kCompressedImageATC,
-        sizeof(kCompressedImageATC)));
-    supported_formats.push_back(new Image(
+        sizeof(kCompressedImageATC))));
+    supported_formats.push_back(make_scoped_ptr(new Image(
         GL_ATC_RGBA_INTERPOLATED_ALPHA_AMD,
         kCompressedImageATCIA,
-        sizeof(kCompressedImageATCIA)));
+        sizeof(kCompressedImageATCIA))));
   }
   if (GLTestHelper::HasExtension("GL_EXT_texture_compression_dxt1")) {
-    supported_formats.push_back(new Image(
+    supported_formats.push_back(make_scoped_ptr(new Image(
         GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
         kCompressedImageDXT1,
-        sizeof(kCompressedImageDXT1)));
+        sizeof(kCompressedImageDXT1))));
   }
   if (GLTestHelper::HasExtension("GL_ANGLE_texture_compression_dxt5") ||
       GLTestHelper::HasExtension("GL_EXT_texture_compression_s3tc")) {
-    supported_formats.push_back(new Image(
+    supported_formats.push_back(make_scoped_ptr(new Image(
         GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,
         kCompressedImageDXT5,
-        sizeof(kCompressedImageDXT5)));
+        sizeof(kCompressedImageDXT5))));
   }
   if (GLTestHelper::HasExtension("GL_OES_compressed_ETC1_RGB8_texture")) {
-    supported_formats.push_back(new Image(
+    supported_formats.push_back(make_scoped_ptr(new Image(
         GL_ETC1_RGB8_OES,
         kCompressedImageETC1,
-        sizeof(kCompressedImageETC1)));
+        sizeof(kCompressedImageETC1))));
   }
 
-  for (const Image* image : supported_formats) {
+  for (const auto& image : supported_formats) {
     glBindTexture(GL_TEXTURE_2D, textures_[0]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -209,7 +209,7 @@ TEST_F(GLCompressedCopyTextureCHROMIUMTest, InternalFormat) {
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glCompressedCopyTextureCHROMIUM(GL_TEXTURE_2D, textures_[0], textures_[1]);
+    glCompressedCopyTextureCHROMIUM(textures_[0], textures_[1]);
     EXPECT_TRUE(GL_NO_ERROR == glGetError());
   }
 }
@@ -221,7 +221,7 @@ TEST_F(GLCompressedCopyTextureCHROMIUMTest, InternalFormatNotSupported) {
     return;
   }
 
-  const uint8 kUncompressedPixels[1 * 4] = { 255u, 0u, 0u, 255u };
+  const uint8_t kUncompressedPixels[1 * 4] = {255u, 0u, 0u, 255u};
 
   glBindTexture(GL_TEXTURE_2D, textures_[0]);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -239,8 +239,44 @@ TEST_F(GLCompressedCopyTextureCHROMIUMTest, InternalFormatNotSupported) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
   // Check that the GL_RGBA format reports an error.
-  glCompressedCopyTextureCHROMIUM(GL_TEXTURE_2D, textures_[0], textures_[1]);
+  glCompressedCopyTextureCHROMIUM(textures_[0], textures_[1]);
   EXPECT_TRUE(GL_INVALID_OPERATION == glGetError());
+}
+
+TEST_F(GLCompressedCopyTextureCHROMIUMTest, InvalidTextureIds) {
+  if (!GLTestHelper::HasExtension("GL_EXT_texture_compression_dxt1")) {
+    LOG(INFO)
+        << "GL_EXT_texture_compression_dxt1 not supported. Skipping test...";
+    return;
+  }
+
+  glBindTexture(GL_TEXTURE_2D, textures_[0]);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGB_S3TC_DXT1_EXT, 4,
+                         4, 0, sizeof(kCompressedImageDXT1),
+                         kCompressedImageDXT1);
+  EXPECT_TRUE(glGetError() == GL_NO_ERROR);
+
+  glBindTexture(GL_TEXTURE_2D, textures_[1]);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+  glCompressedCopyTextureCHROMIUM(textures_[0], 99993);
+  EXPECT_TRUE(glGetError() == GL_INVALID_VALUE);
+
+  glCompressedCopyTextureCHROMIUM(99994, textures_[1]);
+  EXPECT_TRUE(glGetError() == GL_INVALID_VALUE);
+
+  glCompressedCopyTextureCHROMIUM(99995, 99996);
+  EXPECT_TRUE(glGetError() == GL_INVALID_VALUE);
+
+  glCompressedCopyTextureCHROMIUM(textures_[0], textures_[1]);
+  EXPECT_TRUE(glGetError() == GL_NO_ERROR);
 }
 
 // Validate that some basic GL state is not touched upon execution of
@@ -280,8 +316,7 @@ TEST_F(GLCompressedCopyTextureCHROMIUMTest, BasicStatePreservation) {
     glDepthMask(setting);
 
     glActiveTexture(GL_TEXTURE1 + x);
-
-    glCompressedCopyTextureCHROMIUM(GL_TEXTURE_2D, textures_[0], textures_[1]);
+    glCompressedCopyTextureCHROMIUM(textures_[0], textures_[1]);
     EXPECT_TRUE(glGetError() == GL_NO_ERROR);
 
     EXPECT_EQ(setting, glIsEnabled(GL_DEPTH_TEST));
@@ -343,7 +378,7 @@ TEST_F(GLCompressedCopyTextureCHROMIUMTest, TextureStatePreserved) {
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, texture_ids[1]);
 
-  glCompressedCopyTextureCHROMIUM(GL_TEXTURE_2D, textures_[0], textures_[1]);
+  glCompressedCopyTextureCHROMIUM(textures_[0], textures_[1]);
   EXPECT_TRUE(GL_NO_ERROR == glGetError());
 
   GLint active_texture = 0;

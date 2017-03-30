@@ -6,6 +6,7 @@
 #define CONTENT_CHILD_GEOFENCING_WEB_GEOFENCING_PROVIDER_IMPL_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/WebGeofencingProvider.h"
@@ -18,7 +19,7 @@ class CONTENT_EXPORT WebGeofencingProviderImpl
     : NON_EXPORTED_BASE(public blink::WebGeofencingProvider) {
  public:
   explicit WebGeofencingProviderImpl(ThreadSafeSender* thread_safe_sender);
-  virtual ~WebGeofencingProviderImpl();
+  ~WebGeofencingProviderImpl() override;
 
   // Enables mock geofencing service. |service_available| indicates if the
   // mock service should mock geofencing being available or not.
@@ -30,18 +31,18 @@ class CONTENT_EXPORT WebGeofencingProviderImpl
 
  private:
   // WebGeofencingProvider implementation.
-  virtual void registerRegion(
+  void registerRegion(
       const blink::WebString& regionId,
       const blink::WebCircularGeofencingRegion& region,
       blink::WebServiceWorkerRegistration* service_worker_registration,
-      blink::WebGeofencingCallbacks* callbacks);
-  virtual void unregisterRegion(
+      blink::WebGeofencingCallbacks* callbacks) override;
+  void unregisterRegion(
       const blink::WebString& regionId,
       blink::WebServiceWorkerRegistration* service_worker_registration,
-      blink::WebGeofencingCallbacks* callbacks);
-  virtual void getRegisteredRegions(
+      blink::WebGeofencingCallbacks* callbacks) override;
+  void getRegisteredRegions(
       blink::WebServiceWorkerRegistration* service_worker_registration,
-      blink::WebGeofencingRegionsCallbacks* callbacks);
+      blink::WebGeofencingRegionsCallbacks* callbacks) override;
 
   GeofencingDispatcher* GetDispatcher();
 

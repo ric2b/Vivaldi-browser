@@ -4,6 +4,10 @@
 
 #include "ios/web/app/web_main_loop.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -49,10 +53,8 @@ void WebMainLoop::EarlyInitialization() {
     parts_->PreEarlyInitialization();
   }
 
-#if !defined(USE_OPENSSL)
   // We want to be sure to init NSPR on the main thread.
   crypto::EnsureNSPRInit();
-#endif  // !defined(USE_OPENSSL)
 
   if (parts_) {
     parts_->PostEarlyInitialization();
@@ -68,21 +70,18 @@ void WebMainLoop::MainMessageLoopStart() {
   if (!base::MessageLoop::current()) {
     main_message_loop_.reset(new base::MessageLoopForUI);
   }
-  // Note: In Chrome, Attach() is called in
-  // ChromeBrowserMainPartsIOS::PreMainMessageLoopStart().
   base::MessageLoopForUI::current()->Attach();
 
   InitializeMainThread();
 
 #if 0
-  // TODO(droger): SystemMonitor is not working properly on iOS.
-  // See http://crbug.com/228014.
+  // TODO(crbug.com/228014): SystemMonitor is not working properly on iOS.
   system_monitor_.reset(new base::SystemMonitor);
 #endif
   // TODO(rohitrao): Do we need PowerMonitor on iOS, or can we get rid of it?
   scoped_ptr<base::PowerMonitorSource> power_monitor_source(
       new base::PowerMonitorDeviceSource());
-  power_monitor_.reset(new base::PowerMonitor(power_monitor_source.Pass()));
+  power_monitor_.reset(new base::PowerMonitor(std::move(power_monitor_source)));
   network_change_notifier_.reset(net::NetworkChangeNotifier::Create());
 
   if (parts_) {
@@ -111,18 +110,15 @@ void WebMainLoop::CreateStartupTasks() {
 
 int WebMainLoop::PreCreateThreads() {
   if (parts_) {
-    result_code_ = parts_->PreCreateThreads();
+    parts_->PreCreateThreads();
   }
 
   return result_code_;
 }
 
 int WebMainLoop::CreateThreads() {
-  base::Thread::Options default_options;
   base::Thread::Options io_message_loop_options;
   io_message_loop_options.message_loop_type = base::MessageLoop::TYPE_IO;
-  base::Thread::Options ui_message_loop_options;
-  ui_message_loop_options.message_loop_type = base::MessageLoop::TYPE_UI;
 
   // Start threads in the order they occur in the WebThread::ID
   // enumeration, except for WebThread::UI which is the main
@@ -132,28 +128,31 @@ int WebMainLoop::CreateThreads() {
   for (size_t thread_id = WebThread::UI + 1; thread_id < WebThread::ID_COUNT;
        ++thread_id) {
     scoped_ptr<WebThreadImpl>* thread_to_start = nullptr;
-    base::Thread::Options* options = &default_options;
+    base::Thread::Options options;
 
     switch (thread_id) {
       // TODO(rohitrao): We probably do not need all of these threads.  Remove
       // the ones that serve no purpose.  http://crbug.com/365909
       case WebThread::DB:
         thread_to_start = &db_thread_;
+        options.timer_slack = base::TIMER_SLACK_MAXIMUM;
         break;
       case WebThread::FILE_USER_BLOCKING:
         thread_to_start = &file_user_blocking_thread_;
         break;
       case WebThread::FILE:
         thread_to_start = &file_thread_;
-        options = &io_message_loop_options;
+        options = io_message_loop_options;
+        options.timer_slack = base::TIMER_SLACK_MAXIMUM;
         break;
       case WebThread::CACHE:
         thread_to_start = &cache_thread_;
-        options = &io_message_loop_options;
+        options = io_message_loop_options;
+        options.timer_slack = base::TIMER_SLACK_MAXIMUM;
         break;
       case WebThread::IO:
         thread_to_start = &io_thread_;
-        options = &io_message_loop_options;
+        options = io_message_loop_options;
         break;
       case WebThread::UI:
       case WebThread::ID_COUNT:
@@ -166,7 +165,7 @@ int WebMainLoop::CreateThreads() {
 
     if (thread_to_start) {
       (*thread_to_start).reset(new WebThreadImpl(id));
-      (*thread_to_start)->StartWithOptions(*options);
+      (*thread_to_start)->StartWithOptions(options);
     } else {
       NOTREACHED();
     }

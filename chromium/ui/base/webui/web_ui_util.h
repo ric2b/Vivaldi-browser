@@ -5,6 +5,8 @@
 #ifndef UI_BASE_WEBUI_WEB_UI_UTIL_H_
 #define UI_BASE_WEBUI_WEB_UI_UTIL_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/strings/string_piece.h"
@@ -20,6 +22,10 @@ namespace webui {
 // Convenience routine to convert SkBitmap object to data url
 // so that it can be used in WebUI.
 UI_BASE_EXPORT std::string GetBitmapDataUrl(const SkBitmap& bitmap);
+
+// Convenience routine to convert an in-memory PNG to a data url for WebUI use.
+UI_BASE_EXPORT std::string GetPngDataUrl(const unsigned char* data,
+                                         size_t size);
 
 // Extracts a disposition from click event arguments. |args| should contain
 // an integer button and booleans alt key, ctrl key, meta key, and shift key
@@ -44,8 +50,16 @@ UI_BASE_EXPORT void SetLoadTimeDataDefaults(
     const std::string& app_locale,
     base::DictionaryValue* localized_strings);
 
+// Get a CSS declaration for common text styles using provided template.
+UI_BASE_EXPORT std::string GetWebUiCssTextDefaults(
+    const std::string& css_template);
+
 // Get a CSS declaration for common text styles for all of Web UI.
 UI_BASE_EXPORT std::string GetWebUiCssTextDefaults();
+
+// Get a CSS declaration for common text styles for Web UI using
+// Material Design.
+UI_BASE_EXPORT std::string GetWebUiCssTextDefaultsMd();
 
 // Appends the CSS declaration returned by GetWebUiCssTextDefaults() as an
 // inline stylesheet.

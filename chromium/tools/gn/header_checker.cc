@@ -37,7 +37,8 @@ struct PublicGeneratedPair {
 SourceFile RemoveRootGenDirFromFile(const Target* target,
                                     const SourceFile& file) {
   const SourceDir& gen = target->settings()->toolchain_gen_dir();
-  if (!gen.is_null() && base::StartsWithASCII(file.value(), gen.value(), true))
+  if (!gen.is_null() && base::StartsWith(file.value(), gen.value(),
+                                         base::CompareCase::SENSITIVE))
     return SourceFile("//" + file.value().substr(gen.value().size()));
   return file;
 }
@@ -62,11 +63,11 @@ LocationRange CreatePersistentRange(const InputFile& input_file,
 
   return LocationRange(Location(clone_input_file,
                                 range.begin().line_number(),
-                                range.begin().char_offset(),
+                                range.begin().column_number(),
                                 -1 /* TODO(scottmg) */),
                        Location(clone_input_file,
                                 range.end().line_number(),
-                                range.end().char_offset(),
+                                range.end().column_number(),
                                 -1 /* TODO(scottmg) */));
 }
 
@@ -162,9 +163,11 @@ void HeaderChecker::RunCheckOverFiles(const FileMap& files, bool force_check) {
         type != SOURCE_M && type != SOURCE_MM && type != SOURCE_RC)
       continue;
 
-    // If any target marks it as generated, don't check it.
+    // If any target marks it as generated, don't check it. We have to check
+    // file_map_, which includes all known files; files only includes those
+    // being checked.
     bool is_generated = false;
-    for (const auto& vect_i : file.second)
+    for (const auto& vect_i : file_map_[file.first])
       is_generated |= vect_i.is_generated;
     if (is_generated)
       continue;

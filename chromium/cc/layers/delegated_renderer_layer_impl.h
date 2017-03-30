@@ -5,10 +5,12 @@
 #ifndef CC_LAYERS_DELEGATED_RENDERER_LAYER_IMPL_H_
 #define CC_LAYERS_DELEGATED_RENDERER_LAYER_IMPL_H_
 
+#include <stddef.h>
+
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
-#include "cc/base/scoped_ptr_vector.h"
 #include "cc/layers/layer_impl.h"
 
 namespace cc {
@@ -45,7 +47,7 @@ class CC_EXPORT DelegatedRendererLayerImpl : public LayerImpl {
   void CreateChildIdIfNeeded(const ReturnCallback& return_callback);
 
   void SetFrameData(const DelegatedFrameData* frame_data,
-                    const gfx::RectF& damage_in_frame);
+                    const gfx::Rect& damage_in_frame);
 
   float inverse_device_scale_factor() const {
     return inverse_device_scale_factor_;

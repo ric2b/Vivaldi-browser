@@ -35,8 +35,11 @@ class _MSEMeasurement(page_test.PageTest):
                 value=float(metrics[m]), important=True))
 
 
-@benchmark.Disabled('android',  # See media.android.tough_video_cases below
-                    'xp')  # crbug.com/475191
+# android: See media.android.tough_video_cases below
+# xp: crbug.com/475191
+# win8: crbug.com/531618
+# win7: crbug.com/555079
+@benchmark.Disabled('android', 'xp', 'win8', 'win7')
 class Media(perf_benchmark.PerfBenchmark):
   """Obtains media metrics for key user scenarios."""
   test = media.Media
@@ -58,7 +61,7 @@ class MediaNetworkSimulation(perf_benchmark.PerfBenchmark):
     return 'media.media_cns_cases'
 
 
-@benchmark.Disabled() # crbug.com/448092
+@benchmark.Disabled('all') # crbug.com/448092
 @benchmark.Disabled('l', 'android-webview') # WebView: crbug.com/419689
 class MediaAndroid(perf_benchmark.PerfBenchmark):
   """Obtains media metrics for key user scenarios on Android."""

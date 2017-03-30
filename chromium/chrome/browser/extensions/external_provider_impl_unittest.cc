@@ -4,13 +4,17 @@
 
 #include "chrome/browser/extensions/external_provider_impl.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_path_override.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
@@ -98,7 +102,7 @@ class ExternalProviderImplTest : public ExtensionServiceTestBase {
     ExtensionServiceTestBase::SetUp();
     test_server_.reset(new EmbeddedTestServer());
 
-    ASSERT_TRUE(test_server_->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(test_server_->Start());
     test_server_->RegisterRequestHandler(
         base::Bind(&ExternalProviderImplTest::HandleRequest,
                    base::Unretained(this)));
@@ -127,7 +131,7 @@ class ExternalProviderImplTest : public ExtensionServiceTestBase {
           extension_misc::kInAppPaymentsSupportAppId,
           test_server_->GetURL(kAppPath).spec().c_str()));
       response->set_content_type("text/xml");
-      return response.Pass();
+      return std::move(response);
     }
     if (url.path() == kAppPath) {
       base::FilePath test_data_dir;
@@ -139,7 +143,7 @@ class ExternalProviderImplTest : public ExtensionServiceTestBase {
       scoped_ptr<BasicHttpResponse> response(new BasicHttpResponse);
       response->set_code(net::HTTP_OK);
       response->set_content(contents);
-      return response.Pass();
+      return std::move(response);
     }
 
     return nullptr;
@@ -159,8 +163,7 @@ class ExternalProviderImplTest : public ExtensionServiceTestBase {
 
 }  // namespace
 
-// TODO reenable test for Vivaldi
-TEST_F(ExternalProviderImplTest, DISABLED_InAppPayments) {
+TEST_F(ExternalProviderImplTest, InAppPayments) {
   InitServiceWithExternalProviders();
 
   scoped_refptr<content::MessageLoopRunner> runner =

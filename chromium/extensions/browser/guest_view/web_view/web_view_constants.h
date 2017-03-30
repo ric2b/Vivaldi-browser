@@ -7,7 +7,10 @@
 #ifndef EXTENSIONS_BROWSER_GUEST_VIEW_WEB_VIEW_WEB_VIEW_CONSTANTS_H_
 #define EXTENSIONS_BROWSER_GUEST_VIEW_WEB_VIEW_WEB_VIEW_CONSTANTS_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+// Vivaldi constants
+#include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 
 namespace webview {
 
@@ -37,6 +40,7 @@ extern const char kEventExit[];
 extern const char kEventExitFullscreen[];
 extern const char kEventFindReply[];
 extern const char kEventFrameNameChanged[];
+extern const char kEventHeadersReceived[];
 extern const char kEventLoadAbort[];
 extern const char kEventLoadCommit[];
 extern const char kEventLoadProgress[];
@@ -46,13 +50,20 @@ extern const char kEventLoadStop[];
 extern const char kEventMessage[];
 extern const char kEventNewWindow[];
 extern const char kEventPermissionRequest[];
+extern const char kEventResponseStarted[];
 extern const char kEventResponsive[];
 extern const char kEventSizeChanged[];
 extern const char kEventUnresponsive[];
 extern const char kEventZoomChange[];
 
-// gisli@vivalid.com:  Event for requesting page info.
-extern const char kEventRequestPageInfo[];
+// WebRequest API events.
+extern const char kEventAuthRequired[];
+extern const char kEventBeforeRedirect[];
+extern const char kEventBeforeRequest[];
+extern const char kEventBeforeSendHeaders[];
+extern const char kEventCompleted[];
+extern const char kEventErrorOccurred[];
+extern const char kEventSendHeaders[];
 
 // Event related constants.
 extern const char kWebViewEventPrefix[];
@@ -73,9 +84,6 @@ extern const char kMessageType[];
 extern const char kName[];
 extern const char kNewHeight[];
 extern const char kNewURL[];
-extern const char kNewSearchName[];
-extern const char kNewSearchUrl[];
-extern const char kClipBoardText[];
 extern const char kNewWidth[];
 extern const char kOldHeight[];
 extern const char kOldURL[];
@@ -136,21 +144,16 @@ extern const int kInvalidPermissionRequestID;
 //
 // Note that these are not in an enum because using enums to declare bitmasks
 // results in the enum values being signed.
-extern const uint32 WEB_VIEW_REMOVE_DATA_MASK_APPCACHE;
-extern const uint32 WEB_VIEW_REMOVE_DATA_MASK_CACHE;
-extern const uint32 WEB_VIEW_REMOVE_DATA_MASK_COOKIES;
-extern const uint32 WEB_VIEW_REMOVE_DATA_MASK_FILE_SYSTEMS;
-extern const uint32 WEB_VIEW_REMOVE_DATA_MASK_INDEXEDDB;
-extern const uint32 WEB_VIEW_REMOVE_DATA_MASK_LOCAL_STORAGE;
-extern const uint32 WEB_VIEW_REMOVE_DATA_MASK_WEBSQL;
+extern const uint32_t WEB_VIEW_REMOVE_DATA_MASK_APPCACHE;
+extern const uint32_t WEB_VIEW_REMOVE_DATA_MASK_CACHE;
+extern const uint32_t WEB_VIEW_REMOVE_DATA_MASK_COOKIES;
+extern const uint32_t WEB_VIEW_REMOVE_DATA_MASK_FILE_SYSTEMS;
+extern const uint32_t WEB_VIEW_REMOVE_DATA_MASK_INDEXEDDB;
+extern const uint32_t WEB_VIEW_REMOVE_DATA_MASK_LOCAL_STORAGE;
+extern const uint32_t WEB_VIEW_REMOVE_DATA_MASK_WEBSQL;
 
 // Other.
 extern const char kWebViewContentScriptManagerKeyName[];
-
-// Vivaldi: Extended progress information
-extern const char kLoadedBytes[];
-extern const char kLoadedElements[];
-extern const char kTotalElements[];
 
 }  // namespace webview
 

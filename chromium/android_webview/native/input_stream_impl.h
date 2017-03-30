@@ -5,9 +5,12 @@
 #ifndef ANDROID_WEBVIEW_NATIVE_INPUT_STREAM_H_
 #define ANDROID_WEBVIEW_NATIVE_INPUT_STREAM_H_
 
+#include <stdint.h>
+
 #include "android_webview/browser/input_stream.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 
 namespace net {
 class IOBuffer;
@@ -29,7 +32,7 @@ class InputStreamImpl : public InputStream {
   ~InputStreamImpl() override;
 
   // Gets the underlying Java object. Guaranteed non-NULL.
-  const jobject jobj() const { return jobject_.obj(); }
+  jobject jobj() const { return jobject_.obj(); }
 
   // InputStream implementation.
   bool BytesAvailable(int* bytes_available) const override;

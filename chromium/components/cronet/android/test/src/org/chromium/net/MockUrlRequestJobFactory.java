@@ -6,7 +6,7 @@ package org.chromium.net;
 
 import static junit.framework.Assert.assertTrue;
 
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.net.test.FailurePhase;
 
 /**
@@ -53,10 +53,29 @@ public final class MockUrlRequestJobFactory {
         return nativeGetMockUrlForData(data, dataRepeatCount);
     }
 
+    /**
+     * Constructs a mock URL that will request client certificate and return
+     * the string "data" as the response.
+     */
+    public static String getMockUrlForClientCertificateRequest() {
+        return nativeGetMockUrlForClientCertificateRequest();
+    }
+
+    /**
+     * Constructs a mock URL that will fail with an SSL certificate error.
+     */
+    public static String getMockUrlForSSLCertificateError() {
+        return nativeGetMockUrlForSSLCertificateError();
+    }
+
     private static native void nativeAddUrlInterceptors();
 
     private static native String nativeGetMockUrlWithFailure(int phase, int netError);
 
     private static native String nativeGetMockUrlForData(String data,
             int dataRepeatCount);
+
+    private static native String nativeGetMockUrlForClientCertificateRequest();
+
+    private static native String nativeGetMockUrlForSSLCertificateError();
 }

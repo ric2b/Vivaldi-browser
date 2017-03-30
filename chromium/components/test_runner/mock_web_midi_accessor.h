@@ -5,7 +5,9 @@
 #ifndef COMPONENTS_TEST_RUNNER_MOCK_WEB_MIDI_ACCESSOR_H_
 #define COMPONENTS_TEST_RUNNER_MOCK_WEB_MIDI_ACCESSOR_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "components/test_runner/web_task.h"
 #include "third_party/WebKit/public/platform/WebMIDIAccessor.h"
 
@@ -21,14 +23,14 @@ class MockWebMIDIAccessor : public blink::WebMIDIAccessor {
  public:
   explicit MockWebMIDIAccessor(blink::WebMIDIAccessorClient* client,
                                TestInterfaces* interfaces);
-  virtual ~MockWebMIDIAccessor();
+  ~MockWebMIDIAccessor() override;
 
   // blink::WebMIDIAccessor implementation.
-  virtual void startSession() override;
-  virtual void sendMIDIData(unsigned port_index,
-                            const unsigned char* data,
-                            size_t length,
-                            double timestamp) override {}
+  void startSession() override;
+  void sendMIDIData(unsigned port_index,
+                    const unsigned char* data,
+                    size_t length,
+                    double timestamp) override;
 
   // WebTask related methods
   WebTaskList* mutable_task_list() { return &task_list_; }

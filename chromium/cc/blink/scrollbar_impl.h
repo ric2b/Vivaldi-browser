@@ -5,7 +5,7 @@
 #ifndef CC_BLINK_SCROLLBAR_IMPL_H_
 #define CC_BLINK_SCROLLBAR_IMPL_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/input/scrollbar.h"
 #include "third_party/WebKit/public/platform/WebScrollbarThemePainter.h"
@@ -33,6 +33,8 @@ class ScrollbarImpl : public cc::Scrollbar {
   int ThumbThickness() const override;
   int ThumbLength() const override;
   gfx::Rect TrackRect() const override;
+  float ThumbOpacity() const override;
+  bool NeedsPaintPart(cc::ScrollbarPart part) const override;
   void PaintPart(SkCanvas* canvas,
                  cc::ScrollbarPart part,
                  const gfx::Rect& content_rect) override;

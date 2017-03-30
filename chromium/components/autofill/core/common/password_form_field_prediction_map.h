@@ -7,6 +7,7 @@
 
 #include <map>
 
+#include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 
 namespace autofill {
@@ -19,11 +20,14 @@ enum PasswordFormFieldPredictionType {
   PREDICTION_USERNAME,
   PREDICTION_CURRENT_PASSWORD,
   PREDICTION_NEW_PASSWORD,
-  PREDICTION_MAX = PREDICTION_NEW_PASSWORD
+  PREDICTION_NOT_PASSWORD,
+  PREDICTION_MAX = PREDICTION_NOT_PASSWORD
 };
 
 using PasswordFormFieldPredictionMap =
-    std::map<PasswordFormFieldPredictionType, FormFieldData>;
+    std::map<FormFieldData, PasswordFormFieldPredictionType>;
+using FormsPredictionsMap =
+    std::map<FormData, PasswordFormFieldPredictionMap>;
 
 }  // namespace autofill
 

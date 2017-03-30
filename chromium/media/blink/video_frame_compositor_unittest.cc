@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -51,7 +52,7 @@ class VideoFrameCompositorTest : public testing::Test,
 
   scoped_refptr<VideoFrame> CreateOpaqueFrame() {
     gfx::Size size(8, 8);
-    return VideoFrame::CreateFrame(VideoFrame::YV12, size, gfx::Rect(size),
+    return VideoFrame::CreateFrame(PIXEL_FORMAT_YV12, size, gfx::Rect(size),
                                    size, base::TimeDelta());
   }
 
@@ -220,7 +221,7 @@ TEST_F(VideoFrameCompositorTest, OpacityChanged) {
   gfx::Size size(8, 8);
   scoped_refptr<VideoFrame> opaque_frame = CreateOpaqueFrame();
   scoped_refptr<VideoFrame> not_opaque_frame = VideoFrame::CreateFrame(
-      VideoFrame::YV12A, size, gfx::Rect(size), size, base::TimeDelta());
+      PIXEL_FORMAT_YV12A, size, gfx::Rect(size), size, base::TimeDelta());
 
   // Initial expectations.
   EXPECT_FALSE(opaque());
@@ -258,7 +259,7 @@ TEST_F(VideoFrameCompositorTest, OpacityChanged) {
   EXPECT_FALSE(opaque());
   EXPECT_EQ(1, opacity_changed_count());
 
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       compositor()->UpdateCurrentFrame(base::TimeTicks(), base::TimeTicks()));
   RenderFrame();
   EXPECT_FALSE(opaque());
@@ -285,9 +286,7 @@ TEST_F(VideoFrameCompositorTest, VideoRendererSinkFrameDropped) {
   EXPECT_CALL(*this, Render(_, _, _)).WillRepeatedly(Return(opaque_frame));
   StartVideoRendererSink();
 
-  // The first UpdateCurrentFrame() after a background render, which starting
-  // the sink does automatically, won't report a dropped frame.
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       compositor()->UpdateCurrentFrame(base::TimeTicks(), base::TimeTicks()));
 
   // Another call should trigger a dropped frame callback.

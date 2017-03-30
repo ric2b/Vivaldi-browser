@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
+
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/cloud/policy_header_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -41,13 +46,13 @@ scoped_ptr<net::test_server::HttpResponse> HandleTestRequest(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
     http_response->AddCustomHeader("Location", redirect_target);
-    return http_response.Pass();
+    return std::move(http_response);
   } else {
     scoped_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_OK);
     http_response->set_content("Success");
-    return http_response.Pass();
+    return std::move(http_response);
   }
 }
 
@@ -105,7 +110,7 @@ class ChromeResourceDispatcherHostDelegateBrowserTest :
 
     embedded_test_server()->RegisterRequestHandler(
         base::Bind(&HandleTestRequest));
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
     // Tell chrome that this is our DM server.
     dm_url_ = embedded_test_server()->GetURL("/DeviceManagement");
 

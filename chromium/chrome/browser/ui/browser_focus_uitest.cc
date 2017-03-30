@@ -2,24 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/find_bar/find_bar_host_unittest_util.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_controller.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/common/chrome_paths.h"
@@ -27,11 +29,15 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/omnibox/browser/omnibox_edit_controller.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -67,10 +73,10 @@ const char kTypicalPage[] = "/focus/typical_page.html";
 
 class BrowserFocusTest : public InProcessBrowserTest {
  public:
-   // InProcessBrowserTest overrides:
+  // InProcessBrowserTest overrides:
   void SetUpOnMainThread() override {
-     ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
-   }
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
 
   bool IsViewFocused(ViewID vid) {
     return ui_test_utils::IsViewFocused(browser(), vid);
@@ -117,6 +123,13 @@ class BrowserFocusTest : public InProcessBrowserTest {
       }
 #endif
 
+      if (reverse) {
+        ASSERT_TRUE(ui_test_utils::SendKeyPressAndWait(
+            browser(), key, false, reverse, false, false,
+            content::NOTIFICATION_ALL,
+            content::NotificationService::AllSources()));
+      }
+
       for (size_t j = 0; j < arraysize(kExpectedIDs); ++j) {
         SCOPED_TRACE(base::StringPrintf("focus inner loop %" PRIuS, j));
         const size_t index = reverse ? arraysize(kExpectedIDs) - 1 - j : j;
@@ -145,9 +158,23 @@ class BrowserFocusTest : public InProcessBrowserTest {
           browser(), key, false, reverse, false, false,
           chrome::NOTIFICATION_FOCUS_RETURNED_TO_BROWSER,
           content::Source<Browser>(browser())));
+      EXPECT_TRUE(
+          IsViewFocused(reverse ? VIEW_ID_OMNIBOX : VIEW_ID_LOCATION_ICON));
+
+      ASSERT_TRUE(ui_test_utils::SendKeyPressAndWait(
+          browser(), key, false, reverse, false, false,
+          content::NOTIFICATION_ALL,
+          content::NotificationService::AllSources()));
 #endif
       content::RunAllPendingInMessageLoop();
-      EXPECT_TRUE(IsViewFocused(VIEW_ID_OMNIBOX));
+      EXPECT_TRUE(
+          IsViewFocused(reverse ? VIEW_ID_LOCATION_ICON : VIEW_ID_OMNIBOX));
+      if (reverse) {
+        ASSERT_TRUE(ui_test_utils::SendKeyPressAndWait(
+            browser(), key, false, false, false, false,
+            content::NOTIFICATION_ALL,
+            content::NotificationService::AllSources()));
+      }
     }
   }
 };
@@ -180,7 +207,9 @@ class TestInterstitialPage : public content::InterstitialPageDelegate {
 
   void DontProceed() { interstitial_page_->DontProceed(); }
 
-  bool HasFocus() { return render_view_host()->GetView()->HasFocus(); }
+  bool HasFocus() {
+    return render_view_host()->GetWidget()->GetView()->HasFocus();
+  }
 
  private:
   std::string html_contents_;
@@ -188,10 +217,11 @@ class TestInterstitialPage : public content::InterstitialPageDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestInterstitialPage);
 };
 
-// Flaky on mac. http://crbug.com/67301.
+// Flaky on Mac (http://crbug.com/67301).
 #if defined(OS_MACOSX)
 #define MAYBE_ClickingMovesFocus DISABLED_ClickingMovesFocus
 #else
+// If this flakes, disable and log details in http://crbug.com/523255.
 #define MAYBE_ClickingMovesFocus ClickingMovesFocus
 #endif
 IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_ClickingMovesFocus) {
@@ -200,7 +230,7 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_ClickingMovesFocus) {
   // It seems we have to wait a little bit for the widgets to spin up before
   // we can start clicking on them.
   base::MessageLoop::current()->task_runner()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(kActionDelayMs));
   content::RunMessageLoop();
 #endif  // defined(OS_POSIX)
@@ -438,7 +468,8 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_FocusTraversal) {
 
 // Test forward and reverse focus traversal while an interstitial is showing.
 // Disabled, see http://crbug.com/60973
-IN_PROC_BROWSER_TEST_F(BrowserFocusTest, DISABLED_FocusTraversalOnInterstitial) {
+IN_PROC_BROWSER_TEST_F(BrowserFocusTest,
+                       DISABLED_FocusTraversalOnInterstitial) {
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   const GURL url = embedded_test_server()->GetURL(kSimplePage);
   ui_test_utils::NavigateToURL(browser(), url);
@@ -462,7 +493,7 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, InterstitialFocus) {
   ui_test_utils::NavigateToURL(browser(), url);
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(IsViewFocused(VIEW_ID_TAB_CONTAINER));
-  EXPECT_TRUE(tab->GetRenderViewHost()->GetView()->HasFocus());
+  EXPECT_TRUE(tab->GetRenderViewHost()->GetWidget()->GetView()->HasFocus());
 
   // Create and show a test interstitial page; it should gain focus.
   TestInterstitialPage* interstitial_page = new TestInterstitialPage(tab);
@@ -473,13 +504,14 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, InterstitialFocus) {
   interstitial_page->DontProceed();
   content::RunAllPendingInMessageLoop();
   EXPECT_TRUE(IsViewFocused(VIEW_ID_TAB_CONTAINER));
-  EXPECT_TRUE(tab->GetRenderViewHost()->GetView()->HasFocus());
+  EXPECT_TRUE(tab->GetRenderViewHost()->GetWidget()->GetView()->HasFocus());
 }
 
 // Test that find-in-page UI can request focus, even when it is already open.
 #if defined(OS_MACOSX)
 #define MAYBE_FindFocusTest DISABLED_FindFocusTest
 #else
+// If this flakes, disable and log details in http://crbug.com/523255.
 #define MAYBE_FindFocusTest FindFocusTest
 #endif
 IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_FindFocusTest) {
@@ -537,8 +569,7 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, DISABLED_TabInitialFocus) {
   EXPECT_TRUE(IsViewFocused(VIEW_ID_OMNIBOX));
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_MACOSX) || (defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA))
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA)
 // TODO(erg): http://crbug.com/163931
 #define MAYBE_FocusOnReload DISABLED_FocusOnReload
 #else
@@ -628,8 +659,7 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, DISABLED_FocusAfterCrashedTab) {
 
 // Tests that when a new tab is opened from the omnibox, the focus is moved from
 // the omnibox for the current tab.
-IN_PROC_BROWSER_TEST_F(BrowserFocusTest,
-                       NavigateFromOmniboxIntoNewTab) {
+IN_PROC_BROWSER_TEST_F(BrowserFocusTest, NavigateFromOmniboxIntoNewTab) {
   GURL url("http://www.google.com/");
   GURL url2("http://maps.google.com/");
 

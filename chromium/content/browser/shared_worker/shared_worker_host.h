@@ -8,6 +8,7 @@
 #include <list>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -85,8 +86,7 @@ class SharedWorkerHost {
   }
   int process_id() const { return worker_process_id_; }
   int worker_route_id() const { return worker_route_id_; }
-  bool load_failed() const { return load_failed_; }
-  bool closed() const { return closed_; }
+  bool IsAvailable() const;
 
  private:
   // Unique identifier for a worker client.
@@ -128,7 +128,7 @@ class SharedWorkerHost {
   SharedWorkerMessageFilter* container_render_filter_;
   int worker_process_id_;
   int worker_route_id_;
-  bool load_failed_;
+  bool termination_message_sent_;
   bool closed_;
   const base::TimeTicks creation_time_;
 

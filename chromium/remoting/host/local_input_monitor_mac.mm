@@ -5,6 +5,7 @@
 #include "remoting/host/local_input_monitor.h"
 
 #import <AppKit/AppKit.h>
+#include <stdint.h>
 #include <set>
 
 #include "base/bind.h"
@@ -12,6 +13,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -270,7 +272,7 @@ void LocalInputMonitorMac::Core::OnLocalMouseMoved(
 void LocalInputMonitorMac::Core::OnDisconnectShortcut() {
   caller_task_runner_->PostTask(
       FROM_HERE, base::Bind(&ClientSessionControl::DisconnectSession,
-                            client_session_control_));
+                            client_session_control_, protocol::OK));
 }
 
 }  // namespace

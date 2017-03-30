@@ -15,6 +15,8 @@
 #include "extensions/browser/suggest_permission_util.h"
 #include "extensions/common/permissions/api_permission.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace extensions {
 
 AppWebContentsHelper::AppWebContentsHelper(
@@ -31,6 +33,13 @@ AppWebContentsHelper::AppWebContentsHelper(
 // static
 bool AppWebContentsHelper::ShouldSuppressGestureEvent(
     const blink::WebGestureEvent& event) {
+  if (vivaldi::IsVivaldiRunning()) {
+    // Extend for other platforms after support has been added.
+#if defined(OS_MACOSX)
+    return false;
+#endif  // OS_MACOSX
+  }
+
   // Disable pinch zooming in app windows.
   return event.type == blink::WebGestureEvent::GesturePinchBegin ||
          event.type == blink::WebGestureEvent::GesturePinchUpdate ||

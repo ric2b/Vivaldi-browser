@@ -4,6 +4,9 @@
 
 #include "sandbox/linux/bpf_dsl/codegen.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <limits>
 #include <utility>
 
@@ -54,9 +57,8 @@ CodeGen::CodeGen() : program_(), equivalent_(), memos_() {
 CodeGen::~CodeGen() {
 }
 
-void CodeGen::Compile(CodeGen::Node head, Program* out) {
-  DCHECK(out);
-  out->assign(program_.rbegin() + Offset(head), program_.rend());
+CodeGen::Program CodeGen::Compile(CodeGen::Node head) {
+  return Program(program_.rbegin() + Offset(head), program_.rend());
 }
 
 CodeGen::Node CodeGen::MakeInstruction(uint16_t code,

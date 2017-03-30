@@ -7,11 +7,11 @@
 import logging
 import random
 
+from devil.android import device_errors
+from devil.android.sdk import intent
 from pylib import constants
 from pylib.base import base_test_result
 from pylib.base import base_test_runner
-from pylib.device import device_errors
-from pylib.device import intent
 
 _CHROME_PACKAGE = constants.PACKAGE_INFO['chrome'].package
 
@@ -66,6 +66,10 @@ class TestRunner(base_test_runner.BaseTestRunner):
     # Run the test.
     output = ''
     if before_pids:
+      if len(before_pids.get(self._package, [])) > 1:
+        raise Exception(
+            'At most one instance of process %s expected but found pids: '
+            '%s' % (self._package, before_pids))
       output = '\n'.join(self._LaunchMonkeyTest())
       after_pids = self.device.GetPids(self._package)
 

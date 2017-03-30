@@ -5,10 +5,12 @@
 #ifndef UI_BASE_X_SELECTION_OWNER_H_
 #define UI_BASE_X_SELECTION_OWNER_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -125,7 +127,7 @@ class UI_BASE_EXPORT SelectionOwner {
   std::vector<IncrementalTransfer> incremental_transfers_;
 
   // Used to abort stale incremental data transfers.
-  base::RepeatingTimer<SelectionOwner> incremental_transfer_abort_timer_;
+  base::RepeatingTimer incremental_transfer_abort_timer_;
 
   X11AtomCache atom_cache_;
 

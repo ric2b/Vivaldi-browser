@@ -234,6 +234,18 @@ VolumeInfo.prototype.resolveDisplayRoot = function(opt_onSuccess,
 var volumeManagerUtil = {};
 
 /**
+ * @const {string}
+ */
+volumeManagerUtil.TIMEOUT_STR_REQUEST_FILE_SYSTEM =
+    'timeout(requestFileSystem)';
+
+/**
+ * @const {string}
+ */
+volumeManagerUtil.TIMEOUT_STR_RESOLVE_ISOLATED_ENTRIES =
+    'timeout(resolveIsolatedEntries)';
+
+/**
  * Throws an Error when the given error is not in
  * VolumeManagerCommon.VolumeError.
  *
@@ -271,8 +283,8 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
   }
 
   console.debug('Requesting file system.');
-  return new Promise(
-      function(resolve, reject) {
+  return util.timeoutPromise(
+      new Promise(function(resolve, reject) {
         chrome.fileSystem.requestFileSystem(
             {
               volumeId: volumeMetadata.volumeId,
@@ -284,7 +296,10 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
               else
                 resolve(isolatedFileSystem);
             });
-      })
+      }),
+      VolumeManager.TIMEOUT,
+      volumeManagerUtil.TIMEOUT_STR_REQUEST_FILE_SYSTEM +
+          ': ' + volumeMetadata.volumeId)
   .then(
       /**
        * @param {!FileSystem} isolatedFileSystem
@@ -293,18 +308,22 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
         // Since File System API works on isolated entries only, we need to
         // convert it back to external one.
         // TODO(mtomasz): Make Files app work on isolated entries.
-        return new Promise(function(resolve, reject) {
-          chrome.fileManagerPrivate.resolveIsolatedEntries(
-              [isolatedFileSystem.root],
-              function(entries) {
-                if (chrome.runtime.lastError)
-                  reject(chrome.runtime.lastError.message);
-                else if (!entries[0])
-                  reject('Resolving for external context failed.');
-                else
-                  resolve(entries[0].filesystem);
-              });
-          });
+        return util.timeoutPromise(
+            new Promise(function(resolve, reject) {
+              chrome.fileManagerPrivate.resolveIsolatedEntries(
+                  [isolatedFileSystem.root],
+                  function(entries) {
+                    if (chrome.runtime.lastError)
+                      reject(chrome.runtime.lastError.message);
+                    else if (!entries[0])
+                      reject('Resolving for external context failed.');
+                    else
+                      resolve(entries[0].filesystem);
+                  });
+            }),
+            VolumeManager.TIMEOUT,
+            volumeManagerUtil.TIMEOUT_STR_RESOLVE_ISOLATED_ENTRIES +
+                ': ' + volumeMetadata.volumeId);
        })
   .then(
       /**
@@ -353,6 +372,8 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
         console.error('Failed to mount a file system: ' +
             volumeMetadata.volumeId + ' because of: ' +
             (error.stack || error));
+        volumeManagerUtil.reportMountError(volumeMetadata, error);
+
         return new VolumeInfo(
             /** @type {VolumeManagerCommon.VolumeType} */
             (volumeMetadata.volumeType),
@@ -371,6 +392,43 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
             /** @type {VolumeManagerCommon.Source} */
             (volumeMetadata.source));
       });
+};
+
+
+/**
+ * Reports a mount error to analytics in the form of
+ * "mount {errorType} {volumeType}", like
+ * "mount timeout(resolveIsolatedEntries) provided:ZipUnpacker".
+ * Note that errorType and volumeType must be an element of fixed set of strings
+ * to avoid sending dynamic strings to analytics.
+ *
+ * @param {VolumeMetadata} volumeMetadata
+ * @param {*} error
+ */
+volumeManagerUtil.reportMountError = function(volumeMetadata, error) {
+  var errorType = 'error';
+  if (error instanceof Error) {
+    if (error.message.startsWith(
+        volumeManagerUtil.TIMEOUT_STR_REQUEST_FILE_SYSTEM)) {
+      errorType = volumeManagerUtil.TIMEOUT_STR_REQUEST_FILE_SYSTEM;
+    }
+    if (error.message.startsWith(
+        volumeManagerUtil.TIMEOUT_STR_RESOLVE_ISOLATED_ENTRIES)) {
+      errorType = volumeManagerUtil.TIMEOUT_STR_RESOLVE_ISOLATED_ENTRIES;
+    }
+  }
+  var volumeType = volumeMetadata.volumeType;
+  if (volumeMetadata.volumeType === VolumeManagerCommon.VolumeType.PROVIDED) {
+    volumeType += ':' + metrics.getFileSystemProviderName(
+        volumeMetadata.extensionId);
+  }
+  var description = 'mount ' + errorType + ' ' + volumeType;
+  var fatal =
+      volumeMetadata.volumeType === VolumeManagerCommon.VolumeType.DOWNLOADS ||
+      volumeMetadata.volumeType === VolumeManagerCommon.VolumeType.DRIVE;
+
+  if (window.background && window.background.tracker)
+    window.background.tracker.sendException(description, fatal);
 };
 
 /**
@@ -717,7 +775,22 @@ VolumeManager.prototype.addVolumeMetadata_ = function(volumeMetadata) {
        * @return {!VolumeInfo}
        */
       function(volumeInfo) {
-        if (this.volumeInfoList.findIndex(volumeInfo.volumeId) === -1) {
+        // We don't show Downloads and Drive on volume list if they have mount
+        // error, since users can do nothing in this situation.
+        // We show Removable and Provided volumes regardless of mount error so
+        // that users can unmount or format the volume.
+        // TODO(fukino): Once Files.app get ready, show erroneous Drive volume
+        // so that users can see auth warning banner on the volume.
+        // crbug.com/517772.
+        var shouldShow = true;
+        switch (volumeInfo.volumeType) {
+          case VolumeManagerCommon.VolumeType.DOWNLOADS:
+          case VolumeManagerCommon.VolumeType.DRIVE:
+            shouldShow = !!volumeInfo.fileSystem;
+            break;
+        }
+        if (shouldShow &&
+            this.volumeInfoList.findIndex(volumeInfo.volumeId) === -1) {
           this.volumeInfoList.add(volumeInfo);
 
           // Update the network connection status, because until the drive is
@@ -1119,15 +1192,6 @@ function EntryLocation(volumeInfo, rootType, isRootEntry, isReadOnly) {
       this.rootType === VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME ||
       this.rootType === VolumeManagerCommon.RootType.DRIVE_RECENT ||
       this.rootType === VolumeManagerCommon.RootType.DRIVE_OFFLINE;
-
-  /**
-   * Whether the given path can be a target path of folder shortcut.
-   * @type {boolean}
-   */
-  this.isEligibleForFolderShortcut =
-      !this.isSpecialSearchRoot &&
-      !this.isRootEntry &&
-      this.isDriveBased;
 
   /**
    * Whether the entry is read only or not.

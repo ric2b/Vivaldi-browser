@@ -5,7 +5,7 @@
 #ifndef REMOTING_HOST_CONTINUE_WINDOW_H_
 #define REMOTING_HOST_CONTINUE_WINDOW_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "remoting/host/host_window.h"
@@ -42,10 +42,10 @@ class ContinueWindow : public HostWindow {
   base::WeakPtr<ClientSessionControl> client_session_control_;
 
   // Used to disconnect the client session when timeout expires.
-  base::OneShotTimer<ContinueWindow> disconnect_timer_;
+  base::OneShotTimer disconnect_timer_;
 
   // Used to ask the local user whether the session should be continued.
-  base::OneShotTimer<ContinueWindow> session_expired_timer_;
+  base::OneShotTimer session_expired_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ContinueWindow);
 };

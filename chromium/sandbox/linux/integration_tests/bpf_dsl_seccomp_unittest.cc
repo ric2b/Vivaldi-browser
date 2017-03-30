@@ -7,14 +7,16 @@
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
+#include <sys/socket.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <unistd.h>
-#include <sys/socket.h>
 
 #if defined(ANDROID)
 // Work-around for buggy headers in Android's NDK
@@ -32,12 +34,12 @@
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
+#include "sandbox/linux/bpf_dsl/errorcode.h"
 #include "sandbox/linux/bpf_dsl/linux_syscall_ranges.h"
 #include "sandbox/linux/bpf_dsl/policy.h"
 #include "sandbox/linux/bpf_dsl/seccomp_macros.h"
 #include "sandbox/linux/seccomp-bpf/bpf_tests.h"
 #include "sandbox/linux/seccomp-bpf/die.h"
-#include "sandbox/linux/seccomp-bpf/errorcode.h"
 #include "sandbox/linux/seccomp-bpf/sandbox_bpf.h"
 #include "sandbox/linux/seccomp-bpf/syscall.h"
 #include "sandbox/linux/seccomp-bpf/trap.h"
@@ -56,6 +58,8 @@
 #define PR_CAPBSET_READ 23
 #define PR_CAPBSET_DROP 24
 #endif
+
+#define CASES SANDBOX_BPF_DSL_CASES
 
 namespace sandbox {
 namespace bpf_dsl {
@@ -775,8 +779,9 @@ ResultExpr SimpleCondTestPolicy::EvaluateSyscall(int sysno) const {
       // Allow prctl(PR_SET_DUMPABLE) and prctl(PR_GET_DUMPABLE), but
       // disallow everything else.
       const Arg<int> option(0);
-      return If(option == PR_SET_DUMPABLE || option == PR_GET_DUMPABLE, Allow())
-          .Else(Error(ENOMEM));
+      return Switch(option)
+          .CASES((PR_SET_DUMPABLE, PR_GET_DUMPABLE), Allow())
+          .Default(Error(ENOMEM));
     }
     default:
       return Allow();
@@ -1267,7 +1272,7 @@ ResultExpr AllBitTestPolicy::EvaluateSyscall(int sysno) const {
         .Case(9, HasAllBits64(0x300000000ULL))
         .Case(10, HasAllBits64(0x100000001ULL))
 #endif
-        .Default(Kill("Invalid test case number"));
+        .Default(Kill());
   }
   return Allow();
 }
@@ -1453,7 +1458,7 @@ ResultExpr AnyBitTestPolicy::EvaluateSyscall(int sysno) const {
         .Case(9, HasAnyBits64(0x300000000ULL))
         .Case(10, HasAnyBits64(0x100000001ULL))
 #endif
-        .Default(Kill("Invalid test case number"));
+        .Default(Kill());
   }
   return Allow();
 }
@@ -1598,7 +1603,7 @@ ResultExpr MaskedEqualTestPolicy::EvaluateSyscall(int sysno) const {
         .Case(1, MaskedEqual64(0x00ff00ff00000000, 0x005500aa00000000))
         .Case(2, MaskedEqual64(0x00ff00ff00ff00ff, 0x005500aa005500aa))
 #endif
-        .Default(Kill("Invalid test case number"));
+        .Default(Kill());
   }
 
   return Allow();
@@ -1725,10 +1730,11 @@ ResultExpr PthreadPolicyEquality::EvaluateSyscall(int sysno) const {
                                            CLONE_SIGHAND | CLONE_THREAD |
                                            CLONE_SYSVSEM;
     const Arg<unsigned long> flags(0);
-    return If(flags == kGlibcCloneMask ||
-                  flags == (kBaseAndroidCloneMask | CLONE_DETACHED) ||
-                  flags == kBaseAndroidCloneMask,
-              Allow()).Else(Trap(PthreadTrapHandler, "Unknown mask"));
+    return Switch(flags)
+        .CASES((kGlibcCloneMask, (kBaseAndroidCloneMask | CLONE_DETACHED),
+                kBaseAndroidCloneMask),
+               Allow())
+        .Default(Trap(PthreadTrapHandler, "Unknown mask"));
   }
 
   return Allow();
@@ -1786,15 +1792,15 @@ ResultExpr PthreadPolicyBitMask::EvaluateSyscall(int sysno) const {
     const Arg<unsigned long> flags(0);
     return If(HasAnyBits(flags, ~kKnownFlags),
               Trap(PthreadTrapHandler, "Unexpected CLONE_XXX flag found"))
-        .ElseIf(!HasAllBits(flags, kMandatoryFlags),
+        .ElseIf(Not(HasAllBits(flags, kMandatoryFlags)),
                 Trap(PthreadTrapHandler,
                      "Missing mandatory CLONE_XXX flags "
                      "when creating new thread"))
-        .ElseIf(
-             !HasAllBits(flags, kFutexFlags) && HasAnyBits(flags, kFutexFlags),
-             Trap(PthreadTrapHandler,
-                  "Must set either all or none of the TLS and futex bits in "
-                  "call to clone()"))
+        .ElseIf(AllOf(Not(HasAllBits(flags, kFutexFlags)),
+                      HasAnyBits(flags, kFutexFlags)),
+                Trap(PthreadTrapHandler,
+                     "Must set either all or none of the TLS and futex bits in "
+                     "call to clone()"))
         .Else(Allow());
   }
 

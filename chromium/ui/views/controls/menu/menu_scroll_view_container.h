@@ -5,9 +5,10 @@
 #ifndef UI_VIEWS_CONTROLS_MENU_MENU_SCROLL_VIEW_CONTAINER_H_
 #define UI_VIEWS_CONTROLS_MENU_MENU_SCROLL_VIEW_CONTAINER_H_
 
-#include "ui/views/view.h"
+#include "base/macros.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/menu/menu_types.h"
+#include "ui/views/view.h"
 
 namespace views {
 
@@ -31,10 +32,11 @@ class MenuScrollViewContainer : public View {
   void SetBubbleArrowOffset(int offset);
 
   // View overrides.
-  void OnPaintBackground(gfx::Canvas* canvas) override;
-  void Layout() override;
   gfx::Size GetPreferredSize() const override;
+  void Layout() override;
+  void OnPaintBackground(gfx::Canvas* canvas) override;
   void GetAccessibleState(ui::AXViewState* state) override;
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
  protected:
   // View override.

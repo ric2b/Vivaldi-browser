@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <stdio.h>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -18,10 +21,9 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_popup_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/test_toolbar_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -29,6 +31,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -38,6 +41,8 @@
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/history_quick_provider.h"
+#include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/notification_service.h"
@@ -153,7 +158,7 @@ class OmniboxViewTest : public InProcessBrowserTest,
   // history::HisoryServiceObserver
   void OnHistoryServiceLoaded(
       history::HistoryService* history_service) override {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
  protected:
@@ -267,7 +272,7 @@ class OmniboxViewTest : public InProcessBrowserTest,
         TemplateURLServiceFactory::GetForProfile(profile);
     ASSERT_TRUE(model);
 
-    ui_test_utils::WaitForTemplateURLServiceToLoad(model);
+    search_test_utils::WaitForTemplateURLServiceToLoad(model);
 
     ASSERT_TRUE(model->loaded());
 
@@ -367,12 +372,12 @@ class OmniboxViewTest : public InProcessBrowserTest,
       default:
         FAIL() << "Unexpected notification type";
     }
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void OnURLsModified(history::HistoryService* history_service,
                       const history::URLRows& changed_urls) override {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
  private:
@@ -563,18 +568,11 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_BackspaceInKeywordMode) {
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_BACK, 0));
   ASSERT_FALSE(omnibox_view->model()->is_keyword_hint());
   ASSERT_EQ(base::string16(), omnibox_view->model()->keyword());
-  ASSERT_EQ(std::string(kSearchKeyword) + kSearchText,
+  ASSERT_EQ(std::string(kSearchKeyword) + ' ' + kSearchText,
             UTF16ToUTF8(omnibox_view->GetText()));
 }
 
-// TODO(vivaldi) Reenable mac for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_Escape DISABLED_Escape
-#else
-#define MAYBE_Escape Escape
-#endif
-
-IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_Escape) {
+IN_PROC_BROWSER_TEST_F(OmniboxViewTest, Escape) {
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIHistoryURL));
   chrome::FocusLocationBar(browser());
 
@@ -600,6 +598,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_Escape) {
 #else
 #define MAYBE_DesiredTLD DesiredTLD
 #endif
+
 IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_DesiredTLD) {
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
@@ -631,6 +630,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_DesiredTLD) {
 #else
 #define MAYBE_DesiredTLDWithTemporaryText DesiredTLDWithTemporaryText
 #endif
+
 IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_DesiredTLDWithTemporaryText) {
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
@@ -901,13 +901,13 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, AcceptKeywordBySpace) {
   omnibox_view->model()->ClearKeyword();
   ASSERT_TRUE(omnibox_view->model()->is_keyword_hint());
   ASSERT_EQ(search_keyword, omnibox_view->model()->keyword());
-  ASSERT_EQ(search_keyword, omnibox_view->GetText());
+  ASSERT_EQ(search_keyword + base::char16(' '), omnibox_view->GetText());
 
   // Keyword should also be accepted by typing an ideographic space.
   omnibox_view->OnBeforePossibleChange();
   omnibox_view->SetWindowTextAndCaretPos(search_keyword +
       base::WideToUTF16(L"\x3000"), search_keyword.length() + 1, false, false);
-  omnibox_view->OnAfterPossibleChange();
+  omnibox_view->OnAfterPossibleChange(true);
   ASSERT_FALSE(omnibox_view->model()->is_keyword_hint());
   ASSERT_EQ(search_keyword, omnibox_view->model()->keyword());
   ASSERT_TRUE(omnibox_view->GetText().empty());
@@ -916,7 +916,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, AcceptKeywordBySpace) {
   omnibox_view->model()->ClearKeyword();
   ASSERT_TRUE(omnibox_view->model()->is_keyword_hint());
   ASSERT_EQ(search_keyword, omnibox_view->model()->keyword());
-  ASSERT_EQ(search_keyword, omnibox_view->GetText());
+  ASSERT_EQ(search_keyword + base::char16(' '), omnibox_view->GetText());
 
   // Keyword shouldn't be accepted by pressing space with a trailing
   // whitespace.
@@ -963,7 +963,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, AcceptKeywordBySpace) {
   omnibox_view->model()->OnPaste();
   omnibox_view->SetWindowTextAndCaretPos(search_keyword +
       ASCIIToUTF16(" bar"), search_keyword.length() + 4, false, false);
-  omnibox_view->OnAfterPossibleChange();
+  omnibox_view->OnAfterPossibleChange(true);
   ASSERT_FALSE(omnibox_view->model()->is_keyword_hint());
   ASSERT_TRUE(omnibox_view->model()->keyword().empty());
   ASSERT_EQ(search_keyword + ASCIIToUTF16(" bar"), omnibox_view->GetText());
@@ -981,7 +981,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, AcceptKeywordBySpace) {
   omnibox_view->OnBeforePossibleChange();
   omnibox_view->OnInlineAutocompleteTextMaybeChanged(
       search_keyword + ASCIIToUTF16("  "), search_keyword.length());
-  omnibox_view->OnAfterPossibleChange();
+  omnibox_view->OnAfterPossibleChange(true);
   ASSERT_TRUE(omnibox_view->model()->is_keyword_hint());
   ASSERT_EQ(search_keyword, omnibox_view->model()->keyword());
   ASSERT_EQ(search_keyword + ASCIIToUTF16("  "), omnibox_view->GetText());
@@ -1750,13 +1750,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, CutTextToClipboard) {
   EXPECT_EQ(base::string16(), omnibox_view->GetText());
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_EditSearchEngines DISABLED_EditSearchEngines
-#else
-#define MAYBE_EditSearchEngines EditSearchEngines
-#endif
-IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_EditSearchEngines) {
+IN_PROC_BROWSER_TEST_F(OmniboxViewTest, EditSearchEngines) {
   // Disable settings-in-a-window to simplify test.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       ::switches::kDisableSettingsWindow);
@@ -1777,7 +1771,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BeginningShownAfterBlur) {
   omnibox_view->OnBeforePossibleChange();
   omnibox_view->SetWindowTextAndCaretPos(ASCIIToUTF16("data:text/plain,test"),
       5U, false, false);
-  omnibox_view->OnAfterPossibleChange();
+  omnibox_view->OnAfterPossibleChange(true);
   EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
   size_t start, end;
   omnibox_view->GetSelectionBounds(&start, &end);

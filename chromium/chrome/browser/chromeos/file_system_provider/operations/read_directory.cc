@@ -4,7 +4,10 @@
 
 #include "chrome/browser/chromeos/file_system_provider/operations/read_directory.h"
 
+#include <stddef.h>
+
 #include <string>
+#include <utility>
 
 #include "base/memory/linked_ptr.h"
 #include "chrome/browser/chromeos/file_system_provider/operations/get_metadata.h"
@@ -29,23 +32,17 @@ bool ConvertRequestValueToEntryList(scoped_ptr<RequestValue> value,
 
   for (size_t i = 0; i < params->entries.size(); ++i) {
     const linked_ptr<EntryMetadata> entry_metadata = params->entries[i];
-    if (!ValidateIDLEntryMetadata(*entry_metadata, false /* root_entry */))
+    if (!ValidateIDLEntryMetadata(
+            *entry_metadata,
+            ProvidedFileSystemInterface::METADATA_FIELD_IS_DIRECTORY |
+                ProvidedFileSystemInterface::METADATA_FIELD_NAME,
+            false /* root_entry */)) {
       return false;
+    }
 
     storage::DirectoryEntry output_entry;
-    output_entry.is_directory = entry_metadata->is_directory;
-    output_entry.name = entry_metadata->name;
-    output_entry.size = static_cast<int64>(entry_metadata->size);
-
-    std::string input_modification_time;
-    if (!entry_metadata->modification_time.additional_properties.GetString(
-            "value", &input_modification_time)) {
-      NOTREACHED();
-    }
-    if (!base::Time::FromString(input_modification_time.c_str(),
-                                &output_entry.last_modified_time)) {
-      NOTREACHED();
-    }
+    output_entry.is_directory = *entry_metadata->is_directory;
+    output_entry.name = *entry_metadata->name;
 
     output->push_back(output_entry);
   }
@@ -76,6 +73,10 @@ bool ReadDirectory::Execute(int request_id) {
   options.request_id = request_id;
   options.directory_path = directory_path_.AsUTF8Unsafe();
 
+  // Request only is_directory and name metadata fields.
+  options.is_directory = true;
+  options.name = true;
+
   return SendEvent(
       request_id,
       extensions::events::FILE_SYSTEM_PROVIDER_ON_READ_DIRECTORY_REQUESTED,
@@ -90,7 +91,7 @@ void ReadDirectory::OnSuccess(int /* request_id */,
                               bool has_more) {
   storage::AsyncFileUtil::EntryList entry_list;
   const bool convert_result =
-      ConvertRequestValueToEntryList(result.Pass(), &entry_list);
+      ConvertRequestValueToEntryList(std::move(result), &entry_list);
 
   if (!convert_result) {
     LOG(ERROR)

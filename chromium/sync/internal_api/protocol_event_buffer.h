@@ -5,8 +5,11 @@
 #ifndef SYNC_INTERNAL_API_PROTOCOL_EVENT_BUFFER_H_
 #define SYNC_INTERNAL_API_PROTOCOL_EVENT_BUFFER_H_
 
+#include <stddef.h>
+
 #include <deque>
 
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "sync/base/sync_export.h"
 
@@ -17,7 +20,7 @@ class ProtocolEvent;
 // A container for ProtocolEvents.
 //
 // Stores at most kBufferSize events, then starts dropping the oldest events.
-class SYNC_EXPORT_PRIVATE ProtocolEventBuffer {
+class SYNC_EXPORT ProtocolEventBuffer {
  public:
   static const size_t kBufferSize;
 

@@ -40,6 +40,7 @@ class GFX_EXPORT Transform {
   // Initialize with the concatenation of lhs * rhs.
   Transform(const Transform& lhs, const Transform& rhs)
       : matrix_(lhs.matrix_, rhs.matrix_) {}
+  explicit Transform(const SkMatrix44& matrix) : matrix_(matrix) {}
   // Constructs a transform from explicit 16 matrix elements. Elements
   // should be given in row-major order.
   Transform(SkMScalar col1row1,
@@ -101,8 +102,7 @@ class GFX_EXPORT Transform {
 
   // Applies the current transformation on a skew and assigns the result
   // to |this|.
-  void SkewX(double angle_x);
-  void SkewY(double angle_y);
+  void Skew(double angle_x, double angle_y);
 
   // Applies the current transformation on a perspective transform and assigns
   // the result to |this|.
@@ -255,6 +255,7 @@ class GFX_EXPORT Transform {
   // Returns the underlying matrix.
   const SkMatrix44& matrix() const { return matrix_; }
   SkMatrix44& matrix() { return matrix_; }
+  bool ApproximatelyEqual(const gfx::Transform& transform) const;
 
   std::string ToString() const;
 

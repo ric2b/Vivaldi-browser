@@ -5,8 +5,11 @@
 #ifndef MEDIA_BASE_DECODER_BUFFER_QUEUE_H_
 #define MEDIA_BASE_DECODER_BUFFER_QUEUE_H_
 
+#include <stddef.h>
+
 #include <deque>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"

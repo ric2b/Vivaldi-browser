@@ -10,7 +10,9 @@
 #include "base/synchronization/lock.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/browser/android/synchronous_compositor.h"
+#include "gpu/command_buffer/service/framebuffer_completeness_cache.h"
 #include "gpu/command_buffer/service/shader_translator_cache.h"
+#include "gpu/command_buffer/service/sync_point_manager.h"
 
 namespace android_webview {
 
@@ -60,7 +62,8 @@ DeferredGpuCommandService* DeferredGpuCommandService::GetInstance() {
   return g_service.Get().get();
 }
 
-DeferredGpuCommandService::DeferredGpuCommandService() {}
+DeferredGpuCommandService::DeferredGpuCommandService()
+    : sync_point_manager_(new gpu::SyncPointManager(true)) {}
 
 DeferredGpuCommandService::~DeferredGpuCommandService() {
   base::AutoLock lock(tasks_lock_);
@@ -97,7 +100,7 @@ size_t DeferredGpuCommandService::IdleQueueSize() {
   return idle_tasks_.size();
 }
 
-void DeferredGpuCommandService::ScheduleIdleWork(
+void DeferredGpuCommandService::ScheduleDelayedWork(
     const base::Closure& callback) {
   {
     base::AutoLock lock(tasks_lock_);
@@ -149,6 +152,19 @@ DeferredGpuCommandService::shader_translator_cache() {
   if (!shader_translator_cache_.get())
     shader_translator_cache_ = new gpu::gles2::ShaderTranslatorCache;
   return shader_translator_cache_;
+}
+
+scoped_refptr<gpu::gles2::FramebufferCompletenessCache>
+DeferredGpuCommandService::framebuffer_completeness_cache() {
+  if (!framebuffer_completeness_cache_.get()) {
+    framebuffer_completeness_cache_ =
+        new gpu::gles2::FramebufferCompletenessCache;
+  }
+  return framebuffer_completeness_cache_;
+}
+
+gpu::SyncPointManager* DeferredGpuCommandService::sync_point_manager() {
+  return sync_point_manager_.get();
 }
 
 void DeferredGpuCommandService::RunTasks() {

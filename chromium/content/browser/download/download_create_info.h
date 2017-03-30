@@ -5,11 +5,13 @@
 #ifndef CONTENT_BROWSER_DOWNLOAD_DOWNLOAD_CREATE_INFO_H_
 #define CONTENT_BROWSER_DOWNLOAD_DOWNLOAD_CREATE_INFO_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "content/browser/download/download_file.h"
 #include "content/browser/download/download_request_handle.h"
@@ -25,12 +27,10 @@ namespace content {
 // want to pass |DownloadItem|s between threads.
 struct CONTENT_EXPORT DownloadCreateInfo {
   DownloadCreateInfo(const base::Time& start_time,
-                     int64 total_bytes,
+                     int64_t total_bytes,
                      const net::BoundNetLog& bound_net_log,
-                     bool has_user_gesture,
-                     ui::PageTransition transition_type,
                      scoped_ptr<DownloadSaveInfo> save_info,
-                     bool open_when_done);
+                     bool open_when_done = false);
   DownloadCreateInfo();
   ~DownloadCreateInfo();
 
@@ -56,10 +56,10 @@ struct CONTENT_EXPORT DownloadCreateInfo {
   base::Time start_time;
 
   // The total download size.
-  int64 total_bytes;
+  int64_t total_bytes;
 
   // The ID of the download.
-  uint32 download_id;
+  uint32_t download_id;
 
   // True if the download was initiated by user action.
   bool has_user_gesture;
@@ -93,7 +93,7 @@ struct CONTENT_EXPORT DownloadCreateInfo {
   std::string remote_address;
 
   // The handle to the URLRequest sourcing this download.
-  DownloadRequestHandle request_handle;
+  scoped_ptr<DownloadRequestHandleInterface> request_handle;
 
   // The request's |BoundNetLog|, for "source_dependency" linking with the
   // download item's.

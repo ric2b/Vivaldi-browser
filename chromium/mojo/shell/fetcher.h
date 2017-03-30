@@ -5,6 +5,9 @@
 #ifndef MOJO_SHELL_FETCHER_H_
 #define MOJO_SHELL_FETCHER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
 
@@ -34,7 +37,6 @@ class Fetcher {
   // The param will be null in the case where the content could not be fetched.
   // Reasons include:
   // - network error
-  // - 4x or 5x HTTP errors
   typedef base::Callback<void(scoped_ptr<Fetcher>)> FetchCallback;
 
   Fetcher(const FetchCallback& fetch_callback);

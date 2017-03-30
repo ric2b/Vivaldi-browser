@@ -10,22 +10,24 @@
 #include "base/mac/scoped_nsobject.h"
 #include "content/shell/browser/shell_application_mac.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace content {
 
 void ShellBrowserMainParts::PreMainMessageLoopStart() {
   // Force the NSApplication subclass to be used.
   [ShellCrApplication sharedApplication];
 
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (vivaldi::IsVivaldiRunning()) {
     base::scoped_nsobject<NSNib> nib(
         [[NSNib alloc] initWithNibNamed:@"VivaldiMainMenu"
                                  bundle:base::mac::FrameworkBundle()]);
     [nib instantiateNibWithOwner:NSApp topLevelObjects:nil];
   } else {
-    base::scoped_nsobject<NSNib> nib(
-        [[NSNib alloc] initWithNibNamed:@"MainMenu"
-                                 bundle:base::mac::FrameworkBundle()]);
-    [nib instantiateNibWithOwner:NSApp topLevelObjects:nil];
+  base::scoped_nsobject<NSNib> nib(
+      [[NSNib alloc] initWithNibNamed:@"MainMenu"
+                               bundle:base::mac::FrameworkBundle()]);
+  [nib instantiateNibWithOwner:NSApp topLevelObjects:nil];
   }
 }
 

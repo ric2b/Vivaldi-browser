@@ -7,9 +7,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/frame/header_painter.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"  // override
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -84,7 +84,7 @@ class ASH_EXPORT DefaultHeaderPainter : public HeaderPainter,
   void UpdateAllButtonImages();
 
   // Updates the size button's images.
-  void UpdateSizeButtonImages(bool use_light_images);
+  void UpdateSizeButtonImages();
 
   // Returns the header bounds in the coordinates of |view_|. The header is
   // assumed to be positioned at the top left corner of |view_| and to have the

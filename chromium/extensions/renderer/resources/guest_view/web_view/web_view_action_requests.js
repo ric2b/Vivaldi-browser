@@ -5,6 +5,7 @@
 // This module implements helper objects for the dialog, newwindow, and
 // permissionrequest <webview> events.
 
+var GuestViewInternalNatives = requireNative('guest_view_internal');
 var MessagingNatives = requireNative('messaging_natives');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewInternal = require('webViewInternal').WebViewInternal;
@@ -15,7 +16,8 @@ var PERMISSION_TYPES = ['media',
                         'download',
                         'loadplugin',
                         'filesystem',
-                        'fullscreen'];
+                        'fullscreen',
+                        'notifications'];
 
 // -----------------------------------------------------------------------------
 // WebViewActionRequest object.
@@ -42,7 +44,9 @@ WebViewActionRequest.prototype.defaultAction = function() {
   // Do nothing if the action has already been taken or the requester is
   // already gone (in which case its guestInstanceId will be stale).
   // VB-5686: Disabled since the following crashes (and crashes every time).
-  if (this.actionTaken || this.interfaceName === "request" ||
+  if (this.actionTaken ||
+      (this.interfaceName === "request" &&
+          GuestViewInternalNatives.IsVivaldi()) ||
       this.guestInstanceId != this.webViewImpl.guest.getId()) {
     return;
   }
@@ -299,4 +303,4 @@ var WebViewActionRequests = {
 };
 
 // Exports.
-exports.WebViewActionRequests = WebViewActionRequests;
+exports.$set('WebViewActionRequests', WebViewActionRequests);

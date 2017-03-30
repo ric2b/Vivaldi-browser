@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/channel_test_base.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_test_base.h"
+
+#include <utility>
 
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "mojo/edk/embedder/platform_channel_pair.h"
-#include "mojo/edk/system/raw_channel.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_channel_pair.h"
+#include "third_party/mojo/src/mojo/edk/system/raw_channel.h"
 
 namespace mojo {
 namespace system {
@@ -36,7 +38,7 @@ void ChannelTestBase::InitChannelOnIOThread(unsigned i) {
 
   CHECK(raw_channels_[i]);
   CHECK(channels_[i]);
-  channels_[i]->Init(raw_channels_[i].Pass());
+  channels_[i]->Init(std::move(raw_channels_[i]));
 }
 
 void ChannelTestBase::CreateAndInitChannelOnIOThread(unsigned i) {
@@ -49,6 +51,11 @@ void ChannelTestBase::ShutdownChannelOnIOThread(unsigned i) {
 
   CHECK(channels_[i]);
   channels_[i]->Shutdown();
+}
+
+void ChannelTestBase::ShutdownAndReleaseChannelOnIOThread(unsigned i) {
+  ShutdownChannelOnIOThread(i);
+  channels_[i] = nullptr;
 }
 
 void ChannelTestBase::SetUpOnIOThread() {

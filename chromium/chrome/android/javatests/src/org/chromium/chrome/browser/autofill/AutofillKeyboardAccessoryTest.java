@@ -1,0 +1,292 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.autofill;
+
+import android.test.FlakyTest;
+import android.test.suitebuilder.annotation.MediumTest;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.HorizontalScrollView;
+
+import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.UrlUtils;
+import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
+import org.chromium.chrome.test.ChromeActivityTestCaseBase;
+import org.chromium.content.browser.ContentViewCore;
+import org.chromium.content.browser.test.util.Criteria;
+import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.UiUtils;
+
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * Integration tests for autofill keyboard accessory.
+ */
+@CommandLineFlags.Add({ChromeSwitches.ENABLE_AUTOFILL_KEYBOARD_ACCESSORY})
+public class AutofillKeyboardAccessoryTest extends ChromeActivityTestCaseBase<ChromeActivity> {
+    private final AtomicReference<ContentViewCore> mViewCoreRef =
+            new AtomicReference<ContentViewCore>();
+    private final AtomicReference<WebContents> mWebContentsRef = new AtomicReference<WebContents>();
+    private final AtomicReference<ViewGroup> mContainerRef = new AtomicReference<ViewGroup>();
+    private final AtomicReference<ViewGroup> mKeyboardAccessoryRef =
+            new AtomicReference<ViewGroup>();
+
+    public AutofillKeyboardAccessoryTest() {
+        super(ChromeActivity.class);
+    }
+
+    @Override
+    public void startMainActivity() throws InterruptedException {}
+
+    private void loadTestPage(boolean isRtl) throws InterruptedException, ExecutionException {
+        startMainActivityWithURL(UrlUtils.encodeHtmlDataUri("<html"
+                + (isRtl ? " dir=\"rtl\"" : "")
+                + "><head>"
+                + "<meta name=\"viewport\""
+                + "content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0\" /></head>"
+                + "<body><form method=\"POST\">"
+                + "<input type=\"text\" id=\"fn\" autocomplete=\"given-name\" autofocus/><br>"
+                + "<input type=\"text\" id=\"ln\" autocomplete=\"family-name\" /><br>"
+                + "<textarea id=\"sa\" autocomplete=\"street-address\"></textarea><br>"
+                + "<input type=\"text\" id=\"a1\" autocomplete=\"address-line1\" /><br>"
+                + "<input type=\"text\" id=\"a2\" autocomplete=\"address-line2\" /><br>"
+                + "<input type=\"text\" id=\"ct\" autocomplete=\"address-level2\" /><br>"
+                + "<input type=\"text\" id=\"zc\" autocomplete=\"postal-code\" /><br>"
+                + "<input type=\"text\" id=\"em\" autocomplete=\"email\" /><br>"
+                + "<input type=\"text\" id=\"ph\" autocomplete=\"tel\" /><br>"
+                + "<input type=\"text\" id=\"fx\" autocomplete=\"fax\" /><br>"
+                + "<select id=\"co\" autocomplete=\"country\"><br>"
+                + "<option value=\"BR\">Brazil</option>"
+                + "<option value=\"US\">United States</option>"
+                + "</select>"
+                + "<input type=\"submit\" />"
+                + "</form></body></html>"));
+        new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
+                "Johnononononononononononononononononononononononononononononononononon "
+                        + "Smiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiith",
+                "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "", "94102", "", "US",
+                "(415) 888-9999", "john@acme.inc", "en"));
+        new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
+                "Janenenenenenenenenenenenenenenenenenenenenenenenenenenenenenenenenene "
+                        + "Doooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooe",
+                "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "", "94102", "", "US",
+                "(415) 999-0000", "jane@acme.inc", "en"));
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mViewCoreRef.set(getActivity().getCurrentContentViewCore());
+                mWebContentsRef.set(mViewCoreRef.get().getWebContents());
+                mContainerRef.set(mViewCoreRef.get().getContainerView());
+                mKeyboardAccessoryRef.set(
+                        getActivity().getWindowAndroid().getKeyboardAccessoryView());
+            }
+        });
+        DOMUtils.waitForNonZeroNodeBounds(mWebContentsRef.get(), "fn");
+    }
+
+    /**
+     * Autofocused fields should not show a keyboard accessory.
+     */
+    @MediumTest
+    @Feature({"keyboard-accessory"})
+    public void testAutofocusedFieldDoesNotShowKeyboardAccessory() throws InterruptedException,
+           ExecutionException {
+        loadTestPage(false);
+        assertTrue("Keyboard accessory should be hidden.",
+                ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() {
+                        return mKeyboardAccessoryRef.get().getVisibility() == View.GONE;
+                    }
+                }).booleanValue());
+    }
+
+    /**
+     * Tapping on an input field should show a keyboard and its keyboard accessory.
+     */
+    @MediumTest
+    @Feature({"keyboard-accessory"})
+    public void testTapInputFieldShowsKeyboardAccessory() throws ExecutionException,
+             InterruptedException, TimeoutException {
+        loadTestPage(false);
+        DOMUtils.clickNode(this, mViewCoreRef.get(), "fn");
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Keyboard should be showing.") {
+            @Override
+            public boolean isSatisfied() {
+                return UiUtils.isKeyboardShowing(getActivity(), mContainerRef.get());
+            }
+        });
+        assertTrue("Keyboard accessory should be showing.",
+                ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() {
+                        return mKeyboardAccessoryRef.get().getVisibility() == View.VISIBLE;
+                    }
+                }).booleanValue());
+    }
+
+    /**
+     * Switching fields should re-scroll the keyboard accessory to the left.
+     */
+    /*
+    @MediumTest
+    @Feature({"keyboard-accessory"})
+    Bug https://crbug.com/563640
+    */
+    @FlakyTest
+    public void testSwitchFieldsRescrollsKeyboardAccessory() throws ExecutionException,
+             InterruptedException, TimeoutException {
+        loadTestPage(false);
+        DOMUtils.clickNode(this, mViewCoreRef.get(), "fn");
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Keyboard should be showing.") {
+            @Override
+            public boolean isSatisfied() {
+                return UiUtils.isKeyboardShowing(getActivity(), mContainerRef.get());
+            }
+        });
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                ((HorizontalScrollView) mKeyboardAccessoryRef.get()).scrollTo(2000, 0);
+            }
+        });
+        CriteriaHelper.pollForUIThreadCriteria(
+                new Criteria("First suggestion should be off the screen after manual scroll.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        View suggestion = getSuggestionAt(0);
+                        if (suggestion != null) {
+                            int[] location = new int[2];
+                            suggestion.getLocationOnScreen(location);
+                            return location[0] < 0;
+                        } else {
+                            return false;
+                        }
+                    }
+                });
+        DOMUtils.clickNode(this, mViewCoreRef.get(), "ln");
+        CriteriaHelper.pollForUIThreadCriteria(
+                new Criteria("First suggestion should be on the screen after switching fields.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        int[] location = new int[2];
+                        getSuggestionAt(0).getLocationOnScreen(location);
+                        return location[0] > 0;
+                    }
+                });
+    }
+
+    /**
+     * Switching fields in RTL should re-scroll the keyboard accessory to the right.
+     */
+    @MediumTest
+    @Feature({"keyboard-accessory"})
+    public void testSwitchFieldsRescrollsKeyboardAccessoryRtl() throws ExecutionException,
+             InterruptedException, TimeoutException {
+        loadTestPage(true);
+        DOMUtils.clickNode(this, mViewCoreRef.get(), "fn");
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Keyboard should be showing.") {
+            @Override
+            public boolean isSatisfied() {
+                return UiUtils.isKeyboardShowing(getActivity(), mContainerRef.get());
+            }
+        });
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                ((HorizontalScrollView) mKeyboardAccessoryRef.get()).scrollTo(0, 0);
+            }
+        });
+        CriteriaHelper.pollForUIThreadCriteria(
+                new Criteria("Last suggestion should be on the screen after manual scroll.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        View suggestion = getSuggestionAt(2);
+                        if (suggestion != null) {
+                            int[] location = new int[2];
+                            suggestion.getLocationOnScreen(location);
+                            return location[0] > 0;
+                        } else {
+                            return false;
+                        }
+                    }
+                });
+        DOMUtils.clickNode(this, mViewCoreRef.get(), "ln");
+        CriteriaHelper.pollForUIThreadCriteria(
+                new Criteria("Last suggestion should be off the screen after switching fields.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        View suggestion = getSuggestionAt(2);
+                        if (suggestion != null) {
+                            int[] location = new int[2];
+                            suggestion.getLocationOnScreen(location);
+                            return location[0] < 0;
+                        } else {
+                            return false;
+                        }
+                    }
+                });
+    }
+
+    /**
+     * Selecting a keyboard accessory suggestion should hide the keyboard and its keyboard
+     * accessory.
+     */
+    @MediumTest
+    @Feature({"keyboard-accessory"})
+    public void testSelectSuggestionHidesKeyboardAccessory() throws ExecutionException,
+             InterruptedException, TimeoutException {
+        loadTestPage(false);
+        DOMUtils.clickNode(this, mViewCoreRef.get(), "fn");
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Keyboard should be showing.") {
+            @Override
+            public boolean isSatisfied() {
+                return UiUtils.isKeyboardShowing(getActivity(), mContainerRef.get());
+            }
+        });
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                View suggestion = getSuggestionAt(0);
+                if (suggestion != null) {
+                    suggestion.performClick();
+                }
+            }
+        });
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Keyboard should be hidden.") {
+            @Override
+            public boolean isSatisfied() {
+                return !UiUtils.isKeyboardShowing(getActivity(), mContainerRef.get());
+            }
+        });
+        assertTrue("Keyboard accessory should be hidden.",
+                ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() {
+                        return mKeyboardAccessoryRef.get().getVisibility() == View.GONE;
+                    }
+                }).booleanValue());
+    }
+
+    private View getSuggestionAt(int index) {
+        // The view hierarchy:
+        //   Keyboard accessory.
+        //    \--> A list of suggestions.
+        //          \--> A suggestion that can be clicked.
+        return mKeyboardAccessoryRef.get() != null
+                        && mKeyboardAccessoryRef.get().getChildAt(0) != null
+                ? ((ViewGroup) mKeyboardAccessoryRef.get().getChildAt(0)).getChildAt(index)
+                : null;
+    }
+}

@@ -2,20 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/views/passwords/manage_passwords_icon_view.h"
-
+#include "base/macros.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_icon.h"
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller_mock.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/passwords/manage_passwords_icon_view.h"
+#include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 #include "content/public/test/test_utils.h"
 #include "grit/theme_resources.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event_utils.h"
 
 class ManagePasswordsIconViewTest : public ManagePasswordsTest {
@@ -25,10 +25,22 @@ class ManagePasswordsIconViewTest : public ManagePasswordsTest {
 
   ManagePasswordsIconView* view() override {
     BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
-    return static_cast<ManagePasswordsIconView*>(
+    return static_cast<ManagePasswordsIconViews*>(
         browser_view->GetToolbarView()
             ->location_bar()
             ->manage_passwords_icon_view());
+  }
+
+  password_manager::ui::State ViewState() { return GetView()->state_; }
+
+  ManagePasswordsIconViews* GetView() {
+    return static_cast<ManagePasswordsIconViews*>(view());
+  }
+
+  base::string16 GetTooltipText() {
+    base::string16 tooltip;
+    GetView()->GetTooltipText(gfx::Point(), &tooltip);
+    return tooltip;
   }
 
  private:
@@ -36,48 +48,34 @@ class ManagePasswordsIconViewTest : public ManagePasswordsTest {
 };
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsIconViewTest, DefaultStateIsInactive) {
-  EXPECT_EQ(password_manager::ui::INACTIVE_STATE, view()->state());
-  EXPECT_FALSE(view()->visible());
-  EXPECT_EQ(0, view()->icon_id());
-  EXPECT_EQ(0, view()->tooltip_text_id());
-  view()->SetActive(true);
-  EXPECT_EQ(0, view()->icon_id());
-  view()->SetActive(false);
-  EXPECT_EQ(0, view()->icon_id());
+  EXPECT_EQ(password_manager::ui::INACTIVE_STATE, ViewState());
+  EXPECT_FALSE(GetView()->visible());
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsIconViewTest, PendingState) {
   SetupPendingPassword();
-  EXPECT_EQ(password_manager::ui::PENDING_PASSWORD_STATE, view()->state());
-  EXPECT_TRUE(view()->visible());
-  EXPECT_TRUE(view()->active());
-  EXPECT_EQ(IDR_SAVE_PASSWORD_ACTIVE, view()->icon_id());
-  EXPECT_EQ(IDS_PASSWORD_MANAGER_TOOLTIP_SAVE, view()->tooltip_text_id());
-  view()->SetActive(false);
-  EXPECT_EQ(IDR_SAVE_PASSWORD_INACTIVE, view()->icon_id());
+  EXPECT_EQ(password_manager::ui::PENDING_PASSWORD_STATE, ViewState());
+  EXPECT_TRUE(GetView()->visible());
+  // No tooltip because the bubble is showing.
+  EXPECT_EQ(base::string16(), GetTooltipText());
+  const gfx::ImageSkia active_image = GetView()->GetImage();
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsIconViewTest, ManageState) {
   SetupManagingPasswords();
-  EXPECT_EQ(password_manager::ui::MANAGE_STATE, view()->state());
-  EXPECT_TRUE(view()->visible());
-  EXPECT_EQ(IDR_SAVE_PASSWORD_INACTIVE, view()->icon_id());
-  EXPECT_EQ(IDS_PASSWORD_MANAGER_TOOLTIP_MANAGE, view()->tooltip_text_id());
-  view()->SetActive(true);
-  EXPECT_EQ(IDR_SAVE_PASSWORD_ACTIVE, view()->icon_id());
-  view()->SetActive(false);
-  EXPECT_EQ(IDR_SAVE_PASSWORD_INACTIVE, view()->icon_id());
+  EXPECT_EQ(password_manager::ui::MANAGE_STATE, ViewState());
+  EXPECT_TRUE(GetView()->visible());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_TOOLTIP_MANAGE),
+            GetTooltipText());
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsIconViewTest, CloseOnClick) {
   SetupPendingPassword();
-  EXPECT_TRUE(view()->visible());
-  EXPECT_TRUE(view()->active());
+  EXPECT_TRUE(GetView()->visible());
   ui::MouseEvent mouse_down(ui::ET_MOUSE_PRESSED, gfx::Point(10, 10),
                             gfx::Point(900, 60), ui::EventTimeForNow(),
                             ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
-  view()->OnMousePressed(mouse_down);
+  GetView()->OnMousePressed(mouse_down);
   // Wait for the command execution to close the bubble.
   content::RunAllPendingInMessageLoop();
-  EXPECT_FALSE(view()->active());
 }

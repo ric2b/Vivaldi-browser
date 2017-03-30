@@ -5,7 +5,9 @@
 #ifndef CONTENT_RENDERER_DOM_AUTOMATION_CONTROLLER_H_
 #define CONTENT_RENDERER_DOM_AUTOMATION_CONTROLLER_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "gin/wrappable.h"
 
@@ -92,7 +94,7 @@ class DomAutomationController : public gin::Wrappable<DomAutomationController>,
 
   // Makes the renderer send a javascript value to the app.
   // The value to be sent can be either of type String,
-  // Number (double casted to int32) or Boolean. Any other type or no
+  // Number (double casted to int32_t) or Boolean. Any other type or no
   // argument at all is ignored.
   bool SendMsg(const gin::Arguments& args);
 
@@ -115,6 +117,9 @@ class DomAutomationController : public gin::Wrappable<DomAutomationController>,
 
   // RenderViewObserver
   void OnDestruct() override;
+  void DidCreateScriptContext(v8::Local<v8::Context> context,
+                              int extension_group,
+                              int world_id) override;
 
   int automation_id_;  // routing id to be used by the next channel.
 

@@ -4,7 +4,8 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
 
-#include "ash/system/system_notifier.h"
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -20,11 +21,11 @@
 #include "chrome/browser/chromeos/idle_detector.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
 #include "chrome/browser/chromeos/login/screens/network_model.h"
-#include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
+#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/pref_names.h"
@@ -33,42 +34,18 @@
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
 #include "components/login/localized_values_builder.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
-#include "grit/ash_strings.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
 
 const char kJsScreenPath[] = "login.NetworkScreen";
-const char kNewGAIAKillSwitch[] = "new_gaia_kill_switch";
-
-void ShowNewLoginUIPopup() {
-  // Show new login UI popup message, if necessary
-  if (g_browser_process->local_state()->GetBoolean(prefs::kNewLoginUIPopup)) {
-    base::string16 message = l10n_util::GetStringUTF16(
-        chromeos::StartupUtils::IsWebviewSigninEnabled()
-            ? IDS_ASH_STATUS_TRAY_NEW_LOGIN_UI_ENABLED
-            : IDS_ASH_STATUS_TRAY_NEW_LOGIN_UI_DISABLED);
-    scoped_ptr<message_center::Notification> notification(
-        new message_center::Notification(
-            message_center::NOTIFICATION_TYPE_SIMPLE, kNewGAIAKillSwitch,
-            base::string16(), message, gfx::Image(), base::string16(),
-            message_center::NotifierId(
-                message_center::NotifierId::SYSTEM_COMPONENT,
-                ash::system_notifier::kNotifierOobeScreen),
-            message_center::RichNotificationData(), nullptr));
-    message_center::MessageCenter::Get()->AddNotification(notification.Pass());
-    g_browser_process->local_state()->SetBoolean(prefs::kNewLoginUIPopup,
-                                                 false);
-  }
-}
 
 }  // namespace
 
@@ -126,8 +103,6 @@ void NetworkScreenHandler::Show() {
           chromeos::switches::kSystemDevMode));
   ShowScreen(OobeUI::kScreenOobeNetwork, &network_screen_params);
   core_oobe_actor_->InitDemoModeDetection();
-
-  ShowNewLoginUIPopup();
 }
 
 void NetworkScreenHandler::Hide() {
@@ -169,12 +144,6 @@ void NetworkScreenHandler::ReloadLocalizedContent() {
 }
 
 // NetworkScreenHandler, BaseScreenHandler implementation: --------------------
-
-void NetworkScreenHandler::RegisterMessages() {
-  AddCallback("toggleNewLoginUI",
-              &NetworkScreenHandler::HandleToggleNewLoginUI);
-  BaseScreenHandler::RegisterMessages();
-}
 
 void NetworkScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
@@ -219,7 +188,7 @@ void NetworkScreenHandler::GetAdditionalParameters(
     language_list.reset(GetMinimalUILanguageList().release());
 
   // GetAdditionalParameters() is called when OOBE language is updated.
-  // This happens in two diferent cases:
+  // This happens in three different cases:
   //
   // 1) User selects new locale on OOBE screen. We need to sync active input
   // methods with locale, so EnableLoginLayouts() is needed.
@@ -238,8 +207,21 @@ void NetworkScreenHandler::GetAdditionalParameters(
   // So we need to disable activation of login layouts if we are already in
   // active user session.
   //
+  // 3) This is the bootstrapping process for the remora/"Slave" device. The
+  // locale & input of the remora/"Slave" device is set up by a shark/"Master"
+  // device. In this case we don't want EnableLoginLayout() to reset the input
+  // method to the hardware default method.
+  const bool is_remora = g_browser_process->platform_part()
+                             ->browser_policy_connector_chromeos()
+                             ->GetDeviceCloudPolicyManager()
+                             ->IsRemoraRequisition();
+
+  const bool is_slave = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kOobeBootstrappingSlave);
+
   const bool enable_layouts =
-      !user_manager::UserManager::Get()->IsUserLoggedIn();
+      !user_manager::UserManager::Get()->IsUserLoggedIn() && !is_slave &&
+      !is_remora;
 
   dict->Set("languageList", language_list.release());
   dict->Set(
@@ -260,14 +242,6 @@ void NetworkScreenHandler::Initialize() {
     ReloadLocalizedContent();
 }
 
-void NetworkScreenHandler::HandleToggleNewLoginUI() {
-  if (StartupUtils::EnableWebviewSignin(
-          !StartupUtils::IsWebviewSigninEnabled())) {
-    g_browser_process->local_state()->SetBoolean(prefs::kNewLoginUIPopup, true);
-    chrome::AttemptRestart();
-  }
-}
-
 // NetworkScreenHandler, private: ----------------------------------------------
 
 // static
@@ -276,7 +250,7 @@ base::ListValue* NetworkScreenHandler::GetTimezoneList() {
   CrosSettings::Get()->GetString(kSystemTimezone, &current_timezone_id);
 
   scoped_ptr<base::ListValue> timezone_list(new base::ListValue);
-  scoped_ptr<base::ListValue> timezones = system::GetTimezoneList().Pass();
+  scoped_ptr<base::ListValue> timezones = system::GetTimezoneList();
   for (size_t i = 0; i < timezones->GetSize(); ++i) {
     const base::ListValue* timezone = NULL;
     CHECK(timezones->GetList(i, &timezone));

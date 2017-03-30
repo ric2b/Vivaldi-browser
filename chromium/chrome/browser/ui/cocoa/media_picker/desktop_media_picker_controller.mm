@@ -4,14 +4,18 @@
 
 #import "chrome/browser/ui/cocoa/media_picker/desktop_media_picker_controller.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #import "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
+#import "chrome/browser/ui/cocoa/key_equivalent_constants.h"
 #import "chrome/browser/ui/cocoa/media_picker/desktop_media_picker_item.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
+#include "grit/components_strings.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
 #import "ui/base/cocoa/flipped_view.h"
 #import "ui/base/cocoa/window_size_constants.h"
@@ -73,8 +77,9 @@ const int kExcessButtonPadding = 6;
     [parent addChildWindow:window ordered:NSWindowAbove];
     [window setDelegate:self];
     [self initializeContentsWithAppName:appName targetName:targetName];
-    media_list_ = media_list.Pass();
-    media_list_->SetViewDialogWindowId([window windowNumber]);
+    media_list_ = std::move(media_list);
+    media_list_->SetViewDialogWindowId(content::DesktopMediaID(
+       content::DesktopMediaID::TYPE_WINDOW, [window windowNumber]));
     doneCallback_ = callback;
     items_.reset([[NSMutableArray alloc] init]);
     bridge_.reset(new DesktopMediaPickerBridge(self));
@@ -151,6 +156,7 @@ const int kExcessButtonPadding = 6;
   [shareButton_ setFrameOrigin:origin];
   [shareButton_ setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
   [shareButton_ setTarget:self];
+  [shareButton_ setKeyEquivalent:kKeyEquivalentReturn];
   [shareButton_ setAction:@selector(sharePressed:)];
   [content addSubview:shareButton_];
 
@@ -162,6 +168,7 @@ const int kExcessButtonPadding = 6;
   [cancelButton_ setFrameOrigin:origin];
   [cancelButton_ setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
   [cancelButton_ setTarget:self];
+  [cancelButton_ setKeyEquivalent:kKeyEquivalentEscape];
   [cancelButton_ setAction:@selector(cancelPressed:)];
   [content addSubview:cancelButton_];
   origin.y += kFramePadding +
@@ -173,6 +180,9 @@ const int kExcessButtonPadding = 6;
   [[self window] setContentMinSize:
       NSMakeSize(kMinimumContentWidth, kMinimumContentHeight)];
   [[[self window] contentView] setAutoresizesSubviews:YES];
+
+  // Make sourceBrowser_ get keyboard focus.
+  [[self window] makeFirstResponder:sourceBrowser_];
 }
 
 - (void)showWindow:(id)sender {

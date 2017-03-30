@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_APP_LAUNCHER_PAGE_UI_H_
 #define CHROME_BROWSER_UI_WEBUI_APP_LAUNCHER_PAGE_UI_H_
 
+#include "base/macros.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "ui/base/layout.h"
@@ -23,6 +24,11 @@ class AppLauncherPageUI : public content::WebUIController {
 
   static base::RefCountedMemory* GetFaviconResourceBytes(
       ui::ScaleFactor scale_factor);
+
+  // content::WebUIController:
+  bool OverrideHandleWebUIMessage(const GURL& source_url,
+                                  const std::string& message,
+                                  const base::ListValue& args) override;
 
  private:
   class HTMLSource : public content::URLDataSource {

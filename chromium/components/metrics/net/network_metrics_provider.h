@@ -5,14 +5,14 @@
 #ifndef COMPONENTS_METRICS_NET_NETWORK_METRICS_PROVIDER_H_
 #define COMPONENTS_METRICS_NET_NETWORK_METRICS_PROVIDER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/net/wifi_access_point_info_provider.h"
 #include "components/metrics/proto/system_profile.pb.h"
-#include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
+#include "net/base/network_interfaces.h"
 
 namespace metrics {
 

@@ -4,9 +4,10 @@
 
 #include "chrome/browser/browsing_data/browsing_data_cookie_helper.h"
 
-#include "utility"
+#include <utility>
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
@@ -23,30 +24,35 @@
 using content::BrowserThread;
 
 namespace {
+
 const char kGlobalCookieSetURL[] = "chrome://cookieset";
+
+void OnFetchComplete(const BrowsingDataCookieHelper::FetchCallback& callback,
+                     const net::CookieList& cookies) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(!callback.is_null());
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::Bind(callback, cookies));
 }
+
+}  // namespace
 
 BrowsingDataCookieHelper::BrowsingDataCookieHelper(
     net::URLRequestContextGetter* request_context_getter)
-    : is_fetching_(false),
-      request_context_getter_(request_context_getter) {
+    : request_context_getter_(request_context_getter) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
 BrowsingDataCookieHelper::~BrowsingDataCookieHelper() {
 }
 
-void BrowsingDataCookieHelper::StartFetching(
-    const base::Callback<void(const net::CookieList& cookies)>& callback) {
+void BrowsingDataCookieHelper::StartFetching(const FetchCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(!is_fetching_);
   DCHECK(!callback.is_null());
-  DCHECK(completion_callback_.is_null());
-  is_fetching_ = true;
-  completion_callback_ = callback;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&BrowsingDataCookieHelper::FetchCookiesOnIOThread, this));
+      base::Bind(&BrowsingDataCookieHelper::FetchCookiesOnIOThread, this,
+                 callback));
 }
 
 void BrowsingDataCookieHelper::DeleteCookie(
@@ -58,33 +64,18 @@ void BrowsingDataCookieHelper::DeleteCookie(
                  this, cookie));
 }
 
-void BrowsingDataCookieHelper::FetchCookiesOnIOThread() {
+void BrowsingDataCookieHelper::FetchCookiesOnIOThread(
+    const FetchCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(!callback.is_null());
   scoped_refptr<net::CookieMonster> cookie_monster =
       request_context_getter_->GetURLRequestContext()->
       cookie_store()->GetCookieMonster();
   if (cookie_monster.get()) {
-    cookie_monster->GetAllCookiesAsync(
-        base::Bind(&BrowsingDataCookieHelper::OnFetchComplete, this));
+    cookie_monster->GetAllCookiesAsync(base::Bind(&OnFetchComplete, callback));
   } else {
-    OnFetchComplete(net::CookieList());
+    OnFetchComplete(callback, net::CookieList());
   }
-}
-
-void BrowsingDataCookieHelper::OnFetchComplete(const net::CookieList& cookies) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&BrowsingDataCookieHelper::NotifyInUIThread, this, cookies));
-}
-
-void BrowsingDataCookieHelper::NotifyInUIThread(
-    const net::CookieList& cookies) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(is_fetching_);
-  is_fetching_ = false;
-  completion_callback_.Run(cookies);
-  completion_callback_.Reset();
 }
 
 void BrowsingDataCookieHelper::DeleteCookieOnIOThread(
@@ -112,11 +103,8 @@ void CannedBrowsingDataCookieHelper::AddReadCookies(
     const GURL& frame_url,
     const GURL& url,
     const net::CookieList& cookie_list) {
-  typedef net::CookieList::const_iterator cookie_iterator;
-  for (cookie_iterator add_cookie = cookie_list.begin();
-       add_cookie != cookie_list.end(); ++add_cookie) {
-    AddCookie(frame_url, *add_cookie);
-  }
+  for (const auto& add_cookie : cookie_list)
+    AddCookie(frame_url, add_cookie);
 }
 
 void CannedBrowsingDataCookieHelper::AddChangedCookie(
@@ -137,10 +125,8 @@ void CannedBrowsingDataCookieHelper::Reset() {
 }
 
 bool CannedBrowsingDataCookieHelper::empty() const {
-  for (OriginCookieSetMap::const_iterator it = origin_cookie_set_map_.begin();
-       it != origin_cookie_set_map_.end();
-       ++it) {
-    if (!it->second->empty())
+  for (const auto& pair : origin_cookie_set_map_) {
+    if (!pair.second->empty())
       return false;
   }
   return true;
@@ -149,11 +135,8 @@ bool CannedBrowsingDataCookieHelper::empty() const {
 
 size_t CannedBrowsingDataCookieHelper::GetCookieCount() const {
   size_t count = 0;
-  for (OriginCookieSetMap::const_iterator it = origin_cookie_set_map_.begin();
-       it != origin_cookie_set_map_.end();
-       ++it) {
-    count += it->second->size();
-  }
+  for (const auto& pair : origin_cookie_set_map_)
+    count += pair.second->size();
   return count;
 }
 
@@ -162,23 +145,17 @@ void CannedBrowsingDataCookieHelper::StartFetching(
     const net::CookieMonster::GetCookieListCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   net::CookieList cookie_list;
-  for (OriginCookieSetMap::iterator it = origin_cookie_set_map_.begin();
-       it != origin_cookie_set_map_.end();
-       ++it) {
-    cookie_list.insert(cookie_list.begin(),
-                       it->second->begin(),
-                       it->second->end());
+  for (const auto& pair : origin_cookie_set_map_) {
+    cookie_list.insert(cookie_list.begin(), pair.second->begin(),
+                       pair.second->end());
   }
   callback.Run(cookie_list);
 }
 
 void CannedBrowsingDataCookieHelper::DeleteCookie(
     const net::CanonicalCookie& cookie) {
-  for (OriginCookieSetMap::iterator it = origin_cookie_set_map_.begin();
-       it != origin_cookie_set_map_.end();
-       ++it) {
-    DeleteMatchingCookie(cookie, it->second);
-  }
+  for (const auto& pair : origin_cookie_set_map_)
+    DeleteMatchingCookie(cookie, pair.second);
   BrowsingDataCookieHelper::DeleteCookie(cookie);
 }
 

@@ -5,18 +5,20 @@
 #ifndef MEDIA_CAST_LOGGING_LOGGING_DEFINES_H_
 #define MEDIA_CAST_LOGGING_LOGGING_DEFINES_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/time/time.h"
+#include "media/cast/common/rtp_time.h"
 
 namespace media {
 namespace cast {
 
-static const uint32 kFrameIdUnknown = 0xFFFFFFFF;
-
-typedef uint32 RtpTimestamp;
+static const uint32_t kFrameIdUnknown = 0xFFFFFFFF;
 
 enum CastLoggingEvent {
   UNKNOWN,
@@ -35,7 +37,9 @@ enum CastLoggingEvent {
   PACKET_RTX_REJECTED,
   // Receiver side packet events.
   PACKET_RECEIVED,
-  kNumOfLoggingEvents = PACKET_RECEIVED
+};
+enum {
+  kNumOfLoggingEvents = PACKET_RECEIVED + 1,
 };
 
 const char* CastLoggingToString(CastLoggingEvent event);
@@ -52,8 +56,8 @@ struct FrameEvent {
   FrameEvent();
   ~FrameEvent();
 
-  RtpTimestamp rtp_timestamp;
-  uint32 frame_id;
+  RtpTimeTicks rtp_timestamp;
+  uint32_t frame_id;
 
   // Resolution of the frame. Only set for video FRAME_CAPTURE_END events.
   int width;
@@ -92,10 +96,10 @@ struct PacketEvent {
   PacketEvent();
   ~PacketEvent();
 
-  RtpTimestamp rtp_timestamp;
-  uint32 frame_id;
-  uint16 max_packet_id;
-  uint16 packet_id;
+  RtpTimeTicks rtp_timestamp;
+  uint32_t frame_id;
+  uint16_t max_packet_id;
+  uint16_t packet_id;
   size_t size;
 
   // Time of event logged.

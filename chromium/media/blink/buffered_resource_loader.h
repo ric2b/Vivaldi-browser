@@ -5,13 +5,17 @@
 #ifndef MEDIA_BLINK_BUFFERED_RESOURCE_LOADER_H_
 #define MEDIA_BLINK_BUFFERED_RESOURCE_LOADER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "media/base/media_export.h"
 #include "media/base/seekable_buffer.h"
 #include "media/blink/active_loader.h"
+#include "media/blink/media_blink_export.h"
+#include "media/blink/url_index.h"  // for kPositionNotSpecified
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "third_party/WebKit/public/platform/WebURLLoaderClient.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -22,13 +26,11 @@ namespace media {
 class MediaLog;
 class SeekableBuffer;
 
-const int64 kPositionNotSpecified = -1;
-
 // BufferedResourceLoader is single threaded and must be accessed on the
 // render thread. It wraps a WebURLLoader and does in-memory buffering,
 // pausing resource loading when the in-memory buffer is full and resuming
 // resource loading when there is available capacity.
-class MEDIA_EXPORT BufferedResourceLoader
+class MEDIA_BLINK_EXPORT BufferedResourceLoader
     : NON_EXPORTED_BASE(public blink::WebURLLoaderClient) {
  public:
   // kNeverDefer - Aggresively buffer; never defer loading while paused.
@@ -78,16 +80,15 @@ class MEDIA_EXPORT BufferedResourceLoader
   // |strategy| is the initial loading strategy to use.
   // |bitrate| is the bitrate of the media, 0 if unknown.
   // |playback_rate| is the current playback rate of the media.
-  BufferedResourceLoader(
-      const GURL& url,
-      CORSMode cors_mode,
-      int64 first_byte_position,
-      int64 last_byte_position,
-      DeferStrategy strategy,
-      int bitrate,
-      double playback_rate,
-      MediaLog* media_log);
-  virtual ~BufferedResourceLoader();
+  BufferedResourceLoader(const GURL& url,
+                         CORSMode cors_mode,
+                         int64_t first_byte_position,
+                         int64_t last_byte_position,
+                         DeferStrategy strategy,
+                         int bitrate,
+                         double playback_rate,
+                         MediaLog* media_log);
+  ~BufferedResourceLoader() override;
 
   // Start the resource loading with the specified URL and range.
   //
@@ -95,7 +96,7 @@ class MEDIA_EXPORT BufferedResourceLoader
   // |progress_cb| is executed when additional data has arrived.
   typedef base::Callback<void(Status)> StartCB;
   typedef base::Callback<void(LoadingState)> LoadingStateChangedCB;
-  typedef base::Callback<void(int64)> ProgressCB;
+  typedef base::Callback<void(int64_t)> ProgressCB;
   void Start(const StartCB& start_cb,
              const LoadingStateChangedCB& loading_cb,
              const ProgressCB& progress_cb,
@@ -116,17 +117,19 @@ class MEDIA_EXPORT BufferedResourceLoader
   // If necessary will temporarily increase forward capacity of buffer to
   // accomodate an unusually large read.
   typedef base::Callback<void(Status, int)> ReadCB;
-  void Read(int64 position, int read_size,
-            uint8* buffer, const ReadCB& read_cb);
+  void Read(int64_t position,
+            int read_size,
+            uint8_t* buffer,
+            const ReadCB& read_cb);
 
   // Gets the content length in bytes of the instance after this loader has been
   // started. If this value is |kPositionNotSpecified|, then content length is
   // unknown.
-  int64 content_length();
+  int64_t content_length();
 
   // Gets the original size of the file requested. If this value is
   // |kPositionNotSpecified|, then the size is unknown.
-  int64 instance_size();
+  int64_t instance_size();
 
   // Gets the mime type of the file requested. If this value is
   // empty, then the mime type is unknown.
@@ -136,36 +139,35 @@ class MEDIA_EXPORT BufferedResourceLoader
   bool range_supported();
 
   // blink::WebURLLoaderClient implementation.
-  virtual void willSendRequest(
+  void willFollowRedirect(
       blink::WebURLLoader* loader,
       blink::WebURLRequest& newRequest,
-      const blink::WebURLResponse& redirectResponse);
-  virtual void didSendData(
+      const blink::WebURLResponse& redirectResponse) override;
+  void didSendData(
       blink::WebURLLoader* loader,
       unsigned long long bytesSent,
-      unsigned long long totalBytesToBeSent);
-  virtual void didReceiveResponse(
+      unsigned long long totalBytesToBeSent) override;
+  void didReceiveResponse(
       blink::WebURLLoader* loader,
-      const blink::WebURLResponse& response);
-  virtual void didDownloadData(
+      const blink::WebURLResponse& response) override;
+  void didDownloadData(
       blink::WebURLLoader* loader,
       int data_length,
-      int encoded_data_length);
-  virtual void didReceiveData(
+      int encoded_data_length) override;
+  void didReceiveData(
       blink::WebURLLoader* loader,
       const char* data,
       int data_length,
-      int encoded_data_length);
-  virtual void didReceiveCachedMetadata(
+      int encoded_data_length) override;
+  void didReceiveCachedMetadata(
       blink::WebURLLoader* loader,
-      const char* data, int dataLength);
-  virtual void didFinishLoading(
+      const char* data, int dataLength) override;
+  void didFinishLoading(blink::WebURLLoader* loader,
+                        double finishTime,
+                        int64_t total_encoded_data_length) override;
+  void didFail(
       blink::WebURLLoader* loader,
-      double finishTime,
-      int64_t total_encoded_data_length);
-  virtual void didFail(
-      blink::WebURLLoader* loader,
-      const blink::WebURLError&);
+      const blink::WebURLError&) override;
 
   // Returns true if the media resource has a single origin, false otherwise.
   // Only valid to call after Start() has completed.
@@ -195,7 +197,7 @@ class MEDIA_EXPORT BufferedResourceLoader
   void SetTargetBufferDuration(base::TimeDelta behind, base::TimeDelta ahead);
 
   // Return the |first_byte_position| passed into the ctor.
-  int64 first_byte_position() const;
+  int64_t first_byte_position() const;
 
   // Parse a Content-Range header into its component pieces and return true if
   // each of the expected elements was found & parsed correctly.
@@ -203,9 +205,10 @@ class MEDIA_EXPORT BufferedResourceLoader
   // "/*".
   // NOTE: only public for testing!  This is an implementation detail of
   // VerifyPartialResponse (a private method).
-  static bool ParseContentRange(
-      const std::string& content_range_str, int64* first_byte_position,
-      int64* last_byte_position, int64* instance_size);
+  static bool ParseContentRange(const std::string& content_range_str,
+                                int64_t* first_byte_position,
+                                int64_t* last_byte_position,
+                                int64_t* instance_size);
 
   // Cancels and closes any outstanding deferred ActiveLoader instances. Does
   // not report a failed state, so subsequent read calls to cache may still
@@ -217,7 +220,10 @@ class MEDIA_EXPORT BufferedResourceLoader
   // Returns the original URL of the response. If the request is redirected to
   // another URL it is the URL after redirected. If the response is generated in
   // a Service Worker it is empty.
-  const GURL response_original_url() const { return response_original_url_; }
+  const GURL& response_original_url() const { return response_original_url_; }
+
+  // Returns an estimate of the amount of memory owned by the resource loader.
+  int64_t GetMemoryUsage() const;
 
  private:
   friend class BufferedDataSourceTest;
@@ -293,8 +299,8 @@ class MEDIA_EXPORT BufferedResourceLoader
   GURL url_;
   std::string mime_type_;
   CORSMode cors_mode_;
-  const int64 first_byte_position_;
-  const int64 last_byte_position_;
+  const int64_t first_byte_position_;
+  const int64_t last_byte_position_;
   bool single_origin_;
 
   // Executed whenever the state of resource loading has changed.
@@ -306,16 +312,16 @@ class MEDIA_EXPORT BufferedResourceLoader
 
   // Members used during request start.
   StartCB start_cb_;
-  int64 offset_;
-  int64 content_length_;
-  int64 instance_size_;
+  int64_t offset_;
+  int64_t content_length_;
+  int64_t instance_size_;
 
   // Members used during a read operation. They should be reset after each
   // read has completed or failed.
   ReadCB read_cb_;
-  int64 read_position_;
+  int64_t read_position_;
   int read_size_;
-  uint8* read_buffer_;
+  uint8_t* read_buffer_;
 
   // Offsets of the requested first byte and last byte in |buffer_|. They are
   // written by Read().

@@ -23,11 +23,10 @@
 
 #include "content/browser/download/download_item_impl.h"
 
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -49,7 +48,7 @@
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_url_parameters.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
 #include "net/base/net_util.h"
 
@@ -93,13 +92,12 @@ static void DownloadFileCancel(scoped_ptr<DownloadFile> download_file) {
 }
 
 bool IsDownloadResumptionEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableDownloadResumption);
+  return base::FeatureList::IsEnabled(features::kDownloadResumption);
 }
 
 }  // namespace
 
-const uint32 DownloadItem::kInvalidId = 0;
+const uint32_t DownloadItem::kInvalidId = 0;
 
 const char DownloadItem::kEmptyFileHash[] = "";
 
@@ -108,7 +106,7 @@ const int DownloadItemImpl::kMaxAutoResumeAttempts = 5;
 
 // Constructor for reading from the history service.
 DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
-                                   uint32 download_id,
+                                   uint32_t download_id,
                                    const base::FilePath& current_path,
                                    const base::FilePath& target_path,
                                    const std::vector<GURL>& url_chain,
@@ -119,8 +117,8 @@ DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
                                    const base::Time& end_time,
                                    const std::string& etag,
                                    const std::string& last_modified,
-                                   int64 received_bytes,
-                                   int64 total_bytes,
+                                   int64_t received_bytes,
+                                   int64_t total_bytes,
                                    DownloadItem::DownloadState state,
                                    DownloadDangerType danger_type,
                                    DownloadInterruptReason interrupt_reason,
@@ -167,16 +165,15 @@ DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
 }
 
 // Constructing for a regular download:
-DownloadItemImpl::DownloadItemImpl(
-    DownloadItemImplDelegate* delegate,
-    uint32 download_id,
-    const DownloadCreateInfo& info,
-    const net::BoundNetLog& bound_net_log)
+DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
+                                   uint32_t download_id,
+                                   const DownloadCreateInfo& info,
+                                   const net::BoundNetLog& bound_net_log)
     : is_save_package_download_(false),
       download_id_(download_id),
-      target_disposition_(
-          (info.save_info->prompt_for_save_location) ?
-              TARGET_DISPOSITION_PROMPT : TARGET_DISPOSITION_OVERWRITE),
+      target_disposition_((info.save_info->prompt_for_save_location)
+                              ? TARGET_DISPOSITION_PROMPT
+                              : TARGET_DISPOSITION_OVERWRITE),
       url_chain_(info.url_chain),
       referrer_url_(info.referrer_url),
       tab_url_(info.tab_url),
@@ -228,14 +225,14 @@ DownloadItemImpl::DownloadItemImpl(
 // Constructing for the "Save Page As..." feature:
 DownloadItemImpl::DownloadItemImpl(
     DownloadItemImplDelegate* delegate,
-    uint32 download_id,
+    uint32_t download_id,
     const base::FilePath& path,
     const GURL& url,
     const std::string& mime_type,
     scoped_ptr<DownloadRequestHandleInterface> request_handle,
     const net::BoundNetLog& bound_net_log)
     : is_save_package_download_(true),
-      request_handle_(request_handle.Pass()),
+      request_handle_(std::move(request_handle)),
       download_id_(download_id),
       current_path_(path),
       target_path_(path),
@@ -477,7 +474,7 @@ void DownloadItemImpl::ShowDownloadInShell() {
   delegate_->ShowDownloadInShell(this);
 }
 
-uint32 DownloadItemImpl::GetId() const {
+uint32_t DownloadItemImpl::GetId() const {
   return download_id_;
 }
 
@@ -504,9 +501,8 @@ bool DownloadItemImpl::CanResume() const {
   if (state_ != INTERRUPTED_INTERNAL)
     return false;
 
-  // Downloads that don't have a WebContents should still be resumable, but this
-  // isn't currently the case. See ResumeInterruptedDownload().
-  if (!GetWebContents())
+  // We currently only support HTTP(S) requests for download resumption.
+  if (!GetURL().SchemeIsHTTPOrHTTPS())
     return false;
 
   ResumeMode resume_mode = GetResumeMode();
@@ -666,19 +662,12 @@ void DownloadItemImpl::DeleteFile(const base::Callback<void(bool)>& callback) {
 }
 
 bool DownloadItemImpl::IsDangerous() const {
-#if defined(OS_WIN) || defined(OS_MACOSX)
-  // TODO(noelutz): At this point only the windows views and OSX UI supports
-  // warnings based on dangerous content.
   return (danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
           danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_URL ||
           danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
           danger_type_ == DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT ||
           danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST ||
           danger_type_ == DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED);
-#else
-  return (danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_URL);
-#endif
 }
 
 DownloadDangerType DownloadItemImpl::GetDangerType() const {
@@ -689,7 +678,7 @@ bool DownloadItemImpl::TimeRemaining(base::TimeDelta* remaining) const {
   if (total_bytes_ <= 0)
     return false;  // We never received the content_length for this download.
 
-  int64 speed = CurrentSpeed();
+  int64_t speed = CurrentSpeed();
   if (speed == 0)
     return false;
 
@@ -698,7 +687,7 @@ bool DownloadItemImpl::TimeRemaining(base::TimeDelta* remaining) const {
   return true;
 }
 
-int64 DownloadItemImpl::CurrentSpeed() const {
+int64_t DownloadItemImpl::CurrentSpeed() const {
   if (is_paused_)
     return 0;
   return bytes_per_sec_;
@@ -717,11 +706,11 @@ bool DownloadItemImpl::AllDataSaved() const {
   return all_data_saved_;
 }
 
-int64 DownloadItemImpl::GetTotalBytes() const {
+int64_t DownloadItemImpl::GetTotalBytes() const {
   return total_bytes_;
 }
 
-int64 DownloadItemImpl::GetReceivedBytes() const {
+int64_t DownloadItemImpl::GetReceivedBytes() const {
   return received_bytes_;
 }
 
@@ -891,7 +880,6 @@ DownloadItemImpl::ResumeMode DownloadItemImpl::GetResumeMode() const {
         mode = RESUME_MODE_IMMEDIATE_CONTINUE;
       break;
 
-    case DOWNLOAD_INTERRUPT_REASON_SERVER_PRECONDITION:
     case DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE:
     case DOWNLOAD_INTERRUPT_REASON_FILE_TOO_SHORT:
       if (force_user)
@@ -1000,7 +988,7 @@ const net::BoundNetLog& DownloadItemImpl::GetBoundNetLog() const {
   return bound_net_log_;
 }
 
-void DownloadItemImpl::SetTotalBytes(int64 total_bytes) {
+void DownloadItemImpl::SetTotalBytes(int64_t total_bytes) {
   total_bytes_ = total_bytes;
 }
 
@@ -1027,8 +1015,8 @@ void DownloadItemImpl::MarkAsComplete() {
   TransitionTo(COMPLETE_INTERNAL, UPDATE_OBSERVERS);
 }
 
-void DownloadItemImpl::DestinationUpdate(int64 bytes_so_far,
-                                         int64 bytes_per_sec,
+void DownloadItemImpl::DestinationUpdate(int64_t bytes_so_far,
+                                         int64_t bytes_per_sec,
                                          const std::string& hash_state) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DVLOG(20) << __FUNCTION__ << " so_far=" << bytes_so_far
@@ -1129,8 +1117,8 @@ void DownloadItemImpl::Start(
   DCHECK(file.get());
   DCHECK(req_handle.get());
 
-  download_file_ = file.Pass();
-  request_handle_ = req_handle.Pass();
+  download_file_ = std::move(file);
+  request_handle_ = std::move(req_handle);
 
   if (GetState() == CANCELLED) {
     // The download was in the process of resuming when it was cancelled. Don't
@@ -1681,23 +1669,11 @@ void DownloadItemImpl::AutoResumeIfValid() {
 
 void DownloadItemImpl::ResumeInterruptedDownload() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  // If the flag for downloads resumption isn't enabled, ignore
-  // this request.
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (!command_line.HasSwitch(switches::kEnableDownloadResumption))
+  if (!IsDownloadResumptionEnabled())
     return;
 
   // If we're not interrupted, ignore the request; our caller is drunk.
   if (state_ != INTERRUPTED_INTERNAL)
-    return;
-
-  // If we can't get a web contents, we can't resume the download.
-  // TODO(rdsmith): Find some alternative web contents to use--this
-  // means we can't restart a download if it's a download imported
-  // from the history.
-  if (!GetWebContents())
     return;
 
   // Reset the appropriate state if restarting.
@@ -1710,9 +1686,14 @@ void DownloadItemImpl::ResumeInterruptedDownload() {
     etag_ = "";
   }
 
-  scoped_ptr<DownloadUrlParameters> download_params(
-      DownloadUrlParameters::FromWebContents(GetWebContents(),
-                                             GetOriginalUrl()));
+  scoped_ptr<DownloadUrlParameters> download_params;
+  if (GetWebContents()) {
+    download_params =
+        DownloadUrlParameters::FromWebContents(GetWebContents(), GetURL());
+  } else {
+    download_params = make_scoped_ptr(new DownloadUrlParameters(
+        GetURL(), -1, -1, -1, GetBrowserContext()->GetResourceContext()));
+  }
 
   download_params->set_file_path(GetFullPath());
   download_params->set_offset(GetReceivedBytes());
@@ -1723,7 +1704,7 @@ void DownloadItemImpl::ResumeInterruptedDownload() {
       base::Bind(&DownloadItemImpl::OnResumeRequestStarted,
                  weak_ptr_factory_.GetWeakPtr()));
 
-  delegate_->ResumeInterruptedDownload(download_params.Pass(), GetId());
+  delegate_->ResumeInterruptedDownload(std::move(download_params), GetId());
   // Just in case we were interrupted while paused.
   is_paused_ = false;
 
@@ -1745,7 +1726,7 @@ DownloadItem::DownloadState DownloadItemImpl::InternalToExternalState(
     case INTERRUPTED_INTERNAL:
       return INTERRUPTED;
     case RESUMING_INTERNAL:
-      return INTERRUPTED;
+      return IN_PROGRESS;
     case MAX_DOWNLOAD_INTERNAL_STATE:
       break;
   }

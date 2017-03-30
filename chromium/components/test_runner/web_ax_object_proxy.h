@@ -5,9 +5,11 @@
 #ifndef COMPONENTS_TEST_RUNNER_WEB_AX_OBJECT_PROXY_H_
 #define COMPONENTS_TEST_RUNNER_WEB_AX_OBJECT_PROXY_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
@@ -69,12 +71,27 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   int MaxValue();
   std::string ValueDescription();
   int ChildrenCount();
+
+  // The following selection functions return global information about the
+  // current selection and can be called on any object in the tree.
+  v8::Local<v8::Value> SelectionAnchorObject();
+  int SelectionAnchorOffset();
+  v8::Local<v8::Value> SelectionFocusObject();
+  int SelectionFocusOffset();
+
+  // The following selection functions return text offsets calculated starting
+  // at this object. They only report on a selection that is placed on the
+  // current object or on any of its descendants.
+  // For example, they can be used to retrieve the selection in an input or
+  // a textarea.
   int SelectionStart();
   int SelectionEnd();
   int SelectionStartLineNumber();
   int SelectionEndLineNumber();
+
   bool IsEnabled();
   bool IsRequired();
+  bool IsEditable();
   bool IsRichlyEditable();
   bool IsFocused();
   bool IsFocusable();
@@ -124,6 +141,8 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   std::string ColumnIndexRange();
   v8::Local<v8::Object> CellForColumnAndRow(int column, int row);
   void SetSelectedTextRange(int selection_start, int length);
+  void SetSelection(v8::Local<v8::Value> anchor_object, int anchor_offset,
+                    v8::Local<v8::Value> focus_object, int focus_offset);
   bool IsAttributeSettable(const std::string& attribute);
   bool IsPressActionSupported();
   bool IsIncrementActionSupported();
@@ -133,6 +152,7 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   void Decrement();
   void ShowMenu();
   void Press();
+  bool SetValue(const std::string& value);
   bool IsEqual(v8::Local<v8::Object> proxy);
   void SetNotificationListener(v8::Local<v8::Function> callback);
   void UnsetNotificationListener();
@@ -145,17 +165,15 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   v8::Local<v8::Object> NextOnLine();
   v8::Local<v8::Object> PreviousOnLine();
 
-  // DEPRECATED accessible name and description accessors
-  std::string DeprecatedTitle();
-  std::string DeprecatedDescription();
-  std::string DeprecatedHelpText();
-  v8::Local<v8::Object> DeprecatedTitleUIElement();
-
-  // NEW accessible name and description accessors
   std::string Name();
   std::string NameFrom();
   int NameElementCount();
   v8::Local<v8::Object> NameElementAtIndex(unsigned index);
+
+  std::string Description();
+  std::string DescriptionFrom();
+  int DescriptionElementCount();
+  v8::Local<v8::Object> DescriptionElementAtIndex(unsigned index);
 
   blink::WebAXObject accessibility_object_;
   Factory* factory_;

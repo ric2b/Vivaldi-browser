@@ -60,6 +60,7 @@
         'filesystem_utils.h',
         'function_exec_script.cc',
         'function_foreach.cc',
+        'function_forward_variables_from.cc',
         'function_get_label_info.cc',
         'function_get_path_info.cc',
         'function_get_target_outputs.cc',
@@ -95,6 +96,8 @@
         'label_pattern.cc',
         'label_pattern.h',
         'label_ptr.h',
+        'lib_file.cc',
+        'lib_file.h',
         'loader.cc',
         'loader.h',
         'location.cc',
@@ -208,11 +211,13 @@
         'builder_unittest.cc',
         'c_include_iterator_unittest.cc',
         'command_format_unittest.cc',
+        'config_unittest.cc',
         'config_values_extractors_unittest.cc',
         'escape_unittest.cc',
         'exec_process_unittest.cc',
         'filesystem_utils_unittest.cc',
         'function_foreach_unittest.cc',
+        'function_forward_variables_from_unittest.cc',
         'function_get_label_info_unittest.cc',
         'function_get_path_info_unittest.cc',
         'function_get_target_outputs_unittest.cc',
@@ -246,7 +251,6 @@
         'string_utils_unittest.cc',
         'substitution_pattern_unittest.cc',
         'substitution_writer_unittest.cc',
-        'target_generator_unittest.cc',
         'target_unittest.cc',
         'template_unittest.cc',
         'test_with_scope.cc',
@@ -263,16 +267,6 @@
         '../../testing/gtest.gyp:gtest',
       ],
     },
-    {
-      'target_name': 'generate_test_gn_data',
-      'type': 'executable',
-      'sources': [
-        'generate_test_gn_data.cc',
-      ],
-      'dependencies': [
-        '../../base/base.gyp:base',
-      ],
-    }
   ],
   'conditions': [
     ['test_isolation_mode != "noop"', {

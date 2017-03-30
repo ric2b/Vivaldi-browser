@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher.h"
 #include "components/suggestions/image_fetcher.h"
 #include "ui/gfx/image/image_skia.h"
@@ -22,7 +22,8 @@ class URLRequestContextGetter;
 
 namespace suggestions {
 
-// A class used to fetch server images.
+// A class used to fetch server images. It can be called from any thread and the
+// callback will be called on the thread which initiated the fetch.
 class ImageFetcherImpl : public ImageFetcher,
                          public chrome::BitmapFetcherDelegate {
  public:
@@ -37,7 +38,7 @@ class ImageFetcherImpl : public ImageFetcher,
       base::Callback<void(const GURL&, const SkBitmap*)> callback) override;
 
  private:
-  // Inherited from BitmapFetcherDelegate. Runs on the UI thread.
+  // Inherited from BitmapFetcherDelegate.
   void OnFetchComplete(const GURL& image_url, const SkBitmap* bitmap) override;
 
   typedef std::vector<base::Callback<void(const GURL&, const SkBitmap*)> >

@@ -4,16 +4,21 @@
 
 #include "mojo/runner/context.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/i18n/icu_util.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/path_service.h"
+#include "base/process/process_info.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -22,21 +27,27 @@
 #include "build/build_config.h"
 #include "components/devtools_service/public/cpp/switches.h"
 #include "components/devtools_service/public/interfaces/devtools_service.mojom.h"
-#include "mojo/application/public/cpp/application_connection.h"
-#include "mojo/application/public/cpp/application_delegate.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/common/trace_controller_impl.h"
-#include "mojo/common/tracing_impl.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/simple_platform_support.h"
-#include "mojo/runner/in_process_native_runner.h"
-#include "mojo/runner/out_of_process_native_runner.h"
+#include "components/tracing/tracing_switches.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/runner/host/in_process_native_runner.h"
+#include "mojo/runner/host/out_of_process_native_runner.h"
+#include "mojo/runner/register_local_aliases.h"
 #include "mojo/runner/switches.h"
-#include "mojo/services/tracing/tracing.mojom.h"
+#include "mojo/runner/tracer.h"
+#include "mojo/services/tracing/public/cpp/switches.h"
+#include "mojo/services/tracing/public/cpp/trace_provider_impl.h"
+#include "mojo/services/tracing/public/cpp/tracing_impl.h"
+#include "mojo/services/tracing/public/interfaces/tracing.mojom.h"
 #include "mojo/shell/application_loader.h"
-#include "mojo/shell/application_manager.h"
+#include "mojo/shell/connect_to_application_params.h"
+#include "mojo/shell/package_manager/package_manager_impl.h"
+#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/application_delegate.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/query_util.h"
 #include "mojo/shell/switches.h"
 #include "mojo/util/filename_util.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 #include "url/gurl.h"
 
 namespace mojo {
@@ -47,7 +58,8 @@ namespace {
 class Setup {
  public:
   Setup() {
-    embedder::Init(make_scoped_ptr(new embedder::SimplePlatformSupport()));
+    embedder::PreInitializeParentProcess();
+    embedder::Init();
   }
 
   ~Setup() {}
@@ -56,65 +68,18 @@ class Setup {
   DISALLOW_COPY_AND_ASSIGN(Setup);
 };
 
-bool ConfigureURLMappings(const base::CommandLine& command_line,
-                          Context* context) {
-  URLResolver* resolver = context->url_resolver();
-
-  // Configure the resolution of unknown mojo: URLs.
-  GURL base_url;
-  if (command_line.HasSwitch(switches::kOrigin)) {
-    base_url = GURL(command_line.GetSwitchValueASCII(switches::kOrigin));
-  } else if (!command_line.HasSwitch(switches::kUseUpdater)) {
-    // Use the shell's file root if the base was not specified.
-    base_url = context->ResolveShellFileURL("");
-  }
-
-  if (base_url.is_valid())
-    resolver->SetMojoBaseURL(base_url);
-
-  // The network service and updater must be loaded from the filesystem.
-  // This mapping is done before the command line URL mapping are processed, so
-  // that it can be overridden.
-  resolver->AddURLMapping(GURL("mojo:network_service"),
-                          context->ResolveShellFileURL(
-                              "file:network_service/network_service.mojo"));
-  resolver->AddURLMapping(
-      GURL("mojo:updater"),
-      context->ResolveShellFileURL("file:updater/updater.mojo"));
-
-  // Command line URL mapping.
-  std::vector<URLResolver::OriginMapping> origin_mappings =
-      URLResolver::GetOriginMappings(command_line.argv());
-  for (const auto& origin_mapping : origin_mappings)
-    resolver->AddOriginMapping(GURL(origin_mapping.origin),
-                               GURL(origin_mapping.base_url));
-
-  if (command_line.HasSwitch(switches::kURLMappings)) {
-    const std::string mappings =
-        command_line.GetSwitchValueASCII(switches::kURLMappings);
-
-    base::StringPairs pairs;
-    if (!base::SplitStringIntoKeyValuePairs(mappings, '=', ',', &pairs))
-      return false;
-    using StringPair = std::pair<std::string, std::string>;
-    for (const StringPair& pair : pairs) {
-      const GURL from(pair.first);
-      const GURL to = context->ResolveCommandLineURL(pair.second);
-      if (!from.is_valid() || !to.is_valid())
-        return false;
-      resolver->AddURLMapping(from, to);
-    }
-  }
-
-  return true;
-}
-
-void InitContentHandlers(shell::ApplicationManager* manager,
+void InitContentHandlers(shell::PackageManagerImpl* manager,
                          const base::CommandLine& command_line) {
   // Default content handlers.
+  manager->RegisterContentHandler("application/javascript",
+                                  GURL("mojo:html_viewer"));
   manager->RegisterContentHandler("application/pdf", GURL("mojo:pdf_viewer"));
-  manager->RegisterContentHandler("image/png", GURL("mojo:png_viewer"));
+  manager->RegisterContentHandler("image/gif", GURL("mojo:html_viewer"));
+  manager->RegisterContentHandler("image/jpeg", GURL("mojo:html_viewer"));
+  manager->RegisterContentHandler("image/png", GURL("mojo:html_viewer"));
+  manager->RegisterContentHandler("text/css", GURL("mojo:html_viewer"));
   manager->RegisterContentHandler("text/html", GURL("mojo:html_viewer"));
+  manager->RegisterContentHandler("text/plain", GURL("mojo:html_viewer"));
 
   // Command-line-specified content handlers.
   std::string handlers_spec =
@@ -134,8 +99,8 @@ void InitContentHandlers(shell::ApplicationManager* manager,
   base::ReplaceSubstringsAfterOffset(&handlers_spec, 0, "\\,", ",");
 #endif
 
-  std::vector<std::string> parts;
-  base::SplitString(handlers_spec, ',', &parts);
+  std::vector<std::string> parts = base::SplitString(
+      handlers_spec, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (parts.size() % 2 != 0) {
     LOG(ERROR) << "Invalid value for switch " << switches::kContentHandlers
                << ": must be a comma-separated list of mimetype/url pairs."
@@ -156,25 +121,6 @@ void InitContentHandlers(shell::ApplicationManager* manager,
   }
 }
 
-void InitNativeOptions(shell::ApplicationManager* manager,
-                       const base::CommandLine& command_line) {
-  std::vector<std::string> force_in_process_url_list;
-  base::SplitString(command_line.GetSwitchValueASCII(switches::kForceInProcess),
-                    ',', &force_in_process_url_list);
-  for (const auto& force_in_process_url : force_in_process_url_list) {
-    GURL gurl(force_in_process_url);
-    if (!gurl.is_valid()) {
-      LOG(ERROR) << "Invalid value for switch " << switches::kForceInProcess
-                 << ": '" << force_in_process_url << "'is not a valid URL.";
-      return;
-    }
-
-    shell::NativeRunnerFactory::Options options;
-    options.force_in_process = true;
-    manager->SetNativeOptionsForURL(options, gurl);
-  }
-}
-
 void InitDevToolsServiceIfNeeded(shell::ApplicationManager* manager,
                                  const base::CommandLine& command_line) {
   if (!command_line.HasSwitch(devtools_service::kRemoteDebuggingPort))
@@ -191,11 +137,15 @@ void InitDevToolsServiceIfNeeded(shell::ApplicationManager* manager,
   }
 
   ServiceProviderPtr devtools_service_provider;
-  URLRequestPtr request(URLRequest::New());
-  request->url = "mojo:devtools_service";
-  manager->ConnectToApplication(
-      request.Pass(), std::string(), GURL("mojo:shell"),
-      GetProxy(&devtools_service_provider), nullptr, base::Closure());
+  scoped_ptr<shell::ConnectToApplicationParams> params(
+      new shell::ConnectToApplicationParams);
+  params->set_source(shell::Identity(GURL("mojo:shell"), std::string(),
+                                     shell::GetPermissiveCapabilityFilter()));
+  params->SetTarget(shell::Identity(GURL("mojo:devtools_service"),
+                                    std::string(),
+                                    shell::GetPermissiveCapabilityFilter()));
+  params->set_services(GetProxy(&devtools_service_provider));
+  manager->ConnectToApplication(std::move(params));
 
   devtools_service::DevToolsCoordinatorPtr devtools_coordinator;
   devtools_service_provider->ConnectToService(
@@ -206,19 +156,21 @@ void InitDevToolsServiceIfNeeded(shell::ApplicationManager* manager,
 
 class TracingServiceProvider : public ServiceProvider {
  public:
-  explicit TracingServiceProvider(InterfaceRequest<ServiceProvider> request)
-      : binding_(this, request.Pass()) {}
+  TracingServiceProvider(Tracer* tracer,
+                         InterfaceRequest<ServiceProvider> request)
+      : tracer_(tracer), binding_(this, std::move(request)) {}
   ~TracingServiceProvider() override {}
 
-  void ConnectToService(const String& service_name,
+  void ConnectToService(const mojo::String& service_name,
                         ScopedMessagePipeHandle client_handle) override {
-    if (service_name == tracing::TraceController::Name_) {
-      new TraceControllerImpl(
-          MakeRequest<tracing::TraceController>(client_handle.Pass()));
+    if (tracer_ && service_name == tracing::TraceProvider::Name_) {
+      tracer_->ConnectToProvider(
+          MakeRequest<tracing::TraceProvider>(std::move(client_handle)));
     }
   }
 
  private:
+  Tracer* tracer_;
   StrongBinding<ServiceProvider> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(TracingServiceProvider);
@@ -226,20 +178,8 @@ class TracingServiceProvider : public ServiceProvider {
 
 }  // namespace
 
-Context::Context() : application_manager_(this) {
-  DCHECK(!base::MessageLoop::current());
-
-  // By default assume that the local apps reside alongside the shell.
-  // TODO(ncbray): really, this should be passed in rather than defaulting.
-  // This default makes sense for desktop but not Android.
-  base::FilePath shell_dir;
-  PathService::Get(base::DIR_MODULE, &shell_dir);
-  SetShellFileRoot(shell_dir);
-
-  base::FilePath cwd;
-  PathService::Get(base::DIR_CURRENT, &cwd);
-  SetCommandLineCWD(cwd);
-}
+Context::Context()
+    : package_manager_(nullptr), main_entry_time_(base::Time::Now()) {}
 
 Context::~Context() {
   DCHECK(!base::MessageLoop::current());
@@ -251,121 +191,147 @@ void Context::EnsureEmbedderIsInitialized() {
   setup.Get();
 }
 
-void Context::SetShellFileRoot(const base::FilePath& path) {
-  shell_file_root_ =
-      util::AddTrailingSlashIfNeeded(util::FilePathToFileURL(path));
-}
-
-GURL Context::ResolveShellFileURL(const std::string& path) {
-  return shell_file_root_.Resolve(path);
-}
-
-void Context::SetCommandLineCWD(const base::FilePath& path) {
-  command_line_cwd_ =
-      util::AddTrailingSlashIfNeeded(util::FilePathToFileURL(path));
-}
-
-GURL Context::ResolveCommandLineURL(const std::string& path) {
-  return command_line_cwd_.Resolve(path);
-}
-
-bool Context::Init() {
+bool Context::Init(const base::FilePath& shell_file_root) {
   TRACE_EVENT0("mojo_shell", "Context::Init");
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
+
+  bool trace_startup = command_line.HasSwitch(switches::kTraceStartup);
+  if (trace_startup) {
+    tracer_.Start(
+        command_line.GetSwitchValueASCII(switches::kTraceStartup),
+        command_line.GetSwitchValueASCII(switches::kTraceStartupDuration),
+        "mojo_runner.trace");
+  }
+
+  // ICU data is a thing every part of the system needs. This here warms
+  // up the copy of ICU in the mojo runner.
+  CHECK(base::i18n::InitializeICU());
 
   EnsureEmbedderIsInitialized();
   task_runners_.reset(
       new TaskRunners(base::MessageLoop::current()->task_runner()));
 
-  // TODO(vtl): Probably these failures should be checked before |Init()|, and
-  // this function simply shouldn't fail.
-  if (!shell_file_root_.is_valid())
-    return false;
-  if (!ConfigureURLMappings(command_line, this))
-    return false;
-
   // TODO(vtl): This should be MASTER, not NONE.
-  embedder::InitIPCSupport(
-      embedder::ProcessType::NONE, task_runners_->shell_runner(), this,
-      task_runners_->io_runner(), embedder::ScopedPlatformHandle());
+  embedder::InitIPCSupport(embedder::ProcessType::NONE, this,
+                           task_runners_->io_runner(),
+                           embedder::ScopedPlatformHandle());
+
+  package_manager_ = new shell::PackageManagerImpl(
+      shell_file_root, task_runners_->blocking_pool());
+  InitContentHandlers(package_manager_, command_line);
+
+  RegisterLocalAliases(package_manager_);
 
   scoped_ptr<shell::NativeRunnerFactory> runner_factory;
-  if (command_line.HasSwitch(switches::kEnableMultiprocess))
-    runner_factory.reset(new OutOfProcessNativeRunnerFactory(this));
-  else
-    runner_factory.reset(new InProcessNativeRunnerFactory(this));
-  application_manager_.set_blocking_pool(task_runners_->blocking_pool());
-  application_manager_.set_native_runner_factory(runner_factory.Pass());
-  application_manager_.set_disable_cache(
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableCache));
+  if (command_line.HasSwitch(switches::kEnableMultiprocess)) {
+    runner_factory.reset(
+        new OutOfProcessNativeRunnerFactory(task_runners_->blocking_pool()));
+  } else {
+#if defined(COMPONENT_BUILD)
+    LOG(ERROR) << "Running Mojo in single process component build, which isn't "
+               << "supported because statics in apps interact. Use static build"
+               << " or don't pass --single-process.";
+#endif
+    runner_factory.reset(
+        new InProcessNativeRunnerFactory(task_runners_->blocking_pool()));
+  }
+  application_manager_.reset(new shell::ApplicationManager(
+      make_scoped_ptr(package_manager_), std::move(runner_factory),
+      task_runners_->blocking_pool()));
 
-  InitContentHandlers(&application_manager_, command_line);
-  InitNativeOptions(&application_manager_, command_line);
+  ServiceProviderPtr tracing_services;
+  ServiceProviderPtr tracing_exposed_services;
+  new TracingServiceProvider(&tracer_, GetProxy(&tracing_exposed_services));
 
-  ServiceProviderPtr tracing_service_provider_ptr;
-  new TracingServiceProvider(GetProxy(&tracing_service_provider_ptr));
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From("mojo:tracing");
-  application_manager_.ConnectToApplication(
-      request.Pass(), std::string(), GURL(""), nullptr,
-      tracing_service_provider_ptr.Pass(), base::Closure());
+  scoped_ptr<shell::ConnectToApplicationParams> params(
+      new shell::ConnectToApplicationParams);
+  params->set_source(shell::Identity(GURL("mojo:shell"), std::string(),
+                                     shell::GetPermissiveCapabilityFilter()));
+  params->SetTarget(shell::Identity(GURL("mojo:tracing"), std::string(),
+                                    shell::GetPermissiveCapabilityFilter()));
+  params->set_services(GetProxy(&tracing_services));
+  params->set_exposed_services(std::move(tracing_exposed_services));
+  application_manager_->ConnectToApplication(std::move(params));
 
-  InitDevToolsServiceIfNeeded(&application_manager_, command_line);
+  if (command_line.HasSwitch(tracing::kTraceStartup)) {
+    tracing::TraceCollectorPtr coordinator;
+    auto coordinator_request = GetProxy(&coordinator);
+    tracing_services->ConnectToService(tracing::TraceCollector::Name_,
+                                       coordinator_request.PassMessagePipe());
+    tracer_.StartCollectingFromTracingService(std::move(coordinator));
+  }
+
+  // Record the shell startup metrics used for performance testing.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          tracing::kEnableStatsCollectionBindings)) {
+    tracing::StartupPerformanceDataCollectorPtr collector;
+    tracing_services->ConnectToService(
+        tracing::StartupPerformanceDataCollector::Name_,
+        GetProxy(&collector).PassMessagePipe());
+#if defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_LINUX)
+    // CurrentProcessInfo::CreationTime is only defined on some platforms.
+    const base::Time creation_time = base::CurrentProcessInfo::CreationTime();
+    collector->SetShellProcessCreationTime(creation_time.ToInternalValue());
+#endif
+    collector->SetShellMainEntryPointTime(main_entry_time_.ToInternalValue());
+  }
+
+  InitDevToolsServiceIfNeeded(application_manager_.get(), command_line);
 
   return true;
 }
 
 void Context::Shutdown() {
+  // Actions triggered by ApplicationManager's destructor may require a current
+  // message loop, so we should destruct it explicitly now as ~Context() occurs
+  // post message loop shutdown.
+  application_manager_.reset();
+
   TRACE_EVENT0("mojo_shell", "Context::Shutdown");
   DCHECK_EQ(base::MessageLoop::current()->task_runner(),
             task_runners_->shell_runner());
-  embedder::ShutdownIPCSupport();
+  // Post a task in case OnShutdownComplete is called synchronously.
+  base::MessageLoop::current()->PostTask(
+      FROM_HERE, base::Bind(embedder::ShutdownIPCSupport));
   // We'll quit when we get OnShutdownComplete().
   base::MessageLoop::current()->Run();
-}
-
-GURL Context::ResolveMappings(const GURL& url) {
-  return url_resolver_.ApplyMappings(url);
-}
-
-GURL Context::ResolveMojoURL(const GURL& url) {
-  return url_resolver_.ResolveMojoURL(url);
-}
-
-bool Context::CreateFetcher(
-    const GURL& url,
-    const shell::Fetcher::FetchCallback& loader_callback) {
-  return false;
 }
 
 void Context::OnShutdownComplete() {
   DCHECK_EQ(base::MessageLoop::current()->task_runner(),
             task_runners_->shell_runner());
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void Context::Run(const GURL& url) {
+  DCHECK(app_complete_callback_.is_null());
   ServiceProviderPtr services;
   ServiceProviderPtr exposed_services;
 
   app_urls_.insert(url);
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From(url.spec());
-  application_manager_.ConnectToApplication(
-      request.Pass(), std::string(), GURL(), GetProxy(&services),
-      exposed_services.Pass(),
+
+  scoped_ptr<shell::ConnectToApplicationParams> params(
+      new shell::ConnectToApplicationParams);
+  params->SetTarget(shell::Identity(url, std::string(),
+                                    shell::GetPermissiveCapabilityFilter()));
+  params->set_services(GetProxy(&services));
+  params->set_exposed_services(std::move(exposed_services));
+  params->set_on_application_end(
       base::Bind(&Context::OnApplicationEnd, base::Unretained(this), url));
+  application_manager_->ConnectToApplication(std::move(params));
 }
 
-void Context::RunCommandLineApplication() {
+void Context::RunCommandLineApplication(const base::Closure& callback) {
+  DCHECK(app_urls_.empty());
+  DCHECK(app_complete_callback_.is_null());
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   base::CommandLine::StringVector args = command_line->GetArgs();
   for (size_t i = 0; i < args.size(); ++i) {
     GURL possible_app(args[i]);
     if (possible_app.SchemeIs("mojo")) {
       Run(possible_app);
+      app_complete_callback_ = callback;
       break;
     }
   }
@@ -377,7 +343,11 @@ void Context::OnApplicationEnd(const GURL& url) {
     if (app_urls_.empty() && base::MessageLoop::current()->is_running()) {
       DCHECK_EQ(base::MessageLoop::current()->task_runner(),
                 task_runners_->shell_runner());
-      base::MessageLoop::current()->Quit();
+      if (app_complete_callback_.is_null()) {
+        base::MessageLoop::current()->QuitWhenIdle();
+      } else {
+        app_complete_callback_.Run();
+      }
     }
   }
 }

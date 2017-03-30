@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 
+#include "base/macros.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/plugins_field_trial.h"
@@ -69,6 +70,50 @@ static_assert(arraysize(kPermissionButtonTextIDDefaultSetting) ==
               CONTENT_SETTING_NUM_SETTINGS,
               "kPermissionButtonTextIDDefaultSetting array size is incorrect");
 
+struct PermissionsUIInfo {
+  ContentSettingsType type;
+  int string_id;
+  int blocked_icon_id;
+  int allowed_icon_id;
+};
+
+const PermissionsUIInfo kPermissionsUIInfo[] = {
+    {CONTENT_SETTINGS_TYPE_COOKIES, 0, IDR_BLOCKED_COOKIES,
+     IDR_ACCESSED_COOKIES},
+    {CONTENT_SETTINGS_TYPE_IMAGES, IDS_WEBSITE_SETTINGS_TYPE_IMAGES,
+     IDR_BLOCKED_IMAGES, IDR_ALLOWED_IMAGES},
+    {CONTENT_SETTINGS_TYPE_JAVASCRIPT, IDS_WEBSITE_SETTINGS_TYPE_JAVASCRIPT,
+     IDR_BLOCKED_JAVASCRIPT, IDR_ALLOWED_JAVASCRIPT},
+    {CONTENT_SETTINGS_TYPE_POPUPS, IDS_WEBSITE_SETTINGS_TYPE_POPUPS,
+     IDR_BLOCKED_POPUPS, IDR_ALLOWED_POPUPS},
+#if defined(ENABLE_PLUGINS)
+    {CONTENT_SETTINGS_TYPE_PLUGINS, IDS_WEBSITE_SETTINGS_TYPE_PLUGINS,
+     IDR_BLOCKED_POPUPS, IDR_ALLOWED_PLUGINS},
+#endif
+    {CONTENT_SETTINGS_TYPE_GEOLOCATION, IDS_WEBSITE_SETTINGS_TYPE_LOCATION,
+     IDR_BLOCKED_LOCATION, IDR_ALLOWED_LOCATION},
+    {CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+     IDS_WEBSITE_SETTINGS_TYPE_NOTIFICATIONS, IDR_BLOCKED_NOTIFICATION,
+     IDR_ALLOWED_NOTIFICATION},
+    {CONTENT_SETTINGS_TYPE_PUSH_MESSAGING,
+     IDS_WEBSITE_SETTINGS_TYPE_NOTIFICATIONS, 0, 0},
+    {CONTENT_SETTINGS_TYPE_FULLSCREEN, IDS_WEBSITE_SETTINGS_TYPE_FULLSCREEN,
+     IDR_ALLOWED_FULLSCREEN, IDR_ALLOWED_FULLSCREEN},
+    {CONTENT_SETTINGS_TYPE_MOUSELOCK, IDS_WEBSITE_SETTINGS_TYPE_MOUSELOCK,
+     IDR_BLOCKED_MOUSE_CURSOR, IDR_ALLOWED_MOUSE_CURSOR},
+    {CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, IDS_WEBSITE_SETTINGS_TYPE_MIC,
+     IDR_BLOCKED_MIC, IDR_ALLOWED_MIC},
+    {CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, IDS_WEBSITE_SETTINGS_TYPE_CAMERA,
+     IDR_BLOCKED_CAMERA, IDR_ALLOWED_CAMERA},
+    {CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
+     IDS_AUTOMATIC_DOWNLOADS_TAB_LABEL, IDR_BLOCKED_DOWNLOADS,
+     IDR_ALLOWED_DOWNLOADS},
+    {CONTENT_SETTINGS_TYPE_MIDI_SYSEX, IDS_WEBSITE_SETTINGS_TYPE_MIDI_SYSEX,
+     IDR_BLOCKED_MIDI_SYSEX, IDR_ALLOWED_MIDI_SYSEX},
+    {CONTENT_SETTINGS_TYPE_KEYGEN, IDS_WEBSITE_SETTINGS_TYPE_KEYGEN,
+     IDR_BLOCKED_KEYGEN, IDR_ALLOWED_KEYGEN},
+};
+
 }  // namespace
 
 WebsiteSettingsUI::CookieInfo::CookieInfo()
@@ -79,8 +124,15 @@ WebsiteSettingsUI::PermissionInfo::PermissionInfo()
     : type(CONTENT_SETTINGS_TYPE_DEFAULT),
       setting(CONTENT_SETTING_DEFAULT),
       default_setting(CONTENT_SETTING_DEFAULT),
-      source(content_settings::SETTING_SOURCE_NONE) {
-}
+      source(content_settings::SETTING_SOURCE_NONE),
+      is_incognito(false) {}
+
+WebsiteSettingsUI::ChosenObjectInfo::ChosenObjectInfo(
+    const WebsiteSettings::ChooserUIInfo& ui_info,
+    scoped_ptr<base::DictionaryValue> object)
+    : ui_info(ui_info), object(std::move(object)) {}
+
+WebsiteSettingsUI::ChosenObjectInfo::~ChosenObjectInfo() {}
 
 WebsiteSettingsUI::IdentityInfo::IdentityInfo()
     : identity_status(WebsiteSettings::SITE_IDENTITY_STATUS_UNKNOWN),
@@ -91,19 +143,34 @@ WebsiteSettingsUI::IdentityInfo::IdentityInfo()
 
 WebsiteSettingsUI::IdentityInfo::~IdentityInfo() {}
 
-base::string16 WebsiteSettingsUI::IdentityInfo::GetIdentityStatusText() const {
+base::string16 WebsiteSettingsUI::IdentityInfo::GetSecuritySummary() const {
   switch (identity_status) {
     case WebsiteSettings::SITE_IDENTITY_STATUS_CERT:
     case WebsiteSettings::SITE_IDENTITY_STATUS_EV_CERT:
     case WebsiteSettings::SITE_IDENTITY_STATUS_CERT_REVOCATION_UNKNOWN:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_SECURE_TRANSPORT);
-    case WebsiteSettings::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
+      switch (connection_status) {
+        case WebsiteSettings::SITE_CONNECTION_STATUS_MIXED_CONTENT:
+          return l10n_util::GetStringUTF16(
+              IDS_WEBSITE_SETTINGS_MIXED_PASSIVE_CONTENT);
+        case WebsiteSettings::SITE_CONNECTION_STATUS_MIXED_SCRIPT:
+          return l10n_util::GetStringUTF16(
+              IDS_WEBSITE_SETTINGS_MIXED_ACTIVE_CONTENT);
+        default:
+          return l10n_util::GetStringUTF16(
+              IDS_WEBSITE_SETTINGS_SECURE_TRANSPORT);
+      }
+    case WebsiteSettings::
+        SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR:
+    case WebsiteSettings::
+        SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR:
       return l10n_util::GetStringUTF16(
           IDS_WEBSITE_DEPRECATED_SIGNATURE_ALGORITHM);
     case WebsiteSettings::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
       return l10n_util::GetStringUTF16(IDS_CERT_POLICY_PROVIDED_CERT_HEADER);
     case WebsiteSettings::SITE_IDENTITY_STATUS_UNKNOWN:
       return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_UNKNOWN_TRANSPORT);
+    case WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR:
+      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_CT_ERROR);
     case WebsiteSettings::SITE_IDENTITY_STATUS_INTERNAL_PAGE:
       return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_INTERNAL_PAGE);
     case WebsiteSettings::SITE_IDENTITY_STATUS_NO_CERT:
@@ -119,39 +186,12 @@ WebsiteSettingsUI::~WebsiteSettingsUI() {
 // static
 base::string16 WebsiteSettingsUI::PermissionTypeToUIString(
       ContentSettingsType type) {
-  switch (type) {
-    case CONTENT_SETTINGS_TYPE_IMAGES:
-     return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_IMAGES);
-    case CONTENT_SETTINGS_TYPE_JAVASCRIPT:
-     return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_JAVASCRIPT);
-    case CONTENT_SETTINGS_TYPE_POPUPS:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_POPUPS);
-    case CONTENT_SETTINGS_TYPE_PLUGINS:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_PLUGINS);
-    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_LOCATION);
-    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-      return l10n_util::GetStringUTF16(
-          IDS_WEBSITE_SETTINGS_TYPE_NOTIFICATIONS);
-    case CONTENT_SETTINGS_TYPE_FULLSCREEN:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_FULLSCREEN);
-    case CONTENT_SETTINGS_TYPE_MOUSELOCK:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_MOUSELOCK);
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_MEDIASTREAM);
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_MIC);
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_CAMERA);
-    case CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS:
-      return l10n_util::GetStringUTF16(IDS_AUTOMATIC_DOWNLOADS_TAB_LABEL);
-    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TYPE_MIDI_SYSEX);
-    default:
-      NOTREACHED();
-      return base::string16();
+  for (const PermissionsUIInfo& info : kPermissionsUIInfo) {
+    if (info.type == type)
+      return l10n_util::GetStringUTF16(info.string_id);
   }
+  NOTREACHED();
+  return base::string16();
 }
 
 // static
@@ -215,57 +255,12 @@ base::string16 WebsiteSettingsUI::PermissionActionToUIString(
 int WebsiteSettingsUI::GetPermissionIconID(ContentSettingsType type,
                                            ContentSetting setting) {
   bool use_blocked = (setting == CONTENT_SETTING_BLOCK);
-  int resource_id = IDR_INFO;
-  switch (type) {
-    case CONTENT_SETTINGS_TYPE_IMAGES:
-      resource_id = use_blocked ? IDR_BLOCKED_IMAGES : IDR_ALLOWED_IMAGES;
-      break;
-    case CONTENT_SETTINGS_TYPE_JAVASCRIPT:
-      resource_id =
-          use_blocked ? IDR_BLOCKED_JAVASCRIPT : IDR_ALLOWED_JAVASCRIPT;
-      break;
-    case CONTENT_SETTINGS_TYPE_COOKIES:
-      resource_id = use_blocked ? IDR_BLOCKED_COOKIES : IDR_ACCESSED_COOKIES;
-      break;
-    case CONTENT_SETTINGS_TYPE_POPUPS:
-      resource_id = use_blocked ? IDR_BLOCKED_POPUPS : IDR_ALLOWED_POPUPS;
-      break;
-    case CONTENT_SETTINGS_TYPE_PLUGINS:
-      resource_id = use_blocked ? IDR_BLOCKED_PLUGINS : IDR_ALLOWED_PLUGINS;
-      break;
-    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
-      resource_id = use_blocked ? IDR_BLOCKED_LOCATION : IDR_ALLOWED_LOCATION;
-      break;
-    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
-      resource_id =
-          use_blocked ? IDR_BLOCKED_NOTIFICATION : IDR_ALLOWED_NOTIFICATION;
-      break;
-    case CONTENT_SETTINGS_TYPE_FULLSCREEN:
-      resource_id = IDR_ALLOWED_FULLSCREEN;
-      break;
-    case CONTENT_SETTINGS_TYPE_MOUSELOCK:
-      resource_id =
-          use_blocked ? IDR_BLOCKED_MOUSE_CURSOR : IDR_ALLOWED_MOUSE_CURSOR;
-      break;
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-      resource_id = use_blocked ? IDR_BLOCKED_MIC : IDR_ALLOWED_MIC;
-      break;
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-      resource_id = use_blocked ? IDR_BLOCKED_CAMERA : IDR_ALLOWED_CAMERA;
-      break;
-    case CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS:
-      resource_id = use_blocked ? IDR_BLOCKED_DOWNLOADS
-                                : IDR_ALLOWED_DOWNLOADS;
-      break;
-    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
-      resource_id = use_blocked ? IDR_BLOCKED_MIDI_SYSEX
-                                : IDR_ALLOWED_MIDI_SYSEX;
-      break;
-    default:
-      NOTREACHED();
-      break;
+  for (const PermissionsUIInfo& info : kPermissionsUIInfo) {
+    if (info.type == type)
+      return use_blocked ? info.blocked_icon_id : info.allowed_icon_id;
   }
-  return resource_id;
+  NOTREACHED();
+  return IDR_INFO;
 }
 
 // static
@@ -276,6 +271,23 @@ const gfx::Image& WebsiteSettingsUI::GetPermissionIcon(
     setting = info.default_setting;
   ResourceBundle& rb = ResourceBundle::GetSharedInstance();
   return rb.GetNativeImageNamed(GetPermissionIconID(info.type, setting));
+}
+
+// static
+base::string16 WebsiteSettingsUI::ChosenObjectToUIString(
+    const ChosenObjectInfo& object) {
+  base::string16 name;
+  object.object->GetString(object.ui_info.ui_name_key, &name);
+  return name;
+}
+
+// static
+const gfx::Image& WebsiteSettingsUI::GetChosenObjectIcon(
+    const ChosenObjectInfo& object,
+    bool deleted) {
+  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  return rb.GetNativeImageNamed(deleted ? object.ui_info.blocked_icon_id
+                                        : object.ui_info.allowed_icon_id);
 }
 
 // static
@@ -297,13 +309,19 @@ int WebsiteSettingsUI::GetIdentityIconID(
       resource_id = IDR_PAGEINFO_WARNING_MAJOR;
       break;
     case WebsiteSettings::SITE_IDENTITY_STATUS_ERROR:
+    case WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR:
       resource_id = IDR_PAGEINFO_BAD;
       break;
     case WebsiteSettings::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
       resource_id = IDR_PAGEINFO_ENTERPRISE_MANAGED;
       break;
-    case WebsiteSettings::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
+    case WebsiteSettings::
+        SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR:
       resource_id = IDR_PAGEINFO_WARNING_MINOR;
+      break;
+    case WebsiteSettings::
+        SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR:
+      resource_id = IDR_PAGEINFO_BAD;
       break;
     default:
       NOTREACHED();
@@ -336,11 +354,9 @@ int WebsiteSettingsUI::GetConnectionIconID(
     case WebsiteSettings::SITE_CONNECTION_STATUS_UNENCRYPTED:
       resource_id = IDR_PAGEINFO_WARNING_MAJOR;
       break;
+    case WebsiteSettings::SITE_CONNECTION_STATUS_MIXED_SCRIPT:
     case WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED_ERROR:
       resource_id = IDR_PAGEINFO_BAD;
-      break;
-    default:
-      NOTREACHED();
       break;
   }
   return resource_id;

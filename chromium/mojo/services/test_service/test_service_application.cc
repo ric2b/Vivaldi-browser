@@ -5,12 +5,13 @@
 #include "mojo/services/test_service/test_service_application.h"
 
 #include <assert.h>
+#include <utility>
 
-#include "mojo/application/public/cpp/application_connection.h"
-#include "mojo/application/public/cpp/application_runner.h"
 #include "mojo/public/c/system/main.h"
 #include "mojo/services/test_service/test_service_impl.h"
 #include "mojo/services/test_service/test_time_service_impl.h"
+#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/application_runner.h"
 
 namespace mojo {
 namespace test {
@@ -35,13 +36,13 @@ bool TestServiceApplication::ConfigureIncomingConnection(
 
 void TestServiceApplication::Create(ApplicationConnection* connection,
                                     InterfaceRequest<TestService> request) {
-  new TestServiceImpl(app_impl_, this, request.Pass());
+  new TestServiceImpl(app_impl_, this, std::move(request));
   AddRef();
 }
 
 void TestServiceApplication::Create(ApplicationConnection* connection,
                                     InterfaceRequest<TestTimeService> request) {
-  new TestTimeServiceImpl(app_impl_, request.Pass());
+  new TestTimeServiceImpl(app_impl_, std::move(request));
 }
 
 void TestServiceApplication::AddRef() {
@@ -53,7 +54,7 @@ void TestServiceApplication::ReleaseRef() {
   assert(ref_count_ > 0);
   ref_count_--;
   if (ref_count_ <= 0)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 }  // namespace test

@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/task_management/providers/web_contents/web_contents_tags_manager.h"
 #include "chrome/browser/task_management/task_management_browsertest_util.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/common/content_switches.h"
 #include "extensions/common/switches.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -30,7 +32,7 @@ class BackgroundContentsTagTest : public ExtensionBrowserTest {
 
   base::string16 GetBackgroundTaskExpectedName(
       const extensions::Extension* extension) {
-    return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_BACKGROUND_PREFIX,
+    return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_BACKGROUND_APP_PREFIX,
                                       base::UTF8ToUTF16(extension->name()));
   }
 

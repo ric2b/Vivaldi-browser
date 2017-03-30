@@ -5,6 +5,8 @@
 #include "courgette/assembly_program.h"
 
 #include <memory.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <map>
 #include <set>
@@ -12,45 +14,13 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 
 #include "courgette/courgette.h"
 #include "courgette/encoded_program.h"
 
 namespace courgette {
-
-// Opcodes of simple assembly language
-enum OP {
-  ORIGIN,         // ORIGIN <rva> - set current address for assembly.
-  MAKEPERELOCS,   // Generates a base relocation table.
-  MAKEELFRELOCS,  // Generates a base relocation table.
-  DEFBYTE,        // DEFBYTE <value> - emit a byte literal.
-  REL32,          // REL32 <label> - emit a rel32 encoded reference to 'label'.
-  ABS32,          // ABS32 <label> - emit an abs32 encoded reference to 'label'.
-  REL32ARM,       // REL32ARM <c_op> <label> - arm-specific rel32 reference
-  MAKEELFARMRELOCS,  // Generates a base relocation table.
-  DEFBYTES,       // Emits any number of byte literals
-  ABS64,          // ABS64 <label> - emit an abs64 encoded reference to 'label'.
-  LAST_OP
-};
-
-// Base class for instructions.  Because we have so many instructions we want to
-// keep them as small as possible.  For this reason we avoid virtual functions.
-//
-class Instruction {
- public:
-  OP op() const { return static_cast<OP>(op_); }
-
- protected:
-  explicit Instruction(OP op) : op_(op), info_(0) {}
-  Instruction(OP op, unsigned int info) : op_(op), info_(info) {}
-
-  uint32 op_   : 4;    // A few bits to store the OP code.
-  uint32 info_ : 28;   // Remaining bits in first word available to subclass.
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(Instruction);
-};
 
 namespace {
 
@@ -84,22 +54,20 @@ class ElfARMRelocsInstruction : public Instruction {
 // Emits a single byte.
 class ByteInstruction : public Instruction {
  public:
-  explicit ByteInstruction(uint8 value) : Instruction(DEFBYTE, value) {}
-  uint8 byte_value() const { return info_; }
+  explicit ByteInstruction(uint8_t value) : Instruction(DEFBYTE, value) {}
+  uint8_t byte_value() const { return info_; }
 };
 
 // Emits a single byte.
 class BytesInstruction : public Instruction {
  public:
-  BytesInstruction(const uint8* values, size_t len)
-      : Instruction(DEFBYTES, 0),
-        values_(values),
-        len_(len) {}
-  const uint8* byte_values() const { return values_; }
+  BytesInstruction(const uint8_t* values, size_t len)
+      : Instruction(DEFBYTES, 0), values_(values), len_(len) {}
+  const uint8_t* byte_values() const { return values_; }
   size_t len() const { return len_; }
 
  private:
-  const uint8* values_;
+  const uint8_t* values_;
   size_t len_;
 };
 
@@ -119,19 +87,25 @@ class InstructionWithLabel : public Instruction {
 // a specially-compressed ARM op.
 class InstructionWithLabelARM : public InstructionWithLabel {
  public:
-  InstructionWithLabelARM(OP op, uint16 compressed_op, Label* label,
-                          const uint8* arm_op, uint16 op_size)
-    : InstructionWithLabel(op, label), compressed_op_(compressed_op),
-      arm_op_(arm_op), op_size_(op_size) {
+  InstructionWithLabelARM(OP op,
+                          uint16_t compressed_op,
+                          Label* label,
+                          const uint8_t* arm_op,
+                          uint16_t op_size)
+      : InstructionWithLabel(op, label),
+        compressed_op_(compressed_op),
+        arm_op_(arm_op),
+        op_size_(op_size) {
     if (label == NULL) NOTREACHED();
   }
-  uint16 compressed_op() const { return compressed_op_; }
-  const uint8* arm_op() const { return arm_op_; }
-  uint16 op_size() const { return op_size_; }
+  uint16_t compressed_op() const { return compressed_op_; }
+  const uint8_t* arm_op() const { return arm_op_; }
+  uint16_t op_size() const { return op_size_; }
+
  private:
-  uint16 compressed_op_;
-  const uint8* arm_op_;
-  uint16 op_size_;
+  uint16_t compressed_op_;
+  const uint8_t* arm_op_;
+  uint16_t op_size_;
 };
 
 }  // namespace
@@ -142,64 +116,69 @@ AssemblyProgram::AssemblyProgram(ExecutableType kind)
 
 static void DeleteContainedLabels(const RVAToLabel& labels) {
   for (RVAToLabel::const_iterator p = labels.begin();  p != labels.end();  ++p)
-    delete p->second;
+    UncheckedDelete(p->second);
 }
 
 AssemblyProgram::~AssemblyProgram() {
   for (size_t i = 0;  i < instructions_.size();  ++i) {
     Instruction* instruction = instructions_[i];
-    if (instruction->op() != DEFBYTE)  // Will be in byte_instruction_cache_.
-      delete instruction;
+    if (instruction->op() != DEFBYTE)  // Owned by byte_instruction_cache_.
+      UncheckedDelete(instruction);
   }
   if (byte_instruction_cache_.get()) {
     for (size_t i = 0;  i < 256;  ++i)
-      delete byte_instruction_cache_[i];
+      UncheckedDelete(byte_instruction_cache_[i]);
   }
   DeleteContainedLabels(rel32_labels_);
   DeleteContainedLabels(abs32_labels_);
 }
 
 CheckBool AssemblyProgram::EmitPeRelocsInstruction() {
-  return Emit(new(std::nothrow) PeRelocsInstruction());
+  return Emit(ScopedInstruction(UncheckedNew<PeRelocsInstruction>()));
 }
 
 CheckBool AssemblyProgram::EmitElfRelocationInstruction() {
-  return Emit(new(std::nothrow) ElfRelocsInstruction());
+  return Emit(ScopedInstruction(UncheckedNew<ElfRelocsInstruction>()));
 }
 
 CheckBool AssemblyProgram::EmitElfARMRelocationInstruction() {
-  return Emit(new(std::nothrow) ElfARMRelocsInstruction());
+  return Emit(ScopedInstruction(UncheckedNew<ElfARMRelocsInstruction>()));
 }
 
 CheckBool AssemblyProgram::EmitOriginInstruction(RVA rva) {
-  return Emit(new(std::nothrow) OriginInstruction(rva));
+  return Emit(ScopedInstruction(UncheckedNew<OriginInstruction>(rva)));
 }
 
-CheckBool AssemblyProgram::EmitByteInstruction(uint8 byte) {
-  return Emit(GetByteInstruction(byte));
+CheckBool AssemblyProgram::EmitByteInstruction(uint8_t byte) {
+  return EmitShared(GetByteInstruction(byte));
 }
 
-CheckBool AssemblyProgram::EmitBytesInstruction(const uint8* values,
+CheckBool AssemblyProgram::EmitBytesInstruction(const uint8_t* values,
                                                 size_t len) {
-  return Emit(new(std::nothrow) BytesInstruction(values, len));
+  return Emit(ScopedInstruction(UncheckedNew<BytesInstruction>(values, len)));
 }
 
 CheckBool AssemblyProgram::EmitRel32(Label* label) {
-  return Emit(new(std::nothrow) InstructionWithLabel(REL32, label));
+  return Emit(
+      ScopedInstruction(UncheckedNew<InstructionWithLabel>(REL32, label)));
 }
 
-CheckBool AssemblyProgram::EmitRel32ARM(uint16 op, Label* label,
-                                        const uint8* arm_op, uint16 op_size) {
-  return Emit(new(std::nothrow) InstructionWithLabelARM(REL32ARM, op, label,
-                                                        arm_op, op_size));
+CheckBool AssemblyProgram::EmitRel32ARM(uint16_t op,
+                                        Label* label,
+                                        const uint8_t* arm_op,
+                                        uint16_t op_size) {
+  return Emit(ScopedInstruction(UncheckedNew<InstructionWithLabelARM>(
+      REL32ARM, op, label, arm_op, op_size)));
 }
 
 CheckBool AssemblyProgram::EmitAbs32(Label* label) {
-  return Emit(new(std::nothrow) InstructionWithLabel(ABS32, label));
+  return Emit(
+      ScopedInstruction(UncheckedNew<InstructionWithLabel>(ABS32, label)));
 }
 
 CheckBool AssemblyProgram::EmitAbs64(Label* label) {
-  return Emit(new (std::nothrow) InstructionWithLabel(ABS64, label));
+  return Emit(
+      ScopedInstruction(UncheckedNew<InstructionWithLabel>(ABS64, label)));
 }
 
 Label* AssemblyProgram::FindOrMakeAbs32Label(RVA rva) {
@@ -249,19 +228,23 @@ Label* AssemblyProgram::InstructionRel32Label(
   return NULL;
 }
 
-CheckBool AssemblyProgram::Emit(Instruction* instruction) {
-  if (!instruction)
+CheckBool AssemblyProgram::Emit(ScopedInstruction instruction) {
+  if (!instruction || !instructions_.push_back(instruction.get()))
     return false;
-  bool ok = instructions_.push_back(instruction);
-  if (!ok)
-    delete instruction;
-  return ok;
+  // Ownership successfully passed to instructions_.
+  ignore_result(instruction.release());
+  return true;
+}
+
+CheckBool AssemblyProgram::EmitShared(Instruction* instruction) {
+  DCHECK(!instruction || instruction->op() == DEFBYTE);
+  return instruction && instructions_.push_back(instruction);
 }
 
 Label* AssemblyProgram::FindLabel(RVA rva, RVAToLabel* labels) {
   Label*& slot = (*labels)[rva];
   if (slot == NULL) {
-    slot = new(std::nothrow) Label(rva);
+    slot = UncheckedNew<Label>(rva);
     if (slot == NULL)
       return NULL;
   }
@@ -349,7 +332,7 @@ void AssemblyProgram::AssignRemainingIndexes(RVAToLabel* labels) {
       if (prev)
         prev_index = prev->index_;
       else
-        prev_index = static_cast<uint32>(available.size());
+        prev_index = static_cast<uint32_t>(available.size());
       if (prev_index != 0  &&
           prev_index != Label::kNoIndex  &&
           available.at(prev_index - 1)) {
@@ -401,9 +384,7 @@ static CheckBool DefineLabels(const RVAToLabel& labels,
 }
 
 EncodedProgram* AssemblyProgram::Encode() const {
-  scoped_ptr<EncodedProgram> encoded(new(std::nothrow) EncodedProgram());
-  if (!encoded.get())
-    return NULL;
+  scoped_ptr<EncodedProgram> encoded(new EncodedProgram());
 
   encoded->set_image_base(image_base_);
 
@@ -427,14 +408,14 @@ EncodedProgram* AssemblyProgram::Encode() const {
         break;
       }
       case DEFBYTE: {
-        uint8 b = static_cast<ByteInstruction*>(instruction)->byte_value();
+        uint8_t b = static_cast<ByteInstruction*>(instruction)->byte_value();
         if (!encoded->AddCopy(1, &b))
           return NULL;
         break;
       }
       case DEFBYTES: {
-        const uint8* byte_values =
-          static_cast<BytesInstruction*>(instruction)->byte_values();
+        const uint8_t* byte_values =
+            static_cast<BytesInstruction*>(instruction)->byte_values();
         size_t len = static_cast<BytesInstruction*>(instruction)->len();
 
         if (!encoded->AddCopy(len, byte_values))
@@ -450,9 +431,8 @@ EncodedProgram* AssemblyProgram::Encode() const {
       case REL32ARM: {
         Label* label =
             static_cast<InstructionWithLabelARM*>(instruction)->label();
-        uint16 compressed_op =
-          static_cast<InstructionWithLabelARM*>(instruction)->
-          compressed_op();
+        uint16_t compressed_op =
+            static_cast<InstructionWithLabelARM*>(instruction)->compressed_op();
         if (!encoded->AddRel32ARM(compressed_op, label->index_))
           return NULL;
         break;
@@ -493,20 +473,23 @@ EncodedProgram* AssemblyProgram::Encode() const {
   return encoded.release();
 }
 
-Instruction* AssemblyProgram::GetByteInstruction(uint8 byte) {
-  if (!byte_instruction_cache_.get()) {
-    byte_instruction_cache_.reset(new(std::nothrow) Instruction*[256]);
-    if (!byte_instruction_cache_.get())
-      return NULL;
+Instruction* AssemblyProgram::GetByteInstruction(uint8_t byte) {
+  if (!byte_instruction_cache_) {
+    Instruction** ram = nullptr;
+    if (!base::UncheckedMalloc(sizeof(Instruction*) * 256,
+                               reinterpret_cast<void**>(&ram))) {
+      return nullptr;
+    }
+    byte_instruction_cache_.reset(ram);
 
     for (int i = 0; i < 256; ++i) {
       byte_instruction_cache_[i] =
-          new(std::nothrow) ByteInstruction(static_cast<uint8>(i));
+          UncheckedNew<ByteInstruction>(static_cast<uint8_t>(i));
       if (!byte_instruction_cache_[i]) {
         for (int j = 0; j < i; ++j)
-          delete byte_instruction_cache_[j];
+          UncheckedDelete(byte_instruction_cache_[j]);
         byte_instruction_cache_.reset();
-        return NULL;
+        return nullptr;
       }
     }
   }
@@ -531,6 +514,10 @@ CheckBool AssemblyProgram::TrimLabels() {
   RVAToLabel::iterator it = rel32_labels_.begin();
   while (it != rel32_labels_.end()) {
     if (it->second->count_ <= lower_limit) {
+      // Note: it appears to me (grt) that this leaks the Label instances. I
+      // *think* the right thing would be to add it->second to a collection for
+      // which all elements are freed via UncheckedDelete after the instruction
+      // fixup loop below.
       rel32_labels_.erase(it++);
     } else {
       ++it;
@@ -546,17 +533,17 @@ CheckBool AssemblyProgram::TrimLabels() {
         Label* label =
             static_cast<InstructionWithLabelARM*>(instruction)->label();
         if (label->count_ <= lower_limit) {
-          const uint8* arm_op =
+          const uint8_t* arm_op =
               static_cast<InstructionWithLabelARM*>(instruction)->arm_op();
-          uint16 op_size =
+          uint16_t op_size =
               static_cast<InstructionWithLabelARM*>(instruction)->op_size();
 
           if (op_size < 1)
             return false;
-          BytesInstruction* new_instruction =
-            new(std::nothrow) BytesInstruction(arm_op, op_size);
-          instructions_[i] = new_instruction;
-          delete instruction;
+          UncheckedDelete(instruction);
+          instructions_[i] = UncheckedNew<BytesInstruction>(arm_op, op_size);
+          if (!instructions_[i])
+            return false;
         }
         break;
       }

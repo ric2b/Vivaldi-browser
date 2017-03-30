@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_BOOKMARKS_STARTUP_TASK_RUNNER_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_BOOKMARKS_STARTUP_TASK_RUNNER_SERVICE_FACTORY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -28,7 +28,7 @@ class StartupTaskRunnerServiceFactory
   static StartupTaskRunnerServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<StartupTaskRunnerServiceFactory>;
+  friend struct base::DefaultSingletonTraits<StartupTaskRunnerServiceFactory>;
 
   StartupTaskRunnerServiceFactory();
   ~StartupTaskRunnerServiceFactory() override;

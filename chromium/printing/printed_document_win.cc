@@ -9,7 +9,7 @@
 #include "printing/printed_pages_source.h"
 #include "printing/printed_page.h"
 #include "printing/units.h"
-#include "skia/ext/platform_device.h"
+#include "skia/ext/skia_utils_win.h"
 
 namespace {
 
@@ -23,10 +23,6 @@ void SimpleModifyWorldTransform(HDC context,
   xform.eM11 = xform.eM22 = 1.f / shrink_factor;
   BOOL res = ModifyWorldTransform(context, &xform, MWT_LEFTMULTIPLY);
   DCHECK_NE(res, 0);
-}
-
-void DrawRect(HDC context, gfx::Rect rect) {
-  Rectangle(context, rect.x(), rect.y(), rect.right(), rect.bottom());
 }
 
 }  // namespace

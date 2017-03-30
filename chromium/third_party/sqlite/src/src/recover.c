@@ -1775,7 +1775,7 @@ static int recoverColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int i){
 
   FNENTRY();
 
-  if( i>=pRecover->nCols ){
+  if( (unsigned)i>=pRecover->nCols ){
     return SQLITE_ERROR;
   }
 
@@ -1875,6 +1875,7 @@ static sqlite3_module recoverModule = {
   0,                         /* xRename - rename the table */
 };
 
+CHROMIUM_SQLITE_API
 int recoverVtableInit(sqlite3 *db){
   return sqlite3_create_module_v2(db, "recover", &recoverModule, NULL, 0);
 }
@@ -2082,11 +2083,11 @@ static int recoverInit(
   sqlite3_vtab **ppVtab,              /* OUT: New virtual table */
   char **pzErr                        /* OUT: Error message, if any */
 ){
-  const unsigned kTypeCol = 4;  /* First argument with column type info. */
-  Recover *pRecover;            /* Virtual table structure being created. */
-  char *zDot;                   /* Any dot found in "db.table" backing. */
-  u32 iRootPage;                /* Root page of backing table. */
-  char *zCreateSql;             /* Schema of created virtual table. */
+  const int kTypeCol = 4;  /* First argument with column type info. */
+  Recover *pRecover;       /* Virtual table structure being created. */
+  char *zDot;              /* Any dot found in "db.table" backing. */
+  u32 iRootPage;           /* Root page of backing table. */
+  char *zCreateSql;        /* Schema of created virtual table. */
   int rc;
 
   /* Require to be in the temp database. */

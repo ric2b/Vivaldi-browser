@@ -8,14 +8,15 @@
 #include <string>
 
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "content/common/content_export.h"
+#include "content/public/common/media_stream_request.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
 #include "third_party/libjingle/source/talk/app/webrtc/mediastreaminterface.h"
 #include "third_party/webrtc/modules/audio_processing/include/audio_processing.h"
 
 namespace webrtc {
 
-class AudioFrame;
 class EchoCancellation;
 class MediaConstraintsInterface;
 class TypingDetection;
@@ -138,6 +139,12 @@ void EnableAutomaticGainControl(AudioProcessing* audio_processing);
 
 void GetAecStats(webrtc::EchoCancellation* echo_cancellation,
                  webrtc::AudioProcessorInterface::AudioProcessorStats* stats);
+
+// Returns the array geometry from the media constraints if existing and
+// otherwise that provided by the input device.
+CONTENT_EXPORT std::vector<webrtc::Point> GetArrayGeometryPreferringConstraints(
+    const MediaAudioConstraints& audio_constraints,
+    const MediaStreamDevice::AudioDeviceParameters& input_params);
 
 }  // namespace content
 

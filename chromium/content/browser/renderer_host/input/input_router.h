@@ -5,7 +5,6 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_INPUT_ROUTER_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_INPUT_ROUTER_H_
 
-#include "base/basictypes.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -35,9 +34,7 @@ class InputRouter : public IPC::Listener {
   virtual void SendWheelEvent(
       const MouseWheelEventWithLatencyInfo& wheel_event) = 0;
   virtual void SendKeyboardEvent(
-      const NativeWebKeyboardEvent& key_event,
-      const ui::LatencyInfo& latency_info,
-      bool is_shortcut) = 0;
+      const NativeWebKeyboardEventWithLatencyInfo& key_event) = 0;
   virtual void SendGestureEvent(
       const GestureEventWithLatencyInfo& gesture_event) = 0;
   virtual void SendTouchEvent(
@@ -57,6 +54,10 @@ class InputRouter : public IPC::Listener {
 
   // Whether there are any events pending dispatch to or ack from the renderer.
   virtual bool HasPendingEvents() const = 0;
+
+  // A scale factor to scale the coordinate in WebInputEvent from DIP
+  // to viewport.
+  virtual void SetDeviceScaleFactor(float device_scale_factor) = 0;
 };
 
 }  // namespace content

@@ -4,13 +4,15 @@
 
 #include "chrome/renderer/media/cast_session.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/single_thread_task_runner.h"
 #include "chrome/renderer/media/cast_session_delegate.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/video_encode_accelerator.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
-#include "media/cast/cast_config.h"
 #include "media/cast/cast_sender.h"
 #include "media/cast/logging/logging_defines.h"
 
@@ -35,7 +37,7 @@ void CreateVideoEncodeMemory(
   if (!shm->Map(size)) {
     NOTREACHED() << "Map failed";
   }
-  callback.Run(shm.Pass());
+  callback.Run(std::move(shm));
 }
 
 }  // namespace
@@ -53,8 +55,7 @@ CastSession::~CastSession() {
 void CastSession::StartAudio(const media::cast::AudioSenderConfig& config,
                              const AudioFrameInputAvailableCallback& callback,
                              const ErrorCallback& error_callback) {
-  DCHECK(content::RenderThread::Get()
-             ->GetTaskRunner()->BelongsToCurrentThread());
+  DCHECK(content::RenderThread::Get());
 
   io_task_runner_->PostTask(
       FROM_HERE,
@@ -68,8 +69,7 @@ void CastSession::StartAudio(const media::cast::AudioSenderConfig& config,
 void CastSession::StartVideo(const media::cast::VideoSenderConfig& config,
                              const VideoFrameInputAvailableCallback& callback,
                              const ErrorCallback& error_callback) {
-  DCHECK(content::RenderThread::Get()
-             ->GetTaskRunner()->BelongsToCurrentThread());
+  DCHECK(content::RenderThread::Get());
 
   io_task_runner_->PostTask(
       FROM_HERE,

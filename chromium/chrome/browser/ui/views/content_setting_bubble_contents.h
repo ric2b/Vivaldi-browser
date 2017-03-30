@@ -7,8 +7,8 @@
 
 #include <map>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/media_stream_request.h"
@@ -20,6 +20,10 @@
 class ContentSettingBubbleModel;
 class ContentSettingMediaMenuModel;
 class Profile;
+
+namespace chrome {
+class ContentSettingBubbleViewsBridge;
+}
 
 namespace ui {
 class SimpleMenuModel;
@@ -68,6 +72,9 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
   class Favicon;
   struct MediaMenuParts;
 
+  // This allows ContentSettingBubbleViewsBridge to call SetAnchorRect().
+  friend class chrome::ContentSettingBubbleViewsBridge;
+
   typedef std::map<views::Link*, int> ListItemLinks;
   typedef std::map<views::MenuButton*, MediaMenuParts*> MediaMenuPartsMap;
 
@@ -75,9 +82,6 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
   void DidNavigateMainFrame(
       const content::LoadCommittedDetails& details,
       const content::FrameNavigateParams& params) override;
-
-  // views::View:
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -90,7 +94,7 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
                            const gfx::Point& point) override;
 
   // Helper to get the preferred width of the media menu.
-  void UpdateMenuButtonSizes(const ui::NativeTheme* theme);
+  void UpdateMenuButtonSizes();
 
   // Provides data for this bubble.
   scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model_;

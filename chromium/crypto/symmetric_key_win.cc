@@ -4,6 +4,9 @@
 
 #include "crypto/symmetric_key.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 // TODO(wtc): replace scoped_array by std::vector.
@@ -38,7 +41,7 @@ ALG_ID GetAESAlgIDForKeySize(size_t key_size_in_bits) {
       NOTREACHED();
       return 0;
   }
-};
+}
 
 // Imports a raw/plaintext key of |key_size| stored in |*key_data| into a new
 // key created for the specified |provider|. |alg| contains the algorithm of
@@ -51,7 +54,7 @@ bool ImportRawKey(HCRYPTPROV provider,
                   ALG_ID alg,
                   const void* key_data, size_t key_size,
                   ScopedHCRYPTKEY* key) {
-  DCHECK_GT(key_size, 0);
+  DCHECK_GT(key_size, 0u);
 
   DWORD actual_size =
       static_cast<DWORD>(sizeof(PlaintextBlobHeader) + key_size);
@@ -83,7 +86,7 @@ bool ImportRawKey(HCRYPTPROV provider,
       CryptImportKey(provider, actual_key, actual_size, 0, flags, &unsafe_key);
 
   // Clean up the temporary copy of key, regardless of whether it was imported
-  // sucessfully or not.
+  // successfully or not.
   SecureZeroMemory(actual_key, actual_size);
 
   if (!ok)
@@ -239,7 +242,7 @@ bool ComputePBKDF2Block(HCRYPTHASH hash,
                         DWORD hash_size,
                         const std::string& salt,
                         size_t iterations,
-                        uint32 block_index,
+                        uint32_t block_index,
                         BYTE* output_buf) {
   // From RFC 2898:
   // 3. <snip> The function F is defined as the exclusive-or sum of the first
@@ -263,7 +266,7 @@ bool ComputePBKDF2Block(HCRYPTHASH hash,
     return false;
 
   // Iteration U_1: and append (big-endian) INT (i).
-  uint32 big_endian_block_index = base::HostToNet32(block_index);
+  uint32_t big_endian_block_index = base::HostToNet32(block_index);
   ok = CryptHashData(safe_hash,
                      reinterpret_cast<BYTE*>(&big_endian_block_index),
                      sizeof(big_endian_block_index), 0);
@@ -295,7 +298,7 @@ bool ComputePBKDF2Block(HCRYPTHASH hash,
     if (!ok || size != hash_size)
       return false;
 
-    for (int i = 0; i < hash_size; ++i)
+    for (DWORD i = 0; i < hash_size; ++i)
       output_buf[i] ^= hash_value[i];
   }
 
@@ -314,7 +317,7 @@ SymmetricKey::~SymmetricKey() {
 // static
 SymmetricKey* SymmetricKey::GenerateRandomKey(Algorithm algorithm,
                                               size_t key_size_in_bits) {
-  DCHECK_GE(key_size_in_bits, 8);
+  DCHECK_GE(key_size_in_bits, 8u);
 
   ScopedHCRYPTPROV provider;
   ScopedHCRYPTKEY key;
@@ -412,7 +415,7 @@ SymmetricKey* SymmetricKey::DeriveKeyFromPassword(Algorithm algorithm,
 
   // 1. If dkLen > (2^32 - 1) * hLen, output "derived key too long" and stop.
   size_t dkLen = key_size_in_bits / 8;
-  DCHECK_GT(dkLen, 0);
+  DCHECK_GT(dkLen, 0u);
 
   if ((dkLen / hLen) > 0xFFFFFFFF) {
     DLOG(ERROR) << "Derived key too long.";
@@ -423,7 +426,7 @@ SymmetricKey* SymmetricKey::DeriveKeyFromPassword(Algorithm algorithm,
   //    rounding up, and let r be the number of octets in the last
   //    block:
   size_t L = (dkLen + hLen - 1) / hLen;
-  DCHECK_GT(L, 0);
+  DCHECK_GT(L, 0u);
 
   size_t total_generated_size = L * hLen;
   std::vector<BYTE> generated_key(total_generated_size);
@@ -440,7 +443,7 @@ SymmetricKey* SymmetricKey::DeriveKeyFromPassword(Algorithm algorithm,
   // 4. Concatenate the blocks and extract the first dkLen octets to produce
   //    a derived key DK:
   //    DK = T_1 || T_2 || ... || T_l<0..r-1>
-  for (uint32 block_index = 1; block_index <= L; ++block_index) {
+  for (uint32_t block_index = 1; block_index <= L; ++block_index) {
     if (!ComputePBKDF2Block(prf, hLen, salt, iterations, block_index,
                             block_offset))
         return NULL;

@@ -7,6 +7,7 @@
 #import <Cocoa/Cocoa.h>
 #include <grp.h>
 #include <pwd.h>
+#include <stddef.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
@@ -294,7 +295,7 @@ NSString* PathToFramework(NSString* app_path, NSDictionary* info_plist) {
   return [[[app_path
       stringByAppendingPathComponent:@"Contents/Versions"]
       stringByAppendingPathComponent:version]
-      stringByAppendingPathComponent:@"Google Chrome Framework.framework"];
+      stringByAppendingPathComponent:@"Vivaldi Framework.framework"];
 }
 
 NSString* PathToInstallScript(NSString* app_path, NSDictionary* info_plist) {

@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_DEVTOOLS_PROTOCOL_NETWORK_HANDLER_H_
 #define CONTENT_BROWSER_DEVTOOLS_PROTOCOL_NETWORK_HANDLER_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/devtools/protocol/devtools_protocol_dispatcher.h"
 #include "net/cookies/canonical_cookie.h"
@@ -38,6 +39,9 @@ class NetworkHandler {
                                     double latency,
                                     double download_throughput,
                                     double upload_throughput);
+  Response GetCertificateDetails(int certificate_id,
+                                 scoped_refptr<CertificateDetails>* result);
+  Response ShowCertificateViewer(int certificate_id);
 
  private:
   void SendGetCookiesResponse(

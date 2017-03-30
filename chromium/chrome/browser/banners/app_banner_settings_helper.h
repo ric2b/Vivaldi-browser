@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "ui/base/page_transition_types.h"
 
 namespace content {
 class WebContents;
@@ -51,6 +52,13 @@ class AppBannerSettingsHelper {
     NATIVE,
   };
 
+  // BannerEvents record the time that a site was accessed, along with an
+  // engagement weight representing the importance of the access.
+  struct BannerEvent {
+   base::Time time;
+   double engagement;
+  };
+
   // The content setting basically records a simplified subset of history.
   // For privacy reasons this needs to be cleared. The ClearHistoryForURLs
   // function removes any information from the banner content settings for the
@@ -70,11 +78,21 @@ class AppBannerSettingsHelper {
       const std::string& package_name_or_start_url,
       AppBannerRapporMetric rappor_metric);
 
+  // Record a banner event. Should not be used for could show events, as they
+  // require a transition type.
   static void RecordBannerEvent(content::WebContents* web_contents,
                                 const GURL& origin_url,
                                 const std::string& package_name_or_start_url,
                                 AppBannerEvent event,
                                 base::Time time);
+
+  // Record a banner could show event, with a specified transition type.
+  static void RecordBannerCouldShowEvent(
+      content::WebContents* web_contents,
+      const GURL& origin_url,
+      const std::string& package_name_or_start_url,
+      base::Time time,
+      ui::PageTransition transition_type);
 
   // Determine if the banner should be shown, given the recorded events for the
   // supplied app.
@@ -85,7 +103,7 @@ class AppBannerSettingsHelper {
 
   // Gets the could have been shown events that are stored for the given package
   // or start url. This is only exposed for testing.
-  static std::vector<base::Time> GetCouldShowBannerEvents(
+  static std::vector<BannerEvent> GetCouldShowBannerEvents(
       content::WebContents* web_contents,
       const GURL& origin_url,
       const std::string& package_name_or_start_url);
@@ -98,6 +116,42 @@ class AppBannerSettingsHelper {
       const GURL& origin_url,
       const std::string& package_name_or_start_url,
       AppBannerEvent event);
+
+  // Record a UMA statistic measuring the minutes between the first visit to the
+  // site and the first showing of the banner.
+  static void RecordMinutesFromFirstVisitToShow(
+      content::WebContents* web_contents,
+      const GURL& origin_url,
+      const std::string& package_name_or_start_url,
+      base::Time time);
+
+  // Set the engagement weights assigned to direct and indirect navigations.
+  static void SetEngagementWeights(double direct_engagement,
+                                   double indirect_engagement);
+
+  // Set the minimum number of minutes between banner visits that will
+  // trigger a could show banner event. This must be less than the
+  // number of minutes in a day, and evenly divide the number of minutes
+  // in a day.
+  static void SetMinimumMinutesBetweenVisits(unsigned int minutes);
+
+  // Set the total engagement weight required to trigger a banner.
+  static void SetTotalEngagementToTrigger(double total_engagement);
+
+  // Resets the engagement weights, minimum minutes, and total engagement to
+  // trigger to their default values.
+  static void SetDefaultParameters();
+
+  // Bucket a given time to the given resolution in local time.
+  static base::Time BucketTimeToResolution(base::Time time,
+                                           unsigned int minutes);
+
+  // Updates all values from field trial.
+  static void UpdateFromFieldTrial();
+
+  // Returns true if the app banner trigger condition should use the site
+  // engagement score instead of the navigation-based heuristic.
+  static bool ShouldUseSiteEngagementScore();
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(AppBannerSettingsHelper);

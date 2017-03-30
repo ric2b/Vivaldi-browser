@@ -11,8 +11,7 @@ from telemetry import decorators
 from telemetry.internal.image_processing import video
 from telemetry.testing import tab_test_case
 from telemetry.timeline import model
-from telemetry.timeline import tracing_category_filter
-from telemetry.timeline import tracing_options
+from telemetry.timeline import tracing_config
 from telemetry.util import image_util
 from telemetry.util import rgba_color
 
@@ -36,7 +35,7 @@ class FakePlatform(object):
   def __init__(self):
     self._is_video_capture_running = False
 
-  #pylint: disable=W0613
+  #pylint: disable=unused-argument
   def StartVideoCapture(self, min_bitrate_mbps):
     self._is_video_capture_running = True
 
@@ -61,11 +60,10 @@ class TabTest(tab_test_case.TabTestCase):
   def testTabBrowserIsRightBrowser(self):
     self.assertEquals(self._tab.browser, self._browser)
 
-  @decorators.Disabled('mac') # TODO Vivaldi Mac disabled
   def testRendererCrash(self):
     self.assertRaises(exceptions.DevtoolsTargetCrashException,
                       lambda: self._tab.Navigate('chrome://crash',
-                                                 timeout=5))
+                                                 timeout=30))
 
   @decorators.Enabled('has tabs')
   def testActivateTab(self):
@@ -84,7 +82,7 @@ class TabTest(tab_test_case.TabTestCase):
     self._tab.Navigate(url)
     self.assertEquals(self._tab.url, url)
 
-  #pylint: disable=W0212
+  #pylint: disable=protected-access
   def testIsVideoCaptureRunning(self):
     original_platform_backend = self._tab.browser._platform_backend
     try:
@@ -100,15 +98,16 @@ class TabTest(tab_test_case.TabTestCase):
   # Test failing on android: http://crbug.com/437057
   # and mac: http://crbug.com/468675
   @decorators.Disabled('android', 'chromeos', 'mac')
+  @decorators.Disabled('win')  # crbug.com/570955
   def testHighlight(self):
     self.assertEquals(self._tab.url, 'about:blank')
-    options = tracing_options.TracingOptions()
-    options.enable_chrome_trace = True
-    self._browser.platform.tracing_controller.Start(
-        options, tracing_category_filter.CreateNoOverheadFilter())
+    config = tracing_config.TracingConfig()
+    config.SetNoOverheadFilter()
+    config.enable_chrome_trace = True
+    self._browser.platform.tracing_controller.StartTracing(config)
     self._tab.Highlight(rgba_color.WEB_PAGE_TEST_ORANGE)
     self._tab.ClearHighlight(rgba_color.WEB_PAGE_TEST_ORANGE)
-    trace_data = self._browser.platform.tracing_controller.Stop()
+    trace_data = self._browser.platform.tracing_controller.StopTracing()
     timeline_model = model.TimelineModel(trace_data)
     renderer_thread = timeline_model.GetRendererThreadFromTabId(
         self._tab.id)
@@ -120,11 +119,12 @@ class TabTest(tab_test_case.TabTestCase):
     self.assertTrue(found_video_start_event)
 
   @decorators.Enabled('has tabs')
-  @decorators.Disabled('mac', 'win', 'linux')  # crbug.com/499207.
+  @decorators.Disabled('mac', 'linux')  # crbug.com/499207.
+  @decorators.Disabled('win')  # crbug.com/570955.
   def testGetRendererThreadFromTabId(self):
     self.assertEquals(self._tab.url, 'about:blank')
     # Create 3 tabs. The third tab is closed before we call
-    # tracing_controller.Start.
+    # tracing_controller.StartTracing.
     first_tab = self._tab
     second_tab = self._browser.tabs.New()
     second_tab.Navigate('about:blank')
@@ -133,15 +133,15 @@ class TabTest(tab_test_case.TabTestCase):
     third_tab.Navigate('about:blank')
     third_tab.WaitForDocumentReadyStateToBeInteractiveOrBetter()
     third_tab.Close()
-    options = tracing_options.TracingOptions()
-    options.enable_chrome_trace = True
-    self._browser.platform.tracing_controller.Start(
-        options, tracing_category_filter.CreateNoOverheadFilter())
+    config = tracing_config.TracingConfig()
+    config.SetNoOverheadFilter()
+    config.enable_chrome_trace = True
+    self._browser.platform.tracing_controller.StartTracing(config)
     first_tab.ExecuteJavaScript('console.time("first-tab-marker");')
     first_tab.ExecuteJavaScript('console.timeEnd("first-tab-marker");')
     second_tab.ExecuteJavaScript('console.time("second-tab-marker");')
     second_tab.ExecuteJavaScript('console.timeEnd("second-tab-marker");')
-    trace_data = self._browser.platform.tracing_controller.Stop()
+    trace_data = self._browser.platform.tracing_controller.StopTracing()
     timeline_model = model.TimelineModel(trace_data)
 
     # Assert that the renderer_thread of the first tab contains

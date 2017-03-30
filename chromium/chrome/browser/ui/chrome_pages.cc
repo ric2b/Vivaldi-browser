@@ -4,16 +4,19 @@
 
 #include "chrome/browser/ui/chrome_pages.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/download/download_shelf.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
@@ -24,6 +27,7 @@
 #include "chrome/browser/ui/webui/options/content_settings_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
+#include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
@@ -55,7 +59,7 @@ const char kHashMark[] = "#";
 
 void OpenBookmarkManagerWithHash(Browser* browser,
                                  const std::string& action,
-                                 int64 node_id) {
+                                 int64_t node_id) {
   content::RecordAction(UserMetricsAction("ShowBookmarkManager"));
   content::RecordAction(UserMetricsAction("ShowBookmarks"));
   NavigateParams params(GetSingletonTabNavigateParams(
@@ -128,6 +132,11 @@ void ShowHelpImpl(Browser* browser,
 #endif
 }
 
+std::string GenerateContentSettingsExceptionsSubPage(ContentSettingsType type) {
+  return kContentSettingsExceptionsSubPage + std::string(kHashMark) +
+         options::ContentSettingsHandler::ContentSettingsTypeToGroupName(type);
+}
+
 }  // namespace
 
 void ShowBookmarkManager(Browser* browser) {
@@ -138,7 +147,7 @@ void ShowBookmarkManager(Browser* browser) {
       GetSingletonTabNavigateParams(browser, GURL(kChromeUIBookmarksURL)));
 }
 
-void ShowBookmarkManagerForNode(Browser* browser, int64 node_id) {
+void ShowBookmarkManagerForNode(Browser* browser, int64_t node_id) {
   OpenBookmarkManagerWithHash(browser, std::string(), node_id);
 }
 
@@ -236,9 +245,9 @@ GURL GetSettingsUrl(const std::string& sub_page) {
 
 bool IsSettingsSubPage(const GURL& url, const std::string& sub_page) {
   return (url.SchemeIs(content::kChromeUIScheme) &&
-          (url.host() == chrome::kChromeUISettingsHost ||
-           url.host() == chrome::kChromeUISettingsFrameHost) &&
-          url.path() == "/" + sub_page);
+          (url.host_piece() == chrome::kChromeUISettingsHost ||
+           url.host_piece() == chrome::kChromeUISettingsFrameHost) &&
+          url.path_piece() == "/" + sub_page);
 }
 
 bool IsTrustedPopupWindowWithScheme(const Browser* browser,
@@ -294,11 +303,25 @@ void ShowSettingsSubPageInTabbedBrowser(Browser* browser,
   ShowSingletonTabOverwritingNTP(browser, params);
 }
 
+void ShowContentSettingsExceptions(Browser* browser,
+                                   ContentSettingsType content_settings_type) {
+  ShowSettingsSubPage(
+      browser, GenerateContentSettingsExceptionsSubPage(content_settings_type));
+}
+
+void ShowContentSettingsExceptionsInWindow(
+    Profile* profile,
+    ContentSettingsType content_settings_type) {
+  DCHECK(switches::SettingsWindowEnabled());
+  ShowSettingsSubPageForProfile(
+      profile, GenerateContentSettingsExceptionsSubPage(content_settings_type));
+}
+
 void ShowContentSettings(Browser* browser,
                          ContentSettingsType content_settings_type) {
   ShowSettingsSubPage(
       browser,
-      kContentSettingsExceptionsSubPage + std::string(kHashMark) +
+      kContentSettingsSubPage + std::string(kHashMark) +
           options::ContentSettingsHandler::ContentSettingsTypeToGroupName(
               content_settings_type));
 }
@@ -322,11 +345,11 @@ void ShowAboutChrome(Browser* browser) {
   content::RecordAction(UserMetricsAction("AboutChrome"));
   if (::switches::SettingsWindowEnabled()) {
     SettingsWindowManager::GetInstance()->ShowChromePageForProfile(
-        browser->profile(), GURL(kChromeUIUberURL));
+        browser->profile(), GURL(kChromeUIHelpURL));
     return;
   }
   NavigateParams params(
-      GetSingletonTabNavigateParams(browser, GURL(kChromeUIUberURL)));
+      GetSingletonTabNavigateParams(browser, GURL(kChromeUIHelpURL)));
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
   ShowSingletonTabOverwritingNTP(browser, params);
 }
@@ -337,7 +360,8 @@ void ShowSearchEngineSettings(Browser* browser) {
 }
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-void ShowBrowserSignin(Browser* browser, signin_metrics::Source source) {
+void ShowBrowserSignin(Browser* browser,
+                       signin_metrics::AccessPoint access_point) {
   Profile* original_profile = browser->profile()->GetOriginalProfile();
   SigninManagerBase* manager =
       SigninManagerFactory::GetForProfile(original_profile);
@@ -354,26 +378,34 @@ void ShowBrowserSignin(Browser* browser, signin_metrics::Source source) {
     browser = displayer->browser();
   }
 
-  signin_metrics::LogSigninSource(source);
-
-  // Since the app launcher is a separate application, it might steal focus
+  // Since the extension is a separate application, it might steal focus
   // away from Chrome, and accidentally close the avatar bubble. The same will
   // happen if we had to switch browser windows to show the sign in page. In
   // this case, fallback to the full-tab signin page.
-  if (switches::IsNewAvatarMenu() &&
-      source != signin_metrics::SOURCE_APP_LAUNCHER && !switched_browser) {
+  bool show_avatar_bubble =
+      access_point != signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS &&
+      !switched_browser;
+#if defined(OS_CHROMEOS)
+  // ChromeOS doesn't have the avatar bubble.
+  show_avatar_bubble = false;
+#endif
+
+  if (show_avatar_bubble) {
     browser->window()->ShowAvatarBubbleFromAvatarButton(
         BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
-        signin::ManageAccountsParams());
+        signin::ManageAccountsParams(), access_point);
   } else {
-    NavigateToSingletonTab(browser, GURL(signin::GetPromoURL(source, false)));
+    NavigateToSingletonTab(
+        browser,
+        signin::GetPromoURL(
+            access_point, signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT,
+            false));
     DCHECK_GT(browser->tab_strip_model()->count(), 0);
   }
 }
 
-void ShowBrowserSigninOrSettings(
-    Browser* browser,
-    signin_metrics::Source source) {
+void ShowBrowserSigninOrSettings(Browser* browser,
+                                 signin_metrics::AccessPoint access_point) {
   Profile* original_profile = browser->profile()->GetOriginalProfile();
   SigninManagerBase* manager =
       SigninManagerFactory::GetForProfile(original_profile);
@@ -381,7 +413,7 @@ void ShowBrowserSigninOrSettings(
   if (manager->IsAuthenticated())
     ShowSettings(browser);
   else
-    ShowBrowserSignin(browser, source);
+    ShowBrowserSignin(browser, access_point);
 }
 #endif
 

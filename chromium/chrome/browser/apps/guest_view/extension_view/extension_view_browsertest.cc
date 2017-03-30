@@ -6,13 +6,14 @@
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
 #include "content/public/test/browser_test_utils.h"
-#include "extensions/browser/guest_view/extensions_guest_view_manager_delegate.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/test/extension_test_message_listener.h"
 
-using extensions::ExtensionsGuestViewManagerDelegate;
+using extensions::ExtensionsAPIClient;
 using guest_view::GuestViewManager;
 using guest_view::TestGuestViewManager;
 using guest_view::TestGuestViewManagerFactory;
@@ -32,9 +33,8 @@ class ExtensionViewTest : public extensions::PlatformAppBrowserTest {
       manager = static_cast<TestGuestViewManager*>(
           GuestViewManager::CreateWithDelegate(
               browser()->profile(),
-              scoped_ptr<guest_view::GuestViewManagerDelegate>(
-                  new ExtensionsGuestViewManagerDelegate(
-                      browser()->profile()))));
+              ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(
+                  browser()->profile())));
     }
     return manager;
   }
@@ -79,10 +79,8 @@ class ExtensionViewTest : public extensions::PlatformAppBrowserTest {
 // Tests that <extensionview> can be created and added to the DOM.
 IN_PROC_BROWSER_TEST_F(ExtensionViewTest,
                        TestExtensionViewCreationShouldSucceed) {
-  const extensions::Extension* skeleton_app =
-      InstallPlatformApp("extension_view/skeleton");
-  TestHelper("testExtensionViewCreationShouldSucceed", "extension_view",
-             skeleton_app->id(), "");
+  TestHelper("testExtensionViewCreationShouldSucceed",
+             "extension_view/creation", "", "");
 }
 
 // Tests that verify that <extensionview> does not change extension ID if
@@ -104,7 +102,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionViewTest, ShimSrcAttribute) {
 }
 
 // Tests that verify that <extensionview> can call the load function.
-IN_PROC_BROWSER_TEST_F(ExtensionViewTest, LoadAPICall) {
+// Flaky under MemorySanitizer: https://crbug.com/545656
+IN_PROC_BROWSER_TEST_F(ExtensionViewTest, DISABLED_LoadAPICall) {
   const extensions::Extension* skeleton_app =
       InstallPlatformApp("extension_view/skeleton");
   const extensions::Extension* skeleton_app_two =
@@ -114,9 +113,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionViewTest, LoadAPICall) {
              skeleton_app_two->id());
 }
 
+// Flaky under MemorySanitizer: https://crbug.com/512092
+// Flaky elsewhere: https://crbug.com/538114
 // Tests that verify that <extensionview> can queue up multiple calls to the
 // load function.
-IN_PROC_BROWSER_TEST_F(ExtensionViewTest, QueuedLoadAPICall) {
+IN_PROC_BROWSER_TEST_F(ExtensionViewTest, DISABLED_QueuedLoadAPICall) {
   const extensions::Extension* skeleton_app =
       InstallPlatformApp("extension_view/skeleton");
   const extensions::Extension* skeleton_app_two =

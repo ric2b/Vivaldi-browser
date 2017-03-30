@@ -4,11 +4,14 @@
 
 #include "base/trace_event/trace_event_etw_export_win.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_impl.h"
 
@@ -42,12 +45,12 @@ tEventRegister EventRegisterProc = nullptr;
 tEventWrite EventWriteProc = nullptr;
 tEventUnregister EventUnregisterProc = nullptr;
 
-// |filtered_event_group_names| contains the event categories that can be
+// |kFilteredEventGroupNames| contains the event categories that can be
 // exported individually. These categories can be enabled by passing the correct
 // keyword when starting the trace. A keyword is a 64-bit flag and we attribute
 // one bit per category. We can therefore enable a particular category by
 // setting its corresponding bit in the keyword. For events that are not present
-// in |filtered_event_group_names|, we have two bits that control their
+// in |kFilteredEventGroupNames|, we have two bits that control their
 // behaviour. When bit 61 is enabled, any event that is not disabled by default
 // (ie. doesn't start with disabled-by-default-) will be exported. Likewise,
 // when bit 62 is enabled, any event that is disabled by default will be
@@ -70,7 +73,7 @@ tEventUnregister EventUnregisterProc = nullptr;
 // refers to keywords as flags and there are two ways to enable them, using
 // group names or the hex representation. We only support the latter. Also, we
 // ignore the level.
-const char* const filtered_event_group_names[] = {
+const char* const kFilteredEventGroupNames[] = {
     "benchmark",                                       // 0x1
     "blink",                                           // 0x2
     "browser",                                         // 0x4
@@ -84,12 +87,15 @@ const char* const filtered_event_group_names[] = {
     "v8",                                              // 0x400
     "disabled-by-default-cc.debug",                    // 0x800
     "disabled-by-default-cc.debug.picture",            // 0x1000
-    "disabled-by-default-toplevel.flow"};              // 0x2000
-const char* other_events_group_name = "__OTHER_EVENTS";  // 0x2000000000000000
-const char* disabled_other_events_group_name =
+    "disabled-by-default-toplevel.flow",               // 0x2000
+    "startup"};                                        // 0x4000
+const char kOtherEventsGroupName[] = "__OTHER_EVENTS";  // 0x2000000000000000
+const char kDisabledOtherEventsGroupName[] =
     "__DISABLED_OTHER_EVENTS";  // 0x4000000000000000
-uint64 other_events_keyword_bit = 1ULL << 61;
-uint64 disabled_other_events_keyword_bit = 1ULL << 62;
+const uint64_t kOtherEventsKeywordBit = 1ULL << 61;
+const uint64_t kDisabledOtherEventsKeywordBit = 1ULL << 62;
+const size_t kNumberOfCategories = ARRAYSIZE(kFilteredEventGroupNames) + 2U;
+
 }  // namespace
 
 // Redirector function for EventRegister. Called by macros in
@@ -127,6 +133,30 @@ ULONG EVNTAPI EventUnregister(REGHANDLE RegHandle) {
 namespace base {
 namespace trace_event {
 
+// This object will be created by each process. It's a background (low-priority)
+// thread that will monitor the ETW keyword for any changes.
+class TraceEventETWExport::ETWKeywordUpdateThread
+    : public PlatformThread::Delegate {
+ public:
+  ETWKeywordUpdateThread() {}
+  ~ETWKeywordUpdateThread() override {}
+
+  // Implementation of PlatformThread::Delegate:
+  void ThreadMain() override {
+    PlatformThread::SetName("ETW Keyword Update Thread");
+    TimeDelta sleep_time = TimeDelta::FromMilliseconds(kUpdateTimerDelayMs);
+    while (1) {
+      PlatformThread::Sleep(sleep_time);
+      trace_event::TraceEventETWExport::UpdateETWKeyword();
+    }
+  }
+
+ private:
+  // Time between checks for ETW keyword changes (in milliseconds).
+  unsigned int kUpdateTimerDelayMs = 1000;
+};
+
+
 TraceEventETWExport::TraceEventETWExport()
     : etw_export_enabled_(false), etw_match_any_keyword_(0ULL) {
   // Find Advapi32.dll. This should always succeed.
@@ -143,9 +173,17 @@ TraceEventETWExport::TraceEventETWExport()
     // Register the ETW provider. If registration fails then the event logging
     // calls will fail (on XP this call will do nothing).
     EventRegisterChrome();
-
-    UpdateEnabledCategories();
   }
+
+  // Make sure to initialize the map with all the group names. Subsequent
+  // modifications will be made by the background thread and only affect the
+  // values of the keys (no key addition/deletion). Therefore, the map does not
+  // require a lock for access.
+  for (size_t i = 0; i < ARRAYSIZE(kFilteredEventGroupNames); i++)
+    categories_status_[kFilteredEventGroupNames[i]] = false;
+  categories_status_[kOtherEventsGroupName] = false;
+  categories_status_[kDisabledOtherEventsGroupName] = false;
+  DCHECK_EQ(kNumberOfCategories, categories_status_.size());
 }
 
 TraceEventETWExport::~TraceEventETWExport() {
@@ -160,19 +198,33 @@ TraceEventETWExport* TraceEventETWExport::GetInstance() {
 
 // static
 void TraceEventETWExport::EnableETWExport() {
-  if (GetInstance())
-    GetInstance()->etw_export_enabled_ = true;
+  auto* instance = GetInstance();
+  if (instance && !instance->etw_export_enabled_) {
+    instance->etw_export_enabled_ = true;
+    // Sync the enabled categories with ETW by calling UpdateEnabledCategories()
+    // that checks the keyword. Then create a thread that will call that same
+    // function periodically, to make sure we stay in sync.
+    instance->UpdateEnabledCategories();
+    if (instance->keyword_update_thread_handle_.is_null()) {
+      instance->keyword_update_thread_.reset(new ETWKeywordUpdateThread);
+      PlatformThread::CreateWithPriority(
+          0, instance->keyword_update_thread_.get(),
+          &instance->keyword_update_thread_handle_, ThreadPriority::BACKGROUND);
+    }
+  }
 }
 
 // static
 void TraceEventETWExport::DisableETWExport() {
-  if (GetInstance())
-    GetInstance()->etw_export_enabled_ = false;
+  auto* instance = GetInstance();
+  if (instance && instance->etw_export_enabled_)
+    instance->etw_export_enabled_ = false;
 }
 
 // static
 bool TraceEventETWExport::IsETWExportEnabled() {
-  return (GetInstance() && GetInstance()->etw_export_enabled_);
+  auto* instance = GetInstance();
+  return (instance && instance->etw_export_enabled_);
 }
 
 // static
@@ -187,8 +239,8 @@ void TraceEventETWExport::AddEvent(
     const unsigned long long* arg_values,
     const scoped_refptr<ConvertableToTraceFormat>* convertable_values) {
   // We bail early in case exporting is disabled or no consumer is listening.
-  if (!GetInstance() || !GetInstance()->etw_export_enabled_ ||
-      !EventEnabledChromeEvent())
+  auto* instance = GetInstance();
+  if (!instance || !instance->etw_export_enabled_ || !EventEnabledChromeEvent())
     return;
 
   const char* phase_string = nullptr;
@@ -286,27 +338,19 @@ void TraceEventETWExport::AddEvent(
 }
 
 // static
-void TraceEventETWExport::AddCustomEvent(const char* name,
-                                         char const* phase,
-                                         const char* arg_name_1,
-                                         const char* arg_value_1,
-                                         const char* arg_name_2,
-                                         const char* arg_value_2,
-                                         const char* arg_name_3,
-                                         const char* arg_value_3) {
-  if (!GetInstance() || !GetInstance()->etw_export_enabled_ ||
-      !EventEnabledChromeEvent())
+void TraceEventETWExport::AddCompleteEndEvent(const char* name) {
+  auto* instance = GetInstance();
+  if (!instance || !instance->etw_export_enabled_ || !EventEnabledChromeEvent())
     return;
 
-  EventWriteChromeEvent(name, phase, arg_name_1, arg_value_1, arg_name_2,
-                        arg_value_2, arg_name_3, arg_value_3);
+  EventWriteChromeEvent(name, "Complete End", "", "", "", "", "", "");
 }
 
 // static
 bool TraceEventETWExport::IsCategoryGroupEnabled(
     const char* category_group_name) {
   DCHECK(category_group_name);
-  auto instance = GetInstance();
+  auto* instance = GetInstance();
   if (instance == nullptr)
     return false;
 
@@ -334,30 +378,36 @@ bool TraceEventETWExport::UpdateEnabledCategories() {
   // recording tools) using the ETW infrastructure. This value will be set in
   // all Chrome processes that have registered their ETW provider.
   etw_match_any_keyword_ = CHROME_Context.MatchAnyKeyword;
-  for (int i = 0; i < ARRAYSIZE(filtered_event_group_names); i++) {
+  for (size_t i = 0; i < ARRAYSIZE(kFilteredEventGroupNames); i++) {
     if (etw_match_any_keyword_ & (1ULL << i)) {
-      categories_status_[filtered_event_group_names[i]] = true;
+      categories_status_[kFilteredEventGroupNames[i]] = true;
     } else {
-      categories_status_[filtered_event_group_names[i]] = false;
+      categories_status_[kFilteredEventGroupNames[i]] = false;
     }
   }
 
   // Also update the two default categories.
-  if (etw_match_any_keyword_ & other_events_keyword_bit) {
-    categories_status_[other_events_group_name] = true;
+  if (etw_match_any_keyword_ & kOtherEventsKeywordBit) {
+    categories_status_[kOtherEventsGroupName] = true;
   } else {
-    categories_status_[other_events_group_name] = false;
+    categories_status_[kOtherEventsGroupName] = false;
   }
-  if (etw_match_any_keyword_ & disabled_other_events_keyword_bit) {
-    categories_status_[disabled_other_events_group_name] = true;
+  if (etw_match_any_keyword_ & kDisabledOtherEventsKeywordBit) {
+    categories_status_[kDisabledOtherEventsGroupName] = true;
   } else {
-    categories_status_[disabled_other_events_group_name] = false;
+    categories_status_[kDisabledOtherEventsGroupName] = false;
   }
+
+  DCHECK_EQ(kNumberOfCategories, categories_status_.size());
+
+  // Update the categories in TraceLog.
+  TraceLog::GetInstance()->UpdateETWCategoryGroupEnabledFlags();
 
   return true;
 }
 
 bool TraceEventETWExport::IsCategoryEnabled(const char* category_name) const {
+  DCHECK_EQ(kNumberOfCategories, categories_status_.size());
   // Try to find the category and return its status if found
   auto it = categories_status_.find(category_name);
   if (it != categories_status_.end())
@@ -366,15 +416,23 @@ bool TraceEventETWExport::IsCategoryEnabled(const char* category_name) const {
   // Otherwise return the corresponding default status by first checking if the
   // category is disabled by default.
   if (StringPiece(category_name).starts_with("disabled-by-default")) {
-    DCHECK(categories_status_.find(disabled_other_events_group_name) !=
+    DCHECK(categories_status_.find(kDisabledOtherEventsGroupName) !=
            categories_status_.end());
-    return categories_status_.find(disabled_other_events_group_name)->second;
+    return categories_status_.find(kDisabledOtherEventsGroupName)->second;
   } else {
-    DCHECK(categories_status_.find(other_events_group_name) !=
+    DCHECK(categories_status_.find(kOtherEventsGroupName) !=
            categories_status_.end());
-    return categories_status_.find(other_events_group_name)->second;
+    return categories_status_.find(kOtherEventsGroupName)->second;
   }
 }
 
+// static
+void TraceEventETWExport::UpdateETWKeyword() {
+  if (!IsETWExportEnabled())
+    return;
+  auto* instance = GetInstance();
+  DCHECK(instance);
+  instance->UpdateEnabledCategories();
+}
 }  // namespace trace_event
 }  // namespace base

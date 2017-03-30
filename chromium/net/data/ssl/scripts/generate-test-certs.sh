@@ -50,6 +50,13 @@ try openssl req \
   -out out/ok_cert.req \
   -config ee.cnf
 
+try openssl req \
+  -new \
+  -keyout out/wildcard.key \
+  -out out/wildcard.req \
+  -reqexts req_wildcard \
+  -config ee.cnf
+
 SUBJECT_NAME=req_localhost_cn \
 try openssl req \
   -new \
@@ -81,6 +88,15 @@ CA_COMMON_NAME="Test Root CA" \
 CA_COMMON_NAME="Test Root CA" \
   try openssl ca \
     -batch \
+    -extensions user_cert \
+    -days 3650 \
+    -in out/wildcard.req \
+    -out out/wildcard.pem \
+    -config ca.cnf
+
+CA_COMMON_NAME="Test Root CA" \
+  try openssl ca \
+    -batch \
     -extensions name_constraint_bad \
     -subj "/CN=Leaf certificate/" \
     -days 3650 \
@@ -107,8 +123,21 @@ CA_COMMON_NAME="Test Root CA" \
     -out out/localhost_cert.pem \
     -config ca.cnf
 
+CA_COMMON_NAME="Test Root CA" \
+  try openssl ca \
+    -batch \
+    -extensions user_cert \
+    -subj "/CN=Leaf Certificate/" \
+    -startdate 00010101000000Z \
+    -enddate   00010101000000Z \
+    -in out/ok_cert.req \
+    -out out/bad_validity.pem \
+    -config ca.cnf
+
 try /bin/sh -c "cat out/ok_cert.key out/ok_cert.pem \
     > ../certificates/ok_cert.pem"
+try /bin/sh -c "cat out/wildcard.key out/wildcard.pem \
+    > ../certificates/wildcard.pem"
 try /bin/sh -c "cat out/localhost_cert.key out/localhost_cert.pem \
     > ../certificates/localhost_cert.pem"
 try /bin/sh -c "cat out/expired_cert.key out/expired_cert.pem \
@@ -119,6 +148,8 @@ try /bin/sh -c "cat out/ok_cert.key out/name_constraint_bad.pem \
     > ../certificates/name_constraint_bad.pem"
 try /bin/sh -c "cat out/ok_cert.key out/name_constraint_good.pem \
     > ../certificates/name_constraint_good.pem"
+try /bin/sh -c "cat out/ok_cert.key out/bad_validity.pem \
+    > ../certificates/bad_validity.pem"
 
 # Now generate the one-off certs
 ## SHA-256 general test cert
@@ -151,11 +182,50 @@ SUBJECT_NAME="req_dn" \
     -out ../certificates/reject_intranet_hosts.pem
 
 ## Leaf certificate with a large key; Apple's certificate verifier rejects with
-## a fatal error if the key is bigger than 4096 bits.
+## a fatal error if the key is bigger than 8192 bits.
 try openssl req -x509 -days 3650 \
-    -config ../scripts/ee.cnf -newkey rsa:4104 -text \
+    -config ../scripts/ee.cnf -newkey rsa:8200 -text \
     -sha256 \
     -out ../certificates/large_key.pem
+
+## SHA1 certificate expiring in 2016.
+try openssl req -config ../scripts/ee.cnf -sha1 \
+  -newkey rsa:2048 -text -out out/sha1_2016.req
+CA_COMMON_NAME="Test Root CA" \
+  try openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 081030000000Z \
+    -enddate   161230000000Z \
+    -in out/sha1_2016.req \
+    -out ../certificates/sha1_2016.pem \
+    -config ca.cnf
+
+## SHA1 certificate issued the last second before the SHA-1 deprecation date.
+try openssl req -config ../scripts/ee.cnf -sha1 \
+  -newkey rsa:2048 -text -out out/sha1_dec_2015.req
+CA_COMMON_NAME="Test Root CA" \
+  try openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 151231235959Z \
+    -enddate   161230000000Z \
+    -in out/sha1_dec_2015.req \
+    -out ../certificates/sha1_dec_2015.pem \
+    -config ca.cnf
+
+## SHA1 certificate issued on the SHA-1 deprecation date.
+try openssl req -config ../scripts/ee.cnf -sha1 \
+  -newkey rsa:2048 -text -out out/sha1_jan_2016.req
+CA_COMMON_NAME="Test Root CA" \
+  try openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 160101000000Z \
+    -enddate   161230000000Z \
+    -in out/sha1_jan_2016.req \
+    -out ../certificates/sha1_jan_2016.pem \
+    -config ca.cnf
 
 ## Validity too long unit test support.
 try openssl req -config ../scripts/ee.cnf \

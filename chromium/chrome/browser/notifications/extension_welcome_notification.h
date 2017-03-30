@@ -7,11 +7,12 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_member.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/prefs/pref_service_syncable_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/syncable_prefs/pref_service_syncable_observer.h"
 #include "ui/message_center/notifier_settings.h"
 
 namespace base {
@@ -41,8 +42,9 @@ class Profile;
 // connectivity.
 //
 // This class expects to be created and called from the UI thread.
-class ExtensionWelcomeNotification : public KeyedService,
-                                     public PrefServiceSyncableObserver {
+class ExtensionWelcomeNotification
+    : public KeyedService,
+      public syncable_prefs::PrefServiceSyncableObserver {
  public:
   // Allows for overriding global calls.
   class Delegate {
@@ -75,7 +77,7 @@ class ExtensionWelcomeNotification : public KeyedService,
   static ExtensionWelcomeNotification* Create(Profile* const profile,
                                               Delegate* const delegate);
 
-  // PrefServiceSyncableObserver
+  // syncable_prefs::PrefServiceSyncableObserver
   void OnIsSyncingChanged() override;
 
   // Adds in the welcome notification if required for components built
@@ -151,8 +153,7 @@ class ExtensionWelcomeNotification : public KeyedService,
 
   // If the welcome notification is shown, this timer tracks when to hide the
   // welcome notification.
-  scoped_ptr<base::OneShotTimer<ExtensionWelcomeNotification> >
-      expiration_timer_;
+  scoped_ptr<base::OneShotTimer> expiration_timer_;
 
   // Delegate for Chrome global calls like base::Time::GetTime() for
   // testability.

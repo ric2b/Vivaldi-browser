@@ -4,6 +4,8 @@
 
 #include "chrome/renderer/media/cast_transport_sender_ipc.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/id_map.h"
 #include "chrome/common/cast_messages.h"
@@ -58,15 +60,16 @@ void CastTransportSenderIPC::InitializeVideo(
   Send(new CastHostMsg_InitializeVideo(channel_id_, config));
 }
 
-void CastTransportSenderIPC::InsertFrame(uint32 ssrc,
+void CastTransportSenderIPC::InsertFrame(
+    uint32_t ssrc,
     const media::cast::EncodedFrame& frame) {
   Send(new CastHostMsg_InsertFrame(channel_id_, ssrc, frame));
 }
 
 void CastTransportSenderIPC::SendSenderReport(
-    uint32 ssrc,
+    uint32_t ssrc,
     base::TimeTicks current_time,
-    uint32 current_time_as_rtp_timestamp) {
+    media::cast::RtpTimeTicks current_time_as_rtp_timestamp) {
   Send(new CastHostMsg_SendSenderReport(channel_id_,
                                         ssrc,
                                         current_time,
@@ -74,32 +77,31 @@ void CastTransportSenderIPC::SendSenderReport(
 }
 
 void CastTransportSenderIPC::CancelSendingFrames(
-    uint32 ssrc, const std::vector<uint32>& frame_ids) {
+    uint32_t ssrc,
+    const std::vector<uint32_t>& frame_ids) {
   Send(new CastHostMsg_CancelSendingFrames(channel_id_,
                                            ssrc,
                                            frame_ids));
 }
 
-void CastTransportSenderIPC::ResendFrameForKickstart(
-    uint32 ssrc, uint32 frame_id) {
+void CastTransportSenderIPC::ResendFrameForKickstart(uint32_t ssrc,
+                                                     uint32_t frame_id) {
   Send(new CastHostMsg_ResendFrameForKickstart(channel_id_,
                                                ssrc,
                                                frame_id));
 }
 
-void CastTransportSenderIPC::AddValidSsrc(uint32 ssrc) {
+void CastTransportSenderIPC::AddValidSsrc(uint32_t ssrc) {
   Send(new CastHostMsg_AddValidSsrc(channel_id_, ssrc));
 }
 
-
 void CastTransportSenderIPC::SendRtcpFromRtpReceiver(
-    uint32 ssrc,
-    uint32 sender_ssrc,
+    uint32_t ssrc,
+    uint32_t sender_ssrc,
     const media::cast::RtcpTimeData& time_data,
     const media::cast::RtcpCastMessage* cast_message,
     base::TimeDelta target_delay,
-    const media::cast::ReceiverRtcpEventSubscriber::RtcpEvents*
-    rtcp_events,
+    const media::cast::ReceiverRtcpEventSubscriber::RtcpEvents* rtcp_events,
     const media::cast::RtpReceiverStatistics* rtp_receiver_statistics) {
   // To avoid copies, we put pointers to objects we don't really
   // own into scoped pointers and then very carefully extract them again
@@ -142,10 +144,22 @@ void CastTransportSenderIPC::OnNotifyStatusChange(
 void CastTransportSenderIPC::OnRawEvents(
     const std::vector<media::cast::PacketEvent>& packet_events,
     const std::vector<media::cast::FrameEvent>& frame_events) {
-  raw_events_callback_.Run(packet_events, frame_events);
+  // Note: Casting away const to avoid having to copy all the data elements.  As
+  // the only consumer of this data in the IPC message, mutating the inputs
+  // should be acceptable.  Just nod and blame the interface we were given here.
+  scoped_ptr<std::vector<media::cast::FrameEvent>> taken_frame_events(
+      new std::vector<media::cast::FrameEvent>());
+  taken_frame_events->swap(
+      const_cast<std::vector<media::cast::FrameEvent>&>(frame_events));
+  scoped_ptr<std::vector<media::cast::PacketEvent>> taken_packet_events(
+      new std::vector<media::cast::PacketEvent>());
+  taken_packet_events->swap(
+      const_cast<std::vector<media::cast::PacketEvent>&>(packet_events));
+  raw_events_callback_.Run(std::move(taken_frame_events),
+                           std::move(taken_packet_events));
 }
 
-void CastTransportSenderIPC::OnRtt(uint32 ssrc, base::TimeDelta rtt) {
+void CastTransportSenderIPC::OnRtt(uint32_t ssrc, base::TimeDelta rtt) {
   ClientMap::iterator it = clients_.find(ssrc);
   if (it == clients_.end()) {
     LOG(ERROR) << "Received RTT report from for unknown SSRC: " << ssrc;
@@ -156,7 +170,7 @@ void CastTransportSenderIPC::OnRtt(uint32 ssrc, base::TimeDelta rtt) {
 }
 
 void CastTransportSenderIPC::OnRtcpCastMessage(
-    uint32 ssrc,
+    uint32_t ssrc,
     const media::cast::RtcpCastMessage& cast_message) {
   ClientMap::iterator it = clients_.find(ssrc);
   if (it == clients_.end()) {
@@ -174,7 +188,7 @@ void CastTransportSenderIPC::OnReceivedPacket(
     // TODO(hubbe): Perhaps an non-ownership-transferring cb here?
     scoped_ptr<media::cast::Packet> packet_copy(
         new media::cast::Packet(packet));
-    packet_callback_.Run(packet_copy.Pass());
+    packet_callback_.Run(std::move(packet_copy));
   } else {
     DVLOG(1) << "CastIPCDispatcher::OnReceivedPacket no packet callback yet.";
   }

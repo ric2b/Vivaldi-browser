@@ -5,9 +5,12 @@
 #ifndef CONTENT_RENDERER_MEDIA_VIDEO_CAPTURE_IMPL_H_
 #define CONTENT_RENDERER_MEDIA_VIDEO_CAPTURE_IMPL_H_
 
+#include <stdint.h>
+
 #include <list>
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
@@ -19,10 +22,6 @@
 namespace base {
 class SingleThreadTaskRunner;
 }  // namespace base
-
-namespace gpu {
-struct MailboxHolder;
-}  // namespace gpu
 
 namespace media {
 class VideoFrame;
@@ -91,6 +90,7 @@ class CONTENT_EXPORT VideoCaptureImpl
   // Carries a shared memory for transferring video frames from browser to
   // renderer.
   class ClientBuffer;
+  class ClientBuffer2;
 
   // Contains information for a video capture client. Including parameters
   // for capturing and callbacks to the client.
@@ -103,32 +103,43 @@ class CONTENT_EXPORT VideoCaptureImpl
   };
   typedef std::map<int, ClientInfo> ClientInfoMap;
 
+  typedef base::Callback<void(const gpu::SyncToken& sync_token,
+                              double consumer_resource_utilization)>
+      BufferFinishedCallback;
+
   // VideoCaptureMessageFilter::Delegate interface.
   void OnBufferCreated(base::SharedMemoryHandle handle,
                        int length,
                        int buffer_id) override;
+  void OnBufferCreated2(const std::vector<gfx::GpuMemoryBufferHandle>& handles,
+                        const gfx::Size& size,
+                        int buffer_id) override;
   void OnBufferDestroyed(int buffer_id) override;
-  void OnBufferReceived(int buffer_id,
-                        base::TimeTicks timestamp,
-                        const base::DictionaryValue& metadata,
-                        media::VideoFrame::Format pixel_format,
-                        media::VideoFrame::StorageType storage_type,
-                        const gfx::Size& coded_size,
-                        const gfx::Rect& visible_rect,
-                        const gpu::MailboxHolder& mailbox_holder) override;
+  void OnBufferReceived(
+      int buffer_id,
+      base::TimeTicks timestamp,
+      const base::DictionaryValue& metadata,
+      media::VideoPixelFormat pixel_format,
+      media::VideoFrame::StorageType storage_type,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect) override;
   void OnStateChanged(VideoCaptureState state) override;
   void OnDeviceSupportedFormatsEnumerated(
       const media::VideoCaptureFormats& supported_formats) override;
   void OnDeviceFormatsInUseReceived(
       const media::VideoCaptureFormats& formats_in_use) override;
-  void OnDelegateAdded(int32 device_id) override;
+  void OnDelegateAdded(int32_t device_id) override;
 
   // Sends an IPC message to browser process when all clients are done with the
   // buffer.
   void OnClientBufferFinished(int buffer_id,
                               const scoped_refptr<ClientBuffer>& buffer,
-                              uint32 release_sync_point,
+                              const gpu::SyncToken& release_sync_token,
                               double consumer_resource_utilization);
+  void OnClientBufferFinished2(int buffer_id,
+                               const scoped_refptr<ClientBuffer2>& buffer,
+                               const gpu::SyncToken& release_sync_token,
+                               double consumer_resource_utilization);
 
   void StopDevice();
   void RestartCapture();
@@ -144,9 +155,9 @@ class CONTENT_EXPORT VideoCaptureImpl
   // RESOURCE_UTILIZATION value from the |metadata| and then runs the given
   // callback, to trampoline back to the IO thread with the values.
   static void DidFinishConsumingFrame(
-    const media::VideoFrameMetadata* metadata,
-    uint32* release_sync_point_storage,  // Takes ownership.
-    const base::Callback<void(uint32, double)>& callback_to_io_thread);
+      const media::VideoFrameMetadata* metadata,
+      scoped_ptr<gpu::SyncToken> release_sync_token,
+      const BufferFinishedCallback& callback_to_io_thread);
 
   const scoped_refptr<VideoCaptureMessageFilter> message_filter_;
   int device_id_;
@@ -160,8 +171,10 @@ class CONTENT_EXPORT VideoCaptureImpl
   std::vector<VideoCaptureDeviceFormatsCB> device_formats_in_use_cb_queue_;
 
   // Buffers available for sending to the client.
-  typedef std::map<int32, scoped_refptr<ClientBuffer> > ClientBufferMap;
+  typedef std::map<int32_t, scoped_refptr<ClientBuffer>> ClientBufferMap;
   ClientBufferMap client_buffers_;
+  typedef std::map<int32_t, scoped_refptr<ClientBuffer2>> ClientBuffer2Map;
+  ClientBuffer2Map client_buffer2s_;
 
   ClientInfoMap clients_;
   ClientInfoMap clients_pending_on_filter_;

@@ -76,7 +76,7 @@ process_template() (
     -e "s#@@MAINTNAME@@#${MAINTNAME}#g" \
     -e "s#@@MAINTMAIL@@#${MAINTMAIL}#g" \
     -e "s#@@REPOCONFIG@@#${REPOCONFIG}#g" \
-    -e "s#@@SSLREPOCONFIG@@#${SSLREPOCONFIG}#g" \
+    -e "s#@@REPOCONFIGREGEX@@#${REPOCONFIGREGEX}#g" \
     -e "s#@@SHORTDESC@@#${SHORTDESC}#g" \
     -e "s#@@FULLDESC@@#${FULLDESC}#g" \
     -e "s#@@DEFAULT_FLAGS@@#${DEFAULT_FLAGS:-}#g" \
@@ -136,6 +136,8 @@ stage_install_common() {
   if [ -r "${BUILDDIR}/vivaldi_100_percent.pak" ]; then
     install -m 644 "${BUILDDIR}/vivaldi_100_percent.pak" "${STAGEDIR}/${INSTALLDIR}/"
     install -m 644 "${BUILDDIR}/vivaldi_200_percent.pak" "${STAGEDIR}/${INSTALLDIR}/"
+    install -m 644 "${BUILDDIR}/vivaldi_material_100_percent.pak" "${STAGEDIR}/${INSTALLDIR}/"
+    install -m 644 "${BUILDDIR}/vivaldi_material_200_percent.pak" "${STAGEDIR}/${INSTALLDIR}/"
   else
     install -m 644 "${BUILDDIR}/theme_resources_100_percent.pak" "${STAGEDIR}/${INSTALLDIR}/"
     install -m 644 "${BUILDDIR}/ui_resources_100_percent.pak" "${STAGEDIR}/${INSTALLDIR}/"
@@ -189,13 +191,6 @@ stage_install_common() {
       "${PEPPERFLASH_DESTDIR}/"
     install -m 644 "${PEPPERFLASH_SRCDIR}/manifest.json" \
       "${PEPPERFLASH_DESTDIR}/"
-  fi
-
-  # peerconnection shared library
-  if [ -f "${BUILDDIR}/lib/libpeerconnection.so" ]; then
-    install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/lib/"
-
-    install -m 644 -s "${BUILDDIR}/lib/libpeerconnection.so" "${STAGEDIR}/${INSTALLDIR}/lib/"
   fi
 
   # libc++

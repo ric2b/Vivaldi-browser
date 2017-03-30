@@ -5,6 +5,8 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_TEST_HELPER_H_
 #define GPU_COMMAND_BUFFER_SERVICE_TEST_HELPER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -18,6 +20,7 @@ namespace gles2 {
 struct DisallowedFeatures;
 class Buffer;
 class BufferManager;
+class FeatureInfo;
 class MockErrorState;
 class Shader;
 class TextureRef;
@@ -27,12 +30,16 @@ class TestHelper {
  public:
   static const GLuint kServiceBlackTexture2dId = 701;
   static const GLuint kServiceDefaultTexture2dId = 702;
-  static const GLuint kServiceBlackTextureCubemapId = 703;
-  static const GLuint kServiceDefaultTextureCubemapId = 704;
-  static const GLuint kServiceBlackExternalTextureId = 705;
-  static const GLuint kServiceDefaultExternalTextureId = 706;
-  static const GLuint kServiceBlackRectangleTextureId = 707;
-  static const GLuint kServiceDefaultRectangleTextureId = 708;
+  static const GLuint kServiceBlackTexture3dId = 703;
+  static const GLuint kServiceDefaultTexture3dId = 704;
+  static const GLuint kServiceBlackTexture2dArrayId = 705;
+  static const GLuint kServiceDefaultTexture2dArrayId = 706;
+  static const GLuint kServiceBlackTextureCubemapId = 707;
+  static const GLuint kServiceDefaultTextureCubemapId = 708;
+  static const GLuint kServiceBlackExternalTextureId = 709;
+  static const GLuint kServiceDefaultExternalTextureId = 710;
+  static const GLuint kServiceBlackRectangleTextureId = 711;
+  static const GLuint kServiceDefaultRectangleTextureId = 712;
 
   static const GLint kMaxSamples = 4;
   static const GLint kMaxRenderbufferSize = 1024;
@@ -69,6 +76,22 @@ class TestHelper {
     const char* good_name;
   };
 
+  struct VaryingInfo {
+    const char* name;
+    GLint size;
+    GLenum type;
+    GLint fake_location;
+    GLint real_location;
+    GLint desired_location;
+  };
+  struct ProgramOutputInfo {
+    const char* name;
+    GLint size;
+    GLenum type;
+    GLint color_name;
+    GLuint index;
+  };
+
   static void SetupContextGroupInitExpectations(
       ::gfx::MockGLInterface* gl,
       const DisallowedFeatures& disallowed_features,
@@ -83,25 +106,50 @@ class TestHelper {
       const char* gl_renderer,
       const char* gl_version);
   static void SetupTextureManagerInitExpectations(::gfx::MockGLInterface* gl,
+                                                  bool is_es3_enabled,
                                                   const char* extensions,
                                                   bool use_default_textures);
   static void SetupTextureManagerDestructionExpectations(
       ::gfx::MockGLInterface* gl,
+      bool is_es3_enabled,
       const char* extensions,
       bool use_default_textures);
 
   static void SetupExpectationsForClearingUniforms(
       ::gfx::MockGLInterface* gl, UniformInfo* uniforms, size_t num_uniforms);
 
-  static void SetupShader(
+  static void SetupShaderExpectations(::gfx::MockGLInterface* gl,
+                                      const FeatureInfo* feature_info,
+                                      AttribInfo* attribs,
+                                      size_t num_attribs,
+                                      UniformInfo* uniforms,
+                                      size_t num_uniforms,
+                                      GLuint service_id);
+
+  static void SetupShaderExpectationsWithVaryings(
       ::gfx::MockGLInterface* gl,
-      AttribInfo* attribs, size_t num_attribs,
-      UniformInfo* uniforms, size_t num_uniforms,
+      const FeatureInfo* feature_info,
+      AttribInfo* attribs,
+      size_t num_attribs,
+      UniformInfo* uniforms,
+      size_t num_uniforms,
+      VaryingInfo* varyings,
+      size_t num_varyings,
+      ProgramOutputInfo* program_outputs,
+      size_t num_program_outputs,
       GLuint service_id);
 
-  static void SetupProgramSuccessExpectations(::gfx::MockGLInterface* gl,
-      AttribInfo* attribs, size_t num_attribs,
-      UniformInfo* uniforms, size_t num_uniforms,
+  static void SetupProgramSuccessExpectations(
+      ::gfx::MockGLInterface* gl,
+      const FeatureInfo* feature_info,
+      AttribInfo* attribs,
+      size_t num_attribs,
+      UniformInfo* uniforms,
+      size_t num_uniforms,
+      VaryingInfo* varyings,
+      size_t num_varyings,
+      ProgramOutputInfo* program_outputs,
+      size_t num_program_outputs,
       GLuint service_id);
 
   static void DoBufferData(
@@ -115,7 +163,8 @@ class TestHelper {
       GLenum pname, GLint value, GLenum error);
 
   static void SetShaderStates(
-      ::gfx::MockGLInterface* gl, Shader* shader,
+      ::gfx::MockGLInterface* gl,
+      Shader* shader,
       bool expected_valid,
       const std::string* const expected_log_info,
       const std::string* const expected_translated_source,
@@ -123,6 +172,8 @@ class TestHelper {
       const AttributeMap* const expected_attrib_map,
       const UniformMap* const expected_uniform_map,
       const VaryingMap* const expected_varying_map,
+      const InterfaceBlockMap* const expected_interface_block_map,
+      const OutputVariableList* const expected_output_variable_list,
       const NameMap* const expected_name_map);
 
   static void SetShaderStates(
@@ -137,6 +188,11 @@ class TestHelper {
   static sh::Varying ConstructVarying(
       GLenum type, GLint array_size, GLenum precision,
       bool static_use, const std::string& name);
+  static sh::OutputVariable ConstructOutputVariable(GLenum type,
+                                                    GLint array_size,
+                                                    GLenum precision,
+                                                    bool static_use,
+                                                    const std::string& name);
 
  private:
   static void SetupTextureInitializationExpectations(::gfx::MockGLInterface* gl,

@@ -5,7 +5,7 @@
 #ifndef ASH_TEST_SHELL_TEST_API_H_
 #define ASH_TEST_SHELL_TEST_API_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 namespace ash {
 class AppListController;
@@ -37,7 +37,7 @@ public:
   DragDropController* drag_drop_controller();
   AppListController* app_list_controller();
   MaximizeModeWindowManager* maximize_mode_window_manager();
-  void DisableDisplayConfiguratorAnimation();
+  void DisableDisplayAnimator();
 
   // Set ShelfDelegate.
   void SetShelfDelegate(ShelfDelegate* delegate);

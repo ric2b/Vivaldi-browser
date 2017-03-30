@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "extensions/common/manifest_constants.h"
 
 namespace extensions {
@@ -68,6 +69,7 @@ const char kKeycode[] = "keyCode";
 const char kKioskEnabled[] = "kiosk_enabled";
 const char kKioskOnly[] = "kiosk_only";
 const char kKioskMode[] = "kiosk_mode";
+const char kKioskSecondaryApps[] = "kiosk_secondary_apps";
 const char kLanguage[] = "language";
 const char kLaunch[] = "app.launch";
 const char kLaunchContainer[] = "app.launch.container";
@@ -89,7 +91,6 @@ const char kMinimumVersion[] = "minimum_version";
 const char kMIMETypes[] = "mime_types";
 const char kMimeTypesHandler[] = "mime_types_handler";
 const char kName[] = "name";
-const char kNaClArch[] = "nacl_arch";
 const char kNaClModules[] = "nacl_modules";
 const char kNaClModulesMIMEType[] = "mime_type";
 const char kNaClModulesPath[] = "path";
@@ -120,7 +121,6 @@ const char kPlatformAppBackground[] = "app.background";
 const char kPlatformAppBackgroundPage[] = "app.background.page";
 const char kPlatformAppBackgroundScripts[] = "app.background.scripts";
 const char kPlatformAppContentSecurityPolicy[] = "app.content_security_policy";
-const char kPlatforms[] = "platforms";
 const char kPlugins[] = "plugins";
 const char kPluginsPath[] = "path";
 const char kPluginsPublic[] = "public";
@@ -144,7 +144,6 @@ const char kSpellcheckDictionaryLanguage[] = "dictionary_language";
 const char kSpellcheckDictionaryLocale[] = "dictionary_locale";
 const char kSpellcheckDictionaryPath[] = "dictionary_path";
 const char kStorageManagedSchema[] = "storage.managed_schema";
-const char kSubPackagePath[] = "sub_package_path";
 const char kSuggestedKey[] = "suggested_key";
 const char kSynthesizeExtensionAction[] = "_synthesize_extension_action";
 const char kSystemIndicator[] = "system_indicator";
@@ -194,6 +193,7 @@ namespace manifest_values {
 
 const char kApiKey[] = "api_key";
 const char kBrowserActionCommandEvent[] = "_execute_browser_action";
+const char kIncognitoNotAllowed[] = "not_allowed";
 const char kIncognitoSplit[] = "split";
 const char kIncognitoSpanning[] = "spanning";
 const char kIsolatedStorage[] = "storage";
@@ -263,7 +263,15 @@ const char kCannotAccessAboutUrl[] =
 const char kCannotAccessChromeUrl[] = "Cannot access a chrome:// URL";
 const char kCannotAccessExtensionUrl[] =
     "Cannot access a chrome-extension:// URL of different extension";
+// This deliberately does not contain a URL. Otherwise an extension can parse
+// error messages and determine the URLs of open tabs without having appropriate
+// permissions to see these URLs.
 const char kCannotAccessPage[] =
+    "Cannot access contents of the page. "
+    "Extension manifest must request permission to access the respective host.";
+// Use this error message with caution and only if the extension triggering it
+// has tabs permission. Otherwise, URLs may be leaked to extensions.
+const char kCannotAccessPageWithUrl[] =
     "Cannot access contents of url \"*\". "
     "Extension manifest must request permission to access this host.";
 const char kCannotChangeExtensionID[] =
@@ -458,6 +466,12 @@ const char kInvalidKioskOnly[] =
     "Invalid value for 'kiosk_only'.";
 const char kInvalidKioskOnlyButNotEnabled[] =
     "The 'kiosk_only' key is set, but 'kiosk_enabled' is not set.";
+const char kInvalidKioskSecondaryApps[] =
+    "Invalid value for 'kiosk_secondary_apps'";
+const char kInvalidKioskSecondaryAppsBadAppEntry[] =
+    "Invalid app id item for 'kiosk_secondary_apps'";
+const char kInvalidKioskSecondaryAppsBadAppId[] =
+    "Invalid app id value for 'kiosk_secondary_apps'";
 const char kInvalidLauncherPage[] = "Invalid value for 'launcher_page'.";
 const char kInvalidLauncherPagePage[] =
     "Invalid value for 'launcher_page.page'.";

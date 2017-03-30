@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
-#include "base/memory/linked_ptr.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/synchronization/lock.h"
 #include "components/content_settings/core/browser/content_settings_observable_provider.h"
@@ -35,9 +35,10 @@ class DefaultProvider : public ObservableProvider {
   ~DefaultProvider() override;
 
   // ProviderInterface implementations.
-  RuleIterator* GetRuleIterator(ContentSettingsType content_type,
-                                const ResourceIdentifier& resource_identifier,
-                                bool incognito) const override;
+  scoped_ptr<RuleIterator> GetRuleIterator(
+      ContentSettingsType content_type,
+      const ResourceIdentifier& resource_identifier,
+      bool incognito) const override;
 
   bool SetWebsiteSetting(const ContentSettingsPattern& primary_pattern,
                          const ContentSettingsPattern& secondary_pattern,
@@ -50,10 +51,7 @@ class DefaultProvider : public ObservableProvider {
   void ShutdownOnUIThread() override;
 
  private:
-  typedef linked_ptr<base::Value> ValuePtr;
-  typedef std::map<ContentSettingsType, ValuePtr> ValueMap;
-
-  // Reads all individual settings from the pref service.
+  // Reads all settings from the pref service.
   void ReadDefaultSettings();
 
   // Change the remembered setting in the memory.
@@ -63,46 +61,22 @@ class DefaultProvider : public ObservableProvider {
   bool IsValueEmptyOrDefault(ContentSettingsType content_type,
                              base::Value* value);
 
-  // Parses a |DictionaryValue| into a |ValueMap|.
-  scoped_ptr<ValueMap> GetSettingsFromDictionary(
-      const base::DictionaryValue* dictionary);
+  // Reads the preference corresponding to |content_type|.
+  scoped_ptr<base::Value> ReadFromPref(ContentSettingsType content_type);
 
-  // Forces the default settings in |value_map| to be explicitly set instead
-  // of themselves being CONTENT_SETTING_DEFAULT.
-  void ForceDefaultsToBeExplicit(ValueMap* value_map);
-
-  // Reads the dictionary prefrence and returns the dictionary parsed as
-  // a |ValueMap|.
-  scoped_ptr<ValueMap> ReadDictionaryPref();
-
-  // Reads an individual preference.
-  scoped_ptr<base::Value> ReadIndividualPref(ContentSettingsType content_type);
-
-  // Writes the value |value| to the individual preference corresponding
-  // to |content_type|. It's the responsibility of caller to obtain a lock
-  // and notify observers.
-  void WriteIndividualPref(ContentSettingsType content_type,
-                           base::Value* value);
-
-  // Writes the value |value| to the dictionary preference entry corresponding
-  // to |content_type|. It's the responsibility of caller to obtain a lock
-  // and notify observers.
-  void WriteDictionaryPref(ContentSettingsType content_type,
-                           base::Value* value);
+  // Writes the value |value| to the preference corresponding to |content_type|.
+  // It's the responsibility of caller to obtain a lock and notify observers.
+  void WriteToPref(ContentSettingsType content_type,
+                   base::Value* value);
 
   // Called on prefs change.
   void OnPreferenceChanged(const std::string& pref_name);
 
-  // Migrates the dictionary settings to the individual settings. Only called
-  // once during the first run.
-  void MigrateDefaultSettings();
-
-  // Migrates the obsolete media stream default setting to the new microphone
-  // and camera settings.
-  void MigrateObsoleteMediaContentSetting();
+  // Clean up the obsolete preferences from the user's profile.
+  void DiscardObsoletePreferences();
 
   // Copies of the pref data, so that we can read it on the IO thread.
-  ValueMap default_settings_;
+  std::map<ContentSettingsType, scoped_ptr<base::Value>> default_settings_;
 
   PrefService* prefs_;
 

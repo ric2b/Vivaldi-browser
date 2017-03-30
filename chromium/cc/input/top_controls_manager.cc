@@ -4,6 +4,8 @@
 
 #include "cc/input/top_controls_manager.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
@@ -19,7 +21,7 @@ namespace cc {
 namespace {
 // These constants were chosen empirically for their visually pleasant behavior.
 // Contact tedchoc@chromium.org for questions about changing these values.
-const int64 kShowHideMaxDurationMs = 200;
+const int64_t kShowHideMaxDurationMs = 200;
 }
 
 // static
@@ -159,10 +161,10 @@ gfx::Vector2dF TopControlsManager::Animate(base::TimeTicks monotonic_time) {
   base::TimeDelta time = monotonic_time - base::TimeTicks();
 
   float old_offset = ContentTopOffset();
-  client_->SetCurrentTopControlsShownRatio(
-      top_controls_animation_->GetValue(time));
+  float new_ratio = top_controls_animation_->GetValue(time);
+  client_->SetCurrentTopControlsShownRatio(new_ratio);
 
-  if (IsAnimationCompleteAtTime(monotonic_time))
+  if (IsAnimationComplete(new_ratio))
     ResetAnimations();
 
   gfx::Vector2dF scroll_delta(0.f, ContentTopOffset() - old_offset);
@@ -176,8 +178,8 @@ void TopControlsManager::ResetAnimations() {
 
 void TopControlsManager::SetupAnimation(AnimationDirection direction) {
   DCHECK_NE(NO_ANIMATION, direction);
-  DCHECK_IMPLIES(direction == HIDING_CONTROLS, TopControlsShownRatio() > 0.f);
-  DCHECK_IMPLIES(direction == SHOWING_CONTROLS, TopControlsShownRatio() < 1.f);
+  DCHECK(direction != HIDING_CONTROLS || TopControlsShownRatio() > 0.f);
+  DCHECK(direction != SHOWING_CONTROLS || TopControlsShownRatio() < 1.f);
 
   if (top_controls_animation_ && animation_direction_ == direction)
     return;
@@ -220,18 +222,9 @@ void TopControlsManager::StartAnimationIfNecessary() {
   }
 }
 
-bool TopControlsManager::IsAnimationCompleteAtTime(base::TimeTicks time) {
-  if (!top_controls_animation_)
-    return true;
-
-  base::TimeDelta animation_time = time - base::TimeTicks();
-  float new_ratio = top_controls_animation_->GetValue(animation_time);
-
-  if ((animation_direction_ == SHOWING_CONTROLS && new_ratio >= 1.f) ||
-      (animation_direction_ == HIDING_CONTROLS && new_ratio <= 0.f)) {
-    return true;
-  }
-  return false;
+bool TopControlsManager::IsAnimationComplete(float new_ratio) {
+  return (animation_direction_ == SHOWING_CONTROLS && new_ratio >= 1.f) ||
+         (animation_direction_ == HIDING_CONTROLS && new_ratio <= 0.f);
 }
 
 void TopControlsManager::ResetBaseline() {

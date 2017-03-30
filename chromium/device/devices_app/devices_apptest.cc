@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "device/devices_app/devices_app.h"
 #include "device/devices_app/usb/public/interfaces/device_manager.mojom.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/application_test_base.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/application_test_base.h"
 
 namespace device {
 namespace {
@@ -21,9 +23,7 @@ class DevicesAppTest : public mojo::test::ApplicationTestBase {
 
   void SetUp() override {
     ApplicationTestBase::SetUp();
-    mojo::URLRequestPtr request = mojo::URLRequest::New();
-    request->url = "mojo:devices";
-    application_impl()->ConnectToService(request.Pass(), &usb_device_manager_);
+    application_impl()->ConnectToService("mojo:devices", &usb_device_manager_);
   }
 
   usb::DeviceManager* usb_device_manager() { return usb_device_manager_.get(); }
@@ -49,7 +49,7 @@ TEST_F(DevicesAppTest, GetUSBDevices) {
   options->filters = mojo::Array<usb::DeviceFilterPtr>(1);
   options->filters[0] = usb::DeviceFilter::New();
   usb_device_manager()->GetDevices(
-      options.Pass(), base::Bind(&OnGetDevices, loop.QuitClosure()));
+      std::move(options), base::Bind(&OnGetDevices, loop.QuitClosure()));
   loop.Run();
 }
 

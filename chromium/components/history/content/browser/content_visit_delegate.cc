@@ -4,7 +4,10 @@
 
 #include "components/history/content/browser/content_visit_delegate.h"
 
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/history_database.h"
@@ -117,7 +120,7 @@ void ContentVisitDelegate::RebuildTable(
     const scoped_refptr<URLEnumerator>& enumerator) {
   DCHECK(history_service_);
   scoped_ptr<HistoryDBTask> task(new IterateUrlsDBTask(enumerator));
-  history_service_->ScheduleDBTask(task.Pass(), &task_tracker_);
+  history_service_->ScheduleDBTask(std::move(task), &task_tracker_);
 }
 
 }  // namespace history

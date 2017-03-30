@@ -10,11 +10,13 @@
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/public/common/content_switches.h"
 #include "media/audio/audio_parameters.h"
 
 using media::AudioBus;
+using media::AudioOutputBuffer;
 
 namespace {
 
@@ -51,8 +53,12 @@ AudioSyncReader::AudioSyncReader(base::SharedMemory* shared_memory,
       maximum_wait_time_(base::TimeDelta::FromMilliseconds(20)),
 #endif
       buffer_index_(0) {
-  DCHECK_EQ(packet_size_, AudioBus::CalculateMemorySize(params));
-  output_bus_ = AudioBus::WrapMemory(params, shared_memory->memory());
+  DCHECK_EQ(static_cast<size_t>(packet_size_),
+            sizeof(media::AudioOutputBufferParameters) +
+                AudioBus::CalculateMemorySize(params));
+  AudioOutputBuffer* buffer =
+      reinterpret_cast<AudioOutputBuffer*>(shared_memory_->memory());
+  output_bus_ = AudioBus::WrapMemory(params, buffer->audio);
   output_bus_->Zero();
 }
 
@@ -81,10 +87,19 @@ AudioSyncReader::~AudioSyncReader() {
 }
 
 // media::AudioOutputController::SyncReader implementations.
-void AudioSyncReader::UpdatePendingBytes(uint32 bytes) {
+void AudioSyncReader::UpdatePendingBytes(uint32_t bytes,
+                                         uint32_t frames_skipped) {
+  // Increase the number of skipped frames stored in shared memory. We don't
+  // send it over the socket since sending more than 4 bytes might lead to being
+  // descheduled. The reading side will zero it when consumed.
+  AudioOutputBuffer* buffer =
+      reinterpret_cast<AudioOutputBuffer*>(shared_memory_->memory());
+  buffer->params.frames_skipped += frames_skipped;
+
   // Zero out the entire output buffer to avoid stuttering/repeating-buffers
   // in the anomalous case if the renderer is unable to keep up with real-time.
   output_bus_->Zero();
+
   socket_->Send(&bytes, sizeof(bytes));
   ++buffer_index_;
 }
@@ -93,6 +108,12 @@ void AudioSyncReader::Read(AudioBus* dest) {
   ++renderer_callback_count_;
   if (!WaitUntilDataIsReady()) {
     ++renderer_missed_callback_count_;
+    if (renderer_missed_callback_count_ <= 100) {
+      LOG(WARNING) << "AudioSyncReader::Read timed out, audio glitch count="
+                   << renderer_missed_callback_count_;
+      if (renderer_missed_callback_count_ == 100)
+        LOG(WARNING) << "(log cap reached, suppressing further logs)";
+    }
     dest->Zero();
     return;
   }
@@ -139,7 +160,7 @@ bool AudioSyncReader::WaitUntilDataIsReady() {
   // catch up at some point, which means discarding counter values read from the
   // SyncSocket which don't match our current buffer index.
   size_t bytes_received = 0;
-  uint32 renderer_buffer_index = 0;
+  uint32_t renderer_buffer_index = 0;
   while (timeout.InMicroseconds() > 0) {
     bytes_received = socket_->ReceiveWithTimeout(
         &renderer_buffer_index, sizeof(renderer_buffer_index), timeout);

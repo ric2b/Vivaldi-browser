@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_AFTER_STARTUP_TASK_UTILS_H_
 #define CHROME_BROWSER_AFTER_STARTUP_TASK_UTILS_H_
 
-#include "base/basictypes.h"
 #include "base/bind.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+
+namespace android {
+class AfterStartupTaskUtilsJNI;
+}
 
 namespace base {
 class TaskRunner;
@@ -34,13 +37,19 @@ class AfterStartupTaskUtils {
   // PostTask() API instead.
   static bool IsBrowserStartupComplete();
 
+  // For use by unit tests where we don't have normal content loading
+  // infrastructure and thus StartMonitoringStartup() is unsuitable.
+  static void SetBrowserStartupIsCompleteForTesting();
+
+  static void UnsafeResetForTesting();
+
  private:
-  friend class AfterStartupTaskTest;
-  FRIEND_TEST_ALL_PREFIXES(AfterStartupTaskTest, IsStartupComplete);
-  FRIEND_TEST_ALL_PREFIXES(AfterStartupTaskTest, PostTask);
+  // TODO(wkorman): Look into why Android calls
+  // SetBrowserStartupIsComplete() directly. Ideally it would use
+  // StartMonitoringStartup() as the normal approach.
+  friend class android::AfterStartupTaskUtilsJNI;
 
   static void SetBrowserStartupIsComplete();
-  static void UnsafeResetForTesting();
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(AfterStartupTaskUtils);
 };

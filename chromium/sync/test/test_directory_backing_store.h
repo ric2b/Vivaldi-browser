@@ -5,6 +5,8 @@
 #ifndef SYNC_TEST_TEST_DIRECTORY_BACKING_STORE_H_
 #define SYNC_TEST_TEST_DIRECTORY_BACKING_STORE_H_
 
+#include <string>
+
 #include "base/gtest_prod_util.h"
 #include "sync/syncable/directory_backing_store.h"
 
@@ -52,6 +54,7 @@ class TestDirectoryBackingStore : public DirectoryBackingStore {
   FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest, MigrateVersion86To87);
   FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest, MigrateVersion87To88);
   FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest, MigrateVersion88To89);
+  FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest, MigrateVersion89To90);
   FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest, DetectInvalidPosition);
   FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest, ModelTypeIds);
   FRIEND_TEST_ALL_PREFIXES(DirectoryBackingStoreTest, Corruption);

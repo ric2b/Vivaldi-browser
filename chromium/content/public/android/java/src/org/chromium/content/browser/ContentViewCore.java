@@ -8,13 +8,13 @@ import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.SearchManager;
+import android.app.assist.AssistStructure.ViewNode;
 import android.content.ClipboardManager;
+import android.content.ContentResolver;
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
-import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
@@ -24,10 +24,10 @@ import android.os.Handler;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
 import android.provider.Browser;
-import android.text.Editable;
-import android.text.Selection;
 import android.text.TextUtils;
 import android.util.Pair;
+import android.util.TypedValue;
+import android.view.ActionMode;
 import android.view.HapticFeedbackConstants;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -44,29 +44,28 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.CalledByNative;
 import org.chromium.base.CommandLine;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content.R;
 import org.chromium.content.browser.ScreenOrientationListener.ScreenOrientationObserver;
 import org.chromium.content.browser.accessibility.BrowserAccessibilityManager;
 import org.chromium.content.browser.accessibility.captioning.CaptioningBridgeFactory;
 import org.chromium.content.browser.accessibility.captioning.SystemCaptioningBridge;
 import org.chromium.content.browser.accessibility.captioning.TextTrackSettings;
-import org.chromium.content.browser.input.AdapterInputConnection;
+import org.chromium.content.browser.input.FloatingPastePopupMenu;
 import org.chromium.content.browser.input.GamepadList;
 import org.chromium.content.browser.input.ImeAdapter;
-import org.chromium.content.browser.input.ImeAdapter.AdapterInputConnectionFactory;
 import org.chromium.content.browser.input.InputMethodManagerWrapper;
+import org.chromium.content.browser.input.JoystickScrollProvider;
+import org.chromium.content.browser.input.LegacyPastePopupMenu;
 import org.chromium.content.browser.input.PastePopupMenu;
 import org.chromium.content.browser.input.PastePopupMenu.PastePopupMenuDelegate;
-import org.chromium.content.browser.input.PopupTouchHandleDrawable;
-import org.chromium.content.browser.input.PopupTouchHandleDrawable.PopupTouchHandleDrawableDelegate;
 import org.chromium.content.browser.input.SelectPopup;
 import org.chromium.content.browser.input.SelectPopupDialog;
 import org.chromium.content.browser.input.SelectPopupDropdown;
@@ -100,27 +99,13 @@ import java.util.Map.Entry;
  * being tied to the view system.
  */
 @JNINamespace("content")
-public class ContentViewCore implements
-        AccessibilityStateChangeListener, ScreenOrientationObserver,
-        SystemCaptioningBridge.SystemCaptioningBridgeListener {
-
+public class ContentViewCore implements AccessibilityStateChangeListener, ScreenOrientationObserver,
+                                        SystemCaptioningBridge.SystemCaptioningBridgeListener {
     private static final String TAG = "cr.ContentViewCore";
 
     // Used to avoid enabling zooming in / out if resulting zooming will
     // produce little visible difference.
     private static final float ZOOM_CONTROLS_EPSILON = 0.007f;
-
-    // Used to represent gestures for long press and long tap.
-    private static final int IS_LONG_PRESS = 1;
-    private static final int IS_LONG_TAP = 2;
-
-    /**
-     * TODO(sgurun) remove these and use public API. crbug/512264
-     */
-    private static final int TEXT_STYLE_BOLD = 1 << 0;
-    private static final int TEXT_STYLE_ITALIC = 1 << 1;
-    private static final int TEXT_STYLE_UNDERLINE = 1 << 2;
-    private static final int TEXT_STYLE_STRIKE_THRU = 1 << 3;
 
     private static final ZoomControlsDelegate NO_OP_ZOOM_CONTROLS_DELEGATE =
             new ZoomControlsDelegate() {
@@ -194,7 +179,7 @@ public class ContentViewCore implements
          * List of anchor views stored in the order in which they were acquired mapped
          * to their position.
          */
-        private Map<View, Position> mAnchorViews = new LinkedHashMap<View, Position>();
+        private final Map<View, Position> mAnchorViews = new LinkedHashMap<View, Position>();
 
         ContentViewAndroidDelegate(ViewGroup containerView, RenderCoordinates renderCoordinates) {
             mRenderCoordinates = renderCoordinates;
@@ -447,22 +432,6 @@ public class ContentViewCore implements
         public void onSmartClipDataExtracted(String text, String html, Rect clipRect);
     }
 
-    /**
-     * Cast from Context to Activity taking ContextWrapper into account.
-     */
-    public static Activity activityFromContext(Context context) {
-        // Only retrieve the base context if the supplied context is a ContextWrapper but not
-        // an Activity, given that Activity is already a subclass of ContextWrapper.
-        if (context instanceof Activity) {
-            return ((Activity) context);
-        } else if (context instanceof ContextWrapper) {
-            context = ((ContextWrapper) context).getBaseContext();
-            return activityFromContext(context);
-        } else {
-            return null;
-        }
-    }
-
     private final Context mContext;
     private ViewGroup mContainerView;
     private InternalAccessDelegate mContainerViewInternals;
@@ -488,18 +457,11 @@ public class ContentViewCore implements
 
     // Only valid when focused on a text / password field.
     private ImeAdapter mImeAdapter;
-    private ImeAdapter.AdapterInputConnectionFactory mAdapterInputConnectionFactory;
-    private AdapterInputConnection mInputConnection;
-    private InputMethodManagerWrapper mInputMethodManagerWrapper;
 
     // Lazily created paste popup menu, triggered either via long press in an
     // editable region or from tapping the insertion handle.
     private PastePopupMenu mPastePopupMenu;
     private boolean mWasPastePopupShowingOnInsertionDragStart;
-
-    private PopupTouchHandleDrawableDelegate mTouchHandleDelegate;
-
-    private PositionObserver mPositionObserver;
 
     // Size of the viewport in physical pixels as set from onSizeChanged.
     private int mViewportWidthPix;
@@ -512,19 +474,24 @@ public class ContentViewCore implements
     // Cached copy of all positions and scales as reported by the renderer.
     private final RenderCoordinates mRenderCoordinates;
 
+    // Provides smooth gamepad joystick-driven scrolling.
+    private final JoystickScrollProvider mJoystickScrollProvider;
+
     private boolean mIsMobileOptimizedHint;
 
     // Tracks whether a selection is currently active.  When applied to selected text, indicates
     // whether the last selected text is still highlighted.
     private boolean mHasSelection;
     private boolean mHasInsertion;
+    private boolean mDraggingSelection;
     private String mLastSelectedText;
     private boolean mFocusedNodeEditable;
-    private SelectActionMode mActionMode;
+    private boolean mFocusedNodeIsPassword;
+    private WebActionMode mActionMode;
     private boolean mFloatingActionModeCreationFailed;
     private boolean mUnselectAllOnActionModeDismiss;
     private boolean mPreserveSelectionOnNextLossOfFocus;
-    private SelectActionModeCallback.ActionHandler mActionHandler;
+    private WebActionModeCallback.ActionHandler mActionHandler;
     private final Rect mSelectionRect = new Rect();
 
     // Delegate that will handle GET downloads, and be notified of completion of POST downloads.
@@ -555,34 +522,29 @@ public class ContentViewCore implements
     // WebView.
     private boolean mShouldSetAccessibilityFocusOnPageLoad;
 
-    // Allows us to dynamically respond when the accessibility script injection flag changes.
-    private ContentObserver mAccessibilityScriptInjectionObserver;
-
     // Temporary notification to tell onSizeChanged to focus a form element,
     // because the OSK was just brought up.
     private final Rect mFocusPreOSKViewportRect = new Rect();
 
-    // On tap this will store the x, y coordinates of the touch.
-    private int mLastTapX;
-    private int mLastTapY;
+    // Store the x, y coordinates of the last touch or mouse event.
+    private float mLastFocalEventX;
+    private float mLastFocalEventY;
 
     // Whether a touch scroll sequence is active, used to hide text selection
     // handles. Note that a scroll sequence will *always* bound a pinch
     // sequence, so this will also be true for the duration of a pinch gesture.
     private boolean mTouchScrollInProgress;
 
+    // Multiplier that determines how many (device) pixels to scroll per mouse
+    // wheel tick. Defaults to the preferred list item height.
+    private float mWheelScrollFactorInPixels;
+
     // The outstanding fling start events that hasn't got fling end yet. It may be > 1 because
     // onNativeFlingStopped() is called asynchronously.
     private int mPotentiallyActiveFlingCount;
 
     private SmartClipDataListener mSmartClipDataListener = null;
-    private ObserverList<ContainerViewObserver> mContainerViewObservers;
-
-    // This holds the state of editable text (e.g. contents of <input>, contenteditable) of
-    // a focused element.
-    // Every time the user, IME, javascript (Blink), autofill etc. modifies the content, the new
-    //  state must be reflected to this to keep consistency.
-    private final Editable mEditable;
+    private final ObserverList<ContainerViewObserver> mContainerViewObservers;
 
     /**
      * PID used to indicate an invalid render process.
@@ -629,11 +591,8 @@ public class ContentViewCore implements
      */
     public ContentViewCore(Context context) {
         mContext = context;
-
-        mAdapterInputConnectionFactory = new AdapterInputConnectionFactory();
-        mInputMethodManagerWrapper = new InputMethodManagerWrapper(mContext);
-
         mRenderCoordinates = new RenderCoordinates();
+        mJoystickScrollProvider = new JoystickScrollProvider(this);
         float deviceScaleFactor = getContext().getResources().getDisplayMetrics().density;
         String forceScaleFactor = CommandLine.getInstance().getSwitchValue(
                 ContentSwitches.FORCE_DEVICE_SCALE_FACTOR);
@@ -647,8 +606,6 @@ public class ContentViewCore implements
         mGestureStateListeners = new ObserverList<GestureStateListener>();
         mGestureStateListenersIterator = mGestureStateListeners.rewindableIterator();
 
-        mEditable = Editable.Factory.getInstance().newEditable("");
-        Selection.setSelection(mEditable, 0);
         mContainerViewObservers = new ObserverList<ContainerViewObserver>();
     }
 
@@ -727,24 +684,9 @@ public class ContentViewCore implements
         return mImeAdapter;
     }
 
-    @VisibleForTesting
-    public void setAdapterInputConnectionFactory(AdapterInputConnectionFactory factory) {
-        mAdapterInputConnectionFactory = factory;
-    }
-
-    @VisibleForTesting
-    public void setInputMethodManagerWrapperForTest(InputMethodManagerWrapper immw) {
-        mInputMethodManagerWrapper = immw;
-    }
-
-    @VisibleForTesting
-    public AdapterInputConnection getInputConnectionForTest() {
-        return mInputConnection;
-    }
-
     private ImeAdapter createImeAdapter() {
-        return new ImeAdapter(mInputMethodManagerWrapper,
-                new ImeAdapter.ImeAdapterDelegate() {
+        return new ImeAdapter(
+                new InputMethodManagerWrapper(mContext), new ImeAdapter.ImeAdapterDelegate() {
                     @Override
                     public void onImeEvent() {
                         mPopupZoomer.hide(true);
@@ -800,14 +742,14 @@ public class ContentViewCore implements
                                 } else if (hasFocus() && resultCode
                                         == InputMethodManager.RESULT_UNCHANGED_SHOWN) {
                                     // If the OSK was already there, focus the form immediately.
-                                    assert mWebContents != null;
-                                    mWebContents.scrollFocusedEditableNodeIntoView();
+                                    if (mWebContents != null) {
+                                        mWebContents.scrollFocusedEditableNodeIntoView();
+                                    }
                                 }
                             }
                         };
                     }
-                }
-        );
+                });
     }
 
     /**
@@ -850,7 +792,7 @@ public class ContentViewCore implements
     }
 
     @VisibleForTesting
-    void createContentViewAndroidDelegate() {
+    public void createContentViewAndroidDelegate() {
         mViewAndroidDelegate = new ContentViewAndroidDelegate(mContainerView, mRenderCoordinates);
     }
 
@@ -878,12 +820,10 @@ public class ContentViewCore implements
             if (mContainerView != null) {
                 assert mOverscrollRefreshHandler == null;
                 mPastePopupMenu = null;
-                mInputConnection = null;
                 hidePopupsAndClearSelection();
             }
 
             mContainerView = containerView;
-            mPositionObserver = new ViewPositionObserver(mContainerView);
             mContainerView.setClickable(true);
             mViewAndroidDelegate.updateCurrentContainerView(mContainerView);
             for (ContainerViewObserver observer : mContainerViewObservers) {
@@ -903,7 +843,7 @@ public class ContentViewCore implements
     }
 
     @CalledByNative
-    void onNativeContentViewCoreDestroyed(long nativeContentViewCore) {
+    private void onNativeContentViewCoreDestroyed(long nativeContentViewCore) {
         assert nativeContentViewCore == mNativeContentViewCore;
         mNativeContentViewCore = 0;
     }
@@ -1011,22 +951,16 @@ public class ContentViewCore implements
         mNativeContentViewCore = 0;
         mJavaScriptInterfaces.clear();
         mRetainedJavaScriptObjects.clear();
-        unregisterAccessibilityContentObserver();
+        for (mGestureStateListenersIterator.rewind(); mGestureStateListenersIterator.hasNext();) {
+            mGestureStateListenersIterator.next().onDestroyed();
+        }
         mGestureStateListeners.clear();
         ScreenOrientationListener.getInstance().removeObserver(this);
-        mPositionObserver.clearListener();
         mContainerViewObservers.clear();
+        hidePopupsAndPreserveSelection();
+        mPastePopupMenu = null;
 
         // See warning in javadoc before adding more clean up code here.
-    }
-
-    private void unregisterAccessibilityContentObserver() {
-        if (mAccessibilityScriptInjectionObserver == null) {
-            return;
-        }
-        getContext().getContentResolver().unregisterContentObserver(
-                mAccessibilityScriptInjectionObserver);
-        mAccessibilityScriptInjectionObserver = null;
     }
 
     /**
@@ -1042,7 +976,7 @@ public class ContentViewCore implements
      * @return native ContentViewCore pointer.
      */
     @CalledByNative
-    public long getNativeContentViewCore() {
+    long getNativeContentViewCore() {
         return mNativeContentViewCore;
     }
 
@@ -1092,7 +1026,7 @@ public class ContentViewCore implements
      * @return Width of underlying physical surface.
      */
     @CalledByNative
-    public int getPhysicalBackingWidthPix() {
+    private int getPhysicalBackingWidthPix() {
         return mPhysicalBackingWidthPix;
     }
 
@@ -1100,7 +1034,7 @@ public class ContentViewCore implements
      * @return Height of underlying physical surface.
      */
     @CalledByNative
-    public int getPhysicalBackingHeightPix() {
+    private int getPhysicalBackingHeightPix() {
         return mPhysicalBackingHeightPix;
     }
 
@@ -1145,6 +1079,7 @@ public class ContentViewCore implements
     /**
      * @return The selected text (empty if no text selected).
      */
+    @VisibleForTesting
     public String getSelectedText() {
         return mHasSelection ? mLastSelectedText : "";
     }
@@ -1163,6 +1098,13 @@ public class ContentViewCore implements
         return mFocusedNodeEditable;
     }
 
+    /**
+     * @return Whether the HTML5 gamepad API is active.
+     */
+    public boolean isGamepadAPIActive() {
+        return GamepadList.isGamepadAPIActive();
+    }
+
     // End FrameLayout overrides.
 
     /**
@@ -1170,6 +1112,15 @@ public class ContentViewCore implements
      */
     public boolean onTouchEvent(MotionEvent event) {
         final boolean isTouchHandleEvent = false;
+        return onTouchEventImpl(event, isTouchHandleEvent);
+    }
+
+    /**
+     * Called by PopupWindow-based touch handles.
+     * @param event the MotionEvent targeting the handle.
+     */
+    public boolean onTouchHandleEvent(MotionEvent event) {
+        final boolean isTouchHandleEvent = true;
         return onTouchEventImpl(event, isTouchHandleEvent);
     }
 
@@ -1207,6 +1158,8 @@ public class ContentViewCore implements
                     event.getTouchMajor(), pointerCount > 1 ? event.getTouchMajor(1) : 0,
                     event.getTouchMinor(), pointerCount > 1 ? event.getTouchMinor(1) : 0,
                     event.getOrientation(), pointerCount > 1 ? event.getOrientation(1) : 0,
+                    event.getAxisValue(MotionEvent.AXIS_TILT),
+                    pointerCount > 1 ? event.getAxisValue(MotionEvent.AXIS_TILT, 1) : 0,
                     event.getRawX(), event.getRawY(),
                     event.getToolType(0),
                     pointerCount > 1 ? event.getToolType(1) : MotionEvent.TOOL_TYPE_UNKNOWN,
@@ -1238,27 +1191,29 @@ public class ContentViewCore implements
                 || eventAction == MotionEvent.ACTION_POINTER_UP;
     }
 
+    /**
+     * @return Whether a scroll targeting web content is in progress.
+     */
     public boolean isScrollInProgress() {
-        return mTouchScrollInProgress || mPotentiallyActiveFlingCount > 0
-                || getContentViewClient().isExternalScrollActive();
+        return mTouchScrollInProgress || mPotentiallyActiveFlingCount > 0;
+    }
+
+    private void setTouchScrollInProgress(boolean inProgress) {
+        if (mTouchScrollInProgress == inProgress) return;
+        mTouchScrollInProgress = inProgress;
+        updateActionModeVisibility();
     }
 
     @SuppressWarnings("unused")
     @CalledByNative
     private void onFlingStartEventConsumed(int vx, int vy) {
-        mTouchScrollInProgress = false;
         mPotentiallyActiveFlingCount++;
+        setTouchScrollInProgress(false);
         for (mGestureStateListenersIterator.rewind();
                     mGestureStateListenersIterator.hasNext();) {
             mGestureStateListenersIterator.next().onFlingStartGesture(
                     vx, vy, computeVerticalScrollOffset(), computeVerticalScrollExtent());
         }
-    }
-
-    @SuppressWarnings("unused")
-    @CalledByNative
-    private void onFlingStartEventHadNoConsumer(int vx, int vy) {
-        mTouchScrollInProgress = false;
     }
 
     @SuppressWarnings("unused")
@@ -1270,7 +1225,7 @@ public class ContentViewCore implements
     @SuppressWarnings("unused")
     @CalledByNative
     private void onScrollBeginEventAck() {
-        mTouchScrollInProgress = true;
+        setTouchScrollInProgress(true);
         hidePastePopup();
         mZoomControlsDelegate.invokeZoomPicker();
         updateGestureStateListener(GestureEventType.SCROLL_START);
@@ -1289,8 +1244,7 @@ public class ContentViewCore implements
     @SuppressWarnings("unused")
     @CalledByNative
     private void onScrollEndEventAck() {
-        if (!mTouchScrollInProgress) return;
-        mTouchScrollInProgress = false;
+        setTouchScrollInProgress(false);
         updateGestureStateListener(GestureEventType.SCROLL_END);
     }
 
@@ -1342,6 +1296,12 @@ public class ContentViewCore implements
         nativeDoubleTap(mNativeContentViewCore, timeMs, x, y);
     }
 
+    /**
+     * Flings the viewport with velocity vector (velocityX, velocityY).
+     * @param timeMs the current time.
+     * @param velocityX fling speed in x-axis.
+     * @param velocityY fling speed in y-axis.
+     */
     public void flingViewport(long timeMs, int velocityX, int velocityY) {
         if (mNativeContentViewCore == 0) return;
         nativeFlingCancel(mNativeContentViewCore, timeMs);
@@ -1390,9 +1350,6 @@ public class ContentViewCore implements
                             computeVerticalScrollOffset(),
                             computeVerticalScrollExtent());
                     break;
-                case GestureEventType.FLING_CANCEL:
-                    listener.onFlingCancelGesture();
-                    break;
                 case GestureEventType.SCROLL_START:
                     listener.onScrollStarted(
                             computeVerticalScrollOffset(),
@@ -1407,17 +1364,6 @@ public class ContentViewCore implements
                     break;
             }
         }
-    }
-
-    /**
-     * Sets whether or not this {@link ContentViewCore} will visibly display it's content. By
-     * default this is set to {@code true} so there is no need to call this to start showing content
-     * when initially creating a {@link ContentViewCore}.
-     * @param draws Whether or not this {@link ContentViewCore} should draw.
-     */
-    public void setDrawsContent(boolean draws) {
-        if (mNativeContentViewCore == 0) return;
-        nativeSetDrawsContent(mNativeContentViewCore, draws);
     }
 
     /**
@@ -1455,17 +1401,6 @@ public class ContentViewCore implements
     private void hidePopupsAndPreserveSelection() {
         mUnselectAllOnActionModeDismiss = false;
         hidePopups();
-    }
-
-    private void clearUserSelection() {
-        if (mFocusedNodeEditable) {
-            if (mInputConnection != null) {
-                int selectionEnd = Selection.getSelectionEnd(mEditable);
-                mInputConnection.setSelection(selectionEnd, selectionEnd);
-            }
-        } else if (mWebContents != null) {
-            mWebContents.unselect();
-        }
     }
 
     private void hidePopups() {
@@ -1517,7 +1452,6 @@ public class ContentViewCore implements
     @SuppressLint("MissingSuperCall")
     public void onDetachedFromWindow() {
         mZoomControlsDelegate.dismissZoomPicker();
-        unregisterAccessibilityContentObserver();
 
         ScreenOrientationListener.getInstance().removeObserver(this);
         GamepadList.onDetachedFromWindow();
@@ -1546,25 +1480,7 @@ public class ContentViewCore implements
      * @see View#onCreateInputConnection(EditorInfo)
      */
     public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
-        if (!mImeAdapter.hasTextInputType()) {
-            // Although onCheckIsTextEditor will return false in this case, the EditorInfo
-            // is still used by the InputMethodService. Need to make sure the IME doesn't
-            // enter fullscreen mode.
-            outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN;
-        }
-        mInputConnection = mAdapterInputConnectionFactory.get(mContainerView, mImeAdapter,
-                mEditable, outAttrs);
-        return mInputConnection;
-    }
-
-    @VisibleForTesting
-    public AdapterInputConnection getAdapterInputConnectionForTest() {
-        return mInputConnection;
-    }
-
-    @VisibleForTesting
-    public Editable getEditableForTest() {
-        return mEditable;
+        return mImeAdapter.onCreateInputConnection(outAttrs);
     }
 
     /**
@@ -1581,15 +1497,8 @@ public class ContentViewCore implements
     public void onConfigurationChanged(Configuration newConfig) {
         try {
             TraceEvent.begin("ContentViewCore.onConfigurationChanged");
-
-            if (newConfig.keyboard != Configuration.KEYBOARD_NOKEYS) {
-                if (mNativeContentViewCore != 0) {
-                    mImeAdapter.attach(nativeGetNativeImeAdapter(mNativeContentViewCore));
-                }
-                mInputMethodManagerWrapper.restartInput(mContainerView);
-            }
+            mImeAdapter.onKeyboardConfigurationChanged(newConfig);
             mContainerViewInternals.super_onConfigurationChanged(newConfig);
-
             // To request layout has side effect, but it seems OK as it only happen in
             // onConfigurationChange and layout has to be changed in most case.
             mContainerView.requestLayout();
@@ -1629,10 +1538,6 @@ public class ContentViewCore implements
         }
     }
 
-    /* TODO(aelias): Remove this after downstream callers disappear. */
-    public void onOverdrawBottomHeightChanged(int overdrawHeightPix) {
-    }
-
     private void updateAfterSizeChanged() {
         mPopupZoomer.hide(false);
 
@@ -1663,13 +1568,19 @@ public class ContentViewCore implements
      */
     public void onWindowFocusChanged(boolean hasWindowFocus) {
         if (!hasWindowFocus) resetGestureDetection();
+        if (mActionMode != null) mActionMode.onWindowFocusChanged(hasWindowFocus);
+        for (mGestureStateListenersIterator.rewind(); mGestureStateListenersIterator.hasNext();) {
+            mGestureStateListenersIterator.next().onWindowFocusChanged(hasWindowFocus);
+        }
     }
 
     public void onFocusChanged(boolean gainFocus) {
+        mImeAdapter.onViewFocusChanged(gainFocus);
+        mJoystickScrollProvider.setEnabled(gainFocus && !mFocusedNodeEditable);
+
         if (gainFocus) {
             restoreSelectionPopupsIfNecessary();
         } else {
-            hideImeIfNeeded();
             cancelRequestToScrollFocusedEditableNodeIntoView();
             if (mPreserveSelectionOnNextLossOfFocus) {
                 mPreserveSelectionOnNextLossOfFocus = false;
@@ -1679,7 +1590,7 @@ public class ContentViewCore implements
                 // Clear the selection. The selection is cleared on destroying IME
                 // and also here since we may receive destroy first, for example
                 // when focus is lost in webview.
-                clearUserSelection();
+                clearSelection();
             }
         }
         if (mNativeContentViewCore != 0) nativeSetFocus(mNativeContentViewCore, gainFocus);
@@ -1771,14 +1682,17 @@ public class ContentViewCore implements
     public boolean onGenericMotionEvent(MotionEvent event) {
         if (GamepadList.onGenericMotionEvent(event)) return true;
         if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0) {
+            mLastFocalEventX = event.getX();
+            mLastFocalEventY = event.getY();
             switch (event.getAction()) {
                 case MotionEvent.ACTION_SCROLL:
                     if (mNativeContentViewCore == 0) return false;
 
                     nativeSendMouseWheelEvent(mNativeContentViewCore, event.getEventTime(),
                             event.getX(), event.getY(),
+                            event.getAxisValue(MotionEvent.AXIS_HSCROLL),
                             event.getAxisValue(MotionEvent.AXIS_VSCROLL),
-                            event.getAxisValue(MotionEvent.AXIS_HSCROLL));
+                            getWheelScrollFactorInPixels());
 
                     mContainerView.removeCallbacks(mFakeMouseMoveRunnable);
                     // Send a delayed onMouseMove event so that we end
@@ -1794,6 +1708,8 @@ public class ContentViewCore implements
                     mContainerView.postDelayed(mFakeMouseMoveRunnable, 250);
                     return true;
             }
+        } else if ((event.getSource() & InputDevice.SOURCE_CLASS_JOYSTICK) != 0) {
+            if (mJoystickScrollProvider.onMotion(event)) return true;
         }
         return mContainerViewInternals.super_onGenericMotionEvent(event);
     }
@@ -1822,7 +1738,7 @@ public class ContentViewCore implements
      * are overridden, so that View's mScrollX and mScrollY will be unchanged at
      * (0, 0). This is critical for drawing ContentView correctly.
      */
-    public void scrollBy(float dxPix, float dyPix) {
+    public void scrollBy(float dxPix, float dyPix, boolean useLastFocalEventLocation) {
         if (mNativeContentViewCore == 0) return;
         if (dxPix == 0 && dyPix == 0) return;
         long time = SystemClock.uptimeMillis();
@@ -1830,8 +1746,12 @@ public class ContentViewCore implements
         // be active when programatically scrolling. Cancelling the fling in
         // such cases ensures a consistent gesture event stream.
         if (mPotentiallyActiveFlingCount > 0) nativeFlingCancel(mNativeContentViewCore, time);
-        nativeScrollBegin(mNativeContentViewCore, time, 0, 0, -dxPix, -dyPix, false);
-        nativeScrollBy(mNativeContentViewCore, time, 0, 0, dxPix, dyPix);
+        // x/y represents starting location of scroll.
+        final float x = useLastFocalEventLocation ? mLastFocalEventX : 0f;
+        final float y = useLastFocalEventLocation ? mLastFocalEventY : 0f;
+        nativeScrollBegin(
+                mNativeContentViewCore, time, x, y, -dxPix, -dyPix, !useLastFocalEventLocation);
+        nativeScrollBy(mNativeContentViewCore, time, x, y, dxPix, dyPix);
         nativeScrollEnd(mNativeContentViewCore, time);
     }
 
@@ -1844,7 +1764,7 @@ public class ContentViewCore implements
         final float yCurrentPix = mRenderCoordinates.getScrollYPix();
         final float dxPix = xPix - xCurrentPix;
         final float dyPix = yPix - yCurrentPix;
-        scrollBy(dxPix, dyPix);
+        scrollBy(dxPix, dyPix, false);
     }
 
     // NOTE: this can go away once ContentView.getScrollX() reports correct values.
@@ -1938,23 +1858,8 @@ public class ContentViewCore implements
         }
 
         if (!mPopupZoomer.isShowing()) mPopupZoomer.setLastTouch(xPix, yPix);
-
-        mLastTapX = (int) xPix;
-        mLastTapY = (int) yPix;
-    }
-
-    /**
-     * @return The x coordinate for the last point that a tap or press gesture was initiated from.
-     */
-    public int getLastTapX()  {
-        return mLastTapX;
-    }
-
-    /**
-     * @return The y coordinate for the last point that a tap or press gesture was initiated from.
-     */
-    public int getLastTapY()  {
-        return mLastTapY;
+        mLastFocalEventX = xPix;
+        mLastFocalEventY = yPix;
     }
 
     public void setZoomControlsDelegate(ZoomControlsDelegate zoomControlsDelegate) {
@@ -2010,7 +1915,7 @@ public class ContentViewCore implements
     }
 
     @VisibleForTesting
-    public SelectActionModeCallback.ActionHandler getSelectActionHandler() {
+    public WebActionModeCallback.ActionHandler getSelectActionHandler() {
         return mActionHandler;
     }
 
@@ -2020,9 +1925,18 @@ public class ContentViewCore implements
             return;
         }
 
-        // Start a new action mode with a SelectActionModeCallback.
+        // Start a new action mode with a WebActionModeCallback.
         if (mActionHandler == null) {
-            mActionHandler = new SelectActionModeCallback.ActionHandler() {
+            mActionHandler = new WebActionModeCallback.ActionHandler() {
+                /**
+                 * Android Intent size limitations prevent sending over a megabyte of data. Limit
+                 * query lengths to 100kB because other things may be added to the Intent.
+                 */
+                private static final int MAX_SHARE_QUERY_LENGTH = 100000;
+
+                /** Google search doesn't support requests slightly larger than this. */
+                private static final int MAX_SEARCH_QUERY_LENGTH = 1000;
+
                 @Override
                 public void selectAll() {
                     mWebContents.selectAll();
@@ -2045,7 +1959,7 @@ public class ContentViewCore implements
 
                 @Override
                 public void share() {
-                    final String query = getSelectedText();
+                    final String query = sanitizeQuery(getSelectedText(), MAX_SHARE_QUERY_LENGTH);
                     if (TextUtils.isEmpty(query)) return;
 
                     Intent send = new Intent(Intent.ACTION_SEND);
@@ -2062,8 +1976,35 @@ public class ContentViewCore implements
                 }
 
                 @Override
+                public void processText(Intent intent) {
+                    assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
+
+                    final String query = sanitizeQuery(getSelectedText(), MAX_SEARCH_QUERY_LENGTH);
+                    if (TextUtils.isEmpty(query)) return;
+
+                    intent.putExtra(Intent.EXTRA_PROCESS_TEXT, query);
+                    try {
+                        if (getContentViewClient().doesPerformProcessText()) {
+                            getContentViewClient().startProcessTextIntent(intent);
+                        } else {
+                            getWindowAndroid().showIntent(
+                                    intent, new WindowAndroid.IntentCallback() {
+                                        @Override
+                                        public void onIntentCompleted(WindowAndroid window,
+                                                int resultCode, ContentResolver contentResolver,
+                                                Intent data) {
+                                            onReceivedProcessTextResult(resultCode, data);
+                                        }
+                                    }, null);
+                        }
+                    } catch (android.content.ActivityNotFoundException ex) {
+                        // If no app handles it, do nothing.
+                    }
+                }
+
+                @Override
                 public void search() {
-                    final String query = getSelectedText();
+                    final String query = sanitizeQuery(getSelectedText(), MAX_SEARCH_QUERY_LENGTH);
                     if (TextUtils.isEmpty(query)) return;
 
                     // See if ContentViewClient wants to override.
@@ -2086,7 +2027,7 @@ public class ContentViewCore implements
 
                 @Override
                 public boolean isSelectionPassword() {
-                    return mImeAdapter.isSelectionPassword();
+                    return mFocusedNodeIsPassword;
                 }
 
                 @Override
@@ -2104,26 +2045,49 @@ public class ContentViewCore implements
                     mActionMode = null;
                     if (mUnselectAllOnActionModeDismiss) {
                         dismissTextHandles();
-                        clearUserSelection();
+                        clearSelection();
                     }
-                    getContentViewClient().onContextualActionBarHidden();
+                    if (!supportsFloatingActionMode()) {
+                        getContentViewClient().onContextualActionBarHidden();
+                    }
                 }
 
                 @Override
                 public void onGetContentRect(Rect outRect) {
+                    // The selection coordinates are relative to the content viewport, but we need
+                    // coordinates relative to the containing View.
                     outRect.set(mSelectionRect);
+                    outRect.offset(0, (int) mRenderCoordinates.getContentOffsetYPix());
                 }
 
                 @Override
-                public boolean isShareAvailable() {
+                public boolean isIncognito() {
+                    return mWebContents.isIncognito();
+                }
+
+                @Override
+                public boolean isSelectActionModeAllowed(int actionModeItem) {
+                    boolean isAllowedByClient =
+                            getContentViewClient().isSelectActionModeAllowed(actionModeItem);
+                    if (actionModeItem == WebActionModeCallback.MENU_ITEM_SHARE) {
+                        return isAllowedByClient && isShareAvailable();
+                    }
+
+                    if (actionModeItem == WebActionModeCallback.MENU_ITEM_WEB_SEARCH) {
+                        return isAllowedByClient && isWebSearchAvailable();
+                    }
+
+                    return isAllowedByClient;
+                }
+
+                private boolean isShareAvailable() {
                     Intent intent = new Intent(Intent.ACTION_SEND);
                     intent.setType("text/plain");
                     return getContext().getPackageManager().queryIntentActivities(intent,
                             PackageManager.MATCH_DEFAULT_ONLY).size() > 0;
                 }
 
-                @Override
-                public boolean isWebSearchAvailable() {
+                private boolean isWebSearchAvailable() {
                     if (getContentViewClient().doesPerformWebSearch()) return true;
                     Intent intent = new Intent(Intent.ACTION_WEB_SEARCH);
                     intent.putExtra(SearchManager.EXTRA_NEW_SEARCH, true);
@@ -2131,9 +2095,10 @@ public class ContentViewCore implements
                             PackageManager.MATCH_DEFAULT_ONLY).size() > 0;
                 }
 
-                @Override
-                public boolean isIncognito() {
-                    return mWebContents.isIncognito();
+                private String sanitizeQuery(String query, int maxLength) {
+                    if (TextUtils.isEmpty(query) || query.length() < maxLength) return query;
+                    Log.w(TAG, "Truncating oversized query (" + query.length() + ").");
+                    return query.substring(0, maxLength) + "…";
                 }
             };
         }
@@ -2141,40 +2106,72 @@ public class ContentViewCore implements
         // On ICS, startActionMode throws an NPE when getParent() is null.
         if (mContainerView.getParent() != null) {
             assert mWebContents != null;
-            boolean tryCreateFloatingActionMode = supportsFloatingActionMode();
-            mActionMode = getContentViewClient().startActionMode(
-                    mContainerView, mActionHandler, tryCreateFloatingActionMode);
-            if (tryCreateFloatingActionMode && mActionMode == null) {
-                mFloatingActionModeCreationFailed = true;
-                if (!allowFallbackIfFloatingActionModeCreationFails) return;
-                mActionMode = getContentViewClient().startActionMode(
-                        mContainerView, mActionHandler, false);
-            }
+            ActionMode actionMode = startActionMode(allowFallbackIfFloatingActionModeCreationFails);
+            if (actionMode != null) mActionMode = new WebActionMode(actionMode, mContainerView);
         }
         mUnselectAllOnActionModeDismiss = true;
         if (mActionMode == null) {
             // There is no ActionMode, so remove the selection.
             clearSelection();
         } else {
-            getContentViewClient().onContextualActionBarShown();
+            // TODO(jdduke): Refactor ContentViewClient.onContextualActionBarShown to be aware of
+            // non-action-bar (i.e., floating) ActionMode instances, crbug.com/524666.
+            if (!supportsFloatingActionMode()) {
+                getContentViewClient().onContextualActionBarShown();
+            }
         }
     }
 
     private boolean supportsFloatingActionMode() {
-        return !mFloatingActionModeCreationFailed
-                && getContentViewClient().supportsFloatingActionMode();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        return !mFloatingActionModeCreationFailed;
+    }
+
+    private ActionMode startActionMode(boolean allowFallbackIfFloatingActionModeCreationFails) {
+        WebActionModeCallback callback =
+                new WebActionModeCallback(mContainerView.getContext(), mActionHandler);
+        if (supportsFloatingActionMode()) {
+            ActionMode actionMode = startFloatingActionMode(callback);
+            if (actionMode != null) return actionMode;
+            mFloatingActionModeCreationFailed = true;
+            if (!allowFallbackIfFloatingActionModeCreationFails) return null;
+        }
+        return startDefaultActionMode(callback);
+    }
+
+    private ActionMode startDefaultActionMode(WebActionModeCallback callback) {
+        return mContainerView.startActionMode(callback);
+    }
+
+    @TargetApi(Build.VERSION_CODES.M)
+    private ActionMode startFloatingActionMode(WebActionModeCallback callback) {
+        ActionMode.Callback2 callback2 = new FloatingWebActionModeCallback(callback);
+        return mContainerView.startActionMode(callback2, ActionMode.TYPE_FLOATING);
     }
 
     private void invalidateActionModeContentRect() {
         if (mActionMode != null) mActionMode.invalidateContentRect();
     }
 
+    private void updateActionModeVisibility() {
+        if (mActionMode == null) return;
+        // The active fling count isn't reliable with WebView, so only use the
+        // active touch scroll signal for hiding. The fling animation movement
+        // will naturally hide the ActionMode by invalidating its content rect.
+        mActionMode.hide(mDraggingSelection || mTouchScrollInProgress);
+    }
+
     /**
-     * Clears the current text selection.
+     * Clears the current text selection. Note that we will try to move cursor to selection
+     * end if applicable.
      */
     public void clearSelection() {
-        // This method can be called during shutdown, guard against null accordingly.
-        if (mWebContents != null) mWebContents.unselect();
+        if (mFocusedNodeEditable) {
+            mImeAdapter.moveCursorToSelectionEnd();
+        } else {
+            // This method can be called during shutdown, guard against null accordingly.
+            if (mWebContents != null) mWebContents.unselect();
+        }
     }
 
     /**
@@ -2192,11 +2189,11 @@ public class ContentViewCore implements
         return mHasSelection;
     }
 
-     /**
+    /**
      * @return Whether the page has an active, touch-controlled insertion handle.
      */
     @VisibleForTesting
-    protected boolean hasInsertion() {
+    public boolean hasInsertion() {
         return mHasInsertion;
     }
 
@@ -2208,7 +2205,7 @@ public class ContentViewCore implements
         if (left == right) ++right;
         if (top == bottom) ++bottom;
         switch (eventType) {
-            case SelectionEventType.SELECTION_SHOWN:
+            case SelectionEventType.SELECTION_HANDLES_SHOWN:
                 mSelectionRect.set(left, top, right, bottom);
                 mHasSelection = true;
                 mUnselectAllOnActionModeDismiss = true;
@@ -2218,30 +2215,35 @@ public class ContentViewCore implements
                 showSelectActionMode(true);
                 break;
 
-            case SelectionEventType.SELECTION_MOVED:
+            case SelectionEventType.SELECTION_HANDLES_MOVED:
                 mSelectionRect.set(left, top, right, bottom);
                 invalidateActionModeContentRect();
                 break;
 
-            case SelectionEventType.SELECTION_CLEARED:
+            case SelectionEventType.SELECTION_HANDLES_CLEARED:
                 mHasSelection = false;
+                mDraggingSelection = false;
                 mUnselectAllOnActionModeDismiss = false;
                 hideSelectActionMode();
                 mSelectionRect.setEmpty();
                 break;
 
-            case SelectionEventType.SELECTION_DRAG_STARTED:
+            case SelectionEventType.SELECTION_HANDLE_DRAG_STARTED:
+                mDraggingSelection = true;
+                updateActionModeVisibility();
                 break;
 
-            case SelectionEventType.SELECTION_DRAG_STOPPED:
+            case SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED:
+                mDraggingSelection = false;
+                updateActionModeVisibility();
                 break;
 
-            case SelectionEventType.INSERTION_SHOWN:
+            case SelectionEventType.INSERTION_HANDLE_SHOWN:
                 mSelectionRect.set(left, top, right, bottom);
                 mHasInsertion = true;
                 break;
 
-            case SelectionEventType.INSERTION_MOVED:
+            case SelectionEventType.INSERTION_HANDLE_MOVED:
                 mSelectionRect.set(left, top, right, bottom);
                 if (!isScrollInProgress() && isPastePopupShowing()) {
                     showPastePopup(xAnchor, yAnchor);
@@ -2250,7 +2252,7 @@ public class ContentViewCore implements
                 }
                 break;
 
-            case SelectionEventType.INSERTION_TAPPED:
+            case SelectionEventType.INSERTION_HANDLE_TAPPED:
                 if (mWasPastePopupShowingOnInsertionDragStart) {
                     hidePastePopup();
                 } else {
@@ -2258,18 +2260,20 @@ public class ContentViewCore implements
                 }
                 break;
 
-            case SelectionEventType.INSERTION_CLEARED:
+            case SelectionEventType.INSERTION_HANDLE_CLEARED:
                 hidePastePopup();
                 mHasInsertion = false;
                 mSelectionRect.setEmpty();
                 break;
 
-            case SelectionEventType.INSERTION_DRAG_STARTED:
+            case SelectionEventType.INSERTION_HANDLE_DRAG_STARTED:
                 mWasPastePopupShowingOnInsertionDragStart = isPastePopupShowing();
                 hidePastePopup();
                 break;
 
-            case SelectionEventType.INSERTION_DRAG_STOPPED:
+            case SelectionEventType.INSERTION_HANDLE_DRAG_STOPPED:
+            case SelectionEventType.SELECTION_ESTABLISHED:
+            case SelectionEventType.SELECTION_DISSOLVED:
                 break;
 
             default:
@@ -2281,28 +2285,12 @@ public class ContentViewCore implements
     }
 
     private void dismissTextHandles() {
-        mHasSelection = false;
-        mHasInsertion = false;
         if (mNativeContentViewCore != 0) nativeDismissTextHandles(mNativeContentViewCore);
     }
 
     private void setTextHandlesTemporarilyHidden(boolean hide) {
         if (mNativeContentViewCore == 0) return;
         nativeSetTextHandlesTemporarilyHidden(mNativeContentViewCore, hide);
-    }
-
-    /**
-     * Hides the IME if the containerView is the active view for IME.
-     */
-    public void hideImeIfNeeded() {
-        // Hide input method window from the current view synchronously
-        // because ImeAdapter does so asynchronouly with a delay, and
-        // by the time when ImeAdapter dismisses the input, the
-        // containerView may have lost focus.
-        if (mInputMethodManagerWrapper.isActive(mContainerView)) {
-            mInputMethodManagerWrapper.hideSoftInputFromWindow(
-                    mContainerView.getWindowToken(), 0, null);
-        }
     }
 
     @SuppressWarnings("unused")
@@ -2391,20 +2379,26 @@ public class ContentViewCore implements
         try {
             TraceEvent.begin("ContentViewCore.updateImeAdapter");
             boolean focusedNodeEditable = (textInputType != TextInputType.NONE);
+            boolean focusedNodeIsPassword = (textInputType == TextInputType.PASSWORD);
             if (!focusedNodeEditable) hidePastePopup();
 
+            mImeAdapter.attach(nativeImeAdapterAndroid);
             mImeAdapter.updateKeyboardVisibility(
-                    nativeImeAdapterAndroid, textInputType, textInputFlags, showImeIfNeeded);
+                    textInputType, textInputFlags, showImeIfNeeded);
+            mImeAdapter.updateState(text, selectionStart, selectionEnd, compositionStart,
+                    compositionEnd, isNonImeChange);
 
-            if (mInputConnection != null) {
-                mInputConnection.updateState(text, selectionStart, selectionEnd, compositionStart,
-                        compositionEnd, isNonImeChange);
+            if (mActionMode != null) {
+                final boolean actionModeConfigurationChanged =
+                        focusedNodeEditable != mFocusedNodeEditable
+                        || focusedNodeIsPassword != mFocusedNodeIsPassword;
+                if (actionModeConfigurationChanged) mActionMode.invalidate();
             }
 
-            if (mActionMode != null) mActionMode.invalidate();
-
+            mFocusedNodeIsPassword = focusedNodeIsPassword;
             if (focusedNodeEditable != mFocusedNodeEditable) {
                 mFocusedNodeEditable = focusedNodeEditable;
+                mJoystickScrollProvider.setEnabled(!mFocusedNodeEditable);
                 getContentViewClient().onFocusedNodeEditabilityChanged(mFocusedNodeEditable);
             }
         } finally {
@@ -2434,7 +2428,7 @@ public class ContentViewCore implements
     @SuppressWarnings("unused")
     @CalledByNative
     private void showSelectPopup(long nativeSelectPopupSourceFrame, Rect bounds, String[] items,
-            int[] enabled, boolean multiple, int[] selectedIndices) {
+            int[] enabled, boolean multiple, int[] selectedIndices, boolean rightAligned) {
         if (mContainerView.getParent() == null || mContainerView.getVisibility() != View.VISIBLE) {
             mNativeSelectPopupSourceFrame = nativeSelectPopupSourceFrame;
             selectPopupMenuItems(null);
@@ -2450,9 +2444,14 @@ public class ContentViewCore implements
             popupItems.add(new SelectPopupItem(items[i], enabled[i]));
         }
         if (DeviceFormFactor.isTablet(mContext) && !multiple && !isTouchExplorationEnabled()) {
-            mSelectPopup = new SelectPopupDropdown(this, popupItems, bounds, selectedIndices);
+            mSelectPopup = new SelectPopupDropdown(
+                    this, popupItems, bounds, selectedIndices, rightAligned);
         } else {
-            mSelectPopup = new SelectPopupDialog(this, popupItems, multiple, selectedIndices);
+            if (getWindowAndroid() == null) return;
+            Context windowContext = getWindowAndroid().getContext().get();
+            if (windowContext == null) return;
+            mSelectPopup = new SelectPopupDialog(
+                    this, windowContext, popupItems, multiple, selectedIndices);
         }
         mNativeSelectPopupSourceFrame = nativeSelectPopupSourceFrame;
         mSelectPopup.show();
@@ -2469,6 +2468,7 @@ public class ContentViewCore implements
     /**
      * @return The visible select popup being shown.
      */
+    @VisibleForTesting
     public SelectPopup getSelectPopupForTest() {
         return mSelectPopup;
     }
@@ -2484,36 +2484,6 @@ public class ContentViewCore implements
     @CalledByNative
     private MotionEventSynthesizer createMotionEventSynthesizer() {
         return new MotionEventSynthesizer(this);
-    }
-
-    @SuppressWarnings("unused")
-    @CalledByNative
-    private PopupTouchHandleDrawable createPopupTouchHandleDrawable() {
-        if (mTouchHandleDelegate == null) {
-            mTouchHandleDelegate = new PopupTouchHandleDrawableDelegate() {
-                @Override
-                public View getParent() {
-                    return getContainerView();
-                }
-
-                @Override
-                public PositionObserver getParentPositionObserver() {
-                    return mPositionObserver;
-                }
-
-                @Override
-                public boolean onTouchHandleEvent(MotionEvent event) {
-                    final boolean isTouchHandleEvent = true;
-                    return onTouchEventImpl(event, isTouchHandleEvent);
-                }
-
-                @Override
-                public boolean isScrollInProgress() {
-                    return ContentViewCore.this.isScrollInProgress();
-                }
-            };
-        }
-        return new PopupTouchHandleDrawable(mTouchHandleDelegate);
     }
 
     /**
@@ -2561,72 +2531,63 @@ public class ContentViewCore implements
 
     @SuppressWarnings("unused")
     @CalledByNative
-    private void showPastePopupWithFeedback(int x, int y) {
+    private boolean showPastePopupWithFeedback(int x, int y) {
         // TODO(jdduke): Remove this when there is a better signal that long press caused
         // showing of the paste popup. See http://crbug.com/150151.
         if (showPastePopup(x, y)) {
             mContainerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            if (mWebContents != null) mWebContents.onContextMenuOpened();
+            return true;
+        } else {
+            return false;
         }
     }
 
-    private boolean isPastePopupShowing() {
-        if (supportsFloatingActionMode()) return mActionMode != null;
-        return mPastePopupMenu != null && mPastePopupMenu.isShowing();
+    @VisibleForTesting
+    public boolean isPastePopupShowing() {
+        if (mPastePopupMenu != null) return mPastePopupMenu.isShowing();
+        return false;
     }
 
     private boolean showPastePopup(int x, int y) {
+        if (mContainerView.getParent() == null || mContainerView.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+
         if (!mHasInsertion || !canPaste()) return false;
-        // TODO(jdduke): Factor out all selection/paste-related logic from ContentViewCore.
-        if (supportsFloatingActionMode()) {
-            if (mActionMode == null) {
-                showSelectActionMode(false);
-            } else {
-                invalidateActionModeContentRect();
-            }
-        }
-        // As floating action mode creation may fail if the embedding View
-        // doesn't support it, fall back to the custom paste popup.
-        if (!supportsFloatingActionMode()) {
-            assert mActionMode == null;
-            final float contentOffsetYPix = mRenderCoordinates.getContentOffsetYPix();
-            getPastePopup().showAt(x, (int) (y + contentOffsetYPix));
-        }
+        final float contentOffsetYPix = mRenderCoordinates.getContentOffsetYPix();
+        getPastePopup().show(x, (int) (y + contentOffsetYPix));
         return true;
     }
 
     private void hidePastePopup() {
-        if (!mHasInsertion) return;
-        if (supportsFloatingActionMode()) {
-            mUnselectAllOnActionModeDismiss = false;
-            hideSelectActionMode();
-            return;
-        }
-        if (mPastePopupMenu == null) return;
-        mPastePopupMenu.hide();
+        if (mPastePopupMenu != null) mPastePopupMenu.hide();
     }
 
     private PastePopupMenu getPastePopup() {
-        assert !supportsFloatingActionMode();
         if (mPastePopupMenu == null) {
-            mPastePopupMenu = new PastePopupMenu(getContainerView(),
-                new PastePopupMenuDelegate() {
-                    @Override
-                    public void paste() {
-                        mWebContents.paste();
-                        dismissTextHandles();
-                    }
-                });
+            PastePopupMenuDelegate delegate = new PastePopupMenuDelegate() {
+                @Override
+                public void paste() {
+                    mWebContents.paste();
+                    dismissTextHandles();
+                }
+
+                @Override
+                public void onDismiss() {
+                    if (mWebContents != null) mWebContents.onContextMenuClosed();
+                }
+            };
+            if (supportsFloatingActionMode()) {
+                mPastePopupMenu = new FloatingPastePopupMenu(getContainerView(), delegate);
+            } else {
+                mPastePopupMenu = new LegacyPastePopupMenu(getContainerView(), delegate);
+            }
         }
         return mPastePopupMenu;
     }
 
-    @VisibleForTesting
-    public PastePopupMenu getPastePopupForTest() {
-        return getPastePopup();
-    }
-
     private boolean canPaste() {
-        if (!mFocusedNodeEditable) return false;
         return ((ClipboardManager) mContext.getSystemService(
                 Context.CLIPBOARD_SERVICE)).hasPrimaryClip();
     }
@@ -2865,8 +2826,8 @@ public class ContentViewCore implements
     }
 
     @CalledByNative
-    private void startContentIntent(String contentUrl) {
-        getContentViewClient().onStartContentIntent(getContext(), contentUrl);
+    private void startContentIntent(String contentUrl, boolean isMainFrame) {
+        getContentViewClient().onStartContentIntent(getContext(), contentUrl, isMainFrame);
     }
 
     @Override
@@ -2944,8 +2905,7 @@ public class ContentViewCore implements
         return null;
     }
 
-    // @TargetApi(Build.VERSION_CODES.M) TODO(sgurun) add method document once API is public
-    // crbug/512264
+    @TargetApi(Build.VERSION_CODES.M)
     public void onProvideVirtualStructure(final ViewStructure structure) {
         // Do not collect accessibility tree in incognito mode
         if (getWebContents().isIncognito()) {
@@ -2974,18 +2934,23 @@ public class ContentViewCore implements
     // When creating the View structure, the left and top are relative to the parent node.
     // The X scroll is not used, rather compensated through X-position, while the Y scroll
     // is provided.
+    @TargetApi(Build.VERSION_CODES.M)
     private void createVirtualStructure(ViewStructure viewNode, AccessibilitySnapshotNode node,
             int parentX, int parentY) {
         viewNode.setClassName(node.className);
-        viewNode.setText(node.text);
+        if (node.hasSelection) {
+            viewNode.setText(node.text, node.startSelection, node.endSelection);
+        } else {
+            viewNode.setText(node.text);
+        }
         viewNode.setDimens(node.x - parentX - node.scrollX, node.y - parentY, 0, node.scrollY,
                 node.width, node.height);
         viewNode.setChildCount(node.children.size());
         if (node.hasStyle) {
-            int style = (node.bold ? TEXT_STYLE_BOLD : 0)
-                    | (node.italic ? TEXT_STYLE_ITALIC : 0)
-                    | (node.underline ? TEXT_STYLE_UNDERLINE : 0)
-                    | (node.lineThrough ? TEXT_STYLE_STRIKE_THRU : 0);
+            int style = (node.bold ? ViewNode.TEXT_STYLE_BOLD : 0)
+                    | (node.italic ? ViewNode.TEXT_STYLE_ITALIC : 0)
+                    | (node.underline ? ViewNode.TEXT_STYLE_UNDERLINE : 0)
+                    | (node.lineThrough ? ViewNode.TEXT_STYLE_STRIKE_THRU : 0);
             viewNode.setTextStyle(node.textSize, node.color, node.bgcolor, style);
         }
         for (int i = 0; i < node.children.size(); i++) {
@@ -3004,6 +2969,26 @@ public class ContentViewCore implements
                 settings.getTextTrackFontFamily(), settings.getTextTrackFontStyle(),
                 settings.getTextTrackFontVariant(), settings.getTextTrackTextColor(),
                 settings.getTextTrackTextShadow(), settings.getTextTrackTextSize());
+    }
+
+    /**
+     * Called when the processed text is replied from an activity that supports
+     * Intent.ACTION_PROCESS_TEXT.
+     * @param resultCode the code that indicates if the activity successfully processed the text
+     * @param data the reply that contains the processed text.
+     */
+    public void onReceivedProcessTextResult(int resultCode, Intent data) {
+        if (mWebContents == null || !isSelectionEditable() || resultCode != Activity.RESULT_OK
+                || data == null) {
+            return;
+        }
+
+        CharSequence result = data.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
+        if (result != null) {
+            // TODO(hush): Use a variant of replace that re-selects the replaced text.
+            // crbug.com/546710
+            mWebContents.replace(result.toString());
+        }
     }
 
     /**
@@ -3139,11 +3124,27 @@ public class ContentViewCore implements
         final boolean touchScrollInProgress = mTouchScrollInProgress;
         final int potentiallyActiveFlingCount = mPotentiallyActiveFlingCount;
 
-        mTouchScrollInProgress = false;
+        setTouchScrollInProgress(false);
         mPotentiallyActiveFlingCount = 0;
-
         if (touchScrollInProgress) updateGestureStateListener(GestureEventType.SCROLL_END);
         if (potentiallyActiveFlingCount > 0) updateGestureStateListener(GestureEventType.FLING_END);
+    }
+
+    private float getWheelScrollFactorInPixels() {
+        if (mWheelScrollFactorInPixels == 0) {
+            TypedValue outValue = new TypedValue();
+            // This is the same attribute used by Android Views to scale wheel
+            // event motion into scroll deltas.
+            if (mContext.getTheme().resolveAttribute(
+                        android.R.attr.listPreferredItemHeight, outValue, true)) {
+                mWheelScrollFactorInPixels =
+                        outValue.getDimension(mContext.getResources().getDisplayMetrics());
+            } else {
+                // If attribute retrieval fails, just use a sensible default.
+                mWheelScrollFactorInPixels = 64 * mRenderCoordinates.getDeviceScaleFactor();
+            }
+        }
+        return mWheelScrollFactorInPixels;
     }
 
     ContentVideoViewClient getContentVideoViewClient() {
@@ -3159,7 +3160,7 @@ public class ContentViewCore implements
     private void onNativeFlingStopped() {
         // Note that mTouchScrollInProgress should normally be false at this
         // point, but we reset it anyway as another failsafe.
-        mTouchScrollInProgress = false;
+        setTouchScrollInProgress(false);
         if (mPotentiallyActiveFlingCount <= 0) return;
         mPotentiallyActiveFlingCount--;
         updateGestureStateListener(GestureEventType.FLING_END);
@@ -3167,6 +3168,14 @@ public class ContentViewCore implements
 
     @Override
     public void onScreenOrientationChanged(int orientation) {
+        // ActionMode#invalidate() won't be able to re-layout the floating
+        // action mode menu items according to the new orientation. So Chrome
+        // has to re-create the action mode.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && mActionMode != null) {
+            hidePopupsAndPreserveSelection();
+            showSelectActionMode(true);
+        }
+
         sendOrientationChangeEvent(orientation);
     }
 
@@ -3214,6 +3223,7 @@ public class ContentViewCore implements
             float touchMajor0, float touchMajor1,
             float touchMinor0, float touchMinor1,
             float orientation0, float orientation1,
+            float tilt0, float tilt1,
             float rawX, float rawY,
             int androidToolType0, int androidToolType1,
             int androidButtonState, int androidMetaState,
@@ -3222,9 +3232,8 @@ public class ContentViewCore implements
     private native int nativeSendMouseMoveEvent(
             long nativeContentViewCoreImpl, long timeMs, float x, float y);
 
-    private native int nativeSendMouseWheelEvent(
-            long nativeContentViewCoreImpl, long timeMs, float x, float y, float verticalAxis,
-            float horizontalAxis);
+    private native int nativeSendMouseWheelEvent(long nativeContentViewCoreImpl, long timeMs,
+            float x, float y, float ticksX, float ticksY, float pixelsPerTick);
 
     private native void nativeScrollBegin(long nativeContentViewCoreImpl, long timeMs, float x,
             float y, float hintX, float hintY, boolean targetViewport);
@@ -3305,6 +3314,4 @@ public class ContentViewCore implements
             int x, int y, int w, int h);
 
     private native void nativeSetBackgroundOpaque(long nativeContentViewCoreImpl, boolean opaque);
-
-    private native void nativeSetDrawsContent(long nativeContentViewCoreImpl, boolean draws);
 }

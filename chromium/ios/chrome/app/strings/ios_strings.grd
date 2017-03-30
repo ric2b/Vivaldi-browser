@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+This file contains definition of resources that will be translated for each
+locale.  The variables is_win, is_macosx, is_linux, is_ios and is_posix are
+available for making strings OS specific.  Other platform defines such as
+use_titlecase are declared in build/common.gypi.
+
+The strings in this file are specific to iOS, thus is_ios will be true and
+all other OS specific variables will be false.
+-->
+
+<grit base_dir="." latest_public_release="0" current_release="1"
+      source_lang_id="en" enc_check="möl">
+  <outputs>
+    <output filename="grit/ios_strings.h" type="rc_header">
+      <emit emit_type="prepend"></emit>
+    </output>
+    <output filename="ios_strings_am.pak" type="data_package" lang="am" />
+    <output filename="ios_strings_ar.pak" type="data_package" lang="ar" />
+    <output filename="ios_strings_bg.pak" type="data_package" lang="bg" />
+    <output filename="ios_strings_bn.pak" type="data_package" lang="bn" />
+    <output filename="ios_strings_ca.pak" type="data_package" lang="ca" />
+    <output filename="ios_strings_cs.pak" type="data_package" lang="cs" />
+    <output filename="ios_strings_da.pak" type="data_package" lang="da" />
+    <output filename="ios_strings_de.pak" type="data_package" lang="de" />
+    <output filename="ios_strings_el.pak" type="data_package" lang="el" />
+    <output filename="ios_strings_en-GB.pak" type="data_package" lang="en-GB" />
+    <output filename="ios_strings_en-US.pak" type="data_package" lang="en" />
+    <output filename="ios_strings_es.pak" type="data_package" lang="es" />
+    <output filename="ios_strings_es-MX.pak" type="data_package" lang="es-419" />
+    <output filename="ios_strings_et.pak" type="data_package" lang="et" />
+    <output filename="ios_strings_fa.pak" type="data_package" lang="fa" />
+    <output filename="ios_strings_fake-bidi.pak" type="data_package" lang="fake-bidi" />
+    <output filename="ios_strings_fi.pak" type="data_package" lang="fi" />
+    <output filename="ios_strings_fil.pak" type="data_package" lang="fil" />
+    <output filename="ios_strings_fr.pak" type="data_package" lang="fr" />
+    <output filename="ios_strings_gu.pak" type="data_package" lang="gu" />
+    <output filename="ios_strings_he.pak" type="data_package" lang="he" />
+    <output filename="ios_strings_hi.pak" type="data_package" lang="hi" />
+    <output filename="ios_strings_hr.pak" type="data_package" lang="hr" />
+    <output filename="ios_strings_hu.pak" type="data_package" lang="hu" />
+    <output filename="ios_strings_id.pak" type="data_package" lang="id" />
+    <output filename="ios_strings_it.pak" type="data_package" lang="it" />
+    <output filename="ios_strings_ja.pak" type="data_package" lang="ja" />
+    <output filename="ios_strings_kn.pak" type="data_package" lang="kn" />
+    <output filename="ios_strings_ko.pak" type="data_package" lang="ko" />
+    <output filename="ios_strings_lt.pak" type="data_package" lang="lt" />
+    <output filename="ios_strings_lv.pak" type="data_package" lang="lv" />
+    <output filename="ios_strings_ml.pak" type="data_package" lang="ml" />
+    <output filename="ios_strings_mr.pak" type="data_package" lang="mr" />
+    <output filename="ios_strings_ms.pak" type="data_package" lang="ms" />
+    <output filename="ios_strings_nl.pak" type="data_package" lang="nl" />
+    <!-- The translation console uses 'no' for Norwegian Bokmål. It should
+         be 'nb'. -->
+    <output filename="ios_strings_nb.pak" type="data_package" lang="no" />
+    <output filename="ios_strings_pl.pak" type="data_package" lang="pl" />
+    <output filename="ios_strings_pt.pak" type="data_package" lang="pt-BR" />
+    <output filename="ios_strings_pt-PT.pak" type="data_package" lang="pt-PT" />
+    <output filename="ios_strings_ro.pak" type="data_package" lang="ro" />
+    <output filename="ios_strings_ru.pak" type="data_package" lang="ru" />
+    <output filename="ios_strings_sk.pak" type="data_package" lang="sk" />
+    <output filename="ios_strings_sl.pak" type="data_package" lang="sl" />
+    <output filename="ios_strings_sr.pak" type="data_package" lang="sr" />
+    <output filename="ios_strings_sv.pak" type="data_package" lang="sv" />
+    <output filename="ios_strings_sw.pak" type="data_package" lang="sw" />
+    <output filename="ios_strings_ta.pak" type="data_package" lang="ta" />
+    <output filename="ios_strings_te.pak" type="data_package" lang="te" />
+    <output filename="ios_strings_th.pak" type="data_package" lang="th" />
+    <output filename="ios_strings_tr.pak" type="data_package" lang="tr" />
+    <output filename="ios_strings_uk.pak" type="data_package" lang="uk" />
+    <output filename="ios_strings_vi.pak" type="data_package" lang="vi" />
+    <output filename="ios_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
+    <output filename="ios_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
+  </outputs>
+  <translations>
+    <file path="resources/ios_strings_am.xtb" lang="am" />
+    <file path="resources/ios_strings_ar.xtb" lang="ar" />
+    <file path="resources/ios_strings_bg.xtb" lang="bg" />
+    <file path="resources/ios_strings_bn.xtb" lang="bn" />
+    <file path="resources/ios_strings_ca.xtb" lang="ca" />
+    <file path="resources/ios_strings_cs.xtb" lang="cs" />
+    <file path="resources/ios_strings_da.xtb" lang="da" />
+    <file path="resources/ios_strings_de.xtb" lang="de" />
+    <file path="resources/ios_strings_el.xtb" lang="el" />
+    <file path="resources/ios_strings_en-GB.xtb" lang="en-GB" />
+    <file path="resources/ios_strings_es.xtb" lang="es" />
+    <file path="resources/ios_strings_es-419.xtb" lang="es-419" />
+    <file path="resources/ios_strings_et.xtb" lang="et" />
+    <file path="resources/ios_strings_fa.xtb" lang="fa" />
+    <file path="resources/ios_strings_fi.xtb" lang="fi" />
+    <file path="resources/ios_strings_fil.xtb" lang="fil" />
+    <file path="resources/ios_strings_fr.xtb" lang="fr" />
+    <file path="resources/ios_strings_gu.xtb" lang="gu" />
+    <file path="resources/ios_strings_hi.xtb" lang="hi" />
+    <file path="resources/ios_strings_hr.xtb" lang="hr" />
+    <file path="resources/ios_strings_hu.xtb" lang="hu" />
+    <file path="resources/ios_strings_id.xtb" lang="id" />
+    <file path="resources/ios_strings_it.xtb" lang="it" />
+    <!-- The translation console uses 'iw' for Hebrew, but we use 'he'. -->
+    <file path="resources/ios_strings_iw.xtb" lang="he" />
+    <file path="resources/ios_strings_ja.xtb" lang="ja" />
+    <file path="resources/ios_strings_kn.xtb" lang="kn" />
+    <file path="resources/ios_strings_ko.xtb" lang="ko" />
+    <file path="resources/ios_strings_lt.xtb" lang="lt" />
+    <file path="resources/ios_strings_lv.xtb" lang="lv" />
+    <file path="resources/ios_strings_ml.xtb" lang="ml" />
+    <file path="resources/ios_strings_mr.xtb" lang="mr" />
+    <file path="resources/ios_strings_ms.xtb" lang="ms" />
+    <file path="resources/ios_strings_nl.xtb" lang="nl" />
+    <file path="resources/ios_strings_no.xtb" lang="no" />
+    <file path="resources/ios_strings_pl.xtb" lang="pl" />
+    <file path="resources/ios_strings_pt-BR.xtb" lang="pt-BR" />
+    <file path="resources/ios_strings_pt-PT.xtb" lang="pt-PT" />
+    <file path="resources/ios_strings_ro.xtb" lang="ro" />
+    <file path="resources/ios_strings_ru.xtb" lang="ru" />
+    <file path="resources/ios_strings_sk.xtb" lang="sk" />
+    <file path="resources/ios_strings_sl.xtb" lang="sl" />
+    <file path="resources/ios_strings_sr.xtb" lang="sr" />
+    <file path="resources/ios_strings_sv.xtb" lang="sv" />
+    <file path="resources/ios_strings_sw.xtb" lang="sw" />
+    <file path="resources/ios_strings_ta.xtb" lang="ta" />
+    <file path="resources/ios_strings_te.xtb" lang="te" />
+    <file path="resources/ios_strings_th.xtb" lang="th" />
+    <file path="resources/ios_strings_tr.xtb" lang="tr" />
+    <file path="resources/ios_strings_uk.xtb" lang="uk" />
+    <file path="resources/ios_strings_vi.xtb" lang="vi" />
+    <file path="resources/ios_strings_zh-CN.xtb" lang="zh-CN" />
+    <file path="resources/ios_strings_zh-TW.xtb" lang="zh-TW" />
+  </translations>
+  <release seq="1" allow_pseudo="false">
+    <messages fallback_to_english="true">
+
+      <message name="IDS_IOS_PLATFORM_LABEL" desc="Label for Platform. [Length: unlimited] [iOS only]">
+        Platform
+      </message>
+
+      <message name="IDS_IOS_AUTOFILL_ACCNAME_HIDE_KEYBOARD" desc="The accessible name for the hide keyboard button in the keyboard accessory shown when filling out forms. [Length: unlimited] [iOS only]">
+        Hide keyboard
+      </message>
+      <message name="IDS_IOS_AUTOFILL_ACCNAME_NEXT_FIELD" desc="The accessible name for the next field button in the keyboard accessory shown when filling out forms. [Length: unlimited] [iOS only]">
+        Next field
+      </message>
+      <message name="IDS_IOS_AUTOFILL_ACCNAME_PREVIOUS_FIELD" desc="The accessible name for the previous field button in the keyboard accessory shown when filling out forms. [Length: unlimited] [iOS only]">
+        Previous field
+      </message>
+      <message name="IDS_IOS_AUTOFILL_ACCNAME_SUGGESTION" desc="The accessible description of a suggestion shown in the Autofill keyboard acessory. [Length: unlimited] [iOS only]">
+        <ph name="VALUE">$1<ex>John Smith</ex></ph>, <ph name="ADDITIONAL_INFO">$2<ex>1234 Main St., Springfield, IL 62711</ex></ph>, <ph name="INDEX">$3<ex>1</ex></ph> of <ph name="NUM_SUGGESTIONS">$4<ex>5</ex></ph>
+      </message>
+      <message name="IDS_IOS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_MONTH" desc="The placeholder text for credit card expiration month in the payments card unmask dialog. [Length: 4em] [iOS only]">
+        MM
+      </message>
+      <message name="IDS_IOS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_YEAR" desc="The placeholder text for credit card expiration year in the payments card unmask dialog. [Length: 4em] [iOS only]">
+        YY
+      </message>
+      <message name="IDS_IOS_KEYBOARD_BOOKMARK_THIS_PAGE" desc="In Title Case: Title of the keyboard shortcut that bookmarks the current page. [Length: 20 em] [iOS only]">
+        Bookmark This Page...
+      </message>
+      <message name="IDS_IOS_KEYBOARD_HISTORY_BACK" desc="Title of the keyboard shortcut to go back in the history menu. [Length: 20 em] [iOS only]">
+        Back
+      </message>
+      <message name="IDS_IOS_KEYBOARD_HISTORY_FORWARD" desc="Title of the keyboard shortcut to go forward in the history menu. [Length: 20 em] [iOS only]">
+        Forward
+      </message>
+      <message name="IDS_IOS_KEYBOARD_OPEN_LOCATION" desc="Title of the keyboard shortcut to open a location (puts cursor in the URL bar). [Length: 20 em] [iOS only]">
+        Open Location...
+      </message>
+      <message name="IDS_IOS_KEYBOARD_REOPEN_CLOSED_TAB" desc="Title of the keyboard shortcut to reopen a recently closed tab. [Length: 20 em] [iOS only]">
+        Reopen Closed Tab
+      </message>
+      <message name="IDS_IOS_LOCATION_USAGE_CANCEL" desc="Title for the alert button to cancel sending location for Omnibox queries [Length: 20em] [iOS only]">
+        Not Now
+      </message>
+
+      <message name="IDS_IOS_FLAGS_CONTEXTUAL_SEARCH" desc="Title for the flag to enable Contextual Search.">
+        Contextual Search
+      </message>
+      <message name="IDS_IOS_FLAGS_CONTEXTUAL_SEARCH_DESCRIPTION" desc="Description for the flag to enable Contextual Search.">
+        Whether or not Contextual Search is enabled.
+      </message>
+
+      <!-- iOS Net-Export strings -->
+      <message name="IDS_IOS_NET_EXPORT_NO_EMAIL_ACCOUNTS_ALERT_MESSAGE" desc="The message of the alert informing a user with no email accounts that he or she needs to configure an email account to send net-export data. [Length: 70em]">
+        To send net-export data, please configure your email account in the Settings app.
+      </message>
+      <message name="IDS_IOS_NET_EXPORT_NO_EMAIL_ACCOUNTS_ALERT_TITLE" desc="The title of the alert informing a user with no email accounts that he or she needs to configure an email account to send net-export data. [Length: 20em]">
+        No Email Accounts
+      </message>
+
+      <message name="IDS_IOS_VERSION_COPIED" desc="The message displayed when the version label is tapped (in About settings) [Length: 10em] [iOS only]">
+        Copied
+      </message>
+
+      <!-- Password Manager -->
+      <message name="IDS_IOS_PASSWORD_MANAGER_SAVE_BUTTON" desc="Save button text for password manager [Length: 10em]">
+        Save
+      </message>
+      <message name="IDS_IOS_PASSWORD_MANAGER_BLACKLIST_BUTTON" desc="Button text for the 'Save Password' infobar's 'Never remember for this site' option [Length: 10em]">
+        Never
+      </message>
+      <message name="IDS_IOS_PASSWORD_MANAGER_SAVE_PASSWORD_PROMPT_SMART_LOCK_BRANDING" desc="Info bar message to save a password, referring to the Google Smart Lock
+brand. [Length: 70em]">
+        Do you want Google Smart Lock to save your password for this site?
+      </message>
+
+      <!-- Password Generation -->
+      <message name="IDS_IOS_GENERATED_PASSWORD_ACCEPT" desc="The text of the button that accepts the generated password. [Length: 20em] [iOS only]">
+        Use Password
+      </message>
+      <message name="IDS_IOS_GENERATE_PASSWORD_LABEL" desc="Input accessory view label to generate a password. [Length: 20em] [iOS only]">
+        Generate Password
+      </message>
+      <message name="IDS_IOS_GENERATED_PASSWORD_PROMPT_DESCRIPTION" desc="The explanation text for the generated password prompt. [iOS only]">
+        Chrome will store this in your <ph name="BEGIN_LINK">BEGIN_LINK</ph>Google saved passwords<ph name="END_LINK">END_LINK</ph> and autofill it for you so you don't have to remember it yourself.
+      </message>
+      <message name="IDS_IOS_GENERATED_PASSWORD_PROMPT_TITLE" desc="The text of the button that accepts the generated password. [Length: 20em] [iOS only]">
+        Password Generated by Chrome
+      </message>
+
+      <!-- Safe Browsing -->
+      <!-- - harmful download interstitials -->
+      <message name="IDS_IOS_HARMFUL_V3_EXPLANATION_PARAGRAPH" desc="The explanation of why Safe Browsing has blocked the page.">
+        Google Safe Browsing recently <ph name="BEGIN_LINK">&lt;a href="#" id="help-link"&gt;</ph>found harmful programs<ph name="END_LINK">&lt;/a&gt;</ph> on <ph name="SITE">$1<ex>example.com</ex></ph>.
+      </message>
+      <message name="IDS_IOS_HARMFUL_V3_HEADING" desc="The large heading at the top of the social engineering interstitial.">
+        The site ahead contains harmful programs
+      </message>
+      <message name="IDS_IOS_HARMFUL_V3_PRIMARY_PARAGRAPH" desc="Mobile: The primary explanatory paragraph for the social engineering interstitial.">
+        Attackers on <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="SITE">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> might attempt to trick you into installing programs that harm your browsing experience (for example, by changing your homepage or showing extra ads on sites you visit).
+      </message>
+      <message name="IDS_IOS_HARMFUL_V3_PROCEED_PARAGRAPH" desc="The paragraph that lets the user skip the warning.">
+        If you understand the risks to your security, you may <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>visit this site<ph name="END_LINK">&lt;/a&gt;</ph> before the harmful programs have been removed.
+      </message>
+      <!-- - malware interstitials -->
+      <message name="IDS_IOS_MALWARE_V3_EXPLANATION_PARAGRAPH" desc="The explanation of why Safe Browsing has blocked the page.">
+        Google Safe Browsing recently <ph name="BEGIN_LINK">&lt;a href="#" id="help-link"&gt;</ph>detected malware<ph name="END_LINK">&lt;/a&gt;</ph> on <ph name="SITE">$1<ex>example.com</ex></ph>. Websites that are normally safe are sometimes infected with malware.
+      </message>
+      <message name="IDS_IOS_MALWARE_V3_EXPLANATION_PARAGRAPH_SUBRESOURCE" desc="The explanation of why Safe Browsing has blocked the page.">
+        Google Safe Browsing recently <ph name="BEGIN_LINK">&lt;a href="#" id="help-link"&gt;</ph>detected malware<ph name="END_LINK">&lt;/a&gt;</ph> on <ph name="SITE">$1<ex>example.com</ex></ph>. Websites that are normally safe are sometimes infected with malware. The malicious content comes from <ph name="SUBRESOURCE_HOST">$2<ex>evil.com</ex></ph>, a known malware distributor.
+      </message>
+      <message name="IDS_IOS_MALWARE_V3_HEADING" desc="The large heading at the top of the malware interstitial.">
+        The site ahead contains malware
+      </message>
+      <message name="IDS_IOS_MALWARE_V3_PRIMARY_PARAGRAPH" desc="Mobile: The primary explanatory paragraph for the malware interstitial.">
+        Attackers currently on <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="SITE">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> might attempt to install dangerous apps on your device that steal or delete your information (for example, photos, passwords, messages, and credit cards).
+      </message>
+      <message name="IDS_IOS_MALWARE_V3_PROCEED_PARAGRAPH" desc="The paragraph that lets the user skip the warning.">
+        If you understand the risks to your security, you may <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>visit this unsafe site<ph name="END_LINK">&lt;/a&gt;</ph> before the dangerous programs have been removed.
+      </message>
+      <!-- - phishing interstitials -->
+      <message name="IDS_IOS_PHISHING_V3_EXPLANATION_PARAGRAPH" desc="The explanation of why Safe Browsing has blocked the page.">
+      Google Safe Browsing recently detected phishing on <ph name="SITE">$1<ex>example.com</ex></ph>. <ph name="BEGIN_LINK">&lt;a href="#" id="help-link"&gt;</ph>Phishing sites<ph name="END_LINK">&lt;/a&gt;</ph> pretend to be other websites to trick you.
+      </message>
+      <message name="IDS_IOS_PHISHING_V3_HEADING" desc="The large heading at the top of the phishing interstitial.">
+        Phishing attack ahead
+      </message>
+      <message name="IDS_IOS_PHISHING_V3_PRIMARY_PARAGRAPH" desc="The primary explanatory paragraph for the malware interstitial.">
+        Attackers on <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="SITE">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> might try to trick you to steal your information (for example, passwords, messages, or credit cards).
+      </message>
+      <message name="IDS_IOS_PHISHING_V3_PROCEED_PARAGRAPH" desc="The paragraph that lets the user skip the warning.">
+        If you understand the risks to your security, you may <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>visit this unsafe site<ph name="END_LINK">&lt;/a&gt;</ph>.
+      </message>
+      <message name="IDS_IOS_PHISHING_V4_HEADING" desc="The large heading at the top of the phishing interstitial.">
+        Deceptive site ahead
+      </message>
+      <message name="IDS_IOS_PHISHING_V4_PRIMARY_PARAGRAPH" desc="The primary explanatory paragraph for the malware interstitial.">
+        Attackers on <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="SITE">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> may trick you into doing something dangerous like installing software or revealing your personal information (for example, passwords, phone numbers, or credit cards).
+      </message>
+      <message name="IDS_IOS_PHISHING_V4_PROCEED_AND_REPORT_PARAGRAPH" desc="The paragraph that lets the user skip the warning.">
+        You can <ph name="BEGIN_ERROR_LINK">&lt;a href="#" id="report-error-link"&gt;</ph>report a detection problem<ph name="END_ERROR_LINK">&lt;/a&gt;</ph> or, if you understand the risks to your security, <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>visit this unsafe site<ph name="END_LINK">&lt;/a&gt;</ph>.
+      </message>
+      <!-- - shared strings -->
+      <message name="IDS_IOS_SAFEBROWSING_OVERRIDABLE_SAFETY_BUTTON" desc="The text for the button that takes the user back to the previous page.">
+        Back to safety
+      </message>
+      <message name="IDS_IOS_SAFEBROWSING_V3_CLOSE_DETAILS_BUTTON" desc="The text for the button that hides the details.">
+        Hide details
+      </message>
+      <message name="IDS_IOS_SAFEBROWSING_V3_OPEN_DETAILS_BUTTON" desc="The text for the button that expands the details.">
+        Details
+      </message>
+      <message name="IDS_IOS_SAFEBROWSING_V3_TITLE" desc="The tab title for the Safe Browsing interstitials.">
+        Security error
+      </message>
+
+      <message name="IDS_IOS_INTERSTITIAL_HEADING_SPOOFING_ATTEMPT_ERROR" desc="Header error message to tell user that the requested URI might be misleading [Length: 20em]">
+        Warning: Something's Not Right Here!
+      </message>
+      <message name="IDS_IOS_INTERSTITIAL_SUMMARY_SPOOFING_ATTEMPT_ERROR" desc="Summary error message to tell user that the requested URI might be misleading [Length: unlimited]">
+        Chrome is unable to verify that the URL for this site is correct.
+      </message>
+      <message name="IDS_IOS_INTERSTITIAL_DETAILS_SPOOFING_ATTEMPT_ERROR" desc="Details error message to tell user that the requested URI might be misleading [Length: unlimited]">
+        The site you are trying to access is acting strangely, and Chrome is unable to verify that its URL is correct. For security reasons, you should not proceed, and perhaps try again tomorrow or go somewhere else.
+      </message>
+
+      <message name="IDS_IOS_UPGRADE_AVAILABLE_BUTTON" desc="Displayed on a button the user can use to upgrade the a more recent version of the application. [Length: 10em]">
+        Update
+      </message>
+
+      <!-- Accessibility labels -->
+      <message name="IDS_IOS_ACCNAME_CLEAR_TEXT" desc="The accessibility label for the clear text button in the location bar [Length: unlimited].">
+        Clear Text
+      </message>
+      <message name="IDS_IOS_ACCNAME_VOICE_SEARCH" desc="The accessibility label for the voice search button in the location bar [Length: unlimited]">
+        Voice Search
+      </message>
+    </messages>
+  </release>
+</grit>

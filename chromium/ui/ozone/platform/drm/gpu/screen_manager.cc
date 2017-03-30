@@ -5,6 +5,7 @@
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
 
 #include <xf86drmMode.h>
+#include <utility>
 
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/gfx/geometry/point.h"
@@ -33,10 +34,9 @@ void FillModesetBuffer(const scoped_refptr<DrmDevice>& drm,
     return;
   }
 
-  auto crtcs = controller->crtc_controllers();
-  DCHECK(!crtcs.empty());
-
-  ScopedDrmCrtcPtr saved_crtc(drm->GetCrtc(crtcs[0]->crtc()));
+  DCHECK(!controller->crtc_controllers().empty());
+  CrtcController* first_crtc = controller->crtc_controllers()[0].get();
+  ScopedDrmCrtcPtr saved_crtc(drm->GetCrtc(first_crtc->crtc()));
   if (!saved_crtc || !saved_crtc->buffer_id) {
     VLOG(2) << "Crtc has no saved state or wasn't modeset";
     return;
@@ -68,9 +68,9 @@ void FillModesetBuffer(const scoped_refptr<DrmDevice>& drm,
 CrtcController* GetCrtcController(HardwareDisplayController* controller,
                                   const scoped_refptr<DrmDevice>& drm,
                                   uint32_t crtc) {
-  for (CrtcController* crtc_controller : controller->crtc_controllers()) {
+  for (const auto& crtc_controller : controller->crtc_controllers()) {
     if (crtc_controller->crtc() == crtc)
-      return crtc_controller;
+      return crtc_controller.get();
   }
 
   NOTREACHED();
@@ -100,9 +100,9 @@ void ScreenManager::AddDisplayController(const scoped_refptr<DrmDevice>& drm,
     return;
   }
 
-  controllers_.push_back(new HardwareDisplayController(
+  controllers_.push_back(make_scoped_ptr(new HardwareDisplayController(
       scoped_ptr<CrtcController>(new CrtcController(drm, crtc, connector)),
-      gfx::Point()));
+      gfx::Point())));
 }
 
 void ScreenManager::RemoveDisplayController(const scoped_refptr<DrmDevice>& drm,
@@ -144,7 +144,7 @@ bool ScreenManager::ActualConfigureDisplayController(
   DCHECK(controllers_.end() != it) << "Display controller (crtc=" << crtc
                                    << ") doesn't exist.";
 
-  HardwareDisplayController* controller = *it;
+  HardwareDisplayController* controller = it->get();
   CrtcController* crtc_controller = GetCrtcController(controller, drm, crtc);
   // If nothing changed just enable the controller. Note, we perform an exact
   // comparison on the mode since the refresh rate may have changed.
@@ -168,10 +168,10 @@ bool ScreenManager::ActualConfigureDisplayController(
   // mirror mode, subsequent calls configuring the other controllers will
   // restore mirror mode.
   if (controller->IsMirrored()) {
-    controller = new HardwareDisplayController(
-        controller->RemoveCrtc(drm, crtc), controller->origin());
-    controllers_.push_back(controller);
+    controllers_.push_back(make_scoped_ptr(new HardwareDisplayController(
+        controller->RemoveCrtc(drm, crtc), controller->origin())));
     it = controllers_.end() - 1;
+    controller = it->get();
   }
 
   HardwareDisplayControllers::iterator mirror =
@@ -188,11 +188,11 @@ bool ScreenManager::DisableDisplayController(
     uint32_t crtc) {
   HardwareDisplayControllers::iterator it = FindDisplayController(drm, crtc);
   if (it != controllers_.end()) {
-    HardwareDisplayController* controller = *it;
+    HardwareDisplayController* controller = it->get();
     if (controller->IsMirrored()) {
-      controller = new HardwareDisplayController(
-          controller->RemoveCrtc(drm, crtc), controller->origin());
-      controllers_.push_back(controller);
+      controllers_.push_back(make_scoped_ptr(new HardwareDisplayController(
+          controller->RemoveCrtc(drm, crtc), controller->origin())));
+      controller = controllers_.back().get();
     }
 
     controller->Disable();
@@ -209,7 +209,7 @@ HardwareDisplayController* ScreenManager::GetDisplayController(
   HardwareDisplayControllers::iterator it =
       FindActiveDisplayControllerByLocation(bounds);
   if (it != controllers_.end())
-    return *it;
+    return it->get();
 
   return nullptr;
 }
@@ -217,7 +217,7 @@ HardwareDisplayController* ScreenManager::GetDisplayController(
 void ScreenManager::AddWindow(gfx::AcceleratedWidget widget,
                               scoped_ptr<DrmWindow> window) {
   std::pair<WidgetToWindowMap::iterator, bool> result =
-      window_map_.add(widget, window.Pass());
+      window_map_.add(widget, std::move(window));
   DCHECK(result.second) << "Window already added.";
   UpdateControllerToWindowMapping();
 }
@@ -227,7 +227,7 @@ scoped_ptr<DrmWindow> ScreenManager::RemoveWindow(
   scoped_ptr<DrmWindow> window = window_map_.take_and_erase(widget);
   DCHECK(window) << "Attempting to remove non-existing window for " << widget;
   UpdateControllerToWindowMapping();
-  return window.Pass();
+  return window;
 }
 
 DrmWindow* ScreenManager::GetWindow(gfx::AcceleratedWidget widget) {
@@ -235,15 +235,13 @@ DrmWindow* ScreenManager::GetWindow(gfx::AcceleratedWidget widget) {
   if (it != window_map_.end())
     return it->second;
 
-  NOTREACHED() << "Attempting to get non-existing window for " << widget;
   return nullptr;
 }
 
 ScreenManager::HardwareDisplayControllers::iterator
 ScreenManager::FindDisplayController(const scoped_refptr<DrmDevice>& drm,
                                      uint32_t crtc) {
-  for (HardwareDisplayControllers::iterator it = controllers_.begin();
-       it != controllers_.end(); ++it) {
+  for (auto it = controllers_.begin(); it != controllers_.end(); ++it) {
     if ((*it)->HasCrtc(drm, crtc))
       return it;
   }
@@ -253,8 +251,7 @@ ScreenManager::FindDisplayController(const scoped_refptr<DrmDevice>& drm,
 
 ScreenManager::HardwareDisplayControllers::iterator
 ScreenManager::FindActiveDisplayControllerByLocation(const gfx::Rect& bounds) {
-  for (HardwareDisplayControllers::iterator it = controllers_.begin();
-       it != controllers_.end(); ++it) {
+  for (auto it = controllers_.begin(); it != controllers_.end(); ++it) {
     gfx::Rect controller_bounds((*it)->origin(), (*it)->GetModeSize());
     if (controller_bounds == bounds && !(*it)->IsDisabled())
       return it;
@@ -280,7 +277,7 @@ bool ScreenManager::HandleMirrorMode(
   // TODO(dnicoara): This is hacky, instead the DrmDisplay and CrtcController
   // should be merged and picking the mode should be done properly within
   // HardwareDisplayController.
-  if (ModesetController(*original, (*mirror)->origin(), mode)) {
+  if (ModesetController(original->get(), (*mirror)->origin(), mode)) {
     (*mirror)->AddCrtc((*original)->RemoveCrtc(drm, crtc));
     controllers_.erase(original);
     return true;
@@ -291,7 +288,7 @@ bool ScreenManager::HandleMirrorMode(
   // When things go wrong revert back to the previous configuration since
   // it is expected that the configuration would not have changed if
   // things fail.
-  ModesetController(*original, last_origin, last_mode);
+  ModesetController(original->get(), last_origin, last_mode);
   return false;
 }
 
@@ -299,7 +296,7 @@ void ScreenManager::UpdateControllerToWindowMapping() {
   std::map<DrmWindow*, HardwareDisplayController*> window_to_controller_map;
   // First create a unique mapping between a window and a controller. Note, a
   // controller may be associated with at most 1 window.
-  for (HardwareDisplayController* controller : controllers_) {
+  for (const auto& controller : controllers_) {
     if (controller->IsDisabled())
       continue;
 
@@ -308,16 +305,26 @@ void ScreenManager::UpdateControllerToWindowMapping() {
     if (!window)
       continue;
 
-    window_to_controller_map[window] = controller;
+    window_to_controller_map[window] = controller.get();
   }
 
   // Apply the new mapping to all windows.
   for (auto pair : window_map_) {
     auto it = window_to_controller_map.find(pair.second);
+    HardwareDisplayController* controller = nullptr;
     if (it != window_to_controller_map.end())
-      pair.second->SetController(it->second);
-    else
-      pair.second->SetController(nullptr);
+      controller = it->second;
+
+    bool should_enable =
+        controller && pair.second->GetController() != controller;
+    pair.second->SetController(controller);
+
+    // If we're moving windows between controllers modeset the controller
+    // otherwise the controller may be waiting for a page flip while the window
+    // tries to schedule another buffer.
+    if (should_enable) {
+      EnableController(controller);
+    }
   }
 }
 
@@ -332,8 +339,8 @@ OverlayPlane ScreenManager::GetModesetBuffer(
   }
 
   scoped_refptr<DrmDevice> drm = controller->GetAllocationDrmDevice();
-  scoped_refptr<ScanoutBuffer> buffer =
-      buffer_generator_->Create(drm, bounds.size());
+  scoped_refptr<ScanoutBuffer> buffer = buffer_generator_->Create(
+      drm, gfx::BufferFormat::BGRA_8888, bounds.size());
   if (!buffer) {
     LOG(ERROR) << "Failed to create scanout buffer";
     return OverlayPlane(nullptr, 0, gfx::OVERLAY_TRANSFORM_INVALID, gfx::Rect(),

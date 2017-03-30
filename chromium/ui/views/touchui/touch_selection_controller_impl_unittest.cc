@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/test/test_cursor_client.h"
@@ -63,8 +66,6 @@ class TouchSelectionControllerImplTest : public ViewsTestBase {
         widget_(nullptr),
         textfield_(nullptr),
         views_tsc_factory_(new ViewsTouchEditingControllerFactory) {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableTouchEditing);
     ui::TouchEditingControllerFactory::SetInstance(views_tsc_factory_.get());
   }
 
@@ -610,7 +611,7 @@ class TestTouchEditable : public ui::TouchEditable {
     bounds_ = bounds;
   }
 
-  void set_cursor_rect(const gfx::Rect& cursor_rect) {
+  void set_cursor_rect(const gfx::RectF& cursor_rect) {
     cursor_bound_.SetEdge(cursor_rect.origin(), cursor_rect.bottom_left());
     cursor_bound_.set_type(ui::SelectionBound::Type::CENTER);
   }
@@ -689,31 +690,35 @@ TEST_F(TouchSelectionControllerImplTest,
 
   // Put the cursor completely inside the client bounds. Handle should be
   // visible.
-  touch_editable.set_cursor_rect(gfx::Rect(2, 0, 1, 20));
+  touch_editable.set_cursor_rect(gfx::RectF(2.f, 0.f, 1.f, 20.f));
   touch_selection_controller->SelectionChanged();
   EXPECT_TRUE(IsCursorHandleVisibleFor(touch_selection_controller.get()));
 
   // Move the cursor up such that |kBarMinHeight| pixels are still in the client
   // bounds. Handle should still be visible.
-  touch_editable.set_cursor_rect(gfx::Rect(2, kBarMinHeight - 20, 1, 20));
+  touch_editable.set_cursor_rect(
+      gfx::RectF(2.f, kBarMinHeight - 20.f, 1.f, 20.f));
   touch_selection_controller->SelectionChanged();
   EXPECT_TRUE(IsCursorHandleVisibleFor(touch_selection_controller.get()));
 
   // Move the cursor up such that less than |kBarMinHeight| pixels are in the
   // client bounds. Handle should be hidden.
-  touch_editable.set_cursor_rect(gfx::Rect(2, kBarMinHeight - 20 - 1, 1, 20));
+  touch_editable.set_cursor_rect(
+      gfx::RectF(2.f, kBarMinHeight - 20.f - 1.f, 1.f, 20.f));
   touch_selection_controller->SelectionChanged();
   EXPECT_FALSE(IsCursorHandleVisibleFor(touch_selection_controller.get()));
 
   // Move the Cursor down such that |kBarBottomAllowance| pixels are out of the
   // client bounds. Handle should be visible.
-  touch_editable.set_cursor_rect(gfx::Rect(2, kBarBottomAllowance, 1, 20));
+  touch_editable.set_cursor_rect(
+      gfx::RectF(2.f, kBarBottomAllowance, 1.f, 20.f));
   touch_selection_controller->SelectionChanged();
   EXPECT_TRUE(IsCursorHandleVisibleFor(touch_selection_controller.get()));
 
   // Move the cursor down such that more than |kBarBottomAllowance| pixels are
   // out of the client bounds. Handle should be hidden.
-  touch_editable.set_cursor_rect(gfx::Rect(2, kBarBottomAllowance + 1, 1, 20));
+  touch_editable.set_cursor_rect(
+      gfx::RectF(2.f, kBarBottomAllowance + 1.f, 1.f, 20.f));
   touch_selection_controller->SelectionChanged();
   EXPECT_FALSE(IsCursorHandleVisibleFor(touch_selection_controller.get()));
 
@@ -797,6 +802,25 @@ TEST_F(TouchSelectionControllerImplTest, MouseEventDeactivatesTouchSelection) {
   generator.MoveMouseTo(5, 505);
   RunPendingMessages();
   EXPECT_FALSE(GetSelectionController());
+}
+
+TEST_F(TouchSelectionControllerImplTest, MouseCaptureChangedEventIgnored) {
+  CreateTextfield();
+  EXPECT_FALSE(GetSelectionController());
+
+  ui::test::EventGenerator generator(
+      textfield_widget_->GetNativeView()->GetRootWindow());
+  RunPendingMessages();
+
+  // Start touch editing; then generate a mouse-capture-changed event and ensure
+  // it does not deactivate touch selection.
+  StartTouchEditing();
+  EXPECT_TRUE(GetSelectionController());
+  ui::MouseEvent capture_changed(ui::ET_MOUSE_CAPTURE_CHANGED, gfx::Point(5, 5),
+                                 gfx::Point(5, 5), base::TimeDelta(), 0, 0);
+  generator.Dispatch(&capture_changed);
+  RunPendingMessages();
+  EXPECT_TRUE(GetSelectionController());
 }
 
 TEST_F(TouchSelectionControllerImplTest, KeyEventDeactivatesTouchSelection) {

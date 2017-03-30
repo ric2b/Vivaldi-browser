@@ -16,6 +16,7 @@
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
+#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "ios/web/public/web_thread.h"
@@ -31,20 +32,6 @@ static const NSUInteger kSnapshotPixelSize = 8;
 + (base::FilePath)imagePathForSessionID:(NSString*)sessionID;
 + (base::FilePath)greyImagePathForSessionID:(NSString*)sessionID;
 - (void)handleLowMemory;
-@end
-
-@interface SnapshotCache (TestingAdditions)
-- (BOOL)hasImageInMemory:(NSString*)sessionID;
-- (BOOL)hasGreyImageInMemory:(NSString*)sessionID;
-@end
-
-@implementation SnapshotCache (TestingAdditions)
-- (BOOL)hasImageInMemory:(NSString*)sessionID {
-  return [imageDictionary_ objectForKey:sessionID] != nil;
-}
-- (BOOL)hasGreyImageInMemory:(NSString*)sessionID {
-  return [greyImageDictionary_ objectForKey:sessionID] != nil;
-}
 @end
 
 namespace {
@@ -229,14 +216,18 @@ class SnapshotCacheTest : public PlatformTest {
 TEST_F(SnapshotCacheTest, Cache) {
   // Don't run on tablets because color snapshots are not cached so this test
   // can't compare the UIImage pointers directly.
-  if (IsIPadIdiom()) {
+  if (IsIPadIdiom() && !experimental_flags::IsTabSwitcherEnabled()) {
     return;
   }
 
   SnapshotCache* cache = GetSnapshotCache();
 
+  NSUInteger expectedCacheSize = kSessionCount;
+  if (experimental_flags::IsLRUSnapshotCacheEnabled())
+    expectedCacheSize = MIN(kSessionCount, [cache lruCacheMaxSize]);
+
   // Put all images in the cache.
-  for (NSUInteger i = 0; i < kSessionCount; ++i) {
+  for (NSUInteger i = 0; i < expectedCacheSize; ++i) {
     UIImage* image = [testImages_ objectAtIndex:i];
     NSString* sessionID = [testSessions_ objectAtIndex:i];
     [cache setImage:image withSessionID:sessionID];
@@ -244,7 +235,7 @@ TEST_F(SnapshotCacheTest, Cache) {
 
   // Get images back.
   __block NSUInteger numberOfCallbacks = 0;
-  for (NSUInteger i = 0; i < kSessionCount; ++i) {
+  for (NSUInteger i = 0; i < expectedCacheSize; ++i) {
     NSString* sessionID = [testSessions_ objectAtIndex:i];
     UIImage* expectedImage = [testImages_ objectAtIndex:i];
     EXPECT_TRUE(expectedImage != nil);
@@ -256,7 +247,7 @@ TEST_F(SnapshotCacheTest, Cache) {
                               ++numberOfCallbacks;
                             }];
   }
-  EXPECT_EQ(kSessionCount, numberOfCallbacks);
+  EXPECT_EQ(expectedCacheSize, numberOfCallbacks);
 }
 
 // This test puts all the snapshots in the cache and flushes them to disk.
@@ -377,13 +368,13 @@ TEST_F(SnapshotCacheTest, HandleLowMemory) {
   [set addObject:secondPinnedID];
   cache.pinnedIDs = set;
 
-  if (!IsIPadIdiom())
+  if (!IsIPadIdiom() || experimental_flags::IsTabSwitcherEnabled())
     [cache handleLowMemory];
 
   BOOL expectedValue = YES;
-  if (IsIPadIdiom()) {
+  if (IsIPadIdiom() && !experimental_flags::IsTabSwitcherEnabled())
     expectedValue = NO;
-  }
+
   EXPECT_EQ(expectedValue, [cache hasImageInMemory:firstPinnedID]);
   EXPECT_EQ(expectedValue, [cache hasImageInMemory:secondPinnedID]);
 
@@ -432,7 +423,7 @@ TEST_F(SnapshotCacheTest, CreateGreyCacheFromDisk) {
   // Remove color images from in-memory cache.
   SnapshotCache* cache = GetSnapshotCache();
 
-  if (!IsIPadIdiom())
+  if (!IsIPadIdiom() || experimental_flags::IsTabSwitcherEnabled())
     [cache handleLowMemory];
 
   // Request the creation of a grey image cache for all images.
@@ -474,7 +465,7 @@ TEST_F(SnapshotCacheTest, MostRecentGreyBlock) {
   LoadColorImagesIntoCache(kNumImages, true);
   // Make sure the color images are only on disk, to ensure the background
   // thread is slow enough to queue up the requests.
-  if (!IsIPadIdiom())
+  if (!IsIPadIdiom() || experimental_flags::IsTabSwitcherEnabled())
     [cache handleLowMemory];
 
   // Enable the grey image cache.
@@ -546,7 +537,7 @@ TEST_F(SnapshotCacheTest, SizeAndScalePreservation) {
   NSString* const kSession = @"foo";
   [cache setImage:image withSessionID:kSession];
   FlushRunLoops();  // ensure the file is written to disk.
-  if (!IsIPadIdiom())
+  if (!IsIPadIdiom() || experimental_flags::IsTabSwitcherEnabled())
     [cache handleLowMemory];
 
   // Retrive the image and have the callback verify the size and scale.
@@ -583,7 +574,7 @@ TEST_F(SnapshotCacheTest, DeleteRetinaImages) {
   NSString* const kSession = @"foo";
   [cache setImage:image withSessionID:kSession];
   FlushRunLoops();  // ensure the file is written to disk.
-  if (!IsIPadIdiom())
+  if (!IsIPadIdiom() || experimental_flags::IsTabSwitcherEnabled())
     [cache handleLowMemory];
 
   // Verify the file was writted with @2x in the file name.

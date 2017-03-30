@@ -5,6 +5,9 @@
 #ifndef MEDIA_CAST_TEST_LOOPBACK_TRANSPORT_H_
 #define MEDIA_CAST_TEST_LOOPBACK_TRANSPORT_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/cast/cast_environment.h"
@@ -31,7 +34,7 @@ class LoopBackTransport : public PacketSender {
 
   bool SendPacket(PacketRef packet, const base::Closure& cb) final;
 
-  int64 GetBytesSent() final;
+  int64_t GetBytesSent() final;
 
   // Initiailize this loopback transport.
   // Establish a flow of packets from |pipe| to |packet_receiver|.
@@ -50,7 +53,7 @@ class LoopBackTransport : public PacketSender {
  private:
   const scoped_refptr<CastEnvironment> cast_environment_;
   scoped_ptr<test::PacketPipe> packet_pipe_;
-  int64 bytes_sent_;
+  int64_t bytes_sent_;
 
   DISALLOW_COPY_AND_ASSIGN(LoopBackTransport);
 };

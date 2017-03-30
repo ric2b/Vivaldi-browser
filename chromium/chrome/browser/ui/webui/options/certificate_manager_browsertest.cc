@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/options/options_ui_browsertest.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
@@ -50,6 +51,7 @@ class CertificateManagerBrowserTest : public options::OptionsUIBrowserTest {
     policy.Set(policy::key::kOpenNetworkConfiguration,
                policy::POLICY_LEVEL_MANDATORY,
                policy::POLICY_SCOPE_USER,
+               policy::POLICY_SOURCE_CLOUD,
                new base::StringValue(user_policy_blob),
                NULL);
     provider_.UpdateChromePolicy(policy);

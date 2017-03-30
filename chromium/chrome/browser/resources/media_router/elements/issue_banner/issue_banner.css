@@ -2,56 +2,49 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-.action {
-  /* TODO(apacible): Update to use Chromium paper color. */
-  background-color: rgb(82, 147, 242);
-  color: white;
-}
-
-#blocking-issue-buttons {
-  display: flex;
-}
-
-#blocking-issue-header {
-  display: flex;
+.blocking {
+  background-color: white;
   overflow: hidden;
-  padding-top: 10px;
+  position: relative;
+  text-align: center;
 }
 
-#blocking-issue-message {
-  -webkit-padding-start: 8px;
-  color: rgb(125, 125, 125);
+.blocking > #buttons {
+  padding-bottom: 24px;
+  padding-top: 20px;
+}
+
+.blocking > div > #title {
+  color: rgba(0, 0, 0, 0.87);
   line-height: 1.125em;
+  padding: 10px;
   vertical-align: middle;
 }
 
-#blocking-issue-title {
-  -webkit-padding-start: 8px;
-  font-weight: bold;
-  line-height: 1.125em;
-  vertical-align: top;
+#blocking-icon {
+  color: rgb(219, 68, 55);
+  height: 75px;
+  padding-top: 24px;
+  width: 75px;
 }
 
-.issue-action {
-  color: black;
-  cursor: pointer;
-  text-decoration: underline;
+.non-blocking {
+  background-color: rgb(66, 66, 66);
+  overflow: hidden;
+  padding: 16px;
 }
 
-#non-blocking-issue {
-  -webkit-padding-start: 12px;
-  background-color: rgb(249, 236, 191);
-  line-height: 1.25em;
-  padding-bottom: 6px;
-  padding-top: 6px;
+.non-blocking > #buttons {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  width: 100%;
 }
 
-#sad-face {
-  -webkit-margin-start: 20px;
-  background-image: -webkit-image-set(
-    url(../icon/sad-face.png) 1x,
-    url(../icon/sad-face2x.png) 2x);
-  background-repeat: no-repeat;
-  height: 32px;
-  width: 32px;
+.non-blocking > div > #title {
+  color: rgba(255, 255, 255, 0.87);
+}
+
+paper-button {
+  margin: 0;
 }

@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/bluetooth/bluetooth_api_pairing_delegate.h"
 
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
@@ -15,23 +17,22 @@
 
 namespace extensions {
 
-namespace bt_private = core_api::bluetooth_private;
+namespace bt_private = api::bluetooth_private;
 
 namespace {
 
 void PopulatePairingEvent(const device::BluetoothDevice* device,
                           bt_private::PairingEventType type,
                           bt_private::PairingEvent* out) {
-  core_api::bluetooth::BluetoothDeviceToApiDevice(*device, &out->device);
+  api::bluetooth::BluetoothDeviceToApiDevice(*device, &out->device);
   out->pairing = type;
 }
 
 }  // namespace
 
 BluetoothApiPairingDelegate::BluetoothApiPairingDelegate(
-    const std::string& extension_id,
     content::BrowserContext* browser_context)
-    : extension_id_(extension_id), browser_context_(browser_context) {}
+    : browser_context_(browser_context) {}
 
 BluetoothApiPairingDelegate::~BluetoothApiPairingDelegate() {}
 
@@ -63,7 +64,7 @@ void BluetoothApiPairingDelegate::DisplayPinCode(
 
 void BluetoothApiPairingDelegate::DisplayPasskey(
     device::BluetoothDevice* device,
-    uint32 passkey) {
+    uint32_t passkey) {
   bt_private::PairingEvent event;
   PopulatePairingEvent(
       device, bt_private::PAIRING_EVENT_TYPE_DISPLAYPASSKEY, &event);
@@ -72,7 +73,7 @@ void BluetoothApiPairingDelegate::DisplayPasskey(
 }
 
 void BluetoothApiPairingDelegate::KeysEntered(device::BluetoothDevice* device,
-                                              uint32 entered) {
+                                              uint32_t entered) {
   bt_private::PairingEvent event;
   PopulatePairingEvent(
       device, bt_private::PAIRING_EVENT_TYPE_KEYSENTERED, &event);
@@ -82,7 +83,7 @@ void BluetoothApiPairingDelegate::KeysEntered(device::BluetoothDevice* device,
 
 void BluetoothApiPairingDelegate::ConfirmPasskey(
     device::BluetoothDevice* device,
-    uint32 passkey) {
+    uint32_t passkey) {
   bt_private::PairingEvent event;
   PopulatePairingEvent(
       device, bt_private::PAIRING_EVENT_TYPE_CONFIRMPASSKEY, &event);
@@ -104,9 +105,8 @@ void BluetoothApiPairingDelegate::DispatchPairingEvent(
       bt_private::OnPairing::Create(pairing_event);
   scoped_ptr<Event> event(new Event(events::BLUETOOTH_PRIVATE_ON_PAIRING,
                                     bt_private::OnPairing::kEventName,
-                                    args.Pass()));
-  EventRouter::Get(browser_context_)
-      ->DispatchEventToExtension(extension_id_, event.Pass());
+                                    std::move(args)));
+  EventRouter::Get(browser_context_)->BroadcastEvent(std::move(event));
 }
 
 }  // namespace extensions

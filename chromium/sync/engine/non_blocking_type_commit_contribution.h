@@ -5,40 +5,43 @@
 #ifndef SYNC_ENGINE_NON_BLOCKING_TYPE_COMMIT_CONTRIBUTION_H_
 #define SYNC_ENGINE_NON_BLOCKING_TYPE_COMMIT_CONTRIBUTION_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "sync/engine/commit_contribution.h"
 #include "sync/protocol/sync.pb.h"
 
-namespace syncer {
+namespace syncer_v2 {
 
-class ModelTypeSyncWorkerImpl;
+class ModelTypeWorker;
 
 // A non-blocking sync type's contribution to an outgoing commit message.
 //
 // Helps build a commit message and process its response.  It collaborates
-// closely with the ModelTypeSyncWorkerImpl.
-class NonBlockingTypeCommitContribution : public CommitContribution {
+// closely with the ModelTypeWorker.
+class NonBlockingTypeCommitContribution : public syncer::CommitContribution {
  public:
   NonBlockingTypeCommitContribution(
       const sync_pb::DataTypeContext& context,
       const google::protobuf::RepeatedPtrField<sync_pb::SyncEntity>& entities,
-      const std::vector<int64>& sequence_numbers,
-      ModelTypeSyncWorkerImpl* worker);
+      const std::vector<int64_t>& sequence_numbers,
+      ModelTypeWorker* worker);
   ~NonBlockingTypeCommitContribution() override;
 
   // Implementation of CommitContribution
   void AddToCommitMessage(sync_pb::ClientToServerMessage* msg) override;
-  SyncerError ProcessCommitResponse(
+  syncer::SyncerError ProcessCommitResponse(
       const sync_pb::ClientToServerResponse& response,
-      sessions::StatusController* status) override;
+      syncer::sessions::StatusController* status) override;
   void CleanUp() override;
   size_t GetNumEntries() const override;
 
  private:
   // A non-owned pointer back to the object that created this contribution.
-  ModelTypeSyncWorkerImpl* const worker_;
+  ModelTypeWorker* const worker_;
 
   // The type-global context information.
   const sync_pb::DataTypeContext context_;
@@ -48,7 +51,7 @@ class NonBlockingTypeCommitContribution : public CommitContribution {
 
   // The sequence numbers associated with the pending commits.  These match up
   // with the entities_ vector.
-  const std::vector<int64> sequence_numbers_;
+  const std::vector<int64_t> sequence_numbers_;
 
   // The index in the commit message where this contribution's entities are
   // added.  Used to correlate per-item requests with per-item responses.
@@ -61,6 +64,6 @@ class NonBlockingTypeCommitContribution : public CommitContribution {
   DISALLOW_COPY_AND_ASSIGN(NonBlockingTypeCommitContribution);
 };
 
-}  // namespace syncer
+}  // namespace syncer_v2
 
 #endif  // SYNC_ENGINE_NON_BLOCKING_TYPE_COMMIT_CONTRIBUTION_H_

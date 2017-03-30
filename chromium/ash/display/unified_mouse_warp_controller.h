@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef ASH_DISPLAY_UNIFIED_MOUSE_WARP_CONTROLLER_H
-#define ASH_DISPLAY_UNIFIED_MOUSE_WARP_CONTROLLER_H
+#ifndef ASH_DISPLAY_UNIFIED_MOUSE_WARP_CONTROLLER_H_
+#define ASH_DISPLAY_UNIFIED_MOUSE_WARP_CONTROLLER_H_
 
 #include "ash/display/mouse_warp_controller.h"
 
-#include "base/gtest_prod_util.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace aura {
@@ -35,7 +37,7 @@ class ASH_EXPORT UnifiedMouseWarpController : public MouseWarpController {
 
  private:
   friend class test::DisplayManagerTestApi;
-  FRIEND_TEST_ALL_PREFIXES(UnifiedMouseWarpControllerTest, BoundaryTest);
+  friend class UnifiedMouseWarpControllerTest;
 
   void ComputeBounds();
 
@@ -48,16 +50,18 @@ class ASH_EXPORT UnifiedMouseWarpController : public MouseWarpController {
                                      const gfx::Point& point_in_screen,
                                      bool update_mouse_location_now);
 
-  void allow_non_native_event_for_test() { allow_non_native_event_ = true; }
+  void update_location_for_test() { update_location_for_test_ = true; }
 
   gfx::Rect first_edge_bounds_in_native_;
   gfx::Rect second_edge_bounds_in_native_;
 
-  bool allow_non_native_event_;
+  int64_t current_cursor_display_id_;
+
+  bool update_location_for_test_;
 
   DISALLOW_COPY_AND_ASSIGN(UnifiedMouseWarpController);
 };
 
 }  // namespace ash
 
-#endif  // ASH_DISPLAY_UNIFIED_MOUSE_WARP_CONTROLLER_H
+#endif  // ASH_DISPLAY_UNIFIED_MOUSE_WARP_CONTROLLER_H_

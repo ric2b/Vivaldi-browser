@@ -4,12 +4,16 @@
 
 #include "content/renderer/pepper/pepper_graphics_2d_host.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "cc/resources/shared_bitmap.h"
 #include "cc/resources/texture_mailbox.h"
 #include "content/child/child_shared_bitmap_manager.h"
@@ -51,7 +55,7 @@ namespace content {
 
 namespace {
 
-const int64 kOffscreenCallbackDelayMs = 1000 / 30;  // 30 fps
+const int64_t kOffscreenCallbackDelayMs = 1000 / 30;  // 30 fps
 
 // Converts a rect inside an image of the given dimensions. The rect may be
 // NULL to indicate it should be the entire image. If the rect is outside of
@@ -70,13 +74,13 @@ bool ValidateAndConvertRect(const PP_Rect* rect,
       return false;
 
     // Check the max bounds, being careful of overflow.
-    if (static_cast<int64>(rect->point.x) +
-            static_cast<int64>(rect->size.width) >
-        static_cast<int64>(image_width))
+    if (static_cast<int64_t>(rect->point.x) +
+            static_cast<int64_t>(rect->size.width) >
+        static_cast<int64_t>(image_width))
       return false;
-    if (static_cast<int64>(rect->point.y) +
-            static_cast<int64>(rect->size.height) >
-        static_cast<int64>(image_height))
+    if (static_cast<int64_t>(rect->point.y) +
+            static_cast<int64_t>(rect->size.height) >
+        static_cast<int64_t>(image_height))
       return false;
 
     *dest = gfx::Rect(
@@ -229,8 +233,8 @@ int32_t PepperGraphics2DHost::OnResourceMessageReceived(
                                       OnHostMsgScroll)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_Graphics2D_ReplaceContents,
                                       OnHostMsgReplaceContents)
-    PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_Graphics2D_Flush,
-                                      OnHostMsgFlush)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL_0(PpapiHostMsg_Graphics2D_Flush,
+                                        OnHostMsgFlush)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_Graphics2D_SetScale,
                                       OnHostMsgSetScale)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_Graphics2D_ReadImageData,
@@ -255,12 +259,12 @@ bool PepperGraphics2DHost::ReadImageData(PP_Resource image,
   // Validate the bitmap position.
   int x = top_left->x;
   if (x < 0 ||
-      static_cast<int64>(x) + static_cast<int64>(image_resource->width()) >
+      static_cast<int64_t>(x) + static_cast<int64_t>(image_resource->width()) >
           image_data_->width())
     return false;
   int y = top_left->y;
   if (y < 0 ||
-      static_cast<int64>(y) + static_cast<int64>(image_resource->height()) >
+      static_cast<int64_t>(y) + static_cast<int64_t>(image_resource->height()) >
           image_data_->height())
     return false;
 
@@ -284,7 +288,7 @@ bool PepperGraphics2DHost::ReadImageData(PP_Resource image,
     SkPaint paint;
     paint.setXfermodeMode(SkXfermode::kSrc_Mode);
     dest_canvas->drawBitmapRect(
-        *image_data_->GetMappedBitmap(), &src_irect, dest_rect, &paint);
+        *image_data_->GetMappedBitmap(), src_irect, dest_rect, &paint);
   }
   return true;
 }
@@ -332,8 +336,7 @@ void PepperGraphics2DHost::Paint(blink::WebCanvas* canvas,
   SkAutoCanvasRestore auto_restore(canvas, true);
   canvas->clipRect(sk_invalidate_rect);
   gfx::Size pixel_image_size(image_data_->width(), image_data_->height());
-  gfx::Size image_size =
-      gfx::ToFlooredSize(gfx::ScaleSize(pixel_image_size, scale_));
+  gfx::Size image_size = gfx::ScaleToFlooredSize(pixel_image_size, scale_);
 
   PepperPluginInstance* plugin_instance =
       renderer_ppapi_host_->GetPluginInstance(pp_instance());
@@ -372,15 +375,10 @@ void PepperGraphics2DHost::Paint(blink::WebCanvas* canvas,
     paint.setXfermodeMode(SkXfermode::kSrc_Mode);
   }
 
-  SkPoint origin;
-  origin.set(SkIntToScalar(plugin_rect.x()), SkIntToScalar(plugin_rect.y()));
-
-  SkPoint pixel_origin = origin;
-
+  SkPoint pixel_origin(PointToSkPoint(plugin_rect.origin()));
   if (scale_ != 1.0f && scale_ > 0.0f) {
     canvas->scale(scale_, scale_);
-    pixel_origin.set(pixel_origin.x() * (1.0f / scale_),
-                     pixel_origin.y() * (1.0f / scale_));
+    pixel_origin.scale(1.0f / scale_);
   }
   canvas->drawBitmap(image, pixel_origin.x(), pixel_origin.y(), &paint);
 }
@@ -436,14 +434,14 @@ int32_t PepperGraphics2DHost::OnHostMsgPaintImageData(
 
   // Validate the bitmap position using the previously-validated rect, there
   // should be no painted area outside of the image.
-  int64 x64 = static_cast<int64>(top_left.x);
-  int64 y64 = static_cast<int64>(top_left.y);
-  if (x64 + static_cast<int64>(operation.paint_src_rect.x()) < 0 ||
-      x64 + static_cast<int64>(operation.paint_src_rect.right()) >
+  int64_t x64 = static_cast<int64_t>(top_left.x);
+  int64_t y64 = static_cast<int64_t>(top_left.y);
+  if (x64 + static_cast<int64_t>(operation.paint_src_rect.x()) < 0 ||
+      x64 + static_cast<int64_t>(operation.paint_src_rect.right()) >
           image_data_->width())
     return PP_ERROR_BADARGUMENT;
-  if (y64 + static_cast<int64>(operation.paint_src_rect.y()) < 0 ||
-      y64 + static_cast<int64>(operation.paint_src_rect.bottom()) >
+  if (y64 + static_cast<int64_t>(operation.paint_src_rect.y()) < 0 ||
+      y64 + static_cast<int64_t>(operation.paint_src_rect.bottom()) >
           image_data_->height())
     return PP_ERROR_BADARGUMENT;
   operation.paint_x = top_left.x;
@@ -467,8 +465,8 @@ int32_t PepperGraphics2DHost::OnHostMsgScroll(
 
   // If we're being asked to scroll by more than the clip rect size, just
   // ignore this scroll command and say it worked.
-  int32 dx = amount.x;
-  int32 dy = amount.y;
+  int32_t dx = amount.x;
+  int32_t dy = amount.y;
   if (dx <= -image_data_->width() || dx >= image_data_->width() ||
       dy <= -image_data_->height() || dy >= image_data_->height())
     return PP_ERROR_BADARGUMENT;
@@ -504,14 +502,10 @@ int32_t PepperGraphics2DHost::OnHostMsgReplaceContents(
 }
 
 int32_t PepperGraphics2DHost::OnHostMsgFlush(
-    ppapi::host::HostMessageContext* context,
-    const std::vector<ui::LatencyInfo>& latency_info) {
+    ppapi::host::HostMessageContext* context) {
   // Don't allow more than one pending flush at a time.
   if (HasPendingFlush())
     return PP_ERROR_INPROGRESS;
-
-  if (bound_instance_)
-    bound_instance_->AddLatencyInfo(latency_info);
 
   PP_Resource old_image_data = 0;
   flush_reply_context_ = context->MakeReplyMessageContext();
@@ -554,13 +548,13 @@ int32_t PepperGraphics2DHost::OnHostMsgReadImageData(
 
 void PepperGraphics2DHost::ReleaseCallback(scoped_ptr<cc::SharedBitmap> bitmap,
                                            const gfx::Size& bitmap_size,
-                                           uint32 sync_point,
+                                           const gpu::SyncToken& sync_token,
                                            bool lost_resource) {
   cached_bitmap_.reset();
   // Only keep around a cached bitmap if the plugin is currently drawing (has
   // need_flush_ack_ set).
   if (need_flush_ack_ && bound_instance_)
-    cached_bitmap_ = bitmap.Pass();
+    cached_bitmap_ = std::move(bitmap);
   cached_bitmap_size_ = bitmap_size;
 }
 
@@ -574,7 +568,7 @@ bool PepperGraphics2DHost::PrepareTextureMailbox(
   scoped_ptr<cc::SharedBitmap> shared_bitmap;
   if (cached_bitmap_) {
     if (cached_bitmap_size_ == pixel_image_size)
-      shared_bitmap = cached_bitmap_.Pass();
+      shared_bitmap = std::move(cached_bitmap_);
     else
       cached_bitmap_.reset();
   }
@@ -731,7 +725,7 @@ void PepperGraphics2DHost::ExecutePaintImageData(PPB_ImageData_Impl* image,
     SkPaint paint;
     paint.setXfermodeMode(SkXfermode::kSrc_Mode);
     backing_canvas->drawBitmapRect(
-        *image->GetMappedBitmap(), &src_irect, dest_rect, &paint);
+        *image->GetMappedBitmap(), src_irect, dest_rect, &paint);
   }
 }
 
@@ -806,18 +800,18 @@ bool PepperGraphics2DHost::ConvertToLogicalPixels(float scale,
   // Take the enclosing rectangle after scaling so a rectangle scaled down then
   // scaled back up by the inverse scale would fully contain the entire area
   // affected by the original rectangle.
-  *op_rect = gfx::ToEnclosingRect(gfx::ScaleRect(*op_rect, scale));
+  *op_rect = gfx::ScaleToEnclosingRect(*op_rect, scale);
   if (delta) {
     gfx::Point original_delta = *delta;
     float inverse_scale = 1.0f / scale;
-    *delta = gfx::ToFlooredPoint(gfx::ScalePoint(*delta, scale));
+    *delta = gfx::ScaleToFlooredPoint(*delta, scale);
 
     gfx::Rect inverse_scaled_rect =
-        gfx::ToEnclosingRect(gfx::ScaleRect(*op_rect, inverse_scale));
+        gfx::ScaleToEnclosingRect(*op_rect, inverse_scale);
     if (original_rect != inverse_scaled_rect)
       return false;
     gfx::Point inverse_scaled_point =
-        gfx::ToFlooredPoint(gfx::ScalePoint(*delta, inverse_scale));
+        gfx::ScaleToFlooredPoint(*delta, inverse_scale);
     if (original_delta != inverse_scaled_point)
       return false;
   }

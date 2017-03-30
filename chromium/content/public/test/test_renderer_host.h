@@ -5,8 +5,12 @@
 #ifndef CONTENT_PUBLIC_TEST_TEST_RENDERER_HOST_H_
 #define CONTENT_PUBLIC_TEST_TEST_RENDERER_HOST_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -75,6 +79,26 @@ class RenderFrameHostTester {
   // RenderFrameHost is owned by the parent RenderFrameHost.
   virtual RenderFrameHost* AppendChild(const std::string& frame_name) = 0;
 
+  // Simulates a renderer-initiated navigation to |url| starting in the
+  // RenderFrameHost.
+  virtual void SimulateNavigationStart(const GURL& url) = 0;
+
+  // Simulates a redirect to |new_url| for the navigation in the
+  // RenderFrameHost.
+  virtual void SimulateRedirect(const GURL& new_url) = 0;
+
+  // Simulates a navigation to |url| committing in the RenderFrameHost.
+  virtual void SimulateNavigationCommit(const GURL& url) = 0;
+
+  // Simulates a navigation to |url| failing with the error code |error_code|.
+  virtual void SimulateNavigationError(const GURL& url, int error_code) = 0;
+
+  // Simulates the commit of an error page following a navigation failure.
+  virtual void SimulateNavigationErrorPageCommit() = 0;
+
+  // Simulates a navigation stopping in the RenderFrameHost.
+  virtual void SimulateNavigationStop() = 0;
+
   // Calls OnDidCommitProvisionalLoad on the RenderFrameHost with the given
   // information with various sets of parameters. These are helper functions for
   // simulating the most common types of loads.
@@ -135,7 +159,7 @@ class RenderViewHostTester {
   virtual bool CreateTestRenderView(const base::string16& frame_name,
                                     int opener_frame_route_id,
                                     int proxy_routing_id,
-                                    int32 max_page_id,
+                                    int32_t max_page_id,
                                     bool created_with_opener) = 0;
 
   // Makes the WasHidden/WasShown calls to the RenderWidget that

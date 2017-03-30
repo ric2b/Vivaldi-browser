@@ -4,6 +4,8 @@
 
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_popup_cell.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <cmath>
 
@@ -16,8 +18,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_popup_view_mac.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
-#include "chrome/browser/ui/omnibox/omnibox_popup_model.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -63,10 +65,10 @@ NSColor* DimTextColor() {
   return [NSColor darkGrayColor];
 }
 NSColor* PositiveTextColor() {
-  return gfx::SkColorToCalibratedNSColor(SkColorSetRGB(0x0b, 0x80, 0x43));
+  return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0x0b, 0x80, 0x43));
 }
 NSColor* NegativeTextColor() {
-  return gfx::SkColorToCalibratedNSColor(SkColorSetRGB(0xc5, 0x39, 0x29));
+  return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0xc5, 0x39, 0x29));
 }
 NSColor* URLTextColor() {
   return [NSColor colorWithCalibratedRed:0.0 green:0.55 blue:0.0 alpha:1.0];
@@ -563,8 +565,10 @@ NSAttributedString* CreateClassifiedAttributedString(
       match.GetAdditionalInfo(kACMatchPropertyContentsStartIndex),
       &contentsStartIndex);
   // Ignore invalid state.
-  if (!base::StartsWith(match.fill_into_edit, inputText, true) ||
-      !base::EndsWith(match.fill_into_edit, match.contents, true) ||
+  if (!base::StartsWith(match.fill_into_edit, inputText,
+                        base::CompareCase::SENSITIVE) ||
+      !base::EndsWith(match.fill_into_edit, match.contents,
+                      base::CompareCase::SENSITIVE) ||
       ((size_t)contentsStartIndex >= inputText.length())) {
     return 0;
   }

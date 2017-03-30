@@ -5,8 +5,6 @@
 # GYP version: components/dom_distiller.gypi:dom_distiller_core
 source_set("core") {
   sources = [
-    "../android/component_jni_registrar.cc",
-    "../android/component_jni_registrar.h",
     "article_attachments_data.cc",
     "article_attachments_data.h",
     "article_distillation_update.cc",
@@ -29,6 +27,8 @@ source_set("core") {
     "distiller_url_fetcher.h",
     "dom_distiller_constants.cc",
     "dom_distiller_constants.h",
+    "dom_distiller_features.cc",
+    "dom_distiller_features.h",
     "dom_distiller_model.cc",
     "dom_distiller_model.h",
     "dom_distiller_observer.h",
@@ -42,7 +42,6 @@ source_set("core") {
     "dom_distiller_switches.h",
     "experiments.cc",
     "experiments.h",
-    "external_feedback_reporter.h",
     "feedback_reporter.cc",
     "feedback_reporter.h",
     "page_features.cc",
@@ -70,10 +69,10 @@ source_set("core") {
     "//components/pref_registry",
     "//components/resources",
     "//components/strings",
+    "//components/variations",
     "//net",
     "//skia",
     "//sync",
-    "//sync/protocol",  # TODO(brettw) bug 475091: this should be unnecessary.
     "//third_party/re2",
     "//ui/base",
     "//url",
@@ -116,6 +115,7 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "article_entry_unittest.cc",
+    "distillable_page_detector_unittest.cc",
     "distilled_content_store_unittest.cc",
     "distilled_page_prefs_unittests.cc",
     "distiller_unittest.cc",
@@ -142,6 +142,7 @@ source_set("unit_tests") {
     "//sync",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/base",
     "//url",
   ]
 }

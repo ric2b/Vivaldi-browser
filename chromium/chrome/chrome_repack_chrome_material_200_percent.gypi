@@ -6,9 +6,10 @@
   'action_name': 'repack_chrome_resources_material_200_percent',
   'variables': {
     'pak_inputs': [
+      '<(SHARED_INTERMEDIATE_DIR)/components/components_resources_material_200_percent.pak',
       '<(grit_out_dir)/theme_resources_material_200_percent.pak',
     ],
-    'pak_output': '<(SHARED_INTERMEDIATE_DIR)/repack/chrome_material_200_percent.pak',
+    'pak_output': '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_material_200_percent.pak',
   },
   'includes': [ '../build/repack_action.gypi' ],
 }

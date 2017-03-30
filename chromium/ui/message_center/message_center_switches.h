@@ -13,6 +13,11 @@ namespace switches {
 MESSAGE_CENTER_EXPORT extern const char
     kEnableMessageCenterAlwaysScrollUpUponNotificationRemoval[];
 
+// Flag to enable or disable notification changes while the message center
+// opens.  Possible values are "" (meant default), "enabled" or "disabled".
+// This flag will be removed once the feature gets stable.
+MESSAGE_CENTER_EXPORT extern const char kMessageCenterChangesWhileOpen[];
+
 }  // namespace switches
 
 #endif  // UI_MESSAGE_CENTER_MESSAGE_CENTER_SWITCHES_H_

@@ -5,12 +5,20 @@
 package org.chromium.chrome.browser.tabmodel.document;
 
 import android.content.Context;
-import android.util.Log;
+import android.os.AsyncTask;
+import android.util.SparseArray;
+
+import com.google.protobuf.nano.MessageNano;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.chrome.browser.TabState;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabPersister;
+import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel.Entry;
+import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelInfo.DocumentEntry;
+import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelInfo.DocumentList;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -18,6 +26,8 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Contains functions for interacting with the file system.
@@ -34,13 +44,23 @@ public class StorageDelegate extends TabPersister {
     /** The buffer size to use when reading the DocumentTabModel file, set to 4k bytes. */
     private static final int BUF_SIZE = 0x1000;
 
+    /** Cached base state directory to prevent main-thread filesystem access in getStateDirectory().
+     */
+    private static AsyncTask<Void, Void, File> sBaseStateDirectoryFetchTask;
+
+    public StorageDelegate() {
+        // Warm up the state directory to prevent it from using filesystem on main thread in the
+        // future
+        preloadStateDirectory();
+    }
+
     /**
      * Reads the file containing the minimum info required to restore the state of the
      * {@link DocumentTabModel}.
      * @param encrypted Whether or not the file corresponds to an OffTheRecord TabModel.
      * @return Byte buffer containing the task file's data, or null if it wasn't read.
      */
-    public byte[] readTaskFileBytes(boolean encrypted) {
+    protected byte[] readMetadataFileBytes(boolean encrypted) {
         // Incognito mode doesn't save its state out.
         if (encrypted) return null;
 
@@ -94,9 +114,31 @@ public class StorageDelegate extends TabPersister {
         }
     }
 
+    private void preloadStateDirectory() {
+        if (sBaseStateDirectoryFetchTask != null) {
+            return;
+        }
+
+        sBaseStateDirectoryFetchTask = new AsyncTask<Void, Void, File>() {
+            @Override
+            protected File doInBackground(Void... params) {
+                return ApplicationStatus.getApplicationContext().getDir(
+                        STATE_DIRECTORY, Context.MODE_PRIVATE);
+            }
+        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
     /** @return The directory that stores the TabState files. */
     @Override
     public File getStateDirectory() {
+        try {
+            return sBaseStateDirectoryFetchTask.get();
+        } catch (InterruptedException e) {
+        } catch (ExecutionException e) {
+        }
+
+        // If the AsyncTask failed for some reason, we have no choice but to fall back to
+        // main-thread disk access.
         return ApplicationStatus.getApplicationContext().getDir(
                 STATE_DIRECTORY, Context.MODE_PRIVATE);
     }
@@ -117,5 +159,82 @@ public class StorageDelegate extends TabPersister {
      */
     private String getFilename(boolean encrypted) {
         return encrypted ? null : REGULAR_FILE_NAME;
+    }
+
+    /**
+     * Update tab entries based on metadata.
+     * @param metadataBytes Metadata from last time Chrome was alive.
+     * @param entryMap Map to fill with {@link DocumentTabModel.Entry}s about Tabs.
+     * @param recentlyClosedTabIdList List to fill with IDs of recently closed tabs.
+     */
+    private void updateTabEntriesFromMetadata(byte[] metadataBytes, SparseArray<Entry> entryMap,
+            List<Integer> recentlyClosedTabIdList) {
+        if (metadataBytes != null) {
+            DocumentList list = null;
+            try {
+                list = MessageNano.mergeFrom(new DocumentList(), metadataBytes);
+            } catch (IOException e) {
+                Log.e(TAG, "I/O exception", e);
+            }
+            if (list == null) return;
+
+            for (int i = 0; i < list.entries.length; i++) {
+                DocumentEntry savedEntry = list.entries[i];
+                int tabId = savedEntry.tabId;
+
+                // If the tab ID isn't in the list, it must have been closed after Chrome died.
+                if (entryMap.indexOfKey(tabId) < 0) {
+                    recentlyClosedTabIdList.add(tabId);
+                    continue;
+                }
+
+                // Restore information about the Tab.
+                entryMap.get(tabId).canGoBack = savedEntry.canGoBack;
+            }
+        }
+    }
+
+    /**
+     * Constructs the DocumentTabModel's entries by combining the tasks currently listed in Android
+     * with information stored out in a metadata file.
+     * @param isIncognito               Whether to build an Incognito tab list.
+     * @param activityDelegate          Interacts with the Activitymanager.
+     * @param entryMap                  Map to fill with {@link DocumentTabModel.Entry}s about Tabs.
+     * @param tabIdList                 List to fill with live Tab IDs.
+     * @param recentlyClosedTabIdList   List to fill with IDs of recently closed tabs.
+     */
+    public void restoreTabEntries(final boolean isIncognito, ActivityDelegate activityDelegate,
+            final SparseArray<Entry> entryMap, List<Integer> tabIdList,
+            final List<Integer> recentlyClosedTabIdList) {
+        assert entryMap.size() == 0;
+        assert tabIdList.isEmpty();
+        assert recentlyClosedTabIdList.isEmpty();
+
+        // Run through Android's Overview to see what Chrome tabs are still listed.
+        List<Entry> entries = activityDelegate.getTasksFromRecents(isIncognito);
+        for (Entry entry : entries) {
+            int tabId = entry.tabId;
+            if (tabId != Tab.INVALID_TAB_ID) {
+                if (!tabIdList.contains(tabId)) tabIdList.add(tabId);
+                entryMap.put(tabId, entry);
+            }
+
+            // Prevent these tabs from being retargeted until we have had the opportunity to load
+            // more information about them.
+            entry.canGoBack = true;
+        }
+
+        new AsyncTask<Void, Void, byte[]>() {
+            @Override
+            protected byte[] doInBackground(Void... params) {
+                return readMetadataFileBytes(isIncognito);
+            }
+
+            @Override
+            protected void onPostExecute(byte[] metadataBytes) {
+                updateTabEntriesFromMetadata(metadataBytes, entryMap, recentlyClosedTabIdList);
+            }
+        // Run on serial executor to ensure that this is done before other start-up tasks.
+        }.executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
     }
 }

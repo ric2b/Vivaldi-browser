@@ -5,10 +5,13 @@
 #include "content/test/weburl_loader_mock.h"
 
 #include "base/logging.h"
+#include "base/memory/scoped_ptr.h"
+#include "content/child/web_url_loader_impl.h"
 #include "content/test/weburl_loader_mock_factory.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLLoaderClient.h"
+#include "third_party/WebKit/public/platform/WebUnitTestSupport.h"
 
 WebURLLoaderMock::WebURLLoaderMock(WebURLLoaderMockFactory* factory,
                                    blink::WebURLLoader* default_loader)
@@ -17,17 +20,14 @@ WebURLLoaderMock::WebURLLoaderMock(WebURLLoaderMockFactory* factory,
       default_loader_(default_loader),
       using_default_loader_(false),
       is_deferred_(false),
-      this_deleted_(NULL) {
+      weak_factory_(this) {
 }
 
 WebURLLoaderMock::~WebURLLoaderMock() {
-  // When |this_deleted_| is not null, there is someone interested to know if
-  // |this| got deleted. We notify them by setting the pointed value to true.
-  if (this_deleted_)
-    *this_deleted_ = true;
 }
 
 void WebURLLoaderMock::ServeAsynchronousRequest(
+    blink::WebURLLoaderTestDelegate* delegate,
     const blink::WebURLResponse& response,
     const blink::WebData& data,
     const blink::WebURLError& error) {
@@ -35,33 +35,69 @@ void WebURLLoaderMock::ServeAsynchronousRequest(
   if (!client_)
     return;
 
-  bool this_deleted = false;
-  this_deleted_ = &this_deleted;
-  client_->didReceiveResponse(this, response);
+  // If no delegate is provided then create an empty one. The default behavior
+  // will just proxy to the client.
+  scoped_ptr<blink::WebURLLoaderTestDelegate> defaultDelegate;
+  if (!delegate) {
+    defaultDelegate.reset(new blink::WebURLLoaderTestDelegate());
+    delegate = defaultDelegate.get();
+  }
 
-  // didReceiveResponse might end up getting ::cancel() to be called which will
-  // make the ResourceLoader to delete |this|. If that happens, |this_deleted|,
-  // created on the stack, will be set to true.
-  if (this_deleted)
+  // didReceiveResponse() and didReceiveData() might end up getting ::cancel()
+  // to be called which will make the ResourceLoader to delete |this|.
+  base::WeakPtr<WebURLLoaderMock> self(weak_factory_.GetWeakPtr());
+
+  delegate->didReceiveResponse(client_, this, response);
+  if (!self)
     return;
-  this_deleted_ = NULL;
 
   if (error.reason) {
-    client_->didFail(this, error);
+    delegate->didFail(client_, this, error);
     return;
   }
-  client_->didReceiveData(this, data.data(), data.size(), data.size());
-  client_->didFinishLoading(this, 0, data.size());
+  delegate->didReceiveData(client_, this, data.data(), data.size(),
+                             data.size());
+  if (!self)
+    return;
+
+  delegate->didFinishLoading(client_, this, 0, data.size());
 }
 
 blink::WebURLRequest WebURLLoaderMock::ServeRedirect(
+    const blink::WebURLRequest& request,
     const blink::WebURLResponse& redirectResponse) {
+  GURL redirectURL(redirectResponse.httpHeaderField("Location"));
+
+  net::RedirectInfo redirectInfo;
+  redirectInfo.new_method = request.httpMethod().utf8();
+  redirectInfo.new_url = redirectURL;
+  redirectInfo.new_first_party_for_cookies = redirectURL;
+
   blink::WebURLRequest newRequest;
   newRequest.initialize();
-  newRequest.setRequestContext(blink::WebURLRequest::RequestContextInternal);
-  GURL redirectURL(redirectResponse.httpHeaderField("Location"));
-  newRequest.setURL(redirectURL);
-  client_->willSendRequest(this, newRequest, redirectResponse);
+  content::WebURLLoaderImpl::PopulateURLRequestForRedirect(
+      request,
+      redirectInfo,
+      request.referrerPolicy(),
+      request.skipServiceWorker(),
+      &newRequest);
+
+  base::WeakPtr<WebURLLoaderMock> self(weak_factory_.GetWeakPtr());
+
+  client_->willFollowRedirect(this, newRequest, redirectResponse);
+
+  // |this| might be deleted in willFollowRedirect().
+  if (!self)
+    return newRequest;
+
+  if (redirectURL != GURL(newRequest.url())) {
+    // Only follow the redirect if WebKit left the URL unmodified.
+    // We assume that WebKit only changes the URL to suppress a redirect, and we
+    // assume that it does so by setting it to be invalid.
+    DCHECK(!newRequest.url().isValid());
+    cancel();
+  }
+
   return newRequest;
 }
 
@@ -75,7 +111,7 @@ void WebURLLoaderMock::loadSynchronously(const blink::WebURLRequest& request,
   }
   DCHECK(static_cast<const GURL&>(request.url()).SchemeIs("data"))
       << "loadSynchronously shouldn't be falling back: "
-      << request.url().spec().data();
+      << request.url().string().utf8();
   using_default_loader_ = true;
   default_loader_->loadSynchronously(request, response, error, data);
 }
@@ -89,7 +125,7 @@ void WebURLLoaderMock::loadAsynchronously(const blink::WebURLRequest& request,
   }
   DCHECK(static_cast<const GURL&>(request.url()).SchemeIs("data"))
       << "loadAsynchronously shouldn't be falling back: "
-      << request.url().spec().data();
+      << request.url().string().utf8();
   using_default_loader_ = true;
   default_loader_->loadAsynchronously(request, client);
 }
@@ -110,4 +146,9 @@ void WebURLLoaderMock::setDefersLoading(bool deferred) {
     return;
   }
   NOTIMPLEMENTED();
+}
+
+void WebURLLoaderMock::setLoadingTaskRunner(blink::WebTaskRunner*) {
+  // In principle this is NOTIMPLEMENTED(), but if we put that here it floods
+  // the console during webkit unit tests, so we leave the function empty.
 }

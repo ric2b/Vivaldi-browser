@@ -5,15 +5,17 @@
 #ifndef NET_HTTP_HTTP_SERVER_PROPERTIES_IMPL_H_
 #define NET_HTTP_HTTP_SERVER_PROPERTIES_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
@@ -61,6 +63,8 @@ class NET_EXPORT HttpServerPropertiesImpl
   void InitializeServerNetworkStats(
       ServerNetworkStatsMap* server_network_stats_map);
 
+  void InitializeQuicServerInfoMap(QuicServerInfoMap* quic_server_info_map);
+
   // Get the list of servers (host/port) that support SPDY. The max_size is the
   // number of MRU servers that support SPDY that are to be returned.
   void GetSpdyServerList(base::ListValue* spdy_server_list,
@@ -91,7 +95,8 @@ class NET_EXPORT HttpServerPropertiesImpl
       const HostPortPair& origin) override;
   bool SetAlternativeService(const HostPortPair& origin,
                              const AlternativeService& alternative_service,
-                             double alternative_probability) override;
+                             double alternative_probability,
+                             base::Time expiration) override;
   bool SetAlternativeServices(const HostPortPair& origin,
                               const AlternativeServiceInfoVector&
                                   alternative_service_info_vector) override;
@@ -114,7 +119,7 @@ class NET_EXPORT HttpServerPropertiesImpl
   bool SetSpdySetting(const HostPortPair& host_port_pair,
                       SpdySettingsIds id,
                       SpdySettingsFlags flags,
-                      uint32 value) override;
+                      uint32_t value) override;
   void ClearSpdySettings(const HostPortPair& host_port_pair) override;
   void ClearAllSpdySettings() override;
   const SpdySettingsMap& spdy_settings_map() const override;
@@ -125,6 +130,13 @@ class NET_EXPORT HttpServerPropertiesImpl
   const ServerNetworkStats* GetServerNetworkStats(
       const HostPortPair& host_port_pair) override;
   const ServerNetworkStatsMap& server_network_stats_map() const override;
+  bool SetQuicServerInfo(const QuicServerId& server_id,
+                         const std::string& server_info) override;
+  const std::string* GetQuicServerInfo(const QuicServerId& server_id) override;
+  const QuicServerInfoMap& quic_server_info_map() const override;
+  size_t max_server_configs_stored_in_properties() const override;
+  void SetMaxServerConfigsStoredInProperties(
+      size_t max_server_configs_stored_in_properties) override;
 
  private:
   friend class HttpServerPropertiesImplPeer;
@@ -176,6 +188,9 @@ class NET_EXPORT HttpServerPropertiesImpl
   CanonicalSufficList canonical_suffixes_;
 
   double alternative_service_probability_threshold_;
+
+  QuicServerInfoMap quic_server_info_map_;
+  size_t max_server_configs_stored_in_properties_;
 
   base::WeakPtrFactory<HttpServerPropertiesImpl> weak_ptr_factory_;
 

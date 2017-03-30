@@ -11,12 +11,15 @@
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "base/debug/stack_trace.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
+#include "base/process/launch.h"
 #include "base/process/memory.h"
 #include "base/test/gtest_xml_unittest_result_printer.h"
 #include "base/test/gtest_xml_util.h"
@@ -25,6 +28,7 @@
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
@@ -42,6 +46,8 @@
 #include "base/strings/string_util.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
 #endif
+#else
+#include "base/i18n/rtl.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -95,23 +101,17 @@ int RunUnitTestsUsingBaseTestSuite(int argc, char **argv) {
 }
 
 TestSuite::TestSuite(int argc, char** argv) : initialized_command_line_(false) {
-  PreInitialize(true);
+  PreInitialize();
   InitializeFromCommandLine(argc, argv);
 }
 
 #if defined(OS_WIN)
 TestSuite::TestSuite(int argc, wchar_t** argv)
     : initialized_command_line_(false) {
-  PreInitialize(true);
+  PreInitialize();
   InitializeFromCommandLine(argc, argv);
 }
 #endif  // defined(OS_WIN)
-
-TestSuite::TestSuite(int argc, char** argv, bool create_at_exit_manager)
-    : initialized_command_line_(false) {
-  PreInitialize(create_at_exit_manager);
-  InitializeFromCommandLine(argc, argv);
-}
 
 TestSuite::~TestSuite() {
   if (initialized_command_line_)
@@ -139,7 +139,7 @@ void TestSuite::InitializeFromCommandLine(int argc, wchar_t** argv) {
 }
 #endif  // defined(OS_WIN)
 
-void TestSuite::PreInitialize(bool create_at_exit_manager) {
+void TestSuite::PreInitialize() {
 #if defined(OS_WIN)
   testing::GTEST_FLAG(catch_exceptions) = false;
 #endif
@@ -154,8 +154,7 @@ void TestSuite::PreInitialize(bool create_at_exit_manager) {
   // On Android, AtExitManager is created in
   // testing/android/native_test_wrapper.cc before main() is called.
 #if !defined(OS_ANDROID)
-  if (create_at_exit_manager)
-    at_exit_manager_.reset(new AtExitManager);
+  at_exit_manager_.reset(new AtExitManager);
 #endif
 
   // Don't add additional code to this function.  Instead add it to
@@ -228,7 +227,15 @@ int TestSuite::Run() {
 #if defined(OS_IOS)
   test_listener_ios::RegisterTestEndListener();
 #endif
+
+  // Set up a FeatureList instance, so that code using that API will not hit a
+  // an error that it's not set. Cleared by ClearInstanceForTesting() below.
+  base::FeatureList::SetInstance(make_scoped_ptr(new base::FeatureList));
+
   int result = RUN_ALL_TESTS();
+
+  // Clear the FeatureList that was registered above.
+  FeatureList::ClearInstanceForTesting();
 
 #if defined(OS_MACOSX)
   // This MUST happen before Shutdown() since Shutdown() tears down
@@ -314,6 +321,7 @@ void TestSuite::Initialize() {
 
   CHECK(debug::EnableInProcessStackDumping());
 #if defined(OS_WIN)
+  RouteStdioToConsole(true);
   // Make sure we run with high resolution timer to minimize differences
   // between production code and test code.
   Time::EnableHighResolutionTimer(true);
@@ -340,9 +348,11 @@ void TestSuite::Initialize() {
   i18n::SetICUDefaultLocale("en_US");
 #else
   std::string default_locale(uloc_getDefault());
-  if (EndsWith(default_locale, "POSIX", false))
+  if (EndsWith(default_locale, "POSIX", CompareCase::INSENSITIVE_ASCII))
     i18n::SetICUDefaultLocale("en_US");
 #endif
+#else
+  i18n::SetICUDefaultLocale("en_US");
 #endif
 
   CatchMaybeTests();

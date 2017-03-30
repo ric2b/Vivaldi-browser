@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/extension_resource_protocols.h"
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -94,7 +95,7 @@ ExtensionResourceProtocolHandler::MaybeCreateJob(
 
 }  // namespace
 
-net::URLRequestJobFactory::ProtocolHandler*
+scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
 CreateExtensionResourceProtocolHandler() {
-  return new ExtensionResourceProtocolHandler();
+  return make_scoped_ptr(new ExtensionResourceProtocolHandler());
 }

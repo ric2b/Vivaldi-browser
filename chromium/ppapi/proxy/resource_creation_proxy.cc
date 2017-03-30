@@ -4,8 +4,10 @@
 
 #include "ppapi/proxy/resource_creation_proxy.h"
 
+#include "build/build_config.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/pp_size.h"
+#include "ppapi/proxy/audio_encoder_resource.h"
 #include "ppapi/proxy/audio_input_resource.h"
 #include "ppapi/proxy/camera_device_resource.h"
 #include "ppapi/proxy/compositor_resource.h"
@@ -208,6 +210,10 @@ PP_Resource ResourceCreationProxy::CreateAudio(
       instance, config_id, AudioCallbackCombined(audio_callback), user_data);
 }
 
+PP_Resource ResourceCreationProxy::CreateAudioEncoder(PP_Instance instance) {
+  return (new AudioEncoderResource(GetConnection(), instance))->GetReference();
+}
+
 PP_Resource ResourceCreationProxy::CreateAudioTrusted(PP_Instance instance) {
   // Proxied plugins can't create trusted audio devices.
   return 0;
@@ -260,7 +266,8 @@ PP_Resource ResourceCreationProxy::CreateGraphics3DRaw(
     PP_Resource share_context,
     const int32_t* attrib_list,
     gpu::Capabilities* capabilities,
-    base::SharedMemoryHandle* shared_state) {
+    base::SharedMemoryHandle* shared_state,
+    uint64_t* command_buffer_id) {
   // Not proxied. The raw creation function is used only in the implementation
   // of the proxy on the host side.
   return 0;

@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_CORE_TEST_BASE_H_
-#define MOJO_EDK_SYSTEM_CORE_TEST_BASE_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CORE_TEST_BASE_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CORE_TEST_BASE_H_
 
-#include "base/synchronization/lock.h"
-#include "mojo/edk/embedder/simple_platform_support.h"
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/embedder/simple_platform_support.h"
+#include "third_party/mojo/src/mojo/edk/system/mutex.h"
 
 namespace mojo {
 namespace system {
@@ -88,24 +88,24 @@ class CoreTestBase_MockHandleInfo {
   void AwakableWasAdded(Awakable*);
 
  private:
-  mutable base::Lock lock_;  // Protects the following members.
-  unsigned ctor_call_count_;
-  unsigned dtor_call_count_;
-  unsigned close_call_count_;
-  unsigned write_message_call_count_;
-  unsigned read_message_call_count_;
-  unsigned write_data_call_count_;
-  unsigned begin_write_data_call_count_;
-  unsigned end_write_data_call_count_;
-  unsigned read_data_call_count_;
-  unsigned begin_read_data_call_count_;
-  unsigned end_read_data_call_count_;
-  unsigned add_awakable_call_count_;
-  unsigned remove_awakable_call_count_;
-  unsigned cancel_all_awakables_call_count_;
+  mutable Mutex mutex_;
+  unsigned ctor_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned dtor_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned close_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned write_message_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned read_message_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned write_data_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned begin_write_data_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned end_write_data_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned read_data_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned begin_read_data_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned end_read_data_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned add_awakable_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned remove_awakable_call_count_ MOJO_GUARDED_BY(mutex_);
+  unsigned cancel_all_awakables_call_count_ MOJO_GUARDED_BY(mutex_);
 
-  bool add_awakable_allowed_;
-  std::vector<Awakable*> added_awakables_;
+  bool add_awakable_allowed_ MOJO_GUARDED_BY(mutex_);
+  std::vector<Awakable*> added_awakables_ MOJO_GUARDED_BY(mutex_);
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(CoreTestBase_MockHandleInfo);
 };
@@ -114,4 +114,4 @@ class CoreTestBase_MockHandleInfo {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_CORE_TEST_BASE_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CORE_TEST_BASE_H_

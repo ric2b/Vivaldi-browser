@@ -5,16 +5,17 @@
 #ifndef CHROME_BROWSER_SAFE_BROWSING_CLIENT_SIDE_DETECTION_HOST_H_
 #define CHROME_BROWSER_SAFE_BROWSING_CLIENT_SIDE_DETECTION_HOST_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/safe_browsing/browser_feature_extractor.h"
-#include "chrome/browser/safe_browsing/database_manager.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
-#include "content/public/browser/notification_registrar.h"
+#include "components/safe_browsing_db/database_manager.h"
 #include "content/public/browser/resource_request_details.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "url/gurl.h"
@@ -29,7 +30,6 @@ class ClientSideDetectionService;
 // class which sends a ping to a server to validate the verdict.
 // TODO(noelutz): move all client-side detection IPCs to this class.
 class ClientSideDetectionHost : public content::WebContentsObserver,
-                                public content::NotificationObserver,
                                 public SafeBrowsingUIManager::Observer {
  public:
   // The caller keeps ownership of the tab object and is responsible for
@@ -38,7 +38,10 @@ class ClientSideDetectionHost : public content::WebContentsObserver,
   ~ClientSideDetectionHost() override;
 
   // From content::WebContentsObserver.
-  bool OnMessageReceived(const IPC::Message& message) override;
+  bool OnMessageReceived(const IPC::Message& message,
+                         content::RenderFrameHost* render_frame_host) override;
+  void DidGetResourceResponseStart(
+      const content::ResourceRequestDetails& details) override;
 
   // From content::WebContentsObserver.  If we navigate away we cancel all
   // pending callbacks that could show an interstitial, and check to see whether
@@ -52,16 +55,7 @@ class ClientSideDetectionHost : public content::WebContentsObserver,
   void OnSafeBrowsingHit(
       const SafeBrowsingUIManager::UnsafeResource& resource) override;
 
-  // Called when the SafeBrowsingService finds a match on the SB lists.
-  // Called on the UI thread. Called even if the resource is whitelisted.
-  void OnSafeBrowsingMatch(
-      const SafeBrowsingUIManager::UnsafeResource& resource) override;
-
   virtual scoped_refptr<SafeBrowsingDatabaseManager> database_manager();
-
-  // Returns whether the current page contains a malware or phishing safe
-  // browsing match.
-  bool DidPageReceiveSafeBrowsingMatch() const;
 
  protected:
   explicit ClientSideDetectionHost(content::WebContents* tab);
@@ -120,12 +114,6 @@ class ClientSideDetectionHost : public content::WebContentsObserver,
                       const std::string& referrer,
                       const content::ResourceType resource_type);
 
-  // From NotificationObserver.  Called when a notification comes in.  This
-  // method is called in the UI thread.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
-
   // Inherited from WebContentsObserver.  This is called once the page is
   // done loading.
   void DidStopLoading() override;
@@ -160,8 +148,6 @@ class ClientSideDetectionHost : public content::WebContentsObserver,
   std::vector<GURL> cur_host_redirects_;
   // Current host, used to help determine cur_host_redirects_.
   std::string cur_host_;
-  // Handles registering notifications with the NotificationService.
-  content::NotificationRegistrar registrar_;
 
   // Max number of ips we save for each browse
   static const size_t kMaxIPsPerBrowse;

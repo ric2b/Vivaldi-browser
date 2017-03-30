@@ -9,11 +9,11 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client.h"
 #include "chrome/browser/extensions/api/bookmarks/bookmark_api_constants.h"
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -27,108 +27,121 @@ namespace bookmark_api_helpers {
 
 namespace {
 
-void AddNodeHelper(ChromeBookmarkClient* client,
+void AddNodeHelper(bookmarks::ManagedBookmarkService* managed,
                    const BookmarkNode* node,
-                   std::vector<linked_ptr<BookmarkTreeNode> >* nodes,
+                   std::vector<linked_ptr<BookmarkTreeNode>>* nodes,
                    bool recurse,
                    bool only_folders) {
   if (node->IsVisible()) {
-    linked_ptr<BookmarkTreeNode> new_node(GetBookmarkTreeNode(client,
-                                                              node,
-                                                              recurse,
-                                                              only_folders));
+    linked_ptr<BookmarkTreeNode> new_node(
+        GetBookmarkTreeNode(managed, node, recurse, only_folders));
     nodes->push_back(new_node);
   }
 }
 
 }  // namespace
 
-BookmarkTreeNode* GetBookmarkTreeNode(ChromeBookmarkClient* client,
-                                      const BookmarkNode* node,
-                                      bool recurse,
-                                      bool only_folders) {
+BookmarkTreeNode* GetBookmarkTreeNode(
+    bookmarks::ManagedBookmarkService* managed,
+    const BookmarkNode* node,
+    bool recurse,
+    bool only_folders) {
   BookmarkTreeNode* bookmark_tree_node = new BookmarkTreeNode;
+  PopulateBookmarkTreeNode(managed, node, recurse, only_folders,
+                           bookmark_tree_node);
+  return bookmark_tree_node;
+}
 
-  bookmark_tree_node->id = base::Int64ToString(node->id());
+void PopulateBookmarkTreeNode(
+    bookmarks::ManagedBookmarkService* managed,
+    const bookmarks::BookmarkNode* node,
+    bool recurse,
+    bool only_folders,
+    api::bookmarks::BookmarkTreeNode* out_bookmark_tree_node) {
+  DCHECK(out_bookmark_tree_node);
+
+  out_bookmark_tree_node->id = base::Int64ToString(node->id());
 
   const BookmarkNode* parent = node->parent();
   if (parent) {
-    bookmark_tree_node->parent_id.reset(new std::string(
-        base::Int64ToString(parent->id())));
-    bookmark_tree_node->index.reset(new int(parent->GetIndexOf(node)));
+    out_bookmark_tree_node->parent_id.reset(
+        new std::string(base::Int64ToString(parent->id())));
+    out_bookmark_tree_node->index.reset(new int(parent->GetIndexOf(node)));
   }
 
   if (!node->is_folder()) {
-    bookmark_tree_node->url.reset(new std::string(node->url().spec()));
+    out_bookmark_tree_node->url.reset(new std::string(node->url().spec()));
   } else {
     // Javascript Date wants milliseconds since the epoch, ToDoubleT is seconds.
     base::Time t = node->date_folder_modified();
     if (!t.is_null()) {
-      bookmark_tree_node->date_group_modified.reset(
+      out_bookmark_tree_node->date_group_modified.reset(
           new double(floor(t.ToDoubleT() * 1000)));
     }
   }
 
-  bookmark_tree_node->title = base::UTF16ToUTF8(node->GetTitle());
+  out_bookmark_tree_node->title = base::UTF16ToUTF8(node->GetTitle());
   if (!node->date_added().is_null()) {
     // Javascript Date wants milliseconds since the epoch, ToDoubleT is seconds.
-    bookmark_tree_node->date_added.reset(
+    out_bookmark_tree_node->date_added.reset(
         new double(floor(node->date_added().ToDoubleT() * 1000)));
   }
 
   std::string temp;
   node->GetMetaInfo("Nickname", &temp);
-  bookmark_tree_node->nickname =  temp;
+  out_bookmark_tree_node->nickname =  temp;
 
   node->GetMetaInfo("Description", &temp);
-  bookmark_tree_node->description =  temp;
+  out_bookmark_tree_node->description =  temp;
 
   node->GetMetaInfo("Thumbnail", &temp);
-  bookmark_tree_node->thumbnail =  temp;
+  out_bookmark_tree_node->thumbnail =  temp;
 
   node->GetMetaInfo("Speeddial", &temp);
   bool speeddial = (temp == "true") ? true : false;
-  bookmark_tree_node->speeddial =  speeddial;
+  out_bookmark_tree_node->speeddial =  speeddial;
 
-  if (bookmarks::IsDescendantOf(node, client->managed_node()) ||
-      bookmarks::IsDescendantOf(node, client->supervised_node())) {
-    bookmark_tree_node->unmodifiable =
+  out_bookmark_tree_node->trash = (node->type() ==
+                               bookmarks::BookmarkNode::TRASH);
+
+  if (bookmarks::IsDescendantOf(node, managed->managed_node()) ||
+      bookmarks::IsDescendantOf(node, managed->supervised_node())) {
+    out_bookmark_tree_node->unmodifiable =
         api::bookmarks::BOOKMARK_TREE_NODE_UNMODIFIABLE_MANAGED;
   }
 
   if (recurse && node->is_folder()) {
-    std::vector<linked_ptr<BookmarkTreeNode> > children;
+    std::vector<linked_ptr<BookmarkTreeNode>> children;
     for (int i = 0; i < node->child_count(); ++i) {
       const BookmarkNode* child = node->GetChild(i);
       if (child->IsVisible() && (!only_folders || child->is_folder())) {
         linked_ptr<BookmarkTreeNode> child_node(
-            GetBookmarkTreeNode(client, child, true, only_folders));
+            GetBookmarkTreeNode(managed, child, true, only_folders));
         children.push_back(child_node);
       }
     }
-    bookmark_tree_node->children.reset(
-        new std::vector<linked_ptr<BookmarkTreeNode> >(children));
+    out_bookmark_tree_node->children.reset(
+        new std::vector<linked_ptr<BookmarkTreeNode>>(children));
   }
-  return bookmark_tree_node;
 }
 
-void AddNode(ChromeBookmarkClient* client,
+void AddNode(bookmarks::ManagedBookmarkService* managed,
              const BookmarkNode* node,
-             std::vector<linked_ptr<BookmarkTreeNode> >* nodes,
+             std::vector<linked_ptr<BookmarkTreeNode>>* nodes,
              bool recurse) {
-  return AddNodeHelper(client, node, nodes, recurse, false);
+  return AddNodeHelper(managed, node, nodes, recurse, false);
 }
 
-void AddNodeFoldersOnly(ChromeBookmarkClient* client,
+void AddNodeFoldersOnly(bookmarks::ManagedBookmarkService* managed,
                         const BookmarkNode* node,
-                        std::vector<linked_ptr<BookmarkTreeNode> >* nodes,
+                        std::vector<linked_ptr<BookmarkTreeNode>>* nodes,
                         bool recurse) {
-  return AddNodeHelper(client, node, nodes, recurse, true);
+  return AddNodeHelper(managed, node, nodes, recurse, true);
 }
 
 bool RemoveNode(BookmarkModel* model,
-                ChromeBookmarkClient* client,
-                int64 id,
+                bookmarks::ManagedBookmarkService* managed,
+                int64_t id,
                 bool recursive,
                 std::string* error) {
   const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, id);
@@ -140,8 +153,8 @@ bool RemoveNode(BookmarkModel* model,
     *error = keys::kModifySpecialError;
     return false;
   }
-  if (bookmarks::IsDescendantOf(node, client->managed_node()) ||
-      bookmarks::IsDescendantOf(node, client->supervised_node())) {
+  if (bookmarks::IsDescendantOf(node, managed->managed_node()) ||
+      bookmarks::IsDescendantOf(node, managed->supervised_node())) {
     *error = keys::kModifyManagedError;
     return false;
   }
@@ -175,6 +188,32 @@ void GetMetaInfo(const BookmarkNode& node,
     }
   }
 }
+
+bool MoveNodeToTrash(BookmarkModel* model,
+                     bookmarks::ManagedBookmarkService* managed,
+                     int64_t id,
+                     int insert_pos,
+                     std::string* error) {
+  const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, id);
+  if (!node) {
+    *error = keys::kNoNodeError;
+    return false;
+  }
+  if (model->is_permanent_node(node)) {
+    *error = keys::kModifySpecialError;
+    return false;
+  }
+  if (!model->trash_node() ||
+    bookmarks::IsDescendantOf(node, model->trash_node())) {
+    // If it's already in trash, just delete it.
+    model->Remove(node);
+  } else {
+    // Place it at the given offset.
+    model->Move(node, model->trash_node(), insert_pos);
+  }
+  return true;
+}
+
 
 }  // namespace bookmark_api_helpers
 }  // namespace extensions

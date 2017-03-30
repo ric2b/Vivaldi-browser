@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+// This is a "No Compile Test" suite.
+// http://dev.chromium.org/developers/testing/no-compile-tests
+
 #include "base/memory/scoped_ptr.h"
+
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 
 namespace {
@@ -19,31 +25,31 @@ class RefCountedClass : public base::RefCountedThreadSafe<RefCountedClass> {
 
 }  // namespace
 
-#if defined(NCTEST_NO_PASS_DOWNCAST)  // [r"fatal error: no matching constructor for initialization of 'base::internal::scoped_ptr_impl<\(anonymous namespace\)::Child, base::DefaultDeleter<\(anonymous namespace\)::Child> >::Data'"]
+#if defined(NCTEST_NO_PASS_DOWNCAST)  // [r"fatal error: no viable conversion from returned value of type 'scoped_ptr<\(anonymous namespace\)::Parent>' to function return type 'scoped_ptr<\(anonymous namespace\)::Child>'"]
 
 scoped_ptr<Child> DowncastUsingPassAs(scoped_ptr<Parent> object) {
-  return object.Pass();
+  return object;
 }
 
-#elif defined(NCTEST_NO_REF_COUNTED_SCOPED_PTR)  // [r"fatal error: static_assert failed \"T_is_refcounted_type_and_needs_scoped_refptr\""]
+#elif defined(NCTEST_NO_REF_COUNTED_SCOPED_PTR)  // [r"fatal error: static_assert failed \"T is a refcounted type and needs a scoped_refptr\""]
 
 // scoped_ptr<> should not work for ref-counted objects.
 void WontCompile() {
   scoped_ptr<RefCountedClass> x;
 }
 
-#elif defined(NCTEST_NO_ARRAY_WITH_SIZE)  // [r"fatal error: static_assert failed \"do_not_use_array_with_size_as_type\""]
+#elif defined(NCTEST_NO_ARRAY_WITH_SIZE)  // [r"fatal error: static_assert failed \"scoped_ptr doesn't support array with size\""]
 
 void WontCompile() {
   scoped_ptr<int[10]> x;
 }
 
-#elif defined(NCTEST_NO_PASS_FROM_ARRAY)  // [r"fatal error: static_assert failed \"U_cannot_be_an_array\""]
+#elif defined(NCTEST_NO_PASS_FROM_ARRAY)  // [r"fatal error: no viable overloaded '='"]
 
 void WontCompile() {
   scoped_ptr<int[]> a;
   scoped_ptr<int*> b;
-  b = a.Pass();
+  b = std::move(a);
 }
 
 #elif defined(NCTEST_NO_PASS_TO_ARRAY)  // [r"fatal error: no viable overloaded '='"]
@@ -51,21 +57,21 @@ void WontCompile() {
 void WontCompile() {
   scoped_ptr<int*> a;
   scoped_ptr<int[]> b;
-  b = a.Pass();
+  b = std::move(a);
 }
 
-#elif defined(NCTEST_NO_CONSTRUCT_FROM_ARRAY)  // [r"fatal error: 'impl_' is a private member of 'scoped_ptr<int \[\], base::DefaultDeleter<int \[\]> >'"]
+#elif defined(NCTEST_NO_CONSTRUCT_FROM_ARRAY)  // [r"fatal error: no matching constructor for initialization of 'scoped_ptr<int \*>'"]
 
 void WontCompile() {
   scoped_ptr<int[]> a;
-  scoped_ptr<int*> b(a.Pass());
+  scoped_ptr<int*> b(std::move(a));
 }
 
 #elif defined(NCTEST_NO_CONSTRUCT_TO_ARRAY)  // [r"fatal error: no matching constructor for initialization of 'scoped_ptr<int \[\]>'"]
 
 void WontCompile() {
   scoped_ptr<int*> a;
-  scoped_ptr<int[]> b(a.Pass());
+  scoped_ptr<int[]> b(std::move(a));
 }
 
 #elif defined(NCTEST_NO_CONSTRUCT_SCOPED_PTR_ARRAY_FROM_NULL)  // [r"is ambiguous"]
@@ -74,7 +80,7 @@ void WontCompile() {
   scoped_ptr<int[]> x(NULL);
 }
 
-#elif defined(NCTEST_NO_CONSTRUCT_SCOPED_PTR_ARRAY_FROM_DERIVED)  // [r"fatal error: calling a private constructor of class 'scoped_ptr<\(anonymous namespace\)::Parent \[\], base::DefaultDeleter<\(anonymous namespace\)::Parent \[\]> >'"]
+#elif defined(NCTEST_NO_CONSTRUCT_SCOPED_PTR_ARRAY_FROM_DERIVED)  // [r"fatal error: calling a private constructor of class 'scoped_ptr<\(anonymous namespace\)::Parent \[\], std::default_delete<\(anonymous namespace\)::Parent \[\]> >'"]
 
 void WontCompile() {
   scoped_ptr<Parent[]> x(new Child[1]);
@@ -87,7 +93,7 @@ void WontCompile() {
   x.reset(NULL);
 }
 
-#elif defined(NCTEST_NO_RESET_SCOPED_PTR_ARRAY_FROM_DERIVED)  // [r"fatal error: 'reset' is a private member of 'scoped_ptr<\(anonymous namespace\)::Parent \[\], base::DefaultDeleter<\(anonymous namespace\)::Parent \[\]> >'"]
+#elif defined(NCTEST_NO_RESET_SCOPED_PTR_ARRAY_FROM_DERIVED)  // [r"fatal error: 'reset' is a private member of 'scoped_ptr<\(anonymous namespace\)::Parent \[\], std::default_delete<\(anonymous namespace\)::Parent \[\]> >'"]
 
 void WontCompile() {
   scoped_ptr<Parent[]> x;

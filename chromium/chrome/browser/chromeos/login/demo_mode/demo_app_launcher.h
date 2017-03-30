@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_profile_loader.h"
 
@@ -29,7 +29,6 @@ class DemoAppLauncher : public KioskProfileLoader::Delegate {
   static bool IsDemoAppSession(const std::string& user_id);
   static void SetDemoAppPathForTesting(const base::FilePath& path);
 
-  static const char kDemoUserName[];
   static const char kDemoAppId[];
 
  private:

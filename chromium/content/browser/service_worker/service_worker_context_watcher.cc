@@ -4,6 +4,8 @@
 
 #include "content/browser/service_worker/service_worker_context_watcher.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "content/browser/service_worker/service_worker_context_observer.h"
@@ -63,7 +65,7 @@ void ServiceWorkerContextWatcher::OnStoredRegistrationsOnIOThread(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   context_->AddObserver(this);
 
-  base::ScopedPtrHashMap<int64, scoped_ptr<ServiceWorkerRegistrationInfo>>
+  base::ScopedPtrHashMap<int64_t, scoped_ptr<ServiceWorkerRegistrationInfo>>
       registration_info_map;
   for (const auto& registration : stored_registrations)
     StoreRegistrationInfo(registration, &registration_info_map);
@@ -105,7 +107,7 @@ ServiceWorkerContextWatcher::~ServiceWorkerContextWatcher() {
 
 void ServiceWorkerContextWatcher::StoreRegistrationInfo(
     const ServiceWorkerRegistrationInfo& registration_info,
-    base::ScopedPtrHashMap<int64, scoped_ptr<ServiceWorkerRegistrationInfo>>*
+    base::ScopedPtrHashMap<int64_t, scoped_ptr<ServiceWorkerRegistrationInfo>>*
         info_map) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (registration_info.registration_id == kInvalidServiceWorkerRegistrationId)
@@ -129,12 +131,18 @@ void ServiceWorkerContextWatcher::StoreVersionInfo(
 }
 
 void ServiceWorkerContextWatcher::SendRegistrationInfo(
-    int64 registration_id,
+    int64_t registration_id,
     const GURL& pattern,
     ServiceWorkerRegistrationInfo::DeleteFlag delete_flag) {
   std::vector<ServiceWorkerRegistrationInfo> registrations;
-  registrations.push_back(
-      ServiceWorkerRegistrationInfo(pattern, registration_id, delete_flag));
+  ServiceWorkerRegistration* registration =
+      context_->GetLiveRegistration(registration_id);
+  if (registration) {
+    registrations.push_back(registration->GetInfo());
+  } else {
+    registrations.push_back(
+        ServiceWorkerRegistrationInfo(pattern, registration_id, delete_flag));
+  }
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::Bind(registration_callback_, registrations));
 }
@@ -148,14 +156,14 @@ void ServiceWorkerContextWatcher::SendVersionInfo(
                           base::Bind(version_callback_, versions));
 }
 
-void ServiceWorkerContextWatcher::OnNewLiveRegistration(int64 registration_id,
+void ServiceWorkerContextWatcher::OnNewLiveRegistration(int64_t registration_id,
                                                         const GURL& pattern) {
   SendRegistrationInfo(registration_id, pattern,
                        ServiceWorkerRegistrationInfo::IS_NOT_DELETED);
 }
 
-void ServiceWorkerContextWatcher::OnNewLiveVersion(int64 version_id,
-                                                   int64 registration_id,
+void ServiceWorkerContextWatcher::OnNewLiveVersion(int64_t version_id,
+                                                   int64_t registration_id,
                                                    const GURL& script_url) {
   if (ServiceWorkerVersionInfo* version = version_info_map_.get(version_id)) {
     DCHECK_EQ(version->registration_id, registration_id);
@@ -169,11 +177,11 @@ void ServiceWorkerContextWatcher::OnNewLiveVersion(int64 version_id,
   version->script_url = script_url;
   SendVersionInfo(*version);
   if (!IsStoppedAndRedundant(*version))
-    version_info_map_.set(version_id, version.Pass());
+    version_info_map_.set(version_id, std::move(version));
 }
 
 void ServiceWorkerContextWatcher::OnRunningStateChanged(
-    int64 version_id,
+    int64_t version_id,
     content::ServiceWorkerVersion::RunningStatus running_status) {
   ServiceWorkerVersionInfo* version = version_info_map_.get(version_id);
   DCHECK(version);
@@ -186,7 +194,7 @@ void ServiceWorkerContextWatcher::OnRunningStateChanged(
 }
 
 void ServiceWorkerContextWatcher::OnVersionStateChanged(
-    int64 version_id,
+    int64_t version_id,
     content::ServiceWorkerVersion::Status status) {
   ServiceWorkerVersionInfo* version = version_info_map_.get(version_id);
   DCHECK(version);
@@ -199,7 +207,7 @@ void ServiceWorkerContextWatcher::OnVersionStateChanged(
 }
 
 void ServiceWorkerContextWatcher::OnMainScriptHttpResponseInfoSet(
-    int64 version_id,
+    int64_t version_id,
     base::Time script_response_time,
     base::Time script_last_modified) {
   ServiceWorkerVersionInfo* version = version_info_map_.get(version_id);
@@ -209,11 +217,11 @@ void ServiceWorkerContextWatcher::OnMainScriptHttpResponseInfoSet(
   SendVersionInfo(*version);
 }
 
-void ServiceWorkerContextWatcher::OnErrorReported(int64 version_id,
+void ServiceWorkerContextWatcher::OnErrorReported(int64_t version_id,
                                                   int process_id,
                                                   int thread_id,
                                                   const ErrorInfo& info) {
-  int64 registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   if (ServiceWorkerVersionInfo* version = version_info_map_.get(version_id))
     registration_id = version->registration_id;
   BrowserThread::PostTask(
@@ -222,13 +230,13 @@ void ServiceWorkerContextWatcher::OnErrorReported(int64 version_id,
 }
 
 void ServiceWorkerContextWatcher::OnReportConsoleMessage(
-    int64 version_id,
+    int64_t version_id,
     int process_id,
     int thread_id,
     const ConsoleMessage& message) {
   if (message.message_level != CONSOLE_MESSAGE_LEVEL_ERROR)
     return;
-  int64 registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   if (ServiceWorkerVersionInfo* version = version_info_map_.get(version_id))
     registration_id = version->registration_id;
   BrowserThread::PostTask(
@@ -239,7 +247,7 @@ void ServiceWorkerContextWatcher::OnReportConsoleMessage(
 }
 
 void ServiceWorkerContextWatcher::OnControlleeAdded(
-    int64 version_id,
+    int64_t version_id,
     const std::string& uuid,
     int process_id,
     int route_id,
@@ -251,24 +259,38 @@ void ServiceWorkerContextWatcher::OnControlleeAdded(
   SendVersionInfo(*version);
 }
 
-void ServiceWorkerContextWatcher::OnControlleeRemoved(int64 version_id,
+void ServiceWorkerContextWatcher::OnControlleeRemoved(int64_t version_id,
                                                       const std::string& uuid) {
   ServiceWorkerVersionInfo* version = version_info_map_.get(version_id);
-  DCHECK(version);
+  if (!version)
+    return;
   version->clients.erase(uuid);
   SendVersionInfo(*version);
 }
 
-void ServiceWorkerContextWatcher::OnRegistrationStored(int64 registration_id,
+void ServiceWorkerContextWatcher::OnRegistrationStored(int64_t registration_id,
                                                        const GURL& pattern) {
   SendRegistrationInfo(registration_id, pattern,
                        ServiceWorkerRegistrationInfo::IS_NOT_DELETED);
 }
 
-void ServiceWorkerContextWatcher::OnRegistrationDeleted(int64 registration_id,
+void ServiceWorkerContextWatcher::OnRegistrationDeleted(int64_t registration_id,
                                                         const GURL& pattern) {
   SendRegistrationInfo(registration_id, pattern,
                        ServiceWorkerRegistrationInfo::IS_DELETED);
+}
+
+void ServiceWorkerContextWatcher::OnForceUpdateOnPageLoadChanged(
+    int64_t registration_id,
+    bool force_update_on_page_load) {
+  ServiceWorkerRegistration* registration =
+      context_->GetLiveRegistration(registration_id);
+  if (!registration)
+    return;
+  std::vector<ServiceWorkerRegistrationInfo> registrations;
+  registrations.push_back(registration->GetInfo());
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::Bind(registration_callback_, registrations));
 }
 
 }  // namespace content

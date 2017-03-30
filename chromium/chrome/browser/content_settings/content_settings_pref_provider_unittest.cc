@@ -6,6 +6,7 @@
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/default_pref_store.h"
@@ -19,18 +20,21 @@
 #include "base/values.h"
 #include "chrome/browser/content_settings/content_settings_mock_observer.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/prefs/pref_service_mock_factory.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/content_settings_pref.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
-#include "components/content_settings/core/browser/content_settings_utils.h"
+#include "components/content_settings/core/browser/website_settings_info.h"
+#include "components/content_settings/core/browser/website_settings_registry.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_mock_factory.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -41,14 +45,14 @@ namespace content_settings {
 
 class DeadlockCheckerThread : public base::PlatformThread::Delegate {
  public:
-  explicit DeadlockCheckerThread(PrefProvider* provider)
-      : provider_(provider) {}
+  explicit DeadlockCheckerThread(const ContentSettingsPref* pref)
+      : pref_(pref) {}
 
   void ThreadMain() override {
-    EXPECT_TRUE(provider_->TestAllLocks());
+    EXPECT_TRUE(pref_->TryLockForTesting());
   }
  private:
-  PrefProvider* provider_;
+  const ContentSettingsPref* pref_;
   DISALLOW_COPY_AND_ASSIGN(DeadlockCheckerThread);
 };
 
@@ -62,11 +66,14 @@ class DeadlockCheckerObserver {
       : provider_(provider),
       notification_received_(false) {
     pref_change_registrar_.Init(prefs);
-    pref_change_registrar_.Add(
-        prefs::kContentSettingsPatternPairs,
-        base::Bind(
-            &DeadlockCheckerObserver::OnContentSettingsPatternPairsChanged,
-            base::Unretained(this)));
+    for (const auto& pair : provider_->content_settings_prefs_) {
+      const ContentSettingsPref* pref = pair.second.get();
+      pref_change_registrar_.Add(
+          pref->pref_name_,
+          base::Bind(
+              &DeadlockCheckerObserver::OnContentSettingsPatternPairsChanged,
+              base::Unretained(this), base::Unretained(pref)));
+    }
   }
   virtual ~DeadlockCheckerObserver() {}
 
@@ -75,10 +82,10 @@ class DeadlockCheckerObserver {
   }
 
  private:
-  void OnContentSettingsPatternPairsChanged() {
+  void OnContentSettingsPatternPairsChanged(const ContentSettingsPref* pref) {
     // Check whether |provider_| holds its lock. For this, we need a
     // separate thread.
-    DeadlockCheckerThread thread(provider_);
+    DeadlockCheckerThread thread(pref);
     base::PlatformThreadHandle handle;
     ASSERT_TRUE(base::PlatformThread::Create(0, &thread, &handle));
     base::PlatformThread::Join(handle);
@@ -92,6 +99,13 @@ class DeadlockCheckerObserver {
 };
 
 class PrefProviderTest : public testing::Test {
+ public:
+  PrefProviderTest() {
+    // Ensure all content settings are initialized.
+    ContentSettingsRegistry::GetInstance();
+  }
+
+ private:
   content::TestBrowserThreadBundle thread_bundle_;
 };
 
@@ -101,7 +115,7 @@ TEST_F(PrefProviderTest, Observer) {
 
   ContentSettingsPattern pattern =
       ContentSettingsPattern::FromString("[*.]example.com");
-  content_settings::MockObserver mock_observer;
+  MockObserver mock_observer;
   EXPECT_CALL(mock_observer,
               OnContentSettingChanged(pattern,
                                       ContentSettingsPattern::Wildcard(),
@@ -127,20 +141,20 @@ TEST_F(PrefProviderTest, Incognito) {
   OverlayUserPrefStore* otr_user_prefs =
       new OverlayUserPrefStore(user_prefs);
 
-  PrefServiceMockFactory factory;
+  syncable_prefs::PrefServiceMockFactory factory;
   factory.set_user_prefs(make_scoped_refptr(user_prefs));
   scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
       new user_prefs::PrefRegistrySyncable);
-  PrefServiceSyncable* regular_prefs =
+  syncable_prefs::PrefServiceSyncable* regular_prefs =
       factory.CreateSyncable(registry.get()).release();
 
   chrome::RegisterUserProfilePrefs(registry.get());
 
-  PrefServiceMockFactory otr_factory;
+  syncable_prefs::PrefServiceMockFactory otr_factory;
   otr_factory.set_user_prefs(make_scoped_refptr(otr_user_prefs));
   scoped_refptr<user_prefs::PrefRegistrySyncable> otr_registry(
       new user_prefs::PrefRegistrySyncable);
-  PrefServiceSyncable* otr_prefs =
+  syncable_prefs::PrefServiceSyncable* otr_prefs =
       otr_factory.CreateSyncable(otr_registry.get()).release();
 
   chrome::RegisterUserProfilePrefs(otr_registry.get());
@@ -167,23 +181,18 @@ TEST_F(PrefProviderTest, Incognito) {
   GURL host("http://example.com/");
   // The value should of course be visible in the regular PrefProvider.
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            GetContentSetting(&pref_content_settings_provider,
-                              host,
-                              host,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host,
+                                         host, CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
   // And also in the OTR version.
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            GetContentSetting(&pref_content_settings_provider_incognito,
-                              host,
-                              host,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(
+                &pref_content_settings_provider_incognito, host, host,
+                CONTENT_SETTINGS_TYPE_IMAGES, std::string(), false));
+  const WebsiteSettingsInfo* info =
+      WebsiteSettingsRegistry::GetInstance()->Get(CONTENT_SETTINGS_TYPE_IMAGES);
   // But the value should not be overridden in the OTR user prefs accidentally.
-  EXPECT_FALSE(otr_user_prefs->IsSetInOverlay(
-      prefs::kContentSettingsPatternPairs));
+  EXPECT_FALSE(otr_user_prefs->IsSetInOverlay(info->pref_name()));
 
   pref_content_settings_provider.ShutdownOnUIThread();
   pref_content_settings_provider_incognito.ShutdownOnUIThread();
@@ -198,20 +207,13 @@ TEST_F(PrefProviderTest, GetContentSettingsValue) {
       ContentSettingsPattern::FromString("[*.]example.com");
 
   EXPECT_EQ(CONTENT_SETTING_DEFAULT,
-            GetContentSetting(&provider,
-                              primary_url,
-                              primary_url,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&provider, primary_url, primary_url,
+                                         CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
 
-  EXPECT_EQ(NULL,
-            GetContentSettingValue(&provider,
-                                   primary_url,
-                                   primary_url,
-                                   CONTENT_SETTINGS_TYPE_IMAGES,
-                                   std::string(),
-                                   false));
+  EXPECT_EQ(NULL, TestUtils::GetContentSettingValue(
+                      &provider, primary_url, primary_url,
+                      CONTENT_SETTINGS_TYPE_IMAGES, std::string(), false));
 
   provider.SetWebsiteSetting(primary_pattern,
                              primary_pattern,
@@ -219,19 +221,12 @@ TEST_F(PrefProviderTest, GetContentSettingsValue) {
                              std::string(),
                              new base::FundamentalValue(CONTENT_SETTING_BLOCK));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            GetContentSetting(&provider,
-                              primary_url,
-                              primary_url,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
-  scoped_ptr<base::Value> value_ptr(
-      GetContentSettingValue(&provider,
-                             primary_url,
-                             primary_url,
-                             CONTENT_SETTINGS_TYPE_IMAGES,
-                             std::string(),
-                             false));
+            TestUtils::GetContentSetting(&provider, primary_url, primary_url,
+                                         CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
+  scoped_ptr<base::Value> value_ptr(TestUtils::GetContentSettingValue(
+      &provider, primary_url, primary_url, CONTENT_SETTINGS_TYPE_IMAGES,
+      std::string(), false));
   int int_value = -1;
   value_ptr->GetAsInteger(&int_value);
   EXPECT_EQ(CONTENT_SETTING_BLOCK, IntToContentSetting(int_value));
@@ -241,13 +236,9 @@ TEST_F(PrefProviderTest, GetContentSettingsValue) {
                              CONTENT_SETTINGS_TYPE_IMAGES,
                              std::string(),
                              NULL);
-  EXPECT_EQ(NULL,
-            GetContentSettingValue(&provider,
-                                   primary_url,
-                                   primary_url,
-                                   CONTENT_SETTINGS_TYPE_IMAGES,
-                                   std::string(),
-                                   false));
+  EXPECT_EQ(NULL, TestUtils::GetContentSettingValue(
+                      &provider, primary_url, primary_url,
+                      CONTENT_SETTINGS_TYPE_IMAGES, std::string(), false));
   provider.ShutdownOnUIThread();
 }
 
@@ -268,12 +259,9 @@ TEST_F(PrefProviderTest, Patterns) {
       ContentSettingsPattern::FromString("file:///tmp/test.html");
 
   EXPECT_EQ(CONTENT_SETTING_DEFAULT,
-            GetContentSetting(&pref_content_settings_provider,
-                              host1,
-                              host1,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host1,
+                                         host1, CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
   pref_content_settings_provider.SetWebsiteSetting(
       pattern1,
       pattern1,
@@ -281,27 +269,18 @@ TEST_F(PrefProviderTest, Patterns) {
       std::string(),
       new base::FundamentalValue(CONTENT_SETTING_BLOCK));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            GetContentSetting(&pref_content_settings_provider,
-                              host1,
-                              host1,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host1,
+                                         host1, CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            GetContentSetting(&pref_content_settings_provider,
-                              host2,
-                              host2,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host2,
+                                         host2, CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
 
   EXPECT_EQ(CONTENT_SETTING_DEFAULT,
-            GetContentSetting(&pref_content_settings_provider,
-                              host3,
-                              host3,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host3,
+                                         host3, CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
   pref_content_settings_provider.SetWebsiteSetting(
       pattern2,
       pattern2,
@@ -309,20 +288,14 @@ TEST_F(PrefProviderTest, Patterns) {
       std::string(),
       new base::FundamentalValue(CONTENT_SETTING_BLOCK));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            GetContentSetting(&pref_content_settings_provider,
-                              host3,
-                              host3,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host3,
+                                         host3, CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
 
   EXPECT_EQ(CONTENT_SETTING_DEFAULT,
-            GetContentSetting(&pref_content_settings_provider,
-                              host4,
-                              host4,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host4,
+                                         host4, CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
   pref_content_settings_provider.SetWebsiteSetting(
       pattern3,
       pattern3,
@@ -330,12 +303,9 @@ TEST_F(PrefProviderTest, Patterns) {
       std::string(),
       new base::FundamentalValue(CONTENT_SETTING_BLOCK));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            GetContentSetting(&pref_content_settings_provider,
-                              host4,
-                              host4,
-                              CONTENT_SETTINGS_TYPE_IMAGES,
-                              std::string(),
-                              false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host4,
+                                         host4, CONTENT_SETTINGS_TYPE_IMAGES,
+                                         std::string(), false));
 
   pref_content_settings_provider.ShutdownOnUIThread();
 }
@@ -352,10 +322,9 @@ TEST_F(PrefProviderTest, ResourceIdentifier) {
   std::string resource2("otherplugin");
 
   EXPECT_EQ(CONTENT_SETTING_DEFAULT,
-            GetContentSetting(
-                &pref_content_settings_provider,
-                host, host, CONTENT_SETTINGS_TYPE_PLUGINS,
-                resource1, false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host,
+                                         host, CONTENT_SETTINGS_TYPE_PLUGINS,
+                                         resource1, false));
   pref_content_settings_provider.SetWebsiteSetting(
       pattern,
       pattern,
@@ -363,55 +332,20 @@ TEST_F(PrefProviderTest, ResourceIdentifier) {
       resource1,
       new base::FundamentalValue(CONTENT_SETTING_BLOCK));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            GetContentSetting(
-                &pref_content_settings_provider,
-                host, host, CONTENT_SETTINGS_TYPE_PLUGINS,
-                resource1, false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host,
+                                         host, CONTENT_SETTINGS_TYPE_PLUGINS,
+                                         resource1, false));
   EXPECT_EQ(CONTENT_SETTING_DEFAULT,
-            GetContentSetting(
-                &pref_content_settings_provider,
-                host, host, CONTENT_SETTINGS_TYPE_PLUGINS,
-                resource2, false));
+            TestUtils::GetContentSetting(&pref_content_settings_provider, host,
+                                         host, CONTENT_SETTINGS_TYPE_PLUGINS,
+                                         resource2, false));
 
   pref_content_settings_provider.ShutdownOnUIThread();
 }
 
-TEST_F(PrefProviderTest, AutoSubmitCertificateContentSetting) {
-  TestingProfile profile;
-  TestingPrefServiceSyncable* prefs = profile.GetTestingPrefService();
-  GURL primary_url("https://www.example.com");
-  GURL secondary_url("https://www.sample.com");
-
-  PrefProvider provider(prefs, false);
-
-  EXPECT_EQ(CONTENT_SETTING_DEFAULT,
-            GetContentSetting(
-                &provider,
-                primary_url,
-                primary_url,
-                CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE,
-                std::string(),
-                false));
-
-  provider.SetWebsiteSetting(ContentSettingsPattern::FromURL(primary_url),
-                             ContentSettingsPattern::Wildcard(),
-                             CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE,
-                             std::string(),
-                             new base::FundamentalValue(CONTENT_SETTING_ALLOW));
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            GetContentSetting(
-                &provider,
-                primary_url,
-                secondary_url,
-                CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE,
-                std::string(),
-                false));
-  provider.ShutdownOnUIThread();
-}
-
 // http://crosbug.com/17760
 TEST_F(PrefProviderTest, Deadlock) {
-  TestingPrefServiceSyncable prefs;
+  syncable_prefs::TestingPrefServiceSyncable prefs;
   PrefProvider::RegisterProfilePrefs(prefs.registry());
 
   // Chain of events: a preference changes, |PrefProvider| notices it, and reads
@@ -419,11 +353,12 @@ TEST_F(PrefProviderTest, Deadlock) {
   // is sent, and this used to happen when |PrefProvider| was still holding its
   // lock.
 
+  const WebsiteSettingsInfo* info =
+      WebsiteSettingsRegistry::GetInstance()->Get(CONTENT_SETTINGS_TYPE_IMAGES);
   PrefProvider provider(&prefs, false);
   DeadlockCheckerObserver observer(&prefs, &provider);
   {
-    DictionaryPrefUpdate update(&prefs,
-                                prefs::kContentSettingsPatternPairs);
+    DictionaryPrefUpdate update(&prefs, info->pref_name());
     base::DictionaryValue* mutable_settings = update.Get();
     mutable_settings->SetWithoutPathExpansion("www.example.com,*",
                                               new base::DictionaryValue());
@@ -468,285 +403,8 @@ TEST_F(PrefProviderTest, LastUsage) {
   pref_content_settings_provider.ShutdownOnUIThread();
 }
 
-
-// TODO(msramek): This tests the correct migration behavior between the old
-// aggregate dictionary preferences for all content settings types and the new
-// dictionary preferences for individual types. Remove this when the migration
-// period is over.
-TEST_F(PrefProviderTest, SyncingOldToNew) {
-  TestingPrefServiceSyncable prefs;
-  PrefProvider::RegisterProfilePrefs(prefs.registry());
-  PrefProvider provider(&prefs, false);
-
-  const std::string pattern = "google.com,*";
-  const std::string resource_id = "abcde12345";
-  base::DictionaryValue* exceptions = new base::DictionaryValue();
-  base::DictionaryValue* plugin_resources = new base::DictionaryValue();
-
-  // Add exceptions for images and app banner which did not need to be migrated.
-  exceptions->SetIntegerWithoutPathExpansion(
-      GetTypeName(CONTENT_SETTINGS_TYPE_IMAGES), CONTENT_SETTING_ALLOW);
-  exceptions->SetIntegerWithoutPathExpansion(
-      GetTypeName(CONTENT_SETTINGS_TYPE_APP_BANNER), CONTENT_SETTING_ALLOW);
-
-  // Add exceptions for new content settings types added after the migration.
-  exceptions->SetIntegerWithoutPathExpansion(
-      GetTypeName(CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT),
-      CONTENT_SETTING_ALLOW);
-
-  // Add a regular exception for plugins, then one with a resource identifier.
-  exceptions->SetIntegerWithoutPathExpansion(
-      GetTypeName(CONTENT_SETTINGS_TYPE_PLUGINS), CONTENT_SETTING_ALLOW);
-  plugin_resources->SetIntegerWithoutPathExpansion(
-      resource_id, CONTENT_SETTING_BLOCK);
-  exceptions->SetWithoutPathExpansion(
-      "per_plugin", plugin_resources);
-
-  // Change the old dictionary preference and observe changes
-  // in the new preferences.
-  {
-    DictionaryPrefUpdate update(&prefs, prefs::kContentSettingsPatternPairs);
-    base::DictionaryValue* old_dictionary = update.Get();
-    old_dictionary->SetWithoutPathExpansion(pattern, exceptions);
-  }
-
-  // The images exception was synced.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsImagesPatternPairs);
-    const base::DictionaryValue* images_dictionary = update.Get();
-
-    EXPECT_EQ(1u, images_dictionary->size());
-    const base::DictionaryValue* images_exception;
-    EXPECT_TRUE(images_dictionary->GetDictionaryWithoutPathExpansion(
-        pattern, &images_exception));
-
-    // And it has a correct value.
-    int images_exception_value = CONTENT_SETTING_DEFAULT;
-    EXPECT_TRUE(images_exception->GetIntegerWithoutPathExpansion(
-        "setting", &images_exception_value));
-    EXPECT_EQ(CONTENT_SETTING_ALLOW, images_exception_value);
-  }
-
-  // The app banner exception was not synced.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsAppBannerPatternPairs);
-    const base::DictionaryValue* app_banner_dictionary = update.Get();
-    EXPECT_TRUE(app_banner_dictionary->empty());
-  }
-
-  // The plugins exception was synced, together with the resource identifiers.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsPluginsPatternPairs);
-    const base::DictionaryValue* plugins_dictionary = update.Get();
-    EXPECT_EQ(1u, plugins_dictionary->size());
-
-    const base::DictionaryValue* plugins_exception;
-    EXPECT_TRUE(plugins_dictionary->GetDictionaryWithoutPathExpansion(
-        pattern, &plugins_exception));
-
-    int plugins_exception_value = CONTENT_SETTING_DEFAULT;
-    EXPECT_TRUE(plugins_exception->GetIntegerWithoutPathExpansion(
-        "setting", &plugins_exception_value));
-    EXPECT_EQ(CONTENT_SETTING_ALLOW, plugins_exception_value);
-
-    int resource_exception_value = CONTENT_SETTING_DEFAULT;
-    const base::DictionaryValue* resource_exception;
-    EXPECT_TRUE(plugins_exception->GetDictionaryWithoutPathExpansion(
-        "per_resource", &resource_exception));
-    EXPECT_TRUE(resource_exception->GetIntegerWithoutPathExpansion(
-        resource_id, &resource_exception_value));
-    EXPECT_EQ(CONTENT_SETTING_BLOCK, resource_exception_value);
-  }
-
-  provider.ShutdownOnUIThread();
-}
-
-TEST_F(PrefProviderTest, SyncingNewToOld) {
-  TestingPrefServiceSyncable prefs;
-  PrefProvider::RegisterProfilePrefs(prefs.registry());
-  PrefProvider provider(&prefs, false);
-
-  const std::string pattern = "google.com,*";
-  const std::string resource_id = "abcde12345";
-  base::DictionaryValue block_exception;
-  block_exception.SetIntegerWithoutPathExpansion(
-      "setting", CONTENT_SETTING_BLOCK);
-
-  // Add a mouselock exception.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsMouseLockPatternPairs);
-    base::DictionaryValue* mouselock_dictionary = update.Get();
-
-    mouselock_dictionary->SetWithoutPathExpansion(
-        pattern, block_exception.DeepCopy());
-  }
-
-  // Add a microphone exception.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsMediaStreamMicPatternPairs);
-    base::DictionaryValue* microphone_dictionary = update.Get();
-
-    microphone_dictionary->SetWithoutPathExpansion(
-        pattern, block_exception.DeepCopy());
-  }
-
-  // Add a plugin exception with resource identifiers.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsPluginsPatternPairs);
-    base::DictionaryValue* plugins_dictionary = update.Get();
-
-    base::DictionaryValue* plugin_exception = block_exception.DeepCopy();
-    plugins_dictionary->SetWithoutPathExpansion(
-        pattern, plugin_exception);
-
-    base::DictionaryValue* resource_exception = new base::DictionaryValue();
-    resource_exception->SetIntegerWithoutPathExpansion(
-        resource_id, CONTENT_SETTING_ALLOW);
-
-    plugin_exception->SetWithoutPathExpansion(
-        "per_resource", resource_exception);
-  }
-
-  // Only the notifications and plugin exceptions should appear in the
-  // old dictionary. We should also have a resource identifiers section
-  // for plugins.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsPatternPairs);
-    const base::DictionaryValue* old_dictionary = update.Get();
-
-    const base::DictionaryValue* exception;
-    EXPECT_TRUE(old_dictionary->GetDictionaryWithoutPathExpansion(
-        pattern, &exception));
-    EXPECT_EQ(3u, exception->size());
-    EXPECT_FALSE(exception->HasKey(
-        GetTypeName(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC)));
-
-    int mouselock_exception_value = CONTENT_SETTING_DEFAULT;
-    exception->GetIntegerWithoutPathExpansion(
-        GetTypeName(CONTENT_SETTINGS_TYPE_MOUSELOCK),
-        &mouselock_exception_value);
-    DCHECK_EQ(CONTENT_SETTING_BLOCK, mouselock_exception_value);
-
-    int plugins_exception_value = CONTENT_SETTING_DEFAULT;
-    exception->GetIntegerWithoutPathExpansion(
-        GetTypeName(CONTENT_SETTINGS_TYPE_PLUGINS),
-        &plugins_exception_value);
-    DCHECK_EQ(CONTENT_SETTING_BLOCK, plugins_exception_value);
-
-    int resource_exception_value = CONTENT_SETTING_DEFAULT;
-    const base::DictionaryValue* resource_values;
-    exception->GetDictionaryWithoutPathExpansion(
-        "per_plugin", &resource_values);
-    resource_values->GetIntegerWithoutPathExpansion(
-        resource_id, &resource_exception_value);
-    DCHECK_EQ(CONTENT_SETTING_ALLOW, resource_exception_value);
-  }
-
-  provider.ShutdownOnUIThread();
-}
-
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-TEST_F(PrefProviderTest, PMIMigrateOnlyAllow) {
-  TestingPrefServiceSyncable prefs;
-  PrefProvider::RegisterProfilePrefs(prefs.registry());
-
-  const std::string pattern_1 = "google.com,*";
-  const std::string pattern_2 = "www.google.com,*";
-  base::DictionaryValue* exception_1 = new base::DictionaryValue();
-  base::DictionaryValue* exception_2 = new base::DictionaryValue();
-
-  // Add both an "allow" and "block" exception for PMI.
-  exception_1->SetIntegerWithoutPathExpansion(
-      GetTypeName(CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER),
-      CONTENT_SETTING_ALLOW);
-  exception_2->SetIntegerWithoutPathExpansion(
-      GetTypeName(CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER),
-      CONTENT_SETTING_BLOCK);
-
-  // Change the old dictionary preference.
-  {
-    DictionaryPrefUpdate update(&prefs, prefs::kContentSettingsPatternPairs);
-    base::DictionaryValue* old_dictionary = update.Get();
-    old_dictionary->SetWithoutPathExpansion(pattern_1, exception_1);
-    old_dictionary->SetWithoutPathExpansion(pattern_2, exception_2);
-  }
-
-  // Create the PrefProvider. It should migrate the settings.
-  PrefProvider provider(&prefs, false);
-
-  // The "block" exception for PMI was migrated, but "allow" was not.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsProtectedMediaIdentifierPatternPairs);
-    const base::DictionaryValue* pmi_dictionary = update.Get();
-    EXPECT_FALSE(pmi_dictionary->HasKey(pattern_1));
-    EXPECT_TRUE(pmi_dictionary->HasKey(pattern_2));
-  }
-
-  provider.ShutdownOnUIThread();
-}
-#endif
-
-TEST_F(PrefProviderTest, PrefsMigrateVerbatim) {
-  TestingPrefServiceSyncable prefs;
-  PrefProvider::RegisterProfilePrefs(prefs.registry());
-
-  const std::string pattern_1 = "google.com,*";
-  const std::string pattern_2 = "www.google.com,*";
-  base::DictionaryValue* exception_1 = new base::DictionaryValue();
-  base::DictionaryValue* exception_2 = new base::DictionaryValue();
-  scoped_ptr<base::DictionaryValue> old_dictionary;
-
-  // Add two exceptions.
-  exception_1->SetIntegerWithoutPathExpansion(
-      GetTypeName(CONTENT_SETTINGS_TYPE_COOKIES),
-      CONTENT_SETTING_ALLOW);
-  exception_2->SetIntegerWithoutPathExpansion(
-      GetTypeName(CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS),
-      CONTENT_SETTING_BLOCK);
-
-  // Change the old dictionary preference.
-  {
-    DictionaryPrefUpdate update(&prefs, prefs::kContentSettingsPatternPairs);
-    base::DictionaryValue* dictionary = update.Get();
-    dictionary->SetWithoutPathExpansion(pattern_1, exception_1);
-    dictionary->SetWithoutPathExpansion(pattern_2, exception_2);
-    old_dictionary.reset(dictionary->DeepCopy());
-  }
-
-  // Create the PrefProvider. It should copy the settings from the old
-  // preference to the new ones.
-  PrefProvider provider(&prefs, false);
-
-  // Force copying back from the new preferences to the old one.
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsCookiesPatternPairs);
-  }
-  {
-    DictionaryPrefUpdate update(
-        &prefs, prefs::kContentSettingsAutomaticDownloadsPatternPairs);
-  }
-
-  // Test if the value after copying there and back is the same.
-  {
-    DictionaryPrefUpdate update(&prefs, prefs::kContentSettingsPatternPairs);
-    base::DictionaryValue* new_dictionary = update.Get();
-    EXPECT_TRUE(old_dictionary->Equals(new_dictionary));
-  }
-
-  provider.ShutdownOnUIThread();
-}
-
 TEST_F(PrefProviderTest, IncognitoInheritsValueMap) {
-  TestingPrefServiceSyncable prefs;
+  syncable_prefs::TestingPrefServiceSyncable prefs;
   PrefProvider::RegisterProfilePrefs(prefs.registry());
 
   ContentSettingsPattern pattern_1 =
@@ -813,7 +471,7 @@ TEST_F(PrefProviderTest, IncognitoInheritsValueMap) {
 }
 
 TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
-  TestingPrefServiceSyncable prefs;
+  syncable_prefs::TestingPrefServiceSyncable prefs;
   PrefProvider::RegisterProfilePrefs(prefs.registry());
 
   ContentSettingsPattern pattern =
@@ -856,12 +514,12 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
   provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_GEOLOCATION);
   provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_PLUGINS);
 
-  // Test that the new preferences for images, geolocation and plugins
-  // are empty.
+  WebsiteSettingsRegistry* registry = WebsiteSettingsRegistry::GetInstance();
+  // Test that the preferences for images, geolocation and plugins are empty.
   const char* empty_prefs[] = {
-      prefs::kContentSettingsImagesPatternPairs,
-      prefs::kContentSettingsGeolocationPatternPairs,
-      prefs::kContentSettingsPluginsPatternPairs
+      registry->Get(CONTENT_SETTINGS_TYPE_IMAGES)->pref_name().c_str(),
+      registry->Get(CONTENT_SETTINGS_TYPE_GEOLOCATION)->pref_name().c_str(),
+      registry->Get(CONTENT_SETTINGS_TYPE_PLUGINS)->pref_name().c_str(),
   };
 
   for (const char* pref : empty_prefs) {
@@ -872,28 +530,14 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
 
   // Test that the preferences for cookies and notifications are not empty.
   const char* nonempty_prefs[] = {
-      prefs::kContentSettingsCookiesPatternPairs,
-      prefs::kContentSettingsNotificationsPatternPairs
+      registry->Get(CONTENT_SETTINGS_TYPE_COOKIES)->pref_name().c_str(),
+      registry->Get(CONTENT_SETTINGS_TYPE_NOTIFICATIONS)->pref_name().c_str(),
   };
 
   for (const char* pref : nonempty_prefs) {
     DictionaryPrefUpdate update(&prefs, pref);
     const base::DictionaryValue* dictionary = update.Get();
     EXPECT_EQ(1u, dictionary->size());
-  }
-
-  // Test that the old preference only contains cookies and notifications.
-  {
-    DictionaryPrefUpdate update(&prefs, prefs::kContentSettingsPatternPairs);
-    const base::DictionaryValue* dictionary = update.Get();
-    const base::DictionaryValue* exception;
-    EXPECT_TRUE(dictionary->GetDictionaryWithoutPathExpansion(
-        CreatePatternString(pattern, wildcard), &exception));
-    EXPECT_EQ(1u, exception->size());
-    EXPECT_TRUE(exception->HasKey(GetTypeName(CONTENT_SETTINGS_TYPE_COOKIES)));
-
-    // The notification setting was not cleared, but it was also never written
-    // to the old preference, as it is unsyncable.
   }
 
   provider.ShutdownOnUIThread();

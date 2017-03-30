@@ -5,6 +5,8 @@
 #ifndef UI_EVENTS_GESTURES_GESTURE_RECOGNIZER_H_
 #define UI_EVENTS_GESTURES_GESTURE_RECOGNIZER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/memory/scoped_vector.h"
@@ -35,7 +37,7 @@ class EVENTS_EXPORT GestureRecognizer {
   // Returns a list of zero or more GestureEvents. The caller is responsible for
   // freeing the returned events. Acks the gesture packet in the queue which
   // matches with unique_event_id.
-  virtual Gestures* AckTouchEvent(uint32 unique_event_id,
+  virtual Gestures* AckTouchEvent(uint32_t unique_event_id,
                                   ui::EventResult result,
                                   GestureConsumer* consumer) = 0;
 
@@ -48,10 +50,6 @@ class EVENTS_EXPORT GestureRecognizer {
   // the touch is already associated with a target.
   // Otherwise, returns null.
   virtual GestureConsumer* GetTouchLockedTarget(const TouchEvent& event) = 0;
-
-  // Return the window which should handle this GestureEvent.
-  virtual GestureConsumer* GetTargetForGestureEvent(
-      const GestureEvent& event) = 0;
 
   // Returns the target of the nearest active touch with source device of
   // |source_device_id|, within

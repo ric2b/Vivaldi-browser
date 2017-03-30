@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_RENDERER_INJECTION_HOST_H
 #define EXTENSIONS_RENDERER_INJECTION_HOST_H
 
+#include "base/macros.h"
 #include "extensions/common/host_id.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "url/gurl.h"
@@ -33,10 +34,6 @@ class InjectionHost {
       content::RenderFrame* render_frame,
       int tab_id,
       bool is_declarative) const = 0;
-
-  // Returns true if the browser should be notified of any injections the host
-  // performs.
-  virtual bool ShouldNotifyBrowserOfInjection() const = 0;
 
   const HostID& id() const { return id_; }
 

@@ -7,10 +7,12 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/output/output_surface_client.h"
 #include "cc/output/renderer.h"
 #include "cc/resources/returned_resource.h"
+#include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/display_scheduler.h"
 #include "cc/surfaces/surface_aggregator.h"
 #include "cc/surfaces/surface_id.h"
@@ -28,6 +30,7 @@ class Size;
 
 namespace cc {
 
+class BeginFrameSource;
 class DirectRenderer;
 class DisplayClient;
 class OutputSurface;
@@ -46,6 +49,7 @@ class TextureMailboxDeleter;
 class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
                                    public OutputSurfaceClient,
                                    public RendererClient,
+                                   public SurfaceAggregatorClient,
                                    public SurfaceDamageObserver {
  public:
   Display(DisplayClient* client,
@@ -66,6 +70,10 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
 
   SurfaceId CurrentSurfaceId();
 
+  // SurfaceAggregatorClient implementation
+  void AddSurface(Surface* surface) override;
+  void RemoveSurface(Surface* surface) override;
+
   // DisplaySchedulerClient implementation.
   bool DrawAndSwap() override;
 
@@ -77,16 +85,15 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   void DidSwapBuffersComplete() override;
   void ReclaimResources(const CompositorFrameAck* ack) override;
   void DidLoseOutputSurface() override;
-  void SetExternalDrawConstraints(
-      const gfx::Transform& transform,
-      const gfx::Rect& viewport,
-      const gfx::Rect& clip,
-      const gfx::Rect& viewport_rect_for_tile_priority,
-      const gfx::Transform& transform_for_tile_priority,
-      bool resourceless_software_draw) override;
+  void SetExternalTilePriorityConstraints(
+      const gfx::Rect& viewport_rect,
+      const gfx::Transform& transform) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
   void SetTreeActivationCallback(const base::Closure& callback) override;
-  void OnDraw() override;
+  void OnDraw(const gfx::Transform& transform,
+              const gfx::Rect& viewport,
+              const gfx::Rect& clip,
+              bool resourceless_software_draw) override;
 
   // RendererClient implementation.
   void SetFullRootLayerDamage() override;

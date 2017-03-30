@@ -5,13 +5,16 @@
 #ifndef CONTENT_PUBLIC_BROWSER_WEB_CONTENTS_DELEGATE_H_
 #define CONTENT_PUBLIC_BROWSER_WEB_CONTENTS_DELEGATE_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/navigation_type.h"
 #include "content/public/common/media_stream_request.h"
@@ -77,12 +80,12 @@ private:
 };
 
 struct CONTENT_EXPORT DownloadInformation {
-  DownloadInformation(const int64,
+  DownloadInformation(const int64_t,
                       const std::string& mimetype,
                       const base::string16&);
   ~DownloadInformation();
 
-  const int64 size;
+  const int64_t size;
   const std::string mime_type;
   const base::string16 suggested_filename;
 private:
@@ -106,6 +109,11 @@ class CONTENT_EXPORT WebContentsDelegate {
   // opened immediately.
   virtual WebContents* OpenURLFromTab(WebContents* source,
                                       const OpenURLParams& params);
+
+  // Allows the delegate to optionally cancel navigations that attempt to
+  // transfer to a different process between the start of the network load and
+  // commit.  Defaults to true.
+  virtual bool ShouldTransferNavigation();
 
   // Called to inform the delegate that the WebContents's navigation state
   // changed. The |changed_flags| indicates the parts of the navigation state
@@ -132,10 +140,6 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Selects the specified contents, bringing its container to the front.
   virtual void ActivateContents(WebContents* contents) {}
-
-  // Deactivates the specified contents by deactivating its container and
-  // potentialy moving it to the back of the Z order.
-  virtual void DeactivateContents(WebContents* contents) {}
 
   // Notifies the delegate that this contents is starting or is done loading
   // some resource. The delegate should use this notification to represent
@@ -177,11 +181,13 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void PasteAndGo(const base::ListValue & search) {};
 
   // Notification that there was a mouse event, along with the absolute
-  // coordinates of the mouse pointer and whether it was a normal motion event
-  // (otherwise, the pointer left the contents area).
+  // coordinates of the mouse pointer and the type of event. If |motion| is
+  // true, this is a normal motion event. If |exited| is true, the pointer left
+  // the contents area.
   virtual void ContentsMouseEvent(WebContents* source,
                                   const gfx::Point& location,
-                                  bool motion) {}
+                                  bool motion,
+                                  bool exited) {}
 
   // Request the delegate to change the zoom level of the current tab.
   virtual void ContentsZoomChange(bool zoom_in) {}
@@ -217,9 +223,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // handled the message. If false is returned the default logging mechanism
   // will be used for the message.
   virtual bool AddMessageToConsole(WebContents* source,
-                                   int32 level,
+                                   int32_t level,
                                    const base::string16& message,
-                                   int32 line_no,
+                                   int32_t line_no,
                                    const base::string16& source_id);
 
   // Tells us that we've finished firing this tab's beforeunload event.
@@ -259,6 +265,13 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Invoked when the page loses mouse capture.
   virtual void LostCapture() {}
+
+  // Asks the delegate if the given tab can download.
+  // Invoking the |callback| synchronously is OK.
+  virtual void CanDownload(
+      const GURL& url,
+      const std::string& request_method,
+      const base::Callback<void(bool)>& callback);
 
   // Asks the delegate if the given tab can download.
   // Invoking the |callback| synchronously is OK.
@@ -322,8 +335,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // be destroyed.
   virtual bool ShouldCreateWebContents(
       WebContents* web_contents,
-      int route_id,
-      int main_frame_route_id,
+      int32_t route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
       WindowContainerType window_container_type,
       const std::string& frame_name,
       const GURL& target_url,
@@ -343,9 +357,6 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Notification that the tab is no longer hung.
   virtual void RendererResponsive(WebContents* source) {}
-
-  // Notification that a worker associated with this tab has crashed.
-  virtual void WorkerCrashed(WebContents* source) {}
 
   // Invoked when a main fram navigation occurs.
   virtual void DidNavigateMainFramePostCommit(WebContents* source) {}
@@ -374,6 +385,13 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void EnumerateDirectory(WebContents* web_contents,
                                   int request_id,
                                   const base::FilePath& path) {}
+
+  // Shows a chooser for the user to select a nearby Bluetooth device. The
+  // observer must live at least as long as the returned chooser object.
+  virtual scoped_ptr<BluetoothChooser> RunBluetoothChooser(
+      WebContents* web_contents,
+      const BluetoothChooser::EventHandler& event_handler,
+      const GURL& origin);
 
   // Returns true if the delegate will embed a WebContents-owned fullscreen
   // render widget.  In this case, the delegate may access the widget by calling
@@ -478,6 +496,14 @@ class CONTENT_EXPORT WebContentsDelegate {
                                           const GURL& security_origin,
                                           MediaStreamType type);
 
+#if defined(OS_ANDROID)
+  // Asks permission to decode media stream. After permission is determined,
+  // |callback| will be called with the result.
+  virtual void RequestMediaDecodePermission(
+      WebContents* web_contents,
+      const base::Callback<void(bool)>& callback);
+#endif
+
   // Requests permission to access the PPAPI broker. The delegate should return
   // true and call the passed in |callback| with the result, or return false
   // to indicate that it does not support asking for permission.
@@ -535,6 +561,15 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual SecurityStyle GetSecurityStyle(
       WebContents* web_contents,
       SecurityStyleExplanations* security_style_explanations);
+
+  // Displays platform-specific (OS) dialog with the certificate details.
+  virtual void ShowCertificateViewerInDevTools(
+      WebContents* web_contents,
+      int cert_id);
+
+  // Called when the active render widget is forwarding a RemoteChannel
+  // compositor proto.  This is used in Blimp mode.
+  virtual void ForwardCompositorProto(const std::vector<uint8_t>& proto) {}
 
  protected:
   virtual ~WebContentsDelegate();

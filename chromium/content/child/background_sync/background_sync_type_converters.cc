@@ -8,37 +8,42 @@
 
 namespace mojo {
 
-#define COMPILE_ASSERT_MATCHING_ENUM(mojo_name, blink_name)     \
-  COMPILE_ASSERT(static_cast<int>(content::mojo_name) ==        \
-      static_cast<int>(blink::WebSyncRegistration::blink_name), \
-      mismatching_enums)
+#define COMPILE_ASSERT_MATCHING_ENUM(mojo_name, blink_name) \
+  static_assert(static_cast<int>(content::mojo_name) ==     \
+                    static_cast<int>(blink::blink_name),    \
+                "mojo and blink enums must match")
 
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_PERIODICITY_PERIODIC,
-                             PeriodicityPeriodic);
+                             WebSyncRegistration::PeriodicityPeriodic);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_PERIODICITY_ONE_SHOT,
-                             PeriodicityOneShot);
+                             WebSyncRegistration::PeriodicityOneShot);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_PERIODICITY_MAX,
-                             PeriodicityOneShot);
+                             WebSyncRegistration::PeriodicityOneShot);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_PERIODICITY_MAX,
-                             PeriodicityLast);
+                             WebSyncRegistration::PeriodicityLast);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_NETWORK_STATE_ANY,
-                             NetworkStateAny);
+                             WebSyncRegistration::NetworkStateAny);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_NETWORK_STATE_AVOID_CELLULAR,
-                             NetworkStateAvoidCellular);
+                             WebSyncRegistration::NetworkStateAvoidCellular);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_NETWORK_STATE_ONLINE,
-                             NetworkStateOnline);
+                             WebSyncRegistration::NetworkStateOnline);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_NETWORK_STATE_MAX,
-                             NetworkStateOnline);
+                             WebSyncRegistration::NetworkStateOnline);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_NETWORK_STATE_MAX,
-                             NetworkStateLast);
+                             WebSyncRegistration::NetworkStateLast);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_POWER_STATE_AUTO,
-                             PowerStateAuto);
+                             WebSyncRegistration::PowerStateAuto);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_POWER_STATE_AVOID_DRAINING,
-                             PowerStateAvoidDraining);
+                             WebSyncRegistration::PowerStateAvoidDraining);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_POWER_STATE_MAX,
-                             PowerStateAvoidDraining);
+                             WebSyncRegistration::PowerStateAvoidDraining);
 COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_POWER_STATE_MAX,
-                             PowerStateLast);
+                             WebSyncRegistration::PowerStateLast);
+COMPILE_ASSERT_MATCHING_ENUM(
+    BACKGROUND_SYNC_EVENT_LAST_CHANCE_IS_NOT_LAST_CHANCE,
+    WebServiceWorkerContextProxy::IsNotLastChance);
+COMPILE_ASSERT_MATCHING_ENUM(BACKGROUND_SYNC_EVENT_LAST_CHANCE_IS_LAST_CHANCE,
+                             WebServiceWorkerContextProxy::IsLastChance);
 
 // static
 blink::WebSyncRegistration::Periodicity
@@ -95,7 +100,7 @@ scoped_ptr<blink::WebSyncRegistration> TypeConverter<
          const content::SyncRegistrationPtr& input) {
   scoped_ptr<blink::WebSyncRegistration> result(
       new blink::WebSyncRegistration());
-  result->id = input->id;
+  result->id = input->handle_id;
   result->periodicity =
       ConvertTo<blink::WebSyncRegistration::Periodicity>(input->periodicity);
   result->tag = blink::WebString::fromUTF8(input->tag);
@@ -114,7 +119,7 @@ content::SyncRegistrationPtr TypeConverter<
         const blink::WebSyncRegistration& input) {
   content::SyncRegistrationPtr result(
       content::SyncRegistration::New());
-  result->id = input.id;
+  result->handle_id = input.id;
   result->periodicity =
       ConvertTo<content::BackgroundSyncPeriodicity>(input.periodicity);
   result->tag = input.tag.utf8();
@@ -123,7 +128,24 @@ content::SyncRegistrationPtr TypeConverter<
       ConvertTo<content::BackgroundSyncNetworkState>(input.networkState);
   result->power_state =
       ConvertTo<content::BackgroundSyncPowerState>(input.powerState);
-  return result.Pass();
+  return result;
+}
+
+// static
+blink::WebServiceWorkerContextProxy::LastChanceOption
+TypeConverter<blink::WebServiceWorkerContextProxy::LastChanceOption,
+              content::BackgroundSyncEventLastChance>::
+    Convert(content::BackgroundSyncEventLastChance input) {
+  return static_cast<blink::WebServiceWorkerContextProxy::LastChanceOption>(
+      input);
+}
+
+// static
+content::BackgroundSyncEventLastChance
+TypeConverter<content::BackgroundSyncEventLastChance,
+              blink::WebServiceWorkerContextProxy::LastChanceOption>::
+    Convert(blink::WebServiceWorkerContextProxy::LastChanceOption input) {
+  return static_cast<content::BackgroundSyncEventLastChance>(input);
 }
 
 }  // namespace mojo

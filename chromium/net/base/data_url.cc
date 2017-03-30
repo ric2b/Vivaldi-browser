@@ -9,7 +9,6 @@
 #include "net/base/data_url.h"
 
 #include "base/base64.h"
-#include "base/basictypes.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "net/base/escape.h"
@@ -43,7 +42,7 @@ bool DataURL::Parse(const GURL& url, std::string* mime_type,
   std::vector<std::string>::iterator iter = meta_data.begin();
   if (iter != meta_data.end()) {
     mime_type->swap(*iter);
-    base::StringToLowerASCII(mime_type);
+    *mime_type = base::ToLowerASCII(*mime_type);
     ++iter;
   }
 

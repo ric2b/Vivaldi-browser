@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/base_paths.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
@@ -42,24 +41,39 @@ class ELFImportsTest : public testing::Test {
 
     ASSERT_TRUE(module_mmap.Initialize(module_path));
     base::win::PEImageAsData pe_image_data(
-        reinterpret_cast<HMODULE>(const_cast<uint8*>(module_mmap.data())));
+        reinterpret_cast<HMODULE>(const_cast<uint8_t*>(module_mmap.data())));
     pe_image_data.EnumImportChunks(ELFImportsTest::ImportsCallback, imports);
   }
 };
 
+// Run this test only in Release builds.
+//
+// This test makes sure that chrome_elf.dll has only certain types of imports.
+// However, it directly and indirectly depends on base, which has lots more
+// imports than are allowed here.
+//
+// In release builds, the offending imports are all stripped since this
+// depends on a relatively small portion of base. In GYP, this works in debug
+// builds as well because static libraries are used for the sandbox and base
+// targets and the files that use e.g. user32.dll happen to not get brought
+// into the build in the first place (due to the way static libraries are
+// linked where only the required .o files are included). But we don't bother
+// differentiating GYP and GN builds for this purpose.
+//
+// If you break this test, you may have changed base or the Windows sandbox
+// such that more system imports are required to link.
+#ifdef NDEBUG
 TEST_F(ELFImportsTest, ChromeElfSanityCheck) {
-  std::vector<std::string> elf_imports;
-
   base::FilePath dll;
   ASSERT_TRUE(PathService::Get(base::DIR_EXE, &dll));
   dll = dll.Append(L"vivaldi_elf.dll");
+
+  std::vector<std::string> elf_imports;
   GetImports(dll, &elf_imports);
 
   // Check that ELF has imports.
   ASSERT_LT(0u, elf_imports.size()) << "Ensure the chrome_elf_unittests "
     "target was built, instead of chrome_elf_unittests.exe";
-
-  std::vector<std::string>::iterator it(elf_imports.begin());
 
   static const char* const kValidFilePatterns[] = {
     "KERNEL32.dll",
@@ -74,15 +88,18 @@ TEST_F(ELFImportsTest, ChromeElfSanityCheck) {
   };
 
   // Make sure all of ELF's imports are in the valid imports list.
-  for (; it != elf_imports.end(); it++) {
+  for (const std::string& import : elf_imports) {
     bool match = false;
-    for (int i = 0; i < arraysize(kValidFilePatterns); ++i) {
-      if (base::MatchPattern(*it, kValidFilePatterns[i]))
+    for (const char* kValidFilePattern : kValidFilePatterns) {
+      if (base::MatchPattern(import, kValidFilePattern)) {
         match = true;
+        break;
+      }
     }
-    ASSERT_TRUE(match) << "Illegal import in chrome_elf.dll: " << *it;
+    ASSERT_TRUE(match) << "Illegal import in chrome_elf.dll: " << import;
   }
 }
+#endif  // NDEBUG
 
 TEST_F(ELFImportsTest, ChromeExeSanityCheck) {
   std::vector<std::string> exe_imports;

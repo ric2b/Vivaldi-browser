@@ -4,9 +4,9 @@
 
 #include "ppapi/shared_impl/ppb_gamepad_shared.h"
 
-#include <algorithm>
+#include <string.h>
 
-#include "base/basictypes.h"
+#include <algorithm>
 
 namespace ppapi {
 

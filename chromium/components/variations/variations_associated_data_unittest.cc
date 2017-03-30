@@ -4,6 +4,7 @@
 
 #include "components/variations/variations_associated_data.h"
 
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -18,17 +19,6 @@ const VariationID TEST_VALUE_B = 3300201;
 // Note that this will do the group assignment in |trial| if not already done.
 VariationID GetIDForTrial(IDCollectionKey key, base::FieldTrial* trial) {
   return GetGoogleVariationID(key, trial->trial_name(), trial->group_name());
-}
-
-// Tests whether a field trial is active (i.e. group() has been called on it).
-bool IsFieldTrialActive(const std::string& trial_name) {
-  base::FieldTrial::ActiveGroups active_groups;
-  base::FieldTrialList::GetActiveFieldTrialGroups(&active_groups);
-  for (size_t i = 0; i < active_groups.size(); ++i) {
-    if (active_groups[i].trial_name == trial_name)
-      return true;
-  }
-  return false;
 }
 
 // Call FieldTrialList::FactoryGetFieldTrial() with a future expiry date.
@@ -299,15 +289,15 @@ TEST_F(VariationsAssociatedDataTest,
        AssociateVariationParams_DoesntActivateTrial) {
   const std::string kTrialName = "AssociateVariationParams_DoesntActivateTrial";
 
-  ASSERT_FALSE(IsFieldTrialActive(kTrialName));
+  ASSERT_FALSE(base::FieldTrialList::IsTrialActive(kTrialName));
   scoped_refptr<base::FieldTrial> trial(
       CreateFieldTrial(kTrialName, 100, "A", NULL));
-  ASSERT_FALSE(IsFieldTrialActive(kTrialName));
+  ASSERT_FALSE(base::FieldTrialList::IsTrialActive(kTrialName));
 
   std::map<std::string, std::string> params;
   params["a"] = "10";
   EXPECT_TRUE(AssociateVariationParams(kTrialName, "A", params));
-  ASSERT_FALSE(IsFieldTrialActive(kTrialName));
+  ASSERT_FALSE(base::FieldTrialList::IsTrialActive(kTrialName));
 }
 
 TEST_F(VariationsAssociatedDataTest, GetVariationParams_NoTrial) {
@@ -333,27 +323,27 @@ TEST_F(VariationsAssociatedDataTest, GetVariationParams_NoParams) {
 TEST_F(VariationsAssociatedDataTest, GetVariationParams_ActivatesTrial) {
   const std::string kTrialName = "GetVariationParams_ActivatesTrial";
 
-  ASSERT_FALSE(IsFieldTrialActive(kTrialName));
+  ASSERT_FALSE(base::FieldTrialList::IsTrialActive(kTrialName));
   scoped_refptr<base::FieldTrial> trial(
       CreateFieldTrial(kTrialName, 100, "A", NULL));
-  ASSERT_FALSE(IsFieldTrialActive(kTrialName));
+  ASSERT_FALSE(base::FieldTrialList::IsTrialActive(kTrialName));
 
   std::map<std::string, std::string> params;
   EXPECT_FALSE(GetVariationParams(kTrialName, &params));
-  ASSERT_TRUE(IsFieldTrialActive(kTrialName));
+  ASSERT_TRUE(base::FieldTrialList::IsTrialActive(kTrialName));
 }
 
 TEST_F(VariationsAssociatedDataTest, GetVariationParamValue_ActivatesTrial) {
   const std::string kTrialName = "GetVariationParamValue_ActivatesTrial";
 
-  ASSERT_FALSE(IsFieldTrialActive(kTrialName));
+  ASSERT_FALSE(base::FieldTrialList::IsTrialActive(kTrialName));
   scoped_refptr<base::FieldTrial> trial(
       CreateFieldTrial(kTrialName, 100, "A", NULL));
-  ASSERT_FALSE(IsFieldTrialActive(kTrialName));
+  ASSERT_FALSE(base::FieldTrialList::IsTrialActive(kTrialName));
 
   std::map<std::string, std::string> params;
   EXPECT_EQ(std::string(), GetVariationParamValue(kTrialName, "x"));
-  ASSERT_TRUE(IsFieldTrialActive(kTrialName));
+  ASSERT_TRUE(base::FieldTrialList::IsTrialActive(kTrialName));
 }
 
 }  // namespace variations

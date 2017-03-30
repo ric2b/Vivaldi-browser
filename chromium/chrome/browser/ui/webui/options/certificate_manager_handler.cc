@@ -4,19 +4,25 @@
 
 #include "chrome/browser/ui/webui/options/certificate_manager_handler.h"
 
+#include <errno.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <map>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"  // for FileAccessProvider
 #include "base/i18n/string_compare.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/posix/safe_strerror.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/profiles/profile.h"
@@ -27,6 +33,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+#include "grit/components_strings.h"
 #include "net/base/crypto_module.h"
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
@@ -138,6 +145,11 @@ void ShowCertificateViewerModalDialog(content::WebContents* web_contents,
 }
 #endif
 
+bool IsFileExtensionPkcs12(const base::FilePath& path) {
+  return path.MatchesExtension(FILE_PATH_LITERAL(".p12")) ||
+         path.MatchesExtension(FILE_PATH_LITERAL(".pfx"));
+}
+
 }  // namespace
 
 namespace options {
@@ -155,7 +167,7 @@ class CertIdMap {
   net::X509Certificate* CallbackArgsToCert(const base::ListValue* args);
 
  private:
-  typedef std::map<net::X509Certificate*, int32> CertMap;
+  typedef std::map<net::X509Certificate*, int32_t> CertMap;
 
   // Creates an ID for cert and looks up the cert for an ID.
   IDMap<net::X509Certificate>id_map_;
@@ -171,13 +183,13 @@ std::string CertIdMap::CertToId(net::X509Certificate* cert) {
   if (iter != cert_map_.end())
     return base::IntToString(iter->second);
 
-  int32 new_id = id_map_.Add(cert);
+  int32_t new_id = id_map_.Add(cert);
   cert_map_[cert] = new_id;
   return base::IntToString(new_id);
 }
 
 net::X509Certificate* CertIdMap::IdToCert(const std::string& id) {
-  int32 cert_id = 0;
+  int32_t cert_id = 0;
   if (!base::StringToInt(id, &cert_id))
     return NULL;
 
@@ -709,8 +721,10 @@ void CertificateManagerHandler::StartImportPersonal(
   }
   file_type_info.extensions.resize(1);
   file_type_info.extensions[0].push_back(FILE_PATH_LITERAL("p12"));
+  file_type_info.extensions[0].push_back(FILE_PATH_LITERAL("pfx"));
+  file_type_info.extensions[0].push_back(FILE_PATH_LITERAL("crt"));
   file_type_info.extension_description_overrides.push_back(
-      l10n_util::GetStringUTF16(IDS_CERT_MANAGER_PKCS12_FILES));
+      l10n_util::GetStringUTF16(IDS_CERT_USAGE_SSL_CLIENT));
   file_type_info.include_all_files = true;
   select_file_dialog_ = ui::SelectFileDialog::Create(
       this, new ChromeSelectFilePolicy(web_ui()->GetWebContents()));
@@ -724,8 +738,19 @@ void CertificateManagerHandler::StartImportPersonal(
 void CertificateManagerHandler::ImportPersonalFileSelected(
     const base::FilePath& path) {
   file_path_ = path;
-  web_ui()->CallJavascriptFunction(
-      "CertificateManager.importPersonalAskPassword");
+  if (IsFileExtensionPkcs12(file_path_)) {
+    web_ui()->CallJavascriptFunction(
+        "CertificateManager.importPersonalAskPassword");
+    return;
+  }
+
+  // Non .p12/.pfx files are treated as unencrypted certificates.
+  password_.clear();
+  file_access_provider_->StartRead(
+      file_path_,
+      base::Bind(&CertificateManagerHandler::ImportPersonalFileRead,
+                 base::Unretained(this)),
+      &tracker_);
 }
 
 void CertificateManagerHandler::ImportPersonalPasswordSelected(
@@ -748,7 +773,7 @@ void CertificateManagerHandler::ImportPersonalFileRead(
     ImportExportCleanup();
     web_ui()->CallJavascriptFunction("CertificateRestoreOverlay.dismiss");
     ShowError(
-        l10n_util::GetStringUTF8(IDS_CERT_MANAGER_PKCS12_IMPORT_ERROR_TITLE),
+        l10n_util::GetStringUTF8(IDS_CERT_MANAGER_IMPORT_ERROR_TITLE),
         l10n_util::GetStringFUTF8(IDS_CERT_MANAGER_READ_ERROR_FORMAT,
                                   UTF8ToUTF16(
                                       base::safe_strerror(*read_errno))));
@@ -757,21 +782,49 @@ void CertificateManagerHandler::ImportPersonalFileRead(
 
   file_data_ = *data;
 
-  if (use_hardware_backed_) {
-    module_ = certificate_manager_model_->cert_db()->GetPrivateModule();
-  } else {
-    module_ = certificate_manager_model_->cert_db()->GetPublicModule();
+  if (IsFileExtensionPkcs12(file_path_)) {
+    if (use_hardware_backed_) {
+      module_ = certificate_manager_model_->cert_db()->GetPrivateModule();
+    } else {
+      module_ = certificate_manager_model_->cert_db()->GetPublicModule();
+    }
+
+    net::CryptoModuleList modules;
+    modules.push_back(module_);
+    chrome::UnlockSlotsIfNecessary(
+        modules,
+        chrome::kCryptoModulePasswordCertImport,
+        net::HostPortPair(),  // unused.
+        GetParentWindow(),
+        base::Bind(&CertificateManagerHandler::ImportPersonalSlotUnlocked,
+                   base::Unretained(this)));
+    return;
   }
 
-  net::CryptoModuleList modules;
-  modules.push_back(module_);
-  chrome::UnlockSlotsIfNecessary(
-      modules,
-      chrome::kCryptoModulePasswordCertImport,
-      net::HostPortPair(),  // unused.
-      GetParentWindow(),
-      base::Bind(&CertificateManagerHandler::ImportPersonalSlotUnlocked,
-                 base::Unretained(this)));
+  // Non .p12/.pfx files are assumed to be single/chain certificates without
+  // private key data. The default extension according to spec is '.crt',
+  // however other extensions are also used in some places to represent these
+  // certificates.
+  int result = certificate_manager_model_->ImportUserCert(file_data_);
+  ImportExportCleanup();
+  web_ui()->CallJavascriptFunction("CertificateRestoreOverlay.dismiss");
+  int string_id;
+  switch (result) {
+    case net::OK:
+      return;
+    case net::ERR_NO_PRIVATE_KEY_FOR_CERT:
+      string_id = IDS_CERT_MANAGER_IMPORT_MISSING_KEY;
+      break;
+    case net::ERR_CERT_INVALID:
+      string_id = IDS_CERT_MANAGER_IMPORT_INVALID_FILE;
+      break;
+    default:
+      string_id = IDS_CERT_MANAGER_UNKNOWN_ERROR;
+      break;
+  }
+  ShowError(
+      l10n_util::GetStringUTF8(IDS_CERT_MANAGER_IMPORT_ERROR_TITLE),
+      l10n_util::GetStringUTF8(string_id));
 }
 
 void CertificateManagerHandler::ImportPersonalSlotUnlocked() {
@@ -794,20 +847,20 @@ void CertificateManagerHandler::ImportPersonalSlotUnlocked() {
       string_id = IDS_CERT_MANAGER_BAD_PASSWORD;
       break;
     case net::ERR_PKCS12_IMPORT_INVALID_MAC:
-      string_id = IDS_CERT_MANAGER_PKCS12_IMPORT_INVALID_MAC;
+      string_id = IDS_CERT_MANAGER_IMPORT_INVALID_MAC;
       break;
     case net::ERR_PKCS12_IMPORT_INVALID_FILE:
-      string_id = IDS_CERT_MANAGER_PKCS12_IMPORT_INVALID_FILE;
+      string_id = IDS_CERT_MANAGER_IMPORT_INVALID_FILE;
       break;
     case net::ERR_PKCS12_IMPORT_UNSUPPORTED:
-      string_id = IDS_CERT_MANAGER_PKCS12_IMPORT_UNSUPPORTED;
+      string_id = IDS_CERT_MANAGER_IMPORT_UNSUPPORTED;
       break;
     default:
       string_id = IDS_CERT_MANAGER_UNKNOWN_ERROR;
       break;
   }
   ShowError(
-      l10n_util::GetStringUTF8(IDS_CERT_MANAGER_PKCS12_IMPORT_ERROR_TITLE),
+      l10n_util::GetStringUTF8(IDS_CERT_MANAGER_IMPORT_ERROR_TITLE),
       l10n_util::GetStringUTF8(string_id));
 }
 
@@ -1005,7 +1058,7 @@ void CertificateManagerHandler::Delete(const base::ListValue* args) {
 
 void CertificateManagerHandler::OnCertificateManagerModelCreated(
     scoped_ptr<CertificateManagerModel> model) {
-  certificate_manager_model_ = model.Pass();
+  certificate_manager_model_ = std::move(model);
   CertificateManagerModelReady();
 }
 

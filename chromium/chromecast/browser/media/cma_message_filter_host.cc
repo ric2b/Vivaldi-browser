@@ -4,12 +4,15 @@
 
 #include "chromecast/browser/media/cma_message_filter_host.h"
 
+#include <stdint.h>
+
 #include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/sync_socket.h"
+#include "chromecast/browser/media/cma_media_pipeline_client.h"
 #include "chromecast/browser/media/media_pipeline_host.h"
 #include "chromecast/common/media/cma_messages.h"
 #include "chromecast/media/base/media_message_loop.h"
@@ -23,9 +26,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "media/base/bind_to_current_loop.h"
-#include "ui/gfx/geometry/point_f.h"
-#include "ui/gfx/geometry/quad_f.h"
-#include "ui/gfx/geometry/size.h"
 
 namespace chromecast {
 namespace media {
@@ -49,8 +49,8 @@ base::LazyInstance<MediaPipelineCmaMap> g_pipeline_map_cma =
     LAZY_INSTANCE_INITIALIZER;
 
 uint64_t GetPipelineCmaId(int process_id, int media_id) {
-  return (static_cast<uint64>(process_id) << 32) +
-      static_cast<uint64>(media_id);
+  return (static_cast<uint64_t>(process_id) << 32) +
+         static_cast<uint64_t>(media_id);
 }
 
 MediaPipelineHost* GetMediaPipeline(int process_id, int media_id) {
@@ -110,7 +110,7 @@ void SetCdmOnUiThread(
     return;
   }
 
-  ::media::BrowserCdm* cdm = host->GetBrowserCdm(render_frame_id, cdm_id);
+  scoped_refptr<::media::MediaKeys> cdm = host->GetCdm(render_frame_id, cdm_id);
   if (!cdm) {
     LOG(WARNING) << "Could not find BrowserCdm (" << render_frame_id << ","
                  << cdm_id << ")";
@@ -118,191 +118,20 @@ void SetCdmOnUiThread(
   }
 
   BrowserCdmCast* browser_cdm_cast =
-      static_cast<BrowserCdmCastUi*>(cdm)->browser_cdm_cast();
+      static_cast<BrowserCdmCastUi*>(cdm.get())->browser_cdm_cast();
   MediaMessageLoop::GetTaskRunner()->PostTask(
-      FROM_HERE,
-      base::Bind(&SetCdmOnCmaThread,
-                 render_process_id,
-                 media_id,
-                 browser_cdm_cast));
-}
-
-// TODO(halliwell): remove this and the NotifyExternalSurface path once
-// VIDEO_HOLE is no longer required.
-void EstimateVideoPlaneRect(const gfx::QuadF& quad,
-                            VideoPlane::Transform* transform,
-                            RectF* rect) {
-  const gfx::PointF& p0 = quad.p1();
-  const gfx::PointF& p1 = quad.p2();
-  const gfx::PointF& p2 = quad.p3();
-  const gfx::PointF& p3 = quad.p4();
-
-  float det0 = p0.x() * p1.y() - p1.x() * p0.y();
-  float det1 = p1.x() * p2.y() - p2.x() * p1.y();
-  float det2 = p2.x() * p3.y() - p3.x() * p2.y();
-  float det3 = p3.x() * p0.y() - p0.x() * p3.y();
-
-  // Calculate the area of the quad (i.e. moment 0 of the polygon).
-  // Note: the area can here be either positive or negative
-  // depending on whether the quad is clock wise or counter clock wise.
-  float area = 0.5 * (det0 + det1 + det2 + det3);
-  if (area == 0.0) {
-    // Empty rectangle in that case.
-    *transform = VideoPlane::TRANSFORM_NONE;
-    *rect = RectF(p0.x(), p0.y(), 0.0, 0.0);
-    return;
-  }
-
-  // Calculate the center of gravity of the polygon
-  // (i.e. moment 1 of the polygon).
-  float cx = (1.0 / (6.0 * area)) *
-      ((p0.x() + p1.x()) * det0 +
-       (p1.x() + p2.x()) * det1 +
-       (p2.x() + p3.x()) * det2 +
-       (p3.x() + p0.x()) * det3);
-  float cy = (1.0 / (6.0 * area)) *
-      ((p0.y() + p1.y()) * det0 +
-       (p1.y() + p2.y()) * det1 +
-       (p2.y() + p3.y()) * det2 +
-       (p3.y() + p0.y()) * det3);
-
-  // For numerical stability, subtract the center of gravity now instead of
-  // later doing:
-  // mxx -= cx * cx;
-  // myy -= cy * cy;
-  // mxy -= cx * cy;
-  // to get the centered 2nd moments.
-  gfx::PointF p0c(p0.x() - cx, p0.y() - cy);
-  gfx::PointF p1c(p1.x() - cx, p1.y() - cy);
-  gfx::PointF p2c(p2.x() - cx, p2.y() - cy);
-  gfx::PointF p3c(p3.x() - cx, p3.y() - cy);
-
-  // Calculate the second moments of the polygon.
-  float det0c = p0c.x() * p1c.y() - p1c.x() * p0c.y();
-  float det1c = p1c.x() * p2c.y() - p2c.x() * p1c.y();
-  float det2c = p2c.x() * p3c.y() - p3c.x() * p2c.y();
-  float det3c = p3c.x() * p0c.y() - p0c.x() * p3c.y();
-  float mxx = (1.0 / (12.0 * area)) *
-      ((p0c.x() * p0c.x() + p0c.x() * p1c.x() + p1c.x() * p1c.x()) * det0c +
-       (p1c.x() * p1c.x() + p1c.x() * p2c.x() + p2c.x() * p2c.x()) * det1c +
-       (p2c.x() * p2c.x() + p2c.x() * p3c.x() + p3c.x() * p3c.x()) * det2c +
-       (p3c.x() * p3c.x() + p3c.x() * p0c.x() + p0c.x() * p0c.x()) * det3c);
-  float myy = (1.0 / (12.0 * area)) *
-      ((p0c.y() * p0c.y() + p0c.y() * p1c.y() + p1c.y() * p1c.y()) * det0c +
-       (p1c.y() * p1c.y() + p1c.y() * p2c.y() + p2c.y() * p2c.y()) * det1c +
-       (p2c.y() * p2c.y() + p2c.y() * p3c.y() + p3c.y() * p3c.y()) * det2c +
-       (p3c.y() * p3c.y() + p3c.y() * p0c.y() + p0c.y() * p0c.y()) * det3c);
-
-  // Remark: the 2nd moments of a rotated & centered rectangle are given by:
-  // mxx = (1/12) * (h^2 * s^2 + w^2 * c^2)
-  // myy = (1/12) * (h^2 * c^2 + w^2 * s^2)
-  // mxy = (1/12) * (w^2 - h^2) * c * s
-  // where w = width of the original rectangle,
-  //       h = height of the original rectangle,
-  //       c = cos(teta) with teta the angle of the rotation,
-  //       s = sin(teta)
-  //
-  // For reference, mxy can be calculated from the quad using:
-  // float mxy = (1.0 / (24.0 * area)) *
-  //    ((2.0 * p0c.x() * p0c.y() + p0c.x() * p1c.y() + p1c.x() * p0c.y() +
-  //      2.0 * p1c.x() * p1c.y()) * det0c +
-  //     (2.0 * p1c.x() * p1c.y() + p1c.x() * p2c.y() + p2c.x() * p1c.y() +
-  //      2.0 * p2c.x() * p2c.y()) * det1c +
-  //     (2.0 * p2c.x() * p2c.y() + p2c.x() * p3c.y() + p3c.x() * p2c.y() +
-  //      2.0 * p3c.x() * p3c.y()) * det2c +
-  //     (2.0 * p3c.x() * p3c.y() + p3c.x() * p0c.y() + p0c.x() * p3c.y() +
-  //      2.0 * p0c.x() * p0c.y()) * det3c);
-
-  // The rotation is assumed to be 0, 90, 180 or 270 degrees, so mxy = 0.0
-  // Using this assumption: mxx = (1/12) h^2 or (1/12) w^2 depending on the
-  // rotation. Same for myy.
-  if (mxx < 0 || myy < 0) {
-    // mxx and myy should be positive, only numerical errors can lead to a
-    // negative value.
-    LOG(WARNING) << "Numerical errors: " << mxx << " " << myy;
-    *transform = VideoPlane::TRANSFORM_NONE;
-    *rect = RectF(p0.x(), p0.y(), 0.0, 0.0);
-    return;
-  }
-  float size_x = sqrt(12.0 * mxx);
-  float size_y = sqrt(12.0 * myy);
-
-  // Estimate the parameters of the rotation since teta can only be known
-  // modulo 90 degrees. In previous equations, you can always swap w and h
-  // and subtract 90 degrees to teta to get the exact same second moment.
-  int idx_best = -1;
-  float err_best = 0.0;
-
-  // First, estimate the rotation angle assuming
-  // dist(p0,p1) is equal to |size_x|,
-  // dist(p0,p3) is equal to |size_y|.
-  gfx::PointF r1(size_x, 0);
-  gfx::PointF r2(size_x, size_y);
-  gfx::PointF r3(0, size_y);
-  for (int k = 0; k < 4; k++) {
-    float cur_err =
-        fabs((p1.x() - p0.x()) - r1.x()) + fabs((p1.y() - p0.y()) - r1.y()) +
-        fabs((p2.x() - p0.x()) - r2.x()) + fabs((p2.y() - p0.y()) - r2.y()) +
-        fabs((p3.x() - p0.x()) - r3.x()) + fabs((p3.y() - p0.y()) - r3.y());
-    if (idx_best < 0 || cur_err < err_best) {
-      idx_best = k;
-      err_best = cur_err;
-    }
-    // 90 degree rotation.
-    r1 = gfx::PointF(-r1.y(), r1.x());
-    r2 = gfx::PointF(-r2.y(), r2.x());
-    r3 = gfx::PointF(-r3.y(), r3.x());
-  }
-
-  // Then, estimate the rotation angle assuming:
-  // dist(p0,p1) is equal to |size_y|,
-  // dist(p0,p3) is equal to |size_x|.
-  r1 = gfx::PointF(size_y, 0);
-  r2 = gfx::PointF(size_y, size_x);
-  r3 = gfx::PointF(0, size_x);
-  for (int k = 0; k < 4; k++) {
-    float cur_err =
-        fabs((p1.x() - p0.x()) - r1.x()) + fabs((p1.y() - p0.y()) - r1.y()) +
-        fabs((p2.x() - p0.x()) - r2.x()) + fabs((p2.y() - p0.y()) - r2.y()) +
-        fabs((p3.x() - p0.x()) - r3.x()) + fabs((p3.y() - p0.y()) - r3.y());
-    if (idx_best < 0 || cur_err < err_best) {
-      idx_best = k;
-      err_best = cur_err;
-    }
-    // 90 degree rotation.
-    r1 = gfx::PointF(-r1.y(), r1.x());
-    r2 = gfx::PointF(-r2.y(), r2.x());
-    r3 = gfx::PointF(-r3.y(), r3.x());
-  }
-
-  *transform = static_cast<VideoPlane::Transform>(idx_best);
-  *rect = RectF(cx - size_x / 2.0, cy - size_y / 2.0, size_x, size_y);
-}
-
-void UpdateVideoSurfaceHost(int surface_id, const gfx::QuadF& quad) {
-  // Currently supports only one video plane.
-  CHECK_EQ(surface_id, 0);
-
-  // Convert quad into rect + transform
-  VideoPlane::Transform transform = VideoPlane::TRANSFORM_NONE;
-  RectF rect(0, 0, 0, 0);
-  EstimateVideoPlaneRect(quad, &transform, &rect);
-
-  VideoPlane* video_plane = CastMediaShlib::GetVideoPlane();
-  video_plane->SetGeometry(
-      rect,
-      VideoPlane::COORDINATE_TYPE_GRAPHICS_PLANE,
-      transform);
+      FROM_HERE, base::Bind(&SetCdmOnCmaThread, render_process_id, media_id,
+                            base::Unretained(browser_cdm_cast)));
 }
 
 }  // namespace
 
 CmaMessageFilterHost::CmaMessageFilterHost(
     int render_process_id,
-    const media::CreatePipelineDeviceCB& create_pipeline_device_cb)
+    scoped_refptr<CmaMediaPipelineClient> client)
     : content::BrowserMessageFilter(CastMediaMsgStart),
       process_id_(render_process_id),
-      create_pipeline_device_cb_(create_pipeline_device_cb),
+      client_(client),
       task_runner_(MediaMessageLoop::GetTaskRunner()),
       weak_factory_(this) {
   weak_this_ = weak_factory_.GetWeakPtr();
@@ -336,8 +165,6 @@ bool CmaMessageFilterHost::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(CmaHostMsg_SetPlaybackRate, SetPlaybackRate)
     IPC_MESSAGE_HANDLER(CmaHostMsg_SetVolume, SetVolume)
     IPC_MESSAGE_HANDLER(CmaHostMsg_NotifyPipeWrite, NotifyPipeWrite)
-    IPC_MESSAGE_HANDLER(CmaHostMsg_NotifyExternalSurface,
-                        NotifyExternalSurface)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -349,11 +176,12 @@ void CmaMessageFilterHost::DeleteEntries() {
 
   for (MediaPipelineMap::iterator it = media_pipelines_.begin();
        it != media_pipelines_.end(); ) {
+    int media_id = it->first;
     scoped_ptr<MediaPipelineHost> media_pipeline(it->second);
     media_pipelines_.erase(it++);
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&DestroyMediaPipeline, process_id_, it->first,
+        base::Bind(&DestroyMediaPipeline, process_id_, media_id,
                    base::Passed(&media_pipeline)));
   }
 }
@@ -380,14 +208,21 @@ void CmaMessageFilterHost::CreateMedia(int media_id, LoadType load_type) {
   client.error_cb = ::media::BindToCurrentLoop(
       base::Bind(&CmaMessageFilterHost::OnPlaybackError,
                  weak_this_, media_id, media::kNoTrackId));
+  client.pipeline_backend_created_cb = base::Bind(
+      &CmaMediaPipelineClient::OnMediaPipelineBackendCreated, client_);
+  client.pipeline_backend_destroyed_cb = base::Bind(
+      &CmaMediaPipelineClient::OnMediaPipelineBackendDestroyed, client_);
+
   task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&SetMediaPipeline,
                  process_id_, media_id, media_pipeline_host.get()));
   task_runner_->PostTask(
-      FROM_HERE, base::Bind(&MediaPipelineHost::Initialize,
-                            base::Unretained(media_pipeline_host.get()),
-                            load_type, client, create_pipeline_device_cb_));
+      FROM_HERE,
+      base::Bind(&MediaPipelineHost::Initialize,
+                 base::Unretained(media_pipeline_host.get()), load_type, client,
+                 base::Bind(&CmaMediaPipelineClient::CreateMediaPipelineBackend,
+                            client_)));
   std::pair<MediaPipelineMap::iterator, bool> ret =
     media_pipelines_.insert(
         std::make_pair(media_id, media_pipeline_host.release()));
@@ -517,6 +352,8 @@ void CmaMessageFilterHost::AudioInitialize(
   }
 
   AvPipelineClient client;
+  client.wait_for_key_cb = ::media::BindToCurrentLoop(base::Bind(
+      &CmaMessageFilterHost::OnWaitForKey, weak_this_, media_id, track_id));
   client.eos_cb = ::media::BindToCurrentLoop(base::Bind(
       &CmaMessageFilterHost::OnEos, weak_this_, media_id, track_id));
   client.playback_error_cb = ::media::BindToCurrentLoop(base::Bind(
@@ -547,6 +384,9 @@ void CmaMessageFilterHost::VideoInitialize(
   }
 
   VideoPipelineClient client;
+  client.av_pipeline_client.wait_for_key_cb = ::media::BindToCurrentLoop(
+      base::Bind(&CmaMessageFilterHost::OnWaitForKey, weak_this_,
+                 media_id, track_id));
   client.av_pipeline_client.eos_cb = ::media::BindToCurrentLoop(
       base::Bind(&CmaMessageFilterHost::OnEos, weak_this_,
                  media_id, track_id));
@@ -630,17 +470,6 @@ void CmaMessageFilterHost::NotifyPipeWrite(int media_id, TrackId track_id) {
   FORWARD_CALL(media_pipeline, NotifyPipeWrite, track_id);
 }
 
-void CmaMessageFilterHost::NotifyExternalSurface(
-    int surface_id,
-    const gfx::PointF& p0, const gfx::PointF& p1,
-    const gfx::PointF& p2, const gfx::PointF& p3) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&UpdateVideoSurfaceHost, surface_id,
-                 gfx::QuadF(p0, p1, p2, p3)));
-}
-
 // *** Browser to renderer messages ***
 
 void CmaMessageFilterHost::OnMediaStateChanged(
@@ -674,6 +503,11 @@ void CmaMessageFilterHost::OnBufferingNotification(
     int media_id, ::media::BufferingState state) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   Send(new CmaMsg_BufferingNotification(media_id, state));
+}
+
+void CmaMessageFilterHost::OnWaitForKey(int media_id, TrackId track_id) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  Send(new CmaMsg_WaitForKey(media_id, track_id));
 }
 
 void CmaMessageFilterHost::OnEos(int media_id, TrackId track_id) {

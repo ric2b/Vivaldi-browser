@@ -4,6 +4,8 @@
 
 #include "components/autofill/content/browser/content_autofill_driver.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "components/autofill/content/common/autofill_messages.h"
@@ -77,13 +79,6 @@ void ContentAutofillDriver::SendFormDataToRenderer(
           render_frame_host_->GetRoutingID(), query_id, data));
       break;
   }
-}
-
-void ContentAutofillDriver::PingRenderer() {
-  if (!RendererIsAvailable())
-    return;
-  render_frame_host_->Send(
-      new AutofillMsg_Ping(render_frame_host_->GetRoutingID()));
 }
 
 void ContentAutofillDriver::PropagateAutofillPredictions(
@@ -168,6 +163,9 @@ bool ContentAutofillDriver::HandleMessage(const IPC::Message& message) {
   IPC_MESSAGE_FORWARD(AutofillHostMsg_TextFieldDidChange,
                       autofill_manager_.get(),
                       AutofillManager::OnTextFieldDidChange)
+  IPC_MESSAGE_FORWARD(AutofillHostMsg_FocusNoLongerOnForm,
+                      autofill_manager_.get(),
+                      AutofillManager::OnFocusNoLongerOnForm)
   IPC_MESSAGE_FORWARD(AutofillHostMsg_QueryFormFieldAutofill,
                       autofill_manager_.get(),
                       AutofillManager::OnQueryFormFieldAutofill)
@@ -206,7 +204,7 @@ void ContentAutofillDriver::DidNavigateFrame(
 
 void ContentAutofillDriver::SetAutofillManager(
     scoped_ptr<AutofillManager> manager) {
-  autofill_manager_ = manager.Pass();
+  autofill_manager_ = std::move(manager);
   autofill_manager_->SetExternalDelegate(&autofill_external_delegate_);
 }
 

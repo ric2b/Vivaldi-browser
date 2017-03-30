@@ -7,17 +7,43 @@
 
 #include <string>
 
+#include "base/callback_forward.h"
+#include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/sync_driver/data_type_encryption_handler.h"
 #include "components/sync_driver/sync_service_observer.h"
+#include "google_apis/gaia/google_service_auth_error.h"
 #include "sync/internal_api/public/base/model_type.h"
+#include "sync/internal_api/public/connection_status.h"
 
 class GoogleServiceAuthError;
 
+namespace browser_sync {
+class ProtocolEventObserver;
+}
+
+namespace syncer {
+
+class BaseTransaction;
+class JsController;
+class TypeDebugInfoObserver;
+struct SyncStatus;
+struct UserShare;
+
+namespace sessions {
+class SyncSessionSnapshot;
+}  // namespace sessions
+
+}  // namespace syncer
+
 namespace sync_driver {
 
+class DataTypeController;
+class LocalDeviceInfoProvider;
 class OpenTabsUIDelegate;
+class SyncClient;
 
 class SyncService : public DataTypeEncryptionHandler {
  public:
@@ -35,6 +61,25 @@ class SyncService : public DataTypeEncryptionHandler {
   enum SyncStopDataFate {
     KEEP_DATA,
     CLEAR_DATA,
+  };
+
+  // Status of sync server connection, sync token and token request.
+  struct SyncTokenStatus {
+    SyncTokenStatus();
+    ~SyncTokenStatus();
+
+    // Sync server connection status reported by sync backend.
+    base::Time connection_status_update_time;
+    syncer::ConnectionStatus connection_status;
+
+    // Times when OAuth2 access token is requested and received.
+    base::Time token_request_time;
+    base::Time token_receive_time;
+
+    // Error returned by OAuth2TokenService for token request and time when
+    // next request is scheduled.
+    GoogleServiceAuthError last_get_token_error;
+    base::Time next_token_request_time;
   };
 
   ~SyncService() override {}
@@ -58,12 +103,19 @@ class SyncService : public DataTypeEncryptionHandler {
   // false.
   virtual bool IsSyncActive() const = 0;
 
+  // Triggers a GetUpdates call for the specified |types|, pulling any new data
+  // from the sync server.
+  virtual void TriggerRefresh(const syncer::ModelTypeSet& types) = 0;
+
   // Get the set of current active data types (those chosen or configured by
   // the user which have not also encountered a runtime error).
   // Note that if the Sync engine is in the middle of a configuration, this
   // will the the empty set. Once the configuration completes the set will
   // be updated.
   virtual syncer::ModelTypeSet GetActiveDataTypes() const = 0;
+
+  // Returns the SyncClient instance associated with this service.
+  virtual SyncClient* GetSyncClient() const = 0;
 
   // Adds/removes an observer. SyncService does not take ownership of the
   // observer.
@@ -105,11 +157,11 @@ class SyncService : public DataTypeEncryptionHandler {
   // superset of the active types (see GetActiveDataTypes()).
   virtual syncer::ModelTypeSet GetPreferredDataTypes() const = 0;
 
-  // Called when a user chooses which data types to sync as part of the sync
-  // setup wizard.  |sync_everything| represents whether they chose the
-  // "keep everything synced" option; if true, |chosen_types| will be ignored
-  // and all data types will be synced.  |sync_everything| means "sync all
-  // current and future data types."
+  // Called when a user chooses which data types to sync. |sync_everything|
+  // represents whether they chose the "keep everything synced" option; if
+  // true, |chosen_types| will be ignored and all data types will be synced.
+  // |sync_everything| means "sync all current and future data types."
+  // |chosen_types| must be a subset of syncer::UserSelectableTypes().
   virtual void OnUserChoseDatatypes(bool sync_everything,
                                     syncer::ModelTypeSet chosen_types) = 0;
 
@@ -120,7 +172,7 @@ class SyncService : public DataTypeEncryptionHandler {
   // if the user is customizing sync after already completing setup once).
   // SyncService uses this to determine if it's OK to start syncing, or if the
   // user is still setting up the initial sync configuration.
-  virtual bool FirstSetupInProgress() const = 0;
+  virtual bool IsFirstSetupInProgress() const = 0;
 
   // Called by the UI to notify the SyncService that UI is visible so it will
   // not start syncing. This tells sync whether it's safe to start downloading
@@ -133,7 +185,7 @@ class SyncService : public DataTypeEncryptionHandler {
   virtual void SetSetupInProgress(bool setup_in_progress) = 0;
 
   // Used by tests.
-  virtual bool setup_in_progress() const = 0;
+  virtual bool IsSetupInProgress() const = 0;
 
   // Whether the data types active for the current mode have finished
   // configuration.
@@ -145,7 +197,7 @@ class SyncService : public DataTypeEncryptionHandler {
   // Returns true if the SyncBackendHost has told us it's ready to accept
   // changes. This should only be used for sync's internal configuration logic
   // (such as deciding when to prompt for an encryption passphrase).
-  virtual bool backend_initialized() const = 0;
+  virtual bool IsBackendInitialized() const = 0;
 
   // Return the active OpenTabsUIDelegate. If sessions is not enabled or not
   // currently syncing, returns nullptr.
@@ -168,6 +220,9 @@ class SyncService : public DataTypeEncryptionHandler {
   // after calling this to force the encryption to occur.
   virtual void EnableEncryptEverything() = 0;
 
+  // Returns true if we are currently set to encrypt all the sync data.
+  virtual bool IsEncryptEverythingEnabled() const = 0;
+
   // Asynchronously sets the passphrase to |passphrase| for encryption. |type|
   // specifies whether the passphrase is a custom passphrase or the GAIA
   // password being reused as a passphrase.
@@ -181,6 +236,93 @@ class SyncService : public DataTypeEncryptionHandler {
   // copy of encrypted keys; returns true otherwise.
   virtual bool SetDecryptionPassphrase(const std::string& passphrase)
       WARN_UNUSED_RESULT = 0;
+
+  // Checks whether the Cryptographer is ready to encrypt and decrypt updates
+  // for sensitive data types. Caller must be holding a
+  // syncapi::BaseTransaction to ensure thread safety.
+  virtual bool IsCryptographerReady(
+      const syncer::BaseTransaction* trans) const = 0;
+
+  // TODO(akalin): This is called mostly by ModelAssociators and
+  // tests.  Figure out how to pass the handle to the ModelAssociators
+  // directly, figure out how to expose this to tests, and remove this
+  // function.
+  virtual syncer::UserShare* GetUserShare() const = 0;
+
+  // Returns DeviceInfo provider for the local device.
+  virtual LocalDeviceInfoProvider* GetLocalDeviceInfoProvider() const = 0;
+
+  // Registers a data type controller with the sync service.  This
+  // makes the data type controller available for use, it does not
+  // enable or activate the synchronization of the data type (see
+  // ActivateDataType).  Takes ownership of the pointer.
+  virtual void RegisterDataTypeController(
+      DataTypeController* data_type_controller) = 0;
+
+  // Called to re-enable a type disabled by DisableDatatype(..). Note, this does
+  // not change the preferred state of a datatype, and is not persisted across
+  // restarts.
+  virtual void ReenableDatatype(syncer::ModelType type) = 0;
+
+  // Return sync token status.
+  virtual SyncTokenStatus GetSyncTokenStatus() const = 0;
+
+  // Get a description of the sync status for displaying in the user interface.
+  virtual std::string QuerySyncStatusSummaryString() = 0;
+
+  // Initializes a struct of status indicators with data from the backend.
+  // Returns false if the backend was not available for querying; in that case
+  // the struct will be filled with default data.
+  virtual bool QueryDetailedSyncStatus(syncer::SyncStatus* result) = 0;
+
+  // Returns a user-friendly string form of last synced time (in minutes).
+  virtual base::string16 GetLastSyncedTimeString() const = 0;
+
+  // Returns a human readable string describing backend initialization state.
+  virtual std::string GetBackendInitializationStateString() const = 0;
+
+  virtual syncer::sessions::SyncSessionSnapshot GetLastSessionSnapshot()
+      const = 0;
+
+  // Returns a ListValue indicating the status of all registered types.
+  //
+  // The format is:
+  // [ {"name": <name>, "value": <value>, "status": <status> }, ... ]
+  // where <name> is a type's name, <value> is a string providing details for
+  // the type's status, and <status> is one of "error", "warning" or "ok"
+  // depending on the type's current status.
+  //
+  // This function is used by about_sync_util.cc to help populate the about:sync
+  // page.  It returns a ListValue rather than a DictionaryValue in part to make
+  // it easier to iterate over its elements when constructing that page.
+  virtual base::Value* GetTypeStatusMap() const = 0;
+
+  virtual const GURL& sync_service_url() const = 0;
+
+  virtual std::string unrecoverable_error_message() const = 0;
+  virtual tracked_objects::Location unrecoverable_error_location() const = 0;
+
+  virtual void AddProtocolEventObserver(
+      browser_sync::ProtocolEventObserver* observer) = 0;
+  virtual void RemoveProtocolEventObserver(
+      browser_sync::ProtocolEventObserver* observer) = 0;
+
+  virtual void AddTypeDebugInfoObserver(
+      syncer::TypeDebugInfoObserver* observer) = 0;
+  virtual void RemoveTypeDebugInfoObserver(
+      syncer::TypeDebugInfoObserver* observer) = 0;
+
+  // Returns a weak pointer to the service's JsController.
+  virtual base::WeakPtr<syncer::JsController> GetJsController() = 0;
+
+  // Asynchronously fetches base::Value representations of all sync nodes and
+  // returns them to the specified callback on this thread.
+  //
+  // These requests can live a long time and return when you least expect it.
+  // For safety, the callback should be bound to some sort of WeakPtr<> or
+  // scoped_refptr<>.
+  virtual void GetAllNodes(
+      const base::Callback<void(scoped_ptr<base::ListValue>)>& callback) = 0;
 
  protected:
   SyncService() {}

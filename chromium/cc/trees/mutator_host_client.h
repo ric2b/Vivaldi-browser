@@ -21,6 +21,7 @@ class MutatorHostClient {
  public:
   virtual bool IsLayerInTree(int layer_id, LayerTreeType tree_type) const = 0;
   virtual void SetMutatorsNeedCommit() = 0;
+  virtual void SetMutatorsNeedRebuildPropertyTrees() = 0;
 
   virtual void SetLayerFilterMutated(int layer_id,
                                      LayerTreeType tree_type,
@@ -35,6 +36,11 @@ class MutatorHostClient {
       int layer_id,
       LayerTreeType tree_type,
       const gfx::ScrollOffset& scroll_offset) = 0;
+
+  virtual void LayerTransformIsPotentiallyAnimatingChanged(
+      int layer_id,
+      LayerTreeType tree_type,
+      bool is_animating) = 0;
 
   virtual void ScrollOffsetAnimationFinished() = 0;
   virtual gfx::ScrollOffset GetScrollOffsetForAnimation(int layer_id) const = 0;

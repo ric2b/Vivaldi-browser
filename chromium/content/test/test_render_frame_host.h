@@ -5,9 +5,11 @@
 #ifndef CONTENT_TEST_TEST_RENDER_FRAME_HOST_H_
 #define CONTENT_TEST_TEST_RENDER_FRAME_HOST_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -42,7 +44,8 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
                       RenderWidgetHostDelegate* rwh_delegate,
                       FrameTree* frame_tree,
                       FrameTreeNode* frame_tree_node,
-                      int routing_id,
+                      int32_t routing_id,
+                      int32_t widget_routing_id,
                       int flags);
   ~TestRenderFrameHost() override;
 
@@ -53,6 +56,12 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // RenderFrameHostTester implementation.
   void InitializeRenderFrameIfNeeded() override;
   TestRenderFrameHost* AppendChild(const std::string& frame_name) override;
+  void SimulateNavigationStart(const GURL& url) override;
+  void SimulateRedirect(const GURL& new_url) override;
+  void SimulateNavigationCommit(const GURL& url) override;
+  void SimulateNavigationError(const GURL& url, int error_code) override;
+  void SimulateNavigationErrorPageCommit() override;
+  void SimulateNavigationStop() override;
   void SendNavigate(int page_id,
                     int nav_entry_id,
                     bool did_create_new_entry,
@@ -92,7 +101,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void SendRendererInitiatedNavigationRequest(const GURL& url,
                                               bool has_user_gesture);
 
-  void DidDisownOpener();
+  void DidChangeOpener(int opener_routing_id);
+
+  void DidEnforceStrictMixedContentChecking();
 
   // If set, navigations will appear to have cleared the history list in the
   // RenderFrame
@@ -127,6 +138,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
                                   ui::PageTransition transition,
                                   int response_code,
                                   const ModificationCallback& callback);
+
+  // Computes the page ID for a pending navigation in this RenderFrameHost;
+  int32_t ComputeNextPageID();
 
   TestRenderFrameHostCreationObserver child_creation_observer_;
 

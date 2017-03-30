@@ -6,6 +6,7 @@
 
 #include "base/threading/sequenced_worker_pool.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -315,12 +316,18 @@ void NativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
     content::NativeWebKeyboardEvent synth_event;
     synth_event.type = blink::WebInputEvent::RawKeyDown;
     synth_event.windowsKeyCode = code;
-    s_current_webviewguest->HandleKeyboardEvent(web_view_->GetWebContents(),
-        synth_event);
+    s_current_webviewguest->web_contents()->GetDelegate()
+        ->HandleKeyboardEvent(web_view_->GetWebContents(), synth_event);
   }
 }
 
 // WidgetObserver implementation.
+
+void NativeAppWindowViews::OnWidgetDestroying(views::Widget* widget) {
+  FOR_EACH_OBSERVER(web_modal::ModalDialogHostObserver,
+                    observer_list_,
+                    OnHostDestroying());
+}
 
 void NativeAppWindowViews::OnWidgetVisibilityChanged(views::Widget* widget,
                                                      bool visible) {
@@ -339,7 +346,8 @@ void NativeAppWindowViews::OnWidgetActivationChanged(views::Widget* widget,
 void NativeAppWindowViews::RenderViewCreated(
     content::RenderViewHost* render_view_host) {
   if (app_window_->requested_alpha_enabled() && CanHaveAlphaEnabled()) {
-    content::RenderWidgetHostView* view = render_view_host->GetView();
+    content::RenderWidgetHostView* view =
+        render_view_host->GetWidget()->GetView();
     DCHECK(view);
     view->SetBackgroundColor(SK_ColorTRANSPARENT);
   }
@@ -418,10 +426,6 @@ void NativeAppWindowViews::UpdateShape(scoped_ptr<SkRegion> region) {
   // Stub implementation. See also ChromeNativeAppWindowViews.
 }
 
-void NativeAppWindowViews::SetInterceptAllKeys(bool want_all_keys) {
-  // Stub implementation. See also ChromeNativeAppWindowViews.
-}
-
 void NativeAppWindowViews::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   unhandled_keyboard_event_handler_.HandleKeyboardEvent(event,
@@ -463,9 +467,6 @@ void NativeAppWindowViews::HideWithApp() {
 }
 
 void NativeAppWindowViews::ShowWithApp() {
-}
-
-void NativeAppWindowViews::UpdateShelfMenu() {
 }
 
 gfx::Size NativeAppWindowViews::GetContentMinimumSize() const {

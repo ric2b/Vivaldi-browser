@@ -5,8 +5,8 @@
 #ifndef UI_VIEWS_CONTROLS_THROBBER_H_
 #define UI_VIEWS_CONTROLS_THROBBER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "ui/views/view.h"
@@ -37,7 +37,7 @@ class VIEWS_EXPORT Throbber : public View {
 
  private:
   base::TimeTicks start_time_;  // Time when Start was called.
-  base::RepeatingTimer<Throbber> timer_;  // Used to schedule Run calls.
+  base::RepeatingTimer timer_;  // Used to schedule Run calls.
 
   // Whether or not we should display a checkmark.
   bool checked_;
@@ -75,8 +75,8 @@ class VIEWS_EXPORT SmoothedThrobber : public Throbber {
   // Delay after work stops before stopping, in milliseconds.
   int stop_delay_ms_;
 
-  base::OneShotTimer<SmoothedThrobber> start_timer_;
-  base::OneShotTimer<SmoothedThrobber> stop_timer_;
+  base::OneShotTimer start_timer_;
+  base::OneShotTimer stop_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(SmoothedThrobber);
 };

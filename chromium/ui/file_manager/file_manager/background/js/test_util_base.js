@@ -134,6 +134,30 @@ test.util.sync.getDocument_ = function(contentWindow, opt_iframeQuery) {
 };
 
 /**
+ * Gets the element specified by |targetQuery|.
+ *
+ * @param {Window} contentWindow Window to be used.
+ * @param {string} targetQuery Query to specify the element.
+ * @param {string=} opt_iframeQuery Query for the iframe.
+ * @return {Element} If the specified element is not found, null is returned.
+ * @private
+ */
+test.util.sync.getElement_ = function(
+    contentWindow, targetQuery, opt_iframeQuery) {
+  var doc = test.util.sync.getDocument_(contentWindow, opt_iframeQuery);
+  if (!doc)
+    return null;
+
+  var target = doc.querySelector(targetQuery);
+  if (!target) {
+    console.error('Target element for ' + targetQuery + ' not found.');
+    return null;
+  }
+
+  return target;
+};
+
+/**
  * Gets total Javascript error count from background page and each app window.
  * @return {number} Error count.
  */
@@ -252,26 +276,26 @@ test.util.sync.inputText = function(contentWindow, query, text) {
 };
 
 /**
- * Sends an event to the element specified by |targetQuery|.
+ * Sends an event to the element specified by |targetQuery| or active element.
  *
  * @param {Window} contentWindow Window to be tested.
- * @param {string} targetQuery Query to specify the element.
+ * @param {?string} targetQuery Query to specify the element. If this value is
+ *     null, an event is dispatched to active element of the document.
  * @param {!Event} event Event to be sent.
  * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false otherwise.
  */
 test.util.sync.sendEvent = function(
     contentWindow, targetQuery, event, opt_iframeQuery) {
-  var doc = test.util.sync.getDocument_(contentWindow, opt_iframeQuery);
-  if (doc) {
-    var target = doc.querySelector(targetQuery);
-    if (target) {
-      target.dispatchEvent(event);
-      return true;
-    }
-  }
-  console.error('Target element for ' + targetQuery + ' not found.');
-  return false;
+  var target = targetQuery === null ?
+      contentWindow.document.activeElement :
+      test.util.sync.getElement_(contentWindow, targetQuery, opt_iframeQuery);
+
+  if (!target)
+    return false;
+
+  target.dispatchEvent(event);
+  return true;
 };
 
 /**
@@ -299,21 +323,27 @@ test.util.sync.fakeEvent = function(contentWindow,
 };
 
 /**
- * Sends a fake key event to the element specified by |targetQuery| with the
- * given |keyIdentifier| and optional |ctrl| modifier to the file manager.
+ * Sends a fake key event to the element specified by |targetQuery| or active
+ * element with the given |keyIdentifier| and optional |ctrl| modifier.
  *
  * @param {Window} contentWindow Window to be tested.
- * @param {string} targetQuery Query to specify the element.
+ * @param {?string} targetQuery Query to specify the element. If this value is
+ *     null, key event is dispatched to active element of the document.
  * @param {string} keyIdentifier Identifier of the emulated key.
  * @param {boolean} ctrl Whether CTRL should be pressed, or not.
+ * @param {boolean} shift whether SHIFT should be pressed, or not.
  * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false otherwise.
  */
 test.util.sync.fakeKeyDown = function(
-    contentWindow, targetQuery, keyIdentifier, ctrl, opt_iframeQuery) {
-  var event = new KeyboardEvent(
-      'keydown',
-      { bubbles: true, keyIdentifier: keyIdentifier, ctrlKey: ctrl });
+    contentWindow, targetQuery, keyIdentifier, ctrl, shift, opt_iframeQuery) {
+  var event = new KeyboardEvent('keydown',
+      {
+        bubbles: true,
+        keyIdentifier: keyIdentifier,
+        ctrlKey: ctrl,
+        shiftKey: shift
+      });
   return test.util.sync.sendEvent(
       contentWindow, targetQuery, event, opt_iframeQuery);
 };
@@ -359,10 +389,15 @@ test.util.sync.fakeMouseClick = function(
  */
 test.util.sync.fakeMouseRightClick = function(
     contentWindow, targetQuery, opt_iframeQuery) {
+  var mouseDownEvent = new MouseEvent('mousedown', {bubbles: true, button: 2});
+  if (!test.util.sync.sendEvent(contentWindow, targetQuery, mouseDownEvent,
+        opt_iframeQuery)) {
+    return false;
+  }
+
   var contextMenuEvent = new MouseEvent('contextmenu', {bubbles: true});
-  var result = test.util.sync.sendEvent(
-      contentWindow, targetQuery, contextMenuEvent, opt_iframeQuery);
-  return result;
+  return test.util.sync.sendEvent(contentWindow, targetQuery, contextMenuEvent,
+      opt_iframeQuery);
 };
 
 /**
@@ -428,6 +463,26 @@ test.util.sync.fakeMouseUp = function(
   var event = new MouseEvent('mouseup', { bubbles: true });
   return test.util.sync.sendEvent(
       contentWindow, targetQuery, event, opt_iframeQuery);
+};
+
+/**
+ * Focuses to the element specified by |targetQuery|. This method does not
+ * provide any guarantee whether the element is actually focused or not.
+ *
+ * @param {Window} contentWindow Window to be tested.
+ * @param {string} targetQuery Query to specify the element.
+ * @param {string=} opt_iframeQuery Optional iframe selector.
+ * @return {boolean} True if focus method of the element has been called, false
+ *     otherwise.
+ */
+test.util.sync.focus = function(contentWindow, targetQuery, opt_iframeQuery) {
+  var target = test.util.sync.getElement_(
+      contentWindow, targetQuery, opt_iframeQuery);
+  if (!target)
+    return false;
+
+  target.focus();
+  return true;
 };
 
 /**

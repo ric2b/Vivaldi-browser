@@ -6,13 +6,19 @@
 
 #include <algorithm>
 
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/themes/theme_properties.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
+#include "components/omnibox/browser/omnibox_view.h"
+#include "grit/theme_resources.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
-#include "ui/compositor/clip_transform_recorder.h"
+#include "ui/compositor/clip_recorder.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image.h"
@@ -23,14 +29,6 @@
 #include "ui/views/view_targeter.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
-
-namespace {
-
-// This is the number of pixels in the border image interior to the actual
-// border.
-const int kBorderInterior = 6;
-
-}  // namespace
 
 class OmniboxPopupContentsView::AutocompletePopupWidget
     : public views::Widget,
@@ -69,13 +67,18 @@ OmniboxPopupContentsView::OmniboxPopupContentsView(
       font_list_(font_list),
       ignore_mouse_drag_(false),
       size_animation_(this),
-      left_margin_(0),
-      right_margin_(0) {
+      start_margin_(0),
+      end_margin_(0) {
   // The contents is owned by the LocationBarView.
   set_owned_by_client();
 
-  ui::ThemeProvider* theme = location_bar_view_->GetThemeProvider();
-  bottom_shadow_ = theme->GetImageSkiaNamed(IDR_BUBBLE_B);
+  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    top_shadow_ = rb->GetImageSkiaNamed(IDR_OMNIBOX_DROPDOWN_SHADOW_TOP);
+    bottom_shadow_ = rb->GetImageSkiaNamed(IDR_OMNIBOX_DROPDOWN_SHADOW_BOTTOM);
+  } else {
+    bottom_shadow_ = rb->GetImageSkiaNamed(IDR_BUBBLE_B);
+  }
 
   SetEventTargeter(
       scoped_ptr<views::ViewTargeter>(new views::ViewTargeter(this)));
@@ -116,11 +119,16 @@ gfx::Rect OmniboxPopupContentsView::GetPopupBounds() const {
 
 void OmniboxPopupContentsView::LayoutChildren() {
   gfx::Rect contents_rect = GetContentsBounds();
+  contents_rect.Inset(GetLayoutInsets(OMNIBOX_DROPDOWN));
+  contents_rect.Inset(0, views::NonClientFrameView::kClientEdgeThickness, 0, 0);
 
-  contents_rect.Inset(
-      left_margin_, views::NonClientFrameView::kClientEdgeThickness +
-                        OmniboxResultView::kMinimumTextVerticalPadding,
-      right_margin_, OmniboxResultView::kMinimumTextVerticalPadding);
+  // In the non-material dropdown, the colored/clickable regions within the
+  // dropdown are only as wide as the location bar. In the material version,
+  // these are full width, and OmniboxResultView instead insets the icons/text
+  // inside to be aligned with the location bar.
+  if (!ui::MaterialDesignController::IsModeMaterial())
+    contents_rect.Inset(start_margin_, 0, end_margin_, 0);
+
   int top = contents_rect.y();
   for (size_t i = 0; i < AutocompleteResult::kMaxMatches; ++i) {
     View* v = child_at(i);
@@ -147,6 +155,10 @@ void OmniboxPopupContentsView::InvalidateLine(size_t line) {
     result->ShowKeyword(IsSelectedIndex(line) &&
         model_->selected_line_state() == OmniboxPopupModel::KEYWORD);
   }
+}
+
+void OmniboxPopupContentsView::OnLineSelected(size_t line) {
+  result_view_at(line)->OnSelected();
 }
 
 void OmniboxPopupContentsView::UpdatePopupAppearance() {
@@ -188,10 +200,30 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
   for (size_t i = result_size; i < AutocompleteResult::kMaxMatches; ++i)
     child_at(i)->SetVisible(false);
 
+  // In non-material mode, we want the popup to appear as if it's overlaying
+  // the top of the page content, i.e., is flush against the client edge at the
+  // bottom of the toolbar. However, if the bookmarks bar is attached, we want
+  // to draw over it (so as not to push the results below it), but that means
+  // the toolbar won't be drawing a client edge separating itself from the
+  // popup. So we unconditionally overlap the toolbar by the thickness of the
+  // client edge and draw our own edge (see OnPaint()), which fixes the
+  // attached bookmark bar case without breaking the other case.
+  int top_edge_overlap = views::NonClientFrameView::kClientEdgeThickness;
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    // In material mode, we cover the bookmark bar similarly, but instead of
+    // appearing below the client edge, we want the popup to appear to overlay
+    // the bottom of the toolbar. So instead of drawing a client edge atop the
+    // popup, we shift the popup to completely cover the client edge, and then
+    // draw an additional semitransparent shadow above that. So the total
+    // overlap necessary is the client edge thickness plus the shadow height.
+    top_edge_overlap += top_shadow_->height();
+  }
+
   gfx::Point top_left_screen_coord;
   int width;
   location_bar_view_->GetOmniboxPopupPositioningInfo(
-      &top_left_screen_coord, &width, &left_margin_, &right_margin_);
+      &top_left_screen_coord, &width, &start_margin_,
+      &end_margin_, top_edge_overlap);
   gfx::Rect new_target_bounds(top_left_screen_coord,
                               gfx::Size(width, CalculatePopupHeight()));
 
@@ -208,22 +240,19 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
 
     // If the popup is currently closed, we need to create it.
     popup_ = (new AutocompletePopupWidget)->AsWeakPtr();
-    // On Windows use TYPE_MENU to ensure that this window uses the software
-    // compositor which avoids the UI thread blocking issue during command
-    // buffer creation. We can revert this change once http://crbug.com/125248
-    // is fixed.
-#if defined(OS_WIN)
-    views::Widget::InitParams params(views::Widget::InitParams::TYPE_MENU);
-    // The menu style assumes a top most window. We don't want that in this
-    // case.
-    params.keep_on_top = false;
-#else
+
     views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
+#if defined(OS_WIN)
+    // On Windows use the software compositor to ensure that we don't block
+    // the UI thread blocking issue during command buffer creation. We can
+    // revert this change once http://crbug.com/125248 is fixed.
+    params.force_software_compositing = true;
 #endif
     params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
     params.parent = popup_parent->GetNativeView();
     params.bounds = GetPopupBounds();
     params.context = popup_parent->GetNativeWindow();
+    params.native_theme = popup_parent->GetNativeTheme();
     popup_->Init(params);
     // Third-party software such as DigitalPersona identity verification can
     // hook the underlying window creation methods and use SendMessage to
@@ -395,12 +424,10 @@ int OmniboxPopupContentsView::CalculatePopupHeight() {
   // Add enough space on the top and bottom so it looks like there is the same
   // amount of space between the text and the popup border as there is in the
   // interior between each row of text.
-  //
-  // The * 2 accounts for vertical padding used at the top and bottom.
-  return popup_height +
-         views::NonClientFrameView::kClientEdgeThickness +     // Top border.
-         OmniboxResultView::kMinimumTextVerticalPadding * 2 +  // Padding.
-         bottom_shadow_->height() - kBorderInterior;           // Bottom border.
+  return popup_height + views::NonClientFrameView::kClientEdgeThickness +
+      GetLayoutInsets(OMNIBOX_DROPDOWN).height() +
+      bottom_shadow_->height() -
+      GetLayoutConstant(OMNIBOX_DROPDOWN_BORDER_INTERIOR);
 }
 
 OmniboxResultView* OmniboxPopupContentsView::CreateResultView(
@@ -419,10 +446,14 @@ const char* OmniboxPopupContentsView::GetClassName() const {
 
 void OmniboxPopupContentsView::OnPaint(gfx::Canvas* canvas) {
   // Top border.
-  canvas->FillRect(
-      gfx::Rect(0, 0, width(), views::NonClientFrameView::kClientEdgeThickness),
-      ThemeProperties::GetDefaultColor(
-          ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    canvas->TileImageInt(*top_shadow_, 0, 0, width(), top_shadow_->height());
+  } else {
+    canvas->FillRect(gfx::Rect(0, 0, width(),
+                               views::NonClientFrameView::kClientEdgeThickness),
+                     location_bar_view_->GetThemeProvider()->GetColor(
+                         ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR));
+  }
 
   // Bottom border.
   canvas->TileImageInt(*bottom_shadow_, 0, height() - bottom_shadow_->height(),
@@ -431,11 +462,12 @@ void OmniboxPopupContentsView::OnPaint(gfx::Canvas* canvas) {
 
 void OmniboxPopupContentsView::PaintChildren(const ui::PaintContext& context) {
   gfx::Rect contents_bounds = GetContentsBounds();
+  const int interior = GetLayoutConstant(OMNIBOX_DROPDOWN_BORDER_INTERIOR);
   contents_bounds.Inset(0, views::NonClientFrameView::kClientEdgeThickness, 0,
-                        bottom_shadow_->height() - kBorderInterior);
+                        bottom_shadow_->height() - interior);
 
-  ui::ClipTransformRecorder clip_transform_recorder(context);
-  clip_transform_recorder.ClipRect(contents_bounds);
+  ui::ClipRecorder clip_recorder(context);
+  clip_recorder.ClipRect(contents_bounds);
   {
     ui::PaintRecorder recorder(context, size());
     SkColor background_color = result_view_at(0)->GetColor(

@@ -12,7 +12,6 @@
 #include <mlang.h>
 #endif
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/sys_info.h"
@@ -42,6 +41,12 @@ RenderProcessImpl::RenderProcessImpl()
     }
   }
 #endif
+
+  std::string scavenge_reclaim_unmodified_flag(
+      "--scavenge_reclaim_unmodified_objects");
+  v8::V8::SetFlagsFromString(
+      scavenge_reclaim_unmodified_flag.c_str(),
+      static_cast<int>(scavenge_reclaim_unmodified_flag.size()));
 
   if (base::SysInfo::IsLowEndDevice()) {
     std::string optimize_flag("--optimize-for-size");

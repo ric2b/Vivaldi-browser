@@ -6,22 +6,17 @@
 
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/strings/utf_string_conversions.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "components/dom_distiller/core/dom_distiller_service.h"
 #include "components/dom_distiller/core/experiments.h"
 #include "components/dom_distiller/core/task_tracker.h"
-#include "components/dom_distiller/core/url_constants.h"
 #include "components/dom_distiller/core/viewer.h"
-#include "content/public/browser/navigation_details.h"
-#include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/url_data_source.h"
-#include "net/base/url_util.h"
-#include "net/url_request/url_request.h"
+#include "grit/components_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace dom_distiller {
 
@@ -36,6 +31,11 @@ DomDistillerRequestViewBase::~DomDistillerRequestViewBase() {
 }
 
 void DomDistillerRequestViewBase::FlagAsErrorPage() {
+  // Viewer handle is not passed to this in the case of error pages
+  // so send all JavaScript now.
+  SendCommonJavaScript();
+  SendJavaScript(viewer::GetErrorPageJs());
+
   is_error_page_ = true;
 }
 
@@ -109,12 +109,22 @@ void DomDistillerRequestViewBase::OnChangeFontFamily(
   SendJavaScript(viewer::GetDistilledPageFontFamilyJs(new_font));
 }
 
+void DomDistillerRequestViewBase::OnChangeFontScaling(float scaling) {
+  SendJavaScript(viewer::GetDistilledPageFontScalingJs(scaling));
+}
+
 void DomDistillerRequestViewBase::TakeViewerHandle(
     scoped_ptr<ViewerHandle> viewer_handle) {
-  viewer_handle_ = viewer_handle.Pass();
-  // Getting the viewer handle means this is not an error page, show the
-  // loading indicator.
-  SendJavaScript(viewer::GetToggleLoadingIndicatorJs(false));
+  viewer_handle_ = std::move(viewer_handle);
+  // Getting the viewer handle means this is not an error page, send
+  // the viewer JavaScript and show the loading indicator.
+  SendCommonJavaScript();
+}
+
+void DomDistillerRequestViewBase::SendCommonJavaScript() {
+  SendJavaScript(viewer::GetJavaScript());
+  SendJavaScript(viewer::GetDistilledPageFontScalingJs(
+      distilled_page_prefs_->GetFontScaling()));
 }
 
 }  // namespace dom_distiller

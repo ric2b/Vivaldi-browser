@@ -100,8 +100,8 @@ def StepRunSelLdrTests(pepperdir, sanitizer):
     # We only ship 32-bit version of sel_ldr on mac.
     archs = ('x86_32',)
   else:
-    # On linux we can run both 32 and 64-bit
-    archs = ('x86_64', 'x86_32')
+    # On linux we can run both 32 and 64-bit, and arm (via qemu)
+    archs = ('x86_64', 'x86_32', 'arm')
 
   for root, projects in tree.iteritems():
     for project in projects:
@@ -126,7 +126,7 @@ def StepRunSelLdrTests(pepperdir, sanitizer):
       if sanitizer:
         continue
 
-      for toolchain in ('clang-newlib', 'newlib', 'glibc', 'pnacl'):
+      for toolchain in ('clang-newlib', 'glibc', 'pnacl'):
         for arch in archs:
           for config in configs:
             RunTest(location, toolchain, config, arch)
@@ -181,7 +181,7 @@ def main(args):
 
   pepper_ver = str(int(build_version.ChromeMajorVersion()))
   pepperdir = os.path.join(OUT_DIR, 'pepper_' + pepper_ver)
-  toolchains = ['clang-newlib', 'newlib', 'glibc', 'pnacl']
+  toolchains = ['clang-newlib', 'glibc', 'pnacl']
   toolchains.append(getos.GetPlatform())
 
   if options.verbose:

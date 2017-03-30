@@ -3,30 +3,54 @@
 // found in the LICENSE file.
 
 #include <cryptohi.h>
+#include <stddef.h>
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/path_service.h"
+#include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/login/test/https_forwarder.h"
+#include "chrome/browser/chromeos/policy/affiliation_test_helper.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/net/nss_context.h"
 #include "chrome/browser/net/url_request_mock_util.h"
+#include "chrome/common/chrome_paths.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_session_manager_client.h"
+#include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/user_names.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
-#include "content/public/browser/notification_service.h"
+#include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/test/test_utils.h"
 #include "crypto/nss_util_internal.h"
 #include "crypto/scoped_test_system_nss_key_slot.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/browser/notification_types.h"
+#include "extensions/browser/test_extension_registry_observer.h"
+#include "extensions/browser/test_extension_registry_observer.h"
+#include "extensions/test/result_catcher.h"
+#include "google_apis/gaia/fake_gaia.h"
+#include "google_apis/gaia/gaia_constants.h"
+#include "google_apis/gaia/gaia_switches.h"
+#include "google_apis/gaia/gaia_urls.h"
 #include "net/base/net_errors.h"
 #include "net/cert/nss_cert_database.h"
+#include "net/dns/mock_host_resolver.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "policy/policy_constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
+
 
 namespace {
 
@@ -133,6 +157,10 @@ void ImportPrivateKeyPKCS8ToSlot(const unsigned char* pkcs8_der,
 // its extension ID is well-known and the policy system can push policies for
 // the extension.
 const char kTestExtensionID[] = "aecpbnckhoppanpmefllkdkohionpmig";
+const char kAffiliationID[] = "some-affiliation-id";
+const char kTestUserinfoToken[] = "fake-userinfo-token";
+
+using policy::affiliation_test_helper::kEnterpriseUser;
 
 enum SystemToken {
   SYSTEM_TOKEN_EXISTS,
@@ -166,7 +194,34 @@ class EnterprisePlatformKeysTest
     : public ExtensionApiTest,
       public ::testing::WithParamInterface<Params> {
  public:
-  EnterprisePlatformKeysTest() {}
+  EnterprisePlatformKeysTest() {
+    // Command line should not be tweaked as if user is already logged in.
+    set_chromeos_user_ = false;
+    // We log in without running browser.
+    set_exit_when_last_browser_closes(false);
+  }
+
+  void SetUp() override {
+    base::FilePath test_data_dir;
+    PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+    embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
+
+    embedded_test_server()->RegisterRequestHandler(
+        base::Bind(&FakeGaia::HandleRequest,
+                   base::Unretained(&fake_gaia_)));
+
+    // Don't spin up the IO thread yet since no threads are allowed while
+    // spawning sandbox host process. See crbug.com/322732.
+    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
+
+    // Start https wrapper here so that the URLs can be pointed at it in
+    // SetUpCommandLine().
+    ASSERT_TRUE(gaia_https_forwarder_.Initialize(
+        GaiaUrls::GetInstance()->gaia_url().host(),
+        embedded_test_server()->base_url()));
+
+    ExtensionApiTest::SetUp();
+  }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionApiTest::SetUpCommandLine(command_line);
@@ -175,26 +230,48 @@ class EnterprisePlatformKeysTest
     command_line->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
 
-    std::string user_email = "someuser@anydomain.com";
+    policy::affiliation_test_helper::
+      AppendCommandLineSwitchesForLoginManager(command_line);
 
-    // The command line flag kLoginUser determines the user's email and thus
-    // his affiliation to the domain that the device is enrolled to.
-    if (GetParam().user_affiliation_ == USER_AFFILIATION_ENROLLED_DOMAIN)
-      user_email = chromeos::login::kStubUser;
+    const GURL gaia_url = gaia_https_forwarder_.GetURLForSSLHost(std::string());
+    command_line->AppendSwitchASCII(::switches::kGaiaUrl, gaia_url.spec());
+    command_line->AppendSwitchASCII(::switches::kLsoUrl, gaia_url.spec());
+    command_line->AppendSwitchASCII(::switches::kGoogleApisUrl,
+                                    gaia_url.spec());
 
-    command_line->AppendSwitchASCII(chromeos::switches::kLoginUser, user_email);
+    fake_gaia_.Initialize();
+    fake_gaia_.set_issue_oauth_code_cookie(true);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
     ExtensionApiTest::SetUpInProcessBrowserTestFixture();
 
-    if (GetParam().device_status_ == DEVICE_STATUS_ENROLLED) {
-      device_policy_test_helper_.device_policy()->policy_data().set_username(
-          chromeos::login::kStubUser);
+    host_resolver()->AddRule("*", "127.0.0.1");
 
-      device_policy_test_helper_.device_policy()->Build();
-      device_policy_test_helper_.MarkAsEnterpriseOwned();
+    chromeos::FakeSessionManagerClient* fake_session_manager_client =
+        new chromeos::FakeSessionManagerClient;
+    chromeos::DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
+        scoped_ptr<chromeos::SessionManagerClient>(
+            fake_session_manager_client));
+
+    if (GetParam().device_status_ == DEVICE_STATUS_ENROLLED) {
+      std::set<std::string> device_affiliation_ids;
+      device_affiliation_ids.insert(kAffiliationID);
+      policy::affiliation_test_helper::SetDeviceAffiliationID(
+          &device_policy_test_helper_, fake_session_manager_client,
+          device_affiliation_ids);
     }
+
+
+    if (GetParam().user_affiliation_ == USER_AFFILIATION_ENROLLED_DOMAIN) {
+      std::set<std::string> user_affiliation_ids;
+      user_affiliation_ids.insert(kAffiliationID);
+      policy::UserPolicyBuilder user_policy;
+      policy::affiliation_test_helper::SetUserAffiliationIDs(
+          &user_policy, fake_session_manager_client, kEnterpriseUser,
+          user_affiliation_ids);
+    }
+
 
     EXPECT_CALL(policy_provider_, IsInitializationComplete(testing::_))
         .WillRepeatedly(testing::Return(true));
@@ -204,6 +281,31 @@ class EnterprisePlatformKeysTest
   }
 
   void SetUpOnMainThread() override {
+    // Start the accept thread as the sandbox host process has already been
+    // spawned.
+    embedded_test_server()->StartAcceptingConnections();
+
+    FakeGaia::AccessTokenInfo token_info;
+    token_info.scopes.insert(GaiaConstants::kDeviceManagementServiceOAuth);
+    token_info.scopes.insert(GaiaConstants::kOAuthWrapBridgeUserInfoScope);
+    token_info.audience = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
+    token_info.token = kTestUserinfoToken;
+    token_info.email = kEnterpriseUser;
+    fake_gaia_.IssueOAuthToken(
+        policy::affiliation_test_helper::kFakeRefreshToken,
+        token_info);
+
+    // On PRE_ test stage list of users is empty at this point. Then in the body
+    // of PRE_ test kEnterpriseUser is added. Afterwards in the main test flow
+    // after PRE_ test the list of user contains one kEnterpriseUser user.
+    // This user logs in.
+    const base::ListValue* users =
+        g_browser_process->local_state()->GetList("LoggedInUsers");
+
+    // This condition is not held in PRE_ test.
+    if (!users->empty())
+      policy::affiliation_test_helper::LoginUser(kEnterpriseUser);
+
     if (GetParam().system_token_ == SYSTEM_TOKEN_EXISTS) {
       base::RunLoop loop;
       content::BrowserThread::PostTask(
@@ -211,31 +313,11 @@ class EnterprisePlatformKeysTest
           FROM_HERE,
           base::Bind(&EnterprisePlatformKeysTest::SetUpTestSystemSlotOnIO,
                      base::Unretained(this),
-                     browser()->profile()->GetResourceContext(),
                      loop.QuitClosure()));
       loop.Run();
     }
 
     ExtensionApiTest::SetUpOnMainThread();
-
-    // Enable the URLRequestMock, which is required for force-installing the
-    // test extension through policy.
-    content::BrowserThread::PostTask(
-        content::BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(chrome_browser_net::SetUrlRequestMocksEnabled, true));
-
-    {
-      base::RunLoop loop;
-      GetNSSCertDatabaseForProfile(
-          browser()->profile(),
-          base::Bind(&EnterprisePlatformKeysTest::DidGetCertDatabase,
-                     base::Unretained(this),
-                     loop.QuitClosure()));
-      loop.Run();
-    }
-
-    SetPolicy();
   }
 
   void TearDownOnMainThread() override {
@@ -251,9 +333,9 @@ class EnterprisePlatformKeysTest
                      loop.QuitClosure()));
       loop.Run();
     }
+    EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
   }
 
- private:
   void DidGetCertDatabase(const base::Closure& done_callback,
                           net::NSSCertDatabase* cert_db) {
     // In order to use a prepared certificate, import a private key to the
@@ -264,8 +346,60 @@ class EnterprisePlatformKeysTest
     done_callback.Run();
   }
 
-  void SetUpTestSystemSlotOnIO(content::ResourceContext* context,
-                               const base::Closure& done_callback) {
+  void SetPolicy() {
+    // Extensions that are force-installed come from an update URL, which
+    // defaults to the webstore. Use a mock URL for this test with an update
+    // manifest that includes the crx file of the test extension.
+    base::FilePath update_manifest_path =
+        base::FilePath(kTestExtensionDir).Append(kUpdateManifestFileName);
+    GURL update_manifest_url(net::URLRequestMockHTTPJob::GetMockUrl(
+        update_manifest_path.MaybeAsASCII()));
+
+    scoped_ptr<base::ListValue> forcelist(new base::ListValue);
+    forcelist->AppendString(base::StringPrintf(
+        "%s;%s", kTestExtensionID, update_manifest_url.spec().c_str()));
+
+    policy::PolicyMap policy;
+    policy.Set(policy::key::kExtensionInstallForcelist,
+               policy::POLICY_LEVEL_MANDATORY,
+               policy::POLICY_SCOPE_MACHINE,
+               policy::POLICY_SOURCE_CLOUD,
+               forcelist.release(),
+               NULL);
+
+    // Set the policy and wait until the extension is installed.
+    extensions::TestExtensionRegistryObserver observer(
+        extensions::ExtensionRegistry::Get(profile()));
+    policy_provider_.UpdateChromePolicy(policy);
+    observer.WaitForExtensionWillBeInstalled();
+  }
+
+  // Load |page_url| in |browser| and wait for PASSED or FAILED notification.
+  // The functionality of this function is reduced functionality of
+  // RunExtensionSubtest(), but we don't use it here because it requires
+  // function InProcessBrowserTest::browser() to return non-NULL pointer.
+  // Unfortunately it returns the value which is set in constructor and can't be
+  // modified. Because on login flow there is no browser, the function
+  // InProcessBrowserTest::browser() always returns NULL. Besides this we need
+  // only very little functionality from RunExtensionSubtest(). Thus so that
+  // don't make RunExtensionSubtest() to complex we just introduce a new
+  // function.
+  bool TestExtension(Browser* browser, const std::string& page_url) {
+    DCHECK(!page_url.empty()) << "page_url cannot be empty";
+
+    extensions::ResultCatcher catcher;
+    ui_test_utils::NavigateToURL(browser, GURL(page_url));
+
+    if (!catcher.GetNextResult()) {
+      message_ = catcher.message();
+      return false;
+    }
+    return true;
+  }
+
+ private:
+
+  void SetUpTestSystemSlotOnIO(const base::Closure& done_callback) {
     test_system_slot_.reset(new crypto::ScopedTestSystemNSSKeySlot());
     ASSERT_TRUE(test_system_slot_->ConstructedSuccessfully());
 
@@ -286,42 +420,38 @@ class EnterprisePlatformKeysTest
         content::BrowserThread::UI, FROM_HERE, done_callback);
   }
 
-  void SetPolicy() {
-    // Extensions that are force-installed come from an update URL, which
-    // defaults to the webstore. Use a mock URL for this test with an update
-    // manifest that includes the crx file of the test extension.
-    base::FilePath update_manifest_path =
-        base::FilePath(kTestExtensionDir).Append(kUpdateManifestFileName);
-    GURL update_manifest_url(
-        net::URLRequestMockHTTPJob::GetMockUrl(update_manifest_path));
-
-    scoped_ptr<base::ListValue> forcelist(new base::ListValue);
-    forcelist->AppendString(base::StringPrintf(
-        "%s;%s", kTestExtensionID, update_manifest_url.spec().c_str()));
-
-    policy::PolicyMap policy;
-    policy.Set(policy::key::kExtensionInstallForcelist,
-               policy::POLICY_LEVEL_MANDATORY,
-               policy::POLICY_SCOPE_MACHINE,
-               forcelist.release(),
-               NULL);
-
-    // Set the policy and wait until the extension is installed.
-    content::WindowedNotificationObserver observer(
-        extensions::NOTIFICATION_EXTENSION_WILL_BE_INSTALLED_DEPRECATED,
-        content::NotificationService::AllSources());
-    policy_provider_.UpdateChromePolicy(policy);
-    observer.Wait();
-  }
-
   policy::DevicePolicyCrosTestHelper device_policy_test_helper_;
   scoped_ptr<crypto::ScopedTestSystemNSSKeySlot> test_system_slot_;
   policy::MockConfigurationPolicyProvider policy_provider_;
+  FakeGaia fake_gaia_;
+  chromeos::HTTPSForwarder gaia_https_forwarder_;
 };
 
 }  // namespace
 
+IN_PROC_BROWSER_TEST_P(EnterprisePlatformKeysTest, PRE_Basic) {
+  policy::affiliation_test_helper::PreLoginUser(kEnterpriseUser);
+}
+
 IN_PROC_BROWSER_TEST_P(EnterprisePlatformKeysTest, Basic) {
+  // Enable the URLRequestMock, which is required for force-installing the
+  // test extension through policy.
+  content::BrowserThread::PostTask(
+     content::BrowserThread::IO,
+     FROM_HERE,
+     base::Bind(chrome_browser_net::SetUrlRequestMocksEnabled, true));
+
+  {
+   base::RunLoop loop;
+   GetNSSCertDatabaseForProfile(
+       profile(),
+       base::Bind(&EnterprisePlatformKeysTest::DidGetCertDatabase,
+                  base::Unretained(this),
+                  loop.QuitClosure()));
+   loop.Run();
+  }
+  SetPolicy();
+
   // By default, the system token is disabled.
   std::string system_token_availability = "";
 
@@ -334,8 +464,7 @@ IN_PROC_BROWSER_TEST_P(EnterprisePlatformKeysTest, Basic) {
     system_token_availability = "systemTokenEnabled";
   }
 
-  ASSERT_TRUE(RunExtensionSubtest(
-      "",
+  ASSERT_TRUE(TestExtension(CreateBrowser(profile()),
       base::StringPrintf("chrome-extension://%s/basic.html?%s",
                          kTestExtensionID,
                          system_token_availability.c_str())))

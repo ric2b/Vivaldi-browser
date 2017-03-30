@@ -4,13 +4,17 @@
 
 #include "chrome/browser/extensions/api/image_writer_private/operation.h"
 
+#include <utility>
+
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/threading/worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/image_writer_private/error_messages.h"
 #include "chrome/browser/extensions/api/image_writer_private/operation_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/zlib/google/zip_reader.h"
 
 namespace extensions {
 namespace image_writer {
@@ -41,7 +45,8 @@ Operation::Operation(base::WeakPtr<OperationManager> manager,
       device_path_(device_path),
 #endif
       stage_(image_writer_api::STAGE_UNKNOWN),
-      progress_(0) {
+      progress_(0),
+      zip_reader_(new zip::ZipReader) {
 }
 
 Operation::~Operation() {}
@@ -105,20 +110,20 @@ void Operation::Unzip(const base::Closure& continuation) {
 
   SetStage(image_writer_api::STAGE_UNZIP);
 
-  if (!(zip_reader_.Open(image_path_) && zip_reader_.AdvanceToNextEntry() &&
-        zip_reader_.OpenCurrentEntryInZip())) {
+  if (!(zip_reader_->Open(image_path_) && zip_reader_->AdvanceToNextEntry() &&
+        zip_reader_->OpenCurrentEntryInZip())) {
     Error(error::kUnzipGenericError);
     return;
   }
 
-  if (zip_reader_.HasMore()) {
+  if (zip_reader_->HasMore()) {
     Error(error::kUnzipInvalidArchive);
     return;
   }
 
   // Create a new target to unzip to.  The original file is opened by the
   // zip_reader_.
-  zip::ZipReader::EntryInfo* entry_info = zip_reader_.current_entry_info();
+  zip::ZipReader::EntryInfo* entry_info = zip_reader_->current_entry_info();
   if (entry_info) {
     image_path_ = temp_dir_.path().Append(entry_info->file_path().BaseName());
   } else {
@@ -126,13 +131,13 @@ void Operation::Unzip(const base::Closure& continuation) {
     return;
   }
 
-  zip_reader_.ExtractCurrentEntryToFilePathAsync(
+  zip_reader_->ExtractCurrentEntryToFilePathAsync(
       image_path_,
       base::Bind(&Operation::CompleteAndContinue, this, continuation),
       base::Bind(&Operation::OnUnzipFailure, this),
       base::Bind(&Operation::OnUnzipProgress,
                  this,
-                 zip_reader_.current_entry_info()->original_size()));
+                 zip_reader_->current_entry_info()->original_size()));
 }
 
 void Operation::Finish() {
@@ -267,7 +272,7 @@ void Operation::StopUtilityClient() {
       base::Bind(&ImageWriterUtilityClient::Shutdown, image_writer_client_));
 }
 
-void Operation::WriteImageProgress(int64 total_bytes, int64 curr_bytes) {
+void Operation::WriteImageProgress(int64_t total_bytes, int64_t curr_bytes) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
   if (IsCancelled()) {
     return;
@@ -283,7 +288,7 @@ void Operation::WriteImageProgress(int64 total_bytes, int64 curr_bytes) {
 
 void Operation::GetMD5SumOfFile(
     const base::FilePath& file_path,
-    int64 file_size,
+    int64_t file_size,
     int progress_offset,
     int progress_scale,
     const base::Callback<void(const std::string&)>& callback) {
@@ -307,22 +312,16 @@ void Operation::GetMD5SumOfFile(
     }
   }
 
-  BrowserThread::PostTask(BrowserThread::FILE,
-                          FROM_HERE,
-                          base::Bind(&Operation::MD5Chunk,
-                                     this,
-                                     Passed(file.Pass()),
-                                     0,
-                                     file_size,
-                                     progress_offset,
-                                     progress_scale,
-                                     callback));
+  BrowserThread::PostTask(
+      BrowserThread::FILE, FROM_HERE,
+      base::Bind(&Operation::MD5Chunk, this, Passed(std::move(file)), 0,
+                 file_size, progress_offset, progress_scale, callback));
 }
 
 void Operation::MD5Chunk(
     base::File file,
-    int64 bytes_processed,
-    int64 bytes_total,
+    int64_t bytes_processed,
+    int64_t bytes_total,
     int progress_offset,
     int progress_scale,
     const base::Callback<void(const std::string&)>& callback) {
@@ -333,7 +332,7 @@ void Operation::MD5Chunk(
 
   scoped_ptr<char[]> buffer(new char[kMD5BufferSize]);
   int read_size = std::min(bytes_total - bytes_processed,
-                           static_cast<int64>(kMD5BufferSize));
+                           static_cast<int64_t>(kMD5BufferSize));
 
   if (read_size == 0) {
     // Nothing to read, we are done.
@@ -351,16 +350,11 @@ void Operation::MD5Chunk(
           progress_offset;
       SetProgress(percent_curr);
 
-      BrowserThread::PostTask(BrowserThread::FILE,
-                              FROM_HERE,
-                              base::Bind(&Operation::MD5Chunk,
-                                         this,
-                                         Passed(file.Pass()),
-                                         bytes_processed + len,
-                                         bytes_total,
-                                         progress_offset,
-                                         progress_scale,
-                                         callback));
+      BrowserThread::PostTask(
+          BrowserThread::FILE, FROM_HERE,
+          base::Bind(&Operation::MD5Chunk, this, Passed(std::move(file)),
+                     bytes_processed + len, bytes_total, progress_offset,
+                     progress_scale, callback));
       // Skip closing the file.
       return;
     } else {
@@ -375,7 +369,7 @@ void Operation::OnUnzipFailure() {
   Error(error::kUnzipGenericError);
 }
 
-void Operation::OnUnzipProgress(int64 total_bytes, int64 progress_bytes) {
+void Operation::OnUnzipProgress(int64_t total_bytes, int64_t progress_bytes) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   int progress_percent = kProgressComplete * progress_bytes / total_bytes;

@@ -5,12 +5,19 @@
 #ifndef PPAPI_PROXY_COMPOSITOR_LAYER_RESOURCE_H_
 #define PPAPI_PROXY_COMPOSITOR_LAYER_RESOURCE_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "ppapi/c/ppb_compositor_layer.h"
 #include "ppapi/proxy/plugin_resource.h"
 #include "ppapi/proxy/ppapi_proxy_export.h"
 #include "ppapi/shared_impl/compositor_layer_data.h"
 #include "ppapi/shared_impl/scoped_pp_resource.h"
 #include "ppapi/thunk/ppb_compositor_layer_api.h"
+
+namespace gpu {
+struct SyncToken;
+}
 
 namespace ppapi {
 namespace proxy {
@@ -22,7 +29,8 @@ class PPAPI_PROXY_EXPORT CompositorLayerResource
       public thunk::PPB_CompositorLayer_API {
  public:
   // Release callback for texture or image layer.
-  typedef base::Callback<void(int32_t, uint32_t, bool)> ReleaseCallback;
+  typedef base::Callback<void(int32_t, const gpu::SyncToken&, bool)>
+      ReleaseCallback;
 
   CompositorLayerResource(Connection connection,
                           PP_Instance instance,

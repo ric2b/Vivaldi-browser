@@ -5,21 +5,24 @@
 #ifndef COMPONENTS_AUTOFILL_CONTENT_RENDERER_FORM_AUTOFILL_UTIL_H_
 #define COMPONENTS_AUTOFILL_CONTENT_RENDERER_FORM_AUTOFILL_UTIL_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/strings/string16.h"
 #include "components/autofill/core/common/autofill_constants.h"
+#include "components/autofill/core/common/password_form_field_prediction_map.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebElementCollection.h"
-#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 class GURL;
 
 namespace blink {
 class WebDocument;
 class WebElement;
-class WebFormElement;
 class WebFormControlElement;
+class WebFormElement;
 class WebFrame;
 class WebInputElement;
 class WebNode;
@@ -29,9 +32,11 @@ namespace autofill {
 
 struct FormData;
 struct FormFieldData;
-struct WebElementDescriptor;
+
+namespace form_util {
 
 // A bit field mask to extract data from WebFormControlElement.
+// Copied to components/autofill/ios/browser/resources/autofill_controller.js.
 enum ExtractMask {
   EXTRACT_NONE        = 0,
   EXTRACT_VALUE       = 1 << 0,  // Extract value from WebFormControlElement.
@@ -49,7 +54,37 @@ enum ExtractMask {
 // not relevant to Autofill: (1) the Netflix queue; (2) the Amazon wishlist;
 // (3) router configuration pages; and (4) other configuration pages, e.g. for
 // Google code project settings.
+// Copied to components/autofill/ios/browser/resources/autofill_controller.js.
 extern const size_t kMaxParseableFields;
+
+// Extract FormData from the form element and return whether the operation was
+// successful.
+bool ExtractFormData(const blink::WebFormElement& form_element, FormData* data);
+
+// Helper function to check if there exist any form on |frame| where its action
+// equals |action|. Returns true if so. For forms with empty or unspecified
+// actions, all form data are used for comparison. Form data comparison is
+// disabled on Mac and Android because the update prompt isn't implemented.
+// It may cause many false password updates.
+// TODO(kolos) Turn on all data comparing when the update prompt will be
+// implemented on Mac and Android.
+bool IsFormVisible(blink::WebFrame* frame,
+                   const GURL& action,
+                   const GURL& origin,
+                   const FormData& form_data);
+
+// Returns true if at least one element from |control_elements| is visible.
+bool IsSomeControlElementVisible(
+    const blink::WebVector<blink::WebFormControlElement>& control_elements);
+
+// Returns true if some control elements of |form| are visible.
+bool AreFormContentsVisible(const blink::WebFormElement& form);
+
+// Helper functions to assist in getting the canonical form of the action and
+// origin. The action will proplerly take into account <BASE>, and both will
+// strip unnecessary data (e.g. query params and HTTP credentials).
+GURL GetCanonicalActionForForm(const blink::WebFormElement& form);
+GURL GetCanonicalOriginForDocument(const blink::WebDocument& document);
 
 // Returns true if |element| is a month input element.
 bool IsMonthInput(const blink::WebInputElement* element);
@@ -70,8 +105,12 @@ bool IsCheckableElement(const blink::WebInputElement* element);
 // autofilled. {Text, Radiobutton, Checkbox}.
 bool IsAutofillableInputElement(const blink::WebInputElement* element);
 
-// Recursively checks whether |node| or any of its children have a non-empty
-// bounding box.
+// True if this node takes up space in the layout, ie. this node or a descendant
+// has a non-empty bounding bounding client rect.
+//
+// TODO(esprehn): This isn't really about visibility, it's about the size.
+// We should remove this function and just call hasNonEmptyLayoutSize()
+// directly.
 bool IsWebNodeVisible(const blink::WebNode& node);
 
 // Returns the form's |name| attribute if non-empty; otherwise the form's |id|
@@ -108,6 +147,12 @@ bool WebFormElementToFormData(
 // Get all form control elements from |elements| that are not part of a form.
 // If |fieldsets| is not NULL, also append the fieldsets encountered that are
 // not part of a form.
+std::vector<blink::WebFormControlElement> GetUnownedFormFieldElements(
+    const blink::WebElementCollection& elements,
+    std::vector<blink::WebElement>* fieldsets);
+
+// A shorthand for filtering the results of GetUnownedFormFieldElements with
+// ExtractAutofillableElementsFromSet.
 std::vector<blink::WebFormControlElement>
 GetUnownedAutofillableFormFieldElements(
     const blink::WebElementCollection& elements,
@@ -118,7 +163,20 @@ GetUnownedAutofillableFormFieldElements(
 // representation for |element|.
 // |extract_mask| usage and the return value are the same as
 // WebFormElementToFormData() above.
-bool UnownedFormElementsAndFieldSetsToFormData(
+// This function will return false and not perform any extraction if
+// |document| does not pertain to checkout.
+bool UnownedCheckoutFormElementsAndFieldSetsToFormData(
+    const std::vector<blink::WebElement>& fieldsets,
+    const std::vector<blink::WebFormControlElement>& control_elements,
+    const blink::WebFormControlElement* element,
+    const blink::WebDocument& document,
+    ExtractMask extract_mask,
+    FormData* form,
+    FormFieldData* field);
+
+// Same as above, but without the requirement that the elements only be
+// related to checkout.
+bool UnownedPasswordFormElementsAndFieldSetsToFormData(
     const std::vector<blink::WebElement>& fieldsets,
     const std::vector<blink::WebFormControlElement>& control_elements,
     const blink::WebFormControlElement* element,
@@ -173,9 +231,16 @@ bool IsWebpageEmpty(const blink::WebFrame* frame);
 // are of the type <script>, <meta>, or <title>.
 bool IsWebElementEmpty(const blink::WebElement& element);
 
-// Return a gfx::RectF that is the bounding box for |element| scaled by |scale|.
-gfx::RectF GetScaledBoundingBox(float scale, blink::WebElement* element);
+// Previews |suggestion| in |input_element| and highlights the suffix of
+// |suggestion| not included in the |input_element| text. |input_element| must
+// not be null. |user_input| should be the text typed by the user into
+// |input_element|. Note that |user_input| cannot be easily derived from
+// |input_element| by calling value(), because of http://crbug.com/507714.
+void PreviewSuggestion(const base::string16& suggestion,
+                       const base::string16& user_input,
+                       blink::WebFormControlElement* input_element);
 
+}  // namespace form_util
 }  // namespace autofill
 
 #endif  // COMPONENTS_AUTOFILL_CONTENT_RENDERER_FORM_AUTOFILL_UTIL_H_

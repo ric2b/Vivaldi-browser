@@ -5,15 +5,18 @@
 #ifndef DEVICE_BLUETOOTH_BLUETOOTH_ADAPTER_H_
 #define DEVICE_BLUETOOTH_BLUETOOTH_ADAPTER_H_
 
+#include <stdint.h>
+
 #include <list>
-#include <map>
 #include <set>
 #include <string>
 #include <utility>
 
 #include "base/callback.h"
+#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "device/bluetooth/bluetooth_advertisement.h"
 #include "device/bluetooth/bluetooth_audio_sink.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -30,6 +33,7 @@ class BluetoothGattService;
 class BluetoothSocket;
 class BluetoothUUID;
 struct BluetoothAdapterDeleter;
+enum class UMABluetoothDiscoverySessionOutcome;
 
 // BluetoothAdapter represents a local Bluetooth adapter which may be used to
 // interact with remote Bluetooth devices. As well as providing support for
@@ -81,6 +85,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
     virtual void DeviceChanged(BluetoothAdapter* adapter,
                                BluetoothDevice* device) {}
 
+    // Called when address property of the device |device| known to the adapter
+    // |adapter| change due to pairing.
+    virtual void DeviceAddressChanged(BluetoothAdapter* adapter,
+                                      BluetoothDevice* device,
+                                      const std::string& old_address) {}
+
     // Called when the device |device| is removed from the adapter |adapter|,
     // either as a result of a discovered device being lost between discovering
     // phases or pairing information deleted. |device| should not be
@@ -101,6 +111,11 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
     virtual void GattServiceRemoved(BluetoothAdapter* adapter,
                                     BluetoothDevice* device,
                                     BluetoothGattService* service) {}
+
+    // Called when all the GATT Services in |device| have been discovered
+    // and GattServiceAdded has been called for each service.
+    virtual void GattServicesDiscovered(BluetoothAdapter* adapter,
+                                        BluetoothDevice* device) {}
 
     // Called when all characteristic and descriptor discovery procedures are
     // known to be completed for the GATT service |service|. This method will be
@@ -156,12 +171,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
     virtual void GattCharacteristicValueChanged(
         BluetoothAdapter* adapter,
         BluetoothGattCharacteristic* characteristic,
-        const std::vector<uint8>& value) {}
+        const std::vector<uint8_t>& value) {}
 
     // Called when the value of a characteristic descriptor has been updated.
     virtual void GattDescriptorValueChanged(BluetoothAdapter* adapter,
                                             BluetoothGattDescriptor* descriptor,
-                                            const std::vector<uint8>& value) {}
+                                            const std::vector<uint8_t>& value) {
+    }
   };
 
   // Used to configure a listening servie.
@@ -209,7 +225,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   // Returns a weak pointer to an existing adapter for testing purposes only.
   base::WeakPtr<BluetoothAdapter> GetWeakPtrForTesting();
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
   // Shutdown the adapter: tear down and clean up all objects owned by
   // BluetoothAdapter. After this call, the BluetoothAdapter will behave as if
   // no Bluetooth controller exists in the local system. |IsPresent| will return
@@ -385,10 +401,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
  protected:
   friend class base::RefCounted<BluetoothAdapter>;
   friend class BluetoothDiscoverySession;
+  friend class BluetoothTestBase;
 
-  typedef std::map<const std::string, BluetoothDevice*> DevicesMap;
+  typedef base::ScopedPtrHashMap<std::string, scoped_ptr<BluetoothDevice>>
+      DevicesMap;
   typedef std::pair<BluetoothDevice::PairingDelegate*, PairingDelegatePriority>
       PairingDelegatePair;
+  typedef base::Callback<void(UMABluetoothDiscoverySessionOutcome)>
+      DiscoverySessionErrorCallback;
 
   BluetoothAdapter();
   virtual ~BluetoothAdapter();
@@ -428,20 +448,21 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   //
   // These methods invoke |callback| for success and |error_callback| for
   // failures.
-  virtual void AddDiscoverySession(BluetoothDiscoveryFilter* discovery_filter,
-                                   const base::Closure& callback,
-                                   const ErrorCallback& error_callback) = 0;
+  virtual void AddDiscoverySession(
+      BluetoothDiscoveryFilter* discovery_filter,
+      const base::Closure& callback,
+      const DiscoverySessionErrorCallback& error_callback) = 0;
   virtual void RemoveDiscoverySession(
       BluetoothDiscoveryFilter* discovery_filter,
       const base::Closure& callback,
-      const ErrorCallback& error_callback) = 0;
+      const DiscoverySessionErrorCallback& error_callback) = 0;
 
   // Used to set and update the discovery filter used by the underlying
   // Bluetooth controller.
   virtual void SetDiscoveryFilter(
       scoped_ptr<BluetoothDiscoveryFilter> discovery_filter,
       const base::Closure& callback,
-      const ErrorCallback& error_callback) = 0;
+      const DiscoverySessionErrorCallback& error_callback) = 0;
 
   // Called by RemovePairingDelegate() in order to perform any class-specific
   // internal functionality necessary to remove the pairing delegate, such as
@@ -454,6 +475,11 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
       scoped_ptr<BluetoothDiscoveryFilter> discovery_filter,
       const DiscoverySessionCallback& callback);
 
+  // Error callback passed to AddDiscoverySession by StartDiscoverySession.
+  void OnStartDiscoverySessionError(
+      const ErrorCallback& callback,
+      UMABluetoothDiscoverySessionOutcome outcome);
+
   // Marks all known DiscoverySession instances as inactive. Called by
   // BluetoothAdapter in the event that the adapter unexpectedly stops
   // discovering. This should be called by all platform implementations.
@@ -464,6 +490,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   // inactive.
   void DiscoverySessionBecameInactive(
       BluetoothDiscoverySession* discovery_session);
+
+  void DeleteDeviceForTesting(const std::string& address);
 
   // Observers of BluetoothAdapter, notified from implementation subclasses.
   base::ObserverList<device::BluetoothAdapter::Observer> observers_;
@@ -478,6 +506,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   std::list<PairingDelegatePair> pairing_delegates_;
 
  private:
+  // Histograms the result of StartDiscoverySession.
+  static void RecordBluetoothDiscoverySessionStartOutcome(
+      UMABluetoothDiscoverySessionOutcome outcome);
+
+  // Histograms the result of BluetoothDiscoverySession::Stop.
+  static void RecordBluetoothDiscoverySessionStopOutcome(
+      UMABluetoothDiscoverySessionOutcome outcome);
+
   // Return all discovery filters assigned to this adapter merged together.
   // If |omit| is true, |discovery_filter| will not be processed.
   scoped_ptr<BluetoothDiscoveryFilter> GetMergedDiscoveryFilterHelper(

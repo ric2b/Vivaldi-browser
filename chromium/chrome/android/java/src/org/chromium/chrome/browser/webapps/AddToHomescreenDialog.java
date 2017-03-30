@@ -1,13 +1,13 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.webapps;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.graphics.Bitmap;
+import android.support.v7.app.AlertDialog;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -17,12 +17,11 @@ import android.widget.ImageView;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.Tab;
 
 /**
- * Helper class showing the UI regarding Add to Homescreen and delegate the
- * logic to ShortcutHelper.
+ * Helper class showing the UI regarding Add to Homescreen. This class delegates
+ * most of the logic to AddToHomescreenDialogHelper.
  */
 public class AddToHomescreenDialog {
     private static AlertDialog sCurrentDialog;
@@ -40,7 +39,7 @@ public class AddToHomescreenDialog {
     public static void show(final Activity activity, final Tab currentTab) {
         View view = activity.getLayoutInflater().inflate(
                 R.layout.add_to_homescreen_dialog, null);
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity)
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AlertDialogTheme)
                 .setTitle(R.string.menu_add_to_homescreen)
                 .setNegativeButton(R.string.cancel,
                         new DialogInterface.OnClickListener() {
@@ -51,6 +50,7 @@ public class AddToHomescreenDialog {
                         });
 
         final AlertDialog dialog = builder.create();
+        dialog.getDelegate().setHandleNativeActionModesEnabled(false);
         // On click of the menu item for "add to homescreen", an alert dialog pops asking the user
         // if the title needs to be edited. On click of "Add", shortcut is created. Default
         // title is the title of the page. OK button is disabled if the title text is empty.
@@ -75,17 +75,17 @@ public class AddToHomescreenDialog {
             }
         });
 
-        final ShortcutHelper shortcutHelper =
-                new ShortcutHelper(activity.getApplicationContext(), currentTab);
+        final AddToHomescreenDialogHelper dialogHelper =
+                new AddToHomescreenDialogHelper(activity.getApplicationContext(), currentTab);
 
-        // Initializing the shortcut helper is asynchronous. Until it is
-        // initialized, the UI will show a disabled text field and OK buttons.
-        // They will be enabled and pre-filled as soon as the onInitialized
-        // callback will be run. The user will still be able to cancel the
-        // operation.
-        shortcutHelper.initialize(new ShortcutHelper.ShortcutHelperObserver() {
+        // Initializing the AddToHomescreenDialogHelper is asynchronous. Until
+        // it is initialized, the UI will show a disabled text field and OK
+        // buttons. They will be enabled and pre-filled as soon as the
+        // onInitialized callback will be run. The user will still be able to
+        // cancel the operation.
+        dialogHelper.initialize(new AddToHomescreenDialogHelper.Observer() {
             @Override
-            public void onTitleAvailable(String title) {
+            public void onUserTitleAvailable(String title) {
                 input.setEnabled(true);
                 input.setText(title);
             }
@@ -124,17 +124,17 @@ public class AddToHomescreenDialog {
                 new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int id) {
-                        shortcutHelper.addShortcut(input.getText().toString());
+                        dialogHelper.addShortcut(input.getText().toString());
                     }
                 });
 
-        // The "OK" button should only be shown when |shortcutHelper| is
+        // The "OK" button should only be shown when |dialogHelper| is
         // initialized, it should be kept disabled until then.
         dialog.setOnShowListener(new DialogInterface.OnShowListener() {
             @Override
             public void onShow(DialogInterface d) {
                 dialog.getButton(DialogInterface.BUTTON_POSITIVE).setEnabled(
-                        shortcutHelper.isInitialized());
+                        dialogHelper.isInitialized());
             }
         });
 
@@ -144,7 +144,7 @@ public class AddToHomescreenDialog {
             @Override
             public void onDismiss(DialogInterface dialog) {
                 sCurrentDialog = null;
-                shortcutHelper.destroy();
+                dialogHelper.destroy();
             }
         });
 

@@ -7,12 +7,14 @@
 #include "components/storage_monitor/storage_monitor_linux.h"
 
 #include <mntent.h>
+#include <stdint.h>
 #include <stdio.h>
-
+#include <limits>
 #include <list>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
@@ -97,8 +99,8 @@ class ScopedGetDeviceInfoResultRecorder {
 
 // Returns the storage partition size of the device specified by |device_path|.
 // If the requested information is unavailable, returns 0.
-uint64 GetDeviceStorageSize(const base::FilePath& device_path,
-                            struct udev_device* device) {
+uint64_t GetDeviceStorageSize(const base::FilePath& device_path,
+                              struct udev_device* device) {
   // sysfs provides the device size in units of 512-byte blocks.
   const std::string partition_size =
       device::UdevDeviceGetSysattrValue(device, kSizeSysAttr);
@@ -109,11 +111,12 @@ uint64 GetDeviceStorageSize(const base::FilePath& device_path,
       "RemovableDeviceNotificationsLinux.device_partition_size_available",
       !partition_size.empty());
 
-  uint64 total_size_in_bytes = 0;
+  uint64_t total_size_in_bytes = 0;
   if (!base::StringToUint64(partition_size, &total_size_in_bytes))
     return 0;
-  return (total_size_in_bytes <= kuint64max / 512) ?
-      total_size_in_bytes * 512 : 0;
+  return (total_size_in_bytes <= std::numeric_limits<uint64_t>::max() / 512)
+             ? total_size_in_bytes * 512
+             : 0;
 }
 
 // Gets the device information using udev library.
@@ -128,11 +131,11 @@ scoped_ptr<StorageInfo> GetDeviceInfo(const base::FilePath& device_path,
 
   device::ScopedUdevPtr udev_obj(device::udev_new());
   if (!udev_obj.get())
-    return storage_info.Pass();
+    return storage_info;
 
   struct stat device_stat;
   if (stat(device_path.value().c_str(), &device_stat) < 0)
-    return storage_info.Pass();
+    return storage_info;
 
   char device_type;
   if (S_ISCHR(device_stat.st_mode))
@@ -140,13 +143,13 @@ scoped_ptr<StorageInfo> GetDeviceInfo(const base::FilePath& device_path,
   else if (S_ISBLK(device_stat.st_mode))
     device_type = 'b';
   else
-    return storage_info.Pass();  // Not a supported type.
+    return storage_info;  // Not a supported type.
 
   device::ScopedUdevDevicePtr device(
       device::udev_device_new_from_devnum(udev_obj.get(), device_type,
                                           device_stat.st_rdev));
   if (!device.get())
-    return storage_info.Pass();
+    return storage_info;
 
   base::string16 volume_label = base::UTF8ToUTF16(
       device::UdevDeviceGetPropertyValue(device.get(), kLabel));
@@ -192,7 +195,7 @@ scoped_ptr<StorageInfo> GetDeviceInfo(const base::FilePath& device_path,
       vendor_name,
       model_name,
       GetDeviceStorageSize(device_path, device.get())));
-  return storage_info.Pass();
+  return storage_info;
 }
 
 MtabWatcherLinux* CreateMtabWatcherLinuxOnFileThread(
@@ -223,7 +226,7 @@ StorageMonitor::EjectStatus EjectPathOnFileThread(
   if (!process.WaitForExitWithTimeout(base::TimeDelta::FromMilliseconds(3000),
                                       &exit_code)) {
     process.Terminate(-1, false);
-    base::EnsureProcessTerminated(process.Pass());
+    base::EnsureProcessTerminated(std::move(process));
     return StorageMonitor::EJECT_FAILURE;
   }
 

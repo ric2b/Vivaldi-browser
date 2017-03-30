@@ -13,6 +13,9 @@ FirefoxProfileImporterTest.Firefox35Importer
 # https://github.com/DynamoRIO/drmemory/issues/980
 MetricsLogManagerTest.*
 
+# http://crbug.com/514921
+TaskManagerTest.*
+
 ##################################################
 # Chromium bugs:
 
@@ -28,10 +31,6 @@ ServiceProcessStateTest.ForceShutdown
 
 # fails sporadically: http://crbug.com/108205
 MultiProcessLockTest.RecursiveLock
-
-# Poor isolation, DCHECKs when no MessageLoop exists.  Breaks when sharded.
-# http://crbug.com/117679
-WebsiteSettingsModelTest.*
 
 # fails to create thread
 # http://crbug.com/144087
@@ -83,5 +82,5 @@ SafeBrowsingModuleVerifierWinTest.VerifyModuleUnmodified
 # http://crbug.com/467004
 SigninErrorNotifierTest.NoErrorAuthStatusProviders
 
-# http://crbug.com/473689
-ManagePasswordsBubbleModelTest.CloseWithoutLogging
+# https://crbug.com/577410
+PluginInfoMessageFilterTest.FindEnabledPlugin

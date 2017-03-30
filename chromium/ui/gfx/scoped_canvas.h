@@ -5,6 +5,7 @@
 #ifndef UI_GFX_SCOPED_CANVAS_H_
 #define UI_GFX_SCOPED_CANVAS_H_
 
+#include "base/macros.h"
 #include "ui/gfx/canvas.h"
 
 namespace gfx {
@@ -19,12 +20,6 @@ class ScopedCanvas {
   ~ScopedCanvas() {
     if (canvas_)
       canvas_->Restore();
-  }
-  void SetCanvas(gfx::Canvas* canvas) {
-    if (canvas_)
-      canvas_->Restore();
-    canvas_ = canvas;
-    canvas_->Save();
   }
 
  private:

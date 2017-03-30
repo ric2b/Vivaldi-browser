@@ -2,28 +2,75 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# See comments in mojo/public/c/system/BUILD.gn which this is based on.
+# Summary: depend on this target to use the platform handle functions without
+# linking against a specific implementation.
+# For component targets, add //mojo/platform_handle:for_component to your deps
+# section.
+# For shared_library targets (e.g., a Mojo App), add
+# //mojo/platform_handle:for_shared_library to your deps.
 source_set("platform_handle") {
+  sources = [
+    "platform_handle.h",
+    "platform_handle_functions.h",
+  ]
+  deps = [
+    "//mojo/public/c/system",
+  ]
+}
+
+component("platform_handle_impl") {
+  output_name = "platform_handle_impl"
+  public_deps = [
+    ":platform_handle",
+  ]
+  sources = [
+    "platform_handle_functions.cc",
+  ]
+  defines = [ "PLATFORM_HANDLE_IMPLEMENTATION" ]
+  deps = [
+    "//base",
+    "//mojo/public/c/system:for_component",
+    "//third_party/mojo/src/mojo/edk/embedder:headers",
+  ]
+}
+
+source_set("platform_handle_thunks") {
+  public_deps = [
+    ":platform_handle",
+  ]
   sources = [
     "platform_handle_private_thunks.cc",
     "platform_handle_private_thunks.h",
   ]
-
-  deps = [
-    ":defs",
-    "//third_party/mojo/src/mojo/public/c/system",
-  ]
-
   defines = [ "PLATFORM_HANDLE_IMPLEMENTATION" ]
+  deps = [
+    "//mojo/public/c/system",
+  ]
 }
 
-# Only targets that are registering the thunks should depend upon this.
-source_set("defs") {
-  visibility = [
+group("for_shared_library") {
+  public_deps = [
     ":platform_handle",
-    "//mojo/runner:native_application_support",
   ]
-  sources = [
-    "native_exports.h",
-    "platform_handle_functions.h",
+  if (is_component_build) {
+    deps = [
+      ":platform_handle_impl",
+    ]
+  } else {
+    deps = [
+      ":platform_handle_thunks",
+    ]
+  }
+}
+
+group("for_component") {
+  public_deps = [
+    ":platform_handle",
   ]
+  if (is_component_build) {
+    deps = [
+      ":platform_handle_impl",
+    ]
+  }
 }

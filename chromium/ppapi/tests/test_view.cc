@@ -4,6 +4,8 @@
 
 #include "ppapi/tests/test_view.h"
 
+#include <stddef.h>
+
 #include <sstream>
 
 #include "ppapi/c/pp_time.h"
@@ -142,8 +144,8 @@ std::string TestView::TestClipChange() {
 
   // Original clip should be the full frame.
   pp::Rect original_clip = last_view_.GetClipRect();
-  ASSERT_TRUE(original_clip.x() == 0);
-  ASSERT_TRUE(original_clip.y() == 0);
+  ASSERT_TRUE(original_clip.x() == 1);
+  ASSERT_TRUE(original_clip.y() == 1);
   ASSERT_TRUE(original_clip.width() == original_rect.width());
   ASSERT_TRUE(original_clip.height() == original_rect.height());
 
@@ -164,8 +166,9 @@ std::string TestView::TestClipChange() {
   instance_->EvalScript(script_stream.str());
 
   pp::Rect desired_clip = original_clip;
-  desired_clip.set_y(clip_amount);
-  desired_clip.set_height(desired_clip.height() - desired_clip.y());
+  desired_clip.set_y(clip_amount + original_clip.y());
+  desired_clip.set_height(
+    desired_clip.height() - desired_clip.y() +  original_clip.y());
 
   while (WaitUntilViewChanged() && last_view_.GetClipRect() != desired_clip) {
   }

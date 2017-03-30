@@ -5,13 +5,17 @@
 #ifndef UI_APP_LIST_VIEWS_APPS_GRID_VIEW_H_
 #define UI_APP_LIST_VIEWS_APPS_GRID_VIEW_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
+#include <tuple>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "ui/app_list/app_list_export.h"
 #include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_model_observer.h"
@@ -141,7 +145,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
       const ViewHierarchyChangedDetails& details) override;
   bool GetDropFormats(
       int* formats,
-      std::set<OSExchangeData::CustomFormat>* custom_formats) override;
+      std::set<ui::Clipboard::FormatType>* format_types) override;
   bool CanDrop(const OSExchangeData& data) override;
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
 
@@ -243,10 +247,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
       return page != other.page || slot != other.slot;
     }
     bool operator<(const Index& other) const {
-      if (page != other.page)
-        return page < other.page;
-
-      return slot < other.slot;
+      return std::tie(page, slot) < std::tie(other.page, other.slot);
     }
 
     int page;  // Which page an item view is on.
@@ -534,14 +535,14 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   DropAttempt drop_attempt_;
 
   // Timer for re-ordering the |drop_target_| and |drag_view_|.
-  base::OneShotTimer<AppsGridView> reorder_timer_;
+  base::OneShotTimer reorder_timer_;
 
   // Timer for dropping |drag_view_| into the folder containing
   // the |drop_target_|.
-  base::OneShotTimer<AppsGridView> folder_dropping_timer_;
+  base::OneShotTimer folder_dropping_timer_;
 
   // Timer for dragging a folder item out of folder container ink bubble.
-  base::OneShotTimer<AppsGridView> folder_item_reparent_timer_;
+  base::OneShotTimer folder_item_reparent_timer_;
 
   // An application target drag and drop host which accepts dnd operations.
   ApplicationDragAndDropHost* drag_and_drop_host_;
@@ -554,7 +555,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   gfx::Point last_drag_point_;
 
   // Timer to auto flip page when dragging an item near the left/right edges.
-  base::OneShotTimer<AppsGridView> page_flip_timer_;
+  base::OneShotTimer page_flip_timer_;
 
   // Target page to switch to when |page_flip_timer_| fires.
   int page_flip_target_;

@@ -8,15 +8,17 @@
 #include <list>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/threading/thread.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/geolocation_provider.h"
 #include "content/public/common/geoposition.h"
 
+namespace base {
 template<typename Type> struct DefaultSingletonTraits;
+}
 
 namespace content {
 class LocationArbitrator;
@@ -46,7 +48,7 @@ class CONTENT_EXPORT GeolocationProviderImpl
   }
 
  protected:
-  friend struct DefaultSingletonTraits<GeolocationProviderImpl>;
+  friend struct base::DefaultSingletonTraits<GeolocationProviderImpl>;
   GeolocationProviderImpl();
   ~GeolocationProviderImpl() override;
 

@@ -16,10 +16,11 @@ import android.os.RemoteException;
 import android.view.Surface;
 
 import org.chromium.base.BaseSwitches;
-import org.chromium.base.CalledByNative;
 import org.chromium.base.CommandLine;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
@@ -30,6 +31,7 @@ import org.chromium.content.browser.ChildProcessLauncher;
 import org.chromium.content.browser.FileDescriptorInfo;
 import org.chromium.content.common.IChildProcessCallback;
 import org.chromium.content.common.IChildProcessService;
+import org.chromium.content.common.SurfaceWrapper;
 
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicReference;
@@ -45,6 +47,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * for X in 0...N-1 (where N is {@link ChildProcessLauncher#MAX_REGISTERED_SERVICES})
  */
 @JNINamespace("content")
+@SuppressWarnings("SynchronizeOnNonFinalField")
 public class ChildProcessService extends Service {
     private static final String MAIN_THREAD_NAME = "ChildProcessMain";
     private static final String TAG = "cr.ChildProcessService";
@@ -67,6 +70,19 @@ public class ChildProcessService extends Service {
     private boolean mIsBound = false;
 
     private final Semaphore mActivitySemaphore = new Semaphore(1);
+
+    // Return a Linker instance. If testing, the Linker needs special setup.
+    private Linker getLinker() {
+        if (Linker.areTestsEnabled()) {
+            // For testing, set the Linker implementation and the test runner
+            // class name to match those used by the parent.
+            assert mLinkerParams != null;
+            Linker.setupForTesting(
+                    mLinkerParams.mLinkerImplementationForTesting,
+                    mLinkerParams.mTestRunnerClassNameForTesting);
+        }
+        return Linker.getInstance();
+    }
 
     // Binder object used by clients for this service.
     private final IChildProcessService.Stub mBinder = new IChildProcessService.Stub() {
@@ -96,7 +112,7 @@ public class ChildProcessService extends Service {
                 System.arraycopy(fdInfosAsParcelable, 0, mFdInfos, 0, fdInfosAsParcelable.length);
                 Bundle sharedRelros = args.getBundle(Linker.EXTRA_LINKER_SHARED_RELROS);
                 if (sharedRelros != null) {
-                    Linker.getInstance().useSharedRelros(sharedRelros);
+                    getLinker().useSharedRelros(sharedRelros);
                     sharedRelros = null;
                 }
                 mMainThread.notifyAll();
@@ -128,31 +144,29 @@ public class ChildProcessService extends Service {
             @SuppressFBWarnings("DM_EXIT")
             public void run()  {
                 try {
-                    // CommandLine must be initialized before others, e.g., Linker.isUsed()
-                    // may check the command line options.
+                    // CommandLine must be initialized before everything else.
                     synchronized (mMainThread) {
                         while (mCommandLineParams == null) {
                             mMainThread.wait();
                         }
                     }
                     CommandLine.init(mCommandLineParams);
-                    Linker linker = Linker.getInstance();
-                    boolean useLinker = linker.isUsed();
+
+                    Linker linker = null;
                     boolean requestedSharedRelro = false;
-                    if (useLinker) {
+                    if (Linker.isUsed()) {
                         synchronized (mMainThread) {
                             while (!mIsBound) {
                                 mMainThread.wait();
                             }
                         }
-                        assert mLinkerParams != null;
+                        linker = getLinker();
                         if (mLinkerParams.mWaitForSharedRelro) {
                             requestedSharedRelro = true;
                             linker.initServiceProcess(mLinkerParams.mBaseLoadAddress);
                         } else {
                             linker.disableSharedRelros();
                         }
-                        linker.setTestRunnerClassName(mLinkerParams.mTestRunnerClassName);
                     }
                     boolean isLoaded = false;
                     if (CommandLine.getInstance().hasSwitch(
@@ -198,13 +212,12 @@ public class ChildProcessService extends Service {
                             mMainThread.wait();
                         }
                     }
-                    ContentMain.initApplicationContext(sContext.get().getApplicationContext());
+                    ContextUtils.initApplicationContext(sContext.get().getApplicationContext());
                     for (FileDescriptorInfo fdInfo : mFdInfos) {
                         nativeRegisterGlobalFileDescriptor(
                                 fdInfo.mId, fdInfo.mFd.detachFd(), fdInfo.mOffset, fdInfo.mSize);
                     }
-                    nativeInitChildProcess(sContext.get().getApplicationContext(),
-                            ChildProcessService.this, mCpuCount, mCpuFeatures);
+                    nativeInitChildProcess(ChildProcessService.this, mCpuCount, mCpuFeatures);
                     if (mActivitySemaphore.tryAcquire()) {
                         ContentMain.start();
                         nativeExitChildProcess();
@@ -320,9 +333,10 @@ public class ChildProcessService extends Service {
         }
 
         try {
-            return mCallback.getViewSurface(surfaceId).getSurface();
+            SurfaceWrapper wrapper = mCallback.getViewSurface(surfaceId);
+            return wrapper != null ? wrapper.getSurface() : null;
         } catch (RemoteException e) {
-            Log.e(TAG, "Unable to call establishSurfaceTexturePeer: %s", e);
+            Log.e(TAG, "Unable to call getViewSurface: %s", e);
             return null;
         }
     }
@@ -388,11 +402,10 @@ public class ChildProcessService extends Service {
      * The main entry point for a child process. This should be called from a new thread since
      * it will not return until the child process exits. See child_process_service.{h,cc}
      *
-     * @param applicationContext The Application Context of the current process.
      * @param service The current ChildProcessService object.
      * renderer.
      */
-    private static native void nativeInitChildProcess(Context applicationContext,
+    private static native void nativeInitChildProcess(
             ChildProcessService service, int cpuCount, long cpuFeatures);
 
     /**

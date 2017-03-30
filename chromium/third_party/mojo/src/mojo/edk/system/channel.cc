@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-#include "mojo/edk/embedder/platform_handle_vector.h"
-#include "mojo/edk/system/endpoint_relayer.h"
-#include "mojo/edk/system/transport_data.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_handle_vector.h"
+#include "third_party/mojo/src/mojo/edk/system/endpoint_relayer.h"
+#include "third_party/mojo/src/mojo/edk/system/transport_data.h"
 
 namespace mojo {
 namespace system {
@@ -39,10 +40,10 @@ void Channel::Init(scoped_ptr<RawChannel> raw_channel) {
   DCHECK(creation_thread_checker_.CalledOnValidThread());
   DCHECK(raw_channel);
 
-  // No need to take |lock_|, since this must be called before this object
+  // No need to take |mutex_|, since this must be called before this object
   // becomes thread-safe.
   DCHECK(!is_running_);
-  raw_channel_ = raw_channel.Pass();
+  raw_channel_ = std::move(raw_channel);
   raw_channel_->Init(this);
   is_running_ = true;
 }
@@ -50,7 +51,7 @@ void Channel::Init(scoped_ptr<RawChannel> raw_channel) {
 void Channel::SetChannelManager(ChannelManager* channel_manager) {
   DCHECK(channel_manager);
 
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
   DCHECK(!is_shutting_down_);
   DCHECK(!channel_manager_);
   channel_manager_ = channel_manager;
@@ -61,7 +62,7 @@ void Channel::Shutdown() {
 
   IdToEndpointMap to_destroy;
   {
-    base::AutoLock locker(lock_);
+    MutexLocker locker(&mutex_);
     if (!is_running_)
       return;
 
@@ -69,6 +70,10 @@ void Channel::Shutdown() {
     // |OnReadMessage()| or |OnError()|.
     raw_channel_->Shutdown();
     is_running_ = false;
+    // |WillShutdownSoon()| may not have been called (i.e. on a channel error),
+    // and this flag is relied on to prevent a race with
+    // |AttachAndRunEndpoint()|.
+    is_shutting_down_ = true;
 
     // We need to deal with it outside the lock.
     std::swap(to_destroy, local_id_to_endpoint_map_);
@@ -88,10 +93,33 @@ void Channel::Shutdown() {
   DVLOG_IF(2, num_live || num_zombies) << "Shut down Channel with " << num_live
                                        << " live endpoints and " << num_zombies
                                        << " zombies";
+  // At this point, there should be no attached endpoints. However, it is
+  // possible for this |Channel| to have created new endpoints. These have not
+  // been attached, but are tracked in |aborted_endpoints_| and also need to be
+  // detached.
+  // It is also important to note that because there are no attached endpoints,
+  // it should not be possible for anything to race with the rest of this
+  // function and create more endpoints.
+  EndpointList to_abort;
+  {
+    MutexLocker locker(&mutex_);
+    DCHECK(local_id_to_endpoint_map_.empty());
+    std::swap(to_abort, aborted_endpoints_);
+  }
+  for (auto& endpoint : to_abort)
+    endpoint->DetachFromChannel();
+  DVLOG_IF(2, !to_abort.empty()) << "Endpoints created while shutting down "
+                                 << "Channel: " << to_abort.size();
+#if DCHECK_IS_ON()
+  {
+    MutexLocker locker(&mutex_);
+    DCHECK(aborted_endpoints_.empty());
+  }
+#endif
 }
 
 void Channel::WillShutdownSoon() {
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
   is_shutting_down_ = true;
   channel_manager_ = nullptr;
 }
@@ -99,7 +127,7 @@ void Channel::WillShutdownSoon() {
 void Channel::SetBootstrapEndpoint(scoped_refptr<ChannelEndpoint> endpoint) {
   // Used for both local and remote IDs.
   ChannelEndpointId bootstrap_id = ChannelEndpointId::GetBootstrap();
-  SetBootstrapEndpointWithIds(endpoint.Pass(), bootstrap_id, bootstrap_id);
+  SetBootstrapEndpointWithIds(std::move(endpoint), bootstrap_id, bootstrap_id);
 }
 
 void Channel::SetBootstrapEndpointWithIds(
@@ -109,7 +137,7 @@ void Channel::SetBootstrapEndpointWithIds(
   DCHECK(endpoint);
 
   {
-    base::AutoLock locker(lock_);
+    MutexLocker locker(&mutex_);
 
     DLOG_IF(WARNING, is_shutting_down_)
         << "SetBootstrapEndpoint() while shutting down";
@@ -125,20 +153,20 @@ void Channel::SetBootstrapEndpointWithIds(
 }
 
 bool Channel::WriteMessage(scoped_ptr<MessageInTransit> message) {
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
   if (!is_running_) {
     // TODO(vtl): I think this is probably not an error condition, but I should
     // think about it (and the shutdown sequence) more carefully.
-    LOG(WARNING) << "WriteMessage() after shutdown";
+    VLOG(2) << "WriteMessage() after shutdown";
     return false;
   }
 
-  DLOG_IF(WARNING, is_shutting_down_) << "WriteMessage() while shutting down";
-  return raw_channel_->WriteMessage(message.Pass());
+  DVLOG_IF(2, is_shutting_down_) << "WriteMessage() while shutting down";
+  return raw_channel_->WriteMessage(std::move(message));
 }
 
 bool Channel::IsWriteBufferEmpty() {
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
   if (!is_running_)
     return true;
   return raw_channel_->IsWriteBufferEmpty();
@@ -147,6 +175,13 @@ bool Channel::IsWriteBufferEmpty() {
 void Channel::DetachEndpoint(ChannelEndpoint* endpoint,
                              ChannelEndpointId local_id,
                              ChannelEndpointId remote_id) {
+  // Keep a reference to |this| to prevent this |Channel| from being deleted
+  // while this function is running.  Without this, if |Shutdown()| is started
+  // on the IO thread immediately after |mutex_| is released below and finishes
+  // before |SendControlMessage()| gets to run, |this| could be deleted while
+  // this function is still running.
+  scoped_refptr<Channel> self(this);
+
   DCHECK(endpoint);
   DCHECK(local_id.is_valid());
 
@@ -154,7 +189,7 @@ void Channel::DetachEndpoint(ChannelEndpoint* endpoint,
     return;  // Nothing to do.
 
   {
-    base::AutoLock locker_(lock_);
+    MutexLocker locker_(&mutex_);
     if (!is_running_)
       return;
 
@@ -220,8 +255,6 @@ void Channel::SerializeEndpointWithRemotePeer(
   DCHECK(destination);
   DCHECK(peer_endpoint);
 
-  DLOG(WARNING) << "Direct message pipe passing across multiple channels not "
-                   "yet implemented; will proxy";
   // Create and set up an |EndpointRelayer| to proxy.
   // TODO(vtl): If we were to own/track the relayer directly (rather than owning
   // it via its |ChannelEndpoint|s), then we might be able to make
@@ -247,7 +280,7 @@ scoped_refptr<IncomingEndpoint> Channel::DeserializeEndpoint(
   DVLOG_IF(2, !local_id.is_valid() || !local_id.is_remote())
       << "Attempt to get incoming endpoint for invalid ID " << local_id;
 
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
 
   auto it = incoming_endpoints_.find(local_id);
   if (it == incoming_endpoints_.end()) {
@@ -264,6 +297,9 @@ scoped_refptr<IncomingEndpoint> Channel::DeserializeEndpoint(
 }
 
 size_t Channel::GetSerializedPlatformHandleSize() const {
+  // TODO(vtl): Having to lock |mutex_| here is a bit unfortunate. Maybe we
+  // should get the size in |Init()| and cache it?
+  MutexLocker locker(&mutex_);
   return raw_channel_->GetSerializedPlatformHandleSize();
 }
 
@@ -280,10 +316,10 @@ void Channel::OnReadMessage(
   switch (message_view.type()) {
     case MessageInTransit::Type::ENDPOINT_CLIENT:
     case MessageInTransit::Type::ENDPOINT:
-      OnReadMessageForEndpoint(message_view, platform_handles.Pass());
+      OnReadMessageForEndpoint(message_view, std::move(platform_handles));
       break;
     case MessageInTransit::Type::CHANNEL:
-      OnReadMessageForChannel(message_view, platform_handles.Pass());
+      OnReadMessageForChannel(message_view, std::move(platform_handles));
       break;
     default:
       HandleRemoteError(
@@ -303,8 +339,9 @@ void Channel::OnError(Error error) {
       DVLOG(1) << "RawChannel read error (shutdown)";
       break;
     case ERROR_READ_BROKEN: {
-      base::AutoLock locker(lock_);
-      LOG_IF(ERROR, !is_shutting_down_)
+      MutexLocker locker(&mutex_);
+      // The other side likely crashed or was killed.
+      VLOG_IF(2, !is_shutting_down_)
           << "RawChannel read error (connection broken)";
       break;
     }
@@ -340,7 +377,7 @@ void Channel::OnReadMessageForEndpoint(
 
   scoped_refptr<ChannelEndpoint> endpoint;
   {
-    base::AutoLock locker(lock_);
+    MutexLocker locker(&mutex_);
 
     // Since we own |raw_channel_|, and this method and |Shutdown()| should only
     // be called from the creation thread, |raw_channel_| should never be null
@@ -379,11 +416,11 @@ void Channel::OnReadMessageForEndpoint(
     DCHECK(message_view.transport_data_buffer());
     message->SetDispatchers(TransportData::DeserializeDispatchers(
         message_view.transport_data_buffer(),
-        message_view.transport_data_buffer_size(), platform_handles.Pass(),
+        message_view.transport_data_buffer_size(), std::move(platform_handles),
         this));
   }
 
-  endpoint->OnReadMessage(message.Pass());
+  endpoint->OnReadMessage(std::move(message));
 }
 
 void Channel::OnReadMessageForChannel(
@@ -459,7 +496,7 @@ bool Channel::OnAttachAndRunEndpoint(ChannelEndpointId local_id,
 
   bool success = true;
   {
-    base::AutoLock locker(lock_);
+    MutexLocker locker(&mutex_);
 
     if (local_id_to_endpoint_map_.find(local_id) ==
         local_id_to_endpoint_map_.end()) {
@@ -490,7 +527,7 @@ bool Channel::OnRemoveEndpoint(ChannelEndpointId local_id,
 
   scoped_refptr<ChannelEndpoint> endpoint;
   {
-    base::AutoLock locker(lock_);
+    MutexLocker locker(&mutex_);
 
     IdToEndpointMap::iterator it = local_id_to_endpoint_map_.find(local_id);
     if (it == local_id_to_endpoint_map_.end()) {
@@ -526,7 +563,7 @@ bool Channel::OnRemoveEndpoint(ChannelEndpointId local_id,
 bool Channel::OnRemoveEndpointAck(ChannelEndpointId local_id) {
   DCHECK(creation_thread_checker_.CalledOnValidThread());
 
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
 
   IdToEndpointMap::iterator it = local_id_to_endpoint_map_.find(local_id);
   if (it == local_id_to_endpoint_map_.end()) {
@@ -546,7 +583,7 @@ bool Channel::OnRemoveEndpointAck(ChannelEndpointId local_id) {
 void Channel::HandleRemoteError(const char* error_message) {
   // TODO(vtl): Is this how we really want to handle this? Probably we want to
   // terminate the connection, since it's spewing invalid stuff.
-  LOG(WARNING) << error_message;
+  VLOG(2) << error_message;
 }
 
 void Channel::HandleLocalError(const char* error_message) {
@@ -555,7 +592,7 @@ void Channel::HandleLocalError(const char* error_message) {
   // (endpoint), and notify it that the remote is (effectively) closed.
   // Sometimes we'll want to kill the channel (and notify all the endpoints that
   // their remotes are dead.
-  LOG(WARNING) << error_message;
+  VLOG(2) << error_message;
 }
 
 // Note: |endpoint| being a |scoped_refptr| makes this function safe, since it
@@ -569,10 +606,32 @@ ChannelEndpointId Channel::AttachAndRunEndpoint(
   ChannelEndpointId local_id;
   ChannelEndpointId remote_id;
   {
-    base::AutoLock locker(lock_);
+    MutexLocker locker(&mutex_);
 
     DLOG_IF(WARNING, is_shutting_down_)
         << "AttachAndRunEndpoint() while shutting down";
+    // Returning an invalid ID here prevents a race from occuring when
+    // |Shutdown()| is run at the same time on the IO thread. The race happens
+    // after |Shutdown()| has released |mutex_| and is iterating through the
+    // endpoints. It is possible for a new endpoint to be added while
+    // |Shutdown()| is iterating, which results in the new endpoint having a
+    // reference to this Channel. Since |ChannelEndpoint| holds a reference to a
+    // |Channel| by pointer (and not |scoped_refptr|), this |Channel| will
+    // likely be deleted after |Shutdown()|, causing a use-after-free when the
+    // endpoint later tries to send a message or even just close.  The invalid
+    // ID will be serialized and the receiving end will parse it in
+    // |DeserializeEndpoint()|, which handles invalid IDs (see comment in
+    // |DeserializeEndpoint()|).
+    if (is_shutting_down_) {
+      // The |ChannelEndpoint| is now in a half-created state. Where it may have
+      // a |ChannelEndpointClient|, but is not attached to a |Channel|. The
+      // endpoint needs to be shut down by calling
+      // |ChannelEndpoint::DetachFromChannel()|, but doing so inside this
+      // function can lead to a deadlock. Instead, record the endpoint in a list
+      // and let the racing call to |Shutdown()| take care of it.
+      aborted_endpoints_.push_back(endpoint);
+      return ChannelEndpointId();
+    }
 
     do {
       local_id = local_id_generator_.GetNext();
@@ -609,7 +668,7 @@ bool Channel::SendControlMessage(MessageInTransit::Subtype subtype,
       MessageInTransit::Type::CHANNEL, subtype, 0, nullptr));
   message->set_source_id(local_id);
   message->set_destination_id(remote_id);
-  return WriteMessage(message.Pass());
+  return WriteMessage(std::move(message));
 }
 
 }  // namespace system

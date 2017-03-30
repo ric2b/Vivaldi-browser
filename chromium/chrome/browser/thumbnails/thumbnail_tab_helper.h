@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_THUMBNAILS_THUMBNAIL_TAB_HELPER_H_
 #define CHROME_BROWSER_THUMBNAILS_THUMBNAIL_TAB_HELPER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -24,11 +24,6 @@ class ThumbnailTabHelper
       public content::WebContentsUserData<ThumbnailTabHelper> {
  public:
   ~ThumbnailTabHelper() override;
-
-  // Enables or disables the function of taking thumbnails.
-  // A disabled ThumbnailTabHelper generates no thumbnails although it still
-  // continues to receive the notifications from the web contents.
-  void set_enabled(bool enabled) { enabled_ = enabled; }
 
  private:
   explicit ThumbnailTabHelper(content::WebContents* contents);
@@ -52,8 +47,6 @@ class ThumbnailTabHelper
 
   // Indicates that the given widget has changed is visibility.
   void WidgetHidden(content::RenderWidgetHost* widget);
-
-  bool enabled_;
 
   content::NotificationRegistrar registrar_;
 

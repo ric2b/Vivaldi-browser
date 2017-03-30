@@ -5,9 +5,12 @@
 #ifndef MEDIA_CAST_SENDER_EXTERNAL_VIDEO_ENCODER_H_
 #define MEDIA_CAST_SENDER_EXTERNAL_VIDEO_ENCODER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/sender/size_adaptable_video_encoder_base.h"
 #include "media/cast/sender/video_encoder.h"
@@ -30,7 +33,7 @@ class ExternalVideoEncoder : public VideoEncoder {
       const scoped_refptr<CastEnvironment>& cast_environment,
       const VideoSenderConfig& video_config,
       const gfx::Size& frame_size,
-      uint32 first_frame_id,
+      uint32_t first_frame_id,
       const StatusChangeCallback& status_change_cb,
       const CreateVideoEncodeAcceleratorCallback& create_vea_cb,
       const CreateVideoEncodeMemoryCallback& create_video_encode_memory_cb);
@@ -44,7 +47,6 @@ class ExternalVideoEncoder : public VideoEncoder {
       const FrameEncodedCallback& frame_encoded_callback) final;
   void SetBitRate(int new_bit_rate) final;
   void GenerateKeyFrame() final;
-  void LatestFrameIdToReference(uint32 frame_id) final;
 
  private:
   class VEAClientImpl;
@@ -54,7 +56,7 @@ class ExternalVideoEncoder : public VideoEncoder {
   // |client_| holds a reference to the new VEAClientImpl.
   void OnCreateVideoEncodeAccelerator(
       const VideoSenderConfig& video_config,
-      uint32 first_frame_id,
+      uint32_t first_frame_id,
       const StatusChangeCallback& status_change_cb,
       scoped_refptr<base::SingleThreadTaskRunner> encoder_task_runner,
       scoped_ptr<media::VideoEncodeAccelerator> vea);
@@ -100,6 +102,61 @@ class SizeAdaptableExternalVideoEncoder : public SizeAdaptableVideoEncoderBase {
   const CreateVideoEncodeMemoryCallback create_video_encode_memory_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(SizeAdaptableExternalVideoEncoder);
+};
+
+// A utility class for examining the sequence of frames sent to an external
+// encoder, and returning an estimate of the what the software VP8 encoder would
+// have used for a quantizer value when encoding each frame.  The quantizer
+// value is related to the complexity of the content of the frame.
+class QuantizerEstimator {
+ public:
+  enum {
+    NO_RESULT = -1,
+    MIN_VP8_QUANTIZER = 4,
+    MAX_VP8_QUANTIZER = 63,
+  };
+
+  QuantizerEstimator();
+  ~QuantizerEstimator();
+
+  // Discard any state related to the processing of prior frames.
+  void Reset();
+
+  // Examine |frame| and estimate and return the quantizer value the software
+  // VP8 encoder would have used when encoding the frame, in the range
+  // [4.0,63.0].  If |frame| is not in planar YUV format, or its size is empty,
+  // this returns |NO_RESULT|.
+  double EstimateForKeyFrame(const VideoFrame& frame);
+  double EstimateForDeltaFrame(const VideoFrame& frame);
+
+ private:
+  enum {
+    // The percentage of each frame to sample.  This value is based on an
+    // analysis that showed sampling 10% of the rows of a frame generated
+    // reasonably accurate results.
+    FRAME_SAMPLING_PERCENT = 10,
+  };
+
+  // Returns true if the frame is in planar YUV format.
+  static bool CanExamineFrame(const VideoFrame& frame);
+
+  // Returns a value in the range [0,log2(num_buckets)], the Shannon Entropy
+  // based on the probabilities of values falling within each of the buckets of
+  // the given |histogram|.
+  static double ComputeEntropyFromHistogram(const int* histogram,
+                                            size_t num_buckets,
+                                            int num_samples);
+
+  // Map the |shannon_entropy| to its corresponding software VP8 quantizer.
+  static double ToQuantizerEstimate(double shannon_entropy);
+
+  // A cache of a subset of rows of pixels from the last frame examined.  This
+  // is used to compute the entropy of the difference between frames, which in
+  // turn is used to compute the entropy and quantizer.
+  scoped_ptr<uint8_t[]> last_frame_pixel_buffer_;
+  gfx::Size last_frame_size_;
+
+  DISALLOW_COPY_AND_ASSIGN(QuantizerEstimator);
 };
 
 }  // namespace cast

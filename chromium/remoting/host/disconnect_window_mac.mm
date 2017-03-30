@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -63,7 +64,7 @@ void DisconnectWindowMac::Start(
   // Create the window.
   base::Closure disconnect_callback =
       base::Bind(&ClientSessionControl::DisconnectSession,
-                 client_session_control);
+                 client_session_control, protocol::OK);
   std::string client_jid = client_session_control->client_jid();
   std::string username = client_jid.substr(0, client_jid.find('/'));
   window_controller_ =

@@ -66,7 +66,9 @@ def get_device_info(args, failures):
                      'android',
                      'buildbot',
                      'bb_device_status_check.py'),
-        '--json-output', tempfile_path])
+        '--json-output', tempfile_path,
+        '--blacklist-file', os.path.join(
+            args.paths['checkout'], 'out', 'bad_devices.json')])
 
     if rc:
       failures.append('bb_device_status_check')
@@ -78,7 +80,7 @@ def get_device_info(args, failures):
   results = {}
   results['devices'] = sorted(v['serial'] for v in device_info)
 
-  details = [v['build_detail'] for v in device_info]
+  details = [v['build_detail'] for v in device_info if not v['blacklisted']]
 
   def unique_build_details(index):
     return sorted(list(set([v.split(':')[index] for v in details])))
@@ -96,6 +98,10 @@ def get_device_info(args, failures):
       results[k] = 'MISMATCH'
       results['%s_list' % k] = v
       failures.append(k)
+
+  for v in device_info:
+    if v['blacklisted']:
+      failures.append('Device %s blacklisted' % v['serial'])
 
   return results
 

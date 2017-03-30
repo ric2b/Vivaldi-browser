@@ -4,7 +4,10 @@
 
 #include "remoting/host/native_messaging/native_messaging_reader.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -30,7 +33,7 @@ class NativeMessagingReaderTest : public testing::Test {
   void OnMessage(scoped_ptr<base::Value> message);
 
   // Writes a message (header+body) to the write-end of the pipe.
-  void WriteMessage(std::string message);
+  void WriteMessage(const std::string& message);
 
   // Writes some data to the write-end of the pipe.
   void WriteData(const char* data, int length);
@@ -48,14 +51,12 @@ class NativeMessagingReaderTest : public testing::Test {
   base::RunLoop run_loop_;
 };
 
-NativeMessagingReaderTest::NativeMessagingReaderTest() {
-}
-
+NativeMessagingReaderTest::NativeMessagingReaderTest() {}
 NativeMessagingReaderTest::~NativeMessagingReaderTest() {}
 
 void NativeMessagingReaderTest::SetUp() {
   ASSERT_TRUE(MakePipe(&read_file_, &write_file_));
-  reader_.reset(new NativeMessagingReader(read_file_.Pass()));
+  reader_.reset(new NativeMessagingReader(std::move(read_file_)));
 }
 
 void NativeMessagingReaderTest::Run() {
@@ -71,11 +72,11 @@ void NativeMessagingReaderTest::Run() {
 }
 
 void NativeMessagingReaderTest::OnMessage(scoped_ptr<base::Value> message) {
-  message_ = message.Pass();
+  message_ = std::move(message);
 }
 
-void NativeMessagingReaderTest::WriteMessage(std::string message) {
-  uint32 length = message.length();
+void NativeMessagingReaderTest::WriteMessage(const std::string& message) {
+  uint32_t length = message.length();
   WriteData(reinterpret_cast<char*>(&length), 4);
   WriteData(message.data(), length);
 }
@@ -97,7 +98,7 @@ TEST_F(NativeMessagingReaderTest, GoodMessage) {
 }
 
 TEST_F(NativeMessagingReaderTest, InvalidLength) {
-  uint32 length = 0xffffffff;
+  uint32_t length = 0xffffffff;
   WriteData(reinterpret_cast<char*>(&length), 4);
   Run();
   EXPECT_FALSE(message_);
@@ -116,14 +117,14 @@ TEST_F(NativeMessagingReaderTest, ShortHeader) {
 }
 
 TEST_F(NativeMessagingReaderTest, EmptyBody) {
-  uint32 length = 1;
+  uint32_t length = 1;
   WriteData(reinterpret_cast<char*>(&length), 4);
   Run();
   EXPECT_FALSE(message_);
 }
 
 TEST_F(NativeMessagingReaderTest, ShortBody) {
-  uint32 length = 2;
+  uint32_t length = 2;
   WriteData(reinterpret_cast<char*>(&length), 4);
 
   // Only write 1 byte, where the header indicates there should be 2 bytes.

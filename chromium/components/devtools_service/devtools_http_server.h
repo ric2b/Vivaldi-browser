@@ -5,10 +5,13 @@
 #ifndef COMPONENTS_DEVTOOLS_SERVICE_DEVTOOLS_HTTP_SERVER_H_
 #define COMPONENTS_DEVTOOLS_SERVICE_DEVTOOLS_HTTP_SERVER_H_
 
+#include <stdint.h>
+
 #include <set>
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/services/network/public/interfaces/http_connection.mojom.h"
 #include "mojo/services/network/public/interfaces/http_message.mojom.h"
 #include "mojo/services/network/public/interfaces/http_server.mojom.h"

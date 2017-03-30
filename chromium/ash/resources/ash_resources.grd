@@ -21,6 +21,7 @@
       <structure type="chrome_scaled_image" name="IDR_ASH_SHELF_LIST_INCOGNITO_BROWSER" file="common/shelf/window_switcher_icon_incognito.png" />
       <structure type="chrome_scaled_image" name="IDR_ASH_SHELF_OVERFLOW" file="common/shelf/shelf_overflow.png" />
       <structure type="chrome_scaled_image" name="IDR_ASH_SHELF_UNDERLINE_ACTIVE" file="common/shelf/shelf_underline_active.png" />
+      <structure type="chrome_scaled_image" name="IDR_ASH_SHELF_UNDERLINE_ATTENTION" file="common/shelf/shelf_underline_attention.png" />
       <structure type="chrome_scaled_image" name="IDR_ASH_SHELF_UNDERLINE_RUNNING" file="common/shelf/shelf_underline_running.png" />
       <structure type="chrome_scaled_image" name="IDR_ASH_SHELF_ICON_SETTINGS" file="common/shelf/settings_app_icon.png" />
       <structure type="chrome_scaled_image" name="IDR_ASH_SHELF_ICON_TASK_MANAGER" file="common/shelf/task_manager.png" />
@@ -178,27 +179,6 @@
 
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_VOLUME_LEVELS" file="cros/status/status_volume_dark.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_VOLUME_MUTE" file="cros/status/status_volume_mute.png" />
-
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_ADD_PROFILE" file="cros/status/status_add_profile.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_ADD_PROFILE_HOVER" file="cros/status/status_add_profile_hover.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_REMOVE_ACCOUNT" file="cros/status/status_remove_account.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_UBER_TRAY_REMOVE_ACCOUNT_HOVER" file="cros/status/status_remove_account_hover.png" />
-
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_BACKGROUND_H" file="common/window_control_background_hover.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_BACKGROUND_P" file="common/window_control_background_pressed.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_BACK" file="common/window_control_icon_back.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_CLOSE" file="common/window_control_icon_close.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_CLOSE_WHITE" file="common/window_control_icon_close_white.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_LEFT_SNAPPED" file="common/window_control_icon_left_snapped.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_LEFT_SNAPPED_WHITE" file="common/window_control_icon_left_snapped_white.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_MAXIMIZE" file="common/window_control_icon_maximize.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_MAXIMIZE_WHITE" file="common/window_control_icon_maximize_white.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_MINIMIZE" file="common/window_control_icon_minimize.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_MINIMIZE_WHITE" file="common/window_control_icon_minimize_white.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_RESTORE" file="common/window_control_icon_restore.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_RESTORE_WHITE" file="common/window_control_icon_restore_white.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_RIGHT_SNAPPED" file="common/window_control_icon_right_snapped.png" />
-      <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_CONTROL_ICON_RIGHT_SNAPPED_WHITE" file="common/window_control_icon_right_snapped_white.png" />
 
       <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_HEADER_SHADE_INACTIVE_BOTTOM" file="common/window_header_shade_bottom_inactive.png" />
       <structure type="chrome_scaled_image" name="IDR_AURA_WINDOW_HEADER_SHADE_INACTIVE_LEFT" file="common/window_header_shade_left_inactive.png" />

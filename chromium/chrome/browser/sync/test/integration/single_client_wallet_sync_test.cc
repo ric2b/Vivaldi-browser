@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/test/integration/autofill_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
@@ -19,6 +18,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "content/public/browser/notification_service.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/test/fake_server/fake_server_entity.h"
@@ -137,7 +137,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest, EnabledViaPreference) {
       syncer::AUTOFILL_WALLET_DATA));
   // TODO(pvalenzuela): Assert that the local root node for AUTOFILL_WALLET_DATA
   // exists.
-  ASSERT_FALSE(GetClient(0)->service()->GetActiveDataTypes().Has(
+  ASSERT_TRUE(GetClient(0)->service()->GetActiveDataTypes().Has(
       syncer::AUTOFILL_WALLET_METADATA));
 }
 
@@ -157,7 +157,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest,
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed";
   ASSERT_TRUE(GetClient(0)->service()->GetActiveDataTypes().Has(
       syncer::AUTOFILL_WALLET_DATA));
-  ASSERT_FALSE(GetClient(0)->service()->GetActiveDataTypes().Has(
+  ASSERT_TRUE(GetClient(0)->service()->GetActiveDataTypes().Has(
       syncer::AUTOFILL_WALLET_METADATA));
 }
 
@@ -185,7 +185,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest,
   ASSERT_FALSE(enabled_checker.TimedOut());
   ASSERT_TRUE(GetClient(0)->service()->GetActiveDataTypes().Has(
       syncer::AUTOFILL_WALLET_DATA));
-  ASSERT_FALSE(GetClient(0)->service()->GetActiveDataTypes().Has(
+  ASSERT_TRUE(GetClient(0)->service()->GetActiveDataTypes().Has(
       syncer::AUTOFILL_WALLET_METADATA));
 
   // Then disable the experiment.

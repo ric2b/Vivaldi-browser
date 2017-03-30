@@ -46,6 +46,10 @@ const wchar_t kApRegistryValue[] = L"ap";
 // The name of the value in kCleanupRegistryKey that tells the installer not to
 // delete extracted files.
 const wchar_t kCleanupRegistryValue[] = L"ChromeInstallerCleanup";
+// These values provide installer result codes to Omaha.
+const wchar_t kInstallerErrorRegistryValue[] = L"InstallerError";
+const wchar_t kInstallerExtraCode1RegistryValue[] = L"InstallerExtraCode1";
+const wchar_t kInstallerResultRegistryValue[] = L"InstallerResult";
 // The name of an app's Client State registry value that holds the path to its
 // uninstaller.
 const wchar_t kUninstallRegistryValue[] = L"UninstallString";
@@ -72,8 +76,5 @@ const wchar_t kClientStateKeyBase[] = L"Software\\Chromium";
 // The path to the key in which kCleanupRegistryValue is found.
 const wchar_t kCleanupRegistryKey[] = L"Software\\Chromium";
 #endif
-
-// One gigabyte is the biggest resource size that it can handle.
-const size_t kMaxResourceSize = 1024*1024*1024;
 
 }  // namespace mini_installer

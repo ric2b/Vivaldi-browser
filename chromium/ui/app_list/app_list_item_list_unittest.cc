@@ -4,6 +4,11 @@
 
 #include "ui/app_list/app_list_item_list.h"
 
+#include <stddef.h>
+
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -88,12 +93,12 @@ class AppListItemListTest : public testing::Test {
     else
       position = item_list_.item_at(nitems - 1)->position().CreateAfter();
     item->set_position(position);
-    return item.Pass();
+    return item;
   }
 
   AppListItem* CreateAndAddItem(const std::string& name) {
     scoped_ptr<AppListItem> item(CreateItem(name));
-    return item_list_.AddItem(item.Pass());
+    return item_list_.AddItem(std::move(item));
   }
 
   scoped_ptr<AppListItem> RemoveItem(const std::string& id) {
@@ -178,7 +183,7 @@ TEST_F(AppListItemListTest, RemoveItemAt) {
   EXPECT_TRUE(VerifyItemListOrdinals());
 
   scoped_ptr<AppListItem> item_removed = RemoveItemAt(1);
-  EXPECT_EQ(item_removed, item_1);
+  EXPECT_EQ(item_removed.get(), item_1);
   EXPECT_FALSE(FindItem(item_1->id()));
   EXPECT_EQ(item_list_.item_count(), 2u);
   EXPECT_EQ(observer_.items_removed(), 1u);
@@ -203,7 +208,7 @@ TEST_F(AppListItemListTest, RemoveItem) {
   EXPECT_EQ(index, 1u);
 
   scoped_ptr<AppListItem> item_removed = RemoveItem(item_1->id());
-  EXPECT_EQ(item_removed, item_1);
+  EXPECT_EQ(item_removed.get(), item_1);
   EXPECT_FALSE(FindItem(item_1->id()));
   EXPECT_EQ(item_list_.item_count(), 2u);
   EXPECT_EQ(observer_.items_removed(), 1u);

@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "ui/app_list/search_box_model_observer.h"
 #include "ui/app_list/speech_ui_model_observer.h"
 #include "ui/gfx/shadow_value.h"
@@ -79,6 +80,9 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
 
   // Moves focus to contents or SearchBox and unselects buttons.
   void ResetTabFocus(bool on_contents);
+
+  // Sets voice label for Back button depending on whether a folder is open.
+  void SetBackButtonLabel(bool folder);
 
   // Overridden from views::View:
   gfx::Size GetPreferredSize() const override;

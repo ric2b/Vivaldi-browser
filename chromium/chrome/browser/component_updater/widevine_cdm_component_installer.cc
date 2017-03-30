@@ -4,9 +4,11 @@
 
 #include "chrome/browser/component_updater/widevine_cdm_component_installer.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/base_paths.h"
@@ -24,14 +26,14 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/widevine_cdm_constants.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/default_component_installer.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/pepper_plugin_info.h"
-#include "media/cdm/ppapi/supported_cdm_versions.h"
+#include "media/cdm/supported_cdm_versions.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
 
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR. NOLINT
@@ -156,12 +158,11 @@ bool CheckForCompatibleVersion(const base::DictionaryValue& manifest,
   DLOG_IF(WARNING, versions_string.empty())
       << "Widevine CDM component manifest has empty " << version_name;
 
-  std::vector<std::string> versions;
-  base::SplitString(versions_string, kCdmValueDelimiter, &versions);
-
-  for (size_t i = 0; i < versions.size(); ++i) {
+  for (const base::StringPiece& ver_str : base::SplitStringPiece(
+           versions_string, std::string(1, kCdmValueDelimiter),
+           base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
     int version = 0;
-    if (base::StringToInt(versions[i], &version))
+    if (base::StringToInt(ver_str, &version))
       if (version_check_func(version))
         return true;
   }
@@ -331,7 +332,7 @@ void WidevineCdmComponentInstallerTraits::UpdateCdmAdapter(
       GetPlatformDirectory(cdm_install_dir)
           .AppendASCII(kWidevineCdmAdapterFileName);
 
-  const std::string chrome_version = chrome::VersionInfo().Version();
+  const std::string chrome_version = version_info::GetVersionNumber();
   DCHECK(!chrome_version.empty());
   std::string adapter_version;
   if (!base::ReadFileToString(adapter_version_path, &adapter_version) ||
@@ -373,7 +374,7 @@ void RegisterWidevineCdmComponent(ComponentUpdateService* cus) {
       new WidevineCdmComponentInstallerTraits);
   // |cus| will take ownership of |installer| during installer->Register(cus).
   DefaultComponentInstaller* installer =
-      new DefaultComponentInstaller(traits.Pass());
+      new DefaultComponentInstaller(std::move(traits));
   installer->Register(cus, base::Closure());
 #endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(WIDEVINE_CDM_IS_COMPONENT)
 }

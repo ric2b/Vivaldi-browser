@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/trace_event/trace_event.h"
 #include "skia/ext/event_tracer_impl.h"
 #include "third_party/skia/include/utils/SkEventTracer.h"
@@ -70,5 +72,6 @@ void
 void InitSkiaEventTracer() {
   // Initialize the binding to Skia's tracing events. Skia will
   // take ownership of and clean up the memory allocated here.
-  SkEventTracer::SetInstance(new skia::SkChromiumEventTracer());
+  if (!SkEventTracer::GetInstance())
+    SkEventTracer::SetInstance(new skia::SkChromiumEventTracer());
 }

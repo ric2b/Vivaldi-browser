@@ -29,7 +29,12 @@ class CSSChecker(object):
       return s[0] == s[1] == s[2] if len(s) == 3 else s[0:2] == s[2:4] == s[4:6]
 
     def _remove_all(s):
-      return _remove_grit(_remove_ats(_remove_comments(s)))
+      s = _remove_grit(s)
+      s = _remove_ats(s)
+      s = _remove_comments(s)
+      s = _remove_template_expressions(s)
+      s = _remove_mixins(s)
+      return s
 
     def _remove_ats(s):
       at_reg = re.compile(r"""
@@ -42,6 +47,12 @@ class CSSChecker(object):
 
     def _remove_comments(s):
       return re.sub(re.compile(r'/\*.*?\*/', re.DOTALL), '', s)
+
+    def _remove_mixins(s):
+      return re.sub(re.compile(r'--[\d\w-]+: {.*?};', re.DOTALL), '', s)
+
+    def _remove_template_expressions(s):
+      return re.sub(re.compile(r'\${[^}]*}', re.DOTALL), '', s)
 
     def _remove_grit(s):
       grit_reg = re.compile(r"""
@@ -63,6 +74,7 @@ class CSSChecker(object):
 
     def alphabetize_props(contents):
       errors = []
+      # TODO(dbeam): make this smart enough to detect issues in mixins.
       for rule in re.finditer(r'{(.*?)}', contents, re.DOTALL):
         semis = map(lambda t: t.strip(), rule.group(1).split(';'))[:-1]
         rules = filter(lambda r: ': ' in r, semis)
@@ -94,6 +106,8 @@ class CSSChecker(object):
       class_name = m.group(1)
       return class_name.lower() != class_name or '_' in class_name
 
+    end_mixin_reg = re.compile(r'\s*};\s*$')
+
     def close_brace_on_new_line(line):
       # Ignore single frames in a @keyframe, i.e. 0% { margin: 50px; }
       frame_reg = re.compile(r"""
@@ -104,7 +118,7 @@ class CSSChecker(object):
           """,
           re.VERBOSE)
       return ('}' in line and re.search(r'[^ }]', line) and
-              not frame_reg.match(line))
+              not frame_reg.match(line) and not end_mixin_reg.match(line))
 
     def colons_have_space_after(line):
       colon_space_reg = re.compile(r"""
@@ -157,11 +171,11 @@ class CSSChecker(object):
     def one_rule_per_line(line):
       one_rule_reg = re.compile(r"""
           [\w-](?<!data):  # a rule: but no data URIs
-          (?!//)[^;]+;     # value; ignoring colons in protocols://
+          (?!//)[^;]+;     # value; ignoring colons in protocols:// and };
           \s*[^ }]\s*      # any non-space after the end colon
           """,
           re.VERBOSE)
-      return one_rule_reg.search(line)
+      return one_rule_reg.search(line) and not end_mixin_reg.match(line)
 
     def pseudo_elements_double_colon(contents):
       pseudo_elements = ['after',
@@ -394,12 +408,5 @@ class CSSChecker(object):
       if file_errors:
         results.append(self.output_api.PresubmitPromptWarning(
             '%s:\n%s' % (f[0], '\n\n'.join(file_errors))))
-
-    if results:
-      # Add your name if you're here often mucking around in the code.
-      authors = ['dbeam@chromium.org']
-      results.append(self.output_api.PresubmitNotifyResult(
-          'Was the CSS checker useful? Send feedback or hate mail to %s.' %
-          ', '.join(authors)))
 
     return results

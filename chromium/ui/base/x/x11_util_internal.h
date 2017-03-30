@@ -18,6 +18,7 @@ extern "C" {
 #include <X11/Xlib.h>
 }
 
+#include "build/build_config.h"
 #include "ui/base/ui_base_export.h"
 
 namespace ui {
@@ -43,6 +44,15 @@ UI_BASE_EXPORT void SetX11ErrorHandlers(XErrorHandler error_handler,
 // is to post a task in the error handler to call this function.
 UI_BASE_EXPORT void LogErrorEventDescription(Display* dpy,
                                              const XErrorEvent& error_event);
+
+// --------------------------------------------------------------------------
+// Selects a visual with a preference for alpha support on compositing window
+// managers. The caller must compare depth to 32 to know if the returned visual
+// supports transparency. NULL parameters are allowed to install or query the
+// cached visual and depth.
+#if !defined(OS_CHROMEOS)
+UI_BASE_EXPORT void ChooseVisualForWindow(Visual** visual, int* depth);
+#endif
 
 }  // namespace ui
 

@@ -47,11 +47,6 @@ void SaveStringPreferenceForced(const char* pref_name,
   prefs->CommitPendingWrite();
 }
 
-bool IsWebViewDisabledCmdLine() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kDisableWebviewSigninFlow);
-}
-
 }  // namespace
 
 namespace chromeos {
@@ -63,8 +58,6 @@ void StartupUtils::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kDeviceRegistered, -1);
   registry->RegisterBooleanPref(prefs::kEnrollmentRecoveryRequired, false);
   registry->RegisterStringPref(prefs::kInitialLocale, "en-US");
-  registry->RegisterBooleanPref(prefs::kWebviewSigninDisabled, false);
-  registry->RegisterBooleanPref(prefs::kNewLoginUIPopup, false);
 }
 
 // static
@@ -94,6 +87,7 @@ void StartupUtils::MarkOobeCompleted() {
   SaveBoolPreferenceForced(prefs::kEnrollmentRecoveryRequired, false);
 }
 
+// static
 void StartupUtils::SaveOobePendingScreen(const std::string& screen) {
   SaveStringPreferenceForced(prefs::kOobeScreenPending, screen);
 }
@@ -115,13 +109,22 @@ static base::FilePath GetOobeCompleteFlagPath() {
   }
 }
 
+// static
+base::TimeDelta StartupUtils::GetTimeSinceOobeFlagFileCreation() {
+  const base::FilePath oobe_complete_flag_path = GetOobeCompleteFlagPath();
+  base::File::Info file_info;
+  if (base::GetFileInfo(oobe_complete_flag_path, &file_info))
+    return base::Time::Now() - file_info.creation_time;
+  return base::TimeDelta();
+}
+
 static void CreateOobeCompleteFlagFile() {
   // Create flag file for boot-time init scripts.
-  base::FilePath oobe_complete_path = GetOobeCompleteFlagPath();
-  if (!base::PathExists(oobe_complete_path)) {
-    FILE* oobe_flag_file = base::OpenFile(oobe_complete_path, "w+b");
+  const base::FilePath oobe_complete_flag_path = GetOobeCompleteFlagPath();
+  if (!base::PathExists(oobe_complete_flag_path)) {
+    FILE* oobe_flag_file = base::OpenFile(oobe_complete_flag_path, "w+b");
     if (oobe_flag_file == NULL)
-      DLOG(WARNING) << oobe_complete_path.value() << " doesn't exist.";
+      DLOG(WARNING) << oobe_complete_flag_path.value() << " doesn't exist.";
     else
       base::CloseFile(oobe_flag_file);
   }
@@ -144,8 +147,8 @@ bool StartupUtils::IsDeviceRegistered() {
     // Pref is not set. For compatibility check flag file. It causes blocking
     // IO on UI thread. But it's required for update from old versions.
     base::ThreadRestrictions::ScopedAllowIO allow_io;
-    base::FilePath oobe_complete_flag_file_path = GetOobeCompleteFlagPath();
-    bool file_exists = base::PathExists(oobe_complete_flag_file_path);
+    const base::FilePath oobe_complete_flag_path = GetOobeCompleteFlagPath();
+    bool file_exists = base::PathExists(oobe_complete_flag_path);
     SaveIntegerPreferenceForced(prefs::kDeviceRegistered, file_exists ? 1 : 0);
     return file_exists;
   }
@@ -184,29 +187,6 @@ std::string StartupUtils::GetInitialLocale() {
 
 // static
 bool StartupUtils::IsWebviewSigninEnabled() {
-  const policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
-      g_browser_process->platform_part()
-          ->browser_policy_connector_chromeos()
-          ->GetDeviceCloudPolicyManager();
-
-  const bool is_shark =
-      policy_manager ? policy_manager->IsSharkRequisition() : false;
-
-  const bool is_webview_disabled_pref =
-      g_browser_process->local_state()->GetBoolean(
-          prefs::kWebviewSigninDisabled);
-
-  // TODO(achuith): Remove is_shark when crbug.com/471744 is resolved.
-  return !is_shark && !IsWebViewDisabledCmdLine() && !is_webview_disabled_pref;
-}
-
-// static
-bool StartupUtils::EnableWebviewSignin(bool is_enabled) {
-  if (is_enabled && IsWebViewDisabledCmdLine())
-    return false;
-
-  g_browser_process->local_state()->SetBoolean(prefs::kWebviewSigninDisabled,
-                                               !is_enabled);
   return true;
 }
 

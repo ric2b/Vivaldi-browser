@@ -10,9 +10,11 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/pickle.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
@@ -20,9 +22,14 @@
 #include "sql/connection.h"
 #include "sql/meta_table.h"
 
+#if defined(OS_IOS)
+#include "base/gtest_prod_util.h"
+#endif
+
 namespace password_manager {
 
 extern const int kCurrentVersionNumber;
+extern const int kCompatibleVersionNumber;
 
 // Interface to the database storage of login information, intended as a helper
 // for PasswordStore on platforms that need internal storage of some or all of
@@ -109,11 +116,24 @@ class LoginDatabase {
   // whether further use of this login database will succeed is unspecified.
   bool DeleteAndRecreateDatabaseFile();
 
+  // Returns the encrypted password value for the specified |form|.  Returns an
+  // empty string if the row for this |form| is not found.
+  std::string GetEncryptedPassword(const autofill::PasswordForm& form) const;
+
   StatisticsTable& stats_table() { return stats_table_; }
 
   void set_clear_password_values(bool val) { clear_password_values_ = val; }
 
  private:
+#if defined(OS_IOS)
+  friend class LoginDatabaseIOSTest;
+  FRIEND_TEST_ALL_PREFIXES(LoginDatabaseIOSTest, KeychainStorage);
+
+  // On iOS, removes the keychain item that is used to store the
+  // encrypted password for the supplied |form|.
+  void DeleteEncryptedPassword(const autofill::PasswordForm& form);
+#endif
+
   // Result values for encryption/decryption actions.
   enum EncryptionResult {
     // Success.

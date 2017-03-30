@@ -7,6 +7,7 @@
 #include <bitset>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 
 namespace {
@@ -157,7 +158,9 @@ bool HouseNumberParser::Parse(
     if (base::IsAsciiAlpha(*it_)) {
       // Handle special case 'one'.
       if (result_chars_ == 0) {
-        if (it_ + 3 <= end_ && base::LowerCaseEqualsASCII(it_, it_ + 3, "one"))
+        if (it_ + 3 <= end_ &&
+            base::LowerCaseEqualsASCII(base::StringPiece16(it_, it_ + 3),
+                                       "one"))
           AcceptChars(3);
         else
           RestartOnNextDelimiter();

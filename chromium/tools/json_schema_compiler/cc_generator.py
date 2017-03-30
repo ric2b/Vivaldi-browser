@@ -43,12 +43,12 @@ class _Generator(object):
       .Append()
       .Append(self._util_cc_helper.GetIncludePath())
       .Append('#include "base/logging.h"')
-      .Append('#include "base/stl_util.h"')
       .Append('#include "base/strings/string_number_conversions.h"')
       .Append('#include "base/strings/utf_string_conversions.h"')
       .Append('#include "%s/%s.h"' %
               (self._namespace.source_file_dir, self._namespace.short_filename))
       .Append('#include <set>')
+      .Append('#include <utility>')
       .Cblock(self._type_helper.GenerateIncludes(include_soft=True))
       .Append()
       .Append('using base::UTF8ToUTF16;')
@@ -332,7 +332,7 @@ class _Generator(object):
       .Append('  if (!Populate(%s))' % self._GenerateArgs(
           ('value', 'out.get()')))
       .Append('    return scoped_ptr<%s>();' % classname)
-      .Append('  return out.Pass();')
+      .Append('  return out;')
       .Append('}')
     )
     return c
@@ -408,7 +408,7 @@ class _Generator(object):
         )
 
     return (c.Append()
-             .Append('return value.Pass();')
+             .Append('return value;')
            .Eblock('}'))
 
   def _GenerateChoiceTypeToValue(self, cpp_namespace, type_):
@@ -434,7 +434,7 @@ class _Generator(object):
       )
     (c.Append('DCHECK(result) << "Must set at least one choice for %s";' %
                   type_.unix_name)
-      .Append('return result.Pass();')
+      .Append('return result;')
       .Eblock('}')
     )
     return c
@@ -557,12 +557,10 @@ class _Generator(object):
     elif underlying_type.property_type == PropertyType.BINARY:
       if is_ptr:
         vardot = var + '->'
-        ref = var + '.get()'
       else:
         vardot = var + '.'
-        ref = '&' + var
-      return ('base::BinaryValue::CreateWithCopiedBuffer(vector_as_array(%s),'
-              ' %ssize())' % (ref, vardot))
+      return ('base::BinaryValue::CreateWithCopiedBuffer(%sdata(),'
+              ' %ssize())' % (vardot, vardot))
     elif underlying_type.property_type == PropertyType.ARRAY:
       return '%s.release()' % self._util_cc_helper.CreateValueFromArray(
           var,
@@ -648,7 +646,7 @@ class _Generator(object):
           .Eblock('}'))
       c.Substitute({'value_var': value_var, 'i': i, 'key': param.name})
     (c.Append()
-      .Append('return params.Pass();')
+      .Append('return params;')
       .Eblock('}')
       .Append()
     )
@@ -737,7 +735,7 @@ class _Generator(object):
         )
         (c.Append('}')
           .Append('else')
-          .Append('  %(dst_var)s = temp.Pass();')
+         .Append('  %(dst_var)s = std::move(temp);')
           .Eblock('}')
         )
       else:
@@ -798,7 +796,7 @@ class _Generator(object):
           .Append('if (!%%(cpp_type)s::Populate(%s))' % self._GenerateArgs(
             ('*%(src_var)s', 'temp.get()')))
           .Append('  return %(failure_value)s;')
-          .Append('%(dst_var)s = temp.Pass();')
+          .Append('%(dst_var)s = std::move(temp);')
         )
       else:
         (c.Append('if (!%%(cpp_type)s::Populate(%s))' % self._GenerateArgs(
@@ -1016,7 +1014,7 @@ class _Generator(object):
                                          param.name,
                                          param.type_,
                                          param.unix_name))
-    c.Append('return create_results.Pass();')
+    c.Append('return create_results;')
     c.Eblock('}')
     c.Substitute({
         'function_scope': ('%s::' % function_scope) if function_scope else '',

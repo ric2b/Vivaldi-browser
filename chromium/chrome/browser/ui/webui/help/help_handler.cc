@@ -4,53 +4,55 @@
 
 #include "chrome/browser/ui/webui/help/help_handler.h"
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/obsolete_system/obsolete_system.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_content_client.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/user_agent.h"
+#include "grit/components_chromium_strings.h"
+#include "grit/components_google_chrome_strings.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "v8/include/v8.h"
-
-#if defined(OS_MACOSX)
-#include "chrome/browser/mac/obsolete_system.h"
-#endif
 
 #if defined(OS_CHROMEOS)
 #include "base/files/file_util_proxy.h"
 #include "base/i18n/time_formatting.h"
 #include "base/prefs/pref_service.h"
 #include "base/sys_info.h"
-#include "base/task_runner_util.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -80,6 +82,9 @@ const char kRegulatoryLabelsDirectory[] = "regulatory_labels";
 // File names of the image file and the file containing alt text for the label.
 const char kRegulatoryLabelImageFilename[] = "label.png";
 const char kRegulatoryLabelTextFilename[] = "label.txt";
+
+// Default region code to use if there's no label for the VPD region code.
+const char kDefaultRegionCode[] = "us";
 
 struct RegulatoryLabel {
   const std::string label_text;
@@ -139,26 +144,45 @@ bool CanChangeChannel(Profile* profile) {
   return false;
 }
 
+// Returns the path of the regulatory labels directory for a given region, if
+// found. Must be called from the blocking pool.
+base::FilePath GetRegulatoryLabelDirForRegion(const std::string& region) {
+  DCHECK(BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
+
+  // Generate the path under the asset dir or URL host to the regulatory files
+  // for the region, e.g., "regulatory_labels/us/".
+  const base::FilePath region_path =
+      base::FilePath(kRegulatoryLabelsDirectory).AppendASCII(region);
+
+  // Check for file existence starting in /usr/share/chromeos-assets/, e.g.,
+  // "/usr/share/chromeos-assets/regulatory_labels/us/label.png".
+  const base::FilePath asset_dir(chrome::kChromeOSAssetPath);
+  if (base::PathExists(asset_dir.Append(region_path)
+                           .AppendASCII(kRegulatoryLabelImageFilename))) {
+    return region_path;
+  }
+
+  return base::FilePath();
+}
+
 // Finds the directory for the regulatory label, using the VPD region code.
-// Must be called from the blocking pool.
+// Also tries "us" as a fallback region. Must be called from the blocking pool.
 base::FilePath FindRegulatoryLabelDir() {
   DCHECK(BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
 
   std::string region;
+  base::FilePath region_path;
+  // Use the VPD region code to find the label dir.
   if (chromeos::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
-          "region", &region)) {
-    base::FilePath region_path =
-        base::FilePath(kRegulatoryLabelsDirectory).AppendASCII(region);
-
-    const base::FilePath asset_dir(
-        FILE_PATH_LITERAL(chrome::kChromeOSAssetPath));
-    if (base::PathExists(asset_dir.Append(region_path)
-                             .AppendASCII(kRegulatoryLabelImageFilename))) {
-      return region_path;
-    }
+          "region", &region) && !region.empty()) {
+    region_path = GetRegulatoryLabelDirForRegion(region);
   }
 
-  return base::FilePath();
+  // Try the fallback region code if no directory was found.
+  if (region_path.empty() && region != kDefaultRegionCode)
+    region_path = GetRegulatoryLabelDirForRegion(kDefaultRegionCode);
+
+  return region_path;
 }
 
 // Reads the file containing the regulatory label text, if found, relative to
@@ -193,71 +217,73 @@ void HelpHandler::GetLocalizedValues(base::DictionaryValue* localized_strings) {
   };
 
   static L10nResources resources[] = {
-    { "aboutTitle", IDS_ABOUT_TITLE },
+    {"aboutTitle", IDS_ABOUT_TITLE},
 #if defined(OS_CHROMEOS)
-    { "aboutProductTitle", IDS_PRODUCT_OS_NAME },
+    {"aboutProductTitle", IDS_PRODUCT_OS_NAME},
 #else
-    { "aboutProductTitle", IDS_PRODUCT_NAME },
+    {"aboutProductTitle", IDS_PRODUCT_NAME},
 #endif
-    { "aboutProductDescription", IDS_ABOUT_PRODUCT_DESCRIPTION },
-    { "relaunch", IDS_RELAUNCH_BUTTON },
+    {"aboutProductDescription", IDS_ABOUT_PRODUCT_DESCRIPTION},
+    {"relaunch", IDS_RELAUNCH_BUTTON},
 #if defined(OS_CHROMEOS)
-    { "relaunchAndPowerwash", IDS_RELAUNCH_AND_POWERWASH_BUTTON },
+    {"relaunchAndPowerwash", IDS_RELAUNCH_AND_POWERWASH_BUTTON},
 #endif
-    { "productName", IDS_PRODUCT_NAME },
-    { "updateCheckStarted", IDS_UPGRADE_CHECK_STARTED },
-    { "upToDate", IDS_UPGRADE_UP_TO_DATE },
-    { "updating", IDS_UPGRADE_UPDATING },
+    {"productName", IDS_PRODUCT_NAME},
+    {"updateCheckStarted", IDS_UPGRADE_CHECK_STARTED},
+    {"upToDate", IDS_UPGRADE_UP_TO_DATE},
+    {"updating", IDS_UPGRADE_UPDATING},
 #if defined(OS_CHROMEOS)
-    { "updateButton", IDS_UPGRADE_BUTTON },
-    { "updatingChannelSwitch", IDS_UPGRADE_UPDATING_CHANNEL_SWITCH },
+    {"updateButton", IDS_UPGRADE_BUTTON},
+    {"updatingChannelSwitch", IDS_UPGRADE_UPDATING_CHANNEL_SWITCH},
 #endif
-    { "updateAlmostDone", IDS_UPGRADE_SUCCESSFUL_RELAUNCH },
+    {"updateAlmostDone", IDS_UPGRADE_SUCCESSFUL_RELAUNCH},
 #if defined(OS_CHROMEOS)
-    { "successfulChannelSwitch", IDS_UPGRADE_SUCCESSFUL_CHANNEL_SWITCH },
+    {"successfulChannelSwitch", IDS_UPGRADE_SUCCESSFUL_CHANNEL_SWITCH},
 #endif
-    { "getHelpWithChrome", IDS_GET_HELP_USING_CHROME },
-    { "reportAnIssue", IDS_REPORT_AN_ISSUE },
+    {"getHelpWithChrome", IDS_GET_HELP_USING_CHROME},
+    {"reportAnIssue", IDS_REPORT_AN_ISSUE},
 #if defined(OS_CHROMEOS)
-    { "platform", IDS_PLATFORM_LABEL },
-    { "firmware", IDS_ABOUT_PAGE_FIRMWARE },
-    { "showMoreInfo", IDS_SHOW_MORE_INFO },
-    { "hideMoreInfo", IDS_HIDE_MORE_INFO },
-    { "channel", IDS_ABOUT_PAGE_CHANNEL },
-    { "stable", IDS_ABOUT_PAGE_CHANNEL_STABLE },
-    { "beta", IDS_ABOUT_PAGE_CHANNEL_BETA },
-    { "dev", IDS_ABOUT_PAGE_CHANNEL_DEVELOPMENT },
-    { "channel-changed", IDS_ABOUT_PAGE_CHANNEL_CHANGED },
-    { "currentChannelStable", IDS_ABOUT_PAGE_CURRENT_CHANNEL_STABLE },
-    { "currentChannelBeta", IDS_ABOUT_PAGE_CURRENT_CHANNEL_BETA },
-    { "currentChannelDev", IDS_ABOUT_PAGE_CURRENT_CHANNEL_DEV },
-    { "currentChannel", IDS_ABOUT_PAGE_CURRENT_CHANNEL },
-    { "channelChangeButton", IDS_ABOUT_PAGE_CHANNEL_CHANGE_BUTTON },
-    { "channelChangeDisallowedMessage",
-      IDS_ABOUT_PAGE_CHANNEL_CHANGE_DISALLOWED_MESSAGE },
-    { "channelChangePageTitle", IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_TITLE },
-    { "channelChangePagePowerwashTitle",
-      IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_POWERWASH_TITLE },
-    { "channelChangePagePowerwashMessage",
-      IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_POWERWASH_MESSAGE },
-    { "channelChangePageDelayedChangeTitle",
-      IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_DELAYED_CHANGE_TITLE },
-    { "channelChangePageUnstableTitle",
-      IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_UNSTABLE_TITLE },
-    { "channelChangePagePowerwashButton",
-      IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_POWERWASH_BUTTON },
-    { "channelChangePageChangeButton",
-      IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_CHANGE_BUTTON },
-    { "channelChangePageCancelButton",
-      IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_CANCEL_BUTTON },
-    { "webkit", IDS_WEBKIT },
-    { "userAgent", IDS_ABOUT_VERSION_USER_AGENT },
-    { "commandLine", IDS_ABOUT_VERSION_COMMAND_LINE },
-    { "buildDate", IDS_ABOUT_VERSION_BUILD_DATE },
+    {"platform", IDS_PLATFORM_LABEL},
+    {"firmware", IDS_ABOUT_PAGE_FIRMWARE},
+    {"showMoreInfo", IDS_SHOW_MORE_INFO},
+    {"hideMoreInfo", IDS_HIDE_MORE_INFO},
+    {"channel", IDS_ABOUT_PAGE_CHANNEL},
+    {"stable", IDS_ABOUT_PAGE_CHANNEL_STABLE},
+    {"beta", IDS_ABOUT_PAGE_CHANNEL_BETA},
+    {"dev", IDS_ABOUT_PAGE_CHANNEL_DEVELOPMENT},
+    {"channel-changed", IDS_ABOUT_PAGE_CHANNEL_CHANGED},
+    {"currentChannelStable", IDS_ABOUT_PAGE_CURRENT_CHANNEL_STABLE},
+    {"currentChannelBeta", IDS_ABOUT_PAGE_CURRENT_CHANNEL_BETA},
+    {"currentChannelDev", IDS_ABOUT_PAGE_CURRENT_CHANNEL_DEV},
+    {"currentChannel", IDS_ABOUT_PAGE_CURRENT_CHANNEL},
+    {"channelChangeButton", IDS_ABOUT_PAGE_CHANNEL_CHANGE_BUTTON},
+    {"channelChangeDisallowedMessage",
+     IDS_ABOUT_PAGE_CHANNEL_CHANGE_DISALLOWED_MESSAGE},
+    {"channelChangePageTitle", IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_TITLE},
+    {"channelChangePagePowerwashTitle",
+     IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_POWERWASH_TITLE},
+    {"channelChangePagePowerwashMessage",
+     IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_POWERWASH_MESSAGE},
+    {"channelChangePageDelayedChangeTitle",
+     IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_DELAYED_CHANGE_TITLE},
+    {"channelChangePageUnstableTitle",
+     IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_UNSTABLE_TITLE},
+    {"channelChangePagePowerwashButton",
+     IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_POWERWASH_BUTTON},
+    {"channelChangePageChangeButton",
+     IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_CHANGE_BUTTON},
+    {"channelChangePageCancelButton",
+     IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_CANCEL_BUTTON},
+    {"webkit", IDS_WEBKIT},
+    {"userAgent", IDS_VERSION_UI_USER_AGENT},
+    {"commandLine", IDS_VERSION_UI_COMMAND_LINE},
+    {"buildDate", IDS_VERSION_UI_BUILD_DATE},
+#endif
+#if defined(OS_MACOSX) || defined(OS_WIN)
+    {"learnMore", IDS_LEARN_MORE},
 #endif
 #if defined(OS_MACOSX)
-    { "promote", IDS_ABOUT_CHROME_PROMOTE_UPDATER },
-    { "learnMore", IDS_LEARN_MORE },
+    {"promote", IDS_ABOUT_CHROME_PROMOTE_UPDATER},
 #endif
   };
 
@@ -266,14 +292,10 @@ void HelpHandler::GetLocalizedValues(base::DictionaryValue* localized_strings) {
                                  l10n_util::GetStringUTF16(resources[i].ids));
   }
 
-#if defined(OS_MACOSX)
-  localized_strings->SetString(
-      "updateObsoleteSystem",
-      ObsoleteSystemMac::LocalizedObsoleteSystemString());
-  localized_strings->SetString(
-      "updateObsoleteSystemURL",
-      chrome::kMac32BitDeprecationURL);
-#endif
+  localized_strings->SetString("updateObsoleteSystem",
+                               ObsoleteSystem::LocalizedObsoleteString());
+  localized_strings->SetString("updateObsoleteSystemURL",
+                               ObsoleteSystem::GetLinkURL());
 
   localized_strings->SetString(
       "browserVersion",
@@ -288,8 +310,7 @@ void HelpHandler::GetLocalizedValues(base::DictionaryValue* localized_strings) {
                                   base::IntToString16(exploded_time.year)));
 
   base::string16 license = l10n_util::GetStringFUTF16(
-      IDS_ABOUT_VERSION_LICENSE,
-      base::ASCIIToUTF16(chrome::kChromiumProjectURL),
+      IDS_VERSION_UI_LICENSE, base::ASCIIToUTF16(chrome::kChromiumProjectURL),
       base::ASCIIToUTF16(chrome::kChromeUICreditsURL));
   localized_strings->SetString("productLicense", license);
 
@@ -382,11 +403,9 @@ void HelpHandler::Observe(int type, const content::NotificationSource& source,
 
 // static
 base::string16 HelpHandler::BuildBrowserVersionString() {
-  chrome::VersionInfo version_info;
+  std::string version = chrome::GetVivaldiVersionString();
 
-  std::string version = version_info.VivaldiVersion();
-
-  std::string modifier = chrome::VersionInfo::GetVersionStringModifier();
+  std::string modifier = chrome::GetChannelString();
   if (!modifier.empty())
     version += " " + modifier;
 
@@ -431,16 +450,13 @@ void HelpHandler::OnPageLoaded(const base::ListValue* args) {
   RequestUpdate(NULL);
 #endif
 
-#if defined(OS_MACOSX)
   web_ui()->CallJavascriptFunction(
       "help.HelpPage.setObsoleteSystem",
-      base::FundamentalValue(ObsoleteSystemMac::Is32BitObsoleteNowOrSoon() &&
-                             ObsoleteSystemMac::Has32BitOnlyCPU()));
+      base::FundamentalValue(ObsoleteSystem::IsObsoleteNowOrSoon()));
   web_ui()->CallJavascriptFunction(
       "help.HelpPage.setObsoleteSystemEndOfTheLine",
-      base::FundamentalValue(ObsoleteSystemMac::Is32BitObsoleteNowOrSoon() &&
-                             ObsoleteSystemMac::Is32BitEndOfTheLine()));
-#endif
+      base::FundamentalValue(ObsoleteSystem::IsObsoleteNowOrSoon() &&
+                             ObsoleteSystem::IsEndOfTheLine()));
 
 #if defined(OS_CHROMEOS)
   web_ui()->CallJavascriptFunction(
@@ -568,6 +584,9 @@ void HelpHandler::SetUpdateStatus(VersionUpdater::Status status,
   case VersionUpdater::DISABLED:
     status_str = "disabled";
     break;
+  case VersionUpdater::DISABLED_BY_ADMIN:
+    status_str = "disabled_by_admin";
+    break;
   }
 
   web_ui()->CallJavascriptFunction("help.HelpPage.setUpdateStatus",
@@ -669,4 +688,4 @@ void HelpHandler::OnRegulatoryLabelTextRead(const std::string& text) {
       base::StringValue(base::CollapseWhitespaceASCII(text, true)));
 }
 
-#endif // defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS)

@@ -7,10 +7,9 @@ package org.chromium.chrome.browser.enhancedbookmarks;
 import android.content.Context;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkItem;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.enhanced_bookmarks.EnhancedBookmarksModel;
-import org.chromium.chrome.browser.enhanced_bookmarks.EnhancedBookmarksModel.EnhancedBookmarkDeleteObserver;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkItem;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkModelObserver;
+import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarksModel.EnhancedBookmarkDeleteObserver;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 
@@ -47,13 +46,13 @@ public class EnhancedBookmarkUndoController extends BookmarkModelObserver implem
      */
     public void destroy() {
         mBookmarksModel.removeDeleteObserver(this);
-        mSnackbarManager.dismissSnackbar(false);
+        mSnackbarManager.dismissSnackbars(this);
     }
 
     @Override
     public void onAction(Object actionData) {
         mBookmarksModel.undo();
-        mSnackbarManager.dismissSnackbar(false);
+        mSnackbarManager.dismissSnackbars(this);
     }
 
     @Override
@@ -67,8 +66,7 @@ public class EnhancedBookmarkUndoController extends BookmarkModelObserver implem
     // Overriding BookmarkModelObserver
     @Override
     public void bookmarkModelChanged() {
-        // TODO(danduong): dismiss snackbar only when needed
-        mSnackbarManager.dismissSnackbar(false);
+        mSnackbarManager.dismissSnackbars(this);
     }
 
     @Override

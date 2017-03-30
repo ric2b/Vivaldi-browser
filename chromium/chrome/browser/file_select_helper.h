@@ -10,12 +10,20 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/file_chooser_params.h"
 #include "net/base/directory_lister.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+
+#if defined(FULL_SAFE_BROWSING)
+#include "chrome/browser/safe_browsing/unverified_download_policy.h"
+#endif
 
 class Profile;
 
@@ -32,12 +40,17 @@ struct SelectedFileInfo;
 // This class handles file-selection requests coming from WebUI elements
 // (via the extensions::ExtensionHost class). It implements both the
 // initialisation and listener functions for file-selection dialogs.
-class FileSelectHelper : public base::RefCountedThreadSafe<FileSelectHelper>,
+//
+// Since FileSelectHelper has-a NotificationRegistrar, it needs to live on and
+// be destroyed on the UI thread. References to FileSelectHelper may be passed
+// on to other threads.
+class FileSelectHelper : public base::RefCountedThreadSafe<
+                             FileSelectHelper,
+                             content::BrowserThread::DeleteOnUIThread>,
                          public ui::SelectFileDialog::Listener,
                          public content::WebContentsObserver,
                          public content::NotificationObserver {
  public:
-
   // Show the file chooser dialog.
   static void RunFileChooser(content::WebContents* tab,
                              const content::FileChooserParams& params);
@@ -49,8 +62,13 @@ class FileSelectHelper : public base::RefCountedThreadSafe<FileSelectHelper>,
 
  private:
   friend class base::RefCountedThreadSafe<FileSelectHelper>;
+  friend class base::DeleteHelper<FileSelectHelper>;
+  friend struct content::BrowserThread::DeleteOnThread<
+      content::BrowserThread::UI>;
+
   FRIEND_TEST_ALL_PREFIXES(FileSelectHelperTest, IsAcceptTypeValid);
   FRIEND_TEST_ALL_PREFIXES(FileSelectHelperTest, ZipPackage);
+  FRIEND_TEST_ALL_PREFIXES(FileSelectHelperTest, GetSanitizedFileName);
   explicit FileSelectHelper(Profile* profile);
   ~FileSelectHelper() override;
 
@@ -77,11 +95,18 @@ class FileSelectHelper : public base::RefCountedThreadSafe<FileSelectHelper>,
 
   void RunFileChooser(content::RenderViewHost* render_view_host,
                       content::WebContents* web_contents,
-                      const content::FileChooserParams& params);
-  void RunFileChooserOnFileThread(
-      const content::FileChooserParams& params);
-  void RunFileChooserOnUIThread(
-      const content::FileChooserParams& params);
+                      scoped_ptr<content::FileChooserParams> params);
+  void GetFileTypesOnFileThread(scoped_ptr<content::FileChooserParams> params);
+  void GetSanitizedFilenameOnUIThread(
+      scoped_ptr<content::FileChooserParams> params);
+#if defined(FULL_SAFE_BROWSING)
+  void ApplyUnverifiedDownloadPolicy(
+      const base::FilePath& default_path,
+      scoped_ptr<content::FileChooserParams> params,
+      safe_browsing::UnverifiedDownloadPolicy policy);
+#endif
+  void RunFileChooserOnUIThread(const base::FilePath& default_path,
+                                scoped_ptr<content::FileChooserParams> params);
 
   // Cleans up and releases this instance. This must be called after the last
   // callback is received from the file chooser dialog.
@@ -176,6 +201,22 @@ class FileSelectHelper : public base::RefCountedThreadSafe<FileSelectHelper>,
   // Check the accept type is valid. It is expected to be all lower case with
   // no whitespace.
   static bool IsAcceptTypeValid(const std::string& accept_type);
+
+  // Get a sanitized filename suitable for use as a default filename. The
+  // suggested filename coming over the IPC may contain invalid characters or
+  // may result in a filename that's reserved on the current platform.
+  //
+  // If |suggested_path| is empty, the return value is also empty.
+  //
+  // If |suggested_path| is non-empty, but can't be safely converted to UTF-8,
+  // or is entirely lost during the sanitization process (e.g. because it
+  // consists entirely of invalid characters), it's replaced with a default
+  // filename.
+  //
+  // Otherwise, returns |suggested_path| with any invalid characters will be
+  // replaced with a suitable replacement character.
+  static base::FilePath GetSanitizedFileName(
+      const base::FilePath& suggested_path);
 
   // Profile used to set/retrieve the last used directory.
   Profile* profile_;

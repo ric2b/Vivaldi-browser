@@ -11,6 +11,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
@@ -171,8 +172,7 @@ bool PluginDispatcher::InitPluginWithChannel(
   plugin_delegate_ = delegate;
   plugin_dispatcher_id_ = plugin_delegate_->Register(this);
 
-  sync_filter_ = new IPC::SyncMessageFilter(delegate->GetShutdownEvent());
-  channel()->AddFilter(sync_filter_.get());
+  sync_filter_ = channel()->CreateSyncMessageFilter();
 
   // The message filter will intercept and process certain messages directly
   // on the I/O thread.

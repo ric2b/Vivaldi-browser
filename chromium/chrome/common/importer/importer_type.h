@@ -24,19 +24,22 @@ enum ImporterType {
   TYPE_SAFARI          = 3,
 #endif
   // Value 4 was the (now deleted) Google Toolbar importer.
-  TYPE_BOOKMARKS_FILE  = 5,  // Identifies a 'bookmarks.html' file.
+  TYPE_BOOKMARKS_FILE  = 5, // Identifies a 'bookmarks.html' file.
+#if defined(OS_WIN)
+  TYPE_EDGE            = 6,
+#endif
 
   // Identifies an Opera bookmark file
-  TYPE_OPERA           = 6,
-  TYPE_OPERA_BOOKMARK_FILE           = 7,
-  TYPE_CHROME          = 8,
-  TYPE_VIVALDI          = 9,
-  TYPE_YANDEX = 10,
-  TYPE_OPERA_OPIUM_BETA = 11,   // Chromium-based Opera Beta channel
-  TYPE_OPERA_OPIUM_DEV = 12,    // Chromium-based Opera Developer channel
+  TYPE_OPERA           = 7,
+  TYPE_OPERA_BOOKMARK_FILE = 8,
+  TYPE_CHROME          = 9,
+  TYPE_VIVALDI         = 10,
+  TYPE_YANDEX          = 11,
+  TYPE_OPERA_OPIUM_BETA = 12,   // Chromium-based Opera Beta channel
+  TYPE_OPERA_OPIUM_DEV = 13,
 
   // Must be last due to profile_import_process_param_traits_macros.h
-  TYPE_OPERA_OPIUM = 13,        // Chromium-based Opera
+  TYPE_OPERA_OPIUM = 14,        // Chromium-based Opera
 };
 
 }  // namespace importer

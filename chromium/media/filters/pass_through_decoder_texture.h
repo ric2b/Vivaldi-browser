@@ -35,7 +35,7 @@ class MEDIA_EXPORT AutoReleasedPassThroughDecoderTexture {
 
   scoped_ptr<PassThroughDecoderTexture> Pass() {
     DCHECK(texture_);
-    return texture_.Pass();
+    return std::move(texture_);
   }
 
  private:

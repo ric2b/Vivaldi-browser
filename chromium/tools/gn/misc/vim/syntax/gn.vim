@@ -27,6 +27,7 @@ hi def link     gnPredefVar         Constant
 " Target declarations
 syn keyword     gnTarget action action_foreach copy executable group
 syn keyword     gnTarget shared_library source_set static_library
+syn keyword     gnTarget loadable_module
 hi def link     gnTarget            Type
 
 " Buildfile functions
@@ -41,13 +42,13 @@ hi def link     gnFunctions         Macro
 
 " Variables
 syn keyword     gnVariable all_dependent_configs allow_circular_includes_from
-syn keyword     gnVariable args cflags cflags_c cflags_cc cflags_objc
+syn keyword     gnVariable args asmflags cflags cflags_c cflags_cc cflags_objc
 syn keyword     gnVariable cflags_objcc check_includes complete_static_lib
 syn keyword     gnVariable configs data data_deps defines depfile deps
-syn keyword     gnVariable forward_dependent_configs_from include_dirs inputs
-syn keyword     gnVariable ldflags lib_dirs libs output_extension output_name
-syn keyword     gnVariable outputs public public_configs public_deps script
-syn keyword     gnVariable sources testonly visibility
+syn keyword     gnVariable include_dirs inputs ldflags lib_dirs libs
+syn keyword     gnVariable output_extension output_name outputs public
+syn keyword     gnVariable public_configs public_deps scripte sources testonly
+syn keyword     gnVariable visibility
 hi def link     gnVariable          Keyword
 
 " Strings

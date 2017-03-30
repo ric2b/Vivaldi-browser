@@ -5,6 +5,7 @@
 #include "remoting/host/heartbeat_sender.h"
 
 #include <math.h>
+#include <stdint.h>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -15,6 +16,7 @@
 #include "base/time/time.h"
 #include "remoting/base/constants.h"
 #include "remoting/base/logging.h"
+#include "remoting/host/host_details.h"
 #include "remoting/host/server_log_entry_host.h"
 #include "remoting/signaling/iq_sender.h"
 #include "remoting/signaling/jid_util.h"
@@ -36,6 +38,8 @@ const char kHostVersionTag[] = "host-version";
 const char kHeartbeatSignatureTag[] = "signature";
 const char kSequenceIdAttr[] = "sequence-id";
 const char kHostOfflineReasonAttr[] = "host-offline-reason";
+const char kHostOperatingSystemNameTag[] = "host-os-name";
+const char kHostOperatingSystemVersionTag[] = "host-os-version";
 
 const char kErrorTag[] = "error";
 const char kNotFoundTag[] = "item-not-found";
@@ -44,9 +48,9 @@ const char kHeartbeatResultTag[] = "heartbeat-result";
 const char kSetIntervalTag[] = "set-interval";
 const char kExpectedSequenceIdTag[] = "expected-sequence-id";
 
-const int64 kDefaultHeartbeatIntervalMs = 5 * 60 * 1000;  // 5 minutes.
-const int64 kResendDelayMs = 10 * 1000;  // 10 seconds.
-const int64 kResendDelayOnHostNotFoundMs = 10 * 1000; // 10 seconds.
+const int64_t kDefaultHeartbeatIntervalMs = 5 * 60 * 1000;  // 5 minutes.
+const int64_t kResendDelayMs = 10 * 1000;                   // 10 seconds.
+const int64_t kResendDelayOnHostNotFoundMs = 10 * 1000;     // 10 seconds.
 const int kMaxResendOnHostNotFoundCount = 12;  // 2 minutes (12 x 10 seconds).
 
 }  // namespace
@@ -319,13 +323,26 @@ scoped_ptr<XmlElement> HeartbeatSender::CreateHeartbeatMessage() {
       QName(kChromotingXmlNamespace, kHostVersionTag)));
   version_tag->AddText(STRINGIZE(VERSION));
   heartbeat->AddElement(version_tag.release());
+  // If we have not recorded a heartbeat success, continue sending host OS info.
+  if (!heartbeat_succeeded_) {
+    // Append host OS name.
+    scoped_ptr<XmlElement> os_name_tag(new XmlElement(
+        QName(kChromotingXmlNamespace, kHostOperatingSystemNameTag)));
+    os_name_tag->AddText(GetHostOperatingSystemName());
+    heartbeat->AddElement(os_name_tag.release());
+    // Append host OS version.
+    scoped_ptr<XmlElement> os_version_tag(new XmlElement(
+        QName(kChromotingXmlNamespace, kHostOperatingSystemVersionTag)));
+    os_version_tag->AddText(GetHostOperatingSystemVersion());
+    heartbeat->AddElement(os_version_tag.release());
+  }
   // Append log message (which isn't signed).
   scoped_ptr<XmlElement> log(ServerLogEntry::MakeStanza());
   scoped_ptr<ServerLogEntry> log_entry(MakeLogEntryForHeartbeat());
   AddHostFieldsToLogEntry(log_entry.get());
   log->AddElement(log_entry->ToStanza().release());
   heartbeat->AddElement(log.release());
-  return heartbeat.Pass();
+  return heartbeat;
 }
 
 scoped_ptr<XmlElement> HeartbeatSender::CreateSignature() {
@@ -337,7 +354,7 @@ scoped_ptr<XmlElement> HeartbeatSender::CreateSignature() {
   std::string signature(host_key_pair_->SignMessage(message));
   signature_tag->AddText(signature);
 
-  return signature_tag.Pass();
+  return signature_tag;
 }
 
 }  // namespace remoting

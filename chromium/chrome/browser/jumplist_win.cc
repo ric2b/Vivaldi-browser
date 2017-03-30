@@ -8,6 +8,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/strings/string_util.h"
@@ -19,7 +20,6 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/metrics/jumplist_metrics_win.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/chrome_constants.h"
@@ -32,7 +32,8 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/page_usage_data.h"
 #include "components/history/core/browser/top_sites.h"
-#include "components/sessions/session_types.h"
+#include "components/sessions/core/session_types.h"
+#include "components/sessions/core/tab_restore_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
@@ -46,6 +47,8 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "chrome/browser/web_applications/web_app.h"
 
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 using content::BrowserThread;
 
@@ -79,7 +82,8 @@ bool CreateIconFile(const SkBitmap& bitmap,
   // save it as the temporary file.
   gfx::ImageFamily image_family;
   image_family.Add(gfx::Image::CreateFrom1xBitmap(bitmap));
-  if (!IconUtil::CreateIconFileFromImageFamily(image_family, path))
+  if (!IconUtil::CreateIconFileFromImageFamily(image_family, path,
+                                               IconUtil::NORMAL_WRITE))
     return false;
 
   // Add this icon file to the list and return its absolute path.
@@ -87,10 +91,6 @@ bool CreateIconFile(const SkBitmap& bitmap,
   *icon_path = path;
   return true;
 }
-
-const char kVivaldiNewTabUrl[] =
-    "chrome-extension://mpognobbkildjkofajifpdfhcoklimli/components/startpage/"
-    "startpage.html";
 
 // Updates the "Tasks" category of the JumpList.
 bool UpdateTaskCategory(
@@ -102,21 +102,22 @@ bool UpdateTaskCategory(
 
   ShellLinkItemList items;
 
+  // Create an IShellLink object which opens a new tab in Vivaldi, and add it
+  // to the collection. We use our application icon as the icon for this item.
+  // We remove '&' characters from this string so we can share it with our
+  // system menu.
   if (JumpList::IsVivaldi()) {
-    // Create an IShellLink object which opens a new tab in Vivaldi, and add it to the
-    // collection. We use our application icon as the icon for this item.
-    // We remove '&' characters from this string so we can share it with our
-    // system menu.
     scoped_refptr<ShellLinkItem> new_tab = JumpList::CreateShellLink();
-    new_tab->GetCommandLine()->AppendArg(kVivaldiNewTabUrl);
-    std::wstring new_tab_title =
-      base::UTF16ToWide(l10n_util::GetStringUTF16(IDS_NEW_TAB));
-    base::ReplaceSubstringsAfterOffset(&new_tab_title, 0, L"&", L"");
+    new_tab->GetCommandLine()->AppendArg(vivaldi::kVivaldiNewTabURL);
+    base::string16 new_tab_title = l10n_util::GetStringUTF16(IDS_NEW_TAB);
+    base::ReplaceSubstringsAfterOffset(
+        &new_tab_title, 0, L"&", base::StringPiece16());
     new_tab->set_title(new_tab_title);
     new_tab->set_icon(chrome_path.value(), 0);
     items.push_back(new_tab);
   }
-  // Create an IShellLink object which launches Chrome/Vivaldi, and add it to the
+
+  // Create an IShellLink object which launches Chrome, and add it to the
   // collection. We use our application icon as the icon for this item.
   // We remove '&' characters from this string so we can share it with our
   // system menu.
@@ -129,8 +130,8 @@ bool UpdateTaskCategory(
     chrome->set_icon(chrome_path.value(), 0);
     items.push_back(chrome);
   }
-#if 0 // TODO: Incognito mode is not yet available in Vivaldi
-  // Create an IShellLink object which launches Chrome/Vivaldi in incognito mode, and
+
+  // Create an IShellLink object which launches Chrome in incognito mode, and
   // add it to the collection. We use our application icon as the icon for
   // this item.
   if (incognito_availability != IncognitoModePrefs::DISABLED) {
@@ -144,7 +145,7 @@ bool UpdateTaskCategory(
     incognito->set_icon(chrome_path.value(), 0);
     items.push_back(incognito);
   }
-#endif
+
   return jumplist_updater->AddTasks(items);
 }
 
@@ -228,18 +229,19 @@ JumpList::JumpList(Profile* profile)
   // When we add this object to the observer list, we save the pointer to this
   // TabRestoreService object. This pointer is used when we remove this object
   // from the observer list.
-  TabRestoreService* tab_restore_service =
+  sessions::TabRestoreService* tab_restore_service =
       TabRestoreServiceFactory::GetForProfile(profile_);
   if (!tab_restore_service)
     return;
 
   if (IsVivaldi()) {
-    static const char vivaldi_extension_id[] = "mpognobbkildjkofajifpdfhcoklimli";
-    std::string app_name = web_app::GenerateApplicationNameFromExtensionId(vivaldi_extension_id);
-    app_id_ = ShellIntegration::GetAppModelIdForProfile(base::UTF8ToWide(app_name), profile_->GetPath());
-  }
-  else {
-    app_id_ = ShellIntegration::GetChromiumModelIdForProfile(profile_->GetPath());
+    std::string app_name =
+        web_app::GenerateApplicationNameFromExtensionId(vivaldi::kVivaldiAppId);
+    app_id_ = ShellIntegration::GetAppModelIdForProfile(
+        base::UTF8ToWide(app_name), profile_->GetPath());
+  } else {
+    app_id_ =
+        ShellIntegration::GetChromiumModelIdForProfile(profile_->GetPath());
   }
   icon_dir_ = profile_->GetPath().Append(chrome::kJumpListIconDirname);
 
@@ -278,7 +280,7 @@ bool JumpList::Enabled() {
 
 // static
 bool JumpList::IsVivaldi() {
-  return base::CommandLine::ForCurrentProcess()->IsRunningVivaldi();
+  return vivaldi::IsVivaldiRunning();
 }
 
 void JumpList::OnUpdateVivaldiSpeedDials(
@@ -347,7 +349,7 @@ void JumpList::CancelPendingUpdate() {
 void JumpList::Terminate() {
   CancelPendingUpdate();
   if (profile_) {
-    TabRestoreService* tab_restore_service =
+    sessions::TabRestoreService* tab_restore_service =
         TabRestoreServiceFactory::GetForProfile(profile_);
     if (tab_restore_service)
       tab_restore_service->RemoveObserver(this);
@@ -387,7 +389,7 @@ void JumpList::OnMostVisitedURLsAvailable(
   StartLoadingFavicon();
 }
 
-void JumpList::TabRestoreServiceChanged(TabRestoreService* service) {
+void JumpList::TabRestoreServiceChanged(sessions::TabRestoreService* service) {
   // if we have a pending handle request, cancel it here (it is out of date).
   CancelPendingUpdate();
 
@@ -406,17 +408,19 @@ void JumpList::TabRestoreServiceChanged(TabRestoreService* service) {
   // This code is copied from
   // RecentlyClosedTabsHandler::TabRestoreServiceChanged() to emulate it.
   const int kRecentlyClosedCount = 4;
-  TabRestoreService* tab_restore_service =
+  sessions::TabRestoreService* tab_restore_service =
       TabRestoreServiceFactory::GetForProfile(profile_);
-  const TabRestoreService::Entries& entries = tab_restore_service->entries();
-  for (TabRestoreService::Entries::const_iterator it = entries.begin();
+  const sessions::TabRestoreService::Entries& entries =
+      tab_restore_service->entries();
+  for (sessions::TabRestoreService::Entries::const_iterator it =
+           entries.begin();
        it != entries.end(); ++it) {
-    const TabRestoreService::Entry* entry = *it;
-    if (entry->type == TabRestoreService::TAB) {
-      AddTab(static_cast<const TabRestoreService::Tab*>(entry),
+    const sessions::TabRestoreService::Entry* entry = *it;
+    if (entry->type == sessions::TabRestoreService::TAB) {
+      AddTab(static_cast<const sessions::TabRestoreService::Tab*>(entry),
              &temp_list, kRecentlyClosedCount);
-    } else if (entry->type == TabRestoreService::WINDOW) {
-      AddWindow(static_cast<const TabRestoreService::Window*>(entry),
+    } else if (entry->type == sessions::TabRestoreService::WINDOW) {
+      AddWindow(static_cast<const sessions::TabRestoreService::Window*>(entry),
                 &temp_list, kRecentlyClosedCount);
     }
   }
@@ -430,10 +434,10 @@ void JumpList::TabRestoreServiceChanged(TabRestoreService* service) {
   StartLoadingFavicon();
 }
 
-void JumpList::TabRestoreServiceDestroyed(TabRestoreService* service) {
-}
+void JumpList::TabRestoreServiceDestroyed(
+    sessions::TabRestoreService* service) {}
 
-bool JumpList::AddTab(const TabRestoreService::Tab* tab,
+bool JumpList::AddTab(const sessions::TabRestoreService::Tab* tab,
                       ShellLinkItemList* list,
                       size_t max_items) {
   // This code adds the URL and the title strings of the given tab to the
@@ -454,7 +458,7 @@ bool JumpList::AddTab(const TabRestoreService::Tab* tab,
   return true;
 }
 
-void JumpList::AddWindow(const TabRestoreService::Window* window,
+void JumpList::AddWindow(const sessions::TabRestoreService::Window* window,
                          ShellLinkItemList* list,
                          size_t max_items) {
   // This code enumerates al the tabs in the given window object and add their

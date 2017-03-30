@@ -5,10 +5,13 @@
 #ifndef NET_SPDY_SPDY_PROXY_CLIENT_SOCKET_H_
 #define NET_SPDY_SPDY_PROXY_CLIENT_SOCKET_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_callback.h"
@@ -45,9 +48,7 @@ class NET_EXPORT_PRIVATE SpdyProxyClientSocket : public ProxyClientSocket,
                         const HostPortPair& endpoint,
                         const HostPortPair& proxy_server,
                         const BoundNetLog& source_net_log,
-                        HttpAuthCache* auth_cache,
-                        HttpAuthHandlerFactory* auth_handler_factory);
-
+                        HttpAuthController* auth_controller);
 
   // On destruction Disconnect() is called.
   ~SpdyProxyClientSocket() override;
@@ -76,6 +77,7 @@ class NET_EXPORT_PRIVATE SpdyProxyClientSocket : public ProxyClientSocket,
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
+  int64_t GetTotalReceivedBytes() const override;
 
   // Socket implementation.
   int Read(IOBuffer* buf,
@@ -84,8 +86,8 @@ class NET_EXPORT_PRIVATE SpdyProxyClientSocket : public ProxyClientSocket,
   int Write(IOBuffer* buf,
             int buf_len,
             const CompletionCallback& callback) override;
-  int SetReceiveBufferSize(int32 size) override;
-  int SetSendBufferSize(int32 size) override;
+  int SetReceiveBufferSize(int32_t size) override;
+  int SetSendBufferSize(int32_t size) override;
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
 
@@ -95,6 +97,7 @@ class NET_EXPORT_PRIVATE SpdyProxyClientSocket : public ProxyClientSocket,
       const SpdyHeaderBlock& response_headers) override;
   void OnDataReceived(scoped_ptr<SpdyBuffer> buffer) override;
   void OnDataSent() override;
+  void OnTrailers(const SpdyHeaderBlock& trailers) override;
   void OnClose(int status) override;
 
  private:

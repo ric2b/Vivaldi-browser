@@ -11,13 +11,13 @@ import os
 import re
 import sys
 
-from pylib import constants
+from pylib.constants import host_paths
 
 # Uses symbol.py from third_party/android_platform, not python's.
-sys.path.insert(0,
-                os.path.join(constants.DIR_SOURCE_ROOT,
-                            'third_party/android_platform/development/scripts'))
-import symbol
+with host_paths.SysPath(
+    host_paths.ANDROID_PLATFORM_DEVELOPMENT_SCRIPTS_PATH,
+    position=0):
+  import symbol
 
 
 _RE_ASAN = re.compile(r'(.*?)(#\S*?) (\S*?) \((.*?)\+(.*?)\)')
@@ -35,7 +35,7 @@ def _ParseAsanLogLine(line):
 
 
 def _FindASanLibraries():
-  asan_lib_dir = os.path.join(constants.DIR_SOURCE_ROOT,
+  asan_lib_dir = os.path.join(host_paths.DIR_SOURCE_ROOT,
                               'third_party', 'llvm-build',
                               'Release+Asserts', 'lib')
   asan_libs = []
@@ -50,6 +50,7 @@ def _TranslateLibPath(library, asan_libs):
   for asan_lib in asan_libs:
     if os.path.basename(library) == os.path.basename(asan_lib):
       return '/' + asan_lib
+  # pylint: disable=no-member
   return symbol.TranslateLibPath(library)
 
 
@@ -67,6 +68,7 @@ def _Symbolize(asan_input):
   for library, items in libraries.iteritems():
     libname = _TranslateLibPath(library, asan_libs)
     lib_relative_addrs = set([i['rel_address'] for i in items])
+    # pylint: disable=no-member
     info_dict = symbol.SymbolInformationForSet(libname,
                                                lib_relative_addrs,
                                                True)

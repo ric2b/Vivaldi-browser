@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/service_worker/service_worker_controllee_request_handler.h"
+
+#include <utility>
+#include <vector>
+
+#include "base/callback_helpers.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
@@ -9,13 +15,11 @@
 #include "content/browser/fileapi/mock_url_request_delegate.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
-#include "content/browser/service_worker/service_worker_controllee_request_handler.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/browser/service_worker/service_worker_registration.h"
-#include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
-#include "content/browser/service_worker/service_worker_utils.h"
 #include "content/common/resource_request_body.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
@@ -30,10 +34,7 @@ namespace content {
 
 namespace {
 
-int kMockRenderProcessId = 1224;
 int kMockProviderId = 1;
-
-void EmptyCallback() {}
 
 }
 
@@ -43,8 +44,7 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
       : browser_thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP) {}
 
   void SetUp() override {
-    helper_.reset(
-        new EmbeddedWorkerTestHelper(base::FilePath(), kMockRenderProcessId));
+    helper_.reset(new EmbeddedWorkerTestHelper(base::FilePath()));
 
     // A new unstored registration/version.
     scope_ = GURL("http://host/scope/");
@@ -61,12 +61,12 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
 
     // An empty host.
     scoped_ptr<ServiceWorkerProviderHost> host(new ServiceWorkerProviderHost(
-        kMockRenderProcessId, MSG_ROUTING_NONE, kMockProviderId,
+        helper_->mock_render_process_id(), MSG_ROUTING_NONE, kMockProviderId,
         SERVICE_WORKER_PROVIDER_FOR_WINDOW, context()->AsWeakPtr(), NULL));
     provider_host_ = host->AsWeakPtr();
-    context()->AddProviderHost(host.Pass());
+    context()->AddProviderHost(std::move(host));
 
-    context()->storage()->LazyInitialize(base::Bind(&EmptyCallback));
+    context()->storage()->LazyInitialize(base::Bind(&base::DoNothing));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -123,17 +123,14 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, DisallowServiceWorker) {
       kDocUrl, net::DEFAULT_PRIORITY, &url_request_delegate_);
   scoped_ptr<ServiceWorkerControlleeRequestHandler> handler(
       new ServiceWorkerControlleeRequestHandler(
-          context()->AsWeakPtr(),
-          provider_host_,
+          context()->AsWeakPtr(), provider_host_,
           base::WeakPtr<storage::BlobStorageContext>(),
-          FETCH_REQUEST_MODE_NO_CORS,
-          FETCH_CREDENTIALS_MODE_OMIT,
-          RESOURCE_TYPE_MAIN_FRAME,
-          REQUEST_CONTEXT_TYPE_HYPERLINK,
-          REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
+          FETCH_REQUEST_MODE_NO_CORS, FETCH_CREDENTIALS_MODE_OMIT,
+          FetchRedirectMode::FOLLOW_MODE, RESOURCE_TYPE_MAIN_FRAME,
+          REQUEST_CONTEXT_TYPE_HYPERLINK, REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
           scoped_refptr<ResourceRequestBody>()));
-  scoped_refptr<net::URLRequestJob> job =
-      handler->MaybeCreateJob(request.get(), NULL, &mock_resource_context_);
+  scoped_ptr<net::URLRequestJob> job(
+      handler->MaybeCreateJob(request.get(), nullptr, &mock_resource_context_));
   ServiceWorkerURLRequestJob* sw_job =
       static_cast<ServiceWorkerURLRequestJob*>(job.get());
 
@@ -166,17 +163,14 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, ActivateWaitingVersion) {
       kDocUrl, net::DEFAULT_PRIORITY, &url_request_delegate_);
   scoped_ptr<ServiceWorkerControlleeRequestHandler> handler(
       new ServiceWorkerControlleeRequestHandler(
-          context()->AsWeakPtr(),
-          provider_host_,
+          context()->AsWeakPtr(), provider_host_,
           base::WeakPtr<storage::BlobStorageContext>(),
-          FETCH_REQUEST_MODE_NO_CORS,
-          FETCH_CREDENTIALS_MODE_OMIT,
-          RESOURCE_TYPE_MAIN_FRAME,
-          REQUEST_CONTEXT_TYPE_HYPERLINK,
-          REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
+          FETCH_REQUEST_MODE_NO_CORS, FETCH_CREDENTIALS_MODE_OMIT,
+          FetchRedirectMode::FOLLOW_MODE, RESOURCE_TYPE_MAIN_FRAME,
+          REQUEST_CONTEXT_TYPE_HYPERLINK, REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
           scoped_refptr<ResourceRequestBody>()));
-  scoped_refptr<net::URLRequestJob> job =
-      handler->MaybeCreateJob(request.get(), NULL, &mock_resource_context_);
+  scoped_ptr<net::URLRequestJob> job(
+      handler->MaybeCreateJob(request.get(), nullptr, &mock_resource_context_));
   ServiceWorkerURLRequestJob* sw_job =
       static_cast<ServiceWorkerURLRequestJob*>(job.get());
 
@@ -195,6 +189,39 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, ActivateWaitingVersion) {
   // Navigations should trigger an update too.
   handler.reset(NULL);
   EXPECT_TRUE(version_->update_timer_.IsRunning());
+}
+
+// Test that an installing registration is associated with a provider host.
+TEST_F(ServiceWorkerControlleeRequestHandlerTest, InstallingRegistration) {
+  // Create an installing registration.
+  version_->SetStatus(ServiceWorkerVersion::INSTALLING);
+  registration_->SetInstallingVersion(version_);
+  context()->storage()->NotifyInstallingRegistration(registration_.get());
+
+  // Conduct a main resource load.
+  const GURL kDocUrl("http://host/scope/doc");
+  scoped_ptr<net::URLRequest> request = url_request_context_.CreateRequest(
+      kDocUrl, net::DEFAULT_PRIORITY, &url_request_delegate_);
+  scoped_ptr<ServiceWorkerControlleeRequestHandler> handler(
+      new ServiceWorkerControlleeRequestHandler(
+          context()->AsWeakPtr(), provider_host_,
+          base::WeakPtr<storage::BlobStorageContext>(),
+          FETCH_REQUEST_MODE_NO_CORS, FETCH_CREDENTIALS_MODE_OMIT,
+          FetchRedirectMode::FOLLOW_MODE, RESOURCE_TYPE_MAIN_FRAME,
+          REQUEST_CONTEXT_TYPE_HYPERLINK, REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
+          scoped_refptr<ResourceRequestBody>()));
+  scoped_ptr<net::URLRequestJob> job(
+      handler->MaybeCreateJob(request.get(), nullptr, &mock_resource_context_));
+  base::RunLoop().RunUntilIdle();
+
+  // The handler should have fallen back to network and destroyed the job. The
+  // registration should be associated with the provider host, although it is
+  // not controlled since there is no active version.
+  EXPECT_FALSE(job);
+  EXPECT_EQ(registration_.get(), provider_host_->associated_registration());
+  EXPECT_EQ(version_.get(), provider_host_->installing_version());
+  EXPECT_FALSE(version_->HasControllee());
+  EXPECT_FALSE(provider_host_->controlling_version());
 }
 
 // Test to not regress crbug/414118.
@@ -217,17 +244,14 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, DeletedProviderHost) {
       kDocUrl, net::DEFAULT_PRIORITY, &url_request_delegate_);
   scoped_ptr<ServiceWorkerControlleeRequestHandler> handler(
       new ServiceWorkerControlleeRequestHandler(
-          context()->AsWeakPtr(),
-          provider_host_,
+          context()->AsWeakPtr(), provider_host_,
           base::WeakPtr<storage::BlobStorageContext>(),
-          FETCH_REQUEST_MODE_NO_CORS,
-          FETCH_CREDENTIALS_MODE_OMIT,
-          RESOURCE_TYPE_MAIN_FRAME,
-          REQUEST_CONTEXT_TYPE_HYPERLINK,
-          REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
+          FETCH_REQUEST_MODE_NO_CORS, FETCH_CREDENTIALS_MODE_OMIT,
+          FetchRedirectMode::FOLLOW_MODE, RESOURCE_TYPE_MAIN_FRAME,
+          REQUEST_CONTEXT_TYPE_HYPERLINK, REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
           scoped_refptr<ResourceRequestBody>()));
-  scoped_refptr<net::URLRequestJob> job =
-      handler->MaybeCreateJob(request.get(), NULL, &mock_resource_context_);
+  scoped_ptr<net::URLRequestJob> job(
+      handler->MaybeCreateJob(request.get(), nullptr, &mock_resource_context_));
   ServiceWorkerURLRequestJob* sw_job =
       static_cast<ServiceWorkerURLRequestJob*>(job.get());
 
@@ -236,7 +260,8 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, DeletedProviderHost) {
 
   // Shouldn't crash if the ProviderHost is deleted prior to completion of
   // the database lookup.
-  context()->RemoveProviderHost(kMockRenderProcessId, kMockProviderId);
+  context()->RemoveProviderHost(helper_->mock_render_process_id(),
+                                kMockProviderId);
   EXPECT_FALSE(provider_host_.get());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(sw_job->ShouldFallbackToNetwork());

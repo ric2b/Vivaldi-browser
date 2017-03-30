@@ -8,6 +8,7 @@
 #define CHROME_BROWSER_CHROME_BROWSER_MAIN_LINUX_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/chrome_browser_main_posix.h"
 
 class ChromeBrowserMainPartsLinux : public ChromeBrowserMainPartsPosix {
@@ -20,6 +21,8 @@ class ChromeBrowserMainPartsLinux : public ChromeBrowserMainPartsPosix {
   void ToolkitInitialized() override;
   void PreProfileInit() override;
   void PostProfileInit() override;
+  void PostMainMessageLoopStart() override;
+  void PostDestroyThreads() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainPartsLinux);

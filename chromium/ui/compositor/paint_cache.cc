@@ -15,17 +15,19 @@ PaintCache::PaintCache() : has_cache_(false) {
 PaintCache::~PaintCache() {
 }
 
-bool PaintCache::UseCache(const PaintContext& context) {
+bool PaintCache::UseCache(const PaintContext& context,
+                          const gfx::Size& size_in_context) {
   if (!has_cache_)
     return false;
   DCHECK(context.list_);
-  auto* item = context.list_->CreateAndAppendItem<cc::DrawingDisplayItem>();
-  display_item_.CloneTo(item);
+  gfx::Rect bounds_in_layer = context.ToLayerSpaceBounds(size_in_context);
+  context.list_->CreateAndAppendItem<cc::DrawingDisplayItem>(bounds_in_layer,
+                                                             display_item_);
   return true;
 }
 
-void PaintCache::SetCache(const cc::DrawingDisplayItem* item) {
-  item->CloneTo(&display_item_);
+void PaintCache::SetCache(const cc::DrawingDisplayItem& item) {
+  item.CloneTo(&display_item_);
   has_cache_ = true;
 }
 

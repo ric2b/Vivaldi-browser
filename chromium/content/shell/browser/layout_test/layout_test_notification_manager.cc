@@ -106,12 +106,15 @@ bool LayoutTestNotificationManager::GetDisplayedPersistentNotifications(
   return false;
 }
 
-void LayoutTestNotificationManager::SimulateClick(const std::string& title) {
+void LayoutTestNotificationManager::SimulateClick(const std::string& title,
+                                                  int action_index) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // First check for page-notifications with the given title.
   const auto& page_iterator = page_notifications_.find(title);
   if (page_iterator != page_notifications_.end()) {
+    DCHECK_EQ(action_index, -1) << "Action buttons are only supported for "
+                                   "persistent notifications";
     page_iterator->second->NotificationClick();
     return;
   }
@@ -127,6 +130,7 @@ void LayoutTestNotificationManager::SimulateClick(const std::string& title) {
           notification.browser_context,
           notification.persistent_id,
           notification.origin,
+          action_index,
           base::Bind(&OnEventDispatchComplete));
 }
 

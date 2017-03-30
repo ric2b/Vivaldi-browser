@@ -4,9 +4,10 @@
 
 #include "content/common/plugin_list.h"
 
+#include <stddef.h>
+
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/file_version_info.h"
 #include "base/file_version_info_win.h"
 #include "base/files/file_util.h"
@@ -21,6 +22,7 @@
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "content/common/plugin_constants_win.h"
 
 namespace content {
@@ -237,12 +239,15 @@ bool HaveSharedMimeType(const WebPluginInfo& plugin1,
 // Compares Windows style version strings (i.e. 1,2,3,4).  Returns true if b's
 // version is newer than a's, or false if it's equal or older.
 bool IsNewerVersion(const base::string16& a, const base::string16& b) {
-  std::vector<base::string16> a_ver, b_ver;
-  base::SplitString(a, ',', &a_ver);
-  base::SplitString(b, ',', &b_ver);
+  std::vector<base::string16> a_ver = base::SplitString(
+      a, base::string16(1, ','), base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  std::vector<base::string16> b_ver = base::SplitString(
+      b, base::string16(1, ','), base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (a_ver.size() == 1 && b_ver.size() == 1) {
-    base::SplitString(a, '.', &a_ver);
-    base::SplitString(b, '.', &b_ver);
+    a_ver = base::SplitString(
+        a, base::string16(1, '.'), base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    b_ver = base::SplitString(
+        b, base::string16(1, '.'), base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   }
   if (a_ver.size() != b_ver.size())
     return false;
@@ -392,9 +397,9 @@ bool PluginList::ShouldLoadPluginUsingPluginList(
   if (should_check_version) {
     for (size_t j = 0; j < plugins->size(); ++j) {
       base::FilePath::StringType plugin1 =
-          base::StringToLowerASCII((*plugins)[j].path.BaseName().value());
+          base::ToLowerASCII((*plugins)[j].path.BaseName().value());
       base::FilePath::StringType plugin2 =
-          base::StringToLowerASCII(info.path.BaseName().value());
+          base::ToLowerASCII(info.path.BaseName().value());
       if ((plugin1 == plugin2 && HaveSharedMimeType((*plugins)[j], info)) ||
           (plugin1 == kJavaDeploy1 && plugin2 == kJavaDeploy2) ||
           (plugin1 == kJavaDeploy2 && plugin2 == kJavaDeploy1)) {
@@ -421,7 +426,7 @@ bool PluginList::ShouldLoadPluginUsingPluginList(
 
   // Troublemakers.
   base::FilePath::StringType filename =
-      base::StringToLowerASCII(info.path.BaseName().value());
+      base::ToLowerASCII(info.path.BaseName().value());
   // Depends on XPCOM.
   if (filename == kMozillaActiveXPlugin)
     return false;
@@ -442,8 +447,9 @@ bool PluginList::ShouldLoadPluginUsingPluginList(
   // We only work with newer versions of the Java plugin which use NPAPI only
   // and don't depend on XPCOM.
   if (filename == kJavaPlugin1 || filename == kJavaPlugin2) {
-    std::vector<base::FilePath::StringType> ver;
-    base::SplitString(info.version, '.', &ver);
+    std::vector<base::FilePath::StringType> ver = base::SplitString(
+        info.version, base::FilePath::StringType(1, '.'),
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     int major, minor, update;
     if (ver.size() == 4 &&
         base::StringToInt(ver[0], &major) &&

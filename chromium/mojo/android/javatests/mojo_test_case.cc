@@ -13,8 +13,7 @@
 #include "base/run_loop.h"
 #include "base/test/test_support_android.h"
 #include "jni/MojoTestCase_jni.h"
-#include "mojo/common/message_pump_mojo.h"
-
+#include "mojo/message_pump/message_pump_mojo.h"
 #include "mojo/public/cpp/environment/environment.h"
 
 namespace {
@@ -31,30 +30,28 @@ struct TestEnvironment {
 namespace mojo {
 namespace android {
 
-static void InitApplicationContext(JNIEnv* env,
-                                   jobject jcaller,
-                                   jobject context) {
-  base::android::ScopedJavaLocalRef<jobject> scoped_context(env, context);
-  base::android::InitApplicationContext(env, scoped_context);
+static void Init(JNIEnv* env, const JavaParamRef<jobject>& jcaller) {
   base::InitAndroidTestMessageLoop();
 }
 
-static jlong SetupTestEnvironment(JNIEnv* env, jobject jcaller) {
+static jlong SetupTestEnvironment(JNIEnv* env,
+                                  const JavaParamRef<jobject>& jcaller) {
   return reinterpret_cast<intptr_t>(new TestEnvironment());
 }
 
 static void TearDownTestEnvironment(JNIEnv* env,
-                                    jobject jcaller,
+                                    const JavaParamRef<jobject>& jcaller,
                                     jlong test_environment) {
   delete reinterpret_cast<TestEnvironment*>(test_environment);
 }
 
-static void RunLoop(JNIEnv* env, jobject jcaller, jlong timeout_ms) {
+static void RunLoop(JNIEnv* env,
+                    const JavaParamRef<jobject>& jcaller,
+                    jlong timeout_ms) {
   base::RunLoop run_loop;
   if (timeout_ms) {
     base::MessageLoop::current()->PostDelayedTask(
-        FROM_HERE,
-        base::MessageLoop::QuitClosure(),
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
         base::TimeDelta::FromMilliseconds(timeout_ms));
     run_loop.Run();
   } else {

@@ -5,16 +5,20 @@
 #ifndef CHROME_BROWSER_TASK_MANAGER_TASK_MANAGER_H_
 #define CHROME_BROWSER_TASK_MANAGER_TASK_MANAGER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/task_manager/resource_provider.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "content/public/common/gpu_memory_stats.h"
@@ -90,10 +94,14 @@ class TaskManager {
   FRIEND_TEST_ALL_PREFIXES(TaskManagerWindowControllerTest, Sort);
   FRIEND_TEST_ALL_PREFIXES(TaskManagerWindowControllerTest,
                            SelectionAdaptsToSorting);
+  FRIEND_TEST_ALL_PREFIXES(TaskManagerWindowControllerTest,
+                           EnsureNewPrimarySortColumn);
+  FRIEND_TEST_ALL_PREFIXES(TaskManagerWindowControllerTest,
+                           EnsureOneColumnVisible);
 
   // Obtain an instance via GetInstance().
   TaskManager();
-  friend struct DefaultSingletonTraits<TaskManager>;
+  friend struct base::DefaultSingletonTraits<TaskManager>;
 
   ~TaskManager();
 
@@ -153,7 +161,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
 
   // Methods to return raw resource information.
   int GetNaClDebugStubPort(int index) const;
-  int64 GetNetworkUsage(int index) const;
+  int64_t GetNetworkUsage(int index) const;
   double GetCPUUsage(int index) const;
   int GetIdleWakeupsPerSecond(int index) const;
   base::ProcessId GetProcessId(int index) const;
@@ -292,7 +300,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
   void NotifyVideoMemoryUsageStats(
       const content::GPUVideoMemoryUsageStats& video_memory_usage_stats);
 
-  void NotifyBytesRead(const net::URLRequest& request, int bytes_read);
+  void NotifyBytesRead(const net::URLRequest& request, int64_t bytes_read);
 
   void RegisterOnDataReadyCallback(const base::Closure& callback);
 
@@ -333,7 +341,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
     base::string16 profile_name;
 
     // No is_network_usage since default (0) is fine.
-    int64 network_usage;
+    int64_t network_usage;
 
     bool is_process_id_valid;
     base::ProcessId process_id;
@@ -389,7 +397,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
       ResourceProviderList;
   typedef std::map<base::ProcessHandle, ResourceList> GroupMap;
   typedef std::map<base::ProcessHandle, base::ProcessMetrics*> MetricsMap;
-  typedef std::map<task_manager::Resource*, int64> ResourceValueMap;
+  typedef std::map<task_manager::Resource*, int64_t> ResourceValueMap;
   typedef std::map<task_manager::Resource*,
                    PerResourceValues> PerResourceCache;
   typedef std::map<base::ProcessHandle, PerProcessValues> PerProcessCache;
@@ -399,7 +407,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
     BytesReadParam(int origin_pid,
                    int child_id,
                    int route_id,
-                   int byte_count)
+                   int64_t byte_count)
         : origin_pid(origin_pid),
           child_id(child_id),
           route_id(route_id),
@@ -413,7 +421,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
     int child_id;
 
     int route_id;
-    int byte_count;
+    int64_t byte_count;
   };
 
   ~TaskManagerModel();
@@ -425,7 +433,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
 
   // Returns the network usage (in bytes per seconds) for the specified
   // resource. That's the value retrieved at the last timer's tick.
-  int64 GetNetworkUsageForResource(task_manager::Resource* resource) const;
+  int64_t GetNetworkUsageForResource(task_manager::Resource* resource) const;
 
   // Called on the UI thread when some bytes are read.
   void BytesRead(BytesReadParam param);
@@ -444,7 +452,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
   // Returns the network usage (in byte per second) that should be displayed for
   // the passed |resource|.  -1 means the information is not available for that
   // resource.
-  int64 GetNetworkUsage(task_manager::Resource* resource) const;
+  int64_t GetNetworkUsage(task_manager::Resource* resource) const;
 
   // Returns the CPU usage (in %) that should be displayed for the passed
   // |resource|.
@@ -456,7 +464,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
 
   // Given a number, this function returns the formatted string that should be
   // displayed in the task manager's memory cell.
-  base::string16 GetMemCellText(int64 number) const;
+  base::string16 GetMemCellText(int64_t number) const;
 
   // Verifies the private and shared memory for |handle| is valid in
   // |per_process_cache_|. Returns true if the data in |per_process_cache_| is

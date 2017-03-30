@@ -7,6 +7,7 @@
 #include "cc/blink/web_layer_impl.h"
 #include "cc/blink/web_layer_impl_fixed_bounds.h"
 #include "cc/layers/picture_image_layer.h"
+#include "third_party/skia/include/core/SkImage.h"
 
 namespace cc_blink {
 
@@ -22,10 +23,12 @@ blink::WebLayer* WebImageLayerImpl::layer() {
   return layer_.get();
 }
 
-void WebImageLayerImpl::setImageBitmap(const SkBitmap& bitmap) {
-  static_cast<cc::PictureImageLayer*>(layer_->layer())->SetBitmap(bitmap);
+void WebImageLayerImpl::setImage(const SkImage* image) {
+  skia::RefPtr<const SkImage> imageRef = skia::SharePtr(image);
+  static_cast<cc::PictureImageLayer*>(layer_->layer())
+      ->SetImage(std::move(imageRef));
   static_cast<WebLayerImplFixedBounds*>(layer_.get())
-      ->SetFixedBounds(gfx::Size(bitmap.width(), bitmap.height()));
+      ->SetFixedBounds(gfx::Size(image->width(), image->height()));
 }
 
 void WebImageLayerImpl::setNearestNeighbor(bool nearest_neighbor) {

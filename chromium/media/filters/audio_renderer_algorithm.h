@@ -21,6 +21,9 @@
 #ifndef MEDIA_FILTERS_AUDIO_RENDERER_ALGORITHM_H_
 #define MEDIA_FILTERS_AUDIO_RENDERER_ALGORITHM_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/audio/audio_parameters.h"
@@ -68,6 +71,9 @@ class MEDIA_EXPORT AudioRendererAlgorithm {
 
   // Increase the capacity of |audio_buffer_| if possible.
   void IncreaseQueueCapacity();
+
+  // Returns an estimate of the amount of memory (in bytes) used for frames.
+  int64_t GetMemoryUsage() const;
 
   // Returns the number of frames left in |audio_buffer_|, which may be larger
   // than QueueCapacity() in the event that EnqueueBuffer() delivered more data
@@ -117,6 +123,9 @@ class MEDIA_EXPORT AudioRendererAlgorithm {
 
   // Do we have enough data to perform one round of WSOLA?
   bool CanPerformWsola() const;
+
+  // Converts a time in milliseconds to frames using |samples_per_second_|.
+  int ConvertMillisecondsToFrames(int ms) const;
 
   // Number of channels in audio stream.
   int channels_;

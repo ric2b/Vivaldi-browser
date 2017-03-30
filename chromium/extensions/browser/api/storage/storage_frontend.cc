@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/storage/storage_frontend.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
@@ -45,13 +47,16 @@ class DefaultObserver : public SettingsObserver {
     // string-based event payloads is removed. http://crbug.com/136045
     scoped_ptr<base::ListValue> args(new base::ListValue());
     args->Append(base::JSONReader::Read(change_json));
+    if (*(args->begin()) == NULL)
+      args->Set(0,base::JSONReader::Read("{}"));
+
     args->Append(new base::StringValue(settings_namespace::ToString(
         settings_namespace)));
-    scoped_ptr<Event> event(new Event(events::UNKNOWN,
-                                      core_api::storage::OnChanged::kEventName,
-                                      args.Pass()));
+    scoped_ptr<Event> event(new Event(events::STORAGE_ON_CHANGED,
+                                      api::storage::OnChanged::kEventName,
+                                      std::move(args)));
     EventRouter::Get(browser_context_)
-        ->DispatchEventToExtension(extension_id, event.Pass());
+        ->DispatchEventToExtension(extension_id, std::move(event));
   }
 
  private:

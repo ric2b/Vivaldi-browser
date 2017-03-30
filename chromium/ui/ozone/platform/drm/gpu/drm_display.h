@@ -5,8 +5,12 @@
 #ifndef UI_OZONE_PLATFORM_DRM_GPU_DRM_DISPLAY_H_
 #define UI_OZONE_PLATFORM_DRM_GPU_DRM_DISPLAY_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/point.h"
@@ -35,7 +39,7 @@ class DrmDisplay {
   const std::vector<drmModeModeInfo>& modes() const { return modes_; }
 
   DisplaySnapshot_Params Update(HardwareDisplayControllerInfo* info,
-                                size_t display_index);
+                                size_t device_index);
 
   bool Configure(const drmModeModeInfo* mode, const gfx::Point& origin);
   bool GetHDCPState(HDCPState* state);

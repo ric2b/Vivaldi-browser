@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/auto_reset.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
 #include "chrome/browser/download/download_item_model.h"
@@ -17,6 +20,7 @@
 #include "content/public/test/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "content/public/test/test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace {
 
@@ -52,11 +56,10 @@ bool ListMatches(base::ListValue* left_list, const std::string& right_json) {
 // all other respects.
 class MockDownloadsDOMHandler : public DownloadsDOMHandler {
  public:
-  explicit MockDownloadsDOMHandler(content::DownloadManager* dlm)
-    : DownloadsDOMHandler(dlm),
+  explicit MockDownloadsDOMHandler(content::DownloadManager* download_manager)
+    : DownloadsDOMHandler(download_manager),
       waiting_list_(false),
-      waiting_updated_(false),
-      manager_(nullptr) {
+      waiting_updated_(false) {
   }
   ~MockDownloadsDOMHandler() override {}
 
@@ -84,8 +87,6 @@ class MockDownloadsDOMHandler : public DownloadsDOMHandler {
   void reset_downloads_list() { downloads_list_.reset(); }
   void reset_download_updated() { download_updated_.reset(); }
 
-  void set_manager(content::DownloadManager* manager) { manager_ = manager; }
-
   using DownloadsDOMHandler::FinalizeRemovals;
 
  protected:
@@ -94,23 +95,19 @@ class MockDownloadsDOMHandler : public DownloadsDOMHandler {
   void CallUpdateAll(const base::ListValue& list) override {
     downloads_list_.reset(list.DeepCopy());
     if (waiting_list_) {
-      content::BrowserThread::PostTask(content::BrowserThread::UI,
-                                       FROM_HERE,
-                                       base::MessageLoop::QuitClosure());
+      content::BrowserThread::PostTask(
+          content::BrowserThread::UI, FROM_HERE,
+          base::MessageLoop::QuitWhenIdleClosure());
     }
   }
 
   void CallUpdateItem(const base::DictionaryValue& item) override {
     download_updated_.reset(item.DeepCopy());
     if (waiting_updated_) {
-      content::BrowserThread::PostTask(content::BrowserThread::UI,
-                                       FROM_HERE,
-                                       base::MessageLoop::QuitClosure());
+      content::BrowserThread::PostTask(
+          content::BrowserThread::UI, FROM_HERE,
+          base::MessageLoop::QuitWhenIdleClosure());
     }
-  }
-
-  content::DownloadManager* GetMainNotifierManager() override {
-    return manager_ ? manager_ : DownloadsDOMHandler::GetMainNotifierManager();
   }
 
  private:
@@ -118,7 +115,6 @@ class MockDownloadsDOMHandler : public DownloadsDOMHandler {
   scoped_ptr<base::DictionaryValue> download_updated_;
   bool waiting_list_;
   bool waiting_updated_;
-  content::DownloadManager* manager_;  // weak.
 
   DISALLOW_COPY_AND_ASSIGN(MockDownloadsDOMHandler);
 };
@@ -137,7 +133,8 @@ class DownloadsDOMHandlerTest : public InProcessBrowserTest {
     browser()->profile()->GetPrefs()->SetFilePath(
         prefs::kDownloadDefaultDirectory,
         downloads_directory_.path());
-    CHECK(test_server()->Start());
+    CHECK(embedded_test_server()->Start());
+    mock_handler_->HandleGetDownloads(nullptr);
   }
 
   content::DownloadManager* download_manager() {
@@ -145,7 +142,7 @@ class DownloadsDOMHandlerTest : public InProcessBrowserTest {
   }
 
   void DownloadAnItem() {
-    GURL url = test_server()->GetURL("files/downloads/image.jpg");
+    GURL url = embedded_test_server()->GetURL("/downloads/image.jpg");
     std::vector<GURL> url_chain;
     url_chain.push_back(url);
     base::Time current(base::Time::Now());
@@ -192,13 +189,7 @@ class DownloadsDOMHandlerTest : public InProcessBrowserTest {
 };
 
 // Tests removing all items, both when prohibited and when allowed.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_RemoveAll DISABLED_RemoveAll
-#else
-#define MAYBE_RemoveAll RemoveAll
-#endif
-IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, MAYBE_RemoveAll) {
+IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, RemoveAll) {
   DownloadAnItem();
 
   mock_handler_->reset_downloads_list();
@@ -219,13 +210,7 @@ IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, MAYBE_RemoveAll) {
 }
 
 // Tests removing one item, both when prohibited and when allowed.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_RemoveOneItem DISABLED_RemoveOneItem
-#else
-#define MAYBE_RemoveOneItem RemoveOneItem
-#endif
-IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, MAYBE_RemoveOneItem) {
+IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, RemoveOneItem) {
   DownloadAnItem();
   base::ListValue item;
   item.AppendString("1");
@@ -249,8 +234,11 @@ IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, MAYBE_RemoveOneItem) {
 }
 
 IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, ClearAllSkipsInProgress) {
-  content::MockDownloadManager manager;
-  mock_handler_->set_manager(&manager);
+  testing::NiceMock<content::MockDownloadManager> manager;
+  EXPECT_CALL(manager, GetBrowserContext()).WillRepeatedly(
+      testing::Return(browser()->profile()));
+  mock_handler_.reset(new MockDownloadsDOMHandler(&manager));
+  mock_handler_->HandleGetDownloads(nullptr);
 
   content::MockDownloadItem item;
   EXPECT_CALL(item, GetState()).WillRepeatedly(
@@ -264,18 +252,14 @@ IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, ClearAllSkipsInProgress) {
 
   mock_handler_->HandleClearAll(NULL);
   EXPECT_TRUE(DownloadItemModel(&item).ShouldShowInShelf());
+
+  mock_handler_.reset();
 }
 
 // Tests that DownloadsDOMHandler detects new downloads and relays them to the
 // renderer.
 // crbug.com/159390: This test fails when daylight savings time ends.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_DownloadsRelayed DISABLED_DownloadsRelayed
-#else
-#define MAYBE_DownloadsRelayed DownloadsRelayed
-#endif
-IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, MAYBE_DownloadsRelayed) {
+IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, DownloadsRelayed) {
   DownloadAnItem();
 
   mock_handler_->WaitForDownloadUpdated();
@@ -301,8 +285,11 @@ IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, MAYBE_DownloadsRelayed) {
 // Tests that DownloadsDOMHandler actually calls DownloadItem::Remove() when
 // it's closed (and removals can no longer be undone).
 IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, RemoveCalledOnPageClose) {
-  content::MockDownloadManager manager;
-  mock_handler_->set_manager(&manager);
+  testing::NiceMock<content::MockDownloadManager> manager;
+  EXPECT_CALL(manager, GetBrowserContext()).WillRepeatedly(
+      testing::Return(browser()->profile()));
+  mock_handler_.reset(new MockDownloadsDOMHandler(&manager));
+  mock_handler_->HandleGetDownloads(nullptr);
 
   content::MockDownloadItem item;
   EXPECT_CALL(item, GetId()).WillRepeatedly(testing::Return(1));
@@ -325,6 +312,7 @@ IN_PROC_BROWSER_TEST_F(DownloadsDOMHandlerTest, RemoveCalledOnPageClose) {
   // because the vtable is affected during destruction and the fake manager
   // rigging doesn't work.
   mock_handler_->FinalizeRemovals();
+  mock_handler_.reset();
 }
 
 // TODO(benjhayden): Test the extension downloads filter for both

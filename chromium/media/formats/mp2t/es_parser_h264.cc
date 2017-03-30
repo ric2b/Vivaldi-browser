@@ -6,8 +6,8 @@
 
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
-#include "media/base/buffers.h"
 #include "media/base/stream_parser_buffer.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/filters/h264_parser.h"
 #include "media/formats/common/offset_byte_queue.h"
@@ -41,7 +41,7 @@ void EsParserH264::Flush() {
 
   // Simulate an additional AUD to force emitting the last access unit
   // which is assumed to be complete at this point.
-  uint8 aud[] = { 0x00, 0x00, 0x01, 0x09 };
+  uint8_t aud[] = {0x00, 0x00, 0x01, 0x09};
   es_queue_->Push(aud, sizeof(aud));
   ParseFromEsQueue();
 
@@ -57,9 +57,9 @@ void EsParserH264::ResetInternal() {
   es_adapter_.Reset();
 }
 
-bool EsParserH264::FindAUD(int64* stream_pos) {
+bool EsParserH264::FindAUD(int64_t* stream_pos) {
   while (true) {
-    const uint8* es;
+    const uint8_t* es;
     int size;
     es_queue_->PeekAt(*stream_pos, &es, &size);
 
@@ -120,10 +120,10 @@ bool EsParserH264::ParseFromEsQueue() {
   bool is_key_frame = false;
   int pps_id_for_access_unit = -1;
 
-  const uint8* es;
+  const uint8_t* es;
   int size;
   es_queue_->PeekAt(current_access_unit_pos_, &es, &size);
-  int access_unit_size = base::checked_cast<int, int64>(
+  int access_unit_size = base::checked_cast<int, int64_t>(
       next_access_unit_pos_ - current_access_unit_pos_);
   DCHECK_LE(access_unit_size, size);
   h264_parser_->SetStream(es, access_unit_size);
@@ -195,8 +195,10 @@ bool EsParserH264::ParseFromEsQueue() {
   return true;
 }
 
-bool EsParserH264::EmitFrame(int64 access_unit_pos, int access_unit_size,
-                             bool is_key_frame, int pps_id) {
+bool EsParserH264::EmitFrame(int64_t access_unit_pos,
+                             int access_unit_size,
+                             bool is_key_frame,
+                             int pps_id) {
   // Get the access unit timing info.
   // Note: |current_timing_desc.pts| might be |kNoTimestamp()| at this point
   // if:
@@ -236,7 +238,7 @@ bool EsParserH264::EmitFrame(int64 access_unit_pos, int access_unit_size,
   DVLOG(LOG_LEVEL_ES) << "Emit frame: stream_pos=" << current_access_unit_pos_
                       << " size=" << access_unit_size;
   int es_size;
-  const uint8* es;
+  const uint8_t* es;
   es_queue_->PeekAt(current_access_unit_pos_, &es, &es_size);
   CHECK_GE(es_size, access_unit_size);
 
@@ -279,14 +281,9 @@ bool EsParserH264::UpdateVideoDecoderConfig(const H264SPS* sps) {
     return false;
 
   VideoDecoderConfig video_decoder_config(
-      kCodecH264,
-      VIDEO_CODEC_PROFILE_UNKNOWN,
-      VideoFrame::YV12,
-      coded_size,
-      visible_rect,
-      natural_size,
-      NULL, 0,
-      false);
+      kCodecH264, VIDEO_CODEC_PROFILE_UNKNOWN, PIXEL_FORMAT_YV12,
+      COLOR_SPACE_HD_REC709, coded_size, visible_rect, natural_size,
+      std::vector<uint8_t>(), false);
 
   if (!video_decoder_config.Matches(last_video_decoder_config_)) {
     DVLOG(1) << "Profile IDC: " << sps->profile_idc;

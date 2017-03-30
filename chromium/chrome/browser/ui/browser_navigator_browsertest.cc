@@ -8,6 +8,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -15,27 +16,29 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 using content::WebContents;
 
 namespace {
 
 const char kExpectedTitle[] = "PASSED!";
-const char kEchoTitleCommand[] = "echotitle";
+const char kEchoTitleCommand[] = "/echotitle";
 
 GURL GetGoogleURL() {
   return GURL("http://www.google.com/");
@@ -202,6 +205,10 @@ void BrowserNavigatorTest::SetUpCommandLine(base::CommandLine* command_line) {
   // Disable settings-in-a-window so that we can use the settings page and
   // sub-pages to test browser navigation.
   command_line->AppendSwitch(::switches::kDisableSettingsWindow);
+
+  // Disable new downloads UI as it is very very slow. https://crbug.com/526577
+  // TODO(dbeam): remove this once the downloads UI is not slow.
+  command_line->AppendSwitch(switches::kDisableMaterialDesignDownloads);
 }
 
 void BrowserNavigatorTest::Observe(
@@ -409,14 +416,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 // This test verifies that when a navigation requiring a new foreground tab
 // occurs in a Browser that cannot host multiple tabs and no compatible Browser
 // that can is open, a compatible Browser is created.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_Disposition_IncompatibleWindow_NoExisting DISABLED_Disposition_IncompatibleWindow_NoExisting
-#else
-#define MAYBE_Disposition_IncompatibleWindow_NoExisting Disposition_IncompatibleWindow_NoExisting
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       MAYBE_Disposition_IncompatibleWindow_NoExisting) {
+                       Disposition_IncompatibleWindow_NoExisting) {
   // We want to simulate not being able to find an existing window compatible
   // with our non-tabbed browser window so Navigate() is forced to create a
   // new compatible window. Because browser() supplied by the in-process
@@ -1081,14 +1082,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   EXPECT_FALSE(web_contents->IsCrashed());
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NavigateFromDefaultToOptionsInSameTab DISABLED_NavigateFromDefaultToOptionsInSameTab
-#else
-#define MAYBE_NavigateFromDefaultToOptionsInSameTab NavigateFromDefaultToOptionsInSameTab
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       MAYBE_NavigateFromDefaultToOptionsInSameTab) {
+                       NavigateFromDefaultToOptionsInSameTab) {
   {
     content::WindowedNotificationObserver observer(
         content::NOTIFICATION_LOAD_STOP,
@@ -1102,14 +1097,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                 GetActiveWebContents()->GetURL()));
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NavigateFromBlankToOptionsInSameTab DISABLED_NavigateFromBlankToOptionsInSameTab
-#else
-#define MAYBE_NavigateFromBlankToOptionsInSameTab NavigateFromBlankToOptionsInSameTab
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       MAYBE_NavigateFromBlankToOptionsInSameTab) {
+                       NavigateFromBlankToOptionsInSameTab) {
   chrome::NavigateParams params(MakeNavigateParams());
   params.url = GURL(url::kAboutBlankURL);
   ui_test_utils::NavigateToURL(&params);
@@ -1127,14 +1116,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                 GetActiveWebContents()->GetURL()));
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NavigateFromNTPToOptionsInSameTab DISABLED_NavigateFromNTPToOptionsInSameTab
-#else
-#define MAYBE_NavigateFromNTPToOptionsInSameTab NavigateFromNTPToOptionsInSameTab
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       MAYBE_NavigateFromNTPToOptionsInSameTab) {
+                       NavigateFromNTPToOptionsInSameTab) {
   chrome::NavigateParams params(MakeNavigateParams());
   params.url = GURL(chrome::kChromeUINewTabURL);
   ui_test_utils::NavigateToURL(&params);
@@ -1155,14 +1138,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                 GetActiveWebContents()->GetURL()));
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NavigateFromPageToOptionsInNewTab DISABLED_NavigateFromPageToOptionsInNewTab
-#else
-#define MAYBE_NavigateFromPageToOptionsInNewTab NavigateFromPageToOptionsInNewTab
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       MAYBE_NavigateFromPageToOptionsInNewTab) {
+                       NavigateFromPageToOptionsInNewTab) {
   chrome::NavigateParams params(MakeNavigateParams());
   ui_test_utils::NavigateToURL(&params);
   EXPECT_EQ(GetGoogleURL(),
@@ -1183,14 +1160,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                 GetActiveWebContents()->GetURL()));
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NavigateFromNTPToOptionsSingleton DISABLED_NavigateFromNTPToOptionsSingleton
-#else
-#define MAYBE_NavigateFromNTPToOptionsSingleton NavigateFromNTPToOptionsSingleton
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       MAYBE_NavigateFromNTPToOptionsSingleton) {
+                       NavigateFromNTPToOptionsSingleton) {
   {
     content::WindowedNotificationObserver observer(
         content::NOTIFICATION_LOAD_STOP,
@@ -1216,14 +1187,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                 GetActiveWebContents()->GetURL()));
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NavigateFromNTPToOptionsPageInSameTab DISABLED_NavigateFromNTPToOptionsPageInSameTab
-#else
-#define MAYBE_NavigateFromNTPToOptionsPageInSameTab NavigateFromNTPToOptionsPageInSameTab
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       MAYBE_NavigateFromNTPToOptionsPageInSameTab) {
+                       NavigateFromNTPToOptionsPageInSameTab) {
   {
     content::WindowedNotificationObserver observer(
         content::NOTIFICATION_LOAD_STOP,
@@ -1250,14 +1215,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
             browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NavigateFromOtherTabToSingletonOptions DISABLED_NavigateFromOtherTabToSingletonOptions
-#else
-#define MAYBE_NavigateFromOtherTabToSingletonOptions NavigateFromOtherTabToSingletonOptions
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       MAYBE_NavigateFromOtherTabToSingletonOptions) {
+                       NavigateFromOtherTabToSingletonOptions) {
   {
     content::WindowedNotificationObserver observer(
         content::NOTIFICATION_LOAD_STOP,
@@ -1283,13 +1242,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                 GetActiveWebContents()->GetURL()));
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_CloseSingletonTab DISABLED_CloseSingletonTab
-#else
-#define MAYBE_CloseSingletonTab CloseSingletonTab
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MAYBE_CloseSingletonTab) {
+IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, CloseSingletonTab) {
   for (int i = 0; i < 2; ++i) {
     content::WindowedNotificationObserver observer(
         content::NOTIFICATION_LOAD_STOP,
@@ -1404,14 +1357,15 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, ViewSourceIsntSingleton) {
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                        SendBrowserInitiatedRequestUsingPOST) {
   // Uses a test sever to verify POST request.
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // Open a browser initiated POST request in new foreground tab.
   base::string16 expected_title(base::ASCIIToUTF16(kExpectedTitle));
   std::string post_data = kExpectedTitle;
   base::string16 title;
   ASSERT_TRUE(OpenPOSTURLInNewForegroundTabAndGetTitle(
-      test_server()->GetURL(kEchoTitleCommand), post_data, true, &title));
+      embedded_test_server()->GetURL(kEchoTitleCommand), post_data, true,
+      &title));
   EXPECT_EQ(expected_title, title);
 }
 
@@ -1420,14 +1374,15 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                        SendRendererInitiatedRequestUsingPOST) {
   // Uses a test sever to verify POST request.
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // Open a renderer initiated POST request in new foreground tab.
   base::string16 expected_title(base::ASCIIToUTF16(kExpectedTitle));
   std::string post_data = kExpectedTitle;
   base::string16 title;
   ASSERT_TRUE(OpenPOSTURLInNewForegroundTabAndGetTitle(
-      test_server()->GetURL(kEchoTitleCommand), post_data, false, &title));
+      embedded_test_server()->GetURL(kEchoTitleCommand), post_data, false,
+      &title));
   EXPECT_NE(expected_title, title);
 }
 

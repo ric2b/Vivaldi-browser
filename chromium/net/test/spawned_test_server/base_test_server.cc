@@ -4,7 +4,10 @@
 
 #include "net/test/spawned_test_server/base_test_server.h"
 
+#include <stdint.h>
+#include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/base64.h"
@@ -16,9 +19,10 @@
 #include "net/base/address_list.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
+#include "net/base/port_util.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cert/test_root_certs.h"
+#include "net/cert/x509_certificate.h"
 #include "net/dns/host_resolver.h"
 #include "net/log/net_log.h"
 #include "url/gurl.h"
@@ -95,6 +99,29 @@ base::StringValue* GetTLSIntoleranceType(
   }
 }
 
+bool GetLocalCertificatesDir(const base::FilePath& certificates_dir,
+                             base::FilePath* local_certificates_dir) {
+  if (certificates_dir.IsAbsolute()) {
+    *local_certificates_dir = certificates_dir;
+    return true;
+  }
+
+  base::FilePath src_dir;
+  if (!PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
+    return false;
+
+  *local_certificates_dir = src_dir.Append(certificates_dir);
+  return true;
+}
+
+scoped_ptr<base::ListValue> GetTokenBindingParams(std::vector<int> params) {
+  scoped_ptr<base::ListValue> values(new base::ListValue());
+  for (int param : params) {
+    values->Append(new base::FundamentalValue(param));
+  }
+  return values;
+}
+
 }  // namespace
 
 BaseTestServer::SSLOptions::SSLOptions()
@@ -110,9 +137,9 @@ BaseTestServer::SSLOptions::SSLOptions()
       fallback_scsv_enabled(false),
       staple_ocsp_response(false),
       ocsp_server_unavailable(false),
-      enable_npn(false),
-      alert_after_handshake(false) {
-}
+      alert_after_handshake(false),
+      disable_channel_id(false),
+      disable_extended_master_secret(false) {}
 
 BaseTestServer::SSLOptions::SSLOptions(
     BaseTestServer::SSLOptions::ServerCertificate cert)
@@ -128,9 +155,9 @@ BaseTestServer::SSLOptions::SSLOptions(
       fallback_scsv_enabled(false),
       staple_ocsp_response(false),
       ocsp_server_unavailable(false),
-      enable_npn(false),
-      alert_after_handshake(false) {
-}
+      alert_after_handshake(false),
+      disable_channel_id(false),
+      disable_extended_master_secret(false) {}
 
 BaseTestServer::SSLOptions::~SSLOptions() {}
 
@@ -147,6 +174,8 @@ base::FilePath BaseTestServer::SSLOptions::GetCertificateFile() const {
       // This chain uses its own dedicated test root certificate to avoid
       // side-effects that may affect testing.
       return base::FilePath(FILE_PATH_LITERAL("redundant-server-chain.pem"));
+    case CERT_BAD_VALIDITY:
+      return base::FilePath(FILE_PATH_LITERAL("bad_validity.pem"));
     case CERT_AUTO:
       return base::FilePath();
     default:
@@ -259,11 +288,11 @@ bool BaseTestServer::GetAddressList(AddressList* address_list) const {
   return true;
 }
 
-uint16 BaseTestServer::GetPort() {
+uint16_t BaseTestServer::GetPort() {
   return host_port_pair_.port();
 }
 
-void BaseTestServer::SetPort(uint16 port) {
+void BaseTestServer::SetPort(uint16_t port) {
   host_port_pair_.set_port(port);
 }
 
@@ -323,16 +352,36 @@ bool BaseTestServer::LoadTestRootCert() const {
     return false;
 
   // Should always use absolute path to load the root certificate.
-  base::FilePath root_certificate_path = certificates_dir_;
-  if (!certificates_dir_.IsAbsolute()) {
-    base::FilePath src_dir;
-    if (!PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
-      return false;
-    root_certificate_path = src_dir.Append(certificates_dir_);
-  }
+  base::FilePath root_certificate_path;
+  if (!GetLocalCertificatesDir(certificates_dir_, &root_certificate_path))
+    return false;
 
   return root_certs->AddFromFile(
       root_certificate_path.AppendASCII("root_ca_cert.pem"));
+}
+
+scoped_refptr<X509Certificate> BaseTestServer::GetCertificate() const {
+  base::FilePath certificate_path;
+  if (!GetLocalCertificatesDir(certificates_dir_, &certificate_path))
+    return nullptr;
+
+  base::FilePath certificate_file(ssl_options_.GetCertificateFile());
+  if (certificate_file.value().empty())
+    return nullptr;
+
+  certificate_path = certificate_path.Append(certificate_file);
+
+  std::string cert_data;
+  if (!base::ReadFileToString(certificate_path, &cert_data))
+    return nullptr;
+
+  CertificateList certs_in_file =
+      X509Certificate::CreateCertificateListFromBytes(
+          cert_data.data(), cert_data.size(),
+          X509Certificate::FORMAT_PEM_CERT_SEQUENCE);
+  if (certs_in_file.empty())
+    return nullptr;
+  return certs_in_file[0];
 }
 
 void BaseTestServer::Init(const std::string& host) {
@@ -368,7 +417,7 @@ bool BaseTestServer::ParseServerData(const std::string& server_data) {
     LOG(ERROR) << "Could not find port value";
     return false;
   }
-  if ((port <= 0) || (port > kuint16max)) {
+  if ((port <= 0) || (port > std::numeric_limits<uint16_t>::max())) {
     LOG(ERROR) << "Invalid port value: " << port;
     return false;
   }
@@ -506,10 +555,28 @@ bool BaseTestServer::GenerateArguments(base::DictionaryValue* arguments) const {
       arguments->Set("ocsp-server-unavailable",
                      base::Value::CreateNullValue());
     }
-    if (ssl_options_.enable_npn)
-      arguments->Set("enable-npn", base::Value::CreateNullValue());
+    if (!ssl_options_.npn_protocols.empty()) {
+      scoped_ptr<base::ListValue> npn_protocols(new base::ListValue());
+      for (const std::string& proto : ssl_options_.npn_protocols) {
+        npn_protocols->Append(new base::StringValue(proto));
+      }
+      arguments->Set("npn-protocols", std::move(npn_protocols));
+    }
     if (ssl_options_.alert_after_handshake)
       arguments->Set("alert-after-handshake", base::Value::CreateNullValue());
+
+    if (ssl_options_.disable_channel_id)
+      arguments->Set("disable-channel-id", base::Value::CreateNullValue());
+    if (ssl_options_.disable_extended_master_secret) {
+      arguments->Set("disable-extended-master-secret",
+                     base::Value::CreateNullValue());
+    }
+    if (!ssl_options_.supported_token_binding_params.empty()) {
+      scoped_ptr<base::ListValue> token_binding_params(new base::ListValue());
+      arguments->Set(
+          "token-binding-params",
+          GetTokenBindingParams(ssl_options_.supported_token_binding_params));
+    }
   }
 
   return GenerateAdditionalArguments(arguments);

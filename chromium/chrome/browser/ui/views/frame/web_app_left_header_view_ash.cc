@@ -7,11 +7,13 @@
 #include "ash/frame/caption_buttons/frame_caption_button.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/toolbar/toolbar_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/navigation_entry.h"
 #include "grit/ash_resources.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/layout/box_layout.h"
 
 // static
@@ -24,10 +26,9 @@ WebAppLeftHeaderView::WebAppLeftHeaderView(BrowserView* browser_view)
 
   back_button_ =
       new ash::FrameCaptionButton(this, ash::CAPTION_BUTTON_ICON_BACK);
-  back_button_->SetImages(
-      ash::CAPTION_BUTTON_ICON_BACK, ash::FrameCaptionButton::ANIMATE_NO,
-      IDR_AURA_WINDOW_CONTROL_ICON_BACK, IDR_AURA_WINDOW_CONTROL_BACKGROUND_H,
-      IDR_AURA_WINDOW_CONTROL_BACKGROUND_P);
+  back_button_->SetImage(ash::CAPTION_BUTTON_ICON_BACK,
+                         ash::FrameCaptionButton::ANIMATE_NO,
+                         gfx::VectorIconId::WINDOW_CONTROL_BACK);
   AddChildView(back_button_);
 
   location_icon_ =
@@ -41,11 +42,9 @@ WebAppLeftHeaderView::~WebAppLeftHeaderView() {
 }
 
 void WebAppLeftHeaderView::Update() {
-  int icon_resource = browser_view_->browser()->toolbar_model()->GetIcon();
-  location_icon_->SetImages(ash::CAPTION_BUTTON_ICON_LOCATION,
-                            ash::FrameCaptionButton::ANIMATE_NO, icon_resource,
-                            IDR_AURA_WINDOW_CONTROL_BACKGROUND_H,
-                            IDR_AURA_WINDOW_CONTROL_BACKGROUND_P);
+  location_icon_->SetImage(
+      ash::CAPTION_BUTTON_ICON_LOCATION, ash::FrameCaptionButton::ANIMATE_NO,
+      browser_view_->browser()->toolbar_model()->GetVectorIcon());
 
   back_button_->SetState(
       chrome::IsCommandEnabled(browser_view_->browser(), IDC_BACK)
@@ -90,6 +89,11 @@ void WebAppLeftHeaderView::ShowWebsiteSettings() const {
   if (!nav_entry)
     return;
 
+  ChromeSecurityStateModelClient* security_model_client =
+      ChromeSecurityStateModelClient::FromWebContents(tab);
+  DCHECK(security_model_client);
+
   chrome::ShowWebsiteSettings(browser_view_->browser(), tab,
-                              nav_entry->GetURL(), nav_entry->GetSSL());
+                              nav_entry->GetURL(),
+                              security_model_client->GetSecurityInfo());
 }

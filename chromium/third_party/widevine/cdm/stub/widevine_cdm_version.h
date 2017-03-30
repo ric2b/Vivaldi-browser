@@ -11,6 +11,5 @@
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
 
 #define WIDEVINE_CDM_AVAILABLE
-#define WIDEVINE_CDM_VERSION_STRING "1.0.123.456"
 
 #endif  // WIDEVINE_CDM_VERSION_H_

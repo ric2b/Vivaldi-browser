@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/strings/string_util.h"
 #include "components/copresence/handlers/gcm_handler_impl.h"
 #include "components/copresence/proto/push_message.pb.h"
 #include "components/copresence/test/fake_directive_handler.h"
@@ -12,18 +11,9 @@
 #include "components/gcm_driver/gcm_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-using gcm::GCMClient;
-
 namespace copresence {
 
 namespace {
-
-// TODO(ckehoe): Move this to a central place.
-std::string ToUrlSafe(std::string token) {
-  base::ReplaceChars(token, "+", "-", &token);
-  base::ReplaceChars(token, "/", "_", &token);
-  return token;
-}
 
 using google::protobuf::RepeatedPtrField;
 void IgnoreMessages(
@@ -43,7 +33,7 @@ class GCMHandlerTest : public testing::Test {
   }
 
  protected:
-  void ProcessMessage(const GCMClient::IncomingMessage& message) {
+  void ProcessMessage(const gcm::IncomingMessage& message) {
     gcm_handler_.OnMessage(GCMHandlerImpl::kCopresenceAppId, message);
   }
 
@@ -64,11 +54,13 @@ TEST_F(GCMHandlerTest, OnMessage) {
   std::string serialized_proto;
   std::string encoded_proto;
   push_message.SerializeToString(&serialized_proto);
-  base::Base64Encode(serialized_proto, &encoded_proto);
+  base::Base64UrlEncode(serialized_proto,
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        &encoded_proto);
 
   // Send it in a GCM message.
-  GCMClient::IncomingMessage gcm_message;
-  gcm_message.data[GCMHandlerImpl::kGcmMessageKey] = ToUrlSafe(encoded_proto);
+  gcm::IncomingMessage gcm_message;
+  gcm_message.data[GCMHandlerImpl::kGcmMessageKey] = encoded_proto;
   ProcessMessage(gcm_message);
 
   // Check that the correct directives were passed along.

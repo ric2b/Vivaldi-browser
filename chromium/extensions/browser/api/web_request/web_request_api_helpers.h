@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -44,6 +45,21 @@ namespace extension_web_request_api_helpers {
 
 typedef std::pair<std::string, std::string> ResponseHeader;
 typedef std::vector<ResponseHeader> ResponseHeaders;
+
+// Internal representation of the extraInfoSpec parameter on webRequest
+// events, used to specify extra information to be included with network
+// events.
+struct ExtraInfoSpec {
+  enum Flags {
+    REQUEST_HEADERS = 1 << 0,
+    RESPONSE_HEADERS = 1 << 1,
+    BLOCKING = 1 << 2,
+    ASYNC_BLOCKING = 1 << 3,
+    REQUEST_BODY = 1 << 4,
+  };
+
+  static bool InitFromValue(const base::ListValue& value, int* extra_info_spec);
+};
 
 // Data container for RequestCookies as defined in the declarative WebRequest
 // API definition.

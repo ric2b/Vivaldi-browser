@@ -18,6 +18,7 @@
 #include "base/win/scoped_comptr.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_decoder_config.h"
+#include "media/base/audio_discard_helper.h"
 #include "media/base/sample_format.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_decoder_config.h"
@@ -64,53 +65,52 @@ class WMFDecoderImpl {
   void Reset(const base::Closure& closure);
 
  private:
-  // Performs decoder config checks specific to the WMFDecoder,
-  // beyond the generic DecoderConfig::IsValidConfig() check.
+  // Performs decoder config checks specific to the WMFDecoder, beyond the
+  // generic DecoderConfig::IsValidConfig() check.
   static bool IsValidConfig(const DecoderConfig& config);
-  static std::string GetModuleName();
-  static GUID GetMediaObjectGUID();
-  static base::win::ScopedComPtr<IMFTransform> CreateWMFDecoder();
+  static std::string GetModuleName(const DecoderConfig& config);
+  static GUID GetMediaObjectGUID(const DecoderConfig& config);
+  static base::win::ScopedComPtr<IMFTransform> CreateWMFDecoder(
+      const DecoderConfig& config);
 
   // Methods used for initialization and configuration.
   bool ConfigureDecoder();
   bool SetInputMediaType();
   bool SetOutputMediaType();
   HRESULT SetOutputMediaTypeInternal(GUID subtype, IMFMediaType* media_type);
+  size_t CalculateOutputBufferSize(
+      const MFT_OUTPUT_STREAM_INFO& stream_info) const;
   bool InitializeDecoderFunctions();
 
   // Methods used during decoding.
   HRESULT ProcessInput(const scoped_refptr<DecoderBuffer>& input);
-  void RecordInputTimestamp(base::TimeDelta timestamp);
+  void RecordInput(const scoped_refptr<DecoderBuffer>& input);
   HRESULT ProcessOutput();
+  bool ProcessBuffer(const scoped_refptr<OutputType>& output);
   bool ProcessOutputLoop();
   bool Drain();
-  bool PrepareInputSample(IMFSample** sample,
-                          IMFMediaBuffer** buffer,
-                          const scoped_refptr<DecoderBuffer>& input) const;
+  base::win::ScopedComPtr<IMFSample> PrepareInputSample(
+      const scoped_refptr<DecoderBuffer>& input) const;
   scoped_refptr<OutputType> CreateOutputBuffer(
       const MFT_OUTPUT_DATA_BUFFER& output_data_buffer);
-  base::TimeDelta GetOutputTimestamp(IMFSample* output);
   scoped_refptr<OutputType> CreateOutputBufferInternal(
       const uint8_t* data,
       DWORD data_size,
       base::TimeDelta timestamp);
-  bool CreateSampleAndBuffer(IMFSample** sample,
-                             IMFMediaBuffer** buffer,
-                             DWORD buffer_size,
-                             int buffer_alignment) const;
-  bool IsDecoderCreatingSamples() const;
+  base::win::ScopedComPtr<IMFSample> CreateSample(DWORD buffer_size,
+                                                  int buffer_alignment) const;
+  void ResetTimestampState();
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   base::win::ScopedComPtr<IMFTransform> decoder_;
   DecoderConfig config_;
   OutputCB output_cb_;
   MFT_INPUT_STREAM_INFO input_stream_info_;
-  MFT_OUTPUT_STREAM_INFO output_stream_info_;
+  base::win::ScopedComPtr<IMFSample> output_sample_;
   uint32_t output_sample_size_;  // in Bytes
 
-  // Used to transfer timestamps from input to output buffers when we can't
-  // rely on IMFTransform timestamps.
-  std::deque<base::TimeDelta> timestamps_;
+  std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
+  scoped_ptr<AudioDiscardHelper> discard_helper_;
 
   // We always call MFGetStrideForBitmapInfoHeader() through this pointer.
   // This guarantees the call succeeds both on Vista and newer systems.  On

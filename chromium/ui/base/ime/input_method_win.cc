@@ -4,10 +4,14 @@
 
 #include "ui/base/ime/input_method_win.h"
 
-#include "base/basictypes.h"
-#include "base/profiler/scoped_tracker.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/auto_reset.h"
+#include "base/command_line.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/win/tsf_input_scope.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
@@ -29,11 +33,9 @@ InputMethodWin::InputMethodWin(internal::InputMethodDelegate* delegate,
     : toplevel_window_handle_(toplevel_window_handle),
       pending_requested_direction_(base::i18n::UNKNOWN_DIRECTION),
       accept_carriage_return_(false),
-      active_(false),
       enabled_(false),
       is_candidate_popup_open_(false),
-      composing_window_handle_(NULL),
-      default_input_language_initialized_(false) {
+      composing_window_handle_(NULL) {
   SetDelegate(delegate);
 }
 
@@ -59,11 +61,6 @@ bool InputMethodWin::OnUntranslatedIMEMessage(
   LRESULT original_result = 0;
   BOOL handled = FALSE;
 
-  if (!default_input_language_initialized_) {
-    // Gets the initial input locale.
-    OnInputLocaleChanged();
-  }
-
   switch (event.message) {
     case WM_IME_SETCONTEXT:
       original_result = OnImeSetContext(
@@ -87,8 +84,8 @@ bool InputMethodWin::OnUntranslatedIMEMessage(
       break;
     case WM_CHAR:
     case WM_SYSCHAR:
-      original_result = OnChar(
-          event.hwnd, event.message, event.wParam, event.lParam, &handled);
+      original_result = OnChar(event.hwnd, event.message, event.wParam,
+                               event.lParam, event, &handled);
       break;
     case WM_IME_NOTIFY:
       original_result = OnImeNotify(
@@ -103,17 +100,49 @@ bool InputMethodWin::OnUntranslatedIMEMessage(
   return !!handled;
 }
 
-bool InputMethodWin::DispatchKeyEvent(const ui::KeyEvent& event) {
-  if (!event.HasNativeEvent())
-    return DispatchFabricatedKeyEvent(event);
-
-  const base::NativeEvent& native_key_event = event.native_event();
-  if (native_key_event.message == WM_CHAR) {
-    BOOL handled;
-    OnChar(native_key_event.hwnd, native_key_event.message,
-           native_key_event.wParam, native_key_event.lParam, &handled);
-    return !!handled;  // Don't send WM_CHAR for post event processing.
+void InputMethodWin::DispatchKeyEvent(ui::KeyEvent* event) {
+  if (!event->HasNativeEvent()) {
+    DispatchFabricatedKeyEvent(event);
+    return;
   }
+
+  const base::NativeEvent& native_key_event = event->native_event();
+  BOOL handled = FALSE;
+  if (native_key_event.message == WM_CHAR) {
+    OnChar(native_key_event.hwnd, native_key_event.message,
+           native_key_event.wParam, native_key_event.lParam, native_key_event,
+           &handled);
+    if (handled)
+      event->StopPropagation();
+    return;
+  }
+
+  std::vector<MSG> char_msgs;
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableMergeKeyCharEvents)) {
+    // Combines the WM_KEY* and WM_CHAR messages in the event processing flow
+    // which is necessary to let Chrome IME extension to process the key event
+    // and perform corresponding IME actions.
+    // Chrome IME extension may wants to consume certain key events based on
+    // the character information of WM_CHAR messages. Holding WM_KEY* messages
+    // until WM_CHAR is processed by the IME extension is not feasible because
+    // there is no way to know wether there will or not be a WM_CHAR following
+    // the WM_KEY*.
+    // Chrome never handles dead chars so it is safe to remove/ignore
+    // WM_*DEADCHAR messages.
+    MSG msg;
+    while (::PeekMessage(&msg, native_key_event.hwnd, WM_CHAR, WM_DEADCHAR,
+                         PM_REMOVE)) {
+      if (msg.message == WM_CHAR)
+        char_msgs.push_back(msg);
+    }
+    while (::PeekMessage(&msg, native_key_event.hwnd, WM_SYSCHAR,
+                         WM_SYSDEADCHAR, PM_REMOVE)) {
+      if (msg.message == WM_SYSCHAR)
+        char_msgs.push_back(msg);
+    }
+  }
+
   // Handles ctrl-shift key to change text direction and layout alignment.
   if (ui::IMM32Manager::IsRTLKeyboardLayoutInstalled() &&
       !IsTextInputTypeNone()) {
@@ -137,7 +166,20 @@ bool InputMethodWin::DispatchKeyEvent(const ui::KeyEvent& event) {
     }
   }
 
-  return DispatchKeyEventPostIME(event);
+  // If only 1 WM_CHAR per the key event, set it as the character of it.
+  if (char_msgs.size() == 1)
+    event->set_character(static_cast<base::char16>(char_msgs[0].wParam));
+
+  ui::EventDispatchDetails details = DispatchKeyEventPostIME(event);
+  if (details.dispatcher_destroyed || details.target_destroyed ||
+      event->stopped_propagation()) {
+    return;
+  }
+
+  for (size_t i = 0; i < char_msgs.size(); ++i) {
+    MSG msg = char_msgs[i];
+    OnChar(msg.hwnd, msg.message, msg.wParam, msg.lParam, msg, &handled);
+  }
 }
 
 void InputMethodWin::OnTextInputTypeChanged(const TextInputClient* client) {
@@ -177,18 +219,12 @@ void InputMethodWin::CancelComposition(const TextInputClient* client) {
 }
 
 void InputMethodWin::OnInputLocaleChanged() {
-  default_input_language_initialized_ = true;
-  active_ = imm32_manager_.SetInputLanguage();
-  locale_ = imm32_manager_.GetInputLanguageName();
+  // Note: OnInputLocaleChanged() is for crbug.com/168971.
   OnInputMethodChanged();
 }
 
 std::string InputMethodWin::GetInputLocale() {
-  return locale_;
-}
-
-bool InputMethodWin::IsActive() {
-  return active_;
+  return imm32_manager_.GetInputLanguageName();
 }
 
 bool InputMethodWin::IsCandidatePopupOpen() const {
@@ -222,11 +258,8 @@ LRESULT InputMethodWin::OnChar(HWND window_handle,
                                UINT message,
                                WPARAM wparam,
                                LPARAM lparam,
+                               const base::NativeEvent& event,
                                BOOL* handled) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("440919 InputMethodWin::OnChar"));
-
   *handled = TRUE;
 
   // We need to send character events to the focused text input client event if
@@ -237,13 +270,15 @@ LRESULT InputMethodWin::OnChar(HWND window_handle,
     // A mask to determine the previous key state from |lparam|. The value is 1
     // if the key is down before the message is sent, or it is 0 if the key is
     // up.
-    const uint32 kPrevKeyDownBit = 0x40000000;
+    const uint32_t kPrevKeyDownBit = 0x40000000;
     if (ch == kCarriageReturn && !(lparam & kPrevKeyDownBit))
       accept_carriage_return_ = true;
     // Conditionally ignore '\r' events to work around crbug.com/319100.
     // TODO(yukawa, IME): Figure out long-term solution.
-    if (ch != kCarriageReturn || accept_carriage_return_)
-      GetTextInputClient()->InsertChar(ch, ui::GetModifiersFromKeyState());
+    if (ch != kCarriageReturn || accept_carriage_return_) {
+      ui::KeyEvent char_event(event);
+      GetTextInputClient()->InsertChar(char_event);
+    }
   }
 
   // Explicitly show the system menu at a good location on [Alt]+[Space].
@@ -260,13 +295,16 @@ LRESULT InputMethodWin::OnImeSetContext(HWND window_handle,
                                         WPARAM wparam,
                                         LPARAM lparam,
                                         BOOL* handled) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440919 InputMethodWin::OnImeSetContext"));
-
-  if (!!wparam)
+  if (!!wparam) {
     imm32_manager_.CreateImeWindow(window_handle);
+    // Delay initialize the tsf to avoid perf regression.
+    // Loading tsf dll causes some time, so doing it in UpdateIMEState() will
+    // slow down the browser window creation.
+    // See crbug.com/509984.
+    tsf_inputscope::InitializeTsfForInputScopes();
+    tsf_inputscope::SetInputScopeForTsfUnawareWindow(
+        toplevel_window_handle_, GetTextInputType(), GetTextInputMode());
+  }
 
   OnInputMethodChanged();
   return imm32_manager_.SetImeWindowStyle(
@@ -278,11 +316,6 @@ LRESULT InputMethodWin::OnImeStartComposition(HWND window_handle,
                                               WPARAM wparam,
                                               LPARAM lparam,
                                               BOOL* handled) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440919 InputMethodWin::OnImeStartComposition"));
-
   // We have to prevent WTL from calling ::DefWindowProc() because the function
   // calls ::ImmSetCompositionWindow() and ::ImmSetCandidateWindow() to
   // over-write the position of IME windows.
@@ -300,11 +333,6 @@ LRESULT InputMethodWin::OnImeComposition(HWND window_handle,
                                          WPARAM wparam,
                                          LPARAM lparam,
                                          BOOL* handled) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440919 InputMethodWin::OnImeComposition"));
-
   // We have to prevent WTL from calling ::DefWindowProc() because we do not
   // want for the IMM (Input Method Manager) to send WM_IME_CHAR messages.
   *handled = TRUE;
@@ -338,11 +366,6 @@ LRESULT InputMethodWin::OnImeEndComposition(HWND window_handle,
                                             WPARAM wparam,
                                             LPARAM lparam,
                                             BOOL* handled) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "440919 InputMethodWin::OnImeEndComposition"));
-
   // Let WTL call ::DefWindowProc() and release its resources.
   *handled = FALSE;
 
@@ -360,10 +383,6 @@ LRESULT InputMethodWin::OnImeNotify(UINT message,
                                     WPARAM wparam,
                                     LPARAM lparam,
                                     BOOL* handled) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("440919 InputMethodWin::OnImeNotify"));
-
   *handled = FALSE;
 
   // Update |is_candidate_popup_open_|, whether a candidate window is open.
@@ -383,10 +402,6 @@ LRESULT InputMethodWin::OnImeRequest(UINT message,
                                      WPARAM wparam,
                                      LPARAM lparam,
                                      BOOL* handled) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("440919 InputMethodWin::OnImeRequest"));
-
   *handled = FALSE;
 
   // Should not receive WM_IME_REQUEST message, if IME is disabled.
@@ -575,16 +590,16 @@ bool InputMethodWin::IsWindowFocused(const TextInputClient* client) const {
       GetActiveWindow() == toplevel_window_handle_;
 }
 
-bool InputMethodWin::DispatchFabricatedKeyEvent(const ui::KeyEvent& event) {
-  if (event.is_char()) {
+void InputMethodWin::DispatchFabricatedKeyEvent(ui::KeyEvent* event) {
+  if (event->is_char()) {
     if (GetTextInputClient()) {
-      GetTextInputClient()->InsertChar(
-          static_cast<base::char16>(event.key_code()),
-          ui::GetModifiersFromKeyState());
-      return true;
+      ui::KeyEvent ch_event(*event);
+      ch_event.set_character(static_cast<base::char16>(event->key_code()));
+      GetTextInputClient()->InsertChar(ch_event);
+      return;
     }
   }
-  return DispatchKeyEventPostIME(event);
+  ignore_result(DispatchKeyEventPostIME(event));
 }
 
 void InputMethodWin::ConfirmCompositionText() {

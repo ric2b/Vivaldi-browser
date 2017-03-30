@@ -6,6 +6,7 @@
 
 #include "cc/layers/delegated_frame_provider.h"
 #include "cc/layers/delegated_frame_resource_collection.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/output/delegated_frame_data.h"
 #include "cc/test/fake_delegated_renderer_layer.h"
@@ -20,7 +21,7 @@ namespace {
 class DelegatedRendererLayerTest : public testing::Test {
  public:
   DelegatedRendererLayerTest()
-      : proxy_(), host_client_(FakeLayerTreeHostClient::DIRECT_3D) {
+      : host_client_(FakeLayerTreeHostClient::DIRECT_3D) {
     LayerTreeSettings settings;
     settings.minimum_occlusion_tracking_size = gfx::Size();
 
@@ -30,7 +31,6 @@ class DelegatedRendererLayerTest : public testing::Test {
   }
 
  protected:
-  FakeProxy proxy_;
   FakeLayerTreeHostClient host_client_;
   TestTaskGraphRunner task_graph_runner_;
   TestSharedBitmapManager shared_bitmap_manager_;
@@ -44,9 +44,9 @@ class DelegatedRendererLayerTestSimple : public DelegatedRendererLayerTest {
     root_pass->SetNew(
         RenderPassId(1, 1), gfx::Rect(1, 1), gfx::Rect(1, 1), gfx::Transform());
     scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
-    frame_data->render_pass_list.push_back(root_pass.Pass());
+    frame_data->render_pass_list.push_back(std::move(root_pass));
     resources_ = new DelegatedFrameResourceCollection;
-    provider_ = new DelegatedFrameProvider(resources_, frame_data.Pass());
+    provider_ = new DelegatedFrameProvider(resources_, std::move(frame_data));
     LayerSettings layer_settings;
     root_layer_ = SolidColorLayer::Create(layer_settings);
     layer_before_ = SolidColorLayer::Create(layer_settings);

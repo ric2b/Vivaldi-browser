@@ -17,7 +17,7 @@
 #import "chrome/browser/ui/cocoa/panels/panel_cocoa.h"
 #import "chrome/browser/ui/cocoa/panels/panel_titlebar_view_cocoa.h"
 #import "chrome/browser/ui/cocoa/panels/panel_window_controller_cocoa.h"
-#import "chrome/browser/ui/cocoa/run_loop_testing.h"
+#include "chrome/browser/ui/cocoa/run_loop_testing.h"
 #include "chrome/browser/ui/panels/panel.h"
 #include "chrome/browser/ui/panels/panel_manager.h"
 #include "chrome/common/chrome_switches.h"
@@ -51,7 +51,7 @@ class PanelCocoaTest : public CocoaProfileTest {
     int panels_count = manager->num_panels();
 
     Panel* panel = manager->CreatePanel(panel_name, profile(),
-                                        GURL(), gfx::Rect(),
+                                        GURL(), nullptr, gfx::Rect(),
                                         PanelManager::CREATE_AS_DOCKED);
     EXPECT_EQ(panels_count + 1, manager->num_panels());
 
@@ -59,7 +59,7 @@ class PanelCocoaTest : public CocoaProfileTest {
     EXPECT_TRUE(panel->native_panel());  // Native panel is created right away.
     PanelCocoa* native_window =
         static_cast<PanelCocoa*>(panel->native_panel());
-    EXPECT_EQ(panel, native_window->panel_);  // Back pointer initialized.
+    EXPECT_EQ(panel, native_window->panel_.get());  // Back pointer initialized.
 
     PanelAnimatedBoundsObserver bounds_observer(panel);
 
@@ -396,10 +396,12 @@ TEST_F(PanelCocoaTest, ActivatePanel) {
   // focus outside of interactive UI tests. BrowserWindowController uses the
   // same way of testing this.
   native_window->ActivatePanel();
+  chrome::testing::NSRunLoopRunAllPending();
   NSWindow* frontmostWindow = [[NSApp orderedWindows] objectAtIndex:0];
   EXPECT_NSEQ(frontmostWindow, [native_window->controller_ window]);
 
   native_window2->ActivatePanel();
+  chrome::testing::NSRunLoopRunAllPending();
   frontmostWindow = [[NSApp orderedWindows] objectAtIndex:0];
   EXPECT_NSEQ(frontmostWindow, [native_window2->controller_ window]);
 

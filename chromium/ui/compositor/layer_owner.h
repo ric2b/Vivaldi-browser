@@ -6,6 +6,7 @@
 #define UI_COMPOSITOR_LAYER_OWNER_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/compositor/compositor_export.h"
 #include "ui/compositor/layer.h"
@@ -33,7 +34,7 @@ class COMPOSITOR_EXPORT LayerOwner {
   //
   // This does not recurse. Existing children of the layer are moved to the new
   // layer.
-  scoped_ptr<Layer> RecreateLayer();
+  virtual scoped_ptr<Layer> RecreateLayer();
 
   ui::Layer* layer() { return layer_; }
   const ui::Layer* layer() const { return layer_; }

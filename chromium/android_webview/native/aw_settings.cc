@@ -4,6 +4,7 @@
 
 #include "android_webview/native/aw_settings.h"
 
+#include "android_webview/browser/aw_content_browser_client.h"
 #include "android_webview/browser/renderer_host/aw_render_view_host_ext.h"
 #include "android_webview/common/aw_content_client.h"
 #include "android_webview/native/aw_contents.h"
@@ -50,13 +51,13 @@ void PopulateFixedWebPreferences(WebPreferences* web_prefs) {
   web_prefs->should_clear_document_background = false;
 }
 
-};  // namespace
+const void* const kAwSettingsUserDataKey = &kAwSettingsUserDataKey;
 
-const void* kAwSettingsUserDataKey = &kAwSettingsUserDataKey;
+};  // namespace
 
 class AwSettingsUserData : public base::SupportsUserData::Data {
  public:
-  AwSettingsUserData(AwSettings* ptr) : settings_(ptr) {}
+  explicit AwSettingsUserData(AwSettings* ptr) : settings_(ptr) {}
 
   static AwSettings* GetSettings(content::WebContents* web_contents) {
     if (!web_contents)
@@ -93,7 +94,7 @@ AwSettings::~AwSettings() {
                                        reinterpret_cast<intptr_t>(this));
 }
 
-void AwSettings::Destroy(JNIEnv* env, jobject obj) {
+void AwSettings::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
@@ -108,7 +109,8 @@ AwRenderViewHostExt* AwSettings::GetAwRenderViewHostExt() {
   return contents->render_view_host_ext();
 }
 
-void AwSettings::ResetScrollAndScaleState(JNIEnv* env, jobject obj) {
+void AwSettings::ResetScrollAndScaleState(JNIEnv* env,
+                                          const JavaParamRef<jobject>& obj) {
   AwRenderViewHostExt* rvhe = GetAwRenderViewHostExt();
   if (!rvhe) return;
   rvhe->ResetScrollAndScaleState();
@@ -124,7 +126,8 @@ void AwSettings::UpdateEverything() {
   Java_AwSettings_updateEverything(env, obj);
 }
 
-void AwSettings::UpdateEverythingLocked(JNIEnv* env, jobject obj) {
+void AwSettings::UpdateEverythingLocked(JNIEnv* env,
+                                        const JavaParamRef<jobject>& obj) {
   UpdateInitialPageScaleLocked(env, obj);
   UpdateWebkitPreferencesLocked(env, obj);
   UpdateUserAgentLocked(env, obj);
@@ -134,7 +137,8 @@ void AwSettings::UpdateEverythingLocked(JNIEnv* env, jobject obj) {
   UpdateOffscreenPreRasterLocked(env, obj);
 }
 
-void AwSettings::UpdateUserAgentLocked(JNIEnv* env, jobject obj) {
+void AwSettings::UpdateUserAgentLocked(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
   if (!web_contents()) return;
 
   ScopedJavaLocalRef<jstring> str =
@@ -152,7 +156,9 @@ void AwSettings::UpdateUserAgentLocked(JNIEnv* env, jobject obj) {
     controller.GetEntryAtIndex(i)->SetIsOverridingUserAgent(ua_overidden);
 }
 
-void AwSettings::UpdateWebkitPreferencesLocked(JNIEnv* env, jobject obj) {
+void AwSettings::UpdateWebkitPreferencesLocked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (!web_contents()) return;
   AwRenderViewHostExt* render_view_host_ext = GetAwRenderViewHostExt();
   if (!render_view_host_ext) return;
@@ -163,7 +169,9 @@ void AwSettings::UpdateWebkitPreferencesLocked(JNIEnv* env, jobject obj) {
   render_view_host->OnWebkitPreferencesChanged();
 }
 
-void AwSettings::UpdateInitialPageScaleLocked(JNIEnv* env, jobject obj) {
+void AwSettings::UpdateInitialPageScaleLocked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   AwRenderViewHostExt* rvhe = GetAwRenderViewHostExt();
   if (!rvhe) return;
 
@@ -178,7 +186,9 @@ void AwSettings::UpdateInitialPageScaleLocked(JNIEnv* env, jobject obj) {
   }
 }
 
-void AwSettings::UpdateFormDataPreferencesLocked(JNIEnv* env, jobject obj) {
+void AwSettings::UpdateFormDataPreferencesLocked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (!web_contents()) return;
   AwContents* contents = AwContents::FromWebContents(web_contents());
   if (!contents) return;
@@ -186,7 +196,9 @@ void AwSettings::UpdateFormDataPreferencesLocked(JNIEnv* env, jobject obj) {
   contents->SetSaveFormData(Java_AwSettings_getSaveFormDataLocked(env, obj));
 }
 
-void AwSettings::UpdateRendererPreferencesLocked(JNIEnv* env, jobject obj) {
+void AwSettings::UpdateRendererPreferencesLocked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (!web_contents()) return;
 
   bool update_prefs = false;
@@ -210,12 +222,20 @@ void AwSettings::UpdateRendererPreferencesLocked(JNIEnv* env, jobject obj) {
     update_prefs = true;
   }
 
+  if (prefs->accept_languages.compare(
+          AwContentBrowserClient::GetAcceptLangsImpl())) {
+    prefs->accept_languages = AwContentBrowserClient::GetAcceptLangsImpl();
+    update_prefs = true;
+  }
+
   content::RenderViewHost* host = web_contents()->GetRenderViewHost();
   if (update_prefs && host)
     host->SyncRendererPrefs();
 }
 
-void AwSettings::UpdateOffscreenPreRasterLocked(JNIEnv* env, jobject obj) {
+void AwSettings::UpdateOffscreenPreRasterLocked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   AwContents* contents = AwContents::FromWebContents(web_contents());
   if (contents) {
     contents->SetOffscreenPreRaster(
@@ -223,17 +243,9 @@ void AwSettings::UpdateOffscreenPreRasterLocked(JNIEnv* env, jobject obj) {
   }
 }
 
-void AwSettings::RenderViewCreated(content::RenderViewHost* render_view_host) {
-  // A single WebContents can normally have 0 to many RenderViewHost instances
-  // associated with it.
-  // This is important since there is only one RenderViewHostExt instance per
-  // WebContents (and not one RVHExt per RVH, as you might expect) and updating
-  // settings via RVHExt only ever updates the 'current' RVH.
-  // In android_webview we don't swap out the RVH on cross-site navigations, so
-  // we shouldn't have to deal with the multiple RVH per WebContents case. That
-  // in turn means that the newly created RVH is always the 'current' RVH
-  // (since we only ever go from 0 to 1 RVH instances) and hence the DCHECK.
-  DCHECK_EQ(render_view_host, web_contents()->GetRenderViewHost());
+void AwSettings::RenderViewHostChanged(content::RenderViewHost* old_host,
+                                       content::RenderViewHost* new_host) {
+  DCHECK_EQ(new_host, web_contents()->GetRenderViewHost());
 
   UpdateEverything();
 }
@@ -253,8 +265,9 @@ void AwSettings::PopulateWebPreferences(WebPreferences* web_prefs) {
       env, obj, reinterpret_cast<jlong>(web_prefs));
 }
 
-void AwSettings::PopulateWebPreferencesLocked(
-    JNIEnv* env, jobject obj, jlong web_prefs_ptr) {
+void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
+                                              const JavaParamRef<jobject>& obj,
+                                              jlong web_prefs_ptr) {
   AwRenderViewHostExt* render_view_host_ext = GetAwRenderViewHostExt();
   if (!render_view_host_ext) return;
 
@@ -418,19 +431,23 @@ void AwSettings::PopulateWebPreferencesLocked(
 
   web_prefs->fullscreen_supported =
       Java_AwSettings_getFullscreenSupportedLocked(env, obj);
+  web_prefs->record_whole_document =
+      Java_AwSettings_getRecordFullDocument(env, obj);
 }
 
 static jlong Init(JNIEnv* env,
-                  jobject obj,
-                  jobject web_contents) {
+                  const JavaParamRef<jobject>& obj,
+                  const JavaParamRef<jobject>& web_contents) {
   content::WebContents* contents = content::WebContents::FromJavaWebContents(
       web_contents);
   AwSettings* settings = new AwSettings(env, obj, contents);
   return reinterpret_cast<intptr_t>(settings);
 }
 
-static jstring GetDefaultUserAgent(JNIEnv* env, jclass clazz) {
-  return base::android::ConvertUTF8ToJavaString(env, GetUserAgent()).Release();
+static ScopedJavaLocalRef<jstring> GetDefaultUserAgent(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  return base::android::ConvertUTF8ToJavaString(env, GetUserAgent());
 }
 
 bool RegisterAwSettings(JNIEnv* env) {

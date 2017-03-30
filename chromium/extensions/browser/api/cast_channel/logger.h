@@ -5,11 +5,13 @@
 #ifndef EXTENSIONS_BROWSER_API_CAST_CHANNEL_LOGGER_H_
 #define EXTENSIONS_BROWSER_API_CAST_CHANNEL_LOGGER_H_
 
+#include <stddef.h>
+
 #include <deque>
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -19,11 +21,11 @@
 #include "net/base/ip_endpoint.h"
 
 namespace base {
-class TickClock;
+class Clock;
 }
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 
 struct AuthResult;
@@ -38,9 +40,12 @@ class Logger : public base::RefCounted<Logger> {
  public:
   // |clock|: Clock used for generating timestamps for the events. Owned by
   // this class.
-  // |unix_epoch_time_ticks|: The TimeTicks that corresponds to Unix epoch.
-  Logger(scoped_ptr<base::TickClock> clock,
-         base::TimeTicks unix_epoch_time_ticks);
+  // |unix_epoch_time|: The Time that corresponds to the Unix epoch.
+  // Can be set to other values (e.g. zero) for testing purposes.
+  //
+  // See crbug.com/518951 for information on why base::Clock
+  // is used instead of base::TickClock.
+  Logger(scoped_ptr<base::Clock> clock, base::Time unix_epoch_time);
 
   // For newly created sockets. Will create an event and log a
   // CAST_SOCKET_CREATED event.
@@ -124,9 +129,9 @@ class Logger : public base::RefCounted<Logger> {
       int channel_id,
       const proto::SocketEvent& socket_event);
 
-  scoped_ptr<base::TickClock> clock_;
+  scoped_ptr<base::Clock> clock_;
   AggregatedSocketEventLogMap aggregated_socket_events_;
-  base::TimeTicks unix_epoch_time_ticks_;
+  base::Time unix_epoch_time_;
 
   // Log proto holding global statistics.
   proto::Log log_;
@@ -136,7 +141,7 @@ class Logger : public base::RefCounted<Logger> {
   DISALLOW_COPY_AND_ASSIGN(Logger);
 };
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_CAST_CHANNEL_LOGGER_H_

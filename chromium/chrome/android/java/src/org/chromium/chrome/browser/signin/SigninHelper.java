@@ -22,9 +22,7 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager.SignInFlowObserver;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.sync.AndroidSyncSettings;
-import org.chromium.sync.internal_api.pub.base.ModelType;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.signin.ChromeSigninController;
 
@@ -33,6 +31,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import javax.annotation.Nullable;
 
 /**
  * A helper for tasks like re-signin.
@@ -104,13 +104,14 @@ public class SigninHelper {
 
     private final ChromeSigninController mChromeSigninController;
 
-    private final ProfileSyncService mProfileSyncService;
+    @Nullable private final ProfileSyncService mProfileSyncService;
 
     private final SigninManager mSigninManager;
 
+    private final AccountTrackerService mAccountTrackerService;
+
     private final OAuth2TokenService mOAuth2TokenService;
 
-    private final SyncController mSyncController;
 
     public static SigninHelper get(Context context) {
         synchronized (LOCK) {
@@ -123,14 +124,17 @@ public class SigninHelper {
 
     private SigninHelper(Context context) {
         mContext = context;
-        mProfileSyncService = ProfileSyncService.get(mContext);
+        mProfileSyncService = ProfileSyncService.get();
         mSigninManager = SigninManager.get(mContext);
+        mAccountTrackerService = AccountTrackerService.get(mContext);
         mOAuth2TokenService = OAuth2TokenService.getForProfile(Profile.getLastUsedProfile());
-        mSyncController = SyncController.get(context);
         mChromeSigninController = ChromeSigninController.get(mContext);
     }
 
     public void validateAccountSettings(boolean accountsChanged) {
+        // Ensure System accounts have been seeded.
+        mAccountTrackerService.checkAndSeedSystemAccounts();
+
         Account syncAccount = mChromeSigninController.getSignedInUser();
         if (syncAccount == null) {
             if (SigninManager.getAndroidSigninPromoExperimentGroup() < 0) return;
@@ -174,7 +178,7 @@ public class SigninHelper {
         }
 
         // Always check for account deleted.
-        if (!accountExists(syncAccount)) {
+        if (!accountExists(mContext, syncAccount)) {
             // It is possible that Chrome got to this point without account
             // rename notification. Let us signout before doing a rename.
             // updateAccountRenameData(mContext, new SystemAccountChangeEventChecker());
@@ -189,7 +193,7 @@ public class SigninHelper {
                 protected void onPostExecute(Void result) {
                     String renamedAccount = getNewSignedInAccountName(mContext);
                     if (renamedAccount == null) {
-                        mSigninManager.signOut(null, null);
+                        mSigninManager.signOut();
                     } else {
                         validateAccountSettings(true);
                     }
@@ -205,7 +209,7 @@ public class SigninHelper {
             mOAuth2TokenService.validateAccounts(mContext, false);
         }
 
-        if (AndroidSyncSettings.isSyncEnabled(mContext)) {
+        if (mProfileSyncService != null && AndroidSyncSettings.isSyncEnabled(mContext)) {
             if (mProfileSyncService.hasSyncSetupCompleted()) {
                 if (accountsChanged) {
                     // Nudge the syncer to ensure it does a full sync.
@@ -231,14 +235,9 @@ public class SigninHelper {
         // TODO(acleung): I think most of the operations need to run on the main
         // thread. May be we should have a progress Dialog?
 
-        // Before signing out, remember the current sync state and data types.
-        final boolean isSyncWanted = AndroidSyncSettings.isChromeSyncEnabled(mContext);
-        final Set<ModelType> dataTypes = mProfileSyncService.getPreferredDataTypes();
-
         // TODO(acleung): Deal with passphrase or just prompt user to re-enter it?
-
         // Perform a sign-out with a callback to sign-in again.
-        mSigninManager.signOut(null, new Runnable() {
+        mSigninManager.signOut(new Runnable() {
             @Override
             public void run() {
                 // Clear the shared perf only after signOut is successful.
@@ -246,28 +245,21 @@ public class SigninHelper {
                 // Otherwise, if re-sign-in fails, we'll just leave chrome
                 // signed-out.
                 clearNewSignedInAccountName(mContext);
-                performResignin(newName, isSyncWanted, dataTypes);
+                performResignin(newName);
             }
         });
     }
 
-    private void performResignin(String newName,
-                                 final boolean isSyncWanted,
-                                 final Set<ModelType> dataTypes) {
+    private void performResignin(String newName) {
         // This is the correct account now.
         final Account account = AccountManagerHelper.createAccountFromName(newName);
 
         mSigninManager.startSignIn(null, account, true, new SignInFlowObserver() {
             @Override
             public void onSigninComplete() {
-                mProfileSyncService.setSetupInProgress(false);
-
-                if (isSyncWanted) {
-                    mSyncController.start();
-                } else {
-                    mSyncController.stop();
+                if (mProfileSyncService != null) {
+                    mProfileSyncService.setSetupInProgress(false);
                 }
-
                 validateAccountSettings(true);
             }
 
@@ -277,8 +269,8 @@ public class SigninHelper {
         });
     }
 
-    private boolean accountExists(Account account) {
-        Account[] accounts = AccountManagerHelper.get(mContext).getGoogleAccounts();
+    private static boolean accountExists(Context context, Account account) {
+        Account[] accounts = AccountManagerHelper.get(context).getGoogleAccounts();
         for (Account a : accounts) {
             if (a.equals(account)) {
                 return true;
@@ -345,7 +337,8 @@ public class SigninHelper {
         int newIndex = eventIndex;
 
         try {
-            outerLoop: while (true) {
+        outerLoop:
+            while (true) {
                 List<String> nameChanges = checker.getAccountChangeEvents(context,
                         newIndex, newName);
 
@@ -354,8 +347,12 @@ public class SigninHelper {
                         // We have found a rename event of the current account.
                         // We need to check if that account is further renamed.
                         newName = name;
-                        newIndex = 0; // Start from the beginning of the new account.
-                        continue outerLoop;
+                        if (!accountExists(context, AccountManagerHelper.get(context)
+                                                            .createAccountFromName(newName))) {
+                            newIndex = 0; // Start from the beginning of the new account.
+                            continue outerLoop;
+                        }
+                        break;
                     }
                 }
 

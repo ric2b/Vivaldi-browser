@@ -5,7 +5,8 @@
 #ifndef CONTENT_PUBLIC_RENDERER_PEPPER_PLUGIN_INSTANCE_H_
 #define CONTENT_PUBLIC_RENDERER_PEPPER_PLUGIN_INSTANCE_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/process/process_handle.h"
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
@@ -48,6 +49,8 @@ class RenderView;
 
 class PepperPluginInstance {
  public:
+  // Return the PepperPluginInstance for the given |instance_id|. Will return
+  // null if the instance is in the process of being deleted.
   static CONTENT_EXPORT PepperPluginInstance* Get(PP_Instance instance_id);
 
   virtual ~PepperPluginInstance() {}

@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <atlbase.h>
 #include <shlobj.h>
+#include <stddef.h>
 
 #include <algorithm>
 #include <limits>
@@ -14,6 +15,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
@@ -29,7 +31,7 @@
 #include "chrome/installer/util/util_constants.h"
 
 #if defined(GOOGLE_CHROME_BUILD)
-#include "google_update/google_update_idl.h"
+#include "google_update/google_update_idl.h"  // nogncheck
 #endif
 
 namespace {

@@ -9,13 +9,16 @@
 #import "base/mac/foundation_util.h"
 #import "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "testing/gtest_mac.h"
+#import "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/ime/input_method.h"
 #import "ui/gfx/test/ui_cocoa_test_helper.h"
+#import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/native_widget_mac_nswindow.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
@@ -40,6 +43,54 @@ namespace {
 // Empty range shortcut for readibility.
 NSRange EmptyRange() {
   return NSMakeRange(NSNotFound, 0);
+}
+
+// Sets |composition_text| as the composition text with caret placed at
+// |caret_pos| and updates |caret_range|.
+void SetCompositionText(ui::TextInputClient* client,
+                        const base::string16& composition_text,
+                        const int caret_pos,
+                        NSRange* caret_range) {
+  ui::CompositionText composition;
+  composition.selection = gfx::Range(caret_pos);
+  composition.text = composition_text;
+  client->SetCompositionText(composition);
+  if (caret_range)
+    *caret_range = NSMakeRange(caret_pos, 0);
+}
+
+// Returns a zero width rectangle corresponding to current caret position.
+gfx::Rect GetCaretBounds(const ui::TextInputClient* client) {
+  gfx::Rect caret_bounds = client->GetCaretBounds();
+  caret_bounds.set_width(0);
+  return caret_bounds;
+}
+
+// Returns a zero width rectangle corresponding to caret bounds when it's placed
+// at |caret_pos| and updates |caret_range|.
+gfx::Rect GetCaretBoundsForPosition(ui::TextInputClient* client,
+                                    const base::string16& composition_text,
+                                    const int caret_pos,
+                                    NSRange* caret_range) {
+  SetCompositionText(client, composition_text, caret_pos, caret_range);
+  return GetCaretBounds(client);
+}
+
+// Returns the expected boundary rectangle for characters of |composition_text|
+// within the |query_range|.
+gfx::Rect GetExpectedBoundsForRange(ui::TextInputClient* client,
+                                    const base::string16& composition_text,
+                                    NSRange query_range) {
+  gfx::Rect left_caret = GetCaretBoundsForPosition(
+      client, composition_text, query_range.location, nullptr);
+  gfx::Rect right_caret = GetCaretBoundsForPosition(
+      client, composition_text, query_range.location + query_range.length,
+      nullptr);
+
+  // The expected bounds correspond to the area between the left and right caret
+  // positions.
+  return gfx::Rect(left_caret.x(), left_caret.y(),
+                   right_caret.x() - left_caret.x(), left_caret.height());
 }
 
 }  // namespace
@@ -127,6 +178,8 @@ class BridgedNativeWidgetTestBase : public ui::CocoaTest {
     // Opacity defaults to "infer" which is usually updated by ViewsDelegate.
     init_params_.opacity = Widget::InitParams::OPAQUE_WINDOW;
 
+    init_params_.bounds = gfx::Rect(100, 100, 100, 100);
+
     native_widget_mac_->GetWidget()->Init(init_params_);
   }
 
@@ -143,8 +196,13 @@ class BridgedNativeWidgetTest : public BridgedNativeWidgetTestBase {
   BridgedNativeWidgetTest();
   ~BridgedNativeWidgetTest() override;
 
-  // Install a textfield in the view hierarchy and make it the text input
-  // client.
+  // Install a textfield with input type |text_input_type| in the view hierarchy
+  // and make it the text input client.
+  void InstallTextField(const std::string& text,
+                        ui::TextInputType text_input_type);
+
+  // Install a textfield with input type ui::TEXT_INPUT_TYPE_TEXT in the view
+  // hierarchy and make it the text input client.
   void InstallTextField(const std::string& text);
 
   // Returns the current text as std::string.
@@ -170,10 +228,15 @@ BridgedNativeWidgetTest::BridgedNativeWidgetTest() {
 BridgedNativeWidgetTest::~BridgedNativeWidgetTest() {
 }
 
-void BridgedNativeWidgetTest::InstallTextField(const std::string& text) {
+void BridgedNativeWidgetTest::InstallTextField(
+    const std::string& text,
+    ui::TextInputType text_input_type) {
   Textfield* textfield = new Textfield();
   textfield->SetText(ASCIIToUTF16(text));
+  textfield->SetTextInputType(text_input_type);
+  view_->RemoveAllChildViews(true);
   view_->AddChildView(textfield);
+  textfield->SetBoundsRect(init_params_.bounds);
 
   // Request focus so the InputMethod can dispatch events to the RootView, and
   // have them delivered to the textfield. Note that focusing a textfield
@@ -181,6 +244,10 @@ void BridgedNativeWidgetTest::InstallTextField(const std::string& text) {
   textfield->RequestFocus();
 
   [ns_view_ setTextInputClient:textfield];
+}
+
+void BridgedNativeWidgetTest::InstallTextField(const std::string& text) {
+  InstallTextField(text, ui::TEXT_INPUT_TYPE_TEXT);
 }
 
 std::string BridgedNativeWidgetTest::GetText() {
@@ -273,13 +340,92 @@ TEST_F(BridgedNativeWidgetTest, GetInputMethodShouldNotReturnNull) {
 }
 
 // A simpler test harness for testing initialization flows.
-typedef BridgedNativeWidgetTestBase BridgedNativeWidgetInitTest;
+class BridgedNativeWidgetInitTest : public BridgedNativeWidgetTestBase {
+ public:
+  BridgedNativeWidgetInitTest() {}
+
+  // Prepares a new |window_| and |widget_| for a call to PerformInit().
+  void CreateNewWidgetToInit(NSUInteger style_mask) {
+    window_.reset(
+        [[NSWindow alloc] initWithContentRect:ui::kWindowSizeDeterminedLater
+                                    styleMask:style_mask
+                                      backing:NSBackingStoreBuffered
+                                        defer:NO]);
+    [window_ setReleasedWhenClosed:NO];  // Owned by scoped_nsobject.
+    widget_.reset(new Widget);
+    native_widget_mac_ = new MockNativeWidgetMac(widget_.get());
+    init_params_.native_widget = native_widget_mac_;
+  }
+
+  void PerformInit() {
+    widget_->Init(init_params_);
+    bridge()->Init(window_, init_params_);
+  }
+
+ protected:
+  base::scoped_nsobject<NSWindow> window_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(BridgedNativeWidgetInitTest);
+};
 
 // Test that BridgedNativeWidget remains sane if Init() is never called.
 TEST_F(BridgedNativeWidgetInitTest, InitNotCalled) {
   EXPECT_FALSE(bridge()->ns_view());
   EXPECT_FALSE(bridge()->ns_window());
   bridge().reset();
+}
+
+// Tests the shadow type given in InitParams.
+TEST_F(BridgedNativeWidgetInitTest, ShadowType) {
+  // Verify Widget::InitParam defaults and arguments added from SetUp().
+  EXPECT_EQ(Widget::InitParams::TYPE_WINDOW_FRAMELESS, init_params_.type);
+  EXPECT_EQ(Widget::InitParams::OPAQUE_WINDOW, init_params_.opacity);
+  EXPECT_EQ(Widget::InitParams::SHADOW_TYPE_DEFAULT, init_params_.shadow_type);
+
+  CreateNewWidgetToInit(NSBorderlessWindowMask);
+  EXPECT_FALSE([window_ hasShadow]);  // Default for NSBorderlessWindowMask.
+  PerformInit();
+
+  // Borderless is 0, so isn't really a mask. Check that nothing is set.
+  EXPECT_EQ(NSBorderlessWindowMask, [window_ styleMask]);
+  EXPECT_TRUE([window_ hasShadow]);  // SHADOW_TYPE_DEFAULT means a shadow.
+
+  CreateNewWidgetToInit(NSBorderlessWindowMask);
+  init_params_.shadow_type = Widget::InitParams::SHADOW_TYPE_NONE;
+  PerformInit();
+  EXPECT_FALSE([window_ hasShadow]);  // Preserves lack of shadow.
+
+  // Default for Widget::InitParams::TYPE_WINDOW.
+  NSUInteger kBorderedMask =
+      NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask |
+      NSResizableWindowMask | NSTexturedBackgroundWindowMask;
+  CreateNewWidgetToInit(kBorderedMask);
+  EXPECT_TRUE([window_ hasShadow]);  // Default for non-borderless.
+  PerformInit();
+  EXPECT_FALSE([window_ hasShadow]);  // SHADOW_TYPE_NONE removes shadow.
+
+  init_params_.shadow_type = Widget::InitParams::SHADOW_TYPE_DEFAULT;
+  CreateNewWidgetToInit(kBorderedMask);
+  PerformInit();
+  EXPECT_TRUE([window_ hasShadow]);  // Preserves shadow.
+
+  window_.reset();
+  widget_.reset();
+}
+
+// Ensure a nil NSTextInputContext is returned when the ui::TextInputClient is
+// not editable, a password field, or unset.
+TEST_F(BridgedNativeWidgetTest, InputContext) {
+  const std::string test_string = "test_str";
+  InstallTextField(test_string, ui::TEXT_INPUT_TYPE_PASSWORD);
+  EXPECT_FALSE([ns_view_ inputContext]);
+  InstallTextField(test_string, ui::TEXT_INPUT_TYPE_TEXT);
+  EXPECT_TRUE([ns_view_ inputContext]);
+  [ns_view_ setTextInputClient:nil];
+  EXPECT_FALSE([ns_view_ inputContext]);
+  InstallTextField(test_string, ui::TEXT_INPUT_TYPE_NONE);
+  EXPECT_FALSE([ns_view_ inputContext]);
 }
 
 // Test getting complete string using text input protocol.
@@ -437,6 +583,96 @@ TEST_F(BridgedNativeWidgetTest, TextInput_DeleteForward) {
   [ns_view_ doCommandBySelector:@selector(deleteForward:)];
   EXPECT_EQ("", GetText());
   EXPECT_EQ_RANGE(NSMakeRange(0, 0), [ns_view_ selectedRange]);
+}
+
+// Test firstRectForCharacterRange:actualRange for cases where query range is
+// empty or outside composition range.
+TEST_F(BridgedNativeWidgetTest, TextInput_FirstRectForCharacterRange_Caret) {
+  InstallTextField("");
+  ui::TextInputClient* client = [ns_view_ textInputClient];
+
+  // No composition. Ensure bounds and range corresponding to the current caret
+  // position are returned.
+  // Initially selection range will be [0, 0].
+  NSRange caret_range = NSMakeRange(0, 0);
+  NSRange query_range = NSMakeRange(1, 1);
+  NSRange actual_range;
+  NSRect rect = [ns_view_ firstRectForCharacterRange:query_range
+                                         actualRange:&actual_range];
+  EXPECT_EQ(GetCaretBounds(client), gfx::ScreenRectFromNSRect(rect));
+  EXPECT_EQ_RANGE(caret_range, actual_range);
+
+  // Set composition with caret before second character ('e').
+  const base::string16 test_string = base::ASCIIToUTF16("test_str");
+  const size_t kTextLength = 8;
+  SetCompositionText(client, test_string, 1, &caret_range);
+
+  // Test bounds returned for empty ranges within composition range. As per
+  // Apple's documentation for firstRectForCharacterRange:actualRange:, for an
+  // empty query range, the returned rectangle should coincide with the
+  // insertion point and have zero width. However in our implementation, if the
+  // empty query range lies within the composition range, we return a zero width
+  // rectangle corresponding to the query range location.
+
+  // Test bounds returned for empty range before second character ('e') are same
+  // as caret bounds when placed before second character.
+  query_range = NSMakeRange(1, 0);
+  rect = [ns_view_ firstRectForCharacterRange:query_range
+                                  actualRange:&actual_range];
+  EXPECT_EQ(GetCaretBoundsForPosition(client, test_string, 1, &caret_range),
+            gfx::ScreenRectFromNSRect(rect));
+  EXPECT_EQ_RANGE(query_range, actual_range);
+
+  // Test bounds returned for empty range after the composition text are same as
+  // caret bounds when placed after the composition text.
+  query_range = NSMakeRange(kTextLength, 0);
+  rect = [ns_view_ firstRectForCharacterRange:query_range
+                                  actualRange:&actual_range];
+  EXPECT_NE(GetCaretBoundsForPosition(client, test_string, 1, &caret_range),
+            gfx::ScreenRectFromNSRect(rect));
+  EXPECT_EQ(
+      GetCaretBoundsForPosition(client, test_string, kTextLength, &caret_range),
+      gfx::ScreenRectFromNSRect(rect));
+  EXPECT_EQ_RANGE(query_range, actual_range);
+
+  // Query outside composition range. Ensure bounds and range corresponding to
+  // the current caret position are returned.
+  query_range = NSMakeRange(kTextLength + 1, 0);
+  rect = [ns_view_ firstRectForCharacterRange:query_range
+                                  actualRange:&actual_range];
+  EXPECT_EQ(GetCaretBounds(client), gfx::ScreenRectFromNSRect(rect));
+  EXPECT_EQ_RANGE(caret_range, actual_range);
+
+  // Make sure not crashing by passing null pointer instead of actualRange.
+  rect = [ns_view_ firstRectForCharacterRange:query_range actualRange:nullptr];
+}
+
+// Test firstRectForCharacterRange:actualRange for non-empty query ranges within
+// the composition range.
+TEST_F(BridgedNativeWidgetTest, TextInput_FirstRectForCharacterRange) {
+  InstallTextField("");
+  ui::TextInputClient* client = [ns_view_ textInputClient];
+
+  const base::string16 kTestString = base::ASCIIToUTF16("test_str");
+  const size_t kTextLength = 8;
+  SetCompositionText(client, kTestString, 1, nullptr);
+
+  // Query bounds for the whole composition string.
+  NSRange query_range = NSMakeRange(0, kTextLength);
+  NSRange actual_range;
+  NSRect rect = [ns_view_ firstRectForCharacterRange:query_range
+                                         actualRange:&actual_range];
+  EXPECT_EQ(GetExpectedBoundsForRange(client, kTestString, query_range),
+            gfx::ScreenRectFromNSRect(rect));
+  EXPECT_EQ_RANGE(query_range, actual_range);
+
+  // Query bounds for the substring "est_".
+  query_range = NSMakeRange(1, 4);
+  rect = [ns_view_ firstRectForCharacterRange:query_range
+                                  actualRange:&actual_range];
+  EXPECT_EQ(GetExpectedBoundsForRange(client, kTestString, query_range),
+            gfx::ScreenRectFromNSRect(rect));
+  EXPECT_EQ_RANGE(query_range, actual_range);
 }
 
 typedef BridgedNativeWidgetTestBase BridgedNativeWidgetSimulateFullscreenTest;

@@ -4,11 +4,15 @@
 
 #include "chrome/browser/extensions/error_console/error_console.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
@@ -158,7 +162,7 @@ class ErrorConsoleBrowserTest : public ExtensionBrowserTest {
       ++errors_observed_;
       if (errors_observed_ >= errors_expected_) {
         if (waiting_)
-          base::MessageLoopForUI::current()->Quit();
+          base::MessageLoopForUI::current()->QuitWhenIdle();
       }
     }
 
@@ -221,7 +225,7 @@ class ErrorConsoleBrowserTest : public ExtensionBrowserTest {
 
   const GURL& GetTestURL() {
     if (test_url_.is_empty()) {
-      CHECK(embedded_test_server()->InitializeAndWaitUntilReady());
+      CHECK(embedded_test_server()->Start());
       test_url_ = embedded_test_server()->GetURL(kTestingPage);
     }
     return test_url_;
@@ -421,7 +425,13 @@ IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest,
 
 // Catch an error from a BrowserAction; this is more complex than a content
 // script error, since browser actions are routed through our own code.
-IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest, BrowserActionRuntimeError) {
+#if defined(OS_WIN)  // Flakes on XP. http://crbug.com/517029
+#define MAYBE_BrowserActionRuntimeError DISABLED_BrowserActionRuntimeError
+#else
+#define MAYBE_BrowserActionRuntimeError BrowserActionRuntimeError
+#endif
+IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest,
+                       MAYBE_BrowserActionRuntimeError) {
   const Extension* extension = NULL;
   LoadExtensionAndCheckErrors(
       "browser_action_runtime_error",

@@ -4,13 +4,16 @@
 
 #include "content/child/shared_memory_data_consumer_handle.h"
 
+#include <stddef.h>
 #include <string.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/task_runner.h"
@@ -125,7 +128,7 @@ class ThreadedSharedMemoryDataConsumerHandleTest : public ::testing::Test {
     ReadDataOperation(scoped_ptr<SharedMemoryDataConsumerHandle> handle,
                       base::MessageLoop* main_message_loop,
                       const base::Closure& on_done)
-        : handle_(handle.Pass()),
+        : handle_(std::move(handle)),
           main_message_loop_(main_message_loop),
           on_done_(on_done) {}
 
@@ -998,8 +1001,8 @@ TEST(SharedMemoryDataConsumerHandleWithoutBackpressureTest, AddData) {
 
 TEST_F(ThreadedSharedMemoryDataConsumerHandleTest, Read) {
   base::RunLoop run_loop;
-  auto operation = make_scoped_ptr(
-      new ReadDataOperation(handle_.Pass(), &loop_, run_loop.QuitClosure()));
+  auto operation = make_scoped_ptr(new ReadDataOperation(
+      std::move(handle_), &loop_, run_loop.QuitClosure()));
   scoped_refptr<Logger> logger(new Logger);
 
   base::Thread t("DataConsumerHandle test thread");

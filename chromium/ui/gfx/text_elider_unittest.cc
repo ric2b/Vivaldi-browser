@@ -6,13 +6,17 @@
 
 #include "ui/gfx/text_elider.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_list.h"
@@ -52,9 +56,10 @@ struct TestData {
 
 }  // namespace
 
-// TODO(ios): This test fails on iOS because iOS version of GetStringWidthF
-// that calls [NSString sizeWithFont] returns the rounded string width.
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/546240): This test fails on iOS because iOS version of
+// GetStringWidthF that calls [NSString sizeWithFont] returns the rounded string
+// width.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_IOS) || defined(OS_ANDROID)
 #define MAYBE_ElideEmail DISABLED_ElideEmail
 #else
@@ -115,7 +120,7 @@ TEST(TextEliderTest, MAYBE_ElideEmail) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideEmailMoreSpace DISABLED_ElideEmailMoreSpace
 #else
@@ -147,9 +152,10 @@ TEST(TextEliderTest, MAYBE_ElideEmailMoreSpace) {
   }
 }
 
-// TODO(ios): This test fails on iOS because iOS version of GetStringWidthF
-// that calls [NSString sizeWithFont] returns the rounded string width.
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/546240): This test fails on iOS because iOS version of
+// GetStringWidthF that calls [NSString sizeWithFont] returns the rounded string
+// width.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_IOS) || defined(OS_ANDROID)
 #define MAYBE_TestFilenameEliding DISABLED_TestFilenameEliding
 #else
@@ -204,7 +210,7 @@ TEST(TextEliderTest, MAYBE_TestFilenameEliding) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideTextTruncate DISABLED_ElideTextTruncate
 #else
@@ -233,7 +239,7 @@ TEST(TextEliderTest, MAYBE_ElideTextTruncate) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideTextEllipsis DISABLED_ElideTextEllipsis
 #else
@@ -265,7 +271,7 @@ TEST(TextEliderTest, MAYBE_ElideTextEllipsis) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideTextEllipsisFront DISABLED_ElideTextEllipsisFront
 #else
@@ -317,7 +323,7 @@ static void CheckCodeUnitPairs(const base::string16& text,
 
 // Test that both both UTF-16 surrogate pairs and combining character sequences
 // do not get split by ElideText.
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideTextAtomicSequences DISABLED_ElideTextAtomicSequences
 #else
@@ -361,7 +367,7 @@ TEST(TextEliderTest, MAYBE_ElideTextAtomicSequences) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideTextLongStrings DISABLED_ElideTextLongStrings
 #else
@@ -613,7 +619,7 @@ TEST(TextEliderTest, ElideString) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideRectangleText DISABLED_ElideRectangleText
 #else
@@ -668,7 +674,8 @@ TEST(TextEliderTest, MAYBE_ElideRectangleText) {
                                  TRUNCATE_LONG_WORDS,
                                  &lines));
     if (cases[i].output) {
-      const std::string result = UTF16ToUTF8(JoinString(lines, '|'));
+      const std::string result =
+          UTF16ToUTF8(base::JoinString(lines, ASCIIToUTF16("|")));
       EXPECT_EQ(cases[i].output, result) << "Case " << i << " failed!";
     } else {
       EXPECT_TRUE(lines.empty()) << "Case " << i << " failed!";
@@ -676,7 +683,7 @@ TEST(TextEliderTest, MAYBE_ElideRectangleText) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideRectangleTextPunctuation \
     DISABLED_ElideRectangleTextPunctuation
@@ -715,7 +722,8 @@ TEST(TextEliderTest, MAYBE_ElideRectangleTextPunctuation) {
                                  wrap_behavior,
                                  &lines));
     if (cases[i].output) {
-      const std::string result = UTF16ToUTF8(JoinString(lines, '|'));
+      const std::string result =
+          UTF16ToUTF8(base::JoinString(lines, base::ASCIIToUTF16("|")));
       EXPECT_EQ(cases[i].output, result) << "Case " << i << " failed!";
     } else {
       EXPECT_TRUE(lines.empty()) << "Case " << i << " failed!";
@@ -723,7 +731,7 @@ TEST(TextEliderTest, MAYBE_ElideRectangleTextPunctuation) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideRectangleTextLongWords DISABLED_ElideRectangleTextLongWords
 #else
@@ -784,7 +792,8 @@ TEST(TextEliderTest, MAYBE_ElideRectangleTextLongWords) {
                                  &lines));
     std::string expected_output(cases[i].output);
     base::ReplaceSubstringsAfterOffset(&expected_output, 0, "...", kEllipsis);
-    const std::string result = UTF16ToUTF8(JoinString(lines, '|'));
+    const std::string result =
+        UTF16ToUTF8(base::JoinString(lines, base::ASCIIToUTF16("|")));
     EXPECT_EQ(expected_output, result) << "Case " << i << " failed!";
   }
 }
@@ -794,7 +803,7 @@ TEST(TextEliderTest, MAYBE_ElideRectangleTextLongWords) {
 // fail because the truncated integer width is returned for the string
 // and the accumulation of the truncated values causes the elide function
 // to wrap incorrectly.
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideRectangleTextCheckLineWidth \
     DISABLED_ElideRectangleTextCheckLineWidth
@@ -839,7 +848,7 @@ TEST(TextEliderTest, ElideRectangleTextCheckConcatWidthEqualsSumOfWidths) {
 }
 #endif // OS_CHROMEOS
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideRectangleString DISABLED_ElideRectangleString
 #else
@@ -928,7 +937,7 @@ TEST(TextEliderTest, MAYBE_ElideRectangleString) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideRectangleStringNotStrict \
     DISABLED_ElideRectangleStringNotStrict
@@ -1017,7 +1026,7 @@ TEST(TextEliderTest, MAYBE_ElideRectangleStringNotStrict) {
   }
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideRectangleWide16 DISABLED_ElideRectangleWide16
 #else
@@ -1042,7 +1051,7 @@ TEST(TextEliderTest, MAYBE_ElideRectangleWide16) {
   EXPECT_EQ(out2, output);
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_ElideRectangleWide32 DISABLED_ElideRectangleWide32
 #else
@@ -1061,60 +1070,77 @@ TEST(TextEliderTest, MAYBE_ElideRectangleWide32) {
   EXPECT_EQ(out, output);
 }
 
-// TODO(338784): Enable this on android.
+// TODO(crbug.com/338784): Enable this on android.
 #if defined(OS_ANDROID)
 #define MAYBE_TruncateString DISABLED_TruncateString
 #else
 #define MAYBE_TruncateString TruncateString
 #endif
 TEST(TextEliderTest, MAYBE_TruncateString) {
-  base::string16 string = ASCIIToUTF16("foooooey    bxxxar baz");
+  base::string16 str = ASCIIToUTF16("fooooey    bxxxar baz  ");
 
-  // Tests that apply to both break behaviors:
+  // Test breaking at character 0.
+  EXPECT_EQ(base::string16(), TruncateString(str, 0, WORD_BREAK));
+  EXPECT_EQ(base::string16(), TruncateString(str, 0, CHARACTER_BREAK));
 
-  // Make sure it doesn't modify the string if length > string length.
-  EXPECT_EQ(string, TruncateString(string, 100, WORD_BREAK));
-  EXPECT_EQ(string, TruncateString(string, 100, CHARACTER_BREAK));
+  // Test breaking at character 1.
+  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(str, 1, WORD_BREAK)));
+  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(str, 1, CHARACTER_BREAK)));
 
-  // Test no characters.
-  EXPECT_EQ(L"", UTF16ToWide(TruncateString(string, 0, WORD_BREAK)));
-  EXPECT_EQ(L"", UTF16ToWide(TruncateString(string, 0, CHARACTER_BREAK)));
+  // Test breaking in the middle of the first word.
+  EXPECT_EQ(L"f\x2026", UTF16ToWide(TruncateString(str, 2, WORD_BREAK)));
+  EXPECT_EQ(L"f\x2026", UTF16ToWide(TruncateString(str, 2, CHARACTER_BREAK)));
 
-  // Test 1 character.
-  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(string, 1, WORD_BREAK)));
-  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(string, 1, CHARACTER_BREAK)));
+  // Test breaking in between words.
+  EXPECT_EQ(L"fooooey\x2026", UTF16ToWide(TruncateString(str, 9, WORD_BREAK)));
+  EXPECT_EQ(L"fooooey\x2026",
+            UTF16ToWide(TruncateString(str, 9, CHARACTER_BREAK)));
 
-  // Test completely truncates string if break is on initial whitespace.
-  EXPECT_EQ(L"\x2026",
-            UTF16ToWide(TruncateString(ASCIIToUTF16("   "), 2, WORD_BREAK)));
-  EXPECT_EQ(L"\x2026",
-            UTF16ToWide(TruncateString(ASCIIToUTF16("   "), 2,
-                                       CHARACTER_BREAK)));
+  // Test breaking at the start of a later word.
+  EXPECT_EQ(L"fooooey\x2026", UTF16ToWide(TruncateString(str, 11, WORD_BREAK)));
+  EXPECT_EQ(L"fooooey\x2026",
+            UTF16ToWide(TruncateString(str, 11, CHARACTER_BREAK)));
 
-  // Break-only-at-word-boundaries tests:
+  // Test breaking in the middle of a word.
+  EXPECT_EQ(L"fooooey\x2026", UTF16ToWide(TruncateString(str, 12, WORD_BREAK)));
+  EXPECT_EQ(L"fooooey\x2026",
+            UTF16ToWide(TruncateString(str, 12, CHARACTER_BREAK)));
+  EXPECT_EQ(L"fooooey\x2026", UTF16ToWide(TruncateString(str, 14, WORD_BREAK)));
+  EXPECT_EQ(L"fooooey    bx\x2026",
+            UTF16ToWide(TruncateString(str, 14, CHARACTER_BREAK)));
 
-  // Test adds ... at right spot when there is enough room to break at a
-  // word boundary.
-  EXPECT_EQ(L"foooooey\x2026", UTF16ToWide(TruncateString(string, 14,
-                                                          WORD_BREAK)));
+  // Test breaking in whitespace at the end of the string.
+  EXPECT_EQ(L"fooooey    bxxxar baz\x2026",
+            UTF16ToWide(TruncateString(str, 22, WORD_BREAK)));
+  EXPECT_EQ(L"fooooey    bxxxar baz\x2026",
+            UTF16ToWide(TruncateString(str, 22, CHARACTER_BREAK)));
 
-  // Test adds ... at right spot when there is not enough space in first word.
-  EXPECT_EQ(L"f\x2026", UTF16ToWide(TruncateString(string, 2, WORD_BREAK)));
+  // Test breaking at the end of the string.
+  EXPECT_EQ(str, TruncateString(str, str.length(), WORD_BREAK));
+  EXPECT_EQ(str, TruncateString(str, str.length(), CHARACTER_BREAK));
 
-  // Test adds ... at right spot when there is not enough room to break at a
-  // word boundary.
-  EXPECT_EQ(L"foooooey\x2026", UTF16ToWide(TruncateString(string, 11,
-                                                          WORD_BREAK)));
+  // Test breaking past the end of the string.
+  EXPECT_EQ(str, TruncateString(str, str.length() + 10, WORD_BREAK));
+  EXPECT_EQ(str, TruncateString(str, str.length() + 10, CHARACTER_BREAK));
 
-  // Break-anywhere tests:
 
-  // Test adds ... at right spot within a word.
-  EXPECT_EQ(L"f\x2026", UTF16ToWide(TruncateString(string, 2,
-                                                   CHARACTER_BREAK)));
+  // Tests of strings with leading whitespace:
+  base::string16 str2 = ASCIIToUTF16("   foo");
 
-  // Test removes trailing whitespace if break falls between words.
-  EXPECT_EQ(L"foooooey\x2026", UTF16ToWide(TruncateString(string, 12,
-                                                          CHARACTER_BREAK)));
+  // Test breaking in leading whitespace.
+  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(str2, 2, WORD_BREAK)));
+  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(str2, 2, CHARACTER_BREAK)));
+
+  // Test breaking at the beginning of the first word, with leading whitespace.
+  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(str2, 3, WORD_BREAK)));
+  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(str2, 3, CHARACTER_BREAK)));
+
+  // Test breaking in the middle of the first word, with leading whitespace.
+  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(str2, 4, WORD_BREAK)));
+  EXPECT_EQ(L"\x2026", UTF16ToWide(TruncateString(str2, 4, CHARACTER_BREAK)));
+  EXPECT_EQ(L"   f\x2026", UTF16ToWide(TruncateString(str2, 5, WORD_BREAK)));
+  EXPECT_EQ(L"   f\x2026",
+            UTF16ToWide(TruncateString(str2, 5, CHARACTER_BREAK)));
 }
 
 }  // namespace gfx

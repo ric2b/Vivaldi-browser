@@ -8,9 +8,9 @@
 
 goog.provide('cvox.BrailleBackground');
 
-goog.require('cvox.AbstractBraille');
 goog.require('cvox.BrailleDisplayManager');
 goog.require('cvox.BrailleInputHandler');
+goog.require('cvox.BrailleInterface');
 goog.require('cvox.BrailleKeyEvent');
 goog.require('cvox.BrailleTranslatorManager');
 goog.require('global');
@@ -24,12 +24,11 @@ goog.require('global');
  *        (for mocking in tests).
  * @param {cvox.BrailleTranslatorManager=} opt_translatorManagerForTest
  *        Braille translator manager (for mocking in tests)
- * @extends {cvox.AbstractBraille}
+ * @implements {cvox.BrailleInterface}
  */
 cvox.BrailleBackground = function(opt_displayManagerForTest,
                                   opt_inputHandlerForTest,
                                   opt_translatorManagerForTest) {
-  goog.base(this);
   /**
    * @type {!cvox.BrailleTranslatorManager}
    * @private*/
@@ -60,19 +59,11 @@ cvox.BrailleBackground = function(opt_displayManagerForTest,
       new cvox.BrailleInputHandler(this.translatorManager_);
   this.inputHandler_.init();
 };
-goog.inherits(cvox.BrailleBackground, cvox.AbstractBraille);
 
 
 /** @override */
 cvox.BrailleBackground.prototype.write = function(params) {
   this.setContent_(params, null);
-};
-
-
-/** @override */
-cvox.BrailleBackground.prototype.setCommandListener = function(func) {
-  // TODO(plundblad): Implement when the background page handles commands
-  // as well.
 };
 
 
@@ -116,15 +107,19 @@ cvox.BrailleBackground.prototype.setContent_ = function(
 
 
 /**
- * Handles braille key events by dispatching either to the input handler or
- * a content script.
+ * Handles braille key events by dispatching either to the input handler,
+ * ChromeVox next's background object or ChromeVox classic's content script.
  * @param {!cvox.BrailleKeyEvent} brailleEvt The event.
- * @param {cvox.NavBraille} content Content of display when event fired.
+ * @param {!cvox.NavBraille} content Content of display when event fired.
  * @private
  */
 cvox.BrailleBackground.prototype.onBrailleKeyEvent_ = function(
     brailleEvt, content) {
   if (this.inputHandler_.onBrailleKeyEvent(brailleEvt)) {
+    return;
+  }
+  if (global.backgroundObj &&
+      global.backgroundObj.onBrailleKeyEvent(brailleEvt, content)) {
     return;
   }
   this.sendCommand_(brailleEvt, content);
@@ -139,9 +134,6 @@ cvox.BrailleBackground.prototype.onBrailleKeyEvent_ = function(
  */
 cvox.BrailleBackground.prototype.sendCommand_ =
     function(brailleEvt, content) {
-  if (global.backgroundObj &&
-      global.backgroundObj.onGotBrailleCommand(brailleEvt))
-    return;
   var msg = {
     'message': 'BRAILLE',
     'args': brailleEvt

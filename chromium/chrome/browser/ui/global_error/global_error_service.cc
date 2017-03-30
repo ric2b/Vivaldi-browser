@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/global_error/global_error_service.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/stl_util.h"
@@ -46,7 +48,7 @@ GlobalError* GlobalErrorService::GetGlobalErrorByMenuItemCommandID(
 }
 
 GlobalError*
-GlobalErrorService::GetHighestSeverityGlobalErrorWithWrenchMenuItem() const {
+GlobalErrorService::GetHighestSeverityGlobalErrorWithAppMenuItem() const {
   GlobalError::Severity highest_severity = GlobalError::SEVERITY_LOW;
   GlobalError* highest_severity_error = NULL;
 

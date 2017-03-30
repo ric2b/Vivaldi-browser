@@ -4,7 +4,10 @@
 
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/testing_pref_service.h"
@@ -24,10 +27,12 @@ struct SpellcheckLanguageTestCase {
       : accept_languages(accept_languages),
         num_expected_enabled_spellcheck_languages(
             num_expected_enabled_spellcheck_languages) {
-    base::SplitString(unsplit_spellcheck_dictionaries, ',',
-                      &spellcheck_dictionaries);
-    base::SplitString(unsplit_expected_languages, ',',
-                      &expected_spellcheck_languages);
+    spellcheck_dictionaries = base::SplitString(
+        unsplit_spellcheck_dictionaries, ",",
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    expected_spellcheck_languages = base::SplitString(
+        unsplit_expected_languages, ",",
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   }
   ~SpellcheckLanguageTestCase() {}
 

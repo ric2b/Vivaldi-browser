@@ -12,6 +12,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 
 class Profile;
@@ -27,16 +28,19 @@ class WebContents;
 class TabModelJniBridge : public TabModel {
  public:
   TabModelJniBridge(JNIEnv* env, jobject obj, bool is_incognito);
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   ~TabModelJniBridge() override;
 
   // Registers the JNI bindings.
   static bool Register(JNIEnv* env);
 
   // Called by JNI
-  base::android::ScopedJavaLocalRef<jobject> GetProfileAndroid(JNIEnv* env,
-                                                               jobject obj);
-  void TabAddedToModel(JNIEnv* env, jobject obj, jobject jtab);
+  base::android::ScopedJavaLocalRef<jobject> GetProfileAndroid(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void TabAddedToModel(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       const base::android::JavaParamRef<jobject>& jtab);
 
   // TabModel::
   int GetTabCount() const override;
@@ -47,7 +51,8 @@ class TabModelJniBridge : public TabModel {
   void SetActiveIndex(int index) override;
   void CloseTabAt(int index) override;
 
-  void CreateTab(content::WebContents* web_contents,
+  void CreateTab(TabAndroid* parent,
+                 content::WebContents* web_contents,
                  int parent_tab_id) override;
 
   content::WebContents* CreateNewTabForDevTools(const GURL& url) override;
@@ -57,7 +62,9 @@ class TabModelJniBridge : public TabModel {
 
   // Instructs the TabModel to broadcast a notification that all tabs are now
   // loaded from storage.
-  void BroadcastSessionRestoreComplete(JNIEnv* env, jobject obj);
+  void BroadcastSessionRestoreComplete(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
  protected:
   JavaObjectWeakGlobalRef java_object_;

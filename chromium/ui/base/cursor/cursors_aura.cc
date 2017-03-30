@@ -4,6 +4,9 @@
 
 #include "ui/base/cursor/cursors_aura.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/point.h"
@@ -34,8 +37,8 @@ struct CursorSet {
 };
 
 const CursorData kNormalCursors[] = {
-  {ui::kCursorNull, IDR_AURA_CURSOR_PTR, {4, 4}, {8, 9}},
-  {ui::kCursorPointer, IDR_AURA_CURSOR_PTR, {4, 4}, {8, 9}},
+  {ui::kCursorNull, IDR_AURA_CURSOR_PTR, {4, 4}, {7, 7}},
+  {ui::kCursorPointer, IDR_AURA_CURSOR_PTR, {4, 4}, {7, 7}},
   {ui::kCursorNoDrop, IDR_AURA_CURSOR_NO_DROP, {9, 9}, {18, 18}},
   {ui::kCursorNotAllowed, IDR_AURA_CURSOR_NO_DROP, {9, 9}, {18, 18}},
   {ui::kCursorCopy, IDR_AURA_CURSOR_COPY, {9, 9}, {18, 18}},
@@ -128,8 +131,8 @@ const CursorData kLargeCursors[] = {
 };
 
 const CursorData kAnimatedCursors[] = {
-  {ui::kCursorWait, IDR_THROBBER, {7, 7}, {14, 14}},
-  {ui::kCursorProgress, IDR_THROBBER, {7, 7}, {14, 14}},
+  {ui::kCursorWait, IDR_AURA_CURSOR_THROBBER, {7, 7}, {14, 14}},
+  {ui::kCursorProgress, IDR_AURA_CURSOR_THROBBER, {7, 7}, {14, 14}},
 };
 
 const CursorSet kCursorSets[] = {

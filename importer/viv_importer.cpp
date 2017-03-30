@@ -19,26 +19,27 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/browser/shell_integration.h"
-#include "grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_resources.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_importer.h"
 #include "base/strings/utf_string_conversions.h"
 
-bool ReadOperaIniFile(const base::FilePath &profile_dir, DictionaryValueINIParser& target);
+bool ReadOperaIniFile(const base::FilePath &profile_dir,
+                      DictionaryValueINIParser& target);
 
 namespace viv_importer {
 
-void DetectOperaProfiles(std::vector<importer::SourceProfile*>* profiles) {
-  importer::SourceProfile* opera = new importer::SourceProfile;
-  opera->importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA);
-  opera->importer_type = importer::TYPE_OPERA;
-  opera->source_path = GetProfileDir();
+void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
+  importer::SourceProfile opera;
+  opera.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA);
+  opera.importer_type = importer::TYPE_OPERA;
+  opera.source_path = GetProfileDir();
 #if defined(OS_WIN)
-  opera->app_path = GetOperaInstallPathFromRegistry();
+  opera.app_path = GetOperaInstallPathFromRegistry();
 #endif
-  opera->services_supported =
+  opera.services_supported =
       importer::FAVORITES | importer::NOTES | importer::PASSWORDS /*|
           importer::HISTORY |
           importer::COOKIES |
@@ -46,12 +47,12 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile*>* profiles) {
 
   // Check if this profile need the master password
   DictionaryValueINIParser inifile_parser;
-  if (ReadOperaIniFile(opera->source_path, inifile_parser)) {
+  if (ReadOperaIniFile(opera.source_path, inifile_parser)) {
     const base::DictionaryValue& inifile = inifile_parser.root();
     int val;
     inifile.GetInteger("Security Prefs.Use Paranoid Mailpassword", &val);
     if (val) {
-      opera->services_supported |= importer::MASTER_PASSWORD;
+      opera.services_supported |= importer::MASTER_PASSWORD;
     }
   }
   profiles->push_back(opera);
@@ -78,59 +79,62 @@ bool ReadOperaIniFile(const base::FilePath &profile_dir,
 }
 
 OperaImporter::OperaImporter(const importer::ImportConfig &import_config)
-    : wand_version_(0), master_password_required(false) {
+    : wand_version_(0), master_password_required_(false) {
   if (import_config.arguments.size() >= 1) {
-    master_password = import_config.arguments[0];
+    master_password_ = import_config.arguments[0];
   }
 }
 
-OperaImporter::~OperaImporter() { master_password.clear(); }
+OperaImporter::~OperaImporter() {
+}
+
+static const char OPERA_PREFS_NAME[]= "operaprefs.ini";
 
 void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
-                                uint16 items, ImporterBridge *bridge) {
+                                uint16_t items, ImporterBridge *bridge) {
   bridge_ = bridge;
   profile_dir_ = source_profile.source_path;
 
   base::FilePath file = profile_dir_;
 
-#if defined(OS_WIN)
-  if (base::EndsWith(file.value(), L"operaprefs.ini", false)) {
-#else
-  if (base::EndsWith(file.value(), "operaprefs.ini", false)) {
-#endif
-    profile_dir_ = profile_dir_.DirName();
-    file = profile_dir_;
+  if (source_profile.importer_type == importer::TYPE_OPERA_BOOKMARK_FILE) {
+    bookmarkfilename_ = file.value();
+  } else {
+    if (base::LowerCaseEqualsASCII(file.BaseName().MaybeAsASCII(),
+            OPERA_PREFS_NAME)) {
+      profile_dir_ = profile_dir_.DirName();
+      file = profile_dir_;
+    }
+    // Read Inifile
+    DictionaryValueINIParser inifile_parser;
+    if (!ReadOperaIniFile(profile_dir_, inifile_parser)) {
+      bridge_->NotifyEnded();
+      return;
+    }
+
+    const base::DictionaryValue &inifile = inifile_parser.root();
+
+    inifile.GetString("User Prefs.Hot List File Ver2", &bookmarkfilename_);
+    // Fallback to a bookmkarks.adr file in the profile directory
+    if (bookmarkfilename_.empty()) {
+      bookmarkfilename_ = profile_dir_.AppendASCII("bookmarks.adr").value();
+    }
+
+    inifile.GetString("MailBox.NotesFile", &notesfilename_);
+    if (notesfilename_.empty()) {
+      notesfilename_ = profile_dir_.AppendASCII("notes.adr").value();
+    }
+    std::string temp_val;
+    master_password_required_ =
+        (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",
+                            &temp_val) &&
+          !temp_val.empty() && atoi(temp_val.c_str()) != 0);
+
+    if (!inifile.GetString("User Prefs.WandStorageFile", &wandfilename_)) {
+      wandfilename_ = profile_dir_.AppendASCII("wand.dat").value();
+    }
+    masterpassword_filename_ = profile_dir_.AppendASCII("opcert6.dat").value();
   }
-  // Read Inifile
-  DictionaryValueINIParser inifile_parser;
-  if (!ReadOperaIniFile(profile_dir_, inifile_parser)) {
-    bridge_->NotifyEnded();
-    return;
-  }
-
-  const base::DictionaryValue &inifile = inifile_parser.root();
-
-  inifile.GetString("User Prefs.Hot List File Ver2", &bookmarkfilename_);
-  // Fallback to a bookmkarks.adr file in the profile directory
-  if (bookmarkfilename_.empty()) {
-    bookmarkfilename_ = profile_dir_.AppendASCII("bookmarks.adr").value();
-  }
-
-  inifile.GetString("MailBox.NotesFile", &notesfilename_);
-  if (notesfilename_.empty()) {
-    notesfilename_ = profile_dir_.AppendASCII("notes.adr").value();
-  }
-
-  std::string temp_val;
-  master_password_required =
-      (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",
-                          &temp_val) &&
-        !temp_val.empty() && atoi(temp_val.c_str()) != 0);
-
-  if (!inifile.GetString("User Prefs.WandStorageFile", &wandfilename_))
-    wandfilename_ = profile_dir_.AppendASCII("wand.dat").value();
-  masterpassword_filename_ = profile_dir_.AppendASCII("opcert6.dat").value();
-
   bridge_->NotifyStarted();
 
   if ((items & importer::FAVORITES) && !cancelled()) {

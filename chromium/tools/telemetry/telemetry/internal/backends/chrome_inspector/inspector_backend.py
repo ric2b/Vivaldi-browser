@@ -13,13 +13,10 @@ from telemetry import decorators
 from telemetry.internal.backends.chrome_inspector import devtools_http
 from telemetry.internal.backends.chrome_inspector import inspector_console
 from telemetry.internal.backends.chrome_inspector import inspector_memory
-from telemetry.internal.backends.chrome_inspector import inspector_network
 from telemetry.internal.backends.chrome_inspector import inspector_page
 from telemetry.internal.backends.chrome_inspector import inspector_runtime
 from telemetry.internal.backends.chrome_inspector import inspector_websocket
 from telemetry.internal.backends.chrome_inspector import websocket
-from telemetry.timeline import model as timeline_model_module
-from telemetry.timeline import trace_data as trace_data_module
 
 
 def _HandleInspectorWebSocketExceptions(func):
@@ -70,8 +67,6 @@ class InspectorBackend(object):
     self._page = inspector_page.InspectorPage(
         self._websocket, timeout=timeout)
     self._runtime = inspector_runtime.InspectorRuntime(self._websocket)
-    self._network = inspector_network.InspectorNetwork(self._websocket)
-    self._timeline_model = None
 
   def Disconnect(self):
     """Disconnects the inspector websocket.
@@ -147,11 +142,11 @@ class InspectorBackend(object):
   # Console public methods.
 
   @property
-  def message_output_stream(self):  # pylint: disable=E0202
+  def message_output_stream(self):
     return self._console.message_output_stream
 
   @message_output_stream.setter
-  def message_output_stream(self, stream):  # pylint: disable=E0202
+  def message_output_stream(self, stream):
     self._console.message_output_stream = stream
 
   # Memory public methods.
@@ -223,31 +218,67 @@ class InspectorBackend(object):
     """
     return self._runtime.EnableAllContexts()
 
-  # Timeline public methods.
-
-  @property
-  def timeline_model(self):
-    return self._timeline_model
-
   @_HandleInspectorWebSocketExceptions
-  def StartTimelineRecording(self):
-    self._network.timeline_recorder.Start()
+  def SynthesizeScrollGesture(self, x=100, y=800, xDistance=0, yDistance=-500,
+                              xOverscroll=None, yOverscroll=None,
+                              preventFling=True, speed=None,
+                              gestureSourceType=None, repeatCount=None,
+                              repeatDelayMs=None, interactionMarkerName=None,
+                              timeout=60):
+    """Runs an inspector command that causes a repeatable browser driven scroll.
 
-  @_HandleInspectorWebSocketExceptions
-  def StopTimelineRecording(self):
-    builder = trace_data_module.TraceDataBuilder()
+    Args:
+      x: X coordinate of the start of the gesture in CSS pixels.
+      y: Y coordinate of the start of the gesture in CSS pixels.
+      xDistance: Distance to scroll along the X axis (positive to scroll left).
+      yDistance: Distance to scroll along the Y axis (positive to scroll up).
+      xOverscroll: Number of additional pixels to scroll back along the X axis.
+      xOverscroll: Number of additional pixels to scroll back along the Y axis.
+      preventFling: Prevents a fling gesture.
+      speed: Swipe speed in pixels per second.
+      gestureSourceType: Which type of input events to be generated.
+      repeatCount: Number of additional repeats beyond the first scroll.
+      repeatDelayMs: Number of milliseconds delay between each repeat.
+      interactionMarkerName: The name of the interaction markers to generate.
 
-    data = self._network.timeline_recorder.Stop()
-    if data:
-      builder.AddEventsTo(trace_data_module.INSPECTOR_TRACE_PART, data)
-    self._timeline_model = timeline_model_module.TimelineModel(
-        builder.AsData(), shift_world_to_zero=False)
+    Raises:
+      exceptions.TimeoutException
+      exceptions.DevtoolsTargetCrashException
+    """
+    params = {
+        'x': x,
+        'y': y,
+        'xDistance': xDistance,
+        'yDistance': yDistance,
+        'preventFling': preventFling,
+    }
 
-  # Network public methods.
+    if xOverscroll is not None:
+      params['xOverscroll'] = xOverscroll
 
-  @_HandleInspectorWebSocketExceptions
-  def ClearCache(self):
-    self._network.ClearCache()
+    if yOverscroll is not None:
+      params['yOverscroll'] = yOverscroll
+
+    if speed is not None:
+      params['speed'] = speed
+
+    if repeatCount is not None:
+      params['repeatCount'] = repeatCount
+
+    if gestureSourceType is not None:
+      params['gestureSourceType'] = gestureSourceType
+
+    if repeatDelayMs is not None:
+      params['repeatDelayMs'] = repeatDelayMs
+
+    if interactionMarkerName is not None:
+      params['interactionMarkerName'] = interactionMarkerName
+
+    scroll_command = {
+      'method': 'Input.synthesizeScrollGesture',
+      'params': params
+    }
+    return self._runtime.RunInspectorCommand(scroll_command, timeout)
 
   # Methods used internally by other backends.
 
@@ -279,7 +310,7 @@ class InspectorBackend(object):
     Args:
       error: An instance of socket.error or websocket.WebSocketException.
     Raises:
-      exceptions.TimeoutException: A timeout occured.
+      exceptions.TimeoutException: A timeout occurred.
       exceptions.DevtoolsTargetCrashException: On any other error, the most
         likely explanation is that the devtool's target crashed.
     """

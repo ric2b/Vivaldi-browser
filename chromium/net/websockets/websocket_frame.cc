@@ -4,9 +4,9 @@
 
 #include "net/websockets/websocket_frame.h"
 
+#include <stddef.h>
 #include <algorithm>
 
-#include "base/basictypes.h"
 #include "base/big_endian.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
@@ -17,15 +17,30 @@ namespace net {
 
 namespace {
 
-const uint8 kFinalBit = 0x80;
-const uint8 kReserved1Bit = 0x40;
-const uint8 kReserved2Bit = 0x20;
-const uint8 kReserved3Bit = 0x10;
-const uint8 kOpCodeMask = 0xF;
-const uint8 kMaskBit = 0x80;
-const uint64 kMaxPayloadLengthWithoutExtendedLengthField = 125;
-const uint64 kPayloadLengthWithTwoByteExtendedLengthField = 126;
-const uint64 kPayloadLengthWithEightByteExtendedLengthField = 127;
+// GCC (and Clang) can transparently use vector ops. Only try to do this on
+// architectures where we know it works, otherwise gcc will attempt to emulate
+// the vector ops, which is unlikely to be efficient.
+// TODO(ricea): Add ARCH_CPU_ARM_FAMILY when arm_neon=1 becomes the default.
+#if defined(COMPILER_GCC) && defined(ARCH_CPU_X86_FAMILY) && !defined(OS_NACL)
+
+using PackedMaskType = uint32_t __attribute__((vector_size(16)));
+
+#else
+
+using PackedMaskType = size_t;
+
+#endif  // defined(COMPILER_GCC) && defined(ARCH_CPU_X86_FAMILY) &&
+        // !defined(OS_NACL)
+
+const uint8_t kFinalBit = 0x80;
+const uint8_t kReserved1Bit = 0x40;
+const uint8_t kReserved2Bit = 0x20;
+const uint8_t kReserved3Bit = 0x10;
+const uint8_t kOpCodeMask = 0xF;
+const uint8_t kMaskBit = 0x80;
+const uint64_t kMaxPayloadLengthWithoutExtendedLengthField = 125;
+const uint64_t kPayloadLengthWithTwoByteExtendedLengthField = 126;
+const uint64_t kPayloadLengthWithEightByteExtendedLengthField = 127;
 
 inline void MaskWebSocketFramePayloadByBytes(
     const WebSocketMaskingKey& masking_key,
@@ -44,7 +59,7 @@ inline void MaskWebSocketFramePayloadByBytes(
 scoped_ptr<WebSocketFrameHeader> WebSocketFrameHeader::Clone() const {
   scoped_ptr<WebSocketFrameHeader> ret(new WebSocketFrameHeader(opcode));
   ret->CopyFrom(*this);
-  return ret.Pass();
+  return ret;
 }
 
 void WebSocketFrameHeader::CopyFrom(const WebSocketFrameHeader& source) {
@@ -69,9 +84,9 @@ WebSocketFrameChunk::~WebSocketFrameChunk() {}
 int GetWebSocketFrameHeaderSize(const WebSocketFrameHeader& header) {
   int extended_length_size = 0;
   if (header.payload_length > kMaxPayloadLengthWithoutExtendedLengthField &&
-      header.payload_length <= kuint16max) {
+      header.payload_length <= UINT16_MAX) {
     extended_length_size = 2;
-  } else if (header.payload_length > kuint16max) {
+  } else if (header.payload_length > UINT16_MAX) {
     extended_length_size = 8;
   }
 
@@ -85,9 +100,9 @@ int WriteWebSocketFrameHeader(const WebSocketFrameHeader& header,
                               int buffer_size) {
   DCHECK((header.opcode & kOpCodeMask) == header.opcode)
       << "header.opcode must fit to kOpCodeMask.";
-  DCHECK(header.payload_length <= static_cast<uint64>(kint64max))
+  DCHECK(header.payload_length <= static_cast<uint64_t>(INT64_MAX))
       << "WebSocket specification doesn't allow a frame longer than "
-      << "kint64max (0x7FFFFFFFFFFFFFFF) bytes.";
+      << "INT64_MAX (0x7FFFFFFFFFFFFFFF) bytes.";
   DCHECK_GE(buffer_size, 0);
 
   // WebSocket frame format is as follows:
@@ -106,7 +121,7 @@ int WriteWebSocketFrameHeader(const WebSocketFrameHeader& header,
 
   int buffer_index = 0;
 
-  uint8 first_byte = 0u;
+  uint8_t first_byte = 0u;
   first_byte |= header.final ? kFinalBit : 0u;
   first_byte |= header.reserved1 ? kReserved1Bit : 0u;
   first_byte |= header.reserved2 ? kReserved2Bit : 0u;
@@ -115,11 +130,11 @@ int WriteWebSocketFrameHeader(const WebSocketFrameHeader& header,
   buffer[buffer_index++] = first_byte;
 
   int extended_length_size = 0;
-  uint8 second_byte = 0u;
+  uint8_t second_byte = 0u;
   second_byte |= header.masked ? kMaskBit : 0u;
   if (header.payload_length <= kMaxPayloadLengthWithoutExtendedLengthField) {
     second_byte |= header.payload_length;
-  } else if (header.payload_length <= kuint16max) {
+  } else if (header.payload_length <= UINT16_MAX) {
     second_byte |= kPayloadLengthWithTwoByteExtendedLengthField;
     extended_length_size = 2;
   } else {
@@ -130,7 +145,7 @@ int WriteWebSocketFrameHeader(const WebSocketFrameHeader& header,
 
   // Writes "extended payload length" field.
   if (extended_length_size == 2) {
-    uint16 payload_length_16 = static_cast<uint16>(header.payload_length);
+    uint16_t payload_length_16 = static_cast<uint16_t>(header.payload_length);
     base::WriteBigEndian(buffer + buffer_index, payload_length_16);
     buffer_index += sizeof(payload_length_16);
   } else if (extended_length_size == 8) {
@@ -163,7 +178,7 @@ WebSocketMaskingKey GenerateWebSocketMaskingKey() {
 }
 
 void MaskWebSocketFramePayload(const WebSocketMaskingKey& masking_key,
-                               uint64 frame_offset,
+                               uint64_t frame_offset,
                                char* const data,
                                int data_size) {
   static const size_t kMaskingKeyLength =
@@ -171,16 +186,14 @@ void MaskWebSocketFramePayload(const WebSocketMaskingKey& masking_key,
 
   DCHECK_GE(data_size, 0);
 
-  // Most of the masking is done one word at a time, except for the beginning
-  // and the end of the buffer which may be unaligned. We use size_t to get the
-  // word size for this architecture. We require it be a multiple of
-  // kMaskingKeyLength in size.
-  typedef size_t PackedMaskType;
-  PackedMaskType packed_mask_key = 0;
+  // Most of the masking is done in chunks of sizeof(PackedMaskType), except for
+  // the beginning and the end of the buffer which may be unaligned.
+  // PackedMaskType must be a multiple of kMaskingKeyLength in size.
+  PackedMaskType packed_mask_key;
   static const size_t kPackedMaskKeySize = sizeof(packed_mask_key);
   static_assert((kPackedMaskKeySize >= kMaskingKeyLength &&
                  kPackedMaskKeySize % kMaskingKeyLength == 0),
-                "word size is not a multiple of mask length");
+                "PackedMaskType size is not a multiple of mask length");
   char* const end = data + data_size;
   // If the buffer is too small for the vectorised version to be useful, revert
   // to the byte-at-a-time implementation early.

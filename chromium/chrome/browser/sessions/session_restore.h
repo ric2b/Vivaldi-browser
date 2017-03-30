@@ -5,13 +5,15 @@
 #ifndef CHROME_BROWSER_SESSIONS_SESSION_RESTORE_H_
 #define CHROME_BROWSER_SESSIONS_SESSION_RESTORE_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_list.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/sessions/session_types.h"
+#include "components/sessions/core/session_types.h"
 #include "ui/base/window_open_disposition.h"
 
 class Browser;
@@ -39,12 +41,6 @@ class SessionRestore {
     SYNCHRONOUS                  = 1 << 2,
   };
 
-  enum SmartRestoreMode {
-    SMART_RESTORE_MODE_OFF,     // No sorting of tabs.
-    SMART_RESTORE_MODE_SIMPLE,  // Tabs are sorted using predetermined criteria.
-    SMART_RESTORE_MODE_MRU      // Same as above but takes into account MRU.
-  };
-
   // Notification callback list.
   using CallbackList = base::CallbackList<void(int)>;
 
@@ -64,7 +60,7 @@ class SessionRestore {
   static Browser* RestoreSession(Profile* profile,
                                  Browser* browser,
                                  chrome::HostDesktopType host_desktop_type,
-                                 uint32 behavior,
+                                 uint32_t behavior,
                                  const std::vector<GURL>& urls_to_open);
 
   // Restores the last session when the last session crashed. It's a wrapper
@@ -103,10 +99,6 @@ class SessionRestore {
   // indicates the number of tabs that were created.
   static CallbackSubscription RegisterOnSessionRestoredCallback(
       const base::Callback<void(int)>& callback);
-
-  // Returns true if smart session restore is enabled (ie. background tabs are
-  // sorted before being loaded).
-  static SmartRestoreMode GetSmartRestoreMode();
 
  private:
   SessionRestore();

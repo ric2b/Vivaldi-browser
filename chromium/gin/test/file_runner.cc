@@ -65,13 +65,14 @@ void RunTestFromFile(const base::FilePath& path, FileRunnerDelegate* delegate,
 #endif
 
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,
+                                 gin::IsolateHolder::kStableV8Extras,
                                  gin::ArrayBufferAllocator::SharedInstance());
 
   gin::IsolateHolder instance;
   gin::ShellRunner runner(delegate, instance.isolate());
   {
     gin::Runner::Scope scope(&runner);
-    v8::V8::SetCaptureStackTraceForUncaughtExceptions(true);
+    instance.isolate()->SetCaptureStackTraceForUncaughtExceptions(true);
     runner.Run(source, path.AsUTF8Unsafe());
 
     if (run_until_idle) {

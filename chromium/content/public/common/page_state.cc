@@ -4,6 +4,8 @@
 
 #include "content/public/common/page_state.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/common/page_state_serialization.h"
@@ -42,7 +44,7 @@ void RecursivelyRemovePasswordData(ExplodedFrameState* state) {
 
 void RecursivelyRemoveScrollOffset(ExplodedFrameState* state) {
   state->scroll_offset = gfx::Point();
-  state->pinch_viewport_scroll_offset = gfx::PointF();
+  state->visual_viewport_scroll_offset = gfx::PointF();
 }
 
 void RecursivelyRemoveReferrer(ExplodedFrameState* state) {

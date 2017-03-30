@@ -5,11 +5,12 @@
 #include "chrome/browser/extensions/api/content_settings/content_settings_store.h"
 
 #include <set>
+#include <utility>
+#include <vector>
 
 #include "base/debug/alias.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -54,11 +55,11 @@ ContentSettingsStore::~ContentSettingsStore() {
   STLDeleteValues(&entries_);
 }
 
-RuleIterator* ContentSettingsStore::GetRuleIterator(
+scoped_ptr<RuleIterator> ContentSettingsStore::GetRuleIterator(
     ContentSettingsType type,
     const content_settings::ResourceIdentifier& identifier,
     bool incognito) const {
-  ScopedVector<RuleIterator> iterators;
+  std::vector<scoped_ptr<RuleIterator>> iterators;
   // Iterate the extensions based on install time (last installed extensions
   // first).
   ExtensionEntryMap::const_reverse_iterator entry;
@@ -87,7 +88,8 @@ RuleIterator* ContentSettingsStore::GetRuleIterator(
           entry->second->settings.GetRuleIterator(type, identifier, NULL));
     }
   }
-  return new ConcatenationIterator(&iterators, auto_lock.release());
+  return scoped_ptr<RuleIterator>(
+      new ConcatenationIterator(std::move(iterators), auto_lock.release()));
 }
 
 void ContentSettingsStore::SetExtensionContentSetting(
@@ -101,8 +103,6 @@ void ContentSettingsStore::SetExtensionContentSetting(
   {
     base::AutoLock lock(lock_);
     OriginIdentifierValueMap* map = GetValueMap(ext_id, scope);
-    // find out why the extension did not get registered in entries_
-    DCHECK(map);
     if (setting == CONTENT_SETTING_DEFAULT) {
       map->DeleteValue(primary_pattern, secondary_pattern, type, identifier);
     } else {
@@ -273,9 +273,12 @@ base::ListValue* ContentSettingsStore::GetSettingsForExtension(
                               it->first.resource_identifier);
       ContentSetting content_setting = ValueToContentSetting(rule.value.get());
       DCHECK_NE(CONTENT_SETTING_DEFAULT, content_setting);
-      setting_dict->SetString(
-          keys::kContentSettingKey,
-          helpers::ContentSettingToString(content_setting));
+
+      std::string setting_string =
+          content_settings::ContentSettingToString(content_setting);
+      DCHECK(!setting_string.empty());
+
+      setting_dict->SetString(keys::kContentSettingKey, setting_string);
       settings->Append(setting_dict);
     }
   }
@@ -316,9 +319,9 @@ void ContentSettingsStore::SetExtensionContentSettingFromList(
 
     std::string content_setting_string;
     dict->GetString(keys::kContentSettingKey, &content_setting_string);
-    ContentSetting setting = CONTENT_SETTING_DEFAULT;
-    bool result =
-        helpers::StringToContentSetting(content_setting_string, &setting);
+    ContentSetting setting;
+    bool result = content_settings::ContentSettingFromString(
+        content_setting_string, &setting);
     DCHECK(result);
 
     SetExtensionContentSetting(extension_id,

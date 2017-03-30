@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/message_loop/message_loop.h"
-#include "base/run_loop.h"
+#include <stdint.h>
+
+#include "base/bind.h"
+#include "base/test/test_simple_task_runner.h"
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
 #include "media/base/video_frame.h"
 #include "media/renderers/mock_gpu_video_accelerator_factories.h"
@@ -21,15 +23,44 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
     *textures = ++gen_textures;
   }
 
-  GLuint InsertSyncPointCHROMIUM() override { return ++sync_point; }
+  void ShallowFlushCHROMIUM() override {
+    flushed_fence_sync_ = next_fence_sync_ - 1;
+  }
+
+  void OrderingBarrierCHROMIUM() override {
+    flushed_fence_sync_ = next_fence_sync_ - 1;
+  }
+
+  GLuint64 InsertFenceSyncCHROMIUM() override { return next_fence_sync_++; }
+
+  void GenSyncTokenCHROMIUM(GLuint64 fence_sync, GLbyte* sync_token) override {
+    gpu::SyncToken sync_token_data;
+    if (fence_sync <= flushed_fence_sync_) {
+      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0, 0,
+                          fence_sync);
+      sync_token_data.SetVerifyFlush();
+    }
+    memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
+  }
+
+  void GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
+                                      GLbyte* sync_token) override {
+    gpu::SyncToken sync_token_data;
+    if (fence_sync <= flushed_fence_sync_) {
+      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0, 0,
+                          fence_sync);
+    }
+    memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
+  }
 
   void GenMailboxCHROMIUM(GLbyte* mailbox) override {
-    *reinterpret_cast<unsigned*>(mailbox) = ++this->mailbox;
+    *reinterpret_cast<unsigned*>(mailbox) = ++mailbox_;
   }
 
  private:
-  unsigned sync_point = 0u;
-  unsigned mailbox = 0u;
+  uint64_t next_fence_sync_ = 1u;
+  uint64_t flushed_fence_sync_ = 0u;
+  unsigned mailbox_ = 0u;
 };
 
 }  // unnamed namespace
@@ -37,142 +68,235 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
 class GpuMemoryBufferVideoFramePoolTest : public ::testing::Test {
  public:
   GpuMemoryBufferVideoFramePoolTest() {}
-  void SetUp() override { gles2_.reset(new TestGLES2Interface); }
+  void SetUp() override {
+    gles2_.reset(new TestGLES2Interface);
+    media_task_runner_ = make_scoped_refptr(new base::TestSimpleTaskRunner);
+    copy_task_runner_ = make_scoped_refptr(new base::TestSimpleTaskRunner);
+    mock_gpu_factories_.reset(
+        new MockGpuVideoAcceleratorFactories(gles2_.get()));
+    gpu_memory_buffer_pool_.reset(new GpuMemoryBufferVideoFramePool(
+        media_task_runner_, copy_task_runner_.get(),
+        mock_gpu_factories_.get()));
+  }
 
-  void TearDown() override { base::RunLoop().RunUntilIdle(); }
+  void TearDown() override {
+    gpu_memory_buffer_pool_.reset();
+    RunUntilIdle();
+    mock_gpu_factories_.reset();
+  }
+
+  void RunUntilIdle() {
+    media_task_runner_->RunUntilIdle();
+    copy_task_runner_->RunUntilIdle();
+    media_task_runner_->RunUntilIdle();
+  }
 
   static scoped_refptr<media::VideoFrame> CreateTestYUVVideoFrame(
       int dimension) {
     const int kDimension = 10;
-    static uint8 y_data[kDimension * kDimension] = {0};
-    static uint8 u_data[kDimension * kDimension / 2] = {0};
-    static uint8 v_data[kDimension * kDimension / 2] = {0};
+    static uint8_t y_data[kDimension * kDimension] = {0};
+    static uint8_t u_data[kDimension * kDimension / 2] = {0};
+    static uint8_t v_data[kDimension * kDimension / 2] = {0};
 
     DCHECK_LE(dimension, kDimension);
     gfx::Size size(dimension, dimension);
 
-    return media::VideoFrame::WrapExternalYuvData(
-        media::VideoFrame::YV12,  // format
-        size,                     // coded_size
-        gfx::Rect(size),          // visible_rect
-        size,                     // natural_size
-        size.width(),             // y_stride
-        size.width() / 2,         // u_stride
-        size.width() / 2,         // v_stride
-        y_data,                   // y_data
-        u_data,                   // u_data
-        v_data,                   // v_data
-        base::TimeDelta());       // timestamp
+    scoped_refptr<VideoFrame> video_frame =
+        media::VideoFrame::WrapExternalYuvData(
+            media::PIXEL_FORMAT_YV12,  // format
+            size,                      // coded_size
+            gfx::Rect(size),           // visible_rect
+            size,                      // natural_size
+            size.width(),              // y_stride
+            size.width() / 2,          // u_stride
+            size.width() / 2,          // v_stride
+            y_data,                    // y_data
+            u_data,                    // u_data
+            v_data,                    // v_data
+            base::TimeDelta());        // timestamp
+    EXPECT_TRUE(video_frame);
+    return video_frame;
   }
 
  protected:
-  base::MessageLoop media_message_loop_;
+  scoped_ptr<MockGpuVideoAcceleratorFactories> mock_gpu_factories_;
+  scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_;
+  scoped_refptr<base::TestSimpleTaskRunner> media_task_runner_;
+  scoped_refptr<base::TestSimpleTaskRunner> copy_task_runner_;
   scoped_ptr<TestGLES2Interface> gles2_;
 };
 
-TEST_F(GpuMemoryBufferVideoFramePoolTest, NoGpuFactoryNoHardwareVideoFrame) {
-  scoped_refptr<VideoFrame> frame = CreateTestYUVVideoFrame(10);
-  scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_ =
-      make_scoped_ptr(new GpuMemoryBufferVideoFramePool(
-          media_message_loop_.task_runner(), nullptr));
-
-  scoped_refptr<VideoFrame> frame2 =
-      gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(frame);
-  EXPECT_EQ(frame.get(), frame2.get());
+void MaybeCreateHardwareFrameCallback(
+    scoped_refptr<VideoFrame>* video_frame_output,
+    const scoped_refptr<VideoFrame>& video_frame) {
+  *video_frame_output = video_frame;
 }
 
-TEST_F(GpuMemoryBufferVideoFramePoolTest, NoTextureRGNoHardwareVideoFrame) {
-  scoped_refptr<VideoFrame> frame = CreateTestYUVVideoFrame(10);
-  scoped_refptr<MockGpuVideoAcceleratorFactories> mock_gpu_factories(
-      new MockGpuVideoAcceleratorFactories);
-  scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_ =
-      make_scoped_ptr(new GpuMemoryBufferVideoFramePool(
-          media_message_loop_.task_runner(), mock_gpu_factories));
+TEST_F(GpuMemoryBufferVideoFramePoolTest, VideoFrameOutputFormatUnknown) {
+  scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
+  mock_gpu_factories_->SetVideoFrameOutputFormat(PIXEL_FORMAT_UNKNOWN);
+  scoped_refptr<VideoFrame> frame;
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
 
-  EXPECT_CALL(*mock_gpu_factories.get(), IsTextureRGSupported())
-      .WillRepeatedly(testing::Return(false));
-  scoped_refptr<VideoFrame> frame2 =
-      gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(frame);
-  EXPECT_EQ(frame.get(), frame2.get());
+  EXPECT_EQ(software_frame.get(), frame.get());
 }
 
 TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareFrame) {
   scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
-  scoped_refptr<MockGpuVideoAcceleratorFactories> mock_gpu_factories(
-      new MockGpuVideoAcceleratorFactories);
-  scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_ =
-      make_scoped_ptr(new GpuMemoryBufferVideoFramePool(
-          media_message_loop_.task_runner(), mock_gpu_factories));
+  scoped_refptr<VideoFrame> frame;
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
 
-  EXPECT_CALL(*mock_gpu_factories.get(), GetGLES2Interface())
-      .WillRepeatedly(testing::Return(gles2_.get()));
-  EXPECT_CALL(*mock_gpu_factories.get(), IsTextureRGSupported())
-      .WillRepeatedly(testing::Return(true));
+  RunUntilIdle();
 
-  scoped_refptr<VideoFrame> frame =
-      gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(software_frame);
   EXPECT_NE(software_frame.get(), frame.get());
   EXPECT_EQ(3u, gles2_->gen_textures);
 }
 
 TEST_F(GpuMemoryBufferVideoFramePoolTest, ReuseFirstResource) {
   scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
-  scoped_refptr<MockGpuVideoAcceleratorFactories> mock_gpu_factories(
-      new MockGpuVideoAcceleratorFactories);
-  scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_ =
-      make_scoped_ptr(new GpuMemoryBufferVideoFramePool(
-          media_message_loop_.task_runner(), mock_gpu_factories));
+  scoped_refptr<VideoFrame> frame;
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
 
-  EXPECT_CALL(*mock_gpu_factories.get(), GetGLES2Interface())
-      .WillRepeatedly(testing::Return(gles2_.get()));
-  EXPECT_CALL(*mock_gpu_factories.get(), IsTextureRGSupported())
-      .WillRepeatedly(testing::Return(true));
-
-  scoped_refptr<VideoFrame> frame =
-      gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(software_frame);
   EXPECT_NE(software_frame.get(), frame.get());
   gpu::Mailbox mailbox = frame->mailbox_holder(0).mailbox;
-  unsigned sync_point = frame->mailbox_holder(0).sync_point;
+  const gpu::SyncToken sync_token = frame->mailbox_holder(0).sync_token;
   EXPECT_EQ(3u, gles2_->gen_textures);
 
-  scoped_refptr<VideoFrame> frame2 =
-      gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(software_frame);
+  scoped_refptr<VideoFrame> frame2;
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame2));
+  RunUntilIdle();
+
   EXPECT_NE(software_frame.get(), frame2.get());
   EXPECT_NE(mailbox, frame2->mailbox_holder(0).mailbox);
   EXPECT_EQ(6u, gles2_->gen_textures);
 
   frame = nullptr;
   frame2 = nullptr;
-  base::RunLoop().RunUntilIdle();  // Run posted closures.
-  frame = gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(software_frame);
+  RunUntilIdle();
+
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
+
   EXPECT_NE(software_frame.get(), frame.get());
   EXPECT_EQ(6u, gles2_->gen_textures);
   EXPECT_EQ(frame->mailbox_holder(0).mailbox, mailbox);
-  EXPECT_NE(frame->mailbox_holder(0).sync_point, sync_point);
+  EXPECT_NE(frame->mailbox_holder(0).sync_token, sync_token);
+}
+
+TEST_F(GpuMemoryBufferVideoFramePoolTest, DoNotReuseInUse) {
+  scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
+  scoped_refptr<VideoFrame> frame;
+  scoped_refptr<VideoFrame> frame2;
+
+  // Allocate a frame.
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
+  EXPECT_NE(software_frame.get(), frame.get());
+  gpu::Mailbox mailbox = frame->mailbox_holder(0).mailbox;
+  const gpu::SyncToken sync_token = frame->mailbox_holder(0).sync_token;
+  EXPECT_EQ(3u, gles2_->gen_textures);
+
+  // Allocate a second frame.
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame2));
+  RunUntilIdle();
+  EXPECT_NE(software_frame.get(), frame2.get());
+  EXPECT_NE(mailbox, frame2->mailbox_holder(0).mailbox);
+  EXPECT_EQ(6u, gles2_->gen_textures);
+
+  // Allow the frames to be recycled.
+  frame = nullptr;
+  frame2 = nullptr;
+  RunUntilIdle();
+
+  // Set all buffers to be in use, so the next hardware frame will require
+  // a new allocation.
+  mock_gpu_factories_->SetGpuMemoryBuffersInUseByMacOSWindowServer(true);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
+  EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(9u, gles2_->gen_textures);
+  EXPECT_NE(frame->mailbox_holder(0).mailbox, mailbox);
+  EXPECT_NE(frame->mailbox_holder(0).sync_token, sync_token);
+
+  // Set the buffers no longer in use, so no new allocations will be made.
+  mock_gpu_factories_->SetGpuMemoryBuffersInUseByMacOSWindowServer(false);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame2));
+  RunUntilIdle();
+  EXPECT_NE(software_frame.get(), frame2.get());
+  EXPECT_EQ(9u, gles2_->gen_textures);
+  EXPECT_NE(frame->mailbox_holder(0).mailbox, mailbox);
+  EXPECT_NE(frame->mailbox_holder(0).sync_token, sync_token);
 }
 
 TEST_F(GpuMemoryBufferVideoFramePoolTest, DropResourceWhenSizeIsDifferent) {
-  scoped_refptr<MockGpuVideoAcceleratorFactories> mock_gpu_factories(
-      new MockGpuVideoAcceleratorFactories);
-  scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_ =
-      make_scoped_ptr(new GpuMemoryBufferVideoFramePool(
-          media_message_loop_.task_runner(), mock_gpu_factories));
+  scoped_refptr<VideoFrame> frame;
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      CreateTestYUVVideoFrame(10),
+      base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
 
-  EXPECT_CALL(*mock_gpu_factories.get(), GetGLES2Interface())
-      .WillRepeatedly(testing::Return(gles2_.get()));
-  EXPECT_CALL(*mock_gpu_factories.get(), IsTextureRGSupported())
-      .WillRepeatedly(testing::Return(true));
-
-  scoped_refptr<VideoFrame> frame =
-      gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
-          CreateTestYUVVideoFrame(10));
   EXPECT_EQ(3u, gles2_->gen_textures);
 
   frame = nullptr;
-  base::RunLoop().RunUntilIdle();  // Run posted closures.
-  frame = gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
-      CreateTestYUVVideoFrame(4));
+  RunUntilIdle();
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      CreateTestYUVVideoFrame(4),
+      base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
   EXPECT_EQ(6u, gles2_->gen_textures);
+}
+
+TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareUYUVFrame) {
+  scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
+  scoped_refptr<VideoFrame> frame;
+  mock_gpu_factories_->SetVideoFrameOutputFormat(PIXEL_FORMAT_UYVY);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+
+  RunUntilIdle();
+
+  EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(1u, gles2_->gen_textures);
+}
+
+TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareNV12Frame) {
+  scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
+  scoped_refptr<VideoFrame> frame;
+  mock_gpu_factories_->SetVideoFrameOutputFormat(PIXEL_FORMAT_NV12);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+
+  RunUntilIdle();
+
+  EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(1u, gles2_->gen_textures);
+}
+
+// AllocateGpuMemoryBuffer can return null (e.g: when the GPU process is down).
+// This test checks that in that case we don't crash and still create the
+// textures.
+TEST_F(GpuMemoryBufferVideoFramePoolTest, AllocateGpuMemoryBufferFail) {
+  scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
+  scoped_refptr<VideoFrame> frame;
+  mock_gpu_factories_->SetFailToAllocateGpuMemoryBufferForTesting(true);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+
+  RunUntilIdle();
+
+  EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(3u, gles2_->gen_textures);
 }
 
 }  // namespace media

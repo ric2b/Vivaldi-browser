@@ -19,8 +19,12 @@ component("views") {
   all_dependent_configs = [ ":flags" ]
   sources = gypi_values.views_sources
 
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  configs += [
+    "//build/config:precompiled_headers",
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
 
   defines = [ "VIEWS_IMPLEMENTATION" ]
 
@@ -68,6 +72,7 @@ component("views") {
 
   if (is_chromeos) {
     sources -= [
+      "controls/menu/menu_config_linux.cc",
       "linux_ui/status_icon_linux.cc",
       "linux_ui/status_icon_linux.h",
     ]
@@ -109,7 +114,7 @@ component("views") {
       "//ui/touch_selection",
       "//ui/wm",
     ]
-    if (!is_chromeos) {
+    if (!is_chromeos && !is_android) {
       sources += gypi_values.views_desktop_aura_sources
       if (use_x11) {
         sources += gypi_values.views_desktop_aura_x11_sources
@@ -123,10 +128,16 @@ component("views") {
         sources += gypi_values.views_desktop_aura_linux_sources
       }
     }
+    if (is_android) {
+      sources += gypi_values.views_android_sources
+    }
   }
 
   if (is_mac) {
-    deps += [ "//ui/accelerated_widget_mac" ]
+    deps += [
+      "//ui/accelerated_widget_mac",
+      "//ui/events:dom_keycode_converter",
+    ]
     libs = [
       # Required by bridged_native_widget.mm.
       "QuartzCore.framework",
@@ -134,9 +145,14 @@ component("views") {
   }
 }
 
-static_library("test_support") {
+source_set("test_support_internal") {
   testonly = true
   sources = gypi_values.views_test_support_sources
+
+  # External code should depend upon "test_support".
+  visibility = [ "./*" ]
+
+  configs += [ "//build/config:precompiled_headers" ]
 
   public_deps = [
     ":views",
@@ -158,6 +174,8 @@ static_library("test_support") {
     "//ui/gfx/geometry",
   ]
 
+  sources += [ "test/platform_test_helper.h" ]
+
   if (use_aura) {
     sources += gypi_values.views_test_support_aura_sources
     deps += [
@@ -177,6 +195,16 @@ static_library("test_support") {
   }
 }
 
+static_library("test_support") {
+  testonly = true
+  public_deps = [
+    ":test_support_internal",
+  ]
+  sources = [
+    "test/default_platform_test_helper.cc",
+  ]
+}
+
 test("views_unittests") {
   sources = gypi_values.views_unittests_sources
 
@@ -186,27 +214,34 @@ test("views_unittests") {
     "//base:i18n",
     "//base/allocator",
     "//base/test:test_support",
+    "//cc",
     "//skia",
     "//testing/gtest",
     "//third_party/icu",
     "//ui/accessibility",
     "//ui/base",
-    "//ui/base/ime",
     "//ui/base:test_support",
+    "//ui/base/ime",
     "//ui/compositor:test_support",
-    "//ui/events:test_support",
+    "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
+    "//ui/events:test_support",
     "//ui/events/platform",
-    "//ui/gfx",
+    "//ui/gfx:test_support",
     "//ui/gfx/geometry",
-    "//ui/gl",
+    "//ui/gl:test_support",
     "//ui/resources",
     "//ui/strings",
     "//url",
   ]
 
+  data_deps = [
+    "//ui/resources:ui_test_pak",
+  ]
+
   if (is_win) {
     deps += [
+      "//build/win:default_exe_manifest",
       "//third_party/iaccessible2",
       "//third_party/wtl",
     ]
@@ -215,15 +250,6 @@ test("views_unittests") {
       "oleacc.lib",
       "comctl32.lib",
     ]
-
-    # TOOD(GYP)
-    #'msvs_settings': {
-    #  'VCManifestTool': {
-    #    'AdditionalManifestFiles': [
-    #      '$(ProjectDir)\\test\\views_unittest.manifest',
-    #    ],
-    #  },
-    #},
   }
 
   if (use_x11) {
@@ -253,14 +279,9 @@ test("views_unittests") {
       }
     }
   }
+
   if (!is_chromeos) {
     sources += gypi_values.views_unittests_desktop_sources
-  }
-  if (use_x11) {
-    deps += [
-      "//ui/events/platform/x11",
-      "//ui/gfx/x",
-    ]
   }
 
   if (is_mac) {
@@ -270,6 +291,7 @@ test("views_unittests") {
       "controls/native/native_view_host_unittest.cc",
       "widget/window_reorderer_unittest.cc",
     ]
+    deps += [ "//ui/accelerated_widget_mac" ]
   }
 }
 
@@ -289,6 +311,8 @@ if (is_mac) {
       "//testing/gtest",
       "//ui/base:test_support",
       "//ui/compositor",
+      "//ui/events:test_support",
+      "//ui/gl:test_support",
       "//ui/resources",
       "//ui/resources:ui_test_pak",
       "//ui/strings",

@@ -6,8 +6,11 @@
 #define NET_UDP_UDP_SOCKET_WIN_H_
 
 #include <qos2.h>
+#include <stdint.h>
 #include <winsock2.h>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -18,10 +21,11 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
-#include "net/base/net_util.h"
+#include "net/base/network_change_notifier.h"
 #include "net/base/rand_callback.h"
 #include "net/log/net_log.h"
 #include "net/udp/datagram_socket.h"
+#include "net/udp/diff_serv_code_point.h"
 
 namespace net {
 
@@ -38,6 +42,13 @@ class NET_EXPORT UDPSocketWin
   // Opens the socket.
   // Returns a net error code.
   int Open(AddressFamily address_family);
+
+  // Binds this socket to |network|. All data traffic on the socket will be sent
+  // and received via |network|. Must be called before Connect(). This call will
+  // fail if |network| has disconnected. Communication using this socket will
+  // fail if |network| disconnects.
+  // Returns a net error code.
+  int BindToNetwork(NetworkChangeNotifier::NetworkHandle network);
 
   // Connects the socket to connect with a certain |address|.
   // Should be called after Open().
@@ -108,11 +119,11 @@ class NET_EXPORT UDPSocketWin
 
   // Sets the receive buffer size (in bytes) for the socket.
   // Returns a net error code.
-  int SetReceiveBufferSize(int32 size);
+  int SetReceiveBufferSize(int32_t size);
 
   // Sets the send buffer size (in bytes) for the socket.
   // Returns a net error code.
-  int SetSendBufferSize(int32 size);
+  int SetSendBufferSize(int32_t size);
 
   // Returns true if the socket is already connected or bound.
   bool is_connected() const { return is_connected_; }
@@ -148,7 +159,7 @@ class NET_EXPORT UDPSocketWin
   // default interface is used.
   // Should be called before Bind().
   // Returns a net error code.
-  int SetMulticastInterface(uint32 interface_index);
+  int SetMulticastInterface(uint32_t interface_index);
 
   // Sets the time-to-live option for UDP packets sent to the multicast
   // group address. The default value of this option is 1.
@@ -249,7 +260,7 @@ class NET_EXPORT UDPSocketWin
   int socket_options_;
 
   // Multicast interface.
-  uint32 multicast_interface_;
+  uint32_t multicast_interface_;
 
   // Multicast socket options cached for SetMulticastOption.
   // Cannot be used after Bind().

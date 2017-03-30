@@ -6,7 +6,9 @@
 #define MEDIA_BASE_ANDROID_VIDEO_DECODER_JOB_H_
 
 #include <jni.h>
+#include <stddef.h>
 
+#include "base/macros.h"
 #include "media/base/android/media_decoder_job.h"
 
 namespace media {
@@ -18,13 +20,10 @@ class VideoDecoderJob : public MediaDecoderJob {
  public:
   // Create a new VideoDecoderJob instance.
   // |request_data_cb| - Callback used to request more data for the decoder.
-  // |request_resources_cb| - Callback used to request resources.
   // |on_demuxer_config_changed_cb| - Callback used to inform the caller that
   // demuxer config has changed.
-  VideoDecoderJob(
-      const base::Closure& request_data_cb,
-      const base::Closure& request_resources_cb,
-      const base::Closure& on_demuxer_config_changed_cb);
+  VideoDecoderJob(const base::Closure& request_data_cb,
+                  const base::Closure& on_demuxer_config_changed_cb);
   ~VideoDecoderJob() override;
 
   // Passes a java surface object to the codec. Returns true if the surface
@@ -43,8 +42,10 @@ class VideoDecoderJob : public MediaDecoderJob {
   // MediaDecoderJob implementation.
   void ReleaseOutputBuffer(
       int output_buffer_index,
+      size_t offset,
       size_t size,
       bool render_output,
+      bool is_late_frame,
       base::TimeDelta current_presentation_timestamp,
       const ReleaseOutputCompletionCallback& callback) override;
   bool ComputeTimeToRender() const override;
@@ -67,10 +68,6 @@ class VideoDecoderJob : public MediaDecoderJob {
 
   // The surface object currently owned by the player.
   gfx::ScopedJavaSurface surface_;
-
-  // Callbacks to inform the caller about decoder resources change.
-  base::Closure request_resources_cb_;
-  base::Closure release_resources_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoDecoderJob);
 };

@@ -12,6 +12,7 @@
 
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
@@ -74,10 +75,15 @@ class CHROMEOS_EXPORT NetworkStateHandler
     TECHNOLOGY_AVAILABLE,
     TECHNOLOGY_UNINITIALIZED,
     TECHNOLOGY_ENABLING,
-    TECHNOLOGY_ENABLED
+    TECHNOLOGY_ENABLED,
+    TECHNOLOGY_PROHIBITED
   };
 
   ~NetworkStateHandler() override;
+
+  // Called just before destruction to give observers a chance to remove
+  // themselves and disable any networking.
+  void Shutdown();
 
   // Add/remove observers.
   void AddObserver(NetworkStateHandlerObserver* observer,
@@ -94,6 +100,9 @@ class CHROMEOS_EXPORT NetworkStateHandler
   bool IsTechnologyEnabled(const NetworkTypePattern& type) const {
     return GetTechnologyState(type) == TECHNOLOGY_ENABLED;
   }
+  bool IsTechnologyProhibited(const NetworkTypePattern& type) const {
+    return GetTechnologyState(type) == TECHNOLOGY_PROHIBITED;
+  }
 
   // Asynchronously sets the technology enabled property for |type|. Only
   // NetworkTypePattern::Primitive, ::Mobile and ::Ethernet are supported.
@@ -101,6 +110,13 @@ class CHROMEOS_EXPORT NetworkStateHandler
   void SetTechnologyEnabled(
       const NetworkTypePattern& type,
       bool enabled,
+      const network_handler::ErrorCallback& error_callback);
+
+  // Asynchronously sets the list of prohibited technologies. The accepted
+  // values are the shill network technology identifiers. See also
+  // chromeos::onc::Validator::ValidateGlobalNetworkConfiguration().
+  void SetProhibitedTechnologies(
+      const std::vector<std::string>& prohibited_technologies,
       const network_handler::ErrorCallback& error_callback);
 
   // Finds and returns a device state by |device_path| or NULL if not found.
@@ -362,14 +378,14 @@ class CHROMEOS_EXPORT NetworkStateHandler
   scoped_ptr<internal::ShillPropertyHandler> shill_property_handler_;
 
   // Observer list
-  base::ObserverList<NetworkStateHandlerObserver> observers_;
+  base::ObserverList<NetworkStateHandlerObserver, true> observers_;
 
   // List of managed network states
   ManagedStateList network_list_;
 
   // Set to true when the network list is sorted, cleared when network updates
   // arrive. Used to trigger sorting when needed.
-  bool network_list_sorted_;
+  bool network_list_sorted_ = false;
 
   // List of managed device states
   ManagedStateList device_list_;
@@ -383,6 +399,9 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // Map of network specifiers to guids. Contains an entry for each
   // NetworkState that is not saved in a profile.
   SpecifierGuidMap specifier_guid_map_;
+
+  // Ensure that Shutdown() gets called exactly once.
+  bool did_shutdown_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkStateHandler);
 };

@@ -7,11 +7,13 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
 
 // See the comments in dir_reader_posix.h about this.
@@ -70,7 +72,7 @@ class DirReaderLinux {
 
   const char* name() const {
     if (!size_)
-      return NULL;
+      return nullptr;
 
     const linux_dirent* dirent =
         reinterpret_cast<const linux_dirent*>(&buf_[offset_]);
@@ -88,7 +90,8 @@ class DirReaderLinux {
  private:
   const int fd_;
   unsigned char buf_[512];
-  size_t offset_, size_;
+  size_t offset_;
+  size_t size_;
 
   DISALLOW_COPY_AND_ASSIGN(DirReaderLinux);
 };

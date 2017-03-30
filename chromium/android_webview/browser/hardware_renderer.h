@@ -6,6 +6,7 @@
 #define ANDROID_WEBVIEW_BROWSER_HARDWARE_RENDERER_H_
 
 #include "android_webview/browser/shared_renderer_state.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/surfaces/display_client.h"
 #include "cc/surfaces/surface_factory_client.h"
@@ -25,6 +26,7 @@ namespace android_webview {
 class AwGLSurface;
 class ChildFrame;
 class ParentOutputSurface;
+class ScopedAppGLStateRestore;
 
 class HardwareRenderer : public cc::DisplayClient,
                          public cc::SurfaceFactoryClient {
@@ -32,10 +34,10 @@ class HardwareRenderer : public cc::DisplayClient,
   explicit HardwareRenderer(SharedRendererState* state);
   ~HardwareRenderer() override;
 
-  void DrawGL(bool stencil_enabled,
-              int framebuffer_binding_ext,
-              AwDrawGLInfo* draw_info);
+  void DrawGL(AwDrawGLInfo* draw_info, const ScopedAppGLStateRestore& gl_state);
   void CommitFrame();
+
+  void SetBackingFrameBufferObject(int framebuffer_binding_ext);
 
  private:
   // cc::DisplayClient overrides.
@@ -46,6 +48,12 @@ class HardwareRenderer : public cc::DisplayClient,
 
   // cc::SurfaceFactoryClient implementation.
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
+  void SetBeginFrameSource(cc::SurfaceId surface_id,
+                           cc::BeginFrameSource* begin_frame_source) override;
+
+  void ReturnResourcesInChildFrame();
+  void ReturnResourcesToCompositor(const cc::ReturnedResourceArray& resources,
+                                   unsigned int compositor_routing_id);
 
   SharedRendererState* shared_renderer_state_;
 
@@ -58,6 +66,9 @@ class HardwareRenderer : public cc::DisplayClient,
   // Infromation from UI on last commit.
   gfx::Vector2d scroll_offset_;
 
+  // This holds the last ChildFrame received. Contains the frame info of the
+  // last frame. The |frame| member may be null if it's already submitted to
+  // SurfaceFactory.
   scoped_ptr<ChildFrame> child_frame_;
 
   scoped_refptr<AwGLSurface> gl_surface_;
@@ -68,6 +79,7 @@ class HardwareRenderer : public cc::DisplayClient,
   scoped_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;
   cc::SurfaceId child_id_;
   cc::SurfaceId root_id_;
+  unsigned int compositor_id_;
 
   // This is owned by |display_|.
   ParentOutputSurface* output_surface_;

@@ -4,8 +4,11 @@
 
 #include "components/autofill/core/common/autofill_regexes.h"
 
+#include <utility>
+
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string16.h"
@@ -24,7 +27,7 @@ class AutofillRegexes {
  private:
   AutofillRegexes();
   ~AutofillRegexes();
-  friend struct DefaultSingletonTraits<AutofillRegexes>;
+  friend struct base::DefaultSingletonTraits<AutofillRegexes>;
 
   // Maps patterns to their corresponding regex matchers.
   base::ScopedPtrHashMap<base::string16, scoped_ptr<icu::RegexMatcher>>
@@ -35,7 +38,7 @@ class AutofillRegexes {
 
 // static
 AutofillRegexes* AutofillRegexes::GetInstance() {
-  return Singleton<AutofillRegexes>::get();
+  return base::Singleton<AutofillRegexes>::get();
 }
 
 AutofillRegexes::AutofillRegexes() {
@@ -54,7 +57,7 @@ icu::RegexMatcher* AutofillRegexes::GetMatcher(const base::string16& pattern) {
         new icu::RegexMatcher(icu_pattern, UREGEX_CASE_INSENSITIVE, status));
     DCHECK(U_SUCCESS(status));
 
-    auto result = matchers_.add(pattern, matcher.Pass());
+    auto result = matchers_.add(pattern, std::move(matcher));
     DCHECK(result.second);
     it = result.first;
   }

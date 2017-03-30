@@ -11,7 +11,7 @@ import echo_gadget
 import usb_constants
 
 
-class HidGadgetTest(unittest.TestCase):
+class EchoGadgetTest(unittest.TestCase):
 
   def test_bulk_echo(self):
     g = echo_gadget.EchoGadget()

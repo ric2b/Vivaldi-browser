@@ -11,6 +11,7 @@ import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Message;
 import android.os.SystemClock;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup.MarginLayoutParams;
 import android.widget.AdapterView;
@@ -22,7 +23,6 @@ import org.chromium.base.PerfTraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Animatable;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Animation;
@@ -33,6 +33,7 @@ import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackScroller;
 import org.chromium.chrome.browser.compositor.overlays.strip.TabLoadTracker.TabLoadTrackerCallback;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
@@ -67,6 +68,7 @@ public class StripLayoutHelper {
     private static final int RESIZE_DELAY_MS = 1500;
     private static final int SPINNER_UPDATE_DELAY_MS = 66;
     // Degrees per milisecond.
+    private static final float SPINNER_DPMS = 0.33f;
     private static final int EXPAND_DURATION_MS = 250;
     private static final int ANIM_TAB_CREATED_MS = 150;
     private static final int ANIM_TAB_CLOSED_MS = 150;
@@ -134,9 +136,11 @@ public class StripLayoutHelper {
     private CompositorButton mLastPressedCloseButton;
     private float mWidth;
     private float mHeight;
+    private long mLastSpinnerUpdate;
     private float mLeftMargin;
     private float mRightMargin;
     private final boolean mIncognito;
+    private float mBrightness;
 
     // Tab menu item IDs
     public static final int ID_CLOSE_ALL_TABS = 0;
@@ -181,6 +185,7 @@ public class StripLayoutHelper {
                 res.getString(R.string.accessibility_toolbar_btn_new_incognito_tab));
         mContext = context;
         mIncognito = incognito;
+        mBrightness = 1.f;
 
         // Create tab menu
         mTabMenu = new ListPopupWindow(mContext);
@@ -239,8 +244,22 @@ public class StripLayoutHelper {
     /**
      * @return The brightness of background tabs in the tabstrip.
      */
-    public float getStripBrightness() {
+    public float getBackgroundTabBrightness() {
         return mInReorderMode ? 0.75f : 1.0f;
+    }
+
+    /**
+     * Sets the brightness for the entire tabstrip.
+     */
+    public void setBrightness(float brightness) {
+        mBrightness = brightness;
+    }
+
+    /**
+     * @return The brightness of the entire tabstrip.
+     */
+    public float getBrightness() {
+        return mBrightness;
     }
 
     /**
@@ -594,11 +613,13 @@ public class StripLayoutHelper {
 
     /**
      * Called on onDown event.
-     * @param time The time stamp in millisecond of the event.
-     * @param x    The x position of the event.
-     * @param y    The y position of the event.
+     * @param time      The time stamp in millisecond of the event.
+     * @param x         The x position of the event.
+     * @param y         The y position of the event.
+     * @param fromMouse Whether the event originates from a mouse.
+     * @param buttons   State of all buttons that are pressed.
      */
-    public void onDown(long time, float x, float y) {
+    public void onDown(long time, float x, float y, boolean fromMouse, int buttons) {
         resetResizeTimeout(false);
 
         if (mNewTabButton.onDown(x, y)) {
@@ -616,7 +637,9 @@ public class StripLayoutHelper {
         mInteractingTab = index != TabModel.INVALID_TAB_INDEX && index < mStripTabs.length
                 ? mStripTabs[index]
                 : null;
-        if (clickedTab != null && clickedTab.checkCloseHitTest(x, y)) {
+        boolean clickedClose = clickedTab != null
+                               && clickedTab.checkCloseHitTest(x, y);
+        if (clickedClose) {
             clickedTab.setClosePressed(true);
             mLastPressedCloseButton = clickedTab.getCloseButton();
             mRenderHost.requestRender();
@@ -625,6 +648,12 @@ public class StripLayoutHelper {
         if (!mScroller.isFinished()) {
             mScroller.forceFinished(true);
             mInteractingTab = null;
+        }
+
+        if (fromMouse && !clickedClose && clickedTab != null
+                && clickedTab.getVisiblePercentage() >= 1.f
+                && (buttons & MotionEvent.BUTTON_TERTIARY) == 0) {
+            startReorderMode(time, x, x);
         }
     }
 
@@ -648,11 +677,13 @@ public class StripLayoutHelper {
 
     /**
      * Called on click. This is called before the onUpOrCancel event.
-     * @param time The current time of the app in ms.
-     * @param x    The x coordinate of the position of the click.
-     * @param y    The y coordinate of the position of the click.
+     * @param time      The current time of the app in ms.
+     * @param x         The x coordinate of the position of the click.
+     * @param y         The y coordinate of the position of the click.
+     * @param fromMouse Whether the event originates from a mouse.
+     * @param buttons   State of all buttons that were pressed when onDown was invoked.
      */
-    public void click(long time, float x, float y) {
+    public void click(long time, float x, float y, boolean fromMouse, int buttons) {
         resetResizeTimeout(false);
 
         if (mNewTabButton.click(x, y) && mModel != null) {
@@ -662,7 +693,8 @@ public class StripLayoutHelper {
 
         final StripLayoutTab clickedTab = getTabAtPosition(x);
         if (clickedTab == null || clickedTab.isDying()) return;
-        if (clickedTab.checkCloseHitTest(x, y)) {
+        if (clickedTab.checkCloseHitTest(x, y)
+                || (fromMouse && (buttons & MotionEvent.BUTTON_TERTIARY) != 0)) {
             // 1. Start the close animation.
             startAnimation(buildTabClosedAnimation(clickedTab), true);
 
@@ -736,7 +768,7 @@ public class StripLayoutHelper {
         }
 
         // 5. Update tab spinners.
-        updateSpinners();
+        updateSpinners(time);
 
         // 6. Stop any flings if we're trying to stop animations.
         if (jumpToEnd) mScroller.forceFinished(true);
@@ -798,15 +830,19 @@ public class StripLayoutHelper {
         mLayoutAnimations.cancel(tab, property);
     }
 
-    private void updateSpinners() {
+    private void updateSpinners(long time) {
+        long diff = time - mLastSpinnerUpdate;
+        float degrees = diff * SPINNER_DPMS;
         boolean tabsToLoad = false;
         for (int i = 0; i < mStripTabs.length; i++) {
             StripLayoutTab tab = mStripTabs[i];
             // TODO(clholgat): Only update if the tab is visible.
             if (tab.isLoading()) {
+                tab.addLoadingSpinnerRotation(degrees);
                 tabsToLoad = true;
             }
         }
+        mLastSpinnerUpdate = time;
         if (tabsToLoad) {
             mStripTabEventHandler.removeMessages(MESSAGE_UPDATE_SPINNER);
             mStripTabEventHandler.sendEmptyMessageDelayed(
@@ -992,6 +1028,9 @@ public class StripLayoutHelper {
                 break;
             }
         }
+
+        // 8. Invalidate the accessibility provider in case the visible virtual views have changed.
+        mRenderHost.invalidateAccessibilityProvider();
     }
 
     private void computeTabInitialPositions() {

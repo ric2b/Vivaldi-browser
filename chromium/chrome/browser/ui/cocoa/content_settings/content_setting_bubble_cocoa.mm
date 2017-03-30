@@ -4,8 +4,11 @@
 
 #import "chrome/browser/ui/cocoa/content_settings/content_setting_bubble_cocoa.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -236,6 +239,25 @@ class ContentSettingBubbleWebContentsObserverBridge
                 anchoredAt:anchor];
 }
 
+struct ContentTypeToNibPath {
+  ContentSettingsType type;
+  NSString* path;
+};
+
+const ContentTypeToNibPath kNibPaths[] = {
+    {CONTENT_SETTINGS_TYPE_COOKIES, @"ContentBlockedCookies"},
+    {CONTENT_SETTINGS_TYPE_IMAGES, @"ContentBlockedSimple"},
+    {CONTENT_SETTINGS_TYPE_JAVASCRIPT, @"ContentBlockedSimple"},
+    {CONTENT_SETTINGS_TYPE_PPAPI_BROKER, @"ContentBlockedSimple"},
+    {CONTENT_SETTINGS_TYPE_PLUGINS, @"ContentBlockedPlugins"},
+    {CONTENT_SETTINGS_TYPE_POPUPS, @"ContentBlockedPopups"},
+    {CONTENT_SETTINGS_TYPE_GEOLOCATION, @"ContentBlockedGeolocation"},
+    {CONTENT_SETTINGS_TYPE_MIXEDSCRIPT, @"ContentBlockedMixedScript"},
+    {CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS, @"ContentProtocolHandlers"},
+    {CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS, @"ContentBlockedDownloads"},
+    {CONTENT_SETTINGS_TYPE_MIDI_SYSEX, @"ContentBlockedMIDISysEx"},
+};
+
 - (id)initWithModel:(ContentSettingBubbleModel*)contentSettingBubbleModel
         webContents:(content::WebContents*)webContents
        parentWindow:(NSWindow*)parentWindow
@@ -246,49 +268,25 @@ class ContentSettingBubbleWebContentsObserverBridge
   observerBridge_.reset(
     new ContentSettingBubbleWebContentsObserverBridge(webContents, self));
 
-  ContentSettingsType settingsType = model->content_type();
   NSString* nibPath = @"";
-  switch (settingsType) {
-    case CONTENT_SETTINGS_TYPE_COOKIES:
-      nibPath = @"ContentBlockedCookies"; break;
-    case CONTENT_SETTINGS_TYPE_IMAGES:
-    case CONTENT_SETTINGS_TYPE_JAVASCRIPT:
-    case CONTENT_SETTINGS_TYPE_PPAPI_BROKER:
-      nibPath = @"ContentBlockedSimple"; break;
-    case CONTENT_SETTINGS_TYPE_PLUGINS:
-      nibPath = @"ContentBlockedPlugins"; break;
-    case CONTENT_SETTINGS_TYPE_POPUPS:
-      nibPath = @"ContentBlockedPopups"; break;
-    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
-      nibPath = @"ContentBlockedGeolocation"; break;
-    case CONTENT_SETTINGS_TYPE_MIXEDSCRIPT:
-      nibPath = @"ContentBlockedMixedScript"; break;
-    case CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS:
-      nibPath = @"ContentProtocolHandlers"; break;
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM:
-      nibPath = @"ContentBlockedMedia"; break;
-    case CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS:
-      nibPath = @"ContentBlockedDownloads"; break;
-    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
-      nibPath = @"ContentBlockedMIDISysEx"; break;
-    // These content types have no bubble:
-    case CONTENT_SETTINGS_TYPE_DEFAULT:
-    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
-    case CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE:
-    case CONTENT_SETTINGS_TYPE_FULLSCREEN:
-    case CONTENT_SETTINGS_TYPE_MOUSELOCK:
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-    case CONTENT_SETTINGS_NUM_TYPES:
-    // TODO(miguelg): Remove this nib content settings support
-    // is implemented
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-    case CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS:
-    case CONTENT_SETTINGS_TYPE_APP_BANNER:
-    case CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT:
-    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
-      NOTREACHED();
+
+  ContentSettingSimpleBubbleModel* simple_bubble = model->AsSimpleBubbleModel();
+  if (simple_bubble) {
+    ContentSettingsType settingsType = simple_bubble->content_type();
+
+    for (const ContentTypeToNibPath& type_to_path : kNibPaths) {
+      if (settingsType == type_to_path.type) {
+        nibPath = type_to_path.path;
+        break;
+      }
+    }
   }
+
+  if (model->AsMediaStreamBubbleModel())
+    nibPath = @"ContentBlockedMedia";
+
+  DCHECK_NE(0u, [nibPath length]);
+
   if ((self = [super initWithWindowNibPath:nibPath
                               parentWindow:parentWindow
                                 anchoredAt:anchoredAt])) {
@@ -327,6 +325,19 @@ class ContentSettingBubbleWebContentsObserverBridge
   // passed in the radio_group and be 1-based, not 0-based.
   const ContentSettingBubbleModel::RadioGroup& radio_group =
       contentSettingBubbleModel_->bubble_content().radio_group;
+
+  // Xcode 5.1 Interface Builder doesn't allow a font property to be set for
+  // NSMatrix. The implementation of GTMUILocalizerAndLayoutTweaker assumes that
+  // the font for each of the cells in a NSMatrix is identical, and is the font
+  // of the NSMatrix. This logic sets the font of NSMatrix to be that of its
+  // cells.
+  NSFont* font = nil;
+  for (NSCell* cell in [allowBlockRadioGroup_ cells]) {
+    if (!font)
+      font = [cell font];
+    DCHECK([font isEqual:[cell font]]);
+  }
+  [allowBlockRadioGroup_ setFont:font];
 
   // Select appropriate radio button.
   [allowBlockRadioGroup_ selectCellWithTag: radio_group.default_item + 1];
@@ -720,7 +731,7 @@ class ContentSettingBubbleWebContentsObserverBridge
   const ContentSettingBubbleModel::BubbleContent& content =
       contentSettingBubbleModel_->bubble_content();
   [manageButton_ setTitle:base::SysUTF8ToNSString(content.manage_link)];
-  [GTMUILocalizerAndLayoutTweaker sizeToFitView:manageButton_];
+  [GTMUILocalizerAndLayoutTweaker sizeToFitView:[manageButton_ superview]];
 
   CGFloat actualWidth = NSWidth([[[self window] contentView] frame]);
   CGFloat requiredWidth = NSMaxX([manageButton_ frame]) + kManageDonePadding +
@@ -747,24 +758,34 @@ class ContentSettingBubbleWebContentsObserverBridge
 
   [self initializeTitle];
 
-  ContentSettingsType type = contentSettingBubbleModel_->content_type();
-  if (type == CONTENT_SETTINGS_TYPE_PLUGINS) {
+  // Note that the per-content-type methods and |initializeRadioGroup| below
+  // must be kept in the correct order, as they make interdependent adjustments
+  // of the bubble's height.
+  ContentSettingSimpleBubbleModel* simple_bubble =
+      contentSettingBubbleModel_->AsSimpleBubbleModel();
+  if (simple_bubble &&
+      simple_bubble->content_type() == CONTENT_SETTINGS_TYPE_PLUGINS) {
     [self sizeToFitLoadButton];
     [self initializeBlockedPluginsList];
   }
 
-  if (allowBlockRadioGroup_)  // not bound in cookie bubble xib
+  if (allowBlockRadioGroup_)  // Some xibs do not bind |allowBlockRadioGroup_|.
     [self initializeRadioGroup];
 
-  if (type == CONTENT_SETTINGS_TYPE_POPUPS ||
-      type == CONTENT_SETTINGS_TYPE_PLUGINS)
-    [self initializeItemList];
-  if (type == CONTENT_SETTINGS_TYPE_GEOLOCATION)
-    [self initializeGeoLists];
-  if (type == CONTENT_SETTINGS_TYPE_MEDIASTREAM)
+  if (simple_bubble) {
+    ContentSettingsType type = simple_bubble->content_type();
+
+    if (type == CONTENT_SETTINGS_TYPE_POPUPS ||
+        type == CONTENT_SETTINGS_TYPE_PLUGINS)
+      [self initializeItemList];
+    if (type == CONTENT_SETTINGS_TYPE_GEOLOCATION)
+      [self initializeGeoLists];
+    if (type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX)
+      [self initializeMIDISysExLists];
+  }
+
+  if (contentSettingBubbleModel_->AsMediaStreamBubbleModel())
     [self initializeMediaMenus];
-  if (type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX)
-    [self initializeMIDISysExLists];
 }
 
 ///////////////////////////////////////////////////////////////////////////////

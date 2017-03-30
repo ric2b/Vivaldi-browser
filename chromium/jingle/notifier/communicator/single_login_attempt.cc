@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
-
 #include "jingle/notifier/communicator/single_login_attempt.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include <limits>
+#include <string>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -57,8 +59,8 @@ namespace {
 // unparseable, it assumes the default XMPP port.  The hostname may be
 // empty.
 net::HostPortPair ParseRedirectText(const std::string& redirect_text) {
-  std::vector<std::string> parts;
-  base::SplitString(redirect_text, ':', &parts);
+  std::vector<std::string> parts = base::SplitString(
+      redirect_text, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   net::HostPortPair redirect_server;
   redirect_server.set_port(kDefaultXmppPort);
   if (parts.empty()) {
@@ -73,7 +75,7 @@ net::HostPortPair ParseRedirectText(const std::string& redirect_text) {
   if (!base::StringToInt(parts[1], &port)) {
     port = kDefaultXmppPort;
   }
-  if (port <= 0 || port > kuint16max) {
+  if (port <= 0 || port > std::numeric_limits<uint16_t>::max()) {
     port = kDefaultXmppPort;
   }
   redirect_server.set_port(port);

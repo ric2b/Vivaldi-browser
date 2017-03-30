@@ -6,10 +6,11 @@
 #define CONTENT_BROWSER_RENDERER_HOST_PEPPER_PEPPER_NETWORK_MONITOR_HOST_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
-#include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
+#include "net/base/network_interfaces.h"
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/host/resource_host.h"
 

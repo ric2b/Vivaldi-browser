@@ -4,12 +4,16 @@
 
 #include "chrome/browser/printing/pdf_to_emf_converter.h"
 
+#include <stdint.h>
+
 #include <queue>
+#include <utility>
 
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/chrome_utility_printing_messages.h"
 #include "chrome/grit/generated_resources.h"
@@ -113,21 +117,21 @@ class PdfToEmfUtilityProcessHostClient
 
  private:
   class GetPageCallbackData {
-    MOVE_ONLY_TYPE_FOR_CPP_03(GetPageCallbackData, RValue);
+    MOVE_ONLY_TYPE_FOR_CPP_03(GetPageCallbackData);
 
    public:
     GetPageCallbackData(int page_number,
                         PdfToEmfConverter::GetPageCallback callback)
         : page_number_(page_number), callback_(callback) {}
 
-    // Move constructor for STL.
-    GetPageCallbackData(RValue other) { this->operator=(other); }
+    GetPageCallbackData(GetPageCallbackData&& other) {
+      *this = std::move(other);
+    }
 
-    // Move assignment for STL.
-    GetPageCallbackData& operator=(RValue rhs) {
-      page_number_ = rhs.object->page_number_;
-      callback_ = rhs.object->callback_;
-      emf_ = rhs.object->emf_.Pass();
+    GetPageCallbackData& operator=(GetPageCallbackData&& rhs) {
+      page_number_ = rhs.page_number_;
+      callback_ = rhs.callback_;
+      emf_ = std::move(rhs.emf_);
       return *this;
     }
 
@@ -266,7 +270,7 @@ void LazyEmf::Close() const {
 
 bool LazyEmf::LoadEmf(Emf* emf) const {
   file_->Seek(base::File::FROM_BEGIN, 0);
-  int64 size = file_->GetLength();
+  int64_t size = file_->GetLength();
   if (size <= 0)
     return false;
   std::vector<char> data(size);

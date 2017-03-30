@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/power_monitor/power_observer.h"
@@ -61,6 +62,7 @@ class GCM_EXPORT HeartbeatManager : public base::PowerObserver {
   void UpdateHeartbeatTimer(scoped_ptr<base::Timer> timer);
 
   // base::PowerObserver override.
+  void OnSuspend() override;
   void OnResume() override;
 
   // Maximum and minimum of the custom client interval that can be requested,
@@ -113,6 +115,9 @@ class GCM_EXPORT HeartbeatManager : public base::PowerObserver {
 
   // Timer for triggering heartbeats.
   scoped_ptr<base::Timer> heartbeat_timer_;
+
+  // Time at which the machine was last suspended.
+  base::Time suspend_time_;
 
   // Callbacks for interacting with the the connection.
   base::Closure send_heartbeat_callback_;

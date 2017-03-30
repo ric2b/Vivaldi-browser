@@ -7,7 +7,6 @@
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/guid.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
@@ -76,8 +75,7 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetForWorker(
 }
 
 DevToolsAgentHostImpl::DevToolsAgentHostImpl()
-    : id_(base::GenerateGUID()),
-      client_(NULL) {
+    : id_(base::GenerateGUID()), session_id_(0), client_(NULL) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   g_instances.Get()[id_] = this;
 }
@@ -98,7 +96,7 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetForId(
   return it->second;
 }
 
-//static
+// static
 scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::Create(
     DevToolsExternalAgentProxyDelegate* delegate) {
   return new ForwardingAgentHost(delegate);
@@ -106,9 +104,10 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::Create(
 
 void DevToolsAgentHostImpl::AttachClient(DevToolsAgentHostClient* client) {
   scoped_refptr<DevToolsAgentHostImpl> protect(this);
+  ++session_id_;
   if (client_) {
     client_->AgentHostClosed(this, true);
-    Detach();
+    InnerDetach();
   }
   client_ = client;
   Attach();
@@ -120,7 +119,12 @@ void DevToolsAgentHostImpl::DetachClient() {
 
   scoped_refptr<DevToolsAgentHostImpl> protect(this);
   client_ = NULL;
+  InnerDetach();
+}
+
+void DevToolsAgentHostImpl::InnerDetach() {
   Detach();
+  io_context_.DiscardAllStreams();
 }
 
 bool DevToolsAgentHostImpl::IsAttached() {
@@ -148,6 +152,16 @@ void DevToolsAgentHostImpl::DisconnectWebContents() {
 void DevToolsAgentHostImpl::ConnectWebContents(WebContents* wc) {
 }
 
+void DevToolsAgentHostImpl::SendProtocolResponse(int session_id,
+                                                 const std::string& message) {
+  SendMessageToClient(session_id, message);
+}
+
+void DevToolsAgentHostImpl::SendProtocolNotification(
+    const std::string& message) {
+  SendMessageToClient(session_id_, message);
+}
+
 void DevToolsAgentHostImpl::HostClosed() {
   if (!client_)
     return;
@@ -159,8 +173,12 @@ void DevToolsAgentHostImpl::HostClosed() {
   client->AgentHostClosed(this, false);
 }
 
-void DevToolsAgentHostImpl::SendMessageToClient(const std::string& message) {
+void DevToolsAgentHostImpl::SendMessageToClient(int session_id,
+                                                const std::string& message) {
   if (!client_)
+    return;
+  // Filter any messages from previous sessions.
+  if (session_id != session_id_)
     return;
   client_->DispatchProtocolMessage(this, message);
 }
@@ -181,7 +199,7 @@ void DevToolsAgentHost::DetachAllClients() {
       DevToolsAgentHostClient* client = agent_host->client_;
       agent_host->client_ = NULL;
       client->AgentHostClosed(agent_host, true);
-      agent_host->Detach();
+      agent_host->InnerDetach();
     }
   }
 }
@@ -244,7 +262,7 @@ void DevToolsMessageChunkProcessor::ProcessChunkedMessageFromAgent(
 
   if (chunk.is_first && chunk.is_last) {
     CHECK(message_buffer_size_ == 0);
-    callback_.Run(chunk.data);
+    callback_.Run(chunk.session_id, chunk.data);
     return;
   }
 
@@ -260,7 +278,7 @@ void DevToolsMessageChunkProcessor::ProcessChunkedMessageFromAgent(
 
   if (chunk.is_last) {
     CHECK(message_buffer_.size() == message_buffer_size_);
-    callback_.Run(message_buffer_);
+    callback_.Run(chunk.session_id, message_buffer_);
     message_buffer_ = std::string();
     message_buffer_size_ = 0;
   }

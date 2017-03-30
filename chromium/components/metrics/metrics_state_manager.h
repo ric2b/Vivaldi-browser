@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -116,6 +115,10 @@ class MetricsStateManager {
   // that is non-identifying amongst browser clients. This method will
   // generate the entropy source value if it has not been called before.
   int GetLowEntropySource();
+
+  // Generates the low entropy source value for this client if it is not
+  // already set.
+  void UpdateLowEntropySource();
 
   // Updates |entropy_source_returned_| with |type| iff the current value is
   // ENTROPY_SOURCE_NONE and logs the new value in a histogram.

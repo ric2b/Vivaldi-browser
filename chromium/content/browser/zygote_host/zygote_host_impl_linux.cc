@@ -4,6 +4,7 @@
 
 #include "content/browser/zygote_host/zygote_host_impl_linux.h"
 
+#include <errno.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -18,9 +19,9 @@
 #include "base/files/scoped_file.h"
 #include "base/linux_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/path_service.h"
@@ -33,6 +34,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/render_sandbox_host_linux.h"
 #include "content/common/child_process_sandbox_support_impl_linux.h"
 #include "content/common/zygote_commands_linux.h"
@@ -62,7 +64,7 @@ bool ReceiveFixedMessage(int fd,
                          size_t expect_len,
                          base::ProcessId* sender_pid) {
   char buf[expect_len + 1];
-  ScopedVector<base::ScopedFD> fds_vec;
+  std::vector<base::ScopedFD> fds_vec;
 
   const ssize_t len = base::UnixDomainSocket::RecvMsgWithPid(
       fd, buf, sizeof(buf), &fds_vec, sender_pid);
@@ -99,7 +101,7 @@ ZygoteHostImpl::~ZygoteHostImpl() { TearDown(); }
 
 // static
 ZygoteHostImpl* ZygoteHostImpl::GetInstance() {
-  return Singleton<ZygoteHostImpl>::get();
+  return base::Singleton<ZygoteHostImpl>::get();
 }
 
 void ZygoteHostImpl::Init(const std::string& sandbox_cmd) {
@@ -131,6 +133,7 @@ void ZygoteHostImpl::Init(const std::string& sandbox_cmd) {
   static const char* kForwardSwitches[] = {
     switches::kAllowSandboxDebugging,
     switches::kDisableSeccompFilterSandbox,
+    switches::kEnableHeapProfiling,
     switches::kEnableLogging,  // Support, e.g., --enable-logging=stderr.
     // Zygote process needs to know what resources to have loaded when it
     // becomes a renderer process.
@@ -158,7 +161,15 @@ void ZygoteHostImpl::Init(const std::string& sandbox_cmd) {
   // or namespace sandbox. This is needed beacuse the processes are
   // non-dumpable, so /proc/pid/oom_score_adj can only be written by root.
   use_suid_sandbox_for_adj_oom_score_ =
-      using_namespace_sandbox || using_suid_sandbox;
+      !sandbox_binary_.empty() && using_suid_sandbox;
+
+#if defined(OS_CHROMEOS)
+  // Chrome OS has a kernel patch that restricts oom_score_adj. See
+  // crbug.com/576409 for details.
+  if (!sandbox_binary_.empty() && using_namespace_sandbox) {
+    use_suid_sandbox_for_adj_oom_score_ = true;
+  }
+#endif
 
   // Start up the sandbox host process and get the file descriptor for the
   // renderers to talk to it.
@@ -360,7 +371,7 @@ pid_t ZygoteHostImpl::ForkRequest(const std::vector<std::string>& argv,
 
     {
       char buf[sizeof(kZygoteChildPingMessage) + 1];
-      ScopedVector<base::ScopedFD> recv_fds;
+      std::vector<base::ScopedFD> recv_fds;
       base::ProcessId real_pid;
 
       ssize_t n = base::UnixDomainSocket::RecvMsgWithPid(

@@ -28,7 +28,7 @@ goog.inherits(cvox.StructuralLineWalker, cvox.AbstractSelectionWalker);
  * @override
  */
 cvox.StructuralLineWalker.prototype.getGranularityMsg = function() {
-  return cvox.ChromeVox.msgs.getMsg('structural_line');
+  return Msgs.getMsg('structural_line');
 };
 
 
@@ -68,7 +68,7 @@ cvox.StructuralLineWalker.prototype.getBraille = function(prevSel, sel) {
   }
   var spannable =
       cvox.BrailleUtil.getTemplated(prevNode, objNode, {name: name});
-  spannable.setSpan(objNode, 0, spannable.getLength());
+  spannable.setSpan(objNode, 0, spannable.length);
   braille.text = spannable;
 
   // Remove any selections.

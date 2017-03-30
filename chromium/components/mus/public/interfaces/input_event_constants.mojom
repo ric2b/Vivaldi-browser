@@ -1,0 +1,59 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mus.mojom;
+
+enum EventType {
+  UNKNOWN,
+  KEY_PRESSED,
+  KEY_RELEASED,
+  POINTER_CANCEL,
+  POINTER_DOWN,
+  POINTER_MOVE,
+  POINTER_UP,
+  MOUSE_EXIT,
+  WHEEL,
+};
+
+// This mirrors ui::EventFlags
+// TODO(morrita): Use shift operator once it is available.
+enum EventFlags {
+  NONE                 =      0,
+  IS_SYNTHESIZED       =      1,
+  SHIFT_DOWN           =      2,
+  CONTROL_DOWN         =      4,
+  ALT_DOWN             =      8,
+  COMMAND_DOWN         =     16,
+  ALTGR_DOWN           =     32,
+  MOD3_DOWN            =     64,
+  NUM_LOCK_ON          =    128,
+  CAPS_LOCK_ON         =    256,
+  SCROLL_LOCK_ON       =    512,
+  LEFT_MOUSE_BUTTON    =   1024,
+  MIDDLE_MOUSE_BUTTON  =   2048,
+  RIGHT_MOUSE_BUTTON   =   4096,
+  BACK_MOUSE_BUTTON    =   8192,
+  FORWARD_MOUSE_BUTTON =  16384,
+};
+
+enum MouseEventFlags {
+  IS_DOUBLE_CLICK      =  32768,
+  IS_TRIPLE_CLICK      =  65536,
+  IS_NON_CLIENT        = 131072,
+
+  // TODO(erg): Move accessibility flags and maybe synthetic touch events here.
+};
+
+enum PointerKind {
+  MOUSE,
+  PEN,
+  TOUCH,
+};
+
+enum WheelMode {
+  PIXEL,
+  LINE,
+  PAGE,
+  SCALING,
+};

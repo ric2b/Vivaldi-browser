@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
@@ -15,9 +16,10 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
-#include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "components/google/core/browser/google_pref_names.h"
 #include "components/google/core/browser/google_url_tracker.h"
+#include "components/search/search.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/entropy_provider.h"
@@ -31,7 +33,7 @@ InstantUnitTestBase::~InstantUnitTestBase() {
 }
 
 void InstantUnitTestBase::SetUp() {
-  chrome::EnableQueryExtractionForTesting();
+  search::EnableQueryExtractionForTesting();
   SetUpHelper();
 }
 
@@ -52,9 +54,8 @@ void InstantUnitTestBase::SetUserSelectedDefaultSearchProvider(
   data.SetShortName(base::UTF8ToUTF16(base_url));
   data.SetKeyword(base::UTF8ToUTF16(base_url));
   data.SetURL(base_url + "url?bar={searchTerms}");
-  data.instant_url = base_url +
-      "instant?{google:omniboxStartMarginParameter}{google:forceInstantResults}"
-      "foo=foo#foo=foo&strk";
+  data.instant_url =
+      base_url + "instant?{google:forceInstantResults}foo=foo#foo=foo&strk";
   data.new_tab_url = base_url + "newtab";
   data.alternate_urls.push_back(base_url + "alt#quux={searchTerms}");
   data.search_terms_replacement_key = "strk";
@@ -92,7 +93,7 @@ void InstantUnitTestBase::SetUpHelper() {
   BrowserWithTestWindowTest::SetUp();
 
   template_url_service_ = TemplateURLServiceFactory::GetForProfile(profile());
-  ui_test_utils::WaitForTemplateURLServiceToLoad(template_url_service_);
+  search_test_utils::WaitForTemplateURLServiceToLoad(template_url_service_);
 
   UIThreadSearchTermsData::SetGoogleBaseURL("https://www.google.com/");
   SetUserSelectedDefaultSearchProvider("{google:baseURL}");

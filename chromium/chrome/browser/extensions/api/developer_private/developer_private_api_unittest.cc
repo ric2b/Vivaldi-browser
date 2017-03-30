@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
@@ -148,10 +151,11 @@ const Extension* DeveloperPrivateApiUnitTest::LoadSimpleExtension() {
           .Set("manifest_version", 2)
           .Set("description", "an extension");
   scoped_refptr<const Extension> extension =
-      ExtensionBuilder().SetManifest(manifest)
-                        .SetLocation(Manifest::INTERNAL)
-                        .SetID(id)
-                        .Build();
+      ExtensionBuilder()
+          .SetManifest(std::move(manifest))
+          .SetLocation(Manifest::INTERNAL)
+          .SetID(id)
+          .Build();
   service()->AddExtension(extension.get());
   return extension.get();
 }
@@ -277,7 +281,8 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateReload) {
 }
 
 // Test developerPrivate.packDirectory.
-TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivatePackFunction) {
+// http://crbug.com/527228 flaky
+TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivatePackFunction) {
   ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
 
   base::FilePath root_path = data_dir().AppendASCII("good_unpacked");
@@ -321,7 +326,8 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivatePackFunction) {
 }
 
 // Test developerPrivate.choosePath.
-TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateChoosePath) {
+// http://crbug.com/527228 flaky
+TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivateChoosePath) {
   ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
   content::TestWebContentsFactory web_contents_factory;
   content::WebContents* web_contents =
@@ -366,7 +372,8 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateChoosePath) {
 }
 
 // Test developerPrivate.loadUnpacked.
-TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateLoadUnpacked) {
+// http://crbug.com/527228 flaky
+TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivateLoadUnpacked) {
   ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
   content::TestWebContentsFactory web_contents_factory;
   content::WebContents* web_contents =
@@ -411,7 +418,9 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateLoadUnpacked) {
 }
 
 // Test developerPrivate.requestFileSource.
-TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateRequestFileSource) {
+// http://crbug.com/527228 flaky
+TEST_F(DeveloperPrivateApiUnitTest,
+       DISABLED_DeveloperPrivateRequestFileSource) {
   ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
   // Testing of this function seems light, but that's because it basically just
   // forwards to reading a file to a string, and highlighting it - both of which
@@ -443,7 +452,9 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateRequestFileSource) {
 }
 
 // Test developerPrivate.getExtensionsInfo.
-TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateGetExtensionsInfo) {
+// http://crbug.com/527228 flaky
+TEST_F(DeveloperPrivateApiUnitTest,
+       DISABLED_DeveloperPrivateGetExtensionsInfo) {
   ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
   LoadSimpleExtension();
 
@@ -505,9 +516,9 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
       api::developer_private::ERROR_TYPE_MANIFEST);
   scoped_ptr<base::ListValue> args =
       ListBuilder()
-          .Append(DictionaryBuilder()
-                      .Set("extensionId", extension->id())
-                      .Set("type", type_string))
+          .Append(std::move(DictionaryBuilder()
+                                .Set("extensionId", extension->id())
+                                .Set("type", type_string)))
           .Build();
   scoped_refptr<UIThreadExtensionFunction> function =
       new api::DeveloperPrivateDeleteExtensionErrorsFunction();
@@ -519,11 +530,13 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
 
   // Next remove errors by id.
   int error_id = error_list[0]->id();
-  args = ListBuilder()
-             .Append(DictionaryBuilder()
-                         .Set("extensionId", extension->id())
-                         .Set("errorIds", ListBuilder().Append(error_id)))
-             .Build();
+  args =
+      ListBuilder()
+          .Append(std::move(
+              DictionaryBuilder()
+                  .Set("extensionId", extension->id())
+                  .Set("errorIds", std::move(ListBuilder().Append(error_id)))))
+          .Build();
   function = new api::DeveloperPrivateDeleteExtensionErrorsFunction();
   EXPECT_TRUE(RunFunction(function, *args)) << function->GetError();
   // And then there was one.
@@ -531,7 +544,8 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
 
   // Finally remove all errors for the extension.
   args = ListBuilder()
-             .Append(DictionaryBuilder().Set("extensionId", extension->id()))
+             .Append(std::move(
+                 DictionaryBuilder().Set("extensionId", extension->id())))
              .Build();
   function = new api::DeveloperPrivateDeleteExtensionErrorsFunction();
   EXPECT_TRUE(RunFunction(function, *args)) << function->GetError();

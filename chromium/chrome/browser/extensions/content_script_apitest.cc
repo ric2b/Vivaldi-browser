@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/permissions/permissions_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -251,8 +255,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContentScriptAboutBlankAndSrcdoc) {
       << message_;
 }
 
-// VB-781: Temporarily disabled test
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_ContentScriptExtensionIframe) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContentScriptExtensionIframe) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("content_scripts/extension_iframe")) << message_;
 }
@@ -368,7 +371,7 @@ IN_PROC_BROWSER_TEST_F(
       content::Source<Profile>(browser()->profile()));
 
   // Start with a renderer already open at a URL.
-  GURL url(test_server()->GetURL("file/extensions/test_file.html"));
+  GURL url(embedded_test_server()->GetURL("/extensions/test_file.html"));
   ui_test_utils::NavigateToURL(browser(), url);
 
   LoadExtension(
@@ -614,6 +617,24 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
       CURRENT_TAB, ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(listener.was_satisfied());
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
+                       DontInjectContentScriptsInBackgroundPages) {
+  host_resolver()->AddRule("a.com", "127.0.0.1");
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  // Load two extensions, one with an iframe to a.com in its background page,
+  // the other, a content script for a.com. The latter should never be able to
+  // inject the script, because scripts aren't allowed to run on foreign
+  // extensions' pages.
+  base::FilePath data_dir = test_data_dir_.AppendASCII("content_scripts");
+  ExtensionTestMessageListener iframe_loaded_listener("iframe loaded", false);
+  ExtensionTestMessageListener content_script_listener("script injected",
+                                                       false);
+  LoadExtension(data_dir.AppendASCII("script_a_com"));
+  LoadExtension(data_dir.AppendASCII("background_page_iframe"));
+  iframe_loaded_listener.WaitUntilSatisfied();
+  EXPECT_FALSE(content_script_listener.was_satisfied());
 }
 
 }  // namespace extensions

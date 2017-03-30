@@ -8,10 +8,10 @@ import android.content.Context;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -64,8 +64,7 @@ public class UndoBarPopupController implements SnackbarManager.SnackbarControlle
         mContext = context;
         mTabModelObserver = new EmptyTabModelObserver() {
             private boolean disableUndo() {
-                return !DeviceClassManager.enableUndo(mContext)
-                        || DeviceClassManager.isAccessibilityModeEnabled(mContext)
+                return DeviceClassManager.isAccessibilityModeEnabled(mContext)
                         || DeviceClassManager.enableAccessibilityLayout();
             }
 
@@ -78,13 +77,13 @@ public class UndoBarPopupController implements SnackbarManager.SnackbarControlle
             @Override
             public void tabClosureUndone(Tab tab) {
                 if (disableUndo()) return;
-                mSnackbarManager.removeMatchingSnackbars(UndoBarPopupController.this, tab.getId());
+                mSnackbarManager.dismissSnackbars(UndoBarPopupController.this, tab.getId());
             }
 
             @Override
             public void tabClosureCommitted(Tab tab) {
                 if (disableUndo()) return;
-                mSnackbarManager.removeMatchingSnackbars(UndoBarPopupController.this, tab.getId());
+                mSnackbarManager.dismissSnackbars(UndoBarPopupController.this, tab.getId());
             }
 
             @Override
@@ -96,7 +95,7 @@ public class UndoBarPopupController implements SnackbarManager.SnackbarControlle
             @Override
             public void allTabsClosureCommitted() {
                 if (disableUndo()) return;
-                mSnackbarManager.removeMatchingSnackbars(UndoBarPopupController.this);
+                mSnackbarManager.dismissSnackbars(UndoBarPopupController.this);
             }
         };
     }

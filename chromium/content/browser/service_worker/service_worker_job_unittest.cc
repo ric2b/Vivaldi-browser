@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
@@ -31,8 +34,6 @@ using net::WrappedIOBuffer;
 namespace content {
 
 namespace {
-
-int kMockRenderProcessId = 88;
 
 void SaveRegistrationCallback(
     ServiceWorkerStatusCode expected_status,
@@ -84,7 +85,7 @@ ServiceWorkerStorage::FindRegistrationCallback SaveFoundRegistration(
 
 void SaveUnregistrationCallback(ServiceWorkerStatusCode expected_status,
                                 bool* called,
-                                int64 registration_id,
+                                int64_t registration_id,
                                 ServiceWorkerStatusCode status) {
   EXPECT_EQ(expected_status, status);
   *called = true;
@@ -102,12 +103,10 @@ ServiceWorkerUnregisterJob::UnregistrationCallback SaveUnregistration(
 class ServiceWorkerJobTest : public testing::Test {
  public:
   ServiceWorkerJobTest()
-      : browser_thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
-        render_process_id_(kMockRenderProcessId) {}
+      : browser_thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP) {}
 
   void SetUp() override {
-    helper_.reset(
-        new EmbeddedWorkerTestHelper(base::FilePath(), render_process_id_));
+    helper_.reset(new EmbeddedWorkerTestHelper(base::FilePath()));
   }
 
   void TearDown() override { helper_.reset(); }
@@ -134,7 +133,6 @@ class ServiceWorkerJobTest : public testing::Test {
 
   TestBrowserThreadBundle browser_thread_bundle_;
   scoped_ptr<EmbeddedWorkerTestHelper> helper_;
-  int render_process_id_;
 };
 
 scoped_refptr<ServiceWorkerRegistration> ServiceWorkerJobTest::RunRegisterJob(
@@ -356,11 +354,10 @@ TEST_F(ServiceWorkerJobTest, RegisterDuplicateScript) {
 
 class FailToStartWorkerTestHelper : public EmbeddedWorkerTestHelper {
  public:
-  explicit FailToStartWorkerTestHelper(int mock_render_process_id)
-      : EmbeddedWorkerTestHelper(base::FilePath(), mock_render_process_id) {}
+  FailToStartWorkerTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
   void OnStartWorker(int embedded_worker_id,
-                     int64 service_worker_version_id,
+                     int64_t service_worker_version_id,
                      const GURL& scope,
                      const GURL& script_url) override {
     EmbeddedWorkerInstance* worker = registry()->GetWorker(embedded_worker_id);
@@ -369,7 +366,7 @@ class FailToStartWorkerTestHelper : public EmbeddedWorkerTestHelper {
 };
 
 TEST_F(ServiceWorkerJobTest, Register_FailToStartWorker) {
-  helper_.reset(new FailToStartWorkerTestHelper(render_process_id_));
+  helper_.reset(new FailToStartWorkerTestHelper);
 
   scoped_refptr<ServiceWorkerRegistration> registration =
       RunRegisterJob(GURL("http://www.example.com/"),
@@ -727,10 +724,11 @@ void OnIOComplete(int* rv_out, int rv) {
   *rv_out = rv;
 }
 
-void WriteResponse(
-    ServiceWorkerStorage* storage, int64 id,
-    const std::string& headers,
-    IOBuffer* body, int length) {
+void WriteResponse(ServiceWorkerStorage* storage,
+                   int64_t id,
+                   const std::string& headers,
+                   IOBuffer* body,
+                   int length) {
   scoped_ptr<ServiceWorkerResponseWriter> writer =
       storage->CreateResponseWriter(id);
 
@@ -754,9 +752,9 @@ void WriteResponse(
   EXPECT_EQ(length, rv);
 }
 
-void WriteStringResponse(
-    ServiceWorkerStorage* storage, int64 id,
-    const std::string& body) {
+void WriteStringResponse(ServiceWorkerStorage* storage,
+                         int64_t id,
+                         const std::string& body) {
   scoped_refptr<IOBuffer> body_buffer(new WrappedIOBuffer(body.data()));
   const char kHttpHeaders[] = "HTTP/1.0 200 HONKYDORY\0\0";
   std::string headers(kHttpHeaders, arraysize(kHttpHeaders));
@@ -769,19 +767,17 @@ class UpdateJobTestHelper
       public ServiceWorkerVersion::Listener {
  public:
   struct AttributeChangeLogEntry {
-    int64 registration_id;
+    int64_t registration_id;
     ChangedVersionAttributesMask mask;
     ServiceWorkerRegistrationInfo info;
   };
 
   struct StateChangeLogEntry {
-    int64 version_id;
+    int64_t version_id;
     ServiceWorkerVersion::Status status;
   };
 
-  UpdateJobTestHelper(int mock_render_process_id)
-      : EmbeddedWorkerTestHelper(base::FilePath(), mock_render_process_id),
-        update_found_(false) {}
+  UpdateJobTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
   ~UpdateJobTestHelper() override {
     if (registration_.get())
       registration_->RemoveListener(this);
@@ -813,11 +809,11 @@ class UpdateJobTestHelper
 
   // EmbeddedWorkerTestHelper overrides
   void OnStartWorker(int embedded_worker_id,
-                     int64 version_id,
+                     int64_t version_id,
                      const GURL& scope,
                      const GURL& script) override {
     const std::string kMockScriptBody = "mock_script";
-    const uint64 kMockScriptSize = 19284;
+    const uint64_t kMockScriptSize = 19284;
     ServiceWorkerVersion* version = context()->GetLiveVersion(version_id);
     ServiceWorkerRegistration* registration =
         context()->GetLiveRegistration(version->registration_id());
@@ -829,7 +825,7 @@ class UpdateJobTestHelper
 
     if (!is_update) {
       // Spoof caching the script for the initial version.
-      int64 resource_id = storage()->NewResourceId();
+      int64_t resource_id = storage()->NewResourceId();
       version->script_cache_map()->NotifyStartedCaching(script, resource_id);
       WriteStringResponse(storage(), resource_id, kMockScriptBody);
       version->script_cache_map()->NotifyFinishedCaching(
@@ -842,7 +838,7 @@ class UpdateJobTestHelper
       }
 
       // Spoof caching the script for the new version.
-      int64 resource_id = storage()->NewResourceId();
+      int64_t resource_id = storage()->NewResourceId();
       version->script_cache_map()->NotifyStartedCaching(script, resource_id);
       WriteStringResponse(storage(), resource_id, "mock_different_script");
       version->script_cache_map()->NotifyFinishedCaching(
@@ -885,19 +881,18 @@ class UpdateJobTestHelper
 
   std::vector<AttributeChangeLogEntry> attribute_change_log_;
   std::vector<StateChangeLogEntry> state_change_log_;
-  bool update_found_;
+  bool update_found_ = false;
 };
 
 // Helper class for update tests that evicts the active version when the update
 // worker is about to be started.
 class EvictIncumbentVersionHelper : public UpdateJobTestHelper {
  public:
-  EvictIncumbentVersionHelper(int mock_render_process_id)
-      : UpdateJobTestHelper(mock_render_process_id) {}
+  EvictIncumbentVersionHelper() {}
   ~EvictIncumbentVersionHelper() override {}
 
   void OnStartWorker(int embedded_worker_id,
-                     int64 version_id,
+                     int64_t version_id,
                      const GURL& scope,
                      const GURL& script) override {
     ServiceWorkerVersion* version = context()->GetLiveVersion(version_id);
@@ -925,8 +920,7 @@ class EvictIncumbentVersionHelper : public UpdateJobTestHelper {
 }  // namespace
 
 TEST_F(ServiceWorkerJobTest, Update_NoChange) {
-  UpdateJobTestHelper* update_helper =
-      new UpdateJobTestHelper(render_process_id_);
+  UpdateJobTestHelper* update_helper = new UpdateJobTestHelper;
   helper_.reset(update_helper);
   scoped_refptr<ServiceWorkerRegistration> registration =
       update_helper->SetupInitialRegistration(kNoChangeOrigin);
@@ -967,8 +961,7 @@ TEST_F(ServiceWorkerJobTest, Update_BumpLastUpdateCheckTime) {
   const base::Time kToday = base::Time::Now();
   const base::Time kYesterday =
       kToday - base::TimeDelta::FromDays(1) - base::TimeDelta::FromHours(1);
-  UpdateJobTestHelper* update_helper =
-      new UpdateJobTestHelper(render_process_id_);
+  UpdateJobTestHelper* update_helper = new UpdateJobTestHelper;
   helper_.reset(update_helper);
   scoped_refptr<ServiceWorkerRegistration> registration =
       update_helper->SetupInitialRegistration(kNoChangeOrigin);
@@ -989,8 +982,7 @@ TEST_F(ServiceWorkerJobTest, Update_BumpLastUpdateCheckTime) {
 }
 
 TEST_F(ServiceWorkerJobTest, Update_NewVersion) {
-  UpdateJobTestHelper* update_helper =
-      new UpdateJobTestHelper(render_process_id_);
+  UpdateJobTestHelper* update_helper = new UpdateJobTestHelper;
   helper_.reset(update_helper);
   scoped_refptr<ServiceWorkerRegistration> registration =
       update_helper->SetupInitialRegistration(kNewVersionOrigin);
@@ -1108,8 +1100,7 @@ TEST_F(ServiceWorkerJobTest, Update_NewestVersionChanged) {
 // Test that update succeeds if the incumbent worker was evicted
 // during the update job (this can happen on disk cache failure).
 TEST_F(ServiceWorkerJobTest, Update_EvictedIncumbent) {
-  EvictIncumbentVersionHelper* update_helper =
-      new EvictIncumbentVersionHelper(render_process_id_);
+  EvictIncumbentVersionHelper* update_helper = new EvictIncumbentVersionHelper;
   helper_.reset(update_helper);
   scoped_refptr<ServiceWorkerRegistration> registration =
       update_helper->SetupInitialRegistration(kNewVersionOrigin);
@@ -1351,8 +1342,8 @@ TEST_F(ServiceWorkerJobTest, RegisterMultipleTimesWhileUninstalling) {
 
 class EventCallbackHelper : public EmbeddedWorkerTestHelper {
  public:
-  explicit EventCallbackHelper(int mock_render_process_id)
-      : EmbeddedWorkerTestHelper(base::FilePath(), mock_render_process_id),
+  EventCallbackHelper()
+      : EmbeddedWorkerTestHelper(base::FilePath()),
         install_event_result_(blink::WebServiceWorkerEventResultCompleted),
         activate_event_result_(blink::WebServiceWorkerEventResultCompleted) {}
 
@@ -1386,7 +1377,7 @@ private:
 };
 
 TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall) {
-  EventCallbackHelper* helper = new EventCallbackHelper(render_process_id_);
+  EventCallbackHelper* helper = new EventCallbackHelper;
   helper_.reset(helper);
 
   GURL pattern("http://www.example.com/one/");
@@ -1426,7 +1417,7 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall) {
 }
 
 TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringRejectedInstall) {
-  EventCallbackHelper* helper = new EventCallbackHelper(render_process_id_);
+  EventCallbackHelper* helper = new EventCallbackHelper;
   helper_.reset(helper);
 
   GURL pattern("http://www.example.com/one/");
@@ -1462,7 +1453,7 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringRejectedInstall) {
 }
 
 TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall_RejectActivate) {
-  EventCallbackHelper* helper = new EventCallbackHelper(render_process_id_);
+  EventCallbackHelper* helper = new EventCallbackHelper;
   helper_.reset(helper);
 
   GURL pattern("http://www.example.com/one/");

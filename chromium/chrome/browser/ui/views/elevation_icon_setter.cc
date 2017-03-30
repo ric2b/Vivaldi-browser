@@ -6,6 +6,7 @@
 
 #include "base/callback.h"
 #include "base/task_runner_util.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/views/controls/button/label_button.h"
 
@@ -49,7 +50,7 @@ scoped_ptr<SkBitmap> GetElevationIcon() {
       gfx::Size(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON))));
   DestroyIcon(icon_info.hIcon);
 #endif
-  return icon.Pass();
+  return icon;
 }
 
 }  // namespace

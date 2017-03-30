@@ -4,11 +4,13 @@
 
 #include "chrome/browser/chromeos/file_system_provider/notification_manager.h"
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/app_icon_loader_impl.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
@@ -118,7 +120,8 @@ NotificationManager::CreateNotification() {
   message_center::NotifierId notifier_id(
       message_center::NotifierId::SYSTEM_COMPONENT,
       file_system_info_.mount_path().value());
-  notifier_id.profile_id = multi_user_util::GetUserIDFromProfile(profile_);
+  notifier_id.profile_id =
+      multi_user_util::GetAccountIdFromProfile(profile_).GetUserEmail();
 
   scoped_ptr<message_center::Notification> notification(
       new message_center::Notification(
@@ -131,11 +134,11 @@ NotificationManager::CreateNotification() {
                   : IDS_FILE_SYSTEM_PROVIDER_MANY_UNRESPONSIVE_WARNING),
           extension_icon_.get() ? *extension_icon_.get() : gfx::Image(),
           base::string16(),  // display_source
-          notifier_id, rich_notification_data,
+          GURL(), notifier_id, rich_notification_data,
           new ProviderNotificationDelegate(this)));
 
   notification->SetSystemPriority();
-  return notification.Pass();
+  return notification;
 }
 
 void NotificationManager::OnNotificationResult(NotificationResult result) {

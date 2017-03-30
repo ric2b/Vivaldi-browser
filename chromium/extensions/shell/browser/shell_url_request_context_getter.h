@@ -6,6 +6,7 @@
 #define EXTENSIONS_SHELL_BROWSER_SHELL_URL_REQUEST_CONTEXT_GETTER_H_
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "content/shell/browser/shell_url_request_context_getter.h"
 
 namespace base {
@@ -40,7 +41,7 @@ class ShellURLRequestContextGetter :
       InfoMap* extension_info_map);
 
   // content::ShellURLRequestContextGetter implementation.
-  net::NetworkDelegate* CreateNetworkDelegate() override;
+  scoped_ptr<net::NetworkDelegate> CreateNetworkDelegate() override;
 
 protected:
  ~ShellURLRequestContextGetter() override;

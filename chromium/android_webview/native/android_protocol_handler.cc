@@ -4,14 +4,16 @@
 
 #include "android_webview/native/android_protocol_handler.h"
 
+#include <utility>
+
 #include "android_webview/browser/net/android_stream_reader_url_request_job.h"
 #include "android_webview/browser/net/aw_url_request_job_factory.h"
 #include "android_webview/common/url_constants.h"
 #include "android_webview/native/input_stream_impl.h"
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
-#include "base/strings/string_util.h"
 #include "content/public/common/url_constants.h"
 #include "jni/AndroidProtocolHandler_jni.h"
 #include "net/base/io_buffer.h"
@@ -22,7 +24,9 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
+using android_webview::AndroidStreamReaderURLRequestJob;
 using android_webview::InputStream;
 using android_webview::InputStreamImpl;
 using base::android::AttachCurrentThread;
@@ -94,15 +98,7 @@ class AndroidRequestInterceptorBase : public net::URLRequestInterceptor {
 class AssetFileRequestInterceptor : public AndroidRequestInterceptorBase {
  public:
   AssetFileRequestInterceptor();
-
-  ~AssetFileRequestInterceptor() override;
   bool ShouldHandleRequest(const net::URLRequest* request) const override;
-
- private:
-  // file:///android_asset/
-  const std::string asset_prefix_;
-  // file:///android_res/
-  const std::string resource_prefix_;
 };
 
 // Protocol handler for content:// scheme requests.
@@ -228,36 +224,18 @@ net::URLRequestJob* AndroidRequestInterceptorBase::MaybeInterceptRequest(
   scoped_ptr<AndroidStreamReaderURLRequestJobDelegateImpl> reader_delegate(
       new AndroidStreamReaderURLRequestJobDelegateImpl());
 
-  return new AndroidStreamReaderURLRequestJob(
-      request, network_delegate, reader_delegate.Pass());
+  return new AndroidStreamReaderURLRequestJob(request, network_delegate,
+                                              std::move(reader_delegate));
 }
 
 // AssetFileRequestInterceptor ------------------------------------------------
 
-AssetFileRequestInterceptor::AssetFileRequestInterceptor()
-    : asset_prefix_(std::string(url::kFileScheme) +
-                    std::string(url::kStandardSchemeSeparator) +
-                    android_webview::kAndroidAssetPath),
-      resource_prefix_(std::string(url::kFileScheme) +
-                       std::string(url::kStandardSchemeSeparator) +
-                       android_webview::kAndroidResourcePath) {
-}
-
-AssetFileRequestInterceptor::~AssetFileRequestInterceptor() {
+AssetFileRequestInterceptor::AssetFileRequestInterceptor() {
 }
 
 bool AssetFileRequestInterceptor::ShouldHandleRequest(
     const net::URLRequest* request) const {
-  if (!request->url().SchemeIsFile())
-    return false;
-
-  const std::string& url = request->url().spec();
-  if (!base::StartsWithASCII(url, asset_prefix_, /*case_sensitive=*/ true) &&
-      !base::StartsWithASCII(url, resource_prefix_, /*case_sensitive=*/ true)) {
-    return false;
-  }
-
-  return true;
+  return android_webview::IsAndroidSpecialFileUrl(request->url());
 }
 
 // ContentSchemeRequestInterceptor --------------------------------------------
@@ -267,7 +245,7 @@ ContentSchemeRequestInterceptor::ContentSchemeRequestInterceptor() {
 
 bool ContentSchemeRequestInterceptor::ShouldHandleRequest(
     const net::URLRequest* request) const {
-  return request->url().SchemeIs(android_webview::kContentScheme);
+  return request->url().SchemeIs(url::kContentScheme);
 }
 
 }  // namespace
@@ -298,8 +276,9 @@ scoped_ptr<net::URLRequestInterceptor> CreateAssetFileRequestInterceptor() {
 //
 // |context| should be a android.content.Context instance or NULL to enable
 // the use of the standard application context.
-static void SetResourceContextForTesting(JNIEnv* env, jclass /*clazz*/,
-                                         jobject context) {
+static void SetResourceContextForTesting(JNIEnv* env,
+                                         const JavaParamRef<jclass>& /*clazz*/,
+                                         const JavaParamRef<jobject>& context) {
   if (context) {
     ResetResourceContext(new JavaObjectWeakGlobalRef(env, context));
   } else {
@@ -307,16 +286,16 @@ static void SetResourceContextForTesting(JNIEnv* env, jclass /*clazz*/,
   }
 }
 
-static jstring GetAndroidAssetPath(JNIEnv* env, jclass /*clazz*/) {
-  // OK to release, JNI binding.
-  return ConvertUTF8ToJavaString(
-      env, android_webview::kAndroidAssetPath).Release();
+static ScopedJavaLocalRef<jstring> GetAndroidAssetPath(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& /*clazz*/) {
+  return ConvertUTF8ToJavaString(env, android_webview::kAndroidAssetPath);
 }
 
-static jstring GetAndroidResourcePath(JNIEnv* env, jclass /*clazz*/) {
-  // OK to release, JNI binding.
-  return ConvertUTF8ToJavaString(
-      env, android_webview::kAndroidResourcePath).Release();
+static ScopedJavaLocalRef<jstring> GetAndroidResourcePath(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& /*clazz*/) {
+  return ConvertUTF8ToJavaString(env, android_webview::kAndroidResourcePath);
 }
 
 }  // namespace android_webview

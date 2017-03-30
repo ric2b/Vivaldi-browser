@@ -4,6 +4,8 @@
 
 #include "chromeos/dbus/power_policy_controller.h"
 
+#include <stdint.h>
+
 #include <utility>
 
 #include "base/format_macros.h"
@@ -152,7 +154,7 @@ std::string PowerPolicyController::GetPolicyDebugString(
   }
   if (policy.has_reason())
     str += base::StringPrintf("reason=\"%s\" ", policy.reason().c_str());
-  base::TrimWhitespace(str, base::TRIM_TRAILING, &str);
+  base::TrimWhitespaceASCII(str, base::TRIM_TRAILING, &str);
   return str;
 }
 
@@ -193,7 +195,7 @@ void PowerPolicyController::ApplyPrefs(const PrefValues& values) {
 
   // If auto screen-locking is enabled, ensure that the screen is locked soon
   // after it's turned off due to user inactivity.
-  int64 lock_ms = delays->screen_off_ms() + kScreenLockAfterOffDelayMs;
+  int64_t lock_ms = delays->screen_off_ms() + kScreenLockAfterOffDelayMs;
   if (values.enable_auto_screen_lock && delays->screen_off_ms() > 0 &&
       (delays->screen_lock_ms() <= 0 || lock_ms < delays->screen_lock_ms()) &&
       lock_ms < delays->idle_ms()) {
@@ -244,6 +246,11 @@ void PowerPolicyController::ApplyPrefs(const PrefValues& values) {
 int PowerPolicyController::AddScreenWakeLock(WakeLockReason reason,
                                              const std::string& description) {
   return AddWakeLockInternal(WakeLock::TYPE_SCREEN, reason, description);
+}
+
+int PowerPolicyController::AddDimWakeLock(WakeLockReason reason,
+                                          const std::string& description) {
+  return AddWakeLockInternal(WakeLock::TYPE_DIM, reason, description);
 }
 
 int PowerPolicyController::AddSystemWakeLock(WakeLockReason reason,
@@ -301,6 +308,7 @@ void PowerPolicyController::SendCurrentPolicy() {
     causes = kPrefsReason;
 
   bool have_screen_wake_locks = false;
+  bool have_dim_wake_locks = false;
   bool have_system_wake_locks = false;
   for (const auto& it : wake_locks_) {
     // Skip audio and video locks that should be ignored due to policy.
@@ -311,6 +319,9 @@ void PowerPolicyController::SendCurrentPolicy() {
     switch (it.second.type) {
       case WakeLock::TYPE_SCREEN:
         have_screen_wake_locks = true;
+        break;
+      case WakeLock::TYPE_DIM:
+        have_dim_wake_locks = true;
         break;
       case WakeLock::TYPE_SYSTEM:
         have_system_wake_locks = true;
@@ -328,7 +339,14 @@ void PowerPolicyController::SendCurrentPolicy() {
     policy.mutable_battery_delays()->set_screen_lock_ms(0);
   }
 
-  if (have_screen_wake_locks || have_system_wake_locks) {
+  if (honor_screen_wake_locks_ && have_dim_wake_locks) {
+    policy.mutable_ac_delays()->set_screen_off_ms(0);
+    policy.mutable_ac_delays()->set_screen_lock_ms(0);
+    policy.mutable_battery_delays()->set_screen_off_ms(0);
+    policy.mutable_battery_delays()->set_screen_lock_ms(0);
+  }
+
+  if (have_screen_wake_locks || have_dim_wake_locks || have_system_wake_locks) {
     if (!policy.has_ac_idle_action() || policy.ac_idle_action() ==
         power_manager::PowerManagementPolicy_Action_SUSPEND) {
       policy.set_ac_idle_action(

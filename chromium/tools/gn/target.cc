@@ -4,6 +4,8 @@
 
 #include "tools/gn/target.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -12,6 +14,7 @@
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/substitution_writer.h"
+#include "tools/gn/trace.h"
 
 namespace {
 
@@ -125,6 +128,8 @@ const char* Target::GetStringForOutputType(OutputType type) {
       return "Group";
     case EXECUTABLE:
       return "Executable";
+    case LOADABLE_MODULE:
+      return "Loadable module";
     case SHARED_LIBRARY:
       return "Shared library";
     case STATIC_LIBRARY:
@@ -154,21 +159,43 @@ bool Target::OnResolved(Err* err) {
   DCHECK(output_type_ != UNKNOWN);
   DCHECK(toolchain_) << "Toolchain should have been set before resolving.";
 
-  // Copy our own dependent configs to the list of configs applying to us.
+  ScopedTrace trace(TraceItem::TRACE_ON_RESOLVED, label());
+  trace.SetToolchain(settings()->toolchain_label());
+
+  // Copy this target's own dependent and public configs to the list of configs
+  // applying to it.
   configs_.Append(all_dependent_configs_.begin(), all_dependent_configs_.end());
   MergePublicConfigsFrom(this, &configs_);
+
+  // Copy public configs from all dependencies into the list of configs
+  // applying to this target (configs_).
+  PullDependentTargetConfigs();
+
+  // Copies public dependencies' public configs to this target's public
+  // configs. These configs have already been applied to this target by
+  // PullDependentTargetConfigs above, along with the public configs from
+  // private deps. This step re-exports them as public configs for targets that
+  // depend on this one.
+  for (const auto& dep : public_deps_) {
+    public_configs_.Append(dep.ptr->public_configs().begin(),
+                           dep.ptr->public_configs().end());
+  }
 
   // Copy our own libs and lib_dirs to the final set. This will be from our
   // target and all of our configs. We do this specially since these must be
   // inherited through the dependency tree (other flags don't work this way).
+  //
+  // This needs to happen after we pull dependent target configs for the
+  // public config's libs to be included here. And it needs to happen
+  // before pulling the dependent target libs so the libs are in the correct
+  // order (local ones first, then the dependency's).
   for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
     const ConfigValues& cur = iter.cur();
     all_lib_dirs_.append(cur.lib_dirs().begin(), cur.lib_dirs().end());
     all_libs_.append(cur.libs().begin(), cur.libs().end());
   }
 
-  PullDependentTargets();
-  PullForwardedDependentConfigs();
+  PullDependentTargetLibs();
   PullRecursiveHardDeps();
   if (!ResolvePrecompiledHeaders(err))
     return false;
@@ -193,7 +220,12 @@ bool Target::IsLinkable() const {
 }
 
 bool Target::IsFinal() const {
-  return output_type_ == EXECUTABLE || output_type_ == SHARED_LIBRARY ||
+  return output_type_ == EXECUTABLE ||
+         output_type_ == SHARED_LIBRARY ||
+         output_type_ == LOADABLE_MODULE ||
+         output_type_ == ACTION ||
+         output_type_ == ACTION_FOREACH ||
+         output_type_ == COPY_FILES ||
          (output_type_ == STATIC_LIBRARY && complete_static_lib_);
 }
 
@@ -219,7 +251,8 @@ std::string Target::GetComputedOutputName(bool include_prefix) const {
     const Tool* tool = toolchain_->GetToolForTargetFinalOutput(this);
     if (tool) {
       // Only add the prefix if the name doesn't already have it.
-      if (!base::StartsWithASCII(name, tool->output_prefix(), true))
+      if (!base::StartsWith(name, tool->output_prefix(),
+                            base::CompareCase::SENSITIVE))
         result = tool->output_prefix();
     }
   }
@@ -254,10 +287,17 @@ bool Target::SetToolchain(const Toolchain* toolchain, Err* err) {
   return false;
 }
 
-void Target::PullDependentTarget(const Target* dep, bool is_public) {
+void Target::PullDependentTargetConfigsFrom(const Target* dep) {
   MergeAllDependentConfigsFrom(dep, &configs_, &all_dependent_configs_);
   MergePublicConfigsFrom(dep, &configs_);
+}
 
+void Target::PullDependentTargetConfigs() {
+  for (const auto& pair : GetDeps(DEPS_LINKED))
+    PullDependentTargetConfigsFrom(pair.ptr);
+}
+
+void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
   // Direct dependent libraries.
   if (dep->output_type() == STATIC_LIBRARY ||
       dep->output_type() == SHARED_LIBRARY ||
@@ -276,7 +316,7 @@ void Target::PullDependentTarget(const Target* dep, bool is_public) {
     //
     // However, if the dependency is private:
     //   EXE -> INTERMEDIATE_SHLIB --[private]--> FINAL_SHLIB
-    // the dependency will not be propogated because INTERMEDIATE_SHLIB is
+    // the dependency will not be propagated because INTERMEDIATE_SHLIB is
     // not granting permission to call functiosn from FINAL_SHLIB. If EXE
     // wants to use functions (and link to) FINAL_SHLIB, it will need to do
     // so explicitly.
@@ -297,54 +337,22 @@ void Target::PullDependentTarget(const Target* dep, bool is_public) {
   }
 }
 
-void Target::PullDependentTargets() {
+void Target::PullDependentTargetLibs() {
   for (const auto& dep : public_deps_)
-    PullDependentTarget(dep.ptr, true);
+    PullDependentTargetLibsFrom(dep.ptr, true);
   for (const auto& dep : private_deps_)
-    PullDependentTarget(dep.ptr, false);
-}
-
-void Target::PullForwardedDependentConfigs() {
-  // Pull public configs from each of our dependency's public deps.
-  for (const auto& dep : public_deps_)
-    PullForwardedDependentConfigsFrom(dep.ptr);
-
-  // Forward public configs if explicitly requested.
-  for (const auto& dep : forward_dependent_configs_) {
-    const Target* from_target = dep.ptr;
-
-    // The forward_dependent_configs_ must be in the deps (public or private)
-    // already, so we don't need to bother copying to our configs, only
-    // forwarding.
-    DCHECK(std::find_if(private_deps_.begin(), private_deps_.end(),
-                        LabelPtrPtrEquals<Target>(from_target)) !=
-               private_deps_.end() ||
-           std::find_if(public_deps_.begin(), public_deps_.end(),
-                        LabelPtrPtrEquals<Target>(from_target)) !=
-               public_deps_.end());
-
-    PullForwardedDependentConfigsFrom(from_target);
-  }
-}
-
-void Target::PullForwardedDependentConfigsFrom(const Target* from) {
-  public_configs_.Append(from->public_configs().begin(),
-                         from->public_configs().end());
+    PullDependentTargetLibsFrom(dep.ptr, false);
 }
 
 void Target::PullRecursiveHardDeps() {
   for (const auto& pair : GetDeps(DEPS_LINKED)) {
+    // Direct hard dependencies.
     if (pair.ptr->hard_dep())
       recursive_hard_deps_.insert(pair.ptr);
 
-    // Android STL doesn't like insert(begin, end) so do it manually.
-    // TODO(brettw) this can be changed to
-    // insert(iter.target()->begin(), iter.target()->end())
-    // when Android uses a better STL.
-    for (std::set<const Target*>::const_iterator cur =
-             pair.ptr->recursive_hard_deps().begin();
-         cur != pair.ptr->recursive_hard_deps().end(); ++cur)
-      recursive_hard_deps_.insert(*cur);
+    // Recursive hard dependencies of all dependencies.
+    recursive_hard_deps_.insert(pair.ptr->recursive_hard_deps().begin(),
+                                pair.ptr->recursive_hard_deps().end());
   }
 }
 
@@ -366,8 +374,9 @@ void Target::FillOutputFiles() {
       break;
     }
     case EXECUTABLE:
-      // Executables don't get linked to, but the first output is used for
-      // dependency management.
+    case LOADABLE_MODULE:
+      // Executables and loadable modules don't get linked to, but the first
+      // output is used for dependency management.
       CHECK_GE(tool->outputs().list().size(), 1u);
       check_tool_outputs = true;
       dependency_output_file_ =
@@ -452,7 +461,7 @@ bool Target::ResolvePrecompiledHeaders(Err* err) {
       continue;  // Skip the one on the target itself.
 
     const Config* config = iter.GetCurrentConfig();
-    const ConfigValues& cur = config->config_values();
+    const ConfigValues& cur = config->resolved_values();
     if (!cur.has_precompiled_headers())
       continue;  // This one has no precompiled header info, skip.
 
@@ -545,6 +554,8 @@ void Target::CheckSourcesGenerated() const {
     CheckSourceGenerated(file);
   for (const SourceFile& file : inputs_)
     CheckSourceGenerated(file);
+  // TODO(agrieve): Check all_libs_ here as well (those that are source files).
+  // http://crbug.com/571731
 }
 
 void Target::CheckSourceGenerated(const SourceFile& source) const {

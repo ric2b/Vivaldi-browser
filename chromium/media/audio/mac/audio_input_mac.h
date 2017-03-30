@@ -7,9 +7,11 @@
 
 #include <AudioToolbox/AudioFormat.h>
 #include <AudioToolbox/AudioQueue.h>
+#include <stdint.h>
 
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_parameters.h"
@@ -77,7 +79,7 @@ class PCMQueueInAudioInputStream : public AudioInputStream {
   // Handle to the OS audio queue object.
   AudioQueueRef audio_queue_;
   // Size of each of the buffers in |audio_buffers_|
-  uint32 buffer_size_bytes_;
+  uint32_t buffer_size_bytes_;
   // True iff Start() has been called successfully.
   bool started_;
   // Used to determine if we need to slow down |callback_| calls.

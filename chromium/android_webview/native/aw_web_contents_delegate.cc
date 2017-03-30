@@ -16,8 +16,10 @@
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
@@ -79,12 +81,11 @@ void AwWebContentsDelegate::FindReply(WebContents* web_contents,
 void AwWebContentsDelegate::CanDownload(
     const GURL& url,
     const std::string& request_method,
-    const content::DownloadInformation& info,
-    const base::Callback<void(const content::DownloadItemAction&)>& callback) {
+    const base::Callback<void(bool)>& callback) {
   // Android webview intercepts download in its resource dispatcher host
   // delegate, so should not reach here.
   NOTREACHED();
-  callback.Run(content::DownloadItemAction(false, false));
+  callback.Run(false);
 }
 
 void AwWebContentsDelegate::RunFileChooser(WebContents* web_contents,
@@ -115,7 +116,7 @@ void AwWebContentsDelegate::RunFileChooser(WebContents* web_contents,
       web_contents->GetRenderViewHost()->GetRoutingID(),
       mode_flags,
       ConvertUTF16ToJavaString(env,
-        JoinString(params.accept_types, ',')).obj(),
+          base::JoinString(params.accept_types, base::ASCIIToUTF16(","))).obj(),
       params.title.empty() ? NULL :
           ConvertUTF16ToJavaString(env, params.title).obj(),
       params.default_file_name.empty() ? NULL :
@@ -217,6 +218,13 @@ void AwWebContentsDelegate::LoadingStateChanged(WebContents* source,
   }
 }
 
+bool AwWebContentsDelegate::ShouldResumeRequestsForCreatedWindow() {
+  // Always return false here since we need to defer loading the created window
+  // until after we have attached a new delegate to the new webcontents (which
+  // happens asynchronously).
+  return false;
+}
+
 void AwWebContentsDelegate::RequestMediaAccessPermission(
     WebContents* web_contents,
     const content::MediaStreamRequest& request,
@@ -225,7 +233,7 @@ void AwWebContentsDelegate::RequestMediaAccessPermission(
   if (!aw_contents) {
     callback.Run(content::MediaStreamDevices(),
                  content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
-                 scoped_ptr<content::MediaStreamUI>().Pass());
+                 scoped_ptr<content::MediaStreamUI>());
     return;
   }
   aw_contents->GetPermissionRequestHandler()->SendRequest(
@@ -237,14 +245,14 @@ void AwWebContentsDelegate::EnterFullscreenModeForTab(
     content::WebContents* web_contents, const GURL& origin) {
   WebContentsDelegateAndroid::EnterFullscreenModeForTab(web_contents, origin);
   is_fullscreen_ = true;
-  web_contents->GetRenderViewHost()->WasResized();
+  web_contents->GetRenderViewHost()->GetWidget()->WasResized();
 }
 
 void AwWebContentsDelegate::ExitFullscreenModeForTab(
     content::WebContents* web_contents) {
   WebContentsDelegateAndroid::ExitFullscreenModeForTab(web_contents);
   is_fullscreen_ = false;
-  web_contents->GetRenderViewHost()->WasResized();
+  web_contents->GetRenderViewHost()->GetWidget()->WasResized();
 }
 
 bool AwWebContentsDelegate::IsFullscreenForTabOrPending(
@@ -252,11 +260,14 @@ bool AwWebContentsDelegate::IsFullscreenForTabOrPending(
   return is_fullscreen_;
 }
 
-
 static void FilesSelectedInChooser(
-    JNIEnv* env, jclass clazz,
-    jint process_id, jint render_id, jint mode_flags,
-    jobjectArray file_paths, jobjectArray display_names) {
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    jint process_id,
+    jint render_id,
+    jint mode_flags,
+    const JavaParamRef<jobjectArray>& file_paths,
+    const JavaParamRef<jobjectArray>& display_names) {
   content::RenderViewHost* rvh = content::RenderViewHost::FromID(process_id,
                                                                  render_id);
   if (!rvh)
@@ -294,7 +305,7 @@ static void FilesSelectedInChooser(
     mode = FileChooserParams::Open;
   }
   DVLOG(0) << "File Chooser result: mode = " << mode
-           << ", file paths = " << JoinString(file_path_str, ":");
+           << ", file paths = " << base::JoinString(file_path_str, ":");
   rvh->FilesSelectedInChooser(files, mode);
 }
 

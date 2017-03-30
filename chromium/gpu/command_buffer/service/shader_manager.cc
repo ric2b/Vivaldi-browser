@@ -4,6 +4,8 @@
 
 #include "gpu/command_buffer/service/shader_manager.h"
 
+#include <stddef.h>
+
 #include <utility>
 
 #include "base/logging.h"
@@ -69,14 +71,10 @@ void Shader::DoCompile() {
   const char* source_for_driver = last_compiled_source_.c_str();
   ShaderTranslatorInterface* translator = translator_.get();
   if (translator) {
-    bool success = translator->Translate(last_compiled_source_,
-                                         &log_info_,
-                                         &translated_source_,
-                                         &shader_version_,
-                                         &attrib_map_,
-                                         &uniform_map_,
-                                         &varying_map_,
-                                         &name_map_);
+    bool success = translator->Translate(
+        last_compiled_source_, &log_info_, &translated_source_,
+        &shader_version_, &attrib_map_, &uniform_map_, &varying_map_,
+        &interface_block_map_, &output_variable_list_, &name_map_);
     if (!success) {
       return;
     }
@@ -85,23 +83,10 @@ void Shader::DoCompile() {
 
   glShaderSource(service_id_, 1, &source_for_driver, NULL);
   glCompileShader(service_id_);
+
   if (source_type_ == kANGLE) {
-    GLint max_len = 0;
-    glGetShaderiv(service_id_,
-                  GL_TRANSLATED_SHADER_SOURCE_LENGTH_ANGLE,
-                  &max_len);
-    source_for_driver = "\0";
-    translated_source_.resize(max_len);
-    if (max_len) {
-      GLint len = 0;
-      glGetTranslatedShaderSourceANGLE(
-          service_id_, translated_source_.size(),
-          &len, &translated_source_.at(0));
-      DCHECK(max_len == 0 || len < max_len);
-      DCHECK(len == 0 || translated_source_[len] == '\0');
-      translated_source_.resize(len);
-      source_for_driver = translated_source_.c_str();
-    }
+    RefreshTranslatedShaderSource();
+    source_for_driver = translated_source_.c_str();
   }
 
   GLint status = GL_FALSE;
@@ -134,6 +119,23 @@ void Shader::DoCompile() {
         << "\n--original-shader--\n" << last_compiled_source_
         << "\n--translated-shader--\n" << source_for_driver
         << "\n--info-log--\n" << log_info_;
+  }
+}
+
+void Shader::RefreshTranslatedShaderSource() {
+  if (source_type_ == kANGLE) {
+    GLint max_len = 0;
+    glGetShaderiv(service_id_, GL_TRANSLATED_SHADER_SOURCE_LENGTH_ANGLE,
+                  &max_len);
+    translated_source_.resize(max_len);
+    if (max_len) {
+      GLint len = 0;
+      glGetTranslatedShaderSourceANGLE(service_id_, translated_source_.size(),
+                                       &len, &translated_source_.at(0));
+      DCHECK(max_len == 0 || len < max_len);
+      DCHECK(len == 0 || translated_source_[len] == '\0');
+      translated_source_.resize(len);
+    }
   }
 }
 
@@ -175,12 +177,48 @@ const sh::Attribute* Shader::GetAttribInfo(const std::string& name) const {
 
 const std::string* Shader::GetAttribMappedName(
     const std::string& original_name) const {
-  for (AttributeMap::const_iterator it = attrib_map_.begin();
-       it != attrib_map_.end(); ++it) {
+  for (const auto& key_value : attrib_map_) {
+    if (key_value.second.name == original_name)
+      return &(key_value.first);
+  }
+  return nullptr;
+}
+
+const std::string* Shader::GetUniformMappedName(
+    const std::string& original_name) const {
+  for (const auto& key_value : uniform_map_) {
+    if (key_value.second.name == original_name)
+      return &(key_value.first);
+  }
+  return nullptr;
+}
+
+const std::string* Shader::GetVaryingMappedName(
+    const std::string& original_name) const {
+  for (VaryingMap::const_iterator it = varying_map_.begin();
+       it != varying_map_.end(); ++it) {
     if (it->second.name == original_name)
       return &(it->first);
   }
   return NULL;
+}
+
+const std::string* Shader::GetInterfaceBlockMappedName(
+    const std::string& original_name) const {
+  for (const auto& key_value : interface_block_map_) {
+    if (key_value.second.name == original_name)
+      return &(key_value.first);
+  }
+  return NULL;
+}
+
+const std::string* Shader::GetOutputVariableMappedName(
+    const std::string& original_name) const {
+  for (const auto& value : output_variable_list_) {
+    if (value.name == original_name)
+      return &value.mappedName;
+  }
+  return nullptr;
 }
 
 const std::string* Shader::GetOriginalNameFromHashedName(
@@ -188,6 +226,15 @@ const std::string* Shader::GetOriginalNameFromHashedName(
   NameMap::const_iterator it = name_map_.find(hashed_name);
   if (it != name_map_.end())
     return &(it->second);
+  return NULL;
+}
+
+const std::string* Shader::GetMappedName(
+    const std::string& original_name) const {
+  for (const auto& key_value : name_map_) {
+    if (key_value.second == original_name)
+      return &(key_value.first);
+  }
   return NULL;
 }
 
@@ -199,6 +246,25 @@ const sh::Uniform* Shader::GetUniformInfo(const std::string& name) const {
 const sh::Varying* Shader::GetVaryingInfo(const std::string& name) const {
   VaryingMap::const_iterator it = varying_map_.find(GetTopVariableName(name));
   return it != varying_map_.end() ? &it->second : NULL;
+}
+
+const sh::InterfaceBlock* Shader::GetInterfaceBlockInfo(
+    const std::string& name) const {
+  InterfaceBlockMap::const_iterator it =
+      interface_block_map_.find(GetTopVariableName(name));
+  return it != interface_block_map_.end() ? &it->second : NULL;
+}
+
+const sh::OutputVariable* Shader::GetOutputVariableInfo(
+    const std::string& name) const {
+  std::string mapped_name = GetTopVariableName(name);
+  // Number of output variables is expected to be so low that
+  // a linear search of a list should be faster than using a map.
+  for (const auto& value : output_variable_list_) {
+    if (value.mappedName == mapped_name)
+      return &value;
+  }
+  return nullptr;
 }
 
 ShaderManager::ShaderManager() {}

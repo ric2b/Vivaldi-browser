@@ -387,6 +387,10 @@
               {
                 "title": "Enable Play Services in Your ARC App",
                 "href": "/apps/arc_playservices"
+              },
+              {
+                "title": "In-app Purchases for ARC Apps",
+                "href": "/apps/arc_in_app_payments"
               }
             ]
           },
@@ -482,7 +486,7 @@
               },
               {
                 "title": "Monetize Your App",
-                "href": "/apps/google_wallet"
+                "href": "/webstore/payments-iap"
               },
               {
                 "title": "One-Time Payments",
@@ -531,10 +535,6 @@
               {
                 "title": "FAQ",
                 "href": "/apps/faq"
-              },
-              {
-                "title": "Google Groups",
-                "href": "https://groups.google.com/a/chromium.org/forum/#!forum/chromium-apps"
               },
               {
                 "title": "Stack Overflow",
@@ -1068,8 +1068,8 @@
                 "href": "/webstore/faq"
               },
               {
-                "title": "Google Groups",
-                "href": "https://groups.google.com/a/chromium.org/forum/#!forum/chromium-apps"
+                "title": "Stack Overflow",
+                "href": "http://stackoverflow.com/questions/tagged/google-chrome-app"
               },
               {
                 "title": "Articles",

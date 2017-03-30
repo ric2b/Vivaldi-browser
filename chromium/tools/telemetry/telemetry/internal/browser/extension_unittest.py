@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from telemetry.core import util
-from telemetry.decorators import Disabled
+from telemetry import decorators
 from telemetry.internal.browser import browser_finder
 from telemetry.internal.browser import extension_to_load
 from telemetry.testing import options_for_unittests
@@ -42,7 +42,6 @@ class ExtensionTest(unittest.TestCase):
     if self._browser:
       self._browser.Close()
 
-  @Disabled("mac")
   def testExtensionBasic(self):
     """Test ExtensionPage's ExecuteJavaScript and EvaluateJavaScript."""
     if not self.CreateBrowserWithExtension('simple_extension'):
@@ -67,7 +66,8 @@ class ExtensionTest(unittest.TestCase):
     self.assertTrue(
         ext[0].EvaluateJavaScript('chrome.runtime != null'))
 
-  @Disabled("mac")
+  @decorators.Disabled('mac')
+  @decorators.Disabled('win')  # crbug.com/570955
   def testWebApp(self):
     """Tests GetByExtensionId for a web app with multiple pages."""
     if not self.CreateBrowserWithExtension('simple_app'):
@@ -107,8 +107,7 @@ class MultipleExtensionTest(unittest.TestCase):
   def setUp(self):
     """ Copy the manifest and background.js files of simple_extension to a
     number of temporary directories to load as extensions"""
-    self._extension_dirs = [tempfile.mkdtemp()
-                            for i in range(3)] # pylint: disable=W0612
+    self._extension_dirs = [tempfile.mkdtemp() for _ in range(3)]
     src_extension_dir = os.path.join(
         util.GetUnittestDataDir(), 'simple_extension')
     manifest_path = os.path.join(src_extension_dir, 'manifest.json')
@@ -188,7 +187,7 @@ class ComponentExtensionTest(unittest.TestCase):
 class WebviewInExtensionTest(ExtensionTest):
 
   # Flaky on windows, hits an exception: http://crbug.com/508325
-  @Disabled('win', 'linux', "mac")
+  @decorators.Disabled('win', 'linux')
   def testWebviewInExtension(self):
     """Tests GetWebviewContext() for a web app containing <webview> element."""
     if not self.CreateBrowserWithExtension('webview_app'):

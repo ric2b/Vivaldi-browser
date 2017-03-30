@@ -16,6 +16,7 @@ namespace banners {
 // Error message strings used to notify developers via the console.
 extern const char kRendererRequestCancel[];
 extern const char kManifestEmpty[];
+extern const char kNoManifest[];
 extern const char kCannotDetermineBestIcon[];
 extern const char kNoMatchingServiceWorker[];
 extern const char kNoIconAvailable[];
@@ -27,6 +28,7 @@ extern const char kManifestMissingSuitableIcon[];
 extern const char kNotServedFromSecureOrigin[];
 extern const char kIgnoredNotSupportedOnAndroid[];
 extern const char kIgnoredNoId[];
+extern const char kIgnoredIdsDoNotMatch[];
 
 // Logs a message to the main console if a banner could not be shown
 // and the engagement checks have been bypassed.

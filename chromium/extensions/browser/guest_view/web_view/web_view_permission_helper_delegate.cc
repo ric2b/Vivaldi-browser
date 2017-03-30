@@ -5,9 +5,18 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
 
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 
 namespace extensions {
+
+namespace {
+
+void ProxyCanDownloadCallback(
+    const base::Callback<void(const content::DownloadItemAction&)>& callback,
+    bool allow) {
+  callback.Run(content::DownloadItemAction(allow, false, false));
+}
+
+}  // namespace
 
 WebViewPermissionHelperDelegate::WebViewPermissionHelperDelegate(
     WebViewPermissionHelper* web_view_permission_helper)
@@ -18,5 +27,22 @@ WebViewPermissionHelperDelegate::WebViewPermissionHelperDelegate(
 
 WebViewPermissionHelperDelegate::~WebViewPermissionHelperDelegate() {
 }
+
+void WebViewPermissionHelperDelegate::CanDownload(
+      const GURL& url,
+      const std::string& request_method,
+      const base::Callback<void(bool)>& callback) {
+}
+
+void WebViewPermissionHelperDelegate::CanDownload(
+      const GURL& url,
+      const std::string& request_method,
+      const content::DownloadInformation& info,
+      const base::Callback<
+          void(const content::DownloadItemAction&)>& callback) {
+  CanDownload(url,request_method,
+      base::Bind(ProxyCanDownloadCallback, callback));
+}
+
 
 }  // namespace extensions

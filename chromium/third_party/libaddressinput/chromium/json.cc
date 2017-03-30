@@ -5,11 +5,10 @@
 #include "third_party/libaddressinput/src/cpp/src/util/json.h"
 
 #include <map>
-#include <utility>
 
-#include "base/basictypes.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/values.h"
@@ -36,7 +35,7 @@ namespace {
   else
     result.reset(static_cast<const base::DictionaryValue*>(parsed.release()));
 
-  return result.Pass();
+  return result;
 }
 
 }  // namespace

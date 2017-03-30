@@ -4,13 +4,17 @@
 
 #include "chrome/browser/ui/webui/sync_internals_message_handler.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/logging.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/about_sync_util.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/common/channel_info.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/signin/core/browser/signin_manager_base.h"
+#include "components/sync_driver/about_sync_util.h"
+#include "components/sync_driver/sync_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"
 #include "sync/internal_api/public/events/protocol_event.h"
@@ -24,11 +28,26 @@ using syncer::JsEventDetails;
 using syncer::ModelTypeSet;
 using syncer::WeakHandle;
 
+namespace {
+class UtilAboutSyncDataExtractor : public AboutSyncDataExtractor {
+ public:
+  scoped_ptr<base::DictionaryValue> ConstructAboutInformation(
+      sync_driver::SyncService* service,
+      SigninManagerBase* signin) override {
+    return sync_driver::sync_ui_util::ConstructAboutInformation(
+        service, signin, chrome::GetChannel());
+  }
+};
+}  //  namespace
+
 SyncInternalsMessageHandler::SyncInternalsMessageHandler()
-    : is_registered_(false),
-      is_registered_for_counters_(false),
-      weak_ptr_factory_(this) {
-}
+    : SyncInternalsMessageHandler(
+          make_scoped_ptr(new UtilAboutSyncDataExtractor())) {}
+
+SyncInternalsMessageHandler::SyncInternalsMessageHandler(
+    scoped_ptr<AboutSyncDataExtractor> about_sync_data_extractor)
+    : about_sync_data_extractor_(std::move(about_sync_data_extractor)),
+      weak_ptr_factory_(this) {}
 
 SyncInternalsMessageHandler::~SyncInternalsMessageHandler() {
   if (js_controller_)
@@ -49,27 +68,27 @@ void SyncInternalsMessageHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   web_ui()->RegisterMessageCallback(
-      "registerForEvents",
+      sync_driver::sync_ui_util::kRegisterForEvents,
       base::Bind(&SyncInternalsMessageHandler::HandleRegisterForEvents,
                  base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
-      "registerForPerTypeCounters",
+      sync_driver::sync_ui_util::kRegisterForPerTypeCounters,
       base::Bind(&SyncInternalsMessageHandler::HandleRegisterForPerTypeCounters,
                  base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
-      "requestUpdatedAboutInfo",
+      sync_driver::sync_ui_util::kRequestUpdatedAboutInfo,
       base::Bind(&SyncInternalsMessageHandler::HandleRequestUpdatedAboutInfo,
                  base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
-      "requestListOfTypes",
+      sync_driver::sync_ui_util::kRequestListOfTypes,
       base::Bind(&SyncInternalsMessageHandler::HandleRequestListOfTypes,
                  base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
-      "getAllNodes",
+      sync_driver::sync_ui_util::kGetAllNodes,
       base::Bind(&SyncInternalsMessageHandler::HandleGetAllNodes,
                  base::Unretained(this)));
 }
@@ -123,10 +142,10 @@ void SyncInternalsMessageHandler::HandleRequestListOfTypes(
        it.Good(); it.Inc()) {
     type_list->Append(new base::StringValue(ModelTypeToString(it.Get())));
   }
-  event_details.Set("types", type_list.release());
+  event_details.Set(sync_driver::sync_ui_util::kTypes, type_list.release());
   web_ui()->CallJavascriptFunction(
-      "chrome.sync.dispatchEvent",
-      base::StringValue("onReceivedListOfTypes"),
+      sync_driver::sync_ui_util::kDispatchEvent,
+      base::StringValue(sync_driver::sync_ui_util::kOnReceivedListOfTypes),
       event_details);
 }
 
@@ -149,8 +168,8 @@ void SyncInternalsMessageHandler::OnReceivedAllNodes(
     int request_id,
     scoped_ptr<base::ListValue> nodes) {
   base::FundamentalValue id(request_id);
-  web_ui()->CallJavascriptFunction("chrome.sync.getAllNodesCallback",
-                                   id, *nodes);
+  web_ui()->CallJavascriptFunction(
+      sync_driver::sync_ui_util::kGetAllNodesCallback, id, *nodes);
 }
 
 void SyncInternalsMessageHandler::OnStateChanged() {
@@ -162,27 +181,29 @@ void SyncInternalsMessageHandler::OnProtocolEvent(
   scoped_ptr<base::DictionaryValue> value(
       syncer::ProtocolEvent::ToValue(event));
   web_ui()->CallJavascriptFunction(
-      "chrome.sync.dispatchEvent",
-      base::StringValue("onProtocolEvent"),
-      *value);
+      sync_driver::sync_ui_util::kDispatchEvent,
+      base::StringValue(sync_driver::sync_ui_util::kOnProtocolEvent), *value);
 }
 
 void SyncInternalsMessageHandler::OnCommitCountersUpdated(
     syncer::ModelType type,
     const syncer::CommitCounters& counters) {
-  EmitCounterUpdate(type, "commit", counters.ToValue());
+  EmitCounterUpdate(type, sync_driver::sync_ui_util::kCommit,
+                    counters.ToValue());
 }
 
 void SyncInternalsMessageHandler::OnUpdateCountersUpdated(
     syncer::ModelType type,
     const syncer::UpdateCounters& counters) {
-  EmitCounterUpdate(type, "update", counters.ToValue());
+  EmitCounterUpdate(type, sync_driver::sync_ui_util::kUpdate,
+                    counters.ToValue());
 }
 
 void SyncInternalsMessageHandler::OnStatusCountersUpdated(
     syncer::ModelType type,
     const syncer::StatusCounters& counters) {
-  EmitCounterUpdate(type, "status", counters.ToValue());
+  EmitCounterUpdate(type, sync_driver::sync_ui_util::kStatus,
+                    counters.ToValue());
 }
 
 void SyncInternalsMessageHandler::EmitCounterUpdate(
@@ -190,12 +211,14 @@ void SyncInternalsMessageHandler::EmitCounterUpdate(
     const std::string& counter_type,
     scoped_ptr<base::DictionaryValue> value) {
   scoped_ptr<base::DictionaryValue> details(new base::DictionaryValue());
-  details->SetString("modelType", ModelTypeToString(type));
-  details->SetString("counterType", counter_type);
-  details->Set("counters", value.release());
-  web_ui()->CallJavascriptFunction("chrome.sync.dispatchEvent",
-                                   base::StringValue("onCountersUpdated"),
-                                   *details);
+  details->SetString(sync_driver::sync_ui_util::kModelType,
+                     ModelTypeToString(type));
+  details->SetString(sync_driver::sync_ui_util::kCounterType, counter_type);
+  details->Set(sync_driver::sync_ui_util::kCounters, value.release());
+  web_ui()->CallJavascriptFunction(
+      sync_driver::sync_ui_util::kDispatchEvent,
+      base::StringValue(sync_driver::sync_ui_util::kOnCountersUpdated),
+      *details);
 }
 
 void SyncInternalsMessageHandler::HandleJsEvent(
@@ -203,17 +226,19 @@ void SyncInternalsMessageHandler::HandleJsEvent(
     const JsEventDetails& details) {
   DVLOG(1) << "Handling event: " << name
            << " with details " << details.ToString();
-  web_ui()->CallJavascriptFunction("chrome.sync.dispatchEvent",
-                                   base::StringValue(name),
-                                   details.Get());
+  web_ui()->CallJavascriptFunction(sync_driver::sync_ui_util::kDispatchEvent,
+                                   base::StringValue(name), details.Get());
 }
 
 void SyncInternalsMessageHandler::SendAboutInfo() {
+  ProfileSyncService* sync_service = GetProfileSyncService();
+  SigninManagerBase* signin = sync_service ? sync_service->signin() : nullptr;
   scoped_ptr<base::DictionaryValue> value =
-      sync_ui_util::ConstructAboutInformation(GetProfileSyncService());
+      about_sync_data_extractor_->ConstructAboutInformation(sync_service,
+                                                            signin);
   web_ui()->CallJavascriptFunction(
-      "chrome.sync.dispatchEvent",
-      base::StringValue("onAboutInfoUpdated"),
+      sync_driver::sync_ui_util::kDispatchEvent,
+      base::StringValue(sync_driver::sync_ui_util::kOnAboutInfoUpdated),
       *value);
 }
 

@@ -9,6 +9,7 @@
 #include <atlbase.h>
 #pragma warning(pop)
 #include <security.h>
+#include <stddef.h>
 
 #include <iomanip>
 #include <iostream>
@@ -38,6 +39,7 @@
 #include "cloud_print/service/win/service_listener.h"
 #include "cloud_print/service/win/service_utils.h"
 #include "cloud_print/service/win/setup_listener.h"
+#include "content/public/common/content_switches.h"
 
 namespace {
 
@@ -90,7 +92,8 @@ base::string16 GetOption(int string_id,
                          bool secure) {
   base::string16 prompt_format = cloud_print::LoadLocalString(string_id);
   std::vector<base::string16> substitutions(1, default_option);
-  std::cout << ReplaceStringPlaceholders(prompt_format, substitutions, NULL);
+  std::cout <<
+      base::ReplaceStringPlaceholders(prompt_format, substitutions, NULL);
   base::string16 tmp;
   if (secure) {
     DWORD saved_mode = 0;
@@ -127,6 +130,8 @@ base::string16 StateAsString(ServiceController::State state) {
     break;
   case ServiceController::STATE_RUNNING:
     string_id = IDS_SERVICE_RUNNING;
+    break;
+  case ServiceController::STATE_UNKNOWN:
     break;
   }
   return string_id ? cloud_print::LoadLocalString(string_id) : base::string16();
@@ -357,8 +362,8 @@ class CloudPrintServiceModule
     }
 
     if (new_contents != contents) {
-      size_t  written = base::WriteFile(file, new_contents.c_str(),
-                                              new_contents.size());
+      size_t written = base::WriteFile(
+          file, new_contents.c_str(), static_cast<int>(new_contents.size()));
       if (written != new_contents.size()) {
         return ReportError(cloud_print::GetLastHResult(),
                            IDS_ERROR_FAILED_CREATE_CONFIG);

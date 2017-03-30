@@ -5,7 +5,7 @@
 #ifndef UI_EVENTS_GESTURE_DETECTION_GESTURE_CONFIGURATION_H_
 #define UI_EVENTS_GESTURE_DETECTION_GESTURE_CONFIGURATION_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "ui/events/gesture_detection/gesture_detection_export.h"
 #include "ui/events/gesture_detection/velocity_tracker.h"
 
@@ -52,6 +52,10 @@ class GESTURE_DETECTION_EXPORT GestureConfiguration {
   void set_fling_max_tap_gap_time_in_ms(int val) {
     fling_max_tap_gap_time_in_ms_ = val;
   }
+  bool stylus_scale_enabled() const { return stylus_scale_enabled_; }
+  void set_stylus_scale_enabled(bool enabled) {
+    stylus_scale_enabled_ = enabled;
+  }
   bool gesture_begin_end_types_enabled() const {
     return gesture_begin_end_types_enabled_;
   }
@@ -72,6 +76,8 @@ class GESTURE_DETECTION_EXPORT GestureConfiguration {
   void set_max_distance_for_two_finger_tap_in_pixels(float val) {
     max_distance_for_two_finger_tap_in_pixels_ = val;
   }
+  int max_tap_count() const { return max_tap_count_; }
+  void set_max_tap_count(int count) { max_tap_count_ = count; }
   float max_fling_velocity() const { return max_fling_velocity_; }
   void set_max_fling_velocity(float val) { max_fling_velocity_ = val; }
   float max_gesture_bounds_length() const {
@@ -220,9 +226,15 @@ class GESTURE_DETECTION_EXPORT GestureConfiguration {
   // Maxium time between a mousedown/mouseup pair that is considered to be a
   // suppressable tap.
   int fling_max_tap_gap_time_in_ms_;
+
+  bool stylus_scale_enabled_;
   bool gesture_begin_end_types_enabled_;
   int long_press_time_in_ms_;
   float max_distance_between_taps_for_double_tap_;
+
+  // The max length of a repeated tap sequence, e.g., to support double-click
+  // only this is 2, to support triple-click it's 3.
+  int max_tap_count_;
 
   // The maximum allowed distance between two fingers for a two finger tap. If
   // the distance between two fingers is greater than this value, we will not

@@ -8,6 +8,7 @@
 #include "ui/events/latency_info.h"
 
 #include "content/common/input/web_input_event_traits.h"
+#include "content/public/browser/native_web_keyboard_event.h"
 
 namespace blink {
 class WebGestureEvent;
@@ -37,16 +38,25 @@ class EventWithLatencyInfo {
   }
 
   void CoalesceWith(const EventWithLatencyInfo& other) {
+    // |other| should be a newer event than |this|.
+    if (other.latency.trace_id() >= 0 && latency.trace_id() >= 0)
+      DCHECK_GT(other.latency.trace_id(), latency.trace_id());
+    double old_timestamp = event.timeStampSeconds;
     WebInputEventTraits::Coalesce(other.event, &event);
     // When coalescing two input events, we keep the oldest LatencyInfo
     // for Telemetry latency test since it will represent the longest
     // latency.
-    if (other.latency.trace_id >= 0 &&
-        (latency.trace_id < 0 || other.latency.trace_id < latency.trace_id))
+    if (other.latency.trace_id() >= 0 &&
+        (latency.trace_id() < 0 ||
+         other.latency.trace_id() < latency.trace_id())) {
       latency = other.latency;
+    }
+    latency.AddCoalescedEventTimestamp(old_timestamp);
   }
 };
 
+typedef EventWithLatencyInfo<NativeWebKeyboardEvent>
+    NativeWebKeyboardEventWithLatencyInfo;
 typedef EventWithLatencyInfo<blink::WebGestureEvent>
     GestureEventWithLatencyInfo;
 typedef EventWithLatencyInfo<blink::WebMouseWheelEvent>

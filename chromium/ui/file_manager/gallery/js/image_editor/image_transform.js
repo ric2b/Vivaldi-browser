@@ -12,59 +12,56 @@
 ImageEditor.Mode.Crop = function() {
   ImageEditor.Mode.call(this, 'crop', 'GALLERY_CROP');
 
+  this.paddingTop = ImageEditor.Mode.Crop.MOUSE_GRAB_RADIUS;
+  this.paddingBottom = ImageEditor.Mode.Crop.MOUSE_GRAB_RADIUS;
+
   /**
-   * @type {HTMLDivElement}
+   * @type {HTMLElement}
    * @private
    */
   this.domOverlay_ = null;
 
   /**
-   * @type {HTMLDivElement}
+   * @type {HTMLElement}
    * @private
    */
   this.shadowTop_ = null;
 
   /**
-   * @type {HTMLDivElement}
+   * @type {HTMLElement}
    * @private
    */
   this.middleBox_ = null;
 
   /**
-   * @type {HTMLDivElement}
+   * @type {HTMLElement}
    * @private
    */
   this.shadowLeft_ = null;
 
   /**
-   * @type {HTMLDivElement}
+   * @type {HTMLElement}
    * @private
    */
   this.cropFrame_ = null;
 
   /**
-   * @type {HTMLDivElement}
+   * @type {HTMLElement}
    * @private
    */
   this.shadowRight_ = null;
 
   /**
-   * @type {HTMLDivElement}
+   * @type {HTMLElement}
    * @private
    */
   this.shadowBottom_ = null;
 
   /**
-   * @type {ImageEditor.Toolbar}
-   * @private
-   */
-  this.toolbar_ = null;
-
-  /**
    * @type {?function()}
    * @private
    */
-  this.onResizedBound_ = null;
+  this.onViewportResizedBound_ = null;
 
   /**
    * @type {DraggableRect}
@@ -85,31 +82,31 @@ ImageEditor.Mode.Crop.prototype.setUp = function() {
   var container = this.getImageView().container_;
   var doc = container.ownerDocument;
 
-  this.domOverlay_ = doc.createElement('div');
+  this.domOverlay_ = /** @type {!HTMLElement} */ (doc.createElement('div'));
   this.domOverlay_.className = 'crop-overlay';
   container.appendChild(this.domOverlay_);
 
-  this.shadowTop_ = doc.createElement('div');
+  this.shadowTop_ = /** @type {!HTMLElement} */ (doc.createElement('div'));
   this.shadowTop_.className = 'shadow';
   this.domOverlay_.appendChild(this.shadowTop_);
 
-  this.middleBox_ = doc.createElement('div');
+  this.middleBox_ = /** @type {!HTMLElement} */ (doc.createElement('div'));
   this.middleBox_.className = 'middle-box';
   this.domOverlay_.appendChild(this.middleBox_);
 
-  this.shadowLeft_ = doc.createElement('div');
+  this.shadowLeft_ = /** @type {!HTMLElement} */ (doc.createElement('div'));
   this.shadowLeft_.className = 'shadow';
   this.middleBox_.appendChild(this.shadowLeft_);
 
-  this.cropFrame_ = doc.createElement('div');
+  this.cropFrame_ = /** @type {!HTMLElement} */ (doc.createElement('div'));
   this.cropFrame_.className = 'crop-frame';
   this.middleBox_.appendChild(this.cropFrame_);
 
-  this.shadowRight_ = doc.createElement('div');
+  this.shadowRight_ = /** @type {!HTMLElement} */ (doc.createElement('div'));
   this.shadowRight_.className = 'shadow';
   this.middleBox_.appendChild(this.shadowRight_);
 
-  this.shadowBottom_ = doc.createElement('div');
+  this.shadowBottom_ = /** @type {!HTMLElement} */ (doc.createElement('div'));
   this.shadowBottom_.className = 'shadow';
   this.domOverlay_.appendChild(this.shadowBottom_);
 
@@ -129,8 +126,8 @@ ImageEditor.Mode.Crop.prototype.setUp = function() {
   addCropFrame('bottom horizontal');
   addCropFrame('right bottom corner');
 
-  this.onResizedBound_ = this.onResized_.bind(this);
-  window.addEventListener('resize', this.onResizedBound_);
+  this.onViewportResizedBound_ = this.onViewportResized_.bind(this);
+  this.getViewport().addEventListener('resize', this.onViewportResizedBound_);
 
   this.createDefaultCrop();
 };
@@ -145,32 +142,14 @@ ImageEditor.Mode.Crop.prototype.createTools = function(toolbar) {
     GALLERY_ASPECT_RATIO_7_5: 7 / 5,
     GALLERY_ASPECT_RATIO_16_9: 16 / 9
   };
+
   for (var name in aspects) {
     var button = toolbar.addButton(
         name,
-        name,
-        function(aspect, event) {
-          var button = event.target;
-          if (button.classList.contains('selected')) {
-            button.classList.remove('selected');
-            this.cropRect_.fixedAspectRatio = null;
-          } else {
-            var selectedButtons =
-                toolbar.getElement().querySelectorAll('button.selected');
-            for (var i = 0; i < selectedButtons.length; i++) {
-              selectedButtons[i].classList.remove('selected');
-            }
-            button.classList.add('selected');
-            var clipRect = this.viewport_.screenToImageRect(
-                this.viewport_.getImageBoundsOnScreenClipped());
-            this.cropRect_.fixedAspectRatio = aspect;
-            this.cropRect_.forceAspectRatio(aspect, clipRect);
-            this.markUpdated();
-            this.positionDOM();
-            this.toolbar_.getElement().classList.remove('dimmable');
-            this.toolbar_.getElement().removeAttribute('dimmed');
-          }
-        }.bind(this, aspects[name]));
+        ImageEditor.Toolbar.ButtonType.LABEL,
+        this.onCropAspectRatioClicked_.bind(this, toolbar, aspects[name]),
+        'crop-aspect-ratio');
+
     // Prevent from cropping by Enter key if the button is focused.
     button.addEventListener('keydown', function(event) {
       var key = util.getKeyModifiers(event) + event.keyIdentifier;
@@ -178,14 +157,43 @@ ImageEditor.Mode.Crop.prototype.createTools = function(toolbar) {
         event.stopPropagation();
     });
   }
-  this.toolbar_ = toolbar;
 };
 
 /**
- * Handles resizing of the window and updates the crop rectangle.
+ * Handles click events of crop aspect ratio buttons.
+ * @param {!ImageEditor.Toolbar} toolbar Toolbar.
+ * @param {number} aspect Aspect ratio.
+ * @param {Event} event An event.
  * @private
  */
-ImageEditor.Mode.Crop.prototype.onResized_ = function() {
+ImageEditor.Mode.Crop.prototype.onCropAspectRatioClicked_ = function(
+    toolbar, aspect, event) {
+  var button = event.target;
+
+  if (button.classList.contains('selected')) {
+    button.classList.remove('selected');
+    this.cropRect_.fixedAspectRatio = null;
+  } else {
+    var selectedButtons =
+        toolbar.getElement().querySelectorAll('button.selected');
+    for (var i = 0; i < selectedButtons.length; i++) {
+      selectedButtons[i].classList.remove('selected');
+    }
+    button.classList.add('selected');
+    var clipRect = this.viewport_.screenToImageRect(
+        this.viewport_.getImageBoundsOnScreenClipped());
+    this.cropRect_.fixedAspectRatio = aspect;
+    this.cropRect_.forceAspectRatio(aspect, clipRect);
+    this.markUpdated();
+    this.positionDOM();
+  }
+};
+
+/**
+ * Handles resizing of the viewport and updates the crop rectangle.
+ * @private
+ */
+ImageEditor.Mode.Crop.prototype.onViewportResized_ = function() {
   this.positionDOM();
 };
 
@@ -195,38 +203,19 @@ ImageEditor.Mode.Crop.prototype.onResized_ = function() {
 ImageEditor.Mode.Crop.prototype.reset = function() {
   ImageEditor.Mode.prototype.reset.call(this);
   this.createDefaultCrop();
-  if (this.toolbar_) {
-    this.toolbar_.getElement().classList.add('dimmable');
-    this.toolbar_ = null;
-  }
 };
 
 /**
  * Updates the position of DOM elements.
  */
 ImageEditor.Mode.Crop.prototype.positionDOM = function() {
-  var screenClipped = this.viewport_.getImageBoundsOnScreenClipped();
-
   var screenCrop = this.viewport_.imageToScreenRect(this.cropRect_.getRect());
-  var delta = ImageEditor.Mode.Crop.MOUSE_GRAB_RADIUS;
-  this.editor_.hideOverlappingTools(
-      screenCrop.inflate(delta, delta),
-      screenCrop.inflate(-delta, -delta));
 
-  this.domOverlay_.style.left = screenClipped.left + 'px';
-  this.domOverlay_.style.top = screenClipped.top + 'px';
-  this.domOverlay_.style.width = screenClipped.width + 'px';
-  this.domOverlay_.style.height = screenClipped.height + 'px';
-
-  this.shadowLeft_.style.width = screenCrop.left - screenClipped.left + 'px';
-
-  this.shadowTop_.style.height = screenCrop.top - screenClipped.top + 'px';
-
-  this.shadowRight_.style.width = screenClipped.left + screenClipped.width -
-      (screenCrop.left + screenCrop.width) + 'px';
-
-  this.shadowBottom_.style.height = screenClipped.top + screenClipped.height -
-      (screenCrop.top + screenCrop.height) + 'px';
+  this.shadowLeft_.style.width = screenCrop.left + 'px';
+  this.shadowTop_.style.height = screenCrop.top + 'px';
+  this.shadowRight_.style.width = window.innerWidth - screenCrop.right + 'px';
+  this.shadowBottom_.style.height =
+      window.innerHeight - screenCrop.bottom + 'px';
 };
 
 /**
@@ -236,9 +225,9 @@ ImageEditor.Mode.Crop.prototype.cleanUpUI = function() {
   ImageEditor.Mode.prototype.cleanUpUI.apply(this, arguments);
   this.domOverlay_.parentNode.removeChild(this.domOverlay_);
   this.domOverlay_ = null;
-  this.editor_.hideOverlappingTools();
-  window.removeEventListener('resize', this.onResizedBound_);
-  this.onResizedBound_ = null;
+  this.getViewport().removeEventListener(
+      'resize', this.onViewportResizedBound_);
+  this.onViewportResizedBound_ = null;
 };
 
 /**
@@ -308,8 +297,6 @@ ImageEditor.Mode.Crop.prototype.getDragHandler = function(x, y, touch) {
     return null;
 
   return function(x, y, shiftKey) {
-    if (this.toolbar_)
-      this.toolbar_.getElement().classList.add('dimmable');
     cropDragHandler(x, y, shiftKey);
     this.markUpdated();
     this.positionDOM();
@@ -551,15 +538,29 @@ DraggableRect.prototype.getCursorStyle = function(x, y, mouseDown) {
  */
 DraggableRect.prototype.getDragHandler = function(
     initialScreenX, initialScreenY, touch) {
-  // Check if the initial coordinate in the clip rect.
+  // Check if the initial coordinate is in the image rect.
+  var boundsOnScreen = this.viewport_.getImageBoundsOnScreenClipped();
+  var handlerRadius = touch ? ImageEditor.Mode.Crop.TOUCH_GRAB_RADIUS :
+      ImageEditor.Mode.Crop.MOUSE_GRAB_RADIUS;
+  var draggableAreas = [
+      boundsOnScreen,
+      new Circle(boundsOnScreen.left, boundsOnScreen.top, handlerRadius),
+      new Circle(boundsOnScreen.right, boundsOnScreen.top, handlerRadius),
+      new Circle(boundsOnScreen.left, boundsOnScreen.bottom, handlerRadius),
+      new Circle(boundsOnScreen.right, boundsOnScreen.bottom, handlerRadius)
+  ];
+
+  if (!draggableAreas.some(
+      (area) => area.inside(initialScreenX, initialScreenY))) {
+    return null;
+  }
+
+  // Convert coordinates.
   var initialX = this.viewport_.screenToImageX(initialScreenX);
   var initialY = this.viewport_.screenToImageY(initialScreenY);
   var initialWidth = this.bounds_.right - this.bounds_.left;
   var initialHeight = this.bounds_.bottom - this.bounds_.top;
-  var clipRect = this.viewport_.screenToImageRect(
-      this.viewport_.getImageBoundsOnScreenClipped());
-  if (!clipRect.inside(initialX, initialY))
-    return null;
+  var clipRect = this.viewport_.screenToImageRect(boundsOnScreen);
 
   // Obtain the drag mode.
   this.dragMode_ = this.getDragMode(initialX, initialY, touch);

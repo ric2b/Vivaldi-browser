@@ -4,6 +4,7 @@
 
 #import "chrome/browser/ui/cocoa/apps/app_shim_menu_controller_mac.h"
 
+#include "app/vivaldi_apptools.h"
 #include "base/command_line.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/strings/sys_string_conversions.h"
@@ -375,8 +376,8 @@ void SetChromeCyclesWindows(int sequence_number) {
 - (void)buildAppMenuItems {
   aboutDoppelganger_.reset([[DoppelgangerMenuItem alloc]
       initWithController:self
-              menuTag:IDC_CHROME_MENU
-              itemTag:IDC_ABOUT
+                 menuTag:IDC_CHROME_MENU
+                 itemTag:IDC_ABOUT
               resourceId:IDS_ABOUT_MAC
                   action:nil
            keyEquivalent:@""]);
@@ -457,12 +458,13 @@ void SetChromeCyclesWindows(int sequence_number) {
   viewMenuItem_.reset([[[NSApp mainMenu] itemWithTag:IDC_VIEW_MENU] copy]);
   RemoveMenuItemWithTag(viewMenuItem_, IDC_SHOW_BOOKMARK_BAR, YES);
 
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (!vivaldi::IsVivaldiRunning()) {
   // History menu.
   historyMenuItem_.reset([NewTopLevelItemFrom(IDC_HISTORY_MENU) retain]);
   AddDuplicateItem(historyMenuItem_, IDC_HISTORY_MENU, IDC_BACK);
   AddDuplicateItem(historyMenuItem_, IDC_HISTORY_MENU, IDC_FORWARD);
   }
+
   // Window menu.
   windowMenuItem_.reset([NewTopLevelItemFrom(IDC_WINDOW_MENU) retain]);
   AddDuplicateItem(windowMenuItem_, IDC_WINDOW_MENU, IDC_MINIMIZE_WINDOW);
@@ -501,9 +503,8 @@ void SetChromeCyclesWindows(int sequence_number) {
     // Ignore is_browser: if a window becomes main that does not belong to an
     // extension or browser, treat it the same as switching to a browser.
     if (extension) {
-      NSString* appId = base::SysUTF8ToNSString(extension->id());
-      if (![@"mpognobbkildjkofajifpdfhcoklimli" isEqualToString:appId]) {
-        [self appBecameMain:extension];
+      if (!vivaldi::IsVivaldiApp(extension->id())) {
+      [self appBecameMain:extension];
       }
     } else
       [self chromeBecameMain];
@@ -581,7 +582,7 @@ void SetChromeCyclesWindows(int sequence_number) {
   [mainMenu addItem:appMenuItem_];
   [mainMenu addItem:fileMenuItem_];
 
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (!vivaldi::IsVivaldiRunning()) {
   SetItemWithTagVisible(editMenuItem_,
                         IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE,
                         app->is_hosted_app(), true);

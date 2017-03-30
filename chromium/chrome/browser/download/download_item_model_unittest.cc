@@ -4,10 +4,14 @@
 
 #include "chrome/browser/download/download_item_model.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
@@ -156,8 +160,6 @@ TEST_F(DownloadItemModelTest, InterruptedStatus) {
       "Failed - Server problem" },
     { content::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE,
       "Failed - Download error" },
-    { content::DOWNLOAD_INTERRUPT_REASON_SERVER_PRECONDITION,
-      "Failed - Download error" },
     { content::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT,
       "Failed - No file" },
     { content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED,
@@ -234,8 +236,6 @@ TEST_F(DownloadItemModelTest, InterruptTooltip) {
       "foo.bar\nServer problem" },
     { content::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE,
       "foo.bar\nDownload error" },
-    { content::DOWNLOAD_INTERRUPT_REASON_SERVER_PRECONDITION,
-      "foo.bar\nDownload error" },
     { content::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT,
       "foo.bar\nNo file" },
     { content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED,
@@ -291,8 +291,8 @@ TEST_F(DownloadItemModelTest, InterruptTooltip) {
 
 TEST_F(DownloadItemModelTest, InProgressStatus) {
   const struct TestCase {
-    int64 received_bytes;               // Return value of GetReceivedBytes().
-    int64 total_bytes;                  // Return value of GetTotalBytes().
+    int64_t received_bytes;             // Return value of GetReceivedBytes().
+    int64_t total_bytes;                // Return value of GetTotalBytes().
     bool  time_remaining_known;         // If TimeRemaining() is known.
     bool  open_when_complete;           // GetOpenWhenComplete().
     bool  is_paused;                    // IsPaused().
@@ -373,6 +373,16 @@ TEST_F(DownloadItemModelTest, ShouldShowInShelf) {
 
   model().SetShouldShowInShelf(true);
   EXPECT_TRUE(model().ShouldShowInShelf());
+}
+
+TEST_F(DownloadItemModelTest, DangerLevel) {
+  SetupDownloadItemDefaults();
+
+  // Default danger level is NOT_DANGEROUS.
+  EXPECT_EQ(download_util::NOT_DANGEROUS, model().GetDangerLevel());
+
+  model().SetDangerLevel(download_util::ALLOW_ON_USER_GESTURE);
+  EXPECT_EQ(download_util::ALLOW_ON_USER_GESTURE, model().GetDangerLevel());
 }
 
 TEST_F(DownloadItemModelTest, ShouldRemoveFromShelfWhenComplete) {

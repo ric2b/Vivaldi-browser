@@ -8,11 +8,13 @@
 #ifndef GPU_TOOLS_COMPOSITOR_MODEL_BENCH_RENDER_TREE_H_
 #define GPU_TOOLS_COMPOSITOR_MODEL_BENCH_RENDER_TREE_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/scoped_ptr.h"
 #include "gpu/tools/compositor_model_bench/shaders.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
@@ -35,7 +37,7 @@ struct Texture {
   GLenum format;
 };
 
-GLenum TextureFormatFromString(std::string format);
+GLenum TextureFormatFromString(const std::string& format);
 const char* TextureFormatName(GLenum format);
 int FormatBytesPerPixel(GLenum format);
 
@@ -144,11 +146,11 @@ class ContentLayerNode : public RenderNode {
   }
 
   void add_child(RenderNode* child) {
-    children_.push_back(child);
+    children_.push_back(make_scoped_ptr(child));
   }
 
  private:
-  ScopedVector<RenderNode> children_;
+  std::vector<scoped_ptr<RenderNode>> children_;
   bool skipsDraw_;
 };
 

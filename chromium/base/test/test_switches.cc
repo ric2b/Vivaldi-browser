@@ -18,6 +18,11 @@ const char switches::kTestLauncherBotMode[] =
 const char switches::kTestLauncherDebugLauncher[] =
     "test-launcher-debug-launcher";
 
+// Force running all requested tests and retries even if too many test errors
+// occur.
+const char switches::kTestLauncherForceRunBrokenTests[] =
+    "test-launcher-force-run-broken-tests";
+
 // Path to file containing test filter (one pattern per line).
 const char switches::kTestLauncherFilterFile[] = "test-launcher-filter-file";
 

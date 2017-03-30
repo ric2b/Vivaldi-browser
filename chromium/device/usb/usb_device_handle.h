@@ -5,10 +5,14 @@
 #ifndef DEVICE_USB_USB_DEVICE_HANDLE_H_
 #define DEVICE_USB_USB_DEVICE_HANDLE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_checker.h"
@@ -59,36 +63,23 @@ class UsbDeviceHandle : public base::RefCountedThreadSafe<UsbDeviceHandle> {
                                             int alternate_setting,
                                             const ResultCallback& callback) = 0;
   virtual void ResetDevice(const ResultCallback& callback) = 0;
+  virtual void ClearHalt(uint8_t endpoint, const ResultCallback& callback) = 0;
 
   // The transfer functions may be called from any thread. The provided callback
   // will be run on the caller's thread.
   virtual void ControlTransfer(UsbEndpointDirection direction,
                                TransferRequestType request_type,
                                TransferRecipient recipient,
-                               uint8 request,
-                               uint16 value,
-                               uint16 index,
+                               uint8_t request,
+                               uint16_t value,
+                               uint16_t index,
                                scoped_refptr<net::IOBuffer> buffer,
                                size_t length,
                                unsigned int timeout,
                                const TransferCallback& callback) = 0;
 
-  virtual void BulkTransfer(UsbEndpointDirection direction,
-                            uint8 endpoint,
-                            scoped_refptr<net::IOBuffer> buffer,
-                            size_t length,
-                            unsigned int timeout,
-                            const TransferCallback& callback) = 0;
-
-  virtual void InterruptTransfer(UsbEndpointDirection direction,
-                                 uint8 endpoint,
-                                 scoped_refptr<net::IOBuffer> buffer,
-                                 size_t length,
-                                 unsigned int timeout,
-                                 const TransferCallback& callback) = 0;
-
   virtual void IsochronousTransfer(UsbEndpointDirection direction,
-                                   uint8 endpoint,
+                                   uint8_t endpoint,
                                    scoped_refptr<net::IOBuffer> buffer,
                                    size_t length,
                                    unsigned int packets,
@@ -96,12 +87,24 @@ class UsbDeviceHandle : public base::RefCountedThreadSafe<UsbDeviceHandle> {
                                    unsigned int timeout,
                                    const TransferCallback& callback) = 0;
 
+  virtual void GenericTransfer(UsbEndpointDirection direction,
+                               uint8_t endpoint,
+                               scoped_refptr<net::IOBuffer> buffer,
+                               size_t length,
+                               unsigned int timeout,
+                               const TransferCallback& callback) = 0;
+
+  // Gets the interface containing |endpoint_address|. Returns false if no
+  // claimed interface contains that endpoint.
+  virtual bool FindInterfaceByEndpoint(uint8_t endpoint_address,
+                                       uint8_t* interface_number) = 0;
+
  protected:
   friend class base::RefCountedThreadSafe<UsbDeviceHandle>;
 
-  UsbDeviceHandle() {};
+  UsbDeviceHandle();
 
-  virtual ~UsbDeviceHandle() {};
+  virtual ~UsbDeviceHandle();
 
   DISALLOW_COPY_AND_ASSIGN(UsbDeviceHandle);
 };

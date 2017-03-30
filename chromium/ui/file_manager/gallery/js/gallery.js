@@ -17,35 +17,17 @@ ContentMetadataProvider.WORKER_SCRIPT = '/js/metadata_worker.js';
  */
 function Gallery(volumeManager) {
   /**
-   * @type {{appWindow: chrome.app.window.AppWindow, onClose: function(),
-   *     onMaximize: function(), onMinimize: function(),
-   *     onAppRegionChanged: function(), readonlyDirName: string,
-   *     displayStringFunction: function(), loadTimeData: Object,
-   *     curDirEntry: Entry, searchResults: *}}
+   * @type {{appWindow: chrome.app.window.AppWindow, readonlyDirName: string,
+   *     displayStringFunction: function(), loadTimeData: Object}}
    * @private
-   *
-   * TODO(yawano): curDirEntry and searchResults seem not to be used.
-   *     Investigate them and remove them if possible.
    */
   this.context_ = {
     appWindow: chrome.app.window.current(),
-    onClose: function() { window.close(); },
-    onMaximize: function() {
-      var appWindow = chrome.app.window.current();
-      if (appWindow.isMaximized())
-        appWindow.restore();
-      else
-        appWindow.maximize();
-    },
-    onMinimize: function() { chrome.app.window.current().minimize(); },
-    onAppRegionChanged: function() {},
     readonlyDirName: '',
     displayStringFunction: function() { return ''; },
     loadTimeData: {},
-    curDirEntry: null,
-    searchResults: null
   };
-  this.container_ = queryRequiredElement(document, '.gallery');
+  this.container_ = queryRequiredElement('.gallery');
   this.document_ = document;
   this.volumeManager_ = volumeManager;
   /**
@@ -74,7 +56,7 @@ function Gallery(volumeManager) {
   this.selectionModel_ = new cr.ui.ListSelectionModel();
 
   /**
-   * @type {(SlideMode|MosaicMode)}
+   * @type {(SlideMode|ThumbnailMode)}
    * @private
    */
   this.currentMode_ = null;
@@ -92,71 +74,72 @@ function Gallery(volumeManager) {
   cr.ui.dialogs.BaseDialog.OK_LABEL = str('GALLERY_OK_LABEL');
   cr.ui.dialogs.BaseDialog.CANCEL_LABEL = str('GALLERY_CANCEL_LABEL');
 
-  var content = queryRequiredElement(document, '#content');
+  var content = getRequiredElement('content');
   content.addEventListener('click', this.onContentClick_.bind(this));
 
-  this.header_ = queryRequiredElement(document, '#header');
-  this.toolbar_ = queryRequiredElement(document, '#toolbar');
+  this.topToolbar_ = getRequiredElement('top-toolbar');
+  this.bottomToolbar_ = getRequiredElement('bottom-toolbar');
 
-  var preventDefault = function(event) { event.preventDefault(); };
+  this.filenameSpacer_ = queryRequiredElement('.filename-spacer',
+      this.topToolbar_);
 
-  var minimizeButton = util.createChild(this.header_,
-                                        'minimize-button tool dimmable',
-                                        'button');
-  minimizeButton.tabIndex = -1;
-  minimizeButton.addEventListener('click', this.onMinimize_.bind(this));
-  minimizeButton.addEventListener('mousedown', preventDefault);
+  /**
+   * @private {HTMLInputElement}
+   * @const
+   */
+  this.filenameEdit_ = /** @type {HTMLInputElement} */
+      (queryRequiredElement('input', this.filenameSpacer_));
 
-  var maximizeButton = util.createChild(this.header_,
-                                        'maximize-button tool dimmable',
-                                        'button');
-  maximizeButton.tabIndex = -1;
-  maximizeButton.addEventListener('click', this.onMaximize_.bind(this));
-  maximizeButton.addEventListener('mousedown', preventDefault);
+  this.filenameCanvas_ = document.createElement('canvas');
+  this.filenameCanvasContext_ = this.filenameCanvas_.getContext('2d');
 
-  var closeButton = util.createChild(this.header_,
-                                     'close-button tool dimmable',
-                                     'button');
-  closeButton.tabIndex = -1;
-  closeButton.addEventListener('click', this.onClose_.bind(this));
-  closeButton.addEventListener('mousedown', preventDefault);
+  // Set font style of canvas context to same font style with rename field.
+  var filenameEditComputedStyle = window.getComputedStyle(this.filenameEdit_);
+  this.filenameCanvasContext_.font = filenameEditComputedStyle.font;
 
-  this.filenameSpacer_ = queryRequiredElement(this.toolbar_,
-      '.filename-spacer');
-  this.filenameEdit_ = util.createChild(this.filenameSpacer_,
-                                        'namebox', 'input');
-
-  this.filenameEdit_.setAttribute('type', 'text');
   this.filenameEdit_.addEventListener('blur',
       this.onFilenameEditBlur_.bind(this));
-
   this.filenameEdit_.addEventListener('focus',
       this.onFilenameFocus_.bind(this));
-
+  this.filenameEdit_.addEventListener('input',
+      this.resizeRenameField_.bind(this));
   this.filenameEdit_.addEventListener('keydown',
       this.onFilenameEditKeydown_.bind(this));
 
-  var middleSpacer = queryRequiredElement(this.toolbar_, '.middle-spacer');
-  var buttonSpacer = queryRequiredElement(this.toolbar_, '.button-spacer');
+  var buttonSpacer = queryRequiredElement('.button-spacer', this.topToolbar_);
 
   this.prompt_ = new ImageEditor.Prompt(this.container_, strf);
 
   this.errorBanner_ = new ErrorBanner(this.container_);
 
-  this.modeButton_ = queryRequiredElement(this.toolbar_, 'button.mode');
-  this.modeButton_.addEventListener('click',
-      this.toggleMode_.bind(this, undefined));
+  /**
+   * @private {!HTMLElement}
+   * @const
+   */
+  this.modeSwitchButton_ = queryRequiredElement('button.mode',
+      this.topToolbar_);
+  GalleryUtil.decorateMouseFocusHandling(this.modeSwitchButton_);
+  this.modeSwitchButton_.addEventListener('click',
+      this.onModeSwitchButtonClicked_.bind(this));
 
-  this.mosaicMode_ = new MosaicMode(content,
-                                    this.errorBanner_,
-                                    this.dataModel_,
-                                    this.selectionModel_,
-                                    this.volumeManager_,
-                                    this.toggleMode_.bind(this, undefined));
+  /**
+   * @private {!DimmableUIController}
+   * @const
+   */
+  this.dimmableUIController_ = new DimmableUIController(this.container_);
+
+  this.thumbnailMode_ = new ThumbnailMode(
+      assertInstanceof(document.querySelector('.thumbnail-view'), HTMLElement),
+      this.errorBanner_,
+      this.dataModel_,
+      this.selectionModel_,
+      this.onChangeToSlideMode_.bind(this));
+  this.thumbnailMode_.hide();
 
   this.slideMode_ = new SlideMode(this.container_,
                                   content,
-                                  this.toolbar_,
+                                  this.topToolbar_,
+                                  this.bottomToolbar_,
                                   this.prompt_,
                                   this.errorBanner_,
                                   this.dataModel_,
@@ -166,16 +149,31 @@ function Gallery(volumeManager) {
                                   this.context_,
                                   this.volumeManager_,
                                   this.toggleMode_.bind(this),
-                                  str);
+                                  str,
+                                  this.dimmableUIController_);
 
-  this.slideMode_.addEventListener('image-displayed', function() {
-    cr.dispatchSimpleEvent(this, 'image-displayed');
-  }.bind(this));
-
-  this.deleteButton_ = this.initToolbarButton_('delete', 'GALLERY_DELETE');
+  /**
+   * @private {!HTMLElement}
+   * @const
+   */
+  this.deleteButton_ = queryRequiredElement('button.delete', this.topToolbar_);
+  GalleryUtil.decorateMouseFocusHandling(this.deleteButton_);
   this.deleteButton_.addEventListener('click', this.delete_.bind(this));
 
-  this.shareButton_ = this.initToolbarButton_('share', 'GALLERY_SHARE');
+  /**
+   * @private {!HTMLElement}
+   * @const
+   */
+  this.slideshowButton_ = queryRequiredElement(
+      'button.slideshow', this.topToolbar_);
+  GalleryUtil.decorateMouseFocusHandling(this.slideshowButton_);
+
+  /**
+   * @private {!HTMLElement}
+   * @const
+   */
+  this.shareButton_ = queryRequiredElement('button.share', this.topToolbar_);
+  GalleryUtil.decorateMouseFocusHandling(this.shareButton_);
   this.shareButton_.addEventListener(
       'click', this.onShareButtonClick_.bind(this));
 
@@ -193,20 +191,41 @@ function Gallery(volumeManager) {
   this.keyDownBound_ = this.onKeyDown_.bind(this);
   this.document_.body.addEventListener('keydown', this.keyDownBound_);
 
-  this.inactivityWatcher_ = new MouseInactivityWatcher(
-      this.container_, Gallery.FADE_TIMEOUT, this.hasActiveTool.bind(this));
-
   // TODO(hirono): Add observer to handle thumbnail update.
   this.volumeManager_.addEventListener(
       'externally-unmounted', this.onExternallyUnmountedBound_);
   // The 'pagehide' event is called when the app window is closed.
   window.addEventListener('pagehide', this.onPageHide_.bind(this));
-}
 
-/**
- * Gallery extends cr.EventTarget.
- */
-Gallery.prototype.__proto__ = cr.EventTarget.prototype;
+  window.addEventListener('resize', this.resizeRenameField_.bind(this));
+
+  assertInstanceof(document.querySelector('files-tooltip'), FilesTooltip)
+      .addTargets(document.querySelectorAll('[has-tooltip]'));
+
+  // We must call this method after elements of all tools have been attached to
+  // the DOM.
+  this.dimmableUIController_.setTools(document.querySelectorAll('.tool'));
+
+  /**
+   * @private {function(!Event)}
+   * @const
+   */
+  this.onSubModeChangedBound_ = this.onSubModeChanged_.bind(this);
+
+  chrome.accessibilityFeatures.largeCursor.onChange.addListener(
+      this.onGetOrChangedAccessibilityConfiguration_.bind(
+          this, 'large-cursor'));
+  chrome.accessibilityFeatures.largeCursor.get({},
+      this.onGetOrChangedAccessibilityConfiguration_.bind(
+          this, 'large-cursor'));
+
+  chrome.accessibilityFeatures.highContrast.onChange.addListener(
+      this.onGetOrChangedAccessibilityConfiguration_.bind(
+          this, 'high-contrast'));
+  chrome.accessibilityFeatures.highContrast.get({},
+      this.onGetOrChangedAccessibilityConfiguration_.bind(
+          this, 'high-contrast'));
+}
 
 /**
  * Tools fade-out timeout in milliseconds.
@@ -236,7 +255,43 @@ Gallery.MOSAIC_BACKGROUND_INIT_DELAY = 1000;
  * @type {!Array<string>}
  */
 Gallery.PREFETCH_PROPERTY_NAMES =
-    ['imageWidth', 'imageHeight', 'size', 'present'];
+    ['imageWidth', 'imageHeight', 'imageRotation', 'size', 'present'];
+
+/**
+ * Modes in Gallery.
+ * @enum {string}
+ */
+Gallery.Mode = {
+  SLIDE: 'slide',
+  THUMBNAIL: 'thumbnail'
+};
+
+/**
+ * Sub modes in Gallery.
+ * @enum {string}
+ * TODO(yawano): Remove sub modes by extracting them as modes.
+ */
+Gallery.SubMode = {
+  BROWSE: 'browse',
+  EDIT: 'edit',
+  SLIDESHOW: 'slideshow'
+};
+
+/**
+ * Updates attributes of container element when accessibility configuration has
+ * been changed.
+ * @param {string} name
+ * @param {Object} details
+ * @private
+ */
+Gallery.prototype.onGetOrChangedAccessibilityConfiguration_ = function(
+    name, details) {
+  if (details.value) {
+    this.container_.setAttribute(name, true);
+  } else {
+    this.container_.removeAttribute(name);
+  }
+};
 
 /**
  * Closes gallery when a volume containing the selected item is unmounted.
@@ -264,20 +319,6 @@ Gallery.prototype.onPageHide_ = function() {
 };
 
 /**
- * Initializes a toolbar button.
- *
- * @param {string} className Class to add.
- * @param {string} title Button title.
- * @return {!HTMLElement} Newly created button.
- * @private
- */
-Gallery.prototype.initToolbarButton_ = function(className, title) {
-  var button = queryRequiredElement(this.toolbar_, 'button.' + className);
-  button.title = str(title);
-  return button;
-};
-
-/**
  * Loads the content.
  *
  * @param {!Array<!Entry>} selectedEntries Array of selected entries.
@@ -302,7 +343,7 @@ Gallery.prototype.loadInternal_ = function(entries, selectedEntries) {
     var locationInfo = this.volumeManager_.getLocationInfo(entries[i]);
     if (!locationInfo)  // Skip the item, since gone.
       return;
-    items.push(new Gallery.Item(
+    items.push(new GalleryItem(
         entries[i],
         locationInfo,
         null,
@@ -368,43 +409,34 @@ Gallery.prototype.loadInternal_ = function(entries, selectedEntries) {
         chunkItem.setMetadataItem(metadataLists[0][index]);
         chunkItem.setThumbnailMetadataItem(metadataLists[1][index]);
 
-        if (!firstChunk || self.initialized_) {
-          var event = new Event('content');
-          event.item = chunkItem;
-          event.oldEntry = chunkItem.getEntry();
-          event.thumbnailChanged = true;
-          self.dataModel_.dispatchEvent(event);
-        }
+        var event = new Event('content');
+        event.item = chunkItem;
+        event.oldEntry = chunkItem.getEntry();
+        event.thumbnailChanged = true;
+        self.dataModel_.dispatchEvent(event);
       });
 
       // Init modes after the first chunk is loaded.
       if (firstChunk && !self.initialized_) {
         // Determine the initial mode.
-        var shouldShowMosaic = selectedEntries.length > 1 ||
+        var shouldShowThumbnail = selectedEntries.length > 1 ||
             (self.context_.pageState &&
-             self.context_.pageState.gallery === 'mosaic');
+             self.context_.pageState.gallery === 'thumbnail');
         self.setCurrentMode_(
-            shouldShowMosaic ? self.mosaicMode_ : self.slideMode_);
-
-        // Init mosaic mode.
-        var mosaic = self.mosaicMode_.getMosaic();
-        mosaic.init();
+            shouldShowThumbnail ? self.thumbnailMode_ : self.slideMode_);
 
         // Do the initialization for each mode.
-        if (shouldShowMosaic) {
-          mosaic.show();
-          self.inactivityWatcher_.check();  // Show the toolbar.
-          cr.dispatchSimpleEvent(self, 'loaded');
+        if (shouldShowThumbnail) {
+          self.thumbnailMode_.show();
+          self.thumbnailMode_.focus();
         } else {
           self.slideMode_.enter(
               null,
               function() {
                 // Flash the toolbar briefly to show it is there.
-                self.inactivityWatcher_.kick(Gallery.FIRST_FADE_TIMEOUT);
+                self.dimmableUIController_.kick(Gallery.FIRST_FADE_TIMEOUT);
               },
-              function() {
-                cr.dispatchSimpleEvent(self, 'loaded');
-              });
+              function() {});
         }
         self.initialized_ = true;
       }
@@ -416,45 +448,6 @@ Gallery.prototype.loadInternal_ = function(entries, selectedEntries) {
   loadChunk(/* firstChunk */ true).catch(function(error) {
     console.error(error.stack || error);
   });
-};
-
-/**
- * Handles user's 'Close' action.
- * @private
- */
-Gallery.prototype.onClose_ = function() {
-  this.executeWhenReady(this.context_.onClose);
-};
-
-/**
- * Handles user's 'Maximize' action (Escape or a click on the X icon).
- * @private
- */
-Gallery.prototype.onMaximize_ = function() {
-  this.executeWhenReady(this.context_.onMaximize);
-};
-
-/**
- * Handles user's 'Maximize' action (Escape or a click on the X icon).
- * @private
- */
-Gallery.prototype.onMinimize_ = function() {
-  this.executeWhenReady(this.context_.onMinimize);
-};
-
-/**
- * Executes a function when the editor is done with the modifications.
- * @param {function()} callback Function to execute.
- */
-Gallery.prototype.executeWhenReady = function(callback) {
-  this.currentMode_.executeWhenReady(callback);
-};
-
-/**
- * @return {!Object} File manager private API.
- */
-Gallery.getFileManagerPrivate = function() {
-  return chrome.fileManagerPrivate || window.top.chrome.fileManagerPrivate;
 };
 
 /**
@@ -471,22 +464,145 @@ Gallery.prototype.hasActiveTool = function() {
 */
 Gallery.prototype.onUserAction_ = function() {
   // Show the toolbar and hide it after the default timeout.
-  this.inactivityWatcher_.kick();
+  this.dimmableUIController_.kick();
+};
+
+/**
+ * Returns the current mode.
+ * @return {Gallery.Mode}
+ */
+Gallery.prototype.getCurrentMode = function() {
+  switch (/** @type {(SlideMode|ThumbnailMode)} */ (this.currentMode_)) {
+    case this.slideMode_:
+      return Gallery.Mode.SLIDE;
+    case this.thumbnailMode_:
+      return Gallery.Mode.THUMBNAIL;
+    default:
+      assertNotReached();
+  }
+};
+
+/**
+ * Returns sub mode of current mode. If current mode is not set yet, null is
+ * returned.
+ * @return {Gallery.SubMode}
+ */
+Gallery.prototype.getCurrentSubMode = function() {
+  assert(this.currentMode_);
+  return this.currentMode_.getSubMode();
 };
 
 /**
  * Sets the current mode, update the UI.
- * @param {!(SlideMode|MosaicMode)} mode Current mode.
+ * @param {!(SlideMode|ThumbnailMode)} mode Current mode.
  * @private
  */
 Gallery.prototype.setCurrentMode_ = function(mode) {
-  if (mode !== this.slideMode_ && mode !== this.mosaicMode_)
+  if (mode !== this.slideMode_ && mode !== this.thumbnailMode_)
     console.error('Invalid Gallery mode');
 
+  if (this.currentMode_) {
+    this.currentMode_.removeEventListener(
+        'sub-mode-change', this.onSubModeChangedBound_);
+  }
   this.currentMode_ = mode;
+  this.currentMode_.addEventListener(
+      'sub-mode-change', this.onSubModeChangedBound_);
+
+  this.dimmableUIController_.setCurrentMode(
+      this.getCurrentMode(), this.getCurrentSubMode());
+
   this.container_.setAttribute('mode', this.currentMode_.getName());
   this.updateSelectionAndState_();
-  this.updateButtons_();
+};
+
+/**
+ * Handles sub-mode-change event.
+ * @private
+ */
+Gallery.prototype.onSubModeChanged_ = function() {
+  this.dimmableUIController_.setCurrentMode(
+      this.getCurrentMode(), this.getCurrentSubMode());
+};
+
+/**
+ * Handles click event of mode switch button.
+ * @param {!Event} event An event.
+ * @private
+ */
+Gallery.prototype.onModeSwitchButtonClicked_ = function(event) {
+  this.toggleMode_(undefined /* callback */, event);
+};
+
+/**
+ * Change to slide mode.
+ * @private
+ */
+Gallery.prototype.onChangeToSlideMode_ = function() {
+  if (this.modeSwitchButton_.disabled)
+    return;
+
+  this.changeCurrentMode_(this.slideMode_);
+};
+
+/**
+ * Change current mode.
+ * @param {!(SlideMode|ThumbnailMode)} mode Target mode.
+ * @param {Event=} opt_event Event that caused this call.
+ * @return {!Promise} Resolved when mode has been changed.
+ * @private
+ */
+Gallery.prototype.changeCurrentMode_ = function(mode, opt_event) {
+  return new Promise(function(fulfill, reject) {
+    // Do not re-enter while changing the mode.
+    if (this.currentMode_ === mode || this.changingMode_) {
+      fulfill();
+      return;
+    }
+
+    if (opt_event)
+      this.onUserAction_();
+
+    this.changingMode_ = true;
+
+    var onModeChanged = function() {
+      this.changingMode_ = false;
+      fulfill();
+    }.bind(this);
+
+    var thumbnailIndex = Math.max(0, this.selectionModel_.selectedIndex);
+    var thumbnailRect = ImageRect.createFromBounds(
+        this.thumbnailMode_.getThumbnailRect(thumbnailIndex));
+
+    if (mode === this.thumbnailMode_) {
+      this.setCurrentMode_(this.thumbnailMode_);
+      this.slideMode_.leave(
+          thumbnailRect,
+          function() {
+            // Show thumbnail mode and perform animation.
+            this.thumbnailMode_.show();
+            var fromRect = this.slideMode_.getSelectedImageRect();
+            if (fromRect) {
+              this.thumbnailMode_.performEnterAnimation(
+                  thumbnailIndex, fromRect);
+            }
+            this.thumbnailMode_.focus();
+
+            onModeChanged();
+          }.bind(this));
+      this.bottomToolbar_.hidden = true;
+    } else {
+      this.setCurrentMode_(this.slideMode_);
+      this.slideMode_.enter(
+          thumbnailRect,
+          function() {
+            // Animate to zoomed position.
+            this.thumbnailMode_.hide();
+          }.bind(this),
+          onModeChanged);
+      this.bottomToolbar_.hidden = false;
+    }
+  }.bind(this));
 };
 
 /**
@@ -496,50 +612,17 @@ Gallery.prototype.setCurrentMode_ = function(mode) {
  * @private
  */
 Gallery.prototype.toggleMode_ = function(opt_callback, opt_event) {
-  if (!this.modeButton_)
-    return;
+  // If it's in editing, leave edit mode.
+  if (this.slideMode_.isEditing())
+    this.slideMode_.toggleEditor();
 
-  if (this.changingMode_) // Do not re-enter while changing the mode.
-    return;
+  var targetMode = this.currentMode_ === this.slideMode_ ?
+      this.thumbnailMode_ : this.slideMode_;
 
-  if (opt_event)
-    this.onUserAction_();
-
-  this.changingMode_ = true;
-
-  var onModeChanged = function() {
-    this.changingMode_ = false;
-    if (opt_callback) opt_callback();
-  }.bind(this);
-
-  var tileIndex = Math.max(0, this.selectionModel_.selectedIndex);
-
-  var mosaic = this.mosaicMode_.getMosaic();
-  var tileRect = mosaic.getTileRect(tileIndex);
-
-  if (this.currentMode_ === this.slideMode_) {
-    this.setCurrentMode_(this.mosaicMode_);
-    mosaic.transform(
-        tileRect, this.slideMode_.getSelectedImageRect(), true /* instant */);
-    this.slideMode_.leave(
-        tileRect,
-        function() {
-          // Animate back to normal position.
-          mosaic.transform(null, null);
-          mosaic.show();
-          onModeChanged();
-        }.bind(this));
-  } else {
-    this.setCurrentMode_(this.slideMode_);
-    this.slideMode_.enter(
-        tileRect,
-        function() {
-          // Animate to zoomed position.
-          mosaic.transform(tileRect, this.slideMode_.getSelectedImageRect());
-          mosaic.hide();
-        }.bind(this),
-        onModeChanged);
-  }
+  this.changeCurrentMode_(targetMode, opt_event).then(function() {
+    if (opt_callback)
+      opt_callback();
+  });
 };
 
 /**
@@ -600,7 +683,7 @@ Gallery.prototype.delete_ = function() {
 };
 
 /**
- * @return {!Array<Gallery.Item>} Current selection.
+ * @return {!Array<GalleryItem>} Current selection.
  */
 Gallery.prototype.getSelectedItems = function() {
   return this.selectionModel_.selectedIndexes.map(
@@ -617,7 +700,7 @@ Gallery.prototype.getSelectedEntries = function() {
 };
 
 /**
- * @return {?Gallery.Item} Current single selection.
+ * @return {?GalleryItem} Current single selection.
  */
 Gallery.prototype.getSingleSelectedItem = function() {
   var items = this.getSelectedItems();
@@ -646,6 +729,9 @@ Gallery.prototype.onSplice_ = function() {
       this.selectionModel_.selectedIndexes.filter(function(index) {
     return 0 <= index && index < this.dataModel_.length;
   }.bind(this));
+
+  // Disable mode switch button if there is no image.
+  this.modeSwitchButton_.disabled = this.dataModel_.length === 0;
 };
 
 /**
@@ -660,7 +746,7 @@ Gallery.prototype.onContentChange_ = function(event) {
 /**
  * Keydown handler.
  *
- * @param {!Event} event Event.
+ * @param {!Event} event
  * @private
  */
 Gallery.prototype.onKeyDown_ = function(event) {
@@ -686,9 +772,14 @@ Gallery.prototype.onKeyDown_ = function(event) {
   if (this.shareDialog_.isShowing())
     return;
 
+  // Show UIs when user types any key.
+  this.dimmableUIController_.kick();
+
   // Handle mode specific shortcut keys.
-  if (this.currentMode_.onKeyDown(event))
+  if (this.currentMode_.onKeyDown(event)) {
+    event.preventDefault();
     return;
+  }
 
   // Handle application wide shortcut keys.
   switch (keyString) {
@@ -698,18 +789,23 @@ Gallery.prototype.onKeyDown_ = function(event) {
       break;
 
     case 'U+004D':  // 'm' switches between Slide and Mosaic mode.
-      this.toggleMode_(undefined, event);
+      if (!this.modeSwitchButton_.disabled)
+        this.toggleMode_(undefined, event);
       break;
 
     case 'U+0056':  // 'v'
     case 'MediaPlayPause':
-      this.slideMode_.startSlideshow(SlideMode.SLIDESHOW_INTERVAL_FIRST, event);
+      if (!this.slideshowButton_.disabled) {
+        this.slideMode_.startSlideshow(
+            SlideMode.SLIDESHOW_INTERVAL_FIRST, event);
+      }
       break;
 
     case 'U+007F':  // Delete
     case 'Shift-U+0033':  // Shift+'3' (Delete key might be missing).
     case 'U+0044':  // 'd'
-      this.delete_();
+      if (!this.deleteButton_.disabled)
+        this.delete_();
       break;
 
     case 'U+001B':  // Escape
@@ -731,6 +827,9 @@ Gallery.prototype.updateSelectionAndState_ = function() {
 
   // If it's selecting something, update the variable values.
   if (numSelectedItems) {
+    // Enable slideshow button.
+    this.slideshowButton_.disabled = false;
+
     // Delete button is available when all images are NOT readOnly.
     this.deleteButton_.disabled = !this.selectionModel_.selectedIndexes
         .every(function(i) {
@@ -753,7 +852,9 @@ Gallery.prototype.updateSelectionAndState_ = function() {
       this.filenameEdit_.disabled = selectedItem.getLocationInfo().isReadOnly;
       this.filenameEdit_.value =
           ImageUtil.getDisplayNameFromName(this.selectedEntry_.name);
-      this.shareButton_.hidden = !selectedItem.getLocationInfo().isDriveBased;
+      this.resizeRenameField_();
+
+      this.shareButton_.disabled = !selectedItem.getLocationInfo().isDriveBased;
     } else {
       if (this.context_.curDirEntry) {
         // If the Gallery was opened on search results the search query will not
@@ -766,20 +867,28 @@ Gallery.prototype.updateSelectionAndState_ = function() {
       this.filenameEdit_.disabled = true;
       this.filenameEdit_.value =
           strf('GALLERY_ITEMS_SELECTED', numSelectedItems);
-      this.shareButton_.hidden = true;
+      this.resizeRenameField_();
+
+      this.shareButton_.disabled = true;
     }
   } else {
     document.title = '';
     this.filenameEdit_.disabled = true;
-    this.deleteButton_.disabled = true;
     this.filenameEdit_.value = '';
-    this.shareButton_.hidden = true;
+    this.resizeRenameField_();
+
+    this.deleteButton_.disabled = true;
+    this.slideshowButton_.disabled = true;
+    this.shareButton_.disabled = true;
   }
 
   util.updateAppState(
       null,  // Keep the current directory.
       selectedEntryURL,  // Update the selection.
-      {gallery: (this.currentMode_ === this.mosaicMode_ ? 'mosaic' : 'slide')});
+      {
+        gallery: (this.currentMode_ === this.thumbnailMode_ ?
+                  'thumbnail' : 'slide')
+      });
 };
 
 /**
@@ -788,6 +897,8 @@ Gallery.prototype.updateSelectionAndState_ = function() {
  */
 Gallery.prototype.onFilenameFocus_ = function() {
   ImageUtil.setAttribute(this.filenameSpacer_, 'renaming', true);
+  this.dimmableUIController_.setRenaming(true);
+
   this.filenameEdit_.originalValue = this.filenameEdit_.value;
   setTimeout(this.filenameEdit_.select.bind(this.filenameEdit_), 0);
   this.onUserAction_();
@@ -815,6 +926,7 @@ Gallery.prototype.onFilenameEditBlur_ = function(event) {
         return Promise.resolve();
       this.filenameEdit_.value =
           ImageUtil.getDisplayNameFromName(item.getEntry().name);
+      this.resizeRenameField_();
       this.filenameEdit_.focus();
       if (typeof error === 'string')
         this.prompt_.showStringAt('center', error, 5000);
@@ -826,7 +938,34 @@ Gallery.prototype.onFilenameEditBlur_ = function(event) {
   }
 
   ImageUtil.setAttribute(this.filenameSpacer_, 'renaming', false);
+  this.dimmableUIController_.setRenaming(false);
   this.onUserAction_();
+};
+
+/**
+ * Minimum width of rename field.
+ * @const {number}
+ */
+Gallery.MIN_WIDTH_RENAME_FIELD = 160; // px
+
+/**
+ * End padding for rename field.
+ * @const {number}
+ */
+Gallery.END_PADDING_RENAME_FIELD = 20; // px
+
+/**
+ * Resize rename field depending on its content.
+ * @private
+ */
+Gallery.prototype.resizeRenameField_ = function() {
+  var size = this.filenameCanvasContext_.measureText(this.filenameEdit_.value);
+
+  var width = Math.min(Math.max(
+      size.width + Gallery.END_PADDING_RENAME_FIELD,
+      Gallery.MIN_WIDTH_RENAME_FIELD), window.innerWidth / 2);
+
+  this.filenameEdit_.style.width = width + 'px';
 };
 
 /**
@@ -839,6 +978,7 @@ Gallery.prototype.onFilenameEditKeydown_ = function(event) {
   switch (event.keyCode) {
     case 27:  // Escape
       this.filenameEdit_.value = this.filenameEdit_.originalValue;
+      this.resizeRenameField_();
       this.filenameEdit_.blur();
       break;
 
@@ -883,32 +1023,6 @@ Gallery.prototype.onShareButtonClick_ = function() {
 Gallery.prototype.updateThumbnails_ = function() {
   if (this.currentMode_ === this.slideMode_)
     this.slideMode_.updateThumbnails();
-
-  if (this.mosaicMode_) {
-    var mosaic = this.mosaicMode_.getMosaic();
-    if (mosaic.isInitialized())
-      mosaic.reload();
-  }
-};
-
-/**
- * Updates buttons.
- * @private
- */
-Gallery.prototype.updateButtons_ = function() {
-  if (this.modeButton_) {
-    var oppositeMode =
-        this.currentMode_ === this.slideMode_ ? this.mosaicMode_ :
-                                                this.slideMode_;
-    this.modeButton_.title = str(oppositeMode.getTitle());
-  }
-};
-
-/**
- * Enters the debug mode.
- */
-Gallery.prototype.debugMe = function() {
-  this.mosaicMode_.debugMe();
 };
 
 /**
@@ -963,12 +1077,3 @@ var initializePromise =
 
 // Loads entries.
 initializePromise.then(reload);
-
-/**
- * Enteres the debug mode.
- */
-window.debugMe = function() {
-  initializePromise.then(function() {
-    gallery.debugMe();
-  });
-};

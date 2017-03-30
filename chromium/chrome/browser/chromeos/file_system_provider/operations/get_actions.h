@@ -5,7 +5,10 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FILE_SYSTEM_PROVIDER_OPERATIONS_GET_ACTIONS_H_
 #define CHROME_BROWSER_CHROMEOS_FILE_SYSTEM_PROVIDER_OPERATIONS_GET_ACTIONS_H_
 
+#include <vector>
+
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/file_system_provider/operations/operation.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
@@ -31,7 +34,7 @@ class GetActions : public Operation {
  public:
   GetActions(extensions::EventRouter* event_router,
              const ProvidedFileSystemInfo& file_system_info,
-             const base::FilePath& entry_path,
+             const std::vector<base::FilePath>& entry_paths,
              const ProvidedFileSystemInterface::GetActionsCallback& callback);
   ~GetActions() override;
 
@@ -45,7 +48,7 @@ class GetActions : public Operation {
                base::File::Error error) override;
 
  private:
-  base::FilePath entry_path_;
+  const std::vector<base::FilePath> entry_paths_;
   const ProvidedFileSystemInterface::GetActionsCallback callback_;
 
   DISALLOW_COPY_AND_ASSIGN(GetActions);

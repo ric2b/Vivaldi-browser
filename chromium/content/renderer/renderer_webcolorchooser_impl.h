@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/public/common/color_suggestion.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "third_party/WebKit/public/web/WebColorChooser.h"
@@ -25,11 +26,11 @@ class RendererWebColorChooserImpl : public blink::WebColorChooser,
  public:
   explicit RendererWebColorChooserImpl(RenderFrame* render_frame,
                                        blink::WebColorChooserClient*);
-  virtual ~RendererWebColorChooserImpl();
+  ~RendererWebColorChooserImpl() override;
 
   // blink::WebColorChooser implementation:
-  virtual void setSelectedColor(const blink::WebColor);
-  virtual void endChooser();
+  void setSelectedColor(const blink::WebColor) override;
+  void endChooser() override;
 
   void Open(SkColor initial_color,
             const std::vector<content::ColorSuggestion>& suggestions);

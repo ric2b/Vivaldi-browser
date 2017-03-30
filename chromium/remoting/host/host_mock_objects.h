@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "net/base/ip_endpoint.h"
 #include "remoting/codec/video_encoder.h"
 #include "remoting/host/chromoting_host_context.h"
@@ -61,7 +62,7 @@ class MockClientSessionControl : public ClientSessionControl {
   ~MockClientSessionControl() override;
 
   MOCK_CONST_METHOD0(client_jid, const std::string&());
-  MOCK_METHOD0(DisconnectSession, void());
+  MOCK_METHOD1(DisconnectSession, void(protocol::ErrorCode error));
   MOCK_METHOD1(OnLocalMouseMoved, void(const webrtc::DesktopVector&));
   MOCK_METHOD1(SetDisableInputs, void(bool));
   MOCK_METHOD0(ResetVideoPipeline, void());
@@ -76,7 +77,7 @@ class MockClientSessionEventHandler : public ClientSession::EventHandler {
   ~MockClientSessionEventHandler() override;
 
   MOCK_METHOD1(OnSessionAuthenticating, void(ClientSession* client));
-  MOCK_METHOD1(OnSessionAuthenticated, bool(ClientSession* client));
+  MOCK_METHOD1(OnSessionAuthenticated, void(ClientSession* client));
   MOCK_METHOD1(OnSessionChannelsConnected, void(ClientSession* client));
   MOCK_METHOD1(OnSessionAuthenticationFailed, void(ClientSession* client));
   MOCK_METHOD1(OnSessionClosed, void(ClientSession* client));
@@ -164,18 +165,6 @@ class MockMouseCursorMonitor : public webrtc::MouseCursorMonitor {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMouseCursorMonitor);
-};
-
-class MockVideoEncoder : public VideoEncoder {
- public:
-  MockVideoEncoder();
-  ~MockVideoEncoder() override;
-
-  MOCK_METHOD1(SetLosslessEncode, void(bool));
-  MOCK_METHOD1(SetLosslessColor, void(bool));
-  MOCK_METHOD1(EncodePtr, VideoPacket*(const webrtc::DesktopFrame&));
-
-  scoped_ptr<VideoPacket> Encode(const webrtc::DesktopFrame& frame) override;
 };
 
 }  // namespace remoting

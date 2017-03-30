@@ -6,7 +6,7 @@
   'variables': {
     # Allow widevinecdmadapter to be built in Chromium.
     'variables': {
-      'enable_widevine%': 1,
+      'enable_widevine%': 0,
     },
     'enable_widevine%': '<(enable_widevine)',
     'widevine_cdm_version_h_file%': 'widevine_cdm_version.h',
@@ -71,7 +71,7 @@
       'type': 'none',
       'variables': {
         'output_dir': '.',
-        'branding_path': '../../../chrome/app/theme/<(branding_path_component)/BRANDING',
+        'branding_path': '<(VIVALDI)/app/resources/theme/vivaldi/BRANDING',
         'template_input_path': '../../../chrome/app/chrome_version.rc.version',
         'extra_variable_files_arguments': [ '-f', 'BRANDING' ],
         'extra_variable_files': [ 'BRANDING' ], # NOTE: matches that above

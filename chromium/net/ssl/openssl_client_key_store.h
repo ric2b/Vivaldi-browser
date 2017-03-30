@@ -9,7 +9,7 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "crypto/openssl_util.h"
@@ -90,7 +90,7 @@ class NET_EXPORT OpenSSLClientKeyStore {
 
   std::vector<KeyPair> pairs_;
 
-  friend struct DefaultSingletonTraits<OpenSSLClientKeyStore>;
+  friend struct base::DefaultSingletonTraits<OpenSSLClientKeyStore>;
 
   DISALLOW_COPY_AND_ASSIGN(OpenSSLClientKeyStore);
 };

@@ -18,7 +18,7 @@
 #include "chrome/browser/extensions/api/file_handlers/mime_util.h"
 #include "chrome/browser/extensions/api/file_system/file_system_api.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -39,11 +39,13 @@
 #include "net/base/net_util.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+
 #if defined(OS_CHROMEOS)
 #include "components/user_manager/user_manager.h"
 #endif
 
-namespace app_runtime = extensions::core_api::app_runtime;
+namespace app_runtime = extensions::api::app_runtime;
 
 using content::BrowserThread;
 using extensions::AppRuntimeEventRouter;
@@ -344,14 +346,14 @@ void LaunchPlatformAppWithCommandLine(Profile* profile,
     }
   }
 
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (vivaldi::IsVivaldiRunning()) {
     if (command_line.GetArgs().size() > 0) {
       // To simplistic fixing of the supplied URL.  For more complete
       // fixing see: StartupBrowserCreator::GetURLsFromCommandLine()
       GURL url;
       {
         base::ThreadRestrictions::ScopedAllowIO allow_io;
-        url = url_fixer::FixupRelativeFile(
+        url = url_formatter::FixupRelativeFile(
             current_directory, base::FilePath(command_line.GetArgs()[0]));
       }
       //GURL url = GURL(command_line.GetArgs()[0]);

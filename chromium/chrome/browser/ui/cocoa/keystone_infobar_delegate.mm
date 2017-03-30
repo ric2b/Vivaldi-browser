@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
@@ -51,7 +52,8 @@ class KeystonePromotionInfoBarDelegate : public ConfirmInfoBarDelegate {
   void SetCanExpire() { can_expire_ = true; }
 
   // ConfirmInfoBarDelegate
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
   bool ShouldExpire(const NavigationDetails& details) const override;
   base::string16 GetMessageText() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
@@ -104,7 +106,12 @@ KeystonePromotionInfoBarDelegate::KeystonePromotionInfoBarDelegate(
 KeystonePromotionInfoBarDelegate::~KeystonePromotionInfoBarDelegate() {
 }
 
-int KeystonePromotionInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::InfoBarIdentifier
+KeystonePromotionInfoBarDelegate::GetIdentifier() const {
+  return KEYSTONE_PROMOTION_INFOBAR_DELEGATE;
+}
+
+int KeystonePromotionInfoBarDelegate::GetIconId() const {
   return IDR_PRODUCT_LOGO_32;
 }
 

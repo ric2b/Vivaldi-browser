@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "extensions/common/url_pattern.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -17,7 +20,7 @@ static const int kAllSchemes =
     URLPattern::SCHEME_FILE |
     URLPattern::SCHEME_FTP |
     URLPattern::SCHEME_CHROMEUI |
-	URLPattern::SCHEME_VIVALDIUI |
+  	URLPattern::SCHEME_VIVALDIUI |
     URLPattern::SCHEME_EXTENSION |
     URLPattern::SCHEME_FILESYSTEM;
 
@@ -538,7 +541,7 @@ TEST(ExtensionURLPatternTest, ConvertToExplicitSchemes) {
       URLPattern::SCHEME_FTP,
       "http://google.com/monkey").ConvertToExplicitSchemes());
 
-  ASSERT_EQ(8u, all_urls.size());
+  ASSERT_EQ(7u+1, all_urls.size());
   ASSERT_EQ(2u, all_schemes.size());
   ASSERT_EQ(1u, monkey.size());
 
@@ -743,6 +746,8 @@ TEST(ExtensionURLPatternTest, Subset) {
   URLPattern pattern11(kAllSchemes, "http://example.com/*");
   URLPattern pattern12(kAllSchemes, "*://example.com/*");
   URLPattern pattern13(kAllSchemes, "*://example.com/foo/*");
+  URLPattern pattern14(kAllSchemes, "http://yahoo.com/*");
+  URLPattern pattern15(kAllSchemes, "http://*.yahoo.com/*");
 
   // All patterns should encompass themselves.
   EXPECT_TRUE(pattern1.Contains(pattern1));
@@ -809,6 +814,7 @@ TEST(ExtensionURLPatternTest, Subset) {
   EXPECT_TRUE(StrictlyContains(pattern12, pattern11));
   EXPECT_TRUE(NeitherContains(pattern11, pattern13));
   EXPECT_TRUE(StrictlyContains(pattern12, pattern13));
+  EXPECT_TRUE(StrictlyContains(pattern15, pattern14));
 }
 
 TEST(ExtensionURLPatternTest, MatchesSingleOrigin) {

@@ -10,11 +10,12 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_window.h"
-#include "chrome/browser/signin/signin_header_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
 #include "chrome/browser/ui/views/load_complete_listener.h"
+#include "chrome/browser/ui/views/profiles/signin_view_controller.h"
 #include "components/omnibox/browser/omnibox_popup_model_observer.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -112,6 +114,14 @@ class BrowserView : public BrowserWindow,
 
   // Returns the BrowserView used for the specified Browser.
   static BrowserView* GetBrowserViewForBrowser(const Browser* browser);
+
+  // Paints a 1 device-pixel-thick horizontal line (regardless of device scale
+  // factor) at either the very bottom or very top of the interior of |bounds|,
+  // depending on |at_bottom|.
+  static void Paint1pxHorizontalLine(gfx::Canvas* canvas,
+                                     SkColor color,
+                                     const gfx::Rect& bounds,
+                                     bool at_bottom);
 
   // Returns a Browser instance of this view.
   Browser* browser() { return browser_.get(); }
@@ -281,12 +291,15 @@ class BrowserView : public BrowserWindow,
   void UpdateExclusiveAccessExitBubbleContent(
       const GURL& url,
       ExclusiveAccessBubbleType bubble_type) override;
+  void OnExclusiveAccessUserInput() override;
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
   bool SupportsFullscreenWithToolbar() const override;
   void UpdateFullscreenWithToolbar(bool with_toolbar) override;
+  void ToggleFullscreenToolbar() override;
   bool IsFullscreenWithToolbar() const override;
+  bool ShouldHideFullscreenToolbar() const override;
 #if defined(OS_WIN)
   void SetMetroSnapMode(bool enable) override;
   bool IsInMetroSnapMode() const override;
@@ -297,6 +310,7 @@ class BrowserView : public BrowserWindow,
   void UpdateToolbar(content::WebContents* contents) override;
   void ResetToolbarTabState(content::WebContents* contents) override;
   void FocusToolbar() override;
+  ToolbarActionsBar* GetToolbarActionsBar() override;
   void ToolbarSizeChanged(bool is_animating) override;
   void FocusAppMenu() override;
   void FocusBookmarksToolbar() override;
@@ -315,14 +329,14 @@ class BrowserView : public BrowserWindow,
   void ShowBookmarkAppBubble(
       const WebApplicationInfo& web_app_info,
       const ShowBookmarkAppBubbleCallback& callback) override;
+  autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
+      content::WebContents* contents,
+      autofill::SaveCardBubbleController* controller,
+      bool is_user_gesture) override;
   void ShowTranslateBubble(content::WebContents* contents,
                            translate::TranslateStep step,
                            translate::TranslateErrors::Type error_type,
                            bool is_user_gesture) override;
-  bool ShowSessionCrashedBubble() override;
-  bool IsProfileResetBubbleSupported() const override;
-  GlobalErrorBubbleViewBase* ShowProfileResetBubble(
-      const base::WeakPtr<ProfileResetGlobalError>& global_error) override;
 #if defined(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninBubble(
       OneClickSigninBubbleType type,
@@ -340,10 +354,12 @@ class BrowserView : public BrowserWindow,
       bool app_modal,
       const base::Callback<void(bool)>& callback) override;
   void UserChangedTheme() override;
-  void ShowWebsiteSettings(Profile* profile,
-                           content::WebContents* web_contents,
-                           const GURL& url,
-                           const content::SSLStatus& ssl) override;
+  void ShowWebsiteSettings(
+      Profile* profile,
+      content::WebContents* web_contents,
+      const GURL& url,
+      const security_state::SecurityStateModel::SecurityInfo& security_info)
+      override;
   void ShowAppMenu() override;
   bool PreHandleKeyboardEvent(const content::NativeWebKeyboardEvent& event,
                               bool* is_keyboard_shortcut) override;
@@ -357,7 +373,11 @@ class BrowserView : public BrowserWindow,
       override;
   void ShowAvatarBubbleFromAvatarButton(
       AvatarBubbleMode mode,
-      const signin::ManageAccountsParams& manage_accounts_params) override;
+      const signin::ManageAccountsParams& manage_accounts_params,
+      signin_metrics::AccessPoint access_point) override;
+  void ShowModalSigninWindow(AvatarBubbleMode mode,
+                             signin_metrics::AccessPoint access_point) override;
+  void CloseModalSigninWindow() override;
   int GetRenderViewHeightInsetWithDetachedBookmarkBar() override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;
@@ -460,8 +480,6 @@ class BrowserView : public BrowserWindow,
   // interface to keep these two classes decoupled and testable.
   friend class BrowserViewLayoutDelegateImpl;
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, BrowserView);
-  FRIEND_TEST_ALL_PREFIXES(BrowserViewsAccessibilityTest,
-                           TestAboutChromeViewAccObj);
 
   enum FullscreenMode {
     NORMAL_FULLSCREEN,
@@ -686,7 +704,7 @@ class BrowserView : public BrowserWindow,
 #endif
 
   // The timer used to update frames for the Loading Animation.
-  base::RepeatingTimer<BrowserView> loading_animation_timer_;
+  base::RepeatingTimer loading_animation_timer_;
 
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
@@ -700,6 +718,8 @@ class BrowserView : public BrowserWindow,
   scoped_ptr<ImmersiveModeController> immersive_mode_controller_;
 
   scoped_ptr<WebContentsCloseHandler> web_contents_close_handler_;
+
+  SigninViewController signin_view_controller_;
 
   mutable base::WeakPtrFactory<BrowserView> activate_modal_dialog_factory_;
 

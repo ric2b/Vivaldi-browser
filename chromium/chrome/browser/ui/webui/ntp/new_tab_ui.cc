@@ -23,9 +23,9 @@
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache_factory.h"
 #include "chrome/browser/ui/webui/ntp/ntp_user_data_logger.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -108,7 +108,8 @@ NewTabUI::NewTabUI(content::WebUI* web_ui)
   // The theme handler can require some CPU, so do it after hooking up the most
   // visited handler. This allows the DB query for the new tab thumbs to happen
   // earlier.
-  web_ui->AddMessageHandler(new ThemeHandler());
+  if (!profile->IsGuestSession())
+    web_ui->AddMessageHandler(new ThemeHandler());
 #endif
 
   scoped_ptr<NewTabHTMLSource> html_source(
@@ -151,7 +152,7 @@ void NewTabUI::StartTimingPaint(RenderViewHost* render_view_host) {
   last_paint_ = start_;
 
   content::NotificationSource source =
-      content::Source<content::RenderWidgetHost>(render_view_host);
+      content::Source<content::RenderWidgetHost>(render_view_host->GetWidget());
   if (!registrar_.IsRegistered(this,
           content::NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE,
           source)) {

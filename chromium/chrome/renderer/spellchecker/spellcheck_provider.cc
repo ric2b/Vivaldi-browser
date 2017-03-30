@@ -11,6 +11,7 @@
 #include "chrome/common/spellcheck_messages.h"
 #include "chrome/common/spellcheck_result.h"
 #include "chrome/renderer/spellchecker/spellcheck.h"
+#include "chrome/renderer/spellchecker/spellcheck_language.h"
 #include "content/public/renderer/render_view.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -46,7 +47,7 @@ SpellCheckProvider::SpellCheckProvider(
   DCHECK(spellcheck_);
   if (render_view) {  // NULL in unit tests.
     render_view->GetWebView()->setSpellCheckClient(this);
-    EnableSpellcheck(spellcheck_->is_spellcheck_enabled());
+    EnableSpellcheck(spellcheck_->IsSpellcheckEnabled());
   }
 }
 
@@ -72,7 +73,7 @@ void SpellCheckProvider::RequestTextChecking(
   last_request_.clear();
   last_results_.assign(blink::WebVector<blink::WebTextCheckingResult>());
 
-#if defined(USE_PLATFORM_SPELLCHECKER)
+#if defined(USE_BROWSER_SPELLCHECKER)
   // Text check (unified request for grammar and spell check) is only
   // available for browser process, so we ask the system spellchecker
   // over IPC or return an empty result if the checker is not
@@ -88,17 +89,17 @@ void SpellCheckProvider::RequestTextChecking(
       text_check_completions_.Add(completion),
       base::string16(text),
       markers));
-#endif  // !USE_PLATFORM_SPELLCHECKER
+#endif  // !USE_BROWSER_SPELLCHECKER
 }
 
 bool SpellCheckProvider::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(SpellCheckProvider, message)
-#if !defined(USE_PLATFORM_SPELLCHECKER)
+#if !defined(USE_BROWSER_SPELLCHECKER)
     IPC_MESSAGE_HANDLER(SpellCheckMsg_RespondSpellingService,
                         OnRespondSpellingService)
 #endif
-#if defined(USE_PLATFORM_SPELLCHECKER)
+#if defined(USE_BROWSER_SPELLCHECKER)
     IPC_MESSAGE_HANDLER(SpellCheckMsg_AdvanceToNextMisspelling,
                         OnAdvanceToNextMisspelling)
     IPC_MESSAGE_HANDLER(SpellCheckMsg_RespondTextCheck, OnRespondTextCheck)
@@ -110,17 +111,15 @@ bool SpellCheckProvider::OnMessageReceived(const IPC::Message& message) {
 }
 
 void SpellCheckProvider::FocusedNodeChanged(const blink::WebNode& unused) {
-#if defined(USE_PLATFORM_SPELLCHECKER)
+#if defined(USE_BROWSER_SPELLCHECKER)
   WebFrame* frame = render_view()->GetWebView()->focusedFrame();
   WebElement element = frame->document().isNull() ? WebElement() :
       frame->document().focusedElement();
-  bool enabled = !element.isNull() && render_view()->IsEditableNode(element);
-
-  bool checked = enabled && render_view()->GetWebView() &&
-      frame->isContinuousSpellCheckingEnabled();
+  bool enabled = !element.isNull() && element.isEditable();
+  bool checked = enabled && frame->isContinuousSpellCheckingEnabled();
 
   Send(new SpellCheckHostMsg_ToggleSpellCheck(routing_id(), enabled, checked));
-#endif  // USE_PLATFORM_SPELLCHECKER
+#endif  // USE_BROWSER_SPELLCHECKER
 }
 
 void SpellCheckProvider::spellCheck(
@@ -130,8 +129,9 @@ void SpellCheckProvider::spellCheck(
     WebVector<WebString>* optional_suggestions) {
   base::string16 word(text);
   std::vector<base::string16> suggestions;
+  const int kWordStart = 0;
   spellcheck_->SpellCheckWord(
-      word.c_str(), word.size(), routing_id(),
+      word.c_str(), kWordStart, word.size(), routing_id(),
       &offset, &length, optional_suggestions ? & suggestions : NULL);
   if (optional_suggestions) {
     *optional_suggestions = suggestions;
@@ -163,7 +163,7 @@ void SpellCheckProvider::checkTextOfParagraph(
 
 void SpellCheckProvider::requestCheckingOfText(
     const WebString& text,
-    const WebVector<uint32>& markers,
+    const WebVector<uint32_t>& markers,
     const WebVector<unsigned>& marker_offsets,
     WebTextCheckingCompletion* completion) {
   std::vector<SpellCheckMarker> spellcheck_markers;
@@ -175,18 +175,8 @@ void SpellCheckProvider::requestCheckingOfText(
   UMA_HISTOGRAM_COUNTS("SpellCheck.api.async", text.length());
 }
 
-WebString SpellCheckProvider::autoCorrectWord(const WebString& word) {
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kEnableSpellingAutoCorrect)) {
-    UMA_HISTOGRAM_COUNTS("SpellCheck.api.autocorrect", word.length());
-    return spellcheck_->GetAutoCorrectionWord(word, routing_id());
-  }
-  return base::string16();
-}
-
 void SpellCheckProvider::showSpellingUI(bool show) {
-#if defined(USE_PLATFORM_SPELLCHECKER)
+#if defined(USE_BROWSER_SPELLCHECKER)
   UMA_HISTOGRAM_BOOLEAN("SpellCheck.api.showUI", show);
   Send(new SpellCheckHostMsg_ShowSpellingPanel(routing_id(), show));
 #endif
@@ -198,13 +188,13 @@ bool SpellCheckProvider::isShowingSpellingUI() {
 
 void SpellCheckProvider::updateSpellingUIWithMisspelledWord(
     const WebString& word) {
-#if defined(USE_PLATFORM_SPELLCHECKER)
+#if defined(USE_BROWSER_SPELLCHECKER)
   Send(new SpellCheckHostMsg_UpdateSpellingPanelWithMisspelledWord(routing_id(),
                                                                    word));
 #endif
 }
 
-#if !defined(USE_PLATFORM_SPELLCHECKER)
+#if !defined(USE_BROWSER_SPELLCHECKER)
 void SpellCheckProvider::OnRespondSpellingService(
     int identifier,
     bool succeeded,
@@ -244,7 +234,7 @@ bool SpellCheckProvider::HasWordCharacters(
   const base::char16* data = text.data();
   int length = text.length();
   while (index < length) {
-    uint32 code = 0;
+    uint32_t code = 0;
     U16_NEXT(data, index, length, code);
     UErrorCode error = U_ZERO_ERROR;
     if (uscript_getScript(code, &error) != USCRIPT_COMMON)
@@ -253,7 +243,7 @@ bool SpellCheckProvider::HasWordCharacters(
   return false;
 }
 
-#if defined(USE_PLATFORM_SPELLCHECKER)
+#if defined(USE_BROWSER_SPELLCHECKER)
 void SpellCheckProvider::OnAdvanceToNextMisspelling() {
   if (!render_view()->GetWebView())
     return;
@@ -263,6 +253,7 @@ void SpellCheckProvider::OnAdvanceToNextMisspelling() {
 
 void SpellCheckProvider::OnRespondTextCheck(
     int identifier,
+    const base::string16& line,
     const std::vector<SpellCheckResult>& results) {
   // TODO(groby): Unify with SpellCheckProvider::OnRespondSpellingService
   DCHECK(spellcheck_);
@@ -274,7 +265,7 @@ void SpellCheckProvider::OnRespondTextCheck(
   blink::WebVector<blink::WebTextCheckingResult> textcheck_results;
   spellcheck_->CreateTextCheckingResults(SpellCheck::DO_NOT_MODIFY,
                                          0,
-                                         base::string16(),
+                                         line,
                                          results,
                                          &textcheck_results);
   completion->didFinishCheckingText(textcheck_results);

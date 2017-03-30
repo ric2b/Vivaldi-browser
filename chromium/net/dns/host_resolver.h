@@ -5,15 +5,17 @@
 #ifndef NET_DNS_HOST_RESOLVER_H_
 #define NET_DNS_HOST_RESOLVER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/address_family.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_export.h"
-#include "net/base/net_util.h"
 #include "net/base/prioritized_dispatcher.h"
 #include "net/base/request_priority.h"
 
@@ -68,7 +70,7 @@ class NET_EXPORT HostResolver {
       host_port_pair_ = host_port_pair;
     }
 
-    uint16 port() const { return host_port_pair_.port(); }
+    uint16_t port() const { return host_port_pair_.port(); }
     const std::string& hostname() const { return host_port_pair_.host(); }
 
     AddressFamily address_family() const { return address_family_; }
@@ -174,10 +176,9 @@ class NET_EXPORT HostResolver {
   // Used primarily to clear the cache and for getting debug information.
   virtual HostCache* GetHostCache();
 
-  // Returns the current DNS configuration |this| is using, as a Value, or NULL
-  // if it's configured to always use the system host resolver.  Caller takes
-  // ownership of the returned Value.
-  virtual base::Value* GetDnsConfigAsValue() const;
+  // Returns the current DNS configuration |this| is using, as a Value, or
+  // nullptr if it's configured to always use the system host resolver.
+  virtual scoped_ptr<base::Value> GetDnsConfigAsValue() const;
 
   // Creates a HostResolver implementation that queries the underlying system.
   // (Except if a unit-test has changed the global HostResolverProc using

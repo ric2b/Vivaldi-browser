@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
@@ -16,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/defaults.h"
@@ -28,9 +31,9 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "components/sessions/serialized_navigation_entry_test_helper.h"
-#include "components/sessions/session_command.h"
-#include "components/sessions/session_types.h"
+#include "components/sessions/core/serialized_navigation_entry_test_helper.h"
+#include "components/sessions/core/session_command.h"
+#include "components/sessions/core/session_types.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -927,9 +930,8 @@ TEST_F(SessionServiceTest, RestoreActivation1) {
       window2_id, tab1_id, tab2_id, &nav1, &nav2);
 
   service()->ScheduleCommand(
-      sessions::CreateSetActiveWindowCommand(window2_id).Pass());
-  service()->ScheduleCommand(
-      sessions::CreateSetActiveWindowCommand(window_id).Pass());
+      sessions::CreateSetActiveWindowCommand(window2_id));
+  service()->ScheduleCommand(sessions::CreateSetActiveWindowCommand(window_id));
 
   ScopedVector<sessions::SessionWindow> windows;
   SessionID::id_type active_window_id = 0;
@@ -950,11 +952,10 @@ TEST_F(SessionServiceTest, RestoreActivation2) {
       window2_id, tab1_id, tab2_id, &nav1, &nav2);
 
   service()->ScheduleCommand(
-      sessions::CreateSetActiveWindowCommand(window2_id).Pass());
+      sessions::CreateSetActiveWindowCommand(window2_id));
+  service()->ScheduleCommand(sessions::CreateSetActiveWindowCommand(window_id));
   service()->ScheduleCommand(
-      sessions::CreateSetActiveWindowCommand(window_id).Pass());
-  service()->ScheduleCommand(
-      sessions::CreateSetActiveWindowCommand(window2_id).Pass());
+      sessions::CreateSetActiveWindowCommand(window2_id));
 
   ScopedVector<sessions::SessionWindow> windows;
   SessionID::id_type active_window_id = 0;

@@ -4,10 +4,12 @@
 
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
@@ -170,7 +172,8 @@ TEST_F(DeviceSettingsServiceTest, StoreSuccess) {
             device_settings_service_.status());
 
   owner_key_util_->SetPublicKeyFromPrivateKey(*device_policy_.GetSigningKey());
-  InitOwner(device_policy_.policy_data().username(), true);
+  InitOwner(AccountId::FromUserEmail(device_policy_.policy_data().username()),
+            true);
   device_settings_service_.Store(
       device_policy_.GetCopy(),
       base::Bind(&DeviceSettingsServiceTest::SetOperationCompleted,
@@ -202,7 +205,7 @@ TEST_F(DeviceSettingsServiceTest, StoreRotation) {
   CheckPolicy();
 
   // Check the new key has been loaded.
-  std::vector<uint8> key;
+  std::vector<uint8_t> key;
   ASSERT_TRUE(device_policy_.GetNewSigningKey()->ExportPublicKey(&key));
   EXPECT_EQ(device_settings_service_.GetPublicKey()->data(), key);
 }
@@ -235,7 +238,7 @@ TEST_F(DeviceSettingsServiceTest, OwnershipStatus) {
   EXPECT_FALSE(device_settings_service_.HasPrivateOwnerKey());
   ASSERT_TRUE(device_settings_service_.GetPublicKey().get());
   ASSERT_TRUE(device_settings_service_.GetPublicKey()->is_loaded());
-  std::vector<uint8> key;
+  std::vector<uint8_t> key;
   ASSERT_TRUE(device_policy_.GetSigningKey()->ExportPublicKey(&key));
   EXPECT_EQ(device_settings_service_.GetPublicKey()->data(), key);
   EXPECT_EQ(DeviceSettingsService::OWNERSHIP_TAKEN,
@@ -243,7 +246,8 @@ TEST_F(DeviceSettingsServiceTest, OwnershipStatus) {
   EXPECT_EQ(DeviceSettingsService::OWNERSHIP_TAKEN, ownership_status_);
 
   owner_key_util_->SetPrivateKey(device_policy_.GetSigningKey());
-  InitOwner(device_policy_.policy_data().username(), true);
+  InitOwner(AccountId::FromUserEmail(device_policy_.policy_data().username()),
+            true);
   device_settings_service_.GetOwnershipStatusAsync(
       base::Bind(&DeviceSettingsServiceTest::SetOwnershipStatus,
                  base::Unretained(this)));
@@ -267,7 +271,7 @@ TEST_F(DeviceSettingsServiceTest, OnTPMTokenReadyForNonOwner) {
             device_settings_service_.GetOwnershipStatus());
 
   const std::string& user_id = device_policy_.policy_data().username();
-  InitOwner(user_id, false);
+  InitOwner(AccountId::FromUserEmail(user_id), false);
   OwnerSettingsServiceChromeOS* service =
       OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(profile_.get());
   ASSERT_TRUE(service);
@@ -280,7 +284,7 @@ TEST_F(DeviceSettingsServiceTest, OnTPMTokenReadyForNonOwner) {
   EXPECT_FALSE(device_settings_service_.HasPrivateOwnerKey());
   ASSERT_TRUE(device_settings_service_.GetPublicKey().get());
   ASSERT_TRUE(device_settings_service_.GetPublicKey()->is_loaded());
-  std::vector<uint8> key;
+  std::vector<uint8_t> key;
   ASSERT_TRUE(device_policy_.GetSigningKey()->ExportPublicKey(&key));
   EXPECT_EQ(device_settings_service_.GetPublicKey()->data(), key);
   EXPECT_EQ(DeviceSettingsService::OWNERSHIP_TAKEN,
@@ -312,7 +316,7 @@ TEST_F(DeviceSettingsServiceTest, OwnerPrivateKeyInTPMToken) {
 
   const std::string& user_id = device_policy_.policy_data().username();
   owner_key_util_->SetPublicKeyFromPrivateKey(*device_policy_.GetSigningKey());
-  InitOwner(user_id, false);
+  InitOwner(AccountId::FromUserEmail(user_id), false);
   OwnerSettingsServiceChromeOS* service =
       OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(profile_.get());
   ASSERT_TRUE(service);
@@ -321,7 +325,7 @@ TEST_F(DeviceSettingsServiceTest, OwnerPrivateKeyInTPMToken) {
   EXPECT_FALSE(device_settings_service_.HasPrivateOwnerKey());
   ASSERT_TRUE(device_settings_service_.GetPublicKey().get());
   ASSERT_TRUE(device_settings_service_.GetPublicKey()->is_loaded());
-  std::vector<uint8> key;
+  std::vector<uint8_t> key;
   ASSERT_TRUE(device_policy_.GetSigningKey()->ExportPublicKey(&key));
   EXPECT_EQ(device_settings_service_.GetPublicKey()->data(), key);
   EXPECT_EQ(DeviceSettingsService::OWNERSHIP_TAKEN,
@@ -348,7 +352,7 @@ TEST_F(DeviceSettingsServiceTest, OnTPMTokenReadyForOwner) {
 
   const std::string& user_id = device_policy_.policy_data().username();
   owner_key_util_->SetPublicKeyFromPrivateKey(*device_policy_.GetSigningKey());
-  InitOwner(user_id, false);
+  InitOwner(AccountId::FromUserEmail(user_id), false);
   OwnerSettingsServiceChromeOS* service =
       OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(profile_.get());
   ASSERT_TRUE(service);
@@ -359,7 +363,7 @@ TEST_F(DeviceSettingsServiceTest, OnTPMTokenReadyForOwner) {
   EXPECT_FALSE(device_settings_service_.HasPrivateOwnerKey());
   ASSERT_TRUE(device_settings_service_.GetPublicKey().get());
   ASSERT_TRUE(device_settings_service_.GetPublicKey()->is_loaded());
-  std::vector<uint8> key;
+  std::vector<uint8_t> key;
   ASSERT_TRUE(device_policy_.GetSigningKey()->ExportPublicKey(&key));
   EXPECT_EQ(device_settings_service_.GetPublicKey()->data(), key);
   EXPECT_EQ(DeviceSettingsService::OWNERSHIP_TAKEN,
@@ -392,14 +396,15 @@ TEST_F(DeviceSettingsServiceTest, IsCurrentUserOwnerAsyncWithLoadedCerts) {
   owner_key_util_->SetPublicKeyFromPrivateKey(*device_policy_.GetSigningKey());
   owner_key_util_->SetPrivateKey(device_policy_.GetSigningKey());
 
-  InitOwner(device_policy_.policy_data().username(), true);
+  InitOwner(AccountId::FromUserEmail(device_policy_.policy_data().username()),
+            true);
   ReloadDeviceSettings();
   FlushDeviceSettings();
 
   EXPECT_TRUE(device_settings_service_.HasPrivateOwnerKey());
   ASSERT_TRUE(device_settings_service_.GetPublicKey().get());
   ASSERT_TRUE(device_settings_service_.GetPublicKey()->is_loaded());
-  std::vector<uint8> key;
+  std::vector<uint8_t> key;
   ASSERT_TRUE(device_policy_.GetSigningKey()->ExportPublicKey(&key));
   EXPECT_EQ(device_settings_service_.GetPublicKey()->data(), key);
   EXPECT_EQ(DeviceSettingsService::OWNERSHIP_TAKEN,
@@ -438,7 +443,8 @@ TEST_F(DeviceSettingsServiceTest, Observer) {
   EXPECT_CALL(observer_, OwnershipStatusChanged()).Times(1);
   EXPECT_CALL(observer_, DeviceSettingsUpdated()).Times(1);
   owner_key_util_->SetPublicKeyFromPrivateKey(*device_policy_.GetSigningKey());
-  InitOwner(device_policy_.policy_data().username(), true);
+  InitOwner(AccountId::FromUserEmail(device_policy_.policy_data().username()),
+            true);
   ReloadDeviceSettings();
   Mock::VerifyAndClearExpectations(&observer_);
 

@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/webui/options/startup_pages_handler.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
@@ -21,7 +24,7 @@
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_result.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/web_ui.h"
 
@@ -163,7 +166,7 @@ void StartupPagesHandler::AddStartupPage(const base::ListValue* args) {
   std::string url_string;
   CHECK(args->GetString(0, &url_string));
 
-  GURL url = url_fixer::FixupURL(url_string, std::string());
+  GURL url = url_formatter::FixupURL(url_string, std::string());
   if (!url.is_valid())
     return;
 
@@ -188,7 +191,7 @@ void StartupPagesHandler::EditStartupPage(const base::ListValue* args) {
     return;
   }
 
-  fixed_url = url_fixer::FixupURL(url_string, std::string());
+  fixed_url = url_formatter::FixupURL(url_string, std::string());
   if (!fixed_url.is_empty()) {
     std::vector<GURL> urls = startup_custom_pages_table_model_->GetURLs();
     urls[index] = fixed_url;

@@ -6,6 +6,8 @@
 
 #include "media/filters/wmf_video_decoder.h"
 
+#include "media/base/pipeline_stats.h"
+
 namespace media {
 
 WMFVideoDecoder::WMFVideoDecoder(
@@ -22,8 +24,11 @@ std::string WMFVideoDecoder::GetDisplayName() const {
 
 void WMFVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                  bool low_delay,
+                                 const SetCdmReadyCB& set_cdm_ready_cb,
                                  const InitCB& init_cb,
                                  const OutputCB& output_cb) {
+  pipeline_stats::AddDecoderClass(GetDisplayName());
+
   impl_.Initialize(config, init_cb, output_cb);
 }
 

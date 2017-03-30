@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "content/common/indexed_db/indexed_db_key.h"
 #include "testing/gtest/include/gtest/gtest.h"

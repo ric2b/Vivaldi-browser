@@ -21,9 +21,12 @@ using content::RenderWidgetHost;
 using content::RenderWidgetHostView;
 using content::WebContents;
 
+#include "content/public/browser/render_view_host.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
+
 namespace extensions {
 
-using core_api::extension_types::ImageDetails;
+using api::extension_types::ImageDetails;
 
 bool CaptureWebContentsFunction::HasPermission() {
   return true;
@@ -50,21 +53,19 @@ bool CaptureWebContentsFunction::RunAsync() {
     return false;
 
   // The default format and quality setting used when encoding jpegs.
-  const core_api::extension_types::ImageFormat kDefaultFormat =
-      core_api::extension_types::IMAGE_FORMAT_JPEG;
+  const api::extension_types::ImageFormat kDefaultFormat =
+      api::extension_types::IMAGE_FORMAT_JPEG;
   const int kDefaultQuality = 90;
 
   image_format_ = kDefaultFormat;
   image_quality_ = kDefaultQuality;
 
   if (image_details) {
-    if (image_details->format !=
-        core_api::extension_types::IMAGE_FORMAT_NONE)
+    if (image_details->format != api::extension_types::IMAGE_FORMAT_NONE)
       image_format_ = image_details->format;
     if (image_details->quality.get())
       image_quality_ = *image_details->quality;
   }
-
   // TODO(miu): Account for fullscreen render widget?  http://crbug.com/419878
   RenderWidgetHostView* const view = contents->GetRenderWidgetHostView();
   RenderWidgetHost* const host = view ? view->GetRenderWidgetHost() : nullptr;
@@ -72,7 +73,25 @@ bool CaptureWebContentsFunction::RunAsync() {
     OnCaptureFailure(FAILURE_REASON_VIEW_INVISIBLE);
     return false;
   }
+  // Vivaldi addition, if guest is valid then we're capturing a guest view.
+  extensions::WebViewGuest* guest = WebViewGuest::FromWebContents(contents);
+  if (guest) {
+    content::RenderWidgetHostView* embedder_view =
+      guest->embedder_web_contents()->GetRenderWidgetHostView();
+    content::RenderViewHost* embedder_render_view_host =
+      guest->embedder_web_contents()->GetRenderViewHost();
+    gfx::Point source_origin =
+      view->GetViewBounds().origin() -
+      embedder_view->GetViewBounds().OffsetFromOrigin();
+    gfx::Rect source_rect(source_origin, view->GetViewBounds().size());
 
+    embedder_render_view_host->GetWidget()->CopyFromBackingStore(
+      source_rect, source_rect.size(),
+      base::Bind(
+        &CaptureWebContentsFunction::CopyFromBackingStoreComplete,
+        this),
+      kN32_SkColorType);
+  } else {
   // By default, the requested bitmap size is the view size in screen
   // coordinates.  However, if there's more pixel detail available on the
   // current system, increase the requested bitmap size to capture it all.
@@ -83,14 +102,15 @@ bool CaptureWebContentsFunction::RunAsync() {
   const float scale =
       screen->GetDisplayNearestWindow(native_view).device_scale_factor();
   if (scale > 1.0f)
-    bitmap_size = gfx::ToCeiledSize(gfx::ScaleSize(view_size, scale));
+    bitmap_size = gfx::ScaleToCeiledSize(view_size, scale);
 
   host->CopyFromBackingStore(
       gfx::Rect(view_size),
       bitmap_size,
       base::Bind(&CaptureWebContentsFunction::CopyFromBackingStoreComplete,
-                 this),
+                  this),
       kN32_SkColorType);
+  }
   return true;
 }
 
@@ -110,7 +130,7 @@ void CaptureWebContentsFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
   bool encoded = false;
   std::string mime_type;
   switch (image_format_) {
-    case core_api::extension_types::IMAGE_FORMAT_JPEG:
+    case api::extension_types::IMAGE_FORMAT_JPEG:
       encoded = gfx::JPEGCodec::Encode(
           reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
           gfx::JPEGCodec::FORMAT_SkBitmap,
@@ -121,7 +141,7 @@ void CaptureWebContentsFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
           &data);
       mime_type = kMimeTypeJpeg;
       break;
-    case core_api::extension_types::IMAGE_FORMAT_PNG:
+    case api::extension_types::IMAGE_FORMAT_PNG:
       encoded =
           gfx::PNGCodec::EncodeBGRASkBitmap(bitmap,
                                             true,  // Discard transparency.
@@ -138,8 +158,8 @@ void CaptureWebContentsFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
   }
 
   std::string base64_result;
-  base::StringPiece stream_as_string(
-      reinterpret_cast<const char*>(vector_as_array(&data)), data.size());
+  base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
+                                     data.size());
 
   base::Base64Encode(stream_as_string, &base64_result);
   base64_result.insert(

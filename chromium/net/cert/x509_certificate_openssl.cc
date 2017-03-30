@@ -13,7 +13,9 @@
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
@@ -38,7 +40,8 @@ using ScopedGENERAL_NAMES =
     crypto::ScopedOpenSSL<GENERAL_NAMES, GENERAL_NAMES_free>;
 
 void CreateOSCertHandlesFromPKCS7Bytes(
-    const char* data, int length,
+    const char* data,
+    size_t length,
     X509Certificate::OSCertHandles* handles) {
   crypto::EnsureOpenSSLInit();
   crypto::OpenSSLErrStackTracer err_cleaner(FROM_HERE);
@@ -142,8 +145,8 @@ class X509InitSingleton {
     // We allow the X509 store to leak, because it is used from a non-joinable
     // worker that is not stopped on shutdown, hence may still be using
     // OpenSSL library after the AtExit runner has completed.
-    return Singleton<X509InitSingleton,
-                     LeakySingletonTraits<X509InitSingleton> >::get();
+    return base::Singleton<X509InitSingleton, base::LeakySingletonTraits<
+                                                  X509InitSingleton>>::get();
   }
   X509_STORE* store() const { return store_.get(); }
 
@@ -155,7 +158,7 @@ class X509InitSingleton {
   }
 
  private:
-  friend struct DefaultSingletonTraits<X509InitSingleton>;
+  friend struct base::DefaultSingletonTraits<X509InitSingleton>;
   X509InitSingleton() {
     crypto::EnsureOpenSSLInit();
     ResetCertStore();
@@ -260,24 +263,23 @@ SHA1HashValue X509Certificate::CalculateCAFingerprint(
 
 // static
 X509Certificate::OSCertHandle X509Certificate::CreateOSCertHandleFromBytes(
-    const char* data, int length) {
-  if (length < 0)
-    return NULL;
+    const char* data,
+    size_t length) {
   crypto::EnsureOpenSSLInit();
   const unsigned char* d2i_data =
       reinterpret_cast<const unsigned char*>(data);
   // Don't cache this data for x509_util::GetDER as this wire format
   // may be not be identical from the i2d_X509 roundtrip.
-  X509* cert = d2i_X509(NULL, &d2i_data, length);
+  X509* cert = d2i_X509(NULL, &d2i_data, base::checked_cast<long>(length));
   return cert;
 }
 
 // static
 X509Certificate::OSCertHandles X509Certificate::CreateOSCertHandlesFromBytes(
-    const char* data, int length, Format format) {
+    const char* data,
+    size_t length,
+    Format format) {
   OSCertHandles results;
-  if (length < 0)
-    return results;
 
   switch (format) {
     case FORMAT_SINGLE_CERTIFICATE: {

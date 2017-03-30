@@ -5,8 +5,8 @@
 #ifndef ASH_SYSTEM_CHROMEOS_SESSION_LOGOUT_CONFIRMATION_DIALOG_H_
 #define ASH_SYSTEM_CHROMEOS_SESSION_LOGOUT_CONFIRMATION_DIALOG_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -46,7 +46,7 @@ class LogoutConfirmationDialog : public views::DialogDelegateView {
 
   views::Label* label_;
 
-  base::RepeatingTimer<LogoutConfirmationDialog> update_timer_;
+  base::RepeatingTimer update_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(LogoutConfirmationDialog);
 };

@@ -49,10 +49,6 @@ void NavigationResourceHandler::SetController(ResourceController* controller) {
   ResourceHandler::SetController(controller);
 }
 
-bool NavigationResourceHandler::OnUploadProgress(uint64 position, uint64 size) {
-  return true;
-}
-
 bool NavigationResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* response,
@@ -68,9 +64,7 @@ bool NavigationResourceHandler::OnRequestRedirected(
 }
 
 bool NavigationResourceHandler::OnResponseStarted(ResourceResponse* response,
-                                                  bool* defer,
-                                                  bool open_when_done,
-                                                  bool ask_for_target) {
+                                                  bool* defer) {
   DCHECK(core_);
 
   ResourceRequestInfoImpl* info = GetRequestInfo();

@@ -5,6 +5,7 @@
 #ifndef CONTENT_TEST_FAKE_COMPOSITOR_DEPENDENCIES_H_
 #define CONTENT_TEST_FAKE_COMPOSITOR_DEPENDENCIES_H_
 
+#include "base/macros.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -25,9 +26,10 @@ class FakeCompositorDependencies : public CompositorDependencies {
   bool IsLcdTextEnabled() override;
   bool IsDistanceFieldTextEnabled() override;
   bool IsZeroCopyEnabled() override;
-  bool IsOneCopyEnabled() override;
+  bool IsPartialRasterEnabled() override;
+  bool IsGpuMemoryBufferCompositorResourcesEnabled() override;
   bool IsElasticOverscrollEnabled() override;
-  uint32 GetImageTextureTarget() override;
+  std::vector<unsigned> GetImageTextureTargets() override;
   scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorMainThreadTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner>
@@ -39,7 +41,8 @@ class FakeCompositorDependencies : public CompositorDependencies {
   scoped_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource(
       int routing_id) override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  bool IsGatherPixelRefsEnabled() override;
+  bool AreImageDecodeTasksEnabled() override;
+  bool IsThreadedAnimationEnabled() override;
 
  private:
   cc::TestSharedBitmapManager shared_bitmap_manager_;

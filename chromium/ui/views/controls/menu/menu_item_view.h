@@ -10,6 +10,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "ui/base/models/menu_separator_types.h"
@@ -32,6 +33,10 @@ namespace views {
 
 namespace internal {
 class MenuRunnerImpl;
+}
+
+namespace test {
+class TestMenuItemViewShown;
 }
 
 class MenuController;
@@ -320,9 +325,6 @@ class VIEWS_EXPORT MenuItemView : public View {
     use_right_margin_ = use_right_margin;
   }
 
-  // Returns a reference to MenuConfig to be used with this menu.
-  const MenuConfig& GetMenuConfig() const;
-
  protected:
   // Creates a MenuItemView. This is used by the various AddXXX methods.
   MenuItemView(MenuItemView* parent, int command, Type type);
@@ -343,6 +345,7 @@ class VIEWS_EXPORT MenuItemView : public View {
 
  private:
   friend class internal::MenuRunnerImpl;  // For access to ~MenuItemView.
+  friend class test::TestMenuItemViewShown;  // for access to |submenu_|;
 
   enum PaintButtonMode { PB_NORMAL, PB_FOR_DRAG };
 

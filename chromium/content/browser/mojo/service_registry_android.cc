@@ -4,6 +4,8 @@
 
 #include "content/browser/mojo/service_registry_android.h"
 
+#include <utility>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/callback.h"
@@ -55,11 +57,12 @@ ServiceRegistryAndroid::~ServiceRegistryAndroid() {
 }
 
 // Methods called from Java.
-void ServiceRegistryAndroid::AddService(JNIEnv* env,
-                                        jobject j_service_registry,
-                                        jobject j_manager,
-                                        jobject j_factory,
-                                        jstring j_name) {
+void ServiceRegistryAndroid::AddService(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& j_service_registry,
+    const JavaParamRef<jobject>& j_manager,
+    const JavaParamRef<jobject>& j_factory,
+    const JavaParamRef<jstring>& j_name) {
   std::string name(ConvertJavaStringToUTF8(env, j_name));
 
   ScopedJavaGlobalRef<jobject> j_scoped_service_registry;
@@ -78,20 +81,22 @@ void ServiceRegistryAndroid::AddService(JNIEnv* env,
                                            j_scoped_factory));
 }
 
-void ServiceRegistryAndroid::RemoveService(JNIEnv* env,
-                                           jobject j_service_registry,
-                                           jstring j_name) {
+void ServiceRegistryAndroid::RemoveService(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& j_service_registry,
+    const JavaParamRef<jstring>& j_name) {
   std::string name(ConvertJavaStringToUTF8(env, j_name));
   service_registry_->RemoveService(name);
 }
 
-void ServiceRegistryAndroid::ConnectToRemoteService(JNIEnv* env,
-                                                    jobject j_service_registry,
-                                                    jstring j_name,
-                                                    jint j_handle) {
+void ServiceRegistryAndroid::ConnectToRemoteService(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& j_service_registry,
+    const JavaParamRef<jstring>& j_name,
+    jint j_handle) {
   std::string name(ConvertJavaStringToUTF8(env, j_name));
   mojo::ScopedMessagePipeHandle handle((mojo::MessagePipeHandle(j_handle)));
-  service_registry_->ConnectToRemoteService(name, handle.Pass());
+  service_registry_->ConnectToRemoteService(name, std::move(handle));
 }
 
 }  // namespace content

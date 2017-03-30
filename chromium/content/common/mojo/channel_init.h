@@ -6,12 +6,13 @@
 #define CONTENT_COMMON_MOJO_CHANNEL_INIT_H_
 
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "ipc/mojo/scoped_ipc_support.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "third_party/mojo/src/mojo/edk/embedder/channel_info_forward.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/message_pipe.h"
 
 namespace base {
 class TaskRunner;
@@ -34,9 +35,6 @@ class CONTENT_EXPORT ChannelInit {
 
   // Notifies the channel that we (hence it) will soon be destroyed.
   void WillDestroySoon();
-
-  // Shuts down the channel. Must be called from the IO thread.
-  void ShutdownOnIOThread();
 
  private:
   // Invoked on the thread on which this object lives once the channel has been

@@ -4,9 +4,10 @@
 
 #include "sync/test/fake_server/bookmark_entity.h"
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/guid.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/protocol/sync.pb.h"
@@ -71,18 +72,17 @@ scoped_ptr<FakeServerEntity> BookmarkEntity::CreateUpdatedVersion(
       client_entity.mtime()));
 }
 
-BookmarkEntity::BookmarkEntity(
-    const string& id,
-    int64 version,
-    const string& name,
-    const string& originator_cache_guid,
-    const string& originator_client_item_id,
-    const sync_pb::UniquePosition& unique_position,
-    const sync_pb::EntitySpecifics& specifics,
-    bool is_folder,
-    const string& parent_id,
-    int64 creation_time,
-    int64 last_modified_time)
+BookmarkEntity::BookmarkEntity(const string& id,
+                               int64_t version,
+                               const string& name,
+                               const string& originator_cache_guid,
+                               const string& originator_client_item_id,
+                               const sync_pb::UniquePosition& unique_position,
+                               const sync_pb::EntitySpecifics& specifics,
+                               bool is_folder,
+                               const string& parent_id,
+                               int64_t creation_time,
+                               int64_t last_modified_time)
     : FakeServerEntity(id, syncer::BOOKMARKS, version, name),
       originator_cache_guid_(originator_cache_guid),
       originator_client_item_id_(originator_client_item_id),
@@ -92,6 +92,15 @@ BookmarkEntity::BookmarkEntity(
       creation_time_(creation_time),
       last_modified_time_(last_modified_time) {
   SetSpecifics(specifics);
+}
+
+void BookmarkEntity::SetParentId(const string& parent_id) {
+  parent_id_ = parent_id;
+}
+
+bool BookmarkEntity::RequiresParentId() const {
+  // Bookmarks are stored as a hierarchy. All bookmarks must have a parent ID.
+  return true;
 }
 
 string BookmarkEntity::GetParentId() const {
@@ -104,7 +113,6 @@ void BookmarkEntity::SerializeAsProto(sync_pb::SyncEntity* proto) const {
   proto->set_originator_cache_guid(originator_cache_guid_);
   proto->set_originator_client_item_id(originator_client_item_id_);
 
-  proto->set_parent_id_string(parent_id_);
   proto->set_ctime(creation_time_);
   proto->set_mtime(last_modified_time_);
 

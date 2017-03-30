@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
+#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -17,12 +18,16 @@
 #include "skia/ext/image_operations.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/skbitmap_operations.h"
-#include "chrome/browser/extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "ui/gfx/vector_icons_public.h"
+#include "ui/native_theme/common_theme.h"
+#include "ui/native_theme/native_theme.h"
 
 namespace {
 
@@ -110,25 +115,28 @@ void ExtensionIconManager::OnImageLoaded(const std::string& extension_id,
 
   // Vivaldi specific below.
   if (context_) {
-    extensions::api::extension_action_utils::ExtensionInfo info;
+    extensions::vivaldi::extension_action_utils::ExtensionInfo info;
 
     info.id = extension_id;
     info.badge_icon.reset(
         extensions::ExtensionActionUtil::EncodeBitmapToPng(image.ToSkBitmap()));
     scoped_ptr<base::ListValue> args =
-        extensions::api::extension_action_utils::OnIconLoaded::Create(info);
+        extensions::vivaldi::extension_action_utils::OnIconLoaded::Create(info);
 
     extensions::ExtensionActionUtil::BroadcastEvent(
-        extensions::api::extension_action_utils::OnIconLoaded::kEventName,
-        args.Pass(), context_);
+        extensions::vivaldi::extension_action_utils::OnIconLoaded::kEventName,
+        std::move(args), context_);
   }
 }
 
 void ExtensionIconManager::EnsureDefaultIcon() {
   if (default_icon_.empty()) {
-    ResourceBundle& rb = ResourceBundle::GetSharedInstance();
-    SkBitmap src = rb.GetImageNamed(IDR_EXTENSIONS_SECTION).AsBitmap();
-    default_icon_ = ApplyTransforms(src);
+    // TODO(estade): use correct scale factor instead of 1x.
+    default_icon_ = ApplyPadding(
+        *gfx::CreateVectorIcon(gfx::VectorIconId::EXTENSION, gfx::kFaviconSize,
+                               gfx::kChromeIconGrey)
+             .bitmap(),
+        padding_);
   }
 }
 
@@ -147,7 +155,7 @@ SkBitmap ExtensionIconManager::ApplyTransforms(const SkBitmap& source) {
     result = SkBitmapOperations::CreateHSLShiftedBitmap(result, shift);
   }
 
-  if (!padding_.empty())
+  if (!padding_.IsEmpty())
     result = ApplyPadding(result, padding_);
 
   return result;

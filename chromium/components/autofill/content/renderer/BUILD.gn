@@ -35,8 +35,8 @@ static_library("renderer") {
     "//ipc",
     "//net",
     "//skia",
-    "//third_party/icu",
     "//third_party/WebKit/public:blink",
+    "//third_party/re2",
     "//ui/base",
   ]
 
@@ -53,10 +53,27 @@ source_set("test_support") {
     "test_password_generation_agent.h",
   ]
 
-  deps = [
+  public_deps = [
+    ":renderer",
     "//base",
+  ]
+  deps = [
     "//components/autofill/content/renderer",
     "//ipc",
     "//skia",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "renderer_save_password_progress_logger_unittest.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//components/autofill/content/common",
+    "//ipc:test_support",
+    "//testing/gtest",
   ]
 }

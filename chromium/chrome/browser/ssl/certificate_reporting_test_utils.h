@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "chrome/browser/net/certificate_error_reporter.h"
 #include "chrome/test/base/in_process_browser_test.h"
 
 class Browser;
@@ -18,13 +17,9 @@ namespace net {
 class URLRequestContext;
 }
 
-namespace CertificateReportingTestUtils {
-
-class MockReporter;
+namespace certificate_reporting_test_utils {
 
 enum OptIn { EXTENDED_REPORTING_OPT_IN, EXTENDED_REPORTING_DO_NOT_OPT_IN };
-
-enum Proceed { SSL_INTERSTITIAL_PROCEED, SSL_INTERSTITIAL_DO_NOT_PROCEED };
 
 enum ExpectReport { CERT_REPORT_EXPECTED, CERT_REPORT_NOT_EXPECTED };
 
@@ -37,10 +32,12 @@ class CertificateReportingTest : public InProcessBrowserTest {
   void SetUpMockReporter();
 
  protected:
-  // Get the latest hostname for which a certificate report was sent.
-  const std::string& GetLatestHostnameReported();
+  // Get the latest hostname for which a certificate report was
+  // sent. SetUpMockReporter() must have been called before this.
+  const std::string& GetLatestHostnameReported() const;
 
  private:
+  class MockReporter;
   MockReporter* reporter_;
 };
 
@@ -55,11 +52,10 @@ scoped_ptr<SSLCertReporter> SetUpMockSSLCertReporter(
     base::RunLoop* run_loop,
     ExpectReport expect_report);
 
-// Forces a Finch config for the cert reporting experiment.
-void SetCertReportingFinchConfig(const std::string& group_name,
-                                 const std::string& param_value);
-void SetCertReportingFinchConfig(const std::string& group_name);
+// Returns whether a report should be expected (due to the Finch config)
+// if the user opts in.
+ExpectReport GetReportExpectedFromFinch();
 
-}  // namespace CertificateReportingTestUtils
+}  // namespace certificate_reporting_test_utils
 
 #endif  // CHROME_BROWSER_SSL_CERTIFICATE_REPORTING_TEST_UTILS_H_

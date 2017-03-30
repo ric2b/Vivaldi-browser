@@ -1,7 +1,7 @@
 {
   "v8_android_chromium_gn_dbg": {
     "additional_compile_targets": [
-      "chrome_shell_apk"
+      "chrome_public_apk"
     ],
     "gtest_tests": []
   },
@@ -28,7 +28,6 @@
       "extensions_unittests",
       "gcm_unit_tests",
       "gfx_unittests",
-      "gl_unittests",
       "gn_unittests",
       "google_apis_unittests",
       "gpu_unittests",
@@ -37,6 +36,7 @@
       "ipc_tests",
       "jingle_unittests",
       "media_unittests",
+      "media_blink_unittests",
       "mojo_common_unittests",
       "mojo_public_bindings_unittests",
       "mojo_public_environment_unittests",
@@ -59,7 +59,6 @@
       "url_unittests",
       "views_unittests",
       "wm_unittests"
-    ],
-    "gtest_tests": []
+    ]
   }
 }

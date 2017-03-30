@@ -5,6 +5,7 @@
 #ifndef UI_GFX_PLATFORM_FONT_IOS_H_
 #define UI_GFX_PLATFORM_FONT_IOS_H_
 
+#include "base/macros.h"
 #include "ui/gfx/platform_font.h"
 
 namespace gfx {
@@ -18,12 +19,12 @@ class PlatformFontIOS : public PlatformFont {
 
   // Overridden from PlatformFont:
   Font DeriveFont(int size_delta, int style) const override;
-  int GetHeight() const override;
-  int GetBaseline() const override;
-  int GetCapHeight() const override;
-  int GetExpectedTextWidth(int length) const override;
+  int GetHeight() override;
+  int GetBaseline() override;
+  int GetCapHeight() override;
+  int GetExpectedTextWidth(int length) override;
   int GetStyle() const override;
-  std::string GetFontName() const override;
+  const std::string& GetFontName() const override;
   std::string GetActualFontNameForTesting() const override;
   int GetFontSize() const override;
   const FontRenderParams& GetFontRenderParams() override;

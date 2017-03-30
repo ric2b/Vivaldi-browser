@@ -5,9 +5,11 @@
 #include "ui/events/event_utils.h"
 
 #import <Cocoa/Cocoa.h>
+#include <stdint.h>
 
 #include "base/mac/scoped_cftyperef.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_constants.h"
@@ -109,7 +111,7 @@ class EventsMacTest : public CocoaTest {
         NSPointFromCGPoint(Flip(window_location).ToCGPoint());
     NSPoint screen_point = [test_window() convertBaseToScreen:window_point];
     CGFloat primary_screen_height =
-        NSHeight([[[NSScreen screens] objectAtIndex:0] frame]);
+        NSHeight([[[NSScreen screens] firstObject] frame]);
     screen_point.y = primary_screen_height - screen_point.y;
     CGEventSetLocation(scroll, NSPointToCGPoint(screen_point));
     return [NSEvent eventWithCGEvent:scroll];
@@ -141,8 +143,7 @@ TEST_F(EventsMacTest, EventFlagsFromNative) {
   // Caps + Left
   NSEvent* caps = cocoa_test_event_utils::MouseEventWithType(
       NSLeftMouseUp, NSAlphaShiftKeyMask);
-  EXPECT_EQ(EF_LEFT_MOUSE_BUTTON | EF_CAPS_LOCK_DOWN,
-            EventFlagsFromNative(caps));
+  EXPECT_EQ(EF_LEFT_MOUSE_BUTTON | EF_CAPS_LOCK_ON, EventFlagsFromNative(caps));
 
   // Shift + Left
   NSEvent* shift = cocoa_test_event_utils::MouseEventWithType(NSLeftMouseUp,
@@ -305,9 +306,9 @@ TEST_F(EventsMacTest, EventTypeFromNative) {
   event = cocoa_test_event_utils::MouseEventWithType(NSMouseMoved, 0);
   EXPECT_EQ(ui::ET_MOUSE_MOVED, ui::EventTypeFromNative(event));
 
-  event = cocoa_test_event_utils::EnterExitEventWithType(NSMouseEntered);
+  event = cocoa_test_event_utils::EnterEvent();
   EXPECT_EQ(ui::ET_MOUSE_ENTERED, ui::EventTypeFromNative(event));
-  event = cocoa_test_event_utils::EnterExitEventWithType(NSMouseExited);
+  event = cocoa_test_event_utils::ExitEvent();
   EXPECT_EQ(ui::ET_MOUSE_EXITED, ui::EventTypeFromNative(event));
 }
 

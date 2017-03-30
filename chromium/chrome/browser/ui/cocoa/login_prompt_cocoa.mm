@@ -6,11 +6,13 @@
 
 #include "base/mac/bundle_locations.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/tab_contents/tab_util.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_custom_sheet.h"
 #include "chrome/browser/ui/cocoa/constrained_window/constrained_window_mac.h"
 #include "chrome/browser/ui/login/login_prompt.h"
@@ -40,8 +42,9 @@ class LoginHandlerMac : public LoginHandler,
   }
 
   // LoginModelObserver implementation.
-  void OnAutofillDataAvailable(const base::string16& username,
-                               const base::string16& password) override {
+  void OnAutofillDataAvailableInternal(
+      const base::string16& username,
+      const base::string16& password) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
     [sheet_controller_ autofillLogin:base::SysUTF16ToNSString(username)
@@ -50,15 +53,20 @@ class LoginHandlerMac : public LoginHandler,
   void OnLoginModelDestroying() override {}
 
   // LoginHandler:
-  void BuildViewForPasswordManager(password_manager::PasswordManager* manager,
-                                   const base::string16& explanation) override {
+  void BuildViewImpl(const base::string16& authority,
+                     const base::string16& explanation,
+                     LoginModelData* login_model_data) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
     sheet_controller_.reset(
         [[LoginHandlerSheet alloc] initWithLoginHandler:this]);
 
-    SetModel(manager);
+    if (login_model_data)
+      SetModel(*login_model_data);
+    else
+      ResetModel();
 
+    [sheet_controller_ setAuthority:base::SysUTF16ToNSString(authority)];
     [sheet_controller_ setExplanation:base::SysUTF16ToNSString(explanation)];
 
     // Scary thread safety note: This can potentially be called *after* SetAuth
@@ -87,7 +95,7 @@ class LoginHandlerMac : public LoginHandler,
   // Overridden from ConstrainedWindowMacDelegate:
   void OnConstrainedWindowClosed(ConstrainedWindowMac* window) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    SetModel(NULL);
+    ResetModel();
     ReleaseSoon();
 
     constrained_window_.reset();
@@ -126,6 +134,8 @@ class LoginHandlerMac : public LoginHandler,
 // static
 LoginHandler* LoginHandler::Create(net::AuthChallengeInfo* auth_info,
                                    net::URLRequest* request) {
+  if (chrome::ToolkitViewsDialogsEnabled())
+    return chrome::CreateLoginHandlerViews(auth_info, request);
   return new LoginHandlerMac(auth_info, request);
 }
 
@@ -173,8 +183,19 @@ LoginHandler* LoginHandler::Create(net::AuthChallengeInfo* auth_info,
   }
 }
 
+- (void)setAuthority:(NSString*)authority {
+  [authorityField_ setStringValue:authority];
+
+  // Resize the text field.
+  CGFloat windowDelta = [GTMUILocalizerAndLayoutTweaker
+      sizeToFitFixedWidthTextField:authorityField_];
+
+  NSRect newFrame = [[self window] frame];
+  newFrame.size.height += windowDelta;
+  [[self window] setFrame:newFrame display:NO];
+}
+
 - (void)setExplanation:(NSString*)explanation {
-  // Put in the text.
   [explanationField_ setStringValue:explanation];
 
   // Resize the text field.

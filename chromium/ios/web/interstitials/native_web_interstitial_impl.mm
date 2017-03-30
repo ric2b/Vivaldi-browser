@@ -4,6 +4,8 @@
 
 #include "ios/web/interstitials/native_web_interstitial_impl.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "ios/web/public/interstitials/web_interstitial_delegate.h"
 #import "ios/web/public/web_state/ui/crw_generic_content_view.h"
@@ -15,17 +17,21 @@ namespace web {
 // static
 WebInterstitial* WebInterstitial::CreateNativeInterstitial(
     WebState* web_state,
+    bool new_navigation,
     const GURL& url,
     scoped_ptr<NativeWebInterstitialDelegate> delegate) {
   WebStateImpl* web_state_impl = static_cast<WebStateImpl*>(web_state);
-  return new NativeWebInterstitialImpl(web_state_impl, url, delegate.Pass());
+  return new NativeWebInterstitialImpl(web_state_impl, new_navigation, url,
+                                       std::move(delegate));
 }
 
 NativeWebInterstitialImpl::NativeWebInterstitialImpl(
     WebStateImpl* web_state,
+    bool new_navigation,
     const GURL& url,
     scoped_ptr<NativeWebInterstitialDelegate> delegate)
-    : web::WebInterstitialImpl(web_state, url), delegate_(delegate.Pass()) {
+    : web::WebInterstitialImpl(web_state, new_navigation, url),
+      delegate_(std::move(delegate)) {
   DCHECK(delegate_);
 }
 

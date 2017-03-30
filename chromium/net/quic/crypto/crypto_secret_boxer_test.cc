@@ -17,7 +17,7 @@ namespace test {
 TEST(CryptoSecretBoxerTest, BoxAndUnbox) {
   StringPiece message("hello world");
   const size_t key_size = CryptoSecretBoxer::GetKeySize();
-  scoped_ptr<uint8[]> key(new uint8[key_size]);
+  scoped_ptr<uint8_t[]> key(new uint8_t[key_size]);
   memset(key.get(), 0x11, key_size);
 
   CryptoSecretBoxer boxer;
@@ -33,8 +33,9 @@ TEST(CryptoSecretBoxerTest, BoxAndUnbox) {
   EXPECT_FALSE(boxer.Unbox(string(1, 'X') + box, &storage, &result));
   EXPECT_FALSE(boxer.Unbox(box.substr(1, string::npos), &storage, &result));
   EXPECT_FALSE(boxer.Unbox(string(), &storage, &result));
-  EXPECT_FALSE(boxer.Unbox(string(1, box[0]^0x80) + box.substr(1, string::npos),
-                           &storage, &result));
+  EXPECT_FALSE(
+      boxer.Unbox(string(1, box[0] ^ 0x80) + box.substr(1, string::npos),
+                  &storage, &result));
 }
 
 }  // namespace test

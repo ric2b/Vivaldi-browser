@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 
 namespace buzz {
@@ -86,7 +86,7 @@ class SignalStrategy {
   // Remove a |listener| previously added with AddListener().
   virtual void RemoveListener(Listener* listener) = 0;
 
-  // Sends a raw XMPP stanza.
+  // Sends a raw XMPP stanza. Returns false if the stanza couldn't be send.
   virtual bool SendStanza(scoped_ptr<buzz::XmlElement> stanza) = 0;
 
   // Returns new ID that should be used for the next outgoing IQ

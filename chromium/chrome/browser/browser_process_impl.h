@@ -10,24 +10,25 @@
 #ifndef CHROME_BROWSER_BROWSER_PROCESS_IMPL_H_
 #define CHROME_BROWSER_BROWSER_PROCESS_IMPL_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/debug/stack_trace.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 
 class ChromeChildProcessWatcher;
 class ChromeDeviceClient;
-class ChromeNetLog;
 class ChromeResourceDispatcherHostDelegate;
 class RemoteDebuggingServer;
 class PrefRegistrySimple;
-class PromoResourceService;
 
 #if defined(ENABLE_PLUGIN_INSTALLATION)
 class PluginsResourceService;
@@ -46,10 +47,18 @@ namespace gcm {
 class GCMDriver;
 }
 
+namespace net_log {
+class ChromeNetLog;
+}
+
 namespace policy {
 class BrowserPolicyConnector;
 class PolicyService;
 };
+
+namespace web_resource {
+class PromoResourceService;
+}
 
 // Real implementation of BrowserProcess that creates and returns the services.
 class BrowserProcessImpl : public BrowserProcess,
@@ -72,13 +81,16 @@ class BrowserProcessImpl : public BrowserProcess,
   // ChromeBrowserMain based on notifications from the content
   // framework, rather than in the destructor, so that we can
   // interleave cleanup with threads being stopped.
+#if !defined(OS_ANDROID)
   void StartTearDown();
   void PostDestroyThreads();
+#endif
 
   // BrowserProcess implementation.
   void ResourceDispatcherHostCreated() override;
   void EndSession() override;
-  MetricsServicesManager* GetMetricsServicesManager() override;
+  metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
+      override;
   metrics::MetricsService* metrics_service() override;
   rappor::RapporService* rappor_service() override;
   IOThread* io_thread() override;
@@ -86,8 +98,8 @@ class BrowserProcessImpl : public BrowserProcess,
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
   net::URLRequestContextGetter* system_request_context() override;
-  chrome_variations::VariationsService* variations_service() override;
-  PromoResourceService* promo_resource_service() override;
+  variations::VariationsService* variations_service() override;
+  web_resource::PromoResourceService* promo_resource_service() override;
   BrowserProcessPlatformPart* platform_part() override;
   extensions::EventRouterForwarder* extension_event_router_forwarder() override;
   NotificationUIManager* notification_ui_manager() override;
@@ -100,7 +112,7 @@ class BrowserProcessImpl : public BrowserProcess,
   void CreateDevToolsHttpProtocolHandler(
       chrome::HostDesktopType host_desktop_type,
       const std::string& ip,
-      uint16 port) override;
+      uint16_t port) override;
   unsigned int AddRefModule() override;
   unsigned int ReleaseModule() override;
   bool IsShuttingDown() override;
@@ -117,7 +129,7 @@ class BrowserProcessImpl : public BrowserProcess,
   void set_background_mode_manager_for_test(
       scoped_ptr<BackgroundModeManager> manager) override;
   StatusTray* status_tray() override;
-  SafeBrowsingService* safe_browsing_service() override;
+  safe_browsing::SafeBrowsingService* safe_browsing_service() override;
   safe_browsing::ClientSideDetectionService* safe_browsing_detection_service()
       override;
 
@@ -125,7 +137,7 @@ class BrowserProcessImpl : public BrowserProcess,
   void StartAutoupdateTimer() override;
 #endif
 
-  ChromeNetLog* net_log() override;
+  net_log::ChromeNetLog* net_log() override;
   component_updater::ComponentUpdateService* component_updater() override;
   CRLSetFetcher* crl_set_fetcher() override;
   component_updater::PnaclComponentInstaller* pnacl_component_installer()
@@ -139,7 +151,7 @@ class BrowserProcessImpl : public BrowserProcess,
 #endif
   network_time::NetworkTimeTracker* network_time_tracker() override;
   gcm::GCMDriver* gcm_driver() override;
-  memory::OomPriorityManager* GetOomPriorityManager() override;
+  memory::TabManager* GetTabManager() override;
   ShellIntegration::DefaultWebClientState CachedDefaultWebClientState()
       override;
 
@@ -168,7 +180,8 @@ class BrowserProcessImpl : public BrowserProcess,
 
   void CacheDefaultWebClientState();
 
-  scoped_ptr<MetricsServicesManager> metrics_services_manager_;
+  scoped_ptr<metrics_services_manager::MetricsServicesManager>
+      metrics_services_manager_;
 
   scoped_ptr<IOThread> io_thread_;
 
@@ -232,10 +245,12 @@ class BrowserProcessImpl : public BrowserProcess,
 #endif
 
   bool created_safe_browsing_service_;
-  scoped_refptr<SafeBrowsingService> safe_browsing_service_;
+  scoped_refptr<safe_browsing::SafeBrowsingService> safe_browsing_service_;
 
   unsigned int module_ref_count_;
   bool did_start_;
+
+  bool tearing_down_;
 
   // Ensures that all the print jobs are finished before closing the browser.
   scoped_ptr<printing::PrintJobManager> print_job_manager_;
@@ -257,15 +272,15 @@ class BrowserProcessImpl : public BrowserProcess,
   PrefChangeRegistrar pref_change_registrar_;
 
   // Lives here so can safely log events on shutdown.
-  scoped_ptr<ChromeNetLog> net_log_;
+  scoped_ptr<net_log::ChromeNetLog> net_log_;
 
   scoped_ptr<ChromeResourceDispatcherHostDelegate>
       resource_dispatcher_host_delegate_;
 
-  scoped_ptr<PromoResourceService> promo_resource_service_;
+  scoped_ptr<web_resource::PromoResourceService> promo_resource_service_;
 
 #if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
-  base::RepeatingTimer<BrowserProcessImpl> autoupdate_timer_;
+  base::RepeatingTimer autoupdate_timer_;
 
   // Gets called by autoupdate timer to see if browser needs restart and can be
   // restarted, and if that's the case, restarts the browser.
@@ -309,12 +324,12 @@ class BrowserProcessImpl : public BrowserProcess,
 
   scoped_ptr<ChromeChildProcessWatcher> child_process_watcher_;
 
-#if !defined(OS_ANDROID)
   scoped_ptr<ChromeDeviceClient> device_client_;
-#endif
 
-#if defined(OS_CHROMEOS)
-  scoped_ptr<memory::OomPriorityManager> oom_priority_manager_;
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+  // Any change to this #ifdef must be reflected as well in
+  // chrome/browser/memory/tab_manager_browsertest.cc
+  scoped_ptr<memory::TabManager> tab_manager_;
 #endif
 
   ShellIntegration::DefaultWebClientState cached_default_web_client_state_;

@@ -4,6 +4,9 @@
 
 #include "remoting/protocol/content_description.h"
 
+#include <utility>
+
+#include "base/base64.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "remoting/base/constants.h"
@@ -30,13 +33,11 @@ const char kControlTag[] = "control";
 const char kEventTag[] = "event";
 const char kVideoTag[] = "video";
 const char kAudioTag[] = "audio";
-const char kDeprecatedResolutionTag[] = "initial-resolution";
+const char kVp9ExperimentTag[] = "vp9-experiment";
 
 const char kTransportAttr[] = "transport";
 const char kVersionAttr[] = "version";
 const char kCodecAttr[] = "codec";
-const char kDeprecatedWidthAttr[] = "width";
-const char kDeprecatedHeightAttr[] = "height";
 
 const NameMapElement<ChannelConfig::TransportType> kTransports[] = {
   { ChannelConfig::TRANSPORT_STREAM, "stream" },
@@ -116,8 +117,8 @@ bool ParseChannelConfig(const XmlElement* element, bool codec_required,
 ContentDescription::ContentDescription(
     scoped_ptr<CandidateSessionConfig> config,
     scoped_ptr<buzz::XmlElement> authenticator_message)
-    : candidate_config_(config.Pass()),
-      authenticator_message_(authenticator_message.Pass()) {
+    : candidate_config_(std::move(config)),
+      authenticator_message_(std::move(authenticator_message)) {
 }
 
 ContentDescription::~ContentDescription() { }
@@ -139,37 +140,35 @@ XmlElement* ContentDescription::ToXml() const {
   XmlElement* root = new XmlElement(
       QName(kChromotingXmlNamespace, kDescriptionTag), true);
 
-  if (config()->standard_ice()) {
+  if (config()->ice_supported()) {
     root->AddElement(
         new buzz::XmlElement(QName(kChromotingXmlNamespace, kStandardIceTag)));
+
+    for (const auto& channel_config : config()->control_configs()) {
+      root->AddElement(FormatChannelConfig(channel_config, kControlTag));
+    }
+
+    for (const auto& channel_config : config()->event_configs()) {
+      root->AddElement(FormatChannelConfig(channel_config, kEventTag));
+    }
+
+    for (const auto& channel_config : config()->video_configs()) {
+      root->AddElement(FormatChannelConfig(channel_config, kVideoTag));
+    }
+
+    for (const auto& channel_config : config()->audio_configs()) {
+      root->AddElement(FormatChannelConfig(channel_config, kAudioTag));
+    }
   }
 
-  for (const ChannelConfig& channel_config : config()->control_configs()) {
-    root->AddElement(FormatChannelConfig(channel_config, kControlTag));
-  }
-
-  for (const ChannelConfig& channel_config : config()->event_configs()) {
-    root->AddElement(FormatChannelConfig(channel_config, kEventTag));
-  }
-
-  for (const ChannelConfig& channel_config : config()->video_configs()) {
-    root->AddElement(FormatChannelConfig(channel_config, kVideoTag));
-  }
-
-  for (const ChannelConfig& channel_config : config()->audio_configs()) {
-    root->AddElement(FormatChannelConfig(channel_config, kAudioTag));
-  }
-
-  // Older endpoints require an initial-resolution tag, but otherwise ignore it.
-  XmlElement* resolution_tag = new XmlElement(
-      QName(kChromotingXmlNamespace, kDeprecatedResolutionTag));
-  resolution_tag->AddAttr(QName(kDefaultNs, kDeprecatedWidthAttr), "640");
-  resolution_tag->AddAttr(QName(kDefaultNs, kDeprecatedHeightAttr), "480");
-  root->AddElement(resolution_tag);
-
-  if (authenticator_message_.get()) {
+  if (authenticator_message_) {
     DCHECK(Authenticator::IsAuthenticatorMessage(authenticator_message_.get()));
     root->AddElement(new XmlElement(*authenticator_message_));
+  }
+
+  if (config()->vp9_experiment_enabled()) {
+    root->AddElement(
+        new XmlElement(QName(kChromotingXmlNamespace, kVp9ExperimentTag)));
   }
 
   return root;
@@ -202,7 +201,8 @@ bool ContentDescription::ParseChannelConfigs(
 
 // static
 scoped_ptr<ContentDescription> ContentDescription::ParseXml(
-    const XmlElement* element) {
+    const XmlElement* element,
+    bool webrtc_transport) {
   if (element->Name() != QName(kChromotingXmlNamespace, kDescriptionTag)) {
     LOG(ERROR) << "Invalid description: " << element->Str();
     return nullptr;
@@ -210,19 +210,26 @@ scoped_ptr<ContentDescription> ContentDescription::ParseXml(
   scoped_ptr<CandidateSessionConfig> config(
       CandidateSessionConfig::CreateEmpty());
 
-  config->set_standard_ice(
-      element->FirstNamed(QName(kChromotingXmlNamespace, kStandardIceTag)) !=
-      nullptr);
+  config->set_webrtc_supported(webrtc_transport);
 
-  if (!ParseChannelConfigs(element, kControlTag, false, false,
-                           config->mutable_control_configs()) ||
-      !ParseChannelConfigs(element, kEventTag, false, false,
-                           config->mutable_event_configs()) ||
-      !ParseChannelConfigs(element, kVideoTag, true, false,
-                           config->mutable_video_configs()) ||
-      !ParseChannelConfigs(element, kAudioTag, true, true,
-                           config->mutable_audio_configs())) {
-    return nullptr;
+  if (element->FirstNamed(QName(kChromotingXmlNamespace, kStandardIceTag)) !=
+      nullptr) {
+    config->set_ice_supported(true);
+    if (!ParseChannelConfigs(element, kControlTag, false, false,
+                             config->mutable_control_configs()) ||
+        !ParseChannelConfigs(element, kEventTag, false, false,
+                             config->mutable_event_configs()) ||
+        !ParseChannelConfigs(element, kVideoTag, true, false,
+                             config->mutable_video_configs()) ||
+        !ParseChannelConfigs(element, kAudioTag, true, true,
+                             config->mutable_audio_configs())) {
+      return nullptr;
+    }
+  }
+
+  // Check if VP9 experiment is enabled.
+  if (element->FirstNamed(QName(kChromotingXmlNamespace, kVp9ExperimentTag))) {
+    config->set_vp9_experiment_enabled(true);
   }
 
   scoped_ptr<XmlElement> authenticator_message;
@@ -230,8 +237,8 @@ scoped_ptr<ContentDescription> ContentDescription::ParseXml(
   if (child)
     authenticator_message.reset(new XmlElement(*child));
 
-  return make_scoped_ptr(
-      new ContentDescription(config.Pass(), authenticator_message.Pass()));
+  return make_scoped_ptr(new ContentDescription(
+      std::move(config), std::move(authenticator_message)));
 }
 
 }  // namespace protocol

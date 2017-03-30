@@ -4,14 +4,18 @@
 
 #include "chrome/browser/ui/views/tabs/tab_drag_controller_interactive_uitest.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "ash/wm/window_state.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -51,7 +55,6 @@
 #endif
 
 #if defined(USE_ASH)
-#include "ash/display/display_controller.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/cursor_manager_test_api.h"
@@ -97,7 +100,7 @@ class QuitDraggingObserver : public content::NotificationObserver {
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override {
     DCHECK_EQ(chrome::NOTIFICATION_TAB_DRAG_LOOP_DONE, type);
-    base::MessageLoopForUI::current()->Quit();
+    base::MessageLoopForUI::current()->QuitWhenIdle();
     delete this;
   }
 
@@ -1343,8 +1346,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   EXPECT_FALSE(browser2->window()->IsMaximized());
 }
 
-// TODO Re-enable for Vivaldi
-#if 1 || defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_WIN)
 // TODO(sky,sad): Disabled as it fails due to resize locks with a real
 // compositor. crbug.com/331924
 #define MAYBE_DragDirectlyToSecondWindow DISABLED_DragDirectlyToSecondWindow

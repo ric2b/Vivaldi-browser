@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <vector>
 
@@ -25,8 +28,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
+#include "browser/startup_vivaldi_browser.h"
 #include "chrome/browser/apps/install_chrome_app.h"
-#include "chrome/browser/auto_launch_trial.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
@@ -38,13 +42,12 @@
 #include "chrome/browser/extensions/pack_extension_job.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/net/predictor.h"
-#include "chrome/browser/notifications/desktop_notification_service.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
+#include "chrome/browser/profile_resetter/triggered_profile_resetter.h"
+#include "chrome/browser/profile_resetter/triggered_profile_resetter_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
-#include "chrome/browser/rlz/rlz.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
@@ -55,13 +58,15 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/host_desktop.h"
-#include "chrome/browser/ui/startup/autolaunch_prompt.h"
+#include "chrome/browser/ui/session_crashed_bubble.h"
 #include "chrome/browser/ui/startup/bad_flags_prompt.h"
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 #include "chrome/browser/ui/startup/google_api_keys_infobar_delegate.h"
@@ -74,7 +79,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/pref_names.h"
@@ -89,8 +93,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
+#include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
@@ -99,35 +102,25 @@
 #include "net/base/network_change_notifier.h"
 #include "ui/base/l10n/l10n_util.h"
 
-
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
 #include "chrome/browser/ui/cocoa/keystone_infobar_delegate.h"
-#include "chrome/browser/mac/sparkle_util.h"
-#include <iostream>
 #endif
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #include "chrome/browser/apps/app_launch_for_metro_restart_win.h"
-#include "base/win/registry.h"
-#include "base/i18n/rtl.h"
-#include "third_party/_winsparkle_lib/include/winsparkle.h"
 #endif
+
+#if defined(ENABLE_RLZ)
+#include "components/rlz/rlz_tracker.h"
+#endif
+
+#include "app/vivaldi_apptools.h"
 
 using content::ChildProcessSecurityPolicy;
 using content::WebContents;
 using extensions::Extension;
-
-#define UPDATE_SOURCE_WIN_normal 0
-#define UPDATE_SOURCE_WIN_snapshot 0
-#define UPDATE_SOURCE_WIN_preview 1
-#define UPDATE_SOURCE_WIN_beta 1
-
-#define S(s) UPDATE_SOURCE_WIN_ ## s
-#define UPDATE_SOURCE_WIN(s) S(s)
-
-#define UPDATE_PREVIEW_SOURCE_WINDOWS 1
 
 namespace {
 
@@ -260,37 +253,6 @@ void RecordAppLaunches(Profile* profile,
   }
 }
 
-class WebContentsCloseObserver : public content::NotificationObserver {
- public:
-  WebContentsCloseObserver() : contents_(NULL) {}
-  ~WebContentsCloseObserver() override {}
-
-  void SetContents(content::WebContents* contents) {
-    DCHECK(!contents_);
-    contents_ = contents;
-
-    registrar_.Add(this,
-                   content::NOTIFICATION_WEB_CONTENTS_DESTROYED,
-                   content::Source<content::WebContents>(contents_));
-  }
-
-  content::WebContents* contents() { return contents_; }
-
- private:
-  // content::NotificationObserver overrides:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    DCHECK_EQ(type, content::NOTIFICATION_WEB_CONTENTS_DESTROYED);
-    contents_ = NULL;
-  }
-
-  content::WebContents* contents_;
-  content::NotificationRegistrar registrar_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsCloseObserver);
-};
-
 // TODO(koz): Consolidate this function and remove the special casing.
 const Extension* GetPlatformApp(Profile* profile,
                                 const std::string& extension_id) {
@@ -304,16 +266,13 @@ const Extension* GetPlatformApp(Profile* profile,
 
 namespace internals {
 
-GURL GetWelcomePageURL() {
-  std::string welcome_url = l10n_util::GetStringUTF8(IDS_WELCOME_PAGE_URL);
-  return GURL(welcome_url);
+GURL GetTriggeredResetSettingsURL() {
+  return GURL(
+      chrome::GetSettingsUrl(chrome::kTriggeredResetProfileSettingsSubPage));
 }
 
-GURL GetVivaldiNewTabURL() {
-  std::string url =
-      "chrome-extension://mpognobbkildjkofajifpdfhcoklimli/"
-      "components/startpage/startpage.html";
-  return GURL(url);
+GURL GetWelcomePageURL() {
+  return GURL(l10n_util::GetStringUTF8(IDS_WELCOME_PAGE_URL));
 }
 
 }  // namespace internals
@@ -346,23 +305,6 @@ StartupBrowserCreatorImpl::StartupBrowserCreatorImpl(
 StartupBrowserCreatorImpl::~StartupBrowserCreatorImpl() {
 }
 
-
-#if defined(OS_WIN)
-const int kWinSparkleInitDelaySecs = 20;
-
-void WinSparkleCheckForUpdates() {
-  win_sparkle_check_update_without_ui();
-
-  int interval_secs = win_sparkle_get_update_check_interval();
-  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-      base::Bind(&WinSparkleCheckForUpdates),
-      base::TimeDelta::FromSeconds(interval_secs));
-}
-
-#endif
-
-//#define _DEBUG_AUTOUPDATE
-
 bool StartupBrowserCreatorImpl::Launch(Profile* profile,
                                        const std::vector<GURL>& urls_to_open,
                                        bool process_startup,
@@ -374,120 +316,11 @@ bool StartupBrowserCreatorImpl::Launch(Profile* profile,
   DCHECK(profile);
   profile_ = profile;
 
-  std::string app_id = "mpognobbkildjkofajifpdfhcoklimli";
-
-  if (command_line_.HasSwitch(switches::kDnsLogDetails))
-    chrome_browser_net::EnablePredictorDetailedLog(true);
-
   if (AppListService::HandleLaunchCommandLine(command_line_, profile))
     return true;
-  if (command_line_.IsRunningVivaldi() && !command_line_.IsDebuggingVivaldi()) {
-    // Default is now launching the Vivaldi App.
-    // TODO(sverrir@vivaldi.com): Remove
-    const Extension* extension = GetPlatformApp(profile, app_id);
-    // If |app_id| is a disabled platform app we handle it specially here,
-    // otherwise it will be handled below.
-    if (extension) {
-      RecordCmdLineAppHistogram(extensions::Manifest::TYPE_PLATFORM_APP);
-#if defined(OS_WIN) || defined(OS_MACOSX)
-      static bool vivaldi_updater_initialized = false;
-      if (!vivaldi_updater_initialized) {
-        const char kVivaldiAppCastUrl[] =
-#if defined(_DEBUG) && defined(_DEBUG_AUTOUPDATE)
-          // This is for debugging/testing in debug builds
-#if defined(OS_MACOSX)
-          "http://mirror.viv.osl/~jarle/sparkle/mac_appcast.xml";
-#elif defined(_WIN64)
-          "http://mirror.viv.osl/~jarle/sparkle/appcast.x64.xml";
-#else
-          "http://mirror.viv.osl/~jarle/sparkle/appcast.xml";
-#endif
-#elif defined(OFFICIAL_BUILD) && \
-        (UPDATE_SOURCE_WIN(VIVALDI_RELEASE) == UPDATE_PREVIEW_SOURCE_WINDOWS)
-          // This is the public snapshot release channel
-#if defined(OS_MACOSX)
-          "https://update.vivaldi.com/update/1.0/public/mac/appcast.xml";
-#elif defined(_WIN64)
-          "https://update.vivaldi.com/update/1.0/public/appcast.x64.xml";
-#else
-          "https://update.vivaldi.com/update/1.0/public/appcast.xml";
-#endif
-#elif defined(OFFICIAL_BUILD)
-          // This is the public snapshot release channel
-#if defined(OS_MACOSX)
-          "https://update.vivaldi.com/update/1.0/mac/appcast.xml";
-#elif defined(_WIN64)
-          "https://update.vivaldi.com/update/1.0/win/appcast.x64.xml";
-#else
-          "https://update.vivaldi.com/update/1.0/win/appcast.xml";
-#endif
-#else
-          // This is the internal sopranos release channel
-#if defined(OS_MACOSX)
-          "https://update.vivaldi.com/update/1.0/sopranos_new/mac/appcast.xml";
-#elif defined(_WIN64)
-          "https://update.vivaldi.com/update/1.0/sopranos_new/appcast.x64.xml";
-#else
-          "https://update.vivaldi.com/update/1.0/sopranos_new/appcast.xml";
-#endif
-#endif
-        GURL appcast_url(kVivaldiAppCastUrl);
-        DCHECK(appcast_url.is_valid());
-        bool show_vuu = false;
 
-        if (command_line_.HasSwitch(switches::kVivaldiUpdateURL)) {
-          // Ref. VB-7983: If the --vuu switch is specified,
-          // show the update url in a messagebox/stdout
-          show_vuu = true;
-          std::string vuu =
-            command_line_.GetSwitchValueASCII(switches::kVivaldiUpdateURL);
-          if (!vuu.empty()) {
-            GURL gurl(vuu);
-            if (gurl.is_valid()) {
-              // Use the supplied url for update.
-              appcast_url = gurl;
-            }
-          }
-        }
-#if defined(OS_WIN)
-        if (show_vuu) {
-          ::MessageBoxA(NULL, appcast_url.spec().c_str(), "Vivaldi Update URL:",
-            MB_ICONINFORMATION | MB_SETFOREGROUND);
-        }
-
-        const char kUpdateRegPath[] = "Software\\Vivaldi\\AutoUpdate";
-        const wchar_t kVivaldiKey[] = L"Software\\Vivaldi\\AutoUpdate";
-        const wchar_t kEnabled[] = L"Enabled";
-
-        win_sparkle_set_appcast_url(appcast_url.spec().c_str());
-        win_sparkle_set_registry_path(kUpdateRegPath);
-        win_sparkle_set_automatic_check_for_updates(0);
-
-        std::string locale = base::i18n::GetConfiguredLocale();
-        win_sparkle_set_lang(locale.c_str());
-
-        win_sparkle_init();
-
-        base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_QUERY_VALUE);
-        std::wstring enabled;
-        if (key.Valid())
-          key.ReadValue(kEnabled, &enabled);
-        if (enabled == L"1") {
-          base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
-            base::Bind(&WinSparkleCheckForUpdates),
-            base::TimeDelta::FromSeconds(kWinSparkleInitDelaySecs));
-        }
-#elif defined(OS_MACOSX)
-        SparkleUtil::SetFeedURL(appcast_url.spec().c_str());
-        if (show_vuu) {
-          std::string feed_url = SparkleUtil::GetFeedURL();
-          std::cout << "Vivaldi Update URL = " << feed_url.c_str() << std::endl;
-        }
-#endif
-        vivaldi_updater_initialized = true;
-      }
-#endif
-    }
+  if (vivaldi::LaunchVivaldi(command_line_, cur_dir_, profile)) {
+      // Operation completed in function
   } else if (command_line_.HasSwitch(switches::kAppId)) {
     std::string app_id = command_line_.GetSwitchValueASCII(switches::kAppId);
     const Extension* extension = GetPlatformApp(profile, app_id);
@@ -503,7 +336,7 @@ bool StartupBrowserCreatorImpl::Launch(Profile* profile,
       // If we are being launched from the command line, default to native
       // desktop.
       params.desktop_type = chrome::HOST_DESKTOP_TYPE_NATIVE;
-      OpenApplicationWithReenablePrompt(params);
+      ::OpenApplicationWithReenablePrompt(params);
       return true;
     }
   }
@@ -515,8 +348,7 @@ bool StartupBrowserCreatorImpl::Launch(Profile* profile,
   // not as chrome.
   // Special case is when app switches are passed but we do want to restore
   // session. In that case open app window + focus it after session is restored.
-  content::WebContents* app_contents = NULL;
-  if (OpenApplicationWindow(profile, &app_contents)) {
+  if (OpenApplicationWindow(profile)) {
     RecordLaunchModeHistogram(LM_AS_WEBAPP);
   } else {
     RecordLaunchModeHistogram(urls_to_open.empty() ?
@@ -555,22 +387,13 @@ bool StartupBrowserCreatorImpl::Launch(Profile* profile,
   }
 
 #if defined(OS_WIN)
+  // TODO(gab): This could now run only during Active Setup (i.e. on explicit
+  // Active Setup versioning and on OS upgrades) instead of every startup.
+  // http://crbug.com/577697
   if (process_startup)
-    ShellIntegration::MigrateChromiumShortcuts();
+    ShellIntegration::MigrateTaskbarPins();
 #endif  // defined(OS_WIN)
-  if (command_line_.IsRunningVivaldi() && !command_line_.IsDebuggingVivaldi()) {
-    const Extension* extension = GetPlatformApp(profile, app_id);
-    AppLaunchParams params(profile, extension,
-                           extensions::LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                           extensions::SOURCE_EXTENSIONS_PAGE);
-    params.command_line = command_line_;
-    params.current_directory = cur_dir_;
 
-    if (first_run::ShouldShowWelcomePage()) {
-      params.command_line.AppendArg(internals::GetWelcomePageURL().spec());
-    }
-    OpenApplicationWithReenablePrompt(params);
-  }
   return true;
 }
 
@@ -609,19 +432,13 @@ bool StartupBrowserCreatorImpl::OpenApplicationTab(Profile* profile) {
 
   RecordCmdLineAppHistogram(extension->GetType());
 
-  WebContents* app_tab = OpenApplication(
+  WebContents* app_tab = ::OpenApplication(
       AppLaunchParams(profile, extension, extensions::LAUNCH_CONTAINER_TAB,
                       NEW_FOREGROUND_TAB, extensions::SOURCE_COMMAND_LINE));
   return (app_tab != NULL);
 }
 
-bool StartupBrowserCreatorImpl::OpenApplicationWindow(
-    Profile* profile,
-    content::WebContents** out_app_contents) {
-  // Set |out_app_contents| to NULL early on (just in case).
-  if (out_app_contents)
-    *out_app_contents = NULL;
-
+bool StartupBrowserCreatorImpl::OpenApplicationWindow(Profile* profile) {
   std::string url_string, app_id;
   if (!IsAppLaunch(&url_string, &app_id))
     return false;
@@ -649,10 +466,7 @@ bool StartupBrowserCreatorImpl::OpenApplicationWindow(
                            extensions::SOURCE_COMMAND_LINE);
     params.command_line = command_line_;
     params.current_directory = cur_dir_;
-    WebContents* tab_in_app_window = OpenApplication(params);
-
-    if (out_app_contents)
-      *out_app_contents = tab_in_app_window;
+    WebContents* tab_in_app_window = ::OpenApplication(params);
 
     // Platform apps fire off a launch event which may or may not open a window.
     return (tab_in_app_window != NULL || CanLaunchViaEvent(extension));
@@ -683,11 +497,7 @@ bool StartupBrowserCreatorImpl::OpenApplicationWindow(
             extensions::Manifest::TYPE_HOSTED_APP);
       }
 
-      WebContents* app_tab = OpenAppShortcutWindow(profile, url);
-
-      if (out_app_contents)
-        *out_app_contents = app_tab;
-
+      WebContents* app_tab = ::OpenAppShortcutWindow(profile, url);
       return (app_tab != NULL);
     }
   }
@@ -698,14 +508,9 @@ void StartupBrowserCreatorImpl::ProcessLaunchURLs(
     bool process_startup,
     const std::vector<GURL>& urls_to_open,
     chrome::HostDesktopType desktop_type) {
-  // If we're starting up in "background mode" (no open browser window) then
-  // don't open any browser windows, unless kAutoLaunchAtStartup is also
-  // specified.
-  if (process_startup &&
-      command_line_.HasSwitch(switches::kNoStartupWindow) &&
-      !command_line_.HasSwitch(switches::kAutoLaunchAtStartup)) {
+  // Don't open any browser windows if we're starting up in "background mode".
+  if (process_startup && command_line_.HasSwitch(switches::kNoStartupWindow))
     return;
-  }
 
   // Determine whether or not this launch must include the welcome page.
   InitializeWelcomeRunType(urls_to_open);
@@ -740,10 +545,7 @@ void StartupBrowserCreatorImpl::ProcessLaunchURLs(
       // if desired.
       if (!HasPendingUncleanExit(profile_)) {
         std::vector<GURL> adjusted_urls(urls_to_open);
-        if (welcome_run_type_ == WelcomeRunType::FIRST_TAB) {
-          adjusted_urls.insert(adjusted_urls.begin(),
-                               internals::GetWelcomePageURL());
-        }
+        AddSpecialURLs(&adjusted_urls);
         if (service->RestoreIfNecessary(adjusted_urls))
           return;
       }
@@ -799,7 +601,7 @@ bool StartupBrowserCreatorImpl::ProcessStartupURLs(
   if (pref.type == SessionStartupPref::LAST) {
     if (profile_->GetLastSessionExitType() == Profile::EXIT_CRASHED &&
         !command_line_.HasSwitch(switches::kRestoreLastSession) &&
-        !command_line_.IsRunningVivaldi()) {
+        !vivaldi::IsVivaldiRunning(command_line_)) {
       // The last session crashed. It's possible automatically loading the
       // page will trigger another crash, locking the user out of chrome.
       // To avoid this, don't restore on startup but instead show the crashed
@@ -808,7 +610,7 @@ bool StartupBrowserCreatorImpl::ProcessStartupURLs(
       return false;
     }
 
-    uint32 restore_behavior = SessionRestore::SYNCHRONOUS;
+    uint32_t restore_behavior = SessionRestore::SYNCHRONOUS;
     if (browser_defaults::kAlwaysCreateTabbedBrowserOnSessionRestore ||
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kCreateBrowserOnStartupForTests)) {
@@ -825,12 +627,8 @@ bool StartupBrowserCreatorImpl::ProcessStartupURLs(
     }
 #endif
 
-    // Optionally include the welcome page.
     std::vector<GURL> adjusted_urls(urls_to_open);
-    if (welcome_run_type_ == WelcomeRunType::FIRST_TAB) {
-      adjusted_urls.insert(adjusted_urls.begin(),
-                           internals::GetWelcomePageURL());
-    }
+    AddSpecialURLs(&adjusted_urls);
 
     // The startup code only executes for browsers launched in desktop mode.
     // i.e. HOST_DESKTOP_TYPE_NATIVE. Ash should never get here.
@@ -888,17 +686,14 @@ Browser* StartupBrowserCreatorImpl::ProcessSpecifiedURLs(
     UrlsToTabs(urls, &tabs);
   } else if (pref.type == SessionStartupPref::URLS && !pref.urls.empty() &&
              !HasPendingUncleanExit(profile_)) {
-    // Optionally include the welcome page first.
-    if (welcome_run_type_ == WelcomeRunType::FIRST_TAB)
-      UrlsToTabs(std::vector<GURL>(1, internals::GetWelcomePageURL()), &tabs);
+    std::vector<GURL> extra_urls;
+    AddSpecialURLs(&extra_urls);
+    UrlsToTabs(extra_urls, &tabs);
+
     // Only use the set of urls specified in preferences if nothing was
     // specified on the command line. Filter out any urls that are to be
     // restored by virtue of having been previously pinned.
     AddUniqueURLs(pref.urls, &tabs);
-  } else if (pref.type == SessionStartupPref::HOMEPAGE) {
-    // If 'homepage' selected, either by the user or by a policy, we should
-    // have migrated them to another value.
-    NOTREACHED() << "SessionStartupPref has deprecated type HOMEPAGE";
   }
 
   if (tabs.empty())
@@ -980,8 +775,8 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
 
 #if defined(ENABLE_RLZ) && !defined(OS_IOS)
     if (process_startup && google_util::IsGoogleHomePageUrl(tabs[i].url)) {
-      params.extra_headers = RLZTracker::GetAccessPointHttpHeader(
-          RLZTracker::ChromeHomePage());
+      params.extra_headers = rlz::RLZTracker::GetAccessPointHttpHeader(
+          rlz::RLZTracker::ChromeHomePage());
     }
 #endif  // defined(ENABLE_RLZ) && !defined(OS_IOS)
 
@@ -990,7 +785,7 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
     first_tab = false;
   }
   if (!browser->tab_strip_model()->GetActiveWebContents()) {
-    // TODO: this is a work around for 110909. Figure out why it's needed.
+    // TODO(sky): this is a work around for 110909. Figure out why it's needed.
     if (!browser->tab_strip_model()->count())
       chrome::AddTabAt(browser, GURL(), -1, true);
     else
@@ -1014,7 +809,7 @@ void StartupBrowserCreatorImpl::AddInfoBarsIfNecessary(
     return;
 
   if (HasPendingUncleanExit(browser->profile()) &&
-      !browser->window()->ShowSessionCrashedBubble()) {
+      !SessionCrashedBubble::Show(browser)) {
     SessionCrashedInfoBarDelegate::Create(browser);
   }
 
@@ -1035,10 +830,9 @@ void StartupBrowserCreatorImpl::AddInfoBarsIfNecessary(
       // Generally, the default browser prompt should not be shown on first
       // run. However, when the set-as-default dialog has been suppressed, we
       // need to allow it.
-      if ((!is_first_run_ ||
-           (browser_creator_ &&
-            browser_creator_->is_default_browser_dialog_suppressed())) &&
-          !chrome::ShowAutolaunchPrompt(browser)) {
+      if (!is_first_run_ ||
+          (browser_creator_ &&
+           browser_creator_->is_default_browser_dialog_suppressed())) {
         chrome::ShowDefaultBrowserPrompt(profile_,
                                          browser->host_desktop_type());
       }
@@ -1072,27 +866,28 @@ void StartupBrowserCreatorImpl::AddStartupURLs(
       browser_creator_->first_run_tabs_.clear();
     }
   }
+
   // Otherwise open at least the new tab page (and optionally the welcome page
-  // at the front or back as indicated by welcome_run_type_), or the set of URLs
-  // specified on the command line.
+  // at the front or back as indicated by welcome_run_type_, any pages deemed needed by
+  // AddSpecialURLs()), or the set of URLs specified on the command line.
   if (startup_urls->empty()) {
-    if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
-      if (welcome_run_type_ == WelcomeRunType::FIRST_TAB ||
-          welcome_run_type_ == WelcomeRunType::FIRST_RUN_LAST_TAB) {
-        startup_urls->push_back(internals::GetWelcomePageURL());
-      } else {
-        startup_urls->push_back(internals::GetVivaldiNewTabURL());
-      }
-    } else {
-      startup_urls->push_back(GURL(chrome::kChromeUINewTabURL));
+    AddSpecialURLs(startup_urls);
+
+    if (!vivaldi::AddVivaldiNewPage(welcome_run_type_ == WelcomeRunType::NONE,
+                                    startup_urls)) {
+    startup_urls->push_back(GURL(chrome::kChromeUINewTabURL));
     }
+    // Special case the FIRST_RUN_LAST_TAB case of the welcome page.
+    if (welcome_run_type_ == WelcomeRunType::FIRST_RUN_LAST_TAB)
+      startup_urls->push_back(internals::GetWelcomePageURL());
   }
 
   if (signin::ShouldShowPromoAtStartup(profile_, is_first_run_)) {
     signin::DidShowPromoAtStartup(profile_);
 
     const GURL sync_promo_url = signin::GetPromoURL(
-        signin_metrics::SOURCE_START_PAGE, false);
+        signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
+        signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false);
 
     // No need to add if the sync promo is already in the startup list.
     bool add_promo = true;
@@ -1114,6 +909,20 @@ void StartupBrowserCreatorImpl::AddStartupURLs(
       else
         startup_urls->insert(startup_urls->begin(), sync_promo_url);
     }
+  }
+}
+
+void StartupBrowserCreatorImpl::AddSpecialURLs(
+    std::vector<GURL>* url_list) const {
+  // Optionally include the welcome page.
+  if (welcome_run_type_ == WelcomeRunType::FIRST_TAB)
+    url_list->insert(url_list->begin(), internals::GetWelcomePageURL());
+
+  // If this Profile is marked for a reset prompt, ensure the reset
+  // settings dialog appears.
+  if (ProfileHasResetTrigger()) {
+    url_list->insert(url_list->begin(),
+                     internals::GetTriggeredResetSettingsURL());
   }
 }
 
@@ -1194,4 +1003,17 @@ void StartupBrowserCreatorImpl::RecordRapporOnStartupURLs(
     rappor::SampleDomainAndRegistryFromGURL(g_browser_process->rappor_service(),
                                             "Startup.BrowserLaunchURL", url);
   }
+}
+
+bool StartupBrowserCreatorImpl::ProfileHasResetTrigger() const {
+  bool has_reset_trigger = false;
+#if defined(OS_WIN)
+  TriggeredProfileResetter* triggered_profile_resetter =
+      TriggeredProfileResetterFactory::GetForBrowserContext(profile_);
+  // TriggeredProfileResetter instance will be nullptr for incognito profiles.
+  if (triggered_profile_resetter) {
+    has_reset_trigger = triggered_profile_resetter->HasResetTrigger();
+  }
+#endif  // defined(OS_WIN)
+  return has_reset_trigger;
 }

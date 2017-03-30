@@ -4,15 +4,20 @@
 
 #include "net/url_request/url_request.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/debug/stack_trace.h"
 #include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/profiler/scoped_tracker.h"
+#include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -50,28 +55,17 @@ namespace {
 // Max number of http redirects to follow.  Same number as gecko.
 const int kMaxRedirects = 20;
 
-// Discard headers which have meaning in POST (Content-Length, Content-Type,
-// Origin).
-void StripPostSpecificHeaders(HttpRequestHeaders* headers) {
-  // These are headers that may be attached to a POST.
-  headers->RemoveHeader(HttpRequestHeaders::kContentLength);
-  headers->RemoveHeader(HttpRequestHeaders::kContentType);
-  // TODO(jww): This is Origin header removal is probably layering violation and
-  // should be refactored into //content. See https://crbug.com/471397.
-  headers->RemoveHeader(HttpRequestHeaders::kOrigin);
-}
-
 // TODO(battre): Delete this, see http://crbug.com/89321:
 // This counter keeps track of the identifiers used for URL requests so far.
 // 0 is reserved to represent an invalid ID.
-uint64 g_next_url_request_identifier = 1;
+uint64_t g_next_url_request_identifier = 1;
 
 // This lock protects g_next_url_request_identifier.
 base::LazyInstance<base::Lock>::Leaky
     g_next_url_request_identifier_lock = LAZY_INSTANCE_INITIALIZER;
 
 // Returns an prior unused identifier for URL requests.
-uint64 GenerateURLRequestIdentifier() {
+uint64_t GenerateURLRequestIdentifier() {
   base::AutoLock lock(g_next_url_request_identifier_lock.Get());
   return g_next_url_request_identifier++;
 }
@@ -216,7 +210,7 @@ void URLRequest::AppendChunkToUpload(const char* bytes,
 }
 
 void URLRequest::set_upload(scoped_ptr<UploadDataStream> upload) {
-  upload_data_stream_ = upload.Pass();
+  upload_data_stream_ = std::move(upload);
 }
 
 const UploadDataStream* URLRequest::get_upload() const {
@@ -259,11 +253,18 @@ bool URLRequest::GetFullRequestHeaders(HttpRequestHeaders* headers) const {
   return job_->GetFullRequestHeaders(headers);
 }
 
-int64 URLRequest::GetTotalReceivedBytes() const {
+int64_t URLRequest::GetTotalReceivedBytes() const {
   if (!job_.get())
     return 0;
 
   return job_->GetTotalReceivedBytes();
+}
+
+int64_t URLRequest::GetTotalSentBytes() const {
+  if (!job_.get())
+    return 0;
+
+  return job_->GetTotalSentBytes();
 }
 
 LoadStateWithParam URLRequest::GetLoadState() const {
@@ -288,7 +289,7 @@ scoped_ptr<base::Value> URLRequest::GetStateAsValue() const {
     for (const GURL& url : url_chain_) {
       list->AppendString(url.possibly_invalid_spec());
     }
-    dict->Set("url_chain", list.Pass());
+    dict->Set("url_chain", std::move(list));
   }
 
   dict->SetInteger("load_flags", load_flags_);
@@ -323,7 +324,7 @@ scoped_ptr<base::Value> URLRequest::GetStateAsValue() const {
   }
   if (status_.error() != OK)
     dict->SetInteger("net_error", status_.error());
-  return dict.Pass();
+  return std::move(dict);
 }
 
 void URLRequest::LogBlockedBy(const char* blocked_by) {
@@ -393,6 +394,19 @@ void URLRequest::GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const {
   *load_timing_info = load_timing_info_;
 }
 
+void URLRequest::PopulateNetErrorDetails(NetErrorDetails* details) const {
+  if (!job_)
+    return;
+  return job_->PopulateNetErrorDetails(details);
+}
+
+bool URLRequest::GetRemoteEndpoint(IPEndPoint* endpoint) const {
+  if (!job_)
+    return false;
+
+  return job_->GetRemoteEndpoint(endpoint);
+}
+
 bool URLRequest::GetResponseCookies(ResponseCookies* cookies) {
   DCHECK(job_.get());
   return job_->GetResponseCookies(cookies);
@@ -460,6 +474,11 @@ void URLRequest::set_first_party_url_policy(
   first_party_url_policy_ = first_party_url_policy;
 }
 
+void URLRequest::set_initiator(const url::Origin& initiator) {
+  DCHECK(!is_pending_);
+  initiator_ = initiator;
+}
+
 void URLRequest::set_method(const std::string& method) {
   DCHECK(!is_pending_);
   method_ = method;
@@ -481,10 +500,14 @@ void URLRequest::set_referrer_policy(ReferrerPolicy referrer_policy) {
 }
 
 void URLRequest::set_delegate(Delegate* delegate) {
+  DCHECK(!delegate_);
+  DCHECK(delegate);
   delegate_ = delegate;
 }
 
 void URLRequest::Start() {
+  DCHECK(delegate_);
+
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/456327 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
       FROM_HERE_WITH_EXPLICIT_FUNCTION("456327 URLRequest::Start"));
@@ -609,7 +632,7 @@ void URLRequest::StartJob(URLRequestJob* job) {
                  &url(), &method_, load_flags_, priority_,
                  upload_data_stream_ ? upload_data_stream_->identifier() : -1));
 
-  job_ = job;
+  job_.reset(job);
   job_->SetExtraRequestHeaders(extra_request_headers_);
   job_->SetPriority(priority_);
 
@@ -679,6 +702,24 @@ void URLRequest::CancelWithSSLError(int error, const SSLInfo& ssl_info) {
 
 void URLRequest::DoCancel(int error, const SSLInfo& ssl_info) {
   DCHECK(error < 0);
+  // ~500,000 ERR_ABORTED < 100ms in Canary channel a day. Sample .01% to get
+  // ~50 reports a day.
+  // TODO(csharrison) Remove this code when crbug.com/557430 is resolved.
+  int64_t request_time =
+      (base::TimeTicks::Now() - creation_time_).InMilliseconds();
+  if (!has_notified_completion_ && error == ERR_ABORTED &&
+      request_time <= 100 && load_flags_ & LOAD_MAIN_FRAME &&
+      base::RandDouble() < .00001) {
+    static int dump_times = 0;
+    if (dump_times < 5) {
+      char url_copy[256] = {0};
+      strncpy(url_copy, url().spec().c_str(), sizeof(url_copy));
+      base::debug::Alias(&url_copy);
+      base::debug::Alias(&request_time);
+      base::debug::DumpWithoutCrashing();
+      dump_times++;
+    }
+  }
   // If cancelled while calling a delegate, clear delegate info.
   if (calling_delegate_) {
     LogUnblocked();
@@ -762,7 +803,7 @@ void URLRequest::NotifyReceivedRedirect(const RedirectInfo& redirect_info,
           this, network_delegate_, redirect_info.new_url);
   if (job) {
     RestartWithJob(job);
-  } else if (delegate_) {
+  } else {
     OnCallToDelegate();
     delegate_->OnReceivedRedirect(this, redirect_info, defer_redirect);
     // |this| may be have been destroyed here.
@@ -770,7 +811,7 @@ void URLRequest::NotifyReceivedRedirect(const RedirectInfo& redirect_info,
 }
 
 void URLRequest::NotifyBeforeNetworkStart(bool* defer) {
-  if (delegate_ && !notified_before_network_start_) {
+  if (!notified_before_network_start_) {
     OnCallToDelegate();
     delegate_->OnBeforeNetworkStart(this, defer);
     if (!*defer)
@@ -800,23 +841,21 @@ void URLRequest::NotifyResponseStarted() {
   if (job) {
     RestartWithJob(job);
   } else {
-    if (delegate_) {
-      // In some cases (e.g. an event was canceled), we might have sent the
-      // completion event and receive a NotifyResponseStarted() later.
-      if (!has_notified_completion_ && status_.is_success()) {
-        if (network_delegate_)
-          network_delegate_->NotifyResponseStarted(this);
-      }
-
-      // Notify in case the entire URL Request has been finished.
-      if (!has_notified_completion_ && !status_.is_success())
-        NotifyRequestCompleted();
-
-      OnCallToDelegate();
-      delegate_->OnResponseStarted(this);
-      // Nothing may appear below this line as OnResponseStarted may delete
-      // |this|.
+    // In some cases (e.g. an event was canceled), we might have sent the
+    // completion event and receive a NotifyResponseStarted() later.
+    if (!has_notified_completion_ && status_.is_success()) {
+      if (network_delegate_)
+        network_delegate_->NotifyResponseStarted(this);
     }
+
+    // Notify in case the entire URL Request has been finished.
+    if (!has_notified_completion_ && !status_.is_success())
+      NotifyRequestCompleted();
+
+    OnCallToDelegate();
+    delegate_->OnResponseStarted(this);
+    // Nothing may appear below this line as OnResponseStarted may delete
+    // |this|.
   }
 }
 
@@ -841,10 +880,11 @@ void URLRequest::CancelAuth() {
   job_->CancelAuth();
 }
 
-void URLRequest::ContinueWithCertificate(X509Certificate* client_cert) {
+void URLRequest::ContinueWithCertificate(X509Certificate* client_cert,
+                                         SSLPrivateKey* client_private_key) {
   DCHECK(job_.get());
 
-  job_->ContinueWithCertificate(client_cert);
+  job_->ContinueWithCertificate(client_cert, client_private_key);
 }
 
 void URLRequest::ContinueDespiteLastError() {
@@ -884,7 +924,6 @@ void URLRequest::OrphanJob() {
   //   NetworkDelegate::NotifyURLRequestDestroyed notifies the NetworkDelegate
   //   that the callback becomes invalid.
   job_->Kill();
-  job_->DetachRequest();  // ensures that the job will not call us again
   job_ = NULL;
 }
 
@@ -922,13 +961,18 @@ int URLRequest::Redirect(const RedirectInfo& redirect_info) {
   if (redirect_info.new_method != method_) {
     // TODO(davidben): This logic still needs to be replicated at the consumers.
     if (method_ == "POST") {
-      // If being switched from POST, must remove headers that were specific to
-      // the POST and don't have meaning in other methods. For example the
-      // inclusion of a multipart Content-Type header in GET can cause problems
-      // with some servers:
-      // http://code.google.com/p/chromium/issues/detail?id=843
-      StripPostSpecificHeaders(&extra_request_headers_);
+      // If being switched from POST, must remove Origin header.
+      // TODO(jww): This is Origin header removal is probably layering violation
+      // and
+      // should be refactored into //content. See https://crbug.com/471397.
+      extra_request_headers_.RemoveHeader(HttpRequestHeaders::kOrigin);
     }
+    // The inclusion of a multipart Content-Type header can cause problems with
+    // some
+    // servers:
+    // http://code.google.com/p/chromium/issues/detail?id=843
+    extra_request_headers_.RemoveHeader(HttpRequestHeaders::kContentLength);
+    extra_request_headers_.RemoveHeader(HttpRequestHeaders::kContentType);
     upload_data_stream_.reset();
     method_ = redirect_info.new_method;
   }
@@ -939,21 +983,20 @@ int URLRequest::Redirect(const RedirectInfo& redirect_info) {
   // not set to "null", a POST request from origin A to a malicious origin M
   // could be redirected by M back to A.
   //
-  // In the Section 4.2, Step 4.10 of the Fetch spec
-  // (https://fetch.spec.whatwg.org/#concept-http-fetch), it states that on
-  // cross-origin 301, 302, 303, 307, and 308 redirects, the user agent should
-  // set the request's origin to an "opaque identifier," which serializes to
-  // "null." This matches Firefox and IE behavior, although it supercedes the
-  // suggested behavior in RFC 6454, "The Web Origin Concept."
+  // This behavior is specified in step 1 of step 10 of the 301, 302, 303, 307,
+  // 308 block of step 5 of Section 4.2 of Fetch[1] (which supercedes the
+  // behavior outlined in RFC 6454[2].
   //
-  // See also https://crbug.com/465517.
+  // [1]: https://fetch.spec.whatwg.org/#concept-http-fetch
+  // [2]: https://tools.ietf.org/html/rfc6454#section-7
   //
-  // TODO(jww): This is probably layering violation and should be refactored
-  // into //content. See https://crbug.com/471397.
-  if (redirect_info.new_url.GetOrigin() != url().GetOrigin() &&
+  // TODO(jww): This is a layering violation and should be refactored somewhere
+  // up into //net's embedder. https://crbug.com/471397
+  if (!url::Origin(redirect_info.new_url)
+           .IsSameOriginWith(url::Origin(url())) &&
       extra_request_headers_.HasHeader(HttpRequestHeaders::kOrigin)) {
     extra_request_headers_.SetHeader(HttpRequestHeaders::kOrigin,
-                                     url::Origin().string());
+                                     url::Origin().Serialize());
   }
 
   referrer_ = redirect_info.new_referrer;
@@ -970,8 +1013,8 @@ const URLRequestContext* URLRequest::context() const {
   return context_;
 }
 
-int64 URLRequest::GetExpectedContentSize() const {
-  int64 expected_content_size = -1;
+int64_t URLRequest::GetExpectedContentSize() const {
+  int64_t expected_content_size = -1;
   if (job_.get())
     expected_content_size = job_->expected_content_size();
 
@@ -995,7 +1038,7 @@ void URLRequest::SetPriority(RequestPriority priority) {
   priority_ = priority;
   if (job_.get()) {
     net_log_.AddEvent(NetLog::TYPE_URL_REQUEST_SET_PRIORITY,
-                      NetLog::IntegerCallback("priority", priority_));
+                      NetLog::IntCallback("priority", priority_));
     job_->SetPriority(priority_);
   }
 }
@@ -1054,8 +1097,7 @@ void URLRequest::NotifyAuthRequiredComplete(
     case NetworkDelegate::AUTH_REQUIRED_RESPONSE_NO_ACTION:
       // Defer to the URLRequest::Delegate, since the NetworkDelegate
       // didn't take an action.
-      if (delegate_)
-        delegate_->OnAuthRequired(this, auth_info.get());
+      delegate_->OnAuthRequired(this, auth_info.get());
       break;
 
     case NetworkDelegate::AUTH_REQUIRED_RESPONSE_SET_AUTH:
@@ -1074,14 +1116,12 @@ void URLRequest::NotifyAuthRequiredComplete(
 
 void URLRequest::NotifyCertificateRequested(
     SSLCertRequestInfo* cert_request_info) {
-  if (delegate_)
-    delegate_->OnCertificateRequested(this, cert_request_info);
+  delegate_->OnCertificateRequested(this, cert_request_info);
 }
 
 void URLRequest::NotifySSLCertificateError(const SSLInfo& ssl_info,
                                            bool fatal) {
-  if (delegate_)
-    delegate_->OnSSLCertificateError(this, ssl_info, fatal);
+  delegate_->OnSSLCertificateError(this, ssl_info, fatal);
 }
 
 bool URLRequest::CanGetCookies(const CookieList& cookie_list) const {
@@ -1122,8 +1162,7 @@ void URLRequest::NotifyReadCompleted(int bytes_read) {
   if (bytes_read > 0 && !was_cached())
     NetworkChangeNotifier::NotifyDataReceived(*this, bytes_read);
 
-  if (delegate_)
-    delegate_->OnReadCompleted(this, bytes_read);
+  delegate_->OnReadCompleted(this, bytes_read);
 
   // Nothing below this line as OnReadCompleted may delete |this|.
 }

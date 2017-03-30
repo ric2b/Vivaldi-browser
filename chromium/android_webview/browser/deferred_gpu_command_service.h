@@ -5,14 +5,22 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_DEFERRED_GPU_COMMAND_SERVICE_H_
 #define ANDROID_WEBVIEW_BROWSER_DEFERRED_GPU_COMMAND_SERVICE_H_
 
+#include <stddef.h>
+
 #include <queue>
 #include <utility>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_local.h"
 #include "base/time/time.h"
 #include "gpu/command_buffer/service/in_process_command_buffer.h"
+
+namespace gpu {
+class SyncPointManager;
+}
 
 namespace android_webview {
 
@@ -37,10 +45,13 @@ class DeferredGpuCommandService
   static DeferredGpuCommandService* GetInstance();
 
   void ScheduleTask(const base::Closure& task) override;
-  void ScheduleIdleWork(const base::Closure& task) override;
+  void ScheduleDelayedWork(const base::Closure& task) override;
   bool UseVirtualizedGLContexts() override;
   scoped_refptr<gpu::gles2::ShaderTranslatorCache> shader_translator_cache()
       override;
+  scoped_refptr<gpu::gles2::FramebufferCompletenessCache>
+  framebuffer_completeness_cache() override;
+  gpu::SyncPointManager* sync_point_manager() override;
 
   void RunTasks();
   // If |is_idle| is false, this will only run older idle tasks.
@@ -68,7 +79,10 @@ class DeferredGpuCommandService
   std::queue<base::Closure> tasks_;
   std::queue<std::pair<base::Time, base::Closure> > idle_tasks_;
 
+  scoped_ptr<gpu::SyncPointManager> sync_point_manager_;
   scoped_refptr<gpu::gles2::ShaderTranslatorCache> shader_translator_cache_;
+  scoped_refptr<gpu::gles2::FramebufferCompletenessCache>
+      framebuffer_completeness_cache_;
   DISALLOW_COPY_AND_ASSIGN(DeferredGpuCommandService);
 };
 

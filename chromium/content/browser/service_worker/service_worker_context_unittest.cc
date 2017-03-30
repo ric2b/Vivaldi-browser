@@ -4,6 +4,8 @@
 
 #include "content/public/browser/service_worker_context.h"
 
+#include <stdint.h>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
@@ -27,10 +29,10 @@ namespace content {
 namespace {
 
 void SaveResponseCallback(bool* called,
-                          int64* store_registration_id,
+                          int64_t* store_registration_id,
                           ServiceWorkerStatusCode status,
                           const std::string& status_message,
-                          int64 registration_id) {
+                          int64_t registration_id) {
   EXPECT_EQ(SERVICE_WORKER_OK, status) << ServiceWorkerStatusToString(status);
   *called = true;
   *store_registration_id = registration_id;
@@ -38,7 +40,7 @@ void SaveResponseCallback(bool* called,
 
 ServiceWorkerContextCore::RegistrationCallback MakeRegisteredCallback(
     bool* called,
-    int64* store_registration_id) {
+    int64_t* store_registration_id) {
   return base::Bind(&SaveResponseCallback, called, store_registration_id);
 }
 
@@ -78,8 +80,7 @@ void ExpectRegisteredWorkers(
 
 class RejectInstallTestHelper : public EmbeddedWorkerTestHelper {
  public:
-  explicit RejectInstallTestHelper(int mock_render_process_id)
-      : EmbeddedWorkerTestHelper(base::FilePath(), mock_render_process_id) {}
+  RejectInstallTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
   void OnInstallEvent(int embedded_worker_id,
                       int request_id) override {
@@ -92,8 +93,7 @@ class RejectInstallTestHelper : public EmbeddedWorkerTestHelper {
 
 class RejectActivateTestHelper : public EmbeddedWorkerTestHelper {
  public:
-  explicit RejectActivateTestHelper(int mock_render_process_id)
-      : EmbeddedWorkerTestHelper(base::FilePath(), mock_render_process_id) {}
+  RejectActivateTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
   void OnActivateEvent(int embedded_worker_id, int request_id) override {
     SimulateSend(
@@ -112,7 +112,7 @@ enum NotificationType {
 struct NotificationLog {
   NotificationType type;
   GURL pattern;
-  int64 registration_id;
+  int64_t registration_id;
 };
 
 }  // namespace
@@ -121,19 +121,17 @@ class ServiceWorkerContextTest : public ServiceWorkerContextObserver,
                                  public testing::Test {
  public:
   ServiceWorkerContextTest()
-      : browser_thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
-        render_process_id_(99) {}
+      : browser_thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP) {}
 
   void SetUp() override {
-    helper_.reset(
-        new EmbeddedWorkerTestHelper(base::FilePath(), render_process_id_));
+    helper_.reset(new EmbeddedWorkerTestHelper(base::FilePath()));
     helper_->context_wrapper()->AddObserver(this);
   }
 
   void TearDown() override { helper_.reset(); }
 
   // ServiceWorkerContextObserver overrides.
-  void OnRegistrationStored(int64 registration_id,
+  void OnRegistrationStored(int64_t registration_id,
                             const GURL& pattern) override {
     NotificationLog log;
     log.type = REGISTRATION_STORED;
@@ -141,7 +139,7 @@ class ServiceWorkerContextTest : public ServiceWorkerContextObserver,
     log.registration_id = registration_id;
     notifications_.push_back(log);
   }
-  void OnRegistrationDeleted(int64 registration_id,
+  void OnRegistrationDeleted(int64_t registration_id,
                              const GURL& pattern) override {
     NotificationLog log;
     log.type = REGISTRATION_DELETED;
@@ -160,7 +158,6 @@ class ServiceWorkerContextTest : public ServiceWorkerContextObserver,
  protected:
   TestBrowserThreadBundle browser_thread_bundle_;
   scoped_ptr<EmbeddedWorkerTestHelper> helper_;
-  const int render_process_id_;
   std::vector<NotificationLog> notifications_;
 };
 
@@ -169,7 +166,7 @@ TEST_F(ServiceWorkerContextTest, Register) {
   GURL pattern("http://www.example.com/");
   GURL script_url("http://www.example.com/service_worker.js");
 
-  int64 registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
       pattern,
@@ -215,9 +212,9 @@ TEST_F(ServiceWorkerContextTest, Register_RejectInstall) {
   GURL script_url("http://www.example.com/service_worker.js");
 
   helper_.reset();  // Make sure the process lookups stay overridden.
-  helper_.reset(new RejectInstallTestHelper(render_process_id_));
+  helper_.reset(new RejectInstallTestHelper);
   helper_->context_wrapper()->AddObserver(this);
-  int64 registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
       pattern,
@@ -262,9 +259,9 @@ TEST_F(ServiceWorkerContextTest, Register_RejectActivate) {
   GURL script_url("http://www.example.com/service_worker.js");
 
   helper_.reset();
-  helper_.reset(new RejectActivateTestHelper(render_process_id_));
+  helper_.reset(new RejectActivateTestHelper);
   helper_->context_wrapper()->AddObserver(this);
-  int64 registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
       pattern, script_url, NULL,
@@ -302,7 +299,7 @@ TEST_F(ServiceWorkerContextTest, Unregister) {
   GURL pattern("http://www.example.com/");
 
   bool called = false;
-  int64 registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
       pattern,
       GURL("http://www.example.com/service_worker.js"),
@@ -348,10 +345,10 @@ TEST_F(ServiceWorkerContextTest, UnregisterMultiple) {
   GURL origin3_p1("http://www.other.com/");
 
   bool called = false;
-  int64 registration_id1 = kInvalidServiceWorkerRegistrationId;
-  int64 registration_id2 = kInvalidServiceWorkerRegistrationId;
-  int64 registration_id3 = kInvalidServiceWorkerRegistrationId;
-  int64 registration_id4 = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id1 = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id2 = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id3 = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id4 = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
       origin1_p1,
       GURL("http://www.example.com/service_worker.js"),
@@ -448,7 +445,7 @@ TEST_F(ServiceWorkerContextTest, RegisterNewScript) {
   GURL pattern("http://www.example.com/");
 
   bool called = false;
-  int64 old_registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t old_registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
       pattern,
       GURL("http://www.example.com/service_worker.js"),
@@ -461,7 +458,7 @@ TEST_F(ServiceWorkerContextTest, RegisterNewScript) {
   EXPECT_NE(kInvalidServiceWorkerRegistrationId, old_registration_id);
 
   called = false;
-  int64 new_registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t new_registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
       pattern,
       GURL("http://www.example.com/service_worker_new.js"),
@@ -491,7 +488,7 @@ TEST_F(ServiceWorkerContextTest, RegisterDuplicateScript) {
   GURL script_url("http://www.example.com/service_worker.js");
 
   bool called = false;
-  int64 old_registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t old_registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
       pattern,
       script_url,
@@ -504,7 +501,7 @@ TEST_F(ServiceWorkerContextTest, RegisterDuplicateScript) {
   EXPECT_NE(kInvalidServiceWorkerRegistrationId, old_registration_id);
 
   called = false;
-  int64 new_registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t new_registration_id = kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
       pattern,
       script_url,
@@ -620,12 +617,11 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
     // Reinitialize the helper to test on-disk storage.
     base::ScopedTempDir user_data_directory;
     ASSERT_TRUE(user_data_directory.CreateUniqueTempDir());
-    helper_.reset(new EmbeddedWorkerTestHelper(user_data_directory.path(),
-                                               render_process_id_));
+    helper_.reset(new EmbeddedWorkerTestHelper(user_data_directory.path()));
     helper_->context_wrapper()->AddObserver(this);
   }
 
-  int64 registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t registration_id = kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
       pattern,
@@ -653,14 +649,11 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
   context()->ScheduleDeleteAndStartOver();
 
   // The storage is disabled while the recovery process is running, so the
-  // operation should be failed.
+  // operation should be aborted.
   context()->storage()->FindRegistrationForId(
-      registration_id,
-      pattern.GetOrigin(),
-      base::Bind(&ExpectRegisteredWorkers,
-                 SERVICE_WORKER_ERROR_FAILED,
-                 false /* expect_waiting */,
-                 true /* expect_active */));
+      registration_id, pattern.GetOrigin(),
+      base::Bind(&ExpectRegisteredWorkers, SERVICE_WORKER_ERROR_ABORT,
+                 false /* expect_waiting */, true /* expect_active */));
   base::RunLoop().RunUntilIdle();
 
   // The context started over and the storage was re-initialized, so the

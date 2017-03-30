@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -54,6 +56,11 @@ int GetChangedMouseButtonFlagsFromNative(
     const base::NativeEvent& native_event) {
   NOTIMPLEMENTED();
   return 0;
+}
+
+PointerDetails GetMousePointerDetailsFromNative(
+    const base::NativeEvent& native_event) {
+  return PointerDetails(EventPointerType::POINTER_TYPE_MOUSE);
 }
 
 gfx::Vector2d GetMouseWheelOffset(const base::NativeEvent& native_event) {
@@ -129,27 +136,22 @@ DomCode CodeFromNative(const base::NativeEvent& native_event) {
   return DomCode::NONE;
 }
 
-uint32 PlatformKeycodeFromNative(const base::NativeEvent& native_event) {
-  NOTIMPLEMENTED();
-  return 0;
-}
-
 bool IsCharFromNative(const base::NativeEvent& native_event) {
   NOTIMPLEMENTED();
   return false;
 }
 
-uint32 WindowsKeycodeFromNative(const base::NativeEvent& native_event) {
+uint32_t WindowsKeycodeFromNative(const base::NativeEvent& native_event) {
   NOTIMPLEMENTED();
   return 0;
 }
 
-uint16 TextFromNative(const base::NativeEvent& native_event) {
+uint16_t TextFromNative(const base::NativeEvent& native_event) {
   NOTIMPLEMENTED();
   return 0;
 }
 
-uint16 UnmodifiedTextFromNative(const base::NativeEvent& native_event) {
+uint16_t UnmodifiedTextFromNative(const base::NativeEvent& native_event) {
   NOTIMPLEMENTED();
   return 0;
 }

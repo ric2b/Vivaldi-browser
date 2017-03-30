@@ -9,18 +9,21 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/net_export.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/cert/ct_verify_result.h"
 #include "net/cert/x509_certificate.h"
 #include "net/log/net_log.h"
 #include "net/quic/crypto/proof_verifier.h"
 
 namespace net {
 
+class CTPolicyEnforcer;
 class CertVerifier;
+class CTVerifier;
 class TransportSecurityState;
 
 // ProofVerifyDetailsChromium is the implementation-specific information that a
@@ -28,11 +31,11 @@ class TransportSecurityState;
 class NET_EXPORT_PRIVATE ProofVerifyDetailsChromium
     : public ProofVerifyDetails {
  public:
-
   // ProofVerifyDetails implementation
   ProofVerifyDetails* Clone() const override;
 
   CertVerifyResult cert_verify_result;
+  ct::CTVerifyResult ct_verify_result;
 
   // pinning_failure_log contains a message produced by
   // TransportSecurityState::PKPState::CheckPublicKeyPins in the event of a
@@ -56,13 +59,16 @@ struct ProofVerifyContextChromium : public ProofVerifyContext {
 class NET_EXPORT_PRIVATE ProofVerifierChromium : public ProofVerifier {
  public:
   ProofVerifierChromium(CertVerifier* cert_verifier,
-                        TransportSecurityState* transport_security_state);
+                        CTPolicyEnforcer* ct_policy_enforcer,
+                        TransportSecurityState* transport_security_state,
+                        CTVerifier* cert_transparency_verifier);
   ~ProofVerifierChromium() override;
 
   // ProofVerifier interface
   QuicAsyncStatus VerifyProof(const std::string& hostname,
                               const std::string& server_config,
                               const std::vector<std::string>& certs,
+                              const std::string& cert_sct,
                               const std::string& signature,
                               const ProofVerifyContext* verify_context,
                               std::string* error_details,
@@ -80,8 +86,10 @@ class NET_EXPORT_PRIVATE ProofVerifierChromium : public ProofVerifier {
 
   // Underlying verifier used to verify certificates.
   CertVerifier* const cert_verifier_;
+  CTPolicyEnforcer* const ct_policy_enforcer_;
 
   TransportSecurityState* const transport_security_state_;
+  CTVerifier* const cert_transparency_verifier_;
 
   DISALLOW_COPY_AND_ASSIGN(ProofVerifierChromium);
 };

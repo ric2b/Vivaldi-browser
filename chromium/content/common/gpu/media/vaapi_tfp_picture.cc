@@ -13,17 +13,16 @@
 namespace content {
 
 VaapiTFPPicture::VaapiTFPPicture(
-    VaapiWrapper* vaapi_wrapper,
+    const scoped_refptr<VaapiWrapper>& vaapi_wrapper,
     const base::Callback<bool(void)> make_context_current,
-    int32 picture_buffer_id,
-    uint32 texture_id,
+    int32_t picture_buffer_id,
+    uint32_t texture_id,
     const gfx::Size& size)
     : VaapiPicture(picture_buffer_id, texture_id, size),
       vaapi_wrapper_(vaapi_wrapper),
       make_context_current_(make_context_current),
       x_display_(gfx::GetXDisplay()),
-      x_pixmap_(0) {
-}
+      x_pixmap_(0) {}
 
 VaapiTFPPicture::~VaapiTFPPicture() {
   if (glx_image_.get() && make_context_current_.Run()) {
@@ -52,7 +51,7 @@ bool VaapiTFPPicture::Initialize() {
     return false;
   }
 
-  glx_image_ = new gfx::GLImageGLX(size(), GL_RGB);
+  glx_image_ = new gl::GLImageGLX(size(), GL_RGB);
   if (!glx_image_->Initialize(x_pixmap_)) {
     // x_pixmap_ will be freed in the destructor.
     LOG(ERROR) << "Failed creating a GLX Pixmap for TFP";
@@ -74,7 +73,7 @@ bool VaapiTFPPicture::DownloadFromSurface(
                                               va_surface->size());
 }
 
-scoped_refptr<gfx::GLImage> VaapiTFPPicture::GetImageToBind() {
+scoped_refptr<gl::GLImage> VaapiTFPPicture::GetImageToBind() {
   return nullptr;
 }
 

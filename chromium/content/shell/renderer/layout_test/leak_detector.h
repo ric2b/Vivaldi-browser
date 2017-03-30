@@ -5,7 +5,7 @@
 #ifndef CONTENT_SHELL_RENDERER_LAYOUT_TEST_LEAK_DETECTOR_H_
 #define CONTENT_SHELL_RENDERER_LAYOUT_TEST_LEAK_DETECTOR_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "content/shell/common/leak_detection_result.h"
 #include "third_party/WebKit/public/web/WebLeakDetector.h"
 
@@ -31,7 +31,7 @@ class LeakDetector : public blink::WebLeakDetectorClient {
   void TryLeakDetection(blink::WebLocalFrame* frame);
 
   // WebLeakDetectorClient:
-  virtual void onLeakDetectionComplete(const Result& result) override;
+  void onLeakDetectionComplete(const Result& result) override;
 
  private:
   BlinkTestRunner* test_runner_;

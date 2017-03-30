@@ -9,7 +9,7 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/android/compositor/scene_layer/scene_layer.h"
@@ -37,30 +37,33 @@ class StaticTabSceneLayer : public SceneLayer {
   SkColor GetBackgroundColor() override;
 
   // Update StaticTabSceneLayer with the new parameters.
-  void UpdateTabLayer(JNIEnv* env,
-                      jobject jobj,
-                      jfloat content_viewport_x,
-                      jfloat content_viewport_y,
-                      jfloat content_viewport_width,
-                      jfloat content_viewport_height,
-                      jobject jtab_content_manager,
-                      jint id,
-                      jint toolbar_resource_id,
-                      jboolean can_use_live_layer,
-                      jboolean can_use_ntp_fallback,
-                      jint default_background_color,
-                      jfloat x,
-                      jfloat y,
-                      jfloat width,
-                      jfloat height,
-                      jfloat content_offset_y,
-                      jfloat static_to_view_blend,
-                      jfloat saturation,
-                      jfloat brightness);
+  void UpdateTabLayer(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jfloat content_viewport_x,
+      jfloat content_viewport_y,
+      jfloat content_viewport_width,
+      jfloat content_viewport_height,
+      const base::android::JavaParamRef<jobject>& jtab_content_manager,
+      jint id,
+      jint toolbar_resource_id,
+      jboolean can_use_live_layer,
+      jint default_background_color,
+      jfloat x,
+      jfloat y,
+      jfloat width,
+      jfloat height,
+      jfloat content_offset_y,
+      jfloat static_to_view_blend,
+      jfloat saturation,
+      jfloat brightness);
 
   // Set the given |jscene_layer| as content of this SceneLayer, along with its
   // own content.
-  void SetContentSceneLayer(JNIEnv* env, jobject jobj, jobject jscene_layer);
+  void SetContentSceneLayer(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      const base::android::JavaParamRef<jobject>& jscene_layer);
 
  private:
   scoped_refptr<chrome::android::ContentLayer> content_layer_;
@@ -68,6 +71,7 @@ class StaticTabSceneLayer : public SceneLayer {
 
   int last_set_tab_id_;
   int background_color_;
+  float brightness_;
 
   DISALLOW_COPY_AND_ASSIGN(StaticTabSceneLayer);
 };

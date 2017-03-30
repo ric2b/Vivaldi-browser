@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/passwords/password_manager_presenter.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/user_metrics_action.h"
@@ -11,20 +13,30 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/password_manager/sync_metrics.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/password_ui_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/password_manager/sync/browser/password_sync_util.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
+
+#if defined(OS_WIN)
+#include "chrome/browser/password_manager/password_manager_util_win.h"
+#elif defined(OS_MACOSX)
+#include "chrome/browser/password_manager/password_manager_util_mac.h"
+#endif
 
 using password_manager::PasswordStore;
 
@@ -32,11 +44,11 @@ PasswordManagerPresenter::PasswordManagerPresenter(
     PasswordUIView* password_view)
     : populater_(this),
       exception_populater_(this),
+      require_reauthentication_(
+          !base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kDisablePasswordManagerReauthentication)),
       password_view_(password_view) {
   DCHECK(password_view_);
-  require_reauthentication_ =
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisablePasswordManagerReauthentication);
 }
 
 PasswordManagerPresenter::~PasswordManagerPresenter() {
@@ -123,25 +135,38 @@ void PasswordManagerPresenter::RemovePasswordException(size_t index) {
 }
 
 void PasswordManagerPresenter::RequestShowPassword(size_t index) {
-#if !defined(OS_ANDROID) // This is never called on Android.
+#if !defined(OS_ANDROID)  // This is never called on Android.
   if (index >= password_list_.size()) {
     // |index| out of bounds might come from a compromised renderer, don't let
     // it crash the browser. http://crbug.com/362054
     NOTREACHED();
     return;
   }
-  if (IsAuthenticationRequired()) {
-    if (password_manager_util::AuthenticateUser(
-        password_view_->GetNativeWindow()))
+  if (require_reauthentication_ &&
+      (base::TimeTicks::Now() - last_authentication_time_) >
+          base::TimeDelta::FromSeconds(60)) {
+    bool authenticated = true;
+#if defined(OS_WIN)
+    authenticated = password_manager_util_win::AuthenticateUser(
+        password_view_->GetNativeWindow());
+#elif defined(OS_MACOSX)
+    authenticated = password_manager_util_mac::AuthenticateUser();
+#endif
+    if (authenticated)
       last_authentication_time_ = base::TimeTicks::Now();
     else
       return;
   }
 
-  if (password_manager_sync_metrics::IsSyncAccountCredential(
-          password_view_->GetProfile(),
-          base::UTF16ToUTF8(password_list_[index]->username_value),
-          password_list_[index]->signon_realm)) {
+  sync_driver::SyncService* sync_service = nullptr;
+  if (ProfileSyncServiceFactory::HasProfileSyncService(
+          password_view_->GetProfile())) {
+    sync_service =
+        ProfileSyncServiceFactory::GetForProfile(password_view_->GetProfile());
+  }
+  if (password_manager::sync_util::IsSyncAccountCredential(
+          *password_list_[index], sync_service,
+          SigninManagerFactory::GetForProfile(password_view_->GetProfile()))) {
     content::RecordAction(
         base::UserMetricsAction("PasswordManager_SyncCredentialShown"));
   }
@@ -165,7 +190,7 @@ const autofill::PasswordForm* PasswordManagerPresenter::GetPassword(
     NOTREACHED();
     return NULL;
   }
-  return password_list_[index];
+  return password_list_[index].get();
 }
 
 const autofill::PasswordForm* PasswordManagerPresenter::GetPasswordException(
@@ -176,7 +201,7 @@ const autofill::PasswordForm* PasswordManagerPresenter::GetPasswordException(
     NOTREACHED();
     return NULL;
   }
-  return password_exception_list_[index];
+  return password_exception_list_[index].get();
 }
 
 void PasswordManagerPresenter::SetPasswordList() {
@@ -194,12 +219,6 @@ void PasswordManagerPresenter::SetPasswordList() {
 
 void PasswordManagerPresenter::SetPasswordExceptionList() {
   password_view_->SetPasswordExceptionList(password_exception_list_);
-}
-
-bool PasswordManagerPresenter::IsAuthenticationRequired() {
-  base::TimeDelta delta = base::TimeDelta::FromSeconds(60);
-  return require_reauthentication_ &&
-      (base::TimeTicks::Now() - last_authentication_time_) > delta;
 }
 
 PasswordManagerPresenter::ListPopulater::ListPopulater(
@@ -225,7 +244,8 @@ void PasswordManagerPresenter::PasswordListPopulater::Populate() {
 
 void PasswordManagerPresenter::PasswordListPopulater::OnGetPasswordStoreResults(
     ScopedVector<autofill::PasswordForm> results) {
-  page_->password_list_.swap(results);
+  page_->password_list_ =
+      password_manager_util::ConvertScopedVector(std::move(results));
   page_->SetPasswordList();
 }
 
@@ -246,6 +266,7 @@ void PasswordManagerPresenter::PasswordExceptionListPopulater::Populate() {
 
 void PasswordManagerPresenter::PasswordExceptionListPopulater::
     OnGetPasswordStoreResults(ScopedVector<autofill::PasswordForm> results) {
-  page_->password_exception_list_.swap(results);
+  page_->password_exception_list_ =
+      password_manager_util::ConvertScopedVector(std::move(results));
   page_->SetPasswordExceptionList();
 }

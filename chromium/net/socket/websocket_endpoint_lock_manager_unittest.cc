@@ -4,6 +4,8 @@
 
 #include "net/socket/websocket_endpoint_lock_manager.h"
 
+#include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
@@ -62,6 +64,11 @@ class FakeStreamSocket : public StreamSocket {
 
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
 
+  int64_t GetTotalReceivedBytes() const override {
+    NOTIMPLEMENTED();
+    return 0;
+  }
+
   // Socket implementation
   int Read(IOBuffer* buf,
            int buf_len,
@@ -75,9 +82,9 @@ class FakeStreamSocket : public StreamSocket {
     return ERR_FAILED;
   }
 
-  int SetReceiveBufferSize(int32 size) override { return ERR_FAILED; }
+  int SetReceiveBufferSize(int32_t size) override { return ERR_FAILED; }
 
-  int SetSendBufferSize(int32 size) override { return ERR_FAILED; }
+  int SetSendBufferSize(int32_t size) override { return ERR_FAILED; }
 
  private:
   BoundNetLog bound_net_log_;

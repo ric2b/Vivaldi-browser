@@ -8,11 +8,15 @@
 #include <atlbase.h>
 #include <atlcom.h>
 #include <oleacc.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <UIAutomationCore.h>
 
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/common/content_export.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
@@ -86,8 +90,8 @@ BrowserAccessibilityWin
 
   // Mappings from roles and states to human readable strings. Initialize
   // with |InitializeStringMaps|.
-  static std::map<int32, base::string16> role_string_map;
-  static std::map<int32, base::string16> state_string_map;
+  static std::map<int32_t, base::string16> role_string_map;
+  static std::map<int32_t, base::string16> state_string_map;
 
   CONTENT_EXPORT BrowserAccessibilityWin();
 
@@ -522,15 +526,16 @@ BrowserAccessibilityWin
   CONTENT_EXPORT STDMETHODIMP
   get_hyperlinkIndex(long char_index, long* hyperlink_index) override;
 
-  // IAccessibleHyperlink not implemented.
+  // IAccessibleHyperlink methods.
   CONTENT_EXPORT STDMETHODIMP get_anchor(long index, VARIANT* anchor) override;
-  CONTENT_EXPORT STDMETHODIMP
-  get_anchorTarget(long index, VARIANT* anchor_target) override;
+  CONTENT_EXPORT STDMETHODIMP get_anchorTarget(long index,
+                                               VARIANT* anchor_target) override;
   CONTENT_EXPORT STDMETHODIMP get_startIndex(long* index) override;
   CONTENT_EXPORT STDMETHODIMP get_endIndex(long* index) override;
+  // This method is deprecated in the IA2 Spec and so we don't implement it.
   CONTENT_EXPORT STDMETHODIMP get_valid(boolean* valid) override;
 
-  // IAccessibleAction not implemented.
+  // IAccessibleAction mostly not implemented.
   CONTENT_EXPORT STDMETHODIMP nActions(long* n_actions) override;
   CONTENT_EXPORT STDMETHODIMP doAction(long action_index) override;
   CONTENT_EXPORT STDMETHODIMP
@@ -708,24 +713,26 @@ BrowserAccessibilityWin
                          REFIID iid,
                          void** object);
 
+  CONTENT_EXPORT base::string16 GetText() const override;
+
   // Accessors.
-  int32 ia_role() const { return win_attributes_->ia_role; }
-  int32 ia_state() const { return win_attributes_->ia_state; }
+  int32_t ia_role() const { return win_attributes_->ia_role; }
+  int32_t ia_state() const { return win_attributes_->ia_state; }
   const base::string16& role_name() const { return win_attributes_->role_name; }
-  int32 ia2_role() const { return win_attributes_->ia2_role; }
-  int32 ia2_state() const { return win_attributes_->ia2_state; }
+  int32_t ia2_role() const { return win_attributes_->ia2_role; }
+  int32_t ia2_state() const { return win_attributes_->ia2_state; }
   const std::vector<base::string16>& ia2_attributes() const {
     return win_attributes_->ia2_attributes;
   }
   base::string16 name() const { return win_attributes_->name; }
   base::string16 description() const { return win_attributes_->description; }
-  base::string16 help() const { return win_attributes_->help; }
   base::string16 value() const { return win_attributes_->value; }
-  base::string16 hypertext() const { return win_attributes_->hypertext; }
-  std::map<int32, int32>& hyperlink_offset_to_index() const {
+  std::map<int32_t, int32_t>& hyperlink_offset_to_index() const {
     return win_attributes_->hyperlink_offset_to_index;
   }
-  std::vector<int32>& hyperlinks() const { return win_attributes_->hyperlinks; }
+  std::vector<int32_t>& hyperlinks() const {
+    return win_attributes_->hyperlinks;
+  }
 
  private:
   // Add one to the reference count and return the same object. Always
@@ -751,6 +758,14 @@ BrowserAccessibilityWin
       ui::AXStringAttribute attribute,
       BSTR* value_bstr);
 
+  // Escapes characters in string attributes as required by the IA2 Spec.
+  // It's okay for input to be the same as output.
+  CONTENT_EXPORT static void SanitizeStringAttributeForIA2(
+      const base::string16& input,
+      base::string16* output);
+  FRIEND_TEST_ALL_PREFIXES(BrowserAccessibilityTest,
+                           TestSanitizeStringAttributeForIA2);
+
   // If the string attribute |attribute| is present, add its value as an
   // IAccessible2 attribute with the name |ia2_attr|.
   void StringAttributeToIA2(ui::AXStringAttribute attribute,
@@ -766,16 +781,56 @@ BrowserAccessibilityWin
   void IntAttributeToIA2(ui::AXIntAttribute attribute,
                          const char* ia2_attr);
 
-  // Append the accessible name from this node and its children.
-  base::string16 GetNameRecursive() const;
+  //
+  // Helper methods for IA2 hyperlinks.
+  //
+  // Hyperlink is an IA2 misnomer. It refers to objects embedded within other
+  // objects, such as a numbered list within a contenteditable div.
+  // Also, in IA2, text that includes embedded objects is called hypertext.
+
+  // Returns true if the current object is an IA2 hyperlink.
+  bool IsHyperlink() const;
+
+  // Functions for retrieving offsets for hyperlinks and hypertext.
+  // Return -1 in case of failure.
+  int32_t GetHyperlinkIndexFromChild(
+      const BrowserAccessibilityWin& child) const;
+  int32_t GetHypertextOffsetFromHyperlinkIndex(int32_t hyperlink_index) const;
+  int32_t GetHypertextOffsetFromChild(
+      const BrowserAccessibilityWin& child) const;
+  int32_t GetHypertextOffsetFromDescendant(
+      const BrowserAccessibilityWin& descendant) const;
+
+  // If the selection endpoint is either equal to or an ancestor of this object,
+  // returns endpoint_offset.
+  // If the selection endpoint is a descendant of this object, returns its
+  // offset. Otherwise, returns either 0 or the length of the hypertext
+  // depending on the direction of the selection.
+  // Returns -1 in case of unexpected failure, e.g. the selection endpoint
+  // cannot be found in the accessibility tree.
+  int GetHypertextOffsetFromEndpoint(
+      const BrowserAccessibilityWin& endpoint_object,
+      int endpoint_offset) const;
+
+  //
+  // Selection helper functions.
+  //
+  // The following functions retrieve the endpoints of the current selection.
+  // First they check for a local selection found on the current control, e.g.
+  // when querying the selection on a textarea.
+  // If not found they retrieve the global selection found on the current frame.
+  int GetSelectionAnchor() const;
+  int GetSelectionFocus() const;
+  // Retrieves the selection offsets in the way required by the IA2 APIs.
+  // selection_start and selection_end are -1 when there is no selection active
+  // on this object.
+  // The greatest of the two offsets is one past the last character of the
+  // selection.)
+  void GetSelectionOffsets(int* selection_start, int* selection_end) const;
 
   // Get the value text, which might come from the floating-point
   // value for some roles.
   base::string16 GetValueText();
-
-  // Get the text of this node for the purposes of IAccessibleText - it may
-  // be the name, it may be the value, etc. depending on the role.
-  base::string16 TextForIAccessibleText();
 
   bool IsSameHypertextCharacter(size_t old_char_index, size_t new_char_index);
   void ComputeHypertextRemovedAndInserted(
@@ -798,11 +853,19 @@ BrowserAccessibilityWin
 
   // Return a pointer to the object corresponding to the given id,
   // does not make a new reference.
-  BrowserAccessibilityWin* GetFromID(int32 id);
+  BrowserAccessibilityWin* GetFromID(int32_t id);
 
   // Returns true if this is a list box option with a parent of type list box,
   // or a menu list option with a parent of type menu list popup.
   bool IsListBoxOptionOrMenuListOption();
+
+  // Updates object attributes of IA2 with html attributes.
+  void UpdateRequiredAttributes();
+
+  // Given an int list attribute containing the ids of related elements,
+  // add a new IAccessibleRelation for this object with the given type name.
+  void AddRelations(ui::AXIntListAttribute src_attr,
+                    const base::string16& iaccessiblerelation_type);
 
   // Windows-specific unique ID (unique within the browser process),
   // used for get_accChild, NotifyWinEvent, and as the unique ID for
@@ -814,19 +877,18 @@ BrowserAccessibilityWin
     ~WinAttributes();
 
     // IAccessible role and state.
-    int32 ia_role;
-    int32 ia_state;
+    int32_t ia_role;
+    int32_t ia_state;
     base::string16 role_name;
 
     // IAccessible name, description, help, value.
     base::string16 name;
     base::string16 description;
-    base::string16 help;
     base::string16 value;
 
     // IAccessible2 role and state.
-    int32 ia2_role;
-    int32 ia2_state;
+    int32_t ia2_role;
+    int32_t ia2_state;
 
     // IAccessible2 attributes.
     std::vector<base::string16> ia2_attributes;
@@ -836,10 +898,11 @@ BrowserAccessibilityWin
 
     // Maps the |hypertext_| embedded character offset to an index in
     // |hyperlinks_|.
-    std::map<int32, int32> hyperlink_offset_to_index;
+    std::map<int32_t, int32_t> hyperlink_offset_to_index;
 
     // The id of a BrowserAccessibilityWin for each hyperlink.
-    std::vector<int32> hyperlinks;
+    // TODO(nektar): Replace object IDs with child indices.
+    std::vector<int32_t> hyperlinks;
   };
 
   scoped_ptr<WinAttributes> win_attributes_;

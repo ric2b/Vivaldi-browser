@@ -9,6 +9,7 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 
 namespace content {
@@ -17,14 +18,18 @@ namespace content {
 class TracingControllerAndroid {
  public:
   TracingControllerAndroid(JNIEnv* env, jobject obj);
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   bool StartTracing(JNIEnv* env,
-                    jobject obj,
-                    jstring categories,
-                    jstring trace_options);
-  void StopTracing(JNIEnv* env, jobject obj, jstring jfilepath);
-  bool GetKnownCategoryGroupsAsync(JNIEnv* env, jobject obj);
+                    const base::android::JavaParamRef<jobject>& obj,
+                    const base::android::JavaParamRef<jstring>& categories,
+                    const base::android::JavaParamRef<jstring>& trace_options);
+  void StopTracing(JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& obj,
+                   const base::android::JavaParamRef<jstring>& jfilepath);
+  bool GetKnownCategoryGroupsAsync(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
   static void GenerateTracingFilePath(base::FilePath* file_path);
 
  private:

@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/supports_user_data.h"
 #include "ios/web/public/url_data_source_ios.h"
 #include "ios/web/webui/url_data_manager_ios.h"
@@ -39,8 +39,8 @@ class URLDataManagerIOSBackend : public base::SupportsUserData::Data {
 
   // Invoked to create the protocol handler for chrome://. |is_incognito| should
   // be set for incognito browser states. Called on the UI thread.
-  static net::URLRequestJobFactory::ProtocolHandler* CreateProtocolHandler(
-      BrowserState* browser_state);
+  static scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
+  CreateProtocolHandler(BrowserState* browser_state);
 
   // Adds a DataSource to the collection of data sources.
   void AddDataSource(URLDataSourceIOSImpl* source);

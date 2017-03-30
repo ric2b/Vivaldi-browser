@@ -2,12 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include "ui/compositor/layer.h"
+
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
@@ -24,7 +30,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/dip_util.h"
-#include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/paint_context.h"
@@ -150,7 +155,7 @@ class LayerWithRealCompositorTest : public testing::Test {
             base::Bind(&ReadbackHolder::OutputRequestCallback, holder));
     request->set_area(source_rect);
 
-    GetCompositor()->root_layer()->RequestCopyOfOutput(request.Pass());
+    GetCompositor()->root_layer()->RequestCopyOfOutput(std::move(request));
 
     // Wait for copy response.  This needs to wait as the compositor could
     // be in the middle of a draw right now, and the commit with the
@@ -692,7 +697,7 @@ TEST_F(LayerWithNullDelegateTest, EscapedDebugNames) {
   std::string name = "\"\'\\/\b\f\n\r\t\n";
   layer->set_name(name);
   scoped_refptr<base::trace_event::ConvertableToTraceFormat> debug_info =
-    layer->TakeDebugInfo();
+    layer->TakeDebugInfo(layer->cc_layer_for_testing());
   EXPECT_TRUE(debug_info.get());
   std::string json;
   debug_info->AppendAsTraceFormat(&json);
@@ -707,7 +712,7 @@ TEST_F(LayerWithNullDelegateTest, EscapedDebugNames) {
   EXPECT_EQ(name, roundtrip);
 }
 
-void ReturnMailbox(bool* run, uint32 sync_point, bool is_lost) {
+void ReturnMailbox(bool* run, const gpu::SyncToken& sync_token, bool is_lost) {
   *run = true;
 }
 
@@ -728,7 +733,7 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
   cc::Layer* before_layer = l1->cc_layer_for_testing();
 
   bool callback1_run = false;
-  cc::TextureMailbox mailbox(gpu::Mailbox::Generate(), 0, 0);
+  cc::TextureMailbox mailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), 0);
   l1->SetTextureMailbox(mailbox, cc::SingleReleaseCallback::Create(
                                      base::Bind(ReturnMailbox, &callback1_run)),
                         gfx::Size(10, 10));
@@ -744,7 +749,7 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
   EXPECT_FALSE(callback1_run);
 
   bool callback2_run = false;
-  mailbox = cc::TextureMailbox(gpu::Mailbox::Generate(), 0, 0);
+  mailbox = cc::TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), 0);
   l1->SetTextureMailbox(mailbox, cc::SingleReleaseCallback::Create(
                                      base::Bind(ReturnMailbox, &callback2_run)),
                         gfx::Size(10, 10));
@@ -765,7 +770,7 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
 
   // Back to a texture, without changing the bounds of the layer or the texture.
   bool callback3_run = false;
-  mailbox = cc::TextureMailbox(gpu::Mailbox::Generate(), 0, 0);
+  mailbox = cc::TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), 0);
   l1->SetTextureMailbox(mailbox, cc::SingleReleaseCallback::Create(
                                      base::Bind(ReturnMailbox, &callback3_run)),
                         gfx::Size(10, 10));
@@ -1472,8 +1477,8 @@ static scoped_ptr<cc::DelegatedFrameData> MakeFrameData(gfx::Size size) {
   scoped_ptr<cc::RenderPass> render_pass(cc::RenderPass::Create());
   render_pass->SetNew(
       cc::RenderPassId(1, 1), gfx::Rect(size), gfx::Rect(), gfx::Transform());
-  frame_data->render_pass_list.push_back(render_pass.Pass());
-  return frame_data.Pass();
+  frame_data->render_pass_list.push_back(std::move(render_pass));
+  return frame_data;
 }
 
 TEST_F(LayerWithDelegateTest, DelegatedLayer) {

@@ -4,12 +4,17 @@
 
 #include "sync/internal_api/public/base/unique_position.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
+#include <functional>
 #include <string>
+#include <vector>
 
 #include "base/base64.h"
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
@@ -219,7 +224,6 @@ TEST_F(RelativePositioningTest, SortPositions) {
         << positions[i].ToDebugString() << " != "
         << kSortedPositionArray[i].ToDebugString();
   }
-
 }
 
 // Some more exercise for the comparison function.
@@ -398,7 +402,7 @@ class SuffixGenerator {
 
  private:
   const std::string cache_guid_;
-  int64 next_id_;
+  int64_t next_id_;
 };
 
 // Cache guids generated in the same style as real clients.
@@ -501,7 +505,7 @@ class PositionFromIntTest : public UniquePositionTest {
   }
 
  protected:
-  static const int64 kTestValues[];
+  static const int64_t kTestValues[];
   static const size_t kNumTestValues;
 
   std::string NextSuffix() {
@@ -512,31 +516,47 @@ class PositionFromIntTest : public UniquePositionTest {
   SuffixGenerator generator_;
 };
 
-const int64 PositionFromIntTest::kTestValues[] = {
-  0LL,
-  1LL, -1LL,
-  2LL, -2LL,
-  3LL, -3LL,
-  0x79LL, -0x79LL,
-  0x80LL, -0x80LL,
-  0x81LL, -0x81LL,
-  0xFELL, -0xFELL,
-  0xFFLL, -0xFFLL,
-  0x100LL, -0x100LL,
-  0x101LL, -0x101LL,
-  0xFA1AFELL, -0xFA1AFELL,
-  0xFFFFFFFELL, -0xFFFFFFFELL,
-  0xFFFFFFFFLL, -0xFFFFFFFFLL,
-  0x100000000LL, -0x100000000LL,
-  0x100000001LL, -0x100000001LL,
-  0xFFFFFFFFFFLL, -0xFFFFFFFFFFLL,
-  0x112358132134LL, -0x112358132134LL,
-  0xFEFFBEEFABC1234LL, -0xFEFFBEEFABC1234LL,
-  kint64max,
-  kint64min,
-  kint64min + 1,
-  kint64max - 1
-};
+const int64_t PositionFromIntTest::kTestValues[] = {0LL,
+                                                    1LL,
+                                                    -1LL,
+                                                    2LL,
+                                                    -2LL,
+                                                    3LL,
+                                                    -3LL,
+                                                    0x79LL,
+                                                    -0x79LL,
+                                                    0x80LL,
+                                                    -0x80LL,
+                                                    0x81LL,
+                                                    -0x81LL,
+                                                    0xFELL,
+                                                    -0xFELL,
+                                                    0xFFLL,
+                                                    -0xFFLL,
+                                                    0x100LL,
+                                                    -0x100LL,
+                                                    0x101LL,
+                                                    -0x101LL,
+                                                    0xFA1AFELL,
+                                                    -0xFA1AFELL,
+                                                    0xFFFFFFFELL,
+                                                    -0xFFFFFFFELL,
+                                                    0xFFFFFFFFLL,
+                                                    -0xFFFFFFFFLL,
+                                                    0x100000000LL,
+                                                    -0x100000000LL,
+                                                    0x100000001LL,
+                                                    -0x100000001LL,
+                                                    0xFFFFFFFFFFLL,
+                                                    -0xFFFFFFFFFFLL,
+                                                    0x112358132134LL,
+                                                    -0x112358132134LL,
+                                                    0xFEFFBEEFABC1234LL,
+                                                    -0xFEFFBEEFABC1234LL,
+                                                    INT64_MAX,
+                                                    INT64_MIN,
+                                                    INT64_MIN + 1,
+                                                    INT64_MAX - 1};
 
 const size_t PositionFromIntTest::kNumTestValues =
 arraysize(PositionFromIntTest::kTestValues);
@@ -551,10 +571,10 @@ TEST_F(PositionFromIntTest, IsValid) {
 
 TEST_F(PositionFromIntTest, RoundTripConversion) {
   for (size_t i = 0; i < kNumTestValues; ++i) {
-    const int64 expected_value = kTestValues[i];
+    const int64_t expected_value = kTestValues[i];
     const UniquePosition pos =
         UniquePosition::FromInt64(kTestValues[i], NextSuffix());
-    const int64 value = pos.ToInt64();
+    const int64_t value = pos.ToInt64();
     EXPECT_EQ(expected_value, value) << "i = " << i;
   }
 }
@@ -562,7 +582,7 @@ TEST_F(PositionFromIntTest, RoundTripConversion) {
 template <typename T, typename LessThan = std::less<T> >
 class IndexedLessThan {
  public:
-  IndexedLessThan(const T* values) : values_(values) {}
+  explicit IndexedLessThan(const T* values) : values_(values) {}
 
   bool operator()(int i1, int i2) {
     return less_than_(values_[i1], values_[i2]);
@@ -585,7 +605,7 @@ TEST_F(PositionFromIntTest, ConsistentOrdering) {
   }
 
   std::sort(int64_ordering.begin(), int64_ordering.end(),
-            IndexedLessThan<int64>(kTestValues));
+            IndexedLessThan<int64_t>(kTestValues));
   std::sort(position_ordering.begin(), position_ordering.end(),
             IndexedLessThan<UniquePosition, PositionLessThan>(positions));
   EXPECT_NE(original_ordering, int64_ordering);
@@ -595,22 +615,26 @@ TEST_F(PositionFromIntTest, ConsistentOrdering) {
 class CompressedPositionTest : public UniquePositionTest {
  public:
   CompressedPositionTest() {
-    positions_.push_back(
-        MakePosition( // Prefix starts with 256 0x00s
-            std::string("\x00\x00\x00\x00\xFF\xFF\xFE\xFF" "\x01", 9),
-            MakeSuffix('\x04')));
-    positions_.push_back(
-        MakePosition( // Prefix starts with four 0x00s
-            std::string("\x00\x00\x00\x00\xFF\xFF\xFF\xFB" "\x01", 9),
-            MakeSuffix('\x03')));
-    positions_.push_back(
-        MakePosition( // Prefix starts with four 0xFFs
-            std::string("\xFF\xFF\xFF\xFF\x00\x00\x00\x04" "\x01", 9),
-            MakeSuffix('\x01')));
-    positions_.push_back(
-        MakePosition( // Prefix starts with 256 0xFFs
-            std::string("\xFF\xFF\xFF\xFF\x00\x00\x01\x00" "\x01", 9),
-            MakeSuffix('\x02')));
+    positions_.push_back(MakePosition(  // Prefix starts with 256 0x00s
+        std::string("\x00\x00\x00\x00\xFF\xFF\xFE\xFF"
+                    "\x01",
+                    9),
+        MakeSuffix('\x04')));
+    positions_.push_back(MakePosition(  // Prefix starts with four 0x00s
+        std::string("\x00\x00\x00\x00\xFF\xFF\xFF\xFB"
+                    "\x01",
+                    9),
+        MakeSuffix('\x03')));
+    positions_.push_back(MakePosition(  // Prefix starts with four 0xFFs
+        std::string("\xFF\xFF\xFF\xFF\x00\x00\x00\x04"
+                    "\x01",
+                    9),
+        MakeSuffix('\x01')));
+    positions_.push_back(MakePosition(  // Prefix starts with 256 0xFFs
+        std::string("\xFF\xFF\xFF\xFF\x00\x00\x01\x00"
+                    "\x01",
+                    9),
+        MakeSuffix('\x02')));
   }
 
  private:

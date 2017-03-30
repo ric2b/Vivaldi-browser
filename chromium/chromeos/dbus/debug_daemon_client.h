@@ -5,12 +5,16 @@
 #ifndef CHROMEOS_DBUS_DEBUG_DAEMON_CLIENT_H_
 #define CHROMEOS_DBUS_DEBUG_DAEMON_CLIENT_H_
 
+#include <stdint.h>
+
 #include <map>
 
 #include "base/callback.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/task_runner.h"
+#include "base/trace_event/tracing_agent.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -18,7 +22,9 @@
 namespace chromeos {
 
 // DebugDaemonClient is used to communicate with the debug daemon.
-class CHROMEOS_EXPORT DebugDaemonClient : public DBusClient {
+class CHROMEOS_EXPORT DebugDaemonClient
+    : public DBusClient,
+      public base::trace_event::TracingAgent {
  public:
   ~DebugDaemonClient() override;
 
@@ -83,17 +89,6 @@ class CHROMEOS_EXPORT DebugDaemonClient : public DBusClient {
   virtual void GetNetworkInterfaces(
       const GetNetworkInterfacesCallback& callback) = 0;
 
-  // Called once GetPerfData() is complete only if the the data is successfully
-  // obtained from debugd.
-  typedef base::Callback<void(const std::vector<uint8>& data)>
-      GetPerfDataCallback;
-
-  // Runs perf for |duration| seconds and returns data collected.
-  // TODO(sque): This is being replaced by GetPerfOutput(). Remove this function
-  // and the above callback typedef when the new function is running.
-  virtual void GetPerfData(uint32_t duration,
-                           const GetPerfDataCallback& callback) = 0;
-
   // Called once GetPerfOutput() is complete only if the the data is
   // successfully obtained from debugd.
   // Arguments:
@@ -102,11 +97,12 @@ class CHROMEOS_EXPORT DebugDaemonClient : public DBusClient {
   // - Output from "perf stat", in PerfStatProto format.
   using GetPerfOutputCallback =
       base::Callback<void(int status,
-                          const std::vector<uint8>& perf_data,
-                          const std::vector<uint8>& perf_stat)>;
+                          const std::vector<uint8_t>& perf_data,
+                          const std::vector<uint8_t>& perf_stat)>;
 
-  // Runs perf for |duration| seconds and returns data collected.
+  // Runs perf with arguments for |duration| seconds and returns data collected.
   virtual void GetPerfOutput(uint32_t duration,
+                             const std::vector<std::string>& perf_args,
                              const GetPerfOutputCallback& callback) = 0;
 
   // Callback type for GetScrubbedLogs(), GetAllLogs() or GetUserLogFiles().
@@ -123,21 +119,11 @@ class CHROMEOS_EXPORT DebugDaemonClient : public DBusClient {
   // Gets list of user log files that must be read by Chrome.
   virtual void GetUserLogFiles(const GetLogsCallback& callback) = 0;
 
-  // Requests to start system/kernel tracing.
-  virtual void StartSystemTracing() = 0;
+  virtual void SetStopAgentTracingTaskRunner(
+      scoped_refptr<base::TaskRunner> task_runner) = 0;
 
-  // Called once RequestStopSystemTracing() is complete. Takes one parameter:
-  // - result: the data collected while tracing was active
-  typedef base::Callback<void(const scoped_refptr<base::RefCountedString>&
-      result)> StopSystemTracingCallback;
-
-  // Requests to stop system tracing and calls |callback| when completed.
-  virtual bool RequestStopSystemTracing(
-      scoped_refptr<base::TaskRunner> task_runner,
-      const StopSystemTracingCallback& callback) = 0;
-
-  // Returns an empty SystemTracingCallback that does nothing.
-  static StopSystemTracingCallback EmptyStopSystemTracingCallback();
+  // Returns an empty StopAgentTracingCallback that does nothing.
+  static StopAgentTracingCallback EmptyStopAgentTracingCallback();
 
   // Called once TestICMP() is complete. Takes two parameters:
   // - succeeded: information was obtained successfully.

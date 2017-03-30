@@ -4,16 +4,20 @@
 
 #import "chrome/browser/ui/cocoa/tab_contents/tab_contents_controller.h"
 
+#include <stdint.h>
+
 #include <utility>
 
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #import "chrome/browser/themes/theme_properties.h"
 #import "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -108,8 +112,7 @@ class FullscreenObserver : public WebContentsObserver {
   // windows or opening new tabs), so ensure that the flash be the theme
   // background color in those cases.
   NSColor* backgroundColor = nil;
-  ThemeService* const theme =
-      static_cast<ThemeService*>([[self window] themeProvider]);
+  const ui::ThemeProvider* theme = [[self window] themeProvider];
   if (theme)
     backgroundColor = theme->GetNSColor(ThemeProperties::COLOR_NTP_BACKGROUND);
   if (!backgroundColor)
@@ -177,6 +180,7 @@ class FullscreenObserver : public WebContentsObserver {
 
 @implementation TabContentsController
 @synthesize webContents = contents_;
+@synthesize blockFullscreenResize = blockFullscreenResize_;
 
 - (id)initWithContents:(WebContents*)contents {
   if ((self = [super initWithNibName:nil bundle:nil])) {
@@ -226,7 +230,9 @@ class FullscreenObserver : public WebContentsObserver {
     isEmbeddingFullscreenWidget_ = NO;
     contentsNativeView = contents_->GetNativeView();
   }
-  [contentsNativeView setFrame:[self frameForContentsView]];
+  if (!isEmbeddingFullscreenWidget_ || !blockFullscreenResize_)
+    [contentsNativeView setFrame:[self frameForContentsView]];
+
   if ([subviews count] == 0) {
     [contentsContainer addSubview:contentsNativeView];
   } else if ([subviews objectAtIndex:0] != contentsNativeView) {
@@ -237,6 +243,17 @@ class FullscreenObserver : public WebContentsObserver {
                                           NSViewHeightSizable];
 
   [contentsContainer setNeedsDisplay:YES];
+}
+
+- (void)updateFullscreenWidgetFrame {
+  // This should only apply if a fullscreen widget is embedded.
+  if (!isEmbeddingFullscreenWidget_ || blockFullscreenResize_)
+    return;
+
+  content::RenderWidgetHostView* const fullscreenView =
+      contents_->GetFullscreenRenderWidgetHostView();
+  if (fullscreenView)
+    [fullscreenView->GetNativeView() setFrame:[self frameForContentsView]];
 }
 
 - (void)changeWebContents:(WebContents*)newContents {
@@ -259,17 +276,18 @@ class FullscreenObserver : public WebContentsObserver {
   // a Blur() message to the renderer, but only if the RWHV currently has focus.
   content::RenderViewHost* rvh = [self webContents]->GetRenderViewHost();
   if (rvh) {
-    if (rvh->GetView() && rvh->GetView()->HasFocus()) {
-      rvh->Blur();
+    if (rvh->GetWidget()->GetView() &&
+        rvh->GetWidget()->GetView()->HasFocus()) {
+      rvh->GetWidget()->Blur();
       return;
     }
     WebContents* devtools = DevToolsWindow::GetInTabWebContents(
         [self webContents], NULL);
     if (devtools) {
       content::RenderViewHost* devtoolsView = devtools->GetRenderViewHost();
-      if (devtoolsView && devtoolsView->GetView() &&
-          devtoolsView->GetView()->HasFocus()) {
-        devtoolsView->Blur();
+      if (devtoolsView && devtoolsView->GetWidget()->GetView() &&
+          devtoolsView->GetWidget()->GetView()->HasFocus()) {
+        devtoolsView->GetWidget()->Blur();
       }
     }
   }
@@ -337,8 +355,8 @@ class FullscreenObserver : public WebContentsObserver {
     // TODO(miu): This is basically media::ComputeLetterboxRegion(), and it
     // looks like others have written this code elsewhere.  Let's consolidate
     // into a shared function ui/gfx/geometry or around there.
-    const int64 x = static_cast<int64>(captureSize.width()) * rect.height();
-    const int64 y = static_cast<int64>(captureSize.height()) * rect.width();
+    const int64_t x = static_cast<int64_t>(captureSize.width()) * rect.height();
+    const int64_t y = static_cast<int64_t>(captureSize.height()) * rect.width();
     if (y < x) {
       rect.ClampToCenteredSize(gfx::Size(
           rect.width(), static_cast<int>(y / captureSize.width())));

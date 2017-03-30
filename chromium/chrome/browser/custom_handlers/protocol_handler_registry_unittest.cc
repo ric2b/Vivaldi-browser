@@ -4,19 +4,22 @@
 
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 
+#include <stddef.h>
+
 #include <set>
 
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
@@ -36,12 +39,12 @@ void AssertInterceptedIO(
     net::URLRequestJobFactory* interceptor) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::URLRequestContext context;
-  scoped_ptr<net::URLRequest> request(context.CreateRequest(
-      url, net::DEFAULT_PRIORITY, NULL));
-  scoped_refptr<net::URLRequestJob> job =
+  scoped_ptr<net::URLRequest> request(
+      context.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr));
+  scoped_ptr<net::URLRequestJob> job(
       interceptor->MaybeCreateJobWithProtocolHandler(
-          url.scheme(), request.get(), context.network_delegate());
-  ASSERT_TRUE(job.get() != NULL);
+          url.scheme(), request.get(), context.network_delegate()));
+  ASSERT_TRUE(job.get());
 }
 
 void AssertIntercepted(
@@ -206,7 +209,7 @@ class FakeClientObserver
       delegate_->FakeRegisterWithOS(worker_->protocol());
     }
     if (state != ShellIntegration::STATE_PROCESSING) {
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
     }
   }
 
@@ -226,15 +229,24 @@ class FakeProtocolClientWorker
  private:
   ~FakeProtocolClientWorker() override {}
 
-  ShellIntegration::DefaultWebClientState CheckIsDefault() override {
-    if (force_failure_) {
-      return ShellIntegration::NOT_DEFAULT;
-    } else {
-      return ShellIntegration::IS_DEFAULT;
-    }
+  void CheckIsDefault() override {
+    ShellIntegration::DefaultWebClientState state =
+        ShellIntegration::IS_DEFAULT;
+    if (force_failure_)
+      state = ShellIntegration::NOT_DEFAULT;
+
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&FakeProtocolClientWorker::OnCheckIsDefaultComplete, this,
+                   state));
   }
 
-  bool SetAsDefault(bool interactive_permitted) override { return true; }
+  void SetAsDefault(bool interactive_permitted) override {
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&FakeProtocolClientWorker::OnSetAsDefaultAttemptComplete,
+                   this, AttemptResult::SUCCESS));
+  }
 
  private:
   bool force_failure_;
@@ -427,45 +439,13 @@ class ProtocolHandlerRegistryTest : public testing::Test {
   ProtocolHandler test_protocol_handler_;
 };
 
-// ProtocolHandlerRegistryTest tests are flaky on Linux & ChromeOS.
-// http://crbug.com/133023
-#if defined(OS_LINUX)
-#define MAYBE_AcceptProtocolHandlerHandlesProtocol \
-    DISABLED_AcceptProtocolHandlerHandlesProtocol
-#define MAYBE_DeniedProtocolIsntHandledUntilAccepted \
-    DISABLED_DeniedProtocolIsntHandledUntilAccepted
-#define MAYBE_TestStartsAsDefault DISABLED_TestStartsAsDefault
-#define MAYBE_TestRemoveHandlerRemovesDefault \
-    DISABLED_TestRemoveHandlerRemovesDefault
-#define MAYBE_TestClearDefaultGetsPropagatedToIO \
-    DISABLED_TestClearDefaultGetsPropagatedToIO
-#define MAYBE_TestIsHandledProtocolWorksOnIOThread \
-    DISABLED_TestIsHandledProtocolWorksOnIOThread
-#define MAYBE_TestInstallDefaultHandler \
-    DISABLED_TestInstallDefaultHandler
-#else
-#define MAYBE_AcceptProtocolHandlerHandlesProtocol \
-    AcceptProtocolHandlerHandlesProtocol
-#define MAYBE_DeniedProtocolIsntHandledUntilAccepted \
-    DeniedProtocolIsntHandledUntilAccepted
-#define MAYBE_TestStartsAsDefault TestStartsAsDefault
-#define MAYBE_TestRemoveHandlerRemovesDefault TestRemoveHandlerRemovesDefault
-#define MAYBE_TestClearDefaultGetsPropagatedToIO \
-    TestClearDefaultGetsPropagatedToIO
-#define MAYBE_TestIsHandledProtocolWorksOnIOThread \
-    TestIsHandledProtocolWorksOnIOThread
-#define MAYBE_TestInstallDefaultHandler TestInstallDefaultHandler
-#endif  // defined(OS_LINUX)
-
-TEST_F(ProtocolHandlerRegistryTest,
-       MAYBE_AcceptProtocolHandlerHandlesProtocol) {
+TEST_F(ProtocolHandlerRegistryTest, AcceptProtocolHandlerHandlesProtocol) {
   ASSERT_FALSE(registry()->IsHandledProtocol("test"));
   registry()->OnAcceptRegisterProtocolHandler(test_protocol_handler());
   ASSERT_TRUE(registry()->IsHandledProtocol("test"));
 }
 
-TEST_F(ProtocolHandlerRegistryTest,
-       MAYBE_DeniedProtocolIsntHandledUntilAccepted) {
+TEST_F(ProtocolHandlerRegistryTest, DeniedProtocolIsntHandledUntilAccepted) {
   registry()->OnDenyRegisterProtocolHandler(test_protocol_handler());
   ASSERT_FALSE(registry()->IsHandledProtocol("test"));
   registry()->OnAcceptRegisterProtocolHandler(test_protocol_handler());
@@ -545,7 +525,7 @@ TEST_F(ProtocolHandlerRegistryTest, RemovingHandlerMeansItCanBeAddedAgain) {
   ASSERT_TRUE(registry()->CanSchemeBeOverridden("test"));
 }
 
-TEST_F(ProtocolHandlerRegistryTest, MAYBE_TestStartsAsDefault) {
+TEST_F(ProtocolHandlerRegistryTest, TestStartsAsDefault) {
   registry()->OnAcceptRegisterProtocolHandler(test_protocol_handler());
   ASSERT_TRUE(registry()->IsDefault(test_protocol_handler()));
 }
@@ -673,7 +653,7 @@ TEST_F(ProtocolHandlerRegistryTest, TestSilentlyRegisterHandler) {
   ASSERT_TRUE(registry()->HasIgnoredEquivalent(ph4));
 }
 
-TEST_F(ProtocolHandlerRegistryTest, MAYBE_TestRemoveHandlerRemovesDefault) {
+TEST_F(ProtocolHandlerRegistryTest, TestRemoveHandlerRemovesDefault) {
   ProtocolHandler ph1 = CreateProtocolHandler("test", "test1");
   ProtocolHandler ph2 = CreateProtocolHandler("test", "test2");
   ProtocolHandler ph3 = CreateProtocolHandler("test", "test3");
@@ -793,7 +773,7 @@ TEST_F(ProtocolHandlerRegistryTest, TestOSRegistration) {
 
 #if defined(OS_LINUX)
 // TODO(benwells): When Linux support is more reliable and
-// http://crbut.com/88255 is fixed this test will pass.
+// http://crbug.com/88255 is fixed this test will pass.
 #define MAYBE_TestOSRegistrationFailure DISABLED_TestOSRegistrationFailure
 #else
 #define MAYBE_TestOSRegistrationFailure TestOSRegistrationFailure
@@ -832,7 +812,7 @@ TEST_F(ProtocolHandlerRegistryTest, TestMaybeCreateTaskWorksFromIOThread) {
 }
 
 TEST_F(ProtocolHandlerRegistryTest,
-       MAYBE_TestIsHandledProtocolWorksOnIOThread) {
+       TestIsHandledProtocolWorksOnIOThread) {
   std::string scheme("mailto");
   ProtocolHandler ph1 = CreateProtocolHandler(scheme, "test1");
   registry()->OnAcceptRegisterProtocolHandler(ph1);
@@ -878,7 +858,7 @@ TEST_F(ProtocolHandlerRegistryTest, TestRemovingDefaultDoesntChangeHandlers) {
   ASSERT_EQ(ph1, handlers[1]);
 }
 
-TEST_F(ProtocolHandlerRegistryTest, MAYBE_TestClearDefaultGetsPropagatedToIO) {
+TEST_F(ProtocolHandlerRegistryTest, TestClearDefaultGetsPropagatedToIO) {
   std::string scheme("mailto");
   ProtocolHandler ph1 = CreateProtocolHandler(scheme, "test1");
   registry()->OnAcceptRegisterProtocolHandler(ph1);
@@ -961,7 +941,7 @@ TEST_F(ProtocolHandlerRegistryTest, TestIsSameOrigin) {
       ph3.IsSameOrigin(ph2));
 }
 
-TEST_F(ProtocolHandlerRegistryTest, MAYBE_TestInstallDefaultHandler) {
+TEST_F(ProtocolHandlerRegistryTest, TestInstallDefaultHandler) {
   RecreateRegistry(false);
   registry()->AddPredefinedHandler(
       CreateProtocolHandler("test", GURL("http://test.com/%s")));

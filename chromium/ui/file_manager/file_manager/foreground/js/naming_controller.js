@@ -70,7 +70,7 @@ function NamingController(
  * Verifies the user entered name for file or folder to be created or
  * renamed to. See also util.validateFileName.
  *
- * @param {DirectoryEntry} parentEntry The URL of the parent directory entry.
+ * @param {!DirectoryEntry} parentEntry The URL of the parent directory entry.
  * @param {string} name New file or folder name.
  * @param {function(boolean)} onDone Function to invoke when user closes the
  *    warning box or immediatelly if file name is correct. If the name was
@@ -309,38 +309,16 @@ NamingController.prototype.commitRename_ = function() {
           this.listContainer_.endBatchUpdates();
 
           // Show error dialog.
-          var message;
-          if (error.name == util.FileError.PATH_EXISTS_ERR ||
-              error.name == util.FileError.TYPE_MISMATCH_ERR) {
-            // Check the existing entry is file or not.
-            // 1) If the entry is a file:
-            //   a) If we get PATH_EXISTS_ERR, a file exists.
-            //   b) If we get TYPE_MISMATCH_ERR, a directory exists.
-            // 2) If the entry is a directory:
-            //   a) If we get PATH_EXISTS_ERR, a directory exists.
-            //   b) If we get TYPE_MISMATCH_ERR, a file exists.
-            message = strf(
-                (entry.isFile && error.name ==
-                    util.FileError.PATH_EXISTS_ERR) ||
-                (!entry.isFile && error.name ==
-                    util.FileError.TYPE_MISMATCH_ERR) ?
-                    'FILE_ALREADY_EXISTS' :
-                    'DIRECTORY_ALREADY_EXISTS',
-                newName);
-          } else {
-            message = strf('ERROR_RENAMING', entry.name,
-                           util.getFileErrorString(error.name));
-          }
-
+          var message = util.getRenameErrorMessage(error, entry, newName);
           this.alertDialog_.show(message);
         }.bind(this));
   }.bind(this);
 
-  // TODO(haruki): this.getCurrentDirectoryEntry() might not return the actual
+  // TODO(mtomasz): this.getCurrentDirectoryEntry() might not return the actual
   // parent if the directory content is a search result. Fix it to do proper
   // validation.
   this.validateFileName(
-      /** @type {DirectoryEntry} */ (this.directoryModel_.getCurrentDirEntry()),
+      /** @type {!DirectoryEntry} */ (this.directoryModel_.getCurrentDirEntry()),
       newName,
       validationDone.bind(this));
 };

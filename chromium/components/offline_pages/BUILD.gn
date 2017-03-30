@@ -2,6 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
 # GYP: //components/offline_pages.gypi:offline_pages
 static_library("offline_pages") {
   sources = [
@@ -10,26 +14,87 @@ static_library("offline_pages") {
     "offline_page_item.h",
     "offline_page_metadata_store.cc",
     "offline_page_metadata_store.h",
+    "offline_page_metadata_store_impl.cc",
+    "offline_page_metadata_store_impl.h",
     "offline_page_model.cc",
     "offline_page_model.h",
   ]
 
   deps = [
+    ":switches",
     "//base",
+    "//components/bookmarks/browser",
     "//components/keyed_service/core",
+    "//components/leveldb_proto",
+    "//components/offline_pages/proto:offline_pages_proto",
     "//net",
+    "//third_party/leveldatabase",
     "//url",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "offline_page_test_archiver.cc",
+    "offline_page_test_archiver.h",
+    "offline_page_test_store.cc",
+    "offline_page_test_store.h",
+  ]
+
+  deps = [
+    ":offline_pages",
+    ":switches",
+    "//base",
+    "//testing/gtest",
+    "//url",
+  ]
+}
+
+source_set("switches") {
+  sources = [
+    "offline_page_feature.cc",
+    "offline_page_feature.h",
+    "offline_page_switches.cc",
+    "offline_page_switches.h",
+  ]
+
+  deps = [
+    "//base",
   ]
 }
 
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "offline_page_metadata_store_impl_unittest.cc",
     "offline_page_model_unittest.cc",
   ]
 
   deps = [
     ":offline_pages",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//components/bookmarks/browser",
+    "//components/bookmarks/test",
+    "//components/leveldb_proto",
+    "//components/offline_pages/proto:offline_pages_proto",
     "//testing/gtest",
+    "//url",
   ]
+}
+
+if (is_android) {
+  java_cpp_enum("offline_page_feature_enums_java") {
+    sources = [
+      "offline_page_feature.h",
+    ]
+  }
+
+  java_cpp_enum("offline_page_model_enums_java") {
+    sources = [
+      "offline_page_model.h",
+    ]
+  }
 }

@@ -5,6 +5,8 @@
 #ifndef NET_URL_REQUEST_URL_FETCHER_H_
 #define NET_URL_REQUEST_URL_FETCHER_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -148,8 +150,8 @@ class NET_EXPORT URLFetcher {
   virtual void SetUploadFilePath(
       const std::string& upload_content_type,
       const base::FilePath& file_path,
-      uint64 range_offset,
-      uint64 range_length,
+      uint64_t range_offset,
+      uint64_t range_length,
       scoped_refptr<base::TaskRunner> file_task_runner) = 0;
 
   // Sets data only needed by POSTs.  All callers making POST requests should
@@ -205,10 +207,12 @@ class NET_EXPORT URLFetcher {
   virtual void SetRequestContext(
       URLRequestContextGetter* request_context_getter) = 0;
 
-  // Set the URL that should be consulted for the third-party cookie
-  // blocking policy.
-  virtual void SetFirstPartyForCookies(
-      const GURL& first_party_for_cookies) = 0;
+  // Set the URL that should be considered as "initiating" the fetch. This URL
+  // will be considered the "first-party" when applying cookie blocking policy
+  // to requests, and treated as the request's initiator.
+  //
+  // TODO(mkwst): Convert this to take a 'url::Origin': https://crbug.com/577565
+  virtual void SetInitiatorURL(const GURL& initiator) = 0;
 
   // Set the key and data callback that is used when setting the user
   // data on any URLRequest objects this object creates.
@@ -280,6 +284,19 @@ class NET_EXPORT URLFetcher {
   // be called after the OnURLFetchComplete callback has run and the request
   // has not failed.
   virtual bool WasFetchedViaProxy() const = 0;
+
+  // Returns true if the response body was served from the cache. This includes
+  // responses for which revalidation was required.
+  virtual bool WasCached() const = 0;
+
+  // The number of bytes in the raw response body (before response filters are
+  // applied, to decompress it, for instance).
+  virtual int64_t GetReceivedResponseContentLength() const = 0;
+
+  // The number of bytes received over the network during the processing of this
+  // request. This includes redirect headers, but not redirect bodies. It also
+  // excludes SSL and proxy handshakes.
+  virtual int64_t GetTotalReceivedBytes() const = 0;
 
   // Start the request.  After this is called, you may not change any other
   // settings.

@@ -5,11 +5,13 @@
 #ifndef CONTENT_TEST_TEST_RENDER_VIEW_HOST_H_
 #define CONTENT_TEST_TEST_RENDER_VIEW_HOST_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
@@ -29,6 +31,7 @@
 // To use, derive your test base class from RenderViewHostImplTestHarness.
 
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
+struct ViewHostMsg_TextInputState_Params;
 
 namespace gfx {
 class Rect;
@@ -87,8 +90,9 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   bool IsSpeaking() const override;
   void StopSpeaking() override;
 #endif  // defined(OS_MACOSX)
-  void OnSwapCompositorFrame(uint32 output_surface_id,
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
                              scoped_ptr<cc::CompositorFrame> frame) override;
+  void ClearCompositorFrame() override {}
 
   // RenderWidgetHostViewBase implementation.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -99,10 +103,8 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void Focus() override {}
   void SetIsLoading(bool is_loading) override {}
   void UpdateCursor(const WebCursor& cursor) override {}
-  void TextInputTypeChanged(ui::TextInputType type,
-                            ui::TextInputMode input_mode,
-                            bool can_compose_inline,
-                            int flags) override {}
+  void TextInputStateChanged(
+      const ViewHostMsg_TextInputState_Params& params) override {}
   void ImeCancelComposition() override {}
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
@@ -116,25 +118,23 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void CopyFromCompositingSurface(
       const gfx::Rect& src_subrect,
       const gfx::Size& dst_size,
-      ReadbackRequestCallback& callback,
+      const ReadbackRequestCallback& callback,
       const SkColorType preferred_color_type) override;
   void CopyFromCompositingSurfaceToVideoFrame(
       const gfx::Rect& src_subrect,
       const scoped_refptr<media::VideoFrame>& target,
-      const base::Callback<void(bool)>& callback) override;
+      const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
   bool CanCopyToVideoFrame() const override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
 #if defined(OS_MACOSX)
   bool PostProcessEventForPluginIme(
       const NativeWebKeyboardEvent& event) override;
 #endif
-#if defined(OS_ANDROID)
   void LockCompositingSurface() override {}
   void UnlockCompositingSurface() override {}
-#endif
   void GetScreenInfo(blink::WebScreenInfo* results) override {}
+  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   gfx::Rect GetBoundsInRootWindow() override;
-  gfx::GLSurfaceHandle GetCompositingSurface() override;
   bool LockMouse() override;
   void UnlockMouse() override;
 #if defined(OS_WIN)
@@ -203,10 +203,9 @@ class TestRenderViewHost
       public RenderViewHostTester {
  public:
   TestRenderViewHost(SiteInstance* instance,
+                     scoped_ptr<RenderWidgetHostImpl> widget,
                      RenderViewHostDelegate* delegate,
-                     RenderWidgetHostDelegate* widget_delegate,
-                     int routing_id,
-                     int main_frame_routing_id,
+                     int32_t main_frame_routing_id,
                      bool swapped_out);
   ~TestRenderViewHost() override;
 
@@ -236,17 +235,16 @@ class TestRenderViewHost
   bool CreateTestRenderView(const base::string16& frame_name,
                             int opener_frame_route_id,
                             int proxy_route_id,
-                            int32 max_page_id,
+                            int32_t max_page_id,
                             bool window_was_created_with_opener) override;
 
   // RenderViewHost overrides --------------------------------------------------
 
   bool CreateRenderView(int opener_frame_route_id,
                         int proxy_route_id,
-                        int32 max_page_id,
+                        int32_t max_page_id,
                         const FrameReplicationState& replicated_frame_state,
                         bool window_was_created_with_opener) override;
-  bool IsFullscreenGranted() const override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(RenderViewHostTest, FilterNavigate);

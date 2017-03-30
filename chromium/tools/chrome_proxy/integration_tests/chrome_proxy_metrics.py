@@ -109,7 +109,7 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
         results.current_page, 'load_start', 'ms', load_start))
 
     dom_content_loaded_start = (
-      float(dom_content_loaded_event_start) - navigation_start)
+        float(dom_content_loaded_event_start) - navigation_start)
     results.AddValue(scalar.ScalarValue(
         results.current_page, 'dom_content_loaded_start', 'ms',
         dom_content_loaded_start))
@@ -122,6 +122,16 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     request_start = (float(request_start) - navigation_start)
     results.AddValue(scalar.ScalarValue(
         results.current_page, 'request_start', 'ms', request_start,
+        important=False))
+
+    response_start = (float(response_start) - navigation_start)
+    results.AddValue(scalar.ScalarValue(
+        results.current_page, 'response_start', 'ms', response_start,
+        important=False))
+
+    response_end = (float(response_end) - navigation_start)
+    results.AddValue(scalar.ScalarValue(
+        results.current_page, 'response_end', 'ms', response_end,
         important=False))
 
     # Phase measurements in milliseconds.
@@ -230,6 +240,9 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     lo_fi_response_count = 0
 
     for resp in self.IterResponses(tab):
+      if 'favicon.ico' in resp.response.url:
+        continue
+
       if resp.HasChromeProxyLoFiRequest():
         lo_fi_request_count += 1
       else:
@@ -260,6 +273,51 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
         results.current_page, 'lo_fi_request', 'count', lo_fi_request_count))
     results.AddValue(scalar.ScalarValue(
         results.current_page, 'lo_fi_response', 'count', lo_fi_response_count))
+    super(ChromeProxyMetric, self).AddResults(tab, results)
+
+  def AddResultsForLoFiPreview(self, tab, results):
+    lo_fi_request_count = 0
+    lo_fi_preview_request_count = 0
+    lo_fi_preview_response_count = 0
+
+    for resp in self.IterResponses(tab):
+      if 'favicon.ico' in resp.response.url:
+        continue
+      if resp.response.url.startswith('data:'):
+        continue
+
+      if resp.HasChromeProxyLoFiPreviewRequest():
+        lo_fi_preview_request_count += 1
+      elif resp.HasChromeProxyLoFiRequest():
+        lo_fi_request_count += 1
+      else:
+        raise ChromeProxyMetricException, (
+            '%s: LoFi not in request header.' % (resp.response.url))
+
+      if resp.HasChromeProxyLoFiPreviewResponse():
+        lo_fi_preview_response_count += 1
+
+    if lo_fi_preview_request_count == 0:
+      raise ChromeProxyMetricException, (
+          'Expected at least one LoFi preview request, but zero such requests '
+          'were sent.')
+    if lo_fi_preview_response_count == 0:
+      raise ChromeProxyMetricException, (
+          'Expected at least one LoFi preview response, but zero such '
+          'responses were received.')
+
+    results.AddValue(
+        scalar.ScalarValue(
+            results.current_page, 'lo_fi_preview_request',
+            'count', lo_fi_preview_request_count))
+    results.AddValue(
+        scalar.ScalarValue(
+            results.current_page, 'lo_fi_request',
+            'count', lo_fi_request_count))
+    results.AddValue(
+        scalar.ScalarValue(
+            results.current_page, 'lo_fi_preview_response',
+            'count', lo_fi_preview_response_count))
     super(ChromeProxyMetric, self).AddResults(tab, results)
 
   def AddResultsForPassThrough(self, tab, results):
@@ -294,10 +352,10 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
           'received.' % (compressed_count))
 
     if compressed_size >= pass_through_size:
-        raise ChromeProxyMetricException, (
-            'Compressed image is %d bytes and pass-through image is %d. '
-            'Expecting compressed image size to be less than pass-through '
-            'image.' % (compressed_size, pass_through_size))
+      raise ChromeProxyMetricException, (
+          'Compressed image is %d bytes and pass-through image is %d. '
+          'Expecting compressed image size to be less than pass-through '
+          'image.' % (compressed_size, pass_through_size))
 
     results.AddValue(scalar.ScalarValue(
         results.current_page, 'compressed', 'count', compressed_count))
@@ -307,6 +365,41 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
         results.current_page, 'pass_through', 'count', pass_through_count))
     results.AddValue(scalar.ScalarValue(
         results.current_page, 'pass_through_size', 'bytes', pass_through_size))
+
+  def AddResultsForHTTPSBypass(self, tab, results):
+    bypass_count = 0
+
+    for resp in self.IterResponses(tab):
+      # Only check https url's
+      if "https://" not in resp.response.url:
+        continue
+
+      # If a Chrome Proxy Via appears fail the test
+      if resp.HasChromeProxyViaHeader():
+        r = resp.response
+        raise ChromeProxyMetricException, (
+            '%s: Should not have Via header (%s) (refer=%s, status=%d)' % (
+                r.url, r.GetHeader('Via'), r.GetHeader('Referer'), r.status))
+      bypass_count += 1
+
+    if bypass_count == 0:
+      raise ChromeProxyMetricException, (
+          'Expected at least one https response was expected, but zero such '
+          'responses were received.')
+
+    results.AddValue(scalar.ScalarValue(
+        results.current_page, 'bypass', 'count', bypass_count))
+
+  def AddResultsForHTML5Test(self, tab, results):
+    # Wait for the number of "points" of HTML5 compatibility to appear to verify
+    # the HTML5 elements have loaded successfully.
+    tab.WaitForJavaScriptExpression(
+        'document.getElementsByClassName("pointsPanel")', 15)
+
+  def AddResultsForYouTube(self, tab, results):
+    # Wait for the video to begin playing.
+    tab.WaitForJavaScriptExpression(
+        'window.playerState == YT.PlayerState.PLAYING', 30)
 
   def AddResultsForBypass(self, tab, results, url_pattern=""):
     bypass_count = 0
@@ -360,10 +453,10 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     for url in bypasses:
       if bypasses[url] == 0:
         raise ChromeProxyMetricException, (
-              '%s: Got a 502 without a subsequent 200' % (url))
+            '%s: Got a 502 without a subsequent 200' % (url))
       elif bypasses[url] > 1:
         raise ChromeProxyMetricException, (
-              '%s: Got a 502 and multiple 200s: %d' % (url, bypasses[url]))
+            '%s: Got a 502 and multiple 200s: %d' % (url, bypasses[url]))
     if bypass_count == 0:
       raise ChromeProxyMetricException, (
           'At least one response should be bypassed. '
@@ -376,8 +469,12 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
   def AddResultsForBlockOnce(self, tab, results):
     eligible_response_count = 0
     via_proxy = 0
+    visited_urls = []
 
     for resp in self.IterResponses(tab):
+      # Add debug information in case of failure
+      visited_urls.append(resp.response.url)
+
       # Block-once test URLs (Data Reduction Proxy always returns
       # block-once) should not have the Chrome-Compression-Proxy Via header.
       if (IsTestUrlForBlockOnce(resp.response.url)):
@@ -401,11 +498,13 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     if (eligible_response_count != 2):
       raise ChromeProxyMetricException, (
           'Did not make expected number of requests to whitelisted block-once'
-          ' test URLs. Expected: 2, Actual: ' + str(eligible_response_count))
+          ' test URLs. Expected: 2, Actual: %s, Visited URLs: %s' %
+          (eligible_response_count, visited_urls))
 
     results.AddValue(scalar.ScalarValue(results.current_page,
-        'BlockOnce_success', 'num_eligible_response', 2))
-
+                                        'eligible_responses', 'count', 2))
+    results.AddValue(scalar.ScalarValue(results.current_page,
+                                        'via_proxy', 'count', via_proxy))
 
   def AddResultsForSafebrowsingOn(self, tab, results):
     results.AddValue(scalar.ScalarValue(
@@ -472,8 +571,8 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
           raise ChromeProxyMetricException, (
               'Response for %s should have come through the fallback proxy.\n'
               'Response: remote_port=%s status=(%d, %s)\nHeaders:\n %s' % (
-                r.url, str(resp.remote_port), r.status, r.status_text,
-                r.headers))
+                  r.url, str(resp.remote_port), r.status, r.status_text,
+                  r.headers))
         else:
           via_fallback_count += 1
       resp = next(responses, None)
@@ -581,6 +680,83 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     results.AddValue(scalar.ScalarValue(
         results.current_page, 'via', 'count', via_count))
 
+  def AddResultsForReenableAfterSetBypass(
+      self, tab, results, bypass_seconds):
+    """Verify results for a re-enable after bypass test.
+
+    Args:
+        tab: the tab for the test.
+        results: the results object to add the results values to.
+        bypass_seconds: the duration of the bypass
+    """
+    bypass_count = 0
+    via_count = 0
+
+    # Verify the bypass url was bypassed.
+    for resp in self.IterResponses(tab):
+      if resp.HasChromeProxyViaHeader():
+        r = resp.response
+        raise ChromeProxyMetricException, (
+            'Response for %s should not have via header.\n'
+            'Reponse: status=(%d, %s)\nHeaders:\n %s' % (
+                r.url, r.status, r.status_text, r.headers))
+      else:
+        bypass_count += 1
+
+    # Navigate to a test page and verify it's being bypassed.
+    tab.ClearCache(force=True)
+    before_metrics = ChromeProxyMetric()
+    before_metrics.Start(results.current_page, tab)
+    tab.Navigate('http://chromeproxy-test.appspot.com/default')
+    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 10)
+    before_metrics.Stop(results.current_page, tab)
+
+    for resp in before_metrics.IterResponses(tab):
+      if resp.HasChromeProxyViaHeader():
+        r = resp.response
+        raise ChromeProxyMetricException, (
+            'Response for %s should not have via header; proxy should still '
+            'be bypassed.\nReponse: status=(%d, %s)\nHeaders:\n %s' % (
+                r.url, r.status, r.status_text, r.headers))
+      else:
+        bypass_count += 1
+    if bypass_count == 0:
+      raise ChromeProxyMetricException, (
+          'Expected at least one response to be bypassed before the bypass '
+          'expired, but zero such responses were received.')
+
+    # Wait for the bypass to expire, with the overhead of the previous steps
+    # the bypass duration will have been exceeded after this delay.
+    time.sleep(bypass_seconds)
+
+    # Navigate to the test pass again and verify data saver is no longer
+    # bypassed.
+    tab.ClearCache(force=True)
+    after_metrics = ChromeProxyMetric()
+    after_metrics.Start(results.current_page, tab)
+    tab.Navigate('http://chromeproxy-test.appspot.com/default')
+    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 10)
+    after_metrics.Stop(results.current_page, tab)
+
+    for resp in after_metrics.IterResponses(tab):
+      if not resp.HasChromeProxyViaHeader():
+        r = resp.response
+        raise ChromeProxyMetricException, (
+            'Response for %s should have via header; proxy should no longer '
+            'be bypassed.\nReponse: status=(%d, %s)\nHeaders:\n %s' % (
+                r.url, r.status, r.status_text, r.headers))
+      else:
+        via_count += 1
+    if via_count == 0:
+      raise ChromeProxyMetricException, (
+          'Expected at least one response through the proxy after the bypass '
+          'expired, but zero such responses were received.')
+
+    results.AddValue(scalar.ScalarValue(
+        results.current_page, 'bypass', 'count', bypass_count))
+    results.AddValue(scalar.ScalarValue(
+        results.current_page, 'via', 'count', via_count))
+
   def AddResultsForClientConfig(self, tab, results):
     resources_with_old_auth = 0
     resources_with_new_auth = 0
@@ -609,6 +785,7 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
 
 PROXIED = 'proxied'
 DIRECT = 'direct'
+
 
 class ChromeProxyVideoMetric(network_metrics.NetworkMetric):
   """Metrics for video pages.
@@ -701,12 +878,14 @@ class ChromeProxyVideoMetric(network_metrics.NetworkMetric):
       err('%s: missing video response' % kind)
 
     # Finally, add all the metrics to the results.
-    for (k,v) in self.videoMetrics.iteritems():
+    for (k, v) in self.videoMetrics.iteritems():
       k = "%s_%s" % (k, kind)
       results.AddValue(scalar.ScalarValue(results.current_page, k, "", v))
 
+
 class ChromeProxyInstrumentedVideoMetric(Metric):
   """Metric for pages instrumented to evaluate video transcoding."""
+
   def __init__(self):
     super(ChromeProxyInstrumentedVideoMetric, self).__init__()
 
@@ -717,7 +896,7 @@ class ChromeProxyInstrumentedVideoMetric(Metric):
 
   def AddResults(self, tab, results):
     metrics = tab.EvaluateJavaScript('test.metrics')
-    for (k,v) in metrics.iteritems():
+    for (k, v) in metrics.iteritems():
       results.AddValue(scalar.ScalarValue(results.current_page, k, '', v))
     try:
       complete = metrics['complete']
@@ -727,10 +906,12 @@ class ChromeProxyInstrumentedVideoMetric(Metric):
       if failed:
         raise ChromeProxyMetricException, 'failed'
     except KeyError:
-        raise ChromeProxyMetricException, 'No metrics found'
+      raise ChromeProxyMetricException, 'No metrics found'
 
 # Returns whether |url| is a block-once test URL. Data Reduction Proxy has been
 # configured to always return block-once for these URLs.
 def IsTestUrlForBlockOnce(url):
   return (url == 'http://check.googlezip.net/blocksingle/' or
-      url == 'http://chromeproxy-test.appspot.com/default?respBody=T0s=&respStatus=200&flywheelAction=block-once')
+      url == ('http://chromeproxy-test.appspot.com/default?respBody=T0s='
+              '&respHeader=eyJBY2Nlc3MtQ29udHJvbC1BbGxvdy1PcmlnaW4iOlsiKiJ'
+              'dfQ==&respStatus=200&flywheelAction=block-once'))

@@ -18,6 +18,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -66,7 +67,7 @@ void SetPnaclHash(CrxComponent* component) {
 
 // If we don't have Pnacl installed, this is the version we claim.
 const char kNullVersion[] = "0.0.0.0";
-const char kMinPnaclVersion[] = "0.2.0.86";
+const char kMinPnaclVersion[] = "0.46.0.4";
 
 // Initially say that we do not need OnDemand updates. This should be
 // updated by CheckVersionCompatiblity(), before doing any URLRequests
@@ -127,7 +128,7 @@ bool GetLatestPnaclDirectory(const scoped_refptr<PnaclComponentInstaller>& pci,
 base::DictionaryValue* ReadJSONManifest(const base::FilePath& manifest_path) {
   JSONFileValueDeserializer deserializer(manifest_path);
   std::string error;
-  scoped_ptr<base::Value> root(deserializer.Deserialize(NULL, &error));
+  scoped_ptr<base::Value> root = deserializer.Deserialize(NULL, &error);
   if (!root.get())
     return NULL;
   if (!root->IsType(base::Value::TYPE_DICTIONARY))

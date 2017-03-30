@@ -2,9 +2,22 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
+import("//third_party/pdfium/pdfium.gni")
+
+assert(enable_pdf)
+
 pdf_engine = 0  # 0 PDFium
 
 static_library("pdf") {
+  deps = [
+    "//base",
+    "//gin",
+    "//net",
+    "//ppapi/cpp:objects",
+    "//ppapi/cpp/private:internal_module",
+  ]
+
   sources = [
     "chunk_stream.cc",
     "chunk_stream.h",
@@ -23,14 +36,14 @@ static_library("pdf") {
     "pdf_engine.h",
     "preview_mode_client.cc",
     "preview_mode_client.h",
-    "resource.h",
-    "resource_consts.h",
   ]
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   if (pdf_engine == 0) {
+    deps += [ "//third_party/pdfium" ]
+
     sources += [
       "pdfium/pdfium_api_string_buffer_adapter.cc",
       "pdfium/pdfium_api_string_buffer_adapter.h",
@@ -48,12 +61,7 @@ static_library("pdf") {
     ]
   }
 
-  deps = [
-    "//base",
-    "//components/ui/zoom:ui_zoom",
-    "//content/public/common",
-    "//net",
-    "//ppapi/cpp/private:internal_module",
-    "//third_party/pdfium",
-  ]
+  if (pdf_enable_xfa) {
+    defines = [ "PDF_ENABLE_XFA" ]
+  }
 }

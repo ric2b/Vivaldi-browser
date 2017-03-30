@@ -4,14 +4,15 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/sync_worker.h"
 
+#include <utility>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
-#include "chrome/browser/drive/drive_uploader.h"
-#include "chrome/browser/drive/fake_drive_service.h"
 #include "chrome/browser/extensions/test_extension_service.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.pb.h"
@@ -19,6 +20,8 @@
 #include "chrome/browser/sync_file_system/drive_backend/sync_task.h"
 #include "chrome/browser/sync_file_system/drive_backend/sync_task_manager.h"
 #include "chrome/browser/sync_file_system/sync_file_system_test_util.h"
+#include "components/drive/drive_uploader.h"
+#include "components/drive/service/fake_drive_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
@@ -109,20 +112,18 @@ class SyncWorkerTest : public testing::Test,
     scoped_ptr<drive::DriveServiceInterface>
         fake_drive_service(new drive::FakeDriveService);
 
-    scoped_ptr<SyncEngineContext>
-        sync_engine_context(new SyncEngineContext(
-            fake_drive_service.Pass(),
-            nullptr /* drive_uploader */,
-            nullptr /* task_logger */,
-            base::ThreadTaskRunnerHandle::Get() /* ui_task_runner */,
-            base::ThreadTaskRunnerHandle::Get() /* worker_task_runner */,
-            nullptr /* worker_pool */));
+    scoped_ptr<SyncEngineContext> sync_engine_context(new SyncEngineContext(
+        std::move(fake_drive_service), nullptr /* drive_uploader */,
+        nullptr /* task_logger */,
+        base::ThreadTaskRunnerHandle::Get() /* ui_task_runner */,
+        base::ThreadTaskRunnerHandle::Get() /* worker_task_runner */,
+        nullptr /* worker_pool */));
 
     sync_worker_.reset(new SyncWorker(
         profile_dir_.path(),
         extension_service_->AsWeakPtr(),
         in_memory_env_.get()));
-    sync_worker_->Initialize(sync_engine_context.Pass());
+    sync_worker_->Initialize(std::move(sync_engine_context));
 
     sync_worker_->SetSyncEnabled(true);
     base::RunLoop().RunUntilIdle();
@@ -204,12 +205,12 @@ TEST_F(SyncWorkerTest, UpdateRegisteredApps) {
   for (int i = 0; i < 3; i++) {
     scoped_refptr<const extensions::Extension> extension =
         extensions::ExtensionBuilder()
-        .SetManifest(extensions::DictionaryBuilder()
-                     .Set("name", "foo")
-                     .Set("version", "1.0")
-                     .Set("manifest_version", 2))
-        .SetID(base::StringPrintf("app_%d", i))
-        .Build();
+            .SetManifest(std::move(extensions::DictionaryBuilder()
+                                       .Set("name", "foo")
+                                       .Set("version", "1.0")
+                                       .Set("manifest_version", 2)))
+            .SetID(base::StringPrintf("app_%d", i))
+            .Build();
     extension_service()->AddExtension(extension.get());
     GURL origin = extensions::Extension::GetBaseURLFromExtensionId(
         extension->id());

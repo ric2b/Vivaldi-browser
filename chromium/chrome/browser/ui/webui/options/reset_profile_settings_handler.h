@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
@@ -17,7 +18,6 @@ class DictionaryValue;
 class ListValue;
 }  // namespace base
 
-class AutomaticProfileResetter;
 class BrandcodeConfigFetcher;
 class ProfileResetter;
 class ResettableSettingsSnapshot;
@@ -37,7 +37,6 @@ class ResetProfileSettingsHandler
   void GetLocalizedValues(base::DictionaryValue* localized_strings) override;
   void InitializeHandler() override;
   void InitializePage() override;
-  void Uninitialize() override;
 
   // WebUIMessageHandler implementation.
   void RegisterMessages() override;
@@ -55,9 +54,6 @@ class ResetProfileSettingsHandler
   // Called when the confirmation box disappears.
   void OnHideResetProfileDialog(const base::ListValue* value);
 
-  // Called when the reset banner is dismissed from the WebUI.
-  void OnDismissedResetProfileSettingsBanner(const base::ListValue* args);
-
   // Called when BrandcodeConfigFetcher completed fetching settings.
   void OnSettingsFetched();
 
@@ -67,14 +63,6 @@ class ResetProfileSettingsHandler
 
   // Sets new values for the feedback area.
   void UpdateFeedbackUI();
-
-  // Destroyed with the Profile, thus it should outlive us. This will be NULL if
-  // the underlying profile is off-the-record (e.g. in Guest mode on Chrome OS).
-  AutomaticProfileResetter* automatic_profile_resetter_;
-
-  // Records whether or not the Profile Reset confirmation dialog was opened at
-  // least once during the lifetime of the settings page.
-  bool has_shown_confirmation_dialog_;
 
   scoped_ptr<ProfileResetter> resetter_;
 

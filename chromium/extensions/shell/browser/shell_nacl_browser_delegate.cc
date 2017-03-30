@@ -11,6 +11,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -53,7 +54,7 @@ void OnKeepaliveOnUIThread(
 // Calls OnKeepaliveOnUIThread on UI thread.
 void OnKeepalive(const BrowserPpapiHost::OnKeepaliveInstanceData& instance_data,
                  const base::FilePath& profile_data_directory) {
-  DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserThread::PostTask(
       BrowserThread::UI,
       FROM_HERE,

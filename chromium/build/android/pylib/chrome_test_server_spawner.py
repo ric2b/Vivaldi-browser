@@ -21,20 +21,21 @@ import threading
 import time
 import urlparse
 
-from pylib import constants
-from pylib import ports
+from devil.android import forwarder
+from devil.android import ports
 
-from pylib.forwarder import Forwarder
+from pylib import constants
+from pylib.constants import host_paths
 
 
 # Path that are needed to import necessary modules when launching a testserver.
 os.environ['PYTHONPATH'] = os.environ.get('PYTHONPATH', '') + (':%s:%s:%s:%s:%s'
-    % (os.path.join(constants.DIR_SOURCE_ROOT, 'third_party'),
-       os.path.join(constants.DIR_SOURCE_ROOT, 'third_party', 'tlslite'),
-       os.path.join(constants.DIR_SOURCE_ROOT, 'third_party', 'pyftpdlib',
+    % (os.path.join(host_paths.DIR_SOURCE_ROOT, 'third_party'),
+       os.path.join(host_paths.DIR_SOURCE_ROOT, 'third_party', 'tlslite'),
+       os.path.join(host_paths.DIR_SOURCE_ROOT, 'third_party', 'pyftpdlib',
                     'src'),
-       os.path.join(constants.DIR_SOURCE_ROOT, 'net', 'tools', 'testserver'),
-       os.path.join(constants.DIR_SOURCE_ROOT, 'sync', 'tools', 'testserver')))
+       os.path.join(host_paths.DIR_SOURCE_ROOT, 'net', 'tools', 'testserver'),
+       os.path.join(host_paths.DIR_SOURCE_ROOT, 'sync', 'tools', 'testserver')))
 
 
 SERVER_TYPES = {
@@ -216,7 +217,7 @@ class TestServerThread(threading.Thread):
     logging.info('Start running the thread!')
     self.wait_event.clear()
     self._GenerateCommandLineArguments()
-    command = constants.DIR_SOURCE_ROOT
+    command = host_paths.DIR_SOURCE_ROOT
     if self.arguments['server-type'] == 'sync':
       command = [os.path.join(command, 'sync', 'tools', 'testserver',
                               'sync_testserver.py')] + self.command_line
@@ -224,21 +225,28 @@ class TestServerThread(threading.Thread):
       command = [os.path.join(command, 'net', 'tools', 'testserver',
                               'testserver.py')] + self.command_line
     logging.info('Running: %s', command)
+
+    # Disable PYTHONUNBUFFERED because it has a bad interaction with the
+    # testserver. Remove once this interaction is fixed.
+    unbuf = os.environ.pop('PYTHONUNBUFFERED', None)
+
     # Pass DIR_SOURCE_ROOT as the child's working directory so that relative
     # paths in the arguments are resolved correctly.
     self.process = subprocess.Popen(
         command, preexec_fn=self._CloseUnnecessaryFDsForTestServerProcess,
-        cwd=constants.DIR_SOURCE_ROOT)
+        cwd=host_paths.DIR_SOURCE_ROOT)
+    if unbuf:
+      os.environ['PYTHONUNBUFFERED'] = unbuf
     if self.process:
       if self.pipe_out:
         self.is_ready = self._WaitToStartAndGetPortFromTestServer()
       else:
         self.is_ready = _CheckPortNotAvailable(self.host_port)
     if self.is_ready:
-      Forwarder.Map([(0, self.host_port)], self.device, self.tool)
+      forwarder.Forwarder.Map([(0, self.host_port)], self.device, self.tool)
       # Check whether the forwarder is ready on the device.
       self.is_ready = False
-      device_port = Forwarder.DevicePortForHostPort(self.host_port)
+      device_port = forwarder.Forwarder.DevicePortForHostPort(self.host_port)
       if device_port and _CheckDevicePortStatus(self.device, device_port):
         self.is_ready = True
         self.forwarder_device_port = device_port
@@ -248,7 +256,7 @@ class TestServerThread(threading.Thread):
     _WaitUntil(lambda: self.stop_flag, max_attempts=sys.maxint)
     if self.process.poll() is None:
       self.process.kill()
-    Forwarder.UnmapDevicePort(self.forwarder_device_port, self.device)
+    forwarder.Forwarder.UnmapDevicePort(self.forwarder_device_port, self.device)
     self.process = None
     self.is_ready = False
     if self.pipe_out:

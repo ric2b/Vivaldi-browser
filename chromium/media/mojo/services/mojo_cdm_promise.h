@@ -5,11 +5,13 @@
 #ifndef MEDIA_MOJO_SERVICES_MOJO_CDM_PROMISE_H_
 #define MEDIA_MOJO_SERVICES_MOJO_CDM_PROMISE_H_
 
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "media/base/cdm_promise.h"
 #include "media/mojo/interfaces/content_decryption_module.mojom.h"
 #include "media/mojo/services/mojo_type_trait.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/callback.h"
+#include "mojo/public/cpp/bindings/callback.h"
 
 namespace media {
 
@@ -17,7 +19,7 @@ namespace media {
 template <typename... T>
 class MojoCdmPromise : public CdmPromiseTemplate<T...> {
  public:
-  typedef mojo::Callback<void(mojo::CdmPromiseResultPtr,
+  typedef mojo::Callback<void(interfaces::CdmPromiseResultPtr,
                               typename MojoTypeTrait<T>::MojoType...)>
       CallbackType;
 

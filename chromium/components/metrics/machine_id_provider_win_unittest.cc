@@ -10,8 +10,7 @@
 
 namespace metrics {
 
-// TODO: re-enable for Vivaldi once serial number problem on tester VirtIO drivers is fixed
-TEST(MachineIdProviderTest, DISABLED_GetId) {
+TEST(MachineIdProviderTest, GetId) {
   scoped_refptr<MachineIdProvider> provider(
       MachineIdProvider::CreateInstance());
   std::string id1 = provider->GetMachineId();

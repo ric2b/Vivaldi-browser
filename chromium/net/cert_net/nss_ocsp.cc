@@ -6,21 +6,21 @@
 
 #include <certt.h>
 #include <certdb.h>
-#include <ocsp.h>
 #include <nspr.h>
 #include <nss.h>
+#include <ocsp.h>
 #include <pthread.h>
 #include <secerr.h>
-
 #include <algorithm>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -171,7 +171,7 @@ class OCSPNSSInitialization {
   DISALLOW_COPY_AND_ASSIGN(OCSPNSSInitialization);
 };
 
-base::LazyInstance<OCSPNSSInitialization> g_ocsp_nss_initialization =
+base::LazyInstance<OCSPNSSInitialization>::Leaky g_ocsp_nss_initialization =
     LAZY_INSTANCE_INITIALIZER;
 
 // Concrete class for SEC_HTTP_REQUEST_SESSION.
@@ -410,7 +410,7 @@ class OCSPRequestSession
       scoped_ptr<UploadElementReader> reader(new UploadBytesElementReader(
           upload_content_.data(), upload_content_.size()));
       request_->set_upload(
-          ElementsUploadDataStream::CreateWithReader(reader.Pass(), 0));
+          ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
     }
     if (!extra_request_headers_.IsEmpty())
       request_->SetExtraRequestHeaders(extra_request_headers_);
@@ -594,10 +594,6 @@ OCSPNSSInitialization::OCSPNSSInitialization() {
 }
 
 OCSPNSSInitialization::~OCSPNSSInitialization() {
-  SECStatus status = CERT_RegisterAlternateOCSPAIAInfoCallBack(NULL, NULL);
-  if (status != SECSuccess) {
-    LOG(ERROR) << "Error unregistering OCSP: " << PR_GetError();
-  }
 }
 
 

@@ -5,6 +5,7 @@
 #ifndef CC_DEBUG_BENCHMARK_INSTRUMENTATION_H_
 #define CC_DEBUG_BENCHMARK_INSTRUMENTATION_H_
 
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/debug/rendering_stats.h"
 
@@ -20,6 +21,8 @@ const char kCategory[] = "cc,benchmark";
 const char kBeginFrameId[] = "begin_frame_id";
 }  // namespace internal
 
+// TODO(khushalsagar): Fix these names for the telemetry benchmarks.
+// See crbug/567993.
 const char kSendBeginFrame[] = "ThreadProxy::ScheduledActionSendBeginMainFrame";
 const char kDoBeginFrame[] = "ThreadProxy::BeginMainFrame";
 

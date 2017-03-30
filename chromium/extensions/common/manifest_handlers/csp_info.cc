@@ -12,7 +12,8 @@
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/sandboxed_page_info.h"
-#include "base/command_line.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace extensions {
 
@@ -35,7 +36,7 @@ const char kDefaultPlatformAppContentSecurityPolicy[] =
     // Platform apps can only use local resources by default.
     "default-src 'self' blob: filesystem: chrome-extension-resource:;"
     // For remote resources, they can fetch them via XMLHttpRequest.
-    " connect-src *;"
+    " connect-src * data: blob: filesystem:;"
     // And serve them via data: or same-origin (blob:, filesystem:) URLs
     " style-src " PLATFORM_APP_LOCAL_CSP_SOURCES " 'unsafe-inline';"
     " img-src " PLATFORM_APP_LOCAL_CSP_SOURCES ";"
@@ -46,7 +47,7 @@ const char kDefaultPlatformAppContentSecurityPolicy[] =
     //    spotty connectivity.
     // 2. Fetching via XHR and serving via blob: URLs currently does not allow
     //    streaming or partial buffering.
-    " media-src *;";
+    " media-src * data: blob: filesystem:;";
 
 int GetValidatorOptions(Extension* extension) {
   int options = csp_validator::OPTIONS_NONE;
@@ -111,8 +112,7 @@ bool CSPHandler::Parse(Extension* extension, base::string16* error) {
       //todo Arnar@vivaldi.com. Based on which property should the Vivaldi app
      // be identified on for relaxing special permissions.
       std::string content_security_policy = is_platform_app_ &&
-      !base::CommandLine::ForCurrentProcess()->IsRunningVivaldi() &&
-      !base::CommandLine::ForCurrentProcess()->IsDebuggingVivaldi() ?
+      !vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi() ?
           kDefaultPlatformAppContentSecurityPolicy :
           kDefaultContentSecurityPolicy;
 

@@ -8,7 +8,7 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/favicon/core/favicon_service.h"
@@ -105,9 +105,6 @@ class FaviconSource : public content::URLDataSource {
   Profile* profile_;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(FaviconSourceTest, InstantParsing);
-  FRIEND_TEST_ALL_PREFIXES(FaviconSourceTest, Parsing);
-
   // Defines the allowed pixel sizes for requested favicons.
   enum IconSize {
     SIZE_16,

@@ -4,10 +4,10 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/sync_worker.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
-#include "chrome/browser/drive/drive_service_interface.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/sync_file_system/drive_backend/callback_helper.h"
 #include "chrome/browser/sync_file_system/drive_backend/conflict_resolver.h"
@@ -24,6 +24,7 @@
 #include "chrome/browser/sync_file_system/drive_backend/uninstall_app_task.h"
 #include "chrome/browser/sync_file_system/logger.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
+#include "components/drive/service/drive_service_interface.h"
 #include "storage/common/fileapi/file_system_util.h"
 
 namespace sync_file_system {
@@ -69,7 +70,7 @@ void SyncWorker::Initialize(scoped_ptr<SyncEngineContext> context) {
   DCHECK(sequence_checker_.CalledOnValidSequencedThread());
   DCHECK(!task_manager_);
 
-  context_ = context.Pass();
+  context_ = std::move(context);
 
   task_manager_.reset(new SyncTaskManager(
       weak_ptr_factory_.GetWeakPtr(), 0 /* maximum_background_task */,
@@ -95,8 +96,8 @@ void SyncWorker::RegisterOrigin(
     return;
   }
 
-  task_manager_->ScheduleSyncTask(
-      FROM_HERE, task.Pass(), SyncTaskManager::PRIORITY_HIGH, callback);
+  task_manager_->ScheduleSyncTask(FROM_HERE, std::move(task),
+                                  SyncTaskManager::PRIORITY_HIGH, callback);
 }
 
 void SyncWorker::EnableOrigin(
@@ -190,7 +191,7 @@ void SyncWorker::GetOriginStatusMap(
         GetMetadataDatabase()->IsAppEnabled(app_id) ? "Enabled" : "Disabled";
   }
 
-  callback.Run(status_map.Pass());
+  callback.Run(std::move(status_map));
 }
 
 scoped_ptr<base::ListValue> SyncWorker::DumpFiles(const GURL& origin) {
@@ -395,7 +396,7 @@ void SyncWorker::DidInitialize(SyncEngineInitializer* initializer,
   scoped_ptr<MetadataDatabase> metadata_database =
       initializer->PassMetadataDatabase();
   if (metadata_database) {
-    context_->SetMetadataDatabase(metadata_database.Pass());
+    context_->SetMetadataDatabase(std::move(metadata_database));
     return;
   }
 

@@ -10,10 +10,10 @@
 #include "base/logging.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/ui_resource_layer.h"
+#include "cc/resources/scoped_ui_resource.h"
 #include "chrome/browser/android/compositor/layer_title_cache.h"
 #include "content/public/browser/android/compositor.h"
 #include "ui/android/resources/resource_manager.h"
-#include "ui/android/resources/ui_resource_android.h"
 #include "ui/base/l10n/l10n_util_android.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/vector3d_f.h"
@@ -81,6 +81,10 @@ void DecorationTitle::Update(int title_resource_id,
   favicon_start_padding_ = favicon_start_padding;
   favicon_end_padding_ = favicon_end_padding;
   fade_width_ = fade_width;
+}
+
+void DecorationTitle::SetFaviconResourceId(int favicon_resource_id) {
+  favicon_resource_id_ = favicon_resource_id;
 }
 
 void DecorationTitle::SetUIResourceIds() {

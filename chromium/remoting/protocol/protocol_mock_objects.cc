@@ -4,22 +4,14 @@
 
 #include "remoting/protocol/protocol_mock_objects.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/thread_task_runner_handle.h"
+#include "remoting/protocol/video_stream.h"
 
 namespace remoting {
 namespace protocol {
-
-MockConnectionToClient::MockConnectionToClient(Session* session,
-                                               HostStub* host_stub)
-    : ConnectionToClient(session),
-      clipboard_stub_(nullptr),
-      host_stub_(host_stub),
-      input_stub_(nullptr),
-      video_feedback_stub_(nullptr) {
-}
-
-MockConnectionToClient::~MockConnectionToClient() {}
 
 MockConnectionToClientEventHandler::MockConnectionToClientEventHandler() {}
 
@@ -69,7 +61,7 @@ scoped_ptr<base::ListValue> MockPairingRegistryDelegate::LoadAll() {
        ++i) {
     result->Append(i->second.ToValue().release());
   }
-  return result.Pass();
+  return result;
 }
 
 bool MockPairingRegistryDelegate::DeleteAll() {
@@ -100,11 +92,9 @@ bool MockPairingRegistryDelegate::Delete(const std::string& client_id) {
 
 SynchronousPairingRegistry::SynchronousPairingRegistry(
     scoped_ptr<Delegate> delegate)
-    : PairingRegistry(base::ThreadTaskRunnerHandle::Get(), delegate.Pass()) {
-}
-
-SynchronousPairingRegistry::~SynchronousPairingRegistry() {
-}
+    : PairingRegistry(base::ThreadTaskRunnerHandle::Get(),
+                      std::move(delegate)) {}
+SynchronousPairingRegistry::~SynchronousPairingRegistry() {}
 
 void SynchronousPairingRegistry::PostTask(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,

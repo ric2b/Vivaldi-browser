@@ -4,7 +4,7 @@
 
 package org.chromium.net.urlconnection;
 
-import org.chromium.net.UrlRequestContext;
+import org.chromium.net.CronetEngine;
 
 import java.io.IOException;
 import java.net.Proxy;
@@ -13,34 +13,38 @@ import java.net.URLConnection;
 import java.net.URLStreamHandler;
 
 /**
- * An {@code URLStreamHandler} that handles http and https connections.
+ * A {@link URLStreamHandler} that handles HTTP and HTTPS connections. One can use this class to
+ * create {@link java.net.HttpURLConnection} instances implemented by Cronet; for example: <pre>
+ *
+ * CronetHttpURLStreamHandler streamHandler = new CronetHttpURLStreamHandler(myContext);
+ * HttpURLConnection connection = (HttpURLConnection)streamHandler.openConnection(
+ *         new URL("http://chromium.org"));</pre>
+ * <b>Note:</b> Cronet's {@code HttpURLConnection} implementation is subject to some limitations
+ * listed {@link CronetURLStreamHandlerFactory here}.
  */
-public class CronetHttpURLStreamHandler extends URLStreamHandler {
-    private final UrlRequestContext mUrlRequestContext;
+class CronetHttpURLStreamHandler extends URLStreamHandler {
+    private final CronetEngine mCronetEngine;
 
-    public CronetHttpURLStreamHandler(UrlRequestContext urlRequestContext) {
-        mUrlRequestContext = urlRequestContext;
+    public CronetHttpURLStreamHandler(CronetEngine cronetEngine) {
+        mCronetEngine = cronetEngine;
     }
 
     /**
-     * Establishes a new connection to the resource specified by the URL url.
+     * Establishes a new connection to the resource specified by the {@link URL} {@code url}.
+     * @return an {@link java.net.HttpURLConnection} instance implemented by Cronet.
      */
     @Override
     public URLConnection openConnection(URL url) throws IOException {
-        String protocol = url.getProtocol();
-        if ("http".equals(protocol) || "https".equals(protocol)) {
-            return new CronetHttpURLConnection(url, mUrlRequestContext);
-        }
-        throw new UnsupportedOperationException(
-                "Unexpected protocol:" + protocol);
+        return mCronetEngine.openConnection(url);
     }
 
     /**
-     * Establishes a new connection to the resource specified by the URL url
+     * Establishes a new connection to the resource specified by the {@link URL} {@code url}
      * using the given proxy.
+     * @return an {@link java.net.HttpURLConnection} instance implemented by Cronet.
      */
     @Override
-    public URLConnection openConnection(URL url, Proxy proxy) {
-        throw new UnsupportedOperationException();
+    public URLConnection openConnection(URL url, Proxy proxy) throws IOException {
+        return mCronetEngine.openConnection(url, proxy);
     }
 }

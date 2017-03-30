@@ -16,6 +16,7 @@ UI_BASE_EXPORT
  @private
   BOOL refusesFirstResponder_;
   BOOL drawsBackgroundUsingSuperview_;
+  BOOL isValidLink_;
 }
 
 @property(nonatomic, assign) BOOL drawsBackgroundUsingSuperview;
@@ -26,10 +27,10 @@ UI_BASE_EXPORT
           withFont:(NSFont*)font
       messageColor:(NSColor*)messageColor;
 
-// Marks a |range| within the given message as link, associating it with
-// a |name| that is passed to the delegate's textView:clickedOnLink:atIndex:.
+// Marks a |range| within the given message as a link. Pass nil as the url to
+// create a link that can neither be copied nor dragged.
 - (void)addLinkRange:(NSRange)range
-            withName:(id)name
+             withURL:(NSString*)url
            linkColor:(NSColor*)linkColor;
 
 // This is NO (by default) if the view rejects first responder status.

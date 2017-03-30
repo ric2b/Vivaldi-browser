@@ -24,4 +24,8 @@ InstrumentationOptions = collections.namedtuple('InstrumentationOptions', [
     'device_flags',
     'isolate_file_path',
     'set_asserts',
-    'delete_stale_data'])
+    'delete_stale_data',
+    'timeout_scale',
+    'apk_under_test',
+    'additional_apks',
+    'strict_mode'])

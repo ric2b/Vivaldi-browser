@@ -5,15 +5,21 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_BROWSER_VIEW_RENDERER_H_
 #define ANDROID_WEBVIEW_BROWSER_BROWSER_VIEW_RENDERER_H_
 
+#include <stddef.h>
+
+#include <map>
+
 #include "android_webview/browser/parent_compositor_draw_constraints.h"
 #include "android_webview/browser/shared_renderer_state.h"
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/android/synchronous_compositor_client.h"
 #include "skia/ext/refptr.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
 class SkCanvas;
@@ -38,7 +44,8 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
 
   BrowserViewRenderer(
       BrowserViewRendererClient* client,
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner);
+      const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
+      bool disable_page_visibility);
 
   ~BrowserViewRenderer() override;
 
@@ -79,9 +86,10 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
   // Sets the scale for logical<->physical pixel conversions.
   void SetDipScale(float dip_scale);
   float dip_scale() const { return dip_scale_; }
+  float page_scale_factor() const { return page_scale_factor_; }
 
   // Set the root layer scroll offset to |new_value|.
-  void ScrollTo(gfx::Vector2d new_value);
+  void ScrollTo(const gfx::Vector2d& new_value);
 
   // Android views hierarchy gluing.
   bool IsVisible() const;
@@ -91,6 +99,7 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
   gfx::Size size() const { return size_; }
   void ReleaseHardware();
 
+  bool IsClientVisible() const;
   void TrimMemory(const int level, const bool visible);
 
   // SynchronousCompositorClient overrides.
@@ -98,27 +107,24 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
       content::SynchronousCompositor* compositor) override;
   void DidDestroyCompositor(
       content::SynchronousCompositor* compositor) override;
+  void DidBecomeCurrent(content::SynchronousCompositor* compositor) override;
   void PostInvalidate() override;
   void DidUpdateContent() override;
-  gfx::Vector2dF GetTotalRootLayerScrollOffset() override;
   void UpdateRootLayerState(const gfx::Vector2dF& total_scroll_offset_dip,
                             const gfx::Vector2dF& max_scroll_offset_dip,
                             const gfx::SizeF& scrollable_size_dip,
                             float page_scale_factor,
                             float min_page_scale_factor,
                             float max_page_scale_factor) override;
-  bool IsExternalScrollActive() const override;
-  void SetNeedsAnimateScroll(
-      const AnimationCallback& scroll_animation) override;
-  void DidOverscroll(gfx::Vector2dF accumulated_overscroll,
-                     gfx::Vector2dF latest_overscroll_delta,
-                     gfx::Vector2dF current_fling_velocity) override;
+  void DidOverscroll(const gfx::Vector2dF& accumulated_overscroll,
+                     const gfx::Vector2dF& latest_overscroll_delta,
+                     const gfx::Vector2dF& current_fling_velocity) override;
 
   void UpdateParentDrawConstraints();
   void DetachFunctorFromView();
 
  private:
-  void SetTotalRootLayerScrollOffset(gfx::Vector2dF new_value_dip);
+  void SetTotalRootLayerScrollOffset(const gfx::Vector2dF& new_value_dip);
   bool CanOnDraw();
   // Posts an invalidate with fallback tick. All invalidates posted while an
   // invalidate is pending will be posted as a single invalidate after the
@@ -151,6 +157,7 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
 
   void UpdateMemoryPolicy();
 
+  unsigned int GetCompositorID(content::SynchronousCompositor* compositor);
   // For debug tracing or logging. Return the string representation of this
   // view renderer's state.
   std::string ToString() const;
@@ -158,8 +165,14 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
   BrowserViewRendererClient* client_;
   SharedRendererState shared_renderer_state_;
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
+  bool disable_page_visibility_;
 
+  // The current compositor that's owned by the current RVH.
   content::SynchronousCompositor* compositor_;
+  // A map from compositor's per-WebView unique ID to the compositor's raw
+  // pointer. A raw pointer here is fine because the entry will be erased when
+  // a compositor is destroyed.
+  std::map<size_t, content::SynchronousCompositor*> compositor_map_;
 
   bool is_paused_;
   bool view_visible_;
@@ -168,6 +181,8 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
   bool hardware_enabled_;
   float dip_scale_;
   float page_scale_factor_;
+  float min_page_scale_factor_;
+  float max_page_scale_factor_;
   bool on_new_picture_enable_;
   bool clear_view_;
 
@@ -182,21 +197,23 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
 
   gfx::Size size_;
 
-  // Used to drive a fling animation as requested by the compositor. This acts
-  // as a single-shot animation; the compositor will continually post an
-  // animation callback as long as they're required.
-  AnimationCallback pending_fling_animation_;
+  gfx::SizeF scrollable_size_dip_;
 
   // Current scroll offset in CSS pixels.
+  // TODO(miletus): Make scroll_offset_dip_ a gfx::ScrollOffset.
   gfx::Vector2dF scroll_offset_dip_;
 
   // Max scroll offset in CSS pixels.
+  // TODO(miletus): Make max_scroll_offset_dip_ a gfx::ScrollOffset.
   gfx::Vector2dF max_scroll_offset_dip_;
 
   // Used to prevent rounding errors from accumulating enough to generate
   // visible skew (especially noticeable when scrolling up and down in the same
   // spot over a period of time).
+  // TODO(miletus): Make overscroll_rounding_error_ a gfx::ScrollOffset.
   gfx::Vector2dF overscroll_rounding_error_;
+
+  unsigned int next_compositor_id_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserViewRenderer);
 };

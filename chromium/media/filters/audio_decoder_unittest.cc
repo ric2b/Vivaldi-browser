@@ -2,10 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -16,14 +21,22 @@
 #include "media/base/audio_bus.h"
 #include "media/base/audio_hash.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_util.h"
 #include "media/base/test_data_util.h"
 #include "media/base/test_helpers.h"
+#include "media/base/timestamp_constants.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/audio_file_reader.h"
 #include "media/filters/ffmpeg_audio_decoder.h"
 #include "media/filters/in_memory_url_protocol.h"
 #include "media/filters/opus_audio_decoder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+// USE_SYSTEM_PROPRIETARY_CODECS requires a different test setup, see
+// PlatformMediaPipelineIntegrationTest.
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#undef USE_PROPRIETARY_CODECS
+#endif  // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 namespace media {
 
@@ -40,8 +53,8 @@ enum AudioDecoderType {
 };
 
 struct DecodedBufferExpectations {
-  const int64 timestamp;
-  const int64 duration;
+  const int64_t timestamp;
+  const int64_t duration;
   const char* hash;
 };
 
@@ -80,8 +93,8 @@ static void SetDiscardPadding(AVPacket* packet,
 
   // If the timestamp is positive, try to use FFmpeg's discard data.
   int skip_samples_size = 0;
-  const uint32* skip_samples_ptr =
-      reinterpret_cast<const uint32*>(av_packet_get_side_data(
+  const uint32_t* skip_samples_ptr =
+      reinterpret_cast<const uint32_t*>(av_packet_get_side_data(
           packet, AV_PKT_DATA_SKIP_SAMPLES, &skip_samples_size));
   if (skip_samples_size < 4)
     return;
@@ -99,8 +112,8 @@ class AudioDecoderTest : public testing::TestWithParam<DecoderTestData> {
         last_decode_status_(AudioDecoder::kDecodeError) {
     switch (GetParam().decoder_type) {
       case FFMPEG:
-        decoder_.reset(new FFmpegAudioDecoder(
-            message_loop_.task_runner(), LogCB()));
+        decoder_.reset(new FFmpegAudioDecoder(message_loop_.task_runner(),
+                                              new MediaLog()));
         break;
       case OPUS:
         decoder_.reset(
@@ -144,14 +157,14 @@ class AudioDecoderTest : public testing::TestWithParam<DecoderTestData> {
     EXPECT_EQ(GetParam().first_packet_pts, packet.pts);
     start_timestamp_ = ConvertFromTimeBase(
         reader_->GetAVStreamForTesting()->time_base, packet.pts);
-    av_free_packet(&packet);
+    av_packet_unref(&packet);
 
     // Seek back to the beginning.
     ASSERT_TRUE(reader_->SeekForTesting(start_timestamp_));
 
     AudioDecoderConfig config;
-    AVCodecContextToAudioDecoderConfig(
-        reader_->codec_context_for_testing(), false, &config, false);
+    ASSERT_TRUE(AVCodecContextToAudioDecoderConfig(
+        reader_->codec_context_for_testing(), false, &config));
 
     EXPECT_EQ(GetParam().codec, config.codec());
     EXPECT_EQ(GetParam().samples_per_second, config.samples_per_second());
@@ -167,7 +180,7 @@ class AudioDecoderTest : public testing::TestWithParam<DecoderTestData> {
   void InitializeDecoderWithResult(const AudioDecoderConfig& config,
                                    bool success) {
     decoder_->Initialize(
-        config, NewExpectedBoolCB(success),
+        config, SetCdmReadyCB(), NewExpectedBoolCB(success),
         base::Bind(&AudioDecoderTest::OnDecoderOutput, base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
   }
@@ -194,7 +207,7 @@ class AudioDecoderTest : public testing::TestWithParam<DecoderTestData> {
       SetDiscardPadding(&packet, buffer, GetParam().samples_per_second);
 
     // DecodeBuffer() shouldn't need the original packet since it uses the copy.
-    av_free_packet(&packet);
+    av_packet_unref(&packet);
     DecodeBuffer(buffer);
   }
 
@@ -373,14 +386,15 @@ TEST_P(AudioDecoderTest, NoTimestamp) {
 
 TEST_P(OpusAudioDecoderBehavioralTest, InitializeWithNoCodecDelay) {
   ASSERT_EQ(GetParam().decoder_type, OPUS);
+  std::vector<uint8_t> extra_data(
+      kOpusExtraData,
+      kOpusExtraData + arraysize(kOpusExtraData));
   AudioDecoderConfig decoder_config;
   decoder_config.Initialize(kCodecOpus,
                             kSampleFormatF32,
                             CHANNEL_LAYOUT_STEREO,
                             48000,
-                            kOpusExtraData,
-                            arraysize(kOpusExtraData),
-                            false,
+                            extra_data,
                             false,
                             base::TimeDelta::FromMilliseconds(80),
                             0);
@@ -389,39 +403,36 @@ TEST_P(OpusAudioDecoderBehavioralTest, InitializeWithNoCodecDelay) {
 
 TEST_P(OpusAudioDecoderBehavioralTest, InitializeWithBadCodecDelay) {
   ASSERT_EQ(GetParam().decoder_type, OPUS);
+  std::vector<uint8_t> extra_data(
+      kOpusExtraData,
+      kOpusExtraData + arraysize(kOpusExtraData));
   AudioDecoderConfig decoder_config;
   decoder_config.Initialize(
       kCodecOpus,
       kSampleFormatF32,
       CHANNEL_LAYOUT_STEREO,
       48000,
-      kOpusExtraData,
-      arraysize(kOpusExtraData),
-      false,
+      extra_data,
       false,
       base::TimeDelta::FromMilliseconds(80),
       // Use a different codec delay than in the extradata.
       100);
-  InitializeDecoderWithResult(decoder_config, false);
+  InitializeDecoderWithResult(decoder_config, true);
 }
 
-TEST_P(FFmpegAudioDecoderBehavioralTest, InitializeWithBadConfig) {
-  const AudioDecoderConfig decoder_config(kCodecVorbis,
-                                          kSampleFormatF32,
-                                          CHANNEL_LAYOUT_STEREO,
-                                          // Invalid sample rate of zero.
-                                          0,
-                                          NULL,
-                                          0,
-                                          false);
-  InitializeDecoderWithResult(decoder_config, false);
-}
-
+#if defined(OPUS_FIXED_POINT)
+const DecodedBufferExpectations kSfxOpusExpectations[] = {
+    {0, 13500, "-2.70,-1.41,-0.78,-1.27,-2.56,-3.73,"},
+    {13500, 20000, "5.48,5.93,6.05,5.83,5.54,5.46,"},
+    {33500, 20000, "-3.44,-3.34,-3.57,-4.11,-4.74,-5.13,"},
+};
+#else
 const DecodedBufferExpectations kSfxOpusExpectations[] = {
     {0, 13500, "-2.70,-1.41,-0.78,-1.27,-2.56,-3.73,"},
     {13500, 20000, "5.48,5.93,6.04,5.83,5.54,5.45,"},
     {33500, 20000, "-3.45,-3.35,-3.57,-4.12,-4.74,-5.14,"},
 };
+#endif
 
 const DecodedBufferExpectations kBearOpusExpectations[] = {
     {500, 3500, "-0.26,0.87,1.36,0.84,-0.30,-1.22,"},
@@ -448,7 +459,7 @@ INSTANTIATE_TEST_CASE_P(OpusAudioDecoderBehavioralTest,
                         OpusAudioDecoderBehavioralTest,
                         testing::ValuesIn(kOpusBehavioralTest));
 
-#if 0 && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
 const DecodedBufferExpectations kSfxMp3Expectations[] = {
     {0, 1065, "2.81,3.99,4.53,4.10,3.08,2.46,"},
     {1065, 26122, "-3.81,-4.14,-3.90,-3.36,-3.03,-3.23,"},
@@ -495,7 +506,7 @@ const DecodedBufferExpectations kBearOgvExpectations[] = {
 };
 
 const DecoderTestData kFFmpegTests[] = {
-#if 0 && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
     {FFMPEG, kCodecMP3, "sfx.mp3", kSfxMp3Expectations, 0, 44100,
      CHANNEL_LAYOUT_MONO},
     {FFMPEG, kCodecAAC, "sfx.adts", kSfxAdtsExpectations, 0, 44100,

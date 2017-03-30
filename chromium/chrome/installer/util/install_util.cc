@@ -17,6 +17,7 @@
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
@@ -26,7 +27,6 @@
 #include "base/sys_info.h"
 #include "base/values.h"
 #include "base/version.h"
-#include "base/win/metro.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/chrome_constants.h"
@@ -61,7 +61,6 @@ const wchar_t kStageUncompressing[] = L"uncompressing";
 const wchar_t kStageUnpacking[] = L"unpacking";
 const wchar_t kStageUpdatingChannels[] = L"updating_channels";
 const wchar_t kStageCreatingVisualManifest[] = L"creating_visual_manifest";
-const wchar_t kStageDeferringToHigherVersion[] = L"deferring_to_higher_version";
 const wchar_t kStageUninstallingBinaries[] = L"uninstalling_binaries";
 const wchar_t kStageUninstallingChromeFrame[] = L"uninstalling_chrome_frame";
 
@@ -84,13 +83,13 @@ const wchar_t* const kStages[] = {
   kStageFinishing,
   kStageConfiguringAutoLaunch,
   kStageCreatingVisualManifest,
-  kStageDeferringToHigherVersion,
+  nullptr,      // Deprecated with InstallerStage(18) in util_constants.h.
   kStageUninstallingBinaries,
   kStageUninstallingChromeFrame,
 };
 
-COMPILE_ASSERT(installer::NUM_STAGES == arraysize(kStages),
-               kStages_disagrees_with_Stage_comma_they_must_match_bang);
+static_assert(installer::NUM_STAGES == arraysize(kStages),
+              "kStages disagrees with Stage; they must match!");
 
 // Creates a zero-sized non-decorated foreground window that doesn't appear
 // in the taskbar. This is used as a parent window for calls to ShellExecuteEx
@@ -130,13 +129,6 @@ HWND CreateUACForegroundWindow() {
 
 }  // namespace
 
-bool InstallUtil::ShouldInstallMetroProperties() {
-  // Metro support in Chrome was dropped in Win10. Although Metro properties are
-  // only meaningful on Win8+, install them on earlier versions of the OS as
-  // well in order for easier transitions on OS upgrade to Win8+.
-  return base::win::GetVersion() < base::win::VERSION_WIN10;
-}
-
 base::string16 InstallUtil::GetActiveSetupPath(BrowserDistribution* dist) {
   static const wchar_t kInstalledComponentsPath[] =
       L"Software\\Microsoft\\Active Setup\\Installed Components\\";
@@ -162,11 +154,8 @@ void InstallUtil::TriggerActiveSetupCommand() {
   // and the time setup.exe checks for it.
   cmd.AppendSwitch(installer::switches::kForceConfigureUserSettings);
 
-  base::LaunchOptions launch_options;
-  if (base::win::IsMetroProcess())
-    launch_options.force_breakaway_from_job_ = true;
   base::Process process =
-      base::LaunchProcess(cmd.GetCommandLineString(), launch_options);
+      base::LaunchProcess(cmd.GetCommandLineString(), base::LaunchOptions());
   if (!process.IsValid())
     PLOG(ERROR) << cmd.GetCommandLineString();
 }

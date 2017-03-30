@@ -4,8 +4,12 @@
 
 #include "chrome/browser/password_manager/password_store_mac.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include <string>
+
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -19,6 +23,7 @@
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/password_store_origin_unittest.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_utils.h"
 #include "crypto/mock_apple_keychain.h"
@@ -50,7 +55,7 @@ namespace {
 
 ACTION(QuitUIMessageLoop) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 // From the mock's argument #0 of type const std::vector<PasswordForm*>& takes
@@ -72,12 +77,6 @@ class MockPasswordStoreConsumer : public PasswordStoreConsumer {
   void OnGetPasswordStoreResults(ScopedVector<PasswordForm> results) override {
     OnGetPasswordStoreResultsConstRef(results.get());
   }
-};
-
-class MockPasswordStoreObserver : public PasswordStore::Observer {
- public:
-  MOCK_METHOD1(OnLoginsChanged,
-               void(const password_manager::PasswordStoreChangeList& changes));
 };
 
 // A LoginDatabase that simulates an Init() method that takes a long time.
@@ -163,7 +162,7 @@ void CheckFormsAgainstExpectations(
         created + base::TimeDelta::FromDays(
                       password_manager::kTestingDaysAfterPasswordsAreSynced),
         form->date_synced);
-    EXPECT_EQ(GURL(password_manager::kTestingAvatarUrlSpec), form->avatar_url);
+    EXPECT_EQ(GURL(password_manager::kTestingIconUrlSpec), form->icon_url);
   }
 }
 
@@ -172,7 +171,76 @@ PasswordStoreChangeList AddChangeForForm(const PasswordForm& form) {
       1, PasswordStoreChange(PasswordStoreChange::ADD, form));
 }
 
+class PasswordStoreMacTestDelegate {
+ public:
+  PasswordStoreMacTestDelegate();
+  ~PasswordStoreMacTestDelegate();
+
+  PasswordStoreMac* store() { return store_.get(); }
+
+  static void FinishAsyncProcessing();
+
+ private:
+  void Initialize();
+
+  void ClosePasswordStore();
+
+  base::FilePath test_login_db_file_path() const;
+
+  base::MessageLoopForUI message_loop_;
+  base::ScopedTempDir db_dir_;
+  scoped_ptr<LoginDatabase> login_db_;
+  scoped_refptr<PasswordStoreMac> store_;
+
+  DISALLOW_COPY_AND_ASSIGN(PasswordStoreMacTestDelegate);
+};
+
+PasswordStoreMacTestDelegate::PasswordStoreMacTestDelegate() {
+  Initialize();
+}
+
+PasswordStoreMacTestDelegate::~PasswordStoreMacTestDelegate() {
+  ClosePasswordStore();
+}
+
+void PasswordStoreMacTestDelegate::FinishAsyncProcessing() {
+  base::MessageLoop::current()->RunUntilIdle();
+}
+
+void PasswordStoreMacTestDelegate::Initialize() {
+  ASSERT_TRUE(db_dir_.CreateUniqueTempDir());
+
+  // Ensure that LoginDatabase will use the mock keychain if it needs to
+  // encrypt/decrypt a password.
+  OSCrypt::UseMockKeychain(true);
+  login_db_.reset(new LoginDatabase(test_login_db_file_path()));
+  ASSERT_TRUE(login_db_->Init());
+
+  // Create and initialize the password store.
+  store_ = new PasswordStoreMac(base::ThreadTaskRunnerHandle::Get(),
+                                base::ThreadTaskRunnerHandle::Get(),
+                                make_scoped_ptr(new MockAppleKeychain));
+  store_->set_login_metadata_db(login_db_.get());
+}
+
+void PasswordStoreMacTestDelegate::ClosePasswordStore() {
+  store_->ShutdownOnUIThread();
+  FinishAsyncProcessing();
+}
+
+base::FilePath PasswordStoreMacTestDelegate::test_login_db_file_path() const {
+  return db_dir_.path().Append(FILE_PATH_LITERAL("login.db"));
+}
+
 }  // namespace
+
+namespace password_manager {
+
+INSTANTIATE_TYPED_TEST_CASE_P(Mac,
+                              PasswordStoreOriginTest,
+                              PasswordStoreMacTestDelegate);
+
+}  // namespace password_manager
 
 #pragma mark -
 
@@ -1204,10 +1272,7 @@ class PasswordStoreMacTest : public testing::Test {
     // OSCrypt shouldn't call the Keychain. The histogram doesn't cover the
     // internet passwords.
     if (histogram_tester_) {
-      scoped_ptr<base::HistogramSamples> samples =
-          histogram_tester_->GetHistogramSamplesSinceCreation(
-              "OSX.Keychain.Access");
-      EXPECT_TRUE(!samples || samples->TotalCount() == 0);
+      histogram_tester_->ExpectTotalCount("OSX.Keychain.Access", 0);
     }
   }
 
@@ -1232,7 +1297,7 @@ class PasswordStoreMacTest : public testing::Test {
     if (!store_)
       return;
 
-    store_->Shutdown();
+    store_->ShutdownOnUIThread();
     store_ = nullptr;
   }
 
@@ -1454,6 +1519,8 @@ TEST_F(PasswordStoreMacTest, TestDBKeychainAssociation) {
   base::MessageLoop::current()->Run();
 
   // 3. Add the returned password for m.facebook.com.
+  returned_form.signon_realm = "http://m.facebook.com";
+  returned_form.origin = GURL("http://m.facebook.com/index.html");
   EXPECT_EQ(AddChangeForForm(returned_form),
             login_db()->AddLogin(returned_form));
   owned_keychain_adapter.AddPassword(m_form);
@@ -1480,10 +1547,10 @@ TEST_F(PasswordStoreMacTest, TestDBKeychainAssociation) {
 
 namespace {
 
-class PasswordsChangeObserver :
-    public password_manager::PasswordStore::Observer {
-public:
- PasswordsChangeObserver(PasswordStoreMac* store) : observer_(this) {
+class PasswordsChangeObserver
+    : public password_manager::PasswordStore::Observer {
+ public:
+  explicit PasswordsChangeObserver(PasswordStoreMac* store) : observer_(this) {
     observer_.Add(store);
   }
 
@@ -1496,9 +1563,9 @@ public:
   MOCK_METHOD1(OnLoginsChanged,
                void(const password_manager::PasswordStoreChangeList& changes));
 
-private:
-  ScopedObserver<password_manager::PasswordStore,
-                PasswordsChangeObserver> observer_;
+ private:
+  ScopedObserver<password_manager::PasswordStore, PasswordsChangeObserver>
+      observer_;
 };
 
 password_manager::PasswordStoreChangeList GetAddChangeList(
@@ -1531,8 +1598,6 @@ void CheckRemoveLoginsBetween(PasswordStoreMacTest* test, bool check_created) {
   scoped_ptr<PasswordForm> form_other =
       CreatePasswordFormFromDataForTesting(www_form_data_other);
   base::Time now = base::Time::Now();
-  // TODO(vasilii): remove the next line once crbug/374132 is fixed.
-  now = base::Time::FromTimeT(now.ToTimeT());
   base::Time next_day = now + base::TimeDelta::FromDays(1);
   if (check_created) {
     form_facebook_old->date_created = now;
@@ -1677,7 +1742,8 @@ TEST_F(PasswordStoreMacTest, TestRemoveLoginsMultiProfile) {
 // implicitly deleted. However, the observers shouldn't get notified about
 // deletion of non-existent forms like m.facebook.com.
 TEST_F(PasswordStoreMacTest, SilentlyRemoveOrphanedForm) {
-  testing::StrictMock<MockPasswordStoreObserver> mock_observer;
+  testing::StrictMock<password_manager::MockPasswordStoreObserver>
+      mock_observer;
   store()->AddObserver(&mock_observer);
 
   // 1. Add a password for www.facebook.com to the LoginDatabase.

@@ -13,8 +13,12 @@ source_set("renderer") {
                         ".",
                         "//extensions")
 
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  configs += [
+    "//build/config:precompiled_headers",
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
 
   deps = [
     "//chrome:resources",
@@ -22,9 +26,9 @@ source_set("renderer") {
     "//content:resources",
     "//extensions:extensions_resources",
     "//gin",
+    "//mojo/public/js",
     "//skia",
     "//third_party/WebKit/public:blink",
     "//third_party/mojo/src/mojo/edk/js",
-    "//third_party/mojo/src/mojo/public/js",
   ]
 }

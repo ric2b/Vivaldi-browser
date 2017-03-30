@@ -16,7 +16,8 @@
 #include "chrome/browser/extensions/test_extension_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service_mock.h"
+#include "chrome/browser/sync/profile_sync_test_util.h"
+#include "components/browser_sync/browser/profile_sync_service_mock.h"
 #include "components/sync_driver/device_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/common/extension.h"
@@ -59,7 +60,7 @@ class MockDeviceInfoTracker : public DeviceInfoTracker {
       list.push_back(CloneDeviceInfo(*iter));
     }
 
-    return list.Pass();
+    return list;
   }
 
   void AddObserver(Observer* observer) override { NOTREACHED(); }
@@ -138,7 +139,7 @@ class ProfileSyncServiceMockForExtensionTests:
     public ProfileSyncServiceMock {
  public:
   explicit ProfileSyncServiceMockForExtensionTests(Profile* p)
-      : ProfileSyncServiceMock(p) {}
+      : ProfileSyncServiceMock(CreateProfileSyncServiceParamsForTest(p)) {}
   ~ProfileSyncServiceMockForExtensionTests() {}
 
   MOCK_METHOD0(Shutdown, void());

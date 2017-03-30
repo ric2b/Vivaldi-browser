@@ -4,8 +4,11 @@
 
 #include "chromeos/network/network_state.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+#include <utility>
+
 #include "base/i18n/streaming_utf8_validator.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
@@ -226,7 +229,7 @@ TEST_F(NetworkStateTest, VPNThirdPartyProvider) {
                                           shill::kProviderThirdPartyVpn);
   provider->SetStringWithoutPathExpansion(
       shill::kHostProperty, "third-party-vpn-provider-extension-id");
-  EXPECT_TRUE(SetProperty(shill::kProviderProperty, provider.Pass()));
+  EXPECT_TRUE(SetProperty(shill::kProviderProperty, std::move(provider)));
   SignalInitialPropertiesReceived();
   EXPECT_EQ(network_state_.vpn_provider_type(), shill::kProviderThirdPartyVpn);
   EXPECT_EQ(network_state_.third_party_vpn_provider_extension_id(),

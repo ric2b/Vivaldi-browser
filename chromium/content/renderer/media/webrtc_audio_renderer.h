@@ -5,8 +5,13 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBRTC_AUDIO_RENDERER_H_
 #define CONTENT_RENDERER_MEDIA_WEBRTC_AUDIO_RENDERER_H_
 
-#include <string>
+#include <stdint.h>
 
+#include <map>
+#include <string>
+#include <vector>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/non_thread_safe.h"
@@ -17,6 +22,8 @@
 #include "media/base/audio_pull_fifo.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/channel_layout.h"
+#include "media/base/output_device.h"
+#include "third_party/WebKit/public/platform/WebMediaStream.h"
 
 namespace media {
 class AudioOutputDevice;
@@ -24,7 +31,6 @@ class AudioOutputDevice;
 
 namespace webrtc {
 class AudioSourceInterface;
-class MediaStreamInterface;
 }  // namespace webrtc
 
 namespace content {
@@ -35,7 +41,8 @@ class WebRtcAudioRendererSource;
 // for connecting WebRtc MediaStream with the audio pipeline.
 class CONTENT_EXPORT WebRtcAudioRenderer
     : NON_EXPORTED_BASE(public media::AudioRendererSink::RenderCallback),
-      NON_EXPORTED_BASE(public MediaStreamAudioRenderer) {
+      NON_EXPORTED_BASE(public MediaStreamAudioRenderer),
+      NON_EXPORTED_BASE(public media::OutputDevice) {
  public:
   // This is a little utility class that holds the configured state of an audio
   // stream.
@@ -77,11 +84,11 @@ class CONTENT_EXPORT WebRtcAudioRenderer
 
   WebRtcAudioRenderer(
       const scoped_refptr<base::SingleThreadTaskRunner>& signaling_thread,
-      const scoped_refptr<webrtc::MediaStreamInterface>& media_stream,
+      const blink::WebMediaStream& media_stream,
       int source_render_frame_id,
       int session_id,
-      int sample_rate,
-      int frames_per_buffer);
+      const std::string& device_id,
+      const url::Origin& security_origin);
 
   // Initialize function called by clients like WebRtcAudioDeviceImpl.
   // Stop() has to be called before |source| is deleted.
@@ -97,7 +104,7 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   // will ensure that Pause() is called followed by a call to Stop(), which
   // is the usage pattern that WebRtcAudioRenderer requires.
   scoped_refptr<MediaStreamAudioRenderer> CreateSharedAudioRendererProxy(
-      const scoped_refptr<webrtc::MediaStreamInterface>& media_stream);
+      const blink::WebMediaStream& media_stream);
 
   // Used to DCHECK on the expected state.
   bool IsStarted() const;
@@ -116,11 +123,16 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   void Pause() override;
   void Stop() override;
   void SetVolume(float volume) override;
-  void SwitchOutputDevice(const std::string& device_id,
-                          const GURL& security_origin,
-                          const media::SwitchOutputDeviceCB& callback) override;
+  media::OutputDevice* GetOutputDevice() override;
   base::TimeDelta GetCurrentRenderTime() const override;
   bool IsLocalRenderer() const override;
+
+  // media::OutputDevice implementation
+  void SwitchOutputDevice(const std::string& device_id,
+                          const url::Origin& security_origin,
+                          const media::SwitchOutputDeviceCB& callback) override;
+  media::AudioParameters GetOutputParameters() override;
+  media::OutputDeviceStatus GetDeviceStatus() override;
 
   // Called when an audio renderer, either the main or a proxy, starts playing.
   // Here we maintain a reference count of how many renderers are currently
@@ -152,13 +164,16 @@ class CONTENT_EXPORT WebRtcAudioRenderer
 
   // Used to DCHECK that we are called on the correct thread.
   base::ThreadChecker thread_checker_;
+  base::ThreadChecker audio_renderer_thread_checker_;
 
   // Flag to keep track the state of the renderer.
   State state_;
 
   // media::AudioRendererSink::RenderCallback implementation.
   // These two methods are called on the AudioOutputDevice worker thread.
-  int Render(media::AudioBus* audio_bus, int audio_delay_milliseconds) override;
+  int Render(media::AudioBus* audio_bus,
+             uint32_t audio_delay_milliseconds,
+             uint32_t frames_skipped) override;
   void OnRenderError() override;
 
   // Called by AudioPullFifo when more data is necessary.
@@ -185,9 +200,12 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   // Here we update the shared Play state and apply volume scaling to all audio
   // sources associated with the |media_stream| based on the collective volume
   // of playing renderers.
-  void OnPlayStateChanged(
-      const scoped_refptr<webrtc::MediaStreamInterface>& media_stream,
-      PlayingState* state);
+  void OnPlayStateChanged(const blink::WebMediaStream& media_stream,
+                          PlayingState* state);
+
+  // Updates |sink_params_|, |audio_fifo_| and |fifo_delay_milliseconds_| based
+  // on |sink_|, and initializes |sink_|.
+  void PrepareSink();
 
   // The RenderFrame in which the audio is rendered into |sink_|.
   const int source_render_frame_id_;
@@ -199,12 +217,14 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   scoped_refptr<media::AudioOutputDevice> sink_;
 
   // The media stream that holds the audio tracks that this renderer renders.
-  const scoped_refptr<webrtc::MediaStreamInterface> media_stream_;
+  const blink::WebMediaStream media_stream_;
 
   // Audio data source from the browser process.
   WebRtcAudioRendererSource* source_;
 
-  // Protects access to |state_|, |source_|, |sink_| and |current_time_|.
+  // Protects access to |state_|, |source_|, |audio_fifo_|,
+  // |audio_delay_milliseconds_|, |fifo_delay_milliseconds_|, |current_time_|,
+  // |sink_params_| and |render_callback_count_|
   mutable base::Lock lock_;
 
   // Ref count for the MediaPlayers which are playing audio.
@@ -231,6 +251,11 @@ class CONTENT_EXPORT WebRtcAudioRenderer
 
   // Audio params used by the sink of the renderer.
   media::AudioParameters sink_params_;
+
+  // The preferred device id of the output device or empty for the default
+  // output device. Can change as a result of a SetSinkId() call.
+  std::string output_device_id_;
+  url::Origin security_origin_;
 
   // Maps audio sources to a list of active audio renderers.
   // Pointers to PlayingState objects are only kept in this map while the

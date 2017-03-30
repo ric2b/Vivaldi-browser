@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/mock_pref_change_callback.h"
@@ -377,7 +380,8 @@ class ControlledPrefsDisableExtension : public ExtensionControlledPrefsTest {
         extension1(), kPref1, new base::StringValue("val1"));
     std::string actual = prefs()->pref_service()->GetString(kPref1);
     EXPECT_EQ("val1", actual);
-    prefs()->SetExtensionState(extension1()->id(), Extension::DISABLED);
+    prefs()->SetExtensionDisabled(extension1()->id(),
+                                  Extension::DISABLE_USER_ACTION);
   }
   void Verify() override {
     std::string actual = prefs()->pref_service()->GetString(kPref1);
@@ -391,8 +395,9 @@ class ControlledPrefsReenableExtension : public ExtensionControlledPrefsTest {
   void Initialize() override {
     InstallExtensionControlledPref(
         extension1(), kPref1, new base::StringValue("val1"));
-    prefs()->SetExtensionState(extension1()->id(), Extension::DISABLED);
-    prefs()->SetExtensionState(extension1()->id(), Extension::ENABLED);
+    prefs()->SetExtensionDisabled(extension1()->id(),
+                                  Extension::DISABLE_USER_ACTION);
+    prefs()->SetExtensionEnabled(extension1()->id());
   }
   void Verify() override {
     std::string actual = prefs()->pref_service()->GetString(kPref1);

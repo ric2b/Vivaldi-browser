@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/testing_pref_service.h"
@@ -68,8 +69,8 @@ class AutoEnrollmentClientTest : public testing::Test {
                     int power_limit) {
     state_ = AUTO_ENROLLMENT_STATE_PENDING;
     service_.reset(new MockDeviceManagementService());
-    EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _, _))
-        .WillRepeatedly(SaveArg<6>(&last_request_));
+    EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _))
+        .WillRepeatedly(SaveArg<5>(&last_request_));
     client_.reset(new AutoEnrollmentClient(
         base::Bind(&AutoEnrollmentClientTest::ProgressCallback,
                    base::Unretained(this)),
@@ -90,7 +91,7 @@ class AutoEnrollmentClientTest : public testing::Test {
         .WillOnce(service_->FailJob(error));
   }
 
-  void ServerWillReply(int64 modulus, bool with_hashes, bool with_id_hash) {
+  void ServerWillReply(int64_t modulus, bool with_hashes, bool with_id_hash) {
     em::DeviceManagementResponse response;
     em::DeviceAutoEnrollmentResponse* enrollment_response =
         response.mutable_auto_enrollment_response();
@@ -387,7 +388,7 @@ TEST_F(AutoEnrollmentClientTest, NoBitsUploaded) {
 }
 
 TEST_F(AutoEnrollmentClientTest, ManyBitsUploaded) {
-  int64 bottom62 = INT64_C(0x386e7244d097c3e6);
+  int64_t bottom62 = INT64_C(0x386e7244d097c3e6);
   for (int i = 0; i <= 62; ++i) {
     CreateClient(kStateKey, i, i);
     ServerWillReply(-1, false, false);
@@ -598,16 +599,16 @@ TEST_F(AutoEnrollmentClientTest, NetworkFailureThenRequireUpdatedModulus) {
   InSequence sequence;
   // The default client uploads 4 bits. Make the server ask for 5.
   ServerWillReply(1 << 5, false, false);
-  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _, _));
+  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _));
   // Then reply with a valid response and include the hash.
   ServerWillReply(-1, true, true);
-  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _, _));
+  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _));
   // State download triggers.
   ServerWillSendState(
       "example.com",
       em::DeviceStateRetrievalResponse::RESTORE_MODE_REENROLLMENT_ENFORCED,
       kDisabledMessage);
-  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _, _));
+  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _));
 
   // Trigger a network change event.
   client_->OnNetworkChanged(net::NetworkChangeNotifier::CONNECTION_ETHERNET);

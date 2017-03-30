@@ -4,16 +4,26 @@
 
 #include "components/gcm_driver/gcm_driver.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "components/gcm_driver/gcm_app_handler.h"
 
 namespace gcm {
 
 namespace {
+
 const size_t kMaxSenders = 100;
+
+// TODO(peter): Implement an event for GCMAppHandlers that should be called
+// when decryption of an incoming message has failed.
+void DecryptionFailedCallback(
+    GCMEncryptionProvider::DecryptionFailure reason) {}
+
 }  // namespace
 
 InstanceIDHandler::InstanceIDHandler() {
@@ -27,7 +37,14 @@ void InstanceIDHandler::DeleteAllTokensForApp(
   DeleteToken(app_id, "*", "*", callback);
 }
 
-GCMDriver::GCMDriver() : weak_ptr_factory_(this) {
+GCMDriver::GCMDriver(
+    const base::FilePath& store_path,
+    const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner)
+    : weak_ptr_factory_(this) {
+  // The |blocking_task_runner| can be NULL for tests that do not need the
+  // encryption capabilities of the GCMDriver class.
+  if (blocking_task_runner)
+    encryption_provider_.Init(store_path, blocking_task_runner);
 }
 
 GCMDriver::~GCMDriver() {
@@ -125,7 +142,7 @@ void GCMDriver::UnregisterInternal(const std::string& app_id,
 
 void GCMDriver::Send(const std::string& app_id,
                      const std::string& receiver_id,
-                     const GCMClient::OutgoingMessage& message,
+                     const OutgoingMessage& message,
                      const SendCallback& callback) {
   DCHECK(!app_id.empty());
   DCHECK(!receiver_id.empty());
@@ -147,6 +164,12 @@ void GCMDriver::Send(const std::string& app_id,
   send_callbacks_[key] = callback;
 
   SendImpl(app_id, receiver_id, message);
+}
+
+void GCMDriver::GetEncryptionInfo(
+    const std::string& app_id,
+    const GetEncryptionInfoCallback& callback) {
+  encryption_provider_.GetEncryptionInfo(app_id, callback);
 }
 
 void GCMDriver::UnregisterWithSenderIdImpl(const std::string& app_id,
@@ -244,6 +267,20 @@ void GCMDriver::ClearCallbacks() {
   register_callbacks_.clear();
   unregister_callbacks_.clear();
   send_callbacks_.clear();
+}
+
+void GCMDriver::DispatchMessage(const std::string& app_id,
+                                const IncomingMessage& message) {
+  if (!encryption_provider_.IsEncryptedMessage(message)) {
+    GetAppHandler(app_id)->OnMessage(app_id, message);
+    return;
+  }
+
+  encryption_provider_.DecryptMessage(
+      app_id, message,
+      base::Bind(&GCMDriver::DispatchMessage,
+                 weak_ptr_factory_.GetWeakPtr(), app_id),
+      base::Bind(&DecryptionFailedCallback));
 }
 
 void GCMDriver::RegisterAfterUnregister(

@@ -10,9 +10,8 @@
 #include <string>
 #include <utility>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
-#include "components/guest_view/browser/guest_view.h"
 
 namespace content {
 class ResourceRequestInfo;
@@ -38,7 +37,7 @@ class ExtensionRendererState {
   class RenderViewHostObserver;
   class TabObserver;
   friend class TabObserver;
-  friend struct DefaultSingletonTraits<ExtensionRendererState>;
+  friend struct base::DefaultSingletonTraits<ExtensionRendererState>;
 
   typedef std::pair<int, int> RenderId;
   typedef std::pair<int, int> TabAndWindowId;

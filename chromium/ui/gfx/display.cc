@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -40,17 +41,17 @@ float GetForcedDeviceScaleFactorImpl() {
     std::string value =
         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
             switches::kForceDeviceScaleFactor);
-    if (!base::StringToDouble(value, &scale_in_double))
+    if (!base::StringToDouble(value, &scale_in_double)) {
       LOG(ERROR) << "Failed to parse the default device scale factor:" << value;
+      scale_in_double = 1.0;
+    }
   }
   return static_cast<float>(scale_in_double);
 }
 
-int64 internal_display_id_ = -1;
+int64_t internal_display_id_ = -1;
 
 }  // namespace
-
-const int64 Display::kInvalidDisplayID = -1;
 
 // static
 float Display::GetForcedDeviceScaleFactor() {
@@ -59,7 +60,7 @@ float Display::GetForcedDeviceScaleFactor() {
   return g_forced_device_scale_factor;
 }
 
-//static
+// static
 bool Display::HasForceDeviceScaleFactor() {
   if (g_has_forced_device_scale_factor == -1)
     g_has_forced_device_scale_factor = HasForceDeviceScaleFactorImpl();
@@ -79,14 +80,13 @@ Display::Display()
       touch_support_(TOUCH_SUPPORT_UNKNOWN) {
 }
 
-Display::Display(int64 id)
+Display::Display(int64_t id)
     : id_(id),
       device_scale_factor_(GetForcedDeviceScaleFactor()),
       rotation_(ROTATE_0),
-      touch_support_(TOUCH_SUPPORT_UNKNOWN) {
-}
+      touch_support_(TOUCH_SUPPORT_UNKNOWN) {}
 
-Display::Display(int64 id, const gfx::Rect& bounds)
+Display::Display(int64_t id, const gfx::Rect& bounds)
     : id_(id),
       bounds_(bounds),
       work_area_(bounds),
@@ -157,20 +157,17 @@ void Display::SetScaleAndBounds(
     device_scale_factor_ = device_scale_factor;
   }
   device_scale_factor_ = std::max(1.0f, device_scale_factor_);
-  bounds_ = gfx::Rect(
-      gfx::ToFlooredPoint(gfx::ScalePoint(bounds_in_pixel.origin(),
-                                          1.0f / device_scale_factor_)),
-      gfx::ToFlooredSize(gfx::ScaleSize(bounds_in_pixel.size(),
-                                        1.0f / device_scale_factor_)));
+  bounds_ = gfx::Rect(gfx::ScaleToFlooredPoint(bounds_in_pixel.origin(),
+                                               1.0f / device_scale_factor_),
+                      gfx::ScaleToFlooredSize(bounds_in_pixel.size(),
+                                              1.0f / device_scale_factor_));
   UpdateWorkAreaFromInsets(insets);
 }
 
 void Display::SetSize(const gfx::Size& size_in_pixel) {
   gfx::Point origin = bounds_.origin();
 #if defined(USE_AURA)
-  gfx::PointF origin_f = origin;
-  origin_f.Scale(device_scale_factor_);
-  origin = gfx::ToFlooredPoint(origin_f);
+  origin = gfx::ScaleToFlooredPoint(origin, device_scale_factor_);
 #endif
   SetScaleAndBounds(device_scale_factor_, gfx::Rect(origin, size_in_pixel));
 }
@@ -181,7 +178,7 @@ void Display::UpdateWorkAreaFromInsets(const gfx::Insets& insets) {
 }
 
 gfx::Size Display::GetSizeInPixel() const {
-  return gfx::ToFlooredSize(gfx::ScaleSize(size(), device_scale_factor_));
+  return gfx::ScaleToFlooredSize(size(), device_scale_factor_);
 }
 
 std::string Display::ToString() const {
@@ -199,13 +196,20 @@ bool Display::IsInternal() const {
 }
 
 // static
-int64 Display::InternalDisplayId() {
+int64_t Display::InternalDisplayId() {
+  DCHECK_NE(kInvalidDisplayID, internal_display_id_);
   return internal_display_id_;
 }
 
 // static
-void Display::SetInternalDisplayId(int64 internal_display_id) {
+void Display::SetInternalDisplayId(int64_t internal_display_id) {
   internal_display_id_ = internal_display_id;
+}
+
+// static
+bool Display::IsInternalDisplayId(int64_t display_id) {
+  DCHECK_NE(kInvalidDisplayID, display_id);
+  return HasInternalDisplay() && internal_display_id_ == display_id;
 }
 
 // static

@@ -167,6 +167,7 @@ message OmniboxEventProto {
     // This enum value is currently only used by Android GSA. It represents
     // a suggestion powered by a Chrome content provider.
     ON_DEVICE_CHROME = 13;
+    CLIPBOARD_URL = 14;  // Suggestion coming from clipboard (iOS only).
   }
 
   // The result set displayed on the completion popup
@@ -224,6 +225,7 @@ message OmniboxEventProto {
                                     // own type but instead can be attached to
                                     // suggestions of any type.
       CALCULATOR              = 23; // A calculator answer.
+      CLIPBOARD               = 24; // An URL based on the clipboard.
       BOOKMARK_NICK = 10000;        // A bookmark whose nickname contains the input.
       BOOKMARK_DESCRIPTION = 1001;  // A bookmark whose description contains the input.
     }

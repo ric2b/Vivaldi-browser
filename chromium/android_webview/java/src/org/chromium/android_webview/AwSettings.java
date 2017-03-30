@@ -17,10 +17,10 @@ import android.webkit.WebSettings.LayoutAlgorithm;
 import android.webkit.WebSettings.PluginState;
 import android.webkit.WebSettings.ZoomDensity;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -34,13 +34,8 @@ public class AwSettings {
     private static final String LOGTAG = AwSettings.class.getSimpleName();
     private static final boolean TRACE = false;
 
-    // These constants must be kept in sync with the Android framework, defined in WebSettimgs.
-    @VisibleForTesting
-    public static final int MIXED_CONTENT_ALWAYS_ALLOW = 0;
-    @VisibleForTesting
-    public static final int MIXED_CONTENT_NEVER_ALLOW = 1;
-    @VisibleForTesting
-    public static final int MIXED_CONTENT_COMPATIBILITY_MODE = 2;
+    // TODO(hush): Use android.webkit.WebSettings.MENU_ITEM_*. crbug.com/546762.
+    private static final int MENU_ITEM_NONE = 0;
 
     private static final String TAG = "AwSettings";
 
@@ -91,10 +86,11 @@ public class AwSettings {
     private float mInitialPageScalePercent = 0;
     private boolean mSpatialNavigationEnabled;  // Default depends on device features.
     private boolean mEnableSupportedHardwareAcceleratedFeatures = false;
-    private int mMixedContentMode = MIXED_CONTENT_NEVER_ALLOW;
+    private int mMixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW;
     private boolean mVideoOverlayForEmbeddedVideoEnabled = false;
     private boolean mForceVideoOverlayForTests = false;
     private boolean mOffscreenPreRaster = false;
+    private int mDisabledMenuItems = MENU_ITEM_NONE;
 
     // Although this bit is stored on AwSettings it is actually controlled via the CookieManager.
     private boolean mAcceptThirdPartyCookies = false;
@@ -1619,14 +1615,14 @@ public class AwSettings {
     @CalledByNative
     private boolean getAllowRunningInsecureContentLocked() {
         assert Thread.holdsLock(mAwSettingsLock);
-        return mMixedContentMode == MIXED_CONTENT_ALWAYS_ALLOW;
+        return mMixedContentMode == WebSettings.MIXED_CONTENT_ALWAYS_ALLOW;
     }
 
     @CalledByNative
     private boolean getAllowDisplayingInsecureContentLocked() {
         assert Thread.holdsLock(mAwSettingsLock);
-        return mMixedContentMode == MIXED_CONTENT_ALWAYS_ALLOW
-                || mMixedContentMode == MIXED_CONTENT_COMPATIBILITY_MODE;
+        return mMixedContentMode == WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                || mMixedContentMode == WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE;
     }
 
     public boolean getOffscreenPreRaster() {
@@ -1664,6 +1660,20 @@ public class AwSettings {
                         }
                     }
                 });
+            }
+        }
+    }
+
+    public int getDisabledActionModeMenuItems() {
+        synchronized (mAwSettingsLock) {
+            return mDisabledMenuItems;
+        }
+    }
+
+    public void setDisabledActionModeMenuItems(int menuItems) {
+        synchronized (mAwSettingsLock) {
+            if (menuItems != mDisabledMenuItems) {
+                mDisabledMenuItems = menuItems;
             }
         }
     }
@@ -1721,6 +1731,20 @@ public class AwSettings {
         }
     }
 
+    @VisibleForTesting
+    public void updateAcceptLanguages() {
+        synchronized (mAwSettingsLock) {
+            mEventHandler.runOnUiThreadBlockingAndLocked(new Runnable() {
+                @Override
+                public void run() {
+                    if (mNativeAwSettings != 0) {
+                        nativeUpdateRendererPreferencesLocked(mNativeAwSettings);
+                    }
+                }
+            });
+        }
+    }
+
     @CalledByNative
     private boolean getForceVideoOverlayForTests() {
         assert Thread.holdsLock(mAwSettingsLock);
@@ -1757,6 +1781,12 @@ public class AwSettings {
             return MAXIMUM_FONT_SIZE;
         }
         return size;
+    }
+
+    @CalledByNative
+    private boolean getRecordFullDocument() {
+        assert Thread.holdsLock(mAwSettingsLock);
+        return AwContentsStatics.getRecordFullDocument();
     }
 
     @CalledByNative

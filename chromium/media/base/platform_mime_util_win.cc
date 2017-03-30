@@ -21,8 +21,8 @@ bool IsPlatformMediaPipelineAvailable(PlatformMediaCheckType check_type) {
   return true;
 }
 
-bool IsPlatformAudioDecoderAvailable() {
-  return LoadMFCommonLibraries() && LoadMFAudioDecoderLibraries();
+bool IsPlatformAudioDecoderAvailable(AudioCodec codec) {
+  return LoadMFCommonLibraries() && LoadMFAudioDecoderLibrary(codec);
 }
 
 bool IsPlatformVideoDecoderAvailable() {

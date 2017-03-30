@@ -5,12 +5,15 @@
 #ifndef CHROME_BROWSER_NET_NET_ERROR_TAB_HELPER_H_
 #define CHROME_BROWSER_NET_NET_ERROR_TAB_HELPER_H_
 
-#include "base/basictypes.h"
+#include <string>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_member.h"
 #include "chrome/browser/net/dns_probe_service.h"
+#include "chrome/common/features.h"
 #include "components/error_page/common/net_error_info.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -30,7 +33,7 @@ class NetErrorTabHelper
     TESTING_FORCE_ENABLED
   };
 
-  typedef base::Callback<void(chrome_common_net::DnsProbeStatus)>
+  typedef base::Callback<void(error_page::DnsProbeStatus)>
       DnsProbeStatusSnoopCallback;
 
   ~NetErrorTabHelper() override;
@@ -46,6 +49,8 @@ class NetErrorTabHelper
   }
 
   // content::WebContentsObserver implementation.
+  void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
+
   void DidStartNavigationToPendingEntry(
       const GURL& url,
       content::NavigationController::ReloadType reload_type) override;
@@ -67,15 +72,19 @@ class NetErrorTabHelper
                               const base::string16& error_description,
                               bool was_ignored_by_handler) override;
 
+  bool OnMessageReceived(const IPC::Message& message,
+                         content::RenderFrameHost* render_frame_host) override;
+
+
  protected:
   // |contents| is the WebContents of the tab this NetErrorTabHelper is
   // attached to.
   explicit NetErrorTabHelper(content::WebContents* contents);
   virtual void StartDnsProbe();
   virtual void SendInfo();
-  void OnDnsProbeFinished(chrome_common_net::DnsProbeStatus result);
+  void OnDnsProbeFinished(error_page::DnsProbeStatus result);
 
-  chrome_common_net::DnsProbeStatus dns_probe_status() const {
+  error_page::DnsProbeStatus dns_probe_status() const {
     return dns_probe_status_;
   }
 
@@ -86,6 +95,22 @@ class NetErrorTabHelper
 
   void InitializePref(content::WebContents* contents);
   bool ProbesAllowed() const;
+
+  // Sanitizes |url| and shows a dialog for it.
+  void RunNetworkDiagnostics(const GURL& url);
+
+  // Shows the diagnostics dialog after its been sanitized, virtual for
+  // testing.
+  virtual void RunNetworkDiagnosticsHelper(const std::string& sanitized_url);
+
+  // Relates to offline pages handling.
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  void SetOfflinePageInfo(content::RenderFrameHost* render_frame_host,
+                          const GURL& url);
+  void ShowOfflinePages();
+  void LoadOfflineCopy(const GURL& url);
+  bool IsFromErrorPage() const;
+#endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
   // True if the last provisional load that started was for an error page.
   bool is_error_page_;
@@ -101,7 +126,7 @@ class NetErrorTabHelper
   // The status of a DNS probe that may or may not have started or finished.
   // Since the renderer can change out from under the helper (in cross-process
   // navigations), it re-sends the status whenever an error page commits.
-  chrome_common_net::DnsProbeStatus dns_probe_status_;
+  error_page::DnsProbeStatus dns_probe_status_;
 
   // Optional callback for browser test to snoop on outgoing NetErrorInfo IPCs.
   DnsProbeStatusSnoopCallback dns_probe_status_snoop_callback_;

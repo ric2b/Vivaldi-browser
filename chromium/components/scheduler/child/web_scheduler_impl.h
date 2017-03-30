@@ -21,6 +21,7 @@ namespace scheduler {
 class ChildScheduler;
 class SingleThreadIdleTaskRunner;
 class TaskQueue;
+class WebTaskRunnerImpl;
 
 class SCHEDULER_EXPORT WebSchedulerImpl : public blink::WebScheduler {
  public:
@@ -28,39 +29,38 @@ class SCHEDULER_EXPORT WebSchedulerImpl : public blink::WebScheduler {
       ChildScheduler* child_scheduler,
       scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
-      scoped_refptr<TaskQueue> timer_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> timer_task_runner);
   ~WebSchedulerImpl() override;
 
   // blink::WebScheduler implementation:
-  virtual void shutdown();
-  virtual bool shouldYieldForHighPriorityWork();
-  virtual bool canExceedIdleDeadlineIfRequired();
-  virtual void postIdleTask(const blink::WebTraceLocation& location,
-                            blink::WebThread::IdleTask* task);
-  virtual void postNonNestableIdleTask(const blink::WebTraceLocation& location,
-                                       blink::WebThread::IdleTask* task);
-  virtual void postIdleTaskAfterWakeup(const blink::WebTraceLocation& location,
-                                       blink::WebThread::IdleTask* task);
-  virtual void postLoadingTask(const blink::WebTraceLocation& location,
-                               blink::WebThread::Task* task);
-  virtual void postTimerTaskAt(const blink::WebTraceLocation& location,
-                               blink::WebThread::Task* task,
-                               double monotonicTime);
-
-  // TODO(skyostil): Remove once the Blink side patch lands.
-  virtual void postTimerTask(const blink::WebTraceLocation& location,
-                             blink::WebThread::Task* task,
-                             long long delayMs);
+  void shutdown() override;
+  bool shouldYieldForHighPriorityWork() override;
+  bool canExceedIdleDeadlineIfRequired() override;
+  void postIdleTask(const blink::WebTraceLocation& location,
+                    blink::WebThread::IdleTask* task) override;
+  void postNonNestableIdleTask(const blink::WebTraceLocation& location,
+                               blink::WebThread::IdleTask* task) override;
+  void postIdleTaskAfterWakeup(const blink::WebTraceLocation& location,
+                               blink::WebThread::IdleTask* task) override;
+  blink::WebTaskRunner* loadingTaskRunner() override;
+  blink::WebTaskRunner* timerTaskRunner() override;
+  blink::WebPassOwnPtr<blink::WebViewScheduler> createWebViewScheduler(
+      blink::WebView*) override;
+  void suspendTimerQueue() override {}
+  void resumeTimerQueue() override {}
+  void addPendingNavigation() override {}
+  void removePendingNavigation() override {}
+  void onNavigationStarted() override {}
 
  private:
   static void runIdleTask(scoped_ptr<blink::WebThread::IdleTask> task,
                           base::TimeTicks deadline);
-  static void runTask(scoped_ptr<blink::WebThread::Task> task);
 
   ChildScheduler* child_scheduler_;  // NOT OWNED
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner_;
-  scoped_refptr<TaskQueue> timer_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> timer_task_runner_;
+  scoped_ptr<WebTaskRunnerImpl> loading_web_task_runner_;
+  scoped_ptr<WebTaskRunnerImpl> timer_web_task_runner_;
 };
 
 }  // namespace scheduler

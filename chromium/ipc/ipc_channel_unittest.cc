@@ -8,13 +8,14 @@
 #include <windows.h>
 #endif
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/pickle.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
-#include "ipc/ipc_message.h"
 #include "ipc/ipc_test_base.h"
 #include "ipc/ipc_test_channel_listener.h"
 
@@ -23,39 +24,12 @@ namespace {
 class IPCChannelTest : public IPCTestBase {
 };
 
-// TODO(viettrungluu): Move to a separate IPCMessageTest.
-TEST_F(IPCChannelTest, BasicMessageTest) {
-  int v1 = 10;
-  std::string v2("foobar");
-  base::string16 v3(base::ASCIIToUTF16("hello world"));
-
-  IPC::Message m(0, 1, IPC::Message::PRIORITY_NORMAL);
-  EXPECT_TRUE(m.WriteInt(v1));
-  EXPECT_TRUE(m.WriteString(v2));
-  EXPECT_TRUE(m.WriteString16(v3));
-
-  base::PickleIterator iter(m);
-
-  int vi;
-  std::string vs;
-  base::string16 vs16;
-
-  EXPECT_TRUE(iter.ReadInt(&vi));
-  EXPECT_EQ(v1, vi);
-
-  EXPECT_TRUE(iter.ReadString(&vs));
-  EXPECT_EQ(v2, vs);
-
-  EXPECT_TRUE(iter.ReadString16(&vs16));
-  EXPECT_EQ(v3, vs16);
-
-  // should fail
-  EXPECT_FALSE(iter.ReadInt(&vi));
-  EXPECT_FALSE(iter.ReadString(&vs));
-  EXPECT_FALSE(iter.ReadString16(&vs16));
-}
-
-TEST_F(IPCChannelTest, ChannelTest) {
+#if defined(OS_ANDROID)
+#define MAYBE_ChannelTest DISABLED_ChannelTest
+#else
+#define MAYBE_ChannelTest ChannelTest
+#endif
+TEST_F(IPCChannelTest, MAYBE_ChannelTest) {
   Init("GenericClient");
 
   // Set up IPC channel and start client.
@@ -117,7 +91,12 @@ TEST_F(IPCChannelTest, ChannelTestExistingPipe) {
 }
 #endif  // defined (OS_WIN)
 
-TEST_F(IPCChannelTest, ChannelProxyTest) {
+#if defined(OS_ANDROID)
+#define MAYBE_ChannelProxyTest DISABLED_ChannelProxyTest
+#else
+#define MAYBE_ChannelProxyTest ChannelProxyTest
+#endif
+TEST_F(IPCChannelTest, MAYBE_ChannelProxyTest) {
   Init("GenericClient");
 
   base::Thread thread("ChannelProxyTestServer");
@@ -149,12 +128,12 @@ class ChannelListenerWithOnConnectedSend : public IPC::TestChannelListener {
   ChannelListenerWithOnConnectedSend() {}
   ~ChannelListenerWithOnConnectedSend() override {}
 
-  void OnChannelConnected(int32 peer_pid) override {
+  void OnChannelConnected(int32_t peer_pid) override {
     SendNextMessage();
   }
 };
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_ANDROID)
 // Acting flakey in Windows. http://crbug.com/129595
 #define MAYBE_SendMessageInChannelConnected DISABLED_SendMessageInChannelConnected
 #else
@@ -190,7 +169,7 @@ MULTIPROCESS_IPC_TEST_CLIENT_MAIN(GenericClient) {
 
   // Set up IPC channel.
   scoped_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
-      IPCTestBase::GetChannelName("GenericClient"), &listener, nullptr));
+      IPCTestBase::GetChannelName("GenericClient"), &listener));
   CHECK(channel->Connect());
   listener.Init(channel.get());
   IPC::TestChannelListener::SendOneMessage(channel.get(), "hello from child");

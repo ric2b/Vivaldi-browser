@@ -9,17 +9,20 @@
 // data.  Because the receiving is blocking, they can be used to perform
 // rudimentary cross-process synchronization with low latency.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/base_export.h"
+#include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/process/process_handle.h"
+#include "base/synchronization/waitable_event.h"
+#include "base/time/time.h"
+#include "build/build_config.h"
+
 #if defined(OS_WIN)
 #include <windows.h>
 #endif
 #include <sys/types.h>
-
-#include "base/base_export.h"
-#include "base/compiler_specific.h"
-#include "base/process/process_handle.h"
-#include "base/synchronization/waitable_event.h"
-#include "base/time/time.h"
 
 #if defined(OS_POSIX)
 #include "base/file_descriptor_posix.h"
@@ -83,10 +86,8 @@ class BASE_EXPORT SyncSocket {
                                     TimeDelta timeout);
 
   // Returns the number of bytes available. If non-zero, Receive() will not
-  // not block when called. NOTE: Some implementations cannot reliably
-  // determine the number of bytes available so avoid using the returned
-  // size as a promise and simply test against zero.
-  size_t Peek();
+  // not block when called.
+  virtual size_t Peek();
 
   // Extracts the contained handle.  Used for transferring between
   // processes.

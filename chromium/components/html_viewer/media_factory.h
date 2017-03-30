@@ -6,12 +6,16 @@
 #define COMPONENTS_HTML_VIEWER_MEDIA_FACTORY_H_
 
 #include "base/macros.h"
+#include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/base/audio_hardware_config.h"
-#include "mojo/application/public/interfaces/service_provider.mojom.h"
+#include "media/blink/url_index.h"
+#include "media/mojo/interfaces/service_factory.mojom.h"
+#include "mojo/shell/public/interfaces/service_provider.mojom.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -24,13 +28,15 @@ class WebMediaPlayer;
 class WebLocalFrame;
 class WebURL;
 class WebMediaPlayerClient;
+class WebMediaPlayerEncryptedMediaClient;
 }
 
 namespace media {
 class AudioManager;
-class AudioRendererSink;
+class RestartableAudioRendererSink;
 class CdmFactory;
 class MediaPermission;
+class UrlIndex;
 class WebEncryptedMediaClientImpl;
 }
 
@@ -55,19 +61,20 @@ class MediaFactory {
       blink::WebLocalFrame* frame,
       const blink::WebURL& url,
       blink::WebMediaPlayerClient* client,
+      blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
       blink::WebContentDecryptionModule* initial_cdm,
       mojo::Shell* shell);
 
   blink::WebEncryptedMediaClient* GetEncryptedMediaClient();
 
  private:
-  mojo::ServiceProvider* GetMediaServiceProvider();
+  media::interfaces::ServiceFactory* GetMediaServiceFactory();
   media::MediaPermission* GetMediaPermission();
   media::CdmFactory* GetCdmFactory();
 
 #if !defined(OS_ANDROID)
   const media::AudioHardwareConfig& GetAudioHardwareConfig();
-  scoped_refptr<media::AudioRendererSink> CreateAudioRendererSink();
+  scoped_refptr<media::RestartableAudioRendererSink> CreateAudioRendererSink();
   scoped_refptr<base::SingleThreadTaskRunner> GetMediaThreadTaskRunner();
 
   base::Thread media_thread_;
@@ -81,10 +88,13 @@ class MediaFactory {
   mojo::Shell* shell_;
 
   // Lazily initialized objects.
-  mojo::ServiceProviderPtr media_service_provider_;
+  media::interfaces::ServiceFactoryPtr media_service_factory_;
   scoped_ptr<media::WebEncryptedMediaClientImpl> web_encrypted_media_client_;
   scoped_ptr<media::MediaPermission> media_permission_;
   scoped_ptr<media::CdmFactory> cdm_factory_;
+
+  // Media resource cache, lazily initialized.
+  linked_ptr<media::UrlIndex> url_index_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaFactory);
 };

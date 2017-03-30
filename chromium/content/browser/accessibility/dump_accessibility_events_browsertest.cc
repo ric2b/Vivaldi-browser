@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <vector>
@@ -10,6 +12,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_event_recorder.h"
 #include "content/browser/accessibility/accessibility_tree_formatter.h"
 #include "content/browser/accessibility/browser_accessibility.h"
@@ -89,7 +92,7 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump() {
       shell(), AccessibilityModeComplete, ui::AX_EVENT_NONE));
 
 
-  web_contents->GetMainFrame()->ExecuteJavaScript(
+  web_contents->GetMainFrame()->ExecuteJavaScriptForTests(
       base::ASCIIToUTF16("go()"));
 
   // Wait for at least one accessibility event generated in response to
@@ -213,8 +216,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
 #if defined(OS_WIN)
 #define MAYBE_AccessibilityEventsListboxNext \
   DISABLED_AccessibilityEventsListboxNext
+#define MAYBE_AccessibilityEventsMenuListPopup \
+  DISABLED_AccessibilityEventsMenuListPopup
 #else
 #define MAYBE_AccessibilityEventsListboxNext AccessibilityEventsListboxNext
+#define MAYBE_AccessibilityEventsMenuListPopup AccessibilityEventsMenuListPopup
 #endif
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
@@ -233,7 +239,7 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
-                       AccessibilityEventsMenuListPopup) {
+                       MAYBE_AccessibilityEventsMenuListPopup) {
   RunEventTest(FILE_PATH_LITERAL("menulist-popup.html"));
 }
 

@@ -5,6 +5,8 @@
 #ifndef CONTENT_RENDERER_WEBPUBLICSUFFIXLIST_IMPL_H_
 #define CONTENT_RENDERER_WEBPUBLICSUFFIXLIST_IMPL_H_
 
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
 #include "third_party/WebKit/public/platform/WebPublicSuffixList.h"
 
@@ -13,8 +15,8 @@ namespace content {
 class WebPublicSuffixListImpl : public blink::WebPublicSuffixList {
  public:
   // WebPublicSuffixList methods:
-  virtual size_t getPublicSuffixLength(const blink::WebString& host);
-  virtual ~WebPublicSuffixListImpl();
+  size_t getPublicSuffixLength(const blink::WebString& host) override;
+  ~WebPublicSuffixListImpl() override;
 };
 
 }  // namespace content

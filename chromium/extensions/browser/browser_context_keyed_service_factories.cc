@@ -4,13 +4,14 @@
 
 #include "extensions/browser/browser_context_keyed_service_factories.h"
 
+#include "build/build_config.h"
 #include "extensions/browser/api/alarms/alarm_manager.h"
 #include "extensions/browser/api/api_resource_manager.h"
 #include "extensions/browser/api/audio/audio_api.h"
 #include "extensions/browser/api/bluetooth/bluetooth_api.h"
 #include "extensions/browser/api/bluetooth/bluetooth_private_api.h"
-#include "extensions/browser/api/bluetooth_low_energy/bluetooth_low_energy_api.h"
 #include "extensions/browser/api/bluetooth_socket/bluetooth_socket_event_dispatcher.h"
+#include "extensions/browser/api/display_source/display_source_event_router_factory.h"
 #include "extensions/browser/api/hid/hid_device_manager.h"
 #include "extensions/browser/api/idle/idle_manager_factory.h"
 #include "extensions/browser/api/management/management_api.h"
@@ -53,16 +54,16 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   ApiResourceManager<UsbDeviceResource>::GetFactoryInstance();
   AudioAPI::GetFactoryInstance();
   BluetoothAPI::GetFactoryInstance();
-  BluetoothLowEnergyAPI::GetFactoryInstance();
   BluetoothPrivateAPI::GetFactoryInstance();
 #if defined(OS_CHROMEOS)
   chromeos::VpnServiceFactory::GetInstance();
 #endif
-  core_api::BluetoothSocketEventDispatcher::GetFactoryInstance();
-  core_api::TCPServerSocketEventDispatcher::GetFactoryInstance();
-  core_api::TCPSocketEventDispatcher::GetFactoryInstance();
-  core_api::UDPSocketEventDispatcher::GetFactoryInstance();
+  api::BluetoothSocketEventDispatcher::GetFactoryInstance();
+  api::TCPServerSocketEventDispatcher::GetFactoryInstance();
+  api::TCPSocketEventDispatcher::GetFactoryInstance();
+  api::UDPSocketEventDispatcher::GetFactoryInstance();
   DeclarativeUserScriptManagerFactory::GetInstance();
+  DisplaySourceEventRouterFactory::GetInstance();
   EventRouterFactory::GetInstance();
   ExtensionMessageFilter::EnsureShutdownNotifierFactoryBuilt();
   ExtensionPrefsFactory::GetInstance();

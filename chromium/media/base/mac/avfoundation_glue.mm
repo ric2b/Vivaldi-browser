@@ -5,11 +5,14 @@
 #import "media/base/mac/avfoundation_glue.h"
 
 #include <dlfcn.h>
+#include <stddef.h>
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/mac/mac_util.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
+#include "base/trace_event/trace_event.h"
 #include "media/base/media_switches.h"
 
 namespace {
@@ -174,6 +177,7 @@ enum {
 } static g_avfoundation_initialization = INITIALIZE_NOT_CALLED;
 
 void AVFoundationGlue::InitializeAVFoundation() {
+  TRACE_EVENT0("video", "AVFoundationGlue::InitializeAVFoundation");
   CHECK([NSThread isMainThread]);
   if (g_avfoundation_initialization != INITIALIZE_NOT_CALLED)
     return;

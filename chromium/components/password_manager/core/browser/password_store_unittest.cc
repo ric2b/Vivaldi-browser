@@ -7,17 +7,22 @@
 // instead). We could special-case it, but it is easier to just have empty
 // passwords. This will not be needed anymore if crbug.com/466638 is fixed.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/affiliation_service.h"
+#include "components/password_manager/core/browser/mock_affiliated_match_helper.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/password_store_default.h"
@@ -65,65 +70,6 @@ class MockPasswordStoreConsumer : public PasswordStoreConsumer {
   void OnGetPasswordStoreResults(ScopedVector<PasswordForm> results) override {
     OnGetPasswordStoreResultsConstRef(results.get());
   }
-};
-
-class MockPasswordStoreObserver
-    : public password_manager::PasswordStore::Observer {
- public:
-  MOCK_METHOD1(OnLoginsChanged,
-               void(const password_manager::PasswordStoreChangeList& changes));
-};
-
-class MockAffiliatedMatchHelper : public AffiliatedMatchHelper {
- public:
-  MockAffiliatedMatchHelper()
-      : AffiliatedMatchHelper(nullptr,
-                              make_scoped_ptr<AffiliationService>(nullptr)) {}
-
-  // Expects GetAffiliatedAndroidRealms() to be called with the
-  // |expected_observed_form|, and will cause the result callback supplied to
-  // GetAffiliatedAndroidRealms() to be invoked with |results_to_return|.
-  void ExpectCallToGetAffiliatedAndroidRealms(
-      const autofill::PasswordForm& expected_observed_form,
-      const std::vector<std::string>& results_to_return) {
-    EXPECT_CALL(*this,
-                OnGetAffiliatedAndroidRealmsCalled(expected_observed_form))
-        .WillOnce(testing::Return(results_to_return));
-  }
-
-  // Expects GetAffiliatedWebRealms() to be called with the
-  // |expected_android_form|, and will cause the result callback supplied to
-  // GetAffiliatedWebRealms() to be invoked with |results_to_return|.
-  void ExpectCallToGetAffiliatedWebRealms(
-      const autofill::PasswordForm& expected_android_form,
-      const std::vector<std::string>& results_to_return) {
-    EXPECT_CALL(*this, OnGetAffiliatedWebRealmsCalled(expected_android_form))
-        .WillOnce(testing::Return(results_to_return));
-  }
-
- private:
-  MOCK_METHOD1(OnGetAffiliatedAndroidRealmsCalled,
-               std::vector<std::string>(const PasswordForm&));
-  MOCK_METHOD1(OnGetAffiliatedWebRealmsCalled,
-               std::vector<std::string>(const PasswordForm&));
-
-  void GetAffiliatedAndroidRealms(
-      const autofill::PasswordForm& observed_form,
-      const AffiliatedRealmsCallback& result_callback) override {
-    std::vector<std::string> affiliated_android_realms =
-        OnGetAffiliatedAndroidRealmsCalled(observed_form);
-    result_callback.Run(affiliated_android_realms);
-  }
-
-  void GetAffiliatedWebRealms(
-      const autofill::PasswordForm& android_form,
-      const AffiliatedRealmsCallback& result_callback) override {
-    std::vector<std::string> affiliated_web_realms =
-        OnGetAffiliatedWebRealmsCalled(android_form);
-    result_callback.Run(affiliated_web_realms);
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(MockAffiliatedMatchHelper);
 };
 
 class StartSyncFlareMock {
@@ -224,8 +170,7 @@ TEST_F(PasswordStoreTest, IgnoreOldWwwGoogleLogins) {
   // Build the forms vector and add the forms to the store.
   ScopedVector<PasswordForm> all_forms;
   for (size_t i = 0; i < arraysize(form_data); ++i) {
-    all_forms.push_back(
-        CreatePasswordFormFromDataForTesting(form_data[i]).Pass());
+    all_forms.push_back(CreatePasswordFormFromDataForTesting(form_data[i]));
     store->AddLogin(*all_forms.back());
   }
   base::MessageLoop::current()->RunUntilIdle();
@@ -276,7 +221,7 @@ TEST_F(PasswordStoreTest, IgnoreOldWwwGoogleLogins) {
 
   base::MessageLoop::current()->RunUntilIdle();
 
-  store->Shutdown();
+  store->ShutdownOnUIThread();
   base::MessageLoop::current()->RunUntilIdle();
 }
 
@@ -295,7 +240,7 @@ TEST_F(PasswordStoreTest, StartSyncFlare) {
     store->AddLogin(form);
     base::MessageLoop::current()->RunUntilIdle();
   }
-  store->Shutdown();
+  store->ShutdownOnUIThread();
   base::MessageLoop::current()->RunUntilIdle();
 }
 
@@ -345,7 +290,7 @@ TEST_F(PasswordStoreTest, GetLoginImpl) {
   ASSERT_TRUE(returned_form);
   EXPECT_EQ(*test_form, *returned_form);
 
-  store->Shutdown();
+  store->ShutdownOnUIThread();
   base::MessageLoop::current()->RunUntilIdle();
 }
 
@@ -395,7 +340,7 @@ TEST_F(PasswordStoreTest, UpdateLoginPrimaryKeyFields) {
 
   MockPasswordStoreConsumer mock_consumer;
   ScopedVector<autofill::PasswordForm> expected_forms;
-  expected_forms.push_back(new_form.Pass());
+  expected_forms.push_back(std::move(new_form));
   EXPECT_CALL(mock_consumer,
               OnGetPasswordStoreResultsConstRef(
                   UnorderedPasswordFormElementsAre(expected_forms.get())));
@@ -403,7 +348,7 @@ TEST_F(PasswordStoreTest, UpdateLoginPrimaryKeyFields) {
   base::MessageLoop::current()->RunUntilIdle();
 
   store->RemoveObserver(&mock_observer);
-  store->Shutdown();
+  store->ShutdownOnUIThread();
   base::MessageLoop::current()->RunUntilIdle();
 }
 
@@ -437,12 +382,12 @@ TEST_F(PasswordStoreTest, RemoveLoginsCreatedBetweenCallbackIsCalled) {
   EXPECT_CALL(mock_observer, OnLoginsChanged(testing::SizeIs(1u)));
   store->RemoveLoginsCreatedBetween(
       base::Time::FromDoubleT(0), base::Time::FromDoubleT(2),
-      base::MessageLoop::current()->QuitClosure());
+      base::MessageLoop::current()->QuitWhenIdleClosure());
   base::MessageLoop::current()->Run();
   testing::Mock::VerifyAndClearExpectations(&mock_observer);
 
   store->RemoveObserver(&mock_observer);
-  store->Shutdown();
+  store->ShutdownOnUIThread();
   base::MessageLoop::current()->RunUntilIdle();
 }
 
@@ -501,11 +446,8 @@ TEST_F(PasswordStoreTest, GetLoginsWithoutAffiliations) {
   expected_results.push_back(new PasswordForm(*all_credentials[0]));
   expected_results.push_back(new PasswordForm(*all_credentials[1]));
   for (PasswordForm* result : expected_results) {
-    if (result->signon_realm == observed_form.signon_realm)
-      continue;
-    result->original_signon_realm = result->signon_realm;
-    result->origin = observed_form.origin;
-    result->signon_realm = observed_form.signon_realm;
+    if (result->signon_realm != observed_form.signon_realm)
+      result->is_public_suffix_match = true;
   }
 
   std::vector<std::string> no_affiliated_android_realms;
@@ -516,7 +458,7 @@ TEST_F(PasswordStoreTest, GetLoginsWithoutAffiliations) {
               OnGetPasswordStoreResultsConstRef(
                   UnorderedPasswordFormElementsAre(expected_results.get())));
   store->GetLogins(observed_form, PasswordStore::ALLOW_PROMPT, &mock_consumer);
-  store->Shutdown();
+  store->ShutdownOnUIThread();
   base::MessageLoop::current()->RunUntilIdle();
 }
 
@@ -555,6 +497,12 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliations) {
        "", "", L"", L"", L"",
        L"username_value_3b",
        L"", true, true, 1},
+      // Third credential for the same application which is username-only.
+      {PasswordForm::SCHEME_USERNAME_ONLY,
+       kTestAndroidRealm1,
+       "", "", L"", L"", L"",
+       L"username_value_3c",
+       L"", true, true, 1},
       // Credential for another Android application affiliated with the realm
       // of the observed from.
       {PasswordForm::SCHEME_HTML,
@@ -562,12 +510,20 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliations) {
        "", "", L"", L"", L"",
        L"username_value_4",
        L"", true, true, 1},
+      // Federated credential for this second Android application; this should
+      // not be returned.
+      {PasswordForm::SCHEME_HTML,
+       kTestAndroidRealm2,
+       "", "", L"", L"", L"",
+       L"username_value_4b",
+       kTestingFederatedLoginMarker, true, true, 1},
       // Credential for an unrelated Android application.
       {PasswordForm::SCHEME_HTML,
        kTestUnrelatedAndroidRealm,
        "", "", L"", L"", L"",
        L"username_value_5",
-       L"", true, true, 1}};
+       L"", true, true, 1}
+       };
   /* clang-format on */
 
   scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
@@ -598,13 +554,14 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliations) {
   expected_results.push_back(new PasswordForm(*all_credentials[1]));
   expected_results.push_back(new PasswordForm(*all_credentials[2]));
   expected_results.push_back(new PasswordForm(*all_credentials[3]));
-  expected_results.push_back(new PasswordForm(*all_credentials[4]));
+  expected_results.push_back(new PasswordForm(*all_credentials[5]));
+
   for (PasswordForm* result : expected_results) {
-    if (result->signon_realm == observed_form.signon_realm)
-      continue;
-    result->original_signon_realm = result->signon_realm;
-    result->signon_realm = observed_form.signon_realm;
-    result->origin = observed_form.origin;
+    if (result->signon_realm != observed_form.signon_realm &&
+        !IsValidAndroidFacetURI(result->signon_realm))
+      result->is_public_suffix_match = true;
+    if (IsValidAndroidFacetURI(result->signon_realm))
+      result->is_affiliation_based_match = true;
   }
 
   std::vector<std::string> affiliated_android_realms;
@@ -619,7 +576,7 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliations) {
                   UnorderedPasswordFormElementsAre(expected_results.get())));
 
   store->GetLogins(observed_form, PasswordStore::ALLOW_PROMPT, &mock_consumer);
-  store->Shutdown();
+  store->ShutdownOnUIThread();
   base::MessageLoop::current()->RunUntilIdle();
 }
 
@@ -836,7 +793,7 @@ TEST_F(PasswordStoreTest, MAYBE_UpdatePasswordsStoredForAffiliatedWebsites) {
           OnGetPasswordStoreResultsConstRef(UnorderedPasswordFormElementsAre(
               expected_credentials_after_update.get())));
       store->GetAutofillableLogins(&mock_consumer);
-      store->Shutdown();
+      store->ShutdownOnUIThread();
       base::MessageLoop::current()->RunUntilIdle();
     }
   }

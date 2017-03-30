@@ -7,6 +7,7 @@
 
 #include <OpenGL/CGLTypes.h>
 
+#include "base/macros.h"
 #include "ui/gl/gl_context.h"
 
 namespace gfx {
@@ -21,13 +22,11 @@ class GLContextCGL : public GLContextReal {
   // Implement GLContext.
   bool Initialize(GLSurface* compatible_surface,
                   GpuPreference gpu_preference) override;
-  void Destroy() override;
   bool MakeCurrent(GLSurface* surface) override;
   void ReleaseCurrent(GLSurface* surface) override;
   bool IsCurrent(GLSurface* surface) override;
   void* GetHandle() override;
   void OnSetSwapInterval(int interval) override;
-  bool GetTotalGpuMemory(size_t* bytes) override;
   void SetSafeToForceGpuSwitch() override;
   bool ForceGpuSwitchIfNeeded() override;
 
@@ -35,6 +34,7 @@ class GLContextCGL : public GLContextReal {
   ~GLContextCGL() override;
 
  private:
+  void Destroy();
   GpuPreference GetGpuPreference();
 
   void* context_;

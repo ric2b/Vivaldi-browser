@@ -5,6 +5,7 @@
 #include "extensions/browser/api/networking_private/networking_private_event_router.h"
 
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/network/network_state.h"
@@ -79,15 +80,13 @@ NetworkingPrivateEventRouterImpl::NetworkingPrivateEventRouterImpl(
   EventRouter* event_router = EventRouter::Get(context_);
   if (event_router) {
     event_router->RegisterObserver(
-        this, core_api::networking_private::OnNetworksChanged::kEventName);
+        this, api::networking_private::OnNetworksChanged::kEventName);
     event_router->RegisterObserver(
-        this, core_api::networking_private::OnNetworkListChanged::kEventName);
+        this, api::networking_private::OnNetworkListChanged::kEventName);
     event_router->RegisterObserver(
-        this,
-        core_api::networking_private::OnDeviceStateListChanged::kEventName);
+        this, api::networking_private::OnDeviceStateListChanged::kEventName);
     event_router->RegisterObserver(
-        this,
-        core_api::networking_private::OnPortalDetectionCompleted::kEventName);
+        this, api::networking_private::OnPortalDetectionCompleted::kEventName);
     StartOrStopListeningForNetworkChanges();
   }
 }
@@ -128,24 +127,24 @@ void NetworkingPrivateEventRouterImpl::StartOrStopListeningForNetworkChanges() {
   EventRouter* event_router = EventRouter::Get(context_);
   bool should_listen =
       event_router->HasEventListener(
-          core_api::networking_private::OnNetworksChanged::kEventName) ||
+          api::networking_private::OnNetworksChanged::kEventName) ||
       event_router->HasEventListener(
-          core_api::networking_private::OnNetworkListChanged::kEventName) ||
+          api::networking_private::OnNetworkListChanged::kEventName) ||
       event_router->HasEventListener(
-          core_api::networking_private::OnDeviceStateListChanged::kEventName) ||
+          api::networking_private::OnDeviceStateListChanged::kEventName) ||
       event_router->HasEventListener(
-          core_api::networking_private::OnPortalDetectionCompleted::kEventName);
+          api::networking_private::OnPortalDetectionCompleted::kEventName);
 
   if (should_listen && !listening_) {
     NetworkHandler::Get()->network_state_handler()->AddObserver(this,
                                                                 FROM_HERE);
-    if (chromeos::NetworkPortalDetector::IsInitialized())
-      NetworkPortalDetector::Get()->AddObserver(this);
+    if (chromeos::network_portal_detector::IsInitialized())
+      chromeos::network_portal_detector::GetInstance()->AddObserver(this);
   } else if (!should_listen && listening_) {
     NetworkHandler::Get()->network_state_handler()->RemoveObserver(this,
                                                                    FROM_HERE);
-    if (chromeos::NetworkPortalDetector::IsInitialized())
-      NetworkPortalDetector::Get()->RemoveObserver(this);
+    if (chromeos::network_portal_detector::IsInitialized())
+      chromeos::network_portal_detector::GetInstance()->RemoveObserver(this);
   }
   listening_ = should_listen;
 }
@@ -153,7 +152,7 @@ void NetworkingPrivateEventRouterImpl::StartOrStopListeningForNetworkChanges() {
 void NetworkingPrivateEventRouterImpl::NetworkListChanged() {
   EventRouter* event_router = EventRouter::Get(context_);
   if (!event_router->HasEventListener(
-          core_api::networking_private::OnNetworkListChanged::kEventName)) {
+          api::networking_private::OnNetworkListChanged::kEventName)) {
     return;
   }
 
@@ -168,48 +167,47 @@ void NetworkingPrivateEventRouterImpl::NetworkListChanged() {
   }
 
   scoped_ptr<base::ListValue> args(
-      core_api::networking_private::OnNetworkListChanged::Create(changes));
+      api::networking_private::OnNetworkListChanged::Create(changes));
   scoped_ptr<Event> extension_event(
-      new Event(events::UNKNOWN,
-                core_api::networking_private::OnNetworkListChanged::kEventName,
-                args.Pass()));
-  event_router->BroadcastEvent(extension_event.Pass());
+      new Event(events::NETWORKING_PRIVATE_ON_NETWORK_LIST_CHANGED,
+                api::networking_private::OnNetworkListChanged::kEventName,
+                std::move(args)));
+  event_router->BroadcastEvent(std::move(extension_event));
 }
 
 void NetworkingPrivateEventRouterImpl::DeviceListChanged() {
   EventRouter* event_router = EventRouter::Get(context_);
   if (!event_router->HasEventListener(
-          core_api::networking_private::OnDeviceStateListChanged::kEventName)) {
+          api::networking_private::OnDeviceStateListChanged::kEventName)) {
     return;
   }
 
   scoped_ptr<base::ListValue> args(
-      core_api::networking_private::OnDeviceStateListChanged::Create());
-  scoped_ptr<Event> extension_event(new Event(
-      events::UNKNOWN,
-      core_api::networking_private::OnDeviceStateListChanged::kEventName,
-      args.Pass()));
-  event_router->BroadcastEvent(extension_event.Pass());
+      api::networking_private::OnDeviceStateListChanged::Create());
+  scoped_ptr<Event> extension_event(
+      new Event(events::NETWORKING_PRIVATE_ON_DEVICE_STATE_LIST_CHANGED,
+                api::networking_private::OnDeviceStateListChanged::kEventName,
+                std::move(args)));
+  event_router->BroadcastEvent(std::move(extension_event));
 }
 
 void NetworkingPrivateEventRouterImpl::NetworkPropertiesUpdated(
     const NetworkState* network) {
   EventRouter* event_router = EventRouter::Get(context_);
   if (!event_router->HasEventListener(
-          core_api::networking_private::OnNetworksChanged::kEventName)) {
+          api::networking_private::OnNetworksChanged::kEventName)) {
     NET_LOG_EVENT("NetworkingPrivate.NetworkPropertiesUpdated: No Listeners",
                   network->path());
     return;
   }
   NET_LOG_EVENT("NetworkingPrivate.NetworkPropertiesUpdated", network->path());
   scoped_ptr<base::ListValue> args(
-      core_api::networking_private::OnNetworksChanged::Create(
+      api::networking_private::OnNetworksChanged::Create(
           std::vector<std::string>(1, network->guid())));
-  scoped_ptr<Event> extension_event(
-      new Event(events::UNKNOWN,
-                core_api::networking_private::OnNetworksChanged::kEventName,
-                args.Pass()));
-  event_router->BroadcastEvent(extension_event.Pass());
+  scoped_ptr<Event> extension_event(new Event(
+      events::NETWORKING_PRIVATE_ON_NETWORKS_CHANGED,
+      api::networking_private::OnNetworksChanged::kEventName, std::move(args)));
+  event_router->BroadcastEvent(std::move(extension_event));
 }
 
 void NetworkingPrivateEventRouterImpl::DevicePropertiesUpdated(
@@ -234,32 +232,30 @@ void NetworkingPrivateEventRouterImpl::OnPortalDetectionCompleted(
 
   EventRouter* event_router = EventRouter::Get(context_);
   if (!event_router->HasEventListener(
-          core_api::networking_private::OnPortalDetectionCompleted::
-              kEventName)) {
+          api::networking_private::OnPortalDetectionCompleted::kEventName)) {
     NET_LOG_EVENT("NetworkingPrivate.OnPortalDetectionCompleted: No Listeners",
                   path);
     return;
   }
   NET_LOG_EVENT("NetworkingPrivate.OnPortalDetectionCompleted", path);
 
-  core_api::networking_private::CaptivePortalStatus status =
-      core_api::networking_private::CAPTIVE_PORTAL_STATUS_UNKNOWN;
+  api::networking_private::CaptivePortalStatus status =
+      api::networking_private::CAPTIVE_PORTAL_STATUS_UNKNOWN;
   switch (state.status) {
     case NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_UNKNOWN:
-      status = core_api::networking_private::CAPTIVE_PORTAL_STATUS_UNKNOWN;
+      status = api::networking_private::CAPTIVE_PORTAL_STATUS_UNKNOWN;
       break;
     case NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_OFFLINE:
-      status = core_api::networking_private::CAPTIVE_PORTAL_STATUS_OFFLINE;
+      status = api::networking_private::CAPTIVE_PORTAL_STATUS_OFFLINE;
       break;
     case NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE:
-      status = core_api::networking_private::CAPTIVE_PORTAL_STATUS_ONLINE;
+      status = api::networking_private::CAPTIVE_PORTAL_STATUS_ONLINE;
       break;
     case NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL:
-      status = core_api::networking_private::CAPTIVE_PORTAL_STATUS_PORTAL;
+      status = api::networking_private::CAPTIVE_PORTAL_STATUS_PORTAL;
       break;
     case NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PROXY_AUTH_REQUIRED:
-      status =
-          core_api::networking_private::CAPTIVE_PORTAL_STATUS_PROXYAUTHREQUIRED;
+      status = api::networking_private::CAPTIVE_PORTAL_STATUS_PROXYAUTHREQUIRED;
       break;
     default:
       NOTREACHED();
@@ -267,13 +263,13 @@ void NetworkingPrivateEventRouterImpl::OnPortalDetectionCompleted(
   }
 
   scoped_ptr<base::ListValue> args(
-      core_api::networking_private::OnPortalDetectionCompleted::Create(path,
-                                                                       status));
-  scoped_ptr<Event> extension_event(new Event(
-      events::UNKNOWN,
-      core_api::networking_private::OnPortalDetectionCompleted::kEventName,
-      args.Pass()));
-  event_router->BroadcastEvent(extension_event.Pass());
+      api::networking_private::OnPortalDetectionCompleted::Create(path,
+                                                                  status));
+  scoped_ptr<Event> extension_event(
+      new Event(events::NETWORKING_PRIVATE_ON_PORTAL_DETECTION_COMPLETED,
+                api::networking_private::OnPortalDetectionCompleted::kEventName,
+                std::move(args)));
+  event_router->BroadcastEvent(std::move(extension_event));
 }
 
 NetworkingPrivateEventRouter* NetworkingPrivateEventRouter::Create(

@@ -6,10 +6,11 @@
 
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/geolocation/geolocation_permission_context_android.h"
 #else
 #include "chrome/browser/geolocation/geolocation_permission_context.h"
@@ -26,18 +27,18 @@ GeolocationPermissionContextFactory::GetForProfile(Profile* profile) {
 // static
 GeolocationPermissionContextFactory*
 GeolocationPermissionContextFactory::GetInstance() {
-  return Singleton<GeolocationPermissionContextFactory>::get();
+  return base::Singleton<GeolocationPermissionContextFactory>::get();
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(ANDROID_JAVA_UI)
 GeolocationPermissionContextFactory::GeolocationPermissionContextFactory()
-    : BrowserContextKeyedServiceFactory(
+    : PermissionContextFactoryBase(
           "GeolocationPermissionContext",
           BrowserContextDependencyManager::GetInstance()) {
 }
 #else
 GeolocationPermissionContextFactory::GeolocationPermissionContextFactory()
-    : BrowserContextKeyedServiceFactory(
+    : PermissionContextFactoryBase(
           "GeolocationPermissionContextAndroid",
           BrowserContextDependencyManager::GetInstance()) {
 }
@@ -50,23 +51,10 @@ GeolocationPermissionContextFactory::~GeolocationPermissionContextFactory() {
 KeyedService*
 GeolocationPermissionContextFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(ANDROID_JAVA_UI)
   return new GeolocationPermissionContext(static_cast<Profile*>(profile));
 #else
   return new GeolocationPermissionContextAndroid(
       static_cast<Profile*>(profile));
 #endif
-}
-
-void GeolocationPermissionContextFactory::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-#if defined(OS_ANDROID)
-  registry->RegisterBooleanPref(prefs::kGeolocationEnabled, true);
-#endif
-}
-
-content::BrowserContext*
-GeolocationPermissionContextFactory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  return chrome::GetBrowserContextOwnInstanceInIncognito(context);
 }

@@ -6,10 +6,12 @@
 
 #include <limits>
 #include <queue>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
@@ -44,9 +46,9 @@ net::URLRequestJob* BadRequestJobCallback(
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate) {
   static const char kBadHeaders[] =
-      "HTTP/1.1 400 Bad request\0"
-      "Content-type: application/protobuf\0"
-      "\0";
+      "HTTP/1.1 400 Bad request\n"
+      "Content-type: application/protobuf\n"
+      "\n";
   std::string headers(kBadHeaders, arraysize(kBadHeaders));
   return new net::URLRequestTestJob(
       request, network_delegate, headers, std::string(), true);
@@ -83,7 +85,7 @@ bool ValidRequest(net::URLRequest* request,
   const net::UploadDataStream* stream = request->get_upload();
   if (!stream)
     return false;
-  const ScopedVector<net::UploadElementReader>* readers =
+  const std::vector<scoped_ptr<net::UploadElementReader>>* readers =
       stream->GetElementReaders();
   if (!readers || readers->size() != 1u)
     return false;
@@ -141,9 +143,9 @@ net::URLRequestJob* RegisterJobCallback(
   response.SerializeToString(&data);
 
   static const char kGoodHeaders[] =
-      "HTTP/1.1 200 OK\0"
-      "Content-type: application/protobuf\0"
-      "\0";
+      "HTTP/1.1 200 OK\n"
+      "Content-type: application/protobuf\n"
+      "\n";
   std::string headers(kGoodHeaders, arraysize(kGoodHeaders));
   return new net::URLRequestTestJob(
       request, network_delegate, headers, data, true);
@@ -153,7 +155,11 @@ void RegisterHttpInterceptor(
     const std::string& hostname,
     scoped_ptr<net::URLRequestInterceptor> interceptor) {
   net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
-      "http", hostname, interceptor.Pass());
+      "http", hostname, std::move(interceptor));
+}
+
+void UnregisterHttpInterceptor(const std::string& hostname) {
+  net::URLRequestFilter::GetInstance()->RemoveHostnameHandler("http", hostname);
 }
 
 }  // namespace
@@ -269,10 +275,7 @@ TestRequestInterceptor::~TestRequestInterceptor() {
   // RemoveHostnameHandler() destroys the |delegate_|, which is owned by
   // the URLRequestFilter.
   delegate_ = NULL;
-  PostToIOAndWait(
-      base::Bind(&net::URLRequestFilter::RemoveHostnameHandler,
-                 base::Unretained(net::URLRequestFilter::GetInstance()),
-                 "http", hostname_));
+  PostToIOAndWait(base::Bind(&UnregisterHttpInterceptor, hostname_));
 }
 
 size_t TestRequestInterceptor::GetPendingSize() {

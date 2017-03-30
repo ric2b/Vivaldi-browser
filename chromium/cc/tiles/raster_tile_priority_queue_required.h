@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "cc/layers/picture_layer_impl.h"
 #include "cc/tiles/raster_tile_priority_queue.h"
 #include "cc/tiles/tiling_set_raster_queue_required.h"
@@ -35,7 +36,7 @@ class RasterTilePriorityQueueRequired : public RasterTilePriorityQueue {
       const std::vector<PictureLayerImpl*>& active_layers,
       const std::vector<PictureLayerImpl*>& pending_layers);
 
-  ScopedPtrVector<TilingSetRasterQueueRequired> tiling_set_queues_;
+  std::vector<scoped_ptr<TilingSetRasterQueueRequired>> tiling_set_queues_;
 
   DISALLOW_COPY_AND_ASSIGN(RasterTilePriorityQueueRequired);
 };

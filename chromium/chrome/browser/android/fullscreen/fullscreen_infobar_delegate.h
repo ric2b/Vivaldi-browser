@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_BROWSER_ANDROID_FULLSCREEN_INFOBAR_DELEGATE_H_
-#define CHROME_BROWSER_ANDROID_FULLSCREEN_INFOBAR_DELEGATE_H_
+#ifndef CHROME_BROWSER_ANDROID_FULLSCREEN_FULLSCREEN_INFOBAR_DELEGATE_H_
+#define CHROME_BROWSER_ANDROID_FULLSCREEN_FULLSCREEN_INFOBAR_DELEGATE_H_
 
 #include <string>
 
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "url/gurl.h"
 
@@ -24,10 +25,12 @@ class FullscreenInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~FullscreenInfoBarDelegate() override;
 
   // Called to close the infobar.
-  void CloseFullscreenInfoBar(JNIEnv* env, jobject obj, jobject tab);
+  void CloseFullscreenInfoBar(JNIEnv* env,
+                              const base::android::JavaParamRef<jobject>& obj);
 
   // ConfirmInfoBarDelegate:
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
   bool Accept() override;
@@ -40,4 +43,4 @@ class FullscreenInfoBarDelegate : public ConfirmInfoBarDelegate {
   DISALLOW_COPY_AND_ASSIGN(FullscreenInfoBarDelegate);
 };
 
-#endif  // CHROME_BROWSER_ANDROID_FULLSCREEN_INFOBAR_DELEGATE_H_
+#endif  // CHROME_BROWSER_ANDROID_FULLSCREEN_FULLSCREEN_INFOBAR_DELEGATE_H_

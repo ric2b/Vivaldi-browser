@@ -6,6 +6,7 @@
 #define COMPONENTS_VISITEDLINK_RENDERER_VISITEDLINK_SLAVE_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "components/visitedlink/common/visitedlink_common.h"
 #include "content/public/renderer/render_process_observer.h"
@@ -26,7 +27,7 @@ class VisitedLinkSlave : public VisitedLinkCommon,
   // Message handlers.
   void OnUpdateVisitedLinks(base::SharedMemoryHandle table);
   void OnAddVisitedLinks(const VisitedLinkSlave::Fingerprints& fingerprints);
-  void OnResetVisitedLinks();
+  void OnResetVisitedLinks(bool invalidate_hashes);
 
  private:
   void FreeTable();

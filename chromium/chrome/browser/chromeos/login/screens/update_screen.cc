@@ -51,13 +51,13 @@ const int kDownloadProgressIncrement = 60;
 
 const char kUpdateDeadlineFile[] = "/tmp/update-check-response-deadline";
 
-// Minimum timestep between two consecutive measurements for the
-// download rate.
-const base::TimeDelta kMinTimeStep = base::TimeDelta::FromSeconds(1);
+// Minimum timestep between two consecutive measurements for the download rates.
+const int kMinTimeStepInSeconds = 1;
 
 // Smooth factor that is used for the average downloading speed
 // estimation.
-// avg_speed = smooth_factor * cur_speed + (1.0 - smooth_factor) * avg_speed.
+// avg_speed = smooth_factor * cur_speed + (1.0 - smooth_factor) *
+// avg_speed.
 const double kDownloadSpeedSmoothFactor = 0.1;
 
 // Minumum allowed value for the average downloading speed.
@@ -133,7 +133,7 @@ UpdateScreen::~UpdateScreen() {
     view_->Unbind();
 
   DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
-  NetworkPortalDetector::Get()->RemoveObserver(this);
+  network_portal_detector::GetInstance()->RemoveObserver(this);
   GetInstanceSet().erase(this);
 }
 
@@ -261,7 +261,7 @@ void UpdateScreen::OnPortalDetectionCompleted(
                << "state.status=" << state.status << ", "
                << "state.response_code=" << state.response_code;
 
-  // Wait for the sane detection results.
+  // Wait for sane detection results.
   if (network &&
       state.status == NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_UNKNOWN) {
     return;
@@ -276,7 +276,7 @@ void UpdateScreen::OnPortalDetectionCompleted(
         FROM_HERE,
         base::Bind(
             base::IgnoreResult(&NetworkPortalDetector::StartDetectionIfIdle),
-            base::Unretained(NetworkPortalDetector::Get())));
+            base::Unretained(network_portal_detector::GetInstance())));
     return;
   }
   is_first_detection_notification_ = false;
@@ -309,14 +309,14 @@ void UpdateScreen::StartNetworkCheck() {
   // If portal detector is enabled and portal detection before AU is
   // allowed, initiate network state check. Otherwise, directly
   // proceed to update.
-  if (!NetworkPortalDetector::Get()->IsEnabled()) {
+  if (!network_portal_detector::GetInstance()->IsEnabled()) {
     StartUpdateCheck();
     return;
   }
   state_ = STATE_FIRST_PORTAL_CHECK;
   is_first_detection_notification_ = true;
   is_first_portal_notification_ = true;
-  NetworkPortalDetector::Get()->AddAndFireObserver(this);
+  network_portal_detector::GetInstance()->AddAndFireObserver(this);
 }
 
 void UpdateScreen::PrepareToShow() {
@@ -371,7 +371,7 @@ void UpdateScreen::OnContextKeyUpdated(
 
 void UpdateScreen::ExitUpdate(UpdateScreen::ExitReason reason) {
   DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
-  NetworkPortalDetector::Get()->RemoveObserver(this);
+  network_portal_detector::GetInstance()->RemoveObserver(this);
   SetHostPairingControllerStatus(HostPairingController::UPDATE_STATUS_UPDATED);
 
 
@@ -441,7 +441,9 @@ void UpdateScreen::CancelUpdate() {
 void UpdateScreen::UpdateDownloadingStats(
     const UpdateEngineClient::Status& status) {
   base::Time download_current_time = base::Time::Now();
-  if (download_current_time >= download_last_time_ + kMinTimeStep) {
+  if (download_current_time >=
+      download_last_time_ +
+          base::TimeDelta::FromSeconds(kMinTimeStepInSeconds)) {
     // Estimate downloading rate.
     double progress_delta =
         std::max(status.download_progress - download_last_progress_, 0.0);
@@ -514,7 +516,7 @@ void UpdateScreen::StartUpdateCheck() {
   error_message_timer_.Stop();
   GetErrorScreen()->HideCaptivePortal();
 
-  NetworkPortalDetector::Get()->RemoveObserver(this);
+  network_portal_detector::GetInstance()->RemoveObserver(this);
   connect_request_subscription_.reset();
   if (state_ == STATE_ERROR)
     HideErrorMessage();
@@ -593,8 +595,7 @@ void UpdateScreen::DelayErrorMessage() {
       &UpdateScreen::ShowErrorMessage);
 }
 
-base::OneShotTimer<UpdateScreen>&
-UpdateScreen::GetErrorMessageTimerForTesting() {
+base::OneShotTimer& UpdateScreen::GetErrorMessageTimerForTesting() {
   return error_message_timer_;
 }
 

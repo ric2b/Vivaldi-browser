@@ -72,26 +72,27 @@ class EnterpriseEnrollmentHelper {
       const policy::EnrollmentConfig& enrollment_config,
       const std::string& enrolling_user_domain);
 
-  virtual ~EnterpriseEnrollmentHelper();
+  using CreateMockEnrollmentHelper = EnterpriseEnrollmentHelper* (*)(
+      EnrollmentStatusConsumer* status_consumer,
+      const policy::EnrollmentConfig& enrollment_config,
+      const std::string& enrolling_user_domain);
 
-  // Starts enterprise enrollment using |profile|. First tries to fetch an
-  // authentication token using the |profile|, then tries to enroll the device
-  // with the received token.
-  // If |fetch_additional_token| is true, the helper fetches an additional token
-  // and passes it to the |status_consumer| on successfull enrollment.
-  // If enrollment fails, you should clear authentication data in |profile| by
-  // calling ClearAuth before destroying |this|.
-  // EnrollUsingProfile can be called only once during this object's lifetime,
-  // and only if neither of EnrollUsing* was called before.
-  virtual void EnrollUsingProfile(Profile* profile,
-                                  bool fetch_additional_token) = 0;
+  // Use |creator| instead of the default enrollment helper allocator. This
+  // allows tests to substitute in a mock enrollment helper. This function will
+  // only be used once.
+  static void SetupEnrollmentHelperMock(CreateMockEnrollmentHelper creator);
+
+  virtual ~EnterpriseEnrollmentHelper();
 
   // Starts enterprise enrollment using |auth_code|. First tries to exchange the
   // auth code to authentication token, then tries to enroll the device with the
   // received token.
+  // If |fetch_additional_token| is true, the helper fetches an additional token
+  // and passes it to the |status_consumer| on successful enrollment.
   // EnrollUsingAuthCode can be called only once during this object's lifetime,
   // and only if neither of EnrollUsing* methods was called before.
-  virtual void EnrollUsingAuthCode(const std::string& auth_code) = 0;
+  virtual void EnrollUsingAuthCode(const std::string& auth_code,
+                                   bool fetch_additional_token) = 0;
 
   // Starts enterprise enrollment using |token|.
   // EnrollUsingToken can be called only once during this object's lifetime, and
@@ -127,6 +128,10 @@ class EnterpriseEnrollmentHelper {
 
  private:
   EnrollmentStatusConsumer* status_consumer_;
+
+  // If this is not nullptr, then it will be used to create the enrollment
+  // helper. |create_mock_enrollment_helper_| needs to outlive this class.
+  static CreateMockEnrollmentHelper create_mock_enrollment_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(EnterpriseEnrollmentHelper);
 };

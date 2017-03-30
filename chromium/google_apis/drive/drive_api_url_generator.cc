@@ -32,7 +32,8 @@ const char kDriveV2UploadExistingFileUrlPrefix[] = "upload/drive/v2/files/";
 const char kDriveV2BatchUploadUrl[] = "upload/drive";
 const char kDriveV2PermissionsUrlFormat[] = "drive/v2/files/%s/permissions";
 const char kDriveV2DownloadUrlFormat[] = "host/%s";
-const char kDriveV2ThumbnailUrlFormat[] = "thumb/%s?width=%d&height=%d";
+const char kDriveV2ThumbnailUrlFormat[] = "d/%s=w%d-h%d";
+const char kDriveV2ThumbnailUrlWithCropFormat[] = "d/%s=w%d-h%d-c";
 
 // apps.delete and file.authorize API is exposed through a special endpoint
 // v2internal that is accessible only by the official API key for Chrome.
@@ -53,9 +54,11 @@ GURL AddMultipartUploadParam(const GURL& url) {
 }  // namespace
 
 DriveApiUrlGenerator::DriveApiUrlGenerator(const GURL& base_url,
-                                           const GURL& base_download_url)
+                                           const GURL& base_download_url,
+                                           const GURL& base_thumbnail_url)
     : base_url_(base_url),
-      base_download_url_(base_download_url) {
+      base_download_url_(base_download_url),
+      base_thumbnail_url_(base_thumbnail_url) {
   // Do nothing.
 }
 
@@ -72,6 +75,9 @@ const char DriveApiUrlGenerator::kBaseDownloadUrlForProduction[] =
 #else
     "https://www.googledrive.com";
 #endif
+
+const char DriveApiUrlGenerator::kBaseThumbnailUrlForProduction[] =
+    "https://lh3.googleusercontent.com";
 
 GURL DriveApiUrlGenerator::GetAboutGetUrl() const {
   return base_url_.Resolve(kDriveV2AboutUrl);
@@ -116,8 +122,14 @@ GURL DriveApiUrlGenerator::GetFilesAuthorizeUrl(
                                               net::EscapePath(app_id).c_str()));
 }
 
-GURL DriveApiUrlGenerator::GetFilesInsertUrl() const {
-  return base_url_.Resolve(kDriveV2FilesUrl);
+GURL DriveApiUrlGenerator::GetFilesInsertUrl(
+    const std::string& visibility) const {
+  GURL url =  base_url_.Resolve(kDriveV2FilesUrl);
+
+  if (!visibility.empty())
+    url = net::AppendOrReplaceQueryParameter(url, "visibility", visibility);
+
+  return url;
 }
 
 GURL DriveApiUrlGenerator::GetFilesPatchUrl(const std::string& file_id,
@@ -137,9 +149,16 @@ GURL DriveApiUrlGenerator::GetFilesPatchUrl(const std::string& file_id,
   return url;
 }
 
-GURL DriveApiUrlGenerator::GetFilesCopyUrl(const std::string& file_id) const {
-  return base_url_.Resolve(base::StringPrintf(
+GURL DriveApiUrlGenerator::GetFilesCopyUrl(
+    const std::string& file_id,
+    const std::string& visibility) const {
+  GURL url =  base_url_.Resolve(base::StringPrintf(
       kDriveV2FileCopyUrlFormat, net::EscapePath(file_id).c_str()));
+
+  if (!visibility.empty())
+    url = net::AppendOrReplaceQueryParameter(url, "visibility", visibility);
+
+  return url;
 }
 
 GURL DriveApiUrlGenerator::GetFilesListUrl(int max_results,
@@ -175,7 +194,7 @@ GURL DriveApiUrlGenerator::GetFilesTrashUrl(const std::string& file_id) const {
 GURL DriveApiUrlGenerator::GetChangesListUrl(bool include_deleted,
                                              int max_results,
                                              const std::string& page_token,
-                                             int64 start_change_id) const {
+                                             int64_t start_change_id) const {
   DCHECK_GE(start_change_id, 0);
 
   GURL url = base_url_.Resolve(kDriveV2ChangelistUrl);
@@ -285,15 +304,10 @@ GURL DriveApiUrlGenerator::GetThumbnailUrl(const std::string& resource_id,
                                            int width,
                                            int height,
                                            bool crop) const {
-  GURL url = base_download_url_.Resolve(
-      base::StringPrintf(kDriveV2ThumbnailUrlFormat,
-                         net::EscapePath(resource_id).c_str(), width, height));
-
-  // crop is "false" by default.
-  if (crop)
-    url = net::AppendOrReplaceQueryParameter(url, "crop", "true");
-
-  return url;
+  return base_thumbnail_url_.Resolve(
+    base::StringPrintf(
+        crop ? kDriveV2ThumbnailUrlWithCropFormat : kDriveV2ThumbnailUrlFormat,
+        net::EscapePath(resource_id).c_str(), width, height));
 }
 
 GURL DriveApiUrlGenerator::GetBatchUploadUrl() const {

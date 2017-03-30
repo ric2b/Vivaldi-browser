@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/activity_log/activity_action_constants.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -232,10 +236,10 @@ TEST_F(ActivityLogTest, LogAndFetchActions) {
 TEST_F(ActivityLogTest, LogPrerender) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
@@ -326,10 +330,10 @@ TEST_F(ActivityLogTest, ArgUrlExtraction) {
                       now - base::TimeDelta::FromSeconds(3),
                       Action::ACTION_API_CALL,
                       "windows.create");
-  action->set_args(
-      ListBuilder()
-          .Append(DictionaryBuilder().Set("url", "http://www.google.co.uk"))
-          .Build());
+  action->set_args(ListBuilder()
+                       .Append(std::move(DictionaryBuilder().Set(
+                           "url", "http://www.google.co.uk")))
+                       .Build());
   activity_log->LogAction(action);
 
   activity_log->GetFilteredActions(
@@ -345,10 +349,10 @@ TEST_F(ActivityLogTest, ArgUrlExtraction) {
 TEST_F(ActivityLogTest, UninstalledExtension) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
 
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());

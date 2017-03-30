@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_SEARCH_SEARCH_IPC_ROUTER_POLICY_IMPL_H_
 #define CHROME_BROWSER_UI_SEARCH_SEARCH_IPC_ROUTER_POLICY_IMPL_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/search/search_ipc_router.h"
 
 namespace content {
@@ -21,7 +22,6 @@ class SearchIPCRouterPolicyImpl : public SearchIPCRouter::Policy {
   friend class SearchIPCRouterPolicyTest;
 
   // Overridden from SearchIPCRouter::Policy:
-  bool ShouldProcessSetVoiceSearchSupport() override;
   bool ShouldProcessFocusOmnibox(bool is_active_tab) override;
   bool ShouldProcessNavigateToURL(bool is_active_tab) override;
   bool ShouldProcessDeleteMostVisitedItem() override;
@@ -34,12 +34,10 @@ class SearchIPCRouterPolicyImpl : public SearchIPCRouter::Policy {
   bool ShouldSendSetPromoInformation() override;
   bool ShouldSendSetDisplayInstantResults() override;
   bool ShouldSendSetSuggestionToPrefetch() override;
-  bool ShouldSendSetOmniboxStartMargin() override;
   bool ShouldSendSetInputInProgress(bool is_active_tab) override;
   bool ShouldSendOmniboxFocusChanged() override;
   bool ShouldSendMostVisitedItems() override;
   bool ShouldSendThemeBackgroundInfo() override;
-  bool ShouldSendToggleVoiceSearch() override;
   bool ShouldSubmitQuery() override;
 
   // Used by unit tests.

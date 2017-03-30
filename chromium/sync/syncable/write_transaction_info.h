@@ -5,6 +5,11 @@
 #ifndef SYNC_SYNCABLE_WRITE_TRANSACTION_INFO_H_
 #define SYNC_SYNCABLE_WRITE_TRANSACTION_INFO_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <string>
+
 #include "sync/syncable/entry_kernel.h"
 #include "sync/syncable/syncable_base_transaction.h"
 
@@ -13,7 +18,7 @@ namespace syncable {
 
 // A struct describing the changes made during a transaction.
 struct WriteTransactionInfo {
-  WriteTransactionInfo(int64 id,
+  WriteTransactionInfo(int64_t id,
                        tracked_objects::Location location,
                        WriterTag writer,
                        ImmutableEntryKernelMutationMap mutations);
@@ -23,7 +28,7 @@ struct WriteTransactionInfo {
   // Caller owns the return value.
   base::DictionaryValue* ToValue(size_t max_mutations_size) const;
 
-  int64 id;
+  int64_t id;
   // If tracked_objects::Location becomes assignable, we can use that
   // instead.
   std::string location_string;

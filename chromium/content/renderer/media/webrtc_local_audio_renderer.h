@@ -5,10 +5,13 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBRTC_LOCAL_AUDIO_RENDERER_H_
 #define CONTENT_RENDERER_MEDIA_WEBRTC_LOCAL_AUDIO_RENDERER_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -18,6 +21,7 @@
 #include "content/public/renderer/media_stream_audio_sink.h"
 #include "content/renderer/media/webrtc_audio_device_impl.h"
 #include "content/renderer/media/webrtc_local_audio_track.h"
+#include "media/base/output_device.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 
 namespace media {
@@ -39,14 +43,15 @@ class WebRtcAudioCapturer;
 // When the audio layer in the browser process asks for data to render, this
 // class provides the data by implementing the MediaStreamAudioSink
 // interface, i.e., we are a sink seen from the WebRtcAudioCapturer perspective.
-// TODO(henrika): improve by using similar principles as in RTCVideoRenderer
-// which register itself to the video track when the provider is started and
-// deregisters itself when it is stopped.
-// Tracking this at http://crbug.com/164813.
+// TODO(henrika): improve by using similar principles as in
+// MediaStreamVideoRendererSink which register itself to the video track when
+// the provider is started and deregisters itself when it is stopped. Tracking
+// this at http://crbug.com/164813.
 class CONTENT_EXPORT WebRtcLocalAudioRenderer
     : NON_EXPORTED_BASE(public MediaStreamAudioRenderer),
       NON_EXPORTED_BASE(public MediaStreamAudioSink),
-      NON_EXPORTED_BASE(public media::AudioRendererSink::RenderCallback) {
+      NON_EXPORTED_BASE(public media::AudioRendererSink::RenderCallback),
+      NON_EXPORTED_BASE(public media::OutputDevice) {
  public:
   // Creates a local renderer and registers a capturing |source| object.
   // The |source| is owned by the WebRtcAudioDeviceImpl.
@@ -54,7 +59,8 @@ class CONTENT_EXPORT WebRtcLocalAudioRenderer
   WebRtcLocalAudioRenderer(const blink::WebMediaStreamTrack& audio_track,
                            int source_render_frame_id,
                            int session_id,
-                           int frames_per_buffer);
+                           const std::string& device_id,
+                           const url::Origin& security_origin);
 
   // MediaStreamAudioRenderer implementation.
   // Called on the main thread.
@@ -63,11 +69,16 @@ class CONTENT_EXPORT WebRtcLocalAudioRenderer
   void Play() override;
   void Pause() override;
   void SetVolume(float volume) override;
-  void SwitchOutputDevice(const std::string& device_id,
-                          const GURL& security_origin,
-                          const media::SwitchOutputDeviceCB& callback) override;
+  media::OutputDevice* GetOutputDevice() override;
   base::TimeDelta GetCurrentRenderTime() const override;
   bool IsLocalRenderer() const override;
+
+  // media::OutputDevice implementation
+  void SwitchOutputDevice(const std::string& device_id,
+                          const url::Origin& security_origin,
+                          const media::SwitchOutputDeviceCB& callback) override;
+  media::AudioParameters GetOutputParameters() override;
+  media::OutputDeviceStatus GetDeviceStatus() override;
 
   const base::TimeDelta& total_render_time() const {
     return total_render_time_;
@@ -89,7 +100,9 @@ class CONTENT_EXPORT WebRtcLocalAudioRenderer
   // media::AudioRendererSink::RenderCallback implementation.
   // Render() is called on the AudioOutputDevice thread and OnRenderError()
   // on the IO thread.
-  int Render(media::AudioBus* audio_bus, int audio_delay_milliseconds) override;
+  int Render(media::AudioBus* audio_bus,
+             uint32_t audio_delay_milliseconds,
+             uint32_t frames_skipped) override;
   void OnRenderError() override;
 
   // Initializes and starts the |sink_| if
@@ -144,15 +157,14 @@ class CONTENT_EXPORT WebRtcLocalAudioRenderer
   // Set when playing, cleared when paused.
   bool playing_;
 
-  // Protects |audio_shifter_|, |playing_| and |sink_|.
+  // Protects |audio_shifter_|, |playing_|, |last_render_time_|,
+  // |total_render_time_| and |volume_|.
   mutable base::Lock thread_lock_;
-
-  // The preferred buffer size provided via the ctor.
-  const int frames_per_buffer_;
 
   // The preferred device id of the output device or empty for the default
   // output device.
-  const std::string output_device_id_;
+  std::string output_device_id_;
+  url::Origin security_origin_;
 
   // Cache value for the volume.
   float volume_;

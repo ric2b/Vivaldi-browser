@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <set>
 #include <sstream>
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/config.h"
 #include "tools/gn/config_values_extractors.h"
@@ -25,8 +28,9 @@ namespace commands {
 
 namespace {
 
-// The switch for displaying blame.
+// Desc-specific command line switches.
 const char kBlame[] = "blame";
+const char kTree[] = "tree";
 
 // Prints the given directory in a nice way for the user to view.
 std::string FormatSourceDir(const SourceDir& dir) {
@@ -113,7 +117,7 @@ void PrintDeps(const Target* target, bool display_header) {
   Label toolchain_label = target->label().GetToolchainLabel();
 
   // Tree mode is separate.
-  if (cmdline->HasSwitch("tree")) {
+  if (cmdline->HasSwitch(kTree)) {
     if (display_header)
       OutputString("\nDependency tree:\n");
 
@@ -152,25 +156,6 @@ void PrintDeps(const Target* target, bool display_header) {
   }
 }
 
-void PrintForwardDependentConfigsFrom(const Target* target,
-                                      bool display_header) {
-  if (target->forward_dependent_configs().empty())
-    return;
-
-  if (display_header)
-    OutputString("\nforward_dependent_configs_from:\n");
-
-  // Collect the sorted list of deps.
-  std::vector<Label> forward;
-  for (const auto& pair : target->forward_dependent_configs())
-    forward.push_back(pair.label);
-  std::sort(forward.begin(), forward.end());
-
-  Label toolchain_label = target->label().GetToolchainLabel();
-  for (const auto& fwd : forward)
-    OutputString("  " + fwd.GetUserVisibleName(toolchain_label) + "\n");
-}
-
 // libs and lib_dirs are special in that they're inherited. We don't currently
 // implement a blame feature for this since the bottom-up inheritance makes
 // this difficult.
@@ -187,7 +172,7 @@ void PrintLibDirs(const Target* target, bool display_header) {
 }
 
 void PrintLibs(const Target* target, bool display_header) {
-  const OrderedSet<std::string>& libs = target->all_libs();
+  const OrderedSet<LibFile>& libs = target->all_libs();
   if (libs.empty())
     return;
 
@@ -195,7 +180,7 @@ void PrintLibs(const Target* target, bool display_header) {
     OutputString("\nlibs\n");
 
   for (size_t i = 0; i < libs.size(); i++)
-    OutputString("    " + libs[i] + "\n");
+    OutputString("    " + libs[i].value() + "\n");
 }
 
 void PrintPublic(const Target* target, bool display_header) {
@@ -249,39 +234,46 @@ void PrintTestonly(const Target* target, bool display_header) {
     OutputString("  false\n");
 }
 
-void PrintConfigsVector(const Target* target,
-                        const LabelConfigVector& configs,
-                        const std::string& heading,
-                        bool display_header) {
-  if (configs.empty())
+// Recursively prints subconfigs of a config.
+void PrintSubConfigs(const Config* config, int indent_level) {
+  if (config->configs().empty())
     return;
 
-  // Don't sort since the order determines how things are processed.
-  if (display_header)
-    OutputString("\n" + heading + " (in order applying):\n");
-
-  Label toolchain_label = target->label().GetToolchainLabel();
-  for (const auto& config : configs) {
-    OutputString("  " + config.label.GetUserVisibleName(toolchain_label) +
-                 "\n");
+  std::string indent(indent_level * 2, ' ');
+  Label toolchain_label = config->label().GetToolchainLabel();
+  for (const auto& pair : config->configs()) {
+    OutputString(
+        indent + pair.label.GetUserVisibleName(toolchain_label) + "\n");
+    PrintSubConfigs(pair.ptr, indent_level + 1);
   }
 }
 
+// This allows configs stored as either std::vector<LabelConfigPair> or
+// UniqueVector<LabelConfigPair> to be printed.
+template <class VectorType>
 void PrintConfigsVector(const Target* target,
-                        const UniqueVector<LabelConfigPair>& configs,
+                        const VectorType& configs,
                         const std::string& heading,
                         bool display_header) {
   if (configs.empty())
     return;
 
+  bool tree = base::CommandLine::ForCurrentProcess()->HasSwitch(kTree);
+
   // Don't sort since the order determines how things are processed.
-  if (display_header)
-    OutputString("\n" + heading + " (in order applying):\n");
+  if (display_header) {
+    if (tree)
+      OutputString("\n" + heading + " tree (in order applying):\n");
+    else
+      OutputString("\n" + heading + " (in order applying, try also --tree):\n");
+  }
 
   Label toolchain_label = target->label().GetToolchainLabel();
   for (const auto& config : configs) {
     OutputString("  " + config.label.GetUserVisibleName(toolchain_label) +
                  "\n");
+    if (tree)
+      PrintSubConfigs(config.ptr, 2);  // 2 = start with double-indent.
   }
 }
 
@@ -519,10 +511,6 @@ const char kDesc_Help[] =
     "      Shows the labels of configs applied to targets that depend on this\n"
     "      one (either directly or all of them).\n"
     "\n"
-    "  forward_dependent_configs_from\n"
-    "      Shows the labels of dependencies for which dependent configs will\n"
-    "      be pushed to targets depending on the current one.\n"
-    "\n"
     "  script\n"
     "  args\n"
     "  depfile\n"
@@ -639,8 +627,6 @@ int RunDesc(const std::vector<std::string>& args) {
       PrintPublicConfigs(target, false);
     } else if (what == variables::kAllDependentConfigs) {
       PrintAllDependentConfigs(target, false);
-    } else if (what == variables::kForwardDependentConfigsFrom) {
-      PrintForwardDependentConfigsFrom(target, false);
     } else if (what == variables::kSources) {
       PrintSources(target, false);
     } else if (what == variables::kPublic) {
@@ -674,6 +660,7 @@ int RunDesc(const std::vector<std::string>& args) {
 
     CONFIG_VALUE_HANDLER(defines, std::string)
     CONFIG_VALUE_HANDLER(include_dirs, SourceDir)
+    CONFIG_VALUE_HANDLER(asmflags, std::string)
     CONFIG_VALUE_HANDLER(cflags, std::string)
     CONFIG_VALUE_HANDLER(cflags_c, std::string)
     CONFIG_VALUE_HANDLER(cflags_cc, std::string)
@@ -727,13 +714,13 @@ int RunDesc(const std::vector<std::string>& args) {
 
   PrintPublicConfigs(target, true);
   PrintAllDependentConfigs(target, true);
-  PrintForwardDependentConfigsFrom(target, true);
 
   PrintInputs(target, true);
 
   if (is_binary_output) {
     OUTPUT_CONFIG_VALUE(defines, std::string)
     OUTPUT_CONFIG_VALUE(include_dirs, SourceDir)
+    OUTPUT_CONFIG_VALUE(asmflags, std::string)
     OUTPUT_CONFIG_VALUE(cflags, std::string)
     OUTPUT_CONFIG_VALUE(cflags_c, std::string)
     OUTPUT_CONFIG_VALUE(cflags_cc, std::string)

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/command_line.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/synchronization/waitable_event.h"
@@ -10,6 +15,7 @@
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/spellcheck_common.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -23,16 +29,13 @@ namespace {
 
 // A corrupted BDICT data used in DeleteCorruptedBDICT. Please do not use this
 // BDICT data for other tests.
-const uint8 kCorruptedBDICT[] = {
-  0x42, 0x44, 0x69, 0x63, 0x02, 0x00, 0x01, 0x00,
-  0x20, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x00, 0x00,
-  0x65, 0x72, 0xe0, 0xac, 0x27, 0xc7, 0xda, 0x66,
-  0x6d, 0x1e, 0xa6, 0x35, 0xd1, 0xf6, 0xb7, 0x35,
-  0x32, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x00,
-  0x39, 0x00, 0x00, 0x00, 0x3a, 0x00, 0x00, 0x00,
-  0x0a, 0x0a, 0x41, 0x46, 0x20, 0x30, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0xe6, 0x49, 0x00, 0x68, 0x02,
-  0x73, 0x06, 0x74, 0x0b, 0x77, 0x11, 0x79, 0x15,
+const uint8_t kCorruptedBDICT[] = {
+    0x42, 0x44, 0x69, 0x63, 0x02, 0x00, 0x01, 0x00, 0x20, 0x00, 0x00, 0x00,
+    0x3b, 0x00, 0x00, 0x00, 0x65, 0x72, 0xe0, 0xac, 0x27, 0xc7, 0xda, 0x66,
+    0x6d, 0x1e, 0xa6, 0x35, 0xd1, 0xf6, 0xb7, 0x35, 0x32, 0x00, 0x00, 0x00,
+    0x38, 0x00, 0x00, 0x00, 0x39, 0x00, 0x00, 0x00, 0x3a, 0x00, 0x00, 0x00,
+    0x0a, 0x0a, 0x41, 0x46, 0x20, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe6,
+    0x49, 0x00, 0x68, 0x02, 0x73, 0x06, 0x74, 0x0b, 0x77, 0x11, 0x79, 0x15,
 };
 
 }  // namespace
@@ -127,4 +130,97 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest, PreferencesNotMigrated) {
       prefs->GetList(prefs::kSpellCheckDictionaries)->GetString(0, &new_pref));
   EXPECT_EQ("en-US", new_pref);
   EXPECT_TRUE(prefs->GetString(prefs::kSpellCheckDictionary).empty());
+}
+
+// Checks that if a user starts multilingual mode with spellchecking disabled
+// that all languages get deselected and spellchecking gets enabled.
+IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
+                       SpellcheckingDisabledPreferenceMigration) {
+  ASSERT_TRUE(chrome::spellcheck_common::IsMultilingualSpellcheckEnabled());
+
+  PrefService* prefs = user_prefs::UserPrefs::Get(GetContext());
+  base::ListValue dictionaries;
+  dictionaries.AppendString("en-US");
+  prefs->Set(prefs::kSpellCheckDictionaries, dictionaries);
+  prefs->SetBoolean(prefs::kEnableContinuousSpellcheck, false);
+
+  // Migrate the preferences.
+  SpellcheckServiceFactory::GetForContext(GetContext());
+
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kEnableContinuousSpellcheck));
+  EXPECT_EQ(0U, prefs->GetList(prefs::kSpellCheckDictionaries)->GetSize());
+}
+
+// Make sure that there is only one language in the preference when not using
+// multilingual spellchecking.
+IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
+                       MultilingualToSingleLanguagePreferenceMigration) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableMultilingualSpellChecker);
+  ASSERT_FALSE(chrome::spellcheck_common::IsMultilingualSpellcheckEnabled());
+
+  PrefService* prefs = user_prefs::UserPrefs::Get(GetContext());
+  base::ListValue dictionaries;
+  dictionaries.AppendString("en-US");
+  dictionaries.AppendString("fr");
+  prefs->Set(prefs::kSpellCheckDictionaries, dictionaries);
+
+  // Migrate the preference.
+  SpellcheckServiceFactory::GetForContext(GetContext());
+
+  EXPECT_EQ(1U, prefs->GetList(prefs::kSpellCheckDictionaries)->GetSize());
+  std::string new_pref;
+  ASSERT_TRUE(
+      prefs->GetList(prefs::kSpellCheckDictionaries)->GetString(0, &new_pref));
+  EXPECT_EQ("en-US", new_pref);
+}
+
+// If using multilingual spellchecking with spellchecking enabled, make sure the
+// preference stays the same and spellchecking stays enabled.
+IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
+                       MultilingualPreferenceNotMigrated) {
+  ASSERT_TRUE(chrome::spellcheck_common::IsMultilingualSpellcheckEnabled());
+
+  PrefService* prefs = user_prefs::UserPrefs::Get(GetContext());
+  base::ListValue dictionaries;
+  dictionaries.AppendString("en-US");
+  dictionaries.AppendString("fr");
+  prefs->Set(prefs::kSpellCheckDictionaries, dictionaries);
+  prefs->SetBoolean(prefs::kEnableContinuousSpellcheck, true);
+
+  // Should not migrate any preferences.
+  SpellcheckServiceFactory::GetForContext(GetContext());
+
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kEnableContinuousSpellcheck));
+  EXPECT_EQ(2U, prefs->GetList(prefs::kSpellCheckDictionaries)->GetSize());
+  std::string pref;
+  ASSERT_TRUE(
+      prefs->GetList(prefs::kSpellCheckDictionaries)->GetString(0, &pref));
+  EXPECT_EQ("en-US", pref);
+  ASSERT_TRUE(
+      prefs->GetList(prefs::kSpellCheckDictionaries)->GetString(1, &pref));
+  EXPECT_EQ("fr", pref);
+}
+
+// If not using multilingual spellchecking and only one language is selected,
+// the preference should not change.
+IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
+                       SingleLanguagePreferenceNotMigrated) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableMultilingualSpellChecker);
+  ASSERT_FALSE(chrome::spellcheck_common::IsMultilingualSpellcheckEnabled());
+
+  PrefService* prefs = user_prefs::UserPrefs::Get(GetContext());
+  base::ListValue dictionaries;
+  dictionaries.AppendString("en-US");
+  prefs->Set(prefs::kSpellCheckDictionaries, dictionaries);
+
+  // Should not migrate any preferences.
+  SpellcheckServiceFactory::GetForContext(GetContext());
+
+  EXPECT_EQ(1U, prefs->GetList(prefs::kSpellCheckDictionaries)->GetSize());
+  std::string pref;
+  ASSERT_TRUE(
+      prefs->GetList(prefs::kSpellCheckDictionaries)->GetString(0, &pref));
+  EXPECT_EQ("en-US", pref);
 }

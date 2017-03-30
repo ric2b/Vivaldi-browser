@@ -6,6 +6,9 @@
 
 // If you add more includes to this list, you also need to add them to
 // google_api_keys_unittest.cc.
+
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/lazy_instance.h"
@@ -75,6 +78,9 @@
 #endif
 
 namespace google_apis {
+
+const char kAPIKeysDevelopersHowToURL[] =
+    "http://www.chromium.org/developers/how-tos/api-keys";
 
 // This is used as a lazy instance to determine keys once and cache them.
 class APIKeyCache {

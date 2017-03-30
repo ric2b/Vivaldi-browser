@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/callback_list.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
@@ -16,7 +20,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "device/battery/battery_monitor.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 
 // These tests run against a dummy implementation of the BatteryMonitor service.
 // That is, they verify that the service implementation is correctly exposed to
@@ -46,15 +50,14 @@ void UpdateBattery(const device::BatteryStatus& battery_status) {
 class FakeBatteryMonitor : public device::BatteryMonitor {
  public:
   static void Create(mojo::InterfaceRequest<BatteryMonitor> request) {
-    new FakeBatteryMonitor(request.Pass());
+    new FakeBatteryMonitor(std::move(request));
   }
 
  private:
   typedef mojo::Callback<void(device::BatteryStatusPtr)> BatteryStatusCallback;
 
   FakeBatteryMonitor(mojo::InterfaceRequest<BatteryMonitor> request)
-      : binding_(this, request.Pass()) {
-  }
+      : binding_(this, std::move(request)) {}
   ~FakeBatteryMonitor() override {}
 
   void QueryNextStatus(const BatteryStatusCallback& callback) override {
@@ -88,7 +91,7 @@ class FakeBatteryMonitor : public device::BatteryMonitor {
 // declared above.
 class TestContentBrowserClient : public ContentBrowserClient {
  public:
-  void OverrideRenderProcessMojoServices(ServiceRegistry* registry) override {
+  void RegisterRenderProcessMojoServices(ServiceRegistry* registry) override {
     registry->AddService(base::Bind(&FakeBatteryMonitor::Create));
   }
 

@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_AUTOFILL_DATA_MODEL_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_AUTOFILL_DATA_MODEL_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/strings/string16.h"
@@ -27,10 +29,6 @@ class AutofillDataModel : public FormGroup {
   // rather than automatically aggregated.
   bool IsVerified() const;
 
-  // Called to update |use_count_| and |use_date_| when this data model is
-  // the subject of user interaction (usually, when it's used to fill a form).
-  void RecordUse();
-
   std::string guid() const { return guid_; }
   void set_guid(const std::string& guid) { guid_ = guid; }
 
@@ -48,6 +46,18 @@ class AutofillDataModel : public FormGroup {
   void set_modification_date(const base::Time& time) {
     modification_date_ = time;
   }
+
+  // Compares two data models according to their frecency score. The score uses
+  // a combination of frequency and recency to determine the relevance of the
+  // profile. |comparison_time_| allows consistent sorting throughout the
+  // comparisons.
+  bool CompareFrecency(const AutofillDataModel* other,
+                       base::Time comparison_time) const;
+
+ protected:
+  // Called to update |use_count_| and |use_date_| when this data model is
+  // the subject of user interaction (usually, when it's used to fill a form).
+  void RecordUse();
 
  private:
   // A globally unique ID for this object.
@@ -69,6 +79,12 @@ class AutofillDataModel : public FormGroup {
 
   // The last time data in the model was modified.
   base::Time modification_date_;
+
+  // Returns a score based on both the recency (relative to |time|) and
+  // frequency for the model. The score is a negative number where a higher
+  // value is more relevant. |time| is passed as a parameter to ensure
+  // consistent results.
+  double GetFrecencyScore(base::Time time) const;
 };
 
 }  // namespace autofill

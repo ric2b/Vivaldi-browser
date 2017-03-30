@@ -4,6 +4,8 @@
 //
 // Implementation of ChunkRange class.
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "chrome/browser/safe_browsing/chunk_range.h"
@@ -12,6 +14,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+
+namespace safe_browsing {
 
 ChunkRange::ChunkRange(int start) : start_(start), stop_(start) {
 }
@@ -69,12 +73,10 @@ bool StringToRanges(const std::string& input,
 
   // Crack the string into chunk parts, then crack each part looking for a
   // range.
-  std::vector<std::string> chunk_parts;
-  base::SplitString(input, ',', &chunk_parts);
-
-  for (size_t i = 0; i < chunk_parts.size(); ++i) {
-    std::vector<std::string> chunk_ranges;
-    base::SplitString(chunk_parts[i], '-', &chunk_ranges);
+  for (const base::StringPiece& chunk : base::SplitStringPiece(
+           input, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    std::vector<std::string> chunk_ranges = base::SplitString(
+        chunk, "-", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     int start = atoi(chunk_ranges[0].c_str());
     int stop = start;
     if (chunk_ranges.size() == 2)
@@ -114,3 +116,5 @@ bool IsChunkInRange(int chunk_number, const std::vector<ChunkRange>& ranges) {
 
   return false;
 }
+
+}  // namespace safe_browsing

@@ -4,7 +4,10 @@
 
 #include "extensions/browser/error_map.h"
 
+#include <utility>
+
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 
 namespace extensions {
@@ -183,7 +186,7 @@ const ExtensionError* ErrorMap::AddError(scoped_ptr<ExtensionError> error) {
     iter = map_.insert(std::pair<std::string, ExtensionEntry*>(
         error->extension_id(), new ExtensionEntry)).first;
   }
-  return iter->second->AddError(error.Pass());
+  return iter->second->AddError(std::move(error));
 }
 
 void ErrorMap::RemoveErrors(const Filter& filter,

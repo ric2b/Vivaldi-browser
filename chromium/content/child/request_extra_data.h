@@ -5,9 +5,13 @@
 #ifndef CONTENT_CHILD_REQUEST_EXTRA_DATA_H_
 #define CONTENT_CHILD_REQUEST_EXTRA_DATA_H_
 
+#include <utility>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/child/web_url_loader_impl.h"
 #include "content/common/content_export.h"
+#include "content/common/navigation_params.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -22,7 +26,7 @@ class CONTENT_EXPORT RequestExtraData
     : public NON_EXPORTED_BASE(blink::WebURLRequest::ExtraData) {
  public:
   RequestExtraData();
-  virtual ~RequestExtraData();
+  ~RequestExtraData() override;
 
   blink::WebPageVisibilityState visibility_state() const {
     return visibility_state_;
@@ -86,6 +90,12 @@ class CONTENT_EXPORT RequestExtraData
       int service_worker_provider_id) {
     service_worker_provider_id_ = service_worker_provider_id;
   }
+  LoFiState lofi_state() const {
+    return lofi_state_;
+  }
+  void set_lofi_state(LoFiState lofi_state) {
+    lofi_state_ = lofi_state;
+  }
   // |custom_user_agent| is used to communicate an overriding custom user agent
   // to |RenderViewImpl::willSendRequest()|; set to a null string to indicate no
   // override and an empty string to indicate that there should be no user
@@ -106,12 +116,12 @@ class CONTENT_EXPORT RequestExtraData
   // PlzNavigate: |stream_override| is used to override certain parameters of
   // navigation requests.
   scoped_ptr<StreamOverrideParameters> TakeStreamOverrideOwnership() {
-    return stream_override_.Pass();
+    return std::move(stream_override_);
   }
 
   void set_stream_override(
       scoped_ptr<StreamOverrideParameters> stream_override) {
-    stream_override_ = stream_override.Pass();
+    stream_override_ = std::move(stream_override);
   }
 
  private:
@@ -130,6 +140,7 @@ class CONTENT_EXPORT RequestExtraData
   blink::WebString custom_user_agent_;
   blink::WebString requested_with_;
   scoped_ptr<StreamOverrideParameters> stream_override_;
+  LoFiState lofi_state_;
 
   DISALLOW_COPY_AND_ASSIGN(RequestExtraData);
 };

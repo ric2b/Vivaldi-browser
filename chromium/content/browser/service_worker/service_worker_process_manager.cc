@@ -4,10 +4,16 @@
 
 #include "content/browser/service_worker/service_worker_process_manager.h"
 
+#include <stddef.h>
+
+#include <algorithm>
+#include <utility>
+
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/site_instance.h"
+#include "content/public/common/child_process_host.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -23,15 +29,6 @@ struct SecondGreater {
 };
 
 }  // namespace
-
-static bool IncrementWorkerRefCountByPid(int process_id) {
-  RenderProcessHost* rph = RenderProcessHost::FromID(process_id);
-  if (!rph || rph->FastShutdownStarted())
-    return false;
-
-  static_cast<RenderProcessHostImpl*>(rph)->IncrementWorkerRefCount();
-  return true;
-}
 
 ServiceWorkerProcessManager::ProcessInfo::ProcessInfo(
     const scoped_refptr<SiteInstance>& site_instance)
@@ -49,16 +46,18 @@ ServiceWorkerProcessManager::ProcessInfo::~ProcessInfo() {
 ServiceWorkerProcessManager::ServiceWorkerProcessManager(
     BrowserContext* browser_context)
     : browser_context_(browser_context),
-      process_id_for_test_(-1),
+      process_id_for_test_(ChildProcessHost::kInvalidUniqueID),
       weak_this_factory_(this) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   weak_this_ = weak_this_factory_.GetWeakPtr();
 }
 
 ServiceWorkerProcessManager::~ServiceWorkerProcessManager() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(browser_context_ == NULL)
+  DCHECK(IsShutdown())
       << "Call Shutdown() before destroying |this|, so that racing method "
       << "invocations don't use a destroyed BrowserContext.";
+  DCHECK(instance_info_.empty());
 }
 
 void ServiceWorkerProcessManager::Shutdown() {
@@ -67,9 +66,7 @@ void ServiceWorkerProcessManager::Shutdown() {
   for (std::map<int, ProcessInfo>::const_iterator it = instance_info_.begin();
        it != instance_info_.end();
        ++it) {
-    RenderProcessHost* rph = RenderProcessHost::FromID(it->second.process_id);
-    DCHECK(rph);
-    static_cast<RenderProcessHostImpl*>(rph)->DecrementWorkerRefCount();
+    RenderProcessHost::FromID(it->second.process_id)->DecrementWorkerRefCount();
   }
   instance_info_.clear();
 }
@@ -107,7 +104,7 @@ void ServiceWorkerProcessManager::RemoveProcessReferenceFromPattern(
 
   PatternProcessRefMap::iterator it = pattern_processes_.find(pattern);
   if (it == pattern_processes_.end()) {
-    NOTREACHED() << "process refrences not found for pattern: " << pattern;
+    NOTREACHED() << "process references not found for pattern: " << pattern;
     return;
   }
   ProcessRefMap& process_refs = it->second;
@@ -151,7 +148,7 @@ void ServiceWorkerProcessManager::AllocateWorkerProcess(
     return;
   }
 
-  if (process_id_for_test_ != -1) {
+  if (process_id_for_test_ != ChildProcessHost::kInvalidUniqueID) {
     // Let tests specify the returned process ID. Note: We may need to be able
     // to specify the error code too.
     BrowserThread::PostTask(
@@ -161,34 +158,35 @@ void ServiceWorkerProcessManager::AllocateWorkerProcess(
     return;
   }
 
-  DCHECK(!ContainsKey(instance_info_, embedded_worker_id))
+  if (IsShutdown()) {
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            base::Bind(callback, SERVICE_WORKER_ERROR_ABORT,
+                                       ChildProcessHost::kInvalidUniqueID,
+                                       false /* is_new_process */));
+    return;
+  }
+
+  // TODO(nhiroki): Make sure the instance info is not mixed up.
+  // (http://crbug.com/568915)
+  CHECK(!ContainsKey(instance_info_, embedded_worker_id))
       << embedded_worker_id << " already has a process allocated";
 
-  std::vector<int> sorted_candidates = SortProcessesForPattern(pattern);
-  for (std::vector<int>::const_iterator it = sorted_candidates.begin();
-       it != sorted_candidates.end();
-       ++it) {
-    if (!IncrementWorkerRefCountByPid(*it))
-      continue;
+  int process_id = FindAvailableProcess(pattern);
+  if (process_id != ChildProcessHost::kInvalidUniqueID) {
+    RenderProcessHost::FromID(process_id)->IncrementWorkerRefCount();
     instance_info_.insert(
-        std::make_pair(embedded_worker_id, ProcessInfo(*it)));
+        std::make_pair(embedded_worker_id, ProcessInfo(process_id)));
     BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(callback, SERVICE_WORKER_OK, *it,
+                            base::Bind(callback, SERVICE_WORKER_OK, process_id,
                                        false /* is_new_process */));
     return;
   }
 
-  if (!browser_context_) {
-    // Shutdown has started.
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(callback, SERVICE_WORKER_ERROR_ABORT, -1,
-                                       false /* is_new_process */));
-    return;
-  }
   // No existing processes available; start a new one.
   scoped_refptr<SiteInstance> site_instance =
       SiteInstance::CreateForURL(browser_context_, script_url);
   RenderProcessHost* rph = site_instance->GetProcess();
+
   // This Init() call posts a task to the IO thread that adds the RPH's
   // ServiceWorkerDispatcherHost to the
   // EmbeddedWorkerRegistry::process_sender_map_.
@@ -196,7 +194,8 @@ void ServiceWorkerProcessManager::AllocateWorkerProcess(
     LOG(ERROR) << "Couldn't start a new process!";
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(callback, SERVICE_WORKER_ERROR_PROCESS_NOT_FOUND, -1,
+        base::Bind(callback, SERVICE_WORKER_ERROR_PROCESS_NOT_FOUND,
+                   ChildProcessHost::kInvalidUniqueID,
                    false /* is_new_process */));
     return;
   }
@@ -204,7 +203,7 @@ void ServiceWorkerProcessManager::AllocateWorkerProcess(
   instance_info_.insert(
       std::make_pair(embedded_worker_id, ProcessInfo(site_instance)));
 
-  static_cast<RenderProcessHostImpl*>(rph)->IncrementWorkerRefCount();
+  rph->IncrementWorkerRefCount();
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
                           base::Bind(callback, SERVICE_WORKER_OK, rph->GetID(),
                                      true /* is_new_process */));
@@ -220,19 +219,27 @@ void ServiceWorkerProcessManager::ReleaseWorkerProcess(int embedded_worker_id) {
                    embedded_worker_id));
     return;
   }
-  if (process_id_for_test_ != -1) {
+
+  if (process_id_for_test_ != ChildProcessHost::kInvalidUniqueID) {
     // Unittests don't increment or decrement the worker refcount of a
     // RenderProcessHost.
     return;
   }
-  if (browser_context_ == NULL) {
+
+  if (IsShutdown()) {
     // Shutdown already released all instances.
     DCHECK(instance_info_.empty());
     return;
   }
+
   std::map<int, ProcessInfo>::iterator info =
       instance_info_.find(embedded_worker_id);
-  DCHECK(info != instance_info_.end());
+  // ReleaseWorkerProcess could be called for a nonexistent worker id, for
+  // example, when request to start a worker is aborted on the IO thread during
+  // process allocation that is failed on the UI thread.
+  if (info == instance_info_.end())
+    return;
+
   RenderProcessHost* rph = NULL;
   if (info->second.site_instance.get()) {
     rph = info->second.site_instance->GetProcess();
@@ -245,7 +252,7 @@ void ServiceWorkerProcessManager::ReleaseWorkerProcess(int embedded_worker_id) {
         << "Process " << info->second.process_id
         << " was destroyed unexpectedly. Did we actually hold a reference?";
   }
-  static_cast<RenderProcessHostImpl*>(rph)->DecrementWorkerRefCount();
+  rph->DecrementWorkerRefCount();
   instance_info_.erase(info);
 }
 
@@ -255,6 +262,8 @@ std::vector<int> ServiceWorkerProcessManager::SortProcessesForPattern(
   if (it == pattern_processes_.end())
     return std::vector<int>();
 
+  // Prioritize higher refcount processes to choose the process which has more
+  // tabs and is less likely to be backgrounded by user action like tab close.
   std::vector<std::pair<int, int> > counted(
       it->second.begin(), it->second.end());
   std::sort(counted.begin(), counted.end(), SecondGreater());
@@ -265,15 +274,42 @@ std::vector<int> ServiceWorkerProcessManager::SortProcessesForPattern(
   return result;
 }
 
+int ServiceWorkerProcessManager::FindAvailableProcess(const GURL& pattern) {
+  RenderProcessHost* backgrounded_candidate = nullptr;
+
+  // Try to find an available foreground process.
+  std::vector<int> sorted_candidates = SortProcessesForPattern(pattern);
+  for (int process_id : sorted_candidates) {
+    RenderProcessHost* rph = RenderProcessHost::FromID(process_id);
+    if (!rph || rph->FastShutdownStarted())
+      continue;
+
+    // Keep a backgrounded process for a suboptimal choice.
+    if (rph->IsProcessBackgrounded()) {
+      if (!backgrounded_candidate)
+        backgrounded_candidate = rph;
+      continue;
+    }
+
+    return process_id;
+  }
+
+  // No foreground processes available; choose a backgrounded one.
+  if (backgrounded_candidate)
+    return backgrounded_candidate->GetID();
+
+  return ChildProcessHost::kInvalidUniqueID;
+}
+
 }  // namespace content
 
-namespace base {
+namespace std {
 // Destroying ServiceWorkerProcessManagers only on the UI thread allows the
 // member WeakPtr to safely guard the object's lifetime when used on that
 // thread.
-void DefaultDeleter<content::ServiceWorkerProcessManager>::operator()(
+void default_delete<content::ServiceWorkerProcessManager>::operator()(
     content::ServiceWorkerProcessManager* ptr) const {
   content::BrowserThread::DeleteSoon(
       content::BrowserThread::UI, FROM_HERE, ptr);
 }
-}  // namespace base
+}  // namespace std

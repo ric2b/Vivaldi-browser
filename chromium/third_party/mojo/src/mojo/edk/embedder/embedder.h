@@ -2,28 +2,37 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_EMBEDDER_EMBEDDER_H_
-#define MOJO_EDK_EMBEDDER_EMBEDDER_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_EMBEDDER_EMBEDDER_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_EMBEDDER_EMBEDDER_H_
 
 #include <string>
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/process/process_handle.h"
 #include "base/task_runner.h"
-#include "mojo/edk/embedder/channel_info_forward.h"
-#include "mojo/edk/embedder/process_type.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/edk/embedder/slave_info.h"
-#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "third_party/mojo/src/mojo/edk/embedder/channel_info_forward.h"
+#include "third_party/mojo/src/mojo/edk/embedder/process_type.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/embedder/slave_info.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace mojo {
+
 namespace embedder {
 
-struct Configuration;
-class PlatformSupport;
 class ProcessDelegate;
+
+// Wrapper functions around the ones in src/mojo/edk for component builds.
+MOJO_SYSTEM_IMPL_EXPORT void PreInitializeParentProcess();
+MOJO_SYSTEM_IMPL_EXPORT void PreInitializeChildProcess();
+MOJO_SYSTEM_IMPL_EXPORT ScopedPlatformHandle ChildProcessLaunched(
+    base::ProcessHandle child_process);
+MOJO_SYSTEM_IMPL_EXPORT void ChildProcessLaunched(
+    base::ProcessHandle child_process, ScopedPlatformHandle server_pipe);
+MOJO_SYSTEM_IMPL_EXPORT void SetParentPipeHandle(ScopedPlatformHandle pipe);
 
 // Basic configuration/initialization ------------------------------------------
 
@@ -31,13 +40,12 @@ class ProcessDelegate;
 // functions available and functional. This is never shut down (except in tests
 // -- see test_embedder.h).
 
-// Returns the global configuration. In general, you should not need to change
-// the configuration, but if you do you must do it before calling |Init()|.
-MOJO_SYSTEM_IMPL_EXPORT Configuration* GetConfiguration();
+// Allows changing the default max message size. Must be called before Init.
+MOJO_SYSTEM_IMPL_EXPORT void SetMaxMessageSize(size_t bytes);
 
 // Must be called first, or just after setting configuration parameters, to
 // initialize the (global, singleton) system.
-MOJO_SYSTEM_IMPL_EXPORT void Init(scoped_ptr<PlatformSupport> platform_support);
+MOJO_SYSTEM_IMPL_EXPORT void Init();
 
 // Basic functions -------------------------------------------------------------
 
@@ -80,11 +88,10 @@ PassWrappedPlatformHandle(MojoHandle platform_handle_wrapper_handle,
 
 // Initializes a process of the given type; to be called after |Init()|.
 //   - |process_delegate| must be a process delegate of the appropriate type
-//     corresponding to |process_type|; its methods will be called on
-//     |delegate_thread_task_runner|.
-//   - |delegate_thread_task_runner|, |process_delegate|, and
-//     |io_thread_task_runner| should live at least until
-//     |ShutdownIPCSupport()|'s callback has been run or
+//     corresponding to |process_type|; its methods will be called on the same
+//     thread as Shutdown.
+//   - |process_delegate|, and |io_thread_task_runner| should live at least
+//     until |ShutdownIPCSupport()|'s callback has been run or
 //     |ShutdownIPCSupportOnIOThread()| has completed.
 //   - For slave processes (i.e., |process_type| is |ProcessType::SLAVE|),
 //     |platform_handle| should be connected to the handle passed to
@@ -92,7 +99,6 @@ PassWrappedPlatformHandle(MojoHandle platform_handle_wrapper_handle,
 //     |platform_handle| is ignored (and should not be valid).
 MOJO_SYSTEM_IMPL_EXPORT void InitIPCSupport(
     ProcessType process_type,
-    scoped_refptr<base::TaskRunner> delegate_thread_task_runner,
     ProcessDelegate* process_delegate,
     scoped_refptr<base::TaskRunner> io_thread_task_runner,
     ScopedPlatformHandle platform_handle);
@@ -240,4 +246,4 @@ MOJO_SYSTEM_IMPL_EXPORT void WillDestroyChannelSoon(ChannelInfo* channel_info);
 }  // namespace embedder
 }  // namespace mojo
 
-#endif  // MOJO_EDK_EMBEDDER_EMBEDDER_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_EMBEDDER_EMBEDDER_H_

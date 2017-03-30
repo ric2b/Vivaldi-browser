@@ -4,10 +4,11 @@
 
 #include "google_apis/gaia/oauth2_mint_token_flow.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
@@ -167,7 +168,7 @@ std::string OAuth2MintTokenFlow::CreateApiCallBody() {
       net::EscapeUrlEncodedData(force_value, true).c_str(),
       net::EscapeUrlEncodedData(response_type_value, true).c_str(),
       net::EscapeUrlEncodedData(
-          JoinString(parameters_.scopes, ' '), true).c_str(),
+          base::JoinString(parameters_.scopes, " "), true).c_str(),
       net::EscapeUrlEncodedData(parameters_.client_id, true).c_str(),
       net::EscapeUrlEncodedData(parameters_.extension_id, true).c_str());
   if (!parameters_.device_id.empty()) {

@@ -9,6 +9,7 @@
 
 #include "base/id_map.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
@@ -17,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/printing/background_printing_manager.h"
 #include "chrome/browser/printing/print_preview_data_service.h"
@@ -63,7 +65,7 @@ class PrintPreviewRequestIdMapWithLock {
 
   // Gets the value for |preview_id|.
   // Returns true and sets |out_value| on success.
-  bool Get(int32 preview_id, int* out_value) {
+  bool Get(int32_t preview_id, int* out_value) {
     base::AutoLock lock(lock_);
     PrintPreviewRequestIdMap::const_iterator it = map_.find(preview_id);
     if (it == map_.end())
@@ -73,13 +75,13 @@ class PrintPreviewRequestIdMapWithLock {
   }
 
   // Sets the |value| for |preview_id|.
-  void Set(int32 preview_id, int value) {
+  void Set(int32_t preview_id, int value) {
     base::AutoLock lock(lock_);
     map_[preview_id] = value;
   }
 
   // Erases the entry for |preview_id|.
-  void Erase(int32 preview_id) {
+  void Erase(int32_t preview_id) {
     base::AutoLock lock(lock_);
     map_.erase(preview_id);
   }
@@ -124,13 +126,14 @@ bool HandleRequestCallback(
     const content::WebUIDataSource::GotDataCallback& callback) {
   // ChromeWebUIDataSource handles most requests except for the print preview
   // data.
-  if (!base::EndsWith(path, "/print.pdf", true))
+  std::string file_path = path.substr(0, path.find_first_of('?'));
+  if (!base::EndsWith(file_path, "/print.pdf", base::CompareCase::SENSITIVE))
     return false;
 
   // Print Preview data.
   scoped_refptr<base::RefCountedBytes> data;
-  std::vector<std::string> url_substr;
-  base::SplitString(path, '/', &url_substr);
+  std::vector<std::string> url_substr = base::SplitString(
+      path, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   int preview_ui_id = -1;
   int page_index = 0;
   if (url_substr.size() == 3 &&
@@ -251,6 +254,8 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
   source->AddLocalizedString("printPagesLabel",
                              IDS_PRINT_PREVIEW_PRINT_PAGES_LABEL);
   source->AddLocalizedString("optionsLabel", IDS_PRINT_PREVIEW_OPTIONS_LABEL);
+  source->AddLocalizedString("optionDistillPage",
+                             IDS_PRINT_PREVIEW_OPTION_DISTILL_PAGE);
   source->AddLocalizedString("optionHeaderFooter",
                              IDS_PRINT_PREVIEW_OPTION_HEADER_FOOTER);
   source->AddLocalizedString("optionFitToPage",
@@ -363,6 +368,8 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
 
   source->SetJsonPath("strings.js");
   source->AddResourcePath("print_preview.js", IDR_PRINT_PREVIEW_JS);
+  source->AddResourcePath("pdf_preview.html",
+                          IDR_PRINT_PREVIEW_PDF_PREVIEW_HTML);
   source->AddResourcePath("images/printer.png",
                           IDR_PRINT_PREVIEW_IMAGES_PRINTER);
   source->AddResourcePath("images/printer_shared.png",
@@ -379,6 +386,8 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
                           IDR_PRINT_PREVIEW_IMAGES_MOBILE_SHARED);
   source->SetDefaultResource(IDR_PRINT_PREVIEW_HTML);
   source->SetRequestFilter(base::Bind(&HandleRequestCallback));
+  source->OverrideContentSecurityPolicyFrameSrc("frame-src 'self';");
+  source->DisableDenyXFrameOptions();
   source->OverrideContentSecurityPolicyObjectSrc("object-src 'self';");
   source->AddLocalizedString("moreOptionsLabel", IDS_MORE_OPTIONS_LABEL);
   source->AddLocalizedString("lessOptionsLabel", IDS_LESS_OPTIONS_LABEL);
@@ -396,7 +405,8 @@ PrintPreviewUI::PrintPreviewUI(content::WebUI* web_ui)
       handler_(NULL),
       source_is_modifiable_(true),
       source_has_selection_(false),
-      dialog_closed_(false) {
+      dialog_closed_(false),
+      weak_ptr_factory_(this) {
   // Set up the chrome://print/ data source.
   Profile* profile = Profile::FromWebUI(web_ui);
   content::WebUIDataSource::Add(profile, CreatePrintPreviewUISource());
@@ -458,7 +468,7 @@ void PrintPreviewUI::SetInitialParams(
 }
 
 // static
-void PrintPreviewUI::GetCurrentPrintPreviewStatus(int32 preview_ui_id,
+void PrintPreviewUI::GetCurrentPrintPreviewStatus(int32_t preview_ui_id,
                                                   int request_id,
                                                   bool* cancel) {
   int current_id = -1;
@@ -469,7 +479,7 @@ void PrintPreviewUI::GetCurrentPrintPreviewStatus(int32 preview_ui_id,
   *cancel = (request_id != current_id);
 }
 
-int32 PrintPreviewUI::GetIDForPrintPreviewUI() const {
+int32_t PrintPreviewUI::GetIDForPrintPreviewUI() const {
   return id_;
 }
 
@@ -583,10 +593,6 @@ void PrintPreviewUI::OnPreviewDataIsAvailable(int expected_pages_count,
                                    ui_preview_request_id);
 }
 
-void PrintPreviewUI::OnPrintPreviewDialogDestroyed() {
-  handler_->OnPrintPreviewDialogDestroyed();
-}
-
 void PrintPreviewUI::OnFileSelectionCancelled() {
   web_ui()->CallJavascriptFunction("fileSelectionCancelled");
 }
@@ -660,4 +666,8 @@ void PrintPreviewUI::SetSelectedFileForTesting(const base::FilePath& path) {
 void PrintPreviewUI::SetPdfSavedClosureForTesting(
     const base::Closure& closure) {
   handler_->SetPdfSavedClosureForTesting(closure);
+}
+
+base::WeakPtr<PrintPreviewUI> PrintPreviewUI::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }

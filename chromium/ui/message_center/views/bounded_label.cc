@@ -4,8 +4,11 @@
 
 #include "ui/message_center/views/bounded_label.h"
 
+#include <stddef.h>
+
 #include <limits>
 
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/gfx/canvas.h"
@@ -113,10 +116,10 @@ gfx::Size InnerBoundedLabel::GetSizeForWidthAndLines(int width, int lines) {
                                    std::max(width - insets.width(), 0);
     int text_height = std::numeric_limits<int>::max();
     std::vector<base::string16> wrapped = GetWrappedText(text_width, lines);
-    gfx::Canvas::SizeStringInt(JoinString(wrapped, '\n'), font_list(),
-                               &text_width, &text_height,
-                               owner_->GetLineHeight(),
-                               GetTextFlags());
+    gfx::Canvas::SizeStringInt(
+        base::JoinString(wrapped, base::ASCIIToUTF16("\n")),
+        font_list(), &text_width, &text_height, owner_->GetLineHeight(),
+        GetTextFlags());
     size.set_width(text_width + insets.width());
     size.set_height(text_height + insets.height());
     SetCachedSize(key, size);
@@ -177,7 +180,8 @@ void InnerBoundedLabel::OnPaint(gfx::Canvas* canvas) {
     gfx::Rect bounds(width(), height);
     bounds.Inset(owner_->GetInsets());
     if (bounds.width() != wrapped_text_width_ || lines != wrapped_text_lines_) {
-      wrapped_text_ = JoinString(GetWrappedText(bounds.width(), lines), '\n');
+      wrapped_text_ = base::JoinString(GetWrappedText(bounds.width(), lines),
+                                       base::ASCIIToUTF16("\n"));
       wrapped_text_width_ = bounds.width();
       wrapped_text_lines_ = lines;
     }
@@ -343,7 +347,8 @@ void BoundedLabel::OnNativeThemeChanged(const ui::NativeTheme* theme) {
 }
 
 base::string16 BoundedLabel::GetWrappedTextForTest(int width, int lines) {
-  return JoinString(label_->GetWrappedText(width, lines), '\n');
+  return base::JoinString(label_->GetWrappedText(width, lines),
+                          base::ASCIIToUTF16("\n"));
 }
 
 }  // namespace message_center

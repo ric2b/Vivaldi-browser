@@ -8,28 +8,39 @@
 #include "ui/touch_selection/touch_handle.h"
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_weak_ref.h"
+#include "base/macros.h"
 
 namespace content {
+
+class ContentViewCore;
 
 // Touch handle drawable backed by an Android PopupWindow.
 class PopupTouchHandleDrawable : public ui::TouchHandleDrawable {
  public:
-  PopupTouchHandleDrawable(base::android::ScopedJavaLocalRef<jobject> drawable,
-                           float dpi_scale);
+  static scoped_ptr<PopupTouchHandleDrawable> Create(
+      ContentViewCore* content_view_core);
   ~PopupTouchHandleDrawable() override;
 
   // ui::TouchHandleDrawable implementation.
   void SetEnabled(bool enabled) override;
-  void SetOrientation(ui::TouchHandleOrientation orientation) override;
+  void SetOrientation(ui::TouchHandleOrientation orientation,
+                      bool mirror_vertical,
+                      bool mirror_horizontal) override;
+  void SetOrigin(const gfx::PointF& origin) override;
   void SetAlpha(float alpha) override;
-  void SetFocus(const gfx::PointF& position) override;
   gfx::RectF GetVisibleBounds() const override;
+  float GetDrawableHorizontalPaddingRatio() const override;
 
   static bool RegisterPopupTouchHandleDrawable(JNIEnv* env);
 
  private:
+  PopupTouchHandleDrawable(JNIEnv* env, jobject obj, float dpi_scale);
+
+  JavaObjectWeakGlobalRef java_ref_;
+
   const float dpi_scale_;
-  base::android::ScopedJavaGlobalRef<jobject> drawable_;
+  float drawable_horizontal_padding_ratio_;
 
   DISALLOW_COPY_AND_ASSIGN(PopupTouchHandleDrawable);
 };

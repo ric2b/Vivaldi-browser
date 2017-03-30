@@ -11,6 +11,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 class TabStripModel;
 
@@ -33,12 +34,21 @@ enum TabMediaState {
   TAB_MEDIA_STATE_AUDIO_MUTING,  // Tab audio is being muted.
 };
 
-namespace chrome {
+enum TabMutedReason {
+  TAB_MUTED_REASON_NONE,  // The tab has never been muted or unmuted.
+  TAB_MUTED_REASON_CONTEXT_MENU,  // Mute/Unmute chosen from tab context menu.
+  TAB_MUTED_REASON_AUDIO_INDICATOR,  // Mute toggled via tab-strip audio icon.
+  TAB_MUTED_REASON_MEDIA_CAPTURE,  // Media recording/capture was started.
+  TAB_MUTED_REASON_EXTENSION,  // Mute state changed via extension API.
+};
 
-// String to indicate reason for muted state change (user, capture, extension
-// id, or empty string)
-extern const char kMutedToggleCauseUser[];
-extern const char kMutedToggleCauseCapture[];
+enum TabMutedResult {
+  TAB_MUTED_RESULT_SUCCESS,
+  TAB_MUTED_RESULT_FAIL_NOT_ENABLED,
+  TAB_MUTED_RESULT_FAIL_TABCAPTURE,
+};
+
+namespace chrome {
 
 // Logic to determine which components (i.e., close button, favicon, and media
 // indicator) of a tab should be shown, given current state.  |capacity|
@@ -66,10 +76,6 @@ bool ShouldTabShowCloseButton(int capacity,
                               bool is_pinned_tab,
                               bool is_active_tab);
 
-// Returns whether the given |contents| is playing audio. We might choose to
-// show an audio favicon indicator for this tab.
-bool IsPlayingAudio(content::WebContents* contents);
-
 // Returns the media state to be shown by the tab's media indicator.  When
 // multiple states apply (e.g., tab capture with audio playback), the one most
 // relevant to user privacy concerns is selected.
@@ -77,13 +83,14 @@ TabMediaState GetTabMediaStateForContents(content::WebContents* contents);
 
 // Returns a cached image, to be shown by the media indicator for the given
 // |media_state|.  Uses the global ui::ResourceBundle shared instance.
-const gfx::Image& GetTabMediaIndicatorImage(TabMediaState media_state);
+gfx::Image GetTabMediaIndicatorImage(TabMediaState media_state,
+                                     SkColor button_color);
 
 // Returns the cached image, to be shown by the media indicator button for mouse
 // hover/pressed, when the indicator is in the given |media_state|.  Uses the
 // global ui::ResourceBundle shared instance.
-const gfx::Image& GetTabMediaIndicatorAffordanceImage(
-    TabMediaState media_state);
+gfx::Image GetTabMediaIndicatorAffordanceImage(TabMediaState media_state,
+                                               SkColor button_color);
 
 // Returns a non-continuous Animation that performs a fade-in or fade-out
 // appropriate for the given |next_media_state|.  This is used by the tab media
@@ -97,24 +104,40 @@ scoped_ptr<gfx::Animation> CreateTabMediaIndicatorFadeAnimation(
 base::string16 AssembleTabTooltipText(const base::string16& title,
                                       TabMediaState media_state);
 
-// Returns true if the experimental tab audio mute feature is enabled.
-bool IsTabAudioMutingFeatureEnabled();
+// Returns true if experimental audio mute controls (UI or extension API) are
+// enabled.  Currently, toggling mute from a tab's context menu is the only
+// non-experimental control method.
+bool AreExperimentalMuteControlsEnabled();
 
 // Returns true if audio mute can be activated/deactivated for the given
 // |contents|.
 bool CanToggleAudioMute(content::WebContents* contents);
 
-// Indicates whether all audio output from |contents| is muted.
-bool IsTabAudioMuted(content::WebContents* contents);
+// Unmute a tab if it is currently muted at the request of the extension having
+// the given |extension_id|.
+void UnmuteIfMutedByExtension(content::WebContents* contents,
+                              const std::string& extension_id);
 
-// Sets whether all audio output from |contents| is muted.
-// Cause is extensionid, kMutedToggleCause constant, or empty string
-void SetTabAudioMuted(content::WebContents* contents,
-                      bool mute,
-                      const std::string& cause);
+// Sets whether all audio output from |contents| is muted, along with the
+// |reason| it is to be muted/unmuted (via UI or extension API).  When |reason|
+// is TAB_MUTED_REASON_EXTENSION, |extension_id| must be provided; otherwise, it
+// is ignored.
+//
+// If the |reason| is an experimental feature and the experiment is not enabled,
+// this will have no effect and TAB_MUTED_RESULT_FAIL_NOT_ENABLED will be
+// returned.
+TabMutedResult SetTabAudioMuted(content::WebContents* contents,
+                                bool mute,
+                                TabMutedReason reason,
+                                const std::string& extension_id);
 
-// Get cause of mute (extensionid, kMutedToggleCause constant, or empty string)
-const std::string& GetTabAudioMutedCause(content::WebContents* contents);
+// Returns the last reason a tab's mute state was changed.
+TabMutedReason GetTabAudioMutedReason(content::WebContents* contents);
+
+// If the last reason a tab's mute state was changed was due to use of the
+// extension API, this returns the extension's ID string.  Otherwise, the empty
+// string is returned.
+const std::string& GetExtensionIdForMutedTab(content::WebContents* contents);
 
 // Returns true if the tabs at the |indices| in |tab_strip| are all muted.
 bool AreAllTabsMuted(const TabStripModel& tab_strip,

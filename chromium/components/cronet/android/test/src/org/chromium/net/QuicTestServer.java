@@ -7,9 +7,9 @@ package org.chromium.net;
 import android.content.Context;
 import android.os.ConditionVariable;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.Log;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 
 /**
  * Wrapper class to start a Quic test server.
@@ -31,7 +31,7 @@ public final class QuicTestServer {
     }
 
     public static String getServerURL() {
-        return "http://" + getServerHost() + ":" + getServerPort();
+        return "https://" + getServerHost() + ":" + getServerPort();
     }
 
     public static String getServerHost() {

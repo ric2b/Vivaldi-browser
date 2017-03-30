@@ -6,6 +6,8 @@
 
 #include <cmath>
 
+#include "base/mac/mac_util.h"
+#import "base/mac/sdk_forward_declarations.h"
 #include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/search/search.h"
@@ -13,10 +15,10 @@
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_popup_cell.h"
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_popup_separator_view.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_popup_model.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/omnibox_popup_model.h"
 #include "grit/theme_resources.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
@@ -114,7 +116,7 @@ void OmniboxPopupViewMac::UpdatePopupAppearance() {
 
 gfx::Rect OmniboxPopupViewMac::GetTargetBounds() {
   // Flip the coordinate system before returning.
-  NSScreen* screen = [[NSScreen screens] objectAtIndex:0];
+  NSScreen* screen = [[NSScreen screens] firstObject];
   NSRect monitor_frame = [screen frame];
   gfx::Rect bounds(NSRectToCGRect(target_popup_frame_));
   bounds.set_y(monitor_frame.size.height - bounds.y() - bounds.height());
@@ -274,9 +276,19 @@ void OmniboxPopupViewMac::PositionPopup(const CGFloat matrixHeight) {
   }
 
   [NSAnimationContext beginGrouping];
-  // Don't use the GTM addition for the "Steve" slowdown because this can happen
-  // async from user actions and the effects could be a surprise.
+  // Don't use the GTM addition for the "Steve" slowdown because this can
+  // happen async from user actions and the effects could be a surprise.
   [[NSAnimationContext currentContext] setDuration:kShrinkAnimationDuration];
+  // When using the animator to update |popup_| on El Capitan, for some reason
+  // the window does not get redrawn. Use a completion handler to make sure
+  // |popup_| gets redrawn once the animation completes. See
+  // http://crbug.com/538590 and http://crbug.com/551007 .
+  if (base::mac::IsOSElCapitanOrLater()) {
+    NSWindow* popup = popup_.get();
+    [[NSAnimationContext currentContext] setCompletionHandler:^{
+      [popup display];
+    }];
+  }
   [[popup_ animator] setFrame:popup_frame display:YES];
   [NSAnimationContext endGrouping];
 

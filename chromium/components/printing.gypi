@@ -46,10 +46,25 @@
       # TODO(dgn): C4267: http://crbug.com/167187 size_t -> int
       'msvs_disabled_warnings': [ 4267 ],
     },{
+      # GN: //components/printing/browser:printing_browser
+      'target_name': 'printing_browser',
+      'type': 'static_library',
+      'dependencies': [
+        '<(DEPTH)/printing/printing.gyp:printing',
+        '<(DEPTH)/skia/skia.gyp:skia',
+      ],
+      'sources': [
+        'printing/browser/print_manager.cc',
+        'printing/browser/print_manager.h',
+        'printing/browser/print_manager_utils.cc',
+        'printing/browser/print_manager_utils.h',
+      ],
+    },{
       # GN: //components/printing/test:printing_test_support
       'target_name': 'printing_test_support',
       'type': 'static_library',
       'dependencies': [
+        '../skia/skia.gyp:skia',
         '<(DEPTH)/testing/gtest.gyp:gtest',
         'printing_renderer',
       ],

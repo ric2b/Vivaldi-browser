@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "chrome/browser/browser_process.h"
@@ -78,7 +79,6 @@ struct BlockingLoginTestParam {
   const int steps;
   const char* username;
   const bool enroll_device;
-  const bool use_webview;
 };
 
 class BlockingLoginTest
@@ -87,7 +87,6 @@ class BlockingLoginTest
       public testing::WithParamInterface<BlockingLoginTestParam> {
  public:
   BlockingLoginTest() : profile_added_(NULL) {
-    set_use_webview(GetParam().use_webview);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -178,7 +177,7 @@ class BlockingLoginTest
       }
     }
 
-    return response.Pass();
+    return response;
   }
 
   // Creates a new canned response that will respond with the given HTTP
@@ -230,13 +229,7 @@ class BlockingLoginTest
   DISALLOW_COPY_AND_ASSIGN(BlockingLoginTest);
 };
 
-// http://crbug.com/452523
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_LoginBlocksForUser DISABLED_LoginBlocksForUser
-#else
-#define MAYBE_LoginBlocksForUser LoginBlocksForUser
-#endif
-IN_PROC_BROWSER_TEST_P(BlockingLoginTest, MAYBE_LoginBlocksForUser) {
+IN_PROC_BROWSER_TEST_P(BlockingLoginTest, LoginBlocksForUser) {
   // Verify that there isn't a logged in user when the test starts.
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   EXPECT_FALSE(user_manager->IsUserLoggedIn());
@@ -251,10 +244,9 @@ IN_PROC_BROWSER_TEST_P(BlockingLoginTest, MAYBE_LoginBlocksForUser) {
     EXPECT_TRUE(browser_policy_connector()->IsEnterpriseManaged());
     EXPECT_EQ(kDomain, browser_policy_connector()->GetEnterpriseDomain());
     EXPECT_FALSE(profile_added_);
-    EXPECT_EQ(policy::USER_AFFILIATION_MANAGED,
-              browser_policy_connector()->GetUserAffiliation(kUsername));
     RunUntilIdle();
-    EXPECT_FALSE(user_manager->IsKnownUser(kUsername));
+    EXPECT_FALSE(
+        user_manager->IsKnownUser(AccountId::FromUserEmail(kUsername)));
   }
 
   // Skip the OOBE, go to the sign-in screen, and wait for the login screen to
@@ -310,43 +302,24 @@ IN_PROC_BROWSER_TEST_P(BlockingLoginTest, MAYBE_LoginBlocksForUser) {
 }
 
 const BlockingLoginTestParam kBlockinLoginTestCases[] = {
-    {0, kUsername, true, false},
-    {1, kUsername, true, false},
-    {2, kUsername, true, false},
-    {3, kUsername, true, false},
-    {4, kUsername, true, false},
-    {5, kUsername, true, false},
-    {0, kUsername, false, false},
-    {1, kUsername, false, false},
-    {2, kUsername, false, false},
-    {3, kUsername, false, false},
-    {4, kUsername, false, false},
-    {5, kUsername, false, false},
-    {0, kUsernameOtherDomain, true, false},
-    {1, kUsernameOtherDomain, true, false},
-    {2, kUsernameOtherDomain, true, false},
-    {3, kUsernameOtherDomain, true, false},
-    {4, kUsernameOtherDomain, true, false},
-    {5, kUsernameOtherDomain, true, false},
-
-    {0, kUsername, true, true},
-    {1, kUsername, true, true},
-    {2, kUsername, true, true},
-    {3, kUsername, true, true},
-    {4, kUsername, true, true},
-    {5, kUsername, true, true},
-    {0, kUsername, false, true},
-    {1, kUsername, false, true},
-    {2, kUsername, false, true},
-    {3, kUsername, false, true},
-    {4, kUsername, false, true},
-    {5, kUsername, false, true},
-    {0, kUsernameOtherDomain, true, true},
-    {1, kUsernameOtherDomain, true, true},
-    {2, kUsernameOtherDomain, true, true},
-    {3, kUsernameOtherDomain, true, true},
-    {4, kUsernameOtherDomain, true, true},
-    {5, kUsernameOtherDomain, true, true},
+    {0, kUsername, true},
+    {1, kUsername, true},
+    {2, kUsername, true},
+    {3, kUsername, true},
+    {4, kUsername, true},
+    {5, kUsername, true},
+    {0, kUsername, false},
+    {1, kUsername, false},
+    {2, kUsername, false},
+    {3, kUsername, false},
+    {4, kUsername, false},
+    {5, kUsername, false},
+    {0, kUsernameOtherDomain, true},
+    {1, kUsernameOtherDomain, true},
+    {2, kUsernameOtherDomain, true},
+    {3, kUsernameOtherDomain, true},
+    {4, kUsernameOtherDomain, true},
+    {5, kUsernameOtherDomain, true},
 };
 
 INSTANTIATE_TEST_CASE_P(BlockingLoginTestInstance,

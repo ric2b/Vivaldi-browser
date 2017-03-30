@@ -4,6 +4,8 @@
 
 #include "chromeos/system/version_loader.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -75,11 +77,12 @@ std::string ParseFirmware(const std::string& contents) {
   //   fixed. So we just match kFirmwarePrefix at the start of the line and find
   //   the first character that is not "|" or space
 
-  std::vector<std::string> lines;
-  base::SplitString(contents, '\n', &lines);
-  for (size_t i = 0; i < lines.size(); ++i) {
-    if (base::StartsWithASCII(lines[i], kFirmwarePrefix, false)) {
-      std::string str = lines[i].substr(std::string(kFirmwarePrefix).size());
+  base::StringPiece firmware_prefix(kFirmwarePrefix);
+  for (const std::string& line : base::SplitString(
+           contents, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    if (base::StartsWith(line, firmware_prefix,
+                         base::CompareCase::INSENSITIVE_ASCII)) {
+      std::string str = line.substr(firmware_prefix.size());
       size_t found = str.find_first_not_of("| ");
       if (found != std::string::npos)
         return str.substr(found);

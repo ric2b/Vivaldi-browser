@@ -6,14 +6,16 @@
 
 #include <algorithm>
 #include <cctype>
+#include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/url_matcher/url_matcher_constants.h"
 #include "components/url_matcher/url_matcher_helpers.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace url_matcher {
 
@@ -158,7 +160,8 @@ URLMatcherFactory::CreateFromURLFilterDictionary(
 
   scoped_refptr<URLMatcherConditionSet> url_matcher_condition_set(
       new URLMatcherConditionSet(id, url_matcher_conditions,
-          url_matcher_schema_filter.Pass(), url_matcher_port_filter.Pass()));
+                                 std::move(url_matcher_schema_filter),
+                                 std::move(url_matcher_port_filter)));
   return url_matcher_condition_set;
 }
 

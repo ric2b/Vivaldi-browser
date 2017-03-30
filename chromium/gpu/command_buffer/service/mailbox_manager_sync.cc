@@ -4,11 +4,14 @@
 
 #include "gpu/command_buffer/service/mailbox_manager_sync.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <queue>
 
 #include "base/memory/linked_ptr.h"
 #include "base/synchronization/lock.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "ui/gl/gl_fence.h"
 #include "ui/gl/gl_implementation.h"
@@ -24,23 +27,23 @@ namespace {
 
 base::LazyInstance<base::Lock> g_lock = LAZY_INSTANCE_INITIALIZER;
 
-typedef std::map<uint32, linked_ptr<gfx::GLFence>> SyncPointToFenceMap;
-base::LazyInstance<SyncPointToFenceMap> g_sync_point_to_fence =
-    LAZY_INSTANCE_INITIALIZER;
 #if !defined(OS_MACOSX)
-base::LazyInstance<std::queue<SyncPointToFenceMap::iterator>> g_sync_points =
+typedef std::map<SyncToken, linked_ptr<gfx::GLFence>> SyncTokenToFenceMap;
+base::LazyInstance<SyncTokenToFenceMap> g_sync_point_to_fence =
+    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<std::queue<SyncTokenToFenceMap::iterator>> g_sync_points =
     LAZY_INSTANCE_INITIALIZER;
 #endif
 
-void CreateFenceLocked(uint32 sync_point) {
+void CreateFenceLocked(const SyncToken& sync_token) {
+#if !defined(OS_MACOSX)
   g_lock.Get().AssertAcquired();
   if (gfx::GetGLImplementation() == gfx::kGLImplementationMockGL)
     return;
 
-#if !defined(OS_MACOSX)
-  std::queue<SyncPointToFenceMap::iterator>& sync_points = g_sync_points.Get();
-  SyncPointToFenceMap& sync_point_to_fence = g_sync_point_to_fence.Get();
-  if (sync_point) {
+  std::queue<SyncTokenToFenceMap::iterator>& sync_points = g_sync_points.Get();
+  SyncTokenToFenceMap& sync_point_to_fence = g_sync_point_to_fence.Get();
+  if (sync_token.release_count()) {
     while (!sync_points.empty() &&
            sync_points.front()->second->HasCompleted()) {
       sync_point_to_fence.erase(sync_points.front());
@@ -49,8 +52,8 @@ void CreateFenceLocked(uint32 sync_point) {
     // Need to use EGL fences since we are likely not in a single share group.
     linked_ptr<gfx::GLFence> fence(make_linked_ptr(new gfx::GLFenceEGL));
     if (fence.get()) {
-      std::pair<SyncPointToFenceMap::iterator, bool> result =
-          sync_point_to_fence.insert(std::make_pair(sync_point, fence));
+      std::pair<SyncTokenToFenceMap::iterator, bool> result =
+          sync_point_to_fence.insert(std::make_pair(sync_token, fence));
       DCHECK(result.second);
       sync_points.push(result.first);
     }
@@ -59,13 +62,15 @@ void CreateFenceLocked(uint32 sync_point) {
 #endif
 }
 
-void AcquireFenceLocked(uint32 sync_point) {
+void AcquireFenceLocked(const SyncToken& sync_token) {
+#if !defined(OS_MACOSX)
   g_lock.Get().AssertAcquired();
-  SyncPointToFenceMap::iterator fence_it =
-      g_sync_point_to_fence.Get().find(sync_point);
+  SyncTokenToFenceMap::iterator fence_it =
+      g_sync_point_to_fence.Get().find(sync_token);
   if (fence_it != g_sync_point_to_fence.Get().end()) {
     fence_it->second->ServerWait();
   }
+#endif
 }
 
 static const unsigned kNewTextureVersion = 1;
@@ -270,7 +275,7 @@ void MailboxManagerSync::UpdateDefinitionLocked(
   if (SkipTextureWorkarounds(texture))
     return;
 
-  gfx::GLImage* gl_image = texture->GetLevelImage(texture->target(), 0);
+  gl::GLImage* image = texture->GetLevelImage(texture->target(), 0);
   TextureGroup* group = group_ref->group.get();
   const TextureDefinition& definition = group->GetDefinition();
   scoped_refptr<NativeImageBuffer> image_buffer = definition.image();
@@ -284,32 +289,32 @@ void MailboxManagerSync::UpdateDefinitionLocked(
   if (definition.Matches(texture))
     return;
 
-  DCHECK_IMPLIES(gl_image, image_buffer.get());
-  if (gl_image && !image_buffer->IsClient(gl_image)) {
+  DCHECK(!image || image_buffer.get());
+  if (image && !image_buffer->IsClient(image)) {
     LOG(ERROR) << "MailboxSync: Incompatible attachment";
     return;
   }
 
   group->SetDefinition(TextureDefinition(texture, ++group_ref->version,
-                                         gl_image ? image_buffer : NULL));
+                                         image ? image_buffer : NULL));
 }
 
-void MailboxManagerSync::PushTextureUpdates(uint32 sync_point) {
+void MailboxManagerSync::PushTextureUpdates(const SyncToken& token) {
   base::AutoLock lock(g_lock.Get());
 
   for (TextureToGroupMap::iterator it = texture_to_group_.begin();
        it != texture_to_group_.end(); it++) {
     UpdateDefinitionLocked(it->first, &it->second);
   }
-  CreateFenceLocked(sync_point);
+  CreateFenceLocked(token);
 }
 
-void MailboxManagerSync::PullTextureUpdates(uint32 sync_point) {
+void MailboxManagerSync::PullTextureUpdates(const SyncToken& token) {
   using TextureUpdatePair = std::pair<Texture*, TextureDefinition>;
   std::vector<TextureUpdatePair> needs_update;
   {
     base::AutoLock lock(g_lock.Get());
-    AcquireFenceLocked(sync_point);
+    AcquireFenceLocked(token);
 
     for (TextureToGroupMap::iterator it = texture_to_group_.begin();
          it != texture_to_group_.end(); it++) {
@@ -325,7 +330,6 @@ void MailboxManagerSync::PullTextureUpdates(uint32 sync_point) {
   }
 
   if (!needs_update.empty()) {
-    ScopedUpdateTexture scoped_update_texture;
     for (const TextureUpdatePair& pair : needs_update) {
       pair.second.UpdateTexture(pair.first);
     }

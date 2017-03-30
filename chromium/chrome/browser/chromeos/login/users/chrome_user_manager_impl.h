@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/login/easy_unlock/bootstrap_manager.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
+#include "chrome/browser/chromeos/login/users/affiliation.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager_impl.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller_delegate.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -33,6 +35,10 @@
 class PrefRegistrySimple;
 class PrefService;
 class ProfileSyncService;
+
+namespace gfx {
+class ImageSkia;
+}
 
 namespace policy {
 struct DeviceLocalAccount;
@@ -68,12 +74,12 @@ class ChromeUserManagerImpl
   // UserManagerInterface implementation:
   BootstrapManager* GetBootstrapManager() override;
   MultiProfileUserController* GetMultiProfileUserController() override;
-  UserImageManager* GetUserImageManager(const std::string& user_id) override;
+  UserImageManager* GetUserImageManager(const AccountId& account_id) override;
   SupervisedUserManager* GetSupervisedUserManager() override;
   UserFlow* GetCurrentUserFlow() const override;
-  UserFlow* GetUserFlow(const std::string& user_id) const override;
-  void SetUserFlow(const std::string& user_id, UserFlow* flow) override;
-  void ResetUserFlow(const std::string& user_id) override;
+  UserFlow* GetUserFlow(const AccountId& account_id) const override;
+  void SetUserFlow(const AccountId& account_id, UserFlow* flow) override;
+  void ResetUserFlow(const AccountId& account_id) override;
 
   // UserManager implementation:
   void Shutdown() override;
@@ -83,14 +89,33 @@ class ChromeUserManagerImpl
   user_manager::UserList GetUnlockUsers() const override;
   void SessionStarted() override;
   void SaveUserOAuthStatus(
-      const std::string& user_id,
+      const AccountId& account_id,
       user_manager::User::OAuthTokenStatus oauth_token_status) override;
-  void SaveUserDisplayName(const std::string& user_id,
+  void SaveUserDisplayName(const AccountId& account_id,
                            const base::string16& display_name) override;
   bool CanCurrentUserLock() const override;
   bool IsUserNonCryptohomeDataEphemeral(
-      const std::string& user_id) const override;
+      const AccountId& account_id) const override;
   bool AreSupervisedUsersAllowed() const override;
+  void UpdateLoginState(const user_manager::User* active_user,
+                        const user_manager::User* primary_user,
+                        bool is_current_user_owner) const override;
+  bool GetPlatformKnownUserId(const std::string& user_email,
+                              const std::string& gaia_id,
+                              AccountId* out_account_id) const override;
+  const AccountId& GetGuestAccountId() const override;
+  bool IsFirstExecAfterBoot() const override;
+  void AsyncRemoveCryptohome(const AccountId& account_id) const override;
+  bool IsGuestAccountId(const AccountId& account_id) const override;
+  bool IsStubAccountId(const AccountId& account_id) const override;
+  bool IsSupervisedAccountId(const AccountId& account_id) const override;
+  bool HasBrowserRestarted() const override;
+  const gfx::ImageSkia& GetResourceImagekiaNamed(int id) const override;
+  base::string16 GetResourceStringUTF16(int string_id) const override;
+  void ScheduleResolveLocale(const std::string& locale,
+                             const base::Closure& on_resolved_callback,
+                             std::string* out_resolved_locale) const override;
+  bool IsValidDefaultUserImageId(int image_index) const override;
 
   // content::NotificationObserver implementation.
   void Observe(int type,
@@ -114,36 +139,43 @@ class ChromeUserManagerImpl
 
   // UserManagerBase implementation:
   bool AreEphemeralUsersEnabled() const override;
+  void OnUserRemoved(const AccountId& account_id) override;
+
+  // ChromeUserManager implementation:
+  bool ShouldReportUser(const std::string& user_id) const override;
+  void SetUserAffiliation(
+      const std::string& user_email,
+      const AffiliationIDSet& user_affiliation_ids) override;
 
  protected:
   const std::string& GetApplicationLocale() const override;
   PrefService* GetLocalState() const override;
   void HandleUserOAuthTokenStatusChange(
-      const std::string& user_id,
+      const AccountId& account_id,
       user_manager::User::OAuthTokenStatus status) const override;
   bool IsEnterpriseManaged() const override;
-  void LoadPublicAccounts(std::set<std::string>* users_set) override;
+  void LoadPublicAccounts(std::set<AccountId>* users_set) override;
   void NotifyOnLogin() override;
   void NotifyUserAddedToSession(const user_manager::User* added_user,
                                 bool user_switch_pending) override;
   void PerformPreUserListLoadingActions() override;
   void PerformPostUserListLoadingActions() override;
   void PerformPostUserLoggedInActions(bool browser_restart) override;
-  void RemoveNonCryptohomeData(const std::string& user_id) override;
-  void RemoveUserInternal(const std::string& user_email,
+  void RemoveNonCryptohomeData(const AccountId& account_id) override;
+  void RemoveUserInternal(const AccountId& account_id,
                           user_manager::RemoveUserDelegate* delegate) override;
-  bool IsDemoApp(const std::string& user_id) const override;
-  bool IsKioskApp(const std::string& user_id) const override;
+  bool IsDemoApp(const AccountId& account_id) const override;
+  bool IsKioskApp(const AccountId& account_id) const override;
   bool IsPublicAccountMarkedForRemoval(
-      const std::string& user_id) const override;
+      const AccountId& account_id) const override;
   void DemoAccountLoggedIn() override;
   void GuestUserLoggedIn() override;
-  void KioskAppLoggedIn(const std::string& app_id) override;
+  void KioskAppLoggedIn(const AccountId& kiosk_app_account_id) override;
   void PublicAccountUserLoggedIn(user_manager::User* user) override;
-  void RegularUserLoggedIn(const std::string& user_id) override;
-  void RegularUserLoggedInAsEphemeral(const std::string& user_id) override;
-  void SupervisedUserLoggedIn(const std::string& user_id) override;
-  bool HasPendingBootstrap(const std::string& user_id) const override;
+  void RegularUserLoggedIn(const AccountId& account_id) override;
+  void RegularUserLoggedInAsEphemeral(const AccountId& account_id) override;
+  void SupervisedUserLoggedIn(const AccountId& account_id) override;
+  bool HasPendingBootstrap(const AccountId& account_id) const override;
 
  private:
   friend class SupervisedUserManagerImpl;
@@ -151,8 +183,8 @@ class ChromeUserManagerImpl
   friend class WallpaperManager;
   friend class WallpaperManagerTest;
 
-  typedef base::hash_map<std::string, linked_ptr<UserImageManager> >
-      UserImageManagerMap;
+  using UserImageManagerMap =
+      base::hash_map<AccountId, linked_ptr<UserImageManager> >;
 
   ChromeUserManagerImpl();
 
@@ -197,7 +229,7 @@ class ChromeUserManagerImpl
   void OnUserNotAllowed(const std::string& user_email) override;
 
   // BootstrapManager::Delegate implementation:
-  void RemovePendingBootstrapUser(const std::string& user_id) override;
+  void RemovePendingBootstrapUser(const AccountId& account_id) override;
 
   // Update the number of users.
   void UpdateNumberOfUsers();
@@ -205,6 +237,12 @@ class ChromeUserManagerImpl
   // Starts (or stops) automatic timezone refresh on geolocation,
   // depending on user preferences.
   void UpdateUserTimeZoneRefresher(Profile* profile);
+
+  // Adds user to the list of the users who should be reported.
+  void AddReportingUser(const AccountId& account_id);
+
+  // Removes user from the list of the users who should be reported.
+  void RemoveReportingUser(const AccountId& account_id);
 
   // Interface to the signed settings store.
   CrosSettings* cros_settings_;
@@ -223,7 +261,7 @@ class ChromeUserManagerImpl
   // Session length limiter.
   scoped_ptr<SessionLengthLimiter> session_length_limiter_;
 
-  typedef std::map<std::string, UserFlow*> FlowMap;
+  using FlowMap = std::map<AccountId, UserFlow*>;
 
   // Lazy-initialized default flow.
   mutable scoped_ptr<UserFlow> default_flow_;

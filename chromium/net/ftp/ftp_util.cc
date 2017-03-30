@@ -10,6 +10,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/char_iterator.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -132,7 +133,7 @@ namespace {
 class AbbreviatedMonthsMap {
  public:
   static AbbreviatedMonthsMap* GetInstance() {
-    return Singleton<AbbreviatedMonthsMap>::get();
+    return base::Singleton<AbbreviatedMonthsMap>::get();
   }
 
   // Converts abbreviated month name |text| to its number (in range 1-12).
@@ -150,7 +151,7 @@ class AbbreviatedMonthsMap {
   }
 
  private:
-  friend struct DefaultSingletonTraits<AbbreviatedMonthsMap>;
+  friend struct base::DefaultSingletonTraits<AbbreviatedMonthsMap>;
 
   // Constructor, initializes the map based on ICU data. It is much faster
   // to do that just once.
@@ -357,7 +358,6 @@ base::string16 FtpUtil::GetStringPartAfterColumns(const base::string16& text,
                                                   int columns) {
   base::i18n::UTF16CharIterator iter(&text);
 
-  // TODO(jshin): Is u_isspace the right function to use here?
   for (int i = 0; i < columns; i++) {
     // Skip the leading whitespace.
     while (!iter.end() && u_isspace(iter.get()))

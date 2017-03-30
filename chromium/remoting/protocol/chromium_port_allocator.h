@@ -7,9 +7,11 @@
 
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "third_party/webrtc/p2p/client/httpportallocator.h"
+#include "remoting/protocol/port_allocator_base.h"
+#include "remoting/protocol/port_allocator_factory.h"
 
 namespace net {
 class URLRequestContextGetter;
@@ -20,18 +22,22 @@ namespace protocol {
 
 struct NetworkSettings;
 
-// An implementation of cricket::PortAllocator for libjingle that
-// uses Chromium's network stack and configures itself according
-// to the specified NetworkSettings.
-class ChromiumPortAllocator : public cricket::HttpPortAllocatorBase {
+// An implementation of cricket::PortAllocator that uses Chromium's network
+// stack.
+class ChromiumPortAllocator : public PortAllocatorBase {
  public:
-  static scoped_ptr<ChromiumPortAllocator> Create(
-      const scoped_refptr<net::URLRequestContextGetter>& url_context,
-      const NetworkSettings& network_settings);
-
+  ChromiumPortAllocator(
+      scoped_ptr<rtc::NetworkManager> network_manager,
+      scoped_ptr<rtc::PacketSocketFactory> socket_factory,
+      scoped_refptr<TransportContext> transport_context,
+      scoped_refptr<net::URLRequestContextGetter> url_context);
   ~ChromiumPortAllocator() override;
 
-  // cricket::HttpPortAllocatorBase overrides.
+  scoped_refptr<net::URLRequestContextGetter> url_context() {
+    return url_context_;
+  }
+
+  // PortAllocatorBase overrides.
   cricket::PortAllocatorSession* CreateSessionInternal(
       const std::string& content_name,
       int component,
@@ -39,16 +45,25 @@ class ChromiumPortAllocator : public cricket::HttpPortAllocatorBase {
       const std::string& ice_password) override;
 
  private:
-  ChromiumPortAllocator(
-      const scoped_refptr<net::URLRequestContextGetter>& url_context,
-      scoped_ptr<rtc::NetworkManager> network_manager,
-      scoped_ptr<rtc::PacketSocketFactory> socket_factory);
-
   scoped_refptr<net::URLRequestContextGetter> url_context_;
-  scoped_ptr<rtc::NetworkManager> network_manager_;
-  scoped_ptr<rtc::PacketSocketFactory> socket_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromiumPortAllocator);
+};
+
+class ChromiumPortAllocatorFactory : public PortAllocatorFactory {
+ public:
+  ChromiumPortAllocatorFactory(
+      scoped_refptr<net::URLRequestContextGetter> url_request_context_getter);
+  ~ChromiumPortAllocatorFactory() override;
+
+   // PortAllocatorFactory interface.
+  scoped_ptr<cricket::PortAllocator> CreatePortAllocator(
+      scoped_refptr<TransportContext> transport_context) override;
+
+ private:
+  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
+
+  DISALLOW_COPY_AND_ASSIGN(ChromiumPortAllocatorFactory);
 };
 
 }  // namespace protocol

@@ -45,9 +45,6 @@ class CONTENT_EXPORT ResourceHandler
   // Sets the controller for this handler.
   virtual void SetController(ResourceController* controller);
 
-  // Called as upload progress is made.  The return value is ignored.
-  virtual bool OnUploadProgress(uint64 position, uint64 size) = 0;
-
   // The request was redirected to a new URL.  |*defer| has an initial value of
   // false.  Set |*defer| to true to defer the redirect.  The redirect may be
   // followed later on via ResourceDispatcherHost::FollowDeferredRedirect.  If
@@ -61,9 +58,11 @@ class CONTENT_EXPORT ResourceHandler
   // processing of the response.  Call ResourceDispatcherHostImpl::
   // ResumeDeferredRequest to continue processing the response.
   virtual bool OnResponseStarted(ResourceResponse* response,
+                                 bool* defer);
+  virtual bool OnResponseStarted(ResourceResponse* response,
                                  bool* defer,
-                                 bool open_when_done = false,
-                                 bool ask_for_target = false) = 0;
+                                 bool open_when_done,
+                                 bool ask_for_target = false);
 
   // Called before the net::URLRequest (whose url is |url|) is to be started.
   // If the handler returns false, then the request is cancelled.  Otherwise if

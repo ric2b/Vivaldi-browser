@@ -4,7 +4,10 @@
 
 #include "content/browser/compositor/offscreen_browser_compositor_output_surface.h"
 
+#include <utility>
+
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_ack.h"
 #include "cc/output/gl_frame_data.h"
@@ -30,16 +33,17 @@ namespace content {
 OffscreenBrowserCompositorOutputSurface::
     OffscreenBrowserCompositorOutputSurface(
         const scoped_refptr<ContextProviderCommandBuffer>& context,
+        const scoped_refptr<ContextProviderCommandBuffer>& worker_context,
         const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
         scoped_ptr<BrowserCompositorOverlayCandidateValidator>
             overlay_candidate_validator)
     : BrowserCompositorOutputSurface(context,
+                                     worker_context,
                                      vsync_manager,
-                                     overlay_candidate_validator.Pass()),
+                                     std::move(overlay_candidate_validator)),
       fbo_(0),
       is_backbuffer_discarded_(false),
       weak_ptr_factory_(this) {
-  capabilities_.max_frames_pending = 1;
   capabilities_.uses_default_gl_framebuffer = false;
 }
 
@@ -55,6 +59,12 @@ void OffscreenBrowserCompositorOutputSurface::EnsureBackbuffer() {
     reflector_texture_.reset(new ReflectorTexture(context_provider()));
 
     GLES2Interface* gl = context_provider_->ContextGL();
+
+    int max_texture_size =
+        context_provider_->ContextCapabilities().gpu.max_texture_size;
+    int texture_width = std::min(max_texture_size, surface_size_.width());
+    int texture_height = std::min(max_texture_size, surface_size_.height());
+
     cc::ResourceFormat format = cc::RGBA_8888;
     gl->BindTexture(GL_TEXTURE_2D, reflector_texture_->texture_id());
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -62,7 +72,7 @@ void OffscreenBrowserCompositorOutputSurface::EnsureBackbuffer() {
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     gl->TexImage2D(GL_TEXTURE_2D, 0, GLInternalFormat(format),
-                   surface_size_.width(), surface_size_.height(), 0,
+                   texture_width, texture_height, 0,
                    GLDataFormat(format), GLDataType(format), nullptr);
     if (!fbo_)
       gl->GenFramebuffers(1, &fbo_);
@@ -95,7 +105,8 @@ void OffscreenBrowserCompositorOutputSurface::DiscardBackbuffer() {
 }
 
 void OffscreenBrowserCompositorOutputSurface::Reshape(const gfx::Size& size,
-                                                      float scale_factor) {
+                                                      float scale_factor,
+                                                      bool alpha) {
   if (size == surface_size_)
     return;
 
@@ -131,10 +142,14 @@ void OffscreenBrowserCompositorOutputSurface::SwapBuffers(
   // TODO(oshima): sync with the reflector's SwapBuffersComplete
   // (crbug.com/520567).
   // The original implementation had a flickering issue (crbug.com/515332).
-  uint32_t sync_point =
-      context_provider_->ContextGL()->InsertSyncPointCHROMIUM();
-  context_provider_->ContextSupport()->SignalSyncPoint(
-      sync_point, base::Bind(&OutputSurface::OnSwapBuffersComplete,
+  gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
+  const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
+  gl->ShallowFlushCHROMIUM();
+
+  gpu::SyncToken sync_token;
+  gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+  context_provider_->ContextSupport()->SignalSyncToken(
+      sync_token, base::Bind(&OutputSurface::OnSwapBuffersComplete,
                              weak_ptr_factory_.GetWeakPtr()));
 }
 

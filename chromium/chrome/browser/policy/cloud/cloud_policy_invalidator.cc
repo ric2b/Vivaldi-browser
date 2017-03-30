@@ -4,6 +4,8 @@
 
 #include "chrome/browser/policy/cloud/cloud_policy_invalidator.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/hash.h"
 #include "base/location.h"
@@ -35,12 +37,12 @@ CloudPolicyInvalidator::CloudPolicyInvalidator(
     CloudPolicyCore* core,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     scoped_ptr<base::Clock> clock,
-    int64 highest_handled_invalidation_version)
+    int64_t highest_handled_invalidation_version)
     : state_(UNINITIALIZED),
       type_(type),
       core_(core),
       task_runner_(task_runner),
-      clock_(clock.Pass()),
+      clock_(std::move(clock)),
       invalidation_service_(NULL),
       invalidations_enabled_(false),
       invalidation_service_enabled_(false),
@@ -167,7 +169,7 @@ void CloudPolicyInvalidator::OnStoreLoaded(CloudPolicyStore* store) {
                                 METRIC_POLICY_REFRESH_SIZE);
     }
 
-    const int64 store_invalidation_version = store->invalidation_version();
+    const int64_t store_invalidation_version = store->invalidation_version();
 
     // If the policy was invalid and the version stored matches the latest
     // invalidation version, acknowledge the latest invalidation.
@@ -212,7 +214,7 @@ void CloudPolicyInvalidator::HandleInvalidation(
   // numbers based on the number of such invalidations received. This
   // ensures that the version numbers do not collide with "real" versions
   // (which are positive) or previous invalidations with unknown version.
-  int64 version;
+  int64_t version;
   std::string payload;
   if (invalidation.is_unknown_version()) {
     version = -(++unknown_version_invalidation_count_);
@@ -380,7 +382,7 @@ bool CloudPolicyInvalidator::IsPolicyChanged(
     const enterprise_management::PolicyData* policy) {
   // Determine if the policy changed by comparing its hash value to the
   // previous policy's hash value.
-  uint32 new_hash_value = 0;
+  uint32_t new_hash_value = 0;
   if (policy && policy->has_policy_value())
     new_hash_value = base::Hash(policy->policy_value());
   bool changed = new_hash_value != policy_hash_value_;
@@ -388,7 +390,7 @@ bool CloudPolicyInvalidator::IsPolicyChanged(
   return changed;
 }
 
-bool CloudPolicyInvalidator::IsInvalidationExpired(int64 version) {
+bool CloudPolicyInvalidator::IsInvalidationExpired(int64_t version) {
   base::Time last_fetch_time = base::Time::UnixEpoch() +
       base::TimeDelta::FromMilliseconds(core_->store()->policy()->timestamp());
 

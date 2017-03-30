@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/chromeos/mobile_setup_dialog.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_shutdown.h"
@@ -35,7 +36,7 @@ class MobileSetupDialogDelegate : public WebDialogDelegate {
   void ShowDialog(const std::string& service_path);
 
  protected:
-  friend struct DefaultSingletonTraits<MobileSetupDialogDelegate>;
+  friend struct base::DefaultSingletonTraits<MobileSetupDialogDelegate>;
 
   MobileSetupDialogDelegate();
   ~MobileSetupDialogDelegate() override;
@@ -71,7 +72,7 @@ void MobileSetupDialog::Show(const std::string& service_path) {
 // static
 MobileSetupDialogDelegate* MobileSetupDialogDelegate::GetInstance() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return Singleton<MobileSetupDialogDelegate>::get();
+  return base::Singleton<MobileSetupDialogDelegate>::get();
 }
 
 MobileSetupDialogDelegate::MobileSetupDialogDelegate() : dialog_window_(NULL) {

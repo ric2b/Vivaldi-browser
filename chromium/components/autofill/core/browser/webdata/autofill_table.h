@@ -5,10 +5,12 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_WEBDATA_AUTOFILL_TABLE_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_WEBDATA_AUTOFILL_TABLE_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "components/webdata/common/web_database_table.h"
@@ -221,12 +223,13 @@ struct FormFieldData;
 
 class AutofillTable : public WebDatabaseTable {
  public:
-  explicit AutofillTable(const std::string& app_locale);
+  AutofillTable();
   ~AutofillTable() override;
 
-  // Retrieves the AutofillTable* owned by |database|.
+  // Retrieves the AutofillTable* owned by |db|.
   static AutofillTable* FromWebDatabase(WebDatabase* db);
 
+  // WebDatabaseTable:
   WebDatabaseTable::TypeKey GetTypeKey() const override;
   bool CreateTablesIfNecessary() override;
   bool IsSyncable() override;
@@ -252,9 +255,6 @@ class AutofillTable : public WebDatabaseTable {
                                    std::vector<base::string16>* values,
                                    int limit);
 
-  // Returns whether any form elements are stored in the database.
-  bool HasFormElements();
-
   // Removes rows from the autofill table if they were created on or after
   // |delete_begin| and last used strictly before |delete_end|.  For rows where
   // the time range [date_created, date_last_used] overlaps with [delete_begin,
@@ -274,6 +274,12 @@ class AutofillTable : public WebDatabaseTable {
   // Removes the row from the autofill table for the given |name| |value| pair.
   virtual bool RemoveFormElement(const base::string16& name,
                                  const base::string16& value);
+
+  // Returns the number of unique values such that for all autofill entries with
+  // that value, the interval between creation date and last usage is entirely
+  // contained between [|begin|, |end|).
+  virtual int GetCountOfValuesContainedBetween(const base::Time& begin,
+                                               const base::Time& end);
 
   // Retrieves all of the entries in the autofill table.
   virtual bool GetAllAutofillEntries(std::vector<AutofillEntry>* entries);
@@ -299,11 +305,12 @@ class AutofillTable : public WebDatabaseTable {
   // of the profile to remove.
   virtual bool RemoveAutofillProfile(const std::string& guid);
 
-  // Retrieves a profile with guid |guid|.  The caller owns |profile|.
-  bool GetAutofillProfile(const std::string& guid, AutofillProfile** profile);
+  // Retrieves a profile with guid |guid|.
+  scoped_ptr<AutofillProfile> GetAutofillProfile(const std::string& guid);
 
   // Retrieves local/server profiles in the database. Caller owns the returned
   // profiles.
+  // TODO(thestig): Convert to scopers.
   virtual bool GetAutofillProfiles(std::vector<AutofillProfile*>* profiles);
   virtual bool GetServerProfiles(std::vector<AutofillProfile*>* profiles);
 
@@ -317,16 +324,16 @@ class AutofillTable : public WebDatabaseTable {
   // Updates the database values for the specified credit card.
   bool UpdateCreditCard(const CreditCard& credit_card);
 
-  // Removes a row from the credit_cards table.  |guid| is the identifer  of the
+  // Removes a row from the credit_cards table.  |guid| is the identifer of the
   // credit card to remove.
   bool RemoveCreditCard(const std::string& guid);
 
-  // Retrieves a credit card with guid |guid|.  The caller owns
-  // |credit_card_id|.
-  bool GetCreditCard(const std::string& guid, CreditCard** credit_card);
+  // Retrieves a credit card with guid |guid|.
+  scoped_ptr<CreditCard> GetCreditCard(const std::string& guid);
 
   // Retrieves the local/server credit cards in the database. Caller owns the
   // returned credit cards.
+  // TODO(thestig): Convert to scopers.
   virtual bool GetCreditCards(std::vector<CreditCard*>* credit_cards);
   virtual bool GetServerCreditCards(std::vector<CreditCard*>* credit_cards);
 
@@ -401,12 +408,17 @@ class AutofillTable : public WebDatabaseTable {
   bool MigrateToVersion64AddUnmaskDate();
   bool MigrateToVersion65AddServerMetadataTables();
 
-  // Max data length saved in the table;
+  // Max data length saved in the table, AKA the maximum length allowed for
+  // form data.
+  // Copied to components/autofill/ios/browser/resources/autofill_controller.js.
   static const size_t kMaxDataLength;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AutofillTableTest, Autofill);
   FRIEND_TEST_ALL_PREFIXES(AutofillTableTest, Autofill_AddChanges);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillTableTest,
+      Autofill_GetCountOfValuesContainedBetween);
   FRIEND_TEST_ALL_PREFIXES(AutofillTableTest, Autofill_RemoveBetweenChanges);
   FRIEND_TEST_ALL_PREFIXES(AutofillTableTest, Autofill_UpdateDontReplace);
   FRIEND_TEST_ALL_PREFIXES(
@@ -472,12 +484,6 @@ class AutofillTable : public WebDatabaseTable {
   bool InitServerCardMetadataTable();
   bool InitServerAddressesTable();
   bool InitServerAddressMetadataTable();
-
-  // The application locale.  The locale is needed for the migration to version
-  // 35. Since it must be read on the UI thread, it is set when the table is
-  // created (on the UI thread), and cached here so that it can be used for
-  // migrations (on the DB thread).
-  std::string app_locale_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillTable);
 };

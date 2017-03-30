@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.profiles;
 
 import android.graphics.Bitmap;
 
-import org.chromium.base.CalledByNative;
+import org.chromium.base.annotations.CalledByNative;
 
 /**
  * Methods to bridge into native history to provide most recent urls, titles and thumbnails.
@@ -24,10 +24,23 @@ public class MostVisitedSites {
          * Parameters guaranteed to be non-null.
          *
          * @param titles Array of most visited url page titles.
-         * @param urls Array of most visited urls.
+         * @param urls Array of most visited URLs, including popular URLs if
+         *             available and necessary (i.e. there aren't enough most
+         *             visited URLs).
          */
         @CalledByNative("MostVisitedURLsObserver")
         public void onMostVisitedURLsAvailable(String[] titles, String[] urls);
+
+        /**
+         * This is called when the list of popular URLs is initially available or updated.
+         * Parameters guaranteed to be non-null.
+         *
+         * @param urls Array of popular URLs.
+         * @param faviconUrls Array of URLs for the corresponding favicons (if known).
+         */
+        @CalledByNative("MostVisitedURLsObserver")
+        public void onPopularURLsAvailable(
+                String[] urls, String[] faviconUrls, String[] largeIconUrls);
     }
 
     /**
@@ -39,9 +52,11 @@ public class MostVisitedSites {
          * Parameter may be null.
          *
          * @param thumbnail The bitmap thumbnail for the requested URL.
+         * @param isLocalThumbnail Whether the thumbnail was locally captured, as opposed to
+         *                         server-provided.
          */
         @CalledByNative("ThumbnailCallback")
-        public void onMostVisitedURLsThumbnailAvailable(Bitmap thumbnail);
+        public void onMostVisitedURLsThumbnailAvailable(Bitmap thumbnail, boolean isLocalThumbnail);
     }
 
     /**
@@ -67,7 +82,8 @@ public class MostVisitedSites {
      * after any changes to the list. Note: the observer may be notified synchronously or
      * asynchronously.
      * @param observer The MostVisitedURLsObserver to be called once when the most visited sites
-     *            are initially available and again whenever the list of most visited sites changes.
+     *                 are initially available and again whenever the list of most visited sites
+     *                 changes.
      * @param numSites The maximum number of most visited sites to return.
      */
     public void setMostVisitedURLsObserver(final MostVisitedURLsObserver observer, int numSites) {
@@ -77,6 +93,14 @@ public class MostVisitedSites {
                 // Don't notify observer if we've already been destroyed.
                 if (mNativeMostVisitedSites != 0) {
                     observer.onMostVisitedURLsAvailable(titles, urls);
+                }
+            }
+            @Override
+            public void onPopularURLsAvailable(
+                    String[] urls, String[] faviconUrls, String[] largeIconUrls) {
+                // Don't notify observer if we've already been destroyed.
+                if (mNativeMostVisitedSites != 0) {
+                    observer.onPopularURLsAvailable(urls, faviconUrls, largeIconUrls);
                 }
             }
         };
@@ -92,10 +116,11 @@ public class MostVisitedSites {
     public void getURLThumbnail(String url, final ThumbnailCallback callback) {
         ThumbnailCallback wrappedCallback = new ThumbnailCallback() {
             @Override
-            public void onMostVisitedURLsThumbnailAvailable(Bitmap thumbnail) {
+            public void onMostVisitedURLsThumbnailAvailable(Bitmap thumbnail,
+                    boolean isLocalThumbnail) {
                 // Don't notify callback if we've already been destroyed.
                 if (mNativeMostVisitedSites != 0) {
-                    callback.onMostVisitedURLsThumbnailAvailable(thumbnail);
+                    callback.onMostVisitedURLsThumbnailAvailable(thumbnail, isLocalThumbnail);
                 }
             }
         };
@@ -103,7 +128,7 @@ public class MostVisitedSites {
     }
 
     /**
-     * Blacklist a URL from the most visited URLs list.
+     * Blacklists a URL from the most visited URLs list.
      * @param url The URL to be blacklisted.
      */
     public void blacklistUrl(String url) {
@@ -111,28 +136,32 @@ public class MostVisitedSites {
     }
 
     /**
-     * Called when the loading of the Most Visited page is complete.
+     * Records metrics about which types of tiles are displayed.
+     * @param tileTypes An array of values from MostVisitedTileType indicating the type of each
+     *                  tile that's currently showing.
      */
-    public void onLoadingComplete() {
-        nativeOnLoadingComplete(mNativeMostVisitedSites);
+    public void recordTileTypeMetrics(int[] tileTypes) {
+        nativeRecordTileTypeMetrics(mNativeMostVisitedSites, tileTypes);
     }
 
     /**
-     * Record the opening of a Most Visited Item.
+     * Records the opening of a Most Visited Item.
      * @param index The index of the item that was opened.
+     * @param tileType The visual type of the item. Valid values are listed in MostVisitedTileType.
      */
-    public void recordOpenedMostVisitedItem(int index) {
-        nativeRecordOpenedMostVisitedItem(mNativeMostVisitedSites, index);
+    public void recordOpenedMostVisitedItem(int index, int tileType) {
+        nativeRecordOpenedMostVisitedItem(mNativeMostVisitedSites, index, tileType);
     }
 
     private native long nativeInit(Profile profile);
     private native void nativeDestroy(long nativeMostVisitedSites);
-    private native void nativeOnLoadingComplete(long nativeMostVisitedSites);
     private native void nativeSetMostVisitedURLsObserver(long nativeMostVisitedSites,
             MostVisitedURLsObserver observer, int numSites);
     private native void nativeGetURLThumbnail(long nativeMostVisitedSites, String url,
             ThumbnailCallback callback);
     private native void nativeBlacklistUrl(long nativeMostVisitedSites, String url);
-    private native void nativeRecordOpenedMostVisitedItem(long nativeMostVisitedSites, int index);
+    private native void nativeRecordTileTypeMetrics(long nativeMostVisitedSites, int[] tileTypes);
+    private native void nativeRecordOpenedMostVisitedItem(long nativeMostVisitedSites, int index,
+            int tileType);
 
 }

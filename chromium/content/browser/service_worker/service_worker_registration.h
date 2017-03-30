@@ -5,11 +5,12 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_REGISTRATION_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_REGISTRATION_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
-#include "base/gtest_prod_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/service_worker/service_worker_version.h"
@@ -22,9 +23,10 @@ namespace content {
 class ServiceWorkerVersion;
 struct ServiceWorkerRegistrationInfo;
 
-// This class represents a Service Worker registration. The scope is constant
-// for the life of the persistent registration. It's refcounted to facilitate
-// multiple controllees being associated with the same registration.
+// Represents the core of a service worker registration object. Other
+// registration derivatives (WebServiceWorkerRegistration etc) ultimately refer
+// to this class. This is refcounted via ServiceWorkerRegistrationHandle to
+// facilitate multiple controllees being associated with the same registration.
 class CONTENT_EXPORT ServiceWorkerRegistration
     : NON_EXPORTED_BASE(public base::RefCounted<ServiceWorkerRegistration>),
       public ServiceWorkerVersion::Listener {
@@ -50,10 +52,10 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   };
 
   ServiceWorkerRegistration(const GURL& pattern,
-                            int64 registration_id,
+                            int64_t registration_id,
                             base::WeakPtr<ServiceWorkerContextCore> context);
 
-  int64 id() const { return registration_id_; }
+  int64_t id() const { return registration_id_; }
   const GURL& pattern() const { return pattern_; }
 
   bool is_deleted() const { return is_deleted_; }
@@ -90,6 +92,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   void RemoveListener(Listener* listener);
   void NotifyRegistrationFailed();
   void NotifyUpdateFound();
+  void NotifyVersionAttributesChanged(ChangedVersionAttributesMask mask);
 
   ServiceWorkerRegistrationInfo GetInfo();
 
@@ -128,20 +131,17 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   base::Time last_update_check() const { return last_update_check_; }
   void set_last_update_check(base::Time last) { last_update_check_ = last; }
 
-  // Provide a storage mechanism to read/write arbitrary data associated with
-  // this registration in the storage. Stored data is deleted when this
-  // registration is deleted from the storage.
-  void GetUserData(const std::string& key,
-                   const GetUserDataCallback& callback);
-  void StoreUserData(const std::string& key,
-                     const std::string& data,
-                     const StatusCallback& callback);
-  void ClearUserData(const std::string& key,
-                     const StatusCallback& callback);
-
   // Unsets the version and deletes its resources. Also deletes this
   // registration from storage if there is no longer a stored version.
   void DeleteVersion(const scoped_refptr<ServiceWorkerVersion>& version);
+
+  void RegisterRegistrationFinishedCallback(const base::Closure& callback);
+  void NotifyRegistrationFinished();
+
+  bool force_update_on_page_load() const { return force_update_on_page_load_; }
+  void set_force_update_on_page_load(bool force_update_on_page_load) {
+    force_update_on_page_load_ = force_update_on_page_load;
+  }
 
  private:
   friend class base::RefCounted<ServiceWorkerRegistration>;
@@ -170,17 +170,22 @@ class CONTENT_EXPORT ServiceWorkerRegistration
                          ServiceWorkerStatusCode status);
 
   const GURL pattern_;
-  const int64 registration_id_;
+  const int64_t registration_id_;
   bool is_deleted_;
   bool is_uninstalling_;
   bool is_uninstalled_;
   bool should_activate_when_ready_;
+  bool force_update_on_page_load_;
   base::Time last_update_check_;
   int64_t resources_total_size_bytes_;
+
+  // This registration is the primary owner of these versions.
   scoped_refptr<ServiceWorkerVersion> active_version_;
   scoped_refptr<ServiceWorkerVersion> waiting_version_;
   scoped_refptr<ServiceWorkerVersion> installing_version_;
+
   base::ObserverList<Listener> listeners_;
+  std::vector<base::Closure> registration_finished_callbacks_;
   base::WeakPtr<ServiceWorkerContextCore> context_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerRegistration);

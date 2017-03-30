@@ -4,6 +4,8 @@
 
 #include "chromecast/common/media/cma_param_traits.h"
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "chromecast/common/media/cma_param_traits_macros.h"
@@ -23,8 +25,7 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(media::ChannelLayout,
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(media::VideoCodecProfile,
                               media::VIDEO_CODEC_PROFILE_MIN,
                               media::VIDEO_CODEC_PROFILE_MAX)
-IPC_ENUM_TRAITS_MAX_VALUE(media::VideoFrame::Format,
-                          media::VideoFrame::FORMAT_MAX)
+IPC_ENUM_TRAITS_MAX_VALUE(media::VideoPixelFormat, media::PIXEL_FORMAT_MAX)
 
 namespace IPC {
 
@@ -35,13 +36,7 @@ void ParamTraits<media::AudioDecoderConfig>::Write(
   WriteParam(m, p.channel_layout());
   WriteParam(m, p.samples_per_second());
   WriteParam(m, p.is_encrypted());
-  std::vector<uint8> extra_data;
-  if (p.extra_data_size() > 0) {
-    extra_data =
-        std::vector<uint8>(p.extra_data(),
-                           p.extra_data() + p.extra_data_size());
-  }
-  WriteParam(m, extra_data);
+  WriteParam(m, p.extra_data());
 }
 
 bool ParamTraits<media::AudioDecoderConfig>::Read(
@@ -53,19 +48,14 @@ bool ParamTraits<media::AudioDecoderConfig>::Read(
   media::ChannelLayout channel_layout;
   int samples_per_second;
   bool is_encrypted;
-  std::vector<uint8> extra_data;
+  std::vector<uint8_t> extra_data;
   if (!ReadParam(m, iter, &codec) || !ReadParam(m, iter, &sample_format) ||
       !ReadParam(m, iter, &channel_layout) ||
       !ReadParam(m, iter, &samples_per_second) ||
       !ReadParam(m, iter, &is_encrypted) || !ReadParam(m, iter, &extra_data))
     return false;
-  const uint8* extra_data_ptr = nullptr;
-  if (!extra_data.empty())
-    extra_data_ptr = &extra_data[0];
   *r = media::AudioDecoderConfig(codec, sample_format, channel_layout,
-                                 samples_per_second,
-                                 extra_data_ptr, extra_data.size(),
-                                 is_encrypted);
+                                 samples_per_second, extra_data, is_encrypted);
   return true;
 }
 
@@ -79,17 +69,12 @@ void ParamTraits<media::VideoDecoderConfig>::Write(
   WriteParam(m, p.codec());
   WriteParam(m, p.profile());
   WriteParam(m, p.format());
+  WriteParam(m, p.color_space());
   WriteParam(m, p.coded_size());
   WriteParam(m, p.visible_rect());
   WriteParam(m, p.natural_size());
   WriteParam(m, p.is_encrypted());
-  std::vector<uint8> extra_data;
-  if (p.extra_data_size() > 0) {
-    extra_data =
-        std::vector<uint8>(p.extra_data(),
-                           p.extra_data() + p.extra_data_size());
-  }
-  WriteParam(m, extra_data);
+  WriteParam(m, p.extra_data());
 }
 
 bool ParamTraits<media::VideoDecoderConfig>::Read(
@@ -98,25 +83,22 @@ bool ParamTraits<media::VideoDecoderConfig>::Read(
     media::VideoDecoderConfig* r) {
   media::VideoCodec codec;
   media::VideoCodecProfile profile;
-  media::VideoFrame::Format format;
+  media::VideoPixelFormat format;
+  media::ColorSpace color_space;
   gfx::Size coded_size;
   gfx::Rect visible_rect;
   gfx::Size natural_size;
   bool is_encrypted;
-  std::vector<uint8> extra_data;
+  std::vector<uint8_t> extra_data;
   if (!ReadParam(m, iter, &codec) || !ReadParam(m, iter, &profile) ||
-      !ReadParam(m, iter, &format) || !ReadParam(m, iter, &coded_size) ||
-      !ReadParam(m, iter, &visible_rect) ||
+      !ReadParam(m, iter, &format) || !ReadParam(m, iter, &color_space) ||
+      !ReadParam(m, iter, &coded_size) || !ReadParam(m, iter, &visible_rect) ||
       !ReadParam(m, iter, &natural_size) ||
       !ReadParam(m, iter, &is_encrypted) || !ReadParam(m, iter, &extra_data))
     return false;
-  const uint8* extra_data_ptr = nullptr;
-  if (!extra_data.empty())
-    extra_data_ptr = &extra_data[0];
-  *r = media::VideoDecoderConfig(codec, profile, format,
+  *r = media::VideoDecoderConfig(codec, profile, format, color_space,
                                  coded_size, visible_rect, natural_size,
-                                 extra_data_ptr, extra_data.size(),
-                                 is_encrypted);
+                                 extra_data, is_encrypted);
   return true;
 }
 

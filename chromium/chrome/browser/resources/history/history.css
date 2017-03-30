@@ -365,6 +365,11 @@ html[dir='rtl'] .site-domain {
   border-color: rgba(0, 0, 0, .5);
 }
 
+.site-domain-wrapper:hover .site-domain-row,
+.entry-box:hover {
+  background-color: rgba(0, 0, 0, .025);
+}
+
 .filter-status {
   -webkit-margin-start: 10px;
 }
@@ -422,7 +427,7 @@ html[dir='rtl'] .site-domain {
   min-width: 0;
 }
 
-.active :-webkit-any(.entry-box, .site-domain-row) {
+.focus-row-active :-webkit-any(.entry-box, .site-domain-row) {
   background-color: rgba(0, 0, 0, .05);
 }
 
@@ -503,7 +508,7 @@ html .expand .site-domain-arrow {
   -webkit-margin-end: 3px;
   -webkit-margin-start: 8px;
   background: no-repeat center
-      url(../../../../ui/webui/resources/images/star_small.png);
+      url(../../../../../app/other_resources/webui/star_small.png);
   border: none;
   display: inline-block;
   height: 15px;
@@ -607,6 +612,7 @@ html[dir='rtl'] #newer-button::after {
 
 #action-menu[data-devicename]::before {
   background-color: rgb(245, 245, 245);
+  background-position: 18px center;
   background-repeat: no-repeat;
   background-size: 24px;
   border-bottom: 1px solid rgb(232, 232, 232);
@@ -624,18 +630,15 @@ html[dir='rtl'] #newer-button::after {
 }
 
 #action-menu[data-devicetype='laptop']::before {
-  background-image: url(../../../../ui/webui/resources/images/laptop_small.png);
-  background-position: 18px center;
+  background-image: url(../../../../ui/webui/resources/images/laptop.svg);
 }
 
 #action-menu[data-devicetype='phone']::before {
-  background-image: url(../../../../ui/webui/resources/images/phone_small.png);
+  background-image: url(../../../../ui/webui/resources/images/smartphone.svg);
   background-position: 14px center;
   padding-left: 43px;
 }
 
 #action-menu[data-devicetype='tablet']::before {
-  background-image: url(../../../../ui/webui/resources/images/tablet_small.png);
-  background-position: 17px center;
-  padding-left: 49px;
+  background-image: url(../../../../ui/webui/resources/images/tablet.svg);
 }

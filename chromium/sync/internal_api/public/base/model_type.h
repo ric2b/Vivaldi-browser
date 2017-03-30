@@ -34,6 +34,12 @@ namespace syncer {
 // TODO(akalin): Move the non-exported functions in this file to a
 // private header.
 
+// A Java counterpart will be generated for this enum.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.sync
+
+// |kModelTypeInfoMap| struct entries are in the same order as their definition
+// in ModelType enum. Don't forget to update the |kModelTypeInfoMap| struct in
+// model_type.cc when you make changes in ModelType enum.
 enum ModelType {
   // Object type unknown.  Objects may transition through
   // the unknown state during their initial creation, before
@@ -175,8 +181,7 @@ SYNC_EXPORT void AddDefaultFieldValue(ModelType datatype,
 // local concept: the enum is not in the protocol.  The SyncEntity's ModelType
 // is inferred from the presence of particular datatype field in the
 // entity specifics.
-SYNC_EXPORT_PRIVATE ModelType GetModelType(
-    const sync_pb::SyncEntity& sync_entity);
+SYNC_EXPORT ModelType GetModelType(const sync_pb::SyncEntity& sync_entity);
 
 // Extract the model type from an EntitySpecifics field.  Note that there
 // are some ModelTypes (like TOP_LEVEL_FOLDER) that can't be inferred this way;
@@ -200,7 +205,7 @@ SYNC_EXPORT bool IsUserSelectableType(ModelType model_type);
 SYNC_EXPORT ModelTypeNameMap GetUserSelectableTypeNameMap();
 
 // This is the subset of UserTypes() that can be encrypted.
-SYNC_EXPORT_PRIVATE ModelTypeSet EncryptableUserTypes();
+SYNC_EXPORT ModelTypeSet EncryptableUserTypes();
 
 // This is the subset of UserTypes() that have priority over other types.  These
 // types are synced before other user types and are never encrypted.
@@ -256,8 +261,7 @@ SYNC_EXPORT ModelTypeSet PriorityCoreTypes();
 //     }
 //     model_types.Put(model_type);
 //   }
-SYNC_EXPORT_PRIVATE ModelType GetModelTypeFromSpecificsFieldNumber(
-    int field_number);
+SYNC_EXPORT ModelType GetModelTypeFromSpecificsFieldNumber(int field_number);
 
 // Return the field number of the EntitySpecifics field associated with
 // a model type.
@@ -280,10 +284,10 @@ SYNC_EXPORT int ModelTypeToHistogramInt(ModelType model_type);
 // Handles all model types, and not just real ones.
 //
 // Caller takes ownership of returned value.
-SYNC_EXPORT_PRIVATE base::StringValue* ModelTypeToValue(ModelType model_type);
+SYNC_EXPORT base::StringValue* ModelTypeToValue(ModelType model_type);
 
 // Converts a Value into a ModelType - complement to ModelTypeToValue().
-SYNC_EXPORT_PRIVATE ModelType ModelTypeFromValue(const base::Value& value);
+SYNC_EXPORT ModelType ModelTypeFromValue(const base::Value& value);
 
 // Returns the ModelType corresponding to the name |model_type_string|.
 SYNC_EXPORT ModelType ModelTypeFromString(

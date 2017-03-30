@@ -14,6 +14,7 @@
     # variables overriden inside a target_condition block in this file will not
     # affect the values in untrusted.gypi.
     'variables': {
+      'nacl_untrusted_build': 1,
       'test_files': [],
       'generate_nmf%': 1,
       'nacl_newlib_out_dir': '<(PRODUCT_DIR)/>(nexe_destination_dir)/newlib',
@@ -44,6 +45,7 @@
        '<(DEPTH)/native_client/src/untrusted/nacl/nacl.gyp:nacl_lib',
        '<(DEPTH)/native_client/src/untrusted/pthread/pthread.gyp:pthread_lib',
        '<(DEPTH)/ppapi/ppapi_nacl.gyp:ppapi_cpp_lib',
+       '<(DEPTH)/ppapi/ppapi_nacl.gyp:nacl_elf_loader',
        '<(DEPTH)/ppapi/native_client/native_client.gyp:ppapi_lib',
     ],
     'target_conditions': [
@@ -57,7 +59,7 @@
           },
         ],
       }],
-      ['test_files!=[] and "<(target_arch)"!="arm" and "<(target_arch)"!="mipsel" and disable_glibc==0 and build_glibc==1', {
+      ['test_files!=[] and "<(target_arch)"!="mipsel" and disable_glibc==0 and build_glibc==1', {
         'copies': [
           {
             'destination': '>(nacl_glibc_out_dir)',
@@ -107,16 +109,25 @@
           'extra_args': [
             '--strip-all',
           ],
+          'variables': {
+            'conditions': [
+              ['target_arch=="arm"', {
+                'objdump': '>(nacl_glibc_tc_root)/bin/arm-nacl-objdump'
+              }, {
+                'objdump': '>(nacl_glibc_tc_root)/bin/x86_64-nacl-objdump'
+              }],
+            ]
+          },
           'create_nmf': '<(DEPTH)/native_client_sdk/src/tools/create_nmf.py',
           'create_nmf_args_portable%': [],
           'create_nonsfi_test_nmf': '<(DEPTH)/ppapi/tests/create_nonsfi_test_nmf.py',
           'create_nmf_args': [
             '--no-default-libpath',
-            '--objdump=>(nacl_glibc_tc_root)/bin/x86_64-nacl-objdump',
+            '--objdump=<(objdump)',
           ],
         },
         'target_conditions': [
-          ['generate_nmf==1 and build_newlib==1', {
+          ['generate_nmf==1 and build_newlib==1 and disable_newlib==0', {
             'actions': [
               {
                 'action_name': 'Generate NEWLIB NMF',
@@ -150,12 +161,13 @@
               },
             ],
           }],
-          ['"<(target_arch)"!="arm" and "<(target_arch)"!="mipsel" and generate_nmf==1 and disable_glibc==0 and build_glibc==1', {
+          ['"<(target_arch)"!="mipsel" and generate_nmf==1 and disable_glibc==0 and build_glibc==1', {
             'variables': {
               # NOTE: Use /lib, not /lib64 here; it is a symbolic link which
               # doesn't work on Windows.
               'libdir_glibc64': '>(nacl_glibc_tc_root)/x86_64-nacl/lib',
               'libdir_glibc32': '>(nacl_glibc_tc_root)/x86_64-nacl/lib32',
+              'libdir_glibc_arm': '>(nacl_glibc_tc_root)/arm-nacl/lib',
             },
             'actions': [
               {
@@ -189,7 +201,13 @@
                       '--library-path=>(tc_lib_dir_glibc32)',
                     ],
                   }],
-                  # TODO(ncbray) handle arm case.  We don't have ARM glibc yet.
+                  ['enable_arm==1', {
+                    'inputs': ['>(out_glibc_arm)'],
+                    'action': [
+                      '--library-path=>(libdir_glibc_arm)',
+                      '--library-path=>(tc_lib_dir_glibc_arm)',
+                    ],
+                  }],
                 ],
               },
             ],

@@ -5,6 +5,7 @@
 #include "net/quic/quic_sent_entropy_manager.h"
 
 #include <algorithm>
+#include <vector>
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,32 +38,31 @@ TEST_F(QuicSentEntropyManagerTest, SentEntropyHash) {
 }
 
 TEST_F(QuicSentEntropyManagerTest, IsValidEntropy) {
-  QuicPacketEntropyHash entropies[10] =
-      {12, 1, 33, 3, 32, 100, 28, 42, 22, 255};
+  QuicPacketEntropyHash entropies[10] = {12,  1,  33, 3,  32,
+                                         100, 28, 42, 22, 255};
   for (size_t i = 0; i < arraysize(entropies); ++i) {
     entropy_manager_.RecordPacketEntropyHash(i + 1, entropies[i]);
   }
 
-  SequenceNumberSet missing_packets;
-  missing_packets.insert(1);
-  missing_packets.insert(4);
-  missing_packets.insert(7);
-  missing_packets.insert(8);
+  PacketNumberQueue missing_packets;
+  missing_packets.Add(1);
+  missing_packets.Add(4);
+  missing_packets.Add(7, 9);
 
   QuicPacketEntropyHash entropy_hash = 0;
   for (size_t i = 0; i < arraysize(entropies); ++i) {
-    if (missing_packets.find(i + 1) == missing_packets.end()) {
+    if (!missing_packets.Contains(i + 1)) {
       entropy_hash ^= entropies[i];
     }
   }
 
-  EXPECT_TRUE(entropy_manager_.IsValidEntropy(10, missing_packets,
-                                              entropy_hash));
+  EXPECT_TRUE(
+      entropy_manager_.IsValidEntropy(10, missing_packets, entropy_hash));
 }
 
 TEST_F(QuicSentEntropyManagerTest, ClearEntropiesBefore) {
-  QuicPacketEntropyHash entropies[10] =
-      {12, 1, 33, 3, 32, 100, 28, 42, 22, 255};
+  QuicPacketEntropyHash entropies[10] = {12,  1,  33, 3,  32,
+                                         100, 28, 42, 22, 255};
 
   for (size_t i = 0; i < arraysize(entropies); ++i) {
     entropy_manager_.RecordPacketEntropyHash(i + 1, entropies[i]);
@@ -72,18 +72,17 @@ TEST_F(QuicSentEntropyManagerTest, ClearEntropiesBefore) {
   // still return correct results.
   entropy_manager_.ClearEntropyBefore(5);
 
-  SequenceNumberSet missing_packets;
-  missing_packets.insert(7);
-  missing_packets.insert(8);
+  PacketNumberQueue missing_packets;
+  missing_packets.Add(7, 9);
 
   QuicPacketEntropyHash entropy_hash = 0;
   for (size_t i = 0; i < arraysize(entropies); ++i) {
-    if (missing_packets.find(i + 1) == missing_packets.end()) {
+    if (!missing_packets.Contains(i + 1)) {
       entropy_hash ^= entropies[i];
     }
   }
-  EXPECT_TRUE(entropy_manager_.IsValidEntropy(10, missing_packets,
-                                              entropy_hash));
+  EXPECT_TRUE(
+      entropy_manager_.IsValidEntropy(10, missing_packets, entropy_hash));
 
   entropy_hash = 0;
   for (size_t i = 0; i < arraysize(entropies); ++i) {

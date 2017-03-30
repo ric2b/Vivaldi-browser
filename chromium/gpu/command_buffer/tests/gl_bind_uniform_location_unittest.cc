@@ -5,6 +5,7 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <GLES2/gl2extchromium.h>
+#include <stdint.h>
 
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
@@ -15,12 +16,13 @@
 
 namespace gpu {
 
-class BindUniformLocationTest : public testing::Test {
+class BindUniformLocationTest : public testing::TestWithParam<bool> {
  protected:
   static const GLsizei kResolution = 4;
   void SetUp() override {
     GLManager::Options options;
     options.size = gfx::Size(kResolution, kResolution);
+    options.force_shader_name_hashing = GetParam();
     gl_.Initialize(options);
   }
 
@@ -29,7 +31,7 @@ class BindUniformLocationTest : public testing::Test {
   GLManager gl_;
 };
 
-TEST_F(BindUniformLocationTest, Basic) {
+TEST_P(BindUniformLocationTest, Basic) {
   ASSERT_TRUE(
       GLTestHelper::HasExtension("GL_CHROMIUM_bind_uniform_location"));
 
@@ -92,14 +94,65 @@ TEST_F(BindUniformLocationTest, Basic) {
 
   glDrawArrays(GL_TRIANGLES, 0, 6);
 
-  static const uint8 expected[] = { 64, 128, 192, 255 };
+  static const uint8_t expected[] = {64, 128, 192, 255};
   EXPECT_TRUE(
       GLTestHelper::CheckPixels(0, 0, kResolution, kResolution, 1, expected));
 
   GLTestHelper::CheckGLError("no errors", __LINE__);
 }
 
-TEST_F(BindUniformLocationTest, Compositor) {
+TEST_P(BindUniformLocationTest, ConflictsDetection) {
+  ASSERT_TRUE(
+      GLTestHelper::HasExtension("GL_CHROMIUM_bind_uniform_location"));
+
+  static const char* v_shader_str = SHADER(
+      attribute vec4 a_position;
+      void main()
+      {
+         gl_Position = a_position;
+      }
+  );
+  static const char* f_shader_str = SHADER(
+      precision mediump float;
+      uniform vec4 u_colorA;
+      uniform vec4 u_colorB;
+      void main()
+      {
+        gl_FragColor = u_colorA + u_colorB;
+      }
+  );
+
+  GLint color_a_location = 3;
+  GLint color_b_location = 4;
+
+  GLuint vertex_shader = GLTestHelper::LoadShader(
+      GL_VERTEX_SHADER, v_shader_str);
+  GLuint fragment_shader = GLTestHelper::LoadShader(
+      GL_FRAGMENT_SHADER, f_shader_str);
+
+  GLuint program = glCreateProgram();
+  glAttachShader(program, vertex_shader);
+  glAttachShader(program, fragment_shader);
+
+  glBindUniformLocationCHROMIUM(program, color_a_location, "u_colorA");
+  // Bind u_colorB to location a, causing conflicts, link should fail.
+  glBindUniformLocationCHROMIUM(program, color_a_location, "u_colorB");
+  glLinkProgram(program);
+  GLint linked = 0;
+  glGetProgramiv(program, GL_LINK_STATUS, &linked);
+  EXPECT_EQ(0, linked);
+
+  // Bind u_colorB to location b, no conflicts, link should succeed.
+  glBindUniformLocationCHROMIUM(program, color_b_location, "u_colorB");
+  glLinkProgram(program);
+  linked = 0;
+  glGetProgramiv(program, GL_LINK_STATUS, &linked);
+  EXPECT_EQ(1, linked);
+
+  GLTestHelper::CheckGLError("no errors", __LINE__);
+}
+
+TEST_P(BindUniformLocationTest, Compositor) {
   ASSERT_TRUE(
       GLTestHelper::HasExtension("GL_CHROMIUM_bind_uniform_location"));
 
@@ -142,7 +195,7 @@ TEST_F(BindUniformLocationTest, Compositor) {
       }
   );
 
-  int counter = 0;
+  int counter = 6;
   int matrix_location = counter++;
   int color_a_location = counter++;
   int color_b_location = counter++;
@@ -208,13 +261,109 @@ TEST_F(BindUniformLocationTest, Compositor) {
 
   glDrawArrays(GL_TRIANGLES, 0, 6);
 
-  static const uint8 expected[] = { 204, 204, 204, 204 };
+  static const uint8_t expected[] = {204, 204, 204, 204};
   EXPECT_TRUE(
       GLTestHelper::CheckPixels(0, 0, kResolution, kResolution, 1, expected));
 
   GLTestHelper::CheckGLError("no errors", __LINE__);
 
 }
+
+TEST_P(BindUniformLocationTest, UnusedUniformUpdate) {
+  ASSERT_TRUE(GLTestHelper::HasExtension("GL_CHROMIUM_bind_uniform_location"));
+
+  // clang-format off
+  static const char* kVertexShaderString = SHADER(
+      attribute vec4 a_position;
+      void main() {
+        gl_Position = a_position;
+      }
+  );
+  static const char* kFragmentShaderString = SHADER(
+      precision mediump float;
+      uniform vec4 u_colorA;
+      uniform float u_colorU;
+      uniform vec4 u_colorC;
+      void main() {
+        gl_FragColor = u_colorA + u_colorC;
+      }
+  );
+  // clang-format on
+  const GLint kColorULocation = 1;
+  const GLint kNonexistingLocation = 5;
+  const GLint kUnboundLocation = 6;
+
+  GLuint vertex_shader =
+      GLTestHelper::LoadShader(GL_VERTEX_SHADER, kVertexShaderString);
+  GLuint fragment_shader =
+      GLTestHelper::LoadShader(GL_FRAGMENT_SHADER, kFragmentShaderString);
+  GLuint program = glCreateProgram();
+  glBindUniformLocationCHROMIUM(program, kColorULocation, "u_colorU");
+  // The non-existing uniform should behave like existing, but optimized away
+  // uniform.
+  glBindUniformLocationCHROMIUM(program, kNonexistingLocation, "nonexisting");
+  // Let A and C be assigned automatic locations.
+  glAttachShader(program, vertex_shader);
+  glAttachShader(program, fragment_shader);
+  glLinkProgram(program);
+  GLint linked = 0;
+  glGetProgramiv(program, GL_LINK_STATUS, &linked);
+  EXPECT_EQ(1, linked);
+  glUseProgram(program);
+
+  // No errors on bound locations, since caller does not know
+  // if the driver optimizes them away or not.
+  glUniform1f(kColorULocation, 0.25f);
+  EXPECT_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+
+  // No errors on bound locations of names that do not exist
+  // in the shader. Otherwise it would be inconsistent wrt the
+  // optimization case.
+  glUniform1f(kNonexistingLocation, 0.25f);
+  EXPECT_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+
+  // The above are equal to updating -1.
+  glUniform1f(-1, 0.25f);
+  EXPECT_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+
+  // No errors when updating with other type either.
+  // The type can not be known with the non-existing case.
+  glUniform2f(kColorULocation, 0.25f, 0.25f);
+  EXPECT_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+  glUniform2f(kNonexistingLocation, 0.25f, 0.25f);
+  EXPECT_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+  glUniform2f(-1, 0.25f, 0.25f);
+  EXPECT_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+
+  // Ensure that driver or ANGLE has optimized the variable
+  // away and the test tests what it is supposed to.
+  EXPECT_EQ(-1, glGetUniformLocation(program, "u_colorU"));
+
+  // The bound location gets marked as used and the driver
+  // does not allocate other variables to that location.
+  EXPECT_NE(kColorULocation, glGetUniformLocation(program, "u_colorA"));
+  EXPECT_NE(kColorULocation, glGetUniformLocation(program, "u_colorC"));
+  EXPECT_NE(kNonexistingLocation, glGetUniformLocation(program, "u_colorA"));
+  EXPECT_NE(kNonexistingLocation, glGetUniformLocation(program, "u_colorC"));
+
+  // Unintuitive: while specifying value works, getting the value does not.
+  GLfloat get_result = 0.0f;
+  glGetUniformfv(program, kColorULocation, &get_result);
+  EXPECT_EQ(static_cast<GLenum>(GL_INVALID_OPERATION), glGetError());
+  glGetUniformfv(program, kNonexistingLocation, &get_result);
+  EXPECT_EQ(static_cast<GLenum>(GL_INVALID_OPERATION), glGetError());
+  glGetUniformfv(program, -1, &get_result);
+  EXPECT_EQ(static_cast<GLenum>(GL_INVALID_OPERATION), glGetError());
+
+  // Updating an unbound, non-existing location still causes
+  // an error.
+  glUniform1f(kUnboundLocation, 0.25f);
+  EXPECT_EQ(static_cast<GLenum>(GL_INVALID_OPERATION), glGetError());
+}
+
+INSTANTIATE_TEST_CASE_P(WithAndWithoutShaderNameMapping,
+                        BindUniformLocationTest,
+                        ::testing::Bool());
 
 }  // namespace gpu
 

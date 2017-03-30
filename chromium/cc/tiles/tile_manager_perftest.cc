@@ -2,18 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "cc/debug/lap_timer.h"
 #include "cc/raster/raster_buffer.h"
 #include "cc/test/begin_frame_args_test.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/fake_display_list_raster_source.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/fake_picture_layer_impl.h"
-#include "cc/test/fake_picture_pile_impl.h"
 #include "cc/test/fake_tile_manager.h"
 #include "cc/test/fake_tile_manager_client.h"
 #include "cc/test/test_shared_bitmap_manager.h"
@@ -36,12 +40,10 @@ static const int kTimeCheckInterval = 10;
 class FakeTileTaskRunnerImpl : public TileTaskRunner, public TileTaskClient {
  public:
   // Overridden from TileTaskRunner:
-  void SetClient(TileTaskRunnerClient* client) override {}
   void Shutdown() override {}
-  void ScheduleTasks(TileTaskQueue* queue) override {
-    for (TileTaskQueue::Item::Vector::const_iterator it = queue->items.begin();
-         it != queue->items.end(); ++it) {
-      RasterTask* task = it->task;
+  void ScheduleTasks(TaskGraph* graph) override {
+    for (auto& node : graph->nodes) {
+      TileTask* task = static_cast<TileTask*>(node.task);
 
       task->WillSchedule();
       task->ScheduleOnOriginThread(this);
@@ -51,22 +53,22 @@ class FakeTileTaskRunnerImpl : public TileTaskRunner, public TileTaskClient {
     }
   }
   void CheckForCompletedTasks() override {
-    for (RasterTask::Vector::iterator it = completed_tasks_.begin();
-         it != completed_tasks_.end();
-         ++it) {
-      RasterTask* task = it->get();
+    for (TileTask::Vector::iterator it = completed_tasks_.begin();
+         it != completed_tasks_.end(); ++it) {
+      TileTask* task = it->get();
 
       task->WillComplete();
       task->CompleteOnOriginThread(this);
       task->DidComplete();
-
-      task->RunReplyOnOriginThread();
     }
     completed_tasks_.clear();
   }
-  ResourceFormat GetResourceFormat() const override { return RGBA_8888; }
-  bool GetResourceRequiresSwizzle() const override {
-    return !PlatformColor::SameComponentOrder(GetResourceFormat());
+  ResourceFormat GetResourceFormat(bool must_support_alpha) const override {
+    return RGBA_8888;
+  }
+  bool GetResourceRequiresSwizzle(bool must_support_alpha) const override {
+    return !PlatformColor::SameComponentOrder(
+        GetResourceFormat(must_support_alpha));
   }
 
   // Overridden from TileTaskClient:
@@ -79,7 +81,7 @@ class FakeTileTaskRunnerImpl : public TileTaskRunner, public TileTaskClient {
   void ReleaseBufferForRaster(scoped_ptr<RasterBuffer> buffer) override {}
 
  private:
-  RasterTask::Vector completed_tasks_;
+  TileTask::Vector completed_tasks_;
 };
 base::LazyInstance<FakeTileTaskRunnerImpl> g_fake_tile_task_runner =
     LAZY_INSTANCE_INITIALIZER;
@@ -90,9 +92,10 @@ class TileManagerPerfTest : public testing::Test {
       : memory_limit_policy_(ALLOW_ANYTHING),
         max_tiles_(10000),
         id_(7),
-        proxy_(base::ThreadTaskRunnerHandle::Get()),
+        task_runner_provider_(base::ThreadTaskRunnerHandle::Get()),
+        output_surface_(FakeOutputSurface::Create3d()),
         host_impl_(LayerTreeSettings(),
-                   &proxy_,
+                   &task_runner_provider_,
                    &shared_bitmap_manager_,
                    &task_graph_runner_),
         timer_(kWarmupRuns,
@@ -111,7 +114,7 @@ class TileManagerPerfTest : public testing::Test {
 
     global_state_ = state;
     host_impl_.resource_pool()->SetResourceUsageLimits(
-        state.soft_memory_limit_in_bytes, 0, state.num_resources_limit);
+        state.soft_memory_limit_in_bytes, state.num_resources_limit);
     host_impl_.tile_manager()->SetGlobalStateForTesting(state);
   }
 
@@ -121,18 +124,19 @@ class TileManagerPerfTest : public testing::Test {
   }
 
   virtual void InitializeRenderer() {
-    host_impl_.InitializeRenderer(FakeOutputSurface::Create3d().Pass());
+    host_impl_.SetVisible(true);
+    host_impl_.InitializeRenderer(output_surface_.get());
     tile_manager()->SetTileTaskRunnerForTesting(
         g_fake_tile_task_runner.Pointer());
   }
 
   void SetupDefaultTrees(const gfx::Size& layer_bounds) {
-    scoped_refptr<FakePicturePileImpl> pending_pile =
-        FakePicturePileImpl::CreateFilledPile(kDefaultTileSize, layer_bounds);
-    scoped_refptr<FakePicturePileImpl> active_pile =
-        FakePicturePileImpl::CreateFilledPile(kDefaultTileSize, layer_bounds);
+    scoped_refptr<FakeDisplayListRasterSource> pending_raster_source =
+        FakeDisplayListRasterSource::CreateFilled(layer_bounds);
+    scoped_refptr<FakeDisplayListRasterSource> active_raster_source =
+        FakeDisplayListRasterSource::CreateFilled(layer_bounds);
 
-    SetupTrees(pending_pile, active_pile);
+    SetupTrees(pending_raster_source, active_raster_source);
   }
 
   void ActivateTree() {
@@ -150,24 +154,26 @@ class TileManagerPerfTest : public testing::Test {
     active_root_layer_->set_fixed_tile_size(tile_size);
   }
 
-  void SetupTrees(scoped_refptr<PicturePileImpl> pending_pile,
-                  scoped_refptr<PicturePileImpl> active_pile) {
-    SetupPendingTree(active_pile);
+  void SetupTrees(scoped_refptr<DisplayListRasterSource> pending_raster_source,
+                  scoped_refptr<DisplayListRasterSource> active_raster_source) {
+    SetupPendingTree(active_raster_source);
     ActivateTree();
-    SetupPendingTree(pending_pile);
+    SetupPendingTree(pending_raster_source);
   }
 
-  void SetupPendingTree(scoped_refptr<PicturePileImpl> pile) {
+  void SetupPendingTree(scoped_refptr<DisplayListRasterSource> raster_source) {
     host_impl_.CreatePendingTree();
     LayerTreeImpl* pending_tree = host_impl_.pending_tree();
     // Clear recycled tree.
     pending_tree->DetachLayerTree();
 
     scoped_ptr<FakePictureLayerImpl> pending_layer =
-        FakePictureLayerImpl::CreateWithRasterSource(pending_tree, id_, pile);
+        FakePictureLayerImpl::CreateWithRasterSource(pending_tree, id_,
+                                                     raster_source);
     pending_layer->SetDrawsContent(true);
-    pending_layer->SetHasRenderSurface(true);
-    pending_tree->SetRootLayer(pending_layer.Pass());
+    pending_layer->SetForceRenderSurface(true);
+    pending_tree->SetRootLayer(std::move(pending_layer));
+    pending_tree->BuildPropertyTreesForTesting();
 
     pending_root_layer_ = static_cast<FakePictureLayerImpl*>(
         host_impl_.pending_tree()->LayerById(id_));
@@ -181,9 +187,8 @@ class TileManagerPerfTest : public testing::Test {
     int priority_count = 0;
 
     std::vector<FakePictureLayerImpl*> layers = CreateLayers(layer_count, 10);
-    bool resourceless_software_draw = false;
     for (const auto& layer : layers)
-      layer->UpdateTiles(resourceless_software_draw);
+      layer->UpdateTiles();
 
     timer_.Reset();
     do {
@@ -209,9 +214,8 @@ class TileManagerPerfTest : public testing::Test {
                                  NEW_CONTENT_TAKES_PRIORITY};
 
     std::vector<FakePictureLayerImpl*> layers = CreateLayers(layer_count, 100);
-    bool resourceless_software_draw = false;
     for (const auto& layer : layers)
-      layer->UpdateTiles(resourceless_software_draw);
+      layer->UpdateTiles();
 
     int priority_count = 0;
     timer_.Reset();
@@ -245,9 +249,8 @@ class TileManagerPerfTest : public testing::Test {
     int priority_count = 0;
 
     std::vector<FakePictureLayerImpl*> layers = CreateLayers(layer_count, 10);
-    bool resourceless_software_draw = false;
     for (const auto& layer : layers) {
-      layer->UpdateTiles(resourceless_software_draw);
+      layer->UpdateTiles();
       for (size_t i = 0; i < layer->num_tilings(); ++i) {
         tile_manager()->InitializeTilesWithResourcesForTesting(
             layer->tilings()->tiling_at(i)->AllTilesForTesting());
@@ -280,9 +283,8 @@ class TileManagerPerfTest : public testing::Test {
 
     std::vector<FakePictureLayerImpl*> layers =
         CreateLayers(layer_count, tile_count);
-    bool resourceless_software_draw = false;
     for (const auto& layer : layers) {
-      layer->UpdateTiles(resourceless_software_draw);
+      layer->UpdateTiles();
       for (size_t i = 0; i < layer->num_tilings(); ++i) {
         tile_manager()->InitializeTilesWithResourcesForTesting(
             layer->tilings()->tiling_at(i)->AllTilesForTesting());
@@ -346,19 +348,22 @@ class TileManagerPerfTest : public testing::Test {
     int next_id = id_ + 1;
 
     // Create the rest of the layers as children of the root layer.
-    scoped_refptr<FakePicturePileImpl> pile =
-        FakePicturePileImpl::CreateFilledPile(kDefaultTileSize, layer_bounds);
+    scoped_refptr<FakeDisplayListRasterSource> raster_source =
+        FakeDisplayListRasterSource::CreateFilled(layer_bounds);
     while (static_cast<int>(layers.size()) < layer_count) {
       scoped_ptr<FakePictureLayerImpl> layer =
           FakePictureLayerImpl::CreateWithRasterSource(
-              host_impl_.pending_tree(), next_id, pile);
+              host_impl_.pending_tree(), next_id, raster_source);
       layer->SetBounds(layer_bounds);
       layer->SetDrawsContent(true);
       layers.push_back(layer.get());
-      pending_root_layer_->AddChild(layer.Pass());
+      pending_root_layer_->AddChild(std::move(layer));
       ++next_id;
     }
 
+    // Property trees need to be rebuilt because layers were added above.
+    host_impl_.pending_tree()->property_trees()->needs_rebuild = true;
+    host_impl_.pending_tree()->BuildPropertyTreesForTesting();
     bool update_lcd_text = false;
     host_impl_.pending_tree()->UpdateDrawProperties(update_lcd_text);
     for (FakePictureLayerImpl* layer : layers)
@@ -387,11 +392,10 @@ class TileManagerPerfTest : public testing::Test {
         CreateLayers(layer_count, approximate_tile_count_per_layer);
 
     timer_.Reset();
-    bool resourceless_software_draw = false;
     do {
       host_impl_.AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
       for (const auto& layer : layers)
-        layer->UpdateTiles(resourceless_software_draw);
+        layer->UpdateTiles();
 
       GlobalStateThatImpactsTilePriority global_state(GlobalStateForTest());
       tile_manager()->PrepareTiles(global_state);
@@ -413,17 +417,14 @@ class TileManagerPerfTest : public testing::Test {
   TileMemoryLimitPolicy memory_limit_policy_;
   int max_tiles_;
   int id_;
-  FakeImplProxy proxy_;
+  FakeImplTaskRunnerProvider task_runner_provider_;
+  scoped_ptr<OutputSurface> output_surface_;
   FakeLayerTreeHostImpl host_impl_;
   FakePictureLayerImpl* pending_root_layer_;
   FakePictureLayerImpl* active_root_layer_;
   LapTimer timer_;
   LayerTreeSettings settings_;
-
-  static const gfx::Size kDefaultTileSize;
 };
-
-const gfx::Size TileManagerPerfTest::kDefaultTileSize(100, 100);
 
 TEST_F(TileManagerPerfTest, PrepareTiles) {
   RunPrepareTilesTest("2_100", 2, 100);

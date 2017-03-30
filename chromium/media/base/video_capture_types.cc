@@ -5,10 +5,26 @@
 #include "media/base/video_capture_types.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/limits.h"
+#include "media/base/video_frame.h"
 
 namespace media {
+
+// This list is ordered by precedence of use.
+static VideoPixelFormat const kSupportedCapturePixelFormats[] = {
+    PIXEL_FORMAT_I420,
+    PIXEL_FORMAT_YV12,
+    PIXEL_FORMAT_NV12,
+    PIXEL_FORMAT_NV21,
+    PIXEL_FORMAT_UYVY,
+    PIXEL_FORMAT_YUY2,
+    PIXEL_FORMAT_RGB24,
+    PIXEL_FORMAT_RGB32,
+    PIXEL_FORMAT_ARGB,
+    PIXEL_FORMAT_MJPEG,
+};
 
 VideoCaptureFormat::VideoCaptureFormat()
     : frame_rate(0.0f),
@@ -42,77 +58,25 @@ bool VideoCaptureFormat::IsValid() const {
          (frame_size.GetArea() < media::limits::kMaxCanvas) &&
          (frame_rate >= 0.0f) &&
          (frame_rate < media::limits::kMaxFramesPerSecond) &&
-         (pixel_storage != PIXEL_STORAGE_TEXTURE ||
-          pixel_format == PIXEL_FORMAT_ARGB);
+         (pixel_format >= PIXEL_FORMAT_UNKNOWN &&
+          pixel_format <= PIXEL_FORMAT_MAX) &&
+         (pixel_storage == PIXEL_STORAGE_CPU ||
+          pixel_storage == PIXEL_STORAGE_GPUMEMORYBUFFER);
 }
 
 size_t VideoCaptureFormat::ImageAllocationSize() const {
-  size_t result_frame_size = frame_size.GetArea();
-  switch (pixel_format) {
-    case PIXEL_FORMAT_I420:
-    case PIXEL_FORMAT_YV12:
-    case PIXEL_FORMAT_NV12:
-    case PIXEL_FORMAT_NV21:
-      result_frame_size = result_frame_size * 3 / 2;
-      break;
-    case PIXEL_FORMAT_UYVY:
-    case PIXEL_FORMAT_YUY2:
-      result_frame_size *= 2;
-      break;
-    case PIXEL_FORMAT_RGB24:
-      result_frame_size *= 3;
-      break;
-    case PIXEL_FORMAT_RGB32:
-    case PIXEL_FORMAT_ARGB:
-      result_frame_size *= 4;
-      break;
-    case PIXEL_FORMAT_MJPEG:
-      result_frame_size = 0;
-      break;
-    default:  // Sizes for the rest of the formats are unknown.
-      NOTREACHED() << "Unknown pixel format provided.";
-      break;
-  }
-  return result_frame_size;
+  return VideoFrame::AllocationSize(pixel_format, frame_size);
 }
 
 //static
 std::string VideoCaptureFormat::ToString(const VideoCaptureFormat& format) {
-  return base::StringPrintf("(%s)@%.3ffps, pixel format: %s storage: %s.",
-                            format.frame_size.ToString().c_str(),
-                            format.frame_rate,
-                            PixelFormatToString(format.pixel_format).c_str(),
-                            PixelStorageToString(format.pixel_storage).c_str());
-}
-
-// static
-std::string VideoCaptureFormat::PixelFormatToString(VideoPixelFormat format) {
-  switch (format) {
-    case PIXEL_FORMAT_UNKNOWN:
-      return "UNKNOWN";
-    case PIXEL_FORMAT_I420:
-      return "I420";
-    case PIXEL_FORMAT_YUY2:
-      return "YUY2";
-    case PIXEL_FORMAT_UYVY:
-      return "UYVY";
-    case PIXEL_FORMAT_RGB24:
-      return "RGB24";
-    case PIXEL_FORMAT_RGB32:
-      return "RGB32";
-    case PIXEL_FORMAT_ARGB:
-      return "ARGB";
-    case PIXEL_FORMAT_MJPEG:
-      return "MJPEG";
-    case PIXEL_FORMAT_NV12:
-      return "NV12";
-    case PIXEL_FORMAT_NV21:
-      return "NV21";
-    case PIXEL_FORMAT_YV12:
-      return "YV12";
-  }
-  NOTREACHED() << "Invalid VideoPixelFormat provided: " << format;
-  return std::string();
+  // Beware: This string is parsed by manager.js:parseVideoCaptureFormat_,
+  // take care when changing the formatting.
+  return base::StringPrintf(
+      "(%s)@%.3ffps, pixel format: %s, storage: %s",
+      format.frame_size.ToString().c_str(), format.frame_rate,
+      VideoPixelFormatToString(format.pixel_format).c_str(),
+      PixelStorageToString(format.pixel_storage).c_str());
 }
 
 // static
@@ -121,8 +85,6 @@ std::string VideoCaptureFormat::PixelStorageToString(
   switch (storage) {
     case PIXEL_STORAGE_CPU:
       return "CPU";
-    case PIXEL_STORAGE_TEXTURE:
-      return "TEXTURE";
     case PIXEL_STORAGE_GPUMEMORYBUFFER:
       return "GPUMEMORYBUFFER";
   }
@@ -131,9 +93,31 @@ std::string VideoCaptureFormat::PixelStorageToString(
   return std::string();
 }
 
+// static
+bool VideoCaptureFormat::ComparePixelFormatPreference(
+    const VideoPixelFormat& lhs,
+    const VideoPixelFormat& rhs) {
+  const auto& format_lhs = std::find(
+      kSupportedCapturePixelFormats,
+      kSupportedCapturePixelFormats + arraysize(kSupportedCapturePixelFormats),
+      lhs);
+  const auto& format_rhs = std::find(
+      kSupportedCapturePixelFormats,
+      kSupportedCapturePixelFormats + arraysize(kSupportedCapturePixelFormats),
+      rhs);
+  return format_lhs < format_rhs;
+}
+
 VideoCaptureParams::VideoCaptureParams()
     : resolution_change_policy(RESOLUTION_POLICY_FIXED_RESOLUTION),
-      use_gpu_memory_buffers(false) {
+      power_line_frequency(PowerLineFrequency::FREQUENCY_DEFAULT) {}
+
+bool VideoCaptureParams::IsValid() const {
+  return requested_format.IsValid() &&
+         resolution_change_policy >= RESOLUTION_POLICY_FIXED_RESOLUTION &&
+         resolution_change_policy <= RESOLUTION_POLICY_LAST &&
+         power_line_frequency >= PowerLineFrequency::FREQUENCY_DEFAULT &&
+         power_line_frequency <= PowerLineFrequency::FREQUENCY_MAX;
 }
 
 }  // namespace media

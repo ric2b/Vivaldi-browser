@@ -12,6 +12,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/thread_task_runner_handle.h"
 #include "ui/compositor/compositor.h"
@@ -94,7 +95,7 @@ class TestCompositorHostMac : public TestCompositorHost,
 
   ui::ContextFactory* context_factory_;
 
-  scoped_ptr<ui::Compositor> compositor_;
+  ui::Compositor compositor_;
 
   // Owned.  Released when window is closed.
   NSWindow* window_;
@@ -105,14 +106,21 @@ class TestCompositorHostMac : public TestCompositorHost,
 TestCompositorHostMac::TestCompositorHostMac(
     const gfx::Rect& bounds,
     ui::ContextFactory* context_factory)
-    : bounds_(bounds), context_factory_(context_factory), window_(nil) {
+    : bounds_(bounds),
+      context_factory_(context_factory),
+      compositor_(context_factory, base::ThreadTaskRunnerHandle::Get()),
+      window_(nil) {
 }
 
 TestCompositorHostMac::~TestCompositorHostMac() {
   // Release reference to |compositor_|.  Important because the |compositor_|
   // holds |this| as its delegate, so that reference must be removed here.
   [[window_ contentView] setCompositor:NULL];
-  [window_ setContentView:nil];
+  {
+    base::scoped_nsobject<NSView> new_view(
+        [[NSView alloc] initWithFrame:NSZeroRect]);
+    [window_ setContentView:new_view.get()];
+  }
 
   [window_ orderOut:nil];
   [window_ close];
@@ -130,17 +138,15 @@ void TestCompositorHostMac::Show() {
                               defer:NO];
   base::scoped_nsobject<AcceleratedTestView> view(
       [[AcceleratedTestView alloc] init]);
-  compositor_.reset(new ui::Compositor(view,
-                                       context_factory_,
-                                       base::ThreadTaskRunnerHandle::Get()));
-  compositor_->SetScaleAndSize(1.0f, bounds_.size());
-  [view setCompositor:compositor_.get()];
+  compositor_.SetAcceleratedWidget(view);
+  compositor_.SetScaleAndSize(1.0f, bounds_.size());
+  [view setCompositor:&compositor_];
   [window_ setContentView:view];
   [window_ orderFront:nil];
 }
 
 ui::Compositor* TestCompositorHostMac::GetCompositor() {
-  return compositor_.get();
+  return &compositor_;
 }
 
 // static

@@ -4,8 +4,12 @@
 
 #include "chrome/browser/safe_browsing/two_phase_uploader.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include <limits>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/task_runner.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -41,8 +45,8 @@ class TwoPhaseUploaderImpl : public net::URLFetcherDelegate,
   // net::URLFetcherDelegate implementation:
   void OnURLFetchComplete(const net::URLFetcher* source) override;
   void OnURLFetchUploadProgress(const net::URLFetcher* source,
-                                int64 current,
-                                int64 total) override;
+                                int64_t current,
+                                int64_t total) override;
 
  private:
   void UploadMetadata();
@@ -143,13 +147,13 @@ void TwoPhaseUploaderImpl::OnURLFetchComplete(const net::URLFetcher* source) {
       return;
     default:
       NOTREACHED();
-  };
+  }
 }
 
 void TwoPhaseUploaderImpl::OnURLFetchUploadProgress(
     const net::URLFetcher* source,
-    int64 current,
-    int64 total) {
+    int64_t current,
+    int64_t total) {
   DCHECK(CalledOnValidThread());
   DVLOG(3) << __FUNCTION__ << " " << source->GetURL().spec()
            << " " << current << "/" << total;
@@ -175,8 +179,9 @@ void TwoPhaseUploaderImpl::UploadFile() {
   url_fetcher_ =
       net::URLFetcher::Create(upload_url_, net::URLFetcher::PUT, this);
   url_fetcher_->SetRequestContext(url_request_context_getter_.get());
-  url_fetcher_->SetUploadFilePath(
-      kUploadContentType, file_path_, 0, kuint64max, file_task_runner_);
+  url_fetcher_->SetUploadFilePath(kUploadContentType, file_path_, 0,
+                                  std::numeric_limits<uint64_t>::max(),
+                                  file_task_runner_);
   url_fetcher_->Start();
 }
 

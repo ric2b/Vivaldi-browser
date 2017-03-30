@@ -5,11 +5,15 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_RENDER_FRAME_PROXY_HOST_H_
 #define CONTENT_BROWSER_FRAME_HOST_RENDER_FRAME_PROXY_HOST_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "third_party/WebKit/public/platform/WebFocusType.h"
 
 struct FrameMsg_PostMessage_Params;
 
@@ -106,9 +110,15 @@ class RenderFrameProxyHost
     return cross_process_frame_connector_.get();
   }
 
-  // Set the frame's opener to null in the renderer process in response to an
-  // action in another renderer process.
-  void DisownOpener();
+  // Update the frame's opener in the renderer process in response to the
+  // opener being modified (e.g., with window.open or being set to null) in
+  // another renderer process.
+  void UpdateOpener();
+
+  // Set this proxy as the focused frame in the renderer process.  This is
+  // called to replicate the focused frame when a frame in a different process
+  // becomes focused.
+  void SetFocusedFrame();
 
   void set_render_frame_proxy_created(bool created) {
     render_frame_proxy_created_ = created;
@@ -122,6 +132,9 @@ class RenderFrameProxyHost
   void OnDetach();
   void OnOpenURL(const FrameHostMsg_OpenURL_Params& params);
   void OnRouteMessageEvent(const FrameMsg_PostMessage_Params& params);
+  void OnDidChangeOpener(int32_t opener_routing_id);
+  void OnAdvanceFocus(blink::WebFocusType type, int32_t source_routing_id);
+  void OnFrameFocused();
 
   // This RenderFrameProxyHost's routing id.
   int routing_id_;

@@ -7,8 +7,8 @@
 
 #include <list>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/media_export.h"
@@ -162,24 +162,6 @@ class MEDIA_EXPORT Decryptor {
  private:
   DISALLOW_COPY_AND_ASSIGN(Decryptor);
 };
-
-// Callback to notify that the decryptor has been completely attached into the
-// pipeline. Parameter indicates whether the operation succeeded.
-typedef base::Callback<void(bool)> DecryptorAttachedCB;
-
-// Callback to notify that a decryptor is ready. DecryptorAttachedCB is called
-// when the decryptor has been completely inserted into the pipeline.
-typedef base::Callback<void(Decryptor*, const DecryptorAttachedCB&)>
-    DecryptorReadyCB;
-
-// Callback to set/cancel a DecryptorReadyCB.
-// Calling this callback with a non-null callback registers decryptor ready
-// notification. When the decryptor is ready, notification will be sent
-// through the provided callback.
-// Calling this callback with a null callback cancels previously registered
-// decryptor ready notification. Any previously provided callback will be
-// fired immediately with NULL.
-typedef base::Callback<void(const DecryptorReadyCB&)> SetDecryptorReadyCB;
 
 }  // namespace media
 

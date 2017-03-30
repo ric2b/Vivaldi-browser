@@ -4,8 +4,11 @@
 
 #include "content/common/gpu/media/vaapi_video_decode_accelerator.h"
 
+#include <string.h>
+
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -16,6 +19,7 @@
 #include "content/common/gpu/media/h264_decoder.h"
 #include "content/common/gpu/media/vaapi_picture.h"
 #include "content/common/gpu/media/vp8_decoder.h"
+#include "content/common/gpu/media/vp9_decoder.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/video/picture.h"
 #include "third_party/libva/va/va_dec_vp8.h"
@@ -28,7 +32,8 @@ namespace {
 // UMA errors that the VaapiVideoDecodeAccelerator class reports.
 enum VAVDADecoderFailure {
   VAAPI_ERROR = 0,
-  VAVDA_DECODER_FAILURES_MAX,
+  // UMA requires that max must be greater than 1.
+  VAVDA_DECODER_FAILURES_MAX = 2,
 };
 }
 
@@ -49,25 +54,24 @@ static void ReportToUMA(VAVDADecoderFailure failure) {
 class VaapiVideoDecodeAccelerator::VaapiDecodeSurface
     : public base::RefCountedThreadSafe<VaapiDecodeSurface> {
  public:
-  VaapiDecodeSurface(int32 bitstream_id,
+  VaapiDecodeSurface(int32_t bitstream_id,
                      const scoped_refptr<VASurface>& va_surface);
 
-  int32 bitstream_id() const { return bitstream_id_; }
+  int32_t bitstream_id() const { return bitstream_id_; }
   scoped_refptr<VASurface> va_surface() { return va_surface_; }
 
  private:
   friend class base::RefCountedThreadSafe<VaapiDecodeSurface>;
   ~VaapiDecodeSurface();
 
-  int32 bitstream_id_;
+  int32_t bitstream_id_;
   scoped_refptr<VASurface> va_surface_;
 };
 
 VaapiVideoDecodeAccelerator::VaapiDecodeSurface::VaapiDecodeSurface(
-    int32 bitstream_id,
+    int32_t bitstream_id,
     const scoped_refptr<VASurface>& va_surface)
-    : bitstream_id_(bitstream_id), va_surface_(va_surface) {
-}
+    : bitstream_id_(bitstream_id), va_surface_(va_surface) {}
 
 VaapiVideoDecodeAccelerator::VaapiDecodeSurface::~VaapiDecodeSurface() {
 }
@@ -198,6 +202,60 @@ class VaapiVideoDecodeAccelerator::VaapiVP8Accelerator
   DISALLOW_COPY_AND_ASSIGN(VaapiVP8Accelerator);
 };
 
+class VaapiVP9Picture : public VP9Picture {
+ public:
+  VaapiVP9Picture(
+      const scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>&
+          dec_surface);
+
+  VaapiVP9Picture* AsVaapiVP9Picture() override { return this; }
+  scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> dec_surface() {
+    return dec_surface_;
+  }
+
+ private:
+  ~VaapiVP9Picture() override;
+
+  scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> dec_surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(VaapiVP9Picture);
+};
+
+VaapiVP9Picture::VaapiVP9Picture(
+    const scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>&
+        dec_surface)
+    : dec_surface_(dec_surface) {}
+
+VaapiVP9Picture::~VaapiVP9Picture() {}
+
+class VaapiVideoDecodeAccelerator::VaapiVP9Accelerator
+    : public VP9Decoder::VP9Accelerator {
+ public:
+  VaapiVP9Accelerator(VaapiVideoDecodeAccelerator* vaapi_dec,
+                      VaapiWrapper* vaapi_wrapper);
+  ~VaapiVP9Accelerator() override;
+
+  // VP9Decoder::VP9Accelerator implementation.
+  scoped_refptr<VP9Picture> CreateVP9Picture() override;
+
+  bool SubmitDecode(
+      const scoped_refptr<VP9Picture>& pic,
+      const media::Vp9Segmentation& seg,
+      const media::Vp9LoopFilter& lf,
+      const std::vector<scoped_refptr<VP9Picture>>& ref_pictures) override;
+
+  bool OutputPicture(const scoped_refptr<VP9Picture>& pic) override;
+
+ private:
+  scoped_refptr<VaapiDecodeSurface> VP9PictureToVaapiDecodeSurface(
+      const scoped_refptr<VP9Picture>& pic);
+
+  VaapiWrapper* vaapi_wrapper_;
+  VaapiVideoDecodeAccelerator* vaapi_dec_;
+
+  DISALLOW_COPY_AND_ASSIGN(VaapiVP9Accelerator);
+};
+
 VaapiVideoDecodeAccelerator::InputBuffer::InputBuffer() : id(0), size(0) {
 }
 
@@ -224,7 +282,7 @@ void VaapiVideoDecodeAccelerator::NotifyError(Error error) {
 }
 
 VaapiPicture* VaapiVideoDecodeAccelerator::PictureById(
-    int32 picture_buffer_id) {
+    int32_t picture_buffer_id) {
   Pictures::iterator it = pictures_.find(picture_buffer_id);
   if (it == pictures_.end()) {
     LOG(ERROR) << "Picture id " << picture_buffer_id << " does not exist";
@@ -236,7 +294,7 @@ VaapiPicture* VaapiVideoDecodeAccelerator::PictureById(
 
 VaapiVideoDecodeAccelerator::VaapiVideoDecodeAccelerator(
     const base::Callback<bool(void)>& make_context_current,
-    const base::Callback<void(uint32, uint32, scoped_refptr<gfx::GLImage>)>&
+    const base::Callback<void(uint32_t, uint32_t, scoped_refptr<gl::GLImage>)>&
         bind_image)
     : make_context_current_(make_context_current),
       state_(kUninitialized),
@@ -260,12 +318,19 @@ VaapiVideoDecodeAccelerator::~VaapiVideoDecodeAccelerator() {
   DCHECK_EQ(message_loop_, base::MessageLoop::current());
 }
 
-bool VaapiVideoDecodeAccelerator::Initialize(media::VideoCodecProfile profile,
+bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
                                              Client* client) {
   DCHECK_EQ(message_loop_, base::MessageLoop::current());
 
+  if (config.is_encrypted) {
+    NOTREACHED() << "Encrypted streams are not supported for this VDA";
+    return false;
+  }
+
   client_ptr_factory_.reset(new base::WeakPtrFactory<Client>(client));
   client_ = client_ptr_factory_->GetWeakPtr();
+
+  media::VideoCodecProfile profile = config.profile;
 
   base::AutoLock auto_lock(lock_);
   DCHECK_EQ(state_, kUninitialized);
@@ -301,6 +366,10 @@ bool VaapiVideoDecodeAccelerator::Initialize(media::VideoCodecProfile profile,
              profile <= media::VP8PROFILE_MAX) {
     vp8_accelerator_.reset(new VaapiVP8Accelerator(this, vaapi_wrapper_.get()));
     decoder_.reset(new VP8Decoder(vp8_accelerator_.get()));
+  } else if (profile >= media::VP9PROFILE_MIN &&
+             profile <= media::VP9PROFILE_MAX) {
+    vp9_accelerator_.reset(new VaapiVP9Accelerator(this, vaapi_wrapper_.get()));
+    decoder_.reset(new VP9Decoder(vp9_accelerator_.get()));
   } else {
     DLOG(ERROR) << "Unsupported profile " << profile;
     return false;
@@ -315,11 +384,11 @@ bool VaapiVideoDecodeAccelerator::Initialize(media::VideoCodecProfile profile,
 
 void VaapiVideoDecodeAccelerator::OutputPicture(
     const scoped_refptr<VASurface>& va_surface,
-    int32 input_id,
+    int32_t input_id,
     VaapiPicture* picture) {
   DCHECK_EQ(message_loop_, base::MessageLoop::current());
 
-  int32 output_id = picture->picture_buffer_id();
+  int32_t output_id = picture->picture_buffer_id();
 
   TRACE_EVENT2("Video Decoder", "VAVDA::OutputSurface",
                "input_id", input_id,
@@ -338,10 +407,11 @@ void VaapiVideoDecodeAccelerator::OutputPicture(
   DVLOG(4) << "Notifying output picture id " << output_id
            << " for input "<< input_id << " is ready";
   // TODO(posciak): Use visible size from decoder here instead
-  // (crbug.com/402760).
+  // (crbug.com/402760). Passing (0, 0) results in the client using the
+  // visible size extracted from the container instead.
   if (client_)
     client_->PictureReady(media::Picture(output_id, input_id,
-                                         gfx::Rect(picture->size()),
+                                         gfx::Rect(0, 0),
                                          picture->AllowOverlay()));
 }
 
@@ -432,7 +502,7 @@ bool VaapiVideoDecodeAccelerator::GetInputBuffer_Locked() {
                << " size: " << curr_input_buffer_->size;
 
       decoder_->SetStream(
-          static_cast<uint8*>(curr_input_buffer_->shm->memory()),
+          static_cast<uint8_t*>(curr_input_buffer_->shm->memory()),
           curr_input_buffer_->size);
       return true;
 
@@ -448,7 +518,7 @@ void VaapiVideoDecodeAccelerator::ReturnCurrInputBuffer_Locked() {
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
   DCHECK(curr_input_buffer_.get());
 
-  int32 id = curr_input_buffer_->id;
+  int32_t id = curr_input_buffer_->id;
   curr_input_buffer_.reset();
   DVLOG(4) << "End of input buffer " << id;
   message_loop_->PostTask(FROM_HERE, base::Bind(
@@ -651,16 +721,15 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
     output_buffers_.pop();
 
   RETURN_AND_NOTIFY_ON_FAILURE(
-      buffers.size() == requested_num_pics_,
+      buffers.size() >= requested_num_pics_,
       "Got an invalid number of picture buffers. (Got " << buffers.size()
       << ", requested " << requested_num_pics_ << ")", INVALID_ARGUMENT, );
   DCHECK(requested_pic_size_ == buffers[0].size());
 
   std::vector<VASurfaceID> va_surface_ids;
   RETURN_AND_NOTIFY_ON_FAILURE(
-      vaapi_wrapper_->CreateSurfaces(requested_pic_size_,
-                                     buffers.size(),
-                                     &va_surface_ids),
+      vaapi_wrapper_->CreateSurfaces(VA_RT_FORMAT_YUV420, requested_pic_size_,
+                                     buffers.size(), &va_surface_ids),
       "Failed creating VA Surfaces", PLATFORM_FAILURE, );
   DCHECK_EQ(va_surface_ids.size(), buffers.size());
 
@@ -670,10 +739,10 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
              << " VASurfaceID: " << va_surface_ids[i];
 
     linked_ptr<VaapiPicture> picture(VaapiPicture::CreatePicture(
-        vaapi_wrapper_.get(), make_context_current_, buffers[i].id(),
+        vaapi_wrapper_, make_context_current_, buffers[i].id(),
         buffers[i].texture_id(), requested_pic_size_));
 
-    scoped_refptr<gfx::GLImage> image = picture->GetImageToBind();
+    scoped_refptr<gl::GLImage> image = picture->GetImageToBind();
     if (image) {
       bind_image_.Run(buffers[i].internal_texture_id(),
                       VaapiPicture::GetGLTextureTarget(), image);
@@ -698,7 +767,8 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
                             base::Unretained(this)));
 }
 
-void VaapiVideoDecodeAccelerator::ReusePictureBuffer(int32 picture_buffer_id) {
+void VaapiVideoDecodeAccelerator::ReusePictureBuffer(
+    int32_t picture_buffer_id) {
   DCHECK_EQ(message_loop_, base::MessageLoop::current());
   TRACE_EVENT1("Video Decoder", "VAVDA::ReusePictureBuffer", "Picture id",
                picture_buffer_id);
@@ -939,9 +1009,9 @@ VaapiVideoDecodeAccelerator::CreateSurface() {
     return nullptr;
 
   DCHECK(!awaiting_va_surfaces_recycle_);
-  scoped_refptr<VASurface> va_surface(
-      new VASurface(available_va_surfaces_.front(), requested_pic_size_,
-                    va_surface_release_cb_));
+  scoped_refptr<VASurface> va_surface(new VASurface(
+      available_va_surfaces_.front(), requested_pic_size_,
+      vaapi_wrapper_->va_surface_format(), va_surface_release_cb_));
   available_va_surfaces_.pop_front();
 
   scoped_refptr<VaapiDecodeSurface> dec_surface =
@@ -988,8 +1058,8 @@ bool VaapiVideoDecodeAccelerator::VaapiH264Accelerator::SubmitFrameMetadata(
   VAPictureParameterBufferH264 pic_param;
   memset(&pic_param, 0, sizeof(pic_param));
 
-#define FROM_SPS_TO_PP(a) pic_param.a = sps->a;
-#define FROM_SPS_TO_PP2(a, b) pic_param.b = sps->a;
+#define FROM_SPS_TO_PP(a) pic_param.a = sps->a
+#define FROM_SPS_TO_PP2(a, b) pic_param.b = sps->a
   FROM_SPS_TO_PP2(pic_width_in_mbs_minus1, picture_width_in_mbs_minus1);
   // This assumes non-interlaced video
   FROM_SPS_TO_PP2(pic_height_in_map_units_minus1, picture_height_in_mbs_minus1);
@@ -998,8 +1068,8 @@ bool VaapiVideoDecodeAccelerator::VaapiH264Accelerator::SubmitFrameMetadata(
 #undef FROM_SPS_TO_PP
 #undef FROM_SPS_TO_PP2
 
-#define FROM_SPS_TO_PP_SF(a) pic_param.seq_fields.bits.a = sps->a;
-#define FROM_SPS_TO_PP_SF2(a, b) pic_param.seq_fields.bits.b = sps->a;
+#define FROM_SPS_TO_PP_SF(a) pic_param.seq_fields.bits.a = sps->a
+#define FROM_SPS_TO_PP_SF2(a, b) pic_param.seq_fields.bits.b = sps->a
   FROM_SPS_TO_PP_SF(chroma_format_idc);
   FROM_SPS_TO_PP_SF2(separate_colour_plane_flag,
                      residual_colour_transform_flag);
@@ -1015,7 +1085,7 @@ bool VaapiVideoDecodeAccelerator::VaapiH264Accelerator::SubmitFrameMetadata(
 #undef FROM_SPS_TO_PP_SF
 #undef FROM_SPS_TO_PP_SF2
 
-#define FROM_PPS_TO_PP(a) pic_param.a = pps->a;
+#define FROM_PPS_TO_PP(a) pic_param.a = pps->a
   FROM_PPS_TO_PP(num_slice_groups_minus1);
   pic_param.slice_group_map_type = 0;
   pic_param.slice_group_change_rate_minus1 = 0;
@@ -1025,8 +1095,8 @@ bool VaapiVideoDecodeAccelerator::VaapiH264Accelerator::SubmitFrameMetadata(
   FROM_PPS_TO_PP(second_chroma_qp_index_offset);
 #undef FROM_PPS_TO_PP
 
-#define FROM_PPS_TO_PP_PF(a) pic_param.pic_fields.bits.a = pps->a;
-#define FROM_PPS_TO_PP_PF2(a, b) pic_param.pic_fields.bits.b = pps->a;
+#define FROM_PPS_TO_PP_PF(a) pic_param.pic_fields.bits.a = pps->a
+#define FROM_PPS_TO_PP_PF2(a, b) pic_param.pic_fields.bits.b = pps->a
   FROM_PPS_TO_PP_PF(entropy_coding_mode_flag);
   FROM_PPS_TO_PP_PF(weighted_pred_flag);
   FROM_PPS_TO_PP_PF(weighted_bipred_idc);
@@ -1108,7 +1178,7 @@ bool VaapiVideoDecodeAccelerator::VaapiH264Accelerator::SubmitSlice(
   slice_param.slice_data_flag = VA_SLICE_DATA_FLAG_ALL;
   slice_param.slice_data_bit_offset = slice_hdr->header_bit_size;
 
-#define SHDRToSP(a) slice_param.a = slice_hdr->a;
+#define SHDRToSP(a) slice_param.a = slice_hdr->a
   SHDRToSP(first_mb_in_slice);
   slice_param.slice_type = slice_hdr->slice_type % 5;
   SHDRToSP(direct_spatial_mv_pred_flag);
@@ -1194,7 +1264,7 @@ bool VaapiVideoDecodeAccelerator::VaapiH264Accelerator::SubmitSlice(
     return false;
 
   // Can't help it, blame libva...
-  void* non_const_ptr = const_cast<uint8*>(data);
+  void* non_const_ptr = const_cast<uint8_t*>(data);
   return vaapi_wrapper_->SubmitBuffer(VASliceDataBufferType, size,
                                       non_const_ptr);
 }
@@ -1233,10 +1303,15 @@ VaapiVideoDecodeAccelerator::VaapiH264Accelerator::
 void VaapiVideoDecodeAccelerator::VaapiH264Accelerator::FillVAPicture(
     VAPictureH264* va_pic,
     scoped_refptr<H264Picture> pic) {
-  scoped_refptr<VaapiDecodeSurface> dec_surface =
-      H264PictureToVaapiDecodeSurface(pic);
+  VASurfaceID va_surface_id = VA_INVALID_SURFACE;
 
-  va_pic->picture_id = dec_surface->va_surface()->id();
+  if (!pic->nonexisting) {
+    scoped_refptr<VaapiDecodeSurface> dec_surface =
+        H264PictureToVaapiDecodeSurface(pic);
+    va_surface_id = dec_surface->va_surface()->id();
+  }
+
+  va_pic->picture_id = va_surface_id;
   va_pic->frame_idx = pic->frame_num;
   va_pic->flags = 0;
 
@@ -1391,7 +1466,7 @@ bool VaapiVideoDecodeAccelerator::VaapiVP8Accelerator::SubmitDecode(
 
   const media::Vp8LoopFilterHeader& lf_hdr = frame_hdr->loopfilter_hdr;
 
-#define FHDR_TO_PP_PF(a, b) pic_param.pic_fields.bits.a = (b);
+#define FHDR_TO_PP_PF(a, b) pic_param.pic_fields.bits.a = (b)
   FHDR_TO_PP_PF(key_frame, frame_hdr->IsKeyframe() ? 0 : 1);
   FHDR_TO_PP_PF(version, frame_hdr->version);
   FHDR_TO_PP_PF(segmentation_enabled, sgmnt_hdr.segmentation_enabled);
@@ -1441,7 +1516,7 @@ bool VaapiVideoDecodeAccelerator::VaapiVP8Accelerator::SubmitDecode(
     pic_param.loop_filter_deltas_mode[i] = lf_hdr.mb_mode_delta[i];
   }
 
-#define FHDR_TO_PP(a) pic_param.a = frame_hdr->a;
+#define FHDR_TO_PP(a) pic_param.a = frame_hdr->a
   FHDR_TO_PP(prob_skip_false);
   FHDR_TO_PP(prob_intra);
   FHDR_TO_PP(prob_last);
@@ -1457,12 +1532,11 @@ bool VaapiVideoDecodeAccelerator::VaapiVP8Accelerator::SubmitDecode(
   pic_param.bool_coder_ctx.count = frame_hdr->bool_dec_count;
 
   if (!vaapi_wrapper_->SubmitBuffer(VAPictureParameterBufferType,
-                                    sizeof(VAPictureParameterBufferVP8),
-                                    &pic_param))
+                                    sizeof(pic_param), &pic_param))
     return false;
 
   VASliceParameterBufferVP8 slice_param;
-  memset(&slice_param, 0, sizeof(VASliceParameterBufferVP8));
+  memset(&slice_param, 0, sizeof(slice_param));
   slice_param.slice_data_size = frame_hdr->frame_size;
   slice_param.slice_data_offset = frame_hdr->first_part_offset;
   slice_param.slice_data_flag = VA_SLICE_DATA_FLAG_ALL;
@@ -1483,7 +1557,7 @@ bool VaapiVideoDecodeAccelerator::VaapiVP8Accelerator::SubmitDecode(
                                     &slice_param))
     return false;
 
-  void* non_const_ptr = const_cast<uint8*>(frame_hdr->data);
+  void* non_const_ptr = const_cast<uint8_t*>(frame_hdr->data);
   if (!vaapi_wrapper_->SubmitBuffer(VASliceDataBufferType,
                                     frame_hdr->frame_size,
                                     non_const_ptr))
@@ -1508,6 +1582,162 @@ scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>
 VaapiVideoDecodeAccelerator::VaapiVP8Accelerator::
     VP8PictureToVaapiDecodeSurface(const scoped_refptr<VP8Picture>& pic) {
   VaapiVP8Picture* vaapi_pic = pic->AsVaapiVP8Picture();
+  CHECK(vaapi_pic);
+  return vaapi_pic->dec_surface();
+}
+
+VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::VaapiVP9Accelerator(
+    VaapiVideoDecodeAccelerator* vaapi_dec,
+    VaapiWrapper* vaapi_wrapper)
+    : vaapi_wrapper_(vaapi_wrapper), vaapi_dec_(vaapi_dec) {
+  DCHECK(vaapi_wrapper_);
+  DCHECK(vaapi_dec_);
+}
+
+VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::~VaapiVP9Accelerator() {}
+
+scoped_refptr<VP9Picture>
+VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::CreateVP9Picture() {
+  scoped_refptr<VaapiDecodeSurface> va_surface = vaapi_dec_->CreateSurface();
+  if (!va_surface)
+    return nullptr;
+
+  return new VaapiVP9Picture(va_surface);
+}
+
+bool VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::SubmitDecode(
+    const scoped_refptr<VP9Picture>& pic,
+    const media::Vp9Segmentation& seg,
+    const media::Vp9LoopFilter& lf,
+    const std::vector<scoped_refptr<VP9Picture>>& ref_pictures) {
+  VADecPictureParameterBufferVP9 pic_param;
+  memset(&pic_param, 0, sizeof(pic_param));
+
+  const media::Vp9FrameHeader* frame_hdr = pic->frame_hdr.get();
+  DCHECK(frame_hdr);
+
+  if (frame_hdr->profile != 0) {
+    DVLOG(1) << "Unsupported profile" << frame_hdr->profile;
+    return false;
+  }
+
+  pic_param.frame_width = base::checked_cast<uint16_t>(frame_hdr->width);
+  pic_param.frame_height = base::checked_cast<uint16_t>(frame_hdr->height);
+
+  CHECK_EQ(ref_pictures.size(), arraysize(pic_param.reference_frames));
+  for (size_t i = 0; i < arraysize(pic_param.reference_frames); ++i) {
+    VASurfaceID va_surface_id;
+    if (ref_pictures[i]) {
+      scoped_refptr<VaapiDecodeSurface> surface =
+          VP9PictureToVaapiDecodeSurface(ref_pictures[i]);
+      va_surface_id = surface->va_surface()->id();
+    } else {
+      va_surface_id = VA_INVALID_SURFACE;
+    }
+
+    pic_param.reference_frames[i] = va_surface_id;
+  }
+
+#define FHDR_TO_PP_PF1(a) pic_param.pic_fields.bits.a = frame_hdr->a
+#define FHDR_TO_PP_PF2(a, b) pic_param.pic_fields.bits.a = b
+  FHDR_TO_PP_PF2(subsampling_x, frame_hdr->subsampling_x == 1);
+  FHDR_TO_PP_PF2(subsampling_y, frame_hdr->subsampling_y == 1);
+  FHDR_TO_PP_PF2(frame_type, frame_hdr->IsKeyframe() ? 0 : 1);
+  FHDR_TO_PP_PF1(show_frame);
+  FHDR_TO_PP_PF1(error_resilient_mode);
+  FHDR_TO_PP_PF1(intra_only);
+  FHDR_TO_PP_PF1(allow_high_precision_mv);
+  FHDR_TO_PP_PF2(mcomp_filter_type, frame_hdr->interp_filter);
+  FHDR_TO_PP_PF1(frame_parallel_decoding_mode);
+  FHDR_TO_PP_PF2(reset_frame_context, frame_hdr->reset_context);
+  FHDR_TO_PP_PF1(refresh_frame_context);
+  FHDR_TO_PP_PF1(frame_context_idx);
+  FHDR_TO_PP_PF2(segmentation_enabled, seg.enabled);
+  FHDR_TO_PP_PF2(segmentation_temporal_update, seg.temporal_update);
+  FHDR_TO_PP_PF2(segmentation_update_map, seg.update_map);
+  FHDR_TO_PP_PF2(last_ref_frame, frame_hdr->frame_refs[0]);
+  FHDR_TO_PP_PF2(last_ref_frame_sign_bias, frame_hdr->ref_sign_biases[0]);
+  FHDR_TO_PP_PF2(golden_ref_frame, frame_hdr->frame_refs[1]);
+  FHDR_TO_PP_PF2(golden_ref_frame_sign_bias, frame_hdr->ref_sign_biases[1]);
+  FHDR_TO_PP_PF2(alt_ref_frame, frame_hdr->frame_refs[2]);
+  FHDR_TO_PP_PF2(alt_ref_frame_sign_bias, frame_hdr->ref_sign_biases[2]);
+  FHDR_TO_PP_PF2(lossless_flag, frame_hdr->quant_params.IsLossless());
+#undef FHDR_TO_PP_PF2
+#undef FHDR_TO_PP_PF1
+
+  pic_param.filter_level = lf.filter_level;
+  pic_param.sharpness_level = lf.sharpness_level;
+  pic_param.log2_tile_rows = frame_hdr->log2_tile_rows;
+  pic_param.log2_tile_columns = frame_hdr->log2_tile_cols;
+  pic_param.frame_header_length_in_bytes = frame_hdr->uncompressed_header_size;
+  pic_param.first_partition_size = frame_hdr->first_partition_size;
+
+  ARRAY_MEMCPY_CHECKED(pic_param.mb_segment_tree_probs, seg.tree_probs);
+  ARRAY_MEMCPY_CHECKED(pic_param.segment_pred_probs, seg.pred_probs);
+
+  pic_param.profile = frame_hdr->profile;
+
+  if (!vaapi_wrapper_->SubmitBuffer(VAPictureParameterBufferType,
+                                    sizeof(pic_param), &pic_param))
+    return false;
+
+  VASliceParameterBufferVP9 slice_param;
+  memset(&slice_param, 0, sizeof(slice_param));
+  slice_param.slice_data_size = frame_hdr->frame_size;
+  slice_param.slice_data_offset = 0;
+  slice_param.slice_data_flag = VA_SLICE_DATA_FLAG_ALL;
+
+  static_assert(arraysize(media::Vp9Segmentation::feature_enabled) ==
+                    arraysize(slice_param.seg_param),
+                "seg_param array of incorrect size");
+  for (size_t i = 0; i < arraysize(slice_param.seg_param); ++i) {
+    VASegmentParameterVP9& seg_param = slice_param.seg_param[i];
+#define SEG_TO_SP_SF(a, b) seg_param.segment_flags.fields.a = b
+    SEG_TO_SP_SF(
+        segment_reference_enabled,
+        seg.FeatureEnabled(i, media::Vp9Segmentation::SEG_LVL_REF_FRAME));
+    SEG_TO_SP_SF(segment_reference,
+                 seg.FeatureData(i, media::Vp9Segmentation::SEG_LVL_REF_FRAME));
+    SEG_TO_SP_SF(segment_reference_skipped,
+                 seg.FeatureEnabled(i, media::Vp9Segmentation::SEG_LVL_SKIP));
+#undef SEG_TO_SP_SF
+
+    ARRAY_MEMCPY_CHECKED(seg_param.filter_level, lf.lvl[i]);
+
+    seg_param.luma_dc_quant_scale = seg.y_dequant[i][0];
+    seg_param.luma_ac_quant_scale = seg.y_dequant[i][1];
+    seg_param.chroma_dc_quant_scale = seg.uv_dequant[i][0];
+    seg_param.chroma_ac_quant_scale = seg.uv_dequant[i][1];
+  }
+
+  if (!vaapi_wrapper_->SubmitBuffer(VASliceParameterBufferType,
+                                    sizeof(slice_param), &slice_param))
+    return false;
+
+  void* non_const_ptr = const_cast<uint8_t*>(frame_hdr->data);
+  if (!vaapi_wrapper_->SubmitBuffer(VASliceDataBufferType,
+                                    frame_hdr->frame_size, non_const_ptr))
+    return false;
+
+  scoped_refptr<VaapiDecodeSurface> dec_surface =
+      VP9PictureToVaapiDecodeSurface(pic);
+
+  return vaapi_dec_->DecodeSurface(dec_surface);
+}
+
+bool VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::OutputPicture(
+    const scoped_refptr<VP9Picture>& pic) {
+  scoped_refptr<VaapiDecodeSurface> dec_surface =
+      VP9PictureToVaapiDecodeSurface(pic);
+
+  vaapi_dec_->SurfaceReady(dec_surface);
+  return true;
+}
+
+scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>
+VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::
+    VP9PictureToVaapiDecodeSurface(const scoped_refptr<VP9Picture>& pic) {
+  VaapiVP9Picture* vaapi_pic = pic->AsVaapiVP9Picture();
   CHECK(vaapi_pic);
   return vaapi_pic->dec_surface();
 }

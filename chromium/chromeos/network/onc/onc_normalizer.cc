@@ -30,7 +30,7 @@ scoped_ptr<base::DictionaryValue> Normalizer::NormalizeObject(
   scoped_ptr<base::DictionaryValue> result =
       MapObject(*object_signature, onc_object, &error);
   DCHECK(!error);
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<base::DictionaryValue> Normalizer::MapObject(
@@ -65,7 +65,7 @@ scoped_ptr<base::DictionaryValue> Normalizer::MapObject(
   else if (&signature == &kWiFiSignature)
     NormalizeWiFi(normalized.get());
 
-  return normalized.Pass();
+  return normalized;
 }
 
 namespace {
@@ -81,10 +81,6 @@ void RemoveEntryUnless(base::DictionaryValue* dict,
 
 void Normalizer::NormalizeCertificate(base::DictionaryValue* cert) {
   using namespace ::onc::certificate;
-
-  bool remove = false;
-  cert->GetBooleanWithoutPathExpansion(::onc::kRemove, &remove);
-  RemoveEntryUnless(cert, ::onc::certificate::kType, !remove);
 
   std::string type;
   cert->GetStringWithoutPathExpansion(::onc::certificate::kType, &type);

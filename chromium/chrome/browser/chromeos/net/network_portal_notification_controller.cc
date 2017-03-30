@@ -4,14 +4,16 @@
 
 #include "chrome/browser/chromeos/net/network_portal_notification_controller.h"
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "ash/shell.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/system_tray_notifier.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -36,6 +38,7 @@
 #include "chrome/grit/theme_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/network/network_state.h"
+#include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_type_pattern.h"
 #include "components/captive_portal/captive_portal_detector.h"
 #include "components/user_manager/user_manager.h"
@@ -92,8 +95,7 @@ const extensions::Extension* LookupExtensionForRawSsid(
   if (!profile || !networking_config_service)
     return nullptr;
   std::string extension_id;
-  std::string hex_ssid =
-      base::HexEncode(vector_as_array(&raw_ssid), raw_ssid.size());
+  std::string hex_ssid = base::HexEncode(raw_ssid.data(), raw_ssid.size());
   extension_id =
       networking_config_service->LookupExtensionIdForHexSsid(hex_ssid);
   if (extension_id.empty())
@@ -235,11 +237,24 @@ const char NetworkPortalNotificationController::kNotificationMetric[] =
 const char NetworkPortalNotificationController::kUserActionMetric[] =
     "CaptivePortal.Notification.UserAction";
 
-NetworkPortalNotificationController::NetworkPortalNotificationController()
-    : dialog_(nullptr), ignore_no_network_for_testing_(false) {
+NetworkPortalNotificationController::NetworkPortalNotificationController(
+    NetworkPortalDetector* network_portal_detector)
+    : network_portal_detector_(network_portal_detector), weak_factory_(this) {
+  if (NetworkHandler::IsInitialized()) {  // NULL for unit tests.
+    NetworkHandler::Get()->network_state_handler()->AddObserver(this,
+                                                                FROM_HERE);
+  }
+  if (network_portal_detector_)
+    network_portal_detector_->AddObserver(this);
 }
 
 NetworkPortalNotificationController::~NetworkPortalNotificationController() {
+  if (network_portal_detector_)
+    network_portal_detector_->RemoveObserver(this);
+  if (NetworkHandler::IsInitialized()) {
+    NetworkHandler::Get()->network_state_handler()->RemoveObserver(this,
+                                                                   FROM_HERE);
+  }
 }
 
 void NetworkPortalNotificationController::DefaultNetworkChanged(
@@ -302,7 +317,7 @@ void NetworkPortalNotificationController::ShowDialog() {
     return;
 
   Profile* signin_profile = ProfileHelper::GetSigninProfile();
-  dialog_ = new NetworkPortalWebDialog(AsWeakPtr());
+  dialog_ = new NetworkPortalWebDialog(weak_factory_.GetWeakPtr());
   dialog_->SetWidget(views::Widget::GetWidgetForNativeWindow(
       chrome::ShowWebDialog(nullptr, signin_profile, dialog_)));
 }
@@ -321,7 +336,7 @@ NetworkPortalNotificationController::CreateDefaultCaptivePortalNotification(
   message_center::RichNotificationData data;
   scoped_refptr<NetworkPortalNotificationControllerDelegate> delegate(
       new NetworkPortalNotificationControllerDelegate(
-          std::string(), network->guid(), AsWeakPtr()));
+          std::string(), network->guid(), weak_factory_.GetWeakPtr()));
   gfx::Image& icon = GetImageForNotification();
   message_center::NotifierId notifier_id(
       message_center::NotifierId::SYSTEM_COMPONENT,
@@ -337,9 +352,9 @@ NetworkPortalNotificationController::CreateDefaultCaptivePortalNotification(
           is_wifi ? IDS_PORTAL_DETECTION_NOTIFICATION_MESSAGE_WIFI
                   : IDS_PORTAL_DETECTION_NOTIFICATION_MESSAGE_WIRED,
           base::UTF8ToUTF16(network->name())),
-      icon, base::string16(), notifier_id, data, delegate.get()));
+      icon, base::string16(), GURL(), notifier_id, data, delegate.get()));
   notification->SetSystemPriority();
-  return notification.Pass();
+  return notification;
 }
 
 scoped_ptr<message_center::Notification> NetworkPortalNotificationController::
@@ -350,7 +365,7 @@ scoped_ptr<message_center::Notification> NetworkPortalNotificationController::
   message_center::RichNotificationData data;
   scoped_refptr<NetworkPortalNotificationControllerDelegate> delegate(
       new NetworkPortalNotificationControllerDelegate(
-          extension->id(), network->guid(), AsWeakPtr()));
+          extension->id(), network->guid(), weak_factory_.GetWeakPtr()));
   gfx::Image& icon = GetImageForNotification();
   message_center::NotifierId notifier_id(
       message_center::NotifierId::SYSTEM_COMPONENT,
@@ -386,10 +401,10 @@ scoped_ptr<message_center::Notification> NetworkPortalNotificationController::
   scoped_ptr<Notification> notification(new Notification(
       message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
       l10n_util::GetStringUTF16(IDS_PORTAL_DETECTION_NOTIFICATION_TITLE_WIFI),
-      notificationText, icon, base::string16() /* display_source */,
+      notificationText, icon, base::string16() /* display_source */, GURL(),
       notifier_id, data, delegate.get()));
   notification->SetSystemPriority();
-  return notification.Pass();
+  return notification;
 }
 
 scoped_ptr<Notification> NetworkPortalNotificationController::GetNotification(

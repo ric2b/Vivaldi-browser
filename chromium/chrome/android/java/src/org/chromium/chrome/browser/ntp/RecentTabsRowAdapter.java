@@ -21,18 +21,19 @@ import android.widget.BaseExpandableListAdapter;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ForeignSessionHelper.ForeignSession;
-import org.chromium.chrome.browser.ForeignSessionHelper.ForeignSessionTab;
-import org.chromium.chrome.browser.ForeignSessionHelper.ForeignSessionWindow;
-import org.chromium.chrome.browser.RecentlyClosedBridge.RecentlyClosedTab;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
+import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSession;
+import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSessionTab;
+import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSessionWindow;
+import org.chromium.chrome.browser.ntp.RecentTabsPromoView.UserActionListener;
+import org.chromium.chrome.browser.ntp.RecentlyClosedBridge.RecentlyClosedTab;
 import org.chromium.ui.WindowOpenDisposition;
 import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Row adapter for presenting recently closed tabs, synced tabs from other devices, the sync or
@@ -56,7 +57,6 @@ public class RecentTabsRowAdapter extends BaseExpandableListAdapter {
     private final RecentlyClosedTabsGroup mRecentlyClosedTabsGroup = new RecentlyClosedTabsGroup();
     private final SeparatorGroup mVisibleSeparatorGroup = new SeparatorGroup(true);
     private final SeparatorGroup mInvisibleSeparatorGroup = new SeparatorGroup(false);
-    private final long mInitializationTimestamp;  // Seconds since Unix epoch.
     private final FaviconCache mFaviconCache;
     private final int mFaviconSize;
 
@@ -138,7 +138,6 @@ public class RecentTabsRowAdapter extends BaseExpandableListAdapter {
             if (groupView == null) {
                 groupView = (RecentTabsGroupView) LayoutInflater.from(mActivity).inflate(
                         R.layout.recent_tabs_group_item, parent, false);
-                groupView.initialize(mInitializationTimestamp);
             }
             configureGroupView(groupView, isExpanded);
             return groupView;
@@ -594,7 +593,20 @@ public class RecentTabsRowAdapter extends BaseExpandableListAdapter {
         View getChildView(int childPosition, boolean isLastChild, View convertView,
                 ViewGroup parent) {
             if (convertView == null) {
-                convertView = new RecentTabsPromoView(mActivity, mRecentTabsManager, null);
+                convertView = new RecentTabsPromoView(
+                        mActivity, mRecentTabsManager, new UserActionListener() {
+                            @Override
+                            public void onAccountSelectionConfirmed() {
+                                RecordUserAction.record("Signin_Signin_FromRecentTabs");
+                            }
+                            @Override
+                            public void onNewAccount() {
+                                RecordUserAction.record("Signin_AddAccountToDevice");
+                            }
+                        });
+            }
+            if (!mRecentTabsManager.isSignedIn()) {
+                RecordUserAction.record("Signin_Impression_FromRecentTabs");
             }
             return convertView;
         }
@@ -662,13 +674,11 @@ public class RecentTabsRowAdapter extends BaseExpandableListAdapter {
         mActivity = activity;
         mRecentTabsManager = recentTabsManager;
         mGroups = new ArrayList<Group>();
-        mInitializationTimestamp =
-            TimeUnit.SECONDS.convert(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
         mFaviconCache = buildFaviconCache(MAX_NUM_FAVICONS_TO_CACHE);
 
         Resources resources = activity.getResources();
         mDefaultFavicon = ApiCompatibilityUtils.getDrawable(resources, R.drawable.default_favicon);
-        mFaviconSize = mDefaultFavicon.getIntrinsicHeight();
+        mFaviconSize = resources.getDimensionPixelSize(R.dimen.default_favicon_size);
     }
 
     private static FaviconCache buildFaviconCache(int size) {

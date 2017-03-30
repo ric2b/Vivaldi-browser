@@ -4,8 +4,10 @@
 
 #include "extensions/browser/api/cast_channel/cast_test_util.h"
 
+#include <utility>
+
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 
 const char kTestExtensionId[] = "ddchlicdkolnonkihahngkmmmjnjlkkf";
@@ -22,7 +24,7 @@ CastTransport::Delegate* MockCastTransport::current_delegate() const {
 
 void MockCastTransport::SetReadDelegate(
     scoped_ptr<CastTransport::Delegate> delegate) {
-  delegate_ = delegate.Pass();
+  delegate_ = std::move(delegate);
 }
 
 MockCastTransportDelegate::MockCastTransportDelegate() {
@@ -46,5 +48,5 @@ net::IPEndPoint CreateIPEndPointForTest() {
 }
 
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

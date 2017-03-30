@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "url/gurl.h"
 
@@ -97,6 +98,10 @@ class SuggestionAnswer {
     const GURL& image_url() const { return image_url_; }
 
     bool Equals(const ImageLine& line) const;
+
+    // Returns a string appropriate for use as a readable representation of the
+    // content of this line.
+    base::string16 AccessibleText() const;
 
    private:
     // Forbid assignment.

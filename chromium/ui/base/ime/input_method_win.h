@@ -9,8 +9,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/base/ime/input_method_base.h"
 #include "ui/base/ime/win/imm32_manager.h"
 
@@ -27,13 +27,12 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
   void OnBlur() override;
   bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
                                 NativeEventResult* result) override;
-  bool DispatchKeyEvent(const ui::KeyEvent& event) override;
+  void DispatchKeyEvent(ui::KeyEvent* event) override;
   void OnTextInputTypeChanged(const TextInputClient* client) override;
   void OnCaretBoundsChanged(const TextInputClient* client) override;
   void CancelComposition(const TextInputClient* client) override;
   void OnInputLocaleChanged() override;
   std::string GetInputLocale() override;
-  bool IsActive() override;
   bool IsCandidatePopupOpen() const override;
 
  protected:
@@ -51,6 +50,7 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
                  UINT message,
                  WPARAM wparam,
                  LPARAM lparam,
+                 const base::NativeEvent& event,
                  BOOL* handled);
 
   LRESULT OnImeSetContext(HWND window_handle,
@@ -93,7 +93,7 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
   // to be ready for receiving keyboard input.
   bool IsWindowFocused(const TextInputClient* client) const;
 
-  bool DispatchFabricatedKeyEvent(const ui::KeyEvent& event);
+  void DispatchFabricatedKeyEvent(ui::KeyEvent* event);
 
   // Asks the client to confirm current composition text.
   void ConfirmCompositionText();
@@ -109,9 +109,6 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
   // On non-Aura environment, this value is not used and always NULL.
   const HWND toplevel_window_handle_;
 
-  // Name of the current input locale.
-  std::string locale_;
-
   // The new text direction and layout alignment requested by the user by
   // pressing ctrl-shift. It'll be sent to the text input client when the key
   // is released.
@@ -123,9 +120,6 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
   // TODO(yukawa, IME): Figure out long-term solution.
   bool accept_carriage_return_;
 
-  // Indicates if the current input locale has an IME.
-  bool active_;
-
   // True when an IME should be allowed to process key events.
   bool enabled_;
 
@@ -135,10 +129,6 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
   // Window handle where composition is on-going. NULL when there is no
   // composition.
   HWND composing_window_handle_;
-
-  // Set to false initially. Tracks whether the IME has been initialized with
-  // the current input language.
-  bool default_input_language_initialized_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodWin);
 };

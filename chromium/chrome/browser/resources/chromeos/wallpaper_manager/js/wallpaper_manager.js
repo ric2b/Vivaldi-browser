@@ -62,6 +62,15 @@ function WallpaperManager(dialogDom) {
   }
 
   /**
+   * Returns the base name for |file_path|.
+   * @param {string} file_path The path of the file.
+   * @return {string} The base name of the file.
+   */
+  function getBaseName(file_path) {
+    return file_path.substring(file_path.lastIndexOf('/') + 1);
+  }
+
+  /**
    * Retruns the current selected layout.
    * @return {string} The selected layout.
    */
@@ -202,6 +211,7 @@ function WallpaperManager(dialogDom) {
     var onSuccess = function() {
       if (chrome.runtime.lastError == null) {
         if (shouldEnable) {
+          self.document_.body.removeAttribute('surprise-me-disabled');
           checkbox.classList.add('checked');
           // Hides the wallpaper set by message if there is any.
           $('wallpaper-set-by-message').textContent = '';
@@ -214,6 +224,7 @@ function WallpaperManager(dialogDom) {
                                      self.currentWallpaper_);
           }
           checkbox.classList.remove('checked');
+          self.document_.body.setAttribute('surprise-me-disabled', '');
         }
         $('categories-list').disabled = shouldEnable;
         $('wallpaper-grid').disabled = shouldEnable;
@@ -277,10 +288,14 @@ function WallpaperManager(dialogDom) {
     if (loadTimeData.valueExists('wallpaperAppName')) {
       $('wallpaper-set-by-message').textContent = loadTimeData.getStringF(
           'currentWallpaperSetByMessage', str('wallpaperAppName'));
+      $('wallpaper-grid').classList.add('small');
+    } else {
+      $('wallpaper-grid').classList.remove('small');
     }
 
     if (this.enableOnlineWallpaper_) {
       var self = this;
+      self.document_.body.setAttribute('surprise-me-disabled', '');
       $('surprise-me').hidden = false;
       $('surprise-me').addEventListener('click',
                                         this.toggleSurpriseMe_.bind(this));
@@ -288,6 +303,7 @@ function WallpaperManager(dialogDom) {
         $('surprise-me').querySelector('#checkbox').classList.add('checked');
         $('categories-list').disabled = true;
         $('wallpaper-grid').disabled = true;
+        self.document_.body.removeAttribute('surprise-me-disabled');
       };
 
       WallpaperUtil.enabledSyncThemesCallback(function(syncEnabled) {
@@ -341,8 +357,7 @@ function WallpaperManager(dialogDom) {
           for (var i = 0; i < thumbnails.length; i++) {
             var thumbnail = thumbnails[i];
             var url = self.wallpaperGrid_.dataModel.item(i).baseURL;
-            var fileName = url.substring(url.lastIndexOf('/') + 1) +
-                Constants.HighResolutionSuffix;
+            var fileName = getBaseName(url) + Constants.HighResolutionSuffix;
             if (self.downloadedListMap_ &&
                 self.downloadedListMap_.hasOwnProperty(encodeURI(fileName))) {
               thumbnail.offline = true;
@@ -535,6 +550,7 @@ function WallpaperManager(dialogDom) {
     this.currentWallpaper_ = currentWallpaperURL;
     // Hides the wallpaper set by message.
     $('wallpaper-set-by-message').textContent = '';
+    $('wallpaper-grid').classList.remove('small');
   };
 
   /**
@@ -1004,14 +1020,13 @@ function WallpaperManager(dialogDom) {
       };
 
       var self = this;
-      // Need this check for test purpose.
-      var numOnlineWallpaper = (this.enableOnlineWallpaper_ && this.manifest_) ?
-        this.manifest_.wallpaper_list.length : 0;
       var processResults = function(entries) {
         for (var i = 0; i < entries.length; i++) {
           var entry = entries[i];
           var wallpaperInfo = {
-                wallpaperId: numOnlineWallpaper + i,
+                // Set wallpaperId to null to avoid duplicate thumbnail images,
+                // see crbug.com/506135 for details.
+                wallpaperId: null,
                 baseURL: entry.name,
                 // The layout will be replaced by the actual value saved in
                 // local storage when requested later. Layout is not important
@@ -1026,7 +1041,7 @@ function WallpaperManager(dialogDom) {
         }
         if (loadTimeData.getBoolean('isOEMDefaultWallpaper')) {
           var oemDefaultWallpaperElement = {
-              wallpaperId: numOnlineWallpaper + entries.length,
+              wallpaperId: null,
               baseURL: 'OemDefaultWallpaper',
               layout: 'CENTER_CROPPED',
               source: Constants.WallpaperSourceEnum.OEM,
@@ -1035,8 +1050,12 @@ function WallpaperManager(dialogDom) {
           wallpapersDataModel.push(oemDefaultWallpaperElement);
         }
         for (var i = 0; i < wallpapersDataModel.length; i++) {
-          if (self.currentWallpaper_ == wallpapersDataModel.item(i).baseURL)
+          // For custom wallpapers, the file name of |currentWallpaper_|
+          // includes the first directory level (corresponding to user id hash).
+          if (getBaseName(self.currentWallpaper_) ==
+              wallpapersDataModel.item(i).baseURL) {
             selectedItem = wallpapersDataModel.item(i);
+          }
         }
         var lastElement = {
             baseURL: '',
@@ -1090,8 +1109,7 @@ function WallpaperManager(dialogDom) {
             authorWebsite: this.manifest_.wallpaper_list[i].author_website,
             dynamicURL: this.manifest_.wallpaper_list[i].dynamic_url
           };
-          var startIndex = wallpaperInfo.baseURL.lastIndexOf('/') + 1;
-          var fileName = wallpaperInfo.baseURL.substring(startIndex) +
+          var fileName = getBaseName(wallpaperInfo.baseURL) +
               Constants.HighResolutionSuffix;
           if (this.downloadedListMap_ &&
               this.downloadedListMap_.hasOwnProperty(encodeURI(fileName))) {

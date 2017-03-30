@@ -4,10 +4,14 @@
 
 #include "chrome/browser/extensions/extension_apitest.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/base_switches.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/profiles/profile.h"
@@ -22,6 +26,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
+#include "extensions/common/switches.h"
 #include "extensions/test/result_catcher.h"
 #include "net/base/escape.h"
 #include "net/base/filename_util.h"
@@ -33,11 +38,11 @@
 namespace {
 
 const char kTestCustomArg[] = "customArg";
-const char kTestServerPort[] = "testServer.port";
 const char kTestDataDirectory[] = "testDataDirectory";
 const char kTestWebSocketPort[] = "testWebSocketPort";
+const char kIsolateExtensions[] = "isolateExtensions";
 const char kFtpServerPort[] = "ftpServer.port";
-const char kSpawnedTestServerPort[] = "spawnedTestServer.port";
+const char kEmbeddedTestServerPort[] = "testServer.port";
 
 scoped_ptr<net::test_server::HttpResponse> HandleServerRedirectRequest(
     const net::test_server::HttpRequest& request) {
@@ -53,7 +58,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleServerRedirectRequest(
       new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
   http_response->AddCustomHeader("Location", redirect_target);
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 scoped_ptr<net::test_server::HttpResponse> HandleEchoHeaderRequest(
@@ -67,8 +72,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleEchoHeaderRequest(
       request.relative_url.substr(query_string_pos + 1);
 
   std::string header_value;
-  std::map<std::string, std::string>::const_iterator it = request.headers.find(
-      header_name);
+  auto it = request.headers.find(header_name);
   if (it != request.headers.end())
     header_value = it->second;
 
@@ -76,7 +80,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleEchoHeaderRequest(
       new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_OK);
   http_response->set_content(header_value);
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 scoped_ptr<net::test_server::HttpResponse> HandleSetCookieRequest(
@@ -93,13 +97,11 @@ scoped_ptr<net::test_server::HttpResponse> HandleSetCookieRequest(
   std::string cookie_value =
       request.relative_url.substr(query_string_pos + 1);
 
-  std::vector<std::string> cookies;
-  base::SplitString(cookie_value, '&', &cookies);
+  for (const std::string& cookie : base::SplitString(
+           cookie_value, "&", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL))
+    http_response->AddCustomHeader("Set-Cookie", cookie);
 
-  for (size_t i = 0; i < cookies.size(); i++)
-    http_response->AddCustomHeader("Set-Cookie", cookies[i]);
-
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 scoped_ptr<net::test_server::HttpResponse> HandleSetHeaderRequest(
@@ -130,7 +132,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleSetHeaderRequest(
       new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_OK);
   http_response->AddCustomHeader(header_name, header_value);
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 };  // namespace
@@ -154,6 +156,11 @@ void ExtensionApiTest::SetUpInProcessBrowserTestFixture() {
   test_config_->SetString(kTestDataDirectory,
                           net::FilePathToFileURL(test_data_dir_).spec());
   test_config_->SetInteger(kTestWebSocketPort, 0);
+  bool isolate_extensions = base::CommandLine::ForCurrentProcess()->HasSwitch(
+                                switches::kSitePerProcess) ||
+                            base::CommandLine::ForCurrentProcess()->HasSwitch(
+                                extensions::switches::kIsolateExtensions);
+  test_config_->SetBoolean(kIsolateExtensions, isolate_extensions);
   extensions::TestGetConfigFunction::set_test_config_state(
       test_config_.get());
 }
@@ -317,7 +324,7 @@ bool ExtensionApiTest::RunExtensionTestImpl(const std::string& extension_name,
     }
 
     if (use_incognito)
-      ui_test_utils::OpenURLOffTheRecord(browser()->profile(), url);
+      OpenURLOffTheRecord(browser()->profile(), url);
     else
       ui_test_utils::NavigateToURL(browser(), url);
   } else if (launch_platform_app) {
@@ -368,13 +375,13 @@ const extensions::Extension* ExtensionApiTest::GetSingleLoadedExtension() {
 }
 
 bool ExtensionApiTest::StartEmbeddedTestServer() {
-  if (!embedded_test_server()->InitializeAndWaitUntilReady())
+  if (!embedded_test_server()->Start())
     return false;
 
   // Build a dictionary of values that tests can use to build URLs that
   // access the test server and local file system.  Tests can see these values
   // using the extension API function chrome.test.getConfig().
-  test_config_->SetInteger(kTestServerPort,
+  test_config_->SetInteger(kEmbeddedTestServerPort,
                            embedded_test_server()->port());
 
   return true;
@@ -407,19 +414,6 @@ bool ExtensionApiTest::StartFTPServer(const base::FilePath& root_directory) {
 
   test_config_->SetInteger(kFtpServerPort,
                            ftp_server_->host_port_pair().port());
-
-  return true;
-}
-
-bool ExtensionApiTest::StartSpawnedTestServer() {
-  if (!test_server()->Start())
-    return false;
-
-  // Build a dictionary of values that tests can use to build URLs that
-  // access the test server and local file system.  Tests can see these values
-  // using the extension API function chrome.test.getConfig().
-  test_config_->SetInteger(kSpawnedTestServerPort,
-                           test_server()->host_port_pair().port());
 
   return true;
 }

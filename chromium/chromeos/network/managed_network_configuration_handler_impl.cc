@@ -4,6 +4,7 @@
 
 #include "chromeos/network/managed_network_configuration_handler_impl.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -34,6 +35,7 @@
 #include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/onc/onc_validator.h"
 #include "chromeos/network/policy_util.h"
+#include "chromeos/network/prohibited_technologies_handler.h"
 #include "chromeos/network/shill_property_util.h"
 #include "components/onc/onc_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -153,7 +155,7 @@ void ManagedNetworkConfigurationHandlerImpl::SendManagedProperties(
   if (ui_data && profile) {
     user_settings = ui_data->user_settings();
   } else if (profile) {
-    NET_LOG_ERROR("Service contains empty or invalid UIData", service_path);
+    NET_LOG_DEBUG("Service contains empty or invalid UIData", service_path);
     // TODO(pneubeck): add a conversion of user configured entries of old
     // ChromeOS versions. We will have to use a heuristic to determine which
     // properties _might_ be user configured.
@@ -197,6 +199,7 @@ void ManagedNetworkConfigurationHandlerImpl::SendManagedProperties(
 // GetProperties
 
 void ManagedNetworkConfigurationHandlerImpl::GetProperties(
+    const std::string& userhash,
     const std::string& service_path,
     const network_handler::DictionaryResultCallback& callback,
     const network_handler::ErrorCallback& error_callback) {
@@ -207,21 +210,30 @@ void ManagedNetworkConfigurationHandlerImpl::GetProperties(
           &ManagedNetworkConfigurationHandlerImpl::GetPropertiesCallback,
           weak_ptr_factory_.GetWeakPtr(),
           base::Bind(&ManagedNetworkConfigurationHandlerImpl::SendProperties,
-                     weak_ptr_factory_.GetWeakPtr(), callback, error_callback)),
+                     weak_ptr_factory_.GetWeakPtr(), userhash, callback,
+                     error_callback)),
       error_callback);
 }
 
 void ManagedNetworkConfigurationHandlerImpl::SendProperties(
+    const std::string& userhash,
     const network_handler::DictionaryResultCallback& callback,
     const network_handler::ErrorCallback& error_callback,
     const std::string& service_path,
     scoped_ptr<base::DictionaryValue> shill_properties) {
   const NetworkState* network_state =
       network_state_handler_->GetNetworkState(service_path);
+
+  std::string guid;
+  shill_properties->GetStringWithoutPathExpansion(shill::kGuidProperty, &guid);
+
+  ::onc::ONCSource onc_source;
+  FindPolicyByGUID(userhash, guid, &onc_source);
+
   scoped_ptr<base::DictionaryValue> onc_network(
-      onc::TranslateShillServiceToONCPart(
-          *shill_properties, ::onc::ONC_SOURCE_UNKNOWN,
-          &onc::kNetworkWithStateSignature, network_state));
+      onc::TranslateShillServiceToONCPart(*shill_properties, onc_source,
+                                          &onc::kNetworkWithStateSignature,
+                                          network_state));
   callback.Run(service_path, *onc_network);
 }
 
@@ -328,7 +340,7 @@ void ManagedNetworkConfigurationHandlerImpl::SetProperties(
     }
   }
 
-  SetShillProperties(service_path, shill_dictionary.Pass(), callback,
+  SetShillProperties(service_path, std::move(shill_dictionary), callback,
                      error_callback);
 }
 
@@ -411,10 +423,23 @@ void ManagedNetworkConfigurationHandlerImpl::SetPolicy(
     policies = policies_by_user_[userhash].get();
   } else {
     policies = new Policies;
-    policies_by_user_[userhash] = make_linked_ptr(policies);
+    policies_by_user_[userhash] = make_scoped_ptr(policies);
   }
 
   policies->global_network_config.MergeDictionary(&global_network_config);
+
+  // Update prohibited technologies.
+  const base::ListValue* prohibited_list = nullptr;
+  if (policies->global_network_config.GetListWithoutPathExpansion(
+          ::onc::global_network_config::kDisableNetworkTypes,
+          &prohibited_list) &&
+      prohibited_technologies_handler_) {
+    // Prohobited technologies are only allowed in user policy.
+    DCHECK_EQ(::onc::ONC_SOURCE_DEVICE_POLICY, onc_source);
+
+    prohibited_technologies_handler_->SetProhibitedTechnologies(
+        prohibited_list);
+  }
 
   GuidToPolicyMap old_per_network_config;
   policies->per_network_config.swap(old_per_network_config);
@@ -491,7 +516,7 @@ bool ManagedNetworkConfigurationHandlerImpl::ApplyOrQueuePolicies(
                            policies->global_network_config,
                            this,
                            modified_policies);
-  policy_applicators_[userhash] = make_linked_ptr(applicator);
+  policy_applicators_[userhash] = make_scoped_ptr(applicator);
   applicator->Run();
   return true;
 }
@@ -699,12 +724,14 @@ void ManagedNetworkConfigurationHandlerImpl::Init(
     NetworkStateHandler* network_state_handler,
     NetworkProfileHandler* network_profile_handler,
     NetworkConfigurationHandler* network_configuration_handler,
-    NetworkDeviceHandler* network_device_handler) {
+    NetworkDeviceHandler* network_device_handler,
+    ProhibitedTechnologiesHandler* prohibited_technologies_handler) {
   network_state_handler_ = network_state_handler;
   network_profile_handler_ = network_profile_handler;
   network_configuration_handler_ = network_configuration_handler;
   network_device_handler_ = network_device_handler;
   network_profile_handler_->AddObserver(this);
+  prohibited_technologies_handler_ = prohibited_technologies_handler;
 }
 
 void ManagedNetworkConfigurationHandlerImpl::OnPolicyAppliedToNetwork(
@@ -792,7 +819,7 @@ void ManagedNetworkConfigurationHandlerImpl::GetPropertiesCallback(
       !shill_properties_copy->GetStringWithoutPathExpansion(
           shill::kDeviceProperty, &device_path) ||
       device_path.empty()) {
-    send_callback.Run(service_path, shill_properties_copy.Pass());
+    send_callback.Run(service_path, std::move(shill_properties_copy));
     return;
   }
 
@@ -825,7 +852,7 @@ void ManagedNetworkConfigurationHandlerImpl::GetDevicePropertiesSuccess(
   // Create a "Device" dictionary in |network_properties|.
   network_properties->SetWithoutPathExpansion(
       shill::kDeviceProperty, device_properties.DeepCopy());
-  send_callback.Run(service_path, network_properties.Pass());
+  send_callback.Run(service_path, std::move(network_properties));
 }
 
 void ManagedNetworkConfigurationHandlerImpl::GetDevicePropertiesFailure(
@@ -835,7 +862,7 @@ void ManagedNetworkConfigurationHandlerImpl::GetDevicePropertiesFailure(
     const std::string& error_name,
     scoped_ptr<base::DictionaryValue> error_data) {
   NET_LOG_ERROR("Error getting device properties", service_path);
-  send_callback.Run(service_path, network_properties.Pass());
+  send_callback.Run(service_path, std::move(network_properties));
 }
 
 

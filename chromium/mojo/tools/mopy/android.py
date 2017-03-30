@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import atexit
-import itertools
 import logging
 import os
 import signal
@@ -11,14 +10,12 @@ import subprocess
 import sys
 import threading
 import time
-import urlparse
 
 from .paths import Paths
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir,
-                             os.pardir, 'build', 'android'))
+sys.path.append(os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                             '..', '..', '..', 'build', 'android'))
 from pylib import constants
-from pylib.base import base_test_runner
 from pylib.device import device_errors
 from pylib.device import device_utils
 from pylib.utils import base_error
@@ -39,16 +36,16 @@ MAPPING_PREFIX = '--map-origin='
 
 
 def _ExitIfNeeded(process):
-  """Exits |process| if it is still alive."""
+  '''Exits |process| if it is still alive.'''
   if process.poll() is None:
     process.kill()
 
 
 class AndroidShell(object):
-  """
+  '''
   Used to set up and run a given mojo shell binary on an Android device.
   |config| is the mopy.config.Config for the build.
-  """
+  '''
   def __init__(self, config):
     self.adb_path = constants.GetAdbPath()
     self.config = config
@@ -64,16 +61,16 @@ class AndroidShell(object):
   def _CreateADBCommand(self, args):
     adb_command = [self.adb_path, '-s', self.device.adb.GetDeviceSerial()]
     adb_command.extend(args)
-    logging.getLogger().debug("Command: %s", " ".join(adb_command))
+    logging.getLogger().debug('Command: %s', ' '.join(adb_command))
     return adb_command
 
   def _ReadFifo(self, path, pipe, on_fifo_closed, max_attempts=5):
-    """
+    '''
     Reads the fifo at |path| on the device and write the contents to |pipe|.
     Calls |on_fifo_closed| when the fifo is closed. This method will try to find
     the path up to |max_attempts|, waiting 1 second between each attempt. If it
     cannot find |path|, a exception will be raised.
-    """
+    '''
     def Run():
       def _WaitForFifo():
         for _ in xrange(max_attempts):
@@ -81,7 +78,7 @@ class AndroidShell(object):
             return
           time.sleep(1)
         on_fifo_closed()
-        raise Exception("Unable to find fifo: %s" % path)
+        raise Exception('Unable to find fifo: %s' % path)
       _WaitForFifo()
       stdout_cat = subprocess.Popen(self._CreateADBCommand([
                                       'shell',
@@ -92,55 +89,16 @@ class AndroidShell(object):
       stdout_cat.wait()
       on_fifo_closed()
 
-    thread = threading.Thread(target=Run, name="StdoutRedirector")
+    thread = threading.Thread(target=Run, name='StdoutRedirector')
     thread.start()
 
-  def _StartHttpServerForDirectory(self, path):
-    test_server_helper = base_test_runner.BaseTestRunner(self.device, None)
-    ports = test_server_helper.LaunchTestHttpServer(path)
-    atexit.register(test_server_helper.ShutdownHelperToolsForTestSuite)
-    print 'Hosting %s at http://127.0.0.1:%d' % (path, ports[1])
-    return 'http://127.0.0.1:%d/' % ports[0]
 
-  def _StartHttpServerForOriginMapping(self, mapping):
-    """
-    If |mapping| points at a local file starts an http server to serve files
-    from the directory and returns the new mapping. This is intended to be
-    called for every --map-origin value.
-    """
-    parts = mapping.split('=')
-    if len(parts) != 2:
-      return mapping
-    dest = parts[1]
-    # If the destination is a URL, don't map it.
-    if urlparse.urlparse(dest)[0]:
-      return mapping
-    # Assume the destination is a local file. Start a local server that
-    # redirects to it.
-    localUrl = self._StartHttpServerForDirectory(dest)
-    return parts[0] + '=' + localUrl
-
-  def _StartHttpServerForOriginMappings(self, map_parameters):
-    """Calls _StartHttpServerForOriginMapping for every --map-origin arg."""
-    if not map_parameters:
-      return []
-
-    original_values = list(itertools.chain(
-        *map(lambda x: x[len(MAPPING_PREFIX):].split(','), map_parameters)))
-    sorted(original_values)
-    result = []
-    for value in original_values:
-      result.append(self._StartHttpServerForOriginMapping(value))
-    return [MAPPING_PREFIX + ','.join(result)]
-
-  def InitShell(self, origin='localhost', device=None):
-    """
-    Runs adb as root, starts an origin server, and installs the apk as needed.
-    |origin| is the origin for mojo: URLs; if its value is 'localhost', a local
-    http server will be set up to serve files from the build directory.
-    |device| is the target device to run on, if multiple devices are connected.
-    Returns 0 on success or a non-zero exit code on a terminal failure.
-    """
+  def InitShell(self, device=None):
+    '''
+    Runs adb as root, and installs the apk as needed.  |device| is the target
+    device to run on, if multiple devices are connected. Returns 0 on success or
+    a non-zero exit code on a terminal failure.
+    '''
     try:
       devices = device_utils.DeviceUtils.HealthyDevices()
       if device:
@@ -152,26 +110,22 @@ class AndroidShell(object):
       else:
         raise device_errors.NoDevicesError()
 
-      logging.getLogger().debug("Using device: %s", self.device)
+      logging.getLogger().debug('Using device: %s', self.device)
       # Clean the logs on the device to avoid displaying prior activity.
       subprocess.check_call(self._CreateADBCommand(['logcat', '-c']))
       self.device.EnableRoot()
       self.device.Install(self.paths.apk_path)
     except base_error.BaseError as e:
-      # Report "device not found" as infra failures. See http://crbug.com/493900
-      print "Exception in AndroidShell.InitShell:\n%s" % str(e)
-      if e.is_infra_error or "error: device not found" in str(e):
+      # Report 'device not found' as infra failures. See http://crbug.com/493900
+      print 'Exception in AndroidShell.InitShell:\n%s' % str(e)
+      if e.is_infra_error or 'error: device not found' in str(e):
         return constants.INFRA_EXIT_CODE
       return constants.ERROR_EXIT_CODE
 
-    if origin is 'localhost':
-      origin = self._StartHttpServerForDirectory(self.paths.build_dir)
-    if origin:
-      self.shell_args.append("--origin=" + origin)
     return 0
 
   def _GetProcessId(self, process):
-    """Returns the process id of the process on the remote device."""
+    '''Returns the process id of the process on the remote device.'''
     while True:
       line = process.stdout.readline()
       pid_command = 'launcher waiting for GDB. pid: '
@@ -181,28 +135,28 @@ class AndroidShell(object):
     return 0
 
   def _GetLocalGdbPath(self):
-    """Returns the path to the android gdb."""
-    if self.config.target_cpu == "arm":
-      return os.path.join(constants.ANDROID_NDK_ROOT, "toolchains",
-                          "arm-linux-androideabi-4.9", "prebuilt",
-                          "linux-x86_64", "bin", "arm-linux-androideabi-gdb")
-    elif self.config.target_cpu == "x86":
-      return os.path.join(constants.ANDROID_NDK_ROOT, "toolchains",
-                          "x86-4.9", "prebuilt", "linux-x86_64", "bin",
-                          "i686-linux-android-gdb")
-    elif self.config.target_cpu == "x64":
-      return os.path.join(constants.ANDROID_NDK_ROOT, "toolchains",
-                          "x86_64-4.9", "prebuilt", "linux-x86_64", "bin",
-                          "x86_64-linux-android-gdb")
+    '''Returns the path to the android gdb.'''
+    if self.config.target_cpu == 'arm':
+      return os.path.join(constants.ANDROID_NDK_ROOT, 'toolchains',
+                          'arm-linux-androideabi-4.9', 'prebuilt',
+                          'linux-x86_64', 'bin', 'arm-linux-androideabi-gdb')
+    elif self.config.target_cpu == 'x86':
+      return os.path.join(constants.ANDROID_NDK_ROOT, 'toolchains',
+                          'x86-4.9', 'prebuilt', 'linux-x86_64', 'bin',
+                          'i686-linux-android-gdb')
+    elif self.config.target_cpu == 'x64':
+      return os.path.join(constants.ANDROID_NDK_ROOT, 'toolchains',
+                          'x86_64-4.9', 'prebuilt', 'linux-x86_64', 'bin',
+                          'x86_64-linux-android-gdb')
     else:
-      raise Exception("Unknown target_cpu: %s" % self.config.target_cpu)
+      raise Exception('Unknown target_cpu: %s' % self.config.target_cpu)
 
   def _WaitForProcessIdAndStartGdb(self, process):
-    """
+    '''
     Waits until we see the process id from the remote device, starts up
     gdbserver on the remote device, and gdb on the local device.
-    """
-    # Wait until we see "PID"
+    '''
+    # Wait until we see 'PID'
     pid = self._GetProcessId(process)
     assert pid != 0
     # No longer need the logcat process.
@@ -226,7 +180,7 @@ class AndroidShell(object):
     time.sleep(1)
 
     local_gdb_process = subprocess.Popen([self._GetLocalGdbPath(),
-                                          "-x",
+                                          '-x',
                                           gdbinit_path],
                                          cwd=self.temp_gdb_dir)
     atexit.register(_ExitIfNeeded, local_gdb_process)
@@ -239,12 +193,12 @@ class AndroidShell(object):
                     stdout,
                     on_fifo_closed,
                     temp_gdb_dir=None):
-    """
+    '''
     Starts the shell with the given |arguments|, directing output to |stdout|.
     |on_fifo_closed| will be run if the FIFO can't be found or when it's closed.
     |temp_gdb_dir| is set to a location with appropriate symlinks for gdb to
     find when attached to the device's remote process on startup.
-    """
+    '''
     assert self.device
     arguments += self.shell_args
 
@@ -266,7 +220,7 @@ class AndroidShell(object):
       self.device.adb.Forward('tcp:5039', 'tcp:5039')
       logcat_process = self.ShowLogs(stdout=subprocess.PIPE)
 
-    fifo_path = "/data/data/%s/stdout.fifo" % self.target_package
+    fifo_path = '/data/data/%s/stdout.fifo' % self.target_package
     subprocess.check_call(self._CreateADBCommand(
         ['shell', 'rm', '-f', fifo_path]))
     arguments.append('--fifo-path=%s' % fifo_path)
@@ -275,8 +229,6 @@ class AndroidShell(object):
 
     # Extract map-origin args and add the extras array with commas escaped.
     parameters = [a for a in arguments if not a.startswith(MAPPING_PREFIX)]
-    map_parameters = [a for a in arguments if a.startswith(MAPPING_PREFIX)]
-    parameters += self._StartHttpServerForOriginMappings(map_parameters)
     parameters = [p.replace(',', '\,') for p in parameters]
     cmd += ['--esa', '%s.extras' % self.target_package, ','.join(parameters)]
 
@@ -288,11 +240,11 @@ class AndroidShell(object):
       cmd_process.wait()
 
   def kill(self):
-    """Stops the mojo shell; matches the Popen.kill method signature."""
+    '''Stops the mojo shell; matches the Popen.kill method signature.'''
     self.device.ForceStop(self.target_package)
 
   def ShowLogs(self, stdout=sys.stdout):
-    """Displays the mojo shell logs and returns the process reading the logs."""
+    '''Displays the mojo shell logs and returns the process reading the logs.'''
     logcat = subprocess.Popen(self._CreateADBCommand([
                                'logcat',
                                '-s',
@@ -303,14 +255,14 @@ class AndroidShell(object):
 
 
 def _CreateGdbInit(tmp_dir, gdb_init_path, build_dir):
-  """
+  '''
   Creates the gdbinit file.
 
   Args:
     tmp_dir: the directory where the gdbinit and other files lives.
     gdb_init_path: path to gdbinit
     build_dir: path where build files are located.
-  """
+  '''
   gdbinit = ('target remote localhost:5039\n'
              'def reload-symbols\n'
              '  set solib-search-path %s:%s\n'

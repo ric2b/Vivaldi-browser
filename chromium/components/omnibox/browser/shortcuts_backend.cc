@@ -4,14 +4,17 @@
 
 #include "components/omnibox/browser/shortcuts_backend.h"
 
+#include <stddef.h>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/guid.h"
 #include "base/i18n/case_conversion.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "components/history/core/browser/history_service.h"
@@ -69,7 +72,7 @@ ShortcutsBackend::ShortcutsBackend(
     base::FilePath database_path,
     bool suppress_db)
     : template_url_service_(template_url_service),
-      search_terms_data_(search_terms_data.Pass()),
+      search_terms_data_(std::move(search_terms_data)),
       current_state_(NOT_INITIALIZED),
       history_service_observer_(this),
       main_runner_(base::ThreadTaskRunnerHandle::Get()),
@@ -221,6 +224,8 @@ void ShortcutsBackend::InitCompleted() {
   temp_shortcuts_map_->swap(shortcuts_map_);
   temp_shortcuts_map_.reset(NULL);
   temp_guid_map_.reset(NULL);
+  UMA_HISTOGRAM_COUNTS_10000("ShortcutsProvider.DatabaseSize",
+                             shortcuts_map_.size());
   current_state_ = INITIALIZED;
   FOR_EACH_OBSERVER(ShortcutsBackendObserver, observer_list_,
                     OnShortcutsLoaded());

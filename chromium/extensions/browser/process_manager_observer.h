@@ -17,21 +17,32 @@ class ExtensionHost;
 
 class ProcessManagerObserver {
  public:
-  // Called immediately after an extension background host is started.
+  // Called immediately after an extension background host is started. This
+  // corresponds with the loading of background hosts immediately after profile
+  // startup.
   virtual void OnBackgroundHostStartup(const Extension* extension) {}
 
-  // Called immediately after an ExtensionHost for an extension with a lazy
-  // background page is created.
+  // Called immediately after an ExtensionHost for an extension is created.
+  // This corresponds with any time ProcessManager::OnBackgroundHostCreated is
+  // called.
   virtual void OnBackgroundHostCreated(ExtensionHost* host) {}
 
   // Called immediately after the extension background host is destroyed.
   virtual void OnBackgroundHostClose(const std::string& extension_id) {}
 
+  // Called when a RenderFrameHost has been registered in an extension process.
   virtual void OnExtensionFrameRegistered(
       const std::string& extension_id,
       content::RenderFrameHost* render_frame_host) {}
 
+  // Called when a RenderFrameHost is no longer part of an extension process.
   virtual void OnExtensionFrameUnregistered(
+      const std::string& extension_id,
+      content::RenderFrameHost* render_frame_host) {}
+
+  // Called when a RenderFrameHost was navigated to another page within the
+  // extension process.
+  virtual void OnExtensionFrameNavigated(
       const std::string& extension_id,
       content::RenderFrameHost* render_frame_host) {}
 };

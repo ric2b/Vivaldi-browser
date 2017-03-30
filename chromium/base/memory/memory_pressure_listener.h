@@ -11,8 +11,8 @@
 #define BASE_MEMORY_MEMORY_PRESSURE_LISTENER_H_
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 
 namespace base {
 
@@ -72,8 +72,18 @@ class BASE_EXPORT MemoryPressureListener {
   // Intended for use by the platform specific implementation.
   static void NotifyMemoryPressure(MemoryPressureLevel memory_pressure_level);
 
+  // These methods should not be used anywhere else but in memory measurement
+  // code, where they are intended to maintain stable conditions across
+  // measurements.
+  static bool AreNotificationsSuppressed();
+  static void SetNotificationsSuppressed(bool suppressed);
+  static void SimulatePressureNotification(
+      MemoryPressureLevel memory_pressure_level);
+
  private:
   void Notify(MemoryPressureLevel memory_pressure_level);
+
+  static void DoNotifyMemoryPressure(MemoryPressureLevel memory_pressure_level);
 
   MemoryPressureCallback callback_;
 

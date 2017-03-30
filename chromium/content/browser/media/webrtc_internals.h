@@ -87,28 +87,31 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   // Sends all update data to |observer|.
   void UpdateObserver(WebRTCInternalsUIObserver* observer);
 
-  // Enables or disables AEC dump (diagnostic echo canceller recording).
-  void EnableAecDump(content::WebContents* web_contents);
-  void DisableAecDump();
+  // Enables or disables diagnostic audio recordings for debugging purposes.
+  void EnableAudioDebugRecordings(content::WebContents* web_contents);
+  void DisableAudioDebugRecordings();
 
-  bool aec_dump_enabled() {
-    return aec_dump_enabled_;
-  }
+  bool IsAudioDebugRecordingsEnabled() const;
+  const base::FilePath& GetAudioDebugRecordingsFilePath() const;
 
-  base::FilePath aec_dump_file_path() {
-    return aec_dump_file_path_;
-  }
+  // Enables or disables diagnostic event log.
+  void SetEventLogRecordings(bool enable, content::WebContents* web_contents);
+
+  bool IsEventLogRecordingsEnabled() const;
+  const base::FilePath& GetEventLogRecordingsFilePath() const;
 
   void ResetForTesting();
 
  private:
   friend struct base::DefaultLazyInstanceTraits<WebRTCInternals>;
-  FRIEND_TEST_ALL_PREFIXES(WebRtcAecDumpBrowserTest, CallWithAecDump);
-  FRIEND_TEST_ALL_PREFIXES(WebRtcAecDumpBrowserTest,
-                           CallWithAecDumpEnabledThenDisabled);
-  FRIEND_TEST_ALL_PREFIXES(WebRtcAecDumpBrowserTest, TwoCallsWithAecDump);
+  FRIEND_TEST_ALL_PREFIXES(WebRtcAudioDebugRecordingsBrowserTest,
+                           CallWithAudioDebugRecordings);
+  FRIEND_TEST_ALL_PREFIXES(WebRtcAudioDebugRecordingsBrowserTest,
+                           CallWithAudioDebugRecordingsEnabledThenDisabled);
+  FRIEND_TEST_ALL_PREFIXES(WebRtcAudioDebugRecordingsBrowserTest,
+                           TwoCallsWithAudioDebugRecordings);
   FRIEND_TEST_ALL_PREFIXES(WebRtcInternalsTest,
-                           AecRecordingFileSelectionCanceled);
+                           AudioDebugRecordingsFileSelectionCanceled);
 
   WebRTCInternals();
   ~WebRTCInternals() override;
@@ -128,8 +131,13 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   void OnRendererExit(int render_process_id);
 
 #if defined(ENABLE_WEBRTC)
-  // Enables AEC dump on all render process hosts using |aec_dump_file_path_|.
-  void EnableAecDumpOnAllRenderProcessHosts();
+  // Enables diagnostic audio recordings on all render process hosts using
+  // |audio_debug_recordings_file_path_|.
+  void EnableAudioDebugRecordingsOnAllRenderProcessHosts();
+
+  // Enables event log recordings on all render process hosts using
+  // |event_log_recordings_file_path_|.
+  void EnableEventLogRecordingsOnAllRenderProcessHosts();
 #endif
 
   // Called whenever an element is added to or removed from
@@ -167,9 +175,14 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   // For managing select file dialog.
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
 
-  // AEC dump (diagnostic echo canceller recording) state.
-  bool aec_dump_enabled_;
-  base::FilePath aec_dump_file_path_;
+  // Diagnostic audio recording state.
+  bool audio_debug_recordings_;
+  base::FilePath audio_debug_recordings_file_path_;
+
+  // Diagnostic event log recording state.
+  bool event_log_recordings_;
+  bool selecting_event_log_;
+  base::FilePath event_log_recordings_file_path_;
 
   // While |peer_connection_data_| is non-empty, hold an instance of
   // PowerSaveBlocker.  This prevents the application from being suspended while

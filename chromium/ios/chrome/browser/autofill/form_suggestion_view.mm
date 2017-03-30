@@ -6,6 +6,7 @@
 
 #include "base/i18n/rtl.h"
 #include "base/mac/scoped_nsobject.h"
+#import "components/autofill/ios/browser/form_suggestion.h"
 #import "ios/chrome/browser/autofill/form_suggestion_label.h"
 #import "ios/chrome/browser/autofill/form_suggestion_view_client.h"
 
@@ -13,11 +14,11 @@ namespace {
 
 // Vertical margin between suggestions and the edge of the suggestion content
 // frame.
-const CGFloat kSuggestionVerticalMargin = 4;
+const CGFloat kSuggestionVerticalMargin = 6;
 
 // Horizontal margin around suggestions (i.e. between suggestions, and between
 // the end suggestions and the suggestion content frame).
-const CGFloat kSuggestionHorizontalMargin = 2;
+const CGFloat kSuggestionHorizontalMargin = 6;
 
 }  // namespace
 
@@ -42,13 +43,6 @@ const CGFloat kSuggestionHorizontalMargin = 2;
     const CGFloat labelHeight =
         CGRectGetHeight(frame) - kSuggestionVerticalMargin * 2;
 
-    BOOL isRTL = base::i18n::IsRTL();
-
-    NSUInteger suggestionCount = [_suggestions count];
-    // References to labels. These references are used to adjust the labels'
-    // positions if they don't take up the whole suggestion view area for RTL.
-    base::scoped_nsobject<NSMutableArray> labels(
-        [[NSMutableArray alloc] initWithCapacity:suggestionCount]);
     __block CGFloat currentX = kSuggestionHorizontalMargin;
     void (^setupBlock)(FormSuggestion* suggestion, NSUInteger idx, BOOL* stop) =
         ^(FormSuggestion* suggestion, NSUInteger idx, BOOL* stop) {
@@ -56,38 +50,50 @@ const CGFloat kSuggestionHorizontalMargin = 2;
           // the width.
           CGRect proposedFrame =
               CGRectMake(currentX, kSuggestionVerticalMargin, 0, labelHeight);
-          base::scoped_nsobject<UIView> label(
-              [[FormSuggestionLabel alloc] initWithSuggestion:suggestion
-                                                proposedFrame:proposedFrame
-                                                       client:client]);
+          base::scoped_nsobject<UIView> label([[FormSuggestionLabel alloc]
+              initWithSuggestion:suggestion
+                   proposedFrame:proposedFrame
+                           index:idx
+                  numSuggestions:[_suggestions count]
+                          client:client]);
           [self addSubview:label];
-          [labels addObject:label];
           currentX +=
               CGRectGetWidth([label frame]) + kSuggestionHorizontalMargin;
         };
-    [_suggestions enumerateObjectsWithOptions:(isRTL ? NSEnumerationReverse : 0)
-                                   usingBlock:setupBlock];
-
-    if (isRTL) {
-      if (currentX < CGRectGetWidth(frame)) {
-        self.contentSize = frame.size;
-        // Offsets labels for right alignment.
-        CGFloat offset = CGRectGetWidth(frame) - currentX;
-        for (UIView* label in labels.get()) {
-          label.frame = CGRectOffset(label.frame, offset, 0);
-        }
-      } else {
-        self.contentSize = CGSizeMake(currentX, CGRectGetHeight(frame));
-        // Sets the visible rectangle so suggestions at the right end are
-        // initially visible.
-        CGRect initRect = {{currentX - CGRectGetWidth(frame), 0}, frame.size};
-        [self scrollRectToVisible:initRect animated:NO];
-      }
-    } else {
-      self.contentSize = CGSizeMake(currentX, CGRectGetHeight(frame));
-    }
+    [_suggestions
+        enumerateObjectsWithOptions:(base::i18n::IsRTL() ? NSEnumerationReverse
+                                                         : 0)
+                         usingBlock:setupBlock];
   }
   return self;
+}
+
+- (void)setFrame:(CGRect)frame {
+  [super setFrame:frame];
+
+  CGFloat contentwidth = kSuggestionHorizontalMargin * 2;
+  for (UIView* label in self.subviews) {
+    contentwidth += CGRectGetWidth([label frame]) + kSuggestionHorizontalMargin;
+  }
+
+  if (base::i18n::IsRTL()) {
+    if (contentwidth < CGRectGetWidth(frame)) {
+      self.contentSize = frame.size;
+      // Offsets labels for right alignment.
+      CGFloat offset = CGRectGetWidth(frame) - contentwidth;
+      for (UIView* label in self.subviews) {
+        label.frame = CGRectOffset(label.frame, offset, 0);
+      }
+    } else {
+      self.contentSize = CGSizeMake(contentwidth, CGRectGetHeight(frame));
+      // Sets the visible rectangle so suggestions at the right end are
+      // initially visible.
+      CGRect initRect = {{contentwidth - CGRectGetWidth(frame), 0}, frame.size};
+      [self scrollRectToVisible:initRect animated:NO];
+    }
+  } else {
+    self.contentSize = CGSizeMake(contentwidth, CGRectGetHeight(frame));
+  }
 }
 
 - (NSArray*)suggestions {

@@ -6,6 +6,7 @@
 #define UI_WM_CORE_FOCUS_CONTROLLER_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
@@ -99,6 +100,10 @@ class WM_EXPORT FocusController : public aura::client::ActivationClient,
       aura::client::ActivationChangeObserver::ActivationReason reason,
       aura::Window* requested_window,
       aura::Window* activatable_window);
+
+  // Stack the |active_window_| on top of the window stack. This function is
+  // called when activating a window or re-activating the current active window.
+  void StackActiveWindow();
 
   // Called when a window's disposition changed such that it and its hierarchy
   // are no longer focusable/activatable. |next| is a valid window that is used

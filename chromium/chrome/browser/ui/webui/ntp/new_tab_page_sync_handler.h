@@ -7,9 +7,11 @@
 
 #include <string>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/sync_ui_util.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 namespace base {
@@ -49,7 +51,8 @@ class NewTabPageSyncHandler : public content::WebUIMessageHandler,
   };
   // Helper to invoke the |syncMessageChanged| JS function on the new tab page.
   virtual void SendSyncMessageToPage(MessageType type,
-                                     std::string msg, std::string linktext);
+                                     const std::string& msg,
+                                     const std::string& linktext);
 
   // Helper to query the sync service and figure out what to send to
   // the page, and send it via SendSyncMessageToPage.

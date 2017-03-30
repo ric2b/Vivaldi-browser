@@ -6,10 +6,12 @@
 
 #include <string>
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_string.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/speech/tts_controller.h"
+#include "chrome/common/features.h"
 #include "jni/TtsPlatformImpl_jni.h"
 
 using base::android::AttachCurrentThread;
@@ -45,11 +47,10 @@ bool TtsPlatformImplAndroid::Speak(
     const UtteranceContinuousParameters& params) {
   JNIEnv* env = AttachCurrentThread();
   jboolean success = Java_TtsPlatformImpl_speak(
-      env, java_ref_.obj(),
-      utterance_id,
-      base::android::ConvertUTF8ToJavaString(env, utterance).Release(),
-      base::android::ConvertUTF8ToJavaString(env, lang).Release(),
-      params.rate, params.pitch, params.volume);
+      env, java_ref_.obj(), utterance_id,
+      base::android::ConvertUTF8ToJavaString(env, utterance).obj(),
+      base::android::ConvertUTF8ToJavaString(env, lang).obj(), params.rate,
+      params.pitch, params.volume);
   if (!success)
     return false;
 
@@ -99,23 +100,27 @@ void TtsPlatformImplAndroid::GetVoices(
   }
 }
 
-void TtsPlatformImplAndroid::VoicesChanged(JNIEnv* env, jobject obj) {
+void TtsPlatformImplAndroid::VoicesChanged(JNIEnv* env,
+                                           const JavaParamRef<jobject>& obj) {
   TtsController::GetInstance()->VoicesChanged();
 }
 
-void TtsPlatformImplAndroid::OnEndEvent(
-    JNIEnv* env, jobject obj, jint utterance_id) {
+void TtsPlatformImplAndroid::OnEndEvent(JNIEnv* env,
+                                        const JavaParamRef<jobject>& obj,
+                                        jint utterance_id) {
   SendFinalTtsEvent(utterance_id, TTS_EVENT_END,
                     static_cast<int>(utterance_.size()));
 }
 
-void TtsPlatformImplAndroid::OnErrorEvent(
-    JNIEnv* env, jobject obj, jint utterance_id) {
+void TtsPlatformImplAndroid::OnErrorEvent(JNIEnv* env,
+                                          const JavaParamRef<jobject>& obj,
+                                          jint utterance_id) {
   SendFinalTtsEvent(utterance_id, TTS_EVENT_ERROR, 0);
 }
 
-void TtsPlatformImplAndroid::OnStartEvent(
-    JNIEnv* env, jobject obj, jint utterance_id) {
+void TtsPlatformImplAndroid::OnStartEvent(JNIEnv* env,
+                                          const JavaParamRef<jobject>& obj,
+                                          jint utterance_id) {
   if (utterance_id != utterance_id_)
     return;
 
@@ -136,8 +141,9 @@ void TtsPlatformImplAndroid::SendFinalTtsEvent(
 
 // static
 TtsPlatformImplAndroid* TtsPlatformImplAndroid::GetInstance() {
-  return Singleton<TtsPlatformImplAndroid,
-                   LeakySingletonTraits<TtsPlatformImplAndroid> >::get();
+  return base::Singleton<
+      TtsPlatformImplAndroid,
+      base::LeakySingletonTraits<TtsPlatformImplAndroid>>::get();
 }
 
 // static

@@ -4,11 +4,15 @@
 
 #include "chrome/browser/signin/easy_unlock_app_manager.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/screenlock_private/screenlock_private_api.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -39,7 +43,7 @@
 
 namespace easy_unlock_private_api = extensions::api::easy_unlock_private;
 namespace screenlock_private_api = extensions::api::screenlock_private;
-namespace app_runtime_api = extensions::core_api::app_runtime;
+namespace app_runtime_api = extensions::api::app_runtime;
 
 namespace {
 
@@ -287,9 +291,8 @@ class EasyUnlockAppManagerTest : public testing::Test {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         proximity_auth::switches::kForceLoadEasyUnlockAppInTests);
     extensions::ExtensionSystem* extension_system = SetUpExtensionSystem();
-    app_manager_ =
-        EasyUnlockAppManager::Create(extension_system, IDR_EASY_UNLOCK_MANIFEST,
-                                     GetAppPath()).Pass();
+    app_manager_ = EasyUnlockAppManager::Create(
+        extension_system, IDR_EASY_UNLOCK_MANIFEST, GetAppPath());
   }
 
  protected:
@@ -387,8 +390,7 @@ TEST_F(EasyUnlockAppManagerTest, LoadAppWhenAlreadyLoaded) {
       extension_misc::kEasyUnlockAppId, false));
 }
 
-//tomas@vivaldi.com: disabled unit_tests (VB-5297)
-TEST_F(EasyUnlockAppManagerTest, DISABLED_LoadAppPreviouslyDisabled) {
+TEST_F(EasyUnlockAppManagerTest, LoadAppPreviouslyDisabled) {
   SetExtensionSystemReady();
 
   extension_service_->component_loader()->Add(IDR_EASY_UNLOCK_MANIFEST,
@@ -407,8 +409,7 @@ TEST_F(EasyUnlockAppManagerTest, DISABLED_LoadAppPreviouslyDisabled) {
       extension_misc::kEasyUnlockAppId, false));
 }
 
-//tomas@vivaldi.com: disabled unit_tests (VB-5297)
-TEST_F(EasyUnlockAppManagerTest, DISABLED_ReloadApp) {
+TEST_F(EasyUnlockAppManagerTest, ReloadApp) {
   SetExtensionSystemReady();
 
   extension_service_->component_loader()->Add(IDR_EASY_UNLOCK_MANIFEST,
@@ -425,8 +426,7 @@ TEST_F(EasyUnlockAppManagerTest, DISABLED_ReloadApp) {
       extension_misc::kEasyUnlockAppId, false));
 }
 
-//tomas@vivaldi.com: disabled unit_tests (VB-5297)
-TEST_F(EasyUnlockAppManagerTest, DISABLED_ReloadAppDisabled) {
+TEST_F(EasyUnlockAppManagerTest, ReloadAppDisabled) {
   SetExtensionSystemReady();
 
   extension_service_->component_loader()->Add(IDR_EASY_UNLOCK_MANIFEST,
@@ -446,8 +446,7 @@ TEST_F(EasyUnlockAppManagerTest, DISABLED_ReloadAppDisabled) {
       extension_service_->IsExtensionEnabled(extension_misc::kEasyUnlockAppId));
 }
 
-//tomas@vivaldi.com: disabled unit_tests (VB-5297)
-TEST_F(EasyUnlockAppManagerTest, DISABLED_DisableApp) {
+TEST_F(EasyUnlockAppManagerTest, DisableApp) {
   SetExtensionSystemReady();
 
   extension_service_->component_loader()->Add(IDR_EASY_UNLOCK_MANIFEST,
@@ -512,8 +511,7 @@ TEST_F(EasyUnlockAppManagerTest, LaunchSetup) {
   EXPECT_EQ(1u, event_consumer_.app_launched_count());
 }
 
-//tomas@vivaldi.com: disabled unit_tests (VB-5297)
-TEST_F(EasyUnlockAppManagerTest, DISABLED_LaunchSetupWhenDisabled) {
+TEST_F(EasyUnlockAppManagerTest, LaunchSetupWhenDisabled) {
   SetExtensionSystemReady();
 
   ASSERT_EQ(0u, event_consumer_.app_launched_count());
@@ -587,8 +585,7 @@ TEST_F(EasyUnlockAppManagerTest, SendUserUpdatedNoRegisteredListeners) {
   EXPECT_EQ(0u, event_consumer_.user_updated_count());
 }
 
-//tomas@vivaldi.com: disabled unit_tests (VB-5297)
-TEST_F(EasyUnlockAppManagerTest, DISABLED_SendUserUpdatedAppDisabled) {
+TEST_F(EasyUnlockAppManagerTest, SendUserUpdatedAppDisabled) {
   SetExtensionSystemReady();
 
   app_manager_->LoadApp();
@@ -628,8 +625,7 @@ TEST_F(EasyUnlockAppManagerTest, SendAuthAttemptedNoRegisteredListeners) {
   EXPECT_EQ(0u, event_consumer_.auth_attempted_count());
 }
 
-//tomas@vivaldi.com: disabled unit_tests (VB-5297)
-TEST_F(EasyUnlockAppManagerTest, DISABLED_SendAuthAttemptedAppDisabled) {
+TEST_F(EasyUnlockAppManagerTest, SendAuthAttemptedAppDisabled) {
   SetExtensionSystemReady();
 
   app_manager_->LoadApp();

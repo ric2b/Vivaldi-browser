@@ -4,6 +4,8 @@
 
 #include "cc/trees/damage_tracker.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "cc/base/math_util.h"
@@ -142,13 +144,7 @@ void DamageTracker::UpdateDamageTrackingState(
     damage_rect_for_this_update.Union(damage_from_surface_mask);
     damage_rect_for_this_update.Union(damage_from_leftover_rects);
 
-    if (filters.HasReferenceFilter()) {
-      // TODO(senorblanco):  Once SkImageFilter reports its outsets, use
-      // those here to limit damage.
-      damage_rect_for_this_update = target_surface_content_rect;
-    } else if (filters.HasFilterThatMovesPixels()) {
-      ExpandRectWithFilters(&damage_rect_for_this_update, filters);
-    }
+    ExpandRectWithFilters(&damage_rect_for_this_update, filters);
   }
 
   // Damage accumulates until we are notified that we actually did draw on that
@@ -286,10 +282,6 @@ void DamageTracker::ExtendDamageForLayer(LayerImpl* layer,
   gfx::Rect rect_in_target_space = layer->GetEnclosingRectInTargetSpace();
   data.Update(rect_in_target_space, mailboxId_);
 
-  gfx::RectF damage_rect =
-      gfx::UnionRects(layer->update_rect(), layer->damage_rect());
-  damage_rect.Intersect(gfx::RectF(layer->bounds()));
-
   if (layer_is_new || layer->LayerPropertyChanged()) {
     // If a layer is new or has changed, then its entire layer rect affects the
     // target surface.
@@ -298,11 +290,17 @@ void DamageTracker::ExtendDamageForLayer(LayerImpl* layer,
     // The layer's old region is now exposed on the target surface, too.
     // Note old_rect_in_target_space is already in target space.
     target_damage_rect->Union(old_rect_in_target_space);
-  } else if (!damage_rect.IsEmpty()) {
-    // If the layer properties haven't changed, then the the target surface is
-    // only affected by the layer's damaged area, which could be empty.
-    gfx::Rect damage_rect_in_target_space = gfx::ToEnclosingRect(
-        MathUtil::MapClippedRect(layer->draw_transform(), damage_rect));
+    return;
+  }
+
+  // If the layer properties haven't changed, then the the target surface is
+  // only affected by the layer's damaged area, which could be empty.
+  gfx::Rect damage_rect =
+      gfx::UnionRects(layer->update_rect(), layer->damage_rect());
+  damage_rect.Intersect(gfx::Rect(layer->bounds()));
+  if (!damage_rect.IsEmpty()) {
+    gfx::Rect damage_rect_in_target_space =
+        MathUtil::MapEnclosingClippedRect(layer->DrawTransform(), damage_rect);
     target_damage_rect->Union(damage_rect_in_target_space);
   }
 }

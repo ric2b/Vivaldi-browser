@@ -5,10 +5,14 @@
 #ifndef REMOTING_HOST_CHROMOTING_MESSAGES_H_
 #define REMOTING_HOST_CHROMOTING_MESSAGES_H_
 
+#include <stdint.h>
+
+#include "base/memory/shared_memory_handle.h"
 #include "ipc/ipc_platform_file.h"
 #include "net/base/ip_endpoint.h"
 #include "remoting/host/chromoting_param_traits.h"
 #include "remoting/host/screen_resolution.h"
+#include "remoting/protocol/errors.h"
 #include "remoting/protocol/transport.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
@@ -85,9 +89,9 @@ IPC_MESSAGE_CONTROL2(ChromotingNetworkDaemonMsg_SetScreenResolution,
 IPC_STRUCT_BEGIN(SerializedTransportRoute)
   IPC_STRUCT_MEMBER(int, type)
   IPC_STRUCT_MEMBER(net::IPAddressNumber, remote_address)
-  IPC_STRUCT_MEMBER(uint16, remote_port)
+  IPC_STRUCT_MEMBER(uint16_t, remote_port)
   IPC_STRUCT_MEMBER(net::IPAddressNumber, local_address)
-  IPC_STRUCT_MEMBER(uint16, local_port)
+  IPC_STRUCT_MEMBER(uint16_t, local_port)
 IPC_STRUCT_END()
 
 // Hosts status notifications (see HostStatusObserver interface) sent by
@@ -136,8 +140,8 @@ IPC_MESSAGE_CONTROL0(ChromotingDesktopDaemonMsg_InjectSas)
 // Notifies the network process that a shared buffer has been created.
 IPC_MESSAGE_CONTROL3(ChromotingDesktopNetworkMsg_CreateSharedBuffer,
                      int /* id */,
-                     IPC::PlatformFileForTransit /* handle */,
-                     uint32 /* size */)
+                     base::SharedMemoryHandle /* handle */,
+                     uint32_t /* size */)
 
 // Request the network process to stop using a shared buffer.
 IPC_MESSAGE_CONTROL1(ChromotingDesktopNetworkMsg_ReleaseSharedBuffer,
@@ -158,10 +162,10 @@ IPC_STRUCT_BEGIN(SerializedDesktopFrame)
   IPC_STRUCT_MEMBER(webrtc::DesktopSize, dimensions)
 
   // Time spent in capture. Unit is in milliseconds.
-  IPC_STRUCT_MEMBER(int64, capture_time_ms)
+  IPC_STRUCT_MEMBER(int64_t, capture_time_ms)
 
   // Latest event timestamp supplied by the client for performance tracking.
-  IPC_STRUCT_MEMBER(int64, latest_event_timestamp)
+  IPC_STRUCT_MEMBER(int64_t, latest_event_timestamp)
 
   // DPI for this frame.
   IPC_STRUCT_MEMBER(webrtc::DesktopVector, dpi)
@@ -180,8 +184,12 @@ IPC_MESSAGE_CONTROL1(ChromotingDesktopNetworkMsg_MouseCursor,
 IPC_MESSAGE_CONTROL1(ChromotingDesktopNetworkMsg_InjectClipboardEvent,
                      std::string /* serialized_event */ )
 
+IPC_ENUM_TRAITS_MAX_VALUE(remoting::protocol::ErrorCode,
+                          remoting::protocol::ERROR_CODE_MAX)
+
 // Requests the network process to terminate the client session.
-IPC_MESSAGE_CONTROL0(ChromotingDesktopNetworkMsg_DisconnectSession)
+IPC_MESSAGE_CONTROL1(ChromotingDesktopNetworkMsg_DisconnectSession,
+                     remoting::protocol::ErrorCode /* error */)
 
 // Carries an audio packet from the desktop session agent to the client.
 // |serialized_packet| is a serialized AudioPacket.

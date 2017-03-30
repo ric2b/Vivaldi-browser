@@ -6,6 +6,7 @@
 #define SYNC_API_ATTACHMENTS_ATTACHMENT_STORE_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/api/attachments/attachment.h"
@@ -168,7 +169,7 @@ class SYNC_EXPORT AttachmentStore {
 // AttachmentService writes attachment on behalf of model type after download
 // and takes reference on attachment for the duration of upload.
 // Model type implementation shouldn't use this interface.
-class SYNC_EXPORT_PRIVATE AttachmentStoreForSync : public AttachmentStore {
+class SYNC_EXPORT AttachmentStoreForSync : public AttachmentStore {
  public:
   ~AttachmentStoreForSync();
 

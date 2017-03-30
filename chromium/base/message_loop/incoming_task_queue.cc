@@ -11,6 +11,7 @@
 #include "base/metrics/histogram.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 namespace base {
 namespace internal {
@@ -147,7 +148,7 @@ bool IncomingTaskQueue::PostPendingTask(PendingTask* pending_task) {
   }
 
   // Initialize the sequence number. The sequence number is used for delayed
-  // tasks (to faciliate FIFO sorting when two tasks have the same
+  // tasks (to facilitate FIFO sorting when two tasks have the same
   // delayed_run_time value) and for identifying the task in about:tracing.
   pending_task->sequence_num = next_sequence_num_++;
 

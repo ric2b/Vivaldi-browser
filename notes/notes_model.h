@@ -7,23 +7,22 @@
 #include "notes/notes_model_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
+#include "importer/imported_notes_entry.h"
 
 class Profile;
 
 namespace base {
-  class SequencedTaskRunner;
+class SequencedTaskRunner;
 }
 
-namespace Vivaldi {
+namespace vivaldi {
 
 class NotesLoadDetails;
 class NotesStorage;
 
-class Notes_Model : public content::NotificationObserver,
-  public KeyedService
-{
-public:
-  Notes_Model(Profile* profile);
+class Notes_Model : public content::NotificationObserver, public KeyedService {
+ public:
+  explicit Notes_Model(Profile* profile);
 
   ~Notes_Model() override;
 
@@ -58,12 +57,19 @@ public:
   bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
 
   Notes_Node *root() { return &root_; }
+  Notes_Node *trash_node() { return trash_node_; }
 
-  Notes_Node *AddFolder(const Notes_Node *parent, int index, const base::string16 &name);
+  Notes_Node *AddFolder(const Notes_Node *parent, int index,
+                        const base::string16 &name);
 
-  Notes_Node *AddNote(const Notes_Node *parent, int index, const base::string16 &subject, const GURL &url, const base::string16 &content);
+  Notes_Node *AddNote(const Notes_Node *parent, int index,
+                      const base::string16 &subject, const GURL &url,
+                      const base::string16 &content);
 
   Notes_Node *AddNode(Notes_Node *parent, int index, Notes_Node *node);
+
+  Notes_Node *AddNote(const Notes_Node *parent, int index, bool is_folder,
+                      const ImportedNotesEntry &node);
 
   // Removes the node at the given |index| from |parent|. Removing a folder node
   // recursively removes all nodes.
@@ -79,15 +85,18 @@ public:
 
   bool loaded() const { return loaded_; }
   // Note that |root_| gets 0 as |id_|.
-  int64 getNewIndex() { return ++current_index_; }
+  int64_t GetNewIndex() { return ++current_index_; }
 
-private:
+ private:
   NotesLoadDetails* CreateLoadDetails();
+  Notes_Node* GetTrashNode();
 
-
-private:
+ private:
   Profile* profile_;
   Notes_Node root_;
+
+  // Points to the permanent trash node in the model.
+  Notes_Node *trash_node_;
 
   bool loaded_;
 
@@ -103,9 +112,11 @@ private:
   scoped_refptr<NotesStorage> store_;
 
   // current id for nodes. Used in getNewIndex()
-  int64 current_index_;
+  int64_t current_index_;
 
+  DISALLOW_COPY_AND_ASSIGN(Notes_Model);
 };
 
-} // namespace Vivaldi
-#endif // VIVALDI_NOTES_MODEL_H_
+}  // namespace vivaldi
+
+#endif  // VIVALDI_NOTES_MODEL_H_

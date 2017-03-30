@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/extensions/webstore_standalone_installer.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -31,6 +32,7 @@ class WebstoreInlineInstaller : public WebstoreStandaloneInstaller,
   typedef WebstoreStandaloneInstaller::Callback Callback;
 
   WebstoreInlineInstaller(content::WebContents* web_contents,
+                          content::RenderFrameHost* host,
                           const std::string& webstore_item_id,
                           const GURL& requestor_url,
                           const Callback& callback);
@@ -52,7 +54,7 @@ class WebstoreInlineInstaller : public WebstoreStandaloneInstaller,
   bool ShouldShowPostInstallUI() const override;
   bool ShouldShowAppInstalledBubble() const override;
   content::WebContents* GetWebContents() const override;
-  scoped_refptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
+  scoped_ptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
       const override;
   bool CheckInlineInstallPermitted(const base::DictionaryValue& webstore_data,
                                    std::string* error) const override;
@@ -61,6 +63,9 @@ class WebstoreInlineInstaller : public WebstoreStandaloneInstaller,
 
  private:
   // content::WebContentsObserver interface implementation.
+  void DidNavigateAnyFrame(content::RenderFrameHost* render_frame_host,
+                           const content::LoadCommittedDetails& details,
+                           const content::FrameNavigateParams& params) override;
   void WebContentsDestroyed() override;
 
   // Checks whether the install is initiated by a page in a verified site
@@ -68,6 +73,8 @@ class WebstoreInlineInstaller : public WebstoreStandaloneInstaller,
   static bool IsRequestorURLInVerifiedSite(const GURL& requestor_url,
                                            const std::string& verified_site);
 
+  // This corresponds to the frame that initiated the install request.
+  content::RenderFrameHost* host_;
   GURL requestor_url_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(WebstoreInlineInstaller);

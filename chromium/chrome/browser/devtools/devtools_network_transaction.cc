@@ -4,19 +4,21 @@
 
 #include "chrome/browser/devtools/devtools_network_transaction.h"
 
+#include <utility>
+
+#include "base/callback_helpers.h"
 #include "chrome/browser/devtools/devtools_network_controller.h"
 #include "chrome/browser/devtools/devtools_network_interceptor.h"
+#include "chrome/browser/devtools/devtools_network_upload_data_stream.h"
+#include "net/base/load_timing_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_progress.h"
 #include "net/http/http_network_transaction.h"
 #include "net/http/http_request_info.h"
 #include "net/socket/connection_attempts.h"
 
-// Keep in sync with kDevToolsRequestInitiator and
-// kDevToolsEmulateNetworkConditionsClientId defined in
+// Keep in sync with kDevToolsEmulateNetworkConditionsClientId defined in
 // InspectorResourceAgent.cpp.
-const char DevToolsNetworkTransaction::kDevToolsRequestInitiator[] =
-    "X-DevTools-Request-Initiator";
 const char
     DevToolsNetworkTransaction::kDevToolsEmulateNetworkConditionsClientId[] =
         "X-DevTools-Emulate-Network-Conditions-Client-Id";
@@ -24,81 +26,64 @@ const char
 DevToolsNetworkTransaction::DevToolsNetworkTransaction(
     DevToolsNetworkController* controller,
     scoped_ptr<net::HttpTransaction> network_transaction)
-    : controller_(controller),
-      network_transaction_(network_transaction.Pass()),
-      request_(NULL),
-      failed_(false),
-      throttled_byte_count_(0),
-      callback_type_(NONE),
-      proxy_callback_(base::Bind(&DevToolsNetworkTransaction::OnCallback,
-                                 base::Unretained(this))) {
+    : throttled_byte_count_(0),
+      controller_(controller),
+      network_transaction_(std::move(network_transaction)),
+      request_(nullptr),
+      failed_(false) {
   DCHECK(controller);
 }
 
 DevToolsNetworkTransaction::~DevToolsNetworkTransaction() {
-  if (interceptor_)
-    interceptor_->RemoveTransaction(this);
+  if (interceptor_ && !throttle_callback_.is_null())
+    interceptor_->StopThrottle(throttle_callback_);
 }
 
-void DevToolsNetworkTransaction::Throttle(int result) {
-  throttled_result_ = result;
+void DevToolsNetworkTransaction::IOCallback(
+    const net::CompletionCallback& callback, bool start, int result) {
+  result = Throttle(callback, start, result);
+  if (result != net::ERR_IO_PENDING)
+    callback.Run(result);
+}
 
-  if (callback_type_ == START)
+int DevToolsNetworkTransaction::Throttle(
+    const net::CompletionCallback& callback, bool start, int result) {
+  if (failed_)
+    return net::ERR_INTERNET_DISCONNECTED;
+  if (!interceptor_ || result < 0)
+    return result;
+
+  base::TimeTicks send_end;
+  if (start) {
     throttled_byte_count_ += network_transaction_->GetTotalReceivedBytes();
+    net::LoadTimingInfo load_timing_info;
+    if (GetLoadTimingInfo(&load_timing_info))
+      send_end = load_timing_info.send_end;
+    if (send_end.is_null())
+      send_end = base::TimeTicks::Now();
+  }
   if (result > 0)
     throttled_byte_count_ += result;
 
-  if (interceptor_)
-    interceptor_->ThrottleTransaction(this, callback_type_ == START);
+  throttle_callback_ = base::Bind(&DevToolsNetworkTransaction::ThrottleCallback,
+      base::Unretained(this), callback);
+  int rv = interceptor_->StartThrottle(result, throttled_byte_count_, send_end,
+      start, false, throttle_callback_);
+  if (rv != net::ERR_IO_PENDING)
+    throttle_callback_.Reset();
+  if (rv == net::ERR_INTERNET_DISCONNECTED)
+    Fail();
+  return rv;
 }
 
-void DevToolsNetworkTransaction::OnCallback(int rv) {
-  if (failed_)
-    return;
-  DCHECK(!callback_.is_null());
-  if (callback_type_ == START || callback_type_ == READ) {
-    if (interceptor_ && interceptor_->ShouldThrottle(this)) {
-      Throttle(rv);
-      return;
-    }
-  }
-  net::CompletionCallback callback = callback_;
-  callback_.Reset();
-  callback_type_ = NONE;
-  callback.Run(rv);
-}
-
-int DevToolsNetworkTransaction::SetupCallback(
-    net::CompletionCallback callback,
-    int result,
-    CallbackType callback_type) {
-  DCHECK(callback_type_ == NONE);
-
-  if (result == net::ERR_IO_PENDING) {
-    callback_type_ = callback_type;
-    callback_ = callback;
-    return result;
-  }
-
-  if (!interceptor_ || !interceptor_->ShouldThrottle(this))
-    return result;
-
-  // Only START and READ operation throttling is supported.
-  if (callback_type != START && callback_type != READ)
-    return result;
-
-  // In case of error |throttled_byte_count_| is unknown.
-  if (result < 0)
-    return result;
-
-  // URLRequestJob relies on synchronous end-of-stream notification.
-  if (callback_type == READ && result == 0)
-    return result;
-
-  callback_type_ = callback_type;
-  callback_ = callback;
-  Throttle(result);
-  return net::ERR_IO_PENDING;
+void DevToolsNetworkTransaction::ThrottleCallback(
+    const net::CompletionCallback& callback, int result, int64_t bytes) {
+  DCHECK(!throttle_callback_.is_null());
+  throttle_callback_.Reset();
+  if (result == net::ERR_INTERNET_DISCONNECTED)
+    Fail();
+  throttled_byte_count_ = bytes;
+  callback.Run(result);
 }
 
 void DevToolsNetworkTransaction::Fail() {
@@ -107,12 +92,18 @@ void DevToolsNetworkTransaction::Fail() {
   failed_ = true;
   network_transaction_->SetBeforeNetworkStartCallback(
       BeforeNetworkStartCallback());
-  if (callback_.is_null())
-    return;
-  net::CompletionCallback callback = callback_;
-  callback_.Reset();
-  callback_type_ = NONE;
-  callback.Run(net::ERR_INTERNET_DISCONNECTED);
+  if (interceptor_)
+    interceptor_.reset();
+}
+
+bool DevToolsNetworkTransaction::CheckFailed() {
+  if (failed_)
+    return true;
+  if (interceptor_ && interceptor_->IsOffline()) {
+    Fail();
+    return true;
+  }
+  return false;
 }
 
 int DevToolsNetworkTransaction::Start(
@@ -121,71 +112,90 @@ int DevToolsNetworkTransaction::Start(
     const net::BoundNetLog& net_log) {
   DCHECK(request);
   request_ = request;
-  interceptor_ = controller_->GetInterceptor(this);
-  interceptor_->AddTransaction(this);
 
-  if (interceptor_->ShouldFail(this)) {
-    failed_ = true;
-    network_transaction_->SetBeforeNetworkStartCallback(
-        BeforeNetworkStartCallback());
-    return net::ERR_INTERNET_DISCONNECTED;
-  }
-  int rv = network_transaction_->Start(request_, proxy_callback_, net_log);
-  return SetupCallback(callback, rv, START);
-}
-
-void DevToolsNetworkTransaction::ProcessRequest() {
-  DCHECK(request_);
+  std::string client_id;
   bool has_devtools_client_id = request_->extra_headers.HasHeader(
       kDevToolsEmulateNetworkConditionsClientId);
-  bool has_devtools_request_initiator = request_->extra_headers.HasHeader(
-      kDevToolsRequestInitiator);
-  if (!has_devtools_client_id && !has_devtools_request_initiator)
-    return;
-
-  custom_request_.reset(new net::HttpRequestInfo(*request_));
-
   if (has_devtools_client_id) {
+    custom_request_.reset(new net::HttpRequestInfo(*request_));
     custom_request_->extra_headers.GetHeader(
-        kDevToolsEmulateNetworkConditionsClientId, &client_id_);
+        kDevToolsEmulateNetworkConditionsClientId, &client_id);
     custom_request_->extra_headers.RemoveHeader(
         kDevToolsEmulateNetworkConditionsClientId);
+
+    if (request_->upload_data_stream) {
+      custom_upload_data_stream_.reset(
+          new DevToolsNetworkUploadDataStream(request_->upload_data_stream));
+      custom_request_->upload_data_stream = custom_upload_data_stream_.get();
+    }
+
+    request_ = custom_request_.get();
   }
 
-  if (has_devtools_request_initiator) {
-    custom_request_->extra_headers.GetHeader(
-        kDevToolsRequestInitiator, &request_initiator_);
-    custom_request_->extra_headers.RemoveHeader(kDevToolsRequestInitiator);
+  DevToolsNetworkInterceptor* interceptor =
+      controller_->GetInterceptor(client_id);
+  if (interceptor) {
+    interceptor_ = interceptor->GetWeakPtr();
+    if (custom_upload_data_stream_)
+      custom_upload_data_stream_->SetInterceptor(interceptor);
   }
 
-  request_ = custom_request_.get();
+  if (CheckFailed())
+    return net::ERR_INTERNET_DISCONNECTED;
+
+  if (!interceptor_)
+    return network_transaction_->Start(request_, callback, net_log);
+
+  int result = network_transaction_->Start(request_,
+      base::Bind(&DevToolsNetworkTransaction::IOCallback,
+                 base::Unretained(this), callback, true),
+      net_log);
+  return Throttle(callback, true, result);
 }
 
 int DevToolsNetworkTransaction::RestartIgnoringLastError(
     const net::CompletionCallback& callback) {
-  if (failed_)
+  if (CheckFailed())
     return net::ERR_INTERNET_DISCONNECTED;
-  int rv = network_transaction_->RestartIgnoringLastError(proxy_callback_);
-  return SetupCallback(callback, rv, RESTART_IGNORING_LAST_ERROR);
+  if (!interceptor_)
+    return network_transaction_->RestartIgnoringLastError(callback);
+
+  int result = network_transaction_->RestartIgnoringLastError(
+      base::Bind(&DevToolsNetworkTransaction::IOCallback,
+                 base::Unretained(this), callback, true));
+  return Throttle(callback, true, result);
 }
 
 int DevToolsNetworkTransaction::RestartWithCertificate(
     net::X509Certificate* client_cert,
+    net::SSLPrivateKey* client_private_key,
     const net::CompletionCallback& callback) {
-  if (failed_)
+  if (CheckFailed())
     return net::ERR_INTERNET_DISCONNECTED;
-  int rv = network_transaction_->RestartWithCertificate(
-      client_cert, proxy_callback_);
-  return SetupCallback(callback, rv, RESTART_WITH_CERTIFICATE);
+  if (!interceptor_) {
+    return network_transaction_->RestartWithCertificate(
+        client_cert, client_private_key, callback);
+  }
+
+  int result = network_transaction_->RestartWithCertificate(
+      client_cert, client_private_key,
+      base::Bind(&DevToolsNetworkTransaction::IOCallback,
+                 base::Unretained(this), callback, true));
+  return Throttle(callback, true, result);
 }
 
 int DevToolsNetworkTransaction::RestartWithAuth(
     const net::AuthCredentials& credentials,
     const net::CompletionCallback& callback) {
-  if (failed_)
+  if (CheckFailed())
     return net::ERR_INTERNET_DISCONNECTED;
-  int rv = network_transaction_->RestartWithAuth(credentials, proxy_callback_);
-  return SetupCallback(callback, rv, RESTART_WITH_AUTH);
+  if (!interceptor_)
+    return network_transaction_->RestartWithAuth(credentials, callback);
+
+  int result = network_transaction_->RestartWithAuth(credentials,
+      base::Bind(&DevToolsNetworkTransaction::IOCallback,
+                 base::Unretained(this), callback, true));
+  return Throttle(callback, true, result);
 }
 
 bool DevToolsNetworkTransaction::IsReadyToRestartForAuth() {
@@ -196,10 +206,18 @@ int DevToolsNetworkTransaction::Read(
     net::IOBuffer* buf,
     int buf_len,
     const net::CompletionCallback& callback) {
-  if (failed_)
+  if (CheckFailed())
     return net::ERR_INTERNET_DISCONNECTED;
-  int rv = network_transaction_->Read(buf, buf_len, proxy_callback_);
-  return SetupCallback(callback, rv, READ);
+  if (!interceptor_)
+    return network_transaction_->Read(buf, buf_len, callback);
+
+  int result = network_transaction_->Read(buf, buf_len,
+      base::Bind(&DevToolsNetworkTransaction::IOCallback,
+                 base::Unretained(this), callback, false));
+  // URLRequestJob relies on synchronous end-of-stream notification.
+  if (result == 0)
+    return result;
+  return Throttle(callback, false, result);
 }
 
 void DevToolsNetworkTransaction::StopCaching() {
@@ -211,8 +229,12 @@ bool DevToolsNetworkTransaction::GetFullRequestHeaders(
   return network_transaction_->GetFullRequestHeaders(headers);
 }
 
-int64 DevToolsNetworkTransaction::GetTotalReceivedBytes() const {
+int64_t DevToolsNetworkTransaction::GetTotalReceivedBytes() const {
   return network_transaction_->GetTotalReceivedBytes();
+}
+
+int64_t DevToolsNetworkTransaction::GetTotalSentBytes() const {
+  return network_transaction_->GetTotalSentBytes();
 }
 
 void DevToolsNetworkTransaction::DoneReading() {
@@ -242,6 +264,16 @@ bool DevToolsNetworkTransaction::GetLoadTimingInfo(
   return network_transaction_->GetLoadTimingInfo(load_timing_info);
 }
 
+bool DevToolsNetworkTransaction::GetRemoteEndpoint(
+    net::IPEndPoint* endpoint) const {
+  return network_transaction_->GetRemoteEndpoint(endpoint);
+}
+
+void DevToolsNetworkTransaction::PopulateNetErrorDetails(
+    net::NetErrorDetails* details) const {
+  return network_transaction_->PopulateNetErrorDetails(details);
+}
+
 void DevToolsNetworkTransaction::SetPriority(net::RequestPriority priority) {
   network_transaction_->SetPriority(priority);
 }
@@ -262,7 +294,7 @@ void DevToolsNetworkTransaction::SetBeforeProxyHeadersSentCallback(
 }
 
 int DevToolsNetworkTransaction::ResumeNetworkStart() {
-  if (failed_)
+  if (CheckFailed())
     return net::ERR_INTERNET_DISCONNECTED;
   return network_transaction_->ResumeNetworkStart();
 }
@@ -271,13 +303,4 @@ void
 DevToolsNetworkTransaction::GetConnectionAttempts(net::ConnectionAttempts* out)
 const {
   network_transaction_->GetConnectionAttempts(out);
-}
-
-void DevToolsNetworkTransaction::FireThrottledCallback() {
-  DCHECK(!callback_.is_null());
-  DCHECK(callback_type_ == READ || callback_type_ == START);
-  net::CompletionCallback callback = callback_;
-  callback_.Reset();
-  callback_type_ = NONE;
-  callback.Run(throttled_result_);
 }

@@ -43,12 +43,18 @@ remoting.ChromotingEvent = function(type) {
   this.browser_version;
   /** @private {string} */
   this.webapp_version;
+  /** @type {remoting.ChromotingEvent.Os} */
+  this.host_os;
+  /** @type {string} */
+  this.host_os_version;
   /** @type {string} */
   this.host_version;
   /** @private {string} */
   this.cpu;
   /** @type {remoting.ChromotingEvent.SessionState} */
   this.session_state;
+  /** @type {remoting.ChromotingEvent.SessionState} */
+  this.previous_session_state;
   /** @type {remoting.ChromotingEvent.ConnectionType} */
   this.connection_type;
   /** @private {string} */
@@ -79,7 +85,26 @@ remoting.ChromotingEvent = function(type) {
   this.signal_strategy_type;
   /** @type {remoting.ChromotingEvent.SignalStrategyProgress} */
   this.signal_strategy_progress;
-
+  /** @type {?remoting.ChromotingEvent.XmppError} */
+  this.xmpp_error;
+  /** @type {remoting.ChromotingEvent.SessionEntryPoint} */
+  this.session_entry_point;
+  /**
+   * Elapsed time since last host list refresh in milliseconds.
+   * @type {number}
+   */
+  this.host_status_update_elapsed_time;
+  /** @type {remoting.ChromotingEvent.AuthMethod} */
+  this.auth_method;
+  /** @type {string} */
+  this.raw_plugin_error;
+  /** @type {remoting.ChromotingEvent.SessionSummary} */
+  this.previous_session;
+  /**
+   * Elapsed time since the last host heartbeat in milliseconds.
+   * @type {number}
+   */
+  this.host_last_heartbeat_elapsed_time;
   this.init_();
 };
 
@@ -106,6 +131,29 @@ remoting.ChromotingEvent.prototype.init_ = function() {
 };
 
 /**
+ * Populates the corresponding fields in the logEntry based on |error|.
+ *
+ * @param {remoting.Error} error
+ */
+remoting.ChromotingEvent.prototype.setError = function(error) {
+  var Tag = remoting.Error.Tag;
+  var detail = /** @type {string} */ (error.getDetail());
+
+  switch (error.getTag()) {
+    case Tag.HOST_IS_OFFLINE:
+      if (detail) {
+        this.xmpp_error = new remoting.ChromotingEvent.XmppError(detail);
+      }
+      break;
+    case Tag.MISSING_PLUGIN:
+      console.assert(detail, 'Missing PNaCl plugin last error string.');
+      this.raw_plugin_error = detail;
+  }
+
+  this.connection_error = error.toConnectionError();
+};
+
+/**
  * @param {remoting.ChromotingEvent} event
  * @return {boolean}
  */
@@ -120,6 +168,41 @@ remoting.ChromotingEvent.isEndOfSession = function(event) {
     remoting.ChromotingEvent.SessionState.CONNECTION_CANCELED
   ];
   return endStates.indexOf(event.session_state) !== -1;
+};
+
+/**
+ * This is declared as a separate structure to match the proto format
+ * on the cloud. The cloud will parse the raw stanza for more detailed
+ * fields, e.g. error condition, error type, jingle action, etc.
+ *
+ * @param {string} stanza
+ * @struct
+ * @constructor
+ */
+remoting.ChromotingEvent.XmppError = function(stanza) {
+  /** @type {string} */
+  this.raw_stanza = stanza;
+};
+
+/**
+ * See class comments on logs/proto/chromoting/chromoting_extensions.proto.
+ *
+ * @struct
+ * @constructor
+ */
+remoting.ChromotingEvent.SessionSummary = function() {
+  /** @type {string} */
+  this.session_id;
+  /** @type {remoting.ChromotingEvent.SessionState} */
+  this.last_state;
+  /** @type {remoting.ChromotingEvent.ConnectionError} */
+  this.last_error;
+  /** @type {number} */
+  this.duration;
+  /** @type {number} */
+  this.session_end_elapsed_time;
+  /** @type {remoting.ChromotingEvent.SessionEntryPoint} */
+  this.entry_point;
 };
 
 })();
@@ -156,22 +239,59 @@ remoting.ChromotingEvent.Os = {
   IOS: 7
 };
 
+/**
+ * Convert the OS type String into the enum value.
+ *
+ * @param {string} type
+ * @return {remoting.ChromotingEvent.Os}
+ */
+remoting.ChromotingEvent.toOs = function(type) {
+  type = type.toLowerCase();
+  switch (type) {
+    case 'linux':
+      return remoting.ChromotingEvent.Os.LINUX;
+    case 'chromeos':
+      return remoting.ChromotingEvent.Os.CHROMEOS;
+    case 'mac':
+      return remoting.ChromotingEvent.Os.MAC
+    case 'windows':
+      return remoting.ChromotingEvent.Os.WINDOWS;
+    case 'android':
+      return remoting.ChromotingEvent.Os.ANDROID;
+    case 'ios':
+      return remoting.ChromotingEvent.Os.IOS;
+    default:
+      return remoting.ChromotingEvent.Os.OTHER;
+  }
+};
+
 /** @enum {number} */
 remoting.ChromotingEvent.SessionState = {
-  UNKNOWN: 1,
-  CREATED: 2,
-  BAD_PLUGIN_VERSION: 3,
-  UNKNOWN_PLUGIN_ERROR: 4,
+  UNKNOWN: 1, // deprecated.
+  CREATED: 2, // deprecated.
+  BAD_PLUGIN_VERSION: 3, // deprecated.
+  UNKNOWN_PLUGIN_ERROR: 4, // deprecated.
   CONNECTING: 5,
-  INITIALIZING: 6,
+  INITIALIZING: 6, // deprecated.
   CONNECTED: 7,
   CLOSED: 8,
   CONNECTION_FAILED: 9,
   UNDEFINED: 10,
-  PLUGIN_DISABLED: 11,
+  PLUGIN_DISABLED: 11, // deprecated.
   CONNECTION_DROPPED: 12,
   CONNECTION_CANCELED: 13,
-  AUTHENTICATED: 14
+  AUTHENTICATED: 14,
+  STARTED: 15,
+  SIGNALING: 16,
+  CREATING_PLUGIN: 17,
+};
+
+/** @enum {number} */
+remoting.ChromotingEvent.SessionEntryPoint = {
+  CONNECT_BUTTON: 1,
+  RECONNECT_BUTTON: 2,
+  AUTO_RECONNECT_ON_CONNECTION_DROPPED: 3,
+  AUTO_RECONNECT_ON_HOST_OFFLINE: 4
 };
 
 /** @enum {number} */
@@ -192,11 +312,15 @@ remoting.ChromotingEvent.ConnectionError = {
   INVALID_ACCESS_CODE: 7,
   MISSING_PLUGIN: 8,
   AUTHENTICATION_FAILED: 9,
-  ERROR_BAD_PLUGIN_VERSION: 10,
+  BAD_VERSION: 10,
   HOST_OVERLOAD: 11,
   P2P_FAILURE: 12,
   UNEXPECTED: 13,
-  CLIENT_SUSPENDED: 14
+  CLIENT_SUSPENDED: 14,
+  NACL_DISABLED: 15,
+  MAX_SESSION_LENGTH: 16,
+  HOST_CONFIGURATION_ERROR: 17,
+  NACL_PLUGIN_CRASHED: 18,
 };
 
 /** @enum {number} */
@@ -221,3 +345,10 @@ remoting.ChromotingEvent.SignalStrategyProgress = {
   FAILED_LATE: 5
 };
 
+/** @enum {number} */
+remoting.ChromotingEvent.AuthMethod = {
+  PIN: 1,
+  ACCESS_CODE: 2,
+  PINLESS: 3,
+  THIRD_PARTY: 4,
+};

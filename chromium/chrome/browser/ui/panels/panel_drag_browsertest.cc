@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/panels/base_panel_browser_test.h"
 #include "chrome/browser/ui/panels/detached_panel_collection.h"
@@ -181,13 +182,7 @@ class PanelDragBrowserTest : public BasePanelBrowserTest {
   }
 };
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_DragOneDockedPanel DISABLED_DragOneDockedPanel
-#else
-#define MAYBE_DragOneDockedPanel DragOneDockedPanel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragOneDockedPanel) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, DragOneDockedPanel) {
   static const int big_delta_x = 70;
   static const int big_delta_y = 30;  // Do not exceed the threshold to detach.
 
@@ -279,13 +274,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragOneDockedPanel) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DragTwoDockedPanels DISABLED_DragTwoDockedPanels
-#else
-#define MAYBE_DragTwoDockedPanels DragTwoDockedPanels
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragTwoDockedPanels) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, DragTwoDockedPanels) {
   static const gfx::Vector2d small_delta(10, 0);
 
   Panel* panel1 = CreateDockedPanel("1", gfx::Rect(0, 0, 100, 100));
@@ -381,13 +370,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragTwoDockedPanels) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DragThreeDockedPanels DISABLED_DragThreeDockedPanels
-#else
-#define MAYBE_DragThreeDockedPanels DragThreeDockedPanels
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragThreeDockedPanels) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, DragThreeDockedPanels) {
   Panel* panel1 = CreateDockedPanel("1", gfx::Rect(0, 0, 100, 100));
   Panel* panel2 = CreateDockedPanel("2", gfx::Rect(0, 0, 100, 100));
   Panel* panel3 = CreateDockedPanel("3", gfx::Rect(0, 0, 100, 100));
@@ -520,13 +503,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragThreeDockedPanels) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DragMinimizedPanel DISABLED_DragMinimizedPanel
-#else
-#define MAYBE_DragMinimizedPanel DragMinimizedPanel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragMinimizedPanel) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, DragMinimizedPanel) {
   Panel* panel = CreatePanel("panel1");
   scoped_ptr<NativePanelTesting> panel_testing(
       CreateNativePanelTesting(panel));
@@ -564,14 +541,8 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragMinimizedPanel) {
   panel->Close();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DragMinimizedPanelWhileDrawingAttention DISABLED_DragMinimizedPanelWhileDrawingAttention
-#else
-#define MAYBE_DragMinimizedPanelWhileDrawingAttention DragMinimizedPanelWhileDrawingAttention
-#endif
 IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
-                       MAYBE_DragMinimizedPanelWhileDrawingAttention) {
+                       DragMinimizedPanelWhileDrawingAttention) {
   Panel* panel = CreatePanel("panel1");
   scoped_ptr<NativePanelTesting> panel_testing(
       CreateNativePanelTesting(panel));
@@ -619,13 +590,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CloseDockedPanelOnDrag DISABLED_CloseDockedPanelOnDrag
-#else
-#define MAYBE_CloseDockedPanelOnDrag CloseDockedPanelOnDrag
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_CloseDockedPanelOnDrag) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, CloseDockedPanelOnDrag) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   PanelDragController* drag_controller = panel_manager->drag_controller();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
@@ -799,8 +764,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_CloseDockedPanelOnDrag) {
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_DragOneDetachedPanel DISABLED_DragOneDetachedPanel
 #else
 #define MAYBE_DragOneDetachedPanel DragOneDetachedPanel
@@ -851,13 +815,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragOneDetachedPanel) {
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CloseDetachedPanelOnDrag DISABLED_CloseDetachedPanelOnDrag
-#else
-#define MAYBE_CloseDetachedPanelOnDrag CloseDetachedPanelOnDrag
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_CloseDetachedPanelOnDrag) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, CloseDetachedPanelOnDrag) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   PanelDragController* drag_controller = panel_manager->drag_controller();
   DetachedPanelCollection* detached_collection =
@@ -971,13 +929,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_CloseDetachedPanelOnDrag) {
   }
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_Detach DISABLED_Detach
-#else
-#define MAYBE_Detach Detach
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_Detach) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, Detach) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
   DetachedPanelCollection* detached_collection =
@@ -1034,8 +986,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_Detach) {
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_DetachAndCancel DISABLED_DetachAndCancel
 #else
 #define MAYBE_DetachAndCancel DetachAndCancel
@@ -1097,8 +1048,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DetachAndCancel) {
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_Attach DISABLED_Attach
 #else
 #define MAYBE_Attach Attach
@@ -1164,8 +1114,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_Attach) {
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_AttachAndCancel DISABLED_AttachAndCancel
 #else
 #define MAYBE_AttachAndCancel AttachAndCancel
@@ -1226,13 +1175,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_AttachAndCancel) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DetachAttachAndCancel DISABLED_DetachAttachAndCancel
-#else
-#define MAYBE_DetachAttachAndCancel DetachAttachAndCancel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DetachAttachAndCancel) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, DetachAttachAndCancel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
   DetachedPanelCollection* detached_collection =
@@ -1294,13 +1237,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DetachAttachAndCancel) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DetachWithSqueeze DISABLED_DetachWithSqueeze
-#else
-#define MAYBE_DetachWithSqueeze DetachWithSqueeze
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DetachWithSqueeze) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, DetachWithSqueeze) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
   DetachedPanelCollection* detached_collection =
@@ -1383,13 +1320,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DetachWithSqueeze) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AttachWithSqueeze DISABLED_AttachWithSqueeze
-#else
-#define MAYBE_AttachWithSqueeze AttachWithSqueeze
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_AttachWithSqueeze) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, AttachWithSqueeze) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
   DetachedPanelCollection* detached_collection =
@@ -1507,8 +1438,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_AttachWithSqueeze) {
 }
 
 // http://crbug.com/175760; several panel tests failing regularly on mac.
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_DragDetachedPanelToTop DISABLED_DragDetachedPanelToTop
 #else
 #define MAYBE_DragDetachedPanelToTop DragDetachedPanelToTop
@@ -1541,14 +1471,8 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragDetachedPanelToTop) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DragDockedPanelToSecondaryDisplay DISABLED_DragDockedPanelToSecondaryDisplay
-#else
-#define MAYBE_DragDockedPanelToSecondaryDisplay DragDockedPanelToSecondaryDisplay
-#endif
 IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
-                       MAYBE_DragDockedPanelToSecondaryDisplay) {
+                       DragDockedPanelToSecondaryDisplay) {
   // Setup 2 displays with secondary display on the right side of primary
   // display.
   mock_display_settings_provider()->SetPrimaryDisplay(
@@ -1574,14 +1498,8 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DragDetachedPanelToSecondaryDisplay DISABLED_DragDetachedPanelToSecondaryDisplay
-#else
-#define MAYBE_DragDetachedPanelToSecondaryDisplay DragDetachedPanelToSecondaryDisplay
-#endif
 IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
-                       MAYBE_DragDetachedPanelToSecondaryDisplay) {
+                       DragDetachedPanelToSecondaryDisplay) {
   // Setup 2 displays with secondary display at the bottom of primary display.
   mock_display_settings_provider()->SetPrimaryDisplay(
       gfx::Rect(0, 0, 800, 300), gfx::Rect(0, 0, 800, 260));
@@ -1607,13 +1525,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
   PanelManager::GetInstance()->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupPanelAndPanelFromBottom DISABLED_GroupPanelAndPanelFromBottom
-#else
-#define MAYBE_GroupPanelAndPanelFromBottom GroupPanelAndPanelFromBottom
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupPanelAndPanelFromBottom) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupPanelAndPanelFromBottom) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -1720,13 +1632,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupPanelAndPanelFromBottom)
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupPanelAndPanelFromTop DISABLED_GroupPanelAndPanelFromTop
-#else
-#define MAYBE_GroupPanelAndPanelFromTop GroupPanelAndPanelFromTop
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupPanelAndPanelFromTop) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupPanelAndPanelFromTop) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -1834,13 +1740,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupPanelAndPanelFromTop) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupAndCancel DISABLED_GroupAndCancel
-#else
-#define MAYBE_GroupAndCancel GroupAndCancel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupAndCancel) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupAndCancel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -1893,13 +1793,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupAndCancel) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupPanelAndStackFromBottom DISABLED_GroupPanelAndStackFromBottom
-#else
-#define MAYBE_GroupPanelAndStackFromBottom GroupPanelAndStackFromBottom
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupPanelAndStackFromBottom) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupPanelAndStackFromBottom) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -1960,13 +1854,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupPanelAndStackFromBottom)
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupPanelAndStackFromTop DISABLED_GroupPanelAndStackFromTop
-#else
-#define MAYBE_GroupPanelAndStackFromTop GroupPanelAndStackFromTop
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupPanelAndStackFromTop) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupPanelAndStackFromTop) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2029,13 +1917,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupPanelAndStackFromTop) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupStackAndPanelFromBottom DISABLED_GroupStackAndPanelFromBottom
-#else
-#define MAYBE_GroupStackAndPanelFromBottom GroupStackAndPanelFromBottom
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupStackAndPanelFromBottom) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupStackAndPanelFromBottom) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2092,13 +1974,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupStackAndPanelFromBottom)
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupStackAndPanelFromTop DISABLED_GroupStackAndPanelFromTop
-#else
-#define MAYBE_GroupStackAndPanelFromTop GroupStackAndPanelFromTop
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupStackAndPanelFromTop) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupStackAndPanelFromTop) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2155,13 +2031,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupStackAndPanelFromTop) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupStackAndStackFromBottom DISABLED_GroupStackAndStackFromBottom
-#else
-#define MAYBE_GroupStackAndStackFromBottom GroupStackAndStackFromBottom
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupStackAndStackFromBottom) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupStackAndStackFromBottom) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2232,13 +2102,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupStackAndStackFromBottom)
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_GroupStackAndStackFromTop DISABLED_GroupStackAndStackFromTop
-#else
-#define MAYBE_GroupStackAndStackFromTop GroupStackAndStackFromTop
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupStackAndStackFromTop) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, GroupStackAndStackFromTop) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2311,13 +2175,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_GroupStackAndStackFromTop) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UngroupTwoPanelStack DISABLED_UngroupTwoPanelStack
-#else
-#define MAYBE_UngroupTwoPanelStack UngroupTwoPanelStack
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_UngroupTwoPanelStack) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, UngroupTwoPanelStack) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2406,13 +2264,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_UngroupTwoPanelStack) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UngroupAndCancel DISABLED_UngroupAndCancel
-#else
-#define MAYBE_UngroupAndCancel UngroupAndCancel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_UngroupAndCancel) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, UngroupAndCancel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2473,14 +2325,8 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_UngroupAndCancel) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UngroupBottomPanelInThreePanelStack DISABLED_UngroupBottomPanelInThreePanelStack
-#else
-#define MAYBE_UngroupBottomPanelInThreePanelStack UngroupBottomPanelInThreePanelStack
-#endif
 IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
-                       MAYBE_UngroupBottomPanelInThreePanelStack) {
+                       UngroupBottomPanelInThreePanelStack) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2529,14 +2375,8 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UngroupMiddlePanelInThreePanelStack DISABLED_UngroupMiddlePanelInThreePanelStack
-#else
-#define MAYBE_UngroupMiddlePanelInThreePanelStack UngroupMiddlePanelInThreePanelStack
-#endif
 IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
-                       MAYBE_UngroupMiddlePanelInThreePanelStack) {
+                       UngroupMiddlePanelInThreePanelStack) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2587,14 +2427,8 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UngroupThirdPanelInFourPanelStack DISABLED_UngroupThirdPanelInFourPanelStack
-#else
-#define MAYBE_UngroupThirdPanelInFourPanelStack UngroupThirdPanelInFourPanelStack
-#endif
 IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
-                       MAYBE_UngroupThirdPanelInFourPanelStack) {
+                       UngroupThirdPanelInFourPanelStack) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2654,13 +2488,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UngroupAndGroup DISABLED_UngroupAndGroup
-#else
-#define MAYBE_UngroupAndGroup UngroupAndGroup
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_UngroupAndGroup) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, UngroupAndGroup) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2713,13 +2541,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_UngroupAndGroup) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UngroupAndAttach DISABLED_UngroupAndAttach
-#else
-#define MAYBE_UngroupAndAttach UngroupAndAttach
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_UngroupAndAttach) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, UngroupAndAttach) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
   DetachedPanelCollection* detached_collection =
@@ -2766,13 +2588,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_UngroupAndAttach) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_SnapPanelToPanelLeft DISABLED_SnapPanelToPanelLeft
-#else
-#define MAYBE_SnapPanelToPanelLeft SnapPanelToPanelLeft
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapPanelToPanelLeft) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, SnapPanelToPanelLeft) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2848,13 +2664,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapPanelToPanelLeft) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_SnapPanelToPanelRight DISABLED_SnapPanelToPanelRight
-#else
-#define MAYBE_SnapPanelToPanelRight SnapPanelToPanelRight
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapPanelToPanelRight) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, SnapPanelToPanelRight) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2928,13 +2738,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapPanelToPanelRight) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_SnapAndCancel DISABLED_SnapAndCancel
-#else
-#define MAYBE_SnapAndCancel SnapAndCancel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapAndCancel) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, SnapAndCancel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -2978,13 +2782,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapAndCancel) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_SnapPanelToStackLeft DISABLED_SnapPanelToStackLeft
-#else
-#define MAYBE_SnapPanelToStackLeft SnapPanelToStackLeft
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapPanelToStackLeft) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, SnapPanelToStackLeft) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -3035,13 +2833,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapPanelToStackLeft) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_SnapPanelToStackRight DISABLED_SnapPanelToStackRight
-#else
-#define MAYBE_SnapPanelToStackRight SnapPanelToStackRight
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapPanelToStackRight) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, SnapPanelToStackRight) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DetachedPanelCollection* detached_collection =
       panel_manager->detached_collection();
@@ -3091,13 +2883,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapPanelToStackRight) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DetachAndSnap DISABLED_DetachAndSnap
-#else
-#define MAYBE_DetachAndSnap DetachAndSnap
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DetachAndSnap) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, DetachAndSnap) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
   DetachedPanelCollection* detached_collection =
@@ -3133,13 +2919,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DetachAndSnap) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_DragTopStackedPanel DISABLED_DragTopStackedPanel
-#else
-#define MAYBE_DragTopStackedPanel DragTopStackedPanel
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragTopStackedPanel) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, DragTopStackedPanel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 3 stacked panels.
@@ -3186,13 +2966,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_DragTopStackedPanel) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_SnapDetachedPanelToScreenEdge DISABLED_SnapDetachedPanelToScreenEdge
-#else
-#define MAYBE_SnapDetachedPanelToScreenEdge SnapDetachedPanelToScreenEdge
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapDetachedPanelToScreenEdge) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, SnapDetachedPanelToScreenEdge) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   int small_distance =
       PanelDragController::GetSnapPanelToScreenEdgeThresholdForTesting() / 2;
@@ -3246,13 +3020,7 @@ IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapDetachedPanelToScreenEdge
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_SnapStackedPanelToScreenEdge DISABLED_SnapStackedPanelToScreenEdge
-#else
-#define MAYBE_SnapStackedPanelToScreenEdge SnapStackedPanelToScreenEdge
-#endif
-IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, MAYBE_SnapStackedPanelToScreenEdge) {
+IN_PROC_BROWSER_TEST_F(PanelDragBrowserTest, SnapStackedPanelToScreenEdge) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   int small_distance =
       PanelDragController::GetSnapPanelToScreenEdgeThresholdForTesting() / 2;

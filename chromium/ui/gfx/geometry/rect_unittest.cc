@@ -4,7 +4,10 @@
 
 #include <limits>
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -455,7 +458,7 @@ TEST(RectTest, ScaleRect) {
   };
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
-    Rect r1(tests[i].x1, tests[i].y1, tests[i].w1, tests[i].h1);
+    RectF r1(tests[i].x1, tests[i].y1, tests[i].w1, tests[i].h1);
     RectF r2(tests[i].x2, tests[i].y2, tests[i].w2, tests[i].h2);
 
     RectF scaled = ScaleRect(r1, tests[i].scale);
@@ -705,15 +708,12 @@ TEST(RectTest, ConstructAndAssign) {
 #endif
 
 TEST(RectTest, ToRectF) {
-  // Check that implicit conversion from integer to float compiles.
+  // Check that explicit conversion from integer to float compiles.
   Rect a(10, 20, 30, 40);
   RectF b(10, 20, 30, 40);
 
-  RectF intersect = IntersectRects(a, b);
-  EXPECT_EQ(b, intersect);
-
-  EXPECT_EQ(a, b);
-  EXPECT_EQ(b, a);
+  RectF c = RectF(a);
+  EXPECT_EQ(b, c);
 }
 
 TEST(RectTest, BoundingRect) {

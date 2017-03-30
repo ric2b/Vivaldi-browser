@@ -4,10 +4,13 @@
 
 #include "chrome/browser/supervised_user/supervised_user_bookmarks_handler.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 
 namespace {
 
@@ -150,7 +153,7 @@ scoped_ptr<base::ListValue> SupervisedUserBookmarksHandler::BuildTree() {
   root_.reset(new base::ListValue);
   AddFoldersToTree();
   AddLinksToTree();
-  return root_.Pass();
+  return std::move(root_);
 }
 
 void SupervisedUserBookmarksHandler::AddFoldersToTree() {
@@ -169,7 +172,7 @@ void SupervisedUserBookmarksHandler::AddFoldersToTree() {
       node->SetIntegerWithoutPathExpansion(kId, folder.id);
       node->SetStringWithoutPathExpansion(kName, folder.name);
       node->SetWithoutPathExpansion(kChildren, new base::ListValue);
-      if (!AddNodeToTree(folder.parent_id, node.Pass()))
+      if (!AddNodeToTree(folder.parent_id, std::move(node)))
         folders_failed.push_back(folder);
     }
     folders.swap(folders_failed);
@@ -187,14 +190,14 @@ void SupervisedUserBookmarksHandler::AddFoldersToTree() {
 void SupervisedUserBookmarksHandler::AddLinksToTree() {
   for (const auto& link : links_) {
     scoped_ptr<base::DictionaryValue> node(new base::DictionaryValue);
-    GURL url = url_fixer::FixupURL(link.url, std::string());
+    GURL url = url_formatter::FixupURL(link.url, std::string());
     if (!url.is_valid()) {
       LOG(WARNING) << "Got invalid URL: " << link.url;
       continue;
     }
     node->SetStringWithoutPathExpansion(kUrl, url.spec());
     node->SetStringWithoutPathExpansion(kName, link.name);
-    if (!AddNodeToTree(link.parent_id, node.Pass())) {
+    if (!AddNodeToTree(link.parent_id, std::move(node))) {
       LOG(WARNING) << "SupervisedUserBookmarksHandler::AddLinksToTree"
                    << " failed to add link (url,name,parent): "
                    << link.url << ", " << link.name << ", " << link.parent_id;

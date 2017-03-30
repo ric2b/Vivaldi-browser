@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_NAVIGATOR_BROWSERTEST_H_
 #define CHROME_BROWSER_UI_BROWSER_NAVIGATOR_BROWSERTEST_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/notification_types.h"
 
@@ -15,10 +18,6 @@ class Profile;
 
 namespace base {
 class CommandLine;
-}
-
-namespace chrome {
-struct NavigateParams;
 }
 
 namespace content {

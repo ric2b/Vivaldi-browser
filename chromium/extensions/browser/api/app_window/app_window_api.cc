@@ -5,15 +5,18 @@
 #include "extensions/browser/api/app_window/app_window_api.h"
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_client.h"
@@ -32,7 +35,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 
-namespace app_window = extensions::core_api::app_window;
+namespace app_window = extensions::api::app_window;
 namespace Create = app_window::Create;
 
 namespace extensions {
@@ -65,9 +68,9 @@ const char kImeOptionIsNotSupported[] =
 const char kImeWindowUnsupportedPlatform[] =
     "The \"ime\" option can only be used on ChromeOS.";
 #else
-const char kImeOptionMustBeTrueAndNeedsFrameNone[] =
-    "IME extensions must create window with \"ime: true\" and "
-    "\"frame: 'none'\".";
+const char kImeWindowMustBeImeWindowOrPanel[] =
+    "IME extensions must create ime window ( with \"ime: true\" and "
+    "\"frame: 'none'\") or panel window (with \"type: panel\").";
 #endif
 }  // namespace app_window_constants
 
@@ -86,7 +89,7 @@ bool CheckBoundsConflict(const scoped_ptr<int>& inner_property,
   if (inner_property.get() && outer_property.get()) {
     std::vector<std::string> subst;
     subst.push_back(property_name);
-    *error = ReplaceStringPlaceholders(
+    *error = base::ReplaceStringPlaceholders(
         app_window_constants::kConflictingBoundsOptions, subst, NULL);
     return false;
   }
@@ -243,13 +246,17 @@ bool AppWindowCreateFunction::RunAsync() {
       error_ = app_window_constants::kImeWindowUnsupportedPlatform;
       return false;
 #else
-      // IME extensions must create window with "ime: true" and "frame: none".
-      if (!options->ime.get() || !*options->ime.get() ||
-          create_params.frame != AppWindow::FRAME_NONE) {
-        error_ = app_window_constants::kImeOptionMustBeTrueAndNeedsFrameNone;
+      // IME extensions must create ime window (with "ime: true" and
+      // "frame: none") or panel window (with "type: panel").
+      if (options->ime.get() && *options->ime.get() &&
+          create_params.frame == AppWindow::FRAME_NONE) {
+        create_params.is_ime_window = true;
+      } else if (options->type == app_window::WINDOW_TYPE_PANEL) {
+        create_params.window_type = AppWindow::WINDOW_TYPE_PANEL;
+      } else {
+        error_ = app_window_constants::kImeWindowMustBeImeWindowOrPanel;
         return false;
       }
-      create_params.is_ime_window = true;
 #endif  // OS_CHROMEOS
     } else {
       if (options->ime.get()) {
@@ -365,7 +372,6 @@ bool AppWindowCreateFunction::RunAsync() {
   result->Set("injectTitlebar",
       new base::FundamentalValue(inject_html_titlebar_));
   result->Set("id", new base::StringValue(app_window->window_key()));
-
   app_window->GetSerializedState(result);
   SetResult(result);
 
@@ -379,6 +385,15 @@ bool AppWindowCreateFunction::RunAsync() {
 
   if (options && options->ext_data.get()) {
     result->Set("extData", new base::StringValue(*options->ext_data.get()));
+  }
+
+  // PlzNavigate: delay sending the response until the newly created window has
+  // been told to navigate, and blink has been correctly initialized in the
+  // renderer.
+  if (content::IsBrowserSideNavigationEnabled()) {
+    app_window->SetOnFirstCommitCallback(
+        base::Bind(&AppWindowCreateFunction::SendResponse, this, true));
+    return true;
   }
 
   SendResponse(true);
@@ -538,7 +553,7 @@ bool AppWindowCreateFunction::GetFrameOptions(
       return false;
     }
 
-    if (!image_util::ParseCSSColorString(
+    if (!image_util::ParseHexColorString(
             *options.frame->as_frame_options->color,
             &create_params->active_frame_color)) {
       error_ = app_window_constants::kInvalidColorSpecification;
@@ -549,7 +564,7 @@ bool AppWindowCreateFunction::GetFrameOptions(
     create_params->inactive_frame_color = create_params->active_frame_color;
 
     if (options.frame->as_frame_options->inactive_color.get()) {
-      if (!image_util::ParseCSSColorString(
+      if (!image_util::ParseHexColorString(
               *options.frame->as_frame_options->inactive_color,
               &create_params->inactive_frame_color)) {
         error_ = app_window_constants::kInvalidColorSpecification;

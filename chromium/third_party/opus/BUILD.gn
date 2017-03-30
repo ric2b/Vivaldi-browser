@@ -18,6 +18,10 @@ use_opus_rtcd = current_cpu == "arm" && (is_win || is_android || is_linux)
 
 config("opus_config") {
   include_dirs = [ "src/include" ]
+
+  if (use_opus_fixed_point) {
+    defines = [ "OPUS_FIXED_POINT" ]
+  }
 }
 
 config("opus_test_config") {
@@ -99,7 +103,7 @@ source_set("opus") {
 
   if (!is_debug && is_posix &&
       (current_cpu == "arm" || current_cpu == "arm64")) {
-    configs -= [ "//build/config/compiler:optimize" ]
+    configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
   }
 
@@ -169,6 +173,7 @@ executable("opus_compare") {
 
   deps = [
     ":opus",
+    "//build/config/sanitizers:deps",
   ]
 }
 
@@ -185,6 +190,7 @@ executable("opus_demo") {
 
   deps = [
     ":opus",
+    "//build/config/sanitizers:deps",
   ]
 }
 
@@ -220,6 +226,19 @@ test("test_opus_encode") {
   ]
 }
 
+# GN orders flags on a target before flags from configs. The default config
+# adds -Wall, and this flag have to be after -Wall -- so they need to
+# come from a config and can't be on the target directly.
+config("test_opus_decode_config") {
+  # test_opus_decode passes a null pointer to opus_decode() for an argument
+  # marked as requiring a non-null value by the nonnull function attribute,
+  # and expects opus_decode() to fail. Disable the -Wnonnull option to avoid
+  # a compilation error if -Werror is specified.
+  if (is_posix) {
+    cflags = [ "-Wno-nonnull" ]
+  }
+}
+
 test("test_opus_decode") {
   sources = [
     "src/tests/test_opus_decode.c",
@@ -229,15 +248,8 @@ test("test_opus_decode") {
   configs += [
     "//build/config/compiler:no_chromium_code",
     ":opus_test_config",
+    ":test_opus_decode_config",
   ]
-
-  # test_opus_decode passes a null pointer to opus_decode() for an argument
-  # marked as requiring a non-null value by the nonnull function attribute,
-  # and expects opus_decode() to fail. Disable the -Wnonnull option to avoid
-  # a compilation error if -Werror is specified.
-  if (is_posix) {
-    cflags = [ "-Wno-nonnull" ]
-  }
 
   deps = [
     ":opus",

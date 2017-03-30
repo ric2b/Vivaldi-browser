@@ -4,21 +4,16 @@
 
 #include "net/base/net_util.h"
 
-#include <string.h>
-
 #include <ostream>
 
-#include "base/files/file_path.h"
 #include "base/format_macros.h"
-#include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/sys_byteorder.h"
-#include "base/time/time.h"
 #include "net/base/address_list.h"
 #include "net/base/ip_endpoint.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 #if !defined(OS_NACL) && !defined(OS_WIN)
 #include <net/if.h>
@@ -30,57 +25,19 @@
 #endif  // !OS_IOS
 #endif  // OS_MACOSX
 #endif  // !OS_NACL && !OS_WIN
-#include "testing/gtest/include/gtest/gtest.h"
-#include "url/gurl.h"
-
-#if defined(OS_WIN)
-#include <iphlpapi.h>
-#include <objbase.h>
-#include "base/win/windows_version.h"
-#endif  // OS_WIN
 
 #if !defined(OS_MACOSX) && !defined(OS_NACL) && !defined(OS_WIN)
 #include "net/base/address_tracker_linux.h"
 #endif  // !OS_MACOSX && !OS_NACL && !OS_WIN
 
-using base::ASCIIToUTF16;
-using base::WideToUTF16;
-
 namespace net {
 
 namespace {
-
-struct HeaderCase {
-  const char* const header_name;
-  const char* const expected;
-};
 
 const unsigned char kLocalhostIPv4[] = {127, 0, 0, 1};
 const unsigned char kLocalhostIPv6[] =
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
 const uint16_t kLocalhostLookupPort = 80;
-
-// Fills in sockaddr for the given 32-bit address (IPv4.)
-// |bytes| should be an array of length 4.
-void MakeIPv4Address(const uint8_t* bytes, int port, SockaddrStorage* storage) {
-  memset(&storage->addr_storage, 0, sizeof(storage->addr_storage));
-  storage->addr_len = sizeof(struct sockaddr_in);
-  struct sockaddr_in* addr4 = reinterpret_cast<sockaddr_in*>(storage->addr);
-  addr4->sin_port = base::HostToNet16(port);
-  addr4->sin_family = AF_INET;
-  memcpy(&addr4->sin_addr, bytes, 4);
-}
-
-// Fills in sockaddr for the given 128-bit address (IPv6.)
-// |bytes| should be an array of length 16.
-void MakeIPv6Address(const uint8_t* bytes, int port, SockaddrStorage* storage) {
-  memset(&storage->addr_storage, 0, sizeof(storage->addr_storage));
-  storage->addr_len = sizeof(struct sockaddr_in6);
-  struct sockaddr_in6* addr6 = reinterpret_cast<sockaddr_in6*>(storage->addr);
-  addr6->sin6_port = base::HostToNet16(port);
-  addr6->sin6_family = AF_INET6;
-  memcpy(&addr6->sin6_addr, bytes, 16);
-}
 
 bool HasEndpoint(const IPEndPoint& endpoint, const AddressList& addresses) {
   for (const auto& address : addresses) {
@@ -121,130 +78,11 @@ void TestIPv6LoopbackOnly(const std::string& host) {
 
 }  // anonymous namespace
 
-TEST(NetUtilTest, GetIdentityFromURL) {
-  struct {
-    const char* const input_url;
-    const char* const expected_username;
-    const char* const expected_password;
-  } tests[] = {
-    {
-      "http://username:password@google.com",
-      "username",
-      "password",
-    },
-    { // Test for http://crbug.com/19200
-      "http://username:p@ssword@google.com",
-      "username",
-      "p@ssword",
-    },
-    { // Special URL characters should be unescaped.
-      "http://username:p%3fa%26s%2fs%23@google.com",
-      "username",
-      "p?a&s/s#",
-    },
-    { // Username contains %20.
-      "http://use rname:password@google.com",
-      "use rname",
-      "password",
-    },
-    { // Keep %00 as is.
-      "http://use%00rname:password@google.com",
-      "use%00rname",
-      "password",
-    },
-    { // Use a '+' in the username.
-      "http://use+rname:password@google.com",
-      "use+rname",
-      "password",
-    },
-    { // Use a '&' in the password.
-      "http://username:p&ssword@google.com",
-      "username",
-      "p&ssword",
-    },
-  };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    SCOPED_TRACE(base::StringPrintf("Test[%" PRIuS "]: %s", i,
-                                    tests[i].input_url));
-    GURL url(tests[i].input_url);
-
-    base::string16 username, password;
-    GetIdentityFromURL(url, &username, &password);
-
-    EXPECT_EQ(ASCIIToUTF16(tests[i].expected_username), username);
-    EXPECT_EQ(ASCIIToUTF16(tests[i].expected_password), password);
-  }
-}
-
-// Try extracting a username which was encoded with UTF8.
-TEST(NetUtilTest, GetIdentityFromURL_UTF8) {
-  GURL url(WideToUTF16(L"http://foo:\x4f60\x597d@blah.com"));
-
-  EXPECT_EQ("foo", url.username());
-  EXPECT_EQ("%E4%BD%A0%E5%A5%BD", url.password());
-
-  // Extract the unescaped identity.
-  base::string16 username, password;
-  GetIdentityFromURL(url, &username, &password);
-
-  // Verify that it was decoded as UTF8.
-  EXPECT_EQ(ASCIIToUTF16("foo"), username);
-  EXPECT_EQ(WideToUTF16(L"\x4f60\x597d"), password);
-}
-
-// Just a bunch of fake headers.
-const char google_headers[] =
-    "HTTP/1.1 200 OK\n"
-    "Content-TYPE: text/html; charset=utf-8\n"
-    "Content-disposition: attachment; filename=\"download.pdf\"\n"
-    "Content-Length: 378557\n"
-    "X-Google-Google1: 314159265\n"
-    "X-Google-Google2: aaaa2:7783,bbb21:9441\n"
-    "X-Google-Google4: home\n"
-    "Transfer-Encoding: chunked\n"
-    "Set-Cookie: HEHE_AT=6666x66beef666x6-66xx6666x66; Path=/mail\n"
-    "Set-Cookie: HEHE_HELP=owned:0;Path=/\n"
-    "Set-Cookie: S=gmail=Xxx-beefbeefbeef_beefb:gmail_yj=beefbeef000beefbee"
-       "fbee:gmproxy=bee-fbeefbe; Domain=.google.com; Path=/\n"
-    "X-Google-Google2: /one/two/three/four/five/six/seven-height/nine:9411\n"
-    "Server: GFE/1.3\n"
-    "Transfer-Encoding: chunked\n"
-    "Date: Mon, 13 Nov 2006 21:38:09 GMT\n"
-    "Expires: Tue, 14 Nov 2006 19:23:58 GMT\n"
-    "X-Malformed: bla; arg=test\"\n"
-    "X-Malformed2: bla; arg=\n"
-    "X-Test: bla; arg1=val1; arg2=val2";
-
-TEST(NetUtilTest, GetSpecificHeader) {
-  const HeaderCase tests[] = {
-    {"content-type", "text/html; charset=utf-8"},
-    {"CONTENT-LENGTH", "378557"},
-    {"Date", "Mon, 13 Nov 2006 21:38:09 GMT"},
-    {"Bad-Header", ""},
-    {"", ""},
-  };
-
-  // Test first with google_headers.
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    std::string result =
-        GetSpecificHeader(google_headers, tests[i].header_name);
-    EXPECT_EQ(result, tests[i].expected);
-  }
-
-  // Test again with empty headers.
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    std::string result = GetSpecificHeader(std::string(), tests[i].header_name);
-    EXPECT_EQ(result, std::string());
-  }
-}
-
 TEST(NetUtilTest, CompliantHost) {
-  struct CompliantHostCase {
+  struct {
     const char* const host;
     bool expected_output;
-  };
-
-  const CompliantHostCase compliant_host_cases[] = {
+  } compliant_host_cases[] = {
       {"", false},
       {"a", true},
       {"-", false},
@@ -373,66 +211,6 @@ TEST(NetUtilTest, GetHostAndOptionalPort) {
   }
 }
 
-TEST(NetUtilTest, NetAddressToString_IPv4) {
-  const struct {
-    uint8_t addr[4];
-    const char* const result;
-  } tests[] = {
-    {{0, 0, 0, 0}, "0.0.0.0"},
-    {{127, 0, 0, 1}, "127.0.0.1"},
-    {{192, 168, 0, 1}, "192.168.0.1"},
-  };
-
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    SockaddrStorage storage;
-    MakeIPv4Address(tests[i].addr, 80, &storage);
-    std::string result = NetAddressToString(storage.addr, storage.addr_len);
-    EXPECT_EQ(std::string(tests[i].result), result);
-  }
-}
-
-TEST(NetUtilTest, NetAddressToString_IPv6) {
-  const struct {
-    uint8_t addr[16];
-    const char* const result;
-  } tests[] = {
-    {{0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10, 0xFE, 0xDC, 0xBA,
-      0x98, 0x76, 0x54, 0x32, 0x10},
-     "fedc:ba98:7654:3210:fedc:ba98:7654:3210"},
-  };
-
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    SockaddrStorage storage;
-    MakeIPv6Address(tests[i].addr, 80, &storage);
-    EXPECT_EQ(std::string(tests[i].result),
-        NetAddressToString(storage.addr, storage.addr_len));
-  }
-}
-
-TEST(NetUtilTest, NetAddressToStringWithPort_IPv4) {
-  uint8_t addr[] = {127, 0, 0, 1};
-  SockaddrStorage storage;
-  MakeIPv4Address(addr, 166, &storage);
-  std::string result = NetAddressToStringWithPort(storage.addr,
-                                                  storage.addr_len);
-  EXPECT_EQ("127.0.0.1:166", result);
-}
-
-TEST(NetUtilTest, NetAddressToStringWithPort_IPv6) {
-  uint8_t addr[] = {
-      0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10, 0xFE, 0xDC, 0xBA,
-      0x98, 0x76, 0x54, 0x32, 0x10
-  };
-  SockaddrStorage storage;
-  MakeIPv6Address(addr, 361, &storage);
-  std::string result = NetAddressToStringWithPort(storage.addr,
-                                                  storage.addr_len);
-
-  // May fail on systems that don't support IPv6.
-  if (!result.empty())
-    EXPECT_EQ("[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:361", result);
-}
-
 TEST(NetUtilTest, GetHostName) {
   // We can't check the result of GetHostName() directly, since the result
   // will differ across machines. Our goal here is to simply exercise the
@@ -486,21 +264,6 @@ TEST(NetUtilTest, SimplifyUrlForRequest) {
   }
 }
 
-TEST(NetUtilTest, SetExplicitlyAllowedPortsTest) {
-  std::string invalid[] = { "1,2,a", "'1','2'", "1, 2, 3", "1 0,11,12" };
-  std::string valid[] = { "", "1", "1,2", "1,2,3", "10,11,12,13" };
-
-  for (size_t i = 0; i < arraysize(invalid); ++i) {
-    SetExplicitlyAllowedPorts(invalid[i]);
-    EXPECT_EQ(0, static_cast<int>(GetCountOfExplicitlyAllowedPorts()));
-  }
-
-  for (size_t i = 0; i < arraysize(valid); ++i) {
-    SetExplicitlyAllowedPorts(valid[i]);
-    EXPECT_EQ(i, GetCountOfExplicitlyAllowedPorts());
-  }
-}
-
 TEST(NetUtilTest, GetHostOrSpecFromURL) {
   EXPECT_EQ("example.com",
             GetHostOrSpecFromURL(GURL("http://example.com/test")));
@@ -508,14 +271,6 @@ TEST(NetUtilTest, GetHostOrSpecFromURL) {
             GetHostOrSpecFromURL(GURL("http://example.com./test")));
   EXPECT_EQ("file:///tmp/test.html",
             GetHostOrSpecFromURL(GURL("file:///tmp/test.html")));
-}
-
-TEST(NetUtilTest, GetAddressFamily) {
-  IPAddressNumber number;
-  EXPECT_TRUE(ParseIPLiteralToNumber("192.168.0.1", &number));
-  EXPECT_EQ(ADDRESS_FAMILY_IPV4, GetAddressFamily(number));
-  EXPECT_TRUE(ParseIPLiteralToNumber("1:abcd::3:4:ff", &number));
-  EXPECT_EQ(ADDRESS_FAMILY_IPV6, GetAddressFamily(number));
 }
 
 TEST(NetUtilTest, IsLocalhost) {
@@ -540,6 +295,8 @@ TEST(NetUtilTest, IsLocalhost) {
   EXPECT_TRUE(IsLocalhost("0:0:0:0:0:0:0:1"));
   EXPECT_TRUE(IsLocalhost("foo.localhost"));
   EXPECT_TRUE(IsLocalhost("foo.localhost."));
+  EXPECT_TRUE(IsLocalhost("foo.localhoST"));
+  EXPECT_TRUE(IsLocalhost("foo.localhoST."));
 
   EXPECT_FALSE(IsLocalhost("localhostx"));
   EXPECT_FALSE(IsLocalhost("localhost.x"));
@@ -557,6 +314,7 @@ TEST(NetUtilTest, IsLocalhost) {
   EXPECT_FALSE(IsLocalhost("0:0:0:0:0:0:0:0:1"));
   EXPECT_FALSE(IsLocalhost("foo.localhost.com"));
   EXPECT_FALSE(IsLocalhost("foo.localhoste"));
+  EXPECT_FALSE(IsLocalhost("foo.localhos"));
 }
 
 TEST(NetUtilTest, ResolveLocalHostname) {
@@ -617,23 +375,11 @@ TEST(NetUtilTest, ResolveLocalHostname) {
       ResolveLocalHostname("foo.localhoste", kLocalhostLookupPort, &addresses));
 }
 
-TEST(NetUtilTest, IsLocalhostTLD) {
-  EXPECT_TRUE(IsLocalhostTLD("foo.localhost"));
-  EXPECT_TRUE(IsLocalhostTLD("foo.localhoST"));
-  EXPECT_TRUE(IsLocalhostTLD("foo.localhost."));
-  EXPECT_TRUE(IsLocalhostTLD("foo.localhoST."));
-  EXPECT_FALSE(IsLocalhostTLD("foo.localhos"));
-  EXPECT_FALSE(IsLocalhostTLD("foo.localhost.com"));
-  EXPECT_FALSE(IsLocalhost("foo.localhoste"));
-}
-
 TEST(NetUtilTest, GoogleHost) {
-  struct GoogleHostCase {
+  struct {
     GURL url;
     bool expected_output;
-  };
-
-  const GoogleHostCase google_host_cases[] = {
+  } google_host_cases[] = {
       {GURL("http://.google.com"), true},
       {GURL("http://.youtube.com"), true},
       {GURL("http://.gmail.com"), true},

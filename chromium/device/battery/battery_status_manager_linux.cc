@@ -4,6 +4,9 @@
 
 #include "device/battery/battery_status_manager_linux.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/threading/thread.h"
@@ -82,7 +85,7 @@ scoped_ptr<base::DictionaryValue> GetPropertiesAsDictionary(
 scoped_ptr<PathsVector> GetPowerSourcesPaths(dbus::ObjectProxy* proxy) {
   scoped_ptr<PathsVector> paths(new PathsVector());
   if (!proxy)
-    return paths.Pass();
+    return paths;
 
   dbus::MethodCall method_call(kUPowerServiceName, kUPowerEnumerateDevices);
   scoped_ptr<dbus::Response> response(
@@ -93,7 +96,7 @@ scoped_ptr<PathsVector> GetPowerSourcesPaths(dbus::ObjectProxy* proxy) {
     dbus::MessageReader reader(response.get());
     reader.PopArrayOfObjectPaths(paths.get());
   }
-  return paths.Pass();;
+  return paths;
 }
 
 void UpdateNumberBatteriesHistogram(int count) {
@@ -147,7 +150,7 @@ class BatteryStatusNotificationThread : public base::Thread {
         continue;
 
       bool is_present = GetPropertyAsBoolean(*dictionary, "IsPresent", false);
-      uint32 type = static_cast<uint32>(
+      uint32_t type = static_cast<uint32_t>(
           GetPropertyAsDouble(*dictionary, "Type", UPOWER_DEVICE_TYPE_UNKNOWN));
 
       if (!is_present || type != UPOWER_DEVICE_TYPE_BATTERY) {
@@ -274,6 +277,7 @@ class BatteryStatusManagerLinux : public BatteryStatusManager {
  private:
   // BatteryStatusManager:
   bool StartListeningBatteryChange() override {
+    if (!StartNotifierThreadIfNecessary())
       return false;
 
     notifier_thread_->message_loop()->PostTask(
@@ -323,7 +327,7 @@ BatteryStatus ComputeWebBatteryStatus(const base::DictionaryValue& dictionary) {
   if (!dictionary.HasKey("State"))
     return status;
 
-  uint32 state = static_cast<uint32>(
+  uint32_t state = static_cast<uint32_t>(
       GetPropertyAsDouble(dictionary, "State", UPOWER_DEVICE_STATE_UNKNOWN));
   status.charging = state != UPOWER_DEVICE_STATE_DISCHARGING &&
                     state != UPOWER_DEVICE_STATE_EMPTY;

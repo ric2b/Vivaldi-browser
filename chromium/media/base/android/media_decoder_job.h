@@ -5,7 +5,10 @@
 #ifndef MEDIA_BASE_ANDROID_MEDIA_DECODER_JOB_H_
 #define MEDIA_BASE_ANDROID_MEDIA_DECODER_JOB_H_
 
+#include <stddef.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "media/base/android/demuxer_stream_player_params.h"
@@ -39,17 +42,20 @@ class MediaDecoderJob {
   };
 
   // Callback when a decoder job finishes its work. Args: whether decode
-  // finished successfully, current presentation time, max presentation time.
+  // finished successfully, a flag whether the frame is late for statistics,
+  // cacurrent presentation time, max presentation time.
   // If the current presentation time is equal to kNoTimestamp(), the decoder
   // job skipped rendering of the decoded output and the callback target should
-  // ignore the timestamps provided.
-  typedef base::Callback<void(MediaCodecStatus, base::TimeDelta,
+  // ignore the timestamps provided. The late frame flag has no meaning in this
+  // case.
+  typedef base::Callback<void(MediaCodecStatus, bool, base::TimeDelta,
                               base::TimeDelta)> DecoderCallback;
   // Callback when a decoder job finishes releasing the output buffer.
-  // Args: current presentation time, max presentation time.
+  // Args: whether the frame is a late frame, current presentation time, max
+  // presentation time.
   // If the current presentation time is equal to kNoTimestamp(), the callback
-  // target should ignore the timestamps provided.
-  typedef base::Callback<void(base::TimeDelta, base::TimeDelta)>
+  // target should ignore the timestamps provided and whether it is late.
+  typedef base::Callback<void(bool, base::TimeDelta, base::TimeDelta)>
       ReleaseOutputCompletionCallback;
 
   virtual ~MediaDecoderJob();
@@ -108,9 +114,6 @@ class MediaDecoderJob {
 
   bool prerolling() const { return prerolling_; }
 
-  // Returns true if this object has data to decode.
-  bool HasData() const;
-
  protected:
   // Creates a new MediaDecoderJob instance.
   // |decoder_task_runner| - Thread on which the decoder task will run.
@@ -124,10 +127,14 @@ class MediaDecoderJob {
 
   // Release the output buffer at index |output_buffer_index| and render it if
   // |render_output| is true. Upon completion, |callback| will be called.
+  // |is_late_frame| can be passed with the |callback| if the implementation
+  // does not calculate it itself.
   virtual void ReleaseOutputBuffer(
       int output_buffer_index,
+      size_t offset,
       size_t size,
       bool render_output,
+      bool is_late_frame,
       base::TimeDelta current_presentation_timestamp,
       const ReleaseOutputCompletionCallback& callback) = 0;
 
@@ -136,7 +143,7 @@ class MediaDecoderJob {
   virtual bool ComputeTimeToRender() const = 0;
 
   // Gets MediaCrypto object from |drm_bridge_|.
-  base::android::ScopedJavaLocalRef<jobject> GetMediaCrypto();
+  jobject GetMediaCrypto();
 
   // Releases the |media_codec_bridge_|.
   void ReleaseMediaCodecBridge();
@@ -164,6 +171,9 @@ class MediaDecoderJob {
 
   // Queues an access unit into |media_codec_bridge_|'s input buffer.
   MediaCodecStatus QueueInputBuffer(const AccessUnit& unit);
+
+  // Returns true if this object has data to decode.
+  bool HasData() const;
 
   // Initiates a request for more data.
   // |done_cb| is called when more data is available in |received_data_|.
@@ -195,6 +205,7 @@ class MediaDecoderJob {
   // Completes any pending job destruction or any pending decode stop. If
   // destruction was not pending, passes its arguments to |decode_cb_|.
   void OnDecodeCompleted(MediaCodecStatus status,
+                         bool is_late_frame,
                          base::TimeDelta current_presentation_timestamp,
                          base::TimeDelta max_presentation_timestamp);
 

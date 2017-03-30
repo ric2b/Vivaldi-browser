@@ -5,6 +5,7 @@
 #include "components/translate/core/browser/options_menu_model.h"
 
 #include "base/metrics/histogram.h"
+#include "build/build_config.h"
 #include "components/translate/core/browser/translate_driver.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "grit/components_strings.h"
@@ -29,14 +30,13 @@ OptionsMenuModel::OptionsMenuModel(TranslateInfoBarDelegate* translate_delegate)
   // |translate_delegate| must already be owned.
   DCHECK(translate_infobar_delegate_->GetTranslateDriver());
 
-  base::string16 original_language = translate_delegate->language_name_at(
-      translate_delegate->original_language_index());
-  base::string16 target_language = translate_delegate->language_name_at(
-      translate_delegate->target_language_index());
+  base::string16 original_language =
+      translate_delegate->original_language_name();
+  base::string16 target_language = translate_delegate->target_language_name();
 
   bool autodetermined_source_language =
-      translate_delegate->original_language_index() ==
-      TranslateInfoBarDelegate::kNoIndex;
+      (translate_delegate->original_language_code() ==
+       translate::kUnknownLanguageCode);
 
   // Populate the menu.
   // Incognito mode does not get any preferences related items.

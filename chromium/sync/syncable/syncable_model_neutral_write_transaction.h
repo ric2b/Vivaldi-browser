@@ -5,6 +5,7 @@
 #ifndef SYNC_SYNCABLE_SYNCABLE_MODEL_NEUTRAL_WRITE_TRANSACTION_H_
 #define SYNC_SYNCABLE_SYNCABLE_MODEL_NEUTRAL_WRITE_TRANSACTION_H_
 
+#include "base/macros.h"
 #include "sync/base/sync_export.h"
 #include "sync/syncable/metahandle_set.h"
 #include "sync/syncable/syncable_base_write_transaction.h"
@@ -21,8 +22,7 @@ namespace syncable {
 // good job of tracking and reporting on changes to the entries modified within
 // its scope.  This is because its changes do not need to be reported to the
 // DirectoryChangeDelegate.
-class SYNC_EXPORT_PRIVATE ModelNeutralWriteTransaction
-    : public BaseWriteTransaction {
+class SYNC_EXPORT ModelNeutralWriteTransaction : public BaseWriteTransaction {
  public:
   ModelNeutralWriteTransaction(
       const tracked_objects::Location& location,

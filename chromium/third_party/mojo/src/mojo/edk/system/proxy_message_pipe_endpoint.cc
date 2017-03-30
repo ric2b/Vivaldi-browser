@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/proxy_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/proxy_message_pipe_endpoint.h"
 
 #include <string.h>
+#include <utility>
 
 #include "base/logging.h"
-#include "mojo/edk/system/channel_endpoint.h"
-#include "mojo/edk/system/local_message_pipe_endpoint.h"
-#include "mojo/edk/system/message_pipe_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/local_message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_dispatcher.h"
 
 namespace mojo {
 namespace system {
@@ -46,7 +47,7 @@ bool ProxyMessagePipeEndpoint::OnPeerClose() {
 void ProxyMessagePipeEndpoint::EnqueueMessage(
     scoped_ptr<MessageInTransit> message) {
   DCHECK(channel_endpoint_);
-  bool ok = channel_endpoint_->EnqueueMessage(message.Pass());
+  bool ok = channel_endpoint_->EnqueueMessage(std::move(message));
   LOG_IF(WARNING, !ok) << "Failed to write enqueue message to channel";
 }
 

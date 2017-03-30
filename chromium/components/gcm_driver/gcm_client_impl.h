@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_GCM_DRIVER_GCM_CLIENT_IMPL_H_
 #define COMPONENTS_GCM_DRIVER_GCM_CLIENT_IMPL_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
@@ -12,7 +14,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/containers/scoped_ptr_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -26,7 +28,6 @@
 #include "google_apis/gcm/engine/unregistration_request.h"
 #include "google_apis/gcm/protocol/android_checkin.pb.h"
 #include "google_apis/gcm/protocol/checkin.pb.h"
-#include "net/log/net_log.h"
 #include "net/url_request/url_request_context_getter.h"
 
 class GURL;
@@ -67,9 +68,8 @@ class GCMInternalsBuilder {
   virtual scoped_ptr<ConnectionFactory> BuildConnectionFactory(
       const std::vector<GURL>& endpoints,
       const net::BackoffEntry::Policy& backoff_policy,
-      const scoped_refptr<net::HttpNetworkSession>& gcm_network_session,
-      const scoped_refptr<net::HttpNetworkSession>& http_network_session,
-      net::NetLog* net_log,
+      net::HttpNetworkSession* gcm_network_session,
+      net::HttpNetworkSession* http_network_session,
       GCMStatsRecorder* recorder);
 };
 
@@ -157,9 +157,9 @@ class GCMClientImpl
     void Reset();
 
     // Android ID of the device as assigned by the server.
-    uint64 android_id;
+    uint64_t android_id;
     // Security token of the device as assigned by the server.
-    uint64 secret;
+    uint64_t secret;
     // True if accounts were already provided through SetAccountsForCheckin(),
     // or when |last_checkin_accounts| was loaded as empty.
     bool accounts_set;
@@ -173,18 +173,17 @@ class GCMClientImpl
   // Collection of pending registration requests. Keys are RegistrationInfo
   // instance, while values are pending registration requests to obtain a
   // registration ID for requesting application.
-  typedef base::ScopedPtrMap<linked_ptr<RegistrationInfo>,
-                             scoped_ptr<RegistrationRequest>,
-                             RegistrationInfoComparer>
-      PendingRegistrationRequests;
+  using PendingRegistrationRequests = std::map<linked_ptr<RegistrationInfo>,
+                                               scoped_ptr<RegistrationRequest>,
+                                               RegistrationInfoComparer>;
 
   // Collection of pending unregistration requests. Keys are RegistrationInfo
   // instance, while values are pending unregistration requests to disable the
   // registration ID currently assigned to the application.
-  typedef base::ScopedPtrMap<linked_ptr<RegistrationInfo>,
-                             scoped_ptr<UnregistrationRequest>,
-                             RegistrationInfoComparer>
-      PendingUnregistrationRequests;
+  using PendingUnregistrationRequests =
+      std::map<linked_ptr<RegistrationInfo>,
+               scoped_ptr<UnregistrationRequest>,
+               RegistrationInfoComparer>;
 
   friend class GCMClientImplTest;
   friend class GCMClientInstanceIDTest;
@@ -196,7 +195,7 @@ class GCMClientImpl
   // Receives messages and dispatches them to relevant user delegates.
   void OnMessageReceivedFromMCS(const gcm::MCSMessage& message);
   // Receives confirmation of sent messages or information about errors.
-  void OnMessageSentToMCS(int64 user_serial_number,
+  void OnMessageSentToMCS(int64_t user_serial_number,
                           const std::string& app_id,
                           const std::string& message_id,
                           MCSClient::MessageSendStatus status);
@@ -336,12 +335,12 @@ class GCMClientImpl
   // resetting and loading from the store again and again.
   bool gcm_store_reset_;
 
-  scoped_refptr<net::HttpNetworkSession> network_session_;
-  net::BoundNetLog net_log_;
+  scoped_ptr<net::HttpNetworkSession> network_session_;
   scoped_ptr<ConnectionFactory> connection_factory_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
   // Controls receiving and sending of packets and reliable message queueing.
+  // Must be destroyed before |network_session_|.
   scoped_ptr<MCSClient> mcs_client_;
 
   scoped_ptr<CheckinRequest> checkin_request_;

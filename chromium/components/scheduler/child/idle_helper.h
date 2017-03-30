@@ -5,9 +5,10 @@
 #ifndef COMPONENTS_SCHEDULER_CHILD_IDLE_HELPER_H_
 #define COMPONENTS_SCHEDULER_CHILD_IDLE_HELPER_H_
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "components/scheduler/child/cancelable_closure_holder.h"
-#include "components/scheduler/child/prioritizing_task_queue_selector.h"
+#include "components/scheduler/base/cancelable_closure_holder.h"
+#include "components/scheduler/base/task_queue_selector.h"
 #include "components/scheduler/child/scheduler_helper.h"
 #include "components/scheduler/child/single_thread_idle_task_runner.h"
 #include "components/scheduler/scheduler_export.h"
@@ -68,7 +69,6 @@ class SCHEDULER_EXPORT IdleHelper
   IdleHelper(
       SchedulerHelper* helper,
       Delegate* delegate,
-      size_t idle_queue_index,
       const char* tracing_category,
       const char* disabled_by_default_tracing_category,
       const char* idle_period_tracing_name,
@@ -147,20 +147,22 @@ class SCHEDULER_EXPORT IdleHelper
 
     void TraceIdleIdleTaskStart();
     void TraceIdleIdleTaskEnd();
+
+   private:
     void TraceEventIdlePeriodStateChange(IdlePeriodState new_state,
+                                         bool new_running_idle_task,
                                          base::TimeTicks new_deadline,
                                          base::TimeTicks optional_now);
 
-   private:
     SchedulerHelper* helper_;  // NOT OWNED
     Delegate* delegate_;       // NOT OWNED
 
     IdlePeriodState idle_period_state_;
     base::TimeTicks idle_period_deadline_;
 
-    base::TraceTicks idle_period_deadline_for_tracing_;
-    base::TraceTicks last_idle_task_trace_time_;
-    bool nestable_events_started_;
+    base::TimeTicks last_idle_task_trace_time_;
+    bool idle_period_trace_event_started_;
+    bool running_idle_task_for_tracing_;
     const char* tracing_category_;
     const char* disabled_by_default_tracing_category_;
     const char* idle_period_tracing_name_;
@@ -196,7 +198,7 @@ class SCHEDULER_EXPORT IdleHelper
 
   SchedulerHelper* helper_;  // NOT OWNED
   Delegate* delegate_;       // NOT OWNED
-  size_t idle_queue_index_;
+  scoped_refptr<TaskQueue> idle_queue_;
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
 
   CancelableClosureHolder enable_next_long_idle_period_closure_;
@@ -204,9 +206,6 @@ class SCHEDULER_EXPORT IdleHelper
 
   State state_;
 
-  // A bitmap which controls the set of queues that are checked for quiescence
-  // before triggering a long idle period.
-  uint64 quiescence_monitored_task_queue_mask_;
   base::TimeDelta required_quiescence_duration_before_long_idle_period_;
 
   const char* disabled_by_default_tracing_category_;

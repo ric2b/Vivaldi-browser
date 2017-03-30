@@ -4,9 +4,13 @@
 
 #include "net/cert_net/cert_net_fetcher_impl.h"
 
+#include <tuple>
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/containers/linked_list.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/numerics/safe_math.h"
 #include "base/stl_util.h"
 #include "base/timer/timer.h"
@@ -133,13 +137,9 @@ CertNetFetcherImpl::RequestParams::RequestParams()
 
 bool CertNetFetcherImpl::RequestParams::operator<(
     const RequestParams& other) const {
-  if (url != other.url)
-    return url < other.url;
-  if (http_method != other.http_method)
-    return http_method < other.http_method;
-  if (max_response_bytes != other.max_response_bytes)
-    return max_response_bytes < other.max_response_bytes;
-  return timeout < other.timeout;
+  return std::tie(url, http_method, max_response_bytes, timeout) <
+         std::tie(other.url, other.http_method, other.max_response_bytes,
+                  other.timeout);
 }
 
 // CertNetFetcherImpl::Job tracks an outstanding URLRequest as well as all of
@@ -217,7 +217,7 @@ class CertNetFetcherImpl::Job : public URLRequest::Delegate {
 
   // Used to timeout the job when the URLRequest takes too long. This timer is
   // also used for notifying a failure to start the URLRequest.
-  base::OneShotTimer<Job> timer_;
+  base::OneShotTimer timer_;
 
   // Non-owned pointer to the CertNetFetcherImpl that created this job.
   CertNetFetcherImpl* parent_;
@@ -232,10 +232,9 @@ CertNetFetcherImpl::RequestImpl::~RequestImpl() {
 
 CertNetFetcherImpl::Job::Job(scoped_ptr<RequestParams> request_params,
                              CertNetFetcherImpl* parent)
-    : request_params_(request_params.Pass()),
+    : request_params_(std::move(request_params)),
       result_net_error_(ERR_IO_PENDING),
-      parent_(parent) {
-}
+      parent_(parent) {}
 
 CertNetFetcherImpl::Job::~Job() {
   Cancel();
@@ -262,7 +261,7 @@ scoped_ptr<CertNetFetcher::Request> CertNetFetcherImpl::Job::CreateRequest(
     const FetchCallback& callback) {
   scoped_ptr<RequestImpl> request(new RequestImpl(this, callback));
   requests_.Append(request.get());
-  return request.Pass();
+  return std::move(request);
 }
 
 void CertNetFetcherImpl::Job::DetachRequest(RequestImpl* request) {
@@ -451,7 +450,7 @@ scoped_ptr<CertNetFetcher::Request> CertNetFetcherImpl::FetchCaIssuers(
   request_params->max_response_bytes =
       GetMaxResponseBytes(max_response_bytes, kMaxResponseSizeInBytesForAia);
 
-  return Fetch(request_params.Pass(), callback);
+  return Fetch(std::move(request_params), callback);
 }
 
 scoped_ptr<CertNetFetcher::Request> CertNetFetcherImpl::FetchCrl(
@@ -467,7 +466,7 @@ scoped_ptr<CertNetFetcher::Request> CertNetFetcherImpl::FetchCrl(
   request_params->max_response_bytes =
       GetMaxResponseBytes(max_response_bytes, kMaxResponseSizeInBytesForCrl);
 
-  return Fetch(request_params.Pass(), callback);
+  return Fetch(std::move(request_params), callback);
 }
 
 scoped_ptr<CertNetFetcher::Request> CertNetFetcherImpl::FetchOcsp(
@@ -483,7 +482,7 @@ scoped_ptr<CertNetFetcher::Request> CertNetFetcherImpl::FetchOcsp(
   request_params->max_response_bytes =
       GetMaxResponseBytes(max_response_bytes, kMaxResponseSizeInBytesForAia);
 
-  return Fetch(request_params.Pass(), callback);
+  return Fetch(std::move(request_params), callback);
 }
 
 bool CertNetFetcherImpl::JobComparator::operator()(const Job* job1,
@@ -501,7 +500,7 @@ scoped_ptr<CertNetFetcher::Request> CertNetFetcherImpl::Fetch(
   Job* job = FindJob(*request_params);
 
   if (!job) {
-    job = new Job(request_params.Pass(), this);
+    job = new Job(std::move(request_params), this);
     jobs_.insert(job);
     job->StartURLRequest(context_);
   }

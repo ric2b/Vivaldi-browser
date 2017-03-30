@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/logging.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversion_utils.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/test/chromedriver/chrome/ui_events.h"
 #include "chrome/test/chromedriver/keycode_text_conversion.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
@@ -32,27 +33,19 @@ bool ConvertKeyCodeToText(ui::KeyboardCode key_code,
   if (modifiers & kShiftKeyModifierMask)
     event_flags |= ui::EF_SHIFT_DOWN;
 
-  ui::DomKey dom_key_ignored;
-  base::char16 str[2] = {'\0'};
+  ui::DomKey dom_key;
   ui::KeyboardCode key_code_ignored;
-  uint32 platform_keycode_ignored;
 
-  if (!keyboard_layout_engine->Lookup(dom_code, event_flags, &dom_key_ignored,
-                                      &str[0], &key_code_ignored,
-                                      &platform_keycode_ignored)) {
-    // Key codes like ui::VKEY_UNKNOWN need to be mapped to the empty string, so
-    // even if the lookup fails we still need to return true here.
+  if (!keyboard_layout_engine->Lookup(dom_code, event_flags, &dom_key,
+                                      &key_code_ignored) ||
+      !dom_key.IsCharacter()) {
+    // The keycode lookup failed, or mapped to a key that isn't a unicode
+    // character. Convert it to the empty string.
     *text = std::string();
     return true;
   }
 
-  if (!base::UTF16ToUTF8(str, base::c16len(str), text)) {
-    *error_msg = base::StringPrintf(
-        "unicode conversion failed for keycode %d with modifiers 0x%x",
-        key_code, modifiers);
-    return false;
-  }
-
+  base::WriteUnicodeCharacter(dom_key.ToCharacter(), text);
   return true;
 }
 

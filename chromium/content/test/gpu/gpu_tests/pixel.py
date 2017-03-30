@@ -1,18 +1,16 @@
 # Copyright (c) 2012 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-from datetime import datetime
 import glob
-import optparse
+import json
 import os
 import re
 
-import cloud_storage_test_base
+from gpu_tests import cloud_storage_test_base
+from gpu_tests import pixel_expectations
 import page_sets
-import pixel_expectations
 
 from catapult_base import cloud_storage
-from telemetry import benchmark
 from telemetry.page import page_test
 from telemetry.util import image_util
 
@@ -49,9 +47,12 @@ class PixelTestFailure(Exception):
 def _DidTestSucceed(tab):
   return tab.EvaluateJavaScript('domAutomationController._succeeded')
 
-class _PixelValidator(cloud_storage_test_base.ValidatorBase):
+class PixelValidator(cloud_storage_test_base.ValidatorBase):
   def CustomizeBrowserOptions(self, options):
-    options.AppendExtraBrowserArgs('--enable-gpu-benchmarking')
+    # --test-type=gpu is used only to suppress the "Google API Keys are missing"
+    # infobar, which causes flakiness in tests.
+    options.AppendExtraBrowserArgs(['--enable-gpu-benchmarking',
+                                    '--test-type=gpu'])
 
   def ValidateAndMeasurePage(self, page, tab, results):
     if not _DidTestSucceed(tab):
@@ -65,10 +66,21 @@ class _PixelValidator(cloud_storage_test_base.ValidatorBase):
     if screenshot is None:
       raise page_test.Failure('Could not capture screenshot')
 
+    dpr = tab.EvaluateJavaScript('window.devicePixelRatio')
+
     if hasattr(page, 'test_rect'):
       screenshot = image_util.Crop(
-          screenshot, page.test_rect[0], page.test_rect[1],
-          page.test_rect[2], page.test_rect[3])
+          screenshot, page.test_rect[0] * dpr, page.test_rect[1] * dpr,
+          page.test_rect[2] * dpr, page.test_rect[3] * dpr)
+
+    if hasattr(page, 'expected_colors'):
+      # Use expected pixels instead of ref images for validation.
+      expected_colors_file = os.path.abspath(os.path.join(
+          os.path.dirname(__file__), page.expected_colors))
+      expected_colors = self._ReadPixelExpectations(expected_colors_file)
+      self._ValidateScreenshotSamples(
+          page.display_name, screenshot, expected_colors, dpr)
+      return
 
     image_name = self._UrlToImageName(page.display_name)
 
@@ -86,7 +98,7 @@ class _PixelValidator(cloud_storage_test_base.ValidatorBase):
       # reference image, so download it from cloud storage.
       try:
         ref_png = self._DownloadFromCloudStorage(image_name, page, tab)
-      except cloud_storage.NotFoundError as e:
+      except cloud_storage.NotFoundError:
         # There is no reference image yet in cloud storage. This
         # happens when the revision of the test is incremented or when
         # a new test is added, because the trybots are not allowed to
@@ -135,19 +147,26 @@ class _PixelValidator(cloud_storage_test_base.ValidatorBase):
 
     try:
       ref_png = image_util.FromPngFile(image_path)
-    except IOError:
+    # This can raise a couple of exceptions including IOError and ValueError.
+    except Exception:
       ref_png = None
 
     if ref_png is not None:
       return ref_png
 
-    print 'Reference image not found. Writing tab contents as reference.'
+    print ('Reference image not found. Writing tab contents as reference to: ' +
+           image_path)
 
     self._WriteImage(image_path, screenshot)
     return screenshot
 
+  def _ReadPixelExpectations(self, json_file_path):
+    with open(json_file_path, 'r') as f:
+      json_contents = json.load(f)
+    return json_contents
+
 class Pixel(cloud_storage_test_base.TestBase):
-  test = _PixelValidator
+  test = PixelValidator
 
   @classmethod
   def Name(cls):
@@ -162,10 +181,11 @@ class Pixel(cloud_storage_test_base.TestBase):
         default=default_reference_image_dir)
 
   def CreateStorySet(self, options):
-    story_set = page_sets.PixelTestsStorySet()
+    story_set = page_sets.PixelTestsStorySet(self.GetExpectations(),
+                                             try_es3=True)
     for page in story_set:
       page.script_to_evaluate_on_commit = test_harness_script
     return story_set
 
-  def CreateExpectations(self):
+  def _CreateExpectations(self):
     return pixel_expectations.PixelExpectations()

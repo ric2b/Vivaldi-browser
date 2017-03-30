@@ -37,10 +37,12 @@ AutoConnectHandler::AutoConnectHandler()
 }
 
 AutoConnectHandler::~AutoConnectHandler() {
-  if (client_cert_resolver_)
-    client_cert_resolver_->RemoveObserver(this);
   if (LoginState::IsInitialized())
     LoginState::Get()->RemoveObserver(this);
+  if (client_cert_resolver_)
+    client_cert_resolver_->RemoveObserver(this);
+  if (network_connection_handler_)
+    network_connection_handler_->RemoveObserver(this);
   if (network_state_handler_)
     network_state_handler_->RemoveObserver(this, FROM_HERE);
   if (managed_configuration_handler_)
@@ -100,10 +102,12 @@ void AutoConnectHandler::PoliciesChanged(const std::string& userhash) {
 }
 
 void AutoConnectHandler::PoliciesApplied(const std::string& userhash) {
-  if (userhash.empty())
+  if (userhash.empty()) {
     device_policy_applied_ = true;
-  else
+  } else {
     user_policy_applied_ = true;
+    DisconnectIfPolicyRequires();
+  }
 
   // Request to connect to the best network only if there is at least one
   // managed network. Otherwise only process existing requests.
@@ -194,8 +198,10 @@ void AutoConnectHandler::CheckBestConnection() {
 }
 
 void AutoConnectHandler::DisconnectIfPolicyRequires() {
-  if (applied_autoconnect_policy_ || !LoginState::Get()->IsUserLoggedIn())
+  if (applied_autoconnect_policy_ || !LoginState::Get()->IsUserLoggedIn() ||
+      !user_policy_applied_) {
     return;
+  }
 
   const base::DictionaryValue* global_network_config =
       managed_configuration_handler_->GetGlobalConfigFromPolicy(
@@ -210,8 +216,12 @@ void AutoConnectHandler::DisconnectIfPolicyRequires() {
   global_network_config->GetBooleanWithoutPathExpansion(
       ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
       &only_policy_autoconnect);
+  bool only_policy_connect = false;
+  global_network_config->GetBooleanWithoutPathExpansion(
+      ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
+      &only_policy_connect);
 
-  if (only_policy_autoconnect)
+  if (only_policy_autoconnect || only_policy_connect)
     DisconnectFromUnmanagedSharedWiFiNetworks();
 }
 

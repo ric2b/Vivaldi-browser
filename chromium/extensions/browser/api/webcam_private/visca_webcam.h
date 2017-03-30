@@ -8,6 +8,7 @@
 #include <deque>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "extensions/browser/api/serial/serial_connection.h"
 #include "extensions/browser/api/webcam_private/webcam.h"
@@ -17,39 +18,47 @@ namespace extensions {
 
 class ViscaWebcam : public Webcam {
  public:
-  ViscaWebcam(const std::string& path, const std::string& extension_id);
+  ViscaWebcam();
 
   using OpenCompleteCallback = base::Callback<void(bool)>;
 
   // Open and initialize the web camera. This is done by the following three
-  // steps (in order): 1. Open the serial port;  2. Request address; 3. Clear
-  // the command buffer. After these three steps completes, |open_callback| will
-  // be called.
-  void Open(const OpenCompleteCallback& open_callback);
+  // steps (in order): 1. Open the serial port; 2. Request address; 3. Clear the
+  // command buffer. After these three steps completes, |open_callback| will be
+  // called.
+  void Open(const std::string& path,
+            const std::string& extension_id,
+            const OpenCompleteCallback& open_callback);
 
  private:
-  ~ViscaWebcam() override;
+  friend class ViscaWebcamTest;
 
-  enum CommandType {
-    COMMAND,
+  enum InquiryType {
     INQUIRY_PAN,
     INQUIRY_TILT,
-    INQUIRY_PAN_TILT,
     INQUIRY_ZOOM,
   };
 
   using CommandCompleteCallback =
       base::Callback<void(bool, const std::vector<char>&)>;
 
-  void OpenOnIOThread(const OpenCompleteCallback& open_callback);
+  // Private because WebCam is base::RefCounted.
+  ~ViscaWebcam() override;
+
+  void OpenOnIOThread(const std::string& path,
+                      const std::string& extension_id,
+                      const OpenCompleteCallback& open_callback);
+
   // Callback function that will be called after the serial connection has been
   // opened successfully.
   void OnConnected(const OpenCompleteCallback& open_callback, bool success);
+
   // Callback function that will be called after the address has been set
   // successfully.
   void OnAddressSetCompleted(const OpenCompleteCallback& open_callback,
                              bool success,
                              const std::vector<char>& response);
+
   // Callback function that will be called after the command buffer has been
   // cleared successfully.
   void OnClearAllCompleted(const OpenCompleteCallback& open_callback,
@@ -61,37 +70,61 @@ class ViscaWebcam : public Webcam {
             const CommandCompleteCallback& callback);
   void OnSendCompleted(const CommandCompleteCallback& callback,
                        int bytes_sent,
-                       core_api::serial::SendError error);
+                       api::serial::SendError error);
   void ReceiveLoop(const CommandCompleteCallback& callback);
   void OnReceiveCompleted(const CommandCompleteCallback& callback,
                           const std::vector<char>& data,
-                          core_api::serial::ReceiveError error);
+                          api::serial::ReceiveError error);
+
   // Callback function that will be called after the send and reply of a command
-  // are both completed. Update |value| according to |type| and |response| if
-  // necessory.
-  void OnCommandCompleted(CommandType type,
-                          int* value,
+  // are both completed.
+  void OnCommandCompleted(const SetPTZCompleteCallback& callback,
+                          bool success,
+                          const std::vector<char>& response);
+  // Callback function that will be called after the send and reply of an
+  // inquiry are both completed.
+  void OnInquiryCompleted(InquiryType type,
+                          const GetPTZCompleteCallback& callback,
                           bool success,
                           const std::vector<char>& response);
 
-  // Webcam Overrides:
-  void Reset(bool pan, bool tilt, bool zoom) override;
-  bool GetPan(int* value) override;
-  bool GetTilt(int* value) override;
-  bool GetZoom(int* value) override;
-  bool SetPan(int value) override;
-  bool SetTilt(int value) override;
-  bool SetZoom(int value) override;
-  bool SetPanDirection(PanDirection direction) override;
-  bool SetTiltDirection(TiltDirection direction) override;
+  void ProcessNextCommand();
+  void PostOpenFailureTask(const OpenCompleteCallback& open_callback);
 
-  const std::string path_;
-  const std::string extension_id_;
+  // Webcam Overrides:
+  void GetPan(const GetPTZCompleteCallback& callback) override;
+  void GetTilt(const GetPTZCompleteCallback& callback) override;
+  void GetZoom(const GetPTZCompleteCallback& callback) override;
+  void SetPan(int value,
+              int pan_speed,
+              const SetPTZCompleteCallback& callback) override;
+  void SetTilt(int value,
+               int tilt_speed,
+               const SetPTZCompleteCallback& callback) override;
+  void SetZoom(int value, const SetPTZCompleteCallback& callback) override;
+  void SetPanDirection(PanDirection direction,
+                       int pan_speed,
+                       const SetPTZCompleteCallback& callback) override;
+  void SetTiltDirection(TiltDirection direction,
+                        int tilt_speed,
+                        const SetPTZCompleteCallback& callback) override;
+  void Reset(bool pan,
+             bool tilt,
+             bool zoom,
+             const SetPTZCompleteCallback& callback) override;
+
+  // Used only in unit tests in place of Open().
+  void OpenForTesting(scoped_ptr<SerialConnection> serial_connection);
+
+  // Used only in unit tests to retrieve |serial_connection_| since this class
+  // owns it.
+  SerialConnection* GetSerialConnectionForTesting();
 
   scoped_ptr<SerialConnection> serial_connection_;
 
   // Stores the response for the current command.
   std::vector<char> data_buffer_;
+
   // Queues commands till the current command completes.
   std::deque<std::pair<std::vector<char>, CommandCompleteCallback>> commands_;
 

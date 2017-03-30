@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
 
 namespace gfx {
@@ -371,7 +371,7 @@ class FragmentTexBlendMode {
  protected:
   FragmentTexBlendMode();
 
-  std::string SetBlendModeFunctions(std::string shader_string) const;
+  std::string SetBlendModeFunctions(const std::string& shader_string) const;
 
   int backdrop_location_;
   int original_backdrop_location_;
@@ -866,31 +866,6 @@ class FragmentShaderColorAA : public FragmentTexBlendMode {
   int color_location_;
 
   DISALLOW_COPY_AND_ASSIGN(FragmentShaderColorAA);
-};
-
-class FragmentShaderCheckerboard : public FragmentTexBlendMode {
- public:
-  FragmentShaderCheckerboard();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return alpha_location_; }
-  int tex_transform_location() const { return tex_transform_location_; }
-  int frequency_location() const { return frequency_location_; }
-  int color_location() const { return color_location_; }
-
- private:
-  int alpha_location_;
-  int tex_transform_location_;
-  int frequency_location_;
-  int color_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentShaderCheckerboard);
 };
 
 }  // namespace cc

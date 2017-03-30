@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "media/base/android/access_unit_queue.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -48,7 +51,7 @@ DemuxerData AccessUnitQueueTest::CreateDemuxerData(const AUDescriptor* descr,
       continue;
     }
 
-    au.data = std::vector<uint8>(descr[i].data.begin(), descr[i].data.end());
+    au.data = std::vector<uint8_t>(descr[i].data.begin(), descr[i].data.end());
 
     if (descr[i].unit_type == kKeyFrame)
       au.is_key_frame = true;

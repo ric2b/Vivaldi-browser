@@ -22,8 +22,18 @@
 #pragma comment(linker, "/MERGE:.rdata=.text")
 
 #include <windows.h>
+
+// #define needed to link in RtlGenRandom(), a.k.a. SystemFunction036.  See the
+// "Community Additions" comment on MSDN here:
+// http://msdn.microsoft.com/en-us/library/windows/desktop/aa387694.aspx
+#define SystemFunction036 NTAPI SystemFunction036
+#include <NTSecAPI.h>
+#undef SystemFunction036
+
+#include <sddl.h>
 #include <shellapi.h>
 #include <stdlib.h>
+#include <stddef.h>
 
 #include "chrome/installer/mini_installer/appid.h"
 #include "chrome/installer/mini_installer/configuration.h"
@@ -32,12 +42,26 @@
 #include "chrome/installer/mini_installer/mini_installer_constants.h"
 #include "chrome/installer/mini_installer/mini_string.h"
 #include "chrome/installer/mini_installer/pe_resource.h"
+#include "chrome/installer/mini_installer/regkey.h"
 
 namespace mini_installer {
 
-typedef DWORD ProcessExitCode;
 typedef StackString<MAX_PATH> PathString;
 typedef StackString<MAX_PATH * 4> CommandString;
+
+struct ProcessExitResult {
+  DWORD exit_code;
+  DWORD windows_error;
+
+  explicit ProcessExitResult(DWORD exit) : exit_code(exit), windows_error(0) {}
+  ProcessExitResult(DWORD exit, DWORD win)
+      : exit_code(exit), windows_error(win) {
+  }
+
+  bool IsSuccess() {
+    return exit_code == SUCCESS_EXIT_CODE;
+  }
+};
 
 // This structure passes data back and forth for the processing
 // of resource callbacks.
@@ -50,167 +74,60 @@ struct Context {
   PathString* setup_resource_path;
 };
 
-// A helper class used to manipulate the Windows registry.  Typically, members
-// return Windows last-error codes a la the Win32 registry API.
-class RegKey {
- public:
-  RegKey() : key_(NULL) { }
-  ~RegKey() { Close(); }
 
-  // Opens the key named |sub_key| with given |access| rights.  Returns
-  // ERROR_SUCCESS or some other error.
-  LONG Open(HKEY key, const wchar_t* sub_key, REGSAM access);
+// Opens the Google Update ClientState key for the current install
+// configuration.  This includes locating the correct key in the face of
+// multi-install.  The flag will by default be written to HKCU, but if
+// --system-level is included in the command line, it will be written to
+// HKLM instead.
+bool OpenInstallStateKey(const Configuration& configuration, RegKey* key) {
+  const HKEY root_key =
+      configuration.is_system_level() ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
+  const wchar_t* app_guid = configuration.chrome_app_guid();
+  const REGSAM key_access = KEY_QUERY_VALUE | KEY_SET_VALUE;
 
-  // Returns true if a key is open.
-  bool is_valid() const { return key_ != NULL; }
-
-  // Read a REG_SZ value from the registry into the memory indicated by |value|
-  // (of |value_size| wchar_t units).  Returns ERROR_SUCCESS,
-  // ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, or some other error.  |value| is
-  // guaranteed to be null-terminated on success.
-  LONG ReadValue(const wchar_t* value_name,
-                 wchar_t* value,
-                 size_t value_size) const;
-
-  // Write a REG_SZ value to the registry.  |value| must be null-terminated.
-  // Returns ERROR_SUCCESS or an error code.
-  LONG WriteValue(const wchar_t* value_name, const wchar_t* value);
-
-  // Closes the key if it was open.
-  void Close();
-
- private:
-  RegKey(const RegKey&);
-  RegKey& operator=(const RegKey&);
-
-  HKEY key_;
-};  // class RegKey
-
-LONG RegKey::Open(HKEY key, const wchar_t* sub_key, REGSAM access) {
-  Close();
-  return ::RegOpenKeyEx(key, sub_key, NULL, access, &key_);
+  return OpenClientStateKey(root_key, app_guid, key_access, key);
 }
 
-LONG RegKey::ReadValue(const wchar_t* value_name,
-                       wchar_t* value,
-                       size_t value_size) const {
-  DWORD type;
-  DWORD byte_length = static_cast<DWORD>(value_size * sizeof(wchar_t));
-  LONG result = ::RegQueryValueEx(key_, value_name, NULL, &type,
-                                  reinterpret_cast<BYTE*>(value),
-                                  &byte_length);
-  if (result == ERROR_SUCCESS) {
-    if (type != REG_SZ) {
-      result = ERROR_NOT_SUPPORTED;
-    } else if (byte_length == 0) {
-      *value = L'\0';
-    } else if (value[byte_length/sizeof(wchar_t) - 1] != L'\0') {
-      if ((byte_length / sizeof(wchar_t)) < value_size)
-        value[byte_length / sizeof(wchar_t)] = L'\0';
-      else
-        result = ERROR_MORE_DATA;
-    }
-  }
-  return result;
-}
+// Writes install results into registry where it is read by Google Update.
+// Don't write anything if there is already a result present, likely
+// written by setup.exe.
+void WriteInstallResults(const Configuration& configuration,
+                         ProcessExitResult result) {
+#if defined(GOOGLE_CHROME_BUILD)
+  // Calls to setup.exe will write a "success" result if everything was good
+  // so we don't need to write anything from here.
+  if (result.IsSuccess())
+    return;
 
-LONG RegKey::WriteValue(const wchar_t* value_name, const wchar_t* value) {
-  return ::RegSetValueEx(key_, value_name, 0, REG_SZ,
-                         reinterpret_cast<const BYTE*>(value),
-                         (lstrlen(value) + 1) * sizeof(wchar_t));
-}
-
-void RegKey::Close() {
-  if (key_ != NULL) {
-    ::RegCloseKey(key_);
-    key_ = NULL;
-  }
-}
-
-// Helper function to read a value from registry. Returns true if value
-// is read successfully and stored in parameter value. Returns false otherwise.
-// |size| is measured in wchar_t units.
-bool ReadValueFromRegistry(HKEY root_key, const wchar_t *sub_key,
-                           const wchar_t *value_name, wchar_t *value,
-                           size_t size) {
   RegKey key;
-
-  if (key.Open(root_key, sub_key, KEY_QUERY_VALUE) == ERROR_SUCCESS &&
-      key.ReadValue(value_name, value, size) == ERROR_SUCCESS) {
-    return true;
+  DWORD value;
+  if (OpenInstallStateKey(configuration, &key)) {
+    if (key.ReadDWValue(kInstallerResultRegistryValue, &value)
+            != ERROR_SUCCESS || value == 0) {
+      key.WriteDWValue(kInstallerResultRegistryValue,
+                       result.exit_code ? 1 /* FAILED_CUSTOM_ERROR */
+                                        : 0 /* SUCCESS */);
+      key.WriteDWValue(kInstallerErrorRegistryValue, result.exit_code);
+      key.WriteDWValue(kInstallerExtraCode1RegistryValue, result.windows_error);
+    }
+    key.Close();
   }
-  return false;
-}
-
-// Opens the Google Update ClientState key for a product.  This finds only
-// registry entries for Chrome; it does not support the Chromium registry
-// layout.
-bool OpenClientStateKey(HKEY root_key, const wchar_t* app_guid, REGSAM access,
-                        RegKey* key) {
-  PathString client_state_key;
-  return client_state_key.assign(kClientStateKeyBase) &&
-         client_state_key.append(app_guid) &&
-         (key->Open(root_key,
-                    client_state_key.get(),
-                    access | KEY_WOW64_32KEY) == ERROR_SUCCESS);
+#endif
 }
 
 // This function sets the flag in registry to indicate that Google Update
 // should try full installer next time. If the current installer works, this
-// flag is cleared by setup.exe at the end of install. The flag will by default
-// be written to HKCU, but if --system-level is included in the command line,
-// it will be written to HKLM instead.
-// TODO(grt): Write a unit test for this that uses registry virtualization.
+// flag is cleared by setup.exe at the end of install.
 void SetInstallerFlags(const Configuration& configuration) {
   RegKey key;
-  const REGSAM key_access = KEY_QUERY_VALUE | KEY_SET_VALUE;
-  const HKEY root_key =
-      configuration.is_system_level() ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-  // This is ignored if multi-install is true.
-  const wchar_t* app_guid =
-      configuration.has_chrome_frame() ?
-          google_update::kChromeFrameAppGuid :
-          configuration.chrome_app_guid();
   StackString<128> value;
   LONG ret = ERROR_SUCCESS;
 
-  // When multi_install is true, we are potentially:
-  // 1. Performing a multi-install of some product(s) on a clean machine.
-  //    Neither the product(s) nor the multi-installer will have a ClientState
-  //    key in the registry, so there is nothing to be done.
-  // 2. Upgrading an existing multi-install.  The multi-installer will have a
-  //    ClientState key in the registry.  Only it need be modified.
-  // 3. Migrating a single-install into a multi-install.  The product will have
-  //    a ClientState key in the registry.  Only it need be modified.
-  // To handle all cases, we inspect the product's ClientState to see if it
-  // exists and its "ap" value does not contain "-multi".  This is case 3, so we
-  // modify the product's ClientState.  Otherwise, we check the
-  // multi-installer's ClientState and modify it if it exists.
-  if (configuration.is_multi_install()) {
-    if (OpenClientStateKey(root_key, app_guid, key_access, &key)) {
-      // The product has a client state key.  See if it's a single-install.
-      ret = key.ReadValue(kApRegistryValue, value.get(), value.capacity());
-      if (ret != ERROR_FILE_NOT_FOUND &&
-          (ret != ERROR_SUCCESS ||
-           FindTagInStr(value.get(), kMultiInstallTag, NULL))) {
-        // Error or case 2: modify the multi-installer's value.
-        key.Close();
-        app_guid = google_update::kMultiInstallAppGuid;
-      }  // else case 3: modify this value.
-    } else {
-      // case 1 or 2: modify the multi-installer's value.
-      key.Close();
-      app_guid = google_update::kMultiInstallAppGuid;
-    }
-  }
+  if (!OpenInstallStateKey(configuration, &key))
+    return;
 
-  if (!key.is_valid()) {
-    if (!OpenClientStateKey(root_key, app_guid, key_access, &key))
-      return;
-
-    value.clear();
-    ret = key.ReadValue(kApRegistryValue, value.get(), value.capacity());
-  }
+  ret = key.ReadSZValue(kApRegistryValue, value.get(), value.capacity());
 
   // The conditions below are handling two cases:
   // 1. When ap value is present, we want to add the required tag only if it is
@@ -223,43 +140,44 @@ void SetInstallerFlags(const Configuration& configuration) {
 
     if (!StrEndsWith(value.get(), kFullInstallerSuffix) &&
         value.append(kFullInstallerSuffix)) {
-      key.WriteValue(kApRegistryValue, value.get());
+      key.WriteSZValue(kApRegistryValue, value.get());
     }
   }
 }
 
 // Gets the setup.exe path from Registry by looking at the value of Uninstall
 // string.  |size| is measured in wchar_t units.
-ProcessExitCode GetSetupExePathForAppGuid(bool system_level,
+ProcessExitResult GetSetupExePathForAppGuid(bool system_level,
                                           const wchar_t* app_guid,
                                           const wchar_t* previous_version,
                                           wchar_t* path,
                                           size_t size) {
   const HKEY root_key = system_level ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
   RegKey key;
-  if (!OpenClientStateKey(root_key, app_guid, KEY_QUERY_VALUE, &key) ||
-      (key.ReadValue(kUninstallRegistryValue, path, size) != ERROR_SUCCESS)) {
-    return UNABLE_TO_FIND_REGISTRY_KEY;
-  }
+  if (!OpenClientStateKey(root_key, app_guid, KEY_QUERY_VALUE, &key))
+    return ProcessExitResult(UNABLE_TO_FIND_REGISTRY_KEY);
+  DWORD result = key.ReadSZValue(kUninstallRegistryValue, path, size);
+  if (result != ERROR_SUCCESS)
+    return ProcessExitResult(UNABLE_TO_FIND_REGISTRY_KEY, result);
 
   // Check that the path to the existing installer includes the expected
   // version number.  It's not necessary for accuracy to verify before/after
   // delimiters.
   if (!SearchStringI(path, previous_version))
-    return PATCH_NOT_FOR_INSTALLED_VERSION;
+    return ProcessExitResult(PATCH_NOT_FOR_INSTALLED_VERSION);
 
-  return SUCCESS_EXIT_CODE;
+  return ProcessExitResult(SUCCESS_EXIT_CODE);
 }
 
 // Gets the path to setup.exe of the previous version. The overall path is found
 // in the Uninstall string in the registry. A previous version number specified
 // in |configuration| is used if available. |size| is measured in wchar_t units.
-ProcessExitCode GetPreviousSetupExePath(const Configuration& configuration,
+ProcessExitResult GetPreviousSetupExePath(const Configuration& configuration,
                                         wchar_t* path,
                                         size_t size) {
   bool system_level = configuration.is_system_level();
   const wchar_t* previous_version = configuration.previous_version();
-  ProcessExitCode exit_code = GENERIC_ERROR;
+  ProcessExitResult exit_code = ProcessExitResult(GENERIC_ERROR);
 
   // If this is a multi install, first try looking in the binaries for the path.
   if (configuration.is_multi_install()) {
@@ -270,14 +188,14 @@ ProcessExitCode GetPreviousSetupExePath(const Configuration& configuration,
 
   // Failing that, look in Chrome Frame's client state key if --chrome-frame was
   // specified.
-  if (exit_code != SUCCESS_EXIT_CODE && configuration.has_chrome_frame()) {
+  if (!exit_code.IsSuccess() && configuration.has_chrome_frame()) {
     exit_code = GetSetupExePathForAppGuid(
         system_level, google_update::kChromeFrameAppGuid, previous_version,
         path, size);
   }
 
   // Make a last-ditch effort to look in the Chrome client state key.
-  if (exit_code != SUCCESS_EXIT_CODE) {
+  if (!exit_code.IsSuccess()) {
     exit_code = GetSetupExePathForAppGuid(
         system_level, configuration.chrome_app_guid(), previous_version,
         path, size);
@@ -289,24 +207,28 @@ ProcessExitCode GetPreviousSetupExePath(const Configuration& configuration,
 // Calls CreateProcess with good default parameters and waits for the process to
 // terminate returning the process exit code. |exit_code|, if non-NULL, is
 // populated with the process exit code.
-ProcessExitCode RunProcessAndWait(const wchar_t* exe_path, wchar_t* cmdline) {
+ProcessExitResult RunProcessAndWait(const wchar_t* exe_path, wchar_t* cmdline) {
   STARTUPINFOW si = {sizeof(si)};
   PROCESS_INFORMATION pi = {0};
   if (!::CreateProcess(exe_path, cmdline, NULL, NULL, FALSE, CREATE_NO_WINDOW,
                        NULL, NULL, &si, &pi)) {
-    return COULD_NOT_CREATE_PROCESS;
+    return ProcessExitResult(COULD_NOT_CREATE_PROCESS, ::GetLastError());
   }
 
   ::CloseHandle(pi.hThread);
 
-  ProcessExitCode exit_code = SUCCESS_EXIT_CODE;
+  DWORD exit_code = SUCCESS_EXIT_CODE;
   DWORD wr = ::WaitForSingleObject(pi.hProcess, INFINITE);
-  if (WAIT_OBJECT_0 != wr || !::GetExitCodeProcess(pi.hProcess, &exit_code))
-    exit_code = WAIT_FOR_PROCESS_FAILED;
+  if (WAIT_OBJECT_0 != wr || !::GetExitCodeProcess(pi.hProcess, &exit_code)) {
+    // Note:  We've assumed that WAIT_OBJCT_0 != wr means a failure.  The call
+    // could return a different object but since we never spawn more than one
+    // sub-process at a time that case should never happen.
+    return ProcessExitResult(WAIT_FOR_PROCESS_FAILED, ::GetLastError());
+  }
 
   ::CloseHandle(pi.hProcess);
 
-  return exit_code;
+  return ProcessExitResult(exit_code);
 }
 
 // Appends any command line params passed to mini_installer to the given buffer
@@ -315,12 +237,13 @@ ProcessExitCode RunProcessAndWait(const wchar_t* exe_path, wchar_t* cmdline) {
 void AppendCommandLineFlags(const Configuration& configuration,
                             CommandString* buffer) {
   PathString full_exe_path;
-  size_t len = ::GetModuleFileName(NULL, full_exe_path.get(),
-                                   full_exe_path.capacity());
+  size_t len = ::GetModuleFileName(
+      NULL, full_exe_path.get(), static_cast<DWORD>(full_exe_path.capacity()));
   if (!len || len >= full_exe_path.capacity())
     return;
 
-  const wchar_t* exe_name = GetNameFromPathExt(full_exe_path.get(), len);
+  const wchar_t* exe_name =
+      GetNameFromPathExt(full_exe_path.get(), static_cast<DWORD>(len));
 
   // - configuration.program() returns the first command line argument
   //   passed into the program (that the user probably typed in this case).
@@ -371,11 +294,8 @@ BOOL CALLBACK OnResourceFound(HMODULE module, const wchar_t* type,
   Context* ctx = reinterpret_cast<Context*>(context);
 
   PEResource resource(name, type, module);
-  if ((!resource.IsValid()) ||
-      (resource.Size() < 1) ||
-      (resource.Size() > kMaxResourceSize)) {
+  if (!resource.IsValid() || resource.Size() < 1)
     return FALSE;
-  }
 
   PathString full_path;
   if (!full_path.assign(ctx->base_path) ||
@@ -428,7 +348,7 @@ BOOL CALLBACK WriteResourceToDirectory(HMODULE module,
 // For component builds (where setup.ex_ is always used), all files stored as
 // uncompressed 'BN' resources are also extracted. This is generally the set of
 // DLLs/resources needed by setup.exe to run.
-ProcessExitCode UnpackBinaryResources(const Configuration& configuration,
+ProcessExitResult UnpackBinaryResources(const Configuration& configuration,
                                       HMODULE module, const wchar_t* base_path,
                                       PathString* archive_path,
                                       PathString* setup_path) {
@@ -436,7 +356,7 @@ ProcessExitCode UnpackBinaryResources(const Configuration& configuration,
   PathString setup_dest_path;
   if (!setup_dest_path.assign(base_path) ||
       !setup_dest_path.append(kSetupExe))
-    return PATH_STRING_OVERFLOW;
+    return ProcessExitResult(PATH_STRING_OVERFLOW);
 
   // Prepare the input to OnResourceFound method that needs a location where
   // it will write all the resources.
@@ -450,11 +370,15 @@ ProcessExitCode UnpackBinaryResources(const Configuration& configuration,
   // We need a chrome archive to do the installation. So if there
   // is a problem in fetching B7 resource, just return an error.
   if (!::EnumResourceNames(module, kLZMAResourceType, OnResourceFound,
-                           reinterpret_cast<LONG_PTR>(&context)) ||
-      archive_path->length() == 0)
-    return UNABLE_TO_EXTRACT_CHROME_ARCHIVE;
+                           reinterpret_cast<LONG_PTR>(&context))) {
+    return ProcessExitResult(UNABLE_TO_EXTRACT_CHROME_ARCHIVE,
+                             ::GetLastError());
+  }
+  if (archive_path->length() == 0) {
+    return ProcessExitResult(UNABLE_TO_EXTRACT_CHROME_ARCHIVE);
+  }
 
-  ProcessExitCode exit_code = SUCCESS_EXIT_CODE;
+  ProcessExitResult exit_code = ProcessExitResult(SUCCESS_EXIT_CODE);
 
   // If we found setup 'B7' resource (used for differential updates), handle
   // it.  Note that this is only for Chrome; Chromium installs are always
@@ -465,7 +389,7 @@ ProcessExitCode UnpackBinaryResources(const Configuration& configuration,
     // Get the path to setup.exe first.
     exit_code = GetPreviousSetupExePath(configuration, exe_path.get(),
                                         exe_path.capacity());
-    if (exit_code == SUCCESS_EXIT_CODE) {
+    if (exit_code.IsSuccess()) {
       if (!cmd_line.append(exe_path.get()) ||
           !cmd_line.append(L" --") ||
           !cmd_line.append(kCmdUpdateSetupExe) ||
@@ -476,7 +400,7 @@ ProcessExitCode UnpackBinaryResources(const Configuration& configuration,
           !cmd_line.append(L"=\"") ||
           !cmd_line.append(setup_dest_path.get()) ||
           !cmd_line.append(L"\"")) {
-        exit_code = COMMAND_STRING_OVERFLOW;
+        exit_code = ProcessExitResult(COMMAND_STRING_OVERFLOW);
       }
     }
 
@@ -486,13 +410,13 @@ ProcessExitCode UnpackBinaryResources(const Configuration& configuration,
     // installer results for consumption by Google Update.
     AppendCommandLineFlags(configuration, &cmd_line);
 
-    if (exit_code == SUCCESS_EXIT_CODE)
+    if (exit_code.IsSuccess())
       exit_code = RunProcessAndWait(exe_path.get(), cmd_line.get());
 
-    if (exit_code != SUCCESS_EXIT_CODE)
+    if (!exit_code.IsSuccess())
       DeleteFile(setup_path->get());
     else if (!setup_path->assign(setup_dest_path.get()))
-      exit_code = PATH_STRING_OVERFLOW;
+      exit_code = ProcessExitResult(PATH_STRING_OVERFLOW);
 
     return exit_code;
   }
@@ -500,64 +424,43 @@ ProcessExitCode UnpackBinaryResources(const Configuration& configuration,
   // setup.exe wasn't sent as 'B7', lets see if it was sent as 'BL'
   // (compressed setup).
   if (!::EnumResourceNames(module, kLZCResourceType, OnResourceFound,
-                           reinterpret_cast<LONG_PTR>(&context)) &&
-      ::GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
-    return UNABLE_TO_EXTRACT_SETUP_B7;
+                           reinterpret_cast<LONG_PTR>(&context))) {
+    return ProcessExitResult(UNABLE_TO_EXTRACT_SETUP_BL, ::GetLastError());
+  }
+  if (setup_path->length() == 0) {
+    // Neither setup_patch.packed.7z nor setup.ex_ was found.
+    return ProcessExitResult(UNABLE_TO_EXTRACT_SETUP);
+  }
 
-  if (setup_path->length() > 0) {
-    // Uncompress LZ compressed resource. Setup is packed with 'MSCF'
-    // as opposed to old DOS way of 'SZDD'. Hence we don't use LZCopy.
-    bool success = mini_installer::Expand(setup_path->get(),
-                                          setup_dest_path.get());
-    ::DeleteFile(setup_path->get());
-    if (success) {
-      if (!setup_path->assign(setup_dest_path.get())) {
-        ::DeleteFile(setup_dest_path.get());
-        exit_code = PATH_STRING_OVERFLOW;
-      }
-    } else {
-      exit_code = UNABLE_TO_EXTRACT_SETUP_EXE;
+  // Uncompress LZ compressed resource. Setup is packed with 'MSCF'
+  // as opposed to old DOS way of 'SZDD'. Hence we don't use LZCopy.
+  bool success =
+      mini_installer::Expand(setup_path->get(), setup_dest_path.get());
+  ::DeleteFile(setup_path->get());
+  if (success) {
+    if (!setup_path->assign(setup_dest_path.get())) {
+      ::DeleteFile(setup_dest_path.get());
+      exit_code = ProcessExitResult(PATH_STRING_OVERFLOW);
     }
+  } else {
+    exit_code = ProcessExitResult(UNABLE_TO_EXTRACT_SETUP_EXE);
+  }
 
 #if defined(COMPONENT_BUILD)
+  if (exit_code.IsSuccess()) {
     // Extract the (uncompressed) modules required by setup.exe.
     if (!::EnumResourceNames(module, kBinResourceType, WriteResourceToDirectory,
-                             reinterpret_cast<LONG_PTR>(base_path)))
-      return UNABLE_TO_EXTRACT_SETUP;
-#endif
-
-    return exit_code;
-  }
-
-  // setup.exe still not found. So finally check if it was sent as 'BN'
-  // (uncompressed setup).
-  // TODO(tommi): We don't need BN anymore so let's remove it (and remove
-  // it from create_installer_archive.py).
-  if (!::EnumResourceNames(module, kBinResourceType, OnResourceFound,
-                           reinterpret_cast<LONG_PTR>(&context)) &&
-      ::GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
-    return UNABLE_TO_EXTRACT_SETUP_BN;
-
-  if (setup_path->length() > 0) {
-    if (setup_path->comparei(setup_dest_path.get()) != 0) {
-      if (!::MoveFileEx(setup_path->get(), setup_dest_path.get(),
-                        MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING)) {
-        ::DeleteFile(setup_path->get());
-        setup_path->clear();
-      } else if (!setup_path->assign(setup_dest_path.get())) {
-        ::DeleteFile(setup_dest_path.get());
-      }
+                             reinterpret_cast<LONG_PTR>(base_path))) {
+      return ProcessExitResult(UNABLE_TO_EXTRACT_SETUP, ::GetLastError());
     }
   }
-
-  if (setup_path->length() == 0)
-    exit_code = UNABLE_TO_EXTRACT_SETUP;
+#endif
 
   return exit_code;
 }
 
 // Executes setup.exe, waits for it to finish and returns the exit code.
-ProcessExitCode RunSetup(const Configuration& configuration,
+ProcessExitResult RunSetup(const Configuration& configuration,
                          const wchar_t* archive_path,
                          const wchar_t* setup_path) {
   // There could be three full paths in the command line for setup.exe (path
@@ -570,11 +473,11 @@ ProcessExitCode RunSetup(const Configuration& configuration,
     if (!cmd_line.assign(L"\"") ||
         !cmd_line.append(setup_path) ||
         !cmd_line.append(L"\""))
-      return COMMAND_STRING_OVERFLOW;
+      return ProcessExitResult(COMMAND_STRING_OVERFLOW);
   } else {
-    ProcessExitCode exit_code = GetPreviousSetupExePath(
+    ProcessExitResult exit_code = GetPreviousSetupExePath(
         configuration, cmd_line.get(), cmd_line.capacity());
-    if (exit_code != SUCCESS_EXIT_CODE)
+    if (!exit_code.IsSuccess())
       return exit_code;
   }
 
@@ -590,7 +493,7 @@ ProcessExitCode RunSetup(const Configuration& configuration,
       !cmd_line.append(L"=\"") ||
       !cmd_line.append(archive_path) ||
       !cmd_line.append(L"\""))
-    return COMMAND_STRING_OVERFLOW;
+    return ProcessExitResult(COMMAND_STRING_OVERFLOW);
 
   // Append the command line param for chrome previous version.
   if (configuration.previous_version() &&
@@ -599,19 +502,23 @@ ProcessExitCode RunSetup(const Configuration& configuration,
        !cmd_line.append(L"=\"") ||
        !cmd_line.append(configuration.previous_version()) ||
        !cmd_line.append(L"\""))) {
-    return COMMAND_STRING_OVERFLOW;
+    return ProcessExitResult(COMMAND_STRING_OVERFLOW);
   }
 
   // Get any command line option specified for mini_installer and pass them
   // on to setup.exe
   AppendCommandLineFlags(configuration, &cmd_line);
-
-  cmd_line.append(L" --vivaldi");  // Enable Vivaldi install GUI.
+  // Enable Vivaldi install GUI.
+  cmd_line.append(L" --vivaldi");
   if (cmd_line.findi(L"--do-not-launch-chrome") == NULL) {
     // Launch Vivaldi on a successful install/upgrade/repair (VB-1802)
     // unless explicitly asked not to.
     cmd_line.append(L" --vivaldi-force-launch");
   }
+
+  // By appending this option, setup.exe will install Google Breakpad
+  // crashlogging (crash_service.exe).
+  cmd_line.append(L" --vivaldi-crash-logging");
 
   return RunProcessAndWait(NULL, cmd_line.get());
 }
@@ -626,6 +533,71 @@ void DeleteExtractedFiles(const wchar_t* base_path,
   ::RemoveDirectory(base_path);
 }
 
+// Returns true if the supplied path supports ACLs.
+bool IsAclSupportedForPath(const wchar_t* path) {
+  PathString volume;
+  DWORD flags = 0;
+  return ::GetVolumePathName(path, volume.get(), volume.capacity()) &&
+             ::GetVolumeInformation(volume.get(), NULL, 0, NULL, NULL, &flags,
+                                    NULL, 0) && (flags & FILE_PERSISTENT_ACLS);
+}
+
+// Retrieves the SID of the default owner for objects created by this user
+// token (accounting for different behavior under UAC elevation, etc.).
+// NOTE: On success the |sid| parameter must be freed with LocalFree().
+bool GetCurrentOwnerSid(wchar_t** sid) {
+  HANDLE token;
+  if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &token))
+    return false;
+
+  DWORD size = 0;
+  bool result = false;
+  // We get the TokenOwner rather than the TokenUser because e.g. under UAC
+  // elevation we want the admin to own the directory rather than the user.
+  ::GetTokenInformation(token, TokenOwner, NULL, 0, &size);
+  if (size && GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+    if (TOKEN_OWNER* owner =
+            reinterpret_cast<TOKEN_OWNER*>(::LocalAlloc(LPTR, size))) {
+      if (::GetTokenInformation(token, TokenOwner, owner, size, &size))
+        result = !!::ConvertSidToStringSid(owner->Owner, sid);
+      ::LocalFree(owner);
+    }
+  }
+  ::CloseHandle(token);
+  return result;
+}
+
+// Populates |sd| suitable for use when creating directories within |path| with
+// ACLs allowing access to only the current owner, admin, and system.
+// NOTE: On success the |sd| parameter must be freed with LocalFree().
+bool SetSecurityDescriptor(const wchar_t* path, PSECURITY_DESCRIPTOR* sd) {
+  *sd = NULL;
+  // We succeed without doing anything if ACLs aren't supported.
+  if (!IsAclSupportedForPath(path))
+    return true;
+
+  wchar_t* sid = NULL;
+  if (!GetCurrentOwnerSid(&sid))
+    return false;
+
+  // The largest SID is under 200 characters, so 300 should give enough slack.
+  StackString<300> sddl;
+  bool result = sddl.append(L"D:PAI"  // Protected, auto-inherited DACL.
+                    L"(A;;FA;;;BA)"  // Admin: Full control.
+                    L"(A;OIIOCI;GA;;;BA)"
+                    L"(A;;FA;;;SY)"  // System: Full control.
+                    L"(A;OIIOCI;GA;;;SY)"
+                    L"(A;OIIOCI;GA;;;CO)"  // Owner: Full control.
+                    L"(A;;FA;;;") && sddl.append(sid) && sddl.append(L")");
+  if (result) {
+    result = !!::ConvertStringSecurityDescriptorToSecurityDescriptor(
+        sddl.get(), SDDL_REVISION_1, sd, NULL);
+  }
+
+  ::LocalFree(sid);
+  return result;
+}
+
 // Creates a temporary directory under |base_path| and returns the full path
 // of created directory in |work_dir|. If successful return true, otherwise
 // false.  When successful, the returned |work_dir| will always have a trailing
@@ -636,7 +608,9 @@ void DeleteExtractedFiles(const wchar_t* base_path,
 // delete it and create a directory in its place.  So, we use our own mechanism
 // for creating a directory with a hopefully-unique name.  In the case of a
 // collision, we retry a few times with a new name before failing.
-bool CreateWorkDir(const wchar_t* base_path, PathString* work_dir) {
+bool CreateWorkDir(const wchar_t* base_path, PathString* work_dir,
+                   ProcessExitResult* exit_code) {
+  *exit_code = ProcessExitResult(PATH_STRING_OVERFLOW);
   if (!work_dir->assign(base_path) || !work_dir->append(kTempPrefix))
     return false;
 
@@ -650,20 +624,27 @@ bool CreateWorkDir(const wchar_t* base_path, PathString* work_dir) {
   if ((work_dir->capacity() - end) < (_countof("fffff.tmp") + 1))
     return false;
 
-  // Generate a unique id.  We only use the lowest 20 bits, so take the top
-  // 12 bits and xor them with the lower bits.
-  DWORD id = ::GetTickCount();
-  id ^= (id >> 12);
+  // Add an ACL if supported by the filesystem. Otherwise system-level installs
+  // are potentially vulnerable to file squatting attacks.
+  SECURITY_ATTRIBUTES sa = {};
+  sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+  if (!SetSecurityDescriptor(base_path, &sa.lpSecurityDescriptor)) {
+    *exit_code = ProcessExitResult(UNABLE_TO_SET_DIRECTORY_ACL,
+                                   ::GetLastError());
+    return false;
+  }
 
-  int max_attempts = 10;
-  while (max_attempts--) {
+  unsigned int id;
+  *exit_code = ProcessExitResult(UNABLE_TO_GET_WORK_DIRECTORY);
+  for (int max_attempts = 10; max_attempts; --max_attempts) {
+    ::RtlGenRandom(&id, sizeof(id));  // Try a different name.
+
     // This converts 'id' to a string in the format "78563412" on windows
     // because of little endianness, but we don't care since it's just
-    // a name.
-    if (!HexEncode(&id, sizeof(id), work_dir->get() + end,
-                   work_dir->capacity() - end)) {
-      return false;
-    }
+    // a name. Since we checked capaity at the front end, we don't need to
+    // duplicate it here.
+    HexEncode(&id, sizeof(id), work_dir->get() + end,
+              work_dir->capacity() - end);
 
     // We only want the first 5 digits to remain within the 8.3 file name
     // format (compliant with previous implementation).
@@ -672,26 +653,34 @@ bool CreateWorkDir(const wchar_t* base_path, PathString* work_dir) {
     // for consistency with the previous implementation which relied on
     // GetTempFileName, we append the .tmp extension.
     work_dir->append(L".tmp");
-    if (::CreateDirectory(work_dir->get(), NULL)) {
+
+    if (::CreateDirectory(work_dir->get(),
+                          sa.lpSecurityDescriptor ? &sa : NULL)) {
       // Yay!  Now let's just append the backslash and we're done.
-      return work_dir->append(L"\\");
+      work_dir->append(L"\\");
+      *exit_code = ProcessExitResult(SUCCESS_EXIT_CODE);
+      break;
     }
-    ++id;  // Try a different name.
   }
 
-  return false;
+  if (sa.lpSecurityDescriptor)
+    LocalFree(sa.lpSecurityDescriptor);
+  return exit_code->IsSuccess();
 }
 
 // Creates and returns a temporary directory in |work_dir| that can be used to
 // extract mini_installer payload. |work_dir| ends with a path separator.
-bool GetWorkDir(HMODULE module, PathString* work_dir) {
+bool GetWorkDir(HMODULE module, PathString* work_dir,
+                ProcessExitResult* exit_code) {
   PathString base_path;
-  DWORD len = ::GetTempPath(base_path.capacity(), base_path.get());
+  DWORD len = ::GetTempPath(static_cast<DWORD>(base_path.capacity()),
+                            base_path.get());
   if (!len || len >= base_path.capacity() ||
-      !CreateWorkDir(base_path.get(), work_dir)) {
+      !CreateWorkDir(base_path.get(), work_dir, exit_code)) {
     // Problem creating the work dir under TEMP path, so try using the
     // current directory as the base path.
-    len = ::GetModuleFileName(module, base_path.get(), base_path.capacity());
+    len = ::GetModuleFileName(module, base_path.get(),
+                              static_cast<DWORD>(base_path.capacity()));
     if (len >= base_path.capacity() || !len)
       return false;  // Can't even get current directory? Return an error.
 
@@ -701,7 +690,8 @@ bool GetWorkDir(HMODULE module, PathString* work_dir) {
 
     *name = L'\0';
 
-    return CreateWorkDir(base_path.get(), work_dir);
+    *exit_code = ProcessExitResult(SUCCESS_EXIT_CODE);
+    return CreateWorkDir(base_path.get(), work_dir, exit_code);
   }
   return true;
 }
@@ -796,13 +786,13 @@ void DeleteOldChromeTempDirectories() {
 
   PathString temp;
   // GetTempPath always returns a path with a trailing backslash.
-  DWORD len = ::GetTempPath(temp.capacity(), temp.get());
+  DWORD len = ::GetTempPath(static_cast<DWORD>(temp.capacity()), temp.get());
   // GetTempPath returns 0 or number of chars copied, not including the
   // terminating '\0'.
   if (!len || len >= temp.capacity())
     return;
 
-  for (int i = 0; i < _countof(kDirectoryPrefixes); ++i) {
+  for (size_t i = 0; i < _countof(kDirectoryPrefixes); ++i) {
     DeleteDirectoriesWithPrefix(temp.get(), kDirectoryPrefixes[i]);
   }
 }
@@ -812,12 +802,12 @@ void DeleteOldChromeTempDirectories() {
 // required actions taken.  The installer must exit and return the returned
 // |exit_code|.
 bool ProcessNonInstallOperations(const Configuration& configuration,
-                                 ProcessExitCode* exit_code) {
+                                 ProcessExitResult* exit_code) {
   switch (configuration.operation()) {
     case Configuration::CLEANUP:
       // Cleanup has already taken place in DeleteOldChromeTempDirectories at
       // this point, so just tell our caller to exit early.
-      *exit_code = SUCCESS_EXIT_CODE;
+      *exit_code = ProcessExitResult(SUCCESS_EXIT_CODE);
       return true;
 
     default:
@@ -834,8 +824,8 @@ bool ProcessNonInstallOperations(const Configuration& configuration,
 // we continue to support it.
 bool ShouldDeleteExtractedFiles() {
   wchar_t value[2] = {0};
-  if (ReadValueFromRegistry(HKEY_CURRENT_USER, kCleanupRegistryKey,
-                            kCleanupRegistryValue, value, _countof(value)) &&
+  if (RegKey::ReadSZValue(HKEY_CURRENT_USER, kCleanupRegistryKey,
+                          kCleanupRegistryValue, value, _countof(value)) &&
       value[0] == L'0') {
     return false;
   }
@@ -845,19 +835,19 @@ bool ShouldDeleteExtractedFiles() {
 
 // Main function. First gets a working dir, unpacks the resources and finally
 // executes setup.exe to do the install/upgrade.
-ProcessExitCode WMain(HMODULE module) {
+ProcessExitResult WMain(HMODULE module) {
   // Always start with deleting potential leftovers from previous installations.
   // This can make the difference between success and failure.  We've seen
   // many installations out in the field fail due to out of disk space problems
   // so this could buy us some space.
   DeleteOldChromeTempDirectories();
 
-  ProcessExitCode exit_code = SUCCESS_EXIT_CODE;
+  ProcessExitResult exit_code = ProcessExitResult(SUCCESS_EXIT_CODE);
 
   // Parse configuration from the command line and resources.
   Configuration configuration;
   if (!configuration.Initialize(module))
-    return GENERIC_INITIALIZATION_FAILURE;
+    return ProcessExitResult(GENERIC_INITIALIZATION_FAILURE);
 
   // If the --cleanup switch was specified on the command line, then that means
   // we should only do the cleanup and then exit.
@@ -866,8 +856,8 @@ ProcessExitCode WMain(HMODULE module) {
 
   // First get a path where we can extract payload
   PathString base_path;
-  if (!GetWorkDir(module, &base_path))
-    return UNABLE_TO_GET_WORK_DIRECTORY;
+  if (!GetWorkDir(module, &base_path, &exit_code))
+    return exit_code;
 
 #if defined(GOOGLE_CHROME_BUILD)
   // Set the magic suffix in registry to try full installer next time. We ignore
@@ -885,14 +875,15 @@ ProcessExitCode WMain(HMODULE module) {
   // While unpacking the binaries, we paged in a whole bunch of memory that
   // we don't need anymore.  Let's give it back to the pool before running
   // setup.
-  ::SetProcessWorkingSetSize(::GetCurrentProcess(), -1, -1);
+  ::SetProcessWorkingSetSize(::GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
 
-  if (exit_code == SUCCESS_EXIT_CODE)
+  if (exit_code.IsSuccess())
     exit_code = RunSetup(configuration, archive_path.get(), setup_path.get());
 
   if (ShouldDeleteExtractedFiles())
     DeleteExtractedFiles(base_path.get(), archive_path.get(), setup_path.get());
 
+  WriteInstallResults(configuration, exit_code);
   return exit_code;
 }
 
@@ -901,9 +892,10 @@ ProcessExitCode WMain(HMODULE module) {
 
 extern "C" {
 int MainEntryPoint() {
-  mini_installer::ProcessExitCode result =
+  mini_installer::ProcessExitResult result =
       mini_installer::WMain(::GetModuleHandle(NULL));
-  ::ExitProcess(result);
+
+  ::ExitProcess(result.exit_code);
 }
 }
 

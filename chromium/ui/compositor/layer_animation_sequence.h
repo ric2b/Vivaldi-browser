@@ -5,15 +5,22 @@
 #ifndef UI_COMPOSITOR_LAYER_ANIMATION_SEQUENCE_H_
 #define UI_COMPOSITOR_LAYER_ANIMATION_SEQUENCE_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "ui/compositor/compositor_export.h"
 #include "ui/compositor/layer_animation_element.h"
+
+namespace cc {
+struct AnimationEvent;
+}
 
 namespace ui {
 
@@ -139,6 +146,9 @@ class COMPOSITOR_EXPORT LayerAnimationSequence
 
   // Notifies the observers that this sequence has been scheduled.
   void NotifyScheduled();
+
+  // Notifies the observers that this sequence has been started.
+  void NotifyStarted();
 
   // Notifies the observers that this sequence has ended.
   void NotifyEnded();

@@ -2,10 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/lifetime/browser_close_manager.h"
+
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/background/background_mode_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_shutdown.h"
@@ -16,7 +21,6 @@
 #include "chrome/browser/download/download_service.h"
 #include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/lifetime/browser_close_manager.h"
 #include "chrome/browser/net/url_request_mock_util.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -247,7 +251,7 @@ class BrowserCloseManagerBrowserTest
 };
 
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, TestSingleTabShutdown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/beforeunload.html")));
   RepeatedNotificationObserver cancel_observer(
@@ -269,7 +273,7 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, TestSingleTabShutdown) {
 
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
                        TestShutdownMoreThanOnce) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/beforeunload.html")));
   RepeatedNotificationObserver cancel_observer(
@@ -291,14 +295,15 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
   EXPECT_TRUE(chrome::BrowserIterator().done());
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
+// Test is flaky on Mac. http://crbug.com/517687
 #if defined(OS_MACOSX)
 #define MAYBE_PRE_TestSessionRestore DISABLED_PRE_TestSessionRestore
 #else
-#define MAYBE_PRE_TestSessionRestore PRE_TestSessionRestore
+#define MAYBE_PRE_TestSessionRestore DISABLED_PRE_TestSessionRestore
 #endif
-IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, MAYBE_PRE_TestSessionRestore) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
+                       MAYBE_PRE_TestSessionRestore) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/beforeunload.html")));
   AddBlankTabAndShow(browser());
@@ -333,13 +338,14 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, MAYBE_PRE_TestSessionRest
 
 // Test that the tab closed after the aborted shutdown attempt is not re-opened
 // when restoring the session.
-// TODO(vivaldi) Reenable for Vivaldi
+// Test is flaky on Mac. http://crbug.com/517687
 #if defined(OS_MACOSX)
 #define MAYBE_TestSessionRestore DISABLED_TestSessionRestore
 #else
-#define MAYBE_TestSessionRestore TestSessionRestore
+#define MAYBE_TestSessionRestore DISABLED_TestSessionRestore
 #endif
-IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, MAYBE_TestSessionRestore) {
+IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
+                       MAYBE_TestSessionRestore) {
   // The testing framework launches Chrome with about:blank as args.
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
   EXPECT_EQ(GURL(chrome::kChromeUIVersionURL),
@@ -350,14 +356,8 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, MAYBE_TestSessionRestore)
 
 // Test that browser windows are only closed if all browsers are ready to close
 // and that all beforeunload dialogs are shown again after a cancel.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_TestMultipleWindows DISABLED_TestMultipleWindows
-#else
-#define MAYBE_TestMultipleWindows TestMultipleWindows
-#endif
-IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, MAYBE_TestMultipleWindows) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, TestMultipleWindows) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   browsers_.push_back(CreateBrowser(browser()->profile()));
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
@@ -404,7 +404,8 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, MAYBE_TestMultipleWindows
 // treated the same as the user accepting the close, but do not close the tab
 // early.
 // Test is flaky on windows, disabled. See http://crbug.com/276366
-#if defined(OS_WIN)
+// Test is flaky on Mac. See http://crbug.com/517687.
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_TestHangInBeforeUnloadMultipleTabs \
     DISABLED_TestHangInBeforeUnloadMultipleTabs
 #else
@@ -413,7 +414,7 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest, MAYBE_TestMultipleWindows
 #endif
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
                        MAYBE_TestHangInBeforeUnloadMultipleTabs) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload_hang.html")));
   AddBlankTabAndShow(browsers_[0]);
@@ -444,15 +445,9 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
 // Test that tabs in different windows with a beforeunload event that hangs are
 // treated the same as the user accepting the close, but do not close the tab
 // early.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_TestHangInBeforeUnloadMultipleWindows DISABLED_TestHangInBeforeUnloadMultipleWindows
-#else
-#define MAYBE_TestHangInBeforeUnloadMultipleWindows TestHangInBeforeUnloadMultipleWindows
-#endif
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestHangInBeforeUnloadMultipleWindows) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+                       TestHangInBeforeUnloadMultipleWindows) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   browsers_.push_back(CreateBrowser(browser()->profile()));
   browsers_.push_back(CreateBrowser(browser()->profile()));
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
@@ -483,15 +478,9 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
 }
 
 // Test that a window created during shutdown is closed.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_TestAddWindowDuringShutdown DISABLED_TestAddWindowDuringShutdown
-#else
-#define MAYBE_TestAddWindowDuringShutdown TestAddWindowDuringShutdown
-#endif
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestAddWindowDuringShutdown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+                       TestAddWindowDuringShutdown) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
 
@@ -507,15 +496,9 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
 
 // Test that a window created during shutdown with a beforeunload handler can
 // cancel the shutdown.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_TestAddWindowWithBeforeUnloadDuringShutdown DISABLED_TestAddWindowWithBeforeUnloadDuringShutdown
-#else
-#define MAYBE_TestAddWindowWithBeforeUnloadDuringShutdown TestAddWindowWithBeforeUnloadDuringShutdown
-#endif
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestAddWindowWithBeforeUnloadDuringShutdown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+                       TestAddWindowWithBeforeUnloadDuringShutdown) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
 
@@ -544,15 +527,10 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
 }
 
 // Test that tabs added during shutdown are closed.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_TestAddTabDuringShutdown DISABLED_TestAddTabDuringShutdown
-#else
-#define MAYBE_TestAddTabDuringShutdown TestAddTabDuringShutdown
-#endif
+// Disabled for being flaky tests: crbug.com/519646
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestAddTabDuringShutdown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+                       DISABLED_TestAddTabDuringShutdown) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   browsers_.push_back(CreateBrowser(browser()->profile()));
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
@@ -573,15 +551,10 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
 
 // Test that tabs created during shutdown with beforeunload handlers can cancel
 // the shutdown.
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_TestAddTabWithBeforeUnloadDuringShutdown DISABLED_TestAddTabWithBeforeUnloadDuringShutdown
-#else
-#define MAYBE_TestAddTabWithBeforeUnloadDuringShutdown TestAddTabWithBeforeUnloadDuringShutdown
-#endif
+// Disabled for being flaky tests: crbug.com/519646
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestAddTabWithBeforeUnloadDuringShutdown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+                       DISABLED_TestAddTabWithBeforeUnloadDuringShutdown) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   browsers_.push_back(CreateBrowser(browser()->profile()));
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
@@ -617,15 +590,9 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
   EXPECT_TRUE(chrome::BrowserIterator().done());
 }
 
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_TestCloseTabDuringShutdown DISABLED_TestCloseTabDuringShutdown
-#else
-#define MAYBE_TestCloseTabDuringShutdown TestCloseTabDuringShutdown
-#endif
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestCloseTabDuringShutdown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+                       TestCloseTabDuringShutdown) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
   RepeatedNotificationObserver cancel_observer(
@@ -655,7 +622,6 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
   EXPECT_TRUE(chrome::BrowserIterator().done());
 }
 
-// TODO: Re-enable mac for Vivaldi
 // Test is flaky on Windows and Mac. See http://crbug.com/276366.
 #if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_TestOpenAndCloseWindowDuringShutdown \
@@ -666,7 +632,7 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
                        MAYBE_TestOpenAndCloseWindowDuringShutdown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
   RepeatedNotificationObserver cancel_observer(
@@ -696,15 +662,9 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
   EXPECT_TRUE(chrome::BrowserIterator().done());
 }
 
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_TestCloseWindowDuringShutdown DISABLED_TestCloseWindowDuringShutdown
-#else
-#define MAYBE_TestCloseWindowDuringShutdown TestCloseWindowDuringShutdown
-#endif
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestCloseWindowDuringShutdown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+                       TestCloseWindowDuringShutdown) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
   browsers_.push_back(CreateBrowser(browser()->profile()));
@@ -748,6 +708,13 @@ class BrowserCloseManagerWithDownloadsBrowserTest :
     ASSERT_TRUE(scoped_download_directory_.CreateUniqueTempDir());
   }
 
+  // Disable new downloads UI as it is very very slow. https://crbug.com/526577
+  // TODO(dbeam): remove this once the downloads UI is not slow.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    BrowserCloseManagerBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(switches::kDisableMaterialDesignDownloads);
+  }
+
   void SetDownloadPathForProfile(Profile* profile) {
     DownloadPrefs* download_prefs = DownloadPrefs::FromBrowserContext(profile);
     download_prefs->SetDownloadPath(download_path());
@@ -767,7 +734,7 @@ class BrowserCloseManagerWithDownloadsBrowserTest :
 #if defined(OS_MACOSX)
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
                        TestWithDownloads) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   SetDownloadPathForProfile(browser()->profile());
   ASSERT_NO_FATAL_FAILURE(CreateStalledDownload(browser()));
 
@@ -790,20 +757,20 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
 // Test shutdown with a DANGEROUS_URL download undecided.
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
     TestWithDangerousUrlDownload) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   SetDownloadPathForProfile(browser()->profile());
 
   // Set up the fake delegate that forces the download to be malicious.
   scoped_ptr<TestDownloadManagerDelegate> test_delegate(
       new TestDownloadManagerDelegate(browser()->profile()));
   DownloadServiceFactory::GetForBrowserContext(browser()->profile())
-      ->SetDownloadManagerDelegateForTesting(test_delegate.Pass());
+      ->SetDownloadManagerDelegateForTesting(std::move(test_delegate));
 
   // Run a dangerous download, but the user doesn't make a decision.
   // This .swf normally would be categorized as DANGEROUS_FILE, but
   // TestDownloadManagerDelegate turns it into DANGEROUS_URL.
-  base::FilePath file(FILE_PATH_LITERAL("downloads/dangerous/dangerous.swf"));
-  GURL download_url(net::URLRequestMockHTTPJob::GetMockUrl(file));
+  GURL download_url(net::URLRequestMockHTTPJob::GetMockUrl(
+      "downloads/dangerous/dangerous.swf"));
   content::DownloadTestObserverInterrupted observer(
       content::BrowserContext::GetDownloadManager(browser()->profile()),
       1,
@@ -834,7 +801,7 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
 // Test shutdown with a download in progress.
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
                        TestWithDownloads) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   SetDownloadPathForProfile(browser()->profile());
   ASSERT_NO_FATAL_FAILURE(CreateStalledDownload(browser()));
   content::TestNavigationObserver navigation_observer(
@@ -863,7 +830,7 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
 // Test shutdown with a download in progress in an off-the-record profile.
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
                        TestWithOffTheRecordDownloads) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   Profile* otr_profile = browser()->profile()->GetOffTheRecordProfile();
   SetDownloadPathForProfile(otr_profile);
   Browser* otr_browser = CreateBrowser(otr_profile);
@@ -896,9 +863,8 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
 
 // Test shutdown with a download in progress from one profile, where the only
 // open windows are for another profile.
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
-                       DISABLED_TestWithDownloadsFromDifferentProfiles) {
+                       TestWithDownloadsFromDifferentProfiles) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   base::FilePath path =
       profile_manager->user_data_dir().AppendASCII("test_profile");
@@ -909,7 +875,7 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
   profile_manager->RegisterTestingProfile(other_profile, true, false);
   Browser* other_profile_browser = CreateBrowser(other_profile);
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   SetDownloadPathForProfile(browser()->profile());
   SetDownloadPathForProfile(other_profile);
   ASSERT_NO_FATAL_FAILURE(CreateStalledDownload(browser()));
@@ -952,7 +918,7 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
 // Disabled, see http://crbug.com/315754.
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
                        DISABLED_TestBeforeUnloadAndDownloads) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   SetDownloadPathForProfile(browser()->profile());
   ASSERT_NO_FATAL_FAILURE(CreateStalledDownload(browser()));
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(

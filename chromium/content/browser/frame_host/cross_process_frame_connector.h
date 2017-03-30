@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_CROSS_PROCESS_FRAME_CONNECTOR_H_
 #define CONTENT_BROWSER_FRAME_HOST_CROSS_PROCESS_FRAME_CONNECTOR_H_
 
+#include <stdint.h>
+
 #include "cc/output/compositor_frame.h"
 #include "content/common/content_export.h"
 #include "ui/gfx/geometry/rect.h"
@@ -29,7 +31,9 @@ struct FrameHostMsg_ReclaimCompositorResources_Params;
 namespace content {
 class RenderFrameProxyHost;
 class RenderWidgetHostImpl;
+class RenderWidgetHostViewBase;
 class RenderWidgetHostViewChildFrame;
+class WebCursor;
 
 // CrossProcessFrameConnector provides the platform view abstraction for
 // RenderWidgetHostViewChildFrame allowing RWHVChildFrame to remain ignorant
@@ -84,7 +88,7 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
   void RenderProcessGone();
 
   virtual void ChildFrameCompositorFrameSwapped(
-      uint32 output_surface_id,
+      uint32_t output_surface_id,
       int host_id,
       int route_id,
       scoped_ptr<cc::CompositorFrame> frame);
@@ -94,7 +98,16 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
                                     const cc::SurfaceSequence& sequence);
 
   gfx::Rect ChildFrameRect();
+  float device_scale_factor() const { return device_scale_factor_; }
   void GetScreenInfo(blink::WebScreenInfo* results);
+  void UpdateCursor(const WebCursor& cursor);
+  void TransformPointToRootCoordSpace(const gfx::Point& point,
+                                      cc::SurfaceId surface_id,
+                                      gfx::Point* transformed_point);
+
+  // Determines whether the root RenderWidgetHostView (and thus the current
+  // page) has focus.
+  bool HasFocus();
 
  private:
   // Handlers for messages received from the parent frame.
@@ -103,6 +116,8 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
   void OnReclaimCompositorResources(
       const FrameHostMsg_ReclaimCompositorResources_Params& params);
   void OnForwardInputEvent(const blink::WebInputEvent* event);
+  void OnFrameRectChanged(const gfx::Rect& frame_rect);
+  void OnVisibilityChanged(bool visible);
   void OnInitializeChildFrame(gfx::Rect frame_rect, float scale_factor);
   void OnSatisfySequence(const cc::SurfaceSequence& sequence);
   void OnRequireSequence(const cc::SurfaceId& id,
@@ -110,6 +125,9 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
 
   void SetDeviceScaleFactor(float scale_factor);
   void SetSize(gfx::Rect frame_rect);
+
+  // Retrieve the view for the top-level frame under the same WebContents.
+  RenderWidgetHostViewBase* GetRootRenderWidgetHostView();
 
   // The RenderFrameProxyHost that routes messages to the parent frame's
   // renderer process.

@@ -4,12 +4,16 @@
 
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "chrome/browser/ui/cocoa/cocoa_profile_test.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_controller.h"
-#include "chrome/browser/ui/omnibox/omnibox_popup_model.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_model_delegate.h"
 #include "chrome/browser/ui/toolbar/toolbar_model_impl.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #include "testing/platform_test.h"
 #include "ui/gfx/font.h"
@@ -23,9 +27,11 @@ class MockOmniboxEditModel : public OmniboxEditModel {
   MockOmniboxEditModel(OmniboxView* view,
                        OmniboxEditController* controller,
                        Profile* profile)
-      : OmniboxEditModel(view, controller, profile),
-        up_or_down_count_(0) {
-  }
+      : OmniboxEditModel(
+            view,
+            controller,
+            make_scoped_ptr(new ChromeOmniboxClient(controller, profile))),
+        up_or_down_count_(0) {}
 
   void OnUpOrDownKeyPressed(int count) override { up_or_down_count_ = count; }
 
@@ -49,6 +55,7 @@ class MockOmniboxPopupView : public OmniboxPopupView {
   // Overridden from OmniboxPopupView:
   bool IsOpen() const override { return is_open_; }
   void InvalidateLine(size_t line) override {}
+  void OnLineSelected(size_t line) override {}
   void UpdatePopupAppearance() override {}
   gfx::Rect GetTargetBounds() override { return gfx::Rect(); }
   void PaintUpdatesNow() override {}
@@ -74,26 +81,23 @@ class TestingToolbarModelDelegate : public ToolbarModelDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestingToolbarModelDelegate);
 };
 
-class TestingOmniboxEditController : public OmniboxEditController {
+class TestingOmniboxEditController : public ChromeOmniboxEditController {
  public:
   explicit TestingOmniboxEditController(ToolbarModel* toolbar_model)
-      : OmniboxEditController(NULL),
-        toolbar_model_(toolbar_model) {
-  }
+      : ChromeOmniboxEditController(NULL), toolbar_model_(toolbar_model) {}
   ~TestingOmniboxEditController() override {}
 
  protected:
-  // Overridden from OmniboxEditController:
-  void Update(const content::WebContents* contents) override {}
+  // Overridden from ChromeOmniboxEditController:
+  void UpdateWithoutTabRestore() override {}
   void OnChanged() override {}
   void OnSetFocus() override {}
   void ShowURL() override {}
-  InstantController* GetInstant() override { return NULL; }
-  content::WebContents* GetWebContents() override { return NULL; }
   ToolbarModel* GetToolbarModel() override { return toolbar_model_; }
   const ToolbarModel* GetToolbarModel() const override {
     return toolbar_model_;
   }
+  content::WebContents* GetWebContents() override { return nullptr; }
 
  private:
   ToolbarModel* toolbar_model_;

@@ -11,6 +11,7 @@
 
 #include "base/callback.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -149,7 +150,7 @@ class RequestManager {
     ~Request();
 
     // Timer for discarding the request during a timeout.
-    base::OneShotTimer<RequestManager> timeout_timer;
+    base::OneShotTimer timeout_timer;
 
     // Handler tied to this request.
     scoped_ptr<HandlerInterface> handler;

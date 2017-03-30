@@ -6,6 +6,26 @@
 // isn't implemented if OpenSSL is used.
 GEN('#if defined(USE_NSS_CERTS)');
 
+GEN_INCLUDE(['options_browsertest_base.js']);
+
+/**
+ * URL of the Certificates dialog in the Settings page.
+ * @const
+ */
+var CERTIFICATE_MANAGER_SETTINGS_PAGE_URL =
+    'chrome://settings-frame/certificates';
+
+// Standalone certificate manager dialog page is implemented only in Chrome OS.
+GEN('#if defined(OS_CHROMEOS)');
+
+/**
+ * URL of the standalone certificate manager dialog page.
+ * @const
+ */
+var CERTIFICATE_MANAGER_STANDALONE_PAGE_URL = 'chrome://certificate-manager/';
+
+GEN('#endif  // defined(OS_CHROMEOS)');
+
 /**
  * TestFixture for certificate manager WebUI testing.
  * @extends {testing.Test}
@@ -14,12 +34,7 @@ GEN('#if defined(USE_NSS_CERTS)');
 function CertificateManagerWebUIBaseTest() {}
 
 CertificateManagerWebUIBaseTest.prototype = {
-  __proto__: testing.Test.prototype,
-
-  /**
-   * Browse to the certificate manager.
-   */
-  browsePreload: 'chrome://settings-frame/certificates',
+  __proto__: OptionsBrowsertestBase.prototype,
 
   /** @override */
   preLoad: function() {
@@ -40,6 +55,44 @@ CertificateManagerWebUIBaseTest.prototype = {
           'viewCertificate',
         ]);
   },
+
+  /** @override */
+  setUp: function() {
+    OptionsBrowsertestBase.prototype.setUp.call(this);
+
+    var ariaRoleNotScopedSelectors = [
+      '#tree-item-autogen-id-0',
+      '#tree-item-autogen-id-1',
+      '#tree-item-autogen-id-2',
+      '#tree-item-autogen-id-3',
+      '#tree-item-autogen-id-4',
+    ];
+
+    // Enable when failure is resolved.
+    // AX_ARIA_09: http://crbug.com/570567
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'ariaRoleNotScoped',
+        ariaRoleNotScopedSelectors);
+
+    // Enable when failure is resolved.
+    // AX_ARIA_10: http://crbug.com/570566
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'unsupportedAriaAttribute',
+        '#caCertsTab-tree');
+
+    var focusableElementNotVisibleAndNotAriaHiddenSelectors = [
+      '#personalCertsTab-tree',
+      '#personalCertsTab-import',
+      '#personalCertsTab-import-and-bind',
+      '#certificate-confirm',
+    ];
+
+    // Enable when failure is resolved.
+    // AX_FOCUS_01: http://crbug.com/570568
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'focusableElementNotVisibleAndNotAriaHidden',
+        focusableElementNotVisibleAndNotAriaHiddenSelectors);
+  },
 };
 
 /**
@@ -51,6 +104,11 @@ function CertificateManagerWebUIUnpopulatedTest() {}
 
 CertificateManagerWebUIUnpopulatedTest.prototype = {
   __proto__: CertificateManagerWebUIBaseTest.prototype,
+
+  /**
+   * Browse to the certificate manager dialog in the Settings page.
+   */
+  browsePreload: CERTIFICATE_MANAGER_SETTINGS_PAGE_URL,
 
   /** @override */
   preLoad: function() {
@@ -181,14 +239,36 @@ CertificateManagerWebUITest.prototype = {
                                'readonly': false,
                                'untrusted': false,
                                'extractable': true,
-                               'policy': true }],
+                               'policy': true },
+                             { 'id': 'ca_cert2',
+                               'name': 'ca_cert2',
+                               'readonly': false,
+                               'untrusted': false,
+                               'extractable': true,
+                               'policy': false }],
                }],
            ]
           ].forEach(CertificateManager.onPopulateTree)}));
   },
 };
 
-TEST_F('CertificateManagerWebUITest',
+/**
+ * TestFixture for testing certificate manager WebUI in the Settings page.
+ * @extends {CertificateManagerWebUITest}
+ * @constructor
+ */
+function CertificateManagerSettingsWebUITest() {}
+
+CertificateManagerSettingsWebUITest.prototype = {
+  __proto__: CertificateManagerWebUITest.prototype,
+
+  /**
+   * Browse to the certificate manager dialog in the Settings page.
+   */
+  browsePreload: CERTIFICATE_MANAGER_SETTINGS_PAGE_URL,
+};
+
+TEST_F('CertificateManagerSettingsWebUITest',
        'testViewAndDeleteCert', function() {
   assertEquals(this.browsePreload, document.location.href);
 
@@ -260,7 +340,7 @@ TEST_F('CertificateManagerWebUITest',
 
 // Ensure certificate objects with the 'policy' property set have
 // the cert-policy CSS class appended.
-TEST_F('CertificateManagerWebUITest',
+TEST_F('CertificateManagerSettingsWebUITest',
        'testPolicyInstalledCertificate', function() {
   // Click on the first folder and get the certificates.
   var caCertsTab = $('caCertsTab');
@@ -285,5 +365,41 @@ TEST_F('CertificateManagerWebUITest',
   expectTrue($('caCertsTab-edit').disabled);
   expectTrue($('caCertsTab-delete').disabled);
 });
+
+// Standalone certificate manager dialog page is implemented only in Chrome OS.
+GEN('#if defined(OS_CHROMEOS)');
+
+/**
+ * TestFixture for testing standalone certificate manager WebUI.
+ * @extends {CertificateManagerWebUITest}
+ * @constructor
+ */
+function CertificateManagerStandaloneWebUITest() {}
+
+CertificateManagerStandaloneWebUITest.prototype = {
+  __proto__: CertificateManagerWebUITest.prototype,
+
+  /**
+   * Browse to the certificate manager page.
+   */
+  browsePreload: CERTIFICATE_MANAGER_STANDALONE_PAGE_URL,
+};
+
+// Ensure that the standalone certificate manager page loads and displays the
+// ceertificates correctly.
+TEST_F('CertificateManagerStandaloneWebUITest', 'testCertsDisplaying',
+       function() {
+  assertEquals(this.browsePreload, document.location.href);
+
+  // Click on the first folder and get the certificates.
+  var caCertsTab = $('caCertsTab');
+  caCertsTab.querySelector('div.tree-item').click();
+  var certs = caCertsTab.querySelectorAll('div.tree-item div.tree-item');
+
+  // There should be exactly three certificates displayed.
+  expectEquals(certs.length, 3);
+});
+
+GEN('#endif  // defined(OS_CHROMEOS)');
 
 GEN('#endif  // defined(USE_NSS_CERTS)');

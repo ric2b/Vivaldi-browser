@@ -8,6 +8,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/extensions/features/feature_channel.h"
+#include "components/version_info/version_info.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
@@ -45,7 +46,7 @@ class UIOverrideTest : public testing::Test {
 
 
 TEST_F(UIOverrideTest, ParseManifest) {
-  extensions::ScopedCurrentChannel channel(chrome::VersionInfo::CHANNEL_DEV);
+  extensions::ScopedCurrentChannel channel(version_info::Channel::DEV);
   // This functionality requires a feature flag.
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       "--enable-override-bookmarks-ui", "1");
@@ -73,7 +74,7 @@ TEST_F(UIOverrideTest, ParseManifest) {
 }
 
 TEST_F(UIOverrideTest, ParseBrokenManifest) {
-  extensions::ScopedCurrentChannel channel(chrome::VersionInfo::CHANNEL_DEV);
+  extensions::ScopedCurrentChannel channel(version_info::Channel::DEV);
   // This functionality requires a feature flag.
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       "--enable-override-bookmarks-ui", "1");

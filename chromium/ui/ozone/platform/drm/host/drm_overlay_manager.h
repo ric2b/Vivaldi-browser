@@ -5,26 +5,27 @@
 #ifndef UI_OZONE_PLATFORM_DRM_HOST_DRM_OVERLAY_MANAGER_H_
 #define UI_OZONE_PLATFORM_DRM_HOST_DRM_OVERLAY_MANAGER_H_
 
+#include "base/macros.h"
 #include "ui/ozone/public/overlay_manager_ozone.h"
 
 namespace ui {
 
 class DrmGpuPlatformSupportHost;
+class DrmWindowHostManager;
 
 class DrmOverlayManager : public OverlayManagerOzone {
  public:
-  DrmOverlayManager(bool allow_surfaceless,
-                    DrmGpuPlatformSupportHost* platform_support_host);
+  DrmOverlayManager(DrmGpuPlatformSupportHost* platform_support_host,
+                    DrmWindowHostManager* manager);
   ~DrmOverlayManager() override;
 
   // OverlayManagerOzone:
   scoped_ptr<OverlayCandidatesOzone> CreateOverlayCandidates(
       gfx::AcceleratedWidget w) override;
-  bool CanShowPrimaryPlaneAsOverlay() override;
 
  private:
   DrmGpuPlatformSupportHost* platform_support_host_;
-  bool allow_surfaceless_;
+  DrmWindowHostManager* window_manager_;
   bool is_supported_;
 
   DISALLOW_COPY_AND_ASSIGN(DrmOverlayManager);

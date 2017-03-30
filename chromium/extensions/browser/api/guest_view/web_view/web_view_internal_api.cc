@@ -4,12 +4,12 @@
 
 #include "extensions/browser/api/guest_view/web_view/web_view_internal_api.h"
 
+#include <utility>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -25,49 +25,17 @@
 #include "extensions/common/user_script.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
 
-#include "content/public/browser/render_view_host.h"
-#include "content/public/browser/render_widget_host_view.h"
-#include "base/base64.h"
-#include "base/strings/stringprintf.h"
-
-#include "ui/gfx/codec/jpeg_codec.h"
-#include "ui/gfx/codec/png_codec.h"
-#include "ui/gfx/image/image.h"
-#include "ui/gfx/geometry/size_conversions.h"
-
-
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/web_contents/web_contents_impl.h"
-#include "content/browser/renderer_host/dip_util.h"
-#include "skia/ext/image_operations.h"
-
-#ifdef VIVALDI_BUILD_HAS_CHROME_CODE
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/thumbnails/simple_thumbnail_crop.h"
-#include "chrome/browser/thumbnails/thumbnail_service.h"
-#include "chrome/browser/thumbnails/thumbnail_service_factory.h"
-#include "chrome/browser/thumbnails/thumbnailing_context.h"
-#include "ui/gfx/scrollbar_size.h"
-#include "skia/ext/platform_canvas.h"
-#include "ui/gfx/skbitmap_operations.h"
-#endif  // VIVALDI_BUILD_HAS_CHROME_CODE
-
 using content::WebContents;
 using extensions::ExtensionResource;
-using extensions::core_api::web_view_internal::ContentScriptDetails;
-using extensions::core_api::web_view_internal::InjectionItems;
-using extensions::core_api::web_view_internal::SetPermission::Params;
-using extensions::core_api::extension_types::InjectDetails;
+using extensions::api::web_view_internal::ContentScriptDetails;
+using extensions::api::web_view_internal::InjectionItems;
+using extensions::api::web_view_internal::SetPermission::Params;
+using extensions::api::extension_types::InjectDetails;
 using extensions::UserScript;
 using ui_zoom::ZoomController;
 // error messages for content scripts:
 namespace errors = extensions::manifest_errors;
-namespace web_view_internal = extensions::core_api::web_view_internal;
-
-using content::RenderViewHost;
-using content::WebContentsImpl;
-using content::RenderViewHostImpl;
-using content::BrowserPluginGuest;
+namespace web_view_internal = extensions::api::web_view_internal;
 
 namespace {
 
@@ -84,7 +52,7 @@ const char kViewInstanceIdError[] = "view_instance_id is missing.";
 const char kDuplicatedContentScriptNamesError[] =
     "The given content script name already exists.";
 
-uint32 MaskForKey(const char* key) {
+uint32_t MaskForKey(const char* key) {
   if (strcmp(key, kAppCacheKey) == 0)
     return webview::WEB_VIEW_REMOVE_DATA_MASK_APPCACHE;
   if (strcmp(key, kCacheKey) == 0)
@@ -190,14 +158,14 @@ bool ParseContentScript(const ContentScriptDetails& script_value,
   if (script_value.run_at) {
     UserScript::RunLocation run_at = UserScript::UNDEFINED;
     switch (script_value.run_at) {
-      case extensions::core_api::extension_types::RUN_AT_NONE:
-      case extensions::core_api::extension_types::RUN_AT_DOCUMENT_IDLE:
+      case extensions::api::extension_types::RUN_AT_NONE:
+      case extensions::api::extension_types::RUN_AT_DOCUMENT_IDLE:
         run_at = UserScript::DOCUMENT_IDLE;
         break;
-      case extensions::core_api::extension_types::RUN_AT_DOCUMENT_START:
+      case extensions::api::extension_types::RUN_AT_DOCUMENT_START:
         run_at = UserScript::DOCUMENT_START;
         break;
-      case extensions::core_api::extension_types::RUN_AT_DOCUMENT_END:
+      case extensions::api::extension_types::RUN_AT_DOCUMENT_END:
         run_at = UserScript::DOCUMENT_END;
         break;
     }
@@ -278,43 +246,6 @@ bool ParseContentScripts(
 
 }  // namespace
 
-namespace {
-SkBitmap SmartCropAndSize(const SkBitmap& capture,
-                          int target_width,
-                          int target_height) {
-  thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
-  // Clip it to a more reasonable position.
-  SkBitmap clipped_bitmap = thumbnails::SimpleThumbnailCrop::GetClippedBitmap(
-      capture, target_width, target_height, &clip_result);
-  // Resize the result to the target size.
-  SkBitmap result = skia::ImageOperations::Resize(
-      clipped_bitmap, skia::ImageOperations::RESIZE_BEST, target_width,
-      target_height);
-
-  // NOTE(pettern): Copied from SimpleThumbnailCrop::CreateThumbnail():
-#if !defined(USE_AURA)
-  // This is a bit subtle. SkBitmaps are refcounted, but the magic
-  // ones in PlatformCanvas can't be assigned to SkBitmap with proper
-  // refcounting.  If the bitmap doesn't change, then the downsampler
-  // will return the input bitmap, which will be the reference to the
-  // weird PlatformCanvas one insetad of a regular one. To get a
-  // regular refcounted bitmap, we need to copy it.
-  //
-  // On Aura, the PlatformCanvas is platform-independent and does not have
-  // any native platform resources that can't be refounted, so this issue does
-  // not occur.
-  //
-  // Note that GetClippedBitmap() does extractSubset() but it won't copy
-  // the pixels, hence we check result size == clipped_bitmap size here.
-  if (clipped_bitmap.width() == result.width() &&
-      clipped_bitmap.height() == result.height())
-    clipped_bitmap.copyTo(&result, kN32_SkColorType);
-#endif
-  return result;
-}
-
-}  // namespace
-
 namespace extensions {
 
 bool WebViewInternalExtensionFunction::RunAsync() {
@@ -337,7 +268,7 @@ bool WebViewInternalNavigateFunction::RunAsyncSafe(WebViewGuest* guest) {
       web_view_internal::Navigate::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   std::string src = params->src;
-  bool wasTyped = params->was_typed;
+  bool wasTyped = *params->was_typed;
   guest->NavigateGuest(src, true /* force_navigation */, wasTyped);
   return true;
 }
@@ -363,6 +294,10 @@ bool WebViewInternalExecuteCodeFunction::Init() {
   if (!args_->GetString(1, &src))
     return false;
 
+  // Set |guest_src_| here, but do not return false if it is invalid.
+  // Instead, let it continue with the normal page load sequence,
+  // which will result in the usual LOAD_ABORT event in the case where
+  // the URL is invalid.
   guest_src_ = GURL(src);
   if (!guest_src_.is_valid())
     guest_src_ = GURL::EmptyGURL();
@@ -374,7 +309,7 @@ bool WebViewInternalExecuteCodeFunction::Init() {
   if (!InjectDetails::Populate(*details_value, details.get()))
     return false;
 
-  details_ = details.Pass();
+  details_ = std::move(details);
 
   if (extension()) {
     set_host_id(HostID(HostID::EXTENSIONS, extension()->id()));
@@ -718,7 +653,7 @@ bool WebViewInternalFindFunction::RunAsyncSafe(WebViewGuest* guest) {
         params->options->match_case ? *params->options->match_case : false;
   }
 
-  guest->StartFindInternal(search_text, options, this);
+  guest->StartFind(search_text, options, this);
   return true;
 }
 
@@ -749,7 +684,7 @@ bool WebViewInternalStopFindingFunction::RunAsyncSafe(WebViewGuest* guest) {
       action = content::STOP_FIND_ACTION_KEEP_SELECTION;
   }
 
-  guest->StopFindingInternal(action);
+  guest->StopFinding(action);
   return true;
 }
 
@@ -820,13 +755,13 @@ bool WebViewInternalSetPermissionFunction::RunAsyncSafe(WebViewGuest* guest) {
   WebViewPermissionHelper::PermissionResponseAction action =
       WebViewPermissionHelper::DEFAULT;
   switch (params->action) {
-    case core_api::web_view_internal::SET_PERMISSION_ACTION_ALLOW:
+    case api::web_view_internal::SET_PERMISSION_ACTION_ALLOW:
       action = WebViewPermissionHelper::ALLOW;
       break;
-    case core_api::web_view_internal::SET_PERMISSION_ACTION_DENY:
+    case api::web_view_internal::SET_PERMISSION_ACTION_DENY:
       action = WebViewPermissionHelper::DENY;
       break;
-    case core_api::web_view_internal::SET_PERMISSION_ACTION_DEFAULT:
+    case api::web_view_internal::SET_PERMISSION_ACTION_DEFAULT:
       break;
     default:
       NOTREACHED();
@@ -902,14 +837,14 @@ WebViewInternalClearDataFunction::~WebViewInternalClearDataFunction() {
 // Parses the |dataToRemove| argument to generate the remove mask. Sets
 // |bad_message_| (like EXTENSION_FUNCTION_VALIDATE would if this were a bool
 // method) if 'dataToRemove' is not present.
-uint32 WebViewInternalClearDataFunction::GetRemovalMask() {
+uint32_t WebViewInternalClearDataFunction::GetRemovalMask() {
   base::DictionaryValue* data_to_remove;
   if (!args_->GetDictionary(2, &data_to_remove)) {
     bad_message_ = true;
     return 0;
   }
 
-  uint32 remove_mask = 0;
+  uint32_t remove_mask = 0;
   for (base::DictionaryValue::Iterator i(*data_to_remove); !i.IsAtEnd();
        i.Advance()) {
     bool selected = false;
@@ -972,480 +907,6 @@ bool WebViewInternalClearDataFunction::RunAsyncSafe(WebViewGuest* guest) {
 void WebViewInternalClearDataFunction::ClearDataDone() {
   Release();  // Balanced in RunAsync().
   SendResponse(true);
-}
-
-WebViewInternalSetVisibleFunction::WebViewInternalSetVisibleFunction() {
-}
-
-WebViewInternalSetVisibleFunction::~WebViewInternalSetVisibleFunction() {
-}
-
-bool WebViewInternalSetVisibleFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetVisible::Params> params(
-      web_view_internal::SetVisible::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  guest->SetVisible(params->is_visible);
-  return true;
-}
-
-namespace {
-const float kDefaultThumbnailScale = 1.0f;
-}  // namespace
-
-WebViewInternalGetThumbnailFunction::WebViewInternalGetThumbnailFunction()
-    : image_format_(core_api::extension_types::IMAGE_FORMAT_JPEG),  // Default
-                                                                   // format is
-                                                                   // PNG.
-      image_quality_(90 /*kDefaultQuality*/),  // Default quality setting.
-      scale_(kDefaultThumbnailScale),  // Scale of window dimension to thumb.
-      height_(0),
-      width_(0) {
-}
-
-WebViewInternalGetThumbnailFunction::~WebViewInternalGetThumbnailFunction() {
-}
-
-bool WebViewInternalGetThumbnailFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::GetThumbnail::Params> params(
-      web_view_internal::GetThumbnail::Params::Create(*args_));
-
-  if (params.get() && params->dimension.get()) {
-    if (params->dimension.get()->scale.get())
-      scale_ = *params->dimension.get()->scale.get();
-    if (params->dimension.get()->width.get())
-      width_ = *params->dimension.get()->width.get();
-    if (params->dimension.get()->height.get())
-      height_ = *params->dimension.get()->height.get();
-  }
-
-  WebContents* web_contents = guest->web_contents();
-
-  RenderViewHost* render_view_host = web_contents->GetRenderViewHost();
-  content::RenderWidgetHostView* view = render_view_host->GetView();
-
-  if (!view) {
-    //error_ = keys::kInternalVisibleTabCaptureError;
-    error_ = "Error: View is not available, no screenshot taken.";
-    return false;
-  }
-  if (!guest->IsVisible()) {
-    error_ = "Error: Guest is not visible, no screenshot taken.";
-    return false;
-  }
-
-  RenderViewHost* embedder_render_view_host =
-      guest->embedder_web_contents()->GetRenderViewHost();
-  gfx::Point source_origin =
-      view->GetViewBounds().origin() -
-      embedder_render_view_host->GetView()->GetViewBounds().OffsetFromOrigin();
-  gfx::Rect source_rect(source_origin, view->GetViewBounds().size());
-
-  // Remove scrollbars from thumbnail (even if they're not here!)
-  source_rect.set_width(
-      std::max(1, source_rect.width() - gfx::scrollbar_size()));
-  source_rect.set_height(
-      std::max(1, source_rect.height() - gfx::scrollbar_size()));
-
-  embedder_render_view_host->CopyFromBackingStore(
-      source_rect, source_rect.size(),
-      base::Bind(
-          &WebViewInternalGetThumbnailFunction::CopyFromBackingStoreComplete,
-          this),
-      kN32_SkColorType);
-
-  return true;
-}
-
-void WebViewInternalGetThumbnailFunction::CopyFromBackingStoreComplete(
-  const SkBitmap& bitmap,
-  content::ReadbackResponse response) {
-
-  if (response == content::READBACK_SUCCESS) {
-    VLOG(1) << "captureVisibleTab() got image from backing store.";
-    SendResultFromBitmap(bitmap);
-    return;
-  }
-}
-
-bool WebViewInternalGetThumbnailFunction::EncodeBitmap(
-  const SkBitmap& screen_capture, std::vector<unsigned char>& data,
-  std::string& mime_type) {
-  SkAutoLockPixels screen_capture_lock(screen_capture);
-  gfx::Size dst_size_pixels;
-  if (width_ && height_) {
-    dst_size_pixels.SetSize(width_, height_);
-  } else {
-    dst_size_pixels = gfx::ToRoundedSize(gfx::ScaleSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale_));
-  }
-
-  SkBitmap bitmap = skia::ImageOperations::Resize(
-    screen_capture,
-    skia::ImageOperations::RESIZE_BEST,
-    dst_size_pixels.width(),
-    dst_size_pixels.height());
-
-  bool encoded = false;
-
-  SkAutoLockPixels lock(bitmap);
-
-  switch (image_format_) {
-  case core_api::extension_types::IMAGE_FORMAT_JPEG:
-    if (bitmap.getPixels()) {
-      encoded = gfx::JPEGCodec::Encode(
-        reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
-        gfx::JPEGCodec::FORMAT_SkBitmap,
-        bitmap.width(),
-        bitmap.height(),
-        static_cast<int>(bitmap.rowBytes()),
-        image_quality_,
-        &data);
-      mime_type = "image/jpeg";// kMimeTypeJpeg;
-    }
-    break;
-  case core_api::extension_types::IMAGE_FORMAT_PNG:
-    encoded = gfx::PNGCodec::EncodeBGRASkBitmap(
-      bitmap,
-      true,  // Discard transparency.
-      &data);
-    mime_type = "image/png";// kMimeTypePng;
-    break;
-  default:
-    NOTREACHED() << "Invalid image format.";
-  }
-
-  return encoded;
-}
-
-void WebViewInternalGetThumbnailFunction::SendInternalError() {
-  error_ = "Internal Thumbnail error";
-  SendResponse(false);
-}
-
-// Turn a bitmap of the screen into an image, set that image as the result,
-// and call SendResponse().
-void WebViewInternalGetThumbnailFunction::SendResultFromBitmap(
-  const SkBitmap& screen_capture) {
-  std::vector<unsigned char> data;
-  std::string mime_type;
-  gfx::Size dst_size_pixels;
-  SkBitmap bitmap;
-
-  if (scale_ != kDefaultThumbnailScale) {
-    // Scale has changed, use that.
-    dst_size_pixels = gfx::ToRoundedSize(gfx::ScaleSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale_));
-    bitmap = skia::ImageOperations::Resize(
-        screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height());
-  } else if (width_ != 0 && height_ != 0) {
-    bitmap = SmartCropAndSize(screen_capture, width_, height_);
-  } else {
-    bitmap = screen_capture;
-  }
-  bool encoded = EncodeBitmap(bitmap, data, mime_type);
-  if (!encoded) {
-    error_ = "Internal Thumbnail error";
-    SendResponse(false);
-    return;
-  }
-  std::string base64_result;
-  base::StringPiece stream_as_string(
-    reinterpret_cast<const char*>(vector_as_array(&data)), data.size());
-
-  base::Base64Encode(stream_as_string, &base64_result);
-  base64_result.insert(0, base::StringPrintf("data:%s;base64,",
-    mime_type.c_str()));
-  SetResult(new base::StringValue(base64_result));
-  SendResponse(true);
-}
-
-WebViewInternalGetThumbnailFromServiceFunction::
-    WebViewInternalGetThumbnailFromServiceFunction() {
-}
-
-WebViewInternalGetThumbnailFromServiceFunction::
-    ~WebViewInternalGetThumbnailFromServiceFunction() {
-}
-
-bool WebViewInternalGetThumbnailFromServiceFunction::RunAsyncSafe(
-    WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::AddToThumbnailService::Params> params(
-      web_view_internal::AddToThumbnailService::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  url_ = guest->web_contents()->GetURL();
-
-  return WebViewInternalGetThumbnailFunction::RunAsyncSafe(guest);
-}
-
-// Turn a bitmap of the screen into an image, set that image as the result,
-// and call SendResponse().
-void WebViewInternalGetThumbnailFromServiceFunction::SendResultFromBitmap(
-  const SkBitmap& screen_capture) {
-
-  // TODO:  For now we partially use the thumbnail_service, as we take our own
-  // thumbnail but store it in the service.  When thumbnailing webviews bug
-  // (http://crbug.com//327035) is fixed we should consider also letting the
-  // the thumbnail_service take the thumbnail.
-
-#ifdef VIVALDI_BUILD_HAS_CHROME_CODE
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-    ThumbnailServiceFactory::GetForProfile(profile);
-
-  // Scale the  bitmap.
-  SkAutoLockPixels screen_capture_lock(screen_capture);
-  gfx::Size dst_size_pixels;
-  SkBitmap bitmap;
-
-  if (scale_ != kDefaultThumbnailScale) {
-    // Scale has changed, use that.
-    dst_size_pixels = gfx::ToRoundedSize(gfx::ScaleSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale_));
-    bitmap = skia::ImageOperations::Resize(
-        screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height());
-  } else {
-    bitmap = SmartCropAndSize(screen_capture, width_, height_);
-  }
-  gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap);
-  scoped_refptr<thumbnails::ThumbnailingContext> context(
-      new thumbnails::ThumbnailingContext(url_, thumbnail_service.get()));
-  context->score.force_update = true;
-
-  if (!context->url.is_valid()) {
-    SendResponse(false);
-    return;
-  }
-
-  thumbnail_service->AddForcedURL(context->url);
-  thumbnail_service->SetPageThumbnail(*context, image);
-
-  SetResult(new base::StringValue(std::string("chrome://thumb/") +
-                                  context->url.spec()));
-#endif  // VIVALDI_BUILD_HAS_CHROME_CODE
-  SendResponse(true);
-}
-
-WebViewInternalAddToThumbnailServiceFunction::
-    WebViewInternalAddToThumbnailServiceFunction() {
-}
-
-WebViewInternalAddToThumbnailServiceFunction::
-    ~WebViewInternalAddToThumbnailServiceFunction() {
-}
-
-bool WebViewInternalAddToThumbnailServiceFunction::RunAsyncSafe(
-    WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::AddToThumbnailService::Params> params(
-      web_view_internal::AddToThumbnailService::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  if (!params->key.empty())
-    key_ = params->key;
-
-  url_ = guest->web_contents()->GetURL();
-
-  if (params->dimensions.get()) {
-    if (params->dimensions.get()->store_as_current_url.get()) {
-      store_as_current_url_ =
-          *params->dimensions.get()->store_as_current_url.get();
-    }
-    if (params->dimensions.get()->scale.get())
-      scale_ = *params->dimensions.get()->scale.get();
-    if (params->dimensions.get()->width.get())
-      width_ = *params->dimensions.get()->width.get();
-    if (params->dimensions.get()->height.get())
-      height_ = *params->dimensions.get()->height.get();
-  }
-
-  return WebViewInternalGetThumbnailFunction::RunAsyncSafe(guest);
-}
-
-void WebViewInternalAddToThumbnailServiceFunction::SetPageThumbnailOnUIThread(
-    bool send_result,
-    scoped_refptr<thumbnails::ThumbnailService> thumbnail_service,
-    scoped_refptr<thumbnails::ThumbnailingContext> context,
-    const gfx::Image& thumbnail) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  thumbnail_service->SetPageThumbnail(*context, thumbnail);
-
-  if (send_result) {
-    SetResult(new base::StringValue(std::string("chrome://thumb/") +
-                                    context->url.spec()));
-    SendResponse(true);
-  }
-  Release();
-}
-
-// Turn a bitmap of the screen into an image, set that image as the result,
-// and call SendResponse().
-void WebViewInternalAddToThumbnailServiceFunction::SendResultFromBitmap(
-  const SkBitmap& screen_capture) {
-
-  // TODO:  For now we partially use the thumbnail_service, as we take our own
-  // thumbnail but store it in the service.  When thumbnailing webviews bug
-  // (http://crbug.com//327035) is fixed we should consider also letting the
-  // the thumbnail_service take the thumbnail.
-
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-    ThumbnailServiceFactory::GetForProfile(profile);
-
-  // Scale the  bitmap.
-  SkAutoLockPixels screen_capture_lock(screen_capture);
-  gfx::Size dst_size_pixels;
-  SkBitmap bitmap;
-
-  if (scale_ != kDefaultThumbnailScale) {
-    // Scale has changed, use that.
-    dst_size_pixels = gfx::ToRoundedSize(gfx::ScaleSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale_));
-    bitmap = skia::ImageOperations::Resize(
-        screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height());
-  } else {
-    bitmap = SmartCropAndSize(screen_capture, width_, height_);
-  }
-  gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap);
-
-  scoped_refptr<thumbnails::ThumbnailingContext> context(
-      new thumbnails::ThumbnailingContext(GURL(key_), thumbnail_service.get()));
-  context->score.force_update = true;
-
-  if (!context->url.is_valid()) {
-    SendResponse(false);
-    return;
-  }
-  AddRef();
-
-  // NOTE(pettern): AddForcedURL is async, so we need to ensure adding the
-  // thumbnail is too, to avoid it being added as a non-known url.
-  if (store_as_current_url_) {
-    AddRef();
-    scoped_refptr<thumbnails::ThumbnailingContext> url_context(
-        new thumbnails::ThumbnailingContext(url_, thumbnail_service.get()));
-    thumbnail_service->AddForcedURL(url_context->url);
-    content::BrowserThread::PostDelayedTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&WebViewInternalAddToThumbnailServiceFunction::
-                       SetPageThumbnailOnUIThread,
-                   this, false, thumbnail_service, url_context, image),
-        base::TimeDelta::FromMilliseconds(200));
-  }
-  thumbnail_service->AddForcedURL(context->url);
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&WebViewInternalAddToThumbnailServiceFunction::
-                     SetPageThumbnailOnUIThread,
-                 this, true, thumbnail_service, context, image),
-      base::TimeDelta::FromMilliseconds(200));
-}
-
-WebViewInternalShowPageInfoFunction::WebViewInternalShowPageInfoFunction() {
-}
-
-WebViewInternalShowPageInfoFunction::~WebViewInternalShowPageInfoFunction() {
-}
-
-bool WebViewInternalShowPageInfoFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::ShowPageInfo::Params> params(
-      web_view_internal::ShowPageInfo::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  gfx::Point pos(params->position.left, params->position.top);
-  guest->ShowPageInfo(pos);
-  return true;
-}
-
-WebViewInternalSetIsFullscreenFunction::
-    WebViewInternalSetIsFullscreenFunction() {
-}
-
-WebViewInternalSetIsFullscreenFunction::
-    ~WebViewInternalSetIsFullscreenFunction() {
-}
-
-bool WebViewInternalSetIsFullscreenFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetIsFullscreen::Params> params(
-      web_view_internal::SetIsFullscreen::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  guest->SetIsFullscreen(params->is_fullscreen);
-  return true;
-}
-
-WebViewInternalSetShowImagesFunction::WebViewInternalSetShowImagesFunction() {}
-
-WebViewInternalSetShowImagesFunction::~WebViewInternalSetShowImagesFunction() {}
-
-bool WebViewInternalSetShowImagesFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetShowImages::Params> params(
-      web_view_internal::SetShowImages::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  WebContents* web_contents = guest->web_contents();
-  WebContentsImpl* web_contents_impl =
-      static_cast<WebContentsImpl*>(web_contents);
-
-  web_contents_impl->SetShouldShowImages(params->show_images);
-
-  if (params->only_load_from_cache) {
-    web_contents_impl->SetOnlyLoadFromCache(
-        *params->only_load_from_cache.get());
-  }
-
-  if (params->enable_plugins) {
-    web_contents_impl->SetEnablePlugins(*params->enable_plugins.get());
-  }
-
-  content::RendererPreferences* prefs = web_contents->GetMutableRendererPrefs();
-  if (params->only_load_from_cache && *params->only_load_from_cache.get() &&
-      params->enable_plugins && *params->enable_plugins.get()) {
-    prefs->should_ask_plugin_content = true;
-  } else {
-    prefs->should_ask_plugin_content = false;
-  }
-  web_contents->GetRenderViewHost()->SyncRendererPrefs();
-
-  return true;
-}
-
-WebViewInternalGetPageHistoryFunction::WebViewInternalGetPageHistoryFunction() {
-}
-
-WebViewInternalGetPageHistoryFunction::
-    ~WebViewInternalGetPageHistoryFunction() {
-}
-
-bool WebViewInternalGetPageHistoryFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::GetPageHistory::Params> params(
-      web_view_internal::GetPageHistory::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  content::NavigationController& controller =
-      guest->web_contents()->GetController();
-
-  int currentEntryIndex = controller.GetCurrentEntryIndex();
-
-  std::vector<linked_ptr<
-      web_view_internal::GetPageHistory::Results::PageHistoryType>> history;
-
-  for (int i = 0; i < controller.GetEntryCount(); i++) {
-    content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
-    base::string16 name = entry->GetTitleForDisplay(std::string());
-    linked_ptr<web_view_internal::GetPageHistory::Results::PageHistoryType>
-        history_entry(
-            new web_view_internal::GetPageHistory::Results::PageHistoryType);
-    history_entry->name = base::UTF16ToUTF8(name);
-    std::string urlstr = entry->GetVirtualURL().spec();
-    history_entry->url = urlstr;
-    history_entry->index = i;
-    history.push_back(history_entry);
-  }
-  results_ = web_view_internal::GetPageHistory::Results::Create(
-      currentEntryIndex, history);
-
-  SendResponse(true);
-
-  return true;
 }
 
 }  // namespace extensions

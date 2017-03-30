@@ -4,12 +4,15 @@
 
 #include "components/translate/core/browser/translate_language_list.h"
 
+#include <stddef.h>
+
 #include <set>
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -289,8 +292,8 @@ bool TranslateLanguageList::SetSupportedLanguages(
   //   "al": {"XX": 1, ...}
   // }
   // Where "tl" and "al" are set in kTargetLanguagesKey and kAlphaLanguagesKey.
-  scoped_ptr<base::Value> json_value(base::JSONReader::DeprecatedRead(
-      language_list, base::JSON_ALLOW_TRAILING_COMMAS));
+  scoped_ptr<base::Value> json_value =
+      base::JSONReader::Read(language_list, base::JSON_ALLOW_TRAILING_COMMAS);
 
   if (json_value == NULL || !json_value->IsType(base::Value::TYPE_DICTIONARY)) {
     NotifyEvent(__LINE__, "Language list is invalid");

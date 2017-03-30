@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "android_webview/native/permission/permission_request_handler.h"
+
+#include <utility>
+
 #include "android_webview/native/permission/aw_permission_request.h"
 #include "android_webview/native/permission/aw_permission_request_delegate.h"
-#include "android_webview/native/permission/permission_request_handler.h"
 #include "android_webview/native/permission/permission_request_handler_client.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -14,24 +17,23 @@ namespace android_webview {
 
 class TestAwPermissionRequestDelegate : public AwPermissionRequestDelegate {
  public:
-  TestAwPermissionRequestDelegate(
-      const GURL& origin, int64 resources, base::Callback<void(bool)> callback)
-      : origin_(origin),
-        resources_(resources),
-        callback_(callback) {}
+  TestAwPermissionRequestDelegate(const GURL& origin,
+                                  int64_t resources,
+                                  base::Callback<void(bool)> callback)
+      : origin_(origin), resources_(resources), callback_(callback) {}
 
   // Get the origin which initiated the permission request.
   const GURL& GetOrigin() override { return origin_; }
 
   // Get the resources the origin wanted to access.
-  int64 GetResources() override { return resources_; }
+  int64_t GetResources() override { return resources_; }
 
   // Notify the permission request is allowed or not.
   void NotifyRequestResult(bool allowed) override { callback_.Run(allowed); }
 
  private:
   GURL origin_;
-  int64 resources_;
+  int64_t resources_;
   base::Callback<void(bool)> callback_;
 };
 
@@ -41,11 +43,10 @@ class TestPermissionRequestHandlerClient :
   struct Permission {
     Permission()
         :resources(0) {}
-    Permission(const GURL& origin, int64 resources)
-        : origin(origin),
-          resources(resources) {}
+    Permission(const GURL& origin, int64_t resources)
+        : origin(origin), resources(resources) {}
     GURL origin;
-    int64 resources;
+    int64_t resources;
   };
 
   TestPermissionRequestHandlerClient()
@@ -80,13 +81,13 @@ class TestPermissionRequestHandlerClient :
 
   void Grant() {
     request_->OnAccept(NULL, NULL, true);
-    request_->Destroy(NULL, NULL);
+    request_->DeleteThis();
     request_ = NULL;
   }
 
   void Deny() {
     request_->OnAccept(NULL, NULL, false);
-    request_->Destroy(NULL, NULL);
+    request_->DeleteThis();
     request_ = NULL;
   }
 
@@ -145,12 +146,10 @@ class PermissionRequestHandlerTest : public testing::Test {
     return origin_;
   }
 
-  int64 resources() {
-    return resources_;
-  }
+  int64_t resources() { return resources_; }
 
   scoped_ptr<AwPermissionRequestDelegate> delegate() {
-    return delegate_.Pass();
+    return std::move(delegate_);
   }
 
   TestPermissionRequestHandler* handler() {
@@ -167,7 +166,7 @@ class PermissionRequestHandlerTest : public testing::Test {
 
  private:
   GURL origin_;
-  int64 resources_;
+  int64_t resources_;
   scoped_ptr<AwPermissionRequestDelegate> delegate_;
   TestPermissionRequestHandlerClient client_;
   TestPermissionRequestHandler handler_;
@@ -175,7 +174,7 @@ class PermissionRequestHandlerTest : public testing::Test {
 };
 
 TEST_F(PermissionRequestHandlerTest, TestPermissionGranted) {
-  handler()->SendRequest(delegate().Pass());
+  handler()->SendRequest(delegate());
   // Verify Handler store the request correctly.
   ASSERT_EQ(1u, handler()->requests().size());
   EXPECT_EQ(origin(), handler()->requests()[0]->GetOrigin());
@@ -195,7 +194,7 @@ TEST_F(PermissionRequestHandlerTest, TestPermissionGranted) {
 }
 
 TEST_F(PermissionRequestHandlerTest, TestPermissionDenied) {
-  handler()->SendRequest(delegate().Pass());
+  handler()->SendRequest(delegate());
   // Verify Handler store the request correctly.
   ASSERT_EQ(1u, handler()->requests().size());
   EXPECT_EQ(origin(), handler()->requests()[0]->GetOrigin());
@@ -216,7 +215,7 @@ TEST_F(PermissionRequestHandlerTest, TestPermissionDenied) {
 
 TEST_F(PermissionRequestHandlerTest, TestMultiplePermissionRequest) {
   GURL origin1 = GURL("http://a.google.com");
-  int64 resources1 = AwPermissionRequest::Geolocation;
+  int64_t resources1 = AwPermissionRequest::Geolocation;
 
   scoped_ptr<AwPermissionRequestDelegate> delegate1;
   delegate1.reset(new TestAwPermissionRequestDelegate(
@@ -225,7 +224,7 @@ TEST_F(PermissionRequestHandlerTest, TestMultiplePermissionRequest) {
                  base::Unretained(this))));
 
   // Send 1st request
-  handler()->SendRequest(delegate().Pass());
+  handler()->SendRequest(delegate());
   // Verify Handler store the request correctly.
   ASSERT_EQ(1u, handler()->requests().size());
   EXPECT_EQ(origin(), handler()->requests()[0]->GetOrigin());
@@ -235,7 +234,7 @@ TEST_F(PermissionRequestHandlerTest, TestMultiplePermissionRequest) {
   EXPECT_EQ(resources(), client()->request()->GetResources());
 
   // Send 2nd request
-  handler()->SendRequest(delegate1.Pass());
+  handler()->SendRequest(std::move(delegate1));
   // Verify Handler store the request correctly.
   ASSERT_EQ(2u, handler()->requests().size());
   EXPECT_EQ(origin(), handler()->requests()[0]->GetOrigin());
@@ -250,7 +249,7 @@ TEST_F(PermissionRequestHandlerTest, TestMultiplePermissionRequest) {
   delegate1.reset(new TestAwPermissionRequestDelegate(origin(), resources(),
       base::Bind(&PermissionRequestHandlerTest::NotifyRequestResult,
                  base::Unretained(this))));
-  handler()->SendRequest(delegate1.Pass());
+  handler()->SendRequest(std::move(delegate1));
   // Verify Handler store the request correctly.
   ASSERT_EQ(3u, handler()->requests().size());
   EXPECT_EQ(origin(), handler()->requests()[0]->GetOrigin());
@@ -279,7 +278,7 @@ TEST_F(PermissionRequestHandlerTest, TestPreauthorizePermission) {
   handler()->PreauthorizePermission(origin(), resources());
 
   // Permission should granted without asking PermissionRequestHandlerClient.
-  handler()->SendRequest(delegate().Pass());
+  handler()->SendRequest(delegate());
   EXPECT_TRUE(allowed());
   EXPECT_EQ(NULL, client()->request());
 
@@ -291,7 +290,7 @@ TEST_F(PermissionRequestHandlerTest, TestPreauthorizePermission) {
       base::Bind(&PermissionRequestHandlerTest::NotifyRequestResult,
                  base::Unretained(this))));
   client()->Reset();
-  handler()->SendRequest(delegate.Pass());
+  handler()->SendRequest(std::move(delegate));
   EXPECT_TRUE(allowed());
   EXPECT_EQ(NULL, client()->request());
 }
@@ -302,12 +301,12 @@ TEST_F(PermissionRequestHandlerTest, TestOriginNotPreauthorized) {
   // Ask the origin which wasn't preauthorized.
   GURL origin ("http://a.google.com/a/b");
   scoped_ptr<AwPermissionRequestDelegate> delegate;
-  int64 requested_resources = AwPermissionRequest::AudioCapture;
+  int64_t requested_resources = AwPermissionRequest::AudioCapture;
   delegate.reset(new TestAwPermissionRequestDelegate(
       origin, requested_resources,
       base::Bind(&PermissionRequestHandlerTest::NotifyRequestResult,
                  base::Unretained(this))));
-  handler()->SendRequest(delegate.Pass());
+  handler()->SendRequest(std::move(delegate));
   EXPECT_EQ(origin, handler()->requests()[0]->GetOrigin());
   EXPECT_EQ(requested_resources, handler()->requests()[0]->GetResources());
   client()->Grant();
@@ -319,14 +318,14 @@ TEST_F(PermissionRequestHandlerTest, TestResourcesNotPreauthorized) {
 
   // Ask the resources which weren't preauthorized.
   scoped_ptr<AwPermissionRequestDelegate> delegate;
-  int64 requested_resources = AwPermissionRequest::AudioCapture
-    | AwPermissionRequest::Geolocation;
+  int64_t requested_resources =
+      AwPermissionRequest::AudioCapture | AwPermissionRequest::Geolocation;
   delegate.reset(new TestAwPermissionRequestDelegate(
       origin(), requested_resources,
       base::Bind(&PermissionRequestHandlerTest::NotifyRequestResult,
                  base::Unretained(this))));
 
-  handler()->SendRequest(delegate.Pass());
+  handler()->SendRequest(std::move(delegate));
   EXPECT_EQ(origin(), handler()->requests()[0]->GetOrigin());
   EXPECT_EQ(requested_resources, handler()->requests()[0]->GetResources());
   client()->Deny();
@@ -344,7 +343,7 @@ TEST_F(PermissionRequestHandlerTest, TestPreauthorizeMultiplePermission) {
       origin_hostname, AwPermissionRequest::Geolocation,
       base::Bind(&PermissionRequestHandlerTest::NotifyRequestResult,
                  base::Unretained(this))));
-  handler()->SendRequest(delegate.Pass());
+  handler()->SendRequest(std::move(delegate));
   EXPECT_TRUE(allowed());
   EXPECT_EQ(NULL, client()->request());
 }

@@ -5,7 +5,10 @@
 #ifndef NET_DER_PARSER_H_
 #define NET_DER_PARSER_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/der/input.h"
@@ -14,6 +17,8 @@
 namespace net {
 
 namespace der {
+
+class BitString;
 
 // Parses a DER-encoded ASN.1 structure. DER (distinguished encoding rules)
 // encodes each data value with a tag, length, and value (TLV). The tag
@@ -144,8 +149,17 @@ class NET_EXPORT Parser {
   // Expects the current tag to be kInteger, and calls ParseUint64 on the
   // current value. Note that DER-encoded integers are arbitrary precision,
   // so this method will fail for valid input that represents an integer
-  // outside the range of an int64.
+  // outside the range of an int64_t.
+  //
+  // Note that on failure the Parser is left in an undefined state (the
+  // input may or may not have been advanced).
   bool ReadUint64(uint64_t* out) WARN_UNUSED_RESULT;
+
+  // Reads a BIT STRING. On success fills |out| and returns true.
+  //
+  // Note that on failure the Parser is left in an undefined state (the
+  // input may or may not have been advanced).
+  bool ReadBitString(BitString* out) WARN_UNUSED_RESULT;
 
   // Lower level methods. The previous methods couple reading data from the
   // input with advancing the Parser's internal pointer to the next TLV; these

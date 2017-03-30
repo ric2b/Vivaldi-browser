@@ -7,12 +7,14 @@
 
 #include "ui/gfx/transform.h"
 
-#include <cmath>
-#include <ostream>
-#include <limits>
+#include <stddef.h>
 
-#include "base/basictypes.h"
+#include <cmath>
+#include <limits>
+#include <ostream>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/point.h"
@@ -777,12 +779,10 @@ TEST(XFormTest, BlendSkew) {
   Transform from;
   for (int i = 0; i < 2; ++i) {
     Transform to;
-    to.SkewX(10);
-    to.SkewY(5);
+    to.Skew(10, 5);
     double t = i;
     Transform expected;
-    expected.SkewX(t * 10);
-    expected.SkewY(t * 5);
+    expected.Skew(t * 10, t * 5);
     EXPECT_TRUE(to.Blend(from, t));
     EXPECT_TRUE(MatricesAreNearlyEqual(expected, to));
   }
@@ -792,10 +792,10 @@ TEST(XFormTest, ExtrapolateSkew) {
   Transform from;
   for (int i = -1; i < 2; ++i) {
     Transform to;
-    to.SkewX(20);
+    to.Skew(20, 0);
     double t = i;
     Transform expected;
-    expected.SkewX(t * 20);
+    expected.Skew(t * 20, t * 0);
     EXPECT_TRUE(to.Blend(from, t));
     EXPECT_TRUE(MatricesAreNearlyEqual(expected, to));
   }
@@ -906,18 +906,19 @@ TEST(XFormTest, VerifyBlendForScale) {
   EXPECT_ROW4_EQ(0.0f,   0.0f,  0.0f,  1.0f, to);
 }
 
-TEST(XFormTest, VerifyBlendForSkewX) {
+TEST(XFormTest, VerifyBlendForSkew) {
+  // Along X axis only
   Transform from;
-  from.SkewX(0.0);
+  from.Skew(0.0, 0.0);
 
   Transform to;
 
-  to.SkewX(45.0);
+  to.Skew(45.0, 0.0);
   to.Blend(from, 0.0);
   EXPECT_EQ(from, to);
 
   to = Transform();
-  to.SkewX(45.0);
+  to.Skew(45.0, 0.0);
   to.Blend(from, 0.5);
   EXPECT_ROW1_EQ(1.0f, 0.5f, 0.0f, 0.0f, to);
   EXPECT_ROW2_EQ(0.0f, 1.0f, 0.0f, 0.0f, to);
@@ -925,7 +926,7 @@ TEST(XFormTest, VerifyBlendForSkewX) {
   EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, to);
 
   to = Transform();
-  to.SkewX(45.0);
+  to.Skew(45.0, 0.0);
   to.Blend(from, 0.25);
   EXPECT_ROW1_EQ(1.0f, 0.25f, 0.0f, 0.0f, to);
   EXPECT_ROW2_EQ(0.0f, 1.0f,  0.0f, 0.0f, to);
@@ -933,15 +934,13 @@ TEST(XFormTest, VerifyBlendForSkewX) {
   EXPECT_ROW4_EQ(0.0f, 0.0f,  0.0f, 1.0f, to);
 
   to = Transform();
-  to.SkewX(45.0);
+  to.Skew(45.0, 0.0);
   to.Blend(from, 1.0);
   EXPECT_ROW1_EQ(1.0f, 1.0f, 0.0f, 0.0f, to);
   EXPECT_ROW2_EQ(0.0f, 1.0f, 0.0f, 0.0f, to);
   EXPECT_ROW3_EQ(0.0f, 0.0f, 1.0f, 0.0f, to);
   EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, to);
-}
 
-TEST(XFormTest, VerifyBlendForSkewY) {
   // NOTE CAREFULLY: Decomposition of skew and rotation terms of the matrix
   // is inherently underconstrained, and so it does not always compute the
   // originally intended skew parameters. The current implementation uses QR
@@ -952,24 +951,24 @@ TEST(XFormTest, VerifyBlendForSkewY) {
   // very often, so to get any test coverage, the compromise is to verify the
   // exact matrix that the.Blend() operation produces.
   //
-  // This problem also potentially exists for skewX, but the current QR
-  // decomposition implementation just happens to decompose those test
-  // matrices intuitively.
+  // This problem also potentially exists for skew along the X axis, but the
+  // current QR decomposition implementation just happens to decompose those
+  // test matrices intuitively.
   //
   // Unfortunately, this case suffers from uncomfortably large precision
   // error.
 
-  Transform from;
-  from.SkewY(0.0);
+  from = Transform();
+  from.Skew(0.0, 0.0);
 
-  Transform to;
+  to = Transform();
 
-  to.SkewY(45.0);
+  to.Skew(0.0, 45.0);
   to.Blend(from, 0.0);
   EXPECT_EQ(from, to);
 
   to = Transform();
-  to.SkewY(45.0);
+  to.Skew(0.0, 45.0);
   to.Blend(from, 0.25);
   EXPECT_ROW1_NEAR(1.0823489449280947471976333,
                    0.0464370719145053845178239,
@@ -987,7 +986,7 @@ TEST(XFormTest, VerifyBlendForSkewY) {
   EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, to);
 
   to = Transform();
-  to.SkewY(45.0);
+  to.Skew(0.0, 45.0);
   to.Blend(from, 0.5);
   EXPECT_ROW1_NEAR(1.1152212925809066312865525,
                    0.0676495144007326631996335,
@@ -1005,7 +1004,7 @@ TEST(XFormTest, VerifyBlendForSkewY) {
   EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, to);
 
   to = Transform();
-  to.SkewY(45.0);
+  to.Skew(0.0, 45.0);
   to.Blend(from, 1.0);
   EXPECT_ROW1_NEAR(1.0, 0.0, 0.0, 0.0, to, LOOSE_ERROR_THRESHOLD);
   EXPECT_ROW2_NEAR(1.0, 1.0, 0.0, 0.0, to, LOOSE_ERROR_THRESHOLD);
@@ -1224,7 +1223,7 @@ TEST(XFormTest, VerifyBlendForCompositeTransform) {
   expectedEndOfAnimation.ApplyPerspectiveDepth(1.0);
   expectedEndOfAnimation.Translate3d(10.0, 20.0, 30.0);
   expectedEndOfAnimation.RotateAbout(Vector3dF(0.0, 0.0, 1.0), 25.0);
-  expectedEndOfAnimation.SkewY(45.0);
+  expectedEndOfAnimation.Skew(0.0, 45.0);
   expectedEndOfAnimation.Scale3d(6.0, 7.0, 8.0);
 
   to = expectedEndOfAnimation;
@@ -1929,43 +1928,40 @@ TEST(XFormTest, verifyRotateAboutForDegenerateAxis) {
   EXPECT_ROW4_EQ(13.0f, 17.0f, 21.0f, 25.0f, A);
 }
 
-TEST(XFormTest, verifySkewX) {
+TEST(XFormTest, verifySkew) {
+  // Test a skew along X axis only
   Transform A;
-  A.SkewX(45.0);
+  A.Skew(45.0, 0.0);
   EXPECT_ROW1_EQ(1.0f, 1.0f, 0.0f, 0.0f, A);
   EXPECT_ROW2_EQ(0.0f, 1.0f, 0.0f, 0.0f, A);
   EXPECT_ROW3_EQ(0.0f, 0.0f, 1.0f, 0.0f, A);
   EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, A);
 
-  // Verify that skewX() post-multiplies the existing matrix. Row 1, column 2,
-  // would incorrectly have value "7" if the matrix is pre-multiplied instead
-  // of post-multiplied.
+  // Test a skew along Y axis only
   A.MakeIdentity();
-  A.Scale3d(6.0, 7.0, 8.0);
-  A.SkewX(45.0);
-  EXPECT_ROW1_EQ(6.0f, 6.0f, 0.0f, 0.0f, A);
-  EXPECT_ROW2_EQ(0.0f, 7.0f, 0.0f, 0.0f, A);
-  EXPECT_ROW3_EQ(0.0f, 0.0f, 8.0f, 0.0f, A);
-  EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, A);
-}
-
-TEST(XFormTest, verifySkewY) {
-  Transform A;
-  A.SkewY(45.0);
+  A.Skew(0.0, 45.0);
   EXPECT_ROW1_EQ(1.0f, 0.0f, 0.0f, 0.0f, A);
   EXPECT_ROW2_EQ(1.0f, 1.0f, 0.0f, 0.0f, A);
   EXPECT_ROW3_EQ(0.0f, 0.0f, 1.0f, 0.0f, A);
   EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, A);
 
-  // Verify that skewY() post-multiplies the existing matrix. Row 2, column 1 ,
-  // would incorrectly have value "6" if the matrix is pre-multiplied instead
+  // Verify that skew() post-multiplies the existing matrix. Row 1, column 2,
+  // would incorrectly have value "7" if the matrix is pre-multiplied instead
   // of post-multiplied.
   A.MakeIdentity();
   A.Scale3d(6.0, 7.0, 8.0);
-  A.SkewY(45.0);
-  EXPECT_ROW1_EQ(6.0f, 0.0f, 0.0f, 0.0f, A);
-  EXPECT_ROW2_EQ(7.0f, 7.0f, 0.0f, 0.0f, A);
+  A.Skew(45.0, 0.0);
+  EXPECT_ROW1_EQ(6.0f, 6.0f, 0.0f, 0.0f, A);
+  EXPECT_ROW2_EQ(0.0f, 7.0f, 0.0f, 0.0f, A);
   EXPECT_ROW3_EQ(0.0f, 0.0f, 8.0f, 0.0f, A);
+  EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, A);
+
+  // Test a skew along X and Y axes both
+  A.MakeIdentity();
+  A.Skew(45.0, 45.0);
+  EXPECT_ROW1_EQ(1.0f, 1.0f, 0.0f, 0.0f, A);
+  EXPECT_ROW2_EQ(1.0f, 1.0f, 0.0f, 0.0f, A);
+  EXPECT_ROW3_EQ(0.0f, 0.0f, 1.0f, 0.0f, A);
   EXPECT_ROW4_EQ(0.0f, 0.0f, 0.0f, 1.0f, A);
 }
 
@@ -2040,7 +2036,7 @@ TEST(XFormTest, verifyIsInvertible) {
   EXPECT_TRUE(A.IsInvertible());
 
   A.MakeIdentity();
-  A.SkewX(45.0);
+  A.Skew(45.0, 0.0);
   EXPECT_TRUE(A.IsInvertible());
 
   // A perspective matrix (projection plane at z=0) is invertible. The
@@ -2695,6 +2691,29 @@ TEST(XFormTest, RoundTranslationComponents) {
   expected.Translate3d(0.f, 0.f, 0.5f);
   translation.RoundTranslationComponents();
   EXPECT_EQ(expected.ToString(), translation.ToString());
+}
+
+TEST(XFormTest, BackFaceVisiblilityTolerance) {
+  Transform backface_invisible;
+  backface_invisible.matrix().set(0, 3, 1.f);
+  backface_invisible.matrix().set(3, 0, 1.f);
+  backface_invisible.matrix().set(2, 0, 1.f);
+  backface_invisible.matrix().set(3, 2, 1.f);
+
+  // The transformation matrix has a determinant = 1 and cofactor33 = 0. So,
+  // IsBackFaceVisible should return false.
+  EXPECT_EQ(backface_invisible.matrix().determinant(), 1.f);
+  EXPECT_FALSE(backface_invisible.IsBackFaceVisible());
+
+  // Adding a noise to the transformsation matrix that is within the tolerance
+  // (machine epsilon) should not change the result.
+  float noise = std::numeric_limits<float>::epsilon();
+  backface_invisible.matrix().set(0, 3, 1.f + noise);
+  EXPECT_FALSE(backface_invisible.IsBackFaceVisible());
+
+  // A noise that is more than the tolerance should change the result.
+  backface_invisible.matrix().set(0, 3, 1.f + (2 * noise));
+  EXPECT_TRUE(backface_invisible.IsBackFaceVisible());
 }
 
 }  // namespace

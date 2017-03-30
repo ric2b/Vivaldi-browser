@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/chromeos/login/supervised/supervised_user_creation_controller.h"
 #include "chrome/browser/supervised_user/legacy/supervised_user_registration_utility.h"
 #include "chromeos/login/auth/extended_authenticator.h"
+#include "components/signin/core/account_id/account_id.h"
 
 class Profile;
 
@@ -41,7 +43,7 @@ class SupervisedUserCreationControllerNew
   // |Consumer| is not owned by controller, and it is expected that it wouldn't
   // be deleted before SupervisedUserCreationControllerNew.
   SupervisedUserCreationControllerNew(StatusConsumer* consumer,
-                                      const std::string& manager_id);
+                                      const AccountId& manager_id);
   ~SupervisedUserCreationControllerNew() override;
 
   // Returns the current supervised user controller if it has been created.
@@ -119,7 +121,7 @@ class SupervisedUserCreationControllerNew
     base::string16 display_name;
     int avatar_index;
 
-    std::string manager_id;
+    AccountId manager_id = EmptyAccountId();
 
     std::string local_user_id;  // Used to identify cryptohome.
     std::string sync_user_id;   // Used to identify user in manager's sync data.
@@ -179,7 +181,7 @@ class SupervisedUserCreationControllerNew
   scoped_ptr<UserCreationContext> creation_context_;
 
   // Timer for showing warning if creation process takes too long.
-  base::OneShotTimer<SupervisedUserCreationControllerNew> timeout_timer_;
+  base::OneShotTimer timeout_timer_;
 
   // Factory of callbacks.
   base::WeakPtrFactory<SupervisedUserCreationControllerNew> weak_factory_;

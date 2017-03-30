@@ -7,6 +7,7 @@
 #include <shellapi.h>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/process_singleton.h"
@@ -14,6 +15,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/user_experiment.h"
+#include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -359,7 +361,7 @@ void TryChromeDialogView::ButtonPressed(views::Button* sender,
   }
 
   popup_->Close();
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void TryChromeDialogView::LinkClicked(views::Link* source, int event_flags) {

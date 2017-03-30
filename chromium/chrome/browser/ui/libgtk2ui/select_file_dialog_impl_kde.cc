@@ -2,20 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <set>
-
+#include <stddef.h>
 #include <X11/Xlib.h>
+
+#include <set>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/nix/mime_util_xdg.h"
 #include "base/nix/xdg_util.h"
 #include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ui/libgtk2ui/select_file_dialog_impl.h"
@@ -156,7 +158,7 @@ class SelectFileDialogImplKDE : public SelectFileDialogImpl {
                                           const std::string& output,
                                           int exit_code, void* params);
 
-  // Should be either DESKTOP_ENVIRONMENT_KDE3 or DESKTOP_ENVIRONMENT_KDE4.
+  // Should be either DESKTOP_ENVIRONMENT_KDE3, KDE4, or KDE5.
   base::nix::DesktopEnvironment desktop_;
 
   // The set of all parent windows for which we are currently running
@@ -195,7 +197,8 @@ SelectFileDialogImplKDE::SelectFileDialogImplKDE(
     : SelectFileDialogImpl(listener, policy),
       desktop_(desktop) {
   DCHECK(desktop_ == base::nix::DESKTOP_ENVIRONMENT_KDE3 ||
-         desktop_ == base::nix::DESKTOP_ENVIRONMENT_KDE4);
+         desktop_ == base::nix::DESKTOP_ENVIRONMENT_KDE4 ||
+         desktop_ == base::nix::DESKTOP_ENVIRONMENT_KDE5);
 }
 
 SelectFileDialogImplKDE::~SelectFileDialogImplKDE() {
@@ -331,7 +334,7 @@ void SelectFileDialogImplKDE::GetKDialogCommandLine(
     command_line->AppendSwitchNative(
         desktop_ == base::nix::DESKTOP_ENVIRONMENT_KDE3 ?
             "--embed" : "--attach",
-        base::IntToString(parent));
+        base::Uint64ToString(parent));
   }
 
   // Set the correct title for the dialog.

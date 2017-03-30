@@ -7,14 +7,16 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/signin/signin_header_helper.h"
+#include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "components/profile_metrics/counts.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/user_metrics.h"
 
@@ -26,7 +28,9 @@ const int kMaximumReportedProfileCount = 5;
 
 const int kMaximumDaysOfDisuse = 4 * 7;  // Should be integral number of weeks.
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 size_t number_of_profile_switches_ = 0;
+#endif
 
 // Enum for tracking the state of profiles being switched to.
 enum ProfileOpenState {
@@ -38,21 +42,20 @@ enum ProfileOpenState {
   PROFILE_UNOPENED
 };
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 ProfileOpenState GetProfileOpenState(
     ProfileManager* manager,
     const base::FilePath& path) {
   Profile* profile_switched_to = manager->GetProfileByPath(path);
-
-  if (!profile_switched_to) {
+  if (!profile_switched_to)
     return PROFILE_UNOPENED;
-  }
 
-  if (chrome::GetTotalBrowserCountForProfile(profile_switched_to) > 0) {
+  if (chrome::GetTotalBrowserCountForProfile(profile_switched_to) > 0)
     return PROFILE_OPENED;
-  }
 
   return PROFILE_OPENED_NO_BROWSER;
 }
+#endif
 
 ProfileMetrics::ProfileType GetProfileType(
     const base::FilePath& profile_path) {
@@ -142,7 +145,7 @@ enum ProfileAvatar {
 };
 
 bool ProfileMetrics::CountProfileInformation(ProfileManager* manager,
-                                             ProfileCounts* counts) {
+                                             profile_metrics::Counts* counts) {
   const ProfileInfoCache& info_cache = manager->GetProfileInfoCache();
   size_t number_of_profiles = info_cache.GetNumberOfProfiles();
   counts->total = number_of_profiles;
@@ -175,7 +178,7 @@ bool ProfileMetrics::CountProfileInformation(ProfileManager* manager,
 
 void ProfileMetrics::UpdateReportedProfilesStatistics(ProfileManager* manager) {
 #if defined(OS_WIN) || defined(OS_MACOSX)
-  ProfileCounts counts;
+  profile_metrics::Counts counts;
   if (CountProfileInformation(manager, &counts)) {
     size_t limited_total = counts.total;
     size_t limited_signedin = counts.signedin;
@@ -190,10 +193,12 @@ void ProfileMetrics::UpdateReportedProfilesStatistics(ProfileManager* manager) {
 #endif
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 void ProfileMetrics::LogNumberOfProfileSwitches() {
   UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfSwitches",
                            number_of_profile_switches_);
 }
+#endif
 
 // The OS_MACOSX implementation of this function is in profile_metrics_mac.mm.
 #if defined(OS_WIN)
@@ -204,25 +209,13 @@ void ProfileMetrics::UpdateReportedOSProfileStatistics(
 #endif
 
 void ProfileMetrics::LogNumberOfProfiles(ProfileManager* manager) {
-  ProfileCounts counts;
+  profile_metrics::Counts counts;
   bool success = CountProfileInformation(manager, &counts);
-  UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfProfiles", counts.total);
+
+  profile_metrics::LogProfileMetricsCounts(counts);
 
   // Ignore other metrics if we have no profiles.
   if (success) {
-    UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfManagedProfiles",
-                             counts.supervised);
-    UMA_HISTOGRAM_COUNTS_100("Profile.PercentageOfManagedProfiles",
-                             100 * counts.supervised / counts.total);
-    UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfSignedInProfiles",
-                             counts.signedin);
-    UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfUnusedProfiles",
-                             counts.unused);
-    UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfSignedInProfilesWithGAIAIcons",
-                             counts.gaia_icon);
-    UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfProfilesWithAuthErrors",
-                             counts.auth_errors);
-
     LogLockedProfileInformation(manager);
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
@@ -353,6 +346,7 @@ void ProfileMetrics::LogProfileOpenMethod(ProfileOpen metric) {
                             NUM_PROFILE_OPEN_METRICS);
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 void ProfileMetrics::LogProfileSwitch(
     ProfileOpen metric,
     ProfileManager* manager,
@@ -389,6 +383,7 @@ void ProfileMetrics::LogProfileSwitch(
   // as opening of profile related UI elements.
   LogProfileOpenMethod(metric);
 }
+#endif
 
 void ProfileMetrics::LogProfileSwitchGaia(ProfileGaia metric) {
   if (metric == GAIA_OPT_IN)

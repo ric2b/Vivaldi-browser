@@ -5,15 +5,16 @@
 #ifndef PPAPI_SHARED_IMPL_PPB_INPUT_EVENT_SHARED_H_
 #define PPAPI_SHARED_IMPL_PPB_INPUT_EVENT_SHARED_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ppapi/c/ppb_input_event.h"
 #include "ppapi/shared_impl/resource.h"
 #include "ppapi/thunk/ppb_input_event_api.h"
-#include "ui/events/latency_info.h"
 
 namespace ppapi {
 
@@ -57,8 +58,6 @@ struct PPAPI_SHARED_EXPORT InputEventData {
   std::vector<PP_TouchPoint> touches;
   std::vector<PP_TouchPoint> changed_touches;
   std::vector<PP_TouchPoint> target_touches;
-
-  ui::LatencyInfo latency_info;
 };
 
 // This simple class implements the PPB_InputEvent_API in terms of the
@@ -98,7 +97,6 @@ class PPAPI_SHARED_EXPORT PPB_InputEvent_Shared
   uint32_t GetTouchCount(PP_TouchListType list) override;
   PP_TouchPoint GetTouchByIndex(PP_TouchListType list, uint32_t index) override;
   PP_TouchPoint GetTouchById(PP_TouchListType list, uint32_t id) override;
-  PP_Bool TraceInputLatency(PP_Bool has_damage) override;
 
   // Implementations for event creation.
   static PP_Resource CreateIMEInputEvent(ResourceObjectType type,

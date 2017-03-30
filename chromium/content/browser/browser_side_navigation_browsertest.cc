@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -31,7 +32,7 @@ class BrowserSideNavigationBrowserTest : public ContentBrowserTest {
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 };
 
@@ -137,7 +138,7 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     const char kReplacePortNumber[] =
       "window.domAutomationController.send(setPortNumber(%d));";
-    uint16 port_number = embedded_test_server()->port();
+    uint16_t port_number = embedded_test_server()->port();
     GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
     bool success = false;
     EXPECT_TRUE(ExecuteScriptAndExtractBool(
@@ -176,7 +177,9 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest, FailedNavigation) {
     TestNavigationObserver observer(shell()->web_contents());
     GURL error_url(
         net::URLRequestFailedJob::GetMockHttpUrl(net::ERR_CONNECTION_RESET));
-    net::URLRequestFailedJob::AddUrlHandler();
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&net::URLRequestFailedJob::AddUrlHandler));
     NavigateToURL(shell(), error_url);
     EXPECT_EQ(error_url, observer.last_navigation_url());
     NavigationEntry* entry =

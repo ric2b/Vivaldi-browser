@@ -5,6 +5,7 @@
 #include "ui/base/ime/input_method_base.h"
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -143,12 +144,11 @@ class MockInputMethodBase : public InputMethodBase {
       InputMethod::NativeEventResult* result) override {
     return false;
   }
-  bool DispatchKeyEvent(const ui::KeyEvent&) override { return false; }
+  void DispatchKeyEvent(ui::KeyEvent*) override {}
   void OnCaretBoundsChanged(const TextInputClient* client) override {}
   void CancelComposition(const TextInputClient* client) override {}
   void OnInputLocaleChanged() override {}
   std::string GetInputLocale() override { return ""; }
-  bool IsActive() override { return false; }
   bool IsCandidatePopupOpen() const override { return false; }
   // Overriden from InputMethodBase.
   void OnWillChangeFocusedClient(TextInputClient* focused_before,

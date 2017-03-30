@@ -2,10 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/pickle.h"
+#include "build/build_config.h"
 #include "content/common/cursors/webcursor.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
 
 using blink::WebCursorInfo;
 
@@ -150,7 +158,7 @@ TEST(WebCursorTest, ClampHotspot) {
   // Custom Windows message.
   ok_custom_pickle.WriteUInt32(0);
   base::PickleIterator iter(ok_custom_pickle);
-  ASSERT_TRUE(custom_cursor.Deserialize(&iter));
+  EXPECT_TRUE(custom_cursor.Deserialize(&iter));
 
   // Convert to WebCursorInfo, make sure the hotspot got clamped.
   WebCursor::CursorInfo info;
@@ -185,7 +193,7 @@ TEST(WebCursorTest, EmptyImage) {
   // Make sure we can read this on all platforms; it is technicaally a valid
   // cursor.
   base::PickleIterator iter(broken_cursor_pickle);
-  ASSERT_TRUE(custom_cursor.Deserialize(&iter));
+  EXPECT_TRUE(custom_cursor.Deserialize(&iter));
 }
 
 TEST(WebCursorTest, Scale2) {
@@ -209,5 +217,129 @@ TEST(WebCursorTest, Scale2) {
   base::PickleIterator iter(ok_custom_pickle);
   EXPECT_TRUE(custom_cursor.Deserialize(&iter));
 }
+
+TEST(WebCursorTest, AlphaConversion) {
+  SkBitmap bitmap;
+  SkPMColor testColor = SkPreMultiplyARGB(10, 255, 255, 255);
+  bitmap.allocN32Pixels(1,1);
+  SkAutoLockPixels bitmap_lock(bitmap);
+  *bitmap.getAddr32(0, 0) = testColor;
+  WebCursor::CursorInfo cursor_info;
+  cursor_info.type = WebCursorInfo::TypeCustom;
+  cursor_info.custom_image = bitmap;
+  cursor_info.image_scale_factor = 1;
+  WebCursor custom_cursor;
+
+  // This round trip will convert the cursor to unpremultiplied form.
+  custom_cursor.InitFromCursorInfo(cursor_info);
+  custom_cursor.GetCursorInfo(&cursor_info);
+  {
+    SkAutoLockPixels lock(cursor_info.custom_image);
+    EXPECT_EQ(kUnpremul_SkAlphaType, cursor_info.custom_image.alphaType());
+    EXPECT_EQ(testColor,
+              SkPreMultiplyColor(*cursor_info.custom_image.getAddr32(0,0)));
+  }
+
+  // Second round trip should not do any conversion because data is already
+  // unpremultiplied.
+  custom_cursor.InitFromCursorInfo(cursor_info);
+  custom_cursor.GetCursorInfo(&cursor_info);
+  {
+    SkAutoLockPixels lock(cursor_info.custom_image);
+    EXPECT_EQ(kUnpremul_SkAlphaType, cursor_info.custom_image.alphaType());
+    EXPECT_EQ(testColor,
+              SkPreMultiplyColor(*cursor_info.custom_image.getAddr32(0,0)));
+  }
+
+#if defined(OS_MACOSX)
+  // On MacOS, test roundtrip through NSCursor conversion.
+  WebCursor custom_cursor_copy;
+  custom_cursor_copy.InitFromNSCursor(custom_cursor.GetNativeCursor());
+  custom_cursor_copy.GetCursorInfo(&cursor_info);
+  {
+    SkAutoLockPixels lock(cursor_info.custom_image);
+    EXPECT_EQ(kUnpremul_SkAlphaType, cursor_info.custom_image.alphaType());
+    EXPECT_EQ(testColor,
+              SkPreMultiplyColor(*cursor_info.custom_image.getAddr32(0,0)));
+  }
+#endif
+}
+
+#if defined(USE_AURA)
+TEST(WebCursorTest, CursorScaleFactor) {
+  gfx::Display display;
+  display.set_device_scale_factor(80.2f);
+
+  WebCursor::CursorInfo info;
+  info.image_scale_factor = 2.0f;
+
+  WebCursor cursor;
+  cursor.InitFromCursorInfo(info);
+  cursor.SetDisplayInfo(display);
+
+  EXPECT_EQ(40.1f, cursor.GetCursorScaleFactor());
+}
+
+TEST(WebCursorTest, UnscaledImageCopy) {
+  WebCursor::CursorInfo info;
+  info.type = WebCursorInfo::TypeCustom;
+  info.hotspot = gfx::Point(0, 1);
+
+  SkImageInfo image_info = SkImageInfo::MakeN32(2, 2, kUnpremul_SkAlphaType);
+  info.custom_image = SkBitmap();
+  info.custom_image.setInfo(image_info);
+  info.custom_image.allocN32Pixels(2, 2);
+  info.custom_image.eraseColor(0xFFFFFFFF);
+
+  WebCursor cursor;
+  cursor.InitFromCursorInfo(info);
+
+  SkBitmap image_copy;
+  gfx::Point hotspot;
+  cursor.CreateScaledBitmapAndHotspotFromCustomData(&image_copy, &hotspot);
+
+  EXPECT_EQ(kBGRA_8888_SkColorType, image_copy.colorType());
+  EXPECT_EQ(kUnpremul_SkAlphaType, image_copy.alphaType());
+  EXPECT_EQ(2, image_copy.width());
+  EXPECT_EQ(2, image_copy.height());
+  EXPECT_EQ(0, hotspot.x());
+  EXPECT_EQ(1, hotspot.y());
+}
+#endif
+
+#if defined(OS_WIN)
+void ScaleCursor(float scaleFactor, int hotspotX, int hotspotY) {
+  gfx::Display display;
+  display.set_device_scale_factor(scaleFactor);
+
+  WebCursor::CursorInfo info;
+  info.type = WebCursorInfo::TypeCustom;
+  info.hotspot = gfx::Point(hotspotX, hotspotY);
+
+  info.custom_image = SkBitmap();
+  info.custom_image.allocN32Pixels(10, 10);
+  info.custom_image.eraseColor(0);
+
+  WebCursor cursor;
+  cursor.SetDisplayInfo(display);
+  cursor.InitFromCursorInfo(info);
+
+  HCURSOR windowsCursorHandle = cursor.GetPlatformCursor();
+  EXPECT_NE(nullptr, windowsCursorHandle);
+  ICONINFO windowsIconInfo;
+  EXPECT_TRUE(GetIconInfo(windowsCursorHandle, &windowsIconInfo));
+  EXPECT_FALSE(windowsIconInfo.fIcon);
+  EXPECT_EQ(static_cast<DWORD>(scaleFactor * hotspotX),
+            windowsIconInfo.xHotspot);
+  EXPECT_EQ(static_cast<DWORD>(scaleFactor * hotspotY),
+            windowsIconInfo.yHotspot);
+}
+
+TEST(WebCursorTest, WindowsCursorScaledAtHiDpi) {
+  ScaleCursor(2.0f, 4, 6);
+  ScaleCursor(1.5f, 2, 8);
+  ScaleCursor(1.25f, 3, 7);
+}
+#endif
 
 }  // namespace content

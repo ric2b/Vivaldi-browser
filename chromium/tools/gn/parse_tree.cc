@@ -4,7 +4,10 @@
 
 #include "tools/gn/parse_tree.h"
 
+#include <stdint.h>
+
 #include <string>
+#include <tuple>
 
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -14,6 +17,40 @@
 #include "tools/gn/string_utils.h"
 
 namespace {
+
+enum DepsCategory {
+  DEPS_CATEGORY_LOCAL,
+  DEPS_CATEGORY_RELATIVE,
+  DEPS_CATEGORY_ABSOLUTE,
+  DEPS_CATEGORY_OTHER,
+};
+
+DepsCategory GetDepsCategory(base::StringPiece deps) {
+  if (deps.length() < 2 || deps[0] != '"' || deps[deps.size() - 1] != '"')
+    return DEPS_CATEGORY_OTHER;
+
+  if (deps[1] == ':')
+    return DEPS_CATEGORY_LOCAL;
+
+  if (deps[1] == '/')
+    return DEPS_CATEGORY_ABSOLUTE;
+
+  return DEPS_CATEGORY_RELATIVE;
+}
+
+std::tuple<base::StringPiece, base::StringPiece> SplitAtFirst(
+    base::StringPiece str,
+    char c) {
+  if (!str.starts_with("\"") || !str.ends_with("\""))
+    return std::make_tuple(str, base::StringPiece());
+
+  str = str.substr(1, str.length() - 2);
+  size_t index_of_first = str.find(c);
+  return std::make_tuple(str.substr(0, index_of_first),
+                         index_of_first != base::StringPiece::npos
+                             ? str.substr(index_of_first + 1)
+                             : base::StringPiece());
+}
 
 std::string IndentFor(int value) {
   return std::string(value, ' ');
@@ -149,7 +186,7 @@ Value AccessorNode::ExecuteArrayAccess(Scope* scope, Err* err) const {
   if (!base_value->VerifyTypeIs(Value::LIST, err))
     return Value();
 
-  int64 index_int = index_value.int_value();
+  int64_t index_int = index_value.int_value();
   if (index_int < 0) {
     *err = Err(index_->GetRange(), "Negative array subscript.",
         "You gave me " + base::Int64ToString(index_int) + ".");
@@ -157,12 +194,13 @@ Value AccessorNode::ExecuteArrayAccess(Scope* scope, Err* err) const {
   }
   size_t index_sizet = static_cast<size_t>(index_int);
   if (index_sizet >= base_value->list_value().size()) {
-    *err = Err(index_->GetRange(), "Array subscript out of range.",
-        "You gave me " + base::Int64ToString(index_int) +
-        " but I was expecting something from 0 to " +
-        base::Int64ToString(
-            static_cast<int64>(base_value->list_value().size()) - 1) +
-        ", inclusive.");
+    *err =
+        Err(index_->GetRange(), "Array subscript out of range.",
+            "You gave me " + base::Int64ToString(index_int) +
+                " but I was expecting something from 0 to " +
+                base::Int64ToString(
+                    static_cast<int64_t>(base_value->list_value().size()) - 1) +
+                ", inclusive.");
     return Value();
   }
 
@@ -218,7 +256,7 @@ Value AccessorNode::ExecuteScopeAccess(Scope* scope, Err* err) const {
 void AccessorNode::SetNewLocation(int line_number) {
   Location old = base_.location();
   base_.set_location(
-      Location(old.file(), line_number, old.char_offset(), old.byte()));
+      Location(old.file(), line_number, old.column_number(), old.byte()));
 }
 
 // BinaryOpNode ---------------------------------------------------------------
@@ -445,7 +483,7 @@ void IdentifierNode::Print(std::ostream& out, int indent) const {
 void IdentifierNode::SetNewLocation(int line_number) {
   Location old = value_.location();
   value_.set_location(
-      Location(old.file(), line_number, old.char_offset(), old.byte()));
+      Location(old.file(), line_number, old.column_number(), old.byte()));
 }
 
 // ListNode -------------------------------------------------------------------
@@ -502,10 +540,21 @@ void ListNode::Print(std::ostream& out, int indent) const {
     end_->Print(out, indent + 1);
 }
 
-void ListNode::SortAsStringsList() {
-  // Sorts alphabetically. Partitions first on BlockCommentNodes and sorts each
-  // partition separately.
+template <typename Comparator>
+void ListNode::SortList(Comparator comparator) {
+  // Partitions first on BlockCommentNodes and sorts each partition separately.
   for (auto sr : GetSortRanges()) {
+    bool skip = false;
+    for (size_t i = sr.begin; i != sr.end; ++i) {
+      // Bails out if any of the nodes are unsupported.
+      const ParseNode* node = contents_[i];
+      if (!node->AsLiteral() && !node->AsIdentifier() && !node->AsAccessor()) {
+        skip = true;
+        continue;
+      }
+    }
+    if (skip)
+      continue;
     // Save the original line number so that we can re-assign ranges. We assume
     // they're contiguous lines because GetSortRanges() does so above. We need
     // to re-assign these line numbers primiarily because `gn format` uses them
@@ -514,11 +563,7 @@ void ListNode::SortAsStringsList() {
     int start_line = contents_[sr.begin]->GetRange().begin().line_number();
     const ParseNode* original_first = contents_[sr.begin];
     std::sort(contents_.begin() + sr.begin, contents_.begin() + sr.end,
-              [](const ParseNode* a, const ParseNode* b) {
-                base::StringPiece astr = GetStringRepresentation(a);
-                base::StringPiece bstr = GetStringRepresentation(b);
-                return astr < bstr;
-              });
+              comparator);
     // If the beginning of the range had before comments, and the first node
     // moved during the sort, then move its comments to the new head of the
     // range.
@@ -551,6 +596,26 @@ void ListNode::SortAsStringsList() {
       prev = node;
     }
   }
+}
+
+void ListNode::SortAsStringsList() {
+  // Sorts alphabetically.
+  SortList([](const ParseNode* a, const ParseNode* b) {
+    base::StringPiece astr = GetStringRepresentation(a);
+    base::StringPiece bstr = GetStringRepresentation(b);
+    return astr < bstr;
+  });
+}
+
+void ListNode::SortAsDepsList() {
+  // Sorts first relative targets, then absolute, each group is sorted
+  // alphabetically.
+  SortList([](const ParseNode* a, const ParseNode* b) {
+    base::StringPiece astr = GetStringRepresentation(a);
+    base::StringPiece bstr = GetStringRepresentation(b);
+    return std::make_pair(GetDepsCategory(astr), SplitAtFirst(astr, ':')) <
+           std::make_pair(GetDepsCategory(bstr), SplitAtFirst(bstr, ':'));
+  });
 }
 
 // Breaks the ParseNodes of |contents| up by ranges that should be separately
@@ -642,7 +707,7 @@ Value LiteralNode::Execute(Scope* scope, Err* err) const {
           *err = MakeErrorDescribing("Leading zeros not allowed");
         return Value();
       }
-      int64 result_int;
+      int64_t result_int;
       if (!base::StringToInt64(s, &result_int)) {
         *err = MakeErrorDescribing("This does not look like an integer");
         return Value();
@@ -677,7 +742,7 @@ void LiteralNode::Print(std::ostream& out, int indent) const {
 void LiteralNode::SetNewLocation(int line_number) {
   Location old = value_.location();
   value_.set_location(
-      Location(old.file(), line_number, old.char_offset(), old.byte()));
+      Location(old.file(), line_number, old.column_number(), old.byte()));
 }
 
 // UnaryOpNode ----------------------------------------------------------------

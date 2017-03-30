@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.test.util.browser.tabmodel.document;
 
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.TabState;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
@@ -31,19 +31,9 @@ public class MockTabDelegate extends TabDelegate {
     }
 
     @Override
-    public Tab createTabWithWebContents(WebContents webContents, int parentId, TabLaunchType type) {
-        return null;
-    }
-
-    @Override
-    public Tab createTabWithWebContents(
-            WebContents webContents, int parentId, TabLaunchType type, String url) {
-        return null;
-    }
-
-    @Override
-    public void createTabWithWebContents(
+    public boolean createTabWithWebContents(
             WebContents webContents, int parentId, TabLaunchType type, String url, int startedBy) {
+        return false;
     }
 
     @Override
@@ -52,11 +42,6 @@ public class MockTabDelegate extends TabDelegate {
     }
 
     @Override
-    public Tab launchNTP() {
-        return null;
-    }
-
-    @Override
-    public void createNewTab(AsyncTabCreationParams params, TabLaunchType type, Tab parent) {
+    public void createNewTab(AsyncTabCreationParams params, TabLaunchType type, int parentId) {
     }
 }

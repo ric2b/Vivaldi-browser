@@ -4,10 +4,15 @@
 
 #include "content/browser/media/media_internals.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -17,8 +22,15 @@
 #include "content/public/browser/web_ui.h"
 #include "media/audio/audio_parameters.h"
 #include "media/base/media_log_event.h"
-#include "media/filters/decrypting_video_decoder.h"
 #include "media/filters/gpu_video_decoder.h"
+
+#if !defined(OS_ANDROID)
+#include "media/filters/decrypting_video_decoder.h"
+#endif
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "media/base/pipeline_stats.h"
+#endif
 
 namespace {
 
@@ -202,7 +214,7 @@ void AudioLogImpl::SendWebContentsTitle(int component_id,
                                         int render_frame_id) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   StoreComponentMetadata(component_id, dict.get());
-  SendWebContentsTitleHelper(FormatCacheKey(component_id), dict.Pass(),
+  SendWebContentsTitleHelper(FormatCacheKey(component_id), std::move(dict),
                              render_process_id, render_frame_id);
 }
 
@@ -356,6 +368,9 @@ void MediaInternals::MediaInternalsUMAHandler::SavePlayerState(
     default:
       break;
   }
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  media::pipeline_stats::DeserializeAndReport(event.params);
+#endif
   return;
 }
 
@@ -374,10 +389,12 @@ std::string MediaInternals::MediaInternalsUMAHandler::GetUMANameForAVStream(
     return uma_name + "Other";
   }
 
+#if !defined(OS_ANDROID)
   if (player_info.video_decoder ==
       media::DecryptingVideoDecoder::kDecoderName) {
     return uma_name + "DVD";
   }
+#endif
 
   if (player_info.video_dds) {
     uma_name += "DDS.";
@@ -579,6 +596,10 @@ void MediaInternals::UpdateVideoCaptureDeviceCapabilities(
 
   for (const auto& video_capture_device_info : video_capture_device_infos) {
     base::ListValue* format_list = new base::ListValue();
+    // TODO(nisse): Representing format information as a string, to be
+    // parsed by the javascript handler, is brittle. Consider passing
+    // a list of mappings instead.
+
     for (const auto& format : video_capture_device_info.supported_formats)
       format_list->AppendString(media::VideoCaptureFormat::ToString(format));
 

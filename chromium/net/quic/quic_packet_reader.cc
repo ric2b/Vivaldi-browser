@@ -9,27 +9,37 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
+#include "net/quic/quic_clock.h"
+#include "net/quic/quic_time.h"
 
 namespace net {
 
 QuicPacketReader::QuicPacketReader(DatagramClientSocket* socket,
+                                   QuicClock* clock,
                                    Visitor* visitor,
+                                   int yield_after_packets,
+                                   QuicTime::Delta yield_after_duration,
                                    const BoundNetLog& net_log)
     : socket_(socket),
       visitor_(visitor),
       read_pending_(false),
       num_packets_read_(0),
+      clock_(clock),
+      yield_after_packets_(yield_after_packets),
+      yield_after_duration_(yield_after_duration),
+      yield_after_(QuicTime::Infinite()),
       read_buffer_(new IOBufferWithSize(static_cast<size_t>(kMaxPacketSize))),
       net_log_(net_log),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
-QuicPacketReader::~QuicPacketReader() {
-}
+QuicPacketReader::~QuicPacketReader() {}
 
 void QuicPacketReader::StartReading() {
   if (read_pending_)
     return;
+
+  if (num_packets_read_ == 0)
+    yield_after_ = clock_->Now().Add(yield_after_duration_);
 
   DCHECK(socket_);
   read_pending_ = true;
@@ -42,7 +52,8 @@ void QuicPacketReader::StartReading() {
     return;
   }
 
-  if (++num_packets_read_ > 32) {
+  if (++num_packets_read_ > yield_after_packets_ ||
+      clock_->Now() > yield_after_) {
     num_packets_read_ = 0;
     // Data was read, process it.
     // Schedule the work through the message loop to 1) prevent infinite
@@ -61,7 +72,7 @@ void QuicPacketReader::OnReadComplete(int result) {
     result = ERR_CONNECTION_CLOSED;
 
   if (result < 0) {
-    visitor_->OnReadError(result);
+    visitor_->OnReadError(result, socket_);
     return;
   }
 

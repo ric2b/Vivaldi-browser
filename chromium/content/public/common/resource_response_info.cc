@@ -10,7 +10,8 @@
 namespace content {
 
 ResourceResponseInfo::ResourceResponseInfo()
-    : content_length(-1),
+    : has_major_certificate_errors(false),
+      content_length(-1),
       encoded_data_length(-1),
       appcache_id(kAppCacheNoCacheId),
       was_fetched_via_spdy(false),
@@ -21,8 +22,8 @@ ResourceResponseInfo::ResourceResponseInfo()
       was_fetched_via_service_worker(false),
       was_fallback_required_by_service_worker(false),
       response_type_via_service_worker(
-          blink::WebServiceWorkerResponseTypeDefault) {
-}
+          blink::WebServiceWorkerResponseTypeDefault),
+      is_using_lofi(false) {}
 
 ResourceResponseInfo::~ResourceResponseInfo() {
 }

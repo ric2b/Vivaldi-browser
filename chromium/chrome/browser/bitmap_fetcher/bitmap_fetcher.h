@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_BITMAP_FETCHER_BITMAP_FETCHER_H_
 #define CHROME_BROWSER_BITMAP_FETCHER_BITMAP_FETCHER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_delegate.h"
 #include "chrome/browser/image_decoder.h"
@@ -53,13 +54,6 @@ class BitmapFetcher : public net::URLFetcherDelegate,
   // This will be called when the URL has been fetched, successfully or not.
   // Use accessor methods on |source| to get the results.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
-
-  // This will be called when some part of the response is read. |current|
-  // denotes the number of bytes received up to the call, and |total| is the
-  // expected total size of the response (or -1 if not determined).
-  void OnURLFetchDownloadProgress(const net::URLFetcher* source,
-                                  int64 current,
-                                  int64 total) override;
 
   // Methods inherited from ImageDecoder::ImageRequest
 

@@ -4,10 +4,12 @@
 
 #include "media/mojo/services/mojo_media_client.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/audio/audio_output_stream_sink.h"
 #include "media/audio/fake_audio_log_factory.h"
+#include "media/base/audio_hardware_config.h"
 #include "media/base/media.h"
 #include "media/base/null_video_sink.h"
 #include "media/cdm/default_cdm_factory.h"
@@ -15,13 +17,15 @@
 #include "media/renderers/gpu_video_accelerator_factories.h"
 
 namespace media {
-namespace internal {
 
-class DefaultMojoMediaClient : public PlatformMojoMediaClient {
+namespace {
+class DefaultMojoMediaClient : public MojoMediaClient {
  public:
-  DefaultMojoMediaClient() {
-    InitializeMediaLibrary();
+  DefaultMojoMediaClient() {}
 
+  // MojoMediaClient overrides.
+  void Initialize() override {
+    InitializeMediaLibrary();
     // TODO(dalecurtis): We should find a single owner per process for the audio
     // manager or make it a lazy instance.  It's not safe to call Get()/Create()
     // across multiple threads...
@@ -44,49 +48,42 @@ class DefaultMojoMediaClient : public PlatformMojoMediaClient {
                                                       *audio_hardware_config_));
   }
 
-  ScopedVector<AudioDecoder> CreateAudioDecoders(
-      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-      const scoped_refptr<MediaLog>& media_log) override {
-    NOTREACHED();
-    return ScopedVector<AudioDecoder>();
+  AudioRendererSink* CreateAudioRendererSink() override {
+    if (!audio_renderer_sink_)
+      audio_renderer_sink_ = new AudioOutputStreamSink();
+
+    return audio_renderer_sink_.get();
   }
 
-  ScopedVector<VideoDecoder> CreateVideoDecoders(
-      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-      const scoped_refptr<MediaLog>& media_log) override {
-    NOTREACHED();
-    return ScopedVector<VideoDecoder>();
-  }
-
-  scoped_refptr<AudioRendererSink> CreateAudioRendererSink() override {
-    return new AudioOutputStreamSink();
-  }
-
-  scoped_ptr<VideoRendererSink> CreateVideoRendererSink(
+  VideoRendererSink* CreateVideoRendererSink(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) override {
-    return make_scoped_ptr(
-        new NullVideoSink(false, base::TimeDelta::FromSecondsD(1.0 / 60),
-                          NullVideoSink::NewFrameCB(), task_runner));
+    if (!video_renderer_sink_) {
+      video_renderer_sink_ = make_scoped_ptr(
+          new NullVideoSink(false, base::TimeDelta::FromSecondsD(1.0 / 60),
+                            NullVideoSink::NewFrameCB(), task_runner));
+    }
+
+    return video_renderer_sink_.get();
   }
 
-  const AudioHardwareConfig& GetAudioHardwareConfig() override {
-    return *audio_hardware_config_;
-  }
-
-  scoped_ptr<CdmFactory> CreateCdmFactory() override {
+  scoped_ptr<CdmFactory> CreateCdmFactory(
+      mojo::ServiceProvider* /* service_provider */) override {
     return make_scoped_ptr(new DefaultCdmFactory());
   }
 
  private:
   FakeAudioLogFactory fake_audio_log_factory_;
   scoped_ptr<AudioHardwareConfig> audio_hardware_config_;
+  scoped_refptr<AudioRendererSink> audio_renderer_sink_;
+  scoped_ptr<VideoRendererSink> video_renderer_sink_;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultMojoMediaClient);
 };
 
-scoped_ptr<PlatformMojoMediaClient> CreatePlatformMojoMediaClient() {
+}  // namespace (anonymous)
+
+scoped_ptr<MojoMediaClient> MojoMediaClient::Create() {
   return make_scoped_ptr(new DefaultMojoMediaClient());
 }
 
-}  // namespace internal
 }  // namespace media

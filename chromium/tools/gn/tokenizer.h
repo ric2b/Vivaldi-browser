@@ -5,11 +5,12 @@
 #ifndef TOOLS_GN_TOKENIZER_H_
 #define TOOLS_GN_TOKENIZER_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
-#include "base/strings/string_util.h"
 #include "tools/gn/err.h"
 #include "tools/gn/token.h"
 
@@ -32,14 +33,9 @@ class Tokenizer {
   // The offset must be in the buffer.
   static bool IsNewline(const base::StringPiece& buffer, size_t offset);
 
-  static bool IsIdentifierFirstChar(char c) {
-    return base::IsAsciiAlpha(c) || c == '_';
-  }
+  static bool IsIdentifierFirstChar(char c);
 
-  static bool IsIdentifierContinuingChar(char c) {
-    // Also allow digits after the first char.
-    return IsIdentifierFirstChar(c) || base::IsAsciiDigit(c);
-  }
+  static bool IsIdentifierContinuingChar(char c);
 
  private:
   // InputFile must outlive the tokenizer and all generated tokens.
@@ -86,7 +82,7 @@ class Tokenizer {
   size_t cur_;  // Byte offset into input buffer.
 
   int line_number_;
-  int char_in_line_;
+  int column_number_;
 
   DISALLOW_COPY_AND_ASSIGN(Tokenizer);
 };

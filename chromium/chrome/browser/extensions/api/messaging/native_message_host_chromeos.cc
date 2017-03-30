@@ -5,6 +5,7 @@
 #include "extensions/browser/api/messaging/native_message_host.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -51,8 +52,8 @@ class EchoHost : public NativeMessageHost {
   void Start(Client* client) override { client_ = client; }
 
   void OnMessage(const std::string& request_string) override {
-    scoped_ptr<base::Value> request_value(
-        base::JSONReader::DeprecatedRead(request_string));
+    scoped_ptr<base::Value> request_value =
+        base::JSONReader::Read(request_string);
     scoped_ptr<base::DictionaryValue> request(
       static_cast<base::DictionaryValue*>(request_value.release()));
     if (request_string.find("stopHostTest") != std::string::npos) {
@@ -106,8 +107,8 @@ scoped_ptr<NativeMessageHost> CreateIt2MeHost() {
           content::BrowserThread::GetMessageLoopProxyForThread(
               content::BrowserThread::FILE));
   scoped_ptr<NativeMessageHost> host(new remoting::It2MeNativeMessagingHost(
-      context.Pass(), host_factory.Pass()));
-  return host.Pass();
+      std::move(context), std::move(host_factory)));
+  return host;
 }
 
 // If you modify the list of allowed_origins, don't forget to update

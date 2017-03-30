@@ -5,19 +5,24 @@
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate.h"
 
 #include <stdint.h>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_test_util.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -205,6 +210,65 @@ IN_PROC_BROWSER_TEST_F(ChromeSSLHostStateDelegateTest,
   EXPECT_TRUE(state->DidHostRunInsecureContent("www.google.com", 42));
   EXPECT_FALSE(state->DidHostRunInsecureContent("www.google.com", 191));
   EXPECT_TRUE(state->DidHostRunInsecureContent("example.com", 42));
+}
+
+// Test the migration code needed as a result of changing how the content
+// setting is stored. We used to map the settings dictionary to the pattern
+// pair <origin, origin> but now we map it to <origin, wildcard>.
+IN_PROC_BROWSER_TEST_F(ChromeSSLHostStateDelegateTest, Migrate) {
+  scoped_refptr<net::X509Certificate> cert = GetOkCert();
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  Profile* profile = Profile::FromBrowserContext(tab->GetBrowserContext());
+  ChromeSSLHostStateDelegate* state =
+      ChromeSSLHostStateDelegateFactory::GetForProfile(profile);
+
+  // Simulate a user decision to allow an invalid certificate exception for
+  // kWWWGoogleHost and for kExampleHost.
+  state->AllowCert(kWWWGoogleHost, *cert, net::CERT_STATUS_DATE_INVALID);
+
+  // Move the new-format setting (<origin, wildcard>) to be an old-format one
+  // (<origin, origin>).
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+  GURL url(std::string("https://") + kWWWGoogleHost);
+  scoped_ptr<base::Value> new_format =
+      map->GetWebsiteSetting(url, url, CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
+                             std::string(), nullptr);
+  // Delete the new-format setting.
+  map->SetWebsiteSettingDefaultScope(url, GURL(),
+                                     CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
+                                     std::string(), nullptr);
+
+  // No exception should exist.
+  EXPECT_FALSE(state->HasAllowException(kWWWGoogleHost));
+  // Create the old-format one.
+  map->SetWebsiteSettingCustomScope(
+      ContentSettingsPattern::FromURLNoWildcard(url),
+      ContentSettingsPattern::FromURLNoWildcard(url),
+      CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(),
+      std::move(new_format));
+
+  // Test that the old-format setting works.
+  EXPECT_TRUE(state->HasAllowException(kWWWGoogleHost));
+
+  // Trigger the migration code that happens on construction.
+  {
+    scoped_ptr<ChromeSSLHostStateDelegate> temp_delegate(
+        new ChromeSSLHostStateDelegate(profile));
+  }
+
+  // Test that the new style setting still works.
+  EXPECT_TRUE(state->HasAllowException(kWWWGoogleHost));
+
+  // Check that the old-format setting is removed and only the new one exists.
+  ContentSettingsForOneType settings;
+  map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
+                             std::string(), &settings);
+  EXPECT_EQ(1u, settings.size());
+  EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(url),
+            settings[0].primary_pattern);
+  EXPECT_EQ(ContentSettingsPattern::Wildcard(), settings[0].secondary_pattern);
 }
 
 class ForgetAtSessionEndSSLHostStateDelegateTest
@@ -479,10 +543,11 @@ class RemoveBrowsingHistorySSLHostStateDelegateTest
     : public ChromeSSLHostStateDelegateTest {
  public:
   void RemoveAndWait(Profile* profile) {
-    BrowsingDataRemover* remover = BrowsingDataRemover::CreateForPeriod(
-        profile, BrowsingDataRemover::LAST_HOUR);
+    BrowsingDataRemover* remover =
+        BrowsingDataRemoverFactory::GetForBrowserContext(profile);
     BrowsingDataRemoverCompletionObserver completion_observer(remover);
-    remover->Remove(BrowsingDataRemover::REMOVE_HISTORY,
+    remover->Remove(BrowsingDataRemover::Period(BrowsingDataRemover::LAST_HOUR),
+                    BrowsingDataRemover::REMOVE_HISTORY,
                     BrowsingDataHelper::UNPROTECTED_WEB);
     completion_observer.BlockUntilCompletion();
   }

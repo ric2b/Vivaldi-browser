@@ -44,12 +44,12 @@ LayerTitleCache::LayerTitleCache(JNIEnv* env,
       resource_manager_(nullptr) {
 }
 
-void LayerTitleCache::Destroy(JNIEnv* env, jobject obj) {
+void LayerTitleCache::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
 void LayerTitleCache::UpdateLayer(JNIEnv* env,
-                                  jobject obj,
+                                  const JavaParamRef<jobject>& obj,
                                   jint tab_id,
                                   jint title_resource_id,
                                   jint favicon_resource_id,
@@ -74,7 +74,19 @@ void LayerTitleCache::UpdateLayer(JNIEnv* env,
   }
 }
 
-void LayerTitleCache::ClearExcept(JNIEnv* env, jobject obj, jint except_id) {
+void LayerTitleCache::UpdateFavicon(JNIEnv* env,
+                                    const JavaParamRef<jobject>& obj,
+                                    jint tab_id,
+                                    jint favicon_resource_id) {
+  DecorationTitle* title_layer = layer_cache_.Lookup(tab_id);
+  if (title_layer == nullptr && favicon_resource_id != -1) {
+    title_layer->SetFaviconResourceId(favicon_resource_id);
+  }
+}
+
+void LayerTitleCache::ClearExcept(JNIEnv* env,
+                                  const JavaParamRef<jobject>& obj,
+                                  jint except_id) {
   IDMap<DecorationTitle, IDMapOwnPointer>::iterator iter(&layer_cache_);
   for (; !iter.IsAtEnd(); iter.Advance()) {
     const int id = iter.GetCurrentKey();
@@ -109,7 +121,7 @@ bool RegisterLayerTitleCache(JNIEnv* env) {
 // ----------------------------------------------------------------------------
 
 jlong Init(JNIEnv* env,
-           jobject obj,
+           const JavaParamRef<jobject>& obj,
            jint fade_width,
            jint favicon_start_padding,
            jint favicon_end_padding,

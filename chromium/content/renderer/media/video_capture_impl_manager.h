@@ -8,7 +8,7 @@
 #include <map>
 
 #include "base/callback.h"
-#include "base/memory/linked_ptr.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -105,8 +105,7 @@ class CONTENT_EXPORT VideoCaptureImplManager {
   // destroyed on the IO thread. These are raw pointers because we destroy
   // them manually.
   typedef std::map<media::VideoCaptureSessionId,
-                   std::pair<int, VideoCaptureImpl*> >
-      VideoCaptureDeviceMap;
+                   std::pair<int, VideoCaptureImpl*>> VideoCaptureDeviceMap;
   VideoCaptureDeviceMap devices_;
 
   // This is an internal ID for identifying clients of VideoCaptureImpl.

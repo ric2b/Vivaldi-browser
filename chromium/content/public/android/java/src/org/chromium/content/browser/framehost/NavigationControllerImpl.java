@@ -6,9 +6,9 @@ package org.chromium.content.browser.framehost;
 
 import android.graphics.Bitmap;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
@@ -114,9 +114,23 @@ import org.chromium.content_public.browser.NavigationHistory;
     }
 
     @Override
+    public void reloadToRefreshContent(boolean checkForRepost) {
+        if (mNativeNavigationControllerAndroid != 0) {
+            nativeReloadToRefreshContent(mNativeNavigationControllerAndroid, checkForRepost);
+        }
+    }
+
+    @Override
     public void reloadIgnoringCache(boolean checkForRepost) {
         if (mNativeNavigationControllerAndroid != 0) {
             nativeReloadIgnoringCache(mNativeNavigationControllerAndroid, checkForRepost);
+        }
+    }
+
+    @Override
+    public void reloadDisableLoFi(boolean checkForRepost) {
+        if (mNativeNavigationControllerAndroid != 0) {
+            nativeReloadDisableLoFi(mNativeNavigationControllerAndroid, checkForRepost);
         }
     }
 
@@ -137,19 +151,14 @@ import org.chromium.content_public.browser.NavigationHistory;
     @Override
     public void loadUrl(LoadUrlParams params) {
         if (mNativeNavigationControllerAndroid != 0) {
-            nativeLoadUrl(
-                    mNativeNavigationControllerAndroid,
-                    params.getUrl(),
+            nativeLoadUrl(mNativeNavigationControllerAndroid, params.getUrl(),
                     params.getLoadUrlType(), params.getTransitionType(),
                     params.getReferrer() != null ? params.getReferrer().getUrl() : null,
                     params.getReferrer() != null ? params.getReferrer().getPolicy() : 0,
-                    params.getUserAgentOverrideOption(),
-                    params.getExtraHeadersString(),
-                    params.getPostData(),
-                    params.getBaseUrl(),
-                    params.getVirtualUrlForDataUrl(),
-                    params.getCanLoadLocalResources(),
-                    params.getIsRendererInitiated());
+                    params.getUserAgentOverrideOption(), params.getExtraHeadersString(),
+                    params.getPostData(), params.getBaseUrl(), params.getVirtualUrlForDataUrl(),
+                    params.getDataUrlAsString(), params.getCanLoadLocalResources(),
+                    params.getIsRendererInitiated(), params.getShouldReplaceCurrentEntry());
         }
     }
 
@@ -301,22 +310,17 @@ import org.chromium.content_public.browser.NavigationHistory;
     private native void nativeContinuePendingReload(long nativeNavigationControllerAndroid);
     private native void nativeReload(long nativeNavigationControllerAndroid,
             boolean checkForRepost);
+    private native void nativeReloadToRefreshContent(long nativeNavigationControllerAndroid,
+            boolean checkForRepost);
     private native void nativeReloadIgnoringCache(long nativeNavigationControllerAndroid,
             boolean checkForRepost);
-    private native void nativeLoadUrl(
-            long nativeNavigationControllerAndroid,
-            String url,
-            int loadUrlType,
-            int transitionType,
-            String referrerUrl,
-            int referrerPolicy,
-            int uaOverrideOption,
-            String extraHeaders,
-            byte[] postData,
-            String baseUrlForDataUrl,
-            String virtualUrlForDataUrl,
-            boolean canLoadLocalResources,
-            boolean isRendererInitiated);
+    private native void nativeReloadDisableLoFi(long nativeNavigationControllerAndroid,
+            boolean checkForRepost);
+    private native void nativeLoadUrl(long nativeNavigationControllerAndroid, String url,
+            int loadUrlType, int transitionType, String referrerUrl, int referrerPolicy,
+            int uaOverrideOption, String extraHeaders, byte[] postData, String baseUrlForDataUrl,
+            String virtualUrlForDataUrl, String dataUrlAsString, boolean canLoadLocalResources,
+            boolean isRendererInitiated, boolean shouldReplaceCurrentEntry);
     private native void nativeClearHistory(long nativeNavigationControllerAndroid);
     private native int nativeGetNavigationHistory(long nativeNavigationControllerAndroid,
             Object history);

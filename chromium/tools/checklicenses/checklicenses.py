@@ -31,71 +31,74 @@ Examples:
 
 
 WHITELISTED_LICENSES = [
-    'Anti-Grain Geometry',
-    'Apache (v2.0)',
-    'Apache (v2.0) BSD (2 clause)',
-    'Apache (v2.0) GPL (v2)',
-    'Apple MIT',  # https://fedoraproject.org/wiki/Licensing/Apple_MIT_License
-    'APSL (v2)',
     'APSL (v2) BSD (4 clause)',
-    'BSD',
-    'BSD (2 clause)',
+    'APSL (v2)',
+    'Anti-Grain Geometry',
+    'Apache (v2.0) BSD (2 clause)',
+    'Apache (v2.0) BSD-like',
+    'Apache (v2.0) GPL (v2)',
+    'Apache (v2.0)',
+    'Apple MIT',  # https://fedoraproject.org/wiki/Licensing/Apple_MIT_License
     'BSD (2 clause) ISC',
     'BSD (2 clause) MIT/X11 (BSD like)',
-    'BSD (3 clause)',
+    'BSD (2 clause)',
     'BSD (3 clause) GPL (v2)',
     'BSD (3 clause) ISC',
     'BSD (3 clause) LGPL (v2 or later)',
     'BSD (3 clause) LGPL (v2.1 or later)',
     'BSD (3 clause) MIT/X11 (BSD like)',
+    'BSD (3 clause)',
     'BSD (4 clause)',
+    'BSD',
     'BSD-like',
 
     # TODO(phajdan.jr): Make licensecheck not print BSD-like twice.
+    'BSD MIT/X11 (BSD like)',
     'BSD-like MIT/X11 (BSD like)',
 
     'BSL (v1.0)',
-    'FreeType (BSD like)',
+    'BSL (v1) LGPL (v2.1 or later)',
     'FreeType (BSD like) with patent clause',
-    'GPL (v2) LGPL (v2.1 or later)',
+    'FreeType (BSD like)',
     'GPL (v2 or later) with Bison parser exception',
     'GPL (v2 or later) with libtool exception',
+    'GPL (v2) LGPL (v2.1 or later)',
     'GPL (v3 or later) with Bison parser exception',
     'GPL with Bison parser exception',
-    'Independent JPEG Group License',
     'ISC',
+    'Independent JPEG Group License',
     'LGPL (unversioned/unknown version)',
-    'LGPL (v2)',
     'LGPL (v2 or later)',
-    'LGPL (v2.1)',
+    'LGPL (v2)',
     'LGPL (v2.1 or later)',
+    'LGPL (v2.1)',
     'LGPL (v3 or later)',
-    'MIT/X11 (BSD like)',
     'MIT/X11 (BSD like) LGPL (v2.1 or later)',
+    'MIT/X11 (BSD like)',
     'MPL (v1.0) LGPL (v2 or later)',
-    'MPL (v1.1)',
     'MPL (v1.1) BSD (3 clause) GPL (v2) LGPL (v2.1 or later)',
     'MPL (v1.1) BSD (3 clause) LGPL (v2.1 or later)',
-    'MPL (v1.1) BSD-like',
     'MPL (v1.1) BSD-like GPL (unversioned/unknown version)',
     'MPL (v1.1) BSD-like GPL (v2) LGPL (v2.1 or later)',
-    'MPL (v1.1) GPL (v2)',
+    'MPL (v1.1) BSD-like',
+    'MPL (v1.1) GPL (unversioned/unknown version)',
     'MPL (v1.1) GPL (v2) LGPL (v2 or later)',
     'MPL (v1.1) GPL (v2) LGPL (v2.1 or later)',
-    'MPL (v1.1) GPL (unversioned/unknown version)',
+    'MPL (v1.1) GPL (v2)',
     'MPL (v1.1) LGPL (v2 or later)',
     'MPL (v1.1) LGPL (v2.1 or later)',
+    'MPL (v1.1)',
     'MPL (v2.0)',
     'Ms-PL',
-    'Public domain',
-    'Public domain BSD',
     'Public domain BSD (3 clause)',
+    'Public domain BSD',
     'Public domain BSD-like',
     'Public domain LGPL (v2.1 or later)',
-    'libpng',
-    'zlib/libpng',
+    'Public domain',
     'SGI Free Software License B',
     'SunSoft (BSD like)',
+    'libpng',
+    'zlib/libpng',
     'University of Illinois/NCSA Open Source License (BSD like)',
     ('University of Illinois/NCSA Open Source License (BSD like) '
      'MIT/X11 (BSD like)'),
@@ -107,15 +110,27 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
 
+    'base/third_party/libevent': [  # http://crbug.com/98309
+        'UNKNOWN',
+    ],
+
     # http://code.google.com/p/google-breakpad/issues/detail?id=450
     'breakpad/src': [
         'UNKNOWN',
     ],
 
     'buildtools/third_party/libc++/trunk/test': [
-        # http://llvm.org/bugs/show_bug.cgi?id=18291
+        # http://llvm.org/bugs/show_bug.cgi?id=25980
         'UNKNOWN',
     ],
+    # http://llvm.org/bugs/show_bug.cgi?id=25976
+    'buildtools/third_party/libc++/trunk/src/include/atomic_support.h': [
+      'UNKNOWN'
+    ],
+    'buildtools/third_party/libc++/trunk/utils/gen_link_script': [ 'UNKNOWN' ],
+    'buildtools/third_party/libc++/trunk/utils/not': [ 'UNKNOWN' ],
+    'buildtools/third_party/libc++/trunk/utils/sym_check': [ 'UNKNOWN' ],
+    'buildtools/third_party/libc++abi/trunk/test': [ 'UNKNOWN' ],
 
     'chrome/common/extensions/docs/examples': [  # http://crbug.com/98092
         'UNKNOWN',
@@ -129,12 +144,14 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     'courgette/third_party/bsdiff_create.cc': [  # http://crbug.com/98095
         'UNKNOWN',
     ],
+    'courgette/third_party/qsufsort.h': [  # http://crbug.com/98095
+        'UNKNOWN',
+    ],
     'native_client': [  # http://crbug.com/98099
         'UNKNOWN',
     ],
     'native_client/toolchain': [
         'BSD GPL (v2 or later)',
-        'BSD MIT/X11 (BSD like)',
         'BSD (2 clause) GPL (v2 or later)',
         'BSD (3 clause) GPL (v2 or later)',
         'BSD (4 clause) ISC',
@@ -148,6 +165,14 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'GPL (v3 or later)',
         'MPL (v1.1) LGPL (unversioned/unknown version)',
     ],
+
+    # The project is BSD-licensed but the individual files do not have
+    # consistent license headers. Also, this is just used in a utility
+    # and not shipped. https://github.com/waylan/Python-Markdown/issues/435
+    'third_party/Python-Markdown': [
+        'UNKNOWN',
+    ],
+
     'third_party/WebKit': [
         'UNKNOWN',
     ],
@@ -170,11 +195,6 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     ],
 
     # http://crbug.com/333508
-    'third_party/clang_format/script': [
-        'UNKNOWN',
-    ],
-
-    # http://crbug.com/333508
     'buildtools/clang_format/script': [
         'UNKNOWN',
     ],
@@ -187,9 +207,130 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     'third_party/devscripts': [
         'GPL (v2 or later)',
     ],
-    'third_party/trace-viewer/tracing/third_party/devscripts': [
+    'third_party/catapult/tracing/third_party/devscripts': [
         'GPL (v2 or later)',
     ],
+
+    # https://github.com/shazow/apiclient/issues/8
+    # MIT license.
+    'third_party/catapult/third_party/apiclient': [
+        'UNKNOWN',
+    ],
+
+    # https://bugs.launchpad.net/beautifulsoup/+bug/1481316
+    # MIT license.
+    'third_party/catapult/third_party/beautifulsoup': [
+        'UNKNOWN'
+    ],
+
+    # https://code.google.com/p/graphy/issues/detail?id=6
+    # Apache (v2.0)
+    'third_party/catapult/third_party/graphy': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/GoogleCloudPlatform/gsutil/issues/305
+    ('third_party/catapult/third_party/gsutil/gslib/third_party/'
+     'storage_apitools'): [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/google/apitools/issues/63
+    'third_party/catapult/third_party/gsutil/third_party/apitools': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/boto/boto/issues/3373
+    'third_party/catapult/third_party/gsutil/third_party/boto': [
+        'UNKNOWN',
+    ],
+
+    # https://bitbucket.org/cmcqueen1975/crcmod/issues/1/please-add-per-file-licenses
+    # Includes third_party/catapult/third_party/gsutil/third_party/crcmod_osx.
+    'third_party/catapult/third_party/gsutil/third_party/crcmod': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/jcgregorio/httplib2/issues/307
+    'third_party/catapult/third_party/gsutil/third_party/httplib2': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/google/oauth2client/issues/331
+    'third_party/catapult/third_party/gsutil/third_party/oauth2client': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/google/protorpc/issues/14
+    'third_party/catapult/third_party/gsutil/third_party/protorpc': [
+        'UNKNOWN',
+    ],
+
+    # https://sourceforge.net/p/pyasn1/tickets/4/
+    # Includes
+    # third_party/catapult/third_party/gsutil/third_party/pyasn1-modules.
+    'third_party/catapult/third_party/gsutil/third_party/pyasn1': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/pnpnpn/retry-decorator/issues/4
+    'third_party/catapult/third_party/gsutil/third_party/retry-decorator': [
+        'UNKNOWN',
+    ],
+
+    # https://bitbucket.org/sybren/python-rsa/issues/28/please-add-per-file-licenses
+    'third_party/catapult/third_party/gsutil/third_party/rsa': [
+        'UNKNOWN',
+    ],
+
+    # https://bitbucket.org/gutworth/six/issues/137/please-add-per-file-licenses
+    # Already fixed upstream. https://crbug.com/573341
+    'third_party/catapult/third_party/gsutil/third_party/six': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/html5lib/html5lib-python/issues/125
+    # MIT license.
+    'third_party/catapult/third_party/html5lib-python': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/GoogleCloudPlatform/appengine-mapreduce/issues/71
+    # Apache (v2.0)
+    'third_party/catapult/third_party/mapreduce': [
+        'UNKNOWN',
+    ],
+
+    # https://code.google.com/p/webapp-improved/issues/detail?id=103
+    # Apache (v2.0).
+    'third_party/catapult/third_party/webapp2': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/Pylons/webob/issues/211
+    # MIT license.
+    'third_party/catapult/third_party/WebOb': [
+        'UNKNOWN',
+    ],
+
+    # https://github.com/Pylons/webtest/issues/141
+    # MIT license.
+    'third_party/catapult/third_party/webtest': [
+        'UNKNOWN',
+    ],
+
+    # https://bitbucket.org/ianb/paste/issues/12/add-license-headers-to-source-files
+    # MIT license.
+    'third_party/catapult/third_party/Paste': [
+        'UNKNOWN',
+    ],
+
+    # https://bitbucket.org/gutworth/six/issues/129/add-license-headers-to-source-files
+    # MIT license.
+    'third_party/catapult/third_party/six': [
+        'UNKNOWN',
+    ],
+
     'third_party/expat/files/lib': [  # http://crbug.com/98121
         'UNKNOWN',
     ],
@@ -216,11 +357,17 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     'third_party/icu': [  # http://crbug.com/98301
         'UNKNOWN',
     ],
+    'third_party/jmake': [  # Used only at build time.
+        'GPL (v2)',
+    ],
     'third_party/jsoncpp/source': [
         # https://github.com/open-source-parsers/jsoncpp/issues/234
         'UNKNOWN',
     ],
     'third_party/junit/src': [
+        # Pulled in via DEPS for Android only.
+        # Eclipse Public License / not shipped.
+        # Bug filed but upstream prefers not to fix.
         # https://github.com/junit-team/junit/issues/1132
         'UNKNOWN',
     ],
@@ -229,9 +376,6 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     ],
     'third_party/lcov/contrib/galaxy/genflat.pl': [
         'GPL (v2 or later)',
-    ],
-    'third_party/libevent': [  # http://crbug.com/98309
-        'UNKNOWN',
     ],
     'third_party/libjingle/source/talk': [  # http://crbug.com/98310
         'UNKNOWN',
@@ -249,16 +393,12 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
 
-    'third_party/libpng': [  # http://crbug.com/98318
-        'UNKNOWN',
-    ],
-
     # The following files lack license headers, but are trivial.
     'third_party/libusb/src/libusb/os/poll_posix.h': [
         'UNKNOWN',
     ],
 
-    'third_party/libvpx/source': [  # http://crbug.com/98319
+    'third_party/libvpx_new/source': [  # http://crbug.com/98319
         'UNKNOWN',
     ],
     'third_party/libxml': [
@@ -279,19 +419,17 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     'third_party/modp_b64': [
         'UNKNOWN',
     ],
+    # Missing license headers in openh264 sources: https://github.com/cisco/openh264/issues/2233
+    'third_party/openh264/src': [
+        'UNKNOWN',
+    ],
     'third_party/openmax_dl/dl' : [
         'Khronos Group',
-    ],
-    'third_party/openssl': [  # http://crbug.com/98451
-        'UNKNOWN',
     ],
     'third_party/boringssl': [
         # There are some files in BoringSSL which came from OpenSSL and have no
         # license in them. We don't wish to add the license header ourselves
         # thus we don't expect to pass license checks.
-        'UNKNOWN',
-    ],
-    'third_party/ots/tools/ttf-checksum.py': [  # http://code.google.com/p/ots/issues/detail?id=2
         'UNKNOWN',
     ],
     'third_party/molokocacao': [  # http://crbug.com/98453
@@ -314,6 +452,9 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
     'third_party/scons-2.0.1/engine/SCons': [  # http://crbug.com/98462
+        'UNKNOWN',
+    ],
+    'third_party/sfntly/src/java': [  # Apache 2.0, not shipped.
         'UNKNOWN',
     ],
     'third_party/simplejson': [
@@ -364,6 +505,17 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
 
+    # BSD License. http://bugzilla.maptools.org/show_bug.cgi?id=2532
+    'third_party/pdfium/third_party/libtiff/tif_ojpeg.c': [
+        'UNKNOWN',
+    ],
+    'third_party/pdfium/third_party/libtiff/tiffvers.h': [
+        'UNKNOWN',
+    ],
+    'third_party/pdfium/third_party/libtiff/uvcode.h': [
+        'UNKNOWN',
+    ],
+
     'third_party/talloc': [
         'GPL (v3 or later)',
         'UNKNOWN',  # http://crbug.com/98588
@@ -372,6 +524,11 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',  # http://crbug.com/98589
     ],
     'third_party/tlslite': [
+        'UNKNOWN',
+    ],
+    # MIT license but some files contain no licensing info. e.g. autogen.sh.
+    # Files missing licensing info are not shipped.
+    'third_party/wayland': [  #  http://crbug.com/553573
         'UNKNOWN',
     ],
     'third_party/webdriver': [  # http://crbug.com/98590
@@ -414,22 +571,30 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     'tools/symsrc/pefile.py': [
         'UNKNOWN',
     ],
-    # Not shipped, downloaded on trybots sometimes.
-    'tools/telemetry/third_party/gsutil': [
-        'BSD MIT/X11 (BSD like)',
+    # Not shipped, MIT license but the header files contain no licensing info.
+    'tools/telemetry/third_party/altgraph': [
+        'UNKNOWN',
+    ],
+    # Not shipped, MIT license but the header files contain no licensing info.
+    'tools/telemetry/third_party/modulegraph': [
         'UNKNOWN',
     ],
     'tools/telemetry/third_party/pyserial': [
         # https://sourceforge.net/p/pyserial/feature-requests/35/
         'UNKNOWN',
     ],
-    'v8/test/cctest': [  # http://crbug.com/98597
-        'UNKNOWN',
-    ],
-    'v8/src/third_party/kernel/tools/perf/util/jitdump.h': [  # http://crbug.com/391716
-        'UNKNOWN',
-    ],
 }
+
+EXCLUDED_PATHS = [
+    # Don't check generated files
+    'out/',
+
+    # Don't check sysroot directories
+    'build/linux/debian_wheezy_amd64-sysroot',
+    'build/linux/debian_wheezy_arm-sysroot',
+    'build/linux/debian_wheezy_i386-sysroot',
+    'build/linux/debian_wheezy_mips-sysroot',
+]
 
 
 def check_licenses(options, args):
@@ -479,9 +644,8 @@ def check_licenses(options, args):
     filename, license = line.split(':', 1)
     filename = os.path.relpath(filename.strip(), options.base_directory)
 
-    # All files in the build output directory are generated one way or another.
-    # There's no need to check them.
-    if filename.startswith('out/'):
+    # Check if the file belongs to one of the excluded paths.
+    if any((filename.startswith(path) for path in EXCLUDED_PATHS)):
       continue
 
     # For now we're just interested in the license.

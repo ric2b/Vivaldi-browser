@@ -12,7 +12,7 @@ GEN_INCLUDE(['net_internals_test.js']);
  * A valid hash that can be set for a domain.
  * @type {string}
  */
-var VALID_HASH = 'sha1/Guzek9lMwR3KeIS8wwS9gBvVtIg=';
+var VALID_HASH = 'sha256/7HIpactkIAq2Y49orFOOQKurWxmmSFZhBCoQYcRhJ3Y=';
 
 /*
  * An invalid hash that can't be set for a domain.
@@ -270,15 +270,7 @@ DeleteTask.prototype = {
 /**
  * Checks that querying a domain that was never added fails.
  */
-    // TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsHSTSViewQueryNotFound ' +
-    'DISABLED_netInternalsHSTSViewQueryNotFound');
-GEN('#else');
-GEN('#define MAYBE_netInternalsHSTSViewQueryNotFound ' +
-    'netInternalsHSTSViewQueryNotFound');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsHSTSViewQueryNotFound', function () {
+TEST_F('NetInternalsTest', 'netInternalsHSTSViewQueryNotFound', function() {
   NetInternalsTest.switchToView('hsts');
   taskQueue = new NetInternalsTest.TaskQueue(true);
   var now = new Date().getTime() / 1000.0;
@@ -312,15 +304,7 @@ TEST_F('NetInternalsTest', 'netInternalsHSTSViewDeleteNotFound', function() {
 /**
  * Deletes a domain that returns an error on lookup.
  */
-    // TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsHSTSViewDeleteError ' +
-    'DISABLED_netInternalsHSTSViewDeleteError');
-GEN('#else');
-GEN('#define MAYBE_netInternalsHSTSViewDeleteError ' +
-    'netInternalsHSTSViewDeleteError');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsHSTSViewDeleteError', function () {
+TEST_F('NetInternalsTest', 'netInternalsHSTSViewDeleteError', function() {
   NetInternalsTest.switchToView('hsts');
   taskQueue = new NetInternalsTest.TaskQueue(true);
   taskQueue.addTask(new DeleteTask('\u3024', QueryResultType.ERROR));
@@ -343,15 +327,7 @@ TEST_F('NetInternalsTest', 'netInternalsHSTSViewAddDelete', function() {
 /**
  * Tries to add a domain with an invalid name.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsHSTSViewAddFail ' +
-    'DISABLED_netInternalsHSTSViewAddFail');
-GEN('#else');
-GEN('#define MAYBE_netInternalsHSTSViewAddFail ' +
-    'netInternalsHSTSViewAddFail');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsHSTSViewAddFail', function () {
+TEST_F('NetInternalsTest', 'netInternalsHSTSViewAddFail', function() {
   NetInternalsTest.switchToView('hsts');
   taskQueue = new NetInternalsTest.TaskQueue(true);
   var now = new Date().getTime() / 1000.0;
@@ -366,15 +342,7 @@ TEST_F('NetInternalsTest', 'MAYBE_netInternalsHSTSViewAddFail', function () {
  * Tries to add a domain with a name that errors out on lookup due to having
  * non-ASCII characters in it.
  */
-    // TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsHSTSViewAddError ' +
-    'DISABLED_netInternalsHSTSViewAddError');
-GEN('#else');
-GEN('#define MAYBE_netInternalsHSTSViewAddError ' +
-    'netInternalsHSTSViewAddError');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsHSTSViewAddError', function () {
+TEST_F('NetInternalsTest', 'netInternalsHSTSViewAddError', function() {
   NetInternalsTest.switchToView('hsts');
   taskQueue = new NetInternalsTest.TaskQueue(true);
   var now = new Date().getTime() / 1000.0;
@@ -414,15 +382,7 @@ TEST_F('NetInternalsTest', 'netInternalsHSTSViewAddOverwrite', function() {
 /**
  * Adds two different domains and then deletes them.
  */
-    // TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsHSTSViewAddTwice ' +
-    'DISABLED_netInternalsHSTSViewAddTwice');
-GEN('#else');
-GEN('#define MAYBE_netInternalsHSTSViewAddTwice ' +
-    'netInternalsHSTSViewAddTwice');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsHSTSViewAddTwice', function () {
+TEST_F('NetInternalsTest', 'netInternalsHSTSViewAddTwice', function() {
   NetInternalsTest.switchToView('hsts');
   taskQueue = new NetInternalsTest.TaskQueue(true);
   var now = new Date().getTime() / 1000.0;

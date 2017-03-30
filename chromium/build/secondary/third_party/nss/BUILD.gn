@@ -31,7 +31,7 @@ if (is_linux) {
       "nspr/lib/libc/include",
     ]
 
-    if (component_mode != "shared_library") {
+    if (!is_component_build) {
       defines += [ "NSPR_STATIC" ]
     }
   }
@@ -220,6 +220,9 @@ if (is_linux) {
     configs += [
       "//build/config/compiler:no_chromium_code",
       "//build/config/compiler:no_size_t_to_int_warning",
+
+      # nspr passes "const char*" through "void*".
+      "//build/config/compiler:no_incompatible_pointer_warnings",
     ]
 
     cflags = []
@@ -326,9 +329,6 @@ if (is_linux) {
         # prlink.c on mac.
         "-Wno-deprecated-declarations",
 
-        # nspr passes "const char*" through "void*".
-        "-Wno-incompatible-pointer-types",
-
         # nspr passes "int*" through "unsigned int*".
         "-Wno-pointer-sign",
       ]
@@ -355,7 +355,7 @@ if (is_linux) {
       public_deps += [ ":nssckbi" ]
     }
 
-    if (component_mode == "shared_library") {
+    if (is_component_build) {
       if (is_mac) {
         ldflags = [ "-all_load" ]
       } else if (is_win) {
@@ -695,6 +695,8 @@ if (is_linux) {
       "nss/lib/freebl/win_rand.c",
       "nss/lib/nss/nss.h",
       "nss/lib/nss/nssinit.c",
+      "nss/lib/nss/nssoptions.c",
+      "nss/lib/nss/nssoptions.h",
       "nss/lib/nss/nssrenam.h",
       "nss/lib/nss/utilwrap.c",
       "nss/lib/pk11wrap/debug_module.c",
@@ -859,6 +861,7 @@ if (is_linux) {
       "nss/lib/util/utilpars.h",
       "nss/lib/util/utilparst.h",
       "nss/lib/util/utilrename.h",
+      "nss/lib/util/verref.h",
     ]
 
     sources -= [
@@ -885,6 +888,9 @@ if (is_linux) {
     configs += [
       "//build/config/compiler:no_chromium_code",
       "//build/config/compiler:no_size_t_to_int_warning",
+
+      # nss passes "const char*" through "void*".
+      "//build/config/compiler:no_incompatible_pointer_warnings",
     ]
     public_configs = [ ":nss_static_config" ]
 
@@ -910,7 +916,6 @@ if (is_linux) {
     if (include_nss_libpkix) {
       sources += [
         "nss/lib/certhigh/certvfypkix.c",
-        "nss/lib/certhigh/certvfypkixprint.c",
         "nss/lib/libpkix/include/pkix.h",
         "nss/lib/libpkix/include/pkix_certsel.h",
         "nss/lib/libpkix/include/pkix_certstore.h",
@@ -1094,7 +1099,7 @@ if (is_linux) {
       defines += [ "NSS_DISABLE_ROOT_CERTS" ]
     }
 
-    if (current_cpu == "x64" && !is_win) {
+    if (current_cpu == "x64" && !is_win && !is_ios) {
       sources -= [
         "nss/lib/freebl/chacha20/chacha20.c",
         "nss/lib/freebl/poly1305/poly1305.c",
@@ -1173,6 +1178,7 @@ if (is_linux) {
       # Not Windows.
       sources -= [
         # mpi_x86_asm.c contains MSVC inline assembly code.
+        "nss/lib/freebl/intel-aes-x86-masm.asm",
         "nss/lib/freebl/mpi/mpi_x86_asm.c",
       ]
     }
@@ -1193,6 +1199,9 @@ if (is_linux) {
 
         # nss has some `unsigned < 0` checks.
         "-Wno-tautological-compare",
+
+        # nss-urandom-abort.patch removed the only call to rng_systemFromNoise
+        "-Wno-unused-function",
       ]
     }
 

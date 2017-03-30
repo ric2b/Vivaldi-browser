@@ -4,9 +4,13 @@
 
 #include "content/public/test/test_browser_context.h"
 
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/test/null_task_runner.h"
+#include "content/public/browser/background_sync_controller.h"
 #include "content/public/test/mock_resource_context.h"
+#include "content/test/mock_ssl_host_state_delegate.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
@@ -55,6 +59,11 @@ void TestBrowserContext::SetSpecialStoragePolicy(
   special_storage_policy_ = policy;
 }
 
+void TestBrowserContext::SetBackgroundSyncController(
+    scoped_ptr<BackgroundSyncController> controller) {
+  background_sync_controller_ = std::move(controller);
+}
+
 base::FilePath TestBrowserContext::GetPath() const {
   return browser_context_dir_.path();
 }
@@ -81,7 +90,10 @@ net::URLRequestContextGetter* TestBrowserContext::GetRequestContext() {
 
 net::URLRequestContextGetter*
 TestBrowserContext::GetRequestContextForRenderProcess(int renderer_child_id) {
-  return NULL;
+  // TODO(creis): This should return a request context based on
+  // |render_child_id|'s StoragePartition. For now, it returns the single
+  // context for simplicity.
+  return GetRequestContext();
 }
 
 net::URLRequestContextGetter* TestBrowserContext::GetMediaRequestContext() {
@@ -121,11 +133,20 @@ PushMessagingService* TestBrowserContext::GetPushMessagingService() {
 }
 
 SSLHostStateDelegate* TestBrowserContext::GetSSLHostStateDelegate() {
-  return NULL;
+  if (!ssl_host_state_delegate_)
+    ssl_host_state_delegate_.reset(new MockSSLHostStateDelegate());
+  return ssl_host_state_delegate_.get();
 }
 
 PermissionManager* TestBrowserContext::GetPermissionManager() {
   return NULL;
+}
+
+BackgroundSyncController* TestBrowserContext::GetBackgroundSyncController() {
+  if (!background_sync_controller_)
+    background_sync_controller_.reset(new BackgroundSyncController());
+
+  return background_sync_controller_.get();
 }
 
 }  // namespace content

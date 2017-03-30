@@ -4,19 +4,25 @@
 
 #include "chrome/test/chromedriver/server/http_handler.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"  // For CHECK macros.
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/test/chromedriver/alert_commands.h"
 #include "chrome/test/chromedriver/chrome/adb_impl.h"
 #include "chrome/test/chromedriver/chrome/device_manager.h"
@@ -29,6 +35,7 @@
 #include "chrome/test/chromedriver/version.h"
 #include "net/server/http_server_request_info.h"
 #include "net/server/http_server_response_info.h"
+#include "url/url_util.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -79,7 +86,7 @@ HttpHandler::HttpHandler(
   socket_factory_ = CreateSyncWebSocketFactory(context_getter_.get());
   adb_.reset(new AdbImpl(io_task_runner, adb_port));
   device_manager_.reset(new DeviceManager(adb_.get()));
-  port_server_ = port_server.Pass();
+  port_server_ = std::move(port_server);
   port_manager_.reset(new PortManager(12000, 13000));
 
   CommandMapping commands[] = {
@@ -584,7 +591,7 @@ void HttpHandler::Handle(const net::HttpServerRequestInfo& request,
     scoped_ptr<net::HttpServerResponseInfo> response(
         new net::HttpServerResponseInfo(net::HTTP_BAD_REQUEST));
     response->SetBody("unhandled request", "text/plain");
-    send_response_func.Run(response.Pass());
+    send_response_func.Run(std::move(response));
     return;
   }
 
@@ -631,7 +638,7 @@ void HttpHandler::HandleCommand(
       scoped_ptr<net::HttpServerResponseInfo> response(
           new net::HttpServerResponseInfo(net::HTTP_NOT_FOUND));
       response->SetBody("unknown command: " + trimmed_path, "text/plain");
-      send_response_func.Run(response.Pass());
+      send_response_func.Run(std::move(response));
       return;
     }
     if (internal::MatchesCommand(
@@ -648,7 +655,7 @@ void HttpHandler::HandleCommand(
       scoped_ptr<net::HttpServerResponseInfo> response(
           new net::HttpServerResponseInfo(net::HTTP_BAD_REQUEST));
       response->SetBody("missing command parameters", "text/plain");
-      send_response_func.Run(response.Pass());
+      send_response_func.Run(std::move(response));
       return;
     }
     params.MergeDictionary(body_params);
@@ -670,8 +677,8 @@ void HttpHandler::PrepareResponse(
     const std::string& session_id) {
   CHECK(thread_checker_.CalledOnValidThread());
   scoped_ptr<net::HttpServerResponseInfo> response =
-      PrepareResponseHelper(trimmed_path, status, value.Pass(), session_id);
-  send_response_func.Run(response.Pass());
+      PrepareResponseHelper(trimmed_path, status, std::move(value), session_id);
+  send_response_func.Run(std::move(response));
   if (trimmed_path == kShutdownPath)
     quit_func_.Run();
 }
@@ -685,7 +692,7 @@ scoped_ptr<net::HttpServerResponseInfo> HttpHandler::PrepareResponseHelper(
     scoped_ptr<net::HttpServerResponseInfo> response(
         new net::HttpServerResponseInfo(net::HTTP_NOT_IMPLEMENTED));
     response->SetBody("unimplemented command: " + trimmed_path, "text/plain");
-    return response.Pass();
+    return response;
   }
 
   if (status.IsError()) {
@@ -714,7 +721,7 @@ scoped_ptr<net::HttpServerResponseInfo> HttpHandler::PrepareResponseHelper(
   scoped_ptr<net::HttpServerResponseInfo> response(
       new net::HttpServerResponseInfo(net::HTTP_OK));
   response->SetBody(body, "application/json; charset=utf-8");
-  return response.Pass();
+  return response;
 }
 
 namespace internal {
@@ -722,14 +729,14 @@ namespace internal {
 const char kNewSessionPathPattern[] = "session";
 
 bool MatchesMethod(HttpMethod command_method, const std::string& method) {
-  std::string lower_method = base::StringToLowerASCII(method);
+  std::string lower_method = base::ToLowerASCII(method);
   switch (command_method) {
-  case kGet:
-    return lower_method == "get";
-  case kPost:
-    return lower_method == "post" || lower_method == "put";
-  case kDelete:
-    return lower_method == "delete";
+    case kGet:
+      return lower_method == "get";
+    case kPost:
+      return lower_method == "post" || lower_method == "put";
+    case kDelete:
+      return lower_method == "delete";
   }
   return false;
 }
@@ -742,10 +749,10 @@ bool MatchesCommand(const std::string& method,
   if (!MatchesMethod(command.method, method))
     return false;
 
-  std::vector<std::string> path_parts;
-  base::SplitString(path, '/', &path_parts);
-  std::vector<std::string> command_path_parts;
-  base::SplitString(command.path_pattern, '/', &command_path_parts);
+  std::vector<std::string> path_parts = base::SplitString(
+      path, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  std::vector<std::string> command_path_parts = base::SplitString(
+      command.path_pattern, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (path_parts.size() != command_path_parts.size())
     return false;
 
@@ -756,10 +763,19 @@ bool MatchesCommand(const std::string& method,
       std::string name = command_path_parts[i];
       name.erase(0, 1);
       CHECK(name.length());
+      url::RawCanonOutputT<base::char16> output;
+      url::DecodeURLEscapeSequences(
+          path_parts[i].data(), path_parts[i].length(), &output);
+      std::string decoded = base::UTF16ToASCII(
+          base::string16(output.data(), output.length()));
+      // Due to crbug.com/533361, the url decoding libraries decodes all of the
+      // % escape sequences except for %%. We need to handle this case manually.
+      // So, replacing all the instances of "%%" with "%".
+      base::ReplaceSubstringsAfterOffset(&decoded, 0 , "%%" , "%");
       if (name == "sessionId")
-        *session_id = path_parts[i];
+        *session_id = decoded;
       else
-        params.SetString(name, path_parts[i]);
+        params.SetString(name, decoded);
     } else if (command_path_parts[i] != path_parts[i]) {
       return false;
     }

@@ -9,6 +9,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -132,8 +133,9 @@ Address::Address(const AutofillProfile& profile)
       phone_number_(profile.GetRawInfo(PHONE_HOME_WHOLE_NUMBER)),
       is_complete_address_(true),
       language_code_(profile.language_code()) {
-  base::SplitString(
-      profile.GetRawInfo(ADDRESS_HOME_STREET_ADDRESS), '\n', &street_address_);
+  street_address_ = base::SplitString(
+      profile.GetRawInfo(ADDRESS_HOME_STREET_ADDRESS), base::ASCIIToUTF16("\n"),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   if (!country_name_code_.empty())
     phone_object_ = i18n::PhoneObject(phone_number_, country_name_code_);
@@ -266,7 +268,7 @@ scoped_ptr<Address> Address::CreateDisplayAddress(
                   language_code));
   address->set_is_complete_address(address_state == kFullAddress);
 
-  return address.Pass();
+  return address;
 }
 
 scoped_ptr<base::DictionaryValue> Address::ToDictionaryWithID() const {
@@ -277,7 +279,7 @@ scoped_ptr<base::DictionaryValue> Address::ToDictionaryWithID() const {
   dict->SetString("phone_number", phone_number_);
   dict->Set("postal_address", ToDictionaryWithoutID().release());
 
-  return dict.Pass();
+  return dict;
 }
 
 scoped_ptr<base::DictionaryValue> Address::ToDictionaryWithoutID() const {
@@ -297,7 +299,7 @@ scoped_ptr<base::DictionaryValue> Address::ToDictionaryWithoutID() const {
   dict->SetString("sorting_code", sorting_code_);
   dict->SetString("language_code", language_code_);
 
-  return dict.Pass();
+  return dict;
 }
 
 base::string16 Address::DisplayName() const {
@@ -340,7 +342,7 @@ base::string16 Address::GetInfo(const AutofillType& type,
       return recipient_name();
 
     case ADDRESS_HOME_STREET_ADDRESS:
-      return JoinString(street_address_, base::ASCIIToUTF16("\n"));
+      return base::JoinString(street_address_, base::ASCIIToUTF16("\n"));
 
     case ADDRESS_HOME_LINE1:
       return GetStreetAddressLine(0);

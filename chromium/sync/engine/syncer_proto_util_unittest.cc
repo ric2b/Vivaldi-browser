@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
@@ -34,11 +33,11 @@ using sessions::SyncSessionContext;
 
 class MockDelegate : public sessions::SyncSession::Delegate {
  public:
-   MockDelegate() {}
-   ~MockDelegate() {}
+  MockDelegate() {}
+  ~MockDelegate() {}
 
   MOCK_METHOD1(OnReceivedShortPollIntervalUpdate, void(const base::TimeDelta&));
-  MOCK_METHOD1(OnReceivedLongPollIntervalUpdate ,void(const base::TimeDelta&));
+  MOCK_METHOD1(OnReceivedLongPollIntervalUpdate, void(const base::TimeDelta&));
   MOCK_METHOD1(OnReceivedSessionsCommitDelay, void(const base::TimeDelta&));
   MOCK_METHOD1(OnReceivedClientInvalidationHintBufferSize, void(int));
   MOCK_METHOD1(OnSyncProtocolError, void(const SyncProtocolError&));
@@ -60,9 +59,9 @@ TEST(SyncerProtoUtil, GetTypesToMigrate) {
 }
 
 // Builds a ClientToServerResponse_Error with some error data type
-// ids, including invalid ones.  ConvertErrorPBToLocalType() should
+// ids, including invalid ones.  ConvertErrorPBToSyncProtocolError() should
 // return a SyncProtocolError with only the valid model types.
-TEST(SyncerProtoUtil, ConvertErrorPBToLocalType) {
+TEST(SyncerProtoUtil, ConvertErrorPBToSyncProtocolError) {
   sync_pb::ClientToServerResponse_Error error_pb;
   error_pb.set_error_type(sync_pb::SyncEnums::THROTTLED);
   error_pb.add_error_data_type_ids(
@@ -70,7 +69,7 @@ TEST(SyncerProtoUtil, ConvertErrorPBToLocalType) {
   error_pb.add_error_data_type_ids(
       GetSpecificsFieldNumberFromModelType(HISTORY_DELETE_DIRECTIVES));
   error_pb.add_error_data_type_ids(-1);
-  SyncProtocolError error = ConvertErrorPBToLocalType(error_pb);
+  SyncProtocolError error = ConvertErrorPBToSyncProtocolError(error_pb);
   EXPECT_TRUE(
       error.error_data_types.Equals(
           ModelTypeSet(BOOKMARKS, HISTORY_DELETE_DIRECTIVES)));
@@ -136,6 +135,14 @@ class SyncerProtoUtilTest : public testing::Test {
     return dir_maker_.directory();
   }
 
+  // Helper function to call GetProtocolErrorFromResponse. Allows not adding
+  // individual tests as friends to SyncerProtoUtil.
+  static SyncProtocolError CallGetProtocolErrorFromResponse(
+      const sync_pb::ClientToServerResponse& response,
+      syncable::Directory* directory) {
+    return SyncerProtoUtil::GetProtocolErrorFromResponse(response, directory);
+  }
+
  protected:
   base::MessageLoop message_loop_;
   TestDirectorySetterUpper dir_maker_;
@@ -145,38 +152,63 @@ TEST_F(SyncerProtoUtilTest, VerifyResponseBirthday) {
   // Both sides empty
   EXPECT_TRUE(directory()->store_birthday().empty());
   sync_pb::ClientToServerResponse response;
-  EXPECT_FALSE(SyncerProtoUtil::VerifyResponseBirthday(response, directory()));
+  SyncProtocolError sync_protocol_error;
+  response.set_error_code(sync_pb::SyncEnums::SUCCESS);
+
+  sync_protocol_error = CallGetProtocolErrorFromResponse(response, directory());
+  EXPECT_EQ(NOT_MY_BIRTHDAY, sync_protocol_error.error_type);
+  EXPECT_EQ(DISABLE_SYNC_ON_CLIENT, sync_protocol_error.action);
 
   // Remote set, local empty
   response.set_store_birthday("flan");
-  EXPECT_TRUE(SyncerProtoUtil::VerifyResponseBirthday(response, directory()));
+  sync_protocol_error = CallGetProtocolErrorFromResponse(response, directory());
+  EXPECT_EQ(SYNC_SUCCESS, sync_protocol_error.error_type);
+  EXPECT_EQ(UNKNOWN_ACTION, sync_protocol_error.action);
   EXPECT_EQ(directory()->store_birthday(), "flan");
 
   // Remote empty, local set.
   response.clear_store_birthday();
-  EXPECT_TRUE(SyncerProtoUtil::VerifyResponseBirthday(response, directory()));
+  sync_protocol_error = CallGetProtocolErrorFromResponse(response, directory());
+  EXPECT_EQ(SYNC_SUCCESS, sync_protocol_error.error_type);
+  EXPECT_EQ(UNKNOWN_ACTION, sync_protocol_error.action);
   EXPECT_EQ(directory()->store_birthday(), "flan");
 
   // Doesn't match
   response.set_store_birthday("meat");
-  EXPECT_FALSE(SyncerProtoUtil::VerifyResponseBirthday(response, directory()));
+  response.set_error_code(sync_pb::SyncEnums::NOT_MY_BIRTHDAY);
+  sync_protocol_error = CallGetProtocolErrorFromResponse(response, directory());
+  EXPECT_EQ(NOT_MY_BIRTHDAY, sync_protocol_error.error_type);
+  EXPECT_EQ(DISABLE_SYNC_ON_CLIENT, sync_protocol_error.action);
 
-  response.set_error_code(sync_pb::SyncEnums::CLEAR_PENDING);
-  EXPECT_FALSE(SyncerProtoUtil::VerifyResponseBirthday(response, directory()));
+  // Doesn't match. CLIENT_DATA_OBSOLETE error is set.
+  response.set_error_code(sync_pb::SyncEnums::CLIENT_DATA_OBSOLETE);
+  sync_protocol_error = CallGetProtocolErrorFromResponse(response, directory());
+  EXPECT_EQ(CLIENT_DATA_OBSOLETE, sync_protocol_error.error_type);
+  EXPECT_EQ(RESET_LOCAL_SYNC_DATA, sync_protocol_error.action);
 }
 
 TEST_F(SyncerProtoUtilTest, VerifyDisabledByAdmin) {
   // No error code
   sync_pb::ClientToServerResponse response;
-  EXPECT_FALSE(SyncerProtoUtil::IsSyncDisabledByAdmin(response));
+  SyncProtocolError sync_protocol_error;
+  directory()->set_store_birthday("flan");
+  response.set_error_code(sync_pb::SyncEnums::SUCCESS);
+
+  sync_protocol_error = CallGetProtocolErrorFromResponse(response, directory());
+  EXPECT_EQ(SYNC_SUCCESS, sync_protocol_error.error_type);
+  EXPECT_EQ(UNKNOWN_ACTION, sync_protocol_error.action);
 
   // Has error code, but not disabled
   response.set_error_code(sync_pb::SyncEnums::NOT_MY_BIRTHDAY);
-  EXPECT_FALSE(SyncerProtoUtil::IsSyncDisabledByAdmin(response));
+  sync_protocol_error = CallGetProtocolErrorFromResponse(response, directory());
+  EXPECT_EQ(NOT_MY_BIRTHDAY, sync_protocol_error.error_type);
+  EXPECT_NE(UNKNOWN_ACTION, sync_protocol_error.action);
 
   // Has error code, and is disabled by admin
   response.set_error_code(sync_pb::SyncEnums::DISABLED_BY_ADMIN);
-  EXPECT_TRUE(SyncerProtoUtil::IsSyncDisabledByAdmin(response));
+  sync_protocol_error = CallGetProtocolErrorFromResponse(response, directory());
+  EXPECT_EQ(DISABLED_BY_ADMIN, sync_protocol_error.error_type);
+  EXPECT_EQ(STOP_SYNC_FOR_DISABLED_ACCOUNT, sync_protocol_error.action);
 }
 
 TEST_F(SyncerProtoUtilTest, AddRequestBirthday) {
@@ -192,22 +224,17 @@ TEST_F(SyncerProtoUtilTest, AddRequestBirthday) {
 
 class DummyConnectionManager : public ServerConnectionManager {
  public:
-  DummyConnectionManager(CancelationSignal* signal)
+  explicit DummyConnectionManager(CancelationSignal* signal)
       : ServerConnectionManager("unused", 0, false, signal),
-        send_error_(false),
-        access_denied_(false) {}
+        send_error_(false) {}
 
   ~DummyConnectionManager() override {}
-  bool PostBufferWithCachedAuth(PostBufferParams* params,
-                                ScopedServerStatusWatcher* watcher) override {
+  bool PostBufferWithCachedAuth(PostBufferParams* params) override {
     if (send_error_) {
       return false;
     }
 
     sync_pb::ClientToServerResponse response;
-    if (access_denied_) {
-      response.set_error_code(sync_pb::SyncEnums::ACCESS_DENIED);
-    }
     response.SerializeToString(&params->buffer_out);
 
     return true;
@@ -217,13 +244,8 @@ class DummyConnectionManager : public ServerConnectionManager {
     send_error_ = send;
   }
 
-  void set_access_denied(bool denied) {
-    access_denied_ = denied;
-  }
-
  private:
   bool send_error_;
-  bool access_denied_;
 };
 
 TEST_F(SyncerProtoUtilTest, PostAndProcessHeaders) {
@@ -241,10 +263,6 @@ TEST_F(SyncerProtoUtilTest, PostAndProcessHeaders) {
 
   dcm.set_send_error(false);
   EXPECT_TRUE(SyncerProtoUtil::PostAndProcessHeaders(&dcm, NULL,
-      msg, &response));
-
-  dcm.set_access_denied(true);
-  EXPECT_FALSE(SyncerProtoUtil::PostAndProcessHeaders(&dcm, NULL,
       msg, &response));
 }
 

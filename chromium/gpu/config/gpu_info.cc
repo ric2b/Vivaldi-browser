@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "gpu/config/gpu_info.h"
 
 namespace {
@@ -46,6 +48,11 @@ void EnumerateVideoEncodeAcceleratorSupportedProfile(
 
 namespace gpu {
 
+VideoDecodeAcceleratorCapabilities::VideoDecodeAcceleratorCapabilities()
+    : flags(0) {}
+
+VideoDecodeAcceleratorCapabilities::~VideoDecodeAcceleratorCapabilities() {}
+
 GPUInfo::GPUDevice::GPUDevice()
     : vendor_id(0),
       device_id(0),
@@ -65,13 +72,13 @@ GPUInfo::GPUInfo()
       direct_rendering(true),
       sandboxed(false),
       process_crash_count(0),
+      in_process_gpu(true),
       basic_info_state(kCollectInfoNone),
-#if defined(OS_WIN)
       context_info_state(kCollectInfoNone),
-      dx_diagnostics_info_state(kCollectInfoNone) {
-#else
-      context_info_state(kCollectInfoNone) {
+#if defined(OS_WIN)
+      dx_diagnostics_info_state(kCollectInfoNone),
 #endif
+      jpeg_decode_accelerator_supported(false) {
 }
 
 GPUInfo::~GPUInfo() { }
@@ -85,7 +92,7 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     Version display_link_version;
     GPUDevice gpu;
     std::vector<GPUDevice> secondary_gpus;
-    uint64 adapter_luid;
+    uint64_t adapter_luid;
     std::string driver_vendor;
     std::string driver_version;
     std::string driver_date;
@@ -101,22 +108,23 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     std::string gl_ws_vendor;
     std::string gl_ws_version;
     std::string gl_ws_extensions;
-    uint32 gl_reset_notification_strategy;
+    uint32_t gl_reset_notification_strategy;
     bool can_lose_context;
     bool software_rendering;
     bool direct_rendering;
     bool sandboxed;
     int process_crash_count;
+    bool in_process_gpu;
     CollectInfoResult basic_info_state;
     CollectInfoResult context_info_state;
 #if defined(OS_WIN)
     CollectInfoResult dx_diagnostics_info_state;
     DxDiagNode dx_diagnostics;
 #endif
-    VideoDecodeAcceleratorSupportedProfiles
-        video_decode_accelerator_supported_profiles;
+    VideoDecodeAcceleratorCapabilities video_decode_accelerator_capabilities;
     VideoEncodeAcceleratorSupportedProfiles
         video_encode_accelerator_supported_profiles;
+    bool jpeg_decode_accelerator_supported;
   };
 
   // If this assert fails then most likely something below needs to be updated.
@@ -166,16 +174,22 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
   enumerator->AddBool("directRendering", direct_rendering);
   enumerator->AddBool("sandboxed", sandboxed);
   enumerator->AddInt("processCrashCount", process_crash_count);
+  enumerator->AddBool("inProcessGpu", in_process_gpu);
   enumerator->AddInt("basicInfoState", basic_info_state);
   enumerator->AddInt("contextInfoState", context_info_state);
 #if defined(OS_WIN)
   enumerator->AddInt("DxDiagnosticsInfoState", dx_diagnostics_info_state);
 #endif
   // TODO(kbr): add dx_diagnostics on Windows.
-  for (const auto& profile : video_decode_accelerator_supported_profiles)
+  enumerator->AddInt("videoDecodeAcceleratorFlags",
+                     video_decode_accelerator_capabilities.flags);
+  for (const auto& profile :
+       video_decode_accelerator_capabilities.supported_profiles)
     EnumerateVideoDecodeAcceleratorSupportedProfile(profile, enumerator);
   for (const auto& profile : video_encode_accelerator_supported_profiles)
     EnumerateVideoEncodeAcceleratorSupportedProfile(profile, enumerator);
+  enumerator->AddBool("jpegDecodeAcceleratorSupported",
+      jpeg_decode_accelerator_supported);
   enumerator->EndAuxAttributes();
 }
 

@@ -32,7 +32,8 @@ const char kOAuthWrapBridgeUrlSuffix[] = "OAuthWrapBridge";
 const char kOAuth1LoginUrlSuffix[] = "OAuthLogin";
 const char kOAuthRevokeTokenUrlSuffix[] = "AuthSubRevokeToken";
 const char kListAccountsSuffix[] = "ListAccounts?json=standard";
-const char kEmbeddedSigninSuffix[] = "EmbeddedSignIn";
+const char kPasswordCombinedEmbeddedSigninSuffix[] = "EmbeddedSignIn";
+const char kEmbeddedSigninSuffix[] = "embedded/setup/chrome/usermenu";
 const char kAddAccountSuffix[] = "AddSession";
 const char kGetCheckConnectionInfoSuffix[] = "GetCheckConnectionInfo";
 
@@ -73,7 +74,7 @@ GURL GetURLSwitchValueWithDefault(const char* switch_value,
 }  // namespace
 
 GaiaUrls* GaiaUrls::GetInstance() {
-  return Singleton<GaiaUrls>::get();
+  return base::Singleton<GaiaUrls>::get();
 }
 
 GaiaUrls::GaiaUrls() {
@@ -111,6 +112,8 @@ GaiaUrls::GaiaUrls() {
   oauth_revoke_token_url_ = gaia_url_.Resolve(kOAuthRevokeTokenUrlSuffix);
   oauth1_login_url_ = gaia_url_.Resolve(kOAuth1LoginUrlSuffix);
   list_accounts_url_ = gaia_url_.Resolve(kListAccountsSuffix);
+  password_combined_embedded_signin_url_ =
+      gaia_url_.Resolve(kPasswordCombinedEmbeddedSigninSuffix);
   embedded_signin_url_ = gaia_url_.Resolve(kEmbeddedSigninSuffix);
   add_account_url_ = gaia_url_.Resolve(kAddAccountSuffix);
   get_check_connection_info_url_ =
@@ -221,6 +224,10 @@ const GURL& GaiaUrls::embedded_signin_url() const {
   return embedded_signin_url_;
 }
 
+const GURL& GaiaUrls::password_combined_embedded_signin_url() const {
+  return password_combined_embedded_signin_url_;
+}
+
 const GURL& GaiaUrls::add_account_url() const {
   return add_account_url_;
 }
@@ -282,4 +289,9 @@ GURL GaiaUrls::GetCheckConnectionInfoURLWithSource(const std::string& source) {
       ? get_check_connection_info_url_
       : get_check_connection_info_url_.Resolve(
             base::StringPrintf("?source=%s", source.c_str()));
+}
+
+GURL GaiaUrls::signin_completed_continue_url() const {
+  return
+      GURL("chrome-extension://mfffpogegjflfpflabcdkioaeobkgjik/success.html");
 }

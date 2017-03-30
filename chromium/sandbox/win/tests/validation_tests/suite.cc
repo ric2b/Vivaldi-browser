@@ -7,10 +7,11 @@
 // sandbox.
 
 #include <shlwapi.h>
+#include <stddef.h>
 
 #include "base/win/windows_version.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "sandbox/win/tests/common/controller.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 #pragma comment(lib, "shlwapi.lib")
 
@@ -167,7 +168,7 @@ TEST(ValidationSuite, TestProcessDenyLockdown) {
 // to the integrity label changing after startup via SetDelayedIntegrityLevel).
 TEST(ValidationSuite, TestProcessDenyLowIntegrity) {
   // This test applies only to Vista and above.
-  if (base::win::Version() < base::win::VERSION_VISTA)
+  if (base::win::GetVersion() < base::win::VERSION_VISTA)
     return;
 
   TestRunner runner;
@@ -188,7 +189,7 @@ TEST(ValidationSuite, TestProcessDenyLowIntegrity) {
 // Tests that a locked-down process cannot open a low-integrity process.
 TEST(ValidationSuite, TestProcessDenyBelowLowIntegrity) {
   //  This test applies only to Vista and above.
-  if (base::win::Version() < base::win::VERSION_VISTA)
+  if (base::win::GetVersion() < base::win::VERSION_VISTA)
     return;
 
   TestRunner runner;

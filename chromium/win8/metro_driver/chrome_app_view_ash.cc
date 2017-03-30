@@ -7,22 +7,23 @@
 
 #include <corewindow.h>
 #include <shellapi.h>
+#include <stdint.h>
 #include <windows.foundation.h>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
-#include "base/win/metro.h"
-#include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/chrome_switches.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_sender.h"
 #include "ui/events/gesture_detection/motion_event.h"
+#include "ui/events/win/system_event_state_lookup.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/win/dpi.h"
 #include "ui/metro_viewer/metro_viewer_messages.h"
@@ -207,7 +208,7 @@ class ChromeChannelListener : public IPC::Listener {
                               base::Unretained(app_view_), shortcut, url));
   }
 
-  void OnSetCursor(int64 cursor) {
+  void OnSetCursor(int64_t cursor) {
     ui_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&ChromeAppViewAsh::OnSetCursor, base::Unretained(app_view_),
@@ -251,7 +252,7 @@ class ChromeChannelListener : public IPC::Listener {
   }
 
   void OnImeTextInputClientChanged(
-      const std::vector<int32>& input_scopes,
+      const std::vector<int32_t>& input_scopes,
       const std::vector<metro_viewer::CharacterBounds>& character_bounds) {
     ui_task_runner_->PostTask(
         FROM_HERE, base::Bind(&ChromeAppViewAsh::OnImeUpdateTextInputClient,
@@ -278,17 +279,17 @@ void RunMessageLoop(winui::Core::ICoreDispatcher* dispatcher) {
           ::CoreProcessEventsOption_ProcessUntilQuit);
 
   // Wind down the thread's chrome message loop.
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 // Helper to return the state of the shift/control/alt keys.
-uint32 GetKeyboardEventFlags() {
-  uint32 flags = 0;
-  if (base::win::IsShiftPressed())
+uint32_t GetKeyboardEventFlags() {
+  uint32_t flags = 0;
+  if (ui::win::IsShiftPressed())
     flags |= ui::EF_SHIFT_DOWN;
-  if (base::win::IsCtrlPressed())
+  if (ui::win::IsCtrlPressed())
     flags |= ui::EF_CONTROL_DOWN;
-  if (base::win::IsAltPressed())
+  if (ui::win::IsAltPressed())
     flags |= ui::EF_ALT_DOWN;
   return flags;
 }
@@ -388,10 +389,9 @@ class ChromeAppViewAsh::PointerInfoHandler {
     // via the win32 scale factor which achieves the needful.
     gfx::Point dip_point_metro(point.X, point.Y);
     gfx::Point scaled_point_metro =
-      gfx::ToCeiledPoint(gfx::ScalePoint(dip_point_metro, metro_dpi_scale_));
+        gfx::ScaleToCeiledPoint(dip_point_metro, metro_dpi_scale_);
     gfx::Point dip_point_win32 =
-        gfx::ToCeiledPoint(gfx::ScalePoint(scaled_point_metro,
-                                           1.0 / win32_dpi_scale_));
+        gfx::ScaleToCeiledPoint(scaled_point_metro, 1.0 / win32_dpi_scale_);
     x_ = dip_point_win32.x();
     y_ = dip_point_win32.y();
 
@@ -441,9 +441,7 @@ class ChromeAppViewAsh::PointerInfoHandler {
     return IsType(windevs::Input::PointerDeviceType_Touch);
   }
 
-  int32 wheel_delta() const {
-    return wheel_delta_;
-  }
+  int32_t wheel_delta() const { return wheel_delta_; }
 
   // Identifies the button that changed.
   ui::EventFlags changed_button() const {
@@ -465,16 +463,14 @@ class ChromeAppViewAsh::PointerInfoHandler {
     }
   }
 
-  uint32 mouse_down_flags() const { return mouse_down_flags_; }
+  uint32_t mouse_down_flags() const { return mouse_down_flags_; }
 
   int x() const { return x_; }
   int y() const { return y_; }
 
-  uint32 pointer_id() const {
-    return pointer_id_;
-  }
+  uint32_t pointer_id() const { return pointer_id_; }
 
-  uint64 timestamp() const { return timestamp_; }
+  uint64_t timestamp() const { return timestamp_; }
 
   winui::Input::PointerUpdateKind update_kind() const { return update_kind_; }
 
@@ -484,14 +480,14 @@ class ChromeAppViewAsh::PointerInfoHandler {
   int x_;
   int y_;
   int wheel_delta_;
-  uint32 pointer_id_;
+  uint32_t pointer_id_;
   winui::Input::PointerUpdateKind update_kind_;
   mswr::ComPtr<winui::Input::IPointerPoint> pointer_point_;
-  uint64 timestamp_;
+  uint64_t timestamp_;
 
   // Bitmask of ui::EventFlags corresponding to the buttons that are currently
   // down.
-  uint32 mouse_down_flags_;
+  uint32_t mouse_down_flags_;
 
   // Set to true for a horizontal wheel message.
   boolean is_horizontal_wheel_;
@@ -876,7 +872,7 @@ void ChromeAppViewAsh::OnImeCancelComposition() {
 }
 
 void ChromeAppViewAsh::OnImeUpdateTextInputClient(
-    const std::vector<int32>& input_scopes,
+    const std::vector<int32_t>& input_scopes,
     const std::vector<metro_viewer::CharacterBounds>& character_bounds) {
   if (!text_service_)
     return;
@@ -948,8 +944,8 @@ void ChromeAppViewAsh::OnInputSourceChanged() {
 
 void ChromeAppViewAsh::OnCompositionChanged(
     const base::string16& text,
-    int32 selection_start,
-    int32 selection_end,
+    int32_t selection_start,
+    int32_t selection_end,
     const std::vector<metro_viewer::UnderlineInfo>& underlines) {
   ui_channel_->Send(new MetroViewerHostMsg_ImeCompositionChanged(
       text, selection_start, selection_end, underlines));
@@ -963,17 +959,17 @@ void ChromeAppViewAsh::SendMouseButton(int x,
                                        int y,
                                        int extra,
                                        ui::EventType event_type,
-                                       uint32 flags,
+                                       uint32_t flags,
                                        ui::EventFlags changed_button,
                                        bool is_horizontal_wheel) {
   if (!ui_channel_)
     return;
   MetroViewerHostMsg_MouseButtonParams params;
-  params.x = static_cast<int32>(x);
-  params.y = static_cast<int32>(y);
-  params.extra = static_cast<int32>(extra);
+  params.x = static_cast<int32_t>(x);
+  params.y = static_cast<int32_t>(y);
+  params.extra = static_cast<int32_t>(extra);
   params.event_type = event_type;
-  params.flags = static_cast<int32>(flags);
+  params.flags = static_cast<int32_t>(flags);
   params.changed_button = changed_button;
   params.is_horizontal_wheel = is_horizontal_wheel;
   ui_channel_->Send(new MetroViewerHostMsg_MouseButton(params));
@@ -984,7 +980,7 @@ void ChromeAppViewAsh::GenerateMouseEventFromMoveIfNecessary(
   ui::EventType event_type;
   // For aura we want the flags to include the button that was released, thus
   // we or the old and new.
-  uint32 mouse_down_flags = pointer.mouse_down_flags() | mouse_down_flags_;
+  uint32_t mouse_down_flags = pointer.mouse_down_flags() | mouse_down_flags_;
   mouse_down_flags_ = pointer.mouse_down_flags();
   switch (pointer.update_kind()) {
     case winui::Input::PointerUpdateKind_LeftButtonPressed:
@@ -1112,10 +1108,9 @@ HRESULT ChromeAppViewAsh::OnPointerReleased(
   if (pointer.IsMouse()) {
     mouse_down_flags_ = ui::EF_NONE;
     SendMouseButton(pointer.x(), pointer.y(), 0, ui::ET_MOUSE_RELEASED,
-                    static_cast<uint32>(pointer.changed_button()) |
-                    GetKeyboardEventFlags(),
-                    pointer.changed_button(),
-                    pointer.is_horizontal_wheel());
+                    static_cast<uint32_t>(pointer.changed_button()) |
+                        GetKeyboardEventFlags(),
+                    pointer.changed_button(), pointer.is_horizontal_wheel());
   } else {
     DCHECK(pointer.IsTouch());
     ui_channel_->Send(new MetroViewerHostMsg_TouchUp(pointer.x(),
@@ -1207,7 +1202,7 @@ HRESULT ChromeAppViewAsh::OnAcceleratorKeyDown(
   if (FAILED(hr))
     return hr;
 
-  uint32 keyboard_flags = GetKeyboardEventFlags();
+  uint32_t keyboard_flags = GetKeyboardEventFlags();
 
   switch (event_type) {
     case winui::Core::CoreAcceleratorKeyEventType_SystemCharacter:
@@ -1381,8 +1376,8 @@ HRESULT ChromeAppViewAsh::OnSizeChanged(winui::Core::ICoreWindow* sender,
   RECT rect = {0};
   ::GetWindowRect(core_window_hwnd_, &rect);
 
-  uint32 cx = static_cast<uint32>(rect.right - rect.left);
-  uint32 cy = static_cast<uint32>(rect.bottom - rect.top);
+  uint32_t cx = static_cast<uint32_t>(rect.right - rect.left);
+  uint32_t cy = static_cast<uint32_t>(rect.bottom - rect.top);
 
   DVLOG(1) << "Window size changed: width=" << cx << ", height=" << cy;
   ui_channel_->Send(new MetroViewerHostMsg_WindowSizeChanged(cx, cy));

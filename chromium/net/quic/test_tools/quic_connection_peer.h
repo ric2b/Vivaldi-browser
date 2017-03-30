@@ -5,7 +5,7 @@
 #ifndef NET_QUIC_TEST_TOOLS_QUIC_CONNECTION_PEER_H_
 #define NET_QUIC_TEST_TOOLS_QUIC_CONNECTION_PEER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/quic_connection_stats.h"
 #include "net/quic/quic_protocol.h"
@@ -25,6 +25,7 @@ class QuicPacketCreator;
 class QuicPacketGenerator;
 class QuicPacketWriter;
 class QuicReceivedPacketManager;
+class QuicSentEntropyManager;
 class QuicSentPacketManager;
 class SendAlgorithmInterface;
 
@@ -43,8 +44,7 @@ class QuicConnectionPeer {
   static void PopulateStopWaitingFrame(QuicConnection* connection,
                                        QuicStopWaitingFrame* stop_waiting);
 
-  static QuicConnectionVisitorInterface* GetVisitor(
-      QuicConnection* connection);
+  static QuicConnectionVisitorInterface* GetVisitor(QuicConnection* connection);
 
   static QuicPacketCreator* GetPacketCreator(QuicConnection* connection);
 
@@ -55,17 +55,19 @@ class QuicConnectionPeer {
 
   static QuicTime::Delta GetNetworkTimeout(QuicConnection* connection);
 
+  static QuicSentEntropyManager* GetSentEntropyManager(
+      QuicConnection* connection);
+
   static QuicPacketEntropyHash GetSentEntropyHash(
       QuicConnection* connection,
-      QuicPacketSequenceNumber sequence_number);
+      QuicPacketNumber packet_number);
 
-  static QuicPacketEntropyHash PacketEntropy(
-      QuicConnection* connection,
-      QuicPacketSequenceNumber sequence_number);
+  static QuicPacketEntropyHash PacketEntropy(QuicConnection* connection,
+                                             QuicPacketNumber packet_number);
 
   static QuicPacketEntropyHash ReceivedEntropyHash(
       QuicConnection* connection,
-      QuicPacketSequenceNumber sequence_number);
+      QuicPacketNumber packet_number);
 
   static void SetPerspective(QuicConnection* connection,
                              Perspective perspective);
@@ -77,6 +79,8 @@ class QuicConnectionPeer {
                              const IPEndPoint& peer_address);
 
   static bool IsSilentCloseEnabled(QuicConnection* connection);
+
+  static bool IsMultipathEnabled(QuicConnection* connection);
 
   static void SwapCrypters(QuicConnection* connection, QuicFramer* framer);
 
@@ -107,10 +111,18 @@ class QuicConnectionPeer {
 
   static QuicPacketHeader* GetLastHeader(QuicConnection* connection);
 
-  static void SetSequenceNumberOfLastSentPacket(
-      QuicConnection* connection, QuicPacketSequenceNumber number);
+  static void SetPacketNumberOfLastSentPacket(QuicConnection* connection,
+                                              QuicPacketNumber number);
 
   static QuicConnectionStats* GetStats(QuicConnection* connection);
+
+  static QuicPacketCount GetPacketsBetweenMtuProbes(QuicConnection* connection);
+
+  static void SetPacketsBetweenMtuProbes(QuicConnection* connection,
+                                         QuicPacketCount packets);
+  static void SetNextMtuProbeAt(QuicConnection* connection,
+                                QuicPacketNumber number);
+  static void EnableAckDecimation(QuicConnection* connection);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicConnectionPeer);

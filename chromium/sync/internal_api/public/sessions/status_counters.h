@@ -5,6 +5,10 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_SESSIONS_STATUS_COUNTERS_H_
 #define SYNC_INTERNAL_API_PUBLIC_SESSIONS_STATUS_COUNTERS_H_
 
+#include <stddef.h>
+
+#include <string>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "sync/base/sync_export.h"
@@ -12,7 +16,7 @@
 namespace syncer {
 
 // A class to maintain counts related to the current status of a sync type.
-struct SYNC_EXPORT_PRIVATE StatusCounters {
+struct SYNC_EXPORT StatusCounters {
   StatusCounters();
   ~StatusCounters();
 

@@ -5,7 +5,9 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -57,7 +59,7 @@ class TestWebDialogView : public views::WebDialogView {
       // loop.
       base::MessageLoop::current()->task_runner()->PostTask(
           FROM_HERE,
-          base::Bind(&base::MessageLoop::Quit,
+          base::Bind(&base::MessageLoop::QuitWhenIdle,
                      base::Unretained(base::MessageLoop::current())));
     }
 

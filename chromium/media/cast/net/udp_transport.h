@@ -5,19 +5,22 @@
 #ifndef MEDIA_CAST_NET_UDP_TRANSPORT_H_
 #define MEDIA_CAST_NET_UDP_TRANSPORT_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/cast_transport_sender.h"
+#include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
-#include "net/base/net_util.h"
+#include "net/udp/diff_serv_code_point.h"
 #include "net/udp/udp_socket.h"
 
 namespace net {
-class IOBuffer;
-class IPEndPoint;
 class NetLog;
 }  // namespace net
 
@@ -41,7 +44,7 @@ class UdpTransport : public PacketSender {
       const scoped_refptr<base::SingleThreadTaskRunner>& io_thread_proxy,
       const net::IPEndPoint& local_end_point,
       const net::IPEndPoint& remote_end_point,
-      int32 send_buffer_size,
+      int32_t send_buffer_size,
       const CastTransportStatusCallback& status_callback);
   ~UdpTransport() final;
 
@@ -60,7 +63,7 @@ class UdpTransport : public PacketSender {
 
   // PacketSender implementations.
   bool SendPacket(PacketRef packet, const base::Closure& cb) final;
-  int64 GetBytesSent() final;
+  int64_t GetBytesSent() final;
 
  private:
   // Requests and processes packets from |udp_socket_|.  This method is called
@@ -89,7 +92,7 @@ class UdpTransport : public PacketSender {
   scoped_refptr<net::WrappedIOBuffer> recv_buf_;
   net::IPEndPoint recv_addr_;
   PacketReceiverCallbackWithStatus packet_receiver_;
-  int32 send_buffer_size_;
+  int32_t send_buffer_size_;
   const CastTransportStatusCallback status_callback_;
   int bytes_sent_;
 

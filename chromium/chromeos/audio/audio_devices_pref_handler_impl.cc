@@ -4,6 +4,8 @@
 
 #include "chromeos/audio/audio_devices_pref_handler_impl.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
@@ -32,7 +34,7 @@ const int kPrefMuteOn = 1;
 std::string GetDeviceIdString(const chromeos::AudioDevice& device) {
   std::string device_id_string =
       device.device_name + " : " +
-      base::Uint64ToString(device.id & static_cast<uint64>(0xffffffff)) +
+      base::Uint64ToString(device.id & static_cast<uint64_t>(0xffffffff)) +
       " : " + (device.is_input ? "1" : "0");
   // Replace any periods from the device id string with a space, since setting
   // names cannot contain periods.
@@ -187,14 +189,14 @@ void AudioDevicesPrefHandlerImpl::SaveDevicesVolumePref() {
 }
 
 void AudioDevicesPrefHandlerImpl::MigrateDeviceMuteSettings(
-    std::string active_device) {
+    const std::string& active_device) {
   int old_mute = local_state_->GetInteger(prefs::kAudioMute);
   device_mute_settings_->SetInteger(active_device, old_mute);
   SaveDevicesMutePref();
 }
 
 void AudioDevicesPrefHandlerImpl::MigrateDeviceVolumeSettings(
-    std::string active_device) {
+    const std::string& active_device) {
   double old_volume = local_state_->GetDouble(prefs::kAudioVolumePercent);
   device_volume_settings_->SetDouble(active_device, old_volume);
   SaveDevicesVolumePref();

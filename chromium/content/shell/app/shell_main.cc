@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "content/public/app/content_main.h"
 #include "content/shell/app/shell_main_delegate.h"
 
 #if defined(OS_WIN)
-#include "content/public/app/startup_helper_win.h"
+#include "content/public/app/sandbox_helper_win.h"
 #include "sandbox/win/src/sandbox_types.h"
 #endif
 

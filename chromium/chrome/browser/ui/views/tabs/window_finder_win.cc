@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/views/tabs/window_finder.h"
 
+#include <shobjidl.h>
+
+#include "base/macros.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/windows_version.h"
 #include "ui/aura/window.h"
@@ -107,16 +110,16 @@ class TopMostFinder : public BaseWindowFinder {
     }
 
     // hwnd is at the point. Make sure the point is within the windows region.
-    if (GetWindowRgn(hwnd, tmp_region_.Get()) == ERROR) {
+    if (GetWindowRgn(hwnd, tmp_region_.get()) == ERROR) {
       // There's no region on the window and the window contains the point. Stop
       // iterating.
       return true;
     }
 
     // The region is relative to the window's rect.
-    BOOL is_point_in_region = PtInRegion(tmp_region_.Get(),
-        screen_loc_.x() - r.left, screen_loc_.y() - r.top);
-    tmp_region_ = CreateRectRgn(0, 0, 0, 0);
+    BOOL is_point_in_region = PtInRegion(
+        tmp_region_.get(), screen_loc_.x() - r.left, screen_loc_.y() - r.top);
+    tmp_region_.reset(CreateRectRgn(0, 0, 0, 0));
     // Stop iterating if the region contains the point.
     return !!is_point_in_region;
   }
@@ -148,7 +151,7 @@ class TopMostFinder : public BaseWindowFinder {
   DISALLOW_COPY_AND_ASSIGN(TopMostFinder);
 };
 
-// WindowFinder ---------------------------------------------------------------
+// LocalProcessWindowFinder ---------------------------------------------------
 
 // Helper class to determine if a particular point contains a window from our
 // process.
@@ -178,6 +181,17 @@ class LocalProcessWindowFinder : public BaseWindowFinder {
  protected:
   bool ShouldStopIterating(HWND hwnd) override {
     RECT r;
+
+    // Make sure the window is on the same virtual desktop.
+    if (base::win::GetVersion() >= base::win::VERSION_WIN10) {
+      BOOL on_current_desktop;
+      if (SUCCEEDED(virtual_desktop_manager_->IsWindowOnCurrentVirtualDesktop(
+              hwnd, &on_current_desktop)) &&
+          !on_current_desktop) {
+        return false;
+      }
+    }
+
     if (IsWindowVisible(hwnd) && GetWindowRect(hwnd, &r) &&
         PtInRect(&r, screen_loc_.ToPOINT())) {
       result_ = hwnd;
@@ -191,6 +205,10 @@ class LocalProcessWindowFinder : public BaseWindowFinder {
                            const std::set<HWND>& ignore)
       : BaseWindowFinder(ignore),
         result_(NULL) {
+    if (base::win::GetVersion() >= base::win::VERSION_WIN10) {
+      CHECK(SUCCEEDED(virtual_desktop_manager_.CreateInstance(
+          __uuidof(VirtualDesktopManager))));
+    }
     screen_loc_ = gfx::win::DIPToScreenPoint(screen_loc);
     EnumThreadWindows(GetCurrentThreadId(), WindowCallbackProc, as_lparam());
   }
@@ -201,6 +219,9 @@ class LocalProcessWindowFinder : public BaseWindowFinder {
   // The resulting window. This is initially null but set to true in
   // ShouldStopIterating if an appropriate window is found.
   HWND result_;
+
+  // Only used on Win10+.
+  base::win::ScopedComPtr<IVirtualDesktopManager> virtual_desktop_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(LocalProcessWindowFinder);
 };

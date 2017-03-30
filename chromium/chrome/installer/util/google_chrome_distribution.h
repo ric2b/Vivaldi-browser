@@ -8,7 +8,6 @@
 #ifndef CHROME_INSTALLER_UTIL_GOOGLE_CHROME_DISTRIBUTION_H_
 #define CHROME_INSTALLER_UTIL_GOOGLE_CHROME_DISTRIBUTION_H_
 
-#include "base/gtest_prod_util.h"
 #include "base/strings/string16.h"
 #include "chrome/installer/util/browser_distribution.h"
 
@@ -58,18 +57,14 @@ class GoogleChromeDistribution : public BrowserDistribution {
 
   std::string GetSafeBrowsingName() override;
 
-  std::string GetNetworkStatsServer() const override;
-
   // This method reads data from the Google Update ClientState key for
   // potential use in the uninstall survey. It must be called before the
   // key returned by GetVersionKey() is deleted.
   base::string16 GetDistributionData(HKEY root_key) override;
 
-  base::string16 GetUninstallLinkName() override;
-
   base::string16 GetUninstallRegPath() override;
 
-  bool GetCommandExecuteImplClsid(base::string16* handler_class_uuid) override;
+  base::string16 GetCommandExecuteImplClsid() override;
 
   void UpdateInstallStatus(
       bool system_install,

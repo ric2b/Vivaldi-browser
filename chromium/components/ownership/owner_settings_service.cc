@@ -6,8 +6,8 @@
 
 #include <cryptohi.h>
 #include <keyhi.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
@@ -37,7 +37,7 @@ scoped_ptr<em::PolicyFetchResponse> AssembleAndSignPolicy(
       new em::PolicyFetchResponse());
   if (!policy->SerializeToString(policy_response->mutable_policy_data())) {
     LOG(ERROR) << "Failed to encode policy payload.";
-    return scoped_ptr<em::PolicyFetchResponse>(nullptr).Pass();
+    return scoped_ptr<em::PolicyFetchResponse>(nullptr);
   }
 
   ScopedSGNContext sign_context(
@@ -50,7 +50,7 @@ scoped_ptr<em::PolicyFetchResponse> AssembleAndSignPolicy(
   SECItem signature_item;
   if (SGN_Begin(sign_context.get()) != SECSuccess ||
       SGN_Update(sign_context.get(),
-                 reinterpret_cast<const uint8*>(
+                 reinterpret_cast<const uint8_t*>(
                      policy_response->policy_data().c_str()),
                  policy_response->policy_data().size()) != SECSuccess ||
       SGN_End(sign_context.get(), &signature_item) != SECSuccess) {
@@ -62,7 +62,7 @@ scoped_ptr<em::PolicyFetchResponse> AssembleAndSignPolicy(
       reinterpret_cast<const char*>(signature_item.data), signature_item.len);
   SECITEM_FreeItem(&signature_item, PR_FALSE);
 
-  return policy_response.Pass();
+  return policy_response;
 }
 
 }  // namepace

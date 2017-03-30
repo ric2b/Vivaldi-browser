@@ -4,7 +4,9 @@
 
 #include "base/process/process_metrics.h"
 
+#include <limits.h>
 #include <mach/task.h>
+#include <stddef.h>
 
 #include "base/logging.h"
 
@@ -22,6 +24,11 @@ bool GetTaskInfo(task_basic_info_64* task_info_data) {
 }
 
 }  // namespace
+
+SystemMemoryInfoKB::SystemMemoryInfoKB() {
+  total = 0;
+  free = 0;
+}
 
 ProcessMetrics::ProcessMetrics(ProcessHandle process) {}
 
@@ -80,6 +87,13 @@ size_t GetPageSize() {
 size_t GetSystemCommitCharge() {
   NOTIMPLEMENTED();
   return 0;
+}
+
+// Bytes committed by the system.
+bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
+  // Unimplemented. Must enable unittest for IOS when this gets implemented.
+  NOTIMPLEMENTED();
+  return false;
 }
 
 }  // namespace base

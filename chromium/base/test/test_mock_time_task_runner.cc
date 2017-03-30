@@ -5,6 +5,7 @@
 #include "base/test/test_mock_time_task_runner.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/clock.h"
 #include "base/time/tick_clock.h"
@@ -117,6 +118,10 @@ bool TestMockTimeTaskRunner::TemporalOrder::operator()(
 TestMockTimeTaskRunner::TestMockTimeTaskRunner()
     : now_(Time::UnixEpoch()), next_task_ordinal_(0) {
 }
+
+TestMockTimeTaskRunner::TestMockTimeTaskRunner(Time start_time,
+                                               TimeTicks start_ticks)
+    : now_(Time::UnixEpoch()), now_ticks_(start_ticks), next_task_ordinal_(0) {}
 
 TestMockTimeTaskRunner::~TestMockTimeTaskRunner() {
 }

@@ -13,9 +13,11 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/printing/print_job.h"
+#include "chrome/common/features.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -27,7 +29,7 @@
 #include "printing/printing_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/android/tab_android.h"
 #endif
 
@@ -213,13 +215,14 @@ void PrintJobWorker::GetSettingsWithUI(
     bool is_scripted) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   if (is_scripted) {
     PrintingContextDelegate* printing_context_delegate =
         static_cast<PrintingContextDelegate*>(printing_context_delegate_.get());
     content::WebContents* web_contents =
         printing_context_delegate->GetWebContents();
-    TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
+    TabAndroid* tab =
+        web_contents ? TabAndroid::FromWebContents(web_contents) : nullptr;
 
     // Regardless of whether the following call fails or not, the javascript
     // call will return since startPendingPrint will make it return immediately

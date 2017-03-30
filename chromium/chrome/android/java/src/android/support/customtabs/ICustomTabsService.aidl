@@ -19,4 +19,6 @@ interface ICustomTabsService {
     boolean newSession(in ICustomTabsCallback callback) = 2;
     boolean mayLaunchUrl(in ICustomTabsCallback callback, in Uri url,
             in Bundle extras, in List<Bundle> otherLikelyBundles) = 3;
+    Bundle extraCommand(String commandName, in Bundle args) = 4;
+    boolean updateVisuals(in ICustomTabsCallback callback, in Bundle bundle) = 5;
 }

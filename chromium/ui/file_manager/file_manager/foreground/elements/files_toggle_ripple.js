@@ -42,7 +42,7 @@ var FilesToggleRipple = Polymer({
         this.performDeactivateAnimation_();
     }
 
-    this.$.ripple.classList.toggle('activated', newValue);
+    this.$.ripple.classList.toggle('activated', !!newValue);
   },
 
   /**
@@ -64,8 +64,8 @@ var FilesToggleRipple = Polymer({
         easing: 'cubic-bezier(0, 0, 0.330066603741, 0.931189591041)'
       },
       {
-        width: '80.9%',
-        height: '80.9%',
+        width: '78.6%',
+        height: '78.6%',
         offset: 0.5,
         easing: 'cubic-bezier(0.435623148352, 0.141946042876, 0.2, 1.0)'
       },

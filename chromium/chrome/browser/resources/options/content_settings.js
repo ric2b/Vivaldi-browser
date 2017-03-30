@@ -21,15 +21,17 @@ cr.define('options', function() {
 
   // Lookup table to generate the i18n strings.
   /** @const */ var permissionsLookup = {
-    'location': 'location',
-    'notifications': 'notifications',
-    'media-stream': 'mediaStream',
     'cookies': 'cookies',
-    'multiple-automatic-downloads': 'multipleAutomaticDownloads',
     'images': 'images',
+    'javascript': 'javascript',
+    'keygen': 'keygen',
+    'location': 'location',
+    'media-stream-camera': 'mediaStreamCamera',
+    'media-stream-mic': 'mediaStreamMic',
+    'multiple-automatic-downloads': 'multipleAutomaticDownloads',
+    'notifications': 'notifications',
     'plugins': 'plugins',
     'popups': 'popups',
-    'javascript': 'javascript'
   };
 
   //////////////////////////////////////////////////////////////////////////////
@@ -90,8 +92,10 @@ cr.define('options', function() {
       $('content-settings-overlay-confirm').onclick =
           PageManager.closeOverlay.bind(PageManager);
 
-      $('media-pepper-flash-default').hidden = true;
-      $('media-pepper-flash-exceptions').hidden = true;
+      $('media-pepper-flash-default-mic').hidden = true;
+      $('media-pepper-flash-default-camera').hidden = true;
+      $('media-pepper-flash-exceptions-mic').hidden = true;
+      $('media-pepper-flash-exceptions-camera').hidden = true;
 
       $('media-select-mic').addEventListener('change',
           ContentSettings.setDefaultMicrophone_);
@@ -147,49 +151,6 @@ cr.define('options', function() {
         indicators[i].handlePrefChange(event);
       }
     }
-  };
-
-  /**
-   * Updates the labels and indicators for the Media settings. Those require
-   * special handling because they are backed by multiple prefs and can change
-   * their scope based on the managed state of the backing prefs.
-   * @param {{askText: string, blockText: string, cameraDisabled: boolean,
-   *          micDisabled: boolean, showBubble: boolean, bubbleText: string}}
-   *     mediaSettings A dictionary containing the following fields:
-   *     askText The label for the ask radio button.
-   *     blockText The label for the block radio button.
-   *     cameraDisabled Whether to disable the camera dropdown.
-   *     micDisabled Whether to disable the microphone dropdown.
-   *     showBubble Wether to show the managed icon and bubble for the media
-   *                label.
-   *     bubbleText The text to use inside the bubble if it is shown.
-   */
-  ContentSettings.updateMediaUI = function(mediaSettings) {
-    $('media-stream-ask-label').innerHTML =
-        loadTimeData.getString(mediaSettings.askText);
-    $('media-stream-block-label').innerHTML =
-        loadTimeData.getString(mediaSettings.blockText);
-
-    if (mediaSettings.micDisabled)
-      $('media-select-mic').disabled = true;
-    if (mediaSettings.cameraDisabled)
-      $('media-select-camera').disabled = true;
-
-    PageManager.hideBubble();
-    // Create a synthetic pref change event decorated as
-    // CoreOptionsHandler::CreateValueForPref() does.
-    // TODO(arv): It was not clear what event type this should use?
-    var event = new Event('undefined');
-    event.value = {};
-
-    if (mediaSettings.showBubble) {
-      event.value = { controlledBy: 'policy' };
-      $('media-indicator').setAttribute(
-          'textpolicy', loadTimeData.getString(mediaSettings.bubbleText));
-      $('media-indicator').location = cr.ui.ArrowLocation.TOP_START;
-    }
-
-    $('media-indicator').handlePrefChange(event);
   };
 
   /**
@@ -250,23 +211,27 @@ cr.define('options', function() {
   };
 
   /**
-   * Shows/hides the link to the Pepper Flash camera and microphone default
-   * settings.
+   * Shows/hides the link to the Pepper Flash camera or microphone,
+   * default or exceptions settings.
    * Please note that whether the link is actually showed or not is also
    * affected by the style class pepper-flash-settings.
+   * @param {string} linkType Can be 'default' or 'exceptions'.
+   * @param {string} contentType Can be 'mic' or 'camera'.
+   * @param {boolean} show Whether to show (or hide) the link.
    */
-  ContentSettings.showMediaPepperFlashDefaultLink = function(show) {
-    $('media-pepper-flash-default').hidden = !show;
+  ContentSettings.showMediaPepperFlashLink =
+      function(linkType, contentType, show) {
+    assert(['default', 'exceptions'].indexOf(linkType) >= 0);
+    assert(['mic', 'camera'].indexOf(contentType) >= 0);
+    $('media-pepper-flash-' + linkType + '-' + contentType).hidden = !show;
   };
 
   /**
-   * Shows/hides the link to the Pepper Flash camera and microphone
-   * site-specific settings.
-   * Please note that whether the link is actually showed or not is also
-   * affected by the style class pepper-flash-settings.
+   * Shows/hides parts of the fullscreen and mouselock sections.
+   * @param {boolean} globalsVisible Whether to show (or hide) global settings.
    */
-  ContentSettings.showMediaPepperFlashExceptionsLink = function(show) {
-    $('media-pepper-flash-exceptions').hidden = !show;
+  ContentSettings.setExclusiveAccessVisible = function(globalsVisible) {
+    $('mouselock-global-settings').hidden = !globalsVisible;
   };
 
   /**
@@ -300,6 +265,18 @@ cr.define('options', function() {
     }
     if (defaultIndex >= 0)
       deviceSelect.selectedIndex = defaultIndex;
+  };
+
+  /**
+   * Sets the visibility of the microphone/camera devices menu.
+   * @param {string} type The content settings type name of this device.
+   * @param {boolean} show Whether to show the menu.
+   */
+  ContentSettings.setDevicesMenuVisibility = function(type, show) {
+    assert(type == 'media-stream-mic' || type == 'media-stream-camera');
+    var deviceSelect = $(type == 'media-stream-mic' ? 'media-select-mic' :
+                                                      'media-select-camera');
+    deviceSelect.hidden = !show;
   };
 
   /**

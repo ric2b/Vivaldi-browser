@@ -18,56 +18,60 @@ source_set("lib") {
 
   deps = [
     "//device/core",
-    "//device/devices_app/usb/public/cpp",
     "//device/devices_app/usb/public/interfaces",
     "//device/usb",
+    "//mojo/common",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/bindings:callback",
     "//net",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
-    "//third_party/mojo/src/mojo/public/cpp/bindings:callback",
     "//url",
   ]
 
   public_deps = [
     "//base",
-    "//mojo/application/public/cpp",
-    "//mojo/application/public/interfaces",
+    "//mojo/shell/public/cpp",
+    "//mojo/shell/public/interfaces",
   ]
 }
 
-mojo_native_application("devices") {
-  sources = [
-    "main.cc",
-  ]
+if (!is_component_build) {
+  mojo_native_application("devices") {
+    sources = [
+      "main.cc",
+    ]
 
-  deps = [
-    "//base",
-    "//device/devices_app/public/cpp:factory",
-    "//mojo/application/public/cpp",
-  ]
+    deps = [
+      "//base",
+      "//device/devices_app/public/cpp:factory",
+      "//mojo/shell/public/cpp",
+    ]
 
-  public_deps = [
-    ":lib",
-  ]
-}
+    public_deps = [
+      ":lib",
+    ]
+  }
 
-mojo_native_application("apptests") {
-  output_name = "devices_apptests"
+  mojo_native_application("apptests") {
+    output_name = "devices_apptests"
 
-  testonly = true
+    testonly = true
 
-  sources = [
-    "devices_apptest.cc",
-  ]
+    sources = [
+      "devices_apptest.cc",
+    ]
 
-  deps = [
-    "//base",
-    "//mojo/application/public/cpp:test_support",
-  ]
+    deps = [
+      "//base",
+      "//mojo/shell/public/cpp:test_support",
+    ]
 
-  public_deps = [
-    ":lib",
-    "//device/devices_app/usb/public/interfaces",
-  ]
+    public_deps = [
+      ":lib",
+      "//device/devices_app/usb/public/interfaces",
+    ]
 
-  data_deps = [ ":devices" ]
+    data_deps = [
+      ":devices",
+    ]
+  }
 }

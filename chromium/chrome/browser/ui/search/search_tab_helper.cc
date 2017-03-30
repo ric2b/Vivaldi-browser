@@ -6,25 +6,23 @@
 
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_util.h"
-#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_popup_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
+#include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/browser/ui/search/instant_tab.h"
 #include "chrome/browser/ui/search/search_ipc_router_policy_impl.h"
@@ -33,7 +31,11 @@
 #include "chrome/browser/ui/webui/ntp/ntp_user_data_logger.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "components/search/search.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/navigation_controller.h"
@@ -60,8 +62,8 @@ namespace {
 bool IsCacheableNTP(const content::WebContents* contents) {
   const content::NavigationEntry* entry =
       contents->GetController().GetLastCommittedEntry();
-  return chrome::NavEntryIsInstantNTP(contents, entry) &&
-      entry->GetURL() != GURL(chrome::kChromeSearchLocalNtpUrl);
+  return search::NavEntryIsInstantNTP(contents, entry) &&
+         entry->GetURL() != GURL(chrome::kChromeSearchLocalNtpUrl);
 }
 
 bool IsNTP(const content::WebContents* contents) {
@@ -72,11 +74,11 @@ bool IsNTP(const content::WebContents* contents) {
   if (entry && entry->GetVirtualURL() == GURL(chrome::kChromeUINewTabURL))
     return true;
 
-  return chrome::IsInstantNTP(contents);
+  return search::IsInstantNTP(contents);
 }
 
 bool IsSearchResults(const content::WebContents* contents) {
-  return !chrome::GetSearchTerms(contents).empty();
+  return !search::GetSearchTerms(contents).empty();
 }
 
 bool IsLocal(const content::WebContents* contents) {
@@ -143,7 +145,7 @@ bool OmniboxHasFocus(OmniboxView* omnibox) {
 
 SearchTabHelper::SearchTabHelper(content::WebContents* web_contents)
     : WebContentsObserver(web_contents),
-      is_search_enabled_(chrome::IsInstantExtendedAPIEnabled()),
+      is_search_enabled_(search::IsInstantExtendedAPIEnabled()),
       web_contents_(web_contents),
       ipc_router_(web_contents,
                   this,
@@ -194,7 +196,7 @@ void SearchTabHelper::OmniboxFocusChanged(OmniboxFocusState state,
 
     InstantSearchPrerenderer* prerenderer =
         InstantSearchPrerenderer::GetForProfile(profile());
-    if (!prerenderer || !chrome::ShouldPrerenderInstantUrlOnOmniboxFocus())
+    if (!prerenderer || !search::ShouldPrerenderInstantUrlOnOmniboxFocus())
       return;
 
     if (state == OMNIBOX_FOCUS_NONE) {
@@ -229,7 +231,7 @@ void SearchTabHelper::InstantSupportChanged(bool instant_support) {
   content::NavigationEntry* entry =
       web_contents_->GetController().GetLastCommittedEntry();
   if (entry) {
-    chrome::SetInstantSupportStateInNavigationEntry(new_state, entry);
+    search::SetInstantSupportStateInNavigationEntry(new_state, entry);
     if (delegate_ && !instant_support)
       delegate_->OnWebContentsInstantSupportDisabled(web_contents_);
   }
@@ -253,7 +255,7 @@ void SearchTabHelper::OnTabActivated() {
   ipc_router_.OnTabActivated();
 
   OmniboxView* omnibox_view = GetOmniboxView();
-  if (chrome::ShouldPrerenderInstantUrlOnOmniboxFocus() &&
+  if (search::ShouldPrerenderInstantUrlOnOmniboxFocus() &&
       omnibox_has_focus_fn_(omnibox_view)) {
     InstantSearchPrerenderer* prerenderer =
         InstantSearchPrerenderer::GetForProfile(profile());
@@ -269,10 +271,6 @@ void SearchTabHelper::OnTabDeactivated() {
   ipc_router_.OnTabDeactivated();
 }
 
-void SearchTabHelper::ToggleVoiceSearch() {
-  ipc_router_.ToggleVoiceSearch();
-}
-
 bool SearchTabHelper::IsSearchResultsPage() {
   return model_.mode().is_origin_search();
 }
@@ -285,7 +283,7 @@ void SearchTabHelper::RenderViewCreated(
 void SearchTabHelper::DidStartNavigationToPendingEntry(
     const GURL& url,
     content::NavigationController::ReloadType /* reload_type */) {
-  if (chrome::IsNTPURL(url, profile())) {
+  if (search::IsNTPURL(url, profile())) {
     // Set the title on any pending entry corresponding to the NTP. This
     // prevents any flickering of the tab title.
     content::NavigationEntry* entry =
@@ -300,8 +298,8 @@ void SearchTabHelper::DidNavigateMainFrame(
     const content::FrameNavigateParams& params) {
   if (IsCacheableNTP(web_contents_)) {
     UMA_HISTOGRAM_ENUMERATION("InstantExtended.CacheableNTPLoad",
-                              chrome::CACHEABLE_NTP_LOAD_SUCCEEDED,
-                              chrome::CACHEABLE_NTP_LOAD_MAX);
+                              search::CACHEABLE_NTP_LOAD_SUCCEEDED,
+                              search::CACHEABLE_NTP_LOAD_MAX);
   }
 
   // Always set the title on the new tab page to be the one from our UI
@@ -318,7 +316,7 @@ void SearchTabHelper::DidNavigateMainFrame(
       web_contents_->GetController().GetLastCommittedEntry();
   if (entry && entry->GetTitle().empty() &&
       (entry->GetVirtualURL() == GURL(chrome::kChromeUINewTabURL) ||
-       chrome::NavEntryIsInstantNTP(web_contents_, entry))) {
+       search::NavEntryIsInstantNTP(web_contents_, entry))) {
     entry->SetTitle(l10n_util::GetStringUTF16(IDS_NEW_TAB_TITLE));
   }
 }
@@ -326,7 +324,7 @@ void SearchTabHelper::DidNavigateMainFrame(
 void SearchTabHelper::DidFinishLoad(content::RenderFrameHost* render_frame_host,
                                     const GURL& /* validated_url */) {
   if (!render_frame_host->GetParent()) {
-    if (chrome::IsInstantNTP(web_contents_))
+    if (search::IsInstantNTP(web_contents_))
       RecordNewTabLoadTime(web_contents_);
 
     DetermineIfPageSupportsInstant();
@@ -341,13 +339,9 @@ void SearchTabHelper::NavigationEntryCommitted(
   if (!load_details.is_main_frame)
     return;
 
-  if (chrome::ShouldAssignURLToInstantRenderer(web_contents_->GetURL(),
-                                               profile())) {
-    InstantService* instant_service =
-        InstantServiceFactory::GetForProfile(profile());
-    ipc_router_.SetOmniboxStartMargin(instant_service->omnibox_start_margin());
+  if (search::ShouldAssignURLToInstantRenderer(web_contents_->GetURL(),
+                                               profile()))
     ipc_router_.SetDisplayInstantResults();
-  }
 
   UpdateMode(true, false);
 
@@ -363,7 +357,7 @@ void SearchTabHelper::NavigationEntryCommitted(
     // support for the navigated page. So, copy over the Instant support from
     // the previous entry. If the page does not support Instant, update the
     // location bar from here to turn off search terms replacement.
-    chrome::SetInstantSupportStateInNavigationEntry(model_.instant_support(),
+    search::SetInstantSupportStateInNavigationEntry(model_.instant_support(),
                                                     entry);
     if (delegate_ && model_.instant_support() == INSTANT_SUPPORT_NO)
       delegate_->OnWebContentsInstantSupportDisabled(web_contents_);
@@ -371,8 +365,7 @@ void SearchTabHelper::NavigationEntryCommitted(
   }
 
   model_.SetInstantSupportState(INSTANT_SUPPORT_UNKNOWN);
-  model_.SetVoiceSearchSupported(false);
-  chrome::SetInstantSupportStateInNavigationEntry(model_.instant_support(),
+  search::SetInstantSupportStateInNavigationEntry(model_.instant_support(),
                                                   entry);
 
   if (InInstantProcess(profile(), web_contents_))
@@ -381,10 +374,6 @@ void SearchTabHelper::NavigationEntryCommitted(
 
 void SearchTabHelper::OnInstantSupportDetermined(bool supports_instant) {
   InstantSupportChanged(supports_instant);
-}
-
-void SearchTabHelper::OnSetVoiceSearchSupport(bool supports_voice_search) {
-  model_.SetVoiceSearchSupported(supports_voice_search);
 }
 
 void SearchTabHelper::ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) {
@@ -397,10 +386,24 @@ void SearchTabHelper::MostVisitedItemsChanged(
   // our metrics get inconsistent. So we'd rather emit stats now.
   InstantTab::EmitNtpStatistics(web_contents_);
   ipc_router_.SendMostVisitedItems(items);
+  LogMostVisitedItemsSource(items);
 }
 
-void SearchTabHelper::OmniboxStartMarginChanged(int omnibox_start_margin) {
-  ipc_router_.SetOmniboxStartMargin(omnibox_start_margin);
+void SearchTabHelper::LogMostVisitedItemsSource(
+    const std::vector<InstantMostVisitedItem>& items) {
+  for (auto item : items) {
+    NTPLoggingEventType event;
+    if (item.is_server_side_suggestion) {
+      event = NTP_SERVER_SIDE_SUGGESTION;
+    } else {
+      event = NTP_CLIENT_SIDE_SUGGESTION;
+    }
+    // The metrics are emitted for each suggestion as the design requirement
+    // even the ntp_user_data_logger.cc now only supports the scenario:
+    // all suggestions are provided by server OR
+    // all suggestions are provided by client.
+    this->OnLogEvent(event, base::TimeDelta());
+  }
 }
 
 void SearchTabHelper::FocusOmnibox(OmniboxFocusState state) {
@@ -447,6 +450,15 @@ void SearchTabHelper::FocusOmnibox(OmniboxFocusState state) {
 void SearchTabHelper::NavigateToURL(const GURL& url,
                                     WindowOpenDisposition disposition,
                                     bool is_most_visited_item_url) {
+  // Make sure the specified URL is actually on the most visited or suggested
+  // items list.
+  // TODO(treib): The |is_most_visited_item_url| is meaningless: the way it's
+  // currently set by the renderer means it can't be used to decide which list
+  // of items (most visited or suggestions) to use for the validation check. Can
+  // it be removed?
+  if (!instant_service_ || !instant_service_->IsValidURLForNavigation(url))
+    return;
+
   if (is_most_visited_item_url) {
     content::RecordAction(
         base::UserMetricsAction("InstantExtended.MostVisitedClicked"));
@@ -510,8 +522,8 @@ void SearchTabHelper::PasteIntoOmnibox(const base::string16& text) {
   // from the clipboard already sanitized. The second case is needed to handle
   // drag-and-drop value and it has to be sanitazed before setting it into the
   // omnibox.
-  base::string16 text_to_paste = text.empty() ? omnibox->GetClipboardText() :
-      omnibox->SanitizeTextForPaste(text);
+  base::string16 text_to_paste =
+      text.empty() ? GetClipboardText() : omnibox->SanitizeTextForPaste(text);
 
   if (text_to_paste.empty())
     return;
@@ -522,7 +534,7 @@ void SearchTabHelper::PasteIntoOmnibox(const base::string16& text) {
   omnibox->OnBeforePossibleChange();
   omnibox->model()->OnPaste();
   omnibox->SetUserText(text_to_paste);
-  omnibox->OnAfterPossibleChange();
+  omnibox->OnAfterPossibleChange(true);
 #endif
 }
 
@@ -530,8 +542,9 @@ void SearchTabHelper::OnChromeIdentityCheck(const base::string16& identity) {
   SigninManagerBase* manager = SigninManagerFactory::GetForProfile(profile());
   if (manager) {
     ipc_router_.SendChromeIdentityCheckResult(
-        identity, gaia::AreEmailsSame(base::UTF16ToUTF8(identity),
-                                      manager->GetAuthenticatedUsername()));
+        identity,
+        gaia::AreEmailsSame(base::UTF16ToUTF8(identity),
+                            manager->GetAuthenticatedAccountInfo().email));
   } else {
     ipc_router_.SendChromeIdentityCheckResult(identity, false);
   }

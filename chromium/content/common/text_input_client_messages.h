@@ -4,6 +4,9 @@
 
 // Multiply-included message file, hence no include guard
 
+#include <stddef.h>
+
+#include "build/build_config.h"
 #include "ipc/ipc_message_macros.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/range/range.h"
@@ -53,8 +56,9 @@ IPC_MESSAGE_ROUTED1(TextInputClientReplyMsg_GotFirstRectForRange,
 
 #if defined(OS_MACOSX)
 // Reply message for TextInputClientMsg_StringForRange.
-IPC_MESSAGE_ROUTED1(TextInputClientReplyMsg_GotStringForRange,
-                    mac::AttributedStringCoder::EncodedString)
+IPC_MESSAGE_ROUTED2(TextInputClientReplyMsg_GotStringForRange,
+                    mac::AttributedStringCoder::EncodedString,
+                    gfx::Point)
 
 // Reply message for TextInputClientMsg_StringAtPoint
 IPC_MESSAGE_ROUTED2(TextInputClientReplyMsg_GotStringAtPoint,

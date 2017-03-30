@@ -53,14 +53,16 @@ class TracingCategoryFilter(object):
     self._disabled_by_default_categories = set()
     self._synthetic_delays = set()
     self.contains_wildcards = False
+    self.AddFilterString(filter_string)
 
+  def AddFilterString(self, filter_string):
     if filter_string == None:
       return
 
     if '*' in filter_string or '?' in filter_string:
       self.contains_wildcards = True
 
-    filter_set = set(filter_string.split(','))
+    filter_set = set([cf.strip() for cf in filter_string.split(',')])
     for category in filter_set:
       if category == '':
         continue
@@ -120,6 +122,25 @@ class TracingCategoryFilter(object):
         l.sort()
       categories.extend(l)
     return ','.join(categories)
+
+  def GetDictForChromeTracing(self):
+    INCLUDED_CATEGORIES_PARAM = 'included_categories'
+    EXCLUDED_CATEGORIES_PARAM = 'excluded_categories'
+    SYNTHETIC_DELAYS_PARAM = 'synthetic_delays'
+
+    result = {}
+    if self._included_categories or self._disabled_by_default_categories:
+      result[INCLUDED_CATEGORIES_PARAM] = list(
+        self._included_categories | self._disabled_by_default_categories)
+    if self._excluded_categories:
+      result[EXCLUDED_CATEGORIES_PARAM] = list(self._excluded_categories)
+    if self._synthetic_delays:
+      result[SYNTHETIC_DELAYS_PARAM] = list(self._synthetic_delays)
+    return result
+
+  def AddDisabledByDefault(self, category):
+    assert category.startswith('disabled-by-default-')
+    self._disabled_by_default_categories.add(category)
 
   def AddIncludedCategory(self, category_glob):
     """Explicitly enables anything matching category_glob."""

@@ -16,7 +16,7 @@ namespace message_center {
 
 // Interface used by views to report clicks and other user actions. The views
 // by themselves do not know how to perform those operations, they ask
-// MessageCenterController to do them. Implemented by MessageCeneterView and
+// MessageCenterController to do them. Implemented by MessageCenterView and
 // MessagePopupCollection.
 class MessageCenterController {
  public:
@@ -29,6 +29,7 @@ class MessageCenterController {
   virtual bool HasClickedListener(const std::string& notification_id) = 0;
   virtual void ClickOnNotificationButton(const std::string& notification_id,
                                          int button_index) = 0;
+  virtual void ClickOnSettingsButton(const std::string& notification_id) = 0;
 };
 
 }  // namespace message_center

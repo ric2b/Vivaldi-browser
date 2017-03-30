@@ -20,7 +20,6 @@ import android.support.v7.media.MediaRouter;
 import android.support.v7.media.MediaRouter.RouteInfo;
 import android.support.v7.media.MediaSessionStatus;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.google.android.gms.cast.CastMediaControlIntent;
 
@@ -30,6 +29,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.media.remote.RemoteVideoInfo.PlayerState;
+import org.chromium.ui.widget.Toast;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -95,9 +95,9 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
     private boolean mDebug;
     private String mCurrentSessionId;
     private String mCurrentItemId;
-    private int mStreamPositionTimestamp;
-    private int mLastKnownStreamPosition;
-    private int mStreamDuration;
+    private long mStreamPositionTimestamp;
+    private long mLastKnownStreamPosition;
+    private long mStreamDuration;
     private boolean mSeeking;
     private final String mIntentCategory;
     private PendingIntent mSessionStatusUpdateIntent;
@@ -497,7 +497,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
     }
 
     @Override
-    public int getPosition() {
+    public long getPosition() {
         boolean paused = (getPlayerState() != PlayerState.PLAYING);
         if ((mStreamPositionTimestamp != 0) && !mSeeking && !paused
                 && (mLastKnownStreamPosition < mStreamDuration)) {
@@ -507,18 +507,18 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
             if (extrapolatedStreamPosition > mStreamDuration) {
                 extrapolatedStreamPosition = mStreamDuration;
             }
-            return (int) extrapolatedStreamPosition;
+            return extrapolatedStreamPosition;
         }
         return mLastKnownStreamPosition;
     }
 
     @Override
-    public int getDuration() {
+    public long getDuration() {
         return mStreamDuration;
     }
 
     @Override
-    public void seekTo(int msec) {
+    public void seekTo(long msec) {
         if (msec == getPosition()) return;
         // Update the position now since the MRP will update it only once the video is playing
         // remotely. In particular, if the video is paused, the MRP doesn't send the command until
@@ -529,7 +529,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         intent.addCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK);
         intent.putExtra(MediaControlIntent.EXTRA_SESSION_ID, mCurrentSessionId);
         intent.putExtra(MediaControlIntent.EXTRA_ITEM_ID, mCurrentItemId);
-        intent.putExtra(MediaControlIntent.EXTRA_ITEM_CONTENT_POSITION, (long) msec);
+        intent.putExtra(MediaControlIntent.EXTRA_ITEM_CONTENT_POSITION, msec);
         sendIntentToRoute(intent, new ResultBundleHandler() {
             @Override
             public void onResult(Bundle data) {
@@ -546,6 +546,8 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
 
     @Override
     public void release() {
+        super.release();
+
         for (UiListener listener : getUiListeners()) {
             listener.onRouteUnselected(this);
         }
@@ -692,6 +694,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         } else {
             clearStreamState();
             mReconnecting = false;
+            mLastKnownStreamPosition = 0;
         }
 
         notifyRouteSelected(route);
@@ -815,6 +818,8 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         switch (sessionState) {
             case MediaSessionStatus.SESSION_STATE_ACTIVE:
                 // TODO(aberent): This should not be needed. Remove this once b/12921924 is fixed.
+                // TODO(dgn): It's fixed now. Should be looked at in the context of
+                // https://crbug.com/577110
                 syncStatus(mCurrentSessionId, new ResultBundleHandler() {
                     @Override
                     public void onResult(Bundle data) {
@@ -881,13 +886,13 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
 
                 this.mCurrentItemId = itemId;
 
-                int duration = (int) itemStatus.getContentDuration();
+                long duration = itemStatus.getContentDuration();
                 // duration can possibly be -1 if it's unknown, so cap to 0
                 updateDuration(Math.max(duration, 0));
 
                 // update the position using the remote player's position
-                mLastKnownStreamPosition = (int) itemStatus.getContentPosition();
-                mStreamPositionTimestamp = (int) itemStatus.getTimestamp();
+                mLastKnownStreamPosition = itemStatus.getContentPosition();
+                mStreamPositionTimestamp = itemStatus.getTimestamp();
                 updatePosition();
 
                 if (mSeeking) {
@@ -981,7 +986,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         });
     }
 
-    private void updateDuration(int durationMillis) {
+    private void updateDuration(long durationMillis) {
         mStreamDuration = durationMillis;
 
         for (UiListener listener : getUiListeners()) {
@@ -1024,7 +1029,10 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
 
     @Override
     public void prepareAsync(String frameUrl, long startPositionMillis) {
-        if (mDebug) Log.d(TAG, "prepareAsync called, mLocalVideoUri = " + mLocalVideoUri);
+        if (mDebug) {
+            Log.d(TAG, "prepareAsync called, mLocalVideoUri = " + mLocalVideoUri + ", pos = "
+                            + startPositionMillis);
+        }
         if (mLocalVideoUri == null) return;
 
         RecordCastAction.castPlayRequested();
@@ -1042,7 +1050,11 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
 
     private void playMedia() {
         String title = null;
-        if (getMediaStateListener() != null) title = getMediaStateListener().getTitle();
+        if (getMediaStateListener() != null) {
+            title = getMediaStateListener().getTitle();
+            RecordCastAction.castDomainAndRegistry(
+                    getMediaStateListener().getFrameUrl().toString());
+        }
         playUri(mLocalVideoUri, title, mStartPositionMillis);
     }
 

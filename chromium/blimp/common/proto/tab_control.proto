@@ -1,0 +1,40 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// Message definitions for browser tab control messages.
+
+syntax = "proto2";
+
+option optimize_for = LITE_RUNTIME;
+
+package blimp;
+
+// Contains display information that represents resize events coming from the
+// client device.
+message SizeMessage {
+  optional uint64 width = 1;
+  optional uint64 height = 2;
+  optional float device_pixel_ratio = 3;
+}
+
+message TabControlMessage {
+  enum Type {
+    UNKNOWN = 0;
+
+    // Client <=> Server types.
+    CREATE_TAB = 1;
+    CLOSE_TAB = 2;
+
+    // Client => Server types.
+    SIZE = 3;
+  }
+
+  optional Type type = 1;
+
+  // Feature-specific messages follow.
+  // Only one of these fields may be set per TabControlMessage.
+  // TODO(kmarshall): use a 'oneof' union when it's supported in Chromium.  See
+  // crbug.com/570371.
+  optional SizeMessage size = 1000;
+}

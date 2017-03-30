@@ -61,29 +61,6 @@ const char kMimeTypePng[] = "image/png";
 
 namespace extension_misc {
 
-const int kExtensionIconSizes[] = {EXTENSION_ICON_GIGANTOR,     // 512
-                                   EXTENSION_ICON_EXTRA_LARGE,  // 256
-                                   EXTENSION_ICON_LARGE,        // 128
-                                   EXTENSION_ICON_MEDIUM,       // 48
-                                   EXTENSION_ICON_SMALL,        // 32
-                                   EXTENSION_ICON_SMALLISH,     // 24
-                                   EXTENSION_ICON_BITTY,        // 16
-                                   // Additional 2x resources to load.
-                                   2 * EXTENSION_ICON_MEDIUM,  // 96
-                                   2 * EXTENSION_ICON_SMALL    // 64
-};
-
-const size_t kNumExtensionIconSizes = arraysize(kExtensionIconSizes);
-
-const IconRepresentationInfo kExtensionActionIconSizes[] = {
-  { EXTENSION_ICON_ACTION, "19", ui::SCALE_FACTOR_100P },
-  { 2 * EXTENSION_ICON_ACTION, "38", ui::SCALE_FACTOR_200P }
-};
-
-static_assert(kNumExtensionActionIconSizes ==
-              arraysize(kExtensionActionIconSizes),
-              "num action icon sizes must be in sync with action icon sizes");
-
 const char kPdfExtensionId[] = "mhjfbmdgcfjbbpaeojofohoefgiehjai";
 const char kQuickOfficeComponentExtensionId[] =
     "bpmcpldpdmajfigpchkicefoigmkfalc";
@@ -92,5 +69,16 @@ const char kQuickOfficeInternalExtensionId[] =
 const char kQuickOfficeExtensionId[] = "gbkeegbaiigmenfmjfclcdgdpimamgkj";
 const char kMimeHandlerPrivateTestExtensionId[] =
     "oickdpebdnfbgkcaoklfcdhjniefkcji";
+
+const char kProdHangoutsExtensionId[] = "nckgahadagoaajjgafhacjanaoiihapd";
+const char* const kHangoutsExtensionIds[6] = {
+    kProdHangoutsExtensionId,
+    "ljclpkphhpbpinifbeabbhlfddcpfdde",  // Debug.
+    "ppleadejekpmccmnpjdimmlfljlkdfej",  // Alpha.
+    "eggnbpckecmjlblplehfpjjdhhidfdoj",  // Beta.
+    "jfjjdfefebklmdbmenmlehlopoocnoeh",  // Packaged App Debug.
+    "knipolnnllmklapflnccelgolnpehhpl"   // Packaged App Prod.
+    // Keep in sync with _api_features.json and _manifest_features.json.
+};
 
 }  // namespace extension_misc

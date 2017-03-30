@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "components/autofill/core/common/autofill_switches.h"
 
 namespace autofill {
@@ -24,15 +25,20 @@ const char kDisableFullFormAutofillIOS[]    = "disable-full-form-autofill-ios";
 const char kDisableOfferStoreUnmaskedWalletCards[] =
     "disable-offer-store-unmasked-wallet-cards";
 
+// Disables offering to upload credit cards.
+const char kDisableOfferUploadCreditCards[] =
+    "disable-offer-upload-credit-cards";
+
 // Disables password generation when we detect that the user is going through
 // account creation.
 const char kDisablePasswordGeneration[]     = "disable-password-generation";
 
+// Disables showing bubble instead of infobar for save credit card prompt.
+const char kDisableSaveCardBubble[] =
+    "disable-autofill-save-card-bubble";
+
 // The "disable" flag for kEnableSingleClickAutofill.
 const char kDisableSingleClickAutofill[]    = "disable-single-click-autofill";
-
-const char kEnableAccessorySuggestionView[] =
-    "enable-autofill-keyboard-accessory-view";
 
 // Enables using device's camera to scan a new credit card when filling out a
 // credit card form.
@@ -56,16 +62,23 @@ const char kEnableFullFormAutofillIOS[]     = "enable-full-form-autofill-ios";
 const char kEnableOfferStoreUnmaskedWalletCards[] =
     "enable-offer-store-unmasked-wallet-cards";
 
+// Enables offering to upload credit cards.
+const char kEnableOfferUploadCreditCards[] = "enable-offer-upload-credit-cards";
+
 // Enables password generation when we detect that the user is going through
 // account creation.
 const char kEnablePasswordGeneration[]      = "enable-password-generation";
 
+// Enables showing bubble instead of infobar for save credit card prompt.
+const char kEnableSaveCardBubble[] =
+    "enable-autofill-save-card-bubble";
+
 // Enables/disables suggestions without typing anything (on first click).
 const char kEnableSingleClickAutofill[]     = "enable-single-click-autofill";
 
-// Enables syncing usage counts and last use dates of Wallet addresses and
-// cards.
-const char kEnableWalletMetadataSync[]      = "enable-wallet-metadata-sync";
+// Enables suggestions with substring matching instead of prefix matching.
+const char kEnableSuggestionsWithSubstringMatch[] =
+    "enable-suggestions-with-substring-match";
 
 // Ignores autocomplete="off" for Autofill data (profiles + credit cards).
 const char kIgnoreAutocompleteOffForAutofill[] =
@@ -89,6 +102,16 @@ const char kWalletServiceUrl[]              = "wallet-service-url";
 
 // Use the sandbox Online Wallet service URL (for developer testing).
 const char kWalletServiceUseSandbox[]       = "wallet-service-use-sandbox";
+
+#if defined(OS_ANDROID)
+// Disables showing suggestions in a keyboard accessory view.
+const char kDisableAccessorySuggestionView[] =
+    "disable-autofill-keyboard-accessory-view";
+
+// Enables showing suggestions in a keyboard accessory view.
+const char kEnableAccessorySuggestionView[] =
+    "enable-autofill-keyboard-accessory-view";
+#endif  // defined(OS_ANDROID)
 
 }  // namespace switches
 }  // namespace autofill

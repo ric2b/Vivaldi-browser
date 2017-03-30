@@ -19,9 +19,12 @@
 
 #include "components/history/core/browser/history_service.h"
 
+#include <stdint.h>
+
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -53,7 +56,7 @@ class HistoryServiceTest : public testing::Test {
 
   void OnMostVisitedURLsAvailable(const MostVisitedURLList* url_list) {
     most_visited_urls_ = *url_list;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
  protected:
@@ -79,7 +82,7 @@ class HistoryServiceTest : public testing::Test {
     // Make sure we don't have any event pending that could disrupt the next
     // test.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitClosure());
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     base::MessageLoop::current()->Run();
   }
 
@@ -87,7 +90,8 @@ class HistoryServiceTest : public testing::Test {
     DCHECK(history_service_);
 
     history_service_->ClearCachedDataForContextID(0);
-    history_service_->SetOnBackendDestroyTask(base::MessageLoop::QuitClosure());
+    history_service_->SetOnBackendDestroyTask(
+        base::MessageLoop::QuitWhenIdleClosure());
     history_service_->Cleanup();
     history_service_.reset();
 
@@ -123,7 +127,7 @@ class HistoryServiceTest : public testing::Test {
       query_url_row_ = URLRow();
       query_url_visits_.clear();
     }
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   // Fills in saved_redirects_ with the redirect information for the given URL,
@@ -144,7 +148,7 @@ class HistoryServiceTest : public testing::Test {
       saved_redirects_.insert(
           saved_redirects_.end(), redirects->begin(), redirects->end());
     }
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   base::ScopedTempDir temp_dir_;
@@ -219,7 +223,7 @@ TEST_F(HistoryServiceTest, AddRedirect) {
   EXPECT_TRUE(QueryURL(history_service_.get(), first_redirects[0]));
   EXPECT_EQ(1, query_url_row_.visit_count());
   ASSERT_EQ(1U, query_url_visits_.size());
-  int64 first_visit = query_url_visits_[0].visit_id;
+  int64_t first_visit = query_url_visits_[0].visit_id;
   EXPECT_EQ(ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_CHAIN_START,
             query_url_visits_[0].transition);
   EXPECT_EQ(0, query_url_visits_[0].referring_visit);  // No referrer.
@@ -229,7 +233,7 @@ TEST_F(HistoryServiceTest, AddRedirect) {
   EXPECT_TRUE(QueryURL(history_service_.get(), first_redirects[1]));
   EXPECT_EQ(1, query_url_row_.visit_count());
   ASSERT_EQ(1U, query_url_visits_.size());
-  int64 second_visit = query_url_visits_[0].visit_id;
+  int64_t second_visit = query_url_visits_[0].visit_id;
   EXPECT_EQ(ui::PAGE_TRANSITION_SERVER_REDIRECT | ui::PAGE_TRANSITION_CHAIN_END,
             query_url_visits_[0].transition);
   EXPECT_EQ(first_visit, query_url_visits_[0].referring_visit);
@@ -567,7 +571,7 @@ class HistoryDBTaskImpl : public HistoryDBTask {
 
   void DoneRunOnMainThread() override {
     *done_invoked_ = true;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   int* invoke_count_;
@@ -628,7 +632,7 @@ TEST_F(HistoryServiceTest, ProcessLocalDeleteDirectiveSyncOnline) {
   ASSERT_TRUE(history_service_.get());
 
   const GURL test_url("http://www.google.com/");
-  for (int64 i = 1; i <= 10; ++i) {
+  for (int64_t i = 1; i <= 10; ++i) {
     base::Time t =
         base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(i);
     history_service_->AddPage(test_url, t, NULL, 0, GURL(),
@@ -674,7 +678,7 @@ TEST_F(HistoryServiceTest, ProcessLocalDeleteDirectiveSyncOnline) {
 void CheckDirectiveProcessingResult(
     base::Time timeout,
     const syncer::FakeSyncChangeProcessor* change_processor,
-    uint32 num_changes) {
+    uint32_t num_changes) {
   if (base::Time::Now() > timeout ||
       change_processor->changes().size() >= num_changes) {
     return;
@@ -692,7 +696,7 @@ void CheckDirectiveProcessingResult(
 TEST_F(HistoryServiceTest, ProcessGlobalIdDeleteDirective) {
   ASSERT_TRUE(history_service_.get());
   const GURL test_url("http://www.google.com/");
-  for (int64 i = 1; i <= 20; i++) {
+  for (int64_t i = 1; i <= 20; i++) {
     base::Time t =
         base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(i);
     history_service_->AddPage(test_url, t, NULL, 0, GURL(),
@@ -783,7 +787,7 @@ TEST_F(HistoryServiceTest, ProcessGlobalIdDeleteDirective) {
 TEST_F(HistoryServiceTest, ProcessTimeRangeDeleteDirective) {
   ASSERT_TRUE(history_service_.get());
   const GURL test_url("http://www.google.com/");
-  for (int64 i = 1; i <= 10; ++i) {
+  for (int64_t i = 1; i <= 10; ++i) {
     base::Time t =
         base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(i);
     history_service_->AddPage(test_url, t, NULL, 0, GURL(),

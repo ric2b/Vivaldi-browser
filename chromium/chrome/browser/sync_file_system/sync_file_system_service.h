@@ -6,10 +6,11 @@
 #define CHROME_BROWSER_SYNC_FILE_SYSTEM_SYNC_FILE_SYSTEM_SERVICE_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -91,7 +92,7 @@ class SyncFileSystemService
   friend class SyncFileSystemServiceFactory;
   friend class SyncFileSystemServiceTest;
   friend class SyncFileSystemTest;
-  friend struct base::DefaultDeleter<SyncFileSystemService>;
+  friend std::default_delete<SyncFileSystemService>;
   friend class LocalSyncRunner;
   friend class RemoteSyncRunner;
 

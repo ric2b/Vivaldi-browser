@@ -11,6 +11,7 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/containers/hash_tables.h"
 #include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/layers/ui_resource_layer.h"
 #include "chrome/browser/android/thumbnail/thumbnail_cache.h"
@@ -46,11 +47,8 @@ class TabContentManager : public ThumbnailCacheObserver {
 
   virtual ~TabContentManager();
 
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
-  void SetUIResourceProvider(JNIEnv* env,
-                             jobject obj,
-                             jlong ui_resource_provider_ptr);
   void SetUIResourceProvider(ui::UIResourceProvider* ui_resource_provider);
 
   // Get the live layer from the cache.
@@ -72,24 +70,38 @@ class TabContentManager : public ThumbnailCacheObserver {
   // Callback for when the thumbnail decompression for tab_id is done.
   void OnFinishDecompressThumbnail(int tab_id, bool success, SkBitmap bitmap);
   // JNI methods.
-  jboolean HasFullCachedThumbnail(JNIEnv* env, jobject obj, jint tab_id);
+  jboolean HasFullCachedThumbnail(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint tab_id);
   void CacheTab(JNIEnv* env,
-                jobject obj,
-                jobject tab,
-                jobject content_view_core,
+                const base::android::JavaParamRef<jobject>& obj,
+                const base::android::JavaParamRef<jobject>& tab,
+                const base::android::JavaParamRef<jobject>& content_view_core,
                 jfloat thumbnail_scale);
   void CacheTabWithBitmap(JNIEnv* env,
-                          jobject obj,
-                          jobject tab,
-                          jobject bitmap,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          const base::android::JavaParamRef<jobject>& tab,
+                          const base::android::JavaParamRef<jobject>& bitmap,
                           jfloat thumbnail_scale);
-  void InvalidateIfChanged(JNIEnv* env, jobject obj, jint tab_id, jstring jurl);
-  void UpdateVisibleIds(JNIEnv* env, jobject obj, jintArray priority);
-  void RemoveTabThumbnail(JNIEnv* env, jobject obj, jint tab_id);
-  void RemoveTabThumbnailFromDiskAtAndAboveId(JNIEnv* env,
-                                              jobject obj,
-                                              jint min_forbidden_id);
-  void GetDecompressedThumbnail(JNIEnv* env, jobject obj, jint tab_id);
+  void InvalidateIfChanged(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& obj,
+                           jint tab_id,
+                           const base::android::JavaParamRef<jstring>& jurl);
+  void UpdateVisibleIds(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj,
+                        const base::android::JavaParamRef<jintArray>& priority);
+  void RemoveTabThumbnail(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          jint tab_id);
+  void RemoveTabThumbnailFromDiskAtAndAboveId(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint min_forbidden_id);
+  void GetDecompressedThumbnail(JNIEnv* env,
+                                const base::android::JavaParamRef<jobject>& obj,
+                                jint tab_id);
+  void OnUIResourcesWereEvicted();
 
   // ThumbnailCacheObserver implementation;
   void OnFinishedThumbnailRead(TabId tab_id) override;

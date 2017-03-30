@@ -12,21 +12,28 @@ details on the presubmit API built into depot_tools.
 def CommonChecks(input_api, output_api):
   output = []
 
+  build_android_dir = input_api.PresubmitLocalPath()
+
   def J(*dirs):
     """Returns a path relative to presubmit directory."""
-    return input_api.os_path.join(input_api.PresubmitLocalPath(), *dirs)
+    return input_api.os_path.join(build_android_dir, *dirs)
 
+  build_pys = [
+      r'gyp/.*\.py$',
+      r'gn/.*\.py',
+      r'incremental_install/.*\.py',
+  ]
   output.extend(input_api.canned_checks.RunPylint(
       input_api,
       output_api,
-      black_list=[r'pylib/symbols/.*\.py$', r'gyp/.*\.py$', r'gn/.*\.py'],
-      extra_paths_list=[
-          J(), J('..', '..', 'third_party', 'android_testrunner'),
-          J('buildbot')]))
+      pylintrc='pylintrc',
+      # devil and symbols have their own PRESUBMIT.py
+      black_list=build_pys + [r'devil/.*\.py$', r'pylib/symbols/.*\.py$'],
+      extra_paths_list=[J(), J('buildbot')]))
   output.extend(input_api.canned_checks.RunPylint(
       input_api,
       output_api,
-      white_list=[r'gyp/.*\.py$', r'gn/.*\.py'],
+      white_list=build_pys,
       extra_paths_list=[J('gyp'), J('gn')]))
 
   # Disabled due to http://crbug.com/410936
@@ -35,24 +42,24 @@ def CommonChecks(input_api, output_api):
 
   pylib_test_env = dict(input_api.environ)
   pylib_test_env.update({
-      'PYTHONPATH': input_api.PresubmitLocalPath(),
+      'PYTHONPATH': build_android_dir,
       'PYTHONDONTWRITEBYTECODE': '1',
   })
   output.extend(input_api.canned_checks.RunUnitTests(
       input_api,
       output_api,
       unit_tests=[
+          J('.', 'emma_coverage_stats_test.py'),
+          J('gyp', 'util', 'md5_check_test.py'),
+          J('play_services', 'update_test.py'),
           J('pylib', 'base', 'test_dispatcher_unittest.py'),
-          J('pylib', 'device', 'battery_utils_test.py'),
-          J('pylib', 'device', 'device_utils_test.py'),
-          J('pylib', 'device', 'logcat_monitor_test.py'),
           J('pylib', 'gtest', 'gtest_test_instance_test.py'),
           J('pylib', 'instrumentation',
             'instrumentation_test_instance_test.py'),
           J('pylib', 'results', 'json_results_test.py'),
-          J('pylib', 'utils', 'md5sum_test.py'),
       ],
       env=pylib_test_env))
+
   return output
 
 

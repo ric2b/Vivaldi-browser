@@ -79,6 +79,31 @@ OptionsWebUITest.prototype = {
     this.mockHandler.stubs().observePrefs(ANYTHING);
     this.mockHandler.stubs().coreOptionsUserMetricsAction(ANYTHING);
   },
+
+  /** @override */
+  setUp: function() {
+    OptionsBrowsertestBase.prototype.setUp.call(this);
+
+    // Enable when failure is resolved.
+    // AX_ARIA_10: http://crbug.com/559329
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'unsupportedAriaAttribute',
+        '#profiles-list');
+
+    var linkWithUnclearPurposeSelectors = [
+      '#sync-overview > A',
+      '#privacy-explanation > A',
+      '#languages-section > .settings-row > A',
+      '#cloudprint-options-mdns > .settings-row > A',
+      '#do-not-track-confirm-overlay > .action-area > .hbox.stretch > A',
+    ];
+
+    // Enable when failure is resolved.
+    // AX_TEXT_04: http://crbug.com/559318
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'linkWithUnclearPurpose',
+        linkWithUnclearPurposeSelectors);
+  },
 };
 
 /**
@@ -194,7 +219,7 @@ OptionsWebUITest.prototype.testDoNotTrackInterstitial =
         window.setTimeout(function() {
           assertFalse(dntOverlay.visible);
           assertEquals(confirmInterstitial, dntCheckbox.checked);
-          dntOverlay.removeEventListener(visibleChangeHandler);
+          dntOverlay.removeEventListener('visibleChange', visibleChangeHandler);
           testDone();
         }, 0);
         break;
@@ -215,43 +240,19 @@ OptionsWebUITest.prototype.testDoNotTrackInterstitial =
   dntCheckbox.click();
 };
 
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_EnableDoNotTrackAndConfirmInterstitial ' +
-    'DISABLED_EnableDoNotTrackAndConfirmInterstitial');
-GEN('#else');
-GEN('#define MAYBE_EnableDoNotTrackAndConfirmInterstitial ' +
-    'EnableDoNotTrackAndConfirmInterstitial');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUITest', 'MAYBE_EnableDoNotTrackAndConfirmInterstitial',
+TEST_F('OptionsWebUITest', 'EnableDoNotTrackAndConfirmInterstitial',
        function() {
   this.testDoNotTrackInterstitial(true);
 });
 
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_EnableDoNotTrackAndCancelInterstitial ' +
-    'DISABLED_EnableDoNotTrackAndCancelInterstitial');
-GEN('#else');
-GEN('#define MAYBE_EnableDoNotTrackAndCancelInterstitial ' +
-    'EnableDoNotTrackAndCancelInterstitial');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUITest', 'MAYBE_EnableDoNotTrackAndCancelInterstitial',
+TEST_F('OptionsWebUITest', 'EnableDoNotTrackAndCancelInterstitial',
        function() {
   this.testDoNotTrackInterstitial(false);
 });
 
 // Check that the "Do not Track" preference can be correctly disabled.
 // In order to do that, we need to enable it first.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_EnableAndDisableDoNotTrack ' +
-    'DISABLED_EnableAndDisableDoNotTrack');
-GEN('#else');
-GEN('#define MAYBE_EnableAndDisableDoNotTrack ' +
-    'EnableAndDisableDoNotTrack');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUITest', 'MAYBE_EnableAndDisableDoNotTrack', function() {
+TEST_F('OptionsWebUITest', 'EnableAndDisableDoNotTrack', function() {
   Preferences.prefsFetchedCallback({'enable_do_not_track': {'value': false}});
   var dntCheckbox = $('do-not-track-enabled');
   var dntOverlay = PageManager.registeredOverlayPages.donottrackconfirm;
@@ -271,7 +272,7 @@ TEST_F('OptionsWebUITest', 'MAYBE_EnableAndDisableDoNotTrack', function() {
         window.setTimeout(function() {
           assertFalse(dntOverlay.visible);
           assertTrue(dntCheckbox.checked);
-          dntOverlay.removeEventListener(visibleChangeHandler);
+          dntOverlay.removeEventListener('visibleChange', visibleChangeHandler);
           dntCheckbox.click();
         }, 0);
         break;
@@ -302,15 +303,7 @@ TEST_F('OptionsWebUITest', 'MAYBE_EnableAndDisableDoNotTrack', function() {
 // the default button. If this doesn't happen, other elements that may get
 // focus (by the overlay closing for instance), will execute in addition to the
 // default button. See crbug.com/268336.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_EnterPreventsDefault ' +
-    'DISABLED_EnterPreventsDefault');
-GEN('#else');
-GEN('#define MAYBE_EnterPreventsDefault ' +
-    'EnterPreventsDefault');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUITest', 'MAYBE_EnterPreventsDefault', function () {
+TEST_F('OptionsWebUITest', 'EnterPreventsDefault', function() {
   var page = HomePageOverlay.getInstance();
   PageManager.showPageByName(page.name);
   var event = new KeyboardEvent('keydown', {
@@ -325,15 +318,7 @@ TEST_F('OptionsWebUITest', 'MAYBE_EnterPreventsDefault', function () {
 });
 
 // Verifies that sending an empty list of indexes to move doesn't crash chrome.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_emptySelectedIndexesDoesntCrash ' +
-    'DISABLED_emptySelectedIndexesDoesntCrash');
-GEN('#else');
-GEN('#define MAYBE_emptySelectedIndexesDoesntCrash ' +
-    'emptySelectedIndexesDoesntCrash');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUITest', 'MAYBE_emptySelectedIndexesDoesntCrash', function () {
+TEST_F('OptionsWebUITest', 'emptySelectedIndexesDoesntCrash', function() {
   chrome.send('dragDropStartupPage', [0, []]);
   setTimeout(testDone);
 });
@@ -417,6 +402,44 @@ OptionsWebUIExtendedTest.prototype = {
 
   /** @override */
   typedefCppFixture: 'OptionsBrowserTest',
+
+  /** @override */
+  setUp: function() {
+    OptionsWebUITest.prototype.setUp.call(this);
+
+    // Enable when failure is resolved.
+    // AX_ARIA_10: http://crbug.com/559329
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'unsupportedAriaAttribute',
+        '#profiles-list');
+
+    var controlsWithoutLabelSelectors = [
+      '#cookies-view-page > .content-area.cookies-list-content-area > *',
+      '#other-search-engine-list > .deletable-item > DIV > *',
+    ];
+
+    // Enable when failure is resolved.
+    // AX_TEXT_01: http://crbug.com/559330
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'controlsWithoutLabel',
+        controlsWithoutLabelSelectors);
+
+    var linkWithUnclearPurposeSelectors = [
+      '#sync-overview > A',
+      '#privacy-explanation > A',
+      '#languages-section > .settings-row > A',
+      '#cloudprint-options-mdns > .settings-row > A',
+      // Selectors below only affect ChromeOS tests.
+      '#privacy-section > DIV > DIV:nth-of-type(9) > A',
+      '#accessibility-learn-more',
+    ];
+
+    // Enable when failure is resolved.
+    // AX_TEXT_04: http://crbug.com/559326
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'linkWithUnclearPurpose',
+        linkWithUnclearPurposeSelectors);
+  },
 
   testGenPreamble: function() {
     // Start with no supervised users managed by this profile.
@@ -572,15 +595,7 @@ TEST_F('OptionsWebUIExtendedTest', 'ShowSearchFromField', function() {
 });
 
 // Show a page without updating history.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_ShowPageNoHistory ' +
-    'DISABLED_ShowPageNoHistory');
-GEN('#else');
-GEN('#define MAYBE_ShowPageNoHistory ' +
-    'ShowPageNoHistory');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowPageNoHistory', function () {
+TEST_F('OptionsWebUIExtendedTest', 'ShowPageNoHistory', function() {
   this.verifyOpenPages_(['settings'], '');
   PageManager.showPageByName('search', true, {hash: '#query'});
 
@@ -608,15 +623,7 @@ TEST_F('OptionsWebUIExtendedTest', 'ShowPageWithHistory', function() {
   });
 });
 
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_ShowPageReplaceHistory ' +
-    'DISABLED_ShowPageReplaceHistory');
-GEN('#else');
-GEN('#define MAYBE_ShowPageReplaceHistory ' +
-    'ShowPageReplaceHistory');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowPageReplaceHistory', function () {
+TEST_F('OptionsWebUIExtendedTest', 'ShowPageReplaceHistory', function() {
   PageManager.showPageByName('search', true, {hash: '#query'});
   var self = this;
   this.verifyHistory_(['', 'search#query'], function() {
@@ -627,15 +634,7 @@ TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowPageReplaceHistory', function () {
 });
 
 // This should be identical to ShowPageWithHisory.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_NavigateToPage ' +
-    'DISABLED_NavigateToPage');
-GEN('#else');
-GEN('#define MAYBE_NavigateToPage ' +
-    'NavigateToPage');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_NavigateToPage', function () {
+TEST_F('OptionsWebUIExtendedTest', 'NavigateToPage', function() {
   PageManager.showPageByName('search', true, {hash: '#query'});
   var self = this;
   this.verifyHistory_(['', 'search#query'], function() {
@@ -647,15 +646,7 @@ TEST_F('OptionsWebUIExtendedTest', 'MAYBE_NavigateToPage', function () {
 
 // Settings overlays are much more straightforward than settings pages, opening
 // normally with none of the latter's quirks in the expected history or URL.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_ShowOverlayNoHistory ' +
-    'DISABLED_ShowOverlayNoHistory');
-GEN('#else');
-GEN('#define MAYBE_ShowOverlayNoHistory ' +
-    'ShowOverlayNoHistory');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowOverlayNoHistory', function () {
+TEST_F('OptionsWebUIExtendedTest', 'ShowOverlayNoHistory', function() {
   // Open a layer-1 overlay, not updating history.
   PageManager.showPageByName('languages', false);
   this.verifyOpenPages_(['settings', 'languages'], '');
@@ -685,15 +676,7 @@ TEST_F('OptionsWebUIExtendedTest', 'ShowOverlayWithHistory', function() {
   });
 });
 
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_ShowOverlayReplaceHistory ' +
-    'DISABLED_ShowOverlayReplaceHistory');
-GEN('#else');
-GEN('#define MAYBE_ShowOverlayReplaceHistory ' +
-    'ShowOverlayReplaceHistory');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowOverlayReplaceHistory', function () {
+TEST_F('OptionsWebUIExtendedTest', 'ShowOverlayReplaceHistory', function() {
   // Open a layer-1 overlay, updating history.
   PageManager.showPageByName('languages', true);
   var self = this;
@@ -707,15 +690,7 @@ TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowOverlayReplaceHistory', function (
 
 // Directly show an overlay further above this page, i.e. one for which the
 // current page is an ancestor but not a parent.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_ShowOverlayFurtherAbove ' +
-    'DISABLED_ShowOverlayFurtherAbove');
-GEN('#else');
-GEN('#define MAYBE_ShowOverlayFurtherAbove ' +
-    'ShowOverlayFurtherAbove');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowOverlayFurtherAbove', function () {
+TEST_F('OptionsWebUIExtendedTest', 'ShowOverlayFurtherAbove', function() {
   // Open a layer-2 overlay directly.
   PageManager.showPageByName('addLanguage', true);
   this.verifyOpenPages_(['settings', 'languages', 'addLanguage']);
@@ -725,15 +700,7 @@ TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowOverlayFurtherAbove', function () 
 
 // Directly show a layer-2 overlay for which the layer-1 overlay is not a
 // parent.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_ShowUnrelatedOverlay ' +
-    'DISABLED_ShowUnrelatedOverlay');
-GEN('#else');
-GEN('#define MAYBE_ShowUnrelatedOverlay ' +
-    'ShowUnrelatedOverlay');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_ShowUnrelatedOverlay', function () {
+TEST_F('OptionsWebUIExtendedTest', 'ShowUnrelatedOverlay', function() {
   // Open a layer-1 overlay.
   PageManager.showPageByName('languages', true);
   this.verifyOpenPages_(['settings', 'languages']);
@@ -825,15 +792,7 @@ TEST_F('OptionsWebUIExtendedTest', 'CloseOverlayNoHistory', function() {
 
 // Make sure an overlay isn't closed (even temporarily) when another overlay is
 // opened on top.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_OverlayAboveNoReset ' +
-    'DISABLED_OverlayAboveNoReset');
-GEN('#else');
-GEN('#define MAYBE_OverlayAboveNoReset ' +
-    'OverlayAboveNoReset');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_OverlayAboveNoReset', function () {
+TEST_F('OptionsWebUIExtendedTest', 'OverlayAboveNoReset', function() {
   // Open a layer-1 overlay.
   PageManager.showPageByName('languages', true);
   this.verifyOpenPages_(['settings', 'languages']);
@@ -845,15 +804,7 @@ TEST_F('OptionsWebUIExtendedTest', 'MAYBE_OverlayAboveNoReset', function () {
   testDone();
 });
 
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_OverlayTabNavigation ' +
-    'DISABLED_OverlayTabNavigation');
-GEN('#else');
-GEN('#define MAYBE_OverlayTabNavigation ' +
-    'OverlayTabNavigation');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_OverlayTabNavigation', function () {
+TEST_F('OptionsWebUIExtendedTest', 'OverlayTabNavigation', function() {
   // Open a layer-1 overlay, then a layer-2 overlay on top of it.
   PageManager.showPageByName('languages', true);
   PageManager.showPageByName('addLanguage', true);
@@ -919,15 +870,7 @@ TEST_F('OptionsWebUIExtendedTest', 'OverlayBackToChild', function() {
 });
 
 // Going back to an unrelated overlay should close the overlay and its parent.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_OverlayBackToUnrelated ' +
-    'DISABLED_OverlayBackToUnrelated');
-GEN('#else');
-GEN('#define MAYBE_OverlayBackToUnrelated ' +
-    'OverlayBackToUnrelated');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_OverlayBackToUnrelated', function () {
+TEST_F('OptionsWebUIExtendedTest', 'OverlayBackToUnrelated', function() {
   // Open a layer-1 overlay, then an unrelated layer-2 overlay.
   PageManager.showPageByName('languages', true);
   PageManager.showPageByName('cookies', true);
@@ -943,15 +886,7 @@ TEST_F('OptionsWebUIExtendedTest', 'MAYBE_OverlayBackToUnrelated', function () {
 });
 
 // Verify history changes properly while the page is loading.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_HistoryUpdatedAfterLoading ' +
-    'DISABLED_HistoryUpdatedAfterLoading');
-GEN('#else');
-GEN('#define MAYBE_HistoryUpdatedAfterLoading ' +
-    'HistoryUpdatedAfterLoading');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('OptionsWebUIExtendedTest', 'MAYBE_HistoryUpdatedAfterLoading', function () {
+TEST_F('OptionsWebUIExtendedTest', 'HistoryUpdatedAfterLoading', function() {
   var loc = location.href;
 
   document.documentElement.classList.add('loading');

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -35,11 +36,6 @@ class URLRequestStatus;
 
 class GaiaAuthFetcher : public net::URLFetcherDelegate {
  public:
-  enum HostedAccountsSetting {
-    HostedAccountsAllowed,
-    HostedAccountsNotAllowed
-  };
-
   // Magic string indicating that, while a second factor is still
   // needed to complete authentication, the user provided the right password.
   static const char kSecondFactor[];
@@ -54,23 +50,6 @@ class GaiaAuthFetcher : public net::URLFetcherDelegate {
                   const std::string& source,
                   net::URLRequestContextGetter* getter);
   ~GaiaAuthFetcher() override;
-
-  // Start a request to obtain the SID and LSID cookies for the the account
-  // identified by |username| and |password|.  If |service| is not null or
-  // empty, then also obtains a service token for specified service.
-  //
-  // If this is a second call because of captcha challenge, then the
-  // |login_token| and |login_captcha| arugment should correspond to the
-  // solution of the challenge.
-  //
-  // Either OnClientLoginSuccess or OnClientLoginFailure will be
-  // called on the consumer on the original thread.
-  void StartClientLogin(const std::string& username,
-                        const std::string& password,
-                        const char* const service,
-                        const std::string& login_token,
-                        const std::string& login_captcha,
-                        HostedAccountsSetting allow_hosted_accounts);
 
   // Start a request to obtain service token for the the account identified by
   // |sid| and |lsid| and the |service|.
@@ -250,16 +229,10 @@ class GaiaAuthFetcher : public net::URLFetcherDelegate {
 
   void SetPendingFetch(bool pending_fetch);
 
- private:
-  // ClientLogin body constants that don't change
-  static const char kCookiePersistence[];
-  static const char kAccountTypeHostedOrGoogle[];
-  static const char kAccountTypeGoogle[];
+  // Set the headers to use during the Logout call.
+  void SetLogoutHeaders(const std::string& headers);
 
-  // The format of the POST body for ClientLogin.
-  static const char kClientLoginFormat[];
-  // The format of said POST body when CAPTCHA token & answer are specified.
-  static const char kClientLoginCaptchaFormat[];
+ private:
   // The format of the POST body for IssueAuthToken.
   static const char kIssueAuthTokenFormat[];
   // The format of the query string to get OAuth2 auth code from auth token.
@@ -397,15 +370,6 @@ class GaiaAuthFetcher : public net::URLFetcherDelegate {
   // Is this a special case Gaia error for Less Secure Apps?
   static bool IsWebLoginRequiredSuccess(const std::string& alleged_error);
 
-  // Given parameters, create a ClientLogin request body.
-  static std::string MakeClientLoginBody(
-      const std::string& username,
-      const std::string& password,
-      const std::string& source,
-      const char* const service,
-      const std::string& login_token,
-      const std::string& login_captcha,
-      HostedAccountsSetting allow_hosted_accounts);
   // Supply the sid / lsid returned from ClientLogin in order to
   // request a long lived auth token for a service.
   static std::string MakeIssueAuthTokenBody(const std::string& sid,
@@ -422,10 +386,11 @@ class GaiaAuthFetcher : public net::URLFetcherDelegate {
   static std::string MakeGetUserInfoBody(const std::string& lsid);
 
   // Supply the authentication token returned from StartIssueAuthToken.
-  static std::string MakeMergeSessionBody(const std::string& auth_token,
-                                          const std::string& external_cc_result,
-                                          const std::string& continue_url,
-                                          const std::string& source);
+  static std::string MakeMergeSessionQuery(
+      const std::string& auth_token,
+      const std::string& external_cc_result,
+      const std::string& continue_url,
+      const std::string& source);
 
   static std::string MakeGetAuthCodeHeader(const std::string& auth_token);
 
@@ -450,7 +415,6 @@ class GaiaAuthFetcher : public net::URLFetcherDelegate {
   GaiaAuthConsumer* const consumer_;
   net::URLRequestContextGetter* const getter_;
   std::string source_;
-  const GURL client_login_gurl_;
   const GURL issue_auth_token_gurl_;
   const GURL oauth2_token_gurl_;
   const GURL oauth2_revoke_gurl_;
@@ -469,6 +433,9 @@ class GaiaAuthFetcher : public net::URLFetcherDelegate {
   std::string request_body_;
   std::string requested_service_;
   bool fetch_pending_;
+
+  // Headers used during the Logout call.
+  std::string logout_headers_;
 
   friend class GaiaAuthFetcherTest;
   FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest, CaptchaParse);

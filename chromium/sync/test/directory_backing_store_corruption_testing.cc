@@ -4,6 +4,8 @@
 
 #include "sync/test/directory_backing_store_corruption_testing.h"
 
+#include <string>
+
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 
@@ -13,8 +15,9 @@ namespace corruption_testing {
 
 // This value needs to be large enough to force the underlying DB to be read
 // from disk before writing, but small enough so that tests don't take too long
-// and timeout. The value *may* depend on the underlying DB page size as well as
-// the DB's cache_size PRAGMA.
+// and timeout. The value depend on the underlying DB page size as well as the
+// DB's cache_size PRAGMA. If test fails, you either increase
+// kNumEntriesRequiredForCorruption, or increase the size of each entry.
 const int kNumEntriesRequiredForCorruption = 2000;
 
 bool CorruptDatabase(const base::FilePath& backing_file_path) {
@@ -31,6 +34,6 @@ bool CorruptDatabase(const base::FilePath& backing_file_path) {
   return num_written == 1U;
 }
 
-}  // namespace corruption_util
+}  // namespace corruption_testing
 }  // namespace syncable
 }  // namespace syncer

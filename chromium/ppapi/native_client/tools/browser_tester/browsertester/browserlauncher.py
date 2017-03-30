@@ -239,7 +239,7 @@ class ChromeLauncher(BrowserLauncher):
     if PLATFORM == 'mac':
       return 'Google Chrome'
     elif PLATFORM == 'windows':
-      return 'vivaldi.exe'
+      return 'chrome.exe'
     else:
       return 'chrome'
 

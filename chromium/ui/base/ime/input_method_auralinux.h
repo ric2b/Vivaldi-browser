@@ -5,6 +5,7 @@
 #ifndef UI_BASE_IME_INPUT_METHOD_AURALINUX_H_
 #define UI_BASE_IME_INPUT_METHOD_AURALINUX_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/input_method_base.h"
@@ -27,13 +28,12 @@ class UI_BASE_IME_EXPORT InputMethodAuraLinux
   // Overriden from InputMethod.
   bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
                                 NativeEventResult* result) override;
-  bool DispatchKeyEvent(const ui::KeyEvent& event) override;
+  void DispatchKeyEvent(ui::KeyEvent* event) override;
   void OnTextInputTypeChanged(const TextInputClient* client) override;
   void OnCaretBoundsChanged(const TextInputClient* client) override;
   void CancelComposition(const TextInputClient* client) override;
   void OnInputLocaleChanged() override;
   std::string GetInputLocale() override;
-  bool IsActive() override;
   bool IsCandidatePopupOpen() const override;
   void OnFocus() override;
   void OnBlur() override;
@@ -54,7 +54,7 @@ class UI_BASE_IME_EXPORT InputMethodAuraLinux
  private:
   bool HasInputMethodResult();
   bool NeedInsertChar() const;
-  void SendFakeProcessKeyEvent(int flags) const;
+  ui::EventDispatchDetails SendFakeProcessKeyEvent(ui::KeyEvent* event) const;
   void ConfirmCompositionText();
   void UpdateContextFocusState();
   void ResetContext();

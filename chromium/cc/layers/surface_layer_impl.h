@@ -5,6 +5,7 @@
 #ifndef CC_LAYERS_SURFACE_LAYER_IMPL_H_
 #define CC_LAYERS_SURFACE_LAYER_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
 #include "cc/layers/layer_impl.h"
@@ -22,6 +23,7 @@ class CC_EXPORT SurfaceLayerImpl : public LayerImpl {
   void SetSurfaceId(SurfaceId surface_id);
   void SetSurfaceScale(float scale);
   void SetSurfaceSize(const gfx::Size& size);
+  SurfaceId surface_id() const { return surface_id_; }
 
   // LayerImpl overrides.
   scoped_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
@@ -34,6 +36,7 @@ class CC_EXPORT SurfaceLayerImpl : public LayerImpl {
 
  private:
   void GetDebugBorderProperties(SkColor* color, float* width) const override;
+  void AppendRainbowDebugBorder(RenderPass* render_pass);
   void AsValueInto(base::trace_event::TracedValue* dict) const override;
   const char* LayerTypeAsString() const override;
 

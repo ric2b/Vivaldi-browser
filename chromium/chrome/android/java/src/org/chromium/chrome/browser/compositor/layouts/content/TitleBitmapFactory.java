@@ -22,13 +22,15 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 
 /**
- * A factory that creates text and favicon bitmaps. This is only relevant for the phone tab
- * switcher.
+ * A factory that creates text and favicon bitmaps.
  */
 public class TitleBitmapFactory {
     private static final String TAG = "TitleBitmapFactory";
 
     private static final float TITLE_WIDTH_PERCENTAGE = 1.f;
+    // Canvas#drawText() seems to fail when trying to draw 4100 or more characters.
+    // See https://crbug.com/524390/ for more details.
+    private static final int MAX_NUM_TITLE_CHAR = 1000;
 
     private final int mMaxWidth;
     private final int mNullFaviconResourceId;
@@ -48,16 +50,18 @@ public class TitleBitmapFactory {
         mNullFaviconResourceId = nullFaviconResourceId;
 
         Resources res = context.getResources();
-        int textColor = res.getColor(incognito ? R.color.compositor_tab_title_bar_text_incognito
-                        : R.color.compositor_tab_title_bar_text);
-        int shadowColor = res.getColor(incognito ? R.color.compositor_tab_title_bar_shadow_incognito
-                        : R.color.compositor_tab_title_bar_shadow);
+        int textColor = ApiCompatibilityUtils.getColor(res, incognito
+                ? R.color.compositor_tab_title_bar_text_incognito
+                : R.color.compositor_tab_title_bar_text);
+        int shadowColor = ApiCompatibilityUtils.getColor(res, incognito
+                ? R.color.compositor_tab_title_bar_shadow_incognito
+                : R.color.compositor_tab_title_bar_shadow);
         int shadowXOffset = res.getDimensionPixelOffset(incognito
-                        ? R.dimen.compositor_tab_title_bar_shadow_x_offset_incognito
-                        : R.dimen.compositor_tab_title_bar_shadow_x_offset);
+                ? R.dimen.compositor_tab_title_bar_shadow_x_offset_incognito
+                : R.dimen.compositor_tab_title_bar_shadow_x_offset);
         int shadowYOffset = res.getDimensionPixelOffset(incognito
-                        ? R.dimen.compositor_tab_title_bar_shadow_y_offset_incognito
-                        : R.dimen.compositor_tab_title_bar_shadow_y_offset);
+                ? R.dimen.compositor_tab_title_bar_shadow_y_offset_incognito
+                : R.dimen.compositor_tab_title_bar_shadow_y_offset);
         float textSize = res.getDimensionPixelSize(R.dimen.compositor_tab_title_text_size);
         float adjustedTextSize = textSize * res.getConfiguration().fontScale;
 
@@ -102,7 +106,7 @@ public class TitleBitmapFactory {
             if (favicon == null) {
                 Drawable drawable = ApiCompatibilityUtils.getDrawable(
                         context.getResources(), mNullFaviconResourceId);
-                if (drawable != null && drawable instanceof BitmapDrawable) {
+                if (drawable instanceof BitmapDrawable) {
                     favicon = ((BitmapDrawable) drawable).getBitmap();
                 }
             }
@@ -138,7 +142,7 @@ public class TitleBitmapFactory {
                     Bitmap.Config.ARGB_8888);
             Canvas c = new Canvas(b);
             if (drawText) {
-                c.drawText(title, 0, title.length(), 0,
+                c.drawText(title, 0, Math.min(MAX_NUM_TITLE_CHAR, title.length()), 0,
                         Math.round((mViewHeight - mTextHeight) / 2.0f + mTextYOffset), mTextPaint);
             }
             return b;

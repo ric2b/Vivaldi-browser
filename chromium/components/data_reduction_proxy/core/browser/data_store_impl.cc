@@ -4,6 +4,8 @@
 
 #include "components/data_reduction_proxy/core/browser/data_store_impl.h"
 
+#include <stdint.h>
+
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
@@ -61,9 +63,8 @@ DataStore::Status DataStoreImpl::Get(const std::string& key,
                                      std::string* value) {
   DCHECK(sequence_checker_.CalledOnValidSequencedThread());
 
-  if (db_.get() == nullptr) {
+  if (!db_)
     return MISC_ERROR;
-  }
 
   leveldb::ReadOptions read_options;
   read_options.verify_checksums = true;
@@ -79,19 +80,31 @@ DataStore::Status DataStoreImpl::Put(
     const std::map<std::string, std::string>& map) {
   DCHECK(sequence_checker_.CalledOnValidSequencedThread());
 
-  if (db_.get() == nullptr) {
+  if (!db_)
     return MISC_ERROR;
-  }
 
   leveldb::WriteBatch batch;
   for (const auto& iter : map) {
-    leveldb::Slice key_slice(iter.first);
-    leveldb::Slice value_slice(iter.second);
-    batch.Put(key_slice, value_slice);
+    batch.Put(iter.first, iter.second);
   }
 
   leveldb::WriteOptions write_options;
   leveldb::Status status = db_->Write(write_options, &batch);
+  if (status.IsCorruption())
+    RecreateDB();
+
+  return LevelDbToDRPStoreStatus(status);
+}
+
+DataStore::Status DataStoreImpl::Delete(const std::string& key) {
+  DCHECK(sequence_checker_.CalledOnValidSequencedThread());
+
+  if (!db_)
+    return MISC_ERROR;
+
+  leveldb::Slice slice(key);
+  leveldb::WriteOptions write_options;
+  leveldb::Status status = db_->Delete(write_options, slice);
   if (status.IsCorruption())
     RecreateDB();
 
@@ -116,6 +129,18 @@ DataStore::Status DataStoreImpl::OpenDB() {
     LOG(ERROR) << "Failed to open Data Reduction Proxy DB: " << status;
 
   db_.reset(dbptr);
+
+  if (db_) {
+    leveldb::Range range;
+    uint64_t size;
+    // We try to capture the size of the entire DB by using the highest and
+    // lowest keys.
+    range.start = "";
+    range.limit = "z";  // Keys starting with 'z' will not be included.
+    dbptr->GetApproximateSizes(&range, 1, &size);
+    UMA_HISTOGRAM_MEMORY_KB("DataReductionProxy.LevelDBSize", size / 1024);
+  }
+
   return status;
 }
 

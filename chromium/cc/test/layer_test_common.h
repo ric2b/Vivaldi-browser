@@ -5,8 +5,12 @@
 #ifndef CC_TEST_LAYER_TEST_COMMON_H_
 #define CC_TEST_LAYER_TEST_COMMON_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
+#include "cc/animation/animation_timeline.h"
 #include "cc/quads/render_pass.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -57,7 +61,7 @@ class LayerTestCommon {
       scoped_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++);
       T* ptr = layer.get();
-      root_layer_impl_->AddChild(layer.Pass());
+      root_layer_impl_->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -66,7 +70,16 @@ class LayerTestCommon {
       scoped_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++);
       T* ptr = layer.get();
-      parent->AddChild(layer.Pass());
+      parent->AddChild(std::move(layer));
+      return ptr;
+    }
+
+    template <typename T>
+    T* AddReplicaLayer(LayerImpl* origin) {
+      scoped_ptr<T> layer =
+          T::Create(host_->host_impl()->active_tree(), layer_impl_id_++);
+      T* ptr = layer.get();
+      origin->SetReplicaLayer(std::move(layer));
       return ptr;
     }
 
@@ -75,7 +88,7 @@ class LayerTestCommon {
       scoped_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++, a);
       T* ptr = layer.get();
-      root_layer_impl_->AddChild(layer.Pass());
+      root_layer_impl_->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -84,7 +97,7 @@ class LayerTestCommon {
       scoped_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++, a, b);
       T* ptr = layer.get();
-      root_layer_impl_->AddChild(layer.Pass());
+      root_layer_impl_->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -93,7 +106,7 @@ class LayerTestCommon {
       scoped_ptr<T> layer = T::Create(host_->host_impl()->active_tree(),
                                       layer_impl_id_++, a, b, c, d);
       T* ptr = layer.get();
-      root_layer_impl_->AddChild(layer.Pass());
+      root_layer_impl_->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -111,7 +124,7 @@ class LayerTestCommon {
       scoped_ptr<T> layer = T::Create(host_->host_impl()->active_tree(),
                                       layer_impl_id_++, a, b, c, d, e);
       T* ptr = layer.get();
-      root_layer_impl_->AddChild(layer.Pass());
+      root_layer_impl_->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -133,15 +146,22 @@ class LayerTestCommon {
     LayerImpl* root_layer() const { return root_layer_impl_.get(); }
     FakeLayerTreeHost* host() { return host_.get(); }
     FakeLayerTreeHostImpl* host_impl() const { return host_->host_impl(); }
-    Proxy* proxy() const { return host_->host_impl()->proxy(); }
+    TaskRunnerProvider* task_runner_provider() const {
+      return host_->host_impl()->task_runner_provider();
+    }
     const QuadList& quad_list() const { return render_pass_->quad_list; }
+    scoped_refptr<AnimationTimeline> timeline() { return timeline_; }
+    scoped_refptr<AnimationTimeline> timeline_impl() { return timeline_impl_; }
 
    private:
     FakeLayerTreeHostClient client_;
     TestTaskGraphRunner task_graph_runner_;
+    scoped_ptr<OutputSurface> output_surface_;
     scoped_ptr<FakeLayerTreeHost> host_;
     scoped_ptr<LayerImpl> root_layer_impl_;
     scoped_ptr<RenderPass> render_pass_;
+    scoped_refptr<AnimationTimeline> timeline_;
+    scoped_refptr<AnimationTimeline> timeline_impl_;
     int layer_impl_id_;
   };
 };

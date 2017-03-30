@@ -5,6 +5,8 @@
 #ifndef GIN_V8_INITIALIZER_H_
 #define GIN_V8_INITIALIZER_H_
 
+#include <stdint.h>
+
 #include "base/files/file.h"
 #include "base/files/memory_mapped_file.h"
 #include "gin/array_buffer.h"
@@ -18,7 +20,8 @@ namespace gin {
 class GIN_EXPORT V8Initializer {
  public:
   // This should be called by IsolateHolder::Initialize().
-  static void Initialize(gin::IsolateHolder::ScriptMode mode);
+  static void Initialize(IsolateHolder::ScriptMode mode,
+                         IsolateHolder::V8ExtrasMode v8_extras_mode);
 
   // Get address and size information for currently loaded snapshot.
   // If no snapshot is loaded, the return values are null for addresses
@@ -35,14 +38,14 @@ class GIN_EXPORT V8Initializer {
   // of the files to be loaded. Since the VM can boot with or without
   // the snapshot, this function does not return a status.
   static void LoadV8SnapshotFromFD(base::PlatformFile snapshot_fd,
-                                   int64 snapshot_offset,
-                                   int64 snapshot_size);
+                                   int64_t snapshot_offset,
+                                   int64_t snapshot_size);
   // Similar to LoadV8SnapshotFromFD, but for the source of the natives.
   // Without the natives we cannot continue, so this function contains
   // release mode asserts and won't return if it fails.
   static void LoadV8NativesFromFD(base::PlatformFile natives_fd,
-                                  int64 natives_offset,
-                                  int64 natives_size);
+                                  int64_t natives_offset,
+                                  int64_t natives_size);
 
   // Load V8 snapshot from default resources, if they are available.
   static void LoadV8Snapshot();

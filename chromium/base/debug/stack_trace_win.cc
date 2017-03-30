@@ -6,11 +6,12 @@
 
 #include <windows.h>
 #include <dbghelp.h>
+#include <stddef.h>
 
 #include <iostream>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/process/launch.h"
 #include "base/strings/string_util.h"
@@ -187,7 +188,8 @@ bool EnableInProcessStackDumping() {
   // Add stack dumping support on exception on windows. Similar to OS_POSIX
   // signal() handling in process_util_posix.cc.
   g_previous_filter = SetUnhandledExceptionFilter(&StackDumpExceptionFilter);
-  RouteStdioToConsole();
+
+  RouteStdioToConsole(false);
   return true;
 }
 
@@ -217,13 +219,18 @@ StackTrace::StackTrace(const EXCEPTION_POINTERS* exception_pointers) {
 }
 
 StackTrace::StackTrace(const CONTEXT* context) {
-  // StackWalk64() may modify context record passed to it, so we will
-  // use a copy.
-  CONTEXT context_record = *context;
-  InitTrace(&context_record);
+  InitTrace(context);
 }
 
-void StackTrace::InitTrace(CONTEXT* context_record) {
+void StackTrace::InitTrace(const CONTEXT* context_record) {
+  // StackWalk64 modifies the register context in place, so we have to copy it
+  // so that downstream exception handlers get the right context.  The incoming
+  // context may have had more register state (YMM, etc) than we need to unwind
+  // the stack. Typically StackWalk64 only needs integer and control registers.
+  CONTEXT context_copy;
+  memcpy(&context_copy, context_record, sizeof(context_copy));
+  context_copy.ContextFlags = CONTEXT_INTEGER | CONTEXT_CONTROL;
+
   // When walking an exception stack, we need to use StackWalk64().
   count_ = 0;
   // Initialize stack walking.
@@ -247,7 +254,7 @@ void StackTrace::InitTrace(CONTEXT* context_record) {
                      GetCurrentProcess(),
                      GetCurrentThread(),
                      &stack_frame,
-                     context_record,
+                     &context_copy,
                      NULL,
                      &SymFunctionTableAccess64,
                      &SymGetModuleBase64,

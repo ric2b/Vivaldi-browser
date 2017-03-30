@@ -16,7 +16,6 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
-#include "components/sync_driver/data_type_controller.h"
 #include "components/sync_driver/data_type_encryption_handler.h"
 #include "components/sync_driver/data_type_manager_observer.h"
 #include "components/sync_driver/data_type_status_table.h"
@@ -46,7 +45,6 @@ DataTypeManagerImpl::AssociationTypesInfo::AssociationTypesInfo() {}
 DataTypeManagerImpl::AssociationTypesInfo::~AssociationTypesInfo() {}
 
 DataTypeManagerImpl::DataTypeManagerImpl(
-    const base::Closure& unrecoverable_error_method,
     const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
         debug_info_listener,
     const DataTypeController::TypeMap* controllers,
@@ -62,7 +60,7 @@ DataTypeManagerImpl::DataTypeManagerImpl(
       model_association_manager_(controllers, this),
       observer_(observer),
       encryption_handler_(encryption_handler),
-      unrecoverable_error_method_(unrecoverable_error_method),
+      catch_up_in_progress_(false),
       weak_ptr_factory_(this) {
   DCHECK(configurer_);
   DCHECK(observer_);
@@ -72,6 +70,12 @@ DataTypeManagerImpl::~DataTypeManagerImpl() {}
 
 void DataTypeManagerImpl::Configure(syncer::ModelTypeSet desired_types,
                                     syncer::ConfigureReason reason) {
+  // Once requested, we will remain in "catch up" mode until we notify the
+  // caller (see NotifyDone). We do this to ensure that once started, subsequent
+  // calls to Configure won't take us out of "catch up" mode.
+  if (reason == syncer::CONFIGURE_REASON_CATCH_UP)
+    catch_up_in_progress_ = true;
+
   if (reason == syncer::CONFIGURE_REASON_BACKUP_ROLLBACK)
     desired_types.PutAll(syncer::ControlTypes());
   else
@@ -183,20 +187,26 @@ DataTypeManagerImpl::BuildDataTypeConfigStateMap(
       data_type_status_table_.GetFatalErrorTypes();
   syncer::ModelTypeSet crypto_types =
       data_type_status_table_.GetCryptoErrorTypes();
-  syncer::ModelTypeSet unready_types=
+  syncer::ModelTypeSet unready_types =
       data_type_status_table_.GetUnreadyErrorTypes();
 
   // Types with persistence errors are only purged/resynced when they're
   // actively being configured.
-  syncer::ModelTypeSet persistence_types =
+  syncer::ModelTypeSet clean_types =
       data_type_status_table_.GetPersistenceErrorTypes();
-  persistence_types.RetainAll(types_being_configured);
+  clean_types.RetainAll(types_being_configured);
 
   // Types with unready errors do not count as unready if they've been disabled.
   unready_types.RetainAll(last_requested_types_);
 
   syncer::ModelTypeSet enabled_types = last_requested_types_;
   enabled_types.RemoveAll(error_types);
+
+  // If we're catching up, add all enabled (non-error) types to the clean set to
+  // ensure we download and apply them to the model types.
+  if (catch_up_in_progress_)
+    clean_types.PutAll(enabled_types);
+
   syncer::ModelTypeSet disabled_types =
       syncer::Difference(
           syncer::Union(syncer::UserTypes(), syncer::ControlTypes()),
@@ -215,7 +225,7 @@ DataTypeManagerImpl::BuildDataTypeConfigStateMap(
       BackendDataTypeConfigurer::CONFIGURE_ACTIVE, to_configure,
       &config_state_map);
   BackendDataTypeConfigurer::SetDataTypesState(
-      BackendDataTypeConfigurer::CONFIGURE_CLEAN, persistence_types,
+      BackendDataTypeConfigurer::CONFIGURE_CLEAN, clean_types,
         &config_state_map);
   BackendDataTypeConfigurer::SetDataTypesState(
       BackendDataTypeConfigurer::DISABLED, disabled_types,
@@ -286,6 +296,10 @@ void DataTypeManagerImpl::Restart(syncer::ConfigureReason reason) {
   download_types_queue_ = PrioritizeTypes(enabled_types);
   association_types_queue_ = std::queue<AssociationTypesInfo>();
 
+  // If we're performing a "catch up", first stop the model types to ensure the
+  // call to Initialize triggers model association.
+  if (catch_up_in_progress_)
+    model_association_manager_.Stop();
   model_association_manager_.Initialize(enabled_types);
 
   StartNextDownload(syncer::ModelTypeSet());
@@ -479,7 +493,11 @@ void DataTypeManagerImpl::StartNextAssociation(AssociationGroup group) {
 void DataTypeManagerImpl::OnSingleDataTypeWillStop(
     syncer::ModelType type,
     const syncer::SyncError& error) {
-  configurer_->DeactivateDataType(type);
+  DataTypeController::TypeMap::const_iterator c_it = controllers_->find(type);
+  DCHECK(c_it != controllers_->end());
+  // Delegate deactivation to the controller.
+  c_it->second->DeactivateDataType(configurer_);
+
   if (error.IsSet()) {
     DataTypeStatusTable::TypeErrorMap failed_types;
     failed_types[type] = error;
@@ -503,10 +521,8 @@ void DataTypeManagerImpl::OnSingleDataTypeAssociationDone(
   DataTypeController::TypeMap::const_iterator c_it = controllers_->find(type);
   DCHECK(c_it != controllers_->end());
   if (c_it->second->state() == DataTypeController::RUNNING) {
-    // Tell the backend about the change processor for this type so it can
-    // begin routing changes to it.
-    configurer_->ActivateDataType(type, c_it->second->model_safe_group(),
-                                  c_it->second->GetChangeProcessor());
+    // Delegate activation to the controller.
+    c_it->second->ActivateDataType(configurer_);
   }
 
   if (!debug_info_listener_.IsInitialized())
@@ -623,6 +639,8 @@ void DataTypeManagerImpl::NotifyStart() {
 }
 
 void DataTypeManagerImpl::NotifyDone(const ConfigureResult& raw_result) {
+  catch_up_in_progress_ = false;
+
   AddToConfigureTime();
 
   ConfigureResult result = raw_result;

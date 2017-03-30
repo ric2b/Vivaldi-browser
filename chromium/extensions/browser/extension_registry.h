@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -65,6 +66,7 @@ class ExtensionRegistry : public KeyedService {
     return blacklisted_extensions_;
   }
   const ExtensionSet& blocked_extensions() const { return blocked_extensions_; }
+  const ExtensionSet& ready_extensions() const { return ready_extensions_; }
 
   // Returns the set of all installed extensions, regardless of state (enabled,
   // disabled, etc). Equivalent to GenerateInstalledExtensionSet(EVERYTHING).
@@ -87,6 +89,11 @@ class ExtensionRegistry : public KeyedService {
   // enabled at the time of the call.
   void TriggerOnLoaded(const Extension* extension);
 
+  // Invokes the observer method OnExtensionReady(). This always follows
+  // an OnLoaded event, but is not called until it's safe to create the
+  // extension's child process.
+  void TriggerOnReady(const Extension* extension);
+
   // Invokes the observer method OnExtensionUnloaded(). The extension must not
   // be enabled at the time of the call.
   void TriggerOnUnloaded(const Extension* extension,
@@ -96,12 +103,8 @@ class ExtensionRegistry : public KeyedService {
   // any installed extension with |extension|'s ID. If this is an update then
   // |is_update| is true and must be an installed extension with |extension|'s
   // ID, and |old_name| must be non-empty.
-  // If true, |from_ephemeral| indicates that the extension was previously
-  // installed ephemerally and has been promoted to a regular installed
-  // extension. |is_update| should also be true.
   void TriggerOnWillBeInstalled(const Extension* extension,
                                 bool is_update,
-                                bool from_ephemeral,
                                 const std::string& old_name);
 
   // Invokes the observer method OnExtensionInstalled(). The extension must be
@@ -156,14 +159,12 @@ class ExtensionRegistry : public KeyedService {
   bool AddBlocked(const scoped_refptr<const Extension>& extension);
   bool RemoveBlocked(const std::string& id);
 
+  // As above, but for the ready set.
+  bool AddReady(const scoped_refptr<const Extension>& extension);
+  bool RemoveReady(const std::string& id);
+
   // Removes all extensions from all sets.
   void ClearAll();
-
-  // Sets a callback to run when the disabled extension set is modified.
-  // TODO(jamescook): This is too specific for a generic registry; find some
-  // other way to do this.
-  void SetDisabledModificationCallback(
-      const ExtensionSet::ModificationCallback& callback);
 
   // KeyedService implementation:
   void Shutdown() override;
@@ -186,6 +187,10 @@ class ExtensionRegistry : public KeyedService {
 
   // Extensions that are installed and blocked. Will never be loaded.
   ExtensionSet blocked_extensions_;
+
+  // Extensions that are ready for execution. This set is a non-exclusive
+  // subset of |enabled_extensions_|.
+  ExtensionSet ready_extensions_;
 
   base::ObserverList<ExtensionRegistryObserver> observers_;
 

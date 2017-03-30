@@ -4,14 +4,19 @@
 
 #include "components/history/core/browser/top_sites_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/testing_pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "build/build_config.h"
 #include "components/history/core/browser/history_client.h"
 #include "components/history/core/browser/history_constants.h"
 #include "components/history/core/browser/history_database_params.h"
@@ -53,7 +58,9 @@ class WaitForHistoryTask : public HistoryDBTask {
     return true;
   }
 
-  void DoneRunOnMainThread() override { base::MessageLoop::current()->Quit(); }
+  void DoneRunOnMainThread() override {
+    base::MessageLoop::current()->QuitWhenIdle();
+  }
 
  private:
   ~WaitForHistoryTask() override {}
@@ -104,7 +111,7 @@ class TopSitesQuerier {
     urls_ = data;
     number_of_callbacks_++;
     if (waiting_) {
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
       waiting_ = false;
     }
   }
@@ -211,7 +218,7 @@ class TopSitesImplTest : public HistoryUnitTestBase {
 
   // Quit the current message loop when invoked. Useful when running a nested
   // message loop.
-  void QuitCallback() { base::MessageLoop::current()->Quit(); }
+  void QuitCallback() { base::MessageLoop::current()->QuitWhenIdle(); }
 
   // Adds a page to history.
   void AddPageToHistory(const GURL& url) {
@@ -963,16 +970,16 @@ TEST_F(TopSitesImplTest, DeleteNotifications) {
 
 // Makes sure GetUpdateDelay is updated appropriately.
 TEST_F(TopSitesImplTest, GetUpdateDelay) {
-#if defined(OS_IOS)
-  const int64 kExpectedUpdateDelayInSecondEmpty = 30;
-  const int64 kExpectedUpdateDelayInSecond0Changed = 5;
-  const int64 kExpectedUpdateDelayInSecond3Changed = 5;
-  const int64 kExpectedUpdateDelayInSecond20Changed = 1;
+#if defined(OS_IOS) || defined(OS_ANDROID)
+  const int64_t kExpectedUpdateDelayInSecondEmpty = 30;
+  const int64_t kExpectedUpdateDelayInMinute0Changed = 1;
+  const int64_t kExpectedUpdateDelayInMinute3Changed = 1;
+  const int64_t kExpectedUpdateDelayInMinute20Changed = 1;
 #else
-  const int64 kExpectedUpdateDelayInSecondEmpty = 30;
-  const int64 kExpectedUpdateDelayInSecond0Changed = 60;
-  const int64 kExpectedUpdateDelayInSecond3Changed = 52;
-  const int64 kExpectedUpdateDelayInSecond20Changed = 1;
+  const int64_t kExpectedUpdateDelayInSecondEmpty = 30;
+  const int64_t kExpectedUpdateDelayInMinute0Changed = 60;
+  const int64_t kExpectedUpdateDelayInMinute3Changed = 52;
+  const int64_t kExpectedUpdateDelayInMinute20Changed = 1;
 #endif
 
   SetLastNumUrlsChanged(0);
@@ -989,18 +996,18 @@ TEST_F(TopSitesImplTest, GetUpdateDelay) {
   // gisli@vivaldi.com:  Changed expected value as we changed the some
   // constants in top_sites_impl.cc.  Note, this test will not test the limits
   // the same way it did before.
-  EXPECT_EQ(21u, last_num_urls_changed());
+  EXPECT_EQ(20u+1, last_num_urls_changed());
   SetLastNumUrlsChanged(0);
-  EXPECT_EQ(kExpectedUpdateDelayInSecond0Changed, GetUpdateDelay().InMinutes());
+  EXPECT_EQ(kExpectedUpdateDelayInMinute0Changed, GetUpdateDelay().InMinutes());
 
   SetLastNumUrlsChanged(3);
-  EXPECT_EQ(kExpectedUpdateDelayInSecond3Changed, GetUpdateDelay().InMinutes());
+  EXPECT_EQ(kExpectedUpdateDelayInMinute3Changed, GetUpdateDelay().InMinutes());
 
   // tomas@vivaldi.com - changed from 20 to 21 due to changes from Gisli above.
-  SetLastNumUrlsChanged(21);
+  SetLastNumUrlsChanged(20+1);
   // gisli@vivaldi.com:  Changed expected value as we changed the some
   // constants in top_sites_impl.cc.
-  EXPECT_EQ(kExpectedUpdateDelayInSecond20Changed,
+  EXPECT_EQ(kExpectedUpdateDelayInMinute20Changed,
             GetUpdateDelay().InMinutes());
 }
 
@@ -1343,8 +1350,7 @@ TEST_F(TopSitesImplTest, AddPrepopulatedPages) {
 
 // Ensure calling SetTopSites with forced sites already in the DB works.
 // This test both eviction and
-// TODO: reenable for Vivaldi
-TEST_F(TopSitesImplTest, DISABLED_SetForcedTopSites) {
+TEST_F(TopSitesImplTest, SetForcedTopSites) {
   // Create forced elements in old URL list.
   MostVisitedURLList old_url_list;
   AppendForcedMostVisitedURL(&old_url_list, GURL("http://oldforced/0"), 1000);
@@ -1379,7 +1385,7 @@ TEST_F(TopSitesImplTest, DISABLED_SetForcedTopSites) {
   // constants in top_sites_impl.cc.  Also changed serveral of the
   // expected values to match the contstants.  Note, that this test
   // might NOT test the limits of the url lists the same way it did before.
-  const size_t kNumNonForcedURLs = 60;  // Maximum number of non-forced URLs.
+  const size_t kNumNonForcedURLs = 20+40;  // Maximum number of non-forced URLs.
   for (size_t i = 0; i < kNumNonForcedURLs; ++i) {
     std::ostringstream url;
     url << "http://oldnonforced/" << i;

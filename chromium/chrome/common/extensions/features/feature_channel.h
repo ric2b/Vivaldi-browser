@@ -5,29 +5,33 @@
 #ifndef CHROME_COMMON_EXTENSIONS_FEATURES_FEATURE_CHANNEL_H_
 #define CHROME_COMMON_EXTENSIONS_FEATURES_FEATURE_CHANNEL_H_
 
-#include "chrome/common/chrome_version_info.h"
+#include "base/macros.h"
+
+namespace version_info {
+enum class Channel;
+}
 
 namespace extensions {
 
 // Gets the current channel as seen by the Feature system.
-chrome::VersionInfo::Channel GetCurrentChannel();
+version_info::Channel GetCurrentChannel();
 
 // Sets the current channel as seen by the Feature system. In the browser
-// process this should be chrome::VersionInfo::GetChannel(), and in the
-// renderer this will need to come from an IPC.
-void SetCurrentChannel(chrome::VersionInfo::Channel channel);
+// process this should be chrome::GetChannel(), and in the renderer this will
+// need to come from an IPC.
+void SetCurrentChannel(version_info::Channel channel);
 
 // Gets the default channel as seen by the Feature system.
-chrome::VersionInfo::Channel GetDefaultChannel();
+version_info::Channel GetDefaultChannel();
 
 // Scoped channel setter. Use for tests.
 class ScopedCurrentChannel {
  public:
-  explicit ScopedCurrentChannel(chrome::VersionInfo::Channel channel);
+  explicit ScopedCurrentChannel(version_info::Channel channel);
   ~ScopedCurrentChannel();
 
  private:
-  chrome::VersionInfo::Channel original_channel_;
+  version_info::Channel original_channel_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedCurrentChannel);
 };

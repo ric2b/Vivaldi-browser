@@ -7,21 +7,21 @@ package org.chromium.chrome.browser.ntp;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.preference.PreferenceManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BookmarksBridge;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkItem;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarksCallback;
 import org.chromium.chrome.browser.NativePage;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkItem;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkModelObserver;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarksCallback;
 import org.chromium.chrome.browser.bookmark.EditBookmarkHelper;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
@@ -29,6 +29,7 @@ import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.ntp.BookmarksPageView.BookmarksPageManager;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.ViewUtils;
@@ -48,8 +49,7 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
     private static final String LAST_USED_BOOKMARK_FOLDER_ID = "last_used_folder_id";
 
     private static final int PAGE_MODE_NORMAL = 0;
-    private static final int PAGE_MODE_SELECT_BOOKMARK = 1;
-    private static final int PAGE_MODE_DOCUMENT = 2;
+    private static final int PAGE_MODE_DOCUMENT = 1;
 
     private final Profile mProfile;
     private BookmarksBridge mBookmarksBridge;
@@ -58,6 +58,7 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
     private final BookmarksPageView mPageView;
     private final String mTitle;
     private final int mBackgroundColor;
+    private final int mThemeColor;
 
     // Whether destroy() has been called.
     private boolean mIsDestroyed;
@@ -65,25 +66,6 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
     private BookmarkId mCurrentFolderId;
 
     private final SharedPreferences mSharedPreferences;
-
-    /**
-     * Interface to be notified when the user clicks on a bookmark. To be used with
-     * buildPageForShortcutActivity().
-     */
-    public interface BookmarkSelectedListener {
-        /**
-         * Called when a bookmark is selected.
-         * @param url The url of the selected bookmark.
-         * @param title The title of the selected bookmark.
-         * @param favicon The favicon of the selected bookmark.
-         */
-        void onBookmarkSelected(String url, String title, Bitmap favicon);
-
-        /**
-         * Called when a new tab has been opened in a new tab.
-         */
-        void onNewTabOpened();
-    }
 
     /**
      * Creates a BookmarksPage to be shown in a tab.
@@ -95,42 +77,23 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
      */
     public static BookmarksPage buildPage(Context context, Tab tab,
             TabModelSelector tabModelSelector) {
-        return new BookmarksPage(context, tab.getProfile(), tab, tabModelSelector, null,
+        return new BookmarksPage(context, tab.getProfile(), tab, tabModelSelector,
                 PAGE_MODE_NORMAL);
-    }
-
-    /**
-     * Creates a BookmarksPage to be shown in the ShortcutActivity.
-     * @param context The view context for showing the page.
-     * @param profile The profile from which to load bookmarks.
-     * @param listener The BookmarkSelectedListener to notify when the user clicks a bookmark.
-     * @return The new BookmarksPage object.
-     */
-    public static BookmarksPage buildPageInSelectBookmarkMode(Context context,
-            Profile profile, BookmarkSelectedListener listener) {
-        return new BookmarksPage(context, profile, null, null, listener, PAGE_MODE_SELECT_BOOKMARK);
-    }
-
-    /**
-     * Creates a BookmarksPage to be shown in document mode.
-     * @param context The view context for showing the page.
-     * @param tab The tab from which bookmarks page is loaded.
-     * @param tabModelSelector The TabModelSelector to use when opening new tabs from the bookmarks
-     *         page.
-     * @param profile The profile from which to load bookmarks.
-     * @param listener The BookmarkSelectedListener to notify when the user clicks a bookmark.
-     * @return The new BookmarksPage object.
-     */
-    public static BookmarksPage buildPageInDocumentMode(Context context, Tab tab,
-            TabModelSelector tabModelSelector, Profile profile, BookmarkSelectedListener listener) {
-        return new BookmarksPage(
-                context, profile, tab, tabModelSelector, listener, PAGE_MODE_DOCUMENT);
     }
 
     /**
      * Delegates user triggered actions for the bookmarks page.
      */
     private class BookmarksPageManagerImpl implements BookmarksPageManager {
+        // This must remain in sync with Bookmarks.OpenAction in
+        // tools/metrics/histograms/histograms.xml. Also, never remove or reorder histogram values.
+        // It is safe to append new values to the end.
+        private static final String ACTION_OPEN_BOOKMARK_HISTOGRAM = "Bookmarks.OpenAction";
+        protected static final int ACTION_OPEN_BOOKMARK_CURRENT_TAB = 0;
+        protected static final int ACTION_OPEN_BOOKMARK_NEW_TAB = 1;
+        protected static final int ACTION_OPEN_BOOKMARK_NEW_INCOGNITO_TAB = 2;
+        protected static final int ACTION_OPEN_BOOKMARK_BOUNDARY = 3;
+
         protected Tab mTab;
         protected TabModelSelector mTabModelSelector;
 
@@ -139,9 +102,11 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
             mTabModelSelector = tabModelSelector;
         }
 
-        protected void recordOpenedBookmark() {
+        protected void recordOpenedBookmark(int action) {
             if (!isIncognito()) {
                 NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_BOOKMARK);
+                RecordHistogram.recordEnumeratedHistogram(ACTION_OPEN_BOOKMARK_HISTOGRAM, action,
+                        ACTION_OPEN_BOOKMARK_BOUNDARY);
             }
         }
 
@@ -176,7 +141,7 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
                 mTab.loadUrl(new LoadUrlParams(
                         UrlConstants.BOOKMARKS_FOLDER_URL + item.getBookmarkId().toString()));
             } else {
-                recordOpenedBookmark();
+                recordOpenedBookmark(ACTION_OPEN_BOOKMARK_CURRENT_TAB);
                 mTab.loadUrl(new LoadUrlParams(item.getUrl()));
             }
         }
@@ -184,7 +149,7 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
         @Override
         public void openInNewTab(BookmarkItemView item) {
             assert !item.isFolder();
-            recordOpenedBookmark();
+            recordOpenedBookmark(ACTION_OPEN_BOOKMARK_NEW_TAB);
             mTabModelSelector.openNewTab(new LoadUrlParams(item.getUrl()),
                     TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab,
                     mTabModelSelector.isIncognitoSelected());
@@ -193,7 +158,7 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
         @Override
         public void openInNewIncognitoTab(BookmarkItemView item) {
             assert !item.isFolder();
-            recordOpenedBookmark();
+            recordOpenedBookmark(ACTION_OPEN_BOOKMARK_NEW_INCOGNITO_TAB);
             mTabModelSelector.openNewTab(new LoadUrlParams(item.getUrl()),
                     TabLaunchType.FROM_LONGPRESS_FOREGROUND, mTab, true);
         }
@@ -223,24 +188,8 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
     }
 
     private class DocumentModeManager extends BookmarksPageManagerImpl {
-        private final BookmarkSelectedListener mListener;
-
-        public DocumentModeManager(Tab tab, TabModelSelector tabModelSelector,
-                BookmarkSelectedListener listener) {
+        public DocumentModeManager(Tab tab, TabModelSelector tabModelSelector) {
             super(tab, tabModelSelector);
-            mListener = listener;
-        }
-
-        @Override
-        public void openInNewTab(BookmarkItemView item) {
-            super.openInNewTab(item);
-            mListener.onNewTabOpened();
-        }
-
-        @Override
-        public void openInNewIncognitoTab(BookmarkItemView item) {
-            super.openInNewIncognitoTab(item);
-            mListener.onNewTabOpened();
         }
 
         @Override
@@ -248,8 +197,7 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
             if (item.isFolder()) {
                 updateBookmarksPageContents(item.getBookmarkId(), false);
             } else {
-                recordOpenedBookmark();
-                mListener.onBookmarkSelected(item.getUrl(), item.getTitle(), item.getFavicon());
+                recordOpenedBookmark(ACTION_OPEN_BOOKMARK_CURRENT_TAB);
             }
         }
 
@@ -260,12 +208,13 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
     }
 
     private BookmarksPage(Context context, Profile profile, Tab tab,
-            TabModelSelector tabModelSelector, BookmarkSelectedListener listener,
-            int pageMode) {
+            TabModelSelector tabModelSelector, int pageMode) {
         mProfile = profile;
         mFaviconHelper = new FaviconHelper();
         mTitle = context.getResources().getString(R.string.ntp_bookmarks);
-        mBackgroundColor = context.getResources().getColor(R.color.ntp_bg);
+        mBackgroundColor = ApiCompatibilityUtils.getColor(context.getResources(), R.color.ntp_bg);
+        mThemeColor = ApiCompatibilityUtils.getColor(
+                context.getResources(), R.color.default_primary_color);
         mCurrentFolderId = new BookmarkId(BookmarkId.INVALID_FOLDER_ID, BookmarkType.NORMAL);
         mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
 
@@ -298,11 +247,8 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
             case PAGE_MODE_NORMAL:
                 manager = buildManager(tab, tabModelSelector);
                 break;
-            case PAGE_MODE_SELECT_BOOKMARK:
-                manager = buildManagerForSelectBookmarkMode(listener);
-                break;
             case PAGE_MODE_DOCUMENT:
-                manager = buildManagerForDocumentMode(tab, tabModelSelector, listener);
+                manager = buildManagerForDocumentMode(tab, tabModelSelector);
                 break;
             default:
                 assert false;
@@ -371,83 +317,14 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
         return new BookmarksPageManagerImpl(tab, tabModelSelector);
     }
 
-    private BookmarksPageManager buildManagerForDocumentMode(
-            Tab tab, TabModelSelector tabModelSelector, BookmarkSelectedListener listener) {
-        return new DocumentModeManager(tab, tabModelSelector, listener);
-    }
-
-    private BookmarksPageManager buildManagerForSelectBookmarkMode(
-            final BookmarkSelectedListener listener) {
-        return new BookmarksPageManager() {
-            @Override
-            public boolean isDestroyed() {
-                return mIsDestroyed;
-            }
-
-            @Override
-            public boolean isIncognito() {
-                return false;
-            }
-
-            @Override
-            public boolean shouldShowOpenInNewTab() {
-                return false;
-            }
-
-            @Override
-            public boolean shouldShowOpenInNewIncognitoTab() {
-                return false;
-            }
-
-            @Override
-            public boolean isContextMenuEnabled() {
-                return false;
-            }
-
-            @Override
-            public void open(BookmarkItemView item) {
-                if (item.isFolder()) {
-                    updateBookmarksPageContents(item.getBookmarkId(), false);
-                } else {
-                    listener.onBookmarkSelected(item.getUrl(), item.getTitle(), item.getFavicon());
-                }
-            }
-
-            @Override
-            public void openInNewTab(BookmarkItemView item) {
-            }
-
-            @Override
-            public void openInNewIncognitoTab(BookmarkItemView item) {
-            }
-
-            @Override
-            public void openFolder(BookmarkFolderHierarchyItem item) {
-                updateBookmarksPageContents(item.getFolderId(), false);
-            }
-
-            @Override
-            public void delete(BookmarkItemView item) {
-            }
-
-            @Override
-            public void edit(BookmarkItemView item) {
-            }
-
-            @Override
-            public void getFaviconImageForUrl(
-                    String url, int size, FaviconImageCallback faviconCallback) {
-                BookmarksPage.this.getFaviconImageForUrl(url, size, faviconCallback);
-            }
-        };
+    private BookmarksPageManager buildManagerForDocumentMode(Tab tab,
+            TabModelSelector tabModelSelector) {
+        return new DocumentModeManager(tab, tabModelSelector);
     }
 
     private void getFaviconImageForUrl(String url, int size, FaviconImageCallback faviconCallback) {
         if (mFaviconHelper == null) return;
-        mFaviconHelper.getLocalFaviconImageForURL(mProfile, url,
-                FaviconHelper.FAVICON | FaviconHelper.TOUCH_ICON
-                        | FaviconHelper.TOUCH_PRECOMPOSED_ICON,
-                size, faviconCallback);
+        mFaviconHelper.getLocalFaviconImageForURL(mProfile, url, size, faviconCallback);
     }
 
     private void edit(BookmarkItemView item) {
@@ -525,6 +402,11 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
     }
 
     @Override
+    public int getThemeColor() {
+        return mThemeColor;
+    }
+
+    @Override
     public View getView() {
         return mPageView;
     }
@@ -535,6 +417,7 @@ public class BookmarksPage implements NativePage, InvalidationAwareThumbnailProv
      */
     @Override
     public void destroy() {
+        assert !mIsDestroyed;
         if (mFaviconHelper != null) {
             mFaviconHelper.destroy();
             mFaviconHelper = null;

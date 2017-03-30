@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "base/macros.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/media_stream_requester.h"
 #include "content/common/content_export.h"
@@ -66,7 +67,7 @@ class CONTENT_EXPORT MediaStreamDispatcherHost : public BrowserMessageFilter,
 
   void OnGenerateStream(int render_frame_id,
                         int page_request_id,
-                        const StreamOptions& components,
+                        const StreamControls& controls,
                         const GURL& security_origin,
                         bool user_gesture);
   void OnCancelGenerateStream(int render_frame_id,

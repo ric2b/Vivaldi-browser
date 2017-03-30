@@ -4,6 +4,8 @@
 
 #include "content/test/content_browser_test_utils_internal.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <map>
 #include <set>
@@ -13,8 +15,13 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
+#include "content/public/browser/resource_dispatcher_host.h"
+#include "content/public/browser/resource_throttle.h"
+#include "content/public/test/browser_test_utils.h"
+#include "content/public/test/content_browser_test_utils.h"
+#include "content/shell/browser/shell.h"
 #include "content/test/test_frame_navigation_observer.h"
-#include "url/gurl.h"
+#include "net/url_request/url_request.h"
 
 namespace content {
 
@@ -63,8 +70,7 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
     }
 
     RenderFrameHost* pending = node->render_manager()->pending_frame_host();
-    RenderFrameHost* spec =
-        node->render_manager()->speculative_render_frame_host_.get();
+    RenderFrameHost* spec = node->render_manager()->speculative_frame_host();
     if (pending)
       legend[GetName(pending->GetSiteInstance())] = pending->GetSiteInstance();
     if (spec)
@@ -81,10 +87,8 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
     }
 
     // Sort the proxies by SiteInstance ID to avoid hash_map ordering.
-    std::map<int, RenderFrameProxyHost*> sorted_proxy_hosts;
-    for (auto& proxy_pair : node->render_manager()->proxy_hosts_) {
-      sorted_proxy_hosts.insert(proxy_pair);
-    }
+    std::map<int, RenderFrameProxyHost*> sorted_proxy_hosts =
+        node->render_manager()->GetAllProxyHostsForTesting();
     for (auto& proxy_pair : sorted_proxy_hosts) {
       RenderFrameProxyHost* proxy = proxy_pair.second;
       legend[GetName(proxy->GetSiteInstance())] = proxy->GetSiteInstance();
@@ -138,8 +142,7 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
     // pending or speculative RenderFrameHost.
     RenderFrameHost* current = node->render_manager()->current_frame_host();
     RenderFrameHost* pending = node->render_manager()->pending_frame_host();
-    RenderFrameHost* spec =
-        node->render_manager()->speculative_render_frame_host_.get();
+    RenderFrameHost* spec = node->render_manager()->speculative_frame_host();
     base::StringAppendF(&line, "Site %s",
                         GetName(current->GetSiteInstance()).c_str());
     if (pending) {
@@ -152,7 +155,9 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
     }
 
     // Show the SiteInstances of the RenderFrameProxyHosts of this node.
-    if (!node->render_manager()->proxy_hosts_.empty()) {
+    std::map<int, RenderFrameProxyHost*> sorted_proxy_host_map =
+        node->render_manager()->GetAllProxyHostsForTesting();
+    if (!sorted_proxy_host_map.empty()) {
       // Show a dashed line of variable length before the proxy list. Always at
       // least two dashes.
       line.append(" --");
@@ -171,7 +176,7 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
 
       // Sort these alphabetically, to avoid hash_map ordering dependency.
       std::vector<std::string> sorted_proxy_hosts;
-      for (auto& proxy_pair : node->render_manager()->proxy_hosts_) {
+      for (auto& proxy_pair : sorted_proxy_host_map) {
         sorted_proxy_hosts.push_back(
             GetName(proxy_pair.second->GetSiteInstance()));
       }
@@ -217,6 +222,51 @@ std::string FrameTreeVisualizer::GetName(SiteInstance* site_instance) {
     return base::StringPrintf("%c", 'A' + static_cast<char>(index));
   else
     return base::StringPrintf("Z%d", static_cast<int>(index - 25));
+}
+
+Shell* OpenPopup(const ToRenderFrameHost& opener,
+                 const GURL& url,
+                 const std::string& name) {
+  ShellAddedObserver new_shell_observer;
+  bool did_create_popup = false;
+  bool did_execute_script = ExecuteScriptAndExtractBool(
+      opener,
+      "window.domAutomationController.send("
+      "    !!window.open('" + url.spec() + "', '" + name + "'));",
+      &did_create_popup);
+  if (!did_execute_script || !did_create_popup)
+    return nullptr;
+
+  Shell* new_shell = new_shell_observer.GetShell();
+  WaitForLoadStop(new_shell->web_contents());
+  return new_shell;
+}
+
+namespace {
+
+class HttpRequestStallThrottle : public ResourceThrottle {
+ public:
+  // ResourceThrottle
+  void WillStartRequest(bool* defer) override { *defer = true; }
+
+  const char* GetNameForLogging() const override {
+    return "HttpRequestStallThrottle";
+  }
+};
+
+}  // namespace
+
+NavigationStallDelegate::NavigationStallDelegate(const GURL& url) : url_(url) {}
+
+void NavigationStallDelegate::RequestBeginning(
+    net::URLRequest* request,
+    content::ResourceContext* resource_context,
+    content::AppCacheService* appcache_service,
+    ResourceType resource_type,
+    ScopedVector<content::ResourceThrottle>* throttles) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  if (request->url() == url_)
+    throttles->push_back(new HttpRequestStallThrottle);
 }
 
 }  // namespace content

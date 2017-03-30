@@ -28,10 +28,10 @@
 namespace {
 
 struct IPCPictureBuffer {
-  IPCPictureBuffer(uint32 texture_id, gpu::Mailbox texture_mailbox)
+  IPCPictureBuffer(uint32_t texture_id, gpu::Mailbox texture_mailbox)
       : texture_id(texture_id), texture_mailbox(texture_mailbox) {}
 
-  uint32 texture_id;
+  uint32_t texture_id;
   gpu::Mailbox texture_mailbox;
 };
 
@@ -67,8 +67,7 @@ using media::DemuxerStream;
 // decoded using hardware acceleration.
 class IPCMediaPipelineHostImpl::PictureBufferManager {
  public:
-  explicit PictureBufferManager(
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories);
+  explicit PictureBufferManager(media::GpuVideoAcceleratorFactories* factories);
   ~PictureBufferManager();
 
   const IPCPictureBuffer* ProvidePictureBuffer(const gfx::Size& size);
@@ -79,13 +78,13 @@ class IPCMediaPipelineHostImpl::PictureBufferManager {
  private:
   static void ReleaseMailbox(
       base::WeakPtr<PictureBufferManager> buffer_manager,
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories,
-      uint32 texture_id,
-      uint32 release_sync_point);
+      media::GpuVideoAcceleratorFactories* factories,
+      uint32_t texture_id,
+      const gpu::SyncToken& release_sync_point);
 
   void ReusePictureBuffer(uint32_t texture_id);
 
-  scoped_refptr<media::GpuVideoAcceleratorFactories> factories_;
+  media::GpuVideoAcceleratorFactories* factories_;
 
   scoped_ptr<IPCPictureBuffer> picture_buffer_in_use_;
   std::queue<IPCPictureBuffer> available_picture_buffers_;
@@ -97,9 +96,9 @@ class IPCMediaPipelineHostImpl::PictureBufferManager {
 };
 
 IPCMediaPipelineHostImpl::PictureBufferManager::PictureBufferManager(
-    const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories)
+    media::GpuVideoAcceleratorFactories* factories)
     : factories_(factories), weak_ptr_factory_(this) {
-  DCHECK(factories_.get());
+  DCHECK(factories_);
 }
 
 IPCMediaPipelineHostImpl::PictureBufferManager::~PictureBufferManager() {
@@ -120,7 +119,7 @@ IPCMediaPipelineHostImpl::PictureBufferManager::~PictureBufferManager() {
 const IPCPictureBuffer*
 IPCMediaPipelineHostImpl::PictureBufferManager::ProvidePictureBuffer(
     const gfx::Size& size) {
-  DCHECK(factories_->GetTaskRunner()->BelongsToCurrentThread());
+  DCHECK(factories_->GetTaskRunner()->RunsTasksOnCurrentThread());
   DCHECK(!picture_buffer_in_use_);
 
   if (!available_picture_buffers_.empty()) {
@@ -159,8 +158,8 @@ IPCMediaPipelineHostImpl::PictureBufferManager::CreateWrappedTexture(
       new media::PassThroughDecoderTexture);
   texture_info->texture_id = texture_id;
   texture_info->mailbox_holder = make_scoped_ptr(new gpu::MailboxHolder(
-      picture_buffer_in_use_->texture_mailbox,
-      media::kPlatformMediaPipelineTextureTarget, 0 /* sync_point */));
+      picture_buffer_in_use_->texture_mailbox, gpu::SyncToken(),
+      media::kPlatformMediaPipelineTextureTarget));
   // This callback has to be run when texture is no longer needed.
   // PassThroughDecoderTextureWrapper will take care of it if no one will try to
   // use its load.
@@ -173,16 +172,16 @@ IPCMediaPipelineHostImpl::PictureBufferManager::CreateWrappedTexture(
   picture_buffer_in_use_.reset();
 
   return make_scoped_ptr(
-      new media::AutoReleasedPassThroughDecoderTexture(texture_info.Pass()));
+     new media::AutoReleasedPassThroughDecoderTexture(std::move(texture_info)));
 }
 
 void IPCMediaPipelineHostImpl::PictureBufferManager::ReleaseMailbox(
     base::WeakPtr<PictureBufferManager> buffer_manager,
-    const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories,
-    uint32 texture_id,
-    uint32 release_sync_point) {
+    media::GpuVideoAcceleratorFactories* factories,
+    uint32_t texture_id,
+    const gpu::SyncToken& release_sync_point) {
   DCHECK(factories->GetTaskRunner()->BelongsToCurrentThread());
-  factories->WaitSyncPoint(release_sync_point);
+  factories->WaitSyncToken(release_sync_point);
 
   if (buffer_manager) {
     buffer_manager->ReusePictureBuffer(texture_id);
@@ -277,8 +276,8 @@ int IPCMediaPipelineHostImpl::SharedData::mapped_size() const {
 
 IPCMediaPipelineHostImpl::IPCMediaPipelineHostImpl(
     GpuChannelHost* channel,
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+    media::GpuVideoAcceleratorFactories* factories,
     media::DataSource* data_source)
     : task_runner_(task_runner),
       data_source_(data_source),
@@ -298,7 +297,7 @@ IPCMediaPipelineHostImpl::IPCMediaPipelineHostImpl(
 IPCMediaPipelineHostImpl::~IPCMediaPipelineHostImpl() {
   // We use WeakPtrs which require that we (i.e. our |weak_ptr_factory_|) are
   // destroyed on the same thread they are used.
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (is_connected()) {
     DLOG(ERROR) << "Object was not brought down properly. Missing "
@@ -308,7 +307,7 @@ IPCMediaPipelineHostImpl::~IPCMediaPipelineHostImpl() {
 
 void IPCMediaPipelineHostImpl::Initialize(const std::string& mimetype,
                                           const InitializeCB& callback) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   DCHECK(!is_connected());
   DCHECK(init_callback_.is_null());
 
@@ -338,7 +337,7 @@ void IPCMediaPipelineHostImpl::OnInitialized(
     const media::PlatformMediaTimeInfo& time_info,
     const media::PlatformAudioConfig& audio_config,
     const media::PlatformVideoConfig& video_config) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (init_callback_.is_null()) {
     DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
@@ -352,7 +351,7 @@ void IPCMediaPipelineHostImpl::OnInitialized(
   if (video_config.is_valid()) {
     video_config_ = video_config;
     if (video_config_.decoding_mode ==
-        media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE) {
+        media::PlatformMediaDecodingMode::HARDWARE) {
       picture_buffer_manager_.reset(new PictureBufferManager(factories_));
     }
   }
@@ -365,7 +364,7 @@ void IPCMediaPipelineHostImpl::OnInitialized(
 
 void IPCMediaPipelineHostImpl::OnRequestBufferForRawData(
     size_t requested_size) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (shared_raw_data_->Prepare(requested_size)) {
     channel_->Send(new MediaPipelineMsg_BufferForRawDataReady(
@@ -381,7 +380,7 @@ void IPCMediaPipelineHostImpl::OnRequestBufferForRawData(
 void IPCMediaPipelineHostImpl::OnRequestBufferForDecodedData(
     media::PlatformMediaDataType type,
     size_t requested_size) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (!is_read_in_progress(type)) {
     DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
@@ -406,7 +405,7 @@ void IPCMediaPipelineHostImpl::StartWaitingForSeek() {
 
 void IPCMediaPipelineHostImpl::Seek(base::TimeDelta time,
                                     const media::PipelineStatusCB& status_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   DCHECK(is_connected());
   DCHECK(seek_callback_.is_null());
 
@@ -417,7 +416,7 @@ void IPCMediaPipelineHostImpl::Seek(base::TimeDelta time,
 }
 
 void IPCMediaPipelineHostImpl::OnSought(bool success) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (seek_callback_.is_null()) {
     DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
@@ -431,7 +430,7 @@ void IPCMediaPipelineHostImpl::OnSought(bool success) {
 }
 
 void IPCMediaPipelineHostImpl::Stop() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   DCHECK(is_connected());
 
   TRACE_EVENT0("IPC_MEDIA", "Stop");
@@ -448,7 +447,7 @@ void IPCMediaPipelineHostImpl::Stop() {
 void IPCMediaPipelineHostImpl::ReadDecodedData(
     media::PlatformMediaDataType type,
     const DemuxerStream::ReadCB& read_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   DCHECK(!is_read_in_progress(type)) << "Overlapping reads are not supported";
   DCHECK(is_connected());
 
@@ -491,8 +490,8 @@ base::TimeDelta IPCMediaPipelineHostImpl::GetTargetBufferDurationAhead() const {
   return PlatformMediaPipeline::GetTargetBufferDurationAhead();
 }
 
-void IPCMediaPipelineHostImpl::OnReadRawData(int64 position, int size) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+void IPCMediaPipelineHostImpl::OnReadRawData(int64_t position, int size) {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA", "ReadRawData", this);
 
@@ -512,7 +511,7 @@ void IPCMediaPipelineHostImpl::OnReadRawData(int64 position, int size) {
 }
 
 void IPCMediaPipelineHostImpl::OnReadRawDataFinished(int size) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   DCHECK(shared_raw_data_->IsSufficient(size) ||
          size == media::DataSource::kReadError);
 
@@ -528,7 +527,7 @@ void IPCMediaPipelineHostImpl::OnReadRawDataFinished(int size) {
 bool IPCMediaPipelineHostImpl::OnMessageReceived(const IPC::Message& msg) {
   // GpuChannelHost gives us messages for handling on the thread that called
   // AddRoute().
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(IPCMediaPipelineHostImpl, msg)
@@ -551,13 +550,13 @@ bool IPCMediaPipelineHostImpl::OnMessageReceived(const IPC::Message& msg) {
 }
 
 bool IPCMediaPipelineHostImpl::is_connected() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   return routing_id_ != MSG_ROUTING_NONE;
 }
 
 void IPCMediaPipelineHostImpl::OnDecodedDataReady(
     const MediaPipelineMsg_DecodedDataReady_Params& params) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   DCHECK(!is_handling_accelerated_video_decode(params.type) ||
          picture_buffer_manager_);
 
@@ -583,7 +582,7 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
 
         // PassThroughDecoderImpl treats 0-sized buffers as a sign of an error.
         buffer = new media::DecoderBuffer(1);
-        buffer->set_wrapped_texture(wrapped_texture.Pass());
+        buffer->set_wrapped_texture(std::move(wrapped_texture));
       } else {
         if (!shared_decoded_data_[params.type]->IsSufficient(params.size)) {
           DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
@@ -641,7 +640,7 @@ void IPCMediaPipelineHostImpl::OnAudioConfigChanged(
     const media::PlatformAudioConfig& new_audio_config) {
   DVLOG(1) << __FUNCTION__;
 
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (!is_read_in_progress(media::PLATFORM_MEDIA_AUDIO)) {
     DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
@@ -658,7 +657,7 @@ void IPCMediaPipelineHostImpl::OnVideoConfigChanged(
     const media::PlatformVideoConfig& new_video_config) {
   DVLOG(1) << __FUNCTION__;
 
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   if (!is_read_in_progress(media::PLATFORM_MEDIA_VIDEO)) {
     DLOG(ERROR) << "Unexpected call to " << __FUNCTION__;
@@ -678,12 +677,12 @@ void IPCMediaPipelineHostImpl::OnVideoConfigChanged(
 }
 
 media::PlatformAudioConfig IPCMediaPipelineHostImpl::audio_config() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   return audio_config_;
 }
 
 media::PlatformVideoConfig IPCMediaPipelineHostImpl::video_config() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
   return video_config_;
 }
 

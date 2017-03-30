@@ -12,9 +12,10 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/sys_info.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
-#include "content/public/common/content_switches.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
+#include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "media/base/media_switches.h"
 
 namespace {

@@ -60,6 +60,8 @@ namespace easyUnlockPrivate {
   // Type of a permit. All lower case to match permit.PermitRecord.Type.
   enum PermitType {access, license};
 
+  enum ConnectionStatus {DISCONNECTED, IN_PROGRESS, CONNECTED};
+
   // Options that can be passed to |unwrapSecureMessage| method.
   dictionary UnwrapSecureMessageOptions {
     // The data associated with the message. For the message to be succesfully
@@ -161,6 +163,9 @@ namespace easyUnlockPrivate {
     // Whether all data needed to use Easy unlock service has been loaded for
     // the user.
     boolean dataReady;
+
+    // Whether the |kEnableBluetoothLowEnergyDiscovery| switch is enabled.
+    boolean bleDiscoveryEnabled;
   };
 
   // A range.
@@ -229,6 +234,23 @@ namespace easyUnlockPrivate {
   // |max_transmit_power| The maximum transmission power that can be achieved.
   callback ConnectionInfoCallback = void(
       long rssi, long transmit_power, long max_transmit_power);
+
+  // Callback for the |FindSetupConnectionCallback| method.
+  // |connectionId|: The identifier of the connection found. To be used in
+  // future calls refering to this connection.
+  // |deviceAddress|: The Bluetooth address of the remote device.
+  callback FindSetupConnectionCallback = void(long connectionId,
+                                              DOMString deviceAddress);
+
+  // Callback for the |setupConnectionStatus()| method.
+  // |status|: The status of the connection with |connection_id|.
+  callback SetupConnectionStatusCallback = void(ConnectionStatus status);
+
+  // Callback for the |setupConnectionGetDeviceAddress()| method.
+  // |deviceAddress|: The bluetooth address of the connection with 
+  // |connectionId|.
+  callback SetupConnectionGetDeviceAddressCallback = void(
+      DOMString deviceAddress);
 
   interface Functions {
     // Gets localized strings required to render the API.
@@ -384,6 +406,30 @@ namespace easyUnlockPrivate {
     // an optional error message to be displayed to the user.
     static void setAutoPairingResult(AutoPairingResult result,
                                      optional EmptyCallback callback);
+
+    // Finds and connects the remote BLE device that is advertising:
+    // |setupServiceUUID|. Returns when a connection is found or |timeOut|
+    // seconds have elapsed.
+    static void findSetupConnection(DOMString setupServiceUuid,
+                                    long timeOut,
+                                    FindSetupConnectionCallback callback);
+
+    // Returns the status of the connection with |connectionId|.
+    static void setupConnectionStatus(long connectionId,
+                                      SetupConnectionStatusCallback callback);
+
+    // Disconnects the connection with |connectionId|. 
+    static void setupConnectionDisconnect(long connectionId, 
+                                          optional EmptyCallback callback);
+
+    // Sends |data| through the connection with |connnectionId|.
+    static void setupConnectionSend(long connectionId,
+                                    ArrayBuffer data,
+                                    optional EmptyCallback callback);
+
+    // Gets the Bluetooth address of the connection with |connectionId|
+    static void setupConnectionGetDeviceAddress(long connectionId,
+        SetupConnectionGetDeviceAddressCallback callback);
   };
 
   interface Events {
@@ -395,5 +441,20 @@ namespace easyUnlockPrivate {
     // Event fired at the end of Easy bootstrap to start auto pairing so
     // that a proper cryptohome key could be generated for the user.
     static void onStartAutoPairing();
+
+    // Event fired when |connectionId| change status.
+    static void onConnectionStatusChanged(long connectionId,
+                                          ConnectionStatus oldStatus,
+                                          ConnectionStatus newStatus);
+
+    // Event fired when |connectionId| receives |data|.
+    static void onDataReceived(long connectionId,
+                               ArrayBuffer data);
+
+    // Event fired when |connectionId| sends |data|. |success| is true
+    // if the send operation was successful.
+    static void onSendCompleted(long connectionId,
+                                ArrayBuffer data,
+                                boolean success);
   };
 };

@@ -1,0 +1,58 @@
+// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "bookmarksPrivate",
+    "description": "Use the <code>vivaldi.bookmarksPrivate.updateSpeedDialsForWindowsJumplist</code> API to update bookmarks",
+    "compiler_options": {
+      "implemented_in": "extensions/api/bookmarks/bookmarks_private_api.h"
+    },
+    "types": [
+      {
+        "id": "SpeedDialInfo",
+        "type": "object",
+        "description": "Object passed to the updateSpeedDialsForWindowsJumplist function.",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "updateSpeedDialsForWindowsJumplist",
+        "type": "function",
+        "description": "Update the speed dial list in Windows 7+ jumplist.",
+        "parameters": [
+          {
+            "name": "speedDials",
+            "type": "array",
+            "items": { "$ref": "SpeedDialInfo" }
+          }
+        ]
+      },
+      {
+        "name": "emptyTrash",
+        "type": "function",
+        "description": "Empty the bookmarks trash folder.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "success",
+                "type": "boolean",
+                "description": "true if the operation was successful, otherwise false."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

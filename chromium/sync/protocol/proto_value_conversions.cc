@@ -6,10 +6,12 @@
 
 #include "sync/protocol/proto_value_conversions.h"
 
+#include <stdint.h>
+
+#include <algorithm>
 #include <string>
 
 #include "base/base64.h"
-#include "base/basictypes.h"
 #include "base/i18n/time_formatting.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -49,7 +51,7 @@ namespace {
 
 // Basic Type -> Value functions.
 
-scoped_ptr<base::StringValue> MakeInt64Value(int64 x) {
+scoped_ptr<base::StringValue> MakeInt64Value(int64_t x) {
   return make_scoped_ptr(new base::StringValue(base::Int64ToString(x)));
 }
 
@@ -78,7 +80,7 @@ scoped_ptr<base::ListValue> MakeRepeatedValue(const F& fields,
   return list;
 }
 
-base::string16 TimestampToString(int64 tm) {
+base::string16 TimestampToString(int64_t tm) {
   return base::TimeFormatShortDateAndTime(syncer::ProtoTimeToTime(tm));
 }
 
@@ -190,7 +192,6 @@ scoped_ptr<base::DictionaryValue> TabNavigationToValue(
   SET_STR(virtual_url);
   SET_STR(referrer);
   SET_STR(title);
-  SET_STR(state);
   SET_ENUM(page_transition, GetPageTransitionString);
   SET_ENUM(redirect_type, GetPageTransitionRedirectTypeString);
   SET_INT32(unique_id);
@@ -572,6 +573,7 @@ scoped_ptr<base::DictionaryValue> NigoriSpecificsToValue(
   SET_BOOL(encrypt_articles);
   SET_BOOL(encrypt_app_list);
   SET_BOOL(encrypt_everything);
+  SET_BOOL(server_only_was_missing_keystore_migration_time);
   SET_BOOL(sync_tab_favicons);
   SET_ENUM(passphrase_type, PassphraseTypeString);
   SET(keystore_decryptor_token, EncryptedDataToValue);

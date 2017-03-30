@@ -29,7 +29,18 @@ class LayerTreeHostClient {
   virtual void BeginMainFrame(const BeginFrameArgs& args) = 0;
   virtual void BeginMainFrameNotExpectedSoon() = 0;
   virtual void DidBeginMainFrame() = 0;
-  virtual void Layout() = 0;
+  // A LayerTreeHost is bound to a LayerTreeHostClient. Visual frame-based
+  // updates to the state of the LayerTreeHost are expected to happen only in
+  // calls to LayerTreeHostClient::UpdateLayerTreeHost, which should
+  // mutate/invalidate the layer tree or other page parameters as appropriate.
+  //
+  // An example of a LayerTreeHostClient is (via additional indirections) Blink,
+  // which inside of LayerTreeHostClient::UpdateLayerTreeHost will update
+  // (Blink's notions of) style, layout, paint invalidation and compositing
+  // state. (The "compositing state" will result in a mutated layer tree on the
+  // LayerTreeHost via additional interface indirections which lead back to
+  // mutations on the LayerTreeHost.)
+  virtual void UpdateLayerTreeHost() = 0;
   virtual void ApplyViewportDeltas(
       const gfx::Vector2dF& inner_delta,
       const gfx::Vector2dF& outer_delta,
@@ -57,12 +68,6 @@ class LayerTreeHostClient {
   // TODO(simonhong): Makes this to pure virtual function when client
   // implementation is ready.
   virtual void SendBeginFramesToChildren(const BeginFrameArgs& args) {}
-
-  // Requests that the client insert a rate limiting token in the shared main
-  // thread context's command stream that will block if the context gets too far
-  // ahead of the compositor's command stream. Only needed if the tree contains
-  // a TextureLayer that calls SetRateLimitContext(true).
-  virtual void RateLimitSharedMainThreadContext() {}
 
  protected:
   virtual ~LayerTreeHostClient() {}

@@ -5,12 +5,13 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_interceptor.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
@@ -126,7 +127,7 @@ class DataReductionProxyInterceptorTest : public testing::Test {
   }
 
   void Init(scoped_ptr<net::URLRequestJobFactory> factory) {
-    job_factory_ = factory.Pass();
+    job_factory_ = std::move(factory);
     default_context_->set_job_factory(job_factory_.get());
     default_context_->Init();
   }
@@ -146,16 +147,16 @@ TEST_F(DataReductionProxyInterceptorTest, TestJobFactoryChaining) {
   CountingURLRequestInterceptor* interceptor2 =
       new CountingURLRequestInterceptor();
   scoped_ptr<net::URLRequestJobFactory> factory2(
-      new net::URLRequestInterceptingJobFactory(
-          impl.Pass(), make_scoped_ptr(interceptor2)));
+      new net::URLRequestInterceptingJobFactory(std::move(impl),
+                                                make_scoped_ptr(interceptor2)));
 
   CountingURLRequestInterceptor* interceptor1 =
       new CountingURLRequestInterceptor();
   scoped_ptr<net::URLRequestJobFactory> factory1(
-      new net::URLRequestInterceptingJobFactory(
-          factory2.Pass(), make_scoped_ptr(interceptor1)));
+      new net::URLRequestInterceptingJobFactory(std::move(factory2),
+                                                make_scoped_ptr(interceptor1)));
 
-  Init(factory1.Pass());
+  Init(std::move(factory1));
 
   net::TestDelegate d;
   scoped_ptr<net::URLRequest> req(default_context_->CreateRequest(
@@ -194,8 +195,8 @@ class DataReductionProxyInterceptorWithServerTest : public testing::Test {
         "components/test/data/data_reduction_proxy/direct");
     proxy_.ServeFilesFromDirectory(proxy_file_path);
     direct_.ServeFilesFromDirectory(direct_file_path);
-    ASSERT_TRUE(proxy_.InitializeAndWaitUntilReady());
-    ASSERT_TRUE(direct_.InitializeAndWaitUntilReady());
+    ASSERT_TRUE(proxy_.Start());
+    ASSERT_TRUE(direct_.Start());
 
     test_context_ =
         DataReductionProxyTestContext::Builder()
@@ -210,16 +211,15 @@ class DataReductionProxyInterceptorWithServerTest : public testing::Test {
     proxies_for_http.push_back(origin);
     test_context_->config()->test_params()->SetProxiesForHttp(proxies_for_http);
     std::string proxy_name = origin.ToURI();
-    proxy_service_.reset(
-        net::ProxyService::CreateFixedFromPacResult(
-            "PROXY " + proxy_name + "; DIRECT"));
+    proxy_service_ = net::ProxyService::CreateFixedFromPacResult(
+        "PROXY " + proxy_name + "; DIRECT");
 
     context_.set_proxy_service(proxy_service_.get());
 
     scoped_ptr<net::URLRequestJobFactoryImpl> job_factory_impl(
         new net::URLRequestJobFactoryImpl());
     job_factory_.reset(new net::URLRequestInterceptingJobFactory(
-        job_factory_impl.Pass(),
+        std::move(job_factory_impl),
         test_context_->io_data()->CreateInterceptor()));
     context_.set_job_factory(job_factory_.get());
     context_.Init();
@@ -229,17 +229,15 @@ class DataReductionProxyInterceptorWithServerTest : public testing::Test {
     return context_;
   }
 
-  const net::test_server::EmbeddedTestServer& direct() {
-    return direct_;
-  }
+  const net::EmbeddedTestServer& direct() { return direct_; }
 
  private:
   base::MessageLoopForIO message_loop_;
   net::TestNetLog net_log_;
   net::TestNetworkDelegate network_delegate_;
   net::TestURLRequestContext context_;
-  net::test_server::EmbeddedTestServer proxy_;
-  net::test_server::EmbeddedTestServer direct_;
+  net::EmbeddedTestServer proxy_;
+  net::EmbeddedTestServer direct_;
   scoped_ptr<net::ProxyService> proxy_service_;
   scoped_ptr<net::URLRequestJobFactory> job_factory_;
   scoped_ptr<DataReductionProxyTestContext> test_context_;
@@ -307,7 +305,7 @@ class DataReductionProxyInterceptorEndToEndTest : public testing::Test {
         context_.CreateRequest(url, net::IDLE, &delegate_));
     request->Start();
     drp_test_context_->RunUntilIdle();
-    return request.Pass();
+    return request;
   }
 
   const net::TestDelegate& delegate() const {
@@ -455,11 +453,12 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, RedirectWithBypassAndRetry) {
           MockRead(net::SYNCHRONOUS, net::OK),
       },
   };
-  ScopedVector<net::SocketDataProvider> socket_data_providers;
+  std::vector<scoped_ptr<net::SocketDataProvider>> socket_data_providers;
   for (MockRead* mock_reads : mock_reads_array) {
-    socket_data_providers.push_back(
-        new net::StaticSocketDataProvider(mock_reads, 3, nullptr, 0));
-    mock_socket_factory()->AddSocketDataProvider(socket_data_providers.back());
+    socket_data_providers.push_back(make_scoped_ptr(
+        new net::StaticSocketDataProvider(mock_reads, 3, nullptr, 0)));
+    mock_socket_factory()->AddSocketDataProvider(
+        socket_data_providers.back().get());
   }
 
   scoped_ptr<net::URLRequest> request =

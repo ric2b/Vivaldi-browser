@@ -10,7 +10,7 @@
 #include "content/common/content_export.h"
 
 namespace content {
-struct BackgroundTracingConfig;
+class BackgroundTracingConfig;
 struct BackgroundTracingUploadConfig;
 
 // BackgroundTracingManager is used on the browser process to trigger the
@@ -42,7 +42,7 @@ class BackgroundTracingManager {
   // }
   //
   typedef base::Callback<void(const scoped_refptr<base::RefCountedString>&,
-                              scoped_ptr<base::DictionaryValue>,
+                              scoped_ptr<const base::DictionaryValue>,
                               base::Closure)> ReceiveCallback;
 
   // Set the triggering rules for when to start recording.
@@ -87,14 +87,12 @@ class BackgroundTracingManager {
   // be passed to DidTriggerHappen().
   virtual TriggerHandle RegisterTriggerType(const char* trigger_name) = 0;
 
-  // Returns a list of all registered triggers.
-  virtual void GetTriggerNameList(std::vector<std::string>* trigger_names) = 0;
+  virtual bool HasActiveScenario() = 0;
 
   virtual void InvalidateTriggerHandlesForTesting() = 0;
   virtual void SetTracingEnabledCallbackForTesting(
       const base::Closure& callback) = 0;
   virtual void FireTimerForTesting() = 0;
-  virtual bool HasActiveScenarioForTesting() = 0;
 
  protected:
   virtual ~BackgroundTracingManager() {}

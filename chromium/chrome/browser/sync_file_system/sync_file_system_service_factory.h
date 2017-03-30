@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_SYNC_FILE_SYSTEM_SYNC_FILE_SYSTEM_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_SYNC_FILE_SYSTEM_SYNC_FILE_SYSTEM_SERVICE_FACTORY_H_
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
@@ -35,7 +34,7 @@ class SyncFileSystemServiceFactory : public BrowserContextKeyedServiceFactory {
       scoped_ptr<RemoteFileSyncService> mock_remote_service);
 
  private:
-  friend struct DefaultSingletonTraits<SyncFileSystemServiceFactory>;
+  friend struct base::DefaultSingletonTraits<SyncFileSystemServiceFactory>;
   SyncFileSystemServiceFactory();
   ~SyncFileSystemServiceFactory() override;
 

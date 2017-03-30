@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_MANIFEST_MANIFEST_ICON_SELECTOR_H_
 #define CHROME_BROWSER_MANIFEST_MANIFEST_ICON_SELECTOR_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "content/public/common/manifest.h"
 #include "url/gurl.h"
 
@@ -33,33 +33,43 @@ class ManifestIconSelector {
   // If/when this class is generalized, it may be a good idea to switch this to
   // taking in pixels, instead.
   //
+  // Any icon returned will be close as possible to |ideal_icon_size_in_dp|
+  // with a size not less than |minimum_icon_size_in_dp|.
+  //
   // Returns the icon url if a suitable icon is found. An empty URL otherwise.
   static GURL FindBestMatchingIcon(
       const std::vector<content::Manifest::Icon>& icons,
-      float preferred_icon_size_in_dp,
+      int ideal_icon_size_in_dp,
+      int minimum_icon_size_in_dp,
       const gfx::Screen* screen);
 
  private:
-  explicit ManifestIconSelector(float preferred_icon_size_in_pixels);
+  ManifestIconSelector(int ideal_icon_size_in_px,
+                       int minimum_icon_size_in_px);
   virtual ~ManifestIconSelector() {}
 
   // Runs the algorithm to find the best matching icon in the icons listed in
   // the Manifest.
   // Returns the icon url if a suitable icon is found. An empty URL otherwise.
-  GURL FindBestMatchingIcon(
+  int FindBestMatchingIcon(
       const std::vector<content::Manifest::Icon>& icons,
       float density);
 
   // Runs an algorithm only based on icon declared sizes. It will try to find
   // size that is the closest to preferred_icon_size_in_pixels_ but bigger than
   // preferred_icon_size_in_pixels_ if possible.
-  // Returns the icon url if a suitable icon is found. An empty URL otherwise.
-  GURL FindBestMatchingIconForDensity(
+  // Returns the index of a suitable icon if one is found. -1 otherwise.
+  int FindBestMatchingIconForDensity(
       const std::vector<content::Manifest::Icon>& icons,
       float density);
 
   // Returns whether the |preferred_icon_size_in_pixels_| is in |sizes|.
   bool IconSizesContainsPreferredSize(const std::vector<gfx::Size>& sizes);
+
+  // Returns whether a size bigger than |minimun_icon_size_in_pixels_| is in
+  // |sizes|.
+  bool IconSizesContainsBiggerThanMinimumSize(
+      const std::vector<gfx::Size>& sizes);
 
   // Returns an array containing the items in |icons| without the unsupported
   // image MIME types.
@@ -69,7 +79,8 @@ class ManifestIconSelector {
   // Returns whether the 'any' (ie. gfx::Size(0,0)) is in |sizes|.
   static bool IconSizesContainsAny(const std::vector<gfx::Size>& sizes);
 
-  const int preferred_icon_size_in_pixels_;
+  const int ideal_icon_size_in_px_;
+  const int minimum_icon_size_in_px_;
 
   friend class ManifestIconSelectorTest;
 

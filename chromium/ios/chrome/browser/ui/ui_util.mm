@@ -7,6 +7,7 @@
 #import <UIKit/UIKit.h>
 
 #include "base/ios/ios_util.h"
+#include "base/logging.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ui/gfx/ios/uikit_util.h"
 
@@ -14,6 +15,11 @@ bool IsIPadIdiom() {
   UIUserInterfaceIdiom idiom = [[UIDevice currentDevice] userInterfaceIdiom];
   return idiom == UIUserInterfaceIdiomPad;
 }
+
+const CGFloat kPortraitWidth[INTERFACE_IDIOM_COUNT] = {
+    320,  // IPHONE_IDIOM
+    768   // IPAD_IDIOM
+};
 
 bool IsHighResScreen() {
   return [[UIScreen mainScreen] scale] > 1.0;
@@ -54,9 +60,9 @@ CGFloat CurrentScreenWidth() {
 }
 
 CGFloat StatusBarHeight() {
-  // TODO(justincohen): This is likely not correct, but right now iOS7 betas are
-  // doing strange things when handling calls that change the status bar height.
-  // For now, just return 20. crbug/264367
+  // Checking [UIApplication sharedApplication].statusBarFrame will return the
+  // wrong offset when the application is started while in a phone call, so
+  // simply return 20 here.
   return 20;
 }
 

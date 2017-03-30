@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SIGNIN_LOGIN_UI_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_UI_WEBUI_SIGNIN_LOGIN_UI_SERVICE_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -24,8 +25,13 @@ class LoginUIServiceFactory : public BrowserContextKeyedServiceFactory {
   // Returns an instance of the LoginUIServiceFactory singleton.
   static LoginUIServiceFactory* GetInstance();
 
+  // Helper method that returns a closure displaying the login popup for
+  // |profile|.
+  // This closure must not be called after the LoginUIService is destroyed.
+  static base::Closure GetShowLoginPopupCallbackForProfile(Profile* profile);
+
  private:
-  friend struct DefaultSingletonTraits<LoginUIServiceFactory>;
+  friend struct base::DefaultSingletonTraits<LoginUIServiceFactory>;
 
   LoginUIServiceFactory();
   ~LoginUIServiceFactory() override;

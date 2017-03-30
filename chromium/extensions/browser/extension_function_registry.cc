@@ -10,7 +10,7 @@
 
 // static
 ExtensionFunctionRegistry* ExtensionFunctionRegistry::GetInstance() {
-  return Singleton<ExtensionFunctionRegistry>::get();
+  return base::Singleton<ExtensionFunctionRegistry>::get();
 }
 
 ExtensionFunctionRegistry::ExtensionFunctionRegistry() {
@@ -22,13 +22,6 @@ ExtensionFunctionRegistry::ExtensionFunctionRegistry() {
 }
 
 ExtensionFunctionRegistry::~ExtensionFunctionRegistry() {}
-
-void ExtensionFunctionRegistry::GetAllNames(std::vector<std::string>* names) {
-  for (FactoryMap::iterator iter = factories_.begin(); iter != factories_.end();
-       ++iter) {
-    names->push_back(iter->first);
-  }
-}
 
 bool ExtensionFunctionRegistry::OverrideFunction(
     const std::string& name,

@@ -4,6 +4,8 @@
 
 #include "content/browser/loader/layered_resource_handler.h"
 
+#include <utility>
+
 #include "base/logging.h"
 
 namespace content {
@@ -11,9 +13,7 @@ namespace content {
 LayeredResourceHandler::LayeredResourceHandler(
     net::URLRequest* request,
     scoped_ptr<ResourceHandler> next_handler)
-    : ResourceHandler(request),
-      next_handler_(next_handler.Pass()) {
-}
+    : ResourceHandler(request), next_handler_(std::move(next_handler)) {}
 
 LayeredResourceHandler::~LayeredResourceHandler() {
 }
@@ -29,18 +29,17 @@ void LayeredResourceHandler::SetController(ResourceController* controller) {
   next_handler_->SetController(controller);
 }
 
-bool LayeredResourceHandler::OnUploadProgress(uint64 position,
-                                              uint64 size) {
-  DCHECK(next_handler_.get());
-  return next_handler_->OnUploadProgress(position, size);
-}
-
 bool LayeredResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* response,
     bool* defer) {
   DCHECK(next_handler_.get());
   return next_handler_->OnRequestRedirected(redirect_info, response, defer);
+}
+
+bool LayeredResourceHandler::OnResponseStarted(ResourceResponse* response,
+                                               bool* defer) {
+  return OnResponseStarted(response,defer, false, false);
 }
 
 bool LayeredResourceHandler::OnResponseStarted(ResourceResponse* response,

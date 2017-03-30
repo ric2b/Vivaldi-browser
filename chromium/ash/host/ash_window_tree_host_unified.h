@@ -9,6 +9,7 @@
 
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/host/transformer_helper.h"
+#include "base/macros.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event_source.h"
@@ -65,10 +66,8 @@ class AshWindowTreeHostUnified : public AshWindowTreeHost,
   void OnWindowDestroying(aura::Window* window) override;
 
   // ui::internal::InputMethodDelegate:
-  bool DispatchKeyEventPostIME(const ui::KeyEvent& event) override;
-
-  // ui::EventSource:
-  ui::EventDispatchDetails DeliverEventToProcessor(ui::Event* event) override;
+  ui::EventDispatchDetails DispatchKeyEventPostIME(
+      ui::KeyEvent* event) override;
 
   std::vector<AshWindowTreeHost*> mirroring_hosts_;
 

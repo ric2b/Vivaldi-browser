@@ -14,6 +14,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
+#include "ui/views/event_monitor.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
@@ -32,7 +33,7 @@ FirstRunBubble* FirstRunBubble::ShowBubble(Browser* browser,
   first_run::LogFirstRunMetric(first_run::FIRST_RUN_BUBBLE_SHOWN);
 
   FirstRunBubble* delegate = new FirstRunBubble(browser, anchor_view);
-  views::BubbleDelegateView::CreateBubble(delegate)->Show();
+  views::BubbleDelegateView::CreateBubble(delegate)->ShowInactive();
   return delegate;
 }
 
@@ -80,7 +81,8 @@ void FirstRunBubble::Init() {
 
 FirstRunBubble::FirstRunBubble(Browser* browser, views::View* anchor_view)
     : views::BubbleDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT),
-      browser_(browser) {
+      browser_(browser),
+      bubble_closer_(this, anchor_view) {
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(
       gfx::Insets(kAnchorVerticalInset, 0, kAnchorVerticalInset, 0));
@@ -95,4 +97,42 @@ void FirstRunBubble::LinkClicked(views::Link* source, int event_flags) {
   GetWidget()->Close();
   if (browser_)
     chrome::ShowSearchEngineSettings(browser_);
+}
+
+FirstRunBubble::FirstRunBubbleCloser::FirstRunBubbleCloser(
+    FirstRunBubble* bubble,
+    views::View* anchor_view)
+    : bubble_(bubble) {
+  event_monitor_ = views::EventMonitor::CreateWindowMonitor(
+      this, anchor_view->GetWidget()->GetNativeWindow());
+}
+
+FirstRunBubble::FirstRunBubbleCloser::~FirstRunBubbleCloser() {}
+
+void FirstRunBubble::FirstRunBubbleCloser::OnKeyEvent(ui::KeyEvent* event) {
+  CloseBubble();
+}
+
+void FirstRunBubble::FirstRunBubbleCloser::OnMouseEvent(
+    ui::MouseEvent* event) {
+  if (event->type() == ui::ET_MOUSE_PRESSED)
+    CloseBubble();
+}
+
+void FirstRunBubble::FirstRunBubbleCloser::OnGestureEvent(
+    ui::GestureEvent* event) {
+  if (event->type() == ui::ET_GESTURE_TAP ||
+      event->type() == ui::ET_GESTURE_TAP_DOWN) {
+    CloseBubble();
+  }
+}
+
+void FirstRunBubble::FirstRunBubbleCloser::CloseBubble() {
+  if (!event_monitor_)
+    return;
+
+  event_monitor_.reset();
+  DCHECK(bubble_);
+  bubble_->GetWidget()->Close();
+  bubble_ = nullptr;
 }

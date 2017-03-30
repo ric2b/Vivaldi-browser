@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ppapi/proxy/video_encoder_resource.h"
+
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/memory/shared_memory.h"
 #include "base/process/process.h"
 #include "base/synchronization/waitable_event.h"
@@ -14,7 +20,6 @@
 #include "ppapi/proxy/ppapi_message_utils.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/proxy/ppapi_proxy_test.h"
-#include "ppapi/proxy/video_encoder_resource.h"
 #include "ppapi/shared_impl/media_stream_buffer.h"
 #include "ppapi/shared_impl/proxy_lock.h"
 #include "ppapi/thunk/thunk.h"
@@ -120,7 +125,7 @@ class VideoEncoderResourceTest : public PluginProxyTest,
     for (uint32_t i = 0; i < nb_buffers; ++i) {
       scoped_ptr<base::SharedMemory> mem(new base::SharedMemory());
       ASSERT_TRUE(mem->CreateAnonymous(buffer_size));
-      shared_memory_bitstreams_.push_back(mem.Pass());
+      shared_memory_bitstreams_.push_back(std::move(mem));
     }
   }
 
@@ -132,10 +137,8 @@ class VideoEncoderResourceTest : public PluginProxyTest,
         frame_length + sizeof(ppapi::MediaStreamBuffer::Video);
     ASSERT_TRUE(shared_memory_frames->CreateAnonymous(buffer_length *
                                                       frame_count));
-    ASSERT_TRUE(video_frames_manager_.SetBuffers(frame_count,
-                                                 buffer_length,
-                                                 shared_memory_frames.Pass(),
-                                                 true));
+    ASSERT_TRUE(video_frames_manager_.SetBuffers(
+        frame_count, buffer_length, std::move(shared_memory_frames), true));
     for (int32_t i = 0; i < video_frames_manager_.number_of_buffers(); ++i) {
       ppapi::MediaStreamBuffer::Video* buffer =
         &(video_frames_manager_.GetBufferPointer(i)->video);
@@ -510,7 +513,7 @@ TEST_F(VideoEncoderResourceTest, GetSupportedProfiles0_1) {
 
     ASSERT_EQ(profiles_response.size(), static_cast<uint32_t>(cb.result()));
 
-    for (uint32 i = 0; i < profiles_response.size(); i++) {
+    for (uint32_t i = 0; i < profiles_response.size(); i++) {
       ASSERT_EQ(profiles_response[i].profile, profiles[i].profile);
       ASSERT_EQ(profiles_response[i].max_resolution.width,
                 profiles[i].max_resolution.width);
@@ -643,7 +646,7 @@ TEST_F(VideoEncoderResourceTest, InitializeFailure) {
 TEST_F(VideoEncoderResourceTest, InitializeSuccess) {
   {
     // Verify the initialize callback is called when initialization is
-    // successfull.
+    // successful.
     LockingResourceReleaser encoder(CreateEncoder());
     ResourceMessageCallParams params;
     PP_Size size = kFrameSize;

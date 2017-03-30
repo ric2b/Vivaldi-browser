@@ -4,6 +4,9 @@
 
 #include "components/nacl/renderer/nexe_load_manager.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
@@ -285,12 +288,12 @@ void NexeLoadManager::NexeDidCrash() {
 
 void NexeLoadManager::set_trusted_plugin_channel(
     scoped_ptr<TrustedPluginChannel> channel) {
-  trusted_plugin_channel_ = channel.Pass();
+  trusted_plugin_channel_ = std::move(channel);
 }
 
 void NexeLoadManager::set_manifest_service_channel(
     scoped_ptr<ManifestServiceChannel> channel) {
-  manifest_service_channel_ = channel.Pass();
+  manifest_service_channel_ = std::move(channel);
 }
 
 PP_NaClReadyState NexeLoadManager::nacl_ready_state() {
@@ -343,7 +346,7 @@ void NexeLoadManager::InitializePlugin(
   }
 
   // Store mime_type_ at initialization time since we make it lowercase.
-  mime_type_ = base::StringToLowerASCII(LookupAttribute(args_, kTypeAttribute));
+  mime_type_ = base::ToLowerASCII(LookupAttribute(args_, kTypeAttribute));
 }
 
 void NexeLoadManager::ReportStartupOverhead() const {

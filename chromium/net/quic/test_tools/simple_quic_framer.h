@@ -5,10 +5,13 @@
 #ifndef NET_QUIC_TEST_TOOLS_SIMPLE_QUIC_FRAMER_H_
 #define NET_QUIC_TEST_TOOLS_SIMPLE_QUIC_FRAMER_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/strings/string_piece.h"
 #include "net/quic/quic_framer.h"
 #include "net/quic/quic_protocol.h"
 
@@ -42,8 +45,8 @@ class SimpleQuicFramer {
   const std::vector<QuicPingFrame>& ping_frames() const;
   const std::vector<QuicGoAwayFrame>& goaway_frames() const;
   const std::vector<QuicRstStreamFrame>& rst_stream_frames() const;
-  const std::vector<QuicStreamFrame>& stream_frames() const;
-  const QuicFecData& fec_data() const;
+  const std::vector<QuicStreamFrame*>& stream_frames() const;
+  base::StringPiece fec_data() const;
   const QuicVersionNegotiationPacket* version_negotiation_packet() const;
 
   QuicFramer* framer();

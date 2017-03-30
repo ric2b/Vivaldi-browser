@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_DEVTOOLS_PROTOCOL_INSPECTOR_HANDLER_H_
 #define CONTENT_BROWSER_DEVTOOLS_PROTOCOL_INSPECTOR_HANDLER_H_
 
+#include "base/macros.h"
 #include "content/browser/devtools/protocol/devtools_protocol_dispatcher.h"
 
 namespace content {
@@ -25,6 +26,7 @@ class InspectorHandler {
   void SetRenderFrameHost(RenderFrameHostImpl* host);
 
   void TargetCrashed();
+  void TargetDetached(const std::string& reason);
 
   Response Enable();
 

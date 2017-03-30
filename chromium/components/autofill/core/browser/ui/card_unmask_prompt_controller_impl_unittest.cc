@@ -4,7 +4,10 @@
 
 #include "components/autofill/core/browser/ui/card_unmask_prompt_controller_impl.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/testing_pref_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -54,22 +57,13 @@ class TestCardUnmaskPromptView : public CardUnmaskPromptView {
                              bool allow_retry) override {}
 };
 
-void TestGetRiskData(const base::Callback<void(const std::string&)>& callback) {
-  callback.Run("some risk data");
-}
-
 class TestCardUnmaskPromptController : public CardUnmaskPromptControllerImpl {
  public:
   explicit TestCardUnmaskPromptController(
       TestingPrefServiceSimple* pref_service)
-      : CardUnmaskPromptControllerImpl(
-            base::Bind(&TestGetRiskData), pref_service, false),
+      : CardUnmaskPromptControllerImpl(pref_service, false),
         can_store_locally_(true),
         weak_factory_(this) {}
-
-  void LoadRiskFingerprint() override {
-    OnDidLoadRiskFingerprint("risk aversion");
-  }
 
   bool CanStoreLocally() const override { return can_store_locally_; }
 
@@ -394,9 +388,9 @@ TEST_F(CardUnmaskPromptControllerImplTest, LogRealPanResultSuccess) {
   base::HistogramTester histogram_tester;
   controller_->OnVerificationResult(AutofillClient::SUCCESS);
 
-  histogram_tester.ExpectBucketCount(
-      "Autofill.UnmaskPrompt.GetRealPanResult",
-      AutofillMetrics::GET_REAL_PAN_RESULT_SUCCESS, 1);
+  histogram_tester.ExpectBucketCount("Autofill.UnmaskPrompt.GetRealPanResult",
+                                     AutofillMetrics::PAYMENTS_RESULT_SUCCESS,
+                                     1);
 }
 
 TEST_F(CardUnmaskPromptControllerImplTest, LogRealPanTryAgainFailure) {
@@ -407,7 +401,7 @@ TEST_F(CardUnmaskPromptControllerImplTest, LogRealPanTryAgainFailure) {
 
   histogram_tester.ExpectBucketCount(
       "Autofill.UnmaskPrompt.GetRealPanResult",
-      AutofillMetrics::GET_REAL_PAN_RESULT_TRY_AGAIN_FAILURE, 1);
+      AutofillMetrics::PAYMENTS_RESULT_TRY_AGAIN_FAILURE, 1);
 }
 
 TEST_F(CardUnmaskPromptControllerImplTest, LogUnmaskingDurationResultSuccess) {

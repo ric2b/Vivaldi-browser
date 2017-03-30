@@ -4,18 +4,20 @@
 
 #include "chrome/browser/sync/test/integration/quiesce_status_change_checker.h"
 
+#include <stddef.h>
+
 #include "base/format_macros.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "chrome/browser/sync/profile_sync_service.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "sync/internal_api/public/sessions/sync_session_snapshot.h"
 
 namespace {
 
 // Returns true if this service is disabled.
 bool IsSyncDisabled(ProfileSyncService* service) {
-  return !service->setup_in_progress() && !service->HasSyncSetupCompleted();
+  return !service->IsSetupInProgress() && !service->HasSyncSetupCompleted();
 }
 
 // Returns true if these services have matching progress markers.

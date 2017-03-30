@@ -4,13 +4,14 @@
 
 #include "cloud_print/service/win/chrome_launcher.h"
 
+#include <stddef.h>
+
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/process/process.h"
 #include "base/process/process.h"
 #include "base/values.h"
 #include "base/win/registry.h"
@@ -23,7 +24,9 @@
 #include "cloud_print/common/win/cloud_print_utils.h"
 #include "cloud_print/service/service_constants.h"
 #include "cloud_print/service/win/service_utils.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/cloud_devices/common/cloud_devices_urls.h"
+#include "content/public/common/content_switches.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
 #include "url/gurl.h"
@@ -197,8 +200,8 @@ void ChromeLauncher::Run() {
   const base::TimeDelta default_time_out = base::TimeDelta::FromSeconds(1);
   const base::TimeDelta max_time_out = base::TimeDelta::FromHours(1);
 
-  for (base::TimeDelta time_out = default_time_out;;
-       time_out = std::min(time_out * 2, max_time_out)) {
+  base::TimeDelta time_out = default_time_out;
+  while (1) {
     base::FilePath chrome_path =
         chrome_launcher_support::GetAnyChromePath(false /* is_sxs */);
 
@@ -211,8 +214,11 @@ void ChromeLauncher::Run() {
       cmd.AppendSwitchPath(switches::kUserDataDir, user_data_);
       cmd.AppendSwitch(switches::kNoServiceAutorun);
 
+#if defined(OS_WIN)
+      cmd.AppendArg(switches::kPrefetchArgumentOther);
+#endif  // defined(OS_WIN)
+
       // Optional.
-      cmd.AppendSwitch(switches::kAutoLaunchAtStartup);
       cmd.AppendSwitch(switches::kDisableDefaultApps);
       cmd.AppendSwitch(switches::kDisableExtensions);
       cmd.AppendSwitch(switches::kDisableGpu);
@@ -251,6 +257,8 @@ void ChromeLauncher::Run() {
     }
     if (stop_event_.TimedWait(time_out))
       break;
+
+    time_out = std::min(time_out * 2, max_time_out);
   }
 }
 
@@ -278,7 +286,7 @@ std::string ChromeLauncher::CreateServiceStateFile(
   base::JSONWriter::Write(printer_list, &printers_json);
   size_t written = base::WriteFile(printers_file,
                                    printers_json.c_str(),
-                                   printers_json.size());
+                                   static_cast<int>(printers_json.size()));
   if (written != printers_json.size()) {
     LOG(ERROR) << "Can't write file.";
     return std::string();

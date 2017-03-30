@@ -4,12 +4,16 @@
 
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/extensions/api/automation_internal/automation_util.h"
+#include "chrome/browser/extensions/api/automation_internal/automation_event_router.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/common/extensions/chrome_extension_messages.h"
 #include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/browser_context.h"
 #include "ui/aura/window.h"
@@ -18,11 +22,16 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
+#if defined(OS_CHROMEOS)
+#include "ash/wm/window_util.h"
+#endif
+
 using content::BrowserContext;
+using extensions::AutomationEventRouter;
 
 // static
 AutomationManagerAura* AutomationManagerAura::GetInstance() {
-  return Singleton<AutomationManagerAura>::get();
+  return base::Singleton<AutomationManagerAura>::get();
 }
 
 void AutomationManagerAura::Enable(BrowserContext* context) {
@@ -32,11 +41,15 @@ void AutomationManagerAura::Enable(BrowserContext* context) {
   ResetSerializer();
 
   SendEvent(context, current_tree_->GetRoot(), ui::AX_EVENT_LOAD_COMPLETE);
-  if (focused_window_) {
+
+#if defined(OS_CHROMEOS)
+  aura::Window* active_window = ash::wm::GetActiveWindow();
+  if (active_window) {
     views::AXAuraObjWrapper* focus =
-        views::AXAuraObjCache::GetInstance()->GetOrCreate(focused_window_);
+        views::AXAuraObjCache::GetInstance()->GetOrCreate(active_window);
     SendEvent(context, focus, ui::AX_EVENT_CHILDREN_CHANGED);
   }
+#endif
 }
 
 void AutomationManagerAura::Disable() {
@@ -49,8 +62,6 @@ void AutomationManagerAura::Disable() {
 void AutomationManagerAura::HandleEvent(BrowserContext* context,
                                         views::View* view,
                                         ui::AXEvent event_type) {
-  if (view->GetWidget())
-    focused_window_ = view->GetWidget()->GetNativeView();
   if (!enabled_)
     return;
 
@@ -64,20 +75,7 @@ void AutomationManagerAura::HandleEvent(BrowserContext* context,
 
   views::AXAuraObjWrapper* aura_obj =
       views::AXAuraObjCache::GetInstance()->GetOrCreate(view);
-
-  if (processing_events_) {
-    pending_events_.push_back(std::make_pair(aura_obj, event_type));
-    return;
-  }
-
-  processing_events_ = true;
   SendEvent(context, aura_obj, event_type);
-
-  for (size_t i = 0; i < pending_events_.size(); ++i)
-    SendEvent(context, pending_events_[i].first, pending_events_[i].second);
-
-  processing_events_ = false;
-  pending_events_.clear();
 }
 
 void AutomationManagerAura::HandleAlert(content::BrowserContext* context,
@@ -91,64 +89,75 @@ void AutomationManagerAura::HandleAlert(content::BrowserContext* context,
   SendEvent(context, obj, ui::AX_EVENT_ALERT);
 }
 
-void AutomationManagerAura::DoDefault(int32 id) {
+void AutomationManagerAura::DoDefault(int32_t id) {
   CHECK(enabled_);
   current_tree_->DoDefault(id);
 }
 
-void AutomationManagerAura::Focus(int32 id) {
+void AutomationManagerAura::Focus(int32_t id) {
   CHECK(enabled_);
   current_tree_->Focus(id);
 }
 
-void AutomationManagerAura::MakeVisible(int32 id) {
+void AutomationManagerAura::MakeVisible(int32_t id) {
   CHECK(enabled_);
   current_tree_->MakeVisible(id);
 }
 
-void AutomationManagerAura::SetSelection(int32 id, int32 start, int32 end) {
+void AutomationManagerAura::SetSelection(int32_t anchor_id,
+                                         int32_t anchor_offset,
+                                         int32_t focus_id,
+                                         int32_t focus_offset) {
   CHECK(enabled_);
-  current_tree_->SetSelection(id, start, end);
+  if (anchor_id != focus_id) {
+    NOTREACHED();
+    return;
+  }
+  current_tree_->SetSelection(anchor_id, anchor_offset, focus_offset);
 }
 
-void AutomationManagerAura::ShowContextMenu(int32 id) {
+void AutomationManagerAura::ShowContextMenu(int32_t id) {
   CHECK(enabled_);
   current_tree_->ShowContextMenu(id);
 }
 
 AutomationManagerAura::AutomationManagerAura()
-    : enabled_(false), processing_events_(false), focused_window_(nullptr) {
-  views::WidgetFocusManager::GetInstance()->AddFocusChangeListener(this);
-}
+    : enabled_(false), processing_events_(false) {}
 
 AutomationManagerAura::~AutomationManagerAura() {
 }
 
 void AutomationManagerAura::ResetSerializer() {
   current_tree_serializer_.reset(
-      new ui::AXTreeSerializer<views::AXAuraObjWrapper*>(current_tree_.get()));
+      new AuraAXTreeSerializer(current_tree_.get()));
 }
 
 void AutomationManagerAura::SendEvent(BrowserContext* context,
                                       views::AXAuraObjWrapper* aura_obj,
                                       ui::AXEvent event_type) {
-  ui::AXTreeUpdate update;
-  current_tree_serializer_->SerializeChanges(aura_obj, &update);
+  if (processing_events_) {
+    pending_events_.push_back(std::make_pair(aura_obj, event_type));
+    return;
+  }
+  processing_events_ = true;
 
-  // Route this event to special process/routing ids recognized by the
-  // Automation API as the desktop tree.
-  // TODO(dtseng): Would idealy define these special desktop constants in idl.
-  content::AXEventNotificationDetails detail(
-      update.node_id_to_clear, update.nodes, event_type, aura_obj->GetID(),
-      std::map<int32, int>(),
-      0, /* process_id */
-      0 /* routing_id */);
-  std::vector<content::AXEventNotificationDetails> details;
-  details.push_back(detail);
-  extensions::automation_util::DispatchAccessibilityEventsToAutomation(
-      details, context, gfx::Vector2d());
-}
+  ExtensionMsg_AccessibilityEventParams params;
+  if (!current_tree_serializer_->SerializeChanges(aura_obj, &params.update)) {
+    LOG(ERROR) << "Unable to serialize one accessibility event.";
+    return;
+  }
+  params.tree_id = 0;
+  params.id = aura_obj->GetID();
+  params.event_type = event_type;
+  AutomationEventRouter* router = AutomationEventRouter::GetInstance();
+  router->DispatchAccessibilityEvent(params);
 
-void AutomationManagerAura::OnNativeFocusChanged(aura::Window* focused_now) {
-  focused_window_ = focused_now;
+  processing_events_ = false;
+  auto pending_events_copy = pending_events_;
+  pending_events_.clear();
+  for (size_t i = 0; i < pending_events_copy.size(); ++i) {
+    SendEvent(context,
+              pending_events_copy[i].first,
+              pending_events_copy[i].second);
+  }
 }

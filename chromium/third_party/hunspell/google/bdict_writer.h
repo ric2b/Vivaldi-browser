@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_WRITER_H__
-#define CHROME_THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_WRITER_H__
+#ifndef THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_WRITER_H_
+#define THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_WRITER_H_
 
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 namespace hunspell {
 
@@ -62,9 +62,9 @@ class BDictWriter {
   // Root of the generated trie. Filled by SetWords.
   DicNode* trie_root_;
 
-  DISALLOW_EVIL_CONSTRUCTORS(BDictWriter);
+  DISALLOW_COPY_AND_ASSIGN(BDictWriter);
 };
 
 }  // namespace hunspell
 
-#endif  // CHROME_THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_WRITER_H__
+#endif  // THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_WRITER_H_

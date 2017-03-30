@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -74,38 +77,8 @@ TEST_F(RenderViewHostTest, FilterAbout) {
 
 // Create a full screen popup RenderWidgetHost and View.
 TEST_F(RenderViewHostTest, CreateFullscreenWidget) {
-  int routing_id = process()->GetNextRoutingID();
+  int32_t routing_id = process()->GetNextRoutingID();
   test_rvh()->CreateNewFullscreenWidget(routing_id);
-}
-
-// Makes sure that the RenderViewHost is not waiting for an unload ack when
-// reloading a page. If this is not the case, when reloading, the contents may
-// get closed out even though the user pressed the reload button.
-TEST_F(RenderViewHostTest, ResetUnloadOnReload) {
-  const GURL url1("http://foo1");
-  const GURL url2("http://foo2");
-
-  // This test is for a subtle timing bug. Here's the sequence that triggered
-  // the bug:
-  // . go to a page.
-  // . go to a new page, preferably one that takes a while to resolve, such
-  //   as one on a site that doesn't exist.
-  //   . After this step IsWaitingForUnloadACK returns true on the first RVH.
-  // . click stop before the page has been commited.
-  // . click reload.
-  //   . IsWaitingForUnloadACK still returns true, and if the hang monitor fires
-  //     the contents gets closed.
-
-  NavigateAndCommit(url1);
-  controller().LoadURL(
-      url2, Referrer(), ui::PAGE_TRANSITION_LINK, std::string());
-  // Simulate the ClosePage call which is normally sent by the net::URLRequest.
-  test_rvh()->ClosePage();
-  // Needed so that navigations are not suspended on the RFH.
-  main_test_rfh()->SendBeforeUnloadACK(true);
-  contents()->Stop();
-  controller().Reload(false);
-  EXPECT_FALSE(main_test_rfh()->IsWaitingForUnloadACK());
 }
 
 // Ensure we do not grant bindings to a process shared with unprivileged views.
@@ -274,7 +247,6 @@ class TestSaveImageFromDataURL : public RenderMessageFilter {
       BrowserContext* context)
       : RenderMessageFilter(
             0,
-            nullptr,
             context,
             context->GetRequestContext(),
             nullptr,
@@ -298,12 +270,13 @@ class TestSaveImageFromDataURL : public RenderMessageFilter {
   }
 
   void Test(const std::string& url) {
-    OnMessageReceived(ViewHostMsg_SaveImageFromDataURL(0, url));
+    OnMessageReceived(ViewHostMsg_SaveImageFromDataURL(0, 0, url));
   }
 
  protected:
   ~TestSaveImageFromDataURL() override {}
   void DownloadUrl(int render_view_id,
+                   int render_frame_id,
                    const GURL& url,
                    const Referrer& referrer,
                    const base::string16& suggested_name,

@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <string.h>
+
 #include <string>
 
 // This has to be included first.
@@ -46,13 +49,13 @@ class VaapiJpegDecoderTest : public ::testing::Test {
         << "failed to read input data from " << input_file.value();
   }
 
-  void TearDown() override { wrapper_.reset(); }
+  void TearDown() override { wrapper_ = nullptr; }
 
   bool VerifyDecode(const media::JpegParseResult& parse_result,
                     const std::string& md5sum);
 
  protected:
-  scoped_ptr<VaapiWrapper> wrapper_;
+  scoped_refptr<VaapiWrapper> wrapper_;
   std::string jpeg_data_;
 };
 
@@ -63,7 +66,7 @@ bool VaapiJpegDecoderTest::VerifyDecode(
                  parse_result.frame_header.coded_height);
 
   std::vector<VASurfaceID> va_surfaces;
-  if (!wrapper_->CreateSurfaces(size, 1, &va_surfaces))
+  if (!wrapper_->CreateSurfaces(VA_RT_FORMAT_YUV420, size, 1, &va_surfaces))
     return false;
 
   if (!VaapiJpegDecoder::Decode(wrapper_.get(), parse_result, va_surfaces[0])) {
@@ -89,7 +92,7 @@ bool VaapiJpegDecoderTest::VerifyDecode(
 
   base::StringPiece result(
       reinterpret_cast<const char*>(mem),
-      media::VideoFrame::AllocationSize(media::VideoFrame::I420, size));
+      media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420, size));
   EXPECT_EQ(expected_md5sum, base::MD5String(result));
 
   wrapper_->ReturnVaImage(&image);
@@ -120,7 +123,8 @@ TEST_F(VaapiJpegDecoderTest, DecodeFail) {
                  parse_result.frame_header.coded_height);
 
   std::vector<VASurfaceID> va_surfaces;
-  ASSERT_TRUE(wrapper_->CreateSurfaces(size, 1, &va_surfaces));
+  ASSERT_TRUE(
+      wrapper_->CreateSurfaces(VA_RT_FORMAT_YUV420, size, 1, &va_surfaces));
 
   EXPECT_FALSE(
       VaapiJpegDecoder::Decode(wrapper_.get(), parse_result, va_surfaces[0]));

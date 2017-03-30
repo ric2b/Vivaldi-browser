@@ -8,75 +8,115 @@ import android.accounts.Account;
 import android.content.Context;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.identity.UniqueIdentificationGenerator;
 import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
 import org.chromium.chrome.browser.identity.UuidBasedUniqueIdentificationGenerator;
-import org.chromium.chrome.browser.signin.AccountIdProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
-import org.chromium.chrome.shell.ChromeShellTestBase;
+import org.chromium.chrome.browser.signin.SigninManager.SignInFlowObserver;
+import org.chromium.chrome.test.ChromeActivityTestCaseBase;
+import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
+import org.chromium.content.browser.test.util.Criteria;
+import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.sync.AndroidSyncSettings;
-import org.chromium.sync.internal_api.pub.base.ModelType;
-import org.chromium.sync.signin.AccountManagerHelper;
-import org.chromium.sync.signin.ChromeSigninController;
-import org.chromium.sync.test.util.MockAccountManager;
+import org.chromium.sync.ModelType;
 import org.chromium.sync.test.util.MockSyncContentResolverDelegate;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Base class for common functionality between sync tests.
  */
-public class SyncTestBase extends ChromeShellTestBase {
+public class SyncTestBase extends ChromeActivityTestCaseBase<ChromeActivity> {
     private static final String TAG = "SyncTestBase";
 
-    protected static final String CLIENT_ID = "Client_ID";
+    private static final String CLIENT_ID = "Client_ID";
 
-    protected SyncTestUtil.SyncTestContext mContext;
-    protected MockAccountManager mAccountManager;
-    protected SyncController mSyncController;
+    private static final Set<Integer> USER_SELECTABLE_TYPES =
+            new HashSet<Integer>(Arrays.asList(new Integer[] {
+                ModelType.AUTOFILL,
+                ModelType.BOOKMARKS,
+                ModelType.PASSWORDS,
+                ModelType.PREFERENCES,
+                ModelType.PROXY_TABS,
+                ModelType.TYPED_URLS,
+            }));
+
+    protected abstract class DataCriteria<T> extends Criteria {
+        public DataCriteria() {
+            super("Sync data criteria not met.");
+        }
+
+        public abstract boolean isSatisfied(List<T> data);
+
+        public abstract List<T> getData() throws Exception;
+
+        @Override
+        public boolean isSatisfied() {
+            try {
+                return isSatisfied(getData());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    protected Context mContext;
     protected FakeServerHelper mFakeServerHelper;
     protected ProfileSyncService mProfileSyncService;
     protected MockSyncContentResolverDelegate mSyncContentResolver;
 
+    public SyncTestBase() {
+      super(ChromeActivity.class);
+    }
+
+    @Override
+    public void startMainActivity() throws InterruptedException {
+        // Start the activity by opening about:blank. This URL is ideal because it is not synced as
+        // a typed URL. If another URL is used, it could interfere with test data.
+        startMainActivityOnBlankPage();
+    }
+
     @Override
     protected void setUp() throws Exception {
+        // This must be called before super.setUp() in order for test authentication to work.
+        SigninTestUtil.setUpAuthForTest(getInstrumentation());
+
         super.setUp();
-        assertTrue("Clearing app data failed.", clearAppData());
-        Context targetContext = getInstrumentation().getTargetContext();
-        mContext = new SyncTestUtil.SyncTestContext(targetContext);
+        mContext = getInstrumentation().getTargetContext();
 
-        mapAccountNamesToIds();
         setUpMockAndroidSyncSettings();
-        setUpMockAccountManager();
 
-        // Initializes ChromeSigninController to use our test context.
-        ChromeSigninController.get(mContext);
-
-        startChromeBrowserProcessSync(targetContext);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mSyncController = SyncController.get(mContext);
                 // Ensure SyncController is registered with the new AndroidSyncSettings.
-                AndroidSyncSettings.registerObserver(mContext, mSyncController);
+                AndroidSyncSettings.registerObserver(mContext, SyncController.get(mContext));
                 mFakeServerHelper = FakeServerHelper.get();
             }
         });
-        FakeServerHelper.useFakeServer(targetContext);
+        FakeServerHelper.useFakeServer(mContext);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mProfileSyncService = ProfileSyncService.get(mContext);
+                mProfileSyncService = ProfileSyncService.get();
             }
         });
 
-        // Start the activity by opening about:blank. This URL is ideal because it is not synced as
-        // a typed URL. If another URL is used, it could interfere with test data. This call is in
-        // this location so that it takes place before any other calls to getActivity(). If
-        // getActivity() is called without any prior configuration, an undesired URL
-        // (e.g., google.com) will be opened.
-        launchChromeShellWithBlankPage();
+        UniqueIdentificationGeneratorFactory.registerGenerator(
+                UuidBasedUniqueIdentificationGenerator.GENERATOR_ID,
+                new UniqueIdentificationGenerator() {
+                    @Override
+                    public String getUniqueId(String salt) {
+                        return CLIENT_ID;
+                    }
+                }, true);
     }
 
     @Override
@@ -84,35 +124,13 @@ public class SyncTestBase extends ChromeShellTestBase {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mSyncController.stop();
+                mProfileSyncService.requestStop();
                 FakeServerHelper.deleteFakeServer();
             }
         });
+        SigninTestUtil.get().resetSigninState();
 
         super.tearDown();
-    }
-
-    private void mapAccountNamesToIds() {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                if (AccountIdProvider.getInstance() != null) {
-                    return;
-                }
-
-                AccountIdProvider.setInstance(new AccountIdProvider() {
-                    @Override
-                    public String getAccountId(Context ctx, String accountName) {
-                        return "gaia-id-" + accountName;
-                    }
-                });
-            }
-        });
-    }
-
-    private void setUpMockAccountManager() {
-        mAccountManager = new MockAccountManager(mContext, getInstrumentation().getContext());
-        AccountManagerHelper.overrideAccountManagerHelperForTests(mContext, mAccountManager);
     }
 
     private void setUpMockAndroidSyncSettings() {
@@ -121,80 +139,102 @@ public class SyncTestBase extends ChromeShellTestBase {
         AndroidSyncSettings.overrideForTests(mContext, mSyncContentResolver);
     }
 
-    protected Account setupTestAccount(final String syncClientIdentifier)
-            throws InterruptedException {
-        Account defaultTestAccount = SyncTestUtil.setupTestAccountThatAcceptsAllAuthTokens(
-                mAccountManager, SyncTestUtil.DEFAULT_TEST_ACCOUNT, SyncTestUtil.DEFAULT_PASSWORD);
-
-        UniqueIdentificationGeneratorFactory.registerGenerator(
-                UuidBasedUniqueIdentificationGenerator.GENERATOR_ID,
-                new UniqueIdentificationGenerator() {
-                    @Override
-                    public String getUniqueId(String salt) {
-                        return syncClientIdentifier;
-                    }
-                }, true);
-
+    protected Account setUpTestAccount() throws InterruptedException {
+        Account account = SigninTestUtil.get().addAndSignInTestAccount();
         SyncTestUtil.verifySyncIsSignedOut(getActivity());
-        return defaultTestAccount;
+        return account;
     }
 
-    protected void setupTestAccountAndSignInToSync(
-            final String syncClientIdentifier)
-            throws InterruptedException {
-        Account defaultTestAccount = setupTestAccount(syncClientIdentifier);
-        signIn(defaultTestAccount);
-        SyncTestUtil.verifySyncIsActiveForAccount(mContext, defaultTestAccount);
-        assertTrue("Sync everything should be enabled",
-                SyncTestUtil.isSyncEverythingEnabled(mContext));
+    protected Account setUpTestAccountAndSignInToSync() throws InterruptedException {
+        Account account = setUpTestAccount();
+        signIn(account);
+        return account;
     }
 
     protected void startSync() throws InterruptedException {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                SyncController.get(mContext).start();
+                mProfileSyncService.requestStart();
             }
         });
-        SyncTestUtil.waitForSyncActive(mContext);
+    }
+
+    protected void startSyncAndWait() throws InterruptedException {
+        startSync();
+        SyncTestUtil.waitForSyncActive();
     }
 
     protected void stopSync() {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                SyncController.get(mContext).stop();
+                mProfileSyncService.requestStop();
             }
         });
         getInstrumentation().waitForIdleSync();
     }
 
-    protected void signIn(final Account account) {
+    protected void signIn(final Account account) throws InterruptedException {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mSyncController.signIn(getActivity(), account.name);
+                SigninManager signinManager = SigninManager.get(mContext);
+                signinManager.startSignIn(null, account, false, new SignInFlowObserver() {
+                    @Override
+                    public void onSigninComplete() {
+                        mProfileSyncService.requestStart();
+                    }
+
+                    @Override
+                    public void onSigninCancelled() {}
+                });
             }
         });
+        SyncTestUtil.verifySyncIsActiveForAccount(mContext, account);
     }
 
     protected void signOut() throws InterruptedException {
+        final Semaphore s = new Semaphore(0);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                SigninManager.get(mContext).signOut(getActivity(), null);
+                SigninManager.get(mContext).signOut(new Runnable() {
+                    @Override
+                    public void run() {
+                        s.release();
+                    }
+                });
             }
         });
+        assertTrue(s.tryAcquire(SyncTestUtil.TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        SyncTestUtil.verifySyncIsSignedOut(mContext);
     }
 
-    protected void disableDataType(final ModelType modelType) {
+    protected void clearServerData() throws InterruptedException {
+        mFakeServerHelper.clearServerData();
+        SyncTestUtil.triggerSync();
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Timed out waiting for sync to stop.") {
+            @Override
+            public boolean isSatisfied() {
+                return !ProfileSyncService.get().isSyncRequested();
+            }
+        }, SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
+    }
+
+    protected void disableDataType(final int modelType) {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                Set<ModelType> preferredTypes = mProfileSyncService.getPreferredDataTypes();
+                Set<Integer> preferredTypes = mProfileSyncService.getPreferredDataTypes();
+                preferredTypes.retainAll(USER_SELECTABLE_TYPES);
                 preferredTypes.remove(modelType);
                 mProfileSyncService.setPreferredDataTypes(false, preferredTypes);
             }
         });
+    }
+
+    protected void pollForCriteria(Criteria criteria) throws InterruptedException {
+        CriteriaHelper.pollForCriteria(criteria, SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
     }
 }

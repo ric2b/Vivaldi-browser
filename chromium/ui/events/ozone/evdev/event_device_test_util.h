@@ -6,6 +6,7 @@
 #define UI_EVENTS_OZONE_EVDEV_EVENT_DEVICE_TEST_UTIL_H_
 
 #include <linux/input.h>
+#include <stddef.h>
 
 namespace ui {
 
@@ -69,6 +70,7 @@ extern const DeviceCapabilities kWacomIntuosPtS_Pen;
 extern const DeviceCapabilities kWacomIntuosPtS_Finger;
 extern const DeviceCapabilities kLogitechTouchKeyboardK400;
 extern const DeviceCapabilities kElo_TouchSystems_2700;
+extern const DeviceCapabilities kWilsonBeachActiveStylus;
 
 }  // namspace ui
 

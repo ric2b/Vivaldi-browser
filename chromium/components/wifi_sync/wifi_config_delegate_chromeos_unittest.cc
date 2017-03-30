@@ -4,6 +4,8 @@
 
 #include "components/wifi_sync/wifi_config_delegate_chromeos.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/values.h"
@@ -39,6 +41,7 @@ class FakeManagedNetworkConfigurationHandler
     NOTIMPLEMENTED();
   }
   void GetProperties(
+      const std::string& userhash,
       const std::string& service_path,
       const DictionaryResultCallback& callback,
       const ErrorCallback& error_callback) override {

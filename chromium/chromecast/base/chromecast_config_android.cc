@@ -4,6 +4,7 @@
 
 #include "chromecast/base/chromecast_config_android.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/lazy_instance.h"
 #include "jni/ChromecastConfigAndroid_jni.h"
@@ -47,7 +48,9 @@ void ChromecastConfigAndroid::SetSendUsageStatsChangedCallback(
 }
 
 // Called from Java.
-void SetSendUsageStatsEnabled(JNIEnv* env, jclass caller, jboolean enabled) {
+void SetSendUsageStatsEnabled(JNIEnv* env,
+                              const JavaParamRef<jclass>& caller,
+                              jboolean enabled) {
   ChromecastConfigAndroid::GetInstance()->
       send_usage_stats_changed_callback().Run(enabled);
 }

@@ -15,14 +15,6 @@ using extensions::Extension;
 
 namespace chrome {
 
-void MockExtensionInstallPromptDelegate::InstallUIProceed() {
-  ++proceed_count_;
-}
-
-void MockExtensionInstallPromptDelegate::InstallUIAbort(bool user_initiated) {
-  ++abort_count_;
-}
-
 scoped_refptr<extensions::Extension> LoadInstallPromptExtension(
     const char* extension_dir_name,
     const char* manifest_file) {
@@ -36,8 +28,8 @@ scoped_refptr<extensions::Extension> LoadInstallPromptExtension(
 
   std::string error;
   JSONFileValueDeserializer deserializer(path);
-  scoped_ptr<base::DictionaryValue> value(static_cast<base::DictionaryValue*>(
-      deserializer.Deserialize(NULL, &error)));
+  scoped_ptr<base::DictionaryValue> value =
+      base::DictionaryValue::From(deserializer.Deserialize(NULL, &error));
   if (!value.get()) {
     LOG(ERROR) << error;
     return extension;
@@ -71,21 +63,21 @@ gfx::Image LoadInstallPromptIcon() {
       file_contents.length());
 }
 
-scoped_refptr<ExtensionInstallPrompt::Prompt> BuildExtensionInstallPrompt(
+scoped_ptr<ExtensionInstallPrompt::Prompt> BuildExtensionInstallPrompt(
     Extension* extension) {
-  scoped_refptr<ExtensionInstallPrompt::Prompt> prompt =
+  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt(
       new ExtensionInstallPrompt::Prompt(
-          ExtensionInstallPrompt::INSTALL_PROMPT);
+          ExtensionInstallPrompt::INSTALL_PROMPT));
   prompt->set_extension(extension);
   prompt->set_icon(LoadInstallPromptIcon());
   return prompt;
 }
 
-scoped_refptr<ExtensionInstallPrompt::Prompt>
+scoped_ptr<ExtensionInstallPrompt::Prompt>
 BuildExtensionPostInstallPermissionsPrompt(Extension* extension) {
-  scoped_refptr<ExtensionInstallPrompt::Prompt> prompt =
+  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt(
       new ExtensionInstallPrompt::Prompt(
-          ExtensionInstallPrompt::POST_INSTALL_PERMISSIONS_PROMPT);
+          ExtensionInstallPrompt::POST_INSTALL_PERMISSIONS_PROMPT));
   prompt->set_extension(extension);
   prompt->set_icon(LoadInstallPromptIcon());
   return prompt;

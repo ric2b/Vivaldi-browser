@@ -4,8 +4,9 @@
 
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 
+#include <stddef.h>
+
 #include "ash/ash_switches.h"
-#include "ash/display/display_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button.h"
 #include "ash/shelf/shelf_constants.h"
@@ -19,8 +20,10 @@
 #include "ash/test/shell_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -689,47 +692,6 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, WindowActivation) {
   CloseAppWindow(window1);
   --item_count;
   EXPECT_EQ(item_count, shelf_model()->item_count());
-}
-
-// Verify that ChromeLauncherController::CanInstall() returns true for ephemeral
-// apps and false when the app is promoted to a regular installed app.
-IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, InstallEphemeralApp) {
-  int item_count = shelf_model()->item_count();
-
-  // Sanity check to verify that ChromeLauncherController::CanInstall() returns
-  // false for apps that are fully installed.
-  const Extension* app = LoadAndLaunchPlatformApp("launch", "Launched");
-  ASSERT_TRUE(app);
-  CreateAppWindow(app);
-  ++item_count;
-  ASSERT_EQ(item_count, shelf_model()->item_count());
-  const ash::ShelfItem& app_item = GetLastLauncherItem();
-  ash::ShelfID app_id = app_item.id;
-  EXPECT_FALSE(controller_->CanInstall(app_id));
-
-  // Add an ephemeral app.
-  const Extension* ephemeral_app = InstallEphemeralAppWithSourceAndFlags(
-      test_data_dir_.AppendASCII("platform_apps").AppendASCII("launch_2"),
-      1,
-      extensions::Manifest::INTERNAL,
-      Extension::NO_FLAGS);
-  ASSERT_TRUE(ephemeral_app);
-  CreateAppWindow(ephemeral_app);
-  ++item_count;
-  ASSERT_EQ(item_count, shelf_model()->item_count());
-  const ash::ShelfItem& ephemeral_item = GetLastLauncherItem();
-  ash::ShelfID ephemeral_id = ephemeral_item.id;
-
-  // Verify that the shelf item for the ephemeral app can be installed.
-  EXPECT_TRUE(controller_->CanInstall(ephemeral_id));
-
-  // Promote the ephemeral app to a regular installed app.
-  ExtensionService* service =
-      extensions::ExtensionSystem::Get(profile())->extension_service();
-  service->PromoteEphemeralApp(ephemeral_app, false);
-
-  // Verify that the shelf item for the app can no longer be installed.
-  EXPECT_FALSE(controller_->CanInstall(ephemeral_id));
 }
 
 // Confirm that Click behavior for app windows is correnct.

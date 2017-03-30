@@ -5,11 +5,14 @@
 #ifndef MEDIA_FORMATS_WEBM_WEBM_CLUSTER_PARSER_H_
 #define MEDIA_FORMATS_WEBM_WEBM_CLUSTER_PARSER_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <map>
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_export.h"
@@ -51,7 +54,7 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
     Track(int track_num,
           bool is_video,
           base::TimeDelta default_duration,
-          const LogCB& log_cb);
+          const scoped_refptr<MediaLog>& media_log);
     ~Track();
 
     int track_num() const { return track_num_; }
@@ -113,7 +116,7 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
 
     // Counts the number of estimated durations used in this track. Used to
     // prevent log spam for MEDIA_LOG()s about estimated duration.
-    int num_duration_estimates_;
+    int num_duration_estimates_ = 0;
 
     int track_num_;
     bool is_video_;
@@ -143,23 +146,23 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
     // splicing when these estimates are observed in SourceBufferStream.
     base::TimeDelta estimated_next_frame_duration_;
 
-    LogCB log_cb_;
+    scoped_refptr<MediaLog> media_log_;
   };
 
   typedef std::map<int, Track> TextTrackMap;
 
  public:
-  WebMClusterParser(int64 timecode_scale,
+  WebMClusterParser(int64_t timecode_scale,
                     int audio_track_num,
                     base::TimeDelta audio_default_duration,
                     int video_track_num,
                     base::TimeDelta video_default_duration,
                     const WebMTracksParser::TextTracks& text_tracks,
-                    const std::set<int64>& ignored_tracks,
+                    const std::set<int64_t>& ignored_tracks,
                     const std::string& audio_encryption_key_id,
                     const std::string& video_encryption_key_id,
-                    const AudioCodec audio_codec_,
-                    const LogCB& log_cb);
+                    const AudioCodec audio_codec,
+                    const scoped_refptr<MediaLog>& media_log);
   ~WebMClusterParser() override;
 
   // Resets the parser state so it can accept a new cluster.
@@ -209,7 +212,7 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
   // WebMParserClient methods.
   WebMParserClient* OnListStart(int id) override;
   bool OnListEnd(int id) override;
-  bool OnUInt(int id, int64 val) override;
+  bool OnUInt(int id, int64_t val) override;
   bool OnBinary(int id, const uint8_t* data, int size) override;
 
   bool ParseBlock(bool is_simple_block,
@@ -218,7 +221,7 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
                   const uint8_t* additional,
                   int additional_size,
                   int duration,
-                  int64 discard_padding);
+                  int64_t discard_padding);
   bool OnBlock(bool is_simple_block,
                int track_num,
                int timecode,
@@ -228,7 +231,7 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
                int size,
                const uint8_t* additional,
                int additional_size,
-               int64 discard_padding);
+               int64_t discard_padding);
 
   // Resets the Track objects associated with each text track.
   void ResetTextTracks();
@@ -269,34 +272,34 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
 
   // Tracks the number of MEDIA_LOGs made in process of reading encoded
   // duration. Useful to prevent log spam.
-  int num_duration_errors_;
+  int num_duration_errors_ = 0;
 
   double timecode_multiplier_;  // Multiplier used to convert timecodes into
                                 // microseconds.
-  std::set<int64> ignored_tracks_;
+  std::set<int64_t> ignored_tracks_;
   std::string audio_encryption_key_id_;
   std::string video_encryption_key_id_;
   const AudioCodec audio_codec_;
 
   WebMListParser parser_;
 
-  int64 last_block_timecode_;
+  int64_t last_block_timecode_ = -1;
   scoped_ptr<uint8_t[]> block_data_;
-  int block_data_size_;
-  int64 block_duration_;
-  int64 block_add_id_;
+  int block_data_size_ = -1;
+  int64_t block_duration_ = -1;
+  int64_t block_add_id_ = -1;
 
   scoped_ptr<uint8_t[]> block_additional_data_;
   // Must be 0 if |block_additional_data_| is null. Must be > 0 if
   // |block_additional_data_| is NOT null.
-  int block_additional_data_size_;
+  int block_additional_data_size_ = 0;
 
-  int64 discard_padding_;
-  bool discard_padding_set_;
+  int64_t discard_padding_ = -1;
+  bool discard_padding_set_ = false;
 
-  int64 cluster_timecode_;
+  int64_t cluster_timecode_ = -1;
   base::TimeDelta cluster_start_time_;
-  bool cluster_ended_;
+  bool cluster_ended_ = false;
 
   Track audio_;
   Track video_;
@@ -315,7 +318,7 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
   // kInfiniteDuration() if no buffers are currently missing duration.
   DecodeTimestamp ready_buffer_upper_bound_;
 
-  LogCB log_cb_;
+  scoped_refptr<MediaLog> media_log_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(WebMClusterParser);
 };

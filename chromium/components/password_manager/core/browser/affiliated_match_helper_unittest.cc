@@ -4,6 +4,9 @@
 
 #include "components/password_manager/core/browser/affiliated_match_helper.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -99,7 +102,6 @@ const char kTestAndroidFacetURIBeta2[] =
 const char kTestAndroidFacetURIBeta3[] =
     "android://hash@com.yetanother.beta.android";
 const char kTestWebRealmBeta1[] = "https://one.beta.example.com/";
-const char kTestWebOriginBeta1[] = "https://one.beta.example.com/login";
 const char kTestAndroidRealmBeta2[] =
     "android://hash@com.example.beta.android/";
 const char kTestAndroidRealmBeta3[] =
@@ -291,13 +293,13 @@ class AffiliatedMatchHelperTest : public testing::Test {
     password_store_ = new TestPasswordStore;
 
     match_helper_.reset(
-        new AffiliatedMatchHelper(password_store_.get(), service.Pass()));
+        new AffiliatedMatchHelper(password_store_.get(), std::move(service)));
     match_helper_->SetTaskRunnerUsedForWaitingForTesting(waiting_task_runner_);
   }
 
   void TearDown() override {
     match_helper_.reset();
-    password_store_->Shutdown();
+    password_store_->ShutdownOnUIThread();
     password_store_ = nullptr;
   }
 
@@ -562,46 +564,6 @@ TEST_F(AffiliatedMatchHelperTest, DestroyBeforeDeferredInitialization) {
   base::RunLoop().RunUntilIdle();
   DestroyMatchHelper();
   ASSERT_NO_FATAL_FAILURE(RunDeferredInitialization());
-}
-
-TEST_F(AffiliatedMatchHelperTest, TransformAffiliatedAndroidCredentials) {
-  const char kTestUsername2[] = "JohnDoe2";
-  const char kTestPassword2[] = "secret2";
-
-  autofill::PasswordForm observed_form(
-      GetTestObservedWebForm(kTestWebRealmBeta1, kTestWebOriginBeta1));
-
-  ScopedVector<autofill::PasswordForm> matched_forms;
-  matched_forms.push_back(make_scoped_ptr(new autofill::PasswordForm(
-      GetTestAndroidCredentials(kTestAndroidRealmBeta2))));
-  matched_forms.push_back(make_scoped_ptr(new autofill::PasswordForm(
-      GetTestAndroidCredentials(kTestAndroidRealmBeta3))));
-  matched_forms[1]->username_value = base::ASCIIToUTF16(kTestUsername2);
-  matched_forms[1]->password_value = base::ASCIIToUTF16(kTestPassword2);
-
-  ScopedVector<autofill::PasswordForm> transformed_forms =
-      AffiliatedMatchHelper::TransformAffiliatedAndroidCredentials(
-          observed_form, matched_forms.Pass());
-
-  ASSERT_EQ(2u, transformed_forms.size());
-
-  EXPECT_EQ(base::ASCIIToUTF16(kTestUsername),
-            transformed_forms[0]->username_value);
-  EXPECT_EQ(base::ASCIIToUTF16(kTestPassword),
-            transformed_forms[0]->password_value);
-  EXPECT_EQ(GURL(kTestWebOriginBeta1), transformed_forms[0]->origin);
-  EXPECT_EQ(kTestWebRealmBeta1, transformed_forms[0]->signon_realm);
-  EXPECT_EQ(kTestAndroidRealmBeta2,
-            transformed_forms[0]->original_signon_realm);
-
-  EXPECT_EQ(base::ASCIIToUTF16(kTestUsername2),
-            transformed_forms[1]->username_value);
-  EXPECT_EQ(base::ASCIIToUTF16(kTestPassword2),
-            transformed_forms[1]->password_value);
-  EXPECT_EQ(GURL(kTestWebOriginBeta1), transformed_forms[1]->origin);
-  EXPECT_EQ(kTestWebRealmBeta1, transformed_forms[1]->signon_realm);
-  EXPECT_EQ(kTestAndroidRealmBeta3,
-            transformed_forms[1]->original_signon_realm);
 }
 
 }  // namespace password_manager

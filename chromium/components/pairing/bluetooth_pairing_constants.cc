@@ -7,10 +7,8 @@
 namespace pairing_chromeos {
 
 const char* kPairingServiceUUID = "f035ff16-c025-468e-bb16-967704d141ea";
-const char* kPairingServiceName = "ChromeboxPairing";
-const char* kDeviceNamePrefix = "Chromebox_";
-const char* kErrorInvalidProtocol = "Invalid protocol";
-const char* kErrorEnrollmentFailed = "Enrollment failed";
+const char* kPairingServiceName = "ChromeOSDevicePairing";
+const char* kDeviceNamePrefix = "Chrome";
 const int kPairingAPIVersion = 1;
 
 }  // namespace pairing_chromeos

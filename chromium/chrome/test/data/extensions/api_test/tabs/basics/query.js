@@ -180,12 +180,16 @@ chrome.test.runTests([
         }));
         chrome.tabs.query({windowType: 'popup'}, pass(function(tabs) {
           assertEq(2, tabs.length);
+          for (var i = 0; i < tabs.length; i++)
+            assertFalse(tabs[i].id == chrome.tabs.TAB_ID_NONE);
         }));
         chrome.tabs.query({
           windowType: 'popup',
           url: 'about:*'
         }, pass(function(tabs) {
           assertEq(2, tabs.length);
+          for (var i = 0; i < tabs.length; i++)
+            assertFalse(tabs[i].id == chrome.tabs.TAB_ID_NONE);
         }));
       }));
     }));
@@ -196,7 +200,7 @@ chrome.test.runTests([
       // Each of the 4 windows should have a tab at index 0.
       assertEq(4, tabs.length);
       for (var i = 0; i < tabs.length; i++)
-        assertEq(0, tabs[0].index);
+        assertEq(0, tabs[i].index);
     }));
   },
 
@@ -211,4 +215,3 @@ chrome.test.runTests([
     }));
   }
 ]);
-

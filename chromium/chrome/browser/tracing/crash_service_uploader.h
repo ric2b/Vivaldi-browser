@@ -5,11 +5,12 @@
 #ifndef CHROME_BROWSER_TRACING_CRASH_SERVICE_UPLOADER_H_
 #define CHROME_BROWSER_TRACING_CRASH_SERVICE_UPLOADER_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -21,13 +22,6 @@ namespace net {
 class URLFetcher;
 class URLRequestContextGetter;
 }  // namespace net
-
-namespace {
-
-// Allow up to 10MB for trace upload
-const int kMaxUploadBytes = 10000000;
-
-}  // namespace
 
 // TraceCrashServiceUploader uploads traces to the Chrome crash service.
 class TraceCrashServiceUploader : public content::TraceUploader,
@@ -42,13 +36,13 @@ class TraceCrashServiceUploader : public content::TraceUploader,
   // net::URLFetcherDelegate implementation.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
   void OnURLFetchUploadProgress(const net::URLFetcher* source,
-                                int64 current,
-                                int64 total) override;
+                                int64_t current,
+                                int64_t total) override;
 
   // content::TraceUploader
   void DoUpload(const std::string& file_contents,
                 UploadMode upload_mode,
-                scoped_ptr<base::DictionaryValue> metadata,
+                scoped_ptr<const base::DictionaryValue> metadata,
                 const UploadProgressCallback& progress_callback,
                 const UploadDoneCallback& done_callback) override;
 
@@ -56,14 +50,14 @@ class TraceCrashServiceUploader : public content::TraceUploader,
   void DoUploadOnFileThread(const std::string& file_contents,
                             UploadMode upload_mode,
                             const std::string& upload_url,
-                            scoped_ptr<base::DictionaryValue> metadata,
+                            scoped_ptr<const base::DictionaryValue> metadata,
                             const UploadProgressCallback& progress_callback,
                             const UploadDoneCallback& done_callback);
   // Sets up a multipart body to be uploaded. The body is produced according
   // to RFC 2046.
   void SetupMultipart(const std::string& product,
                       const std::string& version,
-                      scoped_ptr<base::DictionaryValue> metadata,
+                      scoped_ptr<const base::DictionaryValue> metadata,
                       const std::string& trace_filename,
                       const std::string& trace_contents,
                       std::string* post_data);
@@ -77,7 +71,7 @@ class TraceCrashServiceUploader : public content::TraceUploader,
                 int* compressed_bytes);
   void CreateAndStartURLFetcher(const std::string& upload_url,
                                 const std::string& post_data);
-  void OnUploadError(std::string error_message);
+  void OnUploadError(const std::string& error_message);
 
   scoped_ptr<net::URLFetcher> url_fetcher_;
   UploadProgressCallback progress_callback_;

@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "media/cast/net/rtp/frame_buffer.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "media/cast/net/cast_transport_defines.h"
+#include "media/cast/net/rtp/frame_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
@@ -18,14 +21,14 @@ class FrameBufferTest : public ::testing::Test {
   ~FrameBufferTest() override {}
 
   FrameBuffer buffer_;
-  std::vector<uint8> payload_;
+  std::vector<uint8_t> payload_;
   RtpCastHeader rtp_header_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameBufferTest);
 };
 
 TEST_F(FrameBufferTest, OnePacketInsertSanity) {
-  rtp_header_.rtp_timestamp = 3000;
+  rtp_header_.rtp_timestamp = RtpTimeTicks().Expand(UINT32_C(3000));
   rtp_header_.is_key_frame = true;
   rtp_header_.frame_id = 5;
   rtp_header_.reference_frame_id = 5;
@@ -35,7 +38,7 @@ TEST_F(FrameBufferTest, OnePacketInsertSanity) {
   EXPECT_EQ(EncodedFrame::KEY, frame.dependency);
   EXPECT_EQ(5u, frame.frame_id);
   EXPECT_EQ(5u, frame.referenced_frame_id);
-  EXPECT_EQ(3000u, frame.rtp_timestamp);
+  EXPECT_EQ(3000u, frame.rtp_timestamp.lower_32_bits());
 }
 
 TEST_F(FrameBufferTest, EmptyBuffer) {

@@ -4,6 +4,8 @@
 
 #include "content/browser/loader/detachable_resource_handler.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "content/browser/loader/resource_request_info_impl.h"
@@ -24,7 +26,7 @@ DetachableResourceHandler::DetachableResourceHandler(
     base::TimeDelta cancel_delay,
     scoped_ptr<ResourceHandler> next_handler)
     : ResourceHandler(request),
-      next_handler_(next_handler.Pass()),
+      next_handler_(std::move(next_handler)),
       cancel_delay_(cancel_delay),
       is_deferred_(false),
       is_finished_(false) {
@@ -63,7 +65,7 @@ void DetachableResourceHandler::Detach() {
   next_handler_.reset();
 
   // Time the request out if it takes too long.
-  detached_timer_.reset(new base::OneShotTimer<DetachableResourceHandler>());
+  detached_timer_.reset(new base::OneShotTimer());
   detached_timer_->Start(
       FROM_HERE, cancel_delay_, this, &DetachableResourceHandler::Cancel);
 
@@ -85,13 +87,6 @@ void DetachableResourceHandler::SetController(ResourceController* controller) {
   // whether the request is deferred.
   if (next_handler_)
     next_handler_->SetController(this);
-}
-
-bool DetachableResourceHandler::OnUploadProgress(uint64 position, uint64 size) {
-  if (!next_handler_)
-    return true;
-
-  return next_handler_->OnUploadProgress(position, size);
 }
 
 bool DetachableResourceHandler::OnRequestRedirected(

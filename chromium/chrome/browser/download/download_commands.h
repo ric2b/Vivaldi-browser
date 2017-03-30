@@ -7,6 +7,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/page_navigator.h"
@@ -26,6 +27,7 @@ class DownloadCommands {
     KEEP,                 // Keep the malicious download.
     LEARN_MORE_SCANNING,  // Show information about download scanning.
     LEARN_MORE_INTERRUPTED,  // Show information about interrupted downloads.
+    COPY_TO_CLIPBOARD,    // Copy the contents to the clipboard.
   };
 
   // |download_item| must outlive DownloadCommands.
@@ -53,6 +55,7 @@ class DownloadCommands {
   Browser* GetBrowser() const;
   int GetCommandIconId(Command command) const;
   GURL GetLearnMoreURLForInterruptedDownload() const;
+  void CopyFileAsImageToClipboard() const;
 
   content::DownloadItem* const download_item_;
 };

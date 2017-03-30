@@ -4,20 +4,22 @@
 
 #include "chromecast/browser/cast_browser_main_parts.h"
 
+#include <stddef.h>
+#include <string.h>
+
 #include <string>
-#if !defined(OS_ANDROID)
-#include <signal.h>
-#include <sys/prctl.h>
-#endif
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "chromecast/base/cast_constants.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/base/cast_sys_info_util.h"
 #include "chromecast/base/chromecast_switches.h"
@@ -25,12 +27,12 @@
 #include "chromecast/base/metrics/grouped_histogram.h"
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_browser_process.h"
+#include "chromecast/browser/cast_content_browser_client.h"
 #include "chromecast/browser/cast_net_log.h"
 #include "chromecast/browser/devtools/remote_debugging_server.h"
 #include "chromecast/browser/metrics/cast_metrics_prefs.h"
 #include "chromecast/browser/metrics/cast_metrics_service_client.h"
 #include "chromecast/browser/pref_service_helper.h"
-#include "chromecast/browser/service/cast_service.h"
 #include "chromecast/browser/url_request_context_factory.h"
 #include "chromecast/common/platform_client_auth.h"
 #include "chromecast/media/base/key_systems_common.h"
@@ -38,23 +40,32 @@
 #include "chromecast/net/connectivity_checker.h"
 #include "chromecast/public/cast_media_shlib.h"
 #include "chromecast/public/cast_sys_info.h"
+#include "chromecast/service/cast_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/common/content_switches.h"
+#include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/audio/audio_manager.h"
 #include "media/audio/audio_manager_factory.h"
-#include "media/base/browser_cdm_factory.h"
 #include "media/base/media.h"
 #include "ui/compositor/compositor_switches.h"
+
+#if !defined(OS_ANDROID)
+#include <signal.h>
+#include <sys/prctl.h>
+#endif
+#if defined(OS_LINUX)
+#include <fontconfig/fontconfig.h>
+#endif
 
 #if defined(OS_ANDROID)
 #include "chromecast/app/android/crash_handler.h"
 #include "chromecast/browser/media/cast_media_client_android.h"
-#include "components/crash/browser/crash_dump_manager_android.h"
+#include "components/crash/content/browser/crash_dump_manager_android.h"
 #include "media/base/android/media_client_android.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #else
-#include "chromecast/browser/media/cast_browser_cdm_factory.h"
 #include "chromecast/net/network_change_notifier_factory_cast.h"
 #endif
 
@@ -68,15 +79,21 @@ namespace {
 
 #if !defined(OS_ANDROID)
 int kSignalsToRunClosure[] = { SIGTERM, SIGINT, };
-
 // Closure to run on SIGTERM and SIGINT.
-base::Closure* g_signal_closure = NULL;
+base::Closure* g_signal_closure = nullptr;
+base::PlatformThreadId g_main_thread_id;
 
 void RunClosureOnSignal(int signum) {
-  LOG(ERROR) << "Got signal " << signum;
+  if (base::PlatformThread::CurrentId() != g_main_thread_id) {
+    RAW_LOG(INFO, "Received signal on non-main thread\n");
+    return;
+  }
+
+  char message[48] = "Received close signal: ";
+  strncat(message, sys_siglist[signum], sizeof(message) - strlen(message) - 1);
+  RAW_LOG(INFO, message);
+
   DCHECK(g_signal_closure);
-  // Expect main thread got this signal. Otherwise, weak_ptr of run_loop will
-  // crash the process.
   g_signal_closure->Run();
 }
 
@@ -84,8 +101,10 @@ void RegisterClosureOnSignal(const base::Closure& closure) {
   DCHECK(!g_signal_closure);
   DCHECK_GT(arraysize(kSignalsToRunClosure), 0U);
 
-  // Allow memory leak by intention.
+  // Memory leak on purpose, since |g_signal_closure| should live until
+  // process exit.
   g_signal_closure = new base::Closure(closure);
+  g_main_thread_id = base::PlatformThread::CurrentId();
 
   struct sigaction sa_new;
   memset(&sa_new, 0, sizeof(sa_new));
@@ -93,9 +112,9 @@ void RegisterClosureOnSignal(const base::Closure& closure) {
   sigfillset(&sa_new.sa_mask);
   sa_new.sa_flags = SA_RESTART;
 
-  for (size_t i = 0; i < arraysize(kSignalsToRunClosure); i++) {
+  for (int sig : kSignalsToRunClosure) {
     struct sigaction sa_old;
-    if (sigaction(kSignalsToRunClosure[i], &sa_new, &sa_old) == -1) {
+    if (sigaction(sig, &sa_new, &sa_old) == -1) {
       NOTREACHED();
     } else {
       DCHECK_EQ(sa_old.sa_handler, SIG_DFL);
@@ -166,8 +185,10 @@ DefaultCommandLineSwitch g_default_switches[] = {
 #if defined(OS_ANDROID)
   // Disables Chromecast-specific WiFi-related features on ATV for now.
   { switches::kNoWifi, "" },
-  { switches::kEnableOverlayFullscreenVideo, ""},
   { switches::kDisableGestureRequirementForMediaPlayback, ""},
+#else
+  // GPU shader disk cache disabling is largely to conserve disk space.
+  { switches::kDisableGpuShaderDiskCache, "" },
 #endif
   // Always enable HTMLMediaElement logs.
   { switches::kBlinkPlatformLogChannels, "Media"},
@@ -187,9 +208,19 @@ DefaultCommandLineSwitch g_default_switches[] = {
 #endif
 #endif
 #endif  // defined(OS_LINUX)
+  // Enable prefixed EME until all Cast partner apps are moved off of it.
+  { switches::kEnablePrefixedEncryptedMedia, "" },
   // Needed to fix a bug where the raster thread doesn't get scheduled for a
   // substantial time (~5 seconds).  See https://crbug.com/441895.
   { switches::kUseNormalPriorityForTileTaskWorkerThreads, "" },
+  // Needed so that our call to GpuDataManager::SetGLStrings doesn't race
+  // against GPU process creation (which is otherwise triggered from
+  // BrowserThreadsStarted).  The GPU process will be created as soon as a
+  // renderer needs it, which always happens after main loop starts.
+  { switches::kDisableGpuEarlyInit, "" },
+  // Enable navigator.connection API.
+  // TODO(derekjchow): Remove this switch when enabled by default.
+  { switches::kEnableNetworkInformation, "" },
   { NULL, NULL },  // Termination
 };
 
@@ -207,13 +238,11 @@ void AddDefaultCommandLineSwitches(base::CommandLine* command_line) {
 
 CastBrowserMainParts::CastBrowserMainParts(
     const content::MainFunctionParams& parameters,
-    URLRequestContextFactory* url_request_context_factory,
-    scoped_ptr<::media::AudioManagerFactory> audio_manager_factory)
+    URLRequestContextFactory* url_request_context_factory)
     : BrowserMainParts(),
       cast_browser_process_(new CastBrowserProcess()),
       parameters_(parameters),
       url_request_context_factory_(url_request_context_factory),
-      audio_manager_factory_(audio_manager_factory.Pass()),
       net_log_(new CastNetLog()) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   AddDefaultCommandLineSwitches(command_line);
@@ -229,10 +258,6 @@ void CastBrowserMainParts::PreMainMessageLoopStart() {
   // This call must also be before NetworkChangeNotifier, as it generates
   // Net/DNS metrics.
   metrics::PreregisterAllGroupedHistograms();
-
-  // Set the platform's implementation of AudioManagerFactory.
-  if (audio_manager_factory_)
-    ::media::AudioManager::SetFactory(audio_manager_factory_.release());
 
 #if defined(OS_ANDROID)
   net::NetworkChangeNotifier::SetFactory(
@@ -252,6 +277,23 @@ void CastBrowserMainParts::PostMainMessageLoopStart() {
 #endif  // defined(OS_ANDROID)
 }
 
+void CastBrowserMainParts::ToolkitInitialized() {
+#if defined(OS_LINUX)
+  // Without this call, the FontConfig library gets implicitly initialized
+  // on the first call to FontConfig. Since it's not safe to initialize it
+  // concurrently from multiple threads, we explicitly initialize it here
+  // to prevent races when there are multiple renderer's querying the library:
+  // http://crbug.com/404311
+  // Also, implicit initialization can cause a long delay on the first
+  // rendering if the font cache has to be regenerated for some reason. Doing it
+  // explicitly here helps in cases where the browser process is starting up in
+  // the background (resources have not yet been granted to cast) since it
+  // prevents the long delay the user would have seen on first rendering. Note
+  // that future calls to FcInit() are safe no-ops per the FontConfig interface.
+  FcInit();
+#endif
+}
+
 int CastBrowserMainParts::PreCreateThreads() {
 #if defined(OS_ANDROID)
   // GPU process is started immediately after threads are created, requiring
@@ -267,6 +309,12 @@ int CastBrowserMainParts::PreCreateThreads() {
   CHECK(PathService::Get(DIR_CAST_HOME, &home_dir));
   if (!base::CreateDirectory(home_dir))
     return 1;
+
+  // AudioManager is created immediately after threads are created, requiring
+  // AudioManagerFactory to be set beforehand.
+  scoped_ptr< ::media::AudioManagerFactory> audio_manager_factory =
+      cast_browser_process_->browser_client()->CreateAudioManagerFactory();
+  ::media::AudioManager::SetFactory(audio_manager_factory.release());
 #endif
 
 #if defined(USE_AURA)
@@ -280,6 +328,12 @@ int CastBrowserMainParts::PreCreateThreads() {
                                  cast_browser_process_->cast_screen());
 #endif
 
+  content::ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
+      kChromeResourceScheme);
+  return 0;
+}
+
+void CastBrowserMainParts::PreMainMessageLoopRun() {
 #if !defined(OS_ANDROID)
   // Set GL strings so GPU config code can make correct feature blacklisting/
   // whitelisting decisions.
@@ -290,10 +344,6 @@ int CastBrowserMainParts::PreCreateThreads() {
       sys_info->GetGlVersion());
 #endif  // !defined(OS_ANDROID)
 
-  return 0;
-}
-
-void CastBrowserMainParts::PreMainMessageLoopRun() {
   scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple());
   metrics::RegisterPrefs(pref_registry.get());
   cast_browser_process_->SetPrefService(
@@ -302,9 +352,6 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
 #if defined(OS_ANDROID)
   ::media::SetMediaClientAndroid(new media::CastMediaClientAndroid());
-#else
-  if (cmd_line->HasSwitch(switches::kEnableCmaMediaPipeline))
-    ::media::SetBrowserCdmFactory(new media::CastBrowserCdmFactory());
 #endif  // defined(OS_ANDROID)
 
   cast_browser_process_->SetConnectivityChecker(
@@ -327,19 +374,18 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
   if (!PlatformClientAuth::Initialize())
     LOG(ERROR) << "PlatformClientAuth::Initialize failed.";
 
-  cast_browser_process_->SetRemoteDebuggingServer(
-      make_scoped_ptr(new RemoteDebuggingServer()));
+  cast_browser_process_->SetRemoteDebuggingServer(make_scoped_ptr(
+      new RemoteDebuggingServer(cast_browser_process_->browser_client()->
+          EnableRemoteDebuggingImmediately())));
 
-  media::MediaMessageLoop::GetTaskRunner()->PostTask(
-      FROM_HERE,
-      base::Bind(&media::CastMediaShlib::Initialize, cmd_line->argv()));
+  media::CastMediaShlib::Initialize(cmd_line->argv());
   ::media::InitializeMediaLibrary();
 
-  cast_browser_process_->SetCastService(CastService::Create(
-      cast_browser_process_->browser_context(),
-      cast_browser_process_->pref_service(),
-      cast_browser_process_->metrics_service_client(),
-      url_request_context_factory_->GetSystemGetter()));
+  cast_browser_process_->SetCastService(
+      cast_browser_process_->browser_client()->CreateCastService(
+          cast_browser_process_->browser_context(),
+          cast_browser_process_->pref_service(),
+          url_request_context_factory_->GetSystemGetter()));
   cast_browser_process_->cast_service()->Initialize();
 
   // Initializing metrics service and network delegates must happen after cast
@@ -397,11 +443,6 @@ void CastBrowserMainParts::PostMainMessageLoopRun() {
 
   DeregisterKillOnAlarm();
 #endif
-
-  // Finalize CastMediaShlib on media thread to ensure it's not accessed
-  // after Finalize.
-  media::MediaMessageLoop::GetTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&media::CastMediaShlib::Finalize));
 }
 
 }  // namespace shell

@@ -4,19 +4,22 @@
 
 #include "content/browser/child_process_security_policy_impl.h"
 
-#include "base/command_line.h"
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "content/browser/plugin_process_host.h"
 #include "content/browser/site_instance_impl.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/bindings_policy.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/filename_util.h"
 #include "net/url_request/url_request.h"
@@ -25,6 +28,8 @@
 #include "storage/browser/fileapi/isolated_context.h"
 #include "storage/common/fileapi/file_system_util.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace content {
 
@@ -85,6 +90,11 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     }
     UMA_HISTOGRAM_COUNTS("ChildProcessSecurityPolicy.PerChildFilePermissions",
                          file_permissions_.size());
+  }
+
+  // Grant permission to request URLs with the specified origin.
+  void GrantOrigin(const url::Origin& origin) {
+    origin_set_.insert(origin);
   }
 
   // Grant permission to request URLs with the specified scheme.
@@ -166,12 +176,17 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     can_send_midi_sysex_ = true;
   }
 
-  // Determine whether permission has been granted to request |url|.
-  bool CanRequestURL(const GURL& url) {
-    // Having permission to a scheme implies permssion to all of its URLs.
-    SchemeMap::const_iterator judgment(scheme_policy_.find(url.scheme()));
-    if (judgment != scheme_policy_.end())
-      return judgment->second;
+  // Determine whether permission has been granted to commit |url|.
+  bool CanCommitURL(const GURL& url) {
+    // Having permission to a scheme implies permission to all of its URLs.
+    SchemeMap::const_iterator scheme_judgment(
+        scheme_policy_.find(url.scheme()));
+    if (scheme_judgment != scheme_policy_.end())
+      return scheme_judgment->second;
+
+    // Otherwise, check for permission for specific origin.
+    if (ContainsKey(origin_set_, url::Origin(url)))
+      return true;
 
     // file:// URLs are more granular.  The child may have been given
     // permission to a specific file but not the file:// scheme in general.
@@ -214,18 +229,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     return false;
   }
 
-  bool CanLoadPage(const GURL& gurl) {
-    if (origin_lock_.is_empty())
-      return true;
-
-    // TODO(creis): We must pass the valid browser_context to convert hosted
-    // apps URLs.  Currently, hosted apps cannot be loaded in this mode.
-    // See http://crbug.com/160576.
-    GURL site_gurl = SiteInstanceImpl::GetSiteForURL(NULL, gurl);
-    return origin_lock_ == site_gurl;
-  }
-
-  bool CanAccessCookiesForOrigin(const GURL& gurl) {
+  bool CanAccessDataForOrigin(const GURL& gurl) {
     if (origin_lock_.is_empty())
       return true;
     // TODO(creis): We must pass the valid browser_context to convert hosted
@@ -253,6 +257,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
 
  private:
   typedef std::map<std::string, bool> SchemeMap;
+  typedef std::set<url::Origin> OriginSet;
 
   typedef int FilePermissionFlags;  // bit-set of base::File::Flags
   typedef std::map<base::FilePath, FilePermissionFlags> FileMap;
@@ -265,6 +270,10 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   // If a scheme is not present in the map, then it has never been granted
   // or revoked.
   SchemeMap scheme_policy_;
+
+  // The set of URL origins to which the child process has been granted
+  // permission.
+  OriginSet origin_set_;
 
   // The set of files the child process is permited to upload to the web.
   FileMap file_permissions_;
@@ -296,10 +305,10 @@ ChildProcessSecurityPolicyImpl::ChildProcessSecurityPolicyImpl() {
   RegisterWebSafeScheme(url::kBlobScheme);
   RegisterWebSafeScheme(url::kFileSystemScheme);
 
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (vivaldi::IsVivaldiRunning()) {
     RegisterWebSafeScheme("chrome");
+    RegisterWebSafeScheme("vivaldi");
   }
-  RegisterWebSafeScheme("vivaldi");
 
 
   // We know about the following pseudo schemes and treat them specially.
@@ -322,7 +331,7 @@ ChildProcessSecurityPolicy* ChildProcessSecurityPolicy::GetInstance() {
 }
 
 ChildProcessSecurityPolicyImpl* ChildProcessSecurityPolicyImpl::GetInstance() {
-  return Singleton<ChildProcessSecurityPolicyImpl>::get();
+  return base::Singleton<ChildProcessSecurityPolicyImpl>::get();
 }
 
 void ChildProcessSecurityPolicyImpl::Add(int child_id) {
@@ -520,6 +529,17 @@ void ChildProcessSecurityPolicyImpl::GrantSendMidiSysExMessage(int child_id) {
   state->second->GrantPermissionForMidiSysEx();
 }
 
+void ChildProcessSecurityPolicyImpl::GrantOrigin(int child_id,
+                                                 const url::Origin& origin) {
+  base::AutoLock lock(lock_);
+
+  SecurityStateMap::iterator state = security_state_.find(child_id);
+  if (state == security_state_.end())
+    return;
+
+  state->second->GrantOrigin(origin);
+}
+
 void ChildProcessSecurityPolicyImpl::GrantScheme(int child_id,
                                                  const std::string& scheme) {
   base::AutoLock lock(lock_);
@@ -567,28 +587,10 @@ void ChildProcessSecurityPolicyImpl::RevokeReadRawCookies(int child_id) {
   state->second->RevokeReadRawCookies();
 }
 
-bool ChildProcessSecurityPolicyImpl::CanLoadPage(int child_id,
-                                                 const GURL& url,
-                                                 ResourceType resource_type) {
-  // If --site-per-process flag is passed, we should enforce
-  // stronger security restrictions on page navigation.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSitePerProcess) &&
-      IsResourceTypeFrame(resource_type)) {
-    // TODO(nasko): Do the proper check for site-per-process, once
-    // out-of-process iframes is ready to go.
-    return true;
-  }
-  return true;
-}
-
 bool ChildProcessSecurityPolicyImpl::CanRequestURL(
     int child_id, const GURL& url) {
   if (!url.is_valid())
     return false;  // Can't request invalid URLs.
-
-  if (IsWebSafeScheme(url.scheme()))
-    return true;  // The scheme has been white-listed for every child process.
 
   if (IsPseudoScheme(url.scheme())) {
     // There are a number of special cases for pseudo schemes.
@@ -613,10 +615,30 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
     return false;
   }
 
-  if (!GetContentClient()->browser()->IsHandledURL(url) &&
-      !net::URLRequest::IsHandledURL(url)) {
-    return true;  // This URL request is destined for ShellExecute.
-  }
+  // If the process can commit the URL, it can request it.
+  if (CanCommitURL(child_id, url))
+    return true;
+
+  // Also allow URLs destined for ShellExecute and not the browser itself.
+  return !GetContentClient()->browser()->IsHandledURL(url) &&
+         !net::URLRequest::IsHandledURL(url);
+}
+
+bool ChildProcessSecurityPolicyImpl::CanCommitURL(int child_id,
+                                                  const GURL& url) {
+  if (!url.is_valid())
+    return false;  // Can't commit invalid URLs.
+
+  // Of all the pseudo schemes, only about:blank is allowed to commit.
+  if (IsPseudoScheme(url.scheme()))
+    return base::LowerCaseEqualsASCII(url.spec(), url::kAboutBlankURL);
+
+  // TODO(creis): Tighten this for Site Isolation, so that a URL from a site
+  // that is isolated can only be committed in a process dedicated to that site.
+  // CanRequestURL should still allow all web-safe schemes. See
+  // https://crbug.com/515309.
+  if (IsWebSafeScheme(url.scheme()))
+    return true;  // The scheme has been white-listed for every child process.
 
   {
     base::AutoLock lock(lock_);
@@ -626,8 +648,8 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
       return false;
 
     // Otherwise, we consult the child process's security state to see if it is
-    // allowed to request the URL.
-    return state->second->CanRequestURL(url);
+    // allowed to commit the URL.
+    return state->second->CanCommitURL(url);
   }
 }
 
@@ -799,13 +821,13 @@ bool ChildProcessSecurityPolicyImpl::ChildProcessHasPermissionsForFile(
   return state->second->HasPermissionsForFile(file, permissions);
 }
 
-bool ChildProcessSecurityPolicyImpl::CanAccessCookiesForOrigin(
-    int child_id, const GURL& gurl) {
+bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
+                                                            const GURL& gurl) {
   base::AutoLock lock(lock_);
   SecurityStateMap::iterator state = security_state_.find(child_id);
   if (state == security_state_.end())
     return false;
-  return state->second->CanAccessCookiesForOrigin(gurl);
+  return state->second->CanAccessDataForOrigin(gurl);
 }
 
 void ChildProcessSecurityPolicyImpl::LockToOrigin(int child_id,

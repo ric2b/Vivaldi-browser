@@ -7,8 +7,11 @@
 
 #include <deque>
 #include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/data_type_debug_info_listener.h"
@@ -30,7 +33,7 @@ const unsigned int kMaxEntries = MODEL_TYPE_COUNT + 10;
 // Listens to events and records them in a queue. And passes the events to
 // syncer when requested.
 // This class is not thread safe and should only be accessed on the sync thread.
-class SYNC_EXPORT_PRIVATE DebugInfoEventListener
+class SYNC_EXPORT DebugInfoEventListener
     : public SyncManager::Observer,
       public SyncEncryptionHandler::Observer,
       public sessions::DebugInfoGetter,

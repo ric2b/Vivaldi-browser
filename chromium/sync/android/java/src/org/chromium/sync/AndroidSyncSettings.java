@@ -11,6 +11,7 @@ import android.content.SyncStatusObserver;
 import android.os.Bundle;
 import android.os.StrictMode;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.sync.signin.AccountManagerHelper;
@@ -122,6 +123,7 @@ public class AndroidSyncSettings {
      *
      * @return true if sync is on, false otherwise
      */
+    @VisibleForTesting
     public static boolean isChromeSyncEnabled(Context context) {
         ensureInitialized(context);
         return sInstance.mChromeSyncEnabled;
@@ -226,21 +228,22 @@ public class AndroidSyncSettings {
             mSyncContentResolverDelegate.removePeriodicSync(
                     mAccount, mContractAuthority, Bundle.EMPTY);
         }
-
-        // Disable the syncability of Chrome for all other accounts. Don't use
-        // our cache as we're touching many accounts that aren't signed in, so this saves
-        // extra calls to Android sync configuration.
-        Account[] googleAccounts = AccountManagerHelper.get(mApplicationContext)
-                .getGoogleAccounts();
-        for (Account accountToSetNotSyncable : googleAccounts) {
-            if (!accountToSetNotSyncable.equals(mAccount)
-                    && mSyncContentResolverDelegate.getIsSyncable(
-                            accountToSetNotSyncable, mContractAuthority) > 0) {
-                mSyncContentResolverDelegate.setIsSyncable(accountToSetNotSyncable,
-                        mContractAuthority, 0);
-            }
-        }
         StrictMode.setThreadPolicy(oldPolicy);
+
+        // Disable the syncability of Chrome for all other accounts.
+        AccountManagerHelper.get(mApplicationContext).getGoogleAccounts(new Callback<Account[]>() {
+            @Override
+            public void onResult(Account[] accounts) {
+                StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
+                for (Account account : accounts) {
+                    if (!account.equals(mAccount) && mSyncContentResolverDelegate.getIsSyncable(
+                            account, mContractAuthority) > 0) {
+                        mSyncContentResolverDelegate.setIsSyncable(account, mContractAuthority, 0);
+                    }
+                }
+                StrictMode.setThreadPolicy(oldPolicy);
+            }
+        });
     }
 
     /**

@@ -110,14 +110,17 @@ remoting.ApplicationContextMenu.prototype.onClicked_ = function(info) {
             appId: remoting.app.getApplicationId(),
             hostId: that.hostId_,
             connectionStats: JSON.stringify(that.stats_.mostRecent()),
-            sessionId: that.clientSession_.getLogger().getSessionId()
+            sessionId: that.clientSession_.getLogger().getSessionId(),
+            consoleErrors: JSON.stringify(
+                remoting.ConsoleWrapper.getInstance().getHistory())
           };
           consentWindow.contentWindow.postMessage(message, '*');
         };
         consentWindow.contentWindow.addEventListener('load', onLoad, false);
       };
       chrome.app.window.create(
-          'feedback_consent.html', windowAttributes, onCreate);
+          '_modules/koejkfhmphamcgafjmkellhnekdkopod/feedback_consent.html',
+          windowAttributes, onCreate);
       break;
 
     case remoting.ApplicationContextMenu.kShowStatsId:
@@ -126,7 +129,7 @@ remoting.ApplicationContextMenu.prototype.onClicked_ = function(info) {
 
     case remoting.ApplicationContextMenu.kShowCreditsId:
       chrome.app.window.create(
-          'credits.html',
+          '_modules/koejkfhmphamcgafjmkellhnekdkopod/credits.html',
           {
             'width': 800,
             'height': 600,

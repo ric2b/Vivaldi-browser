@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -22,6 +23,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -111,7 +113,8 @@ BundleInstaller::BundleInstaller(Browser* browser,
       authuser_(authuser),
       delegated_username_(delegated_username),
       host_desktop_type_(browser->host_desktop_type()),
-      profile_(browser->profile()) {
+      profile_(browser->profile()),
+      weak_factory_(this) {
   BrowserList::AddObserver(this);
   for (size_t i = 0; i < items.size(); ++i) {
     items_[items[i].id] = items[i];
@@ -184,11 +187,7 @@ void BundleInstaller::CompleteInstall(content::WebContents* web_contents,
         gfx::ImageSkia::CreateFrom1xBitmap(entry.second.icon);
 
     scoped_refptr<WebstoreInstaller> installer = new WebstoreInstaller(
-        profile_,
-        this,
-        web_contents,
-        entry.first,
-        approval.Pass(),
+        profile_, this, web_contents, entry.first, std::move(approval),
         WebstoreInstaller::INSTALL_SOURCE_OTHER);
     installer->Start();
   }
@@ -261,17 +260,20 @@ void BundleInstaller::ShowPrompt() {
     return;
   }
 
-  scoped_refptr<PermissionSet> permissions;
+  scoped_ptr<const PermissionSet> permissions;
+  PermissionSet empty;
   for (size_t i = 0; i < dummy_extensions_.size(); ++i) {
+    // Using "permissions ? *permissions : PermissionSet()" tries to do a copy,
+    // and doesn't compile. Use a more verbose, but compilable, workaround.
     permissions = PermissionSet::CreateUnion(
-        permissions.get(),
-        dummy_extensions_[i]->permissions_data()->active_permissions().get());
+        permissions ? *permissions : empty,
+        dummy_extensions_[i]->permissions_data()->active_permissions());
   }
 
   if (g_auto_approve_for_test == PROCEED) {
-    InstallUIProceed();
+    OnInstallPromptDone(ExtensionInstallPrompt::Result::ACCEPTED);
   } else if (g_auto_approve_for_test == ABORT) {
-    InstallUIAbort(true);
+    OnInstallPromptDone(ExtensionInstallPrompt::Result::USER_CANCELED);
   } else {
     Browser* browser = browser_;
     if (!browser) {
@@ -283,12 +285,21 @@ void BundleInstaller::ShowPrompt() {
     if (browser)
       web_contents = browser->tab_strip_model()->GetActiveWebContents();
     install_ui_.reset(new ExtensionInstallPrompt(web_contents));
+    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt;
     if (delegated_username_.empty()) {
-      install_ui_->ConfirmBundleInstall(this, &icon_, permissions.get());
+      prompt.reset(new ExtensionInstallPrompt::Prompt(
+          ExtensionInstallPrompt::BUNDLE_INSTALL_PROMPT));
     } else {
-      install_ui_->ConfirmPermissionsForDelegatedBundleInstall(
-          this, delegated_username_, &icon_, permissions.get());
+      prompt.reset(new ExtensionInstallPrompt::Prompt(
+          ExtensionInstallPrompt::DELEGATED_BUNDLE_PERMISSIONS_PROMPT));
+      prompt->set_delegated_username(delegated_username_);
     }
+    prompt->set_bundle(this);
+    install_ui_->ShowDialog(
+        base::Bind(&BundleInstaller::OnInstallPromptDone,
+                   weak_factory_.GetWeakPtr()),
+        nullptr, &icon_, std::move(prompt), std::move(permissions),
+        ExtensionInstallPrompt::GetDefaultShowDialogCallback());
   }
 }
 
@@ -324,16 +335,21 @@ void BundleInstaller::OnWebstoreParseFailure(
   ShowPromptIfDoneParsing();
 }
 
-void BundleInstaller::InstallUIProceed() {
-  approved_ = true;
-  approval_callback_.Run(APPROVED);
-}
+void BundleInstaller::OnInstallPromptDone(
+    ExtensionInstallPrompt::Result result) {
+  ApprovalState state = APPROVED;
+  if (result == ExtensionInstallPrompt::Result::ACCEPTED) {
+    approved_ = true;
+    state = APPROVED;
+  } else {
+    for (std::pair<const std::string, Item>& entry : items_)
+      entry.second.state = Item::STATE_FAILED;
 
-void BundleInstaller::InstallUIAbort(bool user_initiated) {
-  for (std::pair<const std::string, Item>& entry : items_)
-    entry.second.state = Item::STATE_FAILED;
-
-  approval_callback_.Run(user_initiated ? USER_CANCELED : APPROVAL_ERROR);
+    state = result == ExtensionInstallPrompt::Result::USER_CANCELED
+                ? USER_CANCELED
+                : APPROVAL_ERROR;
+  }
+  approval_callback_.Run(state);
 }
 
 void BundleInstaller::OnExtensionInstallSuccess(const std::string& id) {

@@ -81,7 +81,7 @@ function ImageView(container, viewport, metadataModel) {
 
   /**
    * Gallery item which is loaded.
-   * @type {Gallery.Item}
+   * @type {GalleryItem}
    * @private
    */
   this.contentItem_ = null;
@@ -141,7 +141,7 @@ ImageView.LoadTarget = {
 /**
  * Obtains prefered load type from GalleryItem.
  *
- * @param {!Gallery.Item} item
+ * @param {!GalleryItem} item
  * @param {!ImageView.Effect} effect
  * @return {ImageView.LoadTarget} Load target.
  */
@@ -151,13 +151,15 @@ ImageView.getLoadTarget = function(item, effect) {
   if (item.screenImage)
     return ImageView.LoadTarget.CACHED_THUMBNAIL;
 
-  // Only show thumbnails if there is no effect or the effect is Slide.
+  // Only show thumbnails if there is no effect or the effect is Slide or
+  // ZoomToScreen.
   var thumbnailLoader = new ThumbnailLoader(
       item.getEntry(),
       ThumbnailLoader.LoaderType.CANVAS,
       item.getThumbnailMetadataItem());
   if ((effect instanceof ImageView.Effect.None ||
-       effect instanceof ImageView.Effect.Slide) &&
+       effect instanceof ImageView.Effect.Slide ||
+       effect instanceof ImageView.Effect.ZoomToScreen) &&
       thumbnailLoader.getLoadTarget() !==
       ThumbnailLoader.LoadTarget.FILE_ENTRY) {
     return ImageView.LoadTarget.THUMBNAIL;
@@ -320,11 +322,29 @@ ImageView.prototype.setupDeviceBuffer = function(canvas) {
 };
 
 /**
- * @return {!ImageData} A new ImageData object with a copy of the content.
+ * Gets screen image data with specified size.
+ * @param {number} width
+ * @param {number} height
+ * @return {!ImageData} A new ImageData object.
  */
-ImageView.prototype.copyScreenImageData = function() {
-  return this.screenImage_.getContext('2d').getImageData(
-      0, 0, this.screenImage_.width, this.screenImage_.height);
+ImageView.prototype.getScreenImageDataWith = function(width, height) {
+  // If specified size is same with current screen image size, just return it.
+  if (width === this.screenImage_.width &&
+      height === this.screenImage_.height) {
+    return this.screenImage_.getContext('2d').getImageData(
+        0, 0, this.screenImage_.width, this.screenImage_.height);
+  }
+
+  // Resize if these sizes are different.
+  var resizeCanvas = document.createElement('canvas');
+  resizeCanvas.width = width;
+  resizeCanvas.height = height;
+
+  var context = resizeCanvas.getContext('2d');
+  context.drawImage(this.screenImage_,
+      0, 0, this.screenImage_.width, this.screenImage_.height,
+      0, 0, resizeCanvas.width, resizeCanvas.height);
+  return context.getImageData(0, 0, resizeCanvas.width, resizeCanvas.height);
 };
 
 /**
@@ -347,7 +367,7 @@ ImageView.prototype.cancelLoad = function() {
  * Loads the thumbnail first, then replaces it with the main image.
  * Takes into account the image orientation encoded in the metadata.
  *
- * @param {!Gallery.Item} item Gallery item to be loaded.
+ * @param {!GalleryItem} item Gallery item to be loaded.
  * @param {!ImageView.Effect} effect Transition effect object.
  * @param {function()} displayCallback Called when the image is displayed
  *     (possibly as a preview).
@@ -500,7 +520,7 @@ ImageView.prototype.load =
 
 /**
  * Prefetches an image.
- * @param {!Gallery.Item} item The image item.
+ * @param {!GalleryItem} item The image item.
  * @param {number=} opt_delay Image load delay in ms.
  */
 ImageView.prototype.prefetch = function(item, opt_delay) {

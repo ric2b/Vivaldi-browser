@@ -4,12 +4,21 @@
 
 #include "sql/connection.h"
 
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
+#include <utility>
 
+#include "base/bind.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/format_macros.h"
+#include "base/json/json_file_value_serializer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_split.h"
@@ -17,6 +26,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/trace_event/memory_dump_manager.h"
+#include "sql/connection_memory_dump_provider.h"
+#include "sql/meta_table.h"
 #include "sql/statement.h"
 #include "third_party/sqlite/sqlite3.h"
 
@@ -30,6 +42,8 @@ namespace {
 // up the database.
 // TODO(shess): Better story on this.  http://crbug.com/56559
 const int kBusyTimeoutSeconds = 1;
+
+bool g_mmap_disabled_default = false;
 
 class ScopedBusyTimeout {
  public:
@@ -111,6 +125,26 @@ bool ValidAttachmentPoint(const char* attachment_point) {
   return true;
 }
 
+void RecordSqliteMemory10Min() {
+  const int64_t used = sqlite3_memory_used();
+  UMA_HISTOGRAM_COUNTS("Sqlite.MemoryKB.TenMinutes", used / 1024);
+}
+
+void RecordSqliteMemoryHour() {
+  const int64_t used = sqlite3_memory_used();
+  UMA_HISTOGRAM_COUNTS("Sqlite.MemoryKB.OneHour", used / 1024);
+}
+
+void RecordSqliteMemoryDay() {
+  const int64_t used = sqlite3_memory_used();
+  UMA_HISTOGRAM_COUNTS("Sqlite.MemoryKB.OneDay", used / 1024);
+}
+
+void RecordSqliteMemoryWeek() {
+  const int64_t used = sqlite3_memory_used();
+  UMA_HISTOGRAM_COUNTS("Sqlite.MemoryKB.OneWeek", used / 1024);
+}
+
 // SQLite automatically calls sqlite3_initialize() lazily, but
 // sqlite3_initialize() uses double-checked locking and thus can have
 // data races.
@@ -122,7 +156,29 @@ base::LazyInstance<base::Lock>::Leaky
     g_sqlite_init_lock = LAZY_INSTANCE_INITIALIZER;
 void InitializeSqlite() {
   base::AutoLock lock(g_sqlite_init_lock.Get());
-  sqlite3_initialize();
+  static bool first_call = true;
+  if (first_call) {
+    sqlite3_initialize();
+
+    // Schedule callback to record memory footprint histograms at 10m, 1h, and
+    // 1d.  There may not be a message loop in tests.
+    if (base::MessageLoop::current()) {
+      base::MessageLoop::current()->PostDelayedTask(
+          FROM_HERE, base::Bind(&RecordSqliteMemory10Min),
+          base::TimeDelta::FromMinutes(10));
+      base::MessageLoop::current()->PostDelayedTask(
+          FROM_HERE, base::Bind(&RecordSqliteMemoryHour),
+          base::TimeDelta::FromHours(1));
+      base::MessageLoop::current()->PostDelayedTask(
+          FROM_HERE, base::Bind(&RecordSqliteMemoryDay),
+          base::TimeDelta::FromDays(1));
+      base::MessageLoop::current()->PostDelayedTask(
+          FROM_HERE, base::Bind(&RecordSqliteMemoryWeek),
+          base::TimeDelta::FromDays(7));
+    }
+
+    first_call = false;
+  }
 }
 
 // Helper to get the sqlite3_file* associated with the "main" database.
@@ -139,6 +195,16 @@ int GetSqlite3File(sqlite3* db, sqlite3_file** file) {
     return SQLITE_ERROR;
 
   return rc;
+}
+
+// Convenience to get the sqlite3_file* and the size for the "main" database.
+int GetSqlite3FileAndSize(sqlite3* db,
+                          sqlite3_file** file, sqlite3_int64* db_size) {
+  int rc = GetSqlite3File(db, file);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  return (*file)->pMethods->xFileSize(*file, db_size);
 }
 
 // This should match UMA_HISTOGRAM_MEDIUM_TIMES().
@@ -171,6 +237,49 @@ bool Connection::ShouldIgnoreSqliteError(int error) {
   if (!current_ignorer_cb_)
     return false;
   return current_ignorer_cb_->Run(error);
+}
+
+// static
+bool Connection::ShouldIgnoreSqliteCompileError(int error) {
+  // Put this first in case tests need to see that the check happened.
+  if (ShouldIgnoreSqliteError(error))
+    return true;
+
+  // Trim extended error codes.
+  int basic_error = error & 0xff;
+
+  // These errors relate more to the runtime context of the system than to
+  // errors with a SQL statement or with the schema, so they aren't generally
+  // interesting to flag.  This list is not comprehensive.
+  return basic_error == SQLITE_BUSY ||
+      basic_error == SQLITE_NOTADB ||
+      basic_error == SQLITE_CORRUPT;
+}
+
+// static
+void Connection::set_mmap_disabled_by_default() {
+    g_mmap_disabled_default = true;
+}
+
+
+void Connection::ReportDiagnosticInfo(int extended_error, Statement* stmt) {
+  AssertIOAllowed();
+
+  std::string debug_info;
+  const int error = (extended_error & 0xFF);
+  if (error == SQLITE_CORRUPT) {
+    debug_info = CollectCorruptionInfo();
+  } else {
+    debug_info = CollectErrorInfo(extended_error, stmt);
+  }
+
+  if (!debug_info.empty() && RegisterIntentToUpload()) {
+    char debug_buf[2000];
+    base::strlcpy(debug_buf, debug_info.c_str(), arraysize(debug_buf));
+    base::debug::Alias(&debug_buf);
+
+    base::debug::DumpWithoutCrashing();
+  }
 }
 
 // static
@@ -238,6 +347,9 @@ Connection::Connection()
       needs_rollback_(false),
       in_memory_(false),
       poisoned_(false),
+      mmap_disabled_(g_mmap_disabled_default),
+      mmap_enabled_(false),
+      total_changes_at_last_release_(0),
       stats_histogram_(NULL),
       commit_time_histogram_(NULL),
       autocommit_time_histogram_(NULL),
@@ -317,6 +429,7 @@ bool Connection::Open(const base::FilePath& path) {
               base::HistogramBase::kUmaTargetedHistogramFlag);
       if (histogram)
         histogram->Add(sample);
+      UMA_HISTOGRAM_COUNTS("Sqlite.SizeKB", sample);
     }
   }
 
@@ -364,6 +477,17 @@ void Connection::CloseInternal(bool forced) {
     // of the function. http://crbug.com/136655.
     AssertIOAllowed();
 
+    // Reseting acquires a lock to ensure no dump is happening on the database
+    // at the same time. Unregister takes ownership of provider and it is safe
+    // since the db is reset. memory_dump_provider_ could be null if db_ was
+    // poisoned.
+    if (memory_dump_provider_) {
+      memory_dump_provider_->ResetDatabase();
+      base::trace_event::MemoryDumpManager::GetInstance()
+          ->UnregisterAndDeleteDumpProviderSoon(
+              std::move(memory_dump_provider_));
+    }
+
     int rc = sqlite3_close(db_);
     if (rc != SQLITE_OK) {
       UMA_HISTOGRAM_SPARSE_SLOWLY("Sqlite.CloseFailure", rc);
@@ -401,12 +525,8 @@ void Connection::Preload() {
     return;
 
   sqlite3_file* file = NULL;
-  int rc = GetSqlite3File(db_, &file);
-  if (rc != SQLITE_OK)
-    return;
-
   sqlite3_int64 file_size = 0;
-  rc = file->pMethods->xFileSize(file, &file_size);
+  int rc = GetSqlite3FileAndSize(db_, &file, &file_size);
   if (rc != SQLITE_OK)
     return;
 
@@ -417,9 +537,453 @@ void Connection::Preload() {
   scoped_ptr<char[]> buf(new char[page_size]);
   for (sqlite3_int64 pos = 0; pos < preload_size; pos += page_size) {
     rc = file->pMethods->xRead(file, buf.get(), page_size, pos);
+
+    // TODO(shess): Consider calling OnSqliteError().
     if (rc != SQLITE_OK)
       return;
   }
+}
+
+// SQLite keeps unused pages associated with a connection in a cache.  It asks
+// the cache for pages by an id, and if the page is present and the database is
+// unchanged, it considers the content of the page valid and doesn't read it
+// from disk.  When memory-mapped I/O is enabled, on read SQLite uses page
+// structures created from the memory map data before consulting the cache.  On
+// write SQLite creates a new in-memory page structure, copies the data from the
+// memory map, and later writes it, releasing the updated page back to the
+// cache.
+//
+// This means that in memory-mapped mode, the contents of the cached pages are
+// not re-used for reads, but they are re-used for writes if the re-written page
+// is still in the cache. The implementation of sqlite3_db_release_memory() as
+// of SQLite 3.8.7.4 frees all pages from pcaches associated with the
+// connection, so it should free these pages.
+//
+// Unfortunately, the zero page is also freed.  That page is never accessed
+// using memory-mapped I/O, and the cached copy can be re-used after verifying
+// the file change counter on disk.  Also, fresh pages from cache receive some
+// pager-level initialization before they can be used.  Since the information
+// involved will immediately be accessed in various ways, it is unclear if the
+// additional overhead is material, or just moving processor cache effects
+// around.
+//
+// TODO(shess): It would be better to release the pages immediately when they
+// are no longer needed.  This would basically happen after SQLite commits a
+// transaction.  I had implemented a pcache wrapper to do this, but it involved
+// layering violations, and it had to be setup before any other sqlite call,
+// which was brittle.  Also, for large files it would actually make sense to
+// maintain the existing pcache behavior for blocks past the memory-mapped
+// segment.  I think drh would accept a reasonable implementation of the overall
+// concept for upstreaming to SQLite core.
+//
+// TODO(shess): Another possibility would be to set the cache size small, which
+// would keep the zero page around, plus some pre-initialized pages, and SQLite
+// can manage things.  The downside is that updates larger than the cache would
+// spill to the journal.  That could be compensated by setting cache_spill to
+// false.  The downside then is that it allows open-ended use of memory for
+// large transactions.
+//
+// TODO(shess): The TrimMemory() trick of bouncing the cache size would also
+// work.  There could be two prepared statements, one for cache_size=1 one for
+// cache_size=goal.
+void Connection::ReleaseCacheMemoryIfNeeded(bool implicit_change_performed) {
+  DCHECK(is_open());
+
+  // If memory-mapping is not enabled, the page cache helps performance.
+  if (!mmap_enabled_)
+    return;
+
+  // On caller request, force the change comparison to fail.  Done before the
+  // transaction-nesting test so that the signal can carry to transaction
+  // commit.
+  if (implicit_change_performed)
+    --total_changes_at_last_release_;
+
+  // Cached pages may be re-used within the same transaction.
+  if (transaction_nesting())
+    return;
+
+  // If no changes have been made, skip flushing.  This allows the first page of
+  // the database to remain in cache across multiple reads.
+  const int total_changes = sqlite3_total_changes(db_);
+  if (total_changes == total_changes_at_last_release_)
+    return;
+
+  total_changes_at_last_release_ = total_changes;
+  sqlite3_db_release_memory(db_);
+}
+
+base::FilePath Connection::DbPath() const {
+  if (!is_open())
+    return base::FilePath();
+
+  const char* path = sqlite3_db_filename(db_, "main");
+  const base::StringPiece db_path(path);
+#if defined(OS_WIN)
+  return base::FilePath(base::UTF8ToWide(db_path));
+#elif defined(OS_POSIX)
+  return base::FilePath(db_path);
+#else
+  NOTREACHED();
+  return base::FilePath();
+#endif
+}
+
+// Data is persisted in a file shared between databases in the same directory.
+// The "sqlite-diag" file contains a dictionary with the version number, and an
+// array of histogram tags for databases which have been dumped.
+bool Connection::RegisterIntentToUpload() const {
+  static const char* kVersionKey = "version";
+  static const char* kDiagnosticDumpsKey = "DiagnosticDumps";
+  static int kVersion = 1;
+
+  AssertIOAllowed();
+
+  if (histogram_tag_.empty())
+    return false;
+
+  if (!is_open())
+    return false;
+
+  if (in_memory_)
+    return false;
+
+  const base::FilePath db_path = DbPath();
+  if (db_path.empty())
+    return false;
+
+  // Put the collection of diagnostic data next to the databases.  In most
+  // cases, this is the profile directory, but safe-browsing stores a Cookies
+  // file in the directory above the profile directory.
+  base::FilePath breadcrumb_path(
+      db_path.DirName().Append(FILE_PATH_LITERAL("sqlite-diag")));
+
+  // Lock against multiple updates to the diagnostics file.  This code should
+  // seldom be called in the first place, and when called it should seldom be
+  // called for multiple databases, and when called for multiple databases there
+  // is _probably_ something systemic wrong with the user's system.  So the lock
+  // should never be contended, but when it is the database experience is
+  // already bad.
+  base::AutoLock lock(g_sqlite_init_lock.Get());
+
+  scoped_ptr<base::Value> root;
+  if (!base::PathExists(breadcrumb_path)) {
+    scoped_ptr<base::DictionaryValue> root_dict(new base::DictionaryValue());
+    root_dict->SetInteger(kVersionKey, kVersion);
+
+    scoped_ptr<base::ListValue> dumps(new base::ListValue);
+    dumps->AppendString(histogram_tag_);
+    root_dict->Set(kDiagnosticDumpsKey, std::move(dumps));
+
+    root = std::move(root_dict);
+  } else {
+    // Failure to read a valid dictionary implies that something is going wrong
+    // on the system.
+    JSONFileValueDeserializer deserializer(breadcrumb_path);
+    scoped_ptr<base::Value> read_root(
+        deserializer.Deserialize(nullptr, nullptr));
+    if (!read_root.get())
+      return false;
+    scoped_ptr<base::DictionaryValue> root_dict =
+        base::DictionaryValue::From(std::move(read_root));
+    if (!root_dict)
+      return false;
+
+    // Don't upload if the version is missing or newer.
+    int version = 0;
+    if (!root_dict->GetInteger(kVersionKey, &version) || version > kVersion)
+      return false;
+
+    base::ListValue* dumps = nullptr;
+    if (!root_dict->GetList(kDiagnosticDumpsKey, &dumps))
+      return false;
+
+    const size_t size = dumps->GetSize();
+    for (size_t i = 0; i < size; ++i) {
+      std::string s;
+
+      // Don't upload if the value isn't a string, or indicates a prior upload.
+      if (!dumps->GetString(i, &s) || s == histogram_tag_)
+        return false;
+    }
+
+    // Record intention to proceed with upload.
+    dumps->AppendString(histogram_tag_);
+    root = std::move(root_dict);
+  }
+
+  const base::FilePath breadcrumb_new =
+      breadcrumb_path.AddExtension(FILE_PATH_LITERAL("new"));
+  base::DeleteFile(breadcrumb_new, false);
+
+  // No upload if the breadcrumb file cannot be updated.
+  // TODO(shess): Consider ImportantFileWriter::WriteFileAtomically() to land
+  // the data on disk.  For now, losing the data is not a big problem, so the
+  // sync overhead would probably not be worth it.
+  JSONFileValueSerializer serializer(breadcrumb_new);
+  if (!serializer.Serialize(*root))
+    return false;
+  if (!base::PathExists(breadcrumb_new))
+    return false;
+  if (!base::ReplaceFile(breadcrumb_new, breadcrumb_path, nullptr)) {
+    base::DeleteFile(breadcrumb_new, false);
+    return false;
+  }
+
+  return true;
+}
+
+std::string Connection::CollectErrorInfo(int error, Statement* stmt) const {
+  // Buffer for accumulating debugging info about the error.  Place
+  // more-relevant information earlier, in case things overflow the
+  // fixed-size reporting buffer.
+  std::string debug_info;
+
+  // The error message from the failed operation.
+  base::StringAppendF(&debug_info, "db error: %d/%s\n",
+                      GetErrorCode(), GetErrorMessage());
+
+  // TODO(shess): |error| and |GetErrorCode()| should always be the same, but
+  // reading code does not entirely convince me.  Remove if they turn out to be
+  // the same.
+  if (error != GetErrorCode())
+    base::StringAppendF(&debug_info, "reported error: %d\n", error);
+
+  // System error information.  Interpretation of Windows errors is different
+  // from posix.
+#if defined(OS_WIN)
+  base::StringAppendF(&debug_info, "LastError: %d\n", GetLastErrno());
+#elif defined(OS_POSIX)
+  base::StringAppendF(&debug_info, "errno: %d\n", GetLastErrno());
+#else
+  NOTREACHED();  // Add appropriate log info.
+#endif
+
+  if (stmt) {
+    base::StringAppendF(&debug_info, "statement: %s\n",
+                        stmt->GetSQLStatement());
+  } else {
+    base::StringAppendF(&debug_info, "statement: NULL\n");
+  }
+
+  // SQLITE_ERROR often indicates some sort of mismatch between the statement
+  // and the schema, possibly due to a failed schema migration.
+  if (error == SQLITE_ERROR) {
+    const char* kVersionSql = "SELECT value FROM meta WHERE key = 'version'";
+    sqlite3_stmt* s;
+    int rc = sqlite3_prepare_v2(db_, kVersionSql, -1, &s, nullptr);
+    if (rc == SQLITE_OK) {
+      rc = sqlite3_step(s);
+      if (rc == SQLITE_ROW) {
+        base::StringAppendF(&debug_info, "version: %d\n",
+                            sqlite3_column_int(s, 0));
+      } else if (rc == SQLITE_DONE) {
+        debug_info += "version: none\n";
+      } else {
+        base::StringAppendF(&debug_info, "version: error %d\n", rc);
+      }
+      sqlite3_finalize(s);
+    } else {
+      base::StringAppendF(&debug_info, "version: prepare error %d\n", rc);
+    }
+
+    debug_info += "schema:\n";
+
+    // sqlite_master has columns:
+    //   type - "index" or "table".
+    //   name - name of created element.
+    //   tbl_name - name of element, or target table in case of index.
+    //   rootpage - root page of the element in database file.
+    //   sql - SQL to create the element.
+    // In general, the |sql| column is sufficient to derive the other columns.
+    // |rootpage| is not interesting for debugging, without the contents of the
+    // database.  The COALESCE is because certain automatic elements will have a
+    // |name| but no |sql|,
+    const char* kSchemaSql = "SELECT COALESCE(sql, name) FROM sqlite_master";
+    rc = sqlite3_prepare_v2(db_, kSchemaSql, -1, &s, nullptr);
+    if (rc == SQLITE_OK) {
+      while ((rc = sqlite3_step(s)) == SQLITE_ROW) {
+        base::StringAppendF(&debug_info, "%s\n", sqlite3_column_text(s, 0));
+      }
+      if (rc != SQLITE_DONE)
+        base::StringAppendF(&debug_info, "error %d\n", rc);
+      sqlite3_finalize(s);
+    } else {
+      base::StringAppendF(&debug_info, "prepare error %d\n", rc);
+    }
+  }
+
+  return debug_info;
+}
+
+// TODO(shess): Since this is only called in an error situation, it might be
+// prudent to rewrite in terms of SQLite API calls, and mark the function const.
+std::string Connection::CollectCorruptionInfo() {
+  AssertIOAllowed();
+
+  // If the file cannot be accessed it is unlikely that an integrity check will
+  // turn up actionable information.
+  const base::FilePath db_path = DbPath();
+  int64_t db_size = -1;
+  if (!base::GetFileSize(db_path, &db_size) || db_size < 0)
+    return std::string();
+
+  // Buffer for accumulating debugging info about the error.  Place
+  // more-relevant information earlier, in case things overflow the
+  // fixed-size reporting buffer.
+  std::string debug_info;
+  base::StringAppendF(&debug_info, "SQLITE_CORRUPT, db size %" PRId64 "\n",
+                      db_size);
+
+  // Only check files up to 8M to keep things from blocking too long.
+  const int64_t kMaxIntegrityCheckSize = 8192 * 1024;
+  if (db_size > kMaxIntegrityCheckSize) {
+    debug_info += "integrity_check skipped due to size\n";
+  } else {
+    std::vector<std::string> messages;
+
+    // TODO(shess): FullIntegrityCheck() splits into a vector while this joins
+    // into a string.  Probably should be refactored.
+    const base::TimeTicks before = base::TimeTicks::Now();
+    FullIntegrityCheck(&messages);
+    base::StringAppendF(
+        &debug_info,
+        "integrity_check %" PRId64 " ms, %" PRIuS " records:\n",
+        (base::TimeTicks::Now() - before).InMilliseconds(),
+        messages.size());
+
+    // SQLite returns up to 100 messages by default, trim deeper to
+    // keep close to the 2000-character size limit for dumping.
+    const size_t kMaxMessages = 20;
+    for (size_t i = 0; i < kMaxMessages && i < messages.size(); ++i) {
+      base::StringAppendF(&debug_info, "%s\n", messages[i].c_str());
+    }
+  }
+
+  return debug_info;
+}
+
+size_t Connection::GetAppropriateMmapSize() {
+  AssertIOAllowed();
+
+#if defined(OS_IOS)
+  // iOS SQLite does not support memory mapping.
+  return 0;
+#endif
+
+  // How much to map if no errors are found.  50MB encompasses the 99th
+  // percentile of Chrome databases in the wild, so this should be good.
+  const size_t kMmapEverything = 256 * 1024 * 1024;
+
+  // If the database doesn't have a place to track progress, assume the best.
+  // This will happen when new databases are created, or if a database doesn't
+  // use a meta table.  sql::MetaTable::Init() will preload kMmapSuccess.
+  // TODO(shess): Databases not using meta include:
+  //   DOMStorageDatabase (localstorage)
+  //   ActivityDatabase (extensions activity log)
+  //   PredictorDatabase (prefetch and autocomplete predictor data)
+  //   SyncDirectory (sync metadata storage)
+  // For now, these all have mmap disabled to allow other databases to get the
+  // default-enable path.  sqlite-diag could be an alternative for all but
+  // DOMStorageDatabase, which creates many small databases.
+  // http://crbug.com/537742
+  if (!MetaTable::DoesTableExist(this)) {
+    RecordOneEvent(EVENT_MMAP_META_MISSING);
+    return kMmapEverything;
+  }
+
+  int64_t mmap_ofs = 0;
+  if (!MetaTable::GetMmapStatus(this, &mmap_ofs)) {
+    RecordOneEvent(EVENT_MMAP_META_FAILURE_READ);
+    return 0;
+  }
+
+  // Database read failed in the past, don't memory map.
+  if (mmap_ofs == MetaTable::kMmapFailure) {
+    RecordOneEvent(EVENT_MMAP_FAILED);
+    return 0;
+  } else if (mmap_ofs != MetaTable::kMmapSuccess) {
+    // Continue reading from previous offset.
+    DCHECK_GE(mmap_ofs, 0);
+
+    // TODO(shess): Could this reading code be shared with Preload()?  It would
+    // require locking twice (this code wouldn't be able to access |db_size| so
+    // the helper would have to return amount read).
+
+    // Read more of the database looking for errors.  The VFS interface is used
+    // to assure that the reads are valid for SQLite.  |g_reads_allowed| is used
+    // to limit checking to 20MB per run of Chromium.
+    sqlite3_file* file = NULL;
+    sqlite3_int64 db_size = 0;
+    if (SQLITE_OK != GetSqlite3FileAndSize(db_, &file, &db_size)) {
+      RecordOneEvent(EVENT_MMAP_VFS_FAILURE);
+      return 0;
+    }
+
+    // Read the data left, or |g_reads_allowed|, whichever is smaller.
+    // |g_reads_allowed| limits the total amount of I/O to spend verifying data
+    // in a single Chromium run.
+    sqlite3_int64 amount = db_size - mmap_ofs;
+    if (amount < 0)
+      amount = 0;
+    if (amount > 0) {
+      base::AutoLock lock(g_sqlite_init_lock.Get());
+      static sqlite3_int64 g_reads_allowed = 20 * 1024 * 1024;
+      if (g_reads_allowed < amount)
+        amount = g_reads_allowed;
+      g_reads_allowed -= amount;
+    }
+
+    // |amount| can be <= 0 if |g_reads_allowed| ran out of quota, or if the
+    // database was truncated after a previous pass.
+    if (amount <= 0 && mmap_ofs < db_size) {
+      DCHECK_EQ(0, amount);
+      RecordOneEvent(EVENT_MMAP_SUCCESS_NO_PROGRESS);
+    } else {
+      static const int kPageSize = 4096;
+      char buf[kPageSize];
+      while (amount > 0) {
+        int rc = file->pMethods->xRead(file, buf, sizeof(buf), mmap_ofs);
+        if (rc == SQLITE_OK) {
+          mmap_ofs += sizeof(buf);
+          amount -= sizeof(buf);
+        } else if (rc == SQLITE_IOERR_SHORT_READ) {
+          // Reached EOF for a database with page size < |kPageSize|.
+          mmap_ofs = db_size;
+          break;
+        } else {
+          // TODO(shess): Consider calling OnSqliteError().
+          mmap_ofs = MetaTable::kMmapFailure;
+          break;
+        }
+      }
+
+      // Log these events after update to distinguish meta update failure.
+      Events event;
+      if (mmap_ofs >= db_size) {
+        mmap_ofs = MetaTable::kMmapSuccess;
+        event = EVENT_MMAP_SUCCESS_NEW;
+      } else if (mmap_ofs > 0) {
+        event = EVENT_MMAP_SUCCESS_PARTIAL;
+      } else {
+        DCHECK_EQ(MetaTable::kMmapFailure, mmap_ofs);
+        event = EVENT_MMAP_FAILED_NEW;
+      }
+
+      if (!MetaTable::SetMmapStatus(this, mmap_ofs)) {
+        RecordOneEvent(EVENT_MMAP_META_FAILURE_UPDATE);
+        return 0;
+      }
+
+      RecordOneEvent(event);
+    }
+  }
+
+  if (mmap_ofs == MetaTable::kMmapFailure)
+    return 0;
+  if (mmap_ofs == MetaTable::kMmapSuccess)
+    return kMmapEverything;
+  return mmap_ofs;
 }
 
 void Connection::TrimMemory(bool aggressively) {
@@ -632,6 +1196,9 @@ bool Connection::Delete(const base::FilePath& path) {
   std::string wal_str = AsUTF8ForSQL(wal_path);
   std::string path_str = AsUTF8ForSQL(path);
 
+  // Make sure sqlite3_initialize() is called before anything else.
+  InitializeSqlite();
+
   sqlite3_vfs* vfs = sqlite3_vfs_find(NULL);
   CHECK(vfs);
   CHECK(vfs->xDelete);
@@ -703,7 +1270,7 @@ void Connection::RollbackTransaction() {
 
 bool Connection::CommitTransaction() {
   if (!transaction_nesting_) {
-    DLOG_IF(FATAL, !poisoned_) << "Rolling back a nonexistent transaction";
+    DLOG_IF(FATAL, !poisoned_) << "Committing a nonexistent transaction";
     return false;
   }
   transaction_nesting_--;
@@ -728,6 +1295,9 @@ bool Connection::CommitTransaction() {
 
   RecordCommitTime(delta);
   RecordOneEvent(EVENT_COMMIT);
+
+  // Release dirty cache pages after the transaction closes.
+  ReleaseCacheMemoryIfNeeded(false);
 
   return ret;
 }
@@ -819,6 +1389,12 @@ int Connection::ExecuteAndReturnErrorCode(const char* sql) {
     const base::TimeDelta delta = Now() - before;
     RecordTimeAndChanges(delta, read_only);
   }
+
+  // Most calls to Execute() modify the database.  The main exceptions would be
+  // calls such as CREATE TABLE IF NOT EXISTS which could modify the database
+  // but sometimes don't.
+  ReleaseCacheMemoryIfNeeded(true);
+
   return rc;
 }
 
@@ -888,7 +1464,7 @@ scoped_refptr<Connection::StatementRef> Connection::GetUniqueStatement(
   int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK) {
     // This is evidence of a syntax error in the incoming SQL.
-    if (!ShouldIgnoreSqliteError(rc))
+    if (!ShouldIgnoreSqliteCompileError(rc))
       DLOG(FATAL) << "SQL compile error " << GetErrorMessage();
 
     // It could also be database corruption.
@@ -898,6 +1474,8 @@ scoped_refptr<Connection::StatementRef> Connection::GetUniqueStatement(
   return new StatementRef(this, stmt, true);
 }
 
+// TODO(shess): Unify this with GetUniqueStatement().  The only difference that
+// seems legitimate is not passing |this| to StatementRef.
 scoped_refptr<Connection::StatementRef> Connection::GetUntrackedStatement(
     const char* sql) const {
   // Return inactive statement.
@@ -908,7 +1486,7 @@ scoped_refptr<Connection::StatementRef> Connection::GetUntrackedStatement(
   int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK) {
     // This is evidence of a syntax error in the incoming SQL.
-    if (!ShouldIgnoreSqliteError(rc))
+    if (!ShouldIgnoreSqliteCompileError(rc))
       DLOG(FATAL) << "SQL compile error " << GetErrorMessage();
     return new StatementRef(NULL, NULL, false);
   }
@@ -992,7 +1570,8 @@ bool Connection::DoesColumnExist(const char* table_name,
     return false;
 
   while (statement.Step()) {
-    if (!base::strcasecmp(statement.ColumnString(1).c_str(), column_name))
+    if (base::EqualsCaseInsensitiveASCII(statement.ColumnString(1),
+                                         column_name))
       return true;
   }
   return false;
@@ -1210,6 +1789,48 @@ bool Connection::OpenInternal(const std::string& file_name,
     return false;
   }
 
+  // Set a reasonable chunk size for larger files.  This reduces churn from
+  // remapping memory on size changes.  It also reduces filesystem
+  // fragmentation.
+  // TODO(shess): It may make sense to have this be hinted by the client.
+  // Database sizes seem to be bimodal, some clients have consistently small
+  // databases (<20k) while other clients have a broad distribution of sizes
+  // (hundreds of kilobytes to many megabytes).
+  sqlite3_file* file = NULL;
+  sqlite3_int64 db_size = 0;
+  int rc = GetSqlite3FileAndSize(db_, &file, &db_size);
+  if (rc == SQLITE_OK && db_size > 16 * 1024) {
+    int chunk_size = 4 * 1024;
+    if (db_size > 128 * 1024)
+      chunk_size = 32 * 1024;
+    sqlite3_file_control(db_, NULL, SQLITE_FCNTL_CHUNK_SIZE, &chunk_size);
+  }
+
+  // Enable memory-mapped access.  The explicit-disable case is because SQLite
+  // can be built to default-enable mmap.  GetAppropriateMmapSize() calculates a
+  // safe range to memory-map based on past regular I/O.  This value will be
+  // capped by SQLITE_MAX_MMAP_SIZE, which could be different between 32-bit and
+  // 64-bit platforms.
+  size_t mmap_size = mmap_disabled_ ? 0 : GetAppropriateMmapSize();
+  std::string mmap_sql =
+      base::StringPrintf("PRAGMA mmap_size = %" PRIuS, mmap_size);
+  ignore_result(Execute(mmap_sql.c_str()));
+
+  // Determine if memory-mapping has actually been enabled.  The Execute() above
+  // can succeed without changing the amount mapped.
+  mmap_enabled_ = false;
+  {
+    Statement s(GetUniqueStatement("PRAGMA mmap_size"));
+    if (s.Step() && s.ColumnInt64(0) > 0)
+      mmap_enabled_ = true;
+  }
+
+  DCHECK(!memory_dump_provider_);
+  memory_dump_provider_.reset(
+      new ConnectionMemoryDumpProvider(db_, histogram_tag_));
+  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+      memory_dump_provider_.get(), "sql::Connection", nullptr);
+
   return true;
 }
 
@@ -1224,6 +1845,11 @@ void Connection::DoRollback() {
 
   RecordUpdateTime(delta);
   RecordOneEvent(EVENT_ROLLBACK);
+
+  // The cache may have been accumulating dirty pages for commit.  Note that in
+  // some cases sql::Transaction can fire rollback after a database is closed.
+  if (is_open())
+    ReleaseCacheMemoryIfNeeded(false);
 
   needs_rollback_ = false;
 }
@@ -1273,7 +1899,11 @@ int Connection::OnSqliteError(int err, sql::Statement *stmt, const char* sql) {
     sql = stmt->GetSQLStatement();
   if (!sql)
     sql = "-- unknown";
-  LOG(ERROR) << histogram_tag_ << " sqlite error " << err
+
+  std::string id = histogram_tag_;
+  if (id.empty())
+    id = DbPath().BaseName().AsUTF8Unsafe();
+  LOG(ERROR) << id << " sqlite error " << err
              << ", errno " << GetLastErrno()
              << ": " << GetErrorMessage()
              << ", sql: " << sql;
@@ -1326,7 +1956,8 @@ bool Connection::IntegrityCheckHelper(
     // it could return separate lines, so loop _and_ split.
     while (stmt.Step()) {
       std::string result(stmt.ColumnString(0));
-      base::SplitString(result, '\n', messages);
+      *messages = base::SplitString(result, "\n", base::TRIM_WHITESPACE,
+                                    base::SPLIT_WANT_ALL);
     }
     ret = stmt.Succeeded();
   }

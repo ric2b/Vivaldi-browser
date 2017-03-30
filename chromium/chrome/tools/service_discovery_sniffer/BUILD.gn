@@ -15,7 +15,8 @@ executable("service_discovery_sniffer") {
     "//base",
     "//base/allocator",
     "//base/test:test_support",
-    "//chrome/utility",
+    "//build/config/sanitizers:deps",
+    "//chrome/browser",
     "//net",
   ]
 

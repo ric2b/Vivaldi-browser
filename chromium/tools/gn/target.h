@@ -9,16 +9,15 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
-#include "base/strings/string_piece.h"
-#include "base/synchronization/lock.h"
+#include "base/macros.h"
 #include "tools/gn/action_values.h"
 #include "tools/gn/config_values.h"
 #include "tools/gn/inherited_libraries.h"
 #include "tools/gn/item.h"
 #include "tools/gn/label_ptr.h"
+#include "tools/gn/lib_file.h"
 #include "tools/gn/ordered_set.h"
 #include "tools/gn/output_file.h"
 #include "tools/gn/source_file.h"
@@ -37,6 +36,7 @@ class Target : public Item {
     GROUP,
     EXECUTABLE,
     SHARED_LIBRARY,
+    LOADABLE_MODULE,
     STATIC_LIBRARY,
     SOURCE_SET,
     COPY_FILES,
@@ -69,7 +69,9 @@ class Target : public Item {
   // Can be linked into other targets.
   bool IsLinkable() const;
 
-  // Can have dependencies linked in.
+  // True if the target links dependencies rather than propogated up the graph.
+  // This is also true of action and copy steps even though they don't link
+  // dependencies, because they also don't propogate libraries up.
   bool IsFinal() const;
 
   // Will be the empty string to use the target label as the output name.
@@ -176,15 +178,6 @@ class Target : public Item {
     return public_configs_;
   }
 
-  // A list of a subset of deps where we'll re-export public_configs as
-  // public_configs of this target.
-  const UniqueVector<LabelTargetPair>& forward_dependent_configs() const {
-    return forward_dependent_configs_;
-  }
-  UniqueVector<LabelTargetPair>& forward_dependent_configs() {
-    return forward_dependent_configs_;
-  }
-
   // Dependencies that can include files from this target.
   const std::set<Label>& allow_circular_includes_from() const {
     return allow_circular_includes_from_;
@@ -205,7 +198,7 @@ class Target : public Item {
   const ActionValues& action_values() const { return action_values_; }
 
   const OrderedSet<SourceDir>& all_lib_dirs() const { return all_lib_dirs_; }
-  const OrderedSet<std::string>& all_libs() const { return all_libs_; }
+  const OrderedSet<LibFile>& all_libs() const { return all_libs_; }
 
   const std::set<const Target*>& recursive_hard_deps() const {
     return recursive_hard_deps_;
@@ -257,13 +250,10 @@ class Target : public Item {
 
   // Pulls necessary information from dependencies to this one when all
   // dependencies have been resolved.
-  void PullDependentTarget(const Target* dep, bool is_public);
-  void PullDependentTargets();
-
-  // These each pull specific things from dependencies to this one when all
-  // deps have been resolved.
-  void PullForwardedDependentConfigs();
-  void PullForwardedDependentConfigsFrom(const Target* from);
+  void PullDependentTargetConfigsFrom(const Target* dep);
+  void PullDependentTargetConfigs();
+  void PullDependentTargetLibsFrom(const Target* dep, bool is_public);
+  void PullDependentTargetLibs();
   void PullRecursiveHardDeps();
 
   // Fills the link and dependency output files when a target is resolved.
@@ -297,10 +287,10 @@ class Target : public Item {
   LabelTargetVector public_deps_;
   LabelTargetVector data_deps_;
 
+  // See getters for more info.
   UniqueVector<LabelConfigPair> configs_;
   UniqueVector<LabelConfigPair> all_dependent_configs_;
   UniqueVector<LabelConfigPair> public_configs_;
-  UniqueVector<LabelTargetPair> forward_dependent_configs_;
 
   std::set<Label> allow_circular_includes_from_;
 
@@ -311,7 +301,7 @@ class Target : public Item {
   // These libs and dirs are inherited from statically linked deps and all
   // configs applying to this target.
   OrderedSet<SourceDir> all_lib_dirs_;
-  OrderedSet<std::string> all_libs_;
+  OrderedSet<LibFile> all_libs_;
 
   // All hard deps from this target and all dependencies. Filled in when this
   // target is marked resolved. This will not include the current target.

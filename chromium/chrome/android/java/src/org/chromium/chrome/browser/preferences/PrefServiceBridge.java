@@ -6,14 +6,13 @@ package org.chromium.chrome.browser.preferences;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
-import org.chromium.base.CalledByNative;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.ContentSettingsType;
-import org.chromium.chrome.browser.UrlUtilities;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.ContentSettingException;
 import org.chromium.chrome.browser.preferences.website.GeolocationInfo;
@@ -22,7 +21,6 @@ import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * PrefServiceBridge is a singleton which provides access to some native preferences. Ideally
@@ -30,11 +28,6 @@ import java.util.Locale;
  * preferences.
  */
 public final class PrefServiceBridge {
-    // Does not need sync with native; used for the popup settings check
-    public static final String EXCEPTION_SETTING_ALLOW = "allow";
-    public static final String EXCEPTION_SETTING_BLOCK = "block";
-    public static final String EXCEPTION_SETTING_DEFAULT = "default";
-
     // These values must match the native enum values in
     // SupervisedUserURLFilter::FilteringBehavior
     public static final int SUPERVISED_USER_FILTERING_ALLOW = 0;
@@ -123,18 +116,14 @@ public final class PrefServiceBridge {
         if (currentVersion < 1) {
             nativeMigrateJavascriptPreference();
         }
-        // Step 2 intentionally skipped.
-        if (currentVersion < 3) {
-            nativeMigrateLocationPreference();
-            nativeMigrateProtectedMediaPreference();
-        }
+        // Steps 2,3 intentionally skipped.
         if (currentVersion < 4) {
             // For a brief period (M44 Beta), it was possible for users to disable images via Site
             // Settings. Now that this option has been removed, ensure that users are not stuck with
             // images disabled.
             setContentSettingEnabled(ContentSettingsType.CONTENT_SETTINGS_TYPE_IMAGES, true);
         }
-        preferences.edit().putInt(MIGRATION_PREF_KEY, MIGRATION_CURRENT_VERSION).commit();
+        preferences.edit().putInt(MIGRATION_PREF_KEY, MIGRATION_CURRENT_VERSION).apply();
     }
 
     /**
@@ -148,65 +137,15 @@ public final class PrefServiceBridge {
         String url = templateUrlService.getSearchEngineUrlFromTemplateUrl(
                 templateUrlService.getDefaultSearchEngineIndex());
         if (allowed && !url.startsWith("https:")) return;
-        GeolocationInfo locationSettings = new GeolocationInfo(url, null);
+        GeolocationInfo locationSettings = new GeolocationInfo(url, null, false);
         ContentSetting locationPermission = locationSettings.getContentSetting();
         if (locationPermission == null || locationPermission == ContentSetting.ASK) {
-            WebsitePreferenceBridge.nativeSetGeolocationSettingForOrigin(
-                    url, url, allowed
-                            ? ContentSetting.ALLOW.toInt() : ContentSetting.BLOCK.toInt());
+            WebsitePreferenceBridge.nativeSetGeolocationSettingForOrigin(url, url,
+                    allowed ? ContentSetting.ALLOW.toInt() : ContentSetting.BLOCK.toInt(), false);
             SharedPreferences sharedPreferences =
                     PreferenceManager.getDefaultSharedPreferences(context);
             sharedPreferences.edit().putBoolean(LOCATION_AUTO_ALLOWED, true).apply();
         }
-    }
-
-    /**
-     * Whether the geo header is allowed to be sent for the current URL.
-     * @param context The Context used to get the device location.
-     * @param url The URL of the request with which this header will be sent.
-     * @param isIncognito Whether the request will happen in an incognito tab.
-     */
-    public static boolean isGeoHeaderEnabledForUrl(
-            Context context, String url, boolean isIncognito) {
-        // TODO(finnur): delete this method once GeolocationHeader has been upstreamed.
-        // Only send the Geo header in normal mode.
-        if (isIncognito) return false;
-
-        // Only send the Geo header to Google domains.
-        if (!UrlUtilities.nativeIsGoogleSearchUrl(url)) return false;
-
-        Uri uri = Uri.parse(url);
-        if (!HTTPS_SCHEME.equals(uri.getScheme())) return false;
-
-        // Only send Geo header if the user hasn't disabled geolocation for url.
-        if (isLocationDisabledForUrl(uri)) return false;
-
-        return true;
-    }
-
-    /**
-     * Returns true if the user has disabled sharing their location with url (e.g. via the
-     * geolocation infobar). If the user has not chosen a preference for url and url uses the https
-     * scheme, this considers the user's preference for url with the http scheme instead.
-     */
-    public static boolean isLocationDisabledForUrl(Uri uri) {
-        // TODO(finnur): Delete this method once GeolocationHeader has been upstreamed.
-        GeolocationInfo locationSettings = new GeolocationInfo(uri.toString(), null);
-        ContentSetting locationPermission = locationSettings.getContentSetting();
-
-        // If no preference has been chosen and the scheme is https, fall back to the preference for
-        // this same host over http with no explicit port number.
-        if (locationPermission == null || locationPermission == ContentSetting.ASK) {
-            String scheme = uri.getScheme();
-            if (scheme != null && scheme.toLowerCase(Locale.US).equals("https")
-                    && uri.getAuthority() != null && uri.getUserInfo() == null) {
-                String urlWithHttp = "http://" + uri.getHost();
-                locationSettings = new GeolocationInfo(urlWithHttp, null);
-                locationPermission = locationSettings.getContentSetting();
-            }
-        }
-
-        return locationPermission == ContentSetting.BLOCK;
     }
 
     /**
@@ -249,10 +188,10 @@ public final class PrefServiceBridge {
             ArrayList<ContentSettingException> list,
             int contentSettingsType,
             String pattern,
-            String setting,
+            int contentSetting,
             String source) {
         ContentSettingException exception = new ContentSettingException(
-                contentSettingsType, pattern, setting, source);
+                contentSettingsType, pattern, ContentSetting.fromInt(contentSetting), source);
         list.add(exception);
     }
 
@@ -265,16 +204,16 @@ public final class PrefServiceBridge {
      */
     @CalledByNative
     public static String getAndroidPermissionForContentSetting(int contentSettingType) {
-        switch(contentSettingType) {
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION:
-                return android.Manifest.permission.ACCESS_FINE_LOCATION;
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-                return android.Manifest.permission.RECORD_AUDIO;
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-                return android.Manifest.permission.CAMERA;
-            default:
-                return null;
+        if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION) {
+            return android.Manifest.permission.ACCESS_FINE_LOCATION;
         }
+        if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) {
+            return android.Manifest.permission.RECORD_AUDIO;
+        }
+        if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA) {
+            return android.Manifest.permission.CAMERA;
+        }
+        return null;
     }
 
     public boolean isAcceptCookiesEnabled() {
@@ -402,6 +341,13 @@ public final class PrefServiceBridge {
     }
 
     /**
+     * Sets the preference that controls automatic detection of character encoding.
+     */
+    public void setAutoDetectEncodingEnabled(boolean enabled) {
+        nativeSetAutoDetectEncodingEnabled(enabled);
+    }
+
+    /**
      * Sets the preference that signals when the user has accepted the EULA.
      */
     public void setEulaAccepted() {
@@ -423,24 +369,17 @@ public final class PrefServiceBridge {
     }
 
     /**
+     * @return the last account id associated with sync.
+     */
+    public String getSyncLastAccountId() {
+        return nativeGetSyncLastAccountId();
+    }
+
+    /**
      * @return the last account username associated with sync.
      */
     public String getSyncLastAccountName() {
         return nativeGetSyncLastAccountName();
-    }
-
-    /**
-     * Enable or disable x-auto-login
-     */
-    public void setAutologinEnabled(boolean autologinEnabled) {
-        nativeSetAutologinEnabled(autologinEnabled);
-    }
-
-    /**
-     * @return true if x-auto-login is enabled, false otherwise.
-     */
-    public boolean isAutologinEnabled() {
-        return nativeGetAutologinEnabled();
     }
 
     /**
@@ -531,6 +470,48 @@ public final class PrefServiceBridge {
     public void setContextualSearchState(boolean enabled) {
         setContextualSearchPreference(enabled
                 ? CONTEXTUAL_SEARCH_ENABLED : CONTEXTUAL_SEARCH_DISABLED);
+    }
+
+    /**
+     * @return whether Safe Browsing Extended Reporting is currently enabled.
+     */
+    public boolean isSafeBrowsingExtendedReportingEnabled() {
+        return nativeGetSafeBrowsingExtendedReportingEnabled();
+    }
+
+    /**
+     * @param whether Safe Browsing Extended Reporting should be enabled.
+     */
+    public void setSafeBrowsingExtendedReportingEnabled(boolean enabled) {
+        nativeSetSafeBrowsingExtendedReportingEnabled(enabled);
+    }
+
+    /**
+     * @return whether Safe Browsing Extended Reporting is managed
+     */
+    public boolean isSafeBrowsingExtendedReportingManaged() {
+        return nativeGetSafeBrowsingExtendedReportingManaged();
+    }
+
+    /**
+     * @return whether Safe Browsing is currently enabled.
+     */
+    public boolean isSafeBrowsingEnabled() {
+        return nativeGetSafeBrowsingEnabled();
+    }
+
+    /**
+     * @param whether Safe Browsing should be enabled.
+     */
+    public void setSafeBrowsingEnabled(boolean enabled) {
+        nativeSetSafeBrowsingEnabled(enabled);
+    }
+
+    /**
+     * @return whether Safe Browsing is managed
+     */
+    public boolean isSafeBrowsingManaged() {
+        return nativeGetSafeBrowsingManaged();
     }
 
     /**
@@ -634,6 +615,13 @@ public final class PrefServiceBridge {
      */
     public boolean isTranslateManaged() {
         return nativeGetTranslateManaged();
+    }
+
+    /**
+     * @return true if automatic detection of character encoding is enabled, false otherwise.
+     */
+    public boolean isAutoDetectEncodingEnabled() {
+        return nativeGetAutoDetectEncodingEnabled();
     }
 
     /**
@@ -862,10 +850,10 @@ public final class PrefServiceBridge {
     }
 
     /**
-     * @return whether ForceGoogleSafeSearch is set
+     * @return whether SafeSites for supervised users is enabled.
      */
-    public boolean isForceGoogleSafeSearch() {
-        return nativeGetForceGoogleSafeSearch();
+    public boolean isSupervisedUserSafeSitesEnabled() {
+        return nativeGetSupervisedUserSafeSitesEnabled();
     }
 
     /**
@@ -928,6 +916,26 @@ public final class PrefServiceBridge {
         return nativeHasSetMetricsReporting();
     }
 
+    /**
+     * @param clicked Whether the update menu item was clicked. The preference is stored to
+     *                facilitate logging whether Chrome was updated after a click on the menu item.
+     */
+    public void setClickedUpdateMenuItem(boolean clicked) {
+        nativeSetClickedUpdateMenuItem(clicked);
+    }
+
+    /**
+     * @return Whether the update menu item was clicked.
+     */
+    public boolean getClickedUpdateMenuItem() {
+        return nativeGetClickedUpdateMenuItem();
+    }
+
+    @VisibleForTesting
+    public void setSupervisedUserId(String supervisedUserId) {
+        nativeSetSupervisedUserId(supervisedUserId);
+    }
+
     private native boolean nativeGetAcceptCookiesEnabled();
     private native boolean nativeGetAcceptCookiesManaged();
     private native boolean nativeGetBlockThirdPartyCookiesEnabled();
@@ -954,6 +962,7 @@ public final class PrefServiceBridge {
     private native boolean nativeGetFullscreenManaged();
     private native boolean nativeGetTranslateEnabled();
     private native boolean nativeGetTranslateManaged();
+    private native boolean nativeGetAutoDetectEncodingEnabled();
     private native boolean nativeGetResolveNavigationErrorEnabled();
     private native boolean nativeGetResolveNavigationErrorManaged();
     private native boolean nativeGetProtectedMediaIdentifierEnabled();
@@ -962,12 +971,11 @@ public final class PrefServiceBridge {
     private native boolean nativeGetIncognitoModeManaged();
     private native boolean nativeGetPrintingEnabled();
     private native boolean nativeGetPrintingManaged();
-    private native boolean nativeGetForceGoogleSafeSearch();
+    private native boolean nativeGetSupervisedUserSafeSitesEnabled();
     private native void nativeSetTranslateEnabled(boolean enabled);
+    private native void nativeSetAutoDetectEncodingEnabled(boolean enabled);
     private native void nativeResetTranslateDefaults();
     private native void nativeMigrateJavascriptPreference();
-    private native void nativeMigrateLocationPreference();
-    private native void nativeMigrateProtectedMediaPreference();
     private native void nativeSetJavaScriptAllowed(String pattern, int setting);
     private native void nativeClearBrowsingData(boolean history, boolean cache,
             boolean cookiesAndSiteData, boolean passwords, boolean formData);
@@ -985,8 +993,6 @@ public final class PrefServiceBridge {
     private native void nativeSetPushNotificationsEnabled(boolean allow);
     private native void nativeSetPasswordEchoEnabled(boolean enabled);
     private native void nativeSetPopupException(String pattern, int setting);
-    private native boolean nativeGetAutologinEnabled();
-    private native void nativeSetAutologinEnabled(boolean autologinEnabled);
     private native void nativeSetCrashReporting(boolean reporting);
     private native boolean nativeCanPredictNetworkActions();
     private native AboutVersionStrings nativeGetAboutVersionStrings();
@@ -996,6 +1002,12 @@ public final class PrefServiceBridge {
     private native boolean nativeGetSearchSuggestEnabled();
     private native void nativeSetSearchSuggestEnabled(boolean enabled);
     private native boolean nativeGetSearchSuggestManaged();
+    private native boolean nativeGetSafeBrowsingExtendedReportingEnabled();
+    private native void nativeSetSafeBrowsingExtendedReportingEnabled(boolean enabled);
+    private native boolean nativeGetSafeBrowsingExtendedReportingManaged();
+    private native boolean nativeGetSafeBrowsingEnabled();
+    private native void nativeSetSafeBrowsingEnabled(boolean enabled);
+    private native boolean nativeGetSafeBrowsingManaged();
     private native boolean nativeGetNetworkPredictionManaged();
     private native boolean nativeNetworkPredictionEnabledHasUserSetting();
     private native boolean nativeNetworkPredictionOptionsHasUserSetting();
@@ -1005,6 +1017,7 @@ public final class PrefServiceBridge {
     private native void nativeSetResolveNavigationErrorEnabled(boolean enabled);
     private native void nativeSetEulaAccepted();
     private native void nativeResetAcceptLanguages(String defaultLocale);
+    private native String nativeGetSyncLastAccountId();
     private native String nativeGetSyncLastAccountName();
     private native String nativeGetSupervisedUserCustodianName();
     private native String nativeGetSupervisedUserCustodianEmail();
@@ -1016,4 +1029,7 @@ public final class PrefServiceBridge {
     private native boolean nativeGetMetricsReportingEnabled();
     private native void nativeSetMetricsReportingEnabled(boolean enabled);
     private native boolean nativeHasSetMetricsReporting();
+    private native void nativeSetClickedUpdateMenuItem(boolean clicked);
+    private native boolean nativeGetClickedUpdateMenuItem();
+    private native void nativeSetSupervisedUserId(String supervisedUserId);
 }

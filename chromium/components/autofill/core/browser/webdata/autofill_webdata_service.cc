@@ -81,13 +81,6 @@ WebDataServiceBase::Handle AutofillWebDataService::GetFormValuesForElementName(
            autofill_backend_, name, prefix, limit), consumer);
 }
 
-WebDataServiceBase::Handle AutofillWebDataService::HasFormElements(
-    WebDataServiceConsumer* consumer) {
-  return wdbs_->ScheduleDBTaskWithResult(FROM_HERE,
-      Bind(&AutofillWebDataBackendImpl::HasFormElements, autofill_backend_),
-      consumer);
-}
-
 void AutofillWebDataService::RemoveFormElementsAddedBetween(
     const Time& delete_begin, const Time& delete_end) {
   wdbs_->ScheduleDBTask(FROM_HERE,
@@ -138,8 +131,17 @@ WebDataServiceBase::Handle AutofillWebDataService::GetServerProfiles(
       consumer);
 }
 
+WebDataServiceBase::Handle
+    AutofillWebDataService::GetCountOfValuesContainedBetween(
+        const Time& begin, const Time& end, WebDataServiceConsumer* consumer) {
+  return wdbs_->ScheduleDBTaskWithResult(FROM_HERE,
+      Bind(&AutofillWebDataBackendImpl::GetCountOfValuesContainedBetween,
+           autofill_backend_, begin, end),
+           consumer);
+}
+
 void AutofillWebDataService::UpdateAutofillEntries(
-    const std::vector<autofill::AutofillEntry>& autofill_entries) {
+    const std::vector<AutofillEntry>& autofill_entries) {
   wdbs_->ScheduleDBTask(FROM_HERE,
                         Bind(&AutofillWebDataBackendImpl::UpdateAutofillEntries,
                              autofill_backend_,

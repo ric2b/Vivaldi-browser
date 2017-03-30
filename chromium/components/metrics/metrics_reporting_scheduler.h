@@ -5,8 +5,8 @@
 #ifndef COMPONENTS_METRICS_METRICS_REPORTING_SCHEDULER_H_
 #define COMPONENTS_METRICS_METRICS_REPORTING_SCHEDULER_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -64,7 +64,7 @@ class MetricsReportingScheduler {
   // The MetricsService method to call when uploading should happen.
   const base::Closure upload_callback_;
 
-  base::OneShotTimer<MetricsReportingScheduler> upload_timer_;
+  base::OneShotTimer upload_timer_;
 
   // The interval between being told an upload is done and starting the next
   // upload.

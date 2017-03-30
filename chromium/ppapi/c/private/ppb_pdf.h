@@ -5,7 +5,8 @@
 #ifndef PPAPI_C_PRIVATE_PPB_PDF_H_
 #define PPAPI_C_PRIVATE_PPB_PDF_H_
 
-#include "ppapi/c/dev/ppb_font_dev.h"
+#include <stdint.h>
+
 #include "ppapi/c/pp_bool.h"
 #include "ppapi/c/pp_instance.h"
 #include "ppapi/c/pp_resource.h"
@@ -13,16 +14,6 @@
 #include "ppapi/c/private/pp_private_font_charset.h"
 
 #define PPB_PDF_INTERFACE "PPB_PDF;1"
-
-// From the public PPB_Font_Dev file.
-struct PP_FontDescription_Dev;
-
-typedef enum {
-  PP_RESOURCESTRING_PDFGETPASSWORD = 0,
-  PP_RESOURCESTRING_PDFLOADING = 1,
-  PP_RESOURCESTRING_PDFLOAD_FAILED = 2,
-  PP_RESOURCESTRING_PDFPROGRESSLOADING = 3
-} PP_ResourceString;
 
 typedef enum {
   PP_PDFFEATURE_HIDPI = 0,
@@ -41,10 +32,6 @@ struct PP_PrivateFindResult {
 };
 
 struct PPB_PDF {
-  // Returns a localized string.
-  struct PP_Var (*GetLocalizedString)(PP_Instance instance,
-                                      PP_ResourceString string_id);
-
   // Returns a resource identifying a font file corresponding to the given font
   // request after applying the browser-specific fallback.
   //

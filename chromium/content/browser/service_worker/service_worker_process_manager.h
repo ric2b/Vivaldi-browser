@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_PROCESS_MANAGER_H_
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/callback.h"
@@ -75,6 +76,12 @@ class CONTENT_EXPORT ServiceWorkerProcessManager {
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerProcessManagerTest, SortProcess);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerProcessManagerTest,
+                           FindAvailableProcess);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerProcessManagerTest,
+                           AllocateWorkerProcess_FindAvailableProcess);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerProcessManagerTest,
+                           AllocateWorkerProcess_InShutdown);
 
   // Information about the process for an EmbeddedWorkerInstance.
   struct ProcessInfo {
@@ -94,6 +101,9 @@ class CONTENT_EXPORT ServiceWorkerProcessManager {
     int process_id;
   };
 
+  // Returns true if Shutdown() has been called.
+  bool IsShutdown() const { return !browser_context_; }
+
   // Maps the process ID to its reference count.
   typedef std::map<int, int> ProcessRefMap;
 
@@ -102,6 +112,10 @@ class CONTENT_EXPORT ServiceWorkerProcessManager {
 
   // Returns a process vector sorted by the reference count for the |pattern|.
   std::vector<int> SortProcessesForPattern(const GURL& pattern) const;
+
+  // Returns the id of an available process for this pattern, or
+  // ChildProcessHost::kInvalidUniqueID if there is none.
+  int FindAvailableProcess(const GURL& pattern);
 
   // These fields are only accessed on the UI thread.
   BrowserContext* browser_context_;
@@ -130,12 +144,12 @@ class CONTENT_EXPORT ServiceWorkerProcessManager {
 
 }  // namespace content
 
-namespace base {
+namespace std {
 // Specialized to post the deletion to the UI thread.
 template <>
-struct CONTENT_EXPORT DefaultDeleter<content::ServiceWorkerProcessManager> {
+struct CONTENT_EXPORT default_delete<content::ServiceWorkerProcessManager> {
   void operator()(content::ServiceWorkerProcessManager* ptr) const;
 };
-}  // namespace base
+}  // namespace std
 
 #endif  // CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_PROCESS_MANAGER_H_

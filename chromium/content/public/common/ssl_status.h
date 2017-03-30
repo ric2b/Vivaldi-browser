@@ -10,6 +10,10 @@
 #include "content/public/common/signed_certificate_timestamp_id_and_status.h"
 #include "net/cert/cert_status_flags.h"
 
+namespace net {
+class SSLInfo;
+}
+
 namespace content {
 
 // Collects the SSL information for this NavigationEntry.
@@ -30,22 +34,30 @@ struct CONTENT_EXPORT SSLStatus {
   };
 
   SSLStatus();
+  SSLStatus(SecurityStyle security_style,
+            int cert_id,
+            const SignedCertificateTimestampIDStatusList&
+                signed_certificate_timestamp_ids,
+            const net::SSLInfo& ssl_info);
   ~SSLStatus();
 
   bool Equals(const SSLStatus& status) const {
     return security_style == status.security_style &&
-           cert_id == status.cert_id &&
-           cert_status == status.cert_status &&
+           cert_id == status.cert_id && cert_status == status.cert_status &&
            security_bits == status.security_bits &&
+           key_exchange_info == status.key_exchange_info &&
+           connection_status == status.connection_status &&
            content_status == status.content_status &&
            signed_certificate_timestamp_ids ==
                status.signed_certificate_timestamp_ids;
   }
 
   content::SecurityStyle security_style;
+  // A cert_id value of 0 indicates that it is unset or invalid.
   int cert_id;
   net::CertStatus cert_status;
   int security_bits;
+  int key_exchange_info;
   int connection_status;
   // A combination of the ContentStatusFlags above.
   int content_status;

@@ -5,8 +5,13 @@
 #ifndef CONTENT_CHILD_SERVICE_WORKER_SERVICE_WORKER_MESSAGE_FILTER_H_
 #define CONTENT_CHILD_SERVICE_WORKER_SERVICE_WORKER_MESSAGE_FILTER_H_
 
+#include <vector>
+
+#include "base/macros.h"
 #include "content/child/worker_thread_message_filter.h"
 #include "content/common/content_export.h"
+
+struct ServiceWorkerMsg_MessageToDocument_Params;
 
 namespace content {
 
@@ -33,14 +38,22 @@ class CONTENT_EXPORT ServiceWorkerMessageFilter
   void OnStaleMessageReceived(const IPC::Message& msg) override;
 
   // Message handlers for stale messages.
-  void OnStaleRegistered(
-      int thread_id,
-      int request_id,
-      const ServiceWorkerRegistrationObjectInfo& info,
-      const ServiceWorkerVersionAttributes& attrs);
-  void OnStaleSetVersionAttributes(
+  void OnStaleAssociateRegistration(
       int thread_id,
       int provider_id,
+      const ServiceWorkerRegistrationObjectInfo& info,
+      const ServiceWorkerVersionAttributes& attrs);
+  void OnStaleGetRegistration(int thread_id,
+                              int request_id,
+                              const ServiceWorkerRegistrationObjectInfo& info,
+                              const ServiceWorkerVersionAttributes& attrs);
+  void OnStaleGetRegistrations(
+      int thread_id,
+      int request_id,
+      const std::vector<ServiceWorkerRegistrationObjectInfo>& info,
+      const std::vector<ServiceWorkerVersionAttributes>& attrs);
+  void OnStaleSetVersionAttributes(
+      int thread_id,
       int registration_handle_id,
       int changed_mask,
       const ServiceWorkerVersionAttributes& attrs);
@@ -49,6 +62,8 @@ class CONTENT_EXPORT ServiceWorkerMessageFilter
       int provider_id,
       const ServiceWorkerObjectInfo& info,
       bool should_notify_controllerchange);
+  void OnStaleMessageToDocument(
+      const ServiceWorkerMsg_MessageToDocument_Params& params);
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerMessageFilter);
 };

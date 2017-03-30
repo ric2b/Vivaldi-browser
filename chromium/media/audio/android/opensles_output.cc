@@ -5,6 +5,7 @@
 #include "media/audio/android/opensles_output.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "media/audio/android/audio_manager_android.h"
 
@@ -330,9 +331,9 @@ void OpenSLESOutputStream::FillBufferQueueNoLock() {
   // Read data from the registered client source.
   // TODO(henrika): Investigate if it is possible to get a more accurate
   // delay estimation.
-  const uint32 hardware_delay = buffer_size_bytes_;
-  int frames_filled = callback_->OnMoreData(
-      audio_bus_.get(), hardware_delay);
+  const uint32_t hardware_delay = buffer_size_bytes_;
+  int frames_filled =
+      callback_->OnMoreData(audio_bus_.get(), hardware_delay, 0);
   if (frames_filled <= 0) {
     // Audio source is shutting down, or halted on error.
     return;
@@ -365,7 +366,7 @@ void OpenSLESOutputStream::SetupAudioBuffer() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!audio_data_[0]);
   for (int i = 0; i < kMaxNumOfBuffersInQueue; ++i) {
-    audio_data_[i] = new uint8[buffer_size_bytes_];
+    audio_data_[i] = new uint8_t[buffer_size_bytes_];
   }
 }
 

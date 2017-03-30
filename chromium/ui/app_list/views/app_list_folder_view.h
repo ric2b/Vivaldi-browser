@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "ui/app_list/app_list_item_list_observer.h"
 #include "ui/app_list/views/apps_grid_view.h"
 #include "ui/app_list/views/apps_grid_view_folder_delegate.h"
@@ -50,6 +51,7 @@ class AppListFolderView : public views::View,
   gfx::Rect GetItemIconBoundsAt(int index);
 
   void UpdateFolderNameVisibility(bool visible);
+  void SetBackButtonLabel(bool folder);
 
   // Hides the view immediately without animation.
   void HideViewImmediately();

@@ -47,9 +47,8 @@ bool FakeSessionManagerClient::IsScreenLocked() const {
 void FakeSessionManagerClient::EmitLoginPromptVisible() {
 }
 
-void FakeSessionManagerClient::RestartJob(int pid,
-                                          const std::string& command_line) {
-}
+void FakeSessionManagerClient::RestartJob(
+    const std::vector<std::string>& argv) {}
 
 void FakeSessionManagerClient::StartSession(const std::string& user_email) {
   DCHECK_EQ(0UL, user_sessions_.count(user_email));
@@ -150,6 +149,23 @@ void FakeSessionManagerClient::GetServerBackedStateKeys(
     const StateKeysCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, server_backed_state_keys_));
+}
+
+void FakeSessionManagerClient::CheckArcAvailability(
+    const ArcCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                base::Bind(callback, false));
+}
+
+void FakeSessionManagerClient::StartArcInstance(const std::string& socket_path,
+                                                const ArcCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                base::Bind(callback, false));
+}
+
+void FakeSessionManagerClient::StopArcInstance(const ArcCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                base::Bind(callback, false));
 }
 
 const std::string& FakeSessionManagerClient::device_policy() const {

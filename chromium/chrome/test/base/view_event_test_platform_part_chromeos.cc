@@ -4,14 +4,19 @@
 
 #include "chrome/test/base/view_event_test_platform_part.h"
 
+#include "ash/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shell_delegate.h"
+#include "base/command_line.h"
+#include "base/macros.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/network/network_handler.h"
+#include "content/public/browser/browser_thread.h"
+#include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/message_center/message_center.h"
@@ -43,13 +48,22 @@ ViewEventTestPlatformPartChromeOS::ViewEventTestPlatformPartChromeOS(
   // also create the message center.
   message_center::MessageCenter::Initialize();
   chromeos::DBusThreadManager::Initialize();
+  bluez::BluezDBusManager::Initialize(
+      chromeos::DBusThreadManager::Get()->GetSystemBus(),
+      chromeos::DBusThreadManager::Get()->IsUsingStub(
+          chromeos::DBusClientBundle::BLUETOOTH));
   chromeos::CrasAudioHandler::InitializeForTesting();
   chromeos::NetworkHandler::Initialize();
+
+  aura::Env::CreateInstance(true);
   ash::test::TestShellDelegate* shell_delegate =
       new ash::test::TestShellDelegate();
   ash::ShellInitParams init_params;
   init_params.delegate = shell_delegate;
   init_params.context_factory = context_factory;
+  init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      ash::switches::kAshHostWindowBounds, "0+0-1280x800");
   ash::Shell::CreateInstance(init_params);
   ash::test::AshTestHelper::GetTestSessionStateDelegate()->
       SetActiveUserSessionStarted(true);
@@ -58,14 +72,15 @@ ViewEventTestPlatformPartChromeOS::ViewEventTestPlatformPartChromeOS(
 
 ViewEventTestPlatformPartChromeOS::~ViewEventTestPlatformPartChromeOS() {
   ash::Shell::DeleteInstance();
+  aura::Env::DeleteInstance();
+
   chromeos::NetworkHandler::Shutdown();
   chromeos::CrasAudioHandler::Shutdown();
+  bluez::BluezDBusManager::Shutdown();
   chromeos::DBusThreadManager::Shutdown();
   // Ash Shell can't just live on its own without a browser process, we need to
   // also shut down the message center.
   message_center::MessageCenter::Shutdown();
-
-  aura::Env::DeleteInstance();
 }
 
 }  // namespace

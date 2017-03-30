@@ -11,7 +11,7 @@
 @class BookmarkBarFolderController;
 @class BookmarkButton;
 @class BrowserWindowController;
-class ThemeService;
+class Profile;
 
 namespace bookmarks {
 class BookmarkModel;
@@ -130,8 +130,8 @@ class BookmarkNode;
 // Used to tell the controller to stop making room for a drop.
 - (void)clearDropInsertionPos;
 
-// Return the theme service associated with this browser window.
-- (ThemeService*)themeService;
+// Return the profile associated with this browser window.
+- (Profile*)profile;
 
 // Called just before a child folder puts itself on screen.
 - (void)childFolderWillShow:(id<BookmarkButtonControllerProtocol>)child;
@@ -252,17 +252,3 @@ class BookmarkNode;
 - (void)beginDrag:(NSEvent*)event;
 @end
 
-namespace bookmark_button {
-
-// Notifications for pulsing of bookmarks.
-extern NSString* const kPulseBookmarkButtonNotification;
-
-// Key for userInfo dict of a kPulseBookmarkButtonNotification.
-// Value is a [NSValue valueWithPointer:]; pointer is a (const BookmarkNode*).
-extern NSString* const kBookmarkKey;
-
-// Key for userInfo dict of a kPulseBookmarkButtonNotification.
-// Value is a [NSNumber numberWithBool:] to turn pulsing on or off.
-extern NSString* const kBookmarkPulseFlagKey;
-
-};

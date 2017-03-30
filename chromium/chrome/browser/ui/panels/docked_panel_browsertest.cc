@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/panels/base_panel_browser_test.h"
 #include "chrome/browser/ui/panels/docked_panel_collection.h"
@@ -146,13 +147,7 @@ IN_PROC_BROWSER_TEST_F(DockedPanelBrowserTest, MAYBE_SqueezeAndThenSomeMore) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_MinimizeSqueezedActive DISABLED_MinimizeSqueezedActive
-#else
-#define MAYBE_MinimizeSqueezedActive MinimizeSqueezedActive
-#endif
-IN_PROC_BROWSER_TEST_F(DockedPanelBrowserTest, MAYBE_MinimizeSqueezedActive) {
+IN_PROC_BROWSER_TEST_F(DockedPanelBrowserTest, MinimizeSqueezedActive) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
 
@@ -205,13 +200,7 @@ IN_PROC_BROWSER_TEST_F(DockedPanelBrowserTest, MAYBE_MinimizeSqueezedActive) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CloseSqueezedPanels DISABLED_CloseSqueezedPanels
-#else
-#define MAYBE_CloseSqueezedPanels CloseSqueezedPanels
-#endif
-IN_PROC_BROWSER_TEST_F(DockedPanelBrowserTest, MAYBE_CloseSqueezedPanels) {
+IN_PROC_BROWSER_TEST_F(DockedPanelBrowserTest, CloseSqueezedPanels) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   DockedPanelCollection* docked_collection = panel_manager->docked_collection();
 

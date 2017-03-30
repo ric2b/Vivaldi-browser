@@ -5,8 +5,11 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_TEST_AUTOFILL_CLIENT_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_TEST_AUTOFILL_CLIENT_H_
 
+#include <utility>
+
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "components/autofill/core/browser/autofill_client.h"
@@ -26,14 +29,22 @@ class TestAutofillClient : public AutofillClient {
   PersonalDataManager* GetPersonalDataManager() override;
   scoped_refptr<AutofillWebDataService> GetDatabase() override;
   PrefService* GetPrefs() override;
+  sync_driver::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporService* GetRapporService() override;
   void HideRequestAutocompleteDialog() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         base::WeakPtr<CardUnmaskDelegate> delegate) override;
-  void OnUnmaskVerificationResult(GetRealPanResult result) override;
-  void ConfirmSaveCreditCard(const base::Closure& save_card_callback) override;
+  void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
+  void ConfirmSaveCreditCardLocally(const CreditCard& card,
+                                    const base::Closure& callback) override;
+  void ConfirmSaveCreditCardToCloud(
+      const CreditCard& card,
+      scoped_ptr<base::DictionaryValue> legal_message,
+      const base::Closure& callback) override;
+  void LoadRiskData(
+      const base::Callback<void(const std::string&)>& callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(const CreditCardScanCallback& callback) override;
   void ShowRequestAutocompleteDialog(const FormData& form,
@@ -55,14 +66,13 @@ class TestAutofillClient : public AutofillClient {
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
   void OnFirstUserGestureObserved() override;
-  void LinkClicked(const GURL& url, WindowOpenDisposition disposition) override;
   bool IsContextSecure(const GURL& form_origin) override;
 
   void set_is_context_secure(bool is_context_secure) {
     is_context_secure_ = is_context_secure;
   };
 
-  void SetPrefs(scoped_ptr<PrefService> prefs) { prefs_ = prefs.Pass(); }
+  void SetPrefs(scoped_ptr<PrefService> prefs) { prefs_ = std::move(prefs); }
 
   rappor::TestRapporService* test_rappor_service() {
     return rappor_service_.get();

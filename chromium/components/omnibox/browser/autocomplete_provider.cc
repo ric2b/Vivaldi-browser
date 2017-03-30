@@ -8,7 +8,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "net/base/net_util.h"
 #include "url/gurl.h"
 
@@ -39,6 +39,8 @@ const char* AutocompleteProvider::TypeToString(Type type) {
       return "Shortcuts";
     case TYPE_ZERO_SUGGEST:
       return "ZeroSuggest";
+    case TYPE_CLIPBOARD_URL:
+      return "ClipboardURL";
     default:
       NOTREACHED() << "Unhandled AutocompleteProvider::Type " << type;
       return "Unknown";
@@ -73,6 +75,8 @@ metrics::OmniboxEventProto_ProviderType AutocompleteProvider::
       return metrics::OmniboxEventProto::SHORTCUTS;
     case TYPE_ZERO_SUGGEST:
       return metrics::OmniboxEventProto::ZERO_SUGGEST;
+    case TYPE_CLIPBOARD_URL:
+      return metrics::OmniboxEventProto::CLIPBOARD_URL;
     default:
       NOTREACHED() << "Unhandled AutocompleteProvider::Type " << type_;
       return metrics::OmniboxEventProto::UNKNOWN_PROVIDER;
@@ -102,7 +106,7 @@ AutocompleteProvider::FixupReturn AutocompleteProvider::FixupUserInput(
 
   // Fixup and canonicalize user input.
   const GURL canonical_gurl(
-      url_fixer::FixupURL(base::UTF16ToUTF8(input_text), std::string()));
+      url_formatter::FixupURL(base::UTF16ToUTF8(input_text), std::string()));
   std::string canonical_gurl_str(canonical_gurl.possibly_invalid_spec());
   if (canonical_gurl_str.empty()) {
     // This probably won't happen, but there are no guarantees.

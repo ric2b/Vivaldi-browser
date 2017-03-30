@@ -12,6 +12,7 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/prefs/pref_member.h"
@@ -28,6 +29,8 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
+
+class AccountId;
 
 namespace chromeos {
 
@@ -107,7 +110,7 @@ class MagnificationManagerImpl : public MagnificationManager,
   void SetProfileForTest(Profile* profile) override { SetProfile(profile); }
 
   // SessionStateObserver overrides:
-  void ActiveUserChanged(const std::string& user_id) override {
+  void ActiveUserChanged(const AccountId& account_id) override {
     SetProfile(ProfileManager::GetActiveUserProfile());
   }
 

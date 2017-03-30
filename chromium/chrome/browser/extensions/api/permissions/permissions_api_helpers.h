@@ -27,11 +27,11 @@ namespace permissions_api_helpers {
 
 // Converts the permission |set| to a permissions object.
 scoped_ptr<api::permissions::Permissions> PackPermissionSet(
-    const PermissionSet* set);
+    const PermissionSet& set);
 
 // Creates a permission set from |permissions|. Returns NULL if the permissions
 // cannot be converted to a permission set, in which case |error| will be set.
-scoped_refptr<PermissionSet> UnpackPermissionSet(
+scoped_ptr<const PermissionSet> UnpackPermissionSet(
     const api::permissions::Permissions& permissions,
     bool allow_file_access,
     std::string* error);

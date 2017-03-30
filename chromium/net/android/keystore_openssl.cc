@@ -14,7 +14,6 @@
 #include <stdint.h>
 
 #include "base/android/build_info.h"
-#include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -72,7 +71,7 @@ extern const ECDSA_METHOD android_ecdsa_method;
 // EC_KEY objects that are created to wrap Android system keys.
 struct KeyExData {
   // private_key contains a reference to a Java, private-key object.
-  jobject private_key;
+  ScopedJavaGlobalRef<jobject> private_key;
   // legacy_rsa, if not NULL, points to an RSA* in the system's OpenSSL (which
   // might not be ABI compatible with Chromium).
   AndroidRSA* legacy_rsa;
@@ -104,10 +103,7 @@ void ExDataFree(void* parent,
   // Ensure the global JNI reference created with this wrapper is
   // properly destroyed with it.
   KeyExData *ex_data = reinterpret_cast<KeyExData*>(ptr);
-  if (ex_data != NULL) {
-    ReleaseKey(ex_data->private_key);
-    delete ex_data;
-  }
+  delete ex_data;
 }
 
 // BoringSSLEngine is a BoringSSL ENGINE that implements RSA and ECDSA by
@@ -176,7 +172,7 @@ int RsaMethodEncrypt(RSA* rsa,
                      size_t in_len,
                      int padding) {
   NOTIMPLEMENTED();
-  OPENSSL_PUT_ERROR(RSA, encrypt, RSA_R_UNKNOWN_ALGORITHM_TYPE);
+  OPENSSL_PUT_ERROR(RSA, RSA_R_UNKNOWN_ALGORITHM_TYPE);
   return 0;
 }
 
@@ -196,15 +192,15 @@ int RsaMethodSignRaw(RSA* rsa,
     // the same Android version as the "NONEwithRSA"
     // java.security.Signature algorithm, so the same version checks
     // for GetRsaLegacyKey should work.
-    OPENSSL_PUT_ERROR(RSA, sign_raw, RSA_R_UNKNOWN_PADDING_TYPE);
+    OPENSSL_PUT_ERROR(RSA, RSA_R_UNKNOWN_PADDING_TYPE);
     return 0;
   }
 
   // Retrieve private key JNI reference.
   const KeyExData *ex_data = RsaGetExData(rsa);
-  if (!ex_data || !ex_data->private_key) {
+  if (!ex_data || !ex_data->private_key.obj()) {
     LOG(WARNING) << "Null JNI reference passed to RsaMethodSignRaw!";
-    OPENSSL_PUT_ERROR(RSA, sign_raw, ERR_R_INTERNAL_ERROR);
+    OPENSSL_PUT_ERROR(RSA, ERR_R_INTERNAL_ERROR);
     return 0;
   }
 
@@ -221,7 +217,7 @@ int RsaMethodSignRaw(RSA* rsa,
       // if there were some way to convince Java to do it. (Without going
       // through Java, it's difficult to get a handle on a system OpenSSL
       // function; dlopen loads a second copy.)
-      OPENSSL_PUT_ERROR(RSA, sign_raw, ERR_R_INTERNAL_ERROR);
+      OPENSSL_PUT_ERROR(RSA, ERR_R_INTERNAL_ERROR);
       return 0;
     }
     *out_len = ret;
@@ -232,9 +228,10 @@ int RsaMethodSignRaw(RSA* rsa,
   std::vector<uint8_t> result;
   // For RSA keys, this function behaves as RSA_private_encrypt with
   // PKCS#1 padding.
-  if (!RawSignDigestWithPrivateKey(ex_data->private_key, from_piece, &result)) {
+  if (!RawSignDigestWithPrivateKey(ex_data->private_key.obj(), from_piece,
+                                   &result)) {
     LOG(WARNING) << "Could not sign message in RsaMethodSignRaw!";
-    OPENSSL_PUT_ERROR(RSA, sign_raw, ERR_R_INTERNAL_ERROR);
+    OPENSSL_PUT_ERROR(RSA, ERR_R_INTERNAL_ERROR);
     return 0;
   }
 
@@ -242,12 +239,12 @@ int RsaMethodSignRaw(RSA* rsa,
   if (result.size() > expected_size) {
     LOG(ERROR) << "RSA Signature size mismatch, actual: "
                <<  result.size() << ", expected <= " << expected_size;
-    OPENSSL_PUT_ERROR(RSA, sign_raw, ERR_R_INTERNAL_ERROR);
+    OPENSSL_PUT_ERROR(RSA, ERR_R_INTERNAL_ERROR);
     return 0;
   }
 
   if (max_out < expected_size) {
-    OPENSSL_PUT_ERROR(RSA, sign_raw, RSA_R_DATA_TOO_LARGE);
+    OPENSSL_PUT_ERROR(RSA, RSA_R_DATA_TOO_LARGE);
     return 0;
   }
 
@@ -269,7 +266,7 @@ int RsaMethodDecrypt(RSA* rsa,
                      size_t in_len,
                      int padding) {
   NOTIMPLEMENTED();
-  OPENSSL_PUT_ERROR(RSA, decrypt, RSA_R_UNKNOWN_ALGORITHM_TYPE);
+  OPENSSL_PUT_ERROR(RSA, RSA_R_UNKNOWN_ALGORITHM_TYPE);
   return 0;
 }
 
@@ -281,7 +278,7 @@ int RsaMethodVerifyRaw(RSA* rsa,
                        size_t in_len,
                        int padding) {
   NOTIMPLEMENTED();
-  OPENSSL_PUT_ERROR(RSA, verify_raw, RSA_R_UNKNOWN_ALGORITHM_TYPE);
+  OPENSSL_PUT_ERROR(RSA, RSA_R_UNKNOWN_ALGORITHM_TYPE);
   return 0;
 }
 
@@ -326,32 +323,28 @@ crypto::ScopedEVP_PKEY CreateRsaPkeyWrapper(
   crypto::ScopedRSA rsa(
       RSA_new_method(global_boringssl_engine.Get().engine()));
 
-  ScopedJavaGlobalRef<jobject> global_key;
-  global_key.Reset(NULL, private_key);
-  if (global_key.is_null()) {
-    LOG(ERROR) << "Could not create global JNI reference";
-    return crypto::ScopedEVP_PKEY();
-  }
-
   std::vector<uint8_t> modulus;
   if (!GetRSAKeyModulus(private_key, &modulus)) {
     LOG(ERROR) << "Failed to get private key modulus";
-    return crypto::ScopedEVP_PKEY();
+    return nullptr;
   }
 
-  KeyExData* ex_data = new KeyExData;
-  ex_data->private_key = global_key.Release();
+  scoped_ptr<KeyExData> ex_data(new KeyExData);
+  ex_data->private_key.Reset(nullptr, private_key);
+  if (ex_data->private_key.is_null()) {
+    LOG(ERROR) << "Could not create global JNI reference";
+    return nullptr;
+  }
   ex_data->legacy_rsa = legacy_rsa;
   ex_data->cached_size = VectorBignumSize(modulus);
-  RSA_set_ex_data(
-      rsa.get(), global_boringssl_engine.Get().rsa_ex_index(), ex_data);
+
+  RSA_set_ex_data(rsa.get(), global_boringssl_engine.Get().rsa_ex_index(),
+                  ex_data.release());
 
   crypto::ScopedEVP_PKEY pkey(EVP_PKEY_new());
-  if (!pkey ||
-      !EVP_PKEY_set1_RSA(pkey.get(), rsa.get())) {
-    return crypto::ScopedEVP_PKEY();
-  }
-  return pkey.Pass();
+  if (!pkey || !EVP_PKEY_set1_RSA(pkey.get(), rsa.get()))
+    return nullptr;
+  return pkey;
 }
 
 // On Android < 4.2, the libkeystore.so ENGINE uses CRYPTO_EX_DATA and is not
@@ -435,7 +428,7 @@ crypto::ScopedEVP_PKEY GetRsaPkeyWrapper(jobject private_key) {
 jobject EcKeyGetKey(const EC_KEY* ec_key) {
   KeyExData* ex_data = reinterpret_cast<KeyExData*>(EC_KEY_get_ex_data(
       ec_key, global_boringssl_engine.Get().ec_key_ex_index()));
-  return ex_data->private_key;
+  return ex_data->private_key.obj();
 }
 
 size_t EcdsaMethodGroupOrderSize(const EC_KEY* ec_key) {
@@ -485,7 +478,7 @@ int EcdsaMethodVerify(const uint8_t* digest,
                       size_t sig_len,
                       EC_KEY* ec_key) {
   NOTIMPLEMENTED();
-  OPENSSL_PUT_ERROR(ECDSA, ECDSA_do_verify, ECDSA_R_NOT_IMPLEMENTED);
+  OPENSSL_PUT_ERROR(ECDSA, ECDSA_R_NOT_IMPLEMENTED);
   return 0;
 }
 
@@ -500,33 +493,29 @@ crypto::ScopedEVP_PKEY GetEcdsaPkeyWrapper(jobject private_key) {
   crypto::ScopedEC_KEY ec_key(
       EC_KEY_new_method(global_boringssl_engine.Get().engine()));
 
-  ScopedJavaGlobalRef<jobject> global_key;
-  global_key.Reset(NULL, private_key);
-  if (global_key.is_null()) {
-    LOG(ERROR) << "Can't create global JNI reference";
-    return crypto::ScopedEVP_PKEY();
-  }
-
   std::vector<uint8_t> order;
   if (!GetECKeyOrder(private_key, &order)) {
     LOG(ERROR) << "Can't extract order parameter from EC private key";
-    return crypto::ScopedEVP_PKEY();
+    return nullptr;
   }
 
-  KeyExData* ex_data = new KeyExData;
-  ex_data->private_key = global_key.Release();
-  ex_data->legacy_rsa = NULL;
+  scoped_ptr<KeyExData> ex_data(new KeyExData);
+  ex_data->private_key.Reset(nullptr, private_key);
+  if (ex_data->private_key.is_null()) {
+    LOG(ERROR) << "Can't create global JNI reference";
+    return nullptr;
+  }
+  ex_data->legacy_rsa = nullptr;
   ex_data->cached_size = VectorBignumSize(order);
 
-  EC_KEY_set_ex_data(
-      ec_key.get(), global_boringssl_engine.Get().ec_key_ex_index(), ex_data);
+  EC_KEY_set_ex_data(ec_key.get(),
+                     global_boringssl_engine.Get().ec_key_ex_index(),
+                     ex_data.release());
 
   crypto::ScopedEVP_PKEY pkey(EVP_PKEY_new());
-  if (!pkey ||
-      !EVP_PKEY_set1_EC_KEY(pkey.get(), ec_key.get())) {
-    return crypto::ScopedEVP_PKEY();
-  }
-  return pkey.Pass();
+  if (!pkey || !EVP_PKEY_set1_EC_KEY(pkey.get(), ec_key.get()))
+    return nullptr;
+  return pkey;
 }
 
 const ECDSA_METHOD android_ecdsa_method = {

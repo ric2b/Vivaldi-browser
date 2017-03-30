@@ -4,8 +4,11 @@
 
 #include "media/base/test_helpers.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/pickle.h"
 #include "base/run_loop.h"
@@ -15,6 +18,7 @@
 #include "media/base/audio_buffer.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_util.h"
 #include "ui/gfx/geometry/rect.h"
 
 using ::testing::_;
@@ -126,8 +130,9 @@ static VideoDecoderConfig GetTestConfig(VideoCodec codec,
   gfx::Size natural_size = coded_size;
 
   return VideoDecoderConfig(codec, VIDEO_CODEC_PROFILE_UNKNOWN,
-      VideoFrame::YV12, coded_size, visible_rect, natural_size,
-      NULL, 0, is_encrypted);
+                            PIXEL_FORMAT_YV12, COLOR_SPACE_UNSPECIFIED,
+                            coded_size, visible_rect, natural_size,
+                            EmptyExtraData(), is_encrypted);
 }
 
 static const gfx::Size kNormalSize(320, 240);
@@ -214,9 +219,9 @@ scoped_refptr<AudioBuffer> MakeAudioBuffer(SampleFormat format,
       type increment,                                        \
       size_t frames,                                         \
       base::TimeDelta start_time)
-DEFINE_MAKE_AUDIO_BUFFER_INSTANCE(uint8);
-DEFINE_MAKE_AUDIO_BUFFER_INSTANCE(int16);
-DEFINE_MAKE_AUDIO_BUFFER_INSTANCE(int32);
+DEFINE_MAKE_AUDIO_BUFFER_INSTANCE(uint8_t);
+DEFINE_MAKE_AUDIO_BUFFER_INSTANCE(int16_t);
+DEFINE_MAKE_AUDIO_BUFFER_INSTANCE(int32_t);
 DEFINE_MAKE_AUDIO_BUFFER_INSTANCE(float);
 
 static const char kFakeVideoBufferHeader[] = "FakeVideoBufferForTest";
@@ -230,9 +235,9 @@ scoped_refptr<DecoderBuffer> CreateFakeVideoBufferForTest(
   pickle.WriteInt(config.coded_size().height());
   pickle.WriteInt64(timestamp.InMilliseconds());
 
-  scoped_refptr<DecoderBuffer> buffer = DecoderBuffer::CopyFrom(
-      static_cast<const uint8*>(pickle.data()),
-      static_cast<int>(pickle.size()));
+  scoped_refptr<DecoderBuffer> buffer =
+      DecoderBuffer::CopyFrom(static_cast<const uint8_t*>(pickle.data()),
+                              static_cast<int>(pickle.size()));
   buffer->set_timestamp(timestamp);
   buffer->set_duration(duration);
   buffer->set_is_key_frame(true);
@@ -244,8 +249,9 @@ bool VerifyFakeVideoBufferForTest(
     const scoped_refptr<DecoderBuffer>& buffer,
     const VideoDecoderConfig& config) {
   // Check if the input |buffer| matches the |config|.
-  base::PickleIterator pickle(base::Pickle(
-      reinterpret_cast<const char*>(buffer->data()), buffer->data_size()));
+  base::PickleIterator pickle(
+      base::Pickle(reinterpret_cast<const char*>(buffer->data()),
+                   static_cast<int>(buffer->data_size())));
   std::string header;
   int width = 0;
   int height = 0;
@@ -271,12 +277,6 @@ void CallbackPairChecker::RecordACalled() {
 void CallbackPairChecker::RecordBCalled() {
   EXPECT_TRUE(expecting_b_);
   expecting_b_ = false;
-}
-
-void AddLogEntryForTest(MediaLog::MediaLogLevel level,
-                        const std::string& message) {
-  DVLOG(1) << "Media log (" << MediaLog::MediaLogLevelToString(level)
-           << "): " << message;
 }
 
 }  // namespace media

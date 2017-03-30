@@ -7,69 +7,56 @@
 
 #include "ui/gl/gl_image.h"
 
-#if defined(OS_WIN) || defined(USE_X11) || defined(OS_ANDROID) || \
-    defined(USE_OZONE)
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#endif
+#include <stddef.h>
 
+#include "base/macros.h"
 #include "base/numerics/safe_math.h"
-#include "ui/gfx/gpu_memory_buffer.h"
+#include "ui/gfx/buffer_types.h"
 
-namespace gfx {
+namespace gl {
 
 class GL_EXPORT GLImageMemory : public GLImage {
  public:
-  GLImageMemory(const Size& size, unsigned internalformat);
-
-  static bool StrideInBytes(size_t width,
-                            GpuMemoryBuffer::Format format,
-                            size_t* stride_in_bytes);
+  GLImageMemory(const gfx::Size& size, unsigned internalformat);
 
   bool Initialize(const unsigned char* memory,
-                  GpuMemoryBuffer::Format format);
+                  gfx::BufferFormat format,
+                  size_t stride);
 
   // Overridden from GLImage:
   void Destroy(bool have_context) override;
-  Size GetSize() override;
+  gfx::Size GetSize() override;
   unsigned GetInternalFormat() override;
   bool BindTexImage(unsigned target) override;
   void ReleaseTexImage(unsigned target) override {}
+  bool CopyTexImage(unsigned target) override;
   bool CopyTexSubImage(unsigned target,
-                       const Point& offset,
-                       const Rect& rect) override;
-  void WillUseTexImage() override;
-  void DidUseTexImage() override;
-  void WillModifyTexImage() override {}
-  void DidModifyTexImage() override {}
-  bool ScheduleOverlayPlane(AcceleratedWidget widget,
+                       const gfx::Point& offset,
+                       const gfx::Rect& rect) override;
+  bool ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
                             int z_order,
-                            OverlayTransform transform,
-                            const Rect& bounds_rect,
-                            const RectF& crop_rect) override;
+                            gfx::OverlayTransform transform,
+                            const gfx::Rect& bounds_rect,
+                            const gfx::RectF& crop_rect) override;
+
+  static unsigned GetInternalFormatForTesting(gfx::BufferFormat format);
 
  protected:
   ~GLImageMemory() override;
 
- private:
-  void DoBindTexImage(unsigned target);
+  gfx::BufferFormat format() const { return format_; }
+  size_t stride() const { return stride_; }
 
-  const Size size_;
+ private:
+  const gfx::Size size_;
   const unsigned internalformat_;
   const unsigned char* memory_;
-  GpuMemoryBuffer::Format format_;
-  bool in_use_;
-  unsigned target_;
-  bool need_do_bind_tex_image_;
-#if defined(OS_WIN) || defined(USE_X11) || defined(OS_ANDROID) || \
-    defined(USE_OZONE)
-  unsigned egl_texture_id_;
-  EGLImageKHR egl_image_;
-#endif
+  gfx::BufferFormat format_;
+  size_t stride_;
 
   DISALLOW_COPY_AND_ASSIGN(GLImageMemory);
 };
 
-}  // namespace gfx
+}  // namespace gl
 
 #endif  // UI_GL_GL_IMAGE_MEMORY_H_

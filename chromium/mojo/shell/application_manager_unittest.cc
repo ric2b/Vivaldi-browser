@@ -2,61 +2,37 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "mojo/shell/application_manager.h"
+
+#include <utility>
+
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
-#include "mojo/application/public/cpp/application_connection.h"
-#include "mojo/application/public/cpp/application_delegate.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/interface_factory.h"
-#include "mojo/application/public/interfaces/service_provider.mojom.h"
+#include "base/run_loop.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/shell/application_loader.h"
-#include "mojo/shell/application_manager.h"
+#include "mojo/shell/connect_util.h"
 #include "mojo/shell/fetcher.h"
+#include "mojo/shell/package_manager.h"
+#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/application_delegate.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/interface_factory.h"
+#include "mojo/shell/public/interfaces/service_provider.mojom.h"
 #include "mojo/shell/test.mojom.h"
+#include "mojo/shell/test_package_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
 namespace shell {
-namespace {
+namespace test {
 
 const char kTestURLString[] = "test:testService";
 const char kTestAURLString[] = "test:TestA";
 const char kTestBURLString[] = "test:TestB";
-
-const char kTestMimeType[] = "test/mime-type";
-
-class TestMimeTypeFetcher : public Fetcher {
- public:
-  explicit TestMimeTypeFetcher(const FetchCallback& fetch_callback)
-      : Fetcher(fetch_callback), url_("xxx") {
-    loader_callback_.Run(make_scoped_ptr(this));
-  }
-  ~TestMimeTypeFetcher() override {}
-
-  // Fetcher:
-  const GURL& GetURL() const override { return url_; }
-  GURL GetRedirectURL() const override { return GURL("yyy"); }
-  GURL GetRedirectReferer() const override { return GURL(); }
-  URLResponsePtr AsURLResponse(base::TaskRunner* task_runner,
-                               uint32_t skip) override {
-    return URLResponse::New().Pass();
-  }
-  void AsPath(
-      base::TaskRunner* task_runner,
-      base::Callback<void(const base::FilePath&, bool)> callback) override {}
-  std::string MimeType() override { return kTestMimeType; }
-  bool HasMojoMagic() override { return false; }
-  bool PeekFirstLine(std::string* line) override { return false; }
-
- private:
-  const GURL url_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestMimeTypeFetcher);
-};
 
 struct TestContext {
   TestContext() : num_impls(0), num_loader_deletes(0) {}
@@ -70,24 +46,10 @@ void QuitClosure(bool* value) {
   base::MessageLoop::current()->QuitWhenIdle();
 }
 
-class QuitMessageLoopErrorHandler : public ErrorHandler {
- public:
-  QuitMessageLoopErrorHandler() {}
-  ~QuitMessageLoopErrorHandler() override {}
-
-  // |ErrorHandler| implementation:
-  void OnConnectionError() override {
-    base::MessageLoop::current()->QuitWhenIdle();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(QuitMessageLoopErrorHandler);
-};
-
 class TestServiceImpl : public TestService {
  public:
   TestServiceImpl(TestContext* context, InterfaceRequest<TestService> request)
-      : context_(context), binding_(this, request.Pass()) {
+      : context_(context), binding_(this, std::move(request)) {
     ++context_->num_impls;
   }
 
@@ -95,7 +57,7 @@ class TestServiceImpl : public TestService {
     --context_->num_impls;
     if (!base::MessageLoop::current()->is_running())
       return;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   // TestService implementation:
@@ -113,11 +75,11 @@ class TestServiceImpl : public TestService {
 class TestClient {
  public:
   explicit TestClient(TestServicePtr service)
-      : service_(service.Pass()), quit_after_ack_(false) {}
+      : service_(std::move(service)), quit_after_ack_(false) {}
 
   void AckTest() {
     if (quit_after_ack_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void Test(const std::string& test_string) {
@@ -136,7 +98,8 @@ class TestApplicationLoader : public ApplicationLoader,
                               public ApplicationDelegate,
                               public InterfaceFactory<TestService> {
  public:
-  TestApplicationLoader() : context_(nullptr), num_loads_(0) {}
+  TestApplicationLoader()
+      : context_(nullptr), num_loads_(0) {}
 
   ~TestApplicationLoader() override {
     if (context_)
@@ -153,20 +116,20 @@ class TestApplicationLoader : public ApplicationLoader,
   void Load(const GURL& url,
             InterfaceRequest<Application> application_request) override {
     ++num_loads_;
-    test_app_.reset(new ApplicationImpl(this, application_request.Pass()));
+    test_app_.reset(new ApplicationImpl(this, std::move(application_request)));
   }
 
   // ApplicationDelegate implementation.
   bool ConfigureIncomingConnection(ApplicationConnection* connection) override {
-    connection->AddService(this);
+    connection->AddService<TestService>(this);
     last_requestor_url_ = GURL(connection->GetRemoteApplicationURL());
     return true;
   }
 
-  // InterfaceFactory implementation.
+  // InterfaceFactory<TestService> implementation.
   void Create(ApplicationConnection* connection,
               InterfaceRequest<TestService> request) override {
-    new TestServiceImpl(context_, request.Pass());
+    new TestServiceImpl(context_, std::move(request));
   }
 
   scoped_ptr<ApplicationImpl> test_app_;
@@ -285,10 +248,9 @@ class TestAImpl : public TestA {
   TestAImpl(ApplicationImpl* app_impl,
             TesterContext* test_context,
             InterfaceRequest<TestA> request)
-      : test_context_(test_context), binding_(this, request.Pass()) {
-    mojo::URLRequestPtr request2(mojo::URLRequest::New());
-    request2->url = mojo::String::From(kTestBURLString);
-    app_impl->ConnectToApplication(request2.Pass())->ConnectToService(&b_);
+      : test_context_(test_context), binding_(this, std::move(request)) {
+    connection_ = app_impl->ConnectToApplication(kTestBURLString);
+    connection_->ConnectToService(&b_);
   }
 
   ~TestAImpl() override {
@@ -307,11 +269,12 @@ class TestAImpl : public TestA {
   }
 
   void Quit() {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     test_context_->set_a_called_quit();
     test_context_->QuitSoon();
   }
 
+  scoped_ptr<ApplicationConnection> connection_;
   TesterContext* test_context_;
   TestBPtr b_;
   StrongBinding<TestA> binding_;
@@ -322,14 +285,14 @@ class TestBImpl : public TestB {
   TestBImpl(ApplicationConnection* connection,
             TesterContext* test_context,
             InterfaceRequest<TestB> request)
-      : test_context_(test_context), binding_(this, request.Pass()) {
+      : test_context_(test_context), binding_(this, std::move(request)) {
     connection->ConnectToService(&c_);
   }
 
   ~TestBImpl() override {
     test_context_->IncrementNumBDeletes();
     if (base::MessageLoop::current()->is_running())
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
     test_context_->QuitSoon();
   }
 
@@ -354,7 +317,7 @@ class TestCImpl : public TestC {
   TestCImpl(ApplicationConnection* connection,
             TesterContext* test_context,
             InterfaceRequest<TestC> request)
-      : test_context_(test_context), binding_(this, request.Pass()) {}
+      : test_context_(test_context), binding_(this, std::move(request)) {}
 
   ~TestCImpl() override { test_context_->IncrementNumCDeletes(); }
 
@@ -381,7 +344,7 @@ class Tester : public ApplicationDelegate,
  private:
   void Load(const GURL& url,
             InterfaceRequest<Application> application_request) override {
-    app_.reset(new ApplicationImpl(this, application_request.Pass()));
+    app_.reset(new ApplicationImpl(this, std::move(application_request)));
   }
 
   bool ConfigureIncomingConnection(ApplicationConnection* connection) override {
@@ -389,7 +352,7 @@ class Tester : public ApplicationDelegate,
         requestor_url_ != connection->GetRemoteApplicationURL()) {
       context_->set_tester_called_quit();
       context_->QuitSoon();
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
       return false;
     }
     // If we're coming from A, then add B, otherwise A.
@@ -409,66 +372,24 @@ class Tester : public ApplicationDelegate,
 
   void Create(ApplicationConnection* connection,
               InterfaceRequest<TestA> request) override {
-    a_bindings_.push_back(new TestAImpl(app_.get(), context_, request.Pass()));
+    a_bindings_.push_back(
+        new TestAImpl(app_.get(), context_, std::move(request)));
   }
 
   void Create(ApplicationConnection* connection,
               InterfaceRequest<TestB> request) override {
-    new TestBImpl(connection, context_, request.Pass());
+    new TestBImpl(connection, context_, std::move(request));
   }
 
   void Create(ApplicationConnection* connection,
               InterfaceRequest<TestC> request) override {
-    new TestCImpl(connection, context_, request.Pass());
+    new TestCImpl(connection, context_, std::move(request));
   }
 
   TesterContext* context_;
   scoped_ptr<ApplicationImpl> app_;
   std::string requestor_url_;
   ScopedVector<TestAImpl> a_bindings_;
-};
-
-class TestDelegate : public ApplicationManager::Delegate {
- public:
-  TestDelegate() : create_test_fetcher_(false) {}
-  ~TestDelegate() override {}
-
-  void AddMapping(const GURL& from, const GURL& to) { mappings_[from] = to; }
-
-  void set_create_test_fetcher(bool create_test_fetcher) {
-    create_test_fetcher_ = create_test_fetcher;
-  }
-
-  // ApplicationManager::Delegate
-  GURL ResolveMappings(const GURL& url) override {
-    auto it = mappings_.find(url);
-    if (it != mappings_.end())
-      return it->second;
-    return url;
-  }
-  GURL ResolveMojoURL(const GURL& url) override {
-    GURL mapped_url = ResolveMappings(url);
-    // The shell automatically map mojo URLs.
-    if (mapped_url.scheme() == "mojo") {
-      url::Replacements<char> replacements;
-      replacements.SetScheme("file", url::Component(0, 4));
-      mapped_url = mapped_url.ReplaceComponents(replacements);
-    }
-    return mapped_url;
-  }
-  bool CreateFetcher(const GURL& url,
-                     const Fetcher::FetchCallback& loader_callback) override {
-    if (!create_test_fetcher_)
-      return false;
-    new TestMimeTypeFetcher(loader_callback);
-    return true;
-  }
-
- private:
-  std::map<GURL, GURL> mappings_;
-  bool create_test_fetcher_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestDelegate);
 };
 
 class ApplicationManagerTest : public testing::Test {
@@ -478,16 +399,17 @@ class ApplicationManagerTest : public testing::Test {
   ~ApplicationManagerTest() override {}
 
   void SetUp() override {
-    application_manager_.reset(new ApplicationManager(&test_delegate_));
+    application_manager_.reset(new ApplicationManager(
+        make_scoped_ptr(new TestPackageManager)));
     test_loader_ = new TestApplicationLoader;
     test_loader_->set_context(&context_);
     application_manager_->set_default_loader(
         scoped_ptr<ApplicationLoader>(test_loader_));
 
     TestServicePtr service_proxy;
-    application_manager_->ConnectToService(GURL(kTestURLString),
-                                           &service_proxy);
-    test_client_.reset(new TestClient(service_proxy.Pass()));
+    ConnectToService(application_manager_.get(), GURL(kTestURLString),
+                     &service_proxy);
+    test_client_.reset(new TestClient(std::move(service_proxy)));
   }
 
   void TearDown() override {
@@ -500,14 +422,13 @@ class ApplicationManagerTest : public testing::Test {
         make_scoped_ptr(new Tester(&tester_context_, requestor_url)), url);
   }
 
-  bool HasFactoryForURL(const GURL& url) {
+  bool HasRunningInstanceForURL(const GURL& url) {
     ApplicationManager::TestAPI manager_test_api(application_manager_.get());
-    return manager_test_api.HasFactoryForURL(url);
+    return manager_test_api.HasRunningInstanceForURL(url);
   }
 
  protected:
   base::ShadowingAtExitManager at_exit_;
-  TestDelegate test_delegate_;
   TestApplicationLoader* test_loader_;
   TesterContext tester_context_;
   TestContext context_;
@@ -523,99 +444,55 @@ TEST_F(ApplicationManagerTest, Basic) {
   EXPECT_EQ(std::string("test"), context_.last_test_string);
 }
 
-// Confirm that url mappings are respected.
-TEST_F(ApplicationManagerTest, URLMapping) {
-  ApplicationManager am(&test_delegate_);
-  GURL test_url("test:test");
-  GURL test_url2("test:test2");
-  test_delegate_.AddMapping(test_url, test_url2);
-  TestApplicationLoader* loader = new TestApplicationLoader;
-  loader->set_context(&context_);
-  am.SetLoaderForURL(scoped_ptr<ApplicationLoader>(loader), test_url2);
-  {
-    // Connext to the mapped url
-    TestServicePtr test_service;
-    am.ConnectToService(test_url, &test_service);
-    TestClient test_client(test_service.Pass());
-    test_client.Test("test");
-    loop_.Run();
-  }
-  {
-    // Connext to the target url
-    TestServicePtr test_service;
-    am.ConnectToService(test_url2, &test_service);
-    TestClient test_client(test_service.Pass());
-    test_client.Test("test");
-    loop_.Run();
-  }
-}
-
 TEST_F(ApplicationManagerTest, ClientError) {
   test_client_->Test("test");
-  EXPECT_TRUE(HasFactoryForURL(GURL(kTestURLString)));
+  EXPECT_TRUE(HasRunningInstanceForURL(GURL(kTestURLString)));
   loop_.Run();
   EXPECT_EQ(1, context_.num_impls);
   test_client_.reset();
   loop_.Run();
   EXPECT_EQ(0, context_.num_impls);
-  EXPECT_TRUE(HasFactoryForURL(GURL(kTestURLString)));
+  EXPECT_TRUE(HasRunningInstanceForURL(GURL(kTestURLString)));
 }
 
 TEST_F(ApplicationManagerTest, Deletes) {
   {
-    ApplicationManager am(&test_delegate_);
+    ApplicationManager am(make_scoped_ptr(new TestPackageManager));
     TestApplicationLoader* default_loader = new TestApplicationLoader;
     default_loader->set_context(&context_);
     TestApplicationLoader* url_loader1 = new TestApplicationLoader;
     TestApplicationLoader* url_loader2 = new TestApplicationLoader;
     url_loader1->set_context(&context_);
     url_loader2->set_context(&context_);
-    TestApplicationLoader* scheme_loader1 = new TestApplicationLoader;
-    TestApplicationLoader* scheme_loader2 = new TestApplicationLoader;
-    scheme_loader1->set_context(&context_);
-    scheme_loader2->set_context(&context_);
     am.set_default_loader(scoped_ptr<ApplicationLoader>(default_loader));
     am.SetLoaderForURL(scoped_ptr<ApplicationLoader>(url_loader1),
                        GURL("test:test1"));
     am.SetLoaderForURL(scoped_ptr<ApplicationLoader>(url_loader2),
                        GURL("test:test1"));
-    am.SetLoaderForScheme(scoped_ptr<ApplicationLoader>(scheme_loader1),
-                          "test");
-    am.SetLoaderForScheme(scoped_ptr<ApplicationLoader>(scheme_loader2),
-                          "test");
   }
-  EXPECT_EQ(5, context_.num_loader_deletes);
+  EXPECT_EQ(3, context_.num_loader_deletes);
 }
 
-// Confirm that both urls and schemes can have their loaders explicitly set.
+// Test for SetLoaderForURL() & set_default_loader().
 TEST_F(ApplicationManagerTest, SetLoaders) {
   TestApplicationLoader* default_loader = new TestApplicationLoader;
   TestApplicationLoader* url_loader = new TestApplicationLoader;
-  TestApplicationLoader* scheme_loader = new TestApplicationLoader;
   application_manager_->set_default_loader(
       scoped_ptr<ApplicationLoader>(default_loader));
   application_manager_->SetLoaderForURL(
       scoped_ptr<ApplicationLoader>(url_loader), GURL("test:test1"));
-  application_manager_->SetLoaderForScheme(
-      scoped_ptr<ApplicationLoader>(scheme_loader), "test");
 
   // test::test1 should go to url_loader.
   TestServicePtr test_service;
-  application_manager_->ConnectToService(GURL("test:test1"), &test_service);
+  ConnectToService(application_manager_.get(), GURL("test:test1"),
+                   &test_service);
   EXPECT_EQ(1, url_loader->num_loads());
-  EXPECT_EQ(0, scheme_loader->num_loads());
-  EXPECT_EQ(0, default_loader->num_loads());
-
-  // test::test2 should go to scheme loader.
-  application_manager_->ConnectToService(GURL("test:test2"), &test_service);
-  EXPECT_EQ(1, url_loader->num_loads());
-  EXPECT_EQ(1, scheme_loader->num_loads());
   EXPECT_EQ(0, default_loader->num_loads());
 
   // http::test1 should go to default loader.
-  application_manager_->ConnectToService(GURL("http:test1"), &test_service);
+  ConnectToService(application_manager_.get(), GURL("http:test1"),
+                   &test_service);
   EXPECT_EQ(1, url_loader->num_loads());
-  EXPECT_EQ(1, scheme_loader->num_loads());
   EXPECT_EQ(1, default_loader->num_loads());
 }
 
@@ -629,7 +506,7 @@ TEST_F(ApplicationManagerTest, ACallB) {
   AddLoaderForURL(GURL(kTestBURLString), kTestAURLString);
 
   TestAPtr a;
-  application_manager_->ConnectToService(GURL(kTestAURLString), &a);
+  ConnectToService(application_manager_.get(), GURL(kTestAURLString), &a);
   a->CallB();
   loop_.Run();
   EXPECT_EQ(1, tester_context_.num_b_calls());
@@ -645,7 +522,7 @@ TEST_F(ApplicationManagerTest, BCallC) {
   AddLoaderForURL(GURL(kTestBURLString), kTestAURLString);
 
   TestAPtr a;
-  application_manager_->ConnectToService(GURL(kTestAURLString), &a);
+  ConnectToService(application_manager_.get(), GURL(kTestAURLString), &a);
   a->CallCFromB();
   loop_.Run();
 
@@ -661,7 +538,7 @@ TEST_F(ApplicationManagerTest, BDeleted) {
   AddLoaderForURL(GURL(kTestBURLString), std::string());
 
   TestAPtr a;
-  application_manager_->ConnectToService(GURL(kTestAURLString), &a);
+  ConnectToService(application_manager_.get(), GURL(kTestAURLString), &a);
 
   a->CallB();
   loop_.Run();
@@ -684,7 +561,7 @@ TEST_F(ApplicationManagerTest, ANoLoadB) {
   AddLoaderForURL(GURL(kTestBURLString), "test:TestC");
 
   TestAPtr a;
-  application_manager_->ConnectToService(GURL(kTestAURLString), &a);
+  ConnectToService(application_manager_.get(), GURL(kTestAURLString), &a);
   a->CallB();
   loop_.Run();
   EXPECT_EQ(0, tester_context_.num_b_calls());
@@ -699,116 +576,60 @@ TEST_F(ApplicationManagerTest, NoServiceNoLoad) {
   // There is no TestC service implementation registered with
   // ApplicationManager, so this cannot succeed (but also shouldn't crash).
   TestCPtr c;
-  application_manager_->ConnectToService(GURL(kTestAURLString), &c);
-  QuitMessageLoopErrorHandler quitter;
-  c.set_error_handler(&quitter);
+  ConnectToService(application_manager_.get(), GURL(kTestAURLString), &c);
+  c.set_connection_error_handler(
+      []() { base::MessageLoop::current()->QuitWhenIdle(); });
 
   loop_.Run();
   EXPECT_TRUE(c.encountered_error());
 }
 
-TEST_F(ApplicationManagerTest, MappedURLsShouldNotCauseDuplicateLoad) {
-  test_delegate_.AddMapping(GURL("foo:foo2"), GURL("foo:foo"));
-  // 1 because ApplicationManagerTest connects once at startup.
-  EXPECT_EQ(1, test_loader_->num_loads());
-
-  TestServicePtr test_service;
-  application_manager_->ConnectToService(GURL("foo:foo"), &test_service);
-  EXPECT_EQ(2, test_loader_->num_loads());
-
-  TestServicePtr test_service2;
-  application_manager_->ConnectToService(GURL("foo:foo2"), &test_service2);
-  EXPECT_EQ(2, test_loader_->num_loads());
-
-  TestServicePtr test_service3;
-  application_manager_->ConnectToService(GURL("bar:bar"), &test_service2);
-  EXPECT_EQ(3, test_loader_->num_loads());
-}
-
-TEST_F(ApplicationManagerTest, MappedURLsShouldWorkWithLoaders) {
-  TestApplicationLoader* custom_loader = new TestApplicationLoader;
-  TestContext context;
-  custom_loader->set_context(&context);
-  application_manager_->SetLoaderForURL(make_scoped_ptr(custom_loader),
-                                        GURL("mojo:foo"));
-  test_delegate_.AddMapping(GURL("mojo:foo2"), GURL("mojo:foo"));
-
-  TestServicePtr test_service;
-  application_manager_->ConnectToService(GURL("mojo:foo2"), &test_service);
-  EXPECT_EQ(1, custom_loader->num_loads());
-  custom_loader->set_context(nullptr);
-
-  EXPECT_TRUE(HasFactoryForURL(GURL("mojo:foo2")));
-  EXPECT_FALSE(HasFactoryForURL(GURL("mojo:foo")));
-}
-
-TEST_F(ApplicationManagerTest, TestQueryWithLoaders) {
-  TestApplicationLoader* url_loader = new TestApplicationLoader;
-  TestApplicationLoader* scheme_loader = new TestApplicationLoader;
-  application_manager_->SetLoaderForURL(
-      scoped_ptr<ApplicationLoader>(url_loader), GURL("test:test1"));
-  application_manager_->SetLoaderForScheme(
-      scoped_ptr<ApplicationLoader>(scheme_loader), "test");
-
-  // test::test1 should go to url_loader.
-  TestServicePtr test_service;
-  application_manager_->ConnectToService(GURL("test:test1?foo=bar"),
-                                         &test_service);
-  EXPECT_EQ(1, url_loader->num_loads());
-  EXPECT_EQ(0, scheme_loader->num_loads());
-
-  // test::test2 should go to scheme loader.
-  application_manager_->ConnectToService(GURL("test:test2?foo=bar"),
-                                         &test_service);
-  EXPECT_EQ(1, url_loader->num_loads());
-  EXPECT_EQ(1, scheme_loader->num_loads());
-}
-
 TEST_F(ApplicationManagerTest, TestEndApplicationClosure) {
   ClosingApplicationLoader* loader = new ClosingApplicationLoader();
-  application_manager_->SetLoaderForScheme(
-      scoped_ptr<ApplicationLoader>(loader), "test");
+  application_manager_->SetLoaderForURL(
+      scoped_ptr<ApplicationLoader>(loader), GURL("test:test"));
 
   bool called = false;
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From("test:test");
-  application_manager_->ConnectToApplication(
-      request.Pass(), std::string(), GURL(), nullptr, nullptr,
+  scoped_ptr<ConnectToApplicationParams> params(new ConnectToApplicationParams);
+  params->SetTargetURL(GURL("test:test"));
+  params->set_on_application_end(
       base::Bind(&QuitClosure, base::Unretained(&called)));
+  application_manager_->ConnectToApplication(std::move(params));
   loop_.Run();
   EXPECT_TRUE(called);
 }
 
-TEST(ApplicationManagerTest2, ContentHandlerConnectionGetsRequestorURL) {
-  const GURL content_handler_url("http://test.content.handler");
-  const GURL requestor_url("http://requestor.url");
-  TestContext test_context;
-  base::MessageLoop loop;
-  TestDelegate test_delegate;
-  test_delegate.set_create_test_fetcher(true);
-  ApplicationManager application_manager(&test_delegate);
-  application_manager.set_default_loader(nullptr);
-  application_manager.RegisterContentHandler(kTestMimeType,
-                                             content_handler_url);
+TEST_F(ApplicationManagerTest, SameIdentityShouldNotCauseDuplicateLoad) {
+  // 1 because ApplicationManagerTest connects once at startup.
+  EXPECT_EQ(1, test_loader_->num_loads());
 
-  TestApplicationLoader* loader = new TestApplicationLoader;
-  loader->set_context(&test_context);
-  application_manager.SetLoaderForURL(scoped_ptr<ApplicationLoader>(loader),
-                                      content_handler_url);
+  TestServicePtr test_service;
+  ConnectToService(application_manager_.get(),
+                   GURL("http://www.example.org/abc?def"), &test_service);
+  EXPECT_EQ(2, test_loader_->num_loads());
 
-  bool called = false;
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From("test:test");
-  application_manager.ConnectToApplication(
-      request.Pass(), std::string(), requestor_url, nullptr, nullptr,
-      base::Bind(&QuitClosure, base::Unretained(&called)));
-  loop.Run();
-  EXPECT_TRUE(called);
+  // Exactly the same URL as above.
+  ConnectToService(application_manager_.get(),
+                   GURL("http://www.example.org/abc?def"), &test_service);
+  EXPECT_EQ(2, test_loader_->num_loads());
 
-  ASSERT_EQ(1, loader->num_loads());
-  EXPECT_EQ(requestor_url, loader->last_requestor_url());
+  // The same identity as the one above because only the query string is
+  // different.
+  ConnectToService(application_manager_.get(),
+                   GURL("http://www.example.org/abc"), &test_service);
+  EXPECT_EQ(2, test_loader_->num_loads());
+
+  // A different identity because the path is different.
+  ConnectToService(application_manager_.get(),
+                   GURL("http://www.example.org/another_path"), &test_service);
+  EXPECT_EQ(3, test_loader_->num_loads());
+
+  // A different identity because the domain is different.
+  ConnectToService(application_manager_.get(),
+                   GURL("http://www.another_domain.org/abc"), &test_service);
+  EXPECT_EQ(4, test_loader_->num_loads());
 }
 
-}  // namespace
+}  // namespace test
 }  // namespace shell
 }  // namespace mojo

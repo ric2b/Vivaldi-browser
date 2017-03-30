@@ -4,6 +4,9 @@
 
 #include "ui/aura/window_targeter.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -41,7 +44,7 @@ class WindowTargeterTest : public test::AuraTestBase {
 };
 
 gfx::RectF GetEffectiveVisibleBoundsInRootWindow(Window* window) {
-  gfx::RectF bounds = gfx::Rect(window->bounds().size());
+  gfx::RectF bounds = gfx::RectF(gfx::SizeF(window->bounds().size()));
   Window* root = window->GetRootWindow();
   CHECK(window->layer());
   CHECK(root->layer());
@@ -240,7 +243,7 @@ TEST_F(WindowTargeterTest, Bounds) {
   EXPECT_EQ(child_r, targeter->FindTargetForEvent(root_target, &mouse3));
 
   // restore original WindowTargeter for |child|.
-  child_r->SetEventTargeter(original_targeter.Pass());
+  child_r->SetEventTargeter(std::move(original_targeter));
 
   // Target |grandchild| location.
   ui::MouseEvent second(ui::ET_MOUSE_MOVED, gfx::Point(12, 12),

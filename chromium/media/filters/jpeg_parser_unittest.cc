@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/at_exit.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/path_service.h"
@@ -76,6 +78,7 @@ TEST(JpegParserTest, Parsing) {
   EXPECT_EQ(1, result.scan.components[2].dc_selector);
   EXPECT_EQ(1, result.scan.components[2].ac_selector);
   EXPECT_EQ(121150u, result.data_size);
+  EXPECT_EQ(121358u, result.image_size);
 }
 
 TEST(JpegParserTest, CodedSizeNotEqualVisibleSize) {

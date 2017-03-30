@@ -36,7 +36,9 @@
     <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input-container.html">
     <link rel="import" href="chrome://resources/polymer/v1_0/paper-progress/paper-progress.html">
     <link rel="import" href="chrome://resources/polymer/v1_0/paper-ripple/paper-ripple.html">
+    <link rel="import" href="foreground/elements/files_ripple.html">
     <link rel="import" href="foreground/elements/files_toggle_ripple.html">
+    <link rel="import" href="foreground/elements/files_tooltip.html">
   </head>
 
   <body tabindex="-1">
@@ -98,11 +100,12 @@
                i18n-values="label:TOGGLE_HIDDEN_FILES_COMMAND_LABEL"
                shortcut="U+00BE-Ctrl" hide-shortcut-text>
 
+      <command id="default-task">
       <command id="open-with" i18n-values="label:OPEN_WITH_BUTTON_LABEL">
       <command id="zip-selection"
                i18n-values="label:ZIP_SELECTION_BUTTON_LABEL">
 
-      <command id="share" i18n-values="label:SHARE_BUTTON_LABEL" disabled
+      <command id="share" i18n-values="label:SHARE_BUTTON_LABEL" disabled hidden
                shortcut="U+00BE" hide-shortcut-text><!-- Shortcut: '.' -->
 
       <command id="zoom-in" shortcut="U+00BB-Ctrl">
@@ -124,16 +127,14 @@
                i18n-values="label:INSTALL_NEW_EXTENSION_LABEL">
     </commands>
 
-    <cr-menu id="file-context-menu" class="chrome-menu" showShortcuts>
-      <cr-menu-item id="default-action"
+    <cr-menu id="file-context-menu" class="chrome-menu files-menu"
+             menu-item-selector="cr-menu-item,hr" showShortcuts>
+      <cr-menu-item id="default-task-menu-item" command="#default-task"
                 visibleif="full-page" hidden></cr-menu-item>
       <cr-menu-item command="#open-with"
                 visibleif="full-page" hidden></cr-menu-item>
-      <hr id="default-action-separator" visibleif="full-page" hidden>
-      <cr-menu-item command="#toggle-pinned" checkable></cr-menu-item>
-      <cr-menu-item command="#share"></cr-menu-item>
-      <cr-menu-item command="#create-folder-shortcut"></cr-menu-item>
-      <hr command="#share">
+      <hr id="tasks-separator" visibleif="full-page" hidden>
+      <hr id="actions-separator" hidden>
       <cr-menu-item command="#cut" visibleif="full-page"></cr-menu-item>
       <cr-menu-item command="#copy" visibleif="full-page"></cr-menu-item>
       <cr-menu-item command="#paste" visibleif="full-page"></cr-menu-item>
@@ -147,19 +148,29 @@
                 visibleif="saveas-file full-page"></cr-menu-item>
     </cr-menu>
 
-    <cr-menu id="roots-context-menu" class="chrome-menu" >
+    <cr-menu id="roots-context-menu" class="chrome-menu files-menu"
+             menu-item-selector="cr-menu-item">
       <cr-menu-item command="#configure"></cr-menu-item>
       <cr-menu-item command="#unmount"></cr-menu-item>
       <cr-menu-item command="#format"></cr-menu-item>
       <cr-menu-item command="#remove-folder-shortcut"></cr-menu-item>
     </cr-menu>
 
-    <cr-menu id="directory-tree-context-menu" class="chrome-menu" >
+    <cr-menu id="directory-tree-context-menu" class="chrome-menu files-menu"
+             menu-item-selector="cr-menu-item,hr">
       <cr-menu-item command="#create-folder-shortcut"></cr-menu-item>
+      <cr-menu-item command="#cut" visibleif="full-page"></cr-menu-item>
+      <cr-menu-item command="#copy" visibleif="full-page"></cr-menu-item>
+      <cr-menu-item command="#paste-into-folder" visibleif="full-page"></cr-menu-item>
+      <hr visibleif="full-page">
+      <cr-menu-item command="#rename"></cr-menu-item>
       <cr-menu-item command="#delete" i18n-content="DELETE_BUTTON_LABEL"></cr-menu-item>
+      <hr visibleif="saveas-file full-page">
+      <cr-menu-item command="#new-folder" visibleif="saveas-file full-page"></cr-menu-item>
     </cr-menu>
 
-    <cr-menu id="sort-menu" class="chrome-menu" menu-item-selector="cr-menu-item">
+    <cr-menu id="sort-menu" class="chrome-menu files-menu"
+             menu-item-selector="cr-menu-item">
       <cr-menu-item id="sort-menu-sort-by-name"
                     command="#sort-by-name"></cr-menu-item>
       <cr-menu-item id="sort-menu-sort-by-size"
@@ -170,7 +181,7 @@
                     command="#sort-by-date"></cr-menu-item>
     </cr-menu>
 
-    <cr-menu id="gear-menu" class="chrome-menu" showShortcuts
+    <cr-menu id="gear-menu" class="chrome-menu files-menu" showShortcuts
              menu-item-selector="cr-menu-item, hr">
       <cr-menu-item id="gear-menu-newwindow" command="#new-window"></cr-menu-item>
       <cr-menu-item id="gear-menu-newfolder" command="#new-folder"></cr-menu-item>
@@ -200,12 +211,17 @@
       </div>
     </cr-menu>
 
-    <cr-menu id="tasks-menu" class="chrome-menu">
+    <cr-menu id="tasks-menu" class="chrome-menu files-menu"
+             menu-item-selector="cr-menu-item, hr">
     </cr-menu>
 
-    <cr-menu id="add-new-services-menu" class="chrome-menu"></cr-menu>
+    <cr-menu id="add-new-services-menu"
+             class="chrome-menu files-menu has-icon-start"
+             menu-item-selector="cr-menu-item, hr">
+    </cr-menu>
 
-    <cr-menu id="text-context-menu" class="chrome-menu" showShortcuts>
+    <cr-menu id="text-context-menu" class="chrome-menu files-menu" showShortcuts
+             menu-item-selector="cr-menu-item">
       <cr-menu-item command="#cut"></cr-menu-item>
       <cr-menu-item command="#copy"></cr-menu-item>
       <cr-menu-item command="#paste"></cr-menu-item>
@@ -232,14 +248,14 @@
               i18n-values="aria-label:SHARE_BUTTON_LABEL"
               visibleif="full-page"
               has-tooltip>
-        <paper-ripple fit class="recenteringTouch"></paper-ripple>
+        <files-ripple></files-ripple>
         <div class="icon"></div>
       </button>
       <button id="delete-button" class="icon-button" tabindex="11" hidden
               i18n-values="aria-label:DELETE_BUTTON_LABEL"
               visibleif="full-page"
               has-tooltip>
-        <paper-ripple fit class="recenteringTouch"></paper-ripple>
+        <files-ripple></files-ripple>
         <div class="icon"></div>
       </button>
       <button id="search-button" class="icon-button" tabindex="12"
@@ -258,7 +274,7 @@
       <button id="refresh-button" class="icon-button" tabindex="14" hidden
               i18n-values="aria-label:REFRESH_BUTTON_LABEL"
               command="#refresh" has-tooltip>
-        <paper-ripple fit class="recenteringTouch"></paper-ripple>
+        <files-ripple></files-ripple>
         <div class="icon"></div>
       </button>
       <div id="cloud-import-combo-button"
@@ -266,14 +282,14 @@
            hidden>
         <div class="buttons">
           <button id="cloud-import-button"
-                  class="icon-button manual-display"
+                  class="icon-button"
                   tabindex="15"
                   i18n-values="aria-label:CLOUD_IMPORT_COMMAND"
                   has-tooltip>
             <iron-icon icon="cloud-queue"></iron-icon>
           </button>
           <button id="cloud-import-details-button"
-                  class="icon-button manual-display"
+                  class="icon-button"
                   tabindex="-1"
                   i18n-values="aria-label:CLOUD_IMPORT_SHOW_DETAILS"
                   has-tooltip>
@@ -288,7 +304,7 @@
       <button id="view-button" class="icon-button" tabindex="16"
               i18n-values="aria-label:CHANGE_TO_THUMBNAILVIEW_BUTTON_LABEL"
               has-tooltip>
-        <paper-ripple fit class="recenteringTouch"></paper-ripple>
+        <files-ripple></files-ripple>
         <div class="icon"></div>
       </button>
       <button id="sort-button" class="icon-button" tabindex="17"
@@ -345,6 +361,7 @@
               </div>
               <div class="button-frame">
                 <button class="cancel" tabindex="-1"></button>
+                <button class="dismiss" tabindex="-1"></button>
                 <button class="open" tabindex="-1"></button>
               </div>
             </li>
@@ -398,9 +415,10 @@
       <div class="left">
         <!-- TODO(fukino): Turn this button into paper-button when the CommandButton supports paper-button. -->
         <button id="new-folder-button" class="primary"
-                i18n-content="NEW_FOLDER_BUTTON_LABEL"
                 visibleif="saveas-file folder" command="#new-folder"
                 tabindex="3" disabled>
+          <paper-ripple fit></paper-ripple>
+          <span i18n-content="NEW_FOLDER_BUTTON_LABEL"></span>
         </button>
         <div id="filename-input-box" visibleif="saveas-file">
           <paper-input-container no-label-float>
@@ -414,15 +432,18 @@
       </div>
       <div class="right buttonbar">
         <select class="file-type" hidden tabindex="-1"></select>
-        <button id="ok-button" class="ok primary" disabled tabindex="5"></button>
-        <button id="cancel-button" class="cancel secondary"
-                i18n-content="CANCEL_LABEL" tabindex="6"></button>
+        <button id="ok-button" class="ok primary" disabled tabindex="5">
+          <paper-ripple fit></paper-ripple>
+          <span></span>
+        </button>
+        <button id="cancel-button" class="cancel secondary" tabindex="6">
+          <paper-ripple fit></paper-ripple>
+          <span i18n-content="CANCEL_LABEL"></span>
+        </button>
       </div>
     </div>
     <div id="drag-container"></div>
-    <div id="tooltip">
-      <div id="tooltip-label"></div>
-    <div>
+    <files-tooltip></files-tooltip>
     <iframe id="command-dispatcher" hidden aria-hidden="true"></iframe>
 
     <script src="foreground/js/main_scripts.js"></script>

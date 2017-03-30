@@ -4,6 +4,10 @@
 
 #include "extensions/browser/api/app_runtime/app_runtime_api.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/metrics/histogram.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -20,7 +24,7 @@ using content::BrowserContext;
 
 namespace extensions {
 
-namespace app_runtime = core_api::app_runtime;
+namespace app_runtime = api::app_runtime;
 
 namespace {
 
@@ -32,10 +36,10 @@ void DispatchOnEmbedRequestedEventImpl(
   args->Append(app_embedding_request_data.release());
   scoped_ptr<Event> event(new Event(events::APP_RUNTIME_ON_EMBED_REQUESTED,
                                     app_runtime::OnEmbedRequested::kEventName,
-                                    args.Pass()));
+                                    std::move(args)));
   event->restrict_to_browser_context = context;
   EventRouter::Get(context)
-      ->DispatchEventWithLazyListener(extension_id, event.Pass());
+      ->DispatchEventWithLazyListener(extension_id, std::move(event));
 
   ExtensionPrefs::Get(context)
       ->SetLastLaunchTime(extension_id, base::Time::Now());
@@ -52,14 +56,19 @@ void DispatchOnLaunchedEventImpl(const std::string& extension_id,
   launch_data->SetBoolean(
       "isKioskSession",
       ExtensionsBrowserClient::Get()->IsRunningInForcedAppMode());
+
+  launch_data->SetBoolean(
+      "isPublicSession",
+      ExtensionsBrowserClient::Get()->IsLoggedInAsPublicAccount());
+
   scoped_ptr<base::ListValue> args(new base::ListValue());
   args->Append(launch_data.release());
   scoped_ptr<Event> event(new Event(events::APP_RUNTIME_ON_LAUNCHED,
                                     app_runtime::OnLaunched::kEventName,
-                                    args.Pass()));
+                                    std::move(args)));
   event->restrict_to_browser_context = context;
   EventRouter::Get(context)
-      ->DispatchEventWithLazyListener(extension_id, event.Pass());
+      ->DispatchEventWithLazyListener(extension_id, std::move(event));
   ExtensionPrefs::Get(context)
       ->SetLastLaunchTime(extension_id, base::Time::Now());
 }
@@ -93,7 +102,7 @@ app_runtime::LaunchSource getLaunchSourceEnum(
       return app_runtime::LAUNCH_SOURCE_EXTENSIONS_PAGE;
     case extensions::SOURCE_MANAGEMENT_API:
       return app_runtime::LAUNCH_SOURCE_MANAGEMENT_API;
-    case extensions::SOURCE_EPHEMERAL_APP:
+    case extensions::SOURCE_EPHEMERAL_APP_DEPRECATED:
       return app_runtime::LAUNCH_SOURCE_EPHEMERAL_APP;
     case extensions::SOURCE_BACKGROUND:
       return app_runtime::LAUNCH_SOURCE_BACKGROUND;
@@ -116,8 +125,8 @@ void AppRuntimeEventRouter::DispatchOnEmbedRequestedEvent(
     content::BrowserContext* context,
     scoped_ptr<base::DictionaryValue> embed_app_data,
     const Extension* extension) {
-  DispatchOnEmbedRequestedEventImpl(
-      extension->id(), embed_app_data.Pass(), context);
+  DispatchOnEmbedRequestedEventImpl(extension->id(), std::move(embed_app_data),
+                                    context);
 }
 
 // static
@@ -131,8 +140,8 @@ void AppRuntimeEventRouter::DispatchOnLaunchedEvent(
   if (extensions::FeatureSwitch::trace_app_source()->IsEnabled()) {
     launch_data.source = source_enum;
   }
-  DispatchOnLaunchedEventImpl(
-      extension->id(), source_enum, launch_data.ToValue().Pass(), context);
+  DispatchOnLaunchedEventImpl(extension->id(), source_enum,
+                              launch_data.ToValue(), context);
 }
 
 // static
@@ -142,10 +151,10 @@ void AppRuntimeEventRouter::DispatchOnRestartedEvent(
   scoped_ptr<base::ListValue> arguments(new base::ListValue());
   scoped_ptr<Event> event(new Event(events::APP_RUNTIME_ON_RESTARTED,
                                     app_runtime::OnRestarted::kEventName,
-                                    arguments.Pass()));
+                                    std::move(arguments)));
   event->restrict_to_browser_context = context;
   EventRouter::Get(context)
-      ->DispatchEventToExtension(extension->id(), event.Pass());
+      ->DispatchEventToExtension(extension->id(), std::move(event));
 }
 
 // static
@@ -178,8 +187,8 @@ void AppRuntimeEventRouter::DispatchOnLaunchedEventWithFileEntries(
     items->Append(launch_item.release());
   }
   launch_data->Set("items", items.release());
-  DispatchOnLaunchedEventImpl(
-      extension->id(), source_enum, launch_data.Pass(), context);
+  DispatchOnLaunchedEventImpl(extension->id(), source_enum,
+                              std::move(launch_data), context);
 }
 
 // static
@@ -198,8 +207,8 @@ void AppRuntimeEventRouter::DispatchOnLaunchedEventWithUrl(
   if (extensions::FeatureSwitch::trace_app_source()->IsEnabled()) {
     launch_data.source = source_enum;
   }
-  DispatchOnLaunchedEventImpl(
-      extension->id(), source_enum, launch_data.ToValue().Pass(), context);
+  DispatchOnLaunchedEventImpl(extension->id(), source_enum,
+                              launch_data.ToValue(), context);
 }
 
 }  // namespace extensions

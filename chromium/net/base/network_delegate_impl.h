@@ -5,6 +5,8 @@
 #ifndef NET_BASE_NETWORK_DELEGATE_IMPL_H_
 #define NET_BASE_NETWORK_DELEGATE_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/strings/string16.h"
 #include "net/base/completion_callback.h"
 #include "net/base/network_delegate.h"
@@ -115,8 +117,25 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
   // This corresponds to URLRequestDelegate::OnResponseStarted.
   void OnResponseStarted(URLRequest* request) override;
 
-  // Called every time we read raw bytes.
-  void OnRawBytesRead(const URLRequest& request, int bytes_read) override;
+  // Called when bytes are received from the network, such as after receiving
+  // headers or reading raw response bytes. This includes localhost requests.
+  // |bytes_received| is the number of bytes measured at the application layer
+  // that have been received over the network for this request since the last
+  // time OnNetworkBytesReceived was called. |bytes_received| will always be
+  // greater than 0.
+  // Currently, this is only implemented for HTTP transactions, and
+  // |bytes_received| does not include TLS overhead or TCP retransmits.
+  void OnNetworkBytesReceived(URLRequest* request,
+                              int64_t bytes_received) override;
+
+  // Called when bytes are sent over the network, such as when sending request
+  // headers or uploading request body bytes. This includes localhost requests.
+  // |bytes_sent| is the number of bytes measured at the application layer that
+  // have been sent over the network for this request since the last time
+  // OnNetworkBytesSent was called. |bytes_sent| will always be greater than 0.
+  // Currently, this is only implemented for HTTP transactions, and |bytes_sent|
+  // does not include TLS overhead or TCP retransmits.
+  void OnNetworkBytesSent(URLRequest* request, int64_t bytes_sent) override;
 
   // Indicates that the URL request has been completed or failed.
   // |started| indicates whether the request has been started. If false,
@@ -183,8 +202,10 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
   // experiment, and false otherwise.
   //
   // TODO(mkwst): Remove this once we decide whether or not we wish to ship
-  // first-party cookies. https://crbug.com/459154
-  bool OnFirstPartyOnlyCookieExperimentEnabled() const override;
+  // first-party cookies and cookie prefixes. https://crbug.com/459154,
+  // https://crbug.com/541511
+  bool OnAreExperimentalCookieFeaturesEnabled() const override;
+  bool OnAreStrictSecureCookiesEnabled() const override;
 
   // Called when the |referrer_url| for requesting |target_url| during handling
   // of the |request| is does not comply with the referrer policy (e.g. a

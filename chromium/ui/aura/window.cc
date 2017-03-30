@@ -4,13 +4,16 @@
 
 #include "ui/aura/window.h"
 
+#include <stddef.h>
+
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "base/profiler/scoped_tracker.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -37,110 +40,6 @@
 #include "ui/gfx/screen.h"
 
 namespace aura {
-
-namespace {
-
-// Used when searching for a Window to stack relative to.
-template <class T>
-T IteratorForDirectionBegin(aura::Window* window);
-
-template <>
-Window::Windows::const_iterator IteratorForDirectionBegin(
-    aura::Window* window) {
-  return window->children().begin();
-}
-
-template <>
-Window::Windows::const_reverse_iterator IteratorForDirectionBegin(
-    aura::Window* window) {
-  return window->children().rbegin();
-}
-
-template <class T>
-T IteratorForDirectionEnd(aura::Window* window);
-
-template <>
-Window::Windows::const_iterator IteratorForDirectionEnd(aura::Window* window) {
-  return window->children().end();
-}
-
-template <>
-Window::Windows::const_reverse_iterator IteratorForDirectionEnd(
-    aura::Window* window) {
-  return window->children().rend();
-}
-
-// Depth first search for the first Window with a layer to stack relative
-// to. Starts at target. Does not descend into |ignore|.
-template <class T>
-ui::Layer* FindStackingTargetLayerDown(aura::Window* target,
-                                       aura::Window* ignore) {
-  if (target == ignore)
-    return NULL;
-
-  if (target->layer())
-    return target->layer();
-
-  for (T i = IteratorForDirectionBegin<T>(target);
-       i != IteratorForDirectionEnd<T>(target); ++i) {
-    ui::Layer* layer = FindStackingTargetLayerDown<T>(*i, ignore);
-    if (layer)
-      return layer;
-  }
-  return NULL;
-}
-
-// Depth first search through the siblings of |target||. This does not search
-// all the siblings, only those before/after |target| (depening upon the
-// template type) and ignoring |ignore|. Returns the Layer of the first Window
-// encountered with a Layer.
-template <class T>
-ui::Layer* FindStackingLayerInSiblings(aura::Window* target,
-                                       aura::Window* ignore) {
-  aura::Window* parent = target->parent();
-  for (T i = std::find(IteratorForDirectionBegin<T>(parent),
-                  IteratorForDirectionEnd<T>(parent), target);
-       i != IteratorForDirectionEnd<T>(parent); ++i) {
-    ui::Layer* layer = FindStackingTargetLayerDown<T>(*i, ignore);
-    if (layer)
-      return layer;
-  }
-  return NULL;
-}
-
-// Returns the first Window that has a Layer. This does a depth first search
-// through the descendants of |target| first, then ascends up doing a depth
-// first search through siblings of all ancestors until a Layer is found or an
-// ancestor with a layer is found. This is intended to locate a layer to stack
-// other layers relative to.
-template <class T>
-ui::Layer* FindStackingTargetLayer(aura::Window* target, aura::Window* ignore) {
-  ui::Layer* result = FindStackingTargetLayerDown<T>(target, ignore);
-  if (result)
-    return result;
-  while (target->parent()) {
-    ui::Layer* result = FindStackingLayerInSiblings<T>(target, ignore);
-    if (result)
-      return result;
-    target = target->parent();
-    if (target->layer())
-      return NULL;
-  }
-  return NULL;
-}
-
-// Does a depth first search for all descendants of |child| that have layers.
-// This stops at any descendants that have layers (and adds them to |layers|).
-void GetLayersToStack(aura::Window* child, std::vector<ui::Layer*>* layers) {
-  if (child->layer()) {
-    layers->push_back(child->layer());
-    return;
-  }
-  for (size_t i = 0; i < child->children().size(); ++i)
-    GetLayersToStack(child->children()[i], layers);
-}
-
-}  // namespace
 
 class ScopedCursorHider {
  public:
@@ -198,7 +97,7 @@ Window::Window(WindowDelegate* delegate)
       // problems for code that adds an observer as part of an observer
       // notification (such as the workspace code).
       observers_(base::ObserverList<WindowObserver>::NOTIFY_EXISTING_ONLY) {
-  set_target_handler(delegate_);
+  SetTargetHandler(delegate_);
 }
 
 Window::~Window() {
@@ -214,7 +113,7 @@ Window::~Window() {
   // While we are being destroyed, our target handler may also be in the
   // process of destruction or already destroyed, so do not forward any
   // input events at the ui::EP_TARGET phase.
-  set_target_handler(nullptr);
+  SetTargetHandler(nullptr);
 
   // TODO(beng): See comment in window_event_dispatcher.h. This shouldn't be
   //             necessary but unfortunately is right now due to ordering
@@ -328,7 +227,7 @@ void Window::Show() {
   // It is not allowed that a window is visible but the layers alpha is fully
   // transparent since the window would still be considered to be active but
   // could not be seen.
-  DCHECK_IMPLIES(visible_, layer()->GetTargetOpacity() > 0.0f);
+  DCHECK(!visible_ || layer()->GetTargetOpacity() > 0.0f);
   SetVisible(true);
 }
 
@@ -342,13 +241,7 @@ bool Window::IsVisible() const {
   // when a Window is hidden, we want this function to return false immediately
   // after, even though the client may decide to animate the hide effect (and
   // so the layer will be visible for some time after Hide() is called).
-  for (const Window* window = this; window; window = window->parent()) {
-    if (!window->visible_)
-      return false;
-    if (window->layer())
-      return window->layer()->IsDrawn();
-  }
-  return false;
+  return visible_ ? layer()->IsDrawn() : false;
 }
 
 gfx::Rect Window::GetBoundsInRootWindow() const {
@@ -378,11 +271,6 @@ gfx::Rect Window::GetBoundsInScreen() const {
 }
 
 void Window::SetTransform(const gfx::Transform& transform) {
-  if (!layer()) {
-    // Transforms aren't supported on layerless windows.
-    NOTREACHED();
-    return;
-  }
   FOR_EACH_OBSERVER(WindowObserver, observers_,
                     OnWindowTransforming(this));
   layer()->SetTransform(transform);
@@ -392,7 +280,7 @@ void Window::SetTransform(const gfx::Transform& transform) {
 }
 
 void Window::SetLayoutManager(LayoutManager* layout_manager) {
-  if (layout_manager == layout_manager_)
+  if (layout_manager == layout_manager_.get())
     return;
   layout_manager_.reset(layout_manager);
   if (!layout_manager)
@@ -407,9 +295,9 @@ void Window::SetLayoutManager(LayoutManager* layout_manager) {
 
 scoped_ptr<ui::EventTargeter>
 Window::SetEventTargeter(scoped_ptr<ui::EventTargeter> targeter) {
-  scoped_ptr<ui::EventTargeter> old_targeter = targeter_.Pass();
-  targeter_ = targeter.Pass();
-  return old_targeter.Pass();
+  scoped_ptr<ui::EventTargeter> old_targeter = std::move(targeter_);
+  targeter_ = std::move(targeter);
+  return old_targeter;
 }
 
 void Window::SetBounds(const gfx::Rect& new_bounds) {
@@ -712,8 +600,7 @@ void Window::SuppressPaint() {
 // {Set,Get,Clear}Property are implemented in window_property.h.
 
 void Window::SetNativeWindowProperty(const char* key, void* value) {
-  SetPropertyInternal(
-      key, key, NULL, reinterpret_cast<int64>(value), 0);
+  SetPropertyInternal(key, key, NULL, reinterpret_cast<int64_t>(value), 0);
 }
 
 void* Window::GetNativeWindowProperty(const char* key) const {
@@ -770,12 +657,12 @@ void Window::RemoveOrDestroyChildren() {
 ///////////////////////////////////////////////////////////////////////////////
 // Window, private:
 
-int64 Window::SetPropertyInternal(const void* key,
-                                  const char* name,
-                                  PropertyDeallocator deallocator,
-                                  int64 value,
-                                  int64 default_value) {
-  int64 old = GetPropertyInternal(key, default_value);
+int64_t Window::SetPropertyInternal(const void* key,
+                                    const char* name,
+                                    PropertyDeallocator deallocator,
+                                    int64_t value,
+                                    int64_t default_value) {
+  int64_t old = GetPropertyInternal(key, default_value);
   if (value == default_value) {
     prop_map_.erase(key);
   } else {
@@ -790,8 +677,8 @@ int64 Window::SetPropertyInternal(const void* key,
   return old;
 }
 
-int64 Window::GetPropertyInternal(const void* key,
-                                  int64 default_value) const {
+int64_t Window::GetPropertyInternal(const void* key,
+                                    int64_t default_value) const {
   std::map<const void*, Value>::const_iterator iter = prop_map_.find(key);
   if (iter == prop_map_.end())
     return default_value;
@@ -829,12 +716,7 @@ void Window::SetBoundsInternal(const gfx::Rect& new_bounds) {
 }
 
 void Window::SetVisible(bool visible) {
-  // TODO(vadimt): Remove ScopedTracker below once crbug.com/440919 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("440919 Window::SetVisible"));
-
-  if ((layer() && visible == layer()->GetTargetVisibility()) ||
-      (!layer() && visible == visible_))
+  if (visible == layer()->GetTargetVisibility())
     return;  // No change.
 
   FOR_EACH_OBSERVER(WindowObserver, observers_,
@@ -879,7 +761,7 @@ Window* Window::GetWindowForPoint(const gfx::Point& local_point,
   // Check if I should claim this event and not pass it to my children because
   // the location is inside my hit test override area.  For details, see
   // set_hit_test_bounds_override_inner().
-  if (for_event_handling && !hit_test_bounds_override_inner_.empty()) {
+  if (for_event_handling && !hit_test_bounds_override_inner_.IsEmpty()) {
     gfx::Rect inset_local_bounds(gfx::Point(), bounds().size());
     inset_local_bounds.Inset(hit_test_bounds_override_inner_);
     // We know we're inside the normal local bounds, so if we're outside the
@@ -941,35 +823,6 @@ void Window::RemoveChildImpl(Window* child, Window* new_parent) {
     layout_manager_->OnWindowRemovedFromLayout(child);
 }
 
-void Window::ReparentLayers(ui::Layer* parent_layer,
-                            const gfx::Vector2d& offset) {
-  if (!layer()) {
-    for (size_t i = 0; i < children_.size(); ++i) {
-      children_[i]->ReparentLayers(
-          parent_layer,
-          offset + children_[i]->bounds().OffsetFromOrigin());
-    }
-  } else {
-    const gfx::Rect real_bounds(bounds());
-    parent_layer->Add(layer());
-    gfx::Rect layer_bounds(layer()->bounds().size());
-    layer_bounds += offset;
-    layer()->SetBounds(layer_bounds);
-    bounds_ = real_bounds;
-  }
-}
-
-void Window::OffsetLayerBounds(const gfx::Vector2d& offset) {
-  if (!layer()) {
-    for (size_t i = 0; i < children_.size(); ++i)
-      children_[i]->OffsetLayerBounds(offset);
-  } else {
-    gfx::Rect layer_bounds(layer()->bounds());
-    layer_bounds += offset;
-    layer()->SetBounds(layer_bounds);
-  }
-}
-
 void Window::OnParentChanged() {
   FOR_EACH_OBSERVER(
       WindowObserver, observers_, OnWindowParentChanged(this, parent_));
@@ -1015,51 +868,11 @@ void Window::StackChildRelativeTo(Window* child,
 void Window::StackChildLayerRelativeTo(Window* child,
                                        Window* target,
                                        StackDirection direction) {
-  DCHECK(layer());
-  if (child->layer() && target->layer()) {
-    if (direction == STACK_ABOVE)
-      layer()->StackAbove(child->layer(), target->layer());
-    else
-      layer()->StackBelow(child->layer(), target->layer());
-    return;
-  }
-  typedef std::vector<ui::Layer*> Layers;
-  Layers layers;
-  GetLayersToStack(child, &layers);
-  if (layers.empty())
-    return;
-
-  ui::Layer* target_layer;
-  if (direction == STACK_ABOVE) {
-    target_layer =
-        FindStackingTargetLayer<Windows::const_reverse_iterator>(target, child);
-  } else {
-    target_layer =
-        FindStackingTargetLayer<Windows::const_iterator>(target, child);
-  }
-
-  if (!target_layer) {
-    if (direction == STACK_ABOVE) {
-      for (Layers::const_reverse_iterator i = layers.rbegin(),
-               rend = layers.rend(); i != rend; ++i) {
-        layer()->StackAtBottom(*i);
-      }
-    } else {
-      for (Layers::const_iterator i = layers.begin(); i != layers.end(); ++i)
-        layer()->StackAtTop(*i);
-    }
-    return;
-  }
-
-  if (direction == STACK_ABOVE) {
-    for (Layers::const_reverse_iterator i = layers.rbegin(),
-             rend = layers.rend(); i != rend; ++i) {
-      layer()->StackAbove(*i, target_layer);
-    }
-  } else {
-    for (Layers::const_iterator i = layers.begin(); i != layers.end(); ++i)
-      layer()->StackBelow(*i, target_layer);
-  }
+  DCHECK(layer() && child->layer() && target->layer());
+  if (direction == STACK_ABOVE)
+    layer()->StackAbove(child->layer(), target->layer());
+  else
+    layer()->StackBelow(child->layer(), target->layer());
 }
 
 void Window::OnStackingChanged() {

@@ -7,21 +7,21 @@
 
 #include <string>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread.h"
-#include "base/synchronization/waitable_event.h"
 #include "chrome/service/cloud_print/cloud_print_proxy.h"
+#include "chrome/service/service_ipc_server.h"
 
 class ServiceProcessPrefs;
-class ServiceIPCServer;
 class ServiceURLRequestContextGetter;
 class ServiceProcessState;
 
 namespace base {
 class CommandLine;
+class SequencedWorkerPool;
+class WaitableEvent;
 }
 
 namespace net {
@@ -32,7 +32,9 @@ class NetworkChangeNotifier;
 // process can live independently of the browser process.
 // ServiceProcess Design Notes
 // https://sites.google.com/a/chromium.org/dev/developers/design-documents/service-processes
-class ServiceProcess : public cloud_print::CloudPrintProxy::Client {
+class ServiceProcess : public ServiceIPCServer::Client,
+                       public cloud_print::CloudPrintProxy::Client,
+                       public cloud_print::CloudPrintProxy::Provider {
  public:
   ServiceProcess();
   ~ServiceProcess() override;
@@ -44,50 +46,39 @@ class ServiceProcess : public cloud_print::CloudPrintProxy::Client {
                   ServiceProcessState* state);
 
   bool Teardown();
-  // TODO(sanjeevr): Change various parts of the code such as
-  // net::ProxyService::CreateSystemProxyConfigService to take in
-  // SingleThreadTaskRunner* instead of MessageLoop*. When we have done that,
-  // we can remove the io_thread() and file_thread() accessors and replace them
-  // with io_message_loop_proxy() and file_message_loop_proxy() respectively.
 
-  // Returns the thread that we perform I/O coordination on (network requests,
-  // communication with renderers, etc.
-  // NOTE: You should ONLY use this to pass to IPC or other objects which must
-  // need a MessageLoop*. If you just want to post a task, use the thread's
-  // task_runner() as it takes care of checking that a thread is still alive,
-  // race conditions, lifetime differences etc. If you still must use this,
-  // need to check the return value for NULL.
-  base::Thread* io_thread() const {
-    return io_thread_.get();
+  // Returns the SingleThreadTaskRunner for the service process io thread (used
+  // for e.g. network requests and IPC). Returns null before Initialize is
+  // called and after Teardown is called.
+  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner() {
+    return io_thread_ ? io_thread_->task_runner() : nullptr;
   }
-  // Returns the thread that we perform random file operations on. For code
-  // that wants to do I/O operations (not network requests or even file: URL
-  // requests), this is the thread to use to avoid blocking the UI thread.
-  base::Thread* file_thread() const {
-    return file_thread_.get();
+
+  // Returns the SingleThreadTaskRunner for the service process file thread.
+  // Used to do I/O operations (not network requests or even file: URL requests)
+  // to avoid blocking the main thread. Returns null before Initialize is
+  // called and after Teardown is called.
+  scoped_refptr<base::SingleThreadTaskRunner> file_task_runner() {
+    return file_thread_ ? file_thread_->task_runner() : nullptr;
   }
 
   // A global event object that is signalled when the main thread's message
   // loop exits. This gives background threads a way to observe the main
   // thread shutting down.
-  base::WaitableEvent* shutdown_event() {
+  base::WaitableEvent* GetShutdownEventForTesting() {
     return &shutdown_event_;
   }
 
-  // Shutdown the service process. This is likely triggered by a IPC message.
+  // Shuts down the service process.
   void Shutdown();
 
-  void SetUpdateAvailable() {
-    update_available_ = true;
-  }
-  bool update_available() const { return update_available_; }
+  // ServiceIPCServer::Client implementation.
+  void OnShutdown() override;
+  void OnUpdateAvailable() override;
+  bool OnIPCClientDisconnect() override;
 
-  // Called by the IPC server when a client disconnects. A return value of
-  // true indicates that the IPC server should continue listening for new
-  // connections.
-  bool HandleClientDisconnect();
-
-  cloud_print::CloudPrintProxy* GetCloudPrintProxy();
+  // CloudPrintProxy::Provider implementation.
+  cloud_print::CloudPrintProxy* GetCloudPrintProxy() override;
 
   // CloudPrintProxy::Client implementation.
   void OnCloudPrintProxyEnabled(bool persist_state) override;
@@ -101,7 +92,7 @@ class ServiceProcess : public cloud_print::CloudPrintProxy::Client {
   // Schedule a call to ShutdownIfNeeded.
   void ScheduleShutdownCheck();
 
-  // Shuts down the process if no services are enabled and no clients are
+  // Shuts down the process if no services are enabled and no IPC client is
   // connected.
   void ShutdownIfNeeded();
 

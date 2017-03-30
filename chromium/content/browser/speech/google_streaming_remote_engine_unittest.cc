@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <queue>
 
 #include "base/big_endian.h"
@@ -15,6 +18,7 @@
 #include "content/browser/speech/proto/google_streaming_api.pb.h"
 #include "content/public/common/speech_recognition_error.h"
 #include "content/public/common/speech_recognition_result.h"
+#include "net/base/net_errors.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
@@ -40,7 +44,8 @@ class GoogleStreamingRemoteEngineTest : public SpeechRecognitionEngineDelegate,
  public:
   GoogleStreamingRemoteEngineTest()
       : last_number_of_upstream_chunks_seen_(0U),
-        error_(SPEECH_RECOGNITION_ERROR_NONE) { }
+        error_(SPEECH_RECOGNITION_ERROR_NONE),
+        end_of_utterance_counter_(0) { }
 
   // Creates a speech recognition request and invokes its URL fetcher delegate
   // with the given test data.
@@ -50,6 +55,9 @@ class GoogleStreamingRemoteEngineTest : public SpeechRecognitionEngineDelegate,
   void OnSpeechRecognitionEngineResults(
       const SpeechRecognitionResults& results) override {
     results_.push(results);
+  }
+  void OnSpeechRecognitionEngineEndOfUtterance() override {
+    ++end_of_utterance_counter_;
   }
   void OnSpeechRecognitionEngineError(
       const SpeechRecognitionError& error) override {
@@ -92,6 +100,7 @@ class GoogleStreamingRemoteEngineTest : public SpeechRecognitionEngineDelegate,
   base::MessageLoop message_loop_;
   std::string response_buffer_;
   SpeechRecognitionErrorCode error_;
+  int end_of_utterance_counter_;
   std::queue<SpeechRecognitionResults> results_;
 };
 
@@ -332,6 +341,31 @@ TEST_F(GoogleStreamingRemoteEngineTest, Stability) {
   ASSERT_EQ(0U, results_.size());
 }
 
+TEST_F(GoogleStreamingRemoteEngineTest, EndOfUtterance) {
+  StartMockRecognition();
+  ASSERT_TRUE(GetUpstreamFetcher());
+
+  // Simulate a END_OF_UTTERANCE proto event with continuous true.
+  SpeechRecognitionEngine::Config config;
+  config.continuous = true;
+  engine_under_test_->SetConfig(config);
+  proto::SpeechRecognitionEvent proto_event;
+  proto_event.set_endpoint(proto::SpeechRecognitionEvent::END_OF_UTTERANCE);
+  ASSERT_EQ(0, end_of_utterance_counter_);
+  ProvideMockProtoResultDownstream(proto_event);
+  ASSERT_EQ(0, end_of_utterance_counter_);
+
+  // Simulate a END_OF_UTTERANCE proto event with continuous false.
+  config.continuous = false;
+  engine_under_test_->SetConfig(config);
+  ProvideMockProtoResultDownstream(proto_event);
+  ASSERT_EQ(1, end_of_utterance_counter_);
+
+  // Shut down.
+  CloseMockDownstream(DOWNSTREAM_ERROR_NONE);
+  EndMockRecognition();
+}
+
 TEST_F(GoogleStreamingRemoteEngineTest, SendPreamble) {
   const size_t kPreambleLength = 100;
   scoped_refptr<SpeechRecognitionSessionPreamble> preamble =
@@ -499,10 +533,9 @@ void GoogleStreamingRemoteEngineTest::CloseMockDownstream(
   TestURLFetcher* downstream_fetcher = GetDownstreamFetcher();
   ASSERT_TRUE(downstream_fetcher);
 
-  const URLRequestStatus::Status fetcher_status =
-      (error == DOWNSTREAM_ERROR_NETWORK) ? URLRequestStatus::FAILED :
-                                            URLRequestStatus::SUCCESS;
-  downstream_fetcher->set_status(URLRequestStatus(fetcher_status, 0));
+  const net::Error net_error =
+      (error == DOWNSTREAM_ERROR_NETWORK) ? net::ERR_FAILED : net::OK;
+  downstream_fetcher->set_status(URLRequestStatus::FromError(net_error));
   downstream_fetcher->set_response_code(
       (error == DOWNSTREAM_ERROR_HTTP500) ? 500 : 200);
 
@@ -563,7 +596,7 @@ std::string GoogleStreamingRemoteEngineTest::SerializeProtobufResponse(
 
   // Prepend 4 byte prefix length indication to the protobuf message as
   // envisaged by the google streaming recognition webservice protocol.
-  uint32 prefix = HostToNet32(checked_cast<uint32>(msg_string.size()));
+  uint32_t prefix = HostToNet32(checked_cast<uint32_t>(msg_string.size()));
   msg_string.insert(0, reinterpret_cast<char*>(&prefix), sizeof(prefix));
 
   return msg_string;

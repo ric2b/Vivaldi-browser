@@ -4,9 +4,13 @@
 
 #include "components/proximity_auth/bluetooth_connection.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
+#include "components/proximity_auth/proximity_auth_test_util.h"
 #include "components/proximity_auth/remote_device.h"
 #include "components/proximity_auth/wire_message.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -29,18 +33,13 @@ using testing::StrictMock;
 namespace proximity_auth {
 namespace {
 
-const char kDeviceName[] = "Device name";
 const char kOtherDeviceName[] = "Other device name";
-
-const char kBluetoothAddress[] = "11:22:33:44:55:66";
-const char kOtherBluetoothAddress[] = "AA:BB:CC:DD:EE:FF";
+const char kOtherBluetoothAddress[] = "FF:BB:CC:DD:EE:FF";
 
 const char kSerializedMessage[] = "Yarrr, this be a serialized message. Yarr!";
 const int kSerializedMessageLength = strlen(kSerializedMessage);
 
 const char kUuid[] = "DEADBEEF-CAFE-FEED-FOOD-D15EA5EBEEF";
-
-const RemoteDevice kRemoteDevice = {kDeviceName, kBluetoothAddress};
 
 const int kReceiveBufferSize = 6;
 const char kReceiveBufferContents[] = "bytes";
@@ -55,7 +54,8 @@ scoped_refptr<net::IOBuffer> CreateReceiveBuffer() {
 class MockBluetoothConnection : public BluetoothConnection {
  public:
   MockBluetoothConnection()
-      : BluetoothConnection(kRemoteDevice, device::BluetoothUUID(kUuid)) {}
+      : BluetoothConnection(CreateClassicRemoteDeviceForTest(),
+                            device::BluetoothUUID(kUuid)) {}
 
   // Calls back into the parent Connection class.
   MOCK_METHOD1(SetStatusProxy, void(Status status));
@@ -70,6 +70,7 @@ class MockBluetoothConnection : public BluetoothConnection {
 
   using BluetoothConnection::status;
   using BluetoothConnection::Connect;
+  using BluetoothConnection::DeviceChanged;
   using BluetoothConnection::DeviceRemoved;
   using BluetoothConnection::Disconnect;
 
@@ -94,7 +95,12 @@ class ProximityAuthBluetoothConnectionTest : public testing::Test {
  public:
   ProximityAuthBluetoothConnectionTest()
       : adapter_(new device::MockBluetoothAdapter),
-        device_(adapter_.get(), 0, kDeviceName, kBluetoothAddress, true, true),
+        device_(adapter_.get(),
+                0,
+                kTestRemoteDeviceName,
+                kTestRemoteDeviceBluetoothAddress,
+                true,
+                true),
         socket_(new StrictMock<device::MockBluetoothSocket>),
         uuid_(kUuid) {
     device::BluetoothAdapterFactory::SetAdapterForTesting(adapter_);
@@ -106,6 +112,7 @@ class ProximityAuthBluetoothConnectionTest : public testing::Test {
   // Transition the connection into an in-progress state.
   void BeginConnecting(MockBluetoothConnection* connection) {
     EXPECT_EQ(Connection::DISCONNECTED, connection->status());
+    ON_CALL(device_, IsConnected()).WillByDefault(Return(false));
 
     ON_CALL(*adapter_, GetDevice(_)).WillByDefault(Return(&device_));
     EXPECT_CALL(*connection, SetStatusProxy(Connection::IN_PROGRESS));
@@ -138,6 +145,7 @@ class ProximityAuthBluetoothConnectionTest : public testing::Test {
     callback.Run(socket_);
 
     EXPECT_EQ(Connection::CONNECTED, connection->status());
+    ON_CALL(device_, IsConnected()).WillByDefault(Return(true));
   }
 
   device::BluetoothSocket::ReceiveCompletionCallback* receive_callback() {
@@ -395,7 +403,7 @@ TEST_F(ProximityAuthBluetoothConnectionTest,
   scoped_ptr<TestWireMessage> wire_message(new TestWireMessage);
   EXPECT_CALL(*socket_, Send(_, kSerializedMessageLength, _, _))
       .WillOnce(SaveArg<0>(&buffer));
-  connection.SendMessage(wire_message.Pass());
+  connection.SendMessage(std::move(wire_message));
   ASSERT_TRUE(buffer.get());
   EXPECT_EQ(kSerializedMessage,
             std::string(buffer->data(), kSerializedMessageLength));
@@ -416,7 +424,7 @@ TEST_F(ProximityAuthBluetoothConnectionTest, SendMessage_Success) {
 
   device::BluetoothSocket::SendCompletionCallback callback;
   EXPECT_CALL(*socket_, Send(_, _, _, _)).WillOnce(SaveArg<2>(&callback));
-  connection.SendMessage(wire_message.Pass());
+  connection.SendMessage(std::move(wire_message));
   ASSERT_FALSE(callback.is_null());
 
   EXPECT_CALL(connection, OnDidSendMessage(Ref(*expected_wire_message), true));
@@ -438,7 +446,7 @@ TEST_F(ProximityAuthBluetoothConnectionTest, SendMessage_Failure) {
 
   device::BluetoothSocket::ErrorCompletionCallback error_callback;
   EXPECT_CALL(*socket_, Send(_, _, _, _)).WillOnce(SaveArg<3>(&error_callback));
-  connection.SendMessage(wire_message.Pass());
+  connection.SendMessage(std::move(wire_message));
 
   ASSERT_FALSE(error_callback.is_null());
   EXPECT_CALL(connection, OnDidSendMessage(Ref(*expected_wire_message), false));
@@ -446,6 +454,35 @@ TEST_F(ProximityAuthBluetoothConnectionTest, SendMessage_Failure) {
   EXPECT_CALL(*socket_, Disconnect(_));
   EXPECT_CALL(*adapter_, RemoveObserver(&connection));
   error_callback.Run("The most helpful of error messages");
+}
+
+TEST_F(ProximityAuthBluetoothConnectionTest, DeviceChanged_Disconnected) {
+  // Create a connected connection.
+  StrictMock<MockBluetoothConnection> connection;
+  Connect(&connection);
+  EXPECT_TRUE(connection.IsConnected());
+
+  // If the remote device disconnects, |connection| should also disconnect.
+  ON_CALL(device_, IsConnected()).WillByDefault(Return(false));
+  EXPECT_CALL(connection, SetStatusProxy(Connection::DISCONNECTED));
+  EXPECT_CALL(*socket_, Disconnect(_));
+  EXPECT_CALL(*adapter_, RemoveObserver(&connection));
+  connection.DeviceChanged(adapter_.get(), &device_);
+  EXPECT_FALSE(connection.IsConnected());
+}
+
+TEST_F(ProximityAuthBluetoothConnectionTest, DeviceChanged_NotDisconnected) {
+  // Nothing should happen if DeviceChanged is called, but the remote device is
+  // not disconnected.
+  StrictMock<MockBluetoothConnection> connection;
+  Connect(&connection);
+  EXPECT_TRUE(connection.IsConnected());
+  connection.DeviceChanged(adapter_.get(), &device_);
+  EXPECT_TRUE(connection.IsConnected());
+
+  // The connection disconnects and unregisters as an observer upon destruction.
+  EXPECT_CALL(*socket_, Disconnect(_));
+  EXPECT_CALL(*adapter_, RemoveObserver(&connection));
 }
 
 }  // namespace proximity_auth

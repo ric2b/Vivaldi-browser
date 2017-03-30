@@ -12,11 +12,12 @@
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
-#include "chrome/browser/metrics/metrics_services_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
+#include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/variations/metrics_util.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
@@ -37,7 +38,8 @@ UmaSessionStats::UmaSessionStats()
 UmaSessionStats::~UmaSessionStats() {
 }
 
-void UmaSessionStats::UmaResumeSession(JNIEnv* env, jobject obj) {
+void UmaSessionStats::UmaResumeSession(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
   DCHECK(g_browser_process);
 
   if (active_session_count_ == 0) {
@@ -52,7 +54,8 @@ void UmaSessionStats::UmaResumeSession(JNIEnv* env, jobject obj) {
   ++active_session_count_;
 }
 
-void UmaSessionStats::UmaEndSession(JNIEnv* env, jobject obj) {
+void UmaSessionStats::UmaEndSession(JNIEnv* env,
+                                    const JavaParamRef<jobject>& obj) {
   --active_session_count_;
   DCHECK_GE(active_session_count_, 0);
 
@@ -92,8 +95,10 @@ void UmaSessionStats::RegisterSyntheticFieldTrial(
 //   This happens when we've got permission to upload on Wi-Fi but we're on a
 //   mobile connection (for example).
 // * Logs are neither being recorded or uploaded.
-static void UpdateMetricsServiceState(JNIEnv* env, jobject obj,
-    jboolean may_record, jboolean may_upload) {
+static void UpdateMetricsServiceState(JNIEnv* env,
+                                      const JavaParamRef<jobject>& obj,
+                                      jboolean may_record,
+                                      jboolean may_upload) {
   metrics::MetricsService* metrics = g_browser_process->metrics_service();
   DCHECK(metrics);
 
@@ -112,30 +117,23 @@ static void UpdateMetricsServiceState(JNIEnv* env, jobject obj,
 }
 
 // Renderer process crashed in the foreground.
-static void LogRendererCrash(JNIEnv* env, jclass clazz, jboolean is_paused) {
+static void LogRendererCrash(JNIEnv*, const JavaParamRef<jclass>&) {
   DCHECK(g_browser_process);
-
-  if (!is_paused) {
-    // Increment the renderer crash count in stability metrics.
-    PrefService* pref = g_browser_process->local_state();
-    DCHECK(pref);
-    int value = pref->GetInteger(prefs::kStabilityRendererCrashCount);
-    pref->SetInteger(prefs::kStabilityRendererCrashCount, value + 1);
-  }
-
-  // Note: When we are paused, any UI metric we increment may not make it to
-  // the disk before we are killed. Treat the count below as a lower bound.
-  content::RecordAction(base::UserMetricsAction("MobileRendererCrashed"));
+  // Increment the renderer crash count in stability metrics.
+  PrefService* pref = g_browser_process->local_state();
+  DCHECK(pref);
+  int value = pref->GetInteger(metrics::prefs::kStabilityRendererCrashCount);
+  pref->SetInteger(metrics::prefs::kStabilityRendererCrashCount, value + 1);
 }
 
 static void RegisterExternalExperiment(JNIEnv* env,
-                                       jclass clazz,
+                                       const JavaParamRef<jclass>& clazz,
                                        jint study_id,
                                        jint experiment_id) {
   const std::string group_name_utf8 = base::IntToString(experiment_id);
 
   variations::ActiveGroupId active_group;
-  active_group.name = static_cast<uint32>(study_id);
+  active_group.name = static_cast<uint32_t>(study_id);
   active_group.group = metrics::HashName(group_name_utf8);
   variations::AssociateGoogleVariationIDForceHashes(
       variations::GOOGLE_WEB_PROPERTIES, active_group,
@@ -145,16 +143,18 @@ static void RegisterExternalExperiment(JNIEnv* env,
       static_cast<uint32_t>(study_id), group_name_utf8);
 }
 
-static void RegisterSyntheticFieldTrial(JNIEnv* env,
-                                        jclass clazz,
-                                        jstring jtrial_name,
-                                        jstring jgroup_name) {
+static void RegisterSyntheticFieldTrial(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jtrial_name,
+    const JavaParamRef<jstring>& jgroup_name) {
   std::string trial_name(ConvertJavaStringToUTF8(env, jtrial_name));
   std::string group_name(ConvertJavaStringToUTF8(env, jgroup_name));
   UmaSessionStats::RegisterSyntheticFieldTrial(trial_name, group_name);
 }
 
-static void RecordMultiWindowSession(JNIEnv*, jclass,
+static void RecordMultiWindowSession(JNIEnv*,
+                                     const JavaParamRef<jclass>&,
                                      jint area_percent,
                                      jint instance_count) {
   UMA_HISTOGRAM_PERCENTAGE("MobileStartup.MobileMultiWindowSession",
@@ -168,12 +168,16 @@ static void RecordMultiWindowSession(JNIEnv*, jclass,
                               10 /* bucket count */);
 }
 
-static void RecordTabCountPerLoad(JNIEnv*, jclass, jint num_tabs) {
+static void RecordTabCountPerLoad(JNIEnv*,
+                                  const JavaParamRef<jclass>&,
+                                  jint num_tabs) {
   // Record how many tabs total are open.
   UMA_HISTOGRAM_CUSTOM_COUNTS("Tabs.TabCountPerLoad", num_tabs, 1, 200, 50);
 }
 
-static void RecordPageLoaded(JNIEnv*, jclass, jboolean is_desktop_user_agent) {
+static void RecordPageLoaded(JNIEnv*,
+                             const JavaParamRef<jclass>&,
+                             jboolean is_desktop_user_agent) {
   // Should be called whenever a page has been loaded.
   content::RecordAction(UserMetricsAction("MobilePageLoaded"));
   if (is_desktop_user_agent) {
@@ -182,11 +186,11 @@ static void RecordPageLoaded(JNIEnv*, jclass, jboolean is_desktop_user_agent) {
   }
 }
 
-static void RecordPageLoadedWithKeyboard(JNIEnv*, jclass) {
+static void RecordPageLoadedWithKeyboard(JNIEnv*, const JavaParamRef<jclass>&) {
   content::RecordAction(UserMetricsAction("MobilePageLoadedWithKeyboard"));
 }
 
-static jlong Init(JNIEnv* env, jclass obj) {
+static jlong Init(JNIEnv* env, const JavaParamRef<jclass>& obj) {
   // We should have only one UmaSessionStats instance.
   DCHECK(!g_uma_session_stats);
   g_uma_session_stats = new UmaSessionStats();

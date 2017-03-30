@@ -6,8 +6,6 @@
 
 #include "base/metrics/histogram.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
-#include "content/browser/frame_host/render_frame_host_delegate.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/message_port_message_filter.h"
 #include "content/browser/message_port_service.h"
 #include "content/browser/shared_worker/shared_worker_instance.h"
@@ -23,14 +21,6 @@
 
 namespace content {
 namespace {
-
-// Notifies RenderViewHost that one or more worker objects crashed.
-void WorkerCrashCallback(int render_process_unique_id, int render_frame_id) {
-  RenderFrameHostImpl* host =
-      RenderFrameHostImpl::FromID(render_process_unique_id, render_frame_id);
-  if (host)
-    host->delegate()->WorkerCrashed(host);
-}
 
 void NotifyWorkerReadyForInspection(int worker_process_id,
                                     int worker_route_id) {
@@ -68,7 +58,7 @@ SharedWorkerHost::SharedWorkerHost(SharedWorkerInstance* instance,
       container_render_filter_(filter),
       worker_process_id_(filter->render_process_id()),
       worker_route_id_(worker_route_id),
-      load_failed_(false),
+      termination_message_sent_(false),
       closed_(false),
       creation_time_(base::TimeTicks::Now()),
       weak_factory_(this) {
@@ -79,22 +69,7 @@ SharedWorkerHost::~SharedWorkerHost() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   UMA_HISTOGRAM_LONG_TIMES("SharedWorker.TimeToDeleted",
                            base::TimeTicks::Now() - creation_time_);
-  // If we crashed, tell the RenderViewHosts.
-  if (instance_ && !load_failed_) {
-    const WorkerDocumentSet::DocumentInfoSet& parents =
-        worker_document_set_->documents();
-    for (WorkerDocumentSet::DocumentInfoSet::const_iterator parent_iter =
-             parents.begin();
-         parent_iter != parents.end();
-         ++parent_iter) {
-      BrowserThread::PostTask(BrowserThread::UI,
-                              FROM_HERE,
-                              base::Bind(&WorkerCrashCallback,
-                                         parent_iter->render_process_id(),
-                                         parent_iter->render_frame_id()));
-    }
-  }
-  if (!closed_)
+  if (!closed_ && !termination_message_sent_)
     NotifyWorkerDestroyed(worker_process_id_, worker_route_id_);
   SharedWorkerServiceImpl::GetInstance()->NotifyWorkerDestroyed(
       worker_process_id_, worker_route_id_);
@@ -126,15 +101,11 @@ void SharedWorkerHost::Start(bool pause_on_start) {
 
 bool SharedWorkerHost::FilterMessage(const IPC::Message& message,
                                      SharedWorkerMessageFilter* filter) {
-  if (!instance_)
+  if (!IsAvailable() || !HasFilter(filter, message.routing_id()))
     return false;
 
-  if (!closed_ && HasFilter(filter, message.routing_id())) {
-    RelayMessage(message, filter);
-    return true;
-  }
-
-  return false;
+  RelayMessage(message, filter);
+  return true;
 }
 
 void SharedWorkerHost::FilterShutdown(SharedWorkerMessageFilter* filter) {
@@ -144,7 +115,7 @@ void SharedWorkerHost::FilterShutdown(SharedWorkerMessageFilter* filter) {
   worker_document_set_->RemoveAll(filter);
   if (worker_document_set_->IsEmpty()) {
     // This worker has no more associated documents - shut it down.
-    Send(new WorkerMsg_TerminateWorkerContext(worker_route_id_));
+    TerminateWorker();
   }
 }
 
@@ -156,7 +127,7 @@ void SharedWorkerHost::DocumentDetached(SharedWorkerMessageFilter* filter,
   worker_document_set_->Remove(filter, document_id);
   if (worker_document_set_->IsEmpty()) {
     // This worker has no more associated documents - shut it down.
-    Send(new WorkerMsg_TerminateWorkerContext(worker_route_id_));
+    TerminateWorker();
   }
 }
 
@@ -167,7 +138,8 @@ void SharedWorkerHost::WorkerContextClosed() {
   // being sent to the worker (messages can still be sent from the worker,
   // for exception reporting, etc).
   closed_ = true;
-  NotifyWorkerDestroyed(worker_process_id_, worker_route_id_);
+  if (!termination_message_sent_)
+    NotifyWorkerDestroyed(worker_process_id_, worker_route_id_);
 }
 
 void SharedWorkerHost::WorkerContextDestroyed() {
@@ -191,7 +163,6 @@ void SharedWorkerHost::WorkerScriptLoadFailed() {
                       base::TimeTicks::Now() - creation_time_);
   if (!instance_)
     return;
-  load_failed_ = true;
   for (FilterList::const_iterator i = filters_.begin(); i != filters_.end();
        ++i) {
     i->filter()->Send(new ViewMsg_WorkerScriptLoadFailed(i->route_id()));
@@ -294,6 +265,9 @@ void SharedWorkerHost::RelayMessage(
 }
 
 void SharedWorkerHost::TerminateWorker() {
+  termination_message_sent_ = true;
+  if (!closed_)
+    NotifyWorkerDestroyed(worker_process_id_, worker_route_id_);
   Send(new WorkerMsg_TerminateWorkerContext(worker_route_id_));
 }
 
@@ -312,6 +286,10 @@ SharedWorkerHost::GetRenderFrameIDsForWorker() {
         std::make_pair(doc->render_process_id(), doc->render_frame_id()));
   }
   return result;
+}
+
+bool SharedWorkerHost::IsAvailable() const {
+  return instance_ && !termination_message_sent_ && !closed_;
 }
 
 void SharedWorkerHost::AddFilter(SharedWorkerMessageFilter* filter,

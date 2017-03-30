@@ -5,6 +5,7 @@
 #include "base/prefs/pref_service.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
@@ -40,8 +41,8 @@ class ReadErrorHandler : public PersistentPrefStore::ReadErrorDelegate {
 
 // Returns the WriteablePrefStore::PrefWriteFlags for the pref with the given
 // |path|.
-uint32 GetWriteFlags(const PrefService::Preference* pref) {
-  uint32 write_flags = WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS;
+uint32_t GetWriteFlags(const PrefService::Preference* pref) {
+  uint32_t write_flags = WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS;
 
   if (!pref)
     return write_flags;
@@ -197,7 +198,7 @@ scoped_ptr<base::DictionaryValue> PrefService::GetPreferenceValues() const {
   for (const auto& it : *pref_registry_) {
     out->Set(it.first, GetPreferenceValue(it.first)->CreateDeepCopy());
   }
-  return out.Pass();
+  return out;
 }
 
 scoped_ptr<base::DictionaryValue> PrefService::GetPreferenceValuesOmitDefaults()
@@ -210,7 +211,7 @@ scoped_ptr<base::DictionaryValue> PrefService::GetPreferenceValuesOmitDefaults()
       continue;
     out->Set(it.first, pref->GetValue()->CreateDeepCopy());
   }
-  return out.Pass();
+  return out;
 }
 
 scoped_ptr<base::DictionaryValue>
@@ -222,7 +223,7 @@ PrefService::GetPreferenceValuesWithoutPathExpansion() const {
     DCHECK(value);
     out->SetWithoutPathExpansion(it.first, value->CreateDeepCopy());
   }
-  return out.Pass();
+  return out;
 }
 
 const PrefService::Preference* PrefService::FindPreference(
@@ -402,11 +403,11 @@ void PrefService::SetFilePath(const std::string& path,
   SetUserPrefValue(path, base::CreateFilePathValue(value));
 }
 
-void PrefService::SetInt64(const std::string& path, int64 value) {
+void PrefService::SetInt64(const std::string& path, int64_t value) {
   SetUserPrefValue(path, new base::StringValue(base::Int64ToString(value)));
 }
 
-int64 PrefService::GetInt64(const std::string& path) const {
+int64_t PrefService::GetInt64(const std::string& path) const {
   DCHECK(CalledOnValidThread());
 
   const base::Value* value = GetPreferenceValue(path);
@@ -418,16 +419,16 @@ int64 PrefService::GetInt64(const std::string& path) const {
   bool rv = value->GetAsString(&result);
   DCHECK(rv);
 
-  int64 val;
+  int64_t val;
   base::StringToInt64(result, &val);
   return val;
 }
 
-void PrefService::SetUint64(const std::string& path, uint64 value) {
+void PrefService::SetUint64(const std::string& path, uint64_t value) {
   SetUserPrefValue(path, new base::StringValue(base::Uint64ToString(value)));
 }
 
-uint64 PrefService::GetUint64(const std::string& path) const {
+uint64_t PrefService::GetUint64(const std::string& path) const {
   DCHECK(CalledOnValidThread());
 
   const base::Value* value = GetPreferenceValue(path);
@@ -439,7 +440,7 @@ uint64 PrefService::GetUint64(const std::string& path) const {
   bool rv = value->GetAsString(&result);
   DCHECK(rv);
 
-  uint64 val;
+  uint64_t val;
   base::StringToUint64(result, &val);
   return val;
 }
@@ -499,7 +500,7 @@ void PrefService::SetUserPrefValue(const std::string& path,
     return;
   }
 
-  user_pref_store_->SetValue(path, owned_value.Pass(), GetWriteFlags(pref));
+  user_pref_store_->SetValue(path, std::move(owned_value), GetWriteFlags(pref));
 }
 
 void PrefService::UpdateCommandLinePrefStore(PrefStore* command_line_store) {

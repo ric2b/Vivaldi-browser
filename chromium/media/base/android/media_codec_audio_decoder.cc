@@ -6,7 +6,8 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "media/base/android/media_codec_bridge.h"
+#include "media/base/android/media_statistics.h"
+#include "media/base/android/sdk_media_codec_bridge.h"
 #include "media/base/audio_timestamp_helper.h"
 #include "media/base/demuxer_stream.h"
 
@@ -21,17 +22,23 @@ namespace media {
 
 MediaCodecAudioDecoder::MediaCodecAudioDecoder(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+    FrameStatistics* frame_statistics,
     const base::Closure& request_data_cb,
     const base::Closure& starvation_cb,
+    const base::Closure& decoder_drained_cb,
     const base::Closure& stop_done_cb,
+    const base::Closure& waiting_for_decryption_key_cb,
     const base::Closure& error_cb,
     const SetTimeCallback& update_current_time_cb)
-    : MediaCodecDecoder(media_task_runner,
+    : MediaCodecDecoder("AudioDecoder",
+                        media_task_runner,
+                        frame_statistics,
                         request_data_cb,
                         starvation_cb,
+                        decoder_drained_cb,
                         stop_done_cb,
-                        error_cb,
-                        "AudioDecoder"),
+                        waiting_for_decryption_key_cb,
+                        error_cb),
       volume_(-1.0),
       bytes_per_frame_(0),
       output_sampling_rate_(0),
@@ -40,6 +47,7 @@ MediaCodecAudioDecoder::MediaCodecAudioDecoder(
 }
 
 MediaCodecAudioDecoder::~MediaCodecAudioDecoder() {
+  DCHECK(media_task_runner_->BelongsToCurrentThread());
   DVLOG(1) << "AudioDecoder::~AudioDecoder()";
   ReleaseDecoderResources();
 }
@@ -55,13 +63,26 @@ bool MediaCodecAudioDecoder::HasStream() const {
 }
 
 void MediaCodecAudioDecoder::SetDemuxerConfigs(const DemuxerConfigs& configs) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
-
   DVLOG(1) << class_name() << "::" << __FUNCTION__ << " " << configs;
 
   configs_ = configs;
   if (!media_codec_bridge_)
     output_sampling_rate_ = configs.audio_sampling_rate;
+}
+
+bool MediaCodecAudioDecoder::IsContentEncrypted() const {
+  // Make sure SetDemuxerConfigs() as been called.
+  DCHECK(configs_.audio_codec != kUnknownAudioCodec);
+  return configs_.is_audio_encrypted;
+}
+
+void MediaCodecAudioDecoder::ReleaseDecoderResources() {
+  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DVLOG(1) << class_name() << "::" << __FUNCTION__;
+
+  DoEmergencyStop();
+
+  ReleaseMediaCodec();
 }
 
 void MediaCodecAudioDecoder::Flush() {
@@ -81,7 +102,8 @@ void MediaCodecAudioDecoder::SetVolume(double volume) {
 }
 
 void MediaCodecAudioDecoder::SetBaseTimestamp(base::TimeDelta base_timestamp) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  // Called from Media thread and Decoder thread. When called from Media thread
+  // Decoder thread should not be running.
 
   DVLOG(1) << __FUNCTION__ << " " << base_timestamp;
 
@@ -91,44 +113,50 @@ void MediaCodecAudioDecoder::SetBaseTimestamp(base::TimeDelta base_timestamp) {
 }
 
 bool MediaCodecAudioDecoder::IsCodecReconfigureNeeded(
-    const DemuxerConfigs& curr,
     const DemuxerConfigs& next) const {
-  return curr.audio_codec != next.audio_codec ||
-         curr.audio_channels != next.audio_channels ||
-         curr.audio_sampling_rate != next.audio_sampling_rate ||
-         next.is_audio_encrypted != next.is_audio_encrypted ||
-         curr.audio_extra_data.size() != next.audio_extra_data.size() ||
-         !std::equal(curr.audio_extra_data.begin(), curr.audio_extra_data.end(),
+  if (always_reconfigure_for_tests_)
+    return true;
+
+  return configs_.audio_codec != next.audio_codec ||
+         configs_.audio_channels != next.audio_channels ||
+         configs_.audio_sampling_rate != next.audio_sampling_rate ||
+         configs_.is_audio_encrypted != next.is_audio_encrypted ||
+         configs_.audio_extra_data.size() != next.audio_extra_data.size() ||
+         !std::equal(configs_.audio_extra_data.begin(),
+                     configs_.audio_extra_data.end(),
                      next.audio_extra_data.begin());
 }
 
-MediaCodecDecoder::ConfigStatus MediaCodecAudioDecoder::ConfigureInternal() {
+MediaCodecDecoder::ConfigStatus MediaCodecAudioDecoder::ConfigureInternal(
+    jobject media_crypto) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
 
   DVLOG(1) << class_name() << "::" << __FUNCTION__;
 
-  media_codec_bridge_.reset(AudioCodecBridge::Create(configs_.audio_codec));
-  if (!media_codec_bridge_)
-    return CONFIG_FAILURE;
-
-  if (!(static_cast<AudioCodecBridge*>(media_codec_bridge_.get()))
-           ->Start(
-               configs_.audio_codec,
-               configs_.audio_sampling_rate,
-               configs_.audio_channels,
-               &configs_.audio_extra_data[0],
-               configs_.audio_extra_data.size(),
-               configs_.audio_codec_delay_ns,
-               configs_.audio_seek_preroll_ns,
-               true,
-               GetMediaCrypto().obj())) {
-    DVLOG(1) << class_name() << "::" << __FUNCTION__ << " failed";
-
-    media_codec_bridge_.reset();
-    return CONFIG_FAILURE;
+  if (configs_.audio_codec == kUnknownAudioCodec) {
+    DVLOG(0) << class_name() << "::" << __FUNCTION__
+             << " configuration parameters are required";
+    return kConfigFailure;
   }
 
-  DVLOG(1) << class_name() << "::" << __FUNCTION__ << " succeeded";
+  media_codec_bridge_.reset(AudioCodecBridge::Create(configs_.audio_codec));
+  if (!media_codec_bridge_)
+    return kConfigFailure;
+
+  if (!(static_cast<AudioCodecBridge*>(media_codec_bridge_.get()))
+           ->ConfigureAndStart(
+               configs_.audio_codec, configs_.audio_sampling_rate,
+               configs_.audio_channels, &configs_.audio_extra_data[0],
+               configs_.audio_extra_data.size(), configs_.audio_codec_delay_ns,
+               configs_.audio_seek_preroll_ns, true, media_crypto)) {
+    DVLOG(0) << class_name() << "::" << __FUNCTION__
+             << " failed: cannot start audio codec";
+
+    media_codec_bridge_.reset();
+    return kConfigFailure;
+  }
+
+  DVLOG(0) << class_name() << "::" << __FUNCTION__ << " succeeded";
 
   SetVolumeInternal();
 
@@ -136,7 +164,10 @@ MediaCodecDecoder::ConfigStatus MediaCodecAudioDecoder::ConfigureInternal() {
   frame_count_ = 0;
   ResetTimestampHelper();
 
-  return CONFIG_OK;
+  if (!codec_created_for_tests_cb_.is_null())
+    media_task_runner_->PostTask(FROM_HERE, codec_created_for_tests_cb_);
+
+  return kConfigOk;
 }
 
 void MediaCodecAudioDecoder::OnOutputFormatChanged() {
@@ -151,38 +182,80 @@ void MediaCodecAudioDecoder::OnOutputFormatChanged() {
 }
 
 void MediaCodecAudioDecoder::Render(int buffer_index,
+                                    size_t offset,
                                     size_t size,
-                                    bool render_output,
+                                    RenderMode render_mode,
                                     base::TimeDelta pts,
                                     bool eos_encountered) {
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
 
-  DVLOG(2) << class_name() << "::" << __FUNCTION__ << " pts:" << pts;
+  DVLOG(2) << class_name() << "::" << __FUNCTION__ << " pts:" << pts << " "
+           << AsString(render_mode);
 
-  render_output = render_output && (size != 0u);
+  const bool do_play = (render_mode != kRenderSkip);
 
-  if (render_output) {
-    int64 head_position =
-        (static_cast<AudioCodecBridge*>(media_codec_bridge_.get()))
-            ->PlayOutputBuffer(buffer_index, size);
+  if (do_play) {
+    AudioCodecBridge* audio_codec =
+        static_cast<AudioCodecBridge*>(media_codec_bridge_.get());
+
+    DCHECK(audio_codec);
+
+    const bool postpone = (render_mode == kRenderAfterPreroll);
+
+    int64_t head_position =
+        audio_codec->PlayOutputBuffer(buffer_index, size, offset, postpone);
+
+    base::TimeTicks current_time = base::TimeTicks::Now();
+
+    frame_statistics_->IncrementFrameCount();
+
+    // Reset the base timestamp if we have not started playing.
+    // SetBaseTimestamp() must be called before AddFrames() since it resets the
+    // internal frame count.
+    if (postpone && !frame_count_)
+      SetBaseTimestamp(pts);
 
     size_t new_frames_count = size / bytes_per_frame_;
     frame_count_ += new_frames_count;
     audio_timestamp_helper_->AddFrames(new_frames_count);
-    int64 frames_to_play = frame_count_ - head_position;
-    DCHECK_GE(frames_to_play, 0);
 
-    base::TimeDelta last_buffered = audio_timestamp_helper_->GetTimestamp();
-    base::TimeDelta now_playing =
-        last_buffered -
-        audio_timestamp_helper_->GetFrameDuration(frames_to_play);
+    if (postpone) {
+      DVLOG(2) << class_name() << "::" << __FUNCTION__ << " pts:" << pts
+               << " POSTPONE";
 
-    DVLOG(2) << class_name() << "::" << __FUNCTION__ << " pts:" << pts
-             << " will play: [" << now_playing << "," << last_buffered << "]";
+      // Let the player adjust the start time.
+      media_task_runner_->PostTask(
+          FROM_HERE, base::Bind(update_current_time_cb_, pts, pts, true));
+    } else {
+      int64_t frames_to_play = frame_count_ - head_position;
 
-    media_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(update_current_time_cb_, now_playing, last_buffered));
+      DCHECK_GE(frames_to_play, 0) << class_name() << "::" << __FUNCTION__
+                                   << " pts:" << pts
+                                   << " frame_count_:" << frame_count_
+                                   << " head_position:" << head_position;
+
+      base::TimeDelta last_buffered = audio_timestamp_helper_->GetTimestamp();
+      base::TimeDelta now_playing =
+          last_buffered -
+          audio_timestamp_helper_->GetFrameDuration(frames_to_play);
+
+      DVLOG(2) << class_name() << "::" << __FUNCTION__ << " pts:" << pts
+               << " will play: [" << now_playing << "," << last_buffered << "]";
+
+      // Statistics
+      if (!next_frame_time_limit_.is_null() &&
+          next_frame_time_limit_ < current_time) {
+        DVLOG(2) << class_name() << "::" << __FUNCTION__ << " LATE FRAME delay:"
+                 << current_time - next_frame_time_limit_;
+        frame_statistics_->IncrementLateFrameCount();
+      }
+
+      next_frame_time_limit_ = current_time + (last_buffered - now_playing);
+
+      media_task_runner_->PostTask(
+          FROM_HERE, base::Bind(update_current_time_cb_, now_playing,
+                                last_buffered, false));
+    }
   }
 
   media_codec_bridge_->ReleaseOutputBuffer(buffer_index, false);

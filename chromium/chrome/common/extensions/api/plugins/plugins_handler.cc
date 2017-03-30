@@ -4,10 +4,13 @@
 
 #include "chrome/common/extensions/api/plugins/plugins_handler.h"
 
+#include <stddef.h>
+
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/manifest.h"
@@ -16,10 +19,6 @@
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/api_permission_set.h"
 #include "ui/base/l10n/l10n_util.h"
-
-#if defined(OS_WIN)
-#include "base/win/metro.h"
-#endif
 
 namespace extensions {
 
@@ -85,7 +84,7 @@ bool PluginsHandler::Parse(Extension* extension, base::string16* error) {
     std::string path_str;
     if (!plugin_value->GetString(keys::kPluginsPath, &path_str)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          manifest_errors::kInvalidPluginsPath, base::IntToString(i));
+          manifest_errors::kInvalidPluginsPath, base::SizeTToString(i));
       return false;
     }
 
@@ -94,23 +93,18 @@ bool PluginsHandler::Parse(Extension* extension, base::string16* error) {
     if (plugin_value->HasKey(keys::kPluginsPublic)) {
       if (!plugin_value->GetBoolean(keys::kPluginsPublic, &is_public)) {
         *error = ErrorUtils::FormatErrorMessageUTF16(
-            manifest_errors::kInvalidPluginsPublic,
-            base::IntToString(i));
+            manifest_errors::kInvalidPluginsPublic, base::SizeTToString(i));
         return false;
       }
     }
 
-    // We don't allow extensions to load NPAPI plugins on Chrome OS, or under
-    // Windows 8 Metro mode, but still parse the entries to display consistent
-    // error messages. If the extension actually requires the plugins then
-    // LoadRequirements will prevent it loading.
+    // We don't allow extensions to load NPAPI plugins on Chrome OS, but still
+    // parse the entries to display consistent error messages. If the extension
+    // actually requires the plugins then LoadRequirements will prevent it
+    // loading.
 #if defined(OS_CHROMEOS)
     continue;
-#elif defined(OS_WIN)
-    if (base::win::IsMetroProcess()) {
-      continue;
-    }
-#endif  // defined(OS_WIN).
+#endif  // defined(OS_CHROMEOS).
     plugins_data->plugins.push_back(PluginInfo(
         extension->path().Append(base::FilePath::FromUTF8Unsafe(path_str)),
         is_public));

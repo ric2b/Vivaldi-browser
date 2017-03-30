@@ -4,6 +4,8 @@
 
 #include "chrome/browser/net/firefox_proxy_settings.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -102,7 +104,7 @@ bool ParsePrefFile(const base::FilePath& pref_file,
     }
     std::string value = line.substr(start_value + 1,
                                     stop_value - start_value - 1);
-    base::TrimWhitespace(value, base::TRIM_ALL, &value);
+    base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
     // Value could be a boolean.
     bool is_value_true = base::LowerCaseEqualsASCII(value, "true");
     if (is_value_true || base::LowerCaseEqualsASCII(value, "false")) {
@@ -236,7 +238,7 @@ bool FirefoxProxySettings::ToProxyConfig(net::ProxyConfig* config) {
   }
 
   config->proxy_rules().bypass_rules.ParseFromStringUsingSuffixMatching(
-      JoinString(proxy_bypass_list_, ';'));
+      base::JoinString(proxy_bypass_list_, ";"));
 
   return true;
 }

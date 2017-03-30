@@ -4,9 +4,11 @@
 
 #include "content/browser/download/download_net_log_parameters.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "content/public/browser/download_interrupt_reasons.h"
@@ -49,7 +51,7 @@ scoped_ptr<base::Value> ItemActivatedNetLogCallback(
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
   dict->SetString("type", download_type_names[download_type]);
-  dict->SetString("id", base::Int64ToString(download_item->GetId()));
+  dict->SetString("id", base::UintToString(download_item->GetId()));
   dict->SetString("original_url", download_item->GetOriginalUrl().spec());
   dict->SetString("final_url", download_item->GetURL().spec());
   dict->SetString("file_name", *file_name);
@@ -59,7 +61,7 @@ scoped_ptr<base::Value> ItemActivatedNetLogCallback(
                   base::Int64ToString(download_item->GetReceivedBytes()));
   dict->SetBoolean("has_user_gesture", download_item->HasUserGesture());
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> ItemCheckedNetLogCallback(
@@ -69,7 +71,7 @@ scoped_ptr<base::Value> ItemCheckedNetLogCallback(
 
   dict->SetString("danger_type", download_danger_names[danger_type]);
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> ItemRenamedNetLogCallback(
@@ -81,12 +83,12 @@ scoped_ptr<base::Value> ItemRenamedNetLogCallback(
   dict->SetString("old_filename", old_filename->AsUTF8Unsafe());
   dict->SetString("new_filename", new_filename->AsUTF8Unsafe());
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> ItemInterruptedNetLogCallback(
     DownloadInterruptReason reason,
-    int64 bytes_so_far,
+    int64_t bytes_so_far,
     const std::string* hash_state,
     net::NetLogCaptureMode capture_mode) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
@@ -96,13 +98,13 @@ scoped_ptr<base::Value> ItemInterruptedNetLogCallback(
   dict->SetString("hash_state",
                   base::HexEncode(hash_state->data(), hash_state->size()));
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> ItemResumingNetLogCallback(
     bool user_initiated,
     DownloadInterruptReason reason,
-    int64 bytes_so_far,
+    int64_t bytes_so_far,
     const std::string* hash_state,
     net::NetLogCaptureMode capture_mode) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
@@ -113,11 +115,11 @@ scoped_ptr<base::Value> ItemResumingNetLogCallback(
   dict->SetString("hash_state",
                   base::HexEncode(hash_state->data(), hash_state->size()));
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> ItemCompletingNetLogCallback(
-    int64 bytes_so_far,
+    int64_t bytes_so_far,
     const std::string* final_hash,
     net::NetLogCaptureMode capture_mode) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
@@ -126,7 +128,7 @@ scoped_ptr<base::Value> ItemCompletingNetLogCallback(
   dict->SetString("final_hash",
                   base::HexEncode(final_hash->data(), final_hash->size()));
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> ItemFinishedNetLogCallback(
@@ -136,11 +138,11 @@ scoped_ptr<base::Value> ItemFinishedNetLogCallback(
 
   dict->SetString("auto_opened", auto_opened ? "yes" : "no");
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> ItemCanceledNetLogCallback(
-    int64 bytes_so_far,
+    int64_t bytes_so_far,
     const std::string* hash_state,
     net::NetLogCaptureMode capture_mode) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
@@ -149,19 +151,19 @@ scoped_ptr<base::Value> ItemCanceledNetLogCallback(
   dict->SetString("hash_state",
                   base::HexEncode(hash_state->data(), hash_state->size()));
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> FileOpenedNetLogCallback(
     const base::FilePath* file_name,
-    int64 start_offset,
+    int64_t start_offset,
     net::NetLogCaptureMode capture_mode) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
   dict->SetString("file_name", file_name->AsUTF8Unsafe());
   dict->SetString("start_offset", base::Int64ToString(start_offset));
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> FileStreamDrainedNetLogCallback(
@@ -173,7 +175,7 @@ scoped_ptr<base::Value> FileStreamDrainedNetLogCallback(
   dict->SetInteger("stream_size", static_cast<int>(stream_size));
   dict->SetInteger("num_buffers", static_cast<int>(num_buffers));
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> FileRenamedNetLogCallback(
@@ -185,7 +187,7 @@ scoped_ptr<base::Value> FileRenamedNetLogCallback(
   dict->SetString("old_filename", old_filename->AsUTF8Unsafe());
   dict->SetString("new_filename", new_filename->AsUTF8Unsafe());
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> FileErrorNetLogCallback(
@@ -197,7 +199,7 @@ scoped_ptr<base::Value> FileErrorNetLogCallback(
   dict->SetString("operation", operation);
   dict->SetInteger("net_error", net_error);
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> FileInterruptedNetLogCallback(
@@ -212,7 +214,7 @@ scoped_ptr<base::Value> FileInterruptedNetLogCallback(
     dict->SetInteger("os_error", os_error);
   dict->SetString("interrupt_reason", DownloadInterruptReasonToString(reason));
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 }  // namespace content

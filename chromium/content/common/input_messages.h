@@ -7,6 +7,7 @@
 // Multiply-included message file, hence no include guard.
 
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/edit_command.h"
@@ -41,8 +42,6 @@
 
 #define IPC_MESSAGE_START InputMsgStart
 
-IPC_ENUM_TRAITS_MAX_VALUE(content::InputEventAckState,
-                          content::INPUT_EVENT_ACK_STATE_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(
     content::SyntheticGestureParams::GestureSourceType,
     content::SyntheticGestureParams::GESTURE_SOURCE_TYPE_MAX)
@@ -72,7 +71,6 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(content::InputEvent)
   IPC_STRUCT_TRAITS_MEMBER(web_event)
   IPC_STRUCT_TRAITS_MEMBER(latency_info)
-  IPC_STRUCT_TRAITS_MEMBER(is_keyboard_shortcut)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::SyntheticGestureParams)
@@ -116,10 +114,9 @@ IPC_STRUCT_TRAITS_BEGIN(content::InputEventAck)
 IPC_STRUCT_TRAITS_END()
 
 // Sends an input event to the render widget.
-IPC_MESSAGE_ROUTED3(InputMsg_HandleInputEvent,
+IPC_MESSAGE_ROUTED2(InputMsg_HandleInputEvent,
                     IPC::WebInputEventPointer /* event */,
-                    ui::LatencyInfo /* latency_info */,
-                    bool /* is_keyboard_shortcut */)
+                    ui::LatencyInfo /* latency_info */)
 
 // Sends the cursor visibility state to the render widget.
 IPC_MESSAGE_ROUTED1(InputMsg_CursorVisibilityChange,
@@ -240,6 +237,12 @@ IPC_MESSAGE_ROUTED3(InputMsg_ActivateNearestFindResult,
                     int /* request_id */,
                     float /* x */,
                     float /* y */)
+
+// Sent by the browser as ACK to ViewHostMsg_TextInputState when necessary.
+// NOTE: ImeEventAck and other Ime* messages should be of the same type,
+// otherwise a race condition can happen.
+IPC_MESSAGE_ROUTED0(InputMsg_ImeEventAck)
+
 #endif
 
 IPC_MESSAGE_ROUTED0(InputMsg_SyntheticGestureCompleted)

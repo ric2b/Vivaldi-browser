@@ -7,9 +7,11 @@
 #include <algorithm>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_about_handler.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
@@ -21,6 +23,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_instant_controller.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
@@ -30,23 +33,15 @@
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
-#include "content/public/browser/browser_plugin_guest_manager.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
-#include "content/browser/web_contents/web_contents_impl.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/url_constants.h"
-#include "components/guest_view/browser/guest_view_base.h"
-#include "components/guest_view/browser/guest_view_manager.h"
-
 
 #if defined(USE_ASH)
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "components/signin/core/account_id/account_id.h"
 #endif
 
 #if defined(USE_AURA)
@@ -64,11 +59,6 @@
 using content::GlobalRequestID;
 using content::NavigationController;
 using content::WebContents;
-using content::WebContentsImpl;
-using content::NavigationEntry;
-using content::NavigationEntryImpl;
-using guest_view::GuestViewManager;
-using guest_view::GuestViewBase;
 
 class BrowserNavigatorWebContentsAdoption {
  public:
@@ -283,14 +273,7 @@ void LoadURLInContents(WebContents* target_contents,
   load_url_params.extra_headers = params->extra_headers;
   load_url_params.should_replace_current_entry =
       params->should_replace_current_entry;
-
-  if (params->transferred_global_request_id != GlobalRequestID()) {
-    load_url_params.is_renderer_initiated = params->is_renderer_initiated;
-    load_url_params.transferred_global_request_id =
-        params->transferred_global_request_id;
-  } else if (params->is_renderer_initiated) {
-    load_url_params.is_renderer_initiated = true;
-  }
+  load_url_params.is_renderer_initiated = params->is_renderer_initiated;
 
   // Only allows the browser-initiated navigation to use POST.
   if (params->uses_post && !params->is_renderer_initiated) {
@@ -367,7 +350,6 @@ content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
   WebContents::CreateParams create_params(
       params.browser->profile(),
       tab_util::GetSiteInstanceForNewTab(params.browser->profile(), url));
-
   if (params.source_contents) {
     create_params.initial_size =
         params.source_contents->GetContainerBounds().size();
@@ -414,108 +396,10 @@ bool SwapInPrerender(const GURL& url, chrome::NavigateParams* params) {
       prerender_manager->MaybeUsePrerenderedPage(url, params);
 }
 
-chrome::HostDesktopType GetHostDesktop(Browser* browser) {
-  if (browser)
-    return browser->host_desktop_type();
-  return chrome::GetActiveDesktop();
-}
-
 }  // namespace
 
+
 namespace chrome {
-
-NavigateParams::NavigateParams(Browser* a_browser,
-                               const GURL& a_url,
-                               ui::PageTransition a_transition)
-    : url(a_url),
-      frame_tree_node_id(-1),
-      uses_post(false),
-      target_contents(NULL),
-      source_contents(NULL),
-      disposition(CURRENT_TAB),
-      trusted_source(false),
-      transition(a_transition),
-      is_renderer_initiated(false),
-      tabstrip_index(-1),
-      tabstrip_add_types(TabStripModel::ADD_ACTIVE),
-      window_action(NO_ACTION),
-      user_gesture(true),
-      path_behavior(RESPECT),
-      ref_behavior(IGNORE_REF),
-      browser(a_browser),
-      initiating_profile(NULL),
-      host_desktop_type(GetHostDesktop(a_browser)),
-      should_replace_current_entry(false),
-      created_with_opener(false) {
-}
-
-NavigateParams::NavigateParams(Browser* a_browser,
-                               WebContents* a_target_contents)
-    : frame_tree_node_id(-1),
-      uses_post(false),
-      target_contents(a_target_contents),
-      source_contents(NULL),
-      disposition(CURRENT_TAB),
-      trusted_source(false),
-      transition(ui::PAGE_TRANSITION_LINK),
-      is_renderer_initiated(false),
-      tabstrip_index(-1),
-      tabstrip_add_types(TabStripModel::ADD_ACTIVE),
-      window_action(NO_ACTION),
-      user_gesture(true),
-      path_behavior(RESPECT),
-      ref_behavior(IGNORE_REF),
-      browser(a_browser),
-      initiating_profile(NULL),
-      host_desktop_type(GetHostDesktop(a_browser)),
-      should_replace_current_entry(false),
-      created_with_opener(false) {
-}
-
-NavigateParams::NavigateParams(Profile* a_profile,
-                               const GURL& a_url,
-                               ui::PageTransition a_transition)
-    : url(a_url),
-      frame_tree_node_id(-1),
-      uses_post(false),
-      target_contents(NULL),
-      source_contents(NULL),
-      disposition(NEW_FOREGROUND_TAB),
-      trusted_source(false),
-      transition(a_transition),
-      is_renderer_initiated(false),
-      tabstrip_index(-1),
-      tabstrip_add_types(TabStripModel::ADD_ACTIVE),
-      window_action(SHOW_WINDOW),
-      user_gesture(true),
-      path_behavior(RESPECT),
-      ref_behavior(IGNORE_REF),
-      browser(NULL),
-      initiating_profile(a_profile),
-      host_desktop_type(chrome::GetActiveDesktop()),
-      should_replace_current_entry(false),
-      created_with_opener(false) {
-}
-
-NavigateParams::~NavigateParams() {}
-
-void FillNavigateParamsFromOpenURLParams(chrome::NavigateParams* nav_params,
-                                         const content::OpenURLParams& params) {
-  nav_params->referrer = params.referrer;
-  nav_params->source_site_instance = params.source_site_instance;
-  nav_params->frame_tree_node_id = params.frame_tree_node_id;
-  nav_params->redirect_chain = params.redirect_chain;
-  nav_params->extra_headers = params.extra_headers;
-  nav_params->disposition = params.disposition;
-  nav_params->trusted_source = false;
-  nav_params->is_renderer_initiated = params.is_renderer_initiated;
-  nav_params->transferred_global_request_id =
-      params.transferred_global_request_id;
-  nav_params->should_replace_current_entry =
-      params.should_replace_current_entry;
-  nav_params->uses_post = params.uses_post;
-  nav_params->browser_initiated_post_data = params.browser_initiated_post_data;
-}
 
 void Navigate(NavigateParams* params) {
   Browser* source_browser = params->browser;
@@ -559,14 +443,14 @@ void Navigate(NavigateParams* params) {
     if (manager) {
       aura::Window* src_window = source_browser->window()->GetNativeWindow();
       aura::Window* new_window = params->browser->window()->GetNativeWindow();
-      const std::string& src_user =
+      const AccountId& src_account_id =
           manager->GetUserPresentingWindow(src_window);
-      if (src_user != manager->GetUserPresentingWindow(new_window)) {
+      if (src_account_id != manager->GetUserPresentingWindow(new_window)) {
         // Once the window gets presented, it should be shown on the same
         // desktop as the desktop of the creating browser. Note that this
         // command will not show the window if it wasn't shown yet by the
         // browser creation.
-        manager->ShowWindowForUser(new_window, src_user);
+        manager->ShowWindowForUser(new_window, src_account_id);
       }
     }
   }
@@ -627,7 +511,6 @@ void Navigate(NavigateParams* params) {
   // If no target WebContents was specified, we need to construct one if
   // we are supposed to target a new tab; unless it's a singleton that already
   // exists.
-
   if (!params->target_contents && singleton_index < 0) {
     DCHECK(!params->url.is_empty());
     if (params->disposition != CURRENT_TAB) {
@@ -654,6 +537,9 @@ void Navigate(NavigateParams* params) {
       // Try to handle non-navigational URLs that popup dialogs and such, these
       // should not actually navigate.
       if (!HandleNonNavigationAboutURL(params->url)) {
+        // Perform the actual navigation, tracking whether it came from the
+        // renderer.
+
         LoadURLInContents(params->target_contents, params->url, params);
       }
     }
@@ -751,8 +637,10 @@ bool IsURLAllowedInIncognito(const GURL& url,
        url.host() == chrome::kChromeUIThumbnailHost2 ||
        url.host() == chrome::kChromeUIThumbnailListHost ||
        url.host() == chrome::kChromeUISuggestionsHost ||
-       url.host() == chrome::kChromeUIDevicesHost ||
-       url.host() == chrome::kChromeUIVoiceSearchHost)) {
+#if defined(OS_CHROMEOS)
+       url.host() == chrome::kChromeUIVoiceSearchHost ||
+#endif
+       url.host() == chrome::kChromeUIDevicesHost)) {
     return false;
   }
 

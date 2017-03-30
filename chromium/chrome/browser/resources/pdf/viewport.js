@@ -25,6 +25,8 @@ function getIntersectionHeight(rect1, rect2) {
  * @param {Function} afterZoomCallback is run after a change in zoom
  * @param {number} scrollbarWidth the width of scrollbars on the page
  * @param {number} defaultZoom The default zoom level.
+ * @param {number} topToolbarHeight The number of pixels that should initially
+ *     be left blank above the document for the toolbar.
  */
 function Viewport(window,
                   sizer,
@@ -32,7 +34,8 @@ function Viewport(window,
                   beforeZoomCallback,
                   afterZoomCallback,
                   scrollbarWidth,
-                  defaultZoom) {
+                  defaultZoom,
+                  topToolbarHeight) {
   this.window_ = window;
   this.sizer_ = sizer;
   this.viewportChangedCallback_ = viewportChangedCallback;
@@ -45,6 +48,7 @@ function Viewport(window,
   this.scrollbarWidth_ = scrollbarWidth;
   this.fittingType_ = Viewport.FittingType.NONE;
   this.defaultZoom_ = defaultZoom;
+  this.topToolbarHeight_ = topToolbarHeight;
 
   window.addEventListener('scroll', this.updateViewport_.bind(this));
   window.addEventListener('resize', this.resize_.bind(this));
@@ -91,6 +95,24 @@ Viewport.PAGE_SHADOW = {top: 3, bottom: 7, left: 5, right: 5};
 
 Viewport.prototype = {
   /**
+   * Returns the zoomed and rounded document dimensions for the given zoom.
+   * Rounding is necessary when interacting with the renderer which tends to
+   * operate in integral values (for example for determining if scrollbars
+   * should be shown).
+   * @param {number} zoom The zoom to use to compute the scaled dimensions.
+   * @return {Object} A dictionary with scaled 'width'/'height' of the document.
+   * @private
+   */
+  getZoomedDocumentDimensions_: function(zoom) {
+    if (!this.documentDimensions_)
+      return null;
+    return {
+      width: Math.round(this.documentDimensions_.width * zoom),
+      height: Math.round(this.documentDimensions_.height * zoom)
+    };
+  },
+
+  /**
    * @private
    * Returns true if the document needs scrollbars at the given zoom level.
    * @param {number} zoom compute whether scrollbars are needed at this zoom
@@ -99,25 +121,25 @@ Viewport.prototype = {
    *     respectively.
    */
   documentNeedsScrollbars_: function(zoom) {
-    if (!this.documentDimensions_) {
+    var zoomedDimensions = this.getZoomedDocumentDimensions_(zoom);
+    if (!zoomedDimensions) {
       return {
         horizontal: false,
         vertical: false
       };
     }
-    var documentWidth = this.documentDimensions_.width * zoom;
-    var documentHeight = this.documentDimensions_.height * zoom;
 
     // If scrollbars are required for one direction, expand the document in the
     // other direction to take the width of the scrollbars into account when
     // deciding whether the other direction needs scrollbars.
-    if (documentWidth > this.window_.innerWidth)
-      documentHeight += this.scrollbarWidth_;
-    else if (documentHeight > this.window_.innerHeight)
-      documentWidth += this.scrollbarWidth_;
+    if (zoomedDimensions.width > this.window_.innerWidth)
+      zoomedDimensions.height += this.scrollbarWidth_;
+    else if (zoomedDimensions.height > this.window_.innerHeight)
+      zoomedDimensions.width += this.scrollbarWidth_;
     return {
-      horizontal: documentWidth > this.window_.innerWidth,
-      vertical: documentHeight > this.window_.innerHeight
+      horizontal: zoomedDimensions.width > this.window_.innerWidth,
+      vertical: zoomedDimensions.height + this.topToolbarHeight_ >
+          this.window_.innerHeight
     };
   },
 
@@ -136,11 +158,11 @@ Viewport.prototype = {
    * Helper function called when the zoomed document size changes.
    */
   contentSizeChanged_: function() {
-    if (this.documentDimensions_) {
-      this.sizer_.style.width =
-          this.documentDimensions_.width * this.zoom_ + 'px';
-      this.sizer_.style.height =
-          this.documentDimensions_.height * this.zoom_ + 'px';
+    var zoomedDimensions = this.getZoomedDocumentDimensions_(this.zoom_);
+    if (zoomedDimensions) {
+      this.sizer_.style.width = zoomedDimensions.width + 'px';
+      this.sizer_.style.height = zoomedDimensions.height +
+          this.topToolbarHeight_ + 'px';
     }
   },
 
@@ -171,7 +193,7 @@ Viewport.prototype = {
   get position() {
     return {
       x: this.window_.pageXOffset,
-      y: this.window_.pageYOffset
+      y: this.window_.pageYOffset - this.topToolbarHeight_
     };
   },
 
@@ -180,7 +202,7 @@ Viewport.prototype = {
    * @type {Object} position the position to scroll to.
    */
   set position(position) {
-    this.window_.scrollTo(position.x, position.y);
+    this.window_.scrollTo(position.x, position.y + this.topToolbarHeight_);
   },
 
   /**
@@ -229,15 +251,17 @@ Viewport.prototype = {
             'Viewport.mightZoom_.';
     }
     // Record the scroll position (relative to the top-left of the window).
-    var currentScrollPos = [
-      this.window_.pageXOffset / this.zoom_,
-      this.window_.pageYOffset / this.zoom_
-    ];
+    var currentScrollPos = {
+      x: this.position.x / this.zoom_,
+      y: this.position.y / this.zoom_
+    };
     this.zoom_ = newZoom;
     this.contentSizeChanged_();
     // Scroll to the scaled scroll position.
-    this.window_.scrollTo(currentScrollPos[0] * newZoom,
-                          currentScrollPos[1] * newZoom);
+    this.position = {
+      x: currentScrollPos.x * newZoom,
+      y: currentScrollPos.y * newZoom
+    };
   },
 
   /**
@@ -353,10 +377,7 @@ Viewport.prototype = {
     if (!needsScrollbars.horizontal && !needsScrollbars.vertical)
       return zoom;
 
-    var zoomedDimensions = {
-      width: this.documentDimensions_.width * zoom,
-      height: this.documentDimensions_.height * zoom
-    };
+    var zoomedDimensions = this.getZoomedDocumentDimensions_(zoom);
 
     // Check if adding a scrollbar will result in needing the other scrollbar.
     var scrollbarWidth = this.scrollbarWidth_;
@@ -426,8 +447,12 @@ Viewport.prototype = {
         height: this.pageDimensions_[page].height,
       };
       this.setZoomInternal_(this.computeFittingZoom_(dimensions, false));
-      if (scrollToTopOfPage)
-        this.window_.scrollTo(0, this.pageDimensions_[page].y * this.zoom_);
+      if (scrollToTopOfPage) {
+        this.position = {
+          x: 0,
+          y: this.pageDimensions_[page].y * this.zoom_
+        };
+      }
       this.updateViewport_();
     }.bind(this));
   },
@@ -485,8 +510,16 @@ Viewport.prototype = {
       if (page >= this.pageDimensions_.length)
         page = this.pageDimensions_.length - 1;
       var dimensions = this.pageDimensions_[page];
-      this.window_.scrollTo(dimensions.x * this.zoom_,
-                            dimensions.y * this.zoom_);
+      var toolbarOffset = 0;
+      // Unless we're in fit to page mode, scroll above the page by
+      // |this.topToolbarHeight_| so that the toolbar isn't covering it
+      // initially.
+      if (this.fittingType_ != Viewport.FittingType.FIT_TO_PAGE)
+        toolbarOffset = this.topToolbarHeight_;
+      this.position = {
+        x: dimensions.x * this.zoom_,
+        y: dimensions.y * this.zoom_ - toolbarOffset
+      };
       this.updateViewport_();
     }.bind(this));
   },
@@ -504,7 +537,10 @@ Viewport.prototype = {
         this.setZoomInternal_(
             Math.min(this.defaultZoom_,
                      this.computeFittingZoom_(this.documentDimensions_, true)));
-        this.window_.scrollTo(0, 0);
+        this.position = {
+          x: 0,
+          y: -this.topToolbarHeight_
+        };
       }
       this.contentSizeChanged_();
       this.resize_();

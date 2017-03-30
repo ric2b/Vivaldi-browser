@@ -4,6 +4,7 @@
 
 #include "components/sync_driver/sync_prefs.h"
 
+#include "base/base64.h"
 #include "base/logging.h"
 #include "base/prefs/pref_member.h"
 #include "base/prefs/pref_service.h"
@@ -77,16 +78,17 @@ void SyncPrefs::RegisterProfilePrefs(
 #endif
 
   registry->RegisterBooleanPref(prefs::kSyncHasAuthError, false);
-
   registry->RegisterStringPref(prefs::kSyncSessionsGUID, std::string());
-
   registry->RegisterIntegerPref(prefs::kSyncRemainingRollbackTries, 0);
-
   registry->RegisterBooleanPref(prefs::kSyncPassphrasePrompted, false);
-
   registry->RegisterIntegerPref(prefs::kSyncMemoryPressureWarningCount, -1);
-
   registry->RegisterBooleanPref(prefs::kSyncShutdownCleanly, false);
+  registry->RegisterDictionaryPref(prefs::kSyncInvalidationVersions);
+  registry->RegisterStringPref(prefs::kSyncLastRunVersion, std::string());
+  registry->RegisterBooleanPref(
+      prefs::kSyncPassphraseEncryptionTransitionInProgress, false);
+  registry->RegisterStringPref(prefs::kSyncNigoriStateForPassphraseTransition,
+                               std::string());
 }
 
 void SyncPrefs::AddSyncPrefObserver(SyncPrefObserver* sync_pref_observer) {
@@ -107,6 +109,13 @@ void SyncPrefs::ClearPreferences() {
   pref_service_->ClearPref(prefs::kSyncEncryptionBootstrapToken);
   pref_service_->ClearPref(prefs::kSyncKeystoreEncryptionBootstrapToken);
   pref_service_->ClearPref(prefs::kSyncPassphrasePrompted);
+  pref_service_->ClearPref(prefs::kSyncMemoryPressureWarningCount);
+  pref_service_->ClearPref(prefs::kSyncShutdownCleanly);
+  pref_service_->ClearPref(prefs::kSyncInvalidationVersions);
+  pref_service_->ClearPref(prefs::kSyncLastRunVersion);
+  pref_service_->ClearPref(
+      prefs::kSyncPassphraseEncryptionTransitionInProgress);
+  pref_service_->ClearPref(prefs::kSyncNigoriStateForPassphraseTransition);
 
   // TODO(nick): The current behavior does not clear
   // e.g. prefs::kSyncBookmarks.  Is that really what we want?
@@ -478,6 +487,78 @@ bool SyncPrefs::DidSyncShutdownCleanly() const {
 
 void SyncPrefs::SetCleanShutdown(bool value) {
   pref_service_->SetBoolean(prefs::kSyncShutdownCleanly, value);
+}
+
+void SyncPrefs::GetInvalidationVersions(
+    std::map<syncer::ModelType, int64_t>* invalidation_versions) const {
+  const base::DictionaryValue* invalidation_dictionary =
+      pref_service_->GetDictionary(prefs::kSyncInvalidationVersions);
+  syncer::ModelTypeSet protocol_types = syncer::ProtocolTypes();
+  for (auto iter = protocol_types.First(); iter.Good(); iter.Inc()) {
+    std::string key = syncer::ModelTypeToString(iter.Get());
+    std::string version_str;
+    if (!invalidation_dictionary->GetString(key, &version_str))
+      continue;
+    int64_t version = 0;
+    if (!base::StringToInt64(version_str, &version))
+      continue;
+    (*invalidation_versions)[iter.Get()] = version;
+  }
+}
+
+void SyncPrefs::UpdateInvalidationVersions(
+    const std::map<syncer::ModelType, int64_t>& invalidation_versions) {
+  scoped_ptr<base::DictionaryValue> invalidation_dictionary(
+      new base::DictionaryValue());
+  for (const auto& map_iter : invalidation_versions) {
+    std::string version_str = base::Int64ToString(map_iter.second);
+    invalidation_dictionary->SetString(
+        syncer::ModelTypeToString(map_iter.first), version_str);
+  }
+  pref_service_->Set(prefs::kSyncInvalidationVersions,
+                     *invalidation_dictionary);
+}
+
+std::string SyncPrefs::GetLastRunVersion() const {
+  return pref_service_->GetString(prefs::kSyncLastRunVersion);
+}
+
+void SyncPrefs::SetLastRunVersion(const std::string& current_version) {
+  pref_service_->SetString(prefs::kSyncLastRunVersion, current_version);
+}
+
+void SyncPrefs::SetPassphraseEncryptionTransitionInProgress(bool value) {
+  pref_service_->SetBoolean(
+      prefs::kSyncPassphraseEncryptionTransitionInProgress, value);
+}
+
+bool SyncPrefs::GetPassphraseEncryptionTransitionInProgress() const {
+  return pref_service_->GetBoolean(
+      prefs::kSyncPassphraseEncryptionTransitionInProgress);
+}
+
+void SyncPrefs::SetSavedNigoriStateForPassphraseEncryptionTransition(
+    const syncer::SyncEncryptionHandler::NigoriState& nigori_state) {
+  std::string encoded;
+  base::Base64Encode(nigori_state.nigori_specifics.SerializeAsString(),
+                     &encoded);
+  pref_service_->SetString(prefs::kSyncNigoriStateForPassphraseTransition,
+                           encoded);
+}
+
+scoped_ptr<syncer::SyncEncryptionHandler::NigoriState>
+SyncPrefs::GetSavedNigoriStateForPassphraseEncryptionTransition() const {
+  const std::string encoded =
+      pref_service_->GetString(prefs::kSyncNigoriStateForPassphraseTransition);
+  std::string decoded;
+  if (!base::Base64Decode(encoded, &decoded))
+    return scoped_ptr<syncer::SyncEncryptionHandler::NigoriState>();
+
+  scoped_ptr<syncer::SyncEncryptionHandler::NigoriState> result(
+      new syncer::SyncEncryptionHandler::NigoriState());
+  if (!result->nigori_specifics.ParseFromString(decoded))
+    return scoped_ptr<syncer::SyncEncryptionHandler::NigoriState>();
+  return result;
 }
 
 }  // namespace sync_driver

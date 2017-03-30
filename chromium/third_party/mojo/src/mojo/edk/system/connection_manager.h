@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_CONNECTION_MANAGER_H_
-#define MOJO_EDK_SYSTEM_CONNECTION_MANAGER_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CONNECTION_MANAGER_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CONNECTION_MANAGER_H_
 
-#include "mojo/edk/system/connection_identifier.h"
-#include "mojo/edk/system/process_identifier.h"
-#include "mojo/edk/system/system_impl_export.h"
+#include <ostream>
+
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/connection_identifier.h"
+#include "third_party/mojo/src/mojo/edk/system/process_identifier.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
+#include "third_party/mojo/src/mojo/edk/system/thread_annotations.h"
 
 namespace mojo {
 
@@ -59,13 +62,23 @@ namespace system {
 // slave).
 class MOJO_SYSTEM_IMPL_EXPORT ConnectionManager {
  public:
+  enum class Result {
+    FAILURE = 0,
+    SUCCESS,
+    // These results are used for |Connect()| (which also uses |FAILURE|, but
+    // not |SUCCESS|).
+    SUCCESS_CONNECT_SAME_PROCESS,
+    SUCCESS_CONNECT_NEW_CONNECTION,
+    SUCCESS_CONNECT_REUSE_CONNECTION
+  };
+
   virtual ~ConnectionManager() {}
 
   ConnectionIdentifier GenerateConnectionIdentifier();
 
   // Shuts down this connection manager. No other methods may be called after
   // this is (or while it is being) called.
-  virtual void Shutdown() = 0;
+  virtual void Shutdown() MOJO_NOT_THREAD_SAFE = 0;
 
   // TODO(vtl): Add a "get my own process identifier" method?
 
@@ -85,14 +98,16 @@ class MOJO_SYSTEM_IMPL_EXPORT ConnectionManager {
   virtual bool CancelConnect(const ConnectionIdentifier& connection_id) = 0;
 
   // Connects a pending connection; to be called only after both parties have
-  // called |AllowConnect()|. On success, |peer_process_identifier| is set to an
-  // unique identifier for the peer process, and if the peer process is not the
-  // same as the calling process then |*platform_handle| is set to a suitable
-  // native handle connecting the two parties (if the two parties are the same
-  // process, then |*platform_handle| is reset to be invalid).
-  virtual bool Connect(const ConnectionIdentifier& connection_id,
-                       ProcessIdentifier* peer_process_identifier,
-                       embedder::ScopedPlatformHandle* platform_handle) = 0;
+  // called |AllowConnect()|. On success, |Result::SUCCESS_CONNECT_...| is
+  // returned, |peer_process_identifier| is set to an unique identifier for the
+  // peer process, and |is_first| is set to true if this is the first party to
+  // call |Connect()|. In the case of |SUCCESS_CONNECT_SAME_PROCESS|,
+  // |*platform_handle| is set to a suitable native handle connecting the two
+  // parties.
+  virtual Result Connect(const ConnectionIdentifier& connection_id,
+                         ProcessIdentifier* peer_process_identifier,
+                         bool* is_first,
+                         embedder::ScopedPlatformHandle* platform_handle) = 0;
 
  protected:
   // |platform_support| must be valid and remain alive until after |Shutdown()|
@@ -106,7 +121,14 @@ class MOJO_SYSTEM_IMPL_EXPORT ConnectionManager {
   MOJO_DISALLOW_COPY_AND_ASSIGN(ConnectionManager);
 };
 
+// So logging macros and |DCHECK_EQ()|, etc. work.
+MOJO_SYSTEM_IMPL_EXPORT inline std::ostream& operator<<(
+    std::ostream& out,
+    ConnectionManager::Result result) {
+  return out << static_cast<int>(result);
+}
+
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_CONNECTION_MANAGER_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CONNECTION_MANAGER_H_

@@ -4,9 +4,11 @@
 
 #include "content/public/test/test_mojo_app.h"
 
+#include <utility>
+
 #include "base/logging.h"
-#include "mojo/application/public/cpp/application_connection.h"
-#include "mojo/application/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/application_impl.h"
 
 namespace content {
 
@@ -32,13 +34,13 @@ bool TestMojoApp::ConfigureIncomingConnection(
 void TestMojoApp::Create(mojo::ApplicationConnection* connection,
                          mojo::InterfaceRequest<TestMojoService> request) {
   DCHECK(!service_binding_.is_bound());
-  service_binding_.Bind(request.Pass());
+  service_binding_.Bind(std::move(request));
 }
 
 void TestMojoApp::DoSomething(const DoSomethingCallback& callback) {
   callback.Run();
   DCHECK(app_);
-  app_->Terminate();
+  app_->Quit();
 }
 
 void TestMojoApp::GetRequestorURL(const GetRequestorURLCallback& callback) {

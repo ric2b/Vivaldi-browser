@@ -4,7 +4,8 @@
 
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/strings/string_util.h"
 #include "net/base/request_priority.h"
 #include "net/url_request/url_request_context.h"
@@ -19,10 +20,6 @@ namespace {
 
 int kUserDataKey;  // The value is not important, the addr is a key.
 
-BlobDataHandle* GetRequestedBlobDataHandle(net::URLRequest* request) {
-  return static_cast<BlobDataHandle*>(request->GetUserData(&kUserDataKey));
-}
-
 }  // namespace
 
 // static
@@ -33,8 +30,8 @@ scoped_ptr<net::URLRequest> BlobProtocolHandler::CreateBlobRequest(
   const GURL kBlobUrl("blob://see_user_data/");
   scoped_ptr<net::URLRequest> request = request_context->CreateRequest(
       kBlobUrl, net::DEFAULT_PRIORITY, request_delegate);
-  SetRequestedBlobDataHandle(request.get(), blob_data_handle.Pass());
-  return request.Pass();
+  SetRequestedBlobDataHandle(request.get(), std::move(blob_data_handle));
+  return request;
 }
 
 // static
@@ -42,6 +39,12 @@ void BlobProtocolHandler::SetRequestedBlobDataHandle(
     net::URLRequest* request,
     scoped_ptr<BlobDataHandle> blob_data_handle) {
   request->SetUserData(&kUserDataKey, blob_data_handle.release());
+}
+
+// static
+BlobDataHandle* BlobProtocolHandler::GetRequestBlobDataHandle(
+    net::URLRequest* request) {
+  return static_cast<BlobDataHandle*>(request->GetUserData(&kUserDataKey));
 }
 
 BlobProtocolHandler::BlobProtocolHandler(
@@ -59,18 +62,16 @@ BlobProtocolHandler::~BlobProtocolHandler() {
 
 net::URLRequestJob* BlobProtocolHandler::MaybeCreateJob(
     net::URLRequest* request, net::NetworkDelegate* network_delegate) const {
-  return new storage::BlobURLRequestJob(request,
-                                        network_delegate,
-                                        LookupBlobData(request),
-                                        file_system_context_.get(),
-                                        file_task_runner_.get());
+  return new storage::BlobURLRequestJob(
+      request, network_delegate, LookupBlobHandle(request),
+      file_system_context_.get(), file_task_runner_.get());
 }
 
-scoped_ptr<BlobDataSnapshot> BlobProtocolHandler::LookupBlobData(
+BlobDataHandle* BlobProtocolHandler::LookupBlobHandle(
     net::URLRequest* request) const {
-  BlobDataHandle* blob_data_handle = GetRequestedBlobDataHandle(request);
+  BlobDataHandle* blob_data_handle = GetRequestBlobDataHandle(request);
   if (blob_data_handle)
-    return blob_data_handle->CreateSnapshot().Pass();
+    return blob_data_handle;
   if (!context_.get())
     return NULL;
 
@@ -78,16 +79,16 @@ scoped_ptr<BlobDataSnapshot> BlobProtocolHandler::LookupBlobData(
   // TODO(michaeln): Replace this use case and others like it with a BlobReader
   // impl that does not depend on urlfetching to perform this function.
   const std::string kPrefix("blob:uuid/");
-  if (!base::StartsWithASCII(request->url().spec(), kPrefix, true))
+  if (!base::StartsWith(request->url().spec(), kPrefix,
+                        base::CompareCase::SENSITIVE))
     return NULL;
   std::string uuid = request->url().spec().substr(kPrefix.length());
   scoped_ptr<BlobDataHandle> handle = context_->GetBlobDataFromUUID(uuid);
-  scoped_ptr<BlobDataSnapshot> snapshot;
+  BlobDataHandle* handle_ptr = handle.get();
   if (handle) {
-    snapshot = handle->CreateSnapshot().Pass();
-    SetRequestedBlobDataHandle(request, handle.Pass());
+    SetRequestedBlobDataHandle(request, std::move(handle));
   }
-  return snapshot.Pass();
+  return handle_ptr;
 }
 
 }  // namespace storage

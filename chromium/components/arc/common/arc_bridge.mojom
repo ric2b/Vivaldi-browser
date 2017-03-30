@@ -1,0 +1,59 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module arc;
+
+import "app.mojom";
+import "auth.mojom";
+import "clipboard.mojom";
+import "ime.mojom";
+import "input.mojom";
+import "notifications.mojom";
+import "power.mojom";
+import "process.mojom";
+import "settings.mojom";
+import "video.mojom";
+
+interface ArcBridgeHost {
+  // Keep the entries alphabetical. In order to do so without breaking
+  // compatibility with the ARC instance, explicitly assign each interface a
+  // unique ordinal.
+
+  // Notifies Chrome that the AppInstance interface is ready.
+  OnAppInstanceReady@100(AppInstance instance_ptr);
+
+  // Notifies Chrome that the AuthInstance interface is ready.
+  [MinVersion=1] OnAuthInstanceReady@106(AuthInstance instance_ptr);
+
+  // Notifies Chrome that the ClipboardInstance interface is ready.
+  [MinVersion=2] OnClipboardInstanceReady@109(ClipboardInstance instance_ptr);
+
+  // Notifies Chrome that the ImeInstance interface is ready.
+  [MinVersion=3] OnImeInstanceReady@110(ImeInstance instance_ptr);
+
+  // Notifies Chrome that the InputInstnace interface is ready.
+  OnInputInstanceReady@101(InputInstance instance_ptr);
+
+  // Notifies Chrome that the NotificationsInstance interface is ready.
+  OnNotificationsInstanceReady@102(NotificationsInstance instance_ptr);
+
+  // Notifies Chrome that the PowerInstance interface is ready.
+  OnPowerInstanceReady@103(PowerInstance instance_ptr);
+
+  // Notifies Chrome that the ProcessInstance interface is ready.
+  OnProcessInstanceReady@104(ProcessInstance instance_ptr);
+
+  // Notifies Chrome that the SettingsInstance interface is ready.
+  OnSettingsInstanceReady@105(SettingsInstance instance_ptr);
+
+  // Notifies Chrome that the VideoInstance interface is ready.
+  [MinVersion=2] OnVideoInstanceReady@107(VideoInstance instance_ptr);
+};
+
+interface ArcBridgeInstance {
+  // Establishes full-duplex communication with the host.
+  // |host_ptr| is the MessagePipe endpoint that is bound to the
+  // ArcBridgeHostPtr binding.
+  Init@0(ArcBridgeHost host_ptr);
+};

@@ -5,10 +5,9 @@
 #include "components/metrics/metrics_log_manager.h"
 
 #include <algorithm>
+#include <utility>
 
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
-#include "base/timer/elapsed_timer.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_pref_names.h"
 
@@ -56,7 +55,7 @@ MetricsLogManager::~MetricsLogManager() {}
 
 void MetricsLogManager::BeginLoggingWithLog(scoped_ptr<MetricsLog> log) {
   DCHECK(!current_log_);
-  current_log_ = log.Pass();
+  current_log_ = std::move(log);
 }
 
 void MetricsLogManager::FinishCurrentLog() {
@@ -118,18 +117,13 @@ void MetricsLogManager::PersistUnsentLogs() {
   if (!unsent_logs_loaded_)
     return;
 
-  base::ElapsedTimer timer;
   initial_log_queue_.SerializeLogs();
   ongoing_log_queue_.SerializeLogs();
-  UMA_HISTOGRAM_TIMES("UMA.StoreLogsTime", timer.Elapsed());
 }
 
 void MetricsLogManager::LoadPersistedUnsentLogs() {
-  base::ElapsedTimer timer;
   initial_log_queue_.DeserializeLogs();
   ongoing_log_queue_.DeserializeLogs();
-  UMA_HISTOGRAM_TIMES("UMA.LoadLogsTime", timer.Elapsed());
-
   unsent_logs_loaded_ = true;
 }
 

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/metrics/extensions_metrics_provider.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/memory/scoped_ptr.h"
@@ -48,35 +50,36 @@ class TestExtensionsMetricsProvider : public ExtensionsMetricsProvider {
         new extensions::ExtensionSet());
     scoped_refptr<const extensions::Extension> extension;
     extension = extensions::ExtensionBuilder()
-                    .SetManifest(extensions::DictionaryBuilder()
-                                     .Set("name", "Test extension")
-                                     .Set("version", "1.0.0")
-                                     .Set("manifest_version", 2))
+                    .SetManifest(std::move(extensions::DictionaryBuilder()
+                                               .Set("name", "Test extension")
+                                               .Set("version", "1.0.0")
+                                               .Set("manifest_version", 2)))
                     .SetID("ahfgeienlihckogmohjhadlkjgocpleb")
                     .Build();
     extensions->Insert(extension);
     extension = extensions::ExtensionBuilder()
-                    .SetManifest(extensions::DictionaryBuilder()
-                                     .Set("name", "Test extension 2")
-                                     .Set("version", "1.0.0")
-                                     .Set("manifest_version", 2))
+                    .SetManifest(std::move(extensions::DictionaryBuilder()
+                                               .Set("name", "Test extension 2")
+                                               .Set("version", "1.0.0")
+                                               .Set("manifest_version", 2)))
                     .SetID("pknkgggnfecklokoggaggchhaebkajji")
                     .Build();
     extensions->Insert(extension);
-    extension = extensions::ExtensionBuilder()
-                    .SetManifest(extensions::DictionaryBuilder()
-                                     .Set("name", "Colliding Extension")
-                                     .Set("version", "1.0.0")
-                                     .Set("manifest_version", 2))
-                    .SetID("mdhofdjgenpkhlmddfaegdjddcecipmo")
-                    .Build();
+    extension =
+        extensions::ExtensionBuilder()
+            .SetManifest(std::move(extensions::DictionaryBuilder()
+                                       .Set("name", "Colliding Extension")
+                                       .Set("version", "1.0.0")
+                                       .Set("manifest_version", 2)))
+            .SetID("mdhofdjgenpkhlmddfaegdjddcecipmo")
+            .Build();
     extensions->Insert(extension);
-    return extensions.Pass();
+    return extensions;
   }
 
   // Override GetClientID() to return a specific value on which test
   // expectations are based.
-  uint64 GetClientID() override { return 0x3f1bfee9; }
+  uint64_t GetClientID() override { return 0x3f1bfee9; }
 };
 
 }  // namespace

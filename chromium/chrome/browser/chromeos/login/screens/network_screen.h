@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -80,16 +81,23 @@ class NetworkScreen : public NetworkModel,
                           Profile* profile,
                           bool show_message) override;
 
-  void SetApplicationLocale(const std::string& locale);
+  // Set locale and input method. If |locale| is empty or doesn't change, set
+  // the |input_method| directly. If |input_method| is empty or ineligible, we
+  // don't change the current |input_method|.
+  void SetApplicationLocaleAndInputMethod(const std::string& locale,
+                                          const std::string& input_method);
   std::string GetApplicationLocale();
-
-  void SetInputMethod(const std::string& input_method);
   std::string GetInputMethod() const;
 
   void SetTimezone(const std::string& timezone_id);
   std::string GetTimezone() const;
 
-  void CreateNetworkFromOnc(const std::string& onc_spec);
+  // Currently We can only get unsecured Wifi network configuration from shark
+  // that can be applied to remora. Returns the network ONC configuration.
+  void GetConnectedWifiNetwork(std::string* out_onc_spec);
+  void CreateAndConnectNetworkFromOnc(const std::string& onc_spec,
+                                      const base::Closure& success_callback,
+                                      const base::Closure& failed_callback);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -98,6 +106,9 @@ class NetworkScreen : public NetworkModel,
   friend class NetworkScreenTest;
   FRIEND_TEST_ALL_PREFIXES(NetworkScreenTest, Timeout);
   FRIEND_TEST_ALL_PREFIXES(NetworkScreenTest, CanConnect);
+
+  void SetApplicationLocale(const std::string& locale);
+  void SetInputMethod(const std::string& input_method);
 
   // Subscribe to timezone changes.
   void InitializeTimezoneObserver();
@@ -137,6 +148,7 @@ class NetworkScreen : public NetworkModel,
   // Async callback after ReloadResourceBundle(locale) completed.
   void OnLanguageChangedCallback(
       const InputEventsBlocker* input_events_blocker,
+      const std::string& input_method,
       const locale_util::LanguageSwitchResult& result);
 
   // Starts resolving language list on BlockingPool.
@@ -145,8 +157,8 @@ class NetworkScreen : public NetworkModel,
 
   // Callback for chromeos::ResolveUILanguageList() (from l10n_util).
   void OnLanguageListResolved(scoped_ptr<base::ListValue> new_language_list,
-                              std::string new_language_list_locale,
-                              std::string new_selected_language);
+                              const std::string& new_language_list_locale,
+                              const std::string& new_selected_language);
 
   // Callback when the system timezone settings is changed.
   void OnSystemTimezoneChanged();
@@ -162,7 +174,7 @@ class NetworkScreen : public NetworkModel,
   bool continue_pressed_;
 
   // Timer for connection timeout.
-  base::OneShotTimer<NetworkScreen> connection_timer_;
+  base::OneShotTimer connection_timer_;
 
   scoped_ptr<CrosSettings::ObserverSubscription> timezone_subscription_;
 

@@ -92,26 +92,50 @@ class V8GCTimesTests(page_test_test_case.PageTestTestCase):
         self.CreateEmptyPageSet())
 
     test_page_helper.AddEvent('toplevel', 'PostMessage',
-        thread_start=0, thread_duration=57, wall_start=5, wall_duration=68)
+        thread_start=0, thread_duration=77, wall_start=5, wall_duration=88)
     test_page_helper.AddEvent('v8', 'V8.GCScavenger', 5, 4)
     test_page_helper.AddEvent('v8', 'V8.GCScavenger', 15, 3)
     test_page_helper.AddEvent('v8', 'V8.GCIncrementalMarking', 23, 4)
     test_page_helper.AddEvent('v8', 'V8.GCIncrementalMarking', 34, 2)
-    test_page_helper.AddEvent('v8', 'V8.GCCompactor', 42, 4)
-    test_page_helper.AddEvent('v8', 'V8.GCCompactor', 52, 5)
+    test_page_helper.AddEvent('v8', 'V8.GCFinalizeMC', 38, 2)
+    test_page_helper.AddEvent('v8', 'V8.GCFinalizeMC', 42, 3)
+    test_page_helper.AddEvent('v8', 'V8.GCFinalizeMCReduceMemory', 46, 4)
+    test_page_helper.AddEvent('v8', 'V8.GCFinalizeMCReduceMemory', 51, 5)
+    test_page_helper.AddEvent('v8', 'V8.GCCompactor', 62, 4)
+    test_page_helper.AddEvent('v8', 'V8.GCCompactor', 72, 5)
 
     results = test_page_helper.MeasureFakePage()
     expected = _GetEmptyResults()
-    expected['duration'] = ('ms', 68)
-    expected['cpu_time'] = ('ms', 57)
+    expected['duration'] = ('ms', 88)
+    expected['cpu_time'] = ('ms', 77)
     expected['v8_gc_incremental_marking'] = ('ms', 6.0)
+    expected['v8_gc_incremental_marking_average'] = ('ms', 3.0)
+    expected['v8_gc_incremental_marking_count'] = ('count', 2)
+    expected['v8_gc_incremental_marking_max'] = ('ms', 4.0)
     expected['v8_gc_incremental_marking_outside_idle'] = ('ms', 6.0)
+    expected['v8_gc_finalize_incremental'] = ('ms', 5.0)
+    expected['v8_gc_finalize_incremental_average'] = ('ms', 2.5)
+    expected['v8_gc_finalize_incremental_count'] = ('count', 2)
+    expected['v8_gc_finalize_incremental_max'] = ('ms', 3.0)
+    expected['v8_gc_finalize_incremental_outside_idle'] = ('ms', 5.0)
+    expected['v8_gc_finalize_incremental_reduce_memory'] = ('ms', 9.0)
+    expected['v8_gc_finalize_incremental_reduce_memory_average'] = ('ms', 4.5)
+    expected['v8_gc_finalize_incremental_reduce_memory_count'] = ('count', 2)
+    expected['v8_gc_finalize_incremental_reduce_memory_max'] = ('ms', 5.0)
+    expected['v8_gc_finalize_incremental_reduce_memory_outside_idle'] = (
+        'ms', 9.0)
     expected['v8_gc_scavenger'] = ('ms', 7.0)
+    expected['v8_gc_scavenger_average'] = ('ms', 3.5)
+    expected['v8_gc_scavenger_count'] = ('count', 2)
+    expected['v8_gc_scavenger_max'] = ('ms', 4.0)
     expected['v8_gc_scavenger_outside_idle'] = ('ms', 7.0)
     expected['v8_gc_mark_compactor'] = ('ms', 9.0)
+    expected['v8_gc_mark_compactor_average'] = ('ms', 4.5)
+    expected['v8_gc_mark_compactor_count'] = ('count', 2)
+    expected['v8_gc_mark_compactor_max'] = ('ms', 5.0)
     expected['v8_gc_mark_compactor_outside_idle'] = ('ms', 9.0)
-    expected['v8_gc_total'] = ('ms', 22.0)
-    expected['v8_gc_total_outside_idle'] = ('ms', 22.0)
+    expected['v8_gc_total'] = ('ms', 36.0)
+    expected['v8_gc_total_outside_idle'] = ('ms', 36.0)
 
     self._AssertResultsEqual(expected, _ActualValues(results))
 
@@ -142,13 +166,22 @@ class V8GCTimesTests(page_test_test_case.PageTestTestCase):
     expected['duration'] = ('ms', 68)
     expected['cpu_time'] = ('ms', 57)
     expected['v8_gc_incremental_marking'] = ('ms', 6.0)
+    expected['v8_gc_incremental_marking_average'] = ('ms', 3.0)
+    expected['v8_gc_incremental_marking_count'] = ('count', 2)
+    expected['v8_gc_incremental_marking_max'] = ('ms', 4.0)
     expected['v8_gc_incremental_marking_outside_idle'] = ('ms', 4.0)
     expected['v8_gc_incremental_marking_percentage_idle'] = \
         ('idle%', 100 * 2 / 6.0)
     expected['v8_gc_scavenger'] = ('ms', 7.0)
+    expected['v8_gc_scavenger_average'] = ('ms', 3.5)
+    expected['v8_gc_scavenger_count'] = ('count', 2)
+    expected['v8_gc_scavenger_max'] = ('ms', 4.0)
     expected['v8_gc_scavenger_outside_idle'] = ('ms', 4.0)
     expected['v8_gc_scavenger_percentage_idle'] = ('idle%', 100 * 3 / 7.0)
     expected['v8_gc_mark_compactor'] = ('ms', 9.0)
+    expected['v8_gc_mark_compactor_average'] = ('ms', 4.5)
+    expected['v8_gc_mark_compactor_count'] = ('count', 2)
+    expected['v8_gc_mark_compactor_max'] = ('ms', 5.0)
     expected['v8_gc_mark_compactor_outside_idle'] = ('ms', 4.0)
     expected['v8_gc_mark_compactor_percentage_idle'] = ('idle%', 100 * 5 / 9.0)
     expected['v8_gc_total'] = ('ms', 22.0)
@@ -181,15 +214,24 @@ class V8GCTimesTests(page_test_test_case.PageTestTestCase):
     expected['duration'] = ('ms', 92)
     expected['cpu_time'] = ('ms', 80)
     expected['v8_gc_incremental_marking'] = ('ms', 14.0)
+    expected['v8_gc_incremental_marking_average'] = ('ms', 14.0)
+    expected['v8_gc_incremental_marking_count'] = ('count', 1)
+    expected['v8_gc_incremental_marking_max'] = ('ms', 14.0)
     expected['v8_gc_incremental_marking_outside_idle'] = ('ms', 8.0)
     expected['v8_gc_incremental_marking_idle_deadline_overrun'] = ('ms', 8.0)
     expected['v8_gc_incremental_marking_percentage_idle'] = \
         ('idle%', 100 * 6 / 14.0)
     expected['v8_gc_scavenger'] = ('ms', 14.0)
+    expected['v8_gc_scavenger_average'] = ('ms', 14.0)
+    expected['v8_gc_scavenger_count'] = ('count', 1)
+    expected['v8_gc_scavenger_max'] = ('ms', 14.0)
     expected['v8_gc_scavenger_outside_idle'] = ('ms', 6.0)
     expected['v8_gc_scavenger_idle_deadline_overrun'] = ('ms', 6.0)
     expected['v8_gc_scavenger_percentage_idle'] = ('idle%', 100 * 8 / 14.0)
     expected['v8_gc_mark_compactor'] = ('ms', 22.0)
+    expected['v8_gc_mark_compactor_average'] = ('ms', 22.0)
+    expected['v8_gc_mark_compactor_count'] = ('count', 1)
+    expected['v8_gc_mark_compactor_max'] = ('ms', 22.0)
     expected['v8_gc_mark_compactor_outside_idle'] = ('ms', 13.0)
     expected['v8_gc_mark_compactor_idle_deadline_overrun'] = ('ms', 13.0)
     expected['v8_gc_mark_compactor_percentage_idle'] = ('idle%', 100 * 9 / 22.0)
@@ -217,6 +259,9 @@ class V8GCTimesTests(page_test_test_case.PageTestTestCase):
     expected['duration'] = ('ms', 92)
     expected['cpu_time'] = ('ms', 80)
     expected['v8_gc_scavenger'] = ('ms', 4.0)
+    expected['v8_gc_scavenger_average'] = ('ms', 4.0)
+    expected['v8_gc_scavenger_count'] = ('count', 1)
+    expected['v8_gc_scavenger_max'] = ('ms', 4.0)
     expected_outside_idle = 4.0 - (4.0 * 8 / 14)
     expected['v8_gc_scavenger_outside_idle'] = ('ms', expected_outside_idle)
     expected['v8_gc_scavenger_idle_deadline_overrun'] = ('ms', 6.0)
@@ -255,14 +300,39 @@ def _GetEmptyResults():
   return {'cpu_time': ('ms', 0.0),
           'duration': ('ms', 0.0),
           'v8_gc_incremental_marking': ('ms', 0.0),
+          'v8_gc_incremental_marking_average': ('ms', 0.0),
+          'v8_gc_incremental_marking_count': ('count', 0),
+          'v8_gc_incremental_marking_max': ('ms', 0.0),
           'v8_gc_incremental_marking_idle_deadline_overrun': ('ms', 0.0),
           'v8_gc_incremental_marking_outside_idle': ('ms', 0.0),
           'v8_gc_incremental_marking_percentage_idle': ('idle%', 0.0),
+          'v8_gc_finalize_incremental': ('ms', 0.0),
+          'v8_gc_finalize_incremental_average': ('ms', 0.0),
+          'v8_gc_finalize_incremental_count': ('count', 0),
+          'v8_gc_finalize_incremental_max': ('ms', 0.0),
+          'v8_gc_finalize_incremental_idle_deadline_overrun': ('ms', 0.0),
+          'v8_gc_finalize_incremental_outside_idle': ('ms', 0.0),
+          'v8_gc_finalize_incremental_percentage_idle': ('idle%', 0.0),
+          'v8_gc_finalize_incremental_reduce_memory': ('ms', 0.0),
+          'v8_gc_finalize_incremental_reduce_memory_average': ('ms', 0.0),
+          'v8_gc_finalize_incremental_reduce_memory_count': ('count', 0),
+          'v8_gc_finalize_incremental_reduce_memory_max': ('ms', 0.0),
+          'v8_gc_finalize_incremental_reduce_memory_idle_deadline_overrun':
+              ('ms', 0.0),
+          'v8_gc_finalize_incremental_reduce_memory_outside_idle': ('ms', 0.0),
+          'v8_gc_finalize_incremental_reduce_memory_percentage_idle':
+              ('idle%', 0.0),
           'v8_gc_mark_compactor': ('ms', 0.0),
+          'v8_gc_mark_compactor_average': ('ms', 0.0),
+          'v8_gc_mark_compactor_count': ('count', 0),
+          'v8_gc_mark_compactor_max': ('ms', 0.0),
           'v8_gc_mark_compactor_idle_deadline_overrun': ('ms', 0.0),
           'v8_gc_mark_compactor_outside_idle': ('ms', 0.0),
           'v8_gc_mark_compactor_percentage_idle': ('idle%', 0.0),
           'v8_gc_scavenger': ('ms', 0.0),
+          'v8_gc_scavenger_average': ('ms', 0.0),
+          'v8_gc_scavenger_count': ('count', 0),
+          'v8_gc_scavenger_max': ('ms', 0.0),
           'v8_gc_scavenger_idle_deadline_overrun': ('ms', 0.0),
           'v8_gc_scavenger_outside_idle': ('ms', 0.0),
           'v8_gc_scavenger_percentage_idle': ('idle%', 0.0),

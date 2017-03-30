@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "ash/accessibility_delegate.h"
 #include "ash/ash_switches.h"
@@ -21,6 +22,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/timer/timer.h"
 #include "ui/aura/window_tree_host.h"
@@ -36,6 +38,11 @@
 using media::SoundsManager;
 #endif
 
+#define UMA_HISTOGRAM_LOCK_TIMES(name, sample)                     \
+  UMA_HISTOGRAM_CUSTOM_TIMES(name, sample,                         \
+                             base::TimeDelta::FromMilliseconds(1), \
+                             base::TimeDelta::FromSeconds(50), 100)
+
 namespace ash {
 
 namespace {
@@ -46,9 +53,24 @@ const int kMaxShutdownSoundDurationMs = 1500;
 
 }  // namespace
 
-const int LockStateController::kLockTimeoutMs = 400;
-const int LockStateController::kShutdownTimeoutMs = 400;
-const int LockStateController::kLockFailTimeoutMs = 8000;
+// ASan/TSan/MSan instrument each memory access. This may slow the execution
+// down significantly.
+#if defined(MEMORY_SANITIZER)
+// For MSan the slowdown depends heavily on the value of msan_track_origins GYP
+// flag. The multiplier below corresponds to msan_track_origins=1.
+static const int kTimeoutMultiplier = 6;
+#elif defined(ADDRESS_SANITIZER) && defined(OS_WIN)
+// Asan/Win has not been optimized yet, give it a higher
+// timeout multiplier. See http://crbug.com/412471
+static const int kTimeoutMultiplier = 3;
+#elif defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER) || \
+    defined(SYZYASAN)
+static const int kTimeoutMultiplier = 2;
+#else
+static const int kTimeoutMultiplier = 1;
+#endif
+
+const int LockStateController::kLockFailTimeoutMs = 8000 * kTimeoutMultiplier;
 const int LockStateController::kLockToShutdownTimeoutMs = 150;
 const int LockStateController::kShutdownRequestDelayMs = 50;
 
@@ -77,7 +99,7 @@ LockStateController::~LockStateController() {
 
 void LockStateController::SetDelegate(
     scoped_ptr<LockStateControllerDelegate> delegate) {
-  delegate_ = delegate.Pass();
+  delegate_ = std::move(delegate);
 }
 
 void LockStateController::AddObserver(LockStateObserver* observer) {
@@ -222,6 +244,8 @@ void LockStateController::OnAppTerminating() {
 }
 
 void LockStateController::OnLockStateChanged(bool locked) {
+  DCHECK((lock_fail_timer_.IsRunning() && lock_duration_timer_ != nullptr) ||
+         (!lock_fail_timer_.IsRunning() && lock_duration_timer_ == nullptr));
   VLOG(1) << "OnLockStateChanged " << locked;
   if (shutting_down_ || (system_is_locked_ == locked))
     return;
@@ -231,12 +255,20 @@ void LockStateController::OnLockStateChanged(bool locked) {
   if (locked) {
     StartPostLockAnimation();
     lock_fail_timer_.Stop();
+    if (lock_duration_timer_) {
+      UMA_HISTOGRAM_LOCK_TIMES("Ash.WindowManager.Lock.Success",
+                               lock_duration_timer_->Elapsed());
+      lock_duration_timer_.reset();
+    }
   } else {
     StartUnlockAnimationAfterUIDestroyed();
   }
 }
 
 void LockStateController::OnLockFailTimeout() {
+  UMA_HISTOGRAM_LOCK_TIMES("Ash.WindowManager.Lock.Timeout",
+                           lock_duration_timer_->Elapsed());
+  lock_duration_timer_.reset();
   DCHECK(!system_is_locked_);
   LOG(FATAL) << "Screen lock took too long; crashing intentionally";
 }
@@ -493,18 +525,15 @@ void LockStateController::PreLockAnimationFinished(bool request_lock) {
   // Increase lock timeout for slower hardware, see http://crbug.com/350628
   const std::string board = base::SysInfo::GetLsbReleaseBoard();
   if (board == "x86-mario" ||
-      base::StartsWithASCII(board, "x86-alex", true /* case_sensitive */) ||
-      base::StartsWithASCII(board, "x86-zgb", true /* case_sensitive */) ||
-      base::StartsWithASCII(board, "daisy", true /* case_sensitive */)) {
+      base::StartsWith(board, "x86-alex", base::CompareCase::SENSITIVE) ||
+      base::StartsWith(board, "x86-zgb", base::CompareCase::SENSITIVE) ||
+      base::StartsWith(board, "daisy", base::CompareCase::SENSITIVE)) {
     timeout *= 2;
   }
-// Times out on ASAN bots.
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER)
-  timeout *= 2;
-#endif
 #endif
   lock_fail_timer_.Start(
       FROM_HERE, timeout, this, &LockStateController::OnLockFailTimeout);
+  lock_duration_timer_.reset(new base::ElapsedTimer());
 }
 
 void LockStateController::PostLockAnimationFinished() {

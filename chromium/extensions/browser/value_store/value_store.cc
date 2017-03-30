@@ -4,42 +4,57 @@
 
 #include "extensions/browser/value_store/value_store.h"
 
+#include <utility>
+
 #include "base/logging.h"
 
-// Implementation of Error.
+// Implementation of Status.
 
-ValueStore::Error::Error(ErrorCode code,
-                         const std::string& message,
-                         scoped_ptr<std::string> key)
-    : code(code), message(message), key(key.Pass()) {}
+ValueStore::Status::Status() : code(OK), restore_status(RESTORE_NONE) {}
 
-ValueStore::Error::~Error() {}
+ValueStore::Status::Status(StatusCode code, const std::string& message)
+    : Status(code, RESTORE_NONE, message) {}
+
+ValueStore::Status::Status(StatusCode code,
+                           BackingStoreRestoreStatus restore_status,
+                           const std::string& message)
+    : code(code), restore_status(restore_status), message(message) {}
+
+ValueStore::Status::~Status() {}
+
+void ValueStore::Status::Merge(const Status& status) {
+  if (code == OK)
+    code = status.code;
+  if (message.empty() && !status.message.empty())
+    message = status.message;
+  if (restore_status == RESTORE_NONE)
+    restore_status = status.restore_status;
+}
 
 // Implementation of ReadResultType.
 
 ValueStore::ReadResultType::ReadResultType(
-    scoped_ptr<base::DictionaryValue> settings) : settings_(settings.Pass()) {
+    scoped_ptr<base::DictionaryValue> settings,
+    const Status& status)
+    : settings_(std::move(settings)), status_(status) {
   CHECK(settings_);
 }
 
-ValueStore::ReadResultType::ReadResultType(scoped_ptr<Error> error)
-    : error_(error.Pass()) {
-  CHECK(error_);
-}
+ValueStore::ReadResultType::ReadResultType(const Status& status)
+    : status_(status) {}
 
 ValueStore::ReadResultType::~ReadResultType() {}
 
 // Implementation of WriteResultType.
 
 ValueStore::WriteResultType::WriteResultType(
-    scoped_ptr<ValueStoreChangeList> changes)
-    : changes_(changes.Pass()) {
+    scoped_ptr<ValueStoreChangeList> changes,
+    const Status& status)
+    : changes_(std::move(changes)), status_(status) {
   CHECK(changes_);
 }
 
-ValueStore::WriteResultType::WriteResultType(scoped_ptr<Error> error)
-    : error_(error.Pass()) {
-  CHECK(error_);
-}
+ValueStore::WriteResultType::WriteResultType(const Status& status)
+    : status_(status) {}
 
 ValueStore::WriteResultType::~WriteResultType() {}

@@ -5,9 +5,9 @@
 #ifndef COMPONENTS_VISITEDLINK_BROWSER_VISITEDLINK_MASTER_H_
 #define COMPONENTS_VISITEDLINK_BROWSER_VISITEDLINK_MASTER_H_
 
-#if defined(OS_WIN)
-#include <windows.h>
-#endif
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <vector>
 
@@ -15,9 +15,17 @@
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "components/visitedlink/common/visitedlink_common.h"
+
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
 
 #if defined(UNIT_TEST) || defined(PERF_TEST) || !defined(NDEBUG)
 #include "base/logging.h"
@@ -56,8 +64,12 @@ class VisitedLinkMaster : public VisitedLinkCommon {
     virtual void Add(Fingerprint fingerprint) = 0;
 
     // Called when link coloring state has been reset. This may occur when
-    // entire or parts of history were deleted.
-    virtual void Reset() = 0;
+    // entire or parts of history were deleted. Also this may occur when
+    // the table was rebuilt or loaded. The salt is stored in the database file.
+    // As a result the salt will change after loading the table from the
+    // database file. In this case we use |invalidate_hashes| to inform that
+    // all cached visitedlink hashes need to be recalculated.
+    virtual void Reset(bool invalidate_hashes) = 0;
   };
 
   VisitedLinkMaster(content::BrowserContext* browser_context,
@@ -84,7 +96,7 @@ class VisitedLinkMaster : public VisitedLinkCommon {
                     bool persist_to_disk,
                     bool suppress_rebuild,
                     const base::FilePath& filename,
-                    int32 default_table_size);
+                    int32_t default_table_size);
   ~VisitedLinkMaster() override;
 
   // Must be called immediately after object creation. Nothing else will work
@@ -98,7 +110,7 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   void AddURL(const GURL& url);
 
   // Adds a set of URLs to the table.
-  void AddURLs(const std::vector<GURL>& url);
+  void AddURLs(const std::vector<GURL>& urls);
 
   // See DeleteURLs.
   class URLIterator {
@@ -139,9 +151,7 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   }
 
   // returns the number of items in the table for testing verification
-  int32 GetUsedCount() const {
-    return used_items_;
-  }
+  int32_t GetUsedCount() const { return used_items_; }
 
   // Returns the listener.
   VisitedLinkMaster::Listener* GetListener() const {
@@ -160,21 +170,29 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   FRIEND_TEST_ALL_PREFIXES(VisitedLinkTest, BigDelete);
   FRIEND_TEST_ALL_PREFIXES(VisitedLinkTest, BigImport);
 
+  // Keeps the result of loading the table from the database file to the UI
+  // thread.
+  struct LoadFromFileResult;
+
+  using TableLoadCompleteCallback = base::Callback<void(
+      bool success,
+      scoped_refptr<LoadFromFileResult> load_from_file_result)>;
+
   // Object to rebuild the table on the history thread (see the .cc file).
   class TableBuilder;
 
   // Byte offsets of values in the header.
-  static const int32 kFileHeaderSignatureOffset;
-  static const int32 kFileHeaderVersionOffset;
-  static const int32 kFileHeaderLengthOffset;
-  static const int32 kFileHeaderUsedOffset;
-  static const int32 kFileHeaderSaltOffset;
+  static const int32_t kFileHeaderSignatureOffset;
+  static const int32_t kFileHeaderVersionOffset;
+  static const int32_t kFileHeaderLengthOffset;
+  static const int32_t kFileHeaderUsedOffset;
+  static const int32_t kFileHeaderSaltOffset;
 
   // The signature at the beginning of a file.
-  static const int32 kFileSignature;
+  static const int32_t kFileSignature;
 
   // version of the file format this module currently uses
-  static const int32 kFileCurrentVersion;
+  static const int32_t kFileCurrentVersion;
 
   // Bytes in the file header, including the salt.
   static const size_t kFileHeaderSize;
@@ -207,26 +225,46 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   // the handle to it will be stored in file_.
   void WriteFullTable();
 
-  // Try to load the table from the database file. If the file doesn't exist or
-  // is corrupt, this will return failure.
+  // Tries to load asynchronously the table from the database file.
   bool InitFromFile();
 
+  // Load the table from the database file. Calls |callback| when completed. It
+  // is called from the background thread. It must be first in the sequence of
+  // background operations with the database file.
+  static void LoadFromFile(const base::FilePath& filename,
+                           const TableLoadCompleteCallback& callback);
+
+  // Load the table from the database file. Returns true on success.
+  // Fills parameter |load_from_file_result| on success. It is called from
+  // the background thread.
+  static bool LoadApartFromFile(
+      const base::FilePath& filename,
+      scoped_refptr<LoadFromFileResult>* load_from_file_result);
+
+  // It is called from the background thread and executed on the UI
+  // thread.
+  void OnTableLoadComplete(
+      bool success,
+      scoped_refptr<LoadFromFileResult> load_from_file_result);
+
   // Reads the header of the link coloring database from disk. Assumes the
-  // file pointer is at the beginning of the file and that there are no pending
-  // asynchronous I/O operations.
+  // file pointer is at the beginning of the file and that it is the first
+  // asynchronous I/O operation on the background thread.
   //
   // Returns true on success and places the size of the table in num_entries
   // and the number of nonzero fingerprints in used_count. This will fail if
   // the version of the file is not the current version of the database.
-  bool ReadFileHeader(FILE* hfile, int32* num_entries, int32* used_count,
-                      uint8 salt[LINK_SALT_LENGTH]);
+  static bool ReadFileHeader(FILE* hfile,
+                             int32_t* num_entries,
+                             int32_t* used_count,
+                             uint8_t salt[LINK_SALT_LENGTH]);
 
   // Fills *filename with the name of the link database filename
   bool GetDatabaseFileName(base::FilePath* filename);
 
   // Wrapper around Window's WriteFile using asynchronous I/O. This will proxy
   // the write to a background thread.
-  void WriteToFile(FILE** hfile, off_t offset, void* data, int32 data_size);
+  void WriteToFile(FILE** hfile, off_t offset, void* data, int32_t data_size);
 
   // Helper function to schedule and asynchronous write of the used count to
   // disk (this is a common operation).
@@ -237,9 +275,13 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   // wrap around at 0 and this function will handle it.
   void WriteHashRangeToFile(Hash first_hash, Hash last_hash);
 
-  // Synchronous read from the file. Assumes there are no pending asynchronous
-  // I/O functions. Returns true if the entire buffer was successfully filled.
-  bool ReadFromFile(FILE* hfile, off_t offset, void* data, size_t data_size);
+  // Synchronous read from the file. Assumes that it is the first asynchronous
+  // I/O operation in the background thread. Returns true if the entire buffer
+  // was successfully filled.
+  static bool ReadFromFile(FILE* hfile,
+                           off_t offset,
+                           void* data,
+                           size_t data_size);
 
   // General table handling
   // ----------------------
@@ -269,12 +311,18 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   // database and for unit tests.
   bool InitFromScratch(bool suppress_rebuild);
 
-  // Allocates the Fingerprint structure and length. When init_to_empty is set,
-  // the table will be filled with 0s and used_items_ will be set to 0 as well.
-  // If the flag is not set, these things are untouched and it is the
-  // responsibility of the caller to fill them (like when we are reading from
-  // a file).
-  bool CreateURLTable(int32 num_entries, bool init_to_empty);
+  // Allocates the Fingerprint structure and length. Structure is filled with 0s
+  // and shared header with salt and used_items_ is set to 0.
+  bool CreateURLTable(int32_t num_entries);
+
+  // Allocates the Fingerprint structure and length. Returns true on success.
+  // Structure is filled with 0s and shared header with salt. The result of
+  // allocation is saved into |shared_memory| and |hash_table| points to the
+  // beginning of Fingerprint table in |shared_memory|.
+  static bool CreateApartURLTable(int32_t num_entries,
+                                  const uint8_t salt[LINK_SALT_LENGTH],
+                                  scoped_ptr<base::SharedMemory>* shared_memory,
+                                  VisitedLinkCommon::Fingerprint** hash_table);
 
   // A wrapper for CreateURLTable, this will allocate a new table, initialized
   // to empty. The caller is responsible for saving the shared memory pointer
@@ -285,7 +333,7 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   //
   // Returns true on success. On failure, the old table will be restored. The
   // caller should not attemp to release the pointer/handle in this case.
-  bool BeginReplaceURLTable(int32 num_entries);
+  bool BeginReplaceURLTable(int32_t num_entries);
 
   // unallocates the Fingerprint table
   void FreeURLTable();
@@ -297,10 +345,13 @@ class VisitedLinkMaster : public VisitedLinkCommon {
 
   // Resizes the table (growing or shrinking) as necessary to accomodate the
   // current count.
-  void ResizeTable(int32 new_size);
+  void ResizeTable(int32_t new_size);
+
+  // Returns the default table size. It can be overrided in unit tests.
+  uint32_t DefaultTableSize() const;
 
   // Returns the desired table size for |item_count| URLs.
-  uint32 NewTableSizeForCount(int32 item_count) const;
+  uint32_t NewTableSizeForCount(int32_t item_count) const;
 
   // Computes the table load as fraction. For example, if 1/4 of the entries are
   // full, this value will be 0.25
@@ -337,15 +388,6 @@ class VisitedLinkMaster : public VisitedLinkCommon {
     return hash - 1;
   }
 
-#ifndef NDEBUG
-  // Indicates whether any asynchronous operation has ever been completed.
-  // We do some synchronous reads that require that no asynchronous operations
-  // are pending, yet we don't track whether they have been completed. This
-  // flag is a sanity check that these reads only happen before any
-  // asynchronous writes have been fired.
-  bool posted_asynchronous_operation_;
-#endif
-
   // Reference to the browser context that this object belongs to
   // (it knows the path to where the data is stored)
   content::BrowserContext* browser_context_;
@@ -370,10 +412,10 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   std::set<Fingerprint> added_since_rebuild_;
   std::set<Fingerprint> deleted_since_rebuild_;
 
-  // TODO(brettw) Support deletion, we need to track whether anything was
-  // deleted during the rebuild here. Then we should delete any of these
-  // entries from the complete table later.
-  // std::vector<Fingerprint> removed_since_rebuild_;
+  // Indicates URLs added and deleted since we started loading the table.
+  // It can be only url because after loading table the salt will be changed.
+  std::set<GURL> added_since_load_;
+  std::set<GURL> deleted_since_load_;
 
   // The currently open file with the table in it. This may be NULL if we're
   // rebuilding and haven't written a new version yet or if |persist_to_disk_|
@@ -395,10 +437,13 @@ class VisitedLinkMaster : public VisitedLinkCommon {
 
   // When we generate new tables, we increment the serial number of the
   // shared memory object.
-  int32 shared_memory_serial_;
+  int32_t shared_memory_serial_;
 
   // Number of non-empty items in the table, used to compute fullness.
-  int32 used_items_;
+  int32_t used_items_;
+
+  // We set this to true to avoid writing to the database file.
+  bool table_is_loading_from_file_;
 
   // Testing values -----------------------------------------------------------
   //
@@ -412,7 +457,7 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   base::FilePath database_name_override_;
 
   // When nonzero, overrides the table size for new databases for testing
-  int32 table_size_override_;
+  int32_t table_size_override_;
 
   // When set, indicates the task that should be run after the next rebuild from
   // history is complete.
@@ -423,6 +468,8 @@ class VisitedLinkMaster : public VisitedLinkCommon {
   // will be false in production.
   bool suppress_rebuild_;
 
+  base::WeakPtrFactory<VisitedLinkMaster> weak_ptr_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(VisitedLinkMaster);
 };
 
@@ -431,8 +478,8 @@ class VisitedLinkMaster : public VisitedLinkCommon {
 
 #if defined(UNIT_TEST) || defined(PERF_TEST) || !defined(NDEBUG)
 inline void VisitedLinkMaster::DebugValidate() {
-  int32 used_count = 0;
-  for (int32 i = 0; i < table_length_; i++) {
+  int32_t used_count = 0;
+  for (int32_t i = 0; i < table_length_; i++) {
     if (hash_table_[i])
       used_count++;
   }

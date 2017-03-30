@@ -1,6 +1,5 @@
 include_rules = [
   "+content/public/renderer",
-  "+native_client/src/public/imc_types.h",  # for NaClHandle
   # for NaClErrorCode
   "+native_client/src/trusted/service_runtime/nacl_error_code.h",
   "+net",
@@ -13,7 +12,6 @@ include_rules = [
   "+ppapi/thunk",
 
   "+v8/include",
-  "+third_party/jsoncpp/source/include/json",
   "+third_party/WebKit/public/platform",
   "+third_party/WebKit/public/web",
 ]

@@ -4,6 +4,7 @@
 
 #include "remoting/host/gnubby_auth_handler_posix.h"
 
+#include <stdint.h>
 #include <unistd.h>
 #include <utility>
 
@@ -14,6 +15,7 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "net/base/net_errors.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
@@ -36,7 +38,7 @@ const char kGnubbyAuthMessage[] = "gnubby-auth";
 const char kGnubbyAuthV1[] = "auth-v1";
 const char kMessageType[] = "type";
 
-const int64 kDefaultRequestTimeoutSeconds = 60;
+const int64_t kDefaultRequestTimeoutSeconds = 60;
 
 // The name of the socket to listen for gnubby requests on.
 base::LazyInstance<base::FilePath>::Leaky g_gnubby_socket_name =
@@ -208,7 +210,7 @@ void GnubbyAuthHandlerPosix::OnAccepted(int result) {
 
   int connection_id = ++last_connection_id_;
   GnubbySocket* socket =
-      new GnubbySocket(accept_socket_.Pass(), request_timeout_,
+      new GnubbySocket(std::move(accept_socket_), request_timeout_,
                        base::Bind(&GnubbyAuthHandlerPosix::RequestTimedOut,
                                   base::Unretained(this), connection_id));
   active_sockets_[connection_id] = socket;
@@ -240,8 +242,15 @@ void GnubbyAuthHandlerPosix::CreateAuthorizationSocket() {
   DCHECK(CalledOnValidThread());
 
   if (!g_gnubby_socket_name.Get().empty()) {
-    // If the file already exists, a socket in use error is returned.
-    base::DeleteFile(g_gnubby_socket_name.Get(), false);
+    {
+      // DeleteFile() is a blocking operation, but so is creation of the unix
+      // socket below. Consider moving this class to a different thread if this
+      // causes any problems. See crbug.com/509807 .
+      base::ThreadRestrictions::ScopedAllowIO allow_io;
+
+      // If the file already exists, a socket in use error is returned.
+      base::DeleteFile(g_gnubby_socket_name.Get(), false);
+    }
 
     HOST_LOG << "Listening for gnubby requests on "
              << g_gnubby_socket_name.Get().value();

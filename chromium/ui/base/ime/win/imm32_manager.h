@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/ui_base_ime_export.h"
@@ -83,12 +83,7 @@ class UI_BASE_IME_EXPORT IMM32Manager {
   bool is_composing() const { return is_composing_; }
 
   // Retrieves the input language from Windows and update it.
-  // Return values
-  //   * true
-  //     The given input language has IMEs.
-  //   * false
-  //     The given input language does not have IMEs.
-  bool SetInputLanguage();
+  void SetInputLanguage();
 
   // Creates the IME windows, and allocate required resources for them.
   // Parameters
@@ -280,13 +275,6 @@ class UI_BASE_IME_EXPORT IMM32Manager {
   // Represents whether or not there is an ongoing composition in a browser
   // process, i.e. whether or not a browser process is composing a text.
   bool is_composing_;
-
-  // This value represents whether or not the current input context has IMEs.
-  // The following table shows the list of IME status:
-  //   Value  Description
-  //   false  The current input language does not have IMEs.
-  //   true   The current input language has IMEs.
-  bool ime_status_;
 
   // The current input Language ID retrieved from Windows, which consists of:
   //   * Primary Language ID (bit 0 to bit 9), which shows a natunal language

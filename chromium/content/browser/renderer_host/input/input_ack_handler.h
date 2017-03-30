@@ -5,7 +5,6 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_INPUT_ACK_HANDLER_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_INPUT_ACK_HANDLER_H_
 
-#include "base/basictypes.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -19,8 +18,11 @@ class CONTENT_EXPORT InputAckHandler {
   virtual ~InputAckHandler() {}
 
   // Called upon event ack receipt from the renderer.
-  virtual void OnKeyboardEventAck(const NativeWebKeyboardEvent& event,
-                                  InputEventAckState ack_result) = 0;
+  virtual void OnKeyboardEventAck(
+      const NativeWebKeyboardEventWithLatencyInfo& event,
+      InputEventAckState ack_result) = 0;
+  virtual void OnMouseEventAck(const MouseEventWithLatencyInfo& event,
+                               InputEventAckState ack_result) = 0;
   virtual void OnWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
                                InputEventAckState ack_result) = 0;
   virtual void OnTouchEventAck(const TouchEventWithLatencyInfo& event,

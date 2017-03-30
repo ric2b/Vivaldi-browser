@@ -8,11 +8,14 @@
 #include <windows.h>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "ui/gfx/gfx_export.h"
 #include "ui/gfx/win/window_impl.h"
 
+namespace base {
 template<typename T> struct DefaultSingletonTraits;
+}
 
 namespace gfx {
 
@@ -34,7 +37,7 @@ class GFX_EXPORT SingletonHwnd : public WindowImpl {
 
  private:
   friend class SingletonHwndObserver;
-  friend struct DefaultSingletonTraits<SingletonHwnd>;
+  friend struct base::DefaultSingletonTraits<SingletonHwnd>;
 
   SingletonHwnd();
   ~SingletonHwnd() override;

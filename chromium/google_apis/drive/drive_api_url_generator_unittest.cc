@@ -4,6 +4,10 @@
 
 #include "google_apis/drive/drive_api_url_generator.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "google_apis/drive/test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -15,13 +19,15 @@ namespace {
 // OS, so use testing base urls.
 const char kBaseUrlForTesting[] = "https://www.example.com";
 const char kBaseDownloadUrlForTesting[] = "https://download.example.com/p/";
+const char kBaseThumbnailUrlForTesting[] = "https://thumbnail.example.com";
 }  // namespace
 
 class DriveApiUrlGeneratorTest : public testing::Test {
  public:
   DriveApiUrlGeneratorTest()
       : url_generator_(GURL(kBaseUrlForTesting),
-                       GURL(kBaseDownloadUrlForTesting)) {}
+                       GURL(kBaseDownloadUrlForTesting),
+                       GURL(kBaseThumbnailUrlForTesting)) {}
 
  protected:
   DriveApiUrlGenerator url_generator_;
@@ -62,7 +68,7 @@ TEST_F(DriveApiUrlGeneratorTest, GetFilesGetUrl) {
             url_generator_.GetFilesGetUrl("0ADK06pfg", true, GURL()).spec());
 
   // If |embed_origin| is not empty, it should be added as a query parameter.
-  url::AddStandardScheme("chrome-extension");
+  url::AddStandardScheme("chrome-extension", url::SCHEME_WITHOUT_PORT);
   EXPECT_EQ(
       "https://www.example.com/drive/v2/files/0ADK06pfg"
       "?embedOrigin=chrome-extension%3A%2F%2Ftest",
@@ -83,7 +89,11 @@ TEST_F(DriveApiUrlGeneratorTest, GetFilesAuthorizeUrl) {
 
 TEST_F(DriveApiUrlGeneratorTest, GetFilesInsertUrl) {
   EXPECT_EQ("https://www.example.com/drive/v2/files",
-            url_generator_.GetFilesInsertUrl().spec());
+            url_generator_.GetFilesInsertUrl("").spec());
+  EXPECT_EQ("https://www.example.com/drive/v2/files?visibility=DEFAULT",
+            url_generator_.GetFilesInsertUrl("DEFAULT").spec());
+  EXPECT_EQ("https://www.example.com/drive/v2/files?visibility=PRIVATE",
+            url_generator_.GetFilesInsertUrl("PRIVATE").spec());
 }
 
 TEST_F(DriveApiUrlGeneratorTest, GetFilePatchUrl) {
@@ -126,11 +136,17 @@ TEST_F(DriveApiUrlGeneratorTest, GetFilePatchUrl) {
 TEST_F(DriveApiUrlGeneratorTest, GetFilesCopyUrl) {
   // |file_id| should be embedded into the url.
   EXPECT_EQ("https://www.example.com/drive/v2/files/0ADK06pfg/copy",
-            url_generator_.GetFilesCopyUrl("0ADK06pfg").spec());
+            url_generator_.GetFilesCopyUrl("0ADK06pfg", "").spec());
   EXPECT_EQ("https://www.example.com/drive/v2/files/0Bz0bd074/copy",
-            url_generator_.GetFilesCopyUrl("0Bz0bd074").spec());
+            url_generator_.GetFilesCopyUrl("0Bz0bd074", "").spec());
   EXPECT_EQ("https://www.example.com/drive/v2/files/file%3Afile_id/copy",
-            url_generator_.GetFilesCopyUrl("file:file_id").spec());
+            url_generator_.GetFilesCopyUrl("file:file_id", "").spec());
+  EXPECT_EQ("https://www.example.com/drive/v2/files/0Bz0bd074/copy"
+            "?visibility=DEFAULT",
+            url_generator_.GetFilesCopyUrl("0Bz0bd074", "DEFAULT").spec());
+  EXPECT_EQ("https://www.example.com/drive/v2/files/file%3Afile_id/copy"
+            "?visibility=PRIVATE",
+            url_generator_.GetFilesCopyUrl("file:file_id", "PRIVATE").spec());
 }
 
 TEST_F(DriveApiUrlGeneratorTest, GetFilesListUrl) {
@@ -189,7 +205,7 @@ TEST_F(DriveApiUrlGeneratorTest, GetChangesListUrl) {
     bool include_deleted;
     int max_results;
     const std::string page_token;
-    int64 start_change_id;
+    int64_t start_change_id;
     const std::string expected_query;
   };
   const TestPattern kTestPatterns[] = {
@@ -359,13 +375,12 @@ TEST_F(DriveApiUrlGeneratorTest, GeneratePermissionsInsertUrl) {
 
 TEST_F(DriveApiUrlGeneratorTest, GenerateThumbnailUrl) {
   EXPECT_EQ(
-      "https://download.example.com/p/thumb/0ADK06pfg?width=500&height=500",
-      url_generator_.GetThumbnailUrl("0ADK06pfg", 500, 500, false).spec());
+      "https://thumbnail.example.com/d/0ADK06pfg=w500-h480",
+      url_generator_.GetThumbnailUrl("0ADK06pfg", 500, 480, false).spec());
 
   EXPECT_EQ(
-      "https://download.example.com/p/thumb/"
-      "0ADK06pfg?width=360&height=360&crop=true",
-      url_generator_.GetThumbnailUrl("0ADK06pfg", 360, 360, true).spec());
+      "https://thumbnail.example.com/d/0ADK06pfg=w360-h380-c",
+      url_generator_.GetThumbnailUrl("0ADK06pfg", 360, 380, true).spec());
 }
 
 TEST_F(DriveApiUrlGeneratorTest, BatchUploadUrl) {

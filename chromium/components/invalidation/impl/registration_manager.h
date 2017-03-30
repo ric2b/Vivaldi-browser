@@ -10,7 +10,7 @@
 
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -32,8 +32,7 @@ using ::invalidation::InvalidationListener;
 // implementations include the syncer thread (both versions) and XMPP
 // retries.  The most sophisticated one is URLRequestThrottler; making
 // that generic should work for everyone.
-class INVALIDATION_EXPORT_PRIVATE RegistrationManager
-    : public base::NonThreadSafe {
+class INVALIDATION_EXPORT RegistrationManager : public base::NonThreadSafe {
  public:
   // Constants for exponential backoff (used by tests).
   static const int kInitialRegistrationDelaySeconds;
@@ -144,7 +143,7 @@ class INVALIDATION_EXPORT_PRIVATE RegistrationManager
     // Increased after each consecutive failure.
     base::TimeDelta next_delay;
     // The actual timer for registration.
-    base::OneShotTimer<RegistrationStatus> registration_timer;
+    base::OneShotTimer registration_timer;
 
     DISALLOW_COPY_AND_ASSIGN(RegistrationStatus);
   };

@@ -5,7 +5,11 @@
 #ifndef CC_SURFACES_SURFACE_H_
 #define CC_SURFACES_SURFACE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
+#include <set>
 #include <vector>
 
 #include "base/callback.h"
@@ -13,7 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "cc/base/scoped_ptr_vector.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/quads/render_pass_id.h"
 #include "cc/surfaces/surface_factory.h"
@@ -23,7 +26,7 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace ui {
-struct LatencyInfo;
+class LatencyInfo;
 }
 
 namespace cc {
@@ -48,7 +51,8 @@ class CC_SURFACES_EXPORT Surface {
   // Adds each CopyOutputRequest in the current frame to copy_requests. The
   // caller takes ownership of them.
   void TakeCopyOutputRequests(
-      std::multimap<RenderPassId, CopyOutputRequest*>* copy_requests);
+      std::multimap<RenderPassId, scoped_ptr<CopyOutputRequest>>*
+          copy_requests);
   // Returns the most recent frame that is eligible to be rendered.
   const CompositorFrame* GetEligibleFrame();
 
@@ -80,8 +84,12 @@ class CC_SURFACES_EXPORT Surface {
   bool destroyed() const { return destroyed_; }
   void set_destroyed(bool destroyed) { destroyed_ = destroyed; }
 
+  void AddBeginFrameSource(BeginFrameSource* begin_frame_source);
+  void RemoveBeginFrameSource(BeginFrameSource* begin_frame_source);
+
  private:
   void ClearCopyRequests();
+  void UpdatePrimaryBeginFrameSource();
 
   SurfaceId surface_id_;
   base::WeakPtr<SurfaceFactory> factory_;
@@ -90,6 +98,10 @@ class CC_SURFACES_EXPORT Surface {
   int frame_index_;
   bool destroyed_;
   std::vector<SurfaceSequence> destruction_dependencies_;
+
+  // This surface may have multiple BeginFrameSources if it is
+  // on multiple Displays.
+  std::set<BeginFrameSource*> begin_frame_sources_;
 
   std::vector<SurfaceId> referenced_surfaces_;
 

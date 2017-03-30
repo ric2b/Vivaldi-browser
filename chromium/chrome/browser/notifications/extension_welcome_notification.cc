@@ -4,22 +4,29 @@
 
 #include "chrome/browser/notifications/extension_welcome_notification.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
+#include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -164,7 +171,7 @@ ExtensionWelcomeNotification* ExtensionWelcomeNotification::Create(
 ExtensionWelcomeNotification::~ExtensionWelcomeNotification() {
   if (delayed_notification_) {
     delayed_notification_.reset();
-    PrefServiceSyncable::FromProfile(profile_)->RemoveObserver(this);
+    PrefServiceSyncableFromProfile(profile_)->RemoveObserver(this);
   } else {
     HideWelcomeNotification();
   }
@@ -172,8 +179,8 @@ ExtensionWelcomeNotification::~ExtensionWelcomeNotification() {
 
 void ExtensionWelcomeNotification::OnIsSyncingChanged() {
   DCHECK(delayed_notification_);
-  PrefServiceSyncable* const pref_service_syncable =
-      PrefServiceSyncable::FromProfile(profile_);
+  syncable_prefs::PrefServiceSyncable* const pref_service_syncable =
+      PrefServiceSyncableFromProfile(profile_);
   if (pref_service_syncable->IsSyncing()) {
     pref_service_syncable->RemoveObserver(this);
     scoped_ptr<Notification> previous_notification(
@@ -185,8 +192,8 @@ void ExtensionWelcomeNotification::OnIsSyncingChanged() {
 void ExtensionWelcomeNotification::ShowWelcomeNotificationIfNecessary(
     const Notification& notification) {
   if ((notification.notifier_id() == notifier_id_) && !delayed_notification_) {
-    PrefServiceSyncable* const pref_service_syncable =
-        PrefServiceSyncable::FromProfile(profile_);
+    syncable_prefs::PrefServiceSyncable* const pref_service_syncable =
+        PrefServiceSyncableFromProfile(profile_);
     if (pref_service_syncable->IsSyncing()) {
       PrefService* const pref_service = profile_->GetPrefs();
       if (!UserHasDismissedWelcomeNotification()) {
@@ -260,17 +267,15 @@ void ExtensionWelcomeNotification::ShowWelcomeNotification(
             l10n_util::GetStringUTF16(IDS_NOTIFICATION_WELCOME_BODY),
             ui::ResourceBundle::GetSharedInstance().GetImageNamed(
                 IDR_NOTIFICATION_WELCOME_ICON),
-            display_source,
-            notifier_id_,
-            rich_notification_data,
-            new NotificationCallbacks(
-                profile_, notifier_id_, welcome_notification_id_,
-                delegate_.get())));
+            display_source, GURL(), notifier_id_, rich_notification_data,
+            new NotificationCallbacks(profile_, notifier_id_,
+                                      welcome_notification_id_,
+                                      delegate_.get())));
 
     if (pop_up_request == POP_UP_HIDDEN)
       message_center_notification->set_shown_as_popup(true);
 
-    GetMessageCenter()->AddNotification(message_center_notification.Pass());
+    GetMessageCenter()->AddNotification(std::move(message_center_notification));
     StartExpirationTimer();
   }
 }
@@ -309,8 +314,7 @@ void ExtensionWelcomeNotification::StartExpirationTimer() {
       expiration_timestamp = GetExpirationTimestamp();
       DCHECK(!expiration_timestamp.is_null());
     }
-    expiration_timer_.reset(
-        new base::OneShotTimer<ExtensionWelcomeNotification>());
+    expiration_timer_.reset(new base::OneShotTimer());
     expiration_timer_->Start(
         FROM_HERE,
         expiration_timestamp - delegate_->GetCurrentTime(),
@@ -335,7 +339,7 @@ void ExtensionWelcomeNotification::ExpireWelcomeNotification() {
 
 base::Time ExtensionWelcomeNotification::GetExpirationTimestamp() const {
   PrefService* const pref_service = profile_->GetPrefs();
-  const int64 expiration_timestamp =
+  const int64_t expiration_timestamp =
       pref_service->GetInt64(prefs::kWelcomeNotificationExpirationTimestamp);
   return (expiration_timestamp == 0)
       ? base::Time()

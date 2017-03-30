@@ -5,6 +5,7 @@
 #include "extensions/shell/browser/api/identity/identity_api.h"
 
 #include <string>
+#include <utility>
 
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
@@ -64,19 +65,18 @@ class IdentityApiTest : public ApiUnitTest {
     // Create an extension with OAuth2 scopes.
     set_extension(
         ExtensionBuilder()
-            .SetManifest(
-                 DictionaryBuilder()
-                     .Set("name", "Test")
-                     .Set("version", "1.0")
-                     .Set(
-                         "oauth2",
-                         DictionaryBuilder()
-                             .Set("client_id",
-                                  "123456.apps.googleusercontent.com")
-                             .Set(
-                                 "scopes",
-                                 ListBuilder().Append(
-                                     "https://www.googleapis.com/auth/drive"))))
+            .SetManifest(std::move(
+                DictionaryBuilder()
+                    .Set("name", "Test")
+                    .Set("version", "1.0")
+                    .Set("oauth2",
+                         std::move(DictionaryBuilder()
+                                       .Set("client_id",
+                                            "123456.apps.googleusercontent.com")
+                                       .Set("scopes",
+                                            std::move(ListBuilder().Append(
+                                                "https://www.googleapis.com/"
+                                                "auth/drive")))))))
             .SetLocation(Manifest::UNPACKED)
             .Build());
   }

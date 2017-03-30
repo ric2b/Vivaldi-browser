@@ -6,15 +6,17 @@
 
 #include <errno.h>
 #include <sched.h>
+#include <stddef.h>
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/threading/platform_thread_internal_posix.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 
 #if !defined(OS_NACL)
 #include <pthread.h>
-#include <sys/prctl.h>
 #include <sys/types.h>
 #include <unistd.h>
 #endif
@@ -34,13 +36,10 @@ const ThreadPriorityToNiceValuePair kThreadPriorityToNiceValueMap[4] = {
     {ThreadPriority::NORMAL, 0},
     {ThreadPriority::DISPLAY, -6},
     {ThreadPriority::REALTIME_AUDIO, -10},
-}
+};
 
-bool SetThreadPriorityForPlatform(PlatformThreadHandle handle,
-                                  ThreadPriority priority) {
+bool SetCurrentThreadPriorityForPlatform(ThreadPriority priority) {
 #if !defined(OS_NACL)
-  // TODO(gab): Assess the correctness of using |pthread_self()| below instead
-  // of |handle|. http://crbug.com/468793.
   return priority == ThreadPriority::REALTIME_AUDIO &&
          pthread_setschedparam(pthread_self(), SCHED_RR, &kRealTimePrio) == 0;
 #else
@@ -48,11 +47,8 @@ bool SetThreadPriorityForPlatform(PlatformThreadHandle handle,
 #endif
 }
 
-bool GetThreadPriorityForPlatform(PlatformThreadHandle handle,
-                                  ThreadPriority* priority) {
+bool GetCurrentThreadPriorityForPlatform(ThreadPriority* priority) {
 #if !defined(OS_NACL)
-  // TODO(gab): Assess the correctness of using |pthread_self()| below instead
-  // of |handle|. http://crbug.com/468793.
   int maybe_sched_rr = 0;
   struct sched_param maybe_realtime_prio = {0};
   if (pthread_getschedparam(pthread_self(), &maybe_sched_rr,

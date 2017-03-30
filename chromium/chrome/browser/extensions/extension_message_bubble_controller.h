@@ -5,18 +5,21 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_EXTENSION_MESSAGE_BUBBLE_CONTROLLER_H_
 #define CHROME_BROWSER_EXTENSIONS_EXTENSION_MESSAGE_BUBBLE_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <string>
-#include "chrome/browser/extensions/extension_message_bubble.h"
+#include "base/macros.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/common/extension.h"
 
 class Browser;
+class ExtensionService;
 class Profile;
 
 namespace extensions {
 
 class ExtensionPrefs;
-class SuspiciousExtensionBubble;
+class ExtensionRegistry;
 
 class ExtensionMessageBubbleController {
  public:
@@ -24,8 +27,9 @@ class ExtensionMessageBubbleController {
   enum BubbleAction {
     ACTION_LEARN_MORE = 0,
     ACTION_EXECUTE,
-    ACTION_DISMISS,
-    ACTION_BOUNDARY, // Must be the last value.
+    ACTION_DISMISS_USER_ACTION,
+    ACTION_DISMISS_DEACTIVATION,
+    ACTION_BOUNDARY,  // Must be the last value.
   };
 
   class Delegate {
@@ -33,7 +37,7 @@ class ExtensionMessageBubbleController {
     explicit Delegate(Profile* profile);
     virtual ~Delegate();
 
-    virtual bool ShouldIncludeExtension(const std::string& extension_id) = 0;
+    virtual bool ShouldIncludeExtension(const Extension* extension) = 0;
     virtual void AcknowledgeExtension(
         const std::string& extension_id,
         BubbleAction action) = 0;
@@ -57,6 +61,9 @@ class ExtensionMessageBubbleController {
     virtual base::string16 GetActionButtonLabel() const = 0;
     virtual base::string16 GetDismissButtonLabel() const = 0;
 
+    // Returns true if the bubble should close when the widget deactivates.
+    virtual bool ShouldCloseOnDeactivate() const = 0;
+
     // Whether to show a list of extensions in the bubble.
     virtual bool ShouldShowExtensionList() const = 0;
 
@@ -64,38 +71,63 @@ class ExtensionMessageBubbleController {
     // the toolbar.
     virtual bool ShouldHighlightExtensions() const = 0;
 
-    // In some cases, we want the delegate only to handle a single extension
-    // and this sets which extension.
-    virtual void RestrictToSingleExtension(const std::string& extension_id);
+    // Returns true if only enabled extensions should be considered.
+    virtual bool ShouldLimitToEnabledExtensions() const = 0;
 
     // Record, through UMA, how many extensions were found.
     virtual void LogExtensionCount(size_t count) = 0;
     virtual void LogAction(BubbleAction action) = 0;
 
+    // Returns a key unique to the type of bubble that can be used to retrieve
+    // state specific to the type (e.g., shown for profiles).
+    virtual const char* GetKey() = 0;
+
+    // Whether the "shown for profiles" set should be cleared if an action is
+    // taken on the bubble. This defaults to true, since once an action is
+    // taken, the extension will usually either be acknowledged or removed, and
+    // the bubble won't show for that extension.
+    // This should be false in cases where there is no acknowledgment option
+    // (as in the developer-mode extension warning).
+    virtual bool ClearProfileSetAfterAction();
+
     // Has the user acknowledged info about the extension the bubble reports.
-    virtual bool HasBubbleInfoBeenAcknowledged(const std::string& extension_id);
-    virtual void SetBubbleInfoBeenAcknowledged(const std::string& extension_id,
-                                               bool value);
+    bool HasBubbleInfoBeenAcknowledged(const std::string& extension_id);
+    void SetBubbleInfoBeenAcknowledged(const std::string& extension_id,
+                                       bool value);
 
    protected:
-    Profile* profile() const;
+    Profile* profile() { return profile_; }
+    ExtensionService* service() { return service_; }
+    const ExtensionRegistry* registry() const { return registry_; }
 
     std::string get_acknowledged_flag_pref_name() const;
-    void set_acknowledged_flag_pref_name(std::string pref_name);
+    void set_acknowledged_flag_pref_name(const std::string& pref_name);
 
    private:
     // A weak pointer to the profile we are associated with. Not owned by us.
     Profile* profile_;
 
+    // The extension service associated with the profile.
+    ExtensionService* service_;
+
+    // The extension registry associated with the profile.
+    ExtensionRegistry* registry_;
+
     // Name for corresponding pref that keeps if the info the bubble contains
     // was acknowledged by user.
     std::string acknowledged_pref_name_;
+
+    DISALLOW_COPY_AND_ASSIGN(Delegate);
   };
 
-  ExtensionMessageBubbleController(Delegate* delegate, Profile* profile);
+  ExtensionMessageBubbleController(Delegate* delegate, Browser* browser);
   virtual ~ExtensionMessageBubbleController();
 
   Delegate* delegate() const { return delegate_.get(); }
+  Profile* profile();
+
+  // Returns true if the bubble should be displayed.
+  bool ShouldShow();
 
   // Obtains a list of all extensions (by name) the controller knows about.
   std::vector<base::string16> GetExtensionList();
@@ -109,19 +141,25 @@ class ExtensionMessageBubbleController {
   const ExtensionIdList& GetExtensionIdList();
 
   // Whether to close the bubble when it loses focus.
-  virtual bool CloseOnDeactivate();
+  bool CloseOnDeactivate();
 
   // Highlights the affected extensions if appropriate. Safe to call multiple
   // times.
   void HighlightExtensionsIfNecessary();
 
-  // Sets up the callbacks and shows the bubble.
-  virtual void Show(ExtensionMessageBubble* bubble);
+  // Called when the bubble is actually shown. Because some bubbles are delayed
+  // (in order to weather the "focus storm"), they are not shown immediately.
+  void OnShown();
 
   // Callbacks from bubble. Declared virtual for testing purposes.
   virtual void OnBubbleAction();
-  virtual void OnBubbleDismiss();
+  virtual void OnBubbleDismiss(bool dismissed_by_deactivation);
   virtual void OnLinkClicked();
+
+  void ClearProfileListForTesting();
+
+  static void set_should_ignore_learn_more_for_testing(
+      bool should_ignore_learn_more);
 
  private:
   // Iterate over the known extensions and acknowledge each one.
@@ -133,8 +171,10 @@ class ExtensionMessageBubbleController {
   // Performs cleanup after the bubble closes.
   void OnClose();
 
-  // A weak pointer to the profile we are associated with. Not owned by us.
-  Profile* profile_;
+  std::set<Profile*>* GetProfileSet();
+
+  // A weak pointer to the Browser we are associated with. Not owned by us.
+  Browser* browser_;
 
   // The list of extensions found.
   ExtensionIdList extension_list_;

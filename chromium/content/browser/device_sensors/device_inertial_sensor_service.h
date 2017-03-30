@@ -5,13 +5,13 @@
 #ifndef CONTENT_BROWSER_DEVICE_SENSORS_DEVICE_INERTIAL_SENSOR_SERVICE_H_
 #define CONTENT_BROWSER_DEVICE_SENSORS_DEVICE_INERTIAL_SENSOR_SERVICE_H_
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/singleton.h"
 #include "base/threading/thread_checker.h"
-#include "content/browser/device_sensors/inertial_sensor_consts.h"
+#include "content/browser/device_sensors/device_sensors_consts.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -48,18 +48,18 @@ class CONTENT_EXPORT DeviceInertialSensorService {
   void SetDataFetcherForTesting(DataFetcherSharedMemory* test_data_fetcher);
 
  private:
-  friend struct DefaultSingletonTraits<DeviceInertialSensorService>;
+  friend struct base::DefaultSingletonTraits<DeviceInertialSensorService>;
 
   DeviceInertialSensorService();
   virtual ~DeviceInertialSensorService();
 
-  bool ChangeNumberConsumers(ConsumerType consumer_type,
-      int delta);
+  bool ChangeNumberConsumers(ConsumerType consumer_type, int delta);
   int GetNumberConsumers(ConsumerType consumer_type) const;
 
   int num_light_readers_;
   int num_motion_readers_;
   int num_orientation_readers_;
+  int num_orientation_absolute_readers_;
   bool is_shutdown_;
   scoped_ptr<DataFetcherSharedMemory> data_fetcher_;
   base::ThreadChecker thread_checker_;

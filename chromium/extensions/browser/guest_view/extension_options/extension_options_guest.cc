@@ -4,6 +4,8 @@
 
 #include "extensions/browser/guest_view/extension_options/extension_options_guest.h"
 
+#include <utility>
+
 #include "base/values.h"
 #include "components/crx_file/id_util.h"
 #include "components/guest_view/browser/guest_view_event.h"
@@ -19,6 +21,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/extension_options/extension_options_constants.h"
 #include "extensions/browser/guest_view/extension_options/extension_options_guest_delegate.h"
+#include "extensions/browser/view_type_utils.h"
 #include "extensions/common/api/extension_options_internal.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -31,27 +34,24 @@
 using content::WebContents;
 using guest_view::GuestViewBase;
 using guest_view::GuestViewEvent;
-using namespace extensions::core_api;
+using namespace extensions::api;
 
 namespace extensions {
 
 // static
 const char ExtensionOptionsGuest::Type[] = "extensionoptions";
 
-ExtensionOptionsGuest::ExtensionOptionsGuest(
-    content::WebContents* owner_web_contents)
+ExtensionOptionsGuest::ExtensionOptionsGuest(WebContents* owner_web_contents)
     : GuestView<ExtensionOptionsGuest>(owner_web_contents),
       extension_options_guest_delegate_(
           extensions::ExtensionsAPIClient::Get()
-              ->CreateExtensionOptionsGuestDelegate(this)) {
-}
+              ->CreateExtensionOptionsGuestDelegate(this)) {}
 
 ExtensionOptionsGuest::~ExtensionOptionsGuest() {
 }
 
 // static
-GuestViewBase* ExtensionOptionsGuest::Create(
-    content::WebContents* owner_web_contents) {
+GuestViewBase* ExtensionOptionsGuest::Create(WebContents* owner_web_contents) {
   return new ExtensionOptionsGuest(owner_web_contents);
 }
 
@@ -111,7 +111,9 @@ void ExtensionOptionsGuest::CreateWebContents(
       content::SiteInstance::CreateForURL(browser_context(), extension_url);
   WebContents::CreateParams params(browser_context(), options_site_instance);
   params.guest_delegate = this;
-  callback.Run(WebContents::Create(params));
+  WebContents* wc = WebContents::Create(params);
+  SetViewType(wc, VIEW_TYPE_EXTENSION_GUEST);
+  callback.Run(wc);
 }
 
 void ExtensionOptionsGuest::DidInitialize(
@@ -126,7 +128,7 @@ void ExtensionOptionsGuest::DidInitialize(
 void ExtensionOptionsGuest::GuestViewDidStopLoading() {
   scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   DispatchEventToView(new GuestViewEvent(
-      extension_options_internal::OnLoad::kEventName, args.Pass()));
+      extension_options_internal::OnLoad::kEventName, std::move(args)));
 }
 
 const char* ExtensionOptionsGuest::GetAPINamespace() const {
@@ -151,8 +153,12 @@ void ExtensionOptionsGuest::OnPreferredSizeChanged(const gfx::Size& pref_size) {
       options.ToValue()));
 }
 
-content::WebContents* ExtensionOptionsGuest::OpenURLFromTab(
-    content::WebContents* source,
+bool ExtensionOptionsGuest::ShouldHandleFindRequestsForEmbedder() const {
+  return true;
+}
+
+WebContents* ExtensionOptionsGuest::OpenURLFromTab(
+    WebContents* source,
     const content::OpenURLParams& params) {
   if (!extension_options_guest_delegate_)
     return nullptr;
@@ -173,7 +179,7 @@ content::WebContents* ExtensionOptionsGuest::OpenURLFromTab(
   return extension_options_guest_delegate_->OpenURLInNewTab(params);
 }
 
-void ExtensionOptionsGuest::CloseContents(content::WebContents* source) {
+void ExtensionOptionsGuest::CloseContents(WebContents* source) {
   DispatchEventToView(
       new GuestViewEvent(extension_options_internal::OnClose::kEventName,
                          make_scoped_ptr(new base::DictionaryValue())));
@@ -188,9 +194,10 @@ bool ExtensionOptionsGuest::HandleContextMenu(
 }
 
 bool ExtensionOptionsGuest::ShouldCreateWebContents(
-    content::WebContents* web_contents,
-    int route_id,
-    int main_frame_route_id,
+    WebContents* web_contents,
+    int32_t route_id,
+    int32_t main_frame_route_id,
+    int32_t main_frame_widget_route_id,
     WindowContainerType window_container_type,
     const std::string& frame_name,
     const GURL& target_url,

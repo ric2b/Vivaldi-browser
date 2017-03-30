@@ -39,8 +39,7 @@ VideoCaptureImplManager::VideoCaptureImplManager()
     : next_client_id_(0),
       filter_(new VideoCaptureMessageFilter()),
       render_main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 VideoCaptureImplManager::~VideoCaptureImplManager() {
   DCHECK(render_main_task_runner_->BelongsToCurrentThread());
@@ -60,7 +59,6 @@ VideoCaptureImplManager::~VideoCaptureImplManager() {
 base::Closure VideoCaptureImplManager::UseDevice(
     media::VideoCaptureSessionId id) {
   DCHECK(render_main_task_runner_->BelongsToCurrentThread());
-
   VideoCaptureImpl* impl = NULL;
   const VideoCaptureDeviceMap::iterator it = devices_.find(id);
   if (it == devices_.end()) {
@@ -95,8 +93,7 @@ base::Closure VideoCaptureImplManager::StartCapture(
       base::Bind(&VideoCaptureImpl::StartCapture, base::Unretained(impl),
                  client_id, params, state_update_cb, deliver_frame_cb));
   return base::Bind(&VideoCaptureImplManager::StopCapture,
-                    weak_factory_.GetWeakPtr(),
-                    client_id, id);
+                    weak_factory_.GetWeakPtr(), client_id, id);
 }
 
 void VideoCaptureImplManager::GetDeviceSupportedFormats(

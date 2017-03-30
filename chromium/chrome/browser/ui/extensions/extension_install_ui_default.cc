@@ -5,7 +5,9 @@
 #include "chrome/browser/ui/extensions/extension_install_ui_default.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/theme_installed_infobar_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -16,11 +18,12 @@
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/app_list/app_list_util.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/extensions/extension_installed_bubble.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/simple_message_box.h"
@@ -67,7 +70,7 @@ void ShowExtensionInstalledBubble(const extensions::Extension* extension,
                                   const SkBitmap& icon) {
   Browser* browser = FindOrCreateVisibleBrowser(profile);
   if (browser)
-    chrome::ShowExtensionInstalledBubble(extension, browser, icon);
+    ExtensionInstalledBubble::ShowBubble(extension, browser, icon);
 }
 
 // Helper class to put up an infobar when installation fails.
@@ -83,10 +86,11 @@ class ErrorInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~ErrorInfoBarDelegate() override;
 
   // ConfirmInfoBarDelegate:
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;
   base::string16 GetLinkText() const override;
-  bool LinkClicked(WindowOpenDisposition disposition) override;
+  GURL GetLinkURL() const override;
 
   extensions::CrxInstallError error_;
 
@@ -108,6 +112,11 @@ ErrorInfoBarDelegate::ErrorInfoBarDelegate(
 ErrorInfoBarDelegate::~ErrorInfoBarDelegate() {
 }
 
+infobars::InfoBarDelegate::InfoBarIdentifier
+ErrorInfoBarDelegate::GetIdentifier() const {
+  return INSTALLATION_ERROR_INFOBAR_DELEGATE;
+}
+
 base::string16 ErrorInfoBarDelegate::GetMessageText() const {
   return error_.message();
 }
@@ -122,14 +131,8 @@ base::string16 ErrorInfoBarDelegate::GetLinkText() const {
              : base::string16();
 }
 
-bool ErrorInfoBarDelegate::LinkClicked(WindowOpenDisposition disposition) {
-  InfoBarService::WebContentsFromInfoBar(infobar())->OpenURL(
-      content::OpenURLParams(
-          GURL("https://support.google.com/chrome_webstore/?p=crx_warning"),
-          content::Referrer(),
-          (disposition == CURRENT_TAB) ? NEW_FOREGROUND_TAB : disposition,
-          ui::PAGE_TRANSITION_LINK, false));
-  return false;
+GURL ErrorInfoBarDelegate::GetLinkURL() const {
+  return GURL("https://support.google.com/chrome_webstore/?p=crx_warning");
 }
 
 }  // namespace
@@ -229,7 +232,7 @@ void ExtensionInstallUIDefault::OpenAppInstalledUI(const std::string& app_id) {
   Profile* current_profile = profile_->GetOriginalProfile();
   Browser* browser = FindOrCreateVisibleBrowser(current_profile);
   if (browser) {
-    GURL url(chrome::IsInstantExtendedAPIEnabled()
+    GURL url(search::IsInstantExtendedAPIEnabled()
                  ? chrome::kChromeUIAppsURL
                  : chrome::kChromeUINewTabURL);
     chrome::NavigateParams params(

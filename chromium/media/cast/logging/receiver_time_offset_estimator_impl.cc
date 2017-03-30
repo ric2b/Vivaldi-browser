@@ -12,28 +12,38 @@
 namespace media {
 namespace cast {
 
+namespace {
+
+// Bitwise merging of values to produce an ordered key for entries in the
+// BoundCalculator::events_ map.
+uint64_t MakeEventKey(RtpTimeTicks rtp, uint16_t packet_id, bool audio) {
+  return (static_cast<uint64_t>(rtp.lower_32_bits()) << 32) |
+         (static_cast<uint64_t>(packet_id) << 1) |
+         (audio ? UINT64_C(1) : UINT64_C(0));
+}
+
+}  // namespace
+
 ReceiverTimeOffsetEstimatorImpl::BoundCalculator::BoundCalculator()
     : has_bound_(false) {}
 ReceiverTimeOffsetEstimatorImpl::BoundCalculator::~BoundCalculator() {}
 
 void ReceiverTimeOffsetEstimatorImpl::BoundCalculator::SetSent(
-    uint32 rtp,
-    uint32 packet_id,
+    RtpTimeTicks rtp,
+    uint16_t packet_id,
     bool audio,
     base::TimeTicks t) {
-  uint64 key = (static_cast<uint64>(rtp) << 32) | (packet_id << 1) |
-      static_cast<uint64>(audio);
+  const uint64_t key = MakeEventKey(rtp, packet_id, audio);
   events_[key].first = t;
   CheckUpdate(key);
 }
 
 void ReceiverTimeOffsetEstimatorImpl::BoundCalculator::SetReceived(
-    uint32 rtp,
-    uint16 packet_id,
+    RtpTimeTicks rtp,
+    uint16_t packet_id,
     bool audio,
     base::TimeTicks t) {
-  uint64 key = (static_cast<uint64>(rtp) << 32) | (packet_id << 1) |
-      static_cast<uint64>(audio);
+  const uint64_t key = MakeEventKey(rtp, packet_id, audio);
   events_[key].second = t;
   CheckUpdate(key);
 }
@@ -53,8 +63,8 @@ void ReceiverTimeOffsetEstimatorImpl::BoundCalculator::UpdateBound(
     has_bound_ = true;
   }
 
-void ReceiverTimeOffsetEstimatorImpl::BoundCalculator::CheckUpdate(
-    uint64 key) {
+  void ReceiverTimeOffsetEstimatorImpl::BoundCalculator::CheckUpdate(
+      uint64_t key) {
   const TimeTickPair& ticks = events_[key];
   if (!ticks.first.is_null() && !ticks.second.is_null()) {
     UpdateBound(ticks.first, ticks.second);

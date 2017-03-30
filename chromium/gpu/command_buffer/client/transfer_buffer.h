@@ -5,7 +5,11 @@
 #ifndef GPU_COMMAND_BUFFER_CLIENT_TRANSFER_BUFFER_H_
 #define GPU_COMMAND_BUFFER_CLIENT_TRANSFER_BUFFER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/client/ring_buffer.h"
 #include "gpu/command_buffer/common/buffer.h"
@@ -50,6 +54,10 @@ class GPU_EXPORT TransferBufferInterface {
   virtual void DiscardBlock(void* p) = 0;
 
   virtual void FreePendingToken(void* p, unsigned int token) = 0;
+
+  virtual unsigned int GetSize() const = 0;
+
+  virtual unsigned int GetFreeSize() const = 0;
 };
 
 // Class that manages the transfer buffer.
@@ -75,6 +83,8 @@ class GPU_EXPORT TransferBuffer : public TransferBufferInterface {
   RingBuffer::Offset GetOffset(void* pointer) const override;
   void DiscardBlock(void* p) override;
   void FreePendingToken(void* p, unsigned int token) override;
+  unsigned int GetSize() const override;
+  unsigned int GetFreeSize() const override;
 
   // These are for testing.
   unsigned int GetCurrentMaxAllocationWithoutRealloc() const;
@@ -114,13 +124,13 @@ class GPU_EXPORT TransferBuffer : public TransferBufferInterface {
   scoped_refptr<gpu::Buffer> buffer_;
 
   // id of buffer. -1 = no buffer
-  int32 buffer_id_;
+  int32_t buffer_id_;
 
   // address of result area
   void* result_buffer_;
 
   // offset to result area
-  uint32 result_shm_offset_;
+  uint32_t result_shm_offset_;
 
   // false if we failed to allocate min_buffer_size
   bool usable_;
@@ -139,6 +149,14 @@ class GPU_EXPORT ScopedTransferBufferPtr {
         transfer_buffer_(transfer_buffer) {
     Reset(size);
   }
+
+  // Constructs an empty and invalid allocation that should be Reset() later.
+  ScopedTransferBufferPtr(CommandBufferHelper* helper,
+                          TransferBufferInterface* transfer_buffer)
+      : buffer_(NULL),
+        size_(0),
+        helper_(helper),
+        transfer_buffer_(transfer_buffer) {}
 
   ~ScopedTransferBufferPtr() {
     Release();

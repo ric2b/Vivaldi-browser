@@ -4,6 +4,8 @@
 
 #include "ui/base/x/x11_menu_list.h"
 
+#include <algorithm>
+
 #include "base/memory/singleton.h"
 #include "ui/base/x/x11_util.h"
 
@@ -11,7 +13,7 @@ namespace ui {
 
 // static
 XMenuList* XMenuList::GetInstance() {
-  return Singleton<XMenuList>::get();
+  return base::Singleton<XMenuList>::get();
 }
 
 XMenuList::XMenuList()

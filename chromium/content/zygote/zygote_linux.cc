@@ -4,18 +4,23 @@
 
 #include "content/zygote/zygote_linux.h"
 
+#include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/linux_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/pickle.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/posix/global_descriptors.h"
@@ -24,7 +29,9 @@
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/common/child_process_sandbox_support_impl_linux.h"
 #include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/common/set_process_title.h"
@@ -83,14 +90,16 @@ void KillAndReap(pid_t pid, ZygoteForkDelegate* helper) {
 
 }  // namespace
 
-Zygote::Zygote(int sandbox_flags, ScopedVector<ZygoteForkDelegate> helpers,
+Zygote::Zygote(int sandbox_flags,
+               ScopedVector<ZygoteForkDelegate> helpers,
                const std::vector<base::ProcessHandle>& extra_children,
                const std::vector<int>& extra_fds)
     : sandbox_flags_(sandbox_flags),
-      helpers_(helpers.Pass()),
+      helpers_(std::move(helpers)),
       initial_uma_index_(0),
       extra_children_(extra_children),
-      extra_fds_(extra_fds) {}
+      extra_fds_(extra_fds),
+      to_reap_() {}
 
 Zygote::~Zygote() {
 }
@@ -107,6 +116,13 @@ bool Zygote::ProcessRequests() {
   memset(&action, 0, sizeof(action));
   action.sa_handler = &SIGCHLDHandler;
   PCHECK(sigaction(SIGCHLD, &action, NULL) == 0);
+
+  // Block SIGCHLD until a child might be ready to reap.
+  sigset_t sigset;
+  sigset_t orig_sigmask;
+  PCHECK(sigemptyset(&sigset) == 0);
+  PCHECK(sigaddset(&sigset, SIGCHLD) == 0);
+  PCHECK(sigprocmask(SIG_BLOCK, &sigset, &orig_sigmask) == 0);
 
   if (UsingSUIDSandbox() || UsingNSSandbox()) {
     // Let the ZygoteHost know we are ready to go.
@@ -127,10 +143,70 @@ bool Zygote::ProcessRequests() {
 #endif
   }
 
+  sigset_t ppoll_sigmask = orig_sigmask;
+  PCHECK(sigdelset(&ppoll_sigmask, SIGCHLD) == 0);
+  struct pollfd pfd;
+  pfd.fd = kZygoteSocketPairFd;
+  pfd.events = POLLIN;
+
+  struct timespec timeout;
+  timeout.tv_sec = 2;
+  timeout.tv_nsec = 0;
+
   for (;;) {
-    // This function call can return multiple times, once per fork().
-    if (HandleRequestFromBrowser(kZygoteSocketPairFd))
-      return true;
+    struct timespec* timeout_ptr = nullptr;
+    if (!to_reap_.empty())
+      timeout_ptr = &timeout;
+    int rc = ppoll(&pfd, 1, timeout_ptr, &ppoll_sigmask);
+    PCHECK(rc >= 0 || errno == EINTR);
+    ReapChildren();
+
+    if (pfd.revents & POLLIN) {
+      // This function call can return multiple times, once per fork().
+      if (HandleRequestFromBrowser(kZygoteSocketPairFd)) {
+        PCHECK(sigprocmask(SIG_SETMASK, &orig_sigmask, NULL) == 0);
+        return true;
+      }
+    }
+  }
+  // The loop should not be exited unless a request was successfully processed.
+  NOTREACHED();
+  return false;
+}
+
+bool Zygote::ReapChild(const base::TimeTicks& now, ZygoteProcessInfo* child) {
+  pid_t pid = child->internal_pid;
+  pid_t r = HANDLE_EINTR(waitpid(pid, NULL, WNOHANG));
+  if (r > 0) {
+    if (r != pid) {
+      DLOG(ERROR) << "While waiting for " << pid << " to terminate, "
+                                                    "waitpid returned "
+                  << r;
+    }
+    return r == pid;
+  }
+  if ((now - child->time_of_reap_request).InSeconds() < 2) {
+    return false;
+  }
+  // If the process has been requested reaped >= 2 seconds ago, kill it.
+  if (!child->sent_sigkill) {
+    if (kill(pid, SIGKILL) != 0)
+      DPLOG(ERROR) << "Sending SIGKILL to process " << pid << " failed";
+
+    child->sent_sigkill = true;
+  }
+  return false;
+}
+
+void Zygote::ReapChildren() {
+  base::TimeTicks now = base::TimeTicks::Now();
+  std::vector<ZygoteProcessInfo>::iterator it = to_reap_.begin();
+  while (it != to_reap_.end()) {
+    if (ReapChild(now, &(*it))) {
+      it = to_reap_.erase(it);
+    } else {
+      it++;
+    }
   }
 }
 
@@ -154,7 +230,7 @@ bool Zygote::UsingNSSandbox() const {
 }
 
 bool Zygote::HandleRequestFromBrowser(int fd) {
-  ScopedVector<base::ScopedFD> fds;
+  std::vector<base::ScopedFD> fds;
   char buf[kZygoteMaxMessageLength];
   const ssize_t len = base::UnixDomainSocket::RecvMsg(
       fd, buf, sizeof(buf), &fds);
@@ -162,21 +238,18 @@ bool Zygote::HandleRequestFromBrowser(int fd) {
   if (len == 0 || (len == -1 && errno == ECONNRESET)) {
     // EOF from the browser. We should die.
     // TODO(earthdok): call __sanititizer_cov_dump() here to obtain code
-    // coverage  for the Zygote. Currently it's not possible because of
+    // coverage for the Zygote. Currently it's not possible because of
     // confusion over who is responsible for closing the file descriptor.
-    for (std::vector<int>::iterator it = extra_fds_.begin();
-         it < extra_fds_.end(); ++it) {
-      PCHECK(0 == IGNORE_EINTR(close(*it)));
+    for (int fd : extra_fds_) {
+      PCHECK(0 == IGNORE_EINTR(close(fd)));
     }
 #if !defined(SANITIZER_COVERAGE)
     // TODO(earthdok): add watchdog thread before using this in builds not
     // using sanitizer coverage.
     CHECK(extra_children_.empty());
 #endif
-    for (std::vector<base::ProcessHandle>::iterator it =
-             extra_children_.begin();
-         it < extra_children_.end(); ++it) {
-      PCHECK(*it == HANDLE_EINTR(waitpid(*it, NULL, 0)));
+    for (base::ProcessHandle pid : extra_children_) {
+      PCHECK(pid == HANDLE_EINTR(waitpid(pid, NULL, 0)));
     }
     _exit(0);
     return false;
@@ -195,7 +268,7 @@ bool Zygote::HandleRequestFromBrowser(int fd) {
     switch (kind) {
       case kZygoteCommandFork:
         // This function call can return multiple times, once per fork().
-        return HandleForkRequest(fd, iter, fds.Pass());
+        return HandleForkRequest(fd, iter, std::move(fds));
 
       case kZygoteCommandReap:
         if (!fds.empty())
@@ -242,23 +315,10 @@ void Zygote::HandleReapRequest(int fd, base::PickleIterator iter) {
     NOTREACHED();
     return;
   }
+  child_info.time_of_reap_request = base::TimeTicks::Now();
 
   if (!child_info.started_from_helper) {
-    // Do not call base::EnsureProcessTerminated() under ThreadSanitizer, as it
-    // spawns a separate thread which may live until the call to fork() in the
-    // zygote. As a result, ThreadSanitizer will report an error and almost
-    // disable race detection in the child process.
-    // Not calling EnsureProcessTerminated() may result in zombie processes
-    // sticking around. This will only happen during testing, so we can live
-    // with this for now.
-#if !defined(THREAD_SANITIZER)
-    // TODO(jln): this old code is completely broken. See crbug.com/274855.
-    base::EnsureProcessTerminated(base::Process(child_info.internal_pid));
-#else
-    LOG(WARNING) << "Zygote process omitting a call to "
-        << "base::EnsureProcessTerminated() for child pid " << child
-        << " under ThreadSanitizer. See http://crbug.com/274855.";
-#endif
+    to_reap_.push_back(child_info);
   } else {
     // For processes from the helper, send a GetTerminationStatus request
     // with known_dead set to true.
@@ -430,6 +490,7 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
     // to system trace event data.
     base::trace_event::TraceLog::GetInstance()->SetProcessID(
         static_cast<int>(real_pid));
+    base::InitUniqueIdForProcessInPidNamespace(real_pid);
 #endif
     return 0;
   }
@@ -442,7 +503,7 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
   // be invalid (see below).
   base::ProcessId real_pid;
   {
-    ScopedVector<base::ScopedFD> recv_fds;
+    std::vector<base::ScopedFD> recv_fds;
     char buf[kZygoteMaxMessageLength];
     const ssize_t len = base::UnixDomainSocket::RecvMsg(
         kZygoteSocketPairFd, buf, sizeof(buf), &recv_fds);
@@ -492,7 +553,7 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
 }
 
 base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
-                                        ScopedVector<base::ScopedFD> fds,
+                                        std::vector<base::ScopedFD> fds,
                                         std::string* uma_name,
                                         int* uma_sample,
                                         int* uma_boundary_value) {
@@ -527,27 +588,23 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
   // First FD is the PID oracle socket.
   if (fds.size() < 1)
     return -1;
-  base::ScopedFD pid_oracle(fds[0]->Pass());
+  base::ScopedFD pid_oracle(std::move(fds[0]));
 
   // Remaining FDs are for the global descriptor mapping.
   for (int i = 1; i < numfds; ++i) {
     base::GlobalDescriptors::Key key;
     if (!iter.ReadUInt32(&key))
       return -1;
-    mapping.push_back(base::GlobalDescriptors::Descriptor(key, fds[i]->get()));
+    mapping.push_back(base::GlobalDescriptors::Descriptor(key, fds[i].get()));
   }
 
   mapping.push_back(base::GlobalDescriptors::Descriptor(
       static_cast<uint32_t>(kSandboxIPCChannel), GetSandboxFD()));
 
   // Returns twice, once per process.
-  base::ProcessId child_pid = ForkWithRealPid(process_type,
-                                              mapping,
-                                              channel_id,
-                                              pid_oracle.Pass(),
-                                              uma_name,
-                                              uma_sample,
-                                              uma_boundary_value);
+  base::ProcessId child_pid =
+      ForkWithRealPid(process_type, mapping, channel_id, std::move(pid_oracle),
+                      uma_name, uma_sample, uma_boundary_value);
   if (!child_pid) {
     // This is the child process.
 
@@ -555,9 +612,8 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
     PCHECK(0 == IGNORE_EINTR(close(kZygoteSocketPairFd)));
 
     // Pass ownership of file descriptors from fds to GlobalDescriptors.
-    for (ScopedVector<base::ScopedFD>::iterator i = fds.begin(); i != fds.end();
-         ++i)
-      ignore_result((*i)->release());
+    for (base::ScopedFD& fd : fds)
+      ignore_result(fd.release());
     base::GlobalDescriptors::GetInstance()->Reset(mapping);
 
     // Reset the process-wide command line to our new command line.
@@ -578,12 +634,12 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
 
 bool Zygote::HandleForkRequest(int fd,
                                base::PickleIterator iter,
-                               ScopedVector<base::ScopedFD> fds) {
+                               std::vector<base::ScopedFD> fds) {
   std::string uma_name;
   int uma_sample;
   int uma_boundary_value;
-  base::ProcessId child_pid = ReadArgsAndFork(
-      iter, fds.Pass(), &uma_name, &uma_sample, &uma_boundary_value);
+  base::ProcessId child_pid = ReadArgsAndFork(iter, std::move(fds), &uma_name,
+                                              &uma_sample, &uma_boundary_value);
   if (child_pid == 0)
     return true;
   // If there's no UMA report for this particular fork, then check if any

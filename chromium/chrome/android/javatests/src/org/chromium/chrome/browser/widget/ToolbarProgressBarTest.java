@@ -6,7 +6,10 @@ package org.chromium.chrome.browser.widget;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_PHONE;
 
+import android.animation.Animator;
+import android.animation.Animator.AnimatorListener;
 import android.test.suitebuilder.annotation.MediumTest;
+import android.view.View;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
@@ -14,15 +17,16 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tests related to the ToolbarProgressBar.
  */
 public class ToolbarProgressBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
+
+    static final int TEST_WAIT_TIME_MS = 60000;
 
     public ToolbarProgressBarTest() {
         super(ChromeActivity.class);
@@ -35,57 +39,86 @@ public class ToolbarProgressBarTest extends ChromeActivityTestCaseBase<ChromeAct
 
     /**
      * Test that calling progressBar.setProgress(# > 0) followed by progressBar.setProgress(0)
-     * results in a hidden progress bar (the secondary progress needs to be 0).
+     * results in a hidden progress bar.
      * @throws InterruptedException
      */
     @Feature({"Android-Toolbar"})
     @MediumTest
     @Restriction(RESTRICTION_TYPE_PHONE)
     public void testProgressBarDisappearsAfterFastShowHide() throws InterruptedException {
+        // onAnimationEnd will be signaled on progress bar showing/hiding animation end.
+        final Object onAnimationEnd = new Object();
+        final AtomicBoolean animationEnded = new AtomicBoolean(false);
         final AtomicReference<ToolbarProgressBar> progressBar =
                 new AtomicReference<ToolbarProgressBar>();
-        ThreadUtils.runOnUiThread(new Runnable() {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
                 progressBar.set((ToolbarProgressBar) getActivity().findViewById(R.id.progress));
+                progressBar.get().setAlphaAnimationDuration(10);
+                progressBar.get().setHidingDelay(10);
+                progressBar.get().animate().setListener(new AnimatorListener() {
+                    @Override
+                    public void onAnimationStart(Animator animation) {
+                    }
+
+                    @Override
+                    public void onAnimationRepeat(Animator animation) {
+                    }
+
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        synchronized (onAnimationEnd) {
+                            animationEnded.set(true);
+                            onAnimationEnd.notify();
+                        }
+                    }
+
+                    @Override
+                    public void onAnimationCancel(Animator animation) {
+                    }
+                });
             }
         });
 
-        // Wait for the progress bar to be reset.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return progressBar.get().getProgress() == 0;
-            }
-        });
+        // Before the actual test, ensure that the progress bar is hidden.
+        assertNotSame(View.VISIBLE, progressBar.get().getVisibility());
 
-        ThreadUtils.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                assertEquals("Progress bar should be hidden to start.", 0,
-                        progressBar.get().getProgress());
-                progressBar.get().setProgress(10);
-                assertTrue("Progress bar did not start animating",
-                        progressBar.get().isAnimatingForShowOrHide());
-                progressBar.get().setProgress(0);
-            }
-        });
+        // Make some progress and check that the progress bar is fully visible.
+        animationEnded.set(false);
+        synchronized (onAnimationEnd) {
+            ThreadUtils.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    progressBar.get().start();
+                    progressBar.get().setProgress(0.5f);
+                }
+            });
 
-        // Wait for the progress bar to finish any and all animations.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return !progressBar.get().isAnimatingForShowOrHide();
+            long deadline = System.currentTimeMillis() + TEST_WAIT_TIME_MS;
+            while (!animationEnded.get() && System.currentTimeMillis() < deadline) {
+                onAnimationEnd.wait(deadline - System.currentTimeMillis());
             }
-        });
+            assertEquals(1.0f, progressBar.get().getAlpha());
+            assertEquals(View.VISIBLE, progressBar.get().getVisibility());
+        }
 
-        ThreadUtils.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                // The secondary progress should be gone.
-                assertEquals("Progress bar background still visible.", 0,
-                        progressBar.get().getSecondaryProgress());
+        // Clear progress and check that the progress bar is hidden.
+        animationEnded.set(false);
+        synchronized (onAnimationEnd) {
+            ThreadUtils.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    progressBar.get().finish(true);
+                }
+            });
+
+            long deadline = System.currentTimeMillis() + TEST_WAIT_TIME_MS;
+            while (!animationEnded.get() && System.currentTimeMillis() < deadline) {
+                onAnimationEnd.wait(deadline - System.currentTimeMillis());
             }
-        });
+            assertEquals(0.0f, progressBar.get().getAlpha());
+            assertNotSame(View.VISIBLE, progressBar.get().getVisibility());
+        }
     }
 }

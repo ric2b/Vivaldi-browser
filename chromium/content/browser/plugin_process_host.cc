@@ -4,12 +4,9 @@
 
 #include "content/browser/plugin_process_host.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#elif defined(OS_POSIX)
-#include <utility>  // for pair<>
-#endif
+#include <stddef.h>
 
+#include <utility>
 #include <vector>
 
 #include "base/base_switches.h"
@@ -18,11 +15,14 @@
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
+#include "components/tracing/tracing_switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/loader/resource_message_filter.h"
@@ -45,6 +45,10 @@
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
+
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
 #include "ui/gfx/geometry/rect.h"
@@ -55,6 +59,7 @@
 #include "content/common/plugin_constants_win.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
 #include "base/vivaldi_switches.h"
 
 namespace content {
@@ -113,7 +118,7 @@ class PluginSandboxedProcessLauncherDelegate
   }
 
 #elif defined(OS_POSIX)
-  base::ScopedFD TakeIpcFd() override { return ipc_fd_.Pass(); }
+  base::ScopedFD TakeIpcFd() override { return std::move(ipc_fd_); }
 #endif  // OS_WIN
 
  private:
@@ -190,12 +195,7 @@ bool PluginProcessHost::Init(const WebPluginInfo& info) {
   base::CommandLine::StringType plugin_launcher =
       browser_command_line.GetSwitchValueNative(switches::kPluginLauncher);
 
-#if defined(OS_MACOSX)
-  // Run the plugin process in a mode tolerant of heap execution without
-  // explicit mprotect calls. Some plugins still rely on this quaint and
-  // archaic "feature." See http://crbug.com/93551.
-  int flags = ChildProcessHost::CHILD_ALLOW_HEAP_EXECUTION;
-#elif defined(OS_LINUX)
+#if defined(OS_LINUX)
   int flags = plugin_launcher.empty() ? ChildProcessHost::CHILD_ALLOW_SELF :
                                         ChildProcessHost::CHILD_NORMAL;
 #else
@@ -212,10 +212,15 @@ bool PluginProcessHost::Init(const WebPluginInfo& info) {
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kPluginProcess);
   cmd_line->AppendSwitchPath(switches::kPluginPath, info.path);
 
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
-	  cmd_line->AppendSwitchNoDup(switches::kRunningVivaldi);
+#if defined(OS_WIN)
+  if (GetContentClient()->browser()->ShouldUseWindowsPrefetchArgument())
+    cmd_line->AppendArg(switches::kPrefetchArgumentOther);
+#endif  // defined(OS_WIN)
+
+  if (vivaldi::IsVivaldiRunning())
+    cmd_line->AppendSwitchNoDup(switches::kRunningVivaldi);
   else
-	  cmd_line->AppendSwitchNoDup(switches::kDisableVivaldi);
+    cmd_line->AppendSwitchNoDup(switches::kDisableVivaldi);
 
   // Propagate the following switches to the plugin command line (along with
   // any associated values) if present in the browser command line
@@ -228,6 +233,7 @@ bool PluginProcessHost::Init(const WebPluginInfo& info) {
     switches::kLogPluginMessages,
     switches::kNoSandbox,
     switches::kPluginStartupDialog,
+    switches::kTraceConfigFile,
     switches::kTraceStartup,
     switches::kUseGL,
     switches::kDebugVivaldi,
@@ -310,7 +316,7 @@ bool PluginProcessHost::OnMessageReceived(const IPC::Message& msg) {
   return handled;
 }
 
-void PluginProcessHost::OnChannelConnected(int32 peer_pid) {
+void PluginProcessHost::OnChannelConnected(int32_t peer_pid) {
   for (size_t i = 0; i < pending_requests_.size(); ++i) {
     RequestPluginChannel(pending_requests_[i]);
   }
@@ -433,11 +439,12 @@ void PluginProcessHost::OnChannelDestroyed(int renderer_id) {
     resource_context_map_.erase(renderer_id);
 }
 
-void PluginProcessHost::GetContexts(const ResourceHostMsg_Request& request,
+void PluginProcessHost::GetContexts(ResourceType resource_type,
+                                    int origin_pid,
                                     ResourceContext** resource_context,
                                     net::URLRequestContext** request_context) {
   *resource_context =
-      resource_context_map_[request.origin_pid].resource_context;
+      resource_context_map_[origin_pid].resource_context;
   *request_context = (*resource_context)->GetRequestContext();
 }
 

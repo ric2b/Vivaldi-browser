@@ -36,9 +36,11 @@ cr.define('gpu', function() {
     applySimulatedData_: function applySimulatedData(data) {
       // set up things according to the simulated data
       this.gpuInfo_ = data.gpuInfo;
+      this.gpuMemoryBufferInfo_ = data.gpuMemoryBufferInfo;
       this.clientInfo_ = data.clientInfo;
       this.logMessages_ = data.logMessages;
       cr.dispatchSimpleEvent(this, 'gpuInfoUpdate');
+      cr.dispatchSimpleEvent(this, 'gpuMemoryBufferInfoUpdate');
       cr.dispatchSimpleEvent(this, 'clientInfoChange');
       cr.dispatchSimpleEvent(this, 'logMessagesChange');
     },
@@ -95,6 +97,21 @@ cr.define('gpu', function() {
     },
 
     /**
+     * Get gpuMemoryBufferInfo data.
+     */
+    get gpuMemoryBufferInfo() {
+      return this.gpuMemoryBufferInfo_;
+    },
+
+    /**
+     * Called from gpu c++ code when GpuMemoryBuffer Info is updated.
+     */
+    onGpuMemoryBufferInfoUpdate: function(gpuMemoryBufferInfo) {
+      this.gpuMemoryBufferInfo_ = gpuMemoryBufferInfo;
+      cr.dispatchSimpleEvent(this, 'gpuMemoryBufferInfoUpdate');
+    },
+
+    /**
      * This function begins a request for the ClientInfo. If it comes back
      * as undefined, then we will issue the request again in 250ms.
      */
@@ -139,6 +156,17 @@ cr.define('gpu', function() {
       return this.logMessages_;
     },
 
+    /**
+     * Returns the value of the "Sandboxed" row.
+     */
+    isSandboxedForTesting : function() {
+      for (i = 0; i < this.gpuInfo_.basic_info.length; ++i) {
+        var info = this.gpuInfo_.basic_info[i];
+        if (info.description == "Sandboxed")
+          return info.value;
+      }
+      return false;
+    }
   };
 
   return {

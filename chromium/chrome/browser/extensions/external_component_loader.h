@@ -8,12 +8,11 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/extensions/external_loader.h"
 #include "chrome/browser/profiles/profile.h"
 
 namespace extensions {
-
-class Extension;
 
 // A specialization of the ExternalLoader that loads a hard-coded list of
 // external extensions, that should be considered components of chrome (but
@@ -24,9 +23,6 @@ class Extension;
 class ExternalComponentLoader : public ExternalLoader {
  public:
   explicit ExternalComponentLoader(Profile* profile);
-
-  // True if |extension| should be modifiable by the user.
-  static bool IsModifiable(const extensions::Extension* extension);
 
  protected:
   void StartLoading() override;

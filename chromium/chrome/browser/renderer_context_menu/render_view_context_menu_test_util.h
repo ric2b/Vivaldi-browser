@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_TEST_UTIL_H_
 #define CHROME_BROWSER_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_TEST_UTIL_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "url/gurl.h"
 
@@ -41,10 +41,15 @@ class TestRenderViewContextMenu : public RenderViewContextMenu {
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) override;
 
-  // Returns true if command specified by |command_id| is present
+  // Returns true if the command specified by |command_id| is present
   // in the menu.
-  // List of command ids can be found in chrome/app/chrome_command_ids.h.
+  // A list of command ids can be found in chrome/app/chrome_command_ids.h.
   bool IsItemPresent(int command_id);
+
+  // Returns true if a command specified by any command id between
+  // |command_id_first| and |command_id_last| (inclusive) is present in the
+  // menu.
+  bool IsItemInRangePresent(int command_id_first, int command_id_last);
 
   // Searches for an menu item with |command_id|. If it's found, the return
   // value is true and the model and index where it appears in that model are
@@ -56,6 +61,12 @@ class TestRenderViewContextMenu : public RenderViewContextMenu {
 #if defined(ENABLE_EXTENSIONS)
   extensions::ContextMenuMatcher& extension_items() { return extension_items_; }
 #endif
+
+  void set_protocol_handler_registry(ProtocolHandlerRegistry* registry) {
+    protocol_handler_registry_ = registry;
+  }
+
+  using RenderViewContextMenu::AppendImageItems;
 
   void Show() override;
 

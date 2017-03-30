@@ -18,9 +18,6 @@
 // which manages the logic for actually dragging tabs.
 @protocol TabDraggingEventTarget
 
-// Returns YES if the tab represented by the controller can be dragged.
-- (BOOL)tabCanBeDragged:(TabController*)tab;
-
 // Initiates a dragging session with a mouseDown event. The tab controller
 // passed here is the one used for the rest of the dragging session.
 - (void)maybeStartDrag:(NSEvent*)event forTab:(TabController*)tab;
@@ -57,6 +54,8 @@
   NSWindow* dragOverlay_;  // Weak. The overlay being dragged
 
   TabWindowController* targetController_;  // weak. Controller being targeted
+
+  CGFloat horizDragOffset_;
 }
 
 // The tab being dragged, or nil if not dragging a tab.

@@ -6,14 +6,15 @@
 #define CHROME_BROWSER_CHROMEOS_DRIVE_DRIVE_INTEGRATION_SERVICE_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "chrome/browser/chromeos/drive/file_errors.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
-#include "chrome/browser/chromeos/drive/job_scheduler.h"
-#include "chrome/browser/drive/drive_notification_observer.h"
+#include "components/drive/drive_notification_observer.h"
+#include "components/drive/file_errors.h"
+#include "components/drive/file_system_core_util.h"
+#include "components/drive/job_scheduler.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
@@ -222,7 +223,7 @@ class DriveIntegrationServiceFactory
   static DriveIntegrationServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<DriveIntegrationServiceFactory>;
+  friend struct base::DefaultSingletonTraits<DriveIntegrationServiceFactory>;
 
   DriveIntegrationServiceFactory();
   ~DriveIntegrationServiceFactory() override;

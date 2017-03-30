@@ -4,14 +4,13 @@
 
 #include "chrome/browser/chromeos/drive/file_task_executor.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "chrome/browser/chromeos/drive/drive.pb.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
-#include "chrome/browser/drive/drive_service_interface.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/browser.h"
@@ -19,6 +18,9 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
+#include "components/drive/drive.pb.h"
+#include "components/drive/file_system_interface.h"
+#include "components/drive/service/drive_service_interface.h"
 #include "content/public/browser/browser_thread.h"
 #include "storage/browser/fileapi/file_system_url.h"
 
@@ -68,11 +70,10 @@ FileTaskExecutor::FileTaskExecutor(Profile* profile, const std::string& app_id)
 FileTaskExecutor::FileTaskExecutor(
     scoped_ptr<FileTaskExecutorDelegate> delegate,
     const std::string& app_id)
-  : delegate_(delegate.Pass()),
-    app_id_(app_id),
-    current_index_(0),
-    weak_ptr_factory_(this) {
-}
+    : delegate_(std::move(delegate)),
+      app_id_(app_id),
+      current_index_(0),
+      weak_ptr_factory_(this) {}
 
 FileTaskExecutor::~FileTaskExecutor() {
 }

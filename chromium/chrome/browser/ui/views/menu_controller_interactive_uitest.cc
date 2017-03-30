@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/views/menu_test_base.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -58,6 +59,7 @@ typedef MenuControllerMnemonicTest<ui::VKEY_DIVIDE,1>
 // ozone bringup - http://crbug.com/401304
 #define MAYBE_MnemonicMatch DISABLED_MnemonicMatch
 #else
+// If this flakes, disable and log details in http://crbug.com/523255.
 #define MAYBE_MnemonicMatch MnemonicMatch
 #endif
 
@@ -72,6 +74,7 @@ typedef MenuControllerMnemonicTest<ui::VKEY_T,2>
 // ozone bringup - http://crbug.com/401304
 #define MAYBE_TitleMatch DISABLED_TitleMatch
 #else
+// If this flakes, disable and log details in http://crbug.com/523255.
 #define MAYBE_TitleMatch TitleMatch
 #endif
 
@@ -85,6 +88,7 @@ typedef MenuControllerMnemonicTest<ui::VKEY_A,0>
 // ozone bringup - http://crbug.com/401304
 #define MAYBE_NoMatch DISABLED_NoMatch
 #else
+// If this flakes, disable and log details in http://crbug.com/523255.
 #define MAYBE_NoMatch NoMatch
 #endif
 

@@ -7,9 +7,9 @@
 #include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/malware_details.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/threat_details.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -26,9 +26,13 @@ using content::WebContentsTester;
 
 static const char* kGoogleURL = "http://www.google.com/";
 static const char* kGoodURL = "http://www.goodguys.com/";
+static const char* kGoodHTTPSURL = "https://www.goodguys.com/";
 static const char* kBadURL = "http://www.badguys.com/";
 static const char* kBadURL2 = "http://www.badguys2.com/";
 static const char* kBadURL3 = "http://www.badguys3.com/";
+static const char* kBadHTTPSURL = "https://www.badguys.com/";
+
+namespace safe_browsing {
 
 namespace {
 
@@ -36,11 +40,15 @@ namespace {
 class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
  public:
   TestSafeBrowsingBlockingPage(SafeBrowsingUIManager* manager,
-                                 WebContents* web_contents,
-                                 const UnsafeResourceList& unsafe_resources)
-      : SafeBrowsingBlockingPage(manager, web_contents, unsafe_resources) {
+                               WebContents* web_contents,
+                               const GURL& main_frame_url,
+                               const UnsafeResourceList& unsafe_resources)
+      : SafeBrowsingBlockingPage(manager,
+                                 web_contents,
+                                 main_frame_url,
+                                 unsafe_resources) {
     // Don't delay details at all for the unittest.
-    malware_details_proceed_delay_ms_ = 0;
+    threat_details_proceed_delay_ms_ = 0;
     DontCreateViewForTesting();
   }
 };
@@ -51,7 +59,7 @@ class TestSafeBrowsingUIManager: public SafeBrowsingUIManager {
       : SafeBrowsingUIManager(service) {
   }
 
-  void SendSerializedMalwareDetails(const std::string& serialized) override {
+  void SendSerializedThreatDetails(const std::string& serialized) override {
     details_.push_back(serialized);
   }
 
@@ -74,10 +82,11 @@ class TestSafeBrowsingBlockingPageFactory
   SafeBrowsingBlockingPage* CreateSafeBrowsingPage(
       SafeBrowsingUIManager* manager,
       WebContents* web_contents,
+      const GURL& main_frame_url,
       const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources)
       override {
     return new TestSafeBrowsingBlockingPage(manager, web_contents,
-                                              unsafe_resources);
+                                            main_frame_url, unsafe_resources);
   }
 };
 
@@ -109,7 +118,7 @@ class SafeBrowsingBlockingPageTest : public ChromeRenderViewHostTestHarness {
     ui_manager_ = NULL;
     SafeBrowsingBlockingPage::RegisterFactory(NULL);
     // Clean up singleton reference (crbug.com/110594).
-    MalwareDetails::RegisterFactory(NULL);
+    ThreatDetails::RegisterFactory(NULL);
     ChromeRenderViewHostTestHarness::TearDown();
   }
 
@@ -223,13 +232,16 @@ class SafeBrowsingBlockingPageTest : public ChromeRenderViewHostTestHarness {
     resource->callback =
         base::Bind(&SafeBrowsingBlockingPageTest::OnBlockingPageComplete,
                    base::Unretained(this));
+    resource->callback_thread =
+        content::BrowserThread::GetMessageLoopProxyForThread(
+            content::BrowserThread::IO);
     resource->url = url;
     resource->is_subresource = is_subresource;
     resource->threat_type = SB_THREAT_TYPE_URL_MALWARE;
     resource->render_process_host_id =
         web_contents()->GetRenderProcessHost()->GetID();
-    resource->render_view_id =
-        web_contents()->GetRenderViewHost()->GetRoutingID();
+    resource->render_frame_id = web_contents()->GetMainFrame()->GetRoutingID();
+    resource->threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
   }
 
   UserResponse user_response_;
@@ -631,6 +643,7 @@ TEST_F(SafeBrowsingBlockingPageTest, MalwareReportsDisabled) {
   ShowInterstitial(false, kBadURL);
   SafeBrowsingBlockingPage* sb_interstitial = GetSafeBrowsingBlockingPage();
   ASSERT_TRUE(sb_interstitial);
+  EXPECT_TRUE(sb_interstitial->CanShowThreatDetailsOption());
 
   base::RunLoop().RunUntilIdle();
 
@@ -665,6 +678,7 @@ TEST_F(SafeBrowsingBlockingPageTest, MalwareReportsToggling) {
   ShowInterstitial(false, kBadURL);
   SafeBrowsingBlockingPage* sb_interstitial = GetSafeBrowsingBlockingPage();
   ASSERT_TRUE(sb_interstitial);
+  EXPECT_TRUE(sb_interstitial->CanShowThreatDetailsOption());
 
   base::RunLoop().RunUntilIdle();
 
@@ -683,3 +697,189 @@ TEST_F(SafeBrowsingBlockingPageTest, MalwareReportsToggling) {
   EXPECT_FALSE(profile->GetPrefs()->GetBoolean(
       prefs::kSafeBrowsingExtendedReportingEnabled));
 }
+
+// Test that extended reporting option is not shown on blocking an HTTPS main
+// page, and no report is sent.
+TEST_F(SafeBrowsingBlockingPageTest, ExtendedReportingNotShownOnSecurePage) {
+  // Enable malware details.
+  Profile* profile = Profile::FromBrowserContext(
+      web_contents()->GetBrowserContext());
+  profile->GetPrefs()->SetBoolean(
+      prefs::kSafeBrowsingExtendedReportingEnabled, true);
+
+  // Start a load.
+  controller().LoadURL(GURL(kBadHTTPSURL), content::Referrer(),
+                       ui::PAGE_TRANSITION_TYPED, std::string());
+
+  // Simulate the load causing a safe browsing interstitial to be shown.
+  ShowInterstitial(false, kBadHTTPSURL);
+  SafeBrowsingBlockingPage* sb_interstitial = GetSafeBrowsingBlockingPage();
+  ASSERT_TRUE(sb_interstitial);
+  EXPECT_FALSE(sb_interstitial->CanShowThreatDetailsOption());
+
+  base::RunLoop().RunUntilIdle();
+
+  // Simulate the user clicking "don't proceed".
+  DontProceedThroughInterstitial(sb_interstitial);
+
+  // The interstitial should be gone.
+  EXPECT_EQ(CANCEL, user_response());
+  EXPECT_FALSE(GetSafeBrowsingBlockingPage());
+
+  // No report should have been sent.
+  EXPECT_EQ(0u, ui_manager_->GetDetails()->size());
+  ui_manager_->GetDetails()->clear();
+}
+
+// Test that extended reporting option is not shown on blocking an HTTPS
+// subresource on an HTTPS page, and no report is sent.
+TEST_F(SafeBrowsingBlockingPageTest,
+       ExtendedReportingNotShownOnSecurePageWithSecureSubresource) {
+  // Enable malware details.
+  Profile* profile = Profile::FromBrowserContext(
+      web_contents()->GetBrowserContext());
+  profile->GetPrefs()->SetBoolean(
+      prefs::kSafeBrowsingExtendedReportingEnabled, true);
+
+  // Commit a load.
+  content::WebContentsTester::For(web_contents())
+        ->NavigateAndCommit(GURL(kGoodHTTPSURL));
+
+  // Simulate a subresource load causing a safe browsing interstitial to be
+  // shown.
+  ShowInterstitial(true, kBadHTTPSURL);
+  SafeBrowsingBlockingPage* sb_interstitial = GetSafeBrowsingBlockingPage();
+  ASSERT_TRUE(sb_interstitial);
+  EXPECT_FALSE(sb_interstitial->CanShowThreatDetailsOption());
+
+  base::RunLoop().RunUntilIdle();
+
+  // Simulate the user clicking "don't proceed".
+  DontProceedThroughInterstitial(sb_interstitial);
+
+  // The interstitial should be gone.
+  EXPECT_EQ(CANCEL, user_response());
+  EXPECT_FALSE(GetSafeBrowsingBlockingPage());
+
+  // No report should have been sent.
+  EXPECT_EQ(0u, ui_manager_->GetDetails()->size());
+  ui_manager_->GetDetails()->clear();
+}
+
+// Test that extended reporting option is not shown on blocking an HTTP
+// subresource on an HTTPS page, and no report is sent.
+TEST_F(SafeBrowsingBlockingPageTest,
+       ExtendedReportingNotShownOnSecurePageWithInsecureSubresource) {
+  // Enable malware details.
+  Profile* profile = Profile::FromBrowserContext(
+      web_contents()->GetBrowserContext());
+  profile->GetPrefs()->SetBoolean(
+      prefs::kSafeBrowsingExtendedReportingEnabled, true);
+
+  // Commit a load.
+  content::WebContentsTester::For(web_contents())
+        ->NavigateAndCommit(GURL(kGoodHTTPSURL));
+
+  // Simulate a subresource load causing a safe browsing interstitial to be
+  // shown.
+  ShowInterstitial(true, kBadURL);
+  SafeBrowsingBlockingPage* sb_interstitial = GetSafeBrowsingBlockingPage();
+  ASSERT_TRUE(sb_interstitial);
+  EXPECT_FALSE(sb_interstitial->CanShowThreatDetailsOption());
+
+  base::RunLoop().RunUntilIdle();
+
+  // Simulate the user clicking "don't proceed".
+  DontProceedThroughInterstitial(sb_interstitial);
+
+  // The interstitial should be gone.
+  EXPECT_EQ(CANCEL, user_response());
+  EXPECT_FALSE(GetSafeBrowsingBlockingPage());
+
+  // No report should have been sent.
+  EXPECT_EQ(0u, ui_manager_->GetDetails()->size());
+  ui_manager_->GetDetails()->clear();
+}
+
+// Test that extended reporting option is shown on blocking an HTTPS
+// subresource on an HTTP page.
+TEST_F(SafeBrowsingBlockingPageTest,
+       ExtendedReportingOnInsecurePageWithSecureSubresource) {
+  // Enable malware details.
+  Profile* profile = Profile::FromBrowserContext(
+      web_contents()->GetBrowserContext());
+  profile->GetPrefs()->SetBoolean(
+      prefs::kSafeBrowsingExtendedReportingEnabled, true);
+
+  // Commit a load.
+  content::WebContentsTester::For(web_contents())
+        ->NavigateAndCommit(GURL(kGoodURL));
+
+  // Simulate a subresource load causing a safe browsing interstitial to be
+  // shown.
+  ShowInterstitial(true, kBadHTTPSURL);
+  SafeBrowsingBlockingPage* sb_interstitial = GetSafeBrowsingBlockingPage();
+  ASSERT_TRUE(sb_interstitial);
+  EXPECT_TRUE(sb_interstitial->CanShowThreatDetailsOption());
+
+  base::RunLoop().RunUntilIdle();
+
+  // Simulate the user clicking "don't proceed".
+  DontProceedThroughInterstitial(sb_interstitial);
+
+  // The interstitial should be gone.
+  EXPECT_EQ(CANCEL, user_response());
+  EXPECT_FALSE(GetSafeBrowsingBlockingPage());
+
+  // A report should have been sent.
+  EXPECT_EQ(1u, ui_manager_->GetDetails()->size());
+  ui_manager_->GetDetails()->clear();
+}
+
+// Test that extended reporting option is not shown on blocking an HTTPS
+// subresource on an HTTPS page while there is a pending load for an HTTP page,
+// and no report is sent.
+TEST_F(SafeBrowsingBlockingPageTest,
+       ExtendedReportingNotShownOnSecurePageWithPendingInsecureLoad) {
+  // Enable malware details.
+  Profile* profile = Profile::FromBrowserContext(
+      web_contents()->GetBrowserContext());
+  profile->GetPrefs()->SetBoolean(
+      prefs::kSafeBrowsingExtendedReportingEnabled, true);
+
+  // Commit a load.
+  content::WebContentsTester::For(web_contents())
+        ->NavigateAndCommit(GURL(kGoodHTTPSURL));
+
+  GURL pending_url("http://slow.example.com");
+
+  // Start a pending load.
+  content::WebContentsTester::For(web_contents())->StartNavigation(pending_url);
+
+  // Simulate a subresource load on the committed page causing a safe browsing
+  // interstitial to be shown.
+  ShowInterstitial(true, kBadHTTPSURL);
+  SafeBrowsingBlockingPage* sb_interstitial = GetSafeBrowsingBlockingPage();
+  ASSERT_TRUE(sb_interstitial);
+  // Threat details option should not be shown. (The blocking page is for the
+  // committed HTTPS page, not the pending HTTP page.)
+  EXPECT_FALSE(sb_interstitial->CanShowThreatDetailsOption());
+
+  base::RunLoop().RunUntilIdle();
+
+  // Simulate the user clicking "don't proceed".
+  DontProceedThroughInterstitial(sb_interstitial);
+
+  // The interstitial should be gone.
+  EXPECT_EQ(CANCEL, user_response());
+  EXPECT_FALSE(GetSafeBrowsingBlockingPage());
+
+  // No report should have been sent.
+  EXPECT_EQ(0u, ui_manager_->GetDetails()->size());
+  ui_manager_->GetDetails()->clear();
+}
+
+// TODO(mattm): Add test for extended reporting not shown or sent in incognito
+// window.
+
+}  // namespace safe_browsing

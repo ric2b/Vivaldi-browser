@@ -19,8 +19,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -97,7 +97,8 @@ class NativeBackendGnome : public PasswordStoreX::NativeBackend,
       const autofill::PasswordForm& form) override;
   bool UpdateLogin(const autofill::PasswordForm& form,
                    password_manager::PasswordStoreChangeList* changes) override;
-  bool RemoveLogin(const autofill::PasswordForm& form) override;
+  bool RemoveLogin(const autofill::PasswordForm& form,
+                   password_manager::PasswordStoreChangeList* changes) override;
   bool RemoveLoginsCreatedBetween(
       base::Time delete_begin,
       base::Time delete_end,

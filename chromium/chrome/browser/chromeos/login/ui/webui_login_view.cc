@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -20,14 +21,12 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/media_stream_infobar_delegate.h"
+#include "chrome/browser/media/media_stream_devices_controller.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
-#include "chrome/common/chrome_version_info.h"
-#include "chrome/common/render_messages.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/network/network_state.h"
@@ -37,10 +36,12 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/renderer_preferences.h"
+#include "extensions/browser/view_type_utils.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -69,8 +70,6 @@ const char kAccelNameDeviceRequisitionRemora[] = "device_requisition_remora";
 const char kAccelNameDeviceRequisitionShark[] = "device_requisition_shark";
 const char kAccelNameAppLaunchBailout[] = "app_launch_bailout";
 const char kAccelNameAppLaunchNetworkConfig[] = "app_launch_network_config";
-const char kAccelNameToggleWebviewSignin[] = "toggle_webview_signin";
-const char kAccelNameToggleNewLoginUI[] = "toggle_new_login_ui";
 const char kAccelNameToggleEasyBootstrap[] = "toggle_easy_bootstrap";
 
 // A class to change arrow key traversal behavior when it's alive.
@@ -132,9 +131,6 @@ WebUILoginView::WebUILoginView()
       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
       kAccelNameEnableDebugging;
   accel_map_[ui::Accelerator(
-      ui::VKEY_L, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
-      kAccelNameToggleNewLoginUI;
-  accel_map_[ui::Accelerator(
       ui::VKEY_B, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
       kAccelNameToggleEasyBootstrap;
 
@@ -142,16 +138,6 @@ WebUILoginView::WebUILoginView()
       kAccelFocusPrev;
   accel_map_[ui::Accelerator(ui::VKEY_RIGHT, ui::EF_NONE)] =
       kAccelFocusNext;
-
-  // Ctrl-Alt-Shift-W for canary/dev builds only.
-  const chrome::VersionInfo::Channel channel =
-      chrome::VersionInfo::GetChannel();
-  if (channel != chrome::VersionInfo::CHANNEL_STABLE &&
-      channel != chrome::VersionInfo::CHANNEL_BETA) {
-    accel_map_[ui::Accelerator(
-        ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
-                        ui::EF_SHIFT_DOWN)] = kAccelNameToggleWebviewSignin;
-  }
 
   accel_map_[ui::Accelerator(
       ui::VKEY_D, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
@@ -209,14 +195,11 @@ void WebUILoginView::Init() {
   WebContentsModalDialogManager::CreateForWebContents(web_contents);
   WebContentsModalDialogManager::FromWebContents(web_contents)->
       SetDelegate(this);
-  if (!popup_manager_.get())
-    popup_manager_.reset(new web_modal::PopupManager(this));
-  popup_manager_->RegisterWith(web_contents);
 
   web_contents->SetDelegate(this);
+  extensions::SetViewType(web_contents, extensions::VIEW_TYPE_COMPONENT);
   extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
       web_contents);
-  WebContentsObserver::Observe(web_contents);
   content::RendererPreferences* prefs = web_contents->GetMutableRendererPrefs();
   renderer_preferences_util::UpdateFromSystemSettings(
       prefs, signin_profile, web_contents);
@@ -290,8 +273,11 @@ void WebUILoginView::LoadURL(const GURL & url) {
 
   // TODO(nkostylev): Use WebContentsObserver::RenderViewCreated to track
   // when RenderView is created.
-  GetWebContents()->GetRenderViewHost()->GetView()->SetBackgroundColor(
-      SK_ColorTRANSPARENT);
+  GetWebContents()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->GetView()
+      ->SetBackgroundColor(SK_ColorTRANSPARENT);
 }
 
 content::WebUI* WebUILoginView::GetWebUI() {
@@ -348,18 +334,6 @@ void WebUILoginView::SetUIEnabled(bool enabled) {
     tray->CloseSystemBubble();
 
   tray->SetEnabled(enabled);
-}
-
-void WebUILoginView::AddFrameObserver(FrameObserver* frame_observer) {
-  DCHECK(frame_observer);
-  DCHECK(!frame_observer_list_.HasObserver(frame_observer));
-  frame_observer_list_.AddObserver(frame_observer);
-}
-
-void WebUILoginView::RemoveFrameObserver(FrameObserver* frame_observer) {
-  DCHECK(frame_observer);
-  DCHECK(frame_observer_list_.HasObserver(frame_observer));
-  frame_observer_list_.RemoveObserver(frame_observer);
 }
 
 // WebUILoginView protected: ---------------------------------------------------
@@ -460,7 +434,8 @@ void WebUILoginView::RequestMediaAccessPermission(
     WebContents* web_contents,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
-  if (MediaStreamInfoBarDelegate::Create(web_contents, request, callback))
+  MediaStreamDevicesController controller(web_contents, request, callback);
+  if (controller.IsAskingForVideo() || controller.IsAskingForAudio())
     NOTREACHED() << "Media stream not allowed for WebUI";
 }
 
@@ -481,23 +456,6 @@ bool WebUILoginView::PreHandleGestureEvent(
       event.type == blink::WebGestureEvent::GesturePinchEnd;
 }
 
-void WebUILoginView::DidFailProvisionalLoad(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url,
-    int error_code,
-    const base::string16& error_description,
-    bool was_ignored_by_handler) {
-  FOR_EACH_OBSERVER(FrameObserver,
-                    frame_observer_list_,
-                    OnFrameError(render_frame_host->GetFrameName()));
-  if (render_frame_host->GetFrameName() != "gaia-frame")
-    return;
-
-  GetWebUI()->CallJavascriptFunction("login.GaiaSigninScreen.onFrameError",
-                                     base::FundamentalValue(-error_code),
-                                     base::StringValue(validated_url.spec()));
-}
-
 void WebUILoginView::OnLoginPromptVisible() {
   // If we're hidden than will generate this signal once we're shown.
   if (is_hidden_ || webui_visible_) {
@@ -512,12 +470,6 @@ void WebUILoginView::OnLoginPromptVisible() {
   }
 
   webui_visible_ = true;
-}
-
-void WebUILoginView::ReturnFocus(bool reverse) {
-  // Return the focus to the web contents.
-  webui_login_->web_contents()->FocusThroughTabTraversal(reverse);
-  GetWidget()->Activate();
 }
 
 }  // namespace chromeos

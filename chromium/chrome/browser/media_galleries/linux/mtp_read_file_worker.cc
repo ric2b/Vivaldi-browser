@@ -4,6 +4,8 @@
 
 #include "chrome/browser/media_galleries/linux/mtp_read_file_worker.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -23,12 +25,12 @@ namespace {
 // the file thread.
 // Returns the number of bytes written to the snapshot file. In case of failure,
 // returns zero.
-uint32 WriteDataChunkIntoSnapshotFileOnFileThread(
+uint32_t WriteDataChunkIntoSnapshotFileOnFileThread(
     const base::FilePath& snapshot_file_path,
     const std::string& data) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
   return base::AppendToFile(snapshot_file_path, data.c_str(), data.size())
-             ? base::checked_cast<uint32>(data.size())
+             ? base::checked_cast<uint32_t>(data.size())
              : 0;
 }
 
@@ -83,7 +85,7 @@ void MTPReadFileWorker::OnDidReadDataChunkFromDeviceFile(
   snapshot_file_details->set_error_occurred(
       error || (data.size() != snapshot_file_details->BytesToRead()));
   if (snapshot_file_details->error_occurred()) {
-    OnDidWriteIntoSnapshotFile(snapshot_file_details.Pass());
+    OnDidWriteIntoSnapshotFile(std::move(snapshot_file_details));
     return;
   }
 
@@ -103,18 +105,18 @@ void MTPReadFileWorker::OnDidReadDataChunkFromDeviceFile(
 
 void MTPReadFileWorker::OnDidWriteDataChunkIntoSnapshotFile(
     scoped_ptr<SnapshotFileDetails> snapshot_file_details,
-    uint32 bytes_written) {
+    uint32_t bytes_written) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(snapshot_file_details.get());
   if (snapshot_file_details->AddBytesWritten(bytes_written)) {
     if (!snapshot_file_details->IsSnapshotFileWriteComplete()) {
-      ReadDataChunkFromDeviceFile(snapshot_file_details.Pass());
+      ReadDataChunkFromDeviceFile(std::move(snapshot_file_details));
       return;
     }
   } else {
     snapshot_file_details->set_error_occurred(true);
   }
-  OnDidWriteIntoSnapshotFile(snapshot_file_details.Pass());
+  OnDidWriteIntoSnapshotFile(std::move(snapshot_file_details));
 }
 
 void MTPReadFileWorker::OnDidWriteIntoSnapshotFile(

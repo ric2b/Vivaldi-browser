@@ -6,11 +6,13 @@
 #define MEDIA_FILTERS_DECRYPTING_AUDIO_DECODER_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "media/base/audio_decoder.h"
+#include "media/base/cdm_context.h"
 #include "media/base/decryptor.h"
 #include "media/base/demuxer_stream.h"
 
@@ -34,13 +36,13 @@ class MEDIA_EXPORT DecryptingAudioDecoder : public AudioDecoder {
   DecryptingAudioDecoder(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       const scoped_refptr<MediaLog>& media_log,
-      const SetDecryptorReadyCB& set_decryptor_ready_cb,
       const base::Closure& waiting_for_decryption_key_cb);
   ~DecryptingAudioDecoder() override;
 
   // AudioDecoder implementation.
   std::string GetDisplayName() const override;
   void Initialize(const AudioDecoderConfig& config,
+                  const SetCdmReadyCB& set_cdm_ready_cb,
                   const InitCB& init_cb,
                   const OutputCB& output_cb) override;
   void Decode(const scoped_refptr<DecoderBuffer>& buffer,
@@ -63,10 +65,9 @@ class MEDIA_EXPORT DecryptingAudioDecoder : public AudioDecoder {
     kError
   };
 
-  // Callback for DecryptorHost::RequestDecryptor(). |decryptor_attached_cb| is
-  // called when the decryptor has been completely attached to the pipeline.
-  void SetDecryptor(Decryptor* decryptor,
-                    const DecryptorAttachedCB& decryptor_attached_cb);
+  // Callback to set CDM. |cdm_attached_cb| is called when the decryptor in the
+  // CDM has been completely attached to the pipeline.
+  void SetCdm(CdmContext* cdm_context, const CdmAttachedCB& cdm_attached_cb);
 
   // Initializes the audio decoder on the |decryptor_| with |config_|.
   void InitializeDecoder();
@@ -106,8 +107,8 @@ class MEDIA_EXPORT DecryptingAudioDecoder : public AudioDecoder {
   // The current decoder configuration.
   AudioDecoderConfig config_;
 
-  // Callback to request/cancel decryptor creation notification.
-  SetDecryptorReadyCB set_decryptor_ready_cb_;
+  // Callback to request/cancel CDM ready notification.
+  SetCdmReadyCB set_cdm_ready_cb_;
 
   Decryptor* decryptor_;
 

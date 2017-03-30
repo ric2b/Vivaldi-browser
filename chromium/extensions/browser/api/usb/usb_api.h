@@ -5,9 +5,13 @@
 #ifndef EXTENSIONS_BROWSER_API_USB_USB_API_H_
 #define EXTENSIONS_BROWSER_API_USB_USB_API_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "device/usb/usb_device.h"
@@ -45,9 +49,9 @@ class UsbConnectionFunction : public UIThreadExtensionFunction {
   ~UsbConnectionFunction() override;
 
   scoped_refptr<device::UsbDeviceHandle> GetDeviceHandle(
-      const extensions::core_api::usb::ConnectionHandle& handle);
+      const extensions::api::usb::ConnectionHandle& handle);
   void ReleaseDeviceHandle(
-      const extensions::core_api::usb::ConnectionHandle& handle);
+      const extensions::api::usb::ConnectionHandle& handle);
 };
 
 class UsbTransferFunction : public UsbConnectionFunction {
@@ -124,6 +128,21 @@ class UsbGetUserSelectedDevicesFunction : public UIThreadExtensionFunction {
   scoped_ptr<DevicePermissionsPrompt> prompt_;
 
   DISALLOW_COPY_AND_ASSIGN(UsbGetUserSelectedDevicesFunction);
+};
+
+class UsbGetConfigurationsFunction : public UsbPermissionCheckingFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("usb.getConfigurations", USB_GETCONFIGURATIONS);
+
+  UsbGetConfigurationsFunction();
+
+ private:
+  ~UsbGetConfigurationsFunction() override;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UsbGetConfigurationsFunction);
 };
 
 class UsbRequestAccessFunction : public UIThreadExtensionFunction {
@@ -344,7 +363,7 @@ class UsbResetDeviceFunction : public UsbConnectionFunction {
 
   void OnComplete(bool success);
 
-  scoped_ptr<extensions::core_api::usb::ResetDevice::Params> parameters_;
+  scoped_ptr<extensions::api::usb::ResetDevice::Params> parameters_;
 
   DISALLOW_COPY_AND_ASSIGN(UsbResetDeviceFunction);
 };

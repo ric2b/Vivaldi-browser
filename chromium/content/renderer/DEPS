@@ -1,13 +1,17 @@
 include_rules = [
   # Allow inclusion of specific components that we depend on. We may only
   # depend on components which we share with the mojo html_viewer.
+  "+components/mus/public",
   "+components/scheduler",
+  "+components/url_formatter",
 
   "+cc/blink",
+  "+components/startup_metric_utils/common",
   "+content/public/child",
   "+content/public/renderer",
   "+content/child",
   "+device/battery",  # For battery status service.
+  "+device/devices_app/public",
   "+device/vibration",
   "+gin",
   "+jingle/glue",
@@ -25,5 +29,8 @@ specific_include_rules = {
   '.*_[a-z]*browsertest.*': [
     "+content/public/browser",
     "+content/shell",
+  ],
+  "render_thread_impl_browsertest\.cc": [
+    "+content/app/mojo/mojo_init.h",
   ],
 }

@@ -18,7 +18,9 @@ source_set("ipc_streamer") {
     "video_decoder_config_marshaller.h",
   ]
 
-  configs += [ "//chromecast:config" ]
+  public_deps = [
+    "//chromecast/public/media",
+  ]
 
   deps = [
     "//base",

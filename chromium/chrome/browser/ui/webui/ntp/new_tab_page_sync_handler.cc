@@ -16,7 +16,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_promo.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -25,7 +24,9 @@
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_ui.h"
 #include "net/cookies/cookie_monster.h"
@@ -113,11 +114,9 @@ void NewTabPageSyncHandler::BuildAndSendSyncStatus() {
   base::string16 status_msg;
   base::string16 link_text;
 
-  sync_ui_util::MessageType type =
-      sync_ui_util::GetStatusLabelsForNewTabPage(sync_service_,
-                                                 *signin,
-                                                 &status_msg,
-                                                 &link_text);
+  sync_ui_util::MessageType type = sync_ui_util::GetStatusLabelsForNewTabPage(
+      Profile::FromWebUI(web_ui()), sync_service_, *signin, &status_msg,
+      &link_text);
   SendSyncMessageToPage(FromSyncStatusMessageType(type),
                         base::UTF16ToUTF8(status_msg),
                         base::UTF16ToUTF8(link_text));
@@ -131,11 +130,14 @@ void NewTabPageSyncHandler::HandleSyncLinkClicked(const base::ListValue* args) {
       chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
   if (!browser || browser->IsAttemptingToCloseBrowser())
     return;
-  chrome::ShowBrowserSignin(browser, signin_metrics::SOURCE_NTP_LINK);
+  chrome::ShowBrowserSignin(browser,
+                            signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK);
 
   if (sync_service_->HasSyncSetupCompleted()) {
-    base::string16 user = base::UTF8ToUTF16(SigninManagerFactory::GetForProfile(
-        Profile::FromWebUI(web_ui()))->GetAuthenticatedUsername());
+    base::string16 user = base::UTF8ToUTF16(
+        SigninManagerFactory::GetForProfile(Profile::FromWebUI(web_ui()))
+            ->GetAuthenticatedAccountInfo()
+            .email);
     base::DictionaryValue value;
     value.SetString("syncEnabledMessage",
                     l10n_util::GetStringFUTF16(IDS_SYNC_NTP_SYNCED_TO,
@@ -160,9 +162,9 @@ void NewTabPageSyncHandler::OnSigninAllowedPrefChange() {
   BuildAndSendSyncStatus();
 }
 
-void NewTabPageSyncHandler::SendSyncMessageToPage(
-    MessageType type, std::string msg,
-    std::string linktext) {
+void NewTabPageSyncHandler::SendSyncMessageToPage(MessageType type,
+                                                  const std::string& msg,
+                                                  const std::string& linktext) {
   base::DictionaryValue value;
   std::string user;
   std::string title;

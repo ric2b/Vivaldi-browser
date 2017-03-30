@@ -22,8 +22,8 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.sync.AndroidSyncSettings;
+import org.chromium.sync.ModelTypeHelper;
 import org.chromium.sync.SyncConstants;
-import org.chromium.sync.internal_api.pub.base.ModelType;
 import org.chromium.sync.notifier.InvalidationClientNameProvider;
 import org.chromium.sync.notifier.InvalidationIntentProtocol;
 import org.chromium.sync.notifier.InvalidationPreferences;
@@ -61,7 +61,7 @@ public class InvalidationClientService extends AndroidListener {
     @VisibleForTesting
     static final int CLIENT_TYPE = ClientType.CHROME_SYNC_ANDROID;
 
-    private static final String TAG = "InvalidationClientService";
+    private static final String TAG = "cr.invalidation";
 
     /**
      * Whether the underlying notification client has been started. This boolean is updated when a
@@ -207,16 +207,16 @@ public class InvalidationClientService extends AndroidListener {
 
         // Attempt to retrieve a token for the user. This method will also invalidate
         // invalidAuthToken if it is non-null.
-        AccountManagerHelper.get(this).getNewAuthTokenFromForeground(
-                account, invalidAuthToken, getOAuth2ScopeWithType(),
-                new AccountManagerHelper.GetAuthTokenCallback() {
+        AccountManagerHelper.get(this).getNewAuthToken(account, invalidAuthToken,
+                getOAuth2ScopeWithType(), new AccountManagerHelper.GetAuthTokenCallback() {
                     @Override
-                    public void tokenAvailable(String token, boolean isTransientError) {
-                        if (token != null) {
-                            setAuthToken(InvalidationClientService.this.getApplicationContext(),
-                                    pendingIntent, token, getOAuth2ScopeWithType());
-                        }
+                    public void tokenAvailable(String token) {
+                        setAuthToken(InvalidationClientService.this.getApplicationContext(),
+                                pendingIntent, token, getOAuth2ScopeWithType());
                     }
+
+                    @Override
+                    public void tokenUnavailable(boolean isTransientError) {}
                 });
     }
 
@@ -299,7 +299,7 @@ public class InvalidationClientService extends AndroidListener {
     private Set<ObjectId> readSyncRegistrationsFromPrefs() {
         Set<String> savedTypes = new InvalidationPreferences(this).getSavedSyncedTypes();
         if (savedTypes == null) return Collections.emptySet();
-        else return ModelType.syncTypesToObjectIds(savedTypes);
+        return ModelTypeHelper.notificationTypesToObjectIds(savedTypes);
     }
 
     /**
@@ -309,7 +309,7 @@ public class InvalidationClientService extends AndroidListener {
     private Set<ObjectId> readNonSyncRegistrationsFromPrefs() {
         Set<ObjectId> objectIds = new InvalidationPreferences(this).getSavedObjectIds();
         if (objectIds == null) return Collections.emptySet();
-        else return objectIds;
+        return objectIds;
     }
 
     /**
@@ -380,7 +380,8 @@ public class InvalidationClientService extends AndroidListener {
         // When computing the desired set of object ids, if only sync types were provided, then
         // keep the existing non-sync types, and vice-versa.
         Set<ObjectId> desiredSyncRegistrations = syncTypes != null
-                ? ModelType.syncTypesToObjectIds(syncTypes) : existingSyncRegistrations;
+                ? ModelTypeHelper.notificationTypesToObjectIds(syncTypes)
+                : existingSyncRegistrations;
         Set<ObjectId> desiredNonSyncRegistrations = objectIds != null
                 ? objectIds : existingNonSyncRegistrations;
         Set<ObjectId> desiredRegistrations = joinRegistrations(desiredNonSyncRegistrations,
@@ -445,7 +446,7 @@ public class InvalidationClientService extends AndroidListener {
     void requestSyncFromContentResolver(
             Bundle bundle, Account account, String contractAuthority) {
         Log.d(TAG, "Request sync: " + account + " / " + contractAuthority + " / "
-                + bundle.keySet());
+                + new PendingInvalidation(bundle).toDebugString());
         ContentResolver.requestSync(account, contractAuthority, bundle);
     }
 

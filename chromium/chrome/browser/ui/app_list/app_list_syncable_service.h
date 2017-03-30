@@ -5,9 +5,13 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_APP_LIST_SYNCABLE_SERVICE_H_
 #define CHROME_BROWSER_UI_APP_LIST_APP_LIST_SYNCABLE_SERVICE_H_
 
+#include <stddef.h>
+
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/drive/drive_app_uninstall_sync_service.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -17,6 +21,10 @@
 #include "sync/api/sync_error_factory.h"
 #include "sync/api/syncable_service.h"
 #include "sync/protocol/app_list_specifics.pb.h"
+
+#if defined(OS_CHROMEOS)
+class ArcAppModelBuilder;
+#endif
 
 class DriveAppProvider;
 class ExtensionAppModelBuilder;
@@ -200,6 +208,9 @@ class AppListSyncableService : public syncer::SyncableService,
   scoped_ptr<ModelObserver> model_observer_;
   scoped_ptr<ModelPrefUpdater> model_pref_updater_;
   scoped_ptr<ExtensionAppModelBuilder> apps_builder_;
+#if defined(OS_CHROMEOS)
+  scoped_ptr<ArcAppModelBuilder> arc_apps_builder_;
+#endif
   scoped_ptr<syncer::SyncChangeProcessor> sync_processor_;
   scoped_ptr<syncer::SyncErrorFactory> sync_error_handler_;
   SyncItemMap sync_items_;

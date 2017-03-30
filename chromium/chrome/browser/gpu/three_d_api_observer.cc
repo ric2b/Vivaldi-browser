@@ -4,6 +4,7 @@
 
 #include "chrome/browser/gpu/three_d_api_observer.h"
 
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/tab_contents/tab_util.h"
@@ -38,7 +39,8 @@ class ThreeDAPIInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~ThreeDAPIInfoBarDelegate() override;
 
   // ConfirmInfoBarDelegate:
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
   bool EqualsDelegate(infobars::InfoBarDelegate* delegate) const override;
   ThreeDAPIInfoBarDelegate* AsThreeDAPIInfoBarDelegate() override;
   base::string16 GetMessageText() const override;
@@ -46,7 +48,7 @@ class ThreeDAPIInfoBarDelegate : public ConfirmInfoBarDelegate {
   bool Accept() override;
   bool Cancel() override;
   base::string16 GetLinkText() const override;
-  bool LinkClicked(WindowOpenDisposition disposition) override;
+  GURL GetLinkURL() const override;
 
   GURL url_;
   content::ThreeDAPIType requester_;
@@ -86,7 +88,12 @@ ThreeDAPIInfoBarDelegate::~ThreeDAPIInfoBarDelegate() {
   }
 }
 
-int ThreeDAPIInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::InfoBarIdentifier
+ThreeDAPIInfoBarDelegate::GetIdentifier() const {
+  return THREE_D_API_INFOBAR_DELEGATE;
+}
+
+int ThreeDAPIInfoBarDelegate::GetIconId() const {
   return IDR_INFOBAR_3D_BLOCKED;
 }
 
@@ -149,14 +156,8 @@ base::string16 ThreeDAPIInfoBarDelegate::GetLinkText() const {
   return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
 }
 
-bool ThreeDAPIInfoBarDelegate::LinkClicked(WindowOpenDisposition disposition) {
-  InfoBarService::WebContentsFromInfoBar(infobar())->OpenURL(
-      content::OpenURLParams(
-          GURL("https://support.google.com/chrome/?p=ib_webgl"),
-          content::Referrer(),
-          (disposition == CURRENT_TAB) ? NEW_FOREGROUND_TAB : disposition,
-          ui::PAGE_TRANSITION_LINK, false));
-  return false;
+GURL ThreeDAPIInfoBarDelegate::GetLinkURL() const {
+  return GURL("https://support.google.com/chrome/?p=ib_webgl");
 }
 
 
@@ -170,14 +171,14 @@ ThreeDAPIObserver::~ThreeDAPIObserver() {
   content::GpuDataManager::GetInstance()->RemoveObserver(this);
 }
 
-void ThreeDAPIObserver::DidBlock3DAPIs(const GURL& url,
+void ThreeDAPIObserver::DidBlock3DAPIs(const GURL& top_origin_url,
                                        int render_process_id,
-                                       int render_view_id,
+                                       int render_frame_id,
                                        content::ThreeDAPIType requester) {
-  content::WebContents* web_contents = tab_util::GetWebContentsByID(
-      render_process_id, render_view_id);
+  content::WebContents* web_contents = tab_util::GetWebContentsByFrameID(
+      render_process_id, render_frame_id);
   if (!web_contents)
     return;
   ThreeDAPIInfoBarDelegate::Create(
-      InfoBarService::FromWebContents(web_contents), url, requester);
+      InfoBarService::FromWebContents(web_contents), top_origin_url, requester);
 }

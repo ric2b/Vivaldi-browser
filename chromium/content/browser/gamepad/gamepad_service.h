@@ -7,8 +7,8 @@
 
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/singleton.h"
@@ -80,7 +80,7 @@ class CONTENT_EXPORT GamepadService {
   void OnGamepadDisconnected(int index, const blink::WebGamepad& pad);
 
  private:
-  friend struct DefaultSingletonTraits<GamepadService>;
+  friend struct base::DefaultSingletonTraits<GamepadService>;
   friend class GamepadServiceTestConstructor;
   friend class GamepadServiceTest;
 

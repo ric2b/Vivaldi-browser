@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <winhttp.h>
 
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "net/base/net_errors.h"
@@ -27,6 +28,28 @@ static void FreeInfo(WINHTTP_PROXY_INFO* info) {
     GlobalFree(info->lpszProxy);
   if (info->lpszProxyBypass)
     GlobalFree(info->lpszProxyBypass);
+}
+
+static Error WinHttpErrorToNetError(DWORD win_http_error) {
+  switch (win_http_error) {
+    case ERROR_WINHTTP_AUTO_PROXY_SERVICE_ERROR:
+    case ERROR_WINHTTP_INTERNAL_ERROR:
+    case ERROR_WINHTTP_INCORRECT_HANDLE_TYPE:
+      return ERR_FAILED;
+    case ERROR_WINHTTP_LOGIN_FAILURE:
+      return ERR_PROXY_AUTH_UNSUPPORTED;
+    case ERROR_WINHTTP_BAD_AUTO_PROXY_SCRIPT:
+      return ERR_PAC_SCRIPT_FAILED;
+    case ERROR_WINHTTP_INVALID_URL:
+    case ERROR_WINHTTP_OPERATION_CANCELLED:
+    case ERROR_WINHTTP_UNABLE_TO_DOWNLOAD_SCRIPT:
+    case ERROR_WINHTTP_UNRECOGNIZED_SCHEME:
+      return ERR_PAC_STATUS_NOT_OK;
+    case ERROR_NOT_ENOUGH_MEMORY:
+      return ERR_INSUFFICIENT_RESOURCES;
+    default:
+      return ERR_FAILED;
+  }
 }
 
 class ProxyResolverWinHttp : public ProxyResolver {
@@ -116,7 +139,7 @@ int ProxyResolverWinHttp::GetProxyForURL(const GURL& query_url,
           ERROR_WINHTTP_AUTO_PROXY_SERVICE_ERROR == error) {
         CloseWinHttpSession();
       }
-      return ERR_FAILED;  // TODO(darin): Bug 1189288: translate error code.
+      return WinHttpErrorToNetError(error);
     }
   }
 

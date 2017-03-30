@@ -4,30 +4,41 @@
 
 #include "chrome/browser/safe_browsing/download_protection_service.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/prefs/pref_service.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/sandboxed_zip_analyzer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/safe_browsing/binary_feature_extractor.h"
 #include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/common/safe_browsing/download_protection_util.h"
@@ -42,18 +53,22 @@
 #include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
+#include "net/base/url_util.h"
 #include "net/cert/x509_cert_types.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
+
+#if defined(OS_MACOSX)
+#include "chrome/browser/safe_browsing/sandboxed_dmg_analyzer_mac.h"
+#endif
 
 using content::BrowserThread;
 
 namespace {
-static const int64 kDownloadRequestTimeoutMs = 7000;
+static const int64_t kDownloadRequestTimeoutMs = 7000;
 }  // namespace
 
 namespace safe_browsing {
@@ -63,19 +78,16 @@ const char DownloadProtectionService::kDownloadRequestUrl[] =
 
 namespace {
 void RecordFileExtensionType(const base::FilePath& file) {
-  UMA_HISTOGRAM_ENUMERATION(
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
       "SBClientDownload.DownloadExtensions",
-      download_protection_util::GetSBClientDownloadExtensionValueForUMA(file),
-      download_protection_util::kSBClientDownloadExtensionsMax);
+      download_protection_util::GetSBClientDownloadExtensionValueForUMA(file));
 }
 
-void RecordArchivedArchiveFileExtensionType(
-    const base::FilePath::StringType& extension) {
-  UMA_HISTOGRAM_ENUMERATION(
+void RecordArchivedArchiveFileExtensionType(const base::FilePath& file_name) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
       "SBClientDownload.ArchivedArchiveExtensions",
       download_protection_util::GetSBClientDownloadExtensionValueForUMA(
-          base::FilePath(extension)),
-      download_protection_util::kSBClientDownloadExtensionsMax);
+          file_name));
 }
 
 // Enumerate for histogramming purposes.
@@ -130,7 +142,12 @@ class DownloadSBClient
         ui_manager_(ui_manager),
         start_time_(base::TimeTicks::Now()),
         total_type_(total_type),
-        dangerous_type_(dangerous_type) {}
+        dangerous_type_(dangerous_type) {
+    Profile* profile = Profile::FromBrowserContext(item.GetBrowserContext());
+    is_extended_reporting_ = profile &&
+                             profile->GetPrefs()->GetBoolean(
+                                 prefs::kSafeBrowsingExtendedReportingEnabled);
+  }
 
   virtual void StartCheck() = 0;
   virtual bool IsDangerous(SBThreatType threat_type) const = 0;
@@ -166,13 +183,21 @@ class DownloadSBClient
     for (size_t i = 0; i < url_chain_.size(); ++i) {
       post_data += url_chain_[i].spec() + "\n";
     }
-    ui_manager_->ReportSafeBrowsingHit(
-        url_chain_.back(),  // malicious_url
-        url_chain_.front(), // page_url
-        referrer_url_,
-        true,  // is_subresource
-        threat_type,
-        post_data);
+
+    safe_browsing::HitReport hit_report;
+    hit_report.malicious_url = url_chain_.back();
+    hit_report.page_url = url_chain_.front();
+    hit_report.referrer_url = referrer_url_;
+    hit_report.is_subresource = true;
+    hit_report.threat_type = threat_type;
+    // TODO(nparker) Replace this with database_manager_->GetThreatSource();
+    hit_report.threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
+    hit_report.post_data = post_data;
+    hit_report.is_extended_reporting = is_extended_reporting_;
+    hit_report.is_metrics_reporting_active =
+        ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
+
+    ui_manager_->MaybeReportSafeBrowsingHit(hit_report);
   }
 
   void UpdateDownloadCheckStats(SBStatsType stat_type) {
@@ -191,6 +216,7 @@ class DownloadSBClient
  private:
   const SBStatsType total_type_;
   const SBStatsType dangerous_type_;
+  bool is_extended_reporting_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadSBClient);
 };
@@ -256,7 +282,8 @@ class DownloadProtectionService::CheckClientDownloadRequest
         referrer_url_(item->GetReferrerUrl()),
         tab_url_(item->GetTabUrl()),
         tab_referrer_url_(item->GetTabReferrerUrl()),
-        zipped_executable_(false),
+        archived_executable_(false),
+        archive_is_valid_(ArchiveValid::UNSET),
         callback_(callback),
         service_(service),
         binary_feature_extractor_(binary_feature_extractor),
@@ -305,6 +332,11 @@ class DownloadProtectionService::CheckClientDownloadRequest
     if (item_->GetTargetFilePath().MatchesExtension(
         FILE_PATH_LITERAL(".zip"))) {
       StartExtractZipFeatures();
+#if defined(OS_MACOSX)
+    } else if (item_->GetTargetFilePath().MatchesExtension(
+                  FILE_PATH_LITERAL(".dmg"))) {
+      StartExtractDmgFeatures();
+#endif
     } else {
       StartExtractFileFeatures();
     }
@@ -420,6 +452,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
                         base::TimeTicks::Now() - start_time_);
     UMA_HISTOGRAM_TIMES("SBClientDownload.DownloadRequestNetworkDuration",
                         base::TimeTicks::Now() - request_start_time_);
+
     FinishRequest(result, reason);
   }
 
@@ -457,6 +490,20 @@ class DownloadProtectionService::CheckClientDownloadRequest
   ~CheckClientDownloadRequest() override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK(item_ == NULL);
+  }
+
+  // .zip files that look invalid to Chrome can often be successfully unpacked
+  // by other archive tools, so they may be a real threat.  For that reason,
+  // we send pings for them if !in_incognito && is_extended_reporting.
+  bool CanReportInvalidArchives() {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    Profile* profile = Profile::FromBrowserContext(item_->GetBrowserContext());
+    if (!profile ||
+        !profile->GetPrefs()->GetBoolean(
+            prefs::kSafeBrowsingExtendedReportingEnabled))
+      return false;
+
+    return !item_->GetBrowserContext()->IsOffTheRecord();
   }
 
   void OnFileFeatureExtractionDone() {
@@ -538,33 +585,89 @@ class DownloadProtectionService::CheckClientDownloadRequest
     DCHECK_EQ(ClientDownloadRequest::ZIPPED_EXECUTABLE, type_);
     if (!service_)
       return;
-    if (results.success) {
-      zipped_executable_ = results.has_executable;
-      archived_binary_.CopyFrom(results.archived_binary);
-      DVLOG(1) << "Zip analysis finished for " << item_->GetFullPath().value()
-               << ", has_executable=" << results.has_executable
-               << " has_archive=" << results.has_archive;
-    } else {
-      DVLOG(1) << "Zip analysis failed for " << item_->GetFullPath().value();
-    }
+
+    // Even if !results.success, some of the zip may have been parsed.
+    // Some unzippers will successfully unpack archives that we cannot,
+    // so we're lenient here.
+    archive_is_valid_ =
+        (results.success ? ArchiveValid::VALID : ArchiveValid::INVALID);
+    archived_executable_ = results.has_executable;
+    archived_binary_.CopyFrom(results.archived_binary);
+    DVLOG(1) << "Zip analysis finished for " << item_->GetFullPath().value()
+             << ", has_executable=" << results.has_executable
+             << ", has_archive=" << results.has_archive
+             << ", success=" << results.success;
+
+    UMA_HISTOGRAM_BOOLEAN("SBClientDownload.ZipFileSuccess", results.success);
     UMA_HISTOGRAM_BOOLEAN("SBClientDownload.ZipFileHasExecutable",
-                          zipped_executable_);
+                          archived_executable_);
     UMA_HISTOGRAM_BOOLEAN("SBClientDownload.ZipFileHasArchiveButNoExecutable",
-                          results.has_archive && !zipped_executable_);
+                          results.has_archive && !archived_executable_);
     UMA_HISTOGRAM_TIMES("SBClientDownload.ExtractZipFeaturesTime",
                         base::TimeTicks::Now() - zip_analysis_start_time_);
-    for (const auto& file_extension : results.archived_archive_filetypes)
-      RecordArchivedArchiveFileExtensionType(file_extension);
+    for (const auto& file_name : results.archived_archive_filenames)
+      RecordArchivedArchiveFileExtensionType(file_name);
 
-    if (!zipped_executable_ && !results.has_archive) {
-      PostFinishTask(UNKNOWN, REASON_ARCHIVE_WITHOUT_BINARIES);
-      return;
+    if (!archived_executable_) {
+      if (results.has_archive) {
+        type_ = ClientDownloadRequest::ZIPPED_ARCHIVE;
+      } else if (!results.success && CanReportInvalidArchives()) {
+        type_ = ClientDownloadRequest::INVALID_ZIP;
+      } else {
+        // Normal zip w/o EXEs, or invalid zip and not extended-reporting.
+        PostFinishTask(UNKNOWN, REASON_ARCHIVE_WITHOUT_BINARIES);
+        return;
+      }
     }
 
-    if (!zipped_executable_ && results.has_archive)
-      type_ = ClientDownloadRequest::ZIPPED_ARCHIVE;
     OnFileFeatureExtractionDone();
   }
+
+#if defined(OS_MACOSX)
+  void StartExtractDmgFeatures() {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    DCHECK(item_);
+    dmg_analyzer_ = new SandboxedDMGAnalyzer(
+        item_->GetFullPath(),
+        base::Bind(&CheckClientDownloadRequest::OnDmgAnalysisFinished,
+                   weakptr_factory_.GetWeakPtr()));
+    dmg_analyzer_->Start();
+    dmg_analysis_start_time_ = base::TimeTicks::Now();
+  }
+
+  void OnDmgAnalysisFinished(const zip_analyzer::Results& results) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    DCHECK_EQ(ClientDownloadRequest::MAC_EXECUTABLE, type_);
+    if (!service_)
+      return;
+
+    // Even if !results.success, some of the DMG may have been parsed.
+    archive_is_valid_ =
+        (results.success ? ArchiveValid::VALID : ArchiveValid::INVALID);
+    archived_executable_ = results.has_executable;
+    archived_binary_.CopyFrom(results.archived_binary);
+    DVLOG(1) << "DMG analysis has finished for " << item_->GetFullPath().value()
+             << ", has_executable=" << results.has_executable
+             << ", success=" << results.success;
+
+    UMA_HISTOGRAM_BOOLEAN("SBClientDownload.DmgFileSuccess", results.success);
+    UMA_HISTOGRAM_BOOLEAN("SBClientDownload.DmgFileHasExecutable",
+                          archived_executable_);
+    UMA_HISTOGRAM_TIMES("SBClientDownload.ExtractDmgFeaturesTime",
+                        base::TimeTicks::Now() - dmg_analysis_start_time_);
+
+    if (!archived_executable_) {
+      if (!results.success && CanReportInvalidArchives()) {
+        type_ = ClientDownloadRequest::INVALID_MAC_ARCHIVE;
+      } else {
+        PostFinishTask(UNKNOWN, REASON_ARCHIVE_WITHOUT_BINARIES);
+        return;
+      }
+    }
+
+    OnFileFeatureExtractionDone();
+  }
+#endif  // defined(OS_MACOSX)
 
   static void RecordCountOfSignedOrWhitelistedDownload() {
     UMA_HISTOGRAM_COUNTS("SBClientDownload.SignedOrWhitelistedDownload", 1);
@@ -609,19 +712,12 @@ class DownloadProtectionService::CheckClientDownloadRequest
       return;
     }
 
-    // Currently, the UI is only enabled on Windows and OSX so we don't even
-    // bother with pinging the server if we're not on one of those platforms.
-    // TODO(noelutz): change this code once the UI is done for Linux.
-#if defined(OS_WIN) || defined(OS_MACOSX)
-    // The URLFetcher is owned by the UI thread, so post a message to
-    // start the pingback.
-    BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&CheckClientDownloadRequest::GetTabRedirects, this));
-#else
-    PostFinishTask(UNKNOWN, REASON_OS_NOT_SUPPORTED);
-#endif
+  // The URLFetcher is owned by the UI thread, so post a message to
+  // start the pingback.
+  BrowserThread::PostTask(
+      BrowserThread::UI,
+      FROM_HERE,
+      base::Bind(&CheckClientDownloadRequest::GetTabRedirects, this));
   }
 
   void GetTabRedirects() {
@@ -665,6 +761,19 @@ class DownloadProtectionService::CheckClientDownloadRequest
     SendRequest();
   }
 
+  // If the hash of either the original file or any executables within an
+  // archive matches the blacklist flag, return true.
+  bool IsDownloadManuallyBlacklisted(const ClientDownloadRequest& request) {
+    if (service_->IsHashManuallyBlacklisted(request.digests().sha256()))
+      return true;
+
+    for (auto bin_itr : request.archived_binary()) {
+      if (service_->IsHashManuallyBlacklisted(bin_itr.digests().sha256()))
+        return true;
+    }
+    return false;
+  }
+
   void SendRequest() {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -672,8 +781,23 @@ class DownloadProtectionService::CheckClientDownloadRequest
     // before sending it.
     if (!service_)
       return;
+    bool is_extended_reporting = false;
+    if (item_->GetBrowserContext()) {
+      Profile* profile =
+          Profile::FromBrowserContext(item_->GetBrowserContext());
+      is_extended_reporting = profile &&
+                              profile->GetPrefs()->GetBoolean(
+                                  prefs::kSafeBrowsingExtendedReportingEnabled);
+    }
 
     ClientDownloadRequest request;
+    if (is_extended_reporting) {
+      request.mutable_population()->set_user_population(
+          ChromeUserPopulation::EXTENDED_REPORTING);
+    } else {
+      request.mutable_population()->set_user_population(
+          ChromeUserPopulation::SAFE_BROWSING);
+    }
     request.set_url(SanitizeUrl(item_->GetUrlChain().back()));
     request.mutable_digests()->set_sha256(item_->GetHash());
     request.set_length(item_->GetReceivedBytes());
@@ -718,19 +842,33 @@ class DownloadProtectionService::CheckClientDownloadRequest
     request.set_file_basename(
         item_->GetTargetFilePath().BaseName().AsUTF8Unsafe());
     request.set_download_type(type_);
+    if (archive_is_valid_ != ArchiveValid::UNSET)
+      request.set_archive_valid(archive_is_valid_ == ArchiveValid::VALID);
     request.mutable_signature()->CopyFrom(signature_info_);
     if (image_headers_)
       request.set_allocated_image_headers(image_headers_.release());
-    if (zipped_executable_)
+    if (archived_executable_)
       request.mutable_archived_binary()->Swap(&archived_binary_);
     if (!request.SerializeToString(&client_download_request_data_)) {
       FinishRequest(UNKNOWN, REASON_INVALID_REQUEST_PROTO);
       return;
     }
-    service_->client_download_request_callbacks_.Notify(item_, &request);
 
+    // User can manually blacklist a sha256 via flag, for testing.
+    // This is checked just before the request is sent, to verify the request
+    // would have been sent.  This emmulates the server returning a DANGEROUS
+    // verdict as closely as possible.
+    if (IsDownloadManuallyBlacklisted(request)) {
+      DVLOG(1) << "Download verdict overridden to DANGEROUS by flag.";
+      PostFinishTask(DANGEROUS, REASON_MANUAL_BLACKLIST);
+      return;
+    }
+
+    service_->client_download_request_callbacks_.Notify(item_, &request);
     DVLOG(2) << "Sending a request for URL: "
              << item_->GetUrlChain().back();
+    DVLOG(2) << "Detected " << request.archived_binary().size() << " archived "
+             << "binaries";
     fetcher_ = net::URLFetcher::Create(0 /* ID used for testing */,
                                        GetDownloadRequestUrl(),
                                        net::URLFetcher::POST, this);
@@ -761,6 +899,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
       return;
     }
     finished_ = true;
+
     // Ensure the timeout task is cancelled while we still have a non-zero
     // refcount. (crbug.com/240449)
     weakptr_factory_.InvalidateWeakPtrs();
@@ -839,6 +978,8 @@ class DownloadProtectionService::CheckClientDownloadRequest
     return false;
   }
 
+  enum class ArchiveValid { UNSET, VALID, INVALID };
+
   // The DownloadItem we are checking. Will be NULL if the request has been
   // canceled. Must be accessed only on UI thread.
   content::DownloadItem* item_;
@@ -851,7 +992,9 @@ class DownloadProtectionService::CheckClientDownloadRequest
   GURL tab_url_;
   GURL tab_referrer_url_;
 
-  bool zipped_executable_;
+  bool archived_executable_;
+  ArchiveValid archive_is_valid_;
+
   ClientDownloadRequest_SignatureInfo signature_info_;
   scoped_ptr<ClientDownloadRequest_ImageHeaders> image_headers_;
   google::protobuf::RepeatedPtrField<ClientDownloadRequest_ArchivedBinary>
@@ -865,6 +1008,10 @@ class DownloadProtectionService::CheckClientDownloadRequest
   scoped_ptr<net::URLFetcher> fetcher_;
   scoped_refptr<SandboxedZipAnalyzer> analyzer_;
   base::TimeTicks zip_analysis_start_time_;
+#if defined(OS_MACOSX)
+  scoped_refptr<SandboxedDMGAnalyzer> dmg_analyzer_;
+  base::TimeTicks dmg_analysis_start_time_;
+#endif
   bool finished_;
   ClientDownloadRequest::DownloadType type_;
   std::string client_download_request_data_;
@@ -890,6 +1037,7 @@ DownloadProtectionService::DownloadProtectionService(
   if (sb_service) {
     ui_manager_ = sb_service->ui_manager();
     database_manager_ = sb_service->database_manager();
+    ParseManualBlacklistFlag();
   }
 }
 
@@ -907,6 +1055,31 @@ void DownloadProtectionService::SetEnabled(bool enabled) {
   if (!enabled_) {
     CancelPendingRequests();
   }
+}
+
+void DownloadProtectionService::ParseManualBlacklistFlag() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switches::kSbManualDownloadBlacklist))
+    return;
+
+  std::string flag_val =
+      command_line->GetSwitchValueASCII(switches::kSbManualDownloadBlacklist);
+  for (const std::string& hash_hex : base::SplitString(
+           flag_val, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+    std::vector<uint8_t> bytes;
+    if (base::HexStringToBytes(hash_hex, &bytes) && bytes.size() == 32) {
+      manual_blacklist_hashes_.insert(
+          std::string(bytes.begin(), bytes.end()));
+    } else {
+      LOG(FATAL) << "Bad sha256 hex value '" << hash_hex << "' found in --"
+                 << switches::kSbManualDownloadBlacklist;
+    }
+  }
+}
+
+bool DownloadProtectionService::IsHashManuallyBlacklisted(
+    const std::string& sha256_hash) const  {
+  return manual_blacklist_hashes_.count(sha256_hash) > 0;
 }
 
 void DownloadProtectionService::CheckClientDownload(
@@ -936,19 +1109,12 @@ void DownloadProtectionService::CheckDownloadUrl(
 bool DownloadProtectionService::IsSupportedDownload(
     const content::DownloadItem& item,
     const base::FilePath& target_path) const {
-  // Currently, the UI is only enabled on Windows and OSX.  On Linux we still
-  // want to show the dangerous file type warning if the file is possibly
-  // dangerous which means we have to always return false here.
-#if defined(OS_WIN) || defined(OS_MACOSX)
   DownloadCheckResultReason reason = REASON_MAX;
   ClientDownloadRequest::DownloadType type =
       ClientDownloadRequest::WIN_EXECUTABLE;
   return (CheckClientDownloadRequest::IsSupportedDownload(
               item, target_path, &reason, &type) &&
           (ClientDownloadRequest::CHROME_EXTENSION != type));
-#else
-  return false;
-#endif
 }
 
 DownloadProtectionService::ClientDownloadRequestSubscription
@@ -986,6 +1152,9 @@ void DownloadProtectionService::ShowDetailsForDownload(
   GURL learn_more_url(chrome::kDownloadScanningLearnMoreURL);
   learn_more_url = google_util::AppendGoogleLocaleParam(
       learn_more_url, g_browser_process->GetApplicationLocale());
+  learn_more_url = net::AppendQueryParameter(
+      learn_more_url, "ctx",
+      base::IntToString(static_cast<int>(item.GetDangerType())));
   navigator->OpenURL(
       content::OpenURLParams(learn_more_url,
                              content::Referrer(),

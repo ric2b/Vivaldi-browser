@@ -4,9 +4,12 @@
 
 #include "remoting/host/it2me/it2me_confirmation_dialog_proxy.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/thread_task_runner_handle.h"
 
 namespace remoting {
@@ -50,7 +53,7 @@ It2MeConfirmationDialogProxy::Core::Core(
     : ui_task_runner_(ui_task_runner),
       caller_task_runner_(caller_task_runner),
       parent_(parent),
-      dialog_(dialog.Pass()) {
+      dialog_(std::move(dialog)) {
 }
 
 It2MeConfirmationDialogProxy::Core::~Core() {
@@ -77,7 +80,7 @@ It2MeConfirmationDialogProxy::It2MeConfirmationDialogProxy(
     scoped_ptr<It2MeConfirmationDialog> dialog)
     : weak_factory_(this) {
   core_.reset(new Core(ui_task_runner, base::ThreadTaskRunnerHandle::Get(),
-                       weak_factory_.GetWeakPtr(), dialog.Pass()));
+                       weak_factory_.GetWeakPtr(), std::move(dialog)));
 }
 
 It2MeConfirmationDialogProxy::~It2MeConfirmationDialogProxy() {

@@ -5,11 +5,23 @@
 #ifndef CONTENT_PUBLIC_RENDERER_MEDIA_STREAM_RENDERER_FACTORY_H_
 #define CONTENT_PUBLIC_RENDERER_MEDIA_STREAM_RENDERER_FACTORY_H_
 
+#include <string>
+
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "content/public/renderer/media_stream_audio_renderer.h"
 #include "content/public/renderer/video_frame_provider.h"
 #include "url/gurl.h"
+#include "url/origin.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+class TaskRunner;
+}  // namespace base
+
+namespace media {
+class GpuVideoAcceleratorFactories;
+}  // namespace media
 
 namespace content {
 
@@ -24,11 +36,16 @@ class MediaStreamRendererFactory {
   virtual scoped_refptr<VideoFrameProvider> GetVideoFrameProvider(
       const GURL& url,
       const base::Closure& error_cb,
-      const VideoFrameProvider::RepaintCB& repaint_cb) = 0;
+      const VideoFrameProvider::RepaintCB& repaint_cb,
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      const scoped_refptr<base::TaskRunner>& worker_task_runner,
+      media::GpuVideoAcceleratorFactories* gpu_factories) = 0;
 
   virtual scoped_refptr<MediaStreamAudioRenderer> GetAudioRenderer(
       const GURL& url,
-      int render_frame_id) = 0;
+      int render_frame_id,
+      const std::string& device_id,
+      const url::Origin& security_origin) = 0;
 };
 
 }  // namespace content

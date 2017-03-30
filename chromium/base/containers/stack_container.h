@@ -5,10 +5,12 @@
 #ifndef BASE_CONTAINERS_STACK_CONTAINER_H_
 #define BASE_CONTAINERS_STACK_CONTAINER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/aligned_memory.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -57,7 +59,7 @@ class StackAllocator : public std::allocator<T> {
     // buffer of the right size instead.
     base::AlignedMemory<sizeof(T[stack_capacity]), ALIGNOF(T)> stack_buffer_;
 #if defined(__GNUC__) && !defined(ARCH_CPU_X86_FAMILY)
-    COMPILE_ASSERT(ALIGNOF(T) <= 16, crbug_115612);
+    static_assert(ALIGNOF(T) <= 16, "http://crbug.com/115612");
 #endif
 
     // Set when the stack buffer is used for an allocation. We do not track

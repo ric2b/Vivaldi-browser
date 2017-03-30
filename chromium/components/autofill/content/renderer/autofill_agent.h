@@ -8,9 +8,8 @@
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/autofill/content/renderer/form_cache.h"
@@ -31,7 +30,6 @@ namespace autofill {
 
 struct FormData;
 struct FormFieldData;
-struct WebElementDescriptor;
 class PasswordAutofillAgent;
 class PasswordGenerationAgent;
 
@@ -52,10 +50,11 @@ class AutofillAgent : public content::RenderFrameObserver,
   AutofillAgent(content::RenderFrame* render_frame,
                 PasswordAutofillAgent* password_autofill_manager,
                 PasswordGenerationAgent* password_generation_agent);
-  virtual ~AutofillAgent();
+  ~AutofillAgent() override;
 
  private:
-  // Functor used as a simplified comparison function for FormData.
+  // Functor used as a simplified comparison function for FormData. Only
+  // compares forms at a high level (notably name, origin, action).
   struct FormDataCompare {
     bool operator()(const FormData& lhs, const FormData& rhs) const;
   };
@@ -126,22 +125,19 @@ class AutofillAgent : public content::RenderFrameObserver,
                                  bool was_focused) override;
 
   // blink::WebAutofillClient:
-  virtual void textFieldDidEndEditing(
-      const blink::WebInputElement& element);
-  virtual void textFieldDidChange(
-      const blink::WebFormControlElement& element);
-  virtual void textFieldDidReceiveKeyDown(
+  void textFieldDidEndEditing(const blink::WebInputElement& element) override;
+  void textFieldDidChange(const blink::WebFormControlElement& element) override;
+  void textFieldDidReceiveKeyDown(
       const blink::WebInputElement& element,
-      const blink::WebKeyboardEvent& event);
-  virtual void didRequestAutocomplete(
-      const blink::WebFormElement& form);
-  virtual void setIgnoreTextChanges(bool ignore);
-  virtual void didAssociateFormControls(
-      const blink::WebVector<blink::WebNode>& nodes);
-  virtual void openTextDataListChooser(const blink::WebInputElement& element);
-  virtual void dataListOptionsChanged(const blink::WebInputElement& element);
-  virtual void firstUserGestureObserved();
-  virtual void ajaxSucceeded();
+      const blink::WebKeyboardEvent& event) override;
+  void didRequestAutocomplete(const blink::WebFormElement& form) override;
+  void setIgnoreTextChanges(bool ignore) override;
+  void didAssociateFormControls(
+      const blink::WebVector<blink::WebNode>& nodes) override;
+  void openTextDataListChooser(const blink::WebInputElement& element) override;
+  void dataListOptionsChanged(const blink::WebInputElement& element) override;
+  void firstUserGestureObserved() override;
+  void ajaxSucceeded() override;
 
   void OnFieldTypePredictionsAvailable(
       const std::vector<FormDataPredictions>& forms);
@@ -160,6 +156,9 @@ class AutofillAgent : public content::RenderFrameObserver,
                                 const base::string16& password);
   void OnPreviewPasswordSuggestion(const base::string16& username,
                                    const base::string16& password);
+
+  // Called when a same-page navigation is detected.
+  void OnSamePageNavigationCompleted();
 
   // Called when interactive autocomplete finishes. |message| is printed to
   // the console if non-empty.
@@ -184,8 +183,7 @@ class AutofillAgent : public content::RenderFrameObserver,
 
   // Queries the browser for Autocomplete and Autofill suggestions for the given
   // |element|.
-  void QueryAutofillSuggestions(const blink::WebFormControlElement& element,
-                                bool datalist_only);
+  void QueryAutofillSuggestions(const blink::WebFormControlElement& element);
 
   // Sets the element value to reflect the selected |suggested_value|.
   void AcceptDataListSuggestion(const base::string16& suggested_value);
@@ -248,6 +246,9 @@ class AutofillAgent : public content::RenderFrameObserver,
 
   // The form element currently requesting an interactive autocomplete.
   blink::WebFormElement in_flight_request_form_;
+
+  // Last form which was interacted with by the user.
+  blink::WebFormElement last_interacted_form_;
 
   // Was the query node autofilled prior to previewing the form?
   bool was_query_node_autofilled_;

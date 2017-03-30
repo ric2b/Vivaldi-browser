@@ -8,6 +8,7 @@
 #include "ui/events/gesture_detection/motion_event_generic.h"
 
 #include <cmath>
+#include <utility>
 
 #include "base/logging.h"
 #include "ui/events/base_event_utils.h"
@@ -29,6 +30,7 @@ PointerProperties::PointerProperties(float x, float y, float touch_major)
       touch_major(touch_major),
       touch_minor(0),
       orientation(0),
+      tilt(0),
       source_device_id(0) {
 }
 
@@ -44,6 +46,7 @@ PointerProperties::PointerProperties(const MotionEvent& event,
       touch_major(event.GetTouchMajor(pointer_index)),
       touch_minor(event.GetTouchMinor(pointer_index)),
       orientation(event.GetOrientation(pointer_index)),
+      tilt(event.GetTilt(pointer_index)),
       source_device_id(0) {
 }
 
@@ -106,7 +109,7 @@ MotionEventGeneric::MotionEventGeneric(const MotionEventGeneric& other)
 MotionEventGeneric::~MotionEventGeneric() {
 }
 
-uint32 MotionEventGeneric::GetUniqueEventId() const {
+uint32_t MotionEventGeneric::GetUniqueEventId() const {
   return unique_event_id_;
 }
 
@@ -168,6 +171,11 @@ float MotionEventGeneric::GetOrientation(size_t pointer_index) const {
 float MotionEventGeneric::GetPressure(size_t pointer_index) const {
   DCHECK_LT(pointer_index, pointers_->size());
   return pointers_[pointer_index].pressure;
+}
+
+float MotionEventGeneric::GetTilt(size_t pointer_index) const {
+  DCHECK_LT(pointer_index, pointers_->size());
+  return pointers_[pointer_index].tilt;
 }
 
 MotionEvent::ToolType MotionEventGeneric::GetToolType(
@@ -232,7 +240,7 @@ scoped_ptr<MotionEventGeneric> MotionEventGeneric::CancelEvent(
       new MotionEventGeneric(event, with_history));
   cancel_event->set_action(ACTION_CANCEL);
   cancel_event->set_unique_event_id(ui::GetNextTouchEventId());
-  return cancel_event.Pass();
+  return cancel_event;
 }
 
 size_t MotionEventGeneric::PushPointer(const PointerProperties& pointer) {
@@ -253,13 +261,13 @@ void MotionEventGeneric::PushHistoricalEvent(scoped_ptr<MotionEvent> event) {
   DCHECK_EQ(event->GetAction(), GetAction());
   DCHECK_LE(event->GetEventTime().ToInternalValue(),
             GetEventTime().ToInternalValue());
-  historical_events_.push_back(event.Pass());
+  historical_events_.push_back(std::move(event));
 }
 
 MotionEventGeneric::MotionEventGeneric()
-    : action_(ACTION_CANCEL),
+    : action_(ACTION_NONE),
       unique_event_id_(ui::GetNextTouchEventId()),
-      action_index_(0),
+      action_index_(-1),
       button_state_(0) {
 }
 
@@ -292,7 +300,7 @@ MotionEventGeneric::MotionEventGeneric(const MotionEvent& event,
                             event.GetHistoricalY(i, h),
                             event.GetHistoricalTouchMajor(i, h)));
     }
-    PushHistoricalEvent(historical_event.Pass());
+    PushHistoricalEvent(std::move(historical_event));
   }
 }
 

@@ -10,9 +10,8 @@ import android.view.View;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.EmptyTabObserver;
-import org.chromium.chrome.browser.Tab;
-import org.chromium.chrome.browser.tab.ChromeTab;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
@@ -36,7 +35,7 @@ public abstract class ChromeTabbedActivityTestBase extends
     }
 
     /**
-     * Load a url in multiple new tabs in parallel. Each {@link ChromeTab} will pretend to be
+     * Load a url in multiple new tabs in parallel. Each {@link Tab} will pretend to be
      * created from a link.
      *
      * @param url The url of the page to load.

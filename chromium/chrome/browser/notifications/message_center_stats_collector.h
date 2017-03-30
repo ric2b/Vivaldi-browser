@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/message_center_types.h"
@@ -70,6 +71,7 @@ class MessageCenterStatsCollector
   void OnNotificationClicked(const std::string& notification_id) override;
   void OnNotificationButtonClicked(const std::string& notification_id,
                                    int button_index) override;
+  void OnNotificationSettingsClicked() override;
   void OnNotificationDisplayed(
       const std::string& notification_id,
       const message_center::DisplaySource source) override;

@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <sstream>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/input_file.h"
@@ -80,9 +84,8 @@ enum Precedence {
 };
 
 int CountLines(const std::string& str) {
-  std::vector<std::string> lines;
-  base::SplitStringDontTrim(str, '\n', &lines);
-  return static_cast<int>(lines.size());
+  return static_cast<int>(base::SplitStringPiece(
+      str, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL).size());
 }
 
 class Printer {
@@ -129,8 +132,11 @@ class Printer {
   // Flag assignments to sources, deps, etc. to make their RHSs multiline.
   void AnnotatePreferredMultilineAssignment(const BinaryOpNode* binop);
 
-  // Alphabetically a list on the RHS if the LHS is 'sources'.
-  void SortIfSources(const BinaryOpNode* binop);
+  // Sort a list on the RHS if the LHS is 'sources', 'deps' or 'public_deps'.
+  // The 'sources' are sorted alphabetically while the 'deps' and 'public_deps'
+  // are sorted putting first the relative targets and then the global ones
+  // (both sorted alphabetically).
+  void SortIfSourcesOrDeps(const BinaryOpNode* binop);
 
   // Heuristics to decide if there should be a blank line added between two
   // items. For various "small" items, it doesn't look nice if there's too much
@@ -300,27 +306,27 @@ void Printer::AnnotatePreferredMultilineAssignment(const BinaryOpNode* binop) {
   // things, but not flags things.
   if (binop->op().value() == "=" && ident && list) {
     const base::StringPiece lhs = ident->value().value();
-    if (lhs == "data" || lhs == "datadeps" || lhs == "deps" ||
-        lhs == "inputs" || lhs == "outputs" || lhs == "public" ||
-        lhs == "public_deps" || lhs == "sources") {
+    if (lhs == "data" || lhs == "datadeps" || lhs == "data_deps" ||
+        lhs == "deps" || lhs == "inputs" || lhs == "outputs" ||
+        lhs == "public" || lhs == "public_deps" || lhs == "sources") {
       const_cast<ListNode*>(list)->set_prefer_multiline(true);
     }
   }
 }
 
-void Printer::SortIfSources(const BinaryOpNode* binop) {
+void Printer::SortIfSourcesOrDeps(const BinaryOpNode* binop) {
   const IdentifierNode* ident = binop->left()->AsIdentifier();
   const ListNode* list = binop->right()->AsList();
-  // TODO(scottmg): Sort more than 'sources'?
   if ((binop->op().value() == "=" || binop->op().value() == "+=" ||
        binop->op().value() == "-=") &&
       ident && list) {
     const base::StringPiece lhs = ident->value().value();
     if (lhs == "sources")
       const_cast<ListNode*>(list)->SortAsStringsList();
+    else if (lhs == "deps" || lhs == "public_deps")
+      const_cast<ListNode*>(list)->SortAsDepsList();
   }
 }
-
 
 bool Printer::ShouldAddBlankLineInBetween(const ParseNode* a,
                                           const ParseNode* b) {
@@ -394,8 +400,8 @@ void Printer::Block(const ParseNode* root) {
 
 int Printer::AssessPenalty(const std::string& output) {
   int penalty = 0;
-  std::vector<std::string> lines;
-  base::SplitStringDontTrim(output, '\n', &lines);
+  std::vector<std::string> lines = base::SplitString(
+      output, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
   penalty += static_cast<int>(lines.size() - 1) * GetPenaltyForLineBreak();
   for (const auto& line : lines) {
     if (line.size() > kMaximumWidth)
@@ -405,9 +411,8 @@ int Printer::AssessPenalty(const std::string& output) {
 }
 
 bool Printer::ExceedsMaximumWidth(const std::string& output) {
-  std::vector<std::string> lines;
-  base::SplitStringDontTrim(output, '\n', &lines);
-  for (const auto& line : lines) {
+  for (const auto& line : base::SplitString(
+           output, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL)) {
     if (line.size() > kMaximumWidth)
       return true;
   }
@@ -460,7 +465,7 @@ int Printer::Expr(const ParseNode* root,
     CHECK(precedence_.find(binop->op().value()) != precedence_.end());
     AnnotatePreferredMultilineAssignment(binop);
 
-    SortIfSources(binop);
+    SortIfSourcesOrDeps(binop);
 
     Precedence prec = precedence_[binop->op().value()];
 

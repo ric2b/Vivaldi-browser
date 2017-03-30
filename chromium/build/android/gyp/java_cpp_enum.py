@@ -5,11 +5,13 @@
 # found in the LICENSE file.
 
 import collections
+from datetime import date
 import re
 import optparse
 import os
 from string import Template
 import sys
+import zipfile
 
 from util import build_utils
 
@@ -227,13 +229,9 @@ class HeaderParser(object):
       self._in_enum = True
 
 def GetScriptName():
-  script_components = os.path.abspath(sys.argv[0]).split(os.path.sep)
-  build_index = script_components.index('build')
-  return os.sep.join(script_components[build_index:])
+  return os.path.basename(os.path.abspath(sys.argv[0]))
 
-
-def DoGenerate(output_dir, source_paths, print_output_only=False):
-  output_paths = []
+def DoGenerate(source_paths):
   for source_path in source_paths:
     enum_definitions = DoParseHeaderFile(source_path)
     if not enum_definitions:
@@ -244,12 +242,9 @@ def DoGenerate(output_dir, source_paths, print_output_only=False):
     for enum_definition in enum_definitions:
       package_path = enum_definition.enum_package.replace('.', os.path.sep)
       file_name = enum_definition.class_name + '.java'
-      output_path = os.path.join(output_dir, package_path, file_name)
-      output_paths.append(output_path)
-      if not print_output_only:
-        build_utils.MakeDirectory(os.path.dirname(output_path))
-        DoWriteOutput(source_path, output_path, enum_definition)
-  return output_paths
+      output_path = os.path.join(package_path, file_name)
+      output = GenerateOutput(source_path, enum_definition)
+      yield output_path, output
 
 
 def DoParseHeaderFile(path):
@@ -259,7 +254,7 @@ def DoParseHeaderFile(path):
 
 def GenerateOutput(source_path, enum_definition):
   template = Template("""
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright ${YEAR} The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -291,13 +286,10 @@ ${ENUM_ENTRIES}
       'PACKAGE': enum_definition.enum_package,
       'SCRIPT_NAME': GetScriptName(),
       'SOURCE_PATH': source_path,
+      'YEAR': str(date.today().year)
   }
   return template.substitute(values)
 
-
-def DoWriteOutput(source_path, output_path, enum_definition):
-  with open(output_path, 'w') as out_file:
-    out_file.write(GenerateOutput(source_path, enum_definition))
 
 def AssertFilesList(output_paths, assert_files_list):
   actual = set(output_paths)
@@ -309,32 +301,69 @@ def AssertFilesList(output_paths, assert_files_list):
                     'add %s and remove %s.' % (need_to_add, need_to_remove))
 
 def DoMain(argv):
-  usage = 'usage: %prog [options] output_dir input_file(s)...'
+  usage = 'usage: %prog [options] [output_dir] input_file(s)...'
   parser = optparse.OptionParser(usage=usage)
+  build_utils.AddDepfileOption(parser)
 
   parser.add_option('--assert_file', action="append", default=[],
                     dest="assert_files_list", help='Assert that the given '
                     'file is an output. There can be multiple occurrences of '
                     'this flag.')
+  parser.add_option('--srcjar',
+                    help='When specified, a .srcjar at the given path is '
+                    'created instead of individual .java files.')
   parser.add_option('--print_output_only', help='Only print output paths.',
                     action='store_true')
   parser.add_option('--verbose', help='Print more information.',
                     action='store_true')
 
   options, args = parser.parse_args(argv)
-  if len(args) < 2:
-    parser.error('Need to specify output directory and at least one input file')
-  output_paths = DoGenerate(args[0], args[1:],
-                            print_output_only=options.print_output_only)
 
-  if options.assert_files_list:
-    AssertFilesList(output_paths, options.assert_files_list)
+  if options.srcjar:
+    if not args:
+      parser.error('Need to specify at least one input file')
+    input_paths = args
+  else:
+    if len(args) < 2:
+      parser.error(
+          'Need to specify output directory and at least one input file')
+    output_dir = args[0]
+    input_paths = args[1:]
 
-  if options.verbose:
-    print 'Output paths:'
-    print '\n'.join(output_paths)
+  if options.depfile:
+    python_deps = build_utils.GetPythonDependencies()
+    build_utils.WriteDepfile(options.depfile, input_paths + python_deps)
 
-  return ' '.join(output_paths)
+  if options.srcjar:
+    if options.print_output_only:
+      parser.error('--print_output_only does not work with --srcjar')
+    if options.assert_files_list:
+      parser.error('--assert_file does not work with --srcjar')
+
+    with zipfile.ZipFile(options.srcjar, 'w', zipfile.ZIP_STORED) as srcjar:
+      for output_path, data in DoGenerate(input_paths):
+        build_utils.AddToZipHermetic(srcjar, output_path, data=data)
+  else:
+    # TODO(agrieve): Delete this non-srcjar branch once GYP is gone.
+    output_paths = []
+    for output_path, data in DoGenerate(input_paths):
+      full_path = os.path.join(output_dir, output_path)
+      output_paths.append(full_path)
+      if not options.print_output_only:
+        build_utils.MakeDirectory(os.path.dirname(full_path))
+        with open(full_path, 'w') as out_file:
+          out_file.write(data)
+
+    if options.assert_files_list:
+      AssertFilesList(output_paths, options.assert_files_list)
+
+    if options.verbose:
+      print 'Output paths:'
+      print '\n'.join(output_paths)
+
+    # Used by GYP.
+    return ' '.join(output_paths)
+
 
 if __name__ == '__main__':
   DoMain(sys.argv[1:])

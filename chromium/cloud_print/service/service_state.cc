@@ -4,6 +4,9 @@
 
 #include "cloud_print/service/service_state.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -35,7 +38,7 @@ const char kXmppAuthTokenOptionName[] = "xmpp_auth_token";
 
 const char kClientLoginUrl[] = "https://www.google.com/accounts/ClientLogin";
 
-const int64 kRequestTimeoutMs = 10 * 1000;
+const int64_t kRequestTimeoutMs = 10 * 1000;
 
 class ServiceStateURLRequestDelegate : public net::URLRequest::Delegate {
  public:
@@ -51,7 +54,7 @@ class ServiceStateURLRequestDelegate : public net::URLRequest::Delegate {
   void OnReadCompleted(net::URLRequest* request, int bytes_read) override {
     Read(request);
     if (!request->status().is_io_pending())
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   const std::string& data() const {
@@ -147,7 +150,7 @@ std::string ServiceState::ToString() {
                         xmpp_auth_token_);
 
   base::DictionaryValue services;
-  services.Set(kCloudPrintJsonName, cloud_print.Pass());
+  services.Set(kCloudPrintJsonName, std::move(cloud_print));
 
   std::string json;
   base::JSONWriter::WriteWithOptions(
@@ -183,15 +186,14 @@ std::string ServiceState::LoginToGoogle(const std::string& service,
   scoped_ptr<net::UploadElementReader> reader(
       net::UploadOwnedBytesElementReader::CreateWithString(post_body));
   request->set_upload(
-      net::ElementsUploadDataStream::CreateWithReader(reader.Pass(), 0));
+      net::ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
   request->SetExtraRequestHeaderByName(
       "Content-Type", "application/x-www-form-urlencoded", true);
   request->set_method("POST");
   request->Start();
 
   base::MessageLoop::current()->PostDelayedTask(
-      FROM_HERE,
-      base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(kRequestTimeoutMs));
 
   base::MessageLoop::current()->Run();

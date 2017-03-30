@@ -5,12 +5,12 @@
 #ifndef NET_URL_REQUEST_URL_REQUEST_TEST_UTIL_H_
 #define NET_URL_REQUEST_URL_REQUEST_TEST_UTIL_H_
 
+#include <stdint.h>
 #include <stdlib.h>
-
 #include <map>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -71,11 +71,11 @@ class TestURLRequestContext : public URLRequestContext {
 
   void set_http_network_session_params(
       scoped_ptr<HttpNetworkSession::Params> params) {
-    http_network_session_params_ = params.Pass();
+    http_network_session_params_ = std::move(params);
   }
 
   void SetSdchManager(scoped_ptr<SdchManager> sdch_manager) {
-    context_storage_.set_sdch_manager(sdch_manager.Pass());
+    context_storage_.set_sdch_manager(std::move(sdch_manager));
   }
 
  private:
@@ -272,8 +272,8 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   void set_can_access_files(bool val) { can_access_files_ = val; }
   bool can_access_files() const { return can_access_files_; }
 
-  void set_first_party_only_cookies_enabled(bool val) {
-    first_party_only_cookies_enabled_ = val;
+  void set_experimental_cookie_features_enabled(bool val) {
+    experimental_cookie_features_enabled_ = val;
   }
 
   void set_cancel_request_with_policy_violating_referrer(bool val) {
@@ -285,6 +285,10 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   }
   int before_send_headers_count() const { return before_send_headers_count_; }
   int headers_received_count() const { return headers_received_count_; }
+  int64_t total_network_bytes_received() const {
+    return total_network_bytes_received_;
+  }
+  int64_t total_network_bytes_sent() const { return total_network_bytes_sent_; }
 
   // Last observed proxy in proxy header sent callback.
   HostPortPair last_observed_proxy() {
@@ -316,7 +320,9 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
       GURL* allowed_unsafe_redirect_url) override;
   void OnBeforeRedirect(URLRequest* request, const GURL& new_location) override;
   void OnResponseStarted(URLRequest* request) override;
-  void OnRawBytesRead(const URLRequest& request, int bytes_read) override;
+  void OnNetworkBytesReceived(URLRequest* request,
+                              int64_t bytes_received) override;
+  void OnNetworkBytesSent(URLRequest* request, int64_t bytes_sent) override;
   void OnCompleted(URLRequest* request, bool started) override;
   void OnURLRequestDestroyed(URLRequest* request) override;
   void OnPACScriptError(int line_number, const base::string16& error) override;
@@ -332,7 +338,8 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
                       CookieOptions* options) override;
   bool OnCanAccessFile(const URLRequest& request,
                        const base::FilePath& path) const override;
-  bool OnFirstPartyOnlyCookieExperimentEnabled() const override;
+  bool OnAreExperimentalCookieFeaturesEnabled() const override;
+  bool OnAreStrictSecureCookiesEnabled() const override;
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(
       const URLRequest& request,
       const GURL& target_url,
@@ -357,6 +364,8 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   int observed_before_proxy_headers_sent_callbacks_;
   int before_send_headers_count_;
   int headers_received_count_;
+  int64_t total_network_bytes_received_;
+  int64_t total_network_bytes_sent_;
   // Last observed proxy in before proxy header sent callback.
   HostPortPair last_observed_proxy_;
 
@@ -377,7 +386,7 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   bool has_load_timing_info_before_auth_;
 
   bool can_access_files_;  // true by default
-  bool first_party_only_cookies_enabled_;               // false by default
+  bool experimental_cookie_features_enabled_;           // false by default
   bool cancel_request_with_policy_violating_referrer_;  // false by default
   bool will_be_intercepted_on_next_error_;
 };
@@ -388,14 +397,15 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
 class TestJobInterceptor : public URLRequestJobFactory::ProtocolHandler {
  public:
   TestJobInterceptor();
+  ~TestJobInterceptor() override;
 
   URLRequestJob* MaybeCreateJob(
       URLRequest* request,
       NetworkDelegate* network_delegate) const override;
-  void set_main_intercept_job(URLRequestJob* job);
+  void set_main_intercept_job(scoped_ptr<URLRequestJob> job);
 
  private:
-  mutable URLRequestJob* main_intercept_job_;
+  mutable scoped_ptr<URLRequestJob> main_intercept_job_;
 };
 
 }  // namespace net

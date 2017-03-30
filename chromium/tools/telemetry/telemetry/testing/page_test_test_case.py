@@ -14,7 +14,6 @@ from telemetry.internal.results import results_options
 from telemetry.internal import story_runner
 from telemetry.page import page as page_module
 from telemetry.page import page_test
-from telemetry.page import test_expectations
 from telemetry.testing import options_for_unittests
 
 
@@ -47,7 +46,6 @@ class PageTestTestCase(unittest.TestCase):
     return ps
 
   def RunMeasurement(self, measurement, ps,
-      expectations=test_expectations.TestExpectations(),
       options=None):
     """Runs a measurement against a pageset, returning the rows its outputs."""
     if options is None:
@@ -61,14 +59,15 @@ class PageTestTestCase(unittest.TestCase):
         continue
       setattr(options, k, v)
 
-    measurement.CustomizeBrowserOptions(options.browser_options)
+    if isinstance(measurement, page_test.PageTest):
+      measurement.CustomizeBrowserOptions(options.browser_options)
     options.output_file = None
     options.output_formats = ['none']
     options.suppress_gtest_report = True
     options.output_trace_tag = None
     story_runner.ProcessCommandLineArgs(temp_parser, options)
     results = results_options.CreateResults(EmptyMetadataForTest(), options)
-    story_runner.Run(measurement, ps, expectations, options, results)
+    story_runner.Run(measurement, ps, options, results)
     return results
 
   def TestTracingCleanedUp(self, measurement_class, options=None):
@@ -82,19 +81,19 @@ class PageTestTestCase(unittest.TestCase):
 
       # Inject fake tracing methods to tracing_controller
       def TabForPage(self, page, browser):
-        ActualStartTracing = browser.platform.tracing_controller.Start
+        ActualStartTracing = browser.platform.tracing_controller.StartTracing
         def FakeStartTracing(*args, **kwargs):
           ActualStartTracing(*args, **kwargs)
           start_tracing_called[0] = True
           raise exceptions.IntentionalException
         browser.StartTracing = FakeStartTracing
 
-        ActualStopTracing = browser.platform.tracing_controller.Stop
+        ActualStopTracing = browser.platform.tracing_controller.StopTracing
         def FakeStopTracing(*args, **kwargs):
           result = ActualStopTracing(*args, **kwargs)
           stop_tracing_called[0] = True
           return result
-        browser.platform.tracing_controller.Stop = FakeStopTracing
+        browser.platform.tracing_controller.StopTracing = FakeStopTracing
 
         return measurement_class.TabForPage(self, page, browser)
 

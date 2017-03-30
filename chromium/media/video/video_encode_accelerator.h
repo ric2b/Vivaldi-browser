@@ -5,9 +5,12 @@
 #ifndef MEDIA_VIDEO_VIDEO_ENCODE_ACCELERATOR_H_
 #define MEDIA_VIDEO_VIDEO_ENCODE_ACCELERATOR_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/media_export.h"
@@ -28,8 +31,8 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     ~SupportedProfile();
     VideoCodecProfile profile;
     gfx::Size max_resolution;
-    uint32 max_framerate_numerator;
-    uint32 max_framerate_denominator;
+    uint32_t max_framerate_numerator;
+    uint32_t max_framerate_denominator;
   };
   using SupportedProfiles = std::vector<SupportedProfile>;
 
@@ -76,7 +79,7 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     //  |bitstream_buffer_id| is the id of the buffer that is ready.
     //  |payload_size| is the byte size of the used portion of the buffer.
     //  |key_frame| is true if this delivered frame is a keyframe.
-    virtual void BitstreamBufferReady(int32 bitstream_buffer_id,
+    virtual void BitstreamBufferReady(int32_t bitstream_buffer_id,
                                       size_t payload_size,
                                       bool key_frame) = 0;
 
@@ -112,10 +115,10 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
   //  |client| is the client of this video encoder.  The provided pointer must
   //  be valid until Destroy() is called.
   // TODO(sheu): handle resolution changes.  http://crbug.com/249944
-  virtual bool Initialize(VideoFrame::Format input_format,
+  virtual bool Initialize(VideoPixelFormat input_format,
                           const gfx::Size& input_visible_size,
                           VideoCodecProfile output_profile,
-                          uint32 initial_bitrate,
+                          uint32_t initial_bitrate,
                           Client* client) = 0;
 
   // Encodes the given frame.
@@ -137,8 +140,8 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
   // Parameters:
   //  |bitrate| is the requested new bitrate, in bits per second.
   //  |framerate| is the requested new framerate, in frames per second.
-  virtual void RequestEncodingParametersChange(uint32 bitrate,
-                                               uint32 framerate) = 0;
+  virtual void RequestEncodingParametersChange(uint32_t bitrate,
+                                               uint32_t framerate) = 0;
 
   // Destroys the encoder: all pending inputs and outputs are dropped
   // immediately and the component is freed.  This call may asynchronously free
@@ -155,19 +158,15 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
 
 }  // namespace media
 
-namespace base {
+namespace std {
 
-template <class T>
-struct DefaultDeleter;
-
-// Specialize DefaultDeleter so that scoped_ptr<VideoEncodeAccelerator> always
+// Specialize std::default_delete so that scoped_ptr<VideoEncodeAccelerator>
 // uses "Destroy()" instead of trying to use the destructor.
 template <>
-struct MEDIA_EXPORT DefaultDeleter<media::VideoEncodeAccelerator> {
- public:
-  void operator()(void* video_encode_accelerator) const;
+struct MEDIA_EXPORT default_delete<media::VideoEncodeAccelerator> {
+  void operator()(media::VideoEncodeAccelerator* vea) const;
 };
 
-}  // namespace base
+}  // namespace std
 
 #endif  // MEDIA_VIDEO_VIDEO_ENCODE_ACCELERATOR_H_

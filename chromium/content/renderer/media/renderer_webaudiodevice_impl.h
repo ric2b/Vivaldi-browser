@@ -5,7 +5,10 @@
 #ifndef CONTENT_RENDERER_MEDIA_RENDERER_WEBAUDIODEVICE_IMPL_H_
 #define CONTENT_RENDERER_MEDIA_RENDERER_WEBAUDIODEVICE_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
 #include "media/audio/audio_parameters.h"
@@ -31,15 +34,17 @@ class RendererWebAudioDeviceImpl
   RendererWebAudioDeviceImpl(const media::AudioParameters& params,
                              blink::WebAudioDevice::RenderCallback* callback,
                              int session_id);
-  virtual ~RendererWebAudioDeviceImpl();
+  ~RendererWebAudioDeviceImpl() override;
 
   // blink::WebAudioDevice implementation.
-  virtual void start();
-  virtual void stop();
-  virtual double sampleRate();
+  void start() override;
+  void stop() override;
+  double sampleRate() override;
 
   // AudioRendererSink::RenderCallback implementation.
-  int Render(media::AudioBus* dest, int audio_delay_milliseconds) override;
+  int Render(media::AudioBus* dest,
+             uint32_t audio_delay_milliseconds,
+             uint32_t frames_skipped) override;
 
   void OnRenderError() override;
 

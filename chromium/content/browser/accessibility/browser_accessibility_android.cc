@@ -63,7 +63,7 @@ void BrowserAccessibilityAndroid::OnLocationChanged() {
 }
 
 bool BrowserAccessibilityAndroid::PlatformIsLeaf() const {
-  if (InternalChildCount() == 0)
+  if (BrowserAccessibility::PlatformIsLeaf())
     return true;
 
   // Iframes are always allowed to contain children.
@@ -78,8 +78,14 @@ bool BrowserAccessibilityAndroid::PlatformIsLeaf() const {
     return false;
 
   // Date and time controls should drop their children.
-  if (GetRole() == ui::AX_ROLE_DATE || GetRole() == ui::AX_ROLE_INPUT_TIME)
-    return true;
+  switch (GetRole()) {
+    case ui::AX_ROLE_DATE:
+    case ui::AX_ROLE_DATE_TIME:
+    case ui::AX_ROLE_INPUT_TIME:
+      return true;
+    default:
+      break;
+  }
 
   BrowserAccessibilityManagerAndroid* manager_android =
       static_cast<BrowserAccessibilityManagerAndroid*>(manager());
@@ -98,7 +104,7 @@ bool BrowserAccessibilityAndroid::PlatformIsLeaf() const {
       return true;
   }
 
-  return BrowserAccessibility::PlatformIsLeaf();
+  return false;
 }
 
 bool BrowserAccessibilityAndroid::IsCheckable() const {
@@ -315,13 +321,24 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
     return base::string16();
   }
 
-  // See comment in browser_accessibility_win.cc for details.
-  // The difference here is that we can only expose one accessible
-  // name on Android, not 2 or 3 like on Windows or Mac.
+  // In accordance with ARIA, some elements use their contents as an
+  // accessibility name, so some elements will have the same name as their
+  // child. While most platforms expect this, it causes Android to speak the
+  // name twice. So in this case we should remove the name from the parent.
+  if (GetRole() == ui::AX_ROLE_LIST_ITEM &&
+      GetIntAttribute(ui::AX_ATTR_NAME_FROM) == ui::AX_NAME_FROM_CONTENTS) {
+    // This is an approximation of "PlatformChildCount() > 0" because we can't
+    // call PlatformChildCount from here.
+    if (InternalChildCount() > 0 && !HasOnlyStaticTextChildren())
+      return base::string16();
+  }
+
+  // We can only expose one accessible name on Android,
+  // not 2 or 3 like on Windows or Mac.
 
   // First, always return the |value| attribute if this is an
   // input field.
-  base::string16 value = GetString16Attribute(ui::AX_ATTR_VALUE);
+  base::string16 value = GetValue();
   if (!value.empty()) {
     if (HasState(ui::AX_STATE_EDITABLE))
       return value;
@@ -345,59 +362,23 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
         base::StringPrintf("#%02X%02X%02X", red, green, blue));
   }
 
-  // Always prefer visible text if this is a link. Sites sometimes add
-  // a "title" attribute to a link with more information, but we can't
-  // lose the link text.
-  base::string16 name = GetString16Attribute(ui::AX_ATTR_NAME);
-  if (!name.empty() && GetRole() == ui::AX_ROLE_LINK)
-    return name;
-
-  // If there's no text value, the basic rule is: prefer description
-  // (aria-labelledby or aria-label), then help (title), then name
-  // (inner text), then value (control value).  However, if
-  // title_elem_id is set, that means there's a label element
-  // supplying the name and then name takes precedence over help.
-  // TODO(dmazzoni): clean this up by providing more granular labels in
-  // Blink, making the platform-specific mapping to accessible text simpler.
+  base::string16 text = GetString16Attribute(ui::AX_ATTR_NAME);
   base::string16 description = GetString16Attribute(ui::AX_ATTR_DESCRIPTION);
-  base::string16 help = GetString16Attribute(ui::AX_ATTR_HELP);
-
-  base::string16 placeholder;
-  switch (GetRole()) {
-    case ui::AX_ROLE_DATE:
-    case ui::AX_ROLE_INPUT_TIME:
-    case ui::AX_ROLE_TEXT_FIELD:
-      GetHtmlAttribute("placeholder", &placeholder);
+  if (!description.empty()) {
+    if (!text.empty())
+      text += base::ASCIIToUTF16(" ");
+    text += description;
   }
 
-  int title_elem_id = GetIntAttribute(
-      ui::AX_ATTR_TITLE_UI_ELEMENT);
-  base::string16 text;
-  if (!description.empty())
-    text = description;
-  else if (title_elem_id && !name.empty())
-    text = name;
-  else if (!help.empty())
-    text = help;
-  else if (!name.empty())
-    text = name;
-  else if (!placeholder.empty())
-    text = placeholder;
-  else if (!value.empty())
+  if (text.empty())
     text = value;
-  else if (title_elem_id) {
-    BrowserAccessibility* title_elem =
-          manager()->GetFromID(title_elem_id);
-    if (title_elem)
-      text = static_cast<BrowserAccessibilityAndroid*>(title_elem)->GetText();
-  }
 
   // This is called from PlatformIsLeaf, so don't call PlatformChildCount
   // from within this!
   if (text.empty() &&
       (HasOnlyStaticTextChildren() ||
        (IsFocusable() && HasOnlyTextAndImageChildren()))) {
-    for (uint32 i = 0; i < InternalChildCount(); i++) {
+    for (uint32_t i = 0; i < InternalChildCount(); i++) {
       BrowserAccessibility* child = InternalGetChild(i);
       text += static_cast<BrowserAccessibilityAndroid*>(child)->GetText();
     }
@@ -406,7 +387,7 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
   if (text.empty() && (IsLink() || GetRole() == ui::AX_ROLE_IMAGE)) {
     base::string16 url = GetString16Attribute(ui::AX_ATTR_URL);
     // Given a url like http://foo.com/bar/baz.png, just return the
-    // base name, e.g., "baz".
+    // base text, e.g., "baz".
     int trailing_slashes = 0;
     while (url.size() - trailing_slashes > 0 &&
            url[url.size() - trailing_slashes - 1] == '/') {
@@ -683,7 +664,7 @@ int BrowserAccessibilityAndroid::GetSelectionEnd() const {
 }
 
 int BrowserAccessibilityAndroid::GetEditableTextLength() const {
-  base::string16 value = GetString16Attribute(ui::AX_ATTR_VALUE);
+  base::string16 value = GetValue();
   return value.length();
 }
 
@@ -797,8 +778,8 @@ float BrowserAccessibilityAndroid::RangeCurrentValue() const {
 
 void BrowserAccessibilityAndroid::GetGranularityBoundaries(
     int granularity,
-    std::vector<int32>* starts,
-    std::vector<int32>* ends,
+    std::vector<int32_t>* starts,
+    std::vector<int32_t>* ends,
     int offset) {
   switch (granularity) {
     case ANDROID_ACCESSIBILITY_NODE_INFO_MOVEMENT_GRANULARITY_LINE:
@@ -813,8 +794,8 @@ void BrowserAccessibilityAndroid::GetGranularityBoundaries(
 }
 
 void BrowserAccessibilityAndroid::GetLineBoundaries(
-    std::vector<int32>* line_starts,
-    std::vector<int32>* line_ends,
+    std::vector<int32_t>* line_starts,
+    std::vector<int32_t>* line_ends,
     int offset) {
   // If this node has no children, treat it as all one line.
   if (GetText().size() > 0 && !InternalChildCount()) {
@@ -826,7 +807,7 @@ void BrowserAccessibilityAndroid::GetLineBoundaries(
   // inline text boxes if possible.
   if (GetRole() == ui::AX_ROLE_STATIC_TEXT) {
     int last_y = 0;
-    for (uint32 i = 0; i < InternalChildCount(); i++) {
+    for (uint32_t i = 0; i < InternalChildCount(); i++) {
       BrowserAccessibilityAndroid* child =
           static_cast<BrowserAccessibilityAndroid*>(InternalGetChild(i));
       CHECK_EQ(ui::AX_ROLE_INLINE_TEXT_BOX, child->GetRole());
@@ -847,7 +828,7 @@ void BrowserAccessibilityAndroid::GetLineBoundaries(
   }
 
   // Otherwise, call GetLineBoundaries recursively on the children.
-  for (uint32 i = 0; i < InternalChildCount(); i++) {
+  for (uint32_t i = 0; i < InternalChildCount(); i++) {
     BrowserAccessibilityAndroid* child =
         static_cast<BrowserAccessibilityAndroid*>(InternalGetChild(i));
     child->GetLineBoundaries(line_starts, line_ends, offset);
@@ -856,14 +837,14 @@ void BrowserAccessibilityAndroid::GetLineBoundaries(
 }
 
 void BrowserAccessibilityAndroid::GetWordBoundaries(
-    std::vector<int32>* word_starts,
-    std::vector<int32>* word_ends,
+    std::vector<int32_t>* word_starts,
+    std::vector<int32_t>* word_ends,
     int offset) {
   if (GetRole() == ui::AX_ROLE_INLINE_TEXT_BOX) {
-    const std::vector<int32>& starts = GetIntListAttribute(
-        ui::AX_ATTR_WORD_STARTS);
-    const std::vector<int32>& ends = GetIntListAttribute(
-        ui::AX_ATTR_WORD_ENDS);
+    const std::vector<int32_t>& starts =
+        GetIntListAttribute(ui::AX_ATTR_WORD_STARTS);
+    const std::vector<int32_t>& ends =
+        GetIntListAttribute(ui::AX_ATTR_WORD_ENDS);
     for (size_t i = 0; i < starts.size(); ++i) {
       word_starts->push_back(offset + starts[i]);
       word_ends->push_back(offset + ends[i]);
@@ -872,7 +853,7 @@ void BrowserAccessibilityAndroid::GetWordBoundaries(
   }
 
   base::string16 concatenated_text;
-  for (uint32 i = 0; i < InternalChildCount(); i++) {
+  for (uint32_t i = 0; i < InternalChildCount(); i++) {
     BrowserAccessibilityAndroid* child =
         static_cast<BrowserAccessibilityAndroid*>(InternalGetChild(i));
     base::string16 child_text = child->GetText();
@@ -883,7 +864,7 @@ void BrowserAccessibilityAndroid::GetWordBoundaries(
   if (text.empty() || concatenated_text == text) {
     // Great - this node is just the concatenation of its children, so
     // we can get the word boundaries recursively.
-    for (uint32 i = 0; i < InternalChildCount(); i++) {
+    for (uint32_t i = 0; i < InternalChildCount(); i++) {
       BrowserAccessibilityAndroid* child =
           static_cast<BrowserAccessibilityAndroid*>(InternalGetChild(i));
       child->GetWordBoundaries(word_starts, word_ends, offset);
@@ -908,7 +889,7 @@ void BrowserAccessibilityAndroid::GetWordBoundaries(
 bool BrowserAccessibilityAndroid::HasFocusableChild() const {
   // This is called from PlatformIsLeaf, so don't call PlatformChildCount
   // from within this!
-  for (uint32 i = 0; i < InternalChildCount(); i++) {
+  for (uint32_t i = 0; i < InternalChildCount(); i++) {
     BrowserAccessibility* child = InternalGetChild(i);
     if (child->HasState(ui::AX_STATE_FOCUSABLE))
       return true;
@@ -921,7 +902,7 @@ bool BrowserAccessibilityAndroid::HasFocusableChild() const {
 bool BrowserAccessibilityAndroid::HasOnlyStaticTextChildren() const {
   // This is called from PlatformIsLeaf, so don't call PlatformChildCount
   // from within this!
-  for (uint32 i = 0; i < InternalChildCount(); i++) {
+  for (uint32_t i = 0; i < InternalChildCount(); i++) {
     BrowserAccessibility* child = InternalGetChild(i);
     if (child->GetRole() != ui::AX_ROLE_STATIC_TEXT)
       return false;
@@ -932,7 +913,7 @@ bool BrowserAccessibilityAndroid::HasOnlyStaticTextChildren() const {
 bool BrowserAccessibilityAndroid::HasOnlyTextAndImageChildren() const {
   // This is called from PlatformIsLeaf, so don't call PlatformChildCount
   // from within this!
-  for (uint32 i = 0; i < InternalChildCount(); i++) {
+  for (uint32_t i = 0; i < InternalChildCount(); i++) {
     BrowserAccessibility* child = InternalGetChild(i);
     if (child->GetRole() != ui::AX_ROLE_STATIC_TEXT &&
         child->GetRole() != ui::AX_ROLE_IMAGE) {
@@ -952,7 +933,7 @@ void BrowserAccessibilityAndroid::OnDataChanged() {
   BrowserAccessibility::OnDataChanged();
 
   if (IsEditableText()) {
-    base::string16 value = GetString16Attribute(ui::AX_ATTR_VALUE);
+    base::string16 value = GetValue();
     if (value != new_value_) {
       old_value_ = new_value_;
       new_value_ = value;
@@ -989,7 +970,7 @@ void BrowserAccessibilityAndroid::NotifyLiveRegionUpdate(
 
 int BrowserAccessibilityAndroid::CountChildrenWithRole(ui::AXRole role) const {
   int count = 0;
-  for (uint32 i = 0; i < PlatformChildCount(); i++) {
+  for (uint32_t i = 0; i < PlatformChildCount(); i++) {
     if (PlatformGetChild(i)->GetRole() == role)
       count++;
   }

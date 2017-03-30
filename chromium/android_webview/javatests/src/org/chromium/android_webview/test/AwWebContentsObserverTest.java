@@ -4,19 +4,16 @@
 
 package org.chromium.android_webview.test;
 
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.android_webview.AwContentsStatics;
 import org.chromium.android_webview.AwWebContentsObserver;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
 
 /**
  * Tests for the AwWebContentsObserver class.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class AwWebContentsObserverTest extends AwTestBase  {
     private TestAwContentsClient mContentsClient;
     private AwTestContainerView mTestContainerView;
@@ -55,6 +52,7 @@ public class AwWebContentsObserverTest extends AwTestBase  {
 
         int callCount = onPageFinishedHelper.getCallCount();
         mWebContentsObserver.didFinishLoad(frameId, EXAMPLE_URL, mainFrame);
+        mWebContentsObserver.didStopLoading(EXAMPLE_URL);
         onPageFinishedHelper.waitForCallback(callCount);
         assertEquals("onPageFinished should be called for main frame navigations.", callCount + 1,
                 onPageFinishedHelper.getCallCount());
@@ -68,6 +66,7 @@ public class AwWebContentsObserverTest extends AwTestBase  {
         callCount = onPageFinishedHelper.getCallCount();
         mWebContentsObserver.didFinishLoad(frameId, EXAMPLE_URL, subFrame);
         mWebContentsObserver.didFinishLoad(frameId, SYNC_URL, mainFrame);
+        mWebContentsObserver.didStopLoading(SYNC_URL);
         onPageFinishedHelper.waitForCallback(callCount);
         assertEquals("onPageFinished should only be called for the main frame.", callCount + 1,
                 onPageFinishedHelper.getCallCount());
@@ -77,6 +76,7 @@ public class AwWebContentsObserverTest extends AwTestBase  {
         callCount = onPageFinishedHelper.getCallCount();
         mWebContentsObserver.didFinishLoad(frameId, mUnreachableWebDataUrl, mainFrame);
         mWebContentsObserver.didFinishLoad(frameId, SYNC_URL, mainFrame);
+        mWebContentsObserver.didStopLoading(SYNC_URL);
         onPageFinishedHelper.waitForCallback(callCount);
         assertEquals("onPageFinished should not be called for the error url.", callCount + 1,
                 onPageFinishedHelper.getCallCount());
@@ -100,6 +100,7 @@ public class AwWebContentsObserverTest extends AwTestBase  {
         mWebContentsObserver.didNavigateMainFrame(EXAMPLE_URL, baseUrl,
                 !navigationToDifferentPage, !fragmentNavigation, httpStatusCode);
         mWebContentsObserver.didFinishLoad(frameId, SYNC_URL, mainFrame);
+        mWebContentsObserver.didStopLoading(SYNC_URL);
         onPageFinishedHelper.waitForCallback(callCount);
         onPageFinishedHelper.waitForCallback(callCount);
         assertEquals("onPageFinished should be called only for main frame fragment navigations.",

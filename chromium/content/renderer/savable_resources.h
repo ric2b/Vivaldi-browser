@@ -8,12 +8,15 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "content/common/content_export.h"
+#include "content/common/savable_subframe.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "url/gurl.h"
 
 namespace blink {
 class WebElement;
+class WebFrame;
 class WebString;
 class WebView;
 }
@@ -26,39 +29,29 @@ namespace content {
 // for keeping these pointers valid for the lifetime of the
 // SavableResourcesResult instance.
 struct SavableResourcesResult {
-  // vector which contains all savable links of sub resource.
+  // Links of all savable resources.
   std::vector<GURL>* resources_list;
-  // vector which contains corresponding all referral links of sub resource,
-  // it matched with links one by one.
-  std::vector<GURL>* referrer_urls_list;
-  // and the corresponding referrer policies.
-  std::vector<blink::WebReferrerPolicy>* referrer_policies_list;
-  // vector which contains all savable links of main frame and sub frames.
-  std::vector<GURL>* frames_list;
+
+  // Subframes.
+  std::vector<SavableSubframe>* subframes;
 
   // Constructor.
   SavableResourcesResult(
       std::vector<GURL>* resources_list,
-      std::vector<GURL>* referrer_urls_list,
-      std::vector<blink::WebReferrerPolicy>* referrer_policies_list,
-      std::vector<GURL>* frames_list)
+      std::vector<SavableSubframe>* subframes)
       : resources_list(resources_list),
-        referrer_urls_list(referrer_urls_list),
-        referrer_policies_list(referrer_policies_list),
-        frames_list(frames_list) { }
+        subframes(subframes) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SavableResourcesResult);
 };
 
-// Get all savable resource links from current webview, include main frame
-// and sub-frame. After collecting all savable resource links, this function
-// will send those links to embedder. Return value indicates whether we get
-// all saved resource links successfully.
-CONTENT_EXPORT bool GetAllSavableResourceLinksForCurrentPage(
-    blink::WebView* view,
-    const GURL& page_url,
-    SavableResourcesResult* savable_resources_result,
+// Get all savable resource links from specified webframe.
+// Returns true if the saved resources links have been saved successfully.
+// Otherwise returns false (i.e. if the frame contains a non-savable content).
+CONTENT_EXPORT bool GetSavableResourceLinksForFrame(
+    blink::WebFrame* frame,
+    SavableResourcesResult* result,
     const char** savable_schemes);
 
 // Returns the value in an elements resource url attribute. For IMG, SCRIPT or

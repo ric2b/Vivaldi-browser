@@ -4,8 +4,11 @@
 
 #include "chrome/browser/media_galleries/fileapi/itunes_file_util.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind_helpers.h"
@@ -73,7 +76,7 @@ void ITunesFileUtil::GetFileInfoOnTaskRunnerThread(
   // |data_provider| may be NULL if the file system was revoked before this
   // operation had a chance to run.
   if (!data_provider) {
-    GetFileInfoWithFreshDataProvider(context.Pass(), url, callback, false);
+    GetFileInfoWithFreshDataProvider(std::move(context), url, callback, false);
   } else {
     data_provider->RefreshData(
         base::Bind(&ITunesFileUtil::GetFileInfoWithFreshDataProvider,
@@ -90,7 +93,8 @@ void ITunesFileUtil::ReadDirectoryOnTaskRunnerThread(
   // |data_provider| may be NULL if the file system was revoked before this
   // operation had a chance to run.
   if (!data_provider) {
-    ReadDirectoryWithFreshDataProvider(context.Pass(), url, callback, false);
+    ReadDirectoryWithFreshDataProvider(std::move(context), url, callback,
+                                       false);
   } else {
     data_provider->RefreshData(
         base::Bind(&ITunesFileUtil::ReadDirectoryWithFreshDataProvider,
@@ -107,7 +111,7 @@ void ITunesFileUtil::CreateSnapshotFileOnTaskRunnerThread(
   // |data_provider| may be NULL if the file system was revoked before this
   // operation had a chance to run.
   if (!data_provider) {
-    CreateSnapshotFileWithFreshDataProvider(context.Pass(), url, callback,
+    CreateSnapshotFileWithFreshDataProvider(std::move(context), url, callback,
                                             false);
   } else {
     data_provider->RefreshData(
@@ -195,12 +199,10 @@ base::File::Error ITunesFileUtil::ReadDirectorySync(
     base::File::Info xml_info;
     if (!base::GetFileInfo(GetDataProvider()->library_path(), &xml_info))
       return base::File::FILE_ERROR_IO;
-    file_list->push_back(DirectoryEntry(kITunesLibraryXML,
-                                        DirectoryEntry::FILE,
-                                        xml_info.size, xml_info.last_modified));
-    file_list->push_back(DirectoryEntry(kITunesMediaDir,
-                                        DirectoryEntry::DIRECTORY,
-                                        0, base::Time()));
+    file_list->push_back(
+        DirectoryEntry(kITunesLibraryXML, DirectoryEntry::FILE));
+    file_list->push_back(
+        DirectoryEntry(kITunesMediaDir, DirectoryEntry::DIRECTORY));
     return base::File::FILE_OK;
   }
 
@@ -212,13 +214,11 @@ base::File::Error ITunesFileUtil::ReadDirectorySync(
 
   if (components.size() == 1) {
     if (!GetDataProvider()->auto_add_path().empty()) {
-      file_list->push_back(DirectoryEntry(kITunesAutoAddDir,
-                                          DirectoryEntry::DIRECTORY,
-                                          0, base::Time()));
+      file_list->push_back(
+          DirectoryEntry(kITunesAutoAddDir, DirectoryEntry::DIRECTORY));
     }
-    file_list->push_back(DirectoryEntry(kITunesMusicDir,
-                                        DirectoryEntry::DIRECTORY,
-                                        0, base::Time()));
+    file_list->push_back(
+        DirectoryEntry(kITunesMusicDir, DirectoryEntry::DIRECTORY));
     return base::File::FILE_OK;
   }
 
@@ -235,8 +235,7 @@ base::File::Error ITunesFileUtil::ReadDirectorySync(
         GetDataProvider()->GetArtistNames();
     std::set<ITunesDataProvider::ArtistName>::const_iterator it;
     for (it = artists.begin(); it != artists.end(); ++it)
-      file_list->push_back(DirectoryEntry(*it, DirectoryEntry::DIRECTORY,
-                                          0, base::Time()));
+      file_list->push_back(DirectoryEntry(*it, DirectoryEntry::DIRECTORY));
     return base::File::FILE_OK;
   }
 
@@ -247,8 +246,7 @@ base::File::Error ITunesFileUtil::ReadDirectorySync(
       return base::File::FILE_ERROR_NOT_FOUND;
     std::set<ITunesDataProvider::AlbumName>::const_iterator it;
     for (it = albums.begin(); it != albums.end(); ++it)
-      file_list->push_back(DirectoryEntry(*it, DirectoryEntry::DIRECTORY,
-                                          0, base::Time()));
+      file_list->push_back(DirectoryEntry(*it, DirectoryEntry::DIRECTORY));
     return base::File::FILE_OK;
   }
 
@@ -262,9 +260,7 @@ base::File::Error ITunesFileUtil::ReadDirectorySync(
       base::File::Info file_info;
       if (media_path_filter()->Match(it->second) &&
           base::GetFileInfo(it->second, &file_info)) {
-        file_list->push_back(DirectoryEntry(it->first, DirectoryEntry::FILE,
-                                            file_info.size,
-                                            file_info.last_modified));
+        file_list->push_back(DirectoryEntry(it->first, DirectoryEntry::FILE));
       }
     }
     return base::File::FILE_OK;
@@ -369,7 +365,7 @@ void ITunesFileUtil::GetFileInfoWithFreshDataProvider(
     }
     return;
   }
-  NativeMediaFileUtil::GetFileInfoOnTaskRunnerThread(context.Pass(), url,
+  NativeMediaFileUtil::GetFileInfoOnTaskRunnerThread(std::move(context), url,
                                                      callback);
 }
 
@@ -387,7 +383,7 @@ void ITunesFileUtil::ReadDirectoryWithFreshDataProvider(
     }
     return;
   }
-  NativeMediaFileUtil::ReadDirectoryOnTaskRunnerThread(context.Pass(), url,
+  NativeMediaFileUtil::ReadDirectoryOnTaskRunnerThread(std::move(context), url,
                                                        callback);
 }
 
@@ -409,8 +405,8 @@ void ITunesFileUtil::CreateSnapshotFileWithFreshDataProvider(
     }
     return;
   }
-  NativeMediaFileUtil::CreateSnapshotFileOnTaskRunnerThread(context.Pass(), url,
-                                                            callback);
+  NativeMediaFileUtil::CreateSnapshotFileOnTaskRunnerThread(std::move(context),
+                                                            url, callback);
 }
 
 ITunesDataProvider* ITunesFileUtil::GetDataProvider() {

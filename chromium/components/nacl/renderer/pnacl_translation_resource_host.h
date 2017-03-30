@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_RENDERER_PEPPER_PNACL_TRANSLATION_RESOURCE_HOST_H_
-#define CHROME_RENDERER_PEPPER_PNACL_TRANSLATION_RESOURCE_HOST_H_
+#ifndef COMPONENTS_NACL_RENDERER_PNACL_TRANSLATION_RESOURCE_HOST_H_
+#define COMPONENTS_NACL_RENDERER_PNACL_TRANSLATION_RESOURCE_HOST_H_
+
+#include <stdint.h>
 
 #include <map>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "ipc/ipc_platform_file.h"
 #include "ipc/message_filter.h"
 #include "ppapi/c/pp_bool.h"
@@ -74,4 +77,4 @@ class PnaclTranslationResourceHost : public IPC::MessageFilter {
   DISALLOW_COPY_AND_ASSIGN(PnaclTranslationResourceHost);
 };
 
-#endif  // CHROME_RENDERER_PEPPER_PNACL_TRANSLATION_RESOURCE_HOST_H_
+#endif  // COMPONENTS_NACL_RENDERER_PNACL_TRANSLATION_RESOURCE_HOST_H_

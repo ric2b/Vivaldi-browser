@@ -4,7 +4,10 @@
 
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager_test_util.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
+#include <utility>
 
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
@@ -56,7 +59,7 @@ scoped_ptr<gfx::ImageSkia> ImageLoader::Load() {
   ImageDecoder::StartWithOptions(this, image_data,
                                  ImageDecoder::ROBUST_JPEG_CODEC, false);
   run_loop_.Run();
-  return decoded_image_.Pass();
+  return std::move(decoded_image_);
 }
 
 void ImageLoader::OnImageDecoded(const SkBitmap& decoded_image) {

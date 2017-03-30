@@ -5,6 +5,7 @@
 #include "chrome/browser/predictors/resource_prefetcher.h"
 
 #include <iterator>
+#include <utility>
 
 #include "base/stl_util.h"
 #include "content/public/browser/browser_thread.h"
@@ -12,6 +13,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/request_priority.h"
 #include "net/url_request/url_request_context.h"
+#include "url/origin.h"
 
 namespace {
 
@@ -40,12 +42,12 @@ ResourcePrefetcher::ResourcePrefetcher(
     const NavigationID& navigation_id,
     PrefetchKeyType key_type,
     scoped_ptr<RequestVector> requests)
-        : state_(INITIALIZED),
-          delegate_(delegate),
-          config_(config),
-          navigation_id_(navigation_id),
-          key_type_(key_type),
-          request_vector_(requests.Pass()) {
+    : state_(INITIALIZED),
+      delegate_(delegate),
+      config_(config),
+      navigation_id_(navigation_id),
+      key_type_(key_type),
+      request_vector_(std::move(requests)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   DCHECK(request_vector_.get());
 
@@ -133,6 +135,7 @@ void ResourcePrefetcher::SendRequest(Request* request) {
 
   url_request->set_method("GET");
   url_request->set_first_party_for_cookies(navigation_id_.main_frame_url);
+  url_request->set_initiator(url::Origin(navigation_id_.main_frame_url));
   url_request->SetReferrer(navigation_id_.main_frame_url.spec());
   url_request->SetLoadFlags(url_request->load_flags() | net::LOAD_PREFETCH);
   StartURLRequest(url_request);

@@ -4,12 +4,14 @@
 
 #include "base/android/memory_pressure_listener_android.h"
 
+#include "base/android/context_utils.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "jni/MemoryPressureListener_jni.h"
 
 // Defined and called by JNI.
-static void OnMemoryPressure(
-    JNIEnv* env, jclass clazz, jint memory_pressure_level) {
+static void OnMemoryPressure(JNIEnv* env,
+                             const JavaParamRef<jclass>& clazz,
+                             jint memory_pressure_level) {
   base::MemoryPressureListener::NotifyMemoryPressure(
       static_cast<base::MemoryPressureListener::MemoryPressureLevel>(
           memory_pressure_level));

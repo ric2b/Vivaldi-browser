@@ -4,6 +4,8 @@
 
 #include "remoting/client/plugin/pepper_input_handler.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "ppapi/cpp/image_data.h"
 #include "ppapi/cpp/input_event.h"
@@ -85,8 +87,7 @@ uint32_t MakeLockStates(const pp::InputEvent& event) {
 protocol::KeyEvent MakeKeyEvent(const pp::KeyboardInputEvent& pp_key_event) {
   protocol::KeyEvent key_event;
   std::string dom_code = pp_key_event.GetCode().AsString();
-  key_event.set_usb_keycode(
-      ui::KeycodeConverter::CodeToUsbKeycode(dom_code.c_str()));
+  key_event.set_usb_keycode(ui::KeycodeConverter::CodeToUsbKeycode(dom_code));
   key_event.set_pressed(pp_key_event.GetType() == PP_INPUTEVENT_TYPE_KEYDOWN);
   key_event.set_lock_states(MakeLockStates(pp_key_event));
   return key_event;

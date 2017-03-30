@@ -4,7 +4,9 @@
 
 #include "crypto/capi_util.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
 
@@ -13,7 +15,7 @@ namespace {
 class CAPIUtilSingleton {
  public:
   static CAPIUtilSingleton* GetInstance() {
-    return Singleton<CAPIUtilSingleton>::get();
+    return base::Singleton<CAPIUtilSingleton>::get();
   }
 
   // Returns a lock to guard calls to CryptAcquireContext with
@@ -23,8 +25,8 @@ class CAPIUtilSingleton {
   }
 
  private:
-  friend class Singleton<CAPIUtilSingleton>;
-  friend struct DefaultSingletonTraits<CAPIUtilSingleton>;
+  friend class base::Singleton<CAPIUtilSingleton>;
+  friend struct base::DefaultSingletonTraits<CAPIUtilSingleton>;
 
   CAPIUtilSingleton() {}
 

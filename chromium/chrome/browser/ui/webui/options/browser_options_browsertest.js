@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+GEN_INCLUDE(['options_browsertest_base.js']);
+
 /**
  * TestFixture for browser options WebUI testing.
  * @extends {testing.Test}
@@ -18,8 +20,7 @@ BrowserOptionsWebUITest.prototype = {
 
 // Test opening the browser options has correct location.
 // Times out on Mac debug only. See http://crbug.com/121030
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if 1 || (defined(OS_MACOSX) && !defined(NDEBUG))');
+GEN('#if defined(OS_MACOSX) && !defined(NDEBUG)');
 GEN('#define MAYBE_testOpenBrowserOptions ' +
     'DISABLED_testOpenBrowserOptions');
 GEN('#else');
@@ -47,8 +48,7 @@ BrowserOptionsOverlayWebUITest.prototype = {
   isAsync: true,
 };
 
-// In Vivaldi this will always break since the relevant code has been removed
-TEST_F('BrowserOptionsOverlayWebUITest', 'DISABLED_testNavigationInBackground',
+TEST_F('BrowserOptionsOverlayWebUITest', 'testNavigationInBackground',
     function() {
   assertEquals(this.browsePreload, document.location.href);
 
@@ -75,10 +75,27 @@ TEST_F('BrowserOptionsOverlayWebUITest', 'DISABLED_testNavigationInBackground',
 function BrowserOptionsFrameWebUITest() {}
 
 BrowserOptionsFrameWebUITest.prototype = {
-  __proto__: testing.Test.prototype,
+  __proto__: OptionsBrowsertestBase.prototype,
 
   /** @override */
   browsePreload: 'chrome://settings-frame/',
+
+  /** @override */
+  setUp: function() {
+    OptionsBrowsertestBase.prototype.setUp.call(this);
+
+    // Enable when failure is resolved.
+    // AX_TEXT_04: http://crbug.com/570721
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'linkWithUnclearPurpose',
+        '#sync-overview > A');
+
+    // Enable when failure is resolved.
+    // AX_ARIA_10: http://crbug.com/570723
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'unsupportedAriaAttribute',
+        '#profiles-list');
+  },
 };
 
 TEST_F('BrowserOptionsFrameWebUITest', 'testAdvancedSettingsHiddenByDefault',
@@ -94,7 +111,7 @@ TEST_F('BrowserOptionsFrameWebUITest', 'testAdvancedSettingsHiddenByDefault',
 function AdvancedSettingsWebUITest() {}
 
 AdvancedSettingsWebUITest.prototype = {
-  __proto__: testing.Test.prototype,
+  __proto__: OptionsBrowsertestBase.prototype,
 
   /** @override */
   browsePreload: 'chrome://settings-frame/autofill',

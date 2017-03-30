@@ -8,27 +8,21 @@
 #include "notes/notes_model.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 
-using namespace Vivaldi;
+namespace vivaldi {
 
-NotesModelLoadedObserver::NotesModelLoadedObserver(Profile* profile)
-    : profile_(profile) {
-}
+NotesModelLoadedObserver::NotesModelLoadedObserver(Profile *profile)
+    : profile_(profile) {}
 
-void NotesModelLoadedObserver::NotesModelChanged() {
-}
-
-void NotesModelLoadedObserver::Loaded(Notes_Model* model,
-                                         bool ids_reassigned) {
+void NotesModelLoadedObserver::Loaded(Notes_Model *model, bool ids_reassigned) {
   // Causes lazy-load if sync is enabled.
   ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
   model->RemoveObserver(this);
   delete this;
 }
 
-void NotesModelLoadedObserver::NotesModelBeingDeleted(
-    Notes_Model* model) {
+void NotesModelLoadedObserver::NotesModelBeingDeleted(Notes_Model *model) {
   model->RemoveObserver(this);
   delete this;
 }
 
-
+}  // namespace vivaldi

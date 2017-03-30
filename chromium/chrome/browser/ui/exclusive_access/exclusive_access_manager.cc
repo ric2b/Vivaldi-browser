@@ -4,12 +4,17 @@
 
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 
+#include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/mouse_lock_controller.h"
+#include "chrome/common/chrome_switches.h"
+#include "content/public/browser/native_web_keyboard_event.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 
 using content::WebContents;
 
@@ -84,6 +89,26 @@ GURL ExclusiveAccessManager::GetExclusiveAccessBubbleURL() const {
   return result;
 }
 
+// static
+bool ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableSimplifiedFullscreenUI)) {
+    return true;
+  }
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableSimplifiedFullscreenUI)) {
+    return false;
+  }
+
+  // Enabled by default on Aura platforms only.
+#if defined(USE_AURA)
+  return true;
+#else
+  return false;
+#endif  // defined(USE_AURA)
+}
+
 void ExclusiveAccessManager::OnTabDeactivated(WebContents* web_contents) {
   fullscreen_controller_.OnTabDeactivated(web_contents);
   mouse_lock_controller_.OnTabDeactivated(web_contents);
@@ -99,7 +124,13 @@ void ExclusiveAccessManager::OnTabClosing(WebContents* web_contents) {
   mouse_lock_controller_.OnTabClosing(web_contents);
 }
 
-bool ExclusiveAccessManager::HandleUserPressedEscape() {
+bool ExclusiveAccessManager::HandleUserKeyPress(
+    const content::NativeWebKeyboardEvent& event) {
+  if (event.windowsKeyCode != ui::VKEY_ESCAPE) {
+    exclusive_access_context_->OnExclusiveAccessUserInput();
+    return false;
+  }
+
   bool handled = false;
   handled = fullscreen_controller_.HandleUserPressedEscape();
   handled |= mouse_lock_controller_.HandleUserPressedEscape();

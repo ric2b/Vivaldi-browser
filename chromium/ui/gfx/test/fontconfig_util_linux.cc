@@ -8,6 +8,7 @@
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 
@@ -100,8 +101,7 @@ bool LoadFontIntoFontconfig(const base::FilePath& path) {
 bool LoadSystemFontIntoFontconfig(const std::string& basename) {
   for (size_t i = 0; i < kNumSystemFontsForFontconfig; ++i) {
     base::FilePath path(kSystemFontsForFontconfig[i]);
-    if (base::strcasecmp(path.BaseName().value().c_str(), basename.c_str()) ==
-        0)
+    if (base::EqualsCaseInsensitiveASCII(path.BaseName().value(), basename))
       return LoadFontIntoFontconfig(path);
   }
   LOG(ERROR) << "Unable to find system font named " << basename;

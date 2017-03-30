@@ -5,7 +5,7 @@
 #ifndef UI_VIEWS_WIDGET_NATIVE_WIDGET_AURA_H_
 #define UI_VIEWS_WIDGET_NATIVE_WIDGET_AURA_H_
 
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/window_delegate.h"
@@ -42,14 +42,15 @@ class VIEWS_EXPORT NativeWidgetAura
  public:
   explicit NativeWidgetAura(internal::NativeWidgetDelegate* delegate);
 
-  // Called internally by NativeWidgetAura and DesktopNativeWidgetAura to
-  // associate |native_widget| with |window|.
+  // Called internally by NativeWidget implementations to associate
+  // |native_widget| with |window|.
   static void RegisterNativeWidgetForWindow(
       internal::NativeWidgetPrivate* native_widget,
       aura::Window* window);
 
   // Overridden from internal::NativeWidgetPrivate:
   void InitNativeWidget(const Widget::InitParams& params) override;
+  void OnWidgetInitDone() override;
   NonClientFrameView* CreateNonClientFrameView() override;
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;

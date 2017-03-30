@@ -5,6 +5,7 @@
 #include "content/browser/frame_host/navigation_entry_screenshot_manager.h"
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/threading/worker_pool.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
@@ -85,9 +86,9 @@ void NavigationEntryScreenshotManager::TakeScreenshot() {
   if (!owner_->delegate()->CanOverscrollContent())
     return;
 
-  RenderViewHost* render_view_host =
-      owner_->delegate()->GetRenderViewHost();
-  content::RenderWidgetHostView* view = render_view_host->GetView();
+  RenderViewHost* render_view_host = owner_->delegate()->GetRenderViewHost();
+  content::RenderWidgetHostView* view =
+      render_view_host->GetWidget()->GetView();
   if (!view)
     return;
 
@@ -116,14 +117,12 @@ void NavigationEntryScreenshotManager::ClearAllScreenshots() {
 void NavigationEntryScreenshotManager::TakeScreenshotImpl(
     RenderViewHost* host,
     NavigationEntryImpl* entry) {
-  DCHECK(host && host->GetView());
+  DCHECK(host && host->GetWidget()->GetView());
   DCHECK(entry);
-  host->CopyFromBackingStore(
-      gfx::Rect(),
-      host->GetView()->GetViewBounds().size(),
+  host->GetWidget()->CopyFromBackingStore(
+      gfx::Rect(), host->GetWidget()->GetView()->GetViewBounds().size(),
       base::Bind(&NavigationEntryScreenshotManager::OnScreenshotTaken,
-                 screenshot_factory_.GetWeakPtr(),
-                 entry->GetUniqueID()),
+                 screenshot_factory_.GetWeakPtr(), entry->GetUniqueID()),
       kAlpha_8_SkColorType);
 }
 
@@ -137,16 +136,7 @@ void NavigationEntryScreenshotManager::OnScreenshotTaken(
     int unique_id,
     const SkBitmap& bitmap,
     ReadbackResponse response) {
-  NavigationEntryImpl* entry = NULL;
-  int entry_count = owner_->GetEntryCount();
-  for (int i = 0; i < entry_count; ++i) {
-    NavigationEntryImpl* iter = owner_->GetEntryAtIndex(i);
-    if (iter->GetUniqueID() == unique_id) {
-      entry = iter;
-      break;
-    }
-  }
-
+  NavigationEntryImpl* entry = owner_->GetEntryWithUniqueID(unique_id);
   if (!entry) {
     LOG(ERROR) << "Invalid entry with unique id: " << unique_id;
     return;
@@ -181,15 +171,7 @@ int NavigationEntryScreenshotManager::GetScreenshotCount() const {
 void NavigationEntryScreenshotManager::OnScreenshotEncodeComplete(
     int unique_id,
     scoped_refptr<ScreenshotData> screenshot) {
-  NavigationEntryImpl* entry = NULL;
-  int entry_count = owner_->GetEntryCount();
-  for (int i = 0; i < entry_count; ++i) {
-    NavigationEntryImpl* iter = owner_->GetEntryAtIndex(i);
-    if (iter->GetUniqueID() == unique_id) {
-      entry = iter;
-      break;
-    }
-  }
+  NavigationEntryImpl* entry = owner_->GetEntryWithUniqueID(unique_id);
   if (!entry)
     return;
   entry->SetScreenshotPNGData(screenshot->data());

@@ -19,7 +19,6 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void CommitVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override {}
   void SetEstimatedParentDrawTime(base::TimeDelta draw_time) override {}
-  void SetMaxSwapsPendingOnImplThread(int max) override {}
   void DidSwapBuffersOnImplThread() override {}
   void DidSwapBuffersCompleteOnImplThread() override {}
   void OnCanDrawStateChanged(bool can_draw) override {}
@@ -27,12 +26,12 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void NotifyReadyToDraw() override {}
   void SetNeedsRedrawOnImplThread() override {}
   void SetNeedsRedrawRectOnImplThread(const gfx::Rect& damage_rect) override {}
-  void SetNeedsAnimateOnImplThread() override {}
+  void SetNeedsOneBeginImplFrameOnImplThread() override {}
   void SetNeedsCommitOnImplThread() override {}
   void SetNeedsPrepareTilesOnImplThread() override {}
   void SetVideoNeedsBeginFrames(bool needs_begin_frames) override {}
   void PostAnimationEventsToMainThreadOnImplThread(
-      scoped_ptr<AnimationEventsVector> events) override {}
+      scoped_ptr<AnimationEvents> events) override;
   bool IsInsideDraw() override;
   void RenewTreePriority() override {}
   void PostDelayedAnimationTaskOnImplThread(const base::Closure& task,
@@ -41,7 +40,7 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void WillPrepareTiles() override {}
   void DidPrepareTiles() override {}
   void DidCompletePageScaleAnimationOnImplThread() override {}
-  void OnDrawForOutputSurface() override {}
+  void OnDrawForOutputSurface(bool resourceless_software_draw) override {}
   void PostFrameTimingEventsOnImplThread(
       scoped_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
       scoped_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events)

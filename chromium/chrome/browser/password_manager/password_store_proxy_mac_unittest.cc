@@ -4,19 +4,22 @@
 
 #include "chrome/browser/password_manager/password_store_proxy_mac.h"
 
+#include <utility>
+
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/password_manager/password_store_mac.h"
 #include "chrome/browser/password_manager/password_store_mac_internal.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "crypto/mock_apple_keychain.h"
@@ -37,7 +40,7 @@ using testing::Pointee;
 
 ACTION(QuitUIMessageLoop) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 // Returns a change list corresponding to |form| being added.
@@ -61,7 +64,7 @@ class MockPasswordStoreConsumer
 class MockPasswordStoreObserver
     : public password_manager::PasswordStore::Observer {
  public:
-  MockPasswordStoreObserver(PasswordStoreProxyMac* password_store)
+  explicit MockPasswordStoreObserver(PasswordStoreProxyMac* password_store)
       : guard_(this) {
     guard_.Add(password_store);
   }
@@ -125,7 +128,7 @@ class PasswordStoreProxyMacTest
 
   base::ScopedTempDir db_dir_;
   scoped_refptr<PasswordStoreProxyMac> store_;
-  TestingPrefServiceSyncable testing_prefs_;
+  syncable_prefs::TestingPrefServiceSyncable testing_prefs_;
 };
 
 PasswordStoreProxyMacTest::PasswordStoreProxyMacTest() {
@@ -144,7 +147,7 @@ PasswordStoreProxyMacTest::~PasswordStoreProxyMacTest() {
 void PasswordStoreProxyMacTest::SetUp() {
   scoped_ptr<password_manager::LoginDatabase> login_db(
       new password_manager::LoginDatabase(test_login_db_file_path()));
-  CreateAndInitPasswordStore(login_db.Pass());
+  CreateAndInitPasswordStore(std::move(login_db));
 }
 
 void PasswordStoreProxyMacTest::TearDown() {
@@ -155,7 +158,7 @@ void PasswordStoreProxyMacTest::CreateAndInitPasswordStore(
     scoped_ptr<password_manager::LoginDatabase> login_db) {
   store_ = new PasswordStoreProxyMac(
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-      make_scoped_ptr(new crypto::MockAppleKeychain), login_db.Pass(),
+      make_scoped_ptr(new crypto::MockAppleKeychain), std::move(login_db),
       &testing_prefs_);
   ASSERT_TRUE(store_->Init(syncer::SyncableService::StartSyncFlare()));
 }
@@ -163,7 +166,7 @@ void PasswordStoreProxyMacTest::CreateAndInitPasswordStore(
 void PasswordStoreProxyMacTest::ClosePasswordStore() {
   if (!store_)
     return;
-  store_->Shutdown();
+  store_->ShutdownOnUIThread();
   EXPECT_FALSE(store_->GetBackgroundTaskRunner());
   store_ = nullptr;
 }
@@ -257,9 +260,9 @@ void PasswordStoreProxyMacTest::CheckRemoveLoginsBetween(bool check_created) {
 // ----------- Tests -------------
 
 TEST_P(PasswordStoreProxyMacTest, StartAndStop) {
-  // PasswordStore::Shutdown() immediately follows PasswordStore::Init(). The
-  // message loop isn't running in between. Anyway, PasswordStore should end up
-  // in the right state.
+  // PasswordStore::ShutdownOnUIThread() immediately follows
+  // PasswordStore::Init(). The message loop isn't running in between. Anyway,
+  // PasswordStore should end up in the right state.
   ClosePasswordStore();
 
   int status = testing_prefs_.GetInteger(
@@ -444,7 +447,7 @@ void PasswordStoreProxyMacMigrationTest::TestMigration(bool lock_keychain) {
     keychain_->set_locked(true);
   store_ = new PasswordStoreProxyMac(
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-      keychain_.Pass(), login_db_.Pass(), &testing_prefs_);
+      std::move(keychain_), std::move(login_db_), &testing_prefs_);
   ASSERT_TRUE(store_->Init(syncer::SyncableService::StartSyncFlare()));
   FinishAsyncProcessing();
 

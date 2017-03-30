@@ -5,13 +5,16 @@
 #ifndef UI_MOJO_INIT_UI_INIT_H_
 #define UI_MOJO_INIT_UI_INIT_H_
 
-#include "base/basictypes.h"
+#include <vector>
+
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 
 namespace gfx {
+class Display;
 class Screen;
-class Size;
 }
 
 namespace ui {
@@ -25,7 +28,7 @@ class GestureConfigurationMojo;
 // including aura).
 class UIInit {
  public:
-  UIInit(const gfx::Size& screen_size_in_pixels, float device_pixel_ratio);
+  explicit UIInit(const std::vector<gfx::Display>& displays);
   ~UIInit();
 
  private:

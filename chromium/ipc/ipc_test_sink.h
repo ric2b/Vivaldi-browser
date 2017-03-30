@@ -5,11 +5,16 @@
 #ifndef IPC_IPC_TEST_SINK_H_
 #define IPC_IPC_TEST_SINK_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel.h"
 
 namespace IPC {
@@ -56,7 +61,7 @@ class Message;
 //    public:
 //     virtual bool OnMessageReceived(const IPC::Message& msg) {
 //       <do something with the message>
-//       MessageLoop::current()->Quit();
+//       MessageLoop::current()->QuitWhenIdle();
 //       return false;  // to store the message in the sink, or true to drop it
 //     }
 //   };
@@ -106,14 +111,14 @@ class TestSink : public Channel {
   // Returns the first message with the given ID in the queue. If there is no
   // message with the given ID, returns NULL. The returned pointer will only be
   // valid until another message is received or the list is cleared.
-  const Message* GetFirstMessageMatching(uint32 id) const;
+  const Message* GetFirstMessageMatching(uint32_t id) const;
 
   // Returns the message with the given ID in the queue. If there is no such
   // message or there is more than one of that message, this will return NULL
   // (with the expectation that you'll do an ASSERT_TRUE() on the result).
   // The returned pointer will only be valid until another message is received
   // or the list is cleared.
-  const Message* GetUniqueMessageMatching(uint32 id) const;
+  const Message* GetUniqueMessageMatching(uint32_t id) const;
 
   // Adds the given listener as a filter to the TestSink.
   // When a message is received by the TestSink, it will be dispatched to

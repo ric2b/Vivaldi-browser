@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/collected_cookies_views.h"
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/browsing_data/browsing_data_appcache_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_channel_id_helper.h"
@@ -29,6 +30,7 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
+#include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "net/cookies/canonical_cookie.h"
 #include "ui/base/l10n/l10n_util.h"

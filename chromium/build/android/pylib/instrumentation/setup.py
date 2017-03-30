@@ -7,11 +7,10 @@
 import logging
 import os
 
-from pylib import constants
+from devil.android import device_utils
 from pylib import valgrind_tools
-
 from pylib.base import base_setup
-from pylib.device import device_utils
+from pylib.constants import host_paths
 from pylib.instrumentation import test_package
 from pylib.instrumentation import test_runner
 
@@ -19,7 +18,6 @@ DEVICE_DATA_DIR = 'chrome/test/data'
 
 ISOLATE_FILE_PATHS = {
     'AndroidWebViewTest': 'android_webview/android_webview_test_apk.isolate',
-    'ChromeShellTest': 'chrome/chrome_shell_test_apk.isolate',
     'ContentShellTest': 'content/content_shell_test_apk.isolate',
 }
 
@@ -33,10 +31,11 @@ def _PushExtraSuiteDataDeps(device, test_apk):
   Args:
     test_apk: The test suite basename for which to return file paths.
   """
-  if test_apk in ['ChromeTest', 'ContentShellTest']:
+  if test_apk in ['ChromeTest', 'ContentShellTest',
+                  'CronetTestInstrumentation']:
     test_files = 'net/data/ssl/certificates'
     host_device_file_tuple = [
-        (os.path.join(constants.DIR_SOURCE_ROOT, test_files),
+        (os.path.join(host_paths.DIR_SOURCE_ROOT, test_files),
          os.path.join(device.GetExternalStoragePath(), test_files))]
     device.PushChangedFiles(host_device_file_tuple)
 
@@ -51,7 +50,7 @@ def _PushDataDeps(device, test_options):
     dst_src = dest_host_pair.split(':', 1)
     dst_layer = dst_src[0]
     host_src = dst_src[1]
-    host_test_files_path = os.path.join(constants.DIR_SOURCE_ROOT, host_src)
+    host_test_files_path = os.path.join(host_paths.DIR_SOURCE_ROOT, host_src)
     if os.path.exists(host_test_files_path):
       host_device_file_tuples += [(
           host_test_files_path,
@@ -76,13 +75,17 @@ def Setup(test_options, devices):
       os.path.exists(test_options.coverage_dir)):
     os.makedirs(test_options.coverage_dir)
 
-  test_pkg = test_package.TestPackage(test_options.test_apk_path,
-                                      test_options.test_apk_jar_path,
-                                      test_options.test_support_apk_path)
+  test_pkg = test_package.TestPackage(
+      test_options.test_apk_path,
+      test_options.test_apk_jar_path,
+      test_options.test_support_apk_path,
+      additional_apks=test_options.additional_apks,
+      apk_under_test=test_options.apk_under_test)
   tests = test_pkg.GetAllMatchingTests(
       test_options.annotations,
       test_options.exclude_annotations,
-      test_options.test_filter)
+      test_options.test_filter,
+      devices)
   if not tests:
     logging.error('No instrumentation tests to run with current args.')
 
@@ -91,17 +94,16 @@ def Setup(test_options, devices):
         _PushDataDeps, test_options)
 
   if test_options.isolate_file_path:
-    i = base_setup.GenerateDepsDirUsingIsolate(test_options.test_apk,
-                                           test_options.isolate_file_path,
-                                           ISOLATE_FILE_PATHS,
-                                           DEPS_EXCLUSION_LIST)
+    isolator = base_setup.GenerateDepsDirUsingIsolate(
+        test_options.test_apk, test_options.isolate_file_path,
+        ISOLATE_FILE_PATHS, DEPS_EXCLUSION_LIST)
     def push_data_deps_to_device_dir(device):
-      base_setup.PushDataDeps(device, device.GetExternalStoragePath(),
-                              test_options)
+      base_setup.PushDataDeps(device, isolator.isolate_deps_dir,
+                              device.GetExternalStoragePath(), test_options)
     device_utils.DeviceUtils.parallel(devices).pMap(
         push_data_deps_to_device_dir)
-    if i:
-      i.Clear()
+    if isolator:
+      isolator.Clear()
 
   device_utils.DeviceUtils.parallel(devices).pMap(
       _PushExtraSuiteDataDeps, test_options.test_apk)

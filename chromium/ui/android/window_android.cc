@@ -4,6 +4,7 @@
 
 #include "ui/android/window_android.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -22,7 +23,7 @@ WindowAndroid::WindowAndroid(JNIEnv* env, jobject obj) : compositor_(NULL) {
   java_window_.Reset(env, obj);
 }
 
-void WindowAndroid::Destroy(JNIEnv* env, jobject obj) {
+void WindowAndroid::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
@@ -36,6 +37,13 @@ bool WindowAndroid::RegisterWindowAndroid(JNIEnv* env) {
 
 WindowAndroid::~WindowAndroid() {
   DCHECK(!compositor_);
+}
+
+WindowAndroid* WindowAndroid::createForTesting() {
+  JNIEnv* env = AttachCurrentThread();
+  jobject context = base::android::GetApplicationContext();
+  return new WindowAndroid(
+      env, Java_WindowAndroid_createForTesting(env, context).obj());
 }
 
 void WindowAndroid::OnCompositingDidCommit() {
@@ -87,7 +95,7 @@ void WindowAndroid::Animate(base::TimeTicks begin_frame_time) {
 }
 
 void WindowAndroid::OnVSync(JNIEnv* env,
-                            jobject obj,
+                            const JavaParamRef<jobject>& obj,
                             jlong time_micros,
                             jlong period_micros) {
   base::TimeTicks frame_time(base::TimeTicks::FromInternalValue(time_micros));
@@ -102,17 +110,19 @@ void WindowAndroid::OnVSync(JNIEnv* env,
 }
 
 void WindowAndroid::OnVisibilityChanged(JNIEnv* env,
-                                        jobject obj,
+                                        const JavaParamRef<jobject>& obj,
                                         bool visible) {
   FOR_EACH_OBSERVER(WindowAndroidObserver, observer_list_,
                     OnRootWindowVisibilityChanged(visible));
 }
 
-void WindowAndroid::OnActivityStopped(JNIEnv* env, jobject obj) {
+void WindowAndroid::OnActivityStopped(JNIEnv* env,
+                                      const JavaParamRef<jobject>& obj) {
   FOR_EACH_OBSERVER(WindowAndroidObserver, observer_list_, OnActivityStopped());
 }
 
-void WindowAndroid::OnActivityStarted(JNIEnv* env, jobject obj) {
+void WindowAndroid::OnActivityStarted(JNIEnv* env,
+                                      const JavaParamRef<jobject>& obj) {
   FOR_EACH_OBSERVER(WindowAndroidObserver, observer_list_, OnActivityStarted());
 }
 
@@ -136,7 +146,7 @@ bool WindowAndroid::CanRequestPermission(const std::string& permission) {
 // Native JNI methods
 // ----------------------------------------------------------------------------
 
-jlong Init(JNIEnv* env, jobject obj) {
+jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   WindowAndroid* window = new WindowAndroid(env, obj);
   return reinterpret_cast<intptr_t>(window);
 }

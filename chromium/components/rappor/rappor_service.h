@@ -5,10 +5,11 @@
 #ifndef COMPONENTS_RAPPOR_RAPPOR_SERVICE_H_
 #define COMPONENTS_RAPPOR_RAPPOR_SERVICE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -31,18 +32,6 @@ namespace rappor {
 class LogUploaderInterface;
 class RapporMetric;
 class RapporReports;
-
-// The type of data stored in a metric.
-enum RapporType {
-  // Generic metrics from UMA opt-in users.
-  UMA_RAPPOR_TYPE = 0,
-  // Generic metrics for SafeBrowsing users.
-  SAFEBROWSING_RAPPOR_TYPE,
-  // Deprecated: Use UMA_RAPPOR_TYPE for new metrics
-  ETLD_PLUS_ONE_RAPPOR_TYPE,
-  NUM_RAPPOR_TYPES,
-  COARSE_RAPPOR_TYPE = SAFEBROWSING_RAPPOR_TYPE,
-};
 
 // This class provides an interface for recording samples for rappor metrics,
 // and periodically generates and uploads reports based on the collected data.
@@ -73,7 +62,7 @@ class RapporService {
   void Update(int recording_groups, bool may_upload);
 
   // Constructs a Sample object for the caller to record fields in.
-  scoped_ptr<Sample> CreateSample(RapporType);
+  virtual scoped_ptr<Sample> CreateSample(RapporType);
 
   // Records a Sample of rappor metric specified by |metric_name|.
   //
@@ -89,8 +78,8 @@ class RapporService {
   // This will result in a report setting two metrics "MyMetric.Field1" and
   // "MyMetric.Field2", and they will both be generated from the same sample,
   // to allow for correllations to be computed.
-  void RecordSampleObj(const std::string& metric_name,
-                       scoped_ptr<Sample> sample);
+  virtual void RecordSampleObj(const std::string& metric_name,
+                               scoped_ptr<Sample> sample);
 
   // Records a sample of the rappor metric specified by |metric_name|.
   // Creates and initializes the metric, if it doesn't yet exist.
@@ -157,7 +146,7 @@ class RapporService {
   int32_t cohort_;
 
   // Timer which schedules calls to OnLogInterval().
-  base::OneShotTimer<RapporService> log_rotation_timer_;
+  base::OneShotTimer log_rotation_timer_;
 
   // A daily event for collecting metrics once a day.
   metrics::DailyEvent daily_event_;

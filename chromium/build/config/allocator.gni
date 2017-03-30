@@ -2,9 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# TODO(GYP): Make tcmalloc work on win.
+import("//build/config/sanitizers/sanitizers.gni")
+
 if (is_android || current_cpu == "mipsel" || is_mac || is_ios || is_asan ||
-    is_lsan || is_tsan || is_msan || is_win) {
+    is_lsan || is_tsan || is_msan || is_win || is_syzyasan) {
   _default_allocator = "none"
 } else {
   _default_allocator = "tcmalloc"
@@ -14,3 +15,7 @@ declare_args() {
   # Memory allocator to use. Set to "none" to use default allocator.
   use_allocator = _default_allocator
 }
+
+assert(use_allocator == "none" || use_allocator == "tcmalloc")
+
+assert(!is_win || use_allocator == "none", "Tcmalloc doesn't work on Windows.")

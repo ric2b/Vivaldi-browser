@@ -21,8 +21,8 @@ import android.widget.TextView;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.UrlUtilities;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
+import org.chromium.chrome.browser.util.UrlUtilities;
 
 import java.net.URI;
 
@@ -72,9 +72,10 @@ public class WebappUrlBar extends FrameLayout implements View.OnLayoutChangeList
                         ViewGroup.LayoutParams.MATCH_PARENT, 1, Gravity.BOTTOM));
 
         // Set the colors.
-        mSeparator.setBackgroundColor(
-                context.getResources().getColor(R.color.webapp_url_bar_separator));
-        setBackgroundColor(context.getResources().getColor(R.color.webapp_url_bar_bg));
+        mSeparator.setBackgroundColor(ApiCompatibilityUtils.getColor(context.getResources(),
+                R.color.webapp_url_bar_separator));
+        setBackgroundColor(ApiCompatibilityUtils.getColor(context.getResources(),
+                R.color.webapp_url_bar_bg));
 
         // Listen for changes in the URL bar's size.
         mUrlBar.addOnLayoutChangeListener(this);
@@ -161,7 +162,7 @@ public class WebappUrlBar extends FrameLayout implements View.OnLayoutChangeList
         boolean showScheme = mCurrentIconResource == 0;
         String displayUrl = originalUrl;
         if (uri != null) {
-            String shortenedUrl = UrlUtilities.getOriginForDisplay(uri, showScheme);
+            String shortenedUrl = UrlUtilities.formatUrlForSecurityDisplay(uri, showScheme);
             if (!TextUtils.isEmpty(shortenedUrl)) displayUrl = shortenedUrl;
         }
 

@@ -10,7 +10,7 @@
 
 #include "base/location.h"
 #include "base/logging.h"
-#include "chrome/browser/drive/event_logger.h"
+#include "components/drive/event_logger.h"
 
 namespace sync_file_system {
 // Originally wanted to use 'logging' here, but it conflicts with
@@ -24,9 +24,8 @@ void ClearLog();
 // This function can be called from any thread.
 void Log(logging::LogSeverity level,
          const tracked_objects::Location& location,
-         const char* format,
-         ...)
-    PRINTF_FORMAT(3, 4);
+         _Printf_format_string_ const char* format,
+         ...) PRINTF_FORMAT(3, 4);
 
 // Returns the log history.
 // This function can be called from any thread.

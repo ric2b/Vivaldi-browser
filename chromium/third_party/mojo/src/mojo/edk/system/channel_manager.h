@@ -2,18 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_CHANNEL_MANAGER_H_
-#define MOJO_EDK_SYSTEM_CHANNEL_MANAGER_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CHANNEL_MANAGER_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CHANNEL_MANAGER_H_
 
 #include <stdint.h>
 
 #include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
 #include "base/memory/ref_counted.h"
-#include "base/synchronization/lock.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/edk/system/channel_id.h"
+#include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_id.h"
+#include "third_party/mojo/src/mojo/edk/system/mutex.h"
 
 namespace base {
 class TaskRunner;
@@ -72,6 +73,14 @@ class MOJO_SYSTEM_IMPL_EXPORT ChannelManager {
       ChannelId channel_id,
       embedder::ScopedPlatformHandle platform_handle);
 
+  // Like |CreateChannelOnIOThread()|, but doesn't create a bootstrap message
+  // pipe. Returns the newly-created |Channel|.
+  // TODO(vtl): Maybe get rid of the others (and bootstrap message pipes in
+  // general).
+  scoped_refptr<Channel> CreateChannelWithoutBootstrapOnIOThread(
+      ChannelId channel_id,
+      embedder::ScopedPlatformHandle platform_handle);
+
   // Like |CreateChannelOnIOThread()|, but may be called from any thread. On
   // completion, will call |callback| (using |callback_thread_task_runner| if it
   // is non-null, else on the I/O thread). Note: This will always post a task to
@@ -110,20 +119,28 @@ class MOJO_SYSTEM_IMPL_EXPORT ChannelManager {
   ConnectionManager* connection_manager() const { return connection_manager_; }
 
  private:
+  // Used by |ShutdownChannel()|. Called on the I/O thread.
+  void ShutdownChannelHelper(
+      ChannelId channel_id,
+      const base::Closure& callback,
+      scoped_refptr<base::TaskRunner> callback_thread_task_runner);
+
   // Used by |Shutdown()|. Called on the I/O thread.
   void ShutdownHelper(
       const base::Closure& callback,
       scoped_refptr<base::TaskRunner> callback_thread_task_runner);
 
   // Used by |CreateChannelOnIOThread()| and |CreateChannelHelper()|. Called on
-  // the I/O thread.
-  void CreateChannelOnIOThreadHelper(
+  // the I/O thread. |bootstrap_channel_endpoint| is optional and may be null.
+  // Returns the newly-created |Channel|.
+  scoped_refptr<Channel> CreateChannelOnIOThreadHelper(
       ChannelId channel_id,
       embedder::ScopedPlatformHandle platform_handle,
       scoped_refptr<system::ChannelEndpoint> bootstrap_channel_endpoint);
 
   // Used by |CreateChannel()|. Called on the I/O thread.
-  void CreateChannelHelper(
+  static void CreateChannelHelper(
+      base::WeakPtr<ChannelManager> channel_manager,
       ChannelId channel_id,
       embedder::ScopedPlatformHandle platform_handle,
       scoped_refptr<system::ChannelEndpoint> bootstrap_channel_endpoint,
@@ -135,12 +152,22 @@ class MOJO_SYSTEM_IMPL_EXPORT ChannelManager {
   const scoped_refptr<base::TaskRunner> io_thread_task_runner_;
   ConnectionManager* const connection_manager_;
 
-  // Note: |Channel| methods should not be called under |lock_|.
-  mutable base::Lock lock_;  // Protects the members below.
+  // Note: |Channel| methods should not be called under |mutex_|.
+  // TODO(vtl): Annotate the above rule using |MOJO_ACQUIRED_{BEFORE,AFTER}()|,
+  // once clang actually checks such annotations.
+  // https://github.com/domokit/mojo/issues/313
+  mutable Mutex mutex_;
 
   using ChannelIdToChannelMap =
       base::hash_map<ChannelId, scoped_refptr<Channel>>;
-  ChannelIdToChannelMap channels_;
+  ChannelIdToChannelMap channels_ MOJO_GUARDED_BY(mutex_);
+
+  // Weak pointer for posting a task to the IO thread. Must only be dereferenced
+  // on the IO thread.
+  base::WeakPtr<ChannelManager> weak_ptr_;
+  // Factory for weak pointer. Must be invalidated on the IO thread prior to
+  // destruction.
+  base::WeakPtrFactory<ChannelManager> weak_factory_;
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(ChannelManager);
 };
@@ -148,4 +175,4 @@ class MOJO_SYSTEM_IMPL_EXPORT ChannelManager {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_CHANNEL_MANAGER_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CHANNEL_MANAGER_H_

@@ -5,7 +5,10 @@
 #ifndef CONTENT_PLUGIN_PLUGIN_CHANNEL_H_
 #define CONTENT_PLUGIN_PLUGIN_CHANNEL_H_
 
+#include <stdint.h>
+
 #include <vector>
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process.h"
 #include "build/build_config.h"
@@ -28,8 +31,7 @@ class PluginChannel : public NPChannelBase {
   // by the browser.
   static PluginChannel* GetPluginChannel(
       int renderer_id,
-      base::SingleThreadTaskRunner* ipc_task_runner,
-      IPC::AttachmentBroker* broker);
+      base::SingleThreadTaskRunner* ipc_task_runner);
 
   // Send a message to all renderers that the process is going to shutdown.
   static void NotifyRenderersOfPendingShutdown();
@@ -65,8 +67,7 @@ class PluginChannel : public NPChannelBase {
   void CleanUp() override;
   bool Init(base::SingleThreadTaskRunner* ipc_task_runner,
             bool create_pipe_now,
-            base::WaitableEvent* shutdown_event,
-            IPC::AttachmentBroker* broker) override;
+            base::WaitableEvent* shutdown_event) override;
 
  private:
   class MessageFilter;
@@ -82,8 +83,8 @@ class PluginChannel : public NPChannelBase {
   void OnDestroyInstance(int instance_id, IPC::Message* reply_msg);
   void OnGenerateRouteID(int* route_id);
   void OnClearSiteData(const std::string& site,
-                       uint64 flags,
-                       uint64 max_age);
+                       uint64_t flags,
+                       uint64_t max_age);
   void OnDidAbortLoading(int render_view_id);
 
   std::vector<scoped_refptr<WebPluginDelegateStub> > plugin_stubs_;

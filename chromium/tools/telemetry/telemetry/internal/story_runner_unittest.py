@@ -17,13 +17,15 @@ from telemetry.internal import story_runner
 from telemetry.internal.util import exception_formatter as ex_formatter_module
 from telemetry.page import page as page_module
 from telemetry.page import page_test
-from telemetry.page import test_expectations
 from telemetry import story as story_module
 from telemetry.testing import options_for_unittests
 from telemetry.testing import system_stub
+import mock
+from telemetry.value import improvement_direction
 from telemetry.value import list_of_scalar_values
 from telemetry.value import scalar
 from telemetry.value import summary as summary_module
+from telemetry.web_perf import story_test
 from telemetry.web_perf import timeline_based_measurement
 from telemetry.wpr import archive_info
 
@@ -57,8 +59,8 @@ class TestSharedState(story_module.SharedState):
   def WillRunStory(self, story):
     self._current_story = story
 
-  def GetTestExpectationAndSkipValue(self, expectations):
-    return 'pass', None
+  def CanRunStory(self, story):
+    return True
 
   def RunStory(self, results):
     raise NotImplementedError
@@ -101,6 +103,9 @@ class DummyLocalStory(story_module.Story):
     super(DummyLocalStory, self).__init__(
         shared_state_class, name=name)
 
+  def Run(self, shared_state):
+    pass
+
   @property
   def is_local(self):
     return True
@@ -141,6 +146,10 @@ def GetNumberOfSuccessfulPageRuns(results):
   return len([run for run in results.all_page_runs if run.ok or run.skipped])
 
 
+class TestOnlyException(Exception):
+  pass
+
+
 class StoryRunnerTest(unittest.TestCase):
 
   def setUp(self):
@@ -148,7 +157,6 @@ class StoryRunnerTest(unittest.TestCase):
     self.actual_stdout = sys.stdout
     sys.stdout = self.fake_stdout
     self.options = _GetOptionForUnittest()
-    self.expectations = test_expectations.TestExpectations()
     self.results = results_options.CreateResults(
         EmptyMetadataForTest(), self.options)
     self._story_runner_logging_stub = None
@@ -201,7 +209,7 @@ class StoryRunnerTest(unittest.TestCase):
   def RunStoryTest(self, s, expected_successes):
     test = DummyTest()
     story_runner.Run(
-        test, s, self.expectations, self.options, self.results)
+        test, s, self.options, self.results)
     self.assertEquals(0, len(self.results.failures))
     self.assertEquals(expected_successes,
                       GetNumberOfSuccessfulPageRuns(self.results))
@@ -218,7 +226,7 @@ class StoryRunnerTest(unittest.TestCase):
     story_set = SetupStorySet(False, one_bar)
     test = DummyTest()
     self.assertRaises(ValueError, story_runner.Run, test, story_set,
-                      self.expectations, self.options, self.results)
+                      self.options, self.results)
 
   def testSuccessfulTimelineBasedMeasurementTest(self):
     """Check that PageTest is not required for story_runner.Run.
@@ -230,16 +238,92 @@ class StoryRunnerTest(unittest.TestCase):
       def RunStory(self, results):
         pass
 
+    TEST_WILL_RUN_STORY = 'test.WillRunStory'
+    TEST_MEASURE = 'test.Measure'
+    TEST_DID_RUN_STORY = 'test.DidRunStory'
+
+    EXPECTED_CALLS_IN_ORDER = [TEST_WILL_RUN_STORY,
+                               TEST_MEASURE,
+                               TEST_DID_RUN_STORY]
+
     test = timeline_based_measurement.TimelineBasedMeasurement(
         timeline_based_measurement.Options())
+
+    manager = mock.MagicMock()
+    test.WillRunStory = mock.MagicMock()
+    test.Measure = mock.MagicMock()
+    test.DidRunStory = mock.MagicMock()
+    manager.attach_mock(test.WillRunStory, TEST_WILL_RUN_STORY)
+    manager.attach_mock(test.Measure, TEST_MEASURE)
+    manager.attach_mock(test.DidRunStory, TEST_DID_RUN_STORY)
+
     story_set = story_module.StorySet()
     story_set.AddStory(DummyLocalStory(TestSharedTbmState))
     story_set.AddStory(DummyLocalStory(TestSharedTbmState))
     story_set.AddStory(DummyLocalStory(TestSharedTbmState))
     story_runner.Run(
-        test, story_set, self.expectations, self.options, self.results)
+        test, story_set, self.options, self.results)
     self.assertEquals(0, len(self.results.failures))
     self.assertEquals(3, GetNumberOfSuccessfulPageRuns(self.results))
+
+    self.assertEquals(3*EXPECTED_CALLS_IN_ORDER,
+                      [call[0] for call in manager.mock_calls])
+
+  def testCallOrderBetweenStoryTestAndSharedState(self):
+    """Check that the call order between StoryTest and SharedState is correct.
+    """
+    TEST_WILL_RUN_STORY = 'test.WillRunStory'
+    TEST_MEASURE = 'test.Measure'
+    TEST_DID_RUN_STORY = 'test.DidRunStory'
+    STATE_WILL_RUN_STORY = 'state.WillRunStory'
+    STATE_RUN_STORY = 'state.RunStory'
+    STATE_DID_RUN_STORY = 'state.DidRunStory'
+
+    EXPECTED_CALLS_IN_ORDER = [TEST_WILL_RUN_STORY,
+                               STATE_WILL_RUN_STORY,
+                               STATE_RUN_STORY,
+                               TEST_MEASURE,
+                               STATE_DID_RUN_STORY,
+                               TEST_DID_RUN_STORY]
+
+    class TestStoryTest(story_test.StoryTest):
+      def WillRunStory(self, platform):
+        pass
+
+      def Measure(self, platform, results):
+        pass
+
+      def DidRunStory(self, platform):
+        pass
+
+    class TestSharedStateForStoryTest(TestSharedState):
+      def RunStory(self, results):
+        pass
+
+    @mock.patch.object(TestStoryTest, 'WillRunStory')
+    @mock.patch.object(TestStoryTest, 'Measure')
+    @mock.patch.object(TestStoryTest, 'DidRunStory')
+    @mock.patch.object(TestSharedStateForStoryTest, 'WillRunStory')
+    @mock.patch.object(TestSharedStateForStoryTest, 'RunStory')
+    @mock.patch.object(TestSharedStateForStoryTest, 'DidRunStory')
+    def GetCallsInOrder(state_DidRunStory, state_RunStory, state_WillRunStory,
+                        test_DidRunStory, test_Measure, test_WillRunStory):
+      manager = mock.MagicMock()
+      manager.attach_mock(test_WillRunStory, TEST_WILL_RUN_STORY)
+      manager.attach_mock(test_Measure, TEST_MEASURE)
+      manager.attach_mock(test_DidRunStory, TEST_DID_RUN_STORY)
+      manager.attach_mock(state_WillRunStory, STATE_WILL_RUN_STORY)
+      manager.attach_mock(state_RunStory, STATE_RUN_STORY)
+      manager.attach_mock(state_DidRunStory, STATE_DID_RUN_STORY)
+
+      test = TestStoryTest()
+      story_set = story_module.StorySet()
+      story_set.AddStory(DummyLocalStory(TestSharedStateForStoryTest))
+      story_runner.Run(test, story_set, self.options, self.results)
+      return [call[0] for call in manager.mock_calls]
+
+    calls_in_order = GetCallsInOrder() # pylint: disable=no-value-for-parameter
+    self.assertEquals(EXPECTED_CALLS_IN_ORDER, calls_in_order)
 
   def testTearDownIsCalledOnceForEachStoryGroupWithPageSetRepeat(self):
     self.options.pageset_repeat = 3
@@ -291,15 +375,28 @@ class StoryRunnerTest(unittest.TestCase):
     story_set = story_module.StorySet()
     class SharedStoryThatCausesAppCrash(TestSharedPageState):
       def WillRunStory(self, story):
-        raise exceptions.AppCrashException('App Foo crashes')
+        raise exceptions.AppCrashException(msg='App Foo crashes')
 
     story_set.AddStory(DummyLocalStory(
           SharedStoryThatCausesAppCrash))
     story_runner.Run(
-        DummyTest(), story_set, self.expectations, self.options, self.results)
+        DummyTest(), story_set, self.options, self.results)
     self.assertEquals(1, len(self.results.failures))
     self.assertEquals(0, GetNumberOfSuccessfulPageRuns(self.results))
     self.assertIn('App Foo crashes', self.fake_stdout.getvalue())
+
+  def testExceptionRaisedInSharedStateTearDown(self):
+    self.SuppressExceptionFormatting()
+    story_set = story_module.StorySet()
+    class SharedStoryThatCausesAppCrash(TestSharedPageState):
+      def TearDownState(self):
+        raise TestOnlyException()
+
+    story_set.AddStory(DummyLocalStory(
+          SharedStoryThatCausesAppCrash))
+    with self.assertRaises(TestOnlyException):
+      story_runner.Run(
+          DummyTest(), story_set, self.options, self.results)
 
   def testUnknownExceptionIsFatal(self):
     self.SuppressExceptionFormatting()
@@ -331,7 +428,7 @@ class StoryRunnerTest(unittest.TestCase):
     test = Test()
     with self.assertRaises(UnknownException):
       story_runner.Run(
-          test, story_set, self.expectations, self.options, self.results)
+          test, story_set, self.options, self.results)
     self.assertEqual(set([s2]), self.results.pages_that_failed)
     self.assertEqual(set([s1]), self.results.pages_that_succeeded)
     self.assertIn('FooBarzException', self.fake_stdout.getvalue())
@@ -349,7 +446,8 @@ class StoryRunnerTest(unittest.TestCase):
         old_run_count = self.run_count
         self.run_count += 1
         if old_run_count == 0:
-          raise exceptions.BrowserGoneException('i am a browser instance')
+          raise exceptions.BrowserGoneException(
+              None, 'i am a browser crash message')
 
       def ValidateAndMeasurePage(self, page, tab, results):
         pass
@@ -358,7 +456,7 @@ class StoryRunnerTest(unittest.TestCase):
     story_set.AddStory(DummyLocalStory(TestSharedPageState))
     test = Test()
     story_runner.Run(
-        test, story_set, self.expectations, self.options, self.results)
+        test, story_set, self.options, self.results)
     self.assertEquals(2, test.run_count)
     self.assertEquals(1, len(self.results.failures))
     self.assertEquals(1, GetNumberOfSuccessfulPageRuns(self.results))
@@ -398,7 +496,7 @@ class StoryRunnerTest(unittest.TestCase):
 
     with self.assertRaises(DidRunTestError):
       story_runner.Run(
-          test, story_set, self.expectations, self.options, self.results)
+          test, story_set, self.options, self.results)
     self.assertEqual(['app-crash', 'tear-down-state'], unit_test_events)
     # The AppCrashException gets added as a failure.
     self.assertEquals(1, len(self.results.failures))
@@ -417,7 +515,8 @@ class StoryRunnerTest(unittest.TestCase):
       def RunPage(self, page, _, results):
         self.i += 1
         results.AddValue(scalar.ScalarValue(
-            page, 'metric', 'unit', self.i))
+            page, 'metric', 'unit', self.i,
+            improvement_direction=improvement_direction.UP))
 
       def ValidateAndMeasurePage(self, page, tab, results):
         pass
@@ -428,16 +527,19 @@ class StoryRunnerTest(unittest.TestCase):
     results = results_options.CreateResults(
       EmptyMetadataForTest(), self.options)
     story_runner.Run(
-        Measurement(), story_set, self.expectations, self.options, results)
+        Measurement(), story_set, self.options, results)
     summary = summary_module.Summary(results.all_page_specific_values)
     values = summary.interleaved_computed_per_page_values_and_summaries
 
     blank_value = list_of_scalar_values.ListOfScalarValues(
-        blank_story, 'metric', 'unit', [1, 3])
+        blank_story, 'metric', 'unit', [1, 3],
+        improvement_direction=improvement_direction.UP)
     green_value = list_of_scalar_values.ListOfScalarValues(
-        green_story, 'metric', 'unit', [2, 4])
+        green_story, 'metric', 'unit', [2, 4],
+        improvement_direction=improvement_direction.UP)
     merged_value = list_of_scalar_values.ListOfScalarValues(
-        None, 'metric', 'unit', [1, 2, 3, 4])
+        None, 'metric', 'unit', [1, 2, 3, 4],
+        improvement_direction=improvement_direction.UP)
 
     self.assertEquals(4, GetNumberOfSuccessfulPageRuns(results))
     self.assertEquals(0, len(results.failures))
@@ -532,13 +634,13 @@ class StoryRunnerTest(unittest.TestCase):
         self._current_story = story
 
       def RunStory(self, results):
-        self._current_story.Run()
+        self._current_story.Run(self)
 
       def DidRunStory(self, results):
         pass
 
-      def GetTestExpectationAndSkipValue(self, expectations):
-        return 'pass', None
+      def CanRunStory(self, story):
+        return True
 
       def TearDownState(self):
         pass
@@ -550,7 +652,7 @@ class StoryRunnerTest(unittest.TestCase):
             is_local=True)
         self.was_run = False
 
-      def Run(self):
+      def Run(self, shared_state):
         self.was_run = True
         raise page_test.Failure
 
@@ -568,7 +670,7 @@ class StoryRunnerTest(unittest.TestCase):
 
     results = results_options.CreateResults(EmptyMetadataForTest(), options)
     story_runner.Run(
-        DummyTest(), story_set, test_expectations.TestExpectations(), options,
+        DummyTest(), story_set, options,
         results, max_failures=runner_max_failures)
     self.assertEquals(0, GetNumberOfSuccessfulPageRuns(results))
     self.assertEquals(expected_num_failures, len(results.failures))

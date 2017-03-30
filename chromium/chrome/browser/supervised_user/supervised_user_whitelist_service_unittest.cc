@@ -15,18 +15,22 @@
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
 #include "chrome/browser/supervised_user/supervised_user_site_list.h"
 #include "chrome/browser/supervised_user/supervised_user_whitelist_service.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/safe_json/testing_json_parser.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "sync/api/sync_change.h"
 #include "sync/api/sync_error_factory.h"
 #include "sync/protocol/sync.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if !defined(OS_ANDROID)
+#include "components/safe_json/testing_json_parser.h"
+#endif
 
 namespace {
 
@@ -43,9 +47,10 @@ class MockSupervisedUserWhitelistInstaller
   }
 
   void NotifyWhitelistReady(const std::string& crx_id,
+                            const base::string16& title,
                             const base::FilePath& path) {
     for (const auto& callback : ready_callbacks_)
-      callback.Run(crx_id, path);
+      callback.Run(crx_id, title, path);
   }
 
   // SupervisedUserWhitelistInstaller implementation:
@@ -152,7 +157,9 @@ class SupervisedUserWhitelistServiceTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
 
+#if !defined(OS_ANDROID)
   safe_json::TestingJsonParser::ScopedFactoryOverride factory_override_;
+#endif
 
   scoped_ptr<MockSupervisedUserWhitelistInstaller> installer_;
   scoped_ptr<SupervisedUserWhitelistService> service_;
@@ -192,14 +199,13 @@ TEST_F(SupervisedUserWhitelistServiceTest, MergeExisting) {
   ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
   base::FilePath whitelist_path =
       test_data_dir.AppendASCII("whitelists/content_pack/site_list.json");
-  installer_->NotifyWhitelistReady("aaaa", whitelist_path);
+  installer_->NotifyWhitelistReady("aaaa", base::ASCIIToUTF16("Title"),
+                                   whitelist_path);
   run_loop.Run();
 
   ASSERT_EQ(1u, site_lists_.size());
-  const std::vector<SupervisedUserSiteList::Site>& sites =
-      site_lists_[0]->sites();
-  EXPECT_EQ(3u, sites.size());
-  EXPECT_EQ("YouTube", base::UTF16ToUTF8(sites[0].name));
+  EXPECT_EQ(base::ASCIIToUTF16("Title"), site_lists_[0]->title());
+  EXPECT_EQ(4u, site_lists_[0]->patterns().size());
 
   // Do the initial merge. One item should be added (whitelist C), one should be
   // modified (whitelist B), and one item should be removed (whitelist A).
@@ -254,7 +260,8 @@ TEST_F(SupervisedUserWhitelistServiceTest, ApplyChanges) {
 
   // If whitelist A now becomes ready, it should be ignored.
   installer_->NotifyWhitelistReady(
-      "aaaa", base::FilePath(FILE_PATH_LITERAL("/path/to/aaaa")));
+      "aaaa", base::ASCIIToUTF16("Title"),
+      base::FilePath(FILE_PATH_LITERAL("/path/to/aaaa")));
   EXPECT_EQ(0u, site_lists_.size());
 
   CheckFinalStateAndPreferences();

@@ -2,45 +2,53 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <limits>
+
 #include "base/base64.h"
-#include "base/basictypes.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "net/http/http_security_headers.h"
 #include "net/http/http_util.h"
+#include "url/gurl.h"
 
 namespace net {
 
 namespace {
 
-static_assert(kMaxHSTSAgeSecs <= kuint32max, "kMaxHSTSAgeSecs too large");
+enum MaxAgeParsing { REQUIRE_MAX_AGE, DO_NOT_REQUIRE_MAX_AGE };
+
+static_assert(kMaxHSTSAgeSecs <= UINT32_MAX, "kMaxHSTSAgeSecs too large");
 
 // MaxAgeToInt converts a string representation of a "whole number" of
-// seconds into a uint32. The string may contain an arbitrarily large number,
+// seconds into a uint32_t. The string may contain an arbitrarily large number,
 // which will be clipped to kMaxHSTSAgeSecs and which is guaranteed to fit
 // within a 32-bit unsigned integer. False is returned on any parse error.
 bool MaxAgeToInt(std::string::const_iterator begin,
                  std::string::const_iterator end,
-                 uint32* result) {
-  const std::string s(begin, end);
-  int64 i = 0;
+                 uint32_t* result) {
+  const base::StringPiece s(begin, end);
+  if (s.empty())
+    return false;
 
-  // Return false on any StringToInt64 parse errors *except* for
-  // int64 overflow. StringToInt64 is used, rather than StringToUint64,
-  // in order to properly handle and reject negative numbers
-  // (StringToUint64 does not return false on negative numbers).
-  // For values too large to be stored in an int64, StringToInt64 will
-  // return false with i set to kint64max, so this case is detected
-  // by the immediately following if-statement and allowed to fall
-  // through so that i gets clipped to kMaxHSTSAgeSecs.
-  if (!base::StringToInt64(s, &i) && i != kint64max)
+  int64_t i = 0;
+
+  // Return false on any StringToInt64 parse errors *except* for int64_t
+  // overflow. StringToInt64 is used, rather than StringToUint64, in order to
+  // properly handle and reject negative numbers (StringToUint64 does not return
+  // false on negative numbers). For values too large to be stored in an
+  // int64_t, StringToInt64 will return false with i set to
+  // std::numeric_limits<int64_t>::max(), so this case is detected by the
+  // immediately following if-statement and allowed to fall through so that i
+  // gets clipped to kMaxHSTSAgeSecs.
+  if (!base::StringToInt64(s, &i) && i != std::numeric_limits<int64_t>::max())
     return false;
   if (i < 0)
     return false;
   if (i > kMaxHSTSAgeSecs)
     i = kMaxHSTSAgeSecs;
-  *result = (uint32)i;
+  *result = (uint32_t)i;
   return true;
 }
 
@@ -92,42 +100,16 @@ bool IsPinListValid(const HashValueVector& pins,
          HashesIntersect(pins, from_cert_chain);
 }
 
-std::string Strip(const std::string& source) {
-  if (source.empty())
-    return source;
-
-  std::string::const_iterator start = source.begin();
-  std::string::const_iterator end = source.end();
-  HttpUtil::TrimLWS(&start, &end);
-  return std::string(start, end);
-}
-
-typedef std::pair<std::string, std::string> StringPair;
-
-StringPair Split(const std::string& source, char delimiter) {
-  StringPair pair;
-  size_t point = source.find(delimiter);
-
-  pair.first = source.substr(0, point);
-  if (std::string::npos != point)
-    pair.second = source.substr(point + 1);
-
-  return pair;
-}
-
-bool ParseAndAppendPin(const std::string& value,
+bool ParseAndAppendPin(std::string::const_iterator begin,
+                       std::string::const_iterator end,
                        HashValueTag tag,
                        HashValueVector* hashes) {
-  // Pins are always quoted.
-  if (value.empty() || !HttpUtil::IsQuote(value[0]))
+  const base::StringPiece value(begin, end);
+  if (value.empty())
     return false;
 
-  std::string unquoted = HttpUtil::Unquote(value);
-  if (unquoted.empty())
-      return false;
-
   std::string decoded;
-  if (!base::Base64Decode(unquoted, &decoded))
+  if (!base::Base64Decode(value, &decoded))
     return false;
 
   HashValue hash(tag);
@@ -136,6 +118,79 @@ bool ParseAndAppendPin(const std::string& value,
 
   memcpy(hash.data(), decoded.data(), hash.size());
   hashes->push_back(hash);
+  return true;
+}
+
+bool ParseHPKPHeaderImpl(const std::string& value,
+                         MaxAgeParsing max_age_status,
+                         base::TimeDelta* max_age,
+                         bool* include_subdomains,
+                         HashValueVector* hashes,
+                         GURL* report_uri) {
+  bool parsed_max_age = false;
+  bool include_subdomains_candidate = false;
+  uint32_t max_age_candidate = 0;
+  GURL parsed_report_uri;
+  HashValueVector pins;
+  bool require_max_age = max_age_status == REQUIRE_MAX_AGE;
+
+  HttpUtil::NameValuePairsIterator name_value_pairs(
+      value.begin(), value.end(), ';',
+      HttpUtil::NameValuePairsIterator::VALUES_OPTIONAL);
+
+  while (name_value_pairs.GetNext()) {
+    if (base::LowerCaseEqualsASCII(
+            base::StringPiece(name_value_pairs.name_begin(),
+                              name_value_pairs.name_end()),
+            "max-age")) {
+      if (!MaxAgeToInt(name_value_pairs.value_begin(),
+                       name_value_pairs.value_end(), &max_age_candidate)) {
+        return false;
+      }
+      parsed_max_age = true;
+    } else if (base::LowerCaseEqualsASCII(
+                   base::StringPiece(name_value_pairs.name_begin(),
+                                     name_value_pairs.name_end()),
+                   "pin-sha256")) {
+      // Pins are always quoted.
+      if (!name_value_pairs.value_is_quoted() ||
+          !ParseAndAppendPin(name_value_pairs.value_begin(),
+                             name_value_pairs.value_end(), HASH_VALUE_SHA256,
+                             &pins)) {
+        return false;
+      }
+    } else if (base::LowerCaseEqualsASCII(
+                   base::StringPiece(name_value_pairs.name_begin(),
+                                     name_value_pairs.name_end()),
+                   "includesubdomains")) {
+      include_subdomains_candidate = true;
+    } else if (base::LowerCaseEqualsASCII(
+                   base::StringPiece(name_value_pairs.name_begin(),
+                                     name_value_pairs.name_end()),
+                   "report-uri")) {
+      // report-uris are always quoted.
+      if (!name_value_pairs.value_is_quoted())
+        return false;
+
+      parsed_report_uri = GURL(name_value_pairs.value());
+      if (parsed_report_uri.is_empty() || !parsed_report_uri.is_valid())
+        return false;
+    } else {
+      // Silently ignore unknown directives for forward compatibility.
+    }
+  }
+
+  if (!name_value_pairs.valid())
+    return false;
+
+  if (!parsed_max_age && require_max_age)
+    return false;
+
+  *max_age = base::TimeDelta::FromSeconds(max_age_candidate);
+  *include_subdomains = include_subdomains_candidate;
+  hashes->swap(pins);
+  *report_uri = parsed_report_uri;
+
   return true;
 }
 
@@ -170,7 +225,7 @@ bool ParseAndAppendPin(const std::string& value,
 bool ParseHSTSHeader(const std::string& value,
                      base::TimeDelta* max_age,
                      bool* include_subdomains) {
-  uint32 max_age_candidate = 0;
+  uint32_t max_age_candidate = 0;
   bool include_subdomains_candidate = false;
 
   // We must see max-age exactly once.
@@ -276,59 +331,48 @@ bool ParseHSTSHeader(const std::string& value,
 // "Public-Key-Pins" ":"
 //     "max-age" "=" delta-seconds ";"
 //     "pin-" algo "=" base64 [ ";" ... ]
+//     [ ";" "includeSubdomains" ]
+//     [ ";" "report-uri" "=" uri-reference ]
 bool ParseHPKPHeader(const std::string& value,
                      const HashValueVector& chain_hashes,
                      base::TimeDelta* max_age,
                      bool* include_subdomains,
-                     HashValueVector* hashes) {
-  bool parsed_max_age = false;
-  bool include_subdomains_candidate = false;
-  uint32 max_age_candidate = 0;
-  HashValueVector pins;
+                     HashValueVector* hashes,
+                     GURL* report_uri) {
+  base::TimeDelta candidate_max_age;
+  bool candidate_include_subdomains;
+  HashValueVector candidate_hashes;
+  GURL candidate_report_uri;
 
-  std::string source = value;
-
-  while (!source.empty()) {
-    StringPair semicolon = Split(source, ';');
-    semicolon.first = Strip(semicolon.first);
-    semicolon.second = Strip(semicolon.second);
-    StringPair equals = Split(semicolon.first, '=');
-    equals.first = Strip(equals.first);
-    equals.second = Strip(equals.second);
-
-    if (base::LowerCaseEqualsASCII(equals.first, "max-age")) {
-      if (equals.second.empty() ||
-          !MaxAgeToInt(equals.second.begin(), equals.second.end(),
-                       &max_age_candidate)) {
-        return false;
-      }
-      parsed_max_age = true;
-    } else if (base::LowerCaseEqualsASCII(equals.first, "pin-sha1")) {
-      if (!ParseAndAppendPin(equals.second, HASH_VALUE_SHA1, &pins))
-        return false;
-    } else if (base::LowerCaseEqualsASCII(equals.first, "pin-sha256")) {
-      if (!ParseAndAppendPin(equals.second, HASH_VALUE_SHA256, &pins))
-        return false;
-    } else if (base::LowerCaseEqualsASCII(equals.first, "includesubdomains")) {
-      include_subdomains_candidate = true;
-    } else {
-      // Silently ignore unknown directives for forward compatibility.
-    }
-
-    source = semicolon.second;
+  if (!ParseHPKPHeaderImpl(value, REQUIRE_MAX_AGE, &candidate_max_age,
+                           &candidate_include_subdomains, &candidate_hashes,
+                           &candidate_report_uri)) {
+    return false;
   }
 
-  if (!parsed_max_age)
+  if (!IsPinListValid(candidate_hashes, chain_hashes))
     return false;
 
-  if (!IsPinListValid(pins, chain_hashes))
-    return false;
-
-  *max_age = base::TimeDelta::FromSeconds(max_age_candidate);
-  *include_subdomains = include_subdomains_candidate;
-  hashes->swap(pins);
-
+  *max_age = candidate_max_age;
+  *include_subdomains = candidate_include_subdomains;
+  hashes->swap(candidate_hashes);
+  *report_uri = candidate_report_uri;
   return true;
+}
+
+// "Public-Key-Pins-Report-Only" ":"
+//     [ "max-age" "=" delta-seconds ";" ]
+//     "pin-" algo "=" base64 [ ";" ... ]
+//     [ ";" "includeSubdomains" ]
+//     [ ";" "report-uri" "=" uri-reference ]
+bool ParseHPKPReportOnlyHeader(const std::string& value,
+                               bool* include_subdomains,
+                               HashValueVector* hashes,
+                               GURL* report_uri) {
+  // max-age is irrelevant for Report-Only headers.
+  base::TimeDelta unused_max_age;
+  return ParseHPKPHeaderImpl(value, DO_NOT_REQUIRE_MAX_AGE, &unused_max_age,
+                             include_subdomains, hashes, report_uri);
 }
 
 }  // namespace net

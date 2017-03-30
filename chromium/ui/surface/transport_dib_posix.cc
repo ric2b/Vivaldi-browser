@@ -4,12 +4,15 @@
 
 #include "ui/surface/transport_dib.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
+#include "build/build_config.h"
 #include "skia/ext/platform_canvas.h"
 
 TransportDIB::TransportDIB()
@@ -25,7 +28,7 @@ TransportDIB::~TransportDIB() {
 }
 
 // static
-TransportDIB* TransportDIB::Create(size_t size, uint32 sequence_num) {
+TransportDIB* TransportDIB::Create(size_t size, uint32_t sequence_num) {
   TransportDIB* dib = new TransportDIB;
   if (!dib->shared_memory_.CreateAndMapAnonymous(size)) {
     delete dib;
@@ -54,10 +57,11 @@ bool TransportDIB::is_valid_handle(Handle dib) {
   return base::SharedMemory::IsHandleValid(dib);
 }
 
-skia::PlatformCanvas* TransportDIB::GetPlatformCanvas(int w, int h) {
+skia::PlatformCanvas* TransportDIB::GetPlatformCanvas(int w, int h,
+                                                      bool opaque) {
   if ((!memory() && !Map()) || !VerifyCanvasSize(w, h))
     return NULL;
-  return skia::CreatePlatformCanvas(w, h, true,
+  return skia::CreatePlatformCanvas(w, h, opaque,
                                     reinterpret_cast<uint8_t*>(memory()),
                                     skia::RETURN_NULL_ON_FAILURE);
 }
@@ -73,9 +77,10 @@ bool TransportDIB::Map() {
   if (memory())
     return true;
 
-  int size = base::SharedMemory::GetSizeFromSharedMemoryHandle(
-      shared_memory_.handle());
-  if (size == -1 || !shared_memory_.Map(size))
+  size_t size;
+  bool success = base::SharedMemory::GetSizeFromSharedMemoryHandle(
+      shared_memory_.handle(), &size);
+  if (!success || !shared_memory_.Map(size))
     return false;
 
   size_ = size;

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SIGNIN_CROSS_DEVICE_PROMO_H_
 #define CHROME_BROWSER_SIGNIN_CROSS_DEVICE_PROMO_H_
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -229,7 +230,7 @@ class CrossDevicePromo : public KeyedService,
   // Used to delay the check of device activity. See
   // OnFetchDeviceActivitySuccess() or MaybeBrowsingSessionStarted(), as well as
   // |delay_until_next_device_activity_fetch_|, for details.
-  base::OneShotTimer<CrossDevicePromo> device_activity_timer_;
+  base::OneShotTimer device_activity_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(CrossDevicePromo);
 };

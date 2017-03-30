@@ -4,6 +4,8 @@
 
 #include "components/plugins/renderer/mobile_youtube_plugin.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/strings/string_piece.h"
@@ -49,15 +51,16 @@ bool IsValidYouTubeVideo(const std::string& path) {
   if (path.length() <= len)
     return false;
 
-  std::string str = base::StringToLowerASCII(path);
   // Youtube flash url can start with /v/ or /e/.
-  if (strncmp(str.data(), kSlashVSlash, len) != 0 &&
-      strncmp(str.data(), kSlashESlash, len) != 0)
+  if (!base::StartsWith(path, kSlashVSlash,
+                        base::CompareCase::INSENSITIVE_ASCII) &&
+      !base::StartsWith(path, kSlashESlash,
+                        base::CompareCase::INSENSITIVE_ASCII))
     return false;
 
   // Start after /v/
   for (unsigned i = len; i < path.length(); i++) {
-    char c = str[i];
+    char c = path[i];
     if (isalpha(c) || isdigit(c) || c == '_' || c == '-')
       continue;
     // The url can have more parameters such as &hl=en after the video id.
@@ -89,8 +92,10 @@ MobileYouTubePlugin::~MobileYouTubePlugin() {}
 bool MobileYouTubePlugin::IsYouTubeURL(const GURL& url,
                                        const std::string& mime_type) {
   std::string host = url.host();
-  bool is_youtube = base::EndsWith(host, "youtube.com", true) ||
-                    base::EndsWith(host, "youtube-nocookie.com", true);
+  bool is_youtube =
+      base::EndsWith(host, "youtube.com", base::CompareCase::SENSITIVE) ||
+      base::EndsWith(host, "youtube-nocookie.com",
+                     base::CompareCase::SENSITIVE);
 
   return is_youtube && IsValidYouTubeVideo(url.path()) &&
          base::LowerCaseEqualsASCII(mime_type,
@@ -103,8 +108,8 @@ void MobileYouTubePlugin::OpenYoutubeUrlCallback() {
   WebURLRequest request;
   request.initialize();
   request.setURL(url);
-  render_frame()->LoadURLExternally(
-      GetFrame(), request, blink::WebNavigationPolicyNewForegroundTab);
+  render_frame()->LoadURLExternally(request,
+                                    blink::WebNavigationPolicyNewForegroundTab);
 }
 
 v8::Local<v8::Value> MobileYouTubePlugin::GetV8Handle(v8::Isolate* isolate) {

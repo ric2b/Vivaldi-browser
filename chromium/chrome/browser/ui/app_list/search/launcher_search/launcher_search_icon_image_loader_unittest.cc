@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_icon_image_loader.h"
 
+#include "base/macros.h"
 #include "chrome/browser/chromeos/launcher_search_provider/error_reporter.h"
 #include "extensions/common/manifest_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -122,8 +123,9 @@ scoped_refptr<extensions::Extension> CreateTestExtension(
 // Returns true if icon image of |result_image| equals to |expected_image|.
 bool IsEqual(const gfx::ImageSkia& expected_image,
              const gfx::ImageSkia& result_image) {
-  return gfx::test::IsEqual(expected_image.GetRepresentation(1.0).sk_bitmap(),
-                            result_image.GetRepresentation(1.0).sk_bitmap());
+  return gfx::test::AreBitmapsEqual(
+      expected_image.GetRepresentation(1.0).sk_bitmap(),
+      result_image.GetRepresentation(1.0).sk_bitmap());
 }
 
 }  // namespace

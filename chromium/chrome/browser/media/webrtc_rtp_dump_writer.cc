@@ -4,10 +4,12 @@
 
 #include "chrome/browser/media/webrtc_rtp_dump_writer.h"
 
+#include <string.h>
+
 #include "base/big_endian.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/stl_util.h"
+#include "base/macros.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/zlib/zlib.h"
 
@@ -22,32 +24,32 @@ static const size_t kRtpDumpFileHeaderSize = 16;  // In bytes.
 
 // A helper for writing the header of the dump file.
 void WriteRtpDumpFileHeaderBigEndian(base::TimeTicks start,
-                                     std::vector<uint8>* output) {
+                                     std::vector<uint8_t>* output) {
   size_t buffer_start_pos = output->size();
   output->resize(output->size() + kRtpDumpFileHeaderSize);
 
   char* buffer = reinterpret_cast<char*>(&(*output)[buffer_start_pos]);
 
   base::TimeDelta delta = start - base::TimeTicks();
-  uint32 start_sec = delta.InSeconds();
+  uint32_t start_sec = delta.InSeconds();
   base::WriteBigEndian(buffer, start_sec);
   buffer += sizeof(start_sec);
 
-  uint32 start_usec =
+  uint32_t start_usec =
       delta.InMilliseconds() * base::Time::kMicrosecondsPerMillisecond;
   base::WriteBigEndian(buffer, start_usec);
   buffer += sizeof(start_usec);
 
   // Network source, always 0.
-  base::WriteBigEndian(buffer, uint32(0));
-  buffer += sizeof(uint32);
+  base::WriteBigEndian(buffer, uint32_t(0));
+  buffer += sizeof(uint32_t);
 
   // UDP port, always 0.
-  base::WriteBigEndian(buffer, uint16(0));
-  buffer += sizeof(uint16);
+  base::WriteBigEndian(buffer, uint16_t(0));
+  buffer += sizeof(uint16_t);
 
   // 2 bytes padding.
-  base::WriteBigEndian(buffer, uint16(0));
+  base::WriteBigEndian(buffer, uint16_t(0));
 }
 
 // The header size for each packet dump.
@@ -58,9 +60,9 @@ static const size_t kPacketDumpHeaderSize = 8;  // In bytes.
 // |dump_length| is the length of the packet dump including this header.
 // |packet_length| is the length of the RTP packet header.
 void WritePacketDumpHeaderBigEndian(const base::TimeTicks& start,
-                                    uint16 dump_length,
-                                    uint16 packet_length,
-                                    std::vector<uint8>* output) {
+                                    uint16_t dump_length,
+                                    uint16_t packet_length,
+                                    std::vector<uint8_t>* output) {
   size_t buffer_start_pos = output->size();
   output->resize(output->size() + kPacketDumpHeaderSize);
 
@@ -72,15 +74,15 @@ void WritePacketDumpHeaderBigEndian(const base::TimeTicks& start,
   base::WriteBigEndian(buffer, packet_length);
   buffer += sizeof(packet_length);
 
-  uint32 elapsed =
-      static_cast<uint32>((base::TimeTicks::Now() - start).InMilliseconds());
+  uint32_t elapsed =
+      static_cast<uint32_t>((base::TimeTicks::Now() - start).InMilliseconds());
   base::WriteBigEndian(buffer, elapsed);
 }
 
 // Append |src_len| bytes from |src| to |dest|.
-void AppendToBuffer(const uint8* src,
+void AppendToBuffer(const uint8_t* src,
                     size_t src_len,
-                    std::vector<uint8>* dest) {
+                    std::vector<uint8_t>* dest) {
   size_t old_dest_size = dest->size();
   dest->resize(old_dest_size + src_len);
   memcpy(&(*dest)[old_dest_size], src, src_len);
@@ -119,7 +121,7 @@ class WebRtcRtpDumpWriter::FileThreadWorker {
   // is true, the compression stream will be ended and the dump file cannot be
   // written to any more.
   void CompressAndWriteToFileOnFileThread(
-      scoped_ptr<std::vector<uint8> > buffer,
+      scoped_ptr<std::vector<uint8_t>> buffer,
       bool end_stream,
       FlushResult* result,
       size_t* bytes_written) {
@@ -149,14 +151,14 @@ class WebRtcRtpDumpWriter::FileThreadWorker {
  private:
   // Helper for CompressAndWriteToFileOnFileThread to compress and write one
   // dump.
-  size_t CompressAndWriteBufferToFile(std::vector<uint8>* buffer,
+  size_t CompressAndWriteBufferToFile(std::vector<uint8_t>* buffer,
                                       FlushResult* result) {
     DCHECK(thread_checker_.CalledOnValidThread());
     DCHECK(buffer->size());
 
     *result = FLUSH_RESULT_SUCCESS;
 
-    std::vector<uint8> compressed_buffer;
+    std::vector<uint8_t> compressed_buffer;
     if (!Compress(buffer, &compressed_buffer)) {
       DVLOG(2) << "Compressing buffer failed.";
       *result = FLUSH_RESULT_FAILURE;
@@ -167,9 +169,8 @@ class WebRtcRtpDumpWriter::FileThreadWorker {
 
     if (base::PathExists(dump_path_)) {
       bytes_written =
-          base::AppendToFile(dump_path_,
-                             reinterpret_cast<const char*>(
-                                 vector_as_array(&compressed_buffer)),
+          base::AppendToFile(dump_path_, reinterpret_cast<const char*>(
+                                             compressed_buffer.data()),
                              compressed_buffer.size())
               ? compressed_buffer.size()
               : -1;
@@ -191,7 +192,7 @@ class WebRtcRtpDumpWriter::FileThreadWorker {
   }
 
   // Compresses |input| into |output|.
-  bool Compress(std::vector<uint8>* input, std::vector<uint8>* output) {
+  bool Compress(std::vector<uint8_t>* input, std::vector<uint8_t>* output) {
     DCHECK(thread_checker_.CalledOnValidThread());
     int result = Z_OK;
 
@@ -218,7 +219,7 @@ class WebRtcRtpDumpWriter::FileThreadWorker {
   bool EndDumpFile() {
     DCHECK(thread_checker_.CalledOnValidThread());
 
-    std::vector<uint8> output_buffer;
+    std::vector<uint8_t> output_buffer;
     output_buffer.resize(kMinimumGzipOutputBufferSize);
 
     stream_.next_in = NULL;
@@ -237,10 +238,9 @@ class WebRtcRtpDumpWriter::FileThreadWorker {
     memset(&stream_, 0, sizeof(z_stream));
 
     DCHECK(!output_buffer.empty());
-    return base::AppendToFile(dump_path_,
-                              reinterpret_cast<const char*>(
-                                  vector_as_array(&output_buffer)),
-                              output_buffer.size());
+    return base::AppendToFile(
+        dump_path_, reinterpret_cast<const char*>(output_buffer.data()),
+        output_buffer.size());
   }
 
   const base::FilePath dump_path_;
@@ -277,7 +277,7 @@ WebRtcRtpDumpWriter::~WebRtcRtpDumpWriter() {
   DCHECK(success);
 }
 
-void WebRtcRtpDumpWriter::WriteRtpPacket(const uint8* packet_header,
+void WebRtcRtpDumpWriter::WriteRtpPacket(const uint8_t* packet_header,
                                          size_t header_length,
                                          size_t packet_length,
                                          bool incoming) {
@@ -285,7 +285,7 @@ void WebRtcRtpDumpWriter::WriteRtpPacket(const uint8* packet_header,
 
   static const size_t kMaxInMemoryBufferSize = 65536;
 
-  std::vector<uint8>* dest_buffer =
+  std::vector<uint8_t>* dest_buffer =
       incoming ? &incoming_buffer_ : &outgoing_buffer_;
 
   // We use the capacity of the buffer to indicate if the buffer has been
@@ -356,7 +356,7 @@ void WebRtcRtpDumpWriter::FlushBuffer(bool incoming,
                                       const FlushDoneCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  scoped_ptr<std::vector<uint8> > new_buffer(new std::vector<uint8>());
+  scoped_ptr<std::vector<uint8_t>> new_buffer(new std::vector<uint8_t>());
 
   if (incoming) {
     new_buffer->reserve(incoming_buffer_.capacity());
@@ -377,19 +377,14 @@ void WebRtcRtpDumpWriter::FlushBuffer(bool incoming,
   // guaranteed to be deleted on the FILE thread before this object goes away.
   base::Closure task =
       base::Bind(&FileThreadWorker::CompressAndWriteToFileOnFileThread,
-                 base::Unretained(worker),
-                 Passed(&new_buffer),
-                 end_stream,
-                 result.get(),
-                 bytes_written.get());
+                 base::Unretained(worker), base::Passed(&new_buffer),
+                 end_stream, result.get(), bytes_written.get());
 
   // OnFlushDone is necessary to avoid running the callback after this
   // object is gone.
-  base::Closure reply = base::Bind(&WebRtcRtpDumpWriter::OnFlushDone,
-                                   weak_ptr_factory_.GetWeakPtr(),
-                                   callback,
-                                   Passed(&result),
-                                   Passed(&bytes_written));
+  base::Closure reply = base::Bind(
+      &WebRtcRtpDumpWriter::OnFlushDone, weak_ptr_factory_.GetWeakPtr(),
+      callback, base::Passed(&result), base::Passed(&bytes_written));
 
   // Define the task and reply outside the method call so that getting and
   // passing the scoped_ptr does not depend on the argument evaluation order.

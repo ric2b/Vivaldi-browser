@@ -14,14 +14,37 @@ cr.define('options.contentSettings', function() {
    *
    * @param {string} contentType The type of the list.
    */
-  function IsEditableType(contentType) {
+  function isEditableType(contentType) {
     // Exceptions of the following lists are not editable for now.
-    return !(contentType == 'notifications' ||
-             contentType == 'location' ||
+    return !(contentType == 'location' ||
              contentType == 'fullscreen' ||
-             contentType == 'media-stream' ||
+             contentType == 'media-stream-mic' ||
+             contentType == 'media-stream-camera' ||
              contentType == 'midi-sysex' ||
-             contentType == 'zoomlevels');
+             contentType == 'zoomlevels' ||
+             isChosenObjectType(contentType));
+  }
+
+  /**
+   * Returns whether exceptions of this type represent chosen objects.
+   *
+   * @param {string} contentType The type of the list.
+   */
+  function isChosenObjectType(contentType) {
+    return contentType == 'usb-devices';
+  }
+
+  /**
+   * Returns the ID of the column containing values for the given content type.
+   *
+   * @param {string} contentType The type of the list.
+   */
+  function valueColumnForContentType(contentType) {
+    if (contentType == 'usb-devices')
+      return 'exception-usb-device-column';
+    if (contentType == 'zoomlevels')
+      return 'exception-zoom-column';
+    return 'exception-behavior-column';
   }
 
   /**
@@ -63,8 +86,6 @@ cr.define('options.contentSettings', function() {
         this.patternLabel = patternCell.querySelector('.static-text');
       var input = patternCell.querySelector('input');
 
-      // TODO(stuartmorgan): Create an createEditableSelectCell abstracting
-      // this code.
       // Setting label for display mode. |pattern| will be null for the 'add new
       // exception' row.
       if (this.pattern) {
@@ -86,14 +107,14 @@ cr.define('options.contentSettings', function() {
       if (this.contentType == 'plugins') {
         var optionDetect = cr.doc.createElement('option');
         optionDetect.textContent = loadTimeData.getString('detectException');
-        optionDetect.value = 'detect';
+        optionDetect.value = 'detect_important_content';
         select.appendChild(optionDetect);
       }
 
       if (this.contentType == 'cookies') {
         var optionSession = cr.doc.createElement('option');
         optionSession.textContent = loadTimeData.getString('sessionException');
-        optionSession.value = 'session';
+        optionSession.value = 'session_only';
         select.appendChild(optionSession);
       }
 
@@ -116,26 +137,17 @@ cr.define('options.contentSettings', function() {
         this.editable = false;
       }
 
-      if (this.contentType != 'zoomlevels') {
+      if (this.contentType != 'zoomlevels' &&
+          !isChosenObjectType(this.contentType)) {
         this.addEditField(select, this.settingLabel);
         this.contentElement.appendChild(select);
       }
       select.className = 'exception-setting';
-      select.setAttribute('aria-labelledby', 'exception-behavior-column');
+      select.setAttribute('aria-labelledby',
+                          valueColumnForContentType(this.contentType));
 
       if (this.pattern)
         select.setAttribute('displaymode', 'edit');
-
-      if (this.contentType == 'media-stream') {
-        this.settingLabel.classList.add('media-audio-setting');
-
-        var videoSettingLabel = cr.doc.createElement('span');
-        videoSettingLabel.textContent = this.videoSettingForDisplay();
-        videoSettingLabel.className = 'exception-setting';
-        videoSettingLabel.classList.add('media-video-setting');
-        videoSettingLabel.setAttribute('displaymode', 'static');
-        this.contentElement.appendChild(videoSettingLabel);
-      }
 
       if (this.contentType == 'zoomlevels') {
         this.deletable = true;
@@ -144,9 +156,20 @@ cr.define('options.contentSettings', function() {
         zoomLabel.textContent = this.dataItem.zoom;
         zoomLabel.className = 'exception-setting';
         zoomLabel.setAttribute('displaymode', 'static');
-        zoomLabel.setAttribute('aria-labelledby', 'exception-zoom-column');
         this.contentElement.appendChild(zoomLabel);
         this.zoomLabel = zoomLabel;
+      }
+
+      if (isChosenObjectType(this.contentType) &&
+          this.dataItem.object !== undefined) {
+        this.deletable = true;
+
+        var objectLabel = cr.doc.createElement('span');
+        objectLabel.textContent = this.dataItem['objectName'];
+        objectLabel.className = 'exception-setting';
+        objectLabel.setAttribute('displaymode', 'static');
+        this.contentElement.appendChild(objectLabel);
+        this.objectLabel = objectLabel;
       }
 
       // Used to track whether the URL pattern in the input is valid.
@@ -165,7 +188,7 @@ cr.define('options.contentSettings', function() {
       this.select = select;
 
       this.updateEditables();
-      this.editable = this.editable && IsEditableType(this.contentType);
+      this.editable = this.editable && isEditableType(this.contentType);
 
       // If the source of the content setting exception is not a user
       // preference, that source controls the exception and the user cannot edit
@@ -264,16 +287,6 @@ cr.define('options.contentSettings', function() {
     },
 
     /**
-     * media video specific function.
-     * Gets a human-readable video setting string.
-     *
-     * @return {string} The display string.
-     */
-    videoSettingForDisplay: function() {
-      return this.getDisplayStringForSetting(this.dataItem.video);
-    },
-
-    /**
      * Gets a human-readable display string for setting.
      *
      * @param {string} setting The setting to be displayed.
@@ -286,9 +299,9 @@ cr.define('options.contentSettings', function() {
         return loadTimeData.getString('blockException');
       else if (setting == 'ask')
         return loadTimeData.getString('askException');
-      else if (setting == 'session')
+      else if (setting == 'session_only')
         return loadTimeData.getString('sessionException');
-      else if (setting == 'detect')
+      else if (setting == 'detect_important_content')
         return loadTimeData.getString('detectException');
       else if (setting == 'default')
         return '';
@@ -550,7 +563,7 @@ cr.define('options.contentSettings', function() {
      */
     isEditable: function() {
       // Exceptions of the following lists are not editable for now.
-      return IsEditableType(this.contentType);
+      return isEditableType(this.contentType);
     },
 
     /**
@@ -572,10 +585,15 @@ cr.define('options.contentSettings', function() {
         return;
 
       var dataItem = listItem.dataItem;
-      chrome.send('removeException', [listItem.contentType,
-                                      listItem.mode,
-                                      dataItem.origin,
-                                      dataItem.embeddingOrigin]);
+      var params = [listItem.contentType,
+                    listItem.mode,
+                    dataItem.origin,
+                    dataItem.embeddingOrigin];
+
+      if (isChosenObjectType(this.contentType))
+        params.push(dataItem.object);
+
+      chrome.send('removeException', params);
     },
   };
 
@@ -640,11 +658,11 @@ cr.define('options.contentSettings', function() {
           divs[i].hidden = true;
       }
 
-      var mediaHeader = this.pageDiv.querySelector('.media-header');
-      mediaHeader.hidden = type != 'media-stream';
-
-      $('exception-behavior-column').hidden = type == 'zoomlevels';
-      $('exception-zoom-column').hidden = type != 'zoomlevels';
+      var valueColumnId = valueColumnForContentType(type);
+      var headers =
+          this.pageDiv.querySelectorAll('div.exception-value-column-header');
+      for (var i = 0; i < headers.length; ++i)
+        headers[i].hidden = (headers[i].id != valueColumnId);
     },
 
     /**

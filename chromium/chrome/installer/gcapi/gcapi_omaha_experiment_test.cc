@@ -4,12 +4,14 @@
 
 #include "chrome/installer/gcapi/gcapi_omaha_experiment.h"
 
+#include <stdint.h>
+
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/installer/gcapi/gcapi.h"
 #include "chrome/installer/gcapi/gcapi_test_registry_overrider.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/google_update_experiment_util.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "components/variations/variations_experiment_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::ASCIIToUTF16;
@@ -17,7 +19,7 @@ using base::ASCIIToUTF16;
 namespace {
 
 const wchar_t kBrand[] = L"ABCD";
-const uint16 kUserLevel = GCAPI_INVOKED_STANDARD_SHELL;
+const uint16_t kUserLevel = GCAPI_INVOKED_STANDARD_SHELL;
 
 const wchar_t kSomeExperiments[] = L"myexp=1|Aug 2;yourexp=2|Sep 5";
 const wchar_t kSomeOtherExperiments[] = L"anotherexp=joe|Jun 7 2008";
@@ -66,7 +68,7 @@ TEST_F(GCAPIOmahaExperimentTest, SetReactivationLabelWithExistingExperiments) {
   ASSERT_TRUE(SetReactivationExperimentLabels(kBrand, kUserLevel));
 
   base::string16 expected_labels(kSomeExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(reactivation_label_);
   VerifyExperimentLabels(expected_labels);
 }
@@ -74,18 +76,18 @@ TEST_F(GCAPIOmahaExperimentTest, SetReactivationLabelWithExistingExperiments) {
 TEST_F(GCAPIOmahaExperimentTest,
        SetReactivationLabelWithExistingIdenticalExperiment) {
   base::string16 previous_labels(kSomeExperiments);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   previous_labels.append(reactivation_label_);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   previous_labels.append(kSomeOtherExperiments);
   GoogleUpdateSettings::SetExperimentLabels(false, previous_labels);
 
   ASSERT_TRUE(SetReactivationExperimentLabels(kBrand, kUserLevel));
 
   base::string16 expected_labels(kSomeExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(kSomeOtherExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(reactivation_label_);
   VerifyExperimentLabels(expected_labels);
 }
@@ -93,14 +95,14 @@ TEST_F(GCAPIOmahaExperimentTest,
 TEST_F(GCAPIOmahaExperimentTest,
        SetReactivationLabelWithExistingIdenticalAtBeginning) {
   base::string16 previous_labels(reactivation_label_);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   previous_labels.append(kSomeExperiments);
   GoogleUpdateSettings::SetExperimentLabels(false, previous_labels);
 
   ASSERT_TRUE(SetReactivationExperimentLabels(kBrand, kUserLevel));
 
   base::string16 expected_labels(kSomeExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(reactivation_label_);
   VerifyExperimentLabels(expected_labels);
 }
@@ -108,30 +110,30 @@ TEST_F(GCAPIOmahaExperimentTest,
 TEST_F(GCAPIOmahaExperimentTest,
        SetReactivationLabelWithFakeMatchInAnExperiment) {
   base::string16 previous_labels(kSomeExperiments);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   previous_labels.append(L"blah_");
   // Shouldn't match deletion criteria.
   previous_labels.append(reactivation_label_);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   previous_labels.append(kSomeOtherExperiments);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   // Should match the deletion criteria.
   previous_labels.append(reactivation_label_);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   previous_labels.append(kSomeMoreExperiments);
   GoogleUpdateSettings::SetExperimentLabels(false, previous_labels);
 
   ASSERT_TRUE(SetReactivationExperimentLabels(kBrand, kUserLevel));
 
   base::string16 expected_labels(kSomeExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(L"blah_");
   expected_labels.append(reactivation_label_);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(kSomeOtherExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(kSomeMoreExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(reactivation_label_);
   VerifyExperimentLabels(expected_labels);
 }
@@ -139,23 +141,23 @@ TEST_F(GCAPIOmahaExperimentTest,
 TEST_F(GCAPIOmahaExperimentTest,
        SetReactivationLabelWithFakeMatchInAnExperimentAndNoRealMatch) {
   base::string16 previous_labels(kSomeExperiments);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   previous_labels.append(L"blah_");
   // Shouldn't match deletion criteria.
   previous_labels.append(reactivation_label_);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   previous_labels.append(kSomeOtherExperiments);
   GoogleUpdateSettings::SetExperimentLabels(false, previous_labels);
 
   ASSERT_TRUE(SetReactivationExperimentLabels(kBrand, kUserLevel));
 
   base::string16 expected_labels(kSomeExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(L"blah_");
   expected_labels.append(reactivation_label_);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(kSomeOtherExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(reactivation_label_);
   VerifyExperimentLabels(expected_labels);
 }
@@ -163,7 +165,7 @@ TEST_F(GCAPIOmahaExperimentTest,
 TEST_F(GCAPIOmahaExperimentTest,
        SetReactivationLabelWithExistingEntryWithLabelAsPrefix) {
   base::string16 previous_labels(kSomeExperiments);
-  previous_labels += google_update::kExperimentLabelSeparator;
+  previous_labels += variations::kExperimentLabelSeparator;
   // Append prefix matching the label, but not followed by '='.
   previous_labels.append(gcapi_internals::kReactivationLabel);
   // Shouldn't match deletion criteria.
@@ -173,10 +175,10 @@ TEST_F(GCAPIOmahaExperimentTest,
   ASSERT_TRUE(SetReactivationExperimentLabels(kBrand, kUserLevel));
 
   base::string16 expected_labels(kSomeExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(gcapi_internals::kReactivationLabel);
   expected_labels.append(kSomeOtherExperiments);
-  expected_labels += google_update::kExperimentLabelSeparator;
+  expected_labels += variations::kExperimentLabelSeparator;
   expected_labels.append(reactivation_label_);
   VerifyExperimentLabels(expected_labels);
 }

@@ -4,13 +4,12 @@
 
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
-#include "gpu/command_buffer/service/async_pixel_transfer_delegate_mock.h"
-#include "gpu/command_buffer/service/async_pixel_transfer_manager.h"
-#include "gpu/command_buffer/service/async_pixel_transfer_manager_mock.h"
 #include "gpu/command_buffer/service/cmd_buffer_engine.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/context_state.h"
@@ -941,8 +940,7 @@ TEST_P(GLES2DecoderWithShaderTest, DrawArraysInstancedANGLEFails) {
       .RetiresOnSaturation();
   DrawArraysInstancedANGLE cmd;
   cmd.Init(GL_TRIANGLES, 0, kNumVertices, 1);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES2DecoderWithShaderTest, VertexAttribDivisorANGLEFails) {
@@ -957,8 +955,7 @@ TEST_P(GLES2DecoderWithShaderTest, VertexAttribDivisorANGLEFails) {
 
   VertexAttribDivisorANGLE cmd;
   cmd.Init(0, 1);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES2DecoderGeometryInstancingTest,
@@ -1029,6 +1026,10 @@ TEST_P(GLES2DecoderGeometryInstancingTest,
   DoVertexAttribPointer(1, 2, GL_FLOAT, 0, 0);
   AddExpectationsForSimulatedAttrib0(kNumVertices, kServiceBufferId);
   SetupExpectationsForApplyingDefaultDirtyState();
+
+  EXPECT_CALL(*gl_, VertexAttribDivisorANGLE(0, 0))
+        .Times(1)
+        .RetiresOnSaturation();
 
   EXPECT_CALL(*gl_, DrawArraysInstancedANGLE(GL_TRIANGLES, 0, kNumVertices, 1))
       .Times(1)
@@ -1427,8 +1428,7 @@ TEST_P(GLES2DecoderWithShaderTest, DrawElementsInstancedANGLEFails) {
            GL_UNSIGNED_SHORT,
            kValidIndexRangeStart * 2,
            1);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES2DecoderGeometryInstancingTest,
@@ -1523,6 +1523,10 @@ TEST_P(GLES2DecoderGeometryInstancingTest,
   AddExpectationsForSimulatedAttrib0(kMaxValidIndex + 1, kServiceBufferId);
   SetupExpectationsForApplyingDefaultDirtyState();
 
+  EXPECT_CALL(*gl_, VertexAttribDivisorANGLE(0, 0))
+        .Times(1)
+        .RetiresOnSaturation();
+
   EXPECT_CALL(
       *gl_,
       DrawElementsInstancedANGLE(GL_TRIANGLES,
@@ -1532,6 +1536,7 @@ TEST_P(GLES2DecoderGeometryInstancingTest,
                                  1))
       .Times(1)
       .RetiresOnSaturation();
+
   DrawElementsInstancedANGLE cmd;
   cmd.Init(GL_TRIANGLES,
            kValidIndexRangeCount,
@@ -2055,9 +2060,9 @@ TEST_P(GLES2DecoderManualInitTest, DrawArraysClearsAfterTexImage2DNULLCubemap) {
   // Fill out all the faces for 2 levels, leave 2 uncleared.
   for (int ii = 0; ii < 6; ++ii) {
     GLenum face = faces[ii];
-    int32 shm_id =
+    int32_t shm_id =
         (face == GL_TEXTURE_CUBE_MAP_NEGATIVE_Y) ? 0 : kSharedMemoryId;
-    uint32 shm_offset =
+    uint32_t shm_offset =
         (face == GL_TEXTURE_CUBE_MAP_NEGATIVE_Y) ? 0 : kSharedMemoryOffset;
     DoTexImage2D(face,
                  0,

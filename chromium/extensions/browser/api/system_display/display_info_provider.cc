@@ -31,12 +31,31 @@ int RotationToDegrees(gfx::Display::Rotation rotation) {
   return 0;
 }
 
+}  // namespace
+
+DisplayInfoProvider::~DisplayInfoProvider() {}
+
+// static
+DisplayInfoProvider* DisplayInfoProvider::Get() {
+  if (g_display_info_provider == NULL)
+    g_display_info_provider = DisplayInfoProvider::Create();
+  return g_display_info_provider;
+}
+
+// static
+void DisplayInfoProvider::InitializeForTesting(
+    DisplayInfoProvider* display_info_provider) {
+  DCHECK(display_info_provider);
+  g_display_info_provider = display_info_provider;
+}
+
+// static
 // Creates new DisplayUnitInfo struct for |display|.
-core_api::system_display::DisplayUnitInfo* CreateDisplayUnitInfo(
-    const gfx::Display& display,
-    int64 primary_display_id) {
-  core_api::system_display::DisplayUnitInfo* unit =
-      new core_api::system_display::DisplayUnitInfo();
+api::system_display::DisplayUnitInfo*
+DisplayInfoProvider::CreateDisplayUnitInfo(const gfx::Display& display,
+                                           int64_t primary_display_id) {
+  api::system_display::DisplayUnitInfo* unit =
+      new api::system_display::DisplayUnitInfo();
   const gfx::Rect& bounds = display.bounds();
   const gfx::Rect& work_area = display.work_area();
   unit->id = base::Int64ToString(display.id());
@@ -55,33 +74,16 @@ core_api::system_display::DisplayUnitInfo* CreateDisplayUnitInfo(
   return unit;
 }
 
-}  // namespace
-
-DisplayInfoProvider::~DisplayInfoProvider() {
-}
-
-// static
-DisplayInfoProvider* DisplayInfoProvider::Get() {
-  if (g_display_info_provider == NULL)
-    g_display_info_provider = DisplayInfoProvider::Create();
-  return g_display_info_provider;
-}
-
-// static
-void DisplayInfoProvider::InitializeForTesting(
-    DisplayInfoProvider* display_info_provider) {
-  DCHECK(display_info_provider);
-  g_display_info_provider = display_info_provider;
-}
+void DisplayInfoProvider::EnableUnifiedDesktop(bool enable) {}
 
 DisplayInfo DisplayInfoProvider::GetAllDisplaysInfo() {
   // TODO(scottmg): Native is wrong http://crbug.com/133312
   gfx::Screen* screen = gfx::Screen::GetNativeScreen();
-  int64 primary_id = screen->GetPrimaryDisplay().id();
+  int64_t primary_id = screen->GetPrimaryDisplay().id();
   std::vector<gfx::Display> displays = screen->GetAllDisplays();
   DisplayInfo all_displays;
   for (const gfx::Display& display : displays) {
-    linked_ptr<core_api::system_display::DisplayUnitInfo> unit(
+    linked_ptr<api::system_display::DisplayUnitInfo> unit(
         CreateDisplayUnitInfo(display, primary_id));
     UpdateDisplayUnitInfoForPlatform(display, unit.get());
     all_displays.push_back(unit);

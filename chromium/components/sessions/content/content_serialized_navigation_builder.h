@@ -8,8 +8,7 @@
 #include <vector>
 
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
-#include "components/sessions/sessions_export.h"
+#include "components/sessions/core/sessions_export.h"
 
 namespace content {
 class BrowserContext;
@@ -39,7 +38,7 @@ class SESSIONS_EXPORT ContentSerializedNavigationBuilder {
 
   // Converts a set of SerializedNavigationEntrys into a list of
   // NavigationEntrys with sequential page IDs and the given context.
-  static ScopedVector<content::NavigationEntry> ToNavigationEntries(
+  static std::vector<scoped_ptr<content::NavigationEntry>> ToNavigationEntries(
       const std::vector<SerializedNavigationEntry>& navigations,
       content::BrowserContext* browser_context);
 };

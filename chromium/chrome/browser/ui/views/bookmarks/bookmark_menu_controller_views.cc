@@ -62,8 +62,6 @@ void BookmarkMenuController::RunMenuAt(BookmarkBarView* bookmark_bar) {
                                         bounds,
                                         anchor,
                                         ui::MENU_SOURCE_NONE));
-  if (!for_drop_)
-    delete this;
 }
 
 void BookmarkMenuController::Cancel() {
@@ -102,10 +100,10 @@ bool BookmarkMenuController::ShouldExecuteCommandWithoutClosingMenu(
 }
 
 bool BookmarkMenuController::GetDropFormats(
-      MenuItemView* menu,
-      int* formats,
-      std::set<ui::OSExchangeData::CustomFormat>* custom_formats) {
-  return menu_delegate_->GetDropFormats(menu, formats, custom_formats);
+    MenuItemView* menu,
+    int* formats,
+    std::set<ui::Clipboard::FormatType>* format_types) {
+  return menu_delegate_->GetDropFormats(menu, formats, format_types);
 }
 
 bool BookmarkMenuController::AreDropTypesRequired(MenuItemView* menu) {
@@ -140,10 +138,6 @@ bool BookmarkMenuController::ShowContextMenu(MenuItemView* source,
   return menu_delegate_->ShowContextMenu(source, id, p, source_type);
 }
 
-void BookmarkMenuController::DropMenuClosed(MenuItemView* menu) {
-  delete this;
-}
-
 bool BookmarkMenuController::CanDrag(MenuItemView* menu) {
   return menu_delegate_->CanDrag(menu);
 }
@@ -155,6 +149,11 @@ void BookmarkMenuController::WriteDragData(MenuItemView* sender,
 
 int BookmarkMenuController::GetDragOperations(MenuItemView* sender) {
   return menu_delegate_->GetDragOperations(sender);
+}
+
+void BookmarkMenuController::OnMenuClosed(views::MenuItemView* menu,
+                                          views::MenuRunner::RunResult result) {
+  delete this;
 }
 
 views::MenuItemView* BookmarkMenuController::GetSiblingMenu(

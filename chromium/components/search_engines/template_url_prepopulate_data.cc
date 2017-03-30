@@ -9,12 +9,14 @@
 #endif
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/search_engines/prepopulated_engines.h"
@@ -104,7 +106,7 @@ const PrepopulatedEngine* engines_BR[] =
 
 // Belarus
 const PrepopulatedEngine* engines_BY[] =
-    { &google, &yahoo_ru, &bing, };
+    { &google, &yandex_by, &mail_ru, };
 
 // Belize
 const PrepopulatedEngine* engines_BZ[] =
@@ -268,7 +270,7 @@ const PrepopulatedEngine* engines_KR[] =
 
 // Kazakhstan
 const PrepopulatedEngine* engines_KZ[] =
-    { &google, &bing, &yahoo, };
+    { &google, &mail_ru, &yandex_kz, };
 
 // Lebanon
 const PrepopulatedEngine* engines_LB[] =
@@ -490,9 +492,9 @@ const PrepopulatedEngine* kAllEngines[] = {
   &yahoo_fr,     &yahoo_gr,     &yahoo_hk,     &yahoo_id,     &yahoo_in,
   &yahoo_jp,     &yahoo_maktoob,&yahoo_mx,     &yahoo_my,     &yahoo_nl,
   &yahoo_nz,     &yahoo_pe,     &yahoo_ph,     &yahoo_qc,     &yahoo_ro,
-  &yahoo_ru,     &yahoo_se,     &yahoo_sg,     &yahoo_th,     &yahoo_tr,
-  &yahoo_tw,     &yahoo_uk,     &yahoo_ve,     &yahoo_vn,     &yandex_ru,
-  &yandex_tr,    &yandex_ua,
+  &yahoo_se,     &yahoo_sg,     &yahoo_th,     &yahoo_tr,     &yahoo_tw,
+  &yahoo_uk,     &yahoo_ve,     &yahoo_vn,     &yandex_by,    &yandex_kz,
+  &yandex_ru,    &yandex_tr,    &yandex_ua,
 
   // UMA-only engines:
   &atlas_cz,     &atlas_sk,     &avg,          &babylon,      &conduit,
@@ -1012,18 +1014,18 @@ scoped_ptr<TemplateURLData> MakePrepopulatedTemplateURLData(
     data->alternate_urls.push_back(alternate_url);
   }
   data->search_terms_replacement_key = search_terms_replacement_key.as_string();
-  return data.Pass();
+  return data;
 }
 
 ScopedVector<TemplateURLData> GetPrepopulatedTemplateURLData(
     PrefService* prefs) {
   ScopedVector<TemplateURLData> t_urls;
   if (!prefs)
-    return t_urls.Pass();
+    return t_urls;
 
   const base::ListValue* list = prefs->GetList(prefs::kSearchProviderOverrides);
   if (!list)
-    return t_urls.Pass();
+    return t_urls;
 
   size_t num_engines = list->GetSize();
   for (size_t i = 0; i != num_engines; ++i) {
@@ -1076,35 +1078,7 @@ ScopedVector<TemplateURLData> GetPrepopulatedTemplateURLData(
           search_terms_replacement_key, id).release());
     }
   }
-  return t_urls.Pass();
-}
-
-scoped_ptr<TemplateURLData>
-    MakePrepopulatedTemplateURLDataFromPrepopulateEngine(
-        const PrepopulatedEngine& engine) {
-  base::ListValue alternate_urls;
-  if (engine.alternate_urls) {
-    for (size_t i = 0; i < engine.alternate_urls_size; ++i)
-      alternate_urls.AppendString(std::string(engine.alternate_urls[i]));
-  }
-
-  return MakePrepopulatedTemplateURLData(base::WideToUTF16(engine.name),
-                                         base::WideToUTF16(engine.keyword),
-                                         engine.search_url,
-                                         engine.suggest_url,
-                                         engine.instant_url,
-                                         engine.image_url,
-                                         engine.new_tab_url,
-                                         engine.contextual_search_url,
-                                         engine.search_url_post_params,
-                                         engine.suggest_url_post_params,
-                                         engine.instant_url_post_params,
-                                         engine.image_url_post_params,
-                                         engine.favicon_url,
-                                         engine.encoding,
-                                         alternate_urls,
-                                         engine.search_terms_replacement_key,
-                                         engine.id);
+  return t_urls;
 }
 
 bool SameDomain(const GURL& given_url, const GURL& prepopulated_url) {
@@ -1139,16 +1113,34 @@ ScopedVector<TemplateURLData> GetPrepopulatedEngines(
   *default_search_provider_index = 0;
   ScopedVector<TemplateURLData> t_urls = GetPrepopulatedTemplateURLData(prefs);
   if (!t_urls.empty())
-    return t_urls.Pass();
+    return t_urls;
 
   const PrepopulatedEngine** engines;
   size_t num_engines;
   GetPrepopulationSetFromCountryID(prefs, &engines, &num_engines);
   for (size_t i = 0; i != num_engines; ++i) {
-    t_urls.push_back(MakePrepopulatedTemplateURLDataFromPrepopulateEngine(
-                         *engines[i]).release());
+    t_urls.push_back(
+        MakeTemplateURLDataFromPrepopulatedEngine(*engines[i]).release());
   }
-  return t_urls.Pass();
+  return t_urls;
+}
+
+scoped_ptr<TemplateURLData> MakeTemplateURLDataFromPrepopulatedEngine(
+    const PrepopulatedEngine& engine) {
+  base::ListValue alternate_urls;
+  if (engine.alternate_urls) {
+    for (size_t i = 0; i < engine.alternate_urls_size; ++i)
+      alternate_urls.AppendString(std::string(engine.alternate_urls[i]));
+  }
+
+  return MakePrepopulatedTemplateURLData(
+      base::WideToUTF16(engine.name), base::WideToUTF16(engine.keyword),
+      engine.search_url, engine.suggest_url, engine.instant_url,
+      engine.image_url, engine.new_tab_url, engine.contextual_search_url,
+      engine.search_url_post_params, engine.suggest_url_post_params,
+      engine.instant_url_post_params, engine.image_url_post_params,
+      engine.favicon_url, engine.encoding, alternate_urls,
+      engine.search_terms_replacement_key, engine.id);
 }
 
 void ClearPrepopulatedEnginesInPrefs(PrefService* prefs) {
@@ -1170,7 +1162,7 @@ scoped_ptr<TemplateURLData> GetPrepopulatedDefaultSearch(PrefService* prefs) {
     default_search_provider.reset(loaded_urls[default_search_index]);
     loaded_urls.weak_erase(loaded_urls.begin() + default_search_index);
   }
-  return default_search_provider.Pass();
+  return default_search_provider;
 }
 
 SearchEngineType GetEngineType(const TemplateURL& url,

@@ -5,6 +5,7 @@
 #ifndef NET_URL_REQUEST_URL_REQUEST_STATUS_H_
 #define NET_URL_REQUEST_URL_REQUEST_STATUS_H_
 
+#include "net/base/net_errors.h"
 #include "net/base/net_export.h"
 
 namespace net {
@@ -33,13 +34,20 @@ class NET_EXPORT URLRequestStatus {
 
   // Creates a URLRequestStatus with specified status and error parameters. New
   // consumers should use URLRequestStatus::FromError instead.
-  URLRequestStatus(Status status, int error) : status_(status), error_(error) {}
+  URLRequestStatus(Status status, int error);
 
   // Creates a URLRequestStatus, initializing the status from |error|. OK maps
   // to SUCCESS, ERR_IO_PENDING maps to IO_PENDING, ERR_ABORTED maps to CANCELED
   // and all others map to FAILED. Other combinations of status and error are
   // deprecated. See https://crbug.com/490311.
   static URLRequestStatus FromError(int error);
+
+  // Returns a Error corresponding to |status_|.
+  //   OK for OK
+  //   ERR_IO_PENDING for IO_PENDING
+  //   ERR_ABORTED for CANCELLED
+  //   Error for FAILED
+  Error ToNetError() const;
 
   Status status() const { return status_; }
   int error() const { return error_; }

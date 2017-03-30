@@ -5,9 +5,11 @@
 #ifndef UI_GFX_CANVAS_H_
 #define UI_GFX_CANVAS_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "skia/ext/platform_canvas.h"
@@ -20,6 +22,7 @@
 namespace gfx {
 
 class Rect;
+class RectF;
 class FontList;
 class Point;
 class Size;
@@ -165,6 +168,11 @@ class GFX_EXPORT Canvas {
   // Draws a dashed rectangle of the specified color.
   void DrawDashedRect(const Rect& rect, SkColor color);
 
+  // Unscales by the image scale factor (aka device scale factor), and returns
+  // that factor.  This is useful when callers want to draw directly in the
+  // native scale.
+  float UndoDeviceScaleFactor();
+
   // Saves a copy of the drawing state onto a stack, operating on this copy
   // until a balanced call to Restore() is made.
   void Save();
@@ -173,8 +181,8 @@ class GFX_EXPORT Canvas {
   // at the specified alpha once Restore() is called.
   // |layer_bounds| are the bounds of the layer relative to the current
   // transform.
-  void SaveLayerAlpha(uint8 alpha);
-  void SaveLayerAlpha(uint8 alpha, const Rect& layer_bounds);
+  void SaveLayerAlpha(uint8_t alpha);
+  void SaveLayerAlpha(uint8_t alpha, const Rect& layer_bounds);
 
   // Restores the drawing state after a call to Save*(). It is an error to
   // call Restore() more times than Save*().
@@ -243,8 +251,13 @@ class GFX_EXPORT Canvas {
                   const SkPaint& paint);
 
   // Draws the given rectangle with rounded corners of |radius| using the
-  // given |paint| parameters.
+  // given |paint| parameters. DEPRECATED in favor of the RectF version below.
+  // TODO(mgiuca): Remove this (http://crbug.com/553726).
   void DrawRoundRect(const Rect& rect, int radius, const SkPaint& paint);
+
+  // Draws the given rectangle with rounded corners of |radius| using the
+  // given |paint| parameters.
+  void DrawRoundRect(const RectF& rect, float radius, const SkPaint& paint);
 
   // Draws the given path using the given |paint| parameters.
   void DrawPath(const SkPath& path, const SkPaint& paint);
@@ -257,7 +270,7 @@ class GFX_EXPORT Canvas {
 
   // Helper for DrawImageInt(..., paint) that constructs a temporary paint and
   // calls paint.setAlpha(alpha).
-  void DrawImageInt(const ImageSkia&, int x, int y, uint8 alpha);
+  void DrawImageInt(const ImageSkia&, int x, int y, uint8_t alpha);
 
   // Draws an image with the origin at the specified location, using the
   // specified paint. The upper left corner of the bitmap is rendered at the
@@ -304,14 +317,11 @@ class GFX_EXPORT Canvas {
                     const SkPaint& paint);
 
   // Same as the DrawImageInt functions above. Difference being this does not
-  // do any scaling, i.e. it assumes that the source/destination/image, etc are
-  // in pixels. It does translate the destination rectangle to ensure that the
-  // image is displayed at the correct pixel coordinates.
-  void DrawImageIntInPixel(const ImageSkia& image,
-                           int src_x,
-                           int src_y,
-                           int src_w,
-                           int src_h,
+  // do any scaling, i.e. it does not scale the output by the device scale
+  // factor (the internal image_scale_). It takes an ImageSkiaRep instead of
+  // an ImageSkia as the caller chooses the exact scale/pixel representation to
+  // use, which will not be scaled while drawing it into the canvas.
+  void DrawImageIntInPixel(const ImageSkiaRep& image_rep,
                            int dest_x,
                            int dest_y,
                            int dest_w,
@@ -389,14 +399,6 @@ class GFX_EXPORT Canvas {
                     int w,
                     int h);
 
-  // Returns a native drawing context for platform specific drawing routines to
-  // use. Must be balanced by a call to EndPlatformPaint().
-  NativeDrawingContext BeginPlatformPaint();
-
-  // Signifies the end of platform drawing using the native drawing context
-  // returned by BeginPlatformPaint().
-  void EndPlatformPaint();
-
   // Apply transformation on the canvas.
   void Transform(const Transform& transform);
 
@@ -416,10 +418,10 @@ class GFX_EXPORT Canvas {
   bool IntersectsClipRectInt(int x, int y, int w, int h);
   bool IntersectsClipRect(const Rect& rect);
 
-  // Helper for the DrawImageInt functions declared above. The |pixel|
-  // parameter if true indicates that the bounds and the image are to
-  // be assumed to be in pixels, i.e. no scaling needs to be performed.
-  void DrawImageIntHelper(const ImageSkia& image,
+  // Helper for the DrawImageInt functions declared above. The
+  // |remove_image_scale| parameter indicates if the scale of the |image_rep|
+  // should be removed when drawing the image, to avoid double-scaling it.
+  void DrawImageIntHelper(const ImageSkiaRep& image_rep,
                           int src_x,
                           int src_y,
                           int src_w,
@@ -430,8 +432,7 @@ class GFX_EXPORT Canvas {
                           int dest_h,
                           bool filter,
                           const SkPaint& paint,
-                          float image_scale,
-                          bool pixel);
+                          bool remove_image_scale);
 
   // The device scale factor at which drawing on this canvas occurs.
   // An additional scale can be applied via Canvas::Scale(). However,

@@ -4,15 +4,20 @@
 
 #include "components/policy/core/common/cloud/component_cloud_policy_store.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/callback.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
 #include "crypto/sha2.h"
 #include "policy/proto/chrome_extension_policy.pb.h"
 #include "policy/proto/device_management_backend.pb.h"
@@ -133,8 +138,8 @@ void ComponentCloudPolicyStore::Load() {
       scoped_ptr<em::PolicyFetchResponse> proto(new em::PolicyFetchResponse);
       em::ExternalPolicyData payload;
       if (!proto->ParseFromString(it->second) ||
-          !ValidateProto(
-              proto.Pass(), constants.policy_type, id, &payload, NULL)) {
+          !ValidateProto(std::move(proto), constants.policy_type, id, &payload,
+                         NULL)) {
         Delete(ns);
         continue;
       }
@@ -249,8 +254,8 @@ bool ComponentCloudPolicyStore::ValidatePolicy(
     PolicyNamespace* ns,
     em::ExternalPolicyData* payload) {
   em::PolicyData policy_data;
-  if (!ValidateProto(
-          proto.Pass(), std::string(), std::string(), payload, &policy_data)) {
+  if (!ValidateProto(std::move(proto), std::string(), std::string(), payload,
+                     &policy_data)) {
     return false;
   }
 
@@ -278,7 +283,7 @@ bool ComponentCloudPolicyStore::ValidateProto(
 
   scoped_ptr<ComponentCloudPolicyValidator> validator(
       ComponentCloudPolicyValidator::Create(
-          proto.Pass(), scoped_refptr<base::SequencedTaskRunner>()));
+          std::move(proto), scoped_refptr<base::SequencedTaskRunner>()));
   validator->ValidateUsername(username_, true);
   validator->ValidateDMToken(dm_token_,
                              ComponentCloudPolicyValidator::DM_TOKEN_REQUIRED);
@@ -323,8 +328,8 @@ bool ComponentCloudPolicyStore::ValidateData(
 
 bool ComponentCloudPolicyStore::ParsePolicy(const std::string& data,
                                             PolicyMap* policy) {
-  scoped_ptr<base::Value> json(base::JSONReader::DeprecatedRead(
-      data, base::JSON_PARSE_RFC | base::JSON_DETACHABLE_CHILDREN));
+  scoped_ptr<base::Value> json = base::JSONReader::Read(
+      data, base::JSON_PARSE_RFC | base::JSON_DETACHABLE_CHILDREN);
   base::DictionaryValue* dict = NULL;
   if (!json || !json->GetAsDictionary(&dict))
     return false;
@@ -353,7 +358,8 @@ bool ComponentCloudPolicyStore::ParsePolicy(const std::string& data,
     // If policy for components is ever used for device-level settings then
     // this must support a configurable scope; assuming POLICY_SCOPE_USER is
     // fine for now.
-    policy->Set(it.key(), level, POLICY_SCOPE_USER, value.release(), NULL);
+    policy->Set(it.key(), level, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                value.release(), nullptr);
   }
 
   return true;

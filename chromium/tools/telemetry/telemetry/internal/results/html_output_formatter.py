@@ -13,8 +13,7 @@ from telemetry.core import util
 from telemetry.internal.results import chart_json_output_formatter
 from telemetry.internal.results import output_formatter
 from telemetry import value as value_module
-
-util.AddDirToPythonPath(util.GetChromiumSrcDir(), 'build', 'util')
+from telemetry.value import list_of_scalar_values
 
 
 _TEMPLATE_HTML_PATH = os.path.join(
@@ -94,17 +93,20 @@ class HtmlOutputFormatter(output_formatter.OutputFormatter):
     self._output_stream.truncate()
 
   def _PrintPerfResult(self, measurement, trace, values, units,
-                       result_type='default'):
+                       result_type='default', std=None):
     metric_name = measurement
     if trace != measurement:
       metric_name += '.' + trace
     self._result['tests'].setdefault(self._test_name, {})
     self._result['tests'][self._test_name].setdefault('metrics', {})
-    self._result['tests'][self._test_name]['metrics'][metric_name] = {
+    metric_data = {
         'current': values,
         'units': units,
         'important': result_type == 'default'
         }
+    if std is not None:
+      metric_data['std'] = std
+    self._result['tests'][self._test_name]['metrics'][metric_name] = metric_data
 
   def _TranslateChartJson(self, chart_json_dict):
     dummy_dict = dict()
@@ -126,11 +128,20 @@ class HtmlOutputFormatter(output_formatter.OutputFormatter):
 
         perf_value = value.GetBuildbotValue()
 
-        if trace_name == 'summary':
-          trace_name = chart_name
+        if '@@' in chart_name:
+          chart_name_to_print = '%s-%s' % tuple(chart_name.split('@@'))
+        else:
+          chart_name_to_print = str(chart_name)
 
-        self._PrintPerfResult(chart_name, trace_name, perf_value,
-                              value.units, result_type)
+        if trace_name == 'summary':
+          trace_name = chart_name_to_print
+
+        std = None
+        if isinstance(value, list_of_scalar_values.ListOfScalarValues):
+          std = value.std
+
+        self._PrintPerfResult(chart_name_to_print, trace_name, perf_value,
+                              value.units, result_type, std)
 
   @property
   def _test_name(self):

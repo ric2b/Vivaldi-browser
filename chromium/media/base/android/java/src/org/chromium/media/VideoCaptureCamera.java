@@ -10,8 +10,8 @@ import android.graphics.SurfaceTexture;
 import android.opengl.GLES20;
 import android.os.Build;
 
-import org.chromium.base.JNINamespace;
 import org.chromium.base.Log;
+import org.chromium.base.annotations.JNINamespace;
 
 import java.io.IOException;
 import java.util.List;
@@ -60,7 +60,7 @@ public abstract class VideoCaptureCamera extends VideoCapture
             parameters = camera.getParameters();
         } catch (RuntimeException ex) {
             Log.e(TAG, "getCameraParameters: android.hardware.Camera.getParameters: " + ex);
-            camera.release();
+            if (camera != null) camera.release();
             return null;
         }
         return parameters;

@@ -137,13 +137,16 @@ def _GetBisectPerformanceMetricsInstance(options_dict):
   return bisect_perf_regression.BisectPerformanceMetrics(opts, os.getcwd())
 
 
-def _GetExtendedOptions(improvement_dir, fake_first, ignore_confidence=True):
+def _GetExtendedOptions(improvement_dir, fake_first, ignore_confidence=True,
+                        **extra_opts):
   """Returns the a copy of the default options dict plus some options."""
   result = dict(DEFAULT_OPTIONS)
   result.update({
       'improvement_direction': improvement_dir,
       'debug_fake_first_test_mean': fake_first,
-      'debug_ignore_regression_confidence': ignore_confidence})
+      'debug_ignore_regression_confidence': ignore_confidence
+  })
+  result.update(extra_opts)
   return result
 
 
@@ -285,65 +288,6 @@ class BisectPerfRegressionTest(unittest.TestCase):
     self._AssertParseResult([], '{}kb')
     self._AssertParseResult([], '{XYZ}kb')
 
-  def _AssertCompatibleCommand(
-      self, expected_command, original_command, revision, target_platform):
-    """Tests the modification of the command that might be done.
-
-    This modification to the command is done in order to get a Telemetry
-    command that works; before some revisions, the browser name that Telemetry
-    expects is different in some cases, but we want it to work anyway.
-
-    Specifically, only for android:
-      After r276628, only android-chrome-shell works.
-      Prior to r274857, only android-chromium-testshell works.
-      In the range [274857, 276628], both work.
-    """
-    bisect_options = bisect_perf_regression.BisectOptions()
-    bisect_options.output_buildbot_annotations = None
-    bisect_instance = bisect_perf_regression.BisectPerformanceMetrics(
-        bisect_options, os.getcwd())
-    bisect_instance.opts.target_platform = target_platform
-    git_revision = source_control.ResolveToRevision(
-        revision, 'chromium', bisect_utils.DEPOT_DEPS_NAME, 100)
-    depot = 'chromium'
-    command = bisect_instance.GetCompatibleCommand(
-        original_command, git_revision, depot)
-    self.assertEqual(expected_command, command)
-
-  def testGetCompatibleCommand_ChangeToTestShell(self):
-    # For revisions <= r274857, only android-chromium-testshell is used.
-    self._AssertCompatibleCommand(
-        'tools/perf/run_benchmark -v --browser=android-chromium-testshell foo',
-        'tools/perf/run_benchmark -v --browser=android-chrome-shell foo',
-        274857, 'android')
-
-  def testGetCompatibleCommand_ChangeToShell(self):
-    # For revisions >= r276728, only android-chrome-shell can be used.
-    self._AssertCompatibleCommand(
-        'tools/perf/run_benchmark -v --browser=android-chrome-shell foo',
-        'tools/perf/run_benchmark -v --browser=android-chromium-testshell foo',
-        276628, 'android')
-
-  def testGetCompatibleCommand_NoChange(self):
-    # For revisions < r276728, android-chromium-testshell can be used.
-    self._AssertCompatibleCommand(
-        'tools/perf/run_benchmark -v --browser=android-chromium-testshell foo',
-        'tools/perf/run_benchmark -v --browser=android-chromium-testshell foo',
-        274858, 'android')
-    # For revisions > r274857, android-chrome-shell can be used.
-    self._AssertCompatibleCommand(
-        'tools/perf/run_benchmark -v --browser=android-chrome-shell foo',
-        'tools/perf/run_benchmark -v --browser=android-chrome-shell foo',
-        274858, 'android')
-
-  def testGetCompatibleCommand_NonAndroidPlatform(self):
-    # In most cases, there's no need to change Telemetry command.
-    # For revisions >= r276728, only android-chrome-shell can be used.
-    self._AssertCompatibleCommand(
-        'tools/perf/run_benchmark -v --browser=release foo',
-        'tools/perf/run_benchmark -v --browser=release foo',
-        276628, 'chromium')
-
   # This method doesn't reference self; it fails if an error is thrown.
   # pylint: disable=R0201
   def testDryRun(self):
@@ -375,7 +319,7 @@ class BisectPerfRegressionTest(unittest.TestCase):
     results = _GenericDryRun(_GetExtendedOptions(1, -100))
     self.assertIsNone(results.error)
 
-  def _CheckAbortsEarly(self, results):
+  def _CheckAbortsEarly(self, results, **extra_opts):
     """Returns True if the bisect job would abort early."""
     global _MockResultsGenerator
     _MockResultsGenerator = (r for r in results)
@@ -384,7 +328,9 @@ class BisectPerfRegressionTest(unittest.TestCase):
     bisect_class.RunPerformanceTestAndParseResults = _MakeMockRunTests()
 
     try:
-      dry_run_results = _GenericDryRun(_GetExtendedOptions(0, 0, False))
+      dry_run_results = _GenericDryRun(_GetExtendedOptions(
+          improvement_dir=0, fake_first=0, ignore_confidence=False,
+          **extra_opts))
     except StopIteration:
       # If StopIteration was raised, that means that the next value after
       # the first two values was requested, so the job was not aborted.
@@ -412,6 +358,10 @@ class BisectPerfRegressionTest(unittest.TestCase):
 
   def testBisectNotAborted_MultipleValues(self):
     self.assertFalse(self._CheckAbortsEarly(MULTIPLE_VALUES))
+
+  def testBisectNotAbortedWhenRequiredConfidenceIsZero(self):
+    self.assertFalse(self._CheckAbortsEarly(
+        CLEAR_NON_REGRESSION, required_initial_confidence=0))
 
   def _CheckAbortsEarlyForReturnCode(self, results):
     """Returns True if the bisect job would abort early in return code mode."""
@@ -456,13 +406,6 @@ class BisectPerfRegressionTest(unittest.TestCase):
     depot_path = os.path.join(bisect_instance.src_cwd, 'v8')
     self.assertEqual(
         23634, source_control.GetCommitPosition(v8_rev, depot_path))
-
-  def testGetCommitPositionForWebKit(self):
-    bisect_instance = _GetBisectPerformanceMetricsInstance(DEFAULT_OPTIONS)
-    wk_rev = 'a94d028e0f2c77f159b3dac95eb90c3b4cf48c61'
-    depot_path = os.path.join(bisect_instance.src_cwd, 'third_party', 'WebKit')
-    self.assertEqual(
-        181660, source_control.GetCommitPosition(wk_rev, depot_path))
 
   def testGetCommitPositionForSkia(self):
     bisect_instance = _GetBisectPerformanceMetricsInstance(DEFAULT_OPTIONS)

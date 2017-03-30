@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SYNC_DRIVER_DATA_TYPE_STATUS_TABLE_H_
 #define COMPONENTS_SYNC_DRIVER_DATA_TYPE_STATUS_TABLE_H_
 
+#include <map>
 #include <string>
 
 #include "components/sync_driver/data_type_manager.h"
@@ -23,7 +24,7 @@ class DataTypeStatusTable {
 
   // Update the failed datatypes. Types will be added to their corresponding
   // error map based on their |error_type()|.
-  bool UpdateFailedDataTypes(const TypeErrorMap& errors);
+  void UpdateFailedDataTypes(const TypeErrorMap& errors);
 
   // Resets the current set of data type errors.
   void Reset();
@@ -70,9 +71,6 @@ class DataTypeStatusTable {
   syncer::SyncError GetUnrecoverableError() const;
 
  private:
-  // Returns true if there are any types with errors.
-  bool AnyFailedDataType() const;
-
   // The current unrecoverable errors. Only one unrecoverable error can be
   // active at a time, but it may apply to more than one type.
   TypeErrorMap unrecoverable_errors_;

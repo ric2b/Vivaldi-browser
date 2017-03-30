@@ -5,14 +5,17 @@
 #ifndef CONTENT_PUBLIC_RENDERER_RENDER_VIEW_H_
 #define CONTENT_PUBLIC_RENDERER_RENDER_VIEW_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/top_controls_state.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace blink {
@@ -24,6 +27,7 @@ class WebString;
 class WebURLRequest;
 class WebView;
 struct WebContextMenuData;
+struct WebRect;
 }
 
 namespace gfx {
@@ -71,6 +75,9 @@ class CONTENT_EXPORT RenderView : public IPC::Sender {
   // Returns the size of the view.
   virtual gfx::Size GetSize() const = 0;
 
+  // Returns the device scale factor of the display the render view is in.
+  virtual float GetDeviceScaleFactor() const = 0;
+
   // Gets WebKit related preferences associated with this view.
   virtual WebPreferences& GetWebkitPreferences() = 0;
 
@@ -80,10 +87,6 @@ class CONTENT_EXPORT RenderView : public IPC::Sender {
 
   // Returns the associated WebView. May return NULL when the view is closing.
   virtual blink::WebView* GetWebView() = 0;
-
-  // Returns true if the parameter node is a textfield, text area, a content
-  // editable div, or has an ARIA role of textbox.
-  virtual bool IsEditableNode(const blink::WebNode& node) const = 0;
 
   // Returns true if we should display scrollbars for the given view size and
   // false if the scrollbars should be hidden.
@@ -126,6 +129,19 @@ class CONTENT_EXPORT RenderView : public IPC::Sender {
                                       TopControlsState current,
                                       bool animate) = 0;
 #endif
+
+  // Converts the |rect| from Viewport coordinates to Window coordinates.
+  // See blink::WebWidgetClient::convertViewportToWindow for more details.
+  virtual void convertViewportToWindow(blink::WebRect* rect) = 0;
+
+  // Returns the bounds of |element| in Window coordinates. The bounds have been
+  // adjusted to include any transformations, including page scale.
+  // This function will update the layout if required.
+  virtual gfx::RectF ElementBoundsInWindow(const blink::WebElement& element)
+      = 0;
+
+  // Returns the device scale factor for unit tests.
+  virtual float GetDeviceScaleFactorForTest() const = 0;
 
  protected:
   ~RenderView() override {}

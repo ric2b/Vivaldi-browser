@@ -4,10 +4,12 @@
 
 #include <windows.h>
 #include <mmsystem.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
@@ -32,7 +34,7 @@ namespace media {
 
 ACTION_P3(CheckCountAndPostQuitTask, count, limit, loop) {
   if (++*count >= limit) {
-    loop->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+    loop->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   }
 }
 
@@ -41,7 +43,7 @@ class MockAudioInputCallback : public AudioInputStream::AudioInputCallback {
   MOCK_METHOD4(OnData,
                void(AudioInputStream* stream,
                     const AudioBus* src,
-                    uint32 hardware_delay_bytes,
+                    uint32_t hardware_delay_bytes,
                     double volume));
   MOCK_METHOD1(OnError, void(AudioInputStream* stream));
 };
@@ -63,9 +65,10 @@ class FakeAudioInputCallback : public AudioInputStream::AudioInputCallback {
 
   void OnData(AudioInputStream* stream,
               const AudioBus* src,
-              uint32 hardware_delay_bytes,
+              uint32_t hardware_delay_bytes,
               double volume) override {
-    EXPECT_NE(hardware_delay_bytes, 0u);
+    EXPECT_GE(hardware_delay_bytes, 0u);
+    EXPECT_LT(hardware_delay_bytes, 0xFFFFu);  // Arbitrarily picked.
     num_received_audio_frames_ += src->frames();
     data_event_.Signal();
   }
@@ -106,7 +109,7 @@ class WriteToFileAudioSink : public AudioInputStream::AudioInputCallback {
   ~WriteToFileAudioSink() override {
     size_t bytes_written = 0;
     while (bytes_written < bytes_to_write_) {
-      const uint8* chunk;
+      const uint8_t* chunk;
       int chunk_size;
 
       // Stop writing if no more data is available.
@@ -124,11 +127,11 @@ class WriteToFileAudioSink : public AudioInputStream::AudioInputCallback {
   // AudioInputStream::AudioInputCallback implementation.
   void OnData(AudioInputStream* stream,
               const AudioBus* src,
-              uint32 hardware_delay_bytes,
+              uint32_t hardware_delay_bytes,
               double volume) override {
     EXPECT_EQ(bits_per_sample_, 16);
     const int num_samples = src->frames() * src->channels();
-    scoped_ptr<int16> interleaved(new int16[num_samples]);
+    scoped_ptr<int16_t> interleaved(new int16_t[num_samples]);
     const int bytes_per_sample = sizeof(*interleaved);
     src->ToInterleaved(src->frames(), bytes_per_sample, interleaved.get());
 
@@ -136,7 +139,7 @@ class WriteToFileAudioSink : public AudioInputStream::AudioInputCallback {
     // fwrite() calls in the audio callback. The complete buffer will be
     // written to file in the destructor.
     const int size = bytes_per_sample * num_samples;
-    if (buffer_.Append((const uint8*)interleaved.get(), size)) {
+    if (buffer_.Append((const uint8_t*)interleaved.get(), size)) {
       bytes_to_write_ += size;
     }
   }
@@ -193,11 +196,10 @@ class AudioInputStreamWrapper {
 
  private:
   AudioInputStream* CreateInputStream() {
+    AudioParameters params = default_params_;
+    params.set_frames_per_buffer(frames_per_buffer_);
     AudioInputStream* ais = audio_man_->MakeAudioInputStream(
-        AudioParameters(format(), default_params_.channel_layout(),
-                        sample_rate(), bits_per_sample(), frames_per_buffer_,
-                        default_params_.effects()),
-        AudioManagerBase::kDefaultDeviceId);
+        params, AudioManagerBase::kDefaultDeviceId);
     EXPECT_TRUE(ais);
     return ais;
   }
@@ -360,13 +362,13 @@ TEST(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
   MockAudioInputCallback sink;
 
   // Derive the expected size in bytes of each recorded packet.
-  uint32 bytes_per_packet = aisw.channels() * aisw.frames_per_buffer() *
-      (aisw.bits_per_sample() / 8);
+  uint32_t bytes_per_packet =
+      aisw.channels() * aisw.frames_per_buffer() * (aisw.bits_per_sample() / 8);
 
   // We use 10ms packets and will run the test until ten packets are received.
   // All should contain valid packets of the same size and a valid delay
   // estimate.
-  EXPECT_CALL(sink, OnData(ais.get(), NotNull(), Gt(bytes_per_packet), _))
+  EXPECT_CALL(sink, OnData(ais.get(), NotNull(), _, _))
       .Times(AtLeast(10))
       .WillRepeatedly(CheckCountAndPostQuitTask(&count, 10, &loop));
   ais->Start(&sink);
@@ -386,7 +388,7 @@ TEST(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
   bytes_per_packet = aisw.channels() * aisw.frames_per_buffer() *
       (aisw.bits_per_sample() / 8);
 
-  EXPECT_CALL(sink, OnData(ais.get(), NotNull(), Gt(bytes_per_packet), _))
+  EXPECT_CALL(sink, OnData(ais.get(), NotNull(), _, _))
       .Times(AtLeast(10))
       .WillRepeatedly(CheckCountAndPostQuitTask(&count, 10, &loop));
   ais->Start(&sink);
@@ -402,7 +404,7 @@ TEST(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
   bytes_per_packet = aisw.channels() * aisw.frames_per_buffer() *
     (aisw.bits_per_sample() / 8);
 
-  EXPECT_CALL(sink, OnData(ais.get(), NotNull(), Gt(bytes_per_packet), _))
+  EXPECT_CALL(sink, OnData(ais.get(), NotNull(), _, _))
       .Times(AtLeast(10))
       .WillRepeatedly(CheckCountAndPostQuitTask(&count, 10, &loop));
   ais->Start(&sink);

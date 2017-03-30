@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "ui/aura/window_observer.h"
@@ -156,7 +156,7 @@ class ASH_EXPORT MultiWindowResizeController :
   ResizeWindows windows_;
 
   // Timer used before showing.
-  base::OneShotTimer<MultiWindowResizeController> show_timer_;
+  base::OneShotTimer show_timer_;
 
   scoped_ptr<views::Widget> resize_widget_;
 

@@ -9,6 +9,11 @@ import("//third_party/protobuf/proto_library.gni")
 
 assert(is_chromeos, "Non-ChromeOS builds must not depend on //chromeos")
 
+declare_args() {
+  # Use binder. Binder related code is compiled only when true.
+  use_binder = false
+}
+
 gypi_values = exec_script("//build/gypi_to_gn.py",
                           [ rebase_path("chromeos.gyp") ],
                           "scope",
@@ -20,15 +25,18 @@ component("chromeos") {
     "//dbus",
   ]
   deps = [
+    ":cryptohome_proto",
+    ":power_manager_proto",
     "//base",
     "//base:i18n",
     "//base:prefs",
     "//base/third_party/dynamic_annotations",
     "//chromeos/ime:gencode",
     "//components/device_event_log",
-    "//components/policy/proto",
     "//components/onc",
+    "//components/policy/proto",
     "//components/proxy_config",
+    "//components/signin/core/account_id",
     "//crypto",
     "//crypto:platform",
     "//google_apis",
@@ -36,22 +44,31 @@ component("chromeos") {
     "//third_party/libxml",
     "//third_party/protobuf:protobuf_lite",
     "//url",
-    ":cryptohome_proto",
-    ":power_manager_proto",
   ]
   sources = gypi_values.chromeos_sources
   defines = [ "CHROMEOS_IMPLEMENTATION" ]
+  if (use_binder) {
+    if (target_cpu == "arm" || target_cpu == "x86") {
+      defines += [ "BINDER_IPC_32BIT" ]
+    }
+    sources += gypi_values.chromeos_binder_sources
+  }
 }
 
+# TYhis must be a static library instead of a source set because some of the
+# files pull in things with dependencies that aren't linked in all cases.
+#
+# TODO this should probably be changed such that it links in all cases and
+# can be converted to a source set.
 static_library("test_support") {
   testonly = true
   configs += [ "//build/config/linux:dbus" ]
-  deps = [
-    "//testing/gmock",
+  public_deps = [
     ":chromeos",
     ":cryptohome_proto",
     ":power_manager_proto",
     ":test_support_without_gmock",
+    "//testing/gmock",
   ]
   sources = [
     "attestation/mock_attestation_flow.cc",
@@ -103,16 +120,14 @@ static_library("test_support_without_gmock") {
   testonly = true
   configs += [ "//build/config/linux:dbus" ]
   deps = [
-    "//crypto",
     ":chromeos",
     ":cryptohome_proto",
     ":power_manager_proto",
+    "//crypto",
   ]
   sources = [
     "dbus/fake_cros_disks_client.cc",
     "dbus/fake_cros_disks_client.h",
-    "dbus/fake_power_manager_client.cc",
-    "dbus/fake_power_manager_client.h",
     "dbus/fake_session_manager_client.cc",
     "dbus/fake_session_manager_client.h",
     "dbus/fake_shill_manager_client.cc",
@@ -128,6 +143,9 @@ test("chromeos_unittests") {
     "//net/third_party/nss/ssl:ssl_config",
   ]
   deps = [
+    ":cryptohome_proto",
+    ":power_manager_proto",
+    ":test_support",
     "//base:prefs_test_support",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
@@ -143,13 +161,16 @@ test("chromeos_unittests") {
     "//testing/gtest",
     "//third_party/icu",
     "//url",
-    ":cryptohome_proto",
-    ":power_manager_proto",
-    ":test_support",
   ]
   sources = gypi_values.chromeos_test_sources
   if (use_allocator != "none") {
     deps += [ "//base/allocator" ]
+  }
+  if (use_binder) {
+    if (target_cpu == "arm" || target_cpu == "x86") {
+      defines += [ "BINDER_IPC_32BIT" ]
+    }
+    sources += gypi_values.chromeos_binder_test_sources
   }
 }
 

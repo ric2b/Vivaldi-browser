@@ -5,17 +5,18 @@
 #ifndef REMOTING_CLIENT_PLUGIN_PEPPER_VIDEO_RENDERER_3D_H_
 #define REMOTING_CLIENT_PLUGIN_PEPPER_VIDEO_RENDERER_3D_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ppapi/cpp/graphics_3d.h"
 #include "ppapi/cpp/instance_handle.h"
 #include "ppapi/cpp/video_decoder.h"
 #include "ppapi/utility/completion_callback_factory.h"
-#include "remoting/client/chromoting_stats.h"
 #include "remoting/client/plugin/pepper_video_renderer.h"
 #include "remoting/protocol/video_stub.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
@@ -36,14 +37,15 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
   // PepperVideoRenderer interface.
   bool Initialize(pp::Instance* instance,
                   const ClientContext& context,
-                  EventHandler* event_handler) override;
+                  EventHandler* event_handler,
+                  protocol::PerformanceTracker* perf_tracker) override;
   void OnViewChanged(const pp::View& view) override;
   void EnableDebugDirtyRegion(bool enable) override;
 
   // VideoRenderer interface.
   void OnSessionConfig(const protocol::SessionConfig& config) override;
-  ChromotingStats* GetStats() override;
   protocol::VideoStub* GetVideoStub() override;
+  protocol::FrameConsumer* GetFrameConsumer() override;
 
   // protocol::VideoStub interface.
   void ProcessVideoPacket(scoped_ptr<VideoPacket> packet,
@@ -52,13 +54,6 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
  private:
   class PendingPacket;
   class Picture;
-
-  struct FrameDecodeTimestamp {
-    FrameDecodeTimestamp(uint32_t frame_id,
-                         base::TimeTicks decode_started_time);
-    uint32_t frame_id;
-    base::TimeTicks decode_started_time;
-  };
 
   // Callback for pp::VideoDecoder::Initialize().
   void OnInitialized(int32_t result);
@@ -95,7 +90,8 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
   // CHECKs that the last OpenGL call has completed successfully.
   void CheckGLError();
 
-  EventHandler* event_handler_;
+  EventHandler* event_handler_ = nullptr;
+  protocol::PerformanceTracker* perf_tracker_ = nullptr;
 
   pp::Graphics3D graphics_;
   const PPB_OpenGLES2* gles2_if_;
@@ -103,26 +99,18 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
 
   webrtc::DesktopSize frame_size_;
   webrtc::DesktopVector frame_dpi_;
-  webrtc::DesktopRegion desktop_shape_;
+  scoped_ptr<webrtc::DesktopRegion> frame_shape_;
 
   webrtc::DesktopSize view_size_;
 
-  ChromotingStats stats_;
-  int64 latest_input_event_timestamp_ ;
-
-  bool initialization_finished_;
-  bool decode_pending_;
-  bool get_picture_pending_;
-  bool paint_pending_;
-
-  uint32_t latest_frame_id_;
+  bool initialization_finished_ = false;
+  bool decode_pending_ = false;
+  bool get_picture_pending_ = false;
+  bool paint_pending_ = false;
 
   // Queue of packets that that have been received, but haven't been passed to
   // the decoder yet.
   std::deque<PendingPacket*> pending_packets_;
-
-  // Timestamps for all frames currently being processed by the decoder.
-  std::deque<FrameDecodeTimestamp> frame_decode_timestamps_;
 
   // The current picture shown on the screen or being rendered. Must be deleted
   // before |video_decoder_|.
@@ -134,24 +122,21 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
   scoped_ptr<Picture> next_picture_;
 
   // Set to true if the screen has been resized and needs to be repainted.
-  bool force_repaint_;
-
-  // Time the last paint operation was started.
-  base::TimeTicks latest_paint_started_time_;
+  bool force_repaint_ = false;
 
   // The texture type for which |shader_program| was initialized. Can be either
   // 0, GL_TEXTURE_2D, GL_TEXTURE_RECTANGLE_ARB or GL_TEXTURE_EXTERNAL_OES. 0
   // indicates that |shader_program_| hasn't been intialized.
-  uint32_t current_shader_program_texture_target_;
+  uint32_t current_shader_program_texture_target_ = 0;
 
   // Shader program ID.
-  unsigned int shader_program_;
+  unsigned int shader_program_ = 0;
 
   // Location of the scale value to be passed to the |shader_program_|.
-  int shader_texcoord_scale_location_;
+  int shader_texcoord_scale_location_ = 0;
 
   // True if dirty regions are to be sent to |event_handler_| for debugging.
-  bool debug_dirty_region_;
+  bool debug_dirty_region_ = false;
 
   pp::CompletionCallbackFactory<PepperVideoRenderer3D> callback_factory_;
 

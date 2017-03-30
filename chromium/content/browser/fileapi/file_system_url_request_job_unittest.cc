@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "storage/browser/fileapi/file_system_url_request_job.h"
-
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
@@ -12,6 +12,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/rand_util.h"
@@ -36,6 +37,7 @@
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_file_util.h"
+#include "storage/browser/fileapi/file_system_url_request_job.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::AsyncFileTestHelper;
@@ -166,7 +168,7 @@ class FileSystemURLRequestJobTest : public testing::Test {
     handlers.push_back(base::Bind(&TestAutoMountForURLRequest));
 
     file_system_context_ = CreateFileSystemContextWithAutoMountersForTesting(
-        NULL, additional_providers.Pass(), handlers, temp_dir_.path());
+        NULL, std::move(additional_providers), handlers, temp_dir_.path());
 
     ASSERT_EQ(static_cast<int>(sizeof(kTestFileData)) - 1,
               base::WriteFile(mnt_point.AppendASCII("foo"), kTestFileData,
@@ -246,10 +248,12 @@ class FileSystemURLRequestJobTest : public testing::Test {
     return GURL(kFileSystemURLPrefix + path);
   }
 
-  // Put the message loop at the top, so that it's the last thing deleted.
+  // Temp directory is at the top because it must be deleted last.
+  base::ScopedTempDir temp_dir_;
+
+  // The message loop must be deleted second to last.
   base::MessageLoopForIO message_loop_;
 
-  base::ScopedTempDir temp_dir_;
   scoped_refptr<storage::FileSystemContext> file_system_context_;
 
   net::URLRequestContext empty_context_;

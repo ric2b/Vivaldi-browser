@@ -6,12 +6,12 @@
 
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
@@ -96,7 +96,7 @@ class URLRequestChromeJob : public net::URLRequestJob {
   // net::URLRequestJob implementation.
   void Start() override;
   void Kill() override;
-  bool ReadRawData(net::IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(net::IOBuffer* buf, int buf_size) override;
   bool GetMimeType(std::string* mime_type) const override;
   int GetResponseCode() const override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
@@ -142,7 +142,7 @@ class URLRequestChromeJob : public net::URLRequestJob {
 
   // Do the actual copy from data_ (the data we're serving) into |buf|.
   // Separate from ReadRawData so we can handle async I/O.
-  void CompleteRead(net::IOBuffer* buf, int buf_size, int* bytes_read);
+  int CompleteRead(net::IOBuffer* buf, int buf_size);
 
   // The actual data we're serving.  NULL until it's been fetched.
   scoped_refptr<base::RefCountedMemory> data_;
@@ -237,8 +237,10 @@ void URLRequestChromeJob::Start() {
 }
 
 void URLRequestChromeJob::Kill() {
+  weak_factory_.InvalidateWeakPtrs();
   if (backend_)
     backend_->RemoveRequest(this);
+  URLRequestJob::Kill();
 }
 
 bool URLRequestChromeJob::GetMimeType(std::string* mime_type) const {
@@ -289,58 +291,46 @@ void URLRequestChromeJob::MimeTypeAvailable(const std::string& mime_type) {
 void URLRequestChromeJob::DataAvailable(base::RefCountedMemory* bytes) {
   TRACE_EVENT_ASYNC_END0("browser", "DataManager:Request", this);
   if (bytes) {
-    // The request completed, and we have all the data.
-    // Clear any IO pending status.
-    SetStatus(net::URLRequestStatus());
-
     data_ = bytes;
-    int bytes_read;
     if (pending_buf_.get()) {
       CHECK(pending_buf_->data());
-      CompleteRead(pending_buf_.get(), pending_buf_size_, &bytes_read);
+      int rv = CompleteRead(pending_buf_.get(), pending_buf_size_);
       pending_buf_ = NULL;
-      NotifyReadComplete(bytes_read);
+      ReadRawDataComplete(rv);
     }
   } else {
-    // The request failed.
-    NotifyDone(
-        net::URLRequestStatus(net::URLRequestStatus::FAILED, net::ERR_FAILED));
+    ReadRawDataComplete(net::ERR_FAILED);
   }
 }
 
-bool URLRequestChromeJob::ReadRawData(net::IOBuffer* buf,
-                                      int buf_size,
-                                      int* bytes_read) {
+int URLRequestChromeJob::ReadRawData(net::IOBuffer* buf, int buf_size) {
   if (!data_.get()) {
-    SetStatus(net::URLRequestStatus(net::URLRequestStatus::IO_PENDING, 0));
     DCHECK(!pending_buf_.get());
     CHECK(buf->data());
     pending_buf_ = buf;
     pending_buf_size_ = buf_size;
-    return false;  // Tell the caller we're still waiting for data.
+    return net::ERR_IO_PENDING;  // Tell the caller we're still waiting for
+                                 // data.
   }
 
   // Otherwise, the data is available.
-  CompleteRead(buf, buf_size, bytes_read);
-  return true;
+  return CompleteRead(buf, buf_size);
 }
 
-void URLRequestChromeJob::CompleteRead(net::IOBuffer* buf,
-                                       int buf_size,
-                                       int* bytes_read) {
+int URLRequestChromeJob::CompleteRead(net::IOBuffer* buf, int buf_size) {
   // http://crbug.com/373841
   char url_buf[128];
   base::strlcpy(url_buf, request_->url().spec().c_str(), arraysize(url_buf));
   base::debug::Alias(url_buf);
 
-  int remaining = static_cast<int>(data_->size()) - data_offset_;
+  int remaining = data_->size() - data_offset_;
   if (buf_size > remaining)
     buf_size = remaining;
   if (buf_size > 0) {
     memcpy(buf->data(), data_->front() + data_offset_, buf_size);
     data_offset_ += buf_size;
   }
-  *bytes_read = buf_size;
+  return buf_size;
 }
 
 namespace {
@@ -413,12 +403,11 @@ URLDataManagerIOSBackend::~URLDataManagerIOSBackend() {
 }
 
 // static
-net::URLRequestJobFactory::ProtocolHandler*
-URLDataManagerIOSBackend::CreateProtocolHandler(
-    BrowserState* browser_state) {
+scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
+URLDataManagerIOSBackend::CreateProtocolHandler(BrowserState* browser_state) {
   DCHECK(browser_state);
-  return new ChromeProtocolHandler(browser_state,
-                                   browser_state->IsOffTheRecord());
+  return make_scoped_ptr(new ChromeProtocolHandler(
+      browser_state, browser_state->IsOffTheRecord()));
 }
 
 void URLDataManagerIOSBackend::AddDataSource(URLDataSourceIOSImpl* source) {

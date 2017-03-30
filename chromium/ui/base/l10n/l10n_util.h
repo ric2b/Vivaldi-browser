@@ -8,10 +8,14 @@
 #ifndef UI_BASE_L10N_L10N_UTIL_H_
 #define UI_BASE_L10N_L10N_UTIL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "ui/base/ui_base_export.h"
 
 #if defined(OS_MACOSX)
@@ -160,7 +164,7 @@ UI_BASE_EXPORT base::string16 GetStringFUTF16(int message_id,
 
 // Convenience functions to get a string with a single number as a parameter.
 UI_BASE_EXPORT base::string16 GetStringFUTF16Int(int message_id, int a);
-base::string16 GetStringFUTF16Int(int message_id, int64 a);
+base::string16 GetStringFUTF16Int(int message_id, int64_t a);
 
 // Get a resource string using |number| with a locale-specific plural rule.
 // |message_id| points to a message in the ICU syntax.
@@ -168,6 +172,13 @@ base::string16 GetStringFUTF16Int(int message_id, int64 a);
 // go/plurals (Google internal).
 UI_BASE_EXPORT base::string16 GetPluralStringFUTF16(int message_id, int number);
 UI_BASE_EXPORT std::string GetPluralStringFUTF8(int message_id, int number);
+
+// Get a string when you only care about 'single vs multiple' distinction.
+// The message pointed to by |message_id| should be in ICU syntax
+// (see the references above for Plural) with 'single', 'multiple', and
+// 'other' (fallback) instead of 'male', 'female', and 'other' (fallback).
+UI_BASE_EXPORT base::string16 GetSingleOrMultipleStringUTF16(int message_id,
+                                                              bool is_multiple);
 
 // In place sorting of base::string16 strings using collation rules for
 // |locale|.

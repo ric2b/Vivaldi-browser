@@ -5,12 +5,13 @@
 #ifndef CONTENT_RENDERER_PEPPER_VIDEO_DECODER_SHIM_H_
 #define CONTENT_RENDERER_PEPPER_VIDEO_DECODER_SHIM_H_
 
+#include <stdint.h>
+
 #include <queue>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
-#include "base/memory/linked_ptr.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -47,16 +48,15 @@ class PepperVideoDecoderHost;
 // thread.
 class VideoDecoderShim : public media::VideoDecodeAccelerator {
  public:
-  explicit VideoDecoderShim(PepperVideoDecoderHost* host);
+  VideoDecoderShim(PepperVideoDecoderHost* host, uint32_t texture_pool_size);
   ~VideoDecoderShim() override;
 
   // media::VideoDecodeAccelerator implementation.
-  bool Initialize(media::VideoCodecProfile profile,
-                  media::VideoDecodeAccelerator::Client* client) override;
+  bool Initialize(const Config& config, Client* client) override;
   void Decode(const media::BitstreamBuffer& bitstream_buffer) override;
   void AssignPictureBuffers(
       const std::vector<media::PictureBuffer>& buffers) override;
-  void ReusePictureBuffer(int32 picture_buffer_id) override;
+  void ReusePictureBuffer(int32_t picture_buffer_id) override;
   void Flush() override;
   void Reset() override;
   void Destroy() override;
@@ -74,7 +74,7 @@ class VideoDecoderShim : public media::VideoDecodeAccelerator {
   class DecoderImpl;
   class YUVConverter;
 
-  void OnInitializeComplete(int32_t result, uint32_t texture_pool_size);
+  void OnInitializeFailed();
   void OnDecodeComplete(int32_t result, uint32_t decode_id);
   void OnOutputComplete(scoped_ptr<PendingFrame> frame);
   void SendPictures();
@@ -111,7 +111,7 @@ class VideoDecoderShim : public media::VideoDecodeAccelerator {
   CompletedDecodeQueue completed_decodes_;
 
   // Queue of decoded frames that await rgb->yuv conversion.
-  typedef std::queue<linked_ptr<PendingFrame> > PendingFrameQueue;
+  typedef std::queue<scoped_ptr<PendingFrame>> PendingFrameQueue;
   PendingFrameQueue pending_frames_;
 
   // The optimal number of textures to allocate for decoder_impl_.

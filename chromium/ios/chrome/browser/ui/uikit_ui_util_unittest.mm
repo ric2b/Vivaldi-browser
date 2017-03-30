@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 
-#include "base/basictypes.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/ui/ui_util.h"
@@ -74,6 +73,20 @@ UIImage* testImage(CGSize imageSize) {
   UIImage* image = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
   return image;
+}
+
+TEST(UIKitUIUtilTest, TestResizeImageOpacity) {
+  UIImage* actual;
+  UIImage* image = testImage(CGSizeMake(100, 100));
+  actual =
+      ResizeImage(image, CGSizeMake(50, 50), ProjectionMode::kAspectFit, YES);
+  EXPECT_TRUE(actual);
+  EXPECT_FALSE(ImageHasAlphaChannel(actual));
+
+  actual =
+      ResizeImage(image, CGSizeMake(50, 50), ProjectionMode::kAspectFit, NO);
+  EXPECT_TRUE(actual);
+  EXPECT_TRUE(ImageHasAlphaChannel(actual));
 }
 
 TEST(UIKitUIUtilTest, TestResizeImageInvalidInput) {

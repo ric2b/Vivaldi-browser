@@ -36,7 +36,8 @@ public class SyncNotificationController implements ProfileSyncService.SyncStateC
             Class<? extends Fragment> accountManagementFragment) {
         mApplicationContext = context.getApplicationContext();
         mNotificationController = GoogleServicesNotificationController.get(context);
-        mProfileSyncService = ProfileSyncService.get(context);
+        mProfileSyncService = ProfileSyncService.get();
+        assert mProfileSyncService != null;
         mPassphraseRequestActivity = passphraseRequestActivity;
         mAccountManagementFragment = accountManagementFragment;
     }
@@ -67,7 +68,7 @@ public class SyncNotificationController implements ProfileSyncService.SyncStateC
         if (shouldSyncAuthErrorBeShown()) {
             message = mProfileSyncService.getAuthError().getMessage();
             intent = createSettingsIntent();
-        } else if (mProfileSyncService.isSyncInitialized()
+        } else if (mProfileSyncService.isBackendInitialized()
                 && mProfileSyncService.isPassphraseRequiredForDecryption()) {
             if (mProfileSyncService.isPassphrasePrompted()) {
                 return;

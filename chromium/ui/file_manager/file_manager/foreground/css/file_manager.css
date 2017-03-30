@@ -3,6 +3,10 @@
  * found in the LICENSE file. */
 
 /* Special attribute used in HTML to hide elements. */
+body:not([type]) [visibleif] {
+  display: none;
+}
+
 body[type='folder'] [invisibleif~='folder'],
 body[type='upload-folder'] [invisibleif~='upload-folder'],
 body[type='saveas-file'] [invisibleif~='saveas-file'],
@@ -56,7 +60,7 @@ a:focus {
   opacity: 0.8;
 }
 
-::-webkit-scrollbar {
+.dialog-container ::-webkit-scrollbar {
   height: 0;
   width: 0;
 }
@@ -202,13 +206,32 @@ div.splitter {
 #directory-tree .tree-row .label {
   display: block;
   flex: auto;
+  font-weight: 500;
   margin: 0 6px;
   overflow-x: hidden;
   text-overflow: ellipsis;
 }
 
+#directory-tree [renaming] > .tree-row > .label {
+  display: none;
+}
+
+#directory-tree .tree-row > input {
+  display: none;
+  margin: 0 6px;
+  overflow: hidden;
+}
+
+#directory-tree [renaming] > .tree-row > input {
+  display: block;
+}
+
 #directory-tree .tree-row > paper-ripple {
   color: rgb(19, 120, 185);
+}
+
+#directory-tree [renaming] > .tree-row > paper-ripple {
+  display: none;
 }
 
 #directory-tree .tree-item.accepts > .tree-row,
@@ -291,7 +314,8 @@ body.check-select button:hover {
   color: rgb(90, 90, 90);
 }
 
-.dialog-header .icon-button > paper-ripple {
+.dialog-header .icon-button > paper-ripple,
+.dialog-header .ripples > paper-ripple {
   color: black;
 }
 
@@ -309,17 +333,13 @@ body.check-select .dialog-header
   background-color: rgba(153, 153, 153, 0.20);
 }
 
-.dialog-header .icon-button[disabled]:not(.manual-display) {
-  display: none !important;
-}
-
 .dialog-header iron-icon,
 .dialog-header .icon {
   height: 16px;
   width: 16px;
 }
 
-.dialog-header paper-button::shadow > paper-material {
+.dialog-header paper-button {
   padding: 0 8px;
   line-height: 32px;
 }
@@ -338,6 +358,13 @@ body.check-select .dialog-header
 
 .dialog-header button.icon-button > iron-icon {
   margin: 8px;
+}
+
+.dialog-header button.icon-button > files-toggle-ripple {
+  height: 28px;
+  left: 2px;
+  top: 2px;
+  width: 28px;
 }
 
 .dialog-header button.icon-button > .icon {
@@ -499,7 +526,7 @@ html[dir='rtl'] #cloud-import-details {
 
 #cloud-import-details .banner .title {
   font-size: 122%;
-  font-weight: bold;
+  font-weight: 500;
   margin-bottom: 5px;
 }
 
@@ -557,6 +584,7 @@ html[dir='rtl'] #cloud-import-details {
 #cloud-import-details paper-button {
   align-self: flex-end;
   color: white;
+  font-weight: 500;
   margin-top: 20px;
 }
 
@@ -571,6 +599,7 @@ html[dir='rtl'] #cloud-import-details {
 #files-selected-label {
   -webkit-margin-start: 20px;
   display: none;
+  font-weight: 500;
 }
 
 body.check-select #files-selected-label {
@@ -583,6 +612,7 @@ body.check-select #files-selected-label {
 
 #cancel-selection-button > span {
   display: inline-block;
+  font-weight: 500;
   vertical-align: middle;
 }
 
@@ -754,18 +784,26 @@ html[dir='rtl'] #search-box .clear {
   margin: 0 0.29em;
   min-width: 5.14em;
   outline: none;
+  padding: 1px 16px;
+  position: relative;
   text-align: center;
   text-transform: uppercase;
+  transition: box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 0;
 }
 
 .dialog-footer button {
-  /* Use bold until we get Roboto medium. crbug.com/368442. */
-  font-weight: bold;
+  font-weight: 500;
 }
 
 .dialog-footer button:hover {
   border-image: none;  /* Overrides the definition of common.css. */
+}
+
+.dialog-footer button:active {
+  box-shadow: 0 4px 5px 0 rgba(0, 0, 0, 0.14),
+              0 1px 10px 0 rgba(0, 0, 0, 0.12),
+              0 2px 4px -1px rgba(0, 0, 0, 0.4);
 }
 
 .dialog-footer paper-button,
@@ -798,7 +836,6 @@ html[dir='rtl'] #search-box .clear {
 }
 
 .dialog-footer input {
-  color: red;
   margin: 3px 0 !important;
 }
 
@@ -845,9 +882,9 @@ html[dir='rtl'] #search-box .clear {
 }
 
 /* Draw outline using box-shadow to make them rounded. */
-.dialog-footer .primary:focus,
-.dialog-footer .secondary:focus,
-.dialog-footer select:focus {
+.dialog-footer .primary:focus:not(:active),
+.dialog-footer .secondary:focus:not(:active),
+.dialog-footer select:focus:not(:active) {
   box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.5);
 }
 
@@ -909,8 +946,7 @@ body.check-select .breadcrumbs {
   cursor: pointer;
   flex: none;
   font-size: 14px;
-  /* Use bold until we get Roboto medium. crbug.com/368442. */
-  font-weight: bold;
+  font-weight: 500;
   min-width: 0;
   padding: 0 9px;
   text-transform: none;
@@ -995,7 +1031,8 @@ html[dir='rtl'] .breadcrumbs .separator {
 }
 
 .spinner {
-  background: url(chrome://resources/images/throbber.svg) center/100% no-repeat;
+  background: url(chrome://resources/images/throbber_small.svg) center/100%
+      no-repeat;
   height: 16px;
   left: 50%;
   margin-left: -8px;
@@ -1111,7 +1148,7 @@ html[dir='rtl'] .breadcrumbs .separator {
   border-radius: 2px;
   color: rgb(49, 102, 212);
   font-size: 13px;
-  font-weight: bold;
+  font-weight: 500;
   height: 32px;
 }
 
@@ -1186,6 +1223,7 @@ body[type='full-page'] .detail-name .detail-icon {
 .thumbnail-bottom .filename-label {
   -webkit-padding-end: 6px;
   flex: auto;
+  font-weight: 500;
 }
 
 /* Styles specific for the grid view. */
@@ -1364,35 +1402,28 @@ html[dir='rtl'] .badge {
 /* Padding counterweights negative margins of items, thus eliminating scroll
    bar when it's not needed. Max height is set to fit 8 items before showing
    scroll bar. */
-#default-actions-list {
+#default-tasks-list {
   max-height: 328px;
   padding: 1px 0;
 }
 
-#default-actions-list > li > * {
+#default-tasks-list > li > * {
   background-position: 5px center;
   background-repeat: no-repeat;
   background-size: 16px 16px;
   padding-left: 26px;
 }
 
-#default-actions-list > li[selected] {
-  background-color: rgb(225, 225, 225);
-}
-
-#default-actions-list:focus > li[selected] {
-  background-color: rgb(66, 129, 244);
-  color: white;
-}
-
 #list-container list > li[selected],
 #list-container list > li:active,
-#list-container list > li.accepts {
+#list-container list > li.accepts,
+#default-tasks-list > li[selected] {
   background-color: rgb(232, 232, 232);
 }
 
 #list-container list:focus > li[selected],
-#list-container list:focus > li.accepts[selected] {
+#list-container list:focus > li.accepts[selected],
+#default-tasks-list:focus > li[selected] {
   background-color: rgb(213, 234, 245);
 }
 
@@ -1427,10 +1458,12 @@ html[dir='rtl'] .badge {
 /* Text box used for renaming in the detail list. */
 .table-row-cell input.rename {
   border-width: 0;
+  min-width: 0;
   padding: 2px 0;
 }
 
-input.rename:focus {
+input.rename:focus,
+#directory-tree .tree-row > input:focus {
   outline-color: rgb(77, 144, 254);
 }
 
@@ -1545,6 +1578,7 @@ li[renaming=''] .badge {
 /* Text label in a table header. */
 .table-header-label {
   color: rgb(100, 100, 100);
+  font-weight: 500;
   line-height: 40px;
   margin: 0 10px;
 }
@@ -1572,7 +1606,7 @@ li[renaming=''] .badge {
   align-items: center;
 }
 
-#default-actions-list li {
+#default-tasks-list li {
   height: 32px;
   line-height: 32px;
 }
@@ -1897,7 +1931,7 @@ body[drive='error'] #unmounted-panel > .error,
   flex: none;
 }
 
-#default-action-dialog {
+#default-task-dialog {
   min-width: 300px;
   width: auto;
 }
@@ -2117,6 +2151,7 @@ list.autocomplete-suggestions > [lead] {
 #progress-center label {
   color: rgb(76, 76, 76);
   display: block;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2175,10 +2210,6 @@ list.autocomplete-suggestions > [lead] {
   width: 16px;
 }
 
-#progress-center li.error.single .button-frame {
-  display: none;
-}
-
 #progress-center button.close {
   -webkit-margin-end: 12px;
   -webkit-margin-start: auto;
@@ -2199,6 +2230,7 @@ list.autocomplete-suggestions > [lead] {
   margin-bottom: 14px;
 }
 
+#progress-center button.dismiss,
 #progress-center button.cancel {
   background: -webkit-image-set(
       url(../images/files/ui/cancel.png) 1x,
@@ -2209,6 +2241,20 @@ list.autocomplete-suggestions > [lead] {
 #progress-center li.error button.open,
 #progress-center li.quiet button.open {
   margin-bottom: 0;
+}
+
+#progress-center button.dismiss {
+  display: none;
+}
+
+/*
+ * Dismiss button is shown only when
+ * - Single error in close view.
+ * - Error items in open view.
+ */
+li#progress-center-close-view.error.single button.dismiss,
+#progress-center-open-view li.error button.dismiss {
+  display: block;
 }
 
 #progress-center-close-view:not(.single) button.cancel {
@@ -2247,27 +2293,4 @@ files-toggle-ripple {
   position: absolute;
   right: 0;
   top: 0;
-}
-
-#tooltip {
-  opacity: 0;
-  padding: 4px 6px 0;
-  pointer-events: none;
-  position: absolute;
-  transition: opacity 300ms;
-  z-index: 1000;
-}
-
-#tooltip[visible] {
-  opacity: .9;
-}
-
-#tooltip-label {
-  background-color: #323232;
-  border-radius: 2px;
-  color: white;
-  font-size: 12px;
-  line-height: 28px;
-  padding: 0 14px;
-  white-space: nowrap;
 }

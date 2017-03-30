@@ -5,9 +5,9 @@
 #ifndef UI_VIEWS_BUBBLE_BUBBLE_FRAME_VIEW_H_
 #define UI_VIEWS_BUBBLE_BUBBLE_FRAME_VIEW_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/window/non_client_view.h"
@@ -84,15 +84,18 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
                                    gfx::Size client_size,
                                    bool adjust_if_offscreen);
 
+  bool close_button_clicked() const { return close_button_clicked_; }
+
  protected:
   // Returns the available screen bounds if the frame were to show in |rect|.
-  virtual gfx::Rect GetAvailableScreenBounds(const gfx::Rect& rect);
+  virtual gfx::Rect GetAvailableScreenBounds(const gfx::Rect& rect) const;
 
   bool IsCloseButtonVisible() const;
   gfx::Rect GetCloseButtonMirroredBounds() const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(BubbleFrameViewTest, GetBoundsForClientView);
+  FRIEND_TEST_ALL_PREFIXES(BubbleDelegateTest, CloseReasons);
 
   // Mirrors the bubble's arrow location on the |vertical| or horizontal axis,
   // if the generated window bounds don't fit in the monitor bounds.
@@ -122,6 +125,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // When supplied, this view is placed in the titlebar between the title and
   // (x) close button.
   View* titlebar_extra_view_;
+
+  // Whether the close button was clicked.
+  bool close_button_clicked_;
 
   DISALLOW_COPY_AND_ASSIGN(BubbleFrameView);
 };

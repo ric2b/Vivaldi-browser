@@ -6,6 +6,7 @@
 #define IOS_WEB_NAVIGATION_CRW_SESSION_ENTRY_H_
 
 #import <Foundation/Foundation.h>
+#include <stdint.h>
 
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
@@ -67,11 +68,6 @@ extern NSString* const kSessionEntryUseDesktopUserAgentKey;
 @property(nonatomic, readonly) web::NavigationItem* navigationItem;
 
 // Pointer to the NavigationItemImpl associated with this CRWSessionEntry.
-// TODO(kkhorimoto): This is a convenience property to avoid requiring static
-// casts every time the web layer needs access to members only available in
-// NavigationItemImpl.  Remove once more navigation management moves into
-// NavigationManager and CRWSessionEntry=>web::NavigationItemImpl conversions
-// become less prominent.
 @property(nonatomic, readonly) web::NavigationItemImpl* navigationItemImpl;
 
 // Initialize the session entry with the given NavigationItem.

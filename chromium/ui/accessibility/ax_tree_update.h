@@ -5,10 +5,15 @@
 #ifndef UI_ACCESSIBILITY_AX_TREE_UPDATE_H_
 #define UI_ACCESSIBILITY_AX_TREE_UPDATE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/strings/string_number_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_tree_data.h"
 
 namespace ui {
 
@@ -20,8 +25,9 @@ namespace ui {
 //
 // An AXTreeUpdate consists of an optional node id to clear (meaning
 // that all of that node's children and their descendants are deleted),
-// followed by an ordered vector of AXNodeData structures to be applied
-// to the tree in order.
+// followed by an ordered vector of zero or more AXNodeData structures to
+// be applied to the tree in order. An update may also include an optional
+// update to the AXTreeData structure that applies to the tree as a whole.
 //
 // Suppose that the next AXNodeData to be applied is |node|. The following
 // invariants must hold:
@@ -37,9 +43,14 @@ namespace ui {
 //        placeholder must be updated within the same AXTreeUpdate, otherwise
 //        it's a fatal error. This guarantees the tree is always complete
 //        before or after an AXTreeUpdate.
-struct AX_EXPORT AXTreeUpdate {
-  AXTreeUpdate();
-  ~AXTreeUpdate();
+template<typename AXNodeData, typename AXTreeData> struct AXTreeUpdateBase {
+  AXTreeUpdateBase();
+  ~AXTreeUpdateBase();
+
+  // If |has_tree_data| is true, the value of |tree_data| should be used
+  // to update the tree data, otherwise it should be ignored.
+  bool has_tree_data;
+  AXTreeData tree_data;
 
   // The id of a node to clear, before applying any updates,
   // or 0 if no nodes should be cleared. Clearing a node means deleting
@@ -56,6 +67,48 @@ struct AX_EXPORT AXTreeUpdate {
 
   // TODO(dmazzoni): location changes
 };
+
+typedef AXTreeUpdateBase<AXNodeData, AXTreeData> AXTreeUpdate;
+
+template<typename AXNodeData, typename AXTreeData>
+AXTreeUpdateBase<AXNodeData, AXTreeData>::AXTreeUpdateBase()
+    : has_tree_data(false),
+      node_id_to_clear(0) {
+}
+
+template<typename AXNodeData, typename AXTreeData>
+AXTreeUpdateBase<AXNodeData, AXTreeData>::~AXTreeUpdateBase() {
+}
+
+template<typename AXNodeData, typename AXTreeData>
+std::string AXTreeUpdateBase<AXNodeData, AXTreeData>::ToString() const {
+  std::string result;
+
+  if (has_tree_data) {
+    result += "AXTreeUpdate tree data:" + tree_data.ToString();
+  }
+
+  if (node_id_to_clear != 0) {
+    result += "AXTreeUpdate: clear node " +
+        base::IntToString(node_id_to_clear) + "\n";
+  }
+
+  // The challenge here is that we want to indent the nodes being updated
+  // so that parent/child relationships are clear, but we don't have access
+  // to the rest of the tree for context, so we have to try to show the
+  // relative indentation of child nodes in this update relative to their
+  // parents.
+  base::hash_map<int32_t, int> id_to_indentation;
+  for (size_t i = 0; i < nodes.size(); ++i) {
+    int indent = id_to_indentation[nodes[i].id];
+    result += std::string(2 * indent, ' ');
+    result += nodes[i].ToString() + "\n";
+    for (size_t j = 0; j < nodes[i].child_ids.size(); ++j)
+      id_to_indentation[nodes[i].child_ids[j]] = indent + 1;
+  }
+
+  return result;
+}
 
 }  // namespace ui
 

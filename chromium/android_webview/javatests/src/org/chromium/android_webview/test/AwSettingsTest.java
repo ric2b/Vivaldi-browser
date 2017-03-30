@@ -9,6 +9,7 @@ import android.graphics.Point;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.SystemClock;
+import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.view.WindowManager;
@@ -28,9 +29,7 @@ import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.ImagePageGenerator;
 import org.chromium.android_webview.test.util.VideoTestUtil;
 import org.chromium.android_webview.test.util.VideoTestWebServer;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.util.CallbackHelper;
@@ -51,7 +50,6 @@ import java.util.regex.Pattern;
  * settings applies either to each individual view or to all views of the
  * application
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class AwSettingsTest extends AwTestBase {
     private static final boolean ENABLED = true;
     private static final boolean DISABLED = false;
@@ -1454,15 +1452,16 @@ public class AwSettingsTest extends AwTestBase {
 
         @Override
         protected void doEnsureSettingHasValue(Boolean value) throws Throwable {
-            DeviceDisplayInfo deviceInfo = DeviceDisplayInfo.create(mContext);
-            int displayWidth = (int) (deviceInfo.getDisplayWidth() / deviceInfo.getDIPScale());
-
             loadDataSync(getData());
-            int width = Integer.parseInt(getTitleOnUiThread());
+            final int reportedClientWidth = Integer.parseInt(getTitleOnUiThread());
             if (value) {
-                assertEquals(displayWidth, width);
+                final DeviceDisplayInfo deviceInfo = DeviceDisplayInfo.create(mContext);
+                // The clientWidth is subject to pixel snapping.
+                final int displayWidth = (int) Math.ceil(
+                        deviceInfo.getDisplayWidth() / deviceInfo.getDIPScale());
+                assertEquals(displayWidth, reportedClientWidth);
             } else {
-                assertEquals(3000, width);
+                assertEquals(3000, reportedClientWidth);
             }
         }
 
@@ -2717,13 +2716,9 @@ public class AwSettingsTest extends AwTestBase {
         assertEquals(defaultScale, getPixelScaleOnUiThread(awContents), .01f);
     }
 
-    /*
     @DisableHardwareAccelerationForTest
     @LargeTest
     @Feature({"AndroidWebView", "Preferences"})
-    http://crbug.com/304549
-    */
-    @DisabledTest
     public void testMediaPlaybackWithoutUserGesture() throws Throwable {
         assertTrue(VideoTestUtil.runVideoTest(this, false, false, WAIT_TIMEOUT_MS));
     }
@@ -2807,19 +2802,19 @@ public class AwSettingsTest extends AwTestBase {
 
             String fullSecureUrl = httpsServer.setResponse(secureUrl, secureHtml, null);
 
-            awSettings.setMixedContentMode(AwSettings.MIXED_CONTENT_NEVER_ALLOW);
+            awSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
             loadUrlSync(awContents, contentClient.getOnPageFinishedHelper(), fullSecureUrl);
             assertEquals(1, httpsServer.getRequestCount(secureUrl));
             assertEquals(0, httpServer.getRequestCount(jsUrl));
             assertEquals(0, httpServer.getRequestCount(imageUrl));
 
-            awSettings.setMixedContentMode(AwSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            awSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
             loadUrlSync(awContents, contentClient.getOnPageFinishedHelper(), fullSecureUrl);
             assertEquals(2, httpsServer.getRequestCount(secureUrl));
             assertEquals(1, httpServer.getRequestCount(jsUrl));
             assertEquals(1, httpServer.getRequestCount(imageUrl));
 
-            awSettings.setMixedContentMode(AwSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+            awSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
             loadUrlSync(awContents, contentClient.getOnPageFinishedHelper(), fullSecureUrl);
             assertEquals(3, httpsServer.getRequestCount(secureUrl));
             assertEquals(1, httpServer.getRequestCount(jsUrl));

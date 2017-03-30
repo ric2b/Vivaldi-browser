@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/mock_filters.h"
@@ -50,7 +50,7 @@ class FakeVideoDecoderTest
   void InitializeWithConfigAndExpectResult(const VideoDecoderConfig& config,
                                            bool success) {
     decoder_->Initialize(
-        config, false, NewExpectedBoolCB(success),
+        config, false, SetCdmReadyCB(), NewExpectedBoolCB(success),
         base::Bind(&FakeVideoDecoderTest::FrameReady, base::Unretained(this)));
     message_loop_.RunUntilIdle();
     current_config_ = config;

@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chromeos/network/onc/onc_translator.h"
-
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chromeos/network/network_profile_handler.h"
@@ -17,6 +16,7 @@
 #include "chromeos/network/network_util.h"
 #include "chromeos/network/onc/onc_signature.h"
 #include "chromeos/network/onc/onc_translation_tables.h"
+#include "chromeos/network/onc/onc_translator.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/shill_property_util.h"
 #include "components/onc/onc_constants.h"
@@ -31,18 +31,16 @@ namespace {
 // returns NULL.
 scoped_ptr<base::Value> ConvertStringToValue(const std::string& str,
                                              base::Value::Type type) {
-  base::Value* value;
+  scoped_ptr<base::Value> value;
   if (type == base::Value::TYPE_STRING) {
-    value = new base::StringValue(str);
+    value.reset(new base::StringValue(str));
   } else {
-    value = base::JSONReader::DeprecatedRead(str);
+    value = base::JSONReader::Read(str);
   }
+  if (value && value->GetType() != type)
+    return nullptr;
 
-  if (value == NULL || value->GetType() != type) {
-    delete value;
-    value = NULL;
-  }
-  return make_scoped_ptr(value);
+  return value;
 }
 
 // This class implements the translation of properties from the given
@@ -185,7 +183,7 @@ ShillToONCTranslator::CreateTranslatedONCObject() {
   } else {
     CopyPropertiesAccordingToSignature();
   }
-  return onc_object_.Pass();
+  return std::move(onc_object_);
 }
 
 void ShillToONCTranslator::TranslateEthernet() {
@@ -331,8 +329,21 @@ void ShillToONCTranslator::TranslateVPN() {
 }
 
 void ShillToONCTranslator::TranslateWiFiWithState() {
-  TranslateWithTableAndSet(shill::kSecurityClassProperty, kWiFiSecurityTable,
-                           ::onc::wifi::kSecurity);
+  std::string shill_security;
+  std::string shill_key_mgmt;
+  if (shill_dictionary_->GetStringWithoutPathExpansion(
+          shill::kSecurityClassProperty, &shill_security) &&
+      shill_security == shill::kSecurityWep &&
+      shill_dictionary_->GetStringWithoutPathExpansion(
+          shill::kEapKeyMgmtProperty, &shill_key_mgmt) &&
+      shill_key_mgmt == shill::kKeyManagementIEEE8021X) {
+    onc_object_->SetStringWithoutPathExpansion(::onc::wifi::kSecurity,
+                                               ::onc::wifi::kWEP_8021X);
+  } else {
+    TranslateWithTableAndSet(shill::kSecurityClassProperty, kWiFiSecurityTable,
+                             ::onc::wifi::kSecurity);
+  }
+
   bool unknown_encoding = true;
   std::string ssid = shill_property_util::GetSSIDFromProperties(
       *shill_dictionary_, false /* verbose_logging */, &unknown_encoding);

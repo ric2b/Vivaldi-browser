@@ -6,10 +6,11 @@
 
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/values.h"
 #include "chromeos/network/onc/onc_signature.h"
 #include "components/onc/onc_constants.h"
@@ -21,14 +22,25 @@ namespace {
 typedef scoped_ptr<base::DictionaryValue> DictionaryPtr;
 
 // Returns true if the field is the identifier of a configuration, i.e. the GUID
-// of a network or a certificate. These can be special handled during merging
-// because they are always identical for the various setting sources.
+// of a network or a certificate.
 bool IsIdentifierField(const OncValueSignature& value_signature,
                        const std::string& field_name) {
   if (&value_signature == &kNetworkConfigurationSignature)
     return field_name == ::onc::network_config::kGUID;
   if (&value_signature == &kCertificateSignature)
     return field_name == ::onc::certificate::kGUID;
+  return false;
+}
+
+// Identifier fields and other read-only fields (specifically Type) are
+// handled specially during merging because they are always identical for the
+// various setting sources.
+bool IsReadOnlyField(const OncValueSignature& value_signature,
+                     const std::string& field_name) {
+  if (IsIdentifierField(value_signature, field_name))
+    return true;
+  if (&value_signature == &kNetworkConfigurationSignature)
+    return field_name == ::onc::network_config::kType;
   return false;
 }
 
@@ -66,7 +78,7 @@ DictionaryPtr GetEditableFlags(const base::DictionaryValue& policy) {
     result_editable->SetWithoutPathExpansion(
         it.key(), GetEditableFlags(*child_policy).release());
   }
-  return result_editable.Pass();
+  return result_editable;
 }
 
 // This is the base class for merging a list of DictionaryValues in
@@ -112,7 +124,7 @@ class MergeListOfDictionaries {
           }
           DictionaryPtr merged_dict(MergeNestedDictionaries(key, nested_dicts));
           if (!merged_dict->empty())
-            merged_value = merged_dict.Pass();
+            merged_value = std::move(merged_dict);
         } else {
           std::vector<const base::Value*> values;
           for (DictPtrs::const_iterator it_inner = dicts.begin();
@@ -129,7 +141,7 @@ class MergeListOfDictionaries {
           result->SetWithoutPathExpansion(key, merged_value.release());
       }
     }
-    return result.Pass();
+    return result;
   }
 
  protected:
@@ -378,19 +390,21 @@ class MergeToAugmented : public MergeToEffective {
     scoped_ptr<base::Value> effective_value =
         MergeToEffective::MergeValues(key, values, &which_effective);
 
-    if (IsIdentifierField(*signature_, key)) {
-      // Don't augment the GUID but write the plain value.
+    if (IsReadOnlyField(*signature_, key)) {
+      // Don't augment read-only fields (GUID and Type).
       if (effective_value) {
-        // DCHECK that all provided GUIDs are identical.
-        DCHECK(AllPresentValuesEqual(values, *effective_value));
-        // Return the un-augmented GUID.
-        return effective_value.Pass();
+        // DCHECK that all provided fields are identical.
+        DCHECK(AllPresentValuesEqual(values, *effective_value))
+            << "Values do not match: " << key
+            << " Effective: " << *effective_value;
+        // Return the un-augmented field.
+        return effective_value;
       }
       if (values.active_setting) {
-        // Unmanaged networks have assigned (active) GUID values.
+        // Unmanaged networks have assigned (active) values.
         return make_scoped_ptr(values.active_setting->DeepCopy());
       }
-      LOG(ERROR) << "GUID field has no effective value";
+      LOG(ERROR) << "Field has no effective value: " << key;
       return nullptr;
     }
 
@@ -441,7 +455,7 @@ class MergeToAugmented : public MergeToEffective {
     }
     if (augmented_value->empty())
       augmented_value.reset();
-    return augmented_value.Pass();
+    return std::move(augmented_value);
   }
 
   // MergeListOfDictionaries override.
@@ -462,7 +476,7 @@ class MergeToAugmented : public MergeToEffective {
     } else {
       result = MergeToEffective::MergeNestedDictionaries(key, dicts);
     }
-    return result.Pass();
+    return result;
   }
 
  private:

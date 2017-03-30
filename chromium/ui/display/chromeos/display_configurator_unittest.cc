@@ -4,12 +4,17 @@
 
 #include "ui/display/chromeos/display_configurator.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/chromeos/test/action_logger_util.h"
 #include "ui/display/chromeos/test/test_display_snapshot.h"
 #include "ui/display/chromeos/test/test_native_display_delegate.h"
+#include "ui/display/util/display_util.h"
 
 namespace ui {
 namespace test {
@@ -78,7 +83,7 @@ class TestStateController : public DisplayConfigurator::StateController {
 
   // DisplayConfigurator::StateController overrides:
   MultipleDisplayState GetStateForDisplayIds(
-      const std::vector<int64_t>& outputs) const override {
+      const DisplayConfigurator::DisplayStateList& outputs) const override {
     return state_;
   }
   bool GetResolutionForDisplayId(int64_t display_id,
@@ -335,6 +340,160 @@ TEST_F(DisplayConfiguratorTest, FindDisplayModeMatchingSize) {
   EXPECT_EQ(NULL,
             DisplayConfigurator::FindDisplayModeMatchingSize(
                 output, gfx::Size(1440, 900)));
+}
+
+TEST_F(DisplayConfiguratorTest, EnableVirtualDisplay) {
+  InitWithSingleOutput();
+
+  observer_.Reset();
+  const DisplayConfigurator::DisplayStateList& cached =
+      configurator_.cached_displays();
+  ASSERT_EQ(static_cast<size_t>(1u), cached.size());
+  EXPECT_EQ(small_mode_.size(), cached[0]->current_mode()->size());
+
+  // Add virtual display.
+  int64_t virtual_display_id =
+      configurator_.AddVirtualDisplay(big_mode_.size());
+  EXPECT_EQ(GenerateDisplayID(0x8000, 0x0, 1), virtual_display_id);
+  EXPECT_FALSE(mirroring_controller_.SoftwareMirroringEnabled());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED,
+            configurator_.display_state());
+
+  // Virtual should not trigger addition of added crtc but does change FB
+  // height.
+  const int kVirtualHeight = small_mode_.size().height() +
+                             DisplayConfigurator::kVerticalGap +
+                             big_mode_.size().height();
+  EXPECT_EQ(
+      JoinActions(
+          kGrab, GetFramebufferAction(
+                     gfx::Size(big_mode_.size().width(), kVirtualHeight),
+                     &outputs_[0], nullptr)
+                     .c_str(),
+          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
+          kUngrab, nullptr),
+      log_->GetActionsAndClear());
+  EXPECT_EQ(1, observer_.num_changes());
+  ASSERT_EQ(static_cast<size_t>(2u), cached.size());
+  EXPECT_EQ(small_mode_.size(), cached[0]->current_mode()->size());
+  EXPECT_EQ(big_mode_.size(), cached[1]->current_mode()->size());
+  EXPECT_EQ(virtual_display_id, cached[1]->display_id());
+
+  // Remove virtual display.
+  observer_.Reset();
+  EXPECT_TRUE(configurator_.RemoveVirtualDisplay(virtual_display_id));
+  EXPECT_EQ(
+      JoinActions(
+          kGrab, GetFramebufferAction(small_mode_.size(), &outputs_[0], nullptr)
+                     .c_str(),
+          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
+          kUngrab, nullptr),
+      log_->GetActionsAndClear());
+  EXPECT_EQ(1, observer_.num_changes());
+  ASSERT_EQ(static_cast<size_t>(1u), cached.size());
+  EXPECT_EQ(small_mode_.size(), cached[0]->current_mode()->size());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_SINGLE, configurator_.display_state());
+}
+
+TEST_F(DisplayConfiguratorTest, EnableTwoVirtualDisplays) {
+  InitWithSingleOutput();
+
+  observer_.Reset();
+  const DisplayConfigurator::DisplayStateList& cached =
+      configurator_.cached_displays();
+  ASSERT_EQ(static_cast<size_t>(1u), cached.size());
+  EXPECT_EQ(small_mode_.size(), cached[0]->current_mode()->size());
+
+  // Add 1st virtual display.
+  int64_t virtual_display_id_1 =
+      configurator_.AddVirtualDisplay(big_mode_.size());
+  EXPECT_EQ(GenerateDisplayID(0x8000, 0x0, 1), virtual_display_id_1);
+  EXPECT_FALSE(mirroring_controller_.SoftwareMirroringEnabled());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED,
+            configurator_.display_state());
+
+  // Virtual should not trigger addition of added crtc but does change FB
+  // height.
+  const int kSingleVirtualHeight = small_mode_.size().height() +
+                                   DisplayConfigurator::kVerticalGap +
+                                   big_mode_.size().height();
+  EXPECT_EQ(
+      JoinActions(
+          kGrab, GetFramebufferAction(
+                     gfx::Size(big_mode_.size().width(), kSingleVirtualHeight),
+                     &outputs_[0], nullptr)
+                     .c_str(),
+          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
+          kUngrab, nullptr),
+      log_->GetActionsAndClear());
+  EXPECT_EQ(1, observer_.num_changes());
+  ASSERT_EQ(static_cast<size_t>(2), cached.size());
+  EXPECT_EQ(small_mode_.size(), cached[0]->current_mode()->size());
+  EXPECT_EQ(big_mode_.size(), cached[1]->current_mode()->size());
+  EXPECT_EQ(virtual_display_id_1, cached[1]->display_id());
+
+  // Add 2nd virtual display
+  int64_t virtual_display_id_2 =
+      configurator_.AddVirtualDisplay(big_mode_.size());
+  EXPECT_EQ(GenerateDisplayID(0x8000, 0x0, 2), virtual_display_id_2);
+  EXPECT_FALSE(mirroring_controller_.SoftwareMirroringEnabled());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
+            configurator_.display_state());
+
+  const int kDualVirtualHeight =
+      small_mode_.size().height() +
+      (DisplayConfigurator::kVerticalGap + big_mode_.size().height()) * 2;
+  EXPECT_EQ(
+      JoinActions(
+          kGrab, GetFramebufferAction(
+                     gfx::Size(big_mode_.size().width(), kDualVirtualHeight),
+                     &outputs_[0], nullptr)
+                     .c_str(),
+          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
+          kUngrab, nullptr),
+      log_->GetActionsAndClear());
+  EXPECT_EQ(2, observer_.num_changes());
+  ASSERT_EQ(static_cast<size_t>(3u), cached.size());
+  EXPECT_EQ(small_mode_.size(), cached[0]->current_mode()->size());
+  EXPECT_EQ(big_mode_.size(), cached[1]->current_mode()->size());
+  EXPECT_EQ(big_mode_.size(), cached[2]->current_mode()->size());
+  EXPECT_EQ(virtual_display_id_1, cached[1]->display_id());
+  EXPECT_EQ(virtual_display_id_2, cached[2]->display_id());
+
+  // Remove 1st virtual display.
+  observer_.Reset();
+  EXPECT_TRUE(configurator_.RemoveVirtualDisplay(virtual_display_id_1));
+  EXPECT_EQ(
+      JoinActions(
+          kGrab, GetFramebufferAction(
+                     gfx::Size(big_mode_.size().width(), kSingleVirtualHeight),
+                     &outputs_[0], nullptr)
+                     .c_str(),
+          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
+          kUngrab, nullptr),
+      log_->GetActionsAndClear());
+  EXPECT_EQ(1, observer_.num_changes());
+  ASSERT_EQ(static_cast<size_t>(2u), cached.size());
+  EXPECT_EQ(small_mode_.size(), cached[0]->current_mode()->size());
+  EXPECT_EQ(big_mode_.size(), cached[1]->current_mode()->size());
+  EXPECT_EQ(virtual_display_id_2, cached[1]->display_id());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED,
+            configurator_.display_state());
+
+  // Remove 2nd virtual display.
+  observer_.Reset();
+  EXPECT_TRUE(configurator_.RemoveVirtualDisplay(virtual_display_id_2));
+  EXPECT_EQ(
+      JoinActions(
+          kGrab, GetFramebufferAction(small_mode_.size(), &outputs_[0], nullptr)
+                     .c_str(),
+          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
+          kUngrab, nullptr),
+      log_->GetActionsAndClear());
+  EXPECT_EQ(1, observer_.num_changes());
+  ASSERT_EQ(static_cast<size_t>(1), cached.size());
+  EXPECT_EQ(small_mode_.size(), cached[0]->current_mode()->size());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_SINGLE, configurator_.display_state());
 }
 
 TEST_F(DisplayConfiguratorTest, ConnectSecondOutput) {
@@ -905,19 +1064,18 @@ TEST_F(DisplayConfiguratorTest, GetMultipleDisplayStateForMirroredDisplays) {
 
 TEST_F(DisplayConfiguratorTest, UpdateCachedOutputsEvenAfterFailure) {
   InitWithSingleOutput();
-  const DisplayConfigurator::DisplayStateList* cached =
-      &configurator_.cached_displays();
-  ASSERT_EQ(static_cast<size_t>(1), cached->size());
-  EXPECT_EQ(outputs_[0].current_mode(), (*cached)[0]->current_mode());
+  const DisplayConfigurator::DisplayStateList& cached =
+      configurator_.cached_displays();
+  ASSERT_EQ(static_cast<size_t>(1), cached.size());
+  EXPECT_EQ(outputs_[0].current_mode(), cached[0]->current_mode());
 
   // After connecting a second output, check that it shows up in
   // |cached_displays_| even if an invalid state is requested.
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_SINGLE);
   UpdateOutputs(2, true);
-  cached = &configurator_.cached_displays();
-  ASSERT_EQ(static_cast<size_t>(2), cached->size());
-  EXPECT_EQ(outputs_[0].current_mode(), (*cached)[0]->current_mode());
-  EXPECT_EQ(outputs_[1].current_mode(), (*cached)[1]->current_mode());
+  ASSERT_EQ(static_cast<size_t>(2), cached.size());
+  EXPECT_EQ(outputs_[0].current_mode(), cached[0]->current_mode());
+  EXPECT_EQ(outputs_[1].current_mode(), cached[1]->current_mode());
 }
 
 TEST_F(DisplayConfiguratorTest, PanelFitting) {

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "chrome/browser/extensions/extension_api_unittest.h"
@@ -45,7 +46,8 @@ class CryptoTokenPrivateApiTest : public extensions::ExtensionApiUnittest {
     return true;
   }
 
-  bool GetCanOriginAssertAppIdResult(std::string origin, std::string appId) {
+  bool GetCanOriginAssertAppIdResult(const std::string& origin,
+                                     const std::string& appId) {
     scoped_refptr<api::CryptotokenPrivateCanOriginAssertAppIdFunction> function(
         new api::CryptotokenPrivateCanOriginAssertAppIdFunction());
     function->set_has_callback(true);
@@ -55,9 +57,7 @@ class CryptoTokenPrivateApiTest : public extensions::ExtensionApiUnittest {
     args->AppendString(appId);
 
     extension_function_test_utils::RunFunction(
-        function.get(),
-        args.Pass(),
-        browser(),
+        function.get(), std::move(args), browser(),
         extension_function_test_utils::NONE);
 
     bool result;

@@ -2,15 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#include "components/policy/core/common/remote_commands/remote_commands_queue.h"
 
+#include <string>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "components/policy/core/common/remote_commands/remote_command_job.h"
-#include "components/policy/core/common/remote_commands/remote_commands_queue.h"
 #include "components/policy/core/common/remote_commands/test_remote_command_job.h"
 #include "policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -108,7 +111,7 @@ void RemoteCommandsQueueTest::SetUp() {
   test_start_time_ = clock->NowTicks();
 
   clock_ = clock.get();
-  queue_.SetClockForTesting(clock.Pass());
+  queue_.SetClockForTesting(std::move(clock));
   queue_.AddObserver(&observer_);
 }
 
@@ -155,7 +158,7 @@ void RemoteCommandsQueueTest::AddJobAndVerifyRunningAfter(
       OnJobStarted(
           AllOf(Property(&RemoteCommandJob::status, RemoteCommandJob::RUNNING),
                 Property(&RemoteCommandJob::execution_started_time, now))));
-  queue_.AddJob(job.Pass());
+  queue_.AddJob(std::move(job));
   Mock::VerifyAndClearExpectations(&observer_);
 
   // After |delta|, the job should still be running.
@@ -179,7 +182,7 @@ TEST_F(RemoteCommandsQueueTest, SingleSucceedCommand) {
       new TestRemoteCommandJob(true, base::TimeDelta::FromSeconds(5)));
   InitializeJob(job.get(), kUniqueID, test_start_time_, kPayload);
 
-  AddJobAndVerifyRunningAfter(job.Pass(), base::TimeDelta::FromSeconds(4));
+  AddJobAndVerifyRunningAfter(std::move(job), base::TimeDelta::FromSeconds(4));
 
   // After 6 seconds, the job is expected to be finished.
   EXPECT_CALL(observer_,
@@ -200,7 +203,7 @@ TEST_F(RemoteCommandsQueueTest, SingleFailedCommand) {
       new TestRemoteCommandJob(false, base::TimeDelta::FromSeconds(10)));
   InitializeJob(job.get(), kUniqueID, test_start_time_, kPayload);
 
-  AddJobAndVerifyRunningAfter(job.Pass(), base::TimeDelta::FromSeconds(9));
+  AddJobAndVerifyRunningAfter(std::move(job), base::TimeDelta::FromSeconds(9));
 
   // After 11 seconds, the job is expected to be finished.
   EXPECT_CALL(observer_,
@@ -221,7 +224,8 @@ TEST_F(RemoteCommandsQueueTest, SingleTerminatedCommand) {
       new TestRemoteCommandJob(false, base::TimeDelta::FromSeconds(200)));
   InitializeJob(job.get(), kUniqueID, test_start_time_, kPayload);
 
-  AddJobAndVerifyRunningAfter(job.Pass(), base::TimeDelta::FromSeconds(179));
+  AddJobAndVerifyRunningAfter(std::move(job),
+                              base::TimeDelta::FromSeconds(179));
 
   // After 181 seconds, the job is expected to be terminated (3 minutes is the
   // timeout duration).
@@ -255,7 +259,7 @@ TEST_F(RemoteCommandsQueueTest, SingleExpiredCommand) {
   // Add the job to the queue. It should not be started.
   EXPECT_CALL(observer_, OnJobFinished(Property(&RemoteCommandJob::status,
                                                 RemoteCommandJob::EXPIRED)));
-  queue_.AddJob(job.Pass());
+  queue_.AddJob(std::move(job));
   Mock::VerifyAndClearExpectations(&observer_);
 
   task_runner_->FastForwardUntilNoTasksRemain();
@@ -277,7 +281,7 @@ TEST_F(RemoteCommandsQueueTest, TwoCommands) {
       OnJobStarted(AllOf(
           Property(&RemoteCommandJob::unique_id, kUniqueID),
           Property(&RemoteCommandJob::status, RemoteCommandJob::RUNNING))));
-  queue_.AddJob(job.Pass());
+  queue_.AddJob(std::move(job));
   Mock::VerifyAndClearExpectations(&observer_);
 
   // Initialize another job expected to succeed after 5 seconds, from a protobuf
@@ -290,7 +294,7 @@ TEST_F(RemoteCommandsQueueTest, TwoCommands) {
   // After 2 seconds, add the second job. It should be queued and not start
   // running immediately.
   task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(2));
-  queue_.AddJob(job.Pass());
+  queue_.AddJob(std::move(job));
 
   // After 4 seconds, nothing happens.
   task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(2));

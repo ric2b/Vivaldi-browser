@@ -4,6 +4,8 @@
 
 #include "extensions/browser/extension_user_script_loader.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 
@@ -71,7 +73,7 @@ class ExtensionUserScriptLoaderTest : public testing::Test,
 
     shared_memory_ = content::Details<base::SharedMemory>(details).ptr();
     if (base::MessageLoop::current() == &message_loop_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   // Directory containing user scripts.
@@ -97,8 +99,8 @@ TEST_F(ExtensionUserScriptLoaderTest, NoScripts) {
       HostID(),
       true /* listen_for_extension_system_loaded */);
   loader.StartLoad();
-  message_loop_.task_runner()->PostTask(FROM_HERE,
-                                        base::MessageLoop::QuitClosure());
+  message_loop_.task_runner()->PostTask(
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   message_loop_.Run();
 
   ASSERT_TRUE(shared_memory_ != NULL);

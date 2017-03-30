@@ -3,9 +3,39 @@
 # found in the LICENSE file.
 {
   'conditions': [
+    # Dummy target to allow chrome to require chrome_dll to build
+    # without actually linking to the library
+    ['OS=="mac"', {
+      'targets': [
+        {
+          'target_name': 'chrome_dll_dependency_shim',
+          'type': 'executable',
+          'dependencies': [
+            'chrome_dll',
+          ],
+          # In release, we end up with a strip step that is unhappy if there is
+          # no binary. Rather than check in a new file for this hack, just
+          # generate a source file on the fly.
+          'actions': [
+            {
+              'action_name': 'generate_stub_main',
+              'process_outputs_as_sources': 1,
+              'inputs': [],
+              'outputs': [ '<(INTERMEDIATE_DIR)/dummy_main.c' ],
+              'action': [
+                'bash', '-c',
+                'echo "int main() { return 0; }" > <(INTERMEDIATE_DIR)/dummy_main.c'
+              ],
+            },
+          ],
+        },
+      ],
+     },
+    ],
     ['OS=="mac" or OS=="win"', {
       'targets': [
         {
+          # GN version: //chrome:chrome_dll
           'target_name': 'chrome_dll',
           'type': 'none',
           'dependencies': [
@@ -86,8 +116,6 @@
             'app/chrome_main_delegate.h',
             'app/chrome_main_mac.h',
             'app/chrome_main_mac.mm',
-            'app/close_handle_hook_win.cc',
-            'app/close_handle_hook_win.h',
             'app/delay_load_hook_win.cc',
             'app/delay_load_hook_win.h',
           ],
@@ -157,7 +185,6 @@
               },
               'msvs_settings': {
                 'VCLinkerTool': {
-                  'ImportLibrary': '$(OutDir)\\lib\\chrome_dll.lib',
                   # Set /SUBSYSTEM:WINDOWS for chrome.dll (for consistency).
                   'SubSystem': '2',
                   'conditions': [
@@ -232,20 +259,6 @@
                     '../printing/printing.gyp:printing',
                   ],
                 }],
-                ['chrome_pgo_phase==1', {
-                  'msvs_settings': {
-                    'VCLinkerTool': {
-                      'LinkTimeCodeGeneration': '2',
-                    },
-                  },
-                }],
-                ['chrome_pgo_phase==2', {
-                  'msvs_settings': {
-                    'VCLinkerTool': {
-                      'LinkTimeCodeGeneration': '3',
-                    },
-                  },
-                }],
               ]
             }],
             ['chrome_multiple_dll==1', {
@@ -271,7 +284,7 @@
                 '<(DEPTH)/third_party/cld/cld.gyp:cld',
               ],
             }],
-            ['cld_version==0 or cld_version==2', {
+            ['cld_version==2', {
               'dependencies': [
                 '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld_2',
               ],
@@ -286,6 +299,7 @@
               'dependencies': [
                 '../components/components.gyp:crash_component',
                 '../components/components.gyp:policy',
+                '../third_party/crashpad/crashpad/handler/handler.gyp:crashpad_handler',
               ],
               'sources': [
                 'app/chrome_crash_reporter_client.cc',
@@ -302,7 +316,7 @@
               ],
             }],
             # This step currently fails when using LTO. TODO(pcc): Re-enable.
-            ['OS=="mac" and use_lto==0', {
+            ['OS=="mac" and use_lto==0 and component=="static_library" and asan==0', {
               'postbuilds': [
                 {
                   # This step causes an error to be raised if the .order file
@@ -336,7 +350,9 @@
           },
           'dependencies': [
             '<@(chromium_child_dependencies)',
+            '../components/components.gyp:browser_watcher_client',
             '../content/content.gyp:content_app_child',
+            '../third_party/kasko/kasko.gyp:kasko',
             'chrome_version_resources',
             'policy_path_parser',
             '../../vivaldi_chromium.gyp:*',
@@ -349,16 +365,22 @@
             'app/chrome_main.cc',
             'app/chrome_main_delegate.cc',
             'app/chrome_main_delegate.h',
-            'app/close_handle_hook_win.cc',
-            'app/close_handle_hook_win.h',
           ],
           'conditions': [
+            ['OS=="win" and win_use_allocator_shim==1', {
+              'dependencies': [
+                '<(allocator_target)',
+              ],
+            }],
             ['OS=="win"', {
               'conditions': [
                 ['chrome_pgo_phase==1', {
                   'msvs_settings': {
                     'VCLinkerTool': {
                       'LinkTimeCodeGeneration': '2',
+                      'AdditionalOptions': [
+                        '/PogoSafeMode',
+                      ],
                     },
                   },
                 }],
@@ -370,6 +392,16 @@
                   },
                 }],
               ]
+            }],
+            ['OS=="win" and configuration_policy==1', {
+              'dependencies': [
+                '<(DEPTH)/components/components.gyp:policy',
+              ],
+            }],
+            ['configuration_policy==1', {
+              'dependencies': [
+                'policy_path_parser',
+              ],
             }],
             ['enable_plugins==1', {
               'dependencies': [

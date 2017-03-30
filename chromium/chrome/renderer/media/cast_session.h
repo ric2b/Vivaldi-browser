@@ -7,10 +7,11 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "media/cast/cast_config.h"
 #include "net/base/ip_endpoint.h"
 
 namespace base {
@@ -24,8 +25,6 @@ class VideoFrame;
 namespace cast {
 class AudioFrameInput;
 class VideoFrameInput;
-struct AudioSenderConfig;
-struct VideoSenderConfig;
 }  // namespace cast
 }  // namespace media
 

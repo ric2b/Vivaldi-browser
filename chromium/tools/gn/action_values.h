@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "tools/gn/source_file.h"
 #include "tools/gn/substitution_list.h"
 
@@ -43,11 +43,24 @@ class ActionValues {
   bool has_depfile() const { return !depfile_.ranges().empty(); }
   void set_depfile(const SubstitutionPattern& depfile) { depfile_ = depfile; }
 
+  // Response file contents. Empty means no response file.
+  SubstitutionList& rsp_file_contents() { return rsp_file_contents_; }
+  const SubstitutionList& rsp_file_contents() const {
+    return rsp_file_contents_;
+  }
+  bool uses_rsp_file() const { return !rsp_file_contents_.list().empty(); }
+
+  // Console pool option
+  bool is_console() const { return console_; }
+  void set_console(bool value) { console_ = value; }
+
  private:
   SourceFile script_;
   SubstitutionList args_;
   SubstitutionList outputs_;
   SubstitutionPattern depfile_;
+  SubstitutionList rsp_file_contents_;
+  bool console_;
 
   DISALLOW_COPY_AND_ASSIGN(ActionValues);
 };

@@ -5,6 +5,8 @@
 #ifndef UI_MESSAGE_CENTER_VIEWS_MESSAGE_CENTER_BUTTON_BAR_H_
 #define UI_MESSAGE_CENTER_VIEWS_MESSAGE_CENTER_BUTTON_BAR_H_
 
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/view.h"
@@ -46,7 +48,7 @@ class MessageCenterButtonBar : public views::View,
 
  private:
   // Updates the layout manager which can have differing configuration
-  // depending on the visibilty of different parts of the button bar.
+  // depending on the visibility of different parts of the button bar.
   void ViewVisibilityChanged();
 
   // Overridden from views::View:

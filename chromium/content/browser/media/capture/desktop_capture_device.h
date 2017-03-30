@@ -5,12 +5,13 @@
 #ifndef CONTENT_BROWSER_MEDIA_CAPTURE_DESKTOP_CAPTURE_DEVICE_H_
 #define CONTENT_BROWSER_MEDIA_CAPTURE_DESKTOP_CAPTURE_DEVICE_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/desktop_media_id.h"
-#include "media/video/capture/video_capture_device.h"
+#include "media/capture/video/video_capture_device.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace base {

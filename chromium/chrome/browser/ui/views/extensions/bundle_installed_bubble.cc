@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "chrome/browser/extensions/bundle_installer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/toolbar/wrench_toolbar_button.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/bubble/bubble_delegate.h"
@@ -176,6 +177,6 @@ class BundleInstalledBubble : public views::BubbleDelegateView,
 void BundleInstaller::ShowInstalledBubble(
     const BundleInstaller* bundle, Browser* browser) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  views::View* anchor = browser_view->GetToolbarView()->app_menu();
+  views::View* anchor = browser_view->GetToolbarView()->app_menu_button();
   new BundleInstalledBubble(bundle, anchor, views::BubbleBorder::TOP_RIGHT);
 }

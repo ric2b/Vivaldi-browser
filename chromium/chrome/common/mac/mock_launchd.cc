@@ -5,21 +5,23 @@
 #include "chrome/common/mac/mock_launchd.h"
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <errno.h>
+#include <stddef.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/mac/launchd.h"
 #include "chrome/common/service_process_util.h"
+#include "components/version_info/version_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 static sockaddr_un* throwaway_sockaddr_un;
@@ -49,8 +51,6 @@ bool MockLaunchd::MakeABundle(const base::FilePath& dst,
     return false;
   }
 
-  chrome::VersionInfo version_info;
-
   const char info_plist_format[] =
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
       "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
@@ -75,7 +75,7 @@ bool MockLaunchd::MakeABundle(const base::FilePath& dst,
       base::StringPrintf(info_plist_format,
                          name.c_str(),
                          name.c_str(),
-                         version_info.Version().c_str());
+                         version_info::GetVersionNumber().c_str());
   len = info_plist_data.length();
   if (base::WriteFile(info_plist, info_plist_data.c_str(), len) != len) {
     return false;
@@ -228,7 +228,7 @@ CFDictionaryRef MockLaunchd::CopyDictionaryByCheckingIn(CFErrorRef* error) {
 
 bool MockLaunchd::RemoveJob(CFStringRef label, CFErrorRef* error) {
   remove_called_ = true;
-  message_loop_->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  message_loop_->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   return true;
 }
 
@@ -237,7 +237,7 @@ bool MockLaunchd::RestartJob(Domain domain,
                              CFStringRef name,
                              CFStringRef session_type) {
   restart_called_ = true;
-  message_loop_->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  message_loop_->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   return true;
 }
 

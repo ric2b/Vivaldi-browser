@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <functional>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "ash/ash_switches.h"
@@ -57,8 +58,7 @@ class CleanupWidgetAfterAnimationObserver
 
 CleanupWidgetAfterAnimationObserver::CleanupWidgetAfterAnimationObserver(
     scoped_ptr<views::Widget> widget)
-    : widget_(widget.Pass()) {
-}
+    : widget_(std::move(widget)) {}
 
 CleanupWidgetAfterAnimationObserver::~CleanupWidgetAfterAnimationObserver() {
 }
@@ -149,7 +149,9 @@ void CalculateOverviewSizes(aura::Window* root_window,
   item_size->set_width(std::min(
       static_cast<int>(total_bounds.width() / num_columns),
       static_cast<int>(total_bounds.height() * kCardAspectRatio / num_rows)));
-  item_size->set_height(item_size->width() / kCardAspectRatio);
+  item_size->set_height(
+      static_cast<int>(item_size->width() / kCardAspectRatio));
+  item_size->SetToMax(gfx::Size(1, 1));
 
   bounding_rect->set_width(std::min(static_cast<int>(items), num_columns) *
                            item_size->width());
@@ -183,12 +185,14 @@ void ReorderItemsGreedyLeastMovement(std::vector<aura::Window*>* items,
         bounding_rect.y() + row * item_size.height() + item_size.height() / 2);
     // Find the nearest window for this position.
     size_t swap_index = i;
-    int64 shortest_distance = std::numeric_limits<int64>::max();
+    int64_t shortest_distance = std::numeric_limits<int64_t>::max();
     for (size_t j = i; j < items->size(); ++j) {
       aura::Window* window = (*items)[j];
-      int64 distance = (ScreenUtil::ConvertRectToScreen(
-                            window, window->GetTargetBounds()).CenterPoint() -
-                        overview_item_center).LengthSquared();
+      int64_t distance =
+          (ScreenUtil::ConvertRectToScreen(window, window->GetTargetBounds())
+               .CenterPoint() -
+           overview_item_center)
+              .LengthSquared();
       // We compare raw pointers to create a stable ordering given two windows
       // with the same center point.
       if (distance < shortest_distance ||
@@ -473,7 +477,7 @@ void WindowGrid::MoveSelectionWidget(WindowSelector::Direction direction,
     // CleanupWidgetAfterAnimationObserver will delete itself (and the
     // widget) when the movement animation is complete.
     animation_settings.AddObserver(
-        new CleanupWidgetAfterAnimationObserver(selection_widget_.Pass()));
+        new CleanupWidgetAfterAnimationObserver(std::move(selection_widget_)));
     old_selection->SetOpacity(0);
     old_selection->GetNativeWindow()->SetBounds(
         old_selection->GetNativeWindow()->bounds() + fade_out_direction);

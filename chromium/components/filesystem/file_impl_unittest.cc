@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/files/file.h"
@@ -366,7 +369,7 @@ TEST_F(FileImplTest, StatTouch) {
   t->now = false;
   const int64_t kPartyTime1 = 1234567890;  // Party like it's 2009-02-13.
   t->seconds = kPartyTime1;
-  file->Touch(t.Pass(), nullptr, Capture(&error));
+  file->Touch(std::move(t), nullptr, Capture(&error));
   ASSERT_TRUE(file.WaitForIncomingResponse());
   EXPECT_EQ(FILE_ERROR_OK, error);
 
@@ -385,7 +388,7 @@ TEST_F(FileImplTest, StatTouch) {
   t->now = false;
   const int64_t kPartyTime2 = 1425059525;  // No time like the present.
   t->seconds = kPartyTime2;
-  file->Touch(nullptr, t.Pass(), Capture(&error));
+  file->Touch(nullptr, std::move(t), Capture(&error));
   ASSERT_TRUE(file.WaitForIncomingResponse());
   EXPECT_EQ(FILE_ERROR_OK, error);
 

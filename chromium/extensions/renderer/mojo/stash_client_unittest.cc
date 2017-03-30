@@ -4,12 +4,13 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "extensions/browser/mojo/stash_backend.h"
 #include "extensions/common/mojo/stash.mojom.h"
 #include "extensions/renderer/api_test_base.h"
 #include "gin/dictionary.h"
 #include "grit/extensions_renderer_resources.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/lib/message_builder.h"
+#include "mojo/public/cpp/bindings/lib/message_builder.h"
 
 // A test launcher for tests for the stash client defined in
 // extensions/test/data/stash_client_unittest.js.
@@ -39,7 +40,6 @@ class StashClientTest : public ApiTestBase {
 // Test that stashing and restoring work correctly.
 TEST_F(StashClientTest, StashAndRestore) {
   ASSERT_NO_FATAL_FAILURE(RunTest("stash_client_unittest.js", "testStash"));
-  env()->context()->DispatchOnUnloadEvent();
   scoped_ptr<ModuleSystemTestEnvironment> restore_test_env(CreateEnvironment());
   ApiTestEnvironment restore_environment(restore_test_env.get());
   PrepareEnvironment(&restore_environment);

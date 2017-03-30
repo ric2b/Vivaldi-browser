@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/guest_view/extension_view/extension_view_internal_api.h"
 
+#include <utility>
+
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/crx_file/id_util.h"
@@ -12,10 +14,11 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/stop_find_action.h"
+#include "extensions/browser/guest_view/extension_view/whitelist/extension_view_whitelist.h"
 #include "extensions/common/api/extension_view_internal.h"
 #include "extensions/common/constants.h"
 
-namespace extensionview = extensions::core_api::extension_view_internal;
+namespace extensionview = extensions::api::extension_view_internal;
 
 namespace extensions {
 
@@ -34,17 +37,14 @@ bool ExtensionViewInternalExtensionFunction::RunAsync() {
 // Returns true if |src| is valid.
 bool IsSrcValid(GURL src) {
   // Check if src is valid and matches the extension scheme.
-  if (!src.is_valid() || !src.SchemeIs(kExtensionScheme)) {
-    VLOG(0) << "src not valid or match extension scheme";
+  if (!src.is_valid() || !src.SchemeIs(kExtensionScheme))
     return false;
-  }
 
   // Get the extension id and check if it is valid.
   std::string extension_id = src.host();
-  if (!crx_file::id_util::IdIsValid(extension_id)) {
-    VLOG(0) << "extension id not valid: " << extension_id;
+  if (!crx_file::id_util::IdIsValid(extension_id) ||
+      !IsExtensionIdWhitelisted(extension_id))
     return false;
-  }
 
   return true;
 }
@@ -80,7 +80,7 @@ bool ExtensionViewInternalParseSrcFunction::RunAsync() {
   scoped_ptr<base::ListValue> result_list(new base::ListValue());
   result_list->AppendBoolean(is_src_valid);
   result_list->AppendString(url.host());
-  SetResultList(result_list.Pass());
+  SetResultList(std::move(result_list));
   SendResponse(true);
   return true;
 }

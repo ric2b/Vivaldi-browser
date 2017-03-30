@@ -5,6 +5,7 @@
 #include "base/cpu.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #endif
@@ -75,7 +76,7 @@ std::string GetCpuFeatures() {
   else if (cpu.has_sse2()) features.push_back("+sse2");
 
   // TODO: AES, POPCNT, LZCNT, ...
-  return JoinString(features, ',');
+  return base::JoinString(features, ",");
 }
 
 }  // namespace nacl

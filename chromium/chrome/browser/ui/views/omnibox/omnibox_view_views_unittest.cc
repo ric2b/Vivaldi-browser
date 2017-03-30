@@ -4,12 +4,18 @@
 
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/command_updater.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_controller.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/event_utils.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
@@ -50,22 +56,20 @@ class TestingOmniboxViewViews : public OmniboxViewViews {
   DISALLOW_COPY_AND_ASSIGN(TestingOmniboxViewViews);
 };
 
-class TestingOmniboxEditController : public OmniboxEditController {
+class TestingOmniboxEditController : public ChromeOmniboxEditController {
  public:
   explicit TestingOmniboxEditController(CommandUpdater* command_updater)
-      : OmniboxEditController(command_updater) {
-  }
+      : ChromeOmniboxEditController(command_updater) {}
 
  protected:
-  // OmniboxEditController:
-  void Update(const content::WebContents* contents) override {}
+  // ChromeOmniboxEditController:
+  void UpdateWithoutTabRestore() override {}
   void OnChanged() override {}
   void OnSetFocus() override {}
   void ShowURL() override {}
-  InstantController* GetInstant() override { return NULL; }
-  content::WebContents* GetWebContents() override { return NULL; }
-  ToolbarModel* GetToolbarModel() override { return NULL; }
-  const ToolbarModel* GetToolbarModel() const override { return NULL; }
+  ToolbarModel* GetToolbarModel() override { return nullptr; }
+  const ToolbarModel* GetToolbarModel() const override { return nullptr; }
+  content::WebContents* GetWebContents() override { return nullptr; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestingOmniboxEditController);
@@ -117,11 +121,17 @@ class OmniboxViewViewsTest : public testing::Test {
 // Checks that a single change of the text in the omnibox invokes
 // only one call to OmniboxViewViews::UpdatePopup().
 TEST_F(OmniboxViewViewsTest, UpdatePopupCall) {
-  omnibox_textfield()->InsertChar('a', 0);
+  ui::KeyEvent char_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A, 0,
+                          ui::DomKey::FromCharacter('a'),
+                          ui::EventTimeForNow());
+  omnibox_textfield()->InsertChar(char_event);
   omnibox_view()->CheckUpdatePopupCallInfo(
       1, base::ASCIIToUTF16("a"), gfx::Range(1));
 
-  omnibox_textfield()->InsertChar('b', 0);
+  char_event =
+      ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_B, ui::DomCode::US_B, 0,
+                   ui::DomKey::FromCharacter('b'), ui::EventTimeForNow());
+  omnibox_textfield()->InsertChar(char_event);
   omnibox_view()->CheckUpdatePopupCallInfo(
       2, base::ASCIIToUTF16("ab"), gfx::Range(2));
 

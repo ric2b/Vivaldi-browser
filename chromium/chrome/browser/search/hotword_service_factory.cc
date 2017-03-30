@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/hotword_service.h"
 #include "chrome/common/chrome_switches.h"
@@ -26,7 +27,7 @@ HotwordService* HotwordServiceFactory::GetForProfile(BrowserContext* context) {
 
 // static
 HotwordServiceFactory* HotwordServiceFactory::GetInstance() {
-  return Singleton<HotwordServiceFactory>::get();
+  return base::Singleton<HotwordServiceFactory>::get();
 }
 
 // static

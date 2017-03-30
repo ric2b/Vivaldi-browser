@@ -4,23 +4,27 @@
 
 #include "chrome/browser/ui/webui/media/webrtc_logs_ui.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/i18n/time_formatting.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/prefs/pref_service.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/webrtc_log_list.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/upload_list.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/upload_list/upload_list.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -47,8 +51,6 @@ content::WebUIDataSource* CreateWebRtcLogsUIHTMLSource() {
                              IDS_WEBRTC_LOGS_LOG_HEADER_FORMAT);
   source->AddLocalizedString("webrtcLogLocalFileLabelFormat",
                              IDS_WEBRTC_LOGS_LOG_LOCAL_FILE_LABEL_FORMAT);
-  source->AddLocalizedString("webrtcLogLocalFileFormat",
-                             IDS_WEBRTC_LOGS_LOG_LOCAL_FILE_FORMAT);
   source->AddLocalizedString("noLocalLogFileMessage",
                              IDS_WEBRTC_LOGS_NO_LOCAL_LOG_FILE_MESSAGE);
   source->AddLocalizedString("webrtcLogUploadTimeFormat",
@@ -150,21 +152,13 @@ void WebRtcLogsDOMHandler::UpdateUI() {
   for (std::vector<UploadList::UploadInfo>::iterator i = uploads.begin();
        i != uploads.end();
        ++i) {
-    base::DictionaryValue* upload = new base::DictionaryValue();
-    upload->SetString("id", i->id);
+    scoped_ptr<base::DictionaryValue> upload(new base::DictionaryValue());
+    upload->SetString("id", i->upload_id);
 
     base::string16 value_w;
-    if (!i->time.is_null())
-      value_w = base::TimeFormatFriendlyDateAndTime(i->time);
+    if (!i->upload_time.is_null())
+      value_w = base::TimeFormatFriendlyDateAndTime(i->upload_time);
     upload->SetString("upload_time", value_w);
-
-    value_w.clear();
-    double seconds_since_epoch;
-    if (base::StringToDouble(i->local_id, &seconds_since_epoch)) {
-      base::Time capture_time = base::Time::FromDoubleT(seconds_since_epoch);
-      value_w = base::TimeFormatFriendlyDateAndTime(capture_time);
-    }
-    upload->SetString("capture_time", value_w);
 
     base::FilePath::StringType value;
     if (!i->local_id.empty())
@@ -172,11 +166,39 @@ void WebRtcLogsDOMHandler::UpdateUI() {
           .AddExtension(FILE_PATH_LITERAL(".gz")).value();
     upload->SetString("local_file", value);
 
-    upload_list.Append(upload);
+    // In october 2015, capture time was added to the log list, previously the
+    // local ID was used as capture time. The local ID has however changed so
+    // that it might not be a time. We fall back on the local ID if it traslates
+    // to a time within reasonable bounds, otherwise we fall back on the upload
+    // time.
+    // TODO(grunell): Use |capture_time| only.
+    if (!i->capture_time.is_null()) {
+      value_w = base::TimeFormatFriendlyDateAndTime(i->capture_time);
+    } else {
+      // Fall back on local ID as time. We need to check that it's within
+      // resonable bounds, since the ID may not represent time. Check between
+      // 2012 when the feature was introduced and now.
+      double seconds_since_epoch;
+      if (base::StringToDouble(i->local_id, &seconds_since_epoch)) {
+        base::Time capture_time = base::Time::FromDoubleT(seconds_since_epoch);
+        base::Time::Exploded lower_limit = {2012, 1, 0, 1, 0, 0, 0, 0};
+        if (capture_time > base::Time::FromUTCExploded(lower_limit) &&
+            capture_time < base::Time::Now()) {
+          value_w = base::TimeFormatFriendlyDateAndTime(capture_time);
+        }
+      }
+    }
+    // If we haven't set |value_w| above, we fall back on the upload time, which
+    // was already in the variable. In case it's empty set the string to
+    // inform that the time is unknown.
+    if (value_w.empty())
+      value_w = base::string16(base::ASCIIToUTF16("(unknown time)"));
+    upload->SetString("capture_time", value_w);
+
+    upload_list.Append(std::move(upload));
   }
 
-  const chrome::VersionInfo version_info;
-  base::StringValue version(version_info.Version());
+  base::StringValue version(version_info::GetVersionNumber());
 
   web_ui()->CallJavascriptFunction("updateWebRtcLogsList", upload_list,
                                    version);

@@ -8,7 +8,9 @@
 #include <string>
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -16,8 +18,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_controller.h"
-#include "chrome/browser/ui/search/search_model_observer.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/ui/zoom/zoom_event_manager_observer.h"
 
@@ -25,14 +26,13 @@
 class CommandUpdater;
 class ContentSettingDecoration;
 class EVBubbleDecoration;
-class GeneratedCreditCardDecoration;
 class KeywordHintDecoration;
 class LocationBarDecoration;
 class LocationIconDecoration;
 class ManagePasswordsDecoration;
-class MicSearchDecoration;
 class PageActionDecoration;
 class Profile;
+class SaveCreditCardDecoration;
 class SelectedKeywordDecoration;
 class StarDecoration;
 class TranslateDecoration;
@@ -45,8 +45,7 @@ class ZoomDecorationTest;
 
 class LocationBarViewMac : public LocationBar,
                            public LocationBarTesting,
-                           public OmniboxEditController,
-                           public SearchModelObserver,
+                           public ChromeOmniboxEditController,
                            public ui_zoom::ZoomEventManagerObserver {
  public:
   LocationBarViewMac(AutocompleteTextField* field,
@@ -65,13 +64,13 @@ class LocationBarViewMac : public LocationBar,
   void FocusSearch() override;
   void UpdateContentSettingsIcons() override;
   void UpdateManagePasswordsIconAndBubble() override;
+  void UpdateSaveCreditCardIcon() override;
   void UpdatePageActions() override;
   void UpdateBookmarkStarVisibility() override;
   void UpdateLocationBarVisibility(bool visible, bool animate) override;
   bool ShowPageActionPopup(const extensions::Extension* extension,
                            bool grant_active_tab) override;
   void UpdateOpenPDFInReaderPrompt() override;
-  void UpdateGeneratedCreditCardView() override;
   void SaveStateToContents(content::WebContents* contents) override;
   void Revert() override;
   const OmniboxView* GetOmniboxView() const override;
@@ -100,7 +99,7 @@ class LocationBarViewMac : public LocationBar,
   // false when the change in zoom for the active tab wasn't an explicit user
   // action (e.g. switching tabs, creating a new tab, creating a new browser).
   // Additionally, |can_show_bubble| will only be true when the bubble wouldn't
-  // be obscured by other UI (wrench menu) or redundant (+/- from wrench).
+  // be obscured by other UI (app menu) or redundant (+/- from app menu).
   void ZoomChangedForActiveTab(bool can_show_bubble);
 
   // Checks if the bookmark star should be enabled or not.
@@ -109,6 +108,10 @@ class LocationBarViewMac : public LocationBar,
   // Get the point in window coordinates on the star for the bookmark bubble to
   // aim at. Only works if IsStarEnabled returns YES.
   NSPoint GetBookmarkBubblePoint() const;
+
+  // Get the point in window coordinates in the save credit card icon for the
+  //  save credit card bubble to aim at.
+  NSPoint GetSaveCreditCardBubblePoint() const;
 
   // Get the point in window coordinates on the star for the Translate bubble to
   // aim at.
@@ -121,10 +124,6 @@ class LocationBarViewMac : public LocationBar,
   // Get the point in window coordinates in the security icon at which the page
   // info bubble aims.
   NSPoint GetPageInfoBubblePoint() const;
-
-  // Get the point in window coordinates in the "generated cc" icon at which the
-  // corresponding info bubble aims.
-  NSPoint GetGeneratedCreditCardBubblePoint() const;
 
   // When any image decorations change, call this to ensure everything is
   // redrawn and laid out if necessary.
@@ -153,18 +152,21 @@ class LocationBarViewMac : public LocationBar,
   // is called and this function returns |NSZeroPoint|.
   NSPoint GetPageActionBubblePoint(ExtensionAction* page_action);
 
+  // Updates the controller, and, if |contents| is non-null, restores saved
+  // state that the tab holds.
+  void Update(const content::WebContents* contents);
+
   // Clears any location bar state stored for |contents|.
   void ResetTabState(content::WebContents* contents);
 
-  // OmniboxEditController:
-  void Update(const content::WebContents* contents) override;
+  // ChromeOmniboxEditController:
+  void UpdateWithoutTabRestore() override;
   void OnChanged() override;
   void OnSetFocus() override;
   void ShowURL() override;
-  InstantController* GetInstant() override;
-  content::WebContents* GetWebContents() override;
   ToolbarModel* GetToolbarModel() override;
   const ToolbarModel* GetToolbarModel() const override;
+  content::WebContents* GetWebContents() override;
 
   NSImage* GetKeywordImage(const base::string16& keyword);
 
@@ -173,10 +175,6 @@ class LocationBarViewMac : public LocationBar,
   ManagePasswordsDecoration* manage_passwords_decoration() {
     return manage_passwords_decoration_.get();
   }
-
-  // SearchModelObserver:
-  void ModelChanged(const SearchModel::State& old_state,
-                    const SearchModel::State& new_state) override;
 
   Browser* browser() const { return browser_; }
 
@@ -221,10 +219,6 @@ class LocationBarViewMac : public LocationBar,
   // Returns whether any updates were made.
   bool UpdateZoomDecoration(bool default_zoom_changed);
 
-  // Updates the voice search decoration. Returns true if the visible state was
-  // changed.
-  bool UpdateMicSearchDecorationVisibility();
-
   scoped_ptr<OmniboxViewMac> omnibox_view_;
 
   AutocompleteTextField* field_;  // owned by tab controller
@@ -238,6 +232,9 @@ class LocationBarViewMac : public LocationBar,
   // A decoration that shows a lock icon and ev-cert label in a bubble
   // on the left.
   scoped_ptr<EVBubbleDecoration> ev_bubble_decoration_;
+
+  // Save credit card icon on the right side of the omnibox.
+  scoped_ptr<SaveCreditCardDecoration> save_credit_card_decoration_;
 
   // Bookmark star right of page actions.
   scoped_ptr<StarDecoration> star_decoration_;
@@ -258,12 +255,6 @@ class LocationBarViewMac : public LocationBar,
   // Keyword hint decoration displayed on the right-hand side.
   scoped_ptr<KeywordHintDecoration> keyword_hint_decoration_;
 
-  // The voice search icon.
-  scoped_ptr<MicSearchDecoration> mic_search_decoration_;
-
-  // Generated CC hint decoration.
-  scoped_ptr<GeneratedCreditCardDecoration> generated_credit_card_decoration_;
-
   // The right-hand-side button to manage passwords associated with a page.
   scoped_ptr<ManagePasswordsDecoration> manage_passwords_decoration_;
 
@@ -271,6 +262,9 @@ class LocationBarViewMac : public LocationBar,
 
   // Used to change the visibility of the star decoration.
   BooleanPrefMember edit_bookmarks_enabled_;
+
+  // Indicates whether or not the location bar is currently visible.
+  bool location_bar_visible_;
 
   // Used to schedule a task for the first run info bubble.
   base::WeakPtrFactory<LocationBarViewMac> weak_ptr_factory_;

@@ -310,9 +310,9 @@ typedef void* GLeglImageOES;
 /* GL_EXT_multisampled_render_to_texture */
 #ifndef GL_EXT_multisampled_render_to_texture
 #define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_SAMPLES_EXT           0x8D6C
-#define GL_RENDERBUFFER_SAMPLES_EXT                             0x9133
-#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_EXT               0x9134
-#define GL_MAX_SAMPLES_EXT                                      0x9135
+#define GL_RENDERBUFFER_SAMPLES_EXT                             0x8CAB
+#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_EXT               0x8D56
+#define GL_MAX_SAMPLES_EXT                                      0x8D57
 #endif
 
 /* GL_EXT_multi_draw_arrays */
@@ -1784,25 +1784,6 @@ typedef void (GL_APIENTRYP PFNGLREQUESTEXTENSIONCHROMIUM) (const GLchar *extensi
 #endif
 #endif
 
-/* GL_CHROMIUM_rate_limit_offscreen_context */
-/*
- * This extension will block if the calling context has gotten more than two
- * glRateLimit calls ahead of the GPU process. This keeps the client in sync
- * with the GPU without having to call swapbuffers, which has potentially
- * undesirable side effects.
- */
-#ifndef GL_CHROMIUM_rate_limit_offscreen_context
-#define GL_CHROMIUM_rate_limit_offscreen_context 1
-#ifdef GL_GLEXT_PROTOTYPES
-#define glRateLimitOffscreenContextCHROMIUM  GLES2_GET_FUN(RateLimitOffscreenContextCHROMIUM)
-#if !defined(GLES2_USE_CPP_BINDINGS)
-GL_APICALL void GL_APIENTRY glRateLimitOffscreenContextCHROMIUM (void);
-#endif
-#else
-typedef void (GL_APIENTRYP PFNGLRATELIMITOFFSCREENCONTEXTCHROMIUM) ();
-#endif
-#endif
-
 /* GL_CHROMIUM_get_multiple */
 /*
  * This extension provides functions for quering multiple GL state with a single
@@ -1945,7 +1926,6 @@ typedef void (GL_APIENTRYP PFNGLTEXIMAGEIOSURFACE2DCHROMIUM) (GLenum target, GLs
 #define glCopySubTextureCHROMIUM GLES2_GET_FUN(CopySubTextureCHROMIUM)
 #if !defined(GLES2_USE_CPP_BINDINGS)
 GL_APICALL void GL_APIENTRY glCopyTextureCHROMIUM(
-    GLenum target,
     GLenum source_id,
     GLenum dest_id,
     GLint internalformat,
@@ -1954,7 +1934,6 @@ GL_APICALL void GL_APIENTRY glCopyTextureCHROMIUM(
     GLboolean unpack_premultiply_alpha,
     GLboolean unpack_unmultiply_alpha);
 GL_APICALL void GL_APIENTRY glCopySubTextureCHROMIUM(
-    GLenum target,
     GLenum source_id,
     GLenum dest_id,
     GLint xoffset,
@@ -1969,7 +1948,6 @@ GL_APICALL void GL_APIENTRY glCopySubTextureCHROMIUM(
 #endif
 #else
 typedef void(GL_APIENTRYP PFNGLCOPYTEXTURECHROMIUM)(
-    GLenum target,
     GLenum source_id,
     GLenum dest_id,
     GLint internalformat,
@@ -1978,7 +1956,6 @@ typedef void(GL_APIENTRYP PFNGLCOPYTEXTURECHROMIUM)(
     GLboolean unpack_premultiply_alpha,
     GLboolean unpack_unmultiply_alpha);
 typedef void(GL_APIENTRYP PFNGLCOPYSUBTEXTURECHROMIUM)(
-    GLenum target,
     GLenum source_id,
     GLenum dest_id,
     GLint xoffset,

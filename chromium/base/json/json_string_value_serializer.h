@@ -8,8 +8,8 @@
 #include <string>
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "base/values.h"
 
@@ -59,8 +59,8 @@ class BASE_EXPORT JSONStringValueDeserializer : public base::ValueDeserializer {
   // If |error_message| is non-null, it will be filled in with a formatted
   // error message including the location of the error if appropriate.
   // The caller takes ownership of the returned value.
-  base::Value* Deserialize(int* error_code,
-                           std::string* error_message) override;
+  scoped_ptr<base::Value> Deserialize(int* error_code,
+                                      std::string* error_message) override;
 
   void set_allow_trailing_comma(bool new_value) {
     allow_trailing_comma_ = new_value;

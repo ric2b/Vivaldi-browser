@@ -5,7 +5,9 @@
 #ifndef UI_VIEWS_CONTROLS_WEBVIEW_WEBVIEW_H_
 #define UI_VIEWS_CONTROLS_WEBVIEW_WEBVIEW_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -91,11 +93,16 @@ class WEBVIEW_EXPORT WebView : public View,
   // Overridden from View:
   const char* GetClassName() const override;
 
+  NativeViewHost* holder() { return holder_; }
+
  protected:
   // Swaps the owned WebContents |wc_owner_| with |new_web_contents|. Returns
   // the previously owned WebContents.
   scoped_ptr<content::WebContents> SwapWebContents(
       scoped_ptr<content::WebContents> new_web_contents);
+
+  // Called when the web contents is successfully attached.
+  virtual void OnWebContentsAttached() {}
 
   // Overridden from View:
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
@@ -131,7 +138,7 @@ class WEBVIEW_EXPORT WebView : public View,
   void DidDetachInterstitialPage() override;
   // Workaround for MSVC++ linker bug/feature that requires
   // instantiation of the inline IPC::Listener methods in all translation units.
-  void OnChannelConnected(int32 peer_id) override {}
+  void OnChannelConnected(int32_t peer_id) override {}
   void OnChannelError() override {}
   void OnBadMessageReceived(const IPC::Message& message) override {}
   void OnWebContentsFocused() override;
@@ -142,7 +149,7 @@ class WEBVIEW_EXPORT WebView : public View,
   void AttachWebContents();
   void DetachWebContents();
   void ReattachForFullscreenChange(bool enter_fullscreen);
-  void NotifyMaybeTextInputClientAndAccessibilityChanged();
+  void NotifyAccessibilityWebContentsChanged();
 
   // Create a regular or test web contents (based on whether we're running
   // in a unit test or not).

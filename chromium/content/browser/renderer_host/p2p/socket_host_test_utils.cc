@@ -4,16 +4,19 @@
 
 #include "content/browser/renderer_host/p2p/socket_host_test_utils.h"
 
+#include <stddef.h>
+
+#include "base/logging.h"
 #include "base/sys_byteorder.h"
 #include "base/thread_task_runner_handle.h"
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
 
 const int kStunHeaderSize = 20;
-const uint16 kStunBindingRequest = 0x0001;
-const uint16 kStunBindingResponse = 0x0102;
-const uint16 kStunBindingError = 0x0111;
-const uint32 kStunMagicCookie = 0x2112A442;
+const uint16_t kStunBindingRequest = 0x0001;
+const uint16_t kStunBindingResponse = 0x0102;
+const uint16_t kStunBindingError = 0x0111;
+const uint32_t kStunMagicCookie = 0x2112A442;
 
 MockIPCSender::MockIPCSender() { }
 MockIPCSender::~MockIPCSender() { }
@@ -103,12 +106,12 @@ void FakeSocket::DoAsyncWrite(scoped_refptr<net::IOBuffer> buf, int buf_len,
   callback.Run(buf_len);
 }
 
-int FakeSocket::SetReceiveBufferSize(int32 size) {
+int FakeSocket::SetReceiveBufferSize(int32_t size) {
   NOTIMPLEMENTED();
   return net::ERR_NOT_IMPLEMENTED;
 }
 
-int FakeSocket::SetSendBufferSize(int32 size) {
+int FakeSocket::SetSendBufferSize(int32_t size) {
   NOTIMPLEMENTED();
   return net::ERR_NOT_IMPLEMENTED;
 }
@@ -176,6 +179,11 @@ void FakeSocket::GetConnectionAttempts(net::ConnectionAttempts* out) const {
   out->clear();
 }
 
+int64_t FakeSocket::GetTotalReceivedBytes() const {
+  NOTIMPLEMENTED();
+  return 0;
+}
+
 void CreateRandomPacket(std::vector<char>* packet) {
   size_t size = kStunHeaderSize + rand() % 1000;
   packet->resize(size);
@@ -187,12 +195,12 @@ void CreateRandomPacket(std::vector<char>* packet) {
   (*packet)[0] = (*packet)[0] | 0x80;
 }
 
-static void CreateStunPacket(std::vector<char>* packet, uint16 type) {
+static void CreateStunPacket(std::vector<char>* packet, uint16_t type) {
   CreateRandomPacket(packet);
-  *reinterpret_cast<uint16*>(&*packet->begin()) = base::HostToNet16(type);
-  *reinterpret_cast<uint16*>(&*packet->begin() + 2) =
+  *reinterpret_cast<uint16_t*>(&*packet->begin()) = base::HostToNet16(type);
+  *reinterpret_cast<uint16_t*>(&*packet->begin() + 2) =
       base::HostToNet16(packet->size() - kStunHeaderSize);
-  *reinterpret_cast<uint32*>(&*packet->begin() + 4) =
+  *reinterpret_cast<uint32_t*>(&*packet->begin() + 4) =
       base::HostToNet32(kStunMagicCookie);
 }
 
@@ -208,7 +216,7 @@ void CreateStunError(std::vector<char>* packet) {
   CreateStunPacket(packet, kStunBindingError);
 }
 
-net::IPEndPoint ParseAddress(const std::string ip_str, uint16 port) {
+net::IPEndPoint ParseAddress(const std::string& ip_str, uint16_t port) {
   net::IPAddressNumber ip;
   EXPECT_TRUE(net::ParseIPLiteralToNumber(ip_str, &ip));
   return net::IPEndPoint(ip, port);

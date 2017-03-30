@@ -15,9 +15,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
+#include "components/metrics/metrics_pref_names.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/version_info/version_info.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "url/gurl.h"
@@ -35,19 +37,6 @@
 @end
 
 namespace {
-
-// Compare function for -[NSArray sortedArrayUsingFunction:context:] that
-// sorts the views in Y order bottom up.
-NSInteger CompareFrameY(id view1, id view2, void* context) {
-  CGFloat y1 = NSMinY([view1 frame]);
-  CGFloat y2 = NSMinY([view2 frame]);
-  if (y1 < y2)
-    return NSOrderedAscending;
-  else if (y1 > y2)
-    return NSOrderedDescending;
-  else
-    return NSOrderedSame;
-}
 
 class FirstRunShowBridge : public base::RefCounted<FirstRunShowBridge> {
  public:
@@ -86,7 +75,7 @@ bool ShowFirstRun(Profile* profile) {
   // (which is likely to be forced in enterprise deployments anyway).
   const PrefService::Preference* metrics_reporting_pref =
       g_browser_process->local_state()->FindPreference(
-          prefs::kMetricsReportingEnabled);
+          metrics::prefs::kMetricsReportingEnabled);
   if (!metrics_reporting_pref || !metrics_reporting_pref->IsManaged()) {
     base::scoped_nsobject<FirstRunDialogController> dialog(
         [[FirstRunDialogController alloc] init]);
@@ -126,8 +115,7 @@ bool ShowFirstRun(Profile* profile) {
 // True when the stats checkbox should be checked by default. This is only
 // the case when the canary is running.
 bool StatsCheckboxDefault() {
-  return chrome::VersionInfo::GetChannel() ==
-      chrome::VersionInfo::CHANNEL_CANARY;
+  return chrome::GetChannel() == version_info::Channel::CANARY;
 }
 
 }  // namespace
@@ -219,8 +207,16 @@ bool ShowFirstRunDialog(Profile* profile) {
 
     // Walk bottom up shuffling for all the hidden views.
     NSArray* subViews =
-        [[[win contentView] subviews] sortedArrayUsingFunction:CompareFrameY
-                                                       context:NULL];
+        [[[win contentView] subviews] sortedArrayUsingComparator:^(id a, id b) {
+          CGFloat y1 = NSMinY([a frame]);
+          CGFloat y2 = NSMinY([b frame]);
+          if (y1 < y2)
+            return NSOrderedAscending;
+          else if (y1 > y2)
+            return NSOrderedDescending;
+          else
+            return NSOrderedSame;
+        }];
     CGFloat moveDown = 0.0;
     NSUInteger numSubViews = [subViews count];
     for (NSUInteger idx = 0 ; idx < numSubViews ; ++idx) {

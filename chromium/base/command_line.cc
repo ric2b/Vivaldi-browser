@@ -7,14 +7,15 @@
 #include <algorithm>
 #include <ostream>
 
-#include "base/basictypes.h"
+#include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/common/chrome_constants.h"
+#include "third_party/zlib/zlib.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -76,7 +77,11 @@ void AppendSwitchesAndArguments(CommandLine* command_line,
   bool parse_switches = true;
   for (size_t i = 1; i < argv.size(); ++i) {
     CommandLine::StringType arg = argv[i];
+#if defined(OS_WIN)
     TrimWhitespace(arg, TRIM_ALL, &arg);
+#else
+    TrimWhitespaceASCII(arg, TRIM_ALL, &arg);
+#endif
 
     CommandLine::StringType switch_string;
     CommandLine::StringType switch_value;
@@ -148,32 +153,24 @@ string16 QuoteForCommandLineToArgvW(const string16& arg,
 
 CommandLine::CommandLine(NoProgram no_program)
     : argv_(1),
-      begin_args_(1),
-      is_vivaldi_(true),
-      is_debugging_vivaldi_(false) {
+      begin_args_(1) {
 }
 
 CommandLine::CommandLine(const FilePath& program)
     : argv_(1),
-      begin_args_(1),
-      is_vivaldi_(true),
-      is_debugging_vivaldi_(false) {
+      begin_args_(1) {
   SetProgram(program);
 }
 
 CommandLine::CommandLine(int argc, const CommandLine::CharType* const* argv)
     : argv_(1),
-      begin_args_(1),
-      is_vivaldi_(true),
-      is_debugging_vivaldi_(false) {
+      begin_args_(1) {
   InitFromArgv(argc, argv);
 }
 
 CommandLine::CommandLine(const StringVector& argv)
     : argv_(1),
-      begin_args_(1),
-      is_vivaldi_(true),
-      is_debugging_vivaldi_(false) {
+      begin_args_(1) {
   InitFromArgv(argv);
 }
 
@@ -272,11 +269,15 @@ FilePath CommandLine::GetProgram() const {
 }
 
 void CommandLine::SetProgram(const FilePath& program) {
+#if defined(OS_WIN)
   TrimWhitespace(program.value(), TRIM_ALL, &argv_[0]);
+#else
+  TrimWhitespaceASCII(program.value(), TRIM_ALL, &argv_[0]);
+#endif
 }
 
 bool CommandLine::HasSwitch(const base::StringPiece& switch_string) const {
-  DCHECK_EQ(StringToLowerASCII(switch_string.as_string()), switch_string);
+  DCHECK_EQ(ToLowerASCII(switch_string), switch_string);
   return switches_by_stringpiece_.find(switch_string) !=
          switches_by_stringpiece_.end();
 }
@@ -306,7 +307,7 @@ FilePath CommandLine::GetSwitchValuePath(
 
 CommandLine::StringType CommandLine::GetSwitchValueNative(
     const base::StringPiece& switch_string) const {
-  DCHECK_EQ(StringToLowerASCII(switch_string.as_string()), switch_string);
+  DCHECK_EQ(ToLowerASCII(switch_string), switch_string);
   auto result = switches_by_stringpiece_.find(switch_string);
   return result == switches_by_stringpiece_.end() ? StringType()
                                                   : *(result->second);
@@ -329,7 +330,7 @@ void CommandLine::AppendSwitchPath(const std::string& switch_string,
 void CommandLine::AppendSwitchNative(const std::string& switch_string,
                                      const CommandLine::StringType& value) {
 #if defined(OS_WIN)
-  const std::string switch_key = StringToLowerASCII(switch_string);
+  const std::string switch_key = ToLowerASCII(switch_string);
   StringType combined_switch_string(ASCIIToUTF16(switch_key));
 #elif defined(OS_POSIX)
   const std::string& switch_key = switch_string;
@@ -346,16 +347,41 @@ void CommandLine::AppendSwitchNative(const std::string& switch_string,
     combined_switch_string = kSwitchPrefixes[0] + combined_switch_string;
   if (!value.empty())
     combined_switch_string += kSwitchValueSeparator + value;
+#if defined(OS_WIN)
+  if (switch_key.compare("--commpressed-args") == 0) {
+    std::string zstring;
+    std::string cstring;
+
+    base::Base64Decode(base::UTF16ToASCII(value), &zstring);
+
+    cstring.resize(zstring.length()+200);
+
+    z_stream stream = {0};
+    int result = inflateInit2(&stream, 
+                            // windowBits = 15 is default, 16 is added to
+                            // produce a gzip header + trailer.
+                            15 + 16);
+    DCHECK_EQ(Z_OK, result);
+    stream.next_out= reinterpret_cast<unsigned char*>(&cstring[0]);
+    stream.avail_out= (uInt) cstring.length();
+    stream.next_in = reinterpret_cast<unsigned char*>(&zstring[0]);
+    stream.avail_in = (uInt) zstring.size();
+    result = inflate(&stream, Z_SYNC_FLUSH);
+    DCHECK_EQ(Z_OK, result);
+    result = inflate(&stream, Z_FINISH);
+    DCHECK_EQ(Z_STREAM_END, result);
+    result = inflateEnd(&stream);
+    DCHECK_EQ(Z_OK, result);
+    cstring.resize(cstring.size()-stream.avail_out);
+
+    CommandLine decompressed_command_line = FromString(base::UTF8ToUTF16(cstring));
+
+    AppendArguments(decompressed_command_line, false);
+    return;
+  }
+#endif
   // Append the switch and update the switches/arguments divider |begin_args_|.
   argv_.insert(argv_.begin() + begin_args_++, combined_switch_string);
-
-  if (switch_key.compare("--running-vivaldi") == 0)
-    is_vivaldi_ = true;
-  if (switch_key.compare("--disable-vivaldi") == 0 ||
-      switch_key.compare("--app") == 0) // so we don't load the Vivaldi app
-    is_vivaldi_ = false;
-  if (switch_key.compare("--debug-vivaldi") == 0)
-    is_debugging_vivaldi_ = true;
 }
 
 void CommandLine::AppendSwitchASCII(const std::string& switch_string,
@@ -416,8 +442,9 @@ void CommandLine::PrependWrapper(const CommandLine::StringType& wrapper) {
     return;
   // The wrapper may have embedded arguments (like "gdb --args"). In this case,
   // we don't pretend to do anything fancy, we just split on spaces.
-  StringVector wrapper_argv;
-  SplitString(wrapper, FILE_PATH_LITERAL(' '), &wrapper_argv);
+  StringVector wrapper_argv = SplitString(
+      wrapper, FilePath::StringType(1, ' '), base::TRIM_WHITESPACE,
+      base::SPLIT_WANT_ALL);
   // Prepend the wrapper and update the switches/arguments |begin_args_|.
   argv_.insert(argv_.begin(), wrapper_argv.begin(), wrapper_argv.end());
   begin_args_ += wrapper_argv.size();

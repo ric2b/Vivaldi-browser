@@ -96,15 +96,15 @@ PageHandler::PageHandler()
       screencast_quality_(kDefaultScreenshotQuality),
       screencast_max_width_(-1),
       screencast_max_height_(-1),
+      capture_every_nth_frame_(1),
       capture_retry_count_(0),
       has_compositor_frame_metadata_(false),
-      screencast_frame_sent_(0),
-      screencast_frame_acked_(0),
-      processing_screencast_frame_(false),
+      session_id_(0),
+      frame_counter_(0),
+      frames_in_flight_(0),
       color_picker_(new ColorPicker(base::Bind(
           &PageHandler::OnColorPicked, base::Unretained(this)))),
       host_(nullptr),
-      screencast_listener_(nullptr),
       weak_factory_(this) {
 }
 
@@ -146,6 +146,16 @@ void PageHandler::Detached() {
 
 void PageHandler::OnSwapCompositorFrame(
     const cc::CompositorFrameMetadata& frame_metadata) {
+  last_compositor_frame_metadata_ = frame_metadata;
+  has_compositor_frame_metadata_ = true;
+
+  if (screencast_enabled_)
+    InnerSwapCompositorFrame();
+  color_picker_->OnSwapCompositorFrame();
+}
+
+void PageHandler::OnSynchronousSwapCompositorFrame(
+    const cc::CompositorFrameMetadata& frame_metadata) {
   last_compositor_frame_metadata_ = has_compositor_frame_metadata_ ?
       next_compositor_frame_metadata_ : frame_metadata;
   next_compositor_frame_metadata_ = frame_metadata;
@@ -178,10 +188,6 @@ void PageHandler::DidDetachInterstitialPage() {
   client_->InterstitialHidden(InterstitialHiddenParams::Create());
 }
 
-void PageHandler::SetScreencastListener(ScreencastListener* listener) {
-  screencast_listener_ = listener;
-}
-
 Response PageHandler::Enable() {
   enabled_ = true;
   return Response::FallThrough();
@@ -191,8 +197,6 @@ Response PageHandler::Disable() {
   enabled_ = false;
   screencast_enabled_ = false;
   color_picker_->SetEnabled(false);
-  if (screencast_listener_)
-    screencast_listener_->ScreencastEnabledChanged();
   return Response::FallThrough();
 }
 
@@ -203,12 +207,15 @@ Response PageHandler::Reload(const bool* ignoreCache,
   if (!web_contents)
     return Response::InternalError("Could not connect to view");
 
-  // Handle in browser only if it is crashed.
-  if (!web_contents->IsCrashed())
+  if (web_contents->IsCrashed() ||
+      (web_contents->GetController().GetVisibleEntry() &&
+       web_contents->GetController().GetVisibleEntry()->IsViewSourceMode())) {
+    web_contents->GetController().Reload(false);
+    return Response::OK();
+  } else {
+    // Handle reload in renderer except for crashed and view source mode.
     return Response::FallThrough();
-
-  web_contents->GetController().Reload(false);
-  return Response::OK();
+  }
 }
 
 Response PageHandler::Navigate(const std::string& url,
@@ -270,19 +277,11 @@ Response PageHandler::CaptureScreenshot(DevToolsCommandId command_id) {
   return Response::OK();
 }
 
-Response PageHandler::CanScreencast(bool* result) {
-#if defined(OS_ANDROID)
-  *result = true;
-#else
-  *result = false;
-#endif  // defined(OS_ANDROID)
-  return Response::OK();
-}
-
 Response PageHandler::StartScreencast(const std::string* format,
                                       const int* quality,
                                       const int* max_width,
-                                      const int* max_height) {
+                                      const int* max_height,
+                                      const int* every_nth_frame) {
   RenderWidgetHostImpl* widget_host =
       host_ ? host_->GetRenderWidgetHost() : nullptr;
   if (!widget_host)
@@ -295,6 +294,11 @@ Response PageHandler::StartScreencast(const std::string* format,
     screencast_quality_ = kDefaultScreenshotQuality;
   screencast_max_width_ = max_width ? *max_width : -1;
   screencast_max_height_ = max_height ? *max_height : -1;
+  ++session_id_;
+  frame_counter_ = 0;
+  frames_in_flight_ = 0;
+  capture_every_nth_frame_ =
+      every_nth_frame && *every_nth_frame ? *every_nth_frame : 1;
 
   bool visible = !widget_host->is_hidden();
   NotifyScreencastVisibility(visible);
@@ -306,20 +310,17 @@ Response PageHandler::StartScreencast(const std::string* format,
           new ViewMsg_ForceRedraw(widget_host->GetRoutingID(), 0));
     }
   }
-  if (screencast_listener_)
-    screencast_listener_->ScreencastEnabledChanged();
   return Response::FallThrough();
 }
 
 Response PageHandler::StopScreencast() {
   screencast_enabled_ = false;
-  if (screencast_listener_)
-    screencast_listener_->ScreencastEnabledChanged();
   return Response::FallThrough();
 }
 
-Response PageHandler::ScreencastFrameAck(int frame_number) {
-  screencast_frame_acked_ = frame_number;
+Response PageHandler::ScreencastFrameAck(int session_id) {
+  if (session_id == session_id_)
+    --frames_in_flight_;
   return Response::OK();
 }
 
@@ -370,12 +371,13 @@ void PageHandler::NotifyScreencastVisibility(bool visible) {
 }
 
 void PageHandler::InnerSwapCompositorFrame() {
-  if (screencast_frame_sent_ - screencast_frame_acked_ >
-      kMaxScreencastFramesInFlight || processing_screencast_frame_) {
-    return;
-  }
-
   if (!host_ || !host_->GetView())
+    return;
+
+  if (frames_in_flight_ > kMaxScreencastFramesInFlight)
+    return;
+
+  if (++frame_counter_ % capture_every_nth_frame_)
     return;
 
   RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
@@ -385,8 +387,9 @@ void PageHandler::InnerSwapCompositorFrame() {
 
   gfx::SizeF viewport_size_dip = gfx::ScaleSize(
       metadata.scrollable_viewport_size, metadata.page_scale_factor);
-  gfx::SizeF screen_size_dip = gfx::ScaleSize(view->GetPhysicalBackingSize(),
-                                              1 / metadata.device_scale_factor);
+  gfx::SizeF screen_size_dip =
+      gfx::ScaleSize(gfx::SizeF(view->GetPhysicalBackingSize()),
+                     1 / metadata.device_scale_factor);
 
   blink::WebScreenInfo screen_info;
   view->GetScreenInfo(&screen_info);
@@ -409,7 +412,6 @@ void PageHandler::InnerSwapCompositorFrame() {
       gfx::ScaleSize(viewport_size_dip, scale)));
 
   if (snapshot_size_dip.width() > 0 && snapshot_size_dip.height() > 0) {
-    processing_screencast_frame_ = true;
     gfx::Rect viewport_bounds_dip(gfx::ToRoundedSize(viewport_size_dip));
     view->CopyFromCompositingSurface(
         viewport_bounds_dip,
@@ -418,6 +420,7 @@ void PageHandler::InnerSwapCompositorFrame() {
                    weak_factory_.GetWeakPtr(),
                    last_compositor_frame_metadata_),
         kN32_SkColorType);
+    frames_in_flight_++;
   }
 }
 
@@ -426,7 +429,6 @@ void PageHandler::ScreencastFrameCaptured(
     const SkBitmap& bitmap,
     ReadbackResponse response) {
   if (response != READBACK_SUCCESS) {
-    processing_screencast_frame_ = false;
     if (capture_retry_count_) {
       --capture_retry_count_;
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -434,6 +436,7 @@ void PageHandler::ScreencastFrameCaptured(
                                 weak_factory_.GetWeakPtr()),
           base::TimeDelta::FromMilliseconds(kFrameRetryDelayMs));
     }
+    --frames_in_flight_;
     return;
   }
   base::PostTaskAndReplyWithResult(
@@ -449,19 +452,22 @@ void PageHandler::ScreencastFrameEncoded(
     const cc::CompositorFrameMetadata& metadata,
     const base::Time& timestamp,
     const std::string& data) {
-  processing_screencast_frame_ = false;
-
   // Consider metadata empty in case it has no device scale factor.
-  if (metadata.device_scale_factor == 0 || !host_ || data.empty())
+  if (metadata.device_scale_factor == 0 || !host_ || data.empty()) {
+    --frames_in_flight_;
     return;
+  }
 
   RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
       host_->GetView());
-  if (!view)
+  if (!view) {
+    --frames_in_flight_;
     return;
+  }
 
-  gfx::SizeF screen_size_dip = gfx::ScaleSize(
-      view->GetPhysicalBackingSize(), 1 / metadata.device_scale_factor);
+  gfx::SizeF screen_size_dip =
+      gfx::ScaleSize(gfx::SizeF(view->GetPhysicalBackingSize()),
+                     1 / metadata.device_scale_factor);
   scoped_refptr<ScreencastFrameMetadata> param_metadata =
       ScreencastFrameMetadata::Create()
           ->set_page_scale_factor(metadata.page_scale_factor)
@@ -474,7 +480,7 @@ void PageHandler::ScreencastFrameEncoded(
   client_->ScreencastFrame(ScreencastFrameParams::Create()
       ->set_data(data)
       ->set_metadata(param_metadata)
-      ->set_frame_number(++screencast_frame_sent_));
+      ->set_session_id(session_id_));
 }
 
 void PageHandler::ScreenshotCaptured(DevToolsCommandId command_id,

@@ -5,6 +5,7 @@
 #include "ui/compositor/test/test_compositor_host.h"
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/thread_task_runner_handle.h"
 #include "ui/compositor/compositor.h"
@@ -18,9 +19,9 @@ class TestCompositorHostWin : public TestCompositorHost,
   TestCompositorHostWin(const gfx::Rect& bounds,
                         ui::ContextFactory* context_factory) {
     Init(NULL, bounds);
-    compositor_.reset(new ui::Compositor(hwnd(),
-                                         context_factory,
+    compositor_.reset(new ui::Compositor(context_factory,
                                          base::ThreadTaskRunnerHandle::Get()));
+    compositor_->SetAcceleratedWidget(hwnd());
     compositor_->SetScaleAndSize(1.0f, GetSize());
   }
 

@@ -28,6 +28,10 @@ class WebContentsModalDialogHostCocoa;
   base::scoped_nsobject<NSWindow> parentWindow_;
   base::scoped_nsobject<NSView> activeView_;
 
+  // Flag to prevent the sheet from updating its position if it's hidden during
+  // fullscreen. Otherwise, we will get janky movements during the animation.
+  BOOL isSheetHiddenForFullscreen_;
+
   // Class that bridges the cross-platform web_modal APIs to the Cocoa sheet
   // controller.
   scoped_ptr<WebContentsModalDialogHostCocoa> dialogHost_;
@@ -50,10 +54,19 @@ class WebContentsModalDialogHostCocoa;
 // Find the sheet attached to the given overlay window.
 + (id<ConstrainedWindowSheet>)sheetForOverlayWindow:(NSWindow*)overlayWindow;
 
-// Shows the given sheet over |parentView|. If |parentView| is not the active
-// view then the sheet is not shown until the |parentView| becomes active.
+// Shows the given sheet over |parentView|.
 - (void)showSheet:(id<ConstrainedWindowSheet>)sheet
     forParentView:(NSView*)parentView;
+
+// Hides a sheet over the active view.
+- (void)hideSheet;
+
+// Hides and unhides the sheet at the beginning and end of fullscreen
+// transition. |hideSheetForFullscreenTransition| gets called at the beginning
+// of the transition and |unhideSheetForFullscreenTransition| gets called at
+// the end.
+- (void)hideSheetForFullscreenTransition;
+- (void)unhideSheetForFullscreenTransition;
 
 // Calculates the position of the sheet for the given window size.
 - (NSPoint)originForSheet:(id<ConstrainedWindowSheet>)sheet
@@ -61,10 +74,6 @@ class WebContentsModalDialogHostCocoa;
 
 // Closes the given sheet.
 - (void)closeSheet:(id<ConstrainedWindowSheet>)sheet;
-
-// Make |parentView| the current active view. If |parentView| has an attached
-// sheet then the sheet is made visible.
-- (void)parentViewDidBecomeActive:(NSView*)parentView;
 
 // Run a pulse animation for the given sheet. This does nothing if the sheet
 // is not visible.

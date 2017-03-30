@@ -5,12 +5,13 @@
 #ifndef EXTENSIONS_BROWSER_API_DOCUMENT_SCAN_DOCUMENT_SCAN_INTERFACE_CHROMEOS_H_
 #define EXTENSIONS_BROWSER_API_DOCUMENT_SCAN_DOCUMENT_SCAN_INTERFACE_CHROMEOS_H_
 
-#include "extensions/browser/api/document_scan/document_scan_interface.h"
+#include "base/macros.h"
 #include "chromeos/dbus/lorgnette_manager_client.h"
+#include "extensions/browser/api/document_scan/document_scan_interface.h"
 
 namespace extensions {
 
-namespace core_api {
+namespace api {
 
 class DocumentScanInterfaceChromeos : public DocumentScanInterface {
  public:
@@ -41,7 +42,7 @@ class DocumentScanInterfaceChromeos : public DocumentScanInterface {
   DISALLOW_COPY_AND_ASSIGN(DocumentScanInterfaceChromeos);
 };
 
-}  // namespace core_api
+}  // namespace api
 
 }  // namespace extensions
 

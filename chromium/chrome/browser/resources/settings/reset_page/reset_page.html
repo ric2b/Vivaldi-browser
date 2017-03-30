@@ -1,0 +1,26 @@
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://md-settings/reset_page/reset_profile_dialog.html">
+
+<if expr="chromeos">
+<link rel="import" href="chrome://md-settings/reset_page/powerwash_dialog.html">
+</if>
+
+<dom-module id="settings-reset-page">
+  <link rel="import" type="css"
+      href="chrome://md-settings/settings_shared.css">
+  <template>
+    <div class="settings-box" id="resetProfile"
+        on-tap="onShowResetProfileDialog_">
+      <div i18n-content="resetPageTitle"></div>
+      <div i18n-content="resetPageDescription"></div>
+    </div>
+<if expr="chromeos">
+    <div class="settings-box" id="powerwash" on-tap="onShowPowerwashDialog_"
+        hidden="[[!allowPowerwash_]]">
+      <div i18n-content="powerwashTitle"></div>
+      <div i18n-content="powerwashDescription"></div>
+    </div>
+</if>
+  </template>
+  <script src="chrome://md-settings/reset_page/reset_page.js"></script>
+</dom-module>

@@ -11,12 +11,13 @@
   ],
   'targets': [
     {
+      # GN version: //win8/delegate_execute:version_resources
       'target_name': 'delegate_execute_version_resources',
       'type': 'none',
       'conditions': [
         ['branding == "vivaldi"', {
           'variables': {
-             'branding_path': '../../chrome/app/theme/vivaldi/BRANDING',
+             'branding_path': '<(VIVALDI)/app/resources/theme/vivaldi/BRANDING',
           },
         }, { # else branding!="vivaldi"
           'variables': {
@@ -36,13 +37,13 @@
       ],
     },
     {
+      # GN version: //win8/delegate_execute
       'target_name': 'delegate_execute',
       'type': 'executable',
       'dependencies': [
         '../../base/base.gyp:base',
         '../../breakpad/breakpad.gyp:breakpad_handler',
         '../../chrome/chrome.gyp:installer_util',
-        '../../content/content.gyp:content_common',
         '../../google_update/google_update.gyp:google_update',
         '../../ui/base/ui_base.gyp:ui_base',
         '../../ui/gfx/gfx.gyp:gfx',
@@ -84,19 +85,20 @@
         }],
       ],
     },
-    #{
-    #  'target_name': 'delegate_execute_unittests',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../../base/base.gyp:base',
-    #    '../../base/base.gyp:run_all_unittests',
-    #    '../../testing/gtest.gyp:gtest',
-    #  ],
-    #  'sources': [
-    #    'delegate_execute_util.cc',
-    #    'delegate_execute_util.h',
-    #    'delegate_execute_util_unittest.cc',
-    #  ],
-    #},
+    {
+      # GN version: //win8/delegate_execute:delegate_execute_unittests
+      'target_name': 'delegate_execute_unittests',
+      'type': 'executable',
+      'dependencies': [
+        '../../base/base.gyp:base',
+        '../../base/base.gyp:run_all_unittests',
+        '../../testing/gtest.gyp:gtest',
+      ],
+      'sources': [
+        'delegate_execute_util.cc',
+        'delegate_execute_util.h',
+        'delegate_execute_util_unittest.cc',
+      ],
+    },
   ],
 }

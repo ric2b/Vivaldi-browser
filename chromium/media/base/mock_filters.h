@@ -5,12 +5,16 @@
 #ifndef MEDIA_BASE_MOCK_FILTERS_H_
 #define MEDIA_BASE_MOCK_FILTERS_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/audio_renderer.h"
+#include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/decryptor.h"
 #include "media/base/demuxer.h"
@@ -42,6 +46,7 @@ class MockDemuxer : public Demuxer {
   MOCK_METHOD1(GetStream, DemuxerStream*(DemuxerStream::Type));
   MOCK_CONST_METHOD0(GetStartTime, base::TimeDelta());
   MOCK_CONST_METHOD0(GetTimelineOffset, base::Time());
+  MOCK_CONST_METHOD0(GetMemoryUsage, int64_t());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockDemuxer);
@@ -83,9 +88,10 @@ class MockVideoDecoder : public VideoDecoder {
 
   // VideoDecoder implementation.
   virtual std::string GetDisplayName() const;
-  MOCK_METHOD4(Initialize,
+  MOCK_METHOD5(Initialize,
                void(const VideoDecoderConfig& config,
                     bool low_delay,
+                    const SetCdmReadyCB& set_cdm_ready_cb,
                     const InitCB& init_cb,
                     const OutputCB& output_cb));
   MOCK_METHOD2(Decode, void(const scoped_refptr<DecoderBuffer>& buffer,
@@ -104,8 +110,9 @@ class MockAudioDecoder : public AudioDecoder {
 
   // AudioDecoder implementation.
   virtual std::string GetDisplayName() const;
-  MOCK_METHOD3(Initialize,
+  MOCK_METHOD4(Initialize,
                void(const AudioDecoderConfig& config,
+                    const SetCdmReadyCB& set_cdm_ready_cb,
                     const InitCB& init_cb,
                     const OutputCB& output_cb));
   MOCK_METHOD2(Decode,
@@ -126,7 +133,7 @@ class MockVideoRenderer : public VideoRenderer {
   MOCK_METHOD9(Initialize,
                void(DemuxerStream* stream,
                     const PipelineStatusCB& init_cb,
-                    const SetDecryptorReadyCB& set_decryptor_ready_cb,
+                    const SetCdmReadyCB& set_cdm_ready_cb,
                     const StatisticsCB& statistics_cb,
                     const BufferingStateCB& buffering_state_cb,
                     const base::Closure& ended_cb,
@@ -150,7 +157,7 @@ class MockAudioRenderer : public AudioRenderer {
   MOCK_METHOD8(Initialize,
                void(DemuxerStream* stream,
                     const PipelineStatusCB& init_cb,
-                    const SetDecryptorReadyCB& set_decryptor_ready_cb,
+                    const SetCdmReadyCB& set_cdm_ready_cb,
                     const StatisticsCB& statistics_cb,
                     const BufferingStateCB& buffering_state_cb,
                     const base::Closure& ended_cb,
@@ -256,6 +263,18 @@ class MockDecryptor : public Decryptor {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockDecryptor);
+};
+
+class MockCdmContext : public CdmContext {
+ public:
+  MockCdmContext();
+  ~MockCdmContext() override;
+
+  MOCK_METHOD0(GetDecryptor, Decryptor*());
+  int GetCdmId() const override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockCdmContext);
 };
 
 }  // namespace media

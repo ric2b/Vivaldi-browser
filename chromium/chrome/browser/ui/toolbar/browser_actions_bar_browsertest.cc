@@ -4,6 +4,10 @@
 
 #include "chrome/browser/ui/toolbar/browser_actions_bar_browsertest.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
+#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
@@ -12,12 +16,13 @@
 #include "chrome/browser/extensions/extension_action_test_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/extension_toolbar_model.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+#include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
@@ -40,11 +45,11 @@ scoped_refptr<const extensions::Extension> CreateExtension(
            Set("manifest_version", 2).
            Set("version", "1.0");
   if (has_browser_action)
-    manifest.Set("browser_action", extensions::DictionaryBuilder().Pass());
-  return extensions::ExtensionBuilder().
-      SetManifest(manifest.Pass()).
-      SetID(crx_file::id_util::GenerateId(name)).
-      Build();
+    manifest.Set("browser_action", extensions::DictionaryBuilder());
+  return extensions::ExtensionBuilder()
+      .SetManifest(std::move(manifest))
+      .SetID(crx_file::id_util::GenerateId(name))
+      .Build();
 }
 
 }  // namespace
@@ -60,14 +65,18 @@ BrowserActionsBarBrowserTest::~BrowserActionsBarBrowserTest() {
 
 void BrowserActionsBarBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
-  ToolbarActionsBar::disable_animations_for_testing_ = true;
   ExtensionBrowserTest::SetUpCommandLine(command_line);
+  ToolbarActionsBar::disable_animations_for_testing_ = true;
+  // These tests are deliberately testing behavior without the redesign.
+  // Forcefully disable it.
+  override_redesign_.reset(new extensions::FeatureSwitch::ScopedOverride(
+      extensions::FeatureSwitch::extension_action_redesign(), false));
 }
 
 void BrowserActionsBarBrowserTest::SetUpOnMainThread() {
   ExtensionBrowserTest::SetUpOnMainThread();
   browser_actions_bar_.reset(new BrowserActionTestUtil(browser()));
-  toolbar_model_ = extensions::ExtensionToolbarModel::Get(profile());
+  toolbar_model_ = ToolbarActionsModel::Get(profile());
 }
 
 void BrowserActionsBarBrowserTest::TearDownOnMainThread() {
@@ -110,9 +119,11 @@ BrowserActionsBarRedesignBrowserTest::~BrowserActionsBarRedesignBrowserTest() {
 void BrowserActionsBarRedesignBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
   BrowserActionsBarBrowserTest::SetUpCommandLine(command_line);
-  enable_redesign_.reset(new extensions::FeatureSwitch::ScopedOverride(
-      extensions::FeatureSwitch::extension_action_redesign(),
-      true));
+  // Override to force the redesign. Completely clear the previous override
+  // first, since doing so resets the value of the switch.
+  override_redesign_.reset();
+  override_redesign_.reset(new extensions::FeatureSwitch::ScopedOverride(
+      extensions::FeatureSwitch::extension_action_redesign(), true));
 }
 
 // Test the basic functionality.
@@ -147,19 +158,19 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest, MoveBrowserActions) {
   EXPECT_EQ(extension_c()->id(), browser_actions_bar()->GetExtensionId(2));
 
   // Move C to first position. Order is C A B.
-  toolbar_model()->MoveExtensionIcon(extension_c()->id(), 0);
+  toolbar_model()->MoveActionIcon(extension_c()->id(), 0);
   EXPECT_EQ(extension_c()->id(), browser_actions_bar()->GetExtensionId(0));
   EXPECT_EQ(extension_a()->id(), browser_actions_bar()->GetExtensionId(1));
   EXPECT_EQ(extension_b()->id(), browser_actions_bar()->GetExtensionId(2));
 
   // Move B to third position. Order is still C A B.
-  toolbar_model()->MoveExtensionIcon(extension_b()->id(), 2);
+  toolbar_model()->MoveActionIcon(extension_b()->id(), 2);
   EXPECT_EQ(extension_c()->id(), browser_actions_bar()->GetExtensionId(0));
   EXPECT_EQ(extension_a()->id(), browser_actions_bar()->GetExtensionId(1));
   EXPECT_EQ(extension_b()->id(), browser_actions_bar()->GetExtensionId(2));
 
   // Move B to middle position. Order is C B A.
-  toolbar_model()->MoveExtensionIcon(extension_b()->id(), 1);
+  toolbar_model()->MoveActionIcon(extension_b()->id(), 1);
   EXPECT_EQ(extension_c()->id(), browser_actions_bar()->GetExtensionId(0));
   EXPECT_EQ(extension_b()->id(), browser_actions_bar()->GetExtensionId(1));
   EXPECT_EQ(extension_a()->id(), browser_actions_bar()->GetExtensionId(2));
@@ -314,35 +325,15 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
 
   // Reduce the visible icon count so that the extension is hidden.
   toolbar_model()->SetVisibleIconCount(3);
-  EXPECT_FALSE(browser_actions_bar()->OverflowedActionButtonWantsToRun());
 
-  // Make the extension want to run, and verify that the overflow button (the
-  // wrench) has the correct UI. Then, make the extension not want to run and
-  // verify it goes away.
+  // The extension should want to run whether or not it's hidden.
   action->SetIsVisible(tab_id, true);
   extension_action_api->NotifyChange(action, web_contents, profile());
-  EXPECT_TRUE(browser_actions_bar()->OverflowedActionButtonWantsToRun());
-  action->SetIsVisible(tab_id, false);
-  extension_action_api->NotifyChange(action, web_contents, profile());
-  EXPECT_FALSE(browser_actions_bar()->OverflowedActionButtonWantsToRun());
-
-  // Make the extension want to run again, and then move it out of the overflow
-  // menu. This should stop the wrench menu from having the special UI.
-  action->SetIsVisible(tab_id, true);
-  extension_action_api->NotifyChange(action, web_contents, profile());
-  EXPECT_TRUE(browser_actions_bar()->OverflowedActionButtonWantsToRun());
-  toolbar_model()->SetVisibleIconCount(4);
-  EXPECT_FALSE(browser_actions_bar()->OverflowedActionButtonWantsToRun());
+  EXPECT_TRUE(browser_actions_bar()->ActionButtonWantsToRun(3));
 }
 
-// Flaky on Mac. See http://crbug.com/498665.
-#if defined(OS_MACOSX)
-#define MAYBE_BrowserActionPopupTest DISABLED_BrowserActionPopupTest
-#else
-#define MAYBE_BrowserActionPopupTest BrowserActionPopupTest
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
-                       MAYBE_BrowserActionPopupTest) {
+                       BrowserActionPopupTest) {
   // Load up two extensions that have browser action popups.
   base::FilePath data_dir =
       test_data_dir_.AppendASCII("api_test").AppendASCII("browser_action");
@@ -412,14 +403,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
   }
 }
 
-// Waiting for popup termination is flaky on mac; disabling while investigating.
-#if defined(OS_MACOSX)
-#define MAYBE_OverflowedBrowserActionPopupTest DISABLED_OverflowedBrowserActionPopupTest
-#else
-#define MAYBE_OverflowedBrowserActionPopupTest OverflowedBrowserActionPopupTest
-#endif
 IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
-                       MAYBE_OverflowedBrowserActionPopupTest) {
+                       OverflowedBrowserActionPopupTest) {
   scoped_ptr<BrowserActionTestUtil> overflow_bar =
       browser_actions_bar()->CreateOverflowBar();
 
@@ -522,4 +507,23 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
   browser_actions_bar()->HidePopup();
   content::RunAllBlockingPoolTasksUntilIdle();
   EXPECT_FALSE(browser_actions_bar()->HasPopup());
+}
+
+// Tests that the browser actions container correctly highlights for displaying
+// the icon surfacing bubble.
+IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
+                       PRE_HighlightsForExtensionIconSurfacingBubble) {
+  // Add a new extension and clear the pref for the bubble being acknowledged.
+  base::FilePath path = PackExtension(test_data_dir_.AppendASCII("api_test")
+                                          .AppendASCII("page_action")
+                                          .AppendASCII("simple"));
+  InstallExtensionFromWebstore(path, 1);
+  profile()->GetPrefs()->ClearPref(
+      prefs::kToolbarIconSurfacingBubbleAcknowledged);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
+                       HighlightsForExtensionIconSurfacingBubble) {
+  // The toolbar should be highlighting for the bubble.
+  EXPECT_TRUE(browser_actions_bar()->IsHighlightingForSurfacingBubble());
 }

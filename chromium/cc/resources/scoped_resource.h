@@ -5,8 +5,8 @@
 #ifndef CC_RESOURCES_SCOPED_RESOURCE_H_
 #define CC_RESOURCES_SCOPED_RESOURCE_H_
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
 #include "cc/resources/resource.h"
@@ -28,9 +28,8 @@ class CC_EXPORT ScopedResource : public Resource {
   void Allocate(const gfx::Size& size,
                 ResourceProvider::TextureHint hint,
                 ResourceFormat format);
-  void AllocateManaged(const gfx::Size& size,
-                       GLenum target,
-                       ResourceFormat format);
+  void AllocateWithGpuMemoryBuffer(const gfx::Size& size,
+                                   ResourceFormat format);
   void Free();
 
  protected:

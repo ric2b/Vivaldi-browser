@@ -4,6 +4,9 @@
 
 #include "content/browser/browser_url_handler_impl.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "content/browser/frame_host/debug_urls.h"
 #include "content/browser/webui/web_ui_impl.h"
@@ -85,7 +88,7 @@ BrowserURLHandler::URLHandler BrowserURLHandler::null_handler() {
 
 // static
 BrowserURLHandlerImpl* BrowserURLHandlerImpl::GetInstance() {
-  return Singleton<BrowserURLHandlerImpl>::get();
+  return base::Singleton<BrowserURLHandlerImpl>::get();
 }
 
 BrowserURLHandlerImpl::BrowserURLHandlerImpl() :

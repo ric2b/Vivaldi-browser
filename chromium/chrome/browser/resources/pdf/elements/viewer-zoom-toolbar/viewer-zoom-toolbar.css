@@ -3,6 +3,7 @@
  * found in the LICENSE file. */
 
 :host {
+  -webkit-user-select: none;
   bottom: 0;
   padding: 48px 0;
   position: fixed;
@@ -10,18 +11,31 @@
   z-index: 3;
 }
 
+:host-context([dir=rtl]) {
+  left: 0;
+  right: auto;
+}
+
+#zoom-buttons {
+  position: relative;
+  right: 48px;
+}
+
+:host-context([dir=rtl]) #zoom-buttons {
+  left: 48px;
+  right: auto;
+}
+
 viewer-zoom-button {
   display: block;
 }
 
-/* A small gap between the fit to page/fit to width buttons and the zoom in/zoom
- * out buttons. */
-#fit-to-page-button,
+/* A small gap between the zoom in/zoom out buttons. */
 #zoom-out-button {
-  margin-top: 1em;
+  margin-top: 10px;
 }
 
-/* A larger gap between the top two and bottom two buttons. */
+/* A larger gap between the fit button and bottom two buttons. */
 #zoom-in-button {
-  margin-top: 2em;
+  margin-top: 24px;
 }

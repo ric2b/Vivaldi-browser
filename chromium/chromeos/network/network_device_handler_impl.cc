@@ -4,6 +4,10 @@
 
 #include "chromeos/network/network_device_handler_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -171,8 +175,8 @@ void TDLSSuccessCallback(
   }
 
   TDLSOperationParams new_params;
-  const int64 kRequestStatusDelayMs = 500;
-  int64 request_delay_ms = 0;
+  const int64_t kRequestStatusDelayMs = 500;
+  int64_t request_delay_ms = 0;
   if (params.operation == shill::kTDLSStatusOperation) {
     // If this is the last operation, or the result is 'Nonexistent',
     // return the result.
@@ -228,7 +232,7 @@ void TDLSErrorCallback(
     ++retry_params.retry_count;
     NET_LOG(EVENT) << "TDLS Retry: " << params.retry_count << ": "
                    << device_path;
-    const int64 kReRequestDelayMs = 1000;
+    const int64_t kReRequestDelayMs = 1000;
     base::TimeDelta request_delay;
     if (!DBusThreadManager::Get()->GetShillDeviceClient()->GetTestInterface())
       request_delay = base::TimeDelta::FromMilliseconds(kReRequestDelayMs);
@@ -254,7 +258,7 @@ void TDLSErrorCallback(
       network_handler::CreateDBusErrorData(
           device_path, error_name, error_detail,
           dbus_error_name, dbus_error_message));
-  error_callback.Run(error_name, error_data.Pass());
+  error_callback.Run(error_name, std::move(error_data));
 }
 
 void CallPerformTDLSOperation(
@@ -569,7 +573,7 @@ const DeviceState* NetworkDeviceHandlerImpl::GetWifiDeviceState(
       return NULL;
     scoped_ptr<base::DictionaryValue> error_data(new base::DictionaryValue);
     error_data->SetString(network_handler::kErrorName, kErrorDeviceMissing);
-    error_callback.Run(kErrorDeviceMissing, error_data.Pass());
+    error_callback.Run(kErrorDeviceMissing, std::move(error_data));
     return NULL;
   }
 

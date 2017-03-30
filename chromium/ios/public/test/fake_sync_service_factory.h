@@ -9,8 +9,10 @@
 #include "base/memory/scoped_ptr.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
+namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
+}  // namespace base
 
 namespace sync_driver {
 class FakeSyncService;
@@ -29,8 +31,12 @@ class FakeSyncServiceFactory : public BrowserStateKeyedServiceFactory {
   static sync_driver::FakeSyncService* GetForBrowserState(
       ios::ChromeBrowserState* browser_state);
 
+  // Returns the FakeSyncService associated to |browser_state|, if it exists.
+  static sync_driver::FakeSyncService* GetForBrowserStateIfExists(
+      ios::ChromeBrowserState* browser_state);
+
  private:
-  friend struct DefaultSingletonTraits<FakeSyncServiceFactory>;
+  friend struct base::DefaultSingletonTraits<FakeSyncServiceFactory>;
 
   FakeSyncServiceFactory();
   ~FakeSyncServiceFactory() override;

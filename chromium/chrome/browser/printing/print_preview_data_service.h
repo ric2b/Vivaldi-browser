@@ -5,16 +5,19 @@
 #ifndef CHROME_BROWSER_PRINTING_PRINT_PREVIEW_DATA_SERVICE_H_
 #define CHROME_BROWSER_PRINTING_PRINT_PREVIEW_DATA_SERVICE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-
-template<typename T> struct DefaultSingletonTraits;
 
 class PrintPreviewDataStore;
 
 namespace base {
+template <typename T>
+struct DefaultSingletonTraits;
 class RefCountedBytes;
 }
 
@@ -28,7 +31,7 @@ class PrintPreviewDataService {
   // |printing::COMPLETE_PREVIEW_DOCUMENT_INDEX| to represent complete preview
   // data. Use |index| to retrieve a specific preview page data. |data| is set
   // to NULL if the requested page is not yet available.
-  void GetDataEntry(int32 preview_ui_id, int index,
+  void GetDataEntry(int32_t preview_ui_id, int index,
                     scoped_refptr<base::RefCountedBytes>* data);
 
   // Set/Update the data entry in PrintPreviewDataStore. |index| is zero-based
@@ -36,23 +39,23 @@ class PrintPreviewDataService {
   // preview data. Use |index| to set/update a specific preview page data.
   // NOTE: PrintPreviewDataStore owns the data. Do not refcount |data| before
   // calling this function. It will be refcounted in PrintPreviewDataStore.
-  void SetDataEntry(int32 preview_ui_id, int index,
+  void SetDataEntry(int32_t preview_ui_id, int index,
                     const base::RefCountedBytes* data);
 
   // Remove the corresponding PrintPreviewUI entry from the map.
-  void RemoveEntry(int32 preview_ui_id);
+  void RemoveEntry(int32_t preview_ui_id);
 
   // Returns the available draft page count.
-  int GetAvailableDraftPageCount(int32 preview_ui_id);
+  int GetAvailableDraftPageCount(int32_t preview_ui_id);
 
  private:
-  friend struct DefaultSingletonTraits<PrintPreviewDataService>;
+  friend struct base::DefaultSingletonTraits<PrintPreviewDataService>;
 
   // 1:1 relationship between PrintPreviewUI and data store object.
   // Key: PrintPreviewUI ID.
   // Value: Print preview data store object.
-  typedef std::map<int32, scoped_refptr<PrintPreviewDataStore> >
-      PreviewDataStoreMap;
+  using PreviewDataStoreMap =
+      std::map<int32_t, scoped_refptr<PrintPreviewDataStore>>;
 
   PrintPreviewDataService();
   virtual ~PrintPreviewDataService();

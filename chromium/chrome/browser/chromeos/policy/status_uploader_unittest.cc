@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/chromeos/policy/status_uploader.h"
+
+#include <utility>
+
 #include "base/prefs/testing_pref_service.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_status_collector.h"
-#include "chrome/browser/chromeos/policy/status_uploader.h"
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
@@ -43,20 +46,6 @@ namespace em = enterprise_management;
 
 namespace {
 
-// A test implementation of PlatformEventSource that we can instantiate to make
-// sure that the PlatformEventSource has an instance while in unit tests (X11
-// platforms don't have a PlatformEventSource by default, while Ozone tests do).
-#if defined(USE_X11)
-class TestPlatformEventSource : public ui::PlatformEventSource {
- public:
-  TestPlatformEventSource() {}
-  ~TestPlatformEventSource() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestPlatformEventSource);
-};
-#endif
-
 class MockDeviceStatusCollector : public policy::DeviceStatusCollector {
  public:
   explicit MockDeviceStatusCollector(PrefService* local_state)
@@ -65,7 +54,8 @@ class MockDeviceStatusCollector : public policy::DeviceStatusCollector {
             nullptr,
             policy::DeviceStatusCollector::LocationUpdateRequester(),
             policy::DeviceStatusCollector::VolumeInfoFetcher(),
-            policy::DeviceStatusCollector::CPUStatisticsFetcher()) {}
+            policy::DeviceStatusCollector::CPUStatisticsFetcher(),
+            policy::DeviceStatusCollector::CPUTempFetcher()) {}
 
   MOCK_METHOD1(GetDeviceStatus, bool(em::DeviceStatusReportRequest*));
   MOCK_METHOD1(GetDeviceSessionStatus, bool(em::SessionStatusReportRequest*));
@@ -141,9 +131,6 @@ class StatusUploaderTest : public testing::Test {
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   chromeos::ScopedCrosSettingsTestHelper settings_helper_;
   scoped_ptr<MockDeviceStatusCollector> collector_;
-#if defined(USE_X11)
-  TestPlatformEventSource platform_event_source_;
-#endif
   ui::UserActivityDetector detector_;
   MockCloudPolicyClient client_;
   MockDeviceManagementService device_management_service_;
@@ -152,7 +139,7 @@ class StatusUploaderTest : public testing::Test {
 
 TEST_F(StatusUploaderTest, BasicTest) {
   EXPECT_TRUE(task_runner_->GetPendingTasks().empty());
-  StatusUploader uploader(&client_, collector_.Pass(), task_runner_);
+  StatusUploader uploader(&client_, std::move(collector_), task_runner_);
   EXPECT_EQ(1U, task_runner_->GetPendingTasks().size());
   // On startup, first update should happen immediately.
   EXPECT_EQ(base::TimeDelta(), task_runner_->NextPendingTaskDelay());
@@ -167,7 +154,7 @@ TEST_F(StatusUploaderTest, DifferentFrequencyAtStart) {
   const base::TimeDelta expected_delay = base::TimeDelta::FromMilliseconds(
       new_delay);
   EXPECT_TRUE(task_runner_->GetPendingTasks().empty());
-  StatusUploader uploader(&client_, collector_.Pass(), task_runner_);
+  StatusUploader uploader(&client_, std::move(collector_), task_runner_);
   ASSERT_EQ(1U, task_runner_->GetPendingTasks().size());
   // On startup, first update should happen immediately.
   EXPECT_EQ(base::TimeDelta(), task_runner_->NextPendingTaskDelay());
@@ -183,7 +170,7 @@ TEST_F(StatusUploaderTest, ResetTimerAfterStatusCollection) {
   // Keep a pointer to the mock collector because collector_ gets cleared
   // when it is passed to the StatusUploader constructor below.
   MockDeviceStatusCollector* const mock_collector = collector_.get();
-  StatusUploader uploader(&client_, collector_.Pass(), task_runner_);
+  StatusUploader uploader(&client_, std::move(collector_), task_runner_);
   EXPECT_CALL(*mock_collector, GetDeviceStatus(_)).WillRepeatedly(Return(true));
   EXPECT_CALL(*mock_collector, GetDeviceSessionStatus(_)).WillRepeatedly(
       Return(true));
@@ -203,7 +190,7 @@ TEST_F(StatusUploaderTest, ResetTimerAfterFailedStatusCollection) {
   // Keep a pointer to the mock collector because collector_ gets cleared
   // when it is passed to the StatusUploader constructor below.
   MockDeviceStatusCollector* mock_collector = collector_.get();
-  StatusUploader uploader(&client_, collector_.Pass(), task_runner_);
+  StatusUploader uploader(&client_, std::move(collector_), task_runner_);
   EXPECT_CALL(*mock_collector, GetDeviceStatus(_)).WillOnce(Return(false));
   EXPECT_CALL(*mock_collector, GetDeviceSessionStatus(_)).WillOnce(
       Return(false));
@@ -220,7 +207,7 @@ TEST_F(StatusUploaderTest, ChangeFrequency) {
   // Keep a pointer to the mock collector because collector_ gets cleared
   // when it is passed to the StatusUploader constructor below.
   MockDeviceStatusCollector* const mock_collector = collector_.get();
-  StatusUploader uploader(&client_, collector_.Pass(), task_runner_);
+  StatusUploader uploader(&client_, std::move(collector_), task_runner_);
   EXPECT_CALL(*mock_collector, GetDeviceStatus(_)).WillRepeatedly(Return(true));
   EXPECT_CALL(*mock_collector, GetDeviceSessionStatus(_)).WillRepeatedly(
       Return(true));
@@ -235,7 +222,7 @@ TEST_F(StatusUploaderTest, ChangeFrequency) {
 
 #if defined(USE_X11) || defined(USE_OZONE)
 TEST_F(StatusUploaderTest, NoUploadAfterUserInput) {
-  StatusUploader uploader(&client_, collector_.Pass(), task_runner_);
+  StatusUploader uploader(&client_, std::move(collector_), task_runner_);
   // Should allow data upload before there is user input.
   EXPECT_TRUE(uploader.IsSessionDataUploadAllowed());
 
@@ -260,7 +247,7 @@ TEST_F(StatusUploaderTest, NoUploadAfterUserInput) {
 #endif
 
 TEST_F(StatusUploaderTest, NoUploadAfterVideoCapture) {
-  StatusUploader uploader(&client_, collector_.Pass(), task_runner_);
+  StatusUploader uploader(&client_, std::move(collector_), task_runner_);
   // Should allow data upload before there is video capture.
   EXPECT_TRUE(uploader.IsSessionDataUploadAllowed());
 

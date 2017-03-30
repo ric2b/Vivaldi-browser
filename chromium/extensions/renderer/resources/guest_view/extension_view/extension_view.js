@@ -76,6 +76,9 @@ ExtensionViewImpl.prototype.loadNextSrc = function() {
     var resolve = this.pendingLoad.resolve;
     var reject = this.pendingLoad.reject;
 
+    // The extensionview validates the |src| twice, once in |parseSrc| and then
+    // in |loadSrc|. The |src| isn't checked directly in |loadNextSrc| for
+    // validity since the sending renderer (WebUI) is trusted.
     ExtensionViewInternal.parseSrc(src, function(isSrcValid, extensionId) {
       // Check if the src is valid.
       if (!isSrcValid) {
@@ -133,4 +136,4 @@ ExtensionViewImpl.prototype.loadNextSrc = function() {
 GuestViewContainer.registerElement(ExtensionViewImpl);
 
 // Exports.
-exports.ExtensionViewImpl = ExtensionViewImpl;
+exports.$set('ExtensionViewImpl', ExtensionViewImpl);

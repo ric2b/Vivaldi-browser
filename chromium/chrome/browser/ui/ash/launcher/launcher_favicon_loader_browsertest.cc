@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/ash/launcher/launcher_favicon_loader.h"
 
+#include <stdint.h>
+
 #include "ash/shelf/shelf_constants.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/ui/browser.h"
@@ -13,6 +16,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 using content::WebContents;
@@ -78,13 +82,14 @@ class LauncherFaviconLoaderBrowsertest
 
  protected:
   bool NavigateTo(const char* url) {
-    std::string url_path = base::StringPrintf("files/ash/launcher/%s", url);
-    ui_test_utils::NavigateToURL(browser(), test_server()->GetURL(url_path));
+    std::string url_path = base::StringPrintf("/ash/launcher/%s", url);
+    ui_test_utils::NavigateToURL(browser(),
+                                 embedded_test_server()->GetURL(url_path));
     return true;
   }
 
   bool WaitForContentsLoaded() {
-    const int64 max_seconds = 10;
+    const int64_t max_seconds = 10;
     base::Time start_time = base::Time::Now();
     while (!(contents_observer_->loaded() &&
              contents_observer_->got_favicons())) {
@@ -99,7 +104,7 @@ class LauncherFaviconLoaderBrowsertest
   }
 
   bool WaitForFaviconUpdated() {
-    const int64 max_seconds = 10;
+    const int64_t max_seconds = 10;
     base::Time start_time = base::Time::Now();
     while (favicon_loader_->HasPendingDownloads()) {
       content::RunAllPendingInMessageLoop();
@@ -125,7 +130,7 @@ class LauncherFaviconLoaderBrowsertest
 };
 
 IN_PROC_BROWSER_TEST_F(LauncherFaviconLoaderBrowsertest, SmallLauncherIcon) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(NavigateTo("launcher-smallfavicon.html"));
   EXPECT_TRUE(WaitForContentsLoaded());
   EXPECT_TRUE(WaitForFaviconUpdated());
@@ -135,7 +140,7 @@ IN_PROC_BROWSER_TEST_F(LauncherFaviconLoaderBrowsertest, SmallLauncherIcon) {
 }
 
 IN_PROC_BROWSER_TEST_F(LauncherFaviconLoaderBrowsertest, LargeLauncherIcon) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(NavigateTo("launcher-largefavicon.html"));
   EXPECT_TRUE(WaitForContentsLoaded());
   EXPECT_TRUE(WaitForFaviconUpdated());
@@ -145,7 +150,7 @@ IN_PROC_BROWSER_TEST_F(LauncherFaviconLoaderBrowsertest, LargeLauncherIcon) {
 }
 
 IN_PROC_BROWSER_TEST_F(LauncherFaviconLoaderBrowsertest, ManyLauncherIcons) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(NavigateTo("launcher-manyfavicon.html"));
   EXPECT_TRUE(WaitForContentsLoaded());
   EXPECT_TRUE(WaitForFaviconUpdated());
@@ -158,7 +163,7 @@ IN_PROC_BROWSER_TEST_F(LauncherFaviconLoaderBrowsertest, ManyLauncherIcons) {
 }
 
 IN_PROC_BROWSER_TEST_F(LauncherFaviconLoaderBrowsertest, ChangeLauncherIcons) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(NavigateTo("launcher-manyfavicon.html"));
   EXPECT_TRUE(WaitForContentsLoaded());
   EXPECT_TRUE(WaitForFaviconUpdated());

@@ -5,27 +5,31 @@
 #ifndef CHROME_BROWSER_JUMPLIST_WIN_H_
 #define CHROME_BROWSER_JUMPLIST_WIN_H_
 
+#include <stddef.h>
+
 #include <list>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/jumplist_updater_win.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
-#include "chrome/browser/sessions/tab_restore_service_observer.h"
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites_observer.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/sessions/core/tab_restore_service_observer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "extensions/schema/bookmarks_private.h"
 
 namespace chrome {
 struct FaviconImageResult;
@@ -38,7 +42,7 @@ class AppWindow;
 class PrefChangeRegistrar;
 class Profile;
 
-using extensions::api::bookmarks::SpeedDialInfo;
+using extensions::vivaldi::bookmarks_private::SpeedDialInfo;
 
 // A class which implements an application JumpList.
 // This class encapsulates operations required for updating an application
@@ -56,7 +60,7 @@ using extensions::api::bookmarks::SpeedDialInfo;
 //
 // Note. base::CancelableTaskTracker is not thread safe, so we
 // always delete JumpList on UI thread (the same thread it got constructed on).
-class JumpList : public TabRestoreServiceObserver,
+class JumpList : public sessions::TabRestoreServiceObserver,
                  public content::NotificationObserver,
                  public history::TopSitesObserver,
                  public base::RefCountedThreadSafe<
@@ -72,11 +76,12 @@ class JumpList : public TabRestoreServiceObserver,
 
   // Observer callback for TabRestoreService::Observer to notify when a tab is
   // added or removed.
-  void TabRestoreServiceChanged(TabRestoreService* service) override;
+  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
 
   // Observer callback to notice when our associated TabRestoreService
   // is destroyed.
-  void TabRestoreServiceDestroyed(TabRestoreService* service) override;
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override;
 
   // Cancel a pending jumplist update.
   void CancelPendingUpdate();
@@ -95,7 +100,8 @@ class JumpList : public TabRestoreServiceObserver,
 
   // Vivaldi speeddials:
   // Update the jumplist's speeddial list.
-  void OnUpdateVivaldiSpeedDials(const std::vector<linked_ptr<SpeedDialInfo> >& speed_dials);
+  void OnUpdateVivaldiSpeedDials(
+      const std::vector<linked_ptr<SpeedDialInfo>> &speed_dials);
 
   // Create a ShellLinkItem preloaded with common switches.
   static scoped_refptr<ShellLinkItem> CreateShellLink();
@@ -110,10 +116,10 @@ class JumpList : public TabRestoreServiceObserver,
   // given list.
   // These functions are copied from the RecentlyClosedTabsHandler class for
   // compatibility with the new-tab page.
-  bool AddTab(const TabRestoreService::Tab* tab,
+  bool AddTab(const sessions::TabRestoreService::Tab* tab,
               ShellLinkItemList* list,
               size_t max_items);
-  void AddWindow(const TabRestoreService::Window* window,
+  void AddWindow(const sessions::TabRestoreService::Window* window,
                  ShellLinkItemList* list,
                  size_t max_items);
 
@@ -192,7 +198,7 @@ class JumpList : public TabRestoreServiceObserver,
   ShellLinkItemList recently_closed_pages_;
 
   // Timer for requesting delayed updates of the jumplist.
-  base::OneShotTimer<JumpList> timer_;
+  base::OneShotTimer timer_;
 
   // A list of URLs we need to retrieve their favicons,
   // protected by the list_lock_.

@@ -4,6 +4,8 @@
 
 #include "ash/system/chromeos/screen_security/screen_share_tray_item.h"
 
+#include <utility>
+
 #include "ash/shell.h"
 #include "ash/system/system_notifier.h"
 #include "grit/ash_resources.h"
@@ -66,19 +68,16 @@ void ScreenShareTrayItem::CreateOrUpdateNotification() {
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SCREEN_SHARE_STOP)));
   ui::ResourceBundle& resource_bundle = ui::ResourceBundle::GetSharedInstance();
   scoped_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
-      kScreenShareNotificationId,
-      help_label_text,
-      base::string16() /* body is blank */,
+      message_center::NOTIFICATION_TYPE_SIMPLE, kScreenShareNotificationId,
+      help_label_text, base::string16() /* body is blank */,
       resource_bundle.GetImageNamed(IDR_AURA_UBER_TRAY_SCREENSHARE_DARK),
-      base::string16() /* display_source */,
-      message_center::NotifierId(
-          message_center::NotifierId::SYSTEM_COMPONENT,
-          system_notifier::kNotifierScreenShare),
-      data,
-      new tray::ScreenNotificationDelegate(this)));
+      base::string16() /* display_source */, GURL(),
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 system_notifier::kNotifierScreenShare),
+      data, new tray::ScreenNotificationDelegate(this)));
   notification->SetSystemPriority();
-  message_center::MessageCenter::Get()->AddNotification(notification.Pass());
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
 }
 
 std::string ScreenShareTrayItem::GetNotificationId() {

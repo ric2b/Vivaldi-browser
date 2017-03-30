@@ -5,6 +5,7 @@
 #include "content/common/cursors/webcursor.h"
 
 #import <AppKit/AppKit.h>
+#include <stddef.h>
 
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
@@ -151,7 +152,9 @@ NSCursor* CreateCustomCursor(const std::vector<char>& custom_data,
   }
 
   SkBitmap bitmap;
-  if (bitmap.tryAllocN32Pixels(size.width(), size.height()) && data)
+  SkImageInfo image_info = SkImageInfo::MakeN32(size.width(), size.height(),
+                                                kUnpremul_SkAlphaType);
+  if (bitmap.tryAllocPixels(image_info) && data)
     memcpy(bitmap.getAddr32(0, 0), data, data_size);
   else
     bitmap.eraseARGB(0, 0, 0, 0);
@@ -159,15 +162,15 @@ NSCursor* CreateCustomCursor(const std::vector<char>& custom_data,
   // Convert from pixels to view units.
   if (custom_scale == 0)
     custom_scale = 1;
-  NSSize dip_size = NSSizeFromCGSize(gfx::ToFlooredSize(
-      gfx::ScaleSize(custom_size, 1 / custom_scale)).ToCGSize());
-  NSPoint dip_hotspot = NSPointFromCGPoint(gfx::ToFlooredPoint(
-      gfx::ScalePoint(hotspot, 1 / custom_scale)).ToCGPoint());
+  NSSize dip_size = NSSizeFromCGSize(
+      gfx::ScaleToFlooredSize(custom_size, 1 / custom_scale).ToCGSize());
+  NSPoint dip_hotspot = NSPointFromCGPoint(
+      gfx::ScaleToFlooredPoint(hotspot, 1 / custom_scale).ToCGPoint());
 
   // Both the image and its representation need to have the same size for
   // cursors to appear in high resolution on retina displays. Note that the
   // size of a representation is not the same as pixelsWide or pixelsHigh.
-  NSImage* cursor_image = gfx::SkBitmapToNSImage(bitmap);
+  NSImage* cursor_image = skia::SkBitmapToNSImage(bitmap);
   [cursor_image setSize:dip_size];
   [[[cursor_image representations] objectAtIndex:0] setSize:dip_size];
 
@@ -352,7 +355,7 @@ void WebCursor::InitFromNSCursor(NSCursor* cursor) {
       cursor_info.type = WebCursorInfo::TypeCustom;
       NSPoint hot_spot = [cursor hotSpot];
       cursor_info.hotspot = gfx::Point(hot_spot.x, hot_spot.y);
-      cursor_info.custom_image = gfx::CGImageToSkBitmap(cg_image);
+      cursor_info.custom_image = skia::CGImageToSkBitmap(cg_image);
     } else {
       cursor_info.type = WebCursorInfo::TypePointer;
     }

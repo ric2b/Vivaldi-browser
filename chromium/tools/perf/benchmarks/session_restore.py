@@ -6,8 +6,6 @@ from core import perf_benchmark
 
 from measurements import session_restore
 import page_sets
-from profile_creators import profile_generator
-from profile_creators import small_profile_extender
 from telemetry import benchmark
 
 
@@ -21,25 +19,12 @@ class _SessionRestoreTypical25(perf_benchmark.PerfBenchmark):
   Use Typical25PageSet to match what the SmallProfileCreator uses.
   TODO(slamm): Make SmallProfileCreator and this use the same page_set ref.
   """
-  page_set = page_sets.Typical25PageSet
+  page_set = page_sets.Typical25PageSetWithProfile
   tag = None  # override with 'warm' or 'cold'
-
-  PROFILE_TYPE = 'small_profile'
 
   @classmethod
   def Name(cls):
     return 'session_restore'
-
-  @classmethod
-  def ProcessCommandLineArgs(cls, parser, args):
-    super(_SessionRestoreTypical25, cls).ProcessCommandLineArgs(parser, args)
-    generator = profile_generator.ProfileGenerator(
-        small_profile_extender.SmallProfileExtender, cls.PROFILE_TYPE)
-    out_dir = generator.Run(args)
-    if out_dir:
-      args.browser_options.profile_dir = out_dir
-    else:
-      args.browser_options.dont_override_profile = True
 
   @classmethod
   def ValueCanBeAddedPredicate(cls, _, is_first_result):
@@ -61,8 +46,8 @@ class _SessionRestoreTypical25(perf_benchmark.PerfBenchmark):
     is_cold = (self.tag == 'cold')
     return session_restore.SessionRestore(cold=is_cold)
 
-# crbug.com/325479, crbug.com/381990
-@benchmark.Disabled('android', 'linux', 'reference')
+@benchmark.Disabled('android',
+                    'mac')  # crbug.com/563594
 class SessionRestoreColdTypical25(_SessionRestoreTypical25):
   """Test by clearing system cache and profile before repeats."""
   tag = 'cold'
@@ -73,8 +58,9 @@ class SessionRestoreColdTypical25(_SessionRestoreTypical25):
     return 'session_restore.cold.typical_25'
 
 
-# crbug.com/325479, crbug.com/381990
-@benchmark.Disabled('android', 'linux', 'reference', 'xp')
+@benchmark.Disabled('android',
+                    'mac',  # crbug.com/563594
+                    'linux', 'xp')  # crbug.com/539056
 class SessionRestoreWarmTypical25(_SessionRestoreTypical25):
   """Test without clearing system cache or profile before repeats.
 

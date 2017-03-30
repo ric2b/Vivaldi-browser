@@ -5,6 +5,11 @@
 #ifndef CONTENT_BROWSER_SITE_INSTANCE_IMPL_H_
 #define CONTENT_BROWSER_SITE_INSTANCE_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
+#include "base/observer_list.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/render_process_host_observer.h"
@@ -18,8 +23,18 @@ class RenderProcessHostFactory;
 class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
                                         public RenderProcessHostObserver {
  public:
+  class Observer {
+   public:
+    // Called when this SiteInstance transitions to having no active frames,
+    // as measured by active_frame_count().
+    virtual void ActiveFrameCountIsZero(SiteInstanceImpl* site_instance) = 0;
+
+    // Called when the renderer process of this SiteInstance has exited.
+    virtual void RenderProcessGone(SiteInstanceImpl* site_instance) = 0;
+  };
+
   // SiteInstance interface overrides.
-  int32 GetId() override;
+  int32_t GetId() override;
   bool HasProcess() const override;
   RenderProcessHost* GetProcess() override;
   BrowserContext* GetBrowserContext() const override;
@@ -27,6 +42,7 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
   SiteInstance* GetRelatedSiteInstance(const GURL& url) override;
   bool IsRelatedSiteInstance(const SiteInstance* instance) override;
   size_t GetRelatedActiveContentsCount() override;
+  bool RequiresDedicatedProcess() override;
 
   // Set the web site that this SiteInstance is rendering pages for.
   // This includes the scheme and registered domain, but not the port.  If the
@@ -48,12 +64,13 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
   // Increase the number of active frames in this SiteInstance. This is
   // increased when a frame is created, or a currently swapped out frame
   // is swapped in.
-  void increment_active_frame_count() { active_frame_count_++; }
+  void IncrementActiveFrameCount();
 
   // Decrease the number of active frames in this SiteInstance. This is
   // decreased when a frame is destroyed, or a currently active frame is
-  // swapped out.
-  void decrement_active_frame_count() { active_frame_count_--; }
+  // swapped out. Decrementing this to zero will notify observers, and may
+  // trigger deletion of proxies.
+  void DecrementActiveFrameCount();
 
   // Get the number of active frames which belong to this SiteInstance.  If
   // there are no active frames left, all frames in this SiteInstance can be
@@ -68,10 +85,13 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
   // that, unlike active_frame_count, this does not count pending RFHs.
   void DecrementRelatedActiveContentsCount();
 
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
   // Sets the global factory used to create new RenderProcessHosts.  It may be
-  // NULL, in which case the default BrowserRenderProcessHost will be created
-  // (this is the behavior if you don't call this function).  The factory must
-  // be set back to NULL before it's destroyed; ownership is not transferred.
+  // NULL, in which case the default RenderProcessHost will be created (this is
+  // the behavior if you don't call this function).  The factory must be set
+  // back to NULL before it's destroyed; ownership is not transferred.
   static void set_render_process_host_factory(
       const RenderProcessHostFactory* rph_factory);
 
@@ -83,6 +103,15 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
   // RenderFrameHostManager.
   static GURL GetEffectiveURL(BrowserContext* browser_context,
                               const GURL& url);
+
+  // Returns true if pages loaded from |effective_url| ought to be handled only
+  // by a renderer process isolated from other sites. If --site-per-process is
+  // on the command line, this is true for all sites. In other site isolation
+  // modes, only a subset of sites will require dedicated processes.
+  //
+  // |effective_url| must be an effective URL.
+  static bool DoesSiteRequireDedicatedProcess(BrowserContext* browser_context,
+                                              const GURL& effective_url);
 
  protected:
   friend class BrowsingInstance;
@@ -99,6 +128,10 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
  private:
   // RenderProcessHostObserver implementation.
   void RenderProcessHostDestroyed(RenderProcessHost* host) override;
+  void RenderProcessWillExit(RenderProcessHost* host) override;
+  void RenderProcessExited(RenderProcessHost* host,
+                           base::TerminationStatus status,
+                           int exit_code) override;
 
   // Used to restrict a process' origin access rights.
   void LockToOrigin();
@@ -107,10 +140,10 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
   static const RenderProcessHostFactory* g_render_process_host_factory_;
 
   // The next available SiteInstance ID.
-  static int32 next_site_instance_id_;
+  static int32_t next_site_instance_id_;
 
   // A unique ID for this SiteInstance.
-  int32 id_;
+  int32_t id_;
 
   // The number of active frames in this SiteInstance.
   size_t active_frame_count_;
@@ -129,6 +162,8 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
 
   // Whether SetSite has been called.
   bool has_site_;
+
+  base::ObserverList<Observer, true> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(SiteInstanceImpl);
 };

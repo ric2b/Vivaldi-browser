@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_ASH_SYSTEM_TRAY_DELEGATE_CHROMEOS_H_
 #define CHROME_BROWSER_UI_ASH_SYSTEM_TRAY_DELEGATE_CHROMEOS_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -16,20 +18,22 @@
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/compiler_specific.h"
-#include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/settings/shutdown_policy_handler.h"
+#include "chrome/browser/chromeos/system/system_clock.h"
+#include "chrome/browser/chromeos/system/system_clock_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_service_observer.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/session_manager_client.h"
-#include "chromeos/login/login_state.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -55,7 +59,6 @@ class SystemTrayDelegateChromeOS
       public SessionManagerClient::Observer,
       public content::NotificationObserver,
       public input_method::InputMethodManager::Observer,
-      public chromeos::LoginState::Observer,
       public chromeos::CrasAudioHandler::AudioObserver,
       public device::BluetoothAdapter::Observer,
       public policy::CloudPolicyStore::Observer,
@@ -64,7 +67,8 @@ class SystemTrayDelegateChromeOS
       public extensions::AppWindowRegistry::Observer,
       public user_manager::UserManager::UserSessionStateObserver,
       public SupervisedUserServiceObserver,
-      public ShutdownPolicyHandler::Delegate  {
+      public ShutdownPolicyHandler::Delegate,
+      public system::SystemClockObserver {
  public:
   SystemTrayDelegateChromeOS();
 
@@ -79,11 +83,11 @@ class SystemTrayDelegateChromeOS
   bool GetTrayVisibilityOnStartup() override;
   ash::user::LoginStatus GetUserLoginStatus() const override;
   void ChangeProfilePicture() override;
-  const std::string GetEnterpriseDomain() const override;
-  const base::string16 GetEnterpriseMessage() const override;
-  const std::string GetSupervisedUserManager() const override;
-  const base::string16 GetSupervisedUserManagerName() const override;
-  const base::string16 GetSupervisedUserMessage() const override;
+  std::string GetEnterpriseDomain() const override;
+  base::string16 GetEnterpriseMessage() const override;
+  std::string GetSupervisedUserManager() const override;
+  base::string16 GetSupervisedUserManagerName() const override;
+  base::string16 GetSupervisedUserMessage() const override;
   bool IsUserSupervised() const override;
   bool IsUserChild() const override;
   void GetSystemUpdateInfo(ash::UpdateInfo* info) const override;
@@ -94,6 +98,7 @@ class SystemTrayDelegateChromeOS
   void ShowSetTimeDialog() override;
   void ShowNetworkSettingsForGuid(const std::string& guid) override;
   void ShowDisplaySettings() override;
+  void ShowPowerSettings() override;
   void ShowChromeSlow() override;
   bool ShouldShowDisplayNotification() override;
   void ShowIMESettings() override;
@@ -124,7 +129,7 @@ class SystemTrayDelegateChromeOS
   bool GetBluetoothEnabled() override;
   bool GetBluetoothDiscovering() override;
   void ChangeProxySettings() override;
-  ash::CastConfigDelegate* GetCastConfigDelegate() const override;
+  ash::CastConfigDelegate* GetCastConfigDelegate() override;
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() const override;
   ash::VolumeControlDelegate* GetVolumeControlDelegate() const override;
   void SetVolumeControlDelegate(
@@ -134,8 +139,6 @@ class SystemTrayDelegateChromeOS
   int GetSystemTrayMenuWidth() override;
   void ActiveUserWasChanged() override;
   bool IsSearchKeyMappedToCapsLock() override;
-  ash::tray::UserAccountsDelegate* GetUserAccountsDelegate(
-      const std::string& user_id) override;
   void AddCustodianInfoTrayObserver(
       ash::CustodianInfoTrayObserver* observer) override;
   void RemoveCustodianInfoTrayObserver(
@@ -157,10 +160,10 @@ class SystemTrayDelegateChromeOS
   // browser tests need to call ShouldUse24HourClock().
   bool GetShouldUse24HourClockForTesting() const;
 
+  // chromeos::system::SystemClockObserver implementation.
+  void OnSystemClockChanged(system::SystemClock*) override;
+
  private:
-  // Should be the same as CrosSettings::ObserverSubscription.
-  typedef base::CallbackList<void(void)>::Subscription
-      CrosSettingsObserverSubscription;
 
   ash::SystemTray* GetPrimarySystemTray();
 
@@ -171,8 +174,6 @@ class SystemTrayDelegateChromeOS
   bool UnsetProfile(Profile* profile);
 
   bool ShouldUse24HourClock() const;
-
-  void UpdateClockType();
 
   void UpdateShowLogoutButtonInTray();
 
@@ -189,9 +190,6 @@ class SystemTrayDelegateChromeOS
   // Notify observers if the current user has no more open browser or app
   // windows.
   void NotifyIfLastWindowClosed();
-
-  // LoginState::Observer overrides.
-  void LoggedInStateChanged() override;
 
   // Overridden from SessionManagerClient::Observer.
   void ScreenIsLocked() override;
@@ -253,8 +251,8 @@ class SystemTrayDelegateChromeOS
   void OnStoreError(policy::CloudPolicyStore* store) override;
 
   // Overridden from ash::SessionStateObserver
-  void UserAddedToSession(const std::string& user_id) override;
-  void ActiveUserChanged(const std::string& user_id) override;
+  void UserAddedToSession(const AccountId& account_id) override;
+  void ActiveUserChanged(const AccountId& account_id) override;
 
   // Overridden from chrome::BrowserListObserver:
   void OnBrowserRemoved(Browser* browser) override;
@@ -295,11 +293,7 @@ class SystemTrayDelegateChromeOS
   scoped_ptr<ash::CastConfigDelegate> cast_config_delegate_;
   scoped_ptr<ash::NetworkingConfigDelegate> networking_config_delegate_;
   scoped_ptr<ash::VolumeControlDelegate> volume_control_delegate_;
-  scoped_ptr<CrosSettingsObserverSubscription> device_settings_observer_;
   scoped_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
-  base::ScopedPtrHashMap<std::string,
-                         scoped_ptr<ash::tray::UserAccountsDelegate>>
-      accounts_delegates_;
   scoped_ptr<ShutdownPolicyHandler> shutdown_policy_handler_;
   scoped_ptr<ash::VPNDelegate> vpn_delegate_;
 

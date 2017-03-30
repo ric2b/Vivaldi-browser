@@ -10,7 +10,7 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -100,7 +100,7 @@ class NET_EXPORT_PRIVATE WebSocketTransportConnectJob : public ConnectJob {
   scoped_ptr<WebSocketTransportConnectSubJob> ipv4_job_;
   scoped_ptr<WebSocketTransportConnectSubJob> ipv6_job_;
 
-  base::OneShotTimer<WebSocketTransportConnectJob> fallback_timer_;
+  base::OneShotTimer fallback_timer_;
   TransportConnectJobHelper::ConnectionLatencyHistogram race_result_;
   ClientSocketHandle* const handle_;
   CompletionCallback callback_;

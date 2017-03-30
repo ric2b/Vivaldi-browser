@@ -34,6 +34,9 @@ public class AsyncTabCreationParams {
     /** What caused a {@link DocumentTab} to be created. */
     private int mDocumentStartedBy = DocumentMetricIds.STARTED_BY_UNKNOWN;
 
+    /** Whether or not the {@link WebContents} should be initially hidden. */
+    private boolean mIsAffiliated;
+
     /** Create parameters for creating a Tab asynchronously. */
     public AsyncTabCreationParams(LoadUrlParams loadUrlParams) {
         this(loadUrlParams, null, null, null);
@@ -87,6 +90,14 @@ public class AsyncTabCreationParams {
 
     public WebContents getWebContents() {
         return mWebContents;
+    }
+
+    public void setIsAffiliated(boolean isAffiliated) {
+        mIsAffiliated = isAffiliated;
+    }
+
+    public boolean isAffiliated() {
+        return mIsAffiliated;
     }
 
     private AsyncTabCreationParams(LoadUrlParams loadUrlParams, Intent originalIntent,

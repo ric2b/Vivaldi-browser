@@ -1,0 +1,104 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/protobuf/proto_library.gni")
+
+proto_library("proto") {
+  sources = [
+    "safebrowsing.proto",
+  ]
+}
+
+group("safe_browsing_db") {
+  deps = [
+    ":database_manager",
+    ":hit_report",
+    ":prefix_set",
+    ":proto",
+    ":util",
+  ]
+}
+
+source_set("database_manager") {
+  sources = [
+    "database_manager.cc",
+    "database_manager.h",
+  ]
+  deps = [
+    ":hit_report",
+    ":util",
+    "//base:base",
+    "//content/public/common",
+    "//url:url",
+  ]
+}
+
+source_set("hit_report") {
+  sources = [
+    "hit_report.cc",
+    "hit_report.h",
+  ]
+  deps = [
+    ":util",
+    "//components/metrics:metrics",
+    "//url:url",
+  ]
+}
+
+source_set("prefix_set") {
+  sources = [
+    "prefix_set.cc",
+    "prefix_set.h",
+  ]
+  deps = [
+    ":util",
+    "//base",
+  ]
+}
+
+source_set("util") {
+  sources = [
+    "util.cc",
+    "util.h",
+  ]
+  deps = [
+    "//base",
+    "//crypto",
+    "//net",
+  ]
+  if (is_win) {
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    cflags = [ "/wd4267" ]  # Conversion from size_t to 'type'.
+  }
+}
+
+source_set("test_database_manager") {
+  sources = [
+    "test_database_manager.cc",
+    "test_database_manager.h",
+  ]
+  deps = [
+    ":database_manager",
+    "//base:base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "prefix_set_unittest.cc",
+    "util_unittest.cc",
+  ]
+  deps = [
+    ":prefix_set",
+    ":util",
+    "//base",
+    "//testing/gtest",
+    "//url",
+  ]
+  if (is_win) {
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    cflags = [ "/wd4267" ]  # Conversion from size_t to 'type'.
+  }
+}

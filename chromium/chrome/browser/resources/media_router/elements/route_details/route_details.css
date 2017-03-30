@@ -2,30 +2,38 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-#close-route-button {
-  background-color: white;
-  color: rgb(33, 150, 243);
-  text-align: -webkit-right;
+
+#custom-controller {
+  display: inline-block;
+  height: 136px;
+  width: 100%;
 }
 
-#route-details-header {
-  background-color: rgb(33, 150, 243);
-  font-size: 1.4em;
+#join-route-button {
+  @apply(--layout-flex);
+}
+
+#route-action-buttons {
+  @apply(--layout-horizontal);
+  @apply(--layout-end-justified);
+  margin: 0;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.route-button {
+  -webkit-padding-end: 24px;
+  -webkit-padding-start: 0;
+  background-color: white;
+  line-height: 12px;
+  margin: 12px 0;
+  text-align: end;
 }
 
 #route-information {
-  -webkit-padding-start: 30px;
-  height: 75px;
-  line-height: 1.125em;
-}
-
-#route-status {
-  color: rgb(125, 125, 125);
-  margin: 8px 0;
-}
-
-#route-title {
-  font-weight: bold;
-  margin: 8px 0;
+  -webkit-padding-start: 44px;
+  background-color: white;
+  font-size: 1.2em;
+  margin-top: 16px;
   overflow: hidden;
 }

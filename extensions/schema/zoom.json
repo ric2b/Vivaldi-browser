@@ -1,0 +1,93 @@
+// Copyright (c) 2015 Vivaldi. All rights reserved.
+[
+  {
+    "namespace": "zoom",
+    "description": "Use the <code>vivaldi.zoom</code> to zoom the Vivaldi html UI.",
+    "functions": [
+      {
+        "name": "setVivaldiUIZoom",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "zoomFactor",
+            "description": "The new value for Vivaldi UI zoom factor."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Called after the zoom message has been sent to the guest process.",
+            "optional": true,
+            "parameters": []
+          }
+        ]
+      },
+      {
+        "name": "getVivaldiUIZoom",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "zoomLevel",
+            "description": "The zoom level.",
+            "parameters": [
+              {
+                "name": "zoomlevel",
+                "type": "number"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setDefaultZoom",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "zoomFactor",
+            "description": "The new Vivaldi default global zoom factor."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Called after the zoom message has been sent to the guest process.",
+            "optional": true,
+            "parameters": []
+          }
+        ]
+      },
+      {
+        "name": "getDefaultZoom",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "zoomLevel",
+            "description": "The zoom level.",
+            "parameters": [
+              {
+                "name": "zoomlevel",
+                "type": "number"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onDefaultZoomChanged",
+        "type": "function",
+        "description": "Fired when the default zoom changes.",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "zoomlevel",
+            "description": "The new zoom level"
+          }
+        ]
+      }
+    ]
+  }
+]

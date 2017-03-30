@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/accessibility_messages.h"
+#include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -131,8 +135,14 @@ IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
   EXPECT_TRUE(button->data().state >> ui::AX_STATE_FOCUSED & 1);
 }
 
+#if defined(OS_ANDROID)
+// http://crbug.com/542704
+#define MAYBE_MultipleBadAccessibilityIPCsKillsRenderer DISABLED_MultipleBadAccessibilityIPCsKillsRenderer
+#else
+#define MAYBE_MultipleBadAccessibilityIPCsKillsRenderer MultipleBadAccessibilityIPCsKillsRenderer
+#endif
 IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
-                       MultipleBadAccessibilityIPCsKillsRenderer) {
+                       MAYBE_MultipleBadAccessibilityIPCsKillsRenderer) {
   // Create a data url and load it.
   const char url_str[] =
       "data:text/html,"
@@ -153,8 +163,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
 
   // Construct a bad accessibility message that BrowserAccessibilityManager
   // will reject.
-  std::vector<AccessibilityHostMsg_EventParams> bad_accessibility_event_list;
-  bad_accessibility_event_list.push_back(AccessibilityHostMsg_EventParams());
+  std::vector<AXEventNotificationDetails> bad_accessibility_event_list;
+  bad_accessibility_event_list.push_back(AXEventNotificationDetails());
   bad_accessibility_event_list[0].update.node_id_to_clear = -2;
 
   // We should be able to reset accessibility |max_iterations-1| times

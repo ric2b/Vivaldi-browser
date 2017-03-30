@@ -12,6 +12,7 @@
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -37,9 +38,8 @@ namespace sessions {
 struct ModelNeutralState;
 }
 
-class SYNC_EXPORT_PRIVATE SyncSchedulerImpl
-    : public SyncScheduler,
-      public base::NonThreadSafe {
+class SYNC_EXPORT SyncSchedulerImpl : public SyncScheduler,
+                                      public base::NonThreadSafe {
  public:
   // |name| is a display string to identify the syncer thread.  Takes
   // |ownership of |syncer| and |delay_provider|.
@@ -53,6 +53,7 @@ class SYNC_EXPORT_PRIVATE SyncSchedulerImpl
 
   void Start(Mode mode, base::Time last_poll_time) override;
   void ScheduleConfiguration(const ConfigurationParams& params) override;
+  void ScheduleClearServerData(const ClearParams& params) override;
   void Stop() override;
   void ScheduleLocalNudge(
       ModelTypeSet types,
@@ -120,7 +121,7 @@ class SYNC_EXPORT_PRIVATE SyncSchedulerImpl
   FRIEND_TEST_ALL_PREFIXES(SyncSchedulerTest, FailedRetry);
   FRIEND_TEST_ALL_PREFIXES(SyncSchedulerTest, ReceiveNewRetryDelay);
 
-  struct SYNC_EXPORT_PRIVATE WaitInterval {
+  struct SYNC_EXPORT WaitInterval {
     enum Mode {
       // Uninitialized state, should not be set in practice.
       UNKNOWN = -1,
@@ -150,6 +151,8 @@ class SYNC_EXPORT_PRIVATE SyncSchedulerImpl
 
   // Invoke the syncer to perform a configuration job.
   void DoConfigurationSyncSessionJob(JobPriority priority);
+
+  void DoClearServerDataSyncSessionJob(JobPriority priority);
 
   // Helper function for Do{Nudge,Configuration,Poll}SyncSessionJob.
   void HandleSuccess();
@@ -252,7 +255,7 @@ class SYNC_EXPORT_PRIVATE SyncSchedulerImpl
   // Timer for polling. Restarted on each successful poll, and when entering
   // normal sync mode or exiting an error state. Not active in configuration
   // mode.
-  base::OneShotTimer<SyncSchedulerImpl> poll_timer_;
+  base::OneShotTimer poll_timer_;
 
   // The mode of operation.
   Mode mode_;
@@ -263,14 +266,16 @@ class SYNC_EXPORT_PRIVATE SyncSchedulerImpl
   scoped_ptr<BackoffDelayProvider> delay_provider_;
 
   // The event that will wake us up.
-  base::OneShotTimer<SyncSchedulerImpl> pending_wakeup_timer_;
+  base::OneShotTimer pending_wakeup_timer_;
 
   // An event that fires when data type throttling expires.
-  base::OneShotTimer<SyncSchedulerImpl> type_unthrottle_timer_;
+  base::OneShotTimer type_unthrottle_timer_;
 
   // Storage for variables related to an in-progress configure request.  Note
   // that (mode_ != CONFIGURATION_MODE) \implies !pending_configure_params_.
   scoped_ptr<ConfigurationParams> pending_configure_params_;
+
+  scoped_ptr<ClearParams> pending_clear_params_;
 
   // If we have a nudge pending to run soon, it will be listed here.
   base::TimeTicks scheduled_nudge_time_;
@@ -310,7 +315,7 @@ class SYNC_EXPORT_PRIVATE SyncSchedulerImpl
   JobPriority next_sync_session_job_priority_;
 
   // One-shot timer for scheduling GU retry according to delay set by server.
-  base::OneShotTimer<SyncSchedulerImpl> retry_timer_;
+  base::OneShotTimer retry_timer_;
 
   base::WeakPtrFactory<SyncSchedulerImpl> weak_ptr_factory_;
 

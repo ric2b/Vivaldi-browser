@@ -8,13 +8,8 @@
 #define CHROME_BROWSER_DEFAULTS_H_
 
 #include "build/build_config.h"
-#include "chrome/browser/prefs/session_startup_pref.h"
-#include "ui/base/resource/resource_bundle.h"
 
 namespace browser_defaults {
-
-// Size of the font used in the omnibox, in pixels.
-extern const int kOmniboxFontPixelSize;
 
 // Can the browser be alive without any browser windows?
 extern const bool kBrowserAliveWithNoWindows;
@@ -55,9 +50,6 @@ extern const bool kShowOtherBrowsersInAboutMemory;
 
 // Should scroll events on the tabstrip change tabs?
 extern const bool kScrollEventChangesTab;
-
-// ChromiumOS network menu font
-extern const ui::ResourceBundle::FontStyle kAssociatedNetworkFontStyle;
 
 // Last character display for passwords.
 extern const bool kPasswordEchoEnabled;

@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_LOCAL_DATA_PIPE_IMPL_H_
-#define MOJO_EDK_SYSTEM_LOCAL_DATA_PIPE_IMPL_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_LOCAL_DATA_PIPE_IMPL_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_LOCAL_DATA_PIPE_IMPL_H_
 
 #include "base/memory/aligned_memory.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/edk/system/data_pipe_impl.h"
-#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe_impl.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace mojo {
 namespace system {
@@ -31,9 +31,9 @@ class MOJO_SYSTEM_IMPL_EXPORT LocalDataPipeImpl final : public DataPipeImpl {
                                UserPointer<uint32_t> num_bytes,
                                uint32_t max_num_bytes_to_write,
                                uint32_t min_num_bytes_to_write) override;
-  MojoResult ProducerBeginWriteData(UserPointer<void*> buffer,
-                                    UserPointer<uint32_t> buffer_num_bytes,
-                                    uint32_t min_num_bytes_to_write) override;
+  MojoResult ProducerBeginWriteData(
+      UserPointer<void*> buffer,
+      UserPointer<uint32_t> buffer_num_bytes) override;
   MojoResult ProducerEndWriteData(uint32_t num_bytes_written) override;
   HandleSignalsState ProducerGetHandleSignalsState() const override;
   void ProducerStartSerialize(Channel* channel,
@@ -54,9 +54,9 @@ class MOJO_SYSTEM_IMPL_EXPORT LocalDataPipeImpl final : public DataPipeImpl {
                                  uint32_t max_num_bytes_to_discard,
                                  uint32_t min_num_bytes_to_discard) override;
   MojoResult ConsumerQueryData(UserPointer<uint32_t> num_bytes) override;
-  MojoResult ConsumerBeginReadData(UserPointer<const void*> buffer,
-                                   UserPointer<uint32_t> buffer_num_bytes,
-                                   uint32_t min_num_bytes_to_read) override;
+  MojoResult ConsumerBeginReadData(
+      UserPointer<const void*> buffer,
+      UserPointer<uint32_t> buffer_num_bytes) override;
   MojoResult ConsumerEndReadData(uint32_t num_bytes_read) override;
   HandleSignalsState ConsumerGetHandleSignalsState() const override;
   void ConsumerStartSerialize(Channel* channel,
@@ -93,4 +93,4 @@ class MOJO_SYSTEM_IMPL_EXPORT LocalDataPipeImpl final : public DataPipeImpl {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_LOCAL_DATA_PIPE_IMPL_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_LOCAL_DATA_PIPE_IMPL_H_

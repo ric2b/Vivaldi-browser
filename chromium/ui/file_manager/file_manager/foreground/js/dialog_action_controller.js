@@ -351,8 +351,10 @@ DialogActionController.prototype.selectFilesAndClose_ = function(selection) {
   var onCancel = function() {
     // According to API cancel may fail, but there is no proper UI to reflect
     // this. So, we just silently assume that everything is cancelled.
-    chrome.fileManagerPrivate.cancelFileTransfers(
-        selection.urls, function(response) {});
+    util.URLsToEntries(selection.urls).then(function(entries) {
+      chrome.fileManagerPrivate.cancelFileTransfers(
+          entries, util.checkAPIError);
+    });
   }.bind(this);
 
   var onProperties = function(properties) {
@@ -420,13 +422,9 @@ DialogActionController.prototype.onFileSelectionChanged_ = function() {
     this.dialogFooter_.filenameInput.value = selection.entries[0].name;
   }
 
-  selection.completeInit().then(function() {
-    if (this.fileSelectionHandler_.selection !== selection)
-      return;
-    this.updateOkButton_();
-    if (!this.dialogFooter_.okButton.disabled)
-      util.testSendMessage('dialog-ready');
-  }.bind(this));
+  this.updateOkButton_();
+  if (!this.dialogFooter_.okButton.disabled)
+    util.testSendMessage('dialog-ready');
 };
 
 /**
@@ -452,10 +450,10 @@ DialogActionController.prototype.updateOkButton_ = function() {
 
   if (this.dialogType_ === DialogType.SELECT_SAVEAS_FILE) {
     if (selection.directoryCount === 1 && selection.fileCount === 0) {
-      this.dialogFooter_.okButton.textContent = str('OPEN_LABEL');
+      this.dialogFooter_.okButtonLabel.textContent = str('OPEN_LABEL');
       this.dialogFooter_.okButton.disabled = false;
     } else {
-      this.dialogFooter_.okButton.textContent = str('SAVE_LABEL');
+      this.dialogFooter_.okButtonLabel.textContent = str('SAVE_LABEL');
       this.dialogFooter_.okButton.disabled =
           this.directoryModel_.isReadOnly() ||
           !this.dialogFooter_.filenameInput.value;

@@ -14,9 +14,7 @@ TestAutofillDriver::TestAutofillDriver()
           new base::SequencedWorkerPoolOwner(4, "TestAutofillDriver")),
       url_request_context_(NULL) {}
 
-TestAutofillDriver::~TestAutofillDriver() {
-  blocking_pool_owner_->pool()->Shutdown();
-}
+TestAutofillDriver::~TestAutofillDriver() {}
 
 bool TestAutofillDriver::IsOffTheRecord() const {
   return false;
@@ -39,11 +37,8 @@ void TestAutofillDriver::SendFormDataToRenderer(int query_id,
                                                 const FormData& form_data) {
 }
 
-void TestAutofillDriver::PingRenderer() {
-}
-
 void TestAutofillDriver::PropagateAutofillPredictions(
-    const std::vector<autofill::FormStructure*>& forms) {
+    const std::vector<FormStructure*>& forms) {
 }
 
 void TestAutofillDriver::SendAutofillTypePredictionsToRenderer(

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/files/file.h"
@@ -19,14 +21,14 @@ TEST(LoggingInstallerTest, TestTruncate) {
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
   base::FilePath temp_file = temp_dir.path().Append(L"temp");
-  EXPECT_EQ(test_data.size(),
+  EXPECT_EQ(static_cast<int>(test_data.size()),
             base::WriteFile(temp_file, &test_data[0],
                             static_cast<int>(test_data.size())));
   ASSERT_TRUE(base::PathExists(temp_file));
 
-  int64 file_size = 0;
+  int64_t file_size = 0;
   EXPECT_TRUE(base::GetFileSize(temp_file, &file_size));
-  EXPECT_EQ(test_data.size(), file_size);
+  EXPECT_EQ(static_cast<int64_t>(test_data.size()), file_size);
 
   EXPECT_EQ(installer::LOGFILE_TRUNCATED,
             installer::TruncateLogFileIfNeeded(temp_file));
@@ -45,20 +47,20 @@ TEST(LoggingInstallerTest, TestTruncationNotNeeded) {
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
   base::FilePath temp_file = temp_dir.path().Append(L"temp");
-  EXPECT_EQ(test_data.size(),
+  EXPECT_EQ(static_cast<int>(test_data.size()),
             base::WriteFile(temp_file, &test_data[0],
                             static_cast<int>(test_data.size())));
   ASSERT_TRUE(base::PathExists(temp_file));
 
-  int64 file_size = 0;
+  int64_t file_size = 0;
   EXPECT_TRUE(base::GetFileSize(temp_file, &file_size));
-  EXPECT_EQ(test_data.size(), file_size);
+  EXPECT_EQ(static_cast<int64_t>(test_data.size()), file_size);
 
   EXPECT_EQ(installer::LOGFILE_UNTOUCHED,
             installer::TruncateLogFileIfNeeded(temp_file));
   EXPECT_TRUE(base::PathExists(temp_file));
   EXPECT_TRUE(base::GetFileSize(temp_file, &file_size));
-  EXPECT_EQ(test_data.size(), file_size);
+  EXPECT_EQ(static_cast<int64_t>(test_data.size()), file_size);
 }
 
 TEST(LoggingInstallerTest, TestInUseNeedsTruncation) {
@@ -68,18 +70,17 @@ TEST(LoggingInstallerTest, TestInUseNeedsTruncation) {
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
   base::FilePath temp_file = temp_dir.path().Append(L"temp");
-  EXPECT_EQ(test_data.size(),
+  EXPECT_EQ(static_cast<int>(test_data.size()),
             base::WriteFile(temp_file, &test_data[0],
                             static_cast<int>(test_data.size())));
   ASSERT_TRUE(base::PathExists(temp_file));
-  int64 file_size = 0;
+  int64_t file_size = 0;
   EXPECT_TRUE(base::GetFileSize(temp_file, &file_size));
-  EXPECT_EQ(test_data.size(), file_size);
+  EXPECT_EQ(static_cast<int64_t>(test_data.size()), file_size);
 
   // Prevent the log file from being moved or deleted.
-  uint32 file_flags = base::File::FLAG_OPEN |
-                      base::File::FLAG_READ |
-                      base::File::FLAG_EXCLUSIVE_READ;
+  uint32_t file_flags = base::File::FLAG_OPEN | base::File::FLAG_READ |
+                        base::File::FLAG_EXCLUSIVE_READ;
   base::File temp_platform_file(temp_file, file_flags);
   ASSERT_TRUE(temp_platform_file.IsValid());
 
@@ -87,7 +88,7 @@ TEST(LoggingInstallerTest, TestInUseNeedsTruncation) {
             installer::TruncateLogFileIfNeeded(temp_file));
   EXPECT_TRUE(base::PathExists(temp_file));
   EXPECT_TRUE(base::GetFileSize(temp_file, &file_size));
-  EXPECT_EQ(test_data.size(), file_size);
+  EXPECT_EQ(static_cast<int64_t>(test_data.size()), file_size);
 }
 
 TEST(LoggingInstallerTest, TestMoveFailsNeedsTruncation) {
@@ -97,19 +98,18 @@ TEST(LoggingInstallerTest, TestMoveFailsNeedsTruncation) {
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
   base::FilePath temp_file = temp_dir.path().Append(L"temp");
-  EXPECT_EQ(test_data.size(),
+  EXPECT_EQ(static_cast<int>(test_data.size()),
             base::WriteFile(temp_file, &test_data[0],
                             static_cast<int>(test_data.size())));
   ASSERT_TRUE(base::PathExists(temp_file));
-  int64 file_size = 0;
+  int64_t file_size = 0;
   EXPECT_TRUE(base::GetFileSize(temp_file, &file_size));
-  EXPECT_EQ(test_data.size(), file_size);
+  EXPECT_EQ(static_cast<int64_t>(test_data.size()), file_size);
 
   // Create an inconvenient, non-deletable file in the location that
   // TruncateLogFileIfNeeded would like to move the log file to.
-  uint32 file_flags = base::File::FLAG_CREATE |
-                      base::File::FLAG_READ |
-                      base::File::FLAG_EXCLUSIVE_READ;
+  uint32_t file_flags = base::File::FLAG_CREATE | base::File::FLAG_READ |
+                        base::File::FLAG_EXCLUSIVE_READ;
   base::FilePath temp_file_move_dest(
       temp_file.value() + FILE_PATH_LITERAL(".tmp"));
   base::File temp_move_destination_file(temp_file_move_dest, file_flags);

@@ -25,6 +25,10 @@ namespace content {
 class BrowserContext;
 }
 
+namespace gfx {
+class Image;
+}
+
 namespace ui {
 class MenuModel;
 }
@@ -34,7 +38,7 @@ class Widget;
 }
 
 namespace keyboard {
-class KeyboardControllerProxy;
+class KeyboardUI;
 }
 
 namespace ash {
@@ -80,8 +84,9 @@ class ASH_EXPORT ShellDelegate {
   // Returns true if we're running in forced app mode.
   virtual bool IsRunningInForcedAppMode() const = 0;
 
-  // Returns true if multi account is enabled.
-  virtual bool IsMultiAccountEnabled() const = 0;
+  // Returns true if |window| can be shown for the delegate's concept of current
+  // user.
+  virtual bool CanShowWindowForUser(aura::Window* window) const = 0;
 
   // Returns true if the first window shown on first run should be
   // unconditionally maximized, overriding the heuristic that normally chooses
@@ -99,9 +104,8 @@ class ASH_EXPORT ShellDelegate {
   // Invoked when the user uses Ctrl-Shift-Q to close chrome.
   virtual void Exit() = 0;
 
-  // Create a shell-specific keyboard::KeyboardControllerProxy
-  virtual keyboard::KeyboardControllerProxy*
-      CreateKeyboardControllerProxy() = 0;
+  // Create a shell-specific keyboard::KeyboardUI
+  virtual keyboard::KeyboardUI* CreateKeyboardUI() = 0;
 
   // Called when virtual keyboard has been activated/deactivated.
   virtual void VirtualKeyboardActivated(bool activated) = 0;
@@ -111,10 +115,6 @@ class ASH_EXPORT ShellDelegate {
       VirtualKeyboardStateObserver* observer) = 0;
   virtual void RemoveVirtualKeyboardStateObserver(
       VirtualKeyboardStateObserver* observer) = 0;
-
-  // Get the active browser context. This will get us the active profile
-  // in chrome.
-  virtual content::BrowserContext* GetActiveBrowserContext() = 0;
 
   // Get the AppListViewDelegate, creating one if it does not yet exist.
   // Ownership stays with Chrome's AppListService, or the ShellDelegate.
@@ -155,6 +155,14 @@ class ASH_EXPORT ShellDelegate {
 
   // Get the product name.
   virtual base::string16 GetProductName() const = 0;
+
+  virtual void OpenKeyboardShortcutHelpPage() const {}
+
+  virtual gfx::Image GetDeprecatedAcceleratorImage() const = 0;
+
+  // Toggles the status of the touchpad / touchscreen on or off.
+  virtual void ToggleTouchpad() {}
+  virtual void ToggleTouchscreen() {}
 };
 
 }  // namespace ash

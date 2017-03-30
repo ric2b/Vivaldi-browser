@@ -68,10 +68,9 @@ void BootstrapUserContextInitializer::StartTokenFetch(
 }
 
 void BootstrapUserContextInitializer::StartCheckExistingKeys() {
-  const std::string& user_id = user_context_.GetUserID();
-
   // Use random key for the first time user.
-  if (!user_manager::UserManager::Get()->IsKnownUser(user_id)) {
+  if (!user_manager::UserManager::Get()->IsKnownUser(
+          user_context_.GetAccountId())) {
     CreateRandomKey();
     return;
   }
@@ -79,7 +78,7 @@ void BootstrapUserContextInitializer::StartCheckExistingKeys() {
   EasyUnlockKeyManager* key_manager =
       UserSessionManager::GetInstance()->GetEasyUnlockKeyManager();
   key_manager->GetDeviceDataList(
-      UserContext(user_id),
+      UserContext(user_context_.GetAccountId()),
       base::Bind(&BootstrapUserContextInitializer::OnGetEasyUnlockData,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -99,14 +98,14 @@ void BootstrapUserContextInitializer::OnGetEasyUnlockData(
   service->AddObserver(this);
 
   static_cast<EasyUnlockServiceSignin*>(service)
-      ->SetCurrentUser(user_context_.GetUserID());
+      ->SetCurrentUser(user_context_.GetAccountId());
   OnScreenlockStateChanged(service->GetScreenlockState());
 }
 
 void BootstrapUserContextInitializer::OnEasyUnlockAuthenticated(
     EasyUnlockAuthAttempt::Type auth_attempt_type,
     bool success,
-    const std::string& user_id,
+    const AccountId& account_id,
     const std::string& key_secret,
     const std::string& key_label) {
   DCHECK_EQ(EasyUnlockAuthAttempt::TYPE_SIGNIN, auth_attempt_type);
@@ -203,7 +202,7 @@ void BootstrapUserContextInitializer::OnScreenlockStateChanged(
   service->RemoveObserver(this);
 
   service->AttemptAuth(
-      user_context_.GetUserID(),
+      user_context_.GetAccountId(),
       base::Bind(&BootstrapUserContextInitializer::OnEasyUnlockAuthenticated,
                  weak_ptr_factory_.GetWeakPtr()));
 }

@@ -60,6 +60,17 @@ const int kMinimumWidthFor4K = 3840;
 // available in extrenal large monitors.
 const float kAdditionalDeviceScaleFactorsFor4k[] = {1.25f, 2.0f};
 
+void UpdateInternalDisplayId(
+    const ui::DisplayConfigurator::DisplayStateList& display_states) {
+  for (auto* state : display_states) {
+    if (state->type() == ui::DISPLAY_CONNECTION_TYPE_INTERNAL) {
+      if (gfx::Display::HasInternalDisplay())
+        DCHECK_EQ(gfx::Display::InternalDisplayId(), state->display_id());
+      gfx::Display::SetInternalDisplayId(state->display_id());
+    }
+  }
+}
+
 }  // namespace
 
 // static
@@ -141,16 +152,19 @@ DisplayChangeObserver::~DisplayChangeObserver() {
 }
 
 ui::MultipleDisplayState DisplayChangeObserver::GetStateForDisplayIds(
-    const std::vector<int64>& display_ids) const {
-  CHECK_EQ(2U, display_ids.size());
-  DisplayIdPair pair = std::make_pair(display_ids[0], display_ids[1]);
+    const ui::DisplayConfigurator::DisplayStateList& display_states) const {
+  UpdateInternalDisplayId(display_states);
+  if (display_states.size() != 2)
+    return ui::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
+  DisplayIdPair pair = CreateDisplayIdPair(display_states[0]->display_id(),
+                                           display_states[1]->display_id());
   DisplayLayout layout = Shell::GetInstance()->display_manager()->
       layout_store()->GetRegisteredDisplayLayout(pair);
   return layout.mirrored ? ui::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR :
                            ui::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
 }
 
-bool DisplayChangeObserver::GetResolutionForDisplayId(int64 display_id,
+bool DisplayChangeObserver::GetResolutionForDisplayId(int64_t display_id,
                                                       gfx::Size* size) const {
   DisplayMode mode;
   if (!Shell::GetInstance()->display_manager()->GetSelectedModeForDisplayId(
@@ -163,34 +177,24 @@ bool DisplayChangeObserver::GetResolutionForDisplayId(int64 display_id,
 
 void DisplayChangeObserver::OnDisplayModeChanged(
     const ui::DisplayConfigurator::DisplayStateList& display_states) {
-  std::vector<DisplayInfo> displays;
-  std::set<int64> ids;
-  for (const ui::DisplaySnapshot* state : display_states) {
-    if (state->type() == ui::DISPLAY_CONNECTION_TYPE_INTERNAL) {
-      if (gfx::Display::InternalDisplayId() ==
-          gfx::Display::kInvalidDisplayID) {
-        gfx::Display::SetInternalDisplayId(state->display_id());
-      } else {
-#if defined(USE_OZONE)
-        // TODO(dnicoara) Remove when Ozone can properly perform the initial
-        // display configuration.
-        gfx::Display::SetInternalDisplayId(state->display_id());
-#endif
-        DCHECK_EQ(gfx::Display::InternalDisplayId(), state->display_id());
-      }
-    }
+  UpdateInternalDisplayId(display_states);
 
+  std::vector<DisplayInfo> displays;
+  std::set<int64_t> ids;
+  for (const ui::DisplaySnapshot* state : display_states) {
     const ui::DisplayMode* mode_info = state->current_mode();
     if (!mode_info)
       continue;
 
     float device_scale_factor = 1.0f;
+    // Sets dpi only if the screen size is not blacklisted.
+    float dpi = ui::IsDisplaySizeBlackListed(state->physical_size())
+                    ? 0
+                    : kInchInMm * mode_info->size().width() /
+                          state->physical_size().width();
     if (state->type() == ui::DISPLAY_CONNECTION_TYPE_INTERNAL) {
-      if (!ui::IsDisplaySizeBlackListed(state->physical_size())) {
-        device_scale_factor =
-            FindDeviceScaleFactor((kInchInMm * mode_info->size().width() /
-                                   state->physical_size().width()));
-      }
+      if (dpi)
+        device_scale_factor = FindDeviceScaleFactor(dpi);
     } else {
       DisplayMode mode;
       if (Shell::GetInstance()->display_manager()->GetSelectedModeForDisplayId(
@@ -214,24 +218,35 @@ void DisplayChangeObserver::OnDisplayModeChanged(
     }
     gfx::Rect display_bounds(state->origin(), mode_info->size());
 
-    std::string name =
-        state->type() == ui::DISPLAY_CONNECTION_TYPE_INTERNAL
-            ? l10n_util::GetStringUTF8(IDS_ASH_INTERNAL_DISPLAY_NAME)
-            : state->display_name();
+    std::string name;
+    switch (state->type()) {
+      case ui::DISPLAY_CONNECTION_TYPE_INTERNAL:
+        name = l10n_util::GetStringUTF8(IDS_ASH_INTERNAL_DISPLAY_NAME);
+        break;
+      case ui::DISPLAY_CONNECTION_TYPE_VIRTUAL:
+        name = l10n_util::GetStringUTF8(IDS_ASH_VIRTUAL_DISPLAY_NAME);
+        break;
+      default:
+        name = state->display_name();
+    }
+
     if (name.empty())
       name = l10n_util::GetStringUTF8(IDS_ASH_STATUS_TRAY_UNKNOWN_DISPLAY_NAME);
 
     bool has_overscan = state->has_overscan();
-    int64 id = state->display_id();
+    int64_t id = state->display_id();
     ids.insert(id);
 
     displays.push_back(DisplayInfo(id, name, has_overscan));
     DisplayInfo& new_info = displays.back();
+    new_info.set_sys_path(state->sys_path());
     new_info.set_device_scale_factor(device_scale_factor);
     new_info.SetBounds(display_bounds);
     new_info.set_native(true);
     new_info.set_is_aspect_preserving_scaling(
         state->is_aspect_preserving_scaling());
+    if (dpi)
+      new_info.set_device_dpi(dpi);
 
     std::vector<DisplayMode> display_modes =
         (state->type() == ui::DISPLAY_CONNECTION_TYPE_INTERNAL)

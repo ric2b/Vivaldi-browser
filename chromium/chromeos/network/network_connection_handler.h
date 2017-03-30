@@ -9,8 +9,8 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -96,6 +96,9 @@ class CHROMEOS_EXPORT NetworkConnectionHandler
   // Certificate load timed out.
   static const char kErrorCertLoadTimeout[];
 
+  // Trying to configure an unmanged network but policy prohibits that
+  static const char kErrorUnmanagedNetwork[];
+
   ~NetworkConnectionHandler() override;
 
   void AddObserver(NetworkConnectionObserver* observer);
@@ -167,6 +170,10 @@ class CHROMEOS_EXPORT NetworkConnectionHandler
                                   const std::string& service_path,
                                   const base::DictionaryValue& properties);
 
+  bool IsNetworkProhibitedByPolicy(const std::string& type,
+                                   const std::string& guid,
+                                   const std::string& profile_path);
+
   // Queues a connect request until certificates have loaded.
   void QueueConnectRequest(const std::string& service_path);
 
@@ -193,7 +200,11 @@ class CHROMEOS_EXPORT NetworkConnectionHandler
                                  const std::string& error_name,
                                  const std::string& error_message);
 
+  // Note: |service_path| is passed by value here, because in some cases
+  // the value may be located in the map and then it can be deleted, producing
+  // a reference to invalid memory.
   void CheckPendingRequest(const std::string service_path);
+
   void CheckAllPendingRequests();
 
   // Notify caller and observers that the connect request succeeded.
@@ -222,7 +233,7 @@ class CHROMEOS_EXPORT NetworkConnectionHandler
   void HandleShillDisconnectSuccess(const std::string& service_path,
                                     const base::Closure& success_callback);
 
-  base::ObserverList<NetworkConnectionObserver> observers_;
+  base::ObserverList<NetworkConnectionObserver, true> observers_;
 
   // Local references to the associated handler instances.
   CertLoader* cert_loader_;

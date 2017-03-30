@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/installer/util/installer_state.h"
+
 #include <windows.h>
+#include <stddef.h>
 
 #include <fstream>
 
@@ -12,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -27,10 +31,8 @@
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/installation_state.h"
-#include "chrome/installer/util/installer_state.h"
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/product_unittest.h"
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -41,8 +43,18 @@ using installer::InstallerState;
 using installer::MasterPreferences;
 using registry_util::RegistryOverrideManager;
 
-class InstallerStateTest : public TestWithTempDirAndDeleteTempOverrideKeys {
+class InstallerStateTest : public testing::Test {
  protected:
+  InstallerStateTest() {}
+
+  void SetUp() override {
+    ASSERT_TRUE(test_dir_.CreateUniqueTempDir());
+  }
+
+  base::ScopedTempDir test_dir_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InstallerStateTest);
 };
 
 // An installer state on which we can access otherwise protected members.
@@ -532,7 +544,7 @@ TEST_F(InstallerStateTest, RemoveOldVersionDirs) {
   };
 
   // Create the version directories.
-  for (int i = 0; i < arraysize(version_dirs); i++) {
+  for (size_t i = 0; i < arraysize(version_dirs); i++) {
     base::CreateDirectory(version_dirs[i]);
     EXPECT_TRUE(base::PathExists(version_dirs[i]));
   }
@@ -553,7 +565,7 @@ TEST_F(InstallerStateTest, RemoveOldVersionDirs) {
     { installer_state.target_path().Append(installer::kChromeNewExe),
       new_chrome_exe_version },
   };
-  for (int i = 0; i < arraysize(targets); ++i) {
+  for (size_t i = 0; i < arraysize(targets); ++i) {
     ASSERT_TRUE(upgrade_test::GenerateSpecificPEFileVersion(
         exe_path, targets[i].target_file, targets[i].target_version));
   }

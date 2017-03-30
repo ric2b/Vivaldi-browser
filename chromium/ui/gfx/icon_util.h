@@ -6,12 +6,14 @@
 #define UI_GFX_ICON_UTIL_H_
 
 #include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/win/scoped_gdi_object.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gfx_export.h"
@@ -43,28 +45,30 @@ class SkBitmap;
 //   ...
 //
 //   // Convert the bitmap into a Windows HICON
-//   HICON icon = IconUtil::CreateHICONFromSkBitmap(bitmap);
-//   if (icon == NULL) {
+//   base::win::ScopedHICON icon(IconUtil::CreateHICONFromSkBitmap(bitmap));
+//   if (!icon.is_valid()) {
 //     // Handle error
 //     ...
 //   }
 //
 //   // Use the icon with a WM_SETICON message
 //   ::SendMessage(hwnd, WM_SETICON, static_cast<WPARAM>(ICON_BIG),
-//                 reinterpret_cast<LPARAM>(icon));
-//
-//   // Destroy the icon when we are done
-//   ::DestroyIcon(icon);
+//                 reinterpret_cast<LPARAM>(icon.get()));
 //
 ///////////////////////////////////////////////////////////////////////////////
 class GFX_EXPORT IconUtil {
  public:
+  // ATOMIC_WRITE ensures that a partially written icon won't be created even if
+  // Chrome crashes part way through, but ATOMIC_WRITE is more expensive than
+  // NORMAL_WRITE. See CreateIconFileFromImageFamily. ATOMIC_WRITE is the
+  // default for historical reasons.
+  enum WriteType { ATOMIC_WRITE, NORMAL_WRITE };
   // The size of the large icon entries in .ico files on Windows Vista+.
-  static const int kLargeIconSize = 256;
+  enum { kLargeIconSize = 256 };
   // The size of icons in the medium icons view on Windows Vista+. This is the
   // maximum size Windows will display an icon that does not have a 256x256
   // image, even at the large or extra large icons views.
-  static const int kMediumIconSize = 48;
+  enum { kMediumIconSize = 48 };
 
   // The dimensions for icon images in Windows icon files. All sizes are square;
   // that is, the value 48 means a 48x48 pixel image. Sizes are listed in
@@ -82,7 +86,7 @@ class GFX_EXPORT IconUtil {
   //
   // The client is responsible for destroying the icon when it is no longer
   // needed by calling ::DestroyIcon().
-  static HICON CreateHICONFromSkBitmap(const SkBitmap& bitmap);
+  static base::win::ScopedHICON CreateHICONFromSkBitmap(const SkBitmap& bitmap);
 
   // Given a valid HICON handle representing an icon, this function converts
   // the icon into an SkBitmap object containing an ARGB bitmap using the
@@ -99,9 +103,9 @@ class GFX_EXPORT IconUtil {
   // loaded .dll or .exe |module|. Supports loading smaller icon sizes as well
   // as the Vista+ 256x256 PNG icon size. If the icon could not be loaded or
   // found, returns a NULL scoped_ptr.
-  static scoped_ptr<SkBitmap> CreateSkBitmapFromIconResource(HMODULE module,
-                                                             int resource_id,
-                                                             int size);
+  static scoped_ptr<gfx::ImageFamily> CreateImageFamilyFromIconResource(
+      HMODULE module,
+      int resource_id);
 
   // Given a valid HICON handle representing an icon, this function converts
   // the icon into an SkBitmap object containing an ARGB bitmap using the
@@ -127,20 +131,21 @@ class GFX_EXPORT IconUtil {
   // |image_family| is empty.
   static bool CreateIconFileFromImageFamily(
       const gfx::ImageFamily& image_family,
-      const base::FilePath& icon_path);
+      const base::FilePath& icon_path,
+      WriteType write_type = ATOMIC_WRITE);
 
   // Creates a cursor of the specified size from the DIB passed in.
   // Returns the cursor on success or NULL on failure.
-  static HICON CreateCursorFromDIB(const gfx::Size& icon_size,
-                                   const gfx::Point& hotspot,
-                                   const void* dib_bits,
-                                   size_t dib_size);
+  static base::win::ScopedHICON CreateCursorFromDIB(const gfx::Size& icon_size,
+                                                    const gfx::Point& hotspot,
+                                                    const void* dib_bits,
+                                                    size_t dib_size);
 
  private:
   // The icon format is published in the MSDN but there is no definition of
   // the icon file structures in any of the Windows header files so we need to
   // define these structure within the class. We must make sure we use 2 byte
-  // packing so that the structures are layed out properly within the file.
+  // packing so that the structures are laid out properly within the file.
   // See: http://msdn.microsoft.com/en-us/library/ms997538.aspx
 #pragma pack(push)
 #pragma pack(2)
@@ -200,12 +205,8 @@ class GFX_EXPORT IconUtil {
 
   friend class IconUtilTest;
 
-  // Used for indicating that the .ico contains an icon (rather than a cursor)
-  // image. This value is set in the |idType| field of the ICONDIR structure.
-  static const int kResourceTypeIcon = 1;
-
   // Returns true if any pixel in the given pixels buffer has an non-zero alpha.
-  static bool PixelsHaveAlpha(const uint32* pixels, size_t num_pixels);
+  static bool PixelsHaveAlpha(const uint32_t* pixels, size_t num_pixels);
 
   // A helper function that initializes a BITMAPV5HEADER structure with a set
   // of values.

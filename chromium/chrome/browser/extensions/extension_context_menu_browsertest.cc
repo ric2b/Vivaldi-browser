@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/lazy_background_page_test_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -534,8 +537,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest, MAYBE_IncognitoSplit) {
                                                  false);
 
   // Open an incognito window.
-  Browser* browser_incognito = ui_test_utils::OpenURLOffTheRecord(
-      browser()->profile(), GURL("about:blank"));
+  Browser* browser_incognito =
+      OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
 
   ASSERT_TRUE(LoadContextMenuExtensionIncognito("incognito"));
 
@@ -608,8 +611,7 @@ class ExtensionContextMenuBrowserLazyTest :
   }
 };
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserLazyTest, DISABLED_EventPage) {
+IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserLazyTest, EventPage) {
   GURL about_blank("about:blank");
   LazyBackgroundObserver page_complete;
   const extensions::Extension* extension = LoadContextMenuExtension(

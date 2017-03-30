@@ -5,7 +5,7 @@
 #ifndef COMPONENTS_TEST_RUNNER_WEB_FRAME_TEST_PROXY_H_
 #define COMPONENTS_TEST_RUNNER_WEB_FRAME_TEST_PROXY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "components/test_runner/mock_screen_orientation_client.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "components/test_runner/web_test_interfaces.h"
@@ -57,12 +57,14 @@ class WebFrameTestProxy : public Base {
     return mime_type.utf8().find(suffix.utf8()) != std::string::npos;
   }
 
-  virtual void loadURLExternally(blink::WebLocalFrame* frame,
-                                 const blink::WebURLRequest& request,
+  virtual void loadURLExternally(const blink::WebURLRequest& request,
                                  blink::WebNavigationPolicy policy,
-                                 const blink::WebString& suggested_name) {
-    base_proxy_->LoadURLExternally(frame, request, policy, suggested_name);
-    Base::loadURLExternally(frame, request, policy, suggested_name);
+                                 const blink::WebString& suggested_name,
+                                 bool replaces_current_history_item) {
+    base_proxy_->LoadURLExternally(request, policy, suggested_name,
+                                   replaces_current_history_item);
+    Base::loadURLExternally(request, policy, suggested_name,
+                            replaces_current_history_item);
   }
 
   virtual void didStartProvisionalLoad(blink::WebLocalFrame* frame,
@@ -110,9 +112,9 @@ class WebFrameTestProxy : public Base {
     Base::didChangeIcon(frame, icon_type);
   }
 
-  virtual void didFinishDocumentLoad(blink::WebLocalFrame* frame) {
+  virtual void didFinishDocumentLoad(blink::WebLocalFrame* frame, bool empty) {
     base_proxy_->DidFinishDocumentLoad(frame);
-    Base::didFinishDocumentLoad(frame);
+    Base::didFinishDocumentLoad(frame, empty);
   }
 
   virtual void didHandleOnloadEvents(blink::WebLocalFrame* frame) {
@@ -179,13 +181,12 @@ class WebFrameTestProxy : public Base {
     Base::showContextMenu(context_menu_data);
   }
 
-  virtual void didDetectXSS(blink::WebLocalFrame* frame,
-                            const blink::WebURL& insecure_url,
+  virtual void didDetectXSS(const blink::WebURL& insecure_url,
                             bool did_block_entire_page) {
     // This is not implemented in RenderFrameImpl, so need to explicitly call
     // into the base proxy.
-    base_proxy_->DidDetectXSS(frame, insecure_url, did_block_entire_page);
-    Base::didDetectXSS(frame, insecure_url, did_block_entire_page);
+    base_proxy_->DidDetectXSS(insecure_url, did_block_entire_page);
+    Base::didDetectXSS(insecure_url, did_block_entire_page);
   }
 
   virtual void didDispatchPingLoader(blink::WebLocalFrame* frame,
@@ -194,14 +195,6 @@ class WebFrameTestProxy : public Base {
     // into the base proxy.
     base_proxy_->DidDispatchPingLoader(frame, url);
     Base::didDispatchPingLoader(frame, url);
-  }
-
-  virtual void willRequestResource(blink::WebLocalFrame* frame,
-                                   const blink::WebCachedURLRequest& request) {
-    // This is not implemented in RenderFrameImpl, so need to explicitly call
-    // into the base proxy.
-    base_proxy_->WillRequestResource(frame, request);
-    Base::willRequestResource(frame, request);
   }
 
   virtual void didCreateDataSource(blink::WebLocalFrame* frame,
@@ -240,7 +233,6 @@ class WebFrameTestProxy : public Base {
   virtual void didFinishResourceLoad(blink::WebLocalFrame* frame,
                                      unsigned identifier) {
     base_proxy_->DidFinishResourceLoad(frame, identifier);
-    Base::didFinishResourceLoad(frame, identifier);
   }
 
   virtual blink::WebNavigationPolicy decidePolicyForNavigation(
@@ -276,15 +268,18 @@ class WebFrameTestProxy : public Base {
         source_frame, target_frame, target, event);
   }
 
-  virtual void didStopLoading() {
-    base_proxy_->DidStopLoading();
-    Base::didStopLoading();
-  }
-
   virtual void postAccessibilityEvent(const blink::WebAXObject& object,
                                       blink::WebAXEvent event) {
     base_proxy_->PostAccessibilityEvent(object, event);
     Base::postAccessibilityEvent(object, event);
+  }
+
+  virtual void checkIfAudioSinkExistsAndIsAuthorized(
+      const blink::WebString& sink_id,
+      const blink::WebSecurityOrigin& security_origin,
+      blink::WebSetSinkIdCallbacks* web_callbacks) {
+    base_proxy_->CheckIfAudioSinkExistsAndIsAuthorized(sink_id, security_origin,
+                                                       web_callbacks);
   }
 
  private:

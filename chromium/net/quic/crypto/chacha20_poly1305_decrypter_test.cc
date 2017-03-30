@@ -14,7 +14,7 @@ namespace {
 // The test vectors come from draft-agl-tls-chacha20poly1305-04 Section 7.
 
 // Each test vector consists of six strings of lowercase hexadecimal digits.
-// The strings may be empty (zero length). A test vector with a NULL |key|
+// The strings may be empty (zero length). A test vector with a nullptr |key|
 // marks the end of an array of test vectors.
 struct TestVector {
   // Input:
@@ -30,39 +30,39 @@ struct TestVector {
 };
 
 const TestVector test_vectors[] = {
-  { "4290bcb154173531f314af57f3be3b5006da371ece272afa1b5dbdd110"
+    {"4290bcb154173531f314af57f3be3b5006da371ece272afa1b5dbdd110"
+     "0a1007",
+     "cd7cf67be39c794a", "87e229d4500845a079c0",
+     "e3e446f7ede9a19b62a4677dabf4e3d24b876bb28475",  // "3896e1d6" truncated.
+     "86d09974840bded2a5ca"},
+    // Modify the ciphertext (ChaCha20 encryption output).
+    {
+        "4290bcb154173531f314af57f3be3b5006da371ece272afa1b5dbdd110"
         "0a1007",
-    "cd7cf67be39c794a",
-    "87e229d4500845a079c0",
-    "e3e446f7ede9a19b62a4677dabf4e3d24b876bb28475",  // "3896e1d6" truncated.
-    "86d09974840bded2a5ca"
-  },
-  // Modify the ciphertext (ChaCha20 encryption output).
-  { "4290bcb154173531f314af57f3be3b5006da371ece272afa1b5dbdd110"
+        "cd7cf67be39c794a", "87e229d4500845a079c0",
+        "f3e446f7ede9a19b62a4677dabf4e3d24b876bb28475",  // "3896e1d6"
+                                                         // truncated.
+        nullptr                                          // FAIL
+    },
+    // Modify the ciphertext (Poly1305 authenticator).
+    {
+        "4290bcb154173531f314af57f3be3b5006da371ece272afa1b5dbdd110"
         "0a1007",
-    "cd7cf67be39c794a",
-    "87e229d4500845a079c0",
-    "f3e446f7ede9a19b62a4677dabf4e3d24b876bb28475",  // "3896e1d6" truncated.
-    NULL  // FAIL
-  },
-  // Modify the ciphertext (Poly1305 authenticator).
-  { "4290bcb154173531f314af57f3be3b5006da371ece272afa1b5dbdd110"
+        "cd7cf67be39c794a", "87e229d4500845a079c0",
+        "e3e446f7ede9a19b62a4677dabf4e3d24b876bb28476",  // "3896e1d6"
+                                                         // truncated.
+        nullptr                                          // FAIL
+    },
+    // Modify the associated data.
+    {
+        "4290bcb154173531f314af57f3be3b5006da371ece272afa1b5dbdd110"
         "0a1007",
-    "cd7cf67be39c794a",
-    "87e229d4500845a079c0",
-    "e3e446f7ede9a19b62a4677dabf4e3d24b876bb28476",  // "3896e1d6" truncated.
-    NULL  // FAIL
-  },
-  // Modify the associated data.
-  { "4290bcb154173531f314af57f3be3b5006da371ece272afa1b5dbdd110"
-        "0a1007",
-    "dd7cf67be39c794a",
-    "87e229d4500845a079c0",
-    "e3e446f7ede9a19b62a4677dabf4e3d24b876bb28475",  // "3896e1d6" truncated.
-    NULL  // FAIL
-  },
-  { NULL }
-};
+        "dd7cf67be39c794a", "87e229d4500845a079c0",
+        "e3e446f7ede9a19b62a4677dabf4e3d24b876bb28475",  // "3896e1d6"
+                                                         // truncated.
+        nullptr                                          // FAIL
+    },
+    {nullptr}};
 
 }  // namespace
 
@@ -75,17 +75,16 @@ QuicData* DecryptWithNonce(ChaCha20Poly1305Decrypter* decrypter,
                            StringPiece nonce,
                            StringPiece associated_data,
                            StringPiece ciphertext) {
-  QuicPacketSequenceNumber sequence_number;
-  StringPiece nonce_prefix(nonce.data(),
-                           nonce.size() - sizeof(sequence_number));
+  QuicPacketNumber packet_number;
+  StringPiece nonce_prefix(nonce.data(), nonce.size() - sizeof(packet_number));
   decrypter->SetNoncePrefix(nonce_prefix);
-  memcpy(&sequence_number, nonce.data() + nonce_prefix.size(),
-         sizeof(sequence_number));
+  memcpy(&packet_number, nonce.data() + nonce_prefix.size(),
+         sizeof(packet_number));
   scoped_ptr<char[]> output(new char[ciphertext.length()]);
   size_t output_length = 0;
   const bool success = decrypter->DecryptPacket(
-      sequence_number, associated_data, ciphertext, output.get(),
-      &output_length, ciphertext.length());
+      packet_number, associated_data, ciphertext, output.get(), &output_length,
+      ciphertext.length());
   if (!success) {
     return nullptr;
   }
@@ -93,11 +92,6 @@ QuicData* DecryptWithNonce(ChaCha20Poly1305Decrypter* decrypter,
 }
 
 TEST(ChaCha20Poly1305DecrypterTest, Decrypt) {
-  if (!ChaCha20Poly1305Decrypter::IsSupported()) {
-    LOG(INFO) << "ChaCha20+Poly1305 not supported. Test skipped.";
-    return;
-  }
-
   for (size_t i = 0; test_vectors[i].key != nullptr; i++) {
     // If not present then decryption is expected to fail.
     bool has_pt = test_vectors[i].pt;

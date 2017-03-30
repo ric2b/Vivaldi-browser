@@ -4,9 +4,13 @@
 
 #include "chrome/browser/chromeos/extensions/file_manager/event_router.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
@@ -15,9 +19,6 @@
 #include "base/values.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/drive_pref_names.h"
-#include "chrome/browser/chromeos/drive/file_change.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
@@ -26,7 +27,6 @@
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
-#include "chrome/browser/drive/drive_service_interface.h"
 #include "chrome/browser/extensions/api/file_system/file_system_api.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -38,6 +38,10 @@
 #include "chromeos/login/login_state.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
+#include "components/drive/drive_pref_names.h"
+#include "components/drive/file_change.h"
+#include "components/drive/file_system_interface.h"
+#include "components/drive/service/drive_service_interface.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
@@ -61,7 +65,7 @@ namespace file_manager {
 namespace {
 
 // Frequency of sending onFileTransferUpdated.
-const int64 kProgressEventFrequencyInMilliseconds = 1000;
+const int64_t kProgressEventFrequencyInMilliseconds = 1000;
 
 // Maximim size of detailed change info on directory change event. If the size
 // exceeds the maximum size, the detailed info is omitted and the force refresh
@@ -69,7 +73,7 @@ const int64 kProgressEventFrequencyInMilliseconds = 1000;
 const size_t kDirectoryChangeEventMaxDetailInfoSize = 1000;
 
 // This time(millisecond) is used for confirm following event exists.
-const int64 kFileTransferEventDelayTimeInMilliseconds = 300;
+const int64_t kFileTransferEventDelayTimeInMilliseconds = 300;
 
 // Checks if the Recovery Tool is running. This is a temporary solution.
 // TODO(mtomasz): Replace with crbug.com/341902 solution.
@@ -98,8 +102,9 @@ void BroadcastEvent(Profile* profile,
                     extensions::events::HistogramValue histogram_value,
                     const std::string& event_name,
                     scoped_ptr<base::ListValue> event_args) {
-  extensions::EventRouter::Get(profile)->BroadcastEvent(make_scoped_ptr(
-      new extensions::Event(histogram_value, event_name, event_args.Pass())));
+  extensions::EventRouter::Get(profile)
+      ->BroadcastEvent(make_scoped_ptr(new extensions::Event(
+          histogram_value, event_name, std::move(event_args))));
 }
 
 // Sends an event named |event_name| with arguments |event_args| to an extension
@@ -112,7 +117,7 @@ void DispatchEventToExtension(
     scoped_ptr<base::ListValue> event_args) {
   extensions::EventRouter::Get(profile)->DispatchEventToExtension(
       extension_id, make_scoped_ptr(new extensions::Event(
-                        histogram_value, event_name, event_args.Pass())));
+                        histogram_value, event_name, std::move(event_args))));
 }
 
 file_manager_private::MountCompletedStatus
@@ -237,7 +242,7 @@ std::string FileErrorToErrorName(base::File::Error error_code) {
 // |last_time|.
 bool ShouldSendProgressEvent(bool always, base::Time* last_time) {
   const base::Time now = base::Time::Now();
-  const int64 delta = (now - *last_time).InMilliseconds();
+  const int64_t delta = (now - *last_time).InMilliseconds();
   // delta < 0 may rarely happen if system clock is synced and rewinded.
   // To be conservative, we don't skip in that case.
   if (!always && 0 <= delta && delta < kProgressEventFrequencyInMilliseconds) {
@@ -325,16 +330,38 @@ class JobEventRouterImpl : public JobEventRouter {
         profile_(profile) {}
 
  protected:
-  GURL ConvertDrivePathToFileSystemUrl(const base::FilePath& path,
-                                       const std::string& id) const override {
-    return file_manager::util::ConvertDrivePathToFileSystemUrl(profile_, path,
-                                                               id);
+  std::set<std::string> GetFileTransfersUpdateEventListenerExtensionIds()
+      override {
+    const extensions::EventListenerMap::ListenerList& listeners =
+        extensions::EventRouter::Get(profile_)
+            ->listeners()
+            .GetEventListenersByName(
+                file_manager_private::OnFileTransfersUpdated::kEventName);
+
+    std::set<std::string> extension_ids;
+
+    for (const auto listener : listeners) {
+      extension_ids.insert(listener->extension_id());
+    }
+
+    return extension_ids;
   }
-  void BroadcastEvent(extensions::events::HistogramValue histogram_value,
-                      const std::string& event_name,
-                      scoped_ptr<base::ListValue> event_args) override {
-    ::file_manager::BroadcastEvent(profile_, histogram_value, event_name,
-                                   event_args.Pass());
+
+  GURL ConvertDrivePathToFileSystemUrl(
+      const base::FilePath& file_path,
+      const std::string& extension_id) override {
+    return file_manager::util::ConvertDrivePathToFileSystemUrl(
+        profile_, file_path, extension_id);
+  }
+
+  void DispatchEventToExtension(
+      const std::string& extension_id,
+      extensions::events::HistogramValue histogram_value,
+      const std::string& event_name,
+      scoped_ptr<base::ListValue> event_args) override {
+    ::file_manager::DispatchEventToExtension(profile_, extension_id,
+                                             histogram_value, event_name,
+                                             std::move(event_args));
   }
 
  private:
@@ -363,6 +390,7 @@ EventRouter::~EventRouter() {
 
 void EventRouter::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  chromeos::system::TimezoneSettings::GetInstance()->RemoveObserver(this);
 
   DLOG_IF(WARNING, !file_watchers_.empty())
       << "Not all file watchers are "
@@ -450,6 +478,8 @@ void EventRouter::ObserveEvents() {
   pref_change_registrar_->Add(drive::prefs::kDisableDrive, callback);
   pref_change_registrar_->Add(prefs::kSearchSuggestEnabled, callback);
   pref_change_registrar_->Add(prefs::kUse24HourClock, callback);
+
+  chromeos::system::TimezoneSettings::GetInstance()->AddObserver(this);
 }
 
 // File watch setup routines.
@@ -546,7 +576,7 @@ void EventRouter::OnCopyProgress(
     storage::FileSystemOperation::CopyProgressType type,
     const GURL& source_url,
     const GURL& destination_url,
-    int64 size) {
+    int64_t size) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   file_manager_private::CopyProgressStatus status;
@@ -600,6 +630,10 @@ void EventRouter::DefaultNetworkChanged(const chromeos::NetworkState* network) {
                     FILE_MANAGER_PRIVATE_ON_DRIVE_CONNECTION_STATUS_CHANGED,
       file_manager_private::OnDriveConnectionStatusChanged::kEventName,
       file_manager_private::OnDriveConnectionStatusChanged::Create());
+}
+
+void EventRouter::TimezoneChanged(const icu::TimeZone& timezone) {
+  OnFileManagerPrefsChanged();
 }
 
 void EventRouter::OnFileManagerPrefsChanged() {
@@ -690,6 +724,9 @@ void EventRouter::OnDriveSyncError(drive::file_system::DriveSyncErrorType type,
     case drive::file_system::DRIVE_SYNC_ERROR_SERVICE_UNAVAILABLE:
       event.type =
           file_manager_private::DRIVE_SYNC_ERROR_TYPE_SERVICE_UNAVAILABLE;
+      break;
+    case drive::file_system::DRIVE_SYNC_ERROR_NO_SERVER_SPACE:
+      event.type = file_manager_private::DRIVE_SYNC_ERROR_TYPE_NO_SERVER_SPACE;
       break;
     case drive::file_system::DRIVE_SYNC_ERROR_MISC:
       event.type =

@@ -4,6 +4,7 @@
 
 #include "content/browser/device_sensors/sensor_manager_chromeos.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chromeos/accelerometer/accelerometer_types.h"
 #include "content/common/device_sensors/device_motion_hardware_buffer.h"
@@ -12,7 +13,7 @@
 
 namespace {
 
-const double kMeanGravity = 9.80665;
+const double kMeanGravity = -9.80665;
 
 // Isolated content::SensorManagerChromeOS from the active
 // chromeos::AccelerometerReader. This allows for direct control over which

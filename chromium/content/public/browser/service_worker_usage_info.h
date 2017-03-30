@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_SERVICE_WORKER_USAGE_INFO_H_
 #define CONTENT_PUBLIC_BROWSER_SERVICE_WORKER_USAGE_INFO_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "content/common/content_export.h"
@@ -13,8 +15,7 @@
 namespace content {
 
 // Used to report per-origin storage info for registered Service Workers.
-class CONTENT_EXPORT ServiceWorkerUsageInfo {
- public:
+struct CONTENT_EXPORT ServiceWorkerUsageInfo {
   ServiceWorkerUsageInfo(const GURL& origin, const std::vector<GURL>& scopes);
   ServiceWorkerUsageInfo(const GURL& origin);
   ServiceWorkerUsageInfo();
@@ -28,7 +29,7 @@ class CONTENT_EXPORT ServiceWorkerUsageInfo {
   std::vector<GURL> scopes;
 
   // The total size, including resources.
-  int64_t total_size_bytes;
+  int64_t total_size_bytes = 0;
 
   // TODO(jsbell): Add last modified time.
 };

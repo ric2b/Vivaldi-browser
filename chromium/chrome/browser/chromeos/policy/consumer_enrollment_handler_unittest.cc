@@ -19,15 +19,15 @@
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
 #include "chrome/browser/chromeos/policy/fake_consumer_management_service.h"
 #include "chrome/browser/chromeos/policy/fake_device_cloud_policy_initializer.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -62,9 +62,9 @@ class ConsumerEnrollmentHandlerTest : public testing::Test {
         make_scoped_ptr(fake_initializer_));
 
     // Set up FakeChromeUserManager.
-    fake_user_manager_->AddUser(kTestOwner);
-    fake_user_manager_->AddUser(kTestUser);
-    fake_user_manager_->set_owner_email(kTestOwner);
+    fake_user_manager_->AddUser(AccountId::FromUserEmail(kTestOwner));
+    fake_user_manager_->AddUser(AccountId::FromUserEmail(kTestUser));
+    fake_user_manager_->set_owner_id(AccountId::FromUserEmail(kTestOwner));
   }
 
   void SetUp() override {
@@ -74,7 +74,7 @@ class ConsumerEnrollmentHandlerTest : public testing::Test {
         std::make_pair(ProfileOAuth2TokenServiceFactory::GetInstance(),
                        BuildAutoIssuingFakeProfileOAuth2TokenService));
     profile_ = testing_profile_manager_->CreateTestingProfile(
-        kTestUser, scoped_ptr<PrefServiceSyncable>(),
+        kTestUser, scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
         base::UTF8ToUTF16(kTestUser), 0, std::string(), factories);
 
     // Set up the authenticated user name and ID.

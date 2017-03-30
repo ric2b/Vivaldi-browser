@@ -100,8 +100,8 @@ BOOL WINAPI InterceptedOpenStoreW(LPCSTR store_provider,
   // If the high word is all zeroes, then |store_provider| is a numeric ID.
   // Otherwise, it's a pointer to a null-terminated ASCII string. See the
   // documentation for CryptGetOIDFunctionAddress for more information.
-  uint32_t store_as_uint = reinterpret_cast<uint32_t>(store_provider);
-  if (store_as_uint > 0xFFFF || store_provider != CERT_STORE_PROV_SYSTEM_W ||
+  uintptr_t store_as_uintptr = reinterpret_cast<uintptr_t>(store_provider);
+  if (store_as_uintptr > 0xFFFF || store_provider != CERT_STORE_PROV_SYSTEM_W ||
       !g_capi_injector.Get().original_function)
     return FALSE;
 
@@ -148,7 +148,7 @@ bool TestRootCerts::Add(X509Certificate* certificate) {
       CERT_STORE_ADD_NEW, NULL);
   if (!ok) {
     // If the certificate is already added, return successfully.
-    return GetLastError() == CRYPT_E_EXISTS;
+    return GetLastError() == static_cast<DWORD>(CRYPT_E_EXISTS);
   }
 
   empty_ = false;

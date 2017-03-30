@@ -4,9 +4,12 @@
 
 #include "chrome/test/remoting/remote_desktop_browsertest.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
@@ -21,6 +24,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
@@ -125,13 +129,12 @@ void RemoteDesktopBrowserTest::InstallChromotingAppUnpacked() {
       extensions::UnpackedInstaller::Create(extension_service());
   installer->set_prompt_for_plugins(false);
 
-  content::WindowedNotificationObserver observer(
-      extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
-      content::NotificationService::AllSources());
+  extensions::TestExtensionRegistryObserver observer(
+      extensions::ExtensionRegistry::Get(browser()->profile()));
 
   installer->Load(webapp_unpacked_);
 
-  observer.Wait();
+  observer.WaitForExtensionLoaded();
 }
 
 void RemoteDesktopBrowserTest::UninstallChromotingApp() {
@@ -237,7 +240,7 @@ content::WebContents* RemoteDesktopBrowserTest::LaunchChromotingApp(
 
 void RemoteDesktopBrowserTest::StartChromotingApp() {
   ClickOnControl("browser-test-continue-init");
-};
+}
 
 void RemoteDesktopBrowserTest::Authorize() {
   // The chromoting extension should be installed.
@@ -393,13 +396,13 @@ void RemoteDesktopBrowserTest::DisconnectMe2Me() {
 
 void RemoteDesktopBrowserTest::SimulateKeyPressWithCode(
     ui::KeyboardCode keyCode,
-    const char* code) {
+    const std::string& code) {
   SimulateKeyPressWithCode(keyCode, code, false, false, false, false);
 }
 
 void RemoteDesktopBrowserTest::SimulateKeyPressWithCode(
     ui::KeyboardCode keyCode,
-    const char* code,
+    const std::string& code,
     bool control,
     bool shift,
     bool alt,
@@ -514,7 +517,7 @@ content::WebContents* RemoteDesktopBrowserTest::SetUpTest() {
   // This causes the test to fail because of a recent bug:
   // crbug.com/430676
   // TODO(anandc): Reactivate this call after above bug is fixed.
-  //EnsureRemoteConnectionEnabled(app_web_content);
+  // EnsureRemoteConnectionEnabled(app_web_content);
   return app_web_content;
 }
 
@@ -584,10 +587,11 @@ void RemoteDesktopBrowserTest::ConnectToRemoteHost(
   EXPECT_FALSE(host_id.empty());
   std::string element_id = "host_" + host_id;
 
-  // Verify the host is online.
-  std::string host_div_class = ExecuteScriptAndExtractString(
-      "document.getElementById('" + element_id + "').parentNode.className");
-  EXPECT_NE(std::string::npos, host_div_class.find("host-online"));
+  ConditionalTimeoutWaiter hostOnlineWaiter(
+      base::TimeDelta::FromSeconds(30), base::TimeDelta::FromSeconds(5),
+      base::Bind(&RemoteDesktopBrowserTest::IsHostOnline,
+                 base::Unretained(this), host_id));
+  EXPECT_TRUE(hostOnlineWaiter.Wait());
 
   ClickOnControl(element_id);
 
@@ -815,6 +819,22 @@ void RemoteDesktopBrowserTest::WaitForConnection() {
   TimeoutWaiter(base::TimeDelta::FromSeconds(2)).Wait();
 }
 
+bool RemoteDesktopBrowserTest::IsHostOnline(const std::string& host_id) {
+  bool refresh_host_list =
+      ExecuteScriptAndExtractBool("remoting.hostList.refreshAndDisplay()");
+
+  if (!refresh_host_list) {
+    return false;
+  }
+
+  // Verify the host is online.
+  std::string element_id = "host_" + host_id;
+  std::string host_div_class = ExecuteScriptAndExtractString(
+      "document.getElementById('" + element_id + "').parentNode.className");
+
+  return (std::string::npos != host_div_class.find("host-online"));
+}
+
 bool RemoteDesktopBrowserTest::IsLocalHostReady() {
   // TODO(weitaosu): Instead of polling, can we register a callback to
   // remoting.hostList.setLocalHost_?
@@ -850,16 +870,16 @@ void RemoteDesktopBrowserTest::DismissHostVersionWarningIfVisible() {
 }
 
 void RemoteDesktopBrowserTest::SetUserNameAndPassword(
-    const base::FilePath &accounts_file_path, const std::string& account_type) {
-
+    const base::FilePath& accounts_file_path,
+    const std::string& account_type) {
   // Read contents of accounts file, using its absolute path.
   base::FilePath absolute_path = base::MakeAbsoluteFilePath(accounts_file_path);
   std::string accounts_info;
   ASSERT_TRUE(base::ReadFileToString(absolute_path, &accounts_info));
 
   // Get the root dictionary from the input json file contents.
-  scoped_ptr<base::Value> root(base::JSONReader::DeprecatedRead(
-      accounts_info, base::JSON_ALLOW_TRAILING_COMMAS));
+  scoped_ptr<base::Value> root =
+      base::JSONReader::Read(accounts_info, base::JSON_ALLOW_TRAILING_COMMAS);
 
   const base::DictionaryValue* root_dict = NULL;
   ASSERT_TRUE(root.get() && root->GetAsDictionary(&root_dict));

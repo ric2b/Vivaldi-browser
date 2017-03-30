@@ -9,6 +9,7 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/autofill/password_generation_popup_view.h"
 
 namespace autofill {
@@ -23,13 +24,16 @@ class PasswordGenerationPopupViewAndroid : public PasswordGenerationPopupView {
       PasswordGenerationPopupController* controller);
 
   // Called from JNI when the "saved passwords" link was clicked.
-  void SavedPasswordsLinkClicked(JNIEnv* env, jobject obj);
+  void SavedPasswordsLinkClicked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   // Called from JNI when the popup was dismissed.
-  void Dismissed(JNIEnv* env, jobject obj);
+  void Dismissed(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   // Called from JNI when the suggested password was selected.
-  void PasswordSelected(JNIEnv* env, jobject object);
+  void PasswordSelected(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& object);
 
   // Registers the popup with JNI.
   static bool Register(JNIEnv* env);

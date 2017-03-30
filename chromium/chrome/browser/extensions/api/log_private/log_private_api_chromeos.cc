@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/api/log_private/log_private_api.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -14,6 +15,7 @@
 #include "base/logging.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/api/file_handlers/app_file_handler_util.h"
@@ -22,11 +24,11 @@
 #include "chrome/browser/extensions/api/log_private/syslog_parser.h"
 #include "chrome/browser/feedback/system_logs/scrubbed_system_logs_fetcher.h"
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/extensions/api/log_private.h"
 #include "chrome/common/logging_chrome.h"
+#include "components/net_log/chrome_net_log.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/event_router.h"
@@ -249,11 +251,11 @@ void LogPrivateAPI::AddEntriesOnUI(scoped_ptr<base::ListValue> value) {
     // Create the event's arguments value.
     scoped_ptr<base::ListValue> event_args(new base::ListValue());
     event_args->Append(value->DeepCopy());
-    scoped_ptr<Event> event(new Event(::extensions::events::UNKNOWN,
-                                      ::events::kOnCapturedEvents,
-                                      event_args.Pass()));
+    scoped_ptr<Event> event(
+        new Event(::extensions::events::LOG_PRIVATE_ON_CAPTURED_EVENTS,
+                  ::events::kOnCapturedEvents, std::move(event_args)));
     EventRouter::Get(browser_context_)
-        ->DispatchEventToExtension(*ix, event.Pass());
+        ->DispatchEventToExtension(*ix, std::move(event));
   }
 }
 
@@ -292,8 +294,8 @@ void LogPrivateAPI::StartObservingNetEvents(
   write_to_file_observer_.reset(new net::WriteToFileNetLogObserver());
   write_to_file_observer_->set_capture_mode(
       net::NetLogCaptureMode::IncludeCookiesAndCredentials());
-  write_to_file_observer_->StartObserving(io_thread->net_log(), file->Pass(),
-                                          nullptr, nullptr);
+  write_to_file_observer_->StartObserving(io_thread->net_log(),
+                                          std::move(*file), nullptr, nullptr);
 }
 
 void LogPrivateAPI::MaybeStartNetInternalLogging(

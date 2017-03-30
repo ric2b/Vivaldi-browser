@@ -4,12 +4,15 @@
 
 #include "chrome/browser/chromeos/policy/enterprise_install_attributes.h"
 
+#include <stddef.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
@@ -324,7 +327,7 @@ void EnterpriseInstallAttributes::OnReadImmutableAttributes(
   callback.Run(LOCK_SUCCESS);
 }
 
-bool EnterpriseInstallAttributes::IsEnterpriseDevice() {
+bool EnterpriseInstallAttributes::IsEnterpriseDevice() const {
   return device_locked_ && !registration_user_.empty();
 }
 
@@ -340,7 +343,7 @@ std::string EnterpriseInstallAttributes::GetRegistrationUser() {
   return registration_user_;
 }
 
-std::string EnterpriseInstallAttributes::GetDomain() {
+std::string EnterpriseInstallAttributes::GetDomain() const {
   if (!IsEnterpriseDevice())
     return std::string();
 

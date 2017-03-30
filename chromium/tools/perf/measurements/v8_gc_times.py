@@ -4,8 +4,7 @@
 
 from telemetry.page import page_test
 from telemetry.timeline.model import TimelineModel
-from telemetry.timeline import tracing_category_filter
-from telemetry.timeline import tracing_options
+from telemetry.timeline import tracing_config
 from telemetry.util import statistics
 from telemetry.value import scalar
 
@@ -15,7 +14,6 @@ class V8GCTimes(page_test.PageTest):
   _TIME_OUT_IN_SECONDS = 60
   _CATEGORIES = ['blink.console',
                  'renderer.scheduler',
-                 'toplevel',
                  'v8',
                  'webkit.console']
   _RENDERER_MAIN_THREAD = 'CrRendererMain'
@@ -25,26 +23,22 @@ class V8GCTimes(page_test.PageTest):
     super(V8GCTimes, self).__init__()
 
   def WillNavigateToPage(self, page, tab):
-    category_filter = tracing_category_filter.TracingCategoryFilter()
-
+    config = tracing_config.TracingConfig()
     for category in self._CATEGORIES:
-      category_filter.AddIncludedCategory(category)
-
-    options = tracing_options.TracingOptions()
-    options.enable_chrome_trace = True
-
-    tab.browser.platform.tracing_controller.Start(
-        options, category_filter, self._TIME_OUT_IN_SECONDS)
+      config.tracing_category_filter.AddIncludedCategory(category)
+    config.enable_chrome_trace = True
+    tab.browser.platform.tracing_controller.StartTracing(
+        config, self._TIME_OUT_IN_SECONDS)
 
   def ValidateAndMeasurePage(self, page, tab, results):
-    trace_data = tab.browser.platform.tracing_controller.Stop()
+    trace_data = tab.browser.platform.tracing_controller.StopTracing()
     timeline_model = TimelineModel(trace_data)
     renderer_process = timeline_model.GetRendererProcessFromTabId(tab.id)
     self._AddV8MetricsToResults(renderer_process, results)
 
-  def CleanUpAfterPage(self, page, tab):
-    if tab.browser.platform.tracing_controller.is_tracing_running:
-      tab.browser.platform.tracing_controller.Stop()
+  def DidRunPage(self, platform):
+    if platform.tracing_controller.is_tracing_running:
+      platform.tracing_controller.StopTracing()
 
   def _AddV8MetricsToResults(self, process, results):
     if process is None:
@@ -67,7 +61,13 @@ class V8GCTimes(page_test.PageTest):
                     'scavenges'),
         V8EventStat('V8.GCCompactor',
                     'v8_gc_mark_compactor',
-                    'mark-sweep-compactor')]
+                    'mark-sweep-compactor'),
+        V8EventStat('V8.GCFinalizeMC',
+                    'v8_gc_finalize_incremental',
+                    'finalization of incremental marking'),
+        V8EventStat('V8.GCFinalizeMCReduceMemory',
+                    'v8_gc_finalize_incremental_reduce_memory',
+                    'finalization of incremental marking with memory reducer')]
     # Find all V8 GC events in the trace.
     for event in thread.IterAllSlices():
       event_stat = _FindV8EventStatForEvent(v8_event_stats, event.name)
@@ -75,6 +75,9 @@ class V8GCTimes(page_test.PageTest):
         continue
 
       event_stat.thread_duration += event.thread_duration
+      event_stat.max_thread_duration = max(event_stat.max_thread_duration,
+                                           event.thread_duration)
+      event_stat.count += 1
 
       parent_idle_task = _ParentIdleTask(event)
       if parent_idle_task:
@@ -97,6 +100,23 @@ class V8GCTimes(page_test.PageTest):
           results.current_page, v8_event_stat.result_name, 'ms',
           v8_event_stat.thread_duration,
           description=('Total thread duration spent in %s' %
+                       v8_event_stat.result_description)))
+      results.AddValue(scalar.ScalarValue(
+          results.current_page, '%s_max' % v8_event_stat.result_name, 'ms',
+          v8_event_stat.max_thread_duration,
+          description=('Max thread duration spent in %s' %
+                       v8_event_stat.result_description)))
+      results.AddValue(scalar.ScalarValue(
+          results.current_page, '%s_count' % v8_event_stat.result_name, 'count',
+          v8_event_stat.count,
+          description=('Number of %s' %
+                       v8_event_stat.result_description)))
+      average_thread_duration = statistics.DivideIfPossibleOrZero(
+          v8_event_stat.thread_duration, v8_event_stat.count)
+      results.AddValue(scalar.ScalarValue(
+          results.current_page, '%s_average' % v8_event_stat.result_name, 'ms',
+          average_thread_duration,
+          description=('Average thread duration spent in %s' %
                        v8_event_stat.result_description)))
       results.AddValue(scalar.ScalarValue(results.current_page,
           '%s_outside_idle' % v8_event_stat.result_name, 'ms',
@@ -185,6 +205,8 @@ class V8EventStat(object):
     self.thread_duration = 0.0
     self.thread_duration_inside_idle = 0.0
     self.idle_task_overrun_duration = 0.0
+    self.max_thread_duration = 0.0
+    self.count = 0
 
   @property
   def thread_duration_outside_idle(self):

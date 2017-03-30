@@ -8,6 +8,7 @@
    },
   'targets': [
     {
+      # GN version: //ios/web/public/app
       'target_name': 'ios_web_app',
       'type': 'static_library',
       'include_dirs': [
@@ -15,7 +16,6 @@
       ],
       'dependencies': [
         'ios_web',
-        'ios_web_thread',
         '../../base/base.gyp:base',
         '../../base/base.gyp:base_i18n',
         '../../crypto/crypto.gyp:crypto',
@@ -33,14 +33,10 @@
         'public/app/web_main.h',
         'public/app/web_main_delegate.h',
         'public/app/web_main_parts.h',
-        'public/app/web_main_parts.mm',
       ],
     },
-    # Note: any embedder using ios_web will for now need to include either
-    # ios_web_thread (any new embedder) or ios_web_content_thread_shim (Chrome).
-    # This will become unnecessary once Chrome switches to using ios_web_thread,
-    # at which point that will be folded into this target.
     {
+      # GN version: //ios/web
       'target_name': 'ios_web',
       'type': 'static_library',
       'include_dirs': [
@@ -51,7 +47,7 @@
         'js_resources',
         'user_agent',
         '../../base/base.gyp:base',
-        '../../content/content.gyp:content_browser',
+        '../../components/url_formatter/url_formatter.gyp:url_formatter',
         '../../ios/net/ios_net.gyp:ios_net',
         '../../ios/third_party/blink/blink_html_tokenizer.gyp:blink_html_tokenizer',
         '../../net/net.gyp:net',
@@ -104,6 +100,8 @@
         'navigation/time_smoother.h',
         'navigation/web_load_params.h',
         'navigation/web_load_params.mm',
+        'net/cert_host_pair.cc',
+        'net/cert_host_pair.h',
         'net/cert_policy.cc',
         'net/cert_store_impl.cc',
         'net/cert_store_impl.h',
@@ -127,6 +125,8 @@
         'net/clients/crw_redirect_network_client_factory.mm',
         'net/cookie_notification_bridge.h',
         'net/cookie_notification_bridge.mm',
+        'net/crw_cert_verification_controller.h',
+        'net/crw_cert_verification_controller.mm',
         'net/crw_request_tracker_delegate.h',
         'net/crw_url_verifying_protocol_handler.h',
         'net/crw_url_verifying_protocol_handler.mm',
@@ -144,6 +144,8 @@
         'public/browser_state.h',
         'public/browser_url_rewriter.h',
         'public/browsing_data_partition.h',
+        'public/browsing_data_partition_client.cc',
+        'public/browsing_data_partition_client.h',
         'public/cert_policy.h',
         'public/cert_store.h',
         'public/certificate_policy_cache.h',
@@ -158,6 +160,8 @@
         'public/load_committed_details.h',
         'public/navigation_item.h',
         'public/navigation_manager.h',
+        'public/origin_util.cc',
+        'public/origin_util.h',
         'public/referrer.h',
         'public/referrer_util.cc',
         'public/referrer_util.h',
@@ -166,21 +170,23 @@
         'public/ssl_status.h',
         'public/string_util.h',
         'public/url_scheme_util.h',
+        'public/url_schemes.h',
+        'public/url_schemes.mm',
         'public/url_util.h',
-        'public/user_agent.h',
-        'public/user_agent.mm',
         'public/user_metrics.h',
         'public/web/url_data_source_ios.h',
         'public/web_client.h',
         'public/web_client.mm',
         'public/web_controller_factory.h',
         'public/web_controller_factory.mm',
+        'public/web_kit_constants.h',
         'public/web_state/credential.h',
         'public/web_state/crw_web_controller_observer.h',
-        'public/web_state/crw_web_delegate.h',
         'public/web_state/crw_web_user_interface_delegate.h',
         'public/web_state/crw_web_view_proxy.h',
         'public/web_state/crw_web_view_scroll_view_proxy.h',
+        'public/web_state/global_web_state_observer.h',
+        'public/web_state/js/credential_util.h',
         'public/web_state/js/crw_js_injection_evaluator.h',
         'public/web_state/js/crw_js_injection_manager.h',
         'public/web_state/js/crw_js_injection_receiver.h',
@@ -190,15 +196,18 @@
         'public/web_state/ui/crw_generic_content_view.h',
         'public/web_state/ui/crw_native_content.h',
         'public/web_state/ui/crw_native_content_provider.h',
+        'public/web_state/ui/crw_web_delegate.h',
         'public/web_state/ui/crw_web_view_content_view.h',
         'public/web_state/url_verification_constants.h',
         'public/web_state/web_state.h',
         'public/web_state/web_state_observer.h',
         'public/web_state/web_state_observer_bridge.h',
+        'public/web_state/web_state_policy_decider.h',
         'public/web_state/web_state_user_data.h',
         'public/web_thread.h',
         'public/web_thread_delegate.h',
         'public/web_ui_ios_data_source.h',
+        'public/web_view_counter.h',
         'public/web_view_creation_util.h',
         'public/web_view_type.h',
         'string_util.cc',
@@ -209,9 +218,12 @@
         'user_metrics.cc',
         'weak_nsobject_counter.h',
         'weak_nsobject_counter.mm',
+        'web_kit_constants.cc',
         'web_state/blocked_popup_info.h',
         'web_state/blocked_popup_info.mm',
         'web_state/credential.cc',
+        'web_state/crw_pass_kit_downloader.h',
+        'web_state/crw_pass_kit_downloader.mm',
         'web_state/crw_recurring_task_delegate.h',
         'web_state/crw_web_view_proxy_impl.h',
         'web_state/crw_web_view_proxy_impl.mm',
@@ -219,7 +231,9 @@
         'web_state/error_translation_util.h',
         'web_state/error_translation_util.mm',
         'web_state/frame_info.h',
-        'web_state/js/credential_util.h',
+        'web_state/global_web_state_event_tracker.cc',
+        'web_state/global_web_state_event_tracker.h',
+        'web_state/global_web_state_observer.cc',
         'web_state/js/credential_util.mm',
         'web_state/js/crw_js_early_script_manager.h',
         'web_state/js/crw_js_early_script_manager.mm',
@@ -229,6 +243,8 @@
         'web_state/js/crw_js_invoke_parameter_queue.mm',
         'web_state/js/crw_js_plugin_placeholder_manager.h',
         'web_state/js/crw_js_plugin_placeholder_manager.mm',
+        'web_state/js/crw_js_post_request_loader.h',
+        'web_state/js/crw_js_post_request_loader.mm',
         'web_state/js/crw_js_window_id_manager.h',
         'web_state/js/crw_js_window_id_manager.mm',
         'web_state/js/page_script_util.h',
@@ -254,14 +270,16 @@
         'web_state/ui/crw_web_controller_container_view.h',
         'web_state/ui/crw_web_controller_container_view.mm',
         'web_state/ui/crw_web_view_content_view.mm',
+        'web_state/ui/crw_wk_script_message_router.h',
+        'web_state/ui/crw_wk_script_message_router.mm',
         'web_state/ui/crw_wk_simple_web_view_controller.h',
         'web_state/ui/crw_wk_simple_web_view_controller.mm',
-        'web_state/ui/crw_wk_web_view_crash_detector.h',
-        'web_state/ui/crw_wk_web_view_crash_detector.mm',
         'web_state/ui/crw_wk_web_view_web_controller.h',
         'web_state/ui/crw_wk_web_view_web_controller.mm',
         'web_state/ui/web_view_js_utils.h',
         'web_state/ui/web_view_js_utils.mm',
+        'web_state/ui/wk_back_forward_list_item_holder.h',
+        'web_state/ui/wk_back_forward_list_item_holder.mm',
         'web_state/ui/wk_web_view_configuration_provider.h',
         'web_state/ui/wk_web_view_configuration_provider.mm',
         'web_state/web_controller_observer_bridge.h',
@@ -272,10 +290,17 @@
         'web_state/web_state_impl.mm',
         'web_state/web_state_observer.cc',
         'web_state/web_state_observer_bridge.mm',
+        'web_state/web_state_policy_decider.mm',
+        'web_state/web_state_weak_ptr_factory.cc',
+        'web_state/web_state_weak_ptr_factory.h',
         'web_state/web_view_internal_creation_util.h',
         'web_state/web_view_internal_creation_util.mm',
         'web_state/wk_web_view_security_util.h',
         'web_state/wk_web_view_security_util.mm',
+        'web_thread_impl.cc',
+        'web_thread_impl.h',
+        'web_view_counter_impl.h',
+        'web_view_counter_impl.mm',
         'web_view_creation_util.mm',
         'webui/crw_web_ui_manager.h',
         'webui/crw_web_ui_manager.mm',
@@ -300,6 +325,8 @@
         'webui/web_ui_ios_impl.mm',
       ],
       'link_settings': {
+        # TODO(crbug.com/541549): change to regular linking once support for
+        # iOS 7 is dropped.
         'xcode_settings': {
           'OTHER_LDFLAGS': [
             '-weak_framework WebKit',
@@ -307,44 +334,9 @@
         },
       },
     },
-    # Target that builds the actual WebThread implementation. This is a
-    # separate target since it can't yet be used by Chrome (see comment below).
-    {
-      'target_name': 'ios_web_thread',
-      'type': 'static_library',
-      'dependencies': [
-        '../../base/base.gyp:base',
-        '../../net/net.gyp:net',
-      ],
-      'include_dirs': [
-        '../..',
-      ],
-      'sources': [
-        'web_thread_impl.cc',
-        'web_thread_impl.h',
-      ],
-    },
-    # Target that builds the files that shim WebThread functions to their
-    # corresponding content equivalents. This is a separate target since it
-    # is needed by Chrome, which still uses content startup (which creates
-    # content threads), but isn't used by web_shell.
-    {
-      'target_name': 'ios_web_content_thread_shim',
-      'type': 'static_library',
-      'dependencies': [
-        '../../base/base.gyp:base',
-        '../../content/content.gyp:content_browser',
-      ],
-      'include_dirs': [
-        '../..',
-      ],
-      'sources': [
-        'web_thread_adapter.cc',
-        'web_thread_adapter.h',
-      ],
-    },
     # Target shared by ios_web and CrNet.
     {
+      # GN version: //ios/web:core
       'target_name': 'ios_web_core',
       'type': 'static_library',
       'dependencies': [
@@ -361,6 +353,7 @@
       ],
     },
     {
+      # GN version: //ios/web:web_bundle_ui
       'target_name': 'ios_web_js_bundle_ui',
       'type': 'none',
       'variables': {
@@ -391,6 +384,7 @@
       ],
     },
     {
+      # GN version: //ios/web:web_bundle_wk
       'target_name': 'ios_web_js_bundle_wk',
       'type': 'none',
       'variables': {
@@ -421,6 +415,7 @@
       ],
     },
     {
+      # GN version: //ios/web:js_resources
       'target_name': 'js_resources',
       'type': 'none',
       'dependencies': [
@@ -428,12 +423,14 @@
         'ios_web_js_bundle_wk',
       ],
       'sources': [
+        'web_state/js/resources/post_request.js',
         'web_state/js/resources/plugin_placeholder.js',
         'web_state/js/resources/window_id.js',
         'webui/resources/web_ui.js',
       ],
       'link_settings': {
         'mac_bundle_resources': [
+          '<(SHARED_INTERMEDIATE_DIR)/post_request.js',
           '<(SHARED_INTERMEDIATE_DIR)/plugin_placeholder.js',
           '<(SHARED_INTERMEDIATE_DIR)/window_id.js',
           '<(SHARED_INTERMEDIATE_DIR)/web_ui.js',
@@ -444,51 +441,16 @@
       ],
     },
     {
-      'target_name': 'test_support_ios_web',
+      # GN version: //ios/web:test_support
+      'target_name': 'ios_web_test_support',
       'type': 'static_library',
       'dependencies': [
-        'ios_web_thread',
-        'test_support_ios_web_without_threads',
-      ],
-      'include_dirs': [
-        '../..',
-      ],
-      'sources': [
-        'test/test_web_thread.cc',
-        'test/test_web_thread_bundle.cc',
-      ],
-    },
-    {
-      'target_name': 'test_support_ios_web_with_content_thread_shim',
-      'type': 'static_library',
-      'dependencies': [
-        'ios_web_content_thread_shim',
-        'test_support_ios_web_without_threads',
-      ],
-      'include_dirs': [
-        '../..',
-      ],
-      'sources': [
-        'test/test_web_thread_adapter.cc',
-        'test/test_web_thread_bundle_adapter.cc',
-      ],
-    },
-    # A test support target that does not include TestWebThread. This is
-    # separate because tests that rely on the the shim thread implementation
-    # can't use TestWebThread/TestWebThreadBundle.
-    # TODO(stuartmorgan): Fold this into test_support_ios_web once
-    # the WebThread-to-BrowserThread shim is gone.
-    {
-      'target_name': 'test_support_ios_web_without_threads',
-      'type': 'static_library',
-      'dependencies': [
-        'ios_web',
-        '../../content/content_shell_and_tests.gyp:test_support_content',
         '../../ios/testing/ios_testing.gyp:ocmock_support',
         '../../ios/third_party/gcdwebserver/gcdwebserver.gyp:gcdwebserver',
         '../../testing/gmock.gyp:gmock',
         '../../testing/gtest.gyp:gtest',
         '../../third_party/ocmock/ocmock.gyp:ocmock',
+        'ios_web',
       ],
       'include_dirs': [
         '../..',
@@ -508,6 +470,10 @@
         'public/test/response_providers/file_based_response_provider_impl.h',
         'public/test/response_providers/response_provider.cc',
         'public/test/response_providers/response_provider.h',
+        'public/test/response_providers/string_response_provider.h',
+        'public/test/response_providers/string_response_provider.mm',
+        'public/test/scoped_testing_web_client.cc',
+        'public/test/scoped_testing_web_client.h',
         'public/test/test_browser_state.cc',
         'public/test/test_browser_state.h',
         'public/test/test_web_client.h',
@@ -521,6 +487,10 @@
         'public/test/web_test_util.h',
         'test/crw_fake_web_controller_observer.h',
         'test/crw_fake_web_controller_observer.mm',
+        'test/test_web_thread.cc',
+        'test/test_web_thread_bundle.cc',
+        'test/web_int_test.h',
+        'test/web_int_test.mm',
         'test/web_test.h',
         'test/web_test.mm',
         'test/web_test_suite.cc',
@@ -530,6 +500,7 @@
       ],
     },
     {
+      # GN version: //ios/web:user_agent
       'target_name': 'user_agent',
       'type': 'static_library',
       'include_dirs': [

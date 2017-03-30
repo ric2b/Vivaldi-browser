@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/move.h"
 
 namespace base {
@@ -53,7 +54,7 @@ namespace base {
 //   typedef ScopedGeneric<int, FooScopedTraits> ScopedFoo;
 template<typename T, typename Traits>
 class ScopedGeneric {
-  MOVE_ONLY_TYPE_WITH_MOVE_CONSTRUCTOR_FOR_CPP_03(ScopedGeneric)
+  DISALLOW_COPY_AND_ASSIGN_WITH_MOVE_FOR_BIND(ScopedGeneric)
 
  private:
   // This must be first since it's used inline below.

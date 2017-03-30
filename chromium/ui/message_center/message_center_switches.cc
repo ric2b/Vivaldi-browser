@@ -12,4 +12,9 @@ namespace switches {
 const char kEnableMessageCenterAlwaysScrollUpUponNotificationRemoval[] =
     "enable-message-center-always-scroll-up-upon-notification-removal";
 
+// Flag to enable or disable notification changes while the message center
+// opens. This flag will be removed once the feature gets stable.
+const char kMessageCenterChangesWhileOpen[] =
+    "message-center-changes-while-open";
+
 }  // namespace switches

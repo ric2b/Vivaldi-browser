@@ -1,0 +1,482 @@
+## Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# gn_isolate_map.pyl - A mapping of Ninja build target names to GN labels and
+# test type classifications for the tests that are run on the bots.
+#
+# This mapping is used by MB so that we can uniformly refer to test binaries
+# by their Ninja target names in the recipes and not need to worry about how
+# they are referred to in GN or GYP specifically (the GYP target name is pretty
+# much always the same as the Ninja target name, since GYP target names are not
+# hierarchical).
+#
+# The 'type' field is used to determine what the command line for the test
+# needs to be; valid values are:
+#
+# "windowed_test_launcher"
+# : the test is a gtest-based test that uses the 'brave-new-test-launcher'
+#   from //base/test:test_support and needs to run under Xvfb if run on
+#   an X11-based platform (use_x11=true).
+#  "console_test_launcher"
+#  : the test is a gtest-based test that uses the 'brave-new-test-launcher'
+#    from //base/test:test_support but does not need Xvfb.
+#  "gpu_browser_test"
+#  : the test is a subset of the browser_tests that will be run against
+#    a real GPU.
+#  "raw"
+#  : the test is a standalone executable; it may take an optional list of
+#    command line arguments in the 'args' field, but otherwise needs no
+#    extra files or special handling.
+#  "unknown"
+#  : (the default), which indicates that we don't know what the command line
+#    needs to be (this is a fatal error).
+
+{
+  "accessibility_unittests":  {
+    "label": "//ui/accessibility:accessibility_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "angle_end2end_tests": {
+    "label": "//third_party/angle/src/tests:angle_end2end_tests",
+    "type": "raw",
+    "args": [],
+  },
+  "angle_unittests": {
+    "label": "//third_party/angle/src/tests:angle_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "app_list_unittests": {
+    "label": "//ui/app_list:app_list_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "app_shell_unittests": {
+    "label": "//extensions/shell:app_shell_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "ash_unittests": {
+    "label": "//ash:ash_unittests",
+    "type": "unknown",
+  },
+  "audio_unittests": {
+    "label": "//media:audio_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "aura_unittests": {
+    "label": "//ui/aura:aura_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "base_unittests": {
+    "label": "//base:base_unittests",
+    "type": "console_test_launcher",
+  },
+  "blimp_unittests": {
+    "label": "//blimp:blimp_unittests",
+    "type": "console_test_launcher",
+  },
+  "blink_heap_unittests": {
+    "label": "//third_party/WebKit/Source/platform:blink_heap_unittests",
+    "type": "console_test_launcher",
+  },
+  "blink_platform_unittests": {
+    "label": "//third_party/WebKit/Source/platform:blink_platform_unittests",
+    "type": "console_test_launcher",
+  },
+  "breakpad_unittests": {
+    "label": "//breakpad:breakpad_unittests",
+    "type": "console_test_launcher",
+  },
+  "browser_tests": {
+    "label": "//chrome/test:browser_tests",
+    "type": "windowed_test_launcher",
+  },
+  "cacheinvalidation_unittests": {
+    "label": "//third_party/cacheinvalidation:cacheinvalidation_unittests",
+    "type": "raw",
+    "args": [
+      "--test-launcher-bot-mode",
+    ],
+  },
+  "cast_base_unittests": {
+    "label": "//cast:cast_base_unittests",
+    "type": "unknown",
+  },
+  "cast_crash_unittests": {
+    "label": "//chromecast/crash:cast_crash_unittests",
+    "type": "unknown",
+  },
+  "cast_shell_unittests": {
+    "label": "//chromecast/app:cast_shell_unittests",
+    "type": "unknown",
+  },
+  "cast_unittests": {
+    "label": "//media/cast:cast_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "cc_unittests": {
+    "label": "//cc:cc_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "chrome_elf_unittests": {
+    "label": "//chrome_elf:chrome_elf_unittests",
+    "type": "unknown",
+  },
+  "chromedriver_unittests": {
+    "label": "//chrome/test/chromedriver:chromedriver_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "chromeos_unittests": {
+    "label": "//chromeos:chromeos_unittests",
+    "type": "unknown",
+  },
+  "components_browsertests": {
+    "label": "//components:components_browsertests",
+    "type": "windowed_test_launcher",
+  },
+  "components_unittests": {
+    "label": "//components:components_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "compositor_unittests": {
+    "label": "//ui/compositor:compositor_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "content_browsertests": {
+    "label": "//content/test:content_browsertests",
+    "type": "windowed_test_launcher",
+  },
+  "content_gl_tests": {
+    "label": "//content/test:content_gl_tests",
+    "type": "raw",
+    "args": [],
+  },
+  "content_unittests": {
+    "label": "//content/test:content_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "courgette_unittests": {
+    "label": "//courgette:courgette_unittests",
+    "type": "unknown",
+  },
+  "crypto_unittests": {
+    "label": "//crypto:crypto_unittests",
+    "type": "console_test_launcher",
+  },
+  "dbus_unittests": {
+    "label": "//dbus:dbus_unittests",
+    "type": "unknown",
+  },
+  "device_unittests": {
+    "label": "//device:device_unittests",
+    "type": "console_test_launcher",
+  },
+  "display_unittests": {
+    "label": "//ui/display:display_unittests",
+    "type": "console_test_launcher",
+  },
+  "events_unittests": {
+    "label": "//ui/events:events_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "extensions_browsertests": {
+    "label": "//extensions:extensions_browsertests",
+    "type": "windowed_test_launcher",
+  },
+  "extensions_unittests": {
+    "label": "//extensions:extensions_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "gcm_unit_tests": {
+    "label": "//google_apis/gcm:gcm_unit_tests",
+    "type": "console_test_launcher",
+  },
+  "gfx_unittests": {
+    "label": "//ui/gfx:gfx_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "gin_unittests": {
+    "label": "//gin:gin_unittests",
+    "type": "console_test_launcher",
+  },
+  "gles2_conform_test": {
+    "label": "//gpu/gles2_conform_support:gles2_conform_test",
+    "type": "console_test_launcher",
+  },
+  "gl_tests": {
+    "label": "//gpu:gl_tests",
+    "type": "raw",
+    "args": [],
+  },
+  "gl_unittests": {
+    "label": "//ui/gl:gl_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "gn_unittests": {
+    "label": "//tools/gn:gn_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "google_apis_unittests": {
+    "label": "//google_apis:google_apis_unittests",
+    "type": "console_test_launcher",
+  },
+  "gpu_unittests": {
+    "label": "//gpu:gpu_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "html_viewer_unittests": {
+    "label": "//components/html_viewer:html_viewer_unittests",
+    "type": "unknown",
+  },
+  "installer_util_unittests": {
+    "label": "//chrome/installer/util:installer_util_unittests",
+    "type": "unknown",
+  },
+  "interactive_ui_tests": {
+    "label": "//chrome/test:interactive_ui_tests",
+    "type": "windowed_test_launcher",
+  },
+  "ipc_mojo_unittests": {
+    "label": "//ipc/mojo:ipc_mojo_unittests",
+    "type": "unknown",
+  },
+  "ipc_tests": {
+    "label": "//ipc:ipc_tests",
+    "type": "console_test_launcher",
+  },
+  "jingle_unittests": {
+    "label": "//jingle:jingle_unittests",
+    "type": "console_test_launcher",
+  },
+  "keyboard_unittests": {
+    "label": "//ui/keyboard:keyboard_unittests",
+    "type": "unknown",
+  },
+  "media_unittests": {
+    "label": "//media:media_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "media_blink_unittests": {
+    "label": "//media/blink:media_blink_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "midi_unittests": {
+    "label": "//media/midi:midi_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "mojo_common_unittests": {
+    "label": "//mojo/common:mojo_common_unittests",
+    "type": "console_test_launcher",
+  },
+  "mojo_public_application_unittests": {
+    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_applicaiton_unittests",
+    "type": "unknown",
+  },
+  "mojo_public_bindings_unittests": {
+    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_bindings_unittests",
+    "type": "console_test_launcher",
+  },
+  "mojo_public_environment_unittests": {
+    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_environment_unittests",
+    "type": "console_test_launcher",
+  },
+  "mojo_public_system_unittests": {
+    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_system_unittests",
+    "type": "console_test_launcher",
+  },
+  "mojo_public_utility_unittests": {
+    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_utility_unittests",
+    "type": "console_test_launcher",
+  },
+  "mojo_runner_host_unittests": {
+    "label": "//mojo/runner/host:unittests",
+    "type": "unknown",
+  },
+  "mojo_shell_unittests": {
+    "label": "//mojo/shell:mojo_shell_unittests",
+    "type": "unknown",
+  },
+  "mojo_surfaces_lib_unittests": {
+    "label": "//mojo/converters/surfaces/tests:mojo_surfaces_lib_unittests",
+    "type": "unknown",
+  },
+  "mojo_system_unittests": {
+    "label": "//third_party/mojo/src/mojo/edk/system:mojo_system_unittests",
+    "type": "unknown",
+  },
+  "mojo_view_manager_lib_unittests": {
+    "label": "//components/view_manager/public/cpp/tests:mojo_view_manager_lib_unittests",
+    "type": "unknown",
+  },
+  "message_center_unittests": {
+    "label": "//ui/message_center:message_center_unittests",
+    "type": "unknown",
+  },
+  "mash_unittests": {
+    "label": "//mash:mash_unittests",
+    "type": "unknown",
+  },
+  "nacl_loader_unittests": {
+    "label": "//components/nacl/loader:nacl_loader_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "net_unittests": {
+    "label": "//net:net_unittests",
+    "type": "console_test_launcher",
+  },
+  "ozone_unittests": {
+    "label": "//ui/ozone:ozone_unittests",
+    "type": "unknown",
+  },
+  "ppapi_unittests": {
+    "label": "//ppapi:ppapi_unittests",
+    "type": "unknown",
+  },
+  "printing_unittests": {
+    "label": "//printing:printing_unittests",
+    "type": "console_test_launcher",
+  },
+  "remoting_unittests": {
+    "label": "//remoting:remoting_unittests",
+    "type": "console_test_launcher",
+  },
+  "resource_provider_unittests": {
+    "label": "//components/resource_provider:resource_provider_unittests",
+    "type": "unknown",
+  },
+  "sandbox_linux_unittests": {
+    "label": "//sandbox/linux:sandbox_linux_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "sandbox_mac_unittests": {
+    "label": "//sandbox/mac:sandbox_mac_unittests",
+    "type": "unknown",
+  },
+  "sbox_integration_tests": {
+    "label": "//sandbox/win:sbox_integration_tests",
+    "type": "unknown",
+  },
+  "sbox_unittests": {
+    "label": "//sandbox/win:sbox_unittests",
+    "type": "unknown",
+  },
+  "sbox_validation_tests": {
+    "label": "//sandbox/win:sbox_validation_tests",
+    "type": "unknown",
+  },
+  "setup_unittests": {
+    "label": "//chrome/installer/setup:setup_unittests",
+    "type": "unknown",
+  },
+  "skia_unittests": {
+    "label": "//skia:skia_unittests",
+    "type": "console_test_launcher",
+  },
+  "sql_unittests": {
+    "label": "//sql:sql_unittests",
+    "type": "console_test_launcher",
+  },
+  "sync_integration_tests": {
+    "label": "//chrome/test:sync_integration_tests",
+    "type": "windowed_test_launcher",
+  },
+  "sync_unit_tests": {
+    "label": "//sync:sync_unit_tests",
+    "type": "console_test_launcher",
+  },
+  "tab_capture_end2end_tests": {
+    "label": "//chrome/test:browser_tests",
+    "type": "gpu_browser_test",
+    "gtest_filter": "CastStreamingApiTestWithPixelOutput.EndToEnd*:TabCaptureApiPixelTest.EndToEnd*",
+  },
+  "telemetry_gpu_test": {
+    "label": "//chrome/test:telemetry_gpu_test",
+    "type": "script",
+    "script": "//testing/scripts/run_telemetry_benchmark_as_googletest.py",
+    "args": [
+      "../../content/test/gpu/run_gpu_test.py",
+    ],
+  },
+  "telemetry_gpu_unittests": {
+    "label": "//chrome/test:telemetry_gpu_unittests",
+    "type": "script",
+    "script": "//testing/scripts/run_telemetry_as_googletest.py",
+    "args": [
+      "../../content/test/gpu/run_unittests.py",
+      "-v",
+    ],
+  },
+  "telemetry_perf_unittests": {
+    "label": "//chrome/test:telemetry_perf_unittests",
+    "type": "script",
+    "script": "//testing/scripts/run_telemetry_as_googletest.py",
+    "args": [
+      "--xvfb",
+      "../../tools/perf/run_tests",
+      "-v",
+    ],
+  },
+  "telemetry_unittests": {
+    "label": "//chrome/test:telemetry_unittests",
+    "type": "script",
+    "script": "//testing/scripts/run_telemetry_as_googletest.py",
+    "args": [
+      "--xvfb",
+      "../../tools/perf/run_telemetry_tests",
+      "-v",
+      "--chrome-root",
+      "../../",
+    ],
+  },
+  "ui_android_unittests": {
+    "label": "//ui/android:ui_android_unittests",
+    "type": "console_test_launcher",
+  },
+  "ui_base_unittests": {
+    "label": "//ui/base:ui_base_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "ui_chromeos_unittests": {
+    "label": "//ui/chromeos:ui_chromeos_unittests",
+    "type": "unknown",
+  },
+  "ui_touch_selection_unittests": {
+    "label": "//ui/touch_selection:ui_touch_selection_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "unit_tests": {
+    "label": "//chrome/test:unit_tests",
+    "type": "windowed_test_launcher",
+  },
+  "url_unittests": {
+    "label": "//url:url_unittests",
+    "type": "console_test_launcher",
+  },
+  "window_manager_unittests": {
+    "label": "//components/mus/ws:window_manager_unittests",
+    "type": "unknown",
+  },
+  "views_unittests": {
+    "label": "//ui/views:views_unittests",
+    "type": "unknown",
+  },
+  "webkit_unit_tests": {
+    "label": "//third_party/WebKit/Source/web:webkit_unit_tests",
+    "type": "console_test_launcher",
+  },
+  "wm_unittests": {
+    "label": "//ui/wm:wm_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "wtf_unittests": {
+    "label": "//third_party/WebKit/Source/wtf:wtf_unittests",
+    "type": "console_test_launcher",
+  },
+}

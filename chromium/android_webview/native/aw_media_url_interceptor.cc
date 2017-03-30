@@ -14,13 +14,13 @@ namespace android_webview {
 
 bool AwMediaUrlInterceptor::Intercept(const std::string& url,
                                       int* fd,
-                                      int64* offset,
-                                      int64* size) const{
+                                      int64_t* offset,
+                                      int64_t* size) const {
   std::string asset_file_prefix(url::kFileScheme);
   asset_file_prefix.append(url::kStandardSchemeSeparator);
   asset_file_prefix.append(android_webview::kAndroidAssetPath);
 
-  if (base::StartsWithASCII(url, asset_file_prefix, true)) {
+  if (base::StartsWith(url, asset_file_prefix, base::CompareCase::SENSITIVE)) {
     std::string filename(url);
     base::ReplaceFirstSubstringAfterOffset(
         &filename, 0, asset_file_prefix, "assets/");

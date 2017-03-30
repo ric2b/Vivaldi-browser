@@ -5,10 +5,12 @@
 #ifndef NET_PROXY_PROXY_SCRIPT_FETCHER_IMPL_H_
 #define NET_PROXY_PROXY_SCRIPT_FETCHER_IMPL_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -117,7 +119,10 @@ class NET_EXPORT ProxyScriptFetcherImpl : public ProxyScriptFetcher,
   base::TimeDelta max_duration_;
 
   // The time that the fetch started.
-  base::Time fetch_start_time_;
+  base::TimeTicks fetch_start_time_;
+
+  // The time that the first byte was received.
+  base::TimeTicks fetch_time_to_first_byte_;
 
   // Factory for creating the time-out task. This takes care of revoking
   // outstanding tasks when |this| is deleted.

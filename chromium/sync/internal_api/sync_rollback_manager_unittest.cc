@@ -4,6 +4,11 @@
 
 #include "sync/internal_api/sync_rollback_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <set>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "sync/internal_api/public/read_node.h"
@@ -39,20 +44,18 @@ class TestChangeDelegate : public SyncManager::ChangeDelegate {
                                &TestChangeDelegate::VerifyDeletes)));
   }
 
-  void add_expected_delete(int64 v) {
-    expected_deletes_.insert(v);
-  }
+  void add_expected_delete(int64_t v) { expected_deletes_.insert(v); }
 
   MOCK_METHOD4(OnChangesApplied,
                void(ModelType model_type,
-                    int64 model_version,
+                    int64_t model_version,
                     const BaseTransaction* trans,
                     const ImmutableChangeRecordList& changes));
   MOCK_METHOD1(OnChangesComplete, void(ModelType model_type));
 
  private:
   void VerifyDeletes(const ImmutableChangeRecordList& changes) {
-    std::set<int64> deleted;
+    std::set<int64_t> deleted;
     for (size_t i = 0; i < changes.Get().size(); ++i) {
       const ChangeRecord& change = (changes.Get())[i];
       EXPECT_EQ(ChangeRecord::ACTION_DELETE, change.action);
@@ -62,7 +65,7 @@ class TestChangeDelegate : public SyncManager::ChangeDelegate {
     EXPECT_TRUE(expected_deletes_ == deleted);
   }
 
-  std::set<int64> expected_deletes_;
+  std::set<int64_t> expected_deletes_;
 };
 
 class SyncRollbackManagerTest : public testing::Test,
@@ -82,23 +85,21 @@ class SyncRollbackManagerTest : public testing::Test,
                     const WeakHandle<DataTypeDebugInfoListener>&,
                     bool, ModelTypeSet));
   MOCK_METHOD1(OnActionableError, void(const SyncProtocolError&));
-  MOCK_METHOD1(OnMigrationRequested, void(ModelTypeSet));;
+  MOCK_METHOD1(OnMigrationRequested, void(ModelTypeSet));
   MOCK_METHOD1(OnProtocolEvent, void(const ProtocolEvent&));
 
   void OnConfigDone(bool success) {
     EXPECT_TRUE(success);
   }
 
-  int64 CreateEntry(UserShare* user_share, ModelType type,
-                    const std::string& client_tag) {
+  int64_t CreateEntry(UserShare* user_share,
+                      ModelType type,
+                      const std::string& client_tag) {
     WriteTransaction trans(FROM_HERE, user_share);
-    ReadNode type_root(&trans);
-    EXPECT_EQ(BaseNode::INIT_OK, type_root.InitTypeRoot(type));
-
     WriteNode node(&trans);
     EXPECT_EQ(WriteNode::INIT_SUCCESS,
-              node.InitUniqueByCreation(type, type_root, client_tag));
-    return node.GetEntry()->GetMetahandle();
+              node.InitUniqueByCreation(type, client_tag));
+    return node.GetId();
   }
 
   void InitManager(SyncManager* manager, ModelTypeSet types,
@@ -190,7 +191,7 @@ TEST_F(SyncRollbackManagerTest, RollbackBasic) {
               InternalComponentsFactory::STORAGE_ON_DISK);
 
   // Simulate a new entry added during type initialization.
-  int64 new_pref_id =
+  int64_t new_pref_id =
       CreateEntry(rollback_manager.GetUserShare(), PREFERENCES, "pref2");
 
   delegate.add_expected_delete(new_pref_id);
@@ -214,7 +215,7 @@ TEST_F(SyncRollbackManagerTest, NoRollbackOfTypesNotBackedUp) {
               InternalComponentsFactory::STORAGE_ON_DISK);
 
   // Simulate new entry added during type initialization.
-  int64 new_pref_id =
+  int64_t new_pref_id =
       CreateEntry(rollback_manager.GetUserShare(), PREFERENCES, "pref2");
   CreateEntry(rollback_manager.GetUserShare(), APPS, "app1");
 

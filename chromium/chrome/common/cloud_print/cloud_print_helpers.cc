@@ -4,15 +4,18 @@
 
 #include "chrome/common/cloud_print/cloud_print_helpers.h"
 
+#include <stdint.h>
+
+#include <limits>
+
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/md5.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/values.h"
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/cloud_print/cloud_print_constants.h"
 #include "net/base/mime_util.h"
 #include "url/gurl.h"
@@ -25,9 +28,7 @@ namespace {
 // required by cloud print server.
 PrinterTags PreparePrinterTags(const PrinterTags& printer_tags) {
   PrinterTags printer_tags_out = printer_tags;
-  chrome::VersionInfo version_info;
-  printer_tags_out[kChromeVersionTagName] =
-      version_info.CreateVersionString();
+  printer_tags_out[kChromeVersionTagName] = chrome::GetVersionString();
   printer_tags_out[kSystemNameTagName] =
       base::SysInfo::OperatingSystemName();
   printer_tags_out[kSystemVersionTagName] =
@@ -198,18 +199,11 @@ scoped_ptr<base::DictionaryValue> ParseResponseJSON(
   if (succeeded &&
       !response_dict->GetBoolean(kSuccessValue, succeeded))
     *succeeded = false;
-  return response_dict.Pass();
+  return response_dict;
 }
 
 std::string GetMultipartMimeType(const std::string& mime_boundary) {
   return std::string("multipart/form-data; boundary=") + mime_boundary;
-}
-
-// Create a MIME boundary marker (27 '-' characters followed by 16 hex digits).
-void CreateMimeBoundaryForUpload(std::string* out) {
-  int r1 = base::RandInt(0, kint32max);
-  int r2 = base::RandInt(0, kint32max);
-  base::SStringPrintf(out, "---------------------------%08X%08X", r1, r2);
 }
 
 std::string GetHashOfPrinterTags(const PrinterTags& printer_tags) {

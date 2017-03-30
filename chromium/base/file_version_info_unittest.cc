@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
@@ -93,7 +97,7 @@ TEST(FileVersionInfoTest, IsOfficialBuild) {
   // Test consistency check.
   ASSERT_EQ(arraysize(kDLLNames), arraysize(kExpected));
 
-  for (int i = 0; i < arraysize(kDLLNames); ++i) {
+  for (size_t i = 0; i < arraysize(kDLLNames); ++i) {
     FilePath dll_path = GetTestDataPath();
     dll_path = dll_path.Append(kDLLNames[i]);
 

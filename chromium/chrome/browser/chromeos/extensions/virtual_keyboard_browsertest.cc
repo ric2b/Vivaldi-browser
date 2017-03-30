@@ -14,6 +14,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
@@ -53,7 +54,7 @@ VirtualKeyboardBrowserTestConfig::VirtualKeyboardBrowserTestConfig()
       url_(kVirtualKeyboardURL) {
 }
 
-VirtualKeyboardBrowserTestConfig::~VirtualKeyboardBrowserTestConfig() {};
+VirtualKeyboardBrowserTestConfig::~VirtualKeyboardBrowserTestConfig() {}
 
 void VirtualKeyboardBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
@@ -98,15 +99,12 @@ content::RenderViewHost* VirtualKeyboardBrowserTest::GetKeyboardRenderViewHost(
   scoped_ptr<content::RenderWidgetHostIterator> widgets(
       content::RenderWidgetHost::GetRenderWidgetHosts());
   while (content::RenderWidgetHost* widget = widgets->GetNextHost()) {
-    if (widget->IsRenderView()) {
-      content::RenderViewHost* view = content::RenderViewHost::From(widget);
-      if (url == view->GetSiteInstance()->GetSiteURL()) {
-        content::WebContents* wc =
-            content::WebContents::FromRenderViewHost(view);
-        // Waits for virtual keyboard to load.
-        EXPECT_TRUE(content::WaitForLoadStop(wc));
-        return view;
-      }
+    content::RenderViewHost* view = content::RenderViewHost::From(widget);
+    if (view && url == view->GetSiteInstance()->GetSiteURL()) {
+      content::WebContents* wc = content::WebContents::FromRenderViewHost(view);
+      // Waits for virtual keyboard to load.
+      EXPECT_TRUE(content::WaitForLoadStop(wc));
+      return view;
     }
   }
   LOG(ERROR) << "Extension not found:" << url;
@@ -156,7 +154,8 @@ IN_PROC_BROWSER_TEST_F(VirtualKeyboardBrowserTest, IsKeyboardLoaded) {
   ASSERT_TRUE(loaded);
 }
 
-IN_PROC_BROWSER_TEST_F(VirtualKeyboardBrowserTest, EndToEndTest) {
+// Disabled; http://crbug.com/515596
+IN_PROC_BROWSER_TEST_F(VirtualKeyboardBrowserTest, DISABLED_EndToEndTest) {
   // Get the virtual keyboard's render view host.
   content::RenderViewHost* keyboard_rvh =
       GetKeyboardRenderViewHost(kExtensionId);

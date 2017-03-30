@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_SESSIONS_SESSION_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_SESSIONS_SESSION_SERVICE_FACTORY_H_
 
+#include <utility>
+
+#include "base/gtest_prod_util.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service.h"
@@ -48,14 +51,14 @@ class SessionServiceFactory : public BrowserContextKeyedServiceFactory {
                                 scoped_ptr<SessionService> service) {
     GetInstance()->BrowserContextShutdown(profile);
     GetInstance()->BrowserContextDestroyed(profile);
-    GetInstance()->Associate(profile, service.Pass());
+    GetInstance()->Associate(profile, std::move(service));
   }
 #endif
 
   static SessionServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<SessionServiceFactory>;
+  friend struct base::DefaultSingletonTraits<SessionServiceFactory>;
   FRIEND_TEST_ALL_PREFIXES(SessionCrashedInfoBarDelegateUnitTest,
                            DetachingTabWithCrashedInfoBar);
 

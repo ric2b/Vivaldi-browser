@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
 namespace content {
@@ -41,7 +42,8 @@ class WifiCredentialSyncableServiceFactory
 #endif
 
  private:
-  friend struct DefaultSingletonTraits<WifiCredentialSyncableServiceFactory>;
+  friend struct base::DefaultSingletonTraits<
+      WifiCredentialSyncableServiceFactory>;
 
   WifiCredentialSyncableServiceFactory();
   ~WifiCredentialSyncableServiceFactory() override;

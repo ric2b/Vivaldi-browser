@@ -4,8 +4,10 @@
 
 #include "chrome/browser/extensions/display_info_provider_chromeos.h"
 
-#include "ash/display/display_controller.h"
+#include <stdint.h>
+
 #include "ash/display/display_manager.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/shell.h"
 #include "base/strings/string_number_conversions.h"
 #include "extensions/common/api/system_display.h"
@@ -17,10 +19,10 @@ using ash::DisplayManager;
 
 namespace extensions {
 
-using core_api::system_display::Bounds;
-using core_api::system_display::DisplayUnitInfo;
-using core_api::system_display::DisplayProperties;
-using core_api::system_display::Insets;
+using api::system_display::Bounds;
+using api::system_display::DisplayUnitInfo;
+using api::system_display::DisplayProperties;
+using api::system_display::Insets;
 
 namespace {
 
@@ -62,8 +64,8 @@ bool PointIsOverRadiusVector(const gfx::Point& point,
   // two is 0.
   // So, (x, y) is over (a, b) if x * b + y * (-a) >= 0, which is equivalent to
   // x * b >= y * a.
-  return static_cast<int64>(point.x()) * static_cast<int64>(vector.y()) >=
-         static_cast<int64>(point.y()) * static_cast<int64>(vector.x());
+  return static_cast<int64_t>(point.x()) * static_cast<int64_t>(vector.y()) >=
+         static_cast<int64_t>(point.y()) * static_cast<int64_t>(vector.x());
 }
 
 // Created ash::DisplayLayout value for |rectangle| compared to the |reference|
@@ -175,7 +177,7 @@ void UpdateDisplayLayout(const gfx::Rect& primary_display_bounds,
 bool ValidateParamsForDisplay(const DisplayProperties& info,
                               const gfx::Display& display,
                               DisplayManager* display_manager,
-                              int64 primary_display_id,
+                              int64_t primary_display_id,
                               std::string* error) {
   bool is_primary = display.id() == primary_display_id ||
                     (info.is_primary && *info.is_primary);
@@ -183,7 +185,7 @@ bool ValidateParamsForDisplay(const DisplayProperties& info,
   // If mirroring source id is set, a display with the given id should exist,
   // and if should not be the same as the target display's id.
   if (info.mirroring_source_id && !info.mirroring_source_id->empty()) {
-    int64 mirroring_id;
+    int64_t mirroring_id;
     if (!base::StringToInt64(*info.mirroring_source_id, &mirroring_id) ||
         display_manager->GetDisplayForId(mirroring_id).id() ==
             gfx::Display::kInvalidDisplayID) {
@@ -268,7 +270,7 @@ bool ValidateParamsForDisplay(const DisplayProperties& info,
 // Gets the display with the provided string id.
 gfx::Display GetTargetDisplay(const std::string& display_id_str,
                               DisplayManager* manager) {
-  int64 display_id;
+  int64_t display_id;
   if (!base::StringToInt64(display_id_str, &display_id)) {
     // This should return invalid display.
     return gfx::Display();
@@ -290,9 +292,9 @@ bool DisplayInfoProviderChromeOS::SetInfo(const std::string& display_id_str,
   DisplayManager* display_manager =
       ash::Shell::GetInstance()->display_manager();
   DCHECK(display_manager);
-  ash::DisplayController* display_controller =
-      ash::Shell::GetInstance()->display_controller();
-  DCHECK(display_controller);
+  ash::WindowTreeHostManager* window_tree_host_manager =
+      ash::Shell::GetInstance()->window_tree_host_manager();
+  DCHECK(window_tree_host_manager);
 
   const gfx::Display target = GetTargetDisplay(display_id_str, display_manager);
 
@@ -301,7 +303,7 @@ bool DisplayInfoProviderChromeOS::SetInfo(const std::string& display_id_str,
     return false;
   }
 
-  int64 display_id = target.id();
+  int64_t display_id = target.id();
   // TODO(scottmg): Native is wrong http://crbug.com/133312
   const gfx::Display& primary =
       gfx::Screen::GetNativeScreen()->GetPrimaryDisplay();
@@ -313,12 +315,12 @@ bool DisplayInfoProviderChromeOS::SetInfo(const std::string& display_id_str,
 
   // Process 'isPrimary' parameter.
   if (info.is_primary && *info.is_primary && target.id() != primary.id())
-    display_controller->SetPrimaryDisplayId(display_id);
+    window_tree_host_manager->SetPrimaryDisplayId(display_id);
 
   // Process 'mirroringSourceId' parameter.
   if (info.mirroring_source_id &&
       info.mirroring_source_id->empty() == display_manager->IsInMirrorMode()) {
-    display_controller->ToggleMirrorMode();
+    window_tree_host_manager->ToggleMirrorMode();
   }
 
   // Process 'overscan' parameter.
@@ -357,7 +359,7 @@ bool DisplayInfoProviderChromeOS::SetInfo(const std::string& display_id_str,
 
 void DisplayInfoProviderChromeOS::UpdateDisplayUnitInfoForPlatform(
     const gfx::Display& display,
-    extensions::core_api::system_display::DisplayUnitInfo* unit) {
+    extensions::api::system_display::DisplayUnitInfo* unit) {
   ash::DisplayManager* display_manager =
       ash::Shell::GetInstance()->display_manager();
   unit->name = display_manager->GetDisplayNameForId(display.id());
@@ -366,12 +368,13 @@ void DisplayInfoProviderChromeOS::UpdateDisplayUnitInfoForPlatform(
         base::Int64ToString(display_manager->mirroring_display_id());
   }
 
-  // TODO(hshi): determine the DPI of the screen.
-  const float kDpi96 = 96.0;
-
-  const float dpi = display.device_scale_factor() * kDpi96;
-  unit->dpi_x = dpi;
-  unit->dpi_y = dpi;
+  const ash::DisplayInfo& display_info =
+      display_manager->GetDisplayInfo(display.id());
+  const float device_dpi = display_info.device_dpi();
+  unit->dpi_x = device_dpi * display.size().width() /
+                display_info.bounds_in_native().width();
+  unit->dpi_y = device_dpi * display.size().height() /
+                display_info.bounds_in_native().height();
 
   const gfx::Insets overscan_insets =
       display_manager->GetOverscanInsets(display.id());
@@ -383,6 +386,33 @@ void DisplayInfoProviderChromeOS::UpdateDisplayUnitInfoForPlatform(
 
 gfx::Screen* DisplayInfoProviderChromeOS::GetActiveScreen() {
   return ash::Shell::GetScreen();
+}
+
+void DisplayInfoProviderChromeOS::EnableUnifiedDesktop(bool enable) {
+  ash::Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(
+      enable);
+}
+
+DisplayInfo DisplayInfoProviderChromeOS::GetAllDisplaysInfo() {
+  ash::DisplayManager* display_manager =
+      ash::Shell::GetInstance()->display_manager();
+  if (!display_manager->IsInUnifiedMode())
+    return DisplayInfoProvider::GetAllDisplaysInfo();
+
+  std::vector<gfx::Display> displays =
+      display_manager->software_mirroring_display_list();
+  CHECK_GT(displays.size(), 0u);
+
+  // Use first display as primary.
+  int64_t primary_id = displays[0].id();
+  DisplayInfo all_displays;
+  for (const gfx::Display& display : displays) {
+    linked_ptr<api::system_display::DisplayUnitInfo> unit(
+        CreateDisplayUnitInfo(display, primary_id));
+    UpdateDisplayUnitInfoForPlatform(display, unit.get());
+    all_displays.push_back(unit);
+  }
+  return all_displays;
 }
 
 // static

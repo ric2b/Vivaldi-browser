@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <list>
 #include <string>
@@ -17,6 +19,7 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_member.h"
@@ -27,28 +30,31 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/url_constants.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_store.h"
+#include "components/net_log/chrome_net_log.h"
 #include "components/onc/onc_constants.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -130,8 +136,8 @@ std::string HashesToBase64String(const net::HashValueVector& hashes) {
 bool Base64StringToHashes(const std::string& hashes_str,
                           net::HashValueVector* hashes) {
   hashes->clear();
-  std::vector<std::string> vector_hash_str;
-  base::SplitString(hashes_str, ',', &vector_hash_str);
+  std::vector<std::string> vector_hash_str = base::SplitString(
+      hashes_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   for (size_t i = 0; i != vector_hash_str.size(); ++i) {
     std::string hash_str;
@@ -300,7 +306,7 @@ class NetInternalsMessageHandler::IOThreadImpl
 #endif
   void OnSetCaptureMode(const base::ListValue* list);
 
-  // ChromeNetLog::ThreadSafeObserver implementation:
+  // NetLog::ThreadSafeObserver implementation:
   void OnAddEntry(const net::NetLog::Entry& entry) override;
 
   // Helper that calls g_browser.receive in the renderer, passing in |command|
@@ -521,9 +527,11 @@ void NetInternalsMessageHandler::OnRendererReady(const base::ListValue* list) {
 
 void NetInternalsMessageHandler::OnClearBrowserCache(
     const base::ListValue* list) {
-  BrowsingDataRemover* remover = BrowsingDataRemover::CreateForUnboundedRange(
-      Profile::FromWebUI(web_ui()));
-  remover->Remove(BrowsingDataRemover::REMOVE_CACHE,
+  BrowsingDataRemover* remover =
+      BrowsingDataRemoverFactory::GetForBrowserContext(
+          Profile::FromWebUI(web_ui()));
+  remover->Remove(BrowsingDataRemover::Unbounded(),
+                  BrowsingDataRemover::REMOVE_CACHE,
                   BrowsingDataHelper::UNPROTECTED_WEB);
   // BrowsingDataRemover deletes itself.
 }
@@ -672,7 +680,11 @@ void NetInternalsMessageHandler::IOThreadImpl::OnRendererReady(
     PostPendingEntries();
   }
 
-  SendJavascriptCommand("receivedConstants", NetInternalsUI::GetConstants());
+  SendJavascriptCommand(
+      "receivedConstants",
+      net_log::ChromeNetLog::GetConstants(
+          base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
+          chrome::GetChannelString()));
 
   PrePopulateEventList();
 
@@ -833,7 +845,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
 
   transport_security_state->AddHSTS(domain, expiry, sts_include_subdomains);
   transport_security_state->AddHPKP(domain, expiry, pkp_include_subdomains,
-                                    hashes);
+                                    hashes, GURL());
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(
@@ -1160,40 +1172,6 @@ void NetInternalsMessageHandler::IOThreadImpl::SendNetInfo(int info_sources) {
 // NetInternalsUI
 //
 ////////////////////////////////////////////////////////////////////////////////
-
-// static
-base::Value* NetInternalsUI::GetConstants() {
-  scoped_ptr<base::DictionaryValue> constants_dict = net::GetNetConstants();
-  DCHECK(constants_dict);
-
-  // Add a dictionary with the version of the client and its command line
-  // arguments.
-  {
-    base::DictionaryValue* dict = new base::DictionaryValue();
-
-    chrome::VersionInfo version_info;
-
-    // We have everything we need to send the right values.
-    dict->SetString("name", version_info.Name());
-    dict->SetString("version", version_info.Version());
-    dict->SetString("cl", version_info.LastChange());
-    dict->SetString("version_mod",
-                    chrome::VersionInfo::GetVersionStringModifier());
-    dict->SetString("official",
-                    version_info.IsOfficialBuild() ? "official" : "unofficial");
-    dict->SetString("os_type", version_info.OSType());
-    dict->SetString(
-        "command_line",
-        base::CommandLine::ForCurrentProcess()->GetCommandLineString());
-
-    constants_dict->Set("clientInfo", dict);
-
-    data_reduction_proxy::DataReductionProxyEventStore::AddConstants(
-        constants_dict.get());
-  }
-
-  return constants_dict.release();
-}
 
 NetInternalsUI::NetInternalsUI(content::WebUI* web_ui)
     : WebUIController(web_ui) {

@@ -7,13 +7,14 @@
 
 #include <string>
 
-#include "base/values.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 
 class GURL;
 
 namespace base {
 class DictionaryValue;
-}  // namspace base
+}  // namespace base
 
 namespace content {
 class BrowserContext;
@@ -21,9 +22,11 @@ class BrowserContext;
 
 namespace net {
 class URLRequest;
-}  // namspace net
+}  // namespace net
 
 namespace extensions {
+
+class WebRequestEventDetails;
 
 // A delegate class of WebRequestApi that are not a part of chrome.
 class WebRequestEventRouterDelegate {
@@ -33,23 +36,25 @@ class WebRequestEventRouterDelegate {
 
   // Looks up the tab and window ID for a given request.
   // Called on the IO thread.
-  virtual void ExtractExtraRequestDetails(
-      net::URLRequest* request, base::DictionaryValue* out);
+  virtual void ExtractExtraRequestDetails(const net::URLRequest* request,
+                                          WebRequestEventDetails* out);
 
   // Called to check extra parameters (e.g., tab_id, windown_id) when filtering
   // event listeners.
-  virtual bool OnGetMatchingListenersImplCheck(
-      int tab_id, int window_id, net::URLRequest* request);
+  virtual bool OnGetMatchingListenersImplCheck(int tab_id,
+                                               int window_id,
+                                               const net::URLRequest* request);
 
   // Logs an extension action.
-  virtual void LogExtensionActivity(
-      content::BrowserContext* browser_context,
-      bool is_incognito,
-      const std::string& extension_id,
-      const GURL& url,
-      const std::string& api_call,
-       scoped_ptr<base::DictionaryValue> details) {};
+  virtual void LogExtensionActivity(content::BrowserContext* browser_context,
+                                    bool is_incognito,
+                                    const std::string& extension_id,
+                                    const GURL& url,
+                                    const std::string& api_call,
+                                    scoped_ptr<base::DictionaryValue> details) {
+  }
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(WebRequestEventRouterDelegate);
 };
 

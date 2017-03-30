@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "device/serial/serial_device_enumerator.h"
 #include "extensions/browser/api/serial/serial_connection.h"
@@ -18,7 +19,7 @@ using content::BrowserThread;
 
 namespace extensions {
 
-namespace core_api {
+namespace api {
 
 namespace {
 
@@ -85,11 +86,14 @@ bool SerialGetDevicesFunction::Prepare() {
 void SerialGetDevicesFunction::Work() {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
+// TODO(moshayedi): crbug.com/549257. Add USB support for Aura on Android.
+#if !defined(OS_ANDROID)
   scoped_ptr<device::SerialDeviceEnumerator> enumerator =
       device::SerialDeviceEnumerator::Create();
   mojo::Array<device::serial::DeviceInfoPtr> devices = enumerator->GetDevices();
   results_ = serial::GetDevices::Results::Create(
       devices.To<std::vector<linked_ptr<serial::DeviceInfo> > >());
+#endif
 }
 
 SerialConnectFunction::SerialConnectFunction() {
@@ -469,19 +473,19 @@ void SerialClearBreakFunction::Work() {
   results_ = serial::ClearBreak::Results::Create(success);
 }
 
-}  // namespace core_api
+}  // namespace api
 
 }  // namespace extensions
 
 namespace mojo {
 
 // static
-linked_ptr<extensions::core_api::serial::DeviceInfo> TypeConverter<
-    linked_ptr<extensions::core_api::serial::DeviceInfo>,
+linked_ptr<extensions::api::serial::DeviceInfo> TypeConverter<
+    linked_ptr<extensions::api::serial::DeviceInfo>,
     device::serial::DeviceInfoPtr>::Convert(const device::serial::DeviceInfoPtr&
                                                 device) {
-  linked_ptr<extensions::core_api::serial::DeviceInfo> info(
-      new extensions::core_api::serial::DeviceInfo);
+  linked_ptr<extensions::api::serial::DeviceInfo> info(
+      new extensions::api::serial::DeviceInfo);
   info->path = device->path;
   if (device->has_vendor_id)
     info->vendor_id.reset(new int(static_cast<int>(device->vendor_id)));

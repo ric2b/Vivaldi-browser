@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef SYNC_INTERNAL_API_SYNC_MANAGER_H_
-#define SYNC_INTERNAL_API_SYNC_MANAGER_H_
+#ifndef SYNC_INTERNAL_API_SYNC_MANAGER_IMPL_H_
+#define SYNC_INTERNAL_API_SYNC_MANAGER_IMPL_H_
 
+#include <stdint.h>
+
+#include <map>
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "net/base/network_change_notifier.h"
 #include "sync/base/sync_export.h"
 #include "sync/engine/all_status.h"
@@ -31,11 +36,14 @@
 
 class GURL;
 
+namespace syncer_v2 {
+class SyncContext;
+}
+
 namespace syncer {
 
 class ModelTypeRegistry;
 class SyncAPIServerConnectionManager;
-class SyncContext;
 class TypeDebugInfoObserver;
 class WriteNode;
 class WriteTransaction;
@@ -52,7 +60,7 @@ class SyncSessionContext;
 //
 // Unless stated otherwise, all methods of SyncManager should be called on the
 // same thread.
-class SYNC_EXPORT_PRIVATE SyncManagerImpl
+class SYNC_EXPORT SyncManagerImpl
     : public SyncManager,
       public net::NetworkChangeNotifier::IPAddressObserver,
       public net::NetworkChangeNotifier::ConnectionTypeObserver,
@@ -94,7 +102,7 @@ class SYNC_EXPORT_PRIVATE SyncManagerImpl
   void SaveChanges() override;
   void ShutdownOnSyncThread(ShutdownReason reason) override;
   UserShare* GetUserShare() override;
-  syncer::SyncContextProxy* GetSyncContextProxy() override;
+  syncer_v2::SyncContextProxy* GetSyncContextProxy() override;
   const std::string cache_guid() override;
   bool ReceivedExperiment(Experiments* experiments) override;
   bool HasUnsyncedItems() override;
@@ -109,6 +117,7 @@ class SYNC_EXPORT_PRIVATE SyncManagerImpl
   bool HasDirectoryTypeDebugInfoObserver(
       syncer::TypeDebugInfoObserver* observer) override;
   void RequestEmitDebugInfo() override;
+  void ClearServerData(const ClearServerDataCallback& callback) override;
 
   // SyncEncryptionHandler::Observer implementation.
   void OnPassphraseRequired(
@@ -153,11 +162,11 @@ class SYNC_EXPORT_PRIVATE SyncManagerImpl
   void HandleCalculateChangesChangeEventFromSyncApi(
       const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
       syncable::BaseTransaction* trans,
-      std::vector<int64>* entries_changed) override;
+      std::vector<int64_t>* entries_changed) override;
   void HandleCalculateChangesChangeEventFromSyncer(
       const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
       syncable::BaseTransaction* trans,
-      std::vector<int64>* entries_changed) override;
+      std::vector<int64_t>* entries_changed) override;
 
   // Handle explicit requests to fetch updates for the given types.
   void RefreshTypes(ModelTypeSet types) override;
@@ -237,7 +246,7 @@ class SYNC_EXPORT_PRIVATE SyncManagerImpl
   // If this is a deletion for a password, sets the legacy
   // ExtraPasswordChangeRecordData field of |buffer|. Otherwise sets
   // |buffer|'s specifics field to contain the unencrypted data.
-  void SetExtraChangeRecordData(int64 id,
+  void SetExtraChangeRecordData(int64_t id,
                                 ModelType type,
                                 ChangeReorderBuffer* buffer,
                                 Cryptographer* cryptographer,
@@ -286,8 +295,8 @@ class SYNC_EXPORT_PRIVATE SyncManagerImpl
   scoped_ptr<ModelTypeRegistry> model_type_registry_;
 
   // The main interface for non-blocking sync types and a thread-safe wrapper.
-  scoped_ptr<SyncContext> sync_context_;
-  scoped_ptr<SyncContextProxy> sync_context_proxy_;
+  scoped_ptr<syncer_v2::SyncContext> sync_context_;
+  scoped_ptr<syncer_v2::SyncContextProxy> sync_context_proxy_;
 
   // A container of various bits of information used by the SyncScheduler to
   // create SyncSessions.  Must outlive the SyncScheduler.
@@ -331,7 +340,6 @@ class SYNC_EXPORT_PRIVATE SyncManagerImpl
 
   ProtocolEventBuffer protocol_event_buffer_;
 
-  scoped_ptr<UnrecoverableErrorHandler> unrecoverable_error_handler_;
   base::Closure report_unrecoverable_error_function_;
 
   // Sync's encryption handler. It tracks the set of encrypted types, manages
@@ -346,4 +354,4 @@ class SYNC_EXPORT_PRIVATE SyncManagerImpl
 
 }  // namespace syncer
 
-#endif  // SYNC_INTERNAL_API_SYNC_MANAGER_H_
+#endif  // SYNC_INTERNAL_API_SYNC_MANAGER_IMPL_H_

@@ -204,7 +204,7 @@
     onLocalDescriptionError = function(error) {
       var expectedMsg = 'Failed to set local offer sdp:' +
           ' Session error code: ERROR_CONTENT. Session error description:' +
-          ' Failed to set video receive codecs..';
+          ' Failed to set local video description recv parameters..';
       assertEquals(expectedMsg, error);
       reportTestSuccess();
     };
@@ -544,8 +544,15 @@
       // When all the above events have occurred- the test pass.
       setAllEventsOccuredHandler(reportTestSuccess);
 
+      gFirstConnection.removeStream(localStream);
+      gSecondConnection.removeStream(localStream);
+
       localStream.addTrack(gLocalStream.getAudioTracks()[0]);
       localStream.removeTrack(localStream.getVideoTracks()[0]);
+
+      gFirstConnection.addStream(localStream);
+      gSecondConnection.addStream(localStream);
+
       negotiate();
     });
   }
@@ -808,6 +815,69 @@
         function (offer) {
           onOfferCreated(offer, caller, callee);
         });
+  }
+
+  function iceCandidateIsLoopback(candidate) {
+    return candidate.candidate.indexOf("127.0.0.1") > -1 ||
+           candidate.candidate.indexOf("::1") > -1;
+  }
+
+  // Helper function to invoke |callback| when gathering is completed.
+  function gatherIceCandidates(pc, callback) {
+    var candidates = [];
+    pc.createDataChannel("");
+    pc.onicecandidate = function(event) {
+      // null candidate indicates the gathering has completed.
+      if (event.candidate == null) {
+        callback(candidates);
+      } else {
+        candidates.push(event.candidate);
+      }
+    }
+    pc.createOffer(
+      function(offer) {
+        pc.setLocalDescription(offer);
+      },
+      function(error) { failTest(error); }
+    );
+  }
+
+  function callWithDevicePermissionGranted() {
+    var pc = new webkitRTCPeerConnection(null, null);
+    gatherIceCandidates(pc, function(candidates) {
+      var hasLoopbackCandidate = false;
+      assertEquals(candidates.length > 0, true);
+      for (i = 0; i < candidates.length; i++) {
+        hasLoopbackCandidate |= iceCandidateIsLoopback(candidates[i]);
+      }
+      if (hasLoopbackCandidate) {
+        reportTestSuccess();
+      } else {
+        failTest('expect to see non-default host interface');
+      }
+    });
+  }
+
+  function callWithNoCandidateExpected() {
+    var pc = new webkitRTCPeerConnection({iceServers:[]}, null);
+    gatherIceCandidates(pc, function(candidates) {
+      assertEquals(candidates.length, 0);
+      reportTestSuccess();
+    });
+  }
+
+  function callAndExpectNonLoopbackCandidates() {
+    var pc = new webkitRTCPeerConnection(null, null);
+    gatherIceCandidates(pc, function(candidates) {
+      var hasCandidate = false;
+      assertEquals(candidates.length > 0, true);
+      for (i = 0; i < candidates.length; i++) {
+        hasCandidate = true;
+        assertEquals(iceCandidateIsLoopback(candidates[i]), false);
+      }
+      assertTrue(hasCandidate, 'expect to see at least one non-loopback candidate');
+      reportTestSuccess();
+    });
   }
 
   function onOfferCreated(offer, caller, callee) {

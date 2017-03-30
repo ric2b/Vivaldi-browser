@@ -19,6 +19,7 @@ we drop the support for JB-MR1.
 Please refer to http://crbug.com/235118 for the details.
 """
 
+import codecs
 import optparse
 import os
 import re
@@ -68,7 +69,7 @@ def IterateXmlElements(node):
 def ParseAndReportErrors(filename):
   try:
     return minidom.parse(filename)
-  except Exception:
+  except Exception: # pylint: disable=broad-except
     import traceback
     traceback.print_exc()
     sys.stderr.write('Failed to parse XML file: %s\n' % filename)
@@ -96,7 +97,7 @@ def AssertNotDeprecatedAttribute(name, value, filename):
 def WriteDomToFile(dom, filename):
   """Write the given dom to filename."""
   build_utils.MakeDirectory(os.path.dirname(filename))
-  with open(filename, 'w') as f:
+  with codecs.open(filename, 'w', 'utf-8') as f:
     dom.writexml(f, '', '  ', '\n', encoding='utf-8')
 
 
@@ -112,10 +113,14 @@ def ErrorIfStyleResourceExistsInDir(input_dir):
   for input_filename in build_utils.FindInDirectory(input_dir, '*.xml'):
     dom = ParseAndReportErrors(input_filename)
     if HasStyleResource(dom):
-      raise Exception('error: style file ' + input_filename +
-                      ' should be under ' + input_dir +
-                      '-v17 directory. Please refer to '
-                      'http://crbug.com/243952 for the details.')
+      # Allow style file in third_party to exist in non-v17 directories so long
+      # as they do not contain deprecated attributes.
+      if not 'third_party' in input_dir or (
+          GenerateV14StyleResourceDom(dom, input_filename)):
+        raise Exception('error: style file ' + input_filename +
+                        ' should be under ' + input_dir +
+                        '-v17 directory. Please refer to '
+                        'http://crbug.com/243952 for the details.')
 
 
 def GenerateV14LayoutResourceDom(dom, filename, assert_not_deprecated=True):

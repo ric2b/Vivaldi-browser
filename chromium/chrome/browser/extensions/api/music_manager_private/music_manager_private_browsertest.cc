@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "extensions/test/extension_test_message_listener.h"
 
@@ -11,8 +12,7 @@
 class MusicManagerPrivateTest : public extensions::PlatformAppBrowserTest {
 };
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(MusicManagerPrivateTest, DISABLED_DeviceIdValueReturned) {
+IN_PROC_BROWSER_TEST_F(MusicManagerPrivateTest, DeviceIdValueReturned) {
   ASSERT_TRUE(RunPlatformAppTest(
       "platform_apps/music_manager_private/device_id_value_returned"))
           << message_;

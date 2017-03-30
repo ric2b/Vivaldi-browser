@@ -4,12 +4,17 @@
 
 #include "chrome/browser/extensions/install_signer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/process/process_info.h"
@@ -20,6 +25,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/crx_file/constants.h"
 #include "crypto/random.h"
@@ -186,7 +192,7 @@ scoped_ptr<InstallSignature> InstallSignature::FromValue(
   if (!value.GetInteger(kSignatureFormatVersionKey, &format_version) ||
       format_version != kSignatureFormatVersion) {
     result.reset();
-    return result.Pass();
+    return result;
   }
 
   std::string salt_base64;
@@ -197,18 +203,18 @@ scoped_ptr<InstallSignature> InstallSignature::FromValue(
       !base::Base64Decode(salt_base64, &result->salt) ||
       !base::Base64Decode(signature_base64, &result->signature)) {
     result.reset();
-    return result.Pass();
+    return result;
   }
 
   // Note: earlier versions of the code did not write out a timestamp value
   // so older entries will not necessarily have this.
   if (value.HasKey(kTimestampKey)) {
     std::string timestamp;
-    int64 timestamp_value = 0;
+    int64_t timestamp_value = 0;
     if (!value.GetString(kTimestampKey, &timestamp) ||
         !base::StringToInt64(timestamp, &timestamp_value)) {
       result.reset();
-      return result.Pass();
+      return result;
     }
     result->timestamp = base::Time::FromInternalValue(timestamp_value);
   }
@@ -216,10 +222,10 @@ scoped_ptr<InstallSignature> InstallSignature::FromValue(
   if (!GetExtensionIdSet(value, kIdsKey, &result->ids) ||
       !GetExtensionIdSet(value, kInvalidIdsKey, &result->invalid_ids)) {
     result.reset();
-    return result.Pass();
+    return result;
   }
 
-  return result.Pass();
+  return result;
 }
 
 
@@ -253,16 +259,15 @@ bool InstallSigner::VerifySignature(const InstallSignature& signature) {
     return false;
 
   crypto::SignatureVerifier verifier;
-  if (!verifier.VerifyInit(crx_file::kSignatureAlgorithm,
-                           sizeof(crx_file::kSignatureAlgorithm),
-                           reinterpret_cast<const uint8*>(
-                               signature.signature.data()),
-                           signature.signature.size(),
-                           reinterpret_cast<const uint8*>(public_key.data()),
-                           public_key.size()))
+  if (!verifier.VerifyInit(
+          crx_file::kSignatureAlgorithm, sizeof(crx_file::kSignatureAlgorithm),
+          reinterpret_cast<const uint8_t*>(signature.signature.data()),
+          signature.signature.size(),
+          reinterpret_cast<const uint8_t*>(public_key.data()),
+          public_key.size()))
     return false;
 
-  verifier.VerifyUpdate(reinterpret_cast<const uint8*>(signed_data.data()),
+  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(signed_data.data()),
                         signed_data.size());
   return verifier.VerifyFinal();
 }
@@ -293,8 +298,8 @@ ExtensionIdSet InstallSigner::GetForcedNotFromWebstore() {
   if (value.empty())
     return ExtensionIdSet();
 
-  std::vector<std::string> ids;
-  base::SplitString(value, ',', &ids);
+  std::vector<std::string> ids = base::SplitString(
+      value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   return ExtensionIdSet(ids.begin(), ids.end());
 }
 
@@ -503,7 +508,7 @@ void InstallSigner::HandleSignatureResult(const std::string& signature,
   }
 
   if (!callback_.is_null())
-    callback_.Run(result.Pass());
+    callback_.Run(std::move(result));
 }
 
 

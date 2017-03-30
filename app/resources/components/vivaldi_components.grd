@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grit base_dir="." latest_public_release="0" current_release="1"
+      source_lang_id="en" enc_check="möl">
+  <release seq="1" allow_pseudo="false">
+    <messages fallback_to_english="true">
+      <!-- Version UI -->
+      <message name="IDS_VERSION_UI_LICENSE" desc="The label below the copyright message, containing the URLs.">
+        Vivaldi is made possible by the <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Chromium<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> open source project and other <ph name="BEGIN_LINK_OSS">&lt;a target="_blank" href="$2"&gt;</ph>open source software<ph name="END_LINK_OSS">&lt;/a&gt;</ph>.
+      </message>
+    </messages>
+  </release>
+</grit>

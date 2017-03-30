@@ -15,7 +15,7 @@ from metrics import keychain_metric
 
 
 # Allow testing protected members in the unit test.
-# pylint: disable=W0212
+# pylint: disable=protected-access
 
 class MockMemoryMetric(object):
   """Used instead of simple_mock.MockObject so that the precise order and
@@ -88,11 +88,16 @@ class FakeBrowser(object):
     return FakePlatform()
 
   @property
-  def http_server(self):
-    class FakeHttpServer(object):
-      def UrlOf(self, url_path):
-        return 'http://fakeserver:99999/%s' % url_path
-    return FakeHttpServer()
+  def supports_cpu_metrics(self):
+    return True
+
+  @property
+  def supports_memory_metrics(self):
+    return True
+
+  @property
+  def supports_power_metrics(self):
+    return True
 
 
 class FakePlatform(object):
@@ -100,6 +105,13 @@ class FakePlatform(object):
     return 'fake'
   def CanMonitorPower(self):
     return False
+
+  @property
+  def http_server(self):
+    class FakeHttpServer(object):
+      def UrlOf(self, url_path):
+        return 'http://fakeserver:99999/%s' % url_path
+    return FakeHttpServer()
 
 
 class PageCyclerUnitTest(unittest.TestCase):

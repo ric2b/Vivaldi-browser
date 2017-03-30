@@ -6,10 +6,10 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/memory/scoped_vector.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/stl_util.h"
 #include "base/supports_user_data.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/domain_reliability/util.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -23,24 +23,31 @@ namespace domain_reliability {
 
 namespace {
 
-const char* kJsonMimeType = "application/json; charset=utf-8";
+const char kJsonMimeType[] = "application/json; charset=utf-8";
 
 class UploadUserData : public base::SupportsUserData::Data {
  public:
-  static net::URLFetcher::CreateDataCallback CreateCreateDataCallback() {
-    return base::Bind(&UploadUserData::CreateUploadUserData);
+  static net::URLFetcher::CreateDataCallback CreateCreateDataCallback(
+      int depth) {
+    return base::Bind(&UploadUserData::CreateUploadUserData, depth);
   }
 
-  static const void* kUserDataKey;
+  static const void* const kUserDataKey;
+
+  int depth() const { return depth_; }
 
  private:
-  static base::SupportsUserData::Data* CreateUploadUserData() {
-    return new UploadUserData();
+  UploadUserData(int depth) : depth_(depth) {}
+
+  static base::SupportsUserData::Data* CreateUploadUserData(int depth) {
+    return new UploadUserData(depth);
   }
+
+  int depth_;
 };
 
-const void* UploadUserData::kUserDataKey =
-    static_cast<const void*>(&UploadUserData::kUserDataKey);
+const void* const UploadUserData::kUserDataKey =
+    &UploadUserData::kUserDataKey;
 
 class DomainReliabilityUploaderImpl
     : public DomainReliabilityUploader, net::URLFetcherDelegate {
@@ -62,6 +69,7 @@ class DomainReliabilityUploaderImpl
   // DomainReliabilityUploader implementation:
   void UploadReport(
       const std::string& report_json,
+      int max_upload_depth,
       const GURL& upload_url,
       const DomainReliabilityUploader::UploadCallback& callback) override {
     VLOG(1) << "Uploading report to " << upload_url;
@@ -78,6 +86,8 @@ class DomainReliabilityUploaderImpl
     net::URLFetcher* fetcher =
         net::URLFetcher::Create(0, upload_url, net::URLFetcher::POST, this)
             .release();
+    data_use_measurement::DataUseUserData::AttachToFetcher(
+        fetcher, data_use_measurement::DataUseUserData::DOMAIN_RELIABILITY);
     fetcher->SetRequestContext(url_request_context_getter_.get());
     fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
                           net::LOAD_DO_NOT_SAVE_COOKIES);
@@ -85,7 +95,7 @@ class DomainReliabilityUploaderImpl
     fetcher->SetAutomaticallyRetryOn5xx(false);
     fetcher->SetURLRequestUserData(
         UploadUserData::kUserDataKey,
-        UploadUserData::CreateCreateDataCallback());
+        UploadUserData::CreateCreateDataCallback(max_upload_depth + 1));
     fetcher->Start();
 
     upload_callbacks_[fetcher] = callback;
@@ -163,9 +173,13 @@ scoped_ptr<DomainReliabilityUploader> DomainReliabilityUploader::Create(
 }
 
 // static
-bool DomainReliabilityUploader::URLRequestIsUpload(
+int DomainReliabilityUploader::GetURLRequestUploadDepth(
     const net::URLRequest& request) {
-  return request.GetUserData(UploadUserData::kUserDataKey) != nullptr;
+  UploadUserData* data = static_cast<UploadUserData*>(
+      request.GetUserData(UploadUserData::kUserDataKey));
+  if (!data)
+    return 0;
+  return data->depth();
 }
 
 }  // namespace domain_reliability

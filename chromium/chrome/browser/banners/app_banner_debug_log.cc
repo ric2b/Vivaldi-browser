@@ -6,16 +6,16 @@
 
 #include "base/command_line.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/render_messages.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_observer.h"
 
 namespace banners {
 
 const char kRendererRequestCancel[] =
     "renderer has requested the banner prompt be cancelled";
-const char kManifestEmpty[] = "manifest is empty or missing";
+const char kManifestEmpty[] =
+    "manifest could not be fetched, is empty, or could not be parsed";
+const char kNoManifest[] = "site has no manifest <link> URL";
 const char kCannotDetermineBestIcon[] =
     "could not determine the best icon to use";
 const char kNoMatchingServiceWorker[] =
@@ -32,13 +32,16 @@ const char kManifestMissingNameOrShortName[] =
     "one of manifest name or short name must be specified";
 const char kManifestMissingSuitableIcon[] =
     "manifest does not contain a suitable icon - PNG format of at least "
-    "144x144px is required";
+    "144x144px is required, and the sizes attribute must be set";
 const char kNotServedFromSecureOrigin[] =
     "page not served from a secure origin";
 // The leading space is intentional as another string is prepended.
 const char kIgnoredNotSupportedOnAndroid[] =
     " application ignored: not supported on Android";
 const char kIgnoredNoId[] = "play application ignored: no id provided";
+const char kIgnoredIdsDoNotMatch[] =
+    "play application ignored: app URL and id fields were specified in the "
+    "manifest, but they do not match";
 
 void OutputDeveloperNotShownMessage(content::WebContents* web_contents,
                                     const std::string& message) {
@@ -49,10 +52,10 @@ void OutputDeveloperDebugMessage(content::WebContents* web_contents,
                                  const std::string& message) {
   std::string log_message = "App banner " + message;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kBypassAppBannerEngagementChecks) && web_contents) {
-    web_contents->GetMainFrame()->Send(
-        new ChromeViewMsg_AppBannerDebugMessageRequest(
-            web_contents->GetMainFrame()->GetRoutingID(), log_message));
+          switches::kBypassAppBannerEngagementChecks) &&
+      web_contents) {
+    web_contents->GetMainFrame()->AddMessageToConsole(
+        content::CONSOLE_MESSAGE_LEVEL_DEBUG, log_message);
   }
 }
 

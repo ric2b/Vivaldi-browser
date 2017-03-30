@@ -4,16 +4,19 @@
 
 #include "chrome/browser/task_manager/task_manager.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/notifications/desktop_notification_service.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
@@ -23,7 +26,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
-#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/panels/panel.h"
 #include "chrome/browser/ui/panels/panel_manager.h"
@@ -38,7 +40,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "extensions/browser/extension_system.h"
@@ -120,6 +121,10 @@ class TaskManagerBrowserTest : public ExtensionBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionBrowserTest::SetUpCommandLine(command_line);
 
+    // These tests are for the old implementation of the task manager. We must
+    // explicitly disable the new one.
+    task_manager::browsertest_util::EnableOldTaskManager();
+
     // Do not launch device discovery process.
     command_line->AppendSwitch(switches::kDisableDeviceDiscoveryNotifications);
   }
@@ -159,12 +164,11 @@ class TaskManagerOOPIFBrowserTest : public TaskManagerBrowserTest,
   void SetUpCommandLine(base::CommandLine* command_line) override {
     TaskManagerBrowserTest::SetUpCommandLine(command_line);
     if (GetParam())
-      command_line->AppendSwitch(switches::kSitePerProcess);
+      content::IsolateAllSitesForTesting(command_line);
   }
 
   bool ShouldExpectSubframes() {
-    return base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kSitePerProcess);
+    return content::AreAllSitesIsolatedForTesting();
   }
 
  private:
@@ -234,7 +238,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, KillTab) {
 IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest,
                        DISABLED_NavigateAwayFromHungRenderer) {
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ShowTaskManager();
 
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAboutBlankTab()));
@@ -257,7 +261,8 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest,
   tab1->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
       base::ASCIIToUTF16("window.open('title3.html', '_blank');"));
   // ... then immediately hang the renderer so that title3.html can't load.
-  tab1->GetMainFrame()->ExecuteJavaScript(base::ASCIIToUTF16("while(1);"));
+  tab1->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::ASCIIToUTF16("while(1);"));
 
   // Blocks until a new WebContents appears.
   WebContents* tab2 = web_contents_added_observer.GetWebContents();
@@ -297,6 +302,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticePanel) {
           last_loaded_extension_id()),
       browser()->profile(),
       url,
+      nullptr,
       gfx::Rect(300, 400),
       PanelManager::CREATE_AS_DOCKED);
 
@@ -350,6 +356,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticePanelChanges) {
           last_loaded_extension_id()),
       browser()->profile(),
       url,
+      nullptr,
       gfx::Rect(300, 400),
       PanelManager::CREATE_AS_DOCKED);
   ASSERT_NO_FATAL_FAILURE(
@@ -397,6 +404,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, KillPanelViaExtensionResource) {
           last_loaded_extension_id()),
       browser()->profile(),
       url,
+      nullptr,
       gfx::Rect(300, 400),
       PanelManager::CREATE_AS_DOCKED);
 
@@ -440,6 +448,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, KillPanelViaPanelResource) {
           last_loaded_extension_id()),
       browser()->profile(),
       url,
+      nullptr,
       gfx::Rect(300, 400),
       PanelManager::CREATE_AS_DOCKED);
 
@@ -627,7 +636,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeHostedAppTabChanges) {
   // The app under test acts on URLs whose host is "localhost",
   // so the URLs we navigate to must have host "localhost".
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL::Replacements replace_host;
   replace_host.SetHostStr("localhost");
   GURL base_url = embedded_test_server()->GetURL(
@@ -691,7 +700,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeHostedAppTabAfterReload) {
   // The app under test acts on URLs whose host is "localhost",
   // so the URLs we navigate to must have host "localhost".
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL::Replacements replace_host;
   replace_host.SetHostStr("localhost");
   GURL base_url =
@@ -726,7 +735,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeHostedAppTabBeforeReload) {
   // The app under test acts on URLs whose host is "localhost",
   // so the URLs we navigate to must have host "localhost".
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL::Replacements replace_host;
   replace_host.SetHostStr("localhost");
   GURL base_url =
@@ -929,7 +938,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, KillSubframe) {
   ShowTaskManager();
 
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   content::SetupCrossSiteRedirector(embedded_test_server());
 
   GURL main_url(embedded_test_server()->GetURL(
@@ -993,7 +1002,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
   ShowTaskManager();
 
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   content::SetupCrossSiteRedirector(embedded_test_server());
 
   // Navigate the tab to a page on a.com with cross-process subframes to
@@ -1044,7 +1053,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
   ShowTaskManager();
 
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   content::SetupCrossSiteRedirector(embedded_test_server());
 
   // Navigate to a page on b.com with a simple (same-site) iframe.
@@ -1103,7 +1112,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
   ShowTaskManager();
 
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   content::SetupCrossSiteRedirector(embedded_test_server());
 
   // Navigate the tab to a page on a.com with cross-process subframes to
@@ -1165,12 +1174,18 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
 
 // Tests what happens when a tab does a same-site navigation away from a page
 // with cross-site iframes.
+// Flaky on Windows. http://crbug.com/528282.
+#if defined(OS_WIN)
+#define MAYBE_LeavePageWithCrossSiteIframes DISABLED_LeavePageWithCrossSiteIframes
+#else
+#define MAYBE_LeavePageWithCrossSiteIframes LeavePageWithCrossSiteIframes
+#endif
 IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
-                       LeavePageWithCrossSiteIframes) {
+                       MAYBE_LeavePageWithCrossSiteIframes) {
   ShowTaskManager();
 
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   content::SetupCrossSiteRedirector(embedded_test_server());
 
   // Navigate the tab to a page on a.com with cross-process subframes.

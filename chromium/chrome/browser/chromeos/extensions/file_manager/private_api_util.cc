@@ -4,14 +4,14 @@
 
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "chrome/browser/chromeos/drive/drive.pb.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/file_errors.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
@@ -22,6 +22,9 @@
 #include "chrome/browser/chromeos/fileapi/file_system_backend.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
+#include "components/drive/drive.pb.h"
+#include "components/drive/file_errors.h"
+#include "components/drive/file_system_interface.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_url.h"
@@ -159,7 +162,7 @@ void ContinueGetSelectedFileInfo(Profile* profile,
   const int index = params->selected_files.size();
   const base::FilePath& file_path = params->file_paths[index];
   params->selected_files.push_back(ui::SelectedFileInfo(file_path, local_path));
-  GetSelectedFileInfoInternal(profile, params.Pass());
+  GetSelectedFileInfoInternal(profile, std::move(params));
 }
 
 }  // namespace

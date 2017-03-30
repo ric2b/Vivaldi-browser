@@ -19,11 +19,7 @@ chrome.test.getConfig(function(config) {
         chrome.test.succeed();
       }
 
-      try {
-        req.send(null);
-        chrome.test.fail('expected an error to be thrown');
-      } catch (e) {
-      };
+      req.send(null);
     }
   ]);
 });

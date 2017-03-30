@@ -34,10 +34,6 @@ class CONTENT_EXPORT BrowserPluginGuestManager {
   // single BrowserPlugin in the given embedder which takes up the full page,
   // then it is returned.
   virtual WebContents* GetFullPageGuest(WebContents* embedder_web_contents);
-
-  virtual void AddGuest(int guest_instance_id,
-                        content::WebContents* guest_web_contents) = 0;
-
 };
 
 }  // namespace content

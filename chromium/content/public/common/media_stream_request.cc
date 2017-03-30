@@ -5,6 +5,7 @@
 #include "content/public/common/media_stream_request.h"
 
 #include "base/logging.h"
+#include "build/build_config.h"
 
 namespace content {
 
@@ -82,6 +83,20 @@ const MediaStreamDevice* MediaStreamDevices::FindById(
   }
   return NULL;
 }
+
+MediaStreamDevice::AudioDeviceParameters::AudioDeviceParameters()
+    : sample_rate(), channel_layout(), frames_per_buffer(), effects() {}
+
+MediaStreamDevice::AudioDeviceParameters::AudioDeviceParameters(
+    int sample_rate,
+    int channel_layout,
+    int frames_per_buffer)
+    : sample_rate(sample_rate),
+      channel_layout(channel_layout),
+      frames_per_buffer(frames_per_buffer),
+      effects() {}
+
+MediaStreamDevice::AudioDeviceParameters::~AudioDeviceParameters() {}
 
 MediaStreamRequest::MediaStreamRequest(
     int render_process_id,

@@ -6,6 +6,8 @@
 
 #include "chrome/browser/extensions/api/cookies/cookies_helpers.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/logging.h"
@@ -87,7 +89,7 @@ scoped_ptr<Cookie> CreateCookie(
   }
   cookie->store_id = store_id;
 
-  return cookie.Pass();
+  return cookie;
 }
 
 scoped_ptr<CookieStore> CreateCookieStore(Profile* profile,

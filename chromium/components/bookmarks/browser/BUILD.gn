@@ -31,6 +31,8 @@ source_set("browser") {
     "bookmark_pasteboard_helper_mac.mm",
     "bookmark_storage.cc",
     "bookmark_storage.h",
+    "bookmark_undo_delegate.h",
+    "bookmark_undo_provider.h",
     "bookmark_utils.cc",
     "bookmark_utils.h",
     "scoped_group_bookmark_actions.cc",
@@ -48,8 +50,8 @@ source_set("browser") {
     "//components/keyed_service/core",
     "//components/pref_registry",
     "//components/query_parser",
-    "//components/startup_metric_utils",
     "//components/strings",
+    "//components/url_formatter",
     "//net",
     "//third_party/icu",
     "//ui/base",
@@ -72,6 +74,10 @@ source_set("unit_tests") {
     "bookmark_model_unittest.cc",
     "bookmark_utils_unittest.cc",
   ]
+
+  if (toolkit_views) {
+    sources += [ "bookmark_node_data_unittest.cc" ]
+  }
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 

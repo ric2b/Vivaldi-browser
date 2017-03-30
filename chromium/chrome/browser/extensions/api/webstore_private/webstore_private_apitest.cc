@@ -6,8 +6,10 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/webstore_private/webstore_private_api.h"
 #include "chrome/browser/extensions/bundle_installer.h"
@@ -32,7 +34,7 @@
 #include "gpu/config/gpu_feature_type.h"
 #include "gpu/config/gpu_info.h"
 #include "net/dns/mock_host_resolver.h"
-#include "ui/app_list/app_list_switches.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/gl/gl_switches.h"
 
 using gpu::GpuFeatureType;
@@ -54,7 +56,7 @@ class WebstoreInstallListener : public WebstoreInstaller::Delegate {
 
     if (waiting_) {
       waiting_ = false;
-      base::MessageLoopForUI::current()->Quit();
+      base::MessageLoopForUI::current()->QuitWhenIdle();
     }
   }
 
@@ -68,7 +70,7 @@ class WebstoreInstallListener : public WebstoreInstaller::Delegate {
 
     if (waiting_) {
       waiting_ = false;
-      base::MessageLoopForUI::current()->Quit();
+      base::MessageLoopForUI::current()->QuitWhenIdle();
     }
   }
 
@@ -102,7 +104,7 @@ class ExtensionWebstorePrivateApiTest : public ExtensionApiTest {
     ExtensionApiTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII(
         switches::kAppsGalleryURL,
-        "http://www.example.com/files/extensions/api_test");
+        "http://www.example.com/extensions/api_test");
   }
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -111,7 +113,7 @@ class ExtensionWebstorePrivateApiTest : public ExtensionApiTest {
     // Start up the test server and get us ready for calling the install
     // API functions.
     host_resolver()->AddRule("www.example.com", "127.0.0.1");
-    ASSERT_TRUE(StartSpawnedTestServer());
+    ASSERT_TRUE(StartEmbeddedTestServer());
     extensions::ExtensionInstallUI::set_disable_failure_ui_for_tests();
   }
 
@@ -131,7 +133,7 @@ class ExtensionWebstorePrivateApiTest : public ExtensionApiTest {
   // Returns a test server URL, but with host 'www.example.com' so it matches
   // the web store app's extent that we set up via command line flags.
   GURL DoGetTestServerURL(const std::string& path) {
-    GURL url = test_server()->GetURL(path);
+    GURL url = embedded_test_server()->GetURL(path);
 
     // Replace the host with 'www.example.com' so it matches the web store
     // app's extent.
@@ -143,7 +145,7 @@ class ExtensionWebstorePrivateApiTest : public ExtensionApiTest {
 
   virtual GURL GetTestServerURL(const std::string& path) {
     return DoGetTestServerURL(
-        std::string("files/extensions/api_test/webstore_private/") + path);
+        std::string("/extensions/api_test/webstore_private/") + path);
   }
 
   // Navigates to |page| and runs the Extension API test there. Any downloads
@@ -190,8 +192,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest,
   base::string16 failure_title = base::UTF8ToUTF16("FAIL");
   content::TitleWatcher watcher(GetWebContents(), expected_title);
   watcher.AlsoWaitForTitle(failure_title);
-  GURL url = test_server()->GetURL(
-      "files/extensions/api_test/webstore_private/noframe.html");
+  GURL url = embedded_test_server()->GetURL(
+      "/extensions/api_test/webstore_private/noframe.html");
   ui_test_utils::NavigateToURL(browser(), url);
   base::string16 final_title = watcher.WaitAndGetTitle();
   EXPECT_EQ(expected_title, final_title);
@@ -205,22 +207,20 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest,
   base::string16 failure_title = base::UTF8ToUTF16("FAIL");
   content::TitleWatcher watcher(GetWebContents(), expected_title);
   watcher.AlsoWaitForTitle(failure_title);
-  GURL url = test_server()->GetURL(
-      "files/extensions/api_test/webstore_private/noframe2.html");
+  GURL url = embedded_test_server()->GetURL(
+      "/extensions/api_test/webstore_private/noframe2.html");
   ui_test_utils::NavigateToURL(browser(), url);
   base::string16 final_title = watcher.WaitAndGetTitle();
   EXPECT_EQ(expected_title, final_title);
 }
 
 // Test cases where the user accepts the install confirmation dialog.
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_InstallAccepted) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, InstallAccepted) {
   ASSERT_TRUE(RunInstallTest("accepted.html", "extension.crx"));
 }
 
 // Test having the default download directory missing.
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_MissingDownloadDir) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, MissingDownloadDir) {
   // Set a non-existent directory as the download path.
   base::ScopedTempDir temp_dir;
   EXPECT_TRUE(temp_dir.CreateUniqueTempDir());
@@ -237,31 +237,26 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_MissingDownload
 }
 
 // Tests passing a localized name.
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_InstallLocalized) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, InstallLocalized) {
   ASSERT_TRUE(RunInstallTest("localized.html", "localized_extension.crx"));
 }
 
 // Now test the case where the user cancels the confirmation dialog.
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_InstallCancelled) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, InstallCancelled) {
   ScopedTestDialogAutoConfirm auto_cancel(ScopedTestDialogAutoConfirm::CANCEL);
   ASSERT_TRUE(RunInstallTest("cancelled.html", "extension.crx"));
 }
 
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_IncorrectManifest1) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, IncorrectManifest1) {
   ASSERT_TRUE(RunInstallTest("incorrect_manifest1.html", "extension.crx"));
 }
 
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_IncorrectManifest2) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, IncorrectManifest2) {
   ASSERT_TRUE(RunInstallTest("incorrect_manifest2.html", "extension.crx"));
 }
 
 // Disabled: http://crbug.com/174399 and http://crbug.com/177163
-// Disabled in Vivaldi, no webstore
-#if 1 || (defined(OS_WIN) && (defined(USE_AURA) || !defined(NDEBUG)))
+#if defined(OS_WIN) && (defined(USE_AURA) || !defined(NDEBUG))
 #define MAYBE_AppInstallBubble DISABLED_AppInstallBubble
 #else
 #define MAYBE_AppInstallBubble AppInstallBubble
@@ -279,22 +274,19 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest,
   ASSERT_EQ("iladmdjkfniedhfhcfoefgojhgaiaccc", listener.id());
 }
 
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_IsInIncognitoMode) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, IsInIncognitoMode) {
   GURL page_url = GetTestServerURL("incognito.html");
   ASSERT_TRUE(
       RunPageTest(page_url.spec(), ExtensionApiTest::kFlagUseIncognito));
 }
 
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_IsNotInIncognitoMode) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, IsNotInIncognitoMode) {
   GURL page_url = GetTestServerURL("not_incognito.html");
   ASSERT_TRUE(RunPageTest(page_url.spec()));
 }
 
 // Fails often on Windows dbg bots. http://crbug.com/177163.
-// Disabled in Vivaldi, no webstore
-#if 1 || defined(OS_WIN)
+#if defined(OS_WIN)
 #define MAYBE_IconUrl DISABLED_IconUrl
 #else
 #define MAYBE_IconUrl IconUrl
@@ -305,8 +297,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, MAYBE_IconUrl) {
 }
 
 // http://crbug.com/177163
-// Disabled in Vivaldi, no webstore
-#if 1 || defined(OS_WIN) && !defined(NDEBUG)
+#if defined(OS_WIN) && !defined(NDEBUG)
 #define MAYBE_BeginInstall DISABLED_BeginInstall
 #else
 #define MAYBE_BeginInstall BeginInstall
@@ -335,8 +326,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, MAYBE_BeginInstall) {
 }
 
 // http://crbug.com/177163
-// Disabled in Vivaldi, no webstore
-#if 1 || defined(OS_WIN) && !defined(NDEBUG)
+#if defined(OS_WIN) && !defined(NDEBUG)
 #define MAYBE_InstallTheme DISABLED_InstallTheme
 #else
 #define MAYBE_InstallTheme InstallTheme
@@ -352,8 +342,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, MAYBE_InstallTheme) {
 }
 
 // Tests that an error is properly reported when an empty crx is returned.
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, DISABLED_EmptyCrx) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, EmptyCrx) {
   ASSERT_TRUE(RunInstallTest("empty.html", "empty.crx"));
 }
 
@@ -409,47 +398,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstoreGetWebGLStatusTest, Blocked) {
 
   bool webgl_allowed = false;
   RunTest(webgl_allowed);
-}
-
-class EphemeralAppWebstorePrivateApiTest
-    : public ExtensionWebstorePrivateApiTest {
- public:
-  void SetUpInProcessBrowserTestFixture() override {
-    ExtensionWebstorePrivateApiTest::SetUpInProcessBrowserTestFixture();
-
-    net::HostPortPair host_port = test_server()->host_port_pair();
-    std::string test_gallery_url = base::StringPrintf(
-        "http://www.example.com:%d/files/extensions/platform_apps/"
-        "ephemeral_launcher",
-        host_port.port());
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kAppsGalleryURL, test_gallery_url);
-  }
-
-  GURL GetTestServerURL(const std::string& path) override {
-    return DoGetTestServerURL(
-        std::string("files/extensions/platform_apps/ephemeral_launcher/") +
-        path);
-  }
-};
-
-// Run tests when the --enable-ephemeral-apps switch is not enabled.
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(EphemeralAppWebstorePrivateApiTest,
-                       DISABLED_EphemeralAppsFeatureDisabled) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      app_list::switches::kDisableExperimentalAppList);
-  ASSERT_TRUE(RunInstallTest("webstore_launch_disabled.html", "app.crx"));
-}
-
-// Run tests when the --enable-ephemeral-apps switch is enabled.
-// Disabled in Vivaldi, no webstore
-IN_PROC_BROWSER_TEST_F(EphemeralAppWebstorePrivateApiTest, DISABLED_LaunchEphemeralApp) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableEphemeralAppsInWebstore);
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      app_list::switches::kEnableExperimentalAppList);
-  ASSERT_TRUE(RunInstallTest("webstore_launch_app.html", "app.crx"));
 }
 
 class BundleWebstorePrivateApiTest

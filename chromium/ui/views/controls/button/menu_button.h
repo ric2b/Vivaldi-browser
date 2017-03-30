@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
@@ -62,7 +63,7 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   void set_menu_offset(int x, int y) { menu_offset_.SetPoint(x, y); }
 
   // Activate the button (called when the button is pressed).
-  virtual bool Activate();
+  bool Activate();
 
   // Overridden from View:
   gfx::Size GetPreferredSize() const override;
@@ -76,6 +77,7 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   void OnGestureEvent(ui::GestureEvent* event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void GetAccessibleState(ui::AXViewState* state) override;
 
  protected:
@@ -121,7 +123,7 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   // The down arrow used to differentiate the menu button from normal buttons.
   const gfx::ImageSkia* menu_marker_;
 
-  // If non-null the destuctor sets this to true. This is set while the menu is
+  // If non-null the destructor sets this to true. This is set while the menu is
   // showing and used to detect if the menu was deleted while running.
   bool* destroyed_flag_;
 

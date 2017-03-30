@@ -4,6 +4,8 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_configurator.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -63,7 +65,7 @@ void DataReductionProxyConfigurator::Enable(
   }
 
   config.proxy_rules().bypass_rules.ParseFromString(
-      JoinString(bypass_rules_, ", "));
+      base::JoinString(bypass_rules_, ", "));
   // The ID is set to a bogus value. It cannot be left uninitialized, else the
   // config will return invalid.
   net::ProxyConfig::ID unused_id = 1;

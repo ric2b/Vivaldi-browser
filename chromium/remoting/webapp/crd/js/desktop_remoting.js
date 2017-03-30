@@ -21,6 +21,12 @@ var remoting = remoting || {};
 remoting.DesktopRemoting = function() {
   base.inherits(this, remoting.Application);
 
+  // Save recent errors for inclusion in user feedback.
+  remoting.ConsoleWrapper.getInstance().activate(
+      5,
+      remoting.ConsoleWrapper.LogType.ERROR,
+      remoting.ConsoleWrapper.LogType.ASSERT);
+
   /** @protected {remoting.DesktopRemoting.Mode} */
   this.connectionMode_ = remoting.DesktopRemoting.Mode.ME2ME;
 
@@ -77,6 +83,16 @@ remoting.DesktopRemoting.prototype.signInFailed_ = function(error) {
  */
 remoting.DesktopRemoting.prototype.initApplication_ = function() {
   remoting.initElementEventHandlers();
+
+  if (remoting.platformIsWindows()) {
+    document.body.classList.add('os-windows');
+  } else if (remoting.platformIsMac()) {
+    document.body.classList.add('os-mac');
+  } else if (remoting.platformIsChromeOS()) {
+    document.body.classList.add('os-chromeos');
+  } else if (remoting.platformIsLinux()) {
+    document.body.classList.add('os-linux');
+  }
 
   if (base.isAppsV2()) {
     remoting.windowFrame = new remoting.WindowFrame(

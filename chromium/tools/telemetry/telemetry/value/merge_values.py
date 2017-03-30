@@ -6,19 +6,38 @@ from telemetry.value import failure
 from telemetry.value import skip
 
 
-def MergeLikeValuesFromSamePage(all_values):
+# TODO(eakuefner): Get rid of this as part of crbug.com/525688
+def DefaultKeyFunc(value):
+  """Keys values in a standard way for grouping in merging and summary.
+
+  Merging and summarization can be parameterized by a function that groups
+  values into equivalence classes. Any function that returns a comparable
+  object can be used as a key_func, but merge_values and summary both use this
+  function by default, to allow the default grouping to change as Telemtry does.
+
+  Args:
+    value: A Telemetry Value instance
+
+  Returns:
+    A comparable object used to group values.
+  """
+  return value.name, value.tir_label
+
+
+def MergeLikeValuesFromSamePage(all_values, key_func=DefaultKeyFunc):
   """Merges values that measure the same thing on the same page.
 
   A page may end up being measured multiple times, meaning that we may end up
   with something like this:
-       ScalarValue(page1, 'x', 1)
-       ScalarValue(page2, 'x', 4)
-       ScalarValue(page1, 'x', 2)
-       ScalarValue(page2, 'x', 5)
+       ScalarValue(page1, 'x', 1, 'foo')
+       ScalarValue(page2, 'x', 4, 'bar')
+       ScalarValue(page1, 'x', 2, 'foo')
+       ScalarValue(page2, 'x', 5, 'baz')
 
   This function will produce:
-       ListOfScalarValues(page1, 'x', [1, 2])
-       ListOfScalarValues(page2, 'x', [4, 5])
+       ListOfScalarValues(page1, 'x', [1, 2], 'foo')
+       ListOfScalarValues(page2, 'x', [4], 'bar')
+       ListOfScalarValues(page2, 'x', [5], 'baz')
 
   The workhorse of this code is Value.MergeLikeValuesFromSamePage.
 
@@ -28,23 +47,24 @@ def MergeLikeValuesFromSamePage(all_values):
   """
   return _MergeLikeValuesCommon(
       all_values,
-      lambda x: (x.page, x.name),
+      lambda x: (x.page, key_func(x)),
       lambda v0, merge_group: v0.MergeLikeValuesFromSamePage(merge_group))
 
 
-def MergeLikeValuesFromDifferentPages(all_values):
+def MergeLikeValuesFromDifferentPages(all_values, key_func=DefaultKeyFunc):
   """Merges values that measure the same thing on different pages.
 
   After using MergeLikeValuesFromSamePage, one still ends up with values from
   different pages:
-       ScalarValue(page1, 'x', 1)
-       ScalarValue(page1, 'y', 30)
-       ScalarValue(page2, 'x', 2)
-       ScalarValue(page2, 'y', 40)
+       ScalarValue(page1, 'x', 1, 'foo')
+       ScalarValue(page1, 'y', 30, 'bar')
+       ScalarValue(page2, 'x', 2, 'foo')
+       ScalarValue(page2, 'y', 40, 'baz')
 
-  This function will group the values of the same value_name together:
-       ListOfScalarValues(None, 'x', [1, 2])
-       ListOfScalarValues(None, 'y', [30, 40])
+  This function will group values with the same name and tir_label together:
+       ListOfScalarValues(None, 'x', [1, 2], 'foo')
+       ListOfScalarValues(None, 'y', [30], 'bar')
+       ListOfScalarValues(None, 'y', [40], 'baz')
 
   The workhorse of this code is Value.MergeLikeValuesFromDifferentPages.
 
@@ -56,10 +76,9 @@ def MergeLikeValuesFromDifferentPages(all_values):
   the Value.IsMergableWith test. If this is not obeyed, the results
   will be undefined.
   """
-  key = lambda x: x.name
   return _MergeLikeValuesCommon(
       all_values,
-      key,
+      key_func,
       lambda v0, merge_group: v0.MergeLikeValuesFromDifferentPages(merge_group))
 
 

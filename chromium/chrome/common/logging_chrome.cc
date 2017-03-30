@@ -31,6 +31,7 @@
 #include <fstream>  // NOLINT
 #include <string>  // NOLINT
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/debug/debugger.h"
@@ -48,6 +49,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/env_vars.h"
+#include "content/public/common/content_switches.h"
 #include "ipc/ipc_logging.h"
 
 #if defined(OS_CHROMEOS)

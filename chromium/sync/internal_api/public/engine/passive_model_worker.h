@@ -5,8 +5,8 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_ENGINE_PASSIVE_MODEL_WORKER_H_
 #define SYNC_INTERNAL_API_PUBLIC_ENGINE_PASSIVE_MODEL_WORKER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/engine/model_safe_worker.h"
 #include "sync/internal_api/public/util/syncer_error.h"
@@ -18,8 +18,7 @@ namespace syncer {
 // thread).
 class SYNC_EXPORT PassiveModelWorker : public ModelSafeWorker {
  public:
-  explicit PassiveModelWorker(const base::MessageLoop* sync_loop,
-                              WorkerLoopDestructionObserver* observer);
+  explicit PassiveModelWorker(WorkerLoopDestructionObserver* observer);
 
   // ModelSafeWorker implementation. Called on the sync thread.
   void RegisterForLoopDestruction() override;
@@ -30,8 +29,6 @@ class SYNC_EXPORT PassiveModelWorker : public ModelSafeWorker {
 
  private:
   ~PassiveModelWorker() override;
-
-  const base::MessageLoop* const sync_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(PassiveModelWorker);
 };

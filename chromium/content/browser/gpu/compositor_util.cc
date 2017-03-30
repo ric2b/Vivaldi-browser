@@ -4,14 +4,18 @@
 
 #include "content/browser/gpu/compositor_util.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "cc/base/switches.h"
+#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/config/gpu_feature_type.h"
@@ -74,7 +78,7 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
           kWebGLFeatureName,
           manager->IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL),
           command_line.HasSwitch(switches::kDisableExperimentalWebGL),
-          "WebGL has been disabled, either via about:flags or command line.",
+          "WebGL has been disabled via the command line.",
           false
       },
       {
@@ -164,22 +168,6 @@ bool IsPropertyTreeVerificationEnabled() {
   return command_line.HasSwitch(cc::switches::kEnablePropertyTreeVerification);
 }
 
-bool IsDelegatedRendererEnabled() {
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  bool enabled = false;
-
-#if defined(USE_AURA) || defined(OS_MACOSX)
-  // Enable on Aura and Mac.
-  enabled = true;
-#endif
-
-  // Flags override.
-  enabled |= command_line.HasSwitch(switches::kEnableDelegatedRenderer);
-  enabled &= !command_line.HasSwitch(switches::kDisableDelegatedRenderer);
-  return enabled;
-}
-
 int NumberOfRendererRasterThreads() {
   int num_processors = base::SysInfo::NumberOfProcessors();
 
@@ -190,14 +178,6 @@ int NumberOfRendererRasterThreads() {
 #endif
 
   int num_raster_threads = num_processors / 2;
-
-  // Async uploads is used when neither zero-copy nor one-copy is enabled and
-  // it uses its own thread, so reduce the number of raster threads when async
-  // uploads is in use.
-  bool async_uploads_is_used =
-      !IsZeroCopyUploadEnabled() && !IsOneCopyUploadEnabled();
-  if (async_uploads_is_used)
-    --num_raster_threads;
 
 #if defined(OS_ANDROID)
   // Limit the number of raster threads to 1 on Android.
@@ -222,35 +202,51 @@ int NumberOfRendererRasterThreads() {
                                     kMaxRasterThreads);
 }
 
-bool IsOneCopyUploadEnabled() {
-  if (IsZeroCopyUploadEnabled())
-    return false;
-
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kEnableOneCopy))
-    return true;
-  if (command_line.HasSwitch(switches::kDisableOneCopy))
-    return false;
-
-#if defined(OS_ANDROID)
-  return false;
-#endif
-  return true;
-}
-
 bool IsZeroCopyUploadEnabled() {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
-  // Single-threaded mode in the renderer process (for layout tests) is
-  // synchronous, which depends on tiles being ready to draw when raster is
-  // complete.  Therefore, it must use one of zero copy, software raster, or
-  // GPU raster. So we force zero-copy on for the case where software/GPU raster
-  // is not used.
-  // TODO(reveman): One-copy can work with sync compositing: crbug.com/490295.
-  if (command_line.HasSwitch(switches::kDisableThreadedCompositing))
-    return true;
+#if defined(OS_MACOSX)
+  return !command_line.HasSwitch(switches::kDisableZeroCopy);
+#else
   return command_line.HasSwitch(switches::kEnableZeroCopy);
+#endif
+}
+
+bool IsPartialRasterEnabled() {
+  // Zero copy currently doesn't take advantage of partial raster.
+  if (IsZeroCopyUploadEnabled())
+    return false;
+  const auto& command_line = *base::CommandLine::ForCurrentProcess();
+  return command_line.HasSwitch(switches::kEnablePartialRaster);
+}
+
+bool IsGpuMemoryBufferCompositorResourcesEnabled() {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(
+          switches::kEnableGpuMemoryBufferCompositorResources)) {
+    return true;
+  }
+  if (command_line.HasSwitch(
+          switches::kDisableGpuMemoryBufferCompositorResources)) {
+    return false;
+  }
+
+  // Native GPU memory buffers are required.
+  if (!BrowserGpuMemoryBufferManager::IsNativeGpuMemoryBuffersEnabled())
+    return false;
+
+  // GPU rasterization does not support GL_TEXTURE_RECTANGLE_ARB, which is
+  // required by GpuMemoryBuffers on Mac.
+  // http://crbug.com/551072
+  if (IsForceGpuRasterizationEnabled() || IsGpuRasterizationEnabled())
+    return false;
+
+#if defined(OS_MACOSX)
+  return true;
+#else
+  return false;
+#endif
 }
 
 bool IsGpuRasterizationEnabled() {
@@ -283,7 +279,7 @@ bool IsForceGpuRasterizationEnabled() {
 
 bool UseSurfacesEnabled() {
 #if defined(OS_ANDROID)
-  return false;
+  return true;
 #endif
   bool enabled = false;
 #if defined(USE_AURA) || defined(OS_MACOSX)
@@ -307,7 +303,8 @@ int GpuRasterizationMSAASampleCount() {
 #if defined(OS_ANDROID)
     return 4;
 #else
-    return 8;
+    // Desktop platforms will compute this automatically based on DPI.
+    return -1;
 #endif
   std::string string_value = command_line.GetSwitchValueASCII(
       switches::kGpuRasterizationMSAASampleCount);

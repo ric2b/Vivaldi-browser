@@ -3,13 +3,14 @@
 // found in the LICENSE file.
 
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/result_catcher.h"
 
@@ -31,11 +32,12 @@ class ProxySettingsApiTest : public ExtensionApiTest {
                         const std::string& expected_pac_url,
                         PrefService* pref_service) {
     const PrefService::Preference* pref =
-        pref_service->FindPreference(prefs::kProxy);
+        pref_service->FindPreference(proxy_config::prefs::kProxy);
     ASSERT_TRUE(pref != NULL);
     EXPECT_TRUE(pref->IsExtensionControlled());
 
-    ProxyConfigDictionary dict(pref_service->GetDictionary(prefs::kProxy));
+    ProxyConfigDictionary dict(
+        pref_service->GetDictionary(proxy_config::prefs::kProxy));
 
     ProxyPrefs::ProxyMode mode;
     ASSERT_TRUE(dict.GetMode(&mode));
@@ -66,7 +68,7 @@ class ProxySettingsApiTest : public ExtensionApiTest {
 
   void ExpectNoSettings(PrefService* pref_service) {
     const PrefService::Preference* pref =
-        pref_service->FindPreference(prefs::kProxy);
+        pref_service->FindPreference(proxy_config::prefs::kProxy);
     ASSERT_TRUE(pref != NULL);
     EXPECT_FALSE(pref->IsExtensionControlled());
   }

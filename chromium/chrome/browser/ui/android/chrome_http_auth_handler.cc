@@ -11,6 +11,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/grit/generated_resources.h"
 #include "jni/ChromeHttpAuthHandler_jni.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -21,10 +22,9 @@ using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ScopedJavaLocalRef;
 
-ChromeHttpAuthHandler::ChromeHttpAuthHandler(const base::string16& explanation)
-    : observer_(NULL),
-      explanation_(explanation) {
-}
+ChromeHttpAuthHandler::ChromeHttpAuthHandler(const base::string16& authority,
+                                             const base::string16& explanation)
+    : observer_(nullptr), authority_(authority), explanation_(explanation) {}
 
 ChromeHttpAuthHandler::~ChromeHttpAuthHandler() {}
 
@@ -62,9 +62,9 @@ void ChromeHttpAuthHandler::OnAutofillDataAvailable(
 }
 
 void ChromeHttpAuthHandler::SetAuth(JNIEnv* env,
-                                    jobject,
-                                    jstring username,
-                                    jstring password) {
+                                    const JavaParamRef<jobject>&,
+                                    const JavaParamRef<jstring>& username,
+                                    const JavaParamRef<jstring>& password) {
   if (observer_) {
     base::string16 username16 = ConvertJavaStringToUTF16(env, username);
     base::string16 password16 = ConvertJavaStringToUTF16(env, password);
@@ -72,14 +72,19 @@ void ChromeHttpAuthHandler::SetAuth(JNIEnv* env,
   }
 }
 
-void ChromeHttpAuthHandler::CancelAuth(JNIEnv* env, jobject) {
+void ChromeHttpAuthHandler::CancelAuth(JNIEnv* env,
+                                       const JavaParamRef<jobject>&) {
   if (observer_)
     observer_->CancelAuth();
 }
 
 ScopedJavaLocalRef<jstring> ChromeHttpAuthHandler::GetMessageBody(
-    JNIEnv* env, jobject) {
-  return ConvertUTF16ToJavaString(env, explanation_);
+    JNIEnv* env,
+    const JavaParamRef<jobject>&) {
+  if (explanation_.empty())
+    return ConvertUTF16ToJavaString(env, authority_);
+  return ConvertUTF16ToJavaString(
+      env, authority_ + base::ASCIIToUTF16(" ") + explanation_);
 }
 
 // static

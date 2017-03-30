@@ -9,15 +9,17 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "components/domain_reliability/clear_mode.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 
 class ChromeAppCacheService;
-class DevToolsNetworkController;
+class ChromeZoomLevelPrefs;
+class DevToolsNetworkControllerHandle;
 class ExtensionSpecialStoragePolicy;
 class HostContentSettingsMap;
 class PrefProxyConfigTracker;
@@ -33,10 +35,6 @@ class TabContentsProvider;
 namespace base {
 class SequencedTaskRunner;
 class Time;
-}
-
-namespace chrome {
-class ChromeZoomLevelPrefs;
 }
 
 namespace chrome_browser_net {
@@ -178,11 +176,11 @@ class Profile : public content::BrowserContext {
 
   // Returns whether the profile is supervised (either a legacy supervised
   // user or a child account; see SupervisedUserService).
-  virtual bool IsSupervised() = 0;
+  virtual bool IsSupervised() const = 0;
   // Returns whether the profile is associated with a child account.
-  virtual bool IsChild() = 0;
+  virtual bool IsChild() const = 0;
   // Returns whether the profile is a legacy supervised user profile.
-  virtual bool IsLegacySupervised() = 0;
+  virtual bool IsLegacySupervised() const = 0;
 
   // Accessor. The instance is created upon first access.
   virtual ExtensionSpecialStoragePolicy*
@@ -196,7 +194,7 @@ class Profile : public content::BrowserContext {
   // Retrieves a pointer to the PrefService that manages the default zoom
   // level and the per-host zoom levels for this user profile.
   // TODO(wjmaclean): Remove this when HostZoomMap migrates to StoragePartition.
-  virtual chrome::ChromeZoomLevelPrefs* GetZoomLevelPrefs();
+  virtual ChromeZoomLevelPrefs* GetZoomLevelPrefs();
 
   // Retrieves a pointer to the PrefService that manages the preferences
   // for OffTheRecord Profiles.  This PrefService is lazily created the first
@@ -212,9 +210,6 @@ class Profile : public content::BrowserContext {
 
   // Returns the SSLConfigService for this profile.
   virtual net::SSLConfigService* GetSSLConfigService() = 0;
-
-  // Returns the Hostname <-> Content settings map for this profile.
-  virtual HostContentSettingsMap* GetHostContentSettingsMap() = 0;
 
   // Return whether 2 profiles are the same. 2 profiles are the same if they
   // represent the same profile. This can happen if there is pointer equality
@@ -287,8 +282,9 @@ class Profile : public content::BrowserContext {
   // Returns the Predictor object used for dns prefetch.
   virtual chrome_browser_net::Predictor* GetNetworkPredictor() = 0;
 
-  // Returns the DevToolsNetworkController for this profile.
-  virtual DevToolsNetworkController* GetDevToolsNetworkController() = 0;
+  // Returns the DevToolsNetworkControllerHandle for this profile.
+  virtual DevToolsNetworkControllerHandle*
+  GetDevToolsNetworkControllerHandle() = 0;
 
   // Deletes all network related data since |time|. It deletes transport
   // security state since |time| and it also deletes HttpServerProperties data.

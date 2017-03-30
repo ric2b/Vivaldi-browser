@@ -14,7 +14,7 @@ namespace suggestions {
 
 ImageFetcherImpl::ImageFetcherImpl(
     net::URLRequestContextGetter* url_request_context)
-    : url_request_context_(url_request_context) {}
+    : delegate_(NULL), url_request_context_(url_request_context) {}
 
 ImageFetcherImpl::~ImageFetcherImpl() {}
 
@@ -56,8 +56,6 @@ void ImageFetcherImpl::StartOrQueueNetworkRequest(
 
 void ImageFetcherImpl::OnFetchComplete(const GURL& image_url,
                                        const SkBitmap* bitmap) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
   ImageRequestMap::iterator image_iter = pending_net_requests_.find(image_url);
   DCHECK(image_iter != pending_net_requests_.end());
 

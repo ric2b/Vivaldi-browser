@@ -4,6 +4,9 @@
 
 #include "chrome/browser/thumbnails/content_analysis.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -35,8 +38,8 @@ unsigned long ImagePixelSum(const SkBitmap& bitmap, const gfx::Rect& rect) {
   DCHECK_EQ(kAlpha_8_SkColorType, bitmap.colorType());
   unsigned long total = 0;
   for (int r = rect.y(); r < rect.bottom(); ++r) {
-    const uint8* row_data = static_cast<const uint8*>(
-        bitmap.getPixels()) + r * bitmap.rowBytes();
+    const uint8_t* row_data =
+        static_cast<const uint8_t*>(bitmap.getPixels()) + r * bitmap.rowBytes();
     for (int c = rect.x(); c < rect.right(); ++c)
       total += row_data[c];
   }
@@ -84,8 +87,7 @@ TEST_F(ThumbnailContentAnalysisTest, ApplyGradientMagnitudeOnImpulse) {
   canvas.FillRect(gfx::Rect(0, 0, 800, 600), SkColorSetRGB(10, 10, 10));
   canvas.FillRect(gfx::Rect(400, 300, 1, 1), SkColorSetRGB(255, 255, 255));
 
-  SkBitmap source =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap source = skia::ReadPixels(canvas.sk_canvas());
 
   SkBitmap reduced_color;
   reduced_color.allocPixels(SkImageInfo::MakeA8(source.width(),
@@ -128,8 +130,7 @@ TEST_F(ThumbnailContentAnalysisTest, ApplyGradientMagnitudeOnFrame) {
   canvas.FillRect(gfx::Rect(0, 0, 800, 600), SkColorSetRGB(0, 0, 0));
   canvas.DrawRect(draw_rect, SkColorSetRGB(255, 255, 255));
 
-  SkBitmap source =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap source = skia::ReadPixels(canvas.sk_canvas());
 
   SkBitmap reduced_color;
   reduced_color.allocPixels(SkImageInfo::MakeA8(source.width(),
@@ -167,8 +168,7 @@ TEST_F(ThumbnailContentAnalysisTest, ExtractImageProfileInformation) {
   canvas.FillRect(image_rect, SkColorSetRGB(0, 0, 0));
   canvas.DrawRect(draw_rect, SkColorSetRGB(255, 255, 255));
 
-  SkBitmap source =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap source = skia::ReadPixels(canvas.sk_canvas());
   SkBitmap reduced_color;
   reduced_color.allocPixels(SkImageInfo::MakeA8(source.width(),
                                                 source.height()));
@@ -231,8 +231,7 @@ TEST_F(ThumbnailContentAnalysisTest,
   canvas.DrawRect(gfx::Rect(300, 250, 99, 100), SkColorSetRGB(255, 255, 255));
   canvas.DrawRect(gfx::Rect(401, 250, 99, 100), SkColorSetRGB(255, 255, 255));
 
-  SkBitmap source =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap source = skia::ReadPixels(canvas.sk_canvas());
   SkBitmap reduced_color;
   reduced_color.allocPixels(SkImageInfo::MakeA8(source.width(),
                                                 source.height()));
@@ -442,10 +441,9 @@ TEST_F(ThumbnailContentAnalysisTest, AutoSegmentPeaks) {
 
   // There should be roughly 50% above and below the threshold.
   // Random is not really random thanks to srand, so we can sort-of compare.
-  int above_count = std::count_if(
-      profile_info.begin(),
-      profile_info.end(),
-      std::bind2nd(std::greater<float>(), threshold));
+  int above_count =
+      std::count_if(profile_info.begin(), profile_info.end(),
+                    [threshold](float value) { return value > threshold; });
   EXPECT_GT(above_count, 450);  // Not much to expect.
   EXPECT_LT(above_count, 550);
 
@@ -455,18 +453,16 @@ TEST_F(ThumbnailContentAnalysisTest, AutoSegmentPeaks) {
   }
   threshold = AutoSegmentPeaks(profile_info);
 
-  above_count = std::count_if(
-      profile_info.begin(),
-      profile_info.end(),
-      std::bind2nd(std::greater<float>(), threshold));
+  above_count =
+      std::count_if(profile_info.begin(), profile_info.end(),
+                    [threshold](float value) { return value > threshold; });
   EXPECT_LT(above_count, 500);  // Negative y expected to fall below threshold.
 
   // Expect two peaks around between 0 and 250 and 500 and 750.
   std::vector<bool> thresholded_values(profile_info.size(), false);
-  std::transform(profile_info.begin(),
-                 profile_info.end(),
+  std::transform(profile_info.begin(), profile_info.end(),
                  thresholded_values.begin(),
-                 std::bind2nd(std::greater<float>(), threshold));
+                 [threshold](float value) { return value > threshold; });
   EXPECT_TRUE(thresholded_values[125]);
   EXPECT_TRUE(thresholded_values[625]);
   int transitions = 0;
@@ -485,37 +481,21 @@ TEST_F(ThumbnailContentAnalysisTest, ConstrainedProfileSegmentation) {
   std::vector<float> columns_profile(kColumnCount);
 
   std::srand(42);
-  std::generate(rows_profile.begin(), rows_profile.end(), std::rand);
-  std::generate(columns_profile.begin(), columns_profile.end(), std::rand);
-
-  // Bring noise level to 0-1.
-  std::transform(rows_profile.begin(),
-                 rows_profile.end(),
-                 rows_profile.begin(),
-                 std::bind2nd(std::divides<float>(), RAND_MAX));
-  std::transform(columns_profile.begin(),
-                 columns_profile.end(),
-                 columns_profile.begin(),
-                 std::bind2nd(std::divides<float>(), RAND_MAX));
-
-  // Set up values to 0-1.
-  std::transform(rows_profile.begin(),
-                 rows_profile.end(),
-                 rows_profile.begin(),
-                 std::bind2nd(std::plus<float>(), 1.0f));
-  std::transform(columns_profile.begin(),
-                 columns_profile.end(),
-                 columns_profile.begin(),
-                 std::bind2nd(std::plus<float>(), 1.0f));
+  std::generate(rows_profile.begin(), rows_profile.end(), []() {
+    return std::rand() / static_cast<float>(RAND_MAX) + 1.f;
+  });
+  std::generate(columns_profile.begin(), columns_profile.end(), []() {
+    return std::rand() / static_cast<float>(RAND_MAX) + 1.f;
+  });
 
   std::transform(rows_profile.begin() + 300,
                  rows_profile.begin() + 450,
                  rows_profile.begin() + 300,
-                 std::bind2nd(std::plus<float>(), 8.0f));
+                 [](float value) { return value + 8.f; });
   std::transform(columns_profile.begin() + 400,
                  columns_profile.begin() + 1000,
                  columns_profile.begin() + 400,
-                 std::bind2nd(std::plus<float>(), 10.0f));
+                 [](float value) { return value + 10.f; });
 
   // Make sure that threshold falls somewhere reasonable.
   float row_threshold = AutoSegmentPeaks(rows_profile);
@@ -525,7 +505,7 @@ TEST_F(ThumbnailContentAnalysisTest, ConstrainedProfileSegmentation) {
   int row_above_count = std::count_if(
       rows_profile.begin(),
       rows_profile.end(),
-      std::bind2nd(std::greater<float>(), row_threshold));
+      [row_threshold](float value) { return value > row_threshold; });
   EXPECT_EQ(row_above_count, 150);
 
   float column_threshold = AutoSegmentPeaks(columns_profile);
@@ -535,7 +515,7 @@ TEST_F(ThumbnailContentAnalysisTest, ConstrainedProfileSegmentation) {
   int column_above_count = std::count_if(
       columns_profile.begin(),
       columns_profile.end(),
-      std::bind2nd(std::greater<float>(), column_threshold));
+      [column_threshold](float value) { return value > column_threshold; });
   EXPECT_EQ(column_above_count, 600);
 
 
@@ -573,8 +553,7 @@ TEST_F(ThumbnailContentAnalysisTest, ComputeDecimatedImage) {
   std::fill_n(columns.begin() + 300, 100, true);
   std::fill_n(columns.begin() + 500, 100, true);
 
-  SkBitmap source =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap source = skia::ReadPixels(canvas.sk_canvas());
   SkBitmap result = ComputeDecimatedImage(source, rows, columns);
   EXPECT_FALSE(result.empty());
   EXPECT_EQ(300, result.width());
@@ -686,8 +665,7 @@ TEST_F(ThumbnailContentAnalysisTest, CreateRetargetedThumbnailImage) {
     canvas.DrawRect(pict_rect, SkColorSetRGB(0, 0, 0));
   }
 
-  SkBitmap source =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap source = skia::ReadPixels(canvas.sk_canvas());
 
   SkBitmap result = CreateRetargetedThumbnailImage(
       source, gfx::Size(424, 264), 2.5);
@@ -702,7 +680,7 @@ TEST_F(ThumbnailContentAnalysisTest, CreateRetargetedThumbnailImage) {
   int histogram[256] = {};
   color_utils::BuildLumaHistogram(result, histogram);
   int non_zero_color_count = std::count_if(
-      histogram, histogram + 256, std::bind2nd(std::greater<int>(), 0));
+      histogram, histogram + 256, [](int value) { return value > 0; });
   EXPECT_GT(non_zero_color_count, 4);
 
 }

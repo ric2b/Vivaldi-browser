@@ -4,6 +4,9 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database_index.h"
 
+#include <tuple>
+#include <utility>
+
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -22,7 +25,7 @@
 //
 // NOTE
 // - Entries are sorted by keys.
-// - int64 value is serialized as a string by base::Int64ToString().
+// - int64_t value is serialized as a string by base::Int64ToString().
 // - ServiceMetadata, FileMetadata, and FileTracker values are serialized
 //   as a string by SerializeToString() of protocol buffers.
 //
@@ -40,15 +43,14 @@
 //   value: <FileMetadata 'metadata'>
 //
 //   # Trackers of local file updates
-//   key: "TRACKER: " + <int64 'tracker_id'>
+//   key: "TRACKER: " + <int64_t 'tracker_id'>
 //   value: <FileTracker 'tracker'>
 
 namespace sync_file_system {
 namespace drive_backend {
 
 ParentIDAndTitle::ParentIDAndTitle() : parent_id(0) {}
-ParentIDAndTitle::ParentIDAndTitle(int64 parent_id,
-                                   const std::string& title)
+ParentIDAndTitle::ParentIDAndTitle(int64_t parent_id, const std::string& title)
     : parent_id(parent_id), title(title) {}
 
 bool operator==(const ParentIDAndTitle& left, const ParentIDAndTitle& right) {
@@ -56,9 +58,8 @@ bool operator==(const ParentIDAndTitle& left, const ParentIDAndTitle& right) {
 }
 
 bool operator<(const ParentIDAndTitle& left, const ParentIDAndTitle& right) {
-  if (left.parent_id != right.parent_id)
-    return left.parent_id < right.parent_id;
-  return left.title < right.title;
+  return std::tie(left.parent_id, left.title) <
+         std::tie(right.parent_id, right.title);
 }
 
 DatabaseContents::DatabaseContents() {}
@@ -101,7 +102,7 @@ void ReadDatabaseContents(LevelDBWrapper* db, DatabaseContents* contents) {
 
     std::string tracker_id_str;
     if (RemovePrefix(key, kFileTrackerKeyPrefix, &tracker_id_str)) {
-      int64 tracker_id = 0;
+      int64_t tracker_id = 0;
       if (!base::StringToInt64(tracker_id_str, &tracker_id)) {
         util::Log(logging::LOG_WARNING, FROM_HERE,
                   "Failed to parse TrackerID");
@@ -120,17 +121,17 @@ void ReadDatabaseContents(LevelDBWrapper* db, DatabaseContents* contents) {
   }
 }
 
-void RemoveUnreachableItems(DatabaseContents* contents,
-                            int64 sync_root_tracker_id,
-                            LevelDBWrapper* db) {
-  typedef std::map<int64, std::set<int64> > ChildTrackersByParent;
+void RemoveUnreachableItemsFromDB(DatabaseContents* contents,
+                                  int64_t sync_root_tracker_id,
+                                  LevelDBWrapper* db) {
+  typedef std::map<int64_t, std::set<int64_t>> ChildTrackersByParent;
   ChildTrackersByParent trackers_by_parent;
 
   // Set up links from parent tracker to child trackers.
   for (size_t i = 0; i < contents->file_trackers.size(); ++i) {
     const FileTracker& tracker = *contents->file_trackers[i];
-    int64 parent_tracker_id = tracker.parent_tracker_id();
-    int64 tracker_id = tracker.tracker_id();
+    int64_t parent_tracker_id = tracker.parent_tracker_id();
+    int64_t tracker_id = tracker.tracker_id();
 
     trackers_by_parent[parent_tracker_id].insert(tracker_id);
   }
@@ -143,14 +144,14 @@ void RemoveUnreachableItems(DatabaseContents* contents,
       trackers_by_parent.erase(tracker.tracker_id());
   }
 
-  std::vector<int64> pending;
+  std::vector<int64_t> pending;
   if (sync_root_tracker_id != kInvalidTrackerID)
     pending.push_back(sync_root_tracker_id);
 
   // Traverse tracker tree from sync-root.
-  std::set<int64> visited_trackers;
+  std::set<int64_t> visited_trackers;
   while (!pending.empty()) {
-    int64 tracker_id = pending.back();
+    int64_t tracker_id = pending.back();
     DCHECK_NE(kInvalidTrackerID, tracker_id);
     pending.pop_back();
 
@@ -160,7 +161,7 @@ void RemoveUnreachableItems(DatabaseContents* contents,
     }
 
     AppendContents(
-        LookUpMap(trackers_by_parent, tracker_id, std::set<int64>()),
+        LookUpMap(trackers_by_parent, tracker_id, std::set<int64_t>()),
         &pending);
   }
 
@@ -175,7 +176,7 @@ void RemoveUnreachableItems(DatabaseContents* contents,
       PutFileTrackerDeletionToDB(tracker->tracker_id(), db);
     }
   }
-  contents->file_trackers = reachable_trackers.Pass();
+  contents->file_trackers = std::move(reachable_trackers);
 
   // List all |file_id| referred by a tracker.
   base::hash_set<std::string> referred_file_ids;
@@ -193,7 +194,7 @@ void RemoveUnreachableItems(DatabaseContents* contents,
       PutFileMetadataDeletionToDB(metadata->file_id(), db);
     }
   }
-  contents->file_metadata = referred_file_metadata.Pass();
+  contents->file_metadata = std::move(referred_file_metadata);
 }
 
 }  // namespace
@@ -210,13 +211,13 @@ MetadataDatabaseIndex::Create(LevelDBWrapper* db) {
   DatabaseContents contents;
   PutVersionToDB(kCurrentDatabaseVersion, db);
   ReadDatabaseContents(db, &contents);
-  RemoveUnreachableItems(&contents,
-                         service_metadata->sync_root_tracker_id(),
-                         db);
+  RemoveUnreachableItemsFromDB(&contents,
+                               service_metadata->sync_root_tracker_id(),
+                               db);
 
   scoped_ptr<MetadataDatabaseIndex> index(new MetadataDatabaseIndex(db));
-  index->Initialize(service_metadata.Pass(), &contents);
-  return index.Pass();
+  index->Initialize(std::move(service_metadata), &contents);
+  return index;
 }
 
 // static
@@ -225,13 +226,13 @@ MetadataDatabaseIndex::CreateForTesting(DatabaseContents* contents,
                                         LevelDBWrapper* db) {
   scoped_ptr<MetadataDatabaseIndex> index(new MetadataDatabaseIndex(db));
   index->Initialize(make_scoped_ptr(new ServiceMetadata), contents);
-  return index.Pass();
+  return index;
 }
 
 void MetadataDatabaseIndex::Initialize(
     scoped_ptr<ServiceMetadata> service_metadata,
     DatabaseContents* contents) {
-  service_metadata_ = service_metadata.Pass();
+  service_metadata_ = std::move(service_metadata);
 
   for (size_t i = 0; i < contents->file_metadata.size(); ++i)
     StoreFileMetadata(make_scoped_ptr(contents->file_metadata[i]));
@@ -250,6 +251,12 @@ void MetadataDatabaseIndex::Initialize(
 MetadataDatabaseIndex::MetadataDatabaseIndex(LevelDBWrapper* db) : db_(db) {}
 MetadataDatabaseIndex::~MetadataDatabaseIndex() {}
 
+void MetadataDatabaseIndex::RemoveUnreachableItems() {
+  // Do nothing. MetadataDatabaseIndex is behind a private flag and will be
+  // removed soon.
+  // TODO(crbug.com/568008): Remove MetadataDatabaseIndex.
+}
+
 bool MetadataDatabaseIndex::GetFileMetadata(
     const std::string& file_id, FileMetadata* metadata) const {
   FileMetadata* identified = metadata_by_id_.get(file_id);
@@ -260,8 +267,8 @@ bool MetadataDatabaseIndex::GetFileMetadata(
   return true;
 }
 
-bool MetadataDatabaseIndex::GetFileTracker(
-    int64 tracker_id, FileTracker* tracker) const {
+bool MetadataDatabaseIndex::GetFileTracker(int64_t tracker_id,
+                                           FileTracker* tracker) const {
   FileTracker* identified = tracker_by_id_.get(tracker_id);
   if (!identified)
     return false;
@@ -279,7 +286,7 @@ void MetadataDatabaseIndex::StoreFileMetadata(
   }
 
   std::string file_id = metadata->file_id();
-  metadata_by_id_.set(file_id, metadata.Pass());
+  metadata_by_id_.set(file_id, std::move(metadata));
 }
 
 void MetadataDatabaseIndex::StoreFileTracker(
@@ -290,7 +297,7 @@ void MetadataDatabaseIndex::StoreFileTracker(
     return;
   }
 
-  int64 tracker_id = tracker->tracker_id();
+  int64_t tracker_id = tracker->tracker_id();
   FileTracker* old_tracker = tracker_by_id_.get(tracker_id);
 
   if (!old_tracker) {
@@ -311,7 +318,7 @@ void MetadataDatabaseIndex::StoreFileTracker(
     UpdateInDirtyTrackerIndexes(*old_tracker, *tracker);
   }
 
-  tracker_by_id_.set(tracker_id, tracker.Pass());
+  tracker_by_id_.set(tracker_id, std::move(tracker));
 }
 
 void MetadataDatabaseIndex::RemoveFileMetadata(const std::string& file_id) {
@@ -319,7 +326,7 @@ void MetadataDatabaseIndex::RemoveFileMetadata(const std::string& file_id) {
   metadata_by_id_.erase(file_id);
 }
 
-void MetadataDatabaseIndex::RemoveFileTracker(int64 tracker_id) {
+void MetadataDatabaseIndex::RemoveFileTracker(int64_t tracker_id) {
   PutFileTrackerDeletionToDB(tracker_id, db_);
 
   FileTracker* tracker = tracker_by_id_.get(tracker_id);
@@ -344,13 +351,13 @@ TrackerIDSet MetadataDatabaseIndex::GetFileTrackerIDsByFileID(
   return FindItem(trackers_by_file_id_, file_id);
 }
 
-int64 MetadataDatabaseIndex::GetAppRootTracker(
+int64_t MetadataDatabaseIndex::GetAppRootTracker(
     const std::string& app_id) const {
   return FindItem(app_root_by_app_id_, app_id);
 }
 
 TrackerIDSet MetadataDatabaseIndex::GetFileTrackerIDsByParentAndTitle(
-    int64 parent_tracker_id,
+    int64_t parent_tracker_id,
     const std::string& title) const {
   TrackerIDsByParentAndTitle::const_iterator found =
       trackers_by_parent_and_title_.find(parent_tracker_id);
@@ -359,9 +366,9 @@ TrackerIDSet MetadataDatabaseIndex::GetFileTrackerIDsByParentAndTitle(
   return FindItem(found->second, title);
 }
 
-std::vector<int64> MetadataDatabaseIndex::GetFileTrackerIDsByParent(
-    int64 parent_tracker_id) const {
-  std::vector<int64> result;
+std::vector<int64_t> MetadataDatabaseIndex::GetFileTrackerIDsByParent(
+    int64_t parent_tracker_id) const {
+  std::vector<int64_t> result;
   TrackerIDsByParentAndTitle::const_iterator found =
       trackers_by_parent_and_title_.find(parent_tracker_id);
   if (found == trackers_by_parent_and_title_.end())
@@ -387,13 +394,13 @@ ParentIDAndTitle MetadataDatabaseIndex::PickMultiBackingFilePath() const {
   return *multi_backing_file_paths_.begin();
 }
 
-int64 MetadataDatabaseIndex::PickDirtyTracker() const {
+int64_t MetadataDatabaseIndex::PickDirtyTracker() const {
   if (dirty_trackers_.empty())
     return kInvalidTrackerID;
   return *dirty_trackers_.begin();
 }
 
-void MetadataDatabaseIndex::DemoteDirtyTracker(int64 tracker_id) {
+void MetadataDatabaseIndex::DemoteDirtyTracker(int64_t tracker_id) {
   if (dirty_trackers_.erase(tracker_id))
     demoted_dirty_trackers_.insert(tracker_id);
 }
@@ -402,12 +409,12 @@ bool MetadataDatabaseIndex::HasDemotedDirtyTracker() const {
   return !demoted_dirty_trackers_.empty();
 }
 
-bool MetadataDatabaseIndex::IsDemotedDirtyTracker(int64 tracker_id) const {
+bool MetadataDatabaseIndex::IsDemotedDirtyTracker(int64_t tracker_id) const {
   return demoted_dirty_trackers_.find(tracker_id) !=
       demoted_dirty_trackers_.end();
 }
 
-void MetadataDatabaseIndex::PromoteDemotedDirtyTracker(int64 tracker_id) {
+void MetadataDatabaseIndex::PromoteDemotedDirtyTracker(int64_t tracker_id) {
   if (demoted_dirty_trackers_.erase(tracker_id) == 1)
     dirty_trackers_.insert(tracker_id);
 }
@@ -432,37 +439,45 @@ size_t MetadataDatabaseIndex::CountFileTracker() const {
   return tracker_by_id_.size();
 }
 
-void MetadataDatabaseIndex::SetSyncRootTrackerID(
-    int64 sync_root_id) const {
+void MetadataDatabaseIndex::SetSyncRootRevalidated() const {
+  service_metadata_->set_sync_root_revalidated(true);
+  PutServiceMetadataToDB(*service_metadata_, db_);
+}
+
+void MetadataDatabaseIndex::SetSyncRootTrackerID(int64_t sync_root_id) const {
   service_metadata_->set_sync_root_tracker_id(sync_root_id);
   PutServiceMetadataToDB(*service_metadata_, db_);
 }
 
 void MetadataDatabaseIndex::SetLargestChangeID(
-    int64 largest_change_id) const {
+    int64_t largest_change_id) const {
   service_metadata_->set_largest_change_id(largest_change_id);
   PutServiceMetadataToDB(*service_metadata_, db_);
 }
 
-void MetadataDatabaseIndex::SetNextTrackerID(
-    int64 next_tracker_id) const {
+void MetadataDatabaseIndex::SetNextTrackerID(int64_t next_tracker_id) const {
   service_metadata_->set_next_tracker_id(next_tracker_id);
   PutServiceMetadataToDB(*service_metadata_, db_);
 }
 
-int64 MetadataDatabaseIndex::GetSyncRootTrackerID() const {
+bool MetadataDatabaseIndex::IsSyncRootRevalidated() const {
+  return service_metadata_->has_sync_root_revalidated() &&
+      service_metadata_->sync_root_revalidated();
+}
+
+int64_t MetadataDatabaseIndex::GetSyncRootTrackerID() const {
   if (!service_metadata_->has_sync_root_tracker_id())
     return kInvalidTrackerID;
   return service_metadata_->sync_root_tracker_id();
 }
 
-int64 MetadataDatabaseIndex::GetLargestChangeID() const {
+int64_t MetadataDatabaseIndex::GetLargestChangeID() const {
   if (!service_metadata_->has_largest_change_id())
     return kInvalidTrackerID;
   return service_metadata_->largest_change_id();
 }
 
-int64 MetadataDatabaseIndex::GetNextTrackerID() const {
+int64_t MetadataDatabaseIndex::GetNextTrackerID() const {
   if (!service_metadata_->has_next_tracker_id()) {
     NOTREACHED();
     return kInvalidTrackerID;
@@ -479,8 +494,8 @@ std::vector<std::string> MetadataDatabaseIndex::GetRegisteredAppIDs() const {
   return result;
 }
 
-std::vector<int64> MetadataDatabaseIndex::GetAllTrackerIDs() const {
-  std::vector<int64> result;
+std::vector<int64_t> MetadataDatabaseIndex::GetAllTrackerIDs() const {
+  std::vector<int64_t> result;
   for (TrackerByID::const_iterator itr = tracker_by_id_.begin();
        itr != tracker_by_id_.end(); ++itr) {
     result.push_back(itr->first);
@@ -598,7 +613,7 @@ void MetadataDatabaseIndex::RemoveFromFileIDIndexes(
 
 void MetadataDatabaseIndex::AddToPathIndexes(
     const FileTracker& new_tracker) {
-  int64 parent = new_tracker.parent_tracker_id();
+  int64_t parent = new_tracker.parent_tracker_id();
   std::string title = GetTrackerTitle(new_tracker);
 
   DVLOG(3) << "  Add to trackers_by_parent_and_title_: "
@@ -623,8 +638,8 @@ void MetadataDatabaseIndex::UpdateInPathIndexes(
   DCHECK(GetTrackerTitle(old_tracker) == GetTrackerTitle(new_tracker) ||
          !old_tracker.has_synced_details());
 
-  int64 tracker_id = new_tracker.tracker_id();
-  int64 parent = new_tracker.parent_tracker_id();
+  int64_t tracker_id = new_tracker.tracker_id();
+  int64_t parent = new_tracker.parent_tracker_id();
   std::string old_title = GetTrackerTitle(old_tracker);
   std::string title = GetTrackerTitle(new_tracker);
 
@@ -676,8 +691,8 @@ void MetadataDatabaseIndex::UpdateInPathIndexes(
 
 void MetadataDatabaseIndex::RemoveFromPathIndexes(
     const FileTracker& tracker) {
-  int64 tracker_id = tracker.tracker_id();
-  int64 parent = tracker.parent_tracker_id();
+  int64_t tracker_id = tracker.tracker_id();
+  int64_t parent = tracker.parent_tracker_id();
   std::string title = GetTrackerTitle(tracker);
 
   DCHECK(ContainsKey(trackers_by_parent_and_title_, parent));
@@ -720,7 +735,7 @@ void MetadataDatabaseIndex::UpdateInDirtyTrackerIndexes(
     const FileTracker& new_tracker) {
   DCHECK_EQ(old_tracker.tracker_id(), new_tracker.tracker_id());
 
-  int64 tracker_id = new_tracker.tracker_id();
+  int64_t tracker_id = new_tracker.tracker_id();
   if (old_tracker.dirty() && !new_tracker.dirty()) {
     DCHECK(ContainsKey(dirty_trackers_, tracker_id) ||
            ContainsKey(demoted_dirty_trackers_, tracker_id));
@@ -742,7 +757,7 @@ void MetadataDatabaseIndex::UpdateInDirtyTrackerIndexes(
 void MetadataDatabaseIndex::RemoveFromDirtyTrackerIndexes(
     const FileTracker& tracker) {
   if (tracker.dirty()) {
-    int64 tracker_id = tracker.tracker_id();
+    int64_t tracker_id = tracker.tracker_id();
     DCHECK(ContainsKey(dirty_trackers_, tracker_id) ||
            ContainsKey(demoted_dirty_trackers_, tracker_id));
 

@@ -4,16 +4,23 @@
 
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "ash/audio/sounds.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/session/session_state_delegate.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram.h"
@@ -34,9 +41,11 @@
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/ui/accessibility_focus_ring_controller.h"
+#include "chrome/browser/extensions/api/braille_display_private/stub_braille_controller.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
@@ -57,6 +66,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
+#include "content/public/common/content_switches.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -77,6 +87,7 @@ using content::RenderViewHost;
 using extensions::api::braille_display_private::BrailleController;
 using extensions::api::braille_display_private::DisplayState;
 using extensions::api::braille_display_private::KeyEvent;
+using extensions::api::braille_display_private::StubBrailleController;
 
 namespace chromeos {
 
@@ -87,9 +98,14 @@ static chromeos::AccessibilityManager* g_accessibility_manager = NULL;
 static BrailleController* g_braille_controller_for_test = NULL;
 
 BrailleController* GetBrailleController() {
-  return g_braille_controller_for_test
-      ? g_braille_controller_for_test
-      : BrailleController::GetInstance();
+  if (g_braille_controller_for_test)
+    return g_braille_controller_for_test;
+  // Don't use the real braille controller for tests to avoid automatically
+  // starting ChromeVox which confuses some tests.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kTestType))
+    return StubBrailleController::GetInstance();
+  return BrailleController::GetInstance();
 }
 
 base::FilePath GetChromeVoxPath() {
@@ -215,6 +231,11 @@ void InjectChromeVoxContentScript(
       RenderViewHost::FromID(render_process_id, render_view_id);
   if (!render_view_host)
     return;
+  const content::WebContents* web_contents =
+      content::WebContents::FromRenderViewHost(render_view_host);
+  GURL content_url;
+  if (web_contents)
+    content_url = web_contents->GetLastCommittedURL();
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(extension_service->profile())
           ->enabled_extensions()
@@ -234,6 +255,8 @@ void InjectChromeVoxContentScript(
       extensions::ContentScriptsInfo::GetContentScripts(extension);
   for (size_t i = 0; i < content_scripts.size(); i++) {
     const extensions::UserScript& script = content_scripts[i];
+    if (web_contents && !script.MatchesURL(content_url))
+      continue;
     for (size_t j = 0; j < script.js_scripts().size(); ++j) {
       const extensions::UserScript::File& file = script.js_scripts()[j];
       extensions::ExtensionResource resource = extension->GetResource(
@@ -252,6 +275,33 @@ void UnloadChromeVoxExtension(Profile* profile) {
 }
 
 }  // namespace
+
+class ChromeVoxPanelWidgetObserver : public views::WidgetObserver {
+ public:
+  ChromeVoxPanelWidgetObserver(views::Widget* widget,
+                               AccessibilityManager* manager)
+      : widget_(widget), manager_(manager) {
+    widget_->AddObserver(this);
+  }
+
+  void OnWidgetClosing(views::Widget* widget) override {
+    CHECK_EQ(widget_, widget);
+    widget->RemoveObserver(this);
+    manager_->OnChromeVoxPanelClosing();
+  }
+
+  void OnWidgetDestroying(views::Widget* widget) override {
+    CHECK_EQ(widget_, widget);
+    widget->RemoveObserver(this);
+    manager_->OnChromeVoxPanelDestroying();
+  }
+
+ private:
+  views::Widget* widget_;
+  AccessibilityManager* manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeVoxPanelWidgetObserver);
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 // AccessibilityStatusEventDetails
@@ -360,6 +410,8 @@ AccessibilityManager::AccessibilityManager()
       braille_display_connected_(false),
       scoped_braille_observer_(this),
       braille_ime_current_(false),
+      chromevox_panel_(nullptr),
+      extension_registry_observer_(this),
       weak_ptr_factory_(this) {
   notification_registrar_.Add(this,
                               chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
@@ -402,6 +454,11 @@ AccessibilityManager::~AccessibilityManager() {
       ui::A11Y_NOTIFICATION_NONE);
   NotifyAccessibilityStatusChanged(details);
   input_method::InputMethodManager::Get()->RemoveObserver(this);
+
+  if (chromevox_panel_) {
+    chromevox_panel_->Close();
+    chromevox_panel_ = nullptr;
+  }
 }
 
 bool AccessibilityManager::ShouldShowAccessibilityMenu() {
@@ -474,9 +531,10 @@ void AccessibilityManager::UpdateLargeCursorFromPref() {
 }
 
 bool AccessibilityManager::IsIncognitoAllowed() {
-  // Supervised users can't create incognito-mode windows.
-  return !user_manager::UserManager::Get()->IsLoggedInAsSupervisedUser() &&
-         !user_manager::UserManager::Get()->IsLoggedInAsChildUser();
+  return profile_ != NULL &&
+         profile_->GetProfileType() != Profile::GUEST_PROFILE &&
+         IncognitoModePrefs::GetAvailability(profile_->GetPrefs()) !=
+             IncognitoModePrefs::DISABLED;
 }
 
 bool AccessibilityManager::IsLargeCursorEnabled() {
@@ -618,6 +676,11 @@ void AccessibilityManager::LoadChromeVoxToLockScreen(
 }
 
 void AccessibilityManager::UnloadChromeVox() {
+  if (chromevox_panel_) {
+    chromevox_panel_->Close();
+    chromevox_panel_ = nullptr;
+  }
+
   if (chrome_vox_loaded_on_lock_screen_)
     UnloadChromeVoxFromLockScreen();
 
@@ -827,10 +890,9 @@ void AccessibilityManager::UpdateBrailleImeState() {
   if (!profile_)
     return;
   PrefService* pref_service = profile_->GetPrefs();
-  std::vector<std::string> preload_engines;
-  base::SplitString(pref_service->GetString(prefs::kLanguagePreloadEngines),
-                    ',',
-                    &preload_engines);
+  std::vector<std::string> preload_engines =
+      base::SplitString(pref_service->GetString(prefs::kLanguagePreloadEngines),
+                        ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   std::vector<std::string>::iterator it =
       std::find(preload_engines.begin(),
                 preload_engines.end(),
@@ -845,7 +907,7 @@ void AccessibilityManager::UpdateBrailleImeState() {
   else
     preload_engines.erase(it);
   pref_service->SetString(prefs::kLanguagePreloadEngines,
-                          JoinString(preload_engines, ','));
+                          base::JoinString(preload_engines, ","));
   braille_ime_current_ = false;
 }
 
@@ -938,8 +1000,12 @@ void AccessibilityManager::SetProfile(Profile* profile) {
   UpdateVirtualKeyboardFromPref();
 }
 
-void AccessibilityManager::ActiveUserChanged(const std::string& user_id) {
+void AccessibilityManager::ActiveUserChanged(const AccountId& account_id) {
   SetProfile(ProfileManager::GetActiveUserProfile());
+}
+
+void AccessibilityManager::OnAppTerminating() {
+  session_state_observer_.reset();
 }
 
 void AccessibilityManager::SetProfileForTest(Profile* profile) {
@@ -988,8 +1054,9 @@ void AccessibilityManager::UpdateChromeOSAccessibilityHistograms() {
                         IsVirtualKeyboardEnabled());
   UMA_HISTOGRAM_BOOLEAN("Accessibility.CrosStickyKeys", IsStickyKeysEnabled());
   if (MagnificationManager::Get()) {
-    uint32 type = MagnificationManager::Get()->IsMagnifierEnabled() ?
-                      MagnificationManager::Get()->GetMagnifierType() : 0;
+    uint32_t type = MagnificationManager::Get()->IsMagnifierEnabled()
+                        ? MagnificationManager::Get()->GetMagnifierType()
+                        : 0;
     // '0' means magnifier is disabled.
     UMA_HISTOGRAM_ENUMERATION("Accessibility.CrosScreenMagnifier",
                               type,
@@ -1095,10 +1162,25 @@ void AccessibilityManager::OnBrailleKeyEvent(const KeyEvent& event) {
   }
 }
 
+void AccessibilityManager::OnExtensionUnloaded(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    extensions::UnloadedExtensionInfo::Reason reason) {
+  if (extension->id() == keyboard_listener_extension_id_) {
+    keyboard_listener_extension_id_ = std::string();
+    keyboard_listener_capture_ = false;
+    extension_registry_observer_.Remove(
+        extensions::ExtensionRegistry::Get(browser_context));
+  }
+}
+
+void AccessibilityManager::OnShutdown(extensions::ExtensionRegistry* registry) {
+  extension_registry_observer_.Remove(registry);
+}
+
 void AccessibilityManager::PostLoadChromeVox(Profile* profile) {
   // Do any setup work needed immediately after ChromeVox actually loads.
-  if (system_sounds_enabled_)
-    ash::PlaySystemSoundAlways(SOUND_SPOKEN_FEEDBACK_ENABLED);
+  ash::PlaySystemSoundAlways(SOUND_SPOKEN_FEEDBACK_ENABLED);
 
   if (chrome_vox_loaded_on_lock_screen_ ||
       should_speak_chrome_vox_announcements_on_user_screen_) {
@@ -1111,22 +1193,50 @@ void AccessibilityManager::PostLoadChromeVox(Profile* profile) {
         extensions::events::ACCESSIBILITY_PRIVATE_ON_INTRODUCE_CHROME_VOX,
         extensions::api::accessibility_private::OnIntroduceChromeVox::
             kEventName,
-        event_args.Pass()));
+        std::move(event_args)));
     event_router->DispatchEventWithLazyListener(
-        extension_misc::kChromeVoxExtensionId, event.Pass());
+        extension_misc::kChromeVoxExtensionId, std::move(event));
   }
 
   should_speak_chrome_vox_announcements_on_user_screen_ =
       chrome_vox_loaded_on_lock_screen_;
+
+  if (!chromevox_panel_) {
+    chromevox_panel_ = new ChromeVoxPanel(profile_);
+    chromevox_panel_widget_observer_.reset(
+        new ChromeVoxPanelWidgetObserver(chromevox_panel_->GetWidget(), this));
+  }
 }
 
 void AccessibilityManager::PostUnloadChromeVox(Profile* profile) {
   // Do any teardown work needed immediately after ChromeVox actually unloads.
-  if (system_sounds_enabled_)
-    ash::PlaySystemSoundAlways(SOUND_SPOKEN_FEEDBACK_DISABLED);
+  ash::PlaySystemSoundAlways(SOUND_SPOKEN_FEEDBACK_DISABLED);
   // Clear the accessibility focus ring.
   AccessibilityFocusRingController::GetInstance()->SetFocusRing(
       std::vector<gfx::Rect>());
+}
+
+void AccessibilityManager::OnChromeVoxPanelClosing() {
+  aura::Window* root_window = chromevox_panel_->GetRootWindow();
+  chromevox_panel_widget_observer_.reset(nullptr);
+  chromevox_panel_ = nullptr;
+  ash::ShelfLayoutManager::ForShelf(root_window)->SetChromeVoxPanelHeight(0);
+}
+
+void AccessibilityManager::OnChromeVoxPanelDestroying() {
+  chromevox_panel_widget_observer_.reset(nullptr);
+  chromevox_panel_ = nullptr;
+}
+
+void AccessibilityManager::SetKeyboardListenerExtensionId(
+    const std::string& id,
+    content::BrowserContext* context) {
+  keyboard_listener_extension_id_ = id;
+
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(context);
+  if (!extension_registry_observer_.IsObserving(registry) && !id.empty())
+    extension_registry_observer_.Add(registry);
 }
 
 }  // namespace chromeos

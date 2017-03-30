@@ -30,24 +30,27 @@ void BrowserContentSettingBubbleModelDelegate::ShowCollectedCookiesDialog(
   TabDialogs::FromWebContents(web_contents)->ShowCollectedCookies();
 }
 
+void BrowserContentSettingBubbleModelDelegate::ShowMediaSettingsPage() {
+  // Microphone and camera settings appear in the content settings menu right
+  // next to each other, the microphone section is first.
+  chrome::ShowContentSettings(
+          browser_, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC);
+}
+
 void BrowserContentSettingBubbleModelDelegate::ShowContentSettingsPage(
     ContentSettingsType type) {
-  switch (type) {
-    case CONTENT_SETTINGS_TYPE_MIXEDSCRIPT:
-      // We don't (yet?) implement user-settable exceptions for mixed script
-      // blocking, so bounce to an explanatory page for now.
-      content_settings::RecordMixedScriptAction(
-          content_settings::MIXED_SCRIPT_ACTION_CLICKED_LEARN_MORE);
-      chrome::AddSelectedTabWithURL(browser_,
-                                    GURL(kInsecureScriptHelpUrl),
-                                    ui::PAGE_TRANSITION_LINK);
-      return;
-    case CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS:
-      chrome::ShowSettingsSubPage(browser_, chrome::kHandlerSettingsSubPage);
-      return;
-    default:
-      chrome::ShowContentSettings(browser_, type);
-      return;
+  if (type == CONTENT_SETTINGS_TYPE_MIXEDSCRIPT) {
+    // We don't (yet?) implement user-settable exceptions for mixed script
+    // blocking, so bounce to an explanatory page for now.
+    content_settings::RecordMixedScriptAction(
+        content_settings::MIXED_SCRIPT_ACTION_CLICKED_LEARN_MORE);
+    chrome::AddSelectedTabWithURL(browser_,
+                                  GURL(kInsecureScriptHelpUrl),
+                                  ui::PAGE_TRANSITION_LINK);
+  } else if (type == CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS) {
+    chrome::ShowSettingsSubPage(browser_, chrome::kHandlerSettingsSubPage);
+  } else {
+    chrome::ShowContentSettingsExceptions(browser_, type);
   }
 }
 

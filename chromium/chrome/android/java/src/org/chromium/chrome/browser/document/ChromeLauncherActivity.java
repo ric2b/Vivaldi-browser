@@ -13,6 +13,7 @@ import android.app.ActivityManager.RecentTaskInfo;
 import android.app.ActivityOptions;
 import android.app.Notification;
 import android.app.PendingIntent;
+import android.app.SearchManager;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
@@ -20,32 +21,36 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.TransactionTooLargeException;
 import android.provider.Browser;
 import android.support.customtabs.CustomTabsIntent;
 import android.text.TextUtils;
-import android.util.Log;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.chrome.browser.BookmarkUtils;
+import org.chromium.base.CommandLineInitUtil;
+import org.chromium.base.Log;
+import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.IntentHandler.TabOpenType;
 import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
+import org.chromium.chrome.browser.externalnav.IntentWithGesturesHandler;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
-import org.chromium.chrome.browser.metrics.LaunchHistogram;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
+import org.chromium.chrome.browser.metrics.StartupMetrics;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.notifications.NotificationUIManager;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.DocumentModeManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabIdManager;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
@@ -54,6 +59,7 @@ import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.content.browser.crypto.CipherFactory;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.PageTransition;
@@ -79,7 +85,7 @@ public class ChromeLauncherActivity extends Activity
     static final String ACTION_CLOSE_ALL_INCOGNITO =
             "com.google.android.apps.chrome.document.CLOSE_ALL_INCOGNITO";
 
-    private static final String TAG = "ChromeLauncherActivity";
+    private static final String TAG = "document_CLActivity";
 
     /** New instance should be launched in the foreground. */
     public static final int LAUNCH_MODE_FOREGROUND = 0;
@@ -103,12 +109,14 @@ public class ChromeLauncherActivity extends Activity
      */
     private static final int INITIAL_DOCUMENT_ACTIVITY_LAUNCH_TIMEOUT_MS = 500;
 
-    private static final LaunchHistogram sMoveToFrontExceptionHistogram =
-            new LaunchHistogram("DocumentActivity.MoveToFrontFailed");
+    private static final LaunchMetrics.BooleanEvent sMoveToFrontExceptionHistogram =
+            new LaunchMetrics.BooleanEvent("DocumentActivity.MoveToFrontFailed");
+    private static final LaunchMetrics.SparseHistogramSample sIntentFlagsHistogram =
+            new LaunchMetrics.SparseHistogramSample("Launch.IntentFlags");
 
     private IntentHandler mIntentHandler;
     private boolean mIsInMultiInstanceMode;
-    private boolean mIsFinishNeeded;
+    private boolean mIsFinishDelayed;
 
     private boolean mIsCustomTabIntent;
 
@@ -130,24 +138,58 @@ public class ChromeLauncherActivity extends Activity
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
+        // This Activity is only transient. It launches another activity and
+        // terminates itself. However, some of the work is performed outside of
+        // {@link Activity#onCreate()}. To capture this, the TraceEvent starts
+        // in onCreate(), and ends in onPause().
+        TraceEvent.begin("ChromeLauncherActivity");
         // Needs to be called as early as possible, to accurately capture the
         // time at which the intent was received.
         IntentHandler.addTimestampToIntent(getIntent());
         // Initialize the command line in case we've disabled document mode from there.
-        ((ChromeApplication) getApplication()).initCommandLine();
+        CommandLineInitUtil.initCommandLine(this, ChromeApplication.COMMAND_LINE_FILE);
 
         // Read partner browser customizations information asynchronously.
         // We want to initialize early because when there is no tabs to restore, we should possibly
         // show homepage, which might require reading PartnerBrowserCustomizations provider.
         PartnerBrowserCustomizations.initializeAsync(getApplicationContext(),
                 PARTNER_BROWSER_CUSTOMIZATIONS_TIMEOUT_MS);
+        maybePerformMigrationTasks();
+        recordIntentMetrics();
 
         mIsInMultiInstanceMode = MultiWindowUtils.getInstance().shouldRunInMultiInstanceMode(this);
         mIntentHandler = new IntentHandler(this, getPackageName());
-        maybePerformMigrationTasks();
-
         mIsCustomTabIntent = isCustomTabIntent();
+
+        Intent intent = getIntent();
+        // Check if a LIVE WebappActivity has to be brought back to the foreground.  We can't
+        // check for a dead WebappActivity because we don't have that information without a global
+        // TabManager.  If that ever lands, code to bring back any Tab could be consolidated
+        // here instead of being spread between ChromeTabbedActivity and ChromeLauncherActivity.
+        // https://crbug.com/443772, https://crbug.com/522918
+        int tabId = IntentUtils.safeGetIntExtra(intent,
+                TabOpenType.BRING_TAB_TO_FRONT.name(), Tab.INVALID_TAB_ID);
+        boolean incognito = intent.getBooleanExtra(
+                IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false);
+        String url = IntentHandler.getUrlFromIntent(intent);
+        if (url == null && tabId == Tab.INVALID_TAB_ID
+                && !incognito && mIntentHandler.handleWebSearchIntent(intent)) {
+            finish();
+            return;
+        }
+
+        if (WebappLauncherActivity.bringWebappToFront(tabId)) {
+            ApiCompatibilityUtils.finishAndRemoveTask(this);
+            return;
+        }
+
+        // The notification settings cog on the flipped side of Notifications and in the Android
+        // Settings "App Notifications" view will open us with a specific category.
+        if (intent.hasCategory(Notification.INTENT_CATEGORY_NOTIFICATION_PREFERENCES)) {
+            NotificationUIManager.launchNotificationPreferences(this, getIntent());
+            finish();
+            return;
+        }
 
         // Check if we should launch the ChromeTabbedActivity.
         if (!mIsCustomTabIntent && !FeatureUtilities.isDocumentMode(this)) {
@@ -157,16 +199,9 @@ public class ChromeLauncherActivity extends Activity
         }
 
         // Check if we're just closing all of the Incognito tabs.
-        if (TextUtils.equals(getIntent().getAction(), ACTION_CLOSE_ALL_INCOGNITO)) {
+        if (TextUtils.equals(intent.getAction(), ACTION_CLOSE_ALL_INCOGNITO)) {
             ChromeApplication.getDocumentTabModelSelector().getModel(true).closeAllTabs();
             ApiCompatibilityUtils.finishAndRemoveTask(this);
-            return;
-        }
-
-        // The notification settings cog on the flipped side of Notifications and in the Android
-        // Settings "App Notifications" view will open us with a specific category.
-        if (getIntent().hasCategory(Notification.INTENT_CATEGORY_NOTIFICATION_PREFERENCES)) {
-            NotificationUIManager.launchNotificationPreferences(this, getIntent());
             return;
         }
 
@@ -182,7 +217,13 @@ public class ChromeLauncherActivity extends Activity
 
         // Launch a DocumentActivity to handle the Intent.
         handleDocumentActivityIntent();
-        if (!mIsFinishNeeded) ApiCompatibilityUtils.finishAndRemoveTask(this);
+        if (!mIsFinishDelayed) ApiCompatibilityUtils.finishAndRemoveTask(this);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        TraceEvent.end("ChromeLauncherActivity");
     }
 
     @Override
@@ -196,7 +237,7 @@ public class ChromeLauncherActivity extends Activity
                     finish();
                 } else if (FeatureUtilities.isDocumentMode(this)) {
                     handleDocumentActivityIntent();
-                    if (!mIsFinishNeeded) ApiCompatibilityUtils.finishAndRemoveTask(this);
+                    if (!mIsFinishDelayed) ApiCompatibilityUtils.finishAndRemoveTask(this);
                 } else {
                     launchTabbedMode();
                     finish();
@@ -223,13 +264,15 @@ public class ChromeLauncherActivity extends Activity
 
     @Override
     public void processWebSearchIntent(String query) {
-        assert false;
+        Intent searchIntent = new Intent(Intent.ACTION_WEB_SEARCH);
+        searchIntent.putExtra(SearchManager.QUERY, query);
+        startActivity(searchIntent);
     }
 
     @Override
     public void processUrlViewIntent(String url, String referer, String headers,
             IntentHandler.TabOpenType tabOpenType, String externalAppId,
-            int tabIdToBringToFront, Intent intent) {
+            int tabIdToBringToFront, boolean hasUserGesture, Intent intent) {
         assert false;
     }
 
@@ -273,11 +316,15 @@ public class ChromeLauncherActivity extends Activity
     private void handleDocumentActivityIntent() {
         if (getIntent() == null || mIntentHandler.shouldIgnoreIntent(this, getIntent())) {
             Log.e(TAG, "Ignoring intent: " + getIntent());
-            mIsFinishNeeded = true;
+            mIsFinishDelayed = false;
             return;
         }
 
         maybePrefetchDnsInBackground();
+        StartupMetrics.getInstance().updateIntent(getIntent());
+
+        boolean hasUserGesture =
+                IntentWithGesturesHandler.getInstance().getUserGestureAndClear(getIntent());
 
         // Increment the Tab ID counter at this point since this Activity may not appear in
         // getAppTasks() when DocumentTabModelSelector is initialized.  This can potentially happen
@@ -295,7 +342,7 @@ public class ChromeLauncherActivity extends Activity
         }
 
         // Sometimes an Intent requests that the current Document get clobbered.
-        if (clobberCurrentDocument(url)) return;
+        if (clobberCurrentDocument(url, hasUserGesture)) return;
 
         // Try to retarget existing Documents before creating a new one.
         boolean incognito = IntentUtils.safeGetBooleanExtra(getIntent(),
@@ -303,16 +350,16 @@ public class ChromeLauncherActivity extends Activity
         boolean append = IntentUtils.safeGetBooleanExtra(
                 getIntent(), IntentHandler.EXTRA_APPEND_TASK, false);
         boolean reuse = IntentUtils.safeGetBooleanExtra(
-                getIntent(), BookmarkUtils.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, false);
+                getIntent(), ShortcutHelper.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, false);
         boolean affiliated = IntentUtils.safeGetBooleanExtra(
                 getIntent(), IntentHandler.EXTRA_OPEN_IN_BG, false);
 
         // Try to relaunch an existing task.
         if (reuse && !append) {
             int shortcutSource = getIntent().getIntExtra(
-                        ShortcutHelper.EXTRA_SOURCE, ShortcutHelper.SOURCE_UNKNOWN);
+                        ShortcutHelper.EXTRA_SOURCE, ShortcutSource.UNKNOWN);
             LaunchMetrics.recordHomeScreenLaunchIntoTab(url, shortcutSource);
-            if (relaunchTask(incognito, url)) return;
+            if (relaunchTask(incognito, url) != Tab.INVALID_TAB_ID) return;
         }
 
         // Create and fire a launch Intent to start a new Task.  The old Intent is copied using
@@ -343,7 +390,7 @@ public class ChromeLauncherActivity extends Activity
 
         // Launch the default page asynchronously because the homepage URL needs to be queried.
         // This is obviously not ideal, but we don't have a choice.
-        mIsFinishNeeded = mIsInMultiInstanceMode;
+        mIsFinishDelayed = mIsInMultiInstanceMode;
         PartnerBrowserCustomizations.setOnInitializeAsyncFinished(new Runnable() {
             @Override
             public void run() {
@@ -357,7 +404,7 @@ public class ChromeLauncherActivity extends Activity
                         mIsInMultiInstanceMode ? LAUNCH_MODE_FOREGROUND : LAUNCH_MODE_RETARGET);
                 launchDocumentInstance(ChromeLauncherActivity.this, false, asyncParams);
 
-                if (mIsFinishNeeded) finish();
+                if (mIsFinishDelayed) finish();
             }
         }, INITIAL_DOCUMENT_ACTIVITY_LAUNCH_TIMEOUT_MS);
     }
@@ -365,9 +412,10 @@ public class ChromeLauncherActivity extends Activity
     /**
      * If necessary, attempts to clobber the current DocumentActivity's tab with the given URL.
      * @param url URL to display.
+     * @param hasUserGesture Whether the intent is launched from a previous user gesture.
      * @return Whether or not the clobber was successful.
      */
-    private boolean clobberCurrentDocument(String url) {
+    private boolean clobberCurrentDocument(String url, boolean hasUserGesture) {
         boolean shouldOpenNewTab = IntentUtils.safeGetBooleanExtra(
                 getIntent(), Browser.EXTRA_CREATE_NEW_TAB, false);
         String applicationId =
@@ -379,8 +427,11 @@ public class ChromeLauncherActivity extends Activity
         if (tabId == Tab.INVALID_TAB_ID) return false;
 
         // Try to clobber the page.
+        LoadUrlParams params = new LoadUrlParams(
+                url, PageTransition.LINK | PageTransition.FROM_API);
+        params.setHasUserGesture(hasUserGesture);
         AsyncTabCreationParams data =
-                new AsyncTabCreationParams(new LoadUrlParams(url), new Intent(getIntent()));
+                new AsyncTabCreationParams(params, new Intent(getIntent()));
         AsyncTabCreationParamsManager.add(tabId, data);
         if (!relaunchTask(tabId)) {
             // Were not able to clobber, will fall through to handle in a new document.
@@ -396,8 +447,7 @@ public class ChromeLauncherActivity extends Activity
         int tabId = ChromeApplication.getDocumentTabModelSelector().getCurrentTabId();
         DocumentTabModel model =
                 ChromeApplication.getDocumentTabModelSelector().getModelForTabId(tabId);
-        if (tabId != Tab.INVALID_TAB_ID && model != null && !model.isCoveredByChildActivity(tabId)
-                && relaunchTask(tabId)) {
+        if (tabId != Tab.INVALID_TAB_ID && model != null && relaunchTask(tabId)) {
             return true;
         }
 
@@ -407,11 +457,6 @@ public class ChromeLauncherActivity extends Activity
         for (AppTask task : am.getAppTasks()) {
             String className = DocumentUtils.getTaskClassName(task, pm);
             if (className == null || !DocumentActivity.isDocumentActivity(className)) continue;
-
-            int id = ActivityDelegate.getTabIdFromIntent(task.getTaskInfo().baseIntent);
-            model = ChromeApplication.getDocumentTabModelSelector().getModelForTabId(id);
-            if (model != null && model.isCoveredByChildActivity(id)) continue;
-
             if (!moveToFront(task)) continue;
             return true;
         }
@@ -429,9 +474,10 @@ public class ChromeLauncherActivity extends Activity
      * @param incognito Whether the created document should be incognito.
      * @param asyncParams AsyncTabCreationParams to store internally and use later once an intent is
      *                    received to launch the URL.
+     * @return ID of the Tab that was launched.
      */
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public static void launchDocumentInstance(
+    public static int launchDocumentInstance(
             Activity activity, boolean incognito, AsyncTabCreationParams asyncParams) {
         assert asyncParams != null;
 
@@ -450,7 +496,8 @@ public class ChromeLauncherActivity extends Activity
         if (launchMode == LAUNCH_MODE_RETARGET) {
             assert asyncParams.getWebContents() == null;
             assert loadUrlParams.getPostData() == null;
-            if (relaunchTask(incognito, loadUrlParams.getUrl())) return;
+            int relaunchedId = relaunchTask(incognito, loadUrlParams.getUrl());
+            if (relaunchedId != Tab.INVALID_TAB_ID) return relaunchedId;
         }
 
         // If the new tab is spawned by another tab, record the parent.
@@ -476,13 +523,15 @@ public class ChromeLauncherActivity extends Activity
         intent.putExtra(EXTRA_LAUNCH_MODE, launchMode);
         IntentHandler.addTrustedIntentExtras(intent, context);
 
+        boolean succeeded = false;
         boolean affiliated = launchMode == LAUNCH_MODE_AFFILIATED;
         if (activity == null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            fireDocumentIntent(context, intent, incognito, affiliated, asyncParams);
+            succeeded = fireDocumentIntent(context, intent, incognito, affiliated, asyncParams);
         } else {
-            fireDocumentIntent(activity, intent, incognito, affiliated, asyncParams);
+            succeeded = fireDocumentIntent(activity, intent, incognito, affiliated, asyncParams);
         }
+        return succeeded ? ActivityDelegate.getTabIdFromIntent(intent) : Tab.INVALID_TAB_ID;
     }
 
     /**
@@ -494,7 +543,7 @@ public class ChromeLauncherActivity extends Activity
      * may therefore _not_ create a new DocumentActivity instance.
      */
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    private static void fireDocumentIntent(Context context, Intent intent, boolean incognito,
+    private static boolean fireDocumentIntent(Context context, Intent intent, boolean incognito,
             boolean affiliated, AsyncTabCreationParams asyncParams) {
         assert asyncParams != null;
         assert incognito || TextUtils.equals(
@@ -518,17 +567,33 @@ public class ChromeLauncherActivity extends Activity
         AsyncTabCreationParamsManager.add(tabId, asyncParams);
         isWebContentsPending = asyncParams.getWebContents() != null;
 
-        Bundle options = affiliated && !isWebContentsPending
-                ? ActivityOptions.makeTaskLaunchBehind().toBundle() : null;
-        if (incognito && !CipherFactory.getInstance().hasCipher()
-                && ChromeApplication.getDocumentTabModelSelector().getModel(true)
-                        .getCount() > 0) {
-            // The CipherKeyActivity needs to be run to restore the Incognito decryption key.
-            Intent cipherIntent = CipherKeyActivity.createIntent(context, intent, options);
-            context.startActivity(cipherIntent);
-        } else {
-            context.startActivity(intent, options);
+        Bundle options = null;
+        if (affiliated && !isWebContentsPending) {
+            options = ActivityOptions.makeTaskLaunchBehind().toBundle();
+            asyncParams.setIsAffiliated(true);
         }
+
+        try {
+            if (incognito && !CipherFactory.getInstance().hasCipher()
+                    && ChromeApplication.getDocumentTabModelSelector().getModel(true)
+                            .getCount() > 0) {
+                // The CipherKeyActivity needs to be run to restore the Incognito decryption key.
+                Intent cipherIntent = CipherKeyActivity.createIntent(context, intent, options);
+                context.startActivity(cipherIntent);
+            } else {
+                context.startActivity(intent, options);
+            }
+        } catch (java.lang.RuntimeException exception) {
+            if (exception.getCause() instanceof TransactionTooLargeException) {
+                Log.e(TAG, "Failed to launch DocumentActivity because Intent was too large");
+                AsyncTabCreationParamsManager.remove(tabId);
+                if (isWebContentsPending) asyncParams.getWebContents().destroy();
+                return false;
+            }
+            throw exception;
+        }
+
+        return true;
     }
 
     /**
@@ -557,12 +622,12 @@ public class ChromeLauncherActivity extends Activity
         Intent intent = oldIntent == null ? new Intent() : new Intent(oldIntent);
         intent.setAction(Intent.ACTION_VIEW);
         intent.setClassName(context, getDocumentClassName(incognito));
+        intent.setData(DocumentTabModelSelector.createDocumentDataString(newTabId, url));
 
-        if (incognito) {
-            // Incognito Intents don't pass URLs in their data.
+        if (incognito || IntentUtils.isIntentTooLarge(intent)) {
+            // Don't pass URLs via Incognito Intents for privacy reasons, and don't do it when the
+            // Intent is too large to prevent crashes: https://crbug.com/526238
             intent.setData(DocumentTabModelSelector.createDocumentDataString(newTabId, ""));
-        } else {
-            intent.setData(DocumentTabModelSelector.createDocumentDataString(newTabId, url));
         }
 
         // For content URIs, because intent.getData().getScheme() begins with "document://,
@@ -633,11 +698,11 @@ public class ChromeLauncherActivity extends Activity
      * Bring the task matching the given URL to the front if the task is retargetable.
      * @param incognito Whether or not the tab is incognito.
      * @param url URL that the tab would have been created for. If null, this param is ignored.
-     * @return Whether the task was successfully brought back.
+     * @return ID of the Tab if it was successfully relaunched, otherwise Tab.INVALID_TAB_ID.
      */
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    private static boolean relaunchTask(boolean incognito, String url) {
-        if (TextUtils.isEmpty(url)) return false;
+    private static int relaunchTask(boolean incognito, String url) {
+        if (TextUtils.isEmpty(url)) return Tab.INVALID_TAB_ID;
 
         Context context = ApplicationStatus.getApplicationContext();
         ActivityManager manager =
@@ -657,10 +722,10 @@ public class ChromeLauncherActivity extends Activity
             }
 
             if (!moveToFront(task)) continue;
-            return true;
+            return id;
         }
 
-        return false;
+        return Tab.INVALID_TAB_ID;
     }
 
     /**
@@ -719,9 +784,9 @@ public class ChromeLauncherActivity extends Activity
     }
 
     /**
-     * Attempt to move a task back to the front.  This can FAIL for some reason because the UID
+     * Attempt to move a task back to the front.  This can fail for some reason because the UID
      * of the DocumentActivity we try to bring back to the front doesn't match the
-     * ChromeLauncherActivities.
+     * ChromeLauncherActivity's.
      * @param task Task to attempt to bring back to the foreground.
      * @return Whether or not this succeeded.
      */
@@ -761,9 +826,16 @@ public class ChromeLauncherActivity extends Activity
     }
 
     /**
-     * Send the number of times an exception was caught when trying to move a task back to front.
+     * Records metrics gleaned from the Intent.
      */
-    public static void sendExceptionCount() {
-        sMoveToFrontExceptionHistogram.commitHistogram();
+    private void recordIntentMetrics() {
+        Intent intent = getIntent();
+        IntentHandler.ExternalAppId source =
+                IntentHandler.determineExternalIntentSource(getPackageName(), intent);
+        if (intent.getPackage() == null && source != IntentHandler.ExternalAppId.CHROME) {
+            int flagsOfInterest = Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
+            int maskedFlags = intent.getFlags() & flagsOfInterest;
+            sIntentFlagsHistogram.record(maskedFlags);
+        }
     }
 }

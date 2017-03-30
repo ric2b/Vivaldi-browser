@@ -13,8 +13,8 @@ import android.net.ConnectivityManager;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
-import android.util.Log;
 
+import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.LibraryProcessType;
@@ -30,7 +30,7 @@ import org.chromium.content.browser.BrowserStartupController;
  * either precaching finishes successfully, or the conditions are no longer met.
  */
 public class PrecacheService extends Service {
-    private static final String TAG = "PrecacheService";
+    private static final String TAG = "Precache";
 
     public static final String ACTION_START_PRECACHE =
             "org.chromium.chrome.browser.precache.PrecacheService.START_PRECACHE";
@@ -39,11 +39,16 @@ public class PrecacheService extends Service {
     private WakeLock mPrecachingWakeLock;
 
     /** True if there is a precache in progress. */
-    private boolean mIsPrecaching = false;
+    private static boolean sIsPrecaching = false;
+
+    /** Returns true if there is a precache in progress. */
+    public static boolean isPrecaching() {
+        return sIsPrecaching;
+    }
 
     @VisibleForTesting
-    boolean isPrecaching() {
-        return mIsPrecaching;
+    static void setIsPrecaching(boolean isPrecaching) {
+        sIsPrecaching = isPrecaching;
     }
 
     private DeviceState mDeviceState = DeviceState.getInstance();
@@ -58,9 +63,8 @@ public class PrecacheService extends Service {
     private final BroadcastReceiver mDeviceStateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (mIsPrecaching && (mDeviceState.isInteractive(context)
-                    || !mDeviceState.isPowerConnected(context)
-                    || !mDeviceState.isWifiAvailable(context))) {
+            if (sIsPrecaching && (!mDeviceState.isPowerConnected(context)
+                                         || !mDeviceState.isWifiAvailable(context))) {
                 cancelPrecaching();
             }
         }
@@ -72,15 +76,15 @@ public class PrecacheService extends Service {
     }
 
     @VisibleForTesting
-    void handlePrecacheCompleted() {
-        if (mIsPrecaching) finishPrecaching();
+    void handlePrecacheCompleted(boolean tryAgainSoon) {
+        if (sIsPrecaching) finishPrecaching(tryAgainSoon);
     }
 
     /** PrecacheLauncher used to run precaching. */
     private PrecacheLauncher mPrecacheLauncher = new PrecacheLauncher() {
         @Override
-        protected void onPrecacheCompleted() {
-            handlePrecacheCompleted();
+        protected void onPrecacheCompleted(boolean tryAgainSoon) {
+            handlePrecacheCompleted(tryAgainSoon);
         }
     };
 
@@ -97,7 +101,7 @@ public class PrecacheService extends Service {
 
     @Override
     public void onDestroy() {
-        if (mIsPrecaching) cancelPrecaching();
+        if (sIsPrecaching) cancelPrecaching();
 
         unregisterReceiver(mDeviceStateReceiver);
         mPrecacheLauncher.destroy();
@@ -110,7 +114,7 @@ public class PrecacheService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         try {
             if (intent != null && ACTION_START_PRECACHE.equals(intent.getAction())
-                    && !mIsPrecaching) {
+                    && !sIsPrecaching) {
                 // Only start precaching if precaching is not already in progress.
                 startPrecaching();
             }
@@ -121,7 +125,7 @@ public class PrecacheService extends Service {
         // {@link Service.START_STICKY} if precaching is in progress to keep the service running;
         // otherwise, return {@link Service.START_NOT_STICKY} to cause the service to stop once it
         // is done processing commands sent to it.
-        return mIsPrecaching ? START_STICKY : START_NOT_STICKY;
+        return sIsPrecaching ? START_STICKY : START_NOT_STICKY;
     }
 
     /** PrecacheService does not support binding. */
@@ -150,7 +154,7 @@ public class PrecacheService extends Service {
     private void startPrecaching() {
         Log.v(TAG, "Start precaching");
         prepareNativeLibraries();
-        mIsPrecaching = true;
+        sIsPrecaching = true;
         acquirePrecachingWakeLock();
 
         // In certain cases, the PrecacheLauncher will skip precaching entirely and call
@@ -161,9 +165,9 @@ public class PrecacheService extends Service {
     }
 
     /** End a precache cycle. */
-    private void finishPrecaching() {
+    private void finishPrecaching(boolean tryAgainSoon) {
         Log.v(TAG, "Finish precaching");
-        shutdownPrecaching();
+        shutdownPrecaching(tryAgainSoon);
     }
 
     /** Cancel a precache cycle. */
@@ -172,15 +176,16 @@ public class PrecacheService extends Service {
         prepareNativeLibraries();
         mPrecacheLauncher.cancel();
 
-        shutdownPrecaching();
+        shutdownPrecaching(true);
     }
 
     /**
      * Update state to indicate that precaching is no longer in progress, and stop the service.
      */
-    private void shutdownPrecaching() {
-        mIsPrecaching = false;
+    private void shutdownPrecaching(boolean tryAgainSoon) {
+        sIsPrecaching = false;
         releasePrecachingWakeLock();
+        PrecacheServiceLauncher.precachingFinished(getApplicationContext(), tryAgainSoon);
         stopSelf();
     }
 
@@ -189,7 +194,6 @@ public class PrecacheService extends Service {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_POWER_DISCONNECTED);
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
-        filter.addAction(Intent.ACTION_SCREEN_ON);
         registerReceiver(mDeviceStateReceiver, filter);
     }
 

@@ -4,6 +4,7 @@
 
 #include "net/android/network_library.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -127,6 +128,19 @@ std::string GetTelephonyNetworkOperator() {
       Java_AndroidNetworkLibrary_getNetworkOperator(
           base::android::AttachCurrentThread(),
           base::android::GetApplicationContext()));
+}
+
+std::string GetTelephonySimOperator() {
+  return base::android::ConvertJavaStringToUTF8(
+      Java_AndroidNetworkLibrary_getSimOperator(
+          base::android::AttachCurrentThread(),
+          base::android::GetApplicationContext()));
+}
+
+bool GetIsRoaming() {
+  return Java_AndroidNetworkLibrary_getIsRoaming(
+      base::android::AttachCurrentThread(),
+      base::android::GetApplicationContext());
 }
 
 bool RegisterNetworkLibrary(JNIEnv* env) {

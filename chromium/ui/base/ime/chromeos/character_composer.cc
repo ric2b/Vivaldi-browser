@@ -21,7 +21,7 @@ namespace {
 
 bool CheckCharacterComposeTable(
     const ui::CharacterComposer::ComposeBuffer& compose_sequence,
-    uint32* composed_character) {
+    uint32_t* composed_character) {
   const ui::TreeComposeChecker kTreeComposeChecker(kCompositions);
   return kTreeComposeChecker.CheckSequence(compose_sequence,
                                            composed_character) !=
@@ -30,7 +30,7 @@ bool CheckCharacterComposeTable(
 
 // Converts |character| to UTF16 string.
 // Returns false when |character| is not a valid character.
-bool UTF32CharacterToUTF16(uint32 character, base::string16* output) {
+bool UTF32CharacterToUTF16(uint32_t character, base::string16* output) {
   output->clear();
   // Reject invalid character. (e.g. codepoint greater than 0x10ffff)
   if (!CBU_IS_UNICODE_CHAR(character))
@@ -83,10 +83,10 @@ bool CharacterComposer::FilterKeyPress(const ui::KeyEvent& event) {
   preedit_string_.clear();
 
   // When the user presses Ctrl+Shift+U, maybe switch to HEX_MODE.
-  // We don't care about other modifiers like Alt.  When CapsLock is down, we
-  // do nothing because what we receive is Ctrl+Shift+u (not U).
+  // We don't care about other modifiers like Alt.  When CapsLock is on, we do
+  // nothing because what we receive is Ctrl+Shift+u (not U).
   if (event.key_code() == VKEY_U &&
-      (event.flags() & (EF_SHIFT_DOWN | EF_CONTROL_DOWN | EF_CAPS_LOCK_DOWN)) ==
+      (event.flags() & (EF_SHIFT_DOWN | EF_CONTROL_DOWN | EF_CAPS_LOCK_ON)) ==
           (EF_SHIFT_DOWN | EF_CONTROL_DOWN)) {
     if (composition_mode_ == KEY_SEQUENCE_MODE && compose_buffer_.empty()) {
       // There is no ongoing composition.  Let's switch to HEX_MODE.
@@ -110,11 +110,10 @@ bool CharacterComposer::FilterKeyPress(const ui::KeyEvent& event) {
 
 bool CharacterComposer::FilterKeyPressSequenceMode(const KeyEvent& event) {
   DCHECK(composition_mode_ == KEY_SEQUENCE_MODE);
-  compose_buffer_.push_back(
-      KeystrokeMeaning(event.GetDomKey(), event.GetCharacter()));
+  compose_buffer_.push_back(event.GetDomKey());
 
   // Check compose table.
-  uint32 composed_character_utf32 = 0;
+  uint32_t composed_character_utf32 = 0;
   if (CheckCharacterComposeTable(compose_buffer_, &composed_character_utf32)) {
     // Key press is recognized as a part of composition.
     if (composed_character_utf32 != 0) {
@@ -177,9 +176,9 @@ bool CharacterComposer::FilterKeyPressHexMode(const KeyEvent& event) {
 
 void CharacterComposer::CommitHex() {
   DCHECK(composition_mode_ == HEX_MODE);
-  uint32 composed_character_utf32 = 0;
+  uint32_t composed_character_utf32 = 0;
   for (size_t i = 0; i != hex_buffer_.size(); ++i) {
-    const uint32 digit = hex_buffer_[i];
+    const uint32_t digit = hex_buffer_[i];
     DCHECK(0 <= digit && digit < 16);
     composed_character_utf32 <<= 4;
     composed_character_utf32 |= digit;
@@ -214,17 +213,22 @@ ComposeChecker::CheckSequenceResult TreeComposeChecker::CheckSequence(
     DCHECK(tree_index < data_.tree_entries);
 
     // If we are looking up a dead key, skip over the character tables.
-    if (keystroke.key == ui::DomKey::DEAD) {
+    int32_t character = -1;
+    if (keystroke.IsDeadKey()) {
       tree_index += 2 * data_.tree[tree_index] + 1;  // internal unicode table
       tree_index += 2 * data_.tree[tree_index] + 1;  // leaf unicode table
-    } else if (keystroke.key != ui::DomKey::CHARACTER) {
-      return CheckSequenceResult::NO_MATCH;
+      character = keystroke.ToDeadKeyCombiningCharacter();
+    } else if (keystroke.IsCharacter()) {
+      character = keystroke.ToCharacter();
     }
+    if (character < 0 || character > 0xFFFF)
+      return CheckSequenceResult::NO_MATCH;
 
     // Check the internal subtree table.
     uint16_t result = 0;
     uint16_t entries = data_.tree[tree_index++];
-    if (entries && Find(tree_index, entries, keystroke.character, &result)) {
+    if (entries &&
+        Find(tree_index, entries, static_cast<uint16_t>(character), &result)) {
       tree_index = result;
       continue;
     }
@@ -232,7 +236,8 @@ ComposeChecker::CheckSequenceResult TreeComposeChecker::CheckSequence(
     // Skip over the internal subtree table and check the leaf table.
     tree_index += 2 * entries;
     entries = data_.tree[tree_index++];
-    if (entries && Find(tree_index, entries, keystroke.character, &result)) {
+    if (entries &&
+        Find(tree_index, entries, static_cast<uint16_t>(character), &result)) {
       *composed_character = result;
       return CheckSequenceResult::FULL_MATCH;
     }

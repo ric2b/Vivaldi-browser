@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
+#include "build/build_config.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_export.h"
 
@@ -29,7 +30,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFactory {
   // use.
   static void GetAdapter(const AdapterCallback& callback);
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
   // Calls |BluetoothAdapter::Shutdown| on the adapter if
   // present.
   static void Shutdown();

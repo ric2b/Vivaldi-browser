@@ -33,15 +33,11 @@ class Label;
 class CredentialsItemView : public AccountAvatarFetcherDelegate,
                             public views::LabelButton {
  public:
-  enum Style {
-    ACCOUNT_CHOOSER,
-    AUTO_SIGNIN,
-  };
-
   CredentialsItemView(views::ButtonListener* button_listener,
                       const autofill::PasswordForm* form,
                       password_manager::CredentialType credential_type,
-                      Style style,
+                      const base::string16& upper_text,
+                      const base::string16& lower_text,
                       net::URLRequestContextGetter* request_context);
   ~CredentialsItemView() override;
 
@@ -52,6 +48,10 @@ class CredentialsItemView : public AccountAvatarFetcherDelegate,
 
   // AccountAvatarFetcherDelegate:
   void UpdateAvatar(const gfx::ImageSkia& image) override;
+
+  // Returns horizontal offset of the username label from the left side of the
+  // view.
+  int GetLabelOffset() const;
 
  private:
   // views::LabelButton:

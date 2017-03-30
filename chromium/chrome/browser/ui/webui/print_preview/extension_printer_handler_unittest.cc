@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <queue>
 #include <string>
 
@@ -18,9 +21,10 @@
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/test_extension_environment.h"
-#include "chrome/browser/local_discovery/pwg_raster_converter.h"
+#include "chrome/browser/printing/pwg_raster_converter.h"
 #include "chrome/browser/ui/webui/print_preview/extension_printer_handler.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/version_info/version_info.h"
 #include "device/core/device_client.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_service.h"
@@ -43,7 +47,7 @@ using extensions::Extension;
 using extensions::PrinterProviderAPI;
 using extensions::PrinterProviderPrintJob;
 using extensions::TestExtensionEnvironment;
-using local_discovery::PWGRasterConverter;
+using printing::PWGRasterConverter;
 
 namespace {
 
@@ -264,7 +268,7 @@ std::string RefCountedMemoryToString(
   return std::string(memory->front_as<char>(), memory->size());
 }
 
-// Fake PWGRasterconverter used in the tests.
+// Fake PWGRasterConverter used in the tests.
 class FakePWGRasterConverter : public PWGRasterConverter {
  public:
   FakePWGRasterConverter() : fail_conversion_(false), initialized_(false) {}
@@ -475,7 +479,7 @@ class ExtensionPrinterHandlerTest : public testing::Test {
         env_.profile(), base::MessageLoop::current()->task_runner()));
 
     pwg_raster_converter_ = new FakePWGRasterConverter();
-    extension_printer_handler_->SetPwgRasterConverterForTesting(
+    extension_printer_handler_->SetPWGRasterConverterForTesting(
         scoped_ptr<PWGRasterConverter>(pwg_raster_converter_));
     device_client_.set_usb_service(&usb_service_);
   }

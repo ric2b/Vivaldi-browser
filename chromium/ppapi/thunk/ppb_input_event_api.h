@@ -5,6 +5,8 @@
 #ifndef PPAPI_THUNK_PPB_INPUT_EVENT_API_H_
 #define PPAPI_THUNK_PPB_INPUT_EVENT_API_H_
 
+#include <stdint.h>
+
 #include "ppapi/c/dev/ppb_ime_input_event_dev.h"
 #include "ppapi/c/ppb_input_event.h"
 #include "ppapi/thunk/ppapi_thunk_export.h"
@@ -47,9 +49,6 @@ class PPAPI_THUNK_EXPORT PPB_InputEvent_API {
                                         uint32_t index) = 0;
   virtual PP_TouchPoint GetTouchById(PP_TouchListType list,
                                      uint32_t id) = 0;
-
-  //  Private API.
-  virtual PP_Bool TraceInputLatency(PP_Bool has_damage) = 0;
 };
 
 }  // namespace thunk

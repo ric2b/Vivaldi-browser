@@ -5,10 +5,14 @@
 #ifndef MEDIA_BLINK_WEBCONTENTDECRYPTIONMODULE_IMPL_H_
 #define MEDIA_BLINK_WEBCONTENTDECRYPTIONMODULE_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
-#include "media/base/media_export.h"
+#include "media/blink/media_blink_export.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModule.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModuleResult.h"
 
@@ -27,7 +31,7 @@ class CdmFactory;
 class CdmSessionAdapter;
 class WebContentDecryptionModuleSessionImpl;
 
-class MEDIA_EXPORT WebContentDecryptionModuleImpl
+class MEDIA_BLINK_EXPORT WebContentDecryptionModuleImpl
     : public blink::WebContentDecryptionModule {
  public:
   static void Create(
@@ -37,15 +41,15 @@ class MEDIA_EXPORT WebContentDecryptionModuleImpl
       const CdmConfig& cdm_config,
       scoped_ptr<blink::WebContentDecryptionModuleResult> result);
 
-  virtual ~WebContentDecryptionModuleImpl();
+  ~WebContentDecryptionModuleImpl() override;
 
   // blink::WebContentDecryptionModule implementation.
-  virtual blink::WebContentDecryptionModuleSession* createSession();
+  blink::WebContentDecryptionModuleSession* createSession() override;
 
-  virtual void setServerCertificate(
-      const uint8* server_certificate,
+  void setServerCertificate(
+      const uint8_t* server_certificate,
       size_t server_certificate_length,
-      blink::WebContentDecryptionModuleResult result);
+      blink::WebContentDecryptionModuleResult result) override;
 
   // Returns the CdmContext associated with this CDM, which must not be nullptr.
   // TODO(jrummell): Figure out lifetimes, as WMPI may still use the decryptor

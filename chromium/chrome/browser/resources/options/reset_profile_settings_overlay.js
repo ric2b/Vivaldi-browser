@@ -6,12 +6,12 @@ cr.define('options', function() {
   var Page = cr.ui.pageManager.Page;
 
   var AutomaticSettingsResetBanner = options.AutomaticSettingsResetBanner;
-  var ResetProfileSettingsBanner = options.ResetProfileSettingsBanner;
 
   /**
    * ResetProfileSettingsOverlay class
    * Encapsulated handling of the 'Reset Profile Settings' overlay page.
-   * @class
+   * @constructor
+   * @extends {cr.ui.pageManager.Page}
    */
   function ResetProfileSettingsOverlay() {
     Page.call(this, 'resetProfileSettings',
@@ -51,7 +51,11 @@ cr.define('options', function() {
      * chrome/browser/resources/options/automatic_settings_reset_banner.js.
      */
     didShowPage: function() {
-      ResetProfileSettingsBanner.dismiss();
+      $('reset-profile-settings-title').textContent =
+          loadTimeData.getString('resetProfileSettingsOverlay');
+      $('reset-profile-settings-explanation').textContent =
+          loadTimeData.getString('resetProfileSettingsExplanation');
+
       chrome.send('onShowResetProfileDialog');
     },
 

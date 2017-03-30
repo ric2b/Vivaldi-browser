@@ -6,28 +6,26 @@
 #define REMOTING_CLIENT_PLUGIN_PEPPER_PORT_ALLOCATOR_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ppapi/cpp/instance_handle.h"
-#include "third_party/webrtc/p2p/client/httpportallocator.h"
+#include "remoting/protocol/port_allocator_base.h"
+#include "remoting/protocol/port_allocator_factory.h"
 
 namespace remoting {
 
-// An implementation of cricket::PortAllocator for libjingle that is
-// used by the client plugin. There are two differences from
-// cricket::HttpPortAllocator:
-//   * PepperPortAllocator uses Pepper URLLoader API when creating
-//     relay sessions.
-//   * PepperPortAllocator resolves STUN DNS names and passes IP
-//     addresses to BasicPortAllocator (it uses HostResolverPrivate API
-//     for that). This is needed because libjingle's DNS resolution
-//     code doesn't work in sandbox.
-class PepperPortAllocator : public cricket::HttpPortAllocatorBase {
+// An implementation of cricket::PortAllocator for libjingle that is used by the
+// client plugin. It uses Pepper URLLoader API when creating relay sessions.
+class PepperPortAllocator : public protocol::PortAllocatorBase {
  public:
-  static scoped_ptr<PepperPortAllocator> Create(
-      const pp::InstanceHandle& instance);
+  PepperPortAllocator(
+      scoped_refptr<protocol::TransportContext> transport_context,
+      pp::InstanceHandle pp_instance);
   ~PepperPortAllocator() override;
 
-  // cricket::HttpPortAllocatorBase overrides.
+  pp::InstanceHandle pp_instance() { return pp_instance_; }
+
+  // PortAllocatorBase overrides.
   cricket::PortAllocatorSession* CreateSessionInternal(
       const std::string& content_name,
       int component,
@@ -35,16 +33,26 @@ class PepperPortAllocator : public cricket::HttpPortAllocatorBase {
       const std::string& ice_password) override;
 
  private:
-  PepperPortAllocator(
-      const pp::InstanceHandle& instance,
-      scoped_ptr<rtc::NetworkManager> network_manager,
-      scoped_ptr<rtc::PacketSocketFactory> socket_factory);
-
-  pp::InstanceHandle instance_;
+  pp::InstanceHandle pp_instance_;
   scoped_ptr<rtc::NetworkManager> network_manager_;
   scoped_ptr<rtc::PacketSocketFactory> socket_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PepperPortAllocator);
+};
+
+class PepperPortAllocatorFactory : public protocol::PortAllocatorFactory {
+ public:
+  PepperPortAllocatorFactory(pp::InstanceHandle pp_instance);
+  ~PepperPortAllocatorFactory() override;
+
+   // PortAllocatorFactory interface.
+  scoped_ptr<cricket::PortAllocator> CreatePortAllocator(
+      scoped_refptr<protocol::TransportContext> transport_context) override;
+
+ private:
+  pp::InstanceHandle pp_instance_;
+
+  DISALLOW_COPY_AND_ASSIGN(PepperPortAllocatorFactory);
 };
 
 }  // namespace remoting

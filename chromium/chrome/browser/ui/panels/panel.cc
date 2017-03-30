@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/panels/panel.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -20,6 +23,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
+#include "chrome/browser/task_management/web_contents_tags.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/panels/native_panel.h"
@@ -95,7 +99,6 @@ PanelExtensionWindowController::CreateWindowValueWithTabs(
     const extensions::Extension* extension) const {
   base::DictionaryValue* result = CreateWindowValue();
 
-  DCHECK(IsVisibleToExtension(extension));
   base::DictionaryValue* tab_value = CreateTabValue(extension, 0);
   if (tab_value) {
     base::ListValue* tab_list = new base::ListValue();
@@ -114,7 +117,6 @@ base::DictionaryValue* PanelExtensionWindowController::CreateTabValue(
   if (!web_contents)
     return NULL;
 
-  DCHECK(IsVisibleToExtension(extension));
   base::DictionaryValue* tab_value = new base::DictionaryValue();
   tab_value->SetInteger(extensions::tabs_constants::kIdKey,
                         SessionTabHelper::IdForTab(web_contents));
@@ -151,6 +153,7 @@ void PanelExtensionWindowController::SetFullscreenMode(
 
 bool PanelExtensionWindowController::IsVisibleToExtension(
     const extensions::Extension* extension) const {
+  DCHECK(extension);
   return extension->id() == panel_->extension_id();
 }
 
@@ -514,6 +517,7 @@ panel::Resizability Panel::CanResizeByMouse() const {
 }
 
 void Panel::Initialize(const GURL& url,
+                       content::SiteInstance* source_site_instance,
                        const gfx::Rect& bounds,
                        bool always_on_top) {
   DCHECK(!initialized_);
@@ -531,11 +535,15 @@ void Panel::Initialize(const GURL& url,
 
   // Set up hosting for web contents.
   panel_host_.reset(new PanelHost(this, profile_));
-  panel_host_->Init(url);
+  panel_host_->Init(url, source_site_instance);
   content::WebContents* web_contents = GetWebContents();
   // The contents might be NULL for most of our tests.
-  if (web_contents)
+  if (web_contents) {
     native_panel_->AttachWebContents(web_contents);
+
+    // Make the panel show up in the task manager.
+    task_management::WebContentsTags::CreateForPanel(web_contents, this);
+  }
 
   // Close when the extension is unloaded or the browser is exiting.
   extension_registry_->AddObserver(this);

@@ -4,10 +4,13 @@
 
 #include "chrome/browser/ui/views/infobars/confirm_infobar.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/views/elevation_icon_setter.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
@@ -17,19 +20,18 @@
 
 scoped_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
     scoped_ptr<ConfirmInfoBarDelegate> delegate) {
-  return make_scoped_ptr(new ConfirmInfoBar(delegate.Pass()));
+  return make_scoped_ptr(new ConfirmInfoBar(std::move(delegate)));
 }
 
 
 // ConfirmInfoBar -------------------------------------------------------------
 
 ConfirmInfoBar::ConfirmInfoBar(scoped_ptr<ConfirmInfoBarDelegate> delegate)
-    : InfoBarView(delegate.Pass()),
+    : InfoBarView(std::move(delegate)),
       label_(NULL),
       ok_button_(NULL),
       cancel_button_(NULL),
-      link_(NULL) {
-}
+      link_(NULL) {}
 
 ConfirmInfoBar::~ConfirmInfoBar() {
   // Ensure |elevation_icon_setter_| is destroyed before |ok_button_|.
@@ -68,20 +70,28 @@ void ConfirmInfoBar::ViewHierarchyChanged(
     AddChildView(label_);
 
     if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_OK) {
-      ok_button_ = CreateLabelButton(
-          this, delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
-      if (delegate->OKButtonTriggersUACPrompt())
+      if (delegate->OKButtonTriggersUACPrompt()) {
+        // Use a label button even in MD mode as MD buttons don't support icons.
+        views::LabelButton* ok_button = CreateLabelButton(
+            this, delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
         elevation_icon_setter_.reset(new ElevationIconSetter(
-            ok_button_,
+            ok_button,
             base::Bind(&ConfirmInfoBar::Layout, base::Unretained(this))));
+        ok_button_ = ok_button;
+      } else {
+        ok_button_ = CreateTextButton(
+            this, delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
+      }
       AddChildView(ok_button_);
+      ok_button_->SizeToPreferredSize();
     }
 
     if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
-      cancel_button_ = CreateLabelButton(
+      cancel_button_ = CreateTextButton(
           this,
           delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
       AddChildView(cancel_button_);
+      cancel_button_->SizeToPreferredSize();
     }
 
     base::string16 link_text(delegate->GetLinkText());
@@ -99,10 +109,10 @@ void ConfirmInfoBar::ButtonPressed(views::Button* sender,
   if (!owner())
     return;  // We're closing; don't call anything, it might access the owner.
   ConfirmInfoBarDelegate* delegate = GetDelegate();
-  if ((ok_button_ != NULL) && sender == ok_button_) {
+  if (sender == ok_button_) {
     if (delegate->Accept())
       RemoveSelf();
-  } else if ((cancel_button_ != NULL) && (sender == cancel_button_)) {
+  } else if (sender == cancel_button_) {
     if (delegate->Cancel())
       RemoveSelf();
   } else {
@@ -132,6 +142,6 @@ int ConfirmInfoBar::NonLabelWidth() const {
       0 : kEndOfLabelSpacing;
   if (ok_button_)
     width += ok_button_->width() + (cancel_button_ ? kButtonButtonSpacing : 0);
-  width += (cancel_button_ ? cancel_button_->width() : 0);
+  width += cancel_button_ ? cancel_button_->width() : 0;
   return width + ((link_->text().empty() || !width) ? 0 : kEndOfLabelSpacing);
 }

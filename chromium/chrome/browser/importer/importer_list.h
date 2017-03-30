@@ -5,22 +5,20 @@
 #ifndef CHROME_BROWSER_IMPORTER_IMPORTER_LIST_H_
 #define CHROME_BROWSER_IMPORTER_IMPORTER_LIST_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
-
-namespace importer {
-struct SourceProfile;
-}
+#include "chrome/common/importer/importer_data_types.h"
 
 // ImporterList detects installed browsers and profiles via
 // DetectSourceProfilesWorker(). ImporterList lives on the UI thread.
-class ImporterList { 
+class ImporterList {
  public:
   ImporterList();
   ~ImporterList();
@@ -44,17 +42,17 @@ class ImporterList {
   // Returns the SourceProfile at |index|. The profiles are ordered such that
   // the profile at index 0 is the likely default browser. The SourceProfile
   // should be passed to ImporterHost::StartImportSettings().
-  importer::SourceProfile& GetSourceProfileAt(size_t index) const;
+  importer::SourceProfile GetSourceProfileAt(size_t index) const;
 
  private:
-  // Called when the source profiles are loaded. Takes ownership of the
-  // loaded profiles in |profiles| and calls |profiles_loaded_callback|.
+  // Called when the source profiles are loaded. Copies the loaded profiles
+  // in |profiles| and calls |profiles_loaded_callback|.
   void SourceProfilesLoaded(
       const base::Closure& profiles_loaded_callback,
-      const std::vector<importer::SourceProfile*>& profiles);
+      const std::vector<importer::SourceProfile>& profiles);
 
   // The list of profiles with the default one first.
-  ScopedVector<importer::SourceProfile> source_profiles_;
+  std::vector<importer::SourceProfile> source_profiles_;
 
   base::WeakPtrFactory<ImporterList> weak_ptr_factory_;
 

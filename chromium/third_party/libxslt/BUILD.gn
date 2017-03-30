@@ -7,6 +7,19 @@ config("libxslt_config") {
   include_dirs = [ "." ]
 }
 
+config("libxslt_warnings") {
+  if (is_clang) {
+    cflags = [
+      # libxslt stores a char[3] in a `const unsigned char*`.
+      "-Wno-pointer-sign",
+
+      # xsltDefaultRegion and xsltCalibrateTimestamps are only
+      # used with certain preprocessor defines set.
+      "-Wno-unused-function",
+    ]
+  }
+}
+
 static_library("libxslt") {
   sources = [
     "libxslt/attributes.c",
@@ -60,7 +73,12 @@ static_library("libxslt") {
   ]
 
   configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [ "//build/config/compiler:no_chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":libxslt_warnings",
+  ]
   public_configs = [ ":libxslt_config" ]
 
   cflags = []
@@ -68,13 +86,15 @@ static_library("libxslt") {
     include_dirs = [ "linux" ]
   } else if (is_win) {
     include_dirs = [ "win32" ]
-    cflags += [ "/wd4267" ]  # size_t to int.
+    cflags += [
+      "/wd4267",  # size_t to int.
+
+      # TODO(brucedawson): http://crbug.com/554200 4311 is a VS
+      # 2015 64-bit warning for pointer truncation
+      "/wd4311",
+    ]
   } else if (is_mac) {
     include_dirs = [ "mac" ]
-  }
-
-  if (is_clang) {
-    cflags += [ "-Wno-pointer-sign" ]
   }
 
   deps = [

@@ -4,6 +4,7 @@
 
 #import <Cocoa/Cocoa.h>
 #include <mach/mach_time.h>
+#include <stdint.h>
 
 #import "ui/events/keycodes/keyboard_code_conversion_mac.h"
 #include "ui/events/test/cocoa_test_event_utils.h"
@@ -52,7 +53,7 @@ NSEvent* MouseEventAtPoint(NSPoint point, NSEventType type,
                                                   kCGMouseButtonCenter);
     // Also specify the modifiers for the middle click case. This makes this
     // test resilient to external modifiers being pressed.
-    CGEventSetFlags(cg_event, modifiers);
+    CGEventSetFlags(cg_event, static_cast<CGEventFlags>(modifiers));
     NSEvent* event = [NSEvent eventWithCGEvent:cg_event];
     CFRelease(cg_event);
     return event;
@@ -150,7 +151,7 @@ NSEvent* KeyEventWithKeyCode(unsigned short key_code,
                            keyCode:key_code];
 }
 
-NSEvent* EnterExitEventWithType(NSEventType event_type) {
+static NSEvent* EnterExitEventWithType(NSEventType event_type) {
   return [NSEvent enterExitEventWithType:event_type
                                 location:NSZeroPoint
                            modifierFlags:0
@@ -160,6 +161,14 @@ NSEvent* EnterExitEventWithType(NSEventType event_type) {
                              eventNumber:0
                           trackingNumber:0
                                 userData:NULL];
+}
+
+NSEvent* EnterEvent() {
+  return EnterExitEventWithType(NSMouseEntered);
+}
+
+NSEvent* ExitEvent() {
+  return EnterExitEventWithType(NSMouseExited);
 }
 
 NSEvent* OtherEventWithType(NSEventType event_type) {

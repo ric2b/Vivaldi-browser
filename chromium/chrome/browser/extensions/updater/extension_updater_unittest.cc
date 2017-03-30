@@ -2,15 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/updater/extension_updater.h"
+
+#include <stddef.h>
+#include <stdint.h>
 #include <list>
 #include <map>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -24,6 +30,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_error_reporter.h"
@@ -32,13 +39,12 @@
 #include "chrome/browser/extensions/test_extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/updater/chrome_extension_downloader_factory.h"
-#include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/google/google_brand.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_observer.h"
@@ -59,7 +65,6 @@
 #include "extensions/common/manifest_constants.h"
 #include "google_apis/gaia/fake_identity_provider.h"
 #include "google_apis/gaia/fake_oauth2_token_service.h"
-#include "libxml/globals.h"
 #include "net/base/backoff_entry.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
@@ -377,7 +382,7 @@ class MockService : public TestExtensionService {
                                           : delegate);
     if (enable_metrics_)
       downloader->set_enable_extra_update_metrics(true);
-    return downloader.Pass();
+    return downloader;
   }
 
   scoped_ptr<ExtensionDownloader> CreateExtensionDownloaderWithIdentity(
@@ -391,8 +396,8 @@ class MockService : public TestExtensionService {
 
     scoped_ptr<ExtensionDownloader> downloader(
         CreateExtensionDownloader(delegate));
-    downloader->SetWebstoreIdentityProvider(fake_identity_provider.Pass());
-    return downloader.Pass();
+    downloader->SetWebstoreIdentityProvider(std::move(fake_identity_provider));
+    return downloader;
   }
 
   scoped_ptr<FakeOAuth2TokenService> fake_token_service_;
@@ -557,11 +562,10 @@ static const int kUpdateFrequencySecs = 15;
 // "foo", and "c" to "".
 static void ExtractParameters(const std::string& params,
                               std::map<std::string, std::string>* result) {
-  std::vector<std::string> pairs;
-  base::SplitString(params, '&', &pairs);
-  for (size_t i = 0; i < pairs.size(); i++) {
-    std::vector<std::string> key_val;
-    base::SplitString(pairs[i], '=', &key_val);
+  for (const std::string& pair : base::SplitString(
+           params, "&", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    std::vector<std::string> key_val = base::SplitString(
+        pair, "=", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     if (!key_val.empty()) {
       std::string key = key_val[0];
       EXPECT_TRUE(result->find(key) == result->end());
@@ -668,7 +672,6 @@ class ExtensionUpdaterTest : public testing::Test {
     EXPECT_TRUE(updater->timer_.IsRunning());
     updater->timer_.Stop();
     updater->TimerFired();
-    content::RunAllBlockingPoolTasksUntilIdle();
   }
 
   // Adds a Result with the given data to results.
@@ -759,8 +762,8 @@ class ExtensionUpdaterTest : public testing::Test {
     // option to appear in the x= parameter.
     scoped_ptr<ManifestFetchData> fetch_data(
         CreateManifestFetchData(GURL("http://localhost/foo")));
-    fetch_data->AddExtension(
-        id, version, &kNeverPingedData, std::string(), std::string(), false);
+    fetch_data->AddExtension(id, version, &kNeverPingedData, std::string(),
+                             std::string());
 
     std::map<std::string, std::string> params;
     VerifyQueryAndExtractParameters(fetch_data->full_url().query(), &params);
@@ -777,8 +780,8 @@ class ExtensionUpdaterTest : public testing::Test {
     // option to appear in the x= parameter.
     scoped_ptr<ManifestFetchData> fetch_data(
         CreateManifestFetchData(GURL("http://localhost/foo")));
-    fetch_data->AddExtension(
-        id, version, &kNeverPingedData, "bar", std::string(), false);
+    fetch_data->AddExtension(id, version, &kNeverPingedData, "bar",
+                             std::string());
     std::map<std::string, std::string> params;
     VerifyQueryAndExtractParameters(fetch_data->full_url().query(), &params);
     EXPECT_EQ(id, params["id"]);
@@ -794,8 +797,8 @@ class ExtensionUpdaterTest : public testing::Test {
     // option to appear in the x= parameter.
     scoped_ptr<ManifestFetchData> fetch_data(
         CreateManifestFetchData(GURL("http://localhost/foo")));
-    fetch_data->AddExtension(
-        id, version, &kNeverPingedData, "a=1&b=2&c", std::string(), false);
+    fetch_data->AddExtension(id, version, &kNeverPingedData, "a=1&b=2&c",
+                             std::string());
     std::map<std::string, std::string> params;
     VerifyQueryAndExtractParameters(fetch_data->full_url().query(), &params);
     EXPECT_EQ(id, params["id"]);
@@ -840,7 +843,7 @@ class ExtensionUpdaterTest : public testing::Test {
     scoped_ptr<ManifestFetchData> fetch_data(
         CreateManifestFetchData(GURL("http://localhost/foo")));
     fetch_data->AddExtension(id, version, &kNeverPingedData,
-                             kEmptyUpdateUrlData, install_source, false);
+                             kEmptyUpdateUrlData, install_source);
     std::map<std::string, std::string> params;
     VerifyQueryAndExtractParameters(fetch_data->full_url().query(), &params);
     EXPECT_EQ(id, params["id"]);
@@ -866,13 +869,11 @@ class ExtensionUpdaterTest : public testing::Test {
     // installed and available at v2.0).
     const std::string id1 = crx_file::id_util::GenerateId("1");
     const std::string id2 = crx_file::id_util::GenerateId("2");
-    fetch_data->AddExtension(
-        id1, "1.0.0.0", &kNeverPingedData, kEmptyUpdateUrlData, std::string(),
-        false);
+    fetch_data->AddExtension(id1, "1.0.0.0", &kNeverPingedData,
+                             kEmptyUpdateUrlData, std::string());
     AddParseResult(id1, "1.1", "http://localhost/e1_1.1.crx", &updates);
-    fetch_data->AddExtension(
-        id2, "2.0.0.0", &kNeverPingedData, kEmptyUpdateUrlData, std::string(),
-        false);
+    fetch_data->AddExtension(id2, "2.0.0.0", &kNeverPingedData,
+                             kEmptyUpdateUrlData, std::string());
     AddParseResult(id2, "2.0.0.0", "http://localhost/e2_2.0.crx", &updates);
 
     EXPECT_CALL(delegate, IsExtensionPending(_)).WillRepeatedly(Return(false));
@@ -910,12 +911,8 @@ class ExtensionUpdaterTest : public testing::Test {
     std::list<std::string>::const_iterator it;
     for (it = ids_for_update_check.begin();
          it != ids_for_update_check.end(); ++it) {
-      fetch_data->AddExtension(*it,
-                               "1.0.0.0",
-                               &kNeverPingedData,
-                               kEmptyUpdateUrlData,
-                               std::string(),
-                               false);
+      fetch_data->AddExtension(*it, "1.0.0.0", &kNeverPingedData,
+                               kEmptyUpdateUrlData, std::string());
       AddParseResult(*it, "1.1", "http://localhost/e1_1.1.crx", &updates);
     }
 
@@ -948,14 +945,14 @@ class ExtensionUpdaterTest : public testing::Test {
     scoped_ptr<ManifestFetchData> fetch3(CreateManifestFetchData(kUpdateUrl));
     scoped_ptr<ManifestFetchData> fetch4(CreateManifestFetchData(kUpdateUrl));
     ManifestFetchData::PingData zeroDays(0, 0, true, 0);
-    fetch1->AddExtension(
-        "1111", "1.0", &zeroDays, kEmptyUpdateUrlData, std::string(), false);
-    fetch2->AddExtension(
-        "2222", "2.0", &zeroDays, kEmptyUpdateUrlData, std::string(), false);
-    fetch3->AddExtension(
-        "3333", "3.0", &zeroDays, kEmptyUpdateUrlData, std::string(), false);
-    fetch4->AddExtension(
-        "4444", "4.0", &zeroDays, kEmptyUpdateUrlData, std::string(), false);
+    fetch1->AddExtension("1111", "1.0", &zeroDays, kEmptyUpdateUrlData,
+                         std::string());
+    fetch2->AddExtension("2222", "2.0", &zeroDays, kEmptyUpdateUrlData,
+                         std::string());
+    fetch3->AddExtension("3333", "3.0", &zeroDays, kEmptyUpdateUrlData,
+                         std::string());
+    fetch4->AddExtension("4444", "4.0", &zeroDays, kEmptyUpdateUrlData,
+                         std::string());
 
     // This will start the first fetcher and queue the others. The next in queue
     // is started as each fetcher receives its response. Note that the fetchers
@@ -964,10 +961,10 @@ class ExtensionUpdaterTest : public testing::Test {
     GURL fetch2_url = fetch2->full_url();
     GURL fetch3_url = fetch3->full_url();
     GURL fetch4_url = fetch4->full_url();
-    downloader.StartUpdateCheck(fetch1.Pass());
-    downloader.StartUpdateCheck(fetch2.Pass());
-    downloader.StartUpdateCheck(fetch3.Pass());
-    downloader.StartUpdateCheck(fetch4.Pass());
+    downloader.StartUpdateCheck(std::move(fetch1));
+    downloader.StartUpdateCheck(std::move(fetch2));
+    downloader.StartUpdateCheck(std::move(fetch3));
+    downloader.StartUpdateCheck(std::move(fetch4));
     RunUntilIdle();
 
     for (int i = 0; i < 4; ++i) {
@@ -1085,11 +1082,11 @@ class ExtensionUpdaterTest : public testing::Test {
 
     scoped_ptr<ManifestFetchData> fetch(CreateManifestFetchData(kUpdateUrl));
     ManifestFetchData::PingData zeroDays(0, 0, true, 0);
-    fetch->AddExtension(
-        "1111", "1.0", &zeroDays, kEmptyUpdateUrlData, std::string(), false);
+    fetch->AddExtension("1111", "1.0", &zeroDays, kEmptyUpdateUrlData,
+                        std::string());
 
     // This will start the first fetcher.
-    downloader.StartUpdateCheck(fetch.Pass());
+    downloader.StartUpdateCheck(std::move(fetch));
     RunUntilIdle();
 
     // ExtensionDownloader should retry kMaxRetries times and then fail.
@@ -1113,11 +1110,11 @@ class ExtensionUpdaterTest : public testing::Test {
     // For response codes that are not in the 5xx range ExtensionDownloader
     // should not retry.
     fetch.reset(CreateManifestFetchData(kUpdateUrl));
-    fetch->AddExtension(
-        "1111", "1.0", &zeroDays, kEmptyUpdateUrlData, std::string(), false);
+    fetch->AddExtension("1111", "1.0", &zeroDays, kEmptyUpdateUrlData,
+                        std::string());
 
     // This will start the first fetcher.
-    downloader.StartUpdateCheck(fetch.Pass());
+    downloader.StartUpdateCheck(std::move(fetch));
     RunUntilIdle();
 
     EXPECT_CALL(delegate, OnExtensionDownloadFailed(
@@ -1176,7 +1173,7 @@ class ExtensionUpdaterTest : public testing::Test {
     scoped_ptr<ExtensionDownloader::ExtensionFetch> fetch(
         new ExtensionDownloader::ExtensionFetch(
             id, test_url, hash, version.GetString(), requests));
-    updater.downloader_->FetchUpdatedExtension(fetch.Pass());
+    updater.downloader_->FetchUpdatedExtension(std::move(fetch));
 
     if (pending) {
       const bool kIsFromSync = true;
@@ -1286,7 +1283,7 @@ class ExtensionUpdaterTest : public testing::Test {
     scoped_ptr<ExtensionDownloader::ExtensionFetch> fetch(
         new ExtensionDownloader::ExtensionFetch(
             id, test_url, hash, version.GetString(), requests));
-    updater.downloader_->FetchUpdatedExtension(fetch.Pass());
+    updater.downloader_->FetchUpdatedExtension(std::move(fetch));
 
     fetcher = factory.GetFetcherByID(ExtensionDownloader::kExtensionFetcherId);
     EXPECT_TRUE(fetcher != NULL && fetcher->delegate() != NULL);
@@ -1479,8 +1476,8 @@ class ExtensionUpdaterTest : public testing::Test {
     scoped_ptr<ExtensionDownloader::ExtensionFetch> fetch2(
         new ExtensionDownloader::ExtensionFetch(
             id2, url2, hash2, version2, requests));
-    updater.downloader_->FetchUpdatedExtension(fetch1.Pass());
-    updater.downloader_->FetchUpdatedExtension(fetch2.Pass());
+    updater.downloader_->FetchUpdatedExtension(std::move(fetch1));
+    updater.downloader_->FetchUpdatedExtension(std::move(fetch2));
 
     // Make the first fetch complete.
     base::FilePath extension_file_path(FILE_PATH_LITERAL("/whatever"));
@@ -1665,7 +1662,6 @@ class ExtensionUpdaterTest : public testing::Test {
     ExtensionUpdater::CheckParams params;
     updater.Start();
     updater.CheckNow(params);
-    content::RunAllBlockingPoolTasksUntilIdle();
 
     // Make the updater do manifest fetching, and note the urls it tries to
     // fetch.
@@ -1776,12 +1772,9 @@ class ExtensionUpdaterTest : public testing::Test {
     scoped_ptr<ManifestFetchData> fetch_data(
         CreateManifestFetchData(update_url));
     const Extension* extension = tmp[0].get();
-    fetch_data->AddExtension(extension->id(),
-                             extension->VersionString(),
-                             &kNeverPingedData,
-                             kEmptyUpdateUrlData,
-                             std::string(),
-                             false);
+    fetch_data->AddExtension(extension->id(), extension->VersionString(),
+                             &kNeverPingedData, kEmptyUpdateUrlData,
+                             std::string());
     UpdateManifest::Results results;
     results.daystart_elapsed_seconds = 750;
 
@@ -1789,7 +1782,7 @@ class ExtensionUpdaterTest : public testing::Test {
     Time last_ping_day =
         service.extension_prefs()->LastPingDay(extension->id());
     EXPECT_FALSE(last_ping_day.is_null());
-    int64 seconds_diff = (Time::Now() - last_ping_day).InSeconds();
+    int64_t seconds_diff = (Time::Now() - last_ping_day).InSeconds();
     EXPECT_LT(seconds_diff - results.daystart_elapsed_seconds, 5);
   }
 
@@ -1818,18 +1811,8 @@ class ExtensionUpdaterTest : public testing::Test {
 
     ExtensionPrefs* prefs = prefs_->prefs();
 
-    for (size_t i = 0; i < disabled.size(); i++) {
-      int reasons = disabled[i];
-      const std::string& id = disabled_extensions[i]->id();
-      // Iterate over the DisableReason values, marking that reason in prefs
-      // for this id if it is set.
-      for (int reason = 1; reason < Extension::DISABLE_REASON_LAST;
-           reason <<= 1) {
-        if (reasons & reason)
-          prefs->AddDisableReason(
-              id, static_cast<Extension::DisableReason>(reason));
-      }
-    }
+    for (size_t i = 0; i < disabled.size(); i++)
+      prefs->SetExtensionDisabled(disabled_extensions[i]->id(), disabled[i]);
 
     // Create the extension updater, make it issue an update, and capture the
     // URL that it tried to fetch.
@@ -2091,7 +2074,6 @@ TEST_F(ExtensionUpdaterTest, TestNonAutoUpdateableLocations) {
   ExtensionUpdater::CheckParams params;
   updater.Start();
   updater.CheckNow(params);
-  content::RunAllBlockingPoolTasksUntilIdle();
 }
 
 TEST_F(ExtensionUpdaterTest, TestUpdatingDisabledExtensions) {
@@ -2130,7 +2112,6 @@ TEST_F(ExtensionUpdaterTest, TestUpdatingDisabledExtensions) {
   ExtensionUpdater::CheckParams params;
   updater.Start();
   updater.CheckNow(params);
-  content::RunAllBlockingPoolTasksUntilIdle();
 }
 
 TEST_F(ExtensionUpdaterTest, TestManifestFetchesBuilderAddExtension) {
@@ -2245,6 +2226,32 @@ TEST_F(ExtensionUpdaterTest, TestDisabledReasons3) {
   std::vector<int> disabled;
   disabled.push_back(0);
   TestPingMetrics(0, disabled);
+}
+
+TEST_F(ExtensionUpdaterTest, TestUninstallWhileUpdateCheck) {
+  ServiceForManifestTests service(prefs_.get());
+  ExtensionList tmp;
+  service.CreateTestExtensions(1, 1, &tmp, nullptr, Manifest::INTERNAL);
+  service.set_extensions(tmp, ExtensionList());
+
+  ASSERT_EQ(1u, tmp.size());
+  ExtensionId id = tmp.front()->id();
+  ASSERT_TRUE(service.GetExtensionById(id, false));
+
+  ExtensionUpdater updater(&service,
+                           service.extension_prefs(),
+                           service.pref_service(),
+                           service.profile(),
+                           kUpdateFrequencySecs,
+                           NULL,
+                           service.GetDownloaderFactory());
+  ExtensionUpdater::CheckParams params;
+  params.ids.push_back(id);
+  updater.Start();
+  updater.CheckNow(params);
+
+  service.set_extensions(ExtensionList(), ExtensionList());
+  ASSERT_FALSE(service.GetExtensionById(id, false));
 }
 
 // TODO(asargent) - (http://crbug.com/12780) add tests for:

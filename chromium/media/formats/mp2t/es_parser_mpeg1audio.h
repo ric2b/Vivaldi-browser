@@ -5,11 +5,14 @@
 #ifndef MEDIA_FORMATS_MP2T_ES_PARSER_MPEG1AUDIO_H_
 #define MEDIA_FORMATS_MP2T_ES_PARSER_MPEG1AUDIO_H_
 
+#include <stdint.h>
+
 #include <list>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "media/base/audio_decoder_config.h"
@@ -33,7 +36,7 @@ class MEDIA_EXPORT EsParserMpeg1Audio : public EsParser {
 
   EsParserMpeg1Audio(const NewAudioConfigCB& new_audio_config_cb,
                      const EmitBufferCB& emit_buffer_cb,
-                     const LogCB& log_cb);
+                     const scoped_refptr<MediaLog>& media_log);
   ~EsParserMpeg1Audio() override;
 
   // EsParser implementation.
@@ -41,7 +44,7 @@ class MEDIA_EXPORT EsParserMpeg1Audio : public EsParser {
 
  private:
   // Used to link a PTS with a byte position in the ES stream.
-  typedef std::pair<int64, base::TimeDelta> EsPts;
+  typedef std::pair<int64_t, base::TimeDelta> EsPts;
   typedef std::list<EsPts> EsPtsList;
 
   struct Mpeg1AudioFrame;
@@ -61,11 +64,11 @@ class MEDIA_EXPORT EsParserMpeg1Audio : public EsParser {
   // Signal any audio configuration change (if any).
   // Return false if the current audio config is not
   // a supported Mpeg1 audio config.
-  bool UpdateAudioConfiguration(const uint8* mpeg1audio_header);
+  bool UpdateAudioConfiguration(const uint8_t* mpeg1audio_header);
 
   void SkipMpeg1AudioFrame(const Mpeg1AudioFrame& mpeg1audio_frame);
 
-  LogCB log_cb_;
+  scoped_refptr<MediaLog> media_log_;
 
   // Callbacks:
   // - to signal a new audio configuration,

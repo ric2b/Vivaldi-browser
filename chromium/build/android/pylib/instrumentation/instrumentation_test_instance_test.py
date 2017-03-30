@@ -6,19 +6,14 @@
 
 """Unit tests for instrumentation.TestRunner."""
 
-# pylint: disable=W0212
-
-import os
-import sys
 import unittest
 
-from pylib import constants
 from pylib.base import base_test_result
+from pylib.constants import host_paths
 from pylib.instrumentation import instrumentation_test_instance
 
-sys.path.append(os.path.join(
-    constants.DIR_SOURCE_ROOT, 'third_party', 'pymock'))
-import mock  # pylint: disable=F0401
+with host_paths.SysPath(host_paths.PYMOCK_PATH):
+  import mock  # pylint: disable=import-error
 
 
 class InstrumentationTestInstanceTest(unittest.TestCase):
@@ -103,6 +98,25 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
         None, None, statuses, 0, 1000)
     self.assertEqual(1, len(results))
     self.assertEqual(base_test_result.ResultType.FAIL, results[0].GetType())
+
+  def testGenerateTestResults_testUnknownException(self):
+    stacktrace = 'long\nstacktrace'
+    statuses = [
+      (1, {
+        'class': 'test.package.TestClass',
+        'test': 'testMethod',
+      }),
+      (-1, {
+        'class': 'test.package.TestClass',
+        'test': 'testMethod',
+        'stack': stacktrace,
+      }),
+    ]
+    results = instrumentation_test_instance.GenerateTestResults(
+        None, None, statuses, 0, 1000)
+    self.assertEqual(1, len(results))
+    self.assertEqual(base_test_result.ResultType.FAIL, results[0].GetType())
+    self.assertEqual(stacktrace, results[0].GetLog())
 
 
 if __name__ == '__main__':

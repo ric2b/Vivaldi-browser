@@ -4,7 +4,10 @@
 
 #include "gin/modules/module_registry.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/logging.h"
@@ -66,9 +69,9 @@ void Define(const v8::FunctionCallbackInfo<Value>& info) {
   std::vector<std::string> dependencies;
   v8::Local<Value> factory;
 
-  if (args.PeekNext()->IsString())
+  if (!args.PeekNext().IsEmpty() && args.PeekNext()->IsString())
     args.GetNext(&id);
-  if (args.PeekNext()->IsArray())
+  if (!args.PeekNext().IsEmpty() && args.PeekNext()->IsArray())
     args.GetNext(&dependencies);
   if (!args.GetNext(&factory))
     return args.ThrowError();
@@ -80,7 +83,7 @@ void Define(const v8::FunctionCallbackInfo<Value>& info) {
 
   ModuleRegistry* registry =
       ModuleRegistry::From(args.isolate()->GetCurrentContext());
-  registry->AddPendingModule(args.isolate(), pending.Pass());
+  registry->AddPendingModule(args.isolate(), std::move(pending));
 }
 
 WrapperInfo g_wrapper_info = { kEmbedderNativeGin };
@@ -158,7 +161,7 @@ void ModuleRegistry::AddPendingModule(Isolate* isolate,
                                       scoped_ptr<PendingModule> pending) {
   const std::string pending_id = pending->id;
   const std::vector<std::string> pending_dependencies = pending->dependencies;
-  AttemptToLoad(isolate, pending.Pass());
+  AttemptToLoad(isolate, std::move(pending));
   FOR_EACH_OBSERVER(ModuleRegistryObserver, observer_list_,
                     OnDidAddPendingModule(pending_id, pending_dependencies));
 }
@@ -255,7 +258,7 @@ bool ModuleRegistry::AttemptToLoad(Isolate* isolate,
     pending_modules_.push_back(pending.release());
     return false;
   }
-  return Load(isolate, pending.Pass());
+  return Load(isolate, std::move(pending));
 }
 
 v8::Local<v8::Value> ModuleRegistry::GetModule(v8::Isolate* isolate,
@@ -275,7 +278,7 @@ void ModuleRegistry::AttemptToLoadMoreModules(Isolate* isolate) {
     for (size_t i = 0; i < pending_modules.size(); ++i) {
       scoped_ptr<PendingModule> pending(pending_modules[i]);
       pending_modules[i] = NULL;
-      if (AttemptToLoad(isolate, pending.Pass()))
+      if (AttemptToLoad(isolate, std::move(pending)))
         keep_trying = true;
     }
   }

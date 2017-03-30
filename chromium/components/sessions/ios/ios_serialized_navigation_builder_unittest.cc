@@ -4,8 +4,8 @@
 
 #include "components/sessions/ios/ios_serialized_navigation_builder.h"
 
-#include "components/sessions/serialized_navigation_entry.h"
-#include "components/sessions/serialized_navigation_entry_test_helper.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
+#include "components/sessions/core/serialized_navigation_entry_test_helper.h"
 #include "ios/web/public/favicon_status.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/referrer.h"
@@ -28,7 +28,7 @@ scoped_ptr<web::NavigationItem> MakeNavigationItemForTest() {
   navigation_item->SetTimestamp(test_data::kTimestamp);
   navigation_item->GetFavicon().valid = true;
   navigation_item->GetFavicon().url = test_data::kFaviconURL;
-  return navigation_item.Pass();
+  return navigation_item;
 }
 
 }  // namespace
@@ -83,8 +83,7 @@ TEST(IOSSerializedNavigationBuilderTest, ToNavigationItem) {
           test_data::kIndex, *old_navigation_item);
 
   const scoped_ptr<web::NavigationItem> new_navigation_item(
-      IOSSerializedNavigationBuilder::ToNavigationItem(
-          &navigation, test_data::kPageID));
+      IOSSerializedNavigationBuilder::ToNavigationItem(&navigation));
 
   EXPECT_EQ(old_navigation_item->GetURL(),
             new_navigation_item->GetURL());
@@ -96,7 +95,6 @@ TEST(IOSSerializedNavigationBuilderTest, ToNavigationItem) {
             new_navigation_item->GetVirtualURL());
   EXPECT_EQ(old_navigation_item->GetTitle(),
             new_navigation_item->GetTitle());
-  EXPECT_EQ(test_data::kPageID, new_navigation_item->GetPageID());
   EXPECT_EQ(ui::PAGE_TRANSITION_RELOAD,
             new_navigation_item->GetTransitionType());
   EXPECT_EQ(old_navigation_item->GetTimestamp(),

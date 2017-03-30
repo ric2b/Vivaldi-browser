@@ -2,7 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/symlink.gni")
 import("//testing/test.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
 
 config("tools_config") {
   include_dirs = [
@@ -44,18 +49,18 @@ config("sender_config") {
   include_dirs = [ "src" ]
 }
 
-# {micro,mini}dump_stackwalk and minidump_dump are tool-type executables that do
-# not build on iOS.
-if (current_toolchain == host_toolchain && !is_win) {
+# {micro,mini}dump_stackwalk and minidump_dump are tool-type executables
+# that do not build on Windows.
+if (!is_win && current_toolchain == host_toolchain) {
   # Contains the code shared by both {micro,mini}dump_stackwalk.
   static_library("stackwalk_common") {
+    # Always want these files included regardless of platform.
+    set_sources_assignment_filter([])
     sources = [
       "src/processor/basic_code_module.h",
       "src/processor/basic_code_modules.cc",
       "src/processor/basic_code_modules.h",
       "src/processor/basic_source_line_resolver.cc",
-      "src/processor/binarystream.cc",
-      "src/processor/binarystream.h",
       "src/processor/call_stack.cc",
       "src/processor/cfi_frame_info.cc",
       "src/processor/cfi_frame_info.h",
@@ -67,6 +72,7 @@ if (current_toolchain == host_toolchain && !is_win) {
       "src/processor/logging.h",
       "src/processor/pathname_stripper.cc",
       "src/processor/pathname_stripper.h",
+      "src/processor/proc_maps_linux.cc",
       "src/processor/process_state.cc",
       "src/processor/simple_symbol_supplier.cc",
       "src/processor/simple_symbol_supplier.h",
@@ -139,6 +145,7 @@ if (current_toolchain == host_toolchain && !is_win) {
 
     deps = [
       ":stackwalk_common",
+      "//build/config/sanitizers:deps",
     ]
 
     defines = [ "BPLOG_MINIMUM_SEVERITY=SEVERITY_ERROR" ]
@@ -158,6 +165,7 @@ if (current_toolchain == host_toolchain && !is_win) {
 
     deps = [
       ":stackwalk_common",
+      "//build/config/sanitizers:deps",
     ]
 
     defines = [ "BPLOG_MINIMUM_SEVERITY=SEVERITY_ERROR" ]
@@ -179,6 +187,7 @@ if (current_toolchain == host_toolchain && !is_win) {
   }
 
   executable("minidump_dump") {
+    set_sources_assignment_filter([])
     sources = [
       "src/processor/basic_code_module.h",
       "src/processor/basic_code_modules.cc",
@@ -191,6 +200,7 @@ if (current_toolchain == host_toolchain && !is_win) {
       "src/processor/minidump_dump.cc",
       "src/processor/pathname_stripper.cc",
       "src/processor/pathname_stripper.h",
+      "src/processor/proc_maps_linux.cc",
     ]
 
     configs += [ ":tools_config" ]
@@ -198,6 +208,10 @@ if (current_toolchain == host_toolchain && !is_win) {
     # There are some warnings in this code.
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    deps = [
+      "//build/config/sanitizers:deps",
+    ]
   }
 }
 
@@ -220,7 +234,7 @@ if (current_toolchain == host_toolchain && is_mac) {
       "src/common/language.cc",
       "src/common/mac/arch_utilities.cc",
       "src/common/mac/arch_utilities.h",
-      "src/common/mac/dump_syms.mm",
+      "src/common/mac/dump_syms.cc",
       "src/common/mac/file_id.cc",
       "src/common/mac/macho_id.cc",
       "src/common/mac/macho_reader.cc",
@@ -230,7 +244,7 @@ if (current_toolchain == host_toolchain && is_mac) {
       "src/common/module.cc",
       "src/common/stabs_reader.cc",
       "src/common/stabs_to_module.cc",
-      "src/tools/mac/dump_syms/dump_syms_tool.mm",
+      "src/tools/mac/dump_syms/dump_syms_tool.cc",
     ]
 
     # For src/common/stabs_reader.h.
@@ -256,9 +270,13 @@ if (current_toolchain == host_toolchain && is_mac) {
       # not crash at -Os.  To play it safe, dump_syms is always built
       # at -O0 until this can be sorted out.
       # http://code.google.com/p/google-breakpad/issues/detail?id=329
-      configs -= [ "//build/config/compiler:optimize" ]
+      configs -= [ "//build/config/compiler:default_optimization" ]
       cflags += [ "-O0" ]
     }
+
+    deps = [
+      "//build/config/sanitizers:deps",
+    ]
   }
 
   executable("symupload") {
@@ -273,6 +291,10 @@ if (current_toolchain == host_toolchain && is_mac) {
 
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    deps = [
+      "//build/config/sanitizers:deps",
+    ]
   }
 }
 
@@ -326,6 +348,7 @@ if (is_mac) {
 
     deps = [
       ":utilities",
+      "//build/config/sanitizers:deps",
     ]
   }
 
@@ -356,9 +379,9 @@ if (is_mac) {
     include_dirs = [ "src/client/apple/Framework" ]
 
     deps = [
-      ":utilities",
       ":crash_inspector",
       ":crash_report_sender",
+      ":utilities",
     ]
   }
 
@@ -367,27 +390,29 @@ if (is_mac) {
   }
 }
 
-if (is_linux) {
-  executable("symupload") {
-    sources = [
-      "src/common/linux/http_upload.cc",
-      "src/common/linux/http_upload.h",
-      "src/tools/linux/symupload/sym_upload.cc",
-    ]
-
-    include_dirs = [
-      "src",
-      "src/third_party",
-    ]
-
-    configs += [ ":tools_config" ]
-
-    libs = [ "dl" ]
-  }
-}
-
 if (is_linux || is_android) {
   if (current_toolchain == host_toolchain) {
+    executable("symupload") {
+      sources = [
+        "src/common/linux/http_upload.cc",
+        "src/common/linux/http_upload.h",
+        "src/tools/linux/symupload/sym_upload.cc",
+      ]
+
+      include_dirs = [
+        "src",
+        "src/third_party",
+      ]
+
+      configs += [ ":tools_config" ]
+
+      libs = [ "dl" ]
+
+      deps = [
+        "//build/config/sanitizers:deps",
+      ]
+    }
+
     # dump_syms is a host tool, so only compile it for the host system.
     executable("dump_syms") {
       sources = [
@@ -443,6 +468,18 @@ if (is_linux || is_android) {
       defines = [ "HAVE_A_OUT_H" ]
 
       include_dirs = [ "src" ]
+
+      deps = [
+        "//build/config/sanitizers:deps",
+      ]
+    }
+  } else {
+    # Aliases for convenience.
+    binary_symlink("dump_syms") {
+      binary_label = ":dump_syms($host_toolchain)"
+    }
+    binary_symlink("symupload") {
+      binary_label = ":symupload($host_toolchain)"
     }
   }
 
@@ -453,8 +490,6 @@ if (is_linux || is_android) {
       "src/client/linux/crash_generation/crash_generation_client.cc",
       "src/client/linux/crash_generation/crash_generation_client.h",
       "src/client/linux/dump_writer_common/mapping_info.h",
-      "src/client/linux/dump_writer_common/seccomp_unwinder.cc",
-      "src/client/linux/dump_writer_common/seccomp_unwinder.h",
       "src/client/linux/dump_writer_common/thread_info.cc",
       "src/client/linux/dump_writer_common/thread_info.h",
       "src/client/linux/dump_writer_common/ucontext_reader.cc",
@@ -519,6 +554,13 @@ if (is_linux || is_android) {
       cflags = [ "-marm" ]
     }
 
+    if (current_cpu == "x86" && is_clang) {
+      # Clang's -mstackrealign doesn't work well with
+      # linux_syscall_support.h hand written asm syscalls.
+      # See https://crbug.com/556393
+      cflags -= [ "-mstackrealign" ]
+    }
+
     if (is_android) {
       sources += [ "src/common/android/breakpad_getcontext.S" ]
     }
@@ -534,6 +576,7 @@ if (is_linux || is_android) {
   }
 
   static_library("processor_support") {
+    set_sources_assignment_filter([])
     sources = [
       "src/common/scoped_ptr.h",
       "src/processor/basic_code_modules.cc",
@@ -545,6 +588,7 @@ if (is_linux || is_android) {
       "src/processor/minidump.cc",
       "src/processor/pathname_stripper.cc",
       "src/processor/pathname_stripper.h",
+      "src/processor/proc_maps_linux.cc",
     ]
 
     include_dirs = [
@@ -558,10 +602,12 @@ if (is_linux || is_android) {
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
   }
-}
 
-if (is_linux) {
-  test("breakpad_unittests") {
+  # "breakpad_unittests" cannot use the test() template because the test is run
+  # as an executable not as an APK on Android.
+  executable("breakpad_unittests") {
+    testonly = true
+    set_sources_assignment_filter([])
     sources = [
       "linux/breakpad_googletest_includes.h",
       "src/client/linux/handler/exception_handler_unittest.cc",
@@ -592,11 +638,12 @@ if (is_linux) {
 
     deps = [
       ":client",
-      ":processor_support",
       ":linux_dumper_unittest_helper",
+      ":processor_support",
+      "//build/config/sanitizers:deps",
+      "//testing/gmock",
       "//testing/gtest",
       "//testing/gtest:gtest_main",
-      "//testing/gmock",
     ]
 
     include_dirs = [
@@ -618,17 +665,25 @@ if (is_linux) {
       sources += [ "src/common/android/breakpad_getcontext_unittest.cc" ]
       libs = [ "log" ]
       include_dirs += [ "src/common/android/include" ]
-      isolate_file = "breakpad_unittests.isolate"
+    }
+
+    if (current_cpu == "x86" && is_clang) {
+      # Clang's -mstackrealign doesn't work well with
+      # linux_syscall_support.h hand written asm syscalls.
+      # See https://crbug.com/556393
+      cflags -= [ "-mstackrealign" ]
     }
   }
 
   executable("linux_dumper_unittest_helper") {
+    set_sources_assignment_filter([])
     testonly = true
     sources = [
       "src/client/linux/minidump_writer/linux_dumper_unittest_helper.cc",
     ]
     deps = [
       ":processor_support",
+      "//build/config/sanitizers:deps",
     ]
 
     include_dirs = [ "src" ]
@@ -639,6 +694,7 @@ if (is_linux) {
   }
 
   executable("generate_test_dump") {
+    set_sources_assignment_filter([])
     testonly = true
     sources = [
       "linux/generate-test-dump.cc",
@@ -650,6 +706,7 @@ if (is_linux) {
 
     deps = [
       ":client",
+      "//build/config/sanitizers:deps",
     ]
 
     include_dirs = [ "src" ]
@@ -661,6 +718,7 @@ if (is_linux) {
   }
 
   executable("minidump-2-core") {
+    set_sources_assignment_filter([])
     sources = [
       "src/tools/linux/md2core/minidump-2-core.cc",
     ]
@@ -669,16 +727,19 @@ if (is_linux) {
 
     deps = [
       ":client",
+      "//build/config/sanitizers:deps",
     ]
   }
 
   executable("core-2-minidump") {
+    set_sources_assignment_filter([])
     sources = [
       "src/tools/linux/core2md/core2md.cc",
     ]
 
     deps = [
       ":client",
+      "//build/config/sanitizers:deps",
     ]
 
     include_dirs = [ "src" ]
@@ -687,6 +748,7 @@ if (is_linux) {
 
 if (is_ios) {
   static_library("client") {
+    set_sources_assignment_filter([])
     sources = [
       "src/client/ios/Breakpad.h",
       "src/client/ios/Breakpad.mm",
@@ -713,6 +775,8 @@ if (is_ios) {
       "src/client/minidump_file_writer.h",
       "src/common/convert_UTF.c",
       "src/common/convert_UTF.h",
+      "src/common/mac/GTMLogger.h",
+      "src/common/mac/GTMLogger.m",
       "src/common/mac/HTTPMultipartUpload.m",
       "src/common/mac/file_id.cc",
       "src/common/mac/file_id.h",
@@ -732,12 +796,20 @@ if (is_ios) {
       "src/common/string_conversion.h",
       "src/google_breakpad/common/minidump_format.h",
     ]
+    set_sources_assignment_filter(sources_assignment_filter)
 
     include_dirs = [
       "src",
       "src/client/mac/Framework",
       "src/common/mac",
     ]
+
+    public_configs = [ ":client_config" ]
+
+    if (is_clang) {
+      # See https://bugs.chromium.org/p/google-breakpad/issues/detail?id=675.
+      cflags = [ "-Wno-deprecated-declarations" ]
+    }
   }
   # TODO(GYP) There is some XCode-only targets like ninja-breakpad.
 }
@@ -745,6 +817,13 @@ if (is_ios) {
 if (is_win) {
   group("client") {
     public_configs = [ ":client_config" ]
+  }
+
+  config("breakpad_handler_warnings") {
+    if (is_clang) {
+      # See https://code.google.com/p/google-breakpad/issues/detail?id=658.
+      cflags = [ "-Wno-reorder" ]
+    }
   }
 
   source_set("breakpad_handler") {
@@ -771,13 +850,6 @@ if (is_win) {
       "src/common/windows/string_utils-inl.h",
       "src/google_breakpad/common/minidump_format.h",
     ]
-    config("breakpad_handler_warnings") {
-      if (is_clang) {
-        # See https://code.google.com/p/google-breakpad/issues/detail?id=658.
-        cflags = [ "-Wno-reorder" ]
-      }
-    }
-
     configs += [ ":breakpad_handler_warnings" ]
   }
 
@@ -790,5 +862,27 @@ if (is_win) {
     ]
     configs += [ ":sender_config" ]
     public_configs = [ ":sender_config" ]
+  }
+}
+
+if (is_android) {
+  create_native_executable_dist("breakpad_unittests_deps") {
+    testonly = true
+    dist_dir = "$root_out_dir/breakpad_unittests_deps"
+    binary = "$root_out_dir/breakpad_unittests"
+    deps = [
+      ":breakpad_unittests",
+    ]
+
+    if (is_component_build) {
+      deps += [ "//build/android:cpplib_stripped" ]
+    }
+  }
+
+  test_runner_script("breakpad_unittests__test_runner_script") {
+    test_name = "breakpad_unittests"
+    test_type = "gtest"
+    test_suite = "breakpad_unittests"
+    isolate_file = "breakpad_unittests.isolate"
   }
 }

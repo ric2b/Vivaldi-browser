@@ -4,16 +4,19 @@
 
 #include "chrome/browser/extensions/api/messaging/native_process_launcher.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/messaging/native_messaging_host_manifest.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_thread.h"
@@ -197,7 +200,8 @@ void NativeProcessLauncherImpl::Core::DoLaunchOnThreadPool(
   base::File write_file;
   if (NativeProcessLauncher::LaunchNativeProcess(
           command_line, &process, &read_file, &write_file)) {
-    PostResult(callback, process.Pass(), read_file.Pass(), write_file.Pass());
+    PostResult(callback, std::move(process), std::move(read_file),
+               std::move(write_file));
   } else {
     PostErrorResult(callback, RESULT_FAILED_TO_START);
   }
@@ -213,7 +217,8 @@ void NativeProcessLauncherImpl::Core::CallCallbackOnIOThread(
   if (detached_)
     return;
 
-  callback.Run(result, process.Pass(), read_file.Pass(), write_file.Pass());
+  callback.Run(result, std::move(process), std::move(read_file),
+               std::move(write_file));
 }
 
 void NativeProcessLauncherImpl::Core::PostErrorResult(

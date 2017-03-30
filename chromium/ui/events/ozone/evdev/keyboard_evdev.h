@@ -5,9 +5,11 @@
 #ifndef UI_EVENTS_OZONE_EVDEV_KEYBOARD_EVDEV_H_
 #define UI_EVENTS_OZONE_EVDEV_KEYBOARD_EVDEV_H_
 
-#include <bitset>
 #include <linux/input.h>
 
+#include <bitset>
+
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "ui/events/ozone/evdev/event_device_util.h"
@@ -56,8 +58,12 @@ class EVENTS_OZONE_EVDEV_EXPORT KeyboardEvdev {
                          const base::TimeDelta& interval);
   void GetAutoRepeatRate(base::TimeDelta* delay, base::TimeDelta* interval);
 
+  // Handle keyboard layout changes.
+  bool SetCurrentLayoutByName(const std::string& layout_name);
+
  private:
   void UpdateModifier(int modifier_flag, bool down);
+  void RefreshModifiers();
   void UpdateCapsLockLed();
   void UpdateKeyRepeat(unsigned int key,
                        bool down,

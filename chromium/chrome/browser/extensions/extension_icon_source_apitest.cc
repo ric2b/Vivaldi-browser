@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -92,7 +93,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionIconSourceTest, MAYBE_IconsLoadedIncognito) {
 
   // Test that the icons are loaded and that the chrome://extension-icon
   // parameters work correctly.
-  Browser* otr_browser = ui_test_utils::OpenURLOffTheRecord(
+  Browser* otr_browser = OpenURLOffTheRecord(
       browser()->profile(),
       GURL("chrome-extension://gbmgkahjioeacddebbnengilkgbkhodg/index.html"));
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(
@@ -103,7 +104,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionIconSourceTest, MAYBE_IconsLoadedIncognito) {
 
   // Verify that the an extension can't load chrome://extension-icon icons
   // without the management permission.
-  ui_test_utils::OpenURLOffTheRecord(
+  OpenURLOffTheRecord(
       browser()->profile(),
       GURL("chrome-extension://apocjbpjpkghdepdngjlknfpmabcmlao/index.html"));
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(

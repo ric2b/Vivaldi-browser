@@ -9,10 +9,12 @@
 #include <keyhi.h>
 #include <pk11pub.h>
 #include <secmod.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list_threadsafe.h"
 #include "base/task_runner.h"
@@ -80,8 +82,8 @@ NSSCertDatabase::ImportCertFailure::~ImportCertFailure() {}
 
 NSSCertDatabase::NSSCertDatabase(crypto::ScopedPK11Slot public_slot,
                                  crypto::ScopedPK11Slot private_slot)
-    : public_slot_(public_slot.Pass()),
-      private_slot_(private_slot.Pass()),
+    : public_slot_(std::move(public_slot)),
+      private_slot_(std::move(private_slot)),
       observer_list_(new base::ObserverListThreadSafe<Observer>),
       weak_factory_(this) {
   CHECK(public_slot_);
@@ -225,6 +227,18 @@ X509Certificate* NSSCertDatabase::FindRootInList(
 
   LOG(WARNING) << "certificate list is not a hierarchy";
   return cert0;
+}
+
+int NSSCertDatabase::ImportUserCert(const std::string& data) {
+  CertificateList certificates =
+      X509Certificate::CreateCertificateListFromBytes(
+          data.c_str(), data.size(), net::X509Certificate::FORMAT_AUTO);
+  int result = psm::ImportUserCert(certificates);
+
+  if (result == OK)
+    NotifyObserversOfCertAdded(NULL);
+
+  return result;
 }
 
 bool NSSCertDatabase::ImportCACerts(const CertificateList& certificates,

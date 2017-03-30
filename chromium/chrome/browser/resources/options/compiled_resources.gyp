@@ -8,8 +8,7 @@
       'variables': {
         'depends': [
           '../../../../third_party/jstemplate/compiled_resources.gyp:jstemplate',
-          '../../../../ui/webui/resources/cr_elements/v1_0/cr_onc/cr_onc_types.js',
-          '../../../../ui/webui/resources/css/tree.css.js',
+          '../../../../ui/webui/resources/cr_elements/network/cr_onc_types.js',
           '../../../../ui/webui/resources/js/action_link.js',
           '../../../../ui/webui/resources/js/cr.js',
           '../../../../ui/webui/resources/js/cr/event_target.js',
@@ -47,9 +46,13 @@
         # no possibility to use gyp variable expansion to it, so we don't use
         # <(CLOSURE_DIR) in the "externs" line.
         'externs': [
-          '../../../../third_party/closure_compiler/externs/chrome_extensions.js',
+          '../../../../third_party/closure_compiler/externs/bluetooth.js',
+          '../../../../third_party/closure_compiler/externs/bluetooth_private.js',
+          '../../../../third_party/closure_compiler/externs/management.js',
+          '../../../../third_party/closure_compiler/externs/metrics_private.js',
+          '../../../../third_party/closure_compiler/externs/networking_private.js',
           '../../../../third_party/closure_compiler/externs/chrome_send.js',
-          '../../../../ui/webui/resources/cr_elements/v1_0/cr_network_icon/cr_network_icon_externs.js',
+          '../../../../ui/webui/resources/cr_elements/network/cr_network_icon_externs.js',
 	],
       },
       'includes': ['../../../../third_party/closure_compiler/compile_js.gypi'],

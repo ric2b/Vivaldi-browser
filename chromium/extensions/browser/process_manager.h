@@ -5,12 +5,15 @@
 #ifndef EXTENSIONS_BROWSER_PROCESS_MANAGER_H_
 #define EXTENSIONS_BROWSER_PROCESS_MANAGER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -56,6 +59,7 @@ class ProcessManager : public KeyedService,
                                content::RenderFrameHost* render_frame_host,
                                const Extension* extension);
   void UnregisterRenderFrameHost(content::RenderFrameHost* render_frame_host);
+  void DidNavigateRenderFrameHost(content::RenderFrameHost* render_frame_host);
 
   // Returns the SiteInstance that the given URL belongs to.
   // TODO(aa): This only returns correct results for extensions and packaged
@@ -70,6 +74,8 @@ class ProcessManager : public KeyedService,
   // extension.
   ProcessManager::FrameSet GetRenderFrameHostsForExtension(
       const std::string& extension_id);
+
+  bool IsRenderFrameHostRegistered(content::RenderFrameHost* render_frame_host);
 
   void AddObserver(ProcessManagerObserver* observer);
   void RemoveObserver(ProcessManagerObserver* observer);
@@ -125,7 +131,8 @@ class ProcessManager : public KeyedService,
 
   // Handles a response to the ShouldSuspend message, used for lazy background
   // pages.
-  void OnShouldSuspendAck(const std::string& extension_id, uint64 sequence_id);
+  void OnShouldSuspendAck(const std::string& extension_id,
+                          uint64_t sequence_id);
 
   // Same as above, for the Suspend message.
   void OnSuspendAck(const std::string& extension_id);
@@ -133,9 +140,9 @@ class ProcessManager : public KeyedService,
   // Tracks network requests for a given RenderFrameHost, used to know
   // when network activity is idle for lazy background pages.
   void OnNetworkRequestStarted(content::RenderFrameHost* render_frame_host,
-                               uint64 request_id);
+                               uint64_t request_id);
   void OnNetworkRequestDone(content::RenderFrameHost* render_frame_host,
-                            uint64 request_id);
+                            uint64_t request_id);
 
   // Prevents |extension|'s background page from being closed and sends the
   // onSuspendCanceled() event to it.
@@ -255,10 +262,10 @@ class ProcessManager : public KeyedService,
   // These are called when the extension transitions between idle and active.
   // They control the process of closing the background page when idle.
   void OnLazyBackgroundPageIdle(const std::string& extension_id,
-                                uint64 sequence_id);
+                                uint64_t sequence_id);
   void OnLazyBackgroundPageActive(const std::string& extension_id);
   void CloseLazyBackgroundPageNow(const std::string& extension_id,
-                                  uint64 sequence_id);
+                                  uint64_t sequence_id);
 
   void OnDevToolsStateChanged(content::DevToolsAgentHost*, bool attached);
 
@@ -312,7 +319,14 @@ class ProcessManager : public KeyedService,
   //
   // This counter provides unique IDs even when BackgroundPageData objects are
   // reset.
-  uint64 last_background_close_sequence_id_;
+  uint64_t last_background_close_sequence_id_;
+
+  // Tracks pending network requests by opaque ID. This is used to ensure proper
+  // keepalive counting in response to request status updates; e.g., if an
+  // extension URLRequest is constructed and then destroyed without ever
+  // starting, we can receive a completion notification without a corresponding
+  // start notification. In that case we want to avoid decrementing keepalive.
+  std::set<int> pending_network_requests_;
 
   // Must be last member, see doc on WeakPtrFactory.
   base::WeakPtrFactory<ProcessManager> weak_ptr_factory_;

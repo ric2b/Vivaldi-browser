@@ -5,7 +5,7 @@
 #ifndef REMOTING_HOST_SIGNALING_CONNECTOR_H_
 #define REMOTING_HOST_SIGNALING_CONNECTOR_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/timer/timer.h"
@@ -69,7 +69,7 @@ class SignalingConnector
   // Number of times we tried to connect without success.
   int reconnect_attempts_;
 
-  base::OneShotTimer<SignalingConnector> timer_;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(SignalingConnector);
 };

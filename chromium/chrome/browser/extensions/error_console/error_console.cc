@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/error_console/error_console.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -15,10 +16,10 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/error_console/error_console_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/extensions/features/feature_channel.h"
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -144,7 +145,7 @@ void ErrorConsole::ReportError(scoped_ptr<ExtensionError> error) {
   if (!(mask & (1 << error->type())))
     return;
 
-  const ExtensionError* weak_error = errors_.AddError(error.Pass());
+  const ExtensionError* weak_error = errors_.AddError(std::move(error));
   FOR_EACH_OBSERVER(Observer, observers_, OnErrorAdded(weak_error));
 }
 
@@ -172,7 +173,7 @@ void ErrorConsole::RemoveObserver(Observer* observer) {
 bool ErrorConsole::IsEnabledForChromeExtensionsPage() const {
   if (!profile_->GetPrefs()->GetBoolean(prefs::kExtensionsUIDeveloperMode))
     return false;  // Only enabled in developer mode.
-  if (GetCurrentChannel() > chrome::VersionInfo::CHANNEL_DEV &&
+  if (GetCurrentChannel() > version_info::Channel::DEV &&
       !FeatureSwitch::error_console()->IsEnabled())
     return false;  // Restricted to dev channel or opt-in.
 

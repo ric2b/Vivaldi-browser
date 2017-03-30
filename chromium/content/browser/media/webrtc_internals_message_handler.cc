@@ -11,6 +11,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
+#include "content/public/common/url_constants.h"
 
 namespace content {
 
@@ -27,17 +28,48 @@ void WebRTCInternalsMessageHandler::RegisterMessages() {
       base::Bind(&WebRTCInternalsMessageHandler::OnGetAllStats,
                  base::Unretained(this)));
 
-  web_ui()->RegisterMessageCallback("enableAecRecording",
-      base::Bind(&WebRTCInternalsMessageHandler::OnSetAecRecordingEnabled,
+  web_ui()->RegisterMessageCallback("enableAudioDebugRecordings",
+      base::Bind(
+          &WebRTCInternalsMessageHandler::OnSetAudioDebugRecordingsEnabled,
+          base::Unretained(this),
+          true));
+
+  web_ui()->RegisterMessageCallback("disableAudioDebugRecordings",
+      base::Bind(
+          &WebRTCInternalsMessageHandler::OnSetAudioDebugRecordingsEnabled,
+          base::Unretained(this),
+          false));
+
+  web_ui()->RegisterMessageCallback(
+      "enableEventLogRecordings",
+      base::Bind(&WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled,
                  base::Unretained(this), true));
 
-  web_ui()->RegisterMessageCallback("disableAecRecording",
-      base::Bind(&WebRTCInternalsMessageHandler::OnSetAecRecordingEnabled,
+  web_ui()->RegisterMessageCallback(
+      "disableEventLogRecordings",
+      base::Bind(&WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled,
                  base::Unretained(this), false));
 
   web_ui()->RegisterMessageCallback("finishedDOMLoad",
       base::Bind(&WebRTCInternalsMessageHandler::OnDOMLoadDone,
                  base::Unretained(this)));
+}
+
+RenderFrameHost* WebRTCInternalsMessageHandler::GetWebRTCInternalsHost() const {
+  RenderFrameHost* host = web_ui()->GetWebContents()->GetMainFrame();
+  if (host) {
+    // Make sure we only ever execute the script in the webrtc-internals page.
+    const GURL url(host->GetLastCommittedURL());
+    if (!url.SchemeIs(kChromeUIScheme) ||
+        url.host() != kChromeUIWebRTCInternalsHost) {
+      // Some other page is currently loaded even though we might be in the
+      // process of loading webrtc-internals.  So, the current RFH is not the
+      // one we're waiting for.
+      host = nullptr;
+    }
+  }
+
+  return host;
 }
 
 void WebRTCInternalsMessageHandler::OnGetAllStats(
@@ -49,39 +81,53 @@ void WebRTCInternalsMessageHandler::OnGetAllStats(
   }
 }
 
-void WebRTCInternalsMessageHandler::OnSetAecRecordingEnabled(
+void WebRTCInternalsMessageHandler::OnSetAudioDebugRecordingsEnabled(
     bool enable, const base::ListValue* /* unused_list */) {
-  if (enable)
-    WebRTCInternals::GetInstance()->EnableAecDump(web_ui()->GetWebContents());
-  else
-    WebRTCInternals::GetInstance()->DisableAecDump();
+  if (enable) {
+    WebRTCInternals::GetInstance()->EnableAudioDebugRecordings(
+        web_ui()->GetWebContents());
+  } else {
+    WebRTCInternals::GetInstance()->DisableAudioDebugRecordings();
+  }
+}
+
+void WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled(
+    bool enable,
+    const base::ListValue* /* unused_list */) {
+  WebRTCInternals::GetInstance()->SetEventLogRecordings(
+      enable, enable ? web_ui()->GetWebContents() : nullptr);
 }
 
 void WebRTCInternalsMessageHandler::OnDOMLoadDone(
     const base::ListValue* /* unused_list */) {
   WebRTCInternals::GetInstance()->UpdateObserver(this);
 
-  if (WebRTCInternals::GetInstance()->aec_dump_enabled()) {
+  if (WebRTCInternals::GetInstance()->IsAudioDebugRecordingsEnabled()) {
+    RenderFrameHost* host = GetWebRTCInternalsHost();
+    if (!host)
+      return;
+
     std::vector<const base::Value*> args_vector;
-    base::string16 script = WebUI::GetJavascriptCall("setAecRecordingEnabled",
-                                                     args_vector);
-    RenderFrameHost* host = web_ui()->GetWebContents()->GetMainFrame();
-    if (host)
-      host->ExecuteJavaScript(script);
+    base::string16 script =
+        WebUI::GetJavascriptCall("setAudioDebugRecordingsEnabled", args_vector);
+    host->ExecuteJavaScript(script);
   }
 }
 
 void WebRTCInternalsMessageHandler::OnUpdate(const std::string& command,
                                              const base::Value* args) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  RenderFrameHost* host = GetWebRTCInternalsHost();
+  if (!host)
+    return;
+
   std::vector<const base::Value*> args_vector;
   if (args)
     args_vector.push_back(args);
-  base::string16 update = WebUI::GetJavascriptCall(command, args_vector);
 
-  RenderFrameHost* host = web_ui()->GetWebContents()->GetMainFrame();
-  if (host)
-    host->ExecuteJavaScript(update);
+  base::string16 update = WebUI::GetJavascriptCall(command, args_vector);
+  host->ExecuteJavaScript(update);
 }
 
 }  // namespace content

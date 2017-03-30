@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_DROPDOWN_BAR_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_DROPDOWN_BAR_VIEW_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/views/dropdown_bar_host.h"
 #include "chrome/browser/ui/views/dropdown_bar_host_delegate.h"
 #include "ui/views/accessible_pane_view.h"
@@ -26,17 +27,7 @@ class DropdownBarView : public views::AccessiblePaneView,
   explicit DropdownBarView(DropdownBarHost* host);
   ~DropdownBarView() override;
 
-  // Updates the view to let it know where the host is clipping the
-  // dropdown widget (while animating the opening or closing of the widget).
-  void SetAnimationOffset(int offset) override;
-
-  // Returns the offset used while animating.
-  int animation_offset() const { return animation_offset_; }
-
  protected:
-  // views::View:
-  void OnPaint(gfx::Canvas* canvas) override;
-
   // Returns the DropdownBarHost that manages this view.
   DropdownBarHost* host() const { return host_; }
 
@@ -49,12 +40,6 @@ class DropdownBarView : public views::AccessiblePaneView,
  private:
   // The dropdown bar host that controls this view.
   DropdownBarHost* host_;
-
-  // While animating, the host clips the widget and draws only the bottom
-  // part of it. The view needs to know the pixel offset at which we are drawing
-  // the widget so that we can draw the curved edges that attach to the toolbar
-  // in the right location.
-  int animation_offset_;
 
   DISALLOW_COPY_AND_ASSIGN(DropdownBarView);
 };

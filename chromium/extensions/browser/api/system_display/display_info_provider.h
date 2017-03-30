@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_BROWSER_API_SYSTEM_DISPLAY_DISPLAY_INFO_PROVIDER_H_
 #define EXTENSIONS_BROWSER_API_SYSTEM_DISPLAY_DISPLAY_INFO_PROVIDER_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -18,14 +20,14 @@ class Screen;
 
 namespace extensions {
 
-namespace core_api {
+namespace api {
 namespace system_display {
 struct DisplayProperties;
 struct DisplayUnitInfo;
 }
 }
 
-typedef std::vector<linked_ptr<core_api::system_display::DisplayUnitInfo> >
+typedef std::vector<linked_ptr<api::system_display::DisplayUnitInfo>>
     DisplayInfo;
 
 class DisplayInfoProvider {
@@ -44,17 +46,27 @@ class DisplayInfoProvider {
   // the display was successfully updated. On failure, no display parameters
   // should be changed, and |error| should be set to the error string.
   virtual bool SetInfo(const std::string& display_id,
-                       const core_api::system_display::DisplayProperties& info,
+                       const api::system_display::DisplayProperties& info,
                        std::string* error) = 0;
 
   // Get the screen that is always active, which will be used for monitoring
   // display changes events.
   virtual gfx::Screen* GetActiveScreen() = 0;
 
-  DisplayInfo GetAllDisplaysInfo();
+  // Enable the unified desktop feature.
+  virtual void EnableUnifiedDesktop(bool enable);
+
+  // Get display information.
+  virtual DisplayInfo GetAllDisplaysInfo();
 
  protected:
   DisplayInfoProvider();
+
+  // Create a DisplayUnitInfo from a gfx::Display for implementations of
+  // GetAllDisplaysInfo()
+  static api::system_display::DisplayUnitInfo* CreateDisplayUnitInfo(
+      const gfx::Display& display,
+      int64_t primary_display_id);
 
  private:
   static DisplayInfoProvider* Create();
@@ -63,7 +75,7 @@ class DisplayInfoProvider {
   // platform specific method.
   virtual void UpdateDisplayUnitInfoForPlatform(
       const gfx::Display& display,
-      core_api::system_display::DisplayUnitInfo* unit) = 0;
+      api::system_display::DisplayUnitInfo* unit) = 0;
 
   DISALLOW_COPY_AND_ASSIGN(DisplayInfoProvider);
 };

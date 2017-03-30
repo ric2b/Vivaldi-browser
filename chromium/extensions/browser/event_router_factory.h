@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_EVENT_ROUTER_FACTORY_H_
 #define EXTENSIONS_BROWSER_EVENT_ROUTER_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -18,7 +19,7 @@ class EventRouterFactory : public BrowserContextKeyedServiceFactory {
   static EventRouterFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<EventRouterFactory>;
+  friend struct base::DefaultSingletonTraits<EventRouterFactory>;
 
   EventRouterFactory();
   ~EventRouterFactory() override;

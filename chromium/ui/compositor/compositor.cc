@@ -4,8 +4,11 @@
 
 #include "ui/compositor/compositor.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <deque>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -14,6 +17,10 @@
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
+#include "cc/animation/animation_host.h"
+#include "cc/animation/animation_id_provider.h"
+#include "cc/animation/animation_timeline.h"
 #include "cc/base/switches.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
@@ -63,12 +70,13 @@ void CompositorLock::CancelLock() {
   compositor_ = NULL;
 }
 
-Compositor::Compositor(gfx::AcceleratedWidget widget,
-                       ui::ContextFactory* context_factory,
+Compositor::Compositor(ui::ContextFactory* context_factory,
                        scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : context_factory_(context_factory),
       root_layer_(NULL),
-      widget_(widget),
+      widget_(gfx::kNullAcceleratedWidget),
+      widget_valid_(false),
+      output_surface_requested_(false),
       surface_id_allocator_(context_factory->CreateSurfaceIdAllocator()),
       task_runner_(task_runner),
       vsync_manager_(new CompositorVSyncManager()),
@@ -85,27 +93,39 @@ Compositor::Compositor(gfx::AcceleratedWidget widget,
 
   cc::LayerTreeSettings settings;
 
-  // When impl-side painting is enabled, this will ensure PictureLayers always
-  // can have LCD text, to match the previous behaviour with ContentLayers,
-  // where LCD-not-allowed notifications were ignored.
+  // This will ensure PictureLayers always can have LCD text, to match the
+  // previous behaviour with ContentLayers, where LCD-not-allowed notifications
+  // were ignored.
   settings.layers_always_allowed_lcd_text = true;
+  // Use occlusion to allow more overlapping windows to take less memory.
+  settings.use_occlusion_for_tile_prioritization = true;
   settings.renderer_settings.refresh_rate =
       context_factory_->DoesCreateTestContexts() ? kTestRefreshRate
                                                  : kDefaultRefreshRate;
   settings.main_frame_before_activation_enabled = false;
-  settings.renderer_settings.disable_gpu_vsync =
-      command_line->HasSwitch(switches::kDisableGpuVsync);
+  if (command_line->HasSwitch(switches::kDisableGpuVsync)) {
+    std::string display_vsync_string =
+        command_line->GetSwitchValueASCII(switches::kDisableGpuVsync);
+    if (display_vsync_string == "gpu") {
+      settings.renderer_settings.disable_display_vsync = true;
+    } else if (display_vsync_string == "beginframe") {
+      settings.wait_for_beginframe_interval = false;
+    } else {
+      settings.renderer_settings.disable_display_vsync = true;
+      settings.wait_for_beginframe_interval = false;
+    }
+  }
   settings.renderer_settings.partial_swap_enabled =
-      !command_line->HasSwitch(cc::switches::kUIDisablePartialSwap);
+      !command_line->HasSwitch(switches::kUIDisablePartialSwap);
 #if defined(OS_WIN)
   settings.renderer_settings.finish_rendering_on_resize = true;
+#elif defined(OS_MACOSX)
+  settings.renderer_settings.release_overlay_resources_on_swap_complete = true;
 #endif
 
   // These flags should be mirrored by renderer versions in content/renderer/.
   settings.initial_debug_state.show_debug_borders =
       command_line->HasSwitch(cc::switches::kUIShowCompositedLayerBorders);
-  settings.initial_debug_state.show_fps_counter =
-      command_line->HasSwitch(cc::switches::kUIShowFPSCounter);
   settings.initial_debug_state.show_layer_animation_bounds_rects =
       command_line->HasSwitch(cc::switches::kUIShowLayerAnimationBounds);
   settings.initial_debug_state.show_paint_rects =
@@ -122,33 +142,46 @@ Compositor::Compositor(gfx::AcceleratedWidget widget,
   settings.initial_debug_state.SetRecordRenderingStats(
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
 
-  settings.use_display_lists = true;
-
+  if (command_line->HasSwitch(cc::switches::kDisableCompositorPropertyTrees))
+    settings.use_property_trees = false;
   settings.use_zero_copy = IsUIZeroCopyEnabled();
-  settings.use_one_copy = IsUIOneCopyEnabled();
 
-  // TODO(reveman): We currently assume that the compositor will use BGRA_8888
-  // if it's able to, and RGBA_8888 otherwise. Since we don't know what it will
-  // use we hardcode BGRA_8888 here for now. We should instead
-  // move decisions about GpuMemoryBuffer format to the browser embedder so we
-  // know it here, and pass that decision to the compositor for each usage.
-  // crbug.com/490362
-  gfx::GpuMemoryBuffer::Format format = gfx::GpuMemoryBuffer::BGRA_8888;
+  settings.renderer_settings.use_rgba_4444_textures =
+      command_line->HasSwitch(switches::kUIEnableRGBA4444Textures);
 
-  // Use PERSISTENT_MAP memory buffers to support partial tile raster for
-  // software raster into GpuMemoryBuffers.
-  gfx::GpuMemoryBuffer::Usage usage = gfx::GpuMemoryBuffer::PERSISTENT_MAP;
-  settings.use_persistent_map_for_gpu_memory_buffers = true;
+  // UI compositor always uses partial raster if not using zero-copy. Zero copy
+  // doesn't currently support partial raster.
+  settings.use_partial_raster = !settings.use_zero_copy;
 
-  settings.use_image_texture_target =
-      context_factory_->GetImageTextureTarget(format, usage);
+  // Use CPU_READ_WRITE_PERSISTENT memory buffers to support partial tile
+  // raster if needed.
+  gfx::BufferUsage usage =
+      settings.use_partial_raster
+          ? gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT
+          : gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
 
-  // Note: gathering of pixel refs is only needed when using multiple
-  // raster threads.
-  settings.gather_pixel_refs = false;
+  for (size_t format = 0;
+      format < static_cast<size_t>(gfx::BufferFormat::LAST) + 1; format++) {
+    DCHECK_GT(settings.use_image_texture_targets.size(), format);
+    settings.use_image_texture_targets[format] =
+        context_factory_->GetImageTextureTarget(
+            static_cast<gfx::BufferFormat>(format), usage);
+  }
 
-  settings.use_compositor_animation_timelines =
-      command_line->HasSwitch(switches::kUIEnableCompositorAnimationTimelines);
+  // Note: Only enable image decode tasks if we have more than one worker
+  // thread.
+  settings.image_decode_tasks_enabled = false;
+
+  settings.use_compositor_animation_timelines = !command_line->HasSwitch(
+      switches::kUIDisableCompositorAnimationTimelines);
+
+#if !defined(OS_ANDROID)
+  // TODO(sohanjg): Revisit this memory usage in tile manager.
+  cc::ManagedMemoryPolicy policy(
+      512 * 1024 * 1024, gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE,
+      settings.memory_policy_.num_resources_limit);
+  settings.memory_policy_ = policy;
+#endif
 
   base::TimeTicks before_create = base::TimeTicks::Now();
 
@@ -163,9 +196,15 @@ Compositor::Compositor(gfx::AcceleratedWidget widget,
   host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
   UMA_HISTOGRAM_TIMES("GPU.CreateBrowserCompositor",
                       base::TimeTicks::Now() - before_create);
+
+  if (settings.use_compositor_animation_timelines) {
+    animation_timeline_ = cc::AnimationTimeline::Create(
+        cc::AnimationIdProvider::NextTimelineId());
+    host_->animation_host()->AddAnimationTimeline(animation_timeline_.get());
+  }
   host_->SetRootLayer(root_web_layer_);
   host_->set_surface_id_namespace(surface_id_allocator_->id_namespace());
-  host_->SetLayerTreeHostClientReady();
+  host_->SetVisible(true);
 }
 
 Compositor::~Compositor() {
@@ -180,10 +219,11 @@ Compositor::~Compositor() {
   FOR_EACH_OBSERVER(CompositorAnimationObserver, animation_observer_list_,
                     OnCompositingShuttingDown(this));
 
-  DCHECK(begin_frame_observer_list_.empty());
-
   if (root_layer_)
     root_layer_->ResetCompositor();
+
+  if (animation_timeline_)
+    host_->animation_host()->RemoveAnimationTimeline(animation_timeline_.get());
 
   // Stop all outstanding draws before telling the ContextFactory to tear
   // down any contexts that the |host_| may rely upon.
@@ -194,7 +234,8 @@ Compositor::~Compositor() {
 
 void Compositor::SetOutputSurface(
     scoped_ptr<cc::OutputSurface> output_surface) {
-  host_->SetOutputSurface(output_surface.Pass());
+  output_surface_requested_ = false;
+  host_->SetOutputSurface(std::move(output_surface));
 }
 
 void Compositor::ScheduleDraw() {
@@ -210,6 +251,10 @@ void Compositor::SetRootLayer(Layer* root_layer) {
   root_web_layer_->RemoveAllChildren();
   if (root_layer_)
     root_layer_->SetCompositor(this, root_web_layer_);
+}
+
+cc::AnimationTimeline* Compositor::GetAnimationTimeline() const {
+  return animation_timeline_.get();
 }
 
 void Compositor::SetHostHasTransparentBackground(
@@ -244,7 +289,7 @@ void Compositor::DisableSwapUntilResize() {
 void Compositor::SetLatencyInfo(const ui::LatencyInfo& latency_info) {
   scoped_ptr<cc::SwapPromise> swap_promise(
       new cc::LatencyInfoSwapPromise(latency_info));
-  host_->QueueSwapPromise(swap_promise.Pass());
+  host_->QueueSwapPromise(std::move(swap_promise));
 }
 
 void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
@@ -287,6 +332,31 @@ void Compositor::SetAuthoritativeVSyncInterval(
   vsync_manager_->SetAuthoritativeVSyncInterval(interval);
 }
 
+void Compositor::SetAcceleratedWidget(gfx::AcceleratedWidget widget) {
+  // This function should only get called once.
+  DCHECK(!widget_valid_);
+  widget_ = widget;
+  widget_valid_ = true;
+  if (output_surface_requested_)
+    context_factory_->CreateOutputSurface(weak_ptr_factory_.GetWeakPtr());
+}
+
+gfx::AcceleratedWidget Compositor::ReleaseAcceleratedWidget() {
+  DCHECK(!IsVisible());
+  if (!host_->output_surface_lost())
+    host_->ReleaseOutputSurface();
+  context_factory_->RemoveCompositor(this);
+  widget_valid_ = false;
+  gfx::AcceleratedWidget widget = widget_;
+  widget_ = gfx::kNullAcceleratedWidget;
+  return widget;
+}
+
+gfx::AcceleratedWidget Compositor::widget() const {
+  DCHECK(widget_valid_);
+  return widget_;
+}
+
 scoped_refptr<CompositorVSyncManager> Compositor::vsync_manager() const {
   return vsync_manager_;
 }
@@ -319,30 +389,21 @@ bool Compositor::HasAnimationObserver(
 }
 
 void Compositor::AddBeginFrameObserver(CompositorBeginFrameObserver* observer) {
-  DCHECK(std::find(begin_frame_observer_list_.begin(),
-                   begin_frame_observer_list_.end(), observer) ==
-         begin_frame_observer_list_.end());
-
-  if (begin_frame_observer_list_.empty())
+  if (!begin_frame_observer_list_.might_have_observers())
     host_->SetChildrenNeedBeginFrames(true);
+
+  begin_frame_observer_list_.AddObserver(observer);
 
   if (missed_begin_frame_args_.IsValid())
     observer->OnSendBeginFrame(missed_begin_frame_args_);
-
-  begin_frame_observer_list_.push_back(observer);
 }
 
 void Compositor::RemoveBeginFrameObserver(
     CompositorBeginFrameObserver* observer) {
-  auto it = std::find(begin_frame_observer_list_.begin(),
-                      begin_frame_observer_list_.end(), observer);
-  DCHECK(it != begin_frame_observer_list_.end());
-  begin_frame_observer_list_.erase(it);
+  begin_frame_observer_list_.RemoveObserver(observer);
 
-  if (begin_frame_observer_list_.empty()) {
-    host_->SetChildrenNeedBeginFrames(false);
-    missed_begin_frame_args_ = cc::BeginFrameArgs();
-  }
+  // As this call may take place while iterating over observers, unsubscription
+  // from |host_| is performed after iteration in |SendBeginFramesToChildren()|.
 }
 
 void Compositor::BeginMainFrame(const cc::BeginFrameArgs& args) {
@@ -362,14 +423,17 @@ static void SendDamagedRectsRecursive(ui::Layer* layer) {
     SendDamagedRectsRecursive(child);
 }
 
-void Compositor::Layout() {
+void Compositor::UpdateLayerTreeHost() {
   if (!root_layer())
     return;
   SendDamagedRectsRecursive(root_layer());
 }
 
 void Compositor::RequestNewOutputSurface() {
-  context_factory_->CreateOutputSurface(weak_ptr_factory_.GetWeakPtr());
+  DCHECK(!output_surface_requested_);
+  output_surface_requested_ = true;
+  if (widget_valid_)
+    context_factory_->CreateOutputSurface(weak_ptr_factory_.GetWeakPtr());
 }
 
 void Compositor::DidInitializeOutputSurface() {
@@ -409,8 +473,18 @@ void Compositor::DidAbortSwapBuffers() {
 }
 
 void Compositor::SendBeginFramesToChildren(const cc::BeginFrameArgs& args) {
-  for (auto observer : begin_frame_observer_list_)
-    observer->OnSendBeginFrame(args);
+  FOR_EACH_OBSERVER(CompositorBeginFrameObserver, begin_frame_observer_list_,
+                    OnSendBeginFrame(args));
+
+  // Unsubscription is performed here, after iteration, to handle the case where
+  // the last BeginFrame observer is removed while iterating over the observers.
+  if (!begin_frame_observer_list_.might_have_observers()) {
+    host_->SetChildrenNeedBeginFrames(false);
+    // Unsubscription should reset |missed_begin_frame_args_|, avoiding stale
+    // BeginFrame dispatch when the next BeginFrame observer is added.
+    missed_begin_frame_args_ = cc::BeginFrameArgs();
+    return;
+  }
 
   missed_begin_frame_args_ = args;
   missed_begin_frame_args_.type = cc::BeginFrameArgs::MISSED;

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
 var model;
 var fileSystem;
 var item;
@@ -28,50 +27,67 @@ function setUp() {
       },
       /* Mock EntryListWatcher */{});
   fileSystem = new MockFileSystem('volumeId');
-  item = new Gallery.Item(
+  model.fallbackSaveDirectory = fileSystem.root;
+}
+
+function testSaveItemOverwrite(callback) {
+  var item = new GalleryItem(
       new MockEntry(fileSystem, '/test.jpg'),
       null,
       /* metadataItem */ {},
       /* thumbnailMetadataItem */ {},
       /* original */ true);
-}
 
-function testSaveItemOverwrite(callback) {
   // Mocking the saveToFile method.
   item.saveToFile = function(
       volumeManager,
       metadataModel,
       fallbackDir,
-      overwrite,
       canvas,
+      overwrite,
       callback) {
-    assertTrue(overwrite);
     callback(true);
   };
   model.push(item);
   reportPromise(
-      model.saveItem({}, item, document.createElement('canvas'), true).
+      model.saveItem({}, item, document.createElement('canvas'),
+          true /* overwrite */).
           then(function() { assertEquals(1, model.length); }),
       callback);
 }
 
-function testSaveItemNewFile(callback) {
-  // Mocking the saveToFile method.
+function testSaveItemToNewFile(callback) {
+  var item = new GalleryItem(
+      new MockEntry(fileSystem, '/test.webp'),
+      null,
+      /* metadataItem */ {},
+      /* thumbnailMetadataItem */ {},
+      /* original */ true);
+
+  // Mocking the saveToFile method. In this case, Gallery saves to a new file
+  // since it cannot overwrite to webp image file.
   item.saveToFile = function(
       volumeManager,
       metadataModel,
       fallbackDir,
-      overwrite,
       canvas,
+      overwrite,
       callback) {
-    assertFalse(overwrite);
     // Gallery item track new file.
-    this.entry_ = new MockEntry(fileSystem, '/test (1).jpg');
+    this.entry_ = new MockEntry(fileSystem, '/test (1).png');
+    this.original_ = false;
     callback(true);
   };
   model.push(item);
   reportPromise(
-      model.saveItem({}, item, document.createElement('canvas'), false).
-          then(function() { assertEquals(2, model.length); }),
+      model.saveItem({}, item, document.createElement('canvas'),
+          false /* not overwrite */).
+          then(function() {
+            assertEquals(2, model.length);
+            assertEquals('test (1).png', model.item(0).getFileName());
+            assertFalse(model.item(0).isOriginal());
+            assertEquals('test.webp', model.item(1).getFileName());
+            assertTrue(model.item(1).isOriginal());
+          }),
       callback);
 }

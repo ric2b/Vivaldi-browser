@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
 
+#include "app/vivaldi_apptools.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/window_controller_list.h"
@@ -11,7 +12,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/sessions/session_id.h"
+#include "components/sessions/core/session_id.h"
 #include "extensions/common/extension.h"
 
 BrowserExtensionWindowController::BrowserExtensionWindowController(
@@ -32,6 +33,8 @@ int BrowserExtensionWindowController::GetWindowId() const {
 namespace keys = extensions::tabs_constants;
 
 std::string BrowserExtensionWindowController::GetWindowTypeText() const {
+  if (browser_->is_devtools())
+    return keys::kWindowTypeValueDevTools;
   if (browser_->is_type_popup())
     return keys::kWindowTypeValuePopup;
   if (browser_->is_app())
@@ -89,9 +92,10 @@ Browser* BrowserExtensionWindowController::GetBrowser() const {
 
 bool BrowserExtensionWindowController::IsVisibleToExtension(
     const extensions::Extension* extension) const {
-  // Platform apps can only see their own windows
+  DCHECK(extension);
+  // Platform apps can only see their own windows.
   // except for the Vivaldi extensions that sees all
   // (gisli@vivaldi.com)
   return (!browser_->is_devtools() && !extension->is_platform_app())
-    || extension->id() == "mpognobbkildjkofajifpdfhcoklimli";
+    || vivaldi::IsVivaldiApp(extension->id());
 }

@@ -4,6 +4,9 @@
 
 #include "pdf/chunk_stream.h"
 
+#include <stddef.h>
+#include <string.h>
+
 #define __STDC_LIMIT_MACROS
 #ifdef _WIN32
 #include <limits.h>
@@ -13,11 +16,9 @@
 
 #include <algorithm>
 
-#include "base/basictypes.h"
-
 namespace chrome_pdf {
 
-ChunkStream::ChunkStream() {
+ChunkStream::ChunkStream() : stream_size_(0) {
 }
 
 ChunkStream::~ChunkStream() {
@@ -26,13 +27,15 @@ ChunkStream::~ChunkStream() {
 void ChunkStream::Clear() {
   chunks_.clear();
   data_.clear();
+  stream_size_ = 0;
 }
 
 void ChunkStream::Preallocate(size_t stream_size) {
   data_.reserve(stream_size);
+  stream_size_ = stream_size;
 }
 
-size_t ChunkStream::GetSize() {
+size_t ChunkStream::GetSize() const {
   return data_.size();
 }
 
@@ -150,7 +153,7 @@ size_t ChunkStream::GetFirstMissingByte() const {
   return begin->first > 0 ? 0 : begin->second;
 }
 
-size_t ChunkStream::GetLastByteBefore(size_t offset) const {
+size_t ChunkStream::GetFirstMissingByteInInterval(size_t offset) const {
   if (chunks_.empty())
     return 0;
   std::map<size_t, size_t>::const_iterator it = chunks_.upper_bound(offset);
@@ -160,13 +163,13 @@ size_t ChunkStream::GetLastByteBefore(size_t offset) const {
   return it->first + it->second;
 }
 
-size_t ChunkStream::GetFirstByteAfter(size_t offset) const {
+size_t ChunkStream::GetLastMissingByteInInterval(size_t offset) const {
   if (chunks_.empty())
-    return 0;
+    return stream_size_ - 1;
   std::map<size_t, size_t>::const_iterator it = chunks_.upper_bound(offset);
   if (it == chunks_.end())
-    return data_.size();
-  return it->first;
+    return stream_size_ - 1;
+  return it->first - 1;
 }
 
 }  // namespace chrome_pdf

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/login/screens/network_view.h"
@@ -44,14 +45,10 @@ class NetworkScreenHandler : public NetworkView, public BaseScreenHandler {
   void ReloadLocalizedContent() override;
 
   // BaseScreenHandler implementation:
-  void RegisterMessages() override;
   void DeclareLocalizedValues(
       ::login::LocalizedValuesBuilder* builder) override;
   void GetAdditionalParameters(base::DictionaryValue* dict) override;
   void Initialize() override;
-
-  // WebUI message handlers.
-  void HandleToggleNewLoginUI();
 
  private:
   // Returns available timezones. Caller gets the ownership.

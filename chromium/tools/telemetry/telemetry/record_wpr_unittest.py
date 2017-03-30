@@ -12,6 +12,7 @@ from telemetry import decorators
 from telemetry.page import page as page_module
 from telemetry.page import page_test
 from telemetry import record_wpr
+from telemetry.testing import options_for_unittests
 from telemetry.testing import tab_test_case
 from telemetry.util import wpr_modes
 
@@ -66,7 +67,28 @@ class MockPageTest(page_test.PageTest):
 
 class MockBenchmark(benchmark.Benchmark):
   test = MockPageTest
-  mock_story_set = None
+
+  def __init__(self):
+    super(MockBenchmark, self).__init__()
+    self.mock_story_set = None
+
+  @classmethod
+  def AddBenchmarkCommandLineArgs(cls, group):
+    group.add_option('', '--mock-benchmark-url', action='store', type='string')
+
+  def CreateStorySet(self, options):
+    kwargs = {}
+    if options.mock_benchmark_url:
+      kwargs['url'] = options.mock_benchmark_url
+    self.mock_story_set = MockStorySet(**kwargs)
+    return self.mock_story_set
+
+
+class MockTimelineBasedMeasurementBenchmark(benchmark.Benchmark):
+
+  def __init__(self):
+    super(MockTimelineBasedMeasurementBenchmark, self).__init__()
+    self.mock_story_set = None
 
   @classmethod
   def AddBenchmarkCommandLineArgs(cls, group):
@@ -90,6 +112,7 @@ class RecordWprUnitTests(tab_test_case.TabTestCase):
     sys.path.extend([cls._base_dir, cls._test_data_dir])
     super(RecordWprUnitTests, cls).setUpClass()
     cls._url = cls.UrlOfUnittestFile('blank.html')
+    cls._test_options = options_for_unittests.GetCopy()
 
   # When the RecorderPageTest is created from a PageSet, we do not have a
   # PageTest to use. In this case, we will record every available action.
@@ -117,10 +140,17 @@ class RecordWprUnitTests(tab_test_case.TabTestCase):
     self.assertEqual('ValidateAndMeasurePage',
                      record_page_test.page_test.func_calls[0])
 
+  def GetBrowserDeviceFlags(self):
+    flags = ['--browser', self._browser.browser_type,
+             '--remote', self._test_options.cros_remote,
+             '--device', self._device]
+    if self._test_options.chrome_root:
+      flags += ['--chrome-root', self._test_options.chrome_root]
+    return flags
+
   @decorators.Disabled('chromeos') # crbug.com/404868.
   def testWprRecorderWithPageSet(self):
-    flags = ['--browser', self._browser.browser_type,
-             '--device', self._device]
+    flags = self.GetBrowserDeviceFlags()
     mock_story_set = MockStorySet(url=self._url)
     wpr_recorder = record_wpr.WprRecorder(self._test_data_dir,
                                           mock_story_set, flags)
@@ -129,9 +159,8 @@ class RecordWprUnitTests(tab_test_case.TabTestCase):
     self.assertEqual(set(mock_story_set.stories), results.pages_that_succeeded)
 
   def testWprRecorderWithBenchmark(self):
-    flags = ['--mock-benchmark-url', self._url,
-             '--browser', self._browser.browser_type,
-             '--device', self._device]
+    flags = self.GetBrowserDeviceFlags()
+    flags.extend(['--mock-benchmark-url', self._url])
     mock_benchmark = MockBenchmark()
     wpr_recorder = record_wpr.WprRecorder(self._test_data_dir, mock_benchmark,
                                           flags)
@@ -140,13 +169,21 @@ class RecordWprUnitTests(tab_test_case.TabTestCase):
     self.assertEqual(set(mock_benchmark.mock_story_set.stories),
                      results.pages_that_succeeded)
 
+  def testWprRecorderWithTimelineBasedMeasurementBenchmark(self):
+    flags = self.GetBrowserDeviceFlags()
+    flags.extend(['--mock-benchmark-url', self._url])
+    mock_benchmark = MockTimelineBasedMeasurementBenchmark()
+    wpr_recorder = record_wpr.WprRecorder(self._test_data_dir, mock_benchmark,
+                                          flags)
+    results = wpr_recorder.CreateResults()
+    wpr_recorder.Record(results)
+    self.assertEqual(set(mock_benchmark.mock_story_set.stories),
+                     results.pages_that_succeeded)
+
   def testPageSetBaseDirFlag(self):
-    flags = [
-       '--page-set-base-dir', self._test_data_dir,
-       '--mock-benchmark-url', self._url,
-       '--browser', self._browser.browser_type,
-       '--device', self._device
-    ]
+    flags = self.GetBrowserDeviceFlags()
+    flags.extend(['--page-set-base-dir', self._test_data_dir,
+                  '--mock-benchmark-url', self._url])
     mock_benchmark = MockBenchmark()
     wpr_recorder = record_wpr.WprRecorder(
         'non-existent-dummy-dir', mock_benchmark, flags)
@@ -194,3 +231,8 @@ class RecordWprUnitTests(tab_test_case.TabTestCase):
         'CustomizeBrowserOptions' in record_page_test.page_test.func_calls)
     self.assertTrue('WillStartBrowser' in record_page_test.page_test.func_calls)
     self.assertTrue('DidStartBrowser' in record_page_test.page_test.func_calls)
+
+  def testUseLiveSitesUnsupported(self):
+    flags = ['--use-live-sites']
+    with self.assertRaises(SystemExit):
+      record_wpr.WprRecorder(self._test_data_dir, MockBenchmark(), flags)

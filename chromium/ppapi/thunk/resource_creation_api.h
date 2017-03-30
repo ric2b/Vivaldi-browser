@@ -5,7 +5,10 @@
 #ifndef PPAPI_THUNK_RESOURCE_CREATION_API_H_
 #define PPAPI_THUNK_RESOURCE_CREATION_API_H_
 
+#include <stdint.h>
+
 #include "base/memory/shared_memory.h"
+#include "build/build_config.h"
 #include "ppapi/c/dev/pp_video_dev.h"
 #include "ppapi/c/dev/ppb_file_chooser_dev.h"
 #include "ppapi/c/dev/ppb_truetype_font_dev.h"
@@ -25,7 +28,6 @@
 #include "ppapi/shared_impl/ppb_image_data_shared.h"
 
 struct PP_Flash_Menu;
-struct PP_FontDescription_Dev;
 struct PP_BrowserFont_Trusted_Description;
 struct PP_NetAddress_IPv4;
 struct PP_NetAddress_IPv6;
@@ -120,6 +122,7 @@ class ResourceCreationAPI {
                                   PP_Resource config_id,
                                   PPB_Audio_Callback audio_callback,
                                   void* user_data) = 0;
+  virtual PP_Resource CreateAudioEncoder(PP_Instance instance) = 0;
   virtual PP_Resource CreateAudioTrusted(PP_Instance instance) = 0;
   virtual PP_Resource CreateAudioConfig(PP_Instance instance,
                                         PP_AudioSampleRate sample_rate,
@@ -140,7 +143,8 @@ class ResourceCreationAPI {
       PP_Resource share_context,
       const int32_t* attrib_list,
       gpu::Capabilities* capabilities,
-      base::SharedMemoryHandle* shared_state) = 0;
+      base::SharedMemoryHandle* shared_state,
+      uint64_t* command_buffer_id) = 0;
   virtual PP_Resource CreateHostResolver(PP_Instance instance) = 0;
   virtual PP_Resource CreateHostResolverPrivate(PP_Instance instance) = 0;
   virtual PP_Resource CreateImageData(PP_Instance instance,

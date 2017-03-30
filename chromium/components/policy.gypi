@@ -22,6 +22,8 @@
         '<(policy_out_dir)/policy/cloud_policy_generated.cc',
     'app_restrictions_path':
         '<(policy_out_dir)/app_restrictions.xml',
+    'risk_tag_header_path':
+        '<(policy_out_dir)/risk_tag.h',
     # This is the "full" protobuf, which defines one protobuf message per
     # policy. It is also the format currently used by the server.
     'chrome_settings_proto_path':
@@ -62,6 +64,11 @@
           'includes': [
             'policy/policy_browser.gypi',
           ],
+          'conditions': [
+            ['OS=="android"', {
+              'dependencies': ['policy_jni_headers']},
+            ],
+          ],
         },
       ],
     }, {  # component=="shared_library"
@@ -81,6 +88,11 @@
           'type': 'none',
           'dependencies': [
             'policy_component',
+          ],
+          'conditions': [
+            ['OS=="android"', {
+              'dependencies': ['policy_jni_headers']},
+            ],
           ],
         },
         {
@@ -113,6 +125,7 @@
                 '<(chrome_settings_proto_path)',
                 '<(cloud_policy_proto_path)',
                 '<(app_restrictions_path)',
+                '<(risk_tag_header_path)',
               ],
               'action_name': 'generate_policy_source',
               'action': [
@@ -124,6 +137,7 @@
                 '--cloud-policy-protobuf=<(cloud_policy_proto_path)',
                 '--cloud-policy-decoder=<(protobuf_decoder_path)',
                 '--app-restrictions-definition=<(app_restrictions_path)',
+                '--risk-tag-header=<(risk_tag_header_path)',
                 '<(DEPTH)/chrome/VERSION',
                 '<(OS)',
                 '<(chromeos)',
@@ -205,6 +219,7 @@
           'sources': [
             '<(policy_constant_header_path)',
             '<(policy_constant_source_path)',
+            '<(risk_tag_header_path)',
             '<(protobuf_decoder_path)',
           ],
           'include_dirs': [
@@ -339,6 +354,23 @@
         },
       ],
     }],
+    ['OS=="android"',
+     {
+      'targets' : [
+        {
+          'target_name' : 'policy_jni_headers',
+          'type': 'none',
+          'sources': [
+            'policy/android/java/src/org/chromium/policy/CombinedPolicyProvider.java',
+            'policy/android/java/src/org/chromium/policy/PolicyConverter.java',
+           ],
+          'variables': {
+            'jni_gen_package': 'policy',
+           },
+          'includes': [ '../build/jni_generator.gypi' ],
+         },
+       ],
+    }],
     ['OS=="android" and configuration_policy==1', {
       'targets': [
         {
@@ -395,6 +427,20 @@
           },
           'includes': [ '../build/java.gypi' ],
         },
+        {
+          # GN: //components/policy/android:policy_java_test_support
+          'target_name': 'policy_java_test_support',
+          'type': 'none',
+          'dependencies': [
+            '../base/base.gyp:base_java',
+            '../base/base.gyp:base_java_test_support',
+            'policy_java'
+          ],
+          'variables': {
+            'java_in_dir': 'policy/android/javatests',
+          },
+          'includes': [ '../build/java.gypi' ],
+        },
       ],
     }],
     ['OS=="win" and target_arch=="ia32" and configuration_policy==1', {
@@ -406,6 +452,7 @@
           'sources': [
             '<(policy_constant_header_path)',
             '<(policy_constant_source_path)',
+            '<(risk_tag_header_path)',
           ],
           'include_dirs': [
             '<(DEPTH)',
@@ -433,6 +480,7 @@
           # the rules of chrome_strings
           'target_name': 'policy_templates',
           'type': 'none',
+          'dependencies': [ '<(VIVALDI)/app/vivaldi_resources.gyp:policy_templates' ],
           'variables': {
             'grit_grd_file': 'policy/resources/policy_templates.grd',
             'grit_info_cmd': [
@@ -447,6 +495,7 @@
           'actions': [
             {
               'action_name': 'policy_templates',
+              'disabled': 1,
               'includes': [
                 '../build/grit_action.gypi',
               ],

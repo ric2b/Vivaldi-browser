@@ -27,8 +27,6 @@ class ThreadTimesUnitTest(page_test_test_case.PageTestTestCase):
     self._options = options_for_unittests.GetCopy()
     self._options.browser_options.wpr_mode = wpr_modes.WPR_OFF
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   @decorators.Disabled('android')
   def testBasic(self):
     ps = self.CreateStorySetFromFileInUnittestDataDir('scrollable_page.html')
@@ -43,8 +41,6 @@ class ThreadTimesUnitTest(page_test_test_case.PageTestTestCase):
         cpu_time = results.FindAllPageSpecificValuesNamed(cpu_time_name)
         self.assertEquals(len(cpu_time), 1)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   @decorators.Disabled('chromeos')  # crbug.com/483212
   def testWithSilkDetails(self):
     ps = self.CreateStorySetFromFileInUnittestDataDir('scrollable_page.html')
@@ -61,7 +57,5 @@ class ThreadTimesUnitTest(page_test_test_case.PageTestTestCase):
         values = results.FindAllPageSpecificValuesNamed(value_name)
         self.assertEquals(len(values), 1)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def testCleanUpTrace(self):
     self.TestTracingCleanedUp(thread_times.ThreadTimes, self._options)

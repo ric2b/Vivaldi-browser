@@ -5,9 +5,13 @@
 #ifndef SYNC_ENGINE_DIRECTORY_COMMIT_CONTRIBUTION_H_
 #define SYNC_ENGINE_DIRECTORY_COMMIT_CONTRIBUTION_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/base/sync_export.h"
 #include "sync/engine/commit_contribution.h"
@@ -33,8 +37,7 @@ class Directory;
 // This class handles the bookkeeping related to the commit of these items,
 // including processing the commit response message and setting and unsetting
 // the SYNCING bits.
-class SYNC_EXPORT_PRIVATE DirectoryCommitContribution
-    : public CommitContribution {
+class SYNC_EXPORT DirectoryCommitContribution : public CommitContribution {
  public:
   // This destructor will DCHECK if UnsetSyncingBits() has not been called yet.
   ~DirectoryCommitContribution() override;
@@ -82,7 +85,7 @@ class SYNC_EXPORT_PRIVATE DirectoryCommitContribution
                            GatherAndTruncate);
 
   DirectoryCommitContribution(
-      const std::vector<int64>& metahandles,
+      const std::vector<int64_t>& metahandles,
       const google::protobuf::RepeatedPtrField<sync_pb::SyncEntity>& entities,
       const sync_pb::DataTypeContext& context,
       syncable::Directory* directory,
@@ -91,7 +94,7 @@ class SYNC_EXPORT_PRIVATE DirectoryCommitContribution
   void UnsetSyncingBits();
 
   syncable::Directory* dir_;
-  const std::vector<int64> metahandles_;
+  const std::vector<int64_t> metahandles_;
   const google::protobuf::RepeatedPtrField<sync_pb::SyncEntity> entities_;
   sync_pb::DataTypeContext context_;
   size_t entries_start_index_;

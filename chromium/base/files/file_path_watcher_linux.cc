@@ -5,6 +5,7 @@
 #include "base/files/file_path_watcher.h"
 
 #include <errno.h>
+#include <stddef.h>
 #include <string.h>
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
@@ -25,9 +26,11 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
@@ -167,9 +170,8 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate,
   void RemoveRecursiveWatches();
 
   // |path| is a symlink to a non-existent target. Attempt to add a watch to
-  // the link target's parent directory. Returns true and update |watch_entry|
-  // on success.
-  bool AddWatchForBrokenSymlink(const FilePath& path, WatchEntry* watch_entry);
+  // the link target's parent directory. Update |watch_entry| on success.
+  void AddWatchForBrokenSymlink(const FilePath& path, WatchEntry* watch_entry);
 
   bool HasValidWatchVector() const;
 
@@ -513,21 +515,19 @@ void FilePathWatcherImpl::UpdateWatches() {
 
   // Walk the list of watches and update them as we go.
   FilePath path(FILE_PATH_LITERAL("/"));
-  bool path_valid = true;
   for (size_t i = 0; i < watches_.size(); ++i) {
     WatchEntry& watch_entry = watches_[i];
     InotifyReader::Watch old_watch = watch_entry.watch;
     watch_entry.watch = InotifyReader::kInvalidWatch;
     watch_entry.linkname.clear();
-    if (path_valid) {
-      watch_entry.watch = g_inotify_reader.Get().AddWatch(path, this);
-      if (watch_entry.watch == InotifyReader::kInvalidWatch) {
-        if (IsLink(path)) {
-          path_valid = AddWatchForBrokenSymlink(path, &watch_entry);
-        } else {
-          path_valid = false;
-        }
-      }
+    watch_entry.watch = g_inotify_reader.Get().AddWatch(path, this);
+    if (watch_entry.watch == InotifyReader::kInvalidWatch) {
+      // Ignore the error code (beyond symlink handling) to attempt to add
+      // watches on accessible children of unreadable directories. Note that
+      // this is a best-effort attempt; we may not catch events in this
+      // scenario.
+      if (IsLink(path))
+        AddWatchForBrokenSymlink(path, &watch_entry);
     }
     if (old_watch != watch_entry.watch)
       g_inotify_reader.Get().RemoveWatch(old_watch, this);
@@ -643,12 +643,12 @@ void FilePathWatcherImpl::RemoveRecursiveWatches() {
   recursive_watches_by_path_.clear();
 }
 
-bool FilePathWatcherImpl::AddWatchForBrokenSymlink(const FilePath& path,
+void FilePathWatcherImpl::AddWatchForBrokenSymlink(const FilePath& path,
                                                    WatchEntry* watch_entry) {
   DCHECK_EQ(InotifyReader::kInvalidWatch, watch_entry->watch);
   FilePath link;
   if (!ReadSymbolicLink(path, &link))
-    return false;
+    return;
 
   if (!link.IsAbsolute())
     link = path.DirName().Append(link);
@@ -664,11 +664,10 @@ bool FilePathWatcherImpl::AddWatchForBrokenSymlink(const FilePath& path,
     // exist. Ideally we should make sure we've watched all the components of
     // the symlink path for changes. See crbug.com/91561 for details.
     DPLOG(WARNING) << "Watch failed for "  << link.DirName().value();
-    return false;
+    return;
   }
   watch_entry->watch = watch;
   watch_entry->linkname = link.BaseName().value();
-  return true;
 }
 
 bool FilePathWatcherImpl::HasValidWatchVector() const {

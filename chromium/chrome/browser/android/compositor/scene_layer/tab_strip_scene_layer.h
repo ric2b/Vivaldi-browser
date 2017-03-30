@@ -10,7 +10,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/ui_resource_layer.h"
@@ -26,60 +26,73 @@ namespace android {
 class LayerTitleCache;
 class TabHandleLayer;
 
+// A scene layer to draw one or more tab strips. Note that content tree can be
+// added as a subtree.
 class TabStripSceneLayer : public SceneLayer {
  public:
   TabStripSceneLayer(JNIEnv* env, jobject jobj);
   ~TabStripSceneLayer() override;
 
-  void SetContentTree(JNIEnv* env, jobject jobj, jobject jcontent_tree);
+  void SetContentTree(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      const base::android::JavaParamRef<jobject>& jcontent_tree);
 
-  void BeginBuildingFrame(JNIEnv* env, jobject jobj);
-  void FinishBuildingFrame(JNIEnv* env, jobject jobj);
+  void BeginBuildingFrame(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& jobj,
+                          jboolean visible);
+  void FinishBuildingFrame(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& jobj);
 
   void UpdateTabStripLayer(JNIEnv* env,
-                           jobject jobj,
+                           const base::android::JavaParamRef<jobject>& jobj,
                            jfloat width,
                            jfloat height,
                            jfloat y_offset,
-                           jfloat strip_brightness);
-  void UpdateNewTabButton(JNIEnv* env,
-                          jobject jobj,
-                          jint resource_id,
-                          jfloat x,
-                          jfloat y,
-                          jfloat width,
-                          jfloat height,
-                          jboolean visible,
-                          jobject jresource_manager);
-  void UpdateModelSelectorButton(JNIEnv* env,
-                                 jobject jobj,
-                                 jint resource_id,
-                                 jfloat x,
-                                 jfloat y,
-                                 jfloat width,
-                                 jfloat height,
-                                 jboolean incognito,
-                                 jboolean visible,
-                                 jobject jresource_manager);
-  void PutStripTabLayer(JNIEnv* env,
-                        jobject jobj,
-                        jint id,
-                        jint close_resource_id,
-                        jint handle_resource_id,
-                        jboolean foreground,
-                        jboolean close_pressed,
-                        jfloat toolbar_width,
-                        jfloat x,
-                        jfloat y,
-                        jfloat width,
-                        jfloat height,
-                        jfloat content_offset_x,
-                        jfloat close_button_alpha,
-                        jboolean is_loading,
-                        jfloat spinner_rotation,
-                        jfloat border_opacity,
-                        jobject jlayer_title_cache,
-                        jobject jresource_manager);
+                           jfloat background_tab_brightness,
+                           jfloat brightness,
+                           jboolean should_readd_background);
+  void UpdateNewTabButton(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jint resource_id,
+      jfloat x,
+      jfloat y,
+      jfloat width,
+      jfloat height,
+      jboolean visible,
+      const base::android::JavaParamRef<jobject>& jresource_manager);
+  void UpdateModelSelectorButton(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jint resource_id,
+      jfloat x,
+      jfloat y,
+      jfloat width,
+      jfloat height,
+      jboolean incognito,
+      jboolean visible,
+      const base::android::JavaParamRef<jobject>& jresource_manager);
+  void PutStripTabLayer(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jint id,
+      jint close_resource_id,
+      jint handle_resource_id,
+      jboolean foreground,
+      jboolean close_pressed,
+      jfloat toolbar_width,
+      jfloat x,
+      jfloat y,
+      jfloat width,
+      jfloat height,
+      jfloat content_offset_x,
+      jfloat close_button_alpha,
+      jboolean is_loading,
+      jfloat spinner_rotation,
+      jfloat border_opacity,
+      const base::android::JavaParamRef<jobject>& jlayer_title_cache,
+      const base::android::JavaParamRef<jobject>& jresource_manager);
 
  private:
   scoped_refptr<TabHandleLayer> GetNextLayer(
@@ -87,11 +100,12 @@ class TabStripSceneLayer : public SceneLayer {
 
   typedef std::vector<scoped_refptr<TabHandleLayer>> TabHandleLayerList;
 
-  scoped_refptr<cc::SolidColorLayer> background_layer_;
+  scoped_refptr<cc::SolidColorLayer> tab_strip_layer_;
   scoped_refptr<cc::UIResourceLayer> new_tab_button_;
   scoped_refptr<cc::UIResourceLayer> model_selector_button_;
 
-  float strip_brightness_;
+  float background_tab_brightness_;
+  float brightness_;
   unsigned write_index_;
   TabHandleLayerList tab_handle_layers_;
   SceneLayer* content_tree_;

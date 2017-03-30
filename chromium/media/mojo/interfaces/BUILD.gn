@@ -2,19 +2,24 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("interfaces") {
   sources = [
     "content_decryption_module.mojom",
     "decryptor.mojom",
     "demuxer_stream.mojom",
-    "media_renderer.mojom",
     "media_types.mojom",
+    "renderer.mojom",
+    "service_factory.mojom",
   ]
 
   if (is_chromeos) {
     sources += [ "platform_verification.mojom" ]
+  }
+
+  if (is_android) {
+    sources += [ "provision_fetcher.mojom" ]
   }
 
   deps = [

@@ -8,13 +8,14 @@
 #include "base/memory/aligned_memory.h"
 #include "base/trace_event/trace_event.h"
 #include "content/renderer/media/webrtc/webrtc_video_frame_adapter.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_pool.h"
 #include "third_party/libjingle/source/talk/media/base/videoframefactory.h"
 #include "third_party/libjingle/source/talk/media/webrtc/webrtcvideoframe.h"
 #include "third_party/libyuv/include/libyuv/convert_from.h"
 #include "third_party/libyuv/include/libyuv/scale.h"
-#include "third_party/webrtc/common_video/interface/video_frame_buffer.h"
+#include "third_party/webrtc/common_video/include/video_frame_buffer.h"
 #include "third_party/webrtc/common_video/rotation.h"
 
 namespace content {
@@ -35,14 +36,12 @@ void ReleaseOriginalFrame(const scoped_refptr<media::VideoFrame>& frame) {
 class WebRtcVideoCapturerAdapter::MediaVideoFrameFactory
     : public cricket::VideoFrameFactory {
  public:
-  void SetFrame(const scoped_refptr<media::VideoFrame>& frame,
-                int64_t elapsed_time) {
+  void SetFrame(const scoped_refptr<media::VideoFrame>& frame) {
     DCHECK(frame.get());
     // Create a CapturedFrame that only contains header information, not the
     // actual pixel data.
     captured_frame_.width = frame->natural_size().width();
     captured_frame_.height = frame->natural_size().height();
-    captured_frame_.elapsed_time = elapsed_time;
     captured_frame_.time_stamp = frame->timestamp().InMicroseconds() *
                                  base::Time::kNanosecondsPerMicrosecond;
     captured_frame_.pixel_height = 1;
@@ -50,7 +49,7 @@ class WebRtcVideoCapturerAdapter::MediaVideoFrameFactory
     captured_frame_.rotation = webrtc::kVideoRotation_0;
     captured_frame_.data = NULL;
     captured_frame_.data_size = cricket::CapturedFrame::kUnknownDataSize;
-    captured_frame_.fourcc = static_cast<uint32>(cricket::FOURCC_ANY);
+    captured_frame_.fourcc = static_cast<uint32_t>(cricket::FOURCC_ANY);
 
     frame_ = frame;
   }
@@ -76,10 +75,14 @@ class WebRtcVideoCapturerAdapter::MediaVideoFrameFactory
 
     // Return |frame_| directly if it is texture backed, because there is no
     // cropping support for texture yet. See http://crbug/503653.
-    if (frame_->HasTextures()) {
+    // Return |frame_| directly if it is GpuMemoryBuffer backed, as we want to
+    // keep the frame on native buffers.
+    if (frame_->HasTextures() ||
+        frame_->storage_type() ==
+            media::VideoFrame::STORAGE_GPU_MEMORY_BUFFERS) {
       return new cricket::WebRtcVideoFrame(
           new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(frame_),
-          captured_frame_.elapsed_time, timestamp_ns);
+          timestamp_ns, webrtc::kVideoRotation_0);
     }
 
     // Create a centered cropped visible rect that preservers aspect ratio for
@@ -92,6 +95,8 @@ class WebRtcVideoCapturerAdapter::MediaVideoFrameFactory
     const gfx::Size output_size(output_width, output_height);
     scoped_refptr<media::VideoFrame> video_frame =
         media::VideoFrame::WrapVideoFrame(frame_, visible_rect, output_size);
+    if (!video_frame)
+      return nullptr;
     video_frame->AddDestructionObserver(
         base::Bind(&ReleaseOriginalFrame, frame_));
 
@@ -99,12 +104,12 @@ class WebRtcVideoCapturerAdapter::MediaVideoFrameFactory
     if (video_frame->natural_size() == video_frame->visible_rect().size()) {
       return new cricket::WebRtcVideoFrame(
           new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(video_frame),
-          captured_frame_.elapsed_time, timestamp_ns);
+          timestamp_ns, webrtc::kVideoRotation_0);
     }
 
     // We need to scale the frame before we hand it over to cricket.
     scoped_refptr<media::VideoFrame> scaled_frame =
-        scaled_frame_pool_.CreateFrame(media::VideoFrame::I420, output_size,
+        scaled_frame_pool_.CreateFrame(media::PIXEL_FORMAT_I420, output_size,
                                        gfx::Rect(output_size), output_size,
                                        frame_->timestamp());
     libyuv::I420Scale(video_frame->visible_data(media::VideoFrame::kYPlane),
@@ -124,7 +129,7 @@ class WebRtcVideoCapturerAdapter::MediaVideoFrameFactory
                       output_width, output_height, libyuv::kFilterBilinear);
     return new cricket::WebRtcVideoFrame(
         new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(scaled_frame),
-        captured_frame_.elapsed_time, timestamp_ns);
+        timestamp_ns, webrtc::kVideoRotation_0);
   }
 
   cricket::VideoFrame* CreateAliasedFrame(
@@ -144,8 +149,7 @@ class WebRtcVideoCapturerAdapter::MediaVideoFrameFactory
 
 WebRtcVideoCapturerAdapter::WebRtcVideoCapturerAdapter(bool is_screencast)
     : is_screencast_(is_screencast),
-      running_(false),
-      first_frame_timestamp_(media::kNoTimestamp()) {
+      running_(false) {
   thread_checker_.DetachFromThread();
   // The base class takes ownership of the frame factory.
   set_frame_factory(new MediaVideoFrameFactory);
@@ -181,7 +185,7 @@ bool WebRtcVideoCapturerAdapter::IsRunning() {
 }
 
 bool WebRtcVideoCapturerAdapter::GetPreferredFourccs(
-    std::vector<uint32>* fourccs) {
+    std::vector<uint32_t>* fourccs) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!fourccs || fourccs->empty());
   if (fourccs)
@@ -215,26 +219,18 @@ void WebRtcVideoCapturerAdapter::OnFrameCaptured(
     const scoped_refptr<media::VideoFrame>& frame) {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("video", "WebRtcVideoCapturerAdapter::OnFrameCaptured");
-  if (!((frame->IsMappable() && (frame->format() == media::VideoFrame::I420 ||
-                                 frame->format() == media::VideoFrame::YV12)) ||
-        frame->HasTextures())) {
+  if (!(frame->IsMappable() && (frame->format() == media::PIXEL_FORMAT_I420 ||
+                                frame->format() == media::PIXEL_FORMAT_YV12))) {
     // Since connecting sources and sinks do not check the format, we need to
     // just ignore formats that we can not handle.
     NOTREACHED();
     return;
   }
 
-  if (first_frame_timestamp_ == media::kNoTimestamp())
-    first_frame_timestamp_ = frame->timestamp();
-
-  const int64 elapsed_time =
-      (frame->timestamp() - first_frame_timestamp_).InMicroseconds() *
-      base::Time::kNanosecondsPerMicrosecond;
-
   // Inject the frame via the VideoFrameFactory of base class.
   MediaVideoFrameFactory* media_video_frame_factory =
       reinterpret_cast<MediaVideoFrameFactory*>(frame_factory());
-  media_video_frame_factory->SetFrame(frame, elapsed_time);
+  media_video_frame_factory->SetFrame(frame);
 
   // This signals to libJingle that a new VideoFrame is available.
   SignalFrameCaptured(this, media_video_frame_factory->GetCapturedFrame());

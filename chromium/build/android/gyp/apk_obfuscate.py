@@ -10,12 +10,20 @@ If proguard is not enabled or 'Release' is not in the configuration name,
 obfuscation will be a no-op.
 """
 
+import json
 import optparse
 import os
 import sys
+import tempfile
 
 from util import build_utils
 from util import proguard_util
+
+
+_PROGUARD_KEEP_CLASS = '''-keep class %s {
+  *;
+}
+'''
 
 
 def ParseArgs(argv):
@@ -35,6 +43,11 @@ def ParseArgs(argv):
 
   parser.add_option('--configuration-name',
                     help='Gyp configuration name (i.e. Debug, Release)')
+
+  parser.add_option('--debug-build-proguard-enabled', action='store_true',
+                    help='--proguard-enabled takes effect on release '
+                         'build, this flag enable the proguard on debug '
+                         'build.')
   parser.add_option('--proguard-enabled', action='store_true',
                     help='Set if proguard is enabled for this target.')
 
@@ -50,6 +63,14 @@ def ParseArgs(argv):
                     'code.')
 
   parser.add_option('--stamp', help='File to touch on success')
+
+  parser.add_option('--main-dex-list-path',
+                    help='The list of classes to retain in the main dex. '
+                         'These will not be obfuscated.')
+  parser.add_option('--multidex-configuration-path',
+                    help='A JSON file containing multidex build configuration.')
+  parser.add_option('--verbose', '-v', action='store_true',
+                    help='Print all proguard output')
 
   (options, args) = parser.parse_args(argv)
 
@@ -80,7 +101,6 @@ def DoProguard(options):
   proguard = proguard_util.ProguardCmdBuilder(options.proguard_jar_path)
   proguard.outjar(options.obfuscated_jar_path)
 
-  library_classpath = [options.android_sdk_jar]
   input_jars = build_utils.ParseGypList(options.input_jars_paths)
 
   exclude_paths = []
@@ -89,29 +109,45 @@ def DoProguard(options):
     # configs should only contain the process_resources.py generated config.
     assert len(configs) == 1, (
         'test apks should not have custom proguard configs: ' + str(configs))
-    tested_jar_info = build_utils.ReadJson(
-        options.tested_apk_obfuscated_jar_path + '.info')
-    exclude_paths = tested_jar_info['inputs']
-    configs = tested_jar_info['configs']
+    proguard.tested_apk_info(options.tested_apk_obfuscated_jar_path + '.info')
 
-    proguard.is_test(True)
-    proguard.mapping(options.tested_apk_obfuscated_jar_path + '.mapping')
-    library_classpath.append(options.tested_apk_obfuscated_jar_path)
-
-  proguard.libraryjars(library_classpath)
+  proguard.libraryjars([options.android_sdk_jar])
   proguard_injars = [p for p in input_jars if p not in exclude_paths]
   proguard.injars(proguard_injars)
-  proguard.configs(configs)
 
+  multidex_config = _PossibleMultidexConfig(options)
+  if multidex_config:
+    configs.append(multidex_config)
+
+  proguard.configs(configs)
+  proguard.verbose(options.verbose)
   proguard.CheckOutput()
 
-  this_info = {
-    'inputs': proguard_injars,
-    'configs': configs
-  }
 
-  build_utils.WriteJson(
-      this_info, options.obfuscated_jar_path + '.info')
+def _PossibleMultidexConfig(options):
+  if not options.multidex_configuration_path:
+    return None
+
+  with open(options.multidex_configuration_path) as multidex_config_file:
+    multidex_config = json.loads(multidex_config_file.read())
+
+  if not (multidex_config.get('enabled') and options.main_dex_list_path):
+    return None
+
+  main_dex_list_config = ''
+  with open(options.main_dex_list_path) as main_dex_list:
+    for clazz in (l.strip() for l in main_dex_list):
+      if clazz.endswith('.class'):
+        clazz = clazz[:-len('.class')]
+      clazz = clazz.replace('/', '.')
+      main_dex_list_config += (_PROGUARD_KEEP_CLASS % clazz)
+  with tempfile.NamedTemporaryFile(
+      delete=False,
+      dir=os.path.dirname(options.main_dex_list_path),
+      prefix='main_dex_list_proguard',
+      suffix='.flags') as main_dex_config_file:
+    main_dex_config_file.write(main_dex_list_config)
+  return main_dex_config_file.name
 
 
 def main(argv):
@@ -125,7 +161,9 @@ def main(argv):
     build_utils.MergeZips(
         options.test_jar_path, input_jars, dependency_class_filters)
 
-  if options.configuration_name == 'Release' and options.proguard_enabled:
+  if ((options.configuration_name == 'Release' and options.proguard_enabled) or
+     (options.configuration_name == 'Debug' and
+      options.debug_build_proguard_enabled)):
     DoProguard(options)
   else:
     output_files = [

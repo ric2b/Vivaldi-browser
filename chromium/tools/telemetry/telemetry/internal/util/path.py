@@ -5,19 +5,16 @@
 import os
 
 from telemetry.core import util
+from catapult_base import util as catapult_util
 
-
-# TODO(dtu): Move these functions from core.util to here.
+# TODO(aiolos): Move these functions to catapult_base or here.
 GetBaseDir = util.GetBaseDir
 GetTelemetryDir = util.GetTelemetryDir
 GetUnittestDataDir = util.GetUnittestDataDir
 GetChromiumSrcDir = util.GetChromiumSrcDir
-AddDirToPythonPath = util.AddDirToPythonPath
 GetBuildDirectories = util.GetBuildDirectories
 
-
-def IsExecutable(path):
-  return os.path.isfile(path) and os.access(path, os.X_OK)
+IsExecutable = catapult_util.IsExecutable
 
 
 def FindInstalledWindowsApplication(application_path):
@@ -53,3 +50,13 @@ def IsSubpath(subpath, superpath):
       return True
     subpath = os.path.split(subpath)[0]
   return False
+
+
+def ListFiles(base_directory, should_include_dir=lambda _: True,
+              should_include_file=lambda _: True):
+  matching_files = []
+  for root, dirs, files in os.walk(base_directory):
+    dirs[:] = [dir_name for dir_name in dirs if should_include_dir(dir_name)]
+    matching_files += [os.path.join(root, file_name)
+                       for file_name in files if should_include_file(file_name)]
+  return sorted(matching_files)

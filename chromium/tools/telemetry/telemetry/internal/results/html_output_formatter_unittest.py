@@ -11,6 +11,7 @@ from telemetry import story
 from telemetry.internal.results import html_output_formatter
 from telemetry.internal.results import page_test_results
 from telemetry import page as page_module
+from telemetry.value import improvement_direction
 from telemetry.value import scalar
 
 
@@ -55,12 +56,14 @@ class HtmlOutputFormatterTest(unittest.TestCase):
     results = page_test_results.PageTestResults()
     results.WillRunPage(test_story_set.stories[0])
     results.AddValue(scalar.ScalarValue(
-        test_story_set.stories[0], 'a', 'seconds', 3))
+        test_story_set.stories[0], 'a', 'seconds', 3,
+        improvement_direction=improvement_direction.DOWN))
     results.DidRunPage(test_story_set.stories[0])
 
     results.WillRunPage(test_story_set.stories[1])
     results.AddValue(scalar.ScalarValue(
-        test_story_set.stories[1], 'a', 'seconds', 7))
+        test_story_set.stories[1], 'a', 'seconds', 7,
+        improvement_direction=improvement_direction.DOWN))
     results.DidRunPage(test_story_set.stories[1])
 
     formatter = DeterministicHtmlOutputFormatter(
@@ -75,6 +78,7 @@ class HtmlOutputFormatterTest(unittest.TestCase):
           "metrics": {
             "a": {
               "current": [3, 7],
+              "std": 2.8284271247461903,
               "units": "seconds",
               "important": True
             },
@@ -85,11 +89,13 @@ class HtmlOutputFormatterTest(unittest.TestCase):
             },
             "a.http://www.bar.com/": {
               "current": [7],
+              "std": 0.0,
               "units": "seconds",
               "important": False
             },
             "a.http://www.foo.com/": {
               "current": [3],
+              "std": 0.0,
               "units": "seconds",
               "important": False
             }
@@ -104,12 +110,14 @@ class HtmlOutputFormatterTest(unittest.TestCase):
     results = page_test_results.PageTestResults()
     results.WillRunPage(test_story_set.stories[0])
     results.AddValue(scalar.ScalarValue(
-        test_story_set.stories[0], 'a', 'seconds', 4))
+        test_story_set.stories[0], 'a', 'seconds', 4,
+        improvement_direction=improvement_direction.DOWN))
     results.DidRunPage(test_story_set.stories[0])
 
     results.WillRunPage(test_story_set.stories[1])
     results.AddValue(scalar.ScalarValue(
-        test_story_set.stories[1], 'a', 'seconds', 8))
+        test_story_set.stories[1], 'a', 'seconds', 8,
+        improvement_direction=improvement_direction.DOWN))
     results.DidRunPage(test_story_set.stories[1])
 
     formatter = DeterministicHtmlOutputFormatter(
@@ -126,6 +134,7 @@ class HtmlOutputFormatterTest(unittest.TestCase):
               "a": {
                 "current": [3, 7],
                 "units": "seconds",
+                "std": 2.8284271247461903,
                 "important": True
               },
               "telemetry_page_measurement_results.num_failed": {
@@ -135,11 +144,13 @@ class HtmlOutputFormatterTest(unittest.TestCase):
               },
               "a.http://www.bar.com/": {
                 "current": [7],
+                "std": 0.0,
                 "units": "seconds",
                 "important": False
               },
               "a.http://www.foo.com/": {
                 "current": [3],
+                "std": 0.0,
                 "units": "seconds",
                 "important": False
               }
@@ -156,6 +167,7 @@ class HtmlOutputFormatterTest(unittest.TestCase):
             "metrics": {
               "a": {
                 "current": [4, 8],
+                'std': 2.8284271247461903,
                 "units": "seconds",
                 "important": True
               },
@@ -166,11 +178,13 @@ class HtmlOutputFormatterTest(unittest.TestCase):
               },
               "a.http://www.bar.com/": {
                 "current": [8],
+                "std": 0.0,
                 "units": "seconds",
                 "important": False
               },
               "a.http://www.foo.com/": {
                 "current": [4],
+                "std": 0.0,
                 "units": "seconds",
                 "important": False
               }
@@ -186,12 +200,16 @@ class HtmlOutputFormatterTest(unittest.TestCase):
     results = page_test_results.PageTestResults()
     results.WillRunPage(test_story_set.stories[0])
     results.AddValue(scalar.ScalarValue(
-        test_story_set.stories[0], 'a', 'seconds', 5))
+        test_story_set.stories[0], 'a', 'seconds', 5,
+        improvement_direction=improvement_direction.DOWN))
     results.DidRunPage(test_story_set.stories[0])
 
     results.WillRunPage(test_story_set.stories[1])
     results.AddValue(scalar.ScalarValue(
-        test_story_set.stories[1], 'a', 'seconds', 9))
+        test_story_set.stories[1], 'a', 'seconds', 9,
+        improvement_direction=improvement_direction.DOWN))
+    results.AddValue(scalar.ScalarValue(
+        test_story_set.stories[1], 'b', 'seconds', 20, tir_label='foo'))
     results.DidRunPage(test_story_set.stories[1])
 
     formatter = DeterministicHtmlOutputFormatter(
@@ -206,6 +224,7 @@ class HtmlOutputFormatterTest(unittest.TestCase):
           "metrics": {
             "a": {
               "current": [5, 9],
+              'std': 2.8284271247461903,
               "units": "seconds",
               "important": True
             },
@@ -216,13 +235,27 @@ class HtmlOutputFormatterTest(unittest.TestCase):
             },
             "a.http://www.bar.com/": {
               "current": [9],
+              "std": 0.0,
               "units": "seconds",
               "important": False
             },
             "a.http://www.foo.com/": {
               "current": [5],
+              "std": 0.0,
               "units": "seconds",
               "important": False
+            },
+            "foo-b.http://www.bar.com/": {
+              "current": [20],
+              "std": 0.0,
+              "units": "seconds",
+              "important": False
+            },
+            "foo-b": {
+              "current": [20],
+              "std": 0.0,
+              "units": "seconds",
+              "important": True
             }
           }
         }

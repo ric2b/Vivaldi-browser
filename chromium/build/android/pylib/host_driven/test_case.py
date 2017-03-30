@@ -24,11 +24,10 @@ import logging
 import os
 import time
 
+from devil.android import forwarder
 from pylib import constants
-from pylib import forwarder
 from pylib import valgrind_tools
 from pylib.base import base_test_result
-from pylib.device import device_utils
 from pylib.instrumentation import test_package
 from pylib.instrumentation import test_result
 from pylib.instrumentation import test_runner
@@ -155,7 +154,8 @@ class HostDrivenTestCase(object):
     start_ms = int(time.time()) * 1000
     done = False
     for test_filter in test_filters:
-      tests = test_pkg.GetAllMatchingTests(None, None, test_filter)
+      tests = test_pkg.GetAllMatchingTests(
+          None, None, test_filter, [self.device])
       # Filters should always result in >= 1 test.
       if len(tests) == 0:
         raise Exception('Java test filter "%s" returned no tests.'

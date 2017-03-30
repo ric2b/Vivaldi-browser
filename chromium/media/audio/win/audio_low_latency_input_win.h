@@ -58,10 +58,13 @@
 
 #include <Audioclient.h>
 #include <MMDeviceAPI.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
@@ -145,12 +148,7 @@ class MEDIA_EXPORT WASAPIAudioInputStream
   size_t packet_size_bytes_;
 
   // Length of the audio endpoint buffer.
-  uint32 endpoint_buffer_size_frames_;
-
-  // A copy of the supplied AudioParameter's |effects|.  If ducking was
-  // specified (desired device=communications) but we ended up not being
-  // able to open the communications device, this flag will be cleared.
-  int effects_;
+  uint32_t endpoint_buffer_size_frames_;
 
   // Contains the unique name of the selected endpoint device.
   // Note that AudioManagerBase::kDefaultDeviceId represents the default

@@ -5,6 +5,7 @@
 #import "ui/views/cocoa/native_widget_mac_nswindow.h"
 
 #include "base/mac/foundation_util.h"
+#import "ui/base/cocoa/user_interface_item_command_handler.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/widget/native_widget_mac.h"
@@ -20,7 +21,32 @@
 - (BOOL)_isTitleHidden;
 @end
 
-@implementation NativeWidgetMacNSWindow
+@implementation NativeWidgetMacNSWindow {
+ @private
+  base::scoped_nsobject<CommandDispatcher> commandDispatcher_;
+  base::scoped_nsprotocol<id<UserInterfaceItemCommandHandler>> commandHandler_;
+}
+
+- (instancetype)initWithContentRect:(NSRect)contentRect
+                          styleMask:(NSUInteger)windowStyle
+                            backing:(NSBackingStoreType)bufferingType
+                              defer:(BOOL)deferCreation {
+  if ((self = [super initWithContentRect:contentRect
+                               styleMask:windowStyle
+                                 backing:bufferingType
+                                   defer:deferCreation])) {
+    commandDispatcher_.reset([[CommandDispatcher alloc] initWithOwner:self]);
+  }
+  return self;
+}
+
+// Public methods.
+
+- (void)setCommandDispatcherDelegate:(id<CommandDispatcherDelegate>)delegate {
+  [commandDispatcher_ setDelegate:delegate];
+}
+
+// Private methods.
 
 - (ViewsNSWindowDelegate*)viewsNSWindowDelegate {
   return base::mac::ObjCCastStrict<ViewsNSWindowDelegate>([self delegate]);
@@ -35,6 +61,8 @@
       views::MenuController::GetActiveInstance();
   return menuController && menuController->owner() == [self viewsWidget];
 }
+
+// NSWindow overrides.
 
 - (BOOL)_isTitleHidden {
   if (![self delegate])
@@ -64,6 +92,10 @@
 // menu while it is active, and while still allowing any native subview to
 // retain firstResponder status.
 - (void)sendEvent:(NSEvent*)event {
+  // Let CommandDispatcher check if this is a redispatched event.
+  if ([commandDispatcher_ preSendEvent:event])
+    return;
+
   NSEventType type = [event type];
   if ((type != NSKeyDown && type != NSKeyUp) || ![self hasViewsMenuActive]) {
     [super sendEvent:event];
@@ -104,6 +136,10 @@
 
 // NSResponder implementation.
 
+- (BOOL)performKeyEquivalent:(NSEvent*)event {
+  return [commandDispatcher_ performKeyEquivalent:event];
+}
+
 - (void)cursorUpdate:(NSEvent*)theEvent {
   // The cursor provided by the delegate should only be applied within the
   // content area. This is because we rely on the contentView to track the
@@ -122,6 +158,44 @@
     [cursor set];
   else
     [super cursorUpdate:theEvent];
+}
+
+// CommandDispatchingWindow implementation.
+
+- (void)setCommandHandler:(id<UserInterfaceItemCommandHandler>)commandHandler {
+  commandHandler_.reset([commandHandler retain]);
+}
+
+- (BOOL)redispatchKeyEvent:(NSEvent*)event {
+  return [commandDispatcher_ redispatchKeyEvent:event];
+}
+
+- (BOOL)defaultPerformKeyEquivalent:(NSEvent*)event {
+  return [super performKeyEquivalent:event];
+}
+
+- (void)commandDispatch:(id)sender {
+  [commandHandler_ commandDispatch:sender window:self];
+}
+
+- (void)commandDispatchUsingKeyModifiers:(id)sender {
+  [commandHandler_ commandDispatchUsingKeyModifiers:sender window:self];
+}
+
+// NSWindow overrides (NSUserInterfaceItemValidations implementation)
+
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
+  // Since this class implements these selectors, |super| will always say they
+  // are enabled. Only use [super] to validate other selectors. If there is no
+  // command handler, defer to AppController.
+  if ([item action] == @selector(commandDispatch:) ||
+      [item action] == @selector(commandDispatchUsingKeyModifiers:)) {
+    return commandHandler_
+               ? [commandHandler_ validateUserInterfaceItem:item window:self]
+               : [[NSApp delegate] validateUserInterfaceItem:item];
+  }
+
+  return [super validateUserInterfaceItem:item];
 }
 
 @end

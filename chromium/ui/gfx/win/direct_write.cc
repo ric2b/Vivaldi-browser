@@ -4,9 +4,6 @@
 
 #include "ui/gfx/win/direct_write.h"
 
-#include <dwrite.h>
-
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/win/registry.h"
@@ -16,7 +13,6 @@
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #include "ui/gfx/platform_font_win.h"
 #include "ui/gfx/switches.h"
-#include "ui/gfx/win/dpi.h"
 
 namespace gfx {
 namespace win {
@@ -44,25 +40,10 @@ bool ShouldUseDirectWrite() {
   // If forced off, don't use it.
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kDisableDirectWrite))
-    return false;
-
-  // Can't use GDI on HiDPI.
-  if (gfx::GetDPIScale() > 1.0f)
-    return true;
-
-  // Otherwise, check the field trial.
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("DirectWrite");
-  return group_name != "Disabled";
+  return !command_line.HasSwitch(switches::kDisableDirectWrite);
 }
 
-void MaybeInitializeDirectWrite() {
-  static bool tried_dwrite_initialize = false;
-  if (tried_dwrite_initialize)
-    return;
-  tried_dwrite_initialize = true;
-
+void CreateDWriteFactory(IDWriteFactory** factory) {
   if (!ShouldUseDirectWrite() ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableDirectWriteForUI)) {
@@ -81,13 +62,26 @@ void MaybeInitializeDirectWrite() {
   if (!dwrite_create_factory_proc)
     return;
 
-  base::win::ScopedComPtr<IDWriteFactory> factory;
-
   // Failure to create the DirectWrite factory indicates a corrupt dll.
-  if (FAILED(dwrite_create_factory_proc(
-          DWRITE_FACTORY_TYPE_SHARED,
-        __uuidof(IDWriteFactory),
-        reinterpret_cast<IUnknown**>(factory.Receive()))))
+  base::win::ScopedComPtr<IUnknown> factory_unknown;
+  if (FAILED(dwrite_create_factory_proc(DWRITE_FACTORY_TYPE_SHARED,
+                                        __uuidof(IDWriteFactory),
+                                        factory_unknown.Receive()))) {
+    return;
+  }
+  factory_unknown.QueryInterface<IDWriteFactory>(factory);
+}
+
+void MaybeInitializeDirectWrite() {
+  static bool tried_dwrite_initialize = false;
+  if (tried_dwrite_initialize)
+    return;
+  tried_dwrite_initialize = true;
+
+  base::win::ScopedComPtr<IDWriteFactory> factory;
+  CreateDWriteFactory(factory.Receive());
+
+  if (factory == nullptr)
     return;
 
   // The skia call to create a new DirectWrite font manager instance can fail

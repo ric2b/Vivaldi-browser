@@ -5,8 +5,10 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_OMNIBOX_OMNIBOX_UI_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_OMNIBOX_OMNIBOX_UI_HANDLER_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/webui/mojo_web_ui_handler.h"
@@ -14,7 +16,7 @@
 #include "components/omnibox/browser/autocomplete_controller_delegate.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 class AutocompleteController;
 class Profile;
@@ -71,7 +73,7 @@ class OmniboxUIHandler : public AutocompleteControllerDelegate,
   // The Profile* handed to us in our constructor.
   Profile* profile_;
 
-  mojo::StrongBinding<OmniboxUIHandlerMojo> binding_;
+  mojo::Binding<OmniboxUIHandlerMojo> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxUIHandler);
 };

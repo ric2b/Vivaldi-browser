@@ -5,8 +5,12 @@
 #ifndef CONTENT_RENDERER_MEDIA_RTC_VIDEO_ENCODER_H_
 #define CONTENT_RENDERER_MEDIA_RTC_VIDEO_ENCODER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -14,7 +18,7 @@
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "media/base/video_decoder_config.h"
-#include "third_party/webrtc/modules/video_coding/codecs/interface/video_codec_interface.h"
+#include "third_party/webrtc/modules/video_coding/include/video_codec_interface.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -37,9 +41,8 @@ namespace content {
 class CONTENT_EXPORT RTCVideoEncoder
     : NON_EXPORTED_BASE(public webrtc::VideoEncoder) {
  public:
-  RTCVideoEncoder(
-      webrtc::VideoCodecType type,
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& gpu_factories);
+  RTCVideoEncoder(webrtc::VideoCodecType type,
+                  media::GpuVideoAcceleratorFactories* gpu_factories);
   ~RTCVideoEncoder() override;
 
   // webrtc::VideoEncoder implementation.  Tasks are posted to |impl_| using the
@@ -50,7 +53,7 @@ class CONTENT_EXPORT RTCVideoEncoder
   int32_t Encode(
       const webrtc::VideoFrame& input_image,
       const webrtc::CodecSpecificInfo* codec_specific_info,
-      const std::vector<webrtc::VideoFrameType>* frame_types) override;
+      const std::vector<webrtc::FrameType>* frame_types) override;
   int32_t RegisterEncodeCompleteCallback(
       webrtc::EncodedImageCallback* callback) override;
   int32_t Release() override;
@@ -63,8 +66,8 @@ class CONTENT_EXPORT RTCVideoEncoder
 
   // Return an encoded output buffer to WebRTC.
   void ReturnEncodedImage(scoped_ptr<webrtc::EncodedImage> image,
-                          int32 bitstream_buffer_id,
-                          uint16 picture_id);
+                          int32_t bitstream_buffer_id,
+                          uint16_t picture_id);
 
   void NotifyError(int32_t error);
 
@@ -77,7 +80,10 @@ class CONTENT_EXPORT RTCVideoEncoder
   const webrtc::VideoCodecType video_codec_type_;
 
   // Factory for creating VEAs, shared memory buffers, etc.
-  const scoped_refptr<media::GpuVideoAcceleratorFactories> gpu_factories_;
+  media::GpuVideoAcceleratorFactories* gpu_factories_;
+
+  // Task runner that the video accelerator runs on.
+  const scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner_;
 
   // webrtc::VideoEncoder encode complete callback.
   webrtc::EncodedImageCallback* encoded_image_callback_;

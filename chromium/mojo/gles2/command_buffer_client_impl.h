@@ -5,15 +5,19 @@
 #ifndef MOJO_GLES2_COMMAND_BUFFER_CLIENT_IMPL_H_
 #define MOJO_GLES2_COMMAND_BUFFER_CLIENT_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "components/view_manager/public/interfaces/command_buffer.mojom.h"
+#include "components/mus/public/interfaces/command_buffer.mojom.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "gpu/command_buffer/common/command_buffer_shared.h"
-#include "mojo/public/cpp/bindings/error_handler.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 namespace base {
 class RunLoop;
@@ -28,13 +32,14 @@ class CommandBufferDelegate {
   virtual void ContextLost();
 };
 
-class CommandBufferClientImpl : public mojo::CommandBufferLostContextObserver,
-                                public mojo::ErrorHandler,
-                                public gpu::CommandBuffer,
-                                public gpu::GpuControl {
+class CommandBufferClientImpl
+    : public mus::mojom::CommandBufferLostContextObserver,
+      public gpu::CommandBuffer,
+      public gpu::GpuControl {
  public:
   explicit CommandBufferClientImpl(
       CommandBufferDelegate* delegate,
+      const std::vector<int32_t>& attribs,
       const MojoAsyncWaiter* async_waiter,
       mojo::ScopedMessagePipeHandle command_buffer_handle);
   ~CommandBufferClientImpl() override;
@@ -63,26 +68,29 @@ class CommandBufferClientImpl : public mojo::CommandBufferLostContextObserver,
                                      size_t height,
                                      unsigned internalformat,
                                      unsigned usage) override;
-  uint32 InsertSyncPoint() override;
-  uint32 InsertFutureSyncPoint() override;
-  void RetireSyncPoint(uint32 sync_point) override;
-  void SignalSyncPoint(uint32 sync_point,
+  uint32_t InsertSyncPoint() override;
+  uint32_t InsertFutureSyncPoint() override;
+  void RetireSyncPoint(uint32_t sync_point) override;
+  void SignalSyncPoint(uint32_t sync_point,
                        const base::Closure& callback) override;
-  void SignalQuery(uint32 query, const base::Closure& callback) override;
-  void SetSurfaceVisible(bool visible) override;
-  uint32 CreateStreamTexture(uint32 texture_id) override;
+  void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   bool IsGpuChannelLost() override;
+  void EnsureWorkVisible() override;
+  gpu::CommandBufferNamespace GetNamespaceID() const override;
+  uint64_t GetCommandBufferID() const override;
+  int32_t GetExtraCommandBufferData() const override;
+  uint64_t GenerateFenceSyncRelease() override;
+  bool IsFenceSyncRelease(uint64_t release) override;
+  bool IsFenceSyncFlushed(uint64_t release) override;
+  bool IsFenceSyncFlushReceived(uint64_t release) override;
+  void SignalSyncToken(const gpu::SyncToken& sync_token,
+                       const base::Closure& callback) override;
+  bool CanWaitUnverifiedSyncToken(const gpu::SyncToken* sync_token) override;
 
  private:
-  class SyncClientImpl;
-  class SyncPointClientImpl;
-
-  // mojo::CommandBufferLostContextObserver implementation:
+  // mus::mojom::CommandBufferLostContextObserver implementation:
   void DidLoseContext(int32_t lost_reason) override;
-
-  // mojo::ErrorHandler implementation:
-  void OnConnectionError() override;
 
   void TryUpdateState();
   void MakeProgressAndUpdateState();
@@ -90,11 +98,11 @@ class CommandBufferClientImpl : public mojo::CommandBufferLostContextObserver,
   gpu::CommandBufferSharedState* shared_state() const { return shared_state_; }
 
   CommandBufferDelegate* delegate_;
-  mojo::Binding<mojo::CommandBufferLostContextObserver> observer_binding_;
-  mojo::CommandBufferPtr command_buffer_;
-  scoped_ptr<SyncClientImpl> sync_client_impl_;
-  scoped_ptr<SyncPointClientImpl> sync_point_client_impl_;
+  std::vector<int32_t> attribs_;
+  mojo::Binding<mus::mojom::CommandBufferLostContextObserver> observer_binding_;
+  mus::mojom::CommandBufferPtr command_buffer_;
 
+  uint64_t command_buffer_id_;
   gpu::Capabilities capabilities_;
   State last_state_;
   mojo::ScopedSharedBufferHandle shared_state_handle_;
@@ -104,6 +112,9 @@ class CommandBufferClientImpl : public mojo::CommandBufferLostContextObserver,
 
   // Image IDs are allocated in sequence.
   int next_image_id_;
+
+  uint64_t next_fence_sync_release_;
+  uint64_t flushed_fence_sync_release_;
 
   const MojoAsyncWaiter* async_waiter_;
 };

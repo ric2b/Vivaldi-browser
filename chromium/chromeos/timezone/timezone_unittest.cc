@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chromeos/geolocation/geoposition.h"
@@ -115,7 +119,7 @@ class TestTimeZoneAPIURLFetcherCallback {
         new net::HttpResponseHeaders(std::string());
     download_headers->AddHeader("Content-Type: application/json");
     fetcher->set_response_headers(download_headers);
-    return fetcher.Pass();
+    return fetcher;
   }
 
   void Initialize(net::FakeURLFetcherFactory* factory) {
@@ -174,7 +178,7 @@ class TimeZoneReceiver {
 
   void OnRequestDone(scoped_ptr<TimeZoneResponseData> timezone,
                      bool server_error) {
-    timezone_ = timezone.Pass();
+    timezone_ = std::move(timezone);
     server_error_ = server_error;
 
     message_loop_runner_->Quit();

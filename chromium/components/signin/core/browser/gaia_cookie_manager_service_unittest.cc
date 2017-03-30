@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -16,6 +17,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/histogram_tester.h"
 #include "base/thread_task_runner_handle.h"
+#include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/signin/core/common/signin_pref_names.h"
@@ -220,7 +222,7 @@ TEST_F(GaiaCookieManagerServiceTest, MergeSessionRetried) {
   DCHECK(helper.is_running());
   // Transient error incurs a retry after 1 second.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(1100));
   base::MessageLoop::current()->Run();
   SimulateMergeSessionSuccess(&helper, "token");
@@ -241,15 +243,19 @@ TEST_F(GaiaCookieManagerServiceTest, MergeSessionRetriedTwice) {
   SimulateMergeSessionFailure(&helper, canceled());
   DCHECK(helper.is_running());
   // Transient error incurs a retry after 1 second.
+  EXPECT_LT(helper.GetBackoffEntry()->GetTimeUntilRelease(),
+      base::TimeDelta::FromMilliseconds(1100));
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(1100));
   base::MessageLoop::current()->Run();
   SimulateMergeSessionFailure(&helper, canceled());
   DCHECK(helper.is_running());
   // Next transient error incurs a retry after 3 seconds.
+  EXPECT_LT(helper.GetBackoffEntry()->GetTimeUntilRelease(),
+      base::TimeDelta::FromMilliseconds(3100));
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(3100));
   base::MessageLoop::current()->Run();
   SimulateMergeSessionSuccess(&helper, "token");
@@ -553,6 +559,35 @@ TEST_F(GaiaCookieManagerServiceTest, ListAccountsFindsOneAccount) {
 
   SimulateListAccountsSuccess(&helper,
       "[\"f\", [[\"b\", 0, \"n\", \"a@b.com\", \"p\", 0, 0, 0, 0, 1, \"8\"]]]");
+}
+
+TEST_F(GaiaCookieManagerServiceTest, ListAccountsAfterOnCookieChanged) {
+  InstrumentedGaiaCookieManagerService helper(token_service(), signin_client());
+  MockObserver observer(&helper);
+
+  std::vector<gaia::ListedAccount> list_accounts;
+  std::vector<gaia::ListedAccount> empty_list_accounts;
+
+  EXPECT_CALL(helper, StartFetchingListAccounts());
+  EXPECT_CALL(observer,
+              OnGaiaAccountsInCookieUpdated(empty_list_accounts, no_error()));
+  ASSERT_FALSE(helper.ListAccounts(&list_accounts));
+  ASSERT_TRUE(list_accounts.empty());
+  SimulateListAccountsSuccess(&helper, "[\"f\",[]]");
+
+  // ListAccounts returns cached data.
+  ASSERT_TRUE(helper.ListAccounts(&list_accounts));
+  ASSERT_TRUE(list_accounts.empty());
+
+  EXPECT_CALL(helper, StartFetchingListAccounts());
+  EXPECT_CALL(observer,
+              OnGaiaAccountsInCookieUpdated(empty_list_accounts, no_error()));
+  helper.ForceOnCookieChangedProcessing();
+
+  // OnCookieChanged should invalidate cached data.
+  ASSERT_FALSE(helper.ListAccounts(&list_accounts));
+  ASSERT_TRUE(list_accounts.empty());
+  SimulateListAccountsSuccess(&helper, "[\"f\",[]]");
 }
 
 TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcher) {

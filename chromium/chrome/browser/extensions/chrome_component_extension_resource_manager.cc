@@ -5,7 +5,9 @@
 #include "chrome/browser/extensions/chrome_component_extension_resource_manager.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "grit/chrome_unscaled_resources.h"
 #include "grit/component_extension_resources_map.h"
@@ -17,7 +19,7 @@
 #endif
 
 #if defined(USE_AURA)
-#include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/content/keyboard_content_util.h"
 #endif
 
 namespace extensions {

@@ -4,6 +4,7 @@
 
 #include "media/cast/test/utility/input_builder.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <cstdio>
 
@@ -63,7 +64,7 @@ int InputBuilder::GetIntInput() const {
   return int_value;
 }
 
-bool InputBuilder::ValidateInput(const std::string input) const {
+bool InputBuilder::ValidateInput(const std::string& input) const {
   // Check for a valid range.
   if (low_range_ == INT_MIN && high_range_ == INT_MAX)
     return true;

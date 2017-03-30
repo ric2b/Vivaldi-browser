@@ -5,6 +5,7 @@
 #ifndef GOOGLE_APIS_GAIA_UBERTOKEN_FETCHER_H_
 #define GOOGLE_APIS_GAIA_UBERTOKEN_FETCHER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
@@ -91,7 +92,7 @@ class UbertokenFetcher : public GaiaAuthConsumer,
   std::string account_id_;
   std::string access_token_;
   int retry_number_;
-  base::OneShotTimer<UbertokenFetcher> retry_timer_;
+  base::OneShotTimer retry_timer_;
   bool second_access_token_request_;
 
   DISALLOW_COPY_AND_ASSIGN(UbertokenFetcher);

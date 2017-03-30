@@ -12,6 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -88,7 +89,7 @@ class IOSUnitTestPlatformDelegate : public base::UnitTestPlatformDelegate {
     return true;
   }
 
-  bool GetTests(std::vector<base::SplitTestName>* output) override {
+  bool GetTests(std::vector<base::TestIdentifier>* output) override {
     base::ScopedTempDir temp_dir;
     if (!temp_dir.CreateUniqueTempDirUnderPath(writable_path_))
       return false;
@@ -121,7 +122,7 @@ class IOSUnitTestPlatformDelegate : public base::UnitTestPlatformDelegate {
     base::CommandLine cmd_line(dir_exe_.AppendASCII(test_name_ + ".app"));
     cmd_line.AppendSwitchPath(switches::kTestLauncherOutput, output_file);
     cmd_line.AppendSwitchASCII(base::kGTestFilterFlag,
-                               JoinString(test_names, ":"));
+                               base::JoinString(test_names, ":"));
     return cmd_line;
   }
 

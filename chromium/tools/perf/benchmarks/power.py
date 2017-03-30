@@ -39,7 +39,7 @@ class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
 
 
 @benchmark.Enabled('android')
-@benchmark.Disabled
+@benchmark.Disabled('all')
 class PowerTypical10MobileReload(perf_benchmark.PerfBenchmark):
   """Android typical 10 mobile power reload test."""
   test = power.LoadPower
@@ -68,6 +68,11 @@ class PowerGpuRasterizationTypical10Mobile(perf_benchmark.PerfBenchmark):
   def Name(cls):
     return 'power.gpu_rasterization.typical_10_mobile'
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return cls.IsSvelte(possible_browser)  # http://crbug.com/563968
+
+
 @benchmark.Enabled('mac')
 class PowerTop10(perf_benchmark.PerfBenchmark):
   """Top 10 quiescent power test."""
@@ -80,6 +85,21 @@ class PowerTop10(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'power.top_10'
+
+@benchmark.Enabled('mac')
+class PowerGpuRasterizationTop10(perf_benchmark.PerfBenchmark):
+  """Top 10 quiescent power test with GPU rasterization enabled."""
+  tag = 'gpu_rasterization'
+  test = power.QuiescentPower
+  page_set = page_sets.Top10PageSet
+
+  def SetExtraBrowserOptions(self, options):
+    silk_flags.CustomizeBrowserOptionsForGpuRasterization(options)
+    options.full_performance_mode = False
+
+  @classmethod
+  def Name(cls):
+    return 'power.gpu_rasterization.top_10'
 
 
 @benchmark.Enabled('mac')
@@ -104,6 +124,29 @@ class PowerTop25(perf_benchmark.PerfBenchmark):
       stories.RemoveStory(found)
     return stories
 
+@benchmark.Enabled('mac')
+class PowerGpuRasterizationTop25(perf_benchmark.PerfBenchmark):
+  """Top 25 quiescent power test with GPU rasterization enabled."""
+  tag = 'gpu_rasterization'
+  test = power.QuiescentPower
+  page_set = page_sets.Top25PageSet
+
+  def SetExtraBrowserOptions(self, options):
+    silk_flags.CustomizeBrowserOptionsForGpuRasterization(options)
+    options.full_performance_mode = False
+
+  @classmethod
+  def Name(cls):
+    return 'power.gpu_rasterization.top_25'
+
+  def CreateStorySet(self, _):
+    # Exclude techcrunch.com. It is not suitable for this benchmark because it
+    # does not consistently become quiescent within 60 seconds.
+    stories = self.page_set()
+    found = next((x for x in stories if 'techcrunch.com' in x.url), None)
+    if found:
+      stories.RemoveStory(found)
+    return stories
 
 @benchmark.Enabled('linux', 'mac', 'win', 'chromeos')
 class PowerPPSControlDisabled(perf_benchmark.PerfBenchmark):

@@ -38,7 +38,7 @@
           ],
         },
         {
-          # GN: //testing/android:native_test_native_code
+          # GN: //testing/android/native_test:native_test_native_code
           'target_name': 'native_test_native_code',
           'message': 'building JNI onload for native test package',
           'type': 'static_library',
@@ -51,6 +51,7 @@
           ],
         },
         {
+          # GN: //testing/android/native_test:native_test_java
           'target_name': 'native_test_java',
           'type': 'none',
           'dependencies': [

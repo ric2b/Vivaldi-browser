@@ -11,13 +11,13 @@
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/search/search.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_controller.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_popup_model.h"
+#include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
+#include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
@@ -26,9 +26,15 @@
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/omnibox_edit_controller.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/search/search.h"
+#include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
+#include "grit/components_strings.h"
 #include "net/base/escape.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_view_state.h"
@@ -134,9 +140,12 @@ OmniboxViewViews::OmniboxViewViews(OmniboxEditController* controller,
                                    bool popup_window_mode,
                                    LocationBarView* location_bar,
                                    const gfx::FontList& font_list)
-    : OmniboxView(profile, controller, command_updater),
+    : OmniboxView(
+          controller,
+          make_scoped_ptr(new ChromeOmniboxClient(controller, profile))),
+      profile_(profile),
       popup_window_mode_(popup_window_mode),
-      security_level_(connection_security::NONE),
+      security_level_(security_state::SecurityStateModel::NONE),
       saved_selection_for_focus_change_(gfx::Range::InvalidRange()),
       ime_composing_before_change_(false),
       delete_at_end_pressed_(false),
@@ -199,8 +208,7 @@ void OmniboxViewViews::SaveStateToTab(content::WebContents* tab) {
 }
 
 void OmniboxViewViews::OnTabChanged(const content::WebContents* web_contents) {
-  security_level_ = controller()->GetToolbarModel()->GetSecurityLevel(false);
-
+  UpdateSecurityLevel();
   const OmniboxState* state = static_cast<OmniboxState*>(
       web_contents->GetUserData(&OmniboxState::kKey));
   model()->RestoreState(state ? &state->model_state : NULL);
@@ -222,8 +230,9 @@ void OmniboxViewViews::ResetTabState(content::WebContents* web_contents) {
 }
 
 void OmniboxViewViews::Update() {
-  const connection_security::SecurityLevel old_security_level = security_level_;
-  security_level_ = controller()->GetToolbarModel()->GetSecurityLevel(false);
+  const security_state::SecurityStateModel::SecurityLevel old_security_level =
+      security_level_;
+  UpdateSecurityLevel();
   if (model()->UpdatePermanentText()) {
     // Something visibly changed.  Re-enable URL replacement.
     controller()->GetToolbarModel()->set_url_replacement_enabled(true);
@@ -323,8 +332,8 @@ gfx::Size OmniboxViewViews::GetMinimumSize() const {
 void OmniboxViewViews::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   views::Textfield::OnNativeThemeChanged(theme);
   if (location_bar_view_) {
-    SetBackgroundColor(location_bar_view_->GetColor(
-        connection_security::NONE, LocationBarView::BACKGROUND));
+    SetBackgroundColor(
+        location_bar_view_->GetColor(LocationBarView::BACKGROUND));
   }
   EmphasizeURLComponents();
 }
@@ -352,7 +361,7 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
       controller()->ShowURL();
       return;
     case IDC_EDIT_SEARCH_ENGINES:
-      command_updater()->ExecuteCommand(command_id);
+      location_bar_view_->command_updater()->ExecuteCommand(command_id);
       return;
     case IDS_MOVE_DOWN:
     case IDS_MOVE_UP:
@@ -371,8 +380,8 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
         return;
       }
       OnBeforePossibleChange();
-      command_updater()->ExecuteCommand(command_id);
-      OnAfterPossibleChange();
+      location_bar_view_->command_updater()->ExecuteCommand(command_id);
+      OnAfterPossibleChange(true);
       return;
   }
 }
@@ -398,7 +407,7 @@ void OmniboxViewViews::OnPaste() {
     // OnAfterPossibleChange(), even if identical contents are pasted.
     text_before_change_.clear();
     InsertOrReplaceText(text);
-    OnAfterPossibleChange();
+    OnAfterPossibleChange(true);
   }
 }
 
@@ -426,6 +435,10 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
 
 void OmniboxViewViews::AccessibilitySetValue(const base::string16& new_value) {
   SetUserText(new_value, new_value, true);
+}
+
+void OmniboxViewViews::UpdateSecurityLevel() {
+  security_level_ = controller()->GetToolbarModel()->GetSecurityLevel(false);
 }
 
 void OmniboxViewViews::SetWindowTextAndCaretPos(const base::string16& text,
@@ -515,7 +528,7 @@ void OmniboxViewViews::OnBeforePossibleChange() {
   ime_composing_before_change_ = IsIMEComposing();
 }
 
-bool OmniboxViewViews::OnAfterPossibleChange() {
+bool OmniboxViewViews::OnAfterPossibleChange(bool allow_keyword_ui_change) {
   // See if the text or selection have changed since OnBeforePossibleChange().
   const base::string16 new_text = text();
   const gfx::Range new_sel = GetSelectedRange();
@@ -536,7 +549,8 @@ bool OmniboxViewViews::OnAfterPossibleChange() {
 
   const bool something_changed = model()->OnAfterPossibleChange(
       text_before_change_, new_text, new_sel.start(), new_sel.end(),
-      selection_differs, text_changed, just_deleted_text, !IsIMEComposing());
+      selection_differs, text_changed, just_deleted_text,
+      allow_keyword_ui_change && !IsIMEComposing());
 
   // If only selection was changed, we don't need to call model()'s
   // OnChanged() method, which is called in TextChanged().
@@ -586,10 +600,9 @@ void OmniboxViewViews::ShowImeIfNeeded() {
   GetInputMethod()->ShowImeIfNeeded();
 }
 
-void OmniboxViewViews::OnMatchOpened(const AutocompleteMatch& match,
-                                     content::WebContents* web_contents) {
+void OmniboxViewViews::OnMatchOpened(const AutocompleteMatch& match) {
   extensions::MaybeShowExtensionControlledSearchNotification(
-      profile(), web_contents, match);
+      profile_, location_bar_view_->GetWebContents(), match);
 }
 
 int OmniboxViewViews::GetOmniboxTextLength() const {
@@ -618,17 +631,15 @@ void OmniboxViewViews::EmphasizeURLComponents() {
   // And Go system uses.
   url::Component scheme, host;
   AutocompleteInput::ParseForEmphasizeComponents(
-      text(), ChromeAutocompleteSchemeClassifier(profile()), &scheme, &host);
+      text(), ChromeAutocompleteSchemeClassifier(profile_), &scheme, &host);
   bool grey_out_url = text().substr(scheme.begin, scheme.len) ==
       base::UTF8ToUTF16(extensions::kExtensionScheme);
   bool grey_base = text_is_url && (host.is_nonempty() || grey_out_url);
   SetColor(location_bar_view_->GetColor(
-      security_level_,
       grey_base ? LocationBarView::DEEMPHASIZED_TEXT : LocationBarView::TEXT));
   if (grey_base && !grey_out_url) {
-    ApplyColor(
-        location_bar_view_->GetColor(security_level_, LocationBarView::TEXT),
-        gfx::Range(host.begin, host.end()));
+    ApplyColor(location_bar_view_->GetColor(LocationBarView::TEXT),
+               gfx::Range(host.begin, host.end()));
   }
 
   // Emphasize the scheme for security UI display purposes (if necessary).
@@ -638,11 +649,12 @@ void OmniboxViewViews::EmphasizeURLComponents() {
   // may have incorrectly identified a qualifier as a scheme.
   SetStyle(gfx::DIAGONAL_STRIKE, false);
   if (!model()->user_input_in_progress() && text_is_url &&
-      scheme.is_nonempty() && (security_level_ != connection_security::NONE)) {
-    SkColor security_color = location_bar_view_->GetColor(
-        security_level_, LocationBarView::SECURITY_TEXT);
+      scheme.is_nonempty() &&
+      (security_level_ != security_state::SecurityStateModel::NONE)) {
+    SkColor security_color =
+        location_bar_view_->GetSecureTextColor(security_level_);
     const bool strike =
-        (security_level_ == connection_security::SECURITY_ERROR);
+        (security_level_ == security_state::SecurityStateModel::SECURITY_ERROR);
     const gfx::Range scheme_range(scheme.begin, scheme.end());
     ApplyColor(security_color, scheme_range);
     ApplyStyle(gfx::DIAGONAL_STRIKE, strike, scheme_range);
@@ -836,6 +848,7 @@ void OmniboxViewViews::GetAccessibleState(ui::AXViewState* state) {
   if (popup_window_mode_) {
     state->AddStateFlag(ui::AX_STATE_READ_ONLY);
   } else {
+    state->AddStateFlag(ui::AX_STATE_EDITABLE);
     state->set_value_callback =
         base::Bind(&OmniboxViewViews::AccessibilitySetValue,
                    weak_ptr_factory_.GetWeakPtr());
@@ -888,7 +901,7 @@ bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
     return controller()->GetToolbarModel()->WouldReplaceURL();
   return command_id == IDS_MOVE_DOWN || command_id == IDS_MOVE_UP ||
          Textfield::IsCommandIdEnabled(command_id) ||
-         command_updater()->IsCommandEnabled(command_id);
+         location_bar_view_->command_updater()->IsCommandEnabled(command_id);
 }
 
 base::string16 OmniboxViewViews::GetSelectionClipboardText() const {
@@ -958,7 +971,7 @@ void OmniboxViewViews::OnBeforeUserAction(views::Textfield* sender) {
 }
 
 void OmniboxViewViews::OnAfterUserAction(views::Textfield* sender) {
-  OnAfterPossibleChange();
+  OnAfterPossibleChange(true);
 }
 
 void OmniboxViewViews::OnAfterCutOrCopy(ui::ClipboardType clipboard_type) {
@@ -1013,7 +1026,7 @@ void OmniboxViewViews::OnGetDragOperationsForTextfield(int* drag_operations) {
 
 void OmniboxViewViews::AppendDropFormats(
     int* formats,
-    std::set<ui::OSExchangeData::CustomFormat>* custom_formats) {
+    std::set<ui::Clipboard::FormatType>* format_types) {
   *formats = *formats | ui::OSExchangeData::URL;
 }
 
@@ -1054,7 +1067,7 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
 
   menu_contents->AddSeparator(ui::NORMAL_SEPARATOR);
 
-  if (chrome::IsQueryExtractionEnabled()) {
+  if (search::IsQueryExtractionEnabled()) {
     int select_all_position = menu_contents->GetIndexOfCommandId(
         IDS_APP_SELECT_ALL);
     DCHECK_GE(select_all_position, 0);

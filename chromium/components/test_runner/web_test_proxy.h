@@ -9,14 +9,16 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "components/test_runner/test_runner_export.h"
 #include "components/test_runner/web_task.h"
 #include "third_party/WebKit/public/platform/WebImage.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
+#include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebAXEnums.h"
@@ -30,7 +32,6 @@
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
 #include "third_party/WebKit/public/web/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/web/WebTextAffinity.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 
 class SkBitmap;
@@ -39,7 +40,6 @@ class SkCanvas;
 namespace blink {
 class WebAXObject;
 class WebAudioDevice;
-class WebCachedURLRequest;
 class WebColorChooser;
 class WebColorChooserClient;
 class WebDataSource;
@@ -166,7 +166,6 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
   blink::WebPlugin* CreatePlugin(blink::WebLocalFrame* frame,
                                  const blink::WebPluginParams& params);
   void SetStatusText(const blink::WebString& text);
-  void DidStopLoading();
   void ShowContextMenu(const blink::WebContextMenuData& data);
   blink::WebUserMediaClient* GetUserMediaClient();
   void PrintPage(blink::WebLocalFrame* frame);
@@ -175,16 +174,15 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
   void RequestPointerUnlock();
   bool IsPointerLocked();
   void DidFocus();
-  void DidBlur();
   void SetToolTipText(const blink::WebString& text,
                       blink::WebTextDirection direction);
   void DidAddMessageToConsole(const blink::WebConsoleMessage& text,
                               const blink::WebString& source_name,
                               unsigned source_line);
-  void LoadURLExternally(blink::WebLocalFrame* frame,
-                         const blink::WebURLRequest& request,
+  void LoadURLExternally(const blink::WebURLRequest& request,
                          blink::WebNavigationPolicy policy,
-                         const blink::WebString& suggested_name);
+                         const blink::WebString& suggested_name,
+                         bool replaces_current_history_item);
   void DidStartProvisionalLoad(blink::WebLocalFrame*);
   void DidReceiveServerRedirectForProvisionalLoad(blink::WebLocalFrame* frame);
   bool DidFailProvisionalLoad(blink::WebLocalFrame* frame,
@@ -205,13 +203,10 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
                    blink::WebHistoryCommitType commit_type);
   void DidFinishLoad(blink::WebLocalFrame* frame);
   void DidChangeLocationWithinPage(blink::WebLocalFrame* frame);
-  void DidDetectXSS(blink::WebLocalFrame* frame,
-                    const blink::WebURL& insecure_url,
+  void DidDetectXSS(const blink::WebURL& insecure_url,
                     bool did_block_entire_page);
   void DidDispatchPingLoader(blink::WebLocalFrame* frame,
                              const blink::WebURL& url);
-  void WillRequestResource(blink::WebLocalFrame* frame,
-                           const blink::WebCachedURLRequest& url_request);
   void WillSendRequest(blink::WebLocalFrame* frame,
                        unsigned identifier,
                        blink::WebURLRequest& request,
@@ -231,6 +226,10 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
                                         blink::WebSecurityOrigin target,
                                         blink::WebDOMMessageEvent event);
   void ResetInputMethod();
+  void CheckIfAudioSinkExistsAndIsAuthorized(
+      const blink::WebString& sink_id,
+      const blink::WebSecurityOrigin& security_origin,
+      blink::WebSetSinkIdCallbacks* web_callbacks);
 
   blink::WebString acceptLanguages();
 
@@ -302,10 +301,10 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
 // RenderWidget. It's safe to ignore that warning.
 #pragma warning(disable: 4250)
 #endif
-template <class Base, typename T>
+template <class Base, typename... Args>
 class WebTestProxy : public Base, public WebTestProxyBase {
  public:
-  explicit WebTestProxy(T t) : Base(t) {}
+  explicit WebTestProxy(Args... args) : Base(args...) {}
 
   // WebWidgetClient implementation.
   virtual blink::WebScreenInfo screenInfo() {
@@ -361,10 +360,6 @@ class WebTestProxy : public Base, public WebTestProxyBase {
   virtual void didFocus() {
     WebTestProxyBase::DidFocus();
     Base::didFocus();
-  }
-  virtual void didBlur() {
-    WebTestProxyBase::DidBlur();
-    Base::didBlur();
   }
   virtual void setToolTipText(const blink::WebString& text,
                               blink::WebTextDirection hint) {

@@ -4,11 +4,16 @@
 
 #include "ui/views/color_chooser/color_chooser_view.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "skia/ext/refptr.h"
+#include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -45,7 +50,7 @@ bool GetColorFromText(const base::string16& text, SkColor* result) {
 
   std::string input =
       base::UTF16ToUTF8((text.size() == 6) ? text : text.substr(1));
-  std::vector<uint8> hex;
+  std::vector<uint8_t> hex;
   if (!base::HexStringToBytes(input, &hex))
     return false;
 

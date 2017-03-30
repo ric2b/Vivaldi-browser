@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/atomicops.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
+#include "base/memory/shared_memory_handle.h"
 #include "base/process/kill.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -13,12 +17,9 @@
 #include "base/test/multiprocess_test.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
-
-#if defined(OS_MACOSX)
-#include "base/mac/scoped_nsautorelease_pool.h"
-#endif
 
 #if defined(OS_POSIX)
 #include <errno.h>
@@ -33,21 +34,17 @@
 #include "base/win/scoped_handle.h"
 #endif
 
-static const int kNumThreads = 5;
-#if !defined(OS_IOS) && !defined(OS_ANDROID)
-static const int kNumTasks = 5;
-#endif
-
 namespace base {
 
 namespace {
 
+#if !defined(OS_MACOSX)
 // Each thread will open the shared memory.  Each thread will take a different 4
 // byte int pointer, and keep changing it, with some small pauses in between.
 // Verify that each thread's value in the shared memory is always correct.
 class MultipleThreadMain : public PlatformThread::Delegate {
  public:
-  explicit MultipleThreadMain(int16 id) : id_(id) {}
+  explicit MultipleThreadMain(int16_t id) : id_(id) {}
   ~MultipleThreadMain() override {}
 
   static void CleanUp() {
@@ -57,21 +54,18 @@ class MultipleThreadMain : public PlatformThread::Delegate {
 
   // PlatformThread::Delegate interface.
   void ThreadMain() override {
-#if defined(OS_MACOSX)
-    mac::ScopedNSAutoreleasePool pool;
-#endif
-    const uint32 kDataSize = 1024;
+    const uint32_t kDataSize = 1024;
     SharedMemory memory;
     bool rv = memory.CreateNamedDeprecated(s_test_name_, true, kDataSize);
     EXPECT_TRUE(rv);
     rv = memory.Map(kDataSize);
     EXPECT_TRUE(rv);
-    int *ptr = static_cast<int*>(memory.memory()) + id_;
+    int* ptr = static_cast<int*>(memory.memory()) + id_;
     EXPECT_EQ(0, *ptr);
 
     for (int idx = 0; idx < 100; idx++) {
       *ptr = idx;
-      PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1));
+      PlatformThread::Sleep(TimeDelta::FromMilliseconds(1));
       EXPECT_EQ(*ptr, idx);
     }
     // Reset back to 0 for the next test that uses the same name.
@@ -81,23 +75,24 @@ class MultipleThreadMain : public PlatformThread::Delegate {
   }
 
  private:
-  int16 id_;
+  int16_t id_;
 
-  static const char* const s_test_name_;
+  static const char s_test_name_[];
 
   DISALLOW_COPY_AND_ASSIGN(MultipleThreadMain);
 };
 
-const char* const MultipleThreadMain::s_test_name_ =
+const char MultipleThreadMain::s_test_name_[] =
     "SharedMemoryOpenThreadTest";
+#endif  // !defined(OS_MACOSX)
 
 }  // namespace
 
-// Android doesn't support SharedMemory::Open/Delete/
+// Android/Mac doesn't support SharedMemory::Open/Delete/
 // CreateNamedDeprecated(openExisting=true)
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_MACOSX)
 TEST(SharedMemoryTest, OpenClose) {
-  const uint32 kDataSize = 1024;
+  const uint32_t kDataSize = 1024;
   std::string test_name = "SharedMemoryOpenCloseTest";
 
   // Open two handles to a memory segment, confirm that they are mapped
@@ -130,8 +125,8 @@ TEST(SharedMemoryTest, OpenClose) {
 
   // Close the first memory segment, and verify the second has the right data.
   memory1.Close();
-  char *start_ptr = static_cast<char *>(memory2.memory());
-  char *end_ptr = start_ptr + kDataSize;
+  char* start_ptr = static_cast<char*>(memory2.memory());
+  char* end_ptr = start_ptr + kDataSize;
   for (char* ptr = start_ptr; ptr < end_ptr; ptr++)
     EXPECT_EQ(*ptr, '1');
 
@@ -145,8 +140,8 @@ TEST(SharedMemoryTest, OpenClose) {
 }
 
 TEST(SharedMemoryTest, OpenExclusive) {
-  const uint32 kDataSize = 1024;
-  const uint32 kDataSize2 = 2048;
+  const uint32_t kDataSize = 1024;
+  const uint32_t kDataSize2 = 2048;
   std::ostringstream test_name_stream;
   test_name_stream << "SharedMemoryOpenExclusiveTest."
                    << Time::Now().ToDoubleT();
@@ -169,7 +164,7 @@ TEST(SharedMemoryTest, OpenExclusive) {
 
   // The mapped memory1 shouldn't exceed rounding for allocation granularity.
   EXPECT_LT(memory1.mapped_size(),
-            kDataSize + base::SysInfo::VMAllocationGranularity());
+            kDataSize + SysInfo::VMAllocationGranularity());
 
   memset(memory1.memory(), 'G', kDataSize);
 
@@ -194,11 +189,11 @@ TEST(SharedMemoryTest, OpenExclusive) {
 
   // The mapped memory2 shouldn't exceed rounding for allocation granularity.
   EXPECT_LT(memory2.mapped_size(),
-            kDataSize2 + base::SysInfo::VMAllocationGranularity());
+            kDataSize2 + SysInfo::VMAllocationGranularity());
 
   // Verify that opening memory2 didn't truncate or delete memory 1.
-  char *start_ptr = static_cast<char *>(memory2.memory());
-  char *end_ptr = start_ptr + kDataSize;
+  char* start_ptr = static_cast<char*>(memory2.memory());
+  char* end_ptr = start_ptr + kDataSize;
   for (char* ptr = start_ptr; ptr < end_ptr; ptr++) {
     EXPECT_EQ(*ptr, 'G');
   }
@@ -209,7 +204,7 @@ TEST(SharedMemoryTest, OpenExclusive) {
   rv = memory1.Delete(test_name);
   EXPECT_TRUE(rv);
 }
-#endif
+#endif  // !defined(OS_ANDROID) && !defined(OS_MACOSX)
 
 // Check that memory is still mapped after its closed.
 TEST(SharedMemoryTest, CloseNoUnmap) {
@@ -234,9 +229,12 @@ TEST(SharedMemoryTest, CloseNoUnmap) {
   EXPECT_EQ(nullptr, memory.memory());
 }
 
+#if !defined(OS_MACOSX)
 // Create a set of N threads to each open a shared memory segment and write to
 // it. Verify that they are always reading/writing consistent data.
 TEST(SharedMemoryTest, MultipleThreads) {
+  const int kNumThreads = 5;
+
   MultipleThreadMain::CleanUp();
   // On POSIX we have a problem when 2 threads try to create the shmem
   // (a file) at exactly the same time, since create both creates the
@@ -255,7 +253,7 @@ TEST(SharedMemoryTest, MultipleThreads) {
     thread_delegates.reset(new MultipleThreadMain*[numthreads]);
 
     // Spawn the threads.
-    for (int16 index = 0; index < numthreads; index++) {
+    for (int16_t index = 0; index < numthreads; index++) {
       PlatformThreadHandle pth;
       thread_delegates[index] = new MultipleThreadMain(index);
       EXPECT_TRUE(PlatformThread::Create(0, thread_delegates[index], &pth));
@@ -270,6 +268,7 @@ TEST(SharedMemoryTest, MultipleThreads) {
   }
   MultipleThreadMain::CleanUp();
 }
+#endif
 
 // Allocate private (unique) shared memory with an empty string for a
 // name.  Make sure several of them don't point to the same thing as
@@ -278,7 +277,7 @@ TEST(SharedMemoryTest, AnonymousPrivate) {
   int i, j;
   int count = 4;
   bool rv;
-  const uint32 kDataSize = 8192;
+  const uint32_t kDataSize = 8192;
 
   scoped_ptr<SharedMemory[]> memories(new SharedMemory[count]);
   scoped_ptr<int*[]> pointers(new int*[count]);
@@ -288,7 +287,7 @@ TEST(SharedMemoryTest, AnonymousPrivate) {
   for (i = 0; i < count; i++) {
     rv = memories[i].CreateAndMapAnonymous(kDataSize);
     EXPECT_TRUE(rv);
-    int *ptr = static_cast<int*>(memories[i].memory());
+    int* ptr = static_cast<int*>(memories[i].memory());
     EXPECT_TRUE(ptr);
     pointers[i] = ptr;
   }
@@ -322,6 +321,10 @@ TEST(SharedMemoryTest, ShareReadOnly) {
   SharedMemoryCreateOptions options;
   options.size = contents.size();
   options.share_read_only = true;
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // The Mach functionality is tested in shared_memory_mac_unittest.cc.
+  options.type = SharedMemoryHandle::POSIX;
+#endif
   ASSERT_TRUE(writable_shmem.Create(options));
   ASSERT_TRUE(writable_shmem.Map(options.size));
   memcpy(writable_shmem.memory(), contents.data(), contents.size());
@@ -375,32 +378,24 @@ TEST(SharedMemoryTest, ShareReadOnly) {
     EXPECT_EQ(0, munmap(writable, readonly_shmem.mapped_size()));
 
 #elif defined(OS_WIN)
-  EXPECT_EQ(NULL, MapViewOfFile(handle, FILE_MAP_WRITE, 0, 0, 0))
+  EXPECT_EQ(NULL, MapViewOfFile(handle.GetHandle(), FILE_MAP_WRITE, 0, 0, 0))
       << "Shouldn't be able to map memory writable.";
 
   HANDLE temp_handle;
-  BOOL rv = ::DuplicateHandle(GetCurrentProcess(),
-                              handle,
-                              GetCurrentProcess(),
-                              &temp_handle,
-                              FILE_MAP_ALL_ACCESS,
-                              false,
-                              0);
+  BOOL rv = ::DuplicateHandle(GetCurrentProcess(), handle.GetHandle(),
+                              GetCurrentProcess(), &temp_handle,
+                              FILE_MAP_ALL_ACCESS, false, 0);
   EXPECT_EQ(FALSE, rv)
       << "Shouldn't be able to duplicate the handle into a writable one.";
   if (rv)
-    base::win::ScopedHandle writable_handle(temp_handle);
-  rv = ::DuplicateHandle(GetCurrentProcess(),
-                         handle,
-                         GetCurrentProcess(),
-                         &temp_handle,
-                         FILE_MAP_READ,
-                         false,
-                         0);
+    win::ScopedHandle writable_handle(temp_handle);
+  rv = ::DuplicateHandle(GetCurrentProcess(), handle.GetHandle(),
+                         GetCurrentProcess(), &temp_handle, FILE_MAP_READ,
+                         false, 0);
   EXPECT_EQ(TRUE, rv)
       << "Should be able to duplicate the handle into a readable one.";
   if (rv)
-    base::win::ScopedHandle writable_handle(temp_handle);
+    win::ScopedHandle writable_handle(temp_handle);
 #else
 #error Unexpected platform; write a test that tries to make 'handle' writable.
 #endif  // defined(OS_POSIX) || defined(OS_WIN)
@@ -423,6 +418,7 @@ TEST(SharedMemoryTest, ShareToSelf) {
       contents,
       StringPiece(static_cast<const char*>(shared.memory()), contents.size()));
 
+  shared_handle = SharedMemoryHandle();
   ASSERT_TRUE(shmem.ShareToProcess(GetCurrentProcessHandle(), &shared_handle));
   SharedMemory readonly(shared_handle, /*readonly=*/true);
 
@@ -433,13 +429,13 @@ TEST(SharedMemoryTest, ShareToSelf) {
 }
 
 TEST(SharedMemoryTest, MapAt) {
-  ASSERT_TRUE(SysInfo::VMAllocationGranularity() >= sizeof(uint32));
+  ASSERT_TRUE(SysInfo::VMAllocationGranularity() >= sizeof(uint32_t));
   const size_t kCount = SysInfo::VMAllocationGranularity();
-  const size_t kDataSize = kCount * sizeof(uint32);
+  const size_t kDataSize = kCount * sizeof(uint32_t);
 
   SharedMemory memory;
   ASSERT_TRUE(memory.CreateAndMapAnonymous(kDataSize));
-  uint32* ptr = static_cast<uint32*>(memory.memory());
+  uint32_t* ptr = static_cast<uint32_t*>(memory.memory());
   ASSERT_NE(ptr, static_cast<void*>(NULL));
 
   for (size_t i = 0; i < kCount; ++i) {
@@ -450,8 +446,8 @@ TEST(SharedMemoryTest, MapAt) {
 
   off_t offset = SysInfo::VMAllocationGranularity();
   ASSERT_TRUE(memory.MapAt(offset, kDataSize - offset));
-  offset /= sizeof(uint32);
-  ptr = static_cast<uint32*>(memory.memory());
+  offset /= sizeof(uint32_t);
+  ptr = static_cast<uint32_t*>(memory.memory());
   ASSERT_NE(ptr, static_cast<void*>(NULL));
   for (size_t i = offset; i < kCount; ++i) {
     EXPECT_EQ(ptr[i - offset], i);
@@ -459,7 +455,7 @@ TEST(SharedMemoryTest, MapAt) {
 }
 
 TEST(SharedMemoryTest, MapTwice) {
-  const uint32 kDataSize = 1024;
+  const uint32_t kDataSize = 1024;
   SharedMemory memory;
   bool rv = memory.CreateAndMapAnonymous(kDataSize);
   EXPECT_TRUE(rv);
@@ -476,12 +472,16 @@ TEST(SharedMemoryTest, MapTwice) {
 #if !defined(OS_IOS)
 // Create a shared memory object, mmap it, and mprotect it to PROT_EXEC.
 TEST(SharedMemoryTest, AnonymousExecutable) {
-  const uint32 kTestSize = 1 << 16;
+  const uint32_t kTestSize = 1 << 16;
 
   SharedMemory shared_memory;
   SharedMemoryCreateOptions options;
   options.size = kTestSize;
   options.executable = true;
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // The Mach functionality is tested in shared_memory_mac_unittest.cc.
+  options.type = SharedMemoryHandle::POSIX;
+#endif
 
   EXPECT_TRUE(shared_memory.Create(options));
   EXPECT_TRUE(shared_memory.Map(shared_memory.requested_size()));
@@ -510,11 +510,15 @@ class ScopedUmaskSetter {
 
 // Create a shared memory object, check its permissions.
 TEST(SharedMemoryTest, FilePermissionsAnonymous) {
-  const uint32 kTestSize = 1 << 8;
+  const uint32_t kTestSize = 1 << 8;
 
   SharedMemory shared_memory;
   SharedMemoryCreateOptions options;
   options.size = kTestSize;
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // The Mach functionality is tested in shared_memory_mac_unittest.cc.
+  options.type = SharedMemoryHandle::POSIX;
+#endif
   // Set a file mode creation mask that gives all permissions.
   ScopedUmaskSetter permissive_mask(S_IWGRP | S_IWOTH);
 
@@ -532,25 +536,24 @@ TEST(SharedMemoryTest, FilePermissionsAnonymous) {
 
 // Create a shared memory object, check its permissions.
 TEST(SharedMemoryTest, FilePermissionsNamed) {
-  const uint32 kTestSize = 1 << 8;
+  const uint32_t kTestSize = 1 << 8;
 
   SharedMemory shared_memory;
   SharedMemoryCreateOptions options;
   options.size = kTestSize;
-  std::string shared_mem_name = "shared_perm_test-" + IntToString(getpid()) +
-      "-" + Uint64ToString(RandUint64());
-  options.name_deprecated = &shared_mem_name;
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // The Mach functionality is tested in shared_memory_mac_unittest.cc.
+  options.type = SharedMemoryHandle::POSIX;
+#endif
+
   // Set a file mode creation mask that gives all permissions.
   ScopedUmaskSetter permissive_mask(S_IWGRP | S_IWOTH);
 
   EXPECT_TRUE(shared_memory.Create(options));
-  // Clean-up the backing file name immediately, we don't need it.
-  EXPECT_TRUE(shared_memory.Delete(shared_mem_name));
 
-  int shm_fd =
-      SharedMemory::GetFdFromSharedMemoryHandle(shared_memory.handle());
+  int fd = SharedMemory::GetFdFromSharedMemoryHandle(shared_memory.handle());
   struct stat shm_stat;
-  EXPECT_EQ(0, fstat(shm_fd, &shm_stat));
+  EXPECT_EQ(0, fstat(fd, &shm_stat));
   // Neither the group, nor others should have been able to open the shared
   // memory file while its name existed.
   EXPECT_FALSE(shm_stat.st_mode & S_IRWXO);
@@ -573,15 +576,63 @@ TEST(SharedMemoryTest, MapMinimumAlignment) {
   shared_memory.Close();
 }
 
-// iOS does not allow multiple processes.
-// Android ashmem doesn't support named shared memory.
-#if !defined(OS_IOS) && !defined(OS_ANDROID)
+#if defined(OS_WIN)
+TEST(SharedMemoryTest, UnsafeImageSection) {
+  const char kTestSectionName[] = "UnsafeImageSection";
+  wchar_t path[MAX_PATH];
+  EXPECT_GT(::GetModuleFileName(nullptr, path, arraysize(path)), 0U);
 
+  // Map the current executable image to save us creating a new PE file on disk.
+  base::win::ScopedHandle file_handle(
+      ::CreateFile(path, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr));
+  EXPECT_TRUE(file_handle.IsValid());
+  base::win::ScopedHandle section_handle(
+      ::CreateFileMappingA(file_handle.Get(), nullptr,
+                           PAGE_READONLY | SEC_IMAGE, 0, 0, kTestSectionName));
+  EXPECT_TRUE(section_handle.IsValid());
+
+  // Check direct opening by name, from handle and duplicated from handle.
+  SharedMemory shared_memory_open;
+  EXPECT_TRUE(shared_memory_open.Open(kTestSectionName, true));
+  EXPECT_FALSE(shared_memory_open.Map(1));
+  EXPECT_EQ(nullptr, shared_memory_open.memory());
+
+  SharedMemory shared_memory_handle_dup(
+      SharedMemoryHandle(section_handle.Get(), ::GetCurrentProcessId()), true,
+      GetCurrentProcess());
+  EXPECT_FALSE(shared_memory_handle_dup.Map(1));
+  EXPECT_EQ(nullptr, shared_memory_handle_dup.memory());
+
+  SharedMemory shared_memory_handle_local(
+      SharedMemoryHandle(section_handle.Take(), ::GetCurrentProcessId()), true);
+  EXPECT_FALSE(shared_memory_handle_local.Map(1));
+  EXPECT_EQ(nullptr, shared_memory_handle_local.memory());
+
+  // Check that a handle without SECTION_QUERY also can't be mapped as it can't
+  // be checked.
+  SharedMemory shared_memory_handle_dummy;
+  SharedMemoryCreateOptions options;
+  options.size = 0x1000;
+  EXPECT_TRUE(shared_memory_handle_dummy.Create(options));
+  HANDLE handle_no_query;
+  EXPECT_TRUE(::DuplicateHandle(
+      ::GetCurrentProcess(), shared_memory_handle_dummy.handle().GetHandle(),
+      ::GetCurrentProcess(), &handle_no_query, FILE_MAP_READ, FALSE, 0));
+  SharedMemory shared_memory_handle_no_query(
+      SharedMemoryHandle(handle_no_query, ::GetCurrentProcessId()), true);
+  EXPECT_FALSE(shared_memory_handle_no_query.Map(1));
+  EXPECT_EQ(nullptr, shared_memory_handle_no_query.memory());
+}
+#endif  // defined(OS_WIN)
+
+// iOS does not allow multiple processes.
+// Android ashmem does not support named shared memory.
+// Mac SharedMemory does not support named shared memory. crbug.com/345734
+#if !defined(OS_IOS) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
 // On POSIX it is especially important we test shmem across processes,
 // not just across threads.  But the test is enabled on all platforms.
 class SharedMemoryProcessTest : public MultiProcessTest {
  public:
-
   static void CleanUp() {
     SharedMemory memory;
     memory.Delete(s_test_name_);
@@ -589,9 +640,6 @@ class SharedMemoryProcessTest : public MultiProcessTest {
 
   static int TaskTestMain() {
     int errors = 0;
-#if defined(OS_MACOSX)
-    mac::ScopedNSAutoreleasePool pool;
-#endif
     SharedMemory memory;
     bool rv = memory.CreateNamedDeprecated(s_test_name_, true, s_data_size_);
     EXPECT_TRUE(rv);
@@ -601,22 +649,24 @@ class SharedMemoryProcessTest : public MultiProcessTest {
     EXPECT_TRUE(rv);
     if (rv != true)
       errors++;
-    int *ptr = static_cast<int*>(memory.memory());
+    int* ptr = static_cast<int*>(memory.memory());
 
     // This runs concurrently in multiple processes. Writes need to be atomic.
-    base::subtle::Barrier_AtomicIncrement(ptr, 1);
+    subtle::Barrier_AtomicIncrement(ptr, 1);
     memory.Close();
     return errors;
   }
 
-  static const char* const s_test_name_;
-  static const uint32 s_data_size_;
+  static const char s_test_name_[];
+  static const uint32_t s_data_size_;
 };
 
-const char* const SharedMemoryProcessTest::s_test_name_ = "MPMem";
-const uint32 SharedMemoryProcessTest::s_data_size_ = 1024;
+const char SharedMemoryProcessTest::s_test_name_[] = "MPMem";
+const uint32_t SharedMemoryProcessTest::s_data_size_ = 1024;
 
 TEST_F(SharedMemoryProcessTest, SharedMemoryAcrossProcesses) {
+  const int kNumTasks = 5;
+
   SharedMemoryProcessTest::CleanUp();
 
   // Create a shared memory region. Set the first word to 0.
@@ -653,7 +703,6 @@ TEST_F(SharedMemoryProcessTest, SharedMemoryAcrossProcesses) {
 MULTIPROCESS_TEST_MAIN(SharedMemoryTestMain) {
   return SharedMemoryProcessTest::TaskTestMain();
 }
-
-#endif  // !defined(OS_IOS) && !defined(OS_ANDROID)
+#endif  // !defined(OS_IOS) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
 
 }  // namespace base

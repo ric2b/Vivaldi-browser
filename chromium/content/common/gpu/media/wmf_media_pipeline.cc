@@ -13,21 +13,25 @@
 
 #include "base/callback_helpers.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/task_runner_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/data_buffer.h"
 #include "media/base/platform_mime_util.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/win/mf_initializer.h"
 #include "media/base/win/mf_util.h"
 #include "media/filters/platform_media_pipeline_constants.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface_egl.h"
 
+namespace content {
+
 namespace {
 
-static const int kMicrosecondsPerSecond = 1000000;
-static const int kHundredsOfNanosecondsPerSecond = 10000000;
+const int kMicrosecondsPerSecond = 1000000;
+const int kHundredsOfNanosecondsPerSecond = 10000000;
 
 class AutoPropVariant {
  public:
@@ -37,8 +41,8 @@ class AutoPropVariant {
   PROPVARIANT* get() { return &var; }
   PROPVARIANT& get_ref() { return var; }
 
-  HRESULT AutoPropVariant::ToInt64(LONGLONG* ret);
-  HRESULT AutoPropVariant::ToInt32(int* ret);
+  HRESULT ToInt64(LONGLONG* ret);
+  HRESULT ToInt32(int* ret);
 
  private:
   PROPVARIANT var;
@@ -54,18 +58,18 @@ class SourceReaderCallback : public IMFSourceReaderCallback {
   explicit SourceReaderCallback(const OnReadSampleCB& on_read_sample_cb);
 
   // IUnknown methods
-  STDMETHODIMP QueryInterface(REFIID iid, void** ppv);
-  STDMETHODIMP_(ULONG) AddRef();
-  STDMETHODIMP_(ULONG) Release();
+  STDMETHODIMP QueryInterface(REFIID iid, void** ppv) override;
+  STDMETHODIMP_(ULONG) AddRef() override;
+  STDMETHODIMP_(ULONG) Release() override;
 
   // IMFSourceReaderCallback methods
   STDMETHODIMP OnReadSample(HRESULT status,
                             DWORD stream_index,
                             DWORD stream_flags,
                             LONGLONG timestamp_hns,
-                            IMFSample* unwrapped_sample);
-  STDMETHODIMP OnEvent(DWORD, IMFMediaEvent*);
-  STDMETHODIMP OnFlush(DWORD);
+                            IMFSample* unwrapped_sample) override;
+  STDMETHODIMP OnEvent(DWORD, IMFMediaEvent*) override;
+  STDMETHODIMP OnFlush(DWORD) override;
 
  private:
   // Destructor is private. Caller should call Release.
@@ -167,7 +171,7 @@ STDMETHODIMP SourceReaderCallback::OnFlush(DWORD) {
 }
 
 // Helper function that counts how many bits are set in the input number.
-int NumberOfSetBits(uint32 i) {
+int NumberOfSetBits(uint32_t i) {
   int number_of_set_bits = 0;
   while (i > 0) {
     if (i & 1) {
@@ -180,8 +184,6 @@ int NumberOfSetBits(uint32 i) {
 
 }  // namespace
 
-namespace content {
-
 class WMFMediaPipeline::AudioTimestampCalculator {
  public:
   AudioTimestampCalculator();
@@ -192,17 +194,17 @@ class WMFMediaPipeline::AudioTimestampCalculator {
   void SetSamplesPerSecond(int samples_per_second);
   void RecapturePosition();
 
-  int64 GetFramesCount(int64 data_size);
-  base::TimeDelta GetTimestamp(int64 timestamp_hns, bool discontinuity);
-  base::TimeDelta GetDuration(int64 frames_count);
-  void UpdateFrameCounter(int64 frames_count);
+  int64_t GetFramesCount(int64_t data_size);
+  base::TimeDelta GetTimestamp(int64_t timestamp_hns, bool discontinuity);
+  base::TimeDelta GetDuration(int64_t frames_count);
+  void UpdateFrameCounter(int64_t frames_count);
 
  private:
   int channel_count_;
   int bytes_per_sample_;
   int samples_per_second_;
-  int64 frame_sum_;
-  int64 frame_offset_;
+  int64_t frame_sum_;
+  int64_t frame_offset_;
   bool must_recapture_position_;
 };  // class WMFMediaPipeline::AudioTimestampCalculator
 
@@ -216,7 +218,7 @@ struct WMFMediaPipeline::Direct3DContext {
   base::win::ScopedComPtr<IDirect3DDevice9Ex> device;
   base::win::ScopedComPtr<IDirect3DDeviceManager9> device_manager;
   base::win::ScopedComPtr<IDirect3DQuery9> query;
-  uint32 dev_manager_reset_token;
+  uint32_t dev_manager_reset_token;
 };  // class WMFMediaPipeline::Direct3DContext
 
 class WMFMediaPipeline::DXVAPictureBuffer {
@@ -277,13 +279,13 @@ void WMFMediaPipeline::AudioTimestampCalculator::RecapturePosition() {
   must_recapture_position_ = true;
 }
 
-int64 WMFMediaPipeline::AudioTimestampCalculator::GetFramesCount(
-    int64 data_size) {
+int64_t WMFMediaPipeline::AudioTimestampCalculator::GetFramesCount(
+    int64_t data_size) {
   return data_size / bytes_per_sample_ / channel_count_;
 }
 
 base::TimeDelta WMFMediaPipeline::AudioTimestampCalculator::GetTimestamp(
-    int64 timestamp_hns,
+    int64_t timestamp_hns,
     bool discontinuity) {
   // If this sample block comes after a discontinuity (i.e. a gap or seek)
   // reset the frame counters, and capture the timestamp. Future timestamps
@@ -300,13 +302,13 @@ base::TimeDelta WMFMediaPipeline::AudioTimestampCalculator::GetTimestamp(
 }
 
 base::TimeDelta WMFMediaPipeline::AudioTimestampCalculator::GetDuration(
-    int64 frames_count) {
+    int64_t frames_count) {
   return base::TimeDelta::FromMicroseconds(
       frames_count * kMicrosecondsPerSecond / samples_per_second_);
 }
 
 void WMFMediaPipeline::AudioTimestampCalculator::UpdateFrameCounter(
-    int64 frames_count) {
+    int64_t frames_count) {
   frame_sum_ += frames_count;
 }
 
@@ -525,6 +527,17 @@ bool WMFMediaPipeline::Direct3DContext::Initialize() {
   return true;
 }
 
+struct WMFMediaPipeline::InitializationResult {
+  InitializationResult()
+      : source_reader_output_video_format(MFVideoFormat_YV12),
+        video_decoding_mode(media::PlatformMediaDecodingMode::SOFTWARE) {}
+
+  GUID source_reader_output_video_format;
+  Direct3DContext direct3d_context;
+  media::PlatformMediaDecodingMode video_decoding_mode;
+  base::win::ScopedComPtr<IMFSourceReader> source_reader;
+};
+
 WMFMediaPipeline::WMFMediaPipeline(
     media::DataSource* data_source,
     const AudioConfigChangedCB& audio_config_changed_cb,
@@ -535,12 +548,12 @@ WMFMediaPipeline::WMFMediaPipeline(
       audio_config_changed_cb_(audio_config_changed_cb),
       video_config_changed_cb_(video_config_changed_cb),
       source_reader_creation_thread_("source_reader_creation_thread"),
-      audio_timestamp_calculator_(new AudioTimestampCalculator),
       input_video_subtype_guid_(GUID_NULL),
+      audio_timestamp_calculator_(new AudioTimestampCalculator),
       source_reader_output_video_format_(MFVideoFormat_YV12),
       make_gl_context_current_cb_(make_gl_context_current_cb),
       egl_config_(preferred_video_decoding_mode ==
-                          media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE
+                          media::PlatformMediaDecodingMode::HARDWARE
                       ? GetEGLConfig(make_gl_context_current_cb)
                       : nullptr),
       current_dxva_picture_buffer_(nullptr),
@@ -551,6 +564,12 @@ WMFMediaPipeline::WMFMediaPipeline(
   std::fill(stream_indices_,
             stream_indices_ + media::PLATFORM_MEDIA_DATA_TYPE_COUNT,
             static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX));
+}
+
+WMFMediaPipeline::~WMFMediaPipeline() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (byte_stream_)
+    byte_stream_->Stop();
 }
 
 // static
@@ -580,16 +599,86 @@ EGLConfig WMFMediaPipeline::GetEGLConfig(
   return egl_config;
 }
 
-WMFMediaPipeline::~WMFMediaPipeline() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (byte_stream_.get())
-    byte_stream_->Stop();
+// static
+WMFMediaPipeline::InitializationResult WMFMediaPipeline::CreateSourceReader(
+    const scoped_refptr<WMFByteStream>& byte_stream,
+    const base::win::ScopedComPtr<IMFAttributes>& attributes,
+    media::PlatformMediaDecodingMode preferred_decoding_mode) {
+  DVLOG(1) << __FUNCTION__;
+  DCHECK(attributes);
+
+  if (preferred_decoding_mode == media::PlatformMediaDecodingMode::HARDWARE) {
+    InitializationResult result;
+    if (CreateDXVASourceReader(byte_stream, attributes, &result))
+      return result;
+  }
+
+  // Fall back to SW SourceReader.
+  InitializationResult result;
+  const HRESULT hr = MFCreateSourceReaderFromByteStream(
+      byte_stream.get(), attributes.get(), result.source_reader.Receive());
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "Failed to create source reader.";
+    // We use (result.source_reader != NULL) as status.
+    result.source_reader.Release();
+  }
+
+  return result;
 }
 
-#define LOG_REPORT_INIT_ERROR(msg, callback)                \
-  DLOG(ERROR) << (msg);                                     \
-  (callback).Run(false, -1, media::PlatformMediaTimeInfo(), \
-                 media::PlatformAudioConfig(), media::PlatformVideoConfig())
+// static
+bool WMFMediaPipeline::CreateDXVASourceReader(
+    const scoped_refptr<WMFByteStream>& byte_stream,
+    const base::win::ScopedComPtr<IMFAttributes>& attributes,
+    InitializationResult* result) {
+  DVLOG(1) << __FUNCTION__;
+  DCHECK(attributes);
+
+  if (!result->direct3d_context.Initialize())
+    return false;
+
+  base::win::ScopedComPtr<IMFAttributes> attributes_hw;
+  HRESULT hr = MFCreateAttributes(attributes_hw.Receive(), 1);
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "Failed to create source reader attributes.";
+    return false;
+  }
+
+  hr = attributes->CopyAllItems(attributes_hw.get());
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "Failed to create source reader attributes.";
+    return false;
+  }
+
+  hr = attributes_hw->SetUnknown(MF_SOURCE_READER_D3D_MANAGER,
+                                 result->direct3d_context.device_manager.get());
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "Failed to set d3d device manager attribute.";
+    return false;
+  }
+
+  hr = attributes_hw->SetUINT32(MF_SOURCE_READER_DISABLE_DXVA, FALSE);
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "Failed to set DXVA attribute.";
+    return false;
+  }
+
+  hr = MFCreateSourceReaderFromByteStream(
+      byte_stream.get(), attributes_hw.get(), result->source_reader.Receive());
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "Failed to create source reader with DXVA support.";
+    return false;
+  }
+
+  result->video_decoding_mode = media::PlatformMediaDecodingMode::HARDWARE;
+
+  // MSDN shyly mentions that it is only preferred format for DXVA
+  // decoding but in reality setting other formats results in flawless
+  // configuration but MF_E_INVALIDMEDIATYPE when reading samples.
+  result->source_reader_output_video_format = MFVideoFormat_NV12;
+
+  return true;
+}
 
 void WMFMediaPipeline::Initialize(const std::string& mime_type,
                                   const InitializeCB& initialize_cb) {
@@ -597,45 +686,50 @@ void WMFMediaPipeline::Initialize(const std::string& mime_type,
   DCHECK(!source_reader_.get());
   DCHECK(data_source_);
 
+  // For diagnostics, the attempted video decoding mode is at least as
+  // interesting on failure as it is on success.
+  video_config_.decoding_mode =
+      egl_config_ ? media::PlatformMediaDecodingMode::HARDWARE
+                  : media::PlatformMediaDecodingMode::SOFTWARE;
+
+  if (!InitializeImpl(mime_type, initialize_cb)) {
+    initialize_cb.Run(false, -1, media::PlatformMediaTimeInfo(),
+                      media::PlatformAudioConfig(), video_config_);
+  }
+}
+
+bool WMFMediaPipeline::InitializeImpl(const std::string& mime_type,
+                                      const InitializeCB& initialize_cb) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
   // We've already made this check in WebMediaPlayerImpl, but that's been in
   // a different process, so let's take its result with a grain of salt.
-  if (!media::IsPlatformMediaPipelineAvailable(
-          media::PlatformMediaCheckType::FULL)) {
-    LOG_REPORT_INIT_ERROR("Can't access required media libraries in the system",
-                          initialize_cb);
-    return;
-  }
+  const bool has_platform_support = media::IsPlatformMediaPipelineAvailable(
+      media::PlatformMediaCheckType::FULL);
 
   get_stride_function_ = reinterpret_cast<decltype(get_stride_function_)>(
       media::GetFunctionFromLibrary("MFGetStrideForBitmapInfoHeader",
                                     "evr.dll"));
-  if (!get_stride_function_) {
-    LOG_REPORT_INIT_ERROR("Can't access required media libraries in the system",
-                          initialize_cb);
-    return;
+
+  if (!has_platform_support || !get_stride_function_) {
+    DVLOG(1) << "Can't access required media libraries in the system";
+    return false;
   }
 
   media::InitializeMediaFoundation();
 
   base::win::ScopedComPtr<IMFAttributes> source_reader_attributes;
   if (!CreateSourceReaderCallbackAndAttributes(&source_reader_attributes)) {
-    LOG_REPORT_INIT_ERROR("Failed to create source reader attributes",
-                          initialize_cb);
-    return;
+    DVLOG(1) << "Failed to create source reader attributes";
+    return false;
   }
 
-  byte_stream_.reset(new WMFByteStream(data_source_));
+  byte_stream_ = new WMFByteStream(data_source_);
   if (FAILED(byte_stream_->Initialize(
           std::wstring(mime_type.begin(), mime_type.end()).c_str()))) {
-    LOG_REPORT_INIT_ERROR("Failed to create byte stream.", initialize_cb);
-    return;
+    DVLOG(1) << "Failed to create byte stream.";
+    return false;
   }
-
-  initialize_cb_ = initialize_cb;
-
-  FinalizeInitializationCB finalization_cb = media::BindToCurrentLoop(
-      base::Bind(&WMFMediaPipeline::FinalizeInitialization,
-                 weak_ptr_factory_.GetWeakPtr()));
 
   // |byte_stream_| is created and destroyed on |media_pipeline_thread| and
   // uses WeakPtr to |this| in its OnReadData callback, so we need to run it on
@@ -643,71 +737,72 @@ void WMFMediaPipeline::Initialize(const std::string& mime_type,
   // read some data (using our |byte_stream_|) and blocks current thread. As
   // we want WMFByteStream::OnReadSample to run on |media_pipeline-thread| we
   // need to move SourceReader creation to separate thread to avoid deadlock.
-  if (!source_reader_creation_thread_.Start()) {
-    LOG_REPORT_INIT_ERROR("Couldn't start reader creation thread",
-                          initialize_cb);
-    return;
-  }
-  source_reader_creation_thread_.task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&WMFMediaPipeline::CreateSourceReader,
-                 base::Unretained(this),
-                 source_reader_attributes,
-                 finalization_cb));
+  if (!source_reader_creation_thread_.Start())
+    return false;
+
+  return base::PostTaskAndReplyWithResult(
+      source_reader_creation_thread_.task_runner().get(), FROM_HERE,
+      base::Bind(&WMFMediaPipeline::CreateSourceReader, byte_stream_,
+                 source_reader_attributes, video_config_.decoding_mode),
+      base::Bind(&WMFMediaPipeline::FinalizeInitialization,
+                 weak_ptr_factory_.GetWeakPtr(), initialize_cb));
 }
 
-void WMFMediaPipeline::FinalizeInitialization() {
+void WMFMediaPipeline::FinalizeInitialization(
+    const InitializeCB& initialize_cb,
+    const InitializationResult& result) {
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!initialize_cb_.is_null());
 
   source_reader_creation_thread_.Stop();
 
-  if (!source_reader_.get()) {
-    LOG_REPORT_INIT_ERROR("SourceReader creation failed", initialize_cb_);
+  media::PlatformMediaTimeInfo time_info;
+  int bitrate = 0;
+  media::PlatformAudioConfig audio_config;
+
+  // Store the decoding mode eventually attempted (takes HW->SW fallback into
+  // account).
+  video_config_.decoding_mode = result.video_decoding_mode;
+
+  if (!result.source_reader) {
+    initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
     return;
   }
 
+  source_reader_ = result.source_reader;
+  direct3d_context_.reset(new Direct3DContext(result.direct3d_context));
+  source_reader_output_video_format_ = result.source_reader_output_video_format;
+
   if (!RetrieveStreamIndices()) {
-    LOG_REPORT_INIT_ERROR("Failed to find streams", initialize_cb_);
+    DVLOG(1) << "Failed to find streams";
+    initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
     return;
   }
 
   if (!ConfigureSourceReader()) {
-    LOG_REPORT_INIT_ERROR("Failed to configure source reader", initialize_cb_);
+    initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
     return;
   }
 
-  int bitrate = -1;
-  media::PlatformMediaTimeInfo time_info;
-  if (!GetDuration(&time_info.duration) ||
-      !GetBitrate(&bitrate, time_info.duration)) {
-    LOG_REPORT_INIT_ERROR("No information about duration and bitrate",
-                          initialize_cb_);
-    return;
-  }
+  time_info.duration = GetDuration();
+  bitrate = GetBitrate(time_info.duration);
 
-  media::PlatformAudioConfig audio_config;
   if (HasMediaStream(media::PLATFORM_MEDIA_AUDIO)) {
     if (!GetAudioDecoderConfig(&audio_config)) {
-      LOG_REPORT_INIT_ERROR("Can't get audio decoder config", initialize_cb_);
+      initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
       return;
     }
   }
 
-  media::PlatformVideoConfig video_config;
   if (HasMediaStream(media::PLATFORM_MEDIA_VIDEO)) {
-    if (!GetVideoDecoderConfig(&video_config)) {
-      LOG_REPORT_INIT_ERROR("Can't get video decoder config", initialize_cb_);
+    if (!GetVideoDecoderConfig(&video_config_)) {
+      initialize_cb.Run(false, bitrate, time_info, audio_config, video_config_);
       return;
     }
   }
 
-  base::ResetAndReturn(&initialize_cb_)
-      .Run(true, bitrate, time_info, audio_config, video_config);
+  initialize_cb.Run(true, bitrate, time_info, audio_config, video_config_);
 }
-
-#undef LOG_REPORT_INIT_ERROR
-#undef REPORT_INIT_ERROR
 
 void WMFMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -749,7 +844,7 @@ void WMFMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb,
   }
 
   if (video_config_.decoding_mode ==
-      media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE) {
+      media::PlatformMediaDecodingMode::HARDWARE) {
     current_dxva_picture_buffer_ = GetDXVAPictureBuffer(texture_id);
     if (!current_dxva_picture_buffer_) {
       DLOG(ERROR) << "Failed to create DXVAPictureBuffer.";
@@ -862,7 +957,7 @@ scoped_refptr<media::DataBuffer> WMFMediaPipeline::CreateDataBufferFromMemory(
   }
 
   // Get the actual data from the IMFMediaBuffer
-  uint8* data = nullptr;
+  uint8_t* data = nullptr;
   DWORD data_size = 0;
   hr = output_buffer->Lock(&data, NULL, &data_size);
   if (FAILED(hr)) {
@@ -916,7 +1011,7 @@ scoped_refptr<media::DataBuffer> WMFMediaPipeline::CreateDataBuffer(
   scoped_refptr<media::DataBuffer> data_buffer;
   if (media_type == media::PLATFORM_MEDIA_VIDEO &&
       video_config_.decoding_mode ==
-          media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE) {
+          media::PlatformMediaDecodingMode::HARDWARE) {
     data_buffer = CreateDataBufferFromTexture(sample);
   } else {
     data_buffer = CreateDataBufferFromMemory(sample);
@@ -924,13 +1019,13 @@ scoped_refptr<media::DataBuffer> WMFMediaPipeline::CreateDataBuffer(
   if (!data_buffer)
     return nullptr;
 
-  int64 timestamp_hns;  // timestamp in hundreds of nanoseconds
+  int64_t timestamp_hns;  // timestamp in hundreds of nanoseconds
   HRESULT hr = sample->GetSampleTime(&timestamp_hns);
   if (FAILED(hr)) {
     timestamp_hns = 0;
   }
 
-  int64 duration_hns;  // duration in hundreds of nanoseconds
+  int64_t duration_hns;  // duration in hundreds of nanoseconds
   hr = sample->GetSampleDuration(&duration_hns);
   if (FAILED(hr)) {
     duration_hns = 0;
@@ -949,8 +1044,8 @@ scoped_refptr<media::DataBuffer> WMFMediaPipeline::CreateDataBuffer(
     // buggy encoders?
     data_buffer->set_timestamp(audio_timestamp_calculator_->GetTimestamp(
         timestamp_hns, discontinuity != 0));
-    int64 frames_count = audio_timestamp_calculator_->GetFramesCount(
-        static_cast<int64>(data_buffer->data_size()));
+    int64_t frames_count = audio_timestamp_calculator_->GetFramesCount(
+        static_cast<int64_t>(data_buffer->data_size()));
     data_buffer->set_duration(
         audio_timestamp_calculator_->GetDuration(frames_count));
     audio_timestamp_calculator_->UpdateFrameCounter(frames_count);
@@ -1210,83 +1305,6 @@ bool WMFMediaPipeline::CreateSourceReaderCallbackAndAttributes(
   return true;
 }
 
-bool WMFMediaPipeline::CreateDXVASourceReader(
-    const base::win::ScopedComPtr<IMFAttributes>& attributes) {
-  DCHECK(attributes);
-  DCHECK(byte_stream_.get());
-  DCHECK(!direct3d_context_);
-
-  direct3d_context_.reset(new Direct3DContext());
-  if (!direct3d_context_->Initialize())
-    return false;
-
-  base::win::ScopedComPtr<IMFAttributes> attributes_hw;
-  HRESULT hr = MFCreateAttributes(attributes_hw.Receive(), 1);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create source reader attributes.";
-    return false;
-  }
-
-  hr = attributes->CopyAllItems(attributes_hw.get());
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create source reader attributes.";
-    return false;
-  }
-
-  hr = attributes_hw->SetUnknown(MF_SOURCE_READER_D3D_MANAGER,
-                                 direct3d_context_->device_manager.get());
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to set d3d device manager attribute.";
-    return false;
-  }
-
-  hr = attributes_hw->SetUINT32(MF_SOURCE_READER_DISABLE_DXVA, FALSE);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to set DXVA attribute.";
-    return false;
-  }
-
-  hr = MFCreateSourceReaderFromByteStream(
-      byte_stream_.get(), attributes_hw.get(), source_reader_.Receive());
-
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create source reader with DXVA support.";
-    return false;
-  }
-
-  // MSDN shyly mentions that it is only preferred format for DXVA
-  // decoding but in reality setting other formats results in flawless
-  // configuration but MF_E_INVALIDMEDIATYPE when reading samples.
-  source_reader_output_video_format_ = MFVideoFormat_NV12;
-  return true;
-}
-
-void WMFMediaPipeline::CreateSourceReader(
-    const base::win::ScopedComPtr<IMFAttributes>& attributes,
-    const FinalizeInitializationCB& finalize_init_cb) {
-  DCHECK(source_reader_creation_thread_.task_runner()
-             ->BelongsToCurrentThread());
-  DCHECK(!source_reader_.get());
-  DCHECK(attributes);
-
-  HRESULT hr = S_OK;
-
-  if (egl_config_ && CreateDXVASourceReader(attributes)) {
-    video_config_.decoding_mode = media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE;
-  } else {
-    // Fallback to SW SourceReader.
-    hr = MFCreateSourceReaderFromByteStream(
-        byte_stream_.get(), attributes.get(), source_reader_.Receive());
-  }
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create source reader.";
-    source_reader_.Release();
-  }
-
-  // We use (source_reader_ != NULL) as status.
-  finalize_init_cb.Run();
-}
-
 bool WMFMediaPipeline::RetrieveStreamIndices() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(source_reader_.get());
@@ -1410,7 +1428,7 @@ bool WMFMediaPipeline::ConfigureSourceReader() {
   return status;
 }
 
-bool WMFMediaPipeline::GetDuration(base::TimeDelta* duration) {
+base::TimeDelta WMFMediaPipeline::GetDuration() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(source_reader_.get());
 
@@ -1421,28 +1439,23 @@ bool WMFMediaPipeline::GetDuration(base::TimeDelta* duration) {
       MF_PD_DURATION,
       var.get());
   if (FAILED(hr)) {
-    if (data_source_->IsStreaming()) {
-      *duration = media::kInfiniteDuration();
-      return true;
-    } else {
-      DLOG(ERROR) << "Failed to obtain media duration.";
-      return false;
-    }
+    DLOG_IF(WARNING, !data_source_->IsStreaming())
+        << "Failed to obtain media duration.";
+    return media::kInfiniteDuration();
   }
 
-  int64 duration_int64 = 0;
+  int64_t duration_int64 = 0;
   hr = var.ToInt64(&duration_int64);
   if (FAILED(hr)) {
     DLOG(ERROR) << "Failed to obtain media duration.";
-    return false;
+    return media::kInfiniteDuration();
   }
   // Have to divide duration64 by ten to convert from
   // hundreds of nanoseconds (WMF style) to microseconds.
-  *duration = base::TimeDelta::FromMicroseconds(duration_int64 / 10);
-  return true;
+  return base::TimeDelta::FromMicroseconds(duration_int64 / 10);
 }
 
-bool WMFMediaPipeline::GetBitrate(int* bitrate, base::TimeDelta duration) {
+int WMFMediaPipeline::GetBitrate(base::TimeDelta duration) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(source_reader_.get());
   DCHECK_GT(duration.InMicroseconds(), 0);
@@ -1450,59 +1463,41 @@ bool WMFMediaPipeline::GetBitrate(int* bitrate, base::TimeDelta duration) {
   AutoPropVariant var;
 
   // Calculating the media bitrate
-  int audio_bitrate = 0;
-  int video_bitrate = 0;
   HRESULT hr = source_reader_->GetPresentationAttribute(
       static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE),
       MF_PD_AUDIO_ENCODING_BITRATE,
       var.get());
-  if (FAILED(hr)) {
-    audio_bitrate = 0;
-  }
+  int audio_bitrate = 0;
   hr = var.ToInt32(&audio_bitrate);
-  if (FAILED(hr)) {
+  if (FAILED(hr))
     audio_bitrate = 0;
-  }
 
   hr = source_reader_->GetPresentationAttribute(
       static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE),
       MF_PD_VIDEO_ENCODING_BITRATE,
       var.get());
-  if (FAILED(hr)) {
-    video_bitrate = 0;
-  }
+  int video_bitrate = 0;
   hr = var.ToInt32(&video_bitrate);
-  if (FAILED(hr)) {
+  if (FAILED(hr))
     video_bitrate = 0;
-  }
 
-  *bitrate = audio_bitrate + video_bitrate;
-  if (*bitrate <= 0 && !data_source_->IsStreaming()) {
-    // if we have a valid bitrate we can use it, otherwise we have to calculate
-    // it from file size and duration
+  const int bitrate = std::max(audio_bitrate + video_bitrate, 0);
+  if (bitrate == 0 && !data_source_->IsStreaming()) {
+    // If we have a valid bitrate we can use it, otherwise we have to calculate
+    // it from file size and duration.
     hr = source_reader_->GetPresentationAttribute(
-        static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE),
-        MF_PD_TOTAL_FILE_SIZE,
+        static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE), MF_PD_TOTAL_FILE_SIZE,
         var.get());
     if (SUCCEEDED(hr) && duration.InMicroseconds() > 0) {
-      int64 file_size_in_bytes;
+      int64_t file_size_in_bytes;
       hr = var.ToInt64(&file_size_in_bytes);
-      if (FAILED(hr)) {
-        DLOG(ERROR) << "Failed to obtain media file size.";
-        return false;
-      }
-      double bytes = file_size_in_bytes;
-      *bitrate = bytes * 8000000.0 / duration.InMicroseconds();
-    } else {
-      DLOG(ERROR) << "Failed to obtain media bitrate.";
-      // Although we could not obtain nor calculate the actual bitrate,
-      // we will still try to decode the media without it - the bitrate
-      // will be set to "0" in this case.
-      return true;
+      if (SUCCEEDED(hr))
+        return (8000000.0 * file_size_in_bytes) / duration.InMicroseconds();
     }
+    DLOG(ERROR) << "Failed to obtain media bitrate.";
   }
 
-  return true;
+  return bitrate;
 }
 
 bool WMFMediaPipeline::GetStride(int* stride) {
@@ -1540,8 +1535,8 @@ bool WMFMediaPipeline::GetStride(int* stride) {
 
 WMFMediaPipeline::DXVAPictureBuffer* WMFMediaPipeline::GetDXVAPictureBuffer(
     uint32_t texture_id) {
-  DCHECK_EQ(video_config_.decoding_mode,
-            media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE);
+  DCHECK(video_config_.decoding_mode ==
+         media::PlatformMediaDecodingMode::HARDWARE);
   DCHECK(direct3d_context_);
   if (!make_gl_context_current_cb_.Run())
     return nullptr;
@@ -1560,7 +1555,7 @@ WMFMediaPipeline::DXVAPictureBuffer* WMFMediaPipeline::GetDXVAPictureBuffer(
     return nullptr;
 
   dxva_picture_buffer = new_dxva_picture_buffer.get();
-  known_picture_buffers_.add(texture_id, new_dxva_picture_buffer.Pass());
+  known_picture_buffers_.add(texture_id, std::move(new_dxva_picture_buffer));
   return dxva_picture_buffer;
 }
 

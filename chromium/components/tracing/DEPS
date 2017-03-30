@@ -1,4 +1,9 @@
 include_rules = [
-  "+base",
   "+ipc",
 ]
+
+specific_include_rules = {
+  '.*browsertest\.cc': [
+    "+content/public/test",
+  ],
+}

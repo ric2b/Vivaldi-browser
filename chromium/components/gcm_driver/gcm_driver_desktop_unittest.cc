@@ -4,10 +4,13 @@
 
 #include "components/gcm_driver/gcm_driver_desktop.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/testing_pref_service.h"
@@ -134,7 +137,7 @@ class GCMDriverTest : public testing::Test {
                 WaitToFinish wait_to_finish);
   void Send(const std::string& app_id,
             const std::string& receiver_id,
-            const GCMClient::OutgoingMessage& message,
+            const OutgoingMessage& message,
             WaitToFinish wait_to_finish);
   void Unregister(const std::string& app_id, WaitToFinish wait_to_finish);
 
@@ -233,9 +236,8 @@ void GCMDriverTest::CreateDriver() {
       new net::TestURLRequestContextGetter(io_thread_.task_runner());
   // TODO(johnme): Need equivalent test coverage of GCMDriverAndroid.
   driver_.reset(new GCMDriverDesktop(
-      scoped_ptr<GCMClientFactory>(
-          new FakeGCMClientFactory(base::ThreadTaskRunnerHandle::Get(),
-                                   io_thread_.task_runner())).Pass(),
+      scoped_ptr<GCMClientFactory>(new FakeGCMClientFactory(
+          base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner())),
       GCMClient::ChromeBuildInfo(), "http://channel.status.request.url",
       "user-agent-string", &prefs_, temp_dir_.path(), request_context,
       base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner(),
@@ -278,7 +280,7 @@ void GCMDriverTest::Register(const std::string& app_id,
 
 void GCMDriverTest::Send(const std::string& app_id,
                          const std::string& receiver_id,
-                         const GCMClient::OutgoingMessage& message,
+                         const OutgoingMessage& message,
                          WaitToFinish wait_to_finish) {
   base::RunLoop run_loop;
   async_operation_completed_callback_ = run_loop.QuitClosure();
@@ -466,7 +468,7 @@ TEST_F(GCMDriverTest, UnregisterFailed) {
 }
 
 TEST_F(GCMDriverTest, SendFailed) {
-  GCMClient::OutgoingMessage message;
+  OutgoingMessage message;
   message.id = "1";
   message.data["key1"] = "value1";
 
@@ -528,7 +530,7 @@ TEST_F(GCMDriverTest, GCMClientNotReadyBeforeSending) {
   AddAppHandlers();
 
   // The sending is on hold until GCMClient is ready.
-  GCMClient::OutgoingMessage message;
+  OutgoingMessage message;
   message.id = "1";
   message.data["key1"] = "value1";
   message.data["key2"] = "value2";
@@ -734,7 +736,7 @@ TEST_F(GCMDriverFunctionalTest, RegisterAfterUnfinishedUnregister) {
 }
 
 TEST_F(GCMDriverFunctionalTest, Send) {
-  GCMClient::OutgoingMessage message;
+  OutgoingMessage message;
   message.id = "1@ack";
   message.data["key1"] = "value1";
   message.data["key2"] = "value2";
@@ -749,7 +751,7 @@ TEST_F(GCMDriverFunctionalTest, Send) {
 }
 
 TEST_F(GCMDriverFunctionalTest, SendError) {
-  GCMClient::OutgoingMessage message;
+  OutgoingMessage message;
   // Embedding error in id will tell the mock to simulate the send error.
   message.id = "1@error";
   message.data["key1"] = "value1";
@@ -776,7 +778,7 @@ TEST_F(GCMDriverFunctionalTest, MessageReceived) {
   // GCM registration has to be performed otherwise GCM will not be started.
   Register(kTestAppID1, ToSenderList("sender"), GCMDriverTest::WAIT);
 
-  GCMClient::IncomingMessage message;
+  IncomingMessage message;
   message.data["key1"] = "value1";
   message.data["key2"] = "value2";
   message.sender_id = "sender";
@@ -794,7 +796,7 @@ TEST_F(GCMDriverFunctionalTest, MessageWithCollapseKeyReceived) {
   // GCM registration has to be performed otherwise GCM will not be started.
   Register(kTestAppID1, ToSenderList("sender"), GCMDriverTest::WAIT);
 
-  GCMClient::IncomingMessage message;
+  IncomingMessage message;
   message.data["key1"] = "value1";
   message.collapse_key = "collapse_key_value";
   message.sender_id = "sender";
@@ -839,8 +841,8 @@ class GCMChannelStatusSyncerTest : public GCMDriverTest {
   void SetUp() override;
 
   void CompleteGCMChannelStatusRequest(bool enabled, int poll_interval_seconds);
-  bool CompareDelaySeconds(int64 expected_delay_seconds,
-                           int64 actual_delay_seconds);
+  bool CompareDelaySeconds(int64_t expected_delay_seconds,
+                           int64_t actual_delay_seconds);
 
   GCMChannelStatusSyncer* syncer() {
     return driver()->gcm_channel_status_syncer_for_testing();
@@ -888,7 +890,8 @@ void GCMChannelStatusSyncerTest::CompleteGCMChannelStatusRequest(
 }
 
 bool GCMChannelStatusSyncerTest::CompareDelaySeconds(
-    int64 expected_delay_seconds, int64 actual_delay_seconds) {
+    int64_t expected_delay_seconds,
+    int64_t actual_delay_seconds) {
   // Most of time, the actual delay should not be smaller than the expected
   // delay.
   if (actual_delay_seconds >= expected_delay_seconds)
@@ -1006,9 +1009,9 @@ TEST_F(GCMChannelStatusSyncerTest, SubsequentPollingWithDefaultInterval) {
   CompleteGCMChannelStatusRequest(true, 0);
 
   // The next request should be scheduled at the expected default interval.
-  int64 actual_delay_seconds =
+  int64_t actual_delay_seconds =
       syncer()->current_request_delay_interval().InSeconds();
-  int64 expected_delay_seconds =
+  int64_t expected_delay_seconds =
       GCMChannelStatusRequest::default_poll_interval_seconds();
   EXPECT_TRUE(CompareDelaySeconds(expected_delay_seconds, actual_delay_seconds))
       << "expected delay: " << expected_delay_seconds
@@ -1050,9 +1053,9 @@ TEST_F(GCMChannelStatusSyncerTest, SubsequentPollingWithUpdatedInterval) {
   CompleteGCMChannelStatusRequest(true, new_poll_interval_seconds);
 
   // The next request should be scheduled at the expected updated interval.
-  int64 actual_delay_seconds =
+  int64_t actual_delay_seconds =
       syncer()->current_request_delay_interval().InSeconds();
-  int64 expected_delay_seconds = new_poll_interval_seconds;
+  int64_t expected_delay_seconds = new_poll_interval_seconds;
   EXPECT_TRUE(CompareDelaySeconds(expected_delay_seconds, actual_delay_seconds))
       << "expected delay: " << expected_delay_seconds
       << " actual delay: " << actual_delay_seconds;

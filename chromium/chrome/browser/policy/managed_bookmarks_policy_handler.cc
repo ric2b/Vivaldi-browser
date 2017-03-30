@@ -4,13 +4,15 @@
 
 #include "chrome/browser/policy/managed_bookmarks_policy_handler.h"
 
+#include <utility>
+
 #include "base/prefs/pref_value_map.h"
 #include "base/values.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmarks_tracker.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/policy_map.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "policy/policy_constants.h"
 #include "url/gurl.h"
 
@@ -39,7 +41,7 @@ void ManagedBookmarksPolicyHandler::ApplyPolicySettings(
     return;
 
   FilterBookmarks(list);
-  prefs->SetValue(bookmarks::prefs::kManagedBookmarks, value.Pass());
+  prefs->SetValue(bookmarks::prefs::kManagedBookmarks, std::move(value));
 }
 
 void ManagedBookmarksPolicyHandler::FilterBookmarks(base::ListValue* list) {
@@ -71,7 +73,7 @@ void ManagedBookmarksPolicyHandler::FilterBookmarks(base::ListValue* list) {
     } else {
       // Make sure the URL is valid before passing a bookmark to the pref.
       dict->Remove(ManagedBookmarksTracker::kChildren, NULL);
-      GURL gurl = url_fixer::FixupURL(url, "");
+      GURL gurl = url_formatter::FixupURL(url, std::string());
       if (!gurl.is_valid()) {
         it = list->Erase(it, NULL);
         continue;

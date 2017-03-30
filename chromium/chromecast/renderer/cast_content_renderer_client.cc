@@ -4,13 +4,16 @@
 
 #include "chromecast/renderer/cast_content_renderer_client.h"
 
+#include <stdint.h>
 #include <sys/sysinfo.h>
 
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/crash/cast_crash_keys.h"
 #include "chromecast/media/base/media_caps.h"
@@ -23,8 +26,6 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/render_view_observer.h"
-#include "crypto/nss_util.h"
-#include "ipc/message_filter.h"
 #include "third_party/WebKit/public/platform/WebColor.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
 #include "third_party/WebKit/public/web/WebView.h"
@@ -97,7 +98,10 @@ void CastRenderViewObserver::DidClearWindowObject(blink::WebLocalFrame* frame) {
 
 }  // namespace
 
-CastContentRendererClient::CastContentRendererClient() {
+CastContentRendererClient::CastContentRendererClient()
+    : allow_hidden_media_playback_(
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kAllowHiddenMediaPlayback)) {
 }
 
 CastContentRendererClient::~CastContentRendererClient() {
@@ -107,22 +111,8 @@ void CastContentRendererClient::AddRendererNativeBindings(
     blink::WebLocalFrame* frame) {
 }
 
-std::vector<scoped_refptr<IPC::MessageFilter>>
-CastContentRendererClient::GetRendererMessageFilters() {
-  return std::vector<scoped_refptr<IPC::MessageFilter>>();
-}
-
 void CastContentRendererClient::RenderThreadStarted() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-#if !defined(USE_OPENSSL)
-  // Note: Copied from chrome_render_process_observer.cc to fix b/8676652.
-  //
-  // On platforms where the system NSS shared libraries are used,
-  // initialize NSS now because it won't be able to load the .so's
-  // after entering the sandbox.
-  if (!command_line->HasSwitch(switches::kSingleProcess))
-    crypto::InitNSSSafely();
-#endif
 
 #if defined(ARCH_CPU_ARM_FAMILY) && !defined(OS_ANDROID)
   PlatformPollFreemem();
@@ -138,8 +128,7 @@ void CastContentRendererClient::RenderThreadStarted() {
     }
   }
 
-  cast_observer_.reset(
-      new CastRenderProcessObserver(GetRendererMessageFilters()));
+  cast_observer_.reset(new CastRenderProcessObserver());
 
   prescient_networking_dispatcher_.reset(
       new network_hints::PrescientNetworkingDispatcher());
@@ -191,7 +180,7 @@ void CastContentRendererClient::AddKeySystems(
 scoped_ptr<::media::RendererFactory>
 CastContentRendererClient::CreateMediaRendererFactory(
     ::content::RenderFrame* render_frame,
-    const scoped_refptr<::media::GpuVideoAcceleratorFactories>& gpu_factories,
+    ::media::GpuVideoAcceleratorFactories* gpu_factories,
     const scoped_refptr<::media::MediaLog>& media_log) {
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (!cmd_line->HasSwitch(switches::kEnableCmaMediaPipeline))
@@ -199,7 +188,7 @@ CastContentRendererClient::CreateMediaRendererFactory(
 
   return scoped_ptr<::media::RendererFactory>(
       new chromecast::media::ChromecastMediaRendererFactory(
-          gpu_factories, media_log, render_frame->GetRoutingID()));
+          gpu_factories, render_frame->GetRoutingID()));
 }
 #endif
 
@@ -210,8 +199,9 @@ CastContentRendererClient::GetPrescientNetworking() {
 
 void CastContentRendererClient::DeferMediaLoad(
     content::RenderFrame* render_frame,
+    bool render_frame_has_played_media_before,
     const base::Closure& closure) {
-  if (!render_frame->IsHidden()) {
+  if (!render_frame->IsHidden() || allow_hidden_media_playback_) {
     closure.Run();
     return;
   }

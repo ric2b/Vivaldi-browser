@@ -4,9 +4,14 @@
 
 #include "mojo/services/network/web_socket_impl.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "mojo/common/handle_watcher.h"
+#include "mojo/message_pump/handle_watcher.h"
 #include "mojo/services/network/network_context.h"
 #include "mojo/services/network/public/cpp/web_socket_read_queue.h"
 #include "mojo/services/network/public/cpp/web_socket_write_queue.h"
@@ -31,15 +36,15 @@ struct TypeConverter<net::WebSocketFrameHeader::OpCode,
     typedef net::WebSocketFrameHeader::OpCode OpCode;
     // These compile asserts verify that the same underlying values are used for
     // both types, so we can simply cast between them.
-    COMPILE_ASSERT(static_cast<OpCode>(WebSocket::MESSAGE_TYPE_CONTINUATION) ==
-                       net::WebSocketFrameHeader::kOpCodeContinuation,
-                   enum_values_must_match_for_opcode_continuation);
-    COMPILE_ASSERT(static_cast<OpCode>(WebSocket::MESSAGE_TYPE_TEXT) ==
-                       net::WebSocketFrameHeader::kOpCodeText,
-                   enum_values_must_match_for_opcode_text);
-    COMPILE_ASSERT(static_cast<OpCode>(WebSocket::MESSAGE_TYPE_BINARY) ==
-                       net::WebSocketFrameHeader::kOpCodeBinary,
-                   enum_values_must_match_for_opcode_binary);
+    static_assert(static_cast<OpCode>(WebSocket::MESSAGE_TYPE_CONTINUATION) ==
+                      net::WebSocketFrameHeader::kOpCodeContinuation,
+                  "enum values must match for opcode continuation");
+    static_assert(static_cast<OpCode>(WebSocket::MESSAGE_TYPE_TEXT) ==
+                      net::WebSocketFrameHeader::kOpCodeText,
+                  "enum values must match for opcode text");
+    static_assert(static_cast<OpCode>(WebSocket::MESSAGE_TYPE_BINARY) ==
+                      net::WebSocketFrameHeader::kOpCodeBinary,
+                  "enum values must match for opcode binary");
     return static_cast<OpCode>(type);
   }
 };
@@ -63,8 +68,7 @@ typedef net::WebSocketEventInterface::ChannelState ChannelState;
 struct WebSocketEventHandler : public net::WebSocketEventInterface {
  public:
   WebSocketEventHandler(WebSocketClientPtr client)
-      : client_(client.Pass()) {
-  }
+      : client_(std::move(client)) {}
   ~WebSocketEventHandler() override {}
 
  private:
@@ -75,9 +79,9 @@ struct WebSocketEventHandler : public net::WebSocketEventInterface {
                            WebSocketMessageType type,
                            const std::vector<char>& data) override;
   ChannelState OnClosingHandshake() override;
-  ChannelState OnFlowControl(int64 quota) override;
+  ChannelState OnFlowControl(int64_t quota) override;
   ChannelState OnDropChannel(bool was_clean,
-                             uint16 code,
+                             uint16_t code,
                              const std::string& reason) override;
   ChannelState OnFailChannel(const std::string& message) override;
   ChannelState OnStartOpeningHandshake(
@@ -106,10 +110,10 @@ ChannelState WebSocketEventHandler::OnAddChannelResponse(
     const std::string& selected_protocol,
     const std::string& extensions) {
   DataPipe data_pipe;
-  receive_stream_ = data_pipe.producer_handle.Pass();
+  receive_stream_ = std::move(data_pipe.producer_handle);
   write_queue_.reset(new WebSocketWriteQueue(receive_stream_.get()));
-  client_->DidConnect(
-      selected_protocol, extensions, data_pipe.consumer_handle.Pass());
+  client_->DidConnect(selected_protocol, extensions,
+                      std::move(data_pipe.consumer_handle));
   return WebSocketEventInterface::CHANNEL_ALIVE;
 }
 
@@ -130,13 +134,13 @@ ChannelState WebSocketEventHandler::OnClosingHandshake() {
   return WebSocketEventInterface::CHANNEL_ALIVE;
 }
 
-ChannelState WebSocketEventHandler::OnFlowControl(int64 quota) {
+ChannelState WebSocketEventHandler::OnFlowControl(int64_t quota) {
   client_->DidReceiveFlowControl(quota);
   return WebSocketEventInterface::CHANNEL_ALIVE;
 }
 
 ChannelState WebSocketEventHandler::OnDropChannel(bool was_clean,
-                                                  uint16 code,
+                                                  uint16_t code,
                                                   const std::string& reason) {
   client_->DidClose(was_clean, code, reason);
   return WebSocketEventInterface::CHANNEL_DELETED;
@@ -177,13 +181,12 @@ void WebSocketEventHandler::DidWriteToReceiveStream(
 
 }  // namespace mojo
 
-WebSocketImpl::WebSocketImpl(
-    NetworkContext* context,
-    scoped_ptr<mojo::AppRefCount> app_refcount,
-    InterfaceRequest<WebSocket> request)
-    : context_(context), app_refcount_(app_refcount.Pass()),
-      binding_(this, request.Pass()) {
-}
+WebSocketImpl::WebSocketImpl(NetworkContext* context,
+                             scoped_ptr<mojo::AppRefCount> app_refcount,
+                             InterfaceRequest<WebSocket> request)
+    : context_(context),
+      app_refcount_(std::move(app_refcount)),
+      binding_(this, std::move(request)) {}
 
 WebSocketImpl::~WebSocketImpl() {
 }
@@ -194,15 +197,15 @@ void WebSocketImpl::Connect(const String& url,
                             ScopedDataPipeConsumerHandle send_stream,
                             WebSocketClientPtr client) {
   DCHECK(!channel_);
-  send_stream_ = send_stream.Pass();
+  send_stream_ = std::move(send_stream);
   read_queue_.reset(new WebSocketReadQueue(send_stream_.get()));
   scoped_ptr<net::WebSocketEventInterface> event_interface(
-      new WebSocketEventHandler(client.Pass()));
-  channel_.reset(new net::WebSocketChannel(event_interface.Pass(),
+      new WebSocketEventHandler(std::move(client)));
+  channel_.reset(new net::WebSocketChannel(std::move(event_interface),
                                            context_->url_request_context()));
   channel_->SendAddChannelRequest(GURL(url.get()),
-                                  protocols.To<std::vector<std::string> >(),
-                                  url::Origin(origin.get()));
+                                  protocols.To<std::vector<std::string>>(),
+                                  url::Origin(GURL(origin.get())));
 }
 
 void WebSocketImpl::Send(bool fin,

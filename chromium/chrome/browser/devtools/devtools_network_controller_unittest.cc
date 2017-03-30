@@ -2,16 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#include "chrome/browser/devtools/devtools_network_controller.h"
 
+#include <stdint.h>
+#include <string>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/devtools/devtools_network_conditions.h"
-#include "chrome/browser/devtools/devtools_network_controller.h"
 #include "chrome/browser/devtools/devtools_network_interceptor.h"
 #include "chrome/browser/devtools/devtools_network_transaction.h"
+#include "chrome/browser/devtools/devtools_network_upload_data_stream.h"
+#include "net/base/chunked_upload_data_stream.h"
 #include "net/http/http_transaction_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -26,6 +32,8 @@ using net::TEST_MODE_SYNC_NET_START;
 
 const char kClientId[] = "42";
 const char kAnotherClientId[] = "24";
+const char kUploadData[] = "upload_data";
+int64_t kUploadIdentifier = 17;
 
 class TestCallback {
  public:
@@ -59,24 +67,36 @@ class DevToolsNetworkControllerHelper {
     network_layer_.CreateTransaction(
         net::DEFAULT_PRIORITY, &network_transaction);
     transaction_.reset(new DevToolsNetworkTransaction(
-        &controller_, network_transaction.Pass()));
+        &controller_, std::move(network_transaction)));
   }
 
-  net::HttpRequestInfo* GetRequest() {
-    if (!request_)
-      request_.reset(new MockHttpRequest(mock_transaction_));
-    return request_.get();
+  void SetNetworkState(bool offline, double download, double upload) {
+    scoped_ptr<DevToolsNetworkConditions> conditions(
+        new DevToolsNetworkConditions(offline, 0, download, upload));
+    controller_.SetNetworkState(kClientId, std::move(conditions));
   }
 
-  void SetNetworkState(const std::string id, bool offline) {
+  void SetNetworkState(const std::string& id, bool offline) {
     scoped_ptr<DevToolsNetworkConditions> conditions(
         new DevToolsNetworkConditions(offline));
-    controller_.SetNetworkStateOnIO(id, conditions.Pass());
+    controller_.SetNetworkState(id, std::move(conditions));
   }
 
-  int Start() {
-    return transaction_->Start(
-        GetRequest(), completion_callback_, net::BoundNetLog());
+  int Start(bool with_upload) {
+    request_.reset(new MockHttpRequest(mock_transaction_));
+
+    if (with_upload) {
+      upload_data_stream_.reset(
+          new net::ChunkedUploadDataStream(kUploadIdentifier));
+      upload_data_stream_->AppendData(
+          kUploadData, arraysize(kUploadData), true);
+      request_->upload_data_stream = upload_data_stream_.get();
+    }
+
+    int rv = transaction_->Start(
+        request_.get(), completion_callback_, net::BoundNetLog());
+    EXPECT_EQ(with_upload, !!transaction_->custom_upload_data_stream_);
+    return rv;
   }
 
   int Read() {
@@ -84,7 +104,31 @@ class DevToolsNetworkControllerHelper {
   }
 
   bool ShouldFail() {
-    return transaction_->interceptor_->ShouldFail(transaction_.get());
+    if (transaction_->interceptor_)
+      return transaction_->interceptor_->IsOffline();
+    DevToolsNetworkInterceptor* interceptor =
+        controller_.GetInterceptor(kClientId);
+    EXPECT_TRUE(!!interceptor);
+    return interceptor->IsOffline();
+  }
+
+  bool HasStarted() {
+    return !!transaction_->request_;
+  }
+
+  bool HasFailed() {
+    return transaction_->failed_;
+  }
+
+  void CancelTransaction() {
+    transaction_.reset();
+  }
+
+  int ReadUploadData() {
+    EXPECT_EQ(net::OK,
+        transaction_->custom_upload_data_stream_->Init(completion_callback_));
+    return transaction_->custom_upload_data_stream_->Read(
+        buffer_.get(), 64, completion_callback_);
   }
 
   ~DevToolsNetworkControllerHelper() {
@@ -92,7 +136,6 @@ class DevToolsNetworkControllerHelper {
   }
 
   TestCallback* callback() { return &callback_; }
-  MockTransaction* mock_transaction() { return &mock_transaction_; }
   DevToolsNetworkController* controller() { return &controller_; }
   DevToolsNetworkTransaction* transaction() { return transaction_.get(); }
 
@@ -105,18 +148,19 @@ class DevToolsNetworkControllerHelper {
   DevToolsNetworkController controller_;
   scoped_ptr<DevToolsNetworkTransaction> transaction_;
   scoped_refptr<net::IOBuffer> buffer_;
+  scoped_ptr<net::ChunkedUploadDataStream> upload_data_stream_;
   scoped_ptr<MockHttpRequest> request_;
 };
 
 TEST(DevToolsNetworkControllerTest, SingleDisableEnable) {
   DevToolsNetworkControllerHelper helper;
-  helper.SetNetworkState(kClientId, false);
-  helper.Start();
+  helper.SetNetworkState(false, 0, 0);
+  helper.Start(false);
 
   EXPECT_FALSE(helper.ShouldFail());
-  helper.SetNetworkState(kClientId, true);
+  helper.SetNetworkState(true, 0, 0);
   EXPECT_TRUE(helper.ShouldFail());
-  helper.SetNetworkState(kClientId, false);
+  helper.SetNetworkState(false, 0, 0);
   EXPECT_FALSE(helper.ShouldFail());
 
   base::RunLoop().RunUntilIdle();
@@ -124,25 +168,25 @@ TEST(DevToolsNetworkControllerTest, SingleDisableEnable) {
 
 TEST(DevToolsNetworkControllerTest, InterceptorIsolation) {
   DevToolsNetworkControllerHelper helper;
-  helper.SetNetworkState(kClientId, false);
-  helper.Start();
+  helper.SetNetworkState(false, 0, 0);
+  helper.Start(false);
 
   EXPECT_FALSE(helper.ShouldFail());
   helper.SetNetworkState(kAnotherClientId, true);
   EXPECT_FALSE(helper.ShouldFail());
-  helper.SetNetworkState(kClientId, true);
+  helper.SetNetworkState(true, 0, 0);
   EXPECT_TRUE(helper.ShouldFail());
 
   helper.SetNetworkState(kAnotherClientId, false);
-  helper.SetNetworkState(kClientId, false);
+  helper.SetNetworkState(false, 0, 0);
   base::RunLoop().RunUntilIdle();
 }
 
 TEST(DevToolsNetworkControllerTest, FailOnStart) {
   DevToolsNetworkControllerHelper helper;
-  helper.SetNetworkState(kClientId, true);
+  helper.SetNetworkState(true, 0, 0);
 
-  int rv = helper.Start();
+  int rv = helper.Start(false);
   EXPECT_EQ(rv, net::ERR_INTERNET_DISCONNECTED);
 
   base::RunLoop().RunUntilIdle();
@@ -151,46 +195,45 @@ TEST(DevToolsNetworkControllerTest, FailOnStart) {
 
 TEST(DevToolsNetworkControllerTest, FailRunningTransaction) {
   DevToolsNetworkControllerHelper helper;
-  helper.SetNetworkState(kClientId, false);
+  helper.SetNetworkState(false, 0, 0);
   TestCallback* callback = helper.callback();
 
-  int rv = helper.Start();
+  int rv = helper.Start(false);
   EXPECT_EQ(rv, net::OK);
 
-  scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(64));
   rv = helper.Read();
   EXPECT_EQ(rv, net::ERR_IO_PENDING);
   EXPECT_EQ(callback->run_count(), 0);
 
-  helper.SetNetworkState(kClientId, true);
+  helper.SetNetworkState(true, 0, 0);
+  EXPECT_EQ(callback->run_count(), 0);
+
+  // Wait until HttpTrancation completes reading and invokes callback.
+  // DevToolsNetworkTransaction should report error instead.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(callback->run_count(), 1);
   EXPECT_EQ(callback->value(), net::ERR_INTERNET_DISCONNECTED);
 
-  // Wait until HttpTrancation completes reading and invokes callback.
-  // DevToolsNetworkTransaction should ignore callback, because it has
-  // reported network error already.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(callback->run_count(), 1);
-
-  // Check that transaction in not failed second time.
-  helper.SetNetworkState(kClientId, false);
-  helper.SetNetworkState(kClientId, true);
+  // Check that transaction is not failed second time.
+  helper.SetNetworkState(false, 0, 0);
+  helper.SetNetworkState(true, 0, 0);
   EXPECT_EQ(callback->run_count(), 1);
 }
 
 TEST(DevToolsNetworkControllerTest, ReadAfterFail) {
   DevToolsNetworkControllerHelper helper;
-  helper.SetNetworkState(kClientId, false);
+  helper.SetNetworkState(false, 0, 0);
 
-  int rv = helper.Start();
+  int rv = helper.Start(false);
   EXPECT_EQ(rv, net::OK);
-  EXPECT_TRUE(helper.transaction()->request());
+  EXPECT_TRUE(helper.HasStarted());
 
-  helper.SetNetworkState(kClientId, true);
-  EXPECT_TRUE(helper.transaction()->failed());
+  helper.SetNetworkState(true, 0, 0);
+  // Not failed yet, as no IO was initiated.
+  EXPECT_FALSE(helper.HasFailed());
 
-  scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(64));
   rv = helper.Read();
+  // Fails on first IO.
   EXPECT_EQ(rv, net::ERR_INTERNET_DISCONNECTED);
 
   // Check that callback is never invoked.
@@ -198,17 +241,87 @@ TEST(DevToolsNetworkControllerTest, ReadAfterFail) {
   EXPECT_EQ(helper.callback()->run_count(), 0);
 }
 
-TEST(DevToolsNetworkControllerTest, AllowsDevToolsRequests) {
+TEST(DevToolsNetworkControllerTest, CancelTransaction) {
   DevToolsNetworkControllerHelper helper;
-  helper.SetNetworkState(kClientId, false);
-  helper.mock_transaction()->request_headers =
-      "X-DevTools-Emulate-Network-Conditions-Client-Id: 42\r\n"
-      "X-DevTools-Request-Initiator: frontend\r\n";
-  helper.Start();
+  helper.SetNetworkState(false, 0, 0);
 
-  EXPECT_FALSE(helper.ShouldFail());
-  helper.SetNetworkState(kClientId, true);
-  EXPECT_FALSE(helper.ShouldFail());
+  int rv = helper.Start(false);
+  EXPECT_EQ(rv, net::OK);
+  EXPECT_TRUE(helper.HasStarted());
+  helper.CancelTransaction();
+
+  // Should not crash.
+  helper.SetNetworkState(true, 0, 0);
+  helper.SetNetworkState(false, 0, 0);
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST(DevToolsNetworkControllerTest, CancelFailedTransaction) {
+  DevToolsNetworkControllerHelper helper;
+  helper.SetNetworkState(true, 0, 0);
+
+  int rv = helper.Start(false);
+  EXPECT_EQ(rv, net::ERR_INTERNET_DISCONNECTED);
+  EXPECT_TRUE(helper.HasStarted());
+  helper.CancelTransaction();
+
+  // Should not crash.
+  helper.SetNetworkState(true, 0, 0);
+  helper.SetNetworkState(false, 0, 0);
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST(DevToolsNetworkControllerTest, UploadDoesNotFail) {
+  DevToolsNetworkControllerHelper helper;
+  helper.SetNetworkState(true, 0, 0);
+  int rv = helper.Start(true);
+  EXPECT_EQ(rv, net::ERR_INTERNET_DISCONNECTED);
+  rv = helper.ReadUploadData();
+  EXPECT_EQ(rv, static_cast<int>(arraysize(kUploadData)));
+}
+
+TEST(DevToolsNetworkControllerTest, DownloadOnly) {
+  DevToolsNetworkControllerHelper helper;
+  TestCallback* callback = helper.callback();
+
+  helper.SetNetworkState(false, 10000000, 0);
+  int rv = helper.Start(false);
+  EXPECT_EQ(rv, net::ERR_IO_PENDING);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(callback->run_count(), 1);
+  EXPECT_GE(callback->value(), net::OK);
+
+  rv = helper.Read();
+  EXPECT_EQ(rv, net::ERR_IO_PENDING);
+  EXPECT_EQ(callback->run_count(), 1);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(callback->run_count(), 2);
+  EXPECT_GE(callback->value(), net::OK);
+}
+
+TEST(DevToolsNetworkControllerTest, UploadOnly) {
+  DevToolsNetworkControllerHelper helper;
+  TestCallback* callback = helper.callback();
+
+  helper.SetNetworkState(false, 0, 1000000);
+  int rv = helper.Start(true);
+  EXPECT_EQ(rv, net::OK);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(callback->run_count(), 0);
+
+  rv = helper.Read();
+  EXPECT_EQ(rv, net::ERR_IO_PENDING);
+  EXPECT_EQ(callback->run_count(), 0);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(callback->run_count(), 1);
+  EXPECT_GE(callback->value(), net::OK);
+
+  rv = helper.ReadUploadData();
+  EXPECT_EQ(rv, net::ERR_IO_PENDING);
+  EXPECT_EQ(callback->run_count(), 1);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(callback->run_count(), 2);
+  EXPECT_EQ(callback->value(), static_cast<int>(arraysize(kUploadData)));
 }
 
 }  // namespace test

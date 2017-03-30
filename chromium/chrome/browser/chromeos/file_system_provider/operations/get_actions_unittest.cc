@@ -5,10 +5,13 @@
 #include "chrome/browser/chromeos/file_system_provider/operations/get_actions.h"
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
@@ -29,7 +32,9 @@ namespace {
 const char kExtensionId[] = "mbflcebpggnecokmikipoihdbecnjfoj";
 const char kFileSystemId[] = "testing-file-system";
 const int kRequestId = 2;
-const base::FilePath::CharType kEntryPath[] = FILE_PATH_LITERAL("/directory");
+const base::FilePath::CharType kDirectoryPath[] =
+    FILE_PATH_LITERAL("/directory");
+const base::FilePath::CharType kFilePath[] = FILE_PATH_LITERAL("/file");
 
 // Callback invocation logger. Acts as a fileapi end-point.
 class CallbackLogger {
@@ -81,7 +86,7 @@ void CreateRequestValueFromJSON(const std::string& json,
   ASSERT_TRUE(value->GetAsList(&value_as_list));
   scoped_ptr<Params> params(Params::Create(*value_as_list));
   ASSERT_TRUE(params.get());
-  *result = RequestValue::CreateForGetActionsSuccess(params.Pass());
+  *result = RequestValue::CreateForGetActionsSuccess(std::move(params));
   ASSERT_TRUE(result->get());
 }
 
@@ -97,9 +102,13 @@ class FileSystemProviderOperationsGetActionsTest : public testing::Test {
         kExtensionId, MountOptions(kFileSystemId, "" /* display_name */),
         base::FilePath(), false /* configurable */, true /* watchable */,
         extensions::SOURCE_FILE);
+    entry_paths_.clear();
+    entry_paths_.push_back(base::FilePath(kDirectoryPath));
+    entry_paths_.push_back(base::FilePath(kFilePath));
   }
 
   ProvidedFileSystemInfo file_system_info_;
+  std::vector<base::FilePath> entry_paths_;
 };
 
 TEST_F(FileSystemProviderOperationsGetActionsTest, Execute) {
@@ -108,7 +117,7 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, Execute) {
   util::LoggingDispatchEventImpl dispatcher(true /* dispatch_reply */);
   CallbackLogger callback_logger;
 
-  GetActions get_actions(NULL, file_system_info_, base::FilePath(kEntryPath),
+  GetActions get_actions(NULL, file_system_info_, entry_paths_,
                          base::Bind(&CallbackLogger::OnGetActions,
                                     base::Unretained(&callback_logger)));
   get_actions.SetDispatchEventImplForTesting(
@@ -133,14 +142,16 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, Execute) {
       GetActionsRequestedOptions::Populate(*options_as_value, &options));
   EXPECT_EQ(kFileSystemId, options.file_system_id);
   EXPECT_EQ(kRequestId, options.request_id);
-  EXPECT_EQ(kEntryPath, options.entry_path);
+  ASSERT_EQ(entry_paths_.size(), options.entry_paths.size());
+  EXPECT_EQ(entry_paths_[0].value(), options.entry_paths[0]);
+  EXPECT_EQ(entry_paths_[1].value(), options.entry_paths[1]);
 }
 
 TEST_F(FileSystemProviderOperationsGetActionsTest, Execute_NoListener) {
   util::LoggingDispatchEventImpl dispatcher(false /* dispatch_reply */);
   CallbackLogger callback_logger;
 
-  GetActions get_actions(NULL, file_system_info_, base::FilePath(kEntryPath),
+  GetActions get_actions(NULL, file_system_info_, entry_paths_,
                          base::Bind(&CallbackLogger::OnGetActions,
                                     base::Unretained(&callback_logger)));
   get_actions.SetDispatchEventImplForTesting(
@@ -154,7 +165,7 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, OnSuccess) {
   util::LoggingDispatchEventImpl dispatcher(true /* dispatch_reply */);
   CallbackLogger callback_logger;
 
-  GetActions get_actions(NULL, file_system_info_, base::FilePath(kEntryPath),
+  GetActions get_actions(NULL, file_system_info_, entry_paths_,
                          base::Bind(&CallbackLogger::OnGetActions,
                                     base::Unretained(&callback_logger)));
   get_actions.SetDispatchEventImplForTesting(
@@ -189,7 +200,7 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, OnSuccess) {
   ASSERT_NO_FATAL_FAILURE(CreateRequestValueFromJSON(input, &request_value));
 
   const bool has_more = false;
-  get_actions.OnSuccess(kRequestId, request_value.Pass(), has_more);
+  get_actions.OnSuccess(kRequestId, std::move(request_value), has_more);
 
   ASSERT_EQ(1u, callback_logger.events().size());
   CallbackLogger::Event* event = callback_logger.events()[0];
@@ -213,7 +224,7 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, OnError) {
   util::LoggingDispatchEventImpl dispatcher(true /* dispatch_reply */);
   CallbackLogger callback_logger;
 
-  GetActions get_actions(NULL, file_system_info_, base::FilePath(kEntryPath),
+  GetActions get_actions(NULL, file_system_info_, entry_paths_,
                          base::Bind(&CallbackLogger::OnGetActions,
                                     base::Unretained(&callback_logger)));
   get_actions.SetDispatchEventImplForTesting(

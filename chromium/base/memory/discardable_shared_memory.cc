@@ -4,19 +4,28 @@
 
 #include "base/memory/discardable_shared_memory.h"
 
-#if defined(OS_POSIX)
-#include <unistd.h>
-#endif
+#include <stdint.h>
 
 #include <algorithm>
 
 #include "base/atomicops.h"
+#include "base/bits.h"
 #include "base/logging.h"
 #include "base/numerics/safe_math.h"
 #include "base/process/process_metrics.h"
+#include "build/build_config.h"
+
+#if defined(OS_POSIX) && !defined(OS_NACL)
+// For madvise() which is available on all POSIX compatible systems.
+#include <sys/mman.h>
+#endif
 
 #if defined(OS_ANDROID)
 #include "third_party/ashmem/ashmem.h"
+#endif
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
 #endif
 
 namespace base {
@@ -32,28 +41,28 @@ typedef uintptr_t UAtomicType;
 // does not have enough precision to contain a timestamp in the standard
 // serialized format.
 template <int>
-Time TimeFromWireFormat(int64 value);
+Time TimeFromWireFormat(int64_t value);
 template <int>
-int64 TimeToWireFormat(Time time);
+int64_t TimeToWireFormat(Time time);
 
 // Serialize to Unix time when using 4-byte wire format.
 // Note: 19 January 2038, this will cease to work.
 template <>
-Time ALLOW_UNUSED_TYPE TimeFromWireFormat<4>(int64 value) {
+Time ALLOW_UNUSED_TYPE TimeFromWireFormat<4>(int64_t value) {
   return value ? Time::UnixEpoch() + TimeDelta::FromSeconds(value) : Time();
 }
 template <>
-int64 ALLOW_UNUSED_TYPE TimeToWireFormat<4>(Time time) {
+int64_t ALLOW_UNUSED_TYPE TimeToWireFormat<4>(Time time) {
   return time > Time::UnixEpoch() ? (time - Time::UnixEpoch()).InSeconds() : 0;
 }
 
 // Standard serialization format when using 8-byte wire format.
 template <>
-Time ALLOW_UNUSED_TYPE TimeFromWireFormat<8>(int64 value) {
+Time ALLOW_UNUSED_TYPE TimeFromWireFormat<8>(int64_t value) {
   return Time::FromInternalValue(value);
 }
 template <>
-int64 ALLOW_UNUSED_TYPE TimeToWireFormat<8>(Time time) {
+int64_t ALLOW_UNUSED_TYPE TimeToWireFormat<8>(Time time) {
   return time.ToInternalValue();
 }
 
@@ -62,7 +71,7 @@ struct SharedState {
 
   explicit SharedState(AtomicType ivalue) { value.i = ivalue; }
   SharedState(LockState lock_state, Time timestamp) {
-    int64 wire_timestamp = TimeToWireFormat<sizeof(AtomicType)>(timestamp);
+    int64_t wire_timestamp = TimeToWireFormat<sizeof(AtomicType)>(timestamp);
     DCHECK_GE(wire_timestamp, 0);
     DCHECK_EQ(lock_state & ~1, 0);
     value.u = (static_cast<UAtomicType>(wire_timestamp) << 1) | lock_state;
@@ -89,15 +98,9 @@ SharedState* SharedStateFromSharedMemory(const SharedMemory& shared_memory) {
   return static_cast<SharedState*>(shared_memory.memory());
 }
 
-// Round up |size| to a multiple of alignment, which must be a power of two.
-size_t Align(size_t alignment, size_t size) {
-  DCHECK_EQ(alignment & (alignment - 1), 0u);
-  return (size + alignment - 1) & ~(alignment - 1);
-}
-
 // Round up |size| to a multiple of page size.
 size_t AlignToPageSize(size_t size) {
-  return Align(base::GetPageSize(), size);
+  return bits::Align(size, base::GetPageSize());
 }
 
 }  // namespace
@@ -218,11 +221,20 @@ DiscardableSharedMemory::LockResult DiscardableSharedMemory::Lock(
   DCHECK_EQ(locked_pages_.size(), locked_page_count_);
 #endif
 
+// Pin pages if supported.
 #if defined(OS_ANDROID)
   SharedMemoryHandle handle = shared_memory_.handle();
   if (SharedMemory::IsHandleValid(handle)) {
     if (ashmem_pin_region(
             handle.fd, AlignToPageSize(sizeof(SharedState)) + offset, length)) {
+      return PURGED;
+    }
+  }
+#elif defined(OS_WIN)
+  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
+    if (!VirtualAlloc(reinterpret_cast<char*>(shared_memory_.memory()) +
+                          AlignToPageSize(sizeof(SharedState)) + offset,
+                      length, MEM_RESET_UNDO, PAGE_READWRITE)) {
       return PURGED;
     }
   }
@@ -244,12 +256,25 @@ void DiscardableSharedMemory::Unlock(size_t offset, size_t length) {
 
   DCHECK(shared_memory_.memory());
 
+// Unpin pages if supported.
 #if defined(OS_ANDROID)
   SharedMemoryHandle handle = shared_memory_.handle();
   if (SharedMemory::IsHandleValid(handle)) {
     if (ashmem_unpin_region(
             handle.fd, AlignToPageSize(sizeof(SharedState)) + offset, length)) {
       DPLOG(ERROR) << "ashmem_unpin_region() failed";
+    }
+  }
+#elif defined(OS_WIN)
+  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
+    // Note: MEM_RESET is not technically gated on Win8.  However, this Unlock
+    // function needs to match the Lock behaviour (MEM_RESET_UNDO) to properly
+    // implement memory pinning.  It needs to bias towards preserving the
+    // contents of memory between an Unlock and next Lock.
+    if (!VirtualAlloc(reinterpret_cast<char*>(shared_memory_.memory()) +
+                          AlignToPageSize(sizeof(SharedState)) + offset,
+                      length, MEM_RESET, PAGE_READWRITE)) {
+      DPLOG(ERROR) << "VirtualAlloc() MEM_RESET failed in Unlock()";
     }
   }
 #endif
@@ -299,18 +324,14 @@ void DiscardableSharedMemory::Unlock(size_t offset, size_t length) {
 }
 
 void* DiscardableSharedMemory::memory() const {
-  return reinterpret_cast<uint8*>(shared_memory_.memory()) +
+  return reinterpret_cast<uint8_t*>(shared_memory_.memory()) +
          AlignToPageSize(sizeof(SharedState));
 }
 
 bool DiscardableSharedMemory::Purge(Time current_time) {
   // Calls to this function must be synchronized properly.
   DFAKE_SCOPED_LOCK(thread_collision_warner_);
-
-  // Early out if not mapped. This can happen if the segment was previously
-  // unmapped using a call to Close().
-  if (!shared_memory_.memory())
-    return true;
+  DCHECK(shared_memory_.memory());
 
   SharedState old_state(SharedState::UNLOCKED, last_known_usage_);
   SharedState new_state(SharedState::UNLOCKED, Time());
@@ -331,6 +352,39 @@ bool DiscardableSharedMemory::Purge(Time current_time) {
     return false;
   }
 
+// The next section will release as much resource as can be done
+// from the purging process, until the client process notices the
+// purge and releases its own references.
+// Note: this memory will not be accessed again.  The segment will be
+// freed asynchronously at a later time, so just do the best
+// immediately.
+#if defined(OS_POSIX) && !defined(OS_NACL)
+// Linux and Android provide MADV_REMOVE which is preferred as it has a
+// behavior that can be verified in tests. Other POSIX flavors (MacOSX, BSDs),
+// provide MADV_FREE which has the same result but memory is purged lazily.
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+#define MADV_PURGE_ARGUMENT MADV_REMOVE
+#else
+#define MADV_PURGE_ARGUMENT MADV_FREE
+#endif
+  // Advise the kernel to remove resources associated with purged pages.
+  // Subsequent accesses of memory pages will succeed, but might result in
+  // zero-fill-on-demand pages.
+  if (madvise(reinterpret_cast<char*>(shared_memory_.memory()) +
+                  AlignToPageSize(sizeof(SharedState)),
+              AlignToPageSize(mapped_size_), MADV_PURGE_ARGUMENT)) {
+    DPLOG(ERROR) << "madvise() failed";
+  }
+#elif defined(OS_WIN)
+  // MEM_DECOMMIT the purged pages to release the physical storage,
+  // either in memory or in the paging file on disk.  Pages remain RESERVED.
+  if (!VirtualFree(reinterpret_cast<char*>(shared_memory_.memory()) +
+                       AlignToPageSize(sizeof(SharedState)),
+                   AlignToPageSize(mapped_size_), MEM_DECOMMIT)) {
+    DPLOG(ERROR) << "VirtualFree() MEM_DECOMMIT failed in Purge()";
+  }
+#endif
+
   last_known_usage_ = Time();
   return true;
 }
@@ -345,29 +399,18 @@ bool DiscardableSharedMemory::IsMemoryResident() const {
          !result.GetTimestamp().is_null();
 }
 
+bool DiscardableSharedMemory::IsMemoryLocked() const {
+  DCHECK(shared_memory_.memory());
+
+  SharedState result(subtle::NoBarrier_Load(
+      &SharedStateFromSharedMemory(shared_memory_)->value.i));
+
+  return result.GetLockState() == SharedState::LOCKED;
+}
+
 void DiscardableSharedMemory::Close() {
   shared_memory_.Close();
 }
-
-#if defined(DISCARDABLE_SHARED_MEMORY_SHRINKING)
-void DiscardableSharedMemory::Shrink() {
-#if defined(OS_POSIX)
-  SharedMemoryHandle handle = shared_memory_.handle();
-  if (!SharedMemory::IsHandleValid(handle))
-    return;
-
-  // Truncate shared memory to size of SharedState.
-  if (HANDLE_EINTR(ftruncate(SharedMemory::GetFdFromSharedMemoryHandle(handle),
-                             AlignToPageSize(sizeof(SharedState)))) != 0) {
-    DPLOG(ERROR) << "ftruncate() failed";
-    return;
-  }
-  mapped_size_ = 0;
-#else
-  NOTIMPLEMENTED();
-#endif
-}
-#endif
 
 Time DiscardableSharedMemory::Now() const {
   return Time::Now();

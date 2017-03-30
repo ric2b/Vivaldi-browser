@@ -4,13 +4,18 @@
 
 #include "ui/views/controls/menu/menu_item_view.h"
 
+#include <stddef.h>
+
 #include "base/i18n/case_conversion.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/menu_model.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/image/image.h"
@@ -240,7 +245,7 @@ MenuItemView* MenuItemView::AddMenuItemAt(
     CreateSubmenu();
   DCHECK_GE(submenu_->child_count(), index);
   if (type == SEPARATOR) {
-    submenu_->AddChildViewAt(new MenuSeparator(this, separator_style), index);
+    submenu_->AddChildViewAt(new MenuSeparator(separator_style), index);
     return NULL;
   }
   MenuItemView* item = new MenuItemView(this, item_id, type);
@@ -418,7 +423,7 @@ int MenuItemView::GetHeightForWidth(int width) const {
 
   int height = child_at(0)->GetHeightForWidth(width);
   if (!icon_view_ && GetRootMenuItem()->has_icons())
-    height = std::max(height, GetMenuConfig().check_height);
+    height = std::max(height, MenuConfig::instance().check_height);
   height += GetBottomMargin() + GetTopMargin();
 
   return height;
@@ -545,13 +550,13 @@ void MenuItemView::Layout() {
       x -= width - kChildXPadding;
     }
     // Position |icon_view|.
-    const MenuConfig& config = GetMenuConfig();
+    const MenuConfig& config = MenuConfig::instance();
     if (icon_view_) {
       icon_view_->SizeToPreferredSize();
       gfx::Size size = icon_view_->GetPreferredSize();
       int x = config.item_left_margin + left_icon_margin_ +
               (icon_area_width_ - size.width()) / 2;
-      if (type_ == CHECKBOX || type_ == RADIO)
+      if (config.icons_in_label || type_ == CHECKBOX || type_ == RADIO)
         x = label_start_;
       int y =
           (height() + GetTopMargin() - GetBottomMargin() - size.height()) / 2;
@@ -565,13 +570,6 @@ void MenuItemView::SetMargins(int top_margin, int bottom_margin) {
   bottom_margin_ = bottom_margin;
 
   invalidate_dimensions();
-}
-
-const MenuConfig& MenuItemView::GetMenuConfig() const {
-  const MenuController* controller = GetMenuController();
-  if (controller)
-    return controller->menu_config_;
-  return MenuConfig::instance(NULL);
 }
 
 MenuItemView::MenuItemView(MenuItemView* parent,
@@ -612,7 +610,7 @@ const char* MenuItemView::GetClassName() const {
 //
 // This is invoked prior to Running a menu.
 void MenuItemView::UpdateMenuPartSizes() {
-  const MenuConfig& config = GetMenuConfig();
+  const MenuConfig& config = MenuConfig::instance();
 
   item_right_margin_ = config.label_to_arrow_padding + config.arrow_width +
                        config.arrow_to_edge_padding;
@@ -624,7 +622,7 @@ void MenuItemView::UpdateMenuPartSizes() {
   int padding = 0;
   if (config.always_use_icon_to_label_padding) {
     padding = config.icon_to_label_padding;
-  } else {
+  } else if (!config.icons_in_label) {
     padding = (has_icons_ || HasChecksOrRadioButtons()) ?
         config.icon_to_label_padding : 0;
   }
@@ -690,7 +688,8 @@ int MenuItemView::GetDrawStringFlags() {
     flags |= gfx::Canvas::TEXT_ALIGN_LEFT;
 
   if (GetRootMenuItem()->has_mnemonics_) {
-    if (GetMenuConfig().show_mnemonics || GetRootMenuItem()->show_mnemonics_) {
+    if (MenuConfig::instance().show_mnemonics ||
+        GetRootMenuItem()->show_mnemonics_) {
       flags |= gfx::Canvas::SHOW_PREFIX;
     } else {
       flags |= gfx::Canvas::HIDE_PREFIX;
@@ -706,7 +705,7 @@ const gfx::FontList& MenuItemView::GetFontList() const {
     if (font_list)
       return *font_list;
   }
-  return GetMenuConfig().font_list;
+  return MenuConfig::instance().font_list;
 }
 
 void MenuItemView::AddEmptyMenus() {
@@ -746,7 +745,7 @@ void MenuItemView::AdjustBoundsForRTLUI(gfx::Rect* rect) const {
 }
 
 void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
-  const MenuConfig& config = GetMenuConfig();
+  const MenuConfig& config = MenuConfig::instance();
   bool render_selection =
       (mode == PB_NORMAL && IsSelected() &&
        parent_menu_item_->GetSubmenu()->GetShowSelection(this) &&
@@ -778,9 +777,35 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
   const int bottom_margin = GetBottomMargin();
   const int available_height = height() - top_margin - bottom_margin;
 
+  // Calculate some colors.
+  ui::NativeTheme::ColorId color_id;
+  if (enabled()) {
+    color_id = render_selection ?
+        ui::NativeTheme::kColorId_SelectedMenuItemForegroundColor:
+        ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor;
+  } else {
+    bool emphasized = delegate &&
+                      delegate->GetShouldUseDisabledEmphasizedForegroundColor(
+                          GetCommand());
+    color_id = emphasized ?
+        ui::NativeTheme::kColorId_DisabledEmphasizedMenuItemForegroundColor :
+        ui::NativeTheme::kColorId_DisabledMenuItemForegroundColor;
+  }
+  SkColor fg_color = native_theme->GetSystemColor(color_id);
+  SkColor override_foreground_color;
+  if (delegate && delegate->GetForegroundColor(GetCommand(),
+                                               render_selection,
+                                               &override_foreground_color)) {
+    fg_color = override_foreground_color;
+  }
+  SkColor icon_color =
+      render_selection && !ui::MaterialDesignController::IsModeMaterial()
+          ? fg_color
+          : color_utils::DeriveDefaultIconColor(fg_color);
+
   // Render the check.
   if (type_ == CHECKBOX && delegate->IsItemChecked(GetCommand())) {
-    gfx::ImageSkia check = GetMenuCheckImage(render_selection);
+    gfx::ImageSkia check = GetMenuCheckImage(icon_color);
     // Don't use config.check_width here as it's padded
     // to force more padding (AURA).
     gfx::Rect check_bounds(icon_x,
@@ -801,26 +826,6 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
   }
 
   // Render the foreground.
-  ui::NativeTheme::ColorId color_id;
-  if (enabled()) {
-    color_id = render_selection ?
-        ui::NativeTheme::kColorId_SelectedMenuItemForegroundColor:
-        ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor;
-  } else {
-    bool emphasized = delegate &&
-                      delegate->GetShouldUseDisabledEmphasizedForegroundColor(
-                          GetCommand());
-    color_id = emphasized ?
-        ui::NativeTheme::kColorId_DisabledEmphasizedMenuItemForegroundColor :
-        ui::NativeTheme::kColorId_DisabledMenuItemForegroundColor;
-  }
-  SkColor fg_color = native_theme->GetSystemColor(color_id);
-  SkColor override_foreground_color;
-  if (delegate && delegate->GetForegroundColor(GetCommand(),
-                                               render_selection,
-                                               &override_foreground_color))
-    fg_color = override_foreground_color;
-
   const gfx::FontList& font_list = GetFontList();
   int accel_width = parent_menu_item_->GetSubmenu()->max_minor_text_width();
   int label_start = GetLabelStartForThisItem();
@@ -852,7 +857,7 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
 
   // Render the submenu indicator (arrow).
   if (HasSubmenu()) {
-    gfx::ImageSkia arrow = GetSubmenuArrowImage(render_selection);
+    gfx::ImageSkia arrow = GetSubmenuArrowImage(icon_color);
     gfx::Rect arrow_bounds(this->width() - config.arrow_width -
                                config.arrow_to_edge_padding,
                            top_margin + (available_height - arrow.height()) / 2,
@@ -872,7 +877,7 @@ void MenuItemView::PaintMinorText(gfx::Canvas* canvas,
   int available_height = height() - GetTopMargin() - GetBottomMargin();
   int max_accel_width =
       parent_menu_item_->GetSubmenu()->max_minor_text_width();
-  const MenuConfig& config = GetMenuConfig();
+  const MenuConfig& config = MenuConfig::instance();
   int accel_right_margin = config.align_arrow_and_shortcut ?
                            config.arrow_to_edge_padding :  item_right_margin_;
   gfx::Rect accel_bounds(width() - accel_right_margin - max_accel_width,
@@ -911,8 +916,8 @@ int MenuItemView::GetTopMargin() const {
 
   const MenuItemView* root = GetRootMenuItem();
   return root && root->has_icons_
-      ? GetMenuConfig().item_top_margin :
-        GetMenuConfig().item_no_icon_top_margin;
+             ? MenuConfig::instance().item_top_margin
+             : MenuConfig::instance().item_no_icon_top_margin;
 }
 
 int MenuItemView::GetBottomMargin() const {
@@ -921,8 +926,8 @@ int MenuItemView::GetBottomMargin() const {
 
   const MenuItemView* root = GetRootMenuItem();
   return root && root->has_icons_
-      ? GetMenuConfig().item_bottom_margin :
-        GetMenuConfig().item_no_icon_bottom_margin;
+             ? MenuConfig::instance().item_bottom_margin
+             : MenuConfig::instance().item_no_icon_bottom_margin;
 }
 
 gfx::Size MenuItemView::GetChildPreferredSize() const {
@@ -960,8 +965,8 @@ MenuItemView::MenuItemDimensions MenuItemView::CalculateDimensions() const {
   // Adjust item content height if menu has both items with and without icons.
   // This way all menu items will have the same height.
   if (!icon_view_ && GetRootMenuItem()->has_icons()) {
-    dimensions.height = std::max(dimensions.height,
-                                 GetMenuConfig().check_height);
+    dimensions.height =
+        std::max(dimensions.height, MenuConfig::instance().check_height);
   }
   dimensions.height += GetBottomMargin() + GetTopMargin();
 
@@ -1003,17 +1008,18 @@ MenuItemView::MenuItemDimensions MenuItemView::CalculateDimensions() const {
       std::max(dimensions.height,
                (subtitle_.empty() ? 0 : font_list.GetHeight()) +
                font_list.GetHeight() + GetBottomMargin() + GetTopMargin());
-  dimensions.height = std::max(dimensions.height,
-                               GetMenuConfig().item_min_height);
+  dimensions.height =
+      std::max(dimensions.height, MenuConfig::instance().item_min_height);
   return dimensions;
 }
 
 int MenuItemView::GetLabelStartForThisItem() const {
+  const MenuConfig& config = MenuConfig::instance();
   int label_start = label_start_ + left_icon_margin_ + right_icon_margin_;
-  if ((type_ == CHECKBOX || type_ == RADIO) && icon_view_) {
-    label_start += icon_view_->size().width() +
-        GetMenuConfig().icon_to_label_padding;
-  }
+  if ((config.icons_in_label || type_ == CHECKBOX || type_ == RADIO) &&
+      icon_view_)
+    label_start += icon_view_->size().width() + config.icon_to_label_padding;
+
   return label_start;
 }
 
@@ -1024,8 +1030,9 @@ base::string16 MenuItemView::GetMinorText() const {
   }
 
   ui::Accelerator accelerator;
-  if (GetMenuConfig().show_accelerators && GetDelegate() && GetCommand() &&
-          GetDelegate()->GetAccelerator(GetCommand(), &accelerator)) {
+  if (MenuConfig::instance().show_accelerators && GetDelegate() &&
+      GetCommand() &&
+      GetDelegate()->GetAccelerator(GetCommand(), &accelerator)) {
     return accelerator.GetShortcutText();
   }
 
@@ -1056,7 +1063,8 @@ int MenuItemView::GetMaxIconViewWidth() const {
       continue;
     } else if (menu_item->HasSubmenu()) {
       temp_width = menu_item->GetMaxIconViewWidth();
-    } else if (menu_item->icon_view()) {
+    } else if (menu_item->icon_view() &&
+               !MenuConfig::instance().icons_in_label) {
       temp_width = menu_item->icon_view()->GetPreferredSize().width();
     }
     width = std::max(width, temp_width);

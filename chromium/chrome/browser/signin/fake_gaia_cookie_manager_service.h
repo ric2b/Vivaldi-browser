@@ -6,6 +6,7 @@
 
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 
@@ -31,9 +32,12 @@ class FakeGaiaCookieManagerService : public GaiaCookieManagerService {
   void SetListAccountsResponseTwoAccounts(
     const char* email1, const char* gaia_id1,
     const char* email2, const char* gaia_id2);
-  void SetListAccountsResponseTwoAccountsWithExpiry(
-      const char* account1, bool account1_expired,
-      const char* account2, bool account2_expired);
+  void SetListAccountsResponseTwoAccountsWithExpiry(const char* email1,
+                                                    const char* gaia_id1,
+                                                    bool account1_expired,
+                                                    const char* email2,
+                                                    const char* gaia_id2,
+                                                    bool account2_expired);
 
   // Helper function to be used with KeyedService::SetTestingFactory().
   static scoped_ptr<KeyedService> Build(content::BrowserContext* context);

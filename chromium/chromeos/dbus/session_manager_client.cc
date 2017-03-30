@@ -4,6 +4,8 @@
 
 #include "chromeos/dbus/session_manager_client.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/socket.h>
 
 #include "base/bind.h"
@@ -11,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -115,15 +118,15 @@ class SessionManagerClientImpl : public SessionManagerClient {
     FOR_EACH_OBSERVER(Observer, observers_, EmitLoginPromptVisibleCalled());
   }
 
-  void RestartJob(int pid, const std::string& command_line) override {
+  void RestartJob(const std::vector<std::string>& argv) override {
     dbus::ScopedFileDescriptor local_auth_fd(new dbus::FileDescriptor);
     dbus::ScopedFileDescriptor remote_auth_fd(new dbus::FileDescriptor);
 
-    // The session_manager provides a new method to replace RestartJob, called
-    // RestartJobWithAuth, that is able to be used correctly within a PID
-    // namespace. To use it, the caller must create a unix domain socket pair
-    // and pass one end over dbus while holding the local end open for the
-    // duration of the call.
+    // session_manager's RestartJob call requires the caller to open a socket
+    // pair and pass one end over dbus while holding the local end open for the
+    // duration of the call. session_manager uses this to determine whether the
+    // PID the restart request originates from belongs to the browser itself.
+    //
     // Here, we call CreateValidCredConduit() to create the socket pair,
     // and then pass both ends along to CallRestartJobWithValidFd(), which
     // takes care of them from there.
@@ -146,7 +149,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
         FROM_HERE, create_credentials_conduit_closure,
         base::Bind(&SessionManagerClientImpl::CallRestartJobWithValidFd,
                    weak_ptr_factory_.GetWeakPtr(), base::Passed(&local_auth_fd),
-                   base::Passed(&remote_auth_fd), command_line),
+                   base::Passed(&remote_auth_fd), argv),
         false);
   }
 
@@ -275,7 +278,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
     dbus::MessageWriter writer(&method_call);
     // static_cast does not work due to signedness.
     writer.AppendArrayOfBytes(
-        reinterpret_cast<const uint8*>(policy_blob.data()), policy_blob.size());
+        reinterpret_cast<const uint8_t*>(policy_blob.data()),
+        policy_blob.size());
     session_manager_proxy_->CallMethod(
         &method_call,
         dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
@@ -329,6 +333,41 @@ class SessionManagerClientImpl : public SessionManagerClient {
         base::Bind(&SessionManagerClientImpl::OnGetServerBackedStateKeys,
                    weak_ptr_factory_.GetWeakPtr(),
                    callback));
+  }
+
+  void CheckArcAvailability(const ArcCallback& callback) override {
+    dbus::MethodCall method_call(
+        login_manager::kSessionManagerInterface,
+        login_manager::kSessionManagerCheckArcAvailability);
+
+    session_manager_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&SessionManagerClientImpl::OnCheckArcAvailability,
+                   weak_ptr_factory_.GetWeakPtr(), callback));
+  }
+
+  void StartArcInstance(const std::string& socket_path,
+                        const ArcCallback& callback) override {
+    dbus::MethodCall method_call(
+        login_manager::kSessionManagerInterface,
+        login_manager::kSessionManagerStartArcInstance);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(socket_path);
+    session_manager_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&SessionManagerClientImpl::OnArcMethod,
+                   weak_ptr_factory_.GetWeakPtr(),
+                   login_manager::kSessionManagerStartArcInstance, callback));
+  }
+
+  void StopArcInstance(const ArcCallback& callback) override {
+    dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
+                                 login_manager::kSessionManagerStopArcInstance);
+    session_manager_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&SessionManagerClientImpl::OnArcMethod,
+                   weak_ptr_factory_.GetWeakPtr(),
+                   login_manager::kSessionManagerStopArcInstance, callback));
   }
 
  protected:
@@ -410,7 +449,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
     writer.AppendString(username);
     // static_cast does not work due to signedness.
     writer.AppendArrayOfBytes(
-        reinterpret_cast<const uint8*>(policy_blob.data()), policy_blob.size());
+        reinterpret_cast<const uint8_t*>(policy_blob.data()),
+        policy_blob.size());
     session_manager_proxy_->CallMethod(
         &method_call,
         dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
@@ -421,19 +461,18 @@ class SessionManagerClientImpl : public SessionManagerClient {
             callback));
   }
 
-  // Calls RestartJobWithAuth to tell the session manager to restart the
-  // browser using the contents of command_line, authorizing the call
-  // using credentials acquired via remote_auth_fd.
-  // Ownership of local_auth_fd is held for the duration of the dbus call.
+  // Calls RestartJob to tell the session manager to restart the browser using
+  // the contents of |argv| as the command line, authorizing the call using
+  // credentials acquired via |remote_auth_fd|. Ownership of |local_auth_fd| is
+  // held for the duration of the dbus call.
   void CallRestartJobWithValidFd(dbus::ScopedFileDescriptor local_auth_fd,
                                  dbus::ScopedFileDescriptor remote_auth_fd,
-                                 const std::string& command_line) {
-    dbus::MethodCall method_call(
-        login_manager::kSessionManagerInterface,
-        login_manager::kSessionManagerRestartJobWithAuth);
+                                 const std::vector<std::string>& argv) {
+    dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
+                                 login_manager::kSessionManagerRestartJob);
     dbus::MessageWriter writer(&method_call);
     writer.AppendFileDescriptor(*remote_auth_fd);
-    writer.AppendString(command_line);
+    writer.AppendArrayOfStrings(argv);
 
     // Ownership of local_auth_fd is passed to the callback that is to be
     // called on completion of this method call. This keeps the browser end
@@ -521,7 +560,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
       return;
     }
     dbus::MessageReader reader(response);
-    const uint8* values = NULL;
+    const uint8_t* values = NULL;
     size_t length = 0;
     if (!reader.PopArrayOfBytes(&values, &length)) {
       LOG(ERROR) << "Invalid response: " << response->ToString();
@@ -565,7 +604,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
       LOG(ERROR) << "Invalid signal: " << signal->ToString();
       return;
     }
-    const bool success = base::StartsWithASCII(result_string, "success", false);
+    const bool success = base::StartsWith(result_string, "success",
+                                          base::CompareCase::INSENSITIVE_ASCII);
     FOR_EACH_OBSERVER(Observer, observers_, OwnerKeySet(success));
   }
 
@@ -577,7 +617,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
       LOG(ERROR) << "Invalid signal: " << signal->ToString();
       return;
     }
-    const bool success = base::StartsWithASCII(result_string, "success", false);
+    const bool success = base::StartsWith(result_string, "success",
+                                          base::CompareCase::INSENSITIVE_ASCII);
     FOR_EACH_OBSERVER(Observer, observers_, PropertyChangeComplete(success));
   }
 
@@ -613,7 +654,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
         LOG(ERROR) << "Bad response: " << response->ToString();
       } else {
         while (array_reader.HasMoreData()) {
-          const uint8* data = NULL;
+          const uint8_t* data = NULL;
           size_t size = 0;
           if (!array_reader.PopArrayOfBytes(&data, &size)) {
             LOG(ERROR) << "Bad response: " << response->ToString();
@@ -630,6 +671,37 @@ class SessionManagerClientImpl : public SessionManagerClient {
       callback.Run(state_keys);
   }
 
+  // Called when kSessionManagerCheckArcAvailability method is complete.
+  void OnCheckArcAvailability(const ArcCallback& callback,
+                              dbus::Response* response) {
+    bool available = false;
+    if (!response) {
+      LOG(ERROR) << "Failed to call "
+                 << login_manager::kSessionManagerCheckArcAvailability;
+    } else {
+      dbus::MessageReader reader(response);
+      if (!reader.PopBool(&available))
+        LOG(ERROR) << "Invalid response: " << response->ToString();
+    }
+    if (!callback.is_null())
+      callback.Run(available);
+  }
+
+  // Called when kSessionManagerStartArcInstance or
+  // kSessionManagerStopArcInstance methods complete.
+  void OnArcMethod(const std::string& method_name,
+                   const ArcCallback& callback,
+                   dbus::Response* response) {
+    bool success = false;
+    if (!response) {
+      LOG(ERROR) << "Failed to call " << method_name;
+    } else {
+      success = true;
+    }
+
+    if (!callback.is_null())
+      callback.Run(success);
+  }
 
   dbus::ObjectProxy* session_manager_proxy_;
   scoped_ptr<BlockingMethodCaller> blocking_method_caller_;
@@ -668,7 +740,7 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
   }
   bool IsScreenLocked() const override { return screen_is_locked_; }
   void EmitLoginPromptVisible() override {}
-  void RestartJob(int pid, const std::string& command_line) override {}
+  void RestartJob(const std::vector<std::string>& argv) override {}
   void StartSession(const std::string& user_email) override {}
   void StopSession() override {}
   void NotifySupervisedUserCreationStarted() override {}
@@ -794,6 +866,19 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
 
     if (!callback.is_null())
       callback.Run(state_keys);
+  }
+
+  void CheckArcAvailability(const ArcCallback& callback) override {
+    callback.Run(false);
+  }
+
+  void StartArcInstance(const std::string& socket_path,
+                        const ArcCallback& callback) override {
+    callback.Run(false);
+  }
+
+  void StopArcInstance(const ArcCallback& callback) override {
+    callback.Run(false);
   }
 
  private:

@@ -6,6 +6,8 @@
 
 #include "skia/ext/platform_canvas.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
@@ -42,8 +44,7 @@ bool IsOfColor(const SkBitmap& bitmap, int x, int y, uint32_t color) {
 bool VerifyRect(const PlatformCanvas& canvas,
                 uint32_t canvas_color, uint32_t rect_color,
                 int x, int y, int w, int h) {
-  SkBaseDevice* device = skia::GetTopDevice(canvas);
-  const SkBitmap& bitmap = device->accessBitmap(false);
+  const SkBitmap bitmap = skia::ReadPixels(const_cast<PlatformCanvas*>(&canvas));
   SkAutoLockPixels lock(bitmap);
 
   for (int cur_y = 0; cur_y < bitmap.height(); cur_y++) {
@@ -63,7 +64,7 @@ bool VerifyRect(const PlatformCanvas& canvas,
   return true;
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(USE_AURA) && !defined(OS_MACOSX)
 // Return true if canvas has something that passes for a rounded-corner
 // rectangle. Basically, we're just checking to make sure that the pixels in the
 // middle are of rect_color and pixels in the corners are of canvas_color.
@@ -100,10 +101,12 @@ bool VerifyBlackRect(const PlatformCanvas& canvas, int x, int y, int w, int h) {
   return VerifyRect(canvas, SK_ColorWHITE, SK_ColorBLACK, x, y, w, h);
 }
 
+#if !defined(USE_AURA)  // http://crbug.com/154358
 // Check that every pixel in the canvas is a single color.
 bool VerifyCanvasColor(const PlatformCanvas& canvas, uint32_t canvas_color) {
   return VerifyRect(canvas, canvas_color, 0, 0, 0, 0, 0);
 }
+#endif  // !defined(USE_AURA)
 
 #if defined(OS_WIN)
 void DrawNativeRect(PlatformCanvas& canvas, int x, int y, int w, int h) {
@@ -208,7 +211,6 @@ TEST(PlatformCanvas, SkLayer) {
 }
 
 #if !defined(USE_AURA)  // http://crbug.com/154358
-
 // Test native clipping.
 TEST(PlatformCanvas, ClipRegion) {
   // Initialize a white canvas
@@ -233,7 +235,6 @@ TEST(PlatformCanvas, ClipRegion) {
   }
   EXPECT_TRUE(VerifyCanvasColor(*canvas, SK_ColorWHITE));
 }
-
 #endif  // !defined(USE_AURA)
 
 // Test the layers get filled properly by native rendering.
@@ -396,66 +397,5 @@ TEST(PlatformCanvas, TranslateLayer) {
 }
 
 #endif  // #if !defined(USE_AURA)
-
-TEST(PlatformBitmapTest, PlatformBitmap) {
-  const int kWidth = 400;
-  const int kHeight = 300;
-  scoped_ptr<PlatformBitmap> platform_bitmap(new PlatformBitmap);
-
-  EXPECT_TRUE(0 == platform_bitmap->GetSurface());
-  EXPECT_TRUE(platform_bitmap->GetBitmap().empty());
-  EXPECT_TRUE(platform_bitmap->GetBitmap().isNull());
-
-  EXPECT_TRUE(platform_bitmap->Allocate(kWidth, kHeight, /*is_opaque=*/false));
-
-  EXPECT_TRUE(0 != platform_bitmap->GetSurface());
-  EXPECT_FALSE(platform_bitmap->GetBitmap().empty());
-  EXPECT_FALSE(platform_bitmap->GetBitmap().isNull());
-  EXPECT_EQ(kWidth, platform_bitmap->GetBitmap().width());
-  EXPECT_EQ(kHeight, platform_bitmap->GetBitmap().height());
-  EXPECT_LE(static_cast<size_t>(platform_bitmap->GetBitmap().width()*4),
-            platform_bitmap->GetBitmap().rowBytes());
-  EXPECT_EQ(kN32_SkColorType,  // Same for all platforms.
-            platform_bitmap->GetBitmap().colorType());
-  EXPECT_TRUE(platform_bitmap->GetBitmap().lockPixelsAreWritable());
-#if defined(SK_DEBUG)
-  EXPECT_TRUE(platform_bitmap->GetBitmap().pixelRef()->isLocked());
-#endif
-  EXPECT_TRUE(platform_bitmap->GetBitmap().pixelRef()->unique());
-
-  *(platform_bitmap->GetBitmap().getAddr32(10, 20)) = 0xDEED1020;
-  *(platform_bitmap->GetBitmap().getAddr32(20, 30)) = 0xDEED2030;
-
-  SkBitmap sk_bitmap = platform_bitmap->GetBitmap();
-  sk_bitmap.lockPixels();
-
-  EXPECT_FALSE(platform_bitmap->GetBitmap().pixelRef()->unique());
-  EXPECT_FALSE(sk_bitmap.pixelRef()->unique());
-
-  EXPECT_EQ(0xDEED1020, *sk_bitmap.getAddr32(10, 20));
-  EXPECT_EQ(0xDEED2030, *sk_bitmap.getAddr32(20, 30));
-
-  *(platform_bitmap->GetBitmap().getAddr32(30, 40)) = 0xDEED3040;
-
-  // The SkBitmaps derived from a PlatformBitmap must be capable of outliving
-  // the PlatformBitmap.
-  platform_bitmap.reset();
-
-  EXPECT_TRUE(sk_bitmap.pixelRef()->unique());
-
-  EXPECT_EQ(0xDEED1020, *sk_bitmap.getAddr32(10, 20));
-  EXPECT_EQ(0xDEED2030, *sk_bitmap.getAddr32(20, 30));
-  EXPECT_EQ(0xDEED3040, *sk_bitmap.getAddr32(30, 40));
-  sk_bitmap.unlockPixels();
-
-  EXPECT_EQ(NULL, sk_bitmap.getPixels());
-
-  sk_bitmap.lockPixels();
-  EXPECT_EQ(0xDEED1020, *sk_bitmap.getAddr32(10, 20));
-  EXPECT_EQ(0xDEED2030, *sk_bitmap.getAddr32(20, 30));
-  EXPECT_EQ(0xDEED3040, *sk_bitmap.getAddr32(30, 40));
-  sk_bitmap.unlockPixels();
-}
-
 
 }  // namespace skia

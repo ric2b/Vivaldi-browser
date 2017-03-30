@@ -8,13 +8,20 @@
 
 namespace ui {
 
-bool GpuPlatformSupportCast::OnMessageReceived(const IPC::Message& msg) {
-  return false;
+GpuPlatformSupportCast::GpuPlatformSupportCast(SurfaceFactoryCast* parent)
+    : parent_(parent) {
+  DCHECK(parent_);
 }
 
-void GpuPlatformSupportCast::RelinquishGpuResources(
-    const base::Closure& callback) {
-  parent_->SetToRelinquishDisplay(callback);
+GpuPlatformSupportCast::~GpuPlatformSupportCast() {
+  // eglTerminate must be called first on display before releasing resources
+  // and shutting down hardware
+  parent_->TerminateDisplay();
+  parent_->ShutdownHardware();
+}
+
+bool GpuPlatformSupportCast::OnMessageReceived(const IPC::Message& msg) {
+  return false;
 }
 
 IPC::MessageFilter* GpuPlatformSupportCast::GetMessageFilter() {

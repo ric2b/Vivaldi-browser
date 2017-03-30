@@ -4,8 +4,9 @@
 
 #include <windows.h>
 #include <mmsystem.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/memory/scoped_ptr.h"
@@ -16,6 +17,7 @@
 #include "base/win/scoped_com_initializer.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_manager.h"
+#include "media/audio/audio_manager_base.h"
 #include "media/audio/audio_unittest_util.h"
 #include "media/audio/mock_audio_source_callback.h"
 #include "media/audio/win/audio_low_latency_output_win.h"
@@ -58,7 +60,7 @@ MATCHER_P(HasValidDelay, value, "") {
 // Used to terminate a loop from a different thread than the loop belongs to.
 // |task_runner| should be a SingleThreadTaskRunner.
 ACTION_P(QuitLoop, task_runner) {
-  task_runner->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  task_runner->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
 // This audio source implementation should be used for manual tests only since
@@ -102,7 +104,9 @@ class ReadFromFileAudioSource : public AudioOutputStream::AudioSourceCallback {
   }
 
   // AudioOutputStream::AudioSourceCallback implementation.
-  int OnMoreData(AudioBus* audio_bus, uint32 total_bytes_delay) override {
+  int OnMoreData(AudioBus* audio_bus,
+                 uint32_t total_bytes_delay,
+                 uint32_t frames_skipped) override {
     // Store time difference between two successive callbacks in an array.
     // These values will be written to a file in the destructor.
     const base::TimeTicks now_time = base::TimeTicks::Now();
@@ -164,7 +168,7 @@ class AudioOutputStreamWrapper {
         bits_per_sample_(kBitsPerSample) {
     AudioParameters preferred_params;
     EXPECT_TRUE(SUCCEEDED(CoreAudioUtil::GetPreferredAudioParameters(
-        eRender, eConsole, &preferred_params)));
+        AudioManagerBase::kDefaultDeviceId, true, &preferred_params)));
     channel_layout_ = preferred_params.channel_layout();
     sample_rate_ = preferred_params.sample_rate();
     samples_per_packet_ = preferred_params.frames_per_buffer();
@@ -376,16 +380,18 @@ TEST(WASAPIAudioOutputStreamTest, ValidPacketSize) {
   EXPECT_TRUE(aos->Open());
 
   // Derive the expected size in bytes of each packet.
-  uint32 bytes_per_packet = aosw.channels() * aosw.samples_per_packet() *
-      (aosw.bits_per_sample() / 8);
+  uint32_t bytes_per_packet = aosw.channels() * aosw.samples_per_packet() *
+                              (aosw.bits_per_sample() / 8);
 
-  // Wait for the first callback and verify its parameters.
-  EXPECT_CALL(source, OnMoreData(NotNull(), HasValidDelay(bytes_per_packet)))
+  // Wait for the first callback and verify its parameters.  Ignore any
+  // subsequent callbacks that might arrive.
+  EXPECT_CALL(source, OnMoreData(NotNull(), HasValidDelay(bytes_per_packet), 0))
       .WillOnce(DoAll(QuitLoop(loop.task_runner()),
-                      Return(aosw.samples_per_packet())));
+                      Return(aosw.samples_per_packet())))
+      .WillRepeatedly(Return(0));
 
   aos->Start(&source);
-  loop.PostDelayedTask(FROM_HERE, base::MessageLoop::QuitClosure(),
+  loop.PostDelayedTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
                        TestTimeouts::action_timeout());
   loop.Run();
   aos->Stop();
@@ -429,7 +435,7 @@ TEST(WASAPIAudioOutputStreamTest, DISABLED_ReadFromStereoFile) {
   DVLOG(0) << "#file segments : " << kNumFileSegments;
   DVLOG(0) << ">> Listen to the stereo file while playing...";
 
-  for (int i = 0; i < kNumFileSegments; i++) {
+  for (size_t i = 0; i < kNumFileSegments; i++) {
     // Each segment will start with a short (~20ms) block of zeros, hence
     // some short glitches might be heard in this test if kNumFileSegments
     // is larger than one. The exact length of the silence period depends on
@@ -569,17 +575,17 @@ TEST(WASAPIAudioOutputStreamTest, DISABLED_ExclusiveModeMinBufferSizeAt48kHz) {
   EXPECT_TRUE(aos->Open());
 
   // Derive the expected size in bytes of each packet.
-  uint32 bytes_per_packet = aosw.channels() * aosw.samples_per_packet() *
-      (aosw.bits_per_sample() / 8);
+  uint32_t bytes_per_packet = aosw.channels() * aosw.samples_per_packet() *
+                              (aosw.bits_per_sample() / 8);
 
  // Wait for the first callback and verify its parameters.
-  EXPECT_CALL(source, OnMoreData(NotNull(), HasValidDelay(bytes_per_packet)))
+  EXPECT_CALL(source, OnMoreData(NotNull(), HasValidDelay(bytes_per_packet), 0))
       .WillOnce(DoAll(QuitLoop(loop.task_runner()),
                       Return(aosw.samples_per_packet())))
       .WillRepeatedly(Return(aosw.samples_per_packet()));
 
   aos->Start(&source);
-  loop.PostDelayedTask(FROM_HERE, base::MessageLoop::QuitClosure(),
+  loop.PostDelayedTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
                        TestTimeouts::action_timeout());
   loop.Run();
   aos->Stop();
@@ -603,18 +609,18 @@ TEST(WASAPIAudioOutputStreamTest, DISABLED_ExclusiveModeMinBufferSizeAt44kHz) {
   EXPECT_TRUE(aos->Open());
 
   // Derive the expected size in bytes of each packet.
-  uint32 bytes_per_packet = aosw.channels() * aosw.samples_per_packet() *
-      (aosw.bits_per_sample() / 8);
+  uint32_t bytes_per_packet = aosw.channels() * aosw.samples_per_packet() *
+                              (aosw.bits_per_sample() / 8);
 
   // Wait for the first callback and verify its parameters.
-  EXPECT_CALL(source, OnMoreData(NotNull(), HasValidDelay(bytes_per_packet)))
+  EXPECT_CALL(source, OnMoreData(NotNull(), HasValidDelay(bytes_per_packet), 0))
       .WillOnce(DoAll(QuitLoop(loop.task_runner()),
                       Return(aosw.samples_per_packet())))
       .WillRepeatedly(Return(aosw.samples_per_packet()));
 
   aos->Start(&source);
-  loop.PostDelayedTask(FROM_HERE, base::MessageLoop::QuitClosure(),
-                        TestTimeouts::action_timeout());
+  loop.PostDelayedTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
+                       TestTimeouts::action_timeout());
   loop.Run();
   aos->Stop();
   aos->Close();

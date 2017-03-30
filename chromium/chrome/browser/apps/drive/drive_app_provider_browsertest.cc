@@ -16,8 +16,6 @@
 #include "chrome/browser/apps/drive/drive_app_mapping.h"
 #include "chrome/browser/apps/drive/drive_app_uninstall_sync_service.h"
 #include "chrome/browser/apps/drive/drive_service_bridge.h"
-#include "chrome/browser/drive/drive_app_registry.h"
-#include "chrome/browser/drive/fake_drive_service.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/install_tracker.h"
@@ -26,6 +24,8 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/web_application_info.h"
+#include "components/drive/drive_app_registry.h"
+#include "components/drive/service/fake_drive_service.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -213,8 +213,7 @@ class DriveAppProviderTest : public ExtensionBrowserTest,
   scoped_ptr<drive::DriveAppRegistry> apps_registry_;
   scoped_ptr<DriveAppProvider> provider_;
 
-  base::RepeatingTimer<DriveAppProviderTest>
-      pending_drive_app_converter_check_timer_;
+  base::RepeatingTimer pending_drive_app_converter_check_timer_;
   scoped_refptr<content::MessageLoopRunner> runner_;
 
   DISALLOW_COPY_AND_ASSIGN(DriveAppProviderTest);

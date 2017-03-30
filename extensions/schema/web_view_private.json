@@ -1,0 +1,261 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+  {
+    "namespace": "webViewPrivate",
+    "description": "none",
+    "compiler_options": {
+      "implemented_in": "extensions/api/guest_view/web_view_private_api.h"
+    },
+    "types": [
+      {
+        "id": "ThumbnailParams",
+        "type": "object",
+        "description": "Object passed to various thumbnail capture functions.",
+        "properties": {
+          "width": {
+            "type": "integer",
+            "description": "The width of the scaled output bitmap.",
+            "optional": true
+          },
+          "height": {
+            "type": "integer",
+            "description": "The height of the scaled output bitmap.",
+            "optional": true
+          },
+          "scale": {
+            "type": "number",
+            "description": "Set scale of the output bitmap, defaults to 0.5. Note that |width.height| will be used if both |scale| and |width.height| are set.",
+            "optional": true
+          },
+          "incognito":  {
+            "type":  "boolean",
+            "description":  "Should this capture be done in incognito mode, which means nothing will be stored on disk except bookmark thumbnails.",
+            "optional": true
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "setVisible",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "type": "boolean",
+            "name": "isVisible"
+          }
+        ]
+      },
+      {
+        "name": "getThumbnail",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "name": "params",
+            "$ref": "ThumbnailParams",
+            "optional": true
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Returns results",
+            "parameters": [
+              {
+                "name": "thumbnail",
+                "type": "string",
+                "description": "Thumbnail in base64 format."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getThumbnailFromService",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "description": "Returns results",
+            "parameters": [
+              {
+                "name": "thumbnail",
+                "optional": false,
+                "type": "string",
+                "description": "Thumbnail in base64 format from the thumbnail service."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "addToThumbnailService",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "type": "string",
+            "name": "key",
+            "description": "Key the thumbnail will be stored under."
+          },
+          {
+            "name": "params",
+            "$ref": "ThumbnailParams",
+            "optional": true
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "description": "Returns results",
+            "parameters": [
+              {
+                "name": "thumbnail",
+                "optional": false,
+                "type": "string",
+                "description": "Url to reference the thumbnail with."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "showPageInfo",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "type": "object",
+            "name": "position",
+            "properties": {
+              "left": { "type": "integer", "description": "Anchor left position, screen coordinates." },
+              "top": { "type": "integer", "description": "Anchor top position, screen coordinates." }
+            }
+          }
+        ]
+      },
+      {
+        "name": "setIsFullscreen",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "type": "boolean",
+            "name": "isFullscreen",
+            "description": "This is used to set a webview as fullscreen or not. This is needed for updating the pseudo-style :fullscreen when going in and out of fullscreen not via element.requestFullscreen and element.cancelFullscreen ."
+          }
+        ]
+      },
+      {
+        "name": "getPageHistory",
+        "type": "function",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId",
+            "description": "The instance ID of the guest <webview> process."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Called when history .",
+            "parameters": [
+              {
+                "type": "integer",
+                "name": "currentEntryIndex",
+                "description": "The current index."
+              },
+              {
+                "name": "pageHistory",
+                "optional": true,
+                "type": "array",
+                "description": "Array of history items with name and index.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string", "description": "Title for the page." },
+                    "url": { "type": "string", "description": "URL for the entry." },
+                    "index": { "type": "integer", "description": "Relative history index. This can be used in <webview>.go(|index|)." }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "discardPage",
+        "type": "function",
+        "description": "This will replace the current |WebContent| with an empty one causing the memory to be freed. Note the content will be reloaded the next time the tab is focussed, or reload is pressed. Calls |TabManager::DiscardTabById()|",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          }
+        ]
+      },
+      {
+        "name": "setExtensionHost",
+        "type": "function",
+        "description": "Will create an |ExtensionHost| for the webview making it capable of running extension content.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "type": "string",
+            "name": "extensionId"
+          }
+        ]
+      },
+      {
+        "name": "isFocusedElementEditable",
+        "type": "function",
+        "description": "Checks whether current DOM element is text-editable.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "editable",
+                "type": "boolean",
+                "description": "true if focused element is editable"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

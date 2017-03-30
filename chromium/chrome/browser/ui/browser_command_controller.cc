@@ -4,24 +4,28 @@
 
 #include "chrome/browser/ui/browser_command_controller.h"
 
+#include <stddef.h>
+
+#include <string>
+
 #include "base/command_line.h"
+#include "base/debug/debugging_flags.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/defaults.h"
-#include "chrome/browser/extensions/api/show_menu/show_menu_api.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/signin/signin_promo.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -31,10 +35,14 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_utils.h"
 #include "chrome/browser/ui/webui/inspect_ui.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/profiling.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/dom_distiller/core/dom_distiller_switches.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -45,15 +53,12 @@
 #include "extensions/browser/extension_system.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-
 #if defined(OS_MACOSX)
 #include "chrome/browser/ui/browser_commands_mac.h"
 #endif
 
 #if defined(OS_WIN)
-#include "base/win/metro.h"
 #include "base/win/windows_version.h"
-#include "chrome/browser/ui/apps/apps_metro_handler_win.h"
 #include "content/public/browser/gpu_data_manager.h"
 #endif
 
@@ -75,14 +80,11 @@
 #include "ui/events/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
 
+#include "app/vivaldi_command_controller.h"
+
 using content::NavigationEntry;
 using content::NavigationController;
 using content::WebContents;
-
-namespace Vivaldi {
-void UpdateCommandsForVivaldi(CommandUpdater &);
-bool CheckVivaldiCommands(Browser *browser, int id);
-}
 
 namespace {
 
@@ -115,74 +117,6 @@ bool HasInternalURL(const NavigationEntry* entry) {
 
   return false;
 }
-
-#if defined(OS_WIN)
-// Windows 8 specific helper class to manage DefaultBrowserWorker. It does the
-// following asynchronous actions in order:
-// 1- Check that chrome is the default browser
-// 2- If we are the default, restart chrome in metro and exit
-// 3- If not the default browser show the 'select default browser' system dialog
-// 4- When dialog dismisses check again who got made the default
-// 5- If we are the default then restart chrome in metro and exit
-// 6- If we are not the default exit.
-//
-// Note: this class deletes itself.
-class SwitchToMetroUIHandler
-    : public ShellIntegration::DefaultWebClientObserver {
- public:
-  SwitchToMetroUIHandler()
-      : default_browser_worker_(
-            new ShellIntegration::DefaultBrowserWorker(this)),
-        first_check_(true) {
-    default_browser_worker_->StartCheckIsDefault();
-  }
-
-  ~SwitchToMetroUIHandler() override {
-    default_browser_worker_->ObserverDestroyed();
-  }
-
- private:
-  void SetDefaultWebClientUIState(
-      ShellIntegration::DefaultWebClientUIState state) override {
-    switch (state) {
-      case ShellIntegration::STATE_PROCESSING:
-        return;
-      case ShellIntegration::STATE_UNKNOWN :
-        break;
-      case ShellIntegration::STATE_IS_DEFAULT:
-        chrome::AttemptRestartToMetroMode();
-        break;
-      case ShellIntegration::STATE_NOT_DEFAULT:
-        if (first_check_) {
-          default_browser_worker_->StartSetAsDefault();
-          return;
-        }
-        break;
-      default:
-        NOTREACHED();
-    }
-    delete this;
-  }
-
-  void OnSetAsDefaultConcluded(bool success) override {
-    if (!success) {
-      delete this;
-      return;
-    }
-    first_check_ = false;
-    default_browser_worker_->StartCheckIsDefault();
-  }
-
-  bool IsInteractiveSetDefaultPermitted() override {
-    return true;
-  }
-
-  scoped_refptr<ShellIntegration::DefaultBrowserWorker> default_browser_worker_;
-  bool first_check_;
-
-  DISALLOW_COPY_AND_ASSIGN(SwitchToMetroUIHandler);
-};
-#endif  // defined(OS_WIN)
 
 }  // namespace
 
@@ -244,7 +178,7 @@ BrowserCommandController::BrowserCommandController(Browser* browser)
 
   InitCommandState();
 
-  TabRestoreService* tab_restore_service =
+  sessions::TabRestoreService* tab_restore_service =
       TabRestoreServiceFactory::GetForProfile(profile());
   if (tab_restore_service) {
     tab_restore_service->AddObserver(this);
@@ -255,7 +189,7 @@ BrowserCommandController::BrowserCommandController(Browser* browser)
 BrowserCommandController::~BrowserCommandController() {
   // TabRestoreService may have been shutdown by the time we get here. Don't
   // trigger creating it.
-  TabRestoreService* tab_restore_service =
+  sessions::TabRestoreService* tab_restore_service =
       TabRestoreServiceFactory::GetForProfileIfExisting(profile());
   if (tab_restore_service)
     tab_restore_service->RemoveObserver(this);
@@ -490,46 +424,12 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
     }
 #endif
 
-#if defined(OS_WIN)
-    // Windows 8 specific commands.
-    case IDC_METRO_SNAP_ENABLE:
-      browser_->SetMetroSnapMode(true);
-      break;
-    case IDC_METRO_SNAP_DISABLE:
-      browser_->SetMetroSnapMode(false);
-      break;
-    case IDC_WIN_DESKTOP_RESTART:
-      if (!VerifyASHSwitchForApps(window()->GetNativeWindow(), id))
-        break;
-
-      chrome::AttemptRestartToDesktopMode();
-      if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
-        content::RecordAction(base::UserMetricsAction("Win8DesktopRestart"));
-      } else {
-        content::RecordAction(base::UserMetricsAction("Win7DesktopRestart"));
-      }
-      break;
-    case IDC_WIN8_METRO_RESTART:
-    case IDC_WIN_CHROMEOS_RESTART:
-      if (!VerifyASHSwitchForApps(window()->GetNativeWindow(), id))
-        break;
-      if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
-        // SwitchToMetroUIHandler deletes itself.
-        new SwitchToMetroUIHandler;
-        content::RecordAction(base::UserMetricsAction("Win8MetroRestart"));
-      } else {
-        content::RecordAction(base::UserMetricsAction("Win7ASHRestart"));
-        chrome::AttemptRestartToMetroMode();
-      }
-      break;
-    case IDC_PIN_TO_START_SCREEN:
-      TogglePagePinnedToStartScreen(browser_);
-      break;
-#endif
-
 #if defined(OS_MACOSX)
     case IDC_PRESENTATION_MODE:
       chrome::ToggleFullscreenMode(browser_);
+      break;
+    case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
+      chrome::ToggleFullscreenToolbar(browser_);
       break;
 #endif
     case IDC_EXIT:
@@ -555,12 +455,17 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_PRINT:
       Print(browser_);
       break;
+
 #if defined(ENABLE_BASIC_PRINTING)
     case IDC_BASIC_PRINT:
       content::RecordAction(base::UserMetricsAction("Accel_Advanced_Print"));
       BasicPrint(browser_);
       break;
 #endif  // ENABLE_BASIC_PRINTING
+
+    case IDC_SAVE_CREDIT_CARD_FOR_PAGE:
+      SaveCreditCard(browser_);
+      break;
     case IDC_TRANSLATE_PAGE:
       Translate(browser_);
       break;
@@ -772,10 +677,8 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       ShowHelp(browser_, HELP_SOURCE_MENU);
       break;
     case IDC_SHOW_SIGNIN:
-      ShowBrowserSigninOrSettings(browser_, signin_metrics::SOURCE_MENU);
-      break;
-    case IDC_TOGGLE_SPEECH_INPUT:
-      ToggleSpeechInput(browser_);
+      ShowBrowserSigninOrSettings(
+          browser_, signin_metrics::AccessPoint::ACCESS_POINT_MENU);
       break;
     case IDC_DISTILL_PAGE:
       DistillCurrentPage(browser_);
@@ -785,13 +688,13 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       ash::accelerators::ToggleTouchHudProjection();
       break;
 #endif
+    case IDC_ROUTE_MEDIA:
+      RouteMedia(browser_);
+      break;
 
     default:
-      if (Vivaldi::CheckVivaldiCommands(browser_, id)) {
-        extensions::ShowMenuAPI::GetFactoryInstance()
-          ->Get(browser_->profile())->CommandExecuted(id);
-      } else {
-        LOG(WARNING) << "Received Unimplemented Command: " << id;
+      if (!vivaldi::ExecuteVivaldiCommands(browser_, id)) {
+      LOG(WARNING) << "Received Unimplemented Command: " << id;
       }
       break;
   }
@@ -833,23 +736,24 @@ void BrowserCommandController::TabBlockedStateChanged(
   PrintingStateChanged();
   FullscreenStateChanged();
   UpdateCommandsForFind();
+  UpdateCommandsForMediaRouter();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserCommandController, TabRestoreServiceObserver implementation:
 
 void BrowserCommandController::TabRestoreServiceChanged(
-    TabRestoreService* service) {
+    sessions::TabRestoreService* service) {
   UpdateTabRestoreCommandState();
 }
 
 void BrowserCommandController::TabRestoreServiceDestroyed(
-    TabRestoreService* service) {
+    sessions::TabRestoreService* service) {
   service->RemoveObserver(this);
 }
 
 void BrowserCommandController::TabRestoreServiceLoaded(
-    TabRestoreService* service) {
+    sessions::TabRestoreService* service) {
   UpdateTabRestoreCommandState();
 }
 
@@ -896,7 +800,6 @@ void BrowserCommandController::InitCommandState() {
 
   // Window management commands
   command_updater_.UpdateCommandEnabled(IDC_CLOSE_WINDOW, true);
-  command_updater_.UpdateCommandEnabled(IDC_TASK_MANAGER, true);
   command_updater_.UpdateCommandEnabled(IDC_NEW_TAB, true);
   command_updater_.UpdateCommandEnabled(IDC_CLOSE_TAB, true);
   command_updater_.UpdateCommandEnabled(IDC_DUPLICATE_TAB, true);
@@ -1020,22 +923,10 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_SELECT_TAB_6, normal_window);
   command_updater_.UpdateCommandEnabled(IDC_SELECT_TAB_7, normal_window);
   command_updater_.UpdateCommandEnabled(IDC_SELECT_LAST_TAB, normal_window);
-#if defined(OS_WIN)
-  bool metro = browser_->host_desktop_type() == chrome::HOST_DESKTOP_TYPE_ASH;
-  command_updater_.UpdateCommandEnabled(IDC_METRO_SNAP_ENABLE, metro);
-  command_updater_.UpdateCommandEnabled(IDC_METRO_SNAP_DISABLE, metro);
-  int restart_mode = metro ? IDC_WIN_DESKTOP_RESTART :
-      (base::win::GetVersion() >= base::win::VERSION_WIN8 ?
-          IDC_WIN8_METRO_RESTART : IDC_WIN_CHROMEOS_RESTART);
-  command_updater_.UpdateCommandEnabled(restart_mode, normal_window);
-#endif
 
   // These are always enabled; the menu determines their menu item visibility.
   command_updater_.UpdateCommandEnabled(IDC_UPGRADE_DIALOG, true);
   command_updater_.UpdateCommandEnabled(IDC_VIEW_INCOMPATIBILITIES, true);
-
-  // Toggle speech input
-  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_SPEECH_INPUT, true);
 
   // Distill current page.
   command_updater_.UpdateCommandEnabled(
@@ -1048,7 +939,7 @@ void BrowserCommandController::InitCommandState() {
   UpdateCommandsForBookmarkEditing();
   UpdateCommandsForIncognitoAvailability();
 
-  Vivaldi::UpdateCommandsForVivaldi(command_updater_);
+  vivaldi::UpdateCommandsForVivaldi(command_updater_);
 }
 
 // static
@@ -1152,6 +1043,7 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   UpdateCommandsForContentRestrictionState();
   UpdateCommandsForBookmarkEditing();
   UpdateCommandsForFind();
+  UpdateCommandsForMediaRouter();
   // Update the zoom commands when an active tab is selected.
   UpdateCommandsForZoomState();
 }
@@ -1280,7 +1172,7 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
   command_updater_.UpdateCommandEnabled(IDC_VIEW_PASSWORDS, show_main_ui);
   command_updater_.UpdateCommandEnabled(IDC_ABOUT, show_main_ui);
   command_updater_.UpdateCommandEnabled(IDC_SHOW_APP_MENU, show_main_ui);
-#if defined (ENABLE_PROFILING) && !defined(NO_TCMALLOC)
+#if BUILDFLAG(ENABLE_PROFILING) && !defined(NO_TCMALLOC)
   command_updater_.UpdateCommandEnabled(IDC_PROFILING_ENABLED, show_main_ui);
 #endif
 
@@ -1296,6 +1188,8 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
 
   command_updater_.UpdateCommandEnabled(IDC_FULLSCREEN, fullscreen_enabled);
   command_updater_.UpdateCommandEnabled(IDC_PRESENTATION_MODE,
+                                        fullscreen_enabled);
+  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_FULLSCREEN_TOOLBAR,
                                         fullscreen_enabled);
 
   UpdateCommandsForBookmarkBar();
@@ -1337,7 +1231,7 @@ void BrowserCommandController::UpdateReloadStopState(bool is_loading,
 }
 
 void BrowserCommandController::UpdateTabRestoreCommandState() {
-  TabRestoreService* tab_restore_service =
+  sessions::TabRestoreService* tab_restore_service =
       TabRestoreServiceFactory::GetForProfile(profile());
   // The command is enabled if the service hasn't loaded yet to trigger loading.
   // The command is updated once the load completes.
@@ -1356,6 +1250,11 @@ void BrowserCommandController::UpdateCommandsForFind() {
   command_updater_.UpdateCommandEnabled(IDC_FIND, enabled);
   command_updater_.UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
   command_updater_.UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
+}
+
+void BrowserCommandController::UpdateCommandsForMediaRouter() {
+  command_updater_.UpdateCommandEnabled(IDC_ROUTE_MEDIA,
+                                        CanRouteMedia(browser_));
 }
 
 void BrowserCommandController::AddInterstitialObservers(WebContents* contents) {

@@ -40,7 +40,7 @@ MimeHandlerStreamManagerFactory::MimeHandlerStreamManagerFactory()
 // static
 MimeHandlerStreamManagerFactory*
 MimeHandlerStreamManagerFactory::GetInstance() {
-  return Singleton<MimeHandlerStreamManagerFactory>::get();
+  return base::Singleton<MimeHandlerStreamManagerFactory>::get();
 }
 
 MimeHandlerStreamManager* MimeHandlerStreamManagerFactory::Get(
@@ -132,7 +132,7 @@ scoped_ptr<StreamContainer> MimeHandlerStreamManager::ReleaseStream(
   streams_by_extension_id_[result->extension_id()].erase(view_id);
   streams_.erase(stream);
   embedder_observers_.erase(view_id);
-  return result.Pass();
+  return result;
 }
 
 void MimeHandlerStreamManager::OnExtensionUnloaded(

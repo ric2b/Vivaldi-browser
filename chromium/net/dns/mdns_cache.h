@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
@@ -92,10 +93,8 @@ class NET_EXPORT_PRIVATE MDnsCache {
   // passed in if it was removed, scoped null otherwise.
   scoped_ptr<const RecordParsed> RemoveRecord(const RecordParsed* record);
 
-  void Clear();
-
  private:
-  typedef std::map<Key, const RecordParsed*> RecordMap;
+  typedef std::map<Key, scoped_ptr<const RecordParsed>> RecordMap;
 
   // Get the effective expiration of a cache entry, based on its creation time
   // and TTL. Does adjustments so entries with a TTL of zero will have a
@@ -105,8 +104,7 @@ class NET_EXPORT_PRIVATE MDnsCache {
   // Get optional part of the DNS key for shared records. For example, in PTR
   // records this is the pointed domain, since multiple PTR records may exist
   // for the same name.
-  static std::string GetOptionalFieldForRecord(
-      const RecordParsed* record);
+  static std::string GetOptionalFieldForRecord(const RecordParsed* record);
 
   RecordMap mdns_cache_;
 

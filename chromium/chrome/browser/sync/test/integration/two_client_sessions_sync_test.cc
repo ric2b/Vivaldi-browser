@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
 #include "base/guid.h"
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
@@ -42,18 +45,20 @@ static const char* kURL2 = "http://127.0.0.1/bubba2";
 
 // Fails on Win, see http://crbug.com/232313
 #if defined(OS_WIN)
-#define MAYBE_E2ETest_SingleClientChanged DISABLED_E2ETest_SingleClientChanged
+#define MAYBE_SingleClientChanged DISABLED_SingleClientChanged
 #define MAYBE_BothChanged DISABLED_BothChanged
 #define MAYBE_DeleteIdleSession DISABLED_DeleteIdleSession
+#define MAYBE_AllChanged DISABLED_AllChanged
 #else
-#define MAYBE_E2ETest_SingleClientChanged E2ETest_SingleClientChanged
+#define MAYBE_SingleClientChanged SingleClientChanged
 #define MAYBE_BothChanged BothChanged
 #define MAYBE_DeleteIdleSession DeleteIdleSession
+#define MAYBE_AllChanged AllChanged
 #endif
 
 
 IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
-                       MAYBE_E2ETest_SingleClientChanged) {
+                       E2E_ENABLED(MAYBE_SingleClientChanged)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   // Open tab and access a url on client 0
@@ -68,6 +73,27 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
 
   // Check the foreign windows on client 1
   ASSERT_TRUE(AwaitCheckForeignSessionsAgainst(1, expected_windows));
+}
+
+IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
+                       E2E_ENABLED(MAYBE_AllChanged)) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+
+  // Open tabs on all clients and retain window information.
+  std::vector<ScopedWindowMap> client_windows(num_clients());
+  for (int i = 0; i < num_clients(); ++i) {
+    SessionWindowMap windows;
+    std::string url = base::StringPrintf("http://127.0.0.1/bubba%s",
+        base::GenerateGUID().c_str());
+    ASSERT_TRUE(OpenTabAndGetLocalWindows(i, GURL(url), &windows));
+    client_windows[i].Reset(&windows);
+  }
+
+  // Get foreign session data from all clients and check it against all
+  // client_windows.
+  for (int i = 0; i < num_clients(); ++i) {
+    ASSERT_TRUE(AwaitCheckForeignSessionsAgainst(i, client_windows));
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,

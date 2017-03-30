@@ -52,11 +52,6 @@
               '<(DEPTH)/components/nacl/renderer/plugin/plugin.gyp:nacl_trusted_plugin',
             ],
           }],
-          ['remoting==1', {
-            'chromium_child_dependencies': [
-              '../remoting/remoting.gyp:remoting_client_plugin',
-            ],
-          }],
         ],
       }],
       ['enable_basic_printing==1 or enable_print_preview==1', {
@@ -109,6 +104,7 @@
     'chrome_browser_ui.gypi',
     'chrome_common.gypi',
     'chrome_installer_util.gypi',
+    'chrome_features.gypi',
   ],
   'conditions': [
     ['OS!="ios"', {
@@ -128,6 +124,7 @@
       ],
       'targets': [
         {
+          # GN version: //chrome/browser/extensions/default_extensions
           'target_name': 'default_extensions',
           'type': 'none',
           'conditions': [
@@ -158,19 +155,23 @@
           'product_name': '<(mac_product_name) Helper',
           'mac_bundle': 1,
           'dependencies': [
-            'chrome_dll',
+            'chrome_dll_dependency_shim',
             'infoplist_strings_tool',
+            'common_constants.gyp:version_header',
+          ],
+          'defines': [
+            'HELPER_EXECUTABLE'
           ],
           'sources': [
-            # chrome_exe_main_mac.cc's main() is the entry point for
+            # chrome_exe_main_mac.c's main() is the entry point for
             # the "chrome" (browser app) target.  All it does is jump
             # to chrome_dll's ChromeMain.  This is appropriate for
             # helper processes too, because the logic to discriminate
             # between process types at run time is actually directed
             # by the --type command line argument processed by
-            # ChromeMain.  Sharing chrome_exe_main_mac.cc with the
+            # ChromeMain.  Sharing chrome_exe_main_mac.c with the
             # browser app will suffice for now.
-            'app/chrome_exe_main_mac.cc',
+            'app/chrome_exe_main_mac.c',
             'app/helper-Info.plist',
           ],
           # TODO(mark): Come up with a fancier way to do this.  It should only
@@ -235,14 +236,6 @@
                          '--scm=0',
                          '--vivaldi-build', '<(vivaldi_global_build_number)'],
             },
-            {
-              # Make sure there isn't any Objective-C in the helper app's
-              # executable.
-              'postbuild_name': 'Verify No Objective-C',
-              'action': [
-                '../build/mac/verify_no_objc.sh',
-              ],
-            },
           ],
           'conditions': [
             ['mac_breakpad==1', {
@@ -297,7 +290,7 @@
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
           ],
           'includes': ['build_mac_dmg.gypi']
         },
@@ -351,7 +344,7 @@
                 },
               ],
               'dependencies': [
-                'vivaldi',
+                'chrome',
                 '../breakpad/breakpad.gyp:dump_syms#host',
               ],
             }],
@@ -371,10 +364,10 @@
           'dependencies': [
             '../base/base.gyp:base_unittests',
             '../content/content_shell_and_tests.gyp:content_browsertests',
-            #'../content/content_shell_and_tests.gyp:content_shell',
-            #'../content/content_shell_and_tests.gyp:content_unittests',
+            '../content/content_shell_and_tests.gyp:content_shell',
+            '../content/content_shell_and_tests.gyp:content_unittests',
             '../net/net.gyp:net_unittests',
-            #'../ui/base/ui_base_tests.gyp:ui_base_unittests',
+            '../ui/base/ui_base_tests.gyp:ui_base_unittests',
           ],
         },
         {
@@ -384,7 +377,7 @@
           'variables': {
             'output_dir': 'chrome_version',
             'template_input_path': 'app/chrome_version.rc.version',
-            'branding_path': 'app/theme/<(branding_path_component)/BRANDING',
+            'branding_path': '<(VIVALDI)/app/resources/theme/vivaldi/BRANDING',
           },
           'direct_dependent_settings': {
             'include_dirs': [
@@ -402,43 +395,7 @@
           ],
         },
         {
-          # GN version: //chrome:version_header
-          'target_name': 'chrome_version_header',
-          'type': 'none',
-          'hard_dependency': 1,
-          'actions': [
-            {
-              'action_name': 'version_header',
-              'variables': {
-                'lastchange_path':
-                  '<(DEPTH)/build/util/LASTCHANGE',
-                'branding_path': 'app/theme/<(branding_path_component)/BRANDING',
-              },
-              'inputs': [
-                '<(version_path)',
-                '<(branding_path)',
-                '<(lastchange_path)',
-                'version.h.in',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/version.h',
-              ],
-              'action': [
-                'python',
-                '<(version_py_path)',
-                '-f', '<(version_path)',
-                '-f', '<(branding_path)',
-                '-f', '<(lastchange_path)',
-                '-f', '<(vivaldi_version_path)',
-                '-e', 'VIVALDI_BUILD=<(vivaldi_global_build_number)',
-                'version.h.in',
-                '<@(_outputs)',
-              ],
-              'message': 'Generating version header file: <@(_outputs)',
-            },
-          ],
-        },
-        {
+          # GN version: //chrome/tools/crash_service
           'target_name': 'crash_service',
           'type': 'executable',
           'dependencies': [
@@ -459,29 +416,27 @@
             },
           },
         },
-        #{
-        #  'target_name': 'sb_sigutil',
-        #  'type': 'executable',
-        #  'dependencies': [
-        #    '../base/base.gyp:base',
-        #    '../crypto/crypto.gyp:crypto',
-        #    'safe_browsing_proto',
-        #  ],
-        #  'sources': [
-        #    'common/safe_browsing/binary_feature_extractor.cc',
-        #    'common/safe_browsing/binary_feature_extractor.h',
-        #    'common/safe_browsing/binary_feature_extractor_win.cc',
-        #    'common/safe_browsing/pe_image_reader_win.cc',
-        #    'common/safe_browsing/pe_image_reader_win.h',
-        #    'tools/safe_browsing/sb_sigutil.cc',
-        #  ],
-        #},
+        {
+          'target_name': 'sb_sigutil',
+          'type': 'executable',
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../crypto/crypto.gyp:crypto',
+            'safe_browsing_proto',
+          ],
+          'sources': [
+            'common/safe_browsing/binary_feature_extractor.cc',
+            'common/safe_browsing/binary_feature_extractor.h',
+            'common/safe_browsing/binary_feature_extractor_win.cc',
+            'common/safe_browsing/pe_image_reader_win.cc',
+            'common/safe_browsing/pe_image_reader_win.h',
+            'tools/safe_browsing/sb_sigutil.cc',
+          ],
+        },
       ],  # 'targets'
       'includes': [
-        #'app_shim/app_shim_win.gypi',
         'chrome_watcher/chrome_watcher.gypi',
         'chrome_process_finder.gypi',
-        'metro_utils.gypi',
       ],
     }],  # OS=="win"
     ['OS=="win" and target_arch=="ia32"',
@@ -508,6 +463,7 @@
           },
         },
         {
+          # GN version: //chrome/tools/crash_service:crash_service_win64
           'target_name': 'crash_service_win64',
           'type': 'executable',
           'product_name': 'crash_service64',
@@ -556,30 +512,39 @@
             'chrome_resources.gyp:chrome_strings',
             'chrome_strings_grd',
             'chrome_version_java',
-            'connection_security_security_levels_java',
-            'connectivity_check_result_java',
-            'document_tab_model_info_proto_java',
-            'profile_account_management_metrics_java',
             'content_setting_java',
             'content_settings_type_java',
+            'connectivity_check_result_java',
+            'document_tab_model_info_proto_java',
+            'infobar_action_type_java',
+            'most_visited_tile_type_java',
             'page_info_connection_type_java',
-            'profile_sync_service_model_type_selection_java',
+            'profile_account_management_metrics_java',
             'resource_id_java',
+            'shortcut_source_java',
+            'signin_metrics_enum_java',
             'tab_load_status_java',
             '../base/base.gyp:base',
+            '../build/android/java_google_api_keys.gyp:google_api_keys_java',
             '../chrome/android/chrome_apk.gyp:custom_tabs_service_aidl',
-            '../components/components.gyp:app_restrictions_resources',
+            '../components/components.gyp:autocomplete_match_type_java',
             '../components/components.gyp:bookmarks_java',
             '../components/components.gyp:dom_distiller_core_java',
             '../components/components.gyp:enhanced_bookmarks_java_enums_srcjar',
             '../components/components.gyp:gcm_driver_java',
             '../components/components.gyp:invalidation_java',
             '../components/components.gyp:navigation_interception_java',
-            '../components/components.gyp:service_tab_launcher_java',
-            '../components/components.gyp:policy_java',
+            '../components/components.gyp:offline_page_feature_enums_java',
+            '../components/components.gyp:offline_page_model_enums_java',
             '../components/components.gyp:precache_java',
+            '../components/components.gyp:safe_json_java',
+            '../components/components.gyp:security_state_enums_java',
+            '../components/components.gyp:service_tab_launcher_java',
+            '../components/components.gyp:signin_core_browser_java',
             '../components/components.gyp:variations_java',
             '../components/components.gyp:web_contents_delegate_android_java',
+            '../components/components.gyp:web_restriction_java',
+            '../components/components_strings.gyp:components_strings',
             '../content/content.gyp:content_java',
             '../media/media.gyp:media_java',
             '../printing/printing.gyp:printing_java',
@@ -594,30 +559,35 @@
             '../third_party/android_tools/android_tools.gyp:android_support_v13_javalib',
             '../third_party/android_tools/android_tools.gyp:google_play_services_javalib',
             '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_javalib',
+            '../third_party/gif_player/gif_player.gyp:gif_player_java',
             '../third_party/jsr-305/jsr-305.gyp:jsr_305_javalib',
             '../ui/android/ui_android.gyp:ui_java',
           ],
           'variables': {
+            'variables': {
+              'android_branding_res_dirs%': ['<(java_in_dir)/res_chromium'],
+            },
             'java_in_dir': '../chrome/android/java',
             'has_java_resources': 1,
             'R_package': 'org.chromium.chrome',
             'R_package_relpath': 'org/chromium/chrome',
             # Include channel-specific resources and xml string files generated
             # from generated_resources.grd
-            'res_channel_dir': '<(java_in_dir)/res_default',
             'res_extra_dirs': [
-              '<(res_channel_dir)',
+              '<@(android_branding_res_dirs)',
               '<(SHARED_INTERMEDIATE_DIR)/chrome/java/res',
+              '<(SHARED_INTERMEDIATE_DIR)/components/strings/java/res',
             ],
             'res_extra_files': [
-              '<!@(find <(res_channel_dir) -type f)',
+              '<!@(find <(android_branding_res_dirs) -type f)',
               '<!@pymod_do_main(grit_info <@(grit_defines) --outputs "<(SHARED_INTERMEDIATE_DIR)/chrome" app/generated_resources.grd)',
             ],
           },
           'conditions': [
-            ['configuration_policy != 1', {
-              'dependencies!': [
+            ['configuration_policy == 1', {
+              'dependencies': [
                 '../components/components.gyp:app_restrictions_resources',
+                '../components/components.gyp:policy_java',
               ],
             }],
           ],
@@ -641,6 +611,7 @@
           'target_name': 'chrome_locale_paks',
           'type': 'none',
           'variables': {
+            'package_name': 'chrome_locale_paks',
             'locale_pak_files': [ '<@(chrome_android_pak_locale_resources)' ],
           },
           'includes': [
@@ -675,6 +646,15 @@
           },
           'includes': [ '../build/android/java_cpp_enum.gypi' ],
         },
+        {
+          # GN: //chrome:signin_metrics_enum_javagen
+          'target_name': 'signin_metrics_enum_java',
+          'type': 'none',
+          'variables': {
+            'source_file': '../components/signin/core/browser/signin_metrics.h',
+          },
+          'includes': [ '../build/android/java_cpp_enum.gypi' ],
+        },
       ], # 'targets'
       'includes': [
         'chrome_android.gypi',
@@ -698,7 +678,6 @@
           'dependencies': [
             'chrome_resources.gyp:chrome_strings',
             'common',
-            'common_net',
             '../base/base.gyp:base',
             '../components/components.gyp:cloud_devices_common',
             '../google_apis/google_apis.gyp:google_apis',
@@ -715,6 +694,8 @@
             'service/cloud_print/cloud_print_auth.h',
             'service/cloud_print/cloud_print_connector.cc',
             'service/cloud_print/cloud_print_connector.h',
+            'service/cloud_print/cloud_print_message_handler.cc',
+            'service/cloud_print/cloud_print_message_handler.h',
             'service/cloud_print/cloud_print_proxy.cc',
             'service/cloud_print/cloud_print_proxy.h',
             'service/cloud_print/cloud_print_proxy_backend.cc',
@@ -747,12 +728,10 @@
             'service/service_process.h',
             'service/service_process_prefs.cc',
             'service/service_process_prefs.h',
-            'service/service_utility_process_host.cc',
-            'service/service_utility_process_host.h',
           ],
           'include_dirs': [
             '..',
-            '<(grit_out_dir)',
+           # '<(grit_out_dir)',
           ],
           'conditions': [
             ['use_cups==1', {
@@ -768,49 +747,18 @@
                 'service/cloud_print/print_system_dummy.cc',
               ],
             }],
-            ['OS!="win"', {
-              'sources!': [
+            ['OS=="win"', {
+              'sources': [
                 'service/service_utility_process_host.cc',
                 'service/service_utility_process_host.h',
               ],
+              'deps': [
+                # TODO(fdoray): Remove this once the PreRead field trial has
+                # expired. crbug.com/577698
+                '../components/components.gyp:startup_metric_utils_common',
+              ],
             }],
           ],
-        },
-      ],
-    }],
-    ['kasko==1', {
-      'variables': {
-        'kasko_exe_dir': '<(DEPTH)/third_party/kasko',
-      },
-      'targets': [
-        {
-          'target_name': 'kasko_dll',
-          'type': 'none',
-          'outputs': [
-            '<(PRODUCT_DIR)/kasko.dll',
-            '<(PRODUCT_DIR)/kasko.dll.pdb',
-          ],
-          'copies': [
-            {
-              'destination': '<(PRODUCT_DIR)',
-              'files': [
-                '<(kasko_exe_dir)/kasko.dll',
-                '<(kasko_exe_dir)/kasko.dll.pdb',
-              ],
-            },
-          ],
-          'direct_dependent_settings': {
-            'msvs_settings': {
-              'VCLinkerTool': {
-                'AdditionalDependencies': [
-                  'kasko.dll.lib',
-                ],
-                'AdditionalLibraryDirectories': [
-                  '<(DEPTH)/third_party/kasko'
-                ],
-              },
-            },
-          },
         },
       ],
     }],

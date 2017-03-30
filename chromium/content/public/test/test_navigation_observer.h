@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/test/test_utils.h"
 #include "ui/base/page_transition_types.h"
@@ -62,10 +63,10 @@ class TestNavigationObserver {
   void OnDidAttachInterstitialPage(WebContents* web_contents);
   void OnDidStartLoading(WebContents* web_contents);
   void OnDidStopLoading(WebContents* web_contents);
-  void OnDidStartProvisionalLoadForFrame(RenderFrameHost* render_frame_host,
-                                         const GURL& validated_url,
-                                         bool is_error_page,
-                                         bool is_iframe_srcdoc);
+  void OnDidStartProvisionalLoad(RenderFrameHost* render_frame_host,
+                                 const GURL& validated_url,
+                                 bool is_error_page,
+                                 bool is_iframe_srcdoc);
   void OnDidFailProvisionalLoad(RenderFrameHost* render_frame_host,
                                 const GURL& validated_url,
                                 int error_code,

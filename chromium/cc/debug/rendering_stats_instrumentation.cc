@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "cc/debug/rendering_stats_instrumentation.h"
 
 namespace cc {
@@ -37,26 +39,7 @@ void RenderingStatsInstrumentation::AccumulateAndClearImplThreadStats() {
   impl_thread_rendering_stats_ = RenderingStats();
 }
 
-base::TimeDelta RenderingStatsInstrumentation::StartRecording() const {
-  if (record_rendering_stats_) {
-    if (base::ThreadTicks::IsSupported())
-      return base::ThreadTicks::Now() - base::ThreadTicks();
-    return base::TimeTicks::Now() - base::TimeTicks();
-  }
-  return base::TimeDelta();
-}
-
-base::TimeDelta RenderingStatsInstrumentation::EndRecording(
-    base::TimeDelta start_time) const {
-  if (start_time != base::TimeDelta()) {
-    if (base::ThreadTicks::IsSupported())
-      return (base::ThreadTicks::Now() - base::ThreadTicks()) - start_time;
-    return (base::TimeTicks::Now() - base::TimeTicks()) - start_time;
-  }
-  return base::TimeDelta();
-}
-
-void RenderingStatsInstrumentation::IncrementFrameCount(int64 count) {
+void RenderingStatsInstrumentation::IncrementFrameCount(int64_t count) {
   if (!record_rendering_stats_)
     return;
 
@@ -64,7 +47,7 @@ void RenderingStatsInstrumentation::IncrementFrameCount(int64 count) {
   impl_thread_rendering_stats_.frame_count += count;
 }
 
-void RenderingStatsInstrumentation::AddVisibleContentArea(int64 area) {
+void RenderingStatsInstrumentation::AddVisibleContentArea(int64_t area) {
   if (!record_rendering_stats_)
     return;
 
@@ -73,7 +56,7 @@ void RenderingStatsInstrumentation::AddVisibleContentArea(int64 area) {
 }
 
 void RenderingStatsInstrumentation::AddApproximatedVisibleContentArea(
-    int64 area) {
+    int64_t area) {
   if (!record_rendering_stats_)
     return;
 
@@ -82,12 +65,30 @@ void RenderingStatsInstrumentation::AddApproximatedVisibleContentArea(
 }
 
 void RenderingStatsInstrumentation::AddCheckerboardedVisibleContentArea(
-    int64 area) {
+    int64_t area) {
   if (!record_rendering_stats_)
     return;
 
   base::AutoLock scoped_lock(lock_);
   impl_thread_rendering_stats_.checkerboarded_visible_content_area += area;
+}
+
+void RenderingStatsInstrumentation::AddCheckerboardedNoRecordingContentArea(
+    int64_t area) {
+  if (!record_rendering_stats_)
+    return;
+
+  base::AutoLock scoped_lock(lock_);
+  impl_thread_rendering_stats_.checkerboarded_no_recording_content_area += area;
+}
+
+void RenderingStatsInstrumentation::AddCheckerboardedNeedsRasterContentArea(
+    int64_t area) {
+  if (!record_rendering_stats_)
+    return;
+
+  base::AutoLock scoped_lock(lock_);
+  impl_thread_rendering_stats_.checkerboarded_needs_raster_content_area += area;
 }
 
 void RenderingStatsInstrumentation::AddDrawDuration(

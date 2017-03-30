@@ -4,13 +4,17 @@
 
 #include "mojo/services/test_service/test_service_impl.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/utf_string_conversions.h"
-#include "mojo/application/public/cpp/application_impl.h"
 #include "mojo/services/test_service/test_service_application.h"
 #include "mojo/services/test_service/test_time_service_impl.h"
 #include "mojo/services/test_service/tracked_service.h"
+#include "mojo/shell/public/cpp/application_impl.h"
 
 namespace mojo {
 namespace test {
@@ -20,15 +24,12 @@ TestServiceImpl::TestServiceImpl(ApplicationImpl* app_impl,
                                  InterfaceRequest<TestService> request)
     : application_(application),
       app_impl_(app_impl),
-      binding_(this, request.Pass()) {
-  binding_.set_error_handler(this);
+      binding_(this, std::move(request)) {
+  binding_.set_connection_error_handler(
+      [this]() { application_->ReleaseRef(); });
 }
 
 TestServiceImpl::~TestServiceImpl() {
-}
-
-void TestServiceImpl::OnConnectionError() {
-  application_->ReleaseRef();
 }
 
 void TestServiceImpl::Ping(const mojo::Callback<void()>& callback) {
@@ -46,9 +47,7 @@ void SendTimeResponse(
 void TestServiceImpl::ConnectToAppAndGetTime(
     const mojo::String& app_url,
     const mojo::Callback<void(int64_t)>& callback) {
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From(app_url);
-  app_impl_->ConnectToService(request.Pass(), &time_service_);
+  app_impl_->ConnectToService(app_url.get(), &time_service_);
   if (tracking_) {
     tracking_->RecordNewRequest();
     time_service_->StartTrackingRequests(mojo::Callback<void()>());
@@ -59,10 +58,8 @@ void TestServiceImpl::ConnectToAppAndGetTime(
 void TestServiceImpl::StartTrackingRequests(
     const mojo::Callback<void()>& callback) {
   TestRequestTrackerPtr tracker;
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From("mojo:test_request_tracker_app");
-  app_impl_->ConnectToService(request.Pass(), &tracker);
-  tracking_.reset(new TrackedService(tracker.Pass(), Name_, callback));
+  app_impl_->ConnectToService("mojo:test_request_tracker_app", &tracker);
+  tracking_.reset(new TrackedService(std::move(tracker), Name_, callback));
 }
 
 }  // namespace test

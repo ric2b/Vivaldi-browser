@@ -7,6 +7,7 @@
 
 #include "ash/system/chromeos/power/power_status.h"
 #include "ash/system/tray/system_tray_item.h"
+#include "base/macros.h"
 
 class SkBitmap;
 
@@ -22,6 +23,7 @@ class MessageCenter;
 namespace ash {
 
 class BatteryNotification;
+class DualRoleNotification;
 
 namespace tray {
 class PowerTrayView;
@@ -50,9 +52,13 @@ class ASH_EXPORT TrayPower : public SystemTrayItem,
   static const int kLowPowerPercentage;
   static const int kNoWarningPercentage;
 
+  static const char kUsbNotificationId[];
+
   TrayPower(SystemTray* system_tray,
             message_center::MessageCenter* message_center);
   ~TrayPower() override;
+
+  void NotifyUsbNotificationClosedByUser();
 
  private:
   friend class TrayPowerTest;
@@ -79,9 +85,12 @@ class ASH_EXPORT TrayPower : public SystemTrayItem,
   // Overridden from PowerStatus::Observer.
   void OnPowerStatusChanged() override;
 
-  // Show a notification that a low-power USB charger has been connected.
+  // Shows a notification that a low-power USB charger has been connected.
   // Returns true if a notification was shown or explicitly hidden.
   bool MaybeShowUsbChargerNotification();
+
+  // Shows a notification when dual-role devices are connected.
+  void MaybeShowDualRoleNotification();
 
   // Sets |notification_state_|. Returns true if a notification should be shown.
   bool UpdateNotificationState();
@@ -91,6 +100,7 @@ class ASH_EXPORT TrayPower : public SystemTrayItem,
   message_center::MessageCenter* message_center_;  // Not owned.
   tray::PowerTrayView* power_tray_;
   scoped_ptr<BatteryNotification> battery_notification_;
+  scoped_ptr<DualRoleNotification> dual_role_notification_;
   NotificationState notification_state_;
 
   // Was a USB charger connected the last time OnPowerStatusChanged() was
@@ -99,6 +109,10 @@ class ASH_EXPORT TrayPower : public SystemTrayItem,
 
   // Was line power connected the last time onPowerStatusChanged() was called?
   bool line_power_was_connected_;
+
+  // Has the user already dismissed a low-power notification? Should be set
+  // back to false when all power sources are disconnected.
+  bool usb_notification_dismissed_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayPower);
 };

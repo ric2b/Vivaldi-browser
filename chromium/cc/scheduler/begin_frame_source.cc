@@ -4,6 +4,8 @@
 
 #include "cc/scheduler/begin_frame_source.h"
 
+#include <stddef.h>
+
 #include "base/auto_reset.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -12,18 +14,6 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/scheduler/delay_based_time_source.h"
 #include "cc/scheduler/scheduler.h"
-
-#ifdef NDEBUG
-#define DEBUG_FRAMES(...)
-#else
-#define DEBUG_FRAMES(name, arg1_name, arg1_val, arg2_name, arg2_val)   \
-  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler.frames"), \
-               name,                                                   \
-               arg1_name,                                              \
-               arg1_val,                                               \
-               arg2_name,                                              \
-               arg2_val);
-#endif
 
 namespace cc {
 
@@ -63,6 +53,7 @@ void BeginFrameObserverBase::AsValueInto(
 BeginFrameSourceBase::BeginFrameSourceBase()
     : observer_(NULL),
       needs_begin_frames_(false),
+      paused_(false),
       inside_as_value_into_(false) {
   DCHECK(!observer_);
   DCHECK_EQ(inside_as_value_into_, false);
@@ -92,6 +83,8 @@ void BeginFrameSourceBase::AddObserver(BeginFrameObserver* obs) {
                obs);
   DCHECK(!observer_);
   observer_ = obs;
+  if (observer_)
+    return observer_->OnBeginFrameSourcePausedChanged(paused_);
 }
 
 void BeginFrameSourceBase::RemoveObserver(BeginFrameObserver* obs) {
@@ -113,6 +106,14 @@ void BeginFrameSourceBase::CallOnBeginFrame(const BeginFrameArgs& args) {
   if (observer_) {
     return observer_->OnBeginFrame(args);
   }
+}
+
+void BeginFrameSourceBase::SetBeginFrameSourcePaused(bool paused) {
+  if (paused_ == paused)
+    return;
+  paused_ = paused;
+  if (observer_)
+    return observer_->OnBeginFrameSourcePausedChanged(paused_);
 }
 
 // Tracing support
@@ -210,12 +211,12 @@ scoped_ptr<SyntheticBeginFrameSource> SyntheticBeginFrameSource::Create(
     base::TimeDelta initial_vsync_interval) {
   scoped_ptr<DelayBasedTimeSource> time_source =
       DelayBasedTimeSource::Create(initial_vsync_interval, task_runner);
-  return make_scoped_ptr(new SyntheticBeginFrameSource(time_source.Pass()));
+  return make_scoped_ptr(new SyntheticBeginFrameSource(std::move(time_source)));
 }
 
 SyntheticBeginFrameSource::SyntheticBeginFrameSource(
     scoped_ptr<DelayBasedTimeSource> time_source)
-    : BeginFrameSourceBase(), time_source_(time_source.Pass()) {
+    : BeginFrameSourceBase(), time_source_(std::move(time_source)) {
   time_source_->SetActive(false);
   time_source_->SetClient(this);
 }
@@ -389,6 +390,10 @@ const BeginFrameArgs BeginFrameSourceMultiplexer::LastUsedBeginFrameArgs()
     return observer_->LastUsedBeginFrameArgs();
   else
     return BeginFrameArgs();
+}
+
+void BeginFrameSourceMultiplexer::OnBeginFrameSourcePausedChanged(bool paused) {
+  BeginFrameSourceBase::SetBeginFrameSourcePaused(paused);
 }
 
 // BeginFrameSource support

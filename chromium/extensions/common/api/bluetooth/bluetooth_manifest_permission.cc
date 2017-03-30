@@ -67,8 +67,8 @@ BluetoothManifestPermission::~BluetoothManifestPermission() {}
 scoped_ptr<BluetoothManifestPermission> BluetoothManifestPermission::FromValue(
     const base::Value& value,
     base::string16* error) {
-  scoped_ptr<core_api::extensions_manifest_types::Bluetooth> bluetooth =
-      core_api::extensions_manifest_types::Bluetooth::FromValue(value, error);
+  scoped_ptr<api::extensions_manifest_types::Bluetooth> bluetooth =
+      api::extensions_manifest_types::Bluetooth::FromValue(value, error);
   if (!bluetooth)
     return scoped_ptr<BluetoothManifestPermission>();
 
@@ -88,7 +88,7 @@ scoped_ptr<BluetoothManifestPermission> BluetoothManifestPermission::FromValue(
   if (bluetooth->peripheral) {
     result->peripheral_ = *(bluetooth->peripheral);
   }
-  return result.Pass();
+  return result;
 }
 
 bool BluetoothManifestPermission::CheckRequest(
@@ -118,11 +118,6 @@ bool BluetoothManifestPermission::CheckLowEnergyPermitted(
 
 bool BluetoothManifestPermission::CheckPeripheralPermitted(
     const Extension* extension) const {
-  if (!FeatureProvider::GetBehaviorFeature(
-           BehaviorFeature::kBluetoothPeripheral)
-           ->IsAvailableToExtension(extension)
-           .is_available())
-    return false;
   return peripheral_;
 }
 
@@ -141,28 +136,6 @@ PermissionIDSet BluetoothManifestPermission::GetPermissions() const {
   return permissions;
 }
 
-bool BluetoothManifestPermission::HasMessages() const { return true; }
-
-PermissionMessages BluetoothManifestPermission::GetMessages() const {
-  // When modifying this function, be careful to also modify GetPermissions()
-  // above to have the same functionality.
-  DCHECK(HasMessages());
-  PermissionMessages result;
-
-  result.push_back(PermissionMessage(
-      PermissionMessage::kBluetooth,
-      l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH)));
-
-  if (!uuids_.empty()) {
-    result.push_back(
-        PermissionMessage(PermissionMessage::kBluetoothDevices,
-                          l10n_util::GetStringUTF16(
-                              IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH_DEVICES)));
-  }
-
-  return result;
-}
-
 bool BluetoothManifestPermission::FromValue(const base::Value* value) {
   if (!value)
     return false;
@@ -178,10 +151,10 @@ bool BluetoothManifestPermission::FromValue(const base::Value* value) {
 }
 
 scoped_ptr<base::Value> BluetoothManifestPermission::ToValue() const {
-  core_api::extensions_manifest_types::Bluetooth bluetooth;
+  api::extensions_manifest_types::Bluetooth bluetooth;
   bluetooth.uuids.reset(new std::vector<std::string>(uuids_.begin(),
                                                      uuids_.end()));
-  return bluetooth.ToValue().Pass();
+  return bluetooth.ToValue();
 }
 
 ManifestPermission* BluetoothManifestPermission::Diff(

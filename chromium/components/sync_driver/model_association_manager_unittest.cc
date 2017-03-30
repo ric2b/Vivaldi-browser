@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/sync_driver/model_association_manager.h"
+
 #include "base/callback.h"
 #include "base/message_loop/message_loop.h"
 #include "components/sync_driver/fake_data_type_controller.h"
-#include "components/sync_driver/model_association_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -35,7 +36,7 @@ FakeDataTypeController* GetController(
   if (it == controllers.end()) {
     return NULL;
   }
-  return (FakeDataTypeController*)(it->second.get());
+  return static_cast<FakeDataTypeController*>(it->second.get());
 }
 
 ACTION_P(VerifyResult, expected_result) {

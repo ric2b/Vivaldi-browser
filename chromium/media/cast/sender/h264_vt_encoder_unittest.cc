@@ -2,19 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <queue>
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/power_monitor_test_base.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_suite.h"
+#include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media.h"
 #include "media/base/media_switches.h"
+#include "media/base/media_util.h"
+#include "media/cast/common/rtp_time.h"
+#include "media/cast/constants.h"
 #include "media/cast/sender/h264_vt_encoder.h"
 #include "media/cast/sender/video_frame_factory.h"
 #include "media/cast/test/utility/default_config.h"
@@ -80,9 +87,9 @@ class MetadataRecorder : public base::RefCountedThreadSafe<MetadataRecorder> {
 
   int count_frames_delivered() const { return count_frames_delivered_; }
 
-  void PushExpectation(uint32 expected_frame_id,
-                       uint32 expected_last_referenced_frame_id,
-                       uint32 expected_rtp_timestamp,
+  void PushExpectation(uint32_t expected_frame_id,
+                       uint32_t expected_last_referenced_frame_id,
+                       RtpTimeTicks expected_rtp_timestamp,
                        const base::TimeTicks& expected_reference_time) {
     expectations_.push(Expectation{expected_frame_id,
                                    expected_last_referenced_frame_id,
@@ -116,9 +123,9 @@ class MetadataRecorder : public base::RefCountedThreadSafe<MetadataRecorder> {
   int count_frames_delivered_;
 
   struct Expectation {
-    uint32 expected_frame_id;
-    uint32 expected_last_referenced_frame_id;
-    uint32 expected_rtp_timestamp;
+    uint32_t expected_frame_id;
+    uint32_t expected_last_referenced_frame_id;
+    RtpTimeTicks expected_rtp_timestamp;
     base::TimeTicks expected_reference_time;
   };
   std::queue<Expectation> expectations_;
@@ -130,11 +137,11 @@ class EndToEndFrameChecker
     : public base::RefCountedThreadSafe<EndToEndFrameChecker> {
  public:
   explicit EndToEndFrameChecker(const VideoDecoderConfig& config)
-      : decoder_(base::MessageLoop::current()->task_runner()),
-        count_frames_checked_(0) {
+      : decoder_(), count_frames_checked_(0) {
     bool decoder_init_result;
     decoder_.Initialize(
-        config, false, base::Bind(&SaveDecoderInitResult, &decoder_init_result),
+        config, false, media::SetCdmReadyCB(),
+        base::Bind(&SaveDecoderInitResult, &decoder_init_result),
         base::Bind(&EndToEndFrameChecker::CompareFrameWithExpected,
                    base::Unretained(this)));
     base::MessageLoop::current()->RunUntilIdle();
@@ -224,9 +231,8 @@ class H264VideoToolboxEncoderTest : public ::testing::Test {
         new base::PowerMonitor(scoped_ptr<TestPowerSource>(power_source_)));
 
     cast_environment_ = new CastEnvironment(
-        scoped_ptr<base::TickClock>(clock_).Pass(),
-        message_loop_.task_runner(), message_loop_.task_runner(),
-        message_loop_.task_runner());
+        scoped_ptr<base::TickClock>(clock_), message_loop_.task_runner(),
+        message_loop_.task_runner(), message_loop_.task_runner());
     encoder_.reset(new H264VideoToolboxEncoder(
         cast_environment_, video_sender_config_,
         base::Bind(&SaveOperationalStatus, &operational_status_)));
@@ -252,7 +258,7 @@ class H264VideoToolboxEncoderTest : public ::testing::Test {
     video_sender_config_.codec = CODEC_VIDEO_H264;
     const gfx::Size size(kVideoWidth, kVideoHeight);
     frame_ = media::VideoFrame::CreateFrame(
-        VideoFrame::I420, size, gfx::Rect(size), size, base::TimeDelta());
+        PIXEL_FORMAT_I420, size, gfx::Rect(size), size, base::TimeDelta());
     PopulateVideoFrame(frame_.get(), 123);
   }
 
@@ -283,16 +289,16 @@ TEST_F(H264VideoToolboxEncoderTest, CheckFrameMetadataSequence) {
       &MetadataRecorder::CompareFrameWithExpected, metadata_recorder.get());
 
   metadata_recorder->PushExpectation(
-      0, 0, TimeDeltaToRtpDelta(frame_->timestamp(), kVideoFrequency),
+      0, 0, RtpTimeTicks::FromTimeDelta(frame_->timestamp(), kVideoFrequency),
       clock_->NowTicks());
   EXPECT_TRUE(encoder_->EncodeVideoFrame(frame_, clock_->NowTicks(), cb));
   message_loop_.RunUntilIdle();
 
-  for (uint32 frame_id = 1; frame_id < 10; ++frame_id) {
+  for (uint32_t frame_id = 1; frame_id < 10; ++frame_id) {
     AdvanceClockAndVideoFrameTimestamp();
     metadata_recorder->PushExpectation(
         frame_id, frame_id - 1,
-        TimeDeltaToRtpDelta(frame_->timestamp(), kVideoFrequency),
+        RtpTimeTicks::FromTimeDelta(frame_->timestamp(), kVideoFrequency),
         clock_->NowTicks());
     EXPECT_TRUE(encoder_->EncodeVideoFrame(frame_, clock_->NowTicks(), cb));
   }
@@ -306,13 +312,14 @@ TEST_F(H264VideoToolboxEncoderTest, CheckFrameMetadataSequence) {
 #if defined(USE_PROPRIETARY_CODECS)
 TEST_F(H264VideoToolboxEncoderTest, CheckFramesAreDecodable) {
   VideoDecoderConfig config(kCodecH264, H264PROFILE_MAIN, frame_->format(),
-                            frame_->coded_size(), frame_->visible_rect(),
-                            frame_->natural_size(), nullptr, 0, false);
+                            COLOR_SPACE_UNSPECIFIED, frame_->coded_size(),
+                            frame_->visible_rect(), frame_->natural_size(),
+                            EmptyExtraData(), false);
   scoped_refptr<EndToEndFrameChecker> checker(new EndToEndFrameChecker(config));
 
   VideoEncoder::FrameEncodedCallback cb =
       base::Bind(&EndToEndFrameChecker::EncodeDone, checker.get());
-  for (uint32 frame_id = 0; frame_id < 6; ++frame_id) {
+  for (uint32_t frame_id = 0; frame_id < 6; ++frame_id) {
     checker->PushExpectation(frame_);
     EXPECT_TRUE(encoder_->EncodeVideoFrame(frame_, clock_->NowTicks(), cb));
     AdvanceClockAndVideoFrameTimestamp();

@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <sstream>
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/statistics_recorder.h"
@@ -15,6 +19,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -31,14 +36,13 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/search/instant_tab.h"
 #include "chrome/browser/ui/search/instant_test_utils.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/theme_source.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/instant_types.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -55,9 +59,11 @@
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "components/omnibox/browser/search_provider.h"
+#include "components/search/search.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/sessions/serialized_navigation_entry.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -71,6 +77,7 @@
 #include "content/public/test/test_utils.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_status_code.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher_impl.h"
 #include "net/url_request/url_request_status.h"
@@ -93,7 +100,9 @@ class QuittingHistoryDBTask : public history::HistoryDBTask {
     return true;
   }
 
-  void DoneRunOnMainThread() override { base::MessageLoop::current()->Quit(); }
+  void DoneRunOnMainThread() override {
+    base::MessageLoop::current()->QuitWhenIdle();
+  }
 
  private:
   ~QuittingHistoryDBTask() override {}
@@ -135,21 +144,20 @@ class InstantExtendedTest : public InProcessBrowserTest,
         submit_count_(0),
         on_esc_key_press_event_calls_(0),
         on_focus_changed_calls_(0),
-        is_focused_(false),
-        on_toggle_voice_search_calls_(0) {
-  }
+        is_focused_(false) {}
+
  protected:
   void SetUpInProcessBrowserTestFixture() override {
-    chrome::EnableQueryExtractionForTesting();
+    search::EnableQueryExtractionForTesting();
     ASSERT_TRUE(https_test_server().Start());
-    GURL instant_url = https_test_server().GetURL(
-        "files/instant_extended.html?strk=1&");
-    GURL ntp_url = https_test_server().GetURL(
-        "files/instant_extended_ntp.html?strk=1&");
+    GURL instant_url =
+        https_test_server().GetURL("/instant_extended.html?strk=1&");
+    GURL ntp_url =
+        https_test_server().GetURL("/instant_extended_ntp.html?strk=1&");
     InstantTestBase::Init(instant_url, ntp_url, false);
   }
 
-  int64 GetHistogramCount(const char* name) {
+  int64_t GetHistogramCount(const char* name) {
     base::HistogramBase* histogram =
         base::StatisticsRecorder::FindHistogram(name);
     if (!histogram) {
@@ -181,8 +189,6 @@ class InstantExtendedTest : public InProcessBrowserTest,
                        &on_focus_changed_calls_) &&
            GetBoolFromJS(contents, "isFocused",
                          &is_focused_) &&
-           GetIntFromJS(contents, "onToggleVoiceSearchCalls",
-                        &on_toggle_voice_search_calls_) &&
            GetStringFromJS(contents, "prefetchQuery", &prefetch_query_value_);
 
   }
@@ -243,7 +249,6 @@ class InstantExtendedTest : public InProcessBrowserTest,
   std::string query_value_;
   int on_focus_changed_calls_;
   bool is_focused_;
-  int on_toggle_voice_search_calls_;
   std::string prefetch_query_value_;
 };
 
@@ -255,12 +260,12 @@ class InstantExtendedPrefetchTest : public InstantExtendedTest {
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    chrome::EnableQueryExtractionForTesting();
+    search::EnableQueryExtractionForTesting();
     ASSERT_TRUE(https_test_server().Start());
-    GURL instant_url = https_test_server().GetURL(
-        "files/instant_extended.html?strk=1&");
-    GURL ntp_url = https_test_server().GetURL(
-        "files/instant_extended_ntp.html?strk=1&");
+    GURL instant_url =
+        https_test_server().GetURL("/instant_extended.html?strk=1&");
+    GURL ntp_url =
+        https_test_server().GetURL("/instant_extended_ntp.html?strk=1&");
     InstantTestBase::Init(instant_url, ntp_url, true);
   }
 
@@ -315,10 +320,10 @@ class InstantPolicyTest : public ExtensionBrowserTest, public InstantTestBase {
  protected:
   void SetUpInProcessBrowserTestFixture() override {
     ASSERT_TRUE(https_test_server().Start());
-    GURL instant_url = https_test_server().GetURL(
-        "files/instant_extended.html?strk=1&");
-    GURL ntp_url = https_test_server().GetURL(
-        "files/instant_extended_ntp.html?strk=1&");
+    GURL instant_url =
+        https_test_server().GetURL("/instant_extended.html?strk=1&");
+    GURL ntp_url =
+        https_test_server().GetURL("/instant_extended_ntp.html?strk=1&");
     InstantTestBase::Init(instant_url, ntp_url, false);
   }
 
@@ -378,13 +383,8 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest, SearchReusesInstantTab) {
   EXPECT_EQ(1, submit_count_);
 }
 
-#if defined(OS_MACOSX)
-#define MAYBE_SearchDoesntReuseInstantTabWithoutSupport DISABLED_SearchDoesntReuseInstantTabWithoutSupport
-#else
-#define MAYBE_SearchDoesntReuseInstantTabWithoutSupport SearchDoesntReuseInstantTabWithoutSupport
-#endif
 IN_PROC_BROWSER_TEST_F(InstantExtendedTest,
-                       MAYBE_SearchDoesntReuseInstantTabWithoutSupport) {
+                       SearchDoesntReuseInstantTabWithoutSupport) {
   ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
   FocusOmnibox();
 
@@ -434,37 +434,9 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest,
   ASSERT_THAT(active_tab->GetURL().spec(), HasSubstr("q=puppies"));
 }
 
-IN_PROC_BROWSER_TEST_F(InstantExtendedTest,
-                       OmniboxMarginSetForSearchURLs) {
-  ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
-  FocusOmnibox();
-
-  // Create an observer to wait for the instant tab to support Instant.
-  content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_INSTANT_TAB_SUPPORT_DETERMINED,
-      content::NotificationService::AllSources());
-
-  SetOmniboxText("flowers");
-  browser()->window()->GetLocationBar()->AcceptInput();
-  observer.Wait();
-
-  const std::string& url =
-      browser()->tab_strip_model()->GetActiveWebContents()->GetURL().spec();
-  // Make sure we actually used search_url, not instant_url.
-  ASSERT_THAT(url, HasSubstr("&is_search"));
-  EXPECT_THAT(url, HasSubstr("&es_sm="));
-}
-
-//Disabled on mac in vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NoMostVisitedChangedOnTabSwitch \
-  DISABLED_NoMostVisitedChangedOnTabSwitch
-#else
-#define MAYBE_NoMostVisitedChangedOnTabSwitch NoMostVisitedChangedOnTabSwitch
-#endif
 // Test to verify that switching tabs should not dispatch onmostvisitedchanged
 // events.
-IN_PROC_BROWSER_TEST_F(InstantExtendedTest, MAYBE_NoMostVisitedChangedOnTabSwitch) {
+IN_PROC_BROWSER_TEST_F(InstantExtendedTest, NoMostVisitedChangedOnTabSwitch) {
   // Initialize Instant.
   ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
 
@@ -603,12 +575,6 @@ IN_PROC_BROWSER_TEST_F(InstantPolicyTest,
 }
 
 // Flaky on all bots.  http://crbug.com/253092
-// TODO reenable test for Vivaldi
-#if 1 || (defined(OS_MACOSX) || defined(OS_LINUX))
-#define MAYBE_UpdateSearchQueryOnBackNavigation DISABLED_UpdateSearchQueryOnBackNavigation
-#else
-#define MAYBE_UpdateSearchQueryOnBackNavigation UpdateSearchQueryOnBackNavigation
-#endif
 // Test to verify that the omnibox search query is updated on browser
 // back button press event.
 IN_PROC_BROWSER_TEST_F(InstantExtendedTest,
@@ -769,7 +735,7 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest, DISABLED_NavigateBackToNTP) {
   load_stop_observer_2.Wait();
 
   active_tab = browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_TRUE(chrome::IsInstantNTP(active_tab));
+  EXPECT_TRUE(search::IsInstantNTP(active_tab));
 }
 
 // Flaky: crbug.com/267119
@@ -817,7 +783,14 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest,
   EXPECT_EQ(1, on_most_visited_change_calls_);
 }
 
-IN_PROC_BROWSER_TEST_F(InstantExtendedPrefetchTest, SetPrefetchQuery) {
+// http://crbug.com/518106
+IN_PROC_BROWSER_TEST_F(InstantExtendedPrefetchTest, DISABLED_SetPrefetchQuery) {
+  // Skip the test if suggest support is disabled, since this is generally due
+  // to policy and can't be overridden.
+  if (!browser()->profile()->GetPrefs()->GetBoolean(
+      prefs::kSearchSuggestEnabled)) {
+    return;
+  }
   ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
   FocusOmnibox();
 
@@ -879,8 +852,15 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedPrefetchTest, SetPrefetchQuery) {
   ASSERT_EQ("puppy", prefetch_query_value_);
 }
 
+// http://crbug.com/518106
 IN_PROC_BROWSER_TEST_F(InstantExtendedPrefetchTest,
-                       ClearPrefetchedResults) {
+                       DISABLED_ClearPrefetchedResults) {
+  // Skip the test if suggest support is disabled, since this is generally due
+  // to policy and can't be overridden.
+  if (!browser()->profile()->GetPrefs()->GetBoolean(
+      prefs::kSearchSuggestEnabled)) {
+    return;
+  }
   ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
   FocusOmnibox();
 
@@ -939,7 +919,7 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedPrefetchTest,
   ASSERT_EQ("", prefetch_query_value_);
 }
 
-#if (defined(OS_LINUX) && defined(ADDRESS_SANITIZER))
+#if defined(OS_LINUX) && defined(ADDRESS_SANITIZER)
 // Flaky timeouts at shutdown on Linux ASan; http://crbug.com/505478.
 #define MAYBE_ShowURL DISABLED_ShowURL
 #else
@@ -975,9 +955,9 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest, MAYBE_ShowURL) {
 
 // Check that clicking on a result sends the correct referrer.
 IN_PROC_BROWSER_TEST_F(InstantExtendedTest, Referrer) {
-  ASSERT_TRUE(test_server()->Start());
-  GURL result_url =
-      test_server()->GetURL("files/referrer_policy/referrer-policy-log.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL result_url = embedded_test_server()->GetURL(
+      "/referrer_policy/referrer-policy-log.html");
   ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
   FocusOmnibox();
 

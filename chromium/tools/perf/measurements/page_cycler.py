@@ -77,7 +77,7 @@ class PageCycler(page_test.PageTest):
     if page.is_file:
       # For legacy page cyclers which use the filesystem, do an initial
       # navigate to avoid paying for a cross-renderer navigation.
-      initial_url = tab.browser.http_server.UrlOf('nonexistent.html')
+      initial_url = tab.browser.platform.http_server.UrlOf('nonexistent.html')
       if self._initial_renderer_url != initial_url:
         self._initial_renderer_url = initial_url
         tab.Navigate(self._initial_renderer_url)
@@ -150,3 +150,6 @@ class PageCycler(page_test.PageTest):
     # warm run, and clearing the cache before the load of the following
     # URL would eliminate the intended warmup for the previous URL.
     return self._has_loaded_page[url] >= self._cold_run_start_index
+
+  def DidRunPage(self, platform):
+    self._power_metric.Close()

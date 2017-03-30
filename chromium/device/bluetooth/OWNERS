@@ -1,11 +1,6 @@
-set noparent
-
 keybuk@chromium.org
 armansito@chromium.org
-
-per-file *_android*=scheib@chromium.org
-per-file *_mac*=rpaquay@chromium.org
-per-file *_win*=rpaquay@chromium.org
+scheib@chromium.org
 
 per-file *.gyp*=*
 per-file BUILD.gn=*

@@ -5,11 +5,13 @@
 #include "chrome/browser/chromeos/policy/remote_commands/device_command_screenshot_job.h"
 
 #include <fstream>
+#include <utility>
 
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
@@ -92,7 +94,7 @@ scoped_ptr<std::string> DeviceCommandScreenshotJob::Payload::Serialize() {
 DeviceCommandScreenshotJob::DeviceCommandScreenshotJob(
     scoped_ptr<Delegate> screenshot_delegate)
     : num_pending_screenshots_(0),
-      screenshot_delegate_(screenshot_delegate.Pass()),
+      screenshot_delegate_(std::move(screenshot_delegate)),
       weak_ptr_factory_(this) {
   DCHECK(screenshot_delegate_);
 }
@@ -121,9 +123,6 @@ void DeviceCommandScreenshotJob::OnFailure(UploadJob::ErrorCode error_code) {
     case UploadJob::NETWORK_ERROR:
     case UploadJob::SERVER_ERROR:
       result_code = FAILURE_SERVER;
-      break;
-    case UploadJob::CONTENT_ENCODING_ERROR:
-      result_code = FAILURE_CLIENT;
       break;
   }
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -178,7 +177,7 @@ void DeviceCommandScreenshotJob::StartScreenshotUpload() {
     upload_job_->AddDataSegment(
         base::StringPrintf(kNameFieldTemplate, screenshot_entry.first),
         base::StringPrintf(kFilenameFieldTemplate, screenshot_entry.first),
-        header_fields, data.Pass());
+        header_fields, std::move(data));
   }
   upload_job_->Start();
 }

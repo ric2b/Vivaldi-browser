@@ -120,7 +120,7 @@ SupervisedUserCreationScreen::~SupervisedUserCreationScreen() {
     sync_service_->RemoveObserver(this);
   if (actor_)
     actor_->SetDelegate(NULL);
-  NetworkPortalDetector::Get()->RemoveObserver(this);
+  network_portal_detector::GetInstance()->RemoveObserver(this);
 }
 
 void SupervisedUserCreationScreen::PrepareToShow() {
@@ -141,7 +141,7 @@ void SupervisedUserCreationScreen::Show() {
   }
 
   if (!on_error_screen_)
-    NetworkPortalDetector::Get()->AddAndFireObserver(this);
+    network_portal_detector::GetInstance()->AddAndFireObserver(this);
   on_error_screen_ = false;
   histogram_helper_->OnScreenShow();
 }
@@ -190,7 +190,7 @@ void SupervisedUserCreationScreen::Hide() {
   if (actor_)
     actor_->Hide();
   if (!on_error_screen_)
-    NetworkPortalDetector::Get()->RemoveObserver(this);
+    network_portal_detector::GetInstance()->RemoveObserver(this);
 }
 
 std::string SupervisedUserCreationScreen::GetName() const {
@@ -216,7 +216,7 @@ void SupervisedUserCreationScreen::HideFlow() {
 }
 
 void SupervisedUserCreationScreen::AuthenticateManager(
-    const std::string& manager_id,
+    const AccountId& manager_id,
     const std::string& manager_password) {
   if (manager_signin_in_progress_)
     return;
@@ -484,7 +484,8 @@ bool SupervisedUserCreationScreen::FindUserByDisplayName(
 void SupervisedUserCreationScreen::ApplyPicture() {
   std::string user_id = controller_->GetSupervisedUserId();
   UserImageManager* image_manager =
-      ChromeUserManager::Get()->GetUserImageManager(user_id);
+      ChromeUserManager::Get()->GetUserImageManager(
+          AccountId::FromUserEmail(user_id));
   switch (selected_image_) {
     case user_manager::User::USER_IMAGE_EXTERNAL:
       // Photo decoding may not have been finished yet.
@@ -500,7 +501,7 @@ void SupervisedUserCreationScreen::ApplyPicture() {
       break;
     default:
       DCHECK(selected_image_ >= 0 &&
-             selected_image_ < user_manager::kDefaultImagesCount);
+             selected_image_ < default_user_image::kDefaultImagesCount);
       image_manager->SaveUserDefaultImageIndex(selected_image_);
       break;
   }
@@ -545,15 +546,16 @@ void SupervisedUserCreationScreen::OnGetSupervisedUsers(
         SupervisedUserSyncService::GetAvatarIndex(
             chromeos_avatar, &avatar_index)) {
       ui_copy->SetString(kAvatarURLKey,
-                         user_manager::GetDefaultImageUrl(avatar_index));
+                         default_user_image::GetDefaultImageUrl(avatar_index));
     } else {
-      int i = base::RandInt(user_manager::kFirstDefaultImageIndex,
-                            user_manager::kDefaultImagesCount - 1);
+      int i = base::RandInt(default_user_image::kFirstDefaultImageIndex,
+                            default_user_image::kDefaultImagesCount - 1);
       local_copy->SetString(
           SupervisedUserSyncService::kChromeOsAvatar,
           SupervisedUserSyncService::BuildAvatarString(i));
       local_copy->SetBoolean(kRandomAvatarKey, true);
-      ui_copy->SetString(kAvatarURLKey, user_manager::GetDefaultImageUrl(i));
+      ui_copy->SetString(kAvatarURLKey,
+                         default_user_image::GetDefaultImageUrl(i));
     }
 
     local_copy->SetBoolean(kUserExists, false);
@@ -616,7 +618,7 @@ void SupervisedUserCreationScreen::OnImageSelected(
     return;
   int user_image_index = user_manager::User::USER_IMAGE_INVALID;
   if (image_type == "default" &&
-      user_manager::IsDefaultImageUrl(image_url, &user_image_index)) {
+      default_user_image::IsDefaultImageUrl(image_url, &user_image_index)) {
     selected_image_ = user_image_index;
   } else if (image_type == "camera") {
     selected_image_ = user_manager::User::USER_IMAGE_EXTERNAL;

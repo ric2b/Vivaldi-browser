@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/bookmarks/bookmark_context_menu.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -13,18 +15,20 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client_factory.h"
+#include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/bookmarks/bookmark_utils.h"
-#include "chrome/common/pref_names.h"
+#include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/test/test_browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/events/platform/platform_event_source.h"
@@ -59,14 +63,9 @@ class TestingPageNavigator : public PageNavigator {
 
 class BookmarkContextMenuTest : public testing::Test {
  public:
-  BookmarkContextMenuTest()
-      : ui_thread_(BrowserThread::UI, &message_loop_),
-        file_thread_(BrowserThread::FILE, &message_loop_),
-        model_(NULL) {
-  }
+  BookmarkContextMenuTest() : model_(nullptr) {}
 
   void SetUp() override {
-    event_source_ = ui::PlatformEventSource::CreateDefault();
     profile_.reset(new TestingProfile());
     profile_->CreateBookmarkModel(true);
 
@@ -80,16 +79,10 @@ class BookmarkContextMenuTest : public testing::Test {
     ui::Clipboard::DestroyClipboardForCurrentThread();
 
     BrowserThread::GetBlockingPool()->FlushForTesting();
-    // Flush the message loop to make application verifiers happy.
-    message_loop_.RunUntilIdle();
-    event_source_.reset();
   }
 
  protected:
-  base::MessageLoopForUI message_loop_;
-  content::TestBrowserThread ui_thread_;
-  content::TestBrowserThread file_thread_;
-  scoped_ptr<ui::PlatformEventSource> event_source_;
+  content::TestBrowserThreadBundle thread_bundle_;
   scoped_ptr<TestingProfile> profile_;
   BookmarkModel* model_;
   TestingPageNavigator navigator_;
@@ -349,9 +342,9 @@ TEST_F(BookmarkContextMenuTest, ShowManagedBookmarks) {
       NULL, NULL, profile_.get(), NULL, nodes[0]->parent(), nodes, false));
 
   // Verify that there are no managed nodes yet.
-  ChromeBookmarkClient* client = ChromeBookmarkClientFactory::GetForProfile(
-      profile_.get());
-  EXPECT_TRUE(client->managed_node()->empty());
+  bookmarks::ManagedBookmarkService* managed =
+      ManagedBookmarkServiceFactory::GetForProfile(profile_.get());
+  EXPECT_TRUE(managed->managed_node()->empty());
 
   // The context menu should not show the option to "Show managed bookmarks".
   EXPECT_FALSE(
@@ -370,9 +363,9 @@ TEST_F(BookmarkContextMenuTest, ShowManagedBookmarks) {
   dict->SetString("url", "http://google.com");
   base::ListValue list;
   list.Append(dict);
-  EXPECT_TRUE(client->managed_node()->empty());
+  EXPECT_TRUE(managed->managed_node()->empty());
   profile_->GetPrefs()->Set(bookmarks::prefs::kManagedBookmarks, list);
-  EXPECT_FALSE(client->managed_node()->empty());
+  EXPECT_FALSE(managed->managed_node()->empty());
 
   // New context menus now show the "Show managed bookmarks" option.
   controller.reset(new BookmarkContextMenu(

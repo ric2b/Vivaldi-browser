@@ -138,19 +138,19 @@ void PepperVideoCaptureHost::OnFrameReady(
 
   for (uint32_t i = 0; i < buffers_.size(); ++i) {
     if (!buffers_[i].in_use) {
-      DCHECK_EQ(frame->format(), media::VideoFrame::I420);
+      DCHECK_EQ(frame->format(), media::PIXEL_FORMAT_I420);
       if (buffers_[i].buffer->size() <
           media::VideoFrame::AllocationSize(frame->format(), alloc_size_)) {
         // TODO(ihf): handle size mismatches gracefully here.
         return;
       }
-      uint8* dst = reinterpret_cast<uint8*>(buffers_[i].data);
+      uint8_t* dst = reinterpret_cast<uint8_t*>(buffers_[i].data);
       static_assert(media::VideoFrame::kYPlane == 0, "y plane should be 0");
       static_assert(media::VideoFrame::kUPlane == 1, "u plane should be 1");
       static_assert(media::VideoFrame::kVPlane == 2, "v plane should be 2");
       for (size_t j = 0; j < media::VideoFrame::NumPlanes(frame->format());
            ++j) {
-        const uint8* src = frame->visible_data(j);
+        const uint8_t* src = frame->visible_data(j);
         const size_t row_bytes = frame->row_bytes(j);
         const size_t src_stride = frame->stride(j);
         for (int k = 0; k < frame->rows(j); ++k) {
@@ -176,7 +176,7 @@ void PepperVideoCaptureHost::AllocBuffers(const gfx::Size& resolution,
   ReleaseBuffers();
 
   const size_t size = media::VideoFrame::AllocationSize(
-      media::VideoFrame::I420, gfx::Size(info.width, info.height));
+      media::PIXEL_FORMAT_I420, gfx::Size(info.width, info.height));
 
   ppapi::proxy::ResourceMessageReplyParams params(pp_resource(), 0);
 
@@ -350,8 +350,7 @@ void PepperVideoCaptureHost::SetRequestedInfo(
                static_cast<uint32_t>(media::limits::kMaxFramesPerSecond - 1));
 
   video_capture_params_.requested_format = media::VideoCaptureFormat(
-      gfx::Size(device_info.width, device_info.height),
-      frames_per_second,
+      gfx::Size(device_info.width, device_info.height), frames_per_second,
       media::PIXEL_FORMAT_I420);
 }
 

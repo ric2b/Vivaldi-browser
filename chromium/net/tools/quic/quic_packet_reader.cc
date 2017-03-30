@@ -14,6 +14,8 @@
 
 #include "base/logging.h"
 #include "net/base/ip_endpoint.h"
+#include "net/quic/quic_bug_tracker.h"
+#include "net/quic/quic_flags.h"
 #include "net/tools/quic/quic_dispatcher.h"
 #include "net/tools/quic/quic_socket_utils.h"
 
@@ -39,8 +41,8 @@ void QuicPacketReader::Initialize() {
   memset(mmsg_hdr_, 0, sizeof(mmsg_hdr_));
 
   for (int i = 0; i < kNumPacketsPerReadMmsgCall; ++i) {
-    iov_[i].iov_base = buf_ + (2 * kMaxPacketSize * i);
-    iov_[i].iov_len = 2 * kMaxPacketSize;
+    iov_[i].iov_base = buf_ + (kMaxPacketSize * i);
+    iov_[i].iov_len = kMaxPacketSize;
 
     msghdr* hdr = &mmsg_hdr_[i].msg_hdr;
     hdr->msg_name = &raw_address_[i];
@@ -53,8 +55,7 @@ void QuicPacketReader::Initialize() {
   }
 }
 
-QuicPacketReader::~QuicPacketReader() {
-}
+QuicPacketReader::~QuicPacketReader() {}
 
 bool QuicPacketReader::ReadAndDispatchPackets(
     int fd,
@@ -64,7 +65,7 @@ bool QuicPacketReader::ReadAndDispatchPackets(
 #if MMSG_MORE
   // Re-set the length fields in case recvmmsg has changed them.
   for (int i = 0; i < kNumPacketsPerReadMmsgCall; ++i) {
-    iov_[i].iov_len = 2 * kMaxPacketSize;
+    iov_[i].iov_len = kMaxPacketSize;
     mmsg_hdr_[i].msg_len = 0;
     msghdr* hdr = &mmsg_hdr_[i].msg_hdr;
     hdr->msg_namelen = sizeof(sockaddr_storage);
@@ -88,7 +89,7 @@ bool QuicPacketReader::ReadAndDispatchPackets(
     IPAddressNumber server_ip =
         QuicSocketUtils::GetAddressFromMsghdr(&mmsg_hdr_[i].msg_hdr);
     if (!IsInitializedAddress(server_ip)) {
-      LOG(DFATAL) << "Unable to get server address.";
+      QUIC_BUG << "Unable to get server address.";
       continue;
     }
 
@@ -103,7 +104,8 @@ bool QuicPacketReader::ReadAndDispatchPackets(
                                            packets_dropped);
   }
 
-  return true;
+  // We may not have read all of the packets available on the socket.
+  return packets_read == kNumPacketsPerReadMmsgCall;
 #else
   LOG(FATAL) << "Unsupported";
   return false;
@@ -116,9 +118,7 @@ bool QuicPacketReader::ReadAndDispatchSinglePacket(
     int port,
     ProcessPacketInterface* processor,
     QuicPacketCount* packets_dropped) {
-  // Allocate some extra space so we can send an error if the packet is larger
-  // than kMaxPacketSize.
-  char buf[2 * kMaxPacketSize];
+  char buf[kMaxPacketSize];
 
   IPEndPoint client_address;
   IPAddressNumber server_ip;

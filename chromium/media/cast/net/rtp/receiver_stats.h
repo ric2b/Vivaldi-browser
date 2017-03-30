@@ -2,33 +2,37 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_CAST_RTP_RECEIVER_RECEIVER_STATS_H_
-#define MEDIA_CAST_RTP_RECEIVER_RECEIVER_STATS_H_
+#ifndef MEDIA_CAST_NET_RTP_RECEIVER_STATS_H_
+#define MEDIA_CAST_NET_RTP_RECEIVER_STATS_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
-#include "media/cast/net/rtcp/rtcp.h"
-#include "media/cast/net/rtp/rtp_receiver_defines.h"
+#include "media/cast/common/rtp_time.h"
+#include "media/cast/net/rtp/rtp_defines.h"
 
 namespace media {
 namespace cast {
 
+// TODO(miu): Document this class.
 class ReceiverStats {
  public:
   explicit ReceiverStats(base::TickClock* clock);
 
   RtpReceiverStatistics GetStatistics();
-  void UpdateStatistics(const RtpCastHeader& header);
+  void UpdateStatistics(const RtpCastHeader& header, int rtp_timebase);
 
  private:
   base::TickClock* const clock_;  // Not owned by this class.
 
   // Global metrics.
-  uint16 min_sequence_number_;
-  uint16 max_sequence_number_;
-  uint32 total_number_packets_;
-  uint16 sequence_number_cycles_;
-  base::TimeDelta last_received_timestamp_;
+  uint16_t min_sequence_number_;
+  uint16_t max_sequence_number_;
+  uint32_t total_number_packets_;
+  uint16_t sequence_number_cycles_;
+  RtpTimeTicks last_received_rtp_timestamp_;
   base::TimeTicks last_received_packet_time_;
   base::TimeDelta jitter_;
 
@@ -43,4 +47,4 @@ class ReceiverStats {
 }  // namespace cast
 }  // namespace media
 
-#endif  // MEDIA_CAST_RTP_RECEIVER_RECEIVER_STATS_H_
+#endif  // MEDIA_CAST_NET_RTP_RECEIVER_STATS_H_

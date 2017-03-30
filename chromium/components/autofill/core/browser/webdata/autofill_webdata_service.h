@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -57,8 +58,6 @@ class AutofillWebDataService : public AutofillWebData,
       int limit,
       WebDataServiceConsumer* consumer) override;
 
-  WebDataServiceBase::Handle HasFormElements(
-      WebDataServiceConsumer* consumer) override;
   void RemoveFormElementsAddedBetween(const base::Time& delete_begin,
                                       const base::Time& delete_end) override;
   void RemoveFormValueForElementName(const base::string16& name,
@@ -75,6 +74,10 @@ class AutofillWebDataService : public AutofillWebData,
   WebDataServiceBase::Handle GetServerProfiles(
       WebDataServiceConsumer* consumer) override;
 
+  WebDataServiceBase::Handle GetCountOfValuesContainedBetween(
+      const base::Time& begin,
+      const base::Time& end,
+      WebDataServiceConsumer* consumer) override;
   void UpdateAutofillEntries(
       const std::vector<AutofillEntry>& autofill_entries) override;
 

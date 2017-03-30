@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/extension_garbage_collector_factory.h"
 
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_garbage_collector.h"
 #include "chrome/browser/extensions/extension_system_factory.h"
 #include "chrome/browser/extensions/install_tracker_factory.h"
@@ -28,7 +29,7 @@ ExtensionGarbageCollectorFactory::GetForBrowserContext(
 // static
 ExtensionGarbageCollectorFactory*
 ExtensionGarbageCollectorFactory::GetInstance() {
-  return Singleton<ExtensionGarbageCollectorFactory>::get();
+  return base::Singleton<ExtensionGarbageCollectorFactory>::get();
 }
 
 ExtensionGarbageCollectorFactory::ExtensionGarbageCollectorFactory()

@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "components/devtools_http_handler/devtools_http_handler.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/storage_monitor/storage_monitor.h"
@@ -72,13 +73,6 @@ using content::BrowserThread;
 #endif
 
 namespace extensions {
-
-namespace {
-
-void CrxInstallComplete(bool success) {
-  VLOG(1) << "CRX download complete. Success: " << success;
-}
-}
 
 ShellBrowserMainParts::ShellBrowserMainParts(
     const content::MainFunctionParams& parameters,
@@ -210,17 +204,6 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
       FROM_HERE,
       base::Bind(nacl::NaClProcessHost::EarlyStartup));
 #endif
-
-  // TODO(rockot): Remove this temporary hack test.
-  std::string install_crx_id =
-      cmd->GetSwitchValueASCII(switches::kAppShellInstallCrx);
-  if (install_crx_id.size() != 0) {
-    CHECK(install_crx_id.size() == 32)
-        << "Extension ID must be exactly 32 characters long.";
-    UpdateService* update_service = UpdateService::Get(browser_context_.get());
-    update_service->DownloadAndInstall(install_crx_id,
-                                       base::Bind(CrxInstallComplete));
-  }
 
   devtools_http_handler_.reset(
       content::ShellDevToolsManagerDelegate::CreateHttpHandler(

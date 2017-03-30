@@ -76,9 +76,6 @@ BUILD_RESULT_SUCCEED = 0
 BUILD_RESULT_FAIL = 1
 BUILD_RESULT_SKIPPED = 2
 
-# The confidence percentage we require to consider the initial range a
-# regression based on the test results of the initial good and bad revisions.
-REGRESSION_CONFIDENCE = 80
 # How many times to repeat the test on the last known good and first known bad
 # revisions in order to assess a more accurate confidence score in the
 # regression culprit.
@@ -475,12 +472,15 @@ def _GenerateProfileIfNecessary(command_args):
   return True
 
 
-def _IsRegressionReproduced(known_good_result, known_bad_result):
+def _IsRegressionReproduced(known_good_result, known_bad_result,
+                            required_initial_confidence):
   """Checks whether the regression was reproduced based on the initial values.
 
   Args:
     known_good_result: A dict with the keys "values", "mean" and "std_err".
     known_bad_result: Same as above.
+    required_initial_confidence: Minimum confidence score for the given
+        good and bad revisions to avoid early aborting.
 
   Returns:
     True if there is a clear change between the result values for the given
@@ -492,12 +492,12 @@ def _IsRegressionReproduced(known_good_result, known_bad_result):
       return map(math_utils.Mean, values)
     return values
 
-  p_value = BisectResults.ConfidenceScore(
+  initial_confidence = BisectResults.ConfidenceScore(
       PossiblyFlatten(known_bad_result['values']),
       PossiblyFlatten(known_good_result['values']),
       accept_single_bad_or_good=True)
 
-  return p_value > REGRESSION_CONFIDENCE
+  return initial_confidence >= required_initial_confidence
 
 
 def _RegressionNotReproducedWarningMessage(
@@ -1238,37 +1238,6 @@ class BisectPerformanceMetrics(object):
   def _IsBisectModeStandardDeviation(self):
     return self.opts.bisect_mode in [bisect_utils.BISECT_MODE_STD_DEV]
 
-  def GetCompatibleCommand(self, command_to_run, revision, depot):
-    """Return a possibly modified test command depending on the revision.
-
-    Prior to crrev.com/274857 *only* android-chromium-testshell
-    Then until crrev.com/276628 *both* (android-chromium-testshell and
-    android-chrome-shell) work. After that rev 276628 *only*
-    android-chrome-shell works. The bisect_perf_regression.py script should
-    handle these cases and set appropriate browser type based on revision.
-    """
-    if self.opts.target_platform in ['android']:
-      # When its a third_party depot, get the chromium revision.
-      if depot != 'chromium':
-        revision = bisect_utils.CheckRunGit(
-            ['rev-parse', 'HEAD'], cwd=self.src_cwd).strip()
-      commit_position = source_control.GetCommitPosition(revision,
-                                                         cwd=self.src_cwd)
-      if not commit_position:
-        return command_to_run
-      cmd_re = re.compile(r'--browser=(?P<browser_type>\S+)')
-      matches = cmd_re.search(command_to_run)
-      if bisect_utils.IsStringInt(commit_position) and matches:
-        cmd_browser = matches.group('browser_type')
-        if commit_position <= 274857 and cmd_browser == 'android-chrome-shell':
-          return command_to_run.replace(cmd_browser,
-                                        'android-chromium-testshell')
-        elif (commit_position >= 276628 and
-              cmd_browser == 'android-chromium-testshell'):
-          return command_to_run.replace(cmd_browser,
-                                        'android-chrome-shell')
-    return command_to_run
-
   def RunPerformanceTestAndParseResults(
       self, command_to_run, metric, reset_on_first_run=False,
       upload_on_last_run=False, results_label=None, test_run_multiplier=1,
@@ -1365,7 +1334,7 @@ class BisectPerformanceMetrics(object):
       if metric and self._IsBisectModeUsingMetric():
         parsed_metric = _ParseMetricValuesFromOutput(metric, output)
         if parsed_metric:
-          metric_values.append(math_utils.Mean(parsed_metric))
+          metric_values += parsed_metric
         # If we're bisecting on a metric (ie, changes in the mean or
         # standard deviation) and no metric values are produced, bail out.
         if not metric_values:
@@ -1541,9 +1510,6 @@ class BisectPerformanceMetrics(object):
       return ('Failed to build revision: [%s]' % str(revision),
               BUILD_RESULT_FAIL)
     after_build_time = time.time()
-
-    # Possibly alter the command.
-    command = self.GetCompatibleCommand(command, revision, depot)
 
     # Run the command and get the results.
     results = self.RunPerformanceTestAndParseResults(
@@ -2047,7 +2013,7 @@ class BisectPerformanceMetrics(object):
             'It is impossible to bisect Android regressions '
             'prior to r265549, which allows the bisect bot to '
             'rely on Telemetry to do apk installation of the most recently '
-            'built local ChromeShell(refer to crbug.com/385324).\n'
+            'built local ChromePublic (refer to crbug.com/385324).\n'
             'Please try bisecting revisions greater than or equal to r265549.')}
 
     if bisect_utils.IsWindowsHost():
@@ -2363,7 +2329,8 @@ class BisectPerformanceMetrics(object):
       # beyond chance-induced variation.
       if not (self.opts.debug_ignore_regression_confidence or
               self._IsBisectModeReturnCode()):
-        if not _IsRegressionReproduced(known_good_value, known_bad_value):
+        if not _IsRegressionReproduced(known_good_value, known_bad_value,
+                                       self.opts.required_initial_confidence):
           # If there is no significant difference between "good" and "bad"
           # revision results, then the "bad revision" is considered "good".
           # TODO(qyearsley): Remove this if it is not necessary.
@@ -2616,6 +2583,7 @@ class BisectOptions(object):
     self.bisect_mode = bisect_utils.BISECT_MODE_MEAN
     self.improvement_direction = 0
     self.bug_id = ''
+    self.required_initial_confidence = 80.0
 
   @staticmethod
   def _AddBisectOptionsGroup(parser):
@@ -2667,6 +2635,11 @@ class BisectOptions(object):
                             'If this number is given, bisect will attempt to ' +
                             'verify that the bug is not closed before '
                             'starting.')
+    group.add_argument('--required_initial_confidence', type=float,
+                       default=80.0,
+                       help='The required confidence score for the initial '
+                            'check to see whether there is a significant '
+                            'difference between given good and bad revisions.')
 
   @staticmethod
   def _AddBuildOptionsGroup(parser):

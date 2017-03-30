@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -18,12 +23,12 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
@@ -31,12 +36,15 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/url_constants.h"
@@ -141,7 +149,7 @@ class PopupBlockerBrowserTest : public InProcessBrowserTest {
     InProcessBrowserTest::SetUpOnMainThread();
 
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
   int GetBlockedContentsCount() {
@@ -235,9 +243,9 @@ class PopupBlockerBrowserTest : public InProcessBrowserTest {
       observer.Wait();
     }
     EXPECT_EQ(1u, popup_blocker_helper->GetBlockedPopupsCount());
-    std::map<int32, GURL> blocked_requests =
+    std::map<int32_t, GURL> blocked_requests =
         popup_blocker_helper->GetBlockedPopupRequests();
-    std::map<int32, GURL>::const_iterator iter = blocked_requests.begin();
+    std::map<int32_t, GURL>::const_iterator iter = blocked_requests.begin();
     popup_blocker_helper->ShowBlockedPopup(iter->first);
 
     observer.Wait();
@@ -342,7 +350,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                        AllowPopupThroughContentSetting) {
   GURL url(embedded_test_server()->GetURL(
       "/popup_blocker/popup-blocked-to-post-blank.html"));
-  browser()->profile()->GetHostContentSettingsMap()
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
       ->SetContentSetting(ContentSettingsPattern::FromURL(url),
                           ContentSettingsPattern::Wildcard(),
                           CONTENT_SETTINGS_TYPE_POPUPS,
@@ -356,7 +364,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
 IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                        AllowPopupThroughContentSettingIFrame) {
   GURL url(embedded_test_server()->GetURL("/popup_blocker/popup-frames.html"));
-  browser()->profile()->GetHostContentSettingsMap()
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
       ->SetContentSetting(ContentSettingsPattern::FromURL(url),
                           ContentSettingsPattern::Wildcard(),
                           CONTENT_SETTINGS_TYPE_POPUPS,
@@ -373,9 +381,9 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
   GURL frame_url(embedded_test_server()
                      ->GetURL("/popup_blocker/popup-frames-iframe.html")
                      .ReplaceComponents(replace_host));
-  browser()->profile()->GetHostContentSettingsMap()->ClearSettingsForOneType(
-      CONTENT_SETTINGS_TYPE_POPUPS);
-  browser()->profile()->GetHostContentSettingsMap()
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+      ->ClearSettingsForOneType(CONTENT_SETTINGS_TYPE_POPUPS);
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
       ->SetContentSetting(ContentSettingsPattern::FromURL(frame_url),
                           ContentSettingsPattern::Wildcard(),
                           CONTENT_SETTINGS_TYPE_POPUPS,
@@ -420,7 +428,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
 
   TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
       browser()->profile());
-  ui_test_utils::WaitForTemplateURLServiceToLoad(service);
+  search_test_utils::WaitForTemplateURLServiceToLoad(service);
   LocationBar* location_bar = browser()->window()->GetLocationBar();
   ui_test_utils::SendToOmniboxAndSubmit(location_bar, search_string);
   OmniboxEditModel* model = location_bar->GetOmniboxView()->model();
@@ -491,13 +499,13 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ClosableAfterNavigation) {
 
   // Navigate it elsewhere.
   content::TestNavigationObserver nav_observer(popup);
-  popup->GetMainFrame()->ExecuteJavaScript(
+  popup->GetMainFrame()->ExecuteJavaScriptForTests(
       base::UTF8ToUTF16("location.href = '/empty.html'"));
   nav_observer.Wait();
 
   // Have it close itself.
   CloseObserver close_observer(popup);
-  popup->GetMainFrame()->ExecuteJavaScript(
+  popup->GetMainFrame()->ExecuteJavaScriptForTests(
       base::UTF8ToUTF16("window.close()"));
   close_observer.Wait();
 }
@@ -563,9 +571,12 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   GURL url(
       embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html"));
-  browser()->profile()->GetHostContentSettingsMap()->SetContentSetting(
-      ContentSettingsPattern::FromURL(url), ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_POPUPS, std::string(), CONTENT_SETTING_ALLOW);
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+      ->SetContentSetting(ContentSettingsPattern::FromURL(url),
+                          ContentSettingsPattern::Wildcard(),
+                          CONTENT_SETTINGS_TYPE_POPUPS,
+                          std::string(),
+                          CONTENT_SETTING_ALLOW);
 
   NavigateAndCheckPopupShown(url, ExpectPopup);
 
@@ -574,7 +585,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
   ASSERT_NE(popup_browser, browser());
 
   // Showing an alert will raise the tab over the popup.
-  tab->GetMainFrame()->ExecuteJavaScript(base::UTF8ToUTF16("alert()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16("alert()"));
   app_modal::AppModalDialog* dialog = ui_test_utils::WaitForAppModalDialog();
 
   // Verify that after the dialog was closed, the popup is in front again.
@@ -621,7 +632,7 @@ void InjectRawKeyEvent(WebContents* web_contents,
                        int modifiers) {
   NativeWebKeyboardEvent event;
   BuildSimpleWebKeyEvent(type, key_code, native_key_code, modifiers, &event);
-  web_contents->GetRenderViewHost()->ForwardKeyboardEvent(event);
+  web_contents->GetRenderViewHost()->GetWidget()->ForwardKeyboardEvent(event);
 }
 
 // Tests that Ctrl+Enter/Cmd+Enter keys on a link open the backgournd tab.

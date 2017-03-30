@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_INSTALL_DIALOG_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_INSTALL_DIALOG_VIEW_H_
 
+#include "base/macros.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -41,8 +42,8 @@ class ExtensionInstallDialogView : public views::DialogDelegateView,
   ExtensionInstallDialogView(
       Profile* profile,
       content::PageNavigator* navigator,
-      ExtensionInstallPrompt::Delegate* delegate,
-      scoped_refptr<ExtensionInstallPrompt::Prompt> prompt);
+      const ExtensionInstallPrompt::DoneCallback& done_callback,
+      scoped_ptr<ExtensionInstallPrompt::Prompt> prompt);
   ~ExtensionInstallDialogView() override;
 
   // Returns the interior ScrollView of the dialog. This allows us to inspect
@@ -91,8 +92,8 @@ class ExtensionInstallDialogView : public views::DialogDelegateView,
 
   Profile* profile_;
   content::PageNavigator* navigator_;
-  ExtensionInstallPrompt::Delegate* delegate_;
-  scoped_refptr<ExtensionInstallPrompt::Prompt> prompt_;
+  ExtensionInstallPrompt::DoneCallback done_callback_;
+  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt_;
 
   // The container view that contains all children (heading, icon, webstore
   // data, and the scroll view with permissions etc.), excluding the buttons,
@@ -109,8 +110,8 @@ class ExtensionInstallDialogView : public views::DialogDelegateView,
   // ExperienceSampling: Track this UI event.
   scoped_ptr<extensions::ExperienceSamplingEvent> sampling_event_;
 
-  // Set to true once the user's selection has been received and the
-  // |delegate_| has been notified.
+  // Set to true once the user's selection has been received and the callback
+  // has been run.
   bool handled_result_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionInstallDialogView);
@@ -184,6 +185,9 @@ class ExpandableContainerView : public views::View,
 
   // Expand/Collapse the detail section for this ExpandableContainerView.
   void ToggleDetailLevel();
+
+  // Updates |arrow_toggle_| according to the given state.
+  void UpdateArrowToggle(bool expanded);
 
   // The dialog that owns |this|. It's also an ancestor in the View hierarchy.
   ExtensionInstallDialogView* owner_;

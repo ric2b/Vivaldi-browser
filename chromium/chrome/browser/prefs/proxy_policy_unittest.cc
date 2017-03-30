@@ -2,23 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/prefs/pref_service_mock_factory.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
+#include "chrome/browser/prefs/command_line_pref_store.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_service_impl.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
-#include "components/proxy_config/proxy_prefs.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/syncable_prefs/pref_service_mock_factory.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "policy/policy_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -97,16 +101,19 @@ class ProxyPolicyTest : public testing::Test {
   void TearDown() override { provider_.Shutdown(); }
 
   scoped_ptr<PrefService> CreatePrefService(bool with_managed_policies) {
-    PrefServiceMockFactory factory;
-    factory.SetCommandLine(&command_line_);
-    if (with_managed_policies)
-      factory.SetManagedPolicies(policy_service_.get());
+    syncable_prefs::PrefServiceMockFactory factory;
+    factory.set_command_line_prefs(new CommandLinePrefStore(&command_line_));
+    if (with_managed_policies) {
+      factory.SetManagedPolicies(policy_service_.get(),
+                                 g_browser_process->browser_policy_connector());
+    }
+
     scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
         new user_prefs::PrefRegistrySyncable);
-    scoped_ptr<PrefServiceSyncable> prefs =
+    scoped_ptr<syncable_prefs::PrefServiceSyncable> prefs =
         factory.CreateSyncable(registry.get());
     chrome::RegisterUserProfilePrefs(registry.get());
-    return prefs.Pass();
+    return std::move(prefs);
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
@@ -122,15 +129,17 @@ TEST_F(ProxyPolicyTest, OverridesCommandLineOptions) {
       new base::StringValue(ProxyPrefs::kFixedServersProxyModeName);
   PolicyMap policy;
   policy.Set(key::kProxyMode, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             mode_name, NULL);
+             POLICY_SOURCE_CLOUD, mode_name, nullptr);
   policy.Set(key::kProxyBypassList,
              POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER,
+             POLICY_SOURCE_CLOUD,
              new base::StringValue("abc"),
              NULL);
   policy.Set(key::kProxyServer,
              POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER,
+             POLICY_SOURCE_CLOUD,
              new base::StringValue("ghi"),
              NULL);
   provider_.UpdateChromePolicy(policy);
@@ -138,7 +147,7 @@ TEST_F(ProxyPolicyTest, OverridesCommandLineOptions) {
   // First verify that command-line options are set correctly when
   // there is no policy in effect.
   scoped_ptr<PrefService> prefs(CreatePrefService(false));
-  ProxyConfigDictionary dict(prefs->GetDictionary(prefs::kProxy));
+  ProxyConfigDictionary dict(prefs->GetDictionary(proxy_config::prefs::kProxy));
   assertProxyMode(dict, ProxyPrefs::MODE_FIXED_SERVERS);
   assertProxyServer(dict, "789");
   assertPacUrl(dict, std::string());
@@ -148,7 +157,8 @@ TEST_F(ProxyPolicyTest, OverridesCommandLineOptions) {
   // manual proxy policy should have removed all traces of the command
   // line and replaced them with the policy versions.
   prefs = CreatePrefService(true);
-  ProxyConfigDictionary dict2(prefs->GetDictionary(prefs::kProxy));
+  ProxyConfigDictionary dict2(
+      prefs->GetDictionary(proxy_config::prefs::kProxy));
   assertProxyMode(dict2, ProxyPrefs::MODE_FIXED_SERVERS);
   assertProxyServer(dict2, "ghi");
   assertPacUrl(dict2, std::string());
@@ -162,13 +172,13 @@ TEST_F(ProxyPolicyTest, OverridesUnrelatedCommandLineOptions) {
       new base::StringValue(ProxyPrefs::kAutoDetectProxyModeName);
   PolicyMap policy;
   policy.Set(key::kProxyMode, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             mode_name, NULL);
+             POLICY_SOURCE_CLOUD, mode_name, nullptr);
   provider_.UpdateChromePolicy(policy);
 
   // First verify that command-line options are set correctly when
   // there is no policy in effect.
   scoped_ptr<PrefService> prefs = CreatePrefService(false);
-  ProxyConfigDictionary dict(prefs->GetDictionary(prefs::kProxy));
+  ProxyConfigDictionary dict(prefs->GetDictionary(proxy_config::prefs::kProxy));
   assertProxyMode(dict, ProxyPrefs::MODE_FIXED_SERVERS);
   assertProxyServer(dict, "789");
   assertPacUrl(dict, std::string());
@@ -179,7 +189,8 @@ TEST_F(ProxyPolicyTest, OverridesUnrelatedCommandLineOptions) {
   // line proxy settings, even though they were not the specific one
   // set in policy.
   prefs = CreatePrefService(true);
-  ProxyConfigDictionary dict2(prefs->GetDictionary(prefs::kProxy));
+  ProxyConfigDictionary dict2(
+      prefs->GetDictionary(proxy_config::prefs::kProxy));
   assertProxyModeWithoutParams(dict2, ProxyPrefs::MODE_AUTO_DETECT);
 }
 
@@ -189,20 +200,21 @@ TEST_F(ProxyPolicyTest, OverridesCommandLineNoProxy) {
       new base::StringValue(ProxyPrefs::kAutoDetectProxyModeName);
   PolicyMap policy;
   policy.Set(key::kProxyMode, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             mode_name, NULL);
+             POLICY_SOURCE_CLOUD, mode_name, nullptr);
   provider_.UpdateChromePolicy(policy);
 
   // First verify that command-line options are set correctly when
   // there is no policy in effect.
   scoped_ptr<PrefService> prefs = CreatePrefService(false);
-  ProxyConfigDictionary dict(prefs->GetDictionary(prefs::kProxy));
+  ProxyConfigDictionary dict(prefs->GetDictionary(proxy_config::prefs::kProxy));
   assertProxyModeWithoutParams(dict, ProxyPrefs::MODE_DIRECT);
 
   // Try a second time time with the managed PrefStore in place, the
   // auto-detect should be overridden. The default pref store must be
   // in place with the appropriate default value for this to work.
   prefs = CreatePrefService(true);
-  ProxyConfigDictionary dict2(prefs->GetDictionary(prefs::kProxy));
+  ProxyConfigDictionary dict2(
+      prefs->GetDictionary(proxy_config::prefs::kProxy));
   assertProxyModeWithoutParams(dict2, ProxyPrefs::MODE_AUTO_DETECT);
 }
 
@@ -212,20 +224,21 @@ TEST_F(ProxyPolicyTest, OverridesCommandLineAutoDetect) {
       new base::StringValue(ProxyPrefs::kDirectProxyModeName);
   PolicyMap policy;
   policy.Set(key::kProxyMode, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             mode_name, NULL);
+             POLICY_SOURCE_CLOUD, mode_name, nullptr);
   provider_.UpdateChromePolicy(policy);
 
   // First verify that the auto-detect is set if there is no managed
   // PrefStore.
   scoped_ptr<PrefService> prefs = CreatePrefService(false);
-  ProxyConfigDictionary dict(prefs->GetDictionary(prefs::kProxy));
+  ProxyConfigDictionary dict(prefs->GetDictionary(proxy_config::prefs::kProxy));
   assertProxyModeWithoutParams(dict, ProxyPrefs::MODE_AUTO_DETECT);
 
   // Try a second time time with the managed PrefStore in place, the
   // auto-detect should be overridden. The default pref store must be
   // in place with the appropriate default value for this to work.
   prefs = CreatePrefService(true);
-  ProxyConfigDictionary dict2(prefs->GetDictionary(prefs::kProxy));
+  ProxyConfigDictionary dict2(
+      prefs->GetDictionary(proxy_config::prefs::kProxy));
   assertProxyModeWithoutParams(dict2, ProxyPrefs::MODE_DIRECT);
 }
 

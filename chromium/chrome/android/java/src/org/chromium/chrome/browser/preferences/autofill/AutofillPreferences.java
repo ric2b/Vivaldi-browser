@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.preferences.autofill;
 
-import android.app.Activity;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
@@ -75,13 +74,15 @@ public class AutofillPreferences extends PreferenceFragment
     private void setPreferenceCategoryIcons() {
         Drawable plusIcon = ApiCompatibilityUtils.getDrawable(getResources(), R.drawable.plus);
         plusIcon.mutate();
-        plusIcon.setColorFilter(getResources().getColor(R.color.pref_accent_color),
+        plusIcon.setColorFilter(
+                ApiCompatibilityUtils.getColor(getResources(), R.color.pref_accent_color),
                 PorterDuff.Mode.SRC_IN);
         findPreference(PREF_AUTOFILL_PROFILES).setIcon(plusIcon);
 
         plusIcon = ApiCompatibilityUtils.getDrawable(getResources(), R.drawable.plus);
         plusIcon.mutate();
-        plusIcon.setColorFilter(getResources().getColor(R.color.pref_accent_color),
+        plusIcon.setColorFilter(
+                ApiCompatibilityUtils.getColor(getResources(), R.color.pref_accent_color),
                 PorterDuff.Mode.SRC_IN);
         findPreference(PREF_AUTOFILL_CREDIT_CARDS).setIcon(plusIcon);
     }
@@ -174,14 +175,14 @@ public class AutofillPreferences extends PreferenceFragment
     }
 
     @Override
-    public void onDestroy() {
-        super.onDestroy();
-        PersonalDataManager.getInstance().unregisterDataObserver(this);
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+        PersonalDataManager.getInstance().registerDataObserver(this);
     }
 
     @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        PersonalDataManager.getInstance().registerDataObserver(this);
+    public void onDestroyView() {
+        PersonalDataManager.getInstance().unregisterDataObserver(this);
+        super.onDestroyView();
     }
 }

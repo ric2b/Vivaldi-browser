@@ -4,6 +4,9 @@
 
 #include "chrome/browser/password_manager/native_backend_kwallet_x.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -16,6 +19,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/grit/chromium_strings.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
@@ -38,29 +42,16 @@ const int kPickleVersion = 7;
 const char kKWalletFolder[] = "Chrome Form Data";
 
 // DBus service, path, and interface names for klauncher and kwalletd.
+const char kKWalletDName[] = "kwalletd";
+const char kKWalletD5Name[] = "kwalletd5";
 const char kKWalletServiceName[] = "org.kde.kwalletd";
+const char kKWallet5ServiceName[] = "org.kde.kwalletd5";
 const char kKWalletPath[] = "/modules/kwalletd";
+const char kKWallet5Path[] = "/modules/kwalletd5";
 const char kKWalletInterface[] = "org.kde.KWallet";
 const char kKLauncherServiceName[] = "org.kde.klauncher";
 const char kKLauncherPath[] = "/KLauncher";
 const char kKLauncherInterface[] = "org.kde.KLauncher";
-
-// Compares two PasswordForms and returns true if they are the same.
-// If |update_check| is false, we only check the fields that are checked by
-// LoginDatabase::UpdateLogin() when updating logins; otherwise, we check the
-// fields that are checked by LoginDatabase::RemoveLogin() for removing them.
-bool CompareForms(const autofill::PasswordForm& a,
-                  const autofill::PasswordForm& b,
-                  bool update_check) {
-  // An update check doesn't care about the submit element.
-  if (!update_check && a.submit_element != b.submit_element)
-    return false;
-  return a.origin           == b.origin &&
-         a.password_element == b.password_element &&
-         a.signon_realm     == b.signon_realm &&
-         a.username_element == b.username_element &&
-         a.username_value   == b.username_value;
-}
 
 // Checks a serialized list of PasswordForms for sanity. Returns true if OK.
 // Note that |realm| is only used for generating a useful warning message.
@@ -160,7 +151,7 @@ bool DeserializeValueSize(const std::string& signon_realm,
     form->signon_realm.assign(signon_realm);
 
     int scheme = 0;
-    int64 date_created = 0;
+    int64_t date_created = 0;
     int type = 0;
     int generation_upload_status = 0;
     // Note that these will be read back in the order listed due to
@@ -193,7 +184,7 @@ bool DeserializeValueSize(const std::string& signon_realm,
     }
 
     if (version > 2) {
-      int64 date_synced = 0;
+      int64_t date_synced = 0;
       if (!iter.ReadInt64(&date_synced)) {
         LogDeserializationWarning(version, signon_realm, false);
         return false;
@@ -203,7 +194,7 @@ bool DeserializeValueSize(const std::string& signon_realm,
 
     if (version > 3) {
       if (!iter.ReadString16(&form->display_name) ||
-          !ReadGURL(&iter, warn_only, &form->avatar_url) ||
+          !ReadGURL(&iter, warn_only, &form->icon_url) ||
           !ReadGURL(&iter, warn_only, &form->federation_url) ||
           !iter.ReadBool(&form->skip_zero_click)) {
         LogDeserializationWarning(version, signon_realm, false);
@@ -232,7 +223,7 @@ bool DeserializeValueSize(const std::string& signon_realm,
       }
     }
 
-    converted_forms.push_back(form.Pass());
+    converted_forms.push_back(std::move(form));
   }
 
   forms->swap(converted_forms);
@@ -262,7 +253,7 @@ void SerializeValue(const std::vector<autofill::PasswordForm*>& forms,
     autofill::SerializeFormData(form->form_data, pickle);
     pickle->WriteInt64(form->date_synced.ToInternalValue());
     pickle->WriteString16(form->display_name);
-    pickle->WriteString(form->avatar_url.spec());
+    pickle->WriteString(form->icon_url.spec());
     pickle->WriteString(form->federation_url.spec());
     pickle->WriteBool(form->skip_zero_click);
     pickle->WriteInt(form->generation_upload_status);
@@ -284,11 +275,22 @@ void UMALogDeserializationStatus(bool success) {
 
 }  // namespace
 
-NativeBackendKWallet::NativeBackendKWallet(LocalProfileId id)
+NativeBackendKWallet::NativeBackendKWallet(
+    LocalProfileId id, base::nix::DesktopEnvironment desktop_env)
     : profile_id_(id),
       kwallet_proxy_(nullptr),
       app_name_(l10n_util::GetStringUTF8(IDS_PRODUCT_NAME)) {
   folder_name_ = GetProfileSpecificFolderName();
+
+  if (desktop_env == base::nix::DESKTOP_ENVIRONMENT_KDE5) {
+    dbus_service_name_ = kKWallet5ServiceName;
+    dbus_path_ = kKWallet5Path;
+    kwalletd_name_ = kKWalletD5Name;
+  } else {
+    dbus_service_name_ = kKWalletServiceName;
+    dbus_path_ = kKWalletPath;
+    kwalletd_name_ = kKWalletDName;
+  }
 }
 
 NativeBackendKWallet::~NativeBackendKWallet() {
@@ -345,8 +347,8 @@ void NativeBackendKWallet::InitOnDBThread(scoped_refptr<dbus::Bus> optional_bus,
     session_bus_ = new dbus::Bus(options);
   }
   kwallet_proxy_ =
-      session_bus_->GetObjectProxy(kKWalletServiceName,
-                                   dbus::ObjectPath(kKWalletPath));
+      session_bus_->GetObjectProxy(dbus_service_name_,
+                                   dbus::ObjectPath(dbus_path_));
   // kwalletd may not be running. If we get a temporary failure initializing it,
   // try to start it and then try again. (Note the short-circuit evaluation.)
   const InitResult result = InitWallet();
@@ -368,7 +370,7 @@ bool NativeBackendKWallet::StartKWalletd() {
                                "start_service_by_desktop_name");
   dbus::MessageWriter builder(&method_call);
   std::vector<std::string> empty;
-  builder.AppendString("kwalletd");     // serviceName
+  builder.AppendString(kwalletd_name_); // serviceName
   builder.AppendArrayOfStrings(empty);  // urls
   builder.AppendArrayOfStrings(empty);  // envs
   builder.AppendString(std::string());  // startup_id
@@ -377,7 +379,7 @@ bool NativeBackendKWallet::StartKWalletd() {
       klauncher->CallMethodAndBlock(
           &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
   if (!response.get()) {
-    LOG(ERROR) << "Error contacting klauncher to start kwalletd";
+    LOG(ERROR) << "Error contacting klauncher to start " << kwalletd_name_;
     return false;
   }
   dbus::MessageReader reader(response.get());
@@ -387,13 +389,13 @@ bool NativeBackendKWallet::StartKWalletd() {
   int32_t pid = -1;
   if (!reader.PopInt32(&ret) || !reader.PopString(&dbus_name) ||
       !reader.PopString(&error) || !reader.PopInt32(&pid)) {
-    LOG(ERROR) << "Error reading response from klauncher to start kwalletd: "
-               << response->ToString();
+    LOG(ERROR) << "Error reading response from klauncher to start "
+               << kwalletd_name_ << ": " << response->ToString();
     return false;
   }
   if (!error.empty() || ret) {
-    LOG(ERROR) << "Error launching kwalletd: error '" << error << "' "
-               << " (code " << ret << ")";
+    LOG(ERROR) << "Error launching " << kwalletd_name_ << ": error '" << error
+               << "' (code " << ret << ")";
     return false;
   }
 
@@ -409,19 +411,19 @@ NativeBackendKWallet::InitResult NativeBackendKWallet::InitWallet() {
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (isEnabled)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (isEnabled)";
       return TEMPORARY_FAIL;
     }
     dbus::MessageReader reader(response.get());
     bool enabled = false;
     if (!reader.PopBool(&enabled)) {
-      LOG(ERROR) << "Error reading response from kwalletd (isEnabled): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (isEnabled): " << response->ToString();
       return PERMANENT_FAIL;
     }
     // Not enabled? Don't use KWallet. But also don't warn here.
     if (!enabled) {
-      VLOG(1) << "kwalletd reports that KWallet is not enabled.";
+      VLOG(1) << kwalletd_name_ << " reports that KWallet is not enabled.";
       return PERMANENT_FAIL;
     }
   }
@@ -433,13 +435,13 @@ NativeBackendKWallet::InitResult NativeBackendKWallet::InitWallet() {
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (networkWallet)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (networkWallet)";
       return TEMPORARY_FAIL;
     }
     dbus::MessageReader reader(response.get());
     if (!reader.PopString(&wallet_name_)) {
-      LOG(ERROR) << "Error reading response from kwalletd (networkWallet): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (networkWallet): " << response->ToString();
       return PERMANENT_FAIL;
     }
   }
@@ -457,23 +459,19 @@ password_manager::PasswordStoreChangeList NativeBackendKWallet::AddLogin(
   if (!GetLoginsList(form.signon_realm, wallet_handle, &forms))
     return password_manager::PasswordStoreChangeList();
 
-  // We search for a login to update, rather than unconditionally appending the
-  // login, because in some cases (especially involving sync) we can be asked to
-  // add a login that already exists. In these cases we want to just update.
-  bool updated = false;
+  auto it = std::partition(forms.begin(), forms.end(),
+                           [&form](const PasswordForm* current_form) {
+    return !ArePasswordFormUniqueKeyEqual(form, *current_form);
+  });
   password_manager::PasswordStoreChangeList changes;
-  for (size_t i = 0; i < forms.size(); ++i) {
-    // Use the more restrictive removal comparison, so that we never have
-    // duplicate logins that would all be removed together by RemoveLogin().
-    if (CompareForms(form, *forms[i], false)) {
-      changes.push_back(password_manager::PasswordStoreChange(
-          password_manager::PasswordStoreChange::REMOVE, *forms[i]));
-      *forms[i] = form;
-      updated = true;
-    }
+  if (it != forms.end()) {
+    // It's an update.
+    changes.push_back(password_manager::PasswordStoreChange(
+        password_manager::PasswordStoreChange::REMOVE, **it));
+    forms.erase(it, forms.end());
   }
-  if (!updated)
-    forms.push_back(new PasswordForm(form));
+
+  forms.push_back(new PasswordForm(form));
   changes.push_back(password_manager::PasswordStoreChange(
       password_manager::PasswordStoreChange::ADD, form));
 
@@ -488,7 +486,6 @@ bool NativeBackendKWallet::UpdateLogin(
     const PasswordForm& form,
     password_manager::PasswordStoreChangeList* changes) {
   DCHECK(changes);
-  changes->clear();
   int wallet_handle = WalletHandle();
   if (wallet_handle == kInvalidKWalletHandle)
     return false;
@@ -497,16 +494,16 @@ bool NativeBackendKWallet::UpdateLogin(
   if (!GetLoginsList(form.signon_realm, wallet_handle, &forms))
     return false;
 
-  bool updated = false;
-  for (size_t i = 0; i < forms.size(); ++i) {
-    if (CompareForms(form, *forms[i], true)) {
-      *forms[i] = form;
-      updated = true;
-    }
-  }
-  if (!updated)
+  auto it = std::partition(forms.begin(), forms.end(),
+                           [&form](const PasswordForm* current_form) {
+    return !ArePasswordFormUniqueKeyEqual(form, *current_form);
+  });
+
+  if (it == forms.end())
     return true;
 
+  forms.erase(it, forms.end());
+  forms.push_back(new PasswordForm(form));
   if (SetLoginsList(forms.get(), form.signon_realm, wallet_handle)) {
     changes->push_back(password_manager::PasswordStoreChange(
         password_manager::PasswordStoreChange::UPDATE, form));
@@ -516,7 +513,10 @@ bool NativeBackendKWallet::UpdateLogin(
   return false;
 }
 
-bool NativeBackendKWallet::RemoveLogin(const PasswordForm& form) {
+bool NativeBackendKWallet::RemoveLogin(
+    const PasswordForm& form,
+    password_manager::PasswordStoreChangeList* changes) {
+  DCHECK(changes);
   int wallet_handle = WalletHandle();
   if (wallet_handle == kInvalidKWalletHandle)
     return false;
@@ -528,14 +528,19 @@ bool NativeBackendKWallet::RemoveLogin(const PasswordForm& form) {
   ScopedVector<autofill::PasswordForm> kept_forms;
   kept_forms.reserve(all_forms.size());
   for (auto& saved_form : all_forms) {
-    if (!CompareForms(form, *saved_form, false)) {
+    if (!ArePasswordFormUniqueKeyEqual(form, *saved_form)) {
       kept_forms.push_back(saved_form);
       saved_form = nullptr;
     }
   }
 
-  // Update the entry in the wallet, possibly deleting it.
-  return SetLoginsList(kept_forms.get(), form.signon_realm, wallet_handle);
+  if (kept_forms.size() != all_forms.size()) {
+    changes->push_back(password_manager::PasswordStoreChange(
+        password_manager::PasswordStoreChange::REMOVE, form));
+    return SetLoginsList(kept_forms.get(), form.signon_realm, wallet_handle);
+  }
+
+  return true;
 }
 
 bool NativeBackendKWallet::RemoveLoginsCreatedBetween(
@@ -595,14 +600,14 @@ bool NativeBackendKWallet::GetLoginsList(
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (hasEntry)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (hasEntry)";
       return false;
     }
     dbus::MessageReader reader(response.get());
     bool has_entry = false;
     if (!reader.PopBool(&has_entry)) {
-      LOG(ERROR) << "Error reading response from kwalletd (hasEntry): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (hasEntry): " << response->ToString();
       return false;
     }
     if (!has_entry) {
@@ -622,15 +627,15 @@ bool NativeBackendKWallet::GetLoginsList(
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (readEntry)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (readEntry)";
       return false;
     }
     dbus::MessageReader reader(response.get());
     const uint8_t* bytes = nullptr;
     size_t length = 0;
     if (!reader.PopArrayOfBytes(&bytes, &length)) {
-      LOG(ERROR) << "Error reading response from kwalletd (readEntry): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (readEntry): " << response->ToString();
       return false;
     }
     if (!bytes)
@@ -660,6 +665,30 @@ bool NativeBackendKWallet::GetLoginsList(
   if (!GetAllLogins(wallet_handle, &all_forms))
     return false;
 
+  // Remove the duplicate sync tags.
+  ScopedVector<autofill::PasswordForm> duplicates;
+  password_manager_util::FindDuplicates(&all_forms, &duplicates, nullptr);
+  if (!duplicates.empty()) {
+    // Fill the signon realms to be updated.
+    std::map<std::string, std::vector<autofill::PasswordForm*>> update_forms;
+    for (autofill::PasswordForm* form : duplicates) {
+      update_forms.insert(std::make_pair(
+          form->signon_realm, std::vector<autofill::PasswordForm*>()));
+    }
+
+    // Fill the actual forms to be saved.
+    for (autofill::PasswordForm* form : all_forms) {
+      auto it = update_forms.find(form->signon_realm);
+      if (it != update_forms.end())
+        it->second.push_back(form);
+    }
+
+    // Update the backend.
+    for (const auto& forms : update_forms) {
+      if (!SetLoginsList(forms.second, forms.first, wallet_handle))
+        return false;
+    }
+  }
   // We have to read all the entries, and then filter them here.
   forms->reserve(all_forms.size());
   for (auto& saved_form : all_forms) {
@@ -688,13 +717,13 @@ bool NativeBackendKWallet::GetAllLogins(
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (entryList)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (entryList)";
       return false;
     }
     dbus::MessageReader reader(response.get());
     if (!reader.PopArrayOfStrings(&realm_list)) {
-      LOG(ERROR) << "Error reading response from kwalletd (entryList): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << "(entryList): " << response->ToString();
       return false;
     }
   }
@@ -711,15 +740,15 @@ bool NativeBackendKWallet::GetAllLogins(
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (readEntry)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << "(readEntry)";
       return false;
     }
     dbus::MessageReader reader(response.get());
     const uint8_t* bytes = nullptr;
     size_t length = 0;
     if (!reader.PopArrayOfBytes(&bytes, &length)) {
-      LOG(ERROR) << "Error reading response from kwalletd (readEntry): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (readEntry): " << response->ToString();
       return false;
     }
     if (!bytes || !CheckSerializedValue(bytes, length, signon_realm))
@@ -748,14 +777,14 @@ bool NativeBackendKWallet::SetLoginsList(
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (removeEntry)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (removeEntry)";
       return kInvalidKWalletHandle;
     }
     dbus::MessageReader reader(response.get());
     int ret = 0;
     if (!reader.PopInt32(&ret)) {
-      LOG(ERROR) << "Error reading response from kwalletd (removeEntry): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (removeEntry): " << response->ToString();
       return false;
     }
     if (ret != 0)
@@ -778,14 +807,14 @@ bool NativeBackendKWallet::SetLoginsList(
       kwallet_proxy_->CallMethodAndBlock(
           &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
   if (!response.get()) {
-    LOG(ERROR) << "Error contacting kwalletd (writeEntry)";
+    LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (writeEntry)";
     return kInvalidKWalletHandle;
   }
   dbus::MessageReader reader(response.get());
   int ret = 0;
   if (!reader.PopInt32(&ret)) {
-    LOG(ERROR) << "Error reading response from kwalletd (writeEntry): "
-               << response->ToString();
+    LOG(ERROR) << "Error reading response from " << kwalletd_name_
+               << " (writeEntry): " << response->ToString();
     return false;
   }
   if (ret != 0)
@@ -815,21 +844,21 @@ bool NativeBackendKWallet::RemoveLoginsBetween(
     scoped_ptr<dbus::Response> response(kwallet_proxy_->CallMethodAndBlock(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (entryList)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (entryList)";
       return false;
     }
     dbus::MessageReader reader(response.get());
     dbus::MessageReader array(response.get());
     if (!reader.PopArray(&array)) {
-      LOG(ERROR) << "Error reading response from kwalletd (entryList): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (entryList): " << response->ToString();
       return false;
     }
     while (array.HasMoreData()) {
       std::string realm;
       if (!array.PopString(&realm)) {
-        LOG(ERROR) << "Error reading response from kwalletd (entryList): "
-                   << response->ToString();
+        LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                   << " (entryList): " << response->ToString();
         return false;
       }
       realm_list.push_back(realm);
@@ -848,15 +877,15 @@ bool NativeBackendKWallet::RemoveLoginsBetween(
     scoped_ptr<dbus::Response> response(kwallet_proxy_->CallMethodAndBlock(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (readEntry)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (readEntry)";
       continue;
     }
     dbus::MessageReader reader(response.get());
     const uint8_t* bytes = nullptr;
     size_t length = 0;
     if (!reader.PopArrayOfBytes(&bytes, &length)) {
-      LOG(ERROR) << "Error reading response from kwalletd (readEntry): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (readEntry): " << response->ToString();
       continue;
     }
     if (!bytes || !CheckSerializedValue(bytes, length, signon_realm))
@@ -913,7 +942,7 @@ ScopedVector<autofill::PasswordForm> NativeBackendKWallet::DeserializeValue(
     success = DeserializeValueSize(
         signon_realm, iter, version, false, false, &forms);
     UMALogDeserializationStatus(success);
-    return forms.Pass();
+    return forms;
   }
 
   const bool size_32 = sizeof(size_t) == sizeof(uint32_t);
@@ -927,7 +956,7 @@ ScopedVector<autofill::PasswordForm> NativeBackendKWallet::DeserializeValue(
         signon_realm, iter, version, !size_32, false, &forms);
   }
   UMALogDeserializationStatus(success);
-  return forms.Pass();
+  return forms;
 }
 
 int NativeBackendKWallet::WalletHandle() {
@@ -946,13 +975,13 @@ int NativeBackendKWallet::WalletHandle() {
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (open)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (open)";
       return kInvalidKWalletHandle;
     }
     dbus::MessageReader reader(response.get());
     if (!reader.PopInt32(&handle)) {
-      LOG(ERROR) << "Error reading response from kwalletd (open): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (open): " << response->ToString();
       return kInvalidKWalletHandle;
     }
     if (handle == kInvalidKWalletHandle) {
@@ -973,13 +1002,13 @@ int NativeBackendKWallet::WalletHandle() {
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (hasFolder)";
+      LOG(ERROR) << "Error contacting " << kwalletd_name_ << " (hasFolder)";
       return kInvalidKWalletHandle;
     }
     dbus::MessageReader reader(response.get());
     if (!reader.PopBool(&has_folder)) {
-      LOG(ERROR) << "Error reading response from kwalletd (hasFolder): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (hasFolder): " << response->ToString();
       return kInvalidKWalletHandle;
     }
   }
@@ -995,14 +1024,15 @@ int NativeBackendKWallet::WalletHandle() {
         kwallet_proxy_->CallMethodAndBlock(
             &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
     if (!response.get()) {
-      LOG(ERROR) << "Error contacting kwalletd (createFolder)";
+      LOG(ERROR) << "Error contacting << " << kwalletd_name_
+                 << " (createFolder)";
       return kInvalidKWalletHandle;
     }
     dbus::MessageReader reader(response.get());
     bool success = false;
     if (!reader.PopBool(&success)) {
-      LOG(ERROR) << "Error reading response from kwalletd (createFolder): "
-                 << response->ToString();
+      LOG(ERROR) << "Error reading response from " << kwalletd_name_
+                 << " (createFolder): " << response->ToString();
       return kInvalidKWalletHandle;
     }
     if (!success) {

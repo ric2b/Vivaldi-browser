@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
@@ -17,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/test/chromedriver/chrome/mobile_device.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/logging.h"
@@ -97,7 +99,8 @@ Status ParseLogPath(const base::Value& option, Capabilities* capabilities) {
   return Status(kOk);
 }
 
-Status ParseDeviceName(std::string device_name, Capabilities* capabilities) {
+Status ParseDeviceName(const std::string& device_name,
+                       Capabilities* capabilities) {
   scoped_ptr<MobileDevice> device;
   Status status = FindMobileDevice(device_name, &device);
 
@@ -143,20 +146,22 @@ Status ParseMobileEmulation(const base::Value& option,
     double device_scale_factor = 0;
     bool touch = true;
     bool mobile = true;
-    if (!metrics->GetInteger("width", &width) ||
-        !metrics->GetInteger("height", &height) ||
+
+    if (metrics->HasKey("width") && !metrics->GetInteger("width", &width))
+      return Status(kUnknownError, "'width' must be an integer");
+
+    if (metrics->HasKey("height") && !metrics->GetInteger("height", &height))
+      return Status(kUnknownError, "'height' must be an integer");
+
+    if (metrics->HasKey("pixelRatio") &&
         !metrics->GetDouble("pixelRatio", &device_scale_factor))
-      return Status(kUnknownError, "invalid 'deviceMetrics'");
+      return Status(kUnknownError, "'pixelRatio' must be a double");
 
-    if (metrics->HasKey("touch")) {
-      if (!metrics->GetBoolean("touch", &touch))
-        return Status(kUnknownError, "'touch' must be a boolean");
-    }
+    if (metrics->HasKey("touch") && !metrics->GetBoolean("touch", &touch))
+      return Status(kUnknownError, "'touch' must be a boolean");
 
-    if (metrics->HasKey("mobile")) {
-      if (!metrics->GetBoolean("mobile", &mobile))
-        return Status(kUnknownError, "'mobile' must be a boolean");
-    }
+    if (metrics->HasKey("mobile") && !metrics->GetBoolean("mobile", &mobile))
+      return Status(kUnknownError, "'mobile' must be a boolean");
 
     DeviceMetrics* device_metrics =
         new DeviceMetrics(width, height, device_scale_factor, touch, mobile);
@@ -211,7 +216,7 @@ Status ParseProxy(const base::Value& option, Capabilities* capabilities) {
   std::string proxy_type;
   if (!proxy_dict->GetString("proxyType", &proxy_type))
     return Status(kUnknownError, "'proxyType' must be a string");
-  proxy_type = base::StringToLowerASCII(proxy_type);
+  proxy_type = base::ToLowerASCII(proxy_type);
   if (proxy_type == "direct") {
     capabilities->switches.SetSwitch("no-proxy-server");
   } else if (proxy_type == "system") {
@@ -294,8 +299,8 @@ Status ParseUseRemoteBrowser(const base::Value& option,
   if (!option.GetAsString(&server_addr))
     return Status(kUnknownError, "must be 'host:port'");
 
-  std::vector<std::string> values;
-  base::SplitString(server_addr, ':', &values);
+  std::vector<std::string> values = base::SplitString(
+      server_addr, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (values.size() != 2)
     return Status(kUnknownError, "must be 'host:port'");
 
@@ -372,6 +377,26 @@ Status ParsePerfLoggingPrefs(const base::Value& option,
   return Status(kOk);
 }
 
+Status ParseWindowTypes(const base::Value& option, Capabilities* capabilities) {
+  const base::ListValue* window_types = NULL;
+  if (!option.GetAsList(&window_types))
+    return Status(kUnknownError, "must be a list");
+  std::set<WebViewInfo::Type> window_types_tmp;
+  for (size_t i = 0; i < window_types->GetSize(); ++i) {
+    std::string window_type;
+    if (!window_types->GetString(i, &window_type)) {
+      return Status(kUnknownError, "each window type must be a string");
+    }
+    WebViewInfo::Type type;
+    Status status = ParseType(window_type, &type);
+    if (status.IsError())
+      return status;
+    window_types_tmp.insert(type);
+  }
+  capabilities->window_types.swap(window_types_tmp);
+  return Status(kOk);
+}
+
 Status ParseChromeOptions(
     const base::Value& capability,
     Capabilities* capabilities) {
@@ -390,6 +415,7 @@ Status ParseChromeOptions(
   parser_map["extensions"] = base::Bind(&IgnoreCapability);
 
   parser_map["perfLoggingPrefs"] = base::Bind(&ParsePerfLoggingPrefs);
+  parser_map["windowTypes"] = base::Bind(&ParseWindowTypes);
 
   if (is_android) {
     parser_map["androidActivity"] =

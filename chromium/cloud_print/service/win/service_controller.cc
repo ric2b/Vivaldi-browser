@@ -7,10 +7,13 @@
 #include <atlbase.h>
 #include <atlcom.h>
 #include <atlctl.h>
+#include <stdint.h>
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/win/scoped_handle.h"
 #include "chrome/common/chrome_switches.h"
@@ -20,6 +23,7 @@
 #include "cloud_print/service/win/chrome_launcher.h"
 #include "cloud_print/service/win/local_security_policy.h"
 #include "cloud_print/service/win/service_utils.h"
+#include "content/public/common/content_switches.h"
 
 namespace {
 
@@ -295,10 +299,11 @@ void ServiceController::UpdateState() {
   if (!config_size)
     return;
 
-  std::vector<uint8> buffer(config_size, 0);
+  std::vector<uint8_t> buffer(config_size, 0);
   QUERY_SERVICE_CONFIG* config =
       reinterpret_cast<QUERY_SERVICE_CONFIG*>(&buffer[0]);
-  if (!::QueryServiceConfig(service.Get(), config, buffer.size(),
+  if (!::QueryServiceConfig(service.Get(), config,
+                            static_cast<DWORD>(buffer.size()),
                             &config_size) ||
       config_size != buffer.size()) {
     return;

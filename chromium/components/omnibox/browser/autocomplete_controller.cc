@@ -4,8 +4,10 @@
 
 #include "components/omnibox/browser/autocomplete_controller.h"
 
+#include <stddef.h>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -13,9 +15,11 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_controller_delegate.h"
 #include "components/omnibox/browser/bookmark_provider.h"
 #include "components/omnibox/browser/builtin_provider.h"
+#include "components/omnibox/browser/clipboard_url_provider.h"
 #include "components/omnibox/browser/history_quick_provider.h"
 #include "components/omnibox/browser/history_url_provider.h"
 #include "components/omnibox/browser/keyword_provider.h"
@@ -23,6 +27,7 @@
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/shortcuts_provider.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
+#include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "grit/components_strings.h"
@@ -62,19 +67,20 @@ void AutocompleteMatchToAssistedQuery(
       return;
     }
     case AutocompleteMatchType::SEARCH_SUGGEST_ENTITY: {
-      *subtype = 46;
+      *type = 46;
       return;
     }
     case AutocompleteMatchType::SEARCH_SUGGEST_TAIL: {
-      *subtype = 33;
+      *type = 33;
       return;
     }
     case AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED: {
+      *type = 35;
       *subtype = 39;
       return;
     }
     case AutocompleteMatchType::SEARCH_SUGGEST_PROFILE: {
-      *subtype = 44;
+      *type = 44;
       return;
     }
     case AutocompleteMatchType::NAVSUGGEST: {
@@ -123,6 +129,7 @@ void AutocompleteMatchToAssistedQuery(
       return;
     }
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED: {
+      *type = 5;
       *subtype = 39;
       return;
     }
@@ -173,7 +180,7 @@ AutocompleteController::AutocompleteController(
     AutocompleteControllerDelegate* delegate,
     int provider_types)
     : delegate_(delegate),
-      provider_client_(provider_client.Pass()),
+      provider_client_(std::move(provider_client)),
       history_url_provider_(NULL),
       keyword_provider_(NULL),
       search_provider_(NULL),
@@ -194,13 +201,10 @@ AutocompleteController::AutocompleteController(
         new HistoryURLProvider(provider_client_.get(), this);
     providers_.push_back(history_url_provider_);
   }
-  // "Tab to search" can be used on all platforms other than Android.
-#if !defined(OS_ANDROID)
   if (provider_types & AutocompleteProvider::TYPE_KEYWORD) {
     keyword_provider_ = new KeywordProvider(provider_client_.get(), this);
     providers_.push_back(keyword_provider_);
   }
-#endif
   if (provider_types & AutocompleteProvider::TYPE_SEARCH) {
     search_provider_ = new SearchProvider(provider_client_.get(), this);
     providers_.push_back(search_provider_);
@@ -212,6 +216,14 @@ AutocompleteController::AutocompleteController(
         ZeroSuggestProvider::Create(provider_client_.get(), this);
     if (zero_suggest_provider_)
       providers_.push_back(zero_suggest_provider_);
+  }
+  if (provider_types & AutocompleteProvider::TYPE_CLIPBOARD_URL) {
+    ClipboardRecentContent* clipboard_recent_content =
+        ClipboardRecentContent::GetInstance();
+    if (clipboard_recent_content) {
+      providers_.push_back(new ClipboardURLProvider(provider_client_.get(),
+                                                    clipboard_recent_content));
+    }
   }
 }
 
@@ -268,7 +280,7 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
   if (input.want_asynchronous_matches() && (input.text().length() < 6)) {
     base::TimeTicks end_time = base::TimeTicks::Now();
     std::string name =
-        "Omnibox.QueryTime2." + base::IntToString(input.text().length());
+        "Omnibox.QueryTime2." + base::SizeTToString(input.text().length());
     base::HistogramBase* counter = base::Histogram::FactoryGet(
         name, 1, 1000, 50, base::Histogram::kUmaTargetedHistogramFlag);
     counter->Add(static_cast<int>((end_time - start_time).InMilliseconds()));

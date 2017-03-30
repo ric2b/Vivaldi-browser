@@ -5,26 +5,20 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/extensions/api/omnibox/omnibox_api_testbase.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "extensions/test/result_catcher.h"
 
 // Tests that the autocomplete popup doesn't reopen after accepting input for
 // a given query.
 // http://crbug.com/88552
-// TODO Vivaldi: Renable test
-#if defined(OS_WIN)
-#define MAYBE_PopupStaysClosed DISABLED_PopupStaysClosed
-#else
-#define MAYBE_PopupStaysClosed PopupStaysClosed
-#endif
-IN_PROC_BROWSER_TEST_F(OmniboxApiTest, MAYBE_PopupStaysClosed) {
+IN_PROC_BROWSER_TEST_F(OmniboxApiTest, PopupStaysClosed) {
   ASSERT_TRUE(RunExtensionTest("omnibox")) << message_;
 
   // The results depend on the TemplateURLService being loaded. Make sure it is
   // loaded so that the autocomplete results are consistent.
   Profile* profile = browser()->profile();
-  ui_test_utils::WaitForTemplateURLServiceToLoad(
+  search_test_utils::WaitForTemplateURLServiceToLoad(
       TemplateURLServiceFactory::GetForProfile(profile));
 
   LocationBar* location_bar = GetLocationBar(browser());
@@ -36,7 +30,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, MAYBE_PopupStaysClosed) {
   // Input a keyword query and wait for suggestions from the extension.
   omnibox_view->OnBeforePossibleChange();
   omnibox_view->SetUserText(base::ASCIIToUTF16("keyword comman"));
-  omnibox_view->OnAfterPossibleChange();
+  omnibox_view->OnAfterPossibleChange(true);
   WaitForAutocompleteDone(autocomplete_controller);
   EXPECT_TRUE(autocomplete_controller->done());
   EXPECT_TRUE(popup_model->IsOpen());

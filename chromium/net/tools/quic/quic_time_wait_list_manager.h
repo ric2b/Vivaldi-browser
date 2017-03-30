@@ -9,9 +9,11 @@
 #ifndef NET_TOOLS_QUIC_QUIC_TIME_WAIT_LIST_MANAGER_H_
 #define NET_TOOLS_QUIC_QUIC_TIME_WAIT_LIST_MANAGER_H_
 
+#include <stddef.h>
+
 #include <deque>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/base/linked_hash_map.h"
 #include "net/quic/quic_blocked_writer_interface.h"
 #include "net/quic/quic_connection.h"
@@ -44,28 +46,22 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
   // helper - used to run clean up alarms. (Owned by the dispatcher)
   QuicTimeWaitListManager(QuicPacketWriter* writer,
                           QuicServerSessionVisitor* visitor,
-                          QuicConnectionHelperInterface* helper,
-                          const QuicVersionVector& supported_versions);
+                          QuicConnectionHelperInterface* helper);
   ~QuicTimeWaitListManager() override;
 
   // Adds the given connection_id to time wait state for time_wait_period_.
-  // Henceforth, any packet bearing this connection_id should not be processed
-  // while the connection_id remains in this list. If a non-nullptr
-  // |close_packet| is provided, the TimeWaitListManager takes ownership of it
-  // and sends it again when packets are received for added connection_ids. If
-  // nullptr, a public reset packet is sent with the specified |version|.
-  // DCHECKs that connection_id is not already on the list. "virtual" to
-  // override in tests.  If "connection_rejected_statelessly" is true, it means
-  // that the connection was closed due to a stateless reject, and no close
-  // packet is expected.  Any packets that are received for connection_id will
-  // be black-holed.
-  // TODO(jokulik): In the future, we plan send (redundant) SREJ packets back to
-  // the client in response to stray data-packets that arrive after the first
-  // SREJ.  This requires some new plumbing, so we black-hole for now.
-  virtual void AddConnectionIdToTimeWait(QuicConnectionId connection_id,
-                                         QuicVersion version,
-                                         bool connection_rejected_statelessly,
-                                         QuicEncryptedPacket* close_packet);
+  // If |termination_packets| are provided, copies of these packets will be sent
+  // when a packet with this connection ID is processed. If no termination
+  // packets are provided, then a PUBLIC_RESET will be sent with the specified
+  // |version|. Any termination packets will be move from |termination_packets|
+  // and will become owned by the manager. If |connection_rejected_statelessly|
+  // is true, it means that the connection was closed due to a stateless reject,
+  // and termination packets are expected.
+  virtual void AddConnectionIdToTimeWait(
+      QuicConnectionId connection_id,
+      QuicVersion version,
+      bool connection_rejected_statelessly,
+      std::vector<QuicEncryptedPacket*>* termination_packets);
 
   // Returns true if the connection_id is in time wait state, false otherwise.
   // Packets received for this connection_id should not lead to creation of new
@@ -80,7 +76,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
   virtual void ProcessPacket(const IPEndPoint& server_address,
                              const IPEndPoint& client_address,
                              QuicConnectionId connection_id,
-                             QuicPacketSequenceNumber sequence_number,
+                             QuicPacketNumber packet_number,
                              const QuicEncryptedPacket& packet);
 
   // Called by the dispatcher when the underlying socket becomes writable again,
@@ -121,7 +117,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
   void SendPublicReset(const IPEndPoint& server_address,
                        const IPEndPoint& client_address,
                        QuicConnectionId connection_id,
-                       QuicPacketSequenceNumber rejected_sequence_number);
+                       QuicPacketNumber rejected_packet_number);
 
   // Either sends the packet and deletes it or makes pending_packets_queue_ the
   // owner of the packet.
@@ -152,17 +148,15 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
     ConnectionIdData(int num_packets_,
                      QuicVersion version_,
                      QuicTime time_added_,
-                     QuicEncryptedPacket* close_packet,
-                     bool connection_rejected_statelessly)
-        : num_packets(num_packets_),
-          version(version_),
-          time_added(time_added_),
-          close_packet(close_packet),
-          connection_rejected_statelessly(connection_rejected_statelessly) {}
+                     bool connection_rejected_statelessly);
+
+    ~ConnectionIdData();
+
     int num_packets;
     QuicVersion version;
     QuicTime time_added;
-    QuicEncryptedPacket* close_packet;
+    // These packets may contain CONNECTION_CLOSE frames, or SREJ messages.
+    std::vector<QuicEncryptedPacket*> termination_packets;
     bool connection_rejected_statelessly;
   };
 

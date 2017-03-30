@@ -7,7 +7,6 @@
 #include "content/public/renderer/media_stream_renderer_factory.h"
 #include "media/base/renderer_factory.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
-#include "third_party/WebKit/public/web/WebPluginPlaceholder.h"
 
 namespace content {
 
@@ -19,20 +18,11 @@ SkBitmap* ContentRendererClient::GetSadWebViewBitmap() {
   return nullptr;
 }
 
-scoped_ptr<blink::WebPluginPlaceholder>
-ContentRendererClient::CreatePluginPlaceholder(
-    RenderFrame* render_frame,
-    blink::WebLocalFrame* frame,
-    const blink::WebPluginParams& params) {
-  return nullptr;
-}
-
 bool ContentRendererClient::OverrideCreatePlugin(
     RenderFrame* render_frame,
     blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params,
-    blink::WebPlugin** plugin,
-    ContentSetting override_action) {
+    blink::WebPlugin** plugin) {
   return false;
 }
 
@@ -52,8 +42,10 @@ bool ContentRendererClient::ShouldSuppressErrorPage(RenderFrame* render_frame,
   return false;
 }
 
-void ContentRendererClient::DeferMediaLoad(RenderFrame* render_frame,
-                                           const base::Closure& closure) {
+void ContentRendererClient::DeferMediaLoad(
+    RenderFrame* render_frame,
+    bool has_played_media_before,
+    const base::Closure& closure) {
   closure.Run();
 }
 
@@ -98,6 +90,10 @@ bool ContentRendererClient::RunIdleHandlerWhenWidgetsHidden() {
   return true;
 }
 
+bool ContentRendererClient::AllowTimerSuspensionWhenProcessBackgrounded() {
+  return false;
+}
+
 bool ContentRendererClient::AllowPopup() {
   return false;
 }
@@ -105,7 +101,7 @@ bool ContentRendererClient::AllowPopup() {
 #ifdef OS_ANDROID
 bool ContentRendererClient::HandleNavigation(
     RenderFrame* render_frame,
-    DocumentState* document_state,
+    bool is_content_initiated,
     int opener_id,
     blink::WebFrame* frame,
     const blink::WebURLRequest& request,
@@ -175,7 +171,7 @@ void ContentRendererClient::AddKeySystems(
 scoped_ptr<media::RendererFactory>
 ContentRendererClient::CreateMediaRendererFactory(
     RenderFrame* render_frame,
-    const scoped_refptr<media::GpuVideoAcceleratorFactories>& gpu_factories,
+    media::GpuVideoAcceleratorFactories* gpu_factories,
     const scoped_refptr<media::MediaLog>& media_log) {
   return nullptr;
 }
@@ -220,13 +216,13 @@ BrowserPluginDelegate* ContentRendererClient::CreateBrowserPluginDelegate(
   return nullptr;
 }
 
-std::string ContentRendererClient::GetUserAgentOverrideForURL(const GURL& url) {
-  return std::string();
-}
-
 scoped_ptr<blink::WebAppBannerClient>
 ContentRendererClient::CreateAppBannerClient(RenderFrame* render_frame) {
   return nullptr;
+}
+
+bool ContentRendererClient::ShouldEnforceWebRTCRoutingPreferences() {
+  return true;
 }
 
 }  // namespace content

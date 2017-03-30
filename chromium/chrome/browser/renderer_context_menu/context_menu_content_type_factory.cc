@@ -20,8 +20,9 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension.h"
-#include "base/command_line.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -60,10 +61,10 @@ ContextMenuContentType* ContextMenuContentTypeFactory::CreateInternal(
     const content::ContextMenuParams& params) {
 #if defined(ENABLE_EXTENSIONS)
   if (extensions::WebViewGuest::FromWebContents(web_contents)){
-    if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+    if (vivaldi::IsVivaldiRunning()) {
       return new ContextMenuContentType(web_contents, params, true);
     }else{
-      return new ContextMenuContentTypeWebView(web_contents, params);
+    return new ContextMenuContentTypeWebView(web_contents, params);
     }
   }
 

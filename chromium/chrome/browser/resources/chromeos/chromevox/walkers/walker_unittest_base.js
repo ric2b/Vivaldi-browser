@@ -16,8 +16,8 @@ CvoxWalkerUnitTestBase.prototype = {
 
   /** @override */
   closureModuleDeps: [
-    'cvox.CursorSelection',
-    'cvox.TestMsgs'
+    'TestMsgs',
+    'cvox.CursorSelection'
   ],
 
   /**
@@ -25,7 +25,7 @@ CvoxWalkerUnitTestBase.prototype = {
    */
   setUp: function() {
     // Needed for getDescription and getGranularityMsg.
-    cvox.ChromeVox.msgs = new cvox.TestMsgs();
+    Msgs = TestMsgs;
 
     // Delete all nodes in the body.
     while (document.body.hasChildNodes()) {
@@ -39,7 +39,11 @@ CvoxWalkerUnitTestBase.prototype = {
    * Returns a new walker appropriate for the child test.
    * @return {!cvox.AbstractWalker} The walker instance.
    */
-  newWalker: goog.abstractMethod,
+  // Closure library is not available when this literal is evaluated, so
+  // we can't use goog.abstractMethod here.
+  newWalker: function() {
+    throw Error('newWalker not implemented.');
+  },
 
   /**
    * Makes testing much less verbose. Executes the command on the

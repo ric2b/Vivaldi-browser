@@ -5,14 +5,17 @@
 #ifndef COMPONENTS_HTML_VIEWER_WEB_SOCKET_HANDLE_IMPL_H_
 #define COMPONENTS_HTML_VIEWER_WEB_SOCKET_HANDLE_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/common/handle_watcher.h"
+#include "mojo/message_pump/handle_watcher.h"
 #include "mojo/services/network/public/interfaces/web_socket.mojom.h"
-#include "third_party/WebKit/public/platform/WebSocketHandle.h"
+#include "third_party/WebKit/public/platform/modules/websockets/WebSocketHandle.h"
 
 namespace mojo {
-class NetworkService;
+class WebSocketFactory;
 class WebSocketWriteQueue;
 }
 
@@ -23,21 +26,21 @@ class WebSocketClientImpl;
 // Implements WebSocketHandle by talking to the mojo WebSocket interface.
 class WebSocketHandleImpl : public blink::WebSocketHandle {
  public:
-  explicit WebSocketHandleImpl(mojo::NetworkService* network_service);
+  explicit WebSocketHandleImpl(mojo::WebSocketFactory* factory);
 
  private:
   friend class WebSocketClientImpl;
 
-  virtual ~WebSocketHandleImpl();
+  ~WebSocketHandleImpl() override;
 
   // blink::WebSocketHandle methods:
-  virtual void connect(const blink::WebURL& url,
-                       const blink::WebVector<blink::WebString>& protocols,
-                       const blink::WebSerializedOrigin& origin,
-                       blink::WebSocketHandleClient*);
-  virtual void send(bool fin, MessageType, const char* data, size_t size);
-  virtual void flowControl(int64_t quota);
-  virtual void close(unsigned short code, const blink::WebString& reason);
+  void connect(const blink::WebURL& url,
+               const blink::WebVector<blink::WebString>& protocols,
+               const blink::WebSecurityOrigin& origin,
+               blink::WebSocketHandleClient*) override;
+  void send(bool fin, MessageType, const char* data, size_t size) override;
+  void flowControl(int64_t quota) override;
+  void close(unsigned short code, const blink::WebString& reason) override;
 
   // Called when we finished writing to |send_stream_|.
   void DidWriteToSendStream(bool fin,

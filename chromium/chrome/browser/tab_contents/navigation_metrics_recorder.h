@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_TAB_CONTENTS_NAVIGATION_METRICS_RECORDER_H_
 #define CHROME_BROWSER_TAB_CONTENTS_NAVIGATION_METRICS_RECORDER_H_
 
+#include "base/macros.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -22,8 +23,6 @@ class NavigationMetricsRecorder
   void DidNavigateMainFrame(
       const content::LoadCommittedDetails& details,
       const content::FrameNavigateParams& params) override;
-
-  void DidStartLoading() override;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationMetricsRecorder);
 };

@@ -7,11 +7,14 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "net/base/net_export.h"
 #include "net/url_request/url_request.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}  // namespace base
 
 namespace net {
 
@@ -51,7 +54,7 @@ class NET_EXPORT URLRequestJobManager {
   static bool SupportsScheme(const std::string& scheme);
 
  private:
-  friend struct DefaultSingletonTraits<URLRequestJobManager>;
+  friend struct base::DefaultSingletonTraits<URLRequestJobManager>;
 
   URLRequestJobManager();
   ~URLRequestJobManager();

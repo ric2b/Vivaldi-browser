@@ -9,8 +9,8 @@ import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
-import org.chromium.net.CronetTestActivity;
 import org.chromium.net.CronetTestBase;
+import org.chromium.net.CronetTestFramework;
 import org.chromium.net.MockUrlRequestJobFactory;
 import org.chromium.net.NativeTestServer;
 import org.chromium.net.UrlRequestException;
@@ -45,12 +45,12 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
     protected void setUp() throws Exception {
         super.setUp();
         String[] commandLineArgs = {
-                CronetTestActivity.CACHE_KEY, CronetTestActivity.CACHE_DISK,
-                CronetTestActivity.LIBRARY_INIT_KEY, CronetTestActivity.LIBRARY_INIT_WRAPPER,
+                CronetTestFramework.CACHE_KEY, CronetTestFramework.CACHE_DISK,
+                CronetTestFramework.LIBRARY_INIT_KEY,
+                CronetTestFramework.LibraryInitType.HTTP_URL_CONNECTION,
         };
-        launchCronetTestAppWithUrlAndCommandLineArgs(null, commandLineArgs);
-        assertTrue(NativeTestServer.startNativeTestServer(
-                getInstrumentation().getTargetContext()));
+        startCronetTestFrameworkWithUrlAndCommandLineArgs(null, commandLineArgs);
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
     @Override
@@ -68,8 +68,41 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
                 (HttpURLConnection) url.openConnection();
         assertEquals(200, urlConnection.getResponseCode());
         assertEquals("OK", urlConnection.getResponseMessage());
-        assertEquals("GET", getResponseAsString(urlConnection));
+        assertEquals("GET", TestUtil.getResponseAsString(urlConnection));
         urlConnection.disconnect();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    // Regression test for crbug.com/561678.
+    public void testSetRequestMethod() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoMethodURL());
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        connection.setRequestMethod("PUT");
+        OutputStream out = connection.getOutputStream();
+        out.write("dummy data".getBytes());
+        assertEquals(200, connection.getResponseCode());
+        assertEquals("OK", connection.getResponseMessage());
+        assertEquals("PUT", TestUtil.getResponseAsString(connection));
+        connection.disconnect();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    // Regression test for crbug.com/571436.
+    public void testDefaultToPostWhenDoOutput() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoMethodURL());
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        OutputStream out = connection.getOutputStream();
+        out.write("dummy data".getBytes());
+        assertEquals(200, connection.getResponseCode());
+        assertEquals("OK", connection.getResponseMessage());
+        assertEquals("POST", TestUtil.getResponseAsString(connection));
+        connection.disconnect();
     }
 
     /**
@@ -95,25 +128,8 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             out.write(data);
             assertEquals(200, connection.getResponseCode());
             assertEquals("OK", connection.getResponseMessage());
-            assertEquals(dataString, getResponseAsString(connection));
+            assertEquals(dataString, TestUtil.getResponseAsString(connection));
             connection.disconnect();
-        }
-    }
-
-    @SmallTest
-    @Feature({"Cronet"})
-    @OnlyRunCronetHttpURLConnection
-    // TODO(xunjieli): Change the test after chunked support is added.
-    public void testPostChunked() throws Exception {
-        URL url = new URL(NativeTestServer.getEchoBodyURL());
-        HttpURLConnection connection =
-                (HttpURLConnection) url.openConnection();
-        connection.setDoOutput(true);
-        connection.setRequestMethod("POST");
-        try {
-            connection.setChunkedStreamingMode(0);
-        } catch (UnsupportedOperationException e) {
-            assertEquals("Chunked mode not supported yet", e.getMessage());
         }
     }
 
@@ -152,8 +168,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         URL url = new URL(NativeTestServer.getFileURL("/success.txt"));
         HttpURLConnection urlConnection =
                 (HttpURLConnection) url.openConnection();
-        assertEquals("this is a text file\n",
-                getResponseAsString(urlConnection));
+        assertEquals("this is a text file\n", TestUtil.getResponseAsString(urlConnection));
         // After shutting down the server, the server should not be handling
         // new requests.
         NativeTestServer.shutdownNativeTestServer();
@@ -174,8 +189,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         }
         checkExceptionsAreThrown(secondConnection);
         // Starts the server to avoid crashing on shutdown in tearDown().
-        assertTrue(NativeTestServer.startNativeTestServer(
-                getInstrumentation().getTargetContext()));
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
     @SmallTest
@@ -223,13 +237,12 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         checkExceptionsAreThrown(urlConnection);
     }
 
-    @SuppressFBWarnings("DLS_DEAD_LOCAL_STORE")
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
     public void testBadScheme() throws Exception {
         try {
-            URL url = new URL("flying://goat");
+            new URL("flying://goat");
             fail();
         } catch (MalformedURLException e) {
             // Expected.
@@ -248,7 +261,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         urlConnection.disconnect();
         assertEquals(200, urlConnection.getResponseCode());
         assertEquals("OK", urlConnection.getResponseMessage());
-        assertEquals("GET", getResponseAsString(urlConnection));
+        assertEquals("GET", TestUtil.getResponseAsString(urlConnection));
     }
 
     @SmallTest
@@ -286,7 +299,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
                 (HttpURLConnection) url.openConnection();
         assertEquals(200, urlConnection.getResponseCode());
         assertEquals("OK", urlConnection.getResponseMessage());
-        assertEquals("GET", getResponseAsString(urlConnection));
+        assertEquals("GET", TestUtil.getResponseAsString(urlConnection));
         // Disconnect multiple times should be fine.
         for (int i = 0; i < 10; i++) {
             urlConnection.disconnect();
@@ -317,7 +330,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         // Check the request headers echoed back by the server.
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        String headers = getResponseAsString(connection);
+        String headers = TestUtil.getResponseAsString(connection);
         List<String> fooHeaderValues =
                 getRequestHeaderValues(headers, "foo-header");
         List<String> barHeaderValues =
@@ -343,7 +356,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             fail();
         } catch (UnsupportedOperationException e) {
             assertEquals(e.getMessage(),
-                    "Cannot add multiple headers of the same key. "
+                    "Cannot add multiple headers of the same key, header-Name. "
                     + "crbug.com/432719.");
         }
     }
@@ -389,7 +402,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         // Check the request headers echoed back by the server.
         assertEquals(200, conn.getResponseCode());
         assertEquals("OK", conn.getResponseMessage());
-        String headers = getResponseAsString(conn);
+        String headers = TestUtil.getResponseAsString(conn);
         List<String> actualValues1 =
                 getRequestHeaderValues(headers, "same-capitalization");
         assertEquals(1, actualValues1.size());
@@ -420,7 +433,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         // Check the request headers echoed back by the server.
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
-        String headers = getResponseAsString(connection);
+        String headers = TestUtil.getResponseAsString(connection);
         List<String> actualValues =
                 getRequestHeaderValues(headers, "Header-nAme");
         assertEquals(1, actualValues.size());
@@ -504,13 +517,15 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
-    @SuppressFBWarnings("DLS_DEAD_LOCAL_STORE")
+    @SuppressFBWarnings({
+            "RANGE_ARRAY_OFFSET",
+            "RANGE_ARRAY_LENGTH"
+            })
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
     public void testInputStreamBatchReadBoundaryConditions() throws Exception {
         String testInputString = "this is a very important header";
-        byte[] testInputBytes = testInputString.getBytes();
         URL url = new URL(NativeTestServer.getEchoHeaderURL("foo"));
         HttpURLConnection urlConnection =
                 (HttpURLConnection) url.openConnection();
@@ -544,15 +559,17 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
 
     @SmallTest
     @Feature({"Cronet"})
-    @OnlyRunCronetHttpURLConnection
+    @CompareDefaultWithCronet
     public void testInputStreamReadOneByte() throws Exception {
-        String data = "MyBigFunkyData";
-        int dataLength = data.length();
-        int repeatCount = 100000;
-        MockUrlRequestJobFactory.setUp();
-        URL url = new URL(MockUrlRequestJobFactory.getMockUrlForData(data, repeatCount));
-        HttpURLConnection connection =
-                (HttpURLConnection) url.openConnection();
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        final HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        // Make the server echo a large request body, so it exceeds the internal
+        // read buffer.
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        byte[] largeData = TestUtil.getLargeData();
+        connection.setFixedLengthStreamingMode(largeData.length);
+        connection.getOutputStream().write(largeData);
         InputStream in = connection.getInputStream();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         int b;
@@ -562,13 +579,10 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
 
         // All data has been read. Try reading beyond what is available should give -1.
         assertEquals(-1, in.read());
-        String responseData = new String(out.toByteArray());
-        for (int i = 0; i < repeatCount; ++i) {
-            assertEquals(data, responseData.substring(dataLength * i,
-                    dataLength * (i + 1)));
-        }
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
+        String responseData = new String(out.toByteArray());
+        TestUtil.checkLargeData(responseData);
     }
 
     @SmallTest
@@ -688,6 +702,108 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         urlConnection.disconnect();
     }
 
+    /**
+     * Makes sure that disconnect while reading from InputStream, the message
+     * loop does not block. Regression test for crbug.com/550605.
+     */
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testDisconnectWhileReadingDoesnotBlock() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        final HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        // Make the server echo a large request body, so it exceeds the internal
+        // read buffer.
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        byte[] largeData = TestUtil.getLargeData();
+        connection.setFixedLengthStreamingMode(largeData.length);
+        OutputStream out = connection.getOutputStream();
+        out.write(largeData);
+
+        InputStream in = connection.getInputStream();
+        // Read one byte and disconnect.
+        assertTrue(in.read() != 1);
+        connection.disconnect();
+        // Continue reading, and make sure the message loop will not block.
+        try {
+            int b = 0;
+            while (b != -1) {
+                b = in.read();
+            }
+            // The response body is big, the connection should be disconnected
+            // before EOF can be received.
+            fail();
+        } catch (IOException e) {
+            // Expected.
+            if (!testingSystemHttpURLConnection()) {
+                assertEquals("stream closed", e.getMessage());
+            }
+        }
+        // Read once more, and make sure exception is thrown.
+        try {
+            in.read();
+            fail();
+        } catch (IOException e) {
+            // Expected.
+            if (!testingSystemHttpURLConnection()) {
+                assertEquals("stream closed", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Makes sure that {@link UrlRequest.Callback#onFailed} exception is
+     * propagated when calling read on the input stream.
+     */
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testServerHangsUp() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        final HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        // Make the server echo a large request body, so it exceeds the internal
+        // read buffer.
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        byte[] largeData = TestUtil.getLargeData();
+        connection.setFixedLengthStreamingMode(largeData.length);
+        OutputStream out = connection.getOutputStream();
+        out.write(largeData);
+
+        InputStream in = connection.getInputStream();
+        // Read one byte and shut down the server.
+        assertTrue(in.read() != 1);
+        NativeTestServer.shutdownNativeTestServer();
+        // Continue reading, and make sure the message loop will not block.
+        try {
+            int b = 0;
+            while (b != -1) {
+                b = in.read();
+            }
+            // Server closes the connection before EOF can be received.
+            fail();
+        } catch (IOException e) {
+            // Expected.
+            // Cronet gives a net::ERR_CONTENT_LENGTH_MISMATCH while the
+            // default implementation gives a java.net.ProtocolException with
+            // "unexpected end of stream" message.
+        }
+
+        // Read once more, and make sure exception is thrown.
+        try {
+            in.read();
+            fail();
+        } catch (IOException e) {
+            // Expected.
+            // Cronet gives a net::ERR_CONTENT_LENGTH_MISMATCH while the
+            // default implementation gives a java.net.ProtocolException with
+            // "unexpected end of stream" message.
+        }
+        // Spins up server to avoid crash when shutting it down in tearDown().
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
+    }
+
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -700,7 +816,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertEquals("OK", connection.getResponseMessage());
         assertEquals(NativeTestServer.getFileURL("/success.txt"),
                 connection.getURL().toString());
-        assertEquals("this is a text file\n", getResponseAsString(connection));
+        assertEquals("this is a text file\n", TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 
@@ -712,11 +828,15 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         HttpURLConnection connection =
                 (HttpURLConnection) url.openConnection();
         connection.setInstanceFollowRedirects(false);
-        assertEquals(302, connection.getResponseCode());
-        assertEquals("Found", connection.getResponseMessage());
-        assertEquals("/success.txt", connection.getHeaderField("Location"));
-        assertEquals(NativeTestServer.getFileURL("/redirect.html"),
-                connection.getURL().toString());
+        // Redirect following control broken in Android Marshmallow:
+        // https://code.google.com/p/android/issues/detail?id=194495
+        if (!testingSystemHttpURLConnection() || Build.VERSION.SDK_INT != Build.VERSION_CODES.M) {
+            assertEquals(302, connection.getResponseCode());
+            assertEquals("Found", connection.getResponseMessage());
+            assertEquals("/success.txt", connection.getHeaderField("Location"));
+            assertEquals(
+                    NativeTestServer.getFileURL("/redirect.html"), connection.getURL().toString());
+        }
         connection.disconnect();
     }
 
@@ -728,11 +848,15 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         URL url = new URL(NativeTestServer.getFileURL("/redirect.html"));
         HttpURLConnection connection =
                 (HttpURLConnection) url.openConnection();
-        assertEquals(302, connection.getResponseCode());
-        assertEquals("Found", connection.getResponseMessage());
-        assertEquals("/success.txt", connection.getHeaderField("Location"));
-        assertEquals(NativeTestServer.getFileURL("/redirect.html"),
-                connection.getURL().toString());
+        // Redirect following control broken in Android Marshmallow:
+        // https://code.google.com/p/android/issues/detail?id=194495
+        if (!testingSystemHttpURLConnection() || Build.VERSION.SDK_INT != Build.VERSION_CODES.M) {
+            assertEquals(302, connection.getResponseCode());
+            assertEquals("Found", connection.getResponseMessage());
+            assertEquals("/success.txt", connection.getHeaderField("Location"));
+            assertEquals(
+                    NativeTestServer.getFileURL("/redirect.html"), connection.getURL().toString());
+        }
         connection.disconnect();
     }
 
@@ -752,7 +876,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertEquals("OK", connection.getResponseMessage());
         assertEquals(NativeTestServer.getFileURL("/success.txt"),
                 connection.getURL().toString());
-        assertEquals("this is a text file\n", getResponseAsString(connection));
+        assertEquals("this is a text file\n", TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 
@@ -772,6 +896,29 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             // Expected.
         }
         assertNull(connection.getErrorStream());
+        connection.disconnect();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    // Tests that redirects across the HTTP and HTTPS boundary are not followed.
+    public void testDoNotFollowRedirectsIfSchemesDontMatch() throws Exception {
+        URL url = new URL(NativeTestServer.getFileURL("/redirect_invalid_scheme.html"));
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setInstanceFollowRedirects(true);
+        assertEquals(302, connection.getResponseCode());
+        assertEquals("Found", connection.getResponseMessage());
+        // Behavior changed in Android Marshmallow to not update the URL.
+        if (testingSystemHttpURLConnection() && Build.VERSION.SDK_INT == Build.VERSION_CODES.M) {
+            // Redirected port is randomized, verify everything but port.
+            assertEquals(url.getProtocol(), connection.getURL().getProtocol());
+            assertEquals(url.getHost(), connection.getURL().getHost());
+            assertEquals(url.getFile(), connection.getURL().getFile());
+        } else {
+            // Redirect is not followed, but the url is updated to the Location header.
+            assertEquals("https://127.0.0.1:8000/success.txt", connection.getURL().toString());
+        }
         connection.disconnect();
     }
 
@@ -901,8 +1048,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.setUseCaches(cacheSetting == CacheSetting.USE_CACHE);
         if (outcome == ExpectedOutcome.SUCCESS) {
             assertEquals(200, connection.getResponseCode());
-            assertEquals("this is a cacheable file\n",
-                    getResponseAsString(connection));
+            assertEquals("this is a cacheable file\n", TestUtil.getResponseAsString(connection));
         } else {
             try {
                 connection.getResponseCode();
@@ -982,20 +1128,6 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         // there's an exception.
         InputStream errorStream = connection.getErrorStream();
         assertNull(errorStream);
-    }
-
-    /**
-     * Helper method to extract response body as a string for testing.
-     */
-    private String getResponseAsString(HttpURLConnection connection)
-            throws Exception {
-        InputStream in = connection.getInputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        int b;
-        while ((b = in.read()) != -1) {
-            out.write(b);
-        }
-        return out.toString();
     }
 
     /**

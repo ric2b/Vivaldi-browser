@@ -2,13 +2,100 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/prefs/pref_service.h"
-#include "chrome/browser/ui/omnibox/omnibox_controller.h"
+#include <stddef.h>
+
+#include "base/macros.h"
+#include "base/strings/string_util.h"
+#include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
+#include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/omnibox_client.h"
+#include "components/omnibox/browser/omnibox_controller.h"
+#include "components/sessions/core/session_id.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
+class TestOmniboxClient : public OmniboxClient {
+ public:
+  explicit TestOmniboxClient(Profile* profile)
+      : profile_(profile),
+        scheme_classifier_(profile) {}
+  ~TestOmniboxClient() override {}
+
+  // OmniboxClient:
+  scoped_ptr<AutocompleteProviderClient> CreateAutocompleteProviderClient()
+      override {
+    return make_scoped_ptr(new ChromeAutocompleteProviderClient(profile_));
+  }
+  scoped_ptr<OmniboxNavigationObserver> CreateOmniboxNavigationObserver(
+      const base::string16& text,
+      const AutocompleteMatch& match,
+      const AutocompleteMatch& alternate_nav_match) override {
+    return nullptr;
+  }
+  bool CurrentPageExists() const override { return true; }
+  const GURL& GetURL() const override { return GURL::EmptyGURL(); }
+  const base::string16& GetTitle() const override {
+    return base::EmptyString16();
+  }
+  gfx::Image GetFavicon() const override { return gfx::Image(); }
+  bool IsInstantNTP() const override { return false; }
+  bool IsSearchResultsPage() const override { return false; }
+  bool IsLoading() const override { return false; }
+  bool IsPasteAndGoEnabled() const override { return false; }
+  bool IsNewTabPage(const std::string& url) const override { return false; }
+  bool IsHomePage(const std::string& url) const override { return false; }
+  const SessionID& GetSessionID() const override { return session_id_; }
+  bookmarks::BookmarkModel* GetBookmarkModel() override { return nullptr; }
+  TemplateURLService* GetTemplateURLService() override { return nullptr; }
+  const AutocompleteSchemeClassifier& GetSchemeClassifier() const override {
+    return scheme_classifier_;
+  }
+  AutocompleteClassifier* GetAutocompleteClassifier() override {
+    return nullptr;
+  }
+  gfx::Image GetIconIfExtensionMatch(
+      const AutocompleteMatch& match) const override {
+    return gfx::Image();
+  }
+  bool ProcessExtensionKeyword(TemplateURL* template_url,
+                               const AutocompleteMatch& match,
+                               WindowOpenDisposition disposition,
+                               OmniboxNavigationObserver* observer) override {
+    return false;
+  }
+  void OnInputStateChanged() override {}
+  void OnFocusChanged(OmniboxFocusState state,
+                      OmniboxFocusChangeReason reason) override {}
+  void OnResultChanged(const AutocompleteResult& result,
+                       bool default_match_changed,
+                       const base::Callback<void(const SkBitmap& bitmap)>&
+                           on_bitmap_fetched) override {}
+  void OnCurrentMatchChanged(const AutocompleteMatch& match) override {}
+  void OnTextChanged(const AutocompleteMatch& current_match,
+                     bool user_input_in_progress,
+                     base::string16& user_text,
+                     const AutocompleteResult& result,
+                     bool is_popup_open,
+                     bool has_focus) override {}
+  void OnInputAccepted(const AutocompleteMatch& match) override {}
+  void OnRevert() override {}
+  void OnURLOpenedFromOmnibox(OmniboxLog* log) override {}
+  void OnBookmarkLaunched() override {}
+  void DiscardNonCommittedNavigations() override {}
+
+ private:
+  Profile* profile_;
+  ChromeAutocompleteSchemeClassifier scheme_classifier_;
+  SessionID session_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestOmniboxClient);
+};
+
+}  // namespace
 
 class OmniboxControllerTest : public testing::Test {
  protected:
@@ -18,14 +105,18 @@ class OmniboxControllerTest : public testing::Test {
   void CreateController();
   void AssertProviders(int expected_providers);
 
-  PrefService* GetPrefs() { return profile_.GetPrefs(); }
   const AutocompleteController::Providers& GetAutocompleteProviders() const {
     return omnibox_controller_->autocomplete_controller()->providers();
   }
 
  private:
+  // testing::Test:
+  void SetUp() override;
+  void TearDown() override;
+
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
+  scoped_ptr<TestOmniboxClient> omnibox_client_;
   scoped_ptr<OmniboxController> omnibox_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxControllerTest);
@@ -38,7 +129,8 @@ OmniboxControllerTest::~OmniboxControllerTest() {
 }
 
 void OmniboxControllerTest::CreateController() {
-  omnibox_controller_.reset(new OmniboxController(NULL, &profile_));
+  DCHECK(omnibox_client_);
+  omnibox_controller_.reset(new OmniboxController(NULL, omnibox_client_.get()));
 }
 
 // Checks that the list of autocomplete providers used by the OmniboxController
@@ -58,6 +150,15 @@ void OmniboxControllerTest::AssertProviders(int expected_providers) {
 
   // Ensure we saw all the providers we expected.
   ASSERT_EQ(0, expected_providers);
+}
+
+void OmniboxControllerTest::SetUp() {
+  omnibox_client_.reset(new TestOmniboxClient(&profile_));
+}
+
+void OmniboxControllerTest::TearDown() {
+  omnibox_controller_.reset();
+  omnibox_client_.reset();
 }
 
 TEST_F(OmniboxControllerTest, CheckDefaultAutocompleteProviders) {

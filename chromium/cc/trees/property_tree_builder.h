@@ -16,12 +16,12 @@ class LayerTreeHost;
 
 class PropertyTreeBuilder {
  public:
-  // Building an opacity tree is optional, and can be skipped by passing
-  // in a null |opacity_tree|.
   static void BuildPropertyTrees(Layer* root_layer,
                                  const Layer* page_scale_layer,
                                  const Layer* inner_viewport_scroll_layer,
                                  const Layer* outer_viewport_scroll_layer,
+                                 const Layer* overscroll_elasticity_layer,
+                                 const gfx::Vector2dF& elastic_overscroll,
                                  float page_scale_factor,
                                  float device_scale_factor,
                                  const gfx::Rect& viewport,
@@ -31,6 +31,8 @@ class PropertyTreeBuilder {
                                  const LayerImpl* page_scale_layer,
                                  const LayerImpl* inner_viewport_scroll_layer,
                                  const LayerImpl* outer_viewport_scroll_layer,
+                                 const LayerImpl* overscroll_elasticity_layer,
+                                 const gfx::Vector2dF& elastic_overscroll,
                                  float page_scale_factor,
                                  float device_scale_factor,
                                  const gfx::Rect& viewport,

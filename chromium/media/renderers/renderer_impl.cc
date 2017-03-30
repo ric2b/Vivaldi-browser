@@ -4,6 +4,8 @@
 
 #include "media/renderers/renderer_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
@@ -20,6 +22,10 @@
 #include "media/base/video_renderer.h"
 #include "media/base/wall_clock_time_source.h"
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "media/base/pipeline_stats.h"
+#endif
+
 namespace media {
 
 // See |video_underflow_threshold_|.
@@ -31,8 +37,8 @@ RendererImpl::RendererImpl(
     scoped_ptr<VideoRenderer> video_renderer)
     : state_(STATE_UNINITIALIZED),
       task_runner_(task_runner),
-      audio_renderer_(audio_renderer.Pass()),
-      video_renderer_(video_renderer.Pass()),
+      audio_renderer_(std::move(audio_renderer)),
+      video_renderer_(std::move(video_renderer)),
       time_source_(NULL),
       time_ticking_(false),
       playback_rate_(0.0),
@@ -121,13 +127,12 @@ void RendererImpl::SetCdm(CdmContext* cdm_context,
 
   cdm_context_ = cdm_context;
 
-  if (decryptor_ready_cb_.is_null()) {
+  if (cdm_ready_cb_.is_null()) {
     cdm_attached_cb.Run(true);
     return;
   }
 
-  base::ResetAndReturn(&decryptor_ready_cb_)
-      .Run(cdm_context->GetDecryptor(), cdm_attached_cb);
+  base::ResetAndReturn(&cdm_ready_cb_).Run(cdm_context, cdm_attached_cb);
 }
 
 void RendererImpl::Flush(const base::Closure& flush_cb) {
@@ -253,27 +258,25 @@ bool RendererImpl::GetWallClockTimes(
   return time_source_->GetWallClockTimes(media_timestamps, wall_clock_times);
 }
 
-void RendererImpl::SetDecryptorReadyCallback(
-    const DecryptorReadyCB& decryptor_ready_cb) {
-  // Cancels the previous decryptor request.
-  if (decryptor_ready_cb.is_null()) {
-    if (!decryptor_ready_cb_.is_null()) {
-      base::ResetAndReturn(&decryptor_ready_cb_)
+void RendererImpl::SetCdmReadyCallback(const CdmReadyCB& cdm_ready_cb) {
+  // Cancels the previous CDM request.
+  if (cdm_ready_cb.is_null()) {
+    if (!cdm_ready_cb_.is_null()) {
+      base::ResetAndReturn(&cdm_ready_cb_)
           .Run(nullptr, base::Bind(IgnoreCdmAttached));
     }
     return;
   }
 
   // We initialize audio and video decoders in sequence.
-  DCHECK(decryptor_ready_cb_.is_null());
+  DCHECK(cdm_ready_cb_.is_null());
 
   if (cdm_context_) {
-    decryptor_ready_cb.Run(cdm_context_->GetDecryptor(),
-                           base::Bind(IgnoreCdmAttached));
+    cdm_ready_cb.Run(cdm_context_, base::Bind(IgnoreCdmAttached));
     return;
   }
 
-  decryptor_ready_cb_ = decryptor_ready_cb;
+  cdm_ready_cb_ = cdm_ready_cb;
 }
 
 void RendererImpl::InitializeAudioRenderer() {
@@ -295,12 +298,13 @@ void RendererImpl::InitializeAudioRenderer() {
   // happen at any time and all future calls must guard against STATE_ERROR.
   audio_renderer_->Initialize(
       demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO), done_cb,
-      base::Bind(&RendererImpl::SetDecryptorReadyCallback, weak_this_),
+      base::Bind(&RendererImpl::SetCdmReadyCallback, weak_this_),
       base::Bind(&RendererImpl::OnUpdateStatistics, weak_this_),
       base::Bind(&RendererImpl::OnBufferingStateChanged, weak_this_,
                  &audio_buffering_state_),
       base::Bind(&RendererImpl::OnAudioRendererEnded, weak_this_),
-      base::Bind(&RendererImpl::OnError, weak_this_),
+      base::Bind(&RendererImpl::OnError, weak_this_,
+                 demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO)),
       waiting_for_decryption_key_cb_);
 }
 
@@ -317,6 +321,11 @@ void RendererImpl::OnAudioRendererInitializeDone(PipelineStatus status) {
   }
 
   if (status != PIPELINE_OK) {
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+    pipeline_stats::ReportStreamError(
+        demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO));
+#endif
+
     base::ResetAndReturn(&init_cb_).Run(status);
     return;
   }
@@ -342,12 +351,13 @@ void RendererImpl::InitializeVideoRenderer() {
 
   video_renderer_->Initialize(
       demuxer_stream_provider_->GetStream(DemuxerStream::VIDEO), done_cb,
-      base::Bind(&RendererImpl::SetDecryptorReadyCallback, weak_this_),
+      base::Bind(&RendererImpl::SetCdmReadyCallback, weak_this_),
       base::Bind(&RendererImpl::OnUpdateStatistics, weak_this_),
       base::Bind(&RendererImpl::OnBufferingStateChanged, weak_this_,
                  &video_buffering_state_),
       base::Bind(&RendererImpl::OnVideoRendererEnded, weak_this_),
-      base::Bind(&RendererImpl::OnError, weak_this_),
+      base::Bind(&RendererImpl::OnError, weak_this_,
+                 demuxer_stream_provider_->GetStream(DemuxerStream::VIDEO)),
       base::Bind(&RendererImpl::GetWallClockTimes, base::Unretained(this)),
       waiting_for_decryption_key_cb_);
 }
@@ -368,6 +378,11 @@ void RendererImpl::OnVideoRendererInitializeDone(PipelineStatus status) {
   DCHECK(!init_cb_.is_null());
 
   if (status != PIPELINE_OK) {
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+    pipeline_stats::ReportStreamError(
+        demuxer_stream_provider_->GetStream(DemuxerStream::VIDEO));
+#endif
+
     base::ResetAndReturn(&init_cb_).Run(status);
     return;
   }
@@ -626,7 +641,7 @@ void RendererImpl::RunEndedCallbackIfNeeded() {
   ended_cb_.Run();
 }
 
-void RendererImpl::OnError(PipelineStatus error) {
+void RendererImpl::OnError(const DemuxerStream* stream, PipelineStatus error) {
   DVLOG(1) << __FUNCTION__ << "(" << error << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_NE(PIPELINE_OK, error) << "PIPELINE_OK isn't an error!";
@@ -634,6 +649,10 @@ void RendererImpl::OnError(PipelineStatus error) {
   // An error has already been delivered.
   if (state_ == STATE_ERROR)
     return;
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  pipeline_stats::ReportStreamError(stream);
+#endif
 
   const State old_state = state_;
   state_ = STATE_ERROR;

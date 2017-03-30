@@ -14,25 +14,27 @@ import signal
 import subprocess
 import time
 
-# TODO(craigdh): Move these pylib dependencies to pylib/utils/.
-from pylib import cmd_helper
+from devil.android import device_errors
+from devil.android import device_utils
+from devil.android.sdk import adb_wrapper
+from devil.utils import cmd_helper
 from pylib import constants
 from pylib import pexpect
-from pylib.device import device_errors
-from pylib.device import device_utils
 from pylib.utils import time_profile
 
-import errors
-import run_command
+# Default sdcard size in the format of [amount][unit]
+DEFAULT_SDCARD_SIZE = '512M'
+# Default internal storage (MB) of emulator image
+DEFAULT_STORAGE_SIZE = '1024M'
 
-# SD card size
-SDCARD_SIZE = '512M'
+# Path for avd files and avd dir
+BASE_AVD_DIR = os.path.expanduser(os.path.join('~', '.android', 'avd'))
 
 # Template used to generate config.ini files for the emulator
 CONFIG_TEMPLATE = """avd.ini.encoding=ISO-8859-1
 hw.dPad=no
 hw.lcd.density=320
-sdcard.size=512M
+sdcard.size={sdcard.size}
 hw.cpu.arch={hw.cpu.arch}
 hw.device.hash=-708107041
 hw.camera.back=none
@@ -52,7 +54,7 @@ hw.trackBall=no
 hw.device.name=Galaxy Nexus
 hw.battery=yes
 hw.sensors.proximity=yes
-image.sysdir.1=system-images/android-{api.level}/{abi.type}/
+image.sysdir.1=system-images/android-{api.level}/default/{abi.type}/
 hw.sensors.orientation=yes
 hw.audioInput=yes
 hw.camera.front=none
@@ -82,23 +84,24 @@ class EmulatorLaunchException(Exception):
   """Emulator failed to launch."""
   pass
 
-def _KillAllEmulators():
+def KillAllEmulators():
   """Kill all running emulators that look like ones we started.
 
   There are odd 'sticky' cases where there can be no emulator process
   running but a device slot is taken.  A little bot trouble and we're out of
   room forever.
   """
-  emulators = [d for d in device_utils.DeviceUtils.HealthyDevices()
-               if d.adb.is_emulator]
+  logging.info('Killing all existing emulators and existing the program')
+  emulators = [device_utils.DeviceUtils(a)
+               for a in adb_wrapper.AdbWrapper.Devices()
+               if a.is_emulator]
   if not emulators:
     return
   for e in emulators:
     e.adb.Emu(['kill'])
   logging.info('Emulator killing is async; give a few seconds for all to die.')
   for _ in range(5):
-    if not any(d.adb.is_emulator for d
-               in device_utils.DeviceUtils.HealthyDevices()):
+    if not any(a.is_emulator for a in adb_wrapper.AdbWrapper.Devices()):
       return
     time.sleep(1)
 
@@ -109,6 +112,7 @@ def DeleteAllTempAVDs():
   If the test exits abnormally and some temporary AVDs created when testing may
   be left in the system. Clean these AVDs.
   """
+  logging.info('Deleting all the avd files')
   avds = device_utils.GetAVDs()
   if not avds:
     return
@@ -116,7 +120,7 @@ def DeleteAllTempAVDs():
     if 'run_tests_avd' in avd_name:
       cmd = ['android', '-s', 'delete', 'avd', '--name', avd_name]
       cmd_helper.RunCmd(cmd)
-      logging.info('Delete AVD %s' % avd_name)
+      logging.info('Delete AVD %s', avd_name)
 
 
 class PortPool(object):
@@ -142,8 +146,9 @@ class PortPool(object):
 def _GetAvailablePort():
   """Returns an available TCP port for the console."""
   used_ports = []
-  emulators = [d for d in device_utils.DeviceUtils.HealthyDevices()
-               if d.adb.is_emulator]
+  emulators = [device_utils.DeviceUtils(a)
+               for a in adb_wrapper.AdbWrapper.Devices()
+               if a.is_emulator]
   for emulator in emulators:
     used_ports.append(emulator.adb.GetDeviceSerial().split('-')[1])
   for port in PortPool.port_range():
@@ -151,7 +156,9 @@ def _GetAvailablePort():
       return port
 
 
-def LaunchTempEmulators(emulator_count, abi, api_level, wait_for_boot=True):
+def LaunchTempEmulators(emulator_count, abi, api_level, enable_kvm=False,
+                        kill_and_launch=True, sdcard_size=DEFAULT_SDCARD_SIZE,
+                        storage_size=DEFAULT_STORAGE_SIZE, wait_for_boot=True):
   """Create and launch temporary emulators and wait for them to boot.
 
   Args:
@@ -170,9 +177,10 @@ def LaunchTempEmulators(emulator_count, abi, api_level, wait_for_boot=True):
     avd_name = 'run_tests_avd_%d' % n
     logging.info('Emulator launch %d with avd_name=%s and api=%d',
         n, avd_name, api_level)
-    emulator = Emulator(avd_name, abi)
+    emulator = Emulator(avd_name, abi, enable_kvm=enable_kvm,
+                        sdcard_size=sdcard_size, storage_size=storage_size)
     emulator.CreateAVD(api_level)
-    emulator.Launch(kill_all_emulators=n == 0)
+    emulator.Launch(kill_all_emulators=(n == 0 and kill_and_launch))
     t.Stop()
     emulators.append(emulator)
   # Wait for all emulators to boot completed.
@@ -182,7 +190,9 @@ def LaunchTempEmulators(emulator_count, abi, api_level, wait_for_boot=True):
   return emulators
 
 
-def LaunchEmulator(avd_name, abi):
+def LaunchEmulator(avd_name, abi, kill_and_launch=True, enable_kvm=False,
+                   sdcard_size=DEFAULT_SDCARD_SIZE,
+                   storage_size=DEFAULT_STORAGE_SIZE):
   """Launch an existing emulator with name avd_name.
 
   Args:
@@ -193,8 +203,9 @@ def LaunchEmulator(avd_name, abi):
     emulator object.
   """
   logging.info('Specified emulator named avd_name=%s launched', avd_name)
-  emulator = Emulator(avd_name, abi)
-  emulator.Launch(kill_all_emulators=True)
+  emulator = Emulator(avd_name, abi, enable_kvm=enable_kvm,
+                      sdcard_size=sdcard_size, storage_size=storage_size)
+  emulator.Launch(kill_all_emulators=kill_and_launch)
   emulator.ConfirmLaunch(True)
   return emulator
 
@@ -226,23 +237,28 @@ class Emulator(object):
   # process life check.
   _WAITFORDEVICE_TIMEOUT = 5
 
-  # Time to wait for a "wait for boot complete" (property set on device).
+  # Time to wait for a 'wait for boot complete' (property set on device).
   _WAITFORBOOT_TIMEOUT = 300
 
-  def __init__(self, avd_name, abi):
+  def __init__(self, avd_name, abi, enable_kvm=False,
+               sdcard_size=DEFAULT_SDCARD_SIZE,
+               storage_size=DEFAULT_STORAGE_SIZE):
     """Init an Emulator.
 
     Args:
       avd_name: name of the AVD to create
       abi: target platform for emulator being created, defaults to x86
     """
-    android_sdk_root = os.path.join(constants.EMULATOR_SDK_ROOT, 'sdk')
+    android_sdk_root = constants.ANDROID_SDK_ROOT
     self.emulator = os.path.join(android_sdk_root, 'tools', 'emulator')
     self.android = os.path.join(android_sdk_root, 'tools', 'android')
     self.popen = None
     self.device_serial = None
     self.abi = abi
     self.avd_name = avd_name
+    self.sdcard_size = sdcard_size
+    self.storage_size = storage_size
+    self.enable_kvm = enable_kvm
 
   @staticmethod
   def _DeviceName():
@@ -275,7 +291,7 @@ class Emulator(object):
         '--name', self.avd_name,
         '--abi', abi_option,
         '--target', api_target,
-        '--sdcard', SDCARD_SIZE,
+        '--sdcard', self.sdcard_size,
         '--force',
     ]
     avd_cmd_str = ' '.join(avd_command)
@@ -288,9 +304,8 @@ class Emulator(object):
     avd_process.expect('Created AVD \'%s\'' % self.avd_name)
 
     # Replace current configuration with default Galaxy Nexus config.
-    avds_dir = os.path.join(os.path.expanduser('~'), '.android', 'avd')
-    ini_file = os.path.join(avds_dir, '%s.ini' % self.avd_name)
-    new_config_ini = os.path.join(avds_dir, '%s.avd' % self.avd_name,
+    ini_file = os.path.join(BASE_AVD_DIR, '%s.ini' % self.avd_name)
+    new_config_ini = os.path.join(BASE_AVD_DIR, '%s.avd' % self.avd_name,
                                   'config.ini')
 
     # Remove config files with defaults to replace with Google's GN settings.
@@ -301,7 +316,7 @@ class Emulator(object):
     with open(ini_file, 'w') as new_ini:
       new_ini.write('avd.ini.encoding=ISO-8859-1\n')
       new_ini.write('target=%s\n' % api_target)
-      new_ini.write('path=%s/%s.avd\n' % (avds_dir, self.avd_name))
+      new_ini.write('path=%s/%s.avd\n' % (BASE_AVD_DIR, self.avd_name))
       new_ini.write('path.rel=avd/%s.avd\n' % self.avd_name)
 
     custom_config = CONFIG_TEMPLATE
@@ -309,6 +324,7 @@ class Emulator(object):
     for key in replacements:
       custom_config = custom_config.replace(key, replacements[key])
     custom_config = custom_config.replace('{api.level}', str(api_level))
+    custom_config = custom_config.replace('{sdcard.size}', self.sdcard_size)
 
     with open(new_config_ini, 'w') as new_config_ini:
       new_config_ini.write(custom_config)
@@ -328,6 +344,21 @@ class Emulator(object):
     logging.info('Delete AVD command: %s', ' '.join(avd_command))
     cmd_helper.RunCmd(avd_command)
 
+  def ResizeAndWipeAvd(self, storage_size):
+    """Wipes old AVD and creates new AVD of size |storage_size|.
+
+    This serves as a work around for '-partition-size' and '-wipe-data'
+    """
+    userdata_img = os.path.join(BASE_AVD_DIR, '%s.avd' % self.avd_name,
+                                'userdata.img')
+    userdata_qemu_img = os.path.join(BASE_AVD_DIR, '%s.avd' % self.avd_name,
+                                     'userdata-qemu.img')
+    resize_cmd = ['resize2fs', userdata_img, '%s' % storage_size]
+    logging.info('Resizing userdata.img to ideal size')
+    cmd_helper.RunCmd(resize_cmd)
+    wipe_cmd = ['cp', userdata_img, userdata_qemu_img]
+    logging.info('Replacing userdata-qemu.img with the new userdata.img')
+    cmd_helper.RunCmd(wipe_cmd)
 
   def Launch(self, kill_all_emulators):
     """Launches the emulator asynchronously. Call ConfirmLaunch() to ensure the
@@ -336,27 +367,22 @@ class Emulator(object):
     If fails, an exception will be raised.
     """
     if kill_all_emulators:
-      _KillAllEmulators()  # just to be sure
+      KillAllEmulators()  # just to be sure
     self._AggressiveImageCleanup()
     (self.device_serial, port) = self._DeviceName()
+    self.ResizeAndWipeAvd(storage_size=self.storage_size)
     emulator_command = [
         self.emulator,
         # Speed up emulator launch by 40%.  Really.
         '-no-boot-anim',
-        # The default /data size is 64M.
-        # That's not enough for 8 unit test bundles and their data.
-        '-partition-size', '512',
         # Use a familiar name and port.
         '-avd', self.avd_name,
         '-port', str(port),
-        # Wipe the data.  We've seen cases where an emulator gets 'stuck' if we
-        # don't do this (every thousand runs or so).
-        '-wipe-data',
         # Enable GPU by default.
         '-gpu', 'on',
         '-qemu', '-m', '1024',
         ]
-    if self.abi == 'x86':
+    if self.abi == 'x86' and self.enable_kvm:
       emulator_command.extend([
           # For x86 emulator --enable-kvm will fail early, avoiding accidental
           # runs in a slow mode (i.e. without hardware virtualization support).

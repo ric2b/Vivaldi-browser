@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_PLUGINS_PLUGIN_INFOBAR_DELEGATES_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "url/gurl.h"
 
@@ -21,32 +23,9 @@ namespace content {
 class WebContents;
 }
 
-// Base class for blocked plugin infobars.
-class PluginInfoBarDelegate : public ConfirmInfoBarDelegate {
- protected:
-  explicit PluginInfoBarDelegate(const std::string& identifier);
-  ~PluginInfoBarDelegate() override;
-
-  // ConfirmInfoBarDelegate:
-  bool LinkClicked(WindowOpenDisposition disposition) override;
-
-  virtual std::string GetLearnMoreURL() const = 0;
-
-  void LoadBlockedPlugins();
-
- private:
-  // ConfirmInfoBarDelegate:
-  int GetIconID() const override;
-  base::string16 GetLinkText() const override;
-
-  std::string identifier_;
-
-  DISALLOW_COPY_AND_ASSIGN(PluginInfoBarDelegate);
-};
-
 #if defined(ENABLE_PLUGIN_INSTALLATION)
 // Infobar that's shown when a plugin is out of date.
-class OutdatedPluginInfoBarDelegate : public PluginInfoBarDelegate,
+class OutdatedPluginInfoBarDelegate : public ConfirmInfoBarDelegate,
                                       public WeakPluginInstallerObserver {
  public:
   // Creates an outdated plugin infobar and delegate and adds the infobar to
@@ -68,14 +47,16 @@ class OutdatedPluginInfoBarDelegate : public PluginInfoBarDelegate,
                                 const base::string16& message);
   ~OutdatedPluginInfoBarDelegate() override;
 
-  // PluginInfoBarDelegate:
+  // ConfirmInfoBarDelegate:
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   void InfoBarDismissed() override;
+  int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
   bool Accept() override;
   bool Cancel() override;
-  bool LinkClicked(WindowOpenDisposition disposition) override;
-  std::string GetLearnMoreURL() const override;
+  base::string16 GetLinkText() const override;
+  GURL GetLinkURL() const override;
 
   // PluginInstallerObserver:
   void DownloadStarted() override;
@@ -90,6 +71,8 @@ class OutdatedPluginInfoBarDelegate : public PluginInfoBarDelegate,
   // not have any buttons (and not call the callback).
   void ReplaceWithInfoBar(const base::string16& message);
 
+  std::string identifier_;
+
   scoped_ptr<PluginMetadata> plugin_metadata_;
 
   base::string16 message_;
@@ -97,42 +80,5 @@ class OutdatedPluginInfoBarDelegate : public PluginInfoBarDelegate,
   DISALLOW_COPY_AND_ASSIGN(OutdatedPluginInfoBarDelegate);
 };
 #endif  // defined(ENABLE_PLUGIN_INSTALLATION)
-
-#if defined(OS_WIN)
-class PluginMetroModeInfoBarDelegate : public ConfirmInfoBarDelegate {
- public:
-  // The infobar can be used for two purposes: to inform the user about a
-  // missing plugin or to note that a plugin only works in desktop mode.  These
-  // purposes require different messages, buttons, etc.
-  enum Mode {
-    MISSING_PLUGIN,
-    DESKTOP_MODE_REQUIRED,
-  };
-
-  // Creates a metro mode infobar and delegate and adds the infobar to
-  // |infobar_service|.
-  static void Create(InfoBarService* infobar_service,
-                     Mode mode,
-                     const base::string16& name);
-
- private:
-  PluginMetroModeInfoBarDelegate(Mode mode, const base::string16& name);
-  ~PluginMetroModeInfoBarDelegate() override;
-
-  // ConfirmInfoBarDelegate:
-  int GetIconID() const override;
-  base::string16 GetMessageText() const override;
-  int GetButtons() const override;
-  base::string16 GetButtonLabel(InfoBarButton button) const override;
-  bool Accept() override;
-  base::string16 GetLinkText() const override;
-  bool LinkClicked(WindowOpenDisposition disposition) override;
-
-  const Mode mode_;
-  const base::string16 name_;
-
-  DISALLOW_COPY_AND_ASSIGN(PluginMetroModeInfoBarDelegate);
-};
-#endif  // defined(OS_WIN)
 
 #endif  // CHROME_BROWSER_PLUGINS_PLUGIN_INFOBAR_DELEGATES_H_

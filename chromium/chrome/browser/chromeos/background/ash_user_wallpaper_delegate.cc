@@ -9,6 +9,7 @@
 #include "ash/wm/window_animations.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/extensions/wallpaper_manager_util.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
@@ -109,7 +110,8 @@ class UserWallpaperDelegate : public ash::UserWallpaperDelegate {
         user_manager::UserManager::Get()->GetActiveUser();
     if (!user)
       return false;
-    if (chromeos::WallpaperManager::Get()->IsPolicyControlled(user->email()))
+    if (chromeos::WallpaperManager::Get()->IsPolicyControlled(
+            user->GetAccountId()))
       return false;
     return true;
   }

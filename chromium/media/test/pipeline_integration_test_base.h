@@ -5,6 +5,9 @@
 #ifndef MEDIA_TEST_PIPELINE_INTEGRATION_TEST_BASE_H_
 #define MEDIA_TEST_PIPELINE_INTEGRATION_TEST_BASE_H_
 
+#include <stdint.h>
+
+#include "base/features/scoped_test_feature_override.h"
 #include "base/md5.h"
 #include "base/message_loop/message_loop.h"
 #include "media/audio/clockless_audio_sink.h"
@@ -72,13 +75,16 @@ class PipelineIntegrationTestBase {
 
   // Starts the pipeline in a particular mode for advanced testing and
   // benchmarking purposes (e.g., underflow is disabled to ensure consistent
-  // hashes).
-  enum kTestType { kHashed, kClockless };
-  PipelineStatus Start(const std::string& filename, kTestType test_type);
+  // hashes).  May be combined using the bitwise or operator (and as such must
+  // have values that are powers of two).
+  enum TestTypeFlags { kHashed = 1, kClockless = 2};
+  PipelineStatus Start(const std::string& filename, uint8_t test_type);
 
   void Play();
   void Pause();
   bool Seek(base::TimeDelta seek_time);
+  bool Suspend();
+  bool Resume(base::TimeDelta seek_time);
   void Stop();
   bool WaitUntilCurrentTimeIsAfter(const base::TimeDelta& wait_time);
 
@@ -113,21 +119,23 @@ class PipelineIntegrationTestBase {
   bool ended_;
   PipelineStatus pipeline_status_;
   Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
-  VideoFrame::Format last_video_frame_format_;
-  VideoFrame::ColorSpace last_video_frame_color_space_;
+  VideoPixelFormat last_video_frame_format_;
+  ColorSpace last_video_frame_color_space_;
   DummyTickClock dummy_clock_;
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  scoped_refptr<MockGpuVideoAcceleratorFactories>
+  scoped_ptr<MockGpuVideoAcceleratorFactories>
       mock_video_accelerator_factories_;
   scoped_ptr<DecodingMockVDA> mock_vda_;
+  base::ScopedTestFeatureOverride mse_mpeg_aac_enabler_;
 #endif
   AudioHardwareConfig hardware_config_;
   PipelineMetadata metadata_;
+  std::string filename_;
 
   void OnSeeked(base::TimeDelta seek_time, PipelineStatus status);
   void OnStatusCallback(PipelineStatus status);
   void DemuxerEncryptedMediaInitDataCB(EmeInitDataType type,
-                                       const std::vector<uint8>& init_data);
+                                       const std::vector<uint8_t>& init_data);
   void set_encrypted_media_init_data_cb(
       const Demuxer::EncryptedMediaInitDataCB& encrypted_media_init_data_cb) {
     encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;

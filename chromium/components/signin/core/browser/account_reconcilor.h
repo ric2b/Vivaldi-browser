@@ -11,17 +11,18 @@
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/signin_client.h"
+#include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -52,6 +53,12 @@ class AccountReconcilor : public KeyedService,
   // Pass the new status as an explicit parameter since disabling the flag
   // doesn't remove it from the CommandLine::ForCurrentProcess().
   void OnNewProfileManagementFlagChanged(bool new_flag_status);
+
+  // Signal that an X-Chrome-Manage-Accounts was received from GAIA. Pass the
+  // ServiceType specified by GAIA in the 204 response.
+  // Virtual for testing.
+  virtual void OnReceivedManageAccountsResponse(
+      signin::GAIAServiceType service_type);
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -84,6 +91,8 @@ class AccountReconcilor : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, StartReconcileNoopWithDots);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, StartReconcileNoopMultiple);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, StartReconcileAddToCookie);
+  FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest,
+                           SignoutAfterErrorDoesNotRecordUma);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest,
                            StartReconcileRemoveFromCookie);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest,
@@ -169,7 +178,7 @@ class AccountReconcilor : public KeyedService,
   // True while the reconcilor is busy checking or managing the accounts in
   // this profile.
   bool is_reconcile_started_;
-  base::Time m_reconcile_start_time_;
+  base::Time reconcile_start_time_;
 
   // True iff this is the first time the reconcilor is executing.
   bool first_execution_;

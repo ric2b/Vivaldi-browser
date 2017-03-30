@@ -5,6 +5,7 @@
 #include "printing/pdf_metafile_cg_mac.h"
 
 #import <ApplicationServices/ApplicationServices.h>
+#include <stdint.h>
 
 #include <string>
 #include <vector>
@@ -35,7 +36,7 @@ TEST(PdfMetafileCgTest, Pdf) {
   pdf.FinishDocument();
 
   // Check data size.
-  uint32 size = pdf.GetDataSize();
+  uint32_t size = pdf.GetDataSize();
   EXPECT_GT(size, 0U);
 
   // Get resulting data.

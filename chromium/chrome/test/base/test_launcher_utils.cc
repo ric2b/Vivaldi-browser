@@ -10,9 +10,11 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/os_crypt/os_crypt_switches.h"
+#include "content/public/common/content_switches.h"
 
 #if defined(USE_AURA)
 #include "ui/wm/core/wm_core_switches.h"
@@ -21,9 +23,6 @@
 namespace test_launcher_utils {
 
 void PrepareBrowserCommandLineForTests(base::CommandLine* command_line) {
-  // Turn off tip loading for tests; see http://crbug.com/17725.
-  command_line->AppendSwitch(switches::kDisableWebResources);
-
   // Turn off preconnects because they break the brittle python webserver;
   // see http://crbug.com/60035.
   command_line->AppendSwitch(switches::kDisablePreconnect);

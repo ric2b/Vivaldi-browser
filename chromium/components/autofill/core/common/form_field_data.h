@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_COMMON_FORM_FIELD_DATA_H_
 #define COMPONENTS_AUTOFILL_CORE_COMMON_FORM_FIELD_DATA_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/i18n/rtl.h"
@@ -19,6 +21,7 @@ namespace autofill {
 
 // Stores information about a field in a form.
 struct FormFieldData {
+  // Copied to components/autofill/ios/browser/resources/autofill_controller.js.
   enum RoleAttribute {
     // "presentation"
     ROLE_ATTRIBUTE_PRESENTATION,

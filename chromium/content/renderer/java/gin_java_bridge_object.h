@@ -7,6 +7,7 @@
 
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/renderer/java/gin_java_bridge_dispatcher.h"
 #include "gin/handle.h"
@@ -58,6 +59,7 @@ class GinJavaBridgeObject : public gin::Wrappable<GinJavaBridgeObject>,
 
   base::WeakPtr<GinJavaBridgeDispatcher> dispatcher_;
   GinJavaBridgeDispatcher::ObjectID object_id_;
+  int frame_routing_id_;
   std::map<std::string, bool> known_methods_;
   v8::StdGlobalValueMap<std::string, v8::FunctionTemplate> template_cache_;
 

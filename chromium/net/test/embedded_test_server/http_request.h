@@ -5,12 +5,16 @@
 #ifndef NET_TEST_EMBEDDED_TEST_SERVER_HTTP_REQUEST_H_
 #define NET_TEST_EMBEDDED_TEST_SERVER_HTTP_REQUEST_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
+#include "url/gurl.h"
 
 namespace net {
 
@@ -27,20 +31,34 @@ enum HttpMethod {
   METHOD_PUT,
   METHOD_DELETE,
   METHOD_PATCH,
+  METHOD_CONNECT,
 };
 
 // Represents a HTTP request. Since it can be big, use scoped_ptr to pass it
 // instead of copying. However, the struct is copyable so tests can save and
 // examine a HTTP request.
 struct HttpRequest {
+  struct CaseInsensitiveStringComparator {
+    bool operator()(const std::string& left, const std::string& right) const {
+      return base::CompareCaseInsensitiveASCII(left, right) < 0;
+    }
+  };
+
+  using HeaderMap =
+      std::map<std::string, std::string, CaseInsensitiveStringComparator>;
+
   HttpRequest();
   ~HttpRequest();
+
+  // Returns a GURL as a convenience to extract the path and query strings.
+  // TODO(svaldez): Use provided URL if available.
+  GURL GetURL() const;
 
   std::string relative_url;  // Starts with '/'. Example: "/test?query=foo"
   HttpMethod method;
   std::string method_string;
   std::string all_headers;
-  std::map<std::string, std::string> headers;
+  HeaderMap headers;
   std::string content;
   bool has_content;
 };

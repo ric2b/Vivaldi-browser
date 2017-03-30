@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/base_paths.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/test/perf_time_logger.h"
@@ -14,7 +18,7 @@
 #include "net/proxy/proxy_resolver.h"
 #include "net/proxy/proxy_resolver_factory.h"
 #include "net/proxy/proxy_resolver_v8.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
@@ -89,12 +93,10 @@ class PacPerfSuiteRunner {
   // |resolver_name| is the label used when logging the results.
   PacPerfSuiteRunner(ProxyResolverFactory* factory,
                      const std::string& resolver_name)
-      : factory_(factory),
-        resolver_name_(resolver_name),
-        test_server_(SpawnedTestServer::TYPE_HTTP,
-                     SpawnedTestServer::kLocalhost,
-                     base::FilePath(FILE_PATH_LITERAL(
-                         "net/data/proxy_resolver_perftest"))) {}
+      : factory_(factory), resolver_name_(resolver_name) {
+    test_server_.ServeFilesFromSourceDirectory(
+        "net/data/proxy_resolver_perftest");
+  }
 
   void RunAllTests() {
     ASSERT_TRUE(test_server_.Start());
@@ -112,8 +114,7 @@ class PacPerfSuiteRunner {
                int queries_len) {
     scoped_ptr<ProxyResolver> resolver;
     if (!factory_->expects_pac_bytes()) {
-      GURL pac_url =
-          test_server_.GetURL(std::string("files/") + script_name);
+      GURL pac_url = test_server_.GetURL(std::string("/") + script_name);
       int rv = factory_->CreateProxyResolver(
           ProxyResolverScriptData::FromURL(pac_url), &resolver,
           CompletionCallback(), nullptr);
@@ -188,7 +189,7 @@ class PacPerfSuiteRunner {
 
   ProxyResolverFactory* factory_;
   std::string resolver_name_;
-  SpawnedTestServer test_server_;
+  EmbeddedTestServer test_server_;
 };
 
 #if defined(OS_WIN)
@@ -228,7 +229,7 @@ class ProxyResolverV8Wrapper : public ProxyResolver {
  public:
   ProxyResolverV8Wrapper(scoped_ptr<ProxyResolverV8> resolver,
                          scoped_ptr<MockJSBindings> bindings)
-      : resolver_(resolver.Pass()), bindings_(bindings.Pass()) {}
+      : resolver_(std::move(resolver)), bindings_(std::move(bindings)) {}
 
   int GetProxyForURL(const GURL& url,
                      ProxyInfo* results,
@@ -265,8 +266,8 @@ class ProxyResolverV8Factory : public ProxyResolverFactory {
     int result =
         ProxyResolverV8::Create(pac_script, js_bindings_.get(), &v8_resolver);
     if (result == OK) {
-      resolver->reset(
-          new ProxyResolverV8Wrapper(v8_resolver.Pass(), js_bindings_.Pass()));
+      resolver->reset(new ProxyResolverV8Wrapper(std::move(v8_resolver),
+                                                 std::move(js_bindings_)));
     }
     return result;
   }

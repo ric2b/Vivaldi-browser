@@ -95,10 +95,13 @@
 
 #include <Audioclient.h>
 #include <MMDeviceAPI.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
@@ -165,7 +168,7 @@ class MEDIA_EXPORT WASAPIAudioOutputStream :
   // for exclusive audio mode.
   HRESULT ExclusiveModeInitialization(IAudioClient* client,
                                       HANDLE event_handle,
-                                      uint32* endpoint_buffer_size);
+                                      uint32_t* endpoint_buffer_size);
 
   // If |render_thread_| is valid, sets |stop_render_event_| and blocks until
   // the thread has stopped.  |stop_render_event_| is reset after the call.
@@ -173,10 +176,10 @@ class MEDIA_EXPORT WASAPIAudioOutputStream :
   void StopThread();
 
   // Contains the thread ID of the creating thread.
-  base::PlatformThreadId creating_thread_id_;
+  const base::PlatformThreadId creating_thread_id_;
 
   // Our creator, the audio manager needs to be notified when we close.
-  AudioManagerWin* manager_;
+  AudioManagerWin* const manager_;
 
   // Rendering is driven by this thread (which has no message loop).
   // All OnMoreData() callbacks will be called from this thread.
@@ -202,18 +205,18 @@ class MEDIA_EXPORT WASAPIAudioOutputStream :
   size_t packet_size_bytes_;
 
   // Length of the audio endpoint buffer.
-  uint32 endpoint_buffer_size_frames_;
+  uint32_t endpoint_buffer_size_frames_;
 
   // The target device id or an empty string for the default device.
   const std::string device_id_;
 
   // Defines the role that the system has assigned to an audio endpoint device.
-  ERole device_role_;
+  const ERole device_role_;
 
   // The sharing mode for the connection.
   // Valid values are AUDCLNT_SHAREMODE_SHARED and AUDCLNT_SHAREMODE_EXCLUSIVE
   // where AUDCLNT_SHAREMODE_SHARED is the default.
-  AUDCLNT_SHAREMODE share_mode_;
+  const AUDCLNT_SHAREMODE share_mode_;
 
   // Counts the number of audio frames written to the endpoint buffer.
   UINT64 num_written_frames_;

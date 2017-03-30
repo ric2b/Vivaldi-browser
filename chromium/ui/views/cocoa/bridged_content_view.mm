@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
+#include "skia/ext/skia_utils_mac.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/compositor/canvas_painter.h"
@@ -15,7 +16,9 @@
 #import "ui/events/keycodes/keyboard_code_conversion_mac.h"
 #include "ui/gfx/canvas_paint_mac.h"
 #include "ui/gfx/geometry/rect.h"
+#import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -52,6 +55,92 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
       return true;
   }
   return false;
+}
+
+// Returns true if |client| has RTL text.
+bool IsTextRTL(const ui::TextInputClient* client) {
+  gfx::Range text_range;
+  base::string16 text;
+  return client->GetTextRange(&text_range) &&
+         client->GetTextFromRange(text_range, &text) &&
+         base::i18n::GetStringDirection(text) == base::i18n::RIGHT_TO_LEFT;
+}
+
+// Returns the boundary rectangle for composition characters in the
+// |requested_range|. Sets |actual_range| corresponding to the returned
+// rectangle. For cases, where there is no composition text or the
+// |requested_range| lies outside the composition range, a zero width rectangle
+// corresponding to the caret bounds is returned. Logic used is similar to
+// RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange(...).
+gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
+                                     const gfx::Range& requested_range,
+                                     gfx::Range* actual_range) {
+  // NSRange doesn't support reversed ranges.
+  DCHECK(!requested_range.is_reversed());
+  DCHECK(actual_range);
+
+  // Set up default return values, to be returned in case of unusual cases.
+  gfx::Rect default_rect;
+  *actual_range = gfx::Range::InvalidRange();
+  if (!client)
+    return default_rect;
+
+  default_rect = client->GetCaretBounds();
+  default_rect.set_width(0);
+
+  // If possible, modify actual_range to correspond to caret position.
+  gfx::Range selection_range;
+  if (client->GetSelectionRange(&selection_range)) {
+    // Caret bounds correspond to end index of selection_range.
+    *actual_range = gfx::Range(selection_range.end());
+  }
+
+  gfx::Range composition_range;
+  if (!client->HasCompositionText() ||
+      !client->GetCompositionTextRange(&composition_range) ||
+      !composition_range.Contains(requested_range))
+    return default_rect;
+
+  DCHECK(!composition_range.is_reversed());
+
+  const size_t from = requested_range.start() - composition_range.start();
+  const size_t to = requested_range.end() - composition_range.start();
+
+  // Pick the first character's bounds as the initial rectangle, then grow it to
+  // the full |requested_range| if possible.
+  const bool request_is_composition_end = from == composition_range.length();
+  const size_t first_index = request_is_composition_end ? from - 1 : from;
+  gfx::Rect union_rect;
+  if (!client->GetCompositionCharacterBounds(first_index, &union_rect))
+    return default_rect;
+
+  // If requested_range is empty, return a zero width rectangle corresponding to
+  // it.
+  if (from == to) {
+    if (request_is_composition_end && !IsTextRTL(client)) {
+      // In case of an empty requested range at end of composition, return the
+      // rectangle to the right of the last compositioned character.
+      union_rect.set_origin(union_rect.top_right());
+    }
+    union_rect.set_width(0);
+    *actual_range = requested_range;
+    return union_rect;
+  }
+
+  // Toolkit-views textfields are always single-line, so no need to check for
+  // line breaks.
+  for (size_t i = from + 1; i < to; i++) {
+    gfx::Rect current_rect;
+    if (client->GetCompositionCharacterBounds(i, &current_rect)) {
+      union_rect.Union(current_rect);
+    } else {
+      *actual_range =
+          gfx::Range(requested_range.start(), i + composition_range.start());
+      return union_rect;
+    }
+  }
+  *actual_range = requested_range;
+  return union_rect;
 }
 
 }  // namespace
@@ -93,6 +182,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
 
 @synthesize hostedView = hostedView_;
 @synthesize textInputClient = textInputClient_;
+@synthesize drawMenuBackgroundForBlur = drawMenuBackgroundForBlur_;
 @synthesize mouseDownCanMoveWindow = mouseDownCanMoveWindow_;
 
 - (id)initWithView:(views::View*)viewToHost {
@@ -119,7 +209,8 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
 }
 
 - (void)clearView {
-  hostedView_ = NULL;
+  textInputClient_ = nullptr;
+  hostedView_ = nullptr;
   [cursorTrackingArea_.get() clearOwner];
   [self removeTrackingArea:cursorTrackingArea_.get()];
 }
@@ -172,7 +263,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   if (DispatchEventToMenu(hostedView_->GetWidget(), event.key_code()))
     return;
 
-  hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(event);
+  hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(&event);
 }
 
 - (void)handleAction:(int)commandId
@@ -193,7 +284,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
 
   // Generate a synthetic event with the keycode toolkit-views expects.
   ui::KeyEvent event(ui::ET_KEY_PRESSED, keyCode, domCode, eventFlags);
-  hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(event);
+  hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(&event);
 }
 
 - (void)undo:(id)sender {
@@ -205,7 +296,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   DCHECK(textInputClient_->IsEditCommandEnabled(IDS_APP_UNDO));
   [self handleAction:IDS_APP_UNDO
              keyCode:ui::VKEY_Z
-             domCode:ui::DomCode::KEY_Z
+             domCode:ui::DomCode::US_Z
           eventFlags:ui::EF_CONTROL_DOWN];
 }
 
@@ -213,7 +304,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   DCHECK(textInputClient_->IsEditCommandEnabled(IDS_APP_REDO));
   [self handleAction:IDS_APP_REDO
              keyCode:ui::VKEY_Z
-             domCode:ui::DomCode::KEY_Z
+             domCode:ui::DomCode::US_Z
           eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
 }
 
@@ -221,7 +312,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   DCHECK(textInputClient_->IsEditCommandEnabled(IDS_APP_CUT));
   [self handleAction:IDS_APP_CUT
              keyCode:ui::VKEY_X
-             domCode:ui::DomCode::KEY_X
+             domCode:ui::DomCode::US_X
           eventFlags:ui::EF_CONTROL_DOWN];
 }
 
@@ -229,7 +320,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   DCHECK(textInputClient_->IsEditCommandEnabled(IDS_APP_COPY));
   [self handleAction:IDS_APP_COPY
              keyCode:ui::VKEY_C
-             domCode:ui::DomCode::KEY_C
+             domCode:ui::DomCode::US_C
           eventFlags:ui::EF_CONTROL_DOWN];
 }
 
@@ -237,7 +328,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   DCHECK(textInputClient_->IsEditCommandEnabled(IDS_APP_PASTE));
   [self handleAction:IDS_APP_PASTE
              keyCode:ui::VKEY_V
-             domCode:ui::DomCode::KEY_V
+             domCode:ui::DomCode::US_V
           eventFlags:ui::EF_CONTROL_DOWN];
 }
 
@@ -245,7 +336,7 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   DCHECK(textInputClient_->IsEditCommandEnabled(IDS_APP_SELECT_ALL));
   [self handleAction:IDS_APP_SELECT_ALL
              keyCode:ui::VKEY_A
-             domCode:ui::DomCode::KEY_A
+             domCode:ui::DomCode::US_A
           eventFlags:ui::EF_CONTROL_DOWN];
 }
 
@@ -308,6 +399,14 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   if (!hostedView_)
     return;
 
+  if (drawMenuBackgroundForBlur_) {
+    const CGFloat radius = views::MenuConfig::instance().corner_radius;
+    [skia::SkColorToSRGBNSColor(0x01000000) set];
+    [[NSBezierPath bezierPathWithRoundedRect:[self bounds]
+                                     xRadius:radius
+                                     yRadius:radius] fill];
+  }
+
   // If there's a layer, painting occurs in BridgedNativeWidget::OnPaintLayer().
   if (hostedView_->GetWidget()->GetLayer())
     return;
@@ -318,8 +417,10 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
 }
 
 - (NSTextInputContext*)inputContext {
-  if (!hostedView_)
-    return [super inputContext];
+  // If the textInputClient_ does not exist, return nil since this view does not
+  // conform to NSTextInputClient protocol.
+  if (!textInputClient_)
+    return nil;
 
   // If a menu is active, and -[NSView interpretKeyEvents:] asks for the
   // input context, return nil. This ensures the action message is sent to
@@ -328,7 +429,17 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   if (menuController && menuController->owner() == hostedView_->GetWidget())
     return nil;
 
-  return [super inputContext];
+  // When not in an editable mode, or while entering passwords
+  // (http://crbug.com/23219), we don't want to show IME candidate windows.
+  // Returning nil prevents this view from getting messages defined as part of
+  // the NSTextInputClient protocol.
+  switch (textInputClient_->GetTextInputType()) {
+    case ui::TEXT_INPUT_TYPE_NONE:
+    case ui::TEXT_INPUT_TYPE_PASSWORD:
+      return nil;
+    default:
+      return [super inputContext];
+  }
 }
 
 // NSResponder implementation.
@@ -580,9 +691,13 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
 }
 
 - (NSRect)firstRectForCharacterRange:(NSRange)range
-                         actualRange:(NSRangePointer)actualRange {
-  NOTIMPLEMENTED();
-  return NSZeroRect;
+                         actualRange:(NSRangePointer)actualNSRange {
+  gfx::Range actualRange;
+  gfx::Rect rect = GetFirstRectForRangeHelper(textInputClient_,
+                                              gfx::Range(range), &actualRange);
+  if (actualNSRange)
+    *actualNSRange = actualRange.ToNSRange();
+  return gfx::ScreenRectToNSRect(rect);
 }
 
 - (BOOL)hasMarkedText {
@@ -628,10 +743,14 @@ bool DispatchEventToMenu(views::Widget* widget, ui::KeyboardCode key_code) {
   // processed, so don't send it to InsertChar() as well. E.g. Alt+S puts 'ß' in
   // |text| but sending 'Alt' to InsertChar would filter it out since it thinks
   // it's a command. Actual commands (e.g. Cmd+S) won't go through insertText:.
-  if (inKeyDown_ && [text length] == 1)
-    textInputClient_->InsertChar([text characterAtIndex:0], 0);
-  else
+  if (inKeyDown_ && [text length] == 1) {
+    ui::KeyEvent char_event(
+        [text characterAtIndex:0],
+        static_cast<ui::KeyboardCode>([text characterAtIndex:0]), ui::EF_NONE);
+    textInputClient_->InsertChar(char_event);
+  } else {
     textInputClient_->InsertText(base::SysNSStringToUTF16(text));
+  }
 }
 
 - (NSRange)markedRange {

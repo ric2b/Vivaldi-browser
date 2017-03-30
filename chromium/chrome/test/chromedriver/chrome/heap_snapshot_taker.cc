@@ -4,8 +4,12 @@
 
 #include "chrome/test/chromedriver/chrome/heap_snapshot_taker.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/values.h"
 #include "chrome/test/chromedriver/chrome/devtools_client.h"
 #include "chrome/test/chromedriver/chrome/status.h"
@@ -28,7 +32,7 @@ Status HeapSnapshotTaker::TakeSnapshot(scoped_ptr<base::Value>* snapshot) {
     if (!value) {
       status3 = Status(kUnknownError, "heap snapshot not in JSON format");
     } else {
-      *snapshot = value.Pass();
+      *snapshot = std::move(value);
     }
   }
   snapshot_.clear();

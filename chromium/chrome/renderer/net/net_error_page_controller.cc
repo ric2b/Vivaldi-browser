@@ -5,7 +5,6 @@
 #include "chrome/renderer/net/net_error_page_controller.h"
 
 #include "base/strings/string_piece.h"
-#include "chrome/renderer/net/net_error_helper.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
@@ -15,8 +14,12 @@
 gin::WrapperInfo NetErrorPageController::kWrapperInfo = {
     gin::kEmbedderNativeGin};
 
+NetErrorPageController::Delegate::Delegate() {}
+NetErrorPageController::Delegate::~Delegate() {}
+
 // static
-void NetErrorPageController::Install(content::RenderFrame* render_frame) {
+void NetErrorPageController::Install(content::RenderFrame* render_frame,
+                                     base::WeakPtr<Delegate> delegate) {
   v8::Isolate* isolate = blink::mainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context =
@@ -27,7 +30,7 @@ void NetErrorPageController::Install(content::RenderFrame* render_frame) {
   v8::Context::Scope context_scope(context);
 
   gin::Handle<NetErrorPageController> controller = gin::CreateHandle(
-      isolate, new NetErrorPageController(render_frame));
+      isolate, new NetErrorPageController(delegate));
   if (controller.IsEmpty())
     return;
 
@@ -38,6 +41,14 @@ void NetErrorPageController::Install(content::RenderFrame* render_frame) {
 
 bool NetErrorPageController::ShowSavedCopyButtonClick() {
   return ButtonClick(error_page::NetErrorHelperCore::SHOW_SAVED_COPY_BUTTON);
+}
+
+bool NetErrorPageController::ShowOfflinePagesButtonClick() {
+  return ButtonClick(error_page::NetErrorHelperCore::SHOW_OFFLINE_PAGES_BUTTON);
+}
+
+bool NetErrorPageController::ShowOfflineCopyButtonClick() {
+  return ButtonClick(error_page::NetErrorHelperCore::SHOW_OFFLINE_COPY_BUTTON);
 }
 
 bool NetErrorPageController::ReloadButtonClick() {
@@ -52,42 +63,34 @@ bool NetErrorPageController::TrackEasterEgg() {
   return ButtonClick(error_page::NetErrorHelperCore::EASTER_EGG);
 }
 
-bool NetErrorPageController::TrackCachedCopyButtonClick(bool is_default_label) {
-  return is_default_label ?
-      ButtonClick(error_page::NetErrorHelperCore::SHOW_CACHED_PAGE_BUTTON) :
-      ButtonClick(error_page::NetErrorHelperCore::SHOW_CACHED_COPY_BUTTON);
+bool NetErrorPageController::DiagnoseErrorsButtonClick() {
+  return ButtonClick(error_page::NetErrorHelperCore::DIAGNOSE_ERROR);
+}
+
+bool NetErrorPageController::TrackCachedCopyButtonClick() {
+  return ButtonClick(error_page::NetErrorHelperCore::SHOW_CACHED_COPY_BUTTON);
 }
 
 bool NetErrorPageController::TrackClick(const gin::Arguments& args) {
-  if (!render_frame())
+  if (args.PeekNext().IsEmpty() || !args.PeekNext()->IsInt32())
     return false;
 
-  if (!args.PeekNext()->IsInt32())
-    return false;
-
-  NetErrorHelper* net_error_helper =
-      content::RenderFrameObserverTracker<NetErrorHelper>::Get(render_frame());
-  DCHECK(net_error_helper);
-  net_error_helper->TrackClick(args.PeekNext()->Int32Value());
+  if (delegate_)
+    delegate_->TrackClick(args.PeekNext()->Int32Value());
   return true;
 }
 
 bool NetErrorPageController::ButtonClick(
     error_page::NetErrorHelperCore::Button button) {
-  if (!render_frame())
-    return false;
-
-  NetErrorHelper* net_error_helper =
-      content::RenderFrameObserverTracker<NetErrorHelper>::Get(render_frame());
-  DCHECK(net_error_helper);
-
-  net_error_helper->ButtonPressed(button);
+  if (delegate_)
+    delegate_->ButtonPressed(button);
 
   return true;
 }
 
-NetErrorPageController::NetErrorPageController(
-    content::RenderFrame* render_frame) : RenderFrameObserver(render_frame) {}
+NetErrorPageController::NetErrorPageController(base::WeakPtr<Delegate> delegate)
+    : delegate_(delegate) {
+}
 
 NetErrorPageController::~NetErrorPageController() {}
 
@@ -97,16 +100,18 @@ gin::ObjectTemplateBuilder NetErrorPageController::GetObjectTemplateBuilder(
              isolate)
       .SetMethod("showSavedCopyButtonClick",
                  &NetErrorPageController::ShowSavedCopyButtonClick)
+      .SetMethod("showOfflinePagesButtonClick",
+                 &NetErrorPageController::ShowOfflinePagesButtonClick)
+      .SetMethod("showOfflineCopyButtonClick",
+                 &NetErrorPageController::ShowOfflineCopyButtonClick)
       .SetMethod("reloadButtonClick",
                  &NetErrorPageController::ReloadButtonClick)
       .SetMethod("detailsButtonClick",
                  &NetErrorPageController::DetailsButtonClick)
-      .SetMethod("trackClick",
-                 &NetErrorPageController::TrackClick)
-      .SetMethod("trackEasterEgg",
-                 &NetErrorPageController::TrackEasterEgg)
+      .SetMethod("diagnoseErrorsButtonClick",
+                 &NetErrorPageController::DiagnoseErrorsButtonClick)
+      .SetMethod("trackClick", &NetErrorPageController::TrackClick)
+      .SetMethod("trackEasterEgg", &NetErrorPageController::TrackEasterEgg)
       .SetMethod("trackCachedCopyButtonClick",
                  &NetErrorPageController::TrackCachedCopyButtonClick);
 }
-
-void NetErrorPageController::OnDestruct() {}

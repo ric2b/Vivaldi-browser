@@ -4,6 +4,8 @@
 
 #include "remoting/signaling/jid_util.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_util.h"
 
 namespace remoting {
@@ -12,9 +14,9 @@ std::string NormalizeJid(const std::string& jid) {
   std::string bare_jid;
   std::string resource;
   if (SplitJidResource(jid, &bare_jid, &resource)) {
-    return base::StringToLowerASCII(bare_jid) + "/" + resource;
+    return base::ToLowerASCII(bare_jid) + "/" + resource;
   }
-  return base::StringToLowerASCII(bare_jid);
+  return base::ToLowerASCII(bare_jid);
 }
 
 bool SplitJidResource(const std::string& full_jid,

@@ -6,12 +6,14 @@ package org.chromium.chrome.browser.compositor;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.v4.view.ViewCompat;
+import android.support.v4.view.accessibility.AccessibilityEventCompat;
 import android.support.v4.view.accessibility.AccessibilityNodeInfoCompat;
 import android.support.v4.widget.ExploreByTouchHelper;
 import android.util.AttributeSet;
@@ -29,9 +31,6 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.EmptyTabObserver;
-import org.chromium.chrome.browser.Tab;
-import org.chromium.chrome.browser.TabObserver;
 import org.chromium.chrome.browser.compositor.Invalidator.Client;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
@@ -41,13 +40,19 @@ import org.chromium.chrome.browser.compositor.layouts.content.ContentOffsetProvi
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeManagerDelegate;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.widget.ClipDrawableProgressBar.DrawingInfo;
 import org.chromium.chrome.browser.widget.ControlContainer;
-import org.chromium.content.browser.ContentReadbackHandler;
+import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.SPenSupport;
 import org.chromium.ui.UiUtils;
@@ -55,7 +60,6 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
-import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -117,6 +121,7 @@ public class CompositorViewHolder extends FrameLayout
     // Cache objects that should not be created frequently.
     private final Rect mCacheViewport = new Rect();
     private final Rect mCacheVisibleViewport = new Rect();
+    private DrawingInfo mProgressBarDrawingInfo;
 
     // If we've drawn at least one frame.
     private boolean mHasDrawnOnce = false;
@@ -251,17 +256,11 @@ public class CompositorViewHolder extends FrameLayout
                 : null;
         if (loader != null && mControlContainer != null) {
             loader.unregisterResource(R.id.control_container);
-            loader.unregisterResource(R.id.progress);
         }
         mControlContainer = controlContainer;
         if (loader != null && mControlContainer != null) {
             loader.registerResource(
                     R.id.control_container, mControlContainer.getToolbarResourceAdapter());
-
-            ViewResourceAdapter progressAdapter = mControlContainer.getProgressResourceAdapter();
-            if (progressAdapter != null) {
-                loader.registerResource(R.id.progress, progressAdapter);
-            }
         }
     }
 
@@ -310,12 +309,6 @@ public class CompositorViewHolder extends FrameLayout
         if (mControlContainer != null) {
             mCompositorView.getResourceManager().getDynamicResourceLoader().registerResource(
                     R.id.control_container, mControlContainer.getToolbarResourceAdapter());
-
-            ViewResourceAdapter progressAdapter = mControlContainer.getProgressResourceAdapter();
-            if (progressAdapter != null) {
-                mCompositorView.getResourceManager().getDynamicResourceLoader().registerResource(
-                        R.id.progress, progressAdapter);
-            }
         }
     }
 
@@ -326,14 +319,6 @@ public class CompositorViewHolder extends FrameLayout
 
     public ContentOffsetProvider getContentOffsetProvider() {
         return mCompositorView;
-    }
-
-    /**
-     * @return The content readback handler.
-     */
-    public ContentReadbackHandler getContentReadbackHandler() {
-        if (mCompositorView == null) return null;
-        return mCompositorView.getContentReadbackHandler();
     }
 
     /**
@@ -432,23 +417,13 @@ public class CompositorViewHolder extends FrameLayout
         mLayoutManager.getActiveLayout().getAllContentViewCores(sCachedCVCList);
 
         for (int i = 0; i < sCachedCVCList.size(); i++) {
-            sCachedCVCList.get(i).onPhysicalBackingSizeChanged(width, height);
+            adjustPhysicalBackingSize(sCachedCVCList.get(i), width, height);
         }
         sCachedCVCList.clear();
     }
 
     @Override
     public void onOverdrawBottomHeightChanged(int overdrawHeight) {
-        if (mLayoutManager == null) return;
-
-        sCachedCVCList.clear();
-        mLayoutManager.getActiveLayout().getAllContentViewCores(sCachedCVCList);
-
-        for (int i = 0; i < sCachedCVCList.size(); i++) {
-            sCachedCVCList.get(i).onOverdrawBottomHeightChanged(overdrawHeight);
-        }
-        sCachedCVCList.clear();
-
         mSkipNextToolbarTextureUpdate = true;
         requestRender();
     }
@@ -550,7 +525,17 @@ public class CompositorViewHolder extends FrameLayout
         TraceEvent.begin("CompositorViewHolder:layout");
         if (mLayoutManager != null) {
             mLayoutManager.onUpdate();
-            mCompositorView.finalizeLayers(mLayoutManager, mSkipNextToolbarTextureUpdate);
+
+            if (!DeviceFormFactor.isTablet(getContext()) && mControlContainer != null) {
+                if (mProgressBarDrawingInfo == null) mProgressBarDrawingInfo = new DrawingInfo();
+                mControlContainer.getProgressBarDrawingInfo(mProgressBarDrawingInfo);
+            } else {
+                assert mProgressBarDrawingInfo == null;
+            }
+
+            mCompositorView.finalizeLayers(mLayoutManager, mSkipNextToolbarTextureUpdate,
+                    mProgressBarDrawingInfo);
+
             // TODO(changwan): Check if this hack can be removed.
             // This is a hack to draw one more frame if the screen just rotated for Nexus 10 + L.
             // See http://crbug/440469 for more.
@@ -681,6 +666,18 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     @Override
+    public int getTopControlsBackgroundColor() {
+        return mTabVisible == null ? Color.WHITE : mTabVisible.getThemeColor();
+    }
+
+    @Override
+    public float getTopControlsUrlBarAlpha() {
+        return mTabVisible == null
+                ? 1.f
+                : ColorUtils.getTextBoxAlphaForToolbarBackground(mTabVisible);
+    }
+
+    @Override
     public boolean areTopControlsPermanentlyHidden() {
         return mFullscreenManager != null && mFullscreenManager.areTopControlsPermanentlyHidden();
     }
@@ -729,12 +726,7 @@ public class CompositorViewHolder extends FrameLayout
                 && mView != null;
     }
 
-    /**
-     * Hides the the keyboard if it was opened for the ContentView.
-     * @param postHideTask A task to run after the keyboard is done hiding and the view's
-     *         layout has been updated.  If the keyboard was not shown, the task will run
-     *         immediately.
-     */
+    @Override
     public void hideKeyboard(Runnable postHideTask) {
         // When this is called we actually want to hide the keyboard whatever owns it.
         // This includes hiding the keyboard, and dropping focus from the URL bar.
@@ -762,14 +754,16 @@ public class CompositorViewHolder extends FrameLayout
      * @param androidContentContainer The {@link ViewGroup} the {@link LayoutManager} should bind
      *                                Android content to.
      * @param contextualSearchManager A {@link ContextualSearchManagementDelegate} instance.
+     * @param readerModeManager       A {@link ReaderModeManagerDelegate} instance.
      */
     public void onFinishNativeInitialization(TabModelSelector tabModelSelector,
             TabCreatorManager tabCreatorManager, TabContentManager tabContentManager,
             ViewGroup androidContentContainer,
-            ContextualSearchManagementDelegate contextualSearchManager) {
+            ContextualSearchManagementDelegate contextualSearchManager,
+            ReaderModeManagerDelegate readerModeManager) {
         assert mLayoutManager != null;
         mLayoutManager.init(tabModelSelector, tabCreatorManager, tabContentManager,
-                androidContentContainer, contextualSearchManager,
+                androidContentContainer, contextualSearchManager, readerModeManager,
                 mCompositorView.getResourceManager().getDynamicResourceLoader());
         mTabModelSelector = tabModelSelector;
         tabModelSelector.addObserver(new EmptyTabModelSelectorObserver() {
@@ -797,7 +791,7 @@ public class CompositorViewHolder extends FrameLayout
         if (show) {
             if (mView.getParent() != this) {
                 // Make sure the view isn't a child of something else before we attempt to add it.
-                if (mView.getParent() != null && mView.getParent() instanceof ViewGroup) {
+                if (mView.getParent() instanceof ViewGroup) {
                     ((ViewGroup) mView.getParent()).removeView(mView);
                 }
 
@@ -870,7 +864,7 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     private void setTab(Tab tab) {
-        if (tab != null && tab.isFrozen()) tab.unfreezeContents();
+        if (tab != null) tab.loadIfNeeded();
 
         View newView = tab != null ? tab.getView() : null;
         if (mView == newView) return;
@@ -932,9 +926,37 @@ public class CompositorViewHolder extends FrameLayout
         contentViewCore.setCurrentMotionEventOffsets(0.f, 0.f);
         contentViewCore.setTopControlsHeight(
                 getTopControlsHeightPixels(), contentViewCore.doTopControlsShrinkBlinkSize());
-        contentViewCore.onPhysicalBackingSizeChanged(
+
+        adjustPhysicalBackingSize(contentViewCore,
                 mCompositorView.getWidth(), mCompositorView.getHeight());
-        contentViewCore.onOverdrawBottomHeightChanged(mCompositorView.getOverdrawBottomHeight());
+    }
+
+    /**
+     * Adjusts the physical backing size of a given ContentViewCore. This method will first check
+     * if the ContentViewCore's client wants to override the size and, if so, it will use the
+     * values provided by the {@link ContentViewClient#getDesiredWidthMeasureSpec()} and
+     * {@link ContentViewClient#getDesiredHeightMeasureSpec()} methods. If no value is provided
+     * in one of these methods, the values from the |width| and |height| arguments will be
+     * used instead.
+     *
+     * @param contentViewCore The {@link ContentViewCore} to resize.
+     * @param width The default width.
+     * @param height The default height.
+     */
+    private void adjustPhysicalBackingSize(ContentViewCore contentViewCore, int width, int height) {
+        ContentViewClient client = contentViewCore.getContentViewClient();
+
+        int desiredWidthMeasureSpec = client.getDesiredWidthMeasureSpec();
+        if (MeasureSpec.getMode(desiredWidthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            width = MeasureSpec.getSize(desiredWidthMeasureSpec);
+        }
+
+        int desiredHeightMeasureSpec = client.getDesiredHeightMeasureSpec();
+        if (MeasureSpec.getMode(desiredHeightMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            height = MeasureSpec.getSize(desiredHeightMeasureSpec);
+        }
+
+        contentViewCore.onPhysicalBackingSizeChanged(width, height);
     }
 
     /**
@@ -954,7 +976,7 @@ public class CompositorViewHolder extends FrameLayout
         int height = getHeight();
         view.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
-        view.layout(0, 0, width, height);
+        view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
         return true;
     }
 
@@ -984,6 +1006,8 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     public void invalidateAccessibilityProvider() {
         if (mNodeProvider != null) {
+            mNodeProvider.sendEventForVirtualView(mNodeProvider.getFocusedVirtualView(),
+                    AccessibilityEventCompat.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED);
             mNodeProvider.invalidateRoot();
         }
     }

@@ -5,9 +5,11 @@
 #include "base/win/registry.h"
 
 #include <shlwapi.h>
+#include <stddef.h>
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/win/windows_version.h"
@@ -82,7 +84,7 @@ bool RegKey::Watcher::StartWatching(HKEY key, const ChangeCallback& callback) {
   }
 
   callback_ = callback;
-  return object_watcher_.StartWatching(watch_event_.Get(), this);
+  return object_watcher_.StartWatchingOnce(watch_event_.Get(), this);
 }
 
 // RegKey ----------------------------------------------------------------------
@@ -301,10 +303,10 @@ LONG RegKey::ReadValueDW(const wchar_t* name, DWORD* out_value) const {
   return result;
 }
 
-LONG RegKey::ReadInt64(const wchar_t* name, int64* out_value) const {
+LONG RegKey::ReadInt64(const wchar_t* name, int64_t* out_value) const {
   DCHECK(out_value);
   DWORD type = REG_QWORD;
-  int64 local_value = 0;
+  int64_t local_value = 0;
   DWORD size = sizeof(local_value);
   LONG result = ReadValue(name, &local_value, &size, &type);
   if (result == ERROR_SUCCESS) {
@@ -364,7 +366,7 @@ LONG RegKey::ReadValues(const wchar_t* name,
   DWORD type = REG_MULTI_SZ;
   DWORD size = 0;
   LONG result = ReadValue(name, NULL, &size, &type);
-  if (FAILED(result) || size == 0)
+  if (result != ERROR_SUCCESS || size == 0)
     return result;
 
   if (type != REG_MULTI_SZ)
@@ -372,7 +374,7 @@ LONG RegKey::ReadValues(const wchar_t* name,
 
   std::vector<wchar_t> buffer(size / sizeof(wchar_t));
   result = ReadValue(name, &buffer[0], &size, NULL);
-  if (FAILED(result) || size == 0)
+  if (result != ERROR_SUCCESS || size == 0)
     return result;
 
   // Parse the double-null-terminated list of strings.
@@ -569,7 +571,7 @@ bool RegistryValueIterator::Read() {
     value_size_ = static_cast<DWORD>((value_.size() - 1) * sizeof(wchar_t));
     LONG result = ::RegEnumValue(
         key_, index_, WriteInto(&name_, name_size), &name_size, NULL, &type_,
-        reinterpret_cast<BYTE*>(vector_as_array(&value_)), &value_size_);
+        reinterpret_cast<BYTE*>(value_.data()), &value_size_);
 
     if (result == ERROR_MORE_DATA) {
       // Registry key names are limited to 255 characters and fit within
@@ -585,7 +587,7 @@ bool RegistryValueIterator::Read() {
       name_size = name_size == capacity ? MAX_REGISTRY_NAME_SIZE : capacity;
       result = ::RegEnumValue(
           key_, index_, WriteInto(&name_, name_size), &name_size, NULL, &type_,
-          reinterpret_cast<BYTE*>(vector_as_array(&value_)), &value_size_);
+          reinterpret_cast<BYTE*>(value_.data()), &value_size_);
     }
 
     if (result == ERROR_SUCCESS) {

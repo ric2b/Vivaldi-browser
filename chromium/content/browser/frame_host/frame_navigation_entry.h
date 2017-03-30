@@ -5,7 +5,9 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_FRAME_NAVIGATION_ENTRY_H_
 #define CONTENT_BROWSER_FRAME_HOST_FRAME_NAVIGATION_ENTRY_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/public/common/page_state.h"
@@ -19,19 +21,18 @@ namespace content {
 // For now, it is owned by a single NavigationEntry and only tracks the main
 // frame.
 //
-// TODO(creis): In --site-per-process, fill in a tree of FrameNavigationEntries
-// in each NavigationEntry, one per frame.  FrameNavigationEntries may be shared
-// across NavigationEntries if the frame hasn't changed.
+// If SiteIsolationPolicy::UseSubframeNavigationEntries is true, there will be a
+// tree of FrameNavigationEntries in each NavigationEntry, one per frame.
+// TODO(creis): Share these FrameNavigationEntries across NavigationEntries if
+// the frame hasn't changed.
 class CONTENT_EXPORT FrameNavigationEntry
     : public base::RefCounted<FrameNavigationEntry> {
  public:
-  // TODO(creis): We should not use FTN IDs here, since they will change if you
-  // leave a page and come back later.  We should evaluate whether Blink's
-  // unique names would work instead, similar to HistoryNode.
   explicit FrameNavigationEntry(int frame_tree_node_id);
   FrameNavigationEntry(int frame_tree_node_id,
-                       int64 item_sequence_number,
-                       int64 document_sequence_number,
+                       const std::string& frame_unique_name,
+                       int64_t item_sequence_number,
+                       int64_t document_sequence_number,
                        SiteInstanceImpl* site_instance,
                        const GURL& url,
                        const Referrer& referrer);
@@ -41,8 +42,9 @@ class CONTENT_EXPORT FrameNavigationEntry
   FrameNavigationEntry* Clone() const;
 
   // Updates all the members of this entry.
-  void UpdateEntry(int64 item_sequence_number,
-                   int64 document_sequence_number,
+  void UpdateEntry(const std::string& frame_unique_name,
+                   int64_t item_sequence_number,
+                   int64_t document_sequence_number,
                    SiteInstanceImpl* site_instance,
                    const GURL& url,
                    const Referrer& referrer,
@@ -51,22 +53,36 @@ class CONTENT_EXPORT FrameNavigationEntry
   // The ID of the FrameTreeNode this entry is for.  -1 for the main frame,
   // since we don't always know the FrameTreeNode ID when creating the overall
   // NavigationEntry.
-  // TODO(creis): Replace with frame sequence number or unique name.
+  // TODO(creis): Consider removing |frame_tree_node_id| in favor of
+  // |frame_unique_name|, if we can move unique name computation to the browser
+  // process.
   int frame_tree_node_id() const { return frame_tree_node_id_; }
+  void set_frame_tree_node_id(int frame_tree_node_id) {
+    frame_tree_node_id_ = frame_tree_node_id;
+  }
+
+  // The unique name of the frame this entry is for.  This is a stable name for
+  // the frame based on its position in the tree and relation to other named
+  // frames, which does not change after cross-process navigations or restores.
+  // Only the main frame can have an empty name.
+  //
+  // This is unique relative to other frames in the same page, but not among
+  // other pages (i.e., not globally unique).
+  const std::string& frame_unique_name() const { return frame_unique_name_; }
+  void set_frame_unique_name(const std::string& frame_unique_name) {
+    frame_unique_name_ = frame_unique_name;
+  }
 
   // Keeps track of where this entry belongs in the frame's session history.
   // The item sequence number identifies each stop in the back/forward history
   // and is globally unique.  The document sequence number increments for each
   // new document and is also globally unique.  In-page navigations get a new
-  // item sequence number but the same document sequence number.
-  void set_item_sequence_number(int64 item_sequence_number) {
-    item_sequence_number_ = item_sequence_number;
-  }
-  int64 item_sequence_number() const { return item_sequence_number_; }
-  void set_document_sequence_number(int64 document_sequence_number) {
-    document_sequence_number_ = document_sequence_number;
-  }
-  int64 document_sequence_number() const { return document_sequence_number_; }
+  // item sequence number but the same document sequence number.  These numbers
+  // should not change once assigned.
+  void set_item_sequence_number(int64_t item_sequence_number);
+  int64_t item_sequence_number() const { return item_sequence_number_; }
+  void set_document_sequence_number(int64_t document_sequence_number);
+  int64_t document_sequence_number() const { return document_sequence_number_; }
 
   // The SiteInstance responsible for rendering this frame.  All frames sharing
   // a SiteInstance must live in the same process.  This is a refcounted pointer
@@ -94,15 +110,16 @@ class CONTENT_EXPORT FrameNavigationEntry
   virtual ~FrameNavigationEntry();
 
   // WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
-  // For all new fields, update |Clone|.
+  // Add all new fields to |UpdateEntry|.
   // TODO(creis): These fields have implications for session restore.  This is
   // currently managed by NavigationEntry, but the logic will move here.
   // WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
 
   // See the accessors above for descriptions.
   int frame_tree_node_id_;
-  int64 item_sequence_number_;
-  int64 document_sequence_number_;
+  std::string frame_unique_name_;
+  int64_t item_sequence_number_;
+  int64_t document_sequence_number_;
   scoped_refptr<SiteInstanceImpl> site_instance_;
   GURL url_;
   Referrer referrer_;

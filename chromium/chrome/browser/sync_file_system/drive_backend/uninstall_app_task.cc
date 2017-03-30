@@ -6,8 +6,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "chrome/browser/drive/drive_api_util.h"
-#include "chrome/browser/drive/drive_service_interface.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_util.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.h"
@@ -15,6 +13,8 @@
 #include "chrome/browser/sync_file_system/drive_backend/sync_engine_context.h"
 #include "chrome/browser/sync_file_system/drive_backend/tracker_id_set.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
+#include "components/drive/drive_api_util.h"
+#include "components/drive/service/drive_service_interface.h"
 #include "google_apis/drive/drive_api_parser.h"
 
 namespace sync_file_system {
@@ -46,7 +46,7 @@ void UninstallAppTask::RunExclusive(const SyncStatusCallback& callback) {
   }
   DCHECK_EQ(RemoteFileSyncService::UNINSTALL_AND_PURGE_REMOTE, uninstall_flag_);
 
-  int64 sync_root_tracker_id = metadata_database()->GetSyncRootTrackerID();
+  int64_t sync_root_tracker_id = metadata_database()->GetSyncRootTrackerID();
   TrackerIDSet trackers;
   if (!metadata_database()->FindTrackersByParentAndTitle(
           sync_root_tracker_id, app_id_, &trackers) ||
@@ -75,7 +75,7 @@ void UninstallAppTask::RunExclusive(const SyncStatusCallback& callback) {
 }
 
 void UninstallAppTask::DidDeleteAppRoot(const SyncStatusCallback& callback,
-                                        int64 change_id,
+                                        int64_t change_id,
                                         google_apis::DriveApiErrorCode error) {
   SyncStatusCode status = DriveApiErrorCodeToSyncStatusCode(error);
   if (status != SYNC_STATUS_OK &&

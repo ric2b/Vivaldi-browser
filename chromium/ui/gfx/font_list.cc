@@ -34,15 +34,17 @@ bool FontList::ParseDescription(const std::string& description,
   DCHECK(style_out);
   DCHECK(size_pixels_out);
 
-  base::SplitString(description, ',', families_out);
+  *families_out = base::SplitString(
+      description, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (families_out->empty())
     return false;
   for (auto& family : *families_out)
     base::TrimWhitespaceASCII(family, base::TRIM_ALL, &family);
 
   // The last item is "[STYLE1] [STYLE2] [...] SIZE".
-  std::vector<std::string> styles;
-  base::SplitStringAlongWhitespace(families_out->back(), &styles);
+  std::vector<std::string> styles = base::SplitString(
+      families_out->back(), base::kWhitespaceASCII,
+      base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   families_out->pop_back();
   if (styles.empty())
     return false;
@@ -50,7 +52,7 @@ bool FontList::ParseDescription(const std::string& description,
   // The size takes the form "<INT>px".
   std::string size_string = styles.back();
   styles.pop_back();
-  if (!base::EndsWith(size_string, "px", true /* case_sensitive */))
+  if (!base::EndsWith(size_string, "px", base::CompareCase::SENSITIVE))
     return false;
   size_string.resize(size_string.size() - 2);
   if (!base::StringToInt(size_string, size_pixels_out) ||
@@ -100,7 +102,7 @@ void FontList::SetDefaultFontDescription(const std::string& font_description) {
   // The description string must end with "px" for size in pixel, or must be
   // the empty string, which specifies to use a single default font.
   DCHECK(font_description.empty() ||
-         base::EndsWith(font_description, "px", true));
+         base::EndsWith(font_description, "px", base::CompareCase::SENSITIVE));
 
   g_default_font_description.Get() = font_description;
   g_default_impl_initialized = false;

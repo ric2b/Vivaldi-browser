@@ -4,6 +4,8 @@
 
 #include "chrome/browser/geolocation/geolocation_permission_context.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <utility>
@@ -11,20 +13,21 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/hash_tables.h"
+#include "base/gtest_prod_util.h"
 #include "base/id_map.h"
 #include "base/memory/scoped_vector.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/geolocation/geolocation_permission_context_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/permissions/permission_request_id.h"
-#include "chrome/browser/ui/website_settings/mock_permission_bubble_view.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/features.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -44,10 +47,13 @@
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/android/mock_location_settings.h"
 #include "chrome/browser/geolocation/geolocation_permission_context_android.h"
+#else
+#include "chrome/browser/ui/website_settings/mock_permission_bubble_view.h"
+#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
@@ -140,13 +146,18 @@ class GeolocationPermissionContextTests
   void AddNewTab(const GURL& url);
   void CheckTabContentsState(const GURL& requesting_frame,
                              ContentSetting expected_content_setting);
+#if !BUILDFLAG(ANDROID_JAVA_UI)
   size_t GetBubblesQueueSize(PermissionBubbleManager* manager);
   void AcceptBubble(PermissionBubbleManager* manager);
   void DenyBubble(PermissionBubbleManager* manager);
   void CloseBubble(PermissionBubbleManager* manager);
+#endif
   void BubbleManagerDocumentLoadCompleted();
   void BubbleManagerDocumentLoadCompleted(content::WebContents* web_contents);
   ContentSetting GetGeolocationContentSetting(GURL frame_0, GURL frame_1);
+  size_t GetNumberOfPrompts();
+  void AcceptPrompt();
+  base::string16 GetPromptText();
 
   // owned by the browser context
   GeolocationPermissionContext* geolocation_permission_context_;
@@ -163,8 +174,7 @@ PermissionRequestID GeolocationPermissionContextTests::RequestID(
   return PermissionRequestID(
       web_contents()->GetRenderProcessHost()->GetID(),
       web_contents()->GetMainFrame()->GetRoutingID(),
-      request_id,
-      GURL());
+      request_id);
 }
 
 PermissionRequestID GeolocationPermissionContextTests::RequestIDForTab(
@@ -173,8 +183,7 @@ PermissionRequestID GeolocationPermissionContextTests::RequestIDForTab(
   return PermissionRequestID(
       extra_tabs_[tab]->GetRenderProcessHost()->GetID(),
       extra_tabs_[tab]->GetMainFrame()->GetRoutingID(),
-      request_id,
-      GURL());
+      request_id);
 }
 
 void GeolocationPermissionContextTests::RequestGeolocationPermission(
@@ -186,7 +195,7 @@ void GeolocationPermissionContextTests::RequestGeolocationPermission(
       web_contents, id, requesting_frame, user_gesture,
       base::Bind(&GeolocationPermissionContextTests::PermissionResponse,
                  base::Unretained(this), id));
-   content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 }
 
 void GeolocationPermissionContextTests::PermissionResponse(
@@ -233,12 +242,15 @@ void GeolocationPermissionContextTests::AddNewTab(const GURL& url) {
 #if defined(ENABLE_EXTENSIONS)
   extensions::SetViewType(new_tab, extensions::VIEW_TYPE_TAB_CONTENTS);
 #endif
+#if BUILDFLAG(ANDROID_JAVA_UI)
   InfoBarService::CreateForWebContents(new_tab);
+#else
   PermissionBubbleManager::CreateForWebContents(new_tab);
   PermissionBubbleManager* permission_bubble_manager =
       PermissionBubbleManager::FromWebContents(new_tab);
   MockPermissionBubbleView::SetFactory(permission_bubble_manager, false);
-  permission_bubble_manager->DisplayPendingRequests(nullptr);
+  permission_bubble_manager->DisplayPendingRequests();
+#endif
 
   extra_tabs_.push_back(new_tab);
 }
@@ -270,18 +282,19 @@ void GeolocationPermissionContextTests::SetUp() {
   TabSpecificContentSettings::CreateForWebContents(web_contents());
   geolocation_permission_context_ =
       GeolocationPermissionContextFactory::GetForProfile(profile());
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   static_cast<GeolocationPermissionContextAndroid*>(
       geolocation_permission_context_)
       ->SetLocationSettingsForTesting(
           scoped_ptr<LocationSettings>(new MockLocationSettings()));
   MockLocationSettings::SetLocationStatus(true, true);
-#endif
+#else
   PermissionBubbleManager::CreateForWebContents(web_contents());
   PermissionBubbleManager* permission_bubble_manager =
       PermissionBubbleManager::FromWebContents(web_contents());
   MockPermissionBubbleView::SetFactory(permission_bubble_manager, false);
-  permission_bubble_manager->DisplayPendingRequests(nullptr);
+  permission_bubble_manager->DisplayPendingRequests();
+#endif
 }
 
 void GeolocationPermissionContextTests::TearDown() {
@@ -289,6 +302,7 @@ void GeolocationPermissionContextTests::TearDown() {
   ChromeRenderViewHostTestHarness::TearDown();
 }
 
+#if !BUILDFLAG(ANDROID_JAVA_UI)
 size_t GeolocationPermissionContextTests::GetBubblesQueueSize(
     PermissionBubbleManager* manager) {
   return manager->requests_.size();
@@ -308,6 +322,7 @@ void GeolocationPermissionContextTests::CloseBubble(
     PermissionBubbleManager* manager) {
   manager->Closing();
 }
+#endif
 
 void GeolocationPermissionContextTests::BubbleManagerDocumentLoadCompleted() {
   GeolocationPermissionContextTests::BubbleManagerDocumentLoadCompleted(
@@ -316,90 +331,72 @@ void GeolocationPermissionContextTests::BubbleManagerDocumentLoadCompleted() {
 
 void GeolocationPermissionContextTests::BubbleManagerDocumentLoadCompleted(
     content::WebContents* web_contents) {
+#if !BUILDFLAG(ANDROID_JAVA_UI)
   PermissionBubbleManager::FromWebContents(web_contents)->
       DocumentOnLoadCompletedInMainFrame();
+#endif
 }
 
 ContentSetting GeolocationPermissionContextTests::GetGeolocationContentSetting(
     GURL frame_0, GURL frame_1) {
-  return profile()->GetHostContentSettingsMap()->GetContentSetting(
-      frame_0, frame_1, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string());
+  return HostContentSettingsMapFactory::GetForProfile(profile())
+      ->GetContentSetting(frame_0,
+                          frame_1,
+                          CONTENT_SETTINGS_TYPE_GEOLOCATION,
+                          std::string());
 }
 
-// Needed to parameterize the tests for both infobars & permission bubbles.
-class GeolocationPermissionContextParamTests :
-      public GeolocationPermissionContextTests,
-      public ::testing::WithParamInterface<bool> {
- protected:
-  GeolocationPermissionContextParamTests() {}
-  ~GeolocationPermissionContextParamTests() override {}
-
-  bool BubbleEnabled() const {
-#if defined (OS_ANDROID)
-    return false;
+size_t GeolocationPermissionContextTests::GetNumberOfPrompts() {
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  PermissionBubbleManager* manager =
+      PermissionBubbleManager::FromWebContents(web_contents());
+  return GetBubblesQueueSize(manager);
 #else
-    return GetParam();
+  return infobar_service()->infobar_count();
 #endif
-  }
+}
 
-  void SetUp() override {
-    GeolocationPermissionContextTests::SetUp();
-#if !defined(OS_ANDROID)
-    if (BubbleEnabled()) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kEnablePermissionsBubbles);
-      EXPECT_TRUE(PermissionBubbleManager::Enabled());
-    } else {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kDisablePermissionsBubbles);
-      EXPECT_FALSE(PermissionBubbleManager::Enabled());
-    }
+void GeolocationPermissionContextTests::AcceptPrompt() {
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  PermissionBubbleManager* manager =
+      PermissionBubbleManager::FromWebContents(web_contents());
+  AcceptBubble(manager);
+#else
+  infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
+  ConfirmInfoBarDelegate* infobar_delegate =
+      infobar->delegate()->AsConfirmInfoBarDelegate();
+  infobar_delegate->Accept();
 #endif
-  }
+}
 
-  size_t GetNumberOfPrompts() {
-    if (BubbleEnabled()) {
-      PermissionBubbleManager* manager =
-          PermissionBubbleManager::FromWebContents(web_contents());
-      return GetBubblesQueueSize(manager);
-    } else {
-      return infobar_service()->infobar_count();
-    }
-  }
-
-  void AcceptPrompt() {
-    if (BubbleEnabled()) {
-      PermissionBubbleManager* manager =
-          PermissionBubbleManager::FromWebContents(web_contents());
-      AcceptBubble(manager);
-    } else {
-      infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
-      ConfirmInfoBarDelegate* infobar_delegate =
-          infobar->delegate()->AsConfirmInfoBarDelegate();
-      infobar_delegate->Accept();
-    }
-  }
-
-  base::string16 GetPromptText() {
-    if (BubbleEnabled()) {
-      PermissionBubbleManager* manager =
-          PermissionBubbleManager::FromWebContents(web_contents());
-      return manager->requests_.front()->GetMessageText();
-    }
-    infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
-    ConfirmInfoBarDelegate* infobar_delegate =
-        infobar->delegate()->AsConfirmInfoBarDelegate();
-    return infobar_delegate->GetMessageText();
-  }
- private:
-  DISALLOW_COPY_AND_ASSIGN(GeolocationPermissionContextParamTests);
-};
+base::string16 GeolocationPermissionContextTests::GetPromptText() {
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  PermissionBubbleManager* manager =
+      PermissionBubbleManager::FromWebContents(web_contents());
+  return manager->requests_.front()->GetMessageText();
+#else
+  infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
+  ConfirmInfoBarDelegate* infobar_delegate =
+      infobar->delegate()->AsConfirmInfoBarDelegate();
+  return infobar_delegate->GetMessageText();
+#endif
+}
 
 // Tests ----------------------------------------------------------------------
 
-TEST_P(GeolocationPermissionContextParamTests, SinglePermissionInfobar) {
-  if (BubbleEnabled()) return;
+TEST_F(GeolocationPermissionContextTests, SinglePermissionBubble) {
+  GURL requesting_frame("http://www.example.com/geolocation");
+  NavigateAndCommit(requesting_frame);
+  BubbleManagerDocumentLoadCompleted();
 
+  EXPECT_EQ(0U, GetNumberOfPrompts());
+  RequestGeolocationPermission(
+      web_contents(), RequestID(0), requesting_frame, true);
+  ASSERT_EQ(1U, GetNumberOfPrompts());
+}
+
+#if BUILDFLAG(ANDROID_JAVA_UI)
+TEST_F(GeolocationPermissionContextTests, SinglePermissionInfobar) {
   GURL requesting_frame("http://www.example.com/geolocation");
   NavigateAndCommit(requesting_frame);
   EXPECT_EQ(0U, infobar_service()->infobar_count());
@@ -416,20 +413,6 @@ TEST_P(GeolocationPermissionContextParamTests, SinglePermissionInfobar) {
   EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar));
 }
 
-TEST_P(GeolocationPermissionContextParamTests, SinglePermissionBubble) {
-  if (!BubbleEnabled()) return;
-
-  GURL requesting_frame("http://www.example.com/geolocation");
-  NavigateAndCommit(requesting_frame);
-  BubbleManagerDocumentLoadCompleted();
-
-  EXPECT_EQ(0U, GetNumberOfPrompts());
-  RequestGeolocationPermission(
-      web_contents(), RequestID(0), requesting_frame, true);
-  ASSERT_EQ(1U, GetNumberOfPrompts());
-}
-
-#if defined(OS_ANDROID)
 // Infobar-only tests; Android doesn't support permission bubbles.
 TEST_F(GeolocationPermissionContextTests, GeolocationEnabledDisabled) {
   GURL requesting_frame("http://www.example.com/geolocation");
@@ -480,7 +463,7 @@ TEST_F(GeolocationPermissionContextTests, MasterEnabledGoogleAppsDisabled) {
 }
 #endif
 
-TEST_P(GeolocationPermissionContextParamTests, QueuedPermission) {
+TEST_F(GeolocationPermissionContextTests, QueuedPermission) {
   GURL requesting_frame_0("http://www.example.com/geolocation");
   GURL requesting_frame_1("http://www.example-2.com/geolocation");
   EXPECT_EQ(
@@ -491,7 +474,7 @@ TEST_P(GeolocationPermissionContextParamTests, QueuedPermission) {
       GetGeolocationContentSetting(requesting_frame_1, requesting_frame_1));
 
   NavigateAndCommit(requesting_frame_0);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   // Check that no permission requests have happened yet.
   EXPECT_EQ(0U, GetNumberOfPrompts());
@@ -510,13 +493,13 @@ TEST_P(GeolocationPermissionContextParamTests, QueuedPermission) {
   CheckTabContentsState(requesting_frame_0, CONTENT_SETTING_ALLOW);
   CheckPermissionMessageSent(0, true);
 
-  if (!BubbleEnabled()) {
-    infobars::InfoBar* infobar_0 = infobar_service()->infobar_at(0);
-    infobar_service()->RemoveInfoBar(infobar_0);
-    EXPECT_EQ(1U, closed_infobar_tracker_.size());
-    EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar_0));
-    closed_infobar_tracker_.Clear();
-  }
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  infobars::InfoBar* infobar_0 = infobar_service()->infobar_at(0);
+  infobar_service()->RemoveInfoBar(infobar_0);
+  EXPECT_EQ(1U, closed_infobar_tracker_.size());
+  EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar_0));
+  closed_infobar_tracker_.Clear();
+#endif
 
   // Now we should have a new infobar for the second frame.
   ASSERT_EQ(1U, GetNumberOfPrompts());
@@ -526,14 +509,14 @@ TEST_P(GeolocationPermissionContextParamTests, QueuedPermission) {
   EXPECT_NE(text_0, text_1);
 
   // Cancel (block) this frame.
-  if (BubbleEnabled()) {
-    PermissionBubbleManager* manager =
-        PermissionBubbleManager::FromWebContents(web_contents());
-    DenyBubble(manager);
-  } else {
-    infobars::InfoBar* infobar_1 = infobar_service()->infobar_at(0);
-    infobar_1->delegate()->AsConfirmInfoBarDelegate()->Cancel();
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  PermissionBubbleManager* manager =
+      PermissionBubbleManager::FromWebContents(web_contents());
+  DenyBubble(manager);
+#else
+  infobars::InfoBar* infobar_1 = infobar_service()->infobar_at(0);
+  infobar_1->delegate()->AsConfirmInfoBarDelegate()->Cancel();
+#endif
   CheckTabContentsState(requesting_frame_1, CONTENT_SETTING_BLOCK);
   CheckPermissionMessageSent(1, false);
 
@@ -546,23 +529,28 @@ TEST_P(GeolocationPermissionContextParamTests, QueuedPermission) {
       GetGeolocationContentSetting(requesting_frame_1, requesting_frame_0));
 }
 
-TEST_P(GeolocationPermissionContextParamTests, HashIsIgnored) {
+TEST_F(GeolocationPermissionContextTests, HashIsIgnored) {
   GURL url_a("http://www.example.com/geolocation#a");
   GURL url_b("http://www.example.com/geolocation#b");
 
   // Navigate to the first url.
   NavigateAndCommit(url_a);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   // Check permission is requested.
   ASSERT_EQ(0U, GetNumberOfPrompts());
-  RequestGeolocationPermission(
-      web_contents(), RequestID(0), url_a, BubbleEnabled());
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  const bool user_gesture = false;
+#else
+  const bool user_gesture = true;
+#endif
+  RequestGeolocationPermission(web_contents(), RequestID(0), url_a,
+                               user_gesture);
   ASSERT_EQ(1U, GetNumberOfPrompts());
 
   // Change the hash, we'll still be on the same page.
   NavigateAndCommit(url_b);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   // Accept.
   AcceptPrompt();
@@ -571,22 +559,25 @@ TEST_P(GeolocationPermissionContextParamTests, HashIsIgnored) {
   CheckPermissionMessageSent(0, true);
 
   // Cleanup.
-  if (!BubbleEnabled()) {
-    infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
-    infobar_service()->RemoveInfoBar(infobar);
-    EXPECT_EQ(1U, closed_infobar_tracker_.size());
-    EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar));
-  }
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
+  infobar_service()->RemoveInfoBar(infobar);
+  EXPECT_EQ(1U, closed_infobar_tracker_.size());
+  EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar));
+#endif
 }
 
-TEST_P(GeolocationPermissionContextParamTests, PermissionForFileScheme) {
-  // TODO(felt): The bubble is rejecting file:// permission requests.
-  // Fix and enable this test. crbug.com/444047
-  if (BubbleEnabled()) return;
-
+// TODO(felt): The bubble is rejecting file:// permission requests.
+// Fix and enable this test. crbug.com/444047
+#if BUILDFLAG(ANDROID_JAVA_UI)
+#define MAYBE_PermissionForFileScheme PermissionForFileScheme
+#else
+#define MAYBE_PermissionForFileScheme DISABLED_PermissionForFileScheme
+#endif
+TEST_F(GeolocationPermissionContextTests, MAYBE_PermissionForFileScheme) {
   GURL requesting_frame("file://example/geolocation.html");
   NavigateAndCommit(requesting_frame);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   // Check permission is requested.
   ASSERT_EQ(0U, GetNumberOfPrompts());
@@ -605,8 +596,7 @@ TEST_P(GeolocationPermissionContextParamTests, PermissionForFileScheme) {
       GetGeolocationContentSetting(requesting_frame, requesting_frame));
 }
 
-TEST_P(GeolocationPermissionContextParamTests,
-    CancelGeolocationPermissionRequest) {
+TEST_F(GeolocationPermissionContextTests, CancelGeolocationPermissionRequest) {
   GURL frame_0("http://www.example.com/geolocation");
   GURL frame_1("http://www.example-2.com/geolocation");
   EXPECT_EQ(
@@ -615,7 +605,7 @@ TEST_P(GeolocationPermissionContextParamTests,
       CONTENT_SETTING_ASK, GetGeolocationContentSetting(frame_1, frame_0));
 
   NavigateAndCommit(frame_0);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   ASSERT_EQ(0U, GetNumberOfPrompts());
 
@@ -631,14 +621,14 @@ TEST_P(GeolocationPermissionContextParamTests,
   ASSERT_FALSE(text_0.empty());
 
   // Simulate the frame going away; the request should be removed.
-  if (BubbleEnabled()) {
-    PermissionBubbleManager* manager =
-        PermissionBubbleManager::FromWebContents(web_contents());
-    CloseBubble(manager);
-  } else {
-    geolocation_permission_context_->CancelPermissionRequest(web_contents(),
-        RequestID(0));
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  PermissionBubbleManager* manager =
+      PermissionBubbleManager::FromWebContents(web_contents());
+  CloseBubble(manager);
+#else
+  geolocation_permission_context_->CancelPermissionRequest(web_contents(),
+                                                           RequestID(0));
+#endif
 
   // Check that the next pending request is created correctly.
   base::string16 text_1 = GetPromptText();
@@ -656,12 +646,12 @@ TEST_P(GeolocationPermissionContextParamTests,
       CONTENT_SETTING_ALLOW, GetGeolocationContentSetting(frame_1, frame_0));
 }
 
-TEST_P(GeolocationPermissionContextParamTests, InvalidURL) {
+TEST_F(GeolocationPermissionContextTests, InvalidURL) {
   // Navigate to the first url.
   GURL invalid_embedder("about:blank");
   GURL requesting_frame;
   NavigateAndCommit(invalid_embedder);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   // Nothing should be displayed.
   EXPECT_EQ(0U, GetNumberOfPrompts());
@@ -671,23 +661,23 @@ TEST_P(GeolocationPermissionContextParamTests, InvalidURL) {
   CheckPermissionMessageSent(0, false);
 }
 
-TEST_P(GeolocationPermissionContextParamTests, SameOriginMultipleTabs) {
+TEST_F(GeolocationPermissionContextTests, SameOriginMultipleTabs) {
   GURL url_a("http://www.example.com/geolocation");
   GURL url_b("http://www.example-2.com/geolocation");
   NavigateAndCommit(url_a);  // Tab A0
   AddNewTab(url_b);          // Tab B (extra_tabs_[0])
   AddNewTab(url_a);          // Tab A1 (extra_tabs_[1])
-  if (BubbleEnabled()) {
-    BubbleManagerDocumentLoadCompleted();
-    BubbleManagerDocumentLoadCompleted(extra_tabs_[0]);
-    BubbleManagerDocumentLoadCompleted(extra_tabs_[1]);
-  }
+  BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted(extra_tabs_[0]);
+  BubbleManagerDocumentLoadCompleted(extra_tabs_[1]);
+#if !BUILDFLAG(ANDROID_JAVA_UI)
   PermissionBubbleManager* manager_a0 =
       PermissionBubbleManager::FromWebContents(web_contents());
   PermissionBubbleManager* manager_b =
       PermissionBubbleManager::FromWebContents(extra_tabs_[0]);
   PermissionBubbleManager* manager_a1 =
       PermissionBubbleManager::FromWebContents(extra_tabs_[1]);
+#endif
 
   // Request permission in all three tabs.
   RequestGeolocationPermission(
@@ -697,56 +687,54 @@ TEST_P(GeolocationPermissionContextParamTests, SameOriginMultipleTabs) {
   RequestGeolocationPermission(
       extra_tabs_[1], RequestIDForTab(1, 0), url_a, true);
   ASSERT_EQ(1U, GetNumberOfPrompts());  // For A0.
-  if (BubbleEnabled()) {
-    ASSERT_EQ(1U, GetBubblesQueueSize(manager_b));
-    ASSERT_EQ(1U, GetBubblesQueueSize(manager_a1));
-  } else {
-    ASSERT_EQ(1U, infobar_service_for_tab(0)->infobar_count());
-    ASSERT_EQ(1U, infobar_service_for_tab(1)->infobar_count());
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  ASSERT_EQ(1U, GetBubblesQueueSize(manager_b));
+  ASSERT_EQ(1U, GetBubblesQueueSize(manager_a1));
+#else
+  ASSERT_EQ(1U, infobar_service_for_tab(0)->infobar_count());
+  ASSERT_EQ(1U, infobar_service_for_tab(1)->infobar_count());
+#endif
 
   // Accept the permission in tab A0.
-  if (BubbleEnabled()) {
-    AcceptBubble(manager_a0);
-  } else {
-    infobars::InfoBar* infobar_a0 = infobar_service()->infobar_at(0);
-    ConfirmInfoBarDelegate* infobar_delegate_a0 =
-        infobar_a0->delegate()->AsConfirmInfoBarDelegate();
-    ASSERT_TRUE(infobar_delegate_a0);
-    infobar_delegate_a0->Accept();
-    infobar_service()->RemoveInfoBar(infobar_a0);
-    EXPECT_EQ(2U, closed_infobar_tracker_.size());
-    EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar_a0));
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  AcceptBubble(manager_a0);
+#else
+  infobars::InfoBar* infobar_a0 = infobar_service()->infobar_at(0);
+  ConfirmInfoBarDelegate* infobar_delegate_a0 =
+      infobar_a0->delegate()->AsConfirmInfoBarDelegate();
+  ASSERT_TRUE(infobar_delegate_a0);
+  infobar_delegate_a0->Accept();
+  infobar_service()->RemoveInfoBar(infobar_a0);
+  EXPECT_EQ(2U, closed_infobar_tracker_.size());
+  EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar_a0));
+#endif
   CheckPermissionMessageSent(0, true);
   // Because they're the same origin, this will cause tab A1's infobar to
   // disappear. It does not cause the bubble to disappear: crbug.com/443013.
   // TODO(felt): Update this test when the bubble's behavior is changed.
-  if (BubbleEnabled())
-    ASSERT_EQ(1U, GetBubblesQueueSize(manager_a1));
-  else
-    CheckPermissionMessageSentForTab(1, 0, true);
-
   // Either way, tab B should still have a pending permission request.
-  if (BubbleEnabled())
-    ASSERT_EQ(1U, GetBubblesQueueSize(manager_b));
-  else
-    ASSERT_EQ(1U, infobar_service_for_tab(0)->infobar_count());
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  ASSERT_EQ(1U, GetBubblesQueueSize(manager_a1));
+  ASSERT_EQ(1U, GetBubblesQueueSize(manager_b));
+#else
+  CheckPermissionMessageSentForTab(1, 0, true);
+  ASSERT_EQ(1U, infobar_service_for_tab(0)->infobar_count());
+#endif
 }
 
-TEST_P(GeolocationPermissionContextParamTests, QueuedOriginMultipleTabs) {
+TEST_F(GeolocationPermissionContextTests, QueuedOriginMultipleTabs) {
   GURL url_a("http://www.example.com/geolocation");
   GURL url_b("http://www.example-2.com/geolocation");
   NavigateAndCommit(url_a);  // Tab A0.
   AddNewTab(url_a);          // Tab A1.
-  if (BubbleEnabled()) {
-    BubbleManagerDocumentLoadCompleted();
-    BubbleManagerDocumentLoadCompleted(extra_tabs_[0]);
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted(extra_tabs_[0]);
   PermissionBubbleManager* manager_a0 =
       PermissionBubbleManager::FromWebContents(web_contents());
   PermissionBubbleManager* manager_a1 =
       PermissionBubbleManager::FromWebContents(extra_tabs_[0]);
+#endif
 
   // Request permission in both tabs; the extra tab will have two permission
   // requests from two origins.
@@ -756,59 +744,60 @@ TEST_P(GeolocationPermissionContextParamTests, QueuedOriginMultipleTabs) {
       extra_tabs_[0], RequestIDForTab(0, 0), url_a, true);
   RequestGeolocationPermission(
       extra_tabs_[0], RequestIDForTab(0, 1), url_b, true);
-  if (BubbleEnabled()) {
-    ASSERT_EQ(1U, GetBubblesQueueSize(manager_a0));
-    ASSERT_EQ(1U, GetBubblesQueueSize(manager_a1));
-  } else {
-    ASSERT_EQ(1U, infobar_service()->infobar_count());
-    ASSERT_EQ(1U, infobar_service_for_tab(0)->infobar_count());
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  ASSERT_EQ(1U, GetBubblesQueueSize(manager_a0));
+  ASSERT_EQ(1U, GetBubblesQueueSize(manager_a1));
+#else
+  ASSERT_EQ(1U, infobar_service()->infobar_count());
+  ASSERT_EQ(1U, infobar_service_for_tab(0)->infobar_count());
+#endif
 
   // Accept the first request in tab A1.
-  if (BubbleEnabled()) {
-    AcceptBubble(manager_a1);
-  } else {
-    infobars::InfoBar* infobar_a1 = infobar_service_for_tab(0)->infobar_at(0);
-    ConfirmInfoBarDelegate* infobar_delegate_a1 =
-        infobar_a1->delegate()->AsConfirmInfoBarDelegate();
-    ASSERT_TRUE(infobar_delegate_a1);
-    infobar_delegate_a1->Accept();
-    infobar_service_for_tab(0)->RemoveInfoBar(infobar_a1);
-    EXPECT_EQ(2U, closed_infobar_tracker_.size());
-    EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar_a1));
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  AcceptBubble(manager_a1);
+#else
+  infobars::InfoBar* infobar_a1 = infobar_service_for_tab(0)->infobar_at(0);
+  ConfirmInfoBarDelegate* infobar_delegate_a1 =
+      infobar_a1->delegate()->AsConfirmInfoBarDelegate();
+  ASSERT_TRUE(infobar_delegate_a1);
+  infobar_delegate_a1->Accept();
+  infobar_service_for_tab(0)->RemoveInfoBar(infobar_a1);
+  EXPECT_EQ(2U, closed_infobar_tracker_.size());
+  EXPECT_TRUE(closed_infobar_tracker_.Contains(infobar_a1));
+#endif
   CheckPermissionMessageSentForTab(0, 0, true);
 
   // Because they're the same origin, this will cause tab A0's infobar to
   // disappear. It does not cause the bubble to disappear: crbug.com/443013.
   // TODO(felt): Update this test when the bubble's behavior is changed.
-  if (BubbleEnabled()) {
-    EXPECT_EQ(1U, GetBubblesQueueSize(manager_a0));
-  } else {
-    EXPECT_EQ(0U, infobar_service()->infobar_count());
-    CheckPermissionMessageSent(0, true);
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  EXPECT_EQ(1U, GetBubblesQueueSize(manager_a0));
+#else
+  EXPECT_EQ(0U, infobar_service()->infobar_count());
+  CheckPermissionMessageSent(0, true);
+#endif
 
   // The second request should now be visible in tab A1.
-  if (BubbleEnabled())
-    ASSERT_EQ(1U, GetBubblesQueueSize(manager_a1));
-  else
-    ASSERT_EQ(1U, infobar_service_for_tab(0)->infobar_count());
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  ASSERT_EQ(1U, GetBubblesQueueSize(manager_a1));
+#else
+  ASSERT_EQ(1U, infobar_service_for_tab(0)->infobar_count());
+#endif
 
   // Accept the second request and check that it's gone.
-  if (BubbleEnabled()) {
-    AcceptBubble(manager_a1);
-    EXPECT_EQ(0U, GetBubblesQueueSize(manager_a1));
-  } else {
-    infobars::InfoBar* infobar_1 = infobar_service_for_tab(0)->infobar_at(0);
-    ConfirmInfoBarDelegate* infobar_delegate_1 =
-        infobar_1->delegate()->AsConfirmInfoBarDelegate();
-    ASSERT_TRUE(infobar_delegate_1);
-    infobar_delegate_1->Accept();
-  }
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  AcceptBubble(manager_a1);
+  EXPECT_EQ(0U, GetBubblesQueueSize(manager_a1));
+#else
+  infobars::InfoBar* infobar_1 = infobar_service_for_tab(0)->infobar_at(0);
+  ConfirmInfoBarDelegate* infobar_delegate_1 =
+      infobar_1->delegate()->AsConfirmInfoBarDelegate();
+  ASSERT_TRUE(infobar_delegate_1);
+  infobar_delegate_1->Accept();
+#endif
 }
 
-TEST_P(GeolocationPermissionContextParamTests, TabDestroyed) {
+TEST_F(GeolocationPermissionContextTests, TabDestroyed) {
   GURL requesting_frame_0("http://www.example.com/geolocation");
   GURL requesting_frame_1("http://www.example-2.com/geolocation");
   EXPECT_EQ(
@@ -819,7 +808,7 @@ TEST_P(GeolocationPermissionContextParamTests, TabDestroyed) {
       GetGeolocationContentSetting(requesting_frame_1, requesting_frame_0));
 
   NavigateAndCommit(requesting_frame_0);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   // Request permission for two frames.
   RequestGeolocationPermission(
@@ -831,12 +820,12 @@ TEST_P(GeolocationPermissionContextParamTests, TabDestroyed) {
   ASSERT_EQ(1U, GetNumberOfPrompts());
 
   // Delete the tab contents.
-  if (!BubbleEnabled()) {
-    infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
-    DeleteContents();
-    ASSERT_EQ(1U, closed_infobar_tracker_.size());
-    ASSERT_TRUE(closed_infobar_tracker_.Contains(infobar));
-  }
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
+  DeleteContents();
+  ASSERT_EQ(1U, closed_infobar_tracker_.size());
+  ASSERT_TRUE(closed_infobar_tracker_.Contains(infobar));
+#endif
 
   // The content settings should not have changed.
   EXPECT_EQ(
@@ -847,16 +836,17 @@ TEST_P(GeolocationPermissionContextParamTests, TabDestroyed) {
       GetGeolocationContentSetting(requesting_frame_1, requesting_frame_0));
 }
 
-TEST_P(GeolocationPermissionContextParamTests, LastUsageAudited) {
+TEST_F(GeolocationPermissionContextTests, LastUsageAudited) {
   GURL requesting_frame("http://www.example.com/geolocation");
   NavigateAndCommit(requesting_frame);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   base::SimpleTestClock* test_clock = new base::SimpleTestClock;
   test_clock->SetNow(base::Time::UnixEpoch() +
                      base::TimeDelta::FromSeconds(10));
 
-  HostContentSettingsMap* map = profile()->GetHostContentSettingsMap();
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile());
   map->SetPrefClockForTesting(scoped_ptr<base::Clock>(test_clock));
 
   // The permission shouldn't have been used yet.
@@ -890,12 +880,13 @@ TEST_P(GeolocationPermissionContextParamTests, LastUsageAudited) {
             13);
 }
 
-TEST_P(GeolocationPermissionContextParamTests, LastUsageAuditedMultipleFrames) {
+TEST_F(GeolocationPermissionContextTests, LastUsageAuditedMultipleFrames) {
   base::SimpleTestClock* test_clock = new base::SimpleTestClock;
   test_clock->SetNow(base::Time::UnixEpoch() +
                      base::TimeDelta::FromSeconds(10));
 
-  HostContentSettingsMap* map = profile()->GetHostContentSettingsMap();
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile());
   map->SetPrefClockForTesting(scoped_ptr<base::Clock>(test_clock));
 
   GURL requesting_frame_0("http://www.example.com/geolocation");
@@ -912,7 +903,7 @@ TEST_P(GeolocationPermissionContextParamTests, LastUsageAuditedMultipleFrames) {
             0);
 
   NavigateAndCommit(requesting_frame_0);
-  if (BubbleEnabled()) BubbleManagerDocumentLoadCompleted();
+  BubbleManagerDocumentLoadCompleted();
 
   EXPECT_EQ(0U, GetNumberOfPrompts());
 
@@ -927,8 +918,9 @@ TEST_P(GeolocationPermissionContextParamTests, LastUsageAuditedMultipleFrames) {
 
   // Accept the first frame.
   AcceptPrompt();
-  if (!BubbleEnabled())
-    infobar_service()->RemoveInfoBar(infobar_service()->infobar_at(0));
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  infobar_service()->RemoveInfoBar(infobar_service()->infobar_at(0));
+#endif
   CheckTabContentsState(requesting_frame_0, CONTENT_SETTING_ALLOW);
   CheckPermissionMessageSent(0, true);
 
@@ -951,8 +943,9 @@ TEST_P(GeolocationPermissionContextParamTests, LastUsageAuditedMultipleFrames) {
   AcceptPrompt();
   CheckTabContentsState(requesting_frame_1, CONTENT_SETTING_ALLOW);
   CheckPermissionMessageSent(1, true);
-  if (!BubbleEnabled())
-    infobar_service()->RemoveInfoBar(infobar_service()->infobar_at(0));
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  infobar_service()->RemoveInfoBar(infobar_service()->infobar_at(0));
+#endif
 
   // Verify that the times are different.
   EXPECT_EQ(map->GetLastUsage(requesting_frame_0.GetOrigin(),
@@ -979,7 +972,3 @@ TEST_P(GeolocationPermissionContextParamTests, LastUsageAuditedMultipleFrames) {
                               CONTENT_SETTINGS_TYPE_GEOLOCATION).ToDoubleT(),
             11);
 }
-
-INSTANTIATE_TEST_CASE_P(GeolocationPermissionContextTestsWithAndWithoutBubbles,
-                        GeolocationPermissionContextParamTests,
-                        ::testing::Values(false, true));

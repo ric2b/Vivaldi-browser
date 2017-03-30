@@ -8,8 +8,10 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/platform_util_internal.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -41,8 +43,7 @@ namespace {
 // ChromeContentBrowserClient subclass that sets up a custom file system backend
 // that allows the test to grant file access to the file manager extension ID
 // without having to install the extension.
-class PlatformUtilTestContentBrowserClient
-    : public chrome::ChromeContentBrowserClient {
+class PlatformUtilTestContentBrowserClient : public ChromeContentBrowserClient {
  public:
   void GetAdditionalFileSystemBackends(
       content::BrowserContext* browser_context,
@@ -93,8 +94,8 @@ class PlatformUtilTestBase : public BrowserWithTestWindowTest {
         "    }"
         "}";
     JSONStringValueDeserializer json_string_deserializer(json_manifest);
-    scoped_ptr<base::Value> manifest(
-        json_string_deserializer.Deserialize(&error_code, &error));
+    scoped_ptr<base::Value> manifest =
+        json_string_deserializer.Deserialize(&error_code, &error);
     base::DictionaryValue* manifest_dictionary;
 
     manifest->GetAsDictionary(&manifest_dictionary);

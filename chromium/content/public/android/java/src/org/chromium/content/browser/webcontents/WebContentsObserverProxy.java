@@ -4,11 +4,13 @@
 
 package org.chromium.content.browser.webcontents;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.MainDex;
 import org.chromium.content_public.browser.WebContentsObserver;
 
 /**
@@ -16,6 +18,7 @@ import org.chromium.content_public.browser.WebContentsObserver;
  * avoiding redundant JNI-related work when there are multiple Java-based observers.
  */
 @JNINamespace("content")
+@MainDex
 class WebContentsObserverProxy extends WebContentsObserver {
     private long mNativeWebContentsObserverProxy;
     private final ObserverList<WebContentsObserver> mObservers;
@@ -57,6 +60,14 @@ class WebContentsObserverProxy extends WebContentsObserver {
      */
     boolean hasObservers() {
         return !mObservers.isEmpty();
+    }
+
+    /**
+     * @return The list of proxied observers.
+     */
+    @VisibleForTesting
+    public ObserverList.RewindableIterator<WebContentsObserver> getObserversForTesting() {
+        return mObservers.rewindableIterator();
     }
 
     @Override
@@ -165,9 +176,9 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void documentLoadedInFrame(long frameId) {
+    public void documentLoadedInFrame(long frameId, boolean isMainFrame) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().documentLoadedInFrame(frameId);
+            mObserversIterator.next().documentLoadedInFrame(frameId, isMainFrame);
         }
     }
 

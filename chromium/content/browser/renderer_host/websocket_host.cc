@@ -4,8 +4,10 @@
 
 #include "content/browser/renderer_host/websocket_host.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
@@ -14,6 +16,7 @@
 #include "content/browser/ssl/ssl_error_handler.h"
 #include "content/browser/ssl/ssl_manager.h"
 #include "content/common/websocket_messages.h"
+#include "content/public/browser/render_frame_host.h"
 #include "ipc/ipc_message_macros.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
@@ -101,9 +104,9 @@ class WebSocketEventHandler : public net::WebSocketEventInterface {
                            WebSocketMessageType type,
                            const std::vector<char>& data) override;
   ChannelState OnClosingHandshake() override;
-  ChannelState OnFlowControl(int64 quota) override;
+  ChannelState OnFlowControl(int64_t quota) override;
   ChannelState OnDropChannel(bool was_clean,
-                             uint16 code,
+                             uint16_t code,
                              const std::string& reason) override;
   ChannelState OnFailChannel(const std::string& message) override;
   ChannelState OnStartOpeningHandshake(
@@ -188,7 +191,7 @@ ChannelState WebSocketEventHandler::OnClosingHandshake() {
   return StateCast(dispatcher_->NotifyClosingHandshake(routing_id_));
 }
 
-ChannelState WebSocketEventHandler::OnFlowControl(int64 quota) {
+ChannelState WebSocketEventHandler::OnFlowControl(int64_t quota) {
   DVLOG(3) << "WebSocketEventHandler::OnFlowControl"
            << " routing_id=" << routing_id_ << " quota=" << quota;
 
@@ -196,7 +199,7 @@ ChannelState WebSocketEventHandler::OnFlowControl(int64 quota) {
 }
 
 ChannelState WebSocketEventHandler::OnDropChannel(bool was_clean,
-                                                  uint16 code,
+                                                  uint16_t code,
                                                   const std::string& reason) {
   DVLOG(3) << "WebSocketEventHandler::OnDropChannel"
            << " routing_id=" << routing_id_ << " was_clean=" << was_clean
@@ -273,21 +276,17 @@ ChannelState WebSocketEventHandler::OnSSLCertificateError(
            << " routing_id=" << routing_id_ << " url=" << url.spec()
            << " cert_status=" << ssl_info.cert_status << " fatal=" << fatal;
   ssl_error_handler_delegate_.reset(
-      new SSLErrorHandlerDelegate(callbacks.Pass()));
-  SSLManager::OnSSLCertificateError(ssl_error_handler_delegate_->GetWeakPtr(),
-                                    RESOURCE_TYPE_SUB_RESOURCE,
-                                    url,
-                                    dispatcher_->render_process_id(),
-                                    render_frame_id_,
-                                    ssl_info,
-                                    fatal);
+      new SSLErrorHandlerDelegate(std::move(callbacks)));
+  SSLManager::OnSSLCertificateSubresourceError(
+      ssl_error_handler_delegate_->GetWeakPtr(), url,
+      dispatcher_->render_process_id(), render_frame_id_, ssl_info, fatal);
   // The above method is always asynchronous.
   return WebSocketEventInterface::CHANNEL_ALIVE;
 }
 
 WebSocketEventHandler::SSLErrorHandlerDelegate::SSLErrorHandlerDelegate(
     scoped_ptr<net::WebSocketEventInterface::SSLErrorCallbacks> callbacks)
-    : callbacks_(callbacks.Pass()), weak_ptr_factory_(this) {}
+    : callbacks_(std::move(callbacks)), weak_ptr_factory_(this) {}
 
 WebSocketEventHandler::SSLErrorHandlerDelegate::~SSLErrorHandlerDelegate() {}
 
@@ -330,7 +329,8 @@ WebSocketHost::WebSocketHost(int routing_id,
 WebSocketHost::~WebSocketHost() {}
 
 void WebSocketHost::GoAway() {
-  OnDropChannel(false, static_cast<uint16>(net::kWebSocketErrorGoingAway), "");
+  OnDropChannel(false, static_cast<uint16_t>(net::kWebSocketErrorGoingAway),
+                "");
 }
 
 bool WebSocketHost::OnMessageReceived(const IPC::Message& message) {
@@ -353,8 +353,8 @@ void WebSocketHost::OnAddChannelRequest(
   DVLOG(3) << "WebSocketHost::OnAddChannelRequest"
            << " routing_id=" << routing_id_ << " socket_url=\"" << socket_url
            << "\" requested_protocols=\""
-           << JoinString(requested_protocols, ", ") << "\" origin=\""
-           << origin.string() << "\"";
+           << base::JoinString(requested_protocols, ", ") << "\" origin=\""
+           << origin << "\"";
 
   DCHECK(!channel_);
   if (delay_ > base::TimeDelta()) {
@@ -377,15 +377,15 @@ void WebSocketHost::AddChannel(
   DVLOG(3) << "WebSocketHost::AddChannel"
            << " routing_id=" << routing_id_ << " socket_url=\"" << socket_url
            << "\" requested_protocols=\""
-           << JoinString(requested_protocols, ", ") << "\" origin=\""
-           << origin.string() << "\"";
+           << base::JoinString(requested_protocols, ", ") << "\" origin=\""
+           << origin << "\"";
 
   DCHECK(!channel_);
 
   scoped_ptr<net::WebSocketEventInterface> event_interface(
       new WebSocketEventHandler(dispatcher_, routing_id_, render_frame_id));
-  channel_.reset(
-      new net::WebSocketChannel(event_interface.Pass(), url_request_context_));
+  channel_.reset(new net::WebSocketChannel(std::move(event_interface),
+                                           url_request_context_));
 
   if (pending_flow_control_quota_ > 0) {
     // channel_->SendFlowControl(pending_flow_control_quota_) must be called
@@ -415,7 +415,7 @@ void WebSocketHost::OnSendFrame(bool fin,
   channel_->SendFrame(fin, MessageTypeToOpCode(type), data);
 }
 
-void WebSocketHost::OnFlowControl(int64 quota) {
+void WebSocketHost::OnFlowControl(int64_t quota) {
   DVLOG(3) << "WebSocketHost::OnFlowControl"
            << " routing_id=" << routing_id_ << " quota=" << quota;
 
@@ -431,7 +431,7 @@ void WebSocketHost::OnFlowControl(int64 quota) {
 }
 
 void WebSocketHost::OnDropChannel(bool was_clean,
-                                  uint16 code,
+                                  uint16_t code,
                                   const std::string& reason) {
   DVLOG(3) << "WebSocketHost::OnDropChannel"
            << " routing_id=" << routing_id_ << " was_clean=" << was_clean

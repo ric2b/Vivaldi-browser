@@ -4,6 +4,8 @@
 
 #include "ui/compositor/scoped_layer_animation_settings.h"
 
+#include <stddef.h>
+
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animation_sequence.h"
@@ -67,7 +69,7 @@ class InvertingObserver : public ImplicitAnimationObserver {
 
       scoped_ptr<LayerAnimationElement> to_return(
           LayerAnimationElement::CreateInverseTransformElement(base, element));
-      return to_return.Pass();
+      return to_return;
     }
 
     Layer* base_layer_;

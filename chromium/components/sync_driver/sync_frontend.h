@@ -5,7 +5,8 @@
 #ifndef COMPONENTS_SYNC_DRIVER_SYNC_FRONTEND_H_
 #define COMPONENTS_SYNC_DRIVER_SYNC_FRONTEND_H_
 
-#include "base/basictypes.h"
+#include <string>
+
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/sync_encryption_handler.h"
 #include "sync/internal_api/public/sync_manager.h"

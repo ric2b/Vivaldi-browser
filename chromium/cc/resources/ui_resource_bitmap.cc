@@ -4,6 +4,8 @@
 
 #include "cc/resources/ui_resource_bitmap.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -44,7 +46,6 @@ void UIResourceBitmap::Create(const skia::RefPtr<SkPixelRef>& pixel_ref,
   pixel_ref_ = pixel_ref;
 
   // Default values for secondary parameters.
-  wrap_mode_ = CLAMP_TO_EDGE;
   opaque_ = (format == ETC1);
 }
 

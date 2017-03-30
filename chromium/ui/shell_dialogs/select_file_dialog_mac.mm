@@ -6,18 +6,22 @@
 
 #import <Cocoa/Cocoa.h>
 #include <CoreServices/CoreServices.h>
+#include <stddef.h>
 
 #include <map>
 #include <set>
 #include <vector>
 
 #include "base/files/file_util.h"
+#include "base/i18n/case_conversion.h"
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #import "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #import "ui/base/cocoa/nib_loading.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -31,6 +35,22 @@ CFStringRef CreateUTIFromExtension(const base::FilePath::StringType& ext) {
   base::ScopedCFTypeRef<CFStringRef> ext_cf(base::SysUTF8ToCFStringRef(ext));
   return UTTypeCreatePreferredIdentifierForTag(
       kUTTagClassFilenameExtension, ext_cf.get(), NULL);
+}
+
+NSString* GetDescriptionFromExtension(const base::FilePath::StringType& ext) {
+  base::ScopedCFTypeRef<CFStringRef> uti(CreateUTIFromExtension(ext));
+  base::ScopedCFTypeRef<CFStringRef> description(
+      UTTypeCopyDescription(uti.get()));
+
+  if (description && CFStringGetLength(description))
+    return [[base::mac::CFToNSCast(description.get()) retain] autorelease];
+
+  // In case no description is found, create a description based on the
+  // unknown extension type (i.e. if the extension is .qqq, the we create
+  // a description "QQQ File (.qqq)").
+  base::string16 ext_name = base::UTF8ToUTF16(ext);
+  return l10n_util::GetNSStringF(IDS_APP_SAVEAS_EXTENSION_FORMAT,
+                                 base::i18n::ToUpper(ext_name), ext_name);
 }
 
 }  // namespace
@@ -53,6 +73,23 @@ class SelectFileDialogImpl;
 // NSSavePanel delegate method
 - (BOOL)panel:(id)sender shouldEnableURL:(NSURL *)url;
 
+@end
+
+// Target for NSPopupButton control in file dialog's accessory view.
+@interface ExtensionDropdownHandler : NSObject {
+ @private
+  // The file dialog to which this target object corresponds. Weak reference
+  // since the dialog_ will stay alive longer than this object.
+  NSSavePanel* dialog_;
+
+  // An array whose each item corresponds to an array of different extensions in
+  // an extension group.
+  base::scoped_nsobject<NSArray> fileTypeLists_;
+}
+
+- (id)initWithDialog:(NSSavePanel*)dialog fileTypeLists:(NSArray*)fileTypeLists;
+
+- (void)popupAction:(id)sender;
 @end
 
 // Implementation of SelectFileDialog that shows Cocoa dialogs for choosing a
@@ -87,25 +124,39 @@ class SelectFileDialogImpl : public ui::SelectFileDialog {
                       void* params) override;
 
  private:
+  // Struct to store data associated with a file dialog while it is showing.
+  struct DialogData {
+    DialogData(void* params_,
+               base::scoped_nsobject<ExtensionDropdownHandler> handler)
+        : params(params_), extension_dropdown_handler(handler) {}
+
+    // |params| user data associated with this file dialog.
+    void* params;
+
+    // Extension dropdown handler corresponding to this file dialog.
+    base::scoped_nsobject<ExtensionDropdownHandler> extension_dropdown_handler;
+  };
+
   ~SelectFileDialogImpl() override;
 
-  // Gets the accessory view for the save dialog.
-  NSView* GetAccessoryView(const FileTypeInfo* file_types,
-                           int file_type_index);
+  // Sets the accessory view for the |dialog| and returns the associated
+  // ExtensionDropdownHandler.
+  static base::scoped_nsobject<ExtensionDropdownHandler> SetAccessoryView(
+      NSSavePanel* dialog,
+      const FileTypeInfo* file_types,
+      int file_type_index,
+      const base::FilePath::StringType& default_extension);
 
   bool HasMultipleFileTypeChoicesImpl() override;
 
   // The bridge for results from Cocoa to return to us.
   base::scoped_nsobject<SelectFileDialogBridge> bridge_;
 
-  // A map from file dialogs to the |params| user data associated with them.
-  std::map<NSSavePanel*, void*> params_map_;
-
   // The set of all parent windows for which we are currently running dialogs.
   std::set<NSWindow*> parents_;
 
-  // A map from file dialogs to their types.
-  std::map<NSSavePanel*, Type> type_map_;
+  // A map from file dialogs to the DialogData associated with them.
+  std::map<NSSavePanel*, DialogData> dialog_data_map_;
 
   bool hasMultipleFileTypeChoices_;
 
@@ -134,10 +185,12 @@ void SelectFileDialogImpl::FileWasSelected(
     bool is_multi,
     const std::vector<base::FilePath>& files,
     int index) {
-  void* params = params_map_[dialog];
-  params_map_.erase(dialog);
   parents_.erase(parent_window);
-  type_map_.erase(dialog);
+
+  auto it = dialog_data_map_.find(dialog);
+  DCHECK(it != dialog_data_map_.end());
+  void* params = it->second.params;
+  dialog_data_map_.erase(it);
 
   [dialog setDelegate:nil];
 
@@ -197,60 +250,23 @@ void SelectFileDialogImpl::SelectFileImpl(
     }
   }
 
-  NSArray* allowed_file_types = nil;
-  if (file_types) {
-    if (!file_types->extensions.empty()) {
-      // While the example given in the header for FileTypeInfo lists an example
-      // |file_types->extensions| value as
-      //   { { "htm", "html" }, { "txt" } }
-      // it is not always the case that the given extensions in one of the sub-
-      // lists are all synonyms. In fact, in the case of a <select> element with
-      // multiple "accept" types, all the extensions allowed for all the types
-      // will be part of one list. To be safe, allow the types of all the
-      // specified extensions.
-      NSMutableSet* file_type_set = [NSMutableSet set];
-      for (size_t i = 0; i < file_types->extensions.size(); ++i) {
-        const std::vector<base::FilePath::StringType>& ext_list =
-            file_types->extensions[i];
-        for (size_t j = 0; j < ext_list.size(); ++j) {
-          base::ScopedCFTypeRef<CFStringRef> uti(
-              CreateUTIFromExtension(ext_list[j]));
-          [file_type_set addObject:base::mac::CFToNSCast(uti.get())];
-
-          // Always allow the extension itself, in case the UTI doesn't map
-          // back to the original extension correctly. This occurs with dynamic
-          // UTIs on 10.7 and 10.8.
-          // See http://crbug.com/148840, http://openradar.me/12316273
-          base::ScopedCFTypeRef<CFStringRef> ext_cf(
-              base::SysUTF8ToCFStringRef(ext_list[j]));
-          [file_type_set addObject:base::mac::CFToNSCast(ext_cf.get())];
-        }
-      }
-      allowed_file_types = [file_type_set allObjects];
-    }
-    if (type == SELECT_SAVEAS_FILE)
-      [dialog setAllowedFileTypes:allowed_file_types];
-    // else we'll pass it in when we run the open panel
-
-    if (file_types->include_all_files || file_types->extensions.empty())
+  base::scoped_nsobject<ExtensionDropdownHandler> handler;
+  if (type != SELECT_FOLDER && type != SELECT_UPLOAD_FOLDER) {
+    if (file_types) {
+      handler = SelectFileDialogImpl::SetAccessoryView(
+          dialog, file_types, file_type_index, default_extension);
+    } else {
+      // If no type info is specified, anything goes.
       [dialog setAllowsOtherFileTypes:YES];
-
-    if (file_types->extension_description_overrides.size() > 1) {
-      NSView* accessory_view = GetAccessoryView(file_types, file_type_index);
-      [dialog setAccessoryView:accessory_view];
     }
-  } else {
-    // If no type info is specified, anything goes.
-    [dialog setAllowsOtherFileTypes:YES];
   }
+
+  auto inserted = dialog_data_map_.insert(
+      std::make_pair(dialog, DialogData(params, handler)));
+  DCHECK(inserted.second);  // Dialog should never exist already.
+
   hasMultipleFileTypeChoices_ =
       file_types ? file_types->extensions.size() > 1 : true;
-
-  if (!default_extension.empty())
-    [dialog setAllowedFileTypes:@[base::SysUTF8ToNSString(default_extension)]];
-
-  params_map_[dialog] = params;
-  type_map_[dialog] = type;
 
   if (type == SELECT_SAVEAS_FILE) {
     // When file extensions are hidden and removing the extension from
@@ -289,7 +305,6 @@ void SelectFileDialogImpl::SelectFileImpl(
     }
 
     [open_dialog setDelegate:bridge_.get()];
-    [open_dialog setAllowedFileTypes:allowed_file_types];
   }
   if (default_dir)
     [dialog setDirectoryURL:[NSURL fileURLWithPath:default_dir]];
@@ -309,52 +324,94 @@ SelectFileDialogImpl::~SelectFileDialogImpl() {
   // to hold the pointers, since we can't delete from the map as we're iterating
   // through it.
   std::vector<NSSavePanel*> panels;
-  for (std::map<NSSavePanel*, void*>::iterator it = params_map_.begin();
-       it != params_map_.end(); ++it) {
-    panels.push_back(it->first);
-  }
+  for (const auto& value : dialog_data_map_)
+    panels.push_back(value.first);
 
-  for (std::vector<NSSavePanel*>::iterator it = panels.begin();
-       it != panels.end(); ++it) {
-    [*it cancel:*it];
-  }
+  for (const auto& panel : panels)
+    [panel cancel:panel];
 }
 
-NSView* SelectFileDialogImpl::GetAccessoryView(const FileTypeInfo* file_types,
-                                               int file_type_index) {
+// static
+base::scoped_nsobject<ExtensionDropdownHandler>
+SelectFileDialogImpl::SetAccessoryView(
+    NSSavePanel* dialog,
+    const FileTypeInfo* file_types,
+    int file_type_index,
+    const base::FilePath::StringType& default_extension) {
   DCHECK(file_types);
   NSView* accessory_view = ui::GetViewFromNib(@"SaveAccessoryView");
   if (!accessory_view)
-    return nil;
+    return base::scoped_nsobject<ExtensionDropdownHandler>();
+  [dialog setAccessoryView:accessory_view];
 
   NSPopUpButton* popup = [accessory_view viewWithTag:kFileTypePopupTag];
   DCHECK(popup);
 
-  size_t type_count = file_types->extensions.size();
-  for (size_t type = 0; type < type_count; ++type) {
-    NSString* type_description;
-    if (type < file_types->extension_description_overrides.size()) {
-      type_description = base::SysUTF16ToNSString(
-          file_types->extension_description_overrides[type]);
-    } else {
-      // No description given for a list of extensions; pick the first one from
-      // the list (arbitrarily) and use its description.
-      const std::vector<base::FilePath::StringType>& ext_list =
-          file_types->extensions[type];
-      DCHECK(!ext_list.empty());
-      base::ScopedCFTypeRef<CFStringRef> uti(
-          CreateUTIFromExtension(ext_list[0]));
-      base::ScopedCFTypeRef<CFStringRef> description(
-          UTTypeCopyDescription(uti.get()));
+  // Create an array with each item corresponding to an array of different
+  // extensions in an extension group.
+  NSMutableArray* file_type_lists = [NSMutableArray array];
+  for (size_t i = 0; i < file_types->extensions.size(); ++i) {
+    const std::vector<base::FilePath::StringType>& ext_list =
+        file_types->extensions[i];
 
-      type_description =
-          [[base::mac::CFToNSCast(description.get()) retain] autorelease];
+    // Generate type description for the extension group.
+    NSString* type_description = nil;
+    if (i < file_types->extension_description_overrides.size() &&
+        !file_types->extension_description_overrides[i].empty()) {
+      type_description = base::SysUTF16ToNSString(
+          file_types->extension_description_overrides[i]);
+    } else {
+      // No description given for a list of extensions; pick the first one
+      // from the list (arbitrarily) and use its description.
+      DCHECK(!ext_list.empty());
+      type_description = GetDescriptionFromExtension(ext_list[0]);
     }
+    DCHECK_NE(0u, [type_description length]);
     [popup addItemWithTitle:type_description];
+
+    // Populate file_type_lists.
+    // Set to store different extensions in the current extension group.
+    NSMutableSet* file_type_set = [NSMutableSet set];
+    for (const base::FilePath::StringType& ext : ext_list) {
+      base::ScopedCFTypeRef<CFStringRef> uti(CreateUTIFromExtension(ext));
+      [file_type_set addObject:base::mac::CFToNSCast(uti.get())];
+
+      // Always allow the extension itself, in case the UTI doesn't map
+      // back to the original extension correctly. This occurs with dynamic
+      // UTIs on 10.7 and 10.8.
+      // See http://crbug.com/148840, http://openradar.me/12316273
+      base::ScopedCFTypeRef<CFStringRef> ext_cf(
+          base::SysUTF8ToCFStringRef(ext));
+      [file_type_set addObject:base::mac::CFToNSCast(ext_cf.get())];
+    }
+    [file_type_lists addObject:[file_type_set allObjects]];
   }
 
-  [popup selectItemAtIndex:file_type_index - 1];  // 1-based
-  return accessory_view;
+  if (file_types->include_all_files || file_types->extensions.empty()) {
+    [popup addItemWithTitle:l10n_util::GetNSString(IDS_APP_SAVEAS_ALL_FILES)];
+    [dialog setAllowsOtherFileTypes:YES];
+  }
+
+  base::scoped_nsobject<ExtensionDropdownHandler> handler(
+      [[ExtensionDropdownHandler alloc] initWithDialog:dialog
+                                         fileTypeLists:file_type_lists]);
+
+  // This establishes a weak reference to handler. Hence we persist it as part
+  // of dialog_data_map_.
+  [popup setTarget:handler];
+  [popup setAction:@selector(popupAction:)];
+
+  if (default_extension.empty()) {
+    // Select the first item.
+    [popup selectItemAtIndex:0];
+    [handler popupAction:popup];
+  } else {
+    [popup selectItemAtIndex:-1];
+    [dialog
+        setAllowedFileTypes:@[ base::SysUTF8ToNSString(default_extension) ]];
+  }
+
+  return handler;
 }
 
 bool SelectFileDialogImpl::HasMultipleFileTypeChoicesImpl() {
@@ -364,8 +421,7 @@ bool SelectFileDialogImpl::HasMultipleFileTypeChoicesImpl() {
 @implementation SelectFileDialogBridge
 
 - (id)initWithSelectFileDialogImpl:(SelectFileDialogImpl*)s {
-  self = [super init];
-  if (self != nil) {
+  if ((self = [super init])) {
     selectFileDialogImpl_ = s;
   }
   return self;
@@ -414,6 +470,31 @@ bool SelectFileDialogImpl::HasMultipleFileTypeChoicesImpl() {
 
 - (BOOL)panel:(id)sender shouldEnableURL:(NSURL *)url {
   return [url isFileURL];
+}
+
+@end
+
+@implementation ExtensionDropdownHandler
+
+- (id)initWithDialog:(NSSavePanel*)dialog
+       fileTypeLists:(NSArray*)fileTypeLists {
+  if ((self = [super init])) {
+    dialog_ = dialog;
+    fileTypeLists_.reset([fileTypeLists retain]);
+  }
+  return self;
+}
+
+- (void)popupAction:(id)sender {
+  NSUInteger index = [sender indexOfSelectedItem];
+  if (index < [fileTypeLists_ count]) {
+    // For save dialogs, this causes the first item in the allowedFileTypes
+    // array to be used as the extension for the save panel.
+    [dialog_ setAllowedFileTypes:[fileTypeLists_ objectAtIndex:index]];
+  } else {
+    // The user selected "All files" option.
+    [dialog_ setAllowedFileTypes:nil];
+  }
 }
 
 @end

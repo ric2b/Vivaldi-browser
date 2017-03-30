@@ -7,8 +7,9 @@
 
 #include <iosfwd>
 #include <string>
+#include <tuple>
 
-#include "ui/gfx/geometry/point_f.h"
+#include "build/build_config.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/gfx_export.h"
 
@@ -84,11 +85,7 @@ class GFX_EXPORT Point {
   // This comparison is required to use Point in sets, or sorted
   // vectors.
   bool operator<(const Point& rhs) const {
-    return (y_ == rhs.y_) ? (x_ < rhs.x_) : (y_ < rhs.y_);
-  }
-
-  operator PointF() const {
-    return PointF(static_cast<float>(x()), static_cast<float>(y()));
+    return std::tie(y_, x_) < std::tie(rhs.y_, rhs.x_);
   }
 
   // Returns a string representation of point.
@@ -131,6 +128,20 @@ inline Point PointAtOffsetFromOrigin(const Vector2d& offset_from_origin) {
 // the gfx_test_support target. Depend on that to use this in your unit test.
 // This should not be used in production code - call ToString() instead.
 void PrintTo(const Point& point, ::std::ostream* os);
+
+// Helper methods to scale a gfx::Point to a new gfx::Point.
+GFX_EXPORT Point ScaleToCeiledPoint(const Point& point,
+                                    float x_scale,
+                                    float y_scale);
+GFX_EXPORT Point ScaleToCeiledPoint(const Point& point, float x_scale);
+GFX_EXPORT Point ScaleToFlooredPoint(const Point& point,
+                                     float x_scale,
+                                     float y_scale);
+GFX_EXPORT Point ScaleToFlooredPoint(const Point& point, float x_scale);
+GFX_EXPORT Point ScaleToRoundedPoint(const Point& point,
+                                     float x_scale,
+                                     float y_scale);
+GFX_EXPORT Point ScaleToRoundedPoint(const Point& point, float x_scale);
 
 }  // namespace gfx
 

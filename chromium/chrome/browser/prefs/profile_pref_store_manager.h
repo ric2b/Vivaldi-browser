@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_PREFS_PROFILE_PREF_STORE_MANAGER_H_
 #define CHROME_BROWSER_PREFS_PROFILE_PREF_STORE_MANAGER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -12,7 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/prefs/tracked/pref_hash_filter.h"
+#include "components/user_prefs/tracked/pref_hash_filter.h"
 
 class PersistentPrefStore;
 class PrefHashStore;
@@ -59,10 +61,6 @@ class ProfilePrefStoreManager {
 
   // Register user prefs used by the profile preferences system.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-
-  // Determines the user preferences filename for the profile at |profile_path|.
-  static base::FilePath GetPrefFilePathFromProfilePath(
-      const base::FilePath& profile_path);
 
   // Deletes stored hashes for all profiles from |local_state|.
   static void ResetAllPrefHashStores(PrefService* local_state);

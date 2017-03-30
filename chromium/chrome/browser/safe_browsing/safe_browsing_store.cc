@@ -73,7 +73,7 @@ void KnockoutSubs(SubsT* subs, AddsT* adds,
 
 // Remove deleted items (|chunk_id| in |del_set|) from the container.
 template <typename ItemsT>
-void RemoveDeleted(ItemsT* items, const base::hash_set<int32>& del_set) {
+void RemoveDeleted(ItemsT* items, const base::hash_set<int32_t>& del_set) {
   DCHECK(items);
 
   // Move items from |iter| to |end_iter|, skipping items in |del_set|.
@@ -90,12 +90,14 @@ void RemoveDeleted(ItemsT* items, const base::hash_set<int32>& del_set) {
 
 }  // namespace
 
+namespace safe_browsing {
+
 void SBProcessSubs(SBAddPrefixes* add_prefixes,
                    SBSubPrefixes* sub_prefixes,
                    std::vector<SBAddFullHash>* add_full_hashes,
                    std::vector<SBSubFullHash>* sub_full_hashes,
-                   const base::hash_set<int32>& add_chunks_deleted,
-                   const base::hash_set<int32>& sub_chunks_deleted) {
+                   const base::hash_set<int32_t>& add_chunks_deleted,
+                   const base::hash_set<int32_t>& sub_chunks_deleted) {
   // It is possible to structure templates and template
   // specializations such that the following calls work without having
   // to qualify things.  It becomes very arbitrary, though, and less
@@ -129,3 +131,5 @@ void SBProcessSubs(SBAddPrefixes* add_prefixes,
   RemoveDeleted(add_full_hashes, add_chunks_deleted);
   RemoveDeleted(sub_full_hashes, sub_chunks_deleted);
 }
+
+}  // namespace safe_browsing

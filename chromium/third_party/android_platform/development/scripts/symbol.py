@@ -26,17 +26,23 @@ import os
 import re
 import struct
 import subprocess
+import sys
 import zipfile
 
-CHROME_SRC = os.path.join(os.path.realpath(os.path.dirname(__file__)),
-                          os.pardir, os.pardir, os.pardir, os.pardir)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__),
+                                os.pardir, os.pardir, os.pardir, os.pardir,
+                                'build', 'android'))
+from pylib import constants
+from pylib.symbols import elf_symbolizer
+
+
+CHROME_SRC = constants.DIR_SOURCE_ROOT
 ANDROID_BUILD_TOP = CHROME_SRC
 SYMBOLS_DIR = CHROME_SRC
-CHROME_SYMBOLS_DIR = CHROME_SRC
-
+CHROME_SYMBOLS_DIR = None
 ARCH = "arm"
-
 TOOLCHAIN_INFO = None
+
 
 # See:
 # http://bugs.python.org/issue14315
@@ -142,7 +148,8 @@ def FindToolchain():
     toolchain_info = (label, platform, target);
     if os.path.exists(ToolPath("addr2line", toolchain_info)):
       TOOLCHAIN_INFO = toolchain_info
-      print "Using toolchain from :" + ToolPath("", TOOLCHAIN_INFO)
+      print ("Using toolchain from: "
+             + os.path.normpath(ToolPath("", TOOLCHAIN_INFO)))
       return toolchain_info
 
   raise Exception("Could not find tool chain")
@@ -198,10 +205,19 @@ def PathListJoin(prefix_list, suffix_list):
    """
    return [
        os.path.join(prefix, suffix)
-       for prefix in prefix_list for suffix in suffix_list ]
+       for suffix in suffix_list for prefix in prefix_list ]
+
+
+def _GetChromeOutputDirCandidates():
+  """Returns a list of output directories to look in."""
+  if os.environ.get('CHROMIUM_OUTPUT_DIR') or os.environ.get('BUILDTYPE'):
+    return [constants.GetOutDirectory()]
+  return [constants.GetOutDirectory(build_type='Debug'),
+          constants.GetOutDirectory(build_type='Release')]
+
 
 def GetCandidates(dirs, filepart, candidate_fun):
-  """Returns a list of candidate filenames.
+  """Returns a list of candidate filenames, sorted by modification time.
 
   Args:
     dirs: a list of the directory part of the pathname.
@@ -211,21 +227,11 @@ def GetCandidates(dirs, filepart, candidate_fun):
   Returns:
     A list of candidate files ordered by modification time, newest first.
   """
-  out_dir = os.environ.get('CHROMIUM_OUT_DIR', 'out')
-  out_dir = os.path.join(CHROME_SYMBOLS_DIR, out_dir)
-  buildtype = os.environ.get('BUILDTYPE')
-  if buildtype:
-    buildtype_list = [ buildtype ]
-  else:
-    buildtype_list = [ 'Debug', 'Release' ]
-
-  candidates = PathListJoin([out_dir], buildtype_list) + [CHROME_SYMBOLS_DIR]
-  candidates = PathListJoin(candidates, dirs)
-  candidates = PathListJoin(candidates, [filepart])
+  candidates = PathListJoin(dirs, [filepart])
   logging.debug('GetCandidates: prefiltered candidates = %s' % candidates)
   candidates = list(
       itertools.chain.from_iterable(map(candidate_fun, candidates)))
-  candidates = sorted(candidates, key=os.path.getmtime, reverse=True)
+  candidates.sort(key=os.path.getmtime, reverse=True)
   return candidates
 
 def GetCandidateApks():
@@ -237,7 +243,8 @@ def GetCandidateApks():
   Returns:
     list of APK filename which could contain the library.
   """
-  return GetCandidates(['apks'], '*.apk', glob.glob)
+  dirs = PathListJoin(_GetChromeOutputDirCandidates(), ['apks'])
+  return GetCandidates(dirs, '*.apk', glob.glob)
 
 def GetCrazyLib(apk_filename):
   """Returns the name of the first crazy library from this APK.
@@ -290,6 +297,14 @@ def MapDeviceApkToLibrary(device_apk_name):
     if crazy_lib:
       return crazy_lib
 
+def GetLibrarySearchPaths():
+  if CHROME_SYMBOLS_DIR:
+    return [CHROME_SYMBOLS_DIR]
+  dirs = _GetChromeOutputDirCandidates()
+  # GYP places unstripped libraries under out/$BUILDTYPE/lib
+  # GN places them under out/$BUILDTYPE/lib.unstripped
+  return PathListJoin(dirs, ['lib.unstripped', 'lib', '.'])
+
 def GetCandidateLibraries(library_name):
   """Returns a list of candidate library filenames.
 
@@ -299,9 +314,15 @@ def GetCandidateLibraries(library_name):
   Returns:
     A list of matching library filenames for library_name.
   """
-  return GetCandidates(
-      ['lib', 'lib.target', '.'], library_name,
+  candidates = GetCandidates(
+      GetLibrarySearchPaths(), library_name,
       lambda filename: filter(os.path.exists, [filename]))
+  # For GN, candidates includes both stripped an unstripped libraries. Stripped
+  # libraries are always newer. Explicitly look for .unstripped and sort them
+  # ahead.
+  candidates.sort(key=lambda c: int('unstripped' not in c))
+  return candidates
+
 
 def TranslateLibPath(lib):
   # The filename in the stack trace maybe an APK name rather than a library
@@ -450,7 +471,6 @@ def CallAddr2LineForSet(lib, unique_addrs):
   if not lib:
     return None
 
-
   symbols = SYMBOLS_DIR + lib
   if not os.path.splitext(symbols)[1] in ['', '.so', '.apk']:
     return None
@@ -458,37 +478,30 @@ def CallAddr2LineForSet(lib, unique_addrs):
   if not os.path.isfile(symbols):
     return None
 
-  (label, platform, target) = FindToolchain()
-  cmd = [ToolPath("addr2line"), "--functions", "--inlines",
-      "--demangle", "--exe=" + symbols]
-  child = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-
-  result = {}
   addrs = sorted(unique_addrs)
-  for addr in addrs:
-    child.stdin.write("0x%s\n" % addr)
-    child.stdin.flush()
+  result = {}
+
+  def _Callback(sym, addr):
     records = []
-    first = True
-    while True:
-      symbol = child.stdout.readline().strip()
-      if symbol == "??":
-        symbol = None
-      location = child.stdout.readline().strip()
-      if location == "??:0":
+    while sym:  # Traverse all the inlines following the |inlined_by| chain.
+      if sym.source_path and sym.source_line:
+        location = '%s:%d' % (sym.source_path, sym.source_line)
+      else:
         location = None
-      if symbol is None and location is None:
-        break
-      records.append((symbol, location))
-      if first:
-        # Write a blank line as a sentinel so we know when to stop
-        # reading inlines from the output.
-        # The blank line will cause addr2line to emit "??\n??:0\n".
-        child.stdin.write("\n")
-        first = False
+      records += [(sym.name, location)]
+      sym = sym.inlined_by
     result[addr] = records
-  child.stdin.close()
-  child.stdout.close()
+
+  (label, platform, target) = FindToolchain()
+  symbolizer = elf_symbolizer.ELFSymbolizer(
+      elf_file_path=symbols,
+      addr2line_path=ToolPath("addr2line"),
+      callback=_Callback,
+      inlines=True)
+
+  for addr in addrs:
+    symbolizer.SymbolizeAsync(int(addr, 16), addr)
+  symbolizer.Join()
   return result
 
 

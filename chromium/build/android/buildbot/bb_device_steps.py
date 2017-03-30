@@ -17,9 +17,10 @@ import bb_utils
 import bb_annotations
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import devil_chromium
 import provision_devices
+from devil.android import device_utils
 from pylib import constants
-from pylib.device import device_utils
 from pylib.gtest import gtest_config
 
 CHROME_SRC_DIR = bb_utils.CHROME_SRC
@@ -63,13 +64,12 @@ INSTRUMENTATION_TESTS = dict((suite.name, suite) for suite in [
       'ContentShellTest',
       'content:content/test/data/android/device_files',
       isolate_file_path='content/content_shell_test_apk.isolate'),
-    I('ChromeShell',
-      'ChromeShell.apk',
-      'org.chromium.chrome.shell',
-      'ChromeShellTest',
+    I('ChromePublic',
+      'ChromePublic.apk',
+      'org.chromium.chrome',
+      'ChromePublicTest',
       'chrome:chrome/test/data/android/device_files',
-      isolate_file_path='chrome/chrome_shell_test_apk.isolate',
-      host_driven_root=constants.CHROME_SHELL_HOST_DRIVEN_DIR),
+      isolate_file_path='chrome/chrome_public_test_apk.isolate'),
     I('AndroidWebView',
       'AndroidWebView.apk',
       'org.chromium.android_webview.shell',
@@ -96,14 +96,11 @@ INSTALLABLE_PACKAGES = dict((package.name, package) for package in (
 VALID_TESTS = set([
     'base_junit_tests',
     'chromedriver',
-    'chrome_proxy',
     'components_browsertests',
     'gfx_unittests',
     'gl_unittests',
     'gpu',
     'python_unittests',
-    'telemetry_unittests',
-    'telemetry_perf_unittests',
     'ui',
     'unit',
     'webkit',
@@ -172,7 +169,7 @@ def RunTestSuites(options, suites, suites_options=None):
   if not suites_options:
     suites_options = {}
 
-  args = ['--verbose']
+  args = ['--verbose', '--blacklist-file', 'out/bad_devices.json']
   if options.target == 'Release':
     args.append('--release')
   if options.asan:
@@ -199,45 +196,12 @@ def RunChromeDriverTests(options):
   bb_annotations.PrintNamedStep('chromedriver_annotation')
   RunCmd(['chrome/test/chromedriver/run_buildbot_steps.py',
           '--android-packages=%s,%s,%s,%s' %
-          ('chrome_shell',
+          ('chromium',
            'chrome_stable',
            'chrome_beta',
            'chromedriver_webview_shell'),
           '--revision=%s' % _GetRevision(options),
           '--update-log'])
-
-def RunChromeProxyTests(options):
-  """Run the chrome_proxy tests.
-
-  Args:
-    options: options object.
-  """
-  InstallApk(options, INSTRUMENTATION_TESTS['ChromeShell'], False)
-  args = ['--browser', 'android-chrome-shell']
-  devices = device_utils.DeviceUtils.HealthyDevices()
-  if devices:
-    args = args + ['--device', devices[0].adb.GetDeviceSerial()]
-  bb_annotations.PrintNamedStep('chrome_proxy')
-  RunCmd(['tools/chrome_proxy/run_tests'] + args)
-
-
-def RunTelemetryTests(options, step_name, run_tests_path):
-  """Runs either telemetry_perf_unittests or telemetry_unittests.
-
-  Args:
-    options: options object.
-    step_name: either 'telemetry_unittests' or 'telemetry_perf_unittests'
-    run_tests_path: path to run_tests script (tools/perf/run_tests for
-                    perf_unittests and tools/telemetry/run_tests for
-                    telemetry_unittests)
-  """
-  InstallApk(options, INSTRUMENTATION_TESTS['ChromeShell'], False)
-  args = ['--browser', 'android-chrome-shell']
-  devices = device_utils.DeviceUtils.HealthyDevices()
-  if devices:
-    args = args + ['--device', 'android']
-  bb_annotations.PrintNamedStep(step_name)
-  RunCmd([run_tests_path] + args)
 
 
 def InstallApk(options, test, print_step=False):
@@ -251,7 +215,10 @@ def InstallApk(options, test, print_step=False):
   if print_step:
     bb_annotations.PrintNamedStep('install_%s' % test.name.lower())
 
-  args = ['--apk_package', test.apk_package]
+  args = [
+      '--apk_package', test.apk_package,
+      '--blacklist-file', 'out/bad_devices.json',
+  ]
   if options.target == 'Release':
     args.append('--release')
   args.append(test.apk)
@@ -274,7 +241,10 @@ def RunInstrumentationSuite(options, test, flunk_on_failure=True,
 
   if test.apk:
     InstallApk(options, test)
-  args = ['--test-apk', test.test_apk, '--verbose']
+  args = [
+      '--test-apk', test.test_apk, '--verbose',
+      '--blacklist-file', 'out/bad_devices.json'
+  ]
   if test.test_data:
     args.extend(['--test_data', test.test_data])
   if options.target == 'Release':
@@ -478,7 +448,10 @@ def ProvisionDevices(options):
     # Restart adb to work around bugs, sleep to wait for usb discovery.
     device_utils.RestartServer()
     RunCmd(['sleep', '1'])
-  provision_cmd = ['build/android/provision_devices.py', '-t', options.target]
+  provision_cmd = [
+      'build/android/provision_devices.py', '-t', options.target,
+      '--blacklist-file', 'out/bad_devices.json'
+  ]
   if options.auto_reconnect:
     provision_cmd.append('--auto-reconnect')
   if options.skip_wipe:
@@ -490,7 +463,10 @@ def ProvisionDevices(options):
 
 def DeviceStatusCheck(options):
   bb_annotations.PrintNamedStep('device_status_check')
-  cmd = ['build/android/buildbot/bb_device_status_check.py']
+  cmd = [
+      'build/android/buildbot/bb_device_status_check.py',
+      '--blacklist-file', 'out/bad_devices.json',
+  ]
   if options.restart_usb:
     cmd.append('--restart-usb')
   RunCmd(cmd, halt_on_failure=True)
@@ -509,14 +485,6 @@ def RunUnitTests(options):
     suites = [s for s in suites
               if s not in gtest_config.ASAN_EXCLUDED_TEST_SUITES]
   RunTestSuites(options, suites)
-
-
-def RunTelemetryUnitTests(options):
-  RunTelemetryTests(options, 'telemetry_unittests', 'tools/telemetry/run_tests')
-
-
-def RunTelemetryPerfUnitTests(options):
-  RunTelemetryTests(options, 'telemetry_perf_unittests', 'tools/perf/run_tests')
 
 
 def RunInstrumentationTests(options):
@@ -546,17 +514,23 @@ def RunGPUTests(options):
           '--os-type',
           'android',
           '--test-machine-name',
-          EscapeBuilderName(builder_name)])
+          EscapeBuilderName(builder_name),
+          '--android-blacklist-file',
+          'out/bad_devices.json'])
 
   bb_annotations.PrintNamedStep('webgl_conformance_tests')
   RunCmd(['content/test/gpu/run_gpu_test.py', '-v',
           '--browser=android-content-shell', 'webgl_conformance',
-          '--webgl-conformance-version=1.0.1'])
+          '--webgl-conformance-version=1.0.1',
+          '--android-blacklist-file',
+          'out/bad_devices.json'])
 
   bb_annotations.PrintNamedStep('android_webview_webgl_conformance_tests')
   RunCmd(['content/test/gpu/run_gpu_test.py', '-v',
           '--browser=android-webview-shell', 'webgl_conformance',
-          '--webgl-conformance-version=1.0.1'])
+          '--webgl-conformance-version=1.0.1',
+          '--android-blacklist-file',
+          'out/bad_devices.json'])
 
   bb_annotations.PrintNamedStep('gpu_rasterization_tests')
   RunCmd(['content/test/gpu/run_gpu_test.py',
@@ -566,7 +540,9 @@ def RunGPUTests(options):
           '--build-revision',
           str(revision),
           '--test-machine-name',
-          EscapeBuilderName(builder_name)])
+          EscapeBuilderName(builder_name),
+          '--android-blacklist-file',
+          'out/bad_devices.json'])
 
 
 def RunPythonUnitTests(_options):
@@ -580,7 +556,6 @@ def GetTestStepCmds():
       ('base_junit_tests',
           lambda _options: RunJunitSuite('base_junit_tests')),
       ('chromedriver', RunChromeDriverTests),
-      ('chrome_proxy', RunChromeProxyTests),
       ('components_browsertests',
           lambda options: RunTestSuites(options, ['components_browsertests'])),
       ('gfx_unittests',
@@ -589,8 +564,6 @@ def GetTestStepCmds():
           lambda options: RunTestSuites(options, ['gl_unittests'])),
       ('gpu', RunGPUTests),
       ('python_unittests', RunPythonUnitTests),
-      ('telemetry_unittests', RunTelemetryUnitTests),
-      ('telemetry_perf_unittests', RunTelemetryPerfUnitTests),
       ('ui', RunInstrumentationTests),
       ('unit', RunUnitTests),
       ('webkit', RunWebkitTests),
@@ -770,6 +743,8 @@ def main(argv):
   parser = GetDeviceStepsOptParser()
   options, args = parser.parse_args(argv[1:])
 
+  devil_chromium.Initialize()
+
   if args:
     return sys.exit('Unused args %s' % args)
 
@@ -779,6 +754,7 @@ def main(argv):
 
   setattr(options, 'target', options.factory_properties.get('target', 'Debug'))
 
+  # pylint: disable=global-statement
   if options.chrome_output_dir:
     global CHROME_OUT_DIR
     global LOGCAT_DIR

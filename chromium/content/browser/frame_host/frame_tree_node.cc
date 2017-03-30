@@ -5,8 +5,9 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 
 #include <queue>
+#include <utility>
 
-#include "base/command_line.h"
+#include "base/macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -15,8 +16,9 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 
 namespace content {
 
@@ -24,9 +26,9 @@ namespace {
 
 // This is a global map between frame_tree_node_ids and pointers to
 // FrameTreeNodes.
-typedef base::hash_map<int, FrameTreeNode*> FrameTreeNodeIDMap;
+typedef base::hash_map<int, FrameTreeNode*> FrameTreeNodeIdMap;
 
-base::LazyInstance<FrameTreeNodeIDMap> g_frame_tree_node_id_map =
+base::LazyInstance<FrameTreeNodeIdMap> g_frame_tree_node_id_map =
     LAZY_INSTANCE_INITIALIZER;
 
 // These values indicate the loading progress status. The minimum progress
@@ -61,20 +63,22 @@ int FrameTreeNode::next_frame_tree_node_id_ = 1;
 // static
 FrameTreeNode* FrameTreeNode::GloballyFindByID(int frame_tree_node_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  FrameTreeNodeIDMap* nodes = g_frame_tree_node_id_map.Pointer();
-  FrameTreeNodeIDMap::iterator it = nodes->find(frame_tree_node_id);
+  FrameTreeNodeIdMap* nodes = g_frame_tree_node_id_map.Pointer();
+  FrameTreeNodeIdMap::iterator it = nodes->find(frame_tree_node_id);
   return it == nodes->end() ? nullptr : it->second;
 }
 
-FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
-                             Navigator* navigator,
-                             RenderFrameHostDelegate* render_frame_delegate,
-                             RenderViewHostDelegate* render_view_delegate,
-                             RenderWidgetHostDelegate* render_widget_delegate,
-                             RenderFrameHostManager::Delegate* manager_delegate,
-                             blink::WebTreeScopeType scope,
-                             const std::string& name,
-                             blink::WebSandboxFlags sandbox_flags)
+FrameTreeNode::FrameTreeNode(
+    FrameTree* frame_tree,
+    Navigator* navigator,
+    RenderFrameHostDelegate* render_frame_delegate,
+    RenderViewHostDelegate* render_view_delegate,
+    RenderWidgetHostDelegate* render_widget_delegate,
+    RenderFrameHostManager::Delegate* manager_delegate,
+    blink::WebTreeScopeType scope,
+    const std::string& name,
+    blink::WebSandboxFlags sandbox_flags,
+    const blink::WebFrameOwnerProperties& frame_owner_properties)
     : frame_tree_(frame_tree),
       navigator_(navigator),
       render_manager_(this,
@@ -86,21 +90,28 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
       parent_(NULL),
       opener_(nullptr),
       opener_observer_(nullptr),
-      replication_state_(scope, name, sandbox_flags),
+      has_committed_real_load_(false),
+      replication_state_(
+          scope,
+          name,
+          sandbox_flags,
+          false /* should enforce strict mixed content checking */),
       // Effective sandbox flags also need to be set, since initial sandbox
       // flags should apply to the initial empty document in the frame.
       effective_sandbox_flags_(sandbox_flags),
+      frame_owner_properties_(frame_owner_properties),
       loading_progress_(kLoadingProgressNotStarted),
       loaded_bytes_(0),
       loaded_elements_(0),
       total_elements_(0) {
-  std::pair<FrameTreeNodeIDMap::iterator, bool> result =
+  std::pair<FrameTreeNodeIdMap::iterator, bool> result =
       g_frame_tree_node_id_map.Get().insert(
           std::make_pair(frame_tree_node_id_, this));
   CHECK(result.second);
 }
 
 FrameTreeNode::~FrameTreeNode() {
+  children_.clear();
   frame_tree_->FrameRemoved(this);
   FOR_EACH_OBSERVER(Observer, observers_, OnFrameTreeNodeDestroyed(this));
 
@@ -122,57 +133,52 @@ bool FrameTreeNode::IsMainFrame() const {
   return frame_tree_->root() == this;
 }
 
-void FrameTreeNode::AddChild(scoped_ptr<FrameTreeNode> child,
-                             int process_id,
-                             int frame_routing_id) {
+FrameTreeNode* FrameTreeNode::AddChild(scoped_ptr<FrameTreeNode> child,
+                                       int process_id,
+                                       int frame_routing_id) {
   // Child frame must always be created in the same process as the parent.
   CHECK_EQ(process_id, render_manager_.current_host()->GetProcess()->GetID());
+  child->set_parent(this);
 
   // Initialize the RenderFrameHost for the new node.  We always create child
   // frames in the same SiteInstance as the current frame, and they can swap to
   // a different one if they navigate away.
   child->render_manager()->Init(
-      render_manager_.current_host()->GetSiteInstance()->GetBrowserContext(),
       render_manager_.current_host()->GetSiteInstance(),
-      render_manager_.current_host()->GetRoutingID(),
-      frame_routing_id);
-  child->set_parent(this);
+      render_manager_.current_host()->GetRoutingID(), frame_routing_id,
+      MSG_ROUTING_NONE);
 
   // Other renderer processes in this BrowsingInstance may need to find out
   // about the new frame.  Create a proxy for the child frame in all
   // SiteInstances that have a proxy for the frame's parent, since all frames
   // in a frame tree should have the same set of proxies.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSitePerProcess))
+  // TODO(alexmos, nick): We ought to do this for non-oopif too, for openers.
+  if (SiteIsolationPolicy::AreCrossProcessFramesPossible())
     render_manager_.CreateProxiesForChildFrame(child.get());
 
-  children_.push_back(child.release());
+  children_.push_back(std::move(child));
+  return children_.back().get();
 }
 
 void FrameTreeNode::RemoveChild(FrameTreeNode* child) {
-  std::vector<FrameTreeNode*>::iterator iter;
-  for (iter = children_.begin(); iter != children_.end(); ++iter) {
-    if ((*iter) == child)
-      break;
-  }
-
-  if (iter != children_.end()) {
-    // Subtle: we need to make sure the node is gone from the tree before
-    // observers are notified of its deletion.
-    scoped_ptr<FrameTreeNode> node_to_delete(*iter);
-    children_.weak_erase(iter);
-    node_to_delete.reset();
+  for (auto iter = children_.begin(); iter != children_.end(); ++iter) {
+    if (iter->get() == child) {
+      // Subtle: we need to make sure the node is gone from the tree before
+      // observers are notified of its deletion.
+      scoped_ptr<FrameTreeNode> node_to_delete(std::move(*iter));
+      children_.erase(iter);
+      node_to_delete.reset();
+      return;
+    }
   }
 }
 
 void FrameTreeNode::ResetForNewProcess() {
   current_url_ = GURL();
 
-  // The children may not have been cleared if a cross-process navigation
-  // commits before the old process cleans everything up.  Make sure the child
-  // nodes get deleted before swapping to a new process.
-  ScopedVector<FrameTreeNode> old_children = children_.Pass();
-  old_children.clear();  // May notify observers.
+  // Remove child nodes from the tree, then delete them. This destruction
+  // operation will notify observers.
+  std::vector<scoped_ptr<FrameTreeNode>>().swap(children_);
 }
 
 void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
@@ -190,8 +196,14 @@ void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
   }
 }
 
+void FrameTreeNode::SetCurrentURL(const GURL& url) {
+  if (!has_committed_real_load_ && url != GURL(url::kAboutBlankURL))
+    has_committed_real_load_ = true;
+  current_url_ = url;
+}
+
 void FrameTreeNode::SetCurrentOrigin(const url::Origin& origin) {
-  if (!origin.IsSameAs(replication_state_.origin))
+  if (!origin.IsSameOriginWith(replication_state_.origin))
     render_manager_.OnDidUpdateOrigin(origin);
   replication_state_.origin = origin;
 }
@@ -200,6 +212,16 @@ void FrameTreeNode::SetFrameName(const std::string& name) {
   if (name != replication_state_.name)
     render_manager_.OnDidUpdateName(name);
   replication_state_.name = name;
+}
+
+void FrameTreeNode::SetEnforceStrictMixedContentChecking(bool should_enforce) {
+  if (should_enforce ==
+      replication_state_.should_enforce_strict_mixed_content_checking) {
+    return;
+  }
+  render_manager_.OnEnforceStrictMixedContentChecking(should_enforce);
+  replication_state_.should_enforce_strict_mixed_content_checking =
+      should_enforce;
 }
 
 bool FrameTreeNode::IsDescendantOf(FrameTreeNode* other) const {
@@ -235,8 +257,7 @@ bool FrameTreeNode::IsLoading() const {
 
   DCHECK(current_frame_host);
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     if (navigation_request_)
       return true;
 
@@ -260,8 +281,7 @@ bool FrameTreeNode::CommitPendingSandboxFlags() {
 
 void FrameTreeNode::CreatedNavigationRequest(
     scoped_ptr<NavigationRequest> navigation_request) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   ResetNavigationRequest(false);
 
   // Force the throbber to start to keep it in sync with what is happening in
@@ -274,14 +294,13 @@ void FrameTreeNode::CreatedNavigationRequest(
     DidStartLoading(true);
   }
 
-  navigation_request_ = navigation_request.Pass();
+  navigation_request_ = std::move(navigation_request);
 
   render_manager()->DidCreateNavigationRequest(*navigation_request_);
 }
 
 void FrameTreeNode::ResetNavigationRequest(bool is_commit) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   if (!navigation_request_)
     return;
   navigation_request_.reset();
@@ -368,10 +387,8 @@ void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
 }
 
 bool FrameTreeNode::StopLoading() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled())
     ResetNavigationRequest(false);
-  }
 
   // TODO(nasko): see if child frames should send IPCs in site-per-process
   // mode.
@@ -380,6 +397,11 @@ bool FrameTreeNode::StopLoading() {
 
   render_manager_.Stop();
   return true;
+}
+
+void FrameTreeNode::DidFocus() {
+  last_focus_time_ = base::TimeTicks::Now();
+  FOR_EACH_OBSERVER(Observer, observers_, OnFrameTreeNodeFocused(this));
 }
 
 void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,

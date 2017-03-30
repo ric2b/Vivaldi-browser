@@ -11,41 +11,24 @@ build directory, e.g. chrome-release/build/.
 For a list of command-line options, call this script with '--help'.
 """
 
-import ast
 import copy
-import datetime
-import exceptions
-import gzip
-import hashlib
-import json
 import logging
 import optparse
 import os
 import platform
 import re
-import stat
 import subprocess
 import sys
-import tempfile
 
 from common import chromium_utils
-from common import gtest_utils
 
-# TODO(crbug.com/403564). We almost certainly shouldn't be importing this.
-import config
-
-from slave import annotation_utils
 from slave import build_directory
-from slave import gtest_slave_utils
 from slave import slave_utils
 from slave import xvfb
 
 USAGE = '%s [options] test.exe [test args]' % os.path.basename(sys.argv[0])
 
 CHROME_SANDBOX_PATH = '/opt/chromium/chrome_sandbox'
-
-# Directory to write JSON for test results into.
-DEST_DIR = 'gtest_results'
 
 # The directory that this script is in.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -109,125 +92,6 @@ def _ShutdownDBus():
     print ' cleared DBUS_SESSION_BUS_ADDRESS environment variable'
 
 
-def _RunGTestCommand(
-    options, command, extra_env, pipes=None):
-  """Runs a test, printing and possibly processing the output.
-
-  Args:
-    options: Options passed for this invocation of runtest.py.
-    command: A list of strings in a command (the command and its arguments).
-    extra_env: A dictionary of extra environment variables to set.
-    pipes: A list of command string lists which the output will be piped to.
-
-  Returns:
-    The process return code.
-  """
-  env = os.environ.copy()
-  if extra_env:
-    print 'Additional test environment:'
-    for k, v in sorted(extra_env.items()):
-      print '  %s=%s' % (k, v)
-  env.update(extra_env or {})
-
-  # Trigger bot mode (test retries, redirection of stdio, possibly faster,
-  # etc.) - using an environment variable instead of command-line flags because
-  # some internal waterfalls run this (_RunGTestCommand) for totally non-gtest
-  # code.
-  # TODO(phajdan.jr): Clean this up when internal waterfalls are fixed.
-  env.update({'CHROMIUM_TEST_LAUNCHER_BOT_MODE': '1'})
-
-  return chromium_utils.RunCommand(command, pipes=pipes, env=env)
-
-
-def _GetMaster():
-  """Return the master name for the current host."""
-  return chromium_utils.GetActiveMaster()
-
-
-def _GetMasterString(master):
-  """Returns a message describing what the master is."""
-  return '[Running for master: "%s"]' % master
-
-
-def _GenerateJSONForTestResults(options, log_processor):
-  """Generates or updates a JSON file from the gtest results XML and upload the
-  file to the archive server.
-
-  The archived JSON file will be placed at:
-    www-dir/DEST_DIR/buildname/testname/results.json
-  on the archive server. NOTE: This will be deprecated.
-
-  Args:
-    options: command-line options that are supposed to have build_dir,
-        results_directory, builder_name, build_name and test_output_xml values.
-    log_processor: An instance of PerformanceLogProcessor or similar class.
-
-  Returns:
-    True upon success, False upon failure.
-  """
-  results_map = None
-  try:
-    results_map = gtest_slave_utils.GetResultsMap(log_processor)
-  except Exception as e:
-    # This error will be caught by the following 'not results_map' statement.
-    print 'Error: ', e
-
-  if not results_map:
-    print 'No data was available to update the JSON results'
-    # Consider this non-fatal.
-    return True
-
-  build_dir = os.path.abspath(options.build_dir)
-  slave_name = options.builder_name or slave_utils.SlaveBuildName(build_dir)
-
-  generate_json_options = copy.copy(options)
-  generate_json_options.build_name = slave_name
-  generate_json_options.input_results_xml = options.test_output_xml
-  generate_json_options.builder_base_url = '%s/%s/%s/%s' % (
-      config.Master.archive_url, DEST_DIR, slave_name, options.test_type)
-  generate_json_options.master_name = options.master_class_name or _GetMaster()
-  generate_json_options.test_results_server = config.Master.test_results_server
-
-  print _GetMasterString(generate_json_options.master_name)
-
-  generator = None
-
-  try:
-    if options.revision:
-      generate_json_options.chrome_revision = options.revision
-    else:
-      generate_json_options.chrome_revision = ''
-
-    if options.webkit_revision:
-      generate_json_options.webkit_revision = options.webkit_revision
-    else:
-      generate_json_options.webkit_revision = ''
-
-    # Generate results JSON file and upload it to the appspot server.
-    generator = gtest_slave_utils.GenerateJSONResults(
-        results_map, generate_json_options)
-
-  except Exception as e:
-    print 'Unexpected error while generating JSON: %s' % e
-    sys.excepthook(*sys.exc_info())
-    return False
-
-  # The code can throw all sorts of exceptions, including
-  # slave.gtest.networktransaction.NetworkTimeout so just trap everything.
-  # Earlier versions of this code ignored network errors, so until a
-  # retry mechanism is added, continue to do so rather than reporting
-  # an error.
-  try:
-    # Upload results JSON file to the appspot server.
-    gtest_slave_utils.UploadJSONResults(generator)
-  except Exception as e:
-    # Consider this non-fatal for the moment.
-    print 'Unexpected error while uploading JSON: %s' % e
-    sys.excepthook(*sys.exc_info())
-
-  return True
-
-
 def _BuildTestBinaryCommand(_build_dir, test_exe_path, options):
   """Builds a command to run a test binary.
 
@@ -252,13 +116,6 @@ def _BuildTestBinaryCommand(_build_dir, test_exe_path, options):
           '--test-launcher-shard-index=%d' % (options.shard_index - 1)])
 
   return command
-
-
-def _UsingGtestJson(options):
-  """Returns True if we're using GTest JSON summary."""
-  return (options.annotate == 'gtest' and
-          not options.run_python_script and
-          not options.run_shell_script)
 
 
 def _GenerateRunIsolatedCommand(build_dir, test_exe_path, options, command):
@@ -292,23 +149,6 @@ def _GetSanitizerSymbolizeCommand(strip_path_prefix=None, json_file_name=None):
   return command
 
 
-def _SymbolizeSnippetsInJSON(options, json_file_name):
-  if not json_file_name:
-    return
-  symbolize_command = _GetSanitizerSymbolizeCommand(
-      strip_path_prefix=options.strip_path_prefix,
-      json_file_name=json_file_name)
-  try:
-    p = subprocess.Popen(symbolize_command, stderr=subprocess.PIPE)
-    (_, stderr) = p.communicate()
-  except OSError as e:
-      print 'Exception while symbolizing snippets: %s' % e
-
-  if p.returncode != 0:
-    print "Error: failed to symbolize snippets in JSON:\n"
-    print stderr
-
-
 def _Main(options, args, extra_env):
   """Using the target build configuration, run the executable given in the
   first non-option argument, passing any following arguments to that
@@ -327,16 +167,9 @@ def _Main(options, args, extra_env):
 
   xvfb_path = os.path.join(os.path.dirname(sys.argv[0]), '..', '..',
                            'third_party', 'xvfb', platform.architecture()[0])
-  special_xvfb_dir = None
-  fp_chromeos = options.factory_properties.get('chromeos', None)
-  if (fp_chromeos or
-      slave_utils.GypFlagIsOn(options, 'use_aura') or
-      slave_utils.GypFlagIsOn(options, 'chromeos')):
-    special_xvfb_dir = xvfb_path
 
   build_dir = os.path.normpath(os.path.abspath(options.build_dir))
   bin_dir = os.path.join(build_dir, options.target)
-  slave_name = options.slave_name or slave_utils.SlaveBuildName(build_dir)
 
   test_exe = args[0]
   if options.run_python_script:
@@ -380,20 +213,7 @@ def _Main(options, args, extra_env):
     command = _BuildTestBinaryCommand(build_dir, test_exe_path, options)
   command.extend(args[1:])
 
-  # Nuke anything that appears to be stale chrome items in the temporary
-  # directory from previous test runs (i.e.- from crashes or unittest leaks).
-  slave_utils.RemoveChromeTemporaryFiles()
-
   log_processor = None
-  if _UsingGtestJson(options):
-    log_processor = gtest_utils.GTestJSONParser(
-        options.build_properties.get('mastername'))
-
-  if options.generate_json_file:
-    if os.path.exists(options.test_output_xml):
-      # remove the old XML output file.
-      os.remove(options.test_output_xml)
-
   try:
     # TODO(dpranke): checking on test_exe is a temporary hack until we
     # can change the buildbot master to pass --xvfb instead of --no-xvfb
@@ -406,40 +226,51 @@ def _Main(options, args, extra_env):
             'devtools_perf_test_wrapper' in test_exe))
     if start_xvfb:
       xvfb.StartVirtualX(
-          slave_name, bin_dir,
+          None, bin_dir,
           with_wm=(options.factory_properties.get('window_manager', 'True') ==
-                   'True'),
-          server_dir=special_xvfb_dir)
+                   'True'))
 
-    if _UsingGtestJson(options):
-      json_file_name = log_processor.PrepareJSONFile(
-          options.test_launcher_summary_output)
-      command.append('--test-launcher-summary-output=%s' % json_file_name)
-
-    pipes = []
-    # See the comment in main() regarding offline symbolization.
-    if options.use_symbolization_script:
-      symbolize_command = _GetSanitizerSymbolizeCommand(
-          strip_path_prefix=options.strip_path_prefix)
-      pipes = [symbolize_command]
+    if options.test_launcher_summary_output:
+      command.append('--test-launcher-summary-output=%s' %
+                     options.test_launcher_summary_output)
 
     command = _GenerateRunIsolatedCommand(build_dir, test_exe_path, options,
                                           command)
-    result = _RunGTestCommand(options, command, extra_env, pipes=pipes)
+
+    env = os.environ.copy()
+    if extra_env:
+      print 'Additional test environment:'
+      for k, v in sorted(extra_env.items()):
+        print '  %s=%s' % (k, v)
+    env.update(extra_env or {})
+
+    # Trigger bot mode (test retries, redirection of stdio, possibly faster,
+    # etc.) - using an environment variable instead of command-line flags
+    # because some internal waterfalls run this for totally non-gtest code.
+    # TODO(phajdan.jr): Clean this up when internal waterfalls are fixed.
+    env.update({'CHROMIUM_TEST_LAUNCHER_BOT_MODE': '1'})
+
+    if options.use_symbolization_script:
+      symbolize_command = _GetSanitizerSymbolizeCommand(
+          strip_path_prefix=options.strip_path_prefix)
+
+      command_process = subprocess.Popen(
+          command, env=env, stdout=subprocess.PIPE)
+      symbolize_process = subprocess.Popen(
+          symbolize_command, env=env, stdin=command_process.stdout)
+      command_process.stdout.close()
+
+      command_process.wait()
+      symbolize_process.wait()
+
+      result = command_process.returncode
+      if result == 0:
+        result = symbolize_process.returncode
+    else:
+      result = subprocess.call(command, env=env)
   finally:
     if start_xvfb:
-      xvfb.StopVirtualX(slave_name)
-    if _UsingGtestJson(options):
-      if options.use_symbolization_script:
-        _SymbolizeSnippetsInJSON(options, json_file_name)
-      log_processor.ProcessJSONFile(options.build_dir)
-
-  if options.generate_json_file:
-    if not _GenerateJSONForTestResults(options, log_processor):
-      return 1
-
-  if options.annotate:
-    annotation_utils.annotate(options.test_type, result, log_processor)
+      xvfb.StopVirtualX(None)
 
   return result
 
@@ -715,15 +546,6 @@ def main():
     if options.total_shards and options.shard_index:
       extra_env['GTEST_TOTAL_SHARDS'] = str(options.total_shards)
       extra_env['GTEST_SHARD_INDEX'] = str(options.shard_index - 1)
-
-    if options.results_directory:
-      options.test_output_xml = os.path.normpath(os.path.abspath(os.path.join(
-          options.results_directory, '%s.xml' % options.test_type)))
-      args.append('--gtest_output=xml:' + options.test_output_xml)
-    elif options.generate_json_file:
-      option_parser.error(
-          '--results-directory is required with --generate-json-file=True')
-      return 1
 
     return _Main(options, args, extra_env)
   finally:

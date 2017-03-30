@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/android/autofill/autofill_dialog_controller_android.h"
 
+#include <stddef.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,7 +21,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/android/autofill/autofill_dialog_result.h"
-#include "chrome/browser/ui/android/window_android_helper.h"
+#include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/autofill/autofill_dialog_common.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -39,6 +42,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/AutofillDialogControllerAndroid_jni.h"
+#include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/base/models/menu_model.h"
@@ -59,7 +63,7 @@ const char kLastUsedBillingAddressGuid[] = "last_used_billing";
 const char kLastUsedShippingAddressGuid[] = "last_used_shipping";
 const char kLastUsedCreditCardGuid[] = "last_used_card";
 
-// Constructs |inputs| for the SECTION_CC_BILLING section.
+// Constructs |inputs| for the SECTION_BILLING section.
 void BuildCcBillingInputs(DetailInputs* inputs) {
   const DetailInput kCcBillingInputs[] = {
     { DetailInput::LONG, NAME_BILLING_FULL },
@@ -106,7 +110,7 @@ void FillOutputForSectionWithComparator(
     FormStructure& form_structure,
     FullWallet* full_wallet,
     const base::string16& email_address) {
-  if ((section == SECTION_CC_BILLING && !full_wallet->billing_address()) ||
+  if ((section == SECTION_BILLING && !full_wallet->billing_address()) ||
       (section == SECTION_SHIPPING && !full_wallet->shipping_address())) {
     return;
   }
@@ -118,10 +122,8 @@ void FillOutputForSectionWithComparator(
 
   std::vector<ServerFieldType> types = TypesFromInputs(inputs);
   form_structure.FillFields(
-      types,
-      compare,
-      get_info,
-      section == SECTION_CC_BILLING
+      types, compare, get_info,
+      section == SECTION_BILLING
           ? full_wallet->billing_address()->language_code()
           : full_wallet->shipping_address()->language_code(),
       g_browser_process->GetApplicationLocale());
@@ -132,9 +134,8 @@ void FillOutputForSection(
     FormStructure& form_structure,
     FullWallet* full_wallet,
     const base::string16& email_address) {
-  DCHECK(section == SECTION_CC_BILLING || section == SECTION_SHIPPING);
   DetailInputs inputs;
-  if (section == SECTION_CC_BILLING)
+  if (section == SECTION_BILLING)
     BuildCcBillingInputs(&inputs);
   else
     BuildShippingInputs(&inputs);
@@ -143,7 +144,7 @@ void FillOutputForSection(
       section, inputs, base::Bind(ServerTypeMatchesField, section),
       form_structure, full_wallet, email_address);
 
-  if (section == SECTION_CC_BILLING) {
+  if (section == SECTION_BILLING) {
     // Email is hidden while using Wallet, special case it.
     for (size_t i = 0; i < form_structure.field_count(); ++i) {
       AutofillField* field = form_structure.field(i);
@@ -257,14 +258,11 @@ void AutofillDialogControllerAndroid::Show() {
   }
 
   // Determine what field types should be included in the dialog.
-  bool has_types = false;
-  bool has_sections = false;
-  form_structure_.ParseFieldTypesFromAutocompleteAttributes(
-      &has_types, &has_sections);
+  form_structure_.ParseFieldTypesFromAutocompleteAttributes();
 
   // Fail if the author didn't specify autocomplete types, or
   // if the dialog shouldn't be shown in a given circumstances.
-  if (!has_types) {
+  if (!form_structure_.has_author_specified_types()) {
     callback_.Run(
         AutofillClient::AutocompleteResultErrorDisabled,
         base::ASCIIToUTF16("Form is missing autocomplete attributes."),
@@ -278,7 +276,8 @@ void AutofillDialogControllerAndroid::Show() {
   bool has_credit_card_field = false;
   for (size_t i = 0; i < form_structure_.field_count(); ++i) {
     AutofillType type = form_structure_.field(i)->Type();
-    if (type.html_type() != HTML_TYPE_UNKNOWN && type.group() == CREDIT_CARD) {
+    if (type.html_type() != HTML_TYPE_UNSPECIFIED &&
+        type.group() == CREDIT_CARD) {
       has_credit_card_field = true;
       break;
     }
@@ -410,8 +409,8 @@ void AutofillDialogControllerAndroid::Show() {
   java_object_.Reset(Java_AutofillDialogControllerAndroid_create(
       env,
       reinterpret_cast<intptr_t>(this),
-      WindowAndroidHelper::FromWebContents(contents_)->
-          GetWindowAndroid()->GetJavaObject().obj(),
+      ViewAndroidHelper::FromWebContents(contents_)->
+          GetViewAndroid()->GetWindowAndroid()->GetJavaObject().obj(),
       request_full_billing_address, request_shipping_address,
       request_phone_numbers, incognito_mode,
       last_used_choice_is_autofill, jlast_used_account_name.obj(),
@@ -434,8 +433,9 @@ bool AutofillDialogControllerAndroid::
   return RegisterNativesImpl(env);
 }
 
-void AutofillDialogControllerAndroid::DialogCancel(JNIEnv* env,
-                                                   jobject obj) {
+void AutofillDialogControllerAndroid::DialogCancel(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   LogOnCancelMetrics();
   callback_.Run(AutofillClient::AutocompleteResultErrorCancel,
                 base::string16(),
@@ -444,13 +444,13 @@ void AutofillDialogControllerAndroid::DialogCancel(JNIEnv* env,
 
 void AutofillDialogControllerAndroid::DialogContinue(
     JNIEnv* env,
-    jobject obj,
-    jobject wallet,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& wallet,
     jboolean jlast_used_choice_is_autofill,
-    jstring jlast_used_account_name,
-    jstring jlast_used_billing,
-    jstring jlast_used_shipping,
-    jstring jlast_used_card) {
+    const JavaParamRef<jstring>& jlast_used_account_name,
+    const JavaParamRef<jstring>& jlast_used_billing,
+    const JavaParamRef<jstring>& jlast_used_shipping,
+    const JavaParamRef<jstring>& jlast_used_card) {
   const base::string16 email =
       AutofillDialogResult::GetWalletEmail(env, wallet);
   const std::string google_transaction_id =
@@ -467,8 +467,8 @@ void AutofillDialogControllerAndroid::DialogContinue(
 
   scoped_ptr<FullWallet> full_wallet =
       AutofillDialogResult::ConvertFromJava(env, wallet);
-  FillOutputForSection(
-      SECTION_CC_BILLING, form_structure_, full_wallet.get(), email);
+  FillOutputForSection(SECTION_BILLING, form_structure_, full_wallet.get(),
+                       email);
   FillOutputForSection(
       SECTION_SHIPPING, form_structure_, full_wallet.get(), email);
 

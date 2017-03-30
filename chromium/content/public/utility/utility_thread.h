@@ -5,7 +5,6 @@
 #ifndef CONTENT_PUBLIC_UTILITY_UTILITY_THREAD_H_
 #define CONTENT_PUBLIC_UTILITY_UTILITY_THREAD_H_
 
-#include "base/basictypes.h"
 #include "content/public/child/child_thread.h"
 
 namespace content {
@@ -21,6 +20,9 @@ class CONTENT_EXPORT UtilityThread : virtual public ChildThread {
 
   // Releases the process if we are not (or no longer) in batch mode.
   virtual void ReleaseProcessIfNeeded() = 0;
+
+  // Initializes blink if it hasn't already been initialized.
+  virtual void EnsureBlinkInitialized() = 0;
 };
 
 }  // namespace content

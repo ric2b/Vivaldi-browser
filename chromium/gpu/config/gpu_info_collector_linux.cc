@@ -4,6 +4,9 @@
 
 #include "gpu/config/gpu_info_collector_linux.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/command_line.h"
@@ -56,7 +59,8 @@ std::string CollectDriverVersionATI() {
   base::StringTokenizer t(contents, "\r\n");
   while (t.GetNext()) {
     std::string line = t.token();
-    if (base::StartsWithASCII(line, "ReleaseVersion=", true)) {
+    if (base::StartsWith(line, "ReleaseVersion=",
+                         base::CompareCase::SENSITIVE)) {
       size_t begin = line.find_first_of("0123456789");
       if (begin != std::string::npos) {
         size_t end = line.find_first_not_of("0123456789.", begin);
@@ -70,9 +74,9 @@ std::string CollectDriverVersionATI() {
   return std::string();
 }
 
-const uint32 kVendorIDIntel = 0x8086;
-const uint32 kVendorIDNVidia = 0x10de;
-const uint32 kVendorIDAMD = 0x1002;
+const uint32_t kVendorIDIntel = 0x8086;
+const uint32_t kVendorIDNVidia = 0x10de;
+const uint32_t kVendorIDAMD = 0x1002;
 
 CollectInfoResult CollectPCIVideoCardInfo(GPUInfo* gpu_info) {
   DCHECK(gpu_info);
@@ -182,7 +186,7 @@ CollectInfoResult CollectContextGraphicsInfo(GPUInfo* gpu_info) {
   return result;
 }
 
-CollectInfoResult CollectGpuID(uint32* vendor_id, uint32* device_id) {
+CollectInfoResult CollectGpuID(uint32_t* vendor_id, uint32_t* device_id) {
   DCHECK(vendor_id && device_id);
   *vendor_id = 0;
   *device_id = 0;
@@ -244,10 +248,11 @@ CollectInfoResult CollectDriverInfoGL(GPUInfo* gpu_info) {
   DCHECK(gpu_info);
 
   std::string gl_version = gpu_info->gl_version;
-  if (base::StartsWithASCII(gl_version, "OpenGL ES", true))
+  if (base::StartsWith(gl_version, "OpenGL ES", base::CompareCase::SENSITIVE))
     gl_version = gl_version.substr(10);
-  std::vector<std::string> pieces;
-  base::SplitStringAlongWhitespace(gl_version, &pieces);
+  std::vector<std::string> pieces = base::SplitString(
+      gl_version, base::kWhitespaceASCII, base::KEEP_WHITESPACE,
+      base::SPLIT_WANT_NONEMPTY);
   // In linux, the gl version string might be in the format of
   //   GLVersion DriverVendor DriverVersion
   if (pieces.size() < 3)

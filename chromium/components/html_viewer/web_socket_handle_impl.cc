@@ -4,22 +4,23 @@
 
 #include "components/html_viewer/web_socket_handle_impl.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "components/html_viewer/blink_basic_type_converters.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/services/network/public/cpp/web_socket_read_queue.h"
 #include "mojo/services/network/public/cpp/web_socket_write_queue.h"
-#include "mojo/services/network/public/interfaces/network_service.mojom.h"
-#include "third_party/WebKit/public/platform/WebSerializedOrigin.h"
-#include "third_party/WebKit/public/platform/WebSocketHandleClient.h"
+#include "mojo/services/network/public/interfaces/web_socket_factory.mojom.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/WebKit/public/platform/modules/websockets/WebSocketHandleClient.h"
 
-using blink::WebSerializedOrigin;
+using blink::WebSecurityOrigin;
 using blink::WebSocketHandle;
 using blink::WebSocketHandleClient;
 using blink::WebString;
@@ -40,18 +41,17 @@ struct TypeConverter<WebSocket::MessageType, WebSocketHandle::MessageType> {
            type == WebSocketHandle::MessageTypeText ||
            type == WebSocketHandle::MessageTypeBinary);
     typedef WebSocket::MessageType MessageType;
-    COMPILE_ASSERT(
+    static_assert(
         static_cast<MessageType>(WebSocketHandle::MessageTypeContinuation) ==
             WebSocket::MESSAGE_TYPE_CONTINUATION,
-        enum_values_must_match_for_message_type);
-    COMPILE_ASSERT(
-        static_cast<MessageType>(WebSocketHandle::MessageTypeText) ==
-            WebSocket::MESSAGE_TYPE_TEXT,
-        enum_values_must_match_for_message_type);
-    COMPILE_ASSERT(
+        "WebSocket and WebSocketHandle enum values must match");
+    static_assert(static_cast<MessageType>(WebSocketHandle::MessageTypeText) ==
+                      WebSocket::MESSAGE_TYPE_TEXT,
+                  "WebSocket and WebSocketHandle enum values must match");
+    static_assert(
         static_cast<MessageType>(WebSocketHandle::MessageTypeBinary) ==
             WebSocket::MESSAGE_TYPE_BINARY,
-        enum_values_must_match_for_message_type);
+        "WebSocket and WebSocketHandle enum values must match");
     return static_cast<WebSocket::MessageType>(type);
   }
 };
@@ -77,7 +77,7 @@ class WebSocketClientImpl : public mojo::WebSocketClient {
   WebSocketClientImpl(WebSocketHandleImpl* handle,
                       blink::WebSocketHandleClient* client,
                       mojo::InterfaceRequest<mojo::WebSocketClient> request)
-      : handle_(handle), client_(client), binding_(this, request.Pass()) {}
+      : handle_(handle), client_(client), binding_(this, std::move(request)) {}
   ~WebSocketClientImpl() override {}
 
  private:
@@ -87,7 +87,7 @@ class WebSocketClientImpl : public mojo::WebSocketClient {
                   mojo::ScopedDataPipeConsumerHandle receive_stream) override {
     blink::WebSocketHandleClient* client = client_;
     WebSocketHandleImpl* handle = handle_;
-    receive_stream_ = receive_stream.Pass();
+    receive_stream_ = std::move(receive_stream);
     read_queue_.reset(new WebSocketReadQueue(receive_stream_.get()));
     client->didConnect(handle,
                        selected_subprotocol.To<WebString>(),
@@ -147,9 +147,9 @@ class WebSocketClientImpl : public mojo::WebSocketClient {
   DISALLOW_COPY_AND_ASSIGN(WebSocketClientImpl);
 };
 
-WebSocketHandleImpl::WebSocketHandleImpl(mojo::NetworkService* network_service)
+WebSocketHandleImpl::WebSocketHandleImpl(mojo::WebSocketFactory* factory)
     : did_close_(false) {
-  network_service->CreateWebSocket(GetProxy(&web_socket_));
+  factory->CreateWebSocket(GetProxy(&web_socket_));
 }
 
 WebSocketHandleImpl::~WebSocketHandleImpl() {
@@ -162,25 +162,25 @@ WebSocketHandleImpl::~WebSocketHandleImpl() {
 
 void WebSocketHandleImpl::connect(const WebURL& url,
                                   const WebVector<WebString>& protocols,
-                                  const WebSerializedOrigin& origin,
+                                  const WebSecurityOrigin& origin,
                                   WebSocketHandleClient* client) {
   // TODO(mpcomplete): Is this the right ownership model? Or should mojo own
   // |client_|?
   mojo::WebSocketClientPtr client_ptr;
   mojo::MessagePipe pipe;
-  client_ptr.Bind(
-      mojo::InterfacePtrInfo<mojo::WebSocketClient>(pipe.handle0.Pass(), 0u));
+  client_ptr.Bind(mojo::InterfacePtrInfo<mojo::WebSocketClient>(
+      std::move(pipe.handle0), 0u));
   mojo::InterfaceRequest<mojo::WebSocketClient> request;
-  request.Bind(pipe.handle1.Pass());
-  client_.reset(new WebSocketClientImpl(this, client, request.Pass()));
+  request.Bind(std::move(pipe.handle1));
+  client_.reset(new WebSocketClientImpl(this, client, std::move(request)));
 
   mojo::DataPipe data_pipe;
-  send_stream_ = data_pipe.producer_handle.Pass();
+  send_stream_ = std::move(data_pipe.producer_handle);
   write_queue_.reset(new mojo::WebSocketWriteQueue(send_stream_.get()));
-  web_socket_->Connect(url.string().utf8(),
-                       mojo::Array<String>::From(protocols),
-                       origin.string().utf8(), data_pipe.consumer_handle.Pass(),
-                       client_ptr.Pass());
+  web_socket_->Connect(
+      url.string().utf8(), mojo::Array<String>::From(protocols),
+      origin.toString().utf8(), std::move(data_pipe.consumer_handle),
+      std::move(client_ptr));
 }
 
 void WebSocketHandleImpl::send(bool fin,

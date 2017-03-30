@@ -7,13 +7,16 @@ package org.chromium.ui.base;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender.SendIntentException;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PermissionInfo;
+import android.os.Build;
 import android.os.Handler;
+import android.os.Process;
 import android.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.util.SparseArray;
@@ -21,12 +24,9 @@ import android.view.View;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.BuildInfo;
 import org.chromium.ui.UiUtils;
 
 import java.lang.ref.WeakReference;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 /**
  * The class provides the WindowAndroid's implementation which requires
@@ -39,15 +39,11 @@ public class ActivityWindowAndroid
     // Constants used for intent request code bounding.
     private static final int REQUEST_CODE_PREFIX = 1000;
     private static final int REQUEST_CODE_RANGE_SIZE = 100;
-    private static final String TAG = "ActivityWindowAndroid";
 
     private static final String PERMISSION_QUERIED_KEY_PREFIX = "HasRequestedAndroidPermission::";
 
-    private final WeakReference<Activity> mActivityRef;
     private final Handler mHandler;
     private final SparseArray<PermissionCallback> mOutstandingPermissionRequests;
-
-    private Method mRequestPermissionsMethod;
 
     private int mNextRequestCode = 0;
 
@@ -55,37 +51,44 @@ public class ActivityWindowAndroid
      * Creates an Activity-specific WindowAndroid with associated intent functionality.
      * TODO(jdduke): Remove this overload when all callsites have been updated to
      * indicate their activity state listening preference.
-     * @param activity The activity associated with the WindowAndroid.
+     * @param context Context wrapping an activity associated with the WindowAndroid.
      */
-    public ActivityWindowAndroid(Activity activity) {
-        this(activity, true);
+    public ActivityWindowAndroid(Context context) {
+        this(context, true);
     }
 
     /**
      * Creates an Activity-specific WindowAndroid with associated intent functionality.
-     * @param activity The activity associated with the WindowAndroid.
+     * @param context Context wrapping an activity associated with the WindowAndroid.
      * @param listenToActivityState Whether to listen to activity state changes.
      */
-    public ActivityWindowAndroid(Activity activity, boolean listenToActivityState) {
-        super(activity.getApplicationContext());
-        mActivityRef = new WeakReference<Activity>(activity);
+    public ActivityWindowAndroid(Context context, boolean listenToActivityState) {
+        super(context);
+        Activity activity = activityFromContext(context);
+        if (activity == null) {
+            throw new IllegalArgumentException("Context is not and does not wrap an Activity");
+        }
         mHandler = new Handler();
         mOutstandingPermissionRequests = new SparseArray<PermissionCallback>();
         if (listenToActivityState) {
             ApplicationStatus.registerStateListenerForActivity(this, activity);
         }
+
+        setAndroidPermissionDelegate(new ActivityAndroidPermissionDelegate());
     }
 
     @Override
     protected void registerKeyboardVisibilityCallbacks() {
-        Activity activity = mActivityRef.get();
+        Activity activity = getActivity().get();
         if (activity == null) return;
-        activity.findViewById(android.R.id.content).addOnLayoutChangeListener(this);
+        View content = activity.findViewById(android.R.id.content);
+        mIsKeyboardShowing = UiUtils.isKeyboardShowing(getActivity().get(), content);
+        content.addOnLayoutChangeListener(this);
     }
 
     @Override
     protected void unregisterKeyboardVisibilityCallbacks() {
-        Activity activity = mActivityRef.get();
+        Activity activity = getActivity().get();
         if (activity == null) return;
         activity.findViewById(android.R.id.content).removeOnLayoutChangeListener(this);
     }
@@ -93,7 +96,7 @@ public class ActivityWindowAndroid
     @Override
     public int showCancelableIntent(
             PendingIntent intent, IntentCallback callback, Integer errorId) {
-        Activity activity = mActivityRef.get();
+        Activity activity = getActivity().get();
         if (activity == null) return START_INTENT_FAILURE;
 
         int requestCode = generateNextRequestCode();
@@ -111,7 +114,7 @@ public class ActivityWindowAndroid
 
     @Override
     public int showCancelableIntent(Intent intent, IntentCallback callback, Integer errorId) {
-        Activity activity = mActivityRef.get();
+        Activity activity = getActivity().get();
         if (activity == null) return START_INTENT_FAILURE;
 
         int requestCode = generateNextRequestCode();
@@ -128,7 +131,7 @@ public class ActivityWindowAndroid
 
     @Override
     public void cancelIntent(int requestCode) {
-        Activity activity = mActivityRef.get();
+        Activity activity = getActivity().get();
         if (activity == null) return;
         activity.finishActivity(requestCode);
     }
@@ -181,94 +184,6 @@ public class ActivityWindowAndroid
         return PERMISSION_QUERIED_KEY_PREFIX + permissionQueriedKey;
     }
 
-    @Override
-    public boolean canRequestPermission(String permission) {
-        if (!BuildInfo.isMncOrLater()) return false;
-
-        Activity activity = mActivityRef.get();
-        if (activity == null) return false;
-
-        // TODO(tedchoc): Child classes are currently required to determine whether we have
-        //                previously requested the permission before but the user did not
-        //                select "Never ask again".  Merge with this class when possible.
-
-        // Check whether we have ever asked for this permission by checking whether we saved
-        // a preference associated with it before.
-        String permissionQueriedKey = getHasRequestedPermissionKey(permission);
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(activity);
-        if (!prefs.getBoolean(permissionQueriedKey, false)) return true;
-
-        return false;
-    }
-
-    @Override
-    public void requestPermissions(
-            final String[] permissions, final PermissionCallback callback) {
-        // If the permission request was not sent successfully, just post a response to the
-        // callback with whatever the current permission state is for all the requested
-        // permissions.  The response is posted to keep the async behavior of this method
-        // consistent.
-        if (!requestPermissionsInternal(permissions, callback)) {
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    int[] results = new int[permissions.length];
-                    for (int i = 0; i < permissions.length; i++) {
-                        results[i] = hasPermission(permissions[i])
-                                ? PackageManager.PERMISSION_GRANTED
-                                : PackageManager.PERMISSION_DENIED;
-                    }
-                    callback.onRequestPermissionsResult(permissions, results);
-                }
-            });
-        } else {
-            Activity activity = mActivityRef.get();
-            SharedPreferences.Editor editor =
-                    PreferenceManager.getDefaultSharedPreferences(activity).edit();
-            for (int i = 0; i < permissions.length; i++) {
-                editor.putBoolean(getHasRequestedPermissionKey(permissions[i]), true);
-            }
-            editor.apply();
-        }
-    }
-
-    /**
-     * Issues the permission request and returns whether it was sent successfully.
-     */
-    private boolean requestPermissionsInternal(String[] permissions, PermissionCallback callback) {
-        // TODO(tedchoc): Remove the MNC check once the SDK version is bumped.
-        if (!BuildInfo.isMncOrLater()) return false;
-
-        // TODO(tedchoc): Remove the reflection aspect of this once a public M SDK is available.
-        Activity activity = mActivityRef.get();
-        if (activity == null) return false;
-
-        if (mRequestPermissionsMethod == null) {
-            try {
-                mRequestPermissionsMethod = Activity.class.getMethod(
-                        "requestPermissions", String[].class, int.class);
-            } catch (NoSuchMethodException e) {
-                return false;
-            }
-        }
-
-        int requestCode = generateNextRequestCode();
-        mOutstandingPermissionRequests.put(requestCode, callback);
-
-        try {
-            mRequestPermissionsMethod.invoke(activity, permissions, requestCode);
-            return true;
-        } catch (IllegalAccessException e) {
-            mOutstandingPermissionRequests.delete(requestCode);
-        } catch (IllegalArgumentException e) {
-            mOutstandingPermissionRequests.delete(requestCode);
-        } catch (InvocationTargetException e) {
-            mOutstandingPermissionRequests.delete(requestCode);
-        }
-
-        return false;
-    }
-
     /**
      * Responds to a pending permission result.
      * @param requestCode The unique code for the permission request.
@@ -278,6 +193,16 @@ public class ActivityWindowAndroid
      */
     public boolean onRequestPermissionsResult(int requestCode, String[] permissions,
             int[] grantResults) {
+        Activity activity = getActivity().get();
+        assert activity != null;
+
+        SharedPreferences.Editor editor =
+                PreferenceManager.getDefaultSharedPreferences(activity).edit();
+        for (int i = 0; i < permissions.length; i++) {
+            editor.putBoolean(getHasRequestedPermissionKey(permissions[i]), true);
+        }
+        editor.apply();
+
         PermissionCallback callback = mOutstandingPermissionRequests.get(requestCode);
         mOutstandingPermissionRequests.delete(requestCode);
         if (callback == null) return false;
@@ -287,8 +212,7 @@ public class ActivityWindowAndroid
 
     @Override
     public WeakReference<Activity> getActivity() {
-        // Return a new WeakReference to prevent clients from releasing our internal WeakReference.
-        return new WeakReference<Activity>(mActivityRef.get());
+        return new WeakReference<Activity>(activityFromContext(getContext().get()));
     }
 
     @Override
@@ -303,7 +227,7 @@ public class ActivityWindowAndroid
     @Override
     public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft,
             int oldTop, int oldRight, int oldBottom) {
-        keyboardVisibilityPossiblyChanged(UiUtils.isKeyboardShowing(mActivityRef.get(), v));
+        keyboardVisibilityPossiblyChanged(UiUtils.isKeyboardShowing(getActivity().get(), v));
     }
 
     private int generateNextRequestCode() {
@@ -316,5 +240,86 @@ public class ActivityWindowAndroid
         mOutstandingIntents.put(requestCode, callback);
         mIntentErrors.put(
                 requestCode, errorId == null ? null : mApplicationContext.getString(errorId));
+    }
+
+    private class ActivityAndroidPermissionDelegate implements AndroidPermissionDelegate {
+        @Override
+        public boolean hasPermission(String permission) {
+            return mApplicationContext.checkPermission(permission, Process.myPid(), Process.myUid())
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @Override
+        public boolean canRequestPermission(String permission) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+
+            Activity activity = getActivity().get();
+            if (activity == null) return false;
+
+            if (isPermissionRevokedByPolicy(permission)) {
+                return false;
+            }
+
+            if (activity.shouldShowRequestPermissionRationale(permission)) {
+                return true;
+            }
+
+            // Check whether we have ever asked for this permission by checking whether we saved
+            // a preference associated with it before.
+            String permissionQueriedKey = getHasRequestedPermissionKey(permission);
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(activity);
+            if (!prefs.getBoolean(permissionQueriedKey, false)) return true;
+
+            return false;
+        }
+
+        @Override
+        public boolean isPermissionRevokedByPolicy(String permission) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+
+            Activity activity = getActivity().get();
+            if (activity == null) return false;
+
+            return activity.getPackageManager().isPermissionRevokedByPolicy(
+                    permission, activity.getPackageName());
+        }
+
+        @Override
+        public void requestPermissions(
+                final String[] permissions, final PermissionCallback callback) {
+            if (requestPermissionsInternal(permissions, callback)) return;
+
+            // If the permission request was not sent successfully, just post a response to the
+            // callback with whatever the current permission state is for all the requested
+            // permissions.  The response is posted to keep the async behavior of this method
+            // consistent.
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    int[] results = new int[permissions.length];
+                    for (int i = 0; i < permissions.length; i++) {
+                        results[i] = hasPermission(permissions[i])
+                                ? PackageManager.PERMISSION_GRANTED
+                                : PackageManager.PERMISSION_DENIED;
+                    }
+                    callback.onRequestPermissionsResult(permissions, results);
+                }
+            });
+        }
+
+        /**
+         * Issues the permission request and returns whether it was sent successfully.
+         */
+        private boolean requestPermissionsInternal(
+                String[] permissions, PermissionCallback callback) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+            Activity activity = getActivity().get();
+            if (activity == null) return false;
+
+            int requestCode = generateNextRequestCode();
+            mOutstandingPermissionRequests.put(requestCode, callback);
+            activity.requestPermissions(permissions, requestCode);
+            return true;
+        }
     }
 }

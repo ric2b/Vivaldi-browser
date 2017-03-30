@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_PROFILER_CONTROLLER_IMPL_H_
 #define CONTENT_BROWSER_PROFILER_CONTROLLER_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/process/process.h"
 #include "content/common/content_export.h"
@@ -49,7 +50,7 @@ class ProfilerControllerImpl : public ProfilerController {
   void OnProfilingPhaseCompleted(int profiling_phase) override;
 
  private:
-  friend struct DefaultSingletonTraits<ProfilerControllerImpl>;
+  friend struct base::DefaultSingletonTraits<ProfilerControllerImpl>;
 
   // Contact child processes and get their profiler data.
   void GetProfilerDataFromChildProcesses(int sequence_number,

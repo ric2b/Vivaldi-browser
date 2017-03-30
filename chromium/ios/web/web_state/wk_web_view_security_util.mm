@@ -11,34 +11,13 @@
 
 namespace web {
 
-// This key was determined by inspecting userInfo dict of an SSL error.
+// These keys were determined by inspecting userInfo dict of an SSL error.
 NSString* const kNSErrorPeerCertificateChainKey =
     @"NSErrorPeerCertificateChainKey";
-
+NSString* const kNSErrorFailingURLKey = @"NSErrorFailingURLKey";
 }
 
 namespace {
-
-// Creates certificate from subject string.
-net::X509Certificate* CreateCertFromSubject(NSString* subject) {
-  std::string issuer = "";
-  base::Time start_date;
-  base::Time expiration_date;
-  return new net::X509Certificate(base::SysNSStringToUTF8(subject),
-                                  issuer,
-                                  start_date,
-                                  expiration_date);
-}
-
-// Creates certificate using information extracted from NSError.
-scoped_refptr<net::X509Certificate> CreateCertFromSSLError(NSError* error) {
-  scoped_refptr<net::X509Certificate> cert = web::CreateCertFromChain(
-      error.userInfo[web::kNSErrorPeerCertificateChainKey]);
-  if (cert)
-    return cert;
-  return CreateCertFromSubject(
-      error.userInfo[NSURLErrorFailingURLStringErrorKey]);
-}
 
 // Maps NSError code to net::CertStatus.
 net::CertStatus GetCertStatusFromNSErrorCode(NSInteger code) {
@@ -94,26 +73,74 @@ scoped_refptr<net::X509Certificate> CreateCertFromTrust(SecTrustRef trust) {
       SecTrustGetCertificateAtIndex(trust, 0), intermediates);
 }
 
+base::ScopedCFTypeRef<SecTrustRef> CreateServerTrustFromChain(NSArray* certs,
+                                                              NSString* host) {
+  base::ScopedCFTypeRef<SecTrustRef> scoped_result;
+  if (certs.count == 0)
+    return scoped_result;
+
+  base::ScopedCFTypeRef<SecPolicyRef> policy(
+      SecPolicyCreateSSL(TRUE, static_cast<CFStringRef>(host)));
+  SecTrustRef ref_result = nullptr;
+  if (SecTrustCreateWithCertificates(certs, policy, &ref_result) ==
+      errSecSuccess) {
+    scoped_result.reset(ref_result);
+  }
+  return scoped_result;
+}
+
 void EnsureFutureTrustEvaluationSucceeds(SecTrustRef trust) {
   base::ScopedCFTypeRef<CFDataRef> exceptions(SecTrustCopyExceptions(trust));
   SecTrustSetExceptions(trust, exceptions);
 }
 
-BOOL IsWKWebViewSSLError(NSError* error) {
-  // SSL errors range is (-2000..-1200], represented by kCFURLError constants:
-  // (kCFURLErrorCannotLoadFromNetwork..kCFURLErrorSecureConnectionFailed].
-  // It's reasonable to expect that all SSL errors will have the error code
-  // less or equal to NSURLErrorSecureConnectionFailed but greater than
-  // NSURLErrorCannotLoadFromNetwork.
-  return [error.domain isEqualToString:NSURLErrorDomain] &&
-         (error.code <= NSURLErrorSecureConnectionFailed &&
-          NSURLErrorCannotLoadFromNetwork < error.code);
+BOOL IsWKWebViewSSLCertError(NSError* error) {
+  if (![error.domain isEqualToString:NSURLErrorDomain]) {
+    return NO;
+  }
+
+  switch (error.code) {
+    case NSURLErrorServerCertificateHasBadDate:
+    case NSURLErrorServerCertificateUntrusted:
+    case NSURLErrorServerCertificateHasUnknownRoot:
+    case NSURLErrorServerCertificateNotYetValid:
+      return YES;
+    case NSURLErrorSecureConnectionFailed:
+      // Although the finer-grained errors above exist, iOS never uses them
+      // and instead signals NSURLErrorSecureConnectionFailed for both
+      // certificate failures and other SSL connection failures. Instead, check
+      // if the error has a certificate attached (crbug.com/539735).
+      return [error.userInfo[web::kNSErrorPeerCertificateChainKey] count] > 0;
+    default:
+      return NO;
+  }
 }
 
-void GetSSLInfoFromWKWebViewSSLError(NSError* error, net::SSLInfo* ssl_info) {
-  DCHECK(IsWKWebViewSSLError(error));
+void GetSSLInfoFromWKWebViewSSLCertError(NSError* error,
+                                         net::SSLInfo* ssl_info) {
+  DCHECK(IsWKWebViewSSLCertError(error));
   ssl_info->cert_status = GetCertStatusFromNSErrorCode(error.code);
-  ssl_info->cert = CreateCertFromSSLError(error);
+  scoped_refptr<net::X509Certificate> cert = web::CreateCertFromChain(
+      error.userInfo[web::kNSErrorPeerCertificateChainKey]);
+  ssl_info->cert = cert;
+  ssl_info->unverified_cert = cert;
+}
+
+SecurityStyle GetSecurityStyleFromTrustResult(SecTrustResultType result) {
+  switch (result) {
+    case kSecTrustResultInvalid:
+      return SECURITY_STYLE_UNKNOWN;
+    case kSecTrustResultProceed:
+    case kSecTrustResultUnspecified:
+      return SECURITY_STYLE_AUTHENTICATED;
+    case kSecTrustResultDeny:
+    case kSecTrustResultRecoverableTrustFailure:
+    case kSecTrustResultFatalTrustFailure:
+    case kSecTrustResultOtherError:
+      return SECURITY_STYLE_AUTHENTICATION_BROKEN;
+  }
+  NOTREACHED();
+  return SECURITY_STYLE_UNKNOWN;
 }
 
 }  // namespace web

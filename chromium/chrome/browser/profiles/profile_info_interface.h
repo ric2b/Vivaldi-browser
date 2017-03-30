@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_PROFILES_PROFILE_INFO_INTERFACE_H_
 #define CHROME_BROWSER_PROFILES_PROFILE_INFO_INTERFACE_H_
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/strings/string16.h"
 
@@ -19,6 +21,8 @@ class Image;
 // This abstract interface is used to query the profiles backend for information
 // about the different profiles. Its sole concrete implementation is the
 // ProfileInfoCache. This interface exists largely to assist in testing.
+// The ProfileInfoInterface is being deprecated. Prefer using the
+// ProfileAttributesStorage and avoid using the Get*AtIndex family of functions.
 class ProfileInfoInterface {
  public:
   virtual size_t GetNumberOfProfiles() const = 0;
@@ -37,7 +41,8 @@ class ProfileInfoInterface {
 
   virtual base::string16 GetUserNameOfProfileAtIndex(size_t index) const = 0;
 
-  virtual const gfx::Image& GetAvatarIconOfProfileAtIndex(size_t index) = 0;
+  virtual const gfx::Image& GetAvatarIconOfProfileAtIndex(
+      size_t index) const = 0;
 
   virtual std::string GetLocalAuthCredentialsOfProfileAtIndex(
       size_t index) const = 0;
@@ -71,7 +76,8 @@ class ProfileInfoInterface {
   virtual bool ProfileIsLegacySupervisedAtIndex(size_t index) const = 0;
 
   // Returns true if the profile should be omitted from the desktop profile
-  // list (see ProfileListDesktop), so it won't appear in the avatar menu.
+  // list (see ProfileListDesktop), so it won't appear in the avatar menu
+  // or user manager.
   virtual bool IsOmittedProfileAtIndex(size_t index) const = 0;
 
   virtual std::string GetSupervisedUserIdOfProfileAtIndex(

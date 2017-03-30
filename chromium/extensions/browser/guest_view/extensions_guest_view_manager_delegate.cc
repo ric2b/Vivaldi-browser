@@ -4,16 +4,20 @@
 
 #include "extensions/browser/guest_view/extensions_guest_view_manager_delegate.h"
 
+#include <utility>
+
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "components/guest_view/common/guest_view_constants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_process_host.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/guest_view/app_view/app_view_guest.h"
 #include "extensions/browser/guest_view/extension_options/extension_options_guest.h"
 #include "extensions/browser/guest_view/extension_view/extension_view_guest.h"
+#include "extensions/browser/guest_view/guest_view_events.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
-#include "extensions/browser/guest_view/surface_worker/surface_worker_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/process_map.h"
@@ -36,25 +40,36 @@ ExtensionsGuestViewManagerDelegate::~ExtensionsGuestViewManagerDelegate() {
 void ExtensionsGuestViewManagerDelegate::DispatchEvent(
     const std::string& event_name,
     scoped_ptr<base::DictionaryValue> args,
-    guest_view::GuestViewBase* guest,
+    GuestViewBase* guest,
     int instance_id) {
   EventFilteringInfo info;
   info.SetInstanceID(instance_id);
   scoped_ptr<base::ListValue> event_args(new base::ListValue());
   event_args->Append(args.release());
 
-  EventRouter::DispatchEvent(
-      guest->owner_web_contents(),
-      guest->browser_context(),
-      guest->owner_host(),
-      event_name,
-      event_args.Pass(),
-      EventRouter::USER_GESTURE_UNKNOWN,
-      info);
+  // GetEventHistogramValue maps guest view event names to their histogram
+  // value. It needs to be like this because the guest view component doesn't
+  // know about extensions, so GuestViewEvent can't have an
+  // extensions::events::HistogramValue as an argument.
+  events::HistogramValue histogram_value =
+      guest_view_events::GetEventHistogramValue(event_name);
+  DCHECK_NE(events::UNKNOWN, histogram_value) << "Event " << event_name
+                                              << " must have a histogram value";
+
+  content::WebContents* owner = guest->owner_web_contents();
+  // Note(andre@vivialdi.com):
+  // The owner |WebContents| might have been removed already. We dispatch an
+  // event in GuestDestroyed for webviews losing their guest WebContents.
+  if (owner) {
+  EventRouter::DispatchEventToSender(owner, guest->browser_context(),
+                                     guest->owner_host(), histogram_value,
+                                     event_name, std::move(event_args),
+                                     EventRouter::USER_GESTURE_UNKNOWN, info);
+  }
 }
 
 bool ExtensionsGuestViewManagerDelegate::IsGuestAvailableToContext(
-    guest_view::GuestViewBase* guest) {
+    GuestViewBase* guest) {
   const Feature* feature =
       FeatureProvider::GetAPIFeature(guest->GetAPINamespace());
   CHECK(feature);
@@ -77,7 +92,7 @@ bool ExtensionsGuestViewManagerDelegate::IsGuestAvailableToContext(
 }
 
 bool ExtensionsGuestViewManagerDelegate::IsOwnedByExtension(
-    guest_view::GuestViewBase* guest) {
+    GuestViewBase* guest) {
   return !!ProcessManager::Get(context_)->
       GetExtensionForWebContents(guest->owner_web_contents());
 }
@@ -88,7 +103,6 @@ void ExtensionsGuestViewManagerDelegate::RegisterAdditionalGuestViewTypes() {
   manager->RegisterGuestViewType<ExtensionOptionsGuest>();
   manager->RegisterGuestViewType<ExtensionViewGuest>();
   manager->RegisterGuestViewType<MimeHandlerViewGuest>();
-  manager->RegisterGuestViewType<SurfaceWorkerGuest>();
   manager->RegisterGuestViewType<WebViewGuest>();
 }
 

@@ -4,6 +4,7 @@
 
 #include "extensions/shell/browser/shell_runtime_api_delegate.h"
 
+#include "build/build_config.h"
 #include "extensions/common/api/runtime.h"
 
 #if defined(OS_CHROMEOS)
@@ -11,7 +12,7 @@
 #include "chromeos/dbus/power_manager_client.h"
 #endif
 
-using extensions::core_api::runtime::PlatformInfo;
+using extensions::api::runtime::PlatformInfo;
 
 namespace extensions {
 
@@ -46,9 +47,9 @@ void ShellRuntimeAPIDelegate::OpenURL(const GURL& uninstall_url) {
 
 bool ShellRuntimeAPIDelegate::GetPlatformInfo(PlatformInfo* info) {
 #if defined(OS_CHROMEOS)
-  info->os = core_api::runtime::PLATFORM_OS_CROS;
+  info->os = api::runtime::PLATFORM_OS_CROS;
 #elif defined(OS_LINUX)
-  info->os = core_api::runtime::PLATFORM_OS_LINUX;
+  info->os = api::runtime::PLATFORM_OS_LINUX;
 #endif
   return true;
 }

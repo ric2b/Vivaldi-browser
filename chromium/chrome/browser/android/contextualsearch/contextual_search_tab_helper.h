@@ -8,6 +8,7 @@
 #include <jni.h>
 
 #include "base/android/jni_weak_ref.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
@@ -17,7 +18,7 @@ class Profile;
 class ContextualSearchTabHelper {
  public:
   ContextualSearchTabHelper(JNIEnv* env, jobject obj, Profile* profile);
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
  private:
   ~ContextualSearchTabHelper();

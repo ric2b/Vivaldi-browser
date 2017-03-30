@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "components/nacl/common/nacl_types.h"
 #include "ipc/ipc_platform_file.h"
 
@@ -9,7 +10,6 @@ namespace nacl {
 
 NaClStartParams::NaClStartParams()
     : nexe_file(IPC::InvalidPlatformFileForTransit()),
-      imc_bootstrap_handle(IPC::InvalidPlatformFileForTransit()),
       irt_handle(IPC::InvalidPlatformFileForTransit()),
 #if defined(OS_MACOSX)
       mac_shm_fd(IPC::InvalidPlatformFileForTransit()),
@@ -19,7 +19,6 @@ NaClStartParams::NaClStartParams()
 #endif
       validation_cache_enabled(false),
       enable_debug_stub(false),
-      enable_ipc_proxy(false),
       process_type(kUnknownNaClProcessType),
       crash_info_shmem_handle(base::SharedMemory::NULLHandle()) {
 }
@@ -68,10 +67,10 @@ NaClLaunchParams::NaClLaunchParams(
     const IPC::PlatformFileForTransit& nexe_file,
     uint64_t nexe_token_lo,
     uint64_t nexe_token_hi,
-    const std::vector<
-        NaClResourcePrefetchRequest>& resource_prefetch_request_list,
+    const std::vector<NaClResourcePrefetchRequest>&
+        resource_prefetch_request_list,
     int render_view_id,
-    uint32 permission_bits,
+    uint32_t permission_bits,
     bool uses_nonsfi_mode,
     NaClAppProcessType process_type)
     : manifest_url(manifest_url),
@@ -82,15 +81,13 @@ NaClLaunchParams::NaClLaunchParams(
       render_view_id(render_view_id),
       permission_bits(permission_bits),
       uses_nonsfi_mode(uses_nonsfi_mode),
-      process_type(process_type) {
-}
+      process_type(process_type) {}
 
 NaClLaunchParams::~NaClLaunchParams() {
 }
 
 NaClLaunchResult::NaClLaunchResult()
-    : imc_channel_handle(IPC::InvalidPlatformFileForTransit()),
-      ppapi_ipc_channel_handle(),
+    : ppapi_ipc_channel_handle(),
       trusted_ipc_channel_handle(),
       plugin_pid(base::kNullProcessId),
       plugin_child_id(0),
@@ -98,15 +95,13 @@ NaClLaunchResult::NaClLaunchResult()
 }
 
 NaClLaunchResult::NaClLaunchResult(
-    const IPC::PlatformFileForTransit& imc_channel_handle,
     const IPC::ChannelHandle& ppapi_ipc_channel_handle,
     const IPC::ChannelHandle& trusted_ipc_channel_handle,
     const IPC::ChannelHandle& manifest_service_ipc_channel_handle,
     base::ProcessId plugin_pid,
     int plugin_child_id,
     base::SharedMemoryHandle crash_info_shmem_handle)
-    : imc_channel_handle(imc_channel_handle),
-      ppapi_ipc_channel_handle(ppapi_ipc_channel_handle),
+    : ppapi_ipc_channel_handle(ppapi_ipc_channel_handle),
       trusted_ipc_channel_handle(trusted_ipc_channel_handle),
       manifest_service_ipc_channel_handle(manifest_service_ipc_channel_handle),
       plugin_pid(plugin_pid),

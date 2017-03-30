@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <gtest/gtest.h>
+#include <stddef.h>
 
 #include <queue>
 #include <string>
@@ -20,6 +21,8 @@
 #include "chromeos/process_proxy/process_output_watcher.h"
 
 namespace chromeos {
+
+namespace {
 
 struct TestCase {
   TestCase(const std::string& input, bool send_terminating_null)
@@ -83,6 +86,12 @@ class ProcessWatcherExpectations {
   size_t received_from_out_;
 };
 
+void StopProcessOutputWatcher(scoped_ptr<ProcessOutputWatcher> watcher) {
+  // Just deleting |watcher| if sufficient.
+}
+
+}  // namespace
+
 class ProcessOutputWatcherTest : public testing::Test {
  public:
   ProcessOutputWatcherTest() : output_watch_thread_started_(false),
@@ -96,15 +105,19 @@ class ProcessOutputWatcherTest : public testing::Test {
       output_watch_thread_->Stop();
   }
 
-  void StartWatch(int pt, int stop) {
-    // This will delete itself.
-    ProcessOutputWatcher* crosh_watcher = new ProcessOutputWatcher(pt, stop,
-        base::Bind(&ProcessOutputWatcherTest::OnRead, base::Unretained(this)));
-    crosh_watcher->Start();
-  }
-
-  void OnRead(ProcessOutputType type, const std::string& output) {
+  void OnRead(ProcessOutputType type,
+              const std::string& output,
+              const base::Closure& ack_callback) {
     ASSERT_FALSE(failed_);
+    // There may be an EXIT signal sent during test tear down (which is sent
+    // by process output watcher when master end of test pseudo-terminal is
+    // closed). If this happens, ignore it. If EXIT is seen before test
+    // expectations are met, fall through in order to fail the test.
+    if (type == PROCESS_OUTPUT_TYPE_EXIT && expectations_.IsDone()) {
+      ASSERT_TRUE(test_case_done_callback_.is_null());
+      return;
+    }
+
     failed_ = !expectations_.CheckExpectations(output, type);
     if (failed_ || expectations_.IsDone()) {
       ASSERT_FALSE(test_case_done_callback_.is_null());
@@ -112,6 +125,9 @@ class ProcessOutputWatcherTest : public testing::Test {
                                             test_case_done_callback_);
       test_case_done_callback_.Reset();
     }
+
+    ASSERT_FALSE(ack_callback.is_null());
+    message_loop_.task_runner()->PostTask(FROM_HERE, ack_callback);
   }
 
  protected:
@@ -125,17 +141,20 @@ class ProcessOutputWatcherTest : public testing::Test {
   void RunTest(const std::vector<TestCase>& test_cases) {
     ASSERT_FALSE(output_watch_thread_started_);
     output_watch_thread_.reset(new base::Thread("ProcessOutpuWatchThread"));
-    output_watch_thread_started_ = output_watch_thread_->Start();
+    output_watch_thread_started_ = output_watch_thread_->StartWithOptions(
+        base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
     ASSERT_TRUE(output_watch_thread_started_);
 
-    int pt_pipe[2], stop_pipe[2];
+    int pt_pipe[2];
     ASSERT_FALSE(HANDLE_EINTR(pipe(pt_pipe)));
-    ASSERT_FALSE(HANDLE_EINTR(pipe(stop_pipe)));
+
+    scoped_ptr<ProcessOutputWatcher> crosh_watcher(new ProcessOutputWatcher(
+        pt_pipe[0],
+        base::Bind(&ProcessOutputWatcherTest::OnRead, base::Unretained(this))));
 
     output_watch_thread_->task_runner()->PostTask(
-        FROM_HERE,
-        base::Bind(&ProcessOutputWatcherTest::StartWatch,
-                   base::Unretained(this), pt_pipe[0], stop_pipe[0]));
+        FROM_HERE, base::Bind(&ProcessOutputWatcher::Start,
+                              base::Unretained(crosh_watcher.get())));
 
     for (size_t i = 0; i < test_cases.size(); i++) {
       expectations_.SetTestCase(test_cases[i]);
@@ -159,10 +178,10 @@ class ProcessOutputWatcherTest : public testing::Test {
         break;
     }
 
-    // Send stop signal. It is not important which string we send.
-    EXPECT_TRUE(base::WriteFileDescriptor(stop_pipe[1], "q", 1));
+    output_watch_thread_->task_runner()->PostTask(
+        FROM_HERE,
+        base::Bind(&StopProcessOutputWatcher, base::Passed(&crosh_watcher)));
 
-    EXPECT_NE(-1, IGNORE_EINTR(close(stop_pipe[1])));
     EXPECT_NE(-1, IGNORE_EINTR(close(pt_pipe[1])));
   }
 
@@ -176,8 +195,7 @@ class ProcessOutputWatcherTest : public testing::Test {
   std::vector<TestCase> exp;
 };
 
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_OutputWatcher) {
+TEST_F(ProcessOutputWatcherTest, OutputWatcher) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(TestCase("t", false));
   test_cases.push_back(TestCase("testing output\n", false));
@@ -192,8 +210,7 @@ TEST_F(ProcessOutputWatcherTest, DISABLED_OutputWatcher) {
   RunTest(test_cases);
 }
 
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_SplitUTF8Character) {
+TEST_F(ProcessOutputWatcherTest, SplitUTF8Character) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(TestCase("test1\xc2", false, "test1"));
   test_cases.push_back(TestCase("\xb5test1", false, "\xc2\xb5test1"));
@@ -201,8 +218,7 @@ TEST_F(ProcessOutputWatcherTest, DISABLED_SplitUTF8Character) {
   RunTest(test_cases);
 }
 
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_SplitSoleUTF8Character) {
+TEST_F(ProcessOutputWatcherTest, SplitSoleUTF8Character) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(TestCase("\xc2", false, ""));
   test_cases.push_back(TestCase("\xb5", false, "\xc2\xb5"));
@@ -210,8 +226,7 @@ TEST_F(ProcessOutputWatcherTest, DISABLED_SplitSoleUTF8Character) {
   RunTest(test_cases);
 }
 
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_SplitUTF8CharacterLength3) {
+TEST_F(ProcessOutputWatcherTest, SplitUTF8CharacterLength3) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(TestCase("test3\xe2\x82", false, "test3"));
   test_cases.push_back(TestCase("\xac", false, "\xe2\x82\xac"));
@@ -219,8 +234,7 @@ TEST_F(ProcessOutputWatcherTest, DISABLED_SplitUTF8CharacterLength3) {
   RunTest(test_cases);
 }
 
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_SplitSoleUTF8CharacterThreeWays) {
+TEST_F(ProcessOutputWatcherTest, SplitSoleUTF8CharacterThreeWays) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(TestCase("\xe2", false, ""));
   test_cases.push_back(TestCase("\x82", false, ""));
@@ -258,8 +272,7 @@ TEST_F(ProcessOutputWatcherTest, MulitByteUTF8CharNullTerminated) {
   RunTest(test_cases);
 }
 
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_MultipleMultiByteUTF8Characters) {
+TEST_F(ProcessOutputWatcherTest, MultipleMultiByteUTF8Characters) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(
       TestCase("test\xe2\x82\xac\xc2", false, "test\xe2\x82\xac"));
@@ -275,8 +288,7 @@ TEST_F(ProcessOutputWatcherTest, ContainsInvalidUTF8) {
   RunTest(test_cases);
 }
 
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_InvalidUTF8SeriesOfTrailingBytes) {
+TEST_F(ProcessOutputWatcherTest, InvalidUTF8SeriesOfTrailingBytes) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(TestCase("\x82\x82\x82", false, "\x82\x82\x82"));
   test_cases.push_back(TestCase("\x82\x82\x82", false, "\x82\x82\x82"));
@@ -291,8 +303,7 @@ TEST_F(ProcessOutputWatcherTest, EndsWithInvalidUTF8) {
   RunTest(test_cases);
 }
 
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_FourByteUTF8) {
+TEST_F(ProcessOutputWatcherTest, FourByteUTF8) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(TestCase("\xf0\xa4\xad", false, ""));
   test_cases.push_back(TestCase("\xa2", false, "\xf0\xa4\xad\xa2"));
@@ -302,8 +313,7 @@ TEST_F(ProcessOutputWatcherTest, DISABLED_FourByteUTF8) {
 
 // Verifies that sending '\0' generates PROCESS_OUTPUT_TYPE_OUT event and does
 // not terminate output watcher.
-// http://crbug.com/396496
-TEST_F(ProcessOutputWatcherTest, DISABLED_SendNull) {
+TEST_F(ProcessOutputWatcherTest, SendNull) {
   std::vector<TestCase> test_cases;
   // This will send '\0' to output watcher.
   test_cases.push_back(TestCase("", true));

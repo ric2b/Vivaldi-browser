@@ -69,33 +69,12 @@ cr.define('options', function() {
       $('autofill-options-confirm').onclick = function(event) {
         PageManager.closeOverlay();
       };
-// TODO(erikchen): After Address Book integration has been disabled for
-// 6 weeks, and there are no major problems, rip out all the code. Expected
-// removal date: 07/15/2015. http://crbug.com/488146.
-/*
-<if expr="is_macosx">
-      $('autofill-use-mac-address-book-checkbox').onchange = function(event) {
-        if (this.checked) {
-          setTimeout(function() {
-            // Prompt the user to give Chrome access to the user's Address
-            // Book, if the user was not previously prompted. The dialog that
-            // appears blocks the Chrome process, so wait for a small period of
-            // time to allow the checkbox to appear filled in.
-            chrome.send('accessAddressBook');
-          }, 10);
-        }
-      };
-</if>
-*/
 
       $('autofill-help').onclick = function(event) {
         chrome.send('coreOptionsUserMetricsAction',
                     ['Options_AutofillShowAbout']);
         return true;  // Always follow the href
       };
-
-      this.walletIntegrationAvailableStateChanged_(
-          loadTimeData.getBoolean('autofillWalletIntegrationAvailable'));
 
       // TODO(jhawkins): What happens when Autofill is disabled whilst on the
       // Autofill options page?
@@ -205,16 +184,6 @@ cr.define('options', function() {
       AutofillEditCreditCardOverlay.loadCreditCard(creditCard);
       PageManager.showPageByName('autofillEditCreditCard');
     },
-
-    /**
-     * Toggles the visibility of the Wallet integration checkbox.
-     * @param {boolean} available Whether the user has the option of using
-     *     Wallet data.
-     * @private
-     */
-    walletIntegrationAvailableStateChanged_: function(available) {
-      $('autofill-wallet-setting-area').hidden = !available;
-    },
   };
 
   AutofillOptions.setAddressList = function(entries) {
@@ -231,11 +200,6 @@ cr.define('options', function() {
 
   AutofillOptions.editAddress = function(address) {
     AutofillOptions.getInstance().showEditAddressOverlay_(address);
-  };
-
-  AutofillOptions.walletIntegrationAvailableStateChanged = function(available) {
-    AutofillOptions.getInstance().
-        walletIntegrationAvailableStateChanged_(available);
   };
 
   /**

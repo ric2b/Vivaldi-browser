@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_COMMON_MANIFEST_CONSTANTS_H_
 #define EXTENSIONS_COMMON_MANIFEST_CONSTANTS_H_
 
+#include "build/build_config.h"
+
 namespace extensions {
 
 // Keys used in JSON representation of extensions.
@@ -71,6 +73,7 @@ extern const char kKeycode[];
 extern const char kKioskEnabled[];
 extern const char kKioskOnly[];
 extern const char kKioskMode[];
+extern const char kKioskSecondaryApps[];
 extern const char kLanguage[];
 extern const char kLaunch[];
 extern const char kLaunchContainer[];
@@ -91,7 +94,6 @@ extern const char kMIMETypes[];
 extern const char kMimeTypesHandler[];
 extern const char kMinimumChromeVersion[];
 extern const char kMinimumVersion[];
-extern const char kNaClArch[];
 extern const char kNaClModules[];
 extern const char kNaClModulesMIMEType[];
 extern const char kNaClModulesPath[];
@@ -122,7 +124,6 @@ extern const char kPlatformAppBackground[];
 extern const char kPlatformAppBackgroundPage[];
 extern const char kPlatformAppBackgroundScripts[];
 extern const char kPlatformAppContentSecurityPolicy[];
-extern const char kPlatforms[];
 extern const char kPlugins[];
 extern const char kPluginsPath[];
 extern const char kPluginsPublic[];
@@ -145,7 +146,6 @@ extern const char kSpellcheckDictionaryLanguage[];
 extern const char kSpellcheckDictionaryLocale[];
 extern const char kSpellcheckDictionaryPath[];
 extern const char kStorageManagedSchema[];
-extern const char kSubPackagePath[];
 extern const char kSuggestedKey[];
 extern const char kSynthesizeExtensionAction[];
 extern const char kSystemIndicator[];
@@ -194,6 +194,7 @@ namespace manifest_values {
 
 extern const char kApiKey[];
 extern const char kBrowserActionCommandEvent[];
+extern const char kIncognitoNotAllowed[];
 extern const char kIncognitoSplit[];
 extern const char kIncognitoSpanning[];
 extern const char kIsolatedStorage[];
@@ -251,6 +252,7 @@ extern const char kCannotAccessAboutUrl[];
 extern const char kCannotAccessChromeUrl[];
 extern const char kCannotAccessExtensionUrl[];
 extern const char kCannotAccessPage[];
+extern const char kCannotAccessPageWithUrl[];
 extern const char kCannotChangeExtensionID[];
 extern const char kCannotClaimAllHostsInExtent[];
 extern const char kCannotClaimAllURLsInExtent[];
@@ -350,6 +352,9 @@ extern const char kInvalidKeyBindingUnknownPlatform[];
 extern const char kInvalidKioskEnabled[];
 extern const char kInvalidKioskOnly[];
 extern const char kInvalidKioskOnlyButNotEnabled[];
+extern const char kInvalidKioskSecondaryApps[];
+extern const char kInvalidKioskSecondaryAppsBadAppEntry[];
+extern const char kInvalidKioskSecondaryAppsBadAppId[];
 extern const char kInvalidLauncherPage[];
 extern const char kInvalidLauncherPagePage[];
 extern const char kInvalidLaunchContainer[];

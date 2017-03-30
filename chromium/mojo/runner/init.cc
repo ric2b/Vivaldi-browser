@@ -4,14 +4,19 @@
 
 #include "mojo/runner/init.h"
 
+#include <stdint.h>
+
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
+#include "base/files/file_path.h"
+#include "base/i18n/icu_util.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "mojo/runner/switches.h"
+#include "mojo/runner/host/switches.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -37,23 +42,46 @@ void WaitForDebuggerIfNecessary() {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kWaitForDebugger)) {
-    std::vector<std::string> apps_to_debug;
-    base::SplitString(
-        command_line->GetSwitchValueASCII(switches::kWaitForDebugger), ',',
-        &apps_to_debug);
-    std::string app = command_line->GetSwitchValueASCII(switches::kApp);
-    if (app.empty())
-      app = "launcher";  // If we're not in a child process look for "launcher".
+    std::vector<std::string> apps_to_debug = base::SplitString(
+        command_line->GetSwitchValueASCII(switches::kWaitForDebugger), ",",
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    std::string app = "launcher";
+    if (command_line->HasSwitch(switches::kChildProcess)) {
+      app = command_line->GetSwitchValuePath(switches::kChildProcess)
+                .BaseName()
+                .RemoveExtension()
+                .MaybeAsASCII();
+    }
     if (apps_to_debug.empty() || ContainsValue(apps_to_debug, app)) {
 #if defined(OS_WIN)
       base::string16 appw = base::UTF8ToUTF16(app);
-      MessageBox(NULL, appw.c_str(), appw.c_str(), MB_OK | MB_SETFOREGROUND);
+      base::string16 message = base::UTF8ToUTF16(
+          base::StringPrintf("%s - %d", app.c_str(), GetCurrentProcessId()));
+      MessageBox(NULL, message.c_str(), appw.c_str(), MB_OK | MB_SETFOREGROUND);
 #else
       LOG(ERROR) << app << " waiting for GDB. pid: " << getpid();
       base::debug::WaitForDebugger(60, true);
 #endif
     }
   }
+}
+
+void CallLibraryEarlyInitialization(base::NativeLibrary app_library) {
+  // Do whatever warming that the mojo application wants.
+  typedef void (*LibraryEarlyInitFunction)(const uint8_t*);
+  LibraryEarlyInitFunction init_function =
+      reinterpret_cast<LibraryEarlyInitFunction>(
+          base::GetFunctionPointerFromNativeLibrary(app_library,
+                                                    "InitializeBase"));
+  if (init_function) {
+    // Get the ICU data that we prewarmed in the runner and then pass it to
+    // the copy of icu in the mojo binary that we're running.
+    const uint8_t* icu_data = base::i18n::GetRawIcuMemory();
+    init_function(icu_data);
+  }
+
+  // TODO(erg): All chromium binaries load base. We might want to make a
+  // general system for other people.
 }
 
 }  // namespace runner

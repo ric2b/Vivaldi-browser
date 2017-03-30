@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_controller_impl.h"
@@ -25,6 +26,10 @@ class ChromeBrowserState;
 
 namespace password_manager {
 class PasswordGenerationManager;
+}
+
+namespace sync_driver {
+class SyncService;
 }
 
 namespace autofill {
@@ -47,14 +52,22 @@ class AutofillClientIOS : public AutofillClient {
   // AutofillClient implementation.
   PersonalDataManager* GetPersonalDataManager() override;
   PrefService* GetPrefs() override;
+  sync_driver::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporService* GetRapporService() override;
   void HideRequestAutocompleteDialog() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         base::WeakPtr<CardUnmaskDelegate> delegate) override;
-  void OnUnmaskVerificationResult(GetRealPanResult result) override;
-  void ConfirmSaveCreditCard(const base::Closure& save_card_callback) override;
+  void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
+  void ConfirmSaveCreditCardLocally(const CreditCard& card,
+                                    const base::Closure& callback) override;
+  void ConfirmSaveCreditCardToCloud(
+      const CreditCard& card,
+      scoped_ptr<base::DictionaryValue> legal_message,
+      const base::Closure& callback) override;
+  void LoadRiskData(
+      const base::Callback<void(const std::string&)>& callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(const CreditCardScanCallback& callback) override;
   void ShowRequestAutocompleteDialog(
@@ -77,7 +90,6 @@ class AutofillClientIOS : public AutofillClient {
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
   void OnFirstUserGestureObserved() override;
-  void LinkClicked(const GURL& url, WindowOpenDisposition disposition) override;
   scoped_refptr<AutofillWebDataService> GetDatabase() override;
   bool IsContextSecure(const GURL& form_origin) override;
 

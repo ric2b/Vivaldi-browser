@@ -41,14 +41,12 @@
         'test/engine/fake_model_worker.h',
         'test/engine/fake_sync_scheduler.cc',
         'test/engine/fake_sync_scheduler.h',
-        'test/engine/injectable_sync_context_proxy.cc',
-        'test/engine/injectable_sync_context_proxy.h',
+        'test/engine/mock_commit_queue.cc',
+        'test/engine/mock_commit_queue.h',
         'test/engine/mock_connection_manager.cc',
         'test/engine/mock_connection_manager.h',
-        'test/engine/mock_model_type_sync_proxy.cc',
-        'test/engine/mock_model_type_sync_proxy.h',
-        'test/engine/mock_model_type_sync_worker.cc',
-        'test/engine/mock_model_type_sync_worker.h',
+        'test/engine/mock_model_type_processor.cc',
+        'test/engine/mock_model_type_processor.h',
         'test/engine/mock_nudge_handler.cc',
         'test/engine/mock_nudge_handler.h',
         'test/engine/mock_update_handler.cc',
@@ -185,12 +183,16 @@
         'test_support_sync_core',
       ],
       'sources': [
+        'internal_api/public/test/fake_metadata_change_list.h',
+        'internal_api/public/test/fake_model_type_service.h',
         'internal_api/public/test/fake_sync_manager.h',
         'internal_api/public/test/null_sync_context_proxy.h',
         'internal_api/public/test/sync_manager_factory_for_profile_sync_test.h',
         'internal_api/public/test/test_entry_factory.h',
         'internal_api/public/test/test_internal_components_factory.h',
         'internal_api/public/test/test_user_share.h',
+        'internal_api/test/fake_metadata_change_list.cc',
+        'internal_api/test/fake_model_type_service.cc',
         'internal_api/test/fake_sync_manager.cc',
         'internal_api/test/null_sync_context_proxy.cc',
         'internal_api/test/sync_manager_factory_for_profile_sync_test.cc',
@@ -226,6 +228,8 @@
         'api/fake_sync_change_processor.h',
         'api/fake_syncable_service.cc',
         'api/fake_syncable_service.h',
+        'api/mock_model_type_store.cc',
+        'api/mock_model_type_store.h',
         'api/sync_change_processor_wrapper_for_test.cc',
         'api/sync_change_processor_wrapper_for_test.h',
         'api/sync_error_factory_mock.cc',
@@ -267,6 +271,7 @@
         'api/attachments/attachment_id_unittest.cc',
         'api/attachments/attachment_metadata_unittest.cc',
         'api/attachments/attachment_unittest.cc',
+        'api/entity_data_unittest.cc',
         'api/sync_change_unittest.cc',
         'api/sync_data_unittest.cc',
         'api/sync_error_unittest.cc',
@@ -277,9 +282,7 @@
         'engine/directory_update_handler_unittest.cc',
         'engine/entity_tracker_unittest.cc',
         'engine/get_updates_processor_unittest.cc',
-        'engine/model_type_entity_unittest.cc',
-        'engine/model_type_sync_proxy_impl_unittest.cc',
-        'engine/model_type_sync_worker_impl_unittest.cc',
+        'engine/model_type_worker_unittest.cc',
         'engine/sync_scheduler_unittest.cc',
         'engine/syncer_proto_util_unittest.cc',
         'engine/syncer_unittest.cc',
@@ -300,6 +303,9 @@
         'internal_api/js_mutation_event_observer_unittest.cc',
         'internal_api/js_sync_encryption_handler_observer_unittest.cc',
         'internal_api/js_sync_manager_observer_unittest.cc',
+        'internal_api/model_type_entity_unittest.cc',
+        'internal_api/model_type_store_backend_unittest.cc',
+        'internal_api/model_type_store_impl_unittest.cc',
         'internal_api/protocol_event_buffer_unittest.cc',
         'internal_api/public/base/attachment_id_proto_unittest.cc',
         'internal_api/public/base/cancelation_signal_unittest.cc',
@@ -308,10 +314,13 @@
         'internal_api/public/base/ordinal_unittest.cc',
         'internal_api/public/base/unique_position_unittest.cc',
         'internal_api/public/change_record_unittest.cc',
+        'internal_api/public/data_batch_impl_unittest.cc',
         'internal_api/public/engine/model_safe_worker_unittest.cc',
         'internal_api/public/sessions/sync_session_snapshot_unittest.cc',
         'internal_api/public/util/immutable_unittest.cc',
+        'internal_api/public/util/proto_value_ptr_unittest.cc',
         'internal_api/public/util/weak_handle_unittest.cc',
+        'internal_api/shared_model_type_processor_unittest.cc',
         'internal_api/sync_backup_manager_unittest.cc',
         'internal_api/sync_context_proxy_impl_unittest.cc',
         'internal_api/sync_encryption_handler_impl_unittest.cc',
@@ -334,7 +343,6 @@
         'syncable/model_type_unittest.cc',
         'syncable/nigori_util_unittest.cc',
         'syncable/parent_child_index_unittest.cc',
-        'syncable/proto_value_ptr_unittest.cc',
         'syncable/syncable_enum_conversions_unittest.cc',
         'syncable/syncable_id_unittest.cc',
         'syncable/syncable_unittest.cc',
@@ -374,7 +382,7 @@
     },
   ],
   'conditions': [
-    ['0 and OS != "ios"', {
+    ['OS != "ios"', {
       'targets': [
         # A tool that can be used to launch a python sync server instance.
         {
@@ -436,8 +444,7 @@
           'includes': [ '../build/jni_generator.gypi' ],
         },
         {
-          # TODO(pvalenzuela): Create GN version of this target.
-          # http://crbug.com/475612
+          # GN: //sync:test_support_sync_proto_java
           'target_name': 'test_support_sync_proto_java',
           'type': 'none',
           'variables': {
@@ -503,6 +510,25 @@
           },
           'includes': [ '../build/apk_test.gypi' ],
         },
+      ],
+      'conditions': [
+        ['test_isolation_mode != "noop"', {
+          'targets': [
+            {
+              'target_name': 'sync_unit_tests_apk_run',
+              'type': 'none',
+              'dependencies': [
+                'sync_unit_tests_apk',
+              ],
+              'includes': [
+                '../build/isolate.gypi',
+              ],
+              'sources': [
+                'sync_unit_tests_apk.isolate',
+              ],
+            },
+          ],
+        }],
       ],
     }],
     ['test_isolation_mode != "noop"', {

@@ -4,14 +4,21 @@
 
 #include "chrome/renderer/spellchecker/spellcheck.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/common/spellcheck_common.h"
 #include "chrome/common/spellcheck_result.h"
 #include "chrome/renderer/spellchecker/hunspell_engine.h"
+#include "chrome/renderer/spellchecker/spellcheck_language.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebTextCheckingCompletion.h"
@@ -20,6 +27,8 @@
 #define TYPOGRAPHICAL_APOSTROPHE L"\x2019"
 
 namespace {
+const int kNoOffset = 0;
+const int kNoTag = 0;
 
 base::FilePath GetHunspellDirectory() {
   base::FilePath hunspell_directory;
@@ -63,14 +72,13 @@ class SpellCheckTest : public testing::Test {
 #if defined(OS_MACOSX)
     // TODO(groby): Forcing spellcheck to use hunspell, even on OSX.
     // Instead, tests should exercise individual spelling engines.
-    spell_check_->spellcheck_.platform_spelling_engine_.reset(
+    spell_check_->languages_.push_back(new SpellcheckLanguage());
+    spell_check_->languages_.front()->platform_spelling_engine_.reset(
         new HunspellEngine);
+    spell_check_->languages_.front()->Init(std::move(file), language);
+#else
+    spell_check_->AddSpellcheckLanguage(std::move(file), language);
 #endif
-    spell_check_->Init(file.Pass(), std::set<std::string>(), language);
-  }
-
-  void EnableAutoCorrect(bool enable_autocorrect) {
-    spell_check_->OnEnableAutoSpellCorrect(enable_autocorrect);
   }
 
   ~SpellCheckTest() override {}
@@ -78,12 +86,19 @@ class SpellCheckTest : public testing::Test {
   SpellCheck* spell_check() { return spell_check_.get(); }
 
   bool CheckSpelling(const std::string& word, int tag) {
-    return spell_check_->spellcheck_.platform_spelling_engine_->CheckSpelling(
-        base::ASCIIToUTF16(word), tag);
+    return spell_check_->languages_.front()
+        ->platform_spelling_engine_->CheckSpelling(base::ASCIIToUTF16(word),
+                                                   tag);
   }
 
   bool IsValidContraction(const base::string16& word, int tag) {
-    return spell_check_->spellcheck_.IsValidContraction(word, tag);
+    return spell_check_->languages_.front()->IsValidContraction(word, tag);
+  }
+
+  static void FillSuggestions(
+      const std::vector<std::vector<base::string16>>& suggestions_list,
+      std::vector<base::string16>* optional_suggestions) {
+    SpellCheck::FillSuggestions(suggestions_list, optional_suggestions);
   }
 
 #if !defined(OS_MACOSX)
@@ -393,8 +408,9 @@ TEST_F(SpellCheckTest, SpellCheckStrings_EN_US) {
     int misspelling_length;
     bool result = spell_check()->SpellCheckWord(
         base::WideToUTF16(kTestCases[i].input).c_str(),
+        kNoOffset,
         static_cast<int>(input_length),
-        0,
+        kNoTag,
         &misspelling_start,
         &misspelling_length, NULL);
 
@@ -445,8 +461,9 @@ TEST_F(SpellCheckTest, SpellCheckSuggestions_EN_US) {
     int misspelling_length;
     bool result = spell_check()->SpellCheckWord(
         base::WideToUTF16(kTestCases[i].input).c_str(),
+        kNoOffset,
         static_cast<int>(input_length),
-        0,
+        kNoTag,
         &misspelling_start,
         &misspelling_length,
         &suggestions);
@@ -824,8 +841,9 @@ TEST_F(SpellCheckTest, MAYBE_SpellCheckText) {
     int misspelling_length = 0;
     bool result = spell_check()->SpellCheckWord(
         base::WideToUTF16(kTestCases[i].input).c_str(),
+        kNoOffset,
         static_cast<int>(input_length),
-        0,
+        kNoTag,
         &misspelling_start,
         &misspelling_length, NULL);
 
@@ -838,36 +856,6 @@ TEST_F(SpellCheckTest, MAYBE_SpellCheckText) {
         << ".";
     EXPECT_EQ(0, misspelling_start);
     EXPECT_EQ(0, misspelling_length);
-  }
-}
-
-TEST_F(SpellCheckTest, GetAutoCorrectionWord_EN_US) {
-  static const struct {
-    // A misspelled word.
-    const char* input;
-
-    // An expected result for this test case.
-    // Should be an empty string if there are no suggestions for auto correct.
-    const char* expected_result;
-  } kTestCases[] = {
-    {"teh", "the"},
-    {"moer", "more"},
-    {"watre", "water"},
-    {"noen", ""},
-    {"what", ""},
-  };
-
-  EnableAutoCorrect(true);
-
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
-    base::string16 misspelled_word(base::UTF8ToUTF16(kTestCases[i].input));
-    base::string16 expected_autocorrect_word(
-        base::UTF8ToUTF16(kTestCases[i].expected_result));
-    base::string16 autocorrect_word = spell_check()->GetAutoCorrectionWord(
-        misspelled_word, 0);
-
-    // Check for spelling.
-    EXPECT_EQ(expected_autocorrect_word, autocorrect_word);
   }
 }
 
@@ -909,8 +897,9 @@ TEST_F(SpellCheckTest, MisspelledWords) {
     int misspelling_start = 0;
     int misspelling_length = 0;
     bool result = spell_check()->SpellCheckWord(word.c_str(),
+                                                kNoOffset,
                                                 word_length,
-                                                0,
+                                                kNoTag,
                                                 &misspelling_start,
                                                 &misspelling_length,
                                                 NULL);
@@ -1236,20 +1225,6 @@ TEST_F(SpellCheckTest, CreateTextCheckingResultsKeepsTypographicalApostrophe) {
   }
 }
 
-// Verify that the SpellCheck class does not crash with empty |line_text|. This
-// happens only with DO_NOT_MODIFY flag.
-TEST_F(SpellCheckTest, CreateTextCheckingResultsDoesNotCrashWithEmptyLineText) {
-  std::vector<SpellCheckResult> spellcheck_results;
-  spellcheck_results.push_back(
-      SpellCheckResult(SpellCheckResult::SPELLING, 0, 1, base::string16()));
-  spellcheck_results.push_back(
-      SpellCheckResult(SpellCheckResult::SPELLING, 1, 1, base::string16()));
-  blink::WebVector<blink::WebTextCheckingResult> textcheck_results;
-  spell_check()->CreateTextCheckingResults(SpellCheck::DO_NOT_MODIFY, 0,
-                                           base::string16(), spellcheck_results,
-                                           &textcheck_results);
-}
-
 // Checks some words that should be present in all English dictionaries.
 TEST_F(SpellCheckTest, EnglishWords) {
   static const struct {
@@ -1291,8 +1266,9 @@ TEST_F(SpellCheckTest, EnglishWords) {
       int misspelling_length = 0;
       bool result = spell_check()->SpellCheckWord(
           base::ASCIIToUTF16(kTestCases[i].input).c_str(),
+          kNoOffset,
           static_cast<int>(input_length),
-          0,
+          kNoTag,
           &misspelling_start,
           &misspelling_length, NULL);
 
@@ -1338,8 +1314,9 @@ TEST_F(SpellCheckTest, NoSuggest) {
     int misspelling_length = 0;
     bool result = spell_check()->SpellCheckWord(
         base::ASCIIToUTF16(kTestCases[i].suggestion).c_str(),
+        kNoOffset,
         static_cast<int>(suggestion_length),
-        0,
+        kNoTag,
         &misspelling_start,
         &misspelling_length, NULL);
 
@@ -1353,8 +1330,9 @@ TEST_F(SpellCheckTest, NoSuggest) {
       input_length = strlen(kTestCases[i].input);
     result = spell_check()->SpellCheckWord(
         base::ASCIIToUTF16(kTestCases[i].input).c_str(),
+        kNoOffset,
         static_cast<int>(input_length),
-        0,
+        kNoTag,
         &misspelling_start,
         &misspelling_length,
         &suggestions);
@@ -1413,8 +1391,9 @@ TEST_F(SpellCheckTest, SpellingEngine_CheckSpelling) {
   // flags internal state that a dictionary was requested. The second one will
   // take the passed-in file and initialize hunspell with it. (The file was
   // passed to hunspell in the ctor for the test fixture).
-  // This needs to be done since we need to ensure the SpellingEngine object
-  // contained in |spellcheck_| from the test fixture does get initialized.
+  // This needs to be done since we need to ensure the SpellingEngine objects
+  // contained in the SpellcheckLanguages in |languages_| from the test fixture
+  // does get initialized.
   // TODO(groby): Clean up this mess.
   InitializeIfNeeded();
   ASSERT_FALSE(InitializeIfNeeded());
@@ -1443,8 +1422,9 @@ TEST_F(SpellCheckTest, LogicalSuggestions) {
     std::vector<base::string16> suggestions;
     EXPECT_FALSE(spell_check()->SpellCheckWord(
         base::ASCIIToUTF16(kTestCases[i].misspelled).c_str(),
+        kNoOffset,
         strlen(kTestCases[i].misspelled),
-        0,
+        kNoTag,
         &misspelling_start,
         &misspelling_length,
         &suggestions));
@@ -1473,4 +1453,107 @@ TEST_F(SpellCheckTest, IsValidContraction) {
     for (size_t j = 0; j < arraysize(kWords); ++j)
       EXPECT_TRUE(IsValidContraction(base::WideToUTF16(kWords[j]), 0));
   }
+}
+
+TEST_F(SpellCheckTest, FillSuggestions_OneLanguageNoSuggestions) {
+  std::vector<std::vector<base::string16>> suggestions_list;
+  std::vector<base::string16> suggestion_results;
+
+  suggestions_list.resize(1);
+
+  FillSuggestions(suggestions_list, &suggestion_results);
+  EXPECT_TRUE(suggestion_results.empty());
+}
+
+TEST_F(SpellCheckTest, FillSuggestions_OneLanguageFewSuggestions) {
+  std::vector<std::vector<base::string16>> suggestions_list;
+  std::vector<base::string16> suggestion_results;
+
+  suggestions_list.resize(1);
+  suggestions_list[0].push_back(base::ASCIIToUTF16("foo"));
+
+  FillSuggestions(suggestions_list, &suggestion_results);
+  ASSERT_EQ(1U, suggestion_results.size());
+  EXPECT_EQ(base::ASCIIToUTF16("foo"), suggestion_results[0]);
+}
+
+TEST_F(SpellCheckTest, FillSuggestions_OneLanguageManySuggestions) {
+  std::vector<std::vector<base::string16>> suggestions_list;
+  std::vector<base::string16> suggestion_results;
+
+  suggestions_list.resize(1);
+  for (int i = 0; i < chrome::spellcheck_common::kMaxSuggestions + 2; ++i)
+    suggestions_list[0].push_back(base::ASCIIToUTF16(base::IntToString(i)));
+
+  FillSuggestions(suggestions_list, &suggestion_results);
+  ASSERT_EQ(static_cast<size_t>(chrome::spellcheck_common::kMaxSuggestions),
+            suggestion_results.size());
+  for (int i = 0; i < chrome::spellcheck_common::kMaxSuggestions; ++i)
+    EXPECT_EQ(base::ASCIIToUTF16(base::IntToString(i)), suggestion_results[i]);
+}
+
+TEST_F(SpellCheckTest, FillSuggestions_RemoveDuplicates) {
+  std::vector<std::vector<base::string16>> suggestions_list;
+  std::vector<base::string16> suggestion_results;
+
+  suggestions_list.resize(2);
+  for (size_t i = 0; i < 2; ++i) {
+    suggestions_list[i].push_back(base::ASCIIToUTF16("foo"));
+    suggestions_list[i].push_back(base::ASCIIToUTF16("bar"));
+    suggestions_list[i].push_back(base::ASCIIToUTF16("baz"));
+  }
+
+  FillSuggestions(suggestions_list, &suggestion_results);
+  ASSERT_EQ(3U, suggestion_results.size());
+  EXPECT_EQ(base::ASCIIToUTF16("foo"), suggestion_results[0]);
+  EXPECT_EQ(base::ASCIIToUTF16("bar"), suggestion_results[1]);
+  EXPECT_EQ(base::ASCIIToUTF16("baz"), suggestion_results[2]);
+}
+
+TEST_F(SpellCheckTest, FillSuggestions_TwoLanguages) {
+  std::vector<std::vector<base::string16>> suggestions_list;
+  std::vector<base::string16> suggestion_results;
+
+  suggestions_list.resize(2);
+  for (size_t i = 0; i < 2; ++i) {
+    std::string prefix = base::IntToString(i);
+    suggestions_list[i].push_back(base::ASCIIToUTF16(prefix + "foo"));
+    suggestions_list[i].push_back(base::ASCIIToUTF16(prefix + "bar"));
+    suggestions_list[i].push_back(base::ASCIIToUTF16(prefix + "baz"));
+  }
+
+  // Yes, this test assumes kMaxSuggestions is 5. If it isn't, the test needs
+  // to be updated accordingly.
+  ASSERT_EQ(5, chrome::spellcheck_common::kMaxSuggestions);
+  FillSuggestions(suggestions_list, &suggestion_results);
+  ASSERT_EQ(5U, suggestion_results.size());
+  EXPECT_EQ(base::ASCIIToUTF16("0foo"), suggestion_results[0]);
+  EXPECT_EQ(base::ASCIIToUTF16("1foo"), suggestion_results[1]);
+  EXPECT_EQ(base::ASCIIToUTF16("0bar"), suggestion_results[2]);
+  EXPECT_EQ(base::ASCIIToUTF16("1bar"), suggestion_results[3]);
+  EXPECT_EQ(base::ASCIIToUTF16("0baz"), suggestion_results[4]);
+}
+
+TEST_F(SpellCheckTest, FillSuggestions_ThreeLanguages) {
+  std::vector<std::vector<base::string16>> suggestions_list;
+  std::vector<base::string16> suggestion_results;
+
+  suggestions_list.resize(3);
+  for (size_t i = 0; i < 3; ++i) {
+    std::string prefix = base::IntToString(i);
+    suggestions_list[i].push_back(base::ASCIIToUTF16(prefix + "foo"));
+    suggestions_list[i].push_back(base::ASCIIToUTF16(prefix + "bar"));
+    suggestions_list[i].push_back(base::ASCIIToUTF16(prefix + "baz"));
+  }
+
+  // Yes, this test assumes kMaxSuggestions is 5. If it isn't, the test needs
+  // to be updated accordingly.
+  ASSERT_EQ(5, chrome::spellcheck_common::kMaxSuggestions);
+  FillSuggestions(suggestions_list, &suggestion_results);
+  ASSERT_EQ(5U, suggestion_results.size());
+  EXPECT_EQ(base::ASCIIToUTF16("0foo"), suggestion_results[0]);
+  EXPECT_EQ(base::ASCIIToUTF16("1foo"), suggestion_results[1]);
+  EXPECT_EQ(base::ASCIIToUTF16("2foo"), suggestion_results[2]);
+  EXPECT_EQ(base::ASCIIToUTF16("0bar"), suggestion_results[3]);
+  EXPECT_EQ(base::ASCIIToUTF16("1bar"), suggestion_results[4]);
 }

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate.h"
 
+#include <stdint.h>
+
 #include <set>
 
 #include "base/base64.h"
@@ -17,6 +19,7 @@
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -93,6 +96,46 @@ std::string GetKey(const net::X509Certificate& cert, net::CertStatus error) {
   return base::UintToString(error) + base64_fingerprint;
 }
 
+void MigrateOldSettings(HostContentSettingsMap* map) {
+  // Migrate old settings. Previously SSL would use the same pattern twice,
+  // instead of using ContentSettingsPattern::Wildcard(). This has no impact on
+  // lookups using GetWebsiteSetting (because Wildcard matches everything) but
+  // it has an impact when trying to change the existing content setting. We
+  // need to migrate the old-format keys.
+  // TODO(raymes): Remove this after ~M51 when clients have migrated. We should
+  // leave in some code to remove old-format settings for a long time.
+  // crbug.com/569734.
+  ContentSettingsForOneType settings;
+  map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
+                             std::string(), &settings);
+  for (const ContentSettingPatternSource& setting : settings) {
+    // Migrate old-format settings only.
+    if (setting.secondary_pattern != ContentSettingsPattern::Wildcard()) {
+      GURL url(setting.primary_pattern.ToString());
+      // Pull out the value of the old-format setting. Only do this if the
+      // patterns are as we expect them to be, otherwise the setting will just
+      // be removed for safety.
+      scoped_ptr<base::Value> value;
+      if (setting.primary_pattern == setting.secondary_pattern &&
+          url.is_valid()) {
+        value = map->GetWebsiteSetting(url, url,
+                                       CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
+                                       std::string(), nullptr);
+      }
+      // Remove the old pattern.
+      map->SetWebsiteSettingCustomScope(
+          setting.primary_pattern, setting.secondary_pattern,
+          CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(), nullptr);
+      // Set the new pattern.
+      if (value) {
+        map->SetWebsiteSettingDefaultScope(
+            url, GURL(), CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
+            std::string(), value.release());
+      }
+    }
+  }
+}
+
 }  // namespace
 
 // This helper function gets the dictionary of certificate fingerprints to
@@ -146,7 +189,7 @@ base::DictionaryValue* ChromeSSLHostStateDelegate::GetValidCertDecisionsDict(
   base::Time decision_expiration;
   if (dict->HasKey(kSSLCertDecisionExpirationTimeKey)) {
     std::string decision_expiration_string;
-    int64 decision_expiration_int64;
+    int64_t decision_expiration_int64;
     success = dict->GetString(kSSLCertDecisionExpirationTimeKey,
                               &decision_expiration_string);
     if (!base::StringToInt64(base::StringPiece(decision_expiration_string),
@@ -176,7 +219,7 @@ base::DictionaryValue* ChromeSSLHostStateDelegate::GetValidCertDecisionsDict(
     expired = true;
     base::Time expiration_time =
         now + base::TimeDelta::FromSeconds(kDeltaDefaultExpirationInSeconds);
-    // Unfortunately, JSON (and thus content settings) doesn't support int64
+    // Unfortunately, JSON (and thus content settings) doesn't support int64_t
     // values, only doubles. Since this mildly depends on precision, it is
     // better to store the value as a string.
     dict->SetString(kSSLCertDecisionExpirationTimeKey,
@@ -220,6 +263,7 @@ ChromeSSLHostStateDelegate::ChromeSSLHostStateDelegate(Profile* profile)
     : clock_(new base::DefaultClock()),
       profile_(profile),
       current_expiration_guid_(base::GenerateGUID()) {
+  MigrateOldSettings(HostContentSettingsMapFactory::GetForProfile(profile));
   if (ExpireAtSessionEnd())
     should_remember_ssl_decisions_ =
         FORGET_SSL_EXCEPTION_DECISIONS_AT_SESSION_END;
@@ -234,9 +278,8 @@ void ChromeSSLHostStateDelegate::AllowCert(const std::string& host,
                                            const net::X509Certificate& cert,
                                            net::CertStatus error) {
   GURL url = GetSecureGURLForHost(host);
-  const ContentSettingsPattern pattern =
-      ContentSettingsPattern::FromURLNoWildcard(url);
-  HostContentSettingsMap* map = profile_->GetHostContentSettingsMap();
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
   scoped_ptr<base::Value> value(map->GetWebsiteSetting(
       url, url, CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(), NULL));
 
@@ -261,17 +304,15 @@ void ChromeSSLHostStateDelegate::AllowCert(const std::string& host,
   cert_dict->SetIntegerWithoutPathExpansion(GetKey(cert, error), ALLOWED);
 
   // The map takes ownership of the value, so it is released in the call to
-  // SetWebsiteSetting.
-  map->SetWebsiteSetting(pattern,
-                         pattern,
-                         CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
-                         std::string(),
-                         value.release());
+  // SetWebsiteSettingDefaultScope.
+  map->SetWebsiteSettingDefaultScope(url, GURL(),
+                                     CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
+                                     std::string(), value.release());
 }
 
 void ChromeSSLHostStateDelegate::Clear() {
-  profile_->GetHostContentSettingsMap()->ClearSettingsForOneType(
-      CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS);
+  HostContentSettingsMapFactory::GetForProfile(profile_)
+      ->ClearSettingsForOneType(CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS);
 }
 
 content::SSLHostStateDelegate::CertJudgment
@@ -279,7 +320,8 @@ ChromeSSLHostStateDelegate::QueryPolicy(const std::string& host,
                                         const net::X509Certificate& cert,
                                         net::CertStatus error,
                                         bool* expired_previous_decision) {
-  HostContentSettingsMap* map = profile_->GetHostContentSettingsMap();
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
   GURL url = GetSecureGURLForHost(host);
   scoped_ptr<base::Value> value(map->GetWebsiteSetting(
       url, url, CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(), NULL));
@@ -328,15 +370,12 @@ ChromeSSLHostStateDelegate::QueryPolicy(const std::string& host,
 void ChromeSSLHostStateDelegate::RevokeUserAllowExceptions(
     const std::string& host) {
   GURL url = GetSecureGURLForHost(host);
-  const ContentSettingsPattern pattern =
-      ContentSettingsPattern::FromURLNoWildcard(url);
-  HostContentSettingsMap* map = profile_->GetHostContentSettingsMap();
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
 
-  map->SetWebsiteSetting(pattern,
-                         pattern,
-                         CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
-                         std::string(),
-                         NULL);
+  map->SetWebsiteSettingDefaultScope(url, GURL(),
+                                     CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
+                                     std::string(), NULL);
 }
 
 // TODO(jww): This will revoke all of the decisions in the browser context.
@@ -369,7 +408,8 @@ bool ChromeSSLHostStateDelegate::HasAllowException(
   GURL url = GetSecureGURLForHost(host);
   const ContentSettingsPattern pattern =
       ContentSettingsPattern::FromURLNoWildcard(url);
-  HostContentSettingsMap* map = profile_->GetHostContentSettingsMap();
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
 
   scoped_ptr<base::Value> value(map->GetWebsiteSetting(
       url, url, CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(), NULL));

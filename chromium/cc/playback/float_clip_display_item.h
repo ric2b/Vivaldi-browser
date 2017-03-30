@@ -5,6 +5,8 @@
 #ifndef CC_PLAYBACK_FLOAT_CLIP_DISPLAY_ITEM_H_
 #define CC_PLAYBACK_FLOAT_CLIP_DISPLAY_ITEM_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/memory/scoped_ptr.h"
@@ -18,33 +20,47 @@ namespace cc {
 
 class CC_EXPORT FloatClipDisplayItem : public DisplayItem {
  public:
-  FloatClipDisplayItem();
+  explicit FloatClipDisplayItem(const gfx::RectF& clip_rect);
+  explicit FloatClipDisplayItem(const proto::DisplayItem& proto);
   ~FloatClipDisplayItem() override;
 
-  void SetNew(const gfx::RectF& clip_rect);
-
+  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               const gfx::Rect& canvas_target_playback_rect,
               SkPicture::AbortCallback* callback) const override;
-  void AsValueInto(base::trace_event::TracedValue* array) const override;
+  void AsValueInto(const gfx::Rect& visual_rect,
+                   base::trace_event::TracedValue* array) const override;
+  size_t ExternalMemoryUsage() const override;
+
+  int ApproximateOpCount() const { return 1; }
+  bool IsSuitableForGpuRasterization() const { return true; }
 
  private:
+  void SetNew(const gfx::RectF& clip_rect);
+
   gfx::RectF clip_rect_;
 };
 
 class CC_EXPORT EndFloatClipDisplayItem : public DisplayItem {
  public:
   EndFloatClipDisplayItem();
+  explicit EndFloatClipDisplayItem(const proto::DisplayItem& proto);
   ~EndFloatClipDisplayItem() override;
 
   static scoped_ptr<EndFloatClipDisplayItem> Create() {
     return make_scoped_ptr(new EndFloatClipDisplayItem());
   }
 
+  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               const gfx::Rect& canvas_target_playback_rect,
               SkPicture::AbortCallback* callback) const override;
-  void AsValueInto(base::trace_event::TracedValue* array) const override;
+  void AsValueInto(const gfx::Rect& visual_rect,
+                   base::trace_event::TracedValue* array) const override;
+  size_t ExternalMemoryUsage() const override;
+
+  int ApproximateOpCount() const { return 0; }
+  bool IsSuitableForGpuRasterization() const { return true; }
 };
 
 }  // namespace cc

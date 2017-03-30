@@ -9,7 +9,7 @@
 
 #include "base/containers/hash_tables.h"
 #include "base/event_types.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/base/glib/glib_integers.h"
 #include "ui/base/glib/glib_signal.h"
@@ -17,7 +17,6 @@
 #include "ui/gfx/geometry/rect.h"
 
 typedef union _GdkEvent GdkEvent;
-typedef struct _GdkDrawable GdkWindow;
 typedef struct _GtkIMContext GtkIMContext;
 
 namespace libgtk2ui {
@@ -74,7 +73,7 @@ class X11InputMethodContextImplGtk2 : public ui::LinuxInputMethodContext {
   // IME's input GTK context.
   GtkIMContext* gtk_context_;
 
-  GdkWindow* gdk_last_set_client_window_;
+  gpointer gdk_last_set_client_window_;
 
   // Last known caret bounds relative to the screen coordinates.
   gfx::Rect last_caret_bounds_;

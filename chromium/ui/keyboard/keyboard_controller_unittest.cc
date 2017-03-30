@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -28,7 +29,7 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
-#include "ui/keyboard/keyboard_controller_proxy.h"
+#include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/wm/core/default_activation_client.h"
 
@@ -86,20 +87,19 @@ class TestFocusController : public ui::EventHandler {
   DISALLOW_COPY_AND_ASSIGN(TestFocusController);
 };
 
-class TestKeyboardControllerProxy : public KeyboardControllerProxy {
+class TestKeyboardUI : public KeyboardUI {
  public:
-  TestKeyboardControllerProxy()
-      : KeyboardControllerProxy(nullptr),
-        input_method_(
-            ui::CreateInputMethod(nullptr, gfx::kNullAcceleratedWidget)) {}
-
-  ~TestKeyboardControllerProxy() override {
+  TestKeyboardUI(ui::InputMethod* input_method) : input_method_(input_method) {}
+  ~TestKeyboardUI() override {
     // Destroy the window before the delegate.
     window_.reset();
   }
 
-  // Overridden from KeyboardControllerProxy:
+  // Overridden from KeyboardUI:
   bool HasKeyboardWindow() const override { return window_; }
+  bool ShouldWindowOverscroll(aura::Window* window) const override {
+    return true;
+  }
   aura::Window* GetKeyboardWindow() override {
     if (!window_) {
       window_.reset(new aura::Window(&delegate_));
@@ -108,22 +108,18 @@ class TestKeyboardControllerProxy : public KeyboardControllerProxy {
     }
     return window_.get();
   }
-  ui::InputMethod* GetInputMethod() override { return input_method_.get(); }
-  void RequestAudioInput(
-      content::WebContents* web_contents,
-      const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) override {
-    return;
-  }
-  void LoadSystemKeyboard() override{};
-  void ReloadKeyboardIfNeeded() override{};
+  ui::InputMethod* GetInputMethod() override { return input_method_; }
+  void SetUpdateInputType(ui::TextInputType type) override {}
+  void ReloadKeyboardIfNeeded() override {};
+  void InitInsets(const gfx::Rect& keyboard_bounds) override {}
+  void ResetInsets() override {}
 
  private:
   scoped_ptr<aura::Window> window_;
   aura::test::TestWindowDelegate delegate_;
-  scoped_ptr<ui::InputMethod> input_method_;
+  ui::InputMethod* input_method_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestKeyboardControllerProxy);
+  DISALLOW_COPY_AND_ASSIGN(TestKeyboardUI);
 };
 
 // Keeps a count of all the events a window receives.
@@ -157,7 +153,7 @@ class KeyboardContainerObserver : public aura::WindowObserver {
  private:
   void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
     if (!visible)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   aura::Window* window_;
@@ -170,7 +166,7 @@ class KeyboardContainerObserver : public aura::WindowObserver {
 class KeyboardControllerTest : public testing::Test,
                                public KeyboardControllerObserver {
  public:
-  KeyboardControllerTest() : number_of_calls_(0) {}
+  KeyboardControllerTest() : number_of_calls_(0), ui_(nullptr) {}
   ~KeyboardControllerTest() override {}
 
   void SetUp() override {
@@ -179,13 +175,13 @@ class KeyboardControllerTest : public testing::Test,
     ui::ContextFactory* context_factory =
         ui::InitializeContextFactoryForTests(enable_pixel_output);
 
+    ui::SetUpInputMethodFactoryForTesting();
     aura_test_helper_.reset(new aura::test::AuraTestHelper(&message_loop_));
     aura_test_helper_->SetUp(context_factory);
     new wm::DefaultActivationClient(aura_test_helper_->root_window());
-    ui::SetUpInputMethodFactoryForTesting();
     focus_controller_.reset(new TestFocusController(root_window()));
-    proxy_ = new TestKeyboardControllerProxy();
-    controller_.reset(new KeyboardController(proxy_));
+    ui_ = new TestKeyboardUI(aura_test_helper_->host()->GetInputMethod());
+    controller_.reset(new KeyboardController(ui_));
     controller()->AddObserver(this);
   }
 
@@ -198,7 +194,7 @@ class KeyboardControllerTest : public testing::Test,
   }
 
   aura::Window* root_window() { return aura_test_helper_->root_window(); }
-  KeyboardControllerProxy* proxy() { return proxy_; }
+  KeyboardUI* ui() { return ui_; }
   KeyboardController* controller() { return controller_.get(); }
 
   void ShowKeyboard() {
@@ -228,13 +224,13 @@ class KeyboardControllerTest : public testing::Test,
   const gfx::Rect& notified_bounds() { return notified_bounds_; }
 
   void SetFocus(ui::TextInputClient* client) {
-    ui::InputMethod* input_method = proxy()->GetInputMethod();
+    ui::InputMethod* input_method = ui()->GetInputMethod();
     input_method->SetFocusedTextInputClient(client);
     if (client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE) {
       input_method->ShowImeIfNeeded();
-      if (proxy_->GetKeyboardWindow()->bounds().height() == 0) {
+      if (ui_->GetKeyboardWindow()->bounds().height() == 0) {
         // Set initial bounds for test keyboard window.
-        proxy_->GetKeyboardWindow()->SetBounds(
+        ui_->GetKeyboardWindow()->SetBounds(
             FullWidthKeyboardBoundsFromRootBounds(
                 root_window()->bounds(), kDefaultVirtualKeyboardHeight));
       }
@@ -246,7 +242,11 @@ class KeyboardControllerTest : public testing::Test,
   }
 
   bool ShouldEnableInsets(aura::Window* window) {
-    return controller_->ShouldEnableInsets(window);
+    aura::Window* keyboard_window = ui_->GetKeyboardWindow();
+    return (keyboard_window->GetRootWindow() == window->GetRootWindow() &&
+            keyboard::IsKeyboardOverscrollEnabled() &&
+            keyboard_window->IsVisible() &&
+            controller_->keyboard_visible());
   }
 
   base::MessageLoopForUI message_loop_;
@@ -256,7 +256,7 @@ class KeyboardControllerTest : public testing::Test,
  private:
   int number_of_calls_;
   gfx::Rect notified_bounds_;
-  KeyboardControllerProxy* proxy_;
+  KeyboardUI* ui_;
   scoped_ptr<KeyboardController> controller_;
   scoped_ptr<ui::TextInputClient> test_text_input_client_;
   DISALLOW_COPY_AND_ASSIGN(KeyboardControllerTest);
@@ -264,7 +264,7 @@ class KeyboardControllerTest : public testing::Test,
 
 TEST_F(KeyboardControllerTest, KeyboardSize) {
   aura::Window* container(controller()->GetContainerWindow());
-  aura::Window* keyboard(proxy()->GetKeyboardWindow());
+  aura::Window* keyboard(ui()->GetKeyboardWindow());
   gfx::Rect screen_bounds = root_window()->bounds();
   root_window()->AddChild(container);
   container->AddChild(keyboard);
@@ -274,7 +274,6 @@ TEST_F(KeyboardControllerTest, KeyboardSize) {
   ASSERT_EQ(gfx::Rect(), initial_bounds);
   VerifyKeyboardWindowSize(container, keyboard);
 
-  gfx::Rect new_bounds(0, 0, 50, 50);
 
   // In FULL_WIDTH mode, attempt to change window width or move window up from
   // the bottom are ignored. Changing window height is supported.
@@ -283,6 +282,10 @@ TEST_F(KeyboardControllerTest, KeyboardSize) {
                             screen_bounds.width(),
                             50);
 
+  // The x position of new bounds may not be 0 if shelf is on the left side of
+  // screen. In FULL_WIDTH mode, the virtual keyboard should always align with
+  // the left edge of screen. See http://crbug.com/510595.
+  gfx::Rect new_bounds(10, 0, 50, 50);
   keyboard->SetBounds(new_bounds);
   ASSERT_EQ(expected_bounds, container->bounds());
   VerifyKeyboardWindowSize(container, keyboard);
@@ -300,7 +303,7 @@ TEST_F(KeyboardControllerTest, KeyboardSize) {
 
 TEST_F(KeyboardControllerTest, FloatingKeyboardSize) {
   aura::Window* container(controller()->GetContainerWindow());
-  aura::Window* keyboard(proxy()->GetKeyboardWindow());
+  aura::Window* keyboard(ui()->GetKeyboardWindow());
   gfx::Rect screen_bounds = root_window()->bounds();
   root_window()->AddChild(container);
   controller()->SetKeyboardMode(FLOATING);
@@ -410,11 +413,11 @@ TEST_F(KeyboardControllerTest, CheckOverscrollInsetDuringVisibilityChange) {
   SetFocus(&no_input_client);
   // Insets should not be enabled for new windows while keyboard is in the
   // process of hiding when overscroll is enabled.
-  EXPECT_FALSE(ShouldEnableInsets(proxy()->GetKeyboardWindow()));
+  EXPECT_FALSE(ShouldEnableInsets(ui()->GetKeyboardWindow()));
   // Cancel keyboard hide.
   SetFocus(&input_client);
   // Insets should be enabled for new windows as hide was cancelled.
-  EXPECT_TRUE(ShouldEnableInsets(proxy()->GetKeyboardWindow()));
+  EXPECT_TRUE(ShouldEnableInsets(ui()->GetKeyboardWindow()));
 }
 
 // Verify switch to FLOATING mode will reset the overscroll or resize and when
@@ -540,7 +543,7 @@ class KeyboardControllerAnimationTest : public KeyboardControllerTest {
   }
 
   aura::Window* keyboard_window() {
-    return proxy()->GetKeyboardWindow();
+    return ui()->GetKeyboardWindow();
   }
 
  private:
@@ -608,6 +611,24 @@ TEST_F(KeyboardControllerAnimationTest, ContainerShowWhileHide) {
   EXPECT_TRUE(keyboard_window()->IsVisible());
   EXPECT_EQ(1.0, layer->opacity());
   EXPECT_EQ(gfx::Transform(), layer->transform());
+}
+
+// Test for crbug.com/568274.
+TEST_F(KeyboardControllerTest, FloatingKeyboardShowOnFirstTap) {
+  aura::Window* container(controller()->GetContainerWindow());
+  aura::Window* keyboard(ui()->GetKeyboardWindow());
+  root_window()->AddChild(container);
+  controller()->SetKeyboardMode(FLOATING);
+  container->AddChild(keyboard);
+  // Mock focus on an input field.
+  ui()->GetInputMethod()->ShowImeIfNeeded();
+  // Mock set keyboard size from javascript side. In floating mode, virtual
+  // keyboard's size is decided by client.
+  gfx::Rect new_bounds(0, 50, 50, 50);
+  keyboard->SetBounds(new_bounds);
+  ASSERT_EQ(new_bounds, container->bounds());
+  EXPECT_TRUE(keyboard->IsVisible());
+  EXPECT_TRUE(container->IsVisible());
 }
 
 }  // namespace keyboard

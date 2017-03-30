@@ -4,16 +4,20 @@
 
 #include "chrome/common/net/x509_certificate_model.h"
 
+#include <limits.h>
 #include <openssl/mem.h>
 #include <openssl/obj_mac.h>
 #include <openssl/sha.h>
 #include <openssl/stack.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/i18n/number_formatting.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,6 +25,7 @@
 #include "crypto/openssl_bio_string.h"
 #include "crypto/openssl_util.h"
 #include "crypto/scoped_openssl_types.h"
+#include "net/base/address_family.h"
 #include "net/base/net_util.h"
 #include "net/cert/x509_util_openssl.h"
 #include "ui/base/l10n/l10n_util.h"

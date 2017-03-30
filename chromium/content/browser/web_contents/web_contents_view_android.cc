@@ -11,6 +11,7 @@
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 
 namespace content {
@@ -48,6 +49,7 @@ void WebContentsViewAndroid::SetContentViewCore(
         web_contents_->GetInterstitialPage()
             ->GetMainFrame()
             ->GetRenderViewHost()
+            ->GetWidget()
             ->GetView());
     if (rwhv)
       rwhv->SetContentViewCore(content_view_core_);
@@ -55,11 +57,11 @@ void WebContentsViewAndroid::SetContentViewCore(
 }
 
 gfx::NativeView WebContentsViewAndroid::GetNativeView() const {
-  return content_view_core_ ? content_view_core_->GetViewAndroid() : NULL;
+  return content_view_core_ ? content_view_core_ : NULL;
 }
 
 gfx::NativeView WebContentsViewAndroid::GetContentNativeView() const {
-  return content_view_core_ ? content_view_core_->GetViewAndroid() : NULL;
+  return content_view_core_ ? content_view_core_ : NULL;
 }
 
 gfx::NativeWindow WebContentsViewAndroid::GetTopLevelNativeWindow() const {
@@ -173,11 +175,9 @@ void WebContentsViewAndroid::ShowPopupMenu(
     bool right_aligned,
     bool allow_multiple_selection) {
   if (content_view_core_) {
-    content_view_core_->ShowSelectPopupMenu(render_frame_host,
-                                            bounds,
-                                            items,
-                                            selected_item,
-                                            allow_multiple_selection);
+    content_view_core_->ShowSelectPopupMenu(
+        render_frame_host, bounds, items, selected_item,
+        allow_multiple_selection, right_aligned);
   }
 }
 

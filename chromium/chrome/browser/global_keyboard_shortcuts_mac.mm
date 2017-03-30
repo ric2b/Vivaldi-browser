@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <AppKit/AppKit.h>
-#include <Carbon/Carbon.h>
-
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
 
-#include "base/basictypes.h"
+#import <AppKit/AppKit.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
 #import "chrome/browser/ui/cocoa/nsmenuitem_additions.h"
 
@@ -107,8 +106,6 @@ const KeyboardShortcutData* GetBrowserKeyboardShortcutTable(
     {false, false, false, false, kVK_Delete,       0,   IDC_BACK},
     {false, true,  false, false, kVK_Delete,       0,   IDC_FORWARD},
     {true,  true,  false, false, 0,                'c', IDC_DEV_TOOLS_INSPECT},
-    {true,  true,  false, false, kVK_ANSI_Period,  0,
-     IDC_TOGGLE_SPEECH_INPUT},
   };
 
   *num_entries = arraysize(keyboard_shortcuts);

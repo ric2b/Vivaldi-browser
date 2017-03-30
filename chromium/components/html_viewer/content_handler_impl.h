@@ -6,9 +6,9 @@
 #define COMPONENTS_HTML_VIEWER_CONTENT_HANDLER_IMPL_H_
 
 #include "base/macros.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/interfaces/content_handler.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/interfaces/content_handler.mojom.h"
 
 namespace html_viewer {
 
@@ -27,12 +27,15 @@ class ContentHandlerImpl : public mojo::ContentHandler {
 
  private:
   // Overridden from ContentHandler:
-  void StartApplication(mojo::InterfaceRequest<mojo::Application> request,
-                        mojo::URLResponsePtr response) override;
+  void StartApplication(
+      mojo::InterfaceRequest<mojo::Application> request,
+      mojo::URLResponsePtr response,
+      const mojo::Callback<void()>& destruct_callback) override;
 
   GlobalState* global_state_;
   mojo::ApplicationImpl* app_;
   mojo::StrongBinding<mojo::ContentHandler> binding_;
+  scoped_ptr<mojo::AppRefCount> app_refcount_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentHandlerImpl);
 };

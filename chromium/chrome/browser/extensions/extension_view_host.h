@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_EXTENSION_VIEW_HOST_H_
 #define CHROME_BROWSER_EXTENSIONS_EXTENSION_VIEW_HOST_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "components/web_modal/popup_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/public/browser/notification_observer.h"
@@ -27,7 +27,6 @@ class ExtensionView;
 // The ExtensionHost for an extension that backs a view in the browser UI. For
 // example, this could be an extension popup or dialog, but not a background
 // page.
-// TODO(gbillock): See if we can remove WebContentsModalDialogManager here.
 class ExtensionViewHost
     : public ExtensionHost,
       public web_modal::WebContentsModalDialogManagerDelegate,
@@ -123,12 +122,6 @@ class ExtensionViewHost
   // Observer to detect when the associated web contents is destroyed.
   class AssociatedWebContentsObserver;
   scoped_ptr<AssociatedWebContentsObserver> associated_web_contents_observer_;
-
-  // Manage popups overlaying the WebContents in this EVH.
-  // TODO(gbillock): should usually not be used -- instead use the parent
-  // window's popup manager. Should only be used when the EVH is created without
-  // a parent window.
-  scoped_ptr<web_modal::PopupManager> popup_manager_;
 
   content::NotificationRegistrar registrar_;
 

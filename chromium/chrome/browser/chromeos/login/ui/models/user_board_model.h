@@ -7,6 +7,8 @@
 
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
 
+class AccountId;
+
 namespace chromeos {
 
 class UserBoardModel : public BaseScreen {
@@ -18,9 +20,9 @@ class UserBoardModel : public BaseScreen {
   virtual void SendUserList() = 0;
 
   // Methods for easy unlock support.
-  virtual void HardLockPod(const std::string& user_id) = 0;
-  virtual void AttemptEasyUnlock(const std::string& user_id) = 0;
-  virtual void RecordClickOnLockIcon(const std::string& user_id) = 0;
+  virtual void HardLockPod(const AccountId& account_id) = 0;
+  virtual void AttemptEasyUnlock(const AccountId& account_id) = 0;
+  virtual void RecordClickOnLockIcon(const AccountId& account_id) = 0;
 
   // BaseScreen implementation:
   std::string GetName() const override;

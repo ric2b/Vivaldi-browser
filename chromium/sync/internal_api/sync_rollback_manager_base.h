@@ -5,9 +5,12 @@
 #ifndef SYNC_INTERNAL_API_SYNC_ROLLBACK_MANAGER_BASE_H_
 #define SYNC_INTERNAL_API_SYNC_ROLLBACK_MANAGER_BASE_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/http_post_provider_factory.h"
 #include "sync/internal_api/public/internal_components_factory.h"
@@ -27,10 +30,10 @@ class WriteTransaction;
 //                        permanent folders) for configured type as needed.
 //
 // Most of other functions are no ops.
-class SYNC_EXPORT_PRIVATE SyncRollbackManagerBase :
-    public SyncManager,
-    public syncable::DirectoryChangeDelegate,
-    public syncable::TransactionObserver {
+class SYNC_EXPORT SyncRollbackManagerBase
+    : public SyncManager,
+      public syncable::DirectoryChangeDelegate,
+      public syncable::TransactionObserver {
  public:
   SyncRollbackManagerBase();
   ~SyncRollbackManagerBase() override;
@@ -66,10 +69,11 @@ class SYNC_EXPORT_PRIVATE SyncRollbackManagerBase :
   bool HasUnsyncedItems() override;
   SyncEncryptionHandler* GetEncryptionHandler() override;
   void RefreshTypes(ModelTypeSet types) override;
-  SyncContextProxy* GetSyncContextProxy() override;
+  syncer_v2::SyncContextProxy* GetSyncContextProxy() override;
   ScopedVector<ProtocolEvent> GetBufferedProtocolEvents() override;
   scoped_ptr<base::ListValue> GetAllNodesForType(
       syncer::ModelType type) override;
+  void ClearServerData(const ClearServerDataCallback& callback) override;
 
   // DirectoryChangeDelegate implementation.
   void HandleTransactionCompleteChangeEvent(
@@ -80,11 +84,11 @@ class SYNC_EXPORT_PRIVATE SyncRollbackManagerBase :
   void HandleCalculateChangesChangeEventFromSyncApi(
       const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
       syncable::BaseTransaction* trans,
-      std::vector<int64>* entries_changed) override;
+      std::vector<int64_t>* entries_changed) override;
   void HandleCalculateChangesChangeEventFromSyncer(
       const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
       syncable::BaseTransaction* trans,
-      std::vector<int64>* entries_changed) override;
+      std::vector<int64_t>* entries_changed) override;
 
   // syncable::TransactionObserver implementation.
   void OnTransactionWrite(
@@ -99,7 +103,7 @@ class SYNC_EXPORT_PRIVATE SyncRollbackManagerBase :
       const base::FilePath& database_location,
       InternalComponentsFactory* internal_components_factory,
       InternalComponentsFactory::StorageOption storage,
-      scoped_ptr<UnrecoverableErrorHandler> unrecoverable_error_handler,
+      const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
       const base::Closure& report_unrecoverable_error_function);
 
   void RegisterDirectoryTypeDebugInfoObserver(
@@ -128,7 +132,7 @@ class SYNC_EXPORT_PRIVATE SyncRollbackManagerBase :
   UserShare share_;
   base::ObserverList<SyncManager::Observer> observers_;
 
-  scoped_ptr<UnrecoverableErrorHandler> unrecoverable_error_handler_;
+  WeakHandle<UnrecoverableErrorHandler> unrecoverable_error_handler_;
   base::Closure report_unrecoverable_error_function_;
 
   scoped_ptr<SyncEncryptionHandler> dummy_handler_;

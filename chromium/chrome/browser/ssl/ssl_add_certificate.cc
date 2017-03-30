@@ -4,14 +4,16 @@
 
 #include "chrome/browser/ssl/ssl_add_certificate.h"
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
+#include "components/infobars/core/infobar_delegate.h"
 #include "components/infobars/core/simple_alert_infobar_delegate.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -21,6 +23,7 @@
 #include "net/cert/cert_database.h"
 #include "net/cert/x509_certificate.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/vector_icons_public.h"
 
 using content::BrowserThread;
 using content::RenderFrameHost;
@@ -43,7 +46,9 @@ class SSLAddCertificateInfoBarDelegate : public ConfirmInfoBarDelegate {
 
   // ConfirmInfoBarDelegate:
   Type GetInfoBarType() const override;
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
+  gfx::VectorIconId GetVectorIconId() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
@@ -76,9 +81,22 @@ SSLAddCertificateInfoBarDelegate::GetInfoBarType() const {
   return PAGE_ACTION_TYPE;
 }
 
-int SSLAddCertificateInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::InfoBarIdentifier
+SSLAddCertificateInfoBarDelegate::GetIdentifier() const {
+  return SSL_ADD_CERTIFICATE_INFOBAR_DELEGATE;
+}
+
+int SSLAddCertificateInfoBarDelegate::GetIconId() const {
   // TODO(davidben): Use a more appropriate icon.
   return IDR_INFOBAR_SAVE_PASSWORD;
+}
+
+gfx::VectorIconId SSLAddCertificateInfoBarDelegate::GetVectorIconId() const {
+#if !defined(OS_MACOSX)
+  return gfx::VectorIconId::AUTOLOGIN;
+#else
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
+#endif
 }
 
 base::string16 SSLAddCertificateInfoBarDelegate::GetMessageText() const {
@@ -121,11 +139,16 @@ void ShowErrorInfoBar(int message_id,
   // TODO(davidben): Display a more user-friendly error string.
   SimpleAlertInfoBarDelegate::Create(
       InfoBarService::FromWebContents(web_contents),
+      infobars::InfoBarDelegate::SSL_ADD_CERTIFICATE,
       IDR_INFOBAR_SAVE_PASSWORD,
-      l10n_util::GetStringFUTF16(IDS_ADD_CERT_ERR_INVALID_CERT,
-                                 base::IntToString16(-cert_error),
-                                 base::ASCIIToUTF16(
-                                     net::ErrorToString(cert_error))),
+#if !defined(OS_MACOSX)
+      gfx::VectorIconId::AUTOLOGIN,
+#else
+      gfx::VectorIconId::VECTOR_ICON_NONE,
+#endif
+      l10n_util::GetStringFUTF16(
+          IDS_ADD_CERT_ERR_INVALID_CERT, base::IntToString16(-cert_error),
+          base::ASCIIToUTF16(net::ErrorToString(cert_error))),
       true);
 }
 

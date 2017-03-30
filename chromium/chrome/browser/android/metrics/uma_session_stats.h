@@ -6,8 +6,11 @@
 #define CHROME_BROWSER_ANDROID_METRICS_UMA_SESSION_STATS_H_
 
 #include <jni.h>
+#include <stdint.h>
 #include <string>
 
+#include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 
@@ -18,8 +21,10 @@ class UmaSessionStats {
  public:
   UmaSessionStats();
 
-  void UmaResumeSession(JNIEnv* env, jobject obj);
-  void UmaEndSession(JNIEnv* env, jobject obj);
+  void UmaResumeSession(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
+  void UmaEndSession(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj);
 
   static void RegisterSyntheticFieldTrialWithNameHash(
       uint32_t trial_name_hash,

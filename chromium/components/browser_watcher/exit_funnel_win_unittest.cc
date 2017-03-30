@@ -4,6 +4,9 @@
 
 #include "components/browser_watcher/exit_funnel_win.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 
 #include "base/command_line.h"
@@ -26,7 +29,7 @@ const wchar_t kRegistryPath[] = L"Software\\ExitFunnelWinTest";
 class ExitFunnelWinTest : public testing::Test {
  public:
   typedef testing::Test Super;
-  typedef std::map<base::string16, int64> EventMap;
+  typedef std::map<base::string16, int64_t> EventMap;
 
   void SetUp() override {
     Super::SetUp();
@@ -37,7 +40,7 @@ class ExitFunnelWinTest : public testing::Test {
   base::string16 GetEventSubkey() {
     // There should be a single subkey named after this process' pid.
     base::win::RegistryKeyIterator it(HKEY_CURRENT_USER, kRegistryPath);
-    EXPECT_EQ(1, it.SubkeyCount());
+    EXPECT_EQ(1u, it.SubkeyCount());
 
     unsigned pid = 0;
     base::StringToUint(it.Name(), &pid);
@@ -53,13 +56,13 @@ class ExitFunnelWinTest : public testing::Test {
 
     base::win::RegKey key(HKEY_CURRENT_USER, key_name.c_str(), KEY_READ);
     EXPECT_TRUE(key.Valid());
-    EXPECT_EQ(2, key.GetValueCount());
+    EXPECT_EQ(2u, key.GetValueCount());
 
     EventMap events;
     for (size_t i = 0; i < key.GetValueCount(); ++i) {
       base::string16 name;
       EXPECT_EQ(key.GetValueNameAt(i, &name), ERROR_SUCCESS);
-      int64 value = 0;
+      int64_t value = 0;
       EXPECT_EQ(key.ReadInt64(name.c_str(), &value), ERROR_SUCCESS);
 
       events[name] = value;
@@ -86,7 +89,7 @@ TEST_F(ExitFunnelWinTest, RecordSingleEvent) {
 
   EventMap events = ReadEvents();
 
-  ASSERT_EQ(events.size(), 2);
+  ASSERT_EQ(2u, events.size());
   ASSERT_TRUE(events.find(L"One") != events.end());
   ASSERT_TRUE(events.find(L"Two") != events.end());
 }
@@ -103,7 +106,7 @@ TEST_F(ExitFunnelWinTest, RecordsEventTimes) {
   ASSERT_TRUE(funnel.RecordEvent(L"Two"));
 
   EventMap events = ReadEvents();
-  ASSERT_EQ(events.size(), 2);
+  ASSERT_EQ(2u, events.size());
 
   base::TimeDelta one = base::TimeDelta::FromInternalValue(events[L"One"]);
   base::TimeDelta two = base::TimeDelta::FromInternalValue(events[L"Two"]);

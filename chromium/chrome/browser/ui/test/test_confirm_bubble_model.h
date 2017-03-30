@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_TEST_TEST_CONFIRM_BUBBLE_MODEL_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/confirm_bubble_model.h"
 
 // A test version of the model for confirmation bubbles.
@@ -21,7 +22,6 @@ class TestConfirmBubbleModel : public ConfirmBubbleModel {
   // ConfirmBubbleModel overrides:
   base::string16 GetTitle() const override;
   base::string16 GetMessageText() const override;
-  gfx::Image* GetIcon() const override;
   int GetButtons() const override;
   base::string16 GetButtonLabel(BubbleButton button) const override;
   void Accept() override;

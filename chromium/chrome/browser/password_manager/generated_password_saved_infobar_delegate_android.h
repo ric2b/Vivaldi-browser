@@ -41,7 +41,8 @@ class GeneratedPasswordSavedInfoBarDelegateAndroid
 
   // infobars::InfoBarDelegate:
   Type GetInfoBarType() const override;
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
 
   // The translated text of the message to display.
   base::string16 message_text_;

@@ -31,6 +31,7 @@ import shutil
 import sys
 from xml.dom import minidom
 
+import action_utils
 import print_style
 
 sys.path.insert(1, os.path.join(sys.path[0], '..', '..', 'python'))
@@ -56,8 +57,26 @@ USER_METRICS_ACTION_RE = re.compile(r"""
   """,
   re.VERBOSE | re.DOTALL      # Verbose syntax and makes . also match new lines.
 )
+USER_METRICS_ACTION_RE_JS = re.compile(r"""
+  chrome\.send                # Start of function call.
+  \(                          # Opening parenthesis.
+  \s*                         # Any amount of whitespace, including new lines.
+  # WebUI message handled by CoreOptionsHandler.
+  'coreOptionsUserMetricsAction'
+  ,                           # Separator after first parameter.
+  \s*                         # Any amount of whitespace, including new lines.
+  \[                          # Opening bracket for arguments for C++ function.
+  \s*                         # Any amount of whitespace, including new lines.
+  (.+?)                       # A sequence of characters for the param.
+  \s*                         # Any amount of whitespace, including new lines.
+  \]                          # Closing bracket.
+  \s*                         # Any amount of whitespace, including new lines.
+  \)                          # Closing parenthesis.
+  """,
+  re.VERBOSE | re.DOTALL      # Verbose syntax and makes . also match new lines.
+)
 COMPUTED_ACTION_RE = re.compile(r'RecordComputedAction')
-QUOTED_STRING_RE = re.compile(r'\"(.+?)\"')
+QUOTED_STRING_RE = re.compile(r"""('[^']+'|"[^"]+")$""")
 
 # Files that are known to use content::RecordComputedAction(), which means
 # they require special handling code in this script.
@@ -191,23 +210,17 @@ def AddWebKitEditorActions(actions):
     if match:  # Plain call to RecordAction
       actions.add(match.group(1))
 
-def AddClosedSourceActions(actions):
-  """Add actions that are in code which is not checked out by default
+def AddPDFPluginActions(actions):
+  """Add actions that are sent by the PDF plugin.
 
   Arguments
     actions: set of actions to add to.
   """
-  actions.add('PDF.FitToHeightButton')
-  actions.add('PDF.FitToWidthButton')
   actions.add('PDF.LoadFailure')
   actions.add('PDF.LoadSuccess')
   actions.add('PDF.PreviewDocumentLoadFailure')
-  actions.add('PDF.PrintButton')
   actions.add('PDF.PrintPage')
-  actions.add('PDF.SaveButton')
   actions.add('PDF.ZoomFromBrowser')
-  actions.add('PDF.ZoomInButton')
-  actions.add('PDF.ZoomOutButton')
   actions.add('PDF_Unsupported_3D')
   actions.add('PDF_Unsupported_Attachment')
   actions.add('PDF_Unsupported_Bookmarks')
@@ -282,9 +295,6 @@ def AddChromeOSActions(actions):
   actions.add('Updater.ServerCertificateChanged')
   actions.add('Updater.ServerCertificateFailed')
 
-  # Actions sent by Chrome OS cryptohome.
-  actions.add('Cryptohome.PKCS11InitFail')
-
 def AddExtensionActions(actions):
   """Add actions reported by extensions via chrome.metricsPrivate API.
 
@@ -323,10 +333,11 @@ class InvalidStatementException(Exception):
 class ActionNameFinder:
   """Helper class to find action names in source code file."""
 
-  def __init__(self, path, contents):
+  def __init__(self, path, contents, action_re):
     self.__path = path
     self.__pos = 0
     self.__contents = contents
+    self.__action_re = action_re
 
   def FindNextAction(self):
     """Finds the next action name in the file.
@@ -338,15 +349,20 @@ class ActionNameFinder:
       and could not be parsed. There may still be more actions in the file,
       so FindNextAction() can continue to be called to find following ones.
     """
-    match = USER_METRICS_ACTION_RE.search(self.__contents, pos=self.__pos)
+    match = self.__action_re.search(self.__contents, pos=self.__pos)
     if not match:
       return None
     match_start = match.start()
     self.__pos = match.end()
+
     match = QUOTED_STRING_RE.match(match.group(1))
     if not match:
+      if self.__action_re == USER_METRICS_ACTION_RE_JS:
+        return None
       self._RaiseException(match_start, self.__pos)
-    return match.group(1)
+
+    # Remove surrounding quotation marks.
+    return match.group(1)[1:-1]
 
   def _RaiseException(self, match_start, match_end):
     """Raises an InvalidStatementException for the specified code range."""
@@ -368,7 +384,14 @@ def GrepForActions(path, actions):
   global number_of_files_total
   number_of_files_total = number_of_files_total + 1
 
-  finder = ActionNameFinder(path, open(path).read())
+  # Check the extension, using the regular expression for C++ syntax by default.
+  ext = os.path.splitext(path)[1].lower()
+  if ext == '.js':
+    action_re = USER_METRICS_ACTION_RE_JS
+  else:
+    action_re = USER_METRICS_ACTION_RE
+
+  finder = ActionNameFinder(path, open(path).read(), action_re)
   while True:
     try:
       action_name = finder.FindNextAction()
@@ -377,6 +400,9 @@ def GrepForActions(path, actions):
       actions.add(action_name)
     except InvalidStatementException, e:
       logging.warning(str(e))
+
+  if action_re != USER_METRICS_ACTION_RE:
+    return
 
   line_number = 0
   for line in open(path):
@@ -492,6 +518,7 @@ def AddWebUIActions(actions):
   resources_root = os.path.join(REPOSITORY_ROOT, 'chrome', 'browser',
                                 'resources')
   WalkDirectory(resources_root, actions, ('.html'), GrepForWebUIActions)
+  WalkDirectory(resources_root, actions, ('.js'), GrepForActions)
 
 def AddHistoryPageActions(actions):
   """Add actions that are used in History page.
@@ -561,14 +588,6 @@ def _ExtractText(parent_dom, tag_name):
   return texts
 
 
-class Action(object):
-  def __init__(self, name, description, owners, obsolete=None):
-    self.name = name
-    self.description = description
-    self.owners = owners
-    self.obsolete = obsolete
-
-
 def ParseActionFile(file_content):
   """Parse the XML data currently stored in the file.
 
@@ -583,7 +602,7 @@ def ParseActionFile(file_content):
 
   comment_nodes = []
   # Get top-level comments. It is assumed that all comments are placed before
-  # <acionts> tag. Therefore the loop will stop if it encounters a non-comment
+  # <actions> tag. Therefore the loop will stop if it encounters a non-comment
   # node.
   for node in dom.childNodes:
     if node.nodeType == minidom.Node.COMMENT_NODE:
@@ -591,12 +610,11 @@ def ParseActionFile(file_content):
     else:
       break
 
-  actions = set()
   actions_dict = {}
   # Get each user action data.
   for action_dom in dom.getElementsByTagName('action'):
     action_name = action_dom.getAttribute('name')
-    actions.add(action_name)
+    not_user_triggered = bool(action_dom.getAttribute('not_user_triggered'))
 
     owners = _ExtractText(action_dom, 'owner')
     # There is only one description for each user action. Get the first element
@@ -616,23 +634,34 @@ def ParseActionFile(file_content):
                     ' fix.', action_name)
       sys.exit(1)
     obsolete = obsolete_list[0] if obsolete_list else None
-    actions_dict[action_name] = Action(action_name, description, owners,
-                                       obsolete)
-  return actions, actions_dict, comment_nodes
+    actions_dict[action_name] = action_utils.Action(action_name, description,
+        owners, not_user_triggered, obsolete)
+
+  try:
+    action_utils.CreateActionsFromSuffixes(actions_dict,
+        dom.getElementsByTagName('action-suffix'))
+  except action_utils.Error as e:
+    sys.exit(1)
+
+  return set(actions_dict.keys()), actions_dict, comment_nodes
 
 
 def _CreateActionTag(doc, action_name, action_object):
   """Create a new action tag.
 
   Format of an action tag:
-  <action name="name">
+  <action name="name" not_user_triggered="true">
     <owner>Owner</owner>
     <description>Description.</description>
     <obsolete>Deprecated.</obsolete>
   </action>
 
-  <obsolete> is an optional tag. It's added to user actions that are no longer
-  used any more.
+  not_user_triggered is an optional attribute. If set, it implies that the
+  belonging action is not a user action. A user action is an action that
+  is logged exactly once right after a user has made an action.
+
+  <obsolete> is an optional tag. It's added to actions that are no longer used
+  any more.
 
   If action_name is in actions_dict, the values to be inserted are based on the
   corresponding Action object. If action_name is not in actions_dict, the
@@ -648,6 +677,10 @@ def _CreateActionTag(doc, action_name, action_object):
   """
   action_dom = doc.createElement('action')
   action_dom.setAttribute('name', action_name)
+
+  # Add not_user_triggered attribute.
+  if action_object and action_object.not_user_triggered:
+    action_dom.setAttribute('not_user_triggered', 'true')
 
   # Create owner tag.
   if action_object and action_object.owners:
@@ -729,9 +762,9 @@ def UpdateXml(original_xml):
   AddAutomaticResetBannerActions(actions)
   AddBookmarkManagerActions(actions)
   AddChromeOSActions(actions)
-  AddClosedSourceActions(actions)
   AddExtensionActions(actions)
   AddHistoryPageActions(actions)
+  AddPDFPluginActions(actions)
 
   return PrettyPrint(actions, actions_dict, comment_nodes)
 

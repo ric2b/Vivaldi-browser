@@ -14,6 +14,7 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/activity_log/fullstream_ui_policy.h"
 #include "chrome/common/chrome_switches.h"
 #include "sql/error_delegate_util.h"
@@ -65,6 +66,10 @@ void ActivityDatabase::Init(const base::FilePath& db_name) {
                  base::Unretained(this)));
   db_.set_page_size(4096);
   db_.set_cache_size(32);
+
+  // TODO(shess): The current mitigation for http://crbug.com/537742 stores
+  // state in the meta table, which this database does not use.
+  db_.set_mmap_disabled();
 
   if (!db_.Open(db_name)) {
     LOG(ERROR) << db_.GetErrorMessage();

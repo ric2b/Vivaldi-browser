@@ -12,6 +12,7 @@ var GuestViewContainer = require('guestViewContainer').GuestViewContainer;
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewEvents = require('webViewEvents').WebViewEvents;
+var WebViewEventsPrivate = require('webViewEventsPrivate').WebViewEventsPrivate; 
 var WebViewInternal = require('webViewInternal').WebViewInternal;
 
 // Represents the internal state of <webview>.
@@ -30,6 +31,9 @@ WebViewImpl.VIEW_TYPE = 'WebView';
 WebViewImpl.setupElement = function(proto) {
   // Public-facing API methods.
   var apiMethods = WebViewImpl.getApiMethods();
+  if (WebViewImpl.getApiMethodsPrivate != undefined) {
+    apiMethods = apiMethods.concat(WebViewImpl.getApiMethodsPrivate());
+  }
 
   // Create default implementations for undefined API methods.
   var createDefaultApiMethod = function(m) {
@@ -137,12 +141,14 @@ WebViewImpl.prototype.onSizeChanged = function(webViewEvent) {
 
 WebViewImpl.prototype.createGuest = function() {
   var params = this.buildParams();
+  if (GuestViewInternalNatives.IsVivaldi()) {
   params['storagePartitionId'] = this.attributes[
       WebViewConstants.ATTRIBUTE_PARTITION].getValue();
 
   if (this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID].getValue()) {
     params['tab_id'] = this.attributes[
         WebViewConstants.ATTRIBUTE_TAB_ID].getValue();
+  }
   }
 
   this.guest.create(params, function() {
@@ -232,4 +238,4 @@ WebViewImpl.prototype.maybeSetupContextMenus = function() {};
 GuestViewContainer.registerElement(WebViewImpl);
 
 // Exports.
-exports.WebViewImpl = WebViewImpl;
+exports.$set('WebViewImpl', WebViewImpl);

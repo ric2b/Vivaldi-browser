@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/options/chromeos/accounts_options_handler.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/bind.h"
@@ -18,7 +20,7 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/ui/webui/chromeos/ui_account_tweaks.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/login/user_names.h"
@@ -122,12 +124,15 @@ void AccountsOptionsHandler::HandleUnwhitelistUser(
     return;
   }
 
+  ProfileMetrics::LogProfileDeleteUser(ProfileMetrics::DELETE_PROFILE_SETTINGS);
+
   base::StringValue canonical_email(gaia::CanonicalizeEmail(email));
   if (OwnerSettingsServiceChromeOS* service =
           OwnerSettingsServiceChromeOS::FromWebUI(web_ui())) {
     service->RemoveFromList(kAccountsPrefUsers, canonical_email);
   }
-  user_manager::UserManager::Get()->RemoveUser(email, NULL);
+  user_manager::UserManager::Get()->RemoveUser(AccountId::FromUserEmail(email),
+                                               nullptr);
 }
 
 void AccountsOptionsHandler::HandleUpdateWhitelist(

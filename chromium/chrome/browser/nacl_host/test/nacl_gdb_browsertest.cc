@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/ppapi/ppapi_test.h"
 #include "components/nacl/common/nacl_switches.h"
@@ -34,7 +35,7 @@ class NaClGdbTest : public PPAPINaClNewlibTest {
     command_line->AppendSwitchPath(switches::kNaClGdbScript, script_);
   }
 
-  void RunWithNaClGdb(std::string test_name) {
+  void RunWithNaClGdb(const std::string& test_name) {
     base::FilePath mock_nacl_gdb_file;
     scoped_ptr<base::Environment> env(base::Environment::Create());
     std::string content;

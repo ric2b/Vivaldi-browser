@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bookmarks specific strings (included from vivaldi_native_strings.grd). -->
+<grit-part>
+  <message name="IDS_BOOKMARK_GROUP_FROM_OPERA" desc="The group name of bookmarks from Opera">
+    Imported From Opera
+  </message>
+  <message name="IDS_IMPORTED_BOOKMARKS" desc="The group name of imported bookmarks">
+    Imported bookmarks
+  </message>
+  <message name="IDS_IMPORT_HTML_BOOKMARKS_FILE_TITLE" desc="The title of the HTML bookmark import dialog.">
+    Select HTML bookmark file
+  </message>
+  <message name="IDS_IMPORT_OPERA_BOOKMARKS_FILE_TITLE" desc="The title of the Opera bookmark import dialog.">
+    Select Opera bookmark file
+  </message>
+  <message name="IDS_IMPORT_OPERA_PROFILE_TITLE" desc="The title of the Opera profile folder select dialog.">
+    Select Opera profile folder for import
+  </message>
+  <message name="IDS_IMPORT_VIVALDI_PROFILE_TITLE" desc="The title of the Vivaldi profile folder select dialog.">
+    Select Vivaldi profile folder for import
+  </message>
+  <message name="IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME" desc="Name shown in the tree for the trash bookmarks folder">
+    Trash
+  </message>
+</grit-part>

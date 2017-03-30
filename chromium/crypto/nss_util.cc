@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "crypto/nss_util.h"
-#include "crypto/nss_util_internal.h"
 
 #include <nss.h>
 #include <pk11pub.h>
@@ -12,6 +11,9 @@
 #include <prinit.h>
 #include <prtime.h>
 #include <secmod.h>
+#include <utility>
+
+#include "crypto/nss_util_internal.h"
 
 #if defined(OS_OPENBSD)
 #include <sys/mount.h>
@@ -215,7 +217,7 @@ void CrashOnNSSInitFailure() {
 class ChromeOSUserData {
  public:
   explicit ChromeOSUserData(ScopedPK11Slot public_slot)
-      : public_slot_(public_slot.Pass()),
+      : public_slot_(std::move(public_slot)),
         private_slot_initialization_started_(false) {}
   ~ChromeOSUserData() {
     if (public_slot_) {
@@ -241,7 +243,7 @@ class ChromeOSUserData {
 
   void SetPrivateSlot(ScopedPK11Slot private_slot) {
     DCHECK(!private_slot_);
-    private_slot_ = private_slot.Pass();
+    private_slot_ = std::move(private_slot);
 
     SlotReadyCallbackList callback_list;
     callback_list.swap(tpm_ready_callback_list_);
@@ -422,7 +424,7 @@ class NSSInitSingleton {
              << ", got tpm slot: " << !!tpm_args->tpm_slot;
 
     chaps_module_ = tpm_args->chaps_module;
-    tpm_slot_ = tpm_args->tpm_slot.Pass();
+    tpm_slot_ = std::move(tpm_args->tpm_slot);
     if (!chaps_module_ && test_system_slot_) {
       // chromeos_unittests try to test the TPM initialization process. If we
       // have a test DB open, pretend that it is the TPM slot.
@@ -500,7 +502,7 @@ class NSSInitSingleton {
         "%s %s", kUserNSSDatabaseName, username_hash.c_str());
     ScopedPK11Slot public_slot(OpenPersistentNSSDBForPath(db_name, path));
     chromeos_user_map_[username_hash] =
-        new ChromeOSUserData(public_slot.Pass());
+        new ChromeOSUserData(std::move(public_slot));
     return true;
   }
 
@@ -553,7 +555,7 @@ class NSSInitSingleton {
     DVLOG(2) << "Got tpm slot for " << username_hash << " "
              << !!tpm_args->tpm_slot;
     chromeos_user_map_[username_hash]->SetPrivateSlot(
-        tpm_args->tpm_slot.Pass());
+        std::move(tpm_args->tpm_slot));
   }
 
   void InitializePrivateSoftwareSlotForChromeOSUser(
@@ -615,7 +617,7 @@ class NSSInitSingleton {
     // Ensure that a previous value of test_system_slot_ is not overwritten.
     // Unsetting, i.e. setting a NULL, however is allowed.
     DCHECK(!slot || !test_system_slot_);
-    test_system_slot_ = slot.Pass();
+    test_system_slot_ = std::move(slot);
     if (test_system_slot_) {
       tpm_slot_.reset(PK11_ReferenceSlot(test_system_slot_.get()));
       RunAndClearTPMReadyCallbackList();
@@ -670,12 +672,6 @@ class NSSInitSingleton {
   }
 #endif  // defined(USE_NSS_CERTS)
 
-  // This method is used to force NSS to be initialized without a DB.
-  // Call this method before NSSInitSingleton() is constructed.
-  static void ForceNoDBInit() {
-    force_nodb_init_ = true;
-  }
-
  private:
   friend struct base::DefaultLazyInstanceTraits<NSSInitSingleton>;
 
@@ -687,8 +683,6 @@ class NSSInitSingleton {
     // It's safe to construct on any thread, since LazyInstance will prevent any
     // other threads from accessing until the constructor is done.
     thread_checker_.DetachFromThread();
-
-    DisableAESNIIfNeeded();
 
     EnsureNSPRInit();
 
@@ -708,7 +702,7 @@ class NSSInitSingleton {
     }
 
     SECStatus status = SECFailure;
-    bool nodb_init = force_nodb_init_;
+    bool nodb_init = false;
 
 #if !defined(USE_NSS_CERTS)
     // Use the system certificate store, so initialize NSS without database.
@@ -851,25 +845,6 @@ class NSSInitSingleton {
   }
 #endif
 
-  static void DisableAESNIIfNeeded() {
-    if (NSS_VersionCheck("3.15") && !NSS_VersionCheck("3.15.4")) {
-      // Some versions of NSS have a bug that causes AVX instructions to be
-      // used without testing whether XSAVE is enabled by the operating system.
-      // In order to work around this, we disable AES-NI in NSS when we find
-      // that |has_avx()| is false (which includes the XSAVE test). See
-      // https://bugzilla.mozilla.org/show_bug.cgi?id=940794
-      base::CPU cpu;
-
-      if (cpu.has_avx_hardware() && !cpu.has_avx()) {
-        scoped_ptr<base::Environment> env(base::Environment::Create());
-        env->SetVar("NSS_DISABLE_HW_AES", "1");
-      }
-    }
-  }
-
-  // If this is set to true NSS is forced to be initialized without a DB.
-  static bool force_nodb_init_;
-
   bool tpm_token_enabled_for_nss_;
   bool initializing_tpm_token_;
   typedef std::vector<base::Closure> TPMReadyCallbackList;
@@ -890,9 +865,6 @@ class NSSInitSingleton {
 
   base::ThreadChecker thread_checker_;
 };
-
-// static
-bool NSSInitSingleton::force_nodb_init_ = false;
 
 base::LazyInstance<NSSInitSingleton>::Leaky
     g_nss_singleton = LAZY_INSTANCE_INITIALIZER;
@@ -927,86 +899,12 @@ void EnsureNSPRInit() {
   g_nspr_singleton.Get();
 }
 
-void InitNSSSafely() {
-  // We might fork, but we haven't loaded any security modules.
-  DisableNSSForkCheck();
-  // If we're sandboxed, we shouldn't be able to open user security modules,
-  // but it's more correct to tell NSS to not even try.
-  // Loading user security modules would have security implications.
-  ForceNSSNoDBInit();
-  // Initialize NSS.
-  EnsureNSSInit();
-}
-
 void EnsureNSSInit() {
   // Initializing SSL causes us to do blocking IO.
   // Temporarily allow it until we fix
   //   http://code.google.com/p/chromium/issues/detail?id=59847
   base::ThreadRestrictions::ScopedAllowIO allow_io;
   g_nss_singleton.Get();
-}
-
-void ForceNSSNoDBInit() {
-  NSSInitSingleton::ForceNoDBInit();
-}
-
-void DisableNSSForkCheck() {
-  scoped_ptr<base::Environment> env(base::Environment::Create());
-  env->SetVar("NSS_STRICT_NOFORK", "DISABLED");
-}
-
-void LoadNSSLibraries() {
-  // Some NSS libraries are linked dynamically so load them here.
-#if defined(USE_NSS_CERTS)
-  // Try to search for multiple directories to load the libraries.
-  std::vector<base::FilePath> paths;
-
-  // Use relative path to Search PATH for the library files.
-  paths.push_back(base::FilePath());
-
-  // For Debian derivatives NSS libraries are located here.
-  paths.push_back(base::FilePath("/usr/lib/nss"));
-
-  // Ubuntu 11.10 (Oneiric) and Debian Wheezy place the libraries here.
-#if defined(ARCH_CPU_X86_64)
-  paths.push_back(base::FilePath("/usr/lib/x86_64-linux-gnu/nss"));
-#elif defined(ARCH_CPU_X86)
-  paths.push_back(base::FilePath("/usr/lib/i386-linux-gnu/nss"));
-#elif defined(ARCH_CPU_ARMEL)
-#if defined(__ARM_PCS_VFP)
-  paths.push_back(base::FilePath("/usr/lib/arm-linux-gnueabihf/nss"));
-#else
-  paths.push_back(base::FilePath("/usr/lib/arm-linux-gnueabi/nss"));
-#endif  // defined(__ARM_PCS_VFP)
-#elif defined(ARCH_CPU_MIPSEL)
-  paths.push_back(base::FilePath("/usr/lib/mipsel-linux-gnu/nss"));
-#endif  // defined(ARCH_CPU_X86_64)
-
-  // A list of library files to load.
-  std::vector<std::string> libs;
-  libs.push_back("libsoftokn3.so");
-  libs.push_back("libfreebl3.so");
-
-  // For each combination of library file and path, check for existence and
-  // then load.
-  size_t loaded = 0;
-  for (size_t i = 0; i < libs.size(); ++i) {
-    for (size_t j = 0; j < paths.size(); ++j) {
-      base::FilePath path = paths[j].Append(libs[i]);
-      base::NativeLibrary lib = base::LoadNativeLibrary(path, NULL);
-      if (lib) {
-        ++loaded;
-        break;
-      }
-    }
-  }
-
-  if (loaded == libs.size()) {
-    VLOG(3) << "NSS libraries loaded.";
-  } else {
-    LOG(ERROR) << "Failed to load NSS libraries.";
-  }
-#endif  // defined(USE_NSS_CERTS)
 }
 
 bool CheckNSSVersion(const char* version) {
@@ -1048,7 +946,7 @@ ScopedPK11Slot GetSystemNSSKeySlot(
 }
 
 void SetSystemKeySlotForTesting(ScopedPK11Slot slot) {
-  g_nss_singleton.Get().SetSystemKeySlotForTesting(slot.Pass());
+  g_nss_singleton.Get().SetSystemKeySlotForTesting(std::move(slot));
 }
 
 void EnableTPMTokenForNSS() {

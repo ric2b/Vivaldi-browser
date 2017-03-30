@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -105,8 +105,6 @@ class NewTabUI : public content::WebUIController,
   };
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(NewTabUITest, UpdateUserPrefsVersion);
-
   // content::NotificationObserver implementation.
   void Observe(int type,
                const content::NotificationSource& source,
@@ -131,7 +129,7 @@ class NewTabUI : public content::WebUIController,
   // The last time we got a paint notification.
   base::TimeTicks last_paint_;
   // Scoping so we can be sure our timeouts don't outlive us.
-  base::OneShotTimer<NewTabUI> timer_;
+  base::OneShotTimer timer_;
   // The preference version. This used for migrating prefs of the NTP.
   static const int current_pref_version_ = 3;
 

@@ -5,8 +5,8 @@
 #ifndef CONTENT_BROWSER_LOADER_DETACHABLE_RESOURCE_HANDLER_H_
 #define CONTENT_BROWSER_LOADER_DETACHABLE_RESOURCE_HANDLER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
@@ -48,7 +48,6 @@ class DetachableResourceHandler : public ResourceHandler,
 
   // ResourceHandler implementation:
   void SetController(ResourceController* controller) override;
-  bool OnUploadProgress(uint64 position, uint64 size) override;
   bool OnRequestRedirected(const net::RedirectInfo& redirect_info,
                            ResourceResponse* response,
                            bool* defer) override;
@@ -78,7 +77,7 @@ class DetachableResourceHandler : public ResourceHandler,
   scoped_ptr<ResourceHandler> next_handler_;
   scoped_refptr<net::IOBuffer> read_buffer_;
 
-  scoped_ptr<base::OneShotTimer<DetachableResourceHandler> > detached_timer_;
+  scoped_ptr<base::OneShotTimer> detached_timer_;
   base::TimeDelta cancel_delay_;
 
   bool is_deferred_;

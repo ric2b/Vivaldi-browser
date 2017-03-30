@@ -2,29 +2,35 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/sync/sessions/sessions_sync_manager.h"
+#include "components/sync_sessions/sessions_sync_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/strings/string_util.h"
-#include "chrome/browser/chrome_notification_types.h"
+#include "build/build_config.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
+#include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/sync/glue/session_sync_test_helper.h"
-#include "chrome/browser/sync/glue/synced_tab_delegate.h"
-#include "chrome/browser/sync/glue/synced_window_delegate.h"
 #include "chrome/browser/sync/sessions/notification_service_sessions_router.h"
-#include "chrome/browser/sync/sessions/sessions_util.h"
-#include "chrome/browser/sync/sessions/synced_window_delegates_getter.h"
+#include "chrome/browser/ui/sync/browser_synced_window_delegates_getter.h"
 #include "chrome/browser/ui/sync/tab_contents_synced_tab_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
-#include "components/sessions/serialized_navigation_entry_test_helper.h"
-#include "components/sessions/session_id.h"
-#include "components/sessions/session_types.h"
+#include "components/sessions/content/content_serialized_navigation_builder.h"
+#include "components/sessions/core/serialized_navigation_entry_test_helper.h"
+#include "components/sessions/core/session_id.h"
+#include "components/sessions/core/session_types.h"
 #include "components/sync_driver/device_info.h"
 #include "components/sync_driver/local_device_info_provider_mock.h"
+#include "components/sync_driver/sync_api_component_factory.h"
+#include "components/sync_sessions/sync_sessions_client.h"
+#include "components/sync_sessions/synced_tab_delegate.h"
+#include "components/sync_sessions/synced_window_delegate.h"
+#include "components/sync_sessions/synced_window_delegates_getter.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
 #include "sync/api/attachments/attachment_id.h"
 #include "sync/api/sync_error_factory_mock.h"
@@ -45,6 +51,26 @@ using syncer::SyncData;
 namespace browser_sync {
 
 namespace {
+
+class SessionNotificationObserver {
+ public:
+  SessionNotificationObserver()
+      : notified_of_update_(false), notified_of_refresh_(false) {}
+  void NotifyOfUpdate() { notified_of_update_ = true; }
+  void NotifyOfRefresh() { notified_of_refresh_ = true; }
+
+  bool notified_of_update() const { return notified_of_update_; }
+  bool notified_of_refresh() const { return notified_of_refresh_; }
+
+  void Reset() {
+    notified_of_update_ = false;
+    notified_of_refresh_ = false;
+  }
+
+ private:
+  bool notified_of_update_;
+  bool notified_of_refresh_;
+};
 
 class SyncedWindowDelegateOverride : public SyncedWindowDelegate {
  public:
@@ -114,6 +140,15 @@ class TestSyncedWindowDelegatesGetter : public SyncedWindowDelegatesGetter {
   std::set<const SyncedWindowDelegate*> GetSyncedWindowDelegates() override {
     return delegates_;
   }
+
+  const SyncedWindowDelegate* FindById(SessionID::id_type id) override {
+    for (auto* window : delegates_) {
+      if (window->GetSessionId() == id)
+        return window;
+    }
+    return nullptr;
+  }
+
  private:
   const std::set<const SyncedWindowDelegate*> delegates_;
 };
@@ -155,10 +190,9 @@ class TestSyncProcessorStub : public syncer::SyncChangeProcessor {
   syncer::SyncDataList sync_data_to_return_;
 };
 
-syncer::SyncChange MakeRemoteChange(
-    int64 id,
-    const sync_pb::SessionSpecifics& specifics,
-    SyncChange::SyncChangeType type) {
+syncer::SyncChange MakeRemoteChange(int64_t id,
+                                    const sync_pb::SessionSpecifics& specifics,
+                                    SyncChange::SyncChangeType type) {
   sync_pb::EntitySpecifics entity;
   entity.mutable_session()->CopyFrom(specifics);
   return syncer::SyncChange(
@@ -201,7 +235,7 @@ void AddTabsToSyncDataList(const std::vector<sync_pb::SessionSpecifics> tabs,
     list->push_back(SyncData::CreateRemoteData(
         i + 2,
         entity,
-        base::Time(),
+        base::Time::FromInternalValue(i + 1),
         syncer::AttachmentIdList(),
         syncer::AttachmentServiceProxyForTest::Create()));
   }
@@ -231,6 +265,58 @@ scoped_ptr<LocalSessionEventRouter> NewDummyRouter() {
   return scoped_ptr<LocalSessionEventRouter>(new DummyRouter());
 }
 
+// Provides ability to override SyncedWindowDelegatesGetter.
+// All other calls are passed through to the original SyncSessionsClient.
+class SyncSessionsClientShim : public sync_sessions::SyncSessionsClient {
+ public:
+  SyncSessionsClientShim(
+      sync_sessions::SyncSessionsClient* sync_sessions_client)
+      : sync_sessions_client_(sync_sessions_client),
+        synced_window_getter_(nullptr) {}
+  ~SyncSessionsClientShim() override {}
+
+  bookmarks::BookmarkModel* GetBookmarkModel() override {
+    return sync_sessions_client_->GetBookmarkModel();
+  }
+
+  favicon::FaviconService* GetFaviconService() override {
+    return sync_sessions_client_->GetFaviconService();
+  }
+
+  history::HistoryService* GetHistoryService() override {
+    return sync_sessions_client_->GetHistoryService();
+  }
+
+  bool ShouldSyncURL(const GURL& url) const override {
+    return sync_sessions_client_->ShouldSyncURL(url);
+  }
+
+  browser_sync::SyncedWindowDelegatesGetter* GetSyncedWindowDelegatesGetter()
+      override {
+    // The idea here is to allow the test code override the default
+    // SyncedWindowDelegatesGetter provided by |sync_sessions_client_|.
+    // If |synced_window_getter_| is explicitly set, return it; otherwise return
+    // the default one provided by |sync_sessions_client_|.
+    return synced_window_getter_
+               ? synced_window_getter_
+               : sync_sessions_client_->GetSyncedWindowDelegatesGetter();
+  }
+
+  scoped_ptr<browser_sync::LocalSessionEventRouter> GetLocalSessionEventRouter()
+      override {
+    return sync_sessions_client_->GetLocalSessionEventRouter();
+  }
+
+  void set_synced_window_getter(
+      browser_sync::SyncedWindowDelegatesGetter* synced_window_getter) {
+    synced_window_getter_ = synced_window_getter;
+  }
+
+ private:
+  sync_sessions::SyncSessionsClient* const sync_sessions_client_;
+  browser_sync::SyncedWindowDelegatesGetter* synced_window_getter_;
+};
+
 }  // namespace
 
 class SessionsSyncManagerTest
@@ -249,16 +335,27 @@ class SessionsSyncManagerTest
 
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
+    sync_client_.reset(new browser_sync::ChromeSyncClient(profile()));
+    sessions_client_shim_.reset(
+        new SyncSessionsClientShim(sync_client_->GetSyncSessionsClient()));
     browser_sync::NotificationServiceSessionsRouter* router(
         new browser_sync::NotificationServiceSessionsRouter(
-            profile(), syncer::SyncableService::StartSyncFlare()));
-    manager_.reset(new SessionsSyncManager(profile(), local_device_.get(),
-      scoped_ptr<LocalSessionEventRouter>(router)));
+            profile(), GetSyncSessionsClient(),
+            syncer::SyncableService::StartSyncFlare()));
+    sync_prefs_.reset(new sync_driver::SyncPrefs(profile()->GetPrefs()));
+    manager_.reset(new SessionsSyncManager(
+        GetSyncSessionsClient(), sync_prefs_.get(), local_device_.get(),
+        scoped_ptr<LocalSessionEventRouter>(router),
+        base::Bind(&SessionNotificationObserver::NotifyOfUpdate,
+                   base::Unretained(&observer_)),
+        base::Bind(&SessionNotificationObserver::NotifyOfRefresh,
+                   base::Unretained(&observer_))));
   }
 
   void TearDown() override {
     test_processor_ = NULL;
     helper()->Reset();
+    sync_prefs_.reset();
     manager_.reset();
     BrowserWithTestWindowTest::TearDown();
   }
@@ -270,6 +367,7 @@ class SessionsSyncManagerTest
   SessionsSyncManager* manager() { return manager_.get(); }
   SessionSyncTestHelper* helper() { return &helper_; }
   LocalDeviceInfoProvider* local_device() { return local_device_.get(); }
+  SessionNotificationObserver* observer() { return &observer_; }
 
   void InitWithSyncDataTakeOutput(const syncer::SyncDataList& initial_data,
                                   syncer::SyncChangeList* output) {
@@ -315,7 +413,22 @@ class SessionsSyncManagerTest
     return list;
   }
 
+  sync_sessions::SyncSessionsClient* GetSyncSessionsClient() {
+    return sessions_client_shim_.get();
+  }
+
+  sync_driver::SyncPrefs* sync_prefs() { return sync_prefs_.get(); }
+
+  void set_synced_window_getter(
+      browser_sync::SyncedWindowDelegatesGetter* synced_window_getter) {
+    sessions_client_shim_->set_synced_window_getter(synced_window_getter);
+  }
+
  private:
+  scoped_ptr<browser_sync::ChromeSyncClient> sync_client_;
+  scoped_ptr<SyncSessionsClientShim> sessions_client_shim_;
+  scoped_ptr<sync_driver::SyncPrefs> sync_prefs_;
+  SessionNotificationObserver observer_;
   scoped_ptr<SessionsSyncManager> manager_;
   SessionSyncTestHelper helper_;
   TestSyncProcessorStub* test_processor_;
@@ -361,33 +474,49 @@ namespace {
 
 class SyncedTabDelegateFake : public SyncedTabDelegate {
  public:
-  SyncedTabDelegateFake() : current_entry_index_(0),
-                            pending_entry_index_(-1),
-                            is_supervised_(false),
-                            sync_id_(-1),
-                            blocked_navigations_(NULL) {}
+  SyncedTabDelegateFake()
+      : current_entry_index_(0), is_supervised_(false), sync_id_(-1) {}
   ~SyncedTabDelegateFake() override {}
 
+  bool IsInitialBlankNavigation() const override {
+    // This differs from NavigationControllerImpl, which has an initial blank
+    // NavigationEntry.
+    return GetEntryCount() == 0;
+  }
   int GetCurrentEntryIndex() const override { return current_entry_index_; }
   void set_current_entry_index(int i) {
     current_entry_index_ = i;
   }
 
-  content::NavigationEntry* GetEntryAtIndex(int i) const override {
-    const int size = entries_.size();
-    return (size < i + 1) ? NULL : entries_[i];
+  void AppendEntry(scoped_ptr<content::NavigationEntry> entry) {
+    entries_.push_back(std::move(entry));
   }
 
-  void AppendEntry(scoped_ptr<content::NavigationEntry> entry) {
-    entries_.push_back(entry.Pass());
+  GURL GetVirtualURLAtIndex(int i) const override {
+    if (static_cast<size_t>(i) >= entries_.size())
+      return GURL();
+    return entries_[i]->GetVirtualURL();
+  }
+
+  GURL GetFaviconURLAtIndex(int i) const override { return GURL(); }
+
+  ui::PageTransition GetTransitionAtIndex(int i) const override {
+    if (static_cast<size_t>(i) >= entries_.size())
+      return ui::PAGE_TRANSITION_LINK;
+    return entries_[i]->GetTransitionType();
+  }
+
+  void GetSerializedNavigationAtIndex(
+      int i,
+      sessions::SerializedNavigationEntry* serialized_entry) const override {
+    if (static_cast<size_t>(i) >= entries_.size())
+      return;
+    *serialized_entry =
+        sessions::ContentSerializedNavigationBuilder::FromNavigationEntry(
+            i, *entries_[i]);
   }
 
   int GetEntryCount() const override { return entries_.size(); }
-
-  int GetPendingEntryIndex() const override { return pending_entry_index_; }
-  void set_pending_entry_index(int i) {
-    pending_entry_index_ = i;
-  }
 
   SessionID::id_type GetWindowId() const override {
     return SessionID::id_type();
@@ -398,107 +527,49 @@ class SyncedTabDelegateFake : public SyncedTabDelegate {
   }
 
   bool IsBeingDestroyed() const override { return false; }
-  Profile* profile() const override { return NULL; }
   std::string GetExtensionAppId() const override { return std::string(); }
-  content::NavigationEntry* GetPendingEntry() const override { return NULL; }
-  content::NavigationEntry* GetActiveEntry() const override { return NULL; }
   bool ProfileIsSupervised() const override { return is_supervised_; }
   void set_is_supervised(bool is_supervised) { is_supervised_ = is_supervised; }
-  const std::vector<const content::NavigationEntry*>* GetBlockedNavigations()
-      const override {
-    return blocked_navigations_;
+  const std::vector<const sessions::SerializedNavigationEntry*>*
+  GetBlockedNavigations() const override {
+    return &blocked_navigations_.get();
   }
   void set_blocked_navigations(
       std::vector<const content::NavigationEntry*>* navs) {
-    blocked_navigations_ = navs;
+    for (auto* entry : *navs) {
+      scoped_ptr<sessions::SerializedNavigationEntry> serialized_entry(
+          new sessions::SerializedNavigationEntry());
+      *serialized_entry =
+          sessions::ContentSerializedNavigationBuilder::FromNavigationEntry(
+              blocked_navigations_.size(), *entry);
+      blocked_navigations_.push_back(serialized_entry.release());
+    }
   }
-  bool IsPinned() const override { return false; }
-  bool HasWebContents() const override { return false; }
-  content::WebContents* GetWebContents() const override { return NULL; }
-  std::string GetExtData() const override { return std::string(); }
+  bool IsPlaceholderTab() const override { return true; }
 
   // Session sync related methods.
   int GetSyncId() const override { return sync_id_; }
   void SetSyncId(int sync_id) override { sync_id_ = sync_id; }
 
-  bool ShouldSync() const override {
-    return sessions_util::ShouldSyncTab(*this);
+  bool ShouldSync(sync_sessions::SyncSessionsClient* sessions_client) override {
+    return false;
   }
 
   void reset() {
     current_entry_index_ = 0;
-    pending_entry_index_ = -1;
     sync_id_ = -1;
     entries_.clear();
   }
 
  private:
    int current_entry_index_;
-   int pending_entry_index_;
    bool is_supervised_;
    int sync_id_;
-   std::vector<const content::NavigationEntry*>* blocked_navigations_;
+   ScopedVector<const sessions::SerializedNavigationEntry> blocked_navigations_;
    ScopedVector<content::NavigationEntry> entries_;
 };
 
 }  // namespace
-
-// Test that we exclude tabs with only chrome:// and file:// schemed navigations
-// from ShouldSyncTab(..).
-TEST_F(SessionsSyncManagerTest, ValidTabs) {
-  SyncedTabDelegateFake tab;
-
-  // A null entry shouldn't crash.
-  tab.AppendEntry(NULL);
-  EXPECT_FALSE(tab.ShouldSync());
-  tab.reset();
-
-  // A chrome:// entry isn't valid.
-  scoped_ptr<content::NavigationEntry> entry(
-      content::NavigationEntry::Create());
-  entry->SetVirtualURL(GURL("chrome://preferences/"));
-  tab.AppendEntry(entry.Pass());
-  EXPECT_FALSE(tab.ShouldSync());
-
-
-  // A file:// entry isn't valid, even in addition to another entry.
-  scoped_ptr<content::NavigationEntry> entry2(
-      content::NavigationEntry::Create());
-  entry2->SetVirtualURL(GURL("file://bla"));
-  tab.AppendEntry(entry2.Pass());
-  EXPECT_FALSE(tab.ShouldSync());
-
-  // Add a valid scheme entry to tab, making the tab valid.
-  scoped_ptr<content::NavigationEntry> entry3(
-      content::NavigationEntry::Create());
-  entry3->SetVirtualURL(GURL("http://www.google.com"));
-  tab.AppendEntry(entry3.Pass());
-  EXPECT_FALSE(tab.ShouldSync());
-}
-
-// Make sure GetCurrentVirtualURL() returns the virtual URL of the pending
-// entry if the current entry is pending.
-TEST_F(SessionsSyncManagerTest, GetCurrentVirtualURLPending) {
-  SyncedTabDelegateFake tab;
-  scoped_ptr<content::NavigationEntry> entry(
-      content::NavigationEntry::Create());
-  GURL url("http://www.google.com/");
-  entry->SetVirtualURL(url);
-  tab.AppendEntry(entry.Pass());
-  EXPECT_EQ(url, manager()->GetCurrentVirtualURL(tab));
-}
-
-// Make sure GetCurrentVirtualURL() returns the virtual URL of the current
-// entry if the current entry is non-pending.
-TEST_F(SessionsSyncManagerTest, GetCurrentVirtualURLNonPending) {
-  SyncedTabDelegateFake tab;
-  scoped_ptr<content::NavigationEntry> entry(
-      content::NavigationEntry::Create());
-  GURL url("http://www.google.com/");
-  entry->SetVirtualURL(url);
-  tab.AppendEntry(entry.Pass());
-  EXPECT_EQ(url, manager()->GetCurrentVirtualURL(tab));
-}
 
 static const base::Time kTime0 = base::Time::FromInternalValue(100);
 static const base::Time kTime1 = base::Time::FromInternalValue(110);
@@ -536,9 +607,9 @@ TEST_F(SessionsSyncManagerTest, SetSessionTabFromDelegate) {
   entry3->SetTimestamp(kTime3);
   entry3->SetHttpStatusCode(202);
 
-  tab.AppendEntry(entry1.Pass());
-  tab.AppendEntry(entry2.Pass());
-  tab.AppendEntry(entry3.Pass());
+  tab.AppendEntry(std::move(entry1));
+  tab.AppendEntry(std::move(entry2));
+  tab.AppendEntry(std::move(entry3));
   tab.set_current_entry_index(2);
 
   sessions::SessionTab session_tab;
@@ -648,16 +719,16 @@ TEST_F(SessionsSyncManagerTest, SetSessionTabFromDelegateNavigationIndex) {
   entry9->SetTimestamp(kTime9);
   entry9->SetHttpStatusCode(200);
 
-  tab.AppendEntry(entry0.Pass());
-  tab.AppendEntry(entry1.Pass());
-  tab.AppendEntry(entry2.Pass());
-  tab.AppendEntry(entry3.Pass());
-  tab.AppendEntry(entry4.Pass());
-  tab.AppendEntry(entry5.Pass());
-  tab.AppendEntry(entry6.Pass());
-  tab.AppendEntry(entry7.Pass());
-  tab.AppendEntry(entry8.Pass());
-  tab.AppendEntry(entry9.Pass());
+  tab.AppendEntry(std::move(entry0));
+  tab.AppendEntry(std::move(entry1));
+  tab.AppendEntry(std::move(entry2));
+  tab.AppendEntry(std::move(entry3));
+  tab.AppendEntry(std::move(entry4));
+  tab.AppendEntry(std::move(entry5));
+  tab.AppendEntry(std::move(entry6));
+  tab.AppendEntry(std::move(entry7));
+  tab.AppendEntry(std::move(entry8));
+  tab.AppendEntry(std::move(entry9));
   tab.set_current_entry_index(8);
 
   sessions::SessionTab session_tab;
@@ -695,10 +766,10 @@ TEST_F(SessionsSyncManagerTest, SetSessionTabFromDelegateCurrentInvalid) {
   entry3->SetTimestamp(kTime3);
   entry3->SetHttpStatusCode(200);
 
-  tab.AppendEntry(entry0.Pass());
-  tab.AppendEntry(entry1.Pass());
-  tab.AppendEntry(entry2.Pass());
-  tab.AppendEntry(entry3.Pass());
+  tab.AppendEntry(std::move(entry0));
+  tab.AppendEntry(std::move(entry1));
+  tab.AppendEntry(std::move(entry2));
+  tab.AppendEntry(std::move(entry3));
   tab.set_current_entry_index(1);
 
   sessions::SessionTab session_tab;
@@ -741,7 +812,7 @@ TEST_F(SessionsSyncManagerTest, BlockedNavigations) {
   GURL url1("http://www.google.com/");
   entry1->SetVirtualURL(url1);
   entry1->SetTimestamp(kTime1);
-  tab.AppendEntry(entry1.Pass());
+  tab.AppendEntry(std::move(entry1));
 
   scoped_ptr<content::NavigationEntry> entry2(
       content::NavigationEntry::Create());
@@ -754,8 +825,8 @@ TEST_F(SessionsSyncManagerTest, BlockedNavigations) {
   entry3->SetVirtualURL(url3);
   entry3->SetTimestamp(kTime3);
   ScopedVector<const content::NavigationEntry> blocked_navigations;
-  blocked_navigations.push_back(entry2.Pass());
-  blocked_navigations.push_back(entry3.Pass());
+  blocked_navigations.push_back(std::move(entry2));
+  blocked_navigations.push_back(std::move(entry3));
 
   tab.set_is_supervised(true);
   tab.set_blocked_navigations(&blocked_navigations.get());
@@ -840,7 +911,9 @@ TEST_F(SessionsSyncManagerTest, MergeLocalSessionNoTabs) {
       syncer::AttachmentServiceProxyForTest::Create()));
   syncer::SyncDataList in(&d, &d + 1);
   out.clear();
-  SessionsSyncManager manager2(profile(), local_device(), NewDummyRouter());
+  SessionsSyncManager manager2(GetSyncSessionsClient(), sync_prefs(),
+                               local_device(), NewDummyRouter(),
+                               base::Closure(), base::Closure());
   syncer::SyncMergeResult result = manager2.MergeDataAndStartSyncing(
       syncer::SESSIONS, in,
       scoped_ptr<syncer::SyncChangeProcessor>(
@@ -903,7 +976,7 @@ TEST_F(SessionsSyncManagerTest, SwappedOutOnRestore) {
   manager()->StopSyncing(syncer::SESSIONS);
 
   const std::set<const SyncedWindowDelegate*>& windows =
-      SyncedWindowDelegate::GetAll();
+      manager()->synced_window_delegates_getter()->GetSyncedWindowDelegates();
   ASSERT_EQ(1U, windows.size());
   SyncedTabDelegateFake t1_override, t2_override;
   t1_override.SetSyncId(1);  // No WebContents by default.
@@ -916,7 +989,7 @@ TEST_F(SessionsSyncManagerTest, SwappedOutOnRestore) {
   delegates.insert(&window_override);
   scoped_ptr<TestSyncedWindowDelegatesGetter> getter(
       new TestSyncedWindowDelegatesGetter(delegates));
-  manager()->synced_window_getter_.reset(getter.release());
+  set_synced_window_getter(getter.get());
 
   syncer::SyncMergeResult result = manager()->MergeDataAndStartSyncing(
       syncer::SESSIONS, in,
@@ -1429,7 +1502,9 @@ TEST_F(SessionsSyncManagerTest, SaveUnassociatedNodesForReassociation) {
       syncer::AttachmentServiceProxyForTest::Create()));
   syncer::SyncDataList in(&d, &d + 1);
   changes.clear();
-  SessionsSyncManager manager2(profile(), local_device(), NewDummyRouter());
+  SessionsSyncManager manager2(GetSyncSessionsClient(), sync_prefs(),
+                               local_device(), NewDummyRouter(),
+                               base::Closure(), base::Closure());
   syncer::SyncMergeResult result = manager2.MergeDataAndStartSyncing(
       syncer::SESSIONS, in,
       scoped_ptr<syncer::SyncChangeProcessor>(
@@ -1621,6 +1696,62 @@ TEST_F(SessionsSyncManagerTest, OnLocalTabModified) {
   EXPECT_EQ(bar2.spec(), tab2_2.navigation(1).virtual_url());
 }
 
+// Check that if a tab becomes uninteresting (for example no syncable URLs),
+// we correctly remove it from the header node.
+TEST_F(SessionsSyncManagerTest, TabBecomesUninteresting) {
+  syncer::SyncChangeList out;
+  // Init with no local data, relies on MergeLocalSessionNoTabs.
+  InitWithSyncDataTakeOutput(syncer::SyncDataList(), &out);
+  ASSERT_FALSE(manager()->current_machine_tag().empty());
+  ASSERT_EQ(2U, out.size());
+  out.clear();
+
+  const GURL kValidUrl("http://foo/1");
+  const GURL kInternalUrl("chrome://internal");
+
+  // Add an interesting tab.
+  AddTab(browser(), kValidUrl);
+  // No-op header update, tab creation, tab update, header update.
+  ASSERT_EQ(4U, out.size());
+  // The last two are the interesting updates.
+  ASSERT_TRUE(out[2].sync_data().GetSpecifics().session().has_tab());
+  EXPECT_EQ(kValidUrl.spec(), out[2]
+                                  .sync_data()
+                                  .GetSpecifics()
+                                  .session()
+                                  .tab()
+                                  .navigation(0)
+                                  .virtual_url());
+  ASSERT_TRUE(out[3].sync_data().GetSpecifics().session().has_header());
+  ASSERT_EQ(1,
+            out[3].sync_data().GetSpecifics().session().header().window_size());
+  ASSERT_EQ(1, out[3]
+                   .sync_data()
+                   .GetSpecifics()
+                   .session()
+                   .header()
+                   .window(0)
+                   .tab_size());
+
+  // Navigate five times to uninteresting urls to push the interesting one off
+  // the back of the stack.
+  NavigateAndCommitActiveTab(kInternalUrl);
+  NavigateAndCommitActiveTab(kInternalUrl);
+  NavigateAndCommitActiveTab(kInternalUrl);
+  NavigateAndCommitActiveTab(kInternalUrl);
+
+  // Reset |out| so we only see the effects of the final navigation.
+  out.clear();
+  NavigateAndCommitActiveTab(kInternalUrl);
+
+  // Only the header node should be updated, and it should no longer have any
+  // valid windows/tabs.
+  ASSERT_EQ(2U, out.size());  // Two header updates (first is a no-op).
+  ASSERT_TRUE(out[1].sync_data().GetSpecifics().session().has_header());
+  EXPECT_EQ(1,
+            out[1].sync_data().GetSpecifics().session().header().window_size());
+}
+
 // Ensure model association associates the pre-existing tabs.
 TEST_F(SessionsSyncManagerTest, MergeLocalSessionExistingTabs) {
   AddTab(browser(), GURL("http://foo1"));
@@ -1686,16 +1817,12 @@ TEST_F(SessionsSyncManagerTest, MergeLocalSessionExistingTabs) {
   // the tree based on order of tabs created
   SessionsSyncManager::TabLinksMap::iterator iter = tab_map.begin();
   ASSERT_EQ(2, iter->second->tab()->GetEntryCount());
-  EXPECT_EQ(GURL("http://foo1"), iter->second->tab()->
-          GetEntryAtIndex(0)->GetVirtualURL());
-  EXPECT_EQ(GURL("http://foo2"), iter->second->tab()->
-          GetEntryAtIndex(1)->GetVirtualURL());
+  EXPECT_EQ(GURL("http://foo1"), iter->second->tab()->GetVirtualURLAtIndex(0));
+  EXPECT_EQ(GURL("http://foo2"), iter->second->tab()->GetVirtualURLAtIndex(1));
   iter++;
   ASSERT_EQ(2, iter->second->tab()->GetEntryCount());
-  EXPECT_EQ(GURL("http://bar1"), iter->second->tab()->
-      GetEntryAtIndex(0)->GetVirtualURL());
-  EXPECT_EQ(GURL("http://bar2"), iter->second->tab()->
-      GetEntryAtIndex(1)->GetVirtualURL());
+  EXPECT_EQ(GURL("http://bar1"), iter->second->tab()->GetVirtualURLAtIndex(0));
+  EXPECT_EQ(GURL("http://bar2"), iter->second->tab()->GetVirtualURLAtIndex(1));
 }
 
 // Test garbage collection of stale foreign sessions.
@@ -1872,49 +1999,10 @@ TEST_F(SessionsSyncManagerTest, CheckPrerenderedWebContentsSwap) {
   ASSERT_EQ(19U, out.size());
 }
 
-namespace {
-class SessionNotificationObserver : public content::NotificationObserver {
- public:
-  SessionNotificationObserver() : notified_of_update_(false),
-                                  notified_of_refresh_(false) {
-    registrar_.Add(this, chrome::NOTIFICATION_FOREIGN_SESSION_UPDATED,
-                   content::NotificationService::AllSources());
-    registrar_.Add(this, chrome::NOTIFICATION_SYNC_REFRESH_LOCAL,
-                   content::NotificationService::AllSources());
-  }
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    switch (type) {
-      case chrome::NOTIFICATION_FOREIGN_SESSION_UPDATED:
-        notified_of_update_ = true;
-        break;
-      case chrome::NOTIFICATION_SYNC_REFRESH_LOCAL:
-        notified_of_refresh_ = true;
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
-  }
-  bool notified_of_update() const { return notified_of_update_; }
-  bool notified_of_refresh() const { return notified_of_refresh_; }
-  void Reset() {
-    notified_of_update_ = false;
-    notified_of_refresh_ = false;
-  }
- private:
-  content::NotificationRegistrar registrar_;
-  bool notified_of_update_;
-  bool notified_of_refresh_;
-};
-}  // namespace
-
 // Test that NOTIFICATION_FOREIGN_SESSION_UPDATED is sent when processing
 // sync changes.
 TEST_F(SessionsSyncManagerTest, NotifiedOfUpdates) {
-  SessionNotificationObserver observer;
-  ASSERT_FALSE(observer.notified_of_update());
+  ASSERT_FALSE(observer()->notified_of_update());
   InitWithNoSyncData();
 
   SessionID::id_type n[] = {5};
@@ -1926,19 +2014,19 @@ TEST_F(SessionsSyncManagerTest, NotifiedOfUpdates) {
   syncer::SyncChangeList changes;
   changes.push_back(MakeRemoteChange(1, meta, SyncChange::ACTION_ADD));
   manager()->ProcessSyncChanges(FROM_HERE, changes);
-  EXPECT_TRUE(observer.notified_of_update());
+  EXPECT_TRUE(observer()->notified_of_update());
 
   changes.clear();
-  observer.Reset();
+  observer()->Reset();
   AddTabsToChangeList(tabs1, SyncChange::ACTION_ADD, &changes);
   manager()->ProcessSyncChanges(FROM_HERE, changes);
-  EXPECT_TRUE(observer.notified_of_update());
+  EXPECT_TRUE(observer()->notified_of_update());
 
   changes.clear();
-  observer.Reset();
+  observer()->Reset();
   changes.push_back(MakeRemoteChange(1, meta, SyncChange::ACTION_DELETE));
   manager()->ProcessSyncChanges(FROM_HERE, changes);
-  EXPECT_TRUE(observer.notified_of_update());
+  EXPECT_TRUE(observer()->notified_of_update());
 }
 
 // Test that NOTIFICATION_FOREIGN_SESSION_UPDATED is sent when handling
@@ -1956,10 +2044,10 @@ TEST_F(SessionsSyncManagerTest, NotifiedOfLocalRemovalOfForeignSession) {
   changes.push_back(MakeRemoteChange(1, meta, SyncChange::ACTION_ADD));
   manager()->ProcessSyncChanges(FROM_HERE, changes);
 
-  SessionNotificationObserver observer;
-  ASSERT_FALSE(observer.notified_of_update());
+  observer()->Reset();
+  ASSERT_FALSE(observer()->notified_of_update());
   manager()->DeleteForeignSession(tag);
-  ASSERT_TRUE(observer.notified_of_update());
+  ASSERT_TRUE(observer()->notified_of_update());
 }
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
@@ -1967,13 +2055,12 @@ TEST_F(SessionsSyncManagerTest, NotifiedOfLocalRemovalOfForeignSession) {
 // This page only exists on mobile platforms today; desktop has a
 // search-enhanced NTP without other devices.
 TEST_F(SessionsSyncManagerTest, NotifiedOfRefresh) {
-  SessionNotificationObserver observer;
-  ASSERT_FALSE(observer.notified_of_refresh());
+  ASSERT_FALSE(observer()->notified_of_refresh());
   InitWithNoSyncData();
   AddTab(browser(), GURL("http://foo1"));
-  EXPECT_FALSE(observer.notified_of_refresh());
+  EXPECT_FALSE(observer()->notified_of_refresh());
   NavigateAndCommitActiveTab(GURL("chrome://newtab/#open_tabs"));
-  EXPECT_TRUE(observer.notified_of_refresh());
+  EXPECT_TRUE(observer()->notified_of_refresh());
 }
 #endif  // defined(OS_ANDROID) || defined(OS_IOS)
 
@@ -2126,6 +2213,113 @@ TEST_F(SessionsSyncManagerTest, ReceiveDuplicateUnassociatedTabs) {
   ASSERT_EQ(1, window_tabs[1]->tab_visual_index);
   // duplicating_tab2 wins due to the later timestamp.
   ASSERT_EQ(3, window_tabs[2]->tab_visual_index);
+}
+
+// Verify that GetAllForeignSessions returns all sessions sorted by recency.
+TEST_F(SessionsSyncManagerTest, GetAllForeignSessions) {
+  SessionID::id_type ids[] = {5, 10, 13, 17};
+  std::vector<SessionID::id_type> tab_list(ids, ids + arraysize(ids));
+
+  const std::string kTag = "tag1";
+  std::vector<sync_pb::SessionSpecifics> tabs1;
+  sync_pb::SessionSpecifics meta1(helper()->BuildForeignSession(
+      kTag, tab_list, &tabs1));
+
+  const std::string kTag2 = "tag2";
+  std::vector<sync_pb::SessionSpecifics> tabs2;
+  sync_pb::SessionSpecifics meta2(helper()->BuildForeignSession(
+      kTag2, tab_list, &tabs2));
+
+  sync_pb::EntitySpecifics entity1;
+  entity1.mutable_session()->CopyFrom(meta1);
+  sync_pb::EntitySpecifics entity2;
+  entity2.mutable_session()->CopyFrom(meta2);
+
+  syncer::SyncDataList initial_data;
+  initial_data.push_back(SyncData::CreateRemoteData(
+      1,
+      entity1,
+      base::Time::FromInternalValue(10),
+      syncer::AttachmentIdList(),
+      syncer::AttachmentServiceProxyForTest::Create()));
+  AddTabsToSyncDataList(tabs1, &initial_data);
+  initial_data.push_back(SyncData::CreateRemoteData(
+      2,
+      entity2,
+      base::Time::FromInternalValue(200),
+      syncer::AttachmentIdList(),
+      syncer::AttachmentServiceProxyForTest::Create()));
+  AddTabsToSyncDataList(tabs2, &initial_data);
+
+  syncer::SyncChangeList output;
+  InitWithSyncDataTakeOutput(initial_data, &output);
+
+  std::vector<const SyncedSession*> foreign_sessions;
+  ASSERT_TRUE(manager()->GetAllForeignSessions(&foreign_sessions));
+  ASSERT_EQ(2U, foreign_sessions.size());
+  ASSERT_GT(foreign_sessions[0]->modified_time,
+            foreign_sessions[1]->modified_time);
+}
+
+// Verify that GetForeignSessionTabs returns all tabs for a session sorted
+// by recency.
+TEST_F(SessionsSyncManagerTest, GetForeignSessionTabs) {
+  const std::string kTag = "tag1";
+
+  SessionID::id_type n1[] = {5, 10, 13, 17};
+  std::vector<SessionID::id_type> tab_list1(n1, n1 + arraysize(n1));
+  std::vector<sync_pb::SessionSpecifics> tabs1;
+  sync_pb::SessionSpecifics meta(helper()->BuildForeignSession(
+      kTag, tab_list1, &tabs1));
+  // Add a second window.
+  SessionID::id_type n2[] = {7, 15, 18, 20};
+  std::vector<SessionID::id_type> tab_list2(n2, n2 + arraysize(n2));
+  helper()->AddWindowSpecifics(1, tab_list2, &meta);
+
+  // Set up initial data.
+  syncer::SyncDataList initial_data;
+  sync_pb::EntitySpecifics entity;
+  entity.mutable_session()->CopyFrom(meta);
+  initial_data.push_back(SyncData::CreateRemoteData(
+      1,
+      entity,
+      base::Time(),
+      syncer::AttachmentIdList(),
+      syncer::AttachmentServiceProxyForTest::Create()));
+
+  // Add the first window's tabs.
+  AddTabsToSyncDataList(tabs1, &initial_data);
+
+  // Add the second window's tabs.
+  for (size_t i = 0; i < tab_list2.size(); ++i) {
+    sync_pb::EntitySpecifics entity;
+    helper()->BuildTabSpecifics(kTag, 0, tab_list2[i],
+                                entity.mutable_session());
+    // Order the tabs oldest to most ReceiveDuplicateUnassociatedTabs and
+    // left to right visually.
+    initial_data.push_back(SyncData::CreateRemoteData(
+        i + 10,
+        entity,
+        base::Time::FromInternalValue(i + 1),
+        syncer::AttachmentIdList(),
+        syncer::AttachmentServiceProxyForTest::Create()));
+  }
+
+  syncer::SyncChangeList output;
+  InitWithSyncDataTakeOutput(initial_data, &output);
+
+  std::vector<const sessions::SessionTab*> tabs;
+  ASSERT_TRUE(manager()->GetForeignSessionTabs(kTag, &tabs));
+  // Assert that the size matches the total number of tabs and that the order
+  // is from most recent to least.
+  ASSERT_EQ(tab_list1.size() + tab_list2.size(), tabs.size());
+  base::Time last_time;
+  for (size_t i = 0; i < tabs.size(); ++i) {
+    base::Time this_time = tabs[i]->timestamp;
+    if (i > 0)
+      ASSERT_GE(last_time, this_time);
+    last_time = tabs[i]->timestamp;
+  }
 }
 
 }  // namespace browser_sync

@@ -4,7 +4,10 @@
 
 #include "extensions/browser/api/storage/storage_api.h"
 
+#include <stddef.h>
+
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -22,8 +25,7 @@ using content::BrowserThread;
 // SettingsFunction
 
 SettingsFunction::SettingsFunction()
-    : settings_namespace_(settings_namespace::INVALID),
-      tried_restoring_storage_(false) {}
+    : settings_namespace_(settings_namespace::INVALID) {}
 
 SettingsFunction::~SettingsFunction() {}
 
@@ -71,10 +73,9 @@ void SettingsFunction::AsyncRunWithStorage(ValueStore* storage) {
 }
 
 ExtensionFunction::ResponseValue SettingsFunction::UseReadResult(
-    ValueStore::ReadResult result,
-    ValueStore* storage) {
-  if (result->HasError())
-    return HandleError(result->error(), storage);
+    ValueStore::ReadResult result) {
+  if (!result->status().ok())
+    return Error(result->status().message);
 
   base::DictionaryValue* dict = new base::DictionaryValue();
   dict->Swap(&result->settings());
@@ -82,10 +83,9 @@ ExtensionFunction::ResponseValue SettingsFunction::UseReadResult(
 }
 
 ExtensionFunction::ResponseValue SettingsFunction::UseWriteResult(
-    ValueStore::WriteResult result,
-    ValueStore* storage) {
-  if (result->HasError())
-    return HandleError(result->error(), storage);
+    ValueStore::WriteResult result) {
+  if (!result->status().ok())
+    return Error(result->status().message);
 
   if (!result->changes().empty()) {
     observers_->Notify(FROM_HERE, &SettingsObserver::OnSettingsChanged,
@@ -94,29 +94,6 @@ ExtensionFunction::ResponseValue SettingsFunction::UseWriteResult(
   }
 
   return NoArguments();
-}
-
-ExtensionFunction::ResponseValue SettingsFunction::HandleError(
-    const ValueStore::Error& error,
-    ValueStore* storage) {
-  // If the method failed due to corruption, and we haven't tried to fix it, we
-  // can try to restore the storage and re-run it. Otherwise, the method has
-  // failed.
-  if (error.code == ValueStore::CORRUPTION && !tried_restoring_storage_) {
-    tried_restoring_storage_ = true;
-
-    // If the corruption is on a particular key, try to restore that key and
-    // re-run.
-    if (error.key.get() && storage->RestoreKey(*error.key))
-      return RunWithStorage(storage);
-
-    // If the full database is corrupted, try to restore the whole thing and
-    // re-run.
-    if (storage->Restore())
-      return RunWithStorage(storage);
-  }
-
-  return Error(error.message);
 }
 
 // Concrete settings functions
@@ -149,10 +126,10 @@ std::vector<std::string> GetKeys(const base::DictionaryValue& dict) {
 void GetModificationQuotaLimitHeuristics(QuotaLimitHeuristics* heuristics) {
   // See storage.json for the current value of these limits.
   QuotaLimitHeuristic::Config short_limit_config = {
-      core_api::storage::sync::MAX_WRITE_OPERATIONS_PER_MINUTE,
+      api::storage::sync::MAX_WRITE_OPERATIONS_PER_MINUTE,
       base::TimeDelta::FromMinutes(1)};
   QuotaLimitHeuristic::Config long_limit_config = {
-      core_api::storage::sync::MAX_WRITE_OPERATIONS_PER_HOUR,
+      api::storage::sync::MAX_WRITE_OPERATIONS_PER_HOUR,
       base::TimeDelta::FromHours(1)};
   heuristics->push_back(new QuotaService::TimedLimit(
       short_limit_config, new QuotaLimitHeuristic::SingletonBucketMapper(),
@@ -160,7 +137,7 @@ void GetModificationQuotaLimitHeuristics(QuotaLimitHeuristics* heuristics) {
   heuristics->push_back(new QuotaService::TimedLimit(
       long_limit_config, new QuotaLimitHeuristic::SingletonBucketMapper(),
       "MAX_WRITE_OPERATIONS_PER_HOUR"));
-};
+}
 
 }  // namespace
 
@@ -172,34 +149,33 @@ ExtensionFunction::ResponseValue StorageStorageAreaGetFunction::RunWithStorage(
 
   switch (input->GetType()) {
     case base::Value::TYPE_NULL:
-      return UseReadResult(storage->Get(), storage);
+      return UseReadResult(storage->Get());
 
     case base::Value::TYPE_STRING: {
       std::string as_string;
       input->GetAsString(&as_string);
-      return UseReadResult(storage->Get(as_string), storage);
+      return UseReadResult(storage->Get(as_string));
     }
 
     case base::Value::TYPE_LIST: {
       std::vector<std::string> as_string_list;
       AddAllStringValues(*static_cast<base::ListValue*>(input),
                          &as_string_list);
-      return UseReadResult(storage->Get(as_string_list), storage);
+      return UseReadResult(storage->Get(as_string_list));
     }
 
     case base::Value::TYPE_DICTIONARY: {
       base::DictionaryValue* as_dict =
           static_cast<base::DictionaryValue*>(input);
       ValueStore::ReadResult result = storage->Get(GetKeys(*as_dict));
-      if (result->HasError()) {
-        return UseReadResult(result.Pass(), storage);
+      if (!result->status().ok()) {
+        return UseReadResult(std::move(result));
       }
 
       base::DictionaryValue* with_default_values = as_dict->DeepCopy();
       with_default_values->MergeDictionary(&result->settings());
-      return UseReadResult(
-          ValueStore::MakeReadResult(make_scoped_ptr(with_default_values)),
-          storage);
+      return UseReadResult(ValueStore::MakeReadResult(
+          make_scoped_ptr(with_default_values), result->status()));
     }
 
     default:
@@ -248,7 +224,7 @@ ExtensionFunction::ResponseValue StorageStorageAreaSetFunction::RunWithStorage(
   base::DictionaryValue* input = NULL;
   if (!args_->GetDictionary(0, &input))
     return BadMessage();
-  return UseWriteResult(storage->Set(ValueStore::DEFAULTS, *input), storage);
+  return UseWriteResult(storage->Set(ValueStore::DEFAULTS, *input));
 }
 
 void StorageStorageAreaSetFunction::GetQuotaLimitHeuristics(
@@ -266,19 +242,19 @@ StorageStorageAreaRemoveFunction::RunWithStorage(ValueStore* storage) {
     case base::Value::TYPE_STRING: {
       std::string as_string;
       input->GetAsString(&as_string);
-      return UseWriteResult(storage->Remove(as_string), storage);
+      return UseWriteResult(storage->Remove(as_string));
     }
 
     case base::Value::TYPE_LIST: {
       std::vector<std::string> as_string_list;
       AddAllStringValues(*static_cast<base::ListValue*>(input),
                          &as_string_list);
-      return UseWriteResult(storage->Remove(as_string_list), storage);
+      return UseWriteResult(storage->Remove(as_string_list));
     }
 
     default:
       return BadMessage();
-  };
+  }
 }
 
 void StorageStorageAreaRemoveFunction::GetQuotaLimitHeuristics(
@@ -288,7 +264,7 @@ void StorageStorageAreaRemoveFunction::GetQuotaLimitHeuristics(
 
 ExtensionFunction::ResponseValue
 StorageStorageAreaClearFunction::RunWithStorage(ValueStore* storage) {
-  return UseWriteResult(storage->Clear(), storage);
+  return UseWriteResult(storage->Clear());
 }
 
 void StorageStorageAreaClearFunction::GetQuotaLimitHeuristics(

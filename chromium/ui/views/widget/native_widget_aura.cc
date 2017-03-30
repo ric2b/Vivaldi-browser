@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -179,6 +180,8 @@ void NativeWidgetAura::InitNativeWidget(const Widget::InitParams& params) {
   window_reorderer_.reset(new WindowReorderer(window_,
       GetWidget()->GetRootView()));
 }
+
+void NativeWidgetAura::OnWidgetInitDone() {}
 
 NonClientFrameView* NativeWidgetAura::CreateNonClientFrameView() {
   return NULL;
@@ -494,6 +497,11 @@ void NativeWidgetAura::ShowWithWindowState(ui::WindowShowState state) {
     // do the right thing.
     SetInitialFocus(state);
   }
+
+  // On desktop aura, a window is activated first even when it is shown as
+  // minimized. Do the same for consistency.
+  if (state == ui::SHOW_STATE_MINIMIZED)
+    Minimize();
 }
 
 bool NativeWidgetAura::IsVisible() const {
@@ -866,10 +874,7 @@ void NativeWidgetAura::OnKeyEvent(ui::KeyEvent* event) {
   if (!window_->IsVisible())
     return;
 
-  FocusManager* focus_manager = GetWidget()->GetFocusManager();
   delegate_->OnKeyEvent(event);
-  if (!event->handled() && focus_manager)
-    focus_manager->OnKeyEvent(*event);
   event->SetHandled();
 }
 
@@ -1164,7 +1169,7 @@ gfx::FontList NativeWidgetPrivate::GetWindowTitleFontList() {
   base::win::GetNonClientMetrics(&ncm);
   l10n_util::AdjustUIFont(&(ncm.lfCaptionFont));
   base::win::ScopedHFONT caption_font(CreateFontIndirect(&(ncm.lfCaptionFont)));
-  return gfx::FontList(gfx::Font(caption_font));
+  return gfx::FontList(gfx::Font(caption_font.get()));
 #else
   return gfx::FontList();
 #endif

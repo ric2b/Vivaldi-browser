@@ -10,6 +10,8 @@
 // portion of this class, the GpuProcessHost, is responsible for
 // shuttling messages between the browser and GPU processes.
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
@@ -17,6 +19,7 @@
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/non_thread_safe.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/common/message_router.h"
 #include "content/public/common/gpu_memory_stats.h"
@@ -29,7 +32,7 @@ struct GpuHostMsg_AcceleratedSurfaceBuffersSwapped_Params;
 #endif
 
 namespace ui {
-struct LatencyInfo;
+class LatencyInfo;
 }
 
 namespace gfx {
@@ -65,6 +68,9 @@ class GpuProcessHostUIShim : public IPC::Listener,
   // Return NULL if none has been created.
   CONTENT_EXPORT static GpuProcessHostUIShim* GetOneInstance();
 
+  // Stops the GPU process.
+  void StopGpuProcess(const base::Closure& callback);
+
   // IPC::Sender implementation.
   bool Send(IPC::Message* msg) override;
 
@@ -74,7 +80,6 @@ class GpuProcessHostUIShim : public IPC::Listener,
   // actually received on the IO thread.
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  CONTENT_EXPORT void RelinquishGpuResources(const base::Closure& callback);
   CONTENT_EXPORT void SimulateRemoveAllContext();
   CONTENT_EXPORT void SimulateCrash();
   CONTENT_EXPORT void SimulateHang();
@@ -91,20 +96,18 @@ class GpuProcessHostUIShim : public IPC::Listener,
 
   void OnGraphicsInfoCollected(const gpu::GPUInfo& gpu_info);
 
-  void OnAcceleratedSurfaceInitialized(int32 surface_id, int32 route_id);
 #if defined(OS_MACOSX)
   void OnAcceleratedSurfaceBuffersSwapped(
       const GpuHostMsg_AcceleratedSurfaceBuffersSwapped_Params& params);
 #endif
   void OnVideoMemoryUsageStatsReceived(
       const GPUVideoMemoryUsageStats& video_memory_usage_stats);
-  void OnResourcesRelinquished();
-  void OnAddSubscription(int32 process_id, unsigned int target);
-  void OnRemoveSubscription(int32 process_id, unsigned int target);
+  void OnAddSubscription(int32_t process_id, unsigned int target);
+  void OnRemoveSubscription(int32_t process_id, unsigned int target);
 
   // The serial number of the GpuProcessHost / GpuProcessHostUIShim pair.
   int host_id_;
-  base::Closure relinquish_callback_;
+  base::Closure close_callback_;
 };
 
 }  // namespace content

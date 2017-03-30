@@ -5,14 +5,17 @@
 #ifndef EXTENSIONS_BROWSER_API_CAST_CHANNEL_CAST_FRAMER_H_
 #define EXTENSIONS_BROWSER_API_CAST_CHANNEL_CAST_FRAMER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "extensions/common/api/cast_channel.h"
 #include "net/base/io_buffer.h"
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 class CastMessage;
 
@@ -94,6 +97,6 @@ class MessageFramer {
   DISALLOW_COPY_AND_ASSIGN(MessageFramer);
 };
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions
 #endif  // EXTENSIONS_BROWSER_API_CAST_CHANNEL_CAST_FRAMER_H_

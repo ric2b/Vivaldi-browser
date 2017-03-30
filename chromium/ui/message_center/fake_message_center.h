@@ -5,6 +5,9 @@
 #ifndef UI_MESSAGE_CENTER_FAKE_MESSAGE_CENTER_H_
 #define UI_MESSAGE_CENTER_FAKE_MESSAGE_CENTER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_types.h"
 
@@ -52,6 +55,7 @@ class FakeMessageCenter : public MessageCenter {
   void ClickOnNotification(const std::string& id) override;
   void ClickOnNotificationButton(const std::string& id,
                                  int button_index) override;
+  void ClickOnSettingsButton(const std::string& id) override;
   void MarkSinglePopupAsShown(const std::string& id,
                               bool mark_notification_as_read) override;
   void DisplayedNotification(const std::string& id,
@@ -67,6 +71,7 @@ class FakeMessageCenter : public MessageCenter {
 
  protected:
   void DisableTimersForTest() override;
+  void EnableChangeQueueForTest(bool enabled) override;
 
  private:
   const NotificationList::Notifications empty_notifications_;

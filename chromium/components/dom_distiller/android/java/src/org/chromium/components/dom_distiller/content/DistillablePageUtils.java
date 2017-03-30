@@ -4,8 +4,8 @@
 
 package org.chromium.components.dom_distiller.content;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -33,5 +33,30 @@ public final class DistillablePageUtils {
 
     private static native void nativeIsPageDistillable(
             WebContents webContents, boolean isMobileOptimized, PageDistillableCallback callback);
-}
 
+    /**
+     * Delegate to receive distillability updates.
+     */
+    public static interface PageDistillableDelegate {
+        /**
+         * Called when the distillability status changes.
+         * @param isDistillable Whether the page is distillable.
+         * @param isLast Whether the update is the last one for this page.
+         */
+        public void onIsPageDistillableResult(boolean isDistillable, boolean isLast);
+    }
+
+    public static void setDelegate(WebContents webContents,
+            PageDistillableDelegate delegate) {
+        nativeSetDelegate(webContents, delegate);
+    }
+
+    @CalledByNative
+    private static void callOnIsPageDistillableUpdate(
+            PageDistillableDelegate delegate, boolean isDistillable, boolean isLast) {
+        delegate.onIsPageDistillableResult(isDistillable, isLast);
+    }
+
+    private static native void nativeSetDelegate(
+            WebContents webContents, PageDistillableDelegate delegate);
+}

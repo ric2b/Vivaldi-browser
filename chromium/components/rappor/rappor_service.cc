@@ -4,10 +4,12 @@
 
 #include "components/rappor/rappor_service.h"
 
+#include <utility>
+
 #include "base/metrics/field_trial.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
-#include "components/metrics/metrics_hashes.h"
 #include "components/rappor/log_uploader.h"
 #include "components/rappor/proto/rappor_metric.pb.h"
 #include "components/rappor/rappor_metric.h"
@@ -47,36 +49,6 @@ GURL GetServerUrl() {
     return GURL(kDefaultServerUrl);
 }
 
-const RapporParameters kRapporParametersForType[NUM_RAPPOR_TYPES] = {
-    // UMA_RAPPOR_TYPE
-    {128 /* Num cohorts */,
-     4 /* Bloom filter size bytes */,
-     2 /* Bloom filter hash count */,
-     rappor::PROBABILITY_50 /* Fake data probability */,
-     rappor::PROBABILITY_50 /* Fake one probability */,
-     rappor::PROBABILITY_75 /* One coin probability */,
-     rappor::PROBABILITY_25 /* Zero coin probability */,
-     UMA_RAPPOR_GROUP /* Recording group */},
-    // SAFEBROWSING_RAPPOR_TYPE
-    {128 /* Num cohorts */,
-     1 /* Bloom filter size bytes */,
-     2 /* Bloom filter hash count */,
-     rappor::PROBABILITY_50 /* Fake data probability */,
-     rappor::PROBABILITY_50 /* Fake one probability */,
-     rappor::PROBABILITY_75 /* One coin probability */,
-     rappor::PROBABILITY_25 /* Zero coin probability */,
-     SAFEBROWSING_RAPPOR_GROUP /* Recording group */},
-    // ETLD_PLUS_ONE_RAPPOR_TYPE
-    {128 /* Num cohorts */,
-     16 /* Bloom filter size bytes */,
-     2 /* Bloom filter hash count */,
-     rappor::PROBABILITY_50 /* Fake data probability */,
-     rappor::PROBABILITY_50 /* Fake one probability */,
-     rappor::PROBABILITY_75 /* One coin probability */,
-     rappor::PROBABILITY_25 /* Zero coin probability */,
-     UMA_RAPPOR_GROUP /* Recording group */},
-};
-
 }  // namespace
 
 RapporService::RapporService(
@@ -97,7 +69,7 @@ RapporService::~RapporService() {
 
 void RapporService::AddDailyObserver(
     scoped_ptr<metrics::DailyEvent::Observer> observer) {
-  daily_event_.AddObserver(observer.Pass());
+  daily_event_.AddObserver(std::move(observer));
 }
 
 void RapporService::Initialize(net::URLRequestContextGetter* request_context) {
@@ -201,7 +173,7 @@ bool RapporService::ExportMetrics(RapporReports* reports) {
   for (const auto& kv : metrics_map_) {
     const RapporMetric* metric = kv.second;
     RapporReports::Report* report = reports->add_report();
-    report->set_name_hash(metrics::HashMetricName(kv.first));
+    report->set_name_hash(base::HashMetricName(kv.first));
     ByteVector bytes = metric->GetReport(secret_);
     report->set_bits(std::string(bytes.begin(), bytes.end()));
     DVLOG(2) << "Exporting metric " << kv.first;
@@ -242,7 +214,7 @@ void RapporService::RecordSample(const std::string& metric_name,
   if (!IsInitialized())
     return;
   DCHECK_LT(type, NUM_RAPPOR_TYPES);
-  const RapporParameters& parameters = kRapporParametersForType[type];
+  const RapporParameters& parameters = internal::kRapporParametersForType[type];
   DVLOG(2) << "Recording sample \"" << sample
            << "\" for metric \"" << metric_name
            << "\" of type: " << type;
@@ -281,7 +253,7 @@ scoped_ptr<Sample> RapporService::CreateSample(RapporType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(IsInitialized());
   return scoped_ptr<Sample>(
-      new Sample(cohort_, kRapporParametersForType[type]));
+      new Sample(cohort_, internal::kRapporParametersForType[type]));
 }
 
 void RapporService::RecordSampleObj(const std::string& metric_name,
@@ -290,7 +262,7 @@ void RapporService::RecordSampleObj(const std::string& metric_name,
   if (!RecordingAllowed(sample->parameters()))
     return;
   DVLOG(1) << "Recording sample of metric \"" << metric_name << "\"";
-  sampler_.AddSample(metric_name, sample.Pass());
+  sampler_.AddSample(metric_name, std::move(sample));
 }
 
 }  // namespace rappor

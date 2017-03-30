@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/browser/notification_types.h"
@@ -196,10 +197,9 @@ gfx::ImageSkiaRep IconImage::LoadImageForScaleFactor(
 
   std::vector<ImageLoader::ImageRepresentation> info_list;
   info_list.push_back(ImageLoader::ImageRepresentation(
-      resource,
-      ImageLoader::ImageRepresentation::ALWAYS_RESIZE,
-      gfx::ToFlooredSize(gfx::ScaleSize(
-          gfx::Size(resource_size_in_dip_, resource_size_in_dip_), scale)),
+      resource, ImageLoader::ImageRepresentation::ALWAYS_RESIZE,
+      gfx::ScaleToFlooredSize(
+          gfx::Size(resource_size_in_dip_, resource_size_in_dip_), scale),
       scale_factor));
 
   extensions::ImageLoader* loader =

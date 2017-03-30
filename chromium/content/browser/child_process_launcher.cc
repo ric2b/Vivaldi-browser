@@ -4,6 +4,8 @@
 
 #include "content/browser/child_process_launcher.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -12,9 +14,10 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/process/process.h"
-#include "base/profiler/scoped_tracker.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_switches.h"
@@ -26,15 +29,14 @@
 #include "content/common/sandbox_win.h"
 #include "content/public/common/sandbox_init.h"
 #elif defined(OS_MACOSX)
-#include "content/browser/bootstrap_sandbox_mac.h"
-#include "content/browser/browser_io_surface_manager_mac.h"
+#include "content/browser/bootstrap_sandbox_manager_mac.h"
 #include "content/browser/mach_broker_mac.h"
 #include "sandbox/mac/bootstrap_sandbox.h"
+#include "sandbox/mac/pre_exec_delegate.h"
 #elif defined(OS_ANDROID)
 #include "base/android/jni_android.h"
 #include "content/browser/android/child_process_launcher_android.h"
 #elif defined(OS_POSIX)
-#include "base/memory/shared_memory.h"
 #include "base/memory/singleton.h"
 #include "content/browser/renderer_host/render_sandbox_host_linux.h"
 #include "content/browser/zygote_host/zygote_host_impl_linux.h"
@@ -92,7 +94,7 @@ void OnChildProcessStartedAndroid(const NotifyCallback& callback,
   } else {
     BrowserThread::PostTask(
         client_thread_id, FROM_HERE, callback_on_client_thread);
- }
+  }
 }
 #endif
 
@@ -139,7 +141,7 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
 #if defined(OS_ANDROID)
   files_to_register->Share(kPrimaryIPCChannel, ipcfd.get());
 #else
-  files_to_register->Transfer(kPrimaryIPCChannel, ipcfd.Pass());
+  files_to_register->Transfer(kPrimaryIPCChannel, std::move(ipcfd));
 #endif
 #endif
 
@@ -188,7 +190,7 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
   CHECK(!cmd_line->HasSwitch(switches::kSingleProcess));
 
   StartChildProcess(
-      cmd_line->argv(), child_process_id, files_to_register.Pass(), regions,
+      cmd_line->argv(), child_process_id, std::move(files_to_register), regions,
       base::Bind(&OnChildProcessStartedAndroid, callback, client_thread_id,
                  begin_launch_time, base::Passed(&ipcfd)));
 
@@ -199,7 +201,7 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
 #if !defined(OS_MACOSX)
   if (use_zygote) {
     base::ProcessHandle handle = ZygoteHostImpl::GetInstance()->ForkRequest(
-        cmd_line->argv(), files_to_register.Pass(), process_type);
+        cmd_line->argv(), std::move(files_to_register), process_type);
     process = base::Process(handle);
   } else
   // Fall through to the normal posix case below when we're not zygoting.
@@ -240,29 +242,29 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
     // check-in from the new process.
     broker->EnsureRunning();
 
-    // Make sure the IOSurfaceManager service is running.
-    BrowserIOSurfaceManager::GetInstance()->EnsureRunning();
-
-    const int bootstrap_sandbox_policy = delegate->GetSandboxType();
-    if (ShouldEnableBootstrapSandbox() &&
-        bootstrap_sandbox_policy != SANDBOX_TYPE_INVALID) {
-      options.replacement_bootstrap_name =
-          GetBootstrapSandbox()->server_bootstrap_name();
-      GetBootstrapSandbox()->PrepareToForkWithPolicy(
-          bootstrap_sandbox_policy);
+    const SandboxType sandbox_type = delegate->GetSandboxType();
+    scoped_ptr<sandbox::PreExecDelegate> pre_exec_delegate;
+    if (BootstrapSandboxManager::ShouldEnable()) {
+      BootstrapSandboxManager* sandbox_manager =
+          BootstrapSandboxManager::GetInstance();
+      if (sandbox_manager->EnabledForSandbox(sandbox_type)) {
+        pre_exec_delegate = sandbox_manager->sandbox()->NewClient(sandbox_type);
+      }
     }
+    options.pre_exec_delegate = pre_exec_delegate.get();
 #endif  // defined(OS_MACOSX)
 
     process = base::LaunchProcess(*cmd_line, options);
 
 #if defined(OS_MACOSX)
-    if (ShouldEnableBootstrapSandbox() &&
-        bootstrap_sandbox_policy != SANDBOX_TYPE_INVALID) {
-      GetBootstrapSandbox()->FinishedFork(process.Handle());
-    }
-
-    if (process.IsValid())
+    if (process.IsValid()) {
       broker->AddPlaceholderForPid(process.Pid(), child_process_id);
+    } else {
+      if (pre_exec_delegate) {
+        BootstrapSandboxManager::GetInstance()->sandbox()->RevokeToken(
+            pre_exec_delegate->sandbox_token());
+      }
+    }
 
     // After updating the broker, release the lock and let the child's
     // messasge be processed on the broker's thread.
@@ -301,7 +303,7 @@ void TerminateOnLauncherThread(bool zygote, base::Process process) {
     ZygoteHostImpl::GetInstance()->EnsureProcessTerminated(process.Handle());
   } else
 #endif  // !OS_MACOSX
-  base::EnsureProcessTerminated(process.Pass());
+    base::EnsureProcessTerminated(std::move(process));
 #endif  // OS_POSIX
 #endif  // defined(OS_ANDROID)
 }
@@ -309,21 +311,15 @@ void TerminateOnLauncherThread(bool zygote, base::Process process) {
 void SetProcessBackgroundedOnLauncherThread(base::Process process,
                                             bool background) {
   DCHECK_CURRENTLY_ON(BrowserThread::PROCESS_LAUNCHER);
-#if defined(OS_MACOSX)
-  MachBroker* broker = MachBroker::GetInstance();
-  mach_port_t task_port = broker->TaskForPid(process.Pid());
-  if (task_port != TASK_NULL) {
-    process.SetProcessBackgrounded(task_port, background);
+  if (process.CanBackgroundProcesses()) {
+    process.SetProcessBackgrounded(background);
   }
-#else
-  process.SetProcessBackgrounded(background);
-#endif  // defined(OS_MACOSX)
 #if defined(OS_ANDROID)
   SetChildProcessInForeground(process.Handle(), !background);
 #endif
 }
 
-}  // anonymous namespace
+}  // namespace
 
 ChildProcessLauncher::ChildProcessLauncher(
     SandboxedProcessLauncherDelegate* delegate,
@@ -372,6 +368,9 @@ void ChildProcessLauncher::Launch(
       cmd_line->GetSwitchValueASCII(switches::kProcessType);
   CHECK(process_type == switches::kGpuProcess ||
         process_type == switches::kRendererProcess ||
+#if defined(ENABLE_PLUGINS)
+        process_type == switches::kPpapiPluginProcess ||
+#endif
         process_type == switches::kUtilityProcess)
       << "Unsupported process type: " << process_type;
 
@@ -443,24 +442,13 @@ void ChildProcessLauncher::DidLaunch(
   if (!process.IsValid())
     LOG(ERROR) << "Failed to launch child process";
 
-  // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/465841
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "465841 ChildProcessLauncher::Context::Notify::Start"));
-
   if (instance.get()) {
     instance->Notify(zygote,
 #if defined(OS_ANDROID)
-                     ipcfd.Pass(),
+                     std::move(ipcfd),
 #endif
-                     process.Pass());
+                     std::move(process));
   } else {
-    // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/465841
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile4(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "465841 ChildProcessLauncher::Context::Notify::ProcessTerminate"));
     if (process.IsValid() && terminate_on_shutdown) {
       // On Posix, EnsureProcessTerminated can lead to 2 seconds of sleep!  So
       // don't this on the UI/IO threads.
@@ -479,24 +467,15 @@ void ChildProcessLauncher::Notify(
     base::Process process) {
   DCHECK(CalledOnValidThread());
   starting_ = false;
-  process_ = process.Pass();
+  process_ = std::move(process);
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
   zygote_ = zygote;
 #endif
   if (process_.IsValid()) {
-    // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/465841
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile2(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "465841 ChildProcessLauncher::Context::Notify::ProcessLaunched"));
     client_->OnProcessLaunched();
   } else {
-    // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/465841
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile3(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "465841 ChildProcessLauncher::Context::Notify::ProcessFailed"));
+    termination_status_ = base::TERMINATION_STATUS_LAUNCH_FAILED;
     client_->OnProcessLaunchFailed();
   }
 }

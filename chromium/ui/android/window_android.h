@@ -11,6 +11,7 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "ui/android/ui_android_export.h"
@@ -26,7 +27,7 @@ class UI_ANDROID_EXPORT WindowAndroid {
  public:
   WindowAndroid(JNIEnv* env, jobject obj);
 
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
 
@@ -57,17 +58,23 @@ class UI_ANDROID_EXPORT WindowAndroid {
   void SetNeedsAnimate();
   void Animate(base::TimeTicks begin_frame_time);
   void OnVSync(JNIEnv* env,
-               jobject obj,
+               const base::android::JavaParamRef<jobject>& obj,
                jlong time_micros,
                jlong period_micros);
-  void OnVisibilityChanged(JNIEnv* env, jobject obj, bool visible);
-  void OnActivityStopped(JNIEnv* env, jobject obj);
-  void OnActivityStarted(JNIEnv* env, jobject obj);
+  void OnVisibilityChanged(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& obj,
+                           bool visible);
+  void OnActivityStopped(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj);
+  void OnActivityStarted(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj);
 
   // Return whether the specified Android permission is granted.
   bool HasPermission(const std::string& permission);
   // Return whether the specified Android permission can be requested by Chrome.
   bool CanRequestPermission(const std::string& permission);
+
+  static WindowAndroid* createForTesting();
 
  private:
   ~WindowAndroid();

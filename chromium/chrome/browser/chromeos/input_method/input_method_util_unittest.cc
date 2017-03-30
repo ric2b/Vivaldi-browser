@@ -4,9 +4,12 @@
 
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -19,8 +22,6 @@
 using base::ASCIIToUTF16;
 
 namespace chromeos {
-
-extern const char* kExtensionImePrefix;
 
 namespace input_method {
 
@@ -109,7 +110,8 @@ class InputMethodUtilTest : public testing::Test {
                                  GURL());  // input view page url
   }
 
-  static base::string16 GetDisplayLanguageName(const std::string& language_code) {
+  static base::string16 GetDisplayLanguageName(
+      const std::string& language_code) {
     return l10n_util::GetDisplayNameForLocale(language_code, "en", true);
   }
 
@@ -174,35 +176,30 @@ TEST_F(InputMethodUtilTest, GetInputMethodShortNameTest) {
 TEST_F(InputMethodUtilTest, GetInputMethodMediumNameTest) {
   {
     // input methods with medium name equal to short name
-    const char * input_method_id[] = {
-      "xkb:us:altgr-intl:eng",
-      "xkb:us:dvorak:eng",
-      "xkb:us:intl:eng",
-      "xkb:us:colemak:eng",
-      "xkb:de:neo:ger",
-      "xkb:es:cat:cat",
-      "xkb:gb:dvorak:eng",
+    const char* const input_method_id[] = {
+        "xkb:us:altgr-intl:eng", "xkb:us:dvorak:eng", "xkb:us:intl:eng",
+        "xkb:us:colemak:eng",    "xkb:de:neo:ger",    "xkb:es:cat:cat",
+        "xkb:gb:dvorak:eng",
     };
     const int len = arraysize(input_method_id);
-    for (int i=0; i<len; ++i) {
+    for (int i = 0; i < len; ++i) {
       InputMethodDescriptor desc = GetDesc(input_method_id[i], "", "", "");
       base::string16 medium_name = util_.GetInputMethodMediumName(desc);
       base::string16 short_name = util_.GetInputMethodShortName(desc);
-      EXPECT_EQ(medium_name,short_name);
+      EXPECT_EQ(medium_name, short_name);
     }
   }
   {
     // input methods with medium name not equal to short name
-    const char * input_method_id[] = {
-      pinyin_ime_id,
-      zhuyin_ime_id,
+    const char* const input_method_id[] = {
+        pinyin_ime_id, zhuyin_ime_id,
     };
     const int len = arraysize(input_method_id);
-    for (int i=0; i<len; ++i) {
+    for (int i = 0; i < len; ++i) {
       InputMethodDescriptor desc = GetDesc(input_method_id[i], "", "", "");
       base::string16 medium_name = util_.GetInputMethodMediumName(desc);
       base::string16 short_name = util_.GetInputMethodShortName(desc);
-      EXPECT_NE(medium_name,short_name);
+      EXPECT_NE(medium_name, short_name);
     }
   }
 }
@@ -495,7 +492,7 @@ TEST_F(InputMethodUtilTest, TestInputMethodIDMigration) {
       {"ime:zh-t:zhuyin", "zh-hant-t-i0-und"},
       {"ime:zh-t:quick", "zh-hant-t-i0-cangjie-1987-x-m0-simplified"},
       {"ime:jp:mozc_us", "nacl_mozc_us"},
-      {"ime:ko:hangul", "hangul_2set"},
+      {"ime:ko:hangul", "ko-t-i0-und"},
       {"m17n:deva_phone", "vkd_deva_phone"},
       {"m17n:ar", "vkd_ar"},
       {"t13n:hi", "hi-t-i0-und"},

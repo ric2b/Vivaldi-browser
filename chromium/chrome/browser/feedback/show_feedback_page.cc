@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/feedback_private/feedback_private_api.h"
 #include "chrome/browser/profiles/profile.h"
@@ -13,6 +14,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
@@ -66,14 +68,14 @@ void ShowFeedbackPage(Browser* browser,
   // Obtains the display profile ID on which the Feedback window should show.
   chrome::MultiUserWindowManager* const window_manager =
       chrome::MultiUserWindowManager::GetInstance();
-  const std::string display_profile_id =
+  const AccountId display_account_id =
       window_manager && browser
           ? window_manager->GetUserPresentingWindow(
                 browser->window()->GetNativeWindow())
-          : "";
-  profile = display_profile_id.empty()
-                ? profile
-                : multi_user_util::GetProfileFromUserID(display_profile_id);
+          : EmptyAccountId();
+  profile = display_account_id.is_valid()
+                ? multi_user_util::GetProfileFromAccountId(display_account_id)
+                : profile;
 #endif
 
   extensions::FeedbackPrivateAPI* api =

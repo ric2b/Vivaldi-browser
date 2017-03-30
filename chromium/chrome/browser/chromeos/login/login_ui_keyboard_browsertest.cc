@@ -31,6 +31,8 @@ void Append_en_US_InputMethods(std::vector<std::string>* out) {
   out->push_back("xkb:us:dvorak:eng");
   out->push_back("xkb:us:dvp:eng");
   out->push_back("xkb:us:colemak:eng");
+  out->push_back("xkb:us:workman:eng");
+  out->push_back("xkb:us:workman-intl:eng");
   chromeos::input_method::InputMethodManager::Get()->MigrateInputMethods(out);
 }
 
@@ -268,7 +270,7 @@ IN_PROC_BROWSER_TEST_F(LoginUIKeyboardTestWithUsersAndOwner,
   CheckGaiaKeyboard();
 
   // Switch back.
-  js_checker().Evaluate("$('cancel-add-user-button').click()");
+  js_checker().Evaluate("$('gaia-signin').cancel()");
   OobeScreenWaiter(OobeDisplay::SCREEN_ACCOUNT_PICKER).Wait();
 
   EXPECT_EQ(expected_input_methods,

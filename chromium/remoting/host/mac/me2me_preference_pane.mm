@@ -10,6 +10,7 @@
 #include <launch.h>
 #import <PreferencePanes/PreferencePanes.h>
 #import <SecurityInterface/SFAuthorizationView.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -20,11 +21,11 @@
 #include "base/posix/eintr_wrapper.h"
 #include "remoting/host/constants_mac.h"
 #include "remoting/host/host_config.h"
+#include "remoting/host/pin_hash.h"
 #import "remoting/host/mac/me2me_preference_pane_confirm_pin.h"
 #import "remoting/host/mac/me2me_preference_pane_disable.h"
 #include "third_party/jsoncpp/source/include/json/reader.h"
 #include "third_party/jsoncpp/source/include/json/writer.h"
-#include "third_party/modp_b64/modp_b64.h"
 
 namespace {
 
@@ -45,51 +46,6 @@ bool IsConfigValid(const remoting::JsonHostConfig* config) {
           config->GetString(remoting::kXmppLoginConfigPath, &value));
 }
 
-bool IsPinValid(const std::string& pin, const std::string& host_id,
-                const std::string& host_secret_hash) {
-  // TODO(lambroslambrou): Once the "base" target supports building for 64-bit
-  // on Mac OS X, remove this code and replace it with |VerifyHostPinHash()|
-  // from host/pin_hash.h.
-  size_t separator = host_secret_hash.find(':');
-  if (separator == std::string::npos)
-    return false;
-
-  std::string method = host_secret_hash.substr(0, separator);
-  if (method != "hmac") {
-    NSLog(@"Authentication method '%s' not supported", method.c_str());
-    return false;
-  }
-
-  std::string hash_base64 = host_secret_hash.substr(separator + 1);
-
-  // Convert |hash_base64| to |hash|, based on code from base/base64.cc.
-  int hash_base64_size = static_cast<int>(hash_base64.size());
-  std::string hash;
-  hash.resize(modp_b64_decode_len(hash_base64_size));
-
-  // modp_b64_decode_len() returns at least 1, so hash[0] is safe here.
-  int hash_size = modp_b64_decode(&(hash[0]), hash_base64.data(),
-                                  hash_base64_size);
-  if (hash_size < 0) {
-    NSLog(@"Failed to parse host_secret_hash");
-    return false;
-  }
-  hash.resize(hash_size);
-
-  std::string computed_hash;
-  computed_hash.resize(CC_SHA256_DIGEST_LENGTH);
-
-  CCHmac(kCCHmacAlgSHA256,
-         host_id.data(), host_id.size(),
-         pin.data(), pin.size(),
-         &(computed_hash[0]));
-
-  // Normally, a constant-time comparison function would be used, but it is
-  // unnecessary here as the "secret" is already readable by the user
-  // supplying input to this routine.
-  return computed_hash == hash;
-}
-
 }  // namespace
 
 // These methods are copied from base/mac, but with the logging changed to use
@@ -108,7 +64,7 @@ launch_data_t MessageForJob(const std::string& job_label,
                             const char* operation) {
   // launch_data_alloc returns something that needs to be freed.
   ScopedLaunchData message(launch_data_alloc(LAUNCH_DATA_DICTIONARY));
-  if (!message) {
+  if (!message.is_valid()) {
     NSLog(@"launch_data_alloc");
     return nullptr;
   }
@@ -118,37 +74,37 @@ launch_data_t MessageForJob(const std::string& job_label,
   // called, so put it in a scoper and .release() it when given to the
   // dictionary.
   ScopedLaunchData job_label_launchd(launch_data_new_string(job_label.c_str()));
-  if (!job_label_launchd) {
+  if (!job_label_launchd.is_valid()) {
     NSLog(@"launch_data_new_string");
     return nullptr;
   }
 
-  if (!launch_data_dict_insert(message,
+  if (!launch_data_dict_insert(message.get(),
                                job_label_launchd.release(),
                                operation)) {
     return nullptr;
   }
 
-  return launch_msg(message);
+  return launch_msg(message.get());
 }
 
 pid_t PIDForJob(const std::string& job_label) {
   ScopedLaunchData response(MessageForJob(job_label, LAUNCH_KEY_GETJOB));
-  if (!response) {
+  if (!response.is_valid()) {
     return -1;
   }
 
-  launch_data_type_t response_type = launch_data_get_type(response);
+  launch_data_type_t response_type = launch_data_get_type(response.get());
   if (response_type != LAUNCH_DATA_DICTIONARY) {
     if (response_type == LAUNCH_DATA_ERRNO) {
-      NSLog(@"PIDForJob: error %d", launch_data_get_errno(response));
+      NSLog(@"PIDForJob: error %d", launch_data_get_errno(response.get()));
     } else {
       NSLog(@"PIDForJob: expected dictionary, got %d", response_type);
     }
     return -1;
   }
 
-  launch_data_t pid_data = launch_data_dict_lookup(response,
+  launch_data_t pid_data = launch_data_dict_lookup(response.get(),
                                                    LAUNCH_JOBKEY_PID);
   if (!pid_data)
     return 0;
@@ -340,7 +296,7 @@ std::string JsonHostConfig::GetSerializedData() const {
     [self showError];
     return;
   }
-  if (!IsPinValid(pin_utf8, host_id, host_secret_hash)) {
+  if (!remoting::VerifyHostPinHash(host_secret_hash, host_id, pin_utf8)) {
     [self showIncorrectPinMessage];
     return;
   }
@@ -627,7 +583,7 @@ std::string JsonHostConfig::GetSerializedData() const {
 - (BOOL)sendJobControlMessage:(const char*)launch_key {
   base::mac::ScopedLaunchData response(
       base::mac::MessageForJob(remoting::kServiceName, launch_key));
-  if (!response) {
+  if (!response.is_valid()) {
     NSLog(@"Failed to send message to launchd");
     [self showError];
     return NO;

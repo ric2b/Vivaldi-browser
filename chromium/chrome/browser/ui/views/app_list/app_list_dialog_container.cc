@@ -4,6 +4,10 @@
 
 #include "chrome/browser/ui/views/app_list/app_list_dialog_container.h"
 
+#include <utility>
+
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "ui/app_list/app_list_constants.h"
@@ -13,6 +17,7 @@
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -30,8 +35,11 @@ namespace {
 
 #if defined(OS_MACOSX)
 const ui::ModalType kModalType = ui::MODAL_TYPE_CHILD;
+const views::BubbleBorder::Shadow kShadowType = views::BubbleBorder::NO_ASSETS;
 #else
 const ui::ModalType kModalType = ui::MODAL_TYPE_WINDOW;
+const views::BubbleBorder::Shadow kShadowType =
+    views::BubbleBorder::SMALL_SHADOW;
 #endif
 
 // The background for App List dialogs, which appears as a rounded rectangle
@@ -210,12 +218,10 @@ class NativeDialogContainer : public BaseDialogContainer {
   views::NonClientFrameView* CreateNonClientFrameView(
       views::Widget* widget) override {
     FullSizeBubbleFrameView* frame = new FullSizeBubbleFrameView();
-    scoped_ptr<views::BubbleBorder> border(
-        new views::BubbleBorder(views::BubbleBorder::FLOAT,
-                                views::BubbleBorder::SMALL_SHADOW,
-                                SK_ColorRED));
+    scoped_ptr<views::BubbleBorder> border(new views::BubbleBorder(
+        views::BubbleBorder::FLOAT, kShadowType, gfx::kPlaceholderColor));
     border->set_use_theme_background_color(true);
-    frame->SetBubbleBorder(border.Pass());
+    frame->SetBubbleBorder(std::move(border));
     return frame;
   }
 

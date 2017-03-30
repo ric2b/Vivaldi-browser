@@ -15,10 +15,6 @@ fi
 
 @@include@@../common/apt.include
 
-@@include@@../common/symlinks.include
-
-remove_udev_symlinks
-
 # Only remove the defaults file if it is not empty. An empty file was probably
 # put there by the sysadmin to disable automatic repository configuration, as
 # per the instructions on the package download page.

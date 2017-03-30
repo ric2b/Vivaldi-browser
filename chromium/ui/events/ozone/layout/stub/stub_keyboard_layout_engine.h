@@ -24,9 +24,7 @@ class EVENTS_OZONE_LAYOUT_EXPORT StubKeyboardLayoutEngine
   bool Lookup(DomCode dom_code,
               int flags,
               DomKey* dom_key,
-              base::char16* character,
-              KeyboardCode* key_code,
-              uint32* platform_keycode) const override;
+              KeyboardCode* key_code) const override;
 };
 
 }  // namespace ui

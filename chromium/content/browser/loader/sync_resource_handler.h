@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_LOADER_SYNC_RESOURCE_HANDLER_H_
 #define CONTENT_BROWSER_LOADER_SYNC_RESOURCE_HANDLER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "content/browser/loader/resource_handler.h"
@@ -33,14 +35,10 @@ class SyncResourceHandler : public ResourceHandler {
                       ResourceDispatcherHostImpl* resource_dispatcher_host);
   ~SyncResourceHandler() override;
 
-  bool OnUploadProgress(uint64 position, uint64 size) override;
   bool OnRequestRedirected(const net::RedirectInfo& redirect_info,
                            ResourceResponse* response,
                            bool* defer) override;
-  bool OnResponseStarted(ResourceResponse* response,
-                         bool* defer,
-                         bool open_when_done,
-                         bool ask_for_target) override;
+  bool OnResponseStarted(ResourceResponse* response, bool* defer) override;
   bool OnWillStart(const GURL& url, bool* defer) override;
   bool OnBeforeNetworkStart(const GURL& url, bool* defer) override;
   bool OnWillRead(scoped_refptr<net::IOBuffer>* buf,
@@ -60,7 +58,7 @@ class SyncResourceHandler : public ResourceHandler {
   SyncLoadResult result_;
   IPC::Message* result_message_;
   ResourceDispatcherHostImpl* rdh_;
-  int64 total_transfer_size_;
+  int64_t total_transfer_size_;
 };
 
 }  // namespace content

@@ -4,9 +4,12 @@
 
 #include "chrome/browser/media/media_stream_capture_indicator.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,13 +21,13 @@
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "grit/theme_resources.h"
-#include "net/base/net_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
@@ -69,26 +72,6 @@ bool IsWhitelistedExtension(const extensions::Extension* extension) {
 }
 #endif  // defined(ENABLE_EXTENSIONS)
 
-// Gets the security originator of the tab. It returns a string with no '/'
-// at the end to display in the UI.
-base::string16 GetSecurityOrigin(WebContents* web_contents) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  if (!web_contents)
-    return base::string16();
-
-  std::string security_origin = web_contents->GetURL().GetOrigin().spec();
-
-  // Remove the last character if it is a '/'.
-  if (!security_origin.empty()) {
-    std::string::iterator it = security_origin.end() - 1;
-    if (*it == '/')
-      security_origin.erase(it);
-  }
-
-  return base::UTF8ToUTF16(security_origin);
-}
-
 base::string16 GetTitle(WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -101,22 +84,12 @@ base::string16 GetTitle(WebContents* web_contents) {
     return base::UTF8ToUTF16(extension->name());
 #endif
 
-  base::string16 tab_title = web_contents->GetTitle();
-
-  if (tab_title.empty()) {
-    // If the page's title is empty use its security originator.
-    tab_title = GetSecurityOrigin(web_contents);
-  } else {
-    // If the page's title matches its URL, use its security originator.
-    Profile* profile =
-        Profile::FromBrowserContext(web_contents->GetBrowserContext());
-    std::string languages =
-        profile->GetPrefs()->GetString(prefs::kAcceptLanguages);
-    if (tab_title == net::FormatUrl(web_contents->GetURL(), languages))
-      tab_title = GetSecurityOrigin(web_contents);
-  }
-
-  return tab_title;
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  std::string languages =
+      profile->GetPrefs()->GetString(prefs::kAcceptLanguages);
+  return url_formatter::FormatUrlForSecurityDisplay(web_contents->GetURL(),
+                                                    languages);
 }
 
 }  // namespace
@@ -445,7 +418,7 @@ void MediaStreamCaptureIndicator::UpdateNotificationUserInterface() {
   // The icon will take the ownership of the passed context menu.
   MaybeCreateStatusTrayIcon(audio, video);
   if (status_icon_) {
-    status_icon_->SetContextMenu(menu.Pass());
+    status_icon_->SetContextMenu(std::move(menu));
   }
 }
 

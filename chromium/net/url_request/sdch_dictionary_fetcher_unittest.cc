@@ -5,6 +5,7 @@
 #include "net/url_request/sdch_dictionary_fetcher.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -124,8 +125,8 @@ class SpecifiedResponseJobInterceptor : public URLRequestInterceptor {
         new SpecifiedResponseJobInterceptor(http_response_info,
                                             lifecycle_callback));
 
-    URLRequestFilter::GetInstance()->AddHostnameInterceptor("http", kTestDomain,
-                                                            interceptor.Pass());
+    URLRequestFilter::GetInstance()->AddHostnameInterceptor(
+        "http", kTestDomain, std::move(interceptor));
   }
 
   static void Unregister() {
@@ -221,12 +222,14 @@ class SdchDictionaryFetcherTest : public ::testing::Test {
 
   // Block until there are no outstanding URLRequestSpecifiedResponseJobs.
   void WaitForNoJobs() {
-    if (jobs_outstanding_ == 0)
-      return;
-
-    run_loop_.reset(new base::RunLoop);
-    run_loop_->Run();
-    run_loop_.reset();
+    // A job may be started after the previous one was destroyed, with a brief
+    // period of 0 jobs in between, so may have to start the run loop multiple
+    // times.
+    while (jobs_outstanding_ != 0) {
+      run_loop_.reset(new base::RunLoop);
+      run_loop_->Run();
+      run_loop_.reset();
+    }
   }
 
   HttpResponseInfo* response_info_to_return() {

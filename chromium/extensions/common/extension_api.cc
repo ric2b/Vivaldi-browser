@@ -4,14 +4,18 @@
 
 #include "extensions/common/extension_api.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -60,8 +64,7 @@ scoped_ptr<base::ListValue> LoadSchemaList(const std::string& name,
 
   CHECK(result.get()) << error_message << " for schema " << schema;
   CHECK(result->IsType(base::Value::TYPE_LIST)) << " for schema " << schema;
-  return scoped_ptr<base::ListValue>(static_cast<base::ListValue*>(
-      result.release()));
+  return base::ListValue::From(std::move(result));
 }
 
 const base::DictionaryValue* FindListItem(const base::ListValue* list,

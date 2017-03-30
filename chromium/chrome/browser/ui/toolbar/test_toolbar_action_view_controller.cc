@@ -22,7 +22,7 @@ TestToolbarActionViewController::TestToolbarActionViewController(
 TestToolbarActionViewController::~TestToolbarActionViewController() {
 }
 
-const std::string& TestToolbarActionViewController::GetId() const {
+std::string TestToolbarActionViewController::GetId() const {
   return id_;
 }
 
@@ -76,10 +76,6 @@ gfx::NativeView TestToolbarActionViewController::GetPopupNativeView() {
 
 ui::MenuModel* TestToolbarActionViewController::GetContextMenu() {
   return nullptr;
-}
-
-bool TestToolbarActionViewController::CanDrag() const {
-  return false;
 }
 
 bool TestToolbarActionViewController::ExecuteAction(bool by_user) {

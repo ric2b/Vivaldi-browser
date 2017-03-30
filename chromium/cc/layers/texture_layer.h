@@ -8,11 +8,16 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "cc/base/cc_export.h"
 #include "cc/layers/layer.h"
 #include "cc/resources/texture_mailbox.h"
+
+namespace gpu {
+struct SyncToken;
+}
 
 namespace cc {
 class BlockingTaskRunner;
@@ -38,7 +43,7 @@ class CC_EXPORT TextureLayer : public Layer {
     };
 
     const TextureMailbox& mailbox() const { return mailbox_; }
-    void Return(uint32 sync_point, bool is_lost);
+    void Return(const gpu::SyncToken& sync_token, bool is_lost);
 
     // Gets a ReleaseCallback that can be called from another thread. Note: the
     // caller must ensure the callback is called.
@@ -63,7 +68,7 @@ class CC_EXPORT TextureLayer : public Layer {
     void InternalAddRef();
     void InternalRelease();
     void ReturnAndReleaseOnImplThread(
-        uint32 sync_point,
+        const gpu::SyncToken& sync_token,
         bool is_lost,
         BlockingTaskRunner* main_thread_task_runner);
 
@@ -73,12 +78,12 @@ class CC_EXPORT TextureLayer : public Layer {
     TextureMailbox mailbox_;
     scoped_ptr<SingleReleaseCallback> release_callback_;
 
-    // This lock guards the sync_point_ and is_lost_ fields because they can be
+    // This lock guards the sync_token_ and is_lost_ fields because they can be
     // accessed on both the impl and main thread. We do this to ensure that the
     // values of these fields are well-ordered such that the last call to
     // ReturnAndReleaseOnImplThread() defines their values.
     base::Lock arguments_lock_;
-    uint32 sync_point_;
+    gpu::SyncToken sync_token_;
     bool is_lost_;
     base::ThreadChecker main_thread_checker_;
     DISALLOW_COPY_AND_ASSIGN(TextureMailboxHolder);
@@ -124,11 +129,6 @@ class CC_EXPORT TextureLayer : public Layer {
   // at draw time. Defaults to false.
   void SetBlendBackgroundColor(bool blend);
 
-  // Sets whether this context should rate limit on damage to prevent too many
-  // frames from being queued up before the compositor gets a chance to run.
-  // Requires a non-nil client.  Defaults to false.
-  void SetRateLimitContext(bool rate_limit);
-
   // Code path for plugins which supply their own mailbox.
   void SetTextureMailbox(const TextureMailbox& mailbox,
                          scoped_ptr<SingleReleaseCallback> release_callback);
@@ -167,7 +167,6 @@ class CC_EXPORT TextureLayer : public Layer {
   float vertex_opacity_[4];
   bool premultiplied_alpha_;
   bool blend_background_color_;
-  bool rate_limit_context_;
 
   scoped_ptr<TextureMailboxHolder::MainThreadReference> holder_ref_;
   bool needs_set_mailbox_;

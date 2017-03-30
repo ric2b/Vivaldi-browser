@@ -4,20 +4,47 @@
 
 #include "remoting/protocol/fake_session.h"
 
+#include "base/location.h"
+#include "base/thread_task_runner_handle.h"
+#include "remoting/protocol/fake_authenticator.h"
+#include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
+
 namespace remoting {
 namespace protocol {
 
 const char kTestJid[] = "host1@gmail.com/chromoting123";
 
 FakeSession::FakeSession()
-    : event_handler_(nullptr),
-      candidate_config_(CandidateSessionConfig::CreateDefault()),
-      config_(SessionConfig::ForTest()),
-      jid_(kTestJid),
-      error_(OK),
-      closed_(false) {
+    : config_(SessionConfig::ForTest()), jid_(kTestJid), weak_factory_(this) {}
+FakeSession::~FakeSession() {}
+
+void FakeSession::SimulateConnection(FakeSession* peer) {
+  peer_ = peer->weak_factory_.GetWeakPtr();
+  peer->peer_ = weak_factory_.GetWeakPtr();
+
+  event_handler_->OnSessionStateChange(CONNECTING);
+  peer->event_handler_->OnSessionStateChange(ACCEPTING);
+  peer->event_handler_->OnSessionStateChange(ACCEPTED);
+  event_handler_->OnSessionStateChange(ACCEPTED);
+  event_handler_->OnSessionStateChange(AUTHENTICATING);
+  peer->event_handler_->OnSessionStateChange(AUTHENTICATING);
+
+  // Initialize transport and authenticator on the client.
+  authenticator_.reset(new FakeAuthenticator(FakeAuthenticator::CLIENT, 0,
+                                             FakeAuthenticator::ACCEPT, false));
+  transport_->Start(authenticator_.get(),
+                    base::Bind(&FakeSession::SendTransportInfo,
+                               weak_factory_.GetWeakPtr()));
+
+  // Initialize transport and authenticator on the host.
+  peer->authenticator_.reset(new FakeAuthenticator(
+      FakeAuthenticator::HOST, 0, FakeAuthenticator::ACCEPT, false));
+  peer->transport_->Start(peer->authenticator_.get(),
+                          base::Bind(&FakeSession::SendTransportInfo, peer_));
+
+  peer->event_handler_->OnSessionStateChange(AUTHENTICATED);
+  event_handler_->OnSessionStateChange(AUTHENTICATED);
 }
-FakeSession::~FakeSession() { }
 
 void FakeSession::SetEventHandler(EventHandler* event_handler) {
   event_handler_ = event_handler;
@@ -31,28 +58,32 @@ const std::string& FakeSession::jid() {
   return jid_;
 }
 
-const CandidateSessionConfig* FakeSession::candidate_config() {
-  return candidate_config_.get();
-}
-
 const SessionConfig& FakeSession::config() {
   return *config_;
 }
 
-void FakeSession::set_config(scoped_ptr<SessionConfig> config) {
-  config_ = config.Pass();
+void FakeSession::SetTransport(Transport* transport) {
+  transport_ = transport;
 }
 
-StreamChannelFactory* FakeSession::GetTransportChannelFactory() {
-  return &channel_factory_;
-}
-
-StreamChannelFactory* FakeSession::GetMultiplexedChannelFactory() {
-  return &channel_factory_;
-}
-
-void FakeSession::Close() {
+void FakeSession::Close(ErrorCode error) {
   closed_ = true;
+  error_ = error;
+  event_handler_->OnSessionStateChange(CLOSED);
+
+  FakeSession* peer = peer_.get();
+  if (peer) {
+    peer->peer_.reset();
+    peer_.reset();
+    peer->Close(error);
+  }
+}
+
+void FakeSession::SendTransportInfo(
+    scoped_ptr<buzz::XmlElement> transport_info) {
+  if (!peer_)
+    return;
+  peer_->transport_->ProcessTransportInfo(transport_info.get());
 }
 
 }  // namespace protocol

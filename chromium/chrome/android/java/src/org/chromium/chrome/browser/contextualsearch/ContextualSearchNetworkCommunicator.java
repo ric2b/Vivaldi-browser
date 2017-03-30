@@ -33,16 +33,11 @@ public interface ContextualSearchNetworkCommunicator {
      *        the search term.
      * @param selectionEndAdjust The end offset adjustment of the selection to use to highlight
      *        the search term.
+     * @param contextLanguage The language of the context, or the empty string if unknown.
      */
     void handleSearchTermResolutionResponse(boolean isNetworkUnavailable, int responseCode,
             String searchTerm, String displayText, String alternateTerm, boolean doPreventPreload,
-            int selectionStartAdjust, int selectionEndAdjust);
-
-    /**
-     * Loads a URL in the search content view.
-     * @param url the URL of the page to load.
-     */
-    void loadUrl(String url);
+            int selectionStartAdjust, int selectionEndAdjust, String contextLanguage);
 
     // --------------------------------------------------------------------------------------------
     // These are non-network actions that need to be stubbed out for testing.
@@ -55,23 +50,4 @@ public interface ContextualSearchNetworkCommunicator {
      * @return The URL of the base page (needed for testing purposes).
      */
     @Nullable URL getBasePageUrl();
-
-    /**
-     * Handles the WebContentsObserver#didNavigateMainFrame callback.
-     * @param url The URL of the navigation.
-     * @param httpResultCode The HTTP result code of the navigation.
-     */
-    void handleDidNavigateMainFrame(String url, int httpResultCode);
-
-    /**
-     * Creates and sets up a new Search Panel's {@code ContentViewCore}. If there's an existing
-     * {@code ContentViewCore} being used, it will be destroyed first. This should be called as
-     * late as possible to avoid unnecessarily consuming memory.
-     */
-    void createNewSearchContentView();
-
-    /**
-     * Destroys the Search Panel's {@code ContentViewCore}.
-     */
-    void destroySearchContentView();
 }

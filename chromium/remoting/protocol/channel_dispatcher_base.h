@@ -7,23 +7,17 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "remoting/base/buffered_socket_writer.h"
 #include "remoting/protocol/errors.h"
 #include "remoting/protocol/message_reader.h"
 
-namespace net {
-class StreamSocket;
-}  // namespace net
-
 namespace remoting {
 namespace protocol {
 
-struct ChannelConfig;
 class StreamChannelFactory;
-class Session;
 
 // Base class for channel message dispatchers. It's responsible for
 // creating the named channel. Derived dispatchers then dispatch
@@ -50,9 +44,7 @@ class ChannelDispatcherBase {
 
   // Creates and connects the channel in the specified
   // |session|. Caller retains ownership of the Session.
-  void Init(Session* session,
-            const ChannelConfig& config,
-            EventHandler* event_handler);
+  void Init(StreamChannelFactory* channel_factory, EventHandler* event_handler);
 
   const std::string& channel_name() { return channel_name_; }
 
@@ -66,13 +58,13 @@ class ChannelDispatcherBase {
   MessageReader* reader() { return &reader_; }
 
  private:
-  void OnChannelReady(scoped_ptr<net::StreamSocket> socket);
+  void OnChannelReady(scoped_ptr<P2PStreamSocket> socket);
   void OnReadWriteFailed(int error);
 
   std::string channel_name_;
   StreamChannelFactory* channel_factory_;
   EventHandler* event_handler_;
-  scoped_ptr<net::StreamSocket> channel_;
+  scoped_ptr<P2PStreamSocket> channel_;
 
   BufferedSocketWriter writer_;
   MessageReader reader_;

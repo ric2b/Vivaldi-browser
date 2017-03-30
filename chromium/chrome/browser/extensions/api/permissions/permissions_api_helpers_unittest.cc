@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/permissions/permissions_api_helpers.h"
@@ -36,11 +39,11 @@ TEST(ExtensionPermissionsAPIHelpers, Pack) {
   AddPattern(&hosts, "http://a.com/*");
   AddPattern(&hosts, "http://b.com/*");
 
-  scoped_refptr<PermissionSet> permission_set =
-      new PermissionSet(apis, ManifestPermissionSet(), hosts, URLPatternSet());
+  PermissionSet permission_set(apis, ManifestPermissionSet(), hosts,
+                               URLPatternSet());
 
   // Pack the permission set to value and verify its contents.
-  scoped_ptr<Permissions> permissions(PackPermissionSet(permission_set.get()));
+  scoped_ptr<Permissions> permissions(PackPermissionSet(permission_set));
   scoped_ptr<base::DictionaryValue> value(permissions->ToValue());
   base::ListValue* api_list = NULL;
   base::ListValue* origin_list = NULL;
@@ -65,14 +68,14 @@ TEST(ExtensionPermissionsAPIHelpers, Pack) {
 
   // Unpack the value back to a permission set and make sure its equal to the
   // original one.
-  scoped_refptr<PermissionSet> from_value;
   std::string error;
   Permissions permissions_object;
   EXPECT_TRUE(Permissions::Populate(*value, &permissions_object));
-  from_value = UnpackPermissionSet(permissions_object, true, &error);
+  scoped_ptr<const PermissionSet> from_value =
+      UnpackPermissionSet(permissions_object, true, &error);
   EXPECT_TRUE(error.empty());
 
-  EXPECT_EQ(*permission_set.get(), *from_value.get());
+  EXPECT_EQ(permission_set, *from_value);
 }
 
 // Tests various error conditions and edge cases when unpacking values
@@ -84,7 +87,7 @@ TEST(ExtensionPermissionsAPIHelpers, Unpack) {
   origins->Append(new base::StringValue("http://a.com/*"));
 
   scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
-  scoped_refptr<PermissionSet> permissions;
+  scoped_ptr<const PermissionSet> permissions;
   std::string error;
 
   // Origins shouldn't have to be present.

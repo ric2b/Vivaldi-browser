@@ -4,12 +4,15 @@
 
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager_test_utils.h"
 
+#include <stddef.h>
+
 #include "ash/ash_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
@@ -37,11 +40,11 @@ class TestWallpaperObserverPendingListEmpty
     wallpaper_manager_->RemoveObserver(this);
   }
 
-  void OnWallpaperAnimationFinished(const std::string& user_id) override {}
+  void OnWallpaperAnimationFinished(const AccountId& account_id) override {}
 
   void OnPendingListEmptyForTesting() override {
     empty_ = true;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void WaitForPendingListEmpty() {

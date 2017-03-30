@@ -5,6 +5,7 @@
 #include "media/audio/android/audio_manager_android.h"
 
 #include "base/android/build_info.h"
+#include "base/android/context_utils.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
@@ -28,19 +29,21 @@ using base::android::ConvertUTF8ToJavaString;
 using base::android::ScopedJavaLocalRef;
 
 namespace media {
+namespace {
 
-static void AddDefaultDevice(AudioDeviceNames* device_names) {
+void AddDefaultDevice(AudioDeviceNames* device_names) {
   DCHECK(device_names->empty());
-  device_names->push_front(
-      AudioDeviceName(AudioManagerBase::kDefaultDeviceName,
-                      AudioManagerBase::kDefaultDeviceId));
+  device_names->push_front(AudioDeviceName(AudioManager::GetDefaultDeviceName(),
+                                           AudioManagerBase::kDefaultDeviceId));
 }
 
 // Maximum number of output streams that can be open simultaneously.
-static const int kMaxOutputStreams = 10;
+const int kMaxOutputStreams = 10;
 
-static const int kDefaultInputBufferSize = 1024;
-static const int kDefaultOutputBufferSize = 2048;
+const int kDefaultInputBufferSize = 1024;
+const int kDefaultOutputBufferSize = 2048;
+
+}  // namespace
 
 AudioManager* CreateAudioManager(AudioLogFactory* audio_log_factory) {
   return new AudioManagerAndroid(audio_log_factory);
@@ -140,9 +143,9 @@ AudioParameters AudioManagerAndroid::GetInputStreamParameters(
   if (user_buffer_size)
     buffer_size = user_buffer_size;
 
-  AudioParameters params(
-      AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
-      GetNativeOutputSampleRate(), 16, buffer_size, effects);
+  AudioParameters params(AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
+                         GetNativeOutputSampleRate(), 16, buffer_size);
+  params.set_effects(effects);
   return params;
 }
 
@@ -258,7 +261,9 @@ bool AudioManagerAndroid::RegisterAudioManager(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
-void AudioManagerAndroid::SetMute(JNIEnv* env, jobject obj, jboolean muted) {
+void AudioManagerAndroid::SetMute(JNIEnv* env,
+                                  const JavaParamRef<jobject>& obj,
+                                  jboolean muted) {
   GetTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(
@@ -306,9 +311,8 @@ AudioParameters AudioManagerAndroid::GetPreferredOutputStreamParameters(
   if (user_buffer_size)
     buffer_size = user_buffer_size;
 
-  return AudioParameters(
-      AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
-      sample_rate, bits_per_sample, buffer_size, AudioParameters::NO_EFFECTS);
+  return AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
+                         sample_rate, bits_per_sample, buffer_size);
 }
 
 bool AudioManagerAndroid::HasNoAudioInputStreams() {

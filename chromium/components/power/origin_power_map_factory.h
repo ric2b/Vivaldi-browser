@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_POWER_ORIGIN_POWER_MAP_FACTORY_H_
 #define COMPONENTS_POWER_ORIGIN_POWER_MAP_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -18,7 +19,7 @@ class OriginPowerMapFactory : public BrowserContextKeyedServiceFactory {
   static OriginPowerMapFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<OriginPowerMapFactory>;
+  friend struct base::DefaultSingletonTraits<OriginPowerMapFactory>;
 
   OriginPowerMapFactory();
   ~OriginPowerMapFactory() override;

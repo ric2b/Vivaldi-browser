@@ -4,22 +4,26 @@
 
 #include "chrome/browser/web_applications/web_app.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/i18n/file_util_icu.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
 #include "content/public/browser/browser_thread.h"
@@ -83,14 +87,19 @@ base::FilePath GetShortcutDataDir(const web_app::ShortcutInfo& shortcut_info) {
 
 void UpdateAllShortcutsForShortcutInfo(
     const base::string16& old_app_title,
+    const base::Closure& callback,
     scoped_ptr<web_app::ShortcutInfo> shortcut_info,
     const extensions::FileHandlersInfo& file_handlers_info) {
   base::FilePath shortcut_data_dir = GetShortcutDataDir(*shortcut_info);
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&web_app::internals::UpdatePlatformShortcuts,
-                 shortcut_data_dir, old_app_title, base::Passed(&shortcut_info),
-                 file_handlers_info));
+  base::Closure task = base::Bind(
+      &web_app::internals::UpdatePlatformShortcuts, shortcut_data_dir,
+      old_app_title, base::Passed(&shortcut_info), file_handlers_info);
+  if (callback.is_null()) {
+    BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE, task);
+  } else {
+    BrowserThread::PostTaskAndReply(BrowserThread::FILE, FROM_HERE, task,
+                                    callback);
+  }
 }
 
 void OnImageLoaded(scoped_ptr<web_app::ShortcutInfo> shortcut_info,
@@ -115,14 +124,14 @@ void OnImageLoaded(scoped_ptr<web_app::ShortcutInfo> shortcut_info,
     shortcut_info->favicon = image_family;
   }
 
-  callback.Run(shortcut_info.Pass(), file_handlers_info);
+  callback.Run(std::move(shortcut_info), file_handlers_info);
 }
 
 void IgnoreFileHandlersInfo(
     const web_app::ShortcutInfoCallback& shortcut_info_callback,
     scoped_ptr<web_app::ShortcutInfo> shortcut_info,
     const extensions::FileHandlersInfo& file_handlers_info) {
-  shortcut_info_callback.Run(shortcut_info.Pass());
+  shortcut_info_callback.Run(std::move(shortcut_info));
 }
 
 void ScheduleCreatePlatformShortcut(
@@ -165,10 +174,7 @@ base::FilePath GetSanitizedFileName(const base::string16& name) {
 
 }  // namespace internals
 
-ShortcutInfo::ShortcutInfo()
-    : is_platform_app(false) {
-}
-
+ShortcutInfo::ShortcutInfo() {}
 ShortcutInfo::~ShortcutInfo() {}
 
 ShortcutLocations::ShortcutLocations()
@@ -214,6 +220,13 @@ scoped_ptr<ShortcutInfo> ShortcutInfoForExtensionAndProfile(
   scoped_ptr<ShortcutInfo> shortcut_info(new ShortcutInfo);
   shortcut_info->extension_id = app->id();
   shortcut_info->is_platform_app = app->is_platform_app();
+
+  // Some default-installed apps are converted into bookmark apps on Chrome
+  // first run. These should not be considered as being created (by the user)
+  // from a web page.
+  shortcut_info->from_bookmark =
+      app->from_bookmark() && !app->was_installed_by_default();
+
   shortcut_info->url = extensions::AppLaunchInfo::GetLaunchWebURL(app);
   shortcut_info->title = base::UTF8ToUTF16(app->name());
   shortcut_info->description = base::UTF8ToUTF16(app->description());
@@ -297,16 +310,32 @@ bool ShouldCreateShortcutFor(web_app::ShortcutCreationReason reason,
     return false;
   }
 
-  // Otherwise, always create shortcuts for v2 packaged apps.
+  // Always create shortcuts for v2 packaged apps.
   if (extension->is_platform_app())
     return true;
 
 #if defined(OS_MACOSX)
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableHostedAppShimCreation)) {
-    return extension->is_hosted_app();
+  // A bookmark app installs itself as an extension, then automatically triggers
+  // a shortcut request with SHORTCUT_CREATION_AUTOMATED. Allow this flow, but
+  // do not automatically create shortcuts for default-installed extensions,
+  // until it is explicitly requested by the user.
+  if (extension->was_installed_by_default() &&
+      reason == SHORTCUT_CREATION_AUTOMATED)
+    return false;
+
+  if (extension->from_bookmark())
+    return true;
+
+  // Otherwise, don't create shortcuts for automated codepaths.
+  if (reason == SHORTCUT_CREATION_AUTOMATED)
+    return false;
+
+  if (extension->is_hosted_app()) {
+    return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+        switches::kDisableHostedAppShimCreation);
   }
 
+  // Only reached for "legacy" packaged apps. Default to false on Mac.
   return false;
 #else
   // For other platforms, allow shortcut creation if it was explicitly
@@ -404,14 +433,14 @@ void CreateShortcutsWithInfo(
       return;
   }
 
-  ScheduleCreatePlatformShortcut(reason, locations, shortcut_info.Pass(),
+  ScheduleCreatePlatformShortcut(reason, locations, std::move(shortcut_info),
                                  file_handlers_info);
 }
 
 void CreateNonAppShortcut(const ShortcutLocations& locations,
                           scoped_ptr<ShortcutInfo> shortcut_info) {
   ScheduleCreatePlatformShortcut(SHORTCUT_CREATION_AUTOMATED, locations,
-                                 shortcut_info.Pass(),
+                                 std::move(shortcut_info),
                                  extensions::FileHandlersInfo());
 }
 
@@ -442,12 +471,12 @@ void DeleteAllShortcuts(Profile* profile, const extensions::Extension* app) {
 
 void UpdateAllShortcuts(const base::string16& old_app_title,
                         Profile* profile,
-                        const extensions::Extension* app) {
+                        const extensions::Extension* app,
+                        const base::Closure& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  GetInfoForApp(app,
-                profile,
-                base::Bind(&UpdateAllShortcutsForShortcutInfo, old_app_title));
+  GetInfoForApp(app, profile, base::Bind(&UpdateAllShortcutsForShortcutInfo,
+                                         old_app_title, callback));
 }
 
 bool IsValidUrl(const GURL& url) {

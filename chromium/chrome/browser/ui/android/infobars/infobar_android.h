@@ -9,8 +9,8 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "components/infobars/core/infobar.h"
 
 class InfoBarService;
@@ -22,8 +22,9 @@ class InfoBarDelegate;
 class InfoBarAndroid : public infobars::InfoBar {
  public:
 
-  // Make sure this set of values is aligned with the java constants defined in
-  // InfoBar.java!
+  // A Java counterpart will be generated for this enum.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.infobar
+  // GENERATED_JAVA_PREFIX_TO_STRIP: ACTION_
   enum ActionType {
     ACTION_NONE = 0,
     // Confirm infobar
@@ -53,12 +54,13 @@ class InfoBarAndroid : public infobars::InfoBar {
   // InfoBar instead of this one.
   void ReassignJavaInfoBar(InfoBarAndroid* replacement);
 
-  virtual void OnLinkClicked(JNIEnv* env, jobject obj) {}
+  virtual void OnLinkClicked(JNIEnv* env,
+                             const base::android::JavaParamRef<jobject>& obj) {}
   void OnButtonClicked(JNIEnv* env,
-                       jobject obj,
-                       jint action,
-                       jstring action_value);
-  void OnCloseButtonClicked(JNIEnv* env, jobject obj);
+                       const base::android::JavaParamRef<jobject>& obj,
+                       jint action);
+  void OnCloseButtonClicked(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>& obj);
 
   void CloseJavaInfoBar();
 
@@ -73,8 +75,8 @@ class InfoBarAndroid : public infobars::InfoBar {
  protected:
   // Derived classes must implement this method to process the corresponding
   // action.
-  virtual void ProcessButton(int action,
-                             const std::string& action_value) = 0;
+  virtual void ProcessButton(int action) = 0;
+
   void CloseInfoBar();
   InfoBarAndroid* infobar_android() { return this; }
 

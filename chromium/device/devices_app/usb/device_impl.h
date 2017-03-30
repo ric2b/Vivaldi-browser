@@ -5,15 +5,18 @@
 #ifndef DEVICE_USB_DEVICE_IMPL_H_
 #define DEVICE_USB_DEVICE_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "device/devices_app/usb/public/interfaces/device.mojom.h"
+#include "device/devices_app/usb/public/interfaces/permission_provider.mojom.h"
 #include "device/usb/usb_device_handle.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/callback.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/callback.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
 
 namespace net {
 class IOBuffer;
@@ -27,54 +30,30 @@ namespace usb {
 // lifetime.
 class DeviceImpl : public Device {
  public:
-  DeviceImpl(scoped_refptr<UsbDeviceHandle> device_handle,
+  DeviceImpl(scoped_refptr<UsbDevice> device,
+             PermissionProviderPtr permission_provider,
              mojo::InterfaceRequest<Device> request);
   ~DeviceImpl() override;
 
  private:
-  using MojoTransferInCallback =
-      mojo::Callback<void(TransferStatus, mojo::Array<uint8_t>)>;
-
-  using MojoTransferOutCallback = mojo::Callback<void(TransferStatus)>;
-
-  // Closes the device if it's open. This will always set |handle_| to null.
+  // Closes the device if it's open. This will always set |device_handle_| to
+  // null.
   void CloseHandle();
 
-  // Handles a UsbDeviceHandle::ClaimInterface response.
-  void OnClaimInterface(uint8_t interface_number,
-                        const ClaimInterfaceCallback& callback,
-                        bool result);
+  // Checks interface permissions for control transfers.
+  void HasControlTransferPermission(ControlTransferRecipient recipient,
+                                    uint16_t index,
+                                    const base::Callback<void(bool)>& callback);
 
-  // Handles completion of an inbound transfer on the UsbDeviceHandle.
-  void OnTransferIn(const MojoTransferInCallback& callback,
-                    UsbTransferStatus status,
-                    scoped_refptr<net::IOBuffer> data,
-                    size_t size);
-
-  // Handles completion of an outbound transfer on the UsbDeviceHandle.
-  void OnTransferOut(const MojoTransferOutCallback& callback,
-                     UsbTransferStatus status,
-                     scoped_refptr<net::IOBuffer> data,
-                     size_t size);
-
-  // Handles completion of an inbound isochronous transfer on the
-  // UsbDeviceHandle.
-  void OnIsochronousTransferIn(const IsochronousTransferInCallback& callback,
-                               uint32_t packet_length,
-                               UsbTransferStatus status,
-                               scoped_refptr<net::IOBuffer> data,
-                               size_t size);
-
-  // Handles completion of an outbound isochronous transfer on the
-  // UsbDeviceHandle.
-  void OnIsochronousTransferOut(const MojoTransferOutCallback& callback,
-                                UsbTransferStatus status,
-                                scoped_refptr<net::IOBuffer> data,
-                                size_t size);
+  // Handles completion of an open request.
+  void OnOpen(const OpenCallback& callback,
+              scoped_refptr<device::UsbDeviceHandle> handle);
 
   // Device implementation:
-  void Close(const CloseCallback& callback) override;
   void GetDeviceInfo(const GetDeviceInfoCallback& callback) override;
+  void GetConfiguration(const GetConfigurationCallback& callback) override;
+  void Open(const OpenCallback& callback) override;
+  void Close(const CloseCallback& callback) override;
   void SetConfiguration(uint8_t value,
                         const SetConfigurationCallback& callback) override;
   void ClaimInterface(uint8_t interface_number,
@@ -86,6 +65,7 @@ class DeviceImpl : public Device {
       uint8_t alternate_setting,
       const SetInterfaceAlternateSettingCallback& callback) override;
   void Reset(const ResetCallback& callback) override;
+  void ClearHalt(uint8_t endpoint, const ClearHaltCallback& callback) override;
   void ControlTransferIn(ControlTransferParamsPtr params,
                          uint32_t length,
                          uint32_t timeout,
@@ -94,24 +74,14 @@ class DeviceImpl : public Device {
                           mojo::Array<uint8_t> data,
                           uint32_t timeout,
                           const ControlTransferOutCallback& callback) override;
-  void BulkTransferIn(uint8_t endpoint_number,
-                      uint32_t length,
-                      uint32_t timeout,
-                      const BulkTransferInCallback& callback) override;
-  void BulkTransferOut(uint8_t endpoint_number,
-                       mojo::Array<uint8_t> data,
-                       uint32_t timeout,
-                       const BulkTransferOutCallback& callback) override;
-  void InterruptTransferIn(
-      uint8_t endpoint_number,
-      uint32_t length,
-      uint32_t timeout,
-      const InterruptTransferInCallback& callback) override;
-  void InterruptTransferOut(
-      uint8_t endpoint_number,
-      mojo::Array<uint8_t> data,
-      uint32_t timeout,
-      const InterruptTransferOutCallback& callback) override;
+  void GenericTransferIn(uint8_t endpoint_number,
+                         uint32_t length,
+                         uint32_t timeout,
+                         const GenericTransferInCallback& callback) override;
+  void GenericTransferOut(uint8_t endpoint_number,
+                          mojo::Array<uint8_t> data,
+                          uint32_t timeout,
+                          const GenericTransferOutCallback& callback) override;
   void IsochronousTransferIn(
       uint8_t endpoint_number,
       uint32_t num_packets,
@@ -124,10 +94,13 @@ class DeviceImpl : public Device {
       uint32_t timeout,
       const IsochronousTransferOutCallback& callback) override;
 
-  mojo::StrongBinding<Device> binding_;
+  mojo::Binding<Device> binding_;
 
-  // The opened device handle. May be null if the device has been closed.
+  scoped_refptr<UsbDevice> device_;
+  // The device handle. Will be null before the device is opened and after it
+  // has been closed.
   scoped_refptr<UsbDeviceHandle> device_handle_;
+  PermissionProviderPtr permission_provider_;
 
   base::WeakPtrFactory<DeviceImpl> weak_factory_;
 

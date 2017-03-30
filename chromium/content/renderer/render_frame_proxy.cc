@@ -4,16 +4,19 @@
 
 #include "content/renderer/render_frame_proxy.h"
 
+#include <stdint.h>
 #include <map>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_replication_state.h"
+#include "content/common/input_messages.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/common/swapped_out_messages.h"
 #include "content/common/view_messages.h"
-#include "content/public/common/content_switches.h"
 #include "content/renderer/child_frame_compositing_helper.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
@@ -59,14 +62,26 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
 
 RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     int routing_id,
-    int parent_routing_id,
     int render_view_routing_id,
+    int opener_routing_id,
+    int parent_routing_id,
     const FrameReplicationState& replicated_state) {
+  RenderFrameProxy* parent = nullptr;
+  if (parent_routing_id != MSG_ROUTING_NONE) {
+    parent = RenderFrameProxy::FromRoutingID(parent_routing_id);
+    // It is possible that the parent proxy has been detached in this renderer
+    // process, just as the parent's real frame was creating this child frame.
+    // In this case, do not create the proxy. See https://crbug.com/568670.
+    if (!parent)
+      return nullptr;
+  }
+
   scoped_ptr<RenderFrameProxy> proxy(
       new RenderFrameProxy(routing_id, MSG_ROUTING_NONE));
   RenderViewImpl* render_view = NULL;
   blink::WebRemoteFrame* web_frame = NULL;
-  if (parent_routing_id == MSG_ROUTING_NONE) {
+
+  if (!parent) {
     // Create a top level WebRemoteFrame.
     render_view = RenderViewImpl::FromRoutingID(render_view_routing_id);
     web_frame =
@@ -76,14 +91,17 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     // Create a frame under an existing parent. The parent is always expected
     // to be a RenderFrameProxy, because navigations initiated by local frames
     // should not wind up here.
-    RenderFrameProxy* parent =
-        RenderFrameProxy::FromRoutingID(parent_routing_id);
+
     web_frame = parent->web_frame()->createRemoteChild(
         replicated_state.scope,
         blink::WebString::fromUTF8(replicated_state.name),
         replicated_state.sandbox_flags, proxy.get());
     render_view = parent->render_view();
   }
+
+  blink::WebFrame* opener =
+      RenderFrameImpl::ResolveOpener(opener_routing_id, nullptr);
+  web_frame->setOpener(opener);
 
   proxy->Init(web_frame, render_view);
 
@@ -100,7 +118,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
 }
 
 // static
-RenderFrameProxy* RenderFrameProxy::FromRoutingID(int32 routing_id) {
+RenderFrameProxy* RenderFrameProxy::FromRoutingID(int32_t routing_id) {
   RoutingIDProxyMap* proxies = g_routing_id_proxy_map.Pointer();
   RoutingIDProxyMap::iterator it = proxies->find(routing_id);
   return it == proxies->end() ? NULL : it->second;
@@ -115,12 +133,6 @@ RenderFrameProxy* RenderFrameProxy::FromWebFrame(blink::WebFrame* web_frame) {
     return proxy;
   }
   return NULL;
-}
-
-// static
-bool RenderFrameProxy::IsSwappedOutStateForbidden() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kSitePerProcess);
 }
 
 RenderFrameProxy::RenderFrameProxy(int routing_id, int frame_routing_id)
@@ -179,10 +191,11 @@ void RenderFrameProxy::DidCommitCompositorFrame() {
 
 void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
   DCHECK(web_frame_);
-  web_frame_->setReplicatedOrigin(blink::WebSecurityOrigin::createFromString(
-      blink::WebString::fromUTF8(state.origin.string())));
+  web_frame_->setReplicatedOrigin(state.origin);
   web_frame_->setReplicatedSandboxFlags(state.sandbox_flags);
   web_frame_->setReplicatedName(blink::WebString::fromUTF8(state.name));
+  web_frame_->setReplicatedShouldEnforceStrictMixedContentChecking(
+      state.should_enforce_strict_mixed_content_checking);
 }
 
 // Update the proxy's SecurityContext and FrameOwner with new sandbox flags
@@ -214,13 +227,17 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER_GENERIC(FrameMsg_CompositorFrameSwapped,
                                 OnCompositorFrameSwapped(msg))
     IPC_MESSAGE_HANDLER(FrameMsg_SetChildFrameSurface, OnSetChildFrameSurface)
-    IPC_MESSAGE_HANDLER(FrameMsg_DisownOpener, OnDisownOpener)
+    IPC_MESSAGE_HANDLER(FrameMsg_UpdateOpener, OnUpdateOpener)
     IPC_MESSAGE_HANDLER(FrameMsg_DidStartLoading, OnDidStartLoading)
     IPC_MESSAGE_HANDLER(FrameMsg_DidStopLoading, OnDidStopLoading)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateSandboxFlags, OnDidUpdateSandboxFlags)
     IPC_MESSAGE_HANDLER(FrameMsg_DispatchLoad, OnDispatchLoad)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateName, OnDidUpdateName)
+    IPC_MESSAGE_HANDLER(FrameMsg_EnforceStrictMixedContentChecking,
+                        OnEnforceStrictMixedContentChecking)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateOrigin, OnDidUpdateOrigin)
+    IPC_MESSAGE_HANDLER(InputMsg_SetFocus, OnSetPageFocus)
+    IPC_MESSAGE_HANDLER(FrameMsg_SetFocusedFrame, OnSetFocusedFrame)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -260,11 +277,9 @@ void RenderFrameProxy::OnCompositorFrameSwapped(const IPC::Message& message) {
   if (!compositing_helper_.get()) {
     compositing_helper_ =
         ChildFrameCompositingHelper::CreateForRenderFrameProxy(this);
-    compositing_helper_->EnableCompositing(true);
   }
   compositing_helper_->OnCompositorFrameSwapped(
-      frame.Pass(),
-      base::get<0>(param).producing_route_id,
+      std::move(frame), base::get<0>(param).producing_route_id,
       base::get<0>(param).output_surface_id,
       base::get<0>(param).producing_host_id,
       base::get<0>(param).shared_memory_handle);
@@ -285,33 +300,27 @@ void RenderFrameProxy::OnSetChildFrameSurface(
   if (!compositing_helper_.get()) {
     compositing_helper_ =
         ChildFrameCompositingHelper::CreateForRenderFrameProxy(this);
-    compositing_helper_->EnableCompositing(true);
   }
   compositing_helper_->OnSetSurface(surface_id, frame_size, scale_factor,
                                     sequence);
 }
 
-void RenderFrameProxy::OnDisownOpener() {
-  // TODO(creis): We should only see this for main frames for now.  To support
-  // disowning the opener on subframes, we will need to move WebContentsImpl's
-  // opener_ to FrameTreeNode.
-  CHECK(!web_frame_->parent());
+void RenderFrameProxy::OnUpdateOpener(int opener_routing_id) {
+  blink::WebFrame* opener =
+      RenderFrameImpl::ResolveOpener(opener_routing_id, nullptr);
 
-  // When there is a RenderFrame for this proxy, tell it to disown its opener.
-  // TODO(creis): Remove this when we only have WebRemoteFrames and make sure
-  // they know they have an opener.
-  if (!RenderFrameProxy::IsSwappedOutStateForbidden()) {
+  // When there is a RenderFrame for this proxy, tell it to update its opener.
+  // TODO(alexmos, nasko): Remove this when we only have WebRemoteFrames.
+  if (!SiteIsolationPolicy::IsSwappedOutStateForbidden()) {
     RenderFrameImpl* render_frame =
         RenderFrameImpl::FromRoutingID(frame_routing_id_);
     if (render_frame) {
-      if (render_frame->GetWebFrame()->opener())
-        render_frame->GetWebFrame()->setOpener(NULL);
+      render_frame->GetWebFrame()->setOpener(opener);
       return;
     }
   }
 
-  if (web_frame_->opener())
-    web_frame_->setOpener(NULL);
+  web_frame_->setOpener(opener);
 }
 
 void RenderFrameProxy::OnDidStartLoading() {
@@ -336,9 +345,24 @@ void RenderFrameProxy::OnDidUpdateName(const std::string& name) {
   web_frame_->setReplicatedName(blink::WebString::fromUTF8(name));
 }
 
+void RenderFrameProxy::OnEnforceStrictMixedContentChecking(
+    bool should_enforce) {
+  web_frame_->setReplicatedShouldEnforceStrictMixedContentChecking(
+      should_enforce);
+}
+
 void RenderFrameProxy::OnDidUpdateOrigin(const url::Origin& origin) {
-  web_frame_->setReplicatedOrigin(blink::WebSecurityOrigin::createFromString(
-      blink::WebString::fromUTF8(origin.string())));
+  web_frame_->setReplicatedOrigin(origin);
+}
+
+void RenderFrameProxy::OnSetPageFocus(bool is_focused) {
+  render_view_->SetFocus(is_focused);
+}
+
+void RenderFrameProxy::OnSetFocusedFrame() {
+  // This uses focusDocumentView rather than setFocusedFrame so that blur
+  // events are properly dispatched on any currently focused elements.
+  render_view_->webview()->focusDocumentView(web_frame_);
 }
 
 void RenderFrameProxy::frameDetached(DetachType type) {
@@ -391,7 +415,6 @@ void RenderFrameProxy::postMessageEvent(
     if (source_render_frame)
       params.source_routing_id = source_render_frame->GetRoutingID();
   }
-  params.source_view_routing_id = MSG_ROUTING_NONE;
 
   Send(new FrameHostMsg_RouteMessageEvent(routing_id_, params));
 }
@@ -420,6 +443,40 @@ void RenderFrameProxy::navigate(const blink::WebURLRequest& request,
 
 void RenderFrameProxy::forwardInputEvent(const blink::WebInputEvent* event) {
   Send(new FrameHostMsg_ForwardInputEvent(routing_id_, event));
+}
+
+void RenderFrameProxy::frameRectsChanged(const blink::WebRect& frame_rect) {
+  Send(new FrameHostMsg_FrameRectChanged(routing_id_, frame_rect));
+}
+
+void RenderFrameProxy::visibilityChanged(bool visible) {
+  Send(new FrameHostMsg_VisibilityChanged(routing_id_, visible));
+}
+
+void RenderFrameProxy::didChangeOpener(blink::WebFrame* opener) {
+  // A proxy shouldn't normally be disowning its opener.  It is possible to get
+  // here when a proxy that is being detached clears its opener, in which case
+  // there is no need to notify the browser process.
+  if (!opener)
+    return;
+
+  // Only a LocalFrame (i.e., the caller of window.open) should be able to
+  // update another frame's opener.
+  DCHECK(opener->isWebLocalFrame());
+
+  int opener_routing_id =
+      RenderFrameImpl::FromWebFrame(opener->toWebLocalFrame())->GetRoutingID();
+  Send(new FrameHostMsg_DidChangeOpener(routing_id_, opener_routing_id));
+}
+
+void RenderFrameProxy::advanceFocus(blink::WebFocusType type,
+                                    blink::WebLocalFrame* source) {
+  int source_routing_id = RenderFrameImpl::FromWebFrame(source)->GetRoutingID();
+  Send(new FrameHostMsg_AdvanceFocus(routing_id_, type, source_routing_id));
+}
+
+void RenderFrameProxy::frameFocused() {
+  Send(new FrameHostMsg_FrameFocused(routing_id_));
 }
 
 }  // namespace

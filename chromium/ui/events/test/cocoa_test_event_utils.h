@@ -9,7 +9,6 @@
 
 #import <objc/objc-class.h>
 
-#include "base/basictypes.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 namespace cocoa_test_event_utils {
@@ -52,8 +51,11 @@ NSEvent* KeyEventWithKeyCode(unsigned short key_code,
                              NSEventType event_type,
                              NSUInteger modifiers);
 
-// Returns a mouse enter/exit event with the given type.
-NSEvent* EnterExitEventWithType(NSEventType event_type);
+// Returns a mouse enter event.
+NSEvent* EnterEvent();
+
+// Returns a mouse exit event.
+NSEvent* ExitEvent();
 
 // Return an "other" event with the given type.
 NSEvent* OtherEventWithType(NSEventType event_type);

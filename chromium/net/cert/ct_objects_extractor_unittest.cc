@@ -32,7 +32,7 @@ class CTObjectsExtractorTest : public ::testing::Test {
                                                   der_test_cert.length());
 
     log_ = CTLogVerifier::Create(ct::GetTestPublicKey(), "testlog",
-                                 "https://ct.example.com").Pass();
+                                 "https://ct.example.com");
     ASSERT_TRUE(log_);
   }
 
@@ -52,7 +52,7 @@ class CTObjectsExtractorTest : public ::testing::Test {
  protected:
   CertificateList precert_chain_;
   scoped_refptr<X509Certificate> test_cert_;
-  scoped_refptr<CTLogVerifier> log_;
+  scoped_refptr<const CTLogVerifier> log_;
 };
 
 // Test that an SCT can be extracted and the extracted SCT contains the

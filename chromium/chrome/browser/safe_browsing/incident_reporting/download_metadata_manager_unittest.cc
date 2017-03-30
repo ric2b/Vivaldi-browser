@@ -4,6 +4,8 @@
 
 #include "chrome/browser/safe_browsing/incident_reporting/download_metadata_manager.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
@@ -42,7 +44,7 @@ namespace {
 const uint32_t kTestDownloadId = 47;
 const uint32_t kOtherDownloadId = 48;
 const uint32_t kCrazyDowloadId = 655;
-const int64 kTestDownloadTimeMsec = 84;
+const int64_t kTestDownloadTimeMsec = 84;
 const char kTestUrl[] = "http://test.test/foo";
 const uint64_t kTestDownloadLength = 1000;
 const double kTestDownloadEndTimeMs = 1413514824057;
@@ -120,7 +122,7 @@ class DownloadMetadataManagerTestBase : public ::testing::Test {
     request->set_url(url);
     request->mutable_digests();
     request->set_length(kTestDownloadLength);
-    return request.Pass();
+    return request;
   }
 
   // Returns a new DownloadMetdata for the given download id.
@@ -131,7 +133,7 @@ class DownloadMetadataManagerTestBase : public ::testing::Test {
         metadata->mutable_download();
     details->set_download_time_msec(kTestDownloadTimeMsec);
     details->set_allocated_download(MakeTestRequest(kTestUrl).release());
-    return metadata.Pass();
+    return metadata;
   }
 
   // Writes a test DownloadMetadata file for the given download id to the
@@ -155,7 +157,7 @@ class DownloadMetadataManagerTestBase : public ::testing::Test {
       return scoped_ptr<DownloadMetadata>();
     scoped_ptr<DownloadMetadata> result(new DownloadMetadata);
     EXPECT_TRUE(result->ParseFromString(data));
-    return result.Pass();
+    return result;
   }
 
   // Runs all tasks posted to the test thread's message loop.
@@ -480,27 +482,20 @@ TEST_P(SetRequestTest, SetRequest) {
   }
 
   static const char kNewUrl[] = "http://blorf";
-  scoped_ptr<ClientDownloadRequest> request;
   if (set_request_)
-    request = MakeTestRequest(kNewUrl).Pass();
-  else
-    request.reset();
-  manager_.SetRequest(test_item_.get(), request.get());
+    manager_.SetRequest(test_item_.get(), MakeTestRequest(kNewUrl).get());
 
   // Allow the write or remove task to run.
   RunAllTasks();
 
-  MockDownloadDetailsGetter details_getter;
   if (set_request_) {
+    MockDownloadDetailsGetter details_getter;
     // Expect that the callback is invoked with details for this item.
     EXPECT_CALL(
         details_getter,
         OnDownloadDetails(ResultOf(GetDetailsDownloadUrl, StrEq(kNewUrl))));
-  } else {
-    // Expect that the callback is invoked with null to clear stale metadata.
-    EXPECT_CALL(details_getter, OnDownloadDetails(IsNull()));
+    manager_.GetDownloadDetails(&profile_, details_getter.GetCallback());
   }
-  manager_.GetDownloadDetails(&profile_, details_getter.GetCallback());
 
   // In http://crbug.com/433928, open after SetRequest(nullpr) caused a crash.
   test_item_->NotifyObserversDownloadOpened();
@@ -513,6 +508,9 @@ TEST_P(SetRequestTest, SetRequest) {
     ASSERT_TRUE(metadata);
     EXPECT_EQ(kTestDownloadId, metadata->download_id());
     EXPECT_STREQ(kNewUrl, metadata->download().download().url().c_str());
+  } else if (metadata_file_present_) {
+    // Expect that the metadata file has not been overwritten.
+    ASSERT_TRUE(metadata);
   } else {
     // Expect that the file is not present.
     ASSERT_FALSE(metadata);
@@ -550,17 +548,12 @@ TEST_F(DownloadMetadataManagerTestBase, ActiveDownloadNoRequest) {
   test_item_->NotifyObserversDownloadUpdated();
 
   RunAllTasks();
-
-  MockDownloadDetailsGetter details_getter;
-  // Expect that the callback is invoked with null to clear stale metadata.
-  EXPECT_CALL(details_getter, OnDownloadDetails(IsNull()));
-  manager_.GetDownloadDetails(&profile_, details_getter.GetCallback());
-
   ShutdownDownloadManager();
 
-  // Expect that the file is not present.
+  // Expect that the metadata file is still present.
   scoped_ptr<DownloadMetadata> metadata(ReadTestMetadataFile());
-  ASSERT_FALSE(metadata);
+  ASSERT_TRUE(metadata);
+  EXPECT_EQ(kOtherDownloadId, metadata->download_id());
 }
 
 TEST_F(DownloadMetadataManagerTestBase, ActiveDownloadWithRequest) {

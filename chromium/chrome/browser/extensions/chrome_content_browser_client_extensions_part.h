@@ -28,8 +28,16 @@ class ChromeContentBrowserClientExtensionsPart
   static GURL GetEffectiveURL(Profile* profile, const GURL& url);
   static bool ShouldUseProcessPerSite(Profile* profile,
                                       const GURL& effective_url);
+  static bool DoesSiteRequireDedicatedProcess(
+      content::BrowserContext* browser_context,
+      const GURL& effective_site_url);
+  static bool ShouldLockToOrigin(content::BrowserContext* browser_context,
+                                 const GURL& effective_site_url);
   static bool CanCommitURL(content::RenderProcessHost* process_host,
                            const GURL& url);
+  static bool IsIllegalOrigin(content::ResourceContext* resource_context,
+                              int child_process_id,
+                              const GURL& origin);
   static bool IsSuitableHost(Profile* profile,
                              content::RenderProcessHost* process_host,
                              const GURL& site_url);
@@ -43,6 +51,11 @@ class ChromeContentBrowserClientExtensionsPart
       content::ResourceContext* resource_context,
       const GURL& current_url,
       const GURL& new_url);
+  static bool AllowServiceWorker(const GURL& scope,
+                                 const GURL& first_party_url,
+                                 content::ResourceContext* context,
+                                 int render_process_id,
+                                 int render_frame_id);
 
   // Similiar to ChromeContentBrowserClient::ShouldAllowOpenURL(), but the
   // return value indicates whether to use |result| or not.

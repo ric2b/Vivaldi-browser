@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_UI_ECHO_DIALOG_VIEW_H_
 #define CHROME_BROWSER_CHROMEOS_UI_ECHO_DIALOG_VIEW_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -62,7 +62,8 @@ class EchoDialogView : public views::DialogDelegateView,
   bool ShouldShowWindowIcon() const override;
 
   // views::LinkListener override.
-  void StyledLabelLinkClicked(const gfx::Range& range,
+  void StyledLabelLinkClicked(views::StyledLabel* label,
+                              const gfx::Range& range,
                               int event_flags) override;
 
   // views::View override.

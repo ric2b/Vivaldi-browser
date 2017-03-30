@@ -55,12 +55,6 @@ Status Device::SetUp(const std::string& package,
     device_socket = "content_shell_devtools_remote";
     command_line_file = "/data/local/tmp/content-shell-command-line";
     exec_name = "content_shell";
-  } else if (package.compare("org.chromium.chrome.shell") == 0) {
-    // ChromeShell
-    known_activity = ".ChromeShellActivity";
-    device_socket = "chrome_shell_devtools_remote";
-    command_line_file = "/data/local/tmp/chrome-shell-command-line";
-    exec_name = "chrome_shell";
   } else if (package.find("chrome") != std::string::npos &&
              package.find("webview") == std::string::npos) {
     // Chrome.
@@ -169,7 +163,7 @@ Status DeviceManager::AcquireDevice(scoped_ptr<Device>* device) {
 
   base::AutoLock lock(devices_lock_);
   status = Status(kUnknownError, "All devices are in use (" +
-                  base::IntToString(devices.size()) + " online)");
+                  base::SizeTToString(devices.size()) + " online)");
   std::vector<std::string>::iterator iter;
   for (iter = devices.begin(); iter != devices.end(); iter++) {
     if (!IsDeviceLocked(*iter)) {
@@ -219,4 +213,3 @@ bool DeviceManager::IsDeviceLocked(const std::string& device_serial) {
   return std::find(active_devices_.begin(), active_devices_.end(),
                    device_serial) != active_devices_.end();
 }
-

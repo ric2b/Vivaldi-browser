@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_NACL_RENDERER_PPB_NACL_PRIVATE_H_
 #define COMPONENTS_NACL_RENDERER_PPB_NACL_PRIVATE_H_
 
+#include "base/memory/scoped_ptr.h"
+#include "base/process/process_handle.h"
+#include "ipc/ipc_sync_channel.h"
 #include "ppapi/c/pp_bool.h"
 #include "ppapi/c/pp_completion_callback.h"
 #include "ppapi/c/pp_instance.h"
@@ -206,14 +209,15 @@ struct PP_NaClFileInfo {
  * @{
  */
 struct PPB_NaCl_Private {
-  /* Launches NaCl's sel_ldr process.  Returns PP_EXTERNAL_PLUGIN_OK on success
-   * and writes a NaClHandle to imc_handle. Returns PP_EXTERNAL_PLUGIN_FAILED on
-   * failure.
+  /* Launches NaCl's sel_ldr process.  Returns PP_EXTERNAL_PLUGIN_OK on success.
+   * Returns PP_EXTERNAL_PLUGIN_FAILED on failure.
    * The |nexe_file_info| is currently used only in non-SFI mode. It is the
    * file handle for the main nexe file, which should be initially loaded.
    * LaunchSelLdr takes the ownership of the file handle.
    * The |uses_nonsfi_mode| flag indicates whether or not nonsfi-mode should
    * be used with the binary pointed by the url.
+   * |translator_channel| and |process_id| are filled out when launching PNaCl
+   * translator processes.
    */
   void (*LaunchSelLdr)(PP_Instance instance,
                        PP_Bool main_service_runtime,
@@ -221,23 +225,13 @@ struct PPB_NaCl_Private {
                        const struct PP_NaClFileInfo* nexe_file_info,
                        PP_Bool uses_nonsfi_mode,
                        PP_NaClAppProcessType process_type,
-                       void* imc_handle,
+                       scoped_ptr<IPC::SyncChannel>* translator_channel,
+                       base::ProcessId* process_id,
                        struct PP_CompletionCallback callback);
   /* On POSIX systems, this function returns the file descriptor of
    * /dev/urandom.  On non-POSIX systems, this function returns 0.
    */
   int32_t (*UrandomFD)(void);
-  /* This is Windows-specific.  This is a replacement for DuplicateHandle() for
-   * use inside the Windows sandbox.  Note that we provide this via dependency
-   * injection only to avoid the linkage problems that occur because the NaCl
-   * plugin is built as a separate DLL/DSO
-   * (see http://code.google.com/p/chromium/issues/detail?id=114439#c8).
-   */
-  int32_t (*BrokerDuplicateHandle)(PP_FileHandle source_handle,
-                                   uint32_t process_id,
-                                   PP_FileHandle* target_handle,
-                                   uint32_t desired_access,
-                                   uint32_t options);
   /* Returns a read-only (but executable) file descriptor / file info for
    * a url for pnacl translator tools. Returns an invalid handle on failure.
    */

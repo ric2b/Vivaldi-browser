@@ -5,8 +5,12 @@
 #ifndef MEDIA_FILTERS_AUDIO_CLOCK_H_
 #define MEDIA_FILTERS_AUDIO_CLOCK_H_
 
+#include <stdint.h>
+
+#include <cmath>
 #include <deque>
 
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"
 
@@ -86,8 +90,14 @@ class MEDIA_EXPORT AudioClock {
   // |start_timestamp| since no                  amount of media frames tracked
   // media data has been played yet.             by AudioClock, which would be
   //                                             1000 + 500 + 250 = 1750 ms.
-  base::TimeDelta front_timestamp() const { return front_timestamp_; }
-  base::TimeDelta back_timestamp() const { return back_timestamp_; }
+  base::TimeDelta front_timestamp() const {
+    return base::TimeDelta::FromMicroseconds(
+        std::round(front_timestamp_micros_));
+  }
+  base::TimeDelta back_timestamp() const {
+    return base::TimeDelta::FromMicroseconds(
+        std::round(back_timestamp_micros_));
+  }
 
   // Returns the amount of wall time until |timestamp| will be played by the
   // audio hardware.
@@ -95,18 +105,9 @@ class MEDIA_EXPORT AudioClock {
   // |timestamp| must be within front_timestamp() and back_timestamp().
   base::TimeDelta TimeUntilPlayback(base::TimeDelta timestamp) const;
 
-  // Returns the amount of contiguous media time buffered at the head of the
-  // audio hardware buffer. Silence introduced into the audio hardware buffer is
-  // treated as a break in media time.
-  base::TimeDelta contiguous_audio_data_buffered() const {
-    return contiguous_audio_data_buffered_;
-  }
-
-  // Same as above, but also treats changes in playback rate as a break in media
-  // time.
-  base::TimeDelta contiguous_audio_data_buffered_at_same_rate() const {
-    return contiguous_audio_data_buffered_at_same_rate_;
-  }
+  void ContiguousAudioDataBufferedForTesting(
+      base::TimeDelta* total,
+      base::TimeDelta* same_rate_total) const;
 
  private:
   // Even with a ridiculously high sample rate of 256kHz, using 64 bits will
@@ -123,7 +124,7 @@ class MEDIA_EXPORT AudioClock {
   // Helpers for operating on |buffered_|.
   void PushBufferedAudioData(int64_t frames, double playback_rate);
   void PopBufferedAudioData(int64_t frames);
-  base::TimeDelta ComputeBufferedMediaTime(int64_t frames) const;
+  double ComputeBufferedMediaDurationMicros() const;
 
   const base::TimeDelta start_timestamp_;
   const double microseconds_per_frame_;
@@ -131,12 +132,14 @@ class MEDIA_EXPORT AudioClock {
   std::deque<AudioData> buffered_;
   int64_t total_buffered_frames_;
 
-  base::TimeDelta front_timestamp_;
-  base::TimeDelta back_timestamp_;
-
-  // Cached results of last call to WroteAudio().
-  base::TimeDelta contiguous_audio_data_buffered_;
-  base::TimeDelta contiguous_audio_data_buffered_at_same_rate_;
+  // Use double rather than TimeDelta to avoid loss of partial microseconds when
+  // converting between frames-written/delayed and time-passed (see conversion
+  // in WroteAudio()). Particularly for |back_timestamp|, which accumulates more
+  // time with each call to WroteAudio(), the loss of precision can accumulate
+  // to create noticeable audio/video sync drift for longer (2-3 hr) videos.
+  // See http://crbug.com/564604.
+  double front_timestamp_micros_;
+  double back_timestamp_micros_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioClock);
 };

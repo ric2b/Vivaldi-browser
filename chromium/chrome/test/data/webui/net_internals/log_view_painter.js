@@ -9,8 +9,7 @@ GEN_INCLUDE(['net_internals_test.js']);
 (function() {
 
 /**
- * Check that stripCookiesAndLoginInfo correctly removes cookies and login
- * information.
+ * Check that stripPrivacyInfo correctly removes cookies and login information.
  */
 TEST_F('NetInternalsTest', 'netInternalsLogViewPainterStripInfo', function() {
   // Each entry in |expectations| is a list consisting of a header element
@@ -56,13 +55,13 @@ TEST_F('NetInternalsTest', 'netInternalsLogViewPainterStripInfo', function() {
     ['Proxy-Authenticate: Digest realm="asdfasdf", nonce=5, qop="auth"', null],
     ['Proxy-Authenticate: Basic realm=foo,foo=bar , Digest ', null],
 
+    ['cookie: [4 bytes were stripped]', null],
     ['cookie: Stuff [4 bytes were stripped]',
      'cookie: [29 bytes were stripped]'],
     ['cookie: [4 bytes were stripped] Stuff',
      'cookie: [29 bytes were stripped]'],
     ['set-cookie: [4 bytes were stripped]', null],
     ['Proxy-Authenticate: NTLM [23 bytes were stripped]', null],
-    ['cookie: [value was stripped]', null],
   ];
 
   for (var i = 0; i < expectations.length; ++i) {
@@ -85,7 +84,7 @@ TEST_F('NetInternalsTest', 'netInternalsLogViewPainterStripInfo', function() {
       };
 
       entry.params.headers[position] = expectation[0];
-      var stripped = stripCookiesAndLoginInfo(entry);
+      var stripped = stripPrivacyInfo(entry);
       // The entry should be duplicated, so the original still has the deleted
       // information.
       expectNotEquals(stripped, entry);
@@ -114,7 +113,7 @@ TEST_F('NetInternalsTest', 'netInternalsLogViewPainterStripInfo', function() {
     'type': EventSourceType.HTTP_TRANSACTION_HTTP2_SEND_REQUEST_HEADERS
   };
   var strippedSpdyRequestHeadersEntry =
-      stripCookiesAndLoginInfo(spdyRequestHeadersEntry);
+      stripPrivacyInfo(spdyRequestHeadersEntry);
   expectEquals('cookie: [4 bytes were stripped]',
                strippedSpdyRequestHeadersEntry.params.headers[3]);
 
@@ -122,17 +121,38 @@ TEST_F('NetInternalsTest', 'netInternalsLogViewPainterStripInfo', function() {
 });
 
 /**
+ * Check that stripPrivacyInfo correctly removes HTTP/2 GOAWAY frame debug data.
+ */
+TEST_F('NetInternalsTest', 'netInternalsLogViewPainterStripGoAway', function() {
+  var entry = {
+    'params': {
+      'active_streams': 1,
+      'debug_data': 'potentially privacy sensitive information',
+      'last_accepted_stream_id': 1,
+      'status': 0,
+      'unclaimed_streams': 0,
+    },
+    'phase': 0,
+    'source': {'id': 404, 'type': 5},
+    'time': '49236780',
+    'type': EventType.HTTP2_SESSION_GOAWAY,
+  };
+
+  var stripped = stripPrivacyInfo(entry);
+
+  // The entry should be duplicated, so the original still has the deleted
+  // information.
+  expectNotEquals(stripped, entry);
+  expectEquals('[41 bytes were stripped]',
+               stripped.params.debug_data);
+
+  testDone();
+});
+
+/**
  * Tests the formatting of log entries to fixed width text.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsLogViewPainterPrintAsText ' +
-    'DISABLED_netInternalsLogViewPainterPrintAsText');
-GEN('#else');
-GEN('#define MAYBE_netInternalsLogViewPainterPrintAsText ' +
-    'netInternalsLogViewPainterPrintAsText');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsLogViewPainterPrintAsText', function () {
+TEST_F('NetInternalsTest', 'netInternalsLogViewPainterPrintAsText', function() {
   // Add a DOM node to draw the log entries into.
   var div = addNode(document.body, 'div');
 

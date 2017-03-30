@@ -32,13 +32,6 @@
         ],
       },
     }],
-    ['OS=="android"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/content_shell/assets/content_shell.pak',
-        ],
-      },
-    }],
     ['chromeos==1', {
       'variables': {
         'files': [
@@ -46,7 +39,7 @@
         ],
       },
     }],
-    ['OS=="linux" or OS=="mac" or OS=="win"', {
+    ['OS=="android" or OS=="linux" or OS=="mac" or OS=="win"', {
       'variables': {
         'files': [
           '<(PRODUCT_DIR)/content_shell.pak',
@@ -65,7 +58,6 @@
     ['OS=="linux"', {
       'variables': {
         'files': [
-          '<(PRODUCT_DIR)/content_shell.pak',
           '<(PRODUCT_DIR)/libosmesa.so',
         ],
       },
@@ -77,17 +69,22 @@
         ],
       },
     }],
+    ['enable_plugins==1', {
+      'variables': {
+        'files': [
+          '../ppapi/tests/test_case.html',
+          '../ppapi/tests/test_page.css',
+        ],
+      },
+    }],
     ['OS=="linux" or OS=="mac" or OS=="win"', {
       'variables': {
         'files': [
           '../net/tools/testserver/',
-          '../ppapi/tests/test_case.html',
-          '../ppapi/tests/test_page.css',
           '../testing/test_env.py',
           '../third_party/pyftpdlib/',
           '../third_party/pywebsocket/',
           '../third_party/tlslite/',
-          '<(PRODUCT_DIR)/content_browsertests<(EXECUTABLE_SUFFIX)',
         ],
       },
     }],
@@ -115,7 +112,6 @@
     ['OS=="win"', {
       'variables': {
         'files': [
-          '<(PRODUCT_DIR)/content_shell.pak',
           '<(PRODUCT_DIR)/osmesa.dll',
           '<(PRODUCT_DIR)/plugins/np_test_netscape_plugin.dll',
           '<(PRODUCT_DIR)/ppapi_tests.dll',
@@ -140,6 +136,6 @@
   'includes': [
     '../base/base.isolate',
     '../gin/v8.isolate',
-    '../third_party/angle/angle.isolate',
+    '../ui/gl/gl.isolate',
   ],
 }

@@ -5,8 +5,6 @@
 LIBRARY  "vivaldi_elf.dll"
 
 EXPORTS
-  CreateFileW=CreateFileWRedirect
-  GetRedirectCount
   IsBlacklistInitialized
   SignalChromeElf
   SuccessfullyBlocked

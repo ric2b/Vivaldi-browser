@@ -32,7 +32,7 @@ const char kOpenerTabIdKey[] = "openerTabId";
 const char kPinnedKey[] = "pinned";
 const char kAudibleKey[] = "audible";
 const char kMutedKey[] = "muted";
-const char kMutedCauseKey[] = "mutedCause";
+const char kMutedInfoKey[] = "mutedInfo";
 const char kQualityKey[] = "quality";
 const char kHighlightedKey[] = "highlighted";
 const char kRunAtKey[] = "runAt";
@@ -51,11 +51,13 @@ const char kWidthKey[] = "width";
 const char kWindowIdKey[] = "windowId";
 const char kWindowTypeKey[] = "type";
 const char kWindowTypeLongKey[] = "windowType";
+const char kWindowTypesKey[] = "windowTypes";
 const char kZoomSettingsMode[] = "mode";
 const char kZoomSettingsScope[] = "scope";
 const char kExtDataKey[] = "extData";
 const char kLastActiveTimeKey[] = "lastActiveTime";
 const char kWindowExtDataKey[] = "extData";
+const char kDiscardedKey[] = "discarded";
 
 const char kShowStateValueNormal[] = "normal";
 const char kShowStateValueMinimized[] = "minimized";
@@ -64,13 +66,12 @@ const char kShowStateValueFullscreen[] = "fullscreen";
 const char kStatusValueComplete[] = "complete";
 const char kStatusValueLoading[] = "loading";
 
-// TODO(mpcomplete): should we expose more specific detail, like devtools, app
-// panel, etc?
 const char kWindowTypeValueNormal[] = "normal";
 const char kWindowTypeValuePopup[] = "popup";
 const char kWindowTypeValuePanel[] = "panel";
 const char kWindowTypeValueDetachedPanel[] = "detached_panel";
 const char kWindowTypeValueApp[] = "app";
+const char kWindowTypeValueDevTools[] = "devtools";
 
 const char kCannotZoomDisabledTabError[] = "Cannot zoom a tab in disabled "
     "mode.";
@@ -102,7 +103,11 @@ const char kSupportedInWindowsOnlyError[] = "Supported in Windows only";
 const char kInvalidWindowTypeError[] = "Invalid value for type";
 const char kInvalidWindowStateError[] = "Invalid value for state";
 const char kScreenshotsDisabled[] = "Taking screenshots has been disabled";
-
+const char kCannotUpdateMuteDisabled[] =
+    "Failed to update mute state for tab *, --* must be enabled";
+const char kCannotUpdateMuteCaptured[] =
+    "Cannot update mute state for tab *, tab has audio or video currently "
+    "being captured";
 const char kCannotDetermineLanguageOfUnloadedTab[] =
     "Cannot determine language: tab not loaded";
 

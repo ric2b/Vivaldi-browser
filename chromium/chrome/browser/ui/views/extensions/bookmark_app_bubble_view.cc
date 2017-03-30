@@ -8,10 +8,12 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
+#include "grit/components_strings.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -26,6 +28,10 @@
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
+
+#if defined(OS_WIN)
+#include "base/win/shortcut.h"
+#endif  // defined(OS_WIN)
 
 using views::ColumnSet;
 using views::GridLayout;
@@ -255,19 +261,15 @@ void BookmarkAppBubbleView::UpdateAddButtonState() {
 }
 
 int BookmarkAppBubbleView::TitleStringId() {
-#if defined(OS_WIN)
-    int string_id = IDS_ADD_TO_TASKBAR_BUBBLE_TITLE;
-#else
-    int string_id = IDS_ADD_TO_DESKTOP_BUBBLE_TITLE;
-#endif
+  int string_id = IDS_ADD_TO_DESKTOP_BUBBLE_TITLE;
 #if defined(USE_ASH)
-    if (chrome::GetHostDesktopTypeForNativeWindow(
-            anchor_widget()->GetNativeWindow()) ==
-        chrome::HOST_DESKTOP_TYPE_ASH) {
-      string_id = IDS_ADD_TO_SHELF_BUBBLE_TITLE;
-    }
+  if (chrome::GetHostDesktopTypeForNativeWindow(
+          anchor_widget()->GetNativeWindow()) ==
+      chrome::HOST_DESKTOP_TYPE_ASH) {
+    string_id = IDS_ADD_TO_SHELF_BUBBLE_TITLE;
+  }
 #endif
-    return string_id;
+  return string_id;
 }
 
 base::string16 BookmarkAppBubbleView::GetTrimmedTitle() {

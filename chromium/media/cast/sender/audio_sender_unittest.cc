@@ -2,18 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/cast/sender/audio_sender.h"
+
 #include <stdint.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "base/values.h"
 #include "media/base/media.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
+#include "media/cast/constants.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/cast_transport_sender_impl.h"
-#include "media/cast/sender/audio_sender.h"
 #include "media/cast/test/fake_single_thread_task_runner.h"
 #include "media/cast/test/utility/audio_utility.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,7 +42,7 @@ class TestPacketSender : public PacketSender {
   TestPacketSender() : number_of_rtp_packets_(0), number_of_rtcp_packets_(0) {}
 
   bool SendPacket(PacketRef packet, const base::Closure& cb) final {
-    if (Rtcp::IsRtcpPacket(&packet->data[0], packet->data.size())) {
+    if (IsRtcpPacket(&packet->data[0], packet->data.size())) {
       ++number_of_rtcp_packets_;
     } else {
       // Check that at least one RTCP packet was sent before the first RTP
@@ -51,7 +56,7 @@ class TestPacketSender : public PacketSender {
     return true;
   }
 
-  int64 GetBytesSent() final { return 0; }
+  int64_t GetBytesSent() final { return 0; }
 
   int number_of_rtp_packets() const { return number_of_rtp_packets_; }
 
@@ -72,10 +77,8 @@ class AudioSenderTest : public ::testing::Test {
     testing_clock_->Advance(base::TimeTicks::Now() - base::TimeTicks());
     task_runner_ = new test::FakeSingleThreadTaskRunner(testing_clock_);
     cast_environment_ =
-        new CastEnvironment(scoped_ptr<base::TickClock>(testing_clock_).Pass(),
-                            task_runner_,
-                            task_runner_,
-                            task_runner_);
+        new CastEnvironment(scoped_ptr<base::TickClock>(testing_clock_),
+                            task_runner_, task_runner_, task_runner_);
     audio_config_.codec = CODEC_AUDIO_OPUS;
     audio_config_.use_external_encoder = false;
     audio_config_.frequency = kDefaultAudioSamplingRate;
@@ -130,7 +133,7 @@ TEST_F(AudioSenderTest, Encode20ms) {
                           TestAudioBusFactory::kMiddleANoteFreq,
                           0.5f).NextAudioBus(kDuration));
 
-  audio_sender_->InsertAudio(bus.Pass(), testing_clock_->NowTicks());
+  audio_sender_->InsertAudio(std::move(bus), testing_clock_->NowTicks());
   task_runner_->RunTasks();
   EXPECT_LE(1, transport_.number_of_rtp_packets());
   EXPECT_LE(1, transport_.number_of_rtcp_packets());
@@ -144,12 +147,12 @@ TEST_F(AudioSenderTest, RtcpTimer) {
                           TestAudioBusFactory::kMiddleANoteFreq,
                           0.5f).NextAudioBus(kDuration));
 
-  audio_sender_->InsertAudio(bus.Pass(), testing_clock_->NowTicks());
+  audio_sender_->InsertAudio(std::move(bus), testing_clock_->NowTicks());
   task_runner_->RunTasks();
 
   // Make sure that we send at least one RTCP packet.
   base::TimeDelta max_rtcp_timeout =
-      base::TimeDelta::FromMilliseconds(1 + kDefaultRtcpIntervalMs * 3 / 2);
+      base::TimeDelta::FromMilliseconds(1 + kRtcpReportIntervalMs * 3 / 2);
   testing_clock_->Advance(max_rtcp_timeout);
   task_runner_->RunTasks();
   EXPECT_LE(1, transport_.number_of_rtp_packets());

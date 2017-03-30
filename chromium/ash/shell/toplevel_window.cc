@@ -4,7 +4,6 @@
 
 #include "ash/shell/toplevel_window.h"
 
-#include "ash/display/display_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/window_positioner.h"
 #include "ash/wm/window_state.h"
@@ -30,9 +29,7 @@ SavedState* saved_state = NULL;
 }  // namespace
 
 ToplevelWindow::CreateParams::CreateParams()
-    : can_resize(false),
-      can_maximize(false) {
-}
+    : can_resize(false), can_maximize(false), use_saved_placement(true) {}
 
 // static
 views::Widget* ToplevelWindow::CreateToplevelWindow(
@@ -79,7 +76,7 @@ bool ToplevelWindow::GetSavedWindowPlacement(
     gfx::Rect* bounds,
     ui::WindowShowState* show_state) const {
   bool is_saved_bounds = !!saved_state;
-  if (saved_state) {
+  if (saved_state && params_.use_saved_placement) {
     *bounds = saved_state->bounds;
     *show_state = saved_state->show_state;
   } else {

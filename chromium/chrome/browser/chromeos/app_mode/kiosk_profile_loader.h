@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -53,7 +53,6 @@ class KioskProfileLoader : public LoginPerformer::Delegate,
   void OnAuthFailure(const AuthFailure& error) override;
   void WhiteListCheckFailed(const std::string& email) override;
   void PolicyLoadFailed() override;
-  void OnOnlineChecked(const std::string& email, bool success) override;
 
   // UserSessionManagerDelegate implementation:
   void OnProfilePrepared(Profile* profile, bool browser_launched) override;

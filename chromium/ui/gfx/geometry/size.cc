@@ -12,7 +12,10 @@
 #include <ApplicationServices/ApplicationServices.h>
 #endif
 
+#include "base/numerics/safe_math.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
+#include "ui/gfx/geometry/size_conversions.h"
 
 namespace gfx {
 
@@ -43,7 +46,13 @@ CGSize Size::ToCGSize() const {
 #endif
 
 int Size::GetArea() const {
-  return width() * height();
+  return GetCheckedArea().ValueOrDie();
+}
+
+base::CheckedNumeric<int> Size::GetCheckedArea() const {
+  base::CheckedNumeric<int> checked_area = width();
+  checked_area *= height();
+  return checked_area;
 }
 
 void Size::Enlarge(int grow_width, int grow_height) {
@@ -62,6 +71,42 @@ void Size::SetToMax(const Size& other) {
 
 std::string Size::ToString() const {
   return base::StringPrintf("%dx%d", width(), height());
+}
+
+Size ScaleToCeiledSize(const Size& size, float x_scale, float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return size;
+  return ToCeiledSize(ScaleSize(gfx::SizeF(size), x_scale, y_scale));
+}
+
+Size ScaleToCeiledSize(const Size& size, float scale) {
+  if (scale == 1.f)
+    return size;
+  return ToCeiledSize(ScaleSize(gfx::SizeF(size), scale, scale));
+}
+
+Size ScaleToFlooredSize(const Size& size, float x_scale, float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return size;
+  return ToFlooredSize(ScaleSize(gfx::SizeF(size), x_scale, y_scale));
+}
+
+Size ScaleToFlooredSize(const Size& size, float scale) {
+  if (scale == 1.f)
+    return size;
+  return ToFlooredSize(ScaleSize(gfx::SizeF(size), scale, scale));
+}
+
+Size ScaleToRoundedSize(const Size& size, float x_scale, float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return size;
+  return ToRoundedSize(ScaleSize(gfx::SizeF(size), x_scale, y_scale));
+}
+
+Size ScaleToRoundedSize(const Size& size, float scale) {
+  if (scale == 1.f)
+    return size;
+  return ToRoundedSize(ScaleSize(gfx::SizeF(size), scale, scale));
 }
 
 }  // namespace gfx

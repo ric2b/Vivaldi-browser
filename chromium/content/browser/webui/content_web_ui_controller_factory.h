@@ -5,7 +5,7 @@
 #ifndef CONTENT_BROWSER_WEBUI_CONTENT_WEB_UI_CONTROLLER_FACTORY_H_
 #define CONTENT_BROWSER_WEBUI_CONTENT_WEB_UI_CONTROLLER_FACTORY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller_factory.h"
@@ -31,7 +31,7 @@ class CONTENT_EXPORT ContentWebUIControllerFactory
   ~ContentWebUIControllerFactory() override;
 
  private:
-  friend struct DefaultSingletonTraits<ContentWebUIControllerFactory>;
+  friend struct base::DefaultSingletonTraits<ContentWebUIControllerFactory>;
 
   DISALLOW_COPY_AND_ASSIGN(ContentWebUIControllerFactory);
 };

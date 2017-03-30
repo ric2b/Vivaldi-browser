@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_TEST_CHANNEL_ENDPOINT_CLIENT_H_
-#define MOJO_EDK_SYSTEM_TEST_CHANNEL_ENDPOINT_CLIENT_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_TEST_CHANNEL_ENDPOINT_CLIENT_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_TEST_CHANNEL_ENDPOINT_CLIENT_H_
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/synchronization/lock.h"
-#include "mojo/edk/system/channel_endpoint.h"
-#include "mojo/edk/system/channel_endpoint_client.h"
-#include "mojo/edk/system/message_in_transit_queue.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint_client.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit_queue.h"
+#include "third_party/mojo/src/mojo/edk/system/mutex.h"
 
 namespace base {
 class WaitableEvent;
@@ -49,15 +49,15 @@ class TestChannelEndpointClient final : public ChannelEndpointClient {
  private:
   ~TestChannelEndpointClient() override;
 
-  mutable base::Lock lock_;  // Protects the members below.
+  mutable Mutex mutex_;
 
-  unsigned port_;
-  scoped_refptr<ChannelEndpoint> endpoint_;
+  unsigned port_ MOJO_GUARDED_BY(mutex_);
+  scoped_refptr<ChannelEndpoint> endpoint_ MOJO_GUARDED_BY(mutex_);
 
-  MessageInTransitQueue messages_;
+  MessageInTransitQueue messages_ MOJO_GUARDED_BY(mutex_);
 
   // Event to trigger if we read a message (may be null).
-  base::WaitableEvent* read_event_;
+  base::WaitableEvent* read_event_ MOJO_GUARDED_BY(mutex_);
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(TestChannelEndpointClient);
 };
@@ -66,4 +66,4 @@ class TestChannelEndpointClient final : public ChannelEndpointClient {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_TEST_CHANNEL_ENDPOINT_CLIENT_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_TEST_CHANNEL_ENDPOINT_CLIENT_H_

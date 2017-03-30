@@ -5,19 +5,21 @@
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
 
 #include <sstream>
+#include <utility>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/multi_client_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
@@ -48,10 +50,10 @@ class PasswordStoreConsumerHelper
   void OnGetPasswordStoreResults(ScopedVector<PasswordForm> results) override {
     result_.swap(results);
     // Quit the message loop to wake up passwords_helper::GetLogins.
-    base::MessageLoopForUI::current()->Quit();
+    base::MessageLoopForUI::current()->QuitWhenIdle();
   }
 
-  ScopedVector<PasswordForm> result() { return result_.Pass(); }
+  ScopedVector<PasswordForm> result() { return std::move(result_); }
 
  private:
   ScopedVector<PasswordForm> result_;

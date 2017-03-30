@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/json/json_reader.h"
 #include "gpu/config/gpu_control_list.h"
 #include "gpu/config/gpu_info.h"
@@ -1148,8 +1150,8 @@ TEST_F(GpuControlListEntryDualGPUTest, CategoryPrimarySecondary) {
         ]
       }
   );
-  // Default is primary.
-  EntryShouldNotApply(json_default);
+  // Default is active, and the secondary Intel GPU is active.
+  EntryShouldApply(json_default);
 }
 
 TEST_F(GpuControlListEntryDualGPUTest, ActiveSecondaryGPU) {
@@ -1236,6 +1238,38 @@ TEST_F(GpuControlListEntryDualGPUTest, VendorOnlyActivePrimaryGPU) {
 
   ActivatePrimaryGPU();
   EntryShouldApply(json);
+}
+
+TEST_F(GpuControlListEntryTest, LinuxKernelVersion) {
+  const std::string json = LONG_STRING_CONST(
+      {
+        "id": 1,
+        "os": {
+          "type": "linux",
+          "version": {
+            "op": "<",
+            "value": "3.19.1"
+          }
+        },
+        "vendor_id": "0x8086",
+        "features": [
+          "test_feature_0"
+        ]
+      }
+  );
+  ScopedEntry entry(GetEntryFromString(json));
+  EXPECT_TRUE(entry.get() != NULL);
+  EXPECT_EQ(GpuControlList::kOsLinux, entry->GetOsType());
+
+  GPUInfo gpu_info;
+  gpu_info.gpu.vendor_id = 0x8086;
+
+  EXPECT_TRUE(entry->Contains(GpuControlList::kOsLinux,
+                              "3.13.0-63-generic",
+                              gpu_info));
+  EXPECT_FALSE(entry->Contains(GpuControlList::kOsLinux,
+                               "3.19.2-1-generic",
+                               gpu_info));
 }
 
 }  // namespace gpu

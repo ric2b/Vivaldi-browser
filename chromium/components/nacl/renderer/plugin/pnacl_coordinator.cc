@@ -8,14 +8,12 @@
 #include <sstream>
 #include <utility>
 
+#include "base/logging.h"
 #include "components/nacl/renderer/plugin/plugin.h"
 #include "components/nacl/renderer/plugin/plugin_error.h"
 #include "components/nacl/renderer/plugin/pnacl_translate_thread.h"
 #include "components/nacl/renderer/plugin/service_runtime.h"
 #include "components/nacl/renderer/plugin/temporary_file.h"
-#include "native_client/src/include/portability_io.h"
-#include "native_client/src/shared/platform/nacl_check.h"
-#include "native_client/src/trusted/service_runtime/include/sys/stat.h"
 #include "ppapi/c/pp_bool.h"
 #include "ppapi/c/pp_errors.h"
 
@@ -97,8 +95,8 @@ PnaclCoordinator::PnaclCoordinator(
       plugin_(plugin),
       translate_notify_callback_(translate_notify_callback),
       translation_finished_reported_(false),
-      compiler_subprocess_("compiler.nexe", NULL, NULL),
-      ld_subprocess_("linker.nexe", NULL, NULL),
+      compiler_subprocess_("compiler.nexe", NULL),
+      ld_subprocess_("linker.nexe", NULL),
       pexe_url_(pexe_url),
       pnacl_options_(pnacl_options),
       architecture_attributes_(GetArchitectureAttributes(plugin)),
@@ -202,13 +200,7 @@ void PnaclCoordinator::TranslateFinished(int32_t pp_error) {
                                       pexe_bytes_compiled_,
                                       expected_pexe_size_);
   }
-  nacl_abi_off_t nexe_size = 0;
-  struct nacl_abi_stat stbuf;
-  struct NaClDesc* desc = temp_nexe_file_->read_wrapper()->desc();
-  if (0 == (*((struct NaClDescVtbl const *)desc->base.vtbl)->Fstat)(desc,
-                                                                    &stbuf)) {
-    nexe_size = stbuf.nacl_abi_st_size;
-  }
+  int64_t nexe_size = temp_nexe_file_->GetLength();
   // The nexe is written to the temp_nexe_file_.  We must Reset() the file
   // pointer to be able to read it again from the beginning.
   temp_nexe_file_->Reset();
@@ -278,7 +270,7 @@ void PnaclCoordinator::BitcodeStreamCacheHit(PP_FileHandle handle) {
   }
   temp_nexe_file_.reset(new TempFile(plugin_, handle));
   // Open it for reading as the cached nexe file.
-  NexeReadDidOpen(temp_nexe_file_->Open(false));
+  NexeReadDidOpen(temp_nexe_file_->CheckValidity());
 }
 
 void PnaclCoordinator::BitcodeStreamCacheMiss(int64_t expected_pexe_size,
@@ -289,7 +281,8 @@ void PnaclCoordinator::BitcodeStreamCacheMiss(int64_t expected_pexe_size,
   // The component updater's resource throttles + OnDemand update/install
   // should block the URL request until the compiler is present. Now we
   // can load the resources (e.g. llc and ld nexes).
-  resources_.reset(new PnaclResources(plugin_, pnacl_options_.use_subzero));
+  resources_.reset(new PnaclResources(plugin_,
+                                      PP_ToBool(pnacl_options_.use_subzero)));
   CHECK(resources_ != NULL);
 
   // The first step of loading resources: read the resource info file.
@@ -314,8 +307,8 @@ void PnaclCoordinator::BitcodeStreamCacheMiss(int64_t expected_pexe_size,
   for (int i = 0; i < split_module_count_; i++) {
     PP_FileHandle obj_handle =
         plugin_->nacl_interface()->CreateTemporaryFile(plugin_->pp_instance());
-    nacl::scoped_ptr<TempFile> temp_file(new TempFile(plugin_, obj_handle));
-    int32_t pp_error = temp_file->Open(true);
+    scoped_ptr<TempFile> temp_file(new TempFile(plugin_, obj_handle));
+    int32_t pp_error = temp_file->CheckValidity();
     if (pp_error != PP_OK) {
       ReportPpapiError(PP_NACL_ERROR_PNACL_CREATE_TEMP,
                        pp_error,
@@ -325,12 +318,11 @@ void PnaclCoordinator::BitcodeStreamCacheMiss(int64_t expected_pexe_size,
       obj_files_.push_back(temp_file.release());
     }
   }
-  invalid_desc_wrapper_.reset(plugin_->wrapper_factory()->MakeInvalid());
 
   temp_nexe_file_.reset(new TempFile(plugin_, nexe_handle));
   // Open the nexe file for connecting ld and sel_ldr.
   // Start translation when done with this last step of setup!
-  int32_t pp_error = temp_nexe_file_->Open(true);
+  int32_t pp_error = temp_nexe_file_->CheckValidity();
   if (pp_error != PP_OK) {
     ReportNonPpapiError(
         PP_NACL_ERROR_PNACL_CREATE_TEMP,
@@ -459,8 +451,7 @@ void PnaclCoordinator::RunCompile(int32_t pp_error,
   translate_thread_->SetupState(
       report_translate_finished, &compiler_subprocess_, &ld_subprocess_,
       &obj_files_, num_threads_, temp_nexe_file_.get(),
-      invalid_desc_wrapper_.get(), &error_info_, &pnacl_options_,
-      architecture_attributes_, this);
+      &error_info_, &pnacl_options_, architecture_attributes_, this);
   translate_thread_->RunCompile(compile_finished);
 }
 

@@ -5,15 +5,19 @@
 #ifndef DEVICE_SERIAL_DATA_SINK_RECEIVER_H_
 #define DEVICE_SERIAL_DATA_SINK_RECEIVER_H_
 
+#include <stdint.h>
+
 #include <queue>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "device/serial/buffer.h"
 #include "device/serial/data_stream.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 
 namespace device {
 

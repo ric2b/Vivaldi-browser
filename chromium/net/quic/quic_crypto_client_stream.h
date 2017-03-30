@@ -5,8 +5,11 @@
 #ifndef NET_QUIC_QUIC_CRYPTO_CLIENT_STREAM_H_
 #define NET_QUIC_QUIC_CRYPTO_CLIENT_STREAM_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "net/quic/crypto/channel_id.h"
 #include "net/quic/crypto/proof_verifier.h"
 #include "net/quic/crypto/quic_crypto_client_config.h"
@@ -20,27 +23,47 @@ class QuicClientSessionBase;
 
 namespace test {
 class CryptoTestUtils;
-class QuicClientSessionPeer;
+class QuicChromiumClientSessionPeer;
 }  // namespace test
 
-class NET_EXPORT_PRIVATE QuicCryptoClientStream : public QuicCryptoStream {
+class NET_EXPORT_PRIVATE QuicCryptoClientStreamBase : public QuicCryptoStream {
  public:
-  QuicCryptoClientStream(const QuicServerId& server_id,
-                         QuicClientSessionBase* session,
-                         ProofVerifyContext* verify_context,
-                         QuicCryptoClientConfig* crypto_config);
-  ~QuicCryptoClientStream() override;
+  explicit QuicCryptoClientStreamBase(QuicClientSessionBase* session);
 
-  // CryptoFramerVisitorInterface implementation
-  void OnHandshakeMessage(const CryptoHandshakeMessage& message) override;
+  ~QuicCryptoClientStreamBase() override{};
 
   // Performs a crypto handshake with the server.
-  virtual void CryptoConnect();
+  virtual void CryptoConnect() = 0;
 
   // num_sent_client_hellos returns the number of client hello messages that
   // have been sent. If the handshake has completed then this is one greater
   // than the number of round-trips needed for the handshake.
-  int num_sent_client_hellos() const;
+  virtual int num_sent_client_hellos() const = 0;
+};
+
+class NET_EXPORT_PRIVATE QuicCryptoClientStream
+    : public QuicCryptoClientStreamBase {
+ public:
+  // kMaxClientHellos is the maximum number of times that we'll send a client
+  // hello. The value 3 accounts for:
+  //   * One failure due to an incorrect or missing source-address token.
+  //   * One failure due the server's certificate chain being unavailible and
+  //     the server being unwilling to send it without a valid source-address
+  //     token.
+  static const int kMaxClientHellos = 3;
+  QuicCryptoClientStream(const QuicServerId& server_id,
+                         QuicClientSessionBase* session,
+                         ProofVerifyContext* verify_context,
+                         QuicCryptoClientConfig* crypto_config);
+
+  ~QuicCryptoClientStream() override;
+
+  // From QuicCryptoClientStreamBase
+  void CryptoConnect() override;
+  int num_sent_client_hellos() const override;
+
+  // CryptoFramerVisitorInterface implementation
+  void OnHandshakeMessage(const CryptoHandshakeMessage& message) override;
 
   // Returns true if a channel ID was sent on this connection.
   bool WasChannelIDSent() const;
@@ -91,7 +114,7 @@ class NET_EXPORT_PRIVATE QuicCryptoClientStream : public QuicCryptoStream {
   };
 
   friend class test::CryptoTestUtils;
-  friend class test::QuicClientSessionPeer;
+  friend class test::QuicChromiumClientSessionPeer;
 
   enum State {
     STATE_IDLE,
@@ -120,8 +143,7 @@ class NET_EXPORT_PRIVATE QuicCryptoClientStream : public QuicCryptoStream {
   void DoInitialize(QuicCryptoClientConfig::CachedState* cached);
 
   // Send either InchoateClientHello or ClientHello message to the server.
-  void DoSendCHLO(const CryptoHandshakeMessage* in,
-                  QuicCryptoClientConfig::CachedState* cached);
+  void DoSendCHLO(QuicCryptoClientConfig::CachedState* cached);
 
   // Process REJ message from the server.
   void DoReceiveREJ(const CryptoHandshakeMessage* in,
@@ -176,7 +198,7 @@ class NET_EXPORT_PRIVATE QuicCryptoClientStream : public QuicCryptoStream {
   const QuicServerId server_id_;
 
   // Generation counter from QuicCryptoClientConfig's CachedState.
-  uint64 generation_counter_;
+  uint64_t generation_counter_;
 
   // True if a channel ID was sent.
   bool channel_id_sent_;
@@ -213,6 +235,8 @@ class NET_EXPORT_PRIVATE QuicCryptoClientStream : public QuicCryptoStream {
   // reject.  Used for book-keeping between the STATE_RECV_REJ,
   // STATE_VERIFY_PROOF*, and subsequent STATE_SEND_CHLO state.
   bool stateless_reject_received_;
+
+  base::TimeTicks proof_verify_start_time_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicCryptoClientStream);
 };

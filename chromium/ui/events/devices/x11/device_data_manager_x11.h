@@ -20,8 +20,8 @@
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/event_types.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/events_devices_export.h"
@@ -38,6 +38,13 @@ namespace ui {
 enum GestureMetricsType {
   kGestureMetricsTypeNoisyGround = 0,
   kGestureMetricsTypeUnknown,
+};
+
+// A bitfield describing which scroll axes are enabled for a device.
+enum ScrollType {
+  SCROLL_TYPE_NO_SCROLL = 0,
+  SCROLL_TYPE_HORIZONTAL = 1 << 0,
+  SCROLL_TYPE_VERTICAL = 1 << 1,
 };
 
 // A class that extracts and tracks the input events data. It currently handles
@@ -142,41 +149,62 @@ class EVENTS_DEVICES_EXPORT DeviceDataManagerX11 : public DeviceDataManager {
   // Check if the event is an XI input event in the strict sense
   // (i.e. XIDeviceEvent). This rules out things like hierarchy changes,
   /// device changes, property changes and so on.
-  bool IsXIDeviceEvent(const base::NativeEvent& native_event) const;
+  bool IsXIDeviceEvent(const XEvent& xev) const;
 
   // Check if the event comes from touchpad devices.
-  bool IsTouchpadXInputEvent(const base::NativeEvent& native_event) const;
+  bool IsTouchpadXInputEvent(const XEvent& xev) const;
 
   // Check if the event comes from devices running CMT driver or using
   // CMT valuators (e.g. mouses). Note that doesn't necessarily mean the event
   // is a CMT event (e.g. it could be a mouse pointer move).
-  bool IsCMTDeviceEvent(const base::NativeEvent& native_event) const;
+  bool IsCMTDeviceEvent(const XEvent& xev) const;
+
+  // Check if the event contains information about a ScrollClass, and
+  // report which scroll axes are contained in this event, defined by
+  // ScrollType.
+  int GetScrollClassEventDetail(const XEvent& xev) const;
+
+  // Check if the event comes from a device that has a ScrollClass, and
+  // report which scroll axes it supports as a bit field, defined by
+  // ScrollType.
+  int GetScrollClassDeviceDetail(const XEvent& xev) const;
 
   // Check if the event is one of the CMT gesture events (scroll, fling,
   // metrics etc.).
-  bool IsCMTGestureEvent(const base::NativeEvent& native_event) const;
+  bool IsCMTGestureEvent(const XEvent& xev) const;
 
   // Returns true if the event is of the specific type, false if not.
-  bool IsScrollEvent(const base::NativeEvent& native_event) const;
-  bool IsFlingEvent(const base::NativeEvent& native_event) const;
-  bool IsCMTMetricsEvent(const base::NativeEvent& native_event) const;
+  bool IsScrollEvent(const XEvent& xev) const;
+  bool IsFlingEvent(const XEvent& xev) const;
+  bool IsCMTMetricsEvent(const XEvent& xev) const;
 
   // Returns true if the event has CMT start/end timestamps.
-  bool HasGestureTimes(const base::NativeEvent& native_event) const;
+  bool HasGestureTimes(const XEvent& xev) const;
 
   // Extract data from a scroll event (a motion event with the necessary
   // valuators). User must first verify the event type with IsScrollEvent.
   // Pointers shouldn't be NULL.
-  void GetScrollOffsets(const base::NativeEvent& native_event,
+  void GetScrollOffsets(const XEvent& xev,
                         float* x_offset,
                         float* y_offset,
                         float* x_offset_ordinal,
                         float* y_offset_ordinal,
                         int* finger_count);
 
+  // Extract data from a scroll class event (smooth scrolling). User must
+  // first verify the event type with GetScrollClassEventDetail.
+  // Pointers shouldn't be NULL.
+  void GetScrollClassOffsets(const XEvent& xev,
+                             double* x_offset,
+                             double* y_offset);
+
+  // Invalidate stored scroll class counters, since they can change when
+  // pointing at other windows.
+  void InvalidateScrollClasses();
+
   // Extract data from a fling event. User must first verify the event type
   // with IsFlingEvent. Pointers shouldn't be NULL.
-  void GetFlingData(const base::NativeEvent& native_event,
+  void GetFlingData(const XEvent& xev,
                     float* vx,
                     float* vy,
                     float* vx_ordinal,
@@ -185,7 +213,7 @@ class EVENTS_DEVICES_EXPORT DeviceDataManagerX11 : public DeviceDataManager {
 
   // Extract data from a CrOS metrics gesture event. User must first verify
   // the event type with IsCMTMetricsEvent. Pointers shouldn't be NULL.
-  void GetMetricsData(const base::NativeEvent& native_event,
+  void GetMetricsData(const XEvent& xev,
                       GestureMetricsType* type,
                       float* data1,
                       float* data2);
@@ -199,9 +227,7 @@ class EVENTS_DEVICES_EXPORT DeviceDataManagerX11 : public DeviceDataManager {
 
   // Extract the start/end timestamps from CMT events. User must first verify
   // the event with HasGestureTimes. Pointers shouldn't be NULL.
-  void GetGestureTimes(const base::NativeEvent& native_event,
-                       double* start_time,
-                       double* end_time);
+  void GetGestureTimes(const XEvent& xev, double* start_time, double* end_time);
 
   // Normalize the data value on deviceid to fall into [0, 1].
   // *value = (*value - min_value_of_tp) / (max_value_of_tp - min_value_of_tp)
@@ -240,8 +266,10 @@ class EVENTS_DEVICES_EXPORT DeviceDataManagerX11 : public DeviceDataManager {
   void DisableDevice(int deviceid);
   void EnableDevice(int deviceid);
 
+  bool IsDeviceEnabled(int device_id) const;
+
   // Returns true if |native_event| should be blocked.
-  bool IsEventBlocked(const base::NativeEvent& native_event);
+  bool IsEventBlocked(const XEvent& xev);
 
   const std::vector<int>& master_pointers() const {
     return master_pointers_;
@@ -253,6 +281,23 @@ class EVENTS_DEVICES_EXPORT DeviceDataManagerX11 : public DeviceDataManager {
       const std::vector<KeyboardDevice>& devices) override;
 
  private:
+  // Information about scroll valuators
+  struct ScrollInfo {
+    struct AxisInfo {
+      // The scroll valuator number of this scroll axis.
+      int number;
+      // The scroll increment; a value of n indicates n movement equals one
+      // traditional scroll unit.
+      double increment;
+      // Current scroll position; used to find the difference between events.
+      double position;
+      // If true then scroll has been seen in this direction.
+      bool seen;
+    };
+
+    AxisInfo vertical, horizontal;
+  };
+
   DeviceDataManagerX11();
   ~DeviceDataManagerX11() override;
 
@@ -264,6 +309,25 @@ class EVENTS_DEVICES_EXPORT DeviceDataManagerX11 : public DeviceDataManager {
                                   int end_valuator,
                                   double min_value,
                                   double max_value);
+
+  // Updates a device based on a Valuator class info. Returns true if the
+  // device is a possible CMT device.
+  bool UpdateValuatorClassDevice(XIValuatorClassInfo* valuator_class_info,
+                                 Atom* atoms,
+                                 int deviceid);
+
+  // Updates a device based on a Scroll class info.
+  void UpdateScrollClassDevice(XIScrollClassInfo* scroll_class_info,
+                               int deviceid);
+
+  // Normalize the scroll amount according to the increment size.
+  // *value /= increment
+  // *value is expected to be 1 or -1.
+  // Returns true and sets the normalized value in |value| if normalization is
+  // successful. Returns false and |value| is unchanged otherwise.
+  double ExtractAndUpdateScrollOffset(
+      DeviceDataManagerX11::ScrollInfo::AxisInfo* axis,
+      double valuator) const;
 
   static const int kMaxXIEventType = XI_LASTEVENT + 1;
   static const int kMaxSlotNum = 10;
@@ -278,6 +342,7 @@ class EVENTS_DEVICES_EXPORT DeviceDataManagerX11 : public DeviceDataManager {
   // should be processed.
   std::bitset<kMaxDeviceNum> cmt_devices_;
   std::bitset<kMaxDeviceNum> touchpads_;
+  std::bitset<kMaxDeviceNum> scrollclass_devices_;
 
   // List of the master pointer devices.
   std::vector<int> master_pointers_;
@@ -295,6 +360,10 @@ class EVENTS_DEVICES_EXPORT DeviceDataManagerX11 : public DeviceDataManager {
   // Index table to find the valuator for DataType on the specific device
   // by valuator_lookup_[device_id][data_type].
   std::vector<int> valuator_lookup_[kMaxDeviceNum];
+
+  // Index table to find the horizontal and vertical scroll valuator
+  // numbers, scroll increments and scroll position.
+  ScrollInfo scroll_data_[kMaxDeviceNum];
 
   // Index table to find the DataType for valuator on the specific device
   // by data_type_lookup_[device_id][valuator].

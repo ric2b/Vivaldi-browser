@@ -4,9 +4,11 @@
 
 #include "chrome/browser/metrics/plugin_metrics_provider.h"
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/prefs/testing_pref_service.h"
@@ -161,15 +163,32 @@ TEST_F(PluginMetricsProviderTest, ProvideStabilityMetricsWhenPendingTask) {
   std::vector<content::WebPluginInfo> plugins;
   plugins.push_back(CreateFakePluginInfo("p1", FILE_PATH_LITERAL("p1.plugin"),
                                          "1.5", true));
+  plugins.push_back(CreateFakePluginInfo("p2", FILE_PATH_LITERAL("p2.plugin"),
+                                         "1.5", true));
   provider.SetPluginsForTesting(plugins);
   metrics::SystemProfileProto system_profile;
   provider.ProvideSystemProfileMetrics(&system_profile);
 
   // Increase number of created instances which should also start a delayed
   // task.
-  content::ChildProcessData child_process_data(content::PROCESS_TYPE_PLUGIN);
-  child_process_data.name = base::UTF8ToUTF16("p1");
-  provider.BrowserChildProcessInstanceCreated(child_process_data);
+  content::ChildProcessData child_process_data1(content::PROCESS_TYPE_PLUGIN);
+  child_process_data1.name = base::UTF8ToUTF16("p1");
+  provider.BrowserChildProcessInstanceCreated(child_process_data1);
+  provider.BrowserChildProcessCrashed(child_process_data1, 1);
+
+  // A disconnect should not generate a crash event.
+  provider.BrowserChildProcessInstanceCreated(child_process_data1);
+  provider.BrowserChildProcessHostDisconnected(child_process_data1);
+
+  content::ChildProcessData child_process_data2(
+      content::PROCESS_TYPE_PPAPI_PLUGIN);
+  child_process_data2.name = base::UTF8ToUTF16("p2");
+  provider.BrowserChildProcessInstanceCreated(child_process_data2);
+  provider.BrowserChildProcessCrashed(child_process_data2, 1);
+
+  // A kill should generate a crash event
+  provider.BrowserChildProcessInstanceCreated(child_process_data2);
+  provider.BrowserChildProcessKilled(child_process_data2, 1);
 
   // Call ProvideStabilityMetrics to check that it will force pending tasks to
   // be executed immediately.
@@ -178,5 +197,21 @@ TEST_F(PluginMetricsProviderTest, ProvideStabilityMetricsWhenPendingTask) {
   // Check current number of instances created.
   const metrics::SystemProfileProto_Stability& stability =
       system_profile.stability();
-  EXPECT_EQ(1, stability.plugin_stability(0).instance_count());
+  size_t found = 0;
+  EXPECT_EQ(stability.plugin_stability_size(), 2);
+  for (int i = 0; i < 2; i++) {
+    std::string name = stability.plugin_stability(i).plugin().name();
+    if (name == "p1") {
+      EXPECT_EQ(2, stability.plugin_stability(i).instance_count());
+      EXPECT_EQ(1, stability.plugin_stability(i).crash_count());
+      found++;
+    } else if (name == "p2") {
+      EXPECT_EQ(2, stability.plugin_stability(i).instance_count());
+      EXPECT_EQ(2, stability.plugin_stability(i).crash_count());
+      found++;
+    } else {
+      GTEST_FAIL() << "Unexpected plugin name : " << name;
+    }
+  }
+  EXPECT_EQ(found, 2U);
 }

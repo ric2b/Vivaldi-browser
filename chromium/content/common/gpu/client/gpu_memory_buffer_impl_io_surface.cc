@@ -5,23 +5,27 @@
 #include "content/common/gpu/client/gpu_memory_buffer_impl_io_surface.h"
 
 #include "base/logging.h"
-#include "content/common/mac/io_surface_manager.h"
+#include "content/common/gpu/gpu_memory_buffer_factory_io_surface.h"
+#include "ui/gfx/buffer_format_util.h"
+#include "ui/gfx/mac/io_surface.h"
 
 namespace content {
 namespace {
 
-uint32_t LockFlags(gfx::GpuMemoryBuffer::Usage usage) {
+uint32_t LockFlags(gfx::BufferUsage usage) {
   switch (usage) {
-    case gfx::GpuMemoryBuffer::MAP:
+    case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
       return kIOSurfaceLockAvoidSync;
-    case gfx::GpuMemoryBuffer::PERSISTENT_MAP:
-      return 0;
-    case gfx::GpuMemoryBuffer::SCANOUT:
-      NOTREACHED();
+    case gfx::BufferUsage::GPU_READ:
+    case gfx::BufferUsage::SCANOUT:
+    case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
       return 0;
   }
   NOTREACHED();
   return 0;
+}
+
+void NoOp() {
 }
 
 }  // namespace
@@ -29,42 +33,71 @@ uint32_t LockFlags(gfx::GpuMemoryBuffer::Usage usage) {
 GpuMemoryBufferImplIOSurface::GpuMemoryBufferImplIOSurface(
     gfx::GpuMemoryBufferId id,
     const gfx::Size& size,
-    Format format,
+    gfx::BufferFormat format,
     const DestructionCallback& callback,
     IOSurfaceRef io_surface,
     uint32_t lock_flags)
     : GpuMemoryBufferImpl(id, size, format, callback),
       io_surface_(io_surface),
-      lock_flags_(lock_flags) {
-}
+      lock_flags_(lock_flags) {}
 
 GpuMemoryBufferImplIOSurface::~GpuMemoryBufferImplIOSurface() {
 }
 
 // static
-scoped_ptr<GpuMemoryBufferImpl> GpuMemoryBufferImplIOSurface::CreateFromHandle(
+scoped_ptr<GpuMemoryBufferImplIOSurface>
+GpuMemoryBufferImplIOSurface::CreateFromHandle(
     const gfx::GpuMemoryBufferHandle& handle,
     const gfx::Size& size,
-    Format format,
-    Usage usage,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage,
     const DestructionCallback& callback) {
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
-      IOSurfaceManager::GetInstance()->AcquireIOSurface(handle.id));
+      IOSurfaceLookupFromMachPort(handle.mach_port.get()));
   if (!io_surface)
     return nullptr;
 
-  return make_scoped_ptr<GpuMemoryBufferImpl>(
+  return make_scoped_ptr(
       new GpuMemoryBufferImplIOSurface(handle.id, size, format, callback,
                                        io_surface.release(), LockFlags(usage)));
 }
 
-bool GpuMemoryBufferImplIOSurface::Map(void** data) {
+// static
+bool GpuMemoryBufferImplIOSurface::IsConfigurationSupported(
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage) {
+  return GpuMemoryBufferFactoryIOSurface::
+      IsGpuMemoryBufferConfigurationSupported(format, usage);
+}
+
+// static
+base::Closure GpuMemoryBufferImplIOSurface::AllocateForTesting(
+    const gfx::Size& size,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage,
+    gfx::GpuMemoryBufferHandle* handle) {
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
+      gfx::CreateIOSurface(size, format));
+  DCHECK(io_surface);
+  gfx::GpuMemoryBufferId kBufferId(1);
+  handle->type = gfx::IO_SURFACE_BUFFER;
+  handle->id = kBufferId;
+  handle->mach_port.reset(IOSurfaceCreateMachPort(io_surface));
+  return base::Bind(&NoOp);
+}
+
+bool GpuMemoryBufferImplIOSurface::Map() {
   DCHECK(!mapped_);
   IOReturn status = IOSurfaceLock(io_surface_, lock_flags_, NULL);
   DCHECK_NE(status, kIOReturnCannotLock);
   mapped_ = true;
-  *data = IOSurfaceGetBaseAddress(io_surface_);
   return true;
+}
+
+void* GpuMemoryBufferImplIOSurface::memory(size_t plane) {
+  DCHECK(mapped_);
+  DCHECK_LT(plane, gfx::NumberOfPlanesForBufferFormat(format_));
+  return IOSurfaceGetBaseAddressOfPlane(io_surface_, plane);
 }
 
 void GpuMemoryBufferImplIOSurface::Unmap() {
@@ -73,8 +106,13 @@ void GpuMemoryBufferImplIOSurface::Unmap() {
   mapped_ = false;
 }
 
-void GpuMemoryBufferImplIOSurface::GetStride(int* stride) const {
-  *stride = IOSurfaceGetBytesPerRow(io_surface_);
+bool GpuMemoryBufferImplIOSurface::IsInUseByMacOSWindowServer() const {
+  return IOSurfaceIsInUse(io_surface_);
+}
+
+int GpuMemoryBufferImplIOSurface::stride(size_t plane) const {
+  DCHECK_LT(plane, gfx::NumberOfPlanesForBufferFormat(format_));
+  return IOSurfaceGetBytesPerRowOfPlane(io_surface_, plane);
 }
 
 gfx::GpuMemoryBufferHandle GpuMemoryBufferImplIOSurface::GetHandle() const {

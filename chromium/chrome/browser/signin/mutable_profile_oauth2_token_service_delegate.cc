@@ -4,10 +4,14 @@
 
 #include "chrome/browser/signin/mutable_profile_oauth2_token_service_delegate.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/browser/webdata/token_web_data.h"
+#include "components/signin/core/common/profile_management_switches.h"
 #include "components/webdata/common/web_data_service_base.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -41,7 +45,7 @@ std::string RemoveAccountIdPrefix(const std::string& prefixed_account_id) {
 
 // This class sends a request to GAIA to revoke the given refresh token from
 // the server.  This is a best effort attempt only.  This class deletes itself
-// when done sucessfully or otherwise.
+// when done successfully or otherwise.
 class MutableProfileOAuth2TokenServiceDelegate::RevokeServerRefreshToken
     : public GaiaAuthConsumer {
  public:
@@ -84,7 +88,7 @@ void MutableProfileOAuth2TokenServiceDelegate::RevokeServerRefreshToken::
                 token_service_delegate_->server_revokes_.end(), this));
 }
 
-MutableProfileOAuth2TokenServiceDelegate::AccountInfo::AccountInfo(
+MutableProfileOAuth2TokenServiceDelegate::AccountStatus::AccountStatus(
     SigninErrorController* signin_error_controller,
     const std::string& account_id,
     const std::string& refresh_token)
@@ -97,11 +101,11 @@ MutableProfileOAuth2TokenServiceDelegate::AccountInfo::AccountInfo(
   signin_error_controller_->AddProvider(this);
 }
 
-MutableProfileOAuth2TokenServiceDelegate::AccountInfo::~AccountInfo() {
+MutableProfileOAuth2TokenServiceDelegate::AccountStatus::~AccountStatus() {
   signin_error_controller_->RemoveProvider(this);
 }
 
-void MutableProfileOAuth2TokenServiceDelegate::AccountInfo::SetLastAuthError(
+void MutableProfileOAuth2TokenServiceDelegate::AccountStatus::SetLastAuthError(
     const GoogleServiceAuthError& error) {
   if (error.state() != last_auth_error_.state()) {
     last_auth_error_ = error;
@@ -110,24 +114,26 @@ void MutableProfileOAuth2TokenServiceDelegate::AccountInfo::SetLastAuthError(
 }
 
 std::string
-MutableProfileOAuth2TokenServiceDelegate::AccountInfo::GetAccountId() const {
+MutableProfileOAuth2TokenServiceDelegate::AccountStatus::GetAccountId() const {
   return account_id_;
 }
 
 GoogleServiceAuthError
-MutableProfileOAuth2TokenServiceDelegate::AccountInfo::GetAuthStatus() const {
+MutableProfileOAuth2TokenServiceDelegate::AccountStatus::GetAuthStatus() const {
   return last_auth_error_;
 }
 
 MutableProfileOAuth2TokenServiceDelegate::
     MutableProfileOAuth2TokenServiceDelegate(
         SigninClient* client,
-        SigninErrorController* signin_error_controller)
+        SigninErrorController* signin_error_controller,
+        AccountTrackerService* account_tracker_service)
     : web_data_service_request_(0),
       backoff_entry_(&backoff_policy_),
       backoff_error_(GoogleServiceAuthError::NONE),
       client_(client),
-      signin_error_controller_(signin_error_controller) {
+      signin_error_controller_(signin_error_controller),
+      account_tracker_service_(account_tracker_service) {
   VLOG(1) << "MutablePO2TS::MutablePO2TS";
   DCHECK(client);
   DCHECK(signin_error_controller);
@@ -139,12 +145,14 @@ MutableProfileOAuth2TokenServiceDelegate::
   backoff_policy_.maximum_backoff_ms = 15 * 60 * 1000;
   backoff_policy_.entry_lifetime_ms = -1;
   backoff_policy_.always_use_initial_delay = false;
+  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
 }
 
 MutableProfileOAuth2TokenServiceDelegate::
     ~MutableProfileOAuth2TokenServiceDelegate() {
   VLOG(1) << "MutablePO2TS::~MutablePO2TS";
   DCHECK(server_revokes_.empty());
+  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
 }
 
 OAuth2AccessTokenFetcher*
@@ -211,7 +219,7 @@ bool MutableProfileOAuth2TokenServiceDelegate::RefreshTokenIsAvailable(
 
 std::string MutableProfileOAuth2TokenServiceDelegate::GetRefreshToken(
     const std::string& account_id) const {
-  AccountInfoMap::const_iterator iter = refresh_tokens_.find(account_id);
+  AccountStatusMap::const_iterator iter = refresh_tokens_.find(account_id);
   if (iter != refresh_tokens_.end())
     return iter->second->refresh_token();
   return std::string();
@@ -220,9 +228,8 @@ std::string MutableProfileOAuth2TokenServiceDelegate::GetRefreshToken(
 std::vector<std::string>
 MutableProfileOAuth2TokenServiceDelegate::GetAccounts() {
   std::vector<std::string> account_ids;
-  for (AccountInfoMap::const_iterator iter = refresh_tokens_.begin();
-       iter != refresh_tokens_.end(); ++iter) {
-    account_ids.push_back(iter->first);
+  for (auto& token : refresh_tokens_) {
+    account_ids.push_back(token.first);
   }
   return account_ids;
 }
@@ -234,7 +241,10 @@ MutableProfileOAuth2TokenServiceDelegate::GetRequestContext() const {
 
 void MutableProfileOAuth2TokenServiceDelegate::LoadCredentials(
     const std::string& primary_account_id) {
-  DCHECK(!primary_account_id.empty());
+  if (primary_account_id.empty()) {
+    FireRefreshTokensLoaded();
+    return;
+  }
   ValidateAccountId(primary_account_id);
   DCHECK(loading_primary_account_id_.empty());
   DCHECK_EQ(0, web_data_service_request_);
@@ -283,15 +293,14 @@ void MutableProfileOAuth2TokenServiceDelegate::OnWebDataServiceRequestDone(
   // while this profile is connected to an account.
   DCHECK(!loading_primary_account_id_.empty());
   if (refresh_tokens_.count(loading_primary_account_id_) == 0) {
-    refresh_tokens_[loading_primary_account_id_].reset(new AccountInfo(
+    refresh_tokens_[loading_primary_account_id_].reset(new AccountStatus(
         signin_error_controller_, loading_primary_account_id_, std::string()));
   }
 
   // If we don't have a refresh token for a known account, signal an error.
-  for (AccountInfoMap::const_iterator i = refresh_tokens_.begin();
-       i != refresh_tokens_.end(); ++i) {
-    if (!RefreshTokenIsAvailable(i->first)) {
-      UpdateAuthError(i->first,
+  for (auto& token : refresh_tokens_) {
+    if (!RefreshTokenIsAvailable(token.first)) {
+      UpdateAuthError(token.first,
                       GoogleServiceAuthError(
                           GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
       break;
@@ -310,6 +319,8 @@ void MutableProfileOAuth2TokenServiceDelegate::LoadAllCredentialsIntoMemory(
 
     VLOG(1) << "MutablePO2TS::LoadAllCredentialsIntoMemory; "
             << db_tokens.size() << " Credential(s).";
+    AccountTrackerService::AccountIdMigrationState migration_state =
+        account_tracker_service_->GetMigrationState();
     for (std::map<std::string, std::string>::const_iterator iter =
              db_tokens.begin();
          iter != db_tokens.end(); ++iter) {
@@ -326,6 +337,25 @@ void MutableProfileOAuth2TokenServiceDelegate::LoadAllCredentialsIntoMemory(
       } else {
         DCHECK(!refresh_token.empty());
         std::string account_id = RemoveAccountIdPrefix(prefixed_account_id);
+
+        if (migration_state == AccountTrackerService::MIGRATION_IN_PROGRESS) {
+          // Migrate to gaia-ids.
+          AccountInfo account_info =
+              account_tracker_service_->FindAccountInfoByEmail(account_id);
+          // |account_info.gaia| could be empty if |account_id| is already gaia
+          // id. This could happen if the chrome was closed in the middle of
+          // migration.
+          if (!account_info.gaia.empty()) {
+            PersistCredentials(account_info.gaia, refresh_token);
+            ClearPersistedCredentials(account_id);
+            account_id = account_info.gaia;
+          }
+
+          // Skip duplicate accounts, this could happen if migration was
+          // crashed in the middle.
+          if (refresh_tokens_.count(account_id) != 0)
+            continue;
+        }
 
         // If the account_id is an email address, then canonicalize it.  This
         // is to support legacy account_ids, and will not be needed after
@@ -345,9 +375,17 @@ void MutableProfileOAuth2TokenServiceDelegate::LoadAllCredentialsIntoMemory(
           account_id = canon_account_id;
         }
 
-        refresh_tokens_[account_id].reset(new AccountInfo(
+        // Only load secondary accounts when account consistency is enabled.
+        if (switches::IsEnableAccountConsistency() ||
+            account_id == loading_primary_account_id_) {
+        refresh_tokens_[account_id].reset(new AccountStatus(
             signin_error_controller_, account_id, refresh_token));
         FireRefreshTokenAvailable(account_id);
+        } else {
+          RevokeCredentialsOnServer(refresh_token);
+          ClearPersistedCredentials(account_id);
+          FireRefreshTokenRevoked(account_id);
+        }
       }
     }
 
@@ -386,8 +424,8 @@ void MutableProfileOAuth2TokenServiceDelegate::UpdateCredentials(
     } else {
       VLOG(1) << "MutablePO2TS::UpdateCredentials; Refresh Token was absent. "
               << "account_id=" << account_id;
-      refresh_tokens_[account_id].reset(
-          new AccountInfo(signin_error_controller_, account_id, refresh_token));
+      refresh_tokens_[account_id].reset(new AccountStatus(
+          signin_error_controller_, account_id, refresh_token));
     }
 
     // Save the token in memory and in persistent store.
@@ -418,9 +456,9 @@ void MutableProfileOAuth2TokenServiceDelegate::RevokeAllCredentials() {
 
   VLOG(1) << "MutablePO2TS::RevokeAllCredentials";
   CancelWebTokenFetch();
-  AccountInfoMap tokens = refresh_tokens_;
-  for (AccountInfoMap::iterator i = tokens.begin(); i != tokens.end(); ++i)
-    RevokeCredentials(i->first);
+  AccountStatusMap tokens = refresh_tokens_;
+  for (auto& token : tokens)
+    RevokeCredentials(token.first);
 
   DCHECK_EQ(0u, refresh_tokens_.size());
 
@@ -476,4 +514,16 @@ void MutableProfileOAuth2TokenServiceDelegate::Shutdown() {
   server_revokes_.clear();
   CancelWebTokenFetch();
   refresh_tokens_.clear();
+}
+
+void MutableProfileOAuth2TokenServiceDelegate::OnNetworkChanged(
+    net::NetworkChangeNotifier::ConnectionType type) {
+  // If our network has changed, reset the backoff timer so that errors caused
+  // by a previous lack of network connectivity don't prevent new requests.
+  backoff_entry_.Reset();
+}
+
+const net::BackoffEntry*
+    MutableProfileOAuth2TokenServiceDelegate::BackoffEntry() const {
+  return &backoff_entry_;
 }

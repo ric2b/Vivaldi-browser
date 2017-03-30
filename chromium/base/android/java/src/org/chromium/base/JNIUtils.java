@@ -4,9 +4,13 @@
 
 package org.chromium.base;
 
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.MainDex;
+
 /**
  * This class provides JNI-related methods to the native library.
  */
+@MainDex
 public class JNIUtils {
     /**
      * This returns a ClassLoader that is capable of loading Chromium Java code. Such a ClassLoader

@@ -12,6 +12,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_data_model.h"
 
 namespace autofill {
@@ -62,6 +63,8 @@ class CreditCard : public AutofillDataModel {
 
 // This method is not compiled on iOS because the resources are not used and
 // should not be shipped.
+// TODO(jdonnelly): Use credit card issuer images on iOS.
+// http://crbug.com/535784
 #if !defined(OS_IOS)
   // The ResourceBundle ID for the appropriate credit card image.
   static int IconResourceId(const std::string& type);
@@ -111,6 +114,9 @@ class CreditCard : public AutofillDataModel {
   base::string16 TypeForDisplay() const;
   // A label for this credit card formatted as 'Cardname - 2345'.
   base::string16 TypeAndLastFourDigits() const;
+
+  // Localized expiration for this credit card formatted as 'Exp: 06/17'.
+  base::string16 AbbreviatedExpirationDateForDisplay() const;
 
   const std::string& type() const { return type_; }
 
@@ -172,6 +178,10 @@ class CreditCard : public AutofillDataModel {
   // Sets |number_| to |number| and computes the appropriate card |type_|.
   void SetNumber(const base::string16& number);
 
+  // Logs the number of days since the credit card was last used and records its
+  // use.
+  void RecordAndLogUse();
+
   // Converts a string representation of a month (such as "February" or "feb."
   // or "2") into a numeric value in [1, 12]. Returns true on successful
   // conversion or false if a month was not recognized.
@@ -230,14 +240,14 @@ class CreditCard : public AutofillDataModel {
 std::ostream& operator<<(std::ostream& os, const CreditCard& credit_card);
 
 // The string identifiers for credit card icon resources.
-extern const char* const kAmericanExpressCard;
-extern const char* const kDinersCard;
-extern const char* const kDiscoverCard;
-extern const char* const kGenericCard;
-extern const char* const kJCBCard;
-extern const char* const kMasterCard;
-extern const char* const kUnionPay;
-extern const char* const kVisaCard;
+extern const char kAmericanExpressCard[];
+extern const char kDinersCard[];
+extern const char kDiscoverCard[];
+extern const char kGenericCard[];
+extern const char kJCBCard[];
+extern const char kMasterCard[];
+extern const char kUnionPay[];
+extern const char kVisaCard[];
 
 }  // namespace autofill
 

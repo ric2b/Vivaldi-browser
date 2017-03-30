@@ -12,8 +12,8 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.widget.FrameLayout;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.ui.base.WindowAndroid;
 
 /***
@@ -30,8 +30,6 @@ public class ContentViewRenderView extends FrameLayout {
 
     private final SurfaceView mSurfaceView;
     protected ContentViewCore mContentViewCore;
-
-    private ContentReadbackHandler mContentReadbackHandler;
 
     /**
      * Constructs a new ContentViewRenderView.
@@ -93,21 +91,6 @@ public class ContentViewRenderView extends FrameLayout {
         };
         mSurfaceView.getHolder().addCallback(mSurfaceCallback);
         mSurfaceView.setVisibility(VISIBLE);
-
-        mContentReadbackHandler = new ContentReadbackHandler() {
-            @Override
-            protected boolean readyForReadback() {
-                return mNativeContentViewRenderView != 0 && mContentViewCore != null;
-            }
-        };
-        mContentReadbackHandler.initNativeContentReadbackHandler();
-    }
-
-    /**
-     * @return The content readback handler.
-     */
-    public ContentReadbackHandler getContentReadbackHandler() {
-        return mContentReadbackHandler;
     }
 
     /**
@@ -134,8 +117,6 @@ public class ContentViewRenderView extends FrameLayout {
      * native resource can be freed.
      */
     public void destroy() {
-        mContentReadbackHandler.destroy();
-        mContentReadbackHandler = null;
         mSurfaceView.getHolder().removeCallback(mSurfaceCallback);
         nativeDestroy(mNativeContentViewRenderView);
         mNativeContentViewRenderView = 0;
@@ -195,10 +176,6 @@ public class ContentViewRenderView extends FrameLayout {
         int format = enabled ? PixelFormat.TRANSLUCENT : PixelFormat.OPAQUE;
         mSurfaceView.getHolder().setFormat(format);
         nativeSetOverlayVideoMode(mNativeContentViewRenderView, enabled);
-    }
-
-    @CalledByNative
-    protected void onCompositorLayout() {
     }
 
     @CalledByNative

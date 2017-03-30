@@ -4,6 +4,8 @@
 
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 
+#include <stddef.h>
+
 #include "base/lazy_instance.h"
 #include "content/browser/frame_host/debug_urls.h"
 #include "content/public/common/url_constants.h"
@@ -31,7 +33,7 @@ void WebUIControllerFactory::UnregisterFactoryForTesting(
 }
 
 WebUIControllerFactoryRegistry* WebUIControllerFactoryRegistry::GetInstance() {
-  return Singleton<WebUIControllerFactoryRegistry>::get();
+  return base::Singleton<WebUIControllerFactoryRegistry>::get();
 }
 
 WebUIController* WebUIControllerFactoryRegistry::CreateWebUIControllerForURL(

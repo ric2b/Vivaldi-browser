@@ -6,10 +6,10 @@
 #include "content/common/content_export.h"
 #include "content/common/media/video_capture.h"
 #include "content/public/common/common_param_traits.h"
-#include "gpu/command_buffer/common/mailbox_holder.h"
 #include "ipc/ipc_message_macros.h"
 #include "media/base/video_capture_types.h"
 #include "media/base/video_frame.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
@@ -19,16 +19,17 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::VideoCaptureState,
                           content::VIDEO_CAPTURE_STATE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(media::ResolutionChangePolicy,
                           media::RESOLUTION_POLICY_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(media::VideoFrame::Format,
-                          media::VideoFrame::FORMAT_MAX)
+IPC_ENUM_TRAITS_MAX_VALUE(media::VideoPixelFormat, media::PIXEL_FORMAT_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(media::VideoFrame::StorageType,
                           media::VideoFrame::STORAGE_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(media::VideoPixelFormat, media::PIXEL_FORMAT_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(media::VideoPixelStorage, media::PIXEL_STORAGE_MAX)
+IPC_ENUM_TRAITS_MAX_VALUE(media::PowerLineFrequency,
+                          media::PowerLineFrequency::FREQUENCY_MAX)
 
 IPC_STRUCT_TRAITS_BEGIN(media::VideoCaptureParams)
   IPC_STRUCT_TRAITS_MEMBER(requested_format)
   IPC_STRUCT_TRAITS_MEMBER(resolution_change_policy)
+  IPC_STRUCT_TRAITS_MEMBER(power_line_frequency)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(VideoCaptureMsg_BufferReady_Params)
@@ -36,11 +37,10 @@ IPC_STRUCT_BEGIN(VideoCaptureMsg_BufferReady_Params)
   IPC_STRUCT_MEMBER(int, buffer_id)
   IPC_STRUCT_MEMBER(base::TimeTicks, timestamp)
   IPC_STRUCT_MEMBER(base::DictionaryValue, metadata)
-  IPC_STRUCT_MEMBER(media::VideoFrame::Format, pixel_format)
+  IPC_STRUCT_MEMBER(media::VideoPixelFormat, pixel_format)
   IPC_STRUCT_MEMBER(media::VideoFrame::StorageType, storage_type)
   IPC_STRUCT_MEMBER(gfx::Size, coded_size)
   IPC_STRUCT_MEMBER(gfx::Rect, visible_rect)
-  IPC_STRUCT_MEMBER(gpu::MailboxHolder, mailbox_holder)
 IPC_STRUCT_END()
 
 // TODO(nick): device_id in these messages is basically just a route_id. We
@@ -57,6 +57,14 @@ IPC_MESSAGE_CONTROL4(VideoCaptureMsg_NewBuffer,
                      int /* device id */,
                      base::SharedMemoryHandle /* handle */,
                      int /* length */,
+                     int /* buffer_id */)
+
+// Tell the renderer process that a new GpuMemoryBuffer backed buffer is
+// allocated for video capture.
+IPC_MESSAGE_CONTROL4(VideoCaptureMsg_NewBuffer2,
+                     int /* device id */,
+                     std::vector<gfx::GpuMemoryBufferHandle> /* handles */,
+                     gfx::Size /* dimensions */,
                      int /* buffer_id */)
 
 // Tell the renderer process that it should release a buffer previously
@@ -109,7 +117,7 @@ IPC_MESSAGE_CONTROL1(VideoCaptureHostMsg_Stop,
 IPC_MESSAGE_CONTROL4(VideoCaptureHostMsg_BufferReady,
                      int /* device_id */,
                      int /* buffer_id */,
-                     uint32 /* syncpoint */,
+                     gpu::SyncToken /* sync_token */,
                      double /* consumer_resource_utilization */)
 
 // Get the formats supported by a device referenced by |capture_session_id|.

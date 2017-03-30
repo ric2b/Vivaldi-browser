@@ -7,6 +7,8 @@
 
 #include "remoting/host/desktop_process.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/debug/alias.h"
@@ -14,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "remoting/base/auto_thread.h"
 #include "remoting/base/auto_thread_task_runner.h"
@@ -70,7 +73,7 @@ bool DesktopProcess::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void DesktopProcess::OnChannelConnected(int32 peer_pid) {
+void DesktopProcess::OnChannelConnected(int32_t peer_pid) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   VLOG(1) << "IPC: desktop <- daemon (" << peer_pid << ")";
@@ -95,7 +98,7 @@ bool DesktopProcess::Start(
   DCHECK(!desktop_environment_factory_);
   DCHECK(desktop_environment_factory);
 
-  desktop_environment_factory_ = desktop_environment_factory.Pass();
+  desktop_environment_factory_ = std::move(desktop_environment_factory);
 
   // Launch the audio capturing thread.
   scoped_refptr<AutoThreadTaskRunner> audio_task_runner;
@@ -139,10 +142,9 @@ bool DesktopProcess::Start(
   }
 
   // Connect to the daemon.
-  daemon_channel_ = IPC::ChannelProxy::Create(daemon_channel_name_,
-                                              IPC::Channel::MODE_CLIENT,
-                                              this,
-                                              io_task_runner.get());
+  daemon_channel_ =
+      IPC::ChannelProxy::Create(daemon_channel_name_, IPC::Channel::MODE_CLIENT,
+                                this, io_task_runner.get());
 
   // Pass |desktop_pipe| to the daemon.
   daemon_channel_->Send(

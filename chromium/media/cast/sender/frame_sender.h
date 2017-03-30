@@ -9,12 +9,15 @@
 #ifndef MEDIA_CAST_SENDER_FRAME_SENDER_H_
 #define MEDIA_CAST_SENDER_FRAME_SENDER_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "media/cast/cast_environment.h"
-#include "media/cast/net/rtcp/rtcp.h"
+#include "media/cast/net/cast_transport_sender.h"
+#include "media/cast/net/rtcp/rtcp_defines.h"
 #include "media/cast/sender/congestion_control.h"
 
 namespace media {
@@ -28,10 +31,11 @@ class FrameSender {
               bool is_audio,
               CastTransportSender* const transport_sender,
               int rtp_timebase,
-              uint32 ssrc,
+              uint32_t ssrc,
               double max_frame_rate,
               base::TimeDelta min_playout_delay,
               base::TimeDelta max_playout_delay,
+              base::TimeDelta animated_playout_delay,
               CongestionControl* congestion_control);
   virtual ~FrameSender();
 
@@ -57,9 +61,6 @@ class FrameSender {
   // of sent, unacknowledged frames.
   virtual base::TimeDelta GetInFlightMediaDuration() const = 0;
 
-  // Called when we get an ACK for a frame.
-  virtual void OnAck(uint32 frame_id) = 0;
-
  protected:
   // Schedule and execute periodic sending of RTCP report.
   void ScheduleNextRtcpReport();
@@ -76,7 +77,7 @@ class FrameSender {
   // network layer.
   CastTransportSender* const transport_sender_;
 
-  const uint32 ssrc_;
+  const uint32_t ssrc_;
 
  protected:
   // Schedule and execute periodic checks for re-sending packets.  If no
@@ -99,24 +100,33 @@ class FrameSender {
   // Warning: If a frame ID too far in the past is requested, the getters will
   // silently succeed but return incorrect values.  Be sure to respect
   // media::cast::kMaxUnackedFrames.
-  void RecordLatestFrameTimestamps(uint32 frame_id,
+  void RecordLatestFrameTimestamps(uint32_t frame_id,
                                    base::TimeTicks reference_time,
-                                   RtpTimestamp rtp_timestamp);
-  base::TimeTicks GetRecordedReferenceTime(uint32 frame_id) const;
-  RtpTimestamp GetRecordedRtpTimestamp(uint32 frame_id) const;
+                                   RtpTimeTicks rtp_timestamp);
+  base::TimeTicks GetRecordedReferenceTime(uint32_t frame_id) const;
+  RtpTimeTicks GetRecordedRtpTimestamp(uint32_t frame_id) const;
 
   // Returns the number of frames that were sent but not yet acknowledged.
   int GetUnacknowledgedFrameCount() const;
 
-  // The total amount of time between a frame's capture/recording on the sender
-  // and its playback on the receiver (i.e., shown to a user).  This is fixed as
-  // a value large enough to give the system sufficient time to encode,
-  // transmit/retransmit, receive, decode, and render; given its run-time
-  // environment (sender/receiver hardware performance, network conditions,
-  // etc.).
+  // Playout delay represents total amount of time between a frame's
+  // capture/recording on the sender and its playback on the receiver
+  // (i.e., shown to a user).  This should be a value large enough to
+  // give the system sufficient time to encode, transmit/retransmit,
+  // receive, decode, and render; given its run-time environment
+  // (sender/receiver hardware performance, network conditions,etc.).
+
+  // The |target_playout delay_| is the current delay that is adaptively
+  // adjusted based on feedback from video capture engine and the congestion
+  // control. In case of interactive content, the target is adjusted to start
+  // at |min_playout_delay_| and in case of animated content, it starts out at
+  // |animated_playout_delay_| and then adaptively adjust based on feedback
+  // from congestion control.
   base::TimeDelta target_playout_delay_;
-  base::TimeDelta min_playout_delay_;
-  base::TimeDelta max_playout_delay_;
+  const base::TimeDelta min_playout_delay_;
+  const base::TimeDelta max_playout_delay_;
+  // Starting playout delay for animated content.
+  const base::TimeDelta animated_playout_delay_;
 
   // If true, we transmit the target playout delay to the receiver.
   bool send_target_playout_delay_;
@@ -136,12 +146,12 @@ class FrameSender {
   // The ID of the last frame sent.  Logic throughout FrameSender assumes this
   // can safely wrap-around.  This member is invalid until
   // |!last_send_time_.is_null()|.
-  uint32 last_sent_frame_id_;
+  uint32_t last_sent_frame_id_;
 
   // The ID of the latest (not necessarily the last) frame that has been
   // acknowledged.  Logic throughout AudioSender assumes this can safely
   // wrap-around.  This member is invalid until |!last_send_time_.is_null()|.
-  uint32 latest_acked_frame_id_;
+  uint32_t latest_acked_frame_id_;
 
   // Counts the number of duplicate ACK that are being received.  When this
   // number reaches a threshold, the sender will take this as a sign that the
@@ -170,7 +180,7 @@ class FrameSender {
   // local reference time and RTP media time).  These should only be accessed
   // through the Record/GetXXX() methods.
   base::TimeTicks frame_reference_times_[256];
-  RtpTimestamp frame_rtp_timestamps_[256];
+  RtpTimeTicks frame_rtp_timestamps_[256];
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<FrameSender> weak_factory_;

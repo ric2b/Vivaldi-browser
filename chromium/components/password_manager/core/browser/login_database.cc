@@ -4,17 +4,24 @@
 
 #include "components/password_manager/core/browser/login_database.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/sparse_histogram.h"
 #include "base/pickle.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -30,8 +37,11 @@ using autofill::PasswordForm;
 
 namespace password_manager {
 
-const int kCurrentVersionNumber = 13;
-static const int kCompatibleVersionNumber = 1;
+// The current version number of the login database schema.
+const int kCurrentVersionNumber = 16;
+// The oldest version of the schema such that a legacy Chrome client using that
+// version can still read/write the current database.
+const int kCompatibleVersionNumber = 14;
 
 base::Pickle SerializeVector(const std::vector<base::string16>& vec) {
   base::Pickle p;
@@ -75,10 +85,27 @@ enum LoginTableColumns {
   COLUMN_FORM_DATA,
   COLUMN_DATE_SYNCED,
   COLUMN_DISPLAY_NAME,
-  COLUMN_AVATAR_URL,
+  COLUMN_ICON_URL,
   COLUMN_FEDERATION_URL,
   COLUMN_SKIP_ZERO_CLICK,
   COLUMN_GENERATION_UPLOAD_STATUS,
+};
+
+enum class HistogramSize { SMALL, LARGE };
+
+// An enum for UMA reporting. Add values to the end only.
+enum DatabaseInitError {
+  INIT_OK,
+  OPEN_FILE_ERROR,
+  START_TRANSACTION_ERROR,
+  META_TABLE_INIT_ERROR,
+  INCOMPATIBLE_VERSION,
+  INIT_LOGINS_ERROR,
+  INIT_STATS_ERROR,
+  MIGRATION_ERROR,
+  COMMIT_TRANSACTION_ERROR,
+
+  DATABASE_INIT_ERROR_COUNT,
 };
 
 void BindAddStatement(const PasswordForm& form,
@@ -112,7 +139,7 @@ void BindAddStatement(const PasswordForm& form,
               form_data_pickle.size());
   s->BindInt64(COLUMN_DATE_SYNCED, form.date_synced.ToInternalValue());
   s->BindString16(COLUMN_DISPLAY_NAME, form.display_name);
-  s->BindString(COLUMN_AVATAR_URL, form.avatar_url.spec());
+  s->BindString(COLUMN_ICON_URL, form.icon_url.spec());
   s->BindString(COLUMN_FEDERATION_URL, form.federation_url.spec());
   s->BindInt(COLUMN_SKIP_ZERO_CLICK, form.skip_zero_click);
   s->BindInt(COLUMN_GENERATION_UPLOAD_STATUS, form.generation_upload_status);
@@ -135,15 +162,20 @@ bool DoesMatchConstraints(const PasswordForm& form) {
   return true;
 }
 
+void LogDatabaseInitError(DatabaseInitError error) {
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.LoginDatabaseInit", error,
+                            DATABASE_INIT_ERROR_COUNT);
+}
+
 // UMA_* macros assume that the name never changes. This is a helper function
 // where this assumption doesn't hold.
 void LogDynamicUMAStat(const std::string& name,
                        int sample,
                        int min,
                        int max,
-                       int bucket_size) {
+                       int bucket_count) {
   base::HistogramBase* counter = base::Histogram::FactoryGet(
-      name, min, max, bucket_size,
+      name, min, max, bucket_count,
       base::HistogramBase::kUmaTargetedHistogramFlag);
   counter->Add(sample);
 }
@@ -159,6 +191,142 @@ void LogTimesUsedStat(const std::string& name, int sample) {
 void LogNumberOfAccountsForScheme(const std::string& scheme, int sample) {
   LogDynamicUMAStat("PasswordManager.TotalAccountsHiRes.WithScheme." + scheme,
                     sample, 1, 1000, 100);
+}
+
+void LogNumberOfAccountsReusingPassword(const std::string& suffix,
+                                        int sample,
+                                        HistogramSize histogram_size) {
+  int max = histogram_size == HistogramSize::LARGE ? 500 : 100;
+  int bucket_count = histogram_size == HistogramSize::LARGE ? 50 : 20;
+  LogDynamicUMAStat("PasswordManager.AccountsReusingPassword." + suffix, sample,
+                    1, max, bucket_count);
+}
+
+// Records password reuse metrics given the |signon_realms| corresponding to a
+// set of accounts that reuse the same password. See histograms.xml for details.
+void LogPasswordReuseMetrics(const std::vector<std::string>& signon_realms) {
+  struct StatisticsPerScheme {
+    StatisticsPerScheme() : num_total_accounts(0) {}
+
+    // The number of accounts for each registry controlled domain.
+    std::map<std::string, int> num_accounts_per_registry_controlled_domain;
+
+    // The number of accounts for each domain.
+    std::map<std::string, int> num_accounts_per_domain;
+
+    // Total number of accounts with this scheme. This equals the sum of counts
+    // in either of the above maps.
+    int num_total_accounts;
+  };
+
+  // The scheme (i.e. protocol) of the origin, not PasswordForm::scheme.
+  enum Scheme { SCHEME_HTTP, SCHEME_HTTPS };
+  const Scheme kAllSchemes[] = {SCHEME_HTTP, SCHEME_HTTPS};
+
+  StatisticsPerScheme statistics[arraysize(kAllSchemes)];
+  std::map<std::string, std::string> domain_to_registry_controlled_domain;
+
+  for (const std::string& signon_realm : signon_realms) {
+    const GURL signon_realm_url(signon_realm);
+    const std::string domain = signon_realm_url.host();
+    if (domain.empty())
+      continue;
+
+    if (!domain_to_registry_controlled_domain.count(domain)) {
+      domain_to_registry_controlled_domain[domain] =
+          GetRegistryControlledDomain(signon_realm_url);
+      if (domain_to_registry_controlled_domain[domain].empty())
+        domain_to_registry_controlled_domain[domain] = domain;
+    }
+    const std::string& registry_controlled_domain =
+        domain_to_registry_controlled_domain[domain];
+
+    Scheme scheme = SCHEME_HTTP;
+    static_assert(arraysize(kAllSchemes) == 2, "Update this logic");
+    if (signon_realm_url.SchemeIs(url::kHttpsScheme))
+      scheme = SCHEME_HTTPS;
+    else if (!signon_realm_url.SchemeIs(url::kHttpScheme))
+      continue;
+
+    statistics[scheme].num_accounts_per_domain[domain]++;
+    statistics[scheme].num_accounts_per_registry_controlled_domain
+        [registry_controlled_domain]++;
+    statistics[scheme].num_total_accounts++;
+  }
+
+  // For each "source" account of either scheme, count the number of "target"
+  // accounts reusing the same password (of either scheme).
+  for (const Scheme scheme : kAllSchemes) {
+    for (const auto& kv : statistics[scheme].num_accounts_per_domain) {
+      const std::string& domain(kv.first);
+      const int num_accounts_per_domain(kv.second);
+      const std::string& registry_controlled_domain =
+          domain_to_registry_controlled_domain[domain];
+
+      Scheme other_scheme = scheme == SCHEME_HTTP ? SCHEME_HTTPS : SCHEME_HTTP;
+      static_assert(arraysize(kAllSchemes) == 2, "Update |other_scheme|");
+
+      // Discount the account at hand from the number of accounts with the same
+      // domain and scheme.
+      int num_accounts_for_same_domain[arraysize(kAllSchemes)] = {};
+      num_accounts_for_same_domain[scheme] =
+          statistics[scheme].num_accounts_per_domain[domain] - 1;
+      num_accounts_for_same_domain[other_scheme] =
+          statistics[other_scheme].num_accounts_per_domain[domain];
+
+      // By definition, a PSL match requires the scheme to be the same.
+      int num_psl_matching_accounts =
+          statistics[scheme].num_accounts_per_registry_controlled_domain
+              [registry_controlled_domain] -
+          statistics[scheme].num_accounts_per_domain[domain];
+
+      // Discount PSL matches from the number of accounts with different domains
+      // but the same scheme.
+      int num_accounts_for_different_domain[arraysize(kAllSchemes)] = {};
+      num_accounts_for_different_domain[scheme] =
+          statistics[scheme].num_total_accounts -
+          statistics[scheme].num_accounts_per_registry_controlled_domain
+              [registry_controlled_domain];
+      num_accounts_for_different_domain[other_scheme] =
+          statistics[other_scheme].num_total_accounts -
+          statistics[other_scheme].num_accounts_per_domain[domain];
+
+      std::string source_realm_kind =
+          scheme == SCHEME_HTTP ? "FromHttpRealm" : "FromHttpsRealm";
+      static_assert(arraysize(kAllSchemes) == 2, "Update |source_realm_kind|");
+
+      // So far, the calculation has been carried out once per "source" domain,
+      // but the metrics need to be recorded on a per-account basis. The set of
+      // metrics are the same for all accounts for the same domain, so simply
+      // report them as many times as accounts.
+      for (int i = 0; i < num_accounts_per_domain; ++i) {
+        LogNumberOfAccountsReusingPassword(
+            source_realm_kind + ".OnHttpRealmWithSameHost",
+            num_accounts_for_same_domain[SCHEME_HTTP], HistogramSize::SMALL);
+        LogNumberOfAccountsReusingPassword(
+            source_realm_kind + ".OnHttpsRealmWithSameHost",
+            num_accounts_for_same_domain[SCHEME_HTTPS], HistogramSize::SMALL);
+        LogNumberOfAccountsReusingPassword(
+            source_realm_kind + ".OnPSLMatchingRealm",
+            num_psl_matching_accounts, HistogramSize::SMALL);
+
+        LogNumberOfAccountsReusingPassword(
+            source_realm_kind + ".OnHttpRealmWithDifferentHost",
+            num_accounts_for_different_domain[SCHEME_HTTP],
+            HistogramSize::LARGE);
+        LogNumberOfAccountsReusingPassword(
+            source_realm_kind + ".OnHttpsRealmWithDifferentHost",
+            num_accounts_for_different_domain[SCHEME_HTTPS],
+            HistogramSize::LARGE);
+
+        LogNumberOfAccountsReusingPassword(
+            source_realm_kind + ".OnAnyRealmWithDifferentHost",
+            num_accounts_for_different_domain[SCHEME_HTTP] +
+                num_accounts_for_different_domain[SCHEME_HTTPS],
+            HistogramSize::LARGE);
+      }
+    }
+  }
 }
 
 // Creates a table named |table_name| using our current schema.
@@ -186,7 +354,7 @@ bool CreateNewTable(sql::Connection* db,
       "form_data BLOB,"
       "date_synced INTEGER,"
       "display_name VARCHAR,"
-      "avatar_url VARCHAR,"
+      "icon_url VARCHAR,"
       "federation_url VARCHAR,"
       "skip_zero_click INTEGER,"
       "%s"
@@ -217,93 +385,119 @@ bool LoginDatabase::Init() {
   db_.set_cache_size(32);
   db_.set_exclusive_locking();
   db_.set_restrict_to_user();
+  db_.set_histogram_tag("Passwords");
 
   if (!db_.Open(db_path_)) {
-    LOG(WARNING) << "Unable to open the password store database.";
+    LogDatabaseInitError(OPEN_FILE_ERROR);
+    LOG(ERROR) << "Unable to open the password store database.";
     return false;
   }
 
   sql::Transaction transaction(&db_);
-  transaction.Begin();
+  if (!transaction.Begin()) {
+    LogDatabaseInitError(START_TRANSACTION_ERROR);
+    LOG(ERROR) << "Unable to start a transaction.";
+    db_.Close();
+    return false;
+  }
 
   // Check the database version.
   if (!meta_table_.Init(&db_, kCurrentVersionNumber,
                         kCompatibleVersionNumber)) {
+    LogDatabaseInitError(META_TABLE_INIT_ERROR);
+    LOG(ERROR) << "Unable to create the meta table.";
     db_.Close();
     return false;
   }
   if (meta_table_.GetCompatibleVersionNumber() > kCurrentVersionNumber) {
-    LOG(WARNING) << "Password store database is too new.";
+    LogDatabaseInitError(INCOMPATIBLE_VERSION);
+    LOG(ERROR) << "Password store database is too new, kCurrentVersionNumber="
+               << kCurrentVersionNumber << ", GetCompatibleVersionNumber="
+               << meta_table_.GetCompatibleVersionNumber();
     db_.Close();
     return false;
   }
 
   // Initialize the tables.
   if (!InitLoginsTable()) {
-    LOG(WARNING) << "Unable to initialize the logins table.";
+    LogDatabaseInitError(INIT_LOGINS_ERROR);
+    LOG(ERROR) << "Unable to initialize the logins table.";
     db_.Close();
     return false;
   }
-
-  if (!stats_table_.Init(&db_)) {
-    LOG(WARNING) << "Unable to initialize the stats table.";
-    db_.Close();
-    return false;
-  }
+  stats_table_.Init(&db_);
 
   // If the file on disk is an older database version, bring it up to date.
-  if (!MigrateOldVersionsAsNeeded()) {
-    LOG(WARNING) << "Unable to migrate database";
+  if (meta_table_.GetVersionNumber() < kCurrentVersionNumber &&
+      !MigrateOldVersionsAsNeeded()) {
+    LogDatabaseInitError(MIGRATION_ERROR);
+    UMA_HISTOGRAM_SPARSE_SLOWLY("PasswordManager.LoginDatabaseFailedVersion",
+                                meta_table_.GetVersionNumber());
+    LOG(ERROR) << "Unable to migrate database from "
+               << meta_table_.GetVersionNumber() << " to "
+               << kCurrentVersionNumber;
+    db_.Close();
+    return false;
+  }
+
+  if (!stats_table_.CreateTableIfNecessary()) {
+    LogDatabaseInitError(INIT_STATS_ERROR);
+    LOG(ERROR) << "Unable to create the stats table.";
     db_.Close();
     return false;
   }
 
   if (!transaction.Commit()) {
+    LogDatabaseInitError(COMMIT_TRANSACTION_ERROR);
+    LOG(ERROR) << "Unable to commit a transaction.";
     db_.Close();
     return false;
   }
 
+  LogDatabaseInitError(INIT_OK);
   return true;
 }
 
 bool LoginDatabase::MigrateOldVersionsAsNeeded() {
-  switch (meta_table_.GetVersionNumber()) {
+  const int original_version = meta_table_.GetVersionNumber();
+  switch (original_version) {
     case 1:
-      if (!db_.Execute("ALTER TABLE logins "
-                       "ADD COLUMN password_type INTEGER") ||
+      // Column could exist because of https://crbug.com/295851
+      if (!db_.DoesColumnExist("logins", "password_type") &&
+          !db_.Execute("ALTER TABLE logins "
+                       "ADD COLUMN password_type INTEGER")) {
+        return false;
+      }
+      if (!db_.DoesColumnExist("logins", "possible_usernames") &&
           !db_.Execute("ALTER TABLE logins "
                        "ADD COLUMN possible_usernames BLOB")) {
         return false;
       }
-      meta_table_.SetVersionNumber(2);
     // Fall through.
     case 2:
-      if (!db_.Execute("ALTER TABLE logins ADD COLUMN times_used INTEGER")) {
+      // Column could exist because of https://crbug.com/295851
+      if (!db_.DoesColumnExist("logins", "times_used") &&
+          !db_.Execute("ALTER TABLE logins ADD COLUMN times_used INTEGER")) {
         return false;
       }
-      meta_table_.SetVersionNumber(3);
     // Fall through.
     case 3:
-      // We need to check if the column exists because of
-      // https://crbug.com/295851
+      // Column could exist because of https://crbug.com/295851
       if (!db_.DoesColumnExist("logins", "form_data") &&
           !db_.Execute("ALTER TABLE logins ADD COLUMN form_data BLOB")) {
         return false;
       }
-      meta_table_.SetVersionNumber(4);
     // Fall through.
     case 4:
       if (!db_.Execute(
               "ALTER TABLE logins ADD COLUMN use_additional_auth INTEGER")) {
         return false;
       }
-      meta_table_.SetVersionNumber(5);
     // Fall through.
     case 5:
       if (!db_.Execute("ALTER TABLE logins ADD COLUMN date_synced INTEGER")) {
         return false;
       }
-      meta_table_.SetVersionNumber(6);
     // Fall through.
     case 6:
       if (!db_.Execute("ALTER TABLE logins ADD COLUMN display_name VARCHAR") ||
@@ -313,12 +507,10 @@ bool LoginDatabase::MigrateOldVersionsAsNeeded() {
           !db_.Execute("ALTER TABLE logins ADD COLUMN is_zero_click INTEGER")) {
         return false;
       }
-      meta_table_.SetVersionNumber(7);
     // Fall through.
     case 7: {
       // Keep version 8 around even though no changes are made. See
       // crbug.com/423716 for context.
-      meta_table_.SetVersionNumber(8);
       // Fall through.
     }
     case 8: {
@@ -331,7 +523,6 @@ bool LoginDatabase::MigrateOldVersionsAsNeeded() {
       s.BindInt64(1, base::Time::kTimeTToMicrosecondsOffset);
       if (!s.Run())
         return false;
-      meta_table_.SetVersionNumber(9);
       // Fall through.
     }
     case 9: {
@@ -358,15 +549,17 @@ bool LoginDatabase::MigrateOldVersionsAsNeeded() {
               ("CREATE TABLE logins(" + fields_to_copy + ")").c_str()) ||
           !db_.Execute(copy_data_query("logins_data", "logins").c_str()) ||
           !db_.Execute("DROP TABLE logins_data") ||
-          !CreateIndexOnSignonRealm(&db_, "logins"))
+          !CreateIndexOnSignonRealm(&db_, "logins")) {
         return false;
-
-      meta_table_.SetVersionNumber(10);
+      }
+      // Fall through.
     }
     case 10: {
-      // rename is_zero_click -> skip_zero_click and restore the unique key
-      // (origin_url, username_element, username_value, password_element,
-      // signon_realm).
+      // Rename is_zero_click -> skip_zero_click. Note that previous versions
+      // may have incorrectly used a 6-column key (origin_url, username_element,
+      // username_value, password_element, signon_realm, submit_element).
+      // In that case, this step also restores the correct 5-column key;
+      // that is, the above without "submit_element".
       const char copy_query[] = "INSERT OR REPLACE INTO logins_new SELECT "
           "origin_url, action_url, username_element, username_value, "
           "password_element, password_value, submit_element, signon_realm, "
@@ -374,24 +567,67 @@ bool LoginDatabase::MigrateOldVersionsAsNeeded() {
           "password_type, possible_usernames, times_used, form_data, "
           "date_synced, display_name, avatar_url, federation_url, is_zero_click"
           " FROM logins";
-      if (!CreateNewTable(&db_, "logins_new", "") || !db_.Execute(copy_query) ||
+      if (!CreateNewTable(&db_, "logins_new", "") ||
+          !db_.Execute(copy_query) ||
           !db_.Execute("DROP TABLE logins") ||
           !db_.Execute("ALTER TABLE logins_new RENAME TO logins") ||
-          !CreateIndexOnSignonRealm(&db_, "logins"))
+          !CreateIndexOnSignonRealm(&db_, "logins")) {
         return false;
-      meta_table_.SetVersionNumber(11);
+      }
+      // Fall through.
     }
     case 11:
       if (!db_.Execute(
               "ALTER TABLE logins ADD COLUMN "
               "generation_upload_status INTEGER"))
         return false;
-      meta_table_.SetVersionNumber(12);
+      // Fall through.
     case 12:
       // The stats table was added. Nothing to do really.
-      meta_table_.SetVersionNumber(13);
+      // Fall through.
+    case 13: {
+      // Rename avatar_url -> icon_url. Note that if the original version was
+      // at most 10, this renaming would have already happened in step 10,
+      // as |CreateNewTable| would create a table with the new column name.
+      if (original_version > 10) {
+        const char copy_query[] = "INSERT OR REPLACE INTO logins_new SELECT "
+            "origin_url, action_url, username_element, username_value, "
+            "password_element, password_value, submit_element, signon_realm, "
+            "ssl_valid, preferred, date_created, blacklisted_by_user, scheme, "
+            "password_type, possible_usernames, times_used, form_data, "
+            "date_synced, display_name, avatar_url, federation_url, "
+            "skip_zero_click, generation_upload_status FROM logins";
+        if (!CreateNewTable(
+                &db_, "logins_new", "generation_upload_status INTEGER,") ||
+            !db_.Execute(copy_query) ||
+            !db_.Execute("DROP TABLE logins") ||
+            !db_.Execute("ALTER TABLE logins_new RENAME TO logins") ||
+            !CreateIndexOnSignonRealm(&db_, "logins")) {
+          return false;
+        }
+      }
+      // Fall through.
+    }
+    case 14:
+      // No change of schema. Version 15 was introduced to force all databases
+      // through an otherwise no-op migration process that will, however, now
+      // correctly set the 'compatible version number'. Previously, it was
+      // always being set to (and forever left at) version 1.
+      meta_table_.SetCompatibleVersionNumber(kCompatibleVersionNumber);
+    case 15:
+      // Recreate the statistics.
+      if (!stats_table_.MigrateToVersion(16))
+        return false;
+
+    // -------------------------------------------------------------------------
+    // DO NOT FORGET to update |kCompatibleVersionNumber| if you add a migration
+    // step that is a breaking change. This is needed so that an older version
+    // of the browser can fail with a meaningful error when opening a newer
+    // database, as opposed to failing on the first database operation.
+    // -------------------------------------------------------------------------
     case kCurrentVersionNumber:
-      // Already up to date
+      // Already up to date.
+      meta_table_.SetVersionNumber(kCurrentVersionNumber);
       return true;
     default:
       NOTREACHED();
@@ -575,6 +811,26 @@ void LoginDatabase::ReportMetrics(const std::string& sync_username,
   LogNumberOfAccountsForScheme("Http", http_logins);
   LogNumberOfAccountsForScheme("Https", https_logins);
   LogNumberOfAccountsForScheme("Other", other_logins);
+
+  sql::Statement form_based_passwords_statement(
+      db_.GetUniqueStatement("SELECT signon_realm, password_value FROM logins "
+                             "WHERE blacklisted_by_user = 0 AND scheme = 0"));
+
+  std::map<base::string16, std::vector<std::string>> passwords_to_realms;
+  while (form_based_passwords_statement.Step()) {
+    std::string signon_realm = form_based_passwords_statement.ColumnString(0);
+    base::string16 decrypted_password;
+    // Note that CryptProtectData() is non-deterministic, so passwords must be
+    // decrypted before checking equality.
+    if (!IsValidAndroidFacetURI(signon_realm) &&
+        DecryptedString(form_based_passwords_statement.ColumnString(1),
+                        &decrypted_password) == ENCRYPTION_RESULT_SUCCESS) {
+      passwords_to_realms[decrypted_password].push_back(signon_realm);
+    }
+  }
+
+  for (const auto& password_to_realms : passwords_to_realms)
+    LogPasswordReuseMetrics(password_to_realms.second);
 }
 
 PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form) {
@@ -595,7 +851,7 @@ PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form) {
       " password_element, password_value, submit_element, "
       " signon_realm, ssl_valid, preferred, date_created, blacklisted_by_user, "
       " scheme, password_type, possible_usernames, times_used, form_data, "
-      " date_synced, display_name, avatar_url,"
+      " date_synced, display_name, icon_url,"
       " federation_url, skip_zero_click, generation_upload_status) VALUES "
       "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
   BindAddStatement(form, encrypted_password, &s);
@@ -614,7 +870,7 @@ PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form) {
       " password_element, password_value, submit_element, "
       " signon_realm, ssl_valid, preferred, date_created, blacklisted_by_user, "
       " scheme, password_type, possible_usernames, times_used, form_data, "
-      " date_synced, display_name, avatar_url,"
+      " date_synced, display_name, icon_url,"
       " federation_url, skip_zero_click, generation_upload_status) VALUES "
       "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
   BindAddStatement(form, encrypted_password, &s);
@@ -632,6 +888,9 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form) {
           &encrypted_password) != ENCRYPTION_RESULT_SUCCESS)
     return PasswordStoreChangeList();
 
+#if defined(OS_IOS)
+  DeleteEncryptedPassword(form);
+#endif
   // Replacement is necessary to deal with updating imported credentials. See
   // crbug.com/349138 for details.
   sql::Statement s(db_.GetCachedStatement(SQL_FROM_HERE,
@@ -649,7 +908,7 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form) {
                                           "scheme = ?, "
                                           "password_type = ?, "
                                           "display_name = ?, "
-                                          "avatar_url = ?, "
+                                          "icon_url = ?, "
                                           "federation_url = ?, "
                                           "skip_zero_click = ?, "
                                           "generation_upload_status = ? "
@@ -673,7 +932,7 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form) {
   s.BindInt(10, form.scheme);
   s.BindInt(11, form.type);
   s.BindString16(12, form.display_name);
-  s.BindString(13, form.avatar_url.spec());
+  s.BindString(13, form.icon_url.spec());
   s.BindString(14, form.federation_url.spec());
   s.BindInt(15, form.skip_zero_click);
   s.BindInt(16, form.generation_upload_status);
@@ -696,11 +955,14 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form) {
 }
 
 bool LoginDatabase::RemoveLogin(const PasswordForm& form) {
-  if (form.IsPublicSuffixMatch()) {
-    // Do not try to remove |form|. It is a modified copy of a password stored
-    // for a different origin, and it is not contained in the database.
+  if (form.is_public_suffix_match) {
+    // TODO(dvadym): Discuss whether we should allow to remove PSL matched
+    // credentials.
     return false;
   }
+#if defined(OS_IOS)
+  DeleteEncryptedPassword(form);
+#endif
   // Remove a login by UNIQUE-constrained fields.
   sql::Statement s(db_.GetCachedStatement(SQL_FROM_HERE,
                                           "DELETE FROM logins WHERE "
@@ -722,11 +984,20 @@ bool LoginDatabase::RemoveLogin(const PasswordForm& form) {
 
 bool LoginDatabase::RemoveLoginsCreatedBetween(base::Time delete_begin,
                                                base::Time delete_end) {
+#if defined(OS_IOS)
+  ScopedVector<autofill::PasswordForm> forms;
+  if (GetLoginsCreatedBetween(delete_begin, delete_end, &forms)) {
+    for (size_t i = 0; i < forms.size(); i++) {
+      DeleteEncryptedPassword(*forms[i]);
+    }
+  }
+#endif
+
   sql::Statement s(db_.GetCachedStatement(SQL_FROM_HERE,
       "DELETE FROM logins WHERE "
       "date_created >= ? AND date_created < ?"));
   s.BindInt64(0, delete_begin.ToInternalValue());
-  s.BindInt64(1, delete_end.is_null() ? std::numeric_limits<int64>::max()
+  s.BindInt64(1, delete_end.is_null() ? std::numeric_limits<int64_t>::max()
                                       : delete_end.ToInternalValue());
 
   return s.Run();
@@ -774,7 +1045,8 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
       base::Time::FromInternalValue(s.ColumnInt64(COLUMN_DATE_CREATED));
   form->blacklisted_by_user = (s.ColumnInt(COLUMN_BLACKLISTED_BY_USER) > 0);
   int scheme_int = s.ColumnInt(COLUMN_SCHEME);
-  DCHECK((scheme_int >= 0) && (scheme_int <= PasswordForm::SCHEME_OTHER));
+  DCHECK_LE(0, scheme_int);
+  DCHECK_GE(PasswordForm::SCHEME_LAST, scheme_int);
   form->scheme = static_cast<PasswordForm::Scheme>(scheme_int);
   int type_int = s.ColumnInt(COLUMN_PASSWORD_TYPE);
   DCHECK(type_int >= 0 && type_int <= PasswordForm::TYPE_GENERATED);
@@ -801,7 +1073,7 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
   form->date_synced =
       base::Time::FromInternalValue(s.ColumnInt64(COLUMN_DATE_SYNCED));
   form->display_name = s.ColumnString16(COLUMN_DISPLAY_NAME);
-  form->avatar_url = GURL(s.ColumnString(COLUMN_AVATAR_URL));
+  form->icon_url = GURL(s.ColumnString(COLUMN_ICON_URL));
   form->federation_url = GURL(s.ColumnString(COLUMN_FEDERATION_URL));
   form->skip_zero_click = (s.ColumnInt(COLUMN_SKIP_ZERO_CLICK) > 0);
   int generation_upload_status_int =
@@ -825,7 +1097,7 @@ bool LoginDatabase::GetLogins(
       "password_element, password_value, submit_element, "
       "signon_realm, ssl_valid, preferred, date_created, blacklisted_by_user, "
       "scheme, password_type, possible_usernames, times_used, form_data, "
-      "date_synced, display_name, avatar_url, "
+      "date_synced, display_name, icon_url, "
       "federation_url, skip_zero_click, generation_upload_status "
       "FROM logins WHERE signon_realm == ? ";
   sql::Statement s;
@@ -888,12 +1160,12 @@ bool LoginDatabase::GetLoginsCreatedBetween(
       "password_element, password_value, submit_element, "
       "signon_realm, ssl_valid, preferred, date_created, blacklisted_by_user, "
       "scheme, password_type, possible_usernames, times_used, form_data, "
-      "date_synced, display_name, avatar_url, "
+      "date_synced, display_name, icon_url, "
       "federation_url, skip_zero_click, generation_upload_status FROM logins "
       "WHERE date_created >= ? AND date_created < ?"
       "ORDER BY origin_url"));
   s.BindInt64(0, begin.ToInternalValue());
-  s.BindInt64(1, end.is_null() ? std::numeric_limits<int64>::max()
+  s.BindInt64(1, end.is_null() ? std::numeric_limits<int64_t>::max()
                                : end.ToInternalValue());
 
   return StatementToForms(&s, nullptr, forms);
@@ -910,7 +1182,7 @@ bool LoginDatabase::GetLoginsSyncedBetween(
       "password_element, password_value, submit_element, signon_realm, "
       "ssl_valid, preferred, date_created, blacklisted_by_user, "
       "scheme, password_type, possible_usernames, times_used, form_data, "
-      "date_synced, display_name, avatar_url, "
+      "date_synced, display_name, icon_url, "
       "federation_url, skip_zero_click, generation_upload_status FROM logins "
       "WHERE date_synced >= ? AND date_synced < ?"
       "ORDER BY origin_url"));
@@ -944,7 +1216,7 @@ bool LoginDatabase::GetAllLoginsWithBlacklistSetting(
       "password_element, password_value, submit_element, "
       "signon_realm, ssl_valid, preferred, date_created, blacklisted_by_user, "
       "scheme, password_type, possible_usernames, times_used, form_data, "
-      "date_synced, display_name, avatar_url, "
+      "date_synced, display_name, icon_url, "
       "federation_url, skip_zero_click, generation_upload_status FROM logins "
       "WHERE blacklisted_by_user == ? ORDER BY origin_url"));
   s.BindInt(0, blacklisted ? 1 : 0);
@@ -958,6 +1230,32 @@ bool LoginDatabase::DeleteAndRecreateDatabaseFile() {
   db_.Close();
   sql::Connection::Delete(db_path_);
   return Init();
+}
+
+std::string LoginDatabase::GetEncryptedPassword(
+    const autofill::PasswordForm& form) const {
+  sql::Statement s(
+      db_.GetCachedStatement(SQL_FROM_HERE,
+                             "SELECT password_value FROM logins WHERE "
+                             "origin_url = ? AND "
+                             "username_element = ? AND "
+                             "username_value = ? AND "
+                             "password_element = ? AND "
+                             "submit_element = ? AND "
+                             "signon_realm = ? "));
+
+  s.BindString(0, form.origin.spec());
+  s.BindString16(1, form.username_element);
+  s.BindString16(2, form.username_value);
+  s.BindString16(3, form.password_element);
+  s.BindString16(4, form.submit_element);
+  s.BindString(5, form.signon_realm);
+
+  std::string encrypted_password;
+  if (s.Step()) {
+    s.ColumnBlobAsString(0, &encrypted_password);
+  }
+  return encrypted_password;
 }
 
 // static
@@ -987,18 +1285,9 @@ bool LoginDatabase::StatementToForms(
       }
 
       psl_domain_match_metric = PSL_DOMAIN_MATCH_FOUND;
-      // This is not a perfect match, so we need to create a new valid result.
-      // We do this by copying over origin, signon realm and action from the
-      // observed form and setting the original signon realm to what we found
-      // in the database. We use the fact that |original_signon_realm| is
-      // non-empty to communicate that this match was found using public
-      // suffix matching.
-      new_form->original_signon_realm = new_form->signon_realm;
-      new_form->origin = psl_match->origin;
-      new_form->signon_realm = psl_match->signon_realm;
-      new_form->action = psl_match->action;
+      new_form->is_public_suffix_match = true;
     }
-    forms->push_back(new_form.Pass());
+    forms->push_back(std::move(new_form));
   }
 
   if (psl_match) {

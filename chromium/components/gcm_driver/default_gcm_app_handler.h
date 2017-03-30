@@ -6,6 +6,7 @@
 #define COMPONENTS_GCM_DRIVER_DEFAULT_GCM_APP_HANDLER_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "components/gcm_driver/gcm_app_handler.h"
 
 namespace gcm {
@@ -20,7 +21,7 @@ class DefaultGCMAppHandler : public GCMAppHandler {
   // Overridden from GCMAppHandler:
   void ShutdownHandler() override;
   void OnMessage(const std::string& app_id,
-                 const GCMClient::IncomingMessage& message) override;
+                 const IncomingMessage& message) override;
   void OnMessagesDeleted(const std::string& app_id) override;
   void OnSendError(
       const std::string& app_id,

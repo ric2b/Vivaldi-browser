@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/browser.h"
@@ -15,7 +17,7 @@
 class CollectedCookiesViewsTest : public InProcessBrowserTest {
  public:
   void SetUpOnMainThread() override {
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
 
     // Disable cookies.
     CookieSettingsFactory::GetForProfile(browser()->profile())

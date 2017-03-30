@@ -5,7 +5,11 @@
 package org.chromium.chrome.browser.signin;
 
 import android.accounts.Account;
+import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.Dialog;
+import android.app.DialogFragment;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
@@ -19,7 +23,9 @@ import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.UserManager;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceChangeListener;
 import android.preference.Preference.OnPreferenceClickListener;
@@ -71,6 +77,7 @@ public class AccountManagementFragment extends PreferenceFragment
                 SyncStateChangedListener, SignInStateObserver {
 
     public static final String SIGN_OUT_DIALOG_TAG = "sign_out_dialog_tag";
+    private static final String CLEAR_DATA_PROGRESS_DIALOG_TAG = "clear_data_progress";
 
     /**
      * The key for an integer value in
@@ -115,7 +122,7 @@ public class AccountManagementFragment extends PreferenceFragment
     public static final String PREF_PARENTAL_SETTINGS = "parental_settings";
     public static final String PREF_PARENT_ACCOUNTS = "parent_accounts";
     public static final String PREF_CHILD_CONTENT = "child_content";
-    public static final String PREF_CHILD_SAFE_SEARCH = "child_safe_search";
+    public static final String PREF_CHILD_SAFE_SITES = "child_safe_sites";
 
     private int mGaiaServiceType;
 
@@ -144,7 +151,10 @@ public class AccountManagementFragment extends PreferenceFragment
         super.onResume();
         SigninManager.get(getActivity()).addSignInStateObserver(this);
         ProfileDownloader.addObserver(this);
-        ProfileSyncService.get(getActivity()).addSyncStateChangedListener(this);
+        ProfileSyncService syncService = ProfileSyncService.get();
+        if (syncService != null) {
+            syncService.addSyncStateChangedListener(this);
+        }
 
         update();
     }
@@ -154,7 +164,10 @@ public class AccountManagementFragment extends PreferenceFragment
         super.onPause();
         SigninManager.get(getActivity()).removeSignInStateObserver(this);
         ProfileDownloader.removeObserver(this);
-        ProfileSyncService.get(getActivity()).removeSyncStateChangedListener(this);
+        ProfileSyncService syncService = ProfileSyncService.get();
+        if (syncService != null) {
+            syncService.removeSyncStateChangedListener(this);
+        }
     }
 
     /**
@@ -203,16 +216,28 @@ public class AccountManagementFragment extends PreferenceFragment
         updateAccountsList();
     }
 
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    private boolean canAddAccounts() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return true;
+
+        UserManager userManager = (UserManager) getActivity()
+                .getSystemService(Context.USER_SERVICE);
+        return !userManager.hasUserRestriction(UserManager.DISALLOW_MODIFY_ACCOUNTS);
+    }
+
     private void configureSignOutSwitch() {
-        boolean hasChildAccount = ChildAccountService.getInstance(getActivity()).hasChildAccount();
+        boolean isChildAccount = ChildAccountService.isChildAccount();
 
         ChromeSwitchPreference signOutSwitch =
                 (ChromeSwitchPreference) findPreference(PREF_SIGN_OUT_SWITCH);
-        if (hasChildAccount) {
+        if (isChildAccount) {
             getPreferenceScreen().removePreference(signOutSwitch);
         } else {
             getPreferenceScreen().removePreference(findPreference(PREF_SIGN_IN_CHILD_MESSAGE));
             signOutSwitch.setChecked(true);
+            signOutSwitch.setEnabled(getSignOutAllowedPreferenceValue(getActivity()));
+            signOutSwitch.setSummary(canAddAccounts() ? R.string.sign_in_accounts_message
+                    : R.string.sign_in_accounts_message_managed);
             signOutSwitch.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
                 @Override
                 public boolean onPreferenceChange(Preference preference, Object newValue) {
@@ -242,7 +267,7 @@ public class AccountManagementFragment extends PreferenceFragment
     private void configureAddAccountPreference(String fullName) {
         ChromeBasePreference addAccount = (ChromeBasePreference) findPreference(PREF_ADD_ACCOUNT);
 
-        if (ChildAccountService.getInstance(getActivity()).hasChildAccount()) {
+        if (ChildAccountService.isChildAccount()) {
             getPreferenceScreen().removePreference(addAccount);
         } else {
             String addAccountString = getResources().getString(
@@ -268,15 +293,21 @@ public class AccountManagementFragment extends PreferenceFragment
                     return true;
                 }
             });
+            addAccount.setManagedPreferenceDelegate(new ManagedPreferenceDelegate() {
+                @Override
+                public boolean isPreferenceControlledByPolicy(Preference preference) {
+                    return !canAddAccounts();
+                }
+            });
         }
     }
 
     private void configureGoIncognitoPreferences(String fullName) {
-        boolean hasChildAccount = ChildAccountService.getInstance(getActivity()).hasChildAccount();
+        boolean isChildAccount = ChildAccountService.isChildAccount();
         Preference notYouPref = findPreference(PREF_NOT_YOU);
         ChromeBasePreference goIncognito = (ChromeBasePreference) findPreference(PREF_GO_INCOGNITO);
 
-        if (hasChildAccount) {
+        if (isChildAccount) {
             getPreferenceScreen().removePreference(notYouPref);
             getPreferenceScreen().removePreference(goIncognito);
         } else {
@@ -327,8 +358,8 @@ public class AccountManagementFragment extends PreferenceFragment
     private void configureChildAccountPreferences() {
         Preference parentAccounts = findPreference(PREF_PARENT_ACCOUNTS);
         Preference childContent = findPreference(PREF_CHILD_CONTENT);
-        Preference childSafeSearch = findPreference(PREF_CHILD_SAFE_SEARCH);
-        if (ChildAccountService.getInstance(getActivity()).hasChildAccount()) {
+        Preference childSafeSites = findPreference(PREF_CHILD_SAFE_SITES);
+        if (ChildAccountService.isChildAccount()) {
             Resources res = getActivity().getResources();
             PrefServiceBridge prefService = PrefServiceBridge.getInstance();
 
@@ -357,16 +388,17 @@ public class AccountManagementFragment extends PreferenceFragment
             childContent.setSummary(contentText);
             childContent.setSelectable(false);
 
-            final String safeSearchText = res.getString(
-                    prefService.isForceGoogleSafeSearch() ? R.string.text_on : R.string.text_off);
-            childSafeSearch.setSummary(safeSearchText);
-            childSafeSearch.setSelectable(false);
+            final String safeSitesText = res.getString(
+                    prefService.isSupervisedUserSafeSitesEnabled()
+                            ? R.string.text_on : R.string.text_off);
+            childSafeSites.setSummary(safeSitesText);
+            childSafeSites.setSelectable(false);
         } else {
             PreferenceScreen prefScreen = getPreferenceScreen();
             prefScreen.removePreference(findPreference(PREF_PARENTAL_SETTINGS));
             prefScreen.removePreference(parentAccounts);
             prefScreen.removePreference(childContent);
-            prefScreen.removePreference(childSafeSearch);
+            prefScreen.removePreference(childSafeSites);
         }
     }
 
@@ -391,8 +423,7 @@ public class AccountManagementFragment extends PreferenceFragment
             String signedInAccountName =
                     ChromeSigninController.get(getActivity()).getSignedInAccountName();
             boolean isPrimaryAccount = TextUtils.equals(account.name, signedInAccountName);
-            boolean isChildAccount =
-                    ChildAccountService.getInstance(getActivity()).hasChildAccount();
+            boolean isChildAccount = ChildAccountService.isChildAccount();
 
             pref.setIcon(new BitmapDrawable(getResources(), isChildAccount
                     ? getBadgedUserPicture(account.name) : getUserPicture(account.name)));
@@ -407,6 +438,8 @@ public class AccountManagementFragment extends PreferenceFragment
                         AccountManagementScreenHelper.logEvent(
                                 ProfileAccountManagementMetrics.CLICK_PRIMARY_ACCOUNT,
                                 mGaiaServiceType);
+
+                        if (ProfileSyncService.get() == null) return true;
 
                         if (AndroidSyncSettings.isMasterSyncEnabled(activity)) {
                             Bundle args = new Bundle();
@@ -449,13 +482,51 @@ public class AccountManagementFragment extends PreferenceFragment
 
     // SignOutDialogListener implementation:
 
+    /**
+     * This class must be public and static. Otherwise an exception will be thrown when Android
+     * recreates the fragment (e.g. after a configuration change).
+     */
+    public static class ClearDataProgressDialog extends DialogFragment {
+        @Override
+        public void onCreate(Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            // Don't allow the dialog to be recreated by Android, since it wouldn't ever be
+            // dismissed after recreation.
+            if (savedInstanceState != null) dismiss();
+        }
+
+        @Override
+        public Dialog onCreateDialog(Bundle savedInstanceState) {
+            setCancelable(false);
+            ProgressDialog dialog = new ProgressDialog(getActivity());
+            dialog.setTitle(getString(R.string.wiping_profile_data_title));
+            dialog.setMessage(getString(R.string.wiping_profile_data_message));
+            dialog.setIndeterminate(true);
+            return dialog;
+        }
+    }
+
     @Override
     public void onSignOutClicked() {
         // In case the user reached this fragment without being signed in, we guard the sign out so
         // we do not hit a native crash.
         if (!ChromeSigninController.get(getActivity()).isSignedIn()) return;
 
-        SigninManager.get(getActivity()).signOut(getActivity(), null);
+        final Activity activity = getActivity();
+        final DialogFragment clearDataProgressDialog = new ClearDataProgressDialog();
+        SigninManager.get(activity).signOut(null, new SigninManager.WipeDataHooks() {
+            @Override
+            public void preWipeData() {
+                clearDataProgressDialog.show(
+                        activity.getFragmentManager(), CLEAR_DATA_PROGRESS_DIALOG_TAG);
+            }
+            @Override
+            public void postWipeData() {
+                if (clearDataProgressDialog.isAdded()) {
+                    clearDataProgressDialog.dismissAllowingStateLoss();
+                }
+            }
+        });
         AccountManagementScreenHelper.logEvent(
                 ProfileAccountManagementMetrics.SIGNOUT_SIGNOUT,
                 mGaiaServiceType);
@@ -492,10 +563,10 @@ public class AccountManagementFragment extends PreferenceFragment
     private static String getSyncStatusSummary(Activity activity) {
         if (!ChromeSigninController.get(activity).isSignedIn()) return "";
 
-        ProfileSyncService profileSyncService = ProfileSyncService.get(activity);
+        ProfileSyncService profileSyncService = ProfileSyncService.get();
         Resources res = activity.getResources();
 
-        if (ChildAccountService.getInstance(activity).hasChildAccount()) {
+        if (ChildAccountService.isChildAccount()) {
             return res.getString(R.string.kids_account);
         }
 
@@ -503,12 +574,16 @@ public class AccountManagementFragment extends PreferenceFragment
             return res.getString(R.string.sync_android_master_sync_disabled);
         }
 
+        if (profileSyncService == null) {
+            return res.getString(R.string.sync_is_disabled);
+        }
+
         if (profileSyncService.getAuthError() != GoogleServiceAuthError.State.NONE) {
             return res.getString(profileSyncService.getAuthError().getMessage());
         }
 
         if (AndroidSyncSettings.isSyncEnabled(activity)) {
-            if (!profileSyncService.isSyncInitialized()) {
+            if (!profileSyncService.isBackendInitialized()) {
                 return res.getString(R.string.sync_setup_progress);
             }
 
@@ -676,7 +751,8 @@ public class AccountManagementFragment extends PreferenceFragment
 
         final int imageSidePixels =
                 context.getResources().getDimensionPixelOffset(R.dimen.user_picture_size);
-        ProfileDownloader.startFetchingAccountInfoFor(profile, accountName, imageSidePixels, false);
+        ProfileDownloader.startFetchingAccountInfoFor(
+                context, profile, accountName, imageSidePixels, false);
     }
 
     /**

@@ -9,7 +9,6 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "chrome_elf/blacklist/blacklist_interceptions.h"
 #include "chrome_elf/chrome_elf_constants.h"
 #include "chrome_elf/chrome_elf_util.h"
@@ -32,6 +31,7 @@ namespace blacklist{
 // NOTE: Please remember to update the DllHash enum in histograms.xml when
 //       adding a new value to the blacklist.
 const wchar_t* g_troublesome_dlls[kTroublesomeDllsMaxCount] = {
+  L"949ba8b6a9.dll",                    // Coupon Time.
   L"activedetect32.dll",                // Lenovo One Key Theater.
                                         // See crbug.com/379218.
   L"activedetect64.dll",                // Lenovo One Key Theater.
@@ -242,7 +242,9 @@ bool IsBlacklistInitialized() {
 }
 
 int GetBlacklistIndex(const wchar_t* dll_name) {
-  for (int i = 0; i < kTroublesomeDllsMaxCount && g_troublesome_dlls[i]; ++i) {
+  for (int i = 0;
+       i < static_cast<int>(kTroublesomeDllsMaxCount) && g_troublesome_dlls[i];
+       ++i) {
     if (_wcsicmp(dll_name, g_troublesome_dlls[i]) == 0)
       return i;
   }
@@ -252,7 +254,7 @@ int GetBlacklistIndex(const wchar_t* dll_name) {
 bool AddDllToBlacklist(const wchar_t* dll_name) {
   int blacklist_size = BlacklistSize();
   // We need to leave one space at the end for the null pointer.
-  if (blacklist_size + 1 >= kTroublesomeDllsMaxCount)
+  if (blacklist_size + 1 >= static_cast<int>(kTroublesomeDllsMaxCount))
     return false;
   for (int i = 0; i < blacklist_size; ++i) {
     if (!_wcsicmp(g_troublesome_dlls[i], dll_name))

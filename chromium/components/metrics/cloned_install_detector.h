@@ -6,6 +6,7 @@
 #define COMPONENTS_METRICS_CLONED_INSTALL_DETECTOR_H_
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 
@@ -46,7 +47,7 @@ class ClonedInstallDetector {
   // Converts raw_id into a 24-bit hash and stores the hash in |local_state|.
   // |raw_id| is not a const ref because it's passed from a cross-thread post
   // task.
-  void SaveMachineId(PrefService* local_state, std::string raw_id);
+  void SaveMachineId(PrefService* local_state, const std::string& raw_id);
 
   scoped_refptr<MachineIdProvider> raw_id_provider_;
   base::WeakPtrFactory<ClonedInstallDetector> weak_ptr_factory_;

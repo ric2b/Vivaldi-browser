@@ -4,8 +4,11 @@
 
 #include "extensions/renderer/module_system_test.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
@@ -13,7 +16,6 @@
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "extensions/common/extension_paths.h"
 #include "extensions/renderer/logging_native_handler.h"
@@ -40,7 +42,7 @@ class V8ExtensionConfigurator {
         names_(1, safe_builtins_->name()),
         configuration_(
             new v8::ExtensionConfiguration(static_cast<int>(names_.size()),
-                                           vector_as_array(&names_))) {
+                                           names_.data())) {
     v8::RegisterExtension(safe_builtins_.get());
   }
 
@@ -141,7 +143,7 @@ ModuleSystemTestEnvironment::ModuleSystemTestEnvironment(v8::Isolate* isolate)
   {
     scoped_ptr<ModuleSystem> module_system(
         new ModuleSystem(context_.get(), source_map_.get()));
-    context_->set_module_system(module_system.Pass());
+    context_->set_module_system(std::move(module_system));
   }
   ModuleSystem* module_system = context_->module_system();
   module_system->RegisterNativeHandler(

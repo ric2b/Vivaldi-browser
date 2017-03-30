@@ -7,8 +7,8 @@
 
 #import <Cocoa/Cocoa.h>
 
-#include "base/basictypes.h"
 #include "ui/events/events_base_export.h"
+#include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 
 namespace ui {
@@ -37,12 +37,17 @@ EVENTS_BASE_EXPORT int MacKeyCodeForWindowsKeyCode(
     unichar* keyboard_character);
 
 // This implementation cribbed from:
-//   third_party/WebKit/Source/web/mac/WebInputEventFactory.mm
+//   content/browser/render_host/input/web_input_event_builder_mac.mm
 // Converts |event| into a |KeyboardCode|.  The mapping is not direct as the Mac
 // has a different notion of key codes.
 EVENTS_BASE_EXPORT KeyboardCode KeyboardCodeFromNSEvent(NSEvent* event);
 
-EVENTS_BASE_EXPORT DomCode CodeFromNSEvent(NSEvent* event);
+EVENTS_BASE_EXPORT DomCode DomCodeFromNSEvent(NSEvent* event);
+
+// Map a |event| to a |DomKey|. |DomKey::NONE| is returned on a failed
+// mapping and the callee should may wish to convert this to
+// |DomKey::UNIDENTIFIED| before handing the value off.
+EVENTS_BASE_EXPORT DomKey DomKeyFromNSEvent(NSEvent* event);
 
 } // namespace ui
 

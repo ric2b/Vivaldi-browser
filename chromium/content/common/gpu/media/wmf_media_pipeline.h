@@ -54,28 +54,38 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
 
  private:
   using EGLConfig = void*;
-  using FinalizeInitializationCB = base::Callback<void(void)>;
 
   class AudioTimestampCalculator;
   struct Direct3DContext;
   class DXVAPictureBuffer;
+  struct InitializationResult;
+
+  // Caller doesn't become an owner of object pointed-to by return value.
+  static EGLConfig GetEGLConfig(
+      const MakeGLContextCurrentCB& make_gl_context_current_cb);
+  static InitializationResult CreateSourceReader(
+      const scoped_refptr<WMFByteStream>& byte_stream,
+      const base::win::ScopedComPtr<IMFAttributes>& attributes,
+      media::PlatformMediaDecodingMode preferred_decoding_mode);
+  static bool CreateDXVASourceReader(
+      const scoped_refptr<WMFByteStream>& byte_stream,
+      const base::win::ScopedComPtr<IMFAttributes>& attributes,
+      InitializationResult* result);
 
   bool CreateSourceReaderCallbackAndAttributes(
       base::win::ScopedComPtr<IMFAttributes>* attributes);
-  void CreateSourceReader(
-      const base::win::ScopedComPtr<IMFAttributes>& attributes,
-      const FinalizeInitializationCB& finalize_init_cb);
-  bool CreateDXVASourceReader(
-      const base::win::ScopedComPtr<IMFAttributes>& attributes);
 
-  void FinalizeInitialization();
+  bool InitializeImpl(const std::string& mime_type,
+                      const InitializeCB& initialize_cb);
+  void FinalizeInitialization(const InitializeCB& initialize_cb,
+                              const InitializationResult& result);
   bool RetrieveStreamIndices();
   bool ConfigureStream(DWORD stream_index);
   bool ConfigureSourceReader();
   bool HasMediaStream(media::PlatformMediaDataType type) const;
   void SetNoMediaStream(media::PlatformMediaDataType type);
-  bool GetDuration(base::TimeDelta* duration);
-  bool GetBitrate(int* bitrate, base::TimeDelta duration);
+  base::TimeDelta GetDuration();
+  int GetBitrate(base::TimeDelta duration);
   bool GetStride(int* stride);
   bool GetAudioDecoderConfig(media::PlatformAudioConfig* audio_config);
   bool GetVideoDecoderConfig(media::PlatformVideoConfig* video_config);
@@ -91,13 +101,10 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
       IMFSample* sample);
 
   // Caller doesn't become an owner of object pointed-to by return value.
-  static EGLConfig GetEGLConfig(
-      const MakeGLContextCurrentCB& make_gl_context_current_cb);
-  // Caller doesn't become an owner of object pointed-to by return value.
   DXVAPictureBuffer* GetDXVAPictureBuffer(uint32_t texture_id);
 
   media::DataSource* data_source_;
-  scoped_ptr<WMFByteStream> byte_stream_;
+  scoped_refptr<WMFByteStream> byte_stream_;
   base::win::ScopedComPtr<IMFSourceReaderCallback> source_reader_callback_;
   base::win::ScopedComPtr<IMFSourceReader> source_reader_;
 
@@ -122,7 +129,6 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
   base::ScopedPtrHashMap<uint32_t, scoped_ptr<DXVAPictureBuffer>>
       known_picture_buffers_;
 
-  InitializeCB initialize_cb_;
   ReadDataCB read_audio_data_cb_;
   ReadDataCB read_video_data_cb_;
 

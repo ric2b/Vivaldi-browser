@@ -210,13 +210,15 @@ parse_one_feature (const char **pp, const char *end, hb_feature_t *feature)
 /**
  * hb_feature_from_string:
  * @str: (array length=len) (element-type uint8_t): a string to parse
- * @len: length of @str, or -1 if string is nul-terminated
+ * @len: length of @str, or -1 if string is %NULL terminated
  * @feature: (out): the #hb_feature_t to initialize with the parsed values
  *
- * Parses a string into a #hb_feature_t. If @len is -1 then @str is
- * %NULL-terminated.
+ * Parses a string into a #hb_feature_t.
  *
- * Return value: %TRUE if @str is successfully parsed, %FALSE otherwise
+ * TODO: document the syntax here.
+ *
+ * Return value:
+ * %true if @str is successfully parsed, %false otherwise.
  *
  * Since: 0.9.5
  **/
@@ -371,11 +373,6 @@ hb_shape_full (hb_font_t          *font,
 	       unsigned int        num_features,
 	       const char * const *shaper_list)
 {
-  if (unlikely (!buffer->len))
-    return true;
-
-  assert (buffer->content_type == HB_BUFFER_CONTENT_TYPE_UNICODE);
-
   hb_shape_plan_t *shape_plan = hb_shape_plan_create_cached (font->face, &buffer->props, features, num_features, shaper_list);
   hb_bool_t res = hb_shape_plan_execute (shape_plan, font, buffer, features, num_features);
   hb_shape_plan_destroy (shape_plan);
@@ -399,7 +396,7 @@ hb_shape_full (hb_font_t          *font,
  *
  * Return value: %FALSE if all shapers failed, %TRUE otherwise
  *
- * Since: 1.0
+ * Since: 0.9.2
  **/
 void
 hb_shape (hb_font_t           *font,

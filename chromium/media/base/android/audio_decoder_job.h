@@ -6,9 +6,12 @@
 #define MEDIA_BASE_ANDROID_AUDIO_DECODER_JOB_H_
 
 #include <jni.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "media/base/android/media_decoder_job.h"
 
 namespace media {
@@ -34,7 +37,6 @@ class AudioDecoderJob : public MediaDecoderJob {
 
   // Sets the volume of the audio output.
   void SetVolume(double volume);
-  double volume() const { return volume_; }
 
   // Sets the base timestamp for |audio_timestamp_helper_|.
   void SetBaseTimestamp(base::TimeDelta base_timestamp);
@@ -43,8 +45,10 @@ class AudioDecoderJob : public MediaDecoderJob {
   // MediaDecoderJob implementation.
   void ReleaseOutputBuffer(
       int output_buffer_index,
+      size_t offset,
       size_t size,
       bool render_output,
+      bool is_late_frame,
       base::TimeDelta current_presentation_timestamp,
       const ReleaseOutputCompletionCallback& callback) override;
   bool ComputeTimeToRender() const override;
@@ -61,9 +65,9 @@ class AudioDecoderJob : public MediaDecoderJob {
   AudioCodec audio_codec_;
   int num_channels_;
   int config_sampling_rate_;
-  std::vector<uint8> audio_extra_data_;
-  int64 audio_codec_delay_ns_;
-  int64 audio_seek_preroll_ns_;
+  std::vector<uint8_t> audio_extra_data_;
+  int64_t audio_codec_delay_ns_;
+  int64_t audio_seek_preroll_ns_;
   double volume_;
   int bytes_per_frame_;
 
@@ -71,13 +75,16 @@ class AudioDecoderJob : public MediaDecoderJob {
   int output_sampling_rate_;
 
   // Frame count to sync with audio codec output
-  int64 frame_count_;
+  int64_t frame_count_;
 
   // Base timestamp for the |audio_timestamp_helper_|.
   base::TimeDelta base_timestamp_;
 
   // Object to calculate the current audio timestamp for A/V sync.
   scoped_ptr<AudioTimestampHelper> audio_timestamp_helper_;
+
+  // The time limit for the next frame to avoid underrun.
+  base::TimeTicks next_frame_time_limit_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioDecoderJob);
 };

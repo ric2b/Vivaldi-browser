@@ -4,6 +4,8 @@
 
 #include "ui/views/controls/button/image_button.h"
 
+#include <utility>
+
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/gfx/animation/throb_animation.h"
@@ -70,7 +72,7 @@ void ImageButton::SetImageAlignment(HorizontalAlignment h_align,
 }
 
 void ImageButton::SetFocusPainter(scoped_ptr<Painter> focus_painter) {
-  focus_painter_ = focus_painter.Pass();
+  focus_painter_ = std::move(focus_painter);
 }
 
 void ImageButton::SetMinimumImageSize(const gfx::Size& size) {
@@ -106,6 +108,9 @@ void ImageButton::OnPaint(gfx::Canvas* canvas) {
   // Call the base class first to paint any background/borders.
   View::OnPaint(canvas);
 
+  // TODO(estade|tdanderson|bruthig): The ink drop layer should be positioned
+  // behind the button's image which means the image needs to be painted to its
+  // own layer instead of to the Canvas.
   gfx::ImageSkia img = GetImageToPaint();
 
   if (!img.isNull()) {
@@ -143,11 +148,12 @@ void ImageButton::OnBlur() {
 gfx::ImageSkia ImageButton::GetImageToPaint() {
   gfx::ImageSkia img;
 
-  if (!images_[STATE_HOVERED].isNull() && hover_animation_->is_animating()) {
-    img = gfx::ImageSkiaOperations::CreateBlendedImage(images_[STATE_NORMAL],
-        images_[STATE_HOVERED], hover_animation_->GetCurrentValue());
+  if (!images_[STATE_HOVERED].isNull() && hover_animation().is_animating()) {
+    img = gfx::ImageSkiaOperations::CreateBlendedImage(
+        images_[STATE_NORMAL], images_[STATE_HOVERED],
+        hover_animation().GetCurrentValue());
   } else {
-    img = images_[state_];
+    img = images_[state()];
   }
 
   return !img.isNull() ? img : images_[STATE_NORMAL];
@@ -210,14 +216,14 @@ void ToggleImageButton::SetToggled(bool toggled) {
   NotifyAccessibilityEvent(ui::AX_EVENT_VALUE_CHANGED, true);
 }
 
-void ToggleImageButton::SetToggledImage(ButtonState state,
+void ToggleImageButton::SetToggledImage(ButtonState image_state,
                                         const gfx::ImageSkia* image) {
   if (toggled_) {
-    images_[state] = image ? *image : gfx::ImageSkia();
-    if (state_ == state)
+    images_[image_state] = image ? *image : gfx::ImageSkia();
+    if (state() == image_state)
       SchedulePaint();
   } else {
-    alternate_images_[state] = image ? *image : gfx::ImageSkia();
+    alternate_images_[image_state] = image ? *image : gfx::ImageSkia();
   }
 }
 
@@ -228,19 +234,20 @@ void ToggleImageButton::SetToggledTooltipText(const base::string16& tooltip) {
 ////////////////////////////////////////////////////////////////////////////////
 // ToggleImageButton, ImageButton overrides:
 
-const gfx::ImageSkia& ToggleImageButton::GetImage(ButtonState state) const {
+const gfx::ImageSkia& ToggleImageButton::GetImage(
+    ButtonState image_state) const {
   if (toggled_)
-    return alternate_images_[state];
-  return images_[state];
+    return alternate_images_[image_state];
+  return images_[image_state];
 }
 
-void ToggleImageButton::SetImage(ButtonState state,
+void ToggleImageButton::SetImage(ButtonState image_state,
                                  const gfx::ImageSkia* image) {
   if (toggled_) {
-    alternate_images_[state] = image ? *image : gfx::ImageSkia();
+    alternate_images_[image_state] = image ? *image : gfx::ImageSkia();
   } else {
-    images_[state] = image ? *image : gfx::ImageSkia();
-    if (state_ == state)
+    images_[image_state] = image ? *image : gfx::ImageSkia();
+    if (state() == image_state)
       SchedulePaint();
   }
   PreferredSizeChanged();

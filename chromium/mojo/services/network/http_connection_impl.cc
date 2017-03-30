@@ -4,15 +4,22 @@
 
 #include "mojo/services/network/http_connection_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <limits>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "mojo/common/handle_watcher.h"
+#include "mojo/message_pump/handle_watcher.h"
+#include "mojo/public/cpp/bindings/type_converter.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/services/network/http_server_impl.h"
 #include "mojo/services/network/net_adapters.h"
 #include "mojo/services/network/public/cpp/web_socket_read_queue.h"
@@ -24,8 +31,6 @@
 #include "net/server/http_server.h"
 #include "net/server/http_server_request_info.h"
 #include "net/server/http_server_response_info.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/type_converter.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
 
 namespace mojo {
 
@@ -42,7 +47,7 @@ class HttpConnectionImpl::SimpleDataPipeReader {
   void Start(ScopedDataPipeConsumerHandle consumer,
              const CompletionCallback& completion_callback) {
     DCHECK(consumer.is_valid() && !consumer_.is_valid());
-    consumer_ = consumer.Pass();
+    consumer_ = std::move(consumer);
     completion_callback_ = completion_callback;
     buffer_.reset(new std::string);
     ReadMore();
@@ -62,7 +67,7 @@ class HttpConnectionImpl::SimpleDataPipeReader {
       WaitToReadMore();
     } else if (rv == MOJO_RESULT_FAILED_PRECONDITION) {
       // We reached end-of-file.
-      completion_callback_.Run(this, buffer_.Pass());
+      completion_callback_.Run(this, std::move(buffer_));
       // Note: This object may have been destroyed in the callback.
     } else {
       CHECK(false);
@@ -86,8 +91,7 @@ class HttpConnectionImpl::SimpleDataPipeReader {
   DISALLOW_COPY_AND_ASSIGN(SimpleDataPipeReader);
 };
 
-class HttpConnectionImpl::WebSocketImpl : public WebSocket,
-                                          public ErrorHandler {
+class HttpConnectionImpl::WebSocketImpl : public WebSocket {
  public:
   // |connection| must outlive this object.
   WebSocketImpl(HttpConnectionImpl* connection,
@@ -95,23 +99,23 @@ class HttpConnectionImpl::WebSocketImpl : public WebSocket,
                 ScopedDataPipeConsumerHandle send_stream,
                 WebSocketClientPtr client)
       : connection_(connection),
-        binding_(this, request.Pass()),
-        client_(client.Pass()),
-        send_stream_(send_stream.Pass()),
+        binding_(this, std::move(request)),
+        client_(std::move(client)),
+        send_stream_(std::move(send_stream)),
         read_send_stream_(new WebSocketReadQueue(send_stream_.get())),
         pending_send_count_(0) {
     DCHECK(binding_.is_bound());
     DCHECK(client_);
     DCHECK(send_stream_.is_valid());
 
-    binding_.set_error_handler(this);
-    client_.set_error_handler(this);
+    binding_.set_connection_error_handler([this]() { Close(); });
+    client_.set_connection_error_handler([this]() { Close(); });
 
     DataPipe data_pipe;
-    receive_stream_ = data_pipe.producer_handle.Pass();
+    receive_stream_ = std::move(data_pipe.producer_handle);
     write_receive_stream_.reset(new WebSocketWriteQueue(receive_stream_.get()));
 
-    client_->DidConnect("", "", data_pipe.consumer_handle.Pass());
+    client_->DidConnect("", "", std::move(data_pipe.consumer_handle));
   }
 
   ~WebSocketImpl() override {}
@@ -174,9 +178,6 @@ class HttpConnectionImpl::WebSocketImpl : public WebSocket,
     Close();
   }
 
-  // ErrorHandler implementation.
-  void OnConnectionError() override { Close(); }
-
   void OnFinishedReadingSendStream(uint32_t num_bytes, const char* data) {
     DCHECK_GT(pending_send_count_, 0u);
     pending_send_count_--;
@@ -235,7 +236,7 @@ struct TypeConverter<HttpRequestPtr, net::HttpServerRequestInfo> {
       HttpHeaderPtr header(HttpHeader::New());
       header->name = item.first;
       header->value = item.second;
-      request->headers[index++] = header.Pass();
+      request->headers[index++] = std::move(header);
     }
     if (!obj.data.empty()) {
       uint32_t num_bytes = static_cast<uint32_t>(obj.data.size());
@@ -245,13 +246,13 @@ struct TypeConverter<HttpRequestPtr, net::HttpServerRequestInfo> {
       options.element_num_bytes = 1;
       options.capacity_num_bytes = num_bytes;
       DataPipe data_pipe(options);
-      request->body = data_pipe.consumer_handle.Pass();
+      request->body = std::move(data_pipe.consumer_handle);
       MojoResult result =
           WriteDataRaw(data_pipe.producer_handle.get(), obj.data.data(),
                        &num_bytes, MOJO_WRITE_DATA_FLAG_ALL_OR_NONE);
       CHECK_EQ(MOJO_RESULT_OK, result);
     }
-    return request.Pass();
+    return request;
   }
 };
 
@@ -261,11 +262,11 @@ HttpConnectionImpl::HttpConnectionImpl(int connection_id,
                                        HttpConnectionPtr* connection)
     : connection_id_(connection_id),
       server_(server),
-      delegate_(delegate.Pass()),
+      delegate_(std::move(delegate)),
       binding_(this, connection) {
   DCHECK(delegate_);
-  binding_.set_error_handler(this);
-  delegate_.set_error_handler(this);
+  binding_.set_connection_error_handler([this]() { Close(); });
+  delegate_.set_connection_error_handler([this]() { Close(); });
 }
 
 HttpConnectionImpl::~HttpConnectionImpl() {
@@ -282,13 +283,13 @@ void HttpConnectionImpl::OnReceivedHttpRequest(
         if (response->body.is_valid()) {
           SimpleDataPipeReader* reader = new SimpleDataPipeReader;
           response_body_readers_.insert(reader);
-          ScopedDataPipeConsumerHandle body = response->body.Pass();
+          ScopedDataPipeConsumerHandle body = std::move(response->body);
           reader->Start(
-              body.Pass(),
+              std::move(body),
               base::Bind(&HttpConnectionImpl::OnFinishedReadingResponseBody,
                          base::Unretained(this), base::Passed(&response)));
         } else {
-          OnFinishedReadingResponseBody(response.Pass(), nullptr, nullptr);
+          OnFinishedReadingResponseBody(std::move(response), nullptr, nullptr);
         }
       });
 }
@@ -309,9 +310,9 @@ void HttpConnectionImpl::OnReceivedWebSocketRequest(
           return;
         }
 
-        web_socket_.reset(new WebSocketImpl(this, web_socket.Pass(),
-                                            send_stream.Pass(),
-                                            web_socket_client.Pass()));
+        web_socket_.reset(new WebSocketImpl(this, std::move(web_socket),
+                                            std::move(send_stream),
+                                            std::move(web_socket_client)));
         server_->server()->AcceptWebSocket(connection_id_, info);
       });
 }
@@ -345,14 +346,6 @@ void HttpConnectionImpl::SetReceiveBufferSize(
   callback.Run(MakeNetworkError(net::OK));
 }
 
-void HttpConnectionImpl::OnConnectionError() {
-  // This method is called when the proxy side of |binding_| or the impl side of
-  // |delegate_| has closed the pipe. Although it is set as error handler for
-  // both |binding_| and |delegate_|, it will only be called at most once
-  // because when called it closes/resets |binding_| and |delegate_|.
-  Close();
-}
-
 void HttpConnectionImpl::OnFinishedReadingResponseBody(
     HttpResponsePtr response,
     SimpleDataPipeReader* reader,
@@ -375,11 +368,12 @@ void HttpConnectionImpl::OnFinishedReadingResponseBody(
       //
       // TODO(yzshen): Consider adding to net::HttpServerResponseInfo a simple
       // setter for body which doesn't fiddle with headers.
-      if (base::strcasecmp(header.name.data(),
-                           net::HttpRequestHeaders::kContentLength) == 0) {
+      base::StringPiece name_piece(header.name.data(), header.name.size());
+      if (base::EqualsCaseInsensitiveASCII(
+              name_piece, net::HttpRequestHeaders::kContentLength)) {
         continue;
-      } else if (base::strcasecmp(header.name.data(),
-                                  net::HttpRequestHeaders::kContentType) == 0) {
+      } else if (base::EqualsCaseInsensitiveASCII(
+                     name_piece, net::HttpRequestHeaders::kContentType)) {
         content_type = header.value;
         continue;
       }

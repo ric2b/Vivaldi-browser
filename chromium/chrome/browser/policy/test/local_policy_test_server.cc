@@ -5,6 +5,7 @@
 #include "chrome/browser/policy/test/local_policy_test_server.h"
 
 #include <ctype.h>
+#include <stdint.h>
 
 #include <algorithm>
 #include <vector>
@@ -13,12 +14,11 @@
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "crypto/rsa_private_key.h"
 #include "net/test/python_utils.h"
-#include "net/test/spawned_test_server/base_test_server.h"
 
 namespace policy {
 
@@ -91,14 +91,13 @@ bool LocalPolicyTestServer::SetSigningKeyAndSignature(
     const crypto::RSAPrivateKey* key, const std::string& signature) {
   CHECK(server_data_dir_.IsValid());
 
-  std::vector<uint8> signing_key_bits;
+  std::vector<uint8_t> signing_key_bits;
   if (!key->ExportPrivateKey(&signing_key_bits))
     return false;
 
   policy_key_ = server_data_dir_.path().Append(kSigningKeyFileName);
   int bytes_written = base::WriteFile(
-      policy_key_,
-      reinterpret_cast<const char*>(vector_as_array(&signing_key_bits)),
+      policy_key_, reinterpret_cast<const char*>(signing_key_bits.data()),
       signing_key_bits.size());
 
   if (bytes_written != static_cast<int>(signing_key_bits.size()))

@@ -5,7 +5,7 @@
 #ifndef CONTENT_RENDERER_IDLE_USER_DETECTOR_H_
 #define CONTENT_RENDERER_IDLE_USER_DETECTOR_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "content/public/renderer/render_view_observer.h"
 
 namespace blink {
@@ -13,7 +13,7 @@ class WebInputEvent;
 }
 
 namespace ui {
-struct LatencyInfo;
+class LatencyInfo;
 }
 
 namespace content {
@@ -30,8 +30,7 @@ class IdleUserDetector : public RenderViewObserver {
   bool OnMessageReceived(const IPC::Message& message) override;
 
   void OnHandleInputEvent(const blink::WebInputEvent* event,
-                          const ui::LatencyInfo& latency_info,
-                          bool is_keyboard_shortcut);
+                          const ui::LatencyInfo& latency_info);
 
   DISALLOW_COPY_AND_ASSIGN(IdleUserDetector);
 };

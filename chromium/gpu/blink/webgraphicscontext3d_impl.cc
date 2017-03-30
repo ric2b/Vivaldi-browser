@@ -4,14 +4,17 @@
 
 #include "gpu/blink/webgraphicscontext3d_impl.h"
 
+#include <stdint.h>
+
 #include "base/atomicops.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
-#include "gpu/skia_bindings/gl_bindings_skia_cmd_buffer.h"
+#include "gpu/command_buffer/common/sync_token.h"
 
 #include "third_party/khronos/GLES2/gl2.h"
 #ifndef GL_GLEXT_PROTOTYPES
@@ -213,9 +216,31 @@ uint32_t WebGraphicsContext3DImpl::lastFlushID() {
   return flush_id_;
 }
 
-DELEGATE_TO_GL_R(insertSyncPoint, InsertSyncPointCHROMIUM, unsigned int)
+bool WebGraphicsContext3DImpl::insertSyncPoint(WGC3Dbyte* sync_token) {
+  const uint32_t sync_point = gl_->InsertSyncPointCHROMIUM();
+  if (!sync_point)
+    return false;
 
-DELEGATE_TO_GL_3(reshapeWithScaleFactor, ResizeCHROMIUM, int, int, float)
+  gpu::SyncToken sync_token_data(sync_point);
+  memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
+  return true;
+}
+
+DELEGATE_TO_GL_R(insertFenceSyncCHROMIUM, InsertFenceSyncCHROMIUM, WGC3Duint64)
+
+bool WebGraphicsContext3DImpl::genSyncTokenCHROMIUM(WGC3Duint64 fenceSync,
+                                                    WGC3Dbyte* syncToken) {
+  gl_->GenSyncTokenCHROMIUM(fenceSync, syncToken);
+  return true;
+}
+
+DELEGATE_TO_GL_1(waitSyncTokenCHROMIUM, WaitSyncTokenCHROMIUM, const WGC3Dbyte*)
+
+void WebGraphicsContext3DImpl::reshapeWithScaleFactor(int width,
+                                                      int height,
+                                                      float scale) {
+  gl_->ResizeCHROMIUM(width, height, scale, true);
+}
 
 DELEGATE_TO_GL_4R(mapBufferSubDataCHROMIUM, MapBufferSubDataCHROMIUM, WGC3Denum,
                   WGC3Dintptr, WGC3Dsizeiptr, WGC3Denum, void*)
@@ -257,6 +282,9 @@ DELEGATE_TO_GL_5(renderbufferStorageMultisampleCHROMIUM,
                  WGC3Denum, WGC3Dsizei, WGC3Dsizei)
 
 DELEGATE_TO_GL_1(activeTexture, ActiveTexture, WGC3Denum)
+
+DELEGATE_TO_GL(applyScreenSpaceAntialiasingCHROMIUM,
+               ApplyScreenSpaceAntialiasingCHROMIUM);
 
 DELEGATE_TO_GL_2(attachShader, AttachShader, WebGLId, WebGLId)
 
@@ -464,6 +492,11 @@ DELEGATE_TO_GL_2(getIntegerv, GetIntegerv, WGC3Denum, WGC3Dint*)
 
 DELEGATE_TO_GL_2(getInteger64v, GetInteger64v, WGC3Denum, WGC3Dint64*)
 
+DELEGATE_TO_GL_3(getIntegeri_v, GetIntegeri_v, WGC3Denum, WGC3Duint, WGC3Dint*)
+
+DELEGATE_TO_GL_3(getInteger64i_v, GetInteger64i_v,
+                 WGC3Denum, WGC3Duint, WGC3Dint64*)
+
 DELEGATE_TO_GL_3(getProgramiv, GetProgramiv, WebGLId, WGC3Denum, WGC3Dint*)
 
 blink::WebString WebGraphicsContext3DImpl::getProgramInfoLog(
@@ -555,6 +588,15 @@ blink::WebString WebGraphicsContext3DImpl::getString(
     WGC3Denum name) {
   return blink::WebString::fromUTF8(
       reinterpret_cast<const char*>(gl_->GetString(name)));
+}
+
+void WebGraphicsContext3DImpl::getSynciv(blink::WGC3Dsync sync,
+                                         blink::WGC3Denum pname,
+                                         blink::WGC3Dsizei bufSize,
+                                         blink::WGC3Dsizei *length,
+                                         blink::WGC3Dint *params) {
+  return gl_->GetSynciv(
+      reinterpret_cast<GLsync>(sync), pname, bufSize, length, params);
 }
 
 DELEGATE_TO_GL_3(getTexParameterfv, GetTexParameterfv,
@@ -826,9 +868,15 @@ DELEGATE_TO_GL_3(getQueryivEXT, GetQueryivEXT, WGC3Denum, WGC3Denum, WGC3Dint*)
 DELEGATE_TO_GL_3(getQueryObjectuivEXT, GetQueryObjectuivEXT,
                  WebGLId, WGC3Denum, WGC3Duint*)
 
-DELEGATE_TO_GL_8(copyTextureCHROMIUM,
-                 CopyTextureCHROMIUM,
+DELEGATE_TO_GL_2(queryCounterEXT, QueryCounterEXT, WebGLId, WGC3Denum)
+DELEGATE_TO_GL_3(getQueryObjectui64vEXT,
+                 GetQueryObjectui64vEXT,
+                 WebGLId,
                  WGC3Denum,
+                 WGC3Duint64*)
+
+DELEGATE_TO_GL_7(copyTextureCHROMIUM,
+                 CopyTextureCHROMIUM,
                  WebGLId,
                  WebGLId,
                  WGC3Denum,
@@ -837,9 +885,8 @@ DELEGATE_TO_GL_8(copyTextureCHROMIUM,
                  WGC3Dboolean,
                  WGC3Dboolean);
 
-DELEGATE_TO_GL_12(copySubTextureCHROMIUM,
+DELEGATE_TO_GL_11(copySubTextureCHROMIUM,
                   CopySubTextureCHROMIUM,
-                  WGC3Denum,
                   WebGLId,
                   WebGLId,
                   WGC3Dint,
@@ -864,8 +911,6 @@ void WebGraphicsContext3DImpl::shallowFinishCHROMIUM() {
   flush_id_ = GenFlushID();
   gl_->ShallowFinishCHROMIUM();
 }
-
-DELEGATE_TO_GL_1(waitSyncPoint, WaitSyncPointCHROMIUM, GLuint)
 
 void WebGraphicsContext3DImpl::loseContextCHROMIUM(
     WGC3Denum current, WGC3Denum other) {
@@ -965,16 +1010,6 @@ DELEGATE_TO_GL_2R(mapBufferCHROMIUM, MapBufferCHROMIUM, WGC3Denum, WGC3Denum,
                   void*)
 DELEGATE_TO_GL_1R(unmapBufferCHROMIUM, UnmapBufferCHROMIUM, WGC3Denum,
                   WGC3Dboolean)
-
-DELEGATE_TO_GL_9(asyncTexImage2DCHROMIUM, AsyncTexImage2DCHROMIUM, WGC3Denum,
-                 WGC3Dint, WGC3Denum, WGC3Dsizei, WGC3Dsizei, WGC3Dint,
-                 WGC3Denum, WGC3Denum, const void*)
-DELEGATE_TO_GL_9(asyncTexSubImage2DCHROMIUM, AsyncTexSubImage2DCHROMIUM,
-                 WGC3Denum, WGC3Dint, WGC3Dint, WGC3Dint, WGC3Dsizei,
-                 WGC3Dsizei, WGC3Denum, WGC3Denum, const void*)
-
-DELEGATE_TO_GL_1(waitAsyncTexImage2DCHROMIUM, WaitAsyncTexImage2DCHROMIUM,
-                 WGC3Denum)
 
 DELEGATE_TO_GL_2(drawBuffersEXT, DrawBuffersEXT, WGC3Dsizei, const WGC3Denum*)
 
@@ -1198,10 +1233,6 @@ blink::WGC3Denum WebGraphicsContext3DImpl::getGraphicsResetStatusARB() {
   return gl_->GetGraphicsResetStatusKHR();
 }
 
-GrGLInterface* WebGraphicsContext3DImpl::createGrGLInterface() {
-  return skia_bindings::CreateCommandBufferSkiaGLBinding();
-}
-
 ::gpu::gles2::GLES2ImplementationErrorMessageCallback*
     WebGraphicsContext3DImpl::getErrorMessageCallback() {
   if (!client_error_message_callback_) {
@@ -1254,7 +1285,21 @@ void WebGraphicsContext3DImpl::ConvertAttributes(
   output_attribs->fail_if_major_perf_caveat =
       attributes.failIfMajorPerformanceCaveat;
   output_attribs->bind_generates_resource = false;
-  output_attribs->webgl_version = attributes.webGLVersion;
+  switch (attributes.webGLVersion) {
+    case 0:
+      output_attribs->context_type = ::gpu::gles2::CONTEXT_TYPE_OPENGLES2;
+      break;
+    case 1:
+      output_attribs->context_type = ::gpu::gles2::CONTEXT_TYPE_WEBGL1;
+      break;
+    case 2:
+      output_attribs->context_type = ::gpu::gles2::CONTEXT_TYPE_WEBGL2;
+      break;
+    default:
+      NOTREACHED();
+      output_attribs->context_type = ::gpu::gles2::CONTEXT_TYPE_OPENGLES2;
+      break;
+  }
 }
 
 }  // namespace gpu_blink

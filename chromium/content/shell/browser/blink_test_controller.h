@@ -10,8 +10,12 @@
 
 #include "base/cancelable_callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/non_thread_safe.h"
+#include "build/build_config.h"
+#include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -28,6 +32,7 @@ class SkBitmap;
 
 namespace content {
 
+class LayoutTestBluetoothChooserFactory;
 class LayoutTestDevToolsFrontend;
 class Shell;
 
@@ -119,11 +124,14 @@ class BlinkTestController : public base::NonThreadSafe,
 
   void SetTempPath(const base::FilePath& temp_path);
   void RendererUnresponsive();
-  void WorkerCrashed();
   void OverrideWebkitPrefs(WebPreferences* prefs);
   void OpenURL(const GURL& url);
   void TestFinishedInSecondaryWindow();
   bool IsMainWindow(WebContents* web_contents) const;
+  scoped_ptr<BluetoothChooser> RunBluetoothChooser(
+      WebContents* web_contents,
+      const BluetoothChooser::EventHandler& event_handler,
+      const GURL& origin);
 
   BlinkTestResultPrinter* printer() { return printer_.get(); }
   void set_printer(BlinkTestResultPrinter* printer) { printer_.reset(printer); }
@@ -176,6 +184,10 @@ class BlinkTestController : public base::NonThreadSafe,
   void OnCloseRemainingWindows();
   void OnResetDone();
   void OnLeakDetectionDone(const content::LeakDetectionResult& result);
+  void OnSetBluetoothManualChooser(bool enable);
+  void OnGetBluetoothManualChooserEvents();
+  void OnSendBluetoothManualChooserEvent(const std::string& event,
+                                         const std::string& argument);
 
   scoped_ptr<BlinkTestResultPrinter> printer_;
 
@@ -214,6 +226,8 @@ class BlinkTestController : public base::NonThreadSafe,
   bool crash_when_leak_found_;
 
   LayoutTestDevToolsFrontend* devtools_frontend_;
+
+  scoped_ptr<LayoutTestBluetoothChooserFactory> bluetooth_chooser_factory_;
 
 #if defined(OS_ANDROID)
   // Because of the nested message pump implementation, Android needs to allow

@@ -14,14 +14,13 @@ PrioritizedTile::PrioritizedTile()
 }
 
 PrioritizedTile::PrioritizedTile(Tile* tile,
-                                 RasterSource* raster_source,
+                                 DisplayListRasterSource* raster_source,
                                  const TilePriority priority,
                                  bool is_occluded)
     : tile_(tile),
       raster_source_(raster_source),
       priority_(priority),
-      is_occluded_(is_occluded) {
-}
+      is_occluded_(is_occluded) {}
 
 PrioritizedTile::~PrioritizedTile() {
 }
@@ -33,6 +32,7 @@ void PrioritizedTile::AsValueInto(base::trace_event::TracedValue* value) const {
 
   value->BeginDictionary("combined_priority");
   priority().AsValueInto(value);
+  value->SetBoolean("is_occluded", is_occluded_);
   value->EndDictionary();
 
   value->SetString("resolution", TileResolutionToString(priority().resolution));

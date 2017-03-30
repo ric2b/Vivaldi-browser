@@ -16,6 +16,7 @@
         '../../../ipc/ipc.gyp:ipc',
         '../../../skia/skia.gyp:skia',
         '../gfx.gyp:gfx',
+        '../gfx.gyp:gfx_geometry',
       ],
       'defines': [
         'GFX_IPC_IMPLEMENTATION',
@@ -26,6 +27,7 @@
       'sources': [
         'gfx_param_traits.cc',
         'gfx_param_traits.h',
+        'gfx_param_traits_macros.h',
       ],
     },
   ],

@@ -4,8 +4,13 @@
 
 #include "storage/browser/fileapi/sandbox_file_stream_writer.h"
 
+#include <stdint.h>
+
+#include <limits>
+
 #include "base/files/file_util_proxy.h"
 #include "base/sequenced_task_runner.h"
+#include "base/trace_event/trace_event.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "storage/browser/fileapi/file_observers.h"
@@ -23,14 +28,14 @@ namespace {
 // |file_offset| < |file_size|) to make the remaining quota calculation easier.
 // Specifically this widens the quota for overlapping range (so that we can
 // simply compare written bytes against the adjusted quota).
-int64 AdjustQuotaForOverlap(int64 quota,
-                            int64 file_offset,
-                            int64 file_size) {
+int64_t AdjustQuotaForOverlap(int64_t quota,
+                              int64_t file_offset,
+                              int64_t file_size) {
   DCHECK_LE(file_offset, file_size);
   if (quota < 0)
     quota = 0;
-  int64 overlap = file_size - file_offset;
-  if (kint64max - overlap > quota)
+  int64_t overlap = file_size - file_offset;
+  if (std::numeric_limits<int64_t>::max() - overlap > quota)
     quota += overlap;
   return quota;
 }
@@ -40,7 +45,7 @@ int64 AdjustQuotaForOverlap(int64 quota,
 SandboxFileStreamWriter::SandboxFileStreamWriter(
     FileSystemContext* file_system_context,
     const FileSystemURL& url,
-    int64 initial_offset,
+    int64_t initial_offset,
     const UpdateObserverList& observers)
     : file_system_context_(file_system_context),
       url_(url),
@@ -50,7 +55,7 @@ SandboxFileStreamWriter::SandboxFileStreamWriter(
       total_bytes_written_(0),
       allowed_bytes_to_write_(0),
       has_pending_operation_(false),
-      default_quota_(kint64max),
+      default_quota_(std::numeric_limits<int64_t>::max()),
       weak_factory_(this) {
   DCHECK(url_.is_valid());
 }
@@ -151,6 +156,9 @@ void SandboxFileStreamWriter::DidCreateSnapshotFile(
     return;
   }
 
+  // crbug.com/349708
+  TRACE_EVENT0("io", "SandboxFileStreamWriter::DidCreateSnapshotFile");
+
   DCHECK(quota_manager_proxy->quota_manager());
   quota_manager_proxy->quota_manager()->GetUsageAndQuota(
       url_.origin(),
@@ -162,15 +170,22 @@ void SandboxFileStreamWriter::DidCreateSnapshotFile(
 void SandboxFileStreamWriter::DidGetUsageAndQuota(
     const net::CompletionCallback& callback,
     storage::QuotaStatusCode status,
-    int64 usage,
-    int64 quota) {
+    int64_t usage,
+    int64_t quota) {
   if (CancelIfRequested())
     return;
   if (status != storage::kQuotaStatusOk) {
     LOG(WARNING) << "Got unexpected quota error : " << status;
+
+    // crbug.com/349708
+    TRACE_EVENT0("io", "SandboxFileStreamWriter::DidGetUsageAndQuota FAILED");
+
     callback.Run(net::ERR_FAILED);
     return;
   }
+
+  // crbug.com/349708
+  TRACE_EVENT0("io", "SandboxFileStreamWriter::DidGetUsageAndQuota OK");
 
   allowed_bytes_to_write_ = quota - usage;
   callback.Run(net::OK);

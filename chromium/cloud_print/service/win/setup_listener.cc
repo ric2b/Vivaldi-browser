@@ -6,6 +6,7 @@
 
 #include <atlbase.h>
 #include <atlsecurity.h>
+#include <stddef.h>
 
 #include "base/bind.h"
 #include "base/guid.h"
@@ -119,7 +120,8 @@ void SetupListener::Connect(const base::string16& user) {
   if (pipe.IsValid()) {
     channel_ = IPC::Channel::CreateServer(IPC::ChannelHandle(pipe.Get()),
                                           this);
-    channel_->Connect();
+    if (!channel_->Connect())
+      done_event_->Signal();
   }
 }
 

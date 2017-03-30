@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/dbus/session_manager_client.h"
 
@@ -31,7 +31,7 @@ class FakeSessionManagerClient : public SessionManagerClient {
   bool HasObserver(const Observer* observer) const override;
   bool IsScreenLocked() const override;
   void EmitLoginPromptVisible() override;
-  void RestartJob(int pid, const std::string& command_line) override;
+  void RestartJob(const std::vector<std::string>& argv) override;
   void StartSession(const std::string& user_email) override;
   void StopSession() override;
   void NotifySupervisedUserCreationStarted() override;
@@ -61,6 +61,11 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void SetFlagsForUser(const std::string& username,
                        const std::vector<std::string>& flags) override;
   void GetServerBackedStateKeys(const StateKeysCallback& callback) override;
+
+  void CheckArcAvailability(const ArcCallback& callback) override;
+  void StartArcInstance(const std::string& socket_path,
+                        const ArcCallback& callback) override;
+  void StopArcInstance(const ArcCallback& callback) override;
 
   const std::string& device_policy() const;
   void set_device_policy(const std::string& policy_blob);

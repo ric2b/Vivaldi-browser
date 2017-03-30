@@ -5,19 +5,21 @@
 #include "base/sys_info.h"
 
 #include <errno.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 
-#include "base/basictypes.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info_internal.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 
 #if defined(OS_ANDROID)
 #include <sys/vfs.h>
@@ -57,7 +59,7 @@ base::LazyInstance<
     g_lazy_number_of_processors = LAZY_INSTANCE_INITIALIZER;
 #endif
 
-int64 AmountOfVirtualMemory() {
+int64_t AmountOfVirtualMemory() {
   struct rlimit limit;
   int result = getrlimit(RLIMIT_DATA, &limit);
   if (result != 0) {
@@ -68,7 +70,7 @@ int64 AmountOfVirtualMemory() {
 }
 
 base::LazyInstance<
-    base::internal::LazySysInfoValue<int64, AmountOfVirtualMemory> >::Leaky
+    base::internal::LazySysInfoValue<int64_t, AmountOfVirtualMemory>>::Leaky
     g_lazy_virtual_memory = LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
@@ -82,18 +84,18 @@ int SysInfo::NumberOfProcessors() {
 #endif
 
 // static
-int64 SysInfo::AmountOfVirtualMemory() {
+int64_t SysInfo::AmountOfVirtualMemory() {
   return g_lazy_virtual_memory.Get().value();
 }
 
 // static
-int64 SysInfo::AmountOfFreeDiskSpace(const FilePath& path) {
+int64_t SysInfo::AmountOfFreeDiskSpace(const FilePath& path) {
   base::ThreadRestrictions::AssertIOAllowed();
 
   struct statvfs stats;
   if (HANDLE_EINTR(statvfs(path.value().c_str(), &stats)) != 0)
     return -1;
-  return static_cast<int64>(stats.f_bavail) * stats.f_frsize;
+  return static_cast<int64_t>(stats.f_bavail) * stats.f_frsize;
 }
 
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)

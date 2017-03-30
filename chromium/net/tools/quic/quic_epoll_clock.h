@@ -5,8 +5,8 @@
 #ifndef NET_TOOLS_QUIC_QUIC_EPOLL_CLOCK_H_
 #define NET_TOOLS_QUIC_QUIC_EPOLL_CLOCK_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "net/quic/quic_clock.h"
 #include "net/quic/quic_time.h"
 
@@ -27,8 +27,12 @@ class QuicEpollClock : public QuicClock {
   QuicTime ApproximateNow() const override;
 
   // Returns the current time as a QuicTime object.
-  // Note: this use significant resources please use only if needed.
+  // Note: this uses significant resources, please use only if needed.
   QuicTime Now() const override;
+
+  // Returns the current time as a QuicWallTime object.
+  // Note: this uses significant resources, please use only if needed.
+  QuicWallTime WallNow() const override;
 
  protected:
   EpollServer* epoll_server_;

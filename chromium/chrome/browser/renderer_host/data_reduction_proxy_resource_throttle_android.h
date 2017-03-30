@@ -8,17 +8,21 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "chrome/browser/renderer_host/safe_browsing_resource_throttle_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/common/resource_type.h"
 
+namespace content {
+class ResourceContext;
+}  // namespace content
+
 namespace net {
 struct RedirectInfo;
 class URLRequest;
-}
+}  // namepsace net
 
 // DataReductionProxyResourceThrottle checks that URLs are "safe" before
 // navigating to them. To be considered "safe", a URL must not be tagged as a
@@ -43,9 +47,17 @@ class DataReductionProxyResourceThrottle
     : public content::ResourceThrottle,
       public base::SupportsWeakPtr<DataReductionProxyResourceThrottle> {
  public:
+  // Create a DataReductionProxyResourceThrottle.  If it's not enabled
+  // or we can't process this request, will return NULL.
+  static DataReductionProxyResourceThrottle* MaybeCreate(
+      net::URLRequest* request,
+      content::ResourceContext* resource_context,
+      content::ResourceType resource_type,
+      safe_browsing::SafeBrowsingService* sb_service);
+
   DataReductionProxyResourceThrottle(net::URLRequest* request,
                             content::ResourceType resource_type,
-                            SafeBrowsingService* safe_browsing);
+                            safe_browsing::SafeBrowsingService* safe_browsing);
 
   // content::ResourceThrottle implementation (called on IO thread).
   void WillRedirectRequest(const net::RedirectInfo& redirect_info,
@@ -67,14 +79,14 @@ class DataReductionProxyResourceThrottle
   void OnBlockingPageComplete(bool proceed);
 
   // Returns the threat type.
-  SBThreatType CheckUrl();
+  safe_browsing::SBThreatType CheckUrl();
 
   // Starts displaying the safe browsing interstitial page if it is not
   // prerendering. Called on the UI thread.
   static void StartDisplayingBlockingPage(
       const base::WeakPtr<DataReductionProxyResourceThrottle>& throttle,
-      scoped_refptr<SafeBrowsingUIManager> ui_manager,
-      const SafeBrowsingUIManager::UnsafeResource& resource);
+      scoped_refptr<safe_browsing::SafeBrowsingUIManager> ui_manager,
+      const safe_browsing::SafeBrowsingUIManager::UnsafeResource& resource);
 
   // Resumes the request, by continuing the deferred action (either starting the
   // request, or following a redirect).
@@ -85,30 +97,12 @@ class DataReductionProxyResourceThrottle
   // The redirect chain for this resource.
   std::vector<GURL> redirect_urls_;
 
-  scoped_refptr<SafeBrowsingService> safe_browsing_;
+  scoped_refptr<safe_browsing::SafeBrowsingService> safe_browsing_;
   net::URLRequest* request_;
   const bool is_subresource_;
   const bool is_subframe_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyResourceThrottle);
-};
-
-class DataReductionProxyResourceThrottleFactory
-    : public SafeBrowsingResourceThrottleFactory {
-
- public:
-  DataReductionProxyResourceThrottleFactory() { }
-  ~DataReductionProxyResourceThrottleFactory() override {}
-
- protected:
-  content::ResourceThrottle* CreateResourceThrottle(
-      net::URLRequest* request,
-      content::ResourceContext* resource_context,
-      content::ResourceType resource_type,
-      SafeBrowsingService* service) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DataReductionProxyResourceThrottleFactory);
 };
 
 #endif  // CHROME_BROWSER_RENDERER_HOST_DATA_REDUCTION_PROXY_RESOURCE_THROTTLE_ANDROID_H_

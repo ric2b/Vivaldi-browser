@@ -7,11 +7,11 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_version_info.h"
+#include "components/version_info/version_info.h"
 
 ChromeManifestTest::ChromeManifestTest()
     // CHANNEL_UNKNOWN == trunk.
-    : current_channel_(chrome::VersionInfo::CHANNEL_UNKNOWN) {}
+    : current_channel_(version_info::Channel::UNKNOWN) {}
 
 ChromeManifestTest::~ChromeManifestTest() {
 }

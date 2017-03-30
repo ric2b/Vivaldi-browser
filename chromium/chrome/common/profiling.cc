@@ -10,10 +10,12 @@
 #include "base/debug/profiler.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread.h"
 #include "chrome/common/chrome_switches.h"
+#include "content/public/common/content_switches.h"
 #include "gin/public/debug.h"
 #include "v8/include/v8.h"
 

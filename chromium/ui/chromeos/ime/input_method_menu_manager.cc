@@ -4,6 +4,8 @@
 
 #include "ui/chromeos/ime/input_method_menu_manager.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 
@@ -50,7 +52,7 @@ bool InputMethodMenuManager::HasInputMethodMenuItemForKey(
 
 // static
 InputMethodMenuManager* InputMethodMenuManager::GetInstance() {
-  return Singleton<InputMethodMenuManager>::get();
+  return base::Singleton<InputMethodMenuManager>::get();
 }
 
 }  // namespace ime

@@ -7,11 +7,9 @@
 }
 
 span {
-  @apply(--paper-font-subhead);
-  @apply(--paper-input-container-input);
   margin-right: 5px;
 }
 
-cr-input {
+paper-input {
   margin: -9px 5px 0 5px;
 }

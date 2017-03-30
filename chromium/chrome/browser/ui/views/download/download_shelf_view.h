@@ -5,12 +5,15 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_DOWNLOAD_DOWNLOAD_SHELF_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_DOWNLOAD_DOWNLOAD_SHELF_VIEW_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/download/download_shelf.h"
 #include "ui/gfx/animation/animation_delegate.h"
+#include "ui/gfx/animation/slide_animation.h"
 #include "ui/views/accessible_pane_view.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/link_listener.h"
@@ -18,15 +21,10 @@
 
 class Browser;
 class BrowserView;
-class DownloadItemView;
 
 namespace content {
 class DownloadItem;
 class PageNavigator;
-}
-
-namespace gfx {
-class SlideAnimation;
 }
 
 namespace views {
@@ -50,7 +48,7 @@ class DownloadShelfView : public views::AccessiblePaneView,
   ~DownloadShelfView() override;
 
   // Sent from the DownloadItemView when the user opens an item.
-  void OpenedDownload(DownloadItemView* view);
+  void OpenedDownload();
 
   // Returns the relevant containing object that can load pages.
   // i.e. the |browser_|.
@@ -103,7 +101,7 @@ class DownloadShelfView : public views::AccessiblePaneView,
   // Adds a View representing a download to this DownloadShelfView.
   // DownloadShelfView takes ownership of the View, and will delete it as
   // necessary.
-  void AddDownloadView(DownloadItemView* view);
+  void AddDownloadView(views::View* view);
 
   // Paints the border.
   void OnPaintBorder(gfx::Canvas* canvas) override;
@@ -124,25 +122,32 @@ class DownloadShelfView : public views::AccessiblePaneView,
   // the shelf have been opened.
   bool CanAutoClose();
 
+  // Gets the |DownloadItem| for the i^th download view. TODO(estade): this
+  // shouldn't be necessary after we only have one type of DownloadItemView.
+  content::DownloadItem* GetDownloadItemForView(size_t i);
+
+  // Returns the color of text for the shelf (used for deriving icon color).
+  SkColor GetTextColorForIconMd();
+
   // The browser for this shelf.
   Browser* browser_;
 
   // The animation for adding new items to the shelf.
-  scoped_ptr<gfx::SlideAnimation> new_item_animation_;
+  gfx::SlideAnimation new_item_animation_;
 
   // The show/hide animation for the shelf itself.
-  scoped_ptr<gfx::SlideAnimation> shelf_animation_;
+  gfx::SlideAnimation shelf_animation_;
 
   // The download views. These are also child Views, and deleted when
   // the DownloadShelfView is deleted.
-  std::vector<DownloadItemView*> download_views_;
+  std::vector<views::View*> download_views_;
 
   // An image displayed on the right of the "Show all downloads..." link.
+  // TODO(estade): not shown in MD; remove.
   views::ImageView* arrow_image_;
 
-  // Link for showing all downloads. This is contained as a child, and deleted
-  // by View.
-  views::Link* show_all_view_;
+  // Link for showing all downloads. For MD this is a system style button.
+  views::View* show_all_view_;
 
   // Button for closing the downloads. This is contained as a child, and
   // deleted by View.

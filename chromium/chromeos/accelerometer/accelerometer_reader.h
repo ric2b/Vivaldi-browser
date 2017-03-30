@@ -5,15 +5,16 @@
 #ifndef CHROMEOS_ACCELEROMETER_ACCELEROMETER_READER_H_
 #define CHROMEOS_ACCELEROMETER_ACCELEROMETER_READER_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list_threadsafe.h"
 #include "chromeos/accelerometer/accelerometer_types.h"
 #include "chromeos/chromeos_export.h"
 
+namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
 
-namespace base {
 class SequencedTaskRunner;
 }
 
@@ -52,7 +53,7 @@ class CHROMEOS_EXPORT AccelerometerReader {
   virtual ~AccelerometerReader();
 
  private:
-  friend struct DefaultSingletonTraits<AccelerometerReader>;
+  friend struct base::DefaultSingletonTraits<AccelerometerReader>;
 
   // Worker that will run on the base::SequencedTaskRunner provided to
   // Initialize. It will determine accelerometer configuration, read the data,

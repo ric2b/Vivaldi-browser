@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -19,6 +20,61 @@
 
 namespace net {
 
+namespace {
+
+// Examines the current extension in |file_name| and tries to return the correct
+// extension the file should actually be using.  Used by EnsureSafeExtension.
+// All other code should use EnsureSafeExtension, as it includes additional
+// safety checks.
+base::FilePath::StringType GetCorrectedExtensionUnsafe(
+    const std::string& mime_type,
+    bool ignore_extension,
+    const base::FilePath& file_name) {
+  // See if the file name already contains an extension.
+  base::FilePath::StringType extension = file_name.Extension();
+  if (!extension.empty())
+    extension.erase(extension.begin());  // Erase preceding '.'.
+
+  // Nothing to do if there's no mime type.
+  if (mime_type.empty())
+    return extension;
+
+  // Nothing to do there's an extension, unless |ignore_extension| is true.
+  if (!extension.empty() && !ignore_extension)
+    return extension;
+
+  // Don't do anything if there's not a preferred extension for the mime
+  // type.
+  base::FilePath::StringType preferred_mime_extension;
+  if (!GetPreferredExtensionForMimeType(mime_type, &preferred_mime_extension))
+    return extension;
+
+  // If the existing extension is in the list of valid extensions for the
+  // given type, use it. This avoids doing things like pointlessly renaming
+  // "foo.jpg" to "foo.jpeg".
+  std::vector<base::FilePath::StringType> all_mime_extensions;
+  GetExtensionsForMimeType(mime_type, &all_mime_extensions);
+  if (ContainsValue(all_mime_extensions, extension))
+    return extension;
+
+  // Get the "final" extension. In most cases, this is the same as the
+  // |extension|, but in cases like "foo.tar.gz", it's "gz" while
+  // |extension| is "tar.gz".
+  base::FilePath::StringType final_extension = file_name.FinalExtension();
+  // Erase preceding '.'.
+  if (!final_extension.empty())
+    final_extension.erase(final_extension.begin());
+
+  // If there's a double extension, and the second extension is in the
+  // list of valid extensions for the given type, keep the double extension.
+  // This avoids renaming things like "foo.tar.gz" to "foo.gz".
+  if (ContainsValue(all_mime_extensions, final_extension))
+    return extension;
+  return preferred_mime_extension;
+}
+
+}  // namespace
+
 void SanitizeGeneratedFileName(base::FilePath::StringType* filename,
                                bool replace_trailing) {
   const base::FilePath::CharType kReplace[] = FILE_PATH_LITERAL("-");
@@ -30,7 +86,12 @@ void SanitizeGeneratedFileName(base::FilePath::StringType* filename,
     size_t length = filename->size();
     size_t pos = filename->find_last_not_of(FILE_PATH_LITERAL(" ."));
     filename->resize((pos == std::string::npos) ? 0 : (pos + 1));
+#if defined(OS_WIN)
     base::TrimWhitespace(*filename, base::TRIM_TRAILING, filename);
+#else
+    base::TrimWhitespaceASCII(*filename, base::TRIM_TRAILING, filename);
+#endif
+
     if (filename->empty())
       return;
     size_t trimmed = length - filename->size();
@@ -90,8 +151,7 @@ std::string GetFileNameFromURL(const GURL& url,
 // Returns whether the specified extension is automatically integrated into the
 // windows shell.
 bool IsShellIntegratedExtension(const base::FilePath::StringType& extension) {
-  base::FilePath::StringType extension_lower =
-      base::StringToLowerASCII(extension);
+  base::FilePath::StringType extension_lower = base::ToLowerASCII(extension);
 
   // http://msdn.microsoft.com/en-us/library/ms811694.aspx
   // Right-clicking on shortcuts can be magical.
@@ -124,37 +184,19 @@ bool IsShellIntegratedExtension(const base::FilePath::StringType& extension) {
 void EnsureSafeExtension(const std::string& mime_type,
                          bool ignore_extension,
                          base::FilePath* file_name) {
-  // See if our file name already contains an extension.
-  base::FilePath::StringType extension = file_name->Extension();
-  if (!extension.empty())
-    extension.erase(extension.begin());  // Erase preceding '.'.
-
-  if ((ignore_extension || extension.empty()) && !mime_type.empty()) {
-    base::FilePath::StringType preferred_mime_extension;
-    std::vector<base::FilePath::StringType> all_mime_extensions;
-    GetPreferredExtensionForMimeType(mime_type, &preferred_mime_extension);
-    GetExtensionsForMimeType(mime_type, &all_mime_extensions);
-    // If the existing extension is in the list of valid extensions for the
-    // given type, use it. This avoids doing things like pointlessly renaming
-    // "foo.jpg" to "foo.jpeg".
-    if (std::find(all_mime_extensions.begin(),
-                  all_mime_extensions.end(),
-                  extension) != all_mime_extensions.end()) {
-      // leave |extension| alone
-    } else if (!preferred_mime_extension.empty()) {
-      extension = preferred_mime_extension;
-    }
-  }
+  DCHECK(file_name);
+  base::FilePath::StringType extension =
+      GetCorrectedExtensionUnsafe(mime_type, ignore_extension, *file_name);
 
 #if defined(OS_WIN)
-  static const base::FilePath::CharType default_extension[] =
+  const base::FilePath::CharType kDefaultExtension[] =
       FILE_PATH_LITERAL("download");
 
   // Rename shell-integrated extensions.
   // TODO(asanka): Consider stripping out the bad extension and replacing it
   // with the preferred extension for the MIME type if one is available.
   if (IsShellIntegratedExtension(extension))
-    extension.assign(default_extension);
+    extension = kDefaultExtension;
 #endif
 
   *file_name = file_name->ReplaceExtension(extension);

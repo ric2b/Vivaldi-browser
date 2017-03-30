@@ -21,8 +21,7 @@ SettingsAppWebUITest.prototype = {
 GEN('#if defined(ENABLE_SETTINGS_APP)');
 
 // Test opening Settings App, and do some checks on section visibility.
-// TODO reenable test for Vivaldi
-TEST_F('SettingsAppWebUITest', 'DISABLED_testOpenSettingsApp', function() {
+TEST_F('SettingsAppWebUITest', 'testOpenSettingsApp', function() {
   // Note there is no location bar in the Settings App.
 
   // Some things are hidden via a parent, so make a helper function.
@@ -45,15 +44,7 @@ TEST_F('SettingsAppWebUITest', 'DISABLED_testOpenSettingsApp', function() {
 // Check functionality of LoadTimeData.overrideValues(), which the Settings App
 // uses. Do spot checks, so the test is not too fragile. Some of the content
 // strings rely on waiting for sync sign-in status, or platform-specifics.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_testStrings ' +
-    'DISABLED_testStrings');
-GEN('#else');
-GEN('#define MAYBE_testStrings ' +
-    'testStrings');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('SettingsAppWebUITest', 'MAYBE_testStrings', function() {
+TEST_F('SettingsAppWebUITest', 'testStrings', function() {
   // Ensure we check against the override values.
   assertTrue(!!loadTimeData.getValue('settingsApp'));
 

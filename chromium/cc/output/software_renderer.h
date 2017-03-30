@@ -5,7 +5,7 @@
 #ifndef CC_OUTPUT_SOFTWARE_RENDERER_H_
 #define CC_OUTPUT_SOFTWARE_RENDERER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/direct_renderer.h"
@@ -37,7 +37,6 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
   const RendererCapabilitiesImpl& Capabilities() const override;
   void Finish() override;
   void SwapBuffers(const CompositorFrameMetadata& metadata) override;
-  void ReceiveSwapBuffersAck(const CompositorFrameAck& ack) override;
   void DiscardBackbuffer() override;
   void EnsureBackbuffer() override;
 
@@ -92,6 +91,19 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
                     const TileDrawQuad* quad);
   void DrawUnsupportedQuad(const DrawingFrame* frame,
                            const DrawQuad* quad);
+  bool ShouldApplyBackgroundFilters(const RenderPassDrawQuad* quad) const;
+  skia::RefPtr<SkImage> ApplyImageFilter(SkImageFilter* filter,
+                                         const RenderPassDrawQuad* quad,
+                                         const SkBitmap* to_filter) const;
+  gfx::Rect GetBackdropBoundingBoxForRenderPassQuad(
+      const DrawingFrame* frame,
+      const RenderPassDrawQuad* quad,
+      const gfx::Transform& contents_device_transform) const;
+  SkBitmap GetBackdropBitmap(const gfx::Rect& bounding_rect) const;
+  skia::RefPtr<SkShader> GetBackgroundFilterShader(
+      const DrawingFrame* frame,
+      const RenderPassDrawQuad* quad,
+      SkShader::TileMode content_tile_mode) const;
 
   RendererCapabilitiesImpl capabilities_;
   bool is_scissor_enabled_;
@@ -105,7 +117,6 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
   scoped_ptr<ResourceProvider::ScopedWriteLockSoftware>
       current_framebuffer_lock_;
   skia::RefPtr<SkCanvas> current_framebuffer_canvas_;
-  scoped_ptr<SoftwareFrameData> current_frame_data_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareRenderer);
 };

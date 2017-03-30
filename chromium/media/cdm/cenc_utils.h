@@ -5,9 +5,10 @@
 #ifndef MEDIA_CDM_CENC_UTILS_H_
 #define MEDIA_CDM_CENC_UTILS_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "media/base/media_export.h"
 #include "media/cdm/json_web_key.h"
 

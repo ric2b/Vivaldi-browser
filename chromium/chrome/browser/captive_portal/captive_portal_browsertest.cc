@@ -5,19 +5,22 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/captive_portal/captive_portal_service.h"
 #include "chrome/browser/captive_portal/captive_portal_service_factory.h"
 #include "chrome/browser/captive_portal/captive_portal_tab_helper.h"
@@ -32,11 +35,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -54,7 +56,11 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/net_errors.h"
+#include "net/base/test_data_directory.h"
+#include "net/cert/x509_certificate.h"
 #include "net/http/transport_security_state.h"
+#include "net/test/cert_test_util.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_failed_job.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request.h"
@@ -75,12 +81,12 @@ using net::URLRequestMockHTTPJob;
 namespace {
 
 // Path of the fake login page, when using the TestServer.
-const char* const kTestServerLoginPath = "files/captive_portal/login.html";
+const char* const kTestServerLoginPath = "/captive_portal/login.html";
 
 // Path of a page with an iframe that has a mock SSL timeout, when using the
 // TestServer.
 const char* const kTestServerIframeTimeoutPath =
-    "files/captive_portal/iframe_timeout.html";
+    "/captive_portal/iframe_timeout.html";
 
 // The following URLs each have two different behaviors, depending on whether
 // URLRequestMockCaptivePortalJobFactory is currently simulating the presence
@@ -144,7 +150,8 @@ class URLRequestTimeoutOnDemandJob : public net::URLRequestJob,
 
   // Fails all active URLRequestTimeoutOnDemandJobs with SSL cert errors.
   // |expected_num_jobs| behaves just as in FailJobs.
-  static void FailJobsWithCertError(int expected_num_jobs);
+  static void FailJobsWithCertError(int expected_num_jobs,
+                                    const net::SSLInfo& ssl_info);
 
   // Abandon all active URLRequestTimeoutOnDemandJobs.  |expected_num_jobs|
   // behaves just as in FailJobs.
@@ -169,9 +176,9 @@ class URLRequestTimeoutOnDemandJob : public net::URLRequestJob,
   bool RemoveFromList();
 
   static void WaitForJobsOnIOThread(int num_jobs);
-  static void FailOrAbandonJobsOnIOThread(
-      int expected_num_jobs,
-      EndJobOperation end_job_operation);
+  static void FailOrAbandonJobsOnIOThread(int expected_num_jobs,
+                                          EndJobOperation end_job_operation,
+                                          const net::SSLInfo& ssl_info);
 
   // Checks if there are at least |num_jobs_to_wait_for_| jobs in
   // |job_list_|.  If so, exits the message loop on the UI thread, which
@@ -239,18 +246,17 @@ void URLRequestTimeoutOnDemandJob::FailJobs(int expected_num_jobs) {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
       base::Bind(&URLRequestTimeoutOnDemandJob::FailOrAbandonJobsOnIOThread,
-                 expected_num_jobs,
-                 FAIL_JOBS));
+                 expected_num_jobs, FAIL_JOBS, net::SSLInfo()));
 }
 
 // static
 void URLRequestTimeoutOnDemandJob::FailJobsWithCertError(
-    int expected_num_jobs) {
+    int expected_num_jobs,
+    const net::SSLInfo& ssl_info) {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
       base::Bind(&URLRequestTimeoutOnDemandJob::FailOrAbandonJobsOnIOThread,
-                 expected_num_jobs,
-                 FAIL_JOBS_WITH_CERT_ERROR));
+                 expected_num_jobs, FAIL_JOBS_WITH_CERT_ERROR, ssl_info));
 }
 
 // static
@@ -258,8 +264,7 @@ void URLRequestTimeoutOnDemandJob::AbandonJobs(int expected_num_jobs) {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
       base::Bind(&URLRequestTimeoutOnDemandJob::FailOrAbandonJobsOnIOThread,
-                 expected_num_jobs,
-                 ABANDON_JOBS));
+                 expected_num_jobs, ABANDON_JOBS, net::SSLInfo()));
 }
 
 URLRequestTimeoutOnDemandJob::URLRequestTimeoutOnDemandJob(
@@ -317,14 +322,15 @@ void URLRequestTimeoutOnDemandJob::MaybeStopWaitingForJobsOnIOThread() {
     last_num_jobs_to_wait_for_ = num_jobs_to_wait_for_;
     num_jobs_to_wait_for_ = 0;
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::MessageLoop::QuitClosure());
+                            base::MessageLoop::QuitWhenIdleClosure());
   }
 }
 
 // static
 void URLRequestTimeoutOnDemandJob::FailOrAbandonJobsOnIOThread(
     int expected_num_jobs,
-    EndJobOperation end_job_operation) {
+    EndJobOperation end_job_operation,
+    const net::SSLInfo& ssl_info) {
   ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
   ASSERT_LT(0, expected_num_jobs);
   EXPECT_EQ(last_num_jobs_to_wait_for_, expected_num_jobs);
@@ -343,11 +349,7 @@ void URLRequestTimeoutOnDemandJob::FailOrAbandonJobsOnIOThread(
                                 net::ERR_CONNECTION_TIMED_OUT));
     } else if (end_job_operation == FAIL_JOBS_WITH_CERT_ERROR) {
       DCHECK(job->request()->url().SchemeIsCryptographic());
-      net::SSLInfo info;
-      info.cert_status = net::CERT_STATUS_COMMON_NAME_INVALID;
-      info.cert = new net::X509Certificate(
-          "bad.host", "CA", base::Time::Max(), base::Time::Max());
-      job->NotifySSLCertificateError(info, true);
+      job->NotifySSLCertificateError(ssl_info, true);
     }
   }
 
@@ -444,7 +446,7 @@ URLRequestMockCaptivePortalJobFactory::CreateInterceptor() {
   EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
   scoped_ptr<Interceptor> interceptor(new Interceptor(behind_captive_portal_));
   interceptors_.push_back(interceptor.get());
-  return interceptor.Pass();
+  return std::move(interceptor);
 }
 
 void URLRequestMockCaptivePortalJobFactory::AddUrlHandlersOnIOThread() {
@@ -541,7 +543,7 @@ URLRequestMockCaptivePortalJobFactory::Interceptor::MaybeInterceptRequest(
 
 // Creates a server-side redirect for use with the TestServer.
 std::string CreateServerRedirect(const std::string& dest_url) {
-  const char* const kServerRedirectBase = "server-redirect?";
+  const char* const kServerRedirectBase = "/server-redirect?";
   return kServerRedirectBase + dest_url;
 }
 
@@ -652,7 +654,7 @@ void MultiNavigationObserver::Observe(
   if (waiting_for_navigation_ &&
       num_navigations_to_wait_for_ == num_navigations_) {
     waiting_for_navigation_ = false;
-    base::MessageLoopForUI::current()->Quit();
+    base::MessageLoopForUI::current()->QuitWhenIdle();
   }
 }
 
@@ -742,7 +744,7 @@ void FailLoadsAfterLoginObserver::Observe(
       tabs_needing_navigation_.size() ==
           tabs_navigated_to_final_destination_.size()) {
     waiting_for_navigation_ = false;
-    base::MessageLoopForUI::current()->Quit();
+    base::MessageLoopForUI::current()->QuitWhenIdle();
   }
 }
 
@@ -836,7 +838,7 @@ void CaptivePortalObserver::Observe(
   if (waiting_for_result_ &&
       num_results_to_wait_for_ == num_results_received_) {
     waiting_for_result_ = false;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 }
 
@@ -1121,7 +1123,7 @@ void CaptivePortalBrowserTest::SetUpOnMainThread() {
   // Set SSL interstitial delay long enough so that a captive portal result
   // is guaranteed to arrive during this window, and a captive portal
   // error page is displayed instead of an SSL interstitial.
-  SSLErrorHandler::SetInterstitialDelayTypeForTest(SSLErrorHandler::LONG);
+  SSLErrorHandler::SetInterstitialDelayForTest(base::TimeDelta::FromHours(1));
 }
 
 void CaptivePortalBrowserTest::TearDownOnMainThread() {
@@ -1826,12 +1828,10 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HttpsNonTimeoutError) {
 }
 
 // Make sure no captive portal test triggers on HTTPS timeouts of iframes.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_HttpsIframeTimeout) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HttpsIframeTimeout) {
   // Use an HTTPS server for the top level page.
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, net::SpawnedTestServer::kLocalhost,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
 
   GURL url = https_server.GetURL(kTestServerIframeTimeoutPath);
@@ -1866,29 +1866,24 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, Disabled) {
 // Checks that we look for a captive portal on HTTPS timeouts and don't reload
 // the error tab when the captive portal probe gets a 204 response, indicating
 // there is no captive portal.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_InternetConnected) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, InternetConnected) {
   // Can't just use SetBehindCaptivePortal(false), since then there wouldn't
   // be a timeout.
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   SetUpCaptivePortalService(browser()->profile(),
-                            test_server()->GetURL("nocontent"));
+                            embedded_test_server()->GetURL("/nocontent"));
   SlowLoadNoCaptivePortal(browser(), captive_portal::RESULT_INTERNET_CONNECTED);
 }
 
 // Checks that no login page is opened when the HTTP test URL redirects to an
 // SSL certificate error.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_RedirectSSLCertError) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, RedirectSSLCertError) {
   // Need an HTTP TestServer to handle a dynamically created server redirect.
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
-  net::SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.server_certificate =
-      net::SpawnedTestServer::SSLOptions::CERT_MISMATCHED_NAME;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, ssl_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
 
   GURL ssl_login_url = https_server.GetURL(kTestServerLoginPath);
@@ -1896,17 +1891,16 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_RedirectSSLCertError) 
   CaptivePortalService* captive_portal_service =
       CaptivePortalServiceFactory::GetForProfile(browser()->profile());
   ASSERT_TRUE(captive_portal_service);
-  SetUpCaptivePortalService(
-      browser()->profile(),
-      test_server()->GetURL(CreateServerRedirect(ssl_login_url.spec())));
+  SetUpCaptivePortalService(browser()->profile(),
+                            embedded_test_server()->GetURL(
+                                CreateServerRedirect(ssl_login_url.spec())));
 
   SlowLoadNoCaptivePortal(browser(), captive_portal::RESULT_NO_RESPONSE);
 }
 
 // A slow SSL load triggers a captive portal check.  The user logs on before
 // the SSL page times out.  We wait for the timeout and subsequent reload.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_Login) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, Login) {
   // Load starts, detect captive portal and open up a login tab.
   SlowLoadBehindCaptivePortal(browser(), true);
 
@@ -1921,8 +1915,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_Login) {
 // profile.  Main issues it tests for are that the incognito has its own
 // non-NULL captive portal service, and we open the tab in the correct
 // window.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_LoginIncognito) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, LoginIncognito) {
   // This will watch tabs for both profiles, but only used to make sure no
   // navigations occur for the non-incognito profile.
   MultiNavigationObserver navigation_observer;
@@ -1954,8 +1947,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_LoginIncognito) {
 
 // The captive portal page is opened before the SSL page times out,
 // but the user logs in only after the page times out.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_LoginSlow) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, LoginSlow) {
   SlowLoadBehindCaptivePortal(browser(), true);
   FailLoadsWithoutLogin(browser(), 1);
   Login(browser(), 0, 1);
@@ -1963,8 +1955,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_LoginSlow) {
 
 // Checks the unlikely case that the tab times out before the timer triggers.
 // This most likely won't happen, but should still work:
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_LoginFastTimeout) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, LoginFastTimeout) {
   FastTimeoutBehindCaptivePortal(browser(), true);
   Login(browser(), 0, 1);
 }
@@ -1973,12 +1964,9 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_LoginFastTimeout) {
 // tab.
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
                        ShowCaptivePortalInterstitialOnCertError) {
-  net::SpawnedTestServer::SSLOptions https_options;
-  https_options.server_certificate =
-      net::SpawnedTestServer::SSLOptions::CERT_MISMATCHED_NAME;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, https_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
 
   TabStripModel* tab_strip_model = browser()->tab_strip_model();
@@ -2061,12 +2049,9 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 // - Stopping the page load shouldn't result in any interstitials.
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
                        InterstitialTimerStopNavigationWhileLoading) {
-  net::SpawnedTestServer::SSLOptions https_options;
-  https_options.server_certificate =
-      net::SpawnedTestServer::SSLOptions::CERT_MISMATCHED_NAME;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, https_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
   // The path does not matter.
   GURL cert_error_url = https_server.GetURL(kTestServerLoginPath);
@@ -2081,6 +2066,9 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
   MultiNavigationObserver test_navigation_observer;
   broken_tab_contents->Stop();
   test_navigation_observer.WaitForNavigations(1);
+
+  // Make sure that the |ssl_error_handler| is deleted if page load is stopped.
+  EXPECT_TRUE(nullptr == SSLErrorHandler::FromWebContents(broken_tab_contents));
 
   EXPECT_FALSE(broken_tab_contents->ShowingInterstitialPage());
   EXPECT_FALSE(broken_tab_contents->IsLoading());
@@ -2115,12 +2103,9 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 // result is the same. (i.e. page load stops, no interstitials shown)
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
                        InterstitialTimerReloadWhileLoading) {
-  net::SpawnedTestServer::SSLOptions https_options;
-  https_options.server_certificate =
-      net::SpawnedTestServer::SSLOptions::CERT_MISMATCHED_NAME;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, https_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
   // The path does not matter.
   GURL cert_error_url = https_server.GetURL(kTestServerLoginPath);
@@ -2136,6 +2121,9 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
   MultiNavigationObserver test_navigation_observer;
   chrome::Reload(browser(), CURRENT_TAB);
   test_navigation_observer.WaitForNavigations(2);
+
+  // Make sure that the |ssl_error_handler| is deleted.
+  EXPECT_TRUE(nullptr == SSLErrorHandler::FromWebContents(broken_tab_contents));
 
   EXPECT_FALSE(broken_tab_contents->ShowingInterstitialPage());
   EXPECT_FALSE(broken_tab_contents->IsLoading());
@@ -2172,12 +2160,9 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 // interstitials should be shown.
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
                        InterstitialTimerNavigateAwayWhileLoading) {
-  net::SpawnedTestServer::SSLOptions https_options;
-  https_options.server_certificate =
-      net::SpawnedTestServer::SSLOptions::CERT_MISMATCHED_NAME;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, https_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
   // The path does not matter.
   GURL cert_error_url = https_server.GetURL(kTestServerLoginPath);
@@ -2193,14 +2178,16 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
   // a load stop notification before starting a new navigation.
   MultiNavigationObserver test_navigation_observer;
   browser()->OpenURL(content::OpenURLParams(
-      URLRequestMockHTTPJob::GetMockUrl(
-          base::FilePath(FILE_PATH_LITERAL("title2.html"))),
+      URLRequestMockHTTPJob::GetMockUrl("title2.html"),
       content::Referrer(),
       CURRENT_TAB,
       ui::PAGE_TRANSITION_TYPED, false));
   // Expect two navigations: First one for stopping the hanging page, second one
   // for completing the load of the above navigation.
   test_navigation_observer.WaitForNavigations(2);
+
+  // Make sure that the |ssl_error_handler| is deleted.
+  EXPECT_TRUE(nullptr == SSLErrorHandler::FromWebContents(broken_tab_contents));
 
   EXPECT_FALSE(broken_tab_contents->ShowingInterstitialPage());
   EXPECT_FALSE(broken_tab_contents->IsLoading());
@@ -2240,12 +2227,9 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 IN_PROC_BROWSER_TEST_F(
     CaptivePortalBrowserTest,
     InterstitialTimerNavigateWhileLoading_EndWithSSLInterstitial) {
-  net::SpawnedTestServer::SSLOptions https_options;
-  https_options.server_certificate =
-      net::SpawnedTestServer::SSLOptions::CERT_MISMATCHED_NAME;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, https_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
   // The path does not matter.
   GURL cert_error_url = https_server.GetURL(kTestServerLoginPath);
@@ -2291,12 +2275,9 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     CaptivePortalBrowserTest,
     InterstitialTimerNavigateWhileLoading_EndWithCaptivePortalInterstitial) {
-  net::SpawnedTestServer::SSLOptions https_options;
-  https_options.server_certificate =
-      net::SpawnedTestServer::SSLOptions::CERT_MISMATCHED_NAME;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, https_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
   // The path does not matter.
   GURL cert_error_url = https_server.GetURL(kTestServerLoginPath);
@@ -2349,20 +2330,17 @@ IN_PROC_BROWSER_TEST_F(
 // tab.  The user then logs in and the page with the error is reloaded.
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, SSLCertErrorLogin) {
   // Need an HTTP TestServer to handle a dynamically created server redirect.
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
-  net::SpawnedTestServer::SSLOptions https_options;
-  https_options.server_certificate =
-      net::SpawnedTestServer::SSLOptions::CERT_MISMATCHED_NAME;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, https_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
 
   // Set SSL interstitial delay to zero so that a captive portal result can not
   // arrive during this window, so an SSL interstitial is displayed instead
   // of a captive portal error page.
-  SSLErrorHandler::SetInterstitialDelayTypeForTest(SSLErrorHandler::NONE);
+  SSLErrorHandler::SetInterstitialDelayForTest(base::TimeDelta());
   TabStripModel* tab_strip_model = browser()->tab_strip_model();
   WebContents* broken_tab_contents = tab_strip_model->GetActiveWebContents();
 
@@ -2409,8 +2387,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, LoginExtraNavigations) {
 
 // After the first SSL timeout, closes the login tab and makes sure it's opened
 // it again on a second timeout.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_CloseLoginTab) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, CloseLoginTab) {
   // First load starts, opens a login tab, and then times out.
   SlowLoadBehindCaptivePortal(browser(), true);
   FailLoadsWithoutLogin(browser(), 1);
@@ -2426,8 +2403,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_CloseLoginTab) {
 
 // Checks that two tabs with SSL timeouts in the same window work.  Both
 // tabs only timeout after logging in.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_TwoBrokenTabs) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, TwoBrokenTabs) {
   SlowLoadBehindCaptivePortal(browser(), true);
 
   // Can't set the TabReloader HTTPS timeout on a new tab without doing some
@@ -2437,8 +2413,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_TwoBrokenTabs) {
   CaptivePortalObserver portal_observer(browser()->profile());
   ui_test_utils::NavigateToURLWithDisposition(
       browser(),
-      URLRequestMockHTTPJob::GetMockUrl(
-          base::FilePath(FILE_PATH_LITERAL("title2.html"))),
+      URLRequestMockHTTPJob::GetMockUrl("title2.html"),
       NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
@@ -2466,8 +2441,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_TwoBrokenTabs) {
   FailLoadsAfterLogin(browser(), 2);
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_AbortLoad) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, AbortLoad) {
   SlowLoadBehindCaptivePortal(browser(), true);
 
   // Abandon the request.
@@ -2495,8 +2469,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_AbortLoad) {
 
 // Checks the case where the timed out tab is successfully navigated before
 // logging in.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_NavigateBrokenTab) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, NavigateBrokenTab) {
   // Go to the error page.
   SlowLoadBehindCaptivePortal(browser(), true);
   FailLoadsWithoutLogin(browser(), 1);
@@ -2505,8 +2478,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_NavigateBrokenTab) {
   TabStripModel* tab_strip_model = browser()->tab_strip_model();
   tab_strip_model->ActivateTabAt(0, true);
   ui_test_utils::NavigateToURL(
-      browser(), URLRequestMockHTTPJob::GetMockUrl(
-                     base::FilePath(FILE_PATH_LITERAL("title2.html"))));
+      browser(), URLRequestMockHTTPJob::GetMockUrl("title2.html"));
   EXPECT_EQ(CaptivePortalTabReloader::STATE_NONE,
             GetStateOfTabReloaderAt(browser(), 0));
 
@@ -2517,9 +2489,8 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_NavigateBrokenTab) {
 
 // Checks that captive portal detection triggers correctly when a same-site
 // navigation is cancelled by a navigation to the same site.
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
-                       DISABLED_NavigateLoadingTabToTimeoutSingleSite) {
+                       NavigateLoadingTabToTimeoutSingleSite) {
   RunNavigateLoadingTabToTimeoutTest(
       browser(),
       GURL(kMockHttpsUrl),
@@ -2528,8 +2499,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 }
 
 // Fails on Windows only, mostly on Win7. http://crbug.com/170033
-// TODO(vivaldi) Reenable mac for Vivaldi
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN)
 #define MAYBE_NavigateLoadingTabToTimeoutTwoSites \
         DISABLED_NavigateLoadingTabToTimeoutTwoSites
 #else
@@ -2550,13 +2520,11 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 
 // Checks that captive portal detection triggers correctly when a cross-site
 // navigation is cancelled by a navigation to yet another site.
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
-                       DISABLED_NavigateLoadingTabToTimeoutThreeSites) {
+                       NavigateLoadingTabToTimeoutThreeSites) {
   RunNavigateLoadingTabToTimeoutTest(
       browser(),
-      URLRequestMockHTTPJob::GetMockUrl(
-          base::FilePath(FILE_PATH_LITERAL("title.html"))),
+      URLRequestMockHTTPJob::GetMockUrl("title.html"),
       GURL(kMockHttpsUrl),
       GURL(kMockHttpsUrl2));
 }
@@ -2565,9 +2533,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, GoBack) {
   // Navigate to a working page.
   ui_test_utils::NavigateToURL(
-      browser(),
-      URLRequestMockHTTPJob::GetMockUrl(
-          base::FilePath(FILE_PATH_LITERAL("title2.html"))));
+      browser(), URLRequestMockHTTPJob::GetMockUrl("title2.html"));
 
   // Go to the error page.
   SlowLoadBehindCaptivePortal(browser(), true);
@@ -2590,13 +2556,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, GoBack) {
 }
 
 // Checks that navigating back to a timeout triggers captive portal detection.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_GoBackToTimeout DISABLED_GoBackToTimeout
-#else
-#define MAYBE_GoBackToTimeout GoBackToTimeout
-#endif
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, MAYBE_GoBackToTimeout) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, GoBackToTimeout) {
   // Disable captive portal detection so the first navigation doesn't open a
   // login tab.
   EnableCaptivePortalDetection(browser()->profile(), false);
@@ -2605,8 +2565,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, MAYBE_GoBackToTimeout) {
 
   // Navigate to a working page.
   ui_test_utils::NavigateToURL(
-      browser(), URLRequestMockHTTPJob::GetMockUrl(
-                     base::FilePath(FILE_PATH_LITERAL("title2.html"))));
+      browser(), URLRequestMockHTTPJob::GetMockUrl("title2.html"));
   ASSERT_EQ(CaptivePortalTabReloader::STATE_NONE,
             GetStateOfTabReloaderAt(browser(), 0));
 
@@ -2655,8 +2614,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, MAYBE_GoBackToTimeout) {
 // Checks that reloading a timeout triggers captive portal detection.
 // Much like the last test, though the captive portal is disabled before
 // the inital navigation, rather than captive portal detection.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_ReloadTimeout) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, ReloadTimeout) {
   factory_.SetBehindCaptivePortal(false);
 
   // Do the first navigation while not behind a captive portal.
@@ -2793,25 +2751,21 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_TwoWindows) {
 // An HTTP page redirects to an HTTPS page loads slowly before timing out.  A
 // captive portal is found, and then the user logs in before the original page
 // times out.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_HttpToHttpsRedirectLogin) {
-  ASSERT_TRUE(test_server()->Start());
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HttpToHttpsRedirectLogin) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   SlowLoadBehindCaptivePortal(
-      browser(),
-      true,
-      test_server()->GetURL(CreateServerRedirect(kMockHttpsUrl)),
-      1,
+      browser(), true,
+      embedded_test_server()->GetURL(CreateServerRedirect(kMockHttpsUrl)), 1,
       1);
   Login(browser(), 1, 0);
   FailLoadsAfterLogin(browser(), 1);
 }
 
 // An HTTPS page redirects to an HTTP page.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_HttpsToHttpRedirect) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HttpsToHttpRedirect) {
   // Use an HTTPS server for the top level page.
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, net::SpawnedTestServer::kLocalhost,
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.AddDefaultHandlers(
       base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
   ASSERT_TRUE(https_server.Start());
 
@@ -2826,8 +2780,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_HttpsToHttpRedirect) {
 }
 
 // Tests the 511 response code, along with an HTML redirect to a login page.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_Status511) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, Status511) {
   SetUpCaptivePortalService(browser()->profile(),
                             GURL(kMockCaptivePortal511Url));
   SlowLoadBehindCaptivePortal(browser(), true, GURL(kMockHttpsUrl), 2, 2);
@@ -2838,8 +2791,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_Status511) {
 // HSTS redirects an HTTP request to HTTPS, and the request then times out.
 // A captive portal is then detected, and a login tab opened, before logging
 // in.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_HstsLogin) {
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HstsLogin) {
   GURL::Replacements replacements;
   replacements.SetSchemeStr("http");
   GURL http_timeout_url = GURL(kMockHttpsUrl).ReplaceComponents(replacements);
@@ -2879,7 +2831,11 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 
   CaptivePortalObserver portal_observer(browser()->profile());
   MultiNavigationObserver navigation_observer;
-  URLRequestTimeoutOnDemandJob::FailJobsWithCertError(1);
+  net::SSLInfo info;
+  info.cert_status = net::CERT_STATUS_COMMON_NAME_INVALID;
+  info.cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+  URLRequestTimeoutOnDemandJob::FailJobsWithCertError(1, info);
   navigation_observer.WaitForNavigations(1);
 
   EXPECT_EQ(CaptivePortalTabReloader::STATE_NEEDS_RELOAD,

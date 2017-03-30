@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/authenticator_test_base.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -15,6 +17,7 @@
 #include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/channel_authenticator.h"
 #include "remoting/protocol/fake_stream_socket.h"
+#include "remoting/protocol/p2p_stream_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
 
@@ -30,7 +33,7 @@ ACTION_P(QuitThreadOnCounter, counter) {
   --(*counter);
   EXPECT_GE(*counter, 0);
   if (*counter == 0)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 }  // namespace
@@ -115,12 +118,12 @@ void AuthenticatorTestBase::RunChannelAuth(bool expected_fail) {
   client_fake_socket_->PairWith(host_fake_socket_.get());
 
   client_auth_->SecureAndAuthenticate(
-      client_fake_socket_.Pass(),
+      std::move(client_fake_socket_),
       base::Bind(&AuthenticatorTestBase::OnClientConnected,
                  base::Unretained(this)));
 
   host_auth_->SecureAndAuthenticate(
-      host_fake_socket_.Pass(),
+      std::move(host_fake_socket_),
       base::Bind(&AuthenticatorTestBase::OnHostConnected,
                  base::Unretained(this)));
 
@@ -141,9 +144,8 @@ void AuthenticatorTestBase::RunChannelAuth(bool expected_fail) {
   // Ensure that .Run() does not run unbounded if the callbacks are never
   // called.
   base::Timer shutdown_timer(false, false);
-  shutdown_timer.Start(FROM_HERE,
-                       TestTimeouts::action_timeout(),
-                       base::MessageLoop::QuitClosure());
+  shutdown_timer.Start(FROM_HERE, TestTimeouts::action_timeout(),
+                       base::MessageLoop::QuitWhenIdleClosure());
   message_loop_.Run();
   shutdown_timer.Stop();
 
@@ -158,16 +160,16 @@ void AuthenticatorTestBase::RunChannelAuth(bool expected_fail) {
 
 void AuthenticatorTestBase::OnHostConnected(
     int error,
-    scoped_ptr<net::StreamSocket> socket) {
+    scoped_ptr<P2PStreamSocket> socket) {
   host_callback_.OnDone(error);
-  host_socket_ = socket.Pass();
+  host_socket_ = std::move(socket);
 }
 
 void AuthenticatorTestBase::OnClientConnected(
     int error,
-    scoped_ptr<net::StreamSocket> socket) {
+    scoped_ptr<P2PStreamSocket> socket) {
   client_callback_.OnDone(error);
-  client_socket_ = socket.Pass();
+  client_socket_ = std::move(socket);
 }
 
 }  // namespace protocol

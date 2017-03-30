@@ -4,23 +4,35 @@
 
 #include "chrome/browser/task_management/providers/task.h"
 
+#include <stddef.h>
+
+#include "base/process/process.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_info_cache.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/task_management/task_manager_observer.h"
+#include "content/public/common/result_codes.h"
+
 namespace task_management {
 
 namespace {
 
 // The last ID given to the previously created task.
-int64 g_last_id = 0;
+int64_t g_last_id = 0;
 
 }  // namespace
 
 
 Task::Task(const base::string16& title,
+           const std::string& rappor_sample,
            const gfx::ImageSkia* icon,
            base::ProcessHandle handle)
     : task_id_(g_last_id++),
       network_usage_(-1),
       current_byte_count_(-1),
       title_(title),
+      rappor_sample_name_(rappor_sample),
       icon_(icon ? *icon : gfx::ImageSkia()),
       process_handle_(handle),
       process_id_(base::GetProcId(handle)) {
@@ -29,12 +41,32 @@ Task::Task(const base::string16& title,
 Task::~Task() {
 }
 
+// static
+base::string16 Task::GetProfileNameFromProfile(Profile* profile) {
+  DCHECK(profile);
+  ProfileInfoCache& cache =
+      g_browser_process->profile_manager()->GetProfileInfoCache();
+  size_t index =
+      cache.GetIndexOfProfileWithPath(profile->GetOriginalProfile()->GetPath());
+  if (index != std::string::npos)
+    return cache.GetNameOfProfileAtIndex(index);
+
+  return base::string16();
+}
+
 void Task::Activate() {
 }
 
-void Task::Refresh(const base::TimeDelta& update_interval) {
-  // TODO(afakhry): Add code here to skip this when network usage refresh has
-  // never been requested.
+void Task::Kill() {
+  DCHECK_NE(process_id(), base::GetCurrentProcId());
+  base::Process process = base::Process::Open(process_id());
+  process.Terminate(content::RESULT_CODE_KILLED, false);
+}
+
+void Task::Refresh(const base::TimeDelta& update_interval,
+                   int64_t refresh_flags) {
+  if ((refresh_flags & REFRESH_TYPE_NETWORK_USAGE) == 0)
+    return;
 
   if (current_byte_count_ == -1)
     return;
@@ -46,7 +78,7 @@ void Task::Refresh(const base::TimeDelta& update_interval) {
   current_byte_count_ = 0;
 }
 
-void Task::OnNetworkBytesRead(int64 bytes_read) {
+void Task::OnNetworkBytesRead(int64_t bytes_read) {
   if (current_byte_count_ == -1)
     current_byte_count_ = 0;
 
@@ -61,7 +93,7 @@ bool Task::ReportsSqliteMemory() const {
   return GetSqliteMemoryUsed() != -1;
 }
 
-int64 Task::GetSqliteMemoryUsed() const {
+int64_t Task::GetSqliteMemoryUsed() const {
   return -1;
 }
 
@@ -69,11 +101,11 @@ bool Task::ReportsV8Memory() const {
   return GetV8MemoryAllocated() != -1;
 }
 
-int64 Task::GetV8MemoryAllocated() const {
+int64_t Task::GetV8MemoryAllocated() const {
   return -1;
 }
 
-int64 Task::GetV8MemoryUsed() const {
+int64_t Task::GetV8MemoryUsed() const {
   return -1;
 }
 

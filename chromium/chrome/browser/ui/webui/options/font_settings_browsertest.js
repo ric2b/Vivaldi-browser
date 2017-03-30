@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+GEN_INCLUDE(['options_browsertest_base.js']);
+
 /**
  * TestFixture for font settings WebUI testing.
  * @extends {testing.Test}
@@ -10,7 +12,7 @@
 function FontSettingsWebUITest() {}
 
 FontSettingsWebUITest.prototype = {
-  __proto__: testing.Test.prototype,
+  __proto__: OptionsBrowsertestBase.prototype,
 
   /**
    * Browse to the font settings page.
@@ -20,32 +22,32 @@ FontSettingsWebUITest.prototype = {
   /** @override */
   preLoad: function() {
     this.makeAndRegisterMockHandler(['openAdvancedFontSettingsOptions']);
-  }
+  },
+
+  /** @override */
+  setUp: function() {
+    OptionsBrowsertestBase.prototype.setUp.call(this);
+
+    var controlsWithoutLabelSelectors = [
+      '#standard-font-size',
+      '#minimum-font-size',
+    ];
+
+    // Enable when failure is resolved.
+    // AX_TEXT_01: http://crbug.com/570555
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'controlsWithoutLabel',
+        controlsWithoutLabelSelectors);
+  },
 };
 
 // Test opening font settings has correct location.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_testOpenFontSettings ' +
-    'DISABLED_testOpenFontSettings');
-GEN('#else');
-GEN('#define MAYBE_testOpenFontSettings ' +
-    'testOpenFontSettings');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('FontSettingsWebUITest', 'MAYBE_testOpenFontSettings', function () {
+TEST_F('FontSettingsWebUITest', 'testOpenFontSettings', function() {
   assertEquals(this.browsePreload, document.location.href);
 });
 
 // Test setup of the Advanced Font Settings links.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_testAdvancedFontSettingsLink ' +
-    'DISABLED_testAdvancedFontSettingsLink');
-GEN('#else');
-GEN('#define MAYBE_testAdvancedFontSettingsLink ' +
-    'testAdvancedFontSettingsLink');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('FontSettingsWebUITest', 'MAYBE_testAdvancedFontSettingsLink', function () {
+TEST_F('FontSettingsWebUITest', 'testAdvancedFontSettingsLink', function() {
   var installElement = $('advanced-font-settings-install');
   var optionsElement = $('advanced-font-settings-options');
   var expectedUrl = 'https://chrome.google.com/webstore/detail/' +

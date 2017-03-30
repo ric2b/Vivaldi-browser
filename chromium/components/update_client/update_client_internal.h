@@ -13,6 +13,8 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "components/update_client/crx_downloader.h"
@@ -50,11 +52,15 @@ class UpdateClientImpl : public UpdateClient {
   bool GetCrxUpdateState(const std::string& id,
                          CrxUpdateItem* update_item) const override;
   bool IsUpdating(const std::string& id) const override;
+  void Stop() override;
+  void SendUninstallPing(const std::string& id,
+                         const Version& version,
+                         int reason) override;
 
  private:
   ~UpdateClientImpl() override;
 
-  void RunTask(Task* task);
+  void RunTask(scoped_ptr<Task> task);
   void OnTaskComplete(const CompletionCallback& completion_callback,
                       Task* task,
                       int error);
@@ -63,12 +69,22 @@ class UpdateClientImpl : public UpdateClient {
 
   base::ThreadChecker thread_checker_;
 
+  // True is Stop method has been called.
+  bool is_stopped_;
+
   scoped_refptr<Configurator> config_;
 
-  // Contains the tasks that are queued up.
+  // Contains the tasks that are pending. In the current implementation,
+  // only update tasks (background tasks) are queued up. These tasks are
+  // pending while they are in this queue. They have not been picked up yet
+  // by the update engine.
   std::queue<Task*> task_queue_;
 
-  // Contains all tasks in progress.
+  // Contains all tasks in progress. These are the tasks that the update engine
+  // is executing at one moment. Install tasks are run concurrently, update
+  // tasks are always serialized, and update tasks are queued up if install
+  // tasks are running. In addition, concurrent install tasks for the same id
+  // are not allowed.
   std::set<Task*> tasks_;
 
   // TODO(sorin): try to make the ping manager an observer of the service.
@@ -76,10 +92,6 @@ class UpdateClientImpl : public UpdateClient {
   scoped_ptr<UpdateEngine> update_engine_;
 
   base::ObserverList<Observer> observer_list_;
-
-  // Used to post responses back to the main thread.
-  scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
-  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(UpdateClientImpl);
 };

@@ -5,19 +5,22 @@
 #ifndef EXTENSIONS_RENDERER_DISPATCHER_H_
 #define EXTENSIONS_RENDERER_DISPATCHER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/timer/timer.h"
 #include "content/public/renderer/render_process_observer.h"
 #include "extensions/common/event_filter.h"
 #include "extensions/common/extension.h"
-#include "extensions/common/extension_set.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/renderer/resource_bundle_source_map.h"
@@ -70,12 +73,6 @@ class Dispatcher : public content::RenderProcessObserver,
   explicit Dispatcher(DispatcherDelegate* delegate);
   ~Dispatcher() override;
 
-  const std::set<std::string>& function_names() const {
-    return function_names_;
-  }
-
-  const ExtensionSet* extensions() const { return &extensions_; }
-
   const ScriptContextSet& script_context_set() const {
     return *script_context_set_;
   }
@@ -86,6 +83,8 @@ class Dispatcher : public content::RenderProcessObserver,
 
   RequestSender* request_sender() { return request_sender_.get(); }
 
+  const std::string& webview_partition_id() { return webview_partition_id_; }
+
   void OnRenderFrameCreated(content::RenderFrame* render_frame);
 
   bool IsExtensionActive(const std::string& extension_id) const;
@@ -95,9 +94,19 @@ class Dispatcher : public content::RenderProcessObserver,
                               int extension_group,
                               int world_id);
 
+  // Runs on a different thread and should not use any member variables.
+  static void DidInitializeServiceWorkerContextOnWorkerThread(
+      v8::Local<v8::Context> v8_context,
+      const GURL& url);
+
   void WillReleaseScriptContext(blink::WebLocalFrame* frame,
                                 const v8::Local<v8::Context>& context,
                                 int world_id);
+
+  // Runs on a different thread and should not use any member variables.
+  static void WillDestroyServiceWorkerContextOnWorkerThread(
+      v8::Local<v8::Context> v8_context,
+      const GURL& url);
 
   void DidCreateDocumentElement(blink::WebLocalFrame* frame);
 
@@ -133,16 +142,10 @@ class Dispatcher : public content::RenderProcessObserver,
 
  private:
   // The RendererPermissionsPolicyDelegateTest.CannotScriptWebstore test needs
-  // to call LoadExtensionForTest and the OnActivateExtension IPCs.
+  // to call the OnActivateExtension IPCs.
   friend class ::ChromeRenderViewTest;
   FRIEND_TEST_ALL_PREFIXES(RendererPermissionsPolicyDelegateTest,
                            CannotScriptWebstore);
-
-  // Inserts an Extension into |extensions_|. Normally the only way to do this
-  // would be through the ExtensionMsg_Loaded IPC (OnLoaded) but this can't be
-  // triggered for tests, because in the process of serializing then
-  // deserializing the IPC, Extension IDs manually set for testing are lost.
-  void LoadExtensionForTest(const Extension* extension);
 
   // RenderProcessObserver implementation:
   bool OnControlMessageReceived(const IPC::Message& message) override;
@@ -167,12 +170,12 @@ class Dispatcher : public content::RenderProcessObserver,
                        const base::ListValue& args,
                        bool user_gesture);
   void OnSetChannel(int channel);
-  void OnSetFunctionNames(const std::vector<std::string>& names);
   void OnSetScriptingWhitelist(
       const ExtensionsClient::ScriptingWhitelist& extension_ids);
   void OnSetSystemFont(const std::string& font_family,
                        const std::string& font_size);
-  void OnShouldSuspend(const std::string& extension_id, uint64 sequence_id);
+  void OnSetWebViewPartitionID(const std::string& partition_id);
+  void OnShouldSuspend(const std::string& extension_id, uint64_t sequence_id);
   void OnSuspend(const std::string& extension_id);
   void OnTransferBlobs(const std::vector<std::string>& blob_uuids);
   void OnUnloaded(const std::string& id);
@@ -253,11 +256,6 @@ class Dispatcher : public content::RenderProcessObserver,
   // True if the IdleNotification timer should be set.
   bool set_idle_notifications_;
 
-  // Contains all loaded extensions.  This is essentially the renderer
-  // counterpart to ExtensionService in the browser. It contains information
-  // about all extensions currently loaded by the browser.
-  ExtensionSet extensions_;
-
   // The IDs of extensions that failed to load, mapped to the error message
   // generated on failure.
   std::map<std::string, std::string> extension_load_errors_;
@@ -274,10 +272,7 @@ class Dispatcher : public content::RenderProcessObserver,
 
   // Same as above, but on a longer timer and will run even if the process is
   // not idle, to ensure that IdleHandle gets called eventually.
-  scoped_ptr<base::RepeatingTimer<content::RenderThread> > forced_idle_timer_;
-
-  // All declared function names.
-  std::set<std::string> function_names_;
+  scoped_ptr<base::RepeatingTimer> forced_idle_timer_;
 
   // The extensions and apps that are active in this process.
   ExtensionIdSet active_extension_ids_;
@@ -307,6 +302,11 @@ class Dispatcher : public content::RenderProcessObserver,
 
   // Status of webrequest usage.
   bool webrequest_used_;
+
+  // The WebView partition ID associated with this process's storage partition,
+  // if this renderer is a WebView guest render process. Otherwise, this will be
+  // empty.
+  std::string webview_partition_id_;
 
   DISALLOW_COPY_AND_ASSIGN(Dispatcher);
 };

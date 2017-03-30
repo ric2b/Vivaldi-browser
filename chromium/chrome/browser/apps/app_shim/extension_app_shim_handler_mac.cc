@@ -8,6 +8,7 @@
 #include "apps/launcher.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chrome/browser/apps/app_shim/app_shim_host_manager_mac.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -175,7 +176,7 @@ void ExtensionAppShimHandler::Delegate::LoadProfileAsync(
   profile_manager->CreateProfileAsync(
       full_path,
       base::Bind(&ProfileLoadedCallback, callback),
-      base::string16(), base::string16(), std::string());
+      base::string16(), std::string(), std::string());
 }
 
 bool ExtensionAppShimHandler::Delegate::IsProfileLockedForPath(

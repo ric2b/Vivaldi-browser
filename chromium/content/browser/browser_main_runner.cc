@@ -8,18 +8,30 @@
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/profiler/scoped_profile.h"
 #include "base/profiler/scoped_tracker.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
+#include "components/tracing/trace_config_file.h"
+#include "components/tracing/tracing_switches.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/browser_shutdown_profile_dumper.h"
 #include "content/browser/notification_service_impl.h"
+#include "content/public/browser/tracing_controller.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
+#include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/base/ime/input_method_initializer.h"
+
+#if defined(OS_ANDROID)
+#include "content/browser/android/tracing_controller_android.h"
+#endif
 
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
@@ -31,13 +43,14 @@
 #include "ui/gfx/win/direct_write.h"
 #endif
 
-bool g_exited_main_message_loop = false;
-
 namespace content {
 
-#if defined(OS_WIN)
 namespace {
 
+bool g_exited_main_message_loop = false;
+
+#if defined(OS_WIN)
+#if !defined(_WIN64)
 // Pointer to the original CryptVerifyCertificateSignatureEx function.
 net::sha256_interception::CryptVerifyCertificateSignatureExFunc
     g_real_crypt_verify_signature_stub = NULL;
@@ -58,6 +71,7 @@ BOOL WINAPI CryptVerifyCertificateSignatureExStub(
       g_real_crypt_verify_signature_stub, provider, encoding_type, subject_type,
       subject_data, issuer_type, issuer_data, flags, extra);
 }
+#endif  // !defined(_WIN64)
 
 // If necessary, install an interception
 void InstallSha256LegacyHooks() {
@@ -113,10 +127,9 @@ void InstallSha256LegacyHooks() {
                          &old_protect));
 #endif  // _WIN64
 }
+#endif  // OS_WIN
 
 }  // namespace
-
-#endif  // OS_WIN
 
 class BrowserMainRunnerImpl : public BrowserMainRunner {
  public:
@@ -129,6 +142,9 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
   }
 
   int Initialize(const MainFunctionParams& parameters) override {
+    SCOPED_UMA_HISTOGRAM_LONG_TIMER(
+        "Startup.BrowserMainRunnerImplInitializeLongTime");
+
     // TODO(vadimt, yiyaoliu): Remove all tracked_objects references below once
     // crbug.com/453640 is fixed.
     tracked_objects::ThreadData::InitializeThreadContext("CrBrowserMain");
@@ -142,6 +158,10 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
     // not run these parts of initialization twice.
     if (!initialization_started_) {
       initialization_started_ = true;
+
+      const base::TimeTicks start_time_step1 = base::TimeTicks::Now();
+
+      SkGraphics::Init();
 
 #if !defined(OS_IOS)
       if (parameters.command_line.HasSwitch(switches::kWaitForDebugger))
@@ -195,11 +215,17 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
 // to browser_shutdown::Shutdown or BrowserProcess::EndSession.
 
       ui::InitializeInputMethod();
+      UMA_HISTOGRAM_TIMES("Startup.BrowserMainRunnerImplInitializeStep1Time",
+                          base::TimeTicks::Now() - start_time_step1);
     }
+    const base::TimeTicks start_time_step2 = base::TimeTicks::Now();
     main_loop_->CreateStartupTasks();
     int result_code = main_loop_->GetResultCode();
     if (result_code > 0)
       return result_code;
+
+    UMA_HISTOGRAM_TIMES("Startup.BrowserMainRunnerImplInitializeStep2Time",
+                        base::TimeTicks::Now() - start_time_step2);
 
     // Return -1 to indicate no early termination.
     return -1;
@@ -226,14 +252,26 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
     // If startup tracing has not been finished yet, replace it's dumper
     // with special version, which would save trace file on exit (i.e.
     // startup tracing becomes a version of shutdown tracing).
+    // There are two cases:
+    // 1. Startup duration is not reached.
+    // 2. Or startup duration is not specified for --trace-config-file flag.
     scoped_ptr<BrowserShutdownProfileDumper> startup_profiler;
-    if (main_loop_->is_tracing_startup()) {
+    if (main_loop_->is_tracing_startup_for_duration()) {
       main_loop_->StopStartupTracingTimer();
       if (main_loop_->startup_trace_file() !=
           base::FilePath().AppendASCII("none")) {
         startup_profiler.reset(
             new BrowserShutdownProfileDumper(main_loop_->startup_trace_file()));
       }
+    } else if (tracing::TraceConfigFile::GetInstance()->IsEnabled() &&
+               TracingController::GetInstance()->IsTracing()) {
+      base::FilePath result_file;
+#if defined(OS_ANDROID) && !defined(USE_AURA)
+      TracingControllerAndroid::GenerateTracingFilePath(&result_file);
+#else
+      result_file = tracing::TraceConfigFile::GetInstance()->GetResultFile();
+#endif
+      startup_profiler.reset(new BrowserShutdownProfileDumper(result_file));
     }
 
     // The shutdown tracing got enabled in AttemptUserExit earlier, but someone
@@ -286,12 +324,18 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
   scoped_ptr<ui::ScopedOleInitializer> ole_initializer_;
 #endif
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(BrowserMainRunnerImpl);
 };
 
 // static
 BrowserMainRunner* BrowserMainRunner::Create() {
   return new BrowserMainRunnerImpl();
+}
+
+// static
+bool BrowserMainRunner::ExitedMainMessageLoop() {
+  return g_exited_main_message_loop;
 }
 
 }  // namespace content

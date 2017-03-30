@@ -4,6 +4,9 @@
 
 #include "components/autofill/content/browser/wallet/full_wallet.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,105 +31,17 @@ FullWallet::FullWallet(int expiration_month,
                        const std::string& iin,
                        const std::string& encrypted_rest,
                        scoped_ptr<Address> billing_address,
-                       scoped_ptr<Address> shipping_address,
-                       const std::vector<RequiredAction>& required_actions)
+                       scoped_ptr<Address> shipping_address)
     : expiration_month_(expiration_month),
       expiration_year_(expiration_year),
       iin_(iin),
       encrypted_rest_(encrypted_rest),
-      billing_address_(billing_address.Pass()),
-      shipping_address_(shipping_address.Pass()),
-      required_actions_(required_actions) {
-  DCHECK(required_actions_.size() > 0 || billing_address_.get());
+      billing_address_(std::move(billing_address)),
+      shipping_address_(std::move(shipping_address)) {
+  DCHECK(billing_address_.get());
 }
 
 FullWallet::~FullWallet() {}
-
-// static
-scoped_ptr<FullWallet>
-    FullWallet::CreateFullWallet(const base::DictionaryValue& dictionary) {
-  const base::ListValue* required_actions_list;
-  std::vector<RequiredAction> required_actions;
-  if (dictionary.GetList("required_action", &required_actions_list)) {
-    for (size_t i = 0; i < required_actions_list->GetSize(); ++i) {
-      std::string action_string;
-      if (required_actions_list->GetString(i, &action_string)) {
-        RequiredAction action = ParseRequiredActionFromString(action_string);
-        if (!ActionAppliesToFullWallet(action)) {
-          DLOG(ERROR) << "Response from Google wallet with bad required action:"
-                         " \"" << action_string << "\"";
-          return scoped_ptr<FullWallet>();
-        }
-        required_actions.push_back(action);
-      }
-    }
-    if (required_actions.size() > 0) {
-      return scoped_ptr<FullWallet>(new FullWallet(-1,
-                                                   -1,
-                                                   std::string(),
-                                                   std::string(),
-                                                   scoped_ptr<Address>(),
-                                                   scoped_ptr<Address>(),
-                                                   required_actions));
-    }
-  } else {
-    DVLOG(1) << "Response from Google wallet missing required actions";
-  }
-
-  int expiration_month;
-  if (!dictionary.GetInteger("expiration_month", &expiration_month)) {
-    DLOG(ERROR) << "Response from Google wallet missing expiration month";
-    return scoped_ptr<FullWallet>();
-  }
-
-  int expiration_year;
-  if (!dictionary.GetInteger("expiration_year", &expiration_year)) {
-    DLOG(ERROR) << "Response from Google wallet missing expiration year";
-    return scoped_ptr<FullWallet>();
-  }
-
-  std::string iin;
-  if (!dictionary.GetString("iin", &iin)) {
-    DLOG(ERROR) << "Response from Google wallet missing iin";
-    return scoped_ptr<FullWallet>();
-  }
-
-  std::string encrypted_rest;
-  if (!dictionary.GetString("rest", &encrypted_rest)) {
-    DLOG(ERROR) << "Response from Google wallet missing rest";
-    return scoped_ptr<FullWallet>();
-  }
-
-  const base::DictionaryValue* billing_address_dict;
-  if (!dictionary.GetDictionary("billing_address", &billing_address_dict)) {
-    DLOG(ERROR) << "Response from Google wallet missing billing address";
-    return scoped_ptr<FullWallet>();
-  }
-
-  scoped_ptr<Address> billing_address =
-      Address::CreateAddress(*billing_address_dict);
-  if (!billing_address.get()) {
-    DLOG(ERROR) << "Response from Google wallet has malformed billing address";
-    return scoped_ptr<FullWallet>();
-  }
-
-  const base::DictionaryValue* shipping_address_dict;
-  scoped_ptr<Address> shipping_address;
-  if (dictionary.GetDictionary("shipping_address", &shipping_address_dict)) {
-    shipping_address =
-        Address::CreateAddressWithID(*shipping_address_dict);
-  } else {
-    DVLOG(1) << "Response from Google wallet missing shipping address";
-  }
-
-  return scoped_ptr<FullWallet>(new FullWallet(expiration_month,
-                                               expiration_year,
-                                               iin,
-                                               encrypted_rest,
-                                               billing_address.Pass(),
-                                               shipping_address.Pass(),
-                                               required_actions));
-}
 
 // static
 scoped_ptr<FullWallet>
@@ -142,16 +57,13 @@ scoped_ptr<FullWallet>
   DCHECK(!cvn.empty());
 
   scoped_ptr<FullWallet> wallet(new FullWallet(
-      expiration_month,
-      expiration_year,
+      expiration_month, expiration_year,
       std::string(),  // no iin -- clear text pan/cvn are set below.
       std::string(),  // no encrypted_rest -- clear text pan/cvn are set below.
-      billing_address.Pass(),
-      shipping_address.Pass(),
-      std::vector<RequiredAction>()));  // no required actions in clear text.
+      std::move(billing_address), std::move(shipping_address)));
   wallet->pan_ = pan;
   wallet->cvn_ = cvn;
-  return wallet.Pass();
+  return wallet;
 }
 
 base::string16 FullWallet::GetInfo(const std::string& app_locale,
@@ -218,13 +130,6 @@ base::string16 FullWallet::GetInfo(const std::string& app_locale,
   }
 }
 
-bool FullWallet::HasRequiredAction(RequiredAction action) const {
-  DCHECK(ActionAppliesToFullWallet(action));
-  return std::find(required_actions_.begin(),
-                   required_actions_.end(),
-                   action) != required_actions_.end();
-}
-
 base::string16 FullWallet::TypeAndLastFourDigits() {
   CreditCard card;
   card.SetRawInfo(CREDIT_CARD_NUMBER, base::ASCIIToUTF16(GetPan()));
@@ -264,9 +169,6 @@ bool FullWallet::operator==(const FullWallet& other) const {
     return false;
   }
 
-  if (required_actions_ != other.required_actions_)
-    return false;
-
   return true;
 }
 
@@ -283,7 +185,7 @@ void FullWallet::DecryptCardInfo() {
 
   DCHECK_EQ(kEncryptedRestSize, encrypted_rest_.size());
 
-  std::vector<uint8> operating_data;
+  std::vector<uint8_t> operating_data;
   // Convert |encrypted_rest_| to bytes so we can decrypt it with |otp|.
   if (!base::HexStringToBytes(encrypted_rest_, &operating_data)) {
     DLOG(ERROR) << "Failed to parse encrypted rest";
@@ -294,18 +196,18 @@ void FullWallet::DecryptCardInfo() {
   // otherwise something has gone wrong and we can't decrypt the data.
   DCHECK_EQ(one_time_pad_.size(), operating_data.size());
 
-  std::vector<uint8> results;
+  std::vector<uint8_t> results;
   // XOR |otp| with the encrypted data to decrypt.
   for (size_t i = 0; i < one_time_pad_.size(); ++i)
     results.push_back(one_time_pad_[i] ^ operating_data[i]);
 
-  // There is no uint8* to int64 so convert the decrypted data to hex and then
-  // parse the hex to an int64 before getting the int64 as a string.
+  // There is no uint8_t* to int64_t so convert the decrypted data to hex and
+  // then parse the hex to an int64_t before getting the int64_t as a string.
   std::string hex_decrypted = base::HexEncode(&(results[0]), results.size());
 
-  int64 decrypted;
+  int64_t decrypted;
   if (!base::HexStringToInt64(hex_decrypted, &decrypted)) {
-    DLOG(ERROR) << "Failed to parse decrypted data in hex to int64";
+    DLOG(ERROR) << "Failed to parse decrypted data in hex to int64_t";
     return;
   }
   std::string card_info = base::Int64ToString(decrypted);

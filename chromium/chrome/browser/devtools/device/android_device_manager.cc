@@ -4,7 +4,9 @@
 
 #include "chrome/browser/devtools/device/android_device_manager.h"
 
+#include <stddef.h>
 #include <string.h>
+#include <utility>
 
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
@@ -76,7 +78,7 @@ class HttpRequest {
       callback.Run(result, std::string());
       return;
     }
-    new HttpRequest(socket.Pass(), request, callback);
+    new HttpRequest(std::move(socket), request, callback);
   }
 
   static void HttpUpgradeRequest(const std::string& request,
@@ -89,14 +91,14 @@ class HttpRequest {
           make_scoped_ptr<net::StreamSocket>(nullptr));
       return;
     }
-    new HttpRequest(socket.Pass(), request, callback);
+    new HttpRequest(std::move(socket), request, callback);
   }
 
  private:
   HttpRequest(scoped_ptr<net::StreamSocket> socket,
               const std::string& request,
               const CommandCallback& callback)
-      : socket_(socket.Pass()),
+      : socket_(std::move(socket)),
         command_callback_(callback),
         expected_size_(-1),
         header_size_(0) {
@@ -106,10 +108,10 @@ class HttpRequest {
   HttpRequest(scoped_ptr<net::StreamSocket> socket,
               const std::string& request,
               const HttpUpgradeCallback& callback)
-    : socket_(socket.Pass()),
-      http_upgrade_callback_(callback),
-      expected_size_(-1),
-      header_size_(0) {
+      : socket_(std::move(socket)),
+        http_upgrade_callback_(callback),
+        expected_size_(-1),
+        header_size_(0) {
     SendRequest(request);
   }
 
@@ -198,7 +200,8 @@ class HttpRequest {
       } else {
         // Pass the WebSocket frames (in |body|), too.
         http_upgrade_callback_.Run(net::OK,
-            ExtractHeader("Sec-WebSocket-Extensions:"), body, socket_.Pass());
+                                   ExtractHeader("Sec-WebSocket-Extensions:"),
+                                   body, std::move(socket_));
       }
       delete this;
       return;
@@ -223,7 +226,7 @@ class HttpRequest {
 
     std::string value = response_.substr(
         start_pos + header.length(), endline_pos - start_pos - header.length());
-    base::TrimWhitespace(value, base::TRIM_ALL, &value);
+    base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
     return value;
   }
 

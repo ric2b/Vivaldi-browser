@@ -7,12 +7,14 @@
 #include <atlbase.h>
 #include <atlcom.h>
 #include <oleauto.h>
+#include <stdint.h>
 #include <uiautomation.h>
 
 #include <algorithm>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -323,10 +325,11 @@ void UIAutomationClient::Context::HandleWindowOpen(
 
   base::string16 class_name(V_BSTR(var.ptr()));
 
-  // Window class names are atoms, which are case-insensitive.
+  // Window class names are atoms, which are case-insensitive. Assume that
+  // the window in question only needs ASCII case-insensitivity.
   if (class_name.size() == class_name_.size() &&
       std::equal(class_name.begin(), class_name.end(), class_name_.begin(),
-                 base::CaseInsensitiveCompare<wchar_t>())) {
+                 base::CaseInsensitiveCompareASCII<wchar_t>())) {
     RemoveWindowObserver();
     ProcessWindow(window);
   }
@@ -573,7 +576,7 @@ void UIAutomationClient::Context::CloseWindow(
 
   HWND handle = reinterpret_cast<HWND>(V_I4(var.ptr()));
 
-  uint32 scan_code = MapVirtualKey(VK_ESCAPE, MAPVK_VK_TO_VSC);
+  uint32_t scan_code = MapVirtualKey(VK_ESCAPE, MAPVK_VK_TO_VSC);
   PostMessage(handle, WM_KEYDOWN, VK_ESCAPE,
               MAKELPARAM(1, scan_code));
   PostMessage(handle, WM_KEYUP, VK_ESCAPE,

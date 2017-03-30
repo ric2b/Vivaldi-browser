@@ -4,6 +4,9 @@
 
 #include "content/child/npapi/webplugin_delegate_impl.h"
 
+#include <stdint.h>
+#include <string.h>
+
 #include <map>
 #include <set>
 #include <string>
@@ -12,6 +15,7 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
@@ -23,7 +27,6 @@
 #include "base/win/windows_version.h"
 #include "content/child/npapi/plugin_instance.h"
 #include "content/child/npapi/plugin_lib.h"
-#include "content/child/npapi/plugin_stream_url.h"
 #include "content/child/npapi/webplugin.h"
 #include "content/child/npapi/webplugin_ime_win.h"
 #include "content/common/cursors/webcursor.h"
@@ -170,7 +173,7 @@ std::wstring GetKeyPath(HKEY key) {
   DWORD size = 0;
   DWORD result = 0;
   result = func(key, KeyNameInformation, 0, 0, &size);
-  if (result != STATUS_BUFFER_TOO_SMALL)
+  if (result != static_cast<DWORD>(STATUS_BUFFER_TOO_SMALL))
     return L"";
 
   scoped_ptr<char[]> buffer(new char[size]);
@@ -178,7 +181,7 @@ std::wstring GetKeyPath(HKEY key) {
     return L"";
 
   result = func(key, KeyNameInformation, buffer.get(), size, &size);
-  if (result != STATUS_SUCCESS)
+  if (result != static_cast<DWORD>(STATUS_SUCCESS))
     return L"";
 
   KEY_NAME_INFORMATION* info =
@@ -248,8 +251,8 @@ WebPluginDelegateImpl::WebPluginDelegateImpl(WebPlugin* plugin,
   memset(&window_, 0, sizeof(window_));
 
   const WebPluginInfo& plugin_info = instance_->plugin_lib()->plugin_info();
-  std::wstring filename =
-      base::StringToLowerASCII(plugin_info.path.BaseName().value());
+  base::string16 filename =
+      base::ToLowerASCII(plugin_info.path.BaseName().value());
 
   if (instance_->mime_type() == kFlashPluginSwfMimeType ||
       filename == kFlashPlugin) {
@@ -595,7 +598,8 @@ void WebPluginDelegateImpl::ThrottleMessage(WNDPROC proc, HWND hwnd,
                                             UINT message, WPARAM wParam,
                                             LPARAM lParam) {
   MSG msg;
-  msg.time = reinterpret_cast<DWORD>(proc);
+  // Cast through uintptr_t and then DWORD to make the truncation explicit.
+  msg.time = static_cast<DWORD>(reinterpret_cast<uintptr_t>(proc));
   msg.hwnd = hwnd;
   msg.message = message;
   msg.wParam = wParam;
@@ -925,7 +929,7 @@ LRESULT CALLBACK WebPluginDelegateImpl::NativeWndProc(
   }
 
   LRESULT result;
-  uint32 old_message = delegate->last_message_;
+  uint32_t old_message = delegate->last_message_;
   delegate->last_message_ = message;
 
   static UINT custom_msg = RegisterWindowMessage(kPaintMessageName);
@@ -945,7 +949,7 @@ LRESULT CALLBACK WebPluginDelegateImpl::NativeWndProc(
     // The plugin window might have non-client area.   If we don't pass in
     // RDW_FRAME then the children don't receive WM_NCPAINT messages while
     // scrolling, which causes painting problems (http://b/issue?id=923945).
-    uint32 flags = RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_FRAME;
+    uint32_t flags = RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_FRAME;
 
     // If a plugin (like Google Earth or Java) has child windows that are hosted
     // in a different process, then RedrawWindow with UPDATENOW will
@@ -1092,8 +1096,8 @@ bool WebPluginDelegateImpl::PlatformSetPluginHasFocus(bool focused) {
 
 static bool NPEventFromWebMouseEvent(const WebMouseEvent& event,
                                      NPEvent* np_event) {
-  np_event->lParam = static_cast<uint32>(MAKELPARAM(event.windowX,
-                                                   event.windowY));
+  np_event->lParam =
+      static_cast<uint32_t>(MAKELPARAM(event.windowX, event.windowY));
   np_event->wParam = 0;
 
   if (event.modifiers & WebInputEvent::ControlKey)
@@ -1124,6 +1128,8 @@ static bool NPEventFromWebMouseEvent(const WebMouseEvent& event,
         case WebMouseEvent::ButtonRight:
           np_event->event = WM_RBUTTONDOWN;
           break;
+        case WebMouseEvent::ButtonNone:
+          break;
       }
       return true;
     case WebInputEvent::MouseUp:
@@ -1136,6 +1142,8 @@ static bool NPEventFromWebMouseEvent(const WebMouseEvent& event,
           break;
         case WebMouseEvent::ButtonRight:
           np_event->event = WM_RBUTTONUP;
+          break;
+        case WebMouseEvent::ButtonNone:
           break;
       }
       return true;

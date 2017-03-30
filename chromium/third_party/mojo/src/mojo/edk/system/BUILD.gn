@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("../mojo_edk.gni")
 import("//testing/test.gni")
 
 if (is_android) {
@@ -41,6 +40,7 @@ component("system") {
     "connection_identifier.h",
     "connection_manager.cc",
     "connection_manager.h",
+    "connection_manager_messages.h",
     "core.cc",
     "core.h",
     "data_pipe.cc",
@@ -82,6 +82,8 @@ component("system") {
     "message_pipe_dispatcher.h",
     "message_pipe_endpoint.cc",
     "message_pipe_endpoint.h",
+    "mutex.cc",
+    "mutex.h",
     "options_validation.h",
     "platform_handle_dispatcher.cc",
     "platform_handle_dispatcher.h",
@@ -103,10 +105,13 @@ component("system") {
     "simple_dispatcher.h",
     "slave_connection_manager.cc",
     "slave_connection_manager.h",
+    "thread_annotations.h",
     "transport_data.cc",
     "transport_data.h",
     "unique_identifier.cc",
     "unique_identifier.h",
+    "wait_set_dispatcher.cc",
+    "wait_set_dispatcher.h",
     "waiter.cc",
     "waiter.h",
   ]
@@ -122,8 +127,13 @@ component("system") {
     "../embedder",
     "../embedder:delegates",
     "../embedder:platform",
-    "../../public/c/system",
-    "../../public/cpp/system",
+
+    # TODO(use_chrome_edk): so that EDK in third_party can choose the EDK in
+    # src/mojo if the command line flag is specified. It has to since we can
+    # only have one definition of the Mojo primitives.
+    "//mojo/edk/system",
+    "//mojo/public/c/system",
+    "//mojo/public/cpp/system",
   ]
 
   deps = [
@@ -137,12 +147,12 @@ component("system") {
 group("tests") {
   testonly = true
   deps = [
-    ":mojo_system_unittests",
     ":mojo_message_pipe_perftests",
+    ":mojo_system_unittests",
   ]
 }
 
-mojo_edk_source_set("test_utils") {
+source_set("test_utils") {
   testonly = true
 
   sources = [
@@ -150,9 +160,9 @@ mojo_edk_source_set("test_utils") {
     "test_utils.h",
   ]
 
-  mojo_sdk_public_deps = [
-    "mojo/public/c/system",
-    "mojo/public/cpp/system",
+  public_deps = [
+    "//mojo/public/c/system",
+    "//mojo/public/cpp/system",
   ]
 
   deps = [
@@ -189,6 +199,7 @@ test("mojo_system_unittests") {
     "message_pipe_test_utils.h",
     "message_pipe_unittest.cc",
     "multiprocess_message_pipe_unittest.cc",
+    "mutex_unittest.cc",
     "options_validation_unittest.cc",
     "platform_handle_dispatcher_unittest.cc",
     "raw_channel_unittest.cc",
@@ -199,7 +210,9 @@ test("mojo_system_unittests") {
     "simple_dispatcher_unittest.cc",
     "test_channel_endpoint_client.cc",
     "test_channel_endpoint_client.h",
+    "thread_annotations_unittest.cc",
     "unique_identifier_unittest.cc",
+    "wait_set_dispatcher_unittest.cc",
     "waiter_test_utils.cc",
     "waiter_test_utils.h",
     "waiter_unittest.cc",
@@ -212,6 +225,7 @@ test("mojo_system_unittests") {
     "../test:test_support",
     "//base",
     "//base/test:test_support",
+    "//mojo/public/cpp/environment:standalone",
     "//testing/gtest",
   ]
 
@@ -232,6 +246,7 @@ test("mojo_message_pipe_perftests") {
     "//base",
     "//base/test:test_support",
     "//base/test:test_support_perf",
+    "//mojo/public/cpp/environment:standalone",
     "//testing/gtest",
   ]
 }

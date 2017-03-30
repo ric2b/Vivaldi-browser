@@ -7,6 +7,7 @@
 
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane.h"
 
+#include <stdint.h>
 #include <xf86drmMode.h>
 
 namespace ui {
@@ -19,19 +20,20 @@ class HardwareDisplayPlaneAtomic : public HardwareDisplayPlane {
   HardwareDisplayPlaneAtomic(uint32_t plane_id, uint32_t possible_crtcs);
   ~HardwareDisplayPlaneAtomic() override;
 
-  bool SetPlaneData(drmModePropertySet* property_set,
+  bool SetPlaneData(drmModeAtomicReq* property_set,
                     uint32_t crtc_id,
                     uint32_t framebuffer,
                     const gfx::Rect& crtc_rect,
                     const gfx::Rect& src_rect);
 
-  // HardwareDisplayPlane:
-  bool Initialize(DrmDevice* drm) override;
-
   void set_crtc(CrtcController* crtc) { crtc_ = crtc; }
   CrtcController* crtc() const { return crtc_; }
 
  private:
+  bool InitializeProperties(
+      DrmDevice* drm,
+      const ScopedDrmObjectPropertyPtr& plane_props) override;
+
   struct Property {
     Property();
     bool Initialize(DrmDevice* drm,

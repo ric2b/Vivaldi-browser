@@ -5,7 +5,7 @@
 #ifndef COMPONENTS_TRANSLATE_CONTENT_BROWSER_CONTENT_TRANSLATE_DRIVER_H_
 #define COMPONENTS_TRANSLATE_CONTENT_BROWSER_CONTENT_TRANSLATE_DRIVER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/translate/core/browser/translate_driver.h"
@@ -21,6 +21,8 @@ namespace translate {
 
 struct LanguageDetectionDetails;
 class TranslateManager;
+class BrowserCldDataProvider;
+
 
 // Content implementation of TranslateDriver.
 class ContentTranslateDriver : public TranslateDriver,
@@ -92,7 +94,8 @@ class ContentTranslateDriver : public TranslateDriver,
   void DidNavigateAnyFrame(content::RenderFrameHost* render_frame_host,
                            const content::LoadCommittedDetails& details,
                            const content::FrameNavigateParams& params) override;
-  bool OnMessageReceived(const IPC::Message& message) override;
+  bool OnMessageReceived(const IPC::Message& message,
+                         content::RenderFrameHost* render_frame_host) override;
 
   // IPC handlers.
   void OnTranslateAssignedSequenceNumber(int page_seq_no);
@@ -112,6 +115,9 @@ class ContentTranslateDriver : public TranslateDriver,
 
   // Max number of attempts before checking if a page has been reloaded.
   int max_reload_check_attempts_;
+
+  // Provides CLD data for this process.
+  scoped_ptr<translate::BrowserCldDataProvider> cld_data_provider_;
 
   base::WeakPtrFactory<ContentTranslateDriver> weak_pointer_factory_;
 

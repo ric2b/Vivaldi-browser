@@ -4,6 +4,8 @@
 
 #include "base/android/jni_android.h"
 
+#include <stddef.h>
+
 #include <map>
 
 #include "base/android/build_info.h"
@@ -20,10 +22,6 @@ using base::android::ScopedJavaLocalRef;
 bool g_disable_manual_jni_registration = false;
 
 JavaVM* g_jvm = NULL;
-// Leak the global app context, as it is used from a non-joinable worker thread
-// that may still be running at shutdown. There is no harm in doing this.
-base::LazyInstance<base::android::ScopedJavaGlobalRef<jobject> >::Leaky
-    g_application_context = LAZY_INSTANCE_INITIALIZER;
 base::LazyInstance<base::android::ScopedJavaGlobalRef<jobject> >::Leaky
     g_class_loader = LAZY_INSTANCE_INITIALIZER;
 jmethodID g_class_loader_load_class_method_id = 0;
@@ -70,21 +68,12 @@ void DetachFromVM() {
 }
 
 void InitVM(JavaVM* vm) {
-  DCHECK(!g_jvm);
+  DCHECK(!g_jvm || g_jvm == vm);
   g_jvm = vm;
 }
 
 bool IsVMInitialized() {
   return g_jvm != NULL;
-}
-
-void InitApplicationContext(JNIEnv* env, const JavaRef<jobject>& context) {
-  if (env->IsSameObject(g_application_context.Get().obj(), context.obj())) {
-    // It's safe to set the context more than once if it's the same context.
-    return;
-  }
-  DCHECK(g_application_context.Get().is_null());
-  g_application_context.Get().Reset(context);
 }
 
 void InitReplacementClassLoader(JNIEnv* env,
@@ -103,11 +92,6 @@ void InitReplacementClassLoader(JNIEnv* env,
 
   DCHECK(env->IsInstanceOf(class_loader.obj(), class_loader_clazz.obj()));
   g_class_loader.Get().Reset(class_loader);
-}
-
-const jobject GetApplicationContext() {
-  DCHECK(!g_application_context.Get().is_null());
-  return g_application_context.Get().obj();
 }
 
 ScopedJavaLocalRef<jclass> GetClass(JNIEnv* env, const char* class_name) {
@@ -143,8 +127,8 @@ jclass LazyGetClass(
     JNIEnv* env,
     const char* class_name,
     base::subtle::AtomicWord* atomic_class_id) {
-  COMPILE_ASSERT(sizeof(subtle::AtomicWord) >= sizeof(jclass),
-                 AtomicWord_SmallerThan_jMethodID);
+  static_assert(sizeof(subtle::AtomicWord) >= sizeof(jclass),
+                "AtomicWord can't be smaller than jclass");
   subtle::AtomicWord value = base::subtle::Acquire_Load(atomic_class_id);
   if (value)
     return reinterpret_cast<jclass>(value);
@@ -188,8 +172,8 @@ jmethodID MethodID::LazyGet(JNIEnv* env,
                             const char* method_name,
                             const char* jni_signature,
                             base::subtle::AtomicWord* atomic_method_id) {
-  COMPILE_ASSERT(sizeof(subtle::AtomicWord) >= sizeof(jmethodID),
-                 AtomicWord_SmallerThan_jMethodID);
+  static_assert(sizeof(subtle::AtomicWord) >= sizeof(jmethodID),
+                "AtomicWord can't be smaller than jMethodID");
   subtle::AtomicWord value = base::subtle::Acquire_Load(atomic_method_id);
   if (value)
     return reinterpret_cast<jmethodID>(value);

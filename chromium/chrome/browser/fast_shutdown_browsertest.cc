@@ -5,6 +5,8 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -18,6 +20,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 using content::BrowserThread;
 
@@ -41,9 +44,9 @@ class FastShutdown : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(FastShutdown, DISABLED_SlowTermination) {
   // Need to run these tests on http:// since we only allow cookies on that (and
   // https obviously).
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   // This page has an unload handler.
-  GURL url = test_server()->GetURL("files/fast_shutdown/on_unloader.html");
+  GURL url = embedded_test_server()->GetURL("/fast_shutdown/on_unloader.html");
   EXPECT_EQ("", content::GetCookies(browser()->profile(), url));
 
   content::WindowedNotificationObserver window_observer(

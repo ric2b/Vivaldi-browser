@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -19,6 +21,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
@@ -27,6 +30,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -618,8 +622,9 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewPdfGeneratedBrowserTest,
     // Splits the command sent by the layout test framework. The first command
     // is always the file path to use for the test. The rest isn't relevant,
     // so it can be ignored. The separator for the commands is an apostrophe.
-    std::vector<base::FilePath::StringType> cmd_arguments;
-    base::SplitString(cmd, '\'', &cmd_arguments);
+    std::vector<base::FilePath::StringType> cmd_arguments = base::SplitString(
+        cmd, base::FilePath::StringType(1, '\''),
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
     ASSERT_GE(cmd_arguments.size(), 1U);
     base::FilePath::StringType test_name(cmd_arguments[0]);

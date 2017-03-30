@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/version.h"
 #include "extensions/common/constants.h"
@@ -77,8 +78,6 @@ class ExtensionSyncData {
   syncer::SyncChange GetSyncChange(
       syncer::SyncChange::SyncChangeType change_type) const;
 
-  void set_uninstalled(bool uninstalled);
-
   bool is_app() const { return is_app_; }
 
   const std::string& id() const { return id_; }
@@ -87,6 +86,7 @@ class ExtensionSyncData {
   // currently-installed extension doesn't match |version|).
   bool uninstalled() const { return uninstalled_; }
   bool enabled() const { return enabled_; }
+  void set_enabled(bool enabled) { enabled_ = enabled; }
   bool supports_disable_reasons() const { return supports_disable_reasons_; }
   int disable_reasons() const { return disable_reasons_; }
   bool incognito_enabled() const { return incognito_enabled_; }
@@ -96,7 +96,8 @@ class ExtensionSyncData {
 
   // Version-dependent properties (i.e., should be used only when the
   // version of the currently-installed extension matches |version|).
-  const Version& version() const { return version_; }
+  const base::Version& version() const { return version_; }
+  void set_version(const base::Version& version) { version_ = version; }
   const GURL& update_url() const { return update_url_; }
   // Used only for debugging.
   const std::string& name() const { return name_; }
@@ -154,7 +155,7 @@ class ExtensionSyncData {
   bool remote_install_;
   OptionalBoolean all_urls_enabled_;
   bool installed_by_custodian_;
-  Version version_;
+  base::Version version_;
   GURL update_url_;
   std::string name_;
 

@@ -5,6 +5,9 @@
 [
   {
     "namespace": "inputMethodPrivate",
+    "compiler_options": {
+      "implemented_in": "chrome/browser/chromeos/extensions/input_method_api.h"
+    },
     "description": "none",
     "functions": [
       {
@@ -23,9 +26,7 @@
                 "type": "object",
                 "description": "The input method config object.",
                 "properties": {
-                  "isPhysicalKeyboardAutocorrectEnabled": {"type": "boolean"},
-                  "isNewMDInputViewEnabled": {"type": "boolean"},
-                  "isVoiceInputEnabled": {"type": "boolean"}
+                  "isPhysicalKeyboardAutocorrectEnabled": {"type": "boolean"}
                 }
               }
             ]
@@ -155,6 +156,24 @@
                 "description": "The result of whether enabled."
               }
             ]
+          }
+        ]
+      }, {
+        "name": "setXkbLayout",
+        "type": "function",
+        "description": "Sets the XKB layout for the given input method.",
+        "parameters": [
+          {
+            "name": "xkb_name",
+            "type": "string",
+            "description": "The XKB layout name."
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "optional": true,
+            "description": "Callback which is called when the layout is set.",
+            "parameters": []
           }
         ]
       }

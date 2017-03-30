@@ -26,7 +26,7 @@ import org.chromium.base.library_loader.LoaderErrors;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.WarmupManager;
-import org.chromium.chrome.browser.metrics.LaunchHistogram;
+import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.MemoryUma;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -39,8 +39,8 @@ import java.lang.reflect.Field;
 public abstract class AsyncInitializationActivity extends AppCompatActivity implements
         ChromeActivityNativeDelegate, BrowserParts {
 
-    private static final LaunchHistogram sBadIntentMetric =
-            new LaunchHistogram("Launch.InvalidIntent");
+    private static final LaunchMetrics.BooleanEvent sBadIntentMetric =
+            new LaunchMetrics.BooleanEvent("Launch.InvalidIntent");
 
     protected final Handler mHandler;
 
@@ -89,7 +89,28 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
     }
 
     @Override
-    public void postInflationStartup() { }
+    public void postInflationStartup() {
+        final View firstDrawView = getViewToBeDrawnBeforeInitializingNative();
+        assert firstDrawView != null;
+        ViewTreeObserver.OnPreDrawListener firstDrawListener =
+                new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                firstDrawView.getViewTreeObserver().removeOnPreDrawListener(this);
+                onFirstDrawComplete();
+                return true;
+            }
+        };
+        firstDrawView.getViewTreeObserver().addOnPreDrawListener(firstDrawListener);
+    }
+
+    /**
+     * @return The primary view that must have completed at least one draw before initializing
+     *         native.  This must be non-null.
+     */
+    protected View getViewToBeDrawnBeforeInitializingNative() {
+        return findViewById(android.R.id.content);
+    }
 
     @Override
     public void maybePreconnect() {
@@ -228,6 +249,7 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
     protected void onNewIntent(Intent intent) {
         if (intent == null) return;
         mNativeInitializationController.onNewIntent(intent);
+        setIntent(intent);
     }
 
     @Override
@@ -237,16 +259,18 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
 
     @Override
     public final void onCreateWithNative() {
-        ChromeBrowserInitializer.getInstance(this).handlePostNativeStartup(this);
+        try {
+            ChromeBrowserInitializer.getInstance(this).handlePostNativeStartup(true, this);
+        } catch (ProcessInitException e) {
+            ChromeApplication.reportStartupErrorAndExit(e);
+        }
     }
 
     @Override
     public void onStartWithNative() { }
 
     @Override
-    public void onResumeWithNative() {
-        sBadIntentMetric.commitHistogram();
-    }
+    public void onResumeWithNative() { }
 
     @Override
     public void onPauseWithNative() { }
@@ -267,11 +291,6 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
                 mNativeInitializationController.firstDrawComplete();
             }
         });
-    }
-
-    @Override
-    public boolean hasDoneFirstDraw() {
-        return true;
     }
 
     @Override

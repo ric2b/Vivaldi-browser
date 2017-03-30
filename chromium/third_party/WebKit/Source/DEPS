@@ -1,0 +1,10 @@
+include_rules = [
+    "+base/gtest_prod_util.h",
+    "+testing/gmock/include/gmock",
+    "+testing/gtest/include/gtest",
+    "+wtf",
+]
+
+skip_child_includes = [
+    "testing",
+]

@@ -4,12 +4,13 @@
 
 #include "chrome/browser/ui/webui/sync_file_system_internals/sync_file_system_internals_handler.h"
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/values.h"
-#include "chrome/browser/drive/drive_notification_manager.h"
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
 #include "chrome/browser/extensions/api/sync_file_system/sync_file_system_api_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/sync_file_system/sync_file_system_service_factory.h"
 #include "chrome/browser/sync_file_system/sync_service_state.h"
 #include "chrome/common/extensions/api/sync_file_system.h"
+#include "components/drive/drive_notification_manager.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_ui.h"
 #include "google_apis/drive/time_util.h"
@@ -96,7 +98,7 @@ void SyncFileSystemInternalsHandler::OnFileSynced(
 void SyncFileSystemInternalsHandler::OnLogRecorded(
     const sync_file_system::TaskLogger::TaskLog& task_log) {
   base::DictionaryValue dict;
-  int64 duration = (task_log.end_time - task_log.start_time).InMilliseconds();
+  int64_t duration = (task_log.end_time - task_log.start_time).InMilliseconds();
   dict.SetInteger("duration", duration);
   dict.SetString("task_description", task_log.task_description);
   dict.SetString("result_description", task_log.result_description);

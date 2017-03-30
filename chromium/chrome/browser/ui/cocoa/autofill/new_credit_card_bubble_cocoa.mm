@@ -20,10 +20,11 @@
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #include "ui/base/cocoa/window_size_constants.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/native_theme_mac.h"
 
 namespace {
 
-const CGFloat kWrenchBubblePointOffsetY = 6;
+const CGFloat kAppMenuBubblePointOffsetY = 6;
 const CGFloat kVerticalSpacing = 8;
 const CGFloat kHorizontalSpacing = 4;
 const CGFloat kInset = 20.0;
@@ -85,9 +86,9 @@ const CGFloat kAnchorlessTopPadding = 10;
     controller_ = controller;
     [window setInfoBubbleCanBecomeKeyWindow:NO];
 
-    ui::NativeTheme* nativeTheme = ui::NativeTheme::instance();
+    ui::NativeTheme* nativeTheme = ui::NativeThemeMac::instance();
     [[self bubble] setBackgroundColor:
-        gfx::SkColorToCalibratedNSColor(nativeTheme->GetSystemColor(
+        skia::SkColorToCalibratedNSColor(nativeTheme->GetSystemColor(
             ui::NativeTheme::kColorId_DialogBackground))];
     [self performLayout];
   }
@@ -209,10 +210,10 @@ void NewCreditCardBubbleCocoa::Show() {
   NSPoint anchor_point;
   NSView* anchor_view;
   if ([bwc isTabbedWindow]) {
-    anchor_view = [[bwc toolbarController] wrenchButton];
+    anchor_view = [[bwc toolbarController] appMenuButton];
     anchor_point = NSMakePoint(
         NSMidX([anchor_view bounds]),
-        NSMinY([anchor_view bounds]) + kWrenchBubblePointOffsetY);
+        NSMinY([anchor_view bounds]) + kAppMenuBubblePointOffsetY);
     [[bubbleController_ bubble] setArrowLocation:info_bubble::kTopRight];
     [[bubbleController_ bubble] setAlignment:info_bubble::kAlignArrowToAnchor];
   } else {

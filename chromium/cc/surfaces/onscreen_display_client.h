@@ -8,6 +8,7 @@
 #include "cc/surfaces/display_client.h"
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -53,14 +54,17 @@ class CC_SURFACES_EXPORT OnscreenDisplayClient
 
  protected:
   scoped_ptr<OutputSurface> output_surface_;
-  scoped_ptr<Display> display_;
+  // Be careful of destruction order:
+  // Display depends on DisplayScheduler depends on *BeginFrameSource
+  // depends on TaskRunner.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_ptr<SyntheticBeginFrameSource> synthetic_frame_source_;
   scoped_ptr<BackToBackBeginFrameSource> unthrottled_frame_source_;
   scoped_ptr<DisplayScheduler> scheduler_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_ptr<Display> display_;
   SurfaceDisplayOutputSurface* surface_display_output_surface_;
   bool output_surface_lost_;
-  bool disable_gpu_vsync_;
+  bool disable_display_vsync_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(OnscreenDisplayClient);

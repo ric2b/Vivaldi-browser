@@ -4,6 +4,8 @@
 
 #include "chromecast/media/cma/base/decoder_buffer_adapter.h"
 
+#include "chromecast/media/cma/base/cast_decrypt_config_impl.h"
+#include "chromecast/public/media/cast_decrypt_config.h"
 #include "media/base/decoder_buffer.h"
 
 namespace chromecast {
@@ -27,19 +29,19 @@ StreamId DecoderBufferAdapter::stream_id() const {
   return stream_id_;
 }
 
-base::TimeDelta DecoderBufferAdapter::timestamp() const {
-  return buffer_->timestamp();
+int64_t DecoderBufferAdapter::timestamp() const {
+  return buffer_->timestamp().InMicroseconds();
 }
 
-void DecoderBufferAdapter::set_timestamp(const base::TimeDelta& timestamp) {
+void DecoderBufferAdapter::set_timestamp(base::TimeDelta timestamp) {
   buffer_->set_timestamp(timestamp);
 }
 
-const uint8* DecoderBufferAdapter::data() const {
+const uint8_t* DecoderBufferAdapter::data() const {
   return buffer_->data();
 }
 
-uint8* DecoderBufferAdapter::writable_data() const {
+uint8_t* DecoderBufferAdapter::writable_data() const {
   return buffer_->writable_data();
 }
 
@@ -47,12 +49,22 @@ size_t DecoderBufferAdapter::data_size() const {
   return buffer_->data_size();
 }
 
-const ::media::DecryptConfig* DecoderBufferAdapter::decrypt_config() const {
-  return buffer_->decrypt_config();
+const CastDecryptConfig* DecoderBufferAdapter::decrypt_config() const {
+  if (buffer_->decrypt_config() && !decrypt_config_) {
+    const ::media::DecryptConfig* config = buffer_->decrypt_config();
+    decrypt_config_.reset(new CastDecryptConfigImpl(*config));
+  }
+
+  return decrypt_config_.get();
 }
 
 bool DecoderBufferAdapter::end_of_stream() const {
   return buffer_->end_of_stream();
+}
+
+scoped_refptr<::media::DecoderBuffer>
+DecoderBufferAdapter::ToMediaBuffer() const {
+  return buffer_;
 }
 
 }  // namespace media

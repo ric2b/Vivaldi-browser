@@ -19,23 +19,21 @@ chromevox_out_dir = "$root_out_dir/resources/chromeos/chromevox"
 
 group("chromevox") {
   deps = [
+    ":chromevox_copied_files",
+    ":chromevox_guest_manifest",
+    ":chromevox_manifest",
     "//chrome/browser/resources/chromeos/braille_ime:braille_ime_manifest",
     "//chrome/browser/resources/chromeos/chromevox/strings:chromevox_strings",
     "//chrome/third_party/chromevox:chromevox_third_party_resources",
     "//third_party/liblouis",
-
-    #<(DEPTH)/third_party/liblouis/liblouis_nacl.gyp:liblouis_nacl_wrapper_nacl'  # TODO(GYP)
-    ":chromevox_copied_files",
-    ":chromevox_manifest",
-    ":chromevox_guest_manifest",
   ]
   if (chromevox_compress_js) {
     deps += [
-      ":chromevox1_background_script",
-      ":chromevox1_content_script",
-      ":chromevox1_kbexplorer_script",
-      ":chromevox1_options_script",
-      ":chromevox2_background_script",
+      ":chromevox_background_script",
+      ":chromevox_content_script",
+      ":chromevox_kbexplorer_script",
+      ":chromevox_options_script",
+      ":chromevox_panel_script",
     ]
   } else {
     deps += [ ":chromevox_deps_js" ]
@@ -134,19 +132,22 @@ chromevox_vars_gypi_values = exec_script("//build/gypi_to_gn.py",
 run_jsbundler("chromevox_copied_files") {
   mode = "copy"
   dest_dir = chromevox_out_dir
-  sources = chromevox_assets_gypi_values.chromevox_assets_chromevox
+  sources = chromevox_assets_gypi_values.chromevox_assets_images
   sources +=
       chromevox_assets_gypi_values.chromevox_assets_chromevox_background_earcons
   sources +=
       chromevox_assets_gypi_values.chromevox_assets_chromevox_background_keymaps
   sources += chromevox_assets_gypi_values.chromevox_assets_chromevox_background_mathmaps_functions
   sources += chromevox_assets_gypi_values.chromevox_assets_chromevox_background_mathmaps_symbols
+  sources +=
+      chromevox_assets_gypi_values.chromevox_assets_cvox2_background_earcons
   sources += [
     "chromevox/background/background.html",
     "chromevox/background/kbexplorer.html",
     "chromevox/background/options.html",
     "chromevox/injected/api.js",
     "cvox2/background/background.html",
+    "cvox2/background/panel.html",
   ]
   if (chromevox_compress_js) {
     sources += [ "chromevox/injected/api_util.js" ]
@@ -154,11 +155,11 @@ run_jsbundler("chromevox_copied_files") {
     sources += chromevox_modules
     sources += [
       "closure/closure_preinit.js",
-      chromevox_vars_gypi_values.chromevox1_background_script_loader_file,
-      chromevox_vars_gypi_values.chromevox1_content_script_loader_file,
-      chromevox_vars_gypi_values.chromevox1_kbexplorer_loader_file,
-      chromevox_vars_gypi_values.chromevox1_options_script_loader_file,
-      chromevox_vars_gypi_values.chromevox2_background_script_loader_file,
+      chromevox_vars_gypi_values.chromevox_content_script_loader_file,
+      chromevox_vars_gypi_values.chromevox_kbexplorer_loader_file,
+      chromevox_vars_gypi_values.chromevox_options_script_loader_file,
+      chromevox_vars_gypi_values.chromevox_background_script_loader_file,
+      chromevox_vars_gypi_values.chromevox_panel_script_loader_file,
     ]
   }
   if (!chromevox_compress_js) {
@@ -256,40 +257,39 @@ if (chromevox_compress_js) {
     }
   }
 
-  compress_js("chromevox1_background_script") {
+  compress_js("chromevox_content_script") {
     sources = [
-      chromevox_vars_gypi_values.chromevox1_background_script_loader_file,
-    ]
-    output_file = "$chromevox_out_dir/chromeVoxChromeBackgroundScript.js"
-  }
-
-  compress_js("chromevox1_content_script") {
-    sources = [
-      chromevox_vars_gypi_values.chromevox1_content_script_loader_file,
+      chromevox_vars_gypi_values.chromevox_content_script_loader_file,
     ]
     output_file = "$chromevox_out_dir/chromeVoxChromePageScript.js"
   }
 
-  compress_js("chromevox1_kbexplorer_script") {
+  compress_js("chromevox_kbexplorer_script") {
     sources = [
-      chromevox_vars_gypi_values.chromevox1_kbexplorer_loader_file,
+      chromevox_vars_gypi_values.chromevox_kbexplorer_loader_file,
     ]
     output_file = "$chromevox_out_dir/chromeVoxKbExplorerScript.js"
   }
 
-  compress_js("chromevox1_options_script") {
+  compress_js("chromevox_options_script") {
     sources = [
-      chromevox_vars_gypi_values.chromevox1_options_script_loader_file,
+      chromevox_vars_gypi_values.chromevox_options_script_loader_file,
     ]
     output_file = "$chromevox_out_dir/chromeVoxChromeOptionsScript.js"
   }
 
-  compress_js("chromevox2_background_script") {
+  compress_js("chromevox_background_script") {
     sources = [
-      chromevox_vars_gypi_values.chromevox1_background_script_loader_file,
-      chromevox_vars_gypi_values.chromevox2_background_script_loader_file,
+      chromevox_vars_gypi_values.chromevox_background_script_loader_file,
     ]
     output_file = "$chromevox_out_dir/chromeVox2ChromeBackgroundScript.js"
+  }
+
+  compress_js("chromevox_panel_script") {
+    sources = [
+      chromevox_vars_gypi_values.chromevox_panel_script_loader_file,
+    ]
+    output_file = "$chromevox_out_dir/chromeVoxPanelScript.js"
   }
 } else {
   generate_deps_js("chromevox_deps_js") {
@@ -312,8 +312,11 @@ test("chromevox_tests") {
   sources = chromevox_tests_gypi_values.chromevox_tests_sources
 
   deps = [
+    ":chromevox_extjs_tests",
+    ":chromevox_unitjs_tests",
     "//base",
     "//base:i18n",
+    "//base/allocator",
     "//base/test:test_support",
     "//chrome:browser_tests_pak",
     "//chrome:packed_extra_resources",
@@ -323,10 +326,9 @@ test("chromevox_tests") {
     "//chrome/browser",
     "//chrome/renderer",
     "//chrome/test:test_support",
+    "//chrome/test:test_support_ui",
     "//testing/gmock",
     "//testing/gtest",
-    ":chromevox_extjs_tests",
-    ":chromevox_unitjs_tests",
   ]
   if (cld_version == 0 || cld_version == 2) {
     # Because the browser_tests use translate, they need CLD data.
@@ -377,6 +379,8 @@ generate_deps_js("chromevox_test_deps_js") {
 js2gtest("chromevox_unitjs_tests") {
   test_type = "webui"
   sources = chromevox_tests_gypi_values.chromevox_tests_unitjs_sources
+  gen_include_files =
+      chromevox_tests_gypi_values.chromevox_tests_unit_gen_include_sources
   test_deps_js_outputs = get_target_outputs(":chromevox_test_deps_js")
   deps_js = test_deps_js_outputs[0]
   deps = [
@@ -388,6 +392,7 @@ js2gtest("chromevox_unitjs_tests") {
 js2gtest("chromevox_extjs_tests") {
   test_type = "extension"
   sources = chromevox_tests_gypi_values.chromevox_tests_extjs_sources
-  sources -= [ "braille/liblouis_test.extjs" ]  # TODO(GYP)
+  gen_include_files =
+      chromevox_tests_gypi_values.chromevox_tests_ext_gen_include_sources
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 }

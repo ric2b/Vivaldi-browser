@@ -4,6 +4,9 @@
 
 #include "components/history/core/browser/visit_database.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 #include <map>
@@ -11,6 +14,7 @@
 
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "components/history/core/browser/url_database.h"
 #include "components/history/core/browser/visit_filter.h"
 #include "sql/statement.h"
@@ -310,11 +314,11 @@ bool VisitDatabase::GetAllVisitsInRange(base::Time begin_time,
       "ORDER BY visit_time LIMIT ?"));
 
   // See GetVisibleVisitsInRange for more info on how these times are bound.
-  int64 end = end_time.ToInternalValue();
+  int64_t end = end_time.ToInternalValue();
   statement.BindInt64(0, begin_time.ToInternalValue());
-  statement.BindInt64(1, end ? end : std::numeric_limits<int64>::max());
-  statement.BindInt64(2,
-      max_results ? max_results : std::numeric_limits<int64>::max());
+  statement.BindInt64(1, end ? end : std::numeric_limits<int64_t>::max());
+  statement.BindInt64(
+      2, max_results ? max_results : std::numeric_limits<int64_t>::max());
 
   return FillVisitVector(statement, visits);
 }
@@ -335,13 +339,13 @@ bool VisitDatabase::GetVisitsInRangeForTransition(
       "ORDER BY visit_time LIMIT ?"));
 
   // See GetVisibleVisitsInRange for more info on how these times are bound.
-  int64 end = end_time.ToInternalValue();
+  int64_t end = end_time.ToInternalValue();
   statement.BindInt64(0, begin_time.ToInternalValue());
-  statement.BindInt64(1, end ? end : std::numeric_limits<int64>::max());
+  statement.BindInt64(1, end ? end : std::numeric_limits<int64_t>::max());
   statement.BindInt(2, ui::PAGE_TRANSITION_CORE_MASK);
   statement.BindInt(3, transition);
-  statement.BindInt64(4,
-      max_results ? max_results : std::numeric_limits<int64>::max());
+  statement.BindInt64(
+      4, max_results ? max_results : std::numeric_limits<int64_t>::max());
 
   return FillVisitVector(statement, visits);
 }
@@ -476,8 +480,10 @@ bool VisitDatabase::GetRedirectToVisit(VisitID to_visit,
     sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
         "SELECT u.url "
         "FROM visits v JOIN urls u ON v.url = u.id "
-        "WHERE v.id = ?"));
+        "WHERE v.id = ? AND (v.transition & ?) != 0"));
     statement.BindInt64(0, row.referring_visit);
+    statement.BindInt64(1, (ui::PAGE_TRANSITION_IS_REDIRECT_MASK |
+                            ui::PAGE_TRANSITION_CHAIN_START));
 
     if (!statement.Step())
       return false;
@@ -533,6 +539,41 @@ bool VisitDatabase::GetVisibleVisitCountToHost(const GURL& url,
 
   *first_visit = base::Time::FromInternalValue(statement.ColumnInt64(0));
   *count = statement.ColumnInt(1);
+  return true;
+}
+
+bool VisitDatabase::GetHistoryCount(const base::Time& begin_time,
+                                    const base::Time& end_time,
+                                    int* count) {
+  sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
+      "SELECT COUNT(*) FROM ("
+      "SELECT DISTINCT url, "
+      // Convert unit of timestamp from the numbers of microseconds since
+      // Windows Epoch to the number of seconds from Unix Epoch. Leap seconds
+      // are not handled in both timestamp units, so a linear conversion is
+      // valid here.
+      "DATE((visit_time - ?) / ?, 'unixepoch', 'localtime')"
+      "FROM visits "
+      "WHERE (transition & ?) != 0 "  // CHAIN_END
+      "AND (transition & ?) NOT IN (?, ?, ?) "  // NO SUBFRAME or
+                                                // KEYWORD_GENERATED
+      "AND visit_time >= ? AND visit_time < ?"
+      ")"));
+
+  statement.BindInt64(0, base::Time::kTimeTToMicrosecondsOffset);
+  statement.BindInt64(1, base::Time::kMicrosecondsPerSecond);
+  statement.BindInt(2, ui::PAGE_TRANSITION_CHAIN_END);
+  statement.BindInt(3, ui::PAGE_TRANSITION_CORE_MASK);
+  statement.BindInt(4, ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+  statement.BindInt(5, ui::PAGE_TRANSITION_MANUAL_SUBFRAME);
+  statement.BindInt(6, ui::PAGE_TRANSITION_KEYWORD_GENERATED);
+  statement.BindInt64(7, begin_time.ToInternalValue());
+  statement.BindInt64(8, end_time.ToInternalValue());
+
+  if (!statement.Step())
+    return false;
+
+  *count = statement.ColumnInt(0);
   return true;
 }
 

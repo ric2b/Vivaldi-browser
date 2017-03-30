@@ -80,6 +80,16 @@ public interface LayoutRenderHost {
     Rect getVisibleViewport(Rect rect);
 
     /**
+     * @return The background color of the toolbar.
+     */
+    int getTopControlsBackgroundColor();
+
+    /**
+     * @return The alpha value of the textbox in the toolbar.
+     */
+    float getTopControlsUrlBarAlpha();
+
+    /**
      * @return Whether or not the toolbar is currently being faked.
      */
     boolean areTopControlsPermanentlyHidden();

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+GEN_INCLUDE(['options_browsertest_base.js']);
+
 /**
  * TestFixture for testing the formatting of settings pages.
  * @extends {testing.Test}
@@ -34,7 +36,7 @@ SettingsFormatWebUITest.Messages = {
 };
 
 SettingsFormatWebUITest.prototype = {
-  __proto__: testing.Test.prototype,
+  __proto__: OptionsBrowsertestBase.prototype,
 
   /**
    * Navigate to browser settings.
@@ -50,8 +52,23 @@ SettingsFormatWebUITest.prototype = {
    */
   errors: null,
 
+  /** @override */
   setUp: function() {
+    OptionsBrowsertestBase.prototype.setUp.call(this);
+
     this.errors = [];
+
+    // Enable when failure is resolved.
+    // AX_TEXT_04: http://crbug.com/570727
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'linkWithUnclearPurpose',
+        '#sync-overview > A');
+
+    // Enable when failure is resolved.
+    // AX_ARIA_10: http://crbug.com/570725
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'unsupportedAriaAttribute',
+        '#profiles-list');
   },
 
   tearDown: function() {
@@ -115,15 +132,7 @@ SettingsFormatWebUITest.prototype = {
 /**
  * Ensure that radio and checkbox buttons have consistent layout.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_RadioCheckboxStyleCheck ' +
-    'DISABLED_RadioCheckboxStyleCheck');
-GEN('#else');
-GEN('#define MAYBE_RadioCheckboxStyleCheck ' +
-    'RadioCheckboxStyleCheck');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('SettingsFormatWebUITest', 'MAYBE_RadioCheckboxStyleCheck', function () {
+TEST_F('SettingsFormatWebUITest', 'RadioCheckboxStyleCheck', function() {
   var settings = $('settings');
   assertTrue(settings != null, 'Unable to access settings');
   var query = 'input[type=checkbox], input[type=radio]';
@@ -139,15 +148,7 @@ TEST_F('SettingsFormatWebUITest', 'MAYBE_RadioCheckboxStyleCheck', function () {
 /**
  * Each checkbox requires an id or pref property.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_CheckboxIdOrPrefCheck ' +
-    'DISABLED_CheckboxIdOrPrefCheck');
-GEN('#else');
-GEN('#define MAYBE_CheckboxIdOrPrefCheck ' +
-    'CheckboxIdOrPrefCheck');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('SettingsFormatWebUITest', 'MAYBE_CheckboxIdOrPrefCheck', function () {
+TEST_F('SettingsFormatWebUITest', 'CheckboxIdOrPrefCheck', function() {
   var query =
       'input[type=checkbox]:not([pref]):not([id]):not(.spacer-checkbox)';
   var elements = document.querySelectorAll(query);
@@ -161,15 +162,7 @@ TEST_F('SettingsFormatWebUITest', 'MAYBE_CheckboxIdOrPrefCheck', function () {
 /**
  * Each radio button requires name and value properties.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_RadioButtonNameValueCheck ' +
-    'DISABLED_RadioButtonNameValueCheck');
-GEN('#else');
-GEN('#define MAYBE_RadioButtonNameValueCheck ' +
-    'RadioButtonNameValueCheck');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('SettingsFormatWebUITest', 'MAYBE_RadioButtonNameValueCheck', function () {
+TEST_F('SettingsFormatWebUITest', 'RadioButtonNameValueCheck', function() {
   var elements = document.querySelectorAll('input[type=radio]');
   for (var i = 0; i < elements.length; i++) {
     var element = elements[i];

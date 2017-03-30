@@ -7,25 +7,28 @@ source_set("base") {
 
   sources = [
     "completion_event.h",
+    "container_util.h",
+    "contiguous_container.cc",
+    "contiguous_container.h",
     "delayed_unique_notifier.cc",
     "delayed_unique_notifier.h",
     "histograms.cc",
     "histograms.h",
     "invalidation_region.cc",
     "invalidation_region.h",
-    "list_container.cc",
     "list_container.h",
+    "list_container_helper.cc",
+    "list_container_helper.h",
     "math_util.cc",
     "math_util.h",
+    "random_access_list_container.h",
     "region.cc",
     "region.h",
     "resource_id.h",
     "rolling_time_delta_history.cc",
     "rolling_time_delta_history.h",
-    "scoped_ptr_algorithm.h",
-    "scoped_ptr_deque.h",
-    "scoped_ptr_vector.h",
-    "sidecar_list_container.h",
+    "rtree.cc",
+    "rtree.h",
     "simple_enclosed_region.cc",
     "simple_enclosed_region.h",
     "switches.cc",
@@ -49,7 +52,7 @@ source_set("base") {
   defines = [ "CC_IMPLEMENTATION=1" ]
 
   if (!is_debug && (is_win || is_android)) {
-    configs -= [ "//build/config/compiler:optimize" ]
+    configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
   }
 }

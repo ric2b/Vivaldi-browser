@@ -9,8 +9,8 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -179,6 +179,21 @@ class InstallVerifier : public KeyedService,
   base::WeakPtrFactory<InstallVerifier> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(InstallVerifier);
+};
+
+// Instances of this class can be constructed to disable install verification
+// during tests.
+class ScopedInstallVerifierBypassForTest {
+ public:
+  ScopedInstallVerifierBypassForTest();
+  ~ScopedInstallVerifierBypassForTest();
+
+  // Should install verification be bypassed?
+  static bool ShouldBypass();
+
+ private:
+  bool old_value_;
+  DISALLOW_COPY_AND_ASSIGN(ScopedInstallVerifierBypassForTest);
 };
 
 }  // namespace extensions

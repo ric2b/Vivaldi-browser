@@ -7,11 +7,9 @@
 
 #include <jni.h>
 
-#include "android_webview/browser/renderer_host/print_manager.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/macros.h"
 #include "skia/ext/refptr.h"
 
 namespace content {
@@ -24,30 +22,27 @@ class PrintSettings;
 
 namespace android_webview {
 
-class AwPdfExporter : public PrintManagerDelegate {
+class AwPdfExporter {
  public:
   AwPdfExporter(JNIEnv* env,
                 jobject obj,
                 content::WebContents* web_contents);
 
-  ~AwPdfExporter() override;
+  ~AwPdfExporter();
 
   void ExportToPdf(JNIEnv* env,
-                   jobject obj,
+                   const base::android::JavaParamRef<jobject>& obj,
                    int fd,
-                   jobject cancel_signal);
-
-  // Implement PrintManagerDelegate methods
-  void DidExportPdf(bool success) override;
-  bool IsCancelled() override;
+                   const base::android::JavaParamRef<jobject>& cancel_signal);
 
  private:
-  void CreatePdfSettings(JNIEnv* env, jobject obj);
+  void InitPdfSettings(JNIEnv* env,
+                       jobject obj,
+                       printing::PrintSettings& settings);
+  void DidExportPdf(int fd, bool success);
 
   JavaObjectWeakGlobalRef java_ref_;
   content::WebContents* web_contents_;
-
-  scoped_ptr<printing::PrintSettings> print_settings_;
 
   DISALLOW_COPY_AND_ASSIGN(AwPdfExporter);
 };

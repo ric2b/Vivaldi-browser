@@ -15,8 +15,8 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content.browser.ContentView;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.ContentViewRenderView;
@@ -127,7 +127,7 @@ public class CastWindowAndroid extends LinearLayout {
     private void initFromNativeWebContents(WebContents webContents, int renderProcessId) {
         Context context = getContext();
         mContentViewCore = new ContentViewCore(context);
-        ContentView view = new ContentView(context, mContentViewCore);
+        ContentView view = ContentView.createContentView(context, mContentViewCore);
         mContentViewCore.initialize(view, view, webContents, mWindow);
         mWebContents = mContentViewCore.getWebContents();
         mNavigationController = mWebContents.getNavigationController();

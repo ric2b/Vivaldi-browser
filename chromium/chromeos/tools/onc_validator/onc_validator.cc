@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <cstdio>
 #include <iostream>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
@@ -13,6 +14,9 @@
 #include "base/values.h"
 #include "chromeos/network/onc/onc_signature.h"
 #include "chromeos/network/onc/onc_validator.h"
+
+// TODO Check why this file do not fail on default trybots
+// http://crbug.com/543919
 
 // Command line switches.
 const char kSwitchErrorOnUnknownField[] = "error-on-unknown-field";
@@ -82,28 +86,28 @@ void PrintHelp() {
           kStatusArgumentError);
 }
 
-scoped_ptr<base::DictionaryValue> ReadDictionary(std::string filename) {
+scoped_ptr<base::DictionaryValue> ReadDictionary(const std::string& filename) {
   base::FilePath path(filename);
   JSONFileValueDeserializer deserializer(path);
   deserializer.set_allow_trailing_comma(true);
 
-  base::DictionaryValue* dict = NULL;
-
   std::string json_error;
-  base::Value* value = deserializer.Deserialize(NULL, &json_error);
+  scoped_ptr<base::Value> value = deserializer.Deserialize(NULL, &json_error);
   if (!value) {
     LOG(ERROR) << "Couldn't json-deserialize file '" << filename
                << "': " << json_error;
-    return make_scoped_ptr(dict);
+    return nullptr;
   }
 
-  if (!value->GetAsDictionary(&dict)) {
+  scoped_ptr<base::DictionaryValue> dict =
+      base::DictionaryValue::From(std::move(value));
+  if (!dict) {
     LOG(ERROR) << "File '" << filename
                << "' does not contain a dictionary as expected, but type "
                << value->GetType();
   }
 
-  return make_scoped_ptr(dict);
+  return dict;
 }
 
 int main(int argc, const char* argv[]) {
@@ -151,7 +155,7 @@ int main(int argc, const char* argv[]) {
   chromeos::onc::Validator::Result result;
   validator.ValidateAndRepairObject(signature, *onc_object, &result);
 
-  switch(result) {
+  switch (result) {
     case chromeos::onc::Validator::VALID:
       return kStatusValid;
     case chromeos::onc::Validator::VALID_WITH_WARNINGS:

@@ -4,10 +4,15 @@
 
 #include "media/cast/sender/vp8_encoder.h"
 
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/format_macros.h"
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
 #include "media/base/video_frame.h"
 #include "media/cast/cast_defines.h"
-#include "third_party/libvpx/source/libvpx/vpx/vp8cx.h"
+#include "media/cast/constants.h"
+#include "third_party/libvpx_new/source/libvpx/vpx/vp8cx.h"
 
 namespace media {
 namespace cast {
@@ -20,35 +25,63 @@ namespace {
 // pause in the video stream.
 const int kRestartFramePeriods = 3;
 
+// The following constants are used to automactically tune the encoder
+// parameters: |cpu_used| and |min_quantizer|.
+
+// The |half-life| of the encoding speed accumulator.
+// The smaller, the shorter of the time averaging window.
+const int kEncodingSpeedAccHalfLife = 120000;  // 0.12 second.
+
+// The target deadline utilization signal. This is a trade-off between quality
+// and less CPU usage. The range of this value is [0, 1]. Higher the value,
+// better the quality and higher the CPU usage.
+//
+// For machines with more than two encoding threads.
+const double kHiTargetDeadlineUtilization = 0.7;
+// For machines with two encoding threads.
+const double kMidTargetDeadlineUtilization = 0.6;
+// For machines with single encoding thread.
+const double kLoTargetDeadlineUtilization = 0.5;
+
+// This is the equivalent change on encoding speed for the change on each
+// quantizer step.
+const double kEquivalentEncodingSpeedStepPerQpStep = 1 / 20.0;
+
+// Highest/lowest allowed encoding speed set to the encoder. The valid range
+// is [4, 16]. Experiments show that with speed higher than 12, the saving of
+// the encoding time is not worth the dropping of the quality. And with speed
+// lower than 6, the increasing of quality is not worth the increasing of
+// encoding time.
+const int kHighestEncodingSpeed = 12;
+const int kLowestEncodingSpeed = 6;
+
+bool HasSufficientFeedback(
+    const FeedbackSignalAccumulator<base::TimeDelta>& accumulator) {
+  const base::TimeDelta amount_of_history =
+      accumulator.update_time() - accumulator.reset_time();
+  return amount_of_history.InMicroseconds() >= 250000;  // 0.25 second.
+}
+
 }  // namespace
 
 Vp8Encoder::Vp8Encoder(const VideoSenderConfig& video_config)
     : cast_config_(video_config),
-      use_multiple_video_buffers_(
-          cast_config_.max_number_of_video_buffers_used ==
-          kNumberOfVp8VideoBuffers),
+      target_deadline_utilization_(
+          video_config.number_of_encode_threads > 2
+              ? kHiTargetDeadlineUtilization
+              : (video_config.number_of_encode_threads > 1
+                     ? kMidTargetDeadlineUtilization
+                     : kLoTargetDeadlineUtilization)),
       key_frame_requested_(true),
       bitrate_kbit_(cast_config_.start_bitrate / 1000),
-      last_encoded_frame_id_(kStartFrameId),
-      last_acked_frame_id_(kStartFrameId),
-      undroppable_frames_(0) {
+      last_encoded_frame_id_(kFirstFrameId - 1),
+      has_seen_zero_length_encoded_frame_(false),
+      encoding_speed_acc_(
+          base::TimeDelta::FromMicroseconds(kEncodingSpeedAccHalfLife)),
+      encoding_speed_(kHighestEncodingSpeed) {
   config_.g_timebase.den = 0;  // Not initialized.
-
-  for (int i = 0; i < kNumberOfVp8VideoBuffers; ++i) {
-    buffer_state_[i].frame_id = last_encoded_frame_id_;
-    buffer_state_[i].state = kBufferStartState;
-  }
-
-  // VP8 have 3 buffers available for prediction, with
-  // max_number_of_video_buffers_used set to 1 we maximize the coding efficiency
-  // however in this mode we can not skip frames in the receiver to catch up
-  // after a temporary network outage; with max_number_of_video_buffers_used
-  // set to 3 we allow 2 frames to be skipped by the receiver without error
-  // propagation.
-  DCHECK(cast_config_.max_number_of_video_buffers_used == 1 ||
-         cast_config_.max_number_of_video_buffers_used ==
-             kNumberOfVp8VideoBuffers)
-      << "Invalid argument";
+  DCHECK_LE(cast_config_.min_qp, cast_config_.max_cpu_saver_qp);
+  DCHECK_LE(cast_config_.max_cpu_saver_qp, cast_config_.max_qp);
 
   thread_checker_.DetachFromThread();
 }
@@ -72,13 +105,13 @@ void Vp8Encoder::ConfigureForNewFrameSize(const gfx::Size& frame_size) {
     // the old size, in terms of area, the existing encoder instance can
     // continue.  Otherwise, completely tear-down and re-create a new encoder to
     // avoid a shutdown crash.
-    if (frame_size.GetArea() <= gfx::Size(config_.g_w, config_.g_h).GetArea() &&
-        !use_multiple_video_buffers_) {
+    if (frame_size.GetArea() <= gfx::Size(config_.g_w, config_.g_h).GetArea()) {
       DVLOG(1) << "Continuing to use existing encoder at smaller frame size: "
                << gfx::Size(config_.g_w, config_.g_h).ToString() << " --> "
                << frame_size.ToString();
       config_.g_w = frame_size.width();
       config_.g_h = frame_size.height();
+      config_.rc_min_quantizer = cast_config_.min_qp;
       if (vpx_codec_enc_config_set(&encoder_, &config_) == VPX_CODEC_OK)
         return;
       DVLOG(1) << "libvpx rejected the attempt to use a smaller frame size in "
@@ -94,14 +127,6 @@ void Vp8Encoder::ConfigureForNewFrameSize(const gfx::Size& frame_size) {
              << frame_size.ToString();
   }
 
-  // Reset multi-buffer mode state.
-  last_acked_frame_id_ = last_encoded_frame_id_;
-  undroppable_frames_ = 0;
-  for (int i = 0; i < kNumberOfVp8VideoBuffers; ++i) {
-    buffer_state_[i].frame_id = last_encoded_frame_id_;
-    buffer_state_[i].state = kBufferStartState;
-  }
-
   // Populate encoder configuration with default values.
   CHECK_EQ(vpx_codec_enc_config_default(vpx_codec_vp8_cx(), &config_, 0),
            VPX_CODEC_OK);
@@ -112,11 +137,7 @@ void Vp8Encoder::ConfigureForNewFrameSize(const gfx::Size& frame_size) {
   // Set the timebase to match that of base::TimeDelta.
   config_.g_timebase.num = 1;
   config_.g_timebase.den = base::Time::kMicrosecondsPerSecond;
-  if (use_multiple_video_buffers_) {
-    // We must enable error resilience when we use multiple buffers, due to
-    // codec requirements.
-    config_.g_error_resilient = 1;
-  }
+
   // |g_pass| and |g_lag_in_frames| must be "one pass" and zero, respectively,
   // in order for VP8 to support changing frame sizes during encoding:
   config_.g_pass = VPX_RC_ONE_PASS;
@@ -153,12 +174,17 @@ void Vp8Encoder::ConfigureForNewFrameSize(const gfx::Size& frame_size) {
   CHECK_EQ(vpx_codec_control(&encoder_, VP8E_SET_STATIC_THRESHOLD, 1),
            VPX_CODEC_OK);
 
-  // Improve quality by enabling sets of codec features that utilize more CPU.
-  // The default is zero, with increasingly more CPU to be used as the value is
-  // more negative.
-  // TODO(miu): Document why this value was chosen and expected behaviors.
-  // Should this be dynamic w.r.t. hardware performance?
-  CHECK_EQ(vpx_codec_control(&encoder_, VP8E_SET_CPUUSED, -6), VPX_CODEC_OK);
+  // This cpu_used setting is a trade-off between cpu usage and encoded video
+  // quality. The default is zero, with increasingly less CPU to be used as the
+  // value is more negative or more positive. The encoder does some automatic
+  // adjust on encoding speed for positive values, however at least at this
+  // stage the experiments show that this automatic behaviour is not reliable on
+  // windows machines. We choose to set negative values instead to directly set
+  // the encoding speed to the encoder. Starting with the highest encoding speed
+  // to avoid large cpu usage from the beginning.
+  encoding_speed_ = kHighestEncodingSpeed;
+  CHECK_EQ(vpx_codec_control(&encoder_, VP8E_SET_CPUUSED, -encoding_speed_),
+           VPX_CODEC_OK);
 }
 
 void Vp8Encoder::Encode(const scoped_refptr<media::VideoFrame>& video_frame,
@@ -177,23 +203,6 @@ void Vp8Encoder::Encode(const scoped_refptr<media::VideoFrame>& video_frame,
   const gfx::Size frame_size = video_frame->visible_rect().size();
   if (!is_initialized() || gfx::Size(config_.g_w, config_.g_h) != frame_size)
     ConfigureForNewFrameSize(frame_size);
-
-  uint32 latest_frame_id_to_reference;
-  Vp8Buffers buffer_to_update;
-  vpx_codec_flags_t flags = 0;
-  if (key_frame_requested_) {
-    flags = VPX_EFLAG_FORCE_KF;
-    // Self reference.
-    latest_frame_id_to_reference = last_encoded_frame_id_ + 1;
-    // We can pick any buffer as buffer_to_update since we update
-    // them all.
-    buffer_to_update = kLastBuffer;
-  } else {
-    // Reference all acked frames (buffers).
-    latest_frame_id_to_reference = GetCodecReferenceFlags(&flags);
-    buffer_to_update = GetNextBufferToUpdate();
-    GetCodecUpdateFlags(buffer_to_update, &flags);
-  }
 
   // Wrapper for vpx_codec_encode() to access the YUV data in the |video_frame|.
   // Only the VISIBLE rectangle within |video_frame| is exposed to the codec.
@@ -245,11 +254,9 @@ void Vp8Encoder::Encode(const scoped_refptr<media::VideoFrame>& video_frame,
   // zero to force the encoder to base its single-frame bandwidth calculations
   // entirely on |predicted_frame_duration| and the target bitrate setting being
   // micro-managed via calls to UpdateRates().
-  CHECK_EQ(vpx_codec_encode(&encoder_,
-                            &vpx_image,
-                            0,
+  CHECK_EQ(vpx_codec_encode(&encoder_, &vpx_image, 0,
                             predicted_frame_duration.InMicroseconds(),
-                            flags,
+                            key_frame_requested_ ? VPX_EFLAG_FORCE_KF : 0,
                             VPX_DL_REALTIME),
            VPX_CODEC_OK)
       << "BUG: Invalid arguments passed to vpx_codec_encode().";
@@ -270,18 +277,36 @@ void Vp8Encoder::Encode(const scoped_refptr<media::VideoFrame>& video_frame,
       // Frame dependencies could theoretically be relaxed by looking for the
       // VPX_FRAME_IS_DROPPABLE flag, but in recent testing (Oct 2014), this
       // flag never seems to be set.
-      encoded_frame->referenced_frame_id = latest_frame_id_to_reference;
+      encoded_frame->referenced_frame_id = last_encoded_frame_id_ - 1;
     }
     encoded_frame->rtp_timestamp =
-        TimeDeltaToRtpDelta(video_frame->timestamp(), kVideoFrequency);
+        RtpTimeTicks::FromTimeDelta(video_frame->timestamp(), kVideoFrequency);
     encoded_frame->reference_time = reference_time;
     encoded_frame->data.assign(
-        static_cast<const uint8*>(pkt->data.frame.buf),
-        static_cast<const uint8*>(pkt->data.frame.buf) + pkt->data.frame.sz);
+        static_cast<const uint8_t*>(pkt->data.frame.buf),
+        static_cast<const uint8_t*>(pkt->data.frame.buf) + pkt->data.frame.sz);
     break;  // Done, since all data is provided in one CX_FRAME_PKT packet.
   }
   DCHECK(!encoded_frame->data.empty())
       << "BUG: Encoder must provide data since lagged encoding is disabled.";
+
+  // TODO(miu): Determine when/why encoding can produce zero-length data,
+  // which causes crypto crashes.  http://crbug.com/519022
+  if (!has_seen_zero_length_encoded_frame_ && encoded_frame->data.empty()) {
+    has_seen_zero_length_encoded_frame_ = true;
+
+    const char kZeroEncodeDetails[] = "zero-encode-details";
+    const std::string details = base::StringPrintf(
+        "SV/%c,id=%" PRIu32 ",rtp=%" PRIu32 ",br=%d,kfr=%c",
+        encoded_frame->dependency == EncodedFrame::KEY ? 'K' : 'D',
+        encoded_frame->frame_id, encoded_frame->rtp_timestamp.lower_32_bits(),
+        static_cast<int>(config_.rc_target_bitrate),
+        key_frame_requested_ ? 'Y' : 'N');
+    base::debug::SetCrashKeyValue(kZeroEncodeDetails, details);
+    // Please forward crash reports to http://crbug.com/519022:
+    base::debug::DumpWithoutCrashing();
+    base::debug::ClearCrashKey(kZeroEncodeDetails);
+  }
 
   // Compute deadline utilization as the real-world time elapsed divided by the
   // frame duration.
@@ -317,168 +342,60 @@ void Vp8Encoder::Encode(const scoped_refptr<media::VideoFrame>& video_frame,
 
   if (encoded_frame->dependency == EncodedFrame::KEY) {
     key_frame_requested_ = false;
-
-    for (int i = 0; i < kNumberOfVp8VideoBuffers; ++i) {
-      buffer_state_[i].state = kBufferSent;
-      buffer_state_[i].frame_id = encoded_frame->frame_id;
-    }
-  } else {
-    if (buffer_to_update != kNoBuffer) {
-      buffer_state_[buffer_to_update].state = kBufferSent;
-      buffer_state_[buffer_to_update].frame_id = encoded_frame->frame_id;
-    }
   }
-}
+  if (encoded_frame->dependency == EncodedFrame::KEY) {
+    encoding_speed_acc_.Reset(kHighestEncodingSpeed, video_frame->timestamp());
+  } else {
+    // Equivalent encoding speed considering both cpu_used setting and
+    // quantizer.
+    double actual_encoding_speed =
+        encoding_speed_ +
+        kEquivalentEncodingSpeedStepPerQpStep *
+            std::max(0, quantizer - cast_config_.min_qp);
+    double adjusted_encoding_speed = actual_encoding_speed *
+                                     encoded_frame->deadline_utilization /
+                                     target_deadline_utilization_;
+    encoding_speed_acc_.Update(adjusted_encoding_speed,
+                               video_frame->timestamp());
+  }
 
-uint32 Vp8Encoder::GetCodecReferenceFlags(vpx_codec_flags_t* flags) {
-  if (!use_multiple_video_buffers_)
-    return last_encoded_frame_id_;
-
-  const uint32 kMagicFrameOffset = 512;
-  // We set latest_frame_to_reference to an old frame so that
-  // IsNewerFrameId will work correctly.
-  uint32 latest_frame_to_reference =
-      last_encoded_frame_id_ - kMagicFrameOffset;
-
-  // Reference all acked frames.
-  // TODO(hubbe): We may also want to allow references to the
-  // last encoded frame, if that frame was assigned to a buffer.
-  for (int i = 0; i < kNumberOfVp8VideoBuffers; ++i) {
-    if (buffer_state_[i].state == kBufferAcked) {
-      if (IsNewerFrameId(buffer_state_[i].frame_id,
-                         latest_frame_to_reference)) {
-        latest_frame_to_reference = buffer_state_[i].frame_id;
-      }
+  if (HasSufficientFeedback(encoding_speed_acc_)) {
+    // Predict |encoding_speed_| and |min_quantizer| for next frame.
+    // When CPU is constrained, increase encoding speed and increase
+    // |min_quantizer| if needed.
+    double next_encoding_speed = encoding_speed_acc_.current();
+    int next_min_qp;
+    if (next_encoding_speed > kHighestEncodingSpeed) {
+      double remainder = next_encoding_speed - kHighestEncodingSpeed;
+      next_encoding_speed = kHighestEncodingSpeed;
+      next_min_qp =
+          static_cast<int>(remainder / kEquivalentEncodingSpeedStepPerQpStep +
+                           cast_config_.min_qp + 0.5);
+      next_min_qp = std::min(next_min_qp, cast_config_.max_cpu_saver_qp);
     } else {
-      switch (i) {
-        case kAltRefBuffer:
-          *flags |= VP8_EFLAG_NO_REF_ARF;
-          break;
-        case kGoldenBuffer:
-          *flags |= VP8_EFLAG_NO_REF_GF;
-          break;
-        case kLastBuffer:
-          *flags |= VP8_EFLAG_NO_REF_LAST;
-          break;
-      }
+      next_encoding_speed =
+          std::max<double>(kLowestEncodingSpeed, next_encoding_speed) + 0.5;
+      next_min_qp = cast_config_.min_qp;
     }
-  }
-
-  if (latest_frame_to_reference ==
-      last_encoded_frame_id_ - kMagicFrameOffset) {
-    // We have nothing to reference, it's kind of like a key frame,
-    // but doesn't reset buffers.
-    latest_frame_to_reference = last_encoded_frame_id_ + 1;
-  }
-
-  return latest_frame_to_reference;
-}
-
-Vp8Encoder::Vp8Buffers Vp8Encoder::GetNextBufferToUpdate() {
-  if (!use_multiple_video_buffers_)
-    return kNoBuffer;
-
-  // The goal here is to make sure that we always keep one ACKed
-  // buffer while trying to get an ACK for a newer buffer as we go.
-  // Here are the rules for which buffer to select for update:
-  // 1. If there is a buffer in state kStartState, use it.
-  // 2. If there is a buffer other than the oldest buffer
-  //    which is Acked, use the oldest buffer.
-  // 3. If there are Sent buffers which are older than
-  //    latest_acked_frame_, use the oldest one.
-  // 4. If all else fails, just overwrite the newest buffer,
-  //    but no more than 3 times in a row.
-  //    TODO(hubbe): Figure out if 3 is optimal.
-  // Note, rule 1-3 describe cases where there is a "free" buffer
-  // that we can use. Rule 4 describes what happens when there is
-  // no free buffer available.
-
-  // Buffers, sorted from oldest frame to newest.
-  Vp8Encoder::Vp8Buffers buffers[kNumberOfVp8VideoBuffers];
-
-  for (int i = 0; i < kNumberOfVp8VideoBuffers; ++i) {
-    Vp8Encoder::Vp8Buffers buffer = static_cast<Vp8Encoder::Vp8Buffers>(i);
-
-    // Rule 1
-    if (buffer_state_[buffer].state == kBufferStartState) {
-      undroppable_frames_ = 0;
-      return buffer;
+    if (encoding_speed_ != static_cast<int>(next_encoding_speed)) {
+      encoding_speed_ = static_cast<int>(next_encoding_speed);
+      CHECK_EQ(vpx_codec_control(&encoder_, VP8E_SET_CPUUSED, -encoding_speed_),
+               VPX_CODEC_OK);
     }
-    buffers[buffer] = buffer;
-  }
-
-  // Sorting three elements with selection sort.
-  for (int i = 0; i < kNumberOfVp8VideoBuffers - 1; i++) {
-    for (int j = i + 1; j < kNumberOfVp8VideoBuffers; j++) {
-      if (IsOlderFrameId(buffer_state_[buffers[j]].frame_id,
-                         buffer_state_[buffers[i]].frame_id)) {
-        std::swap(buffers[i], buffers[j]);
-      }
+    if (config_.rc_min_quantizer != static_cast<unsigned int>(next_min_qp)) {
+      config_.rc_min_quantizer = static_cast<unsigned int>(next_min_qp);
+      CHECK_EQ(vpx_codec_enc_config_set(&encoder_, &config_), VPX_CODEC_OK);
     }
-  }
-
-  // Rule 2
-  if (buffer_state_[buffers[1]].state == kBufferAcked ||
-      buffer_state_[buffers[2]].state == kBufferAcked) {
-    undroppable_frames_ = 0;
-    return buffers[0];
-  }
-
-  // Rule 3
-  for (int i = 0; i < kNumberOfVp8VideoBuffers; i++) {
-    if (buffer_state_[buffers[i]].state == kBufferSent &&
-        IsOlderFrameId(buffer_state_[buffers[i]].frame_id,
-                       last_acked_frame_id_)) {
-      undroppable_frames_ = 0;
-      return buffers[i];
-    }
-  }
-
-  // Rule 4
-  if (undroppable_frames_ >= 3) {
-    undroppable_frames_ = 0;
-    return kNoBuffer;
-  } else {
-    undroppable_frames_++;
-    return buffers[kNumberOfVp8VideoBuffers - 1];
   }
 }
 
-void Vp8Encoder::GetCodecUpdateFlags(Vp8Buffers buffer_to_update,
-                                     vpx_codec_flags_t* flags) {
-  if (!use_multiple_video_buffers_)
-    return;
-
-  // Update at most one buffer, except for key-frames.
-  switch (buffer_to_update) {
-    case kAltRefBuffer:
-      *flags |= VP8_EFLAG_NO_UPD_GF;
-      *flags |= VP8_EFLAG_NO_UPD_LAST;
-      break;
-    case kLastBuffer:
-      *flags |= VP8_EFLAG_NO_UPD_GF;
-      *flags |= VP8_EFLAG_NO_UPD_ARF;
-      break;
-    case kGoldenBuffer:
-      *flags |= VP8_EFLAG_NO_UPD_ARF;
-      *flags |= VP8_EFLAG_NO_UPD_LAST;
-      break;
-    case kNoBuffer:
-      *flags |= VP8_EFLAG_NO_UPD_ARF;
-      *flags |= VP8_EFLAG_NO_UPD_GF;
-      *flags |= VP8_EFLAG_NO_UPD_LAST;
-      *flags |= VP8_EFLAG_NO_UPD_ENTROPY;
-      break;
-  }
-}
-
-void Vp8Encoder::UpdateRates(uint32 new_bitrate) {
+void Vp8Encoder::UpdateRates(uint32_t new_bitrate) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!is_initialized())
     return;
 
-  uint32 new_bitrate_kbit = new_bitrate / 1000;
+  uint32_t new_bitrate_kbit = new_bitrate / 1000;
   if (config_.rc_target_bitrate == new_bitrate_kbit)
     return;
 
@@ -490,23 +407,6 @@ void Vp8Encoder::UpdateRates(uint32 new_bitrate) {
   }
 
   VLOG(1) << "VP8 new rc_target_bitrate: " << new_bitrate_kbit << " kbps";
-}
-
-void Vp8Encoder::LatestFrameIdToReference(uint32 frame_id) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (!use_multiple_video_buffers_)
-    return;
-
-  VLOG(2) << "VP8 ok to reference frame:" << static_cast<int>(frame_id);
-  for (int i = 0; i < kNumberOfVp8VideoBuffers; ++i) {
-    if (frame_id == buffer_state_[i].frame_id) {
-      buffer_state_[i].state = kBufferAcked;
-      break;
-    }
-  }
-  if (IsOlderFrameId(last_acked_frame_id_, frame_id)) {
-    last_acked_frame_id_ = frame_id;
-  }
 }
 
 void Vp8Encoder::GenerateKeyFrame() {

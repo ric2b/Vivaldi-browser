@@ -21,12 +21,12 @@ Performs the following steps:
 import logging
 import threading
 
+from devil.android import device_errors
+from devil.utils import reraiser_thread
+from devil.utils import watchdog_timer
 from pylib import constants
 from pylib.base import base_test_result
 from pylib.base import test_collection
-from pylib.device import device_errors
-from pylib.utils import reraiser_thread
-from pylib.utils import watchdog_timer
 
 
 DEFAULT_TIMEOUT = 7 * 60  # seven minutes
@@ -149,8 +149,10 @@ def _SetUp(runner_factory, device, out_runners, threadsafe_counter):
     runner = runner_factory(device, index)
     runner.SetUp()
     out_runners.append(runner)
-  except device_errors.DeviceUnreachableError as e:
-    logging.warning('Failed to create shard for %s: [%s]', device, e)
+  except (device_errors.CommandFailedError,
+          device_errors.CommandTimeoutError,
+          device_errors.DeviceUnreachableError):
+    logging.exception('Failed to create shard for %s', str(device))
 
 
 def _RunAllTests(runners, test_collection_factory, num_retries, timeout=None,
@@ -171,7 +173,8 @@ def _RunAllTests(runners, test_collection_factory, num_retries, timeout=None,
   Returns:
     A tuple of (TestRunResults object, exit code)
   """
-  logging.warning('Running tests with %s test runners.' % (len(runners)))
+  logging.warning('Running tests with %s test %s.',
+                  len(runners), 'runners' if len(runners) != 1 else 'runner')
   results = []
   exit_code = 0
   run_results = base_test_result.TestRunResults()
@@ -188,14 +191,17 @@ def _RunAllTests(runners, test_collection_factory, num_retries, timeout=None,
   workers = reraiser_thread.ReraiserThreadGroup(threads)
   workers.StartAll()
 
-  # Catch DeviceUnreachableErrors and set a warning exit code
   try:
     workers.JoinAll(watcher)
-  except device_errors.DeviceUnreachableError as e:
-    logging.error(e)
+  except device_errors.CommandFailedError:
+    logging.exception('Command failed on device.')
+  except device_errors.CommandFailedError:
+    logging.exception('Command timed out on device.')
+  except device_errors.DeviceUnreachableError:
+    logging.exception('Device became unreachable.')
 
   if not all((len(tc) == 0 for tc in test_collections)):
-    logging.error('Only ran %d tests (all devices are likely offline).' %
+    logging.error('Only ran %d tests (all devices are likely offline).',
                   len(results))
     for tc in test_collections:
       run_results.AddResults(base_test_result.BaseTestResult(
@@ -223,7 +229,8 @@ def _CreateRunners(runner_factory, devices, timeout=None):
   Returns:
     A list of TestRunner objects.
   """
-  logging.warning('Creating %s test runners.' % len(devices))
+  logging.warning('Creating %s test %s.', len(devices),
+                  'runners' if len(devices) != 1 else 'runner')
   runners = []
   counter = _ThreadSafeCounter()
   threads = reraiser_thread.ReraiserThreadGroup(
@@ -328,5 +335,5 @@ def RunTests(tests, runner_factory, devices, shard=True,
       _TearDownRunners(runners, setup_timeout)
     except device_errors.DeviceUnreachableError as e:
       logging.warning('Device unresponsive during TearDown: [%s]', e)
-    except Exception as e:
-      logging.error('Unexpected exception caught during TearDown: %s' % str(e))
+    except Exception: # pylint: disable=broad-except
+      logging.exception('Unexpected exception caught during TearDown')

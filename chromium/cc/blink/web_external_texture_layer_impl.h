@@ -5,9 +5,11 @@
 #ifndef CC_BLINK_WEB_EXTERNAL_TEXTURE_LAYER_IMPL_H_
 #define CC_BLINK_WEB_EXTERNAL_TEXTURE_LAYER_IMPL_H_
 
+#include <vector>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "cc/blink/cc_blink_export.h"
 #include "cc/layers/texture_layer_client.h"
 #include "third_party/WebKit/public/platform/WebExternalTextureLayer.h"
@@ -35,16 +37,15 @@ class WebExternalTextureLayerImpl
  public:
   CC_BLINK_EXPORT explicit WebExternalTextureLayerImpl(
       blink::WebExternalTextureLayerClient*);
-  virtual ~WebExternalTextureLayerImpl();
+  ~WebExternalTextureLayerImpl() override;
 
   // blink::WebExternalTextureLayer implementation.
-  virtual blink::WebLayer* layer();
-  virtual void clearTexture();
-  virtual void setOpaque(bool opaque);
-  virtual void setPremultipliedAlpha(bool premultiplied);
-  virtual void setBlendBackgroundColor(bool blend);
-  virtual void setRateLimitContext(bool rate_limit);
-  virtual void setNearestNeighbor(bool nearest_neighbor);
+  blink::WebLayer* layer() override;
+  void clearTexture() override;
+  void setOpaque(bool opaque) override;
+  void setPremultipliedAlpha(bool premultiplied) override;
+  void setBlendBackgroundColor(bool blend) override;
+  void setNearestNeighbor(bool nearest_neighbor) override;
 
   // TextureLayerClient implementation.
   bool PrepareTextureMailbox(
@@ -57,14 +58,14 @@ class WebExternalTextureLayerImpl
       base::WeakPtr<WebExternalTextureLayerImpl> layer,
       const blink::WebExternalTextureMailbox& mailbox,
       WebExternalBitmapImpl* bitmap,
-      unsigned sync_point,
+      const gpu::SyncToken& sync_token,
       bool lost_resource);
 
   WebExternalBitmapImpl* AllocateBitmap();
 
   blink::WebExternalTextureLayerClient* client_;
   scoped_ptr<WebLayerImpl> layer_;
-  ScopedVector<WebExternalBitmapImpl> free_bitmaps_;
+  std::vector<scoped_ptr<WebExternalBitmapImpl>> free_bitmaps_;
 
   DISALLOW_COPY_AND_ASSIGN(WebExternalTextureLayerImpl);
 };

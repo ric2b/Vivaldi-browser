@@ -49,11 +49,23 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierAndroid
   ConnectionType GetCurrentConnectionType() const override;
   // Requires ACCESS_WIFI_STATE permission in order to provide precise WiFi link
   // speed.
-  double GetCurrentMaxBandwidth() const override;
+  void GetCurrentMaxBandwidthAndConnectionType(
+      double* max_bandwidth_mbps,
+      ConnectionType* connection_type) const override;
+  bool AreNetworkHandlesCurrentlySupported() const override;
+  void GetCurrentConnectedNetworks(NetworkList* network_list) const override;
+  ConnectionType GetCurrentNetworkConnectionType(
+      NetworkHandle network) const override;
+  NetworkHandle GetCurrentDefaultNetwork() const override;
 
   // NetworkChangeNotifierDelegateAndroid::Observer:
   void OnConnectionTypeChanged() override;
-  void OnMaxBandwidthChanged(double max_bandwidth_mbps) override;
+  void OnMaxBandwidthChanged(double max_bandwidth_mbps,
+                             ConnectionType type) override;
+  void OnNetworkConnected(NetworkHandle network) override;
+  void OnNetworkSoonToDisconnect(NetworkHandle network) override;
+  void OnNetworkDisconnected(NetworkHandle network) override;
+  void OnNetworkMadeDefault(NetworkHandle network) override;
 
   static bool Register(JNIEnv* env);
 
@@ -67,6 +79,9 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierAndroid
 
   class DnsConfigServiceThread;
 
+  // Enable NetworkHandles support for tests.
+  void ForceNetworkHandlesSupportedForTesting();
+
   NetworkChangeNotifierAndroid(NetworkChangeNotifierDelegateAndroid* delegate,
                                const DnsConfig* dns_config_for_testing);
 
@@ -74,6 +89,7 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierAndroid
 
   NetworkChangeNotifierDelegateAndroid* const delegate_;
   scoped_ptr<DnsConfigServiceThread> dns_config_service_thread_;
+  bool force_network_handles_supported_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkChangeNotifierAndroid);
 };

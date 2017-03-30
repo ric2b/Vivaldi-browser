@@ -5,8 +5,8 @@
 #include "chrome/browser/sync/sync_startup_tracker.h"
 
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 
 SyncStartupTracker::SyncStartupTracker(Profile* profile, Observer* observer)
     : profile_(profile),
@@ -62,7 +62,7 @@ SyncStartupTracker::SyncServiceState SyncStartupTracker::GetSyncServiceState(
   }
 
   // If the sync backend has started up, notify the callback.
-  if (service->backend_initialized())
+  if (service->IsBackendInitialized())
     return SYNC_STARTUP_COMPLETE;
 
   // If the sync service has some kind of error, report to the user.

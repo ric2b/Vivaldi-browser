@@ -4,6 +4,8 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings_test_utils.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/prefs/pref_registry_simple.h"
@@ -46,10 +48,10 @@ void DataReductionProxySettingsTestBase::SetUp() {
           .SkipSettingsInitialization()
           .Build();
 
+  test_context_->SetDataReductionProxyEnabled(false);
   TestingPrefServiceSimple* pref_service = test_context_->pref_service();
   pref_service->SetInt64(prefs::kDailyHttpContentLengthLastUpdateDate, 0L);
   pref_service->registry()->RegisterDictionaryPref(kProxy);
-  pref_service->SetBoolean(prefs::kDataReductionProxyEnabled, false);
   pref_service->SetBoolean(prefs::kDataReductionProxyWasEnabledBefore, false);
 
   //AddProxyToCommandLine();
@@ -59,7 +61,7 @@ void DataReductionProxySettingsTestBase::SetUp() {
                                  prefs::kDailyHttpOriginalContentLength);
   ListPrefUpdate received_update(test_context_->pref_service(),
                                  prefs::kDailyHttpReceivedContentLength);
-  for (int64 i = 0; i < kNumDaysInHistory; i++) {
+  for (int64_t i = 0; i < kNumDaysInHistory; i++) {
     original_update->Insert(0,
                             new base::StringValue(base::Int64ToString(2 * i)));
     received_update->Insert(0, new base::StringValue(base::Int64ToString(i)));
@@ -88,9 +90,7 @@ void DataReductionProxySettingsTestBase::ResetSettings(bool allowed,
   settings->config_ = test_context_->config();
   settings->prefs_ = test_context_->pref_service();
   settings->data_reduction_proxy_service_ =
-      test_context_->CreateDataReductionProxyService();
-  settings->data_reduction_proxy_service_->SetIOData(
-      test_context_->io_data()->GetWeakPtr());
+      test_context_->CreateDataReductionProxyService(settings);
   test_context_->config()->ResetParamFlagsForTest(flags);
   settings->UpdateConfigValues();
   EXPECT_CALL(*settings, GetOriginalProfilePrefs())
@@ -127,10 +127,10 @@ void DataReductionProxySettingsTestBase::CheckOnPrefChange(
   ExpectSetProxyPrefs(expected_enabled, false);
   if (managed) {
     test_context_->pref_service()->SetManagedPref(
-        prefs::kDataReductionProxyEnabled, new base::FundamentalValue(enabled));
+        test_context_->GetDataReductionProxyEnabledPrefName(),
+        new base::FundamentalValue(enabled));
   } else {
-    test_context_->pref_service()->SetBoolean(prefs::kDataReductionProxyEnabled,
-                                              enabled);
+    test_context_->SetDataReductionProxyEnabled(enabled);
   }
   test_context_->RunUntilIdle();
   // Never expect the proxy to be restricted for pref change tests.
@@ -139,8 +139,9 @@ void DataReductionProxySettingsTestBase::CheckOnPrefChange(
 void DataReductionProxySettingsTestBase::InitDataReductionProxy(
     bool enabled_at_startup) {
   settings_->InitDataReductionProxySettings(
+      test_context_->GetDataReductionProxyEnabledPrefName(),
       test_context_->pref_service(), test_context_->io_data(),
-      test_context_->CreateDataReductionProxyService());
+      test_context_->CreateDataReductionProxyService(settings_.get()));
   settings_->data_reduction_proxy_service()->SetIOData(
       test_context_->io_data()->GetWeakPtr());
   settings_->SetCallbackToRegisterSyntheticFieldTrial(

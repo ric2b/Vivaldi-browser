@@ -4,18 +4,21 @@
 
 #include "device/usb/usb_service.h"
 
-#include "base/message_loop/message_loop.h"
+#include "base/at_exit.h"
+#include "base/bind.h"
+#include "build/build_config.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/usb/usb_device.h"
+
+#if defined(OS_ANDROID)
+#include "device/usb/usb_service_android.h"
+#else
 #include "device/usb/usb_service_impl.h"
+#endif
 
 namespace device {
 
-namespace {
-
-UsbService* g_service;
-
-}  // namespace
+UsbService::Observer::~Observer() {}
 
 void UsbService::Observer::OnDeviceAdded(scoped_refptr<UsbDevice> device) {
 }
@@ -27,26 +30,23 @@ void UsbService::Observer::OnDeviceRemovedCleanup(
     scoped_refptr<UsbDevice> device) {
 }
 
-// static
-UsbService* UsbService::GetInstance(
-    scoped_refptr<base::SequencedTaskRunner> blocking_task_runner) {
-  if (!g_service) {
-    // UsbService constructor saves the pointer this returns and UsbServiceImpl
-    // will destroy itself when the current message loop exits.
-    UsbServiceImpl::Create(blocking_task_runner);
-  }
-  return g_service;
-}
+void UsbService::Observer::WillDestroyUsbService() {}
 
-UsbService::UsbService() {
-  DCHECK(!g_service);
-  g_service = this;
+// static
+scoped_ptr<UsbService> UsbService::Create(
+    scoped_refptr<base::SequencedTaskRunner> blocking_task_runner) {
+#if defined(OS_ANDROID)
+  return make_scoped_ptr(new UsbServiceAndroid());
+#else
+  return make_scoped_ptr(new UsbServiceImpl(blocking_task_runner));
+#endif
 }
 
 UsbService::~UsbService() {
-  DCHECK(g_service);
-  g_service = nullptr;
+  FOR_EACH_OBSERVER(Observer, observer_list_, WillDestroyUsbService());
 }
+
+UsbService::UsbService() {}
 
 void UsbService::AddObserver(Observer* observer) {
   DCHECK(CalledOnValidThread());

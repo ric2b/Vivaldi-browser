@@ -48,10 +48,16 @@ void ActionTargetGenerator::DoRun() {
   if (!FillScriptArgs())
     return;
 
+  if (!FillResponseFileContents())
+    return;
+
   if (!FillOutputs(output_type_ == Target::ACTION_FOREACH))
     return;
 
   if (!FillDepfile())
+    return;
+
+  if (!FillConsole())
     return;
 
   if (!FillCheckIncludes())
@@ -62,6 +68,29 @@ void ActionTargetGenerator::DoRun() {
 
   // Action outputs don't depend on the current toolchain so we can skip adding
   // that dependency.
+
+  // response_file_contents and {{response_file_name}} in the args must go
+  // together.
+  const auto& required_args_substitutions =
+      target_->action_values().args().required_types();
+  bool has_rsp_file_name = std::find(required_args_substitutions.begin(),
+                                     required_args_substitutions.end(),
+                                     SUBSTITUTION_RSP_FILE_NAME) !=
+      required_args_substitutions.end();
+  if (target_->action_values().uses_rsp_file() && !has_rsp_file_name) {
+    *err_ = Err(function_call_, "Missing {{response_file_name}} in args.",
+        "This target defines response_file_contents but doesn't use\n"
+        "{{response_file_name}} in the args, which means the response file\n"
+        "will be unused.");
+    return;
+  }
+  if (!target_->action_values().uses_rsp_file() && has_rsp_file_name) {
+    *err_ = Err(function_call_, "Missing response_file_contents definition.",
+        "This target uses {{response_file_name}} in the args, but does not\n"
+        "define response_file_contents which means the response file\n"
+        "will be empty.");
+    return;
+  }
 }
 
 bool ActionTargetGenerator::FillScript() {
@@ -92,6 +121,13 @@ bool ActionTargetGenerator::FillScriptArgs() {
   return target_->action_values().args().Parse(*value, err_);
 }
 
+bool ActionTargetGenerator::FillResponseFileContents() {
+  const Value* value = scope_->GetValue(variables::kResponseFileContents, true);
+  if (!value)
+    return true;
+  return target_->action_values().rsp_file_contents().Parse(*value, err_);
+}
+
 bool ActionTargetGenerator::FillDepfile() {
   const Value* value = scope_->GetValue(variables::kDepfile, true);
   if (!value)
@@ -104,6 +140,16 @@ bool ActionTargetGenerator::FillDepfile() {
     return false;
 
   target_->action_values().set_depfile(depfile);
+  return true;
+}
+
+bool ActionTargetGenerator::FillConsole() {
+  const Value* value = scope_->GetValue(variables::kConsole, true);
+  if (!value)
+    return true;
+  if (!value->VerifyTypeIs(Value::BOOLEAN, err_))
+    return false;
+  target_->action_values().set_console(value->boolean_value());
   return true;
 }
 

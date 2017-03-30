@@ -16,8 +16,8 @@
 #include <windows.h>
 #include <XInput.h>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -56,7 +56,7 @@ class GamepadPlatformDataFetcherWin : public GamepadDataFetcher {
   bool GetXInputDllFunctions();
 
   // Scan for connected XInput and DirectInput gamepads.
-  void EnumerateDevices(blink::WebGamepads* pads);
+  void EnumerateDevices();
   bool GetXInputPadConnectivity(int i, blink::WebGamepad* pad) const;
 
   void GetXInputPadData(int i, blink::WebGamepad* pad);
@@ -81,14 +81,13 @@ class GamepadPlatformDataFetcherWin : public GamepadDataFetcher {
     RAWINPUT_CONNECTED
   };
 
-  struct PadState {
+  struct PlatformPadState {
     PadConnectionStatus status;
-    GamepadStandardMappingFunction mapper;
 
     int xinput_index; // XInput-only
     HANDLE raw_input_handle;  // RawInput-only fields.
   };
-  PadState pad_state_[blink::WebGamepads::itemsLengthCap];
+  PlatformPadState platform_pad_state_[blink::WebGamepads::itemsLengthCap];
 
   scoped_ptr<RawInputDataFetcher> raw_input_fetcher_;
 

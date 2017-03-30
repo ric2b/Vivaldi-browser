@@ -4,20 +4,23 @@
 
 #include "chrome/browser/extensions/api/chrome_extensions_api_client.h"
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/chrome_device_permissions_prompt.h"
 #include "chrome/browser/extensions/api/declarative_content/chrome_content_rules_registry.h"
+#include "chrome/browser/extensions/api/declarative_content/default_content_predicate_evaluators.h"
 #include "chrome/browser/extensions/api/management/chrome_management_api_delegate.h"
 #include "chrome/browser/extensions/api/storage/sync_value_store_cache.h"
 #include "chrome/browser/extensions/api/web_request/chrome_extension_web_request_event_router_delegate.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
-#include "chrome/browser/favicon/favicon_helper.h"
+#include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/guest_view/app_view/chrome_app_view_guest_delegate.h"
+#include "chrome/browser/guest_view/chrome_guest_view_manager_delegate.h"
 #include "chrome/browser/guest_view/extension_options/chrome_extension_options_guest_delegate.h"
 #include "chrome/browser/guest_view/mime_handler_view/chrome_mime_handler_view_guest_delegate.h"
 #include "chrome/browser/guest_view/web_view/chrome_web_view_guest_delegate.h"
 #include "chrome/browser/guest_view/web_view/chrome_web_view_permission_helper_delegate.h"
-#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/pdf/chrome_pdf_web_contents_helper_client.h"
 #include "components/pdf/browser/pdf_web_contents_helper.h"
 #include "content/public/browser/browser_context.h"
@@ -97,6 +100,12 @@ ChromeExtensionsAPIClient::CreateExtensionOptionsGuestDelegate(
   return new ChromeExtensionOptionsGuestDelegate(guest);
 }
 
+scoped_ptr<guest_view::GuestViewManagerDelegate>
+ChromeExtensionsAPIClient::CreateGuestViewManagerDelegate(
+    content::BrowserContext* context) const {
+  return make_scoped_ptr(new ChromeGuestViewManagerDelegate(context));
+}
+
 scoped_ptr<MimeHandlerViewGuestDelegate>
 ChromeExtensionsAPIClient::CreateMimeHandlerViewGuestDelegate(
     MimeHandlerViewGuest* guest) const {
@@ -124,7 +133,11 @@ ChromeExtensionsAPIClient::CreateContentRulesRegistry(
     content::BrowserContext* browser_context,
     RulesCacheDelegate* cache_delegate) const {
   return scoped_refptr<ContentRulesRegistry>(
-      new ChromeContentRulesRegistry(browser_context, cache_delegate));
+      new ChromeContentRulesRegistry(
+          browser_context,
+          cache_delegate,
+          base::Bind(&CreateDefaultContentPredicateEvaluators,
+                     base::Unretained(browser_context))));
 }
 
 scoped_ptr<DevicePermissionsPrompt>

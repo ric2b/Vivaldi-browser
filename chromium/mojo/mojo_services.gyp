@@ -23,6 +23,7 @@
           'services/network/public/interfaces/url_loader.mojom',
           'services/network/public/interfaces/url_loader_factory.mojom',
           'services/network/public/interfaces/web_socket.mojom',
+          'services/network/public/interfaces/web_socket_factory.mojom',
         ],
         'mojom_include_path': '<(DEPTH)/mojo/services',
       },
@@ -46,6 +47,18 @@
       'hard_dependency': 1,
       'dependencies': [
         'network_service_bindings_mojom',
+      ],
+    },
+    {
+      # GN version: //mojo/converters/network
+      'target_name': 'network_type_converters',
+      'type': 'static_library',
+      'dependencies': [
+        'network_service_bindings_lib',
+      ],
+      'sources': [
+        'converters/network/network_type_converters.cc',
+        'converters/network/network_type_converters.h',
       ],
     },
     {

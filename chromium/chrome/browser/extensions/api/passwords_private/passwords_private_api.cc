@@ -14,19 +14,6 @@
 namespace extensions {
 
 ////////////////////////////////////////////////////////////////////////////////
-// PasswordsPrivateCanPasswordAccountBeManagedFunction
-
-PasswordsPrivateCanPasswordAccountBeManagedFunction::
-    ~PasswordsPrivateCanPasswordAccountBeManagedFunction() {}
-
-ExtensionFunction::ResponseAction
-    PasswordsPrivateCanPasswordAccountBeManagedFunction::Run() {
-  scoped_ptr<base::FundamentalValue> visible(new base::FundamentalValue(
-      password_manager::ManageAccountLinkExperimentEnabled()));
-  return RespondNow(OneArgument(visible.Pass()));
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // PasswordsPrivateRemoveSavedPasswordFunction
 
 PasswordsPrivateRemoveSavedPasswordFunction::
@@ -40,7 +27,8 @@ ExtensionFunction::ResponseAction
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
   PasswordsPrivateDelegate* delegate =
-      PasswordsPrivateDelegateFactory::GetForBrowserContext(browser_context());
+      PasswordsPrivateDelegateFactory::GetForBrowserContext(browser_context(),
+                                                            true /* create */);
   delegate->RemoveSavedPassword(
       parameters->login_pair.origin_url,
       parameters->login_pair.username);
@@ -62,7 +50,8 @@ ExtensionFunction::ResponseAction
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
   PasswordsPrivateDelegate* delegate =
-      PasswordsPrivateDelegateFactory::GetForBrowserContext(browser_context());
+      PasswordsPrivateDelegateFactory::GetForBrowserContext(browser_context(),
+                                                            true /* create */);
   delegate->RemovePasswordException(parameters->exception_url);
 
   return RespondNow(NoArguments());
@@ -82,7 +71,8 @@ ExtensionFunction::ResponseAction
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
   PasswordsPrivateDelegate* delegate =
-      PasswordsPrivateDelegateFactory::GetForBrowserContext(browser_context());
+      PasswordsPrivateDelegateFactory::GetForBrowserContext(browser_context(),
+                                                            true /* create */);
 
   delegate->RequestShowPassword(parameters->login_pair.origin_url,
                                 parameters->login_pair.username,

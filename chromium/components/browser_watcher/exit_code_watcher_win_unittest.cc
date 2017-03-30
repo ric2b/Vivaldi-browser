@@ -4,6 +4,8 @@
 
 #include "components/browser_watcher/exit_code_watcher_win.h"
 
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/process/process.h"
 #include "base/strings/string16.h"
@@ -84,7 +86,7 @@ class ExitCodeWatcherTest : public testing::Test {
     override_manager_.OverrideRegistry(HKEY_CURRENT_USER);
   }
 
-  base::Process OpenSelfWithAccess(uint32 access) {
+  base::Process OpenSelfWithAccess(uint32_t access) {
     return base::Process::OpenWithAccess(base::GetCurrentProcId(), access);
   }
 
@@ -92,7 +94,7 @@ class ExitCodeWatcherTest : public testing::Test {
     base::win::RegistryValueIterator it(
           HKEY_CURRENT_USER, kRegistryPath);
 
-    ASSERT_EQ(1, it.ValueCount());
+    ASSERT_EQ(1u, it.ValueCount());
     base::win::RegKey key(HKEY_CURRENT_USER,
                           kRegistryPath,
                           KEY_QUERY_VALUE);
@@ -104,7 +106,7 @@ class ExitCodeWatcherTest : public testing::Test {
         base::CompareCase::SENSITIVE));
     DWORD value = 0;
     ASSERT_EQ(ERROR_SUCCESS, key.ReadValueDW(it.Name(), &value));
-    ASSERT_EQ(exit_code, value);
+    ASSERT_EQ(exit_code, static_cast<int>(value));
   }
 
  protected:

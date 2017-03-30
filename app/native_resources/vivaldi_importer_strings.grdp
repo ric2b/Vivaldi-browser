@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vivaldi context menu specific strings (included from vivaldi_native_strings.grd). -->
+<grit-part>
+  <message name="IDS_IMPORT_FROM_OPERA" desc="browser combo box: Opera Browser">
+    Opera 12.x
+  </message>
+  <message name="IDS_IMPORT_FROM_GOOGLE_CHROME" desc="Name of import profile Google Chrome">
+    Chrome
+  </message>
+  <message name="IDS_IMPORT_FROM_YANDEX" desc="Name of import profile Yandex">
+    Yandex
+  </message>
+  <message name="IDS_IMPORT_FROM_OPERA_OPIUM" desc="Name of import profile from Chromium based Opera">
+    Opera version 15+
+  </message>
+  <message name="IDS_IMPORT_FROM_OPERA_OPIUM_BETA" desc="Name of import profile from Chromium based Opera beta">
+    Opera version 15+ (Beta)
+  </message>
+  <message name="IDS_IMPORT_FROM_OPERA_OPIUM_DEV" desc="Name of import profile from Chromium based Opera developer">
+    Opera version 15+ (Developer)
+  </message>
+  <message name="IDS_IMPORT_FROM_VIVALDI" desc="Name of import profile from Chromium based Opera">
+    Vivaldi
+  </message>
+  <message name="IDS_OPERA_IMPORT_FROM_BOOKMARKS_HTML_FILE" desc="browser combo box: Opera Bookmarks HTML File">
+    Opera Bookmarks File
+  </message>
+  <message name="IDS_CHROME_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
+    Sadly, your Chrome settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Chrome windows. Then click Continue.
+  </message>
+  <message name="IDS_YANDEX_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
+    Sadly, your Yandex settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Yandex windows. Then click Continue.
+  </message>
+  <message name="IDS_OPIUM_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
+    Sadly, your Opera 15+ settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera 15+ windows. Then click Continue.
+  </message>
+</grit-part>

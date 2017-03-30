@@ -13,6 +13,8 @@ import android.os.Environment;
 import android.test.InstrumentationTestRunner;
 import android.util.Log;
 
+import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.test.broker.OnDeviceInstrumentationBroker;
 import org.chromium.test.reporter.TestStatusReceiver;
 import org.chromium.test.reporter.TestStatusReporter;
@@ -21,8 +23,10 @@ import org.chromium.test.support.RobotiumBundleGenerator;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -44,6 +48,8 @@ public class OnDeviceInstrumentationDriver extends Instrumentation {
             "org.chromium.test.driver.OnDeviceInstrumentationDriver.TargetPackage";
     private static final String EXTRA_TARGET_CLASS =
             "org.chromium.test.driver.OnDeviceInstrumentationDriver.TargetClass";
+    private static final String EXTRA_TIMEOUT_SCALE =
+            "org.chromium.test.driver.OnDeviceInstrumentationDriver.TimeoutScale";
 
     private static final Pattern COMMA = Pattern.compile(",");
     private static final int TEST_WAIT_TIMEOUT = 5 * TestStatusReporter.HEARTBEAT_INTERVAL_MS;
@@ -54,12 +60,14 @@ public class OnDeviceInstrumentationDriver extends Instrumentation {
     private String mTargetClass;
     private String mTargetPackage;
     private List<String> mTestClasses;
+    private String mTimeoutScale;
 
     /** Parse any arguments and prepare to run tests.
 
         @param arguments The arguments to parse.
      */
     @Override
+    @SuppressFBWarnings("DMI_HARDCODED_ABSOLUTE_FILENAME")
     public void onCreate(Bundle arguments) {
         mTargetArgs = new Bundle(arguments);
         mTargetPackage = arguments.getString(EXTRA_TARGET_PACKAGE);
@@ -101,6 +109,18 @@ public class OnDeviceInstrumentationDriver extends Instrumentation {
             mTargetArgs.remove(EXTRA_TEST_LIST_FILE);
         }
 
+        mTimeoutScale = arguments.getString(EXTRA_TIMEOUT_SCALE);
+        if (mTimeoutScale != null) {
+            try {
+                OutputStreamWriter outputStreamWriter = new OutputStreamWriter(
+                        new FileOutputStream(ScalableTimeout.PROPERTY_FILE));
+                outputStreamWriter.write(mTimeoutScale);
+                outputStreamWriter.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Error writing " + ScalableTimeout.PROPERTY_FILE, e);
+            }
+        }
+
         if (mTestClasses.isEmpty()) {
             fail("No tests.");
             return;
@@ -127,8 +147,14 @@ public class OnDeviceInstrumentationDriver extends Instrumentation {
 
     /** Clean up the reporting service. */
     @Override
+    @SuppressFBWarnings("DMI_HARDCODED_ABSOLUTE_FILENAME")
     public void onDestroy() {
         super.onDestroy();
+        if (mTimeoutScale != null) {
+            if (!new File(ScalableTimeout.PROPERTY_FILE).delete()) {
+                Log.e(TAG, "Error deleting " + ScalableTimeout.PROPERTY_FILE);
+            }
+        }
     }
 
     private class Driver implements Runnable {
@@ -148,11 +174,19 @@ public class OnDeviceInstrumentationDriver extends Instrumentation {
             mTestClasses = testClasses;
         }
 
-        private void sendTestStatus(int status, String testClass, String testMethod) {
+        private void sendTestStatus(
+                int status, String testClass, String testMethod, String stackTrace) {
             Bundle statusBundle = new Bundle();
             statusBundle.putString(InstrumentationTestRunner.REPORT_KEY_NAME_CLASS, testClass);
             statusBundle.putString(InstrumentationTestRunner.REPORT_KEY_NAME_TEST, testMethod);
+            if (stackTrace != null) {
+                statusBundle.putString(InstrumentationTestRunner.REPORT_KEY_STACK, stackTrace);
+            }
             sendStatus(status, statusBundle);
+        }
+
+        private void sendTestStatus(int status, String testClass, String testMethod) {
+            sendTestStatus(status, testClass, testMethod, null);
         }
 
         /** Run the tests. */
@@ -188,9 +222,9 @@ public class OnDeviceInstrumentationDriver extends Instrumentation {
                 });
                 r.registerCallback(new TestStatusReceiver.FailCallback() {
                     @Override
-                    public void testFailed(String testClass, String testMethod) {
+                    public void testFailed(String testClass, String testMethod, String stackTrace) {
                         sendTestStatus(InstrumentationTestRunner.REPORT_VALUE_RESULT_ERROR,
-                                testClass, testMethod);
+                                testClass, testMethod, stackTrace);
                         synchronized (statusLock) {
                             finished.put(testClass + "#" + testMethod,
                                     ResultsBundleGenerator.TestResult.FAILED);

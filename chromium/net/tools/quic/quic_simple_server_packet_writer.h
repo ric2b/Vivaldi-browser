@@ -5,8 +5,10 @@
 #ifndef NET_QUIC_TOOLS_QUIC_SIMPLE_SERVER_PACKET_WRITER_H_
 #define NET_QUIC_TOOLS_QUIC_SIMPLE_SERVER_PACKET_WRITER_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/quic_connection.h"
@@ -28,7 +30,7 @@ class QuicSimpleServerPacketWriter : public QuicPacketWriter {
   typedef base::Callback<void(WriteResult)> WriteCallback;
 
   QuicSimpleServerPacketWriter(UDPServerSocket* socket,
-                         QuicBlockedWriterInterface* blocked_writer);
+                               QuicBlockedWriterInterface* blocked_writer);
   ~QuicSimpleServerPacketWriter() override;
 
   // Use this method to write packets rather than WritePacket:
@@ -47,6 +49,7 @@ class QuicSimpleServerPacketWriter : public QuicPacketWriter {
   bool IsWriteBlockedDataBuffered() const override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
+  QuicByteCount GetMaxPacketSize(const IPEndPoint& peer_address) const override;
 
  protected:
   // Do not call WritePacket on its own -- use WritePacketWithCallback

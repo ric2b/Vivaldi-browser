@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_ANDROID_SYNCHRONOUS_COMPOSITOR_H_
 #define CONTENT_PUBLIC_BROWSER_ANDROID_SYNCHRONOUS_COMPOSITOR_H_
 
+#include <stddef.h>
+
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "gpu/command_buffer/service/in_process_command_buffer.h"
@@ -19,6 +21,7 @@ class CompositorFrameAck;
 }
 
 namespace gfx {
+class ScrollOffset;
 class Transform;
 };
 
@@ -44,20 +47,14 @@ class CONTENT_EXPORT SynchronousCompositor {
   static void SetGpuService(
       scoped_refptr<gpu::InProcessCommandBuffer::Service> service);
 
-  // By default, synchronous compopsitor records the full layer, not only
-  // what is inside and around the view port. This can be used to switch
-  // between this record-full-layer behavior and normal record-around-viewport
-  // behavior.
-  static void SetRecordFullDocument(bool record_full_document);
-
   // "On demand" hardware draw. The content is first clipped to |damage_area|,
   // then transformed through |transform|, and finally clipped to |view_size|.
   virtual scoped_ptr<cc::CompositorFrame> DemandDrawHw(
-      gfx::Size surface_size,
+      const gfx::Size& surface_size,
       const gfx::Transform& transform,
-      gfx::Rect viewport,
-      gfx::Rect clip,
-      gfx::Rect viewport_rect_for_tile_priority,
+      const gfx::Rect& viewport,
+      const gfx::Rect& clip,
+      const gfx::Rect& viewport_rect_for_tile_priority,
       const gfx::Transform& transform_for_tile_priority) = 0;
 
   // For delegated rendering, return resources from parent compositor to this.
@@ -72,14 +69,18 @@ class CONTENT_EXPORT SynchronousCompositor {
   virtual void SetMemoryPolicy(size_t bytes_limit) = 0;
 
   // Should be called by the embedder after the embedder had modified the
-  // scroll offset of the root layer (as returned by
-  // SynchronousCompositorClient::GetTotalRootLayerScrollOffset).
-  virtual void DidChangeRootLayerScrollOffset() = 0;
+  // scroll offset of the root layer.
+  virtual void DidChangeRootLayerScrollOffset(
+      const gfx::ScrollOffset& root_offset) = 0;
 
   // Called by the embedder to notify that the compositor is active. The
   // compositor won't ask for vsyncs when it's inactive. NOTE: The compositor
   // starts off as inactive and needs a SetActive(true) call to begin.
   virtual void SetIsActive(bool is_active) = 0;
+
+  // Called by the embedder to notify that the OnComputeScroll step is happening
+  // and if any input animation is active, it should tick now.
+  virtual void OnComputeScroll(base::TimeTicks animation_time) = 0;
 
  protected:
   virtual ~SynchronousCompositor() {}

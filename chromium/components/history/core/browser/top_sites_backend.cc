@@ -4,6 +4,8 @@
 
 #include "components/history/core/browser/top_sites_backend.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
@@ -16,6 +18,8 @@
 #include "base/trace_event/trace_event.h"
 #include "components/history/core/browser/top_sites_database.h"
 #include "sql/connection.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace history {
 
@@ -137,11 +141,21 @@ void TopSitesBackend::SetPageThumbnailOnDBThread(const MostVisitedURL& url,
 }
 
 void TopSitesBackend::ResetDatabaseOnDBThread(const base::FilePath& file_path) {
+  if (vivaldi::IsVivaldiRunning()) {
+  DCHECK(db_task_runner_->BelongsToCurrentThread());
+  db_->DeleteDataExceptBookmarkThumbnails();
+  } else {
   DCHECK(db_task_runner_->BelongsToCurrentThread());
   db_.reset(NULL);
   sql::Connection::Delete(db_path_);
   db_.reset(new TopSitesDatabase());
   InitDBOnDBThread(db_path_);
+  }
 }
+
+void TopSitesBackend::VacuumDatabase() {
+  db_->Vacuum();
+}
+
 
 }  // namespace history

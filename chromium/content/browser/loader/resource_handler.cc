@@ -29,4 +29,20 @@ ResourceMessageFilter* ResourceHandler::GetFilter() const {
   return GetRequestInfo()->filter();
 }
 
+/* NOTE(yngve): Risk of infinite loop, should only be a problem for us,
+ * if we add new subclasses, chromium will still use the abstract definition.
+ */
+bool ResourceHandler::OnResponseStarted(ResourceResponse* response,
+                       bool* defer) {
+  return OnResponseStarted(response, defer, false, false);
+}
+
+bool ResourceHandler::OnResponseStarted(ResourceResponse* response,
+                       bool* defer,
+                       bool open_when_done,
+                       bool ask_for_target) {
+  return OnResponseStarted(response, defer);
+}
+
+
 }  // namespace content

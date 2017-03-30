@@ -6,6 +6,7 @@
 #define CONTENT_PUBLIC_TEST_CONTENT_BROWSER_TEST_UTILS_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/public/common/page_type.h"
 #include "ui/gfx/native_widget_types.h"
@@ -50,7 +51,7 @@ bool NavigateToURL(Shell* window, const GURL& url);
 
 void LoadDataWithBaseURL(Shell* window,
                          const GURL& url,
-                         const std::string data,
+                         const std::string& data,
                          const GURL& base_url);
 
 // Navigates |window| to |url|, blocking until the given number of navigations

@@ -47,15 +47,21 @@ public class CrashFileManager {
 
     private static final Pattern TMP_PATTERN = Pattern.compile("\\.tmp\\z");
 
-    private static Comparator<File> sFileComparator =  new Comparator<File>() {
+    /**
+     * Comparator used for sorting files by modification
+     * Note that the behavior is undecided if the files are created at the same time
+     * @return Comparator for prioritizing the more recently modified file
+     */
+    @VisibleForTesting
+    protected static final Comparator<File> sFileComparator =  new Comparator<File>() {
         @Override
         public int compare(File lhs, File rhs) {
             if (lhs == rhs) {
                 return 0;
             } else if (lhs.lastModified() < rhs.lastModified()) {
-                return -1;
-            } else {
                 return 1;
+            } else {
+                return -1;
             }
         }
     };
@@ -74,7 +80,7 @@ public class CrashFileManager {
     }
 
     public static String tryIncrementAttemptNumber(File mFileToUpload) {
-        String newName = incrementAttemptNumber(mFileToUpload.getPath());
+        String newName = filenameWithIncrementedAttemptNumber(mFileToUpload.getPath());
         return mFileToUpload.renameTo(new File(newName)) ? newName : null;
     }
 
@@ -82,7 +88,7 @@ public class CrashFileManager {
      * @return The file name to rename to after an addition attempt to upload
      */
     @VisibleForTesting
-    public static String incrementAttemptNumber(String filename) {
+    public static String filenameWithIncrementedAttemptNumber(String filename) {
         int numTried = readAttemptNumber(filename);
         if (numTried > 0) {
             int newCount = numTried + 1;
@@ -146,20 +152,6 @@ public class CrashFileManager {
             deleteFile(f);
         }
         for (File f : getAllTempFiles()) {
-            deleteFile(f);
-        }
-    }
-
-    /**
-     * Deletes all files including unsent crash reports.
-     * Note: This method is called from multiple threads, but it is not thread-safe. It will
-     * generate warning messages in logs if race condition occurs.
-     */
-    @VisibleForTesting
-    public void cleanAllMiniDumps() {
-        cleanOutAllNonFreshMinidumpFiles();
-
-        for (File f : getAllMinidumpFiles()) {
             deleteFile(f);
         }
     }

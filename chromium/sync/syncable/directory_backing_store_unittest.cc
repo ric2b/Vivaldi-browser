@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "testing/gtest/include/gtest/gtest.h"
+#include "sync/syncable/directory_backing_store.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <map>
 #include <string>
 
 #include "base/files/file_path.h"
@@ -13,6 +17,8 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "sql/connection.h"
 #include "sql/statement.h"
 #include "sql/test/scoped_error_ignorer.h"
@@ -22,13 +28,13 @@
 #include "sync/protocol/bookmark_specifics.pb.h"
 #include "sync/protocol/sync.pb.h"
 #include "sync/syncable/directory.h"
-#include "sync/syncable/directory_backing_store.h"
 #include "sync/syncable/on_disk_directory_backing_store.h"
 #include "sync/syncable/syncable-inl.h"
 #include "sync/test/directory_backing_store_corruption_testing.h"
 #include "sync/test/test_directory_backing_store.h"
 #include "sync/util/time.h"
 #include "testing/gtest/include/gtest/gtest-param-test.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace syncer {
 namespace syncable {
@@ -39,10 +45,11 @@ void CatastrophicErrorHandler(bool* catastrophic_error_handler_was_called) {
   *catastrophic_error_handler_was_called = true;
 }
 
-// Create a dirty EntryKernel with an ID derived from |id|.
-scoped_ptr<EntryKernel> CreateEntry(int id) {
+// Create a dirty EntryKernel with an ID derived from |id| + |id_suffix|.
+scoped_ptr<EntryKernel> CreateEntry(int id, const std::string &id_suffix) {
   scoped_ptr<EntryKernel> entry(new EntryKernel());
-  entry->put(ID, Id::CreateFromClientString(base::Int64ToString(id)));
+  std::string id_string = base::Int64ToString(id) + id_suffix;
+  entry->put(ID, Id::CreateFromClientString(id_string));
   entry->put(META_HANDLE, id);
   entry->mark_dirty(NULL);
   return entry;
@@ -50,7 +57,8 @@ scoped_ptr<EntryKernel> CreateEntry(int id) {
 
 }  // namespace
 
-SYNC_EXPORT_PRIVATE extern const int32 kCurrentDBVersion;
+SYNC_EXPORT extern const int32_t kCurrentPageSizeKB;
+SYNC_EXPORT extern const int32_t kCurrentDBVersion;
 
 class MigrationTest : public testing::TestWithParam<int> {
  public:
@@ -98,9 +106,10 @@ class MigrationTest : public testing::TestWithParam<int> {
   void SetUpVersion87Database(sql::Connection* connection);
   void SetUpVersion88Database(sql::Connection* connection);
   void SetUpVersion89Database(sql::Connection* connection);
+  void SetUpVersion90Database(sql::Connection* connection);
 
   void SetUpCurrentDatabaseAndCheckVersion(sql::Connection* connection) {
-    SetUpVersion89Database(connection);  // Prepopulates data.
+    SetUpVersion90Database(connection);  // Prepopulates data.
     scoped_ptr<TestDirectoryBackingStore> dbs(
         new TestDirectoryBackingStore(GetUsername(), connection));
     ASSERT_EQ(kCurrentDBVersion, dbs->GetVersion());
@@ -276,9 +285,9 @@ enum ShouldIncludeDeletedItems {
 
 // Returns a map from metahandle -> expected legacy time (in proto
 // format).
-std::map<int64, int64> GetExpectedLegacyMetaProtoTimes(
+std::map<int64_t, int64_t> GetExpectedLegacyMetaProtoTimes(
     enum ShouldIncludeDeletedItems include_deleted) {
-  std::map<int64, int64> expected_legacy_meta_proto_times;
+  std::map<int64_t, int64_t> expected_legacy_meta_proto_times;
   expected_legacy_meta_proto_times[1] = LEGACY_META_PROTO_TIMES(1);
   if (include_deleted == INCLUDE_DELETED_ITEMS) {
     expected_legacy_meta_proto_times[2] = LEGACY_META_PROTO_TIMES(2);
@@ -298,9 +307,9 @@ std::map<int64, int64> GetExpectedLegacyMetaProtoTimes(
 }
 
 // Returns a map from metahandle -> expected time (in proto format).
-std::map<int64, int64> GetExpectedMetaProtoTimes(
+std::map<int64_t, int64_t> GetExpectedMetaProtoTimes(
     enum ShouldIncludeDeletedItems include_deleted) {
-  std::map<int64, int64> expected_meta_proto_times;
+  std::map<int64_t, int64_t> expected_meta_proto_times;
   expected_meta_proto_times[1] = META_PROTO_TIMES(1);
   if (include_deleted == INCLUDE_DELETED_ITEMS) {
     expected_meta_proto_times[2] = META_PROTO_TIMES(2);
@@ -320,11 +329,11 @@ std::map<int64, int64> GetExpectedMetaProtoTimes(
 }
 
 // Returns a map from metahandle -> expected time (as a Time object).
-std::map<int64, base::Time> GetExpectedMetaTimes() {
-  std::map<int64, base::Time> expected_meta_times;
-  const std::map<int64, int64>& expected_meta_proto_times =
+std::map<int64_t, base::Time> GetExpectedMetaTimes() {
+  std::map<int64_t, base::Time> expected_meta_times;
+  const std::map<int64_t, int64_t>& expected_meta_proto_times =
       GetExpectedMetaProtoTimes(INCLUDE_DELETED_ITEMS);
-  for (std::map<int64, int64>::const_iterator it =
+  for (std::map<int64_t, int64_t>::const_iterator it =
            expected_meta_proto_times.begin();
        it != expected_meta_proto_times.end(); ++it) {
     expected_meta_times[it->first] = ProtoTimeToTime(it->second);
@@ -334,19 +343,19 @@ std::map<int64, base::Time> GetExpectedMetaTimes() {
 
 // Extracts a map from metahandle -> time (in proto format) from the
 // given database.
-std::map<int64, int64> GetMetaProtoTimes(sql::Connection *db) {
+std::map<int64_t, int64_t> GetMetaProtoTimes(sql::Connection* db) {
   sql::Statement s(db->GetCachedStatement(
           SQL_FROM_HERE,
           "SELECT metahandle, mtime, server_mtime, ctime, server_ctime "
           "FROM metas"));
   EXPECT_EQ(5, s.ColumnCount());
-  std::map<int64, int64> meta_times;
+  std::map<int64_t, int64_t> meta_times;
   while (s.Step()) {
-    int64 metahandle = s.ColumnInt64(0);
-    int64 mtime = s.ColumnInt64(1);
-    int64 server_mtime = s.ColumnInt64(2);
-    int64 ctime = s.ColumnInt64(3);
-    int64 server_ctime = s.ColumnInt64(4);
+    int64_t metahandle = s.ColumnInt64(0);
+    int64_t mtime = s.ColumnInt64(1);
+    int64_t server_mtime = s.ColumnInt64(2);
+    int64_t ctime = s.ColumnInt64(3);
+    int64_t server_ctime = s.ColumnInt64(4);
     EXPECT_EQ(mtime, server_mtime);
     EXPECT_EQ(mtime, ctime);
     EXPECT_EQ(mtime, server_ctime);
@@ -389,12 +398,12 @@ void ExpectTime(const EntryKernel& entry_kernel,
 // Expect that all the entries in |entries| have times matching those in
 // the given map (from metahandle to expect time).
 void ExpectTimes(const Directory::MetahandlesMap& handles_map,
-                 const std::map<int64, base::Time>& expected_times) {
+                 const std::map<int64_t, base::Time>& expected_times) {
   for (Directory::MetahandlesMap::const_iterator it = handles_map.begin();
        it != handles_map.end(); ++it) {
-    int64 meta_handle = it->first;
+    int64_t meta_handle = it->first;
     SCOPED_TRACE(meta_handle);
-    std::map<int64, base::Time>::const_iterator it2 =
+    std::map<int64_t, base::Time>::const_iterator it2 =
         expected_times.find(meta_handle);
     if (it2 == expected_times.end()) {
       ADD_FAILURE() << "Could not find expected time for " << meta_handle;
@@ -752,8 +761,7 @@ void MigrationTest::SetUpVersion69Database(sql::Connection* connection) {
           "'Unknown',1263522064,-65542,"
           "'9010788312004066376x-6609234393368420856x');"
       "CREATE TABLE share_version (id VARCHAR(128) primary key, data INT);"
-      "INSERT INTO share_version VALUES('nick@chromium.org',69);"
-  ));
+      "INSERT INTO share_version VALUES('nick@chromium.org',69);"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -860,8 +868,7 @@ void MigrationTest::SetUpVersion70Database(sql::Connection* connection) {
           "'The WebKit Open Source Project','The WebKit Open Source Project',"
           "NULL,NULL,X'C288101A0A12687474703A2F2F7765626B69742E6F72672F120450"
           "4E4758',X'C288101C0A13687474703A2F2F7765626B69742E6F72672F78120550"
-          "4E473259');"
-      ));
+          "4E473259');"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -1274,8 +1281,7 @@ void MigrationTest::SetUpVersion74Database(sql::Connection* connection) {
           "ID_6','s_ID_6','s_ID_12','r',0,0,0,0,0,0,'The WebKit Open Source Pr"
           "oject','The WebKit Open Source Project',NULL,NULL,X'C288101A0A12687"
           "474703A2F2F7765626B69742E6F72672F1204504E4758',X'C288101C0A13687474"
-          "703A2F2F7765626B69742E6F72672F781205504E473259');"
-      ));
+          "703A2F2F7765626B69742E6F72672F781205504E473259');"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -1380,8 +1386,7 @@ void MigrationTest::SetUpVersion75Database(sql::Connection* connection) {
               "en Source Project','The WebKit Open Source Project',NULL,NULL,X"
               "'C288101A0A12687474703A2F2F7765626B69742E6F72672F1204504E4758',"
               "X'C288101C0A13687474703A2F2F7765626B69742E6F72672F781205504E473"
-              "259');"
-      ));
+              "259');"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -1477,8 +1482,7 @@ void MigrationTest::SetUpVersion76Database(sql::Connection* connection) {
           "ult -2, cache_guid TEXT , notification_state BLOB);"
       "INSERT INTO 'share_info' VALUES('nick@chromium.org','nick@chromium.org',"
           "'c27e9f59-08ca-46f8-b0cc-f16a2ed778bb','Unknown',1263522064,-65542,'"
-          "9010788312004066376x-6609234393368420856x',NULL);"
-      ));
+          "9010788312004066376x-6609234393368420856x',NULL);"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -1568,8 +1572,7 @@ void MigrationTest::SetUpVersion77Database(sql::Connection* connection) {
           "ult -2, cache_guid TEXT , notification_state BLOB);"
       "INSERT INTO 'share_info' VALUES('nick@chromium.org','nick@chromium.org',"
           "'c27e9f59-08ca-46f8-b0cc-f16a2ed778bb','Unknown',1263522064,-65542,'"
-          "9010788312004066376x-6609234393368420856x',NULL);"
-      ));
+          "9010788312004066376x-6609234393368420856x',NULL);"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -1663,8 +1666,7 @@ void MigrationTest::SetUpVersion78Database(sql::Connection* connection) {
           "ult -2, cache_guid TEXT , notification_state BLOB);"
       "INSERT INTO 'share_info' VALUES('nick@chromium.org','nick@chromium.org',"
           "'c27e9f59-08ca-46f8-b0cc-f16a2ed778bb','Unknown',1263522064,-65542,'"
-          "9010788312004066376x-6609234393368420856x',NULL);"
-          ));
+          "9010788312004066376x-6609234393368420856x',NULL);"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -1758,8 +1760,7 @@ void MigrationTest::SetUpVersion79Database(sql::Connection* connection) {
           "ult -2, cache_guid TEXT , notification_state BLOB);"
       "INSERT INTO 'share_info' VALUES('nick@chromium.org','nick@chromium.org',"
           "'c27e9f59-08ca-46f8-b0cc-f16a2ed778bb','Unknown',1263522064,"
-          "-131078,'9010788312004066376x-6609234393368420856x',NULL);"
-          ));
+          "-131078,'9010788312004066376x-6609234393368420856x',NULL);"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -1854,8 +1855,7 @@ void MigrationTest::SetUpVersion80Database(sql::Connection* connection) {
           "blob);"
       "INSERT INTO 'share_info' VALUES('nick@chromium.org','nick@chromium.org',"
           "'c27e9f59-08ca-46f8-b0cc-f16a2ed778bb','Unknown',1263522064,"
-          "-131078,'9010788312004066376x-6609234393368420856x',NULL, NULL);"
-          ));
+          "-131078,'9010788312004066376x-6609234393368420856x',NULL, NULL);"));
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
@@ -1864,27 +1864,15 @@ void MigrationTest::SetUpVersion80Database(sql::Connection* connection) {
 namespace {
 
 const int V80_ROW_COUNT = 13;
-const int64 V80_POSITIONS[V80_ROW_COUNT] = {
-  0,
-  -2097152,
-  -3145728,
-  1048576,
-  -4194304,
-  1048576,
-  1048576,
-  1048576,
-  2097152,
-  -1048576,
-  0,
-  -917504,
-  1048576
-};
+const int64_t V80_POSITIONS[V80_ROW_COUNT] = {
+    0,       -2097152, -3145728, 1048576, -4194304, 1048576, 1048576,
+    1048576, 2097152,  -1048576, 0,       -917504,  1048576};
 
 std::string V81_Ordinal(int n) {
   return Int64ToNodeOrdinal(V80_POSITIONS[n]).ToInternalValue();
 }
 
-} //namespace
+}  // namespace
 
 // Unlike the earlier versions, the rows for version 81 are generated
 // programmatically to accurately handle unprintable characters for the
@@ -2789,7 +2777,6 @@ void MigrationTest::SetUpVersion88Database(sql::Connection* connection) {
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
-
 void MigrationTest::SetUpVersion89Database(sql::Connection* connection) {
   ASSERT_TRUE(connection->is_open());
   ASSERT_TRUE(connection->BeginTransaction());
@@ -2903,6 +2890,117 @@ void MigrationTest::SetUpVersion89Database(sql::Connection* connection) {
   ASSERT_TRUE(connection->CommitTransaction());
 }
 
+void MigrationTest::SetUpVersion90Database(sql::Connection* connection) {
+  ASSERT_TRUE(connection->is_open());
+  ASSERT_TRUE(connection->BeginTransaction());
+  ASSERT_TRUE(connection->Execute(
+      "CREATE TABLE share_version (id VARCHAR(128) primary key, data INT);"
+      "INSERT INTO 'share_version' VALUES('nick@chromium.org',90);"
+      "CREATE TABLE models (model_id BLOB primary key, progress_marker BLOB, tr"
+         "ansaction_version BIGINT default 0, context BLOB);"
+      "INSERT INTO 'models' VALUES(X'C2881000',X'0888810218B605',1,NULL);"
+      "CREATE TABLE 'metas'(metahandle bigint primary key ON CONFLICT FAIL,base"
+         "_version bigint default -1,server_version bigint default 0,local_exte"
+         "rnal_id bigint default 0,transaction_version bigint default 0,mtime b"
+         "igint default 0,server_mtime bigint default 0,ctime bigint default 0,"
+         "server_ctime bigint default 0,id varchar(255) default 'r',parent_id v"
+         "archar(255) default 'r',server_parent_id varchar(255) default 'r',is_"
+         "unsynced bit default 0,is_unapplied_update bit default 0,is_del bit d"
+         "efault 0,is_dir bit default 0,server_is_dir bit default 0,server_is_d"
+         "el bit default 0,non_unique_name varchar,server_non_unique_name varch"
+         "ar(255),unique_server_tag varchar,unique_client_tag varchar,unique_bo"
+         "okmark_tag varchar,specifics blob,server_specifics blob,base_server_s"
+         "pecifics blob,server_unique_position blob,unique_position blob,attach"
+         "ment_metadata blob,server_attachment_metadata blob);"
+      "INSERT INTO 'metas' VALUES(1,-1,0,0,0,"
+         META_PROTO_TIMES_VALS(1)
+         ",'r','r','r',0,0,0,1,0,0,NULL,NULL,NULL,NULL,X'',X'',X'',NULL,X'2200'"
+         ",X'2200',NULL,NULL);"
+      "INSERT INTO 'metas' VALUES(6,694,694,6,0,"
+         META_PROTO_TIMES_VALS(6)
+         ",'s_ID_6','s_ID_9','s_ID_9',0,0,0,1,1,0,'The Internet','The Internet'"
+         ",NULL,NULL,X'6754307476346749735A5734654D653273625336557753582F77673D"
+         "',X'C2881000',X'C2881000',NULL,X'22247FFFFFFFFFC000006754307476346749"
+         "735A5734654D653273625336557753582F77673D',X'22247FFFFFFFFFC0000067543"
+         "07476346749735A5734654D653273625336557753582F77673D',NULL,NULL);"
+      "INSERT INTO 'metas' VALUES(7,663,663,0,0,"
+         META_PROTO_TIMES_VALS(7)
+         ",'s_ID_7','r','r',0,0,0,1,1,0,'Google Chrome','Google Chrome','google"
+         "_chrome',NULL,X'',NULL,NULL,NULL,X'2200',X'2200',NULL,NULL);"
+      "INSERT INTO 'metas' VALUES(8,664,664,0,0,"
+         META_PROTO_TIMES_VALS(8)
+         ",'s_ID_8','s_ID_7','s_ID_7',0,0,0,1,1,0,'Bookmarks','Bookmarks','goog"
+         "le_chrome_bookmarks',NULL,X'',X'C2881000',X'C2881000',NULL,X'2200',X'"
+         "2200',NULL,NULL);"
+      "INSERT INTO 'metas' VALUES(9,665,665,1,0,"
+         META_PROTO_TIMES_VALS(9)
+         ",'s_ID_9','s_ID_8','s_ID_8',0,0,0,1,1,0,'Bookmark Bar','Bookmark Bar'"
+         ",'bookmark_bar',NULL,X'',X'C2881000',X'C2881000',NULL,X'2200',X'2200'"
+         ",NULL,NULL);"
+      "INSERT INTO 'metas' VALUES(10,666,666,2,0,"
+         META_PROTO_TIMES_VALS(10)
+         ",'s_ID_10','s_ID_8','s_ID_8',0,0,0,1,1,0,'Other Bookmarks','Other Boo"
+         "kmarks','other_bookmarks',NULL,X'',X'C2881000',X'C2881000',NULL,X'220"
+         "0',X'2200',NULL,NULL);"
+      "INSERT INTO 'metas' VALUES(11,683,683,8,0,"
+         META_PROTO_TIMES_VALS(11)
+         ",'s_ID_11','s_ID_6','s_ID_6',0,0,0,0,0,0,'Home (The Chromium Projects"
+         ")','Home (The Chromium Projects)',NULL,NULL,X'50514C784A456D623579366"
+         "267644237646A7A2B62314130346E493D',X'C28810220A18687474703A2F2F646576"
+         "2E6368726F6D69756D2E6F72672F1206414741545741',X'C28810290A1D687474703"
+         "A2F2F6465762E6368726F6D69756D2E6F72672F6F7468657212084146414756415346"
+         "',NULL,X'22247FFFFFFFFFF0000050514C784A456D623579366267644237646A7A2B"
+         "62314130346E493D',X'22247FFFFFFFFFF0000050514C784A456D623579366267644"
+         "237646A7A2B62314130346E493D',NULL,NULL);"
+      "INSERT INTO 'metas' VALUES(12,685,685,9,0,"
+         META_PROTO_TIMES_VALS(12)
+         ",'s_ID_12','s_ID_6','s_ID_6',0,0,0,1,1,0,'Extra Bookmarks','Extra Boo"
+         "kmarks',NULL,NULL,X'7867626A704A646134635A6F616C376A49513338734B46324"
+         "837773D',X'C2881000',X'C2881000',NULL,X'222480000000000000007867626A7"
+         "04A646134635A6F616C376A49513338734B46324837773D',X'222480000000000000"
+         "007867626A704A646134635A6F616C376A49513338734B46324837773D',NULL,NULL"
+         ");"
+      "INSERT INTO 'metas' VALUES(13,687,687,10,0,"
+         META_PROTO_TIMES_VALS(13)
+         ",'s_ID_13','s_ID_6','s_ID_6',0,0,0,0,0,0,'ICANN | Internet Corporatio"
+         "n for Assigned Names and Numbers','ICANN | Internet Corporation for A"
+         "ssigned Names and Numbers',NULL,NULL,X'3142756B572F774176695650417967"
+         "2B304A614A514B3452384A413D',X'C28810240A15687474703A2F2F7777772E69636"
+         "16E6E2E636F6D2F120B504E474158463041414646',X'C28810200A15687474703A2F"
+         "2F7777772E6963616E6E2E636F6D2F120744414146415346',NULL,X'22247FFFFFFF"
+         "FFF200003142756B572F7741766956504179672B304A614A514B3452384A413D',X'2"
+         "2247FFFFFFFFFF200003142756B572F7741766956504179672B304A614A514B345238"
+         "4A413D',NULL,NULL);"
+      "INSERT INTO 'metas' VALUES(14,692,692,11,0,"
+         META_PROTO_TIMES_VALS(14)
+         ",'s_ID_14','s_ID_6','s_ID_6',0,0,0,0,0,0,'The WebKit Open Source Proj"
+         "ect','The WebKit Open Source Project',NULL,NULL,X'5A5678314E797636457"
+         "9524D3177494F7236563159552F6E644C553D',X'C288101A0A12687474703A2F2F77"
+         "65626B69742E6F72672F1204504E4758',X'C288101C0A13687474703A2F2F7765626"
+         "B69742E6F72672F781205504E473259',NULL,X'222480000000001000005A5678314"
+         "E7976364579524D3177494F7236563159552F6E644C553D',X'222480000000001000"
+         "005A5678314E7976364579524D3177494F7236563159552F6E644C553D',NULL,NULL"
+         ");"
+      "CREATE TABLE deleted_metas (metahandle bigint primary key ON CONFLICT FA"
+         "IL,base_version bigint default -1,server_version bigint default 0,loc"
+         "al_external_id bigint default 0,transaction_version bigint default 0,"
+         "mtime bigint default 0,server_mtime bigint default 0,ctime bigint def"
+         "ault 0,server_ctime bigint default 0,id varchar(255) default 'r',pare"
+         "nt_id varchar(255) default 'r',server_parent_id varchar(255) default "
+         "'r',is_unsynced bit default 0,is_unapplied_update bit default 0,is_de"
+         "l bit default 0,is_dir bit default 0,server_is_dir bit default 0,serv"
+         "er_is_del bit default 0,non_unique_name varchar,server_non_unique_nam"
+         "e varchar(255),unique_server_tag varchar,unique_client_tag varchar,un"
+         "ique_bookmark_tag varchar,specifics blob,server_specifics blob,base_s"
+         "erver_specifics blob,server_unique_position blob,unique_position blob"
+         ",attachment_metadata blob,server_attachment_metadata blob);"
+      "CREATE TABLE 'share_info' (id TEXT primary key, name TEXT, store_birthda"
+         "y TEXT, cache_guid TEXT, bag_of_chips BLOB);"
+      "INSERT INTO 'share_info' VALUES('nick@chromium.org','nick@chromium.org',"
+         "'c27e9f59-08ca-46f8-b0cc-f16a2ed778bb','9010788312004066376x-66092343"
+         "93368420856x',NULL);"));
+  ASSERT_TRUE(connection->CommitTransaction());
+}
 
 TEST_F(DirectoryBackingStoreTest, MigrateVersion67To68) {
   sql::Connection connection;
@@ -3394,6 +3492,30 @@ TEST_F(DirectoryBackingStoreTest, MigrateVersion88To89) {
   EXPECT_TRUE(dbs->needs_column_refresh());
 }
 
+TEST_F(DirectoryBackingStoreTest, MigrateVersion89To90) {
+  sql::Connection connection;
+  ASSERT_TRUE(connection.OpenInMemory());
+  SetUpVersion89Database(&connection);
+  ASSERT_TRUE(connection.DoesColumnExist("share_info", "db_create_version"));
+  ASSERT_TRUE(connection.DoesColumnExist("share_info", "db_create_time"));
+  ASSERT_TRUE(connection.DoesColumnExist("share_info", "next_id"));
+  ASSERT_TRUE(connection.DoesColumnExist("share_info", "notification_state"));
+
+  scoped_ptr<TestDirectoryBackingStore> dbs(
+      new TestDirectoryBackingStore(GetUsername(), &connection));
+  ASSERT_TRUE(dbs->MigrateVersion89To90());
+  ASSERT_EQ(90, dbs->GetVersion());
+  EXPECT_TRUE(dbs->needs_column_refresh());
+
+  ASSERT_TRUE(dbs->RefreshColumns());
+  EXPECT_FALSE(dbs->needs_column_refresh());
+
+  ASSERT_FALSE(connection.DoesColumnExist("share_info", "db_create_version"));
+  ASSERT_FALSE(connection.DoesColumnExist("share_info", "db_create_time"));
+  ASSERT_FALSE(connection.DoesColumnExist("share_info", "next_id"));
+  ASSERT_FALSE(connection.DoesColumnExist("share_info", "notification_state"));
+}
+
 // The purpose of this test case is to make it easier to get a dump of the
 // database so you can implement a SetUpVersionYDatabase method.  Here's what
 // you should do:
@@ -3415,13 +3537,13 @@ TEST_F(DirectoryBackingStoreTest, MigrateToLatestAndDump) {
   {
     sql::Connection connection;
     ASSERT_TRUE(connection.Open(GetDatabasePath()));
-    SetUpVersion88Database(&connection);  // Update this.
+    SetUpVersion89Database(&connection);  // Update this.
 
     scoped_ptr<TestDirectoryBackingStore> dbs(
         new TestDirectoryBackingStore(GetUsername(), &connection));
-    ASSERT_TRUE(dbs->MigrateVersion88To89());  // Update this.
+    ASSERT_TRUE(dbs->MigrateVersion89To90());  // Update this.
     ASSERT_TRUE(LoadAndIgnoreReturnedData(dbs.get()));
-    EXPECT_EQ(89, dbs->GetVersion());  // Update this.
+    EXPECT_EQ(90, dbs->GetVersion());  // Update this.
     ASSERT_FALSE(dbs->needs_column_refresh());
   }
   // Set breakpoint here.
@@ -3457,7 +3579,9 @@ TEST_F(DirectoryBackingStoreTest, DetectInvalidPosition) {
 
 TEST_P(MigrationTest, ToCurrentVersion) {
   sql::Connection connection;
-  ASSERT_TRUE(connection.OpenInMemory());
+  ASSERT_TRUE(connection.Open(GetDatabasePath()));
+  // Assume all old versions have an old page size.
+  connection.set_page_size(4096);
   switch (GetParam()) {
     case 67:
       SetUpVersion67Database(&connection);
@@ -3528,6 +3652,9 @@ TEST_P(MigrationTest, ToCurrentVersion) {
     case 89:
       SetUpVersion89Database(&connection);
       break;
+    case 90:
+      SetUpVersion90Database(&connection);
+      break;
     default:
       // If you see this error, it may mean that you've increased the
       // database version number but you haven't finished adding unit tests
@@ -3536,6 +3663,7 @@ TEST_P(MigrationTest, ToCurrentVersion) {
       // at the new schema.  See the MigrateToLatestAndDump test case.
       FAIL() << "Need to supply database dump for version " << GetParam();
   }
+  connection.Close();
 
   syncable::Directory::KernelLoadInfo dir_info;
   Directory::MetahandlesMap handles_map;
@@ -3544,15 +3672,21 @@ TEST_P(MigrationTest, ToCurrentVersion) {
   STLValueDeleter<Directory::MetahandlesMap> index_deleter(&handles_map);
 
   {
-    scoped_ptr<TestDirectoryBackingStore> dbs(
-        new TestDirectoryBackingStore(GetUsername(), &connection));
+    scoped_ptr<OnDiskDirectoryBackingStore> dbs(
+        new OnDiskDirectoryBackingStore(GetUsername(), GetDatabasePath()));
     ASSERT_EQ(OPENED, dbs->Load(&handles_map, &delete_journals,
                                 &metahandles_to_purge, &dir_info));
     if (!metahandles_to_purge.empty())
-      dbs->DeleteEntries(metahandles_to_purge);
+      dbs->DeleteEntries(DirectoryBackingStore::METAS_TABLE,
+                         metahandles_to_purge);
     ASSERT_FALSE(dbs->needs_column_refresh());
     ASSERT_EQ(kCurrentDBVersion, dbs->GetVersion());
+    int pageSize = 0;
+    ASSERT_TRUE(dbs->GetDatabasePageSize(&pageSize));
+    ASSERT_EQ(kCurrentPageSizeKB, pageSize);
   }
+
+  ASSERT_TRUE(connection.Open(GetDatabasePath()));
 
   // Columns deleted in Version 67.
   ASSERT_FALSE(connection.DoesColumnExist("metas", "name"));
@@ -3578,9 +3712,6 @@ TEST_P(MigrationTest, ToCurrentVersion) {
 
   // Removed extended attributes in Version 72.
   ASSERT_FALSE(connection.DoesTableExist("extended_attributes"));
-
-  // Columns added in Version 73.
-  ASSERT_TRUE(connection.DoesColumnExist("share_info", "notification_state"));
 
   // Column replaced in version 75.
   ASSERT_TRUE(connection.DoesColumnExist("models", "progress_marker"));
@@ -3627,6 +3758,12 @@ TEST_P(MigrationTest, ToCurrentVersion) {
   // Column added in version 89.
   ASSERT_TRUE(
       connection.DoesColumnExist("metas", "server_attachment_metadata"));
+
+  // Columns removed in version 90.
+  ASSERT_FALSE(connection.DoesColumnExist("share_info", "db_create_version"));
+  ASSERT_FALSE(connection.DoesColumnExist("share_info", "db_create_time"));
+  ASSERT_FALSE(connection.DoesColumnExist("share_info", "next_id"));
+  ASSERT_FALSE(connection.DoesColumnExist("share_info", "notification_state"));
 
   // Check download_progress state (v75 migration)
   ASSERT_EQ(694,
@@ -3908,6 +4045,37 @@ TEST_F(DirectoryBackingStoreTest, MinorCorruption) {
   }
 }
 
+TEST_F(DirectoryBackingStoreTest, MinorCorruptionAndUpgrade) {
+  {
+    scoped_ptr<OnDiskDirectoryBackingStore> dbs(
+        new OnDiskDirectoryBackingStore(GetUsername(), GetDatabasePath()));
+    EXPECT_TRUE(LoadAndIgnoreReturnedData(dbs.get()));
+  }
+
+  // Make the node look outdated with an invalid version.
+  {
+    sql::Connection connection;
+    ASSERT_TRUE(connection.Open(GetDatabasePath()));
+    ASSERT_TRUE(connection.Execute("UPDATE share_version SET data = 0;"));
+    ASSERT_TRUE(connection.Execute("PRAGMA page_size=4096;"));
+    ASSERT_TRUE(connection.Execute("VACUUM;"));
+  }
+
+  {
+    scoped_ptr<OnDiskDirectoryBackingStoreForTest> dbs(
+        new OnDiskDirectoryBackingStoreForTest(GetUsername(),
+                                               GetDatabasePath()));
+    dbs->SetCatastrophicErrorHandler(base::Bind(&base::DoNothing));
+
+    EXPECT_TRUE(LoadAndIgnoreReturnedData(dbs.get()));
+    EXPECT_TRUE(dbs->DidFailFirstOpenAttempt());
+
+    int page_size = 0;
+    ASSERT_TRUE(dbs->GetDatabasePageSize(&page_size));
+    EXPECT_EQ(kCurrentPageSizeKB, page_size);
+  }
+}
+
 TEST_F(DirectoryBackingStoreTest, DeleteEntries) {
   sql::Connection connection;
   ASSERT_TRUE(connection.OpenInMemory());
@@ -3925,7 +4093,7 @@ TEST_F(DirectoryBackingStoreTest, DeleteEntries) {
             &kernel_load_info);
   size_t initial_size = handles_map.size();
   ASSERT_LT(0U, initial_size) << "Test requires handles_map to delete.";
-  int64 first_to_die = handles_map.begin()->second->ref(META_HANDLE);
+  int64_t first_to_die = handles_map.begin()->second->ref(META_HANDLE);
   MetahandleSet to_delete;
   to_delete.insert(first_to_die);
   EXPECT_TRUE(dbs->DeleteEntries(to_delete));
@@ -3986,15 +4154,18 @@ TEST_F(DirectoryBackingStoreTest, IncreaseDatabasePageSizeFrom4KTo32K) {
       &handles_map, &delete_journals, &metahandles_to_purge, &kernel_load_info);
   EXPECT_EQ(open_result, OPENED);
 
+  // Set up database's page size to 4096
+  EXPECT_TRUE(dbs->db_->Execute("PRAGMA page_size=4096;"));
+  EXPECT_TRUE(dbs->Vacuum());
+
   // Check if update is successful.
   int pageSize = 0;
-  dbs->GetDatabasePageSize(&pageSize);
-  EXPECT_TRUE(32768 != pageSize);
-  dbs->db_->set_page_size(32768);
-  dbs->IncreasePageSizeTo32K();
+  EXPECT_TRUE(dbs->GetDatabasePageSize(&pageSize));
+  EXPECT_NE(kCurrentPageSizeKB, pageSize);
+  EXPECT_TRUE(dbs->UpdatePageSizeIfNecessary());
   pageSize = 0;
-  dbs->GetDatabasePageSize(&pageSize);
-  EXPECT_EQ(32768, pageSize);
+  EXPECT_TRUE(dbs->GetDatabasePageSize(&pageSize));
+  EXPECT_EQ(kCurrentPageSizeKB, pageSize);
 }
 
 // See that a catastrophic error handler remains set across instances of the
@@ -4030,7 +4201,7 @@ TEST_F(DirectoryBackingStoreTest,
     ASSERT_TRUE(LoadAndIgnoreReturnedData(dbs.get()));
     ASSERT_FALSE(dbs->DidFailFirstOpenAttempt());
     Directory::SaveChangesSnapshot snapshot;
-    snapshot.dirty_metas.insert(CreateEntry(2).release());
+    snapshot.dirty_metas.insert(CreateEntry(2, "").release());
     ASSERT_TRUE(dbs->SaveChanges(snapshot));
   }
 
@@ -4082,9 +4253,11 @@ TEST_F(DirectoryBackingStoreTest,
   ASSERT_TRUE(LoadAndIgnoreReturnedData(dbs.get()));
   ASSERT_FALSE(dbs->DidFailFirstOpenAttempt());
   Directory::SaveChangesSnapshot snapshot;
+  const std::string suffix(400, 'o');
   for (int i = 0; i < corruption_testing::kNumEntriesRequiredForCorruption;
        ++i) {
-    snapshot.dirty_metas.insert(CreateEntry(i).release());
+    scoped_ptr<EntryKernel> large_entry = CreateEntry(i, suffix);
+    snapshot.dirty_metas.insert(large_entry.release());
   }
   ASSERT_TRUE(dbs->SaveChanges(snapshot));
   // Corrupt it.

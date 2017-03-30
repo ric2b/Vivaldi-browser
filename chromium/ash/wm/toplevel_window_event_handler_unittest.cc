@@ -13,7 +13,6 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace_controller.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/message_loop/message_loop.h"
 #include "base/thread_task_runner_handle.h"
@@ -736,7 +735,7 @@ void CheckHasCaptureAndReleaseCapture(aura::Window* window) {
 
 }  // namespace
 
-// Test that releasing capture cancels an in-progress gesture drag.
+// Test that releasing capture completes an in-progress gesture drag.
 TEST_F(ToplevelWindowEventHandlerTest, GestureDragCaptureLoss) {
   scoped_ptr<aura::Window> window(CreateWindow(HTNOWHERE));
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(),
@@ -747,7 +746,7 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDragCaptureLoss) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&CheckHasCaptureAndReleaseCapture,
                             base::Unretained(window.get())));
-  EXPECT_EQ(aura::client::MOVE_CANCELED,
+  EXPECT_EQ(aura::client::MOVE_SUCCESSFUL,
             move_client->RunMoveLoop(window.get(), gfx::Vector2d(),
                                      aura::client::WINDOW_MOVE_SOURCE_TOUCH));
 }

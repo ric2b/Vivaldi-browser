@@ -5,8 +5,8 @@
 #import "chrome/browser/ui/cocoa/extensions/browser_actions_container_view.h"
 
 #include <algorithm>
+#include <utility>
 
-#include "base/basictypes.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
 #include "grit/theme_resources.h"
 #include "ui/base/cocoa/appkit_utils.h"
@@ -83,10 +83,9 @@ const CGFloat kMinimumContainerWidth = 3.0;
 
 - (void)drawRect:(NSRect)rect {
   [super drawRect:rect];
-  if (isHighlighting_) {
-    ui::NinePartImageIds imageIds = IMAGE_GRID(IDR_DEVELOPER_MODE_HIGHLIGHT);
+  if (highlight_) {
     ui::DrawNinePartImage(
-        [self bounds], imageIds, NSCompositeSourceOver, 1.0, true);
+        [self bounds], *highlight_, NSCompositeSourceOver, 1.0, true);
   }
 }
 
@@ -121,6 +120,10 @@ const CGFloat kMinimumContainerWidth = 3.0;
     [trackingArea_.get() clearOwner];
     trackingArea_.reset(nil);
   }
+}
+
+- (BOOL)trackingEnabled {
+  return trackingArea_.get() != nullptr;
 }
 
 - (void)keyDown:(NSEvent*)theEvent {
@@ -167,11 +170,17 @@ const CGFloat kMinimumContainerWidth = 3.0;
   [super keyDown:theEvent];
 }
 
-- (void)setIsHighlighting:(BOOL)isHighlighting {
-  if (isHighlighting != isHighlighting_) {
-    isHighlighting_ = isHighlighting;
+- (void)setHighlight:(scoped_ptr<ui::NinePartImageIds>)highlight {
+  if (highlight || highlight_) {
+    highlight_ = std::move(highlight);
+    // We don't allow resizing when the container is highlighting.
+    resizable_ = highlight.get() == nullptr;
     [self setNeedsDisplay:YES];
   }
+}
+
+- (BOOL)isHighlighting {
+  return highlight_.get() != nullptr;
 }
 
 - (void)setIsOverflow:(BOOL)isOverflow {

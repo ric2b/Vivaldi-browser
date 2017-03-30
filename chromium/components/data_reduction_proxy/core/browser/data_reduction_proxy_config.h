@@ -15,18 +15,15 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
+#include "net/base/network_interfaces.h"
 #include "net/log/net_log.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_retry_info.h"
 
 class GURL;
-
-namespace base {
-class TimeDelta;
-}
 
 namespace net {
 class HostPortPair;
@@ -54,8 +51,6 @@ struct DataReductionProxyTypeInfo;
 // Values of the UMA DataReductionProxy.ProbeURL histogram.
 // This enum must remain synchronized with
 // DataReductionProxyProbeURLFetchResult in metrics/histograms/histograms.xml.
-// TODO(marq): Rename these histogram buckets with s/DISABLED/RESTRICTED/, so
-//     their names match the behavior they track.
 enum SecureProxyCheckFetchResult {
   // The secure proxy check failed because the Internet was disconnected.
   INTERNET_DISCONNECTED = 0,
@@ -79,38 +74,6 @@ enum SecureProxyCheckFetchResult {
 
   // This must always be last.
   SECURE_PROXY_CHECK_FETCH_RESULT_COUNT
-};
-
-// Values of the |lofi_status_|.
-// Default state is |LOFI_STATUS_TEMPORARILY_OFF|.
-enum LoFiStatus {
-  // Used if Lo-Fi is permanently off.
-  LOFI_STATUS_OFF = 0,
-
-  // Used if Lo-Fi is disabled temporarily through direct or indirect user
-  // action. The state would be reset on next main frame request.
-  LOFI_STATUS_TEMPORARILY_OFF,
-
-  // Used if Lo-Fi is enabled through flags.
-  LOFI_STATUS_ACTIVE_FROM_FLAGS,
-
-  // Session is in Auto Lo-Fi Control group and the current conditions are
-  // suitable to use Lo-Fi "q=low" header.
-  LOFI_STATUS_ACTIVE_CONTROL,
-
-  // Session is in Auto Lo-Fi Control group and the current conditions are
-  // not suitable to use Lo-Fi "q=low" header.
-  LOFI_STATUS_INACTIVE_CONTROL,
-
-  // Session is in Auto Lo-Fi enabled group and the current conditions are
-  // suitable to use Lo-Fi "q=low" header.
-  LOFI_STATUS_ACTIVE,
-
-  // Session is in Auto Lo-Fi enabled group and the current conditions are
-  // not suitable to use Lo-Fi "q=low" header.
-  LOFI_STATUS_INACTIVE,
-
-  LOFI_STATUS_LAST = LOFI_STATUS_INACTIVE
 };
 
 // Central point for holding the Data Reduction Proxy configuration.
@@ -216,30 +179,18 @@ class DataReductionProxyConfig
   // tied to whether the Data Reduction Proxy is enabled.
   bool promo_allowed() const;
 
-  // Returns the Lo-Fi status.
-  LoFiStatus GetLoFiStatus() const;
-
-  // Returns true only if Lo-Fi "q=low" header should be added to the Chrome
-  // Proxy header.
-  // Should be called on all URL requests (main frame and non main frame).
-  bool ShouldUseLoFiHeaderForRequests() const;
-
-  // Sets |lofi_status_| to LOFI_STATUS_OFF.
+  // Sets |lofi_off_| to true.
   void SetLoFiModeOff();
 
-  // Updates |lofi_status_| based on the arguments provided and the current
-  // value of |lofi_status_|.
-  // |network_quality_estimator| may be NULL.
-  // Should be called only on main frame loads.
-  void UpdateLoFiStatusOnMainFrameRequest(
-      bool user_temporarily_disabled_lofi,
-      const net::NetworkQualityEstimator* network_quality_estimator);
+  // Returns |lofi_off_|.
+  bool lofi_off() const { return lofi_off_; }
+
+  // Returns true when Lo-Fi mode should be activated. Records metrics for Lo-Fi
+  // state changes. |request| is used to get the network quality estimator from
+  // the URLRequestContext.
+  bool ShouldEnableLoFiMode(const net::URLRequest& request);
 
  protected:
-  // Writes a warning to the log that is used in backend processing of
-  // customer feedback. Virtual so tests can mock it for verification.
-  virtual void LogProxyState(bool enabled, bool restricted, bool at_startup);
-
   // Virtualized for mocking. Records UMA containing the result of requesting
   // the secure proxy check.
   virtual void RecordSecureProxyCheckFetchResult(
@@ -266,19 +217,24 @@ class DataReductionProxyConfig
                            AreProxiesBypassed);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
                            AreProxiesBypassedRetryDelay);
-  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
-                           TestMaybeDisableIfVPNTrialDisabled);
-  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
-                           TestMaybeDisableIfVPNTrialEnabled);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, AutoLoFiParams);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
+                           AutoLoFiParamsSlowConnectionsFlag);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, AutoLoFiAccuracy);
+
+  // Values of the estimated network quality at the beginning of the most
+  // recent query of the Network Quality Estimator.
+  enum NetworkQualityAtLastQuery {
+    NETWORK_QUALITY_AT_LAST_QUERY_UNKNOWN,
+    NETWORK_QUALITY_AT_LAST_QUERY_SLOW,
+    NETWORK_QUALITY_AT_LAST_QUERY_NOT_SLOW
+  };
 
   // NetworkChangeNotifier::IPAddressObserver:
   void OnIPAddressChanged() override;
 
   // Updates the Data Reduction Proxy configurator with the current config.
-  virtual void UpdateConfigurator(bool enabled,
-                                  bool restricted,
-                                  bool at_startup);
+  virtual void UpdateConfigurator(bool enabled, bool restricted);
 
   // Populates the parameters for the Lo-Fi field trial if the session is part
   // of either Lo-Fi enabled or Lo-Fi control field trial group.
@@ -299,11 +255,6 @@ class DataReductionProxyConfig
   // Adds the default proxy bypass rules for the Data Reduction Proxy.
   void AddDefaultProxyBypassRules();
 
-  // Disables use of the Data Reduction Proxy on VPNs if client is not in the
-  // DataReductionProxyUseDataSaverOnVPN field trial and a TUN network interface
-  // is being used. Returns true if the Data Reduction Proxy has been disabled.
-  bool MaybeDisableIfVPN();
-
   // Checks if all configured data reduction proxies are in the retry map.
   // Returns true if the request is bypassed by all configured data reduction
   // proxies that apply to the request scheme. If all possible data reduction
@@ -317,13 +268,11 @@ class DataReductionProxyConfig
       bool is_https,
       base::TimeDelta* min_retry_delay) const;
 
-  // Returns true if this client is part of Lo-Fi enabled field trial.
-  // Virtualized for unit testing.
-  virtual bool IsIncludedInLoFiEnabledFieldTrial() const;
-
-  // Returns true if this client is part of Lo-Fi control field trial.
-  // Virtualized for unit testing.
-  virtual bool IsIncludedInLoFiControlFieldTrial() const;
+  // Returns true when Lo-Fi mode should be activated. Determines if Lo-Fi mode
+  // should be activated by checking the Lo-Fi flags and if the network quality
+  // is prohibitively slow. |network_quality_estimator| may be NULL.
+  bool ShouldEnableLoFiModeInternal(
+      const net::NetworkQualityEstimator* network_quality_estimator);
 
   // Returns true if expected throughput is lower than the one specified in the
   // Auto Lo-Fi field trial parameters OR if the expected round trip time is
@@ -333,16 +282,15 @@ class DataReductionProxyConfig
   virtual bool IsNetworkQualityProhibitivelySlow(
       const net::NetworkQualityEstimator* network_quality_estimator);
 
-  // Returns true only if Lo-Fi "q=low" header should be added to the Chrome
-  // Proxy header based on the value of |lofi_status|.
-  static bool ShouldUseLoFiHeaderForRequests(LoFiStatus lofi_status);
+  // Records Lo-Fi accuracy metric.
+  void RecordAutoLoFiAccuracyRate(
+      const net::NetworkQualityEstimator* network_quality_estimator) const;
 
   scoped_ptr<SecureProxyChecker> secure_proxy_checker_;
 
   // Indicates if the secure Data Reduction Proxy can be used or not.
   bool secure_proxy_allowed_;
 
-  bool disabled_on_vpn_;
   bool unreachable_;
   bool enabled_by_user_;
 
@@ -379,20 +327,36 @@ class DataReductionProxyConfig
   // duration shorter than |auto_lofi_hysteresis_|.
   base::TimeDelta auto_lofi_hysteresis_;
 
-  // Time when the network quality was last updated.
-  base::TimeTicks network_quality_last_updated_;
+  // Time when the network quality was last checked.
+  base::TimeTicks network_quality_last_checked_;
 
   // True iff the network was determined to be prohibitively slow when the
-  // network quality was last updated (most recent main frame request).
+  // network quality was last updated. This happens on when the network quality
+  // was last checked, and not more than once in any window of duration shorter
+  // than |auto_lofi_hysteresis_|.
   bool network_prohibitively_slow_;
 
   // Set to the connection type reported by NetworkChangeNotifier when the
-  // network quality was last updated (most recent main frame request).
+  // network quality was last checked.
   net::NetworkChangeNotifier::ConnectionType connection_type_;
 
-  // Current Lo-Fi status.
-  // The value changes only on main frame load.
-  LoFiStatus lofi_status_;
+  // If true, Lo-Fi is turned off for the rest of the session. This is set to
+  // true if Lo-Fi is disabled via flags or if the user implicitly opts out.
+  bool lofi_off_;
+
+  // Timestamp when the most recent query of the Network Quality Estimator
+  // happened.
+  base::TimeTicks last_query_;
+
+  // Holds the estimated network quality at the last query of the estimator.
+  // This should be used only for the purpose of recording Lo-Fi accuracy UMA.
+  NetworkQualityAtLastQuery network_quality_at_last_query_;
+
+  // True if the previous state of Lo-Fi was on, so that change in Lo-Fi status
+  // can be recorded properly. This is not recorded for the control group,
+  // because it is only used to report changes in request headers, and the
+  // request headers are never modified in the control group.
+  bool previous_state_lofi_on_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyConfig);
 };

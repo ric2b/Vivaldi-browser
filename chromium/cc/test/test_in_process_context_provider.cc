@@ -4,7 +4,10 @@
 
 #include "cc/test/test_in_process_context_provider.h"
 
+#include <stdint.h>
+
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "cc/resources/platform_color.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gl_in_process_context.h"
@@ -55,7 +58,7 @@ scoped_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
           image_factory));
 
   DCHECK(context);
-  return context.Pass();
+  return context;
 }
 
 scoped_ptr<gpu::GLInProcessContext> CreateTestInProcessContext() {
@@ -114,8 +117,8 @@ class GrContext* TestInProcessContextProvider::GrContext() {
   g_gles2_initializer.Get();
   gles2::SetGLContext(ContextGL());
 
-  skia::RefPtr<GrGLInterface> interface =
-      skia::AdoptRef(skia_bindings::CreateCommandBufferSkiaGLBinding());
+  skia::RefPtr<GrGLInterface> interface = skia::AdoptRef(new GrGLInterface);
+  skia_bindings::InitCommandBufferSkiaGLBinding(interface.get());
   interface->fCallback = BindGrContextCallback;
   interface->fCallbackData = reinterpret_cast<GrGLInterfaceCallbackData>(this);
 
@@ -142,6 +145,7 @@ TestInProcessContextProvider::ContextCapabilities() {
   ContextProvider::Capabilities capabilities;
   capabilities.gpu.image = true;
   capabilities.gpu.texture_rectangle = true;
+  capabilities.gpu.sync_query = true;
 
   switch (PlatformColor::Format()) {
     case PlatformColor::SOURCE_FORMAT_RGBA8:
@@ -155,19 +159,12 @@ TestInProcessContextProvider::ContextCapabilities() {
   return capabilities;
 }
 
-void TestInProcessContextProvider::VerifyContexts() {}
-
 void TestInProcessContextProvider::DeleteCachedResources() {
   if (gr_context_)
     gr_context_->freeGpuResources();
 }
 
-bool TestInProcessContextProvider::DestroyedOnMainThread() { return false; }
-
 void TestInProcessContextProvider::SetLostContextCallback(
     const LostContextCallback& lost_context_callback) {}
-
-void TestInProcessContextProvider::SetMemoryPolicyChangedCallback(
-    const MemoryPolicyChangedCallback& memory_policy_changed_callback) {}
 
 }  // namespace cc

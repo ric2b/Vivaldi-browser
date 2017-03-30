@@ -5,10 +5,12 @@
 #include "chrome/browser/chromeos/file_system_provider/operations/get_metadata.h"
 
 #include <string>
+#include <utility>
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
@@ -51,7 +53,7 @@ void CreateRequestValueFromJSON(const std::string& json,
   ASSERT_TRUE(value->GetAsList(&value_as_list));
   scoped_ptr<Params> params(Params::Create(*value_as_list));
   ASSERT_TRUE(params.get());
-  *result = RequestValue::CreateForGetMetadataSuccess(params.Pass());
+  *result = RequestValue::CreateForGetMetadataSuccess(std::move(params));
   ASSERT_TRUE(result->get());
 }
 
@@ -61,7 +63,7 @@ class CallbackLogger {
   class Event {
    public:
     Event(scoped_ptr<EntryMetadata> metadata, base::File::Error result)
-        : metadata_(metadata.Pass()), result_(result) {}
+        : metadata_(std::move(metadata)), result_(result) {}
     virtual ~Event() {}
 
     const EntryMetadata* metadata() const { return metadata_.get(); }
@@ -79,7 +81,7 @@ class CallbackLogger {
 
   void OnGetMetadata(scoped_ptr<EntryMetadata> metadata,
                      base::File::Error result) {
-    events_.push_back(new Event(metadata.Pass(), result));
+    events_.push_back(new Event(std::move(metadata), result));
   }
 
   const ScopedVector<Event>& events() const { return events_; }
@@ -91,6 +93,9 @@ class CallbackLogger {
 };
 
 }  // namespace
+
+using ModificationTime =
+    extensions::api::file_system_provider::EntryMetadata::ModificationTime;
 
 class FileSystemProviderOperationsGetMetadataTest : public testing::Test {
  protected:
@@ -126,67 +131,91 @@ TEST_F(FileSystemProviderOperationsGetMetadataTest, ValidateIDLEntryMetadata) {
   // Correct metadata for non-root.
   {
     EntryMetadata metadata;
-    metadata.name = kValidFileName;
-    metadata.modification_time.additional_properties.SetString(
+    metadata.name.reset(new std::string(kValidFileName));
+    metadata.modification_time.reset(new ModificationTime());
+    metadata.modification_time->additional_properties.SetString(
         "value", "invalid-date-time");  // Invalid modification time is OK.
     metadata.thumbnail.reset(new std::string(kValidThumbnailUrl));
-    EXPECT_TRUE(ValidateIDLEntryMetadata(metadata, false /* root_path */));
+    EXPECT_TRUE(ValidateIDLEntryMetadata(
+        metadata,
+        ProvidedFileSystemInterface::METADATA_FIELD_NAME |
+            ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME |
+            ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
+        false /* root_path */));
   }
 
   // Correct metadata for non-root (without thumbnail).
   {
     EntryMetadata metadata;
-    metadata.name = kValidFileName;
-    metadata.modification_time.additional_properties.SetString(
+    metadata.name.reset(new std::string(kValidFileName));
+    metadata.modification_time.reset(new ModificationTime());
+    metadata.modification_time->additional_properties.SetString(
         "value", "invalid-date-time");  // Invalid modification time is OK.
-    EXPECT_TRUE(ValidateIDLEntryMetadata(metadata, false /* root_path */));
+    EXPECT_TRUE(ValidateIDLEntryMetadata(
+        metadata,
+        ProvidedFileSystemInterface::METADATA_FIELD_NAME |
+            ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME |
+            ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
+        false /* root_path */));
   }
 
   // Correct metadata for root.
   {
     EntryMetadata metadata;
-    metadata.name = "";
-    metadata.modification_time.additional_properties.SetString(
+    metadata.name.reset(new std::string());
+    metadata.modification_time.reset(new ModificationTime());
+    metadata.modification_time->additional_properties.SetString(
         "value", "invalid-date-time");  // Invalid modification time is OK.
-    EXPECT_TRUE(ValidateIDLEntryMetadata(metadata, true /* root_path */));
+    EXPECT_TRUE(ValidateIDLEntryMetadata(
+        metadata,
+        ProvidedFileSystemInterface::METADATA_FIELD_NAME |
+            ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME |
+            ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
+        true /* root_path */));
   }
 
   // Invalid characters in the name.
   {
     EntryMetadata metadata;
-    metadata.name = "hello/world";
-    metadata.modification_time.additional_properties.SetString(
-        "value", "invalid-date-time");  // Invalid modification time is OK.
-    metadata.thumbnail.reset(new std::string(kValidThumbnailUrl));
-    EXPECT_FALSE(ValidateIDLEntryMetadata(metadata, false /* root_path */));
+    metadata.name.reset(new std::string("hello/world"));
+    EXPECT_FALSE(ValidateIDLEntryMetadata(
+        metadata, ProvidedFileSystemInterface::METADATA_FIELD_NAME,
+        false /* root_path */));
   }
 
   // Empty name for non-root.
   {
     EntryMetadata metadata;
-    metadata.name = "";
-    metadata.modification_time.additional_properties.SetString(
-        "value", "invalid-date-time");  // Invalid modification time is OK.
-    metadata.thumbnail.reset(new std::string(kValidThumbnailUrl));
-    EXPECT_FALSE(ValidateIDLEntryMetadata(metadata, false /* root_path */));
+    metadata.name.reset(new std::string());
+    EXPECT_FALSE(ValidateIDLEntryMetadata(
+        metadata, ProvidedFileSystemInterface::METADATA_FIELD_NAME,
+        false /* root_path */));
   }
 
-  // Missing date time.
+  // Missing last modification time.
   {
     EntryMetadata metadata;
-    metadata.name = kValidFileName;
-    metadata.thumbnail.reset(new std::string(kValidThumbnailUrl));
-    EXPECT_FALSE(ValidateIDLEntryMetadata(metadata, false /* root_path */));
+    EXPECT_FALSE(ValidateIDLEntryMetadata(
+        metadata, ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME,
+        false /* root_path */));
   }
 
   // Invalid thumbnail.
   {
     EntryMetadata metadata;
-    metadata.name = kValidFileName;
-    metadata.modification_time.additional_properties.SetString(
-        "value", "invalid-date-time");  // Invalid modification time is OK.
     metadata.thumbnail.reset(new std::string("http://invalid-scheme"));
-    EXPECT_FALSE(ValidateIDLEntryMetadata(metadata, false /* root_path */));
+    EXPECT_FALSE(ValidateIDLEntryMetadata(
+        metadata, ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
+        false /* root_path */));
+  }
+
+  // Empty string for thumbnail.
+  {
+    EntryMetadata metadata;
+    metadata.thumbnail.reset(new std::string());
+    EXPECT_FALSE(ValidateIDLEntryMetadata(
+        metadata, ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
+        false /* root_path */));
   }
 }
 
@@ -249,7 +278,12 @@ TEST_F(FileSystemProviderOperationsGetMetadataTest, OnSuccess) {
 
   GetMetadata get_metadata(
       NULL, file_system_info_, base::FilePath(kDirectoryPath),
-      ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
+      ProvidedFileSystemInterface::METADATA_FIELD_IS_DIRECTORY |
+          ProvidedFileSystemInterface::METADATA_FIELD_NAME |
+          ProvidedFileSystemInterface::METADATA_FIELD_SIZE |
+          ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME |
+          ProvidedFileSystemInterface::METADATA_FIELD_MIME_TYPE |
+          ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
       base::Bind(&CallbackLogger::OnGetMetadata,
                  base::Unretained(&callback_logger)));
   get_metadata.SetDispatchEventImplForTesting(
@@ -281,21 +315,21 @@ TEST_F(FileSystemProviderOperationsGetMetadataTest, OnSuccess) {
   ASSERT_NO_FATAL_FAILURE(CreateRequestValueFromJSON(input, &request_value));
 
   const bool has_more = false;
-  get_metadata.OnSuccess(kRequestId, request_value.Pass(), has_more);
+  get_metadata.OnSuccess(kRequestId, std::move(request_value), has_more);
 
   ASSERT_EQ(1u, callback_logger.events().size());
   CallbackLogger::Event* event = callback_logger.events()[0];
   EXPECT_EQ(base::File::FILE_OK, event->result());
 
   const EntryMetadata* metadata = event->metadata();
-  EXPECT_FALSE(metadata->is_directory);
-  EXPECT_EQ(4096, metadata->size);
+  EXPECT_FALSE(*metadata->is_directory);
+  EXPECT_EQ(4096, *metadata->size);
   base::Time expected_time;
   EXPECT_TRUE(
       base::Time::FromString("Thu Apr 24 00:46:52 UTC 2014", &expected_time));
-  EXPECT_EQ(expected_time, metadata->modification_time);
-  EXPECT_EQ(kMimeType, metadata->mime_type);
-  EXPECT_EQ(kThumbnail, metadata->thumbnail);
+  EXPECT_EQ(expected_time, *metadata->modification_time);
+  EXPECT_EQ(kMimeType, *metadata->mime_type);
+  EXPECT_EQ(kThumbnail, *metadata->thumbnail);
 }
 
 TEST_F(FileSystemProviderOperationsGetMetadataTest, OnSuccess_InvalidMetadata) {
@@ -304,7 +338,12 @@ TEST_F(FileSystemProviderOperationsGetMetadataTest, OnSuccess_InvalidMetadata) {
 
   GetMetadata get_metadata(
       NULL, file_system_info_, base::FilePath(kDirectoryPath),
-      ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
+      ProvidedFileSystemInterface::METADATA_FIELD_IS_DIRECTORY |
+          ProvidedFileSystemInterface::METADATA_FIELD_NAME |
+          ProvidedFileSystemInterface::METADATA_FIELD_SIZE |
+          ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME |
+          ProvidedFileSystemInterface::METADATA_FIELD_MIME_TYPE |
+          ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL,
       base::Bind(&CallbackLogger::OnGetMetadata,
                  base::Unretained(&callback_logger)));
   get_metadata.SetDispatchEventImplForTesting(
@@ -337,7 +376,7 @@ TEST_F(FileSystemProviderOperationsGetMetadataTest, OnSuccess_InvalidMetadata) {
   ASSERT_NO_FATAL_FAILURE(CreateRequestValueFromJSON(input, &request_value));
 
   const bool has_more = false;
-  get_metadata.OnSuccess(kRequestId, request_value.Pass(), has_more);
+  get_metadata.OnSuccess(kRequestId, std::move(request_value), has_more);
 
   ASSERT_EQ(1u, callback_logger.events().size());
   CallbackLogger::Event* event = callback_logger.events()[0];

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 
 namespace ui {
@@ -32,9 +33,11 @@ GestureConfiguration::GestureConfiguration()
       fling_touchscreen_tap_suppression_enabled_(false),
       fling_max_cancel_to_down_time_in_ms_(400),
       fling_max_tap_gap_time_in_ms_(200),
+      stylus_scale_enabled_(false),
       gesture_begin_end_types_enabled_(false),
       long_press_time_in_ms_(1000),
       max_distance_between_taps_for_double_tap_(20),
+      max_tap_count_(3),
       max_distance_for_two_finger_tap_in_pixels_(300),
       max_fling_velocity_(17000.0f),
       max_gesture_bounds_length_(0),

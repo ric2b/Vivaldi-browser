@@ -2,13 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/barrier_closure.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/renderer_host/dip_util.h"
@@ -26,7 +31,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "media/base/video_frame.h"
-#include "media/blink/skcanvas_video_renderer.h"
+#include "media/renderers/skcanvas_video_renderer.h"
 #include "net/base/filename_util.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -104,7 +109,7 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
 
   RenderWidgetHostViewBase* GetRenderWidgetHostView() const {
     return static_cast<RenderWidgetHostViewBase*>(
-        GetRenderViewHost()->GetView());
+        GetRenderViewHost()->GetWidget()->GetView());
   }
 
   // Callback when using CopyFromBackingStore() API.
@@ -122,6 +127,7 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
 
   // Callback when using CopyFromCompositingSurfaceToVideoFrame() API.
   void FinishCopyFromCompositingSurface(const base::Closure& quit_closure,
+                                        const gfx::Rect& region_in_frame,
                                         bool frame_captured) {
     ++callback_invoke_count_;
     if (frame_captured)
@@ -135,6 +141,7 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       base::Closure quit_closure,
       base::TimeTicks timestamp,
+      const gfx::Rect& region_in_frame,
       bool frame_captured) {
     ++callback_invoke_count_;
     if (frame_captured)
@@ -154,13 +161,11 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
     while (true) {
       ++count_attempts;
       base::RunLoop run_loop;
-      GetRenderViewHost()->CopyFromBackingStore(
-          gfx::Rect(),
-          frame_size(),
+      GetRenderViewHost()->GetWidget()->CopyFromBackingStore(
+          gfx::Rect(), frame_size(),
           base::Bind(
               &RenderWidgetHostViewBrowserTest::FinishCopyFromBackingStore,
-              base::Unretained(this),
-              run_loop.QuitClosure()),
+              base::Unretained(this), run_loop.QuitClosure()),
           kN32_SkColorType);
       run_loop.Run();
 
@@ -207,7 +212,7 @@ class CompositingRenderWidgetHostViewBrowserTest
     : public RenderWidgetHostViewBrowserTest,
       public testing::WithParamInterface<CompositingMode> {
  public:
-  explicit CompositingRenderWidgetHostViewBrowserTest()
+  CompositingRenderWidgetHostViewBrowserTest()
       : compositing_mode_(GetParam()) {}
 
   void SetUp() override {
@@ -289,12 +294,10 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
   SET_UP_SURFACE_OR_PASS_TEST(NULL);
 
   base::RunLoop run_loop;
-  GetRenderViewHost()->CopyFromBackingStore(
-      gfx::Rect(),
-      frame_size(),
+  GetRenderViewHost()->GetWidget()->CopyFromBackingStore(
+      gfx::Rect(), frame_size(),
       base::Bind(&RenderWidgetHostViewBrowserTest::FinishCopyFromBackingStore,
-                 base::Unretained(this),
-                 run_loop.QuitClosure()),
+                 base::Unretained(this), run_loop.QuitClosure()),
       kN32_SkColorType);
   run_loop.Run();
 
@@ -329,15 +332,16 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 
 // Test basic frame subscription functionality.  We subscribe, and then run
 // until at least one DeliverFrameCallback has been invoked.
+// https://crbug.com/542896
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_FrameSubscriberTest DISABLED_FrameSubscriberTest
+#else
+#define MAYBE_FrameSubscriberTest FrameSubscriberTest
+#endif
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
-                       FrameSubscriberTest) {
+                       MAYBE_FrameSubscriberTest) {
   SET_UP_SURFACE_OR_PASS_TEST(NULL);
   RenderWidgetHostViewBase* const view = GetRenderWidgetHostView();
-  if (!view->CanSubscribeFrame()) {
-    LOG(WARNING) << ("Blindly passing this test: Frame subscription not "
-                     "supported on this platform.");
-    return;
-  }
 
   base::RunLoop run_loop;
   scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber(
@@ -345,7 +349,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
           &RenderWidgetHostViewBrowserTest::FrameDelivered,
           base::Unretained(this), base::ThreadTaskRunnerHandle::Get(),
           run_loop.QuitClosure())));
-  view->BeginFrameSubscription(subscriber.Pass());
+  view->BeginFrameSubscription(std::move(subscriber));
   run_loop.Run();
   view->EndFrameSubscription();
 
@@ -496,6 +500,7 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
   void ReadbackRequestCallbackForVideo(
       scoped_refptr<media::VideoFrame> video_frame,
       base::Closure quit_callback,
+      const gfx::Rect& region_in_frame,
       bool result) {
     if (!result) {
       readback_response_ = READBACK_TO_VIDEO_FRAME_FAILED;
@@ -520,7 +525,7 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
 
   GURL TestUrl() override { return GURL(test_url_); }
 
-  void SetTestUrl(std::string url) { test_url_ = url; }
+  void SetTestUrl(const std::string& url) { test_url_ = url; }
 
   // Loads a page two boxes side-by-side, each half the width of
   // |html_rect_size|, and with different background colors. The test then
@@ -584,7 +589,7 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
     //      is allowed to transiently fail.  The purpose of these tests is to
     //      confirm correct cropping/scaling behavior; and not that every
     //      readback must succeed.  http://crbug.com/444237
-    uint32 last_frame_number = 0;
+    uint32_t last_frame_number = 0;
     do {
       // Wait for renderer to provide the next frame.
       while (!GetRenderWidgetHost()->ScheduleComposite())
@@ -606,33 +611,28 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
             gfx::Rect(output_size.width() / 2 - 1, 0, 2, output_size.height()));
 
         scoped_refptr<media::VideoFrame> video_frame =
-            media::VideoFrame::CreateFrame(media::VideoFrame::YV12,
-                                           output_size,
-                                           gfx::Rect(output_size),
-                                           output_size,
-                                           base::TimeDelta());
+            media::VideoFrame::CreateFrame(media::PIXEL_FORMAT_YV12,
+                                           output_size, gfx::Rect(output_size),
+                                           output_size, base::TimeDelta());
 
-        base::Callback<void(bool success)> callback =
+        base::Callback<void(const gfx::Rect& rect, bool success)> callback =
             base::Bind(&CompositingRenderWidgetHostViewBrowserTestTabCapture::
                            ReadbackRequestCallbackForVideo,
-                       base::Unretained(this),
-                       video_frame,
+                       base::Unretained(this), video_frame,
                        run_loop.QuitClosure());
         rwhv->CopyFromCompositingSurfaceToVideoFrame(
             copy_rect, video_frame, callback);
       } else {
-        if (IsDelegatedRendererEnabled()) {
-          if (!content::GpuDataManager::GetInstance()
-                   ->CanUseGpuBrowserCompositor()) {
-            // Skia rendering can cause color differences, particularly in the
-            // middle two columns.
-            SetAllowableError(2);
-            SetExcludeRect(gfx::Rect(
-                output_size.width() / 2 - 1, 0, 2, output_size.height()));
-          }
+        if (!content::GpuDataManager::GetInstance()
+                 ->CanUseGpuBrowserCompositor()) {
+          // Skia rendering can cause color differences, particularly in the
+          // middle two columns.
+          SetAllowableError(2);
+          SetExcludeRect(gfx::Rect(output_size.width() / 2 - 1, 0, 2,
+                                   output_size.height()));
         }
 
-        ReadbackRequestCallback callback =
+        const ReadbackRequestCallback callback =
             base::Bind(&CompositingRenderWidgetHostViewBrowserTestTabCapture::
                            ReadbackRequestCallbackTest,
                        base::Unretained(this),
@@ -707,8 +707,16 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
   std::string test_url_;
 };
 
+// https://crbug.com/542896
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_CopyFromCompositingSurface_Origin_Unscaled \
+  DISABLED_CopyFromCompositingSurface_Origin_Unscaled
+#else
+#define MAYBE_CopyFromCompositingSurface_Origin_Unscaled \
+  CopyFromCompositingSurface_Origin_Unscaled
+#endif
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
-                       CopyFromCompositingSurface_Origin_Unscaled) {
+                       MAYBE_CopyFromCompositingSurface_Origin_Unscaled) {
   gfx::Rect copy_rect(400, 300);
   gfx::Size output_size = copy_rect.size();
   gfx::Size html_rect_size(400, 300);
@@ -719,8 +727,16 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
                                 video_frame);
 }
 
+// https://crbug.com/542896
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_CopyFromCompositingSurface_Origin_Scaled \
+  DISABLED_FrameSubscriberTestCopyFromCompositingSurface_Origin_Scaled
+#else
+#define MAYBE_CopyFromCompositingSurface_Origin_Scaled \
+  CopyFromCompositingSurface_Origin_Scaled
+#endif
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
-                       CopyFromCompositingSurface_Origin_Scaled) {
+                       MAYBE_CopyFromCompositingSurface_Origin_Scaled) {
   gfx::Rect copy_rect(400, 300);
   gfx::Size output_size(200, 100);
   gfx::Size html_rect_size(400, 300);
@@ -731,8 +747,16 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
                                 video_frame);
 }
 
+// https://crbug.com/542896
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_CopyFromCompositingSurface_Cropped_Unscaled \
+  DISABLED_CopyFromCompositingSurface_Cropped_Unscaled
+#else
+#define MAYBE_CopyFromCompositingSurface_Cropped_Unscaled \
+  CopyFromCompositingSurface_Cropped_Unscaled
+#endif
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
-                       CopyFromCompositingSurface_Cropped_Unscaled) {
+                       MAYBE_CopyFromCompositingSurface_Cropped_Unscaled) {
   // Grab 60x60 pixels from the center of the tab contents.
   gfx::Rect copy_rect(400, 300);
   copy_rect = gfx::Rect(copy_rect.CenterPoint() - gfx::Vector2d(30, 30),
@@ -746,8 +770,16 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
                                 video_frame);
 }
 
+// https://crbug.com/542896
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_CopyFromCompositingSurface_Cropped_Scaled \
+  DISABLED_CopyFromCompositingSurface_Cropped_Scaled
+#else
+#define MAYBE_CopyFromCompositingSurface_Cropped_Scaled \
+  CopyFromCompositingSurface_Cropped_Scaled
+#endif
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
-                       CopyFromCompositingSurface_Cropped_Scaled) {
+                       MAYBE_CopyFromCompositingSurface_Cropped_Scaled) {
   // Grab 60x60 pixels from the center of the tab contents.
   gfx::Rect copy_rect(400, 300);
   copy_rect = gfx::Rect(copy_rect.CenterPoint() - gfx::Vector2d(30, 30),
@@ -761,8 +793,16 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
                                 video_frame);
 }
 
+// https://crbug.com/542896
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_CopyFromCompositingSurface_ForVideoFrame \
+  DISABLED_CopyFromCompositingSurface_ForVideoFrame
+#else
+#define MAYBE_CopyFromCompositingSurface_ForVideoFrame \
+  CopyFromCompositingSurface_ForVideoFrame
+#endif
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
-                       CopyFromCompositingSurface_ForVideoFrame) {
+                       MAYBE_CopyFromCompositingSurface_ForVideoFrame) {
   // Grab 90x60 pixels from the center of the tab contents.
   gfx::Rect copy_rect(400, 300);
   copy_rect = gfx::Rect(copy_rect.CenterPoint() - gfx::Vector2d(45, 30),
@@ -776,8 +816,16 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
                                 video_frame);
 }
 
+// https://crbug.com/542896
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_CopyFromCompositingSurface_ForVideoFrame_Scaled \
+  DISABLED_CopyFromCompositingSurface_ForVideoFrame_Scaled
+#else
+#define MAYBE_CopyFromCompositingSurface_ForVideoFrame_Scaled \
+  CopyFromCompositingSurface_ForVideoFrame_Scaled
+#endif
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestTabCapture,
-                       CopyFromCompositingSurface_ForVideoFrame_Scaled) {
+                       MAYBE_CopyFromCompositingSurface_ForVideoFrame_Scaled) {
   // Grab 90x60 pixels from the center of the tab contents.
   gfx::Rect copy_rect(400, 300);
   copy_rect = gfx::Rect(copy_rect.CenterPoint() - gfx::Vector2d(45, 30),
@@ -828,7 +876,8 @@ class CompositingRenderWidgetHostViewBrowserTestTabCaptureHighDPI
 
 // NineImagePainter implementation crashes the process on Windows when this
 // content_browsertest forces a device scale factor.  http://crbug.com/399349
-#if defined(OS_WIN)
+// Disabled under MSAN.  http://crbug.com/542896
+#if defined(OS_WIN) || defined(MEMORY_SANITIZER)
 #define MAYBE_CopyToBitmap_EntireRegion DISABLED_CopyToBitmap_EntireRegion
 #define MAYBE_CopyToBitmap_CenterRegion DISABLED_CopyToBitmap_CenterRegion
 #define MAYBE_CopyToBitmap_ScaledResult DISABLED_CopyToBitmap_ScaledResult
@@ -853,8 +902,7 @@ IN_PROC_BROWSER_TEST_P(
   gfx::Size html_rect_size(200, 150);
   gfx::Rect copy_rect(200, 150);
   // Scale the output size so that, internally, scaling is not occurring.
-  gfx::Size output_size =
-      gfx::ToRoundedSize(gfx::ScaleSize(copy_rect.size(), scale()));
+  gfx::Size output_size = gfx::ScaleToRoundedSize(copy_rect.size(), scale());
   bool video_frame = false;
   PerformTestWithLeftRightRects(html_rect_size,
                                 copy_rect,
@@ -871,8 +919,7 @@ IN_PROC_BROWSER_TEST_P(
       gfx::Rect(gfx::Rect(html_rect_size).CenterPoint() - gfx::Vector2d(45, 30),
                 gfx::Size(90, 60));
   // Scale the output size so that, internally, scaling is not occurring.
-  gfx::Size output_size =
-      gfx::ToRoundedSize(gfx::ScaleSize(copy_rect.size(), scale()));
+  gfx::Size output_size = gfx::ScaleToRoundedSize(copy_rect.size(), scale());
   bool video_frame = false;
   PerformTestWithLeftRightRects(html_rect_size,
                                 copy_rect,
@@ -900,8 +947,7 @@ IN_PROC_BROWSER_TEST_P(
   gfx::Size html_rect_size(200, 150);
   gfx::Rect copy_rect(200, 150);
   // Scale the output size so that, internally, scaling is not occurring.
-  gfx::Size output_size =
-      gfx::ToRoundedSize(gfx::ScaleSize(copy_rect.size(), scale()));
+  gfx::Size output_size = gfx::ScaleToRoundedSize(copy_rect.size(), scale());
   bool video_frame = true;
   PerformTestWithLeftRightRects(html_rect_size,
                                 copy_rect,
@@ -918,8 +964,7 @@ IN_PROC_BROWSER_TEST_P(
       gfx::Rect(gfx::Rect(html_rect_size).CenterPoint() - gfx::Vector2d(45, 30),
                 gfx::Size(90, 60));
   // Scale the output size so that, internally, scaling is not occurring.
-  gfx::Size output_size =
-      gfx::ToRoundedSize(gfx::ScaleSize(copy_rect.size(), scale()));
+  gfx::Size output_size = gfx::ScaleToRoundedSize(copy_rect.size(), scale());
   bool video_frame = true;
   PerformTestWithLeftRightRects(html_rect_size,
                                 copy_rect,

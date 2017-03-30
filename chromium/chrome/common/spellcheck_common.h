@@ -5,6 +5,8 @@
 #ifndef CHROME_COMMON_SPELLCHECK_COMMON_H_
 #define CHROME_COMMON_SPELLCHECK_COMMON_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -29,8 +31,6 @@ static const int kFeedbackIntervalSeconds = 1800;  // 30 minutes
 // Max number of dictionary suggestions.
 static const int kMaxSuggestions = 5;
 
-static const int kMaxAutoCorrectWordSize = 8;
-
 // Maximum number of words in the custom spellcheck dictionary that can be
 // synced.
 static const size_t MAX_SYNCABLE_DICTIONARY_WORDS = 1300;
@@ -38,6 +38,9 @@ static const size_t MAX_SYNCABLE_DICTIONARY_WORDS = 1300;
 // Maximum number of bytes in a word that can be added to the custom spellcheck
 // dictionary.
 static const size_t MAX_CUSTOM_DICTIONARY_WORD_BYTES = 99;
+
+// The name of the field trial for multilingual spellchecker.
+extern const char kMultilingualSpellcheckFieldTrial[];
 
 base::FilePath GetVersionedFileName(const std::string& input_language,
                                     const base::FilePath& dict_dir);

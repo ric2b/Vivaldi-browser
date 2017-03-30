@@ -4,6 +4,8 @@
 
 #include "sync/engine/syncer_util.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <set>
 #include <string>
@@ -38,42 +40,13 @@
 
 namespace syncer {
 
-using syncable::BASE_SERVER_SPECIFICS;
-using syncable::BASE_VERSION;
 using syncable::CHANGES_VERSION;
-using syncable::CREATE_NEW_UPDATE_ITEM;
-using syncable::CTIME;
 using syncable::Directory;
 using syncable::Entry;
 using syncable::GET_BY_HANDLE;
 using syncable::GET_BY_ID;
 using syncable::ID;
-using syncable::IS_DEL;
-using syncable::IS_DIR;
-using syncable::IS_UNAPPLIED_UPDATE;
-using syncable::IS_UNSYNCED;
 using syncable::Id;
-using syncable::META_HANDLE;
-using syncable::MTIME;
-using syncable::MutableEntry;
-using syncable::NON_UNIQUE_NAME;
-using syncable::PARENT_ID;
-using syncable::SERVER_CTIME;
-using syncable::SERVER_IS_DEL;
-using syncable::SERVER_IS_DIR;
-using syncable::SERVER_MTIME;
-using syncable::SERVER_NON_UNIQUE_NAME;
-using syncable::SERVER_PARENT_ID;
-using syncable::SERVER_SPECIFICS;
-using syncable::SERVER_UNIQUE_POSITION;
-using syncable::SERVER_VERSION;
-using syncable::SPECIFICS;
-using syncable::SYNCER;
-using syncable::UNIQUE_BOOKMARK_TAG;
-using syncable::UNIQUE_CLIENT_TAG;
-using syncable::UNIQUE_POSITION;
-using syncable::UNIQUE_SERVER_TAG;
-using syncable::WriteTransaction;
 
 syncable::Id FindLocalIdToUpdate(
     syncable::BaseTransaction* trans,
@@ -167,8 +140,8 @@ syncable::Id FindLocalIdToUpdate(
     // If it exists, then our local client lost a commit response.  Use
     // the local entry.
     if (local_entry.good() && !local_entry.GetIsDel()) {
-      int64 old_version = local_entry.GetBaseVersion();
-      int64 new_version = update.version();
+      int64_t old_version = local_entry.GetBaseVersion();
+      int64_t new_version = update.version();
       DCHECK_LE(old_version, 0);
       DCHECK_GT(new_version, 0);
       // Otherwise setting the base version could cause a consistency failure.
@@ -319,8 +292,18 @@ UniquePosition GetUpdatePosition(const sync_pb::SyncEntity& update,
   if (!(SyncerProtoUtil::ShouldMaintainPosition(update))) {
     return UniquePosition::CreateInvalid();
   } else if (update.has_unique_position()) {
-    return UniquePosition::FromProto(update.unique_position());
-  } else if (update.has_position_in_parent()) {
+    UniquePosition proto_position =
+        UniquePosition::FromProto(update.unique_position());
+    if (proto_position.IsValid()) {
+      return proto_position;
+    }
+  }
+
+  // Now, there are two cases hit here.
+  // 1. Did not receive unique_position for this update.
+  // 2. Received unique_position, but it is invalid(ex. empty).
+  // And we will create a valid position for this two cases.
+  if (update.has_position_in_parent()) {
     return UniquePosition::FromInt64(update.position_in_parent(), suffix);
   } else {
     LOG(ERROR) << "No position information in update. This is a server bug.";
@@ -406,7 +389,11 @@ void UpdateServerFieldsFromUpdate(
 
   DCHECK_EQ(target->GetId(), SyncableIdFromProto(update.id_string()))
       << "ID Changing not supported here";
-  target->PutServerParentId(SyncableIdFromProto(update.parent_id_string()));
+  if (SyncerProtoUtil::ShouldMaintainHierarchy(update)) {
+    target->PutServerParentId(SyncableIdFromProto(update.parent_id_string()));
+  } else {
+    target->PutServerParentId(syncable::Id());
+  }
   target->PutServerNonUniqueName(name);
   target->PutServerVersion(update.version());
   target->PutServerCtime(ProtoTimeToTime(update.ctime()));

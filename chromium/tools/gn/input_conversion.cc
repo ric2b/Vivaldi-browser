@@ -4,6 +4,9 @@
 
 #include "tools/gn/input_conversion.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "tools/gn/build_settings.h"
@@ -80,15 +83,15 @@ Value ParseValueOrScope(const Settings* settings,
   // we made, rather than the result of running the block (which will be empty).
   if (what == PARSE_SCOPE) {
     DCHECK(result.type() == Value::NONE);
-    result = Value(origin, scope.Pass());
+    result = Value(origin, std::move(scope));
   }
   return result;
 }
 
 Value ParseList(const std::string& input, const ParseNode* origin, Err* err) {
   Value ret(origin, Value::LIST);
-  std::vector<std::string> as_lines;
-  base::SplitString(input, '\n', &as_lines);
+  std::vector<std::string> as_lines = base::SplitString(
+      input, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   // Trim one empty line from the end since the last line might end in a
   // newline. If the user wants more trimming, they'll specify "trim" in the
@@ -116,7 +119,8 @@ Value DoConvertInputToValue(const Settings* settings,
     return Value();  // Empty string means discard the result.
 
   const char kTrimPrefix[] = "trim ";
-  if (base::StartsWithASCII(input_conversion, kTrimPrefix, true)) {
+  if (base::StartsWith(input_conversion, kTrimPrefix,
+                       base::CompareCase::SENSITIVE)) {
     std::string trimmed;
     base::TrimWhitespaceASCII(input, base::TRIM_ALL, &trimmed);
 

@@ -7,6 +7,8 @@
 
 #include "content/public/renderer/content_renderer_client.h"
 
+#include <stddef.h>
+
 #include "android_webview/renderer/aw_render_process_observer.h"
 #include "base/compiler_specific.h"
 
@@ -26,8 +28,7 @@ class AwContentRendererClient : public content::ContentRendererClient {
   void RenderFrameCreated(content::RenderFrame* render_frame) override;
   void RenderViewCreated(content::RenderView* render_view) override;
   bool HasErrorPage(int http_status_code, std::string* error_domain) override;
-  void GetNavigationErrorStrings(content::RenderView* render_view,
-                                 blink::WebFrame* frame,
+  void GetNavigationErrorStrings(content::RenderFrame* render_frame,
                                  const blink::WebURLRequest& failed_request,
                                  const blink::WebURLError& error,
                                  std::string* error_html,
@@ -38,7 +39,7 @@ class AwContentRendererClient : public content::ContentRendererClient {
   void AddKeySystems(std::vector<media::KeySystemInfo>* key_systems) override;
 
   bool HandleNavigation(content::RenderFrame* render_frame,
-                        content::DocumentState* document_state,
+                        bool is_content_initiated,
                         int opener_id,
                         blink::WebFrame* frame,
                         const blink::WebURLRequest& request,
@@ -52,6 +53,7 @@ class AwContentRendererClient : public content::ContentRendererClient {
  private:
   scoped_ptr<AwRenderProcessObserver> aw_render_process_observer_;
   scoped_ptr<visitedlink::VisitedLinkSlave> visited_link_slave_;
+  const bool disable_page_visibility_;
 };
 
 }  // namespace android_webview

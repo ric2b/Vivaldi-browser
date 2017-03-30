@@ -4,13 +4,20 @@
 
 #include "base/files/file_proxy.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -69,7 +76,7 @@ class FileProxyTest : public testing::Test {
   }
 
  protected:
-  void CreateProxy(uint32 flags, FileProxy* proxy) {
+  void CreateProxy(uint32_t flags, FileProxy* proxy) {
     proxy->CreateOrOpen(
         test_path(), flags,
         Bind(&FileProxyTest::DidCreateOrOpen, weak_factory_.GetWeakPtr()));
@@ -83,10 +90,10 @@ class FileProxyTest : public testing::Test {
   const FilePath& test_dir_path() const { return dir_.path(); }
   const FilePath test_path() const { return dir_.path().AppendASCII("test"); }
 
+  ScopedTempDir dir_;
   MessageLoopForIO message_loop_;
   Thread file_thread_;
 
-  ScopedTempDir dir_;
   File::Error error_;
   FilePath path_;
   File::Info file_info_;
@@ -208,7 +215,7 @@ TEST_F(FileProxyTest, SetAndTake) {
   ASSERT_TRUE(file.IsValid());
   FileProxy proxy(file_task_runner());
   EXPECT_FALSE(proxy.IsValid());
-  proxy.SetFile(file.Pass());
+  proxy.SetFile(std::move(file));
   EXPECT_TRUE(proxy.IsValid());
   EXPECT_FALSE(file.IsValid());
 
@@ -287,7 +294,13 @@ TEST_F(FileProxyTest, WriteAndFlush) {
   }
 }
 
-TEST_F(FileProxyTest, SetTimes) {
+#if defined(OS_ANDROID)
+// Flaky on Android, see http://crbug.com/489602
+#define MAYBE_SetTimes DISABLED_SetTimes
+#else
+#define MAYBE_SetTimes SetTimes
+#endif
+TEST_F(FileProxyTest, MAYBE_SetTimes) {
   FileProxy proxy(file_task_runner());
   CreateProxy(
       File::FLAG_CREATE | File::FLAG_WRITE | File::FLAG_WRITE_ATTRIBUTES,

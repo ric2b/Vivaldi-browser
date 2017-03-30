@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/quic/congestion_control/loss_detection_interface.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_time.h"
@@ -28,11 +28,17 @@ class NET_EXPORT_PRIVATE TimeLossAlgorithm : public LossDetectionInterface {
   // Declares pending packets less than the largest observed lost when it has
   // been 1.25 RTT since they were sent.  Packets larger than the largest
   // observed are retransmitted via TLP.
-  SequenceNumberSet DetectLostPackets(
+  PacketNumberSet DetectLostPackets(const QuicUnackedPacketMap& unacked_packets,
+                                    const QuicTime& time,
+                                    QuicPacketNumber largest_observed,
+                                    const RttStats& rtt_stats) override;
+
+  // Unsupported.
+  void DetectLosses(
       const QuicUnackedPacketMap& unacked_packets,
       const QuicTime& time,
-      QuicPacketSequenceNumber largest_observed,
-      const RttStats& rtt_stats) override;
+      const RttStats& rtt_stats,
+      SendAlgorithmInterface::CongestionVector* packets_lost) override;
 
   // Returns the time the next packet will be lost, or zero if there
   // are no nacked pending packets outstanding.

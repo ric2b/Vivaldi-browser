@@ -24,10 +24,14 @@ scoped_ptr<CopyOutputRequest> CopyOutputRequest::CreateRelayRequest(
   relay->area_ = original_request.area_;
   relay->has_texture_mailbox_ = original_request.has_texture_mailbox_;
   relay->texture_mailbox_ = original_request.texture_mailbox_;
-  return relay.Pass();
+  return relay;
 }
 
-CopyOutputRequest::CopyOutputRequest() {}
+CopyOutputRequest::CopyOutputRequest()
+    : source_(nullptr),
+      force_bitmap_result_(false),
+      has_area_(false),
+      has_texture_mailbox_(false) {}
 
 CopyOutputRequest::CopyOutputRequest(
     bool force_bitmap_result,
@@ -43,21 +47,21 @@ CopyOutputRequest::CopyOutputRequest(
 
 CopyOutputRequest::~CopyOutputRequest() {
   if (!result_callback_.is_null())
-    SendResult(CopyOutputResult::CreateEmptyResult().Pass());
+    SendResult(CopyOutputResult::CreateEmptyResult());
 }
 
 void CopyOutputRequest::SendResult(scoped_ptr<CopyOutputResult> result) {
   bool success = !result->IsEmpty();
-  base::ResetAndReturn(&result_callback_).Run(result.Pass());
+  base::ResetAndReturn(&result_callback_).Run(std::move(result));
   TRACE_EVENT_ASYNC_END1("cc", "CopyOutputRequest", this, "success", success);
 }
 
 void CopyOutputRequest::SendEmptyResult() {
-  SendResult(CopyOutputResult::CreateEmptyResult().Pass());
+  SendResult(CopyOutputResult::CreateEmptyResult());
 }
 
 void CopyOutputRequest::SendBitmapResult(scoped_ptr<SkBitmap> bitmap) {
-  SendResult(CopyOutputResult::CreateBitmapResult(bitmap.Pass()).Pass());
+  SendResult(CopyOutputResult::CreateBitmapResult(std::move(bitmap)));
 }
 
 void CopyOutputRequest::SendTextureResult(
@@ -66,7 +70,7 @@ void CopyOutputRequest::SendTextureResult(
     scoped_ptr<SingleReleaseCallback> release_callback) {
   DCHECK(texture_mailbox.IsTexture());
   SendResult(CopyOutputResult::CreateTextureResult(
-      size, texture_mailbox, release_callback.Pass()));
+      size, texture_mailbox, std::move(release_callback)));
 }
 
 void CopyOutputRequest::SetTextureMailbox(

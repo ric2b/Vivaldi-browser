@@ -8,7 +8,9 @@
 #include <list>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/threading/thread_checker.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame_pool.h"
@@ -27,8 +29,9 @@ class DecoderBuffer;
 
 class MEDIA_EXPORT FFmpegVideoDecoder : public VideoDecoder {
  public:
-  explicit FFmpegVideoDecoder(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+  static bool IsCodecSupported(VideoCodec codec);
+
+  FFmpegVideoDecoder();
   ~FFmpegVideoDecoder() override;
 
   // Allow decoding of individual NALU. Entire frames are required by default.
@@ -39,6 +42,7 @@ class MEDIA_EXPORT FFmpegVideoDecoder : public VideoDecoder {
   std::string GetDisplayName() const override;
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
+                  const SetCdmReadyCB& set_cdm_ready_cb,
                   const InitCB& init_cb,
                   const OutputCB& output_cb) override;
   void Decode(const scoped_refptr<DecoderBuffer>& buffer,
@@ -72,7 +76,7 @@ class MEDIA_EXPORT FFmpegVideoDecoder : public VideoDecoder {
   // and resets them to NULL.
   void ReleaseFFmpegResources();
 
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  base::ThreadChecker thread_checker_;
 
   DecoderState state_;
 

@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -18,6 +19,7 @@
 #include "base/test/values_test_util.h"
 #include "base/threading/platform_thread.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "sync/protocol/bookmark_specifics.pb.h"
 #include "sync/syncable/directory_backing_store.h"
 #include "sync/syncable/directory_change_delegate.h"
@@ -54,12 +56,10 @@ class TestBackingStore : public OnDiskDirectoryBackingStore {
 
   bool SaveChanges(const Directory::SaveChangesSnapshot& snapshot) override;
 
-   void StartFailingSaveChanges() {
-     fail_save_changes_ = true;
-   }
+  void StartFailingSaveChanges() { fail_save_changes_ = true; }
 
  private:
-   bool fail_save_changes_;
+  bool fail_save_changes_;
 };
 
 TestBackingStore::TestBackingStore(const std::string& dir_name,
@@ -71,7 +71,7 @@ TestBackingStore::TestBackingStore(const std::string& dir_name,
 TestBackingStore::~TestBackingStore() { }
 
 bool TestBackingStore::SaveChanges(
-    const Directory::SaveChangesSnapshot& snapshot){
+    const Directory::SaveChangesSnapshot& snapshot) {
   if (fail_save_changes_) {
     return false;
   } else {
@@ -84,8 +84,8 @@ class TestDirectory : public Directory {
  public:
   // A factory function used to work around some initialization order issues.
   static TestDirectory* Create(
-      Encryptor *encryptor,
-      UnrecoverableErrorHandler *handler,
+      Encryptor* encryptor,
+      const WeakHandle<UnrecoverableErrorHandler>& handler,
       const std::string& dir_name,
       const base::FilePath& backing_filepath);
 
@@ -97,15 +97,15 @@ class TestDirectory : public Directory {
 
  private:
   TestDirectory(Encryptor* encryptor,
-                UnrecoverableErrorHandler* handler,
+                const WeakHandle<UnrecoverableErrorHandler>& handler,
                 TestBackingStore* backing_store);
 
   TestBackingStore* backing_store_;
 };
 
 TestDirectory* TestDirectory::Create(
-    Encryptor *encryptor,
-    UnrecoverableErrorHandler *handler,
+    Encryptor* encryptor,
+    const WeakHandle<UnrecoverableErrorHandler>& handler,
     const std::string& dir_name,
     const base::FilePath& backing_filepath) {
   TestBackingStore* backing_store =
@@ -113,16 +113,22 @@ TestDirectory* TestDirectory::Create(
   return new TestDirectory(encryptor, handler, backing_store);
 }
 
-TestDirectory::TestDirectory(Encryptor* encryptor,
-                             UnrecoverableErrorHandler* handler,
-                             TestBackingStore* backing_store)
+TestDirectory::TestDirectory(
+    Encryptor* encryptor,
+    const WeakHandle<UnrecoverableErrorHandler>& handler,
+    TestBackingStore* backing_store)
     : Directory(backing_store, handler, base::Closure(), NULL, NULL),
-      backing_store_(backing_store) {
-}
+      backing_store_(backing_store) {}
 
 TestDirectory::~TestDirectory() { }
 
-TEST(OnDiskSyncableDirectory, FailInitialWrite) {
+// crbug.com/144422
+#if defined(OS_ANDROID)
+#define MAYBE_FailInitialWrite DISABLED_FailInitialWrite
+#else
+#define MAYBE_FailInitialWrite FailInitialWrite
+#endif
+TEST(OnDiskSyncableDirectory, MAYBE_FailInitialWrite) {
   base::MessageLoop message_loop;
   FakeEncryptor encryptor;
   TestUnrecoverableErrorHandler handler;
@@ -133,8 +139,8 @@ TEST(OnDiskSyncableDirectory, FailInitialWrite) {
   std::string name = "user@x.com";
   NullDirectoryChangeDelegate delegate;
 
-  scoped_ptr<TestDirectory> test_dir(
-      TestDirectory::Create(&encryptor, &handler, name, file_path));
+  scoped_ptr<TestDirectory> test_dir(TestDirectory::Create(
+      &encryptor, MakeWeakHandle(handler.GetWeakPtr()), name, file_path));
 
   test_dir->StartFailingSaveChanges();
   ASSERT_EQ(FAILED_INITIAL_WRITE, test_dir->Open(name, &delegate,
@@ -151,7 +157,7 @@ class OnDiskSyncableDirectoryTest : public SyncableDirectoryTest {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     file_path_ = temp_dir_.path().Append(
         FILE_PATH_LITERAL("Test.sqlite3"));
-    base::DeleteFile(file_path_, true);
+    base::DeleteFile(file_path_, false);
     CreateDirectory();
   }
 
@@ -159,14 +165,16 @@ class OnDiskSyncableDirectoryTest : public SyncableDirectoryTest {
     // This also closes file handles.
     dir()->SaveChanges();
     dir().reset();
-    base::DeleteFile(file_path_, true);
+    base::DeleteFile(file_path_, false);
     SyncableDirectoryTest::TearDown();
   }
 
   // Creates a new directory.  Deletes the old directory, if it exists.
   void CreateDirectory() {
     test_directory_ = TestDirectory::Create(
-        encryptor(), unrecoverable_error_handler(), kDirectoryName, file_path_);
+        encryptor(),
+        MakeWeakHandle(unrecoverable_error_handler()->GetWeakPtr()),
+        kDirectoryName, file_path_);
     dir().reset(test_directory_);
     ASSERT_TRUE(dir().get());
     ASSERT_EQ(OPENED,
@@ -185,7 +193,7 @@ class OnDiskSyncableDirectoryTest : public SyncableDirectoryTest {
     test_directory_->StartFailingSaveChanges();
   }
 
-  TestDirectory *test_directory_;  // mirrors scoped_ptr<Directory> dir_
+  TestDirectory* test_directory_;  // mirrors scoped_ptr<Directory> dir_
   base::ScopedTempDir temp_dir_;
   base::FilePath file_path_;
 };
@@ -344,9 +352,10 @@ TEST_F(OnDiskSyncableDirectoryTest,
   }
 
   dir()->SaveChanges();
-  dir().reset(new Directory(
-      new OnDiskDirectoryBackingStore(kDirectoryName, file_path_),
-      unrecoverable_error_handler(), base::Closure(), NULL, NULL));
+  dir().reset(
+      new Directory(new OnDiskDirectoryBackingStore(kDirectoryName, file_path_),
+                    MakeWeakHandle(unrecoverable_error_handler()->GetWeakPtr()),
+                    base::Closure(), NULL, NULL));
 
   ASSERT_TRUE(dir().get());
   ASSERT_EQ(OPENED,
@@ -365,13 +374,13 @@ TEST_F(OnDiskSyncableDirectoryTest,
   }
   int i = BEGIN_FIELDS;
   for ( ; i < INT64_FIELDS_END ; ++i) {
-    EXPECT_EQ(create_pre_save.ref((Int64Field)i) +
-                  (i == TRANSACTION_VERSION ? 1 : 0),
-              create_post_save.ref((Int64Field)i))
-              << "int64 field #" << i << " changed during save/load";
+    EXPECT_EQ(
+        create_pre_save.ref((Int64Field)i) + (i == TRANSACTION_VERSION ? 1 : 0),
+        create_post_save.ref((Int64Field)i))
+        << "int64_t field #" << i << " changed during save/load";
     EXPECT_EQ(update_pre_save.ref((Int64Field)i),
               update_post_save.ref((Int64Field)i))
-        << "int64 field #" << i << " changed during save/load";
+        << "int64_t field #" << i << " changed during save/load";
   }
   for ( ; i < TIME_FIELDS_END ; ++i) {
     EXPECT_EQ(create_pre_save.ref((TimeField)i),
@@ -424,7 +433,7 @@ TEST_F(OnDiskSyncableDirectoryTest,
 }
 
 TEST_F(OnDiskSyncableDirectoryTest, TestSaveChangesFailure) {
-  int64 handle1 = 0;
+  int64_t handle1 = 0;
   // Set up an item using a regular, saveable directory.
   {
     WriteTransaction trans(FROM_HERE, UNITTEST, dir().get());
@@ -460,7 +469,7 @@ TEST_F(OnDiskSyncableDirectoryTest, TestSaveChangesFailure) {
   StartFailingSaveChanges();
   ASSERT_TRUE(dir()->good());
 
-  int64 handle2 = 0;
+  int64_t handle2 = 0;
   {
     WriteTransaction trans(FROM_HERE, UNITTEST, dir().get());
 
@@ -506,7 +515,7 @@ TEST_F(OnDiskSyncableDirectoryTest, TestSaveChangesFailure) {
 }
 
 TEST_F(OnDiskSyncableDirectoryTest, TestSaveChangesFailureWithPurge) {
-  int64 handle1 = 0;
+  int64_t handle1 = 0;
   // Set up an item and progress marker using a regular, saveable directory.
   dir()->SetDownloadProgress(BOOKMARKS, BuildProgress(BOOKMARKS));
   {
@@ -559,8 +568,9 @@ TEST_F(SyncableDirectoryManagement, TestFileRelease) {
       temp_dir_.path().Append(Directory::kSyncDatabaseFilename);
 
   {
-    Directory dir(new OnDiskDirectoryBackingStore("ScopeTest", path), &handler_,
-                  base::Closure(), NULL, NULL);
+    Directory dir(new OnDiskDirectoryBackingStore("ScopeTest", path),
+                  MakeWeakHandle(handler_.GetWeakPtr()), base::Closure(), NULL,
+                  NULL);
     DirOpenResult result =
         dir.Open("ScopeTest", &delegate_, NullTransactionObserver());
     ASSERT_EQ(result, OPENED);

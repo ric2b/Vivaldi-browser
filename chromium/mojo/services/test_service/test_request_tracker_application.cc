@@ -5,11 +5,12 @@
 #include "mojo/services/test_service/test_request_tracker_application.h"
 
 #include <assert.h>
+#include <utility>
 
-#include "mojo/application/public/cpp/application_connection.h"
-#include "mojo/application/public/cpp/application_runner.h"
 #include "mojo/public/c/system/main.h"
 #include "mojo/services/test_service/test_time_service_impl.h"
+#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/application_runner.h"
 
 namespace mojo {
 namespace test {
@@ -38,19 +39,19 @@ bool TestRequestTrackerApplication::ConfigureIncomingConnection(
 void TestRequestTrackerApplication::Create(
     ApplicationConnection* connection,
     InterfaceRequest<TestTimeService> request) {
-  new TestTimeServiceImpl(app_impl_, request.Pass());
+  new TestTimeServiceImpl(app_impl_, std::move(request));
 }
 
 void TestRequestTrackerApplication::Create(
     ApplicationConnection* connection,
     InterfaceRequest<TestRequestTracker> request) {
-  new TestRequestTrackerImpl(request.Pass(), &context_);
+  new TestRequestTrackerImpl(std::move(request), &context_);
 }
 
 void TestRequestTrackerApplication::Create(
     ApplicationConnection* connection,
     InterfaceRequest<TestTrackedRequestService> request) {
-  new TestTrackedRequestServiceImpl(request.Pass(), &context_);
+  new TestTrackedRequestServiceImpl(std::move(request), &context_);
 }
 
 }  // namespace test

@@ -17,7 +17,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
-
 namespace test {
 
 std::string HexDumpWithMarks(const unsigned char* data, int length,
@@ -49,8 +48,9 @@ std::string HexDumpWithMarks(const unsigned char* data, int length,
     }
     hex = hex + "  ";
 
-    for (const unsigned char *p = row; p < row + 4 && p < row + length; ++p)
+    for (const unsigned char* p = row; p < row + 4 && p < row + length; ++p) {
       hex += (*p >= 0x20 && *p <= 0x7f) ? (*p) : '.';
+    }
 
     hex = hex + '\n';
   }
@@ -89,10 +89,9 @@ void CompareCharArraysWithHexError(
 }
 
 void SetFrameFlags(SpdyFrame* frame,
-                   uint8 flags,
+                   uint8_t flags,
                    SpdyMajorVersion spdy_version) {
   switch (spdy_version) {
-    case SPDY2:
     case SPDY3:
     case HTTP2:
       frame->data()[4] = flags;
@@ -106,12 +105,11 @@ void SetFrameLength(SpdyFrame* frame,
                     size_t length,
                     SpdyMajorVersion spdy_version) {
   switch (spdy_version) {
-    case SPDY2:
     case SPDY3:
       CHECK_EQ(0u, length & ~kLengthMask);
       {
-        int32 wire_length = base::HostToNet32(length);
-        // The length field in SPDY 2 and 3 is a 24-bit (3B) integer starting at
+        int32_t wire_length = base::HostToNet32(length);
+        // The length field in SPDY 3 is a 24-bit (3B) integer starting at
         // offset 5.
         memcpy(frame->data() + 5, reinterpret_cast<char*>(&wire_length) + 1, 3);
       }
@@ -119,7 +117,7 @@ void SetFrameLength(SpdyFrame* frame,
     case HTTP2:
       CHECK_GT(1u<<14, length);
       {
-        int32 wire_length = base::HostToNet32(length);
+        int32_t wire_length = base::HostToNet32(length);
         memcpy(frame->data(),
                reinterpret_cast<char*>(&wire_length) + 1,
                3);
@@ -131,7 +129,7 @@ void SetFrameLength(SpdyFrame* frame,
 }
 
 std::string a2b_hex(const char* hex_data) {
-  std::vector<uint8> output;
+  std::vector<uint8_t> output;
   std::string result;
   if (base::HexStringToBytes(hex_data, &output))
     result.assign(reinterpret_cast<const char*>(&output[0]), output.size());
@@ -169,5 +167,4 @@ void AddPin(TransportSecurityState* state,
 }
 
 }  // namespace test
-
 }  // namespace net

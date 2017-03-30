@@ -4,6 +4,14 @@
 
 import("//build/config/features.gni")
 
+declare_args() {
+  if (is_android || is_ios) {
+    cld2_table_size = 0  # Small, accurate tables
+  } else {
+    cld2_table_size = 2  # Larger, more accurate tables
+  }
+}
+
 gypi_values = exec_script("//build/gypi_to_gn.py",
                           [ rebase_path("cld_2.gyp") ],
                           "scope",
@@ -31,7 +39,13 @@ gypi_values = exec_script("//build/gypi_to_gn.py",
 #   components/translate/content/renderer/renderer_cld_utils.cc
 cld2_platform_support = "static"
 
-cld2_table_size = 2
+config("cld2_data_warnings") {
+  visibility = [ ":*" ]
+  if (is_clang) {
+    # The generated files don't have braces around subobject initializers.
+    cflags = [ "-Wno-missing-braces" ]
+  }
+}
 
 source_set("cld2_data") {
   sources = gypi_values.cld2_data_sources
@@ -46,15 +60,13 @@ source_set("cld2_data") {
     "src/public",
   ]
 
-  config("cld2_data_warnings") {
-    if (is_clang) {
-      # The generated files don't have braces around subobject initializers.
-      cflags = [ "-Wno-missing-braces" ]
-    }
-  }
   configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [ "//build/config/compiler:no_chromium_code" ]
-  configs += [ ":cld2_data_warnings" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":cld2_data_warnings",
+  ]
 }
 
 # As in the corresponding gyp file, this just builds the core interfaces for
@@ -72,11 +84,11 @@ source_set("cld_2") {
 }
 
 source_set("cld2_platform_impl") {
-  deps = []
+  public_deps = []
   if (cld2_platform_support == "static") {
-    deps += [ ":cld2_static" ]
+    public_deps += [ ":cld2_static" ]
   } else if (cld2_platform_support == "dynamic") {
-    deps += [ ":cld2_dynamic" ]
+    public_deps += [ ":cld2_dynamic" ]
   }
 }
 
@@ -86,6 +98,9 @@ config("cld2_warnings") {
       # cld_2 contains unused private fields.
       # https://code.google.com/p/cld2/issues/detail?id=37
       "-Wno-unused-private-field",
+
+      # offsetmap.cc uses a char as a subscript.
+      "-Wno-char-subscripts",
     ]
   }
 }
@@ -97,9 +112,9 @@ static_library("cld2_static") {
     "src/public",
   ]
 
-  deps = [
-    ":cld_2",
+  public_deps = [
     ":cld2_data",
+    ":cld_2",
   ]
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [
@@ -128,8 +143,8 @@ static_library("cld2_dynamic") {
   ]
 }
 
-# Does not build on Windows.
-if (!is_win) {
+# Does not build on Windows or Android.
+if (!is_win && !is_android) {
   executable("cld_2_dynamic_data_tool") {
     sources = [
       "src/internal/cld2_dynamic_data_extractor.cc",
@@ -145,6 +160,7 @@ if (!is_win) {
     deps = [
       ":cld2_data",
       ":cld2_dynamic",
+      "//build/config/sanitizers:deps",
     ]
 
     configs -= [ "//build/config/compiler:chromium_code" ]

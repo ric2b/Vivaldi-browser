@@ -5,16 +5,18 @@
 #ifndef UI_BASE_IME_INPUT_METHOD_CHROMEOS_H_
 #define UI_BASE_IME_INPUT_METHOD_CHROMEOS_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/base/ime/chromeos/character_composer.h"
-#include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/composition_text.h"
+#include "ui/base/ime/ime_input_context_handler_interface.h"
 #include "ui/base/ime/input_method_base.h"
 
 namespace ui {
@@ -22,7 +24,7 @@ namespace ui {
 // A ui::InputMethod implementation based on IBus.
 class UI_BASE_IME_EXPORT InputMethodChromeOS
     : public InputMethodBase,
-      public chromeos::IMEInputContextHandlerInterface {
+      public ui::IMEInputContextHandlerInterface {
  public:
   explicit InputMethodChromeOS(internal::InputMethodDelegate* delegate);
   ~InputMethodChromeOS() override;
@@ -32,23 +34,22 @@ class UI_BASE_IME_EXPORT InputMethodChromeOS
   void OnBlur() override;
   bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
                                 NativeEventResult* result) override;
-  bool DispatchKeyEvent(const ui::KeyEvent& event) override;
+  void DispatchKeyEvent(ui::KeyEvent* event) override;
   void OnTextInputTypeChanged(const TextInputClient* client) override;
   void OnCaretBoundsChanged(const TextInputClient* client) override;
   void CancelComposition(const TextInputClient* client) override;
   void OnInputLocaleChanged() override;
   std::string GetInputLocale() override;
-  bool IsActive() override;
   bool IsCandidatePopupOpen() const override;
 
  protected:
   // Converts |text| into CompositionText.
-  void ExtractCompositionText(const chromeos::CompositionText& text,
-                              uint32 cursor_position,
+  void ExtractCompositionText(const CompositionText& text,
+                              uint32_t cursor_position,
                               CompositionText* out_composition) const;
 
   // Process a key returned from the input method.
-  virtual void ProcessKeyEventPostIME(const ui::KeyEvent& event,
+  virtual void ProcessKeyEventPostIME(ui::KeyEvent* event,
                                       bool handled);
 
   // Resets context and abandon all pending results and key events.
@@ -71,15 +72,17 @@ class UI_BASE_IME_EXPORT InputMethodChromeOS
   void UpdateContextFocusState();
 
   // Processes a key event that was already filtered by the input method.
-  // A VKEY_PROCESSKEY may be dispatched to the focused View.
-  void ProcessFilteredKeyPressEvent(const ui::KeyEvent& event);
+  // A VKEY_PROCESSKEY may be dispatched to the EventTargets.
+  // It returns the result of whether the event has been stopped propagation
+  // when dispatching post IME.
+  void ProcessFilteredKeyPressEvent(ui::KeyEvent* event);
 
   // Processes a key event that was not filtered by the input method.
-  void ProcessUnfilteredKeyPressEvent(const ui::KeyEvent& event);
+  void ProcessUnfilteredKeyPressEvent(ui::KeyEvent* event);
 
   // Sends input method result caused by the given key event to the focused text
   // input client.
-  void ProcessInputMethodResult(const ui::KeyEvent& event, bool filtered);
+  void ProcessInputMethodResult(ui::KeyEvent* event, bool filtered);
 
   // Checks if the pending input method result needs inserting into the focused
   // text input client as a single character.
@@ -89,24 +92,25 @@ class UI_BASE_IME_EXPORT InputMethodChromeOS
   bool HasInputMethodResult() const;
 
   // Sends a fake key event for IME composing without physical key events.
-  void SendFakeProcessKeyEvent(bool pressed) const;
+  // Returns true if the faked key event is stopped propagation.
+  bool SendFakeProcessKeyEvent(bool pressed) const;
 
   // Passes keyevent and executes character composition if necessary. Returns
   // true if character composer comsumes key event.
   bool ExecuteCharacterComposer(const ui::KeyEvent& event);
 
-  // chromeos::IMEInputContextHandlerInterface overrides:
+  // ui::IMEInputContextHandlerInterface overrides:
   void CommitText(const std::string& text) override;
-  void UpdateCompositionText(const chromeos::CompositionText& text,
-                             uint32 cursor_pos,
+  void UpdateCompositionText(const CompositionText& text,
+                             uint32_t cursor_pos,
                              bool visible) override;
-  void DeleteSurroundingText(int32 offset, uint32 length) override;
+  void DeleteSurroundingText(int32_t offset, uint32_t length) override;
 
   // Hides the composition text.
   void HidePreeditText();
 
   // Callback function for IMEEngineHandlerInterface::ProcessKeyEvent.
-  void ProcessKeyEventDone(const ui::KeyEvent* event, bool is_handled);
+  void ProcessKeyEventDone(ui::KeyEvent* event, bool is_handled);
 
   // Returns whether an non-password input field is focused.
   bool IsNonPasswordInputFieldFocused();

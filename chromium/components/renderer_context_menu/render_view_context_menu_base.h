@@ -5,10 +5,14 @@
 #ifndef COMPONENTS_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_BASE_H_
 #define COMPONENTS_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_BASE_H_
 
+#include <stddef.h>
 #include <map>
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "components/renderer_context_menu/context_menu_content_type.h"
@@ -108,8 +112,6 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
   content::WebContents* GetWebContents() const override;
   content::BrowserContext* GetBrowserContext() const override;
 
-  virtual void AddVivaldiMenu(RenderViewContextMenuObserver* vivaldiMenu) = 0;
-
  protected:
   friend class RenderViewContextMenuTest;
   friend class RenderViewContextMenuPrefsTest;
@@ -119,7 +121,7 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
   }
 
   void set_toolkit_delegate(scoped_ptr<ToolkitDelegate> delegate) {
-    toolkit_delegate_ = delegate.Pass();
+    toolkit_delegate_ = std::move(delegate);
   }
 
   ToolkitDelegate* toolkit_delegate() {
@@ -195,6 +197,8 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
   const int render_process_id_;
 
   scoped_ptr<ToolkitDelegate> toolkit_delegate_;
+
+  ScopedVector<ui::SimpleMenuModel> custom_submenus_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenuBase);
 };

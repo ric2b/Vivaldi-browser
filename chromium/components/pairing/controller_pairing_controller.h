@@ -31,6 +31,7 @@ class ControllerPairingController {
     STAGE_ESTABLISHING_CONNECTION_ERROR,
     STAGE_WAITING_FOR_CODE_CONFIRMATION,
     STAGE_PAIRING_DONE,
+    STAGE_HOST_NETWORK_ERROR,
     STAGE_HOST_UPDATE_IN_PROGRESS,
     STAGE_HOST_CONNECTION_LOST,
     STAGE_WAITING_FOR_CREDENTIALS,
@@ -87,6 +88,9 @@ class ControllerPairingController {
   // Called to confirm or deny confirmation code. Can be called only on
   // |STAGE_WAITING_FOR_CODE_CONFIRMATION| stage.
   virtual void SetConfirmationCodeIsCorrect(bool correct) = 0;
+
+  // Set the values that will be sent to the host to set its network.
+  virtual void SetHostNetwork(const std::string& onc_spec) = 0;
 
   // Set the values that will be sent to the host if it needs to be configured.
   virtual void SetHostConfiguration(bool accepted_eula,

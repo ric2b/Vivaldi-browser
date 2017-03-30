@@ -6,10 +6,10 @@
 
 #include <mstcpip.h>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -17,8 +17,8 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/network_activity_monitor.h"
+#include "net/base/sockaddr_storage.h"
 #include "net/base/winsock_init.h"
 #include "net/base/winsock_util.h"
 #include "net/log/net_log.h"
@@ -133,14 +133,14 @@ void UDPSocketWin::Core::WatchForRead() {
   // We grab an extra reference because there is an IO operation in progress.
   // Balanced in ReadDelegate::OnObjectSignaled().
   AddRef();
-  read_watcher_.StartWatching(read_overlapped_.hEvent, &reader_);
+  read_watcher_.StartWatchingOnce(read_overlapped_.hEvent, &reader_);
 }
 
 void UDPSocketWin::Core::WatchForWrite() {
   // We grab an extra reference because there is an IO operation in progress.
   // Balanced in WriteDelegate::OnObjectSignaled().
   AddRef();
-  write_watcher_.StartWatching(write_overlapped_.hEvent, &writer_);
+  write_watcher_.StartWatchingOnce(write_overlapped_.hEvent, &writer_);
 }
 
 void UDPSocketWin::Core::ReadDelegate::OnObjectSignaled(HANDLE object) {
@@ -482,7 +482,12 @@ int UDPSocketWin::Bind(const IPEndPoint& address) {
   return rv;
 }
 
-int UDPSocketWin::SetReceiveBufferSize(int32 size) {
+int UDPSocketWin::BindToNetwork(NetworkChangeNotifier::NetworkHandle network) {
+  NOTIMPLEMENTED();
+  return ERR_NOT_IMPLEMENTED;
+}
+
+int UDPSocketWin::SetReceiveBufferSize(int32_t size) {
   DCHECK_NE(socket_, INVALID_SOCKET);
   DCHECK(CalledOnValidThread());
   int rv = setsockopt(socket_, SOL_SOCKET, SO_RCVBUF,
@@ -492,7 +497,7 @@ int UDPSocketWin::SetReceiveBufferSize(int32 size) {
 
   // According to documentation, setsockopt may succeed, but we need to check
   // the results via getsockopt to be sure it works on Windows.
-  int32 actual_size = 0;
+  int32_t actual_size = 0;
   int option_size = sizeof(actual_size);
   rv = getsockopt(socket_, SOL_SOCKET, SO_RCVBUF,
                   reinterpret_cast<char*>(&actual_size), &option_size);
@@ -505,7 +510,7 @@ int UDPSocketWin::SetReceiveBufferSize(int32 size) {
   return ERR_SOCKET_RECEIVE_BUFFER_SIZE_UNCHANGEABLE;
 }
 
-int UDPSocketWin::SetSendBufferSize(int32 size) {
+int UDPSocketWin::SetSendBufferSize(int32_t size) {
   DCHECK_NE(socket_, INVALID_SOCKET);
   DCHECK(CalledOnValidThread());
   int rv = setsockopt(socket_, SOL_SOCKET, SO_SNDBUF,
@@ -514,7 +519,7 @@ int UDPSocketWin::SetSendBufferSize(int32 size) {
     return MapSystemError(WSAGetLastError());
   // According to documentation, setsockopt may succeed, but we need to check
   // the results via getsockopt to be sure it works on Windows.
-  int32 actual_size = 0;
+  int32_t actual_size = 0;
   int option_size = sizeof(actual_size);
   rv = getsockopt(socket_, SOL_SOCKET, SO_SNDBUF,
                   reinterpret_cast<char*>(&actual_size), &option_size);
@@ -669,7 +674,7 @@ void UDPSocketWin::WatchForReadWrite() {
   if (read_write_watcher_.IsWatching())
     return;
   bool watched =
-      read_write_watcher_.StartWatching(read_write_event_.Get(), this);
+      read_write_watcher_.StartWatchingOnce(read_write_event_.Get(), this);
   DCHECK(watched);
 }
 
@@ -911,7 +916,7 @@ int UDPSocketWin::SetMulticastOptions() {
         break;
       }
       case AF_INET6: {
-        uint32 interface_index = multicast_interface_;
+        uint32_t interface_index = multicast_interface_;
         int rv = setsockopt(socket_, IPPROTO_IPV6, IPV6_MULTICAST_IF,
                             reinterpret_cast<const char*>(&interface_index),
                             sizeof(interface_index));
@@ -951,8 +956,8 @@ int UDPSocketWin::RandomBind(const IPAddressNumber& address) {
   DCHECK(bind_type_ == DatagramSocket::RANDOM_BIND && !rand_int_cb_.is_null());
 
   for (int i = 0; i < kBindRetries; ++i) {
-    int rv = DoBind(IPEndPoint(
-        address, static_cast<uint16>(rand_int_cb_.Run(kPortStart, kPortEnd))));
+    int rv = DoBind(IPEndPoint(address, static_cast<uint16_t>(rand_int_cb_.Run(
+                                            kPortStart, kPortEnd))));
     if (rv == OK || rv != ERR_ADDRESS_IN_USE)
       return rv;
   }
@@ -1035,7 +1040,7 @@ int UDPSocketWin::LeaveGroup(
   }
 }
 
-int UDPSocketWin::SetMulticastInterface(uint32 interface_index) {
+int UDPSocketWin::SetMulticastInterface(uint32_t interface_index) {
   DCHECK(CalledOnValidThread());
   if (is_connected())
     return ERR_SOCKET_IS_CONNECTED;

@@ -5,22 +5,37 @@
 #include "chrome/browser/download/download_danger_prompt.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
+#include "base/metrics/sparse_histogram.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
+#include "chrome/common/safe_browsing/csd.pb.h"
+#include "chrome/common/safe_browsing/download_protection_util.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/download_item.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using extensions::ExperienceSamplingEvent;
+using safe_browsing::ClientDownloadResponse;
+using safe_browsing::ClientSafeBrowsingReportRequest;
+using safe_browsing::download_protection_util::
+    GetSBClientDownloadExtensionValueForUMA;
 
 namespace {
+
+const char kDownloadDangerPromptPrefix[] = "Download.DownloadDangerPrompt";
 
 // TODO(wittman): Create a native web contents modal dialog implementation of
 // this dialog for non-Views platforms, to support bold formatting of the
@@ -80,10 +95,8 @@ DownloadDangerPromptImpl::DownloadDangerPromptImpl(
   // ExperienceSampling: A malicious download warning is being shown to the
   // user, so we start a new SamplingEvent and track it.
   sampling_event_.reset(new ExperienceSamplingEvent(
-      ExperienceSamplingEvent::kDownloadDangerPrompt,
-      download->GetURL(),
-      download->GetReferrerUrl(),
-      download->GetBrowserContext()));
+      ExperienceSamplingEvent::kDownloadDangerPrompt, download->GetURL(),
+      download->GetReferrerUrl(), download->GetBrowserContext()));
 }
 
 DownloadDangerPromptImpl::~DownloadDangerPromptImpl() {
@@ -94,8 +107,12 @@ DownloadDangerPromptImpl::~DownloadDangerPromptImpl() {
 
 void DownloadDangerPromptImpl::InvokeActionForTesting(Action action) {
   switch (action) {
-    case ACCEPT: Accept(); break;
-    case CANCEL: Cancel(); break;
+    case ACCEPT:
+      Accept();
+      break;
+    case CANCEL:
+      Cancel();
+      break;
     case DISMISS:
       RunDone(DISMISS);
       Cancel();
@@ -140,7 +157,7 @@ base::string16 DownloadDangerPromptImpl::GetDialogMessage() {
             IDS_PROMPT_DANGEROUS_DOWNLOAD,
             download_->GetFileNameToReportUser().LossyDisplayName());
       }
-      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL: // Fall through
+      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:  // Fall through
       case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
       case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST: {
         return l10n_util::GetStringFUTF16(
@@ -170,10 +187,10 @@ base::string16 DownloadDangerPromptImpl::GetDialogMessage() {
       case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
       case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST: {
         return l10n_util::GetStringUTF16(
-            IDS_PROMPT_CONFIRM_KEEP_MALICIOUS_DOWNLOAD_LEAD) +
-            base::ASCIIToUTF16("\n\n") +
-            l10n_util::GetStringUTF16(
-                IDS_PROMPT_CONFIRM_KEEP_MALICIOUS_DOWNLOAD_BODY);
+                   IDS_PROMPT_CONFIRM_KEEP_MALICIOUS_DOWNLOAD_LEAD) +
+               base::ASCIIToUTF16("\n\n") +
+               l10n_util::GetStringUTF16(
+                   IDS_PROMPT_CONFIRM_KEEP_MALICIOUS_DOWNLOAD_BODY);
       }
       default: {
         return l10n_util::GetStringUTF16(
@@ -240,11 +257,43 @@ void DownloadDangerPromptImpl::RunDone(Action action) {
   OnDone done = done_;
   done_.Reset();
   if (download_ != NULL) {
+    const bool accept = action == DownloadDangerPrompt::ACCEPT;
+    RecordDownloadDangerPrompt(accept, *download_);
+    if (!download_->GetURL().is_empty() &&
+        !download_->GetBrowserContext()->IsOffTheRecord()) {
+      SendSafeBrowsingDownloadRecoveryReport(accept, *download_);
+    }
     download_->RemoveObserver(this);
     download_ = NULL;
   }
   if (!done.is_null())
     done.Run(action);
+}
+
+// Converts DownloadDangerType into their corresponding string.
+const char* GetDangerTypeString(
+    const content::DownloadDangerType& danger_type) {
+  switch (danger_type) {
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+      return "DangerousFile";
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+      return "DangerousURL";
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+      return "DangerousContent";
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+      return "DangerousHost";
+    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+      return "UncommonContent";
+    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+      return "PotentiallyUnwanted";
+    case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+    case content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+    case content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+    case content::DOWNLOAD_DANGER_TYPE_MAX:
+      break;
+  }
+  NOTREACHED();
+  return nullptr;
 }
 
 }  // namespace
@@ -256,10 +305,63 @@ DownloadDangerPrompt* DownloadDangerPrompt::Create(
     content::WebContents* web_contents,
     bool show_context,
     const OnDone& done) {
-  DownloadDangerPromptImpl* prompt = new DownloadDangerPromptImpl(
-      item, web_contents, show_context, done);
+  DownloadDangerPromptImpl* prompt =
+      new DownloadDangerPromptImpl(item, web_contents, show_context, done);
   // |prompt| will be deleted when the dialog is done.
   TabModalConfirmDialog::Create(prompt, web_contents);
   return prompt;
 }
 #endif
+
+void DownloadDangerPrompt::SendSafeBrowsingDownloadRecoveryReport(
+    bool did_proceed,
+    const content::DownloadItem& download) {
+  safe_browsing::SafeBrowsingService* sb_service =
+      g_browser_process->safe_browsing_service();
+  ClientSafeBrowsingReportRequest report;
+  report.set_type(ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_RECOVERY);
+  switch (download.GetDangerType()) {
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+      report.set_download_verdict(ClientDownloadResponse::DANGEROUS);
+      break;
+    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+      report.set_download_verdict(ClientDownloadResponse::UNCOMMON);
+      break;
+    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+      report.set_download_verdict(ClientDownloadResponse::POTENTIALLY_UNWANTED);
+      break;
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+      report.set_download_verdict(ClientDownloadResponse::DANGEROUS_HOST);
+      break;
+    default:
+      break;
+  }
+  report.set_url(download.GetURL().spec());
+  report.set_did_proceed(did_proceed);
+
+  std::string serialized_report;
+  if (report.SerializeToString(&serialized_report))
+    sb_service->SendDownloadRecoveryReport(serialized_report);
+  else
+    DLOG(ERROR) << "Unable to serialize the threat report.";
+}
+
+void DownloadDangerPrompt::RecordDownloadDangerPrompt(
+    bool did_proceed,
+    const content::DownloadItem& download) {
+  int dangerous_file_type =
+      GetSBClientDownloadExtensionValueForUMA(download.GetTargetFilePath());
+  content::DownloadDangerType danger_type = download.GetDangerType();
+
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
+      base::StringPrintf("%s.%s.Shown", kDownloadDangerPromptPrefix,
+                         GetDangerTypeString(danger_type)),
+      dangerous_file_type);
+  if (did_proceed) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY(
+        base::StringPrintf("%s.%s.Proceed", kDownloadDangerPromptPrefix,
+                           GetDangerTypeString(danger_type)),
+        dangerous_file_type);
+  }
+}

@@ -2,20 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_SLAVE_CONNECTION_MANAGER_H_
-#define MOJO_EDK_SYSTEM_SLAVE_CONNECTION_MANAGER_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_SLAVE_CONNECTION_MANAGER_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_SLAVE_CONNECTION_MANAGER_H_
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/edk/embedder/slave_process_delegate.h"
-#include "mojo/edk/system/connection_manager.h"
-#include "mojo/edk/system/raw_channel.h"
-#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/embedder/slave_process_delegate.h"
+#include "third_party/mojo/src/mojo/edk/system/connection_manager.h"
+#include "third_party/mojo/src/mojo/edk/system/mutex.h"
+#include "third_party/mojo/src/mojo/edk/system/raw_channel.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace base {
 class TaskRunner;
@@ -50,29 +50,30 @@ class MOJO_SYSTEM_IMPL_EXPORT SlaveConnectionManager final
   // |delegate_thread_task_runner| should be the task runner for the "delegate
   // thread", on which |slave_process_delegate|'s methods will be called. Both
   // must stay alive at least until after |Shutdown()| has been called.
-  void Init(scoped_refptr<base::TaskRunner> delegate_thread_task_runner,
-            embedder::SlaveProcessDelegate* slave_process_delegate,
+  void Init(embedder::SlaveProcessDelegate* slave_process_delegate,
             embedder::ScopedPlatformHandle platform_handle);
 
   // |ConnectionManager| methods:
   void Shutdown() override;
   bool AllowConnect(const ConnectionIdentifier& connection_id) override;
   bool CancelConnect(const ConnectionIdentifier& connection_id) override;
-  bool Connect(const ConnectionIdentifier& connection_id,
-               ProcessIdentifier* peer_process_identifier,
-               embedder::ScopedPlatformHandle* platform_handle) override;
+  Result Connect(const ConnectionIdentifier& connection_id,
+                 ProcessIdentifier* peer_process_identifier,
+                 bool* is_first,
+                 embedder::ScopedPlatformHandle* platform_handle) override;
 
  private:
   // These should only be called on |private_thread_|:
   void InitOnPrivateThread(embedder::ScopedPlatformHandle platform_handle);
   void ShutdownOnPrivateThread();
   void AllowConnectOnPrivateThread(const ConnectionIdentifier& connection_id,
-                                   bool* result);
+                                   Result* result);
   void CancelConnectOnPrivateThread(const ConnectionIdentifier& connection_id,
-                                    bool* result);
+                                    Result* result);
   void ConnectOnPrivateThread(const ConnectionIdentifier& connection_id,
-                              bool* result,
+                              Result* result,
                               ProcessIdentifier* peer_process_identifier,
+                              bool* is_first,
                               embedder::ScopedPlatformHandle* platform_handle);
 
   // |RawChannel::Delegate| methods (only called on |private_thread_|):
@@ -112,9 +113,10 @@ class MOJO_SYSTEM_IMPL_EXPORT SlaveConnectionManager final
     AWAITING_CONNECT_ACK
   };
   AwaitingAckType awaiting_ack_type_;
-  bool* ack_result_;
+  Result* ack_result_;
   // Used only when waiting for the ack to "connect":
   ProcessIdentifier* ack_peer_process_identifier_;
+  bool* ack_is_first_;
   embedder::ScopedPlatformHandle* ack_platform_handle_;
 
   // The (synchronous) |ConnectionManager| methods are implemented in the
@@ -143,7 +145,7 @@ class MOJO_SYSTEM_IMPL_EXPORT SlaveConnectionManager final
   //
   // TODO(vtl): This is all a hack. It'd really suffice to have a version of
   // |RawChannel| with fully synchronous reading and writing.
-  base::Lock lock_;
+  Mutex mutex_;
   base::WaitableEvent event_;
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(SlaveConnectionManager);
@@ -152,4 +154,4 @@ class MOJO_SYSTEM_IMPL_EXPORT SlaveConnectionManager final
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_SLAVE_CONNECTION_MANAGER_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_SLAVE_CONNECTION_MANAGER_H_

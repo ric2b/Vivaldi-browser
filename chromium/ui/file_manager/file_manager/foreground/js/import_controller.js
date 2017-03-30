@@ -534,30 +534,29 @@ importer.RuntimeCommandWidget = function() {
   };
 
   /** @private {!Element} */
-  this.comboButton_ = queryRequiredElement(
-      document, '#cloud-import-combo-button');
+  this.comboButton_ = getRequiredElement('cloud-import-combo-button');
 
   /** @private {!Element} */
   this.mainButton_ = queryRequiredElement(
-      this.comboButton_, '#cloud-import-button');
+      '#cloud-import-button', this.comboButton_);
   this.mainButton_.onclick = this.onButtonClicked_.bind(
       this, importer.ClickSource.MAIN);
 
   /** @private {!PaperRipple}*/
   this.mainButtonRipple_ =
       /** @type {!PaperRipple} */ (queryRequiredElement(
-          this.comboButton_, '.ripples > paper-ripple'));
+          '.ripples > paper-ripple', this.comboButton_));
 
   /** @private {Element} */
   this.sideButton_ = queryRequiredElement(
-      this.comboButton_, '#cloud-import-details-button');
+      '#cloud-import-details-button', this.comboButton_);
   this.sideButton_.onclick = this.onButtonClicked_.bind(
       this, importer.ClickSource.SIDE);
 
   /** @private {!FilesToggleRipple} */
   this.sideButtonRipple_ =
       /** @type {!FilesToggleRipple} */ (queryRequiredElement(
-          this.comboButton_, '.ripples > files-toggle-ripple'));
+          '.ripples > files-toggle-ripple', this.comboButton_));
 
   /** @private {Element} */
   this.importButton_ =
@@ -1137,15 +1136,13 @@ importer.RuntimeControllerEnvironment.prototype.getFreeStorageSpace =
       function(resolve, reject) {
         chrome.fileManagerPrivate.getSizeStats(
             localVolumeInfo.volumeId,
-            /** @param {Object} stats */
             function(stats) {
-              if (stats && !chrome.runtime.lastError) {
-                resolve(stats.remainingSize);
-              } else {
+              if (chrome.runtime.lastError) {
                 reject('Failed to ascertain available free space: ' +
-                    chrome.runtime.lastError.message ||
-                    chrome.runtime.lastError);
+                    chrome.runtime.lastError.message);
+                return;
               }
+              resolve(assert(stats).remainingSize);
             });
       });
 };

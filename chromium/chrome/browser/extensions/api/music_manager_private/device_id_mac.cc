@@ -5,12 +5,13 @@
 #include "chrome/browser/extensions/api/music_manager_private/device_id.h"
 
 #include <CoreFoundation/CoreFoundation.h>
-#include <DiskArbitration/DASession.h>
 #include <DiskArbitration/DADisk.h>
+#include <DiskArbitration/DASession.h>
 #include <IOKit/IOKitLib.h>
 #include <IOKit/network/IOEthernetController.h>
 #include <IOKit/network/IOEthernetInterface.h>
 #include <IOKit/network/IONetworkInterface.h>
+#include <stddef.h>
 #include <sys/mount.h>
 
 #include "base/bind.h"
@@ -133,7 +134,7 @@ class MacAddressProcessor {
     if (!is_valid_mac_address_.Run(mac_address, mac_address_size))
       return keep_going;
 
-    std::string mac_address_string = base::StringToLowerASCII(base::HexEncode(
+    std::string mac_address_string = base::ToLowerASCII(base::HexEncode(
         mac_address, mac_address_size));
 
     base::ScopedCFTypeRef<CFStringRef> provider_class(

@@ -37,20 +37,41 @@ typedef enum {
   BROTLI_RESULT_NEEDS_MORE_OUTPUT = 3
 } BrotliResult;
 
+/* BROTLI_FAILURE macro unwraps to BROTLI_RESULT_ERROR in non-debug build. */
+/* In debug build it dumps file name, line and pretty function name. */
+#if defined(_MSC_VER) || !defined(BROTLI_DEBUG)
+#define BROTLI_FAILURE() BROTLI_RESULT_ERROR
+#else
+#define BROTLI_FAILURE() \
+    BrotliFailure(__FILE__, __LINE__, __PRETTY_FUNCTION__)
+static inline BrotliResult BrotliFailure(const char *f, int l, const char *fn) {
+  fprintf(stderr, "ERROR at %s:%d (%s)\n", f, l, fn);
+  fflush(stderr);
+  return BROTLI_RESULT_ERROR;
+}
+#endif
+
+/* Creates the instance of BrotliState and initializes it. alloc_func and
+   free_func MUST be both zero or both non-zero. In the case they are both zero,
+   default memory allocators are used. opaque parameter is passed to alloc_func
+   and free_func when they are called. */
+BrotliState* BrotliCreateState(
+    brotli_alloc_func alloc_func, brotli_free_func free_func, void* opaque);
+
+/* Deinitializes and frees BrotliState instance. */
+void BrotliDestroyState(BrotliState* state);
+
 /* Sets *decoded_size to the decompressed size of the given encoded stream. */
 /* This function only works if the encoded buffer has a single meta block, */
 /* or if it has two meta-blocks, where the first is uncompressed and the */
 /* second is empty. */
 /* Returns 1 on success, 0 on failure. */
-BrotliResult BrotliDecompressedSize(size_t encoded_size,
-                                    const uint8_t* encoded_buffer,
-                                    size_t* decoded_size);
+int BrotliDecompressedSize(size_t encoded_size,
+                           const uint8_t* encoded_buffer,
+                           size_t* decoded_size);
 
 /* Decompresses the data in encoded_buffer into decoded_buffer, and sets */
 /* *decoded_size to the decompressed length. */
-/* Returns 0 if there was either a bit stream error or memory allocation */
-/* error, and 1 otherwise. */
-/* If decoded size is zero, returns 1 and keeps decoded_buffer unchanged. */
 BrotliResult BrotliDecompressBuffer(size_t encoded_size,
                                     const uint8_t* encoded_buffer,
                                     size_t* decoded_size,
@@ -58,6 +79,7 @@ BrotliResult BrotliDecompressBuffer(size_t encoded_size,
 
 /* Same as above, but uses the specified input and output callbacks instead */
 /* of reading from and writing to pre-allocated memory buffers. */
+/* DEPRECATED */
 BrotliResult BrotliDecompress(BrotliInput input, BrotliOutput output);
 
 /* Same as above, but supports the caller to call the decoder repeatedly with
@@ -85,6 +107,7 @@ BrotliResult BrotliDecompress(BrotliInput input, BrotliOutput output);
    it returning a smaller value than the amount of bytes to write always results
    in an error.
 */
+/* DEPRECATED */
 BrotliResult BrotliDecompressStreaming(BrotliInput input, BrotliOutput output,
                                        int finish, BrotliState* s);
 
@@ -115,6 +138,7 @@ BrotliResult BrotliDecompressStreaming(BrotliInput input, BrotliOutput output,
    *available_out yourself before a next call, e.g. to point to a new larger
    buffer.
 */
+/* DEPRECATED */
 BrotliResult BrotliDecompressBufferStreaming(size_t* available_in,
                                              const uint8_t** next_in,
                                              int finish,
@@ -122,6 +146,27 @@ BrotliResult BrotliDecompressBufferStreaming(size_t* available_in,
                                              uint8_t** next_out,
                                              size_t* total_out,
                                              BrotliState* s);
+
+BrotliResult BrotliDecompressStream(size_t* available_in,
+                                    const uint8_t** next_in,
+                                    size_t* available_out,
+                                    uint8_t** next_out,
+                                    size_t* total_out,
+                                    BrotliState* s);
+
+/* Fills the new state with a dictionary for LZ77, warming up the ringbuffer,
+   e.g. for custom static dictionaries for data formats.
+   Not to be confused with the built-in transformable dictionary of Brotli.
+   The dictionary must exist in memory until decoding is done and is owned by
+   the caller. To use:
+   -initialize state with BrotliStateInit
+   -use BrotliSetCustomDictionary
+   -use BrotliDecompressBufferStreaming
+   -clean up with BrotliStateCleanup
+*/
+void BrotliSetCustomDictionary(
+    size_t size, const uint8_t* dict, BrotliState* s);
+
 
 #if defined(__cplusplus) || defined(c_plusplus)
 } /* extern "C" */

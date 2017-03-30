@@ -5,8 +5,10 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_DEFAULT_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_DEFAULT_H_
 
+#include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -26,7 +28,7 @@ class PasswordStoreDefault : public PasswordStore {
 
   bool Init(const syncer::SyncableService::StartSyncFlare& flare) override;
 
-  void Shutdown() override;
+  void ShutdownOnUIThread() override;
 
   // To be used only for testing.
   LoginDatabase* login_db() const { return login_db_.get(); }
@@ -46,12 +48,18 @@ class PasswordStoreDefault : public PasswordStore {
       const autofill::PasswordForm& form) override;
   PasswordStoreChangeList RemoveLoginImpl(
       const autofill::PasswordForm& form) override;
+  PasswordStoreChangeList RemoveLoginsByOriginAndTimeImpl(
+      const url::Origin& origin,
+      base::Time delete_begin,
+      base::Time delete_end) override;
   PasswordStoreChangeList RemoveLoginsCreatedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
   PasswordStoreChangeList RemoveLoginsSyncedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
+  bool RemoveStatisticsCreatedBetweenImpl(base::Time delete_begin,
+                                          base::Time delete_end) override;
   ScopedVector<autofill::PasswordForm> FillMatchingLogins(
       const autofill::PasswordForm& form,
       AuthorizationPromptPolicy prompt_policy) override;
@@ -61,7 +69,7 @@ class PasswordStoreDefault : public PasswordStore {
       ScopedVector<autofill::PasswordForm>* forms) override;
   void AddSiteStatsImpl(const InteractionsStats& stats) override;
   void RemoveSiteStatsImpl(const GURL& origin_domain) override;
-  scoped_ptr<InteractionsStats> GetSiteStatsImpl(
+  std::vector<scoped_ptr<InteractionsStats>> GetSiteStatsImpl(
       const GURL& origin_domain) override;
 
   inline bool DeleteAndRecreateDatabaseFile() {

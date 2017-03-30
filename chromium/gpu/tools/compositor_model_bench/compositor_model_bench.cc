@@ -22,7 +22,6 @@
 #include <vector>
 
 #include "base/at_exit.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
@@ -325,7 +324,7 @@ class Simulator {
 
     if (!sims_remaining_.size()) {
       DumpOutput();
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
       return false;
     }
 

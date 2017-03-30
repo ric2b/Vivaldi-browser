@@ -5,6 +5,7 @@
 #ifndef UI_CHROMEOS_TOUCH_EXPLORATION_CONTROLLER_H_
 #define UI_CHROMEOS_TOUCH_EXPLORATION_CONTROLLER_H_
 
+#include "base/macros.h"
 #include "base/time/tick_clock.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
@@ -164,7 +165,8 @@ class TouchExplorationControllerDelegate {
 // destroy them before |root_window| is destroyed.
 class UI_CHROMEOS_EXPORT TouchExplorationController
     : public ui::EventRewriter,
-      public ui::GestureProviderAuraClient {
+      public ui::GestureProviderAuraClient,
+      public ui::GestureConsumer {
  public:
   explicit TouchExplorationController(
       aura::Window* root_window,
@@ -236,7 +238,8 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // the user moves fast enough to trigger a gesture. After the user
   // completes their gesture, this method will decide what keyboard
   // input their gesture corresponded to.
-  void OnGestureEvent(ui::GestureEvent* gesture) override;
+  void OnGestureEvent(ui::GestureConsumer* raw_input_consumer,
+                      ui::GestureEvent* gesture) override;
 
   // Process the gesture events that have been created.
   void ProcessGestureEvents();
@@ -258,8 +261,8 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // Binds DispatchKeyWithFlags to a specific key and flags.
   base::Closure BindKeyEventWithFlags(const ui::KeyboardCode key, int flags);
 
-  scoped_ptr<ui::Event> CreateMouseMoveEvent(const gfx::PointF& location,
-                                             int flags);
+  scoped_ptr<ui::MouseEvent> CreateMouseMoveEvent(const gfx::PointF& location,
+                                                  int flags);
 
   void EnterTouchToMouseMode();
 
@@ -424,7 +427,7 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
 
   // In one finger passthrough, the touch is displaced relative to the
   // last touch exploration location.
-  gfx::Vector2d passthrough_offset_;
+  gfx::Vector2dF passthrough_offset_;
 
   // Stores the most recent event from a finger that is currently not
   // sending events through, but might in the future (e.g. before a finger
@@ -436,13 +439,13 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   scoped_ptr<ui::TouchEvent> last_touch_exploration_;
 
   // A timer that fires after the double-tap delay.
-  base::OneShotTimer<TouchExplorationController> tap_timer_;
+  base::OneShotTimer tap_timer_;
 
   // A timer that fires to enter passthrough.
-  base::OneShotTimer<TouchExplorationController> passthrough_timer_;
+  base::OneShotTimer passthrough_timer_;
 
   // A timer to fire an indicating sound when sliding to change volume.
-  base::RepeatingTimer<TouchExplorationController> sound_timer_;
+  base::RepeatingTimer sound_timer_;
 
   // A default gesture detector config, so we can share the same
   // timeout and pixel slop constants.

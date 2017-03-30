@@ -5,14 +5,16 @@
 #ifndef NET_URL_REQUEST_URL_FETCHER_CORE_H_
 #define NET_URL_REQUEST_URL_FETCHER_CORE_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/debug/stack_trace.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
@@ -66,8 +68,8 @@ class URLFetcherCore : public base::RefCountedThreadSafe<URLFetcherCore>,
                      const std::string& upload_content);
   void SetUploadFilePath(const std::string& upload_content_type,
                          const base::FilePath& file_path,
-                         uint64 range_offset,
-                         uint64 range_length,
+                         uint64_t range_offset,
+                         uint64_t range_length,
                          scoped_refptr<base::TaskRunner> file_task_runner);
   void SetUploadStreamFactory(
       const std::string& upload_content_type,
@@ -85,9 +87,12 @@ class URLFetcherCore : public base::RefCountedThreadSafe<URLFetcherCore>,
   void SetExtraRequestHeaders(const std::string& extra_request_headers);
   void AddExtraRequestHeader(const std::string& header_line);
   void SetRequestContext(URLRequestContextGetter* request_context_getter);
-  // Set the URL that should be consulted for the third-party cookie
-  // blocking policy.
-  void SetFirstPartyForCookies(const GURL& first_party_for_cookies);
+  // Set the URL that should be considered as "initiating" the fetch. This URL
+  // will be considered the "first-party" when applying cookie blocking policy
+  // to requests, and treated as the request's initiator.
+  //
+  // TODO(mkwst): Convert this to a url::Origin. https://crbug.com/577565
+  void SetInitiatorURL(const GURL& initiator);
   // Set the key and data callback that is used when setting the user
   // data on any URLRequest objects this object creates.
   void SetURLRequestUserData(
@@ -109,11 +114,14 @@ class URLFetcherCore : public base::RefCountedThreadSafe<URLFetcherCore>,
   HttpResponseHeaders* GetResponseHeaders() const;
   HostPortPair GetSocketAddress() const;
   bool WasFetchedViaProxy() const;
+  bool WasCached() const;
   const GURL& GetOriginalURL() const;
   const GURL& GetURL() const;
   const URLRequestStatus& GetStatus() const;
   int GetResponseCode() const;
   const ResponseCookies& GetCookies() const;
+  int64_t GetReceivedResponseContentLength() const;
+  int64_t GetTotalReceivedBytes() const;
   // Reports that the received content was malformed (i.e. failed parsing
   // or validation). This makes the throttling logic that does exponential
   // back-off when servers are having problems treat the current request as
@@ -210,10 +218,11 @@ class URLFetcherCore : public base::RefCountedThreadSafe<URLFetcherCore>,
 
   // Notify Delegate about the progress of upload/download.
   void InformDelegateUploadProgress();
-  void InformDelegateUploadProgressInDelegateThread(int64 current, int64 total);
+  void InformDelegateUploadProgressInDelegateThread(int64_t current,
+                                                    int64_t total);
   void InformDelegateDownloadProgress();
-  void InformDelegateDownloadProgressInDelegateThread(int64 current,
-                                                      int64 total);
+  void InformDelegateDownloadProgressInDelegateThread(int64_t current,
+                                                      int64_t total);
 
   // Check if any upload data is set or not.
   void AssertHasNoUploadData() const;
@@ -237,7 +246,7 @@ class URLFetcherCore : public base::RefCountedThreadSafe<URLFetcherCore>,
                                      // Read buffer
   scoped_refptr<URLRequestContextGetter> request_context_getter_;
                                      // Cookie/cache info for the request
-  GURL first_party_for_cookies_;     // The first party URL for the request
+  GURL initiator_;  // The request's initiator
   // The user data to add to each newly-created URLRequest.
   const void* url_request_data_key_;
   URLFetcher::CreateDataCallback url_request_create_data_callback_;
@@ -245,14 +254,17 @@ class URLFetcherCore : public base::RefCountedThreadSafe<URLFetcherCore>,
   HttpRequestHeaders extra_request_headers_;
   scoped_refptr<HttpResponseHeaders> response_headers_;
   bool was_fetched_via_proxy_;
+  bool was_cached_;
+  int64_t received_response_content_length_;
+  int64_t total_received_bytes_;
   HostPortPair socket_address_;
 
   bool upload_content_set_;          // SetUploadData has been called
   std::string upload_content_;       // HTTP POST payload
   base::FilePath upload_file_path_;  // Path to file containing POST payload
-  uint64 upload_range_offset_;       // Offset from the beginning of the file
+  uint64_t upload_range_offset_;     // Offset from the beginning of the file
                                      // to be uploaded.
-  uint64 upload_range_length_;       // The length of the part of file to be
+  uint64_t upload_range_length_;     // The length of the part of file to be
                                      // uploaded.
   URLFetcher::CreateUploadStreamCallback
       upload_stream_factory_;        // Callback to create HTTP POST payload.
@@ -318,14 +330,13 @@ class URLFetcherCore : public base::RefCountedThreadSafe<URLFetcherCore>,
 
   // Timer to poll the progress of uploading for POST and PUT requests.
   // When crbug.com/119629 is fixed, scoped_ptr is not necessary here.
-  scoped_ptr<base::RepeatingTimer<URLFetcherCore> >
-      upload_progress_checker_timer_;
+  scoped_ptr<base::RepeatingTimer> upload_progress_checker_timer_;
   // Number of bytes sent so far.
-  int64 current_upload_bytes_;
+  int64_t current_upload_bytes_;
   // Number of bytes received so far.
-  int64 current_response_bytes_;
+  int64_t current_response_bytes_;
   // Total expected bytes to receive (-1 if it cannot be determined).
-  int64 total_response_bytes_;
+  int64_t total_response_bytes_;
 
   // TODO(willchan): Get rid of this after debugging crbug.com/90971.
   base::debug::StackTrace stack_trace_;

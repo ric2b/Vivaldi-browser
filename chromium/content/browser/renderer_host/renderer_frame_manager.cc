@@ -12,6 +12,7 @@
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/shared_memory.h"
 #include "base/sys_info.h"
+#include "build/build_config.h"
 #include "content/common/host_shared_bitmap_manager.h"
 
 namespace content {
@@ -23,7 +24,7 @@ const int kCriticalPressurePercentage = 10;
 }  // namespace
 
 RendererFrameManager* RendererFrameManager::GetInstance() {
-  return Singleton<RendererFrameManager>::get();
+  return base::Singleton<RendererFrameManager>::get();
 }
 
 void RendererFrameManager::AddFrame(RendererFrameManagerClient* frame,

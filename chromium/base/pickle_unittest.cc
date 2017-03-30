@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/pickle.h"
 #include "base/strings/string16.h"
@@ -19,10 +23,10 @@ const bool testbool1 = false;
 const bool testbool2 = true;
 const int testint = 2093847192;
 const long testlong = 1093847192;
-const uint16 testuint16 = 32123;
-const uint32 testuint32 = 1593847192;
-const int64 testint64 = -0x7E8CA9253104BDFCLL;
-const uint64 testuint64 = 0xCE8CA9253104BDF7ULL;
+const uint16_t testuint16 = 32123;
+const uint32_t testuint32 = 1593847192;
+const int64_t testint64 = -0x7E8CA9253104BDFCLL;
+const uint64_t testuint64 = 0xCE8CA9253104BDF7ULL;
 const size_t testsizet = 0xFEDC7654;
 const float testfloat = 3.1415926935f;
 const double testdouble = 2.71828182845904523;
@@ -53,19 +57,19 @@ void VerifyResult(const Pickle& pickle) {
   EXPECT_TRUE(iter.ReadLong(&outlong));
   EXPECT_EQ(testlong, outlong);
 
-  uint16 outuint16;
+  uint16_t outuint16;
   EXPECT_TRUE(iter.ReadUInt16(&outuint16));
   EXPECT_EQ(testuint16, outuint16);
 
-  uint32 outuint32;
+  uint32_t outuint32;
   EXPECT_TRUE(iter.ReadUInt32(&outuint32));
   EXPECT_EQ(testuint32, outuint32);
 
-  int64 outint64;
+  int64_t outint64;
   EXPECT_TRUE(iter.ReadInt64(&outint64));
   EXPECT_EQ(testint64, outint64);
 
-  uint64 outuint64;
+  uint64_t outuint64;
   EXPECT_TRUE(iter.ReadUInt64(&outuint64));
   EXPECT_EQ(testuint64, outuint64);
 
@@ -147,12 +151,13 @@ TEST(PickleTest, EncodeDecode) {
 TEST(PickleTest, SizeTFrom64Bit) {
   Pickle pickle;
   // Under the hood size_t is always written as a 64-bit value, so simulate a
-  // 64-bit size_t even on 32-bit architectures by explicitly writing a uint64.
+  // 64-bit size_t even on 32-bit architectures by explicitly writing a
+  // uint64_t.
   EXPECT_TRUE(pickle.WriteUInt64(testuint64));
 
   PickleIterator iter(pickle);
   size_t outsizet;
-  if (sizeof(size_t) < sizeof(uint64)) {
+  if (sizeof(size_t) < sizeof(uint64_t)) {
     // ReadSizeT() should return false when the original written value can't be
     // represented as a size_t.
     EXPECT_FALSE(iter.ReadSizeT(&outsizet));
@@ -231,6 +236,88 @@ TEST(PickleTest, BadLenStr16) {
   PickleIterator iter(pickle);
   string16 outstr;
   EXPECT_FALSE(iter.ReadString16(&outstr));
+}
+
+TEST(PickleTest, PeekNext) {
+  struct CustomHeader : base::Pickle::Header {
+    int cookies[10];
+  };
+
+  Pickle pickle(sizeof(CustomHeader));
+
+  EXPECT_TRUE(pickle.WriteString("Goooooooooooogle"));
+
+  const char* pickle_data = static_cast<const char*>(pickle.data());
+
+  size_t pickle_size;
+
+  // Data range doesn't contain header
+  EXPECT_FALSE(Pickle::PeekNext(
+      sizeof(CustomHeader),
+      pickle_data,
+      pickle_data + sizeof(CustomHeader) - 1,
+      &pickle_size));
+
+  // Data range contains header
+  EXPECT_TRUE(Pickle::PeekNext(
+      sizeof(CustomHeader),
+      pickle_data,
+      pickle_data + sizeof(CustomHeader),
+      &pickle_size));
+  EXPECT_EQ(pickle_size, pickle.size());
+
+  // Data range contains header and some other data
+  EXPECT_TRUE(Pickle::PeekNext(
+      sizeof(CustomHeader),
+      pickle_data,
+      pickle_data + sizeof(CustomHeader) + 1,
+      &pickle_size));
+  EXPECT_EQ(pickle_size, pickle.size());
+
+  // Data range contains full pickle
+  EXPECT_TRUE(Pickle::PeekNext(
+      sizeof(CustomHeader),
+      pickle_data,
+      pickle_data + pickle.size(),
+      &pickle_size));
+  EXPECT_EQ(pickle_size, pickle.size());
+}
+
+TEST(PickleTest, PeekNextOverflow) {
+  struct CustomHeader : base::Pickle::Header {
+    int cookies[10];
+  };
+
+  CustomHeader header;
+
+  // Check if we can wrap around at all
+  if (sizeof(size_t) > sizeof(header.payload_size))
+    return;
+
+  const char* pickle_data = reinterpret_cast<const char*>(&header);
+
+  size_t pickle_size;
+
+  // Wrapping around is detected and reported as maximum size_t value
+  header.payload_size = static_cast<uint32_t>(
+      1 - static_cast<int32_t>(sizeof(CustomHeader)));
+  EXPECT_TRUE(Pickle::PeekNext(
+      sizeof(CustomHeader),
+      pickle_data,
+      pickle_data + sizeof(CustomHeader),
+      &pickle_size));
+  EXPECT_EQ(pickle_size, std::numeric_limits<size_t>::max());
+
+  // Ridiculous pickle sizes are fine (callers are supposed to
+  // verify them)
+  header.payload_size =
+      std::numeric_limits<uint32_t>::max() / 2 - sizeof(CustomHeader);
+  EXPECT_TRUE(Pickle::PeekNext(
+      sizeof(CustomHeader),
+      pickle_data,
+      pickle_data + sizeof(CustomHeader),
+      &pickle_size));
+  EXPECT_EQ(pickle_size, std::numeric_limits<uint32_t>::max() / 2);
 }
 
 TEST(PickleTest, FindNext) {
@@ -316,10 +403,10 @@ TEST(PickleTest, Resize) {
 
   // construct a message that will be exactly the size of one payload unit,
   // note that any data will have a 4-byte header indicating the size
-  const size_t payload_size_after_header = unit - sizeof(uint32);
+  const size_t payload_size_after_header = unit - sizeof(uint32_t);
   Pickle pickle;
-  pickle.WriteData(data_ptr,
-      static_cast<int>(payload_size_after_header - sizeof(uint32)));
+  pickle.WriteData(
+      data_ptr, static_cast<int>(payload_size_after_header - sizeof(uint32_t)));
   size_t cur_payload = payload_size_after_header;
 
   // note: we assume 'unit' is a power of 2
@@ -327,7 +414,7 @@ TEST(PickleTest, Resize) {
   EXPECT_EQ(pickle.payload_size(), payload_size_after_header);
 
   // fill out a full page (noting data header)
-  pickle.WriteData(data_ptr, static_cast<int>(unit - sizeof(uint32)));
+  pickle.WriteData(data_ptr, static_cast<int>(unit - sizeof(uint32_t)));
   cur_payload += unit;
   EXPECT_EQ(unit * 2, pickle.capacity_after_header());
   EXPECT_EQ(cur_payload, pickle.payload_size());
@@ -348,7 +435,7 @@ struct CustomHeader : Pickle::Header {
 }  // namespace
 
 TEST(PickleTest, HeaderPadding) {
-  const uint32 kMagic = 0x12345678;
+  const uint32_t kMagic = 0x12345678;
 
   Pickle pickle(sizeof(CustomHeader));
   pickle.WriteInt(kMagic);
@@ -360,7 +447,7 @@ TEST(PickleTest, HeaderPadding) {
   int result;
   ASSERT_TRUE(iter.ReadInt(&result));
 
-  EXPECT_EQ(static_cast<uint32>(result), kMagic);
+  EXPECT_EQ(static_cast<uint32_t>(result), kMagic);
 }
 
 TEST(PickleTest, EqualsOperator) {
@@ -426,6 +513,66 @@ TEST(PickleTest, ReadBytes) {
   int outdata;
   memcpy(&outdata, outdata_char, sizeof(outdata));
   EXPECT_EQ(data, outdata);
+}
+
+// Checks that when a pickle is deep-copied, the result is not larger than
+// needed.
+TEST(PickleTest, DeepCopyResize) {
+  Pickle pickle;
+  while (pickle.capacity_after_header() != pickle.payload_size())
+    pickle.WriteBool(true);
+
+  // Make a deep copy.
+  Pickle pickle2(pickle);
+
+  // Check that there isn't any extraneous capacity.
+  EXPECT_EQ(pickle.capacity_after_header(), pickle2.capacity_after_header());
+}
+
+namespace {
+
+// Publicly exposes the ClaimBytes interface for testing.
+class TestingPickle : public Pickle {
+ public:
+  TestingPickle() {}
+
+  void* ClaimBytes(size_t num_bytes) { return Pickle::ClaimBytes(num_bytes); }
+};
+
+}  // namespace
+
+// Checks that claimed bytes are zero-initialized.
+TEST(PickleTest, ClaimBytesInitialization) {
+  static const int kChunkSize = 64;
+  TestingPickle pickle;
+  const char* bytes = static_cast<const char*>(pickle.ClaimBytes(kChunkSize));
+  for (size_t i = 0; i < kChunkSize; ++i) {
+    EXPECT_EQ(0, bytes[i]);
+  }
+}
+
+// Checks that ClaimBytes properly advances the write offset.
+TEST(PickleTest, ClaimBytes) {
+  std::string data("Hello, world!");
+
+  TestingPickle pickle;
+  pickle.WriteSizeT(data.size());
+  void* bytes = pickle.ClaimBytes(data.size());
+  pickle.WriteInt(42);
+  memcpy(bytes, data.data(), data.size());
+
+  PickleIterator iter(pickle);
+  size_t out_data_length;
+  EXPECT_TRUE(iter.ReadSizeT(&out_data_length));
+  EXPECT_EQ(data.size(), out_data_length);
+
+  const char* out_data = nullptr;
+  EXPECT_TRUE(iter.ReadBytes(&out_data, out_data_length));
+  EXPECT_EQ(data, std::string(out_data, out_data_length));
+
+  int out_value;
+  EXPECT_TRUE(iter.ReadInt(&out_value));
+  EXPECT_EQ(42, out_value);
 }
 
 }  // namespace base

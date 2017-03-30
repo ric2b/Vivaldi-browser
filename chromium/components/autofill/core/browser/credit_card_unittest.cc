@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/guid.h"
+#include "base/macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/credit_card.h"
@@ -24,12 +28,6 @@ const CreditCard::RecordType MASKED_SERVER_CARD =
 const CreditCard::RecordType FULL_SERVER_CARD = CreditCard::FULL_SERVER_CARD;
 
 namespace {
-// TODO: Vivaldi reneable for Mac when locale loading is fixed for tests
-#if defined(OS_MACOSX)
-#define MAYBE_LOCALE(test_name) DISABLED_##test_name
-#else
-#define MAYBE_LOCALE(test_name) test_name
-#endif
 
 // From https://www.paypalobjects.com/en_US/vhelp/paypalmanager_help/credit_card_numbers.htm
 const char* const kValidNumbers[] = {
@@ -66,7 +64,7 @@ const char* const kInvalidNumbers[] = {
 // Tests credit card summary string generation.  This test simulates a variety
 // of different possible summary strings.  Variations occur based on the
 // existence of credit card number, month, and year fields.
-TEST(CreditCardTest, MAYBE_LOCALE(PreviewSummaryAndTypeAndLastFourDigitsStrings)) {
+TEST(CreditCardTest, PreviewSummaryAndTypeAndLastFourDigitsStrings) {
   // Case 0: empty credit card.
   CreditCard credit_card0(base::GenerateGUID(), "https://www.example.com/");
   base::string16 summary0 = credit_card0.Label();
@@ -389,8 +387,13 @@ TEST(CreditCardTest, IsComplete) {
 TEST(CreditCardTest, IsValid) {
   CreditCard card;
   // Invalid because expired
-  card.SetRawInfo(CREDIT_CARD_EXP_MONTH, ASCIIToUTF16("1"));
-  card.SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR, ASCIIToUTF16("2010"));
+  const base::Time now(base::Time::Now());
+  base::Time::Exploded now_exploded;
+  now.LocalExplode(&now_exploded);
+  card.SetRawInfo(CREDIT_CARD_EXP_MONTH,
+                  base::IntToString16(now_exploded.month));
+  card.SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR,
+                  base::IntToString16(now_exploded.year - 1));
   card.SetRawInfo(CREDIT_CARD_NUMBER, ASCIIToUTF16("4111111111111111"));
   EXPECT_FALSE(card.IsValid());
 
@@ -459,7 +462,7 @@ TEST(CreditCardTest, SetExpirationMonth) {
   EXPECT_EQ(2, card.expiration_month());
 }
 
-TEST(CreditCardTest, MAYBE_LOCALE(CreditCardType)) {
+TEST(CreditCardTest, CreditCardType) {
   CreditCard card(base::GenerateGUID(), "https://www.example.com/");
 
   // The card type cannot be set directly.

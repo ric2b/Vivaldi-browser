@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_STAR_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_STAR_VIEW_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/views/location_bar/bubble_icon_view.h"
 
 class Browser;
@@ -24,6 +25,8 @@ class StarView : public BubbleIconView {
   void OnExecuting(BubbleIconView::ExecuteSource execute_source) override;
   void ExecuteCommand(ExecuteSource source) override;
   views::BubbleDelegateView* GetBubble() const override;
+  bool SetRasterIcon() override;
+  gfx::VectorIconId GetVectorIcon() const override;
 
  private:
   Browser* browser_;

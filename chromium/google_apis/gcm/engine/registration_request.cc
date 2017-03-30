@@ -4,10 +4,16 @@
 
 #include "google_apis/gcm/engine/registration_request.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/location.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "google_apis/gcm/base/gcm_util.h"
 #include "google_apis/gcm/monitoring/gcm_stats_recorder.h"
@@ -67,13 +73,10 @@ bool ShouldRetryWithStatus(RegistrationRequest::Status status) {
 
 }  // namespace
 
-RegistrationRequest::RequestInfo::RequestInfo(
-    uint64 android_id,
-    uint64 security_token,
-    const std::string& app_id)
-    : android_id(android_id),
-      security_token(security_token),
-      app_id(app_id) {
+RegistrationRequest::RequestInfo::RequestInfo(uint64_t android_id,
+                                              uint64_t security_token,
+                                              const std::string& app_id)
+    : android_id(android_id), security_token(security_token), app_id(app_id) {
   DCHECK(android_id != 0UL);
   DCHECK(security_token != 0UL);
 }
@@ -96,7 +99,7 @@ RegistrationRequest::RegistrationRequest(
     const std::string& source_to_record)
     : callback_(callback),
       request_info_(request_info),
-      custom_request_handler_(custom_request_handler.Pass()),
+      custom_request_handler_(std::move(custom_request_handler)),
       registration_url_(registration_url),
       backoff_entry_(&backoff_policy),
       request_context_getter_(request_context_getter),
@@ -154,34 +157,26 @@ void RegistrationRequest::BuildRequestBody(std::string* body) {
   custom_request_handler_->BuildRequestBody(body);
 }
 
-void RegistrationRequest::RetryWithBackoff(bool update_backoff) {
-  if (update_backoff) {
-    DCHECK_GT(retries_left_, 0);
-    --retries_left_;
-    url_fetcher_.reset();
-    backoff_entry_.InformOfRequest(false);
-  }
+void RegistrationRequest::RetryWithBackoff() {
+  DCHECK_GT(retries_left_, 0);
+  --retries_left_;
+  url_fetcher_.reset();
+  backoff_entry_.InformOfRequest(false);
 
-  if (backoff_entry_.ShouldRejectRequest()) {
-    DVLOG(1) << "Delaying GCM registration of app: "
-             << request_info_.app_id << ", for "
-             << backoff_entry_.GetTimeUntilRelease().InMilliseconds()
-             << " milliseconds.";
-    recorder_->RecordRegistrationRetryDelayed(
-        request_info_.app_id,
-        source_to_record_,
-        backoff_entry_.GetTimeUntilRelease().InMilliseconds(),
-        retries_left_ + 1);
-    base::MessageLoop::current()->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&RegistrationRequest::RetryWithBackoff,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   false),
-        backoff_entry_.GetTimeUntilRelease());
-    return;
-  }
-
-  Start();
+  DVLOG(1) << "Delaying GCM registration of app: "
+           << request_info_.app_id << ", for "
+           << backoff_entry_.GetTimeUntilRelease().InMilliseconds()
+           << " milliseconds.";
+  recorder_->RecordRegistrationRetryDelayed(
+      request_info_.app_id,
+      source_to_record_,
+      backoff_entry_.GetTimeUntilRelease().InMilliseconds(),
+      retries_left_ + 1);
+  DCHECK(!weak_ptr_factory_.HasWeakPtrs());
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&RegistrationRequest::Start, weak_ptr_factory_.GetWeakPtr()),
+      backoff_entry_.GetTimeUntilRelease());
 }
 
 RegistrationRequest::Status RegistrationRequest::ParseResponse(
@@ -241,7 +236,7 @@ void RegistrationRequest::OnURLFetchComplete(const net::URLFetcher* source) {
 
   if (ShouldRetryWithStatus(status)) {
     if (retries_left_ > 0) {
-      RetryWithBackoff(true);
+      RetryWithBackoff();
       return;
     }
 

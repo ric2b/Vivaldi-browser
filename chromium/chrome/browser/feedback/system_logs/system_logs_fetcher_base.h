@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_FEEDBACK_SYSTEM_LOGS_SYSTEM_LOGS_FETCHER_BASE_H_
 #define CHROME_BROWSER_FEEDBACK_SYSTEM_LOGS_SYSTEM_LOGS_FETCHER_BASE_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 
@@ -60,15 +63,22 @@ class SystemLogsFetcherBase
     : public base::SupportsWeakPtr<SystemLogsFetcherBase> {
  public:
   SystemLogsFetcherBase();
-  ~SystemLogsFetcherBase();
+  virtual ~SystemLogsFetcherBase();
 
   void Fetch(const SysLogsFetcherCallback& callback);
 
  protected:
-  // Callback passed to all the data sources. It merges the |data| it receives
-  // into response_. When all the data sources have responded, it deletes their
-  // objects and returns the response to the callback_. After this it
-  // deletes this instance of the object.
+  // Callback passed to all the data sources. Calls Rewrite() and AddResponse().
+  void OnFetched(const std::string& source_name, SystemLogsResponse* response);
+
+  // Virtual function that allows derived classes to modify the response before
+  // it gets added to the output.
+  virtual void Rewrite(const std::string& source_name,
+                       SystemLogsResponse* response);
+
+  // Merges the |data| it receives into response_. When all the data sources
+  // have responded, it deletes their objects and returns the response to the
+  // callback_. After this it deletes this instance of the object.
   void AddResponse(const std::string& source_name,
                    SystemLogsResponse* response);
 

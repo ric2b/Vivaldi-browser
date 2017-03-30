@@ -4,9 +4,10 @@
 
 #include "gpu/config/gpu_driver_bug_list.h"
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
+#include "gpu/config/gpu_switches.h"
+#include "gpu/config/gpu_util.h"
 
 namespace gpu {
 
@@ -58,30 +59,45 @@ void GpuDriverBugList::AppendWorkaroundsFromCommandLine(
     std::set<int>* workarounds,
     const base::CommandLine& command_line) {
   DCHECK(workarounds);
+
+  if (command_line.HasSwitch(switches::kGpuDriverBugWorkarounds)) {
+    std::string cmd_workarounds_str =
+        command_line.GetSwitchValueASCII(switches::kGpuDriverBugWorkarounds);
+    std::set<int> cmd_workarounds;
+    gpu::StringToFeatureSet(cmd_workarounds_str, &cmd_workarounds);
+    workarounds->insert(cmd_workarounds.begin(), cmd_workarounds.end());
+  }
+
   for (int i = 0; i < NUMBER_OF_GPU_DRIVER_BUG_WORKAROUND_TYPES; i++) {
-    if (!command_line.HasSwitch(kFeatureList[i].name))
-      continue;
-    // Removing conflicting workarounds.
-    switch (kFeatureList[i].type) {
-      case FORCE_DISCRETE_GPU:
-        workarounds->erase(FORCE_INTEGRATED_GPU);
-        workarounds->insert(FORCE_DISCRETE_GPU);
-        break;
-      case FORCE_INTEGRATED_GPU:
-        workarounds->erase(FORCE_DISCRETE_GPU);
-        workarounds->insert(FORCE_INTEGRATED_GPU);
-        break;
-      case MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_512:
-      case MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_1024:
-      case MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_4096:
-        workarounds->erase(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_512);
-        workarounds->erase(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_1024);
-        workarounds->erase(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_4096);
-        workarounds->insert(kFeatureList[i].type);
-        break;
-      default:
-        workarounds->insert(kFeatureList[i].type);
-        break;
+    if (command_line.HasSwitch(kFeatureList[i].name)) {
+      // Check for disabling workaround flag.
+      if (command_line.GetSwitchValueASCII(kFeatureList[i].name) == "0") {
+        workarounds->erase(kFeatureList[i].type);
+        continue;
+      }
+
+      // Removing conflicting workarounds.
+      switch (kFeatureList[i].type) {
+        case FORCE_DISCRETE_GPU:
+          workarounds->erase(FORCE_INTEGRATED_GPU);
+          workarounds->insert(FORCE_DISCRETE_GPU);
+          break;
+        case FORCE_INTEGRATED_GPU:
+          workarounds->erase(FORCE_DISCRETE_GPU);
+          workarounds->insert(FORCE_INTEGRATED_GPU);
+          break;
+        case MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_512:
+        case MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_1024:
+        case MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_4096:
+          workarounds->erase(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_512);
+          workarounds->erase(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_1024);
+          workarounds->erase(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_4096);
+          workarounds->insert(kFeatureList[i].type);
+          break;
+        default:
+          workarounds->insert(kFeatureList[i].type);
+          break;
+      }
     }
   }
 }

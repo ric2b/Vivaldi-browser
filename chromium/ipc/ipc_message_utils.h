@@ -5,6 +5,10 @@
 #ifndef IPC_IPC_MESSAGE_UTILS_H_
 #define IPC_IPC_MESSAGE_UTILS_H_
 
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <map>
 #include <set>
@@ -12,6 +16,7 @@
 #include <vector>
 
 #include "base/containers/small_map.h"
+#include "base/containers/stack_container.h"
 #include "base/files/file.h"
 #include "base/format_macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -20,6 +25,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/tuple.h"
+#include "build/build_config.h"
 #include "ipc/brokerable_attachment.h"
 #include "ipc/ipc_message_start.h"
 #include "ipc/ipc_param_traits.h"
@@ -56,12 +62,11 @@ class NullableString16;
 class Time;
 class TimeDelta;
 class TimeTicks;
-class TraceTicks;
 struct FileDescriptor;
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
 class SharedMemoryHandle;
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
 }
 
 namespace IPC {
@@ -75,14 +80,14 @@ struct IPC_EXPORT LogData {
   ~LogData();
 
   std::string channel;
-  int32 routing_id;
-  uint32 type;  // "User-defined" message type, from ipc_message.h.
+  int32_t routing_id;
+  uint32_t type;  // "User-defined" message type, from ipc_message.h.
   std::string flags;
-  int64 sent;  // Time that the message was sent (i.e. at Send()).
-  int64 receive;  // Time before it was dispatched (i.e. before calling
-                  // OnMessageReceived).
-  int64 dispatch;  // Time after it was dispatched (i.e. after calling
-                   // OnMessageReceived).
+  int64_t sent;  // Time that the message was sent (i.e. at Send()).
+  int64_t receive;  // Time before it was dispatched (i.e. before calling
+                    // OnMessageReceived).
+  int64_t dispatch;  // Time after it was dispatched (i.e. after calling
+                     // OnMessageReceived).
   std::string message_name;
   std::string params;
 };
@@ -127,6 +132,14 @@ struct ParamTraits<bool> {
     return iter->ReadBool(r);
   }
   IPC_EXPORT static void Log(const param_type& p, std::string* l);
+};
+
+template <>
+struct IPC_EXPORT ParamTraits<signed char> {
+  typedef signed char param_type;
+  static void Write(Message* m, const param_type& p);
+  static bool Read(const Message* m, base::PickleIterator* iter, param_type* r);
+  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -207,12 +220,12 @@ template <>
 struct ParamTraits<long long> {
   typedef long long param_type;
   static void Write(Message* m, const param_type& p) {
-    m->WriteInt64(static_cast<int64>(p));
+    m->WriteInt64(static_cast<int64_t>(p));
   }
   static bool Read(const Message* m,
                    base::PickleIterator* iter,
                    param_type* r) {
-    return iter->ReadInt64(reinterpret_cast<int64*>(r));
+    return iter->ReadInt64(reinterpret_cast<int64_t*>(r));
   }
   IPC_EXPORT static void Log(const param_type& p, std::string* l);
 };
@@ -226,7 +239,7 @@ struct ParamTraits<unsigned long long> {
   static bool Read(const Message* m,
                    base::PickleIterator* iter,
                    param_type* r) {
-    return iter->ReadInt64(reinterpret_cast<int64*>(r));
+    return iter->ReadInt64(reinterpret_cast<int64_t*>(r));
   }
   IPC_EXPORT static void Log(const param_type& p, std::string* l);
 };
@@ -510,7 +523,7 @@ struct IPC_EXPORT ParamTraits<base::FileDescriptor> {
 };
 #endif  // defined(OS_POSIX)
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
 template <>
 struct IPC_EXPORT ParamTraits<base::SharedMemoryHandle> {
   typedef base::SharedMemoryHandle param_type;
@@ -518,7 +531,7 @@ struct IPC_EXPORT ParamTraits<base::SharedMemoryHandle> {
   static bool Read(const Message* m, base::PickleIterator* iter, param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
-#endif
+#endif  // (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
 
 template <>
 struct IPC_EXPORT ParamTraits<base::FilePath> {
@@ -595,16 +608,6 @@ struct IPC_EXPORT ParamTraits<base::TimeDelta> {
 template <>
 struct IPC_EXPORT ParamTraits<base::TimeTicks> {
   typedef base::TimeTicks param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
-
-template <>
-struct IPC_EXPORT ParamTraits<base::TraceTicks> {
-  typedef base::TraceTicks param_type;
   static void Write(Message* m, const param_type& p);
   static bool Read(const Message* m,
                    base::PickleIterator* iter,
@@ -775,6 +778,41 @@ struct ParamTraits<ScopedVector<P> > {
       if (i != 0)
         l->append(" ");
       LogParam(*p[i], l);
+    }
+  }
+};
+
+template <class P, size_t stack_capacity>
+struct ParamTraits<base::StackVector<P, stack_capacity> > {
+  typedef base::StackVector<P, stack_capacity> param_type;
+  static void Write(Message* m, const param_type& p) {
+    WriteParam(m, static_cast<int>(p->size()));
+    for (size_t i = 0; i < p->size(); i++)
+      WriteParam(m, p[i]);
+  }
+  static bool Read(const Message* m,
+                   base::PickleIterator* iter,
+                   param_type* r) {
+    int size;
+    // ReadLength() checks for < 0 itself.
+    if (!iter->ReadLength(&size))
+      return false;
+    // Sanity check for the vector size.
+    if (INT_MAX / sizeof(P) <= static_cast<size_t>(size))
+      return false;
+    P value;
+    for (int i = 0; i < size; i++) {
+      if (!ReadParam(m, iter, &value))
+        return false;
+      (*r)->push_back(value);
+    }
+    return true;
+  }
+  static void Log(const param_type& p, std::string* l) {
+    for (size_t i = 0; i < p->size(); ++i) {
+      if (i != 0)
+        l->append(" ");
+      LogParam((p[i]), l);
     }
   }
 };
@@ -1017,7 +1055,7 @@ class SyncMessageSchema {
     Message* reply = SyncMessage::GenerateReply(msg);
     if (ok) {
       typename base::TupleTypes<ReplyParam>::ValueTuple reply_params;
-      DispatchToMethod(obj, func, send_params, &reply_params);
+      base::DispatchToMethod(obj, func, send_params, &reply_params);
       WriteParam(reply, reply_params);
       LogReplyParamsToMessage(reply_params, msg);
     } else {
@@ -1037,7 +1075,7 @@ class SyncMessageSchema {
     if (ok) {
       base::Tuple<Message&> t = base::MakeRefTuple(*reply);
       ConnectMessageAndReply(msg, reply);
-      DispatchToMethod(obj, func, send_params, &t);
+      base::DispatchToMethod(obj, func, send_params, &t);
     } else {
       NOTREACHED() << "Error deserializing message " << msg->type();
       reply->set_reply_error();

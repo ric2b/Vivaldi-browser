@@ -21,8 +21,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::PlatformMediaDataType,
 IPC_ENUM_TRAITS_MAX_VALUE(media::MediaDataStatus,
                           media::kMediaDataStatusCount - 1)
 
-IPC_ENUM_TRAITS_MAX_VALUE(media::PlatformMediaDecodingMode,
-                          media::PLATFORM_MEDIA_DECODING_MODE_COUNT - 1)
+IPC_ENUM_TRAITS_MAX_VALUE(
+    media::PlatformMediaDecodingMode,
+    static_cast<int>(media::PlatformMediaDecodingMode::COUNT) - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::SampleFormat, media::kSampleFormatMax)
 
@@ -70,7 +71,7 @@ IPC_SYNC_MESSAGE_CONTROL2_0(
     int32_t /* gpu_video_accelerator_factories_route_id */)
 
 IPC_MESSAGE_CONTROL1(MediaPipelineMsg_Destroy,
-                     int32 /* route_id */)
+                     int32_t /* route_id */)
 
 IPC_MESSAGE_ROUTED1(MediaPipelineMsg_RequestBufferForRawData,
                     size_t /* requested_size */)
@@ -89,7 +90,7 @@ IPC_MESSAGE_ROUTED3(MediaPipelineMsg_BufferForDecodedDataReady,
                     base::SharedMemoryHandle /* handle */)
 
 IPC_MESSAGE_ROUTED2(MediaPipelineMsg_ReadRawData,
-                    int64 /* position */,
+                    int64_t /* position */,
                     int /* size */)
 
 IPC_MESSAGE_ROUTED1(MediaPipelineMsg_RawDataReady,
@@ -104,7 +105,7 @@ IPC_MESSAGE_ROUTED1(MediaPipelineMsg_DecodedDataReady,
                     MediaPipelineMsg_DecodedDataReady_Params /* data */)
 
 IPC_MESSAGE_ROUTED3(MediaPipelineMsg_Initialize,
-                    int64 /* data_source_size (<0 means "unknown") */,
+                    int64_t /* data_source_size (<0 means "unknown") */,
                     bool /* is_data_source_streaming */,
                     std::string /* mime_type */)
 

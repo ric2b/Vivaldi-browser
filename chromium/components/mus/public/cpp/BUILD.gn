@@ -1,0 +1,73 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("cpp") {
+  sources = [
+    "context_provider.h",
+    "event_matcher.h",
+    "input_event_handler.h",
+    "lib/context_provider.cc",
+    "lib/event_matcher.cc",
+    "lib/in_flight_change.cc",
+    "lib/in_flight_change.h",
+    "lib/output_surface.cc",
+    "lib/property_type_converters.cc",
+    "lib/scoped_window_ptr.cc",
+    "lib/window.cc",
+    "lib/window_observer.cc",
+    "lib/window_private.cc",
+    "lib/window_private.h",
+    "lib/window_surface.cc",
+    "lib/window_tree_client_impl.cc",
+    "lib/window_tree_client_impl.h",
+    "lib/window_tree_delegate.cc",
+    "lib/window_tree_host_factory.cc",
+    "output_surface.h",
+    "property_type_converters.h",
+    "scoped_window_ptr.h",
+    "window.h",
+    "window_manager_delegate.h",
+    "window_observer.h",
+    "window_property.h",
+    "window_surface.h",
+    "window_surface_client.h",
+    "window_tracker.h",
+    "window_tree_connection.h",
+    "window_tree_connection_observer.h",
+    "window_tree_delegate.h",
+    "window_tree_host_factory.h",
+  ]
+
+  public_deps = [
+    "../interfaces",
+    "//mojo/services/network/public/interfaces",
+  ]
+
+  deps = [
+    "//base",
+    "//cc",
+    "//cc/surfaces",
+    "//cc/surfaces:surface_id",
+    "//components/mus/common",
+    "//mojo/converters/geometry",
+    "//mojo/converters/surfaces",
+    "//mojo/gles2:headers",
+    "//mojo/gpu:mojo_gles2_implementation",
+    "//mojo/public/cpp/bindings:bindings",
+    "//mojo/public/cpp/environment",
+    "//mojo/public/cpp/system",
+    "//mojo/shell/public/cpp",
+    "//mojo/shell/public/interfaces",
+    "//ui/gfx/geometry",
+    "//ui/mojo/geometry:interfaces",
+  ]
+
+  data_deps = [
+    "//components/mus",
+  ]
+
+  if (is_component_build) {
+    deps += [ "//mojo/gles2" ]
+  }
+}

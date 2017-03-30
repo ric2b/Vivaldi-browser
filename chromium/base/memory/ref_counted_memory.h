@@ -5,11 +5,14 @@
 #ifndef BASE_MEMORY_REF_COUNTED_MEMORY_H_
 #define BASE_MEMORY_REF_COUNTED_MEMORY_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 
 namespace base {
@@ -104,7 +107,7 @@ class BASE_EXPORT RefCountedString : public RefCountedMemory {
   // Constructs a RefCountedString object by performing a swap. (To non
   // destructively build a RefCountedString, use the default constructor and
   // copy into object->data()).
-  static RefCountedString* TakeString(std::string* to_destroy);
+  static scoped_refptr<RefCountedString> TakeString(std::string* to_destroy);
 
   // Overridden from RefCountedMemory:
   const unsigned char* front() const override;
@@ -119,26 +122,6 @@ class BASE_EXPORT RefCountedString : public RefCountedMemory {
   std::string data_;
 
   DISALLOW_COPY_AND_ASSIGN(RefCountedString);
-};
-
-// An implementation of RefCountedMemory that holds a chunk of memory
-// previously allocated with malloc or calloc, and that therefore must be freed
-// using free().
-class BASE_EXPORT RefCountedMallocedMemory : public base::RefCountedMemory {
- public:
-  RefCountedMallocedMemory(void* data, size_t length);
-
-  // Overridden from RefCountedMemory:
-  const unsigned char* front() const override;
-  size_t size() const override;
-
- private:
-  ~RefCountedMallocedMemory() override;
-
-  unsigned char* data_;
-  size_t length_;
-
-  DISALLOW_COPY_AND_ASSIGN(RefCountedMallocedMemory);
 };
 
 }  // namespace base

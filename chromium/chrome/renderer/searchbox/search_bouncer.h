@@ -7,8 +7,8 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "content/public/renderer/render_process_observer.h"
 #include "url/gurl.h"
 
@@ -23,8 +23,10 @@ class SearchBouncer : public content::RenderProcessObserver {
   SearchBouncer();
   ~SearchBouncer() override;
 
+  static SearchBouncer* GetInstance();
+
   // Returns whether a navigation to |url| should bounce back to the browser as
-  // a potential Instant url. See chrome::ShouldAssignURLToInstantRenderer().
+  // a potential Instant url. See search::ShouldAssignURLToInstantRenderer().
   bool ShouldFork(const GURL& url) const;
 
   // Returns whether |url| is a valid Instant new tab page URL.

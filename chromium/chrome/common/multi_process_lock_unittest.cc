@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/environment.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/kill.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/multiprocess_test.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/common/multi_process_lock.h"
 #include "testing/multiprocess_func_list.h"
 
@@ -53,9 +54,9 @@ void MultiProcessLockTest::ExpectLockIsLocked(const std::string &name) {
   ScopedEnvironmentVariable var(kLockEnviromentVarName, name);
   base::Process process = SpawnChild("MultiProcessLockTryFailMain");
   ASSERT_TRUE(process.IsValid());
-  int exit_code = 0;
+  int exit_code = -1;
   EXPECT_TRUE(process.WaitForExit(&exit_code));
-  EXPECT_EQ(exit_code, 0);
+  EXPECT_EQ(0, exit_code);
 }
 
 void MultiProcessLockTest::ExpectLockIsUnlocked(
@@ -63,9 +64,9 @@ void MultiProcessLockTest::ExpectLockIsUnlocked(
   ScopedEnvironmentVariable var(kLockEnviromentVarName, name);
   base::Process process = SpawnChild("MultiProcessLockTrySucceedMain");
   ASSERT_TRUE(process.IsValid());
-  int exit_code = 0;
+  int exit_code = -1;
   EXPECT_TRUE(process.WaitForExit(&exit_code));
-  EXPECT_EQ(exit_code, 0);
+  EXPECT_EQ(0, exit_code);
 }
 
 TEST_F(MultiProcessLockTest, BasicCreationTest) {
@@ -155,8 +156,11 @@ MULTIPROCESS_TEST_MAIN(MultiProcessLockTryFailMain) {
 #endif  // defined(OS_MACOSX)
   scoped_ptr<MultiProcessLock> test_lock(
       MultiProcessLock::Create(name));
-  EXPECT_FALSE(test_lock->TryLock());
-  return 0;
+
+  // Expect locking to fail because it is claimed by another process.
+  bool locked_successfully = test_lock->TryLock();
+  EXPECT_FALSE(locked_successfully);
+  return locked_successfully;
 }
 
 MULTIPROCESS_TEST_MAIN(MultiProcessLockTrySucceedMain) {
@@ -166,6 +170,9 @@ MULTIPROCESS_TEST_MAIN(MultiProcessLockTrySucceedMain) {
                                   &name));
   scoped_ptr<MultiProcessLock> test_lock(
       MultiProcessLock::Create(name));
-  EXPECT_TRUE(test_lock->TryLock());
-  return 0;
+
+  // Expect locking to succeed because it is not claimed yet.
+  bool locked_successfully = test_lock->TryLock();
+  EXPECT_TRUE(locked_successfully);
+  return !locked_successfully;
 }

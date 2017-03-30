@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_EXCLUSIVE_ACCESS_MANAGER_H_
 #define CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_EXCLUSIVE_ACCESS_MANAGER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
@@ -16,6 +17,7 @@ class GURL;
 class MouseLockController;
 
 namespace content {
+struct NativeWebKeyboardEvent;
 class WebContents;
 }
 
@@ -43,6 +45,8 @@ class ExclusiveAccessManager {
 
   GURL GetExclusiveAccessBubbleURL() const;
 
+  static bool IsSimplifiedFullscreenUIEnabled();
+
   // Callbacks ////////////////////////////////////////////////////////////////
 
   // Called by Browser::TabDeactivated.
@@ -54,8 +58,8 @@ class ExclusiveAccessManager {
   // Called by Browser::TabClosingAt.
   void OnTabClosing(content::WebContents* web_contents);
 
-  // Called by Browser::PreHandleKeyboardEvent
-  bool HandleUserPressedEscape();
+  // Called by Browser::PreHandleKeyboardEvent.
+  bool HandleUserKeyPress(const content::NativeWebKeyboardEvent& event);
 
   // Called by platform ExclusiveAccessExitBubble.
   void OnAcceptExclusiveAccessPermission();

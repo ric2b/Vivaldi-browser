@@ -7,13 +7,25 @@
     'mojom_bindings_generator_variables.gypi',
   ],
   'variables': {
+    'variables': {
+      'mojom_variant%': 'none',
+    },
+    'mojom_variant%': '<(mojom_variant)',
     'mojom_base_output_dir':
         '<!(python <(DEPTH)/build/inverse_depth.py <(DEPTH))',
     'mojom_generated_outputs': [
-      '<!@(python <(DEPTH)/third_party/mojo/src/mojo/public/tools/bindings/mojom_list_outputs.py --basedir <(mojom_base_output_dir) <@(mojom_files))',
+      '<!@(python <(DEPTH)/mojo/public/tools/bindings/mojom_list_outputs.py --basedir <(mojom_base_output_dir) --variant <(mojom_variant) <@(mojom_files))',
     ],
     'mojom_include_path%': '<(DEPTH)',
+    'mojom_extra_generator_args%': [],
     'require_interface_bindings%': 1,
+    'conditions': [
+      ['mojom_variant=="none"', {
+        'mojom_output_languages%': 'c++,javascript,java',
+      }, {
+        'mojom_output_languages%': 'c++',
+      }],
+    ],
   },
   # Given mojom files as inputs, generate sources.  These sources will be
   # exported to another target (via dependent_settings) to be compiled.  This
@@ -33,7 +45,12 @@
         '<(java_out_dir)',
         '<(stamp_filename)',
       ],
-      'inputs': [ '<@(mojom_files)' ],
+      'inputs': [
+        '<@(mojom_files)',
+        '<(SHARED_INTERMEDIATE_DIR)/mojo/public/tools/bindings/cpp_templates.zip',
+        '<(SHARED_INTERMEDIATE_DIR)/mojo/public/tools/bindings/java_templates.zip',
+        '<(SHARED_INTERMEDIATE_DIR)/mojo/public/tools/bindings/js_templates.zip',
+      ],
       'outputs': [ '<(stamp_filename)' ],
     },
     {
@@ -44,7 +61,6 @@
         'mojom_import_args%': [
          '-I<(DEPTH)',
          '-I<(DEPTH)/mojo/services',
-         '-I<(DEPTH)/third_party/mojo/src',
          '-I<(mojom_include_path)',
         ],
       },
@@ -58,13 +74,17 @@
       ],
       'action': [
         'python', '<@(mojom_bindings_generator)',
+        '--use_bundled_pylibs', 'generate',
         '<@(mojom_files)',
-        '--use_bundled_pylibs',
         '-d', '<(DEPTH)',
         '<@(mojom_import_args)',
         '-o', '<(SHARED_INTERMEDIATE_DIR)',
         '--java_output_directory=<(java_out_dir)',
-        '--dart_mojo_root=//third_party/mojo/src',
+        '--variant', '<(mojom_variant)',
+        '-g', '<(mojom_output_languages)',
+        '<@(mojom_extra_generator_args)',
+        '--bytecode_path',
+        '<(SHARED_INTERMEDIATE_DIR)/mojo/public/tools/bindings',
       ],
       'message': 'Generating Mojo bindings from <@(mojom_files)',
     }
@@ -72,6 +92,8 @@
   'conditions': [
     ['require_interface_bindings==1', {
       'dependencies': [
+        '<(DEPTH)/base/base.gyp:base',
+        '<(DEPTH)/mojo/public/tools/bindings/bindings.gyp:precompile_mojom_bindings_generator_templates',
         '<(DEPTH)/third_party/mojo/mojo_public.gyp:mojo_interface_bindings_generation',
       ],
     }],
@@ -90,9 +112,7 @@
     # Include paths needed to compile the generated sources into a library.
     'include_dirs': [
       '<(DEPTH)',
-      '<(DEPTH)/third_party/mojo/src',
       '<(SHARED_INTERMEDIATE_DIR)',
-      '<(SHARED_INTERMEDIATE_DIR)/third_party/mojo/src',
     ],
     # Make sure the generated header files are available for any static library
     # that depends on a static library that depends on this generator.
@@ -102,9 +122,7 @@
       # transitive dependancies when using the library.
       'include_dirs': [
         '<(DEPTH)',
-        '<(DEPTH)/third_party/mojo/src',
         '<(SHARED_INTERMEDIATE_DIR)',
-        '<(SHARED_INTERMEDIATE_DIR)/third_party/mojo/src',
       ],
       'variables': {
         'generated_src_dirs': [

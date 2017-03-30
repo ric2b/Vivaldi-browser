@@ -15,14 +15,13 @@ namespace extensions {
 // override settings.
 class SettingsOverrideAPIPermission : public APIPermission {
  public:
+  explicit SettingsOverrideAPIPermission(const APIPermissionInfo* permission);
   SettingsOverrideAPIPermission(const APIPermissionInfo* permission,
                                 const std::string& setting_value);
   ~SettingsOverrideAPIPermission() override;
 
   // APIPermission overrides.
   PermissionIDSet GetPermissions() const override;
-  bool HasMessages() const override;
-  PermissionMessages GetMessages() const override;
   bool Check(const APIPermission::CheckParam* param) const override;
   bool Contains(const APIPermission* rhs) const override;
   bool Equal(const APIPermission* rhs) const override;

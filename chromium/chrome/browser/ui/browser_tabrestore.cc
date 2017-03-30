@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/browser_tabrestore.h"
 
-#include "base/memory/scoped_vector.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service.h"
@@ -71,23 +70,21 @@ WebContents* CreateRestoredTab(
     create_params.initial_size =
         base_web_contents->GetContainerBounds().size();
   }
-
   WebContents* web_contents = content::WebContents::CreateWithSessionStorage(
-    create_params,
-    session_storage_namespace_map);
-
+      create_params,
+      session_storage_namespace_map);
   extensions::TabHelper::CreateForWebContents(web_contents);
   extensions::TabHelper::FromWebContents(web_contents)->
       SetExtensionAppById(extension_app_id);
-  ScopedVector<NavigationEntry> scoped_entries =
+  std::vector<scoped_ptr<NavigationEntry>> entries =
       ContentSerializedNavigationBuilder::ToNavigationEntries(
           navigations, browser->profile());
   web_contents->SetUserAgentOverride(user_agent_override);
   web_contents->SetExtData(ext_data);
   web_contents->GetController().Restore(
       selected_navigation, GetRestoreType(browser, from_last_session),
-      &scoped_entries);
-  DCHECK_EQ(0u, scoped_entries.size());
+      &entries);
+  DCHECK_EQ(0u, entries.size());
 
   return web_contents;
 }
@@ -127,7 +124,7 @@ content::WebContents* AddRestoredTab(
                                                   add_types);
   if (select) {
     if (!browser->is_vivaldi())
-      browser->window()->Activate();
+    browser->window()->Activate();
   } else {
     // We set the size of the view here, before Blink does its initial layout.
     // If we don't, the initial layout of background tabs will be performed
@@ -147,7 +144,6 @@ content::WebContents* AddRestoredTab(
       SessionServiceFactory::GetForProfileIfExisting(browser->profile());
   if (session_service)
     session_service->TabRestored(web_contents, pin);
-
   return web_contents;
 }
 

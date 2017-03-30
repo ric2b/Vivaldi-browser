@@ -8,25 +8,30 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/ime/input_method.h"
-#include "ui/compositor/clip_transform_recorder.h"
+#include "ui/compositor/clip_recorder.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
+#include "ui/compositor/transform_recorder.h"
 #include "ui/events/event_target_iterator.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -53,6 +58,7 @@
 
 #if defined(OS_WIN)
 #include "base/win/scoped_gdi_object.h"
+#include "ui/native_theme/native_theme_win.h"
 #endif
 
 namespace views {
@@ -114,6 +120,7 @@ View::View()
       context_menu_controller_(NULL),
       drag_controller_(NULL),
       native_view_accessibility_(NULL) {
+  SetTargetHandler(this);
 }
 
 View::~View() {
@@ -466,6 +473,14 @@ void View::SetPaintToLayer(bool paint_to_layer) {
   }
 }
 
+scoped_ptr<ui::Layer> View::RecreateLayer() {
+  scoped_ptr<ui::Layer> old_layer = LayerOwner::RecreateLayer();
+  Widget* widget = GetWidget();
+  if (widget)
+    widget->UpdateRootLayers();
+  return old_layer;
+}
+
 // RTL positioning -------------------------------------------------------------
 
 gfx::Rect View::GetMirroredBounds() const {
@@ -699,7 +714,7 @@ void View::ConvertPointFromScreen(const View* dst, gfx::Point* p) {
 }
 
 gfx::Rect View::ConvertRectToParent(const gfx::Rect& rect) const {
-  gfx::RectF x_rect = rect;
+  gfx::RectF x_rect = gfx::RectF(rect);
   GetTransform().TransformRect(&x_rect);
   x_rect.Offset(GetMirroredPosition().OffsetFromOrigin());
   // Pixels we partially occupy in the parent should be included.
@@ -742,7 +757,7 @@ void View::Paint(const ui::PaintContext& parent_context) {
   if (!layer()) {
     // If the View has a layer() then it is a paint root. Otherwise, we need to
     // add the offset from the parent into the total offset from the paint root.
-    DCHECK_IMPLIES(!parent(), bounds().origin() == gfx::Point());
+    DCHECK(parent() || bounds().origin() == gfx::Point());
     offset_to_parent = GetMirroredPosition().OffsetFromOrigin();
   }
   ui::PaintContext context(parent_context, offset_to_parent);
@@ -777,8 +792,12 @@ void View::Paint(const ui::PaintContext& parent_context) {
 
   // If the view is backed by a layer, it should paint with itself as the origin
   // rather than relative to its parent.
-  ui::ClipTransformRecorder clip_transform_recorder(context);
-  if (!layer()) {
+  bool paint_relative_to_parent = !layer();
+
+  // TODO(danakj): Rework clip and transform recorder usage here to use
+  // std::optional once we can do so.
+  ui::ClipRecorder clip_recorder(parent_context);
+  if (paint_relative_to_parent) {
     // Set the clip rect to the bounds of this View. Note that the X (or left)
     // position we pass to ClipRect takes into consideration whether or not the
     // View uses a right-to-left layout so that we paint the View in its
@@ -788,8 +807,11 @@ void View::Paint(const ui::PaintContext& parent_context) {
     if (parent_)
       clip_rect_in_parent.set_x(
           parent_->GetMirroredXForRect(clip_rect_in_parent));
-    clip_transform_recorder.ClipRect(clip_rect_in_parent);
+    clip_recorder.ClipRect(clip_rect_in_parent);
+  }
 
+  ui::TransformRecorder transform_recorder(context);
+  if (paint_relative_to_parent) {
     // Translate the graphics such that 0,0 corresponds to where
     // this View is located relative to its parent.
     gfx::Transform transform_from_parent;
@@ -797,10 +819,13 @@ void View::Paint(const ui::PaintContext& parent_context) {
     transform_from_parent.Translate(offset_from_parent.x(),
                                     offset_from_parent.y());
     transform_from_parent.PreconcatTransform(GetTransform());
-    clip_transform_recorder.Transform(transform_from_parent);
+    transform_recorder.Transform(transform_from_parent, size());
   }
 
-  if (is_invalidated || !paint_cache_.UseCache(context)) {
+  // Note that the cache is not aware of the offset of the view
+  // relative to the parent since painting is always done relative to
+  // the top left of the individual view.
+  if (is_invalidated || !paint_cache_.UseCache(context, size())) {
     ui::PaintRecorder recorder(context, size(), &paint_cache_);
     gfx::Canvas* canvas = recorder.canvas();
 
@@ -826,16 +851,34 @@ void View::set_background(Background* b) {
   background_.reset(b);
 }
 
-void View::SetBorder(scoped_ptr<Border> b) { border_ = b.Pass(); }
+void View::SetBorder(scoped_ptr<Border> b) {
+  border_ = std::move(b);
+}
 
-ui::ThemeProvider* View::GetThemeProvider() const {
+const ui::ThemeProvider* View::GetThemeProvider() const {
   const Widget* widget = GetWidget();
-  return widget ? widget->GetThemeProvider() : NULL;
+  return widget ? widget->GetThemeProvider() : nullptr;
 }
 
 const ui::NativeTheme* View::GetNativeTheme() const {
   const Widget* widget = GetWidget();
-  return widget ? widget->GetNativeTheme() : ui::NativeTheme::instance();
+  if (widget)
+    return widget->GetNativeTheme();
+
+#if defined(OS_WIN)
+  // On Windows, ui::NativeTheme::GetInstanceForWeb() returns NativeThemeWinAura
+  // because that's what the renderer wants, but Views should default to
+  // NativeThemeWin. TODO(estade): clean this up, see http://crbug.com/558029
+  return ui::NativeThemeWin::instance();
+#else
+  return ui::NativeTheme::GetInstanceForWeb();
+#endif
+}
+
+// RTL painting ----------------------------------------------------------------
+
+void View::EnableCanvasFlippingForRTLUI(bool enable) {
+  flip_canvas_on_paint_for_rtl_ui_ = enable;
 }
 
 // Input -----------------------------------------------------------------------
@@ -892,7 +935,7 @@ bool View::HitTestRect(const gfx::Rect& rect) const {
   return GetEffectiveViewTargeter()->DoesIntersectRect(this, rect);
 }
 
-bool View::IsMouseHovered() {
+bool View::IsMouseHovered() const {
   // If we haven't yet been placed in an onscreen view hierarchy, we can't be
   // hovered.
   if (!GetWidget())
@@ -1019,9 +1062,9 @@ const ui::InputMethod* View::GetInputMethod() const {
 
 scoped_ptr<ViewTargeter>
 View::SetEventTargeter(scoped_ptr<ViewTargeter> targeter) {
-  scoped_ptr<ViewTargeter> old_targeter = targeter_.Pass();
-  targeter_ = targeter.Pass();
-  return old_targeter.Pass();
+  scoped_ptr<ViewTargeter> old_targeter = std::move(targeter_);
+  targeter_ = std::move(targeter);
+  return old_targeter;
 }
 
 ViewTargeter* View::GetEffectiveViewTargeter() const {
@@ -1060,10 +1103,9 @@ void View::AddAccelerator(const ui::Accelerator& accelerator) {
   if (!accelerators_.get())
     accelerators_.reset(new std::vector<ui::Accelerator>());
 
-  if (std::find(accelerators_->begin(), accelerators_->end(), accelerator) ==
-      accelerators_->end()) {
+  if (!ContainsValue(*accelerators_.get(), accelerator))
     accelerators_->push_back(accelerator);
-  }
+
   RegisterPendingAccelerators();
 }
 
@@ -1104,7 +1146,25 @@ bool View::AcceleratorPressed(const ui::Accelerator& accelerator) {
 }
 
 bool View::CanHandleAccelerators() const {
-  return enabled() && IsDrawn() && GetWidget() && GetWidget()->IsVisible();
+  const Widget* widget = GetWidget();
+  if (!enabled() || !IsDrawn() || !widget || !widget->IsVisible())
+    return false;
+#if defined(USE_AURA) && !defined(OS_CHROMEOS)
+  // Non-ChromeOS aura windows have an associated FocusManagerEventHandler which
+  // adds currently focused view as an event PreTarget (see
+  // DesktopNativeWidgetAura::InitNativeWidget). However, the focused view isn't
+  // always the right view to handle accelerators: It should only handle them
+  // when active. Only top level widgets can be active, so for child widgets
+  // check if they are focused instead. ChromeOS also behaves different than
+  // Linux when an extension popup is about to handle the accelerator.
+  bool child = widget && widget->GetTopLevelWidget() != widget;
+  bool focus_in_child =
+      widget &&
+      widget->GetRootView()->Contains(GetFocusManager()->GetFocusedView());
+  if ((child && !focus_in_child) || (!child && !widget->IsActive()))
+    return false;
+#endif
+  return true;
 }
 
 // Focus -----------------------------------------------------------------------
@@ -1219,9 +1279,8 @@ gfx::Point View::GetKeyboardContextMenuLocation() {
 
 // Drag and drop ---------------------------------------------------------------
 
-bool View::GetDropFormats(
-      int* formats,
-      std::set<OSExchangeData::CustomFormat>* custom_formats) {
+bool View::GetDropFormats(int* formats,
+                          std::set<ui::Clipboard::FormatType>* format_types) {
   return false;
 }
 
@@ -1360,8 +1419,8 @@ void View::OnPaint(gfx::Canvas* canvas) {
 void View::OnPaintBackground(gfx::Canvas* canvas) {
   if (background_.get()) {
     TRACE_EVENT2("views", "View::OnPaintBackground",
-                 "width", canvas->sk_canvas()->getDevice()->width(),
-                 "height", canvas->sk_canvas()->getDevice()->height());
+                 "width", canvas->sk_canvas()->getBaseLayerSize().width(),
+                 "height", canvas->sk_canvas()->getBaseLayerSize().height());
     background_->Paint(canvas, this);
   }
 }
@@ -1369,8 +1428,8 @@ void View::OnPaintBackground(gfx::Canvas* canvas) {
 void View::OnPaintBorder(gfx::Canvas* canvas) {
   if (border_.get()) {
     TRACE_EVENT2("views", "View::OnPaintBorder",
-                 "width", canvas->sk_canvas()->getDevice()->width(),
-                 "height", canvas->sk_canvas()->getDevice()->height());
+                 "width", canvas->sk_canvas()->getBaseLayerSize().width(),
+                 "height", canvas->sk_canvas()->getBaseLayerSize().height());
     border_->Paint(*this, canvas);
   }
 }
@@ -1570,8 +1629,8 @@ void View::WriteDragData(const gfx::Point& press_pt, OSExchangeData* data) {
   drag_controller_->WriteDragDataForView(this, press_pt, data);
 }
 
-bool View::InDrag() {
-  Widget* widget = GetWidget();
+bool View::InDrag() const {
+  const Widget* widget = GetWidget();
   return widget ? widget->dragged_view() == this : false;
 }
 
@@ -1725,6 +1784,14 @@ void View::SchedulePaintBoundsChanged(SchedulePaintType type) {
     // tell the compositor to redraw the scene. We know layer() exists due to
     // the above if clause.
     layer()->ScheduleDraw();
+  }
+}
+
+void View::SchedulePaintOnParent() {
+  if (parent_) {
+    // Translate the requested paint rect to the parent's coordinate system
+    // then pass this notification up to the parent.
+    parent_->SchedulePaintInRect(ConvertRectToParent(GetLocalBounds()));
   }
 }
 
@@ -1882,7 +1949,7 @@ void View::BoundsChanged(const gfx::Rect& previous_bounds) {
 
   OnBoundsChanged(previous_bounds);
 
-  if (previous_bounds.size() != size()) {
+  if (needs_layout_ || previous_bounds.size() != size()) {
     needs_layout_ = false;
     Layout();
   }
@@ -1982,7 +2049,7 @@ bool View::ConvertPointForAncestor(const View* ancestor,
   gfx::Transform trans;
   // TODO(sad): Have some way of caching the transformation results.
   bool result = GetTransformRelativeTo(ancestor, &trans);
-  gfx::Point3F p(*point);
+  auto p = gfx::Point3F(gfx::PointF(*point));
   trans.TransformPoint(&p);
   *point = gfx::ToFlooredPoint(p.AsPointF());
   return result;
@@ -1992,7 +2059,7 @@ bool View::ConvertPointFromAncestor(const View* ancestor,
                                     gfx::Point* point) const {
   gfx::Transform trans;
   bool result = GetTransformRelativeTo(ancestor, &trans);
-  gfx::Point3F p(*point);
+  auto p = gfx::Point3F(gfx::PointF(*point));
   trans.TransformPointReverse(&p);
   *point = gfx::ToFlooredPoint(p.AsPointF());
   return result;
@@ -2041,6 +2108,12 @@ void View::CreateLayer() {
   Widget* widget = GetWidget();
   if (widget)
     widget->UpdateRootLayers();
+
+  // Before having its own Layer, this View may have painted in to a Layer owned
+  // by an ancestor View. Scheduling a paint on the parent View will erase this
+  // View's painting effects on the ancestor View's Layer.
+  // (See crbug.com/551492)
+  SchedulePaintOnParent();
 }
 
 void View::UpdateParentLayers() {

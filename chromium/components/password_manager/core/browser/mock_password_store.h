@@ -5,8 +5,12 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_MOCK_PASSWORD_STORE_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_MOCK_PASSWORD_STORE_H_
 
+#include <string>
+#include <vector>
+
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_store.h"
+#include "components/password_manager/core/browser/statistics_table.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace password_manager {
@@ -37,6 +41,8 @@ class MockPasswordStore : public PasswordStore {
                PasswordStoreChangeList(base::Time, base::Time));
   MOCK_METHOD2(RemoveLoginsSyncedBetweenImpl,
                PasswordStoreChangeList(base::Time, base::Time));
+  MOCK_METHOD2(RemoveStatisticsCreatedBetweenImpl,
+               bool(base::Time, base::Time));
   ScopedVector<autofill::PasswordForm> FillMatchingLogins(
       const autofill::PasswordForm& form,
       PasswordStore::AuthorizationPromptPolicy prompt_policy) override {
@@ -47,12 +53,12 @@ class MockPasswordStore : public PasswordStore {
   MOCK_METHOD1(FillBlacklistLogins,
                bool(ScopedVector<autofill::PasswordForm>*));
   MOCK_METHOD1(NotifyLoginsChanged, void(const PasswordStoreChangeList&));
-  void AddSiteStatsImpl(const InteractionsStats& stats) override {}
-  void RemoveSiteStatsImpl(const GURL& origin_domain) override {}
-  scoped_ptr<InteractionsStats> GetSiteStatsImpl(
-      const GURL& origin_domain) override {
-    return scoped_ptr<InteractionsStats>();
-  }
+  // GMock doesn't allow to return noncopyable types.
+  std::vector<scoped_ptr<InteractionsStats>> GetSiteStatsImpl(
+      const GURL& origin_domain) override;
+  MOCK_METHOD1(GetSiteStatsMock, std::vector<InteractionsStats*>(const GURL&));
+  MOCK_METHOD1(AddSiteStatsImpl, void(const InteractionsStats&));
+  MOCK_METHOD1(RemoveSiteStatsImpl, void(const GURL&));
 
   PasswordStoreSync* GetSyncInterface() { return this; }
 

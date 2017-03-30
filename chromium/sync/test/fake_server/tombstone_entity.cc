@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/protocol/sync.pb.h"
 #include "sync/test/fake_server/fake_server_entity.h"
@@ -21,8 +20,9 @@ TombstoneEntity::~TombstoneEntity() { }
 
 // static
 scoped_ptr<FakeServerEntity> TombstoneEntity::Create(const string& id) {
-  return scoped_ptr<FakeServerEntity>(
-      new TombstoneEntity(id, GetModelTypeFromId(id)));
+  const ModelType model_type = GetModelTypeFromId(id);
+  CHECK_NE(model_type, syncer::UNSPECIFIED) << "Invalid ID was given: " << id;
+  return scoped_ptr<FakeServerEntity>(new TombstoneEntity(id, model_type));
 }
 
 TombstoneEntity::TombstoneEntity(const string& id,
@@ -31,6 +31,10 @@ TombstoneEntity::TombstoneEntity(const string& id,
   sync_pb::EntitySpecifics specifics;
   AddDefaultFieldValue(model_type, &specifics);
   SetSpecifics(specifics);
+}
+
+bool TombstoneEntity::RequiresParentId() const {
+  return false;
 }
 
 string TombstoneEntity::GetParentId() const {

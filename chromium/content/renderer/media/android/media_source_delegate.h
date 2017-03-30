@@ -5,15 +5,19 @@
 #ifndef CONTENT_RENDERER_MEDIA_ANDROID_MEDIA_SOURCE_DELEGATE_H_
 #define CONTENT_RENDERER_MEDIA_ANDROID_MEDIA_SOURCE_DELEGATE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "media/base/decryptor.h"
+#include "media/base/cdm_context.h"
 #include "media/base/demuxer.h"
 #include "media/base/media_keys.h"
 #include "media/base/pipeline_status.h"
@@ -60,7 +64,7 @@ class MediaSourceDelegate : public media::DemuxerHost {
       const MediaSourceOpenedCB& media_source_opened_cb,
       const media::Demuxer::EncryptedMediaInitDataCB&
           encrypted_media_init_data_cb,
-      const media::SetDecryptorReadyCB& set_decryptor_ready_cb,
+      const media::SetCdmReadyCB& set_cdm_ready_cb,
       const UpdateNetworkStateCB& update_network_state_cb,
       const DurationChangeCB& duration_change_cb,
       const base::Closure& waiting_for_decryption_key_cb);
@@ -106,8 +110,8 @@ class MediaSourceDelegate : public media::DemuxerHost {
 
  private:
   // Methods inherited from DemuxerHost.
-  void AddBufferedTimeRange(base::TimeDelta start,
-                            base::TimeDelta end) override;
+  void OnBufferedTimeRangesChanged(
+      const media::Ranges<base::TimeDelta>& ranges) override;
   void SetDuration(base::TimeDelta duration) override;
   void OnDemuxerError(media::PipelineStatus status) override;
   void AddTextStream(media::DemuxerStream* text_stream,
@@ -139,7 +143,7 @@ class MediaSourceDelegate : public media::DemuxerHost {
 
   void OnDemuxerOpened();
   void OnEncryptedMediaInitData(media::EmeInitDataType init_data_type,
-                                const std::vector<uint8>& init_data);
+                                const std::vector<uint8_t>& init_data);
   void NotifyDemuxerReady();
 
   // Stops and clears objects on the media thread.
@@ -186,7 +190,7 @@ class MediaSourceDelegate : public media::DemuxerHost {
   scoped_ptr<media::ChunkDemuxer> chunk_demuxer_;
   bool is_demuxer_ready_;
 
-  media::SetDecryptorReadyCB set_decryptor_ready_cb_;
+  media::SetCdmReadyCB set_cdm_ready_cb_;
 
   scoped_ptr<media::DecryptingDemuxerStream> audio_decrypting_demuxer_stream_;
   scoped_ptr<media::DecryptingDemuxerStream> video_decrypting_demuxer_stream_;

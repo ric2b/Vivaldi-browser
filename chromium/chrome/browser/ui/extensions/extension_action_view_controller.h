@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_EXTENSIONS_EXTENSION_ACTION_VIEW_CONTROLLER_H_
 #define CHROME_BROWSER_UI_EXTENSIONS_EXTENSION_ACTION_VIEW_CONTROLLER_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/extension_action_icon_factory.h"
@@ -35,7 +36,7 @@ class ExtensionViewHost;
 class ExtensionActionViewController
     : public ToolbarActionViewController,
       public ExtensionActionIconFactory::Observer,
-      public ExtensionContextMenuModel::PopupDelegate,
+      public extensions::ExtensionContextMenuModel::PopupDelegate,
       public extensions::ExtensionHostObserver {
  public:
   // The different options for showing a popup.
@@ -48,7 +49,7 @@ class ExtensionActionViewController
   ~ExtensionActionViewController() override;
 
   // ToolbarActionViewController:
-  const std::string& GetId() const override;
+  std::string GetId() const override;
   void SetDelegate(ToolbarActionViewDelegate* delegate) override;
   gfx::Image GetIcon(content::WebContents* web_contents,
                      const gfx::Size& size) override;
@@ -63,7 +64,6 @@ class ExtensionActionViewController
   gfx::NativeView GetPopupNativeView() override;
   ui::MenuModel* GetContextMenu() override;
   void OnContextMenuClosed() override;
-  bool CanDrag() const override;
   bool ExecuteAction(bool by_user) override;
   void UpdateState() override;
   void RegisterCommand() override;
@@ -74,7 +74,6 @@ class ExtensionActionViewController
 
   // Closes the active popup (whether it was this action's popup or not).
   void HideActivePopup();
-
 
   // Populates |command| with the command associated with |extension|, if one
   // exists. Returns true if |command| was populated.
@@ -164,7 +163,7 @@ class ExtensionActionViewController
   extensions::ExtensionViewHost* popup_host_;
 
   // The context menu model for the extension.
-  scoped_refptr<ExtensionContextMenuModel> context_menu_model_;
+  scoped_ptr<extensions::ExtensionContextMenuModel> context_menu_model_;
 
   // Our view delegate.
   ToolbarActionViewDelegate* view_delegate_;

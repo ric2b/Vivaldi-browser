@@ -6,12 +6,13 @@
 
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/url_constants.h"
+#include "components/version_info/version_info.h"
 #include "content/public/common/user_agent.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
+#include "url/url_util.h"
 
 // TODO(ios): Investigate merging with chrome_content_client.cc; this would
 // requiring either a lot of ifdefing, or spliting the file into parts.
@@ -30,15 +31,14 @@ void ChromeContentClient::AddPepperPlugins(
 }
 
 void ChromeContentClient::AddAdditionalSchemes(
-    std::vector<std::string>* standard_schemes,
+    std::vector<url::SchemeWithType>* standard_schemes,
     std::vector<std::string>* saveable_shemes) {
   // No additional schemes for iOS.
 }
 
 std::string ChromeContentClient::GetProduct() const {
-  chrome::VersionInfo version_info;
   std::string product("CriOS/");
-  product += version_info.Version();
+  product += version_info::GetVersionNumber();
   return product;
 }
 
@@ -69,5 +69,5 @@ gfx::Image& ChromeContentClient::GetNativeImageNamed(int resource_id) const {
 
 std::string ChromeContentClient::GetProcessTypeNameInEnglish(int type) {
   DCHECK(false) << "Unknown child process type!";
-  return "Unknown"; 
+  return "Unknown";
 }

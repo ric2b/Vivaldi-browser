@@ -5,7 +5,7 @@
 #ifndef COMPONENTS_TEST_RUNNER_MOCK_WEBRTC_DTMF_SENDER_HANDLER_H_
 #define COMPONENTS_TEST_RUNNER_MOCK_WEBRTC_DTMF_SENDER_HANDLER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "components/test_runner/web_task.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 #include "third_party/WebKit/public/platform/WebRTCDTMFSenderHandler.h"
@@ -21,12 +21,12 @@ class MockWebRTCDTMFSenderHandler : public blink::WebRTCDTMFSenderHandler {
                               WebTestDelegate* delegate);
 
   // WebRTCDTMFSenderHandler related methods
-  virtual void setClient(blink::WebRTCDTMFSenderHandlerClient* client) override;
-  virtual blink::WebString currentToneBuffer() override;
-  virtual bool canInsertDTMF() override;
-  virtual bool insertDTMF(const blink::WebString& tones,
-                          long duration,
-                          long inter_tone_gap) override;
+  void setClient(blink::WebRTCDTMFSenderHandlerClient* client) override;
+  blink::WebString currentToneBuffer() override;
+  bool canInsertDTMF() override;
+  bool insertDTMF(const blink::WebString& tones,
+                  long duration,
+                  long inter_tone_gap) override;
 
   // WebTask related methods
   WebTaskList* mutable_task_list() { return &task_list_; }

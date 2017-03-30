@@ -5,6 +5,9 @@
 #ifndef DEVICE_BLUETOOTH_TEST_BLUETOOTH_ADAPTER_OBSERVER_H_
 #define DEVICE_BLUETOOTH_TEST_BLUETOOTH_ADAPTER_OBSERVER_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 
 namespace device {
@@ -29,6 +32,9 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   void DeviceAdded(BluetoothAdapter* adapter, BluetoothDevice* device) override;
   void DeviceChanged(BluetoothAdapter* adapter,
                      BluetoothDevice* device) override;
+  void DeviceAddressChanged(device::BluetoothAdapter* adapter,
+                            device::BluetoothDevice* device,
+                            const std::string& old_address) override;
   void DeviceRemoved(BluetoothAdapter* adapter,
                      BluetoothDevice* device) override;
   void GattServiceAdded(BluetoothAdapter* adapter,
@@ -37,6 +43,8 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   void GattServiceRemoved(BluetoothAdapter* adapter,
                           BluetoothDevice* device,
                           BluetoothGattService* service) override;
+  void GattServicesDiscovered(BluetoothAdapter* adapter,
+                              BluetoothDevice* device) override;
   void GattDiscoveryCompleteForService(BluetoothAdapter* adapter,
                                        BluetoothGattService* service) override;
   void GattServiceChanged(BluetoothAdapter* adapter,
@@ -54,10 +62,10 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   void GattCharacteristicValueChanged(
       BluetoothAdapter* adapter,
       BluetoothGattCharacteristic* characteristic,
-      const std::vector<uint8>& value) override;
+      const std::vector<uint8_t>& value) override;
   void GattDescriptorValueChanged(BluetoothAdapter* adapter,
                                   BluetoothGattDescriptor* descriptor,
-                                  const std::vector<uint8>& value) override;
+                                  const std::vector<uint8_t>& value) override;
 
   // Adapter related:
   int present_changed_count() { return present_changed_count_; }
@@ -71,6 +79,7 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   // Device related:
   int device_added_count() { return device_added_count_; }
   int device_changed_count() { return device_changed_count_; }
+  int device_address_changed_count() { return device_address_changed_count_; }
   int device_removed_count() { return device_removed_count_; }
   BluetoothDevice* last_device() { return last_device_; }
   std::string last_device_address() { return last_device_address_; }
@@ -78,6 +87,9 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   // GATT related:
   int gatt_service_added_count() { return gatt_service_added_count_; }
   int gatt_service_removed_count() { return gatt_service_removed_count_; }
+  int gatt_services_discovered_count() {
+    return gatt_services_discovered_count_;
+  }
   int gatt_service_changed_count() { return gatt_service_changed_count_; }
   int gatt_discovery_complete_count() { return gatt_discovery_complete_count_; }
   int gatt_characteristic_added_count() {
@@ -102,14 +114,14 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   BluetoothUUID last_gatt_characteristic_uuid() {
     return last_gatt_characteristic_uuid_;
   }
-  std::vector<uint8> last_changed_characteristic_value() {
+  std::vector<uint8_t> last_changed_characteristic_value() {
     return last_changed_characteristic_value_;
   }
   std::string last_gatt_descriptor_id() { return last_gatt_descriptor_id_; }
   BluetoothUUID last_gatt_descriptor_uuid() {
     return last_gatt_descriptor_uuid_;
   }
-  std::vector<uint8> last_changed_descriptor_value() {
+  std::vector<uint8_t> last_changed_descriptor_value() {
     return last_changed_descriptor_value_;
   }
 
@@ -132,6 +144,7 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   // Device related:
   int device_added_count_;
   int device_changed_count_;
+  int device_address_changed_count_;
   int device_removed_count_;
   BluetoothDevice* last_device_;
   std::string last_device_address_;
@@ -139,6 +152,7 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   // GATT related:
   int gatt_service_added_count_;
   int gatt_service_removed_count_;
+  int gatt_services_discovered_count_;
   int gatt_service_changed_count_;
   int gatt_discovery_complete_count_;
   int gatt_characteristic_added_count_;
@@ -151,10 +165,10 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   BluetoothUUID last_gatt_service_uuid_;
   std::string last_gatt_characteristic_id_;
   BluetoothUUID last_gatt_characteristic_uuid_;
-  std::vector<uint8> last_changed_characteristic_value_;
+  std::vector<uint8_t> last_changed_characteristic_value_;
   std::string last_gatt_descriptor_id_;
   BluetoothUUID last_gatt_descriptor_uuid_;
-  std::vector<uint8> last_changed_descriptor_value_;
+  std::vector<uint8_t> last_changed_descriptor_value_;
 
   DISALLOW_COPY_AND_ASSIGN(TestBluetoothAdapterObserver);
 };

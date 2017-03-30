@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
 #include <windowsx.h>
 
 #include "ui/events/event_constants.h"
 
 #include "base/logging.h"
 #include "base/time/time.h"
-#include "base/win/win_util.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_code_conversion_win.h"
+#include "ui/events/win/system_event_state_lookup.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/win/dpi.h"
 
@@ -91,6 +92,7 @@ bool IsKeyEvent(const base::NativeEvent& native_event) {
   return native_event.message == WM_KEYDOWN ||
          native_event.message == WM_SYSKEYDOWN ||
          native_event.message == WM_CHAR ||
+         native_event.message == WM_SYSCHAR ||
          native_event.message == WM_KEYUP ||
          native_event.message == WM_SYSKEYUP;
 }
@@ -103,14 +105,11 @@ bool IsScrollEvent(const base::NativeEvent& native_event) {
 // Returns a mask corresponding to the set of pressed modifier keys.
 // Checks the current global state and the state sent by client mouse messages.
 int KeyStateFlagsFromNative(const base::NativeEvent& native_event) {
-  int flags = 0;
-  flags |= base::win::IsAltPressed() ? EF_ALT_DOWN : EF_NONE;
-  flags |= base::win::IsShiftPressed() ? EF_SHIFT_DOWN : EF_NONE;
-  flags |= base::win::IsCtrlPressed() ? EF_CONTROL_DOWN : EF_NONE;
+  int flags = GetModifiersFromKeyState();
 
   // Check key messages for the extended key flag.
-  if (IsKeyEvent(native_event))
-    flags |= (HIWORD(native_event.lParam) & KF_EXTENDED) ? EF_EXTENDED : 0;
+  if (IsKeyEvent(native_event) && (HIWORD(native_event.lParam) & KF_EXTENDED))
+    flags |= EF_IS_EXTENDED_KEY;
 
   // Most client mouse messages include key state information.
   if (IsClientMouseEvent(native_event)) {
@@ -150,6 +149,7 @@ EventType EventTypeFromNative(const base::NativeEvent& native_event) {
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
     case WM_CHAR:
+    case WM_SYSCHAR:
       return ET_KEY_PRESSED;
     // The WM_DEADCHAR message is posted to the window with the keyboard focus
     // when a WM_KEYUP message is translated. This happens for special keyboard
@@ -218,7 +218,16 @@ int EventFlagsFromNative(const base::NativeEvent& native_event) {
 }
 
 base::TimeDelta EventTimeFromNative(const base::NativeEvent& native_event) {
-  return base::TimeDelta::FromMilliseconds(native_event.time);
+  // On Windows, the native input event timestamp (|native_event.time|) is
+  // coming from |GetTickCount()| clock [1], while in platform independent code
+  // path we get timestamps by calling |TimeTicks::Now()|, which, if using high-
+  // resolution timer as underlying implementation, could have different time
+  // origin than |GetTickCount()|. To avoid the mismatching, we use
+  // |TimeTicks::Now()| for event timestamp instead of the native timestamp to
+  // ensure computed input latency and web exposed timestamp is consistent with
+  // other components.
+  // [1] http://blogs.msdn.com/b/oldnewthing/archive/2014/01/22/10491576.aspx
+  return EventTimeForNow();
 }
 
 gfx::Point EventLocationFromNative(const base::NativeEvent& native_event) {
@@ -260,16 +269,12 @@ KeyboardCode KeyboardCodeFromNative(const base::NativeEvent& native_event) {
 }
 
 DomCode CodeFromNative(const base::NativeEvent& native_event) {
-  const uint16 scan_code = GetScanCodeFromLParam(native_event.lParam);
+  const uint16_t scan_code = GetScanCodeFromLParam(native_event.lParam);
   return CodeForWindowsScanCode(scan_code);
 }
 
-uint32 PlatformKeycodeFromNative(const base::NativeEvent& native_event) {
-  return static_cast<uint32>(native_event.wParam);
-}
-
 bool IsCharFromNative(const base::NativeEvent& native_event) {
-  return native_event.message == WM_CHAR;
+  return native_event.message == WM_CHAR || native_event.message == WM_SYSCHAR;
 }
 
 int GetChangedMouseButtonFlagsFromNative(
@@ -286,6 +291,11 @@ int GetChangedMouseButtonFlagsFromNative(
       break;
   }
   return 0;
+}
+
+PointerDetails GetMousePointerDetailsFromNative(
+    const base::NativeEvent& native_event) {
+  return PointerDetails(EventPointerType::POINTER_TYPE_MOUSE);
 }
 
 gfx::Vector2d GetMouseWheelOffset(const base::NativeEvent& native_event) {
@@ -356,27 +366,24 @@ bool GetFlingData(const base::NativeEvent& native_event,
   return false;
 }
 
-int GetModifiersFromACCEL(const ACCEL& accel) {
-  int modifiers = EF_NONE;
-  if (accel.fVirt & FSHIFT)
-    modifiers |= EF_SHIFT_DOWN;
-  if (accel.fVirt & FCONTROL)
-    modifiers |= EF_CONTROL_DOWN;
-  if (accel.fVirt & FALT)
-    modifiers |= EF_ALT_DOWN;
-  return modifiers;
-}
-
 int GetModifiersFromKeyState() {
   int modifiers = EF_NONE;
-  if (base::win::IsShiftPressed())
+  if (ui::win::IsShiftPressed())
     modifiers |= EF_SHIFT_DOWN;
-  if (base::win::IsCtrlPressed())
+  if (ui::win::IsCtrlPressed())
     modifiers |= EF_CONTROL_DOWN;
-  if (base::win::IsAltPressed())
+  if (ui::win::IsAltPressed())
     modifiers |= EF_ALT_DOWN;
-  if (base::win::IsAltGrPressed())
+  if (ui::win::IsWindowsKeyPressed())
+    modifiers |= EF_COMMAND_DOWN;
+  if (ui::win::IsAltGrPressed())
     modifiers |= EF_ALTGR_DOWN;
+  if (ui::win::IsNumLockOn())
+    modifiers |= EF_NUM_LOCK_ON;
+  if (ui::win::IsCapsLockOn())
+    modifiers |= EF_CAPS_LOCK_ON;
+  if (ui::win::IsScrollLockOn())
+    modifiers |= EF_SCROLL_LOCK_ON;
   return modifiers;
 }
 
@@ -388,7 +395,7 @@ bool IsMouseEventFromTouch(UINT message) {
 }
 
 // Conversion scan_code and LParam each other.
-// uint16 scan_code:
+// uint16_t scan_code:
 //     ui/events/keycodes/dom/keycode_converter_data.inc
 // 0 - 15bits: represetns the scan code.
 // 28 - 30 bits (0xE000): represents whether this is an extended key or not.
@@ -397,14 +404,14 @@ bool IsMouseEventFromTouch(UINT message) {
 //     http://msdn.microsoft.com/en-us/library/windows/desktop/ms644984.aspx
 // 16 - 23bits: represetns the scan code.
 // 24bit (0x0100): represents whether this is an extended key or not.
-uint16 GetScanCodeFromLParam(LPARAM l_param) {
-  uint16 scan_code = ((l_param >> 16) & 0x00FF);
+uint16_t GetScanCodeFromLParam(LPARAM l_param) {
+  uint16_t scan_code = ((l_param >> 16) & 0x00FF);
   if (l_param & (1 << 24))
     scan_code |= 0xE000;
   return scan_code;
 }
 
-LPARAM GetLParamFromScanCode(uint16 scan_code) {
+LPARAM GetLParamFromScanCode(uint16_t scan_code) {
   LPARAM l_param = static_cast<LPARAM>(scan_code & 0x00FF) << 16;
   if ((scan_code & 0xE000) == 0xE000)
     l_param |= (1 << 24);

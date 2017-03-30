@@ -6,16 +6,17 @@
 #define EXTENSIONS_BROWSER_API_HID_HID_DEVICE_MANAGER_H_
 
 #include <map>
+#include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/scoped_observer.h"
 #include "base/threading/thread_checker.h"
 #include "device/hid/hid_service.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/common/api/hid.h"
 
 namespace device {
@@ -106,7 +107,8 @@ class HidDeviceManager : public BrowserContextKeyedAPI,
   void OnEnumerationComplete(
       const std::vector<scoped_refptr<device::HidDeviceInfo>>& devices);
 
-  void DispatchEvent(const std::string& event_name,
+  void DispatchEvent(events::HistogramValue histogram_value,
+                     const std::string& event_name,
                      scoped_ptr<base::ListValue> event_args,
                      scoped_refptr<device::HidDeviceInfo> device_info);
 
@@ -117,7 +119,7 @@ class HidDeviceManager : public BrowserContextKeyedAPI,
   ScopedObserver<device::HidService, device::HidService::Observer>
       hid_service_observer_;
   bool enumeration_ready_ = false;
-  ScopedVector<GetApiDevicesParams> pending_enumerations_;
+  std::vector<scoped_ptr<GetApiDevicesParams>> pending_enumerations_;
   int next_resource_id_ = 0;
   ResourceIdToDeviceIdMap device_ids_;
   DeviceIdToResourceIdMap resource_ids_;

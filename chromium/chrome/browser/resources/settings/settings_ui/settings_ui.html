@@ -1,20 +1,33 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-drawer-panel/paper-drawer-panel.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="chrome://md-settings/settings_drawer/settings_drawer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/typography.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-toolbar/paper-toolbar.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://md-settings/settings_main/settings_main.html">
+<link rel="import" href="chrome://md-settings/settings_menu/settings_menu.html">
+<link rel="import" href="chrome://md-settings/settings_page/settings_router.html">
+<link rel="import" href="chrome://md-settings/settings_ui/breadcrumb.html">
 
-<dom-module id="cr-settings-ui">
+<dom-module id="settings-ui">
   <link rel="import" type="css" href="settings_ui.css">
   <template>
-    <paper-drawer-panel drawer-width="280px">
-      <cr-settings-drawer drawer id="drawer" pages="[[pages]]"
-          selected-id="{{selectedPageId}}">
-      </cr-settings-drawer>
-      <cr-settings-main main pages="{{pages}}" prefs="{{prefs}}"
-          selected-page-id="{{selectedPageId}}">
+    <settings-router current-route="{{currentRoute}}"
+        current-route-titles="{{currentRouteTitles}}">
+    </settings-router>
+    <paper-toolbar>
+      <div class="title">Settings</div>
+      <settings-breadcrumb current-route="{{currentRoute}}"
+          current-route-titles="[[currentRouteTitles]]">
+      </settings-breadcrumb>
+    </paper-toolbar>
+    <paper-drawer-panel drawer-width="256px">
+      <settings-menu drawer class="flex" current-route="{{currentRoute}}">
+      </settings-menu>
+      <settings-main main prefs="{{prefs}}" current-route="{{currentRoute}}">
         <paper-icon-button icon="menu" paper-drawer-toggle></paper-icon-button>
-      </cr-settings-main>
+      </settings-main>
     </paper-drawer-panel>
   </template>
   <script src="settings_ui.js"></script>

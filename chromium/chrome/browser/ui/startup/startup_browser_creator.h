@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/startup/startup_tab.h"
@@ -103,6 +104,25 @@ class StartupBrowserCreator {
 
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
+#if defined(OS_WIN)
+  // Setting Chrome as the default browser in Windows 10+ requires a specific
+  // url to be opened through openwith.exe. This url is intercepted in
+  // ProcessCmdLineImpl when the callback is set. See DefaultBrowserWorker in
+  // shell_integration.h for more details. Only call this on the UI
+  // thread.
+  //
+  // Returns false when the default browser callback was already set which
+  // results in a no-op.
+  static bool SetDefaultBrowserCallback(const base::Closure& callback);
+
+  // Clears the callback when it isn't needed anymore. Only call this on the UI
+  // thread.
+  static void ClearDefaultBrowserCallback();
+
+  // Returns the url used to set Chrome as the default browser asynchronously.
+  static const wchar_t* GetDefaultBrowserUrl();
+#endif  // defined(OS_WIN)
+
  private:
   friend class CloudPrintProxyPolicyTest;
   friend class CloudPrintProxyPolicyStartupTest;
@@ -113,6 +133,8 @@ class StartupBrowserCreator {
                            ReadingWasRestartedAfterRestart);
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorTest, UpdateWithTwoProfiles);
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorTest, LastUsedProfileActivated);
+  FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorWinTest,
+                           GetURLsFromCommandLineWithDesktopSearchURL);
 
   // Returns the list of URLs to open from the command line. The returned
   // vector is empty if the user didn't specify any URLs on the command line.

@@ -9,15 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/strings/utf_string_conversions.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "components/dom_distiller/core/dom_distiller_service.h"
 #include "components/dom_distiller/core/task_tracker.h"
-#include "components/dom_distiller/core/viewer.h"
-#include "content/public/browser/url_data_source.h"
-#include "net/base/url_util.h"
 
 namespace dom_distiller {
 
@@ -45,13 +40,17 @@ class DomDistillerRequestViewBase : public ViewRequestDelegate,
 
  protected:
   // DistilledPagePrefs::Observer implementation:
+  void OnChangeTheme(DistilledPagePrefs::Theme new_theme) override;
   void OnChangeFontFamily(
       DistilledPagePrefs::FontFamily new_font_family) override;
-  void OnChangeTheme(DistilledPagePrefs::Theme new_theme) override;
+  void OnChangeFontScaling(float scaling) override;
 
   // Sends JavaScript to the attached Viewer, buffering data if the viewer isn't
   // ready.
   virtual void SendJavaScript(const std::string& buffer) = 0;
+
+  // Sends JavaScript common to normal and error pages.
+  void SendCommonJavaScript();
 
   // The handle to the view request towards the DomDistillerService. It
   // needs to be kept around to ensure the distillation request finishes.

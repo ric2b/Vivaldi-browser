@@ -5,6 +5,9 @@
 #ifndef UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_SCREEN_X11_H_
 #define UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_SCREEN_X11_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/gfx/display_change_notifier.h"
@@ -21,6 +24,10 @@ typedef struct _XDisplay Display;
 
 namespace views {
 class DesktopScreenX11Test;
+
+namespace test {
+class DesktopScreenX11TestApi;
+}
 
 // Our singleton screen implementation that talks to xrandr.
 class VIEWS_EXPORT DesktopScreenX11 : public gfx::Screen,
@@ -47,8 +54,11 @@ class VIEWS_EXPORT DesktopScreenX11 : public gfx::Screen,
   bool CanDispatchEvent(const ui::PlatformEvent& event) override;
   uint32_t DispatchEvent(const ui::PlatformEvent& event) override;
 
+  static void UpdateDeviceScaleFactorForTest();
+
  private:
   friend class DesktopScreenX11Test;
+  friend class test::DesktopScreenX11TestApi;
 
   // Constructor used in tests.
   DesktopScreenX11(const std::vector<gfx::Display>& test_displays);
@@ -75,7 +85,7 @@ class VIEWS_EXPORT DesktopScreenX11 : public gfx::Screen,
 
   // The timer to delay configuring outputs. See also the comments in
   // Dispatch().
-  scoped_ptr<base::OneShotTimer<DesktopScreenX11> > configure_timer_;
+  scoped_ptr<base::OneShotTimer> configure_timer_;
 
   gfx::DisplayChangeNotifier change_notifier_;
 

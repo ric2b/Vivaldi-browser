@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/strings/string16.h"
 #include "extensions/common/api/events.h"
@@ -18,7 +19,7 @@ namespace extensions {
 // The parsed form of the "event_rules" manifest entry.
 class DeclarativeManifestData : public Extension::ManifestData {
  public:
-  typedef extensions::core_api::events::Rule Rule;
+  typedef extensions::api::events::Rule Rule;
 
   DeclarativeManifestData();
   ~DeclarativeManifestData() override;

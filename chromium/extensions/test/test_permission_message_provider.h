@@ -16,22 +16,13 @@ class TestPermissionMessageProvider : public PermissionMessageProvider {
   ~TestPermissionMessageProvider() override;
 
  private:
-  PermissionMessageIDs GetLegacyPermissionMessageIDs(
-      const PermissionSet* permissions,
-      Manifest::Type extension_type) const override;
-  CoalescedPermissionMessages GetCoalescedPermissionMessages(
+  PermissionMessages GetPermissionMessages(
       const PermissionIDSet& permissions) const override;
-  std::vector<base::string16> GetLegacyWarningMessages(
-      const PermissionSet* permissions,
-      Manifest::Type extension_type) const override;
-  std::vector<base::string16> GetLegacyWarningMessagesDetails(
-      const PermissionSet* permissions,
-      Manifest::Type extension_type) const override;
-  bool IsPrivilegeIncrease(const PermissionSet* old_permissions,
-                           const PermissionSet* new_permissions,
+  bool IsPrivilegeIncrease(const PermissionSet& old_permissions,
+                           const PermissionSet& new_permissions,
                            Manifest::Type extension_type) const override;
   PermissionIDSet GetAllPermissionIDs(
-      const PermissionSet* permissions,
+      const PermissionSet& permissions,
       Manifest::Type extension_type) const override;
 
   DISALLOW_COPY_AND_ASSIGN(TestPermissionMessageProvider);

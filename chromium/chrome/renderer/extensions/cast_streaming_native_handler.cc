@@ -4,11 +4,18 @@
 
 #include "chrome/renderer/extensions/cast_streaming_native_handler.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
 #include <functional>
 #include <iterator>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
@@ -74,7 +81,7 @@ void FromCastCodecSpecificParams(const CastCodecSpecificParams& cast_params,
 
 namespace {
 bool HexDecode(const std::string& input, std::string* output) {
-  std::vector<uint8> bytes;
+  std::vector<uint8_t> bytes;
   if (!base::HexStringToBytes(input, &bytes))
     return false;
   output->assign(reinterpret_cast<const char*>(&bytes[0]), bytes.size());
@@ -89,6 +96,9 @@ bool ToCastRtpPayloadParamsOrThrow(v8::Isolate* isolate,
   cast_params->max_latency_ms = ext_params.max_latency;
   cast_params->min_latency_ms =
       ext_params.min_latency ? *ext_params.min_latency : ext_params.max_latency;
+  cast_params->animated_latency_ms = ext_params.animated_latency
+                                         ? *ext_params.animated_latency
+                                         : ext_params.max_latency;
   cast_params->codec_name = ext_params.codec_name;
   cast_params->ssrc = ext_params.ssrc;
   cast_params->feedback_ssrc = ext_params.feedback_ssrc;
@@ -126,6 +136,7 @@ void FromCastRtpPayloadParams(const CastRtpPayloadParams& cast_params,
   ext_params->payload_type = cast_params.payload_type;
   ext_params->max_latency = cast_params.max_latency_ms;
   ext_params->min_latency.reset(new int(cast_params.min_latency_ms));
+  ext_params->animated_latency.reset(new int(cast_params.animated_latency_ms));
   ext_params->codec_name = cast_params.codec_name;
   ext_params->ssrc = cast_params.ssrc;
   ext_params->feedback_ssrc = cast_params.feedback_ssrc;
@@ -663,23 +674,23 @@ bool CastStreamingNativeHandler::FrameReceiverConfigFromArg(
   if (params->codec_name == "OPUS") {
     config->codec = media::cast::CODEC_AUDIO_OPUS;
     config->rtp_timebase = 48000;
-    config->rtp_payload_type = 127;
+    config->rtp_payload_type = media::cast::kDefaultRtpAudioPayloadType;
   } else if (params->codec_name == "PCM16") {
     config->codec = media::cast::CODEC_AUDIO_PCM16;
     config->rtp_timebase = 48000;
-    config->rtp_payload_type = 127;
+    config->rtp_payload_type = media::cast::kDefaultRtpAudioPayloadType;
   } else if (params->codec_name == "AAC") {
     config->codec = media::cast::CODEC_AUDIO_AAC;
     config->rtp_timebase = 48000;
-    config->rtp_payload_type = 127;
+    config->rtp_payload_type = media::cast::kDefaultRtpAudioPayloadType;
   } else if (params->codec_name == "VP8") {
     config->codec = media::cast::CODEC_VIDEO_VP8;
     config->rtp_timebase = 90000;
-    config->rtp_payload_type = 96;
+    config->rtp_payload_type = media::cast::kDefaultRtpVideoPayloadType;
   } else if (params->codec_name == "H264") {
     config->codec = media::cast::CODEC_VIDEO_H264;
     config->rtp_timebase = 90000;
-    config->rtp_payload_type = 96;
+    config->rtp_payload_type = media::cast::kDefaultRtpVideoPayloadType;
   }
   if (params->rtp_timebase) {
     config->rtp_timebase = *params->rtp_timebase;
@@ -763,16 +774,6 @@ void CastStreamingNativeHandler::StartCastRtpReceiver(
     return;
   }
 
-  const std::string url = *v8::String::Utf8Value(args[7]);
-  blink::WebMediaStream stream =
-      blink::WebMediaStreamRegistry::lookupMediaStreamDescriptor(GURL(url));
-
-  if (stream.isNull()) {
-    args.GetIsolate()->ThrowException(v8::Exception::TypeError(
-        v8::String::NewFromUtf8(args.GetIsolate(), kInvalidMediaStreamURL)));
-    return;
-  }
-
   const int max_width = args[3]->ToInt32(args.GetIsolate())->Value();
   const int max_height = args[4]->ToInt32(args.GetIsolate())->Value();
   const double fps = args[5]->NumberValue();
@@ -783,10 +784,18 @@ void CastStreamingNativeHandler::StartCastRtpReceiver(
     return;
   }
 
-  media::VideoCaptureFormat capture_format(
-      gfx::Size(max_width, max_height),
-      fps,
-      media::PIXEL_FORMAT_I420);
+  const std::string url = *v8::String::Utf8Value(args[6]);
+  blink::WebMediaStream stream =
+      blink::WebMediaStreamRegistry::lookupMediaStreamDescriptor(GURL(url));
+
+  if (stream.isNull()) {
+    args.GetIsolate()->ThrowException(v8::Exception::TypeError(
+        v8::String::NewFromUtf8(args.GetIsolate(), kInvalidMediaStreamURL)));
+    return;
+  }
+
+  media::VideoCaptureFormat capture_format(gfx::Size(max_width, max_height),
+                                           fps, media::PIXEL_FORMAT_I420);
 
   video_config.target_frame_rate = fps;
   audio_config.target_frame_rate = 100;
@@ -804,14 +813,14 @@ void CastStreamingNativeHandler::StartCastRtpReceiver(
     return;
   }
 
-  base::DictionaryValue* options = NULL;
-  if (args.Length() >= 10) {
+  scoped_ptr<base::DictionaryValue> options;
+  if (args.Length() >= 9) {
     scoped_ptr<V8ValueConverter> converter(V8ValueConverter::create());
-    base::Value* options_value =
-        converter->FromV8Value(args[8], context()->v8_context());
+    scoped_ptr<base::Value> options_value(
+        converter->FromV8Value(args[8], context()->v8_context()));
     if (!options_value->IsType(base::Value::TYPE_NULL)) {
-      if (!options_value || !options_value->GetAsDictionary(&options)) {
-        delete options_value;
+      options = base::DictionaryValue::From(std::move(options_value));
+      if (!options) {
         args.GetIsolate()->ThrowException(v8::Exception::TypeError(
             v8::String::NewFromUtf8(args.GetIsolate(), kUnableToConvertArgs)));
         return;
@@ -820,7 +829,7 @@ void CastStreamingNativeHandler::StartCastRtpReceiver(
   }
 
   if (!options) {
-    options = new base::DictionaryValue();
+    options.reset(new base::DictionaryValue());
   }
 
   v8::CopyablePersistentTraits<v8::Function>::CopyablePersistent error_callback;
@@ -828,19 +837,12 @@ void CastStreamingNativeHandler::StartCastRtpReceiver(
                        v8::Local<v8::Function>(args[7].As<v8::Function>()));
 
   session->Start(
-      audio_config,
-      video_config,
-      local_endpoint,
-      remote_endpoint,
-      make_scoped_ptr(options),
-      capture_format,
+      audio_config, video_config, local_endpoint, remote_endpoint,
+      std::move(options), capture_format,
       base::Bind(&CastStreamingNativeHandler::AddTracksToMediaStream,
-                 weak_factory_.GetWeakPtr(),
-                 url,
-                 params),
+                 weak_factory_.GetWeakPtr(), url, params),
       base::Bind(&CastStreamingNativeHandler::CallReceiverErrorCallback,
-                 weak_factory_.GetWeakPtr(),
-                 error_callback));
+                 weak_factory_.GetWeakPtr(), error_callback));
 }
 
 void CastStreamingNativeHandler::CallReceiverErrorCallback(
@@ -862,7 +864,7 @@ void CastStreamingNativeHandler::AddTracksToMediaStream(
     scoped_refptr<media::AudioCapturerSource> audio,
     scoped_ptr<media::VideoCapturerSource> video) {
   content::AddAudioTrackToMediaStream(audio, params, true, true, url);
-  content::AddVideoTrackToMediaStream(video.Pass(), true, true, url);
+  content::AddVideoTrackToMediaStream(std::move(video), true, true, url);
 }
 
 }  // namespace extensions

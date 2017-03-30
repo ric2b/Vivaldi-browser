@@ -10,15 +10,14 @@ import android.graphics.Canvas;
 import android.util.SparseArray;
 import android.view.View;
 
-import org.chromium.base.CalledByNative;
 import org.chromium.base.CommandLine;
-import org.chromium.base.JNINamespace;
-import org.chromium.base.Log;
 import org.chromium.base.PathUtils;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.NativePage;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -33,8 +32,6 @@ import java.util.List;
  */
 @JNINamespace("chrome::android")
 public class TabContentManager {
-    private static final String TAG = "cr.content";
-
     private final Context mContext;
     private final float mThumbnailScale;
     private final int mFullResThumbnailsMaxSize;
@@ -86,12 +83,6 @@ public class TabContentManager {
             val = count;
         }
         return val;
-    }
-
-    protected void finalize() throws Throwable {
-        // TODO(dfalcantara): Remove this log.  crbug.com/513130
-        Log.w(TAG, "Finalizing TabContentManager: " + this);
-        super.finalize();
     }
 
     /**
@@ -353,16 +344,6 @@ public class TabContentManager {
         }
     }
 
-    /**
-     * Set the UI resource provider to be used by this {@link TabContentManager} on the native side.
-     * @param resourceProviderNativePtr The pointer to the UI resource provider to be used.
-     */
-    public void setUIResourceProvider(long resourceProviderNativePtr) {
-        if (mNativeTabContentManager == 0 || resourceProviderNativePtr == 0) return;
-
-        nativeSetUIResourceProvider(mNativeTabContentManager, resourceProviderNativePtr);
-    }
-
     @CalledByNative
     protected void notifyListenersOfThumbnailChange(int tabId) {
         for (ThumbnailChangeListener listener : mListeners) {
@@ -384,8 +365,6 @@ public class TabContentManager {
     private native void nativeRemoveTabThumbnail(long nativeTabContentManager, int tabId);
     private native void nativeRemoveTabThumbnailFromDiskAtAndAboveId(long nativeTabContentManager,
             int minForbiddenId);
-    private native void nativeSetUIResourceProvider(long nativeTabContentManager,
-            long resourceProviderNativePtr);
     private native void nativeGetDecompressedThumbnail(long nativeTabContentManager, int tabId);
     private static native void nativeDestroy(long nativeTabContentManager);
 }

@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "extensions/browser/mojo/stash_backend.h"
+
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "extensions/browser/mojo/stash_backend.h"
-#include "mojo/application/public/interfaces/service_provider.mojom.h"
+#include "mojo/shell/public/interfaces/service_provider.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace extensions {
@@ -28,12 +34,12 @@ mojo::ScopedHandle CreateReadableHandle() {
                               MOJO_WRITE_DATA_FLAG_NONE);
   EXPECT_EQ(MOJO_RESULT_OK, result);
   EXPECT_EQ(1u, num_bytes);
-  return mojo::ScopedHandle::From(consumer_handle.Pass());
+  return mojo::ScopedHandle::From(std::move(consumer_handle));
 }
 
 }  // namespace
 
-class StashServiceTest : public testing::Test, public mojo::ErrorHandler {
+class StashServiceTest : public testing::Test {
  public:
   enum Event {
     EVENT_NONE,
@@ -49,23 +55,23 @@ class StashServiceTest : public testing::Test, public mojo::ErrorHandler {
     stash_backend_.reset(new StashBackend(base::Bind(
         &StashServiceTest::OnHandleReadyToRead, base::Unretained(this))));
     stash_backend_->BindToRequest(mojo::GetProxy(&stash_service_));
-    stash_service_.set_error_handler(this);
+    stash_service_.set_connection_error_handler(base::Bind(&OnConnectionError));
     handles_ready_ = 0;
   }
 
-  void OnConnectionError() override { FAIL() << "Unexpected connection error"; }
+  static void OnConnectionError() { FAIL() << "Unexpected connection error"; }
 
   mojo::Array<StashedObjectPtr> RetrieveStash() {
     mojo::Array<StashedObjectPtr> stash;
     stash_service_->RetrieveStash(base::Bind(
         &StashServiceTest::StashRetrieved, base::Unretained(this), &stash));
     WaitForEvent(EVENT_STASH_RETRIEVED);
-    return stash.Pass();
+    return stash;
   }
 
   void StashRetrieved(mojo::Array<StashedObjectPtr>* output,
                       mojo::Array<StashedObjectPtr> stash) {
-    *output = stash.Pass();
+    *output = std::move(stash);
     EventReceived(EVENT_STASH_RETRIEVED);
   }
 
@@ -107,15 +113,15 @@ TEST_F(StashServiceTest, AddTwiceAndRetrieve) {
   stashed_object->id = "test type";
   stashed_object->data.push_back(1);
   stashed_object->stashed_handles = mojo::Array<mojo::ScopedHandle>(0);
-  stashed_objects.push_back(stashed_object.Pass());
-  stash_service_->AddToStash(stashed_objects.Pass());
+  stashed_objects.push_back(std::move(stashed_object));
+  stash_service_->AddToStash(std::move(stashed_objects));
   stashed_object = StashedObject::New();
   stashed_object->id = "test type2";
   stashed_object->data.push_back(2);
   stashed_object->data.push_back(3);
   stashed_object->stashed_handles = mojo::Array<mojo::ScopedHandle>(0);
-  stashed_objects.push_back(stashed_object.Pass());
-  stash_service_->AddToStash(stashed_objects.Pass());
+  stashed_objects.push_back(std::move(stashed_object));
+  stash_service_->AddToStash(std::move(stashed_objects));
   stashed_objects = RetrieveStash();
   ASSERT_EQ(2u, stashed_objects.size());
   EXPECT_EQ("test type", stashed_objects[0]->id);
@@ -149,18 +155,18 @@ TEST_F(StashServiceTest, StashAndRetrieveHandles) {
   ASSERT_EQ(1u, num_bytes);
 
   stashed_object->stashed_handles.push_back(
-      mojo::ScopedHandle::From(producer.Pass()));
+      mojo::ScopedHandle::From(std::move(producer)));
   stashed_object->stashed_handles.push_back(
-      mojo::ScopedHandle::From(consumer.Pass()));
-  stashed_objects.push_back(stashed_object.Pass());
-  stash_service_->AddToStash(stashed_objects.Pass());
+      mojo::ScopedHandle::From(std::move(consumer)));
+  stashed_objects.push_back(std::move(stashed_object));
+  stash_service_->AddToStash(std::move(stashed_objects));
   stashed_objects = RetrieveStash();
   ASSERT_EQ(1u, stashed_objects.size());
   EXPECT_EQ("test type", stashed_objects[0]->id);
   ASSERT_EQ(2u, stashed_objects[0]->stashed_handles.size());
 
   consumer = mojo::ScopedDataPipeConsumerHandle::From(
-      stashed_objects[0]->stashed_handles[1].Pass());
+      std::move(stashed_objects[0]->stashed_handles[1]));
   result = mojo::Wait(
       consumer.get(), MOJO_HANDLE_SIGNAL_READABLE, MOJO_DEADLINE_INDEFINITE,
       nullptr);
@@ -192,11 +198,11 @@ TEST_F(StashServiceTest, NotifyOnReadableHandle) {
   stashed_object->stashed_handles.push_back(mojo::ScopedHandle::From(
       mojo::GetProxy(&service_provider).PassMessagePipe()));
 
-  stash_entries.push_back(stashed_object.Pass());
-  stash_service_->AddToStash(stash_entries.Pass());
+  stash_entries.push_back(std::move(stashed_object));
+  stash_service_->AddToStash(std::move(stash_entries));
 
   mojo::MessagePipe pipe;
-  service_provider->ConnectToService("", pipe.handle0.Pass());
+  service_provider->ConnectToService("", std::move(pipe.handle0));
 
   WaitForEvent(EVENT_HANDLE_READY);
   EXPECT_EQ(1, handles_ready_);
@@ -222,13 +228,13 @@ TEST_F(StashServiceTest, NotifyOnReadableDataPipeHandle) {
   ASSERT_EQ(MOJO_RESULT_OK, result);
   ASSERT_EQ(1u, num_bytes);
   stashed_object->stashed_handles.push_back(
-      mojo::ScopedHandle::From(producer_handle.Pass()));
+      mojo::ScopedHandle::From(std::move(producer_handle)));
   stashed_object->stashed_handles.push_back(
-      mojo::ScopedHandle::From(consumer_handle.Pass()));
+      mojo::ScopedHandle::From(std::move(consumer_handle)));
   stashed_object->data.push_back(1);
 
-  stash_entries.push_back(stashed_object.Pass());
-  stash_service_->AddToStash(stash_entries.Pass());
+  stash_entries.push_back(std::move(stashed_object));
+  stash_service_->AddToStash(std::move(stash_entries));
   WaitForEvent(EVENT_HANDLE_READY);
   EXPECT_EQ(1, handles_ready_);
 }
@@ -241,15 +247,15 @@ TEST_F(StashServiceTest, NotifyOncePerStashOnReadableHandles) {
   stashed_object->monitor_handles = true;
   stashed_object->stashed_handles.push_back(CreateReadableHandle());
   stashed_object->stashed_handles.push_back(CreateReadableHandle());
-  stash_entries.push_back(stashed_object.Pass());
+  stash_entries.push_back(std::move(stashed_object));
   stashed_object = StashedObject::New();
   stashed_object->id = "another test type";
   stashed_object->data.push_back(2);
   stashed_object->monitor_handles = true;
   stashed_object->stashed_handles.push_back(CreateReadableHandle());
   stashed_object->stashed_handles.push_back(CreateReadableHandle());
-  stash_entries.push_back(stashed_object.Pass());
-  stash_service_->AddToStash(stash_entries.Pass());
+  stash_entries.push_back(std::move(stashed_object));
+  stash_service_->AddToStash(std::move(stash_entries));
   WaitForEvent(EVENT_HANDLE_READY);
   EXPECT_EQ(1, handles_ready_);
 
@@ -259,8 +265,8 @@ TEST_F(StashServiceTest, NotifyOncePerStashOnReadableHandles) {
   stashed_object->monitor_handles = true;
   stashed_object->stashed_handles.push_back(CreateReadableHandle());
   stashed_object->stashed_handles.push_back(CreateReadableHandle());
-  stash_entries.push_back(stashed_object.Pass());
-  stash_service_->AddToStash(stash_entries.Pass());
+  stash_entries.push_back(std::move(stashed_object));
+  stash_service_->AddToStash(std::move(stash_entries));
 
   stash_service_->AddToStash(RetrieveStash());
   WaitForEvent(EVENT_HANDLE_READY);
@@ -271,7 +277,7 @@ TEST_F(StashServiceTest, NotifyOncePerStashOnReadableHandles) {
 // exists.
 TEST_F(StashServiceTest, ServiceWithDeletedBackend) {
   stash_backend_.reset();
-  stash_service_.set_error_handler(this);
+  stash_service_.set_connection_error_handler(base::Bind(&OnConnectionError));
 
   mojo::Array<StashedObjectPtr> stashed_objects;
   StashedObjectPtr stashed_object(StashedObject::New());
@@ -279,9 +285,9 @@ TEST_F(StashServiceTest, ServiceWithDeletedBackend) {
   stashed_object->data.push_back(1);
   mojo::MessagePipe message_pipe;
   stashed_object->stashed_handles.push_back(
-      mojo::ScopedHandle::From(message_pipe.handle0.Pass()));
-  stashed_objects.push_back(stashed_object.Pass());
-  stash_service_->AddToStash(stashed_objects.Pass());
+      mojo::ScopedHandle::From(std::move(message_pipe.handle0)));
+  stashed_objects.push_back(std::move(stashed_object));
+  stash_service_->AddToStash(std::move(stashed_objects));
   stashed_objects = RetrieveStash();
   ASSERT_EQ(0u, stashed_objects.size());
   // Check that the stashed handle has been closed.

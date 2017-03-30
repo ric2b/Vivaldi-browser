@@ -6,10 +6,14 @@
   <link rel="import" type="css" href="viewer-page-selector.css">
   <template>
     <paper-input-container id="pageselector" no-label-float>
-      <input id="input" is="iron-input" bind-value="{{pageNo}}" on-mouseup="select"
-          on-change="pageNoCommitted">
+      <input id="input" is="iron-input" value="{{pageNo}}"
+          prevent-invalid-input allowed-pattern="\d" on-mouseup="select"
+          on-change="pageNoCommitted" i18n-values="aria-label:labelPageNumber">
     </paper-input-container>
-    <span id="pagelength">/ <span>{{docLength}}</span></span>
+    <span id="slash"> / </span>
+    <span id="pagelength-spacer">
+      <span id="pagelength">{{docLength}}</span>
+    </span>
   </template>
 </dom-module>
 <script src="viewer-page-selector.js"></script>

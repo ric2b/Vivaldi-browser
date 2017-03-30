@@ -4,6 +4,8 @@
 
 #include "storage/browser/fileapi/sandbox_origin_database.h"
 
+#include <stdint.h>
+
 #include <set>
 #include <utility>
 
@@ -27,7 +29,7 @@ const base::FilePath::CharType kOriginDatabaseName[] =
     FILE_PATH_LITERAL("Origins");
 const char kOriginKeyPrefix[] = "ORIGIN:";
 const char kLastPathKey[] = "LAST_PATH";
-const int64 kMinimumReportIntervalHours = 1;
+const int64_t kMinimumReportIntervalHours = 1;
 const char kInitStatusHistogramLabel[] = "FileSystem.OriginDatabaseInit";
 const char kDatabaseRepairHistogramLabel[] = "FileSystem.OriginDatabaseRepair";
 
@@ -291,8 +293,9 @@ bool SandboxOriginDatabase::ListAllOrigins(
   std::string origin_key_prefix = OriginToOriginKey(std::string());
   iter->Seek(origin_key_prefix);
   origins->clear();
-  while (iter->Valid() && base::StartsWithASCII(iter->key().ToString(),
-                                                origin_key_prefix, true)) {
+  while (iter->Valid() && base::StartsWith(iter->key().ToString(),
+                                           origin_key_prefix,
+                                           base::CompareCase::SENSITIVE)) {
     std::string origin =
       iter->key().ToString().substr(origin_key_prefix.length());
     base::FilePath path = StringToFilePath(iter->value().ToString());

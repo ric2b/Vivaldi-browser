@@ -30,10 +30,10 @@ const char kNotTestProcessError[] =
 
 namespace extensions {
 
-namespace Log = core_api::test::Log;
-namespace NotifyFail = core_api::test::NotifyFail;
-namespace PassMessage = core_api::test::PassMessage;
-namespace WaitForRoundTrip = core_api::test::WaitForRoundTrip;
+namespace Log = api::test::Log;
+namespace NotifyFail = api::test::NotifyFail;
+namespace PassMessage = api::test::PassMessage;
+namespace WaitForRoundTrip = api::test::WaitForRoundTrip;
 
 TestExtensionFunction::~TestExtensionFunction() {}
 
@@ -111,7 +111,7 @@ TestGetConfigFunction::TestConfigState::TestConfigState()
 // static
 TestGetConfigFunction::TestConfigState*
 TestGetConfigFunction::TestConfigState::GetInstance() {
-  return Singleton<TestConfigState>::get();
+  return base::Singleton<TestConfigState>::get();
 }
 
 TestGetConfigFunction::~TestGetConfigFunction() {}

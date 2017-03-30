@@ -8,6 +8,7 @@
     'webrtc_base': "../webrtc/base",
     'webrtc_xmllite': "../webrtc/libjingle/xmllite",
     'webrtc_p2p': "../webrtc/p2p",
+    'webrtc_system_wrappers': "../webrtc/system_wrappers",
   },
   'includes': [
     '../../native_client/build/untrusted.gypi',
@@ -43,15 +44,6 @@
         'USE_WEBRTC_DEV_BRANCH',
         'timezone=_timezone',
       ],
-      'configurations': {
-        'Debug': {
-          'defines': [
-            # TODO(sergeyu): Fix libjingle to use NDEBUG instead of
-            # _DEBUG and remove this define. See below as well.
-            '_DEBUG',
-          ],
-        }
-      },
       'include_dirs': [
         './<(libjingle_source)',
         '../',
@@ -63,6 +55,9 @@
         '<(webrtc_base)/asyncfile.h',
         '<(webrtc_base)/asynchttprequest.cc',
         '<(webrtc_base)/asynchttprequest.h',
+        '<(webrtc_base)/asyncinvoker.cc',
+        '<(webrtc_base)/asyncinvoker.h',
+        '<(webrtc_base)/asyncinvoker-inl.h',
         '<(webrtc_base)/asyncpacketsocket.cc',
         '<(webrtc_base)/asyncpacketsocket.h',
         '<(webrtc_base)/asyncresolverinterface.cc',
@@ -77,7 +72,6 @@
         '<(webrtc_base)/autodetectproxy.h',
         '<(webrtc_base)/base64.cc',
         '<(webrtc_base)/base64.h',
-        '<(webrtc_base)/basicdefs.h',
         '<(webrtc_base)/buffer.cc',
         '<(webrtc_base)/buffer.h',
         '<(webrtc_base)/bytebuffer.cc',
@@ -87,8 +81,6 @@
         '<(webrtc_base)/checks.h',
         '<(webrtc_base)/common.cc',
         '<(webrtc_base)/common.h',
-        '<(webrtc_base)/cpumonitor.cc',
-        '<(webrtc_base)/cpumonitor.h',
         '<(webrtc_base)/crc32.cc',
         '<(webrtc_base)/crc32.h',
         '<(webrtc_base)/criticalsection.cc',
@@ -143,10 +135,8 @@
         '<(webrtc_base)/nethelpers.h',
         '<(webrtc_base)/network.cc',
         '<(webrtc_base)/network.h',
-        '<(webrtc_base)/nssidentity.cc',
-        '<(webrtc_base)/nssidentity.h',
-        '<(webrtc_base)/nssstreamadapter.cc',
-        '<(webrtc_base)/nssstreamadapter.h',
+        '<(webrtc_base)/networkmonitor.cc',
+        '<(webrtc_base)/networkmonitor.h',
         '<(webrtc_base)/nullsocketserver.h',
         '<(webrtc_base)/openssladapter.cc',
         '<(webrtc_base)/openssldigest.cc',
@@ -166,8 +156,6 @@
         '<(webrtc_base)/ratelimiter.h',
         '<(webrtc_base)/ratetracker.cc',
         '<(webrtc_base)/ratetracker.h',
-        '<(webrtc_base)/schanneladapter.cc',
-        '<(webrtc_base)/schanneladapter.h',
         '<(webrtc_base)/scoped_autorelease_pool.h',
         '<(webrtc_base)/scoped_autorelease_pool.mm',
         '<(webrtc_base)/scoped_ptr.h',
@@ -220,6 +208,9 @@
         '<(webrtc_base)/template_util.h',
         '<(webrtc_base)/thread.cc',
         '<(webrtc_base)/thread.h',
+        '<(webrtc_base)/thread_checker.h',
+        '<(webrtc_base)/thread_checker_impl.cc',
+        '<(webrtc_base)/thread_checker_impl.h',
         '<(webrtc_base)/timeutils.cc',
         '<(webrtc_base)/timeutils.h',
         '<(webrtc_base)/timing.cc',
@@ -255,11 +246,17 @@
         '<(webrtc_xmllite)/xmlparser.h',
         '<(webrtc_xmllite)/xmlprinter.cc',
         '<(webrtc_xmllite)/xmlprinter.h',
+        '<(webrtc_system_wrappers)/include/field_trial_default.h',
+        '<(webrtc_system_wrappers)/include/field_trial.h',
+        '<(webrtc_system_wrappers)/source/field_trial_default.cc',
       ],
       'sources!': [
         # Compiled as part of libjingle_p2p_constants_nacl.
         '<(webrtc_p2p)/base/constants.cc',
         '<(webrtc_p2p)/base/constants.h',
+        # For NACL, we have the field_trial_default and don't need the
+        # field_trail.cc.
+        'overrides/field_trial.cc',
       ],
       'sources/': [
         ['exclude', '/mac[a-z]+\\.(h|cc)$'],
@@ -269,7 +266,6 @@
         ['OS!="win"', {
           'sources/': [
             ['exclude', '/win[a-z0-9]+\\.(h|cc)$'],
-            ['exclude', '/schanneladapter\\.(h|cc)$'],
           ],
         }],
       ],
@@ -277,7 +273,7 @@
         'include_dirs': [
           './overrides',
           './<(libjingle_source)',
-          '../../third_party/webrtc/overrides',
+          '../../third_party/webrtc_overrides',
           '../../third_party',
           '../../third_party/webrtc',
         ],
@@ -303,18 +299,10 @@
       'type': 'none',
       'variables': {
         'nlib_target': 'libjingle_p2p_constants_nacl.a',
+        'nacl_untrusted_build': 1,
         'build_glibc': 0,
         'build_newlib': 1,
         'build_pnacl_newlib': 1,
-      },
-      'configurations': {
-        'Debug': {
-          'defines': [
-            # TODO(sergeyu): Fix libjingle to use NDEBUG instead of
-            # _DEBUG and remove this define. See below as well.
-            '_DEBUG',
-          ],
-        }
       },
       'include_dirs': [
         './<(libjingle_source)',

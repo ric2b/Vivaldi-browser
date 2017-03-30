@@ -142,7 +142,7 @@ config("skia_config") {
 
   defines += []
 
-  if (component_mode == "shared_library") {
+  if (is_component_build) {
     defines += [
       "SKIA_DLL",
       "GR_GL_IGNORE_ES3_MSAA=0",
@@ -168,6 +168,10 @@ config("skia_config") {
 
   if (is_mac) {
     defines += [ "SK_BUILD_FOR_MAC" ]
+  }
+
+  if (is_win) {
+    defines += [ "GR_GL_FUNCTION_TYPE=__stdcall" ]
   }
 }
 
@@ -196,7 +200,7 @@ config("skia_library_config") {
 
   defines = []
 
-  if (component_mode == "shared_library") {
+  if (is_component_build) {
     defines += [ "SKIA_IMPLEMENTATION=1" ]
   }
 
@@ -213,7 +217,6 @@ config("skia_library_config") {
     defines += [
       "SK_GAMMA_EXPONENT=1.2",
       "SK_GAMMA_CONTRAST=0.2",
-      "SK_HIGH_QUALITY_IS_LANCZOS",
     ]
   } else if (is_android) {
     defines += [
@@ -225,13 +228,11 @@ config("skia_library_config") {
     defines += [
       "SK_GAMMA_SRGB",
       "SK_GAMMA_CONTRAST=0.5",
-      "SK_HIGH_QUALITY_IS_LANCZOS",
     ]
   } else if (is_mac) {
     defines += [
       "SK_GAMMA_SRGB",
       "SK_GAMMA_CONTRAST=0.0",
-      "SK_HIGH_QUALITY_IS_LANCZOS",
     ]
   }
 
@@ -277,6 +278,9 @@ config("skia_library_config") {
 component("skia") {
   sources = [
     # Chrome sources.
+    "config/SkUserConfig.h",
+    "config/sk_ref_cnt_ext_debug.h",
+    "config/sk_ref_cnt_ext_release.h",
     "ext/SkDiscardableMemory_chrome.cc",
     "ext/SkMemory_new_handler.cpp",
     "ext/analysis_canvas.cc",
@@ -287,20 +291,23 @@ component("skia") {
     "ext/google_logging.cc",
     "ext/image_operations.cc",
     "ext/opacity_filter_canvas.cc",
-    "ext/pixel_ref_utils.cc",
-    "ext/platform_canvas.cc",
     "ext/platform_device.cc",
     "ext/platform_device_linux.cc",
     "ext/platform_device_mac.cc",
     "ext/platform_device_win.cc",
     "ext/recursive_gaussian_convolution.cc",
+    "ext/skia_memory_dump_provider.cc",
+    "ext/skia_trace_memory_dump_impl.cc",
     "ext/skia_utils_base.cc",
     "ext/skia_utils_ios.mm",
     "ext/skia_utils_mac.mm",
     "ext/skia_utils_win.cc",
   ]
 
-  if (current_cpu == "x86" || current_cpu == "x64") {
+  if (!is_ios) {
+    sources += [ "ext/platform_canvas.cc" ]
+  }
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
     sources += [ "ext/convolver_SSE2.cc" ]
   } else if (current_cpu == "mipsel" && mips_dsp_rev >= 2) {
     sources += [ "ext/convolver_mips_dspr2.cc" ]
@@ -330,8 +337,6 @@ component("skia") {
     "//third_party/skia/src/utils/SkBitmapHasher.cpp",
     "//third_party/skia/src/utils/SkBoundaryPatch.cpp",
     "//third_party/skia/src/utils/SkCamera.cpp",
-    "//third_party/skia/src/utils/SkCubicInterval.cpp",
-    "//third_party/skia/src/utils/SkCullPoints.cpp",
     "//third_party/skia/src/utils/SkDumpCanvas.cpp",
     "//third_party/skia/src/utils/SkFrontBufferedStream.cpp",
     "//third_party/skia/src/utils/SkInterpolator.cpp",
@@ -343,10 +348,6 @@ component("skia") {
     "//third_party/skia/src/utils/SkParsePath.cpp",
     "//third_party/skia/src/utils/SkSHA1.cpp",
 
-    # We don't currently need to change thread affinity, so leave out this complexity for now.
-    "//third_party/skia/src/utils/SkThreadUtils_pthread_linux.cpp",
-    "//third_party/skia/src/utils/SkThreadUtils_pthread_mach.cpp",
-
     #testing
     "//third_party/skia/src/fonts/SkGScalerContext.cpp",
   ]
@@ -355,11 +356,10 @@ component("skia") {
     sources -= [
       # Keeping _win.cpp
       "//third_party/skia/src/utils/SkThreadUtils_pthread.cpp",
-      "//third_party/skia/src/utils/SkThreadUtils_pthread_other.cpp",
     ]
   } else {
     sources -= [
-      # Keeping _pthread.cpp and _pthread_other.cpp.
+      # Keeping _pthread.cpp
       "//third_party/skia/src/utils/SkThreadUtils_win.cpp",
     ]
   }
@@ -412,6 +412,7 @@ component("skia") {
     sources -= [
       "//third_party/skia/src/fonts/SkFontMgr_fontconfig.cpp",
       "//third_party/skia/src/ports/SkFontConfigInterface_direct.cpp",
+      "//third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp",
       "//third_party/skia/src/ports/SkFontHost_fontconfig.cpp",
     ]
   }
@@ -430,7 +431,7 @@ component("skia") {
     sources += [ "ext/bitmap_platform_device_mac.cc" ]
   } else if (use_cairo) {
     sources += [ "ext/bitmap_platform_device_cairo.cc" ]
-  } else {
+  } else if (!is_ios) {
     sources += [ "ext/bitmap_platform_device_skia.cc" ]
   }
 
@@ -443,6 +444,7 @@ component("skia") {
 
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [
+    ":skia_config",
     ":skia_library_config",
     "//build/config/compiler:no_chromium_code",
   ]
@@ -456,14 +458,15 @@ component("skia") {
   ]
 
   if (is_linux) {
-    configs += [
-      "//build/config/linux:fontconfig",
-      "//build/config/linux:freetype2",
-    ]
+    configs += [ "//build/config/linux:freetype2" ]
+
     if (use_pango) {
       configs += [ "//build/config/linux:pangocairo" ]
     }
-    deps += [ "//third_party/icu:icuuc" ]
+    deps += [
+      "//build/linux:fontconfig",
+      "//third_party/icu:icuuc",
+    ]
   }
 
   if (is_android) {
@@ -471,9 +474,9 @@ component("skia") {
     sources += [ "ext/platform_device_linux.cc" ]
     set_sources_assignment_filter(sources_assignment_filter)
     deps += [
+      "//third_party/android_tools:cpu_features",
       "//third_party/expat",
       "//third_party/freetype-android:freetype",
-      "//third_party/android_tools:cpu_features",
     ]
   }
 
@@ -483,8 +486,22 @@ component("skia") {
   }
 
   if (is_android && !is_debug) {
-    configs -= [ "//build/config/compiler:optimize" ]
+    configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
+  }
+
+  if (is_ios) {
+    libs = [ "ImageIO.framework" ]
+    set_sources_assignment_filter([])
+    sources += [
+      "//third_party/skia/src/ports/SkFontHost_mac.cpp",
+      "//third_party/skia/src/utils/mac/SkCreateCGImageRef.cpp",
+      "//third_party/skia/src/utils/mac/SkStream_mac.cpp",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+
+    # To disable warning "CGContextSelectFont' is deprecated"
+    cflags = [ "-Wno-deprecated-declarations" ]
   }
 }
 
@@ -506,13 +523,61 @@ if (current_cpu == "x86" || current_cpu == "x64") {
       "//build/config/compiler:no_chromium_code",
     ]
   }
-  source_set("skia_opts_sse4") {
+  source_set("skia_opts_sse41") {
     sources = gypi_skia_opts.sse41_sources
     if (!is_win || is_clang) {
       cflags = [ "-msse4.1" ]
     }
     if (is_win) {
       defines = [ "SK_CPU_SSE_LEVEL=41" ]
+    }
+    visibility = [ ":skia_opts" ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      ":skia_config",
+      ":skia_library_config",
+      "//build/config/compiler:no_chromium_code",
+    ]
+  }
+  source_set("skia_opts_sse42") {
+    sources = gypi_skia_opts.sse42_sources
+    if (!is_win || is_clang) {
+      cflags = [ "-msse4.2" ]
+    }
+    if (is_win) {
+      defines = [ "SK_CPU_SSE_LEVEL=42" ]
+    }
+    visibility = [ ":skia_opts" ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      ":skia_config",
+      ":skia_library_config",
+      "//build/config/compiler:no_chromium_code",
+    ]
+  }
+  source_set("skia_opts_avx") {
+    sources = gypi_skia_opts.avx_sources
+    if (!is_win) {
+      cflags = [ "-mavx" ]
+    }
+    if (is_win) {
+      cflags = [ "/arch:AVX" ]
+    }
+    visibility = [ ":skia_opts" ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      ":skia_config",
+      ":skia_library_config",
+      "//build/config/compiler:no_chromium_code",
+    ]
+  }
+  source_set("skia_opts_avx2") {
+    sources = gypi_skia_opts.avx2_sources
+    if (!is_win) {
+      cflags = [ "-mavx2" ]
+    }
+    if (is_win) {
+      cflags = [ "/arch:AVX2" ]
     }
     visibility = [ ":skia_opts" ]
     configs -= [ "//build/config/compiler:chromium_code" ]
@@ -534,8 +599,11 @@ source_set("skia_opts") {
   if (current_cpu == "x86" || current_cpu == "x64") {
     sources = gypi_skia_opts.sse2_sources
     deps += [
+      ":skia_opts_avx",
+      ":skia_opts_avx2",
       ":skia_opts_sse3",
-      ":skia_opts_sse4",
+      ":skia_opts_sse41",
+      ":skia_opts_sse42",
     ]
   } else if (current_cpu == "arm") {
     # The assembly uses the frame pointer register (r7 in Thumb/r11 in
@@ -557,6 +625,8 @@ source_set("skia_opts") {
     } else {
       sources = gypi_skia_opts.none_sourcees
     }
+  } else if (current_cpu == "arm64") {
+    sources = gypi_skia_opts.arm64_sources
   } else if (current_cpu == "mipsel") {
     cflags += [ "-fomit-frame-pointer" ]
 
@@ -565,12 +635,15 @@ source_set("skia_opts") {
     } else {
       sources = gypi_skia_opts.none_sources
     }
+  } else if (current_cpu == "mips64el") {
+    cflags += [ "-fomit-frame-pointer" ]
+    sources = gypi_skia_opts.none_sources
   } else {
     assert(false, "Need to port cpu specific stuff from skia_library_opts.gyp")
   }
 
   if (is_android && !is_debug) {
-    configs -= [ "//build/config/compiler:optimize" ]
+    configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
   }
 
@@ -584,16 +657,25 @@ source_set("skia_opts") {
   visibility = [ ":skia" ]
 }
 
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("skia_unittests_run") {
+  testonly = true
+  deps = [
+    ":skia_unittests",
+  ]
+}
+
 test("skia_unittests") {
   sources = [
     "ext/analysis_canvas_unittest.cc",
     "ext/bitmap_platform_device_mac_unittest.cc",
     "ext/convolver_unittest.cc",
     "ext/image_operations_unittest.cc",
-    "ext/pixel_ref_utils_unittest.cc",
     "ext/platform_canvas_unittest.cc",
     "ext/recursive_gaussian_convolution_unittest.cc",
     "ext/refptr_unittest.cc",
+    "ext/skia_memory_dump_provider_unittest.cc",
     "ext/skia_utils_ios_unittest.mm",
     "ext/skia_utils_mac_unittest.mm",
   ]
@@ -606,11 +688,14 @@ test("skia_unittests") {
     ":skia",
     "//base",
     "//base/test:run_all_unittests",
-    "//cc:test_support",  # TODO: Fix this test to not depend on cc.
     "//testing/gtest",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
+
+  if (!is_ios) {
+    deps += [ "//cc:test_support" ]  # TODO: Fix this test to not depend on cc.
+  }
 }
 
 if (is_linux && !is_chromeos) {
@@ -623,6 +708,7 @@ if (is_linux && !is_chromeos) {
     deps = [
       ":skia",
       "//base",
+      "//build/config/sanitizers:deps",
     ]
   }
 
@@ -636,6 +722,7 @@ if (is_linux && !is_chromeos) {
       ":skia",
       "//base",
       "//base/test:test_support",
+      "//build/config/sanitizers:deps",
     ]
   }
 }

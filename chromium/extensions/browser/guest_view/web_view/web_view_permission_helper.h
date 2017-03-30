@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_GUEST_VIEW_WEB_VIEW_WEB_VIEW_PERMISSION_HELPER_H_
 #define EXTENSIONS_BROWSER_GUEST_VIEW_WEB_VIEW_WEB_VIEW_PERMISSION_HELPER_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics_action.h"
 #include "components/guest_view/common/guest_view_constants.h"
@@ -87,6 +88,12 @@ class WebViewPermissionHelper
                                     bool user_gesture,
                                     const base::Callback<void(bool)>& callback);
   virtual void CancelGeolocationPermissionRequest(int bridge_id);
+
+  virtual void RequestNotificationPermission(int bridge_id,
+                                    const GURL& requesting_frame,
+                                    bool user_gesture,
+                                    const base::Callback<void(bool)>& callback);
+  virtual void CancelNotificationPermissionRequest(int bridge_id);
 
   virtual void RequestFileSystemPermission(const GURL& url,
                                    bool allowed_by_default,

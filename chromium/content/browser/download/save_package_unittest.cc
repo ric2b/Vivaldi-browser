@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/download/save_package.h"
 #include "content/public/common/url_constants.h"
 #include "content/test/test_render_view_host.h"
@@ -30,11 +35,11 @@ namespace {
 
 // This constant copied from save_package.cc.
 #if defined(OS_WIN)
-const uint32 kMaxFilePathLength = MAX_PATH - 1;
-const uint32 kMaxFileNameLength = MAX_PATH - 1;
+const uint32_t kMaxFilePathLength = MAX_PATH - 1;
+const uint32_t kMaxFileNameLength = MAX_PATH - 1;
 #elif defined(OS_POSIX)
-const uint32 kMaxFilePathLength = PATH_MAX - 1;
-const uint32 kMaxFileNameLength = NAME_MAX;
+const uint32_t kMaxFilePathLength = PATH_MAX - 1;
+const uint32_t kMaxFileNameLength = NAME_MAX;
 #endif
 
 // Used to make long filenames.
@@ -248,7 +253,7 @@ TEST_F(SavePackageTest, MAYBE_TestLongSafePureFilename) {
 #endif
 
   // Test that the filename + extension doesn't exceed kMaxFileNameLength
-  uint32 max_path = SavePackage::GetMaxPathLengthForDirectory(save_dir);
+  uint32_t max_path = SavePackage::GetMaxPathLengthForDirectory(save_dir);
   ASSERT_TRUE(SavePackage::GetSafePureFileName(save_dir, ext, max_path,
                                                &filename));
   EXPECT_TRUE(filename.length() <= kMaxFileNameLength-ext.length());
@@ -325,7 +330,7 @@ TEST_F(SavePackageTest, MAYBE_TestEnsureMimeExtension) {
     { FPL("filename.abc"), FPL("filename.abc"), "unknown/unknown" },
     { FPL("filename"), FPL("filename"), "unknown/unknown" },
   };
-  for (uint32 i = 0; i < arraysize(kExtensionTests); ++i) {
+  for (uint32_t i = 0; i < arraysize(kExtensionTests); ++i) {
     base::FilePath original = base::FilePath(kExtensionTests[i].page_title);
     base::FilePath expected = base::FilePath(kExtensionTests[i].expected_name);
     std::string mime_type(kExtensionTests[i].contents_mime_type);
@@ -408,14 +413,9 @@ TEST_F(SavePackageTest, MAYBE_TestSuggestedSaveNames) {
   }
 }
 
-static const base::FilePath::CharType* kTestDir =
-    FILE_PATH_LITERAL("save_page");
-
 // GetUrlToBeSaved method should return correct url to be saved.
 TEST_F(SavePackageTest, TestGetUrlToBeSaved) {
-  base::FilePath file_name(FILE_PATH_LITERAL("a.htm"));
-  GURL url = net::URLRequestMockHTTPJob::GetMockUrl(
-      base::FilePath(kTestDir).Append(file_name));
+  GURL url = net::URLRequestMockHTTPJob::GetMockUrl("save_page/a.htm");
   NavigateAndCommit(url);
   EXPECT_EQ(url, GetUrlToBeSaved());
 }
@@ -425,13 +425,10 @@ TEST_F(SavePackageTest, TestGetUrlToBeSaved) {
 // Ex:GetUrlToBeSaved method should return http://www.google.com
 // when user types view-source:http://www.google.com
 TEST_F(SavePackageTest, TestGetUrlToBeSavedViewSource) {
-  base::FilePath file_name(FILE_PATH_LITERAL("a.htm"));
-  GURL mock_url = net::URLRequestMockHTTPJob::GetMockUrl(
-      base::FilePath(kTestDir).Append(file_name));
+  GURL mock_url = net::URLRequestMockHTTPJob::GetMockUrl("save_page/a.htm");
   GURL view_source_url =
       GURL(kViewSourceScheme + std::string(":") + mock_url.spec());
-  GURL actual_url = net::URLRequestMockHTTPJob::GetMockUrl(
-      base::FilePath(kTestDir).Append(file_name));
+  GURL actual_url = net::URLRequestMockHTTPJob::GetMockUrl("save_page/a.htm");
   NavigateAndCommit(view_source_url);
   EXPECT_EQ(actual_url, GetUrlToBeSaved());
   EXPECT_EQ(view_source_url, contents()->GetLastCommittedURL());

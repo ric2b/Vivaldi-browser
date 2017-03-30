@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/status/data_promo_notification.h"
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
@@ -86,8 +87,9 @@ class DataPromoNotificationTest : public testing::Test {
  protected:
   void SetupUser() {
     scoped_ptr<FakeChromeUserManager> user_manager(new FakeChromeUserManager());
-    user_manager->AddUser(kTestUserName);
-    user_manager->LoginUser(kTestUserName);
+    const AccountId test_account_id(AccountId::FromUserEmail(kTestUserName));
+    user_manager->AddUser(test_account_id);
+    user_manager->LoginUser(test_account_id);
     user_manager_enabler_.reset(
         new ScopedUserManagerEnabler(user_manager.release()));
 

@@ -5,11 +5,15 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_OPTIONS_CONTENT_SETTINGS_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_OPTIONS_CONTENT_SETTINGS_HANDLER_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/scoped_observer.h"
+#include "base/values.h"
 #include "chrome/browser/pepper_flash_settings_manager.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
 #include "chrome/browser/ui/webui/options/pepper_flash_content_settings_utils.h"
@@ -36,6 +40,8 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
                                public content::NotificationObserver,
                                public PepperFlashSettingsManager::Client {
  public:
+  struct ChooserTypeNameEntry;
+
   ContentSettingsHandler();
   ~ContentSettingsHandler() override;
 
@@ -58,7 +64,7 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
 
   // PepperFlashSettingsManager::Client implementation.
   void OnGetPermissionSettingsCompleted(
-      uint32 request_id,
+      uint32_t request_id,
       bool success,
       PP_Flash_BrowserOperations_Permission default_permission,
       const ppapi::FlashSiteSettings& sites) override;
@@ -69,28 +75,47 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
  private:
   // Used to determine whether we should show links to Flash camera and
   // microphone settings.
-  struct MediaSettingsInfo {
+  class MediaSettingsInfo {
+   public:
     MediaSettingsInfo();
     ~MediaSettingsInfo();
 
     // Cached Pepper Flash settings.
-    ContentSetting flash_default_setting;
-    MediaExceptions flash_exceptions;
-    bool flash_settings_initialized;
-    uint32_t last_flash_refresh_request_id;
+    struct ForFlash {
+      ForFlash();
+      ~ForFlash();
 
-    // Whether the links to Flash settings pages are showed.
-    bool show_flash_default_link;
-    bool show_flash_exceptions_link;
+      ContentSetting default_setting;
+      MediaExceptions exceptions;
+      bool initialized;
+      uint32_t last_refresh_request_id;
+    };
 
-    // Cached Chrome media settings.
-    ContentSetting default_audio_setting;
-    ContentSetting default_video_setting;
-    bool policy_disable_audio;
-    bool policy_disable_video;
-    bool default_settings_initialized;
-    MediaExceptions exceptions;
-    bool exceptions_initialized;
+    struct ForOneType {
+      ForOneType();
+      ~ForOneType();
+
+      // Whether the links to Flash settings pages are showed.
+      bool show_flash_default_link;
+      bool show_flash_exceptions_link;
+
+      // Cached Chrome media settings.
+      ContentSetting default_setting;
+      bool policy_disable;
+      bool default_setting_initialized;
+      MediaExceptions exceptions;
+      bool exceptions_initialized;
+    };
+
+    ForOneType& forType(ContentSettingsType type);
+    ForFlash& forFlash();
+
+   private:
+    ForOneType mic_settings_;
+    ForOneType camera_settings_;
+    ForFlash flash_settings_;
+
+    DISALLOW_COPY_AND_ASSIGN(MediaSettingsInfo);
   };
 
   // Used by ShowFlashMediaLink() to specify which link to show/hide.
@@ -104,8 +129,9 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
   // Updates the page with the default settings (allow, ask, block, etc.)
   void UpdateSettingDefaultFromModel(ContentSettingsType type);
 
-  // Updates the media radio buttons according to the enabled split prefs.
-  void UpdateMediaSettingsView();
+  // Compares the microphone or camera |type| default settings with Flash
+  // and updates the Flash links' visibility accordingly.
+  void UpdateMediaSettingsFromPrefs(ContentSettingsType type);
 
   // Clobbers and rebuilds the specific content setting type exceptions table.
   void UpdateExceptionsViewFromModel(ContentSettingsType type);
@@ -127,11 +153,20 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
   // Clobbers and rebuilds just the desktop notification exception table.
   void UpdateNotificationExceptionsView();
 
-  // Clobbers and rebuilds just the Media device exception table.
-  void UpdateMediaExceptionsView();
+  // Compares the exceptions of the camera or microphone |type| with its Flash
+  // counterparts and updates the Flash links' visibility accordingly.
+  void CompareMediaExceptionsWithFlash(ContentSettingsType type);
 
   // Clobbers and rebuilds just the MIDI SysEx exception table.
   void UpdateMIDISysExExceptionsView();
+
+  // Clobbers and rebuilds all chooser-based exception tables.
+  void UpdateAllChooserExceptionsViewsFromModel();
+
+  // Clobbers and rebuilds the exception table for a particular chooser-based
+  // permission.
+  void UpdateChooserExceptionsViewFromModel(
+      const ChooserTypeNameEntry& chooser_type);
 
   // Modifies the zoom level exceptions list to display correct chrome
   // signin page entry. When the legacy (non-WebView-based) signin page
@@ -161,10 +196,6 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
   // to RemoveException().
   void RemoveNotificationException(const base::ListValue* args);
 
-  // Removes one media camera and microphone exception. |args| contains the
-  // parameters passed to RemoveException().
-  void RemoveMediaException(const base::ListValue* args);
-
   // Removes one exception of |type| from the host content settings map. |args|
   // contains the parameters passed to RemoveException().
   void RemoveExceptionFromHostContentSettingsMap(
@@ -174,6 +205,11 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
   // Removes one zoom level exception. |args| contains the parameters passed to
   // RemoveException().
   void RemoveZoomLevelException(const base::ListValue* args);
+
+  // Removes one exception for a chooser-based permission. |args| contains the
+  // parameters passed to RemoveException().
+  void RemoveChooserException(const ChooserTypeNameEntry* chooser_type,
+                              const base::ListValue* args);
 
   // Callbacks used by the page ------------------------------------------------
 
@@ -213,6 +249,12 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
 
   void RefreshFlashMediaSettings();
 
+  // Returns exceptions constructed from the policy-set allowed URLs
+  // for the content settings |type| mic or camera.
+  void GetPolicyAllowedUrls(
+      ContentSettingsType type,
+      std::vector<scoped_ptr<base::DictionaryValue>>* exceptions);
+
   // Fills in |exceptions| with Values for the given |type| from |map|.
   void GetExceptionsFromHostContentSettingsMap(
       const HostContentSettingsMap* map,
@@ -224,9 +266,12 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
   // content::HostZoomMap subscription.
   void OnZoomLevelChanged(const content::HostZoomMap::ZoomLevelChange& change);
 
-  void ShowFlashMediaLink(LinkType link_type, bool show);
+  void ShowFlashMediaLink(
+      LinkType link_type, ContentSettingsType content_type, bool show);
 
-  void UpdateFlashMediaLinksVisibility();
+  void UpdateFlashMediaLinksVisibility(ContentSettingsType type);
+
+  void UpdateMediaDeviceDropdownVisibility(ContentSettingsType type);
 
   void UpdateProtectedContentExceptionsButton();
 
@@ -235,7 +280,7 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
   content::NotificationRegistrar notification_registrar_;
   PrefChangeRegistrar pref_change_registrar_;
   scoped_ptr<PepperFlashSettingsManager> flash_settings_manager_;
-  MediaSettingsInfo media_settings_;
+  scoped_ptr<MediaSettingsInfo> media_settings_;
   scoped_ptr<content::HostZoomMap::Subscription> host_zoom_map_subscription_;
   scoped_ptr<content::HostZoomMap::Subscription>
       signin_host_zoom_map_subscription_;

@@ -5,14 +5,20 @@
 #ifndef SKIA_EXT_PLATFORM_CANVAS_H_
 #define SKIA_EXT_PLATFORM_CANVAS_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 // The platform-specific device will include the necessary platform headers
 // to get the surface type.
-#include "base/basictypes.h"
-#include "skia/ext/platform_device.h"
+#include "build/build_config.h"
+#include "skia/ext/platform_surface.h"
 #include "skia/ext/refptr.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPixelRef.h"
+#include "third_party/skia/include/core/SkPixmap.h"
+
+class SkBaseDevice;
 
 namespace skia {
 
@@ -116,6 +122,22 @@ SK_API size_t PlatformCanvasStrideForWidth(unsigned width);
 // by the next call to save() or restore().
 SK_API SkBaseDevice* GetTopDevice(const SkCanvas& canvas);
 
+// Copies pixels from the SkCanvas into an SkBitmap, fetching pixels from
+// GPU memory if necessary.
+//
+// The bitmap will remain empty if we can't allocate enough memory for a copy
+// of the pixels.
+SK_API SkBitmap ReadPixels(SkCanvas* canvas);
+
+// Gives the pixmap passed in *writable* access to the pixels backing this
+// canvas. All writes to the pixmap should be visible if the canvas is
+// raster-backed.
+//
+// Returns false on failure: if either argument is nullptr, or if the
+// pixels can not be retrieved from the canvas. In the latter case resets
+// the pixmap to empty.
+SK_API bool GetWritablePixels(SkCanvas* canvas, SkPixmap* pixmap);
+
 // Returns true if native platform routines can be used to draw on the
 // given canvas. If this function returns false, BeginPlatformPaint will
 // return NULL PlatformSurface.
@@ -154,33 +176,18 @@ class SK_API ScopedPlatformPaint {
   ScopedPlatformPaint& operator=(const ScopedPlatformPaint&);
 };
 
-// PlatformBitmap holds a PlatformSurface that can also be used as an SkBitmap.
-class SK_API PlatformBitmap {
- public:
-  PlatformBitmap();
-  ~PlatformBitmap();
+// Following routines are used in print preview workflow to mark the
+// preview metafile.
+SK_API SkMetaData& GetMetaData(const SkCanvas& canvas);
 
-  // Returns true if the bitmap was able to allocate its surface.
-  bool Allocate(int width, int height, bool is_opaque);
+#if defined(OS_MACOSX)
+SK_API void SetIsPreviewMetafile(const SkCanvas& canvas, bool is_preview);
+SK_API bool IsPreviewMetafile(const SkCanvas& canvas);
 
-  // Returns the platform surface, or 0 if Allocate() did not return true.
-  PlatformSurface GetSurface() { return surface_; }
-
-  // Return the skia bitmap, which will be empty if Allocate() did not
-  // return true.
-  //
-  // The resulting SkBitmap holds a refcount on the underlying platform surface,
-  // so the surface will remain allocated so long as the SkBitmap or its copies
-  // stay around.
-  const SkBitmap& GetBitmap() { return bitmap_; }
-
- private:
-  SkBitmap bitmap_;
-  PlatformSurface surface_;  // initialized to 0
-  intptr_t platform_extra_;  // platform specific, initialized to 0
-
-  DISALLOW_COPY_AND_ASSIGN(PlatformBitmap);
-};
+// Returns the CGContext that backing the SkCanvas.
+// Returns NULL if none is bound.
+SK_API CGContextRef GetBitmapContext(const SkCanvas& canvas);
+#endif
 
 }  // namespace skia
 

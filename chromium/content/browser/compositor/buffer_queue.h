@@ -5,9 +5,12 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_BUFFER_QUEUE_H_
 #define CONTENT_BROWSER_COMPOSITOR_BUFFER_QUEUE_H_
 
-#include <queue>
+#include <stddef.h>
+
+#include <deque>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
@@ -16,6 +19,10 @@
 
 namespace cc {
 class ContextProvider;
+}
+
+namespace gfx {
+class GpuMemoryBuffer;
 }
 
 namespace content {
@@ -30,6 +37,7 @@ class GLHelper;
 class CONTENT_EXPORT BufferQueue {
  public:
   BufferQueue(scoped_refptr<cc::ContextProvider> context_provider,
+              unsigned int texture_target,
               unsigned int internalformat,
               GLHelper* gl_helper,
               BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager,
@@ -45,26 +53,32 @@ class CONTENT_EXPORT BufferQueue {
 
   void RecreateBuffers();
 
-  unsigned int current_texture_id() const { return current_surface_.texture; }
+  unsigned int current_texture_id() const {
+    return current_surface_ ? current_surface_->texture : 0;
+  }
   unsigned int fbo() const { return fbo_; }
 
  private:
   friend class BufferQueueTest;
+  friend class AllocatedSurface;
 
-  struct AllocatedSurface {
-    AllocatedSurface() : texture(0), image(0) {}
-    AllocatedSurface(unsigned int texture,
+  struct CONTENT_EXPORT AllocatedSurface {
+    AllocatedSurface(BufferQueue* buffer_queue,
+                     scoped_ptr<gfx::GpuMemoryBuffer> buffer,
+                     unsigned int texture,
                      unsigned int image,
-                     const gfx::Rect& rect)
-        : texture(texture), image(image), damage(rect) {}
-    unsigned int texture;
-    unsigned int image;
+                     const gfx::Rect& rect);
+    ~AllocatedSurface();
+    BufferQueue* const buffer_queue;
+    scoped_ptr<gfx::GpuMemoryBuffer> buffer;
+    const unsigned int texture;
+    const unsigned int image;
     gfx::Rect damage;  // This is the damage for this frame from the previous.
   };
 
   void FreeAllSurfaces();
 
-  void FreeSurface(AllocatedSurface* surface);
+  void FreeSurfaceResources(AllocatedSurface* surface);
 
   // Copy everything that is in |copy_rect|, except for what is in
   // |exclude_rect| from |source_texture| to |texture|.
@@ -76,19 +90,27 @@ class CONTENT_EXPORT BufferQueue {
   void UpdateBufferDamage(const gfx::Rect& damage);
 
   // Return a surface, available to be drawn into.
-  AllocatedSurface GetNextSurface();
+  scoped_ptr<AllocatedSurface> GetNextSurface();
 
-  AllocatedSurface RecreateBuffer(AllocatedSurface* surface);
+  scoped_ptr<AllocatedSurface> RecreateBuffer(
+      scoped_ptr<AllocatedSurface> surface);
 
   gfx::Size size_;
   scoped_refptr<cc::ContextProvider> context_provider_;
   unsigned int fbo_;
   size_t allocated_count_;
-  unsigned int internalformat_;
-  AllocatedSurface current_surface_;  // This surface is currently bound.
-  AllocatedSurface displayed_surface_;  // The surface currently on the screen.
-  std::vector<AllocatedSurface> available_surfaces_;  // These are free for use.
-  std::deque<AllocatedSurface> in_flight_surfaces_;
+  unsigned int texture_target_;
+  unsigned int internal_format_;
+  // This surface is currently bound. This may be nullptr if no surface has
+  // been bound, or if allocation failed at bind.
+  scoped_ptr<AllocatedSurface> current_surface_;
+  // The surface currently on the screen, if any.
+  scoped_ptr<AllocatedSurface> displayed_surface_;
+  // These are free for use, and are not nullptr.
+  std::vector<scoped_ptr<AllocatedSurface>> available_surfaces_;
+  // These have been swapped but are not displayed yet. Entries of this deque
+  // may be nullptr, if they represent frames that have been destroyed.
+  std::deque<scoped_ptr<AllocatedSurface>> in_flight_surfaces_;
   GLHelper* gl_helper_;
   BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager_;
   int surface_id_;

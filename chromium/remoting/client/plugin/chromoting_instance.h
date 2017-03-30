@@ -5,9 +5,12 @@
 #ifndef REMOTING_CLIENT_PLUGIN_CHROMOTING_INSTANCE_H_
 #define REMOTING_CLIENT_PLUGIN_CHROMOTING_INSTANCE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/thread_task_runner_handle.h"
@@ -19,13 +22,12 @@
 #include "ppapi/cpp/var.h"
 #include "remoting/client/client_context.h"
 #include "remoting/client/client_user_interface.h"
+#include "remoting/client/empty_cursor_filter.h"
 #include "remoting/client/key_event_mapper.h"
-#include "remoting/client/plugin/empty_cursor_filter.h"
 #include "remoting/client/plugin/pepper_cursor_setter.h"
 #include "remoting/client/plugin/pepper_input_handler.h"
-#include "remoting/client/plugin/pepper_plugin_thread_delegate.h"
 #include "remoting/client/plugin/pepper_video_renderer.h"
-#include "remoting/client/plugin/touch_input_scaler.h"
+#include "remoting/client/touch_input_scaler.h"
 #include "remoting/proto/event.pb.h"
 #include "remoting/protocol/client_stub.h"
 #include "remoting/protocol/clipboard_stub.h"
@@ -34,6 +36,7 @@
 #include "remoting/protocol/input_event_tracker.h"
 #include "remoting/protocol/mouse_input_filter.h"
 #include "remoting/protocol/negotiating_client_authenticator.h"
+#include "remoting/protocol/performance_tracker.h"
 #include "remoting/protocol/third_party_client_authenticator.h"
 
 namespace base {
@@ -131,7 +134,7 @@ class ChromotingInstance : public ClientUserInterface,
   void OnVideoFirstFrameReceived() override;
   void OnVideoSize(const webrtc::DesktopSize& size,
                       const webrtc::DesktopVector& dpi) override;
-  void OnVideoShape(const webrtc::DesktopRegion& shape) override;
+  void OnVideoShape(const webrtc::DesktopRegion* shape) override;
   void OnVideoFrameDirtyRegion(
       const webrtc::DesktopRegion& dirty_region) override;
 
@@ -164,9 +167,21 @@ class ChromotingInstance : public ClientUserInterface,
       const std::string& scope,
       const base::WeakPtr<TokenFetcherProxy> pepper_token_fetcher);
 
- private:
-  FRIEND_TEST_ALL_PREFIXES(ChromotingInstanceTest, TestCaseSetup);
+  // Updates the specified UMA enumeration histogram with the input value.
+  void UpdateUmaEnumHistogram(const std::string& histogram_name,
+                              int64_t value,
+                              int histogram_max);
 
+  // Updates the specified UMA custom counts or custom times histogram with the
+  // input value.
+  void UpdateUmaCustomHistogram(bool is_custom_counts_histogram,
+                                const std::string& histogram_name,
+                                int64_t value,
+                                int histogram_min,
+                                int histogram_max,
+                                int histogram_buckets);
+
+ private:
   // Used as the |FetchSecretCallback| for IT2Me (or Me2Me from old webapps).
   // Immediately calls |secret_fetched_callback| with |shared_secret|.
   static void FetchSecretFromString(
@@ -185,7 +200,6 @@ class ChromotingInstance : public ClientUserInterface,
   void HandleTrapKey(const base::DictionaryValue& data);
   void HandleSendClipboardItem(const base::DictionaryValue& data);
   void HandleNotifyClientResolution(const base::DictionaryValue& data);
-  void HandlePauseVideo(const base::DictionaryValue& data);
   void HandleVideoControl(const base::DictionaryValue& data);
   void HandlePauseAudio(const base::DictionaryValue& data);
   void HandleOnPinFetched(const base::DictionaryValue& data);
@@ -214,17 +228,12 @@ class ChromotingInstance : public ClientUserInterface,
                              scoped_ptr<base::DictionaryValue> data);
 
   // Posts trapped keys to the web-app to handle.
-  void SendTrappedKey(uint32 usb_keycode, bool pressed);
+  void SendTrappedKey(uint32_t usb_keycode, bool pressed);
 
   // Callback for DelegatingSignalStrategy.
   void SendOutgoingIq(const std::string& iq);
 
-  void SendPerfStats();
-
-  void ProcessLogToUI(const std::string& message);
-
-  // Returns true if the hosting content has the chrome-extension:// scheme.
-  bool IsCallerAppOrExtension();
+  void UpdatePerfStatsInUI();
 
   // Returns true if there is a ConnectionToHost and it is connected.
   bool IsConnected();
@@ -235,16 +244,13 @@ class ChromotingInstance : public ClientUserInterface,
       bool pairing_supported,
       const protocol::SecretFetchedCallback& secret_fetched_callback);
 
-  // Helper to log messages in the JS console in the webapp.
-  void LogToWebapp(const std::string& message);
-
   bool initialized_;
 
-  PepperPluginThreadDelegate plugin_thread_delegate_;
-  scoped_refptr<PluginThreadTaskRunner> plugin_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> plugin_task_runner_;
   scoped_ptr<base::ThreadTaskRunnerHandle> thread_task_runner_handle_;
   scoped_ptr<jingle_glue::JingleThreadWrapper> thread_wrapper_;
   ClientContext context_;
+  protocol::PerformanceTracker perf_tracker_;
   scoped_ptr<PepperVideoRenderer> video_renderer_;
   pp::View plugin_view_;
 
@@ -278,6 +284,12 @@ class ChromotingInstance : public ClientUserInterface,
   protocol::SecretFetchedCallback secret_fetched_callback_;
 
   base::WeakPtr<TokenFetcherProxy> token_fetcher_proxy_;
+
+  base::RepeatingTimer stats_update_timer_;
+
+  base::TimeTicks connection_started_time;
+  base::TimeTicks connection_authenticated_time_;
+  base::TimeTicks connection_connected_time_;
 
   // Weak reference to this instance, used for global logging and task posting.
   base::WeakPtrFactory<ChromotingInstance> weak_factory_;

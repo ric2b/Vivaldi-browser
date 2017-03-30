@@ -8,6 +8,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "chrome/common/extensions/features/feature_channel.h"
+#include "components/version_info/version_info.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
@@ -30,8 +31,8 @@ TEST_F(ExtensionManifestBackgroundTest, BackgroundPermission) {
 
 TEST_F(ExtensionManifestBackgroundTest, BackgroundScripts) {
   std::string error;
-  scoped_ptr<base::DictionaryValue> manifest(
-      LoadManifest("background_scripts.json", &error));
+  scoped_ptr<base::DictionaryValue> manifest =
+      LoadManifest("background_scripts.json", &error);
   ASSERT_TRUE(manifest.get());
 
   scoped_refptr<Extension> extension(
@@ -88,7 +89,7 @@ TEST_F(ExtensionManifestBackgroundTest, BackgroundAllowNoJsAccess) {
 }
 
 TEST_F(ExtensionManifestBackgroundTest, BackgroundPageWebRequest) {
-  ScopedCurrentChannel current_channel(chrome::VersionInfo::CHANNEL_DEV);
+  ScopedCurrentChannel current_channel(version_info::Channel::DEV);
 
   std::string error;
   scoped_ptr<base::DictionaryValue> manifest(

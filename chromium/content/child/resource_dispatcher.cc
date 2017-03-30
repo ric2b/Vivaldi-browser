@@ -6,23 +6,29 @@
 
 #include "content/child/resource_dispatcher.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/debug/stack_trace.h"
 #include "base/files/file_path.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/rand_util.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/request_info.h"
+#include "content/child/resource_scheduling_filter.h"
 #include "content/child/shared_memory_received_data_factory.h"
 #include "content/child/site_isolation_stats_gatherer.h"
 #include "content/child/sync_load_response.h"
 #include "content/child/threaded_data_provider.h"
 #include "content/common/inter_process_time_ticks_converter.h"
+#include "content/common/navigation_params.h"
 #include "content/common/resource_messages.h"
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
@@ -106,10 +112,8 @@ bool ResourceDispatcher::OnMessageReceived(const IPC::Message& message) {
   // Make sure any deferred messages are dispatched before we dispatch more.
   if (!request_info->deferred_message_queue.empty()) {
     FlushDeferredMessages(request_id);
-    // The request could have been deferred now. If yes then the current
-    // message has to be queued up. The request_info instance should remain
-    // valid here as there are pending messages for it.
-    DCHECK(pending_requests_.find(request_id) != pending_requests_.end());
+    request_info = GetPendingRequestInfo(request_id);
+    DCHECK(request_info);
     if (request_info->is_deferred) {
       request_info->deferred_message_queue.push_back(new IPC::Message(message));
       return true;
@@ -122,16 +126,17 @@ bool ResourceDispatcher::OnMessageReceived(const IPC::Message& message) {
 
 ResourceDispatcher::PendingRequestInfo*
 ResourceDispatcher::GetPendingRequestInfo(int request_id) {
-  PendingRequestList::iterator it = pending_requests_.find(request_id);
+  PendingRequestMap::iterator it = pending_requests_.find(request_id);
   if (it == pending_requests_.end()) {
     // This might happen for kill()ed requests on the webkit end.
     return NULL;
   }
-  return &(it->second);
+  return it->second.get();
 }
 
-void ResourceDispatcher::OnUploadProgress(int request_id, int64 position,
-                                          int64 size) {
+void ResourceDispatcher::OnUploadProgress(int request_id,
+                                          int64_t position,
+                                          int64_t size) {
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
   if (!request_info)
     return;
@@ -209,7 +214,19 @@ void ResourceDispatcher::OnSetDataBuffer(int request_id,
     return;
   }
 
+  // TODO(erikchen): Temporary debugging. http://crbug.com/527588.
+  CHECK_GE(shm_size, 0);
+  CHECK_LE(shm_size, 512 * 1024);
   request_info->buffer_size = shm_size;
+}
+
+void ResourceDispatcher::OnReceivedDataDebug(int request_id, int data_offset) {
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (request_info) {
+    CHECK_GE(data_offset, 0);
+    CHECK_LE(data_offset, 512 * 1024);
+    request_info->data_offset = data_offset;
+  }
 }
 
 void ResourceDispatcher::OnReceivedData(int request_id,
@@ -222,6 +239,19 @@ void ResourceDispatcher::OnReceivedData(int request_id,
   bool send_ack = true;
   if (request_info && data_length > 0) {
     CHECK(base::SharedMemory::IsHandleValid(request_info->buffer->handle()));
+
+    // TODO(erikchen): Temporary debugging. http://crbug.com/527588.
+    CHECK_GE(request_info->buffer_size, 0);
+    CHECK_LE(request_info->buffer_size, 512 * 1024);
+    CHECK_GE(data_length, 0);
+    CHECK_LE(data_length, 512 * 1024);
+
+    if (data_offset > 512 * 1024) {
+      int cached_data_offset = request_info->data_offset;
+      base::debug::Alias(&cached_data_offset);
+      CHECK(false);
+    }
+
     CHECK_GE(request_info->buffer_size, data_offset + data_length);
 
     // Ensure that the SHM buffer remains valid for the duration of this scope.
@@ -256,7 +286,7 @@ void ResourceDispatcher::OnReceivedData(int request_id,
           factory->Create(data_offset, data_length, encoded_data_length);
       // |data| takes care of ACKing.
       send_ack = false;
-      request_info->peer->OnReceivedData(data.Pass());
+      request_info->peer->OnReceivedData(std::move(data));
     }
 
     UMA_HISTOGRAM_TIMES("ResourceDispatcher.OnReceivedDataTime",
@@ -306,7 +336,7 @@ void ResourceDispatcher::OnReceivedRedirect(
     request_info->pending_redirect_message.reset(
         new ResourceHostMsg_FollowRedirect(request_id));
     if (!request_info->is_deferred) {
-      FollowPendingRedirect(request_id, *request_info);
+      FollowPendingRedirect(request_id, request_info);
     }
   } else {
     Cancel(request_id);
@@ -315,8 +345,8 @@ void ResourceDispatcher::OnReceivedRedirect(
 
 void ResourceDispatcher::FollowPendingRedirect(
     int request_id,
-    PendingRequestInfo& request_info) {
-  IPC::Message* msg = request_info.pending_redirect_message.release();
+    PendingRequestInfo* request_info) {
+  IPC::Message* msg = request_info->pending_redirect_message.release();
   if (msg)
     message_sender_->Send(msg);
 }
@@ -389,15 +419,15 @@ void ResourceDispatcher::CompletedRequestAfterBackgroundThreadFlush(
 }
 
 bool ResourceDispatcher::RemovePendingRequest(int request_id) {
-  PendingRequestList::iterator it = pending_requests_.find(request_id);
+  PendingRequestMap::iterator it = pending_requests_.find(request_id);
   if (it == pending_requests_.end())
     return false;
 
-  PendingRequestInfo& request_info = it->second;
+  PendingRequestInfo* request_info = it->second.get();
 
-  bool release_downloaded_file = request_info.download_to_file;
+  bool release_downloaded_file = request_info->download_to_file;
 
-  ReleaseResourcesInMessageQueue(&request_info.deferred_message_queue);
+  ReleaseResourcesInMessageQueue(&request_info->deferred_message_queue);
   pending_requests_.erase(it);
 
   if (release_downloaded_file) {
@@ -405,16 +435,41 @@ bool ResourceDispatcher::RemovePendingRequest(int request_id) {
         new ResourceHostMsg_ReleaseDownloadedFile(request_id));
   }
 
+  if (resource_scheduling_filter_.get())
+    resource_scheduling_filter_->ClearRequestIdTaskRunner(request_id);
+
   return true;
 }
 
 void ResourceDispatcher::Cancel(int request_id) {
-  PendingRequestList::iterator it = pending_requests_.find(request_id);
+  PendingRequestMap::iterator it = pending_requests_.find(request_id);
   if (it == pending_requests_.end()) {
     DVLOG(1) << "unknown request";
     return;
   }
 
+  // |completion_time.is_null()| is a proxy for OnRequestComplete never being
+  // called.
+  // TODO(csharrison): Remove this code when crbug.com/557430 is resolved.
+  // ~250,000 ERR_ABORTED coming into canary with |request_time| < 100ms. Sample
+  // by .01% to get something reasonable.
+  const PendingRequestInfo& info = *it->second;
+  int64_t request_time =
+      (base::TimeTicks::Now() - info.request_start).InMilliseconds();
+  if (info.resource_type == ResourceType::RESOURCE_TYPE_MAIN_FRAME &&
+      info.completion_time.is_null() && request_time < 100 &&
+      base::RandDouble() < .0001) {
+    static bool should_dump = true;
+    if (should_dump) {
+      char url_copy[256] = {0};
+      strncpy(url_copy, info.response_url.spec().c_str(),
+              sizeof(url_copy));
+      base::debug::Alias(&url_copy);
+      base::debug::Alias(&request_time);
+      base::debug::DumpWithoutCrashing();
+      should_dump = false;
+    }
+  }
   // Cancel the request, and clean it up so the bridge will receive no more
   // messages.
   message_sender_->Send(new ResourceHostMsg_CancelRequest(request_id));
@@ -422,16 +477,16 @@ void ResourceDispatcher::Cancel(int request_id) {
 }
 
 void ResourceDispatcher::SetDefersLoading(int request_id, bool value) {
-  PendingRequestList::iterator it = pending_requests_.find(request_id);
+  PendingRequestMap::iterator it = pending_requests_.find(request_id);
   if (it == pending_requests_.end()) {
     DLOG(ERROR) << "unknown request";
     return;
   }
-  PendingRequestInfo& request_info = it->second;
+  PendingRequestInfo* request_info = it->second.get();
   if (value) {
-    request_info.is_deferred = value;
-  } else if (request_info.is_deferred) {
-    request_info.is_deferred = false;
+    request_info->is_deferred = value;
+  } else if (request_info->is_deferred) {
+    request_info->is_deferred = false;
 
     FollowPendingRedirect(request_id, request_info);
 
@@ -465,15 +520,6 @@ bool ResourceDispatcher::AttachThreadedDataReceiver(
   return false;
 }
 
-ResourceDispatcher::PendingRequestInfo::PendingRequestInfo()
-    : peer(NULL),
-      threaded_data_provider(NULL),
-      resource_type(RESOURCE_TYPE_SUB_RESOURCE),
-      is_deferred(false),
-      download_to_file(false),
-      buffer_size(0) {
-}
-
 ResourceDispatcher::PendingRequestInfo::PendingRequestInfo(
     RequestPeer* peer,
     ResourceType resource_type,
@@ -482,10 +528,8 @@ ResourceDispatcher::PendingRequestInfo::PendingRequestInfo(
     const GURL& request_url,
     bool download_to_file)
     : peer(peer),
-      threaded_data_provider(NULL),
       resource_type(resource_type),
       origin_pid(origin_pid),
-      is_deferred(false),
       url(request_url),
       frame_origin(frame_origin),
       response_url(request_url),
@@ -506,6 +550,7 @@ void ResourceDispatcher::DispatchMessage(const IPC::Message& message) {
                         OnReceivedCachedMetadata)
     IPC_MESSAGE_HANDLER(ResourceMsg_ReceivedRedirect, OnReceivedRedirect)
     IPC_MESSAGE_HANDLER(ResourceMsg_SetDataBuffer, OnSetDataBuffer)
+    IPC_MESSAGE_HANDLER(ResourceMsg_DataReceivedDebug, OnReceivedDataDebug)
     IPC_MESSAGE_HANDLER(ResourceMsg_DataReceived, OnReceivedData)
     IPC_MESSAGE_HANDLER(ResourceMsg_DataDownloaded, OnDownloadedData)
     IPC_MESSAGE_HANDLER(ResourceMsg_RequestComplete, OnRequestComplete)
@@ -513,16 +558,16 @@ void ResourceDispatcher::DispatchMessage(const IPC::Message& message) {
 }
 
 void ResourceDispatcher::FlushDeferredMessages(int request_id) {
-  PendingRequestList::iterator it = pending_requests_.find(request_id);
+  PendingRequestMap::iterator it = pending_requests_.find(request_id);
   if (it == pending_requests_.end())  // The request could have become invalid.
     return;
-  PendingRequestInfo& request_info = it->second;
-  if (request_info.is_deferred)
+  PendingRequestInfo* request_info = it->second.get();
+  if (request_info->is_deferred)
     return;
   // Because message handlers could result in request_info being destroyed,
   // we need to work with a stack reference to the deferred queue.
   MessageQueue q;
-  q.swap(request_info.deferred_message_queue);
+  q.swap(request_info->deferred_message_queue);
   while (!q.empty()) {
     IPC::Message* m = q.front();
     q.pop_front();
@@ -532,11 +577,11 @@ void ResourceDispatcher::FlushDeferredMessages(int request_id) {
     // we should honor the same and stop dispatching further messages.
     // We need to find the request again in the list as it may have completed
     // by now and the request_info instance above may be invalid.
-    PendingRequestList::iterator index = pending_requests_.find(request_id);
+    PendingRequestMap::iterator index = pending_requests_.find(request_id);
     if (index != pending_requests_.end()) {
-      PendingRequestInfo& pending_request = index->second;
-      if (pending_request.is_deferred) {
-        pending_request.deferred_message_queue.swap(q);
+      PendingRequestInfo* pending_request = index->second.get();
+      if (pending_request->is_deferred) {
+        pending_request->deferred_message_queue.swap(q);
         return;
       }
     }
@@ -583,12 +628,19 @@ int ResourceDispatcher::StartAsync(const RequestInfo& request_info,
   // Compute a unique request_id for this renderer process.
   int request_id = MakeRequestID();
   pending_requests_[request_id] =
-      PendingRequestInfo(peer,
+      make_scoped_ptr(new PendingRequestInfo(peer,
                          request->resource_type,
                          request->origin_pid,
                          frame_origin,
                          request->url,
-                         request_info.download_to_file);
+                         request_info.download_to_file));
+
+  if (resource_scheduling_filter_.get() &&
+      request_info.loading_web_task_runner) {
+    resource_scheduling_filter_->SetRequestIdTaskRunner(
+        request_id,
+        make_scoped_ptr(request_info.loading_web_task_runner->clone()));
+  }
 
   message_sender_->Send(new ResourceHostMsg_RequestResource(
       request_info.routing_id, request_id, *request));
@@ -659,8 +711,8 @@ base::TimeTicks ResourceDispatcher::ToRendererCompletionTime(
   // TimeTicks::Now() returned to WebKit. Is it worth trying to cache that?
   // Until then, |response_start| is used as it is the most recent value
   // returned for this request.
-  int64 result = std::max(browser_completion_time.ToInternalValue(),
-                          request_info.response_start.ToInternalValue());
+  int64_t result = std::max(browser_completion_time.ToInternalValue(),
+                            request_info.response_start.ToInternalValue());
   result = std::min(result, request_info.completion_time.ToInternalValue());
   return base::TimeTicks::FromInternalValue(result);
 }
@@ -682,6 +734,7 @@ bool ResourceDispatcher::IsResourceDispatcherMessage(
     case ResourceMsg_ReceivedCachedMetadata::ID:
     case ResourceMsg_ReceivedRedirect::ID:
     case ResourceMsg_SetDataBuffer::ID:
+    case ResourceMsg_DataReceivedDebug::ID:
     case ResourceMsg_DataReceived::ID:
     case ResourceMsg_DataDownloaded::ID:
     case ResourceMsg_RequestComplete::ID:
@@ -735,6 +788,7 @@ scoped_ptr<ResourceHostMsg_Request> ResourceDispatcher::CreateRequest(
   request->method = request_info.method;
   request->url = request_info.url;
   request->first_party_for_cookies = request_info.first_party_for_cookies;
+  request->request_initiator = request_info.request_initiator;
   request->referrer = request_info.referrer.url;
   request->referrer_policy = request_info.referrer.policy;
   request->headers = request_info.headers;
@@ -750,11 +804,13 @@ scoped_ptr<ResourceHostMsg_Request> ResourceDispatcher::CreateRequest(
   request->should_reset_appcache = request_info.should_reset_appcache;
   request->fetch_request_mode = request_info.fetch_request_mode;
   request->fetch_credentials_mode = request_info.fetch_credentials_mode;
+  request->fetch_redirect_mode = request_info.fetch_redirect_mode;
   request->fetch_request_context_type = request_info.fetch_request_context_type;
   request->fetch_frame_type = request_info.fetch_frame_type;
   request->enable_load_timing = request_info.enable_load_timing;
   request->enable_upload_progress = request_info.enable_upload_progress;
   request->do_not_prompt_for_login = request_info.do_not_prompt_for_login;
+  request->report_raw_headers = request_info.report_raw_headers;
 
   if ((request_info.referrer.policy == blink::WebReferrerPolicyDefault ||
        request_info.referrer.policy ==
@@ -788,10 +844,16 @@ scoped_ptr<ResourceHostMsg_Request> ResourceDispatcher::CreateRequest(
       extra_data->transferred_request_request_id();
   request->service_worker_provider_id =
       extra_data->service_worker_provider_id();
+  request->lofi_state = extra_data->lofi_state();
   request->request_body = request_body;
   if (frame_origin)
     *frame_origin = extra_data->frame_origin();
-  return request.Pass();
+  return request;
+}
+
+void ResourceDispatcher::SetResourceSchedulingFilter(
+    scoped_refptr<ResourceSchedulingFilter> resource_scheduling_filter) {
+  resource_scheduling_filter_ = resource_scheduling_filter;
 }
 
 }  // namespace content

@@ -1,0 +1,100 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Defines fuzzer_test.
+#
+import("//testing/test.gni")
+
+# visible for testing only.
+template("fuzzer_test_launcher") {
+  assert(defined(invoker.fuzzer_name), "need fuzzer_name in $target_name.")
+  assert(defined(invoker.dict), "need dict in $target_name.")
+
+  generated_script = "$root_build_dir/$target_name"
+
+  action(target_name) {
+    script = "//testing/libfuzzer/gen_fuzzer_runner.py"
+    args = [
+      "--fuzzer",
+      invoker.fuzzer_name,
+      "--launcher",
+      rebase_path(generated_script, root_build_dir),
+      "--dict",
+      rebase_path("$target_out_dir/" + invoker.dict, root_build_dir),
+    ]
+    outputs = [
+      generated_script,
+    ]
+  }
+}
+
+# fuzzer_test is used to define individual libfuzzer tests.
+#
+# Supported attributes:
+# - (required) sources - fuzzer test source files
+# - data - test data files.
+# - deps - test dependencies
+# - additional_configs - additional configs to be used for compilation
+# - dict - a dictionary file for the fuzzer.
+#
+# The template wraps test() target with appropriate dependencies.
+# If any test run-time options are present (dict), then a launcher
+# file would be generated with <fuzzer_name>.sh name in root output
+# dir (next to test).
+template("fuzzer_test") {
+  assert(defined(invoker.sources), "Need sources in $target_name.")
+
+  test_deps = [ "//testing/libfuzzer:libfuzzer_main" ]
+
+  if (defined(invoker.deps)) {
+    test_deps += invoker.deps
+  }
+
+  test_data = []
+  if (defined(invoker.data)) {
+    test_data += invoker.data
+  }
+
+  if (defined(invoker.dict)) {
+    fuzzer_name = target_name
+    launcher_name = target_name + ".sh"
+
+    # Copy dictionary to output
+    copy(target_name + "_dict_copy") {
+      sources = [
+        invoker.dict,
+      ]
+      outputs = [
+        "$target_out_dir/{{source_file_part}}",
+      ]
+    }
+
+    fuzzer_test_launcher(launcher_name) {
+      dict = invoker.dict
+    }
+
+    test_deps += [
+      ":$launcher_name",
+      ":" + fuzzer_name + "_dict_copy",
+    ]
+    test_data += [
+      invoker.dict,
+      ":$launcher_name",
+    ]
+  }
+
+  test(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "sources",
+                             "include_dirs",
+                           ])
+    deps = test_deps
+    data = test_data
+
+    if (defined(invoker.additional_configs)) {
+      configs += invoker.additional_configs
+    }
+  }
+}

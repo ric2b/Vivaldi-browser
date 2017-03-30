@@ -4,18 +4,16 @@
 
 package org.chromium.chrome.browser.metrics;
 
-import android.app.Activity;
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.preference.PreferenceManager;
 import android.text.TextUtils;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.privacy.CrashReportingPermissionManager;
 import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
@@ -29,6 +27,8 @@ import org.chromium.net.NetworkChangeNotifier;
  * and the framework's MetricService.
  */
 public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObserver {
+    public static final String LAST_USED_TIME_PREF = "umasessionstats.lastusedtime";
+
     private static final String SAMSUNG_MULTWINDOW_PACKAGE = "com.sec.feature.multiwindow";
 
     private static long sNativeUmaSessionStats = 0;
@@ -144,14 +144,14 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
 
         nativeUmaEndSession(sNativeUmaSessionStats);
         NetworkChangeNotifier.removeConnectionTypeObserver(this);
+        PreferenceManager.getDefaultSharedPreferences(mContext)
+                .edit()
+                .putLong(LAST_USED_TIME_PREF, System.currentTimeMillis())
+                .apply();
     }
 
-    public static void logRendererCrash(Activity activity) {
-        int activityState = ApplicationStatus.getStateForActivity(activity);
-        nativeLogRendererCrash(
-                activityState == ActivityState.PAUSED
-                || activityState == ActivityState.STOPPED
-                || activityState == ActivityState.DESTROYED);
+    public static void logRendererCrash() {
+        nativeLogRendererCrash();
     }
 
     /**
@@ -209,7 +209,7 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
     private native void nativeUpdateMetricsServiceState(boolean mayRecord, boolean mayUpload);
     private native void nativeUmaResumeSession(long nativeUmaSessionStats);
     private native void nativeUmaEndSession(long nativeUmaSessionStats);
-    private static native void nativeLogRendererCrash(boolean isPaused);
+    private static native void nativeLogRendererCrash();
     private static native void nativeRegisterExternalExperiment(int studyId,
                                                                 int experimentId);
     private static native void nativeRegisterSyntheticFieldTrial(

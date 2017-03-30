@@ -4,11 +4,14 @@
 
 #include "ipc/ipc_perftest_support.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/pickle.h"
 #include "base/strings/stringprintf.h"
@@ -67,7 +70,7 @@ class EventTimeTracker {
  private:
   const std::string name_;
 
-  uint64 count_;
+  uint64_t count_;
   base::TimeDelta total_duration_;
   base::TimeDelta max_duration_;
 
@@ -99,7 +102,7 @@ class ChannelReflectorListener : public Listener {
     CHECK(channel_);
 
     base::PickleIterator iter(message);
-    int64 time_internal;
+    int64_t time_internal;
     EXPECT_TRUE(iter.ReadInt64(&time_internal));
     int msgid;
     EXPECT_TRUE(iter.ReadInt(&msgid));
@@ -168,7 +171,7 @@ class PerformanceChannelListener : public Listener {
     CHECK(sender_);
 
     base::PickleIterator iter(message);
-    int64 time_internal;
+    int64_t time_internal;
     EXPECT_TRUE(iter.ReadInt64(&time_internal));
     int msgid;
     EXPECT_TRUE(iter.ReadInt(&msgid));
@@ -328,7 +331,7 @@ PingPongTestClient::~PingPongTestClient() {
 scoped_ptr<Channel> PingPongTestClient::CreateChannel(
     Listener* listener) {
   return Channel::CreateClient(IPCTestBase::GetChannelName("PerformanceClient"),
-                               listener, nullptr);
+                               listener);
 }
 
 int PingPongTestClient::RunMain() {
@@ -348,7 +351,7 @@ scoped_refptr<base::TaskRunner> PingPongTestClient::task_runner() {
 LockThreadAffinity::LockThreadAffinity(int cpu_number)
     : affinity_set_ok_(false) {
 #if defined(OS_WIN)
-  const DWORD_PTR thread_mask = 1 << cpu_number;
+  const DWORD_PTR thread_mask = static_cast<DWORD_PTR>(1) << cpu_number;
   old_affinity_ = SetThreadAffinityMask(GetCurrentThread(), thread_mask);
   affinity_set_ok_ = old_affinity_ != 0;
 #elif defined(OS_LINUX)

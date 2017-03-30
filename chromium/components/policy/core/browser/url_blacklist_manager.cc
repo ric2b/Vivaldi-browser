@@ -4,9 +4,14 @@
 
 #include "components/policy/core/browser/url_blacklist_manager.h"
 
+#include <stdint.h>
+#include <limits>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -62,7 +67,7 @@ scoped_ptr<URLBlacklist> BuildBlacklist(
   scoped_ptr<URLBlacklist> blacklist(new URLBlacklist(segment_url));
   blacklist->Block(block.get());
   blacklist->Allow(allow.get());
-  return blacklist.Pass();
+  return blacklist;
 }
 
 // Tokenise the parameter |query| and add appropriate query element matcher
@@ -137,7 +142,7 @@ struct URLBlacklist::FilterComponents {
 
   std::string scheme;
   std::string host;
-  uint16 port;
+  uint16_t port;
   std::string path;
   std::string query;
   int number_of_key_value_pairs;
@@ -235,7 +240,7 @@ bool URLBlacklist::FilterToComponents(SegmentURLCallback segment_url,
                                       std::string* scheme,
                                       std::string* host,
                                       bool* match_subdomains,
-                                      uint16* port,
+                                      uint16_t* port,
                                       std::string* path,
                                       std::string* query) {
   url::Parsed parsed;
@@ -298,7 +303,7 @@ bool URLBlacklist::FilterToComponents(SegmentURLCallback segment_url,
                            &int_port)) {
       return false;
     }
-    if (int_port <= 0 || int_port > kuint16max)
+    if (int_port <= 0 || int_port > std::numeric_limits<uint16_t>::max())
       return false;
     *port = int_port;
   } else {
@@ -328,7 +333,7 @@ scoped_refptr<URLMatcherConditionSet> URLBlacklist::CreateConditionSet(
     const std::string& scheme,
     const std::string& host,
     bool match_subdomains,
-    uint16 port,
+    uint16_t port,
     const std::string& path,
     const std::string& query,
     bool allow) {
@@ -356,11 +361,9 @@ scoped_refptr<URLMatcherConditionSet> URLBlacklist::CreateConditionSet(
     port_filter.reset(new URLMatcherPortFilter(ranges));
   }
 
-  return new URLMatcherConditionSet(id,
-                                    conditions,
-                                    query_conditions,
-                                    scheme_filter.Pass(),
-                                    port_filter.Pass());
+  return new URLMatcherConditionSet(id, conditions, query_conditions,
+                                    std::move(scheme_filter),
+                                    std::move(port_filter));
 }
 
 // static
@@ -480,7 +483,7 @@ void URLBlacklistManager::UpdateOnIO(scoped_ptr<base::ListValue> block,
 
 void URLBlacklistManager::SetBlacklist(scoped_ptr<URLBlacklist> blacklist) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
-  blacklist_ = blacklist.Pass();
+  blacklist_ = std::move(blacklist);
 }
 
 bool URLBlacklistManager::IsURLBlocked(const GURL& url) const {

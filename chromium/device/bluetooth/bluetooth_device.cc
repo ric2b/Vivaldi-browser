@@ -6,20 +6,25 @@
 
 #include <string>
 
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "device/bluetooth/bluetooth_adapter.h"
+#include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/bluetooth_gatt_service.h"
-#include "grit/device_bluetooth_strings.h"
+#include "grit/bluetooth_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace device {
 
-BluetoothDevice::BluetoothDevice()
-    : services_data_(new base::DictionaryValue()) {}
+BluetoothDevice::BluetoothDevice(BluetoothAdapter* adapter)
+    : adapter_(adapter),
+      gatt_services_discovery_complete_(false),
+      services_data_(new base::DictionaryValue()) {}
 
 BluetoothDevice::~BluetoothDevice() {
-  STLDeleteValues(&gatt_services_);
+  DidDisconnectGatt();
 }
 
 BluetoothDevice::ConnectionInfo::ConnectionInfo()
@@ -92,7 +97,7 @@ base::string16 BluetoothDevice::GetAddressWithLocalizedDeviceTypeName() const {
 
 BluetoothDevice::DeviceType BluetoothDevice::GetDeviceType() const {
   // https://www.bluetooth.org/Technical/AssignedNumbers/baseband.htm
-  uint32 bluetooth_class = GetBluetoothClass();
+  uint32_t bluetooth_class = GetBluetoothClass();
   switch ((bluetooth_class & 0x1f00) >> 8) {
     case 0x01:
       // Computer major device class.
@@ -199,21 +204,37 @@ bool BluetoothDevice::IsTrustable() const {
   return false;
 }
 
+void BluetoothDevice::CreateGattConnection(
+    const GattConnectionCallback& callback,
+    const ConnectErrorCallback& error_callback) {
+  create_gatt_connection_success_callbacks_.push_back(callback);
+  create_gatt_connection_error_callbacks_.push_back(error_callback);
+
+  if (IsGattConnected())
+    return DidConnectGatt();
+
+  CreateGattConnectionImpl();
+}
+
+void BluetoothDevice::SetGattServicesDiscoveryComplete(bool complete) {
+  gatt_services_discovery_complete_ = complete;
+}
+
+bool BluetoothDevice::IsGattServicesDiscoveryComplete() const {
+  return gatt_services_discovery_complete_;
+}
+
 std::vector<BluetoothGattService*>
     BluetoothDevice::GetGattServices() const {
   std::vector<BluetoothGattService*> services;
-  for (GattServiceMap::const_iterator iter = gatt_services_.begin();
-       iter != gatt_services_.end(); ++iter)
-    services.push_back(iter->second);
+  for (const auto& iter : gatt_services_)
+    services.push_back(iter.second);
   return services;
 }
 
 BluetoothGattService* BluetoothDevice::GetGattService(
     const std::string& identifier) const {
-  GattServiceMap::const_iterator iter = gatt_services_.find(identifier);
-  if (iter != gatt_services_.end())
-    return iter->second;
-  return NULL;
+  return gatt_services_.get(identifier);
 }
 
 // static
@@ -272,12 +293,64 @@ BluetoothDevice::UUIDList BluetoothDevice::GetServiceDataUUIDs() const {
   return uuids;
 }
 
+void BluetoothDevice::DidConnectGatt() {
+  for (const auto& callback : create_gatt_connection_success_callbacks_) {
+    callback.Run(
+        make_scoped_ptr(new BluetoothGattConnection(adapter_, GetAddress())));
+  }
+  create_gatt_connection_success_callbacks_.clear();
+  create_gatt_connection_error_callbacks_.clear();
+}
+
+void BluetoothDevice::DidFailToConnectGatt(ConnectErrorCode error) {
+  for (const auto& error_callback : create_gatt_connection_error_callbacks_)
+    error_callback.Run(error);
+  create_gatt_connection_success_callbacks_.clear();
+  create_gatt_connection_error_callbacks_.clear();
+}
+
+void BluetoothDevice::DidDisconnectGatt() {
+  // Pending calls to connect GATT are not expected, if they were then
+  // DidFailToConnectGatt should be called. But in case callbacks exist
+  // flush them to ensure a consistent state.
+  if (create_gatt_connection_error_callbacks_.size() > 0) {
+    VLOG(1) << "Unexpected / unexplained DidDisconnectGatt call while "
+               "create_gatt_connection_error_callbacks_ are pending.";
+  }
+  DidFailToConnectGatt(ERROR_FAILED);
+
+  // Invalidate all BluetoothGattConnection objects.
+  for (BluetoothGattConnection* connection : gatt_connections_) {
+    connection->InvalidateConnectionReference();
+  }
+  gatt_connections_.clear();
+}
+
+void BluetoothDevice::AddGattConnection(BluetoothGattConnection* connection) {
+  auto result = gatt_connections_.insert(connection);
+  DCHECK(result.second);  // Check insert happened; there was no duplicate.
+}
+
+void BluetoothDevice::RemoveGattConnection(
+    BluetoothGattConnection* connection) {
+  size_t erased_count = gatt_connections_.erase(connection);
+  DCHECK(erased_count);
+  if (gatt_connections_.size() == 0)
+    DisconnectGatt();
+}
+
 void BluetoothDevice::ClearServiceData() { services_data_->Clear(); }
 
 void BluetoothDevice::SetServiceData(BluetoothUUID serviceUUID,
                                      const char* buffer, size_t size) {
   services_data_->Set(serviceUUID.value(),
                       base::BinaryValue::CreateWithCopiedBuffer(buffer, size));
+}
+
+void BluetoothDevice::Pair(PairingDelegate* pairing_delegate,
+                           const base::Closure& callback,
+                           const ConnectErrorCallback& error_callback) {
+  NOTREACHED();
 }
 
 }  // namespace device

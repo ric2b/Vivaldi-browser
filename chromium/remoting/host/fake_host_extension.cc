@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "remoting/codec/video_encoder.h"
 #include "remoting/host/host_extension_session.h"
 #include "remoting/proto/control.pb.h"
@@ -92,8 +93,7 @@ scoped_ptr<HostExtensionSession> FakeExtension::CreateExtensionSession(
     protocol::ClientStub* client_stub) {
   DCHECK(!was_instantiated());
   was_instantiated_ = true;
-  scoped_ptr<HostExtensionSession> session(new Session(this, message_type_));
-  return session.Pass();
+  return make_scoped_ptr(new Session(this, message_type_));
 }
 
 } // namespace remoting

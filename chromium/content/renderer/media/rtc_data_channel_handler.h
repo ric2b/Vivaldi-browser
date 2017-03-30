@@ -5,14 +5,17 @@
 #ifndef CONTENT_RENDERER_MEDIA_RTC_DATA_CHANNEL_HANDLER_H_
 #define CONTENT_RENDERER_MEDIA_RTC_DATA_CHANNEL_HANDLER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
-#include "third_party/libjingle/source/talk/app/webrtc/peerconnectioninterface.h"
 #include "third_party/WebKit/public/platform/WebRTCDataChannelHandler.h"
 #include "third_party/WebKit/public/platform/WebRTCDataChannelHandlerClient.h"
+#include "third_party/libjingle/source/talk/app/webrtc/peerconnectioninterface.h"
 
 namespace content {
 
@@ -60,6 +63,7 @@ class CONTENT_EXPORT RtcDataChannelHandler
 
  private:
   void OnStateChange(webrtc::DataChannelInterface::DataState state);
+  void OnBufferedAmountDecrease(unsigned previous_amount);
   void OnMessage(scoped_ptr<webrtc::DataBuffer> buffer);
   void RecordMessageSent(size_t num_bytes);
 
@@ -86,9 +90,11 @@ class CONTENT_EXPORT RtcDataChannelHandler
 
     // webrtc::DataChannelObserver implementation.
     void OnStateChange() override;
+    void OnBufferedAmountChange(uint64_t previous_amount) override;
     void OnMessage(const webrtc::DataBuffer& buffer) override;
 
     void OnStateChangeImpl(webrtc::DataChannelInterface::DataState state);
+    void OnBufferedAmountDecreaseImpl(unsigned previous_amount);
     void OnMessageImpl(scoped_ptr<webrtc::DataBuffer> buffer);
 
     RtcDataChannelHandler* handler_;

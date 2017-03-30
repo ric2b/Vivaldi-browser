@@ -8,6 +8,7 @@
 #include <deque>
 #include <map>
 
+#include "base/macros.h"
 #include "content/browser/service_worker/service_worker_register_job.h"
 #include "content/browser/service_worker/service_worker_unregister_job.h"
 #include "content/common/content_export.h"
@@ -37,6 +38,12 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
       const ServiceWorkerUnregisterJob::UnregistrationCallback& callback);
 
   void Update(ServiceWorkerRegistration* registration, bool force_bypass_cache);
+
+  void Update(ServiceWorkerRegistration* registration,
+              bool force_bypass_cache,
+              bool skip_script_comparison,
+              ServiceWorkerProviderHost* provider_host,
+              const ServiceWorkerRegisterJob::RegistrationCallback& callback);
 
   // Calls ServiceWorkerRegisterJobBase::Abort() on all jobs and removes them.
   void AbortAll();

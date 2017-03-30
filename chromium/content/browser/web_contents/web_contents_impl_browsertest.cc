@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -18,6 +20,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_paths.h"
+#include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -26,6 +29,7 @@
 #include "content/shell/browser/shell.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 namespace content {
 
@@ -141,7 +145,7 @@ class RenderViewSizeObserver : public WebContentsObserver {
 
   // WebContentsObserver:
   void RenderViewCreated(RenderViewHost* rvh) override {
-    rwhv_create_size_ = rvh->GetView()->GetViewBounds().size();
+    rwhv_create_size_ = rvh->GetWidget()->GetView()->GetViewBounds().size();
   }
 
   void DidStartProvisionalLoadForFrame(
@@ -195,7 +199,7 @@ class LoadingStateChangedDelegate : public WebContentsDelegate {
 // Test that DidStopLoading includes the correct URL in the details.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        MAYBE_DidStopLoadingDetails) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   LoadStopNotificationObserver load_observer(
       &shell()->web_contents()->GetController());
@@ -209,8 +213,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 }
 
 // See: http://crbug.com/298193
-// TODO(vivaldi) Reenable Mac for Vivaldi
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX)
 #define MAYBE_DidStopLoadingDetailsWithPending \
   DISABLED_DidStopLoadingDetailsWithPending
 #else
@@ -221,7 +224,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 // pending entry is present.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        MAYBE_DidStopLoadingDetailsWithPending) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL url("data:text/html,<div>test</div>");
 
   // Listen for the first load to stop.
@@ -247,7 +250,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 // See http://crbug.com/280512.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        ClearNonVisiblePendingOnFail) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html"));
 
@@ -279,12 +282,10 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 // WebContentsDelegate::GetSizeForNewRenderView().
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        MAYBE_GetSizeForNewRenderView) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   // Create a new server with a different site.
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS,
-      net::SpawnedTestServer::kLocalhost,
-      base::FilePath(FILE_PATH_LITERAL("content/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.ServeFilesFromSourceDirectory("content/test/data");
   ASSERT_TRUE(https_server.Start());
 
   scoped_ptr<RenderViewSizeDelegate> delegate(new RenderViewSizeDelegate());
@@ -347,11 +348,36 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_EQ(new_size, shell()->web_contents()->GetContainerBounds().size());
 }
 
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, SetTitleOnUnload) {
+  GURL url(
+      "data:text/html,"
+      "<title>A</title>"
+      "<body onunload=\"document.title = 'B'\"></body>");
+  NavigateToURL(shell(), url);
+  ASSERT_EQ(1, shell()->web_contents()->GetController().GetEntryCount());
+  NavigationEntryImpl* entry1 = NavigationEntryImpl::FromNavigationEntry(
+      shell()->web_contents()->GetController().GetLastCommittedEntry());
+  SiteInstance* site_instance1 = entry1->site_instance();
+  EXPECT_EQ(base::ASCIIToUTF16("A"), entry1->GetTitle());
+
+  // Force a process switch by going to a privileged page.
+  GURL web_ui_page(std::string(kChromeUIScheme) + "://" +
+                   std::string(kChromeUIGpuHost));
+  NavigateToURL(shell(), web_ui_page);
+  NavigationEntryImpl* entry2 = NavigationEntryImpl::FromNavigationEntry(
+      shell()->web_contents()->GetController().GetLastCommittedEntry());
+  SiteInstance* site_instance2 = entry2->site_instance();
+  EXPECT_NE(site_instance1, site_instance2);
+
+  EXPECT_EQ(2, shell()->web_contents()->GetController().GetEntryCount());
+  EXPECT_EQ(base::ASCIIToUTF16("B"), entry1->GetTitle());
+}
+
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, OpenURLSubframe) {
   // Navigate to a page with frames and grab a subframe's FrameTreeNode ID.
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   NavigateToURL(shell(),
-                test_server()->GetURL("files/frame_tree/top.html"));
+                embedded_test_server()->GetURL("/frame_tree/top.html"));
   WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* root = wc->GetFrameTree()->root();
   ASSERT_EQ(3UL, root->child_count());
@@ -359,7 +385,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, OpenURLSubframe) {
   EXPECT_NE(-1, frame_tree_node_id);
 
   // Navigate with the subframe's FrameTreeNode ID.
-  const GURL url(test_server()->GetURL("files/title1.html"));
+  const GURL url(embedded_test_server()->GetURL("/title1.html"));
   OpenURLParams params(url, Referrer(), frame_tree_node_id, CURRENT_TAB,
                        ui::PAGE_TRANSITION_LINK, true);
   shell()->web_contents()->OpenURL(params);
@@ -418,14 +444,14 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   // Setup the server to allow serving separate sites, so we can perform
   // cross-process navigation.
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
-  foo_host_port = test_server()->host_port_pair();
+  foo_host_port = embedded_test_server()->host_port_pair();
   foo_host_port.set_host(kFooCom);
 
-  GURL initial_url(test_server()->GetURL("/title1.html"));
+  GURL initial_url(embedded_test_server()->GetURL("/title1.html"));
 
-  cross_site_url = test_server()->GetURL("/title2.html");
+  cross_site_url = embedded_test_server()->GetURL("/title2.html");
   replace_host.SetHostStr(kFooCom);
   cross_site_url = cross_site_url.ReplaceComponents(replace_host);
 
@@ -446,7 +472,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        LoadingStateChangedForSameDocumentNavigation) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   scoped_ptr<LoadingStateChangedDelegate> delegate(
       new LoadingStateChangedDelegate());
   shell()->web_contents()->SetDelegate(delegate.get());
@@ -471,7 +497,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        RenderViewCreatedForChildWindow) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   NavigateToURL(shell(),
                 embedded_test_server()->GetURL("/title1.html"));
@@ -525,7 +551,7 @@ struct LoadProgressDelegateAndObserver : public WebContentsDelegate,
 };
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, LoadProgress) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   scoped_ptr<LoadProgressDelegateAndObserver> delegate(
       new LoadProgressDelegateAndObserver(shell()));
 
@@ -547,7 +573,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, LoadProgress) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, LoadProgressWithFrames) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   scoped_ptr<LoadProgressDelegateAndObserver> delegate(
       new LoadProgressDelegateAndObserver(shell()));
 
@@ -574,7 +600,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, LoadProgressWithFrames) {
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        LoadProgressAfterInterruptedNav) {
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // Start at a real page.
   NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html"));
@@ -638,7 +664,7 @@ struct FirstVisuallyNonEmptyPaintObserver : public WebContentsObserver {
 #endif
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        MAYBE_FirstVisuallyNonEmptyPaint) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   scoped_ptr<FirstVisuallyNonEmptyPaintObserver> observer(
       new FirstVisuallyNonEmptyPaintObserver(shell()));
 
@@ -667,7 +693,7 @@ class WebDisplayModeDelegate : public WebContentsDelegate {
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ChangeDisplayMode) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   WebDisplayModeDelegate delegate(blink::WebDisplayModeMinimalUi);
   shell()->web_contents()->SetDelegate(&delegate);
 
@@ -681,7 +707,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ChangeDisplayMode) {
 
   delegate.set_mode(blink::WebDisplayModeFullscreen);
   // Simulate widget is entering fullscreen (changing size is enough).
-  shell()->web_contents()->GetRenderViewHost()->WasResized();
+  shell()->web_contents()->GetRenderViewHost()->GetWidget()->WasResized();
 
   ASSERT_TRUE(ExecuteScript(shell()->web_contents(),
                             "document.title = "
@@ -690,8 +716,62 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ChangeDisplayMode) {
   EXPECT_EQ(base::ASCIIToUTF16("true"), shell()->web_contents()->GetTitle());
 }
 
+// Observer class used to verify that WebContentsObservers are notified
+// when the page scale factor changes.
+// See WebContentsImplBrowserTest.ChangePageScale.
+class MockPageScaleObserver : public WebContentsObserver {
+ public:
+  MockPageScaleObserver(Shell* shell)
+      : WebContentsObserver(shell->web_contents()),
+        got_page_scale_update_(false) {
+    // Once OnPageScaleFactorChanged is called, quit the run loop.
+    ON_CALL(*this, OnPageScaleFactorChanged(::testing::_)).WillByDefault(
+        ::testing::InvokeWithoutArgs(
+            this, &MockPageScaleObserver::GotPageScaleUpdate));
+  }
+
+  MOCK_METHOD1(OnPageScaleFactorChanged, void(float page_scale_factor));
+
+  void WaitForPageScaleUpdate() {
+    if (!got_page_scale_update_) {
+      base::RunLoop run_loop;
+      on_page_scale_update_ = run_loop.QuitClosure();
+      run_loop.Run();
+    }
+    got_page_scale_update_ = false;
+  }
+
+ private:
+  void GotPageScaleUpdate() {
+    got_page_scale_update_ = true;
+    on_page_scale_update_.Run();
+  }
+
+  base::Closure on_page_scale_update_;
+  bool got_page_scale_update_;
+};
+
+// When the page scale factor is set in the renderer it should send
+// a notification to the browser so that WebContentsObservers are notified.
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ChangePageScale) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html"));
+
+  MockPageScaleObserver observer(shell());
+  ::testing::InSequence expect_call_sequence;
+
+  shell()->web_contents()->SetPageScale(1.5);
+  EXPECT_CALL(observer, OnPageScaleFactorChanged(::testing::FloatEq(1.5)));
+  observer.WaitForPageScaleUpdate();
+
+  // Navigate to reset the page scale factor.
+  shell()->LoadURL(embedded_test_server()->GetURL("/title2.html"));
+  EXPECT_CALL(observer, OnPageScaleFactorChanged(::testing::_));
+  observer.WaitForPageScaleUpdate();
+}
+
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, NewNamedWindow) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url = embedded_test_server()->GetURL("/click-noreferrer-links.html");
   EXPECT_TRUE(NavigateToURL(shell(), url));

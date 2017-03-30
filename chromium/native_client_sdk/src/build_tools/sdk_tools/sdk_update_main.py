@@ -5,11 +5,11 @@
 
 # CMD code copied from git_cl.py in depot_tools.
 
+import argparse
 import config
 import cStringIO
 import download
 import logging
-import optparse
 import os
 import re
 import sdk_update_common
@@ -37,8 +37,8 @@ REVISION = '{REVISION}'
 GSTORE_URL = 'https://storage.googleapis.com/nativeclient-mirror'
 CONFIG_FILENAME = 'naclsdk_config.json'
 MANIFEST_FILENAME = 'naclsdk_manifest2.json'
-DEFAULT_SDK_ROOT = os.path.abspath(PARENT_DIR)
-USER_DATA_DIR = os.path.join(DEFAULT_SDK_ROOT, 'sdk_cache')
+SDK_ROOT = PARENT_DIR
+USER_DATA_DIR = os.path.join(SDK_ROOT, 'sdk_cache')
 
 
 def usage(more):
@@ -115,6 +115,7 @@ def LoadLocalManifest(raise_on_error=False):
       raise
     else:
       logging.warn(str(e))
+
   return manifest
 
 
@@ -166,32 +167,48 @@ def LoadCombinedRemoteManifest(default_manifest_url, cfg):
   return manifest
 
 
+def PruneLocalManifest(local_manifest, remote_manifest):
+  """Remove SDKs from the local manifest that don't exist remotely and
+  are not installed locally.
+
+  Without this the local manifest will grown unboundedly.
+  """
+  local_only_bundles = set([b.name for b in local_manifest.GetBundles()])
+  local_only_bundles -= set([b.name for b in remote_manifest.GetBundles()])
+  dirty = False
+  for bundle in local_only_bundles:
+    root = os.path.join(SDK_ROOT, bundle)
+    if not os.path.exists(root):
+      local_manifest.RemoveBundle(bundle)
+      dirty = True
+
+  if dirty:
+    WriteLocalManifest(local_manifest)
+
+
 # Commands #####################################################################
 
 
 @usage('<bundle names...>')
 def CMDinfo(parser, args):
   """display information about a bundle"""
-  options, args = parser.parse_args(args)
-  if not args:
-    parser.error('No bundles given')
-    return 0
+  parser.add_argument('bundles', nargs='+')
+  options = parser.parse_args(args)
   cfg = LoadConfig()
   remote_manifest = LoadCombinedRemoteManifest(options.manifest_url, cfg)
-  command.info.Info(remote_manifest, args)
+  command.info.Info(remote_manifest, options.bundles)
   return 0
 
 
 def CMDlist(parser, args):
   """list all available bundles"""
-  parser.add_option('-r', '--revision', action='store_true',
+  parser.add_argument('-r', '--revision', action='store_true',
                     help='display revision numbers')
-  options, args = parser.parse_args(args)
-  if args:
-    parser.error('Unsupported argument(s): %s' % ', '.join(args))
+  options = parser.parse_args(args)
   local_manifest = LoadLocalManifest()
   cfg = LoadConfig()
   remote_manifest = LoadCombinedRemoteManifest(options.manifest_url, cfg)
+  PruneLocalManifest(local_manifest, remote_manifest)
   command.list.List(remote_manifest, local_manifest, options.revision)
   return 0
 
@@ -199,22 +216,23 @@ def CMDlist(parser, args):
 @usage('<bundle names...>')
 def CMDupdate(parser, args):
   """update a bundle in the SDK to the latest version"""
-  parser.add_option('-F', '--force', action='store_true',
+  parser.add_argument('-F', '--force', action='store_true',
       help='Force updating bundles that already exist. The bundle will not be '
           'updated if the local revision matches the remote revision.')
-  options, args = parser.parse_args(args)
+  parser.add_argument('bundles', nargs='*',
+                      help='bundles to update',
+                      default=[command.update.RECOMMENDED])
+  options = parser.parse_args(args)
   local_manifest = LoadLocalManifest()
   cfg = LoadConfig()
   remote_manifest = LoadCombinedRemoteManifest(options.manifest_url, cfg)
 
-  if not args:
-    args = [command.update.RECOMMENDED]
+  PruneLocalManifest(local_manifest, remote_manifest)
 
   try:
-    delegate = command.update.RealUpdateDelegate(USER_DATA_DIR,
-                                                 DEFAULT_SDK_ROOT, cfg)
-    command.update.Update(delegate, remote_manifest, local_manifest, args,
-                          options.force)
+    delegate = command.update.RealUpdateDelegate(USER_DATA_DIR, SDK_ROOT, cfg)
+    command.update.Update(delegate, remote_manifest, local_manifest,
+                          options.bundles, options.force)
   finally:
     # Always write out the local manifest, we may have successfully updated one
     # or more bundles before failing.
@@ -238,12 +256,10 @@ def CMDinstall(parser, args):
 @usage('<bundle names...>')
 def CMDuninstall(parser, args):
   """uninstall the given bundles"""
-  _, args = parser.parse_args(args)
-  if not args:
-    parser.error('No bundles given')
-    return 0
+  parser.add_argument('bundles', nargs='+', help='bundles to uninstall')
+  options = parser.parse_args(args)
   local_manifest = LoadLocalManifest()
-  command.uninstall.Uninstall(DEFAULT_SDK_ROOT, local_manifest, args)
+  command.uninstall.Uninstall(SDK_ROOT, local_manifest, options.bundles)
   WriteLocalManifest(local_manifest)
   return 0
 
@@ -255,18 +271,14 @@ def CMDreinstall(parser, args):
   Note that if there is an update to a given bundle, reinstall will not
   automatically update to the newest version.
   """
-  _, args = parser.parse_args(args)
+  parser.add_argument('bundles', nargs='+')
+  options = parser.parse_args(args)
   local_manifest = LoadLocalManifest()
-
-  if not args:
-    parser.error('No bundles given')
-    return 0
 
   cfg = LoadConfig()
   try:
-    delegate = command.update.RealUpdateDelegate(USER_DATA_DIR,
-                                                 DEFAULT_SDK_ROOT, cfg)
-    command.update.Reinstall(delegate, local_manifest, args)
+    delegate = command.update.RealUpdateDelegate(USER_DATA_DIR, SDK_ROOT, cfg)
+    command.update.Reinstall(delegate, local_manifest, options.bundles)
   finally:
     # Always write out the local manifest, we may have successfully updated one
     # or more bundles before failing.
@@ -282,14 +294,14 @@ def CMDreinstall(parser, args):
 
 def CMDsources(parser, args):
   """manage external package sources"""
-  parser.add_option('-a', '--add', dest='url_to_add',
+  parser.add_argument('-a', '--add', dest='url_to_add',
                     help='Add an additional package source')
-  parser.add_option(
+  parser.add_argument(
       '-r', '--remove', dest='url_to_remove',
       help='Remove package source (use \'all\' for all additional sources)')
-  parser.add_option('-l', '--list', dest='do_list', action='store_true',
+  parser.add_argument('-l', '--list', dest='do_list', action='store_true',
                     help='List additional package sources')
-  options, args = parser.parse_args(args)
+  options = parser.parse_args(args)
 
   cfg = LoadConfig(True)
   write_config = False
@@ -312,16 +324,17 @@ def CMDsources(parser, args):
 
 def CMDversion(parser, args):
   """display version information"""
-  _, _ = parser.parse_args(args)
+  parser.parse_args(args)
   print "Native Client SDK Updater, version r%s" % REVISION
   return 0
 
 
 def CMDhelp(parser, args):
   """print list of commands or help for a specific command"""
-  _, args = parser.parse_args(args)
-  if len(args) == 1:
-    return main(args + ['--help'])
+  parser.add_argument('command', nargs='?', help=argparse.SUPPRESS)
+  options = parser.parse_args(args)
+  if options.command:
+    return main(options.command + ['--help'])
   parser.print_help()
   return 0
 
@@ -339,7 +352,7 @@ def GenUsage(parser, cmd):
   else:
     # OptParser.description prefer nicely non-formatted strings.
     parser.description = re.sub('[\r\n ]{2,}', ' ', obj.__doc__)
-  parser.set_usage('usage: %%prog %s [options] %s' % (cmd, more))
+  parser.usage = '%%(prog)s %s [options] %s' % (cmd, more)
 
 
 def UpdateSDKTools(options, args):
@@ -350,8 +363,7 @@ def UpdateSDKTools(options, args):
   remote_manifest = LoadCombinedRemoteManifest(options.manifest_url, cfg)
 
   try:
-    delegate = command.update.RealUpdateDelegate(USER_DATA_DIR,
-                                                 DEFAULT_SDK_ROOT, cfg)
+    delegate = command.update.RealUpdateDelegate(USER_DATA_DIR, SDK_ROOT, cfg)
     command.update.UpdateBundleIfNeeded(
         delegate,
         remote_manifest,
@@ -376,19 +388,19 @@ def main(argv):
       for fn in cmds]))
 
   # Create the option parse and add --verbose support.
-  parser = optparse.OptionParser()
-  parser.add_option(
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument(
       '-v', '--verbose', action='count', default=0,
       help='Use 2 times for more debugging info')
-  parser.add_option('-U', '--manifest-url', dest='manifest_url',
+  parser.add_argument('-U', '--manifest-url', dest='manifest_url',
       default=GSTORE_URL + '/nacl/nacl_sdk/' + MANIFEST_FILENAME,
       metavar='URL', help='override the default URL for the NaCl manifest file')
-  parser.add_option('--update-sdk-tools', action='store_true',
-                    dest='update_sdk_tools', help=optparse.SUPPRESS_HELP)
+  parser.add_argument('--update-sdk-tools', action='store_true',
+      dest='update_sdk_tools', help=argparse.SUPPRESS)
 
   old_parser_args = parser.parse_args
   def Parse(args):
-    options, args = old_parser_args(args)
+    options = old_parser_args(args)
     if options.verbose >= 2:
       loglevel = logging.DEBUG
     elif options.verbose:
@@ -396,15 +408,15 @@ def main(argv):
     else:
       loglevel = logging.WARNING
 
-    fmt = '%(levelname)s:%(message)s'
-    logging.basicConfig(stream=sys.stdout, level=loglevel, format=fmt)
+    logging.basicConfig(stream=sys.stdout, level=loglevel,
+                        format='%(levelname)s:%(message)s')
 
     # If --update-sdk-tools is passed, circumvent any other command running.
     if options.update_sdk_tools:
       UpdateSDKTools(options, args)
       sys.exit(1)
 
-    return options, args
+    return options
   parser.parse_args = Parse
 
   if argv:

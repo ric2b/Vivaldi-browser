@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_UI_COCOA_AUTOFILL_AUTOFILL_DIALOG_VIEW_TESTER_COCOA_H_
 #define CHROME_BROWSER_UI_COCOA_AUTOFILL_AUTOFILL_DIALOG_VIEW_TESTER_COCOA_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/autofill/autofill_dialog_view_tester.h"
 
 @class AutofillDialogWindowController;
@@ -29,8 +29,6 @@ class AutofillDialogViewTesterCocoa: public AutofillDialogViewTester {
                                         const base::string16& text) override;
   void ActivateInput(ServerFieldType type) override;
   gfx::Size GetSize() const override;
-  content::WebContents* GetSignInWebContents() override;
-  bool IsShowingOverlay() const override;
   bool IsShowingSection(DialogSection section) const override;
 
  private:

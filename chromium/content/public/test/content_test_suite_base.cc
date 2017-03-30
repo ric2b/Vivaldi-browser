@@ -4,12 +4,13 @@
 
 #include "content/public/test/content_test_suite_base.h"
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/test/test_suite.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/common/url_schemes.h"
 #include "content/gpu/in_process_gpu_thread.h"
@@ -32,13 +33,17 @@
 #include "base/android/jni_android.h"
 #include "content/browser/android/browser_jni_registrar.h"
 #include "content/common/android/common_jni_registrar.h"
-#include "content/public/browser/android/compositor.h"
 #include "media/base/android/media_jni_registrar.h"
 #include "net/android/net_jni_registrar.h"
 #include "ui/android/ui_android_jni_registrar.h"
 #include "ui/base/android/ui_base_jni_registrar.h"
+#include "ui/events/android/events_jni_registrar.h"
 #include "ui/gfx/android/gfx_jni_registrar.h"
 #include "ui/gl/android/gl_jni_registrar.h"
+#endif
+
+#if defined(OS_ANDROID) && !defined(USE_AURA)
+#include "content/public/browser/android/compositor.h"
 #include "ui/shell_dialogs/android/shell_dialogs_jni_registrar.h"
 #endif
 
@@ -86,11 +91,13 @@ void ContentTestSuiteBase::Initialize() {
   media::RegisterJni(env);
   net::android::RegisterJni(env);
   ui::android::RegisterJni(env);
-  ui::RegisterUIAndroidJni(env);
   ui::gl::android::RegisterJni(env);
+  ui::events::android::RegisterJni(env);
+#if !defined(USE_AURA)
+  ui::RegisterUIAndroidJni(env);
   ui::shell_dialogs::RegisterJni(env);
-
   content::Compositor::Initialize();
+#endif
 #endif
 
 #if defined(USE_OZONE)

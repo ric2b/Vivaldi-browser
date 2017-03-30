@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/channel_manager.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_manager.h"
 
 #include "base/callback.h"
 #include "base/message_loop/message_loop.h"
@@ -10,13 +10,13 @@
 #include "base/task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/simple_thread.h"
-#include "mojo/edk/embedder/platform_channel_pair.h"
-#include "mojo/edk/embedder/simple_platform_support.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/channel_endpoint.h"
-#include "mojo/edk/system/message_pipe_dispatcher.h"
 #include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_channel_pair.h"
+#include "third_party/mojo/src/mojo/edk/embedder/simple_platform_support.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_dispatcher.h"
 
 namespace mojo {
 namespace system {
@@ -29,7 +29,9 @@ class ChannelManagerTest : public testing::Test {
         channel_manager_(&platform_support_,
                          message_loop_.task_runner(),
                          nullptr) {}
-  ~ChannelManagerTest() override {}
+  ~ChannelManagerTest() override {
+    channel_manager_.ShutdownOnIOThread();
+  }
 
  protected:
   ChannelManager& channel_manager() { return channel_manager_; }
@@ -167,6 +169,9 @@ TEST_F(ChannelManagerTest, CallsFromOtherThread) {
 
   EXPECT_EQ(MOJO_RESULT_OK, d->Close());
 }
+
+// TODO(vtl): Test |CreateChannelWithoutBootstrapOnIOThread()|. (This will
+// require additional functionality in |Channel|.)
 
 }  // namespace
 }  // namespace system

@@ -3,9 +3,11 @@
 // found in the LICENSE file.
 
 #include "base/json/json_file_value_serializer.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_icon_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
@@ -35,7 +37,7 @@ class ExtensionIconManagerTest : public testing::Test {
   void ImageLoadObserved() {
     unwaited_image_loads_++;
     if (waiting_) {
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
     }
   }
 
@@ -109,9 +111,8 @@ TEST_F(ExtensionIconManagerTest, LoadRemoveLoad) {
       "extensions/image_loading_tracker/app.json");
 
   JSONFileValueDeserializer deserializer(manifest_path);
-  scoped_ptr<base::DictionaryValue> manifest(
-      static_cast<base::DictionaryValue*>(deserializer.Deserialize(NULL,
-                                                                   NULL)));
+  scoped_ptr<base::DictionaryValue> manifest =
+      base::DictionaryValue::From(deserializer.Deserialize(NULL, NULL));
   ASSERT_TRUE(manifest.get() != NULL);
 
   std::string error;
@@ -152,9 +153,8 @@ TEST_F(ExtensionIconManagerTest, LoadComponentExtensionResource) {
       "extensions/file_manager/app.json");
 
   JSONFileValueDeserializer deserializer(manifest_path);
-  scoped_ptr<base::DictionaryValue> manifest(
-      static_cast<base::DictionaryValue*>(deserializer.Deserialize(NULL,
-                                                                   NULL)));
+  scoped_ptr<base::DictionaryValue> manifest =
+      base::DictionaryValue::From(deserializer.Deserialize(NULL, NULL));
   ASSERT_TRUE(manifest.get() != NULL);
 
   std::string error;

@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -185,11 +187,9 @@ class LanguageDictionaryWebUITest : public InProcessBrowserTest {
 // overlay.
 // editDictionary overlay doesn't exist on OSX so disable it there.
 #if !defined(OS_MACOSX)
-// tomas@vivaldi.com - disabled test
-// VB-7272
 
 // Crashes on Win 7. http://crbug.com/500609
-#if 1 || defined(OS_WIN)
+#if defined(OS_WIN)
 #define MAYBE_TestListKeyboardFocus DISABLED_TestListKeyboardFocus
 #else
 #define MAYBE_TestListKeyboardFocus TestListKeyboardFocus

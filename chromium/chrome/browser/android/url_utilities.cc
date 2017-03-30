@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "components/google/core/browser/google_util.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/elide_url.h"
+#include "components/url_formatter/url_fixer.h"
 #include "jni/UrlUtilities_jni.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
@@ -28,9 +31,9 @@ net::registry_controlled_domains::PrivateRegistryFilter GetRegistryFilter(
 }  // namespace
 
 static jboolean SameDomainOrHost(JNIEnv* env,
-                                 jclass clazz,
-                                 jstring url_1_str,
-                                 jstring url_2_str,
+                                 const JavaParamRef<jclass>& clazz,
+                                 const JavaParamRef<jstring>& url_1_str,
+                                 const JavaParamRef<jstring>& url_2_str,
                                  jboolean include_private) {
   GURL url_1 = ConvertJavaStringToGURL(env, url_1_str);
   GURL url_2 = ConvertJavaStringToGURL(env, url_2_str);
@@ -43,52 +46,84 @@ static jboolean SameDomainOrHost(JNIEnv* env,
                                                             filter);
 }
 
-static jstring GetDomainAndRegistry(JNIEnv* env,
-                                    jclass clazz,
-                                    jstring url,
-                                    jboolean include_private) {
+static jboolean SameHost(JNIEnv* env,
+                         const JavaParamRef<jclass>& clazz,
+                         const JavaParamRef<jstring>& url_1_str,
+                         const JavaParamRef<jstring>& url_2_str) {
+  GURL url_1 = ConvertJavaStringToGURL(env, url_1_str);
+  GURL url_2 = ConvertJavaStringToGURL(env, url_2_str);
+  return url_1.host() == url_2.host();
+}
+
+static ScopedJavaLocalRef<jstring> GetDomainAndRegistry(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& url,
+    jboolean include_private) {
   DCHECK(url);
   GURL gurl = ConvertJavaStringToGURL(env, url);
   if (gurl.is_empty())
-    return nullptr;
+    return ScopedJavaLocalRef<jstring>();
 
   net::registry_controlled_domains::PrivateRegistryFilter filter =
       GetRegistryFilter(include_private);
 
-  // OK to release, JNI binding.
   return base::android::ConvertUTF8ToJavaString(
-      env, net::registry_controlled_domains::GetDomainAndRegistry(
-          gurl, filter)).Release();
+      env,
+      net::registry_controlled_domains::GetDomainAndRegistry(gurl, filter));
 }
 
-static jboolean IsGoogleSearchUrl(JNIEnv* env, jclass clazz, jstring url) {
+static jboolean IsGoogleSearchUrl(JNIEnv* env,
+                                  const JavaParamRef<jclass>& clazz,
+                                  const JavaParamRef<jstring>& url) {
   GURL gurl = ConvertJavaStringToGURL(env, url);
   if (gurl.is_empty())
     return false;
   return google_util::IsGoogleSearchUrl(gurl);
 }
 
-static jboolean IsGoogleHomePageUrl(JNIEnv* env, jclass clazz, jstring url) {
+static ScopedJavaLocalRef<jstring> FormatUrlForSecurityDisplay(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& url) {
+  return base::android::ConvertUTF16ToJavaString(
+      env, url_formatter::FormatUrlForSecurityDisplay(
+               ConvertJavaStringToGURL(env, url), std::string()));
+}
+
+static ScopedJavaLocalRef<jstring> FormatUrlForSecurityDisplayOmitScheme(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& url) {
+  return base::android::ConvertUTF16ToJavaString(
+      env, url_formatter::FormatUrlForSecurityDisplayOmitScheme(
+               ConvertJavaStringToGURL(env, url), std::string()));
+}
+
+static jboolean IsGoogleHomePageUrl(JNIEnv* env,
+                                    const JavaParamRef<jclass>& clazz,
+                                    const JavaParamRef<jstring>& url) {
   GURL gurl = ConvertJavaStringToGURL(env, url);
   if (gurl.is_empty())
     return false;
   return google_util::IsGoogleHomePageUrl(gurl);
 }
 
-static jstring FixupUrl(JNIEnv* env,
-                        jclass clazz,
-                        jstring url,
-                        jstring optional_desired_tld) {
+static ScopedJavaLocalRef<jstring> FixupUrl(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& url,
+    const JavaParamRef<jstring>& optional_desired_tld) {
   DCHECK(url);
-  GURL fixed_url = url_fixer::FixupURL(
+  GURL fixed_url = url_formatter::FixupURL(
       base::android::ConvertJavaStringToUTF8(env, url),
       optional_desired_tld
           ? base::android::ConvertJavaStringToUTF8(env, optional_desired_tld)
           : std::string());
 
-  return fixed_url.is_valid() ?
-      base::android::ConvertUTF8ToJavaString(env, fixed_url.spec()).Release() :
-      nullptr;
+  return fixed_url.is_valid()
+             ? base::android::ConvertUTF8ToJavaString(env, fixed_url.spec())
+             : ScopedJavaLocalRef<jstring>();
 }
 
 // Register native methods

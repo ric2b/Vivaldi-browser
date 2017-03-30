@@ -4,6 +4,8 @@
 
 #include "cc/layers/solid_color_scrollbar_layer_impl.h"
 
+#include <stddef.h>
+
 #include "cc/test/layer_test_common.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -31,9 +33,9 @@ TEST(SolidColorScrollbarLayerImplTest, Occlusion) {
           is_overlay);
   scrollbar_layer_impl->SetBounds(layer_size);
   scrollbar_layer_impl->SetDrawsContent(true);
-  scrollbar_layer_impl->SetCurrentPos(100.f / 4);
-  scrollbar_layer_impl->SetMaximum(100);
-  scrollbar_layer_impl->SetVisibleToTotalLengthRatio(1.f / 2);
+  scrollbar_layer_impl->SetCurrentPos(25.f);
+  scrollbar_layer_impl->SetClipLayerLength(100.f);
+  scrollbar_layer_impl->SetScrollLayerLength(200.f);
   // SolidColorScrollbarLayers construct with opacity = 0.f, so override.
   scrollbar_layer_impl->SetOpacity(1.f);
 

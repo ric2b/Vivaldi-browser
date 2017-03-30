@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/storage_monitor/storage_monitor.h"
@@ -101,13 +104,7 @@ class SystemStorageApiTest : public extensions::ShellApiTest {
   scoped_ptr<base::MessageLoop> message_loop_;
 };
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_Storage DISABLED_Storage
-#else
-#define MAYBE_Storage Storage
-#endif
-IN_PROC_BROWSER_TEST_F(SystemStorageApiTest, MAYBE_Storage) {
+IN_PROC_BROWSER_TEST_F(SystemStorageApiTest, Storage) {
   SetUpAllMockStorageDevices();
   TestStorageInfoProvider* provider =
       new TestStorageInfoProvider(kTestingData, arraysize(kTestingData));

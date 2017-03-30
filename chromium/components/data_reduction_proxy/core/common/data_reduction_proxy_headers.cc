@@ -4,6 +4,9 @@
 
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -13,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 
@@ -26,6 +30,8 @@ const char kChromeProxyHeader[] = "chrome-proxy";
 const char kActionValueDelimiter = '=';
 
 const char kChromeProxyLoFiDirective[] = "q=low";
+const char kChromeProxyLoFiPreviewDirective[] = "q=preview";
+const char kChromeProxyLoFiExperimentDirective[] = "exp=lofi_active_control";
 
 const char kChromeProxyActionBlockOnce[] = "block-once";
 const char kChromeProxyActionBlock[] = "block";
@@ -42,7 +48,7 @@ const int kMediumBypassMaxSeconds = 300;
 
 // Returns a random bypass duration between 1 and 5 minutes.
 base::TimeDelta GetDefaultBypassDuration() {
-  const int64 delta_ms =
+  const int64_t delta_ms =
       base::RandInt(base::TimeDelta::FromMinutes(1).InMilliseconds(),
                     base::TimeDelta::FromMinutes(5).InMilliseconds());
   return TimeDelta::FromMilliseconds(delta_ms);
@@ -60,6 +66,14 @@ const char* chrome_proxy_lo_fi_directive() {
   return kChromeProxyLoFiDirective;
 }
 
+const char* chrome_proxy_lo_fi_preview_directive() {
+  return kChromeProxyLoFiPreviewDirective;
+}
+
+const char* chrome_proxy_lo_fi_experiment_directive() {
+  return kChromeProxyLoFiExperimentDirective;
+}
+
 bool GetDataReductionProxyActionValue(
     const net::HttpResponseHeaders* headers,
     const std::string& action_prefix,
@@ -74,8 +88,8 @@ bool GetDataReductionProxyActionValue(
 
   while (headers->EnumerateHeader(&iter, kChromeProxyHeader, &value)) {
     if (value.size() > prefix.size()) {
-      if (base::LowerCaseEqualsASCII(
-              value.begin(), value.begin() + prefix.size(), prefix.c_str())) {
+      if (base::StartsWith(value, prefix,
+                           base::CompareCase::INSENSITIVE_ASCII)) {
         if (action_value)
           *action_value = value.substr(prefix.size());
         return true;
@@ -98,9 +112,9 @@ bool ParseHeadersAndSetBypassDuration(const net::HttpResponseHeaders* headers,
 
   while (headers->EnumerateHeader(&iter, kChromeProxyHeader, &value)) {
     if (value.size() > prefix.size()) {
-      if (base::LowerCaseEqualsASCII(
-              value.begin(), value.begin() + prefix.size(), prefix.c_str())) {
-        int64 seconds;
+      if (base::StartsWith(value, prefix,
+                           base::CompareCase::INSENSITIVE_ASCII)) {
+        int64_t seconds;
         if (!base::StringToInt64(
                 StringPiece(value.begin() + prefix.size(), value.end()),
                 &seconds) || seconds < 0) {
@@ -250,7 +264,11 @@ DataReductionProxyBypassType GetDataReductionProxyBypassType(
       data_reduction_proxy_info->bypass_duration = TimeDelta::FromSeconds(1);
       return BYPASS_EVENT_TYPE_MISSING_VIA_HEADER_4XX;
     }
-    return BYPASS_EVENT_TYPE_MISSING_VIA_HEADER_OTHER;
+
+    // Missing the via header should not trigger bypass if the client is
+    // included in the tamper detection experiment.
+    if (!params::IsIncludedInTamperDetectionExperiment())
+      return BYPASS_EVENT_TYPE_MISSING_VIA_HEADER_OTHER;
   }
   // There is no bypass event.
   return BYPASS_EVENT_TYPE_MAX;
@@ -303,10 +321,8 @@ void GetDataReductionProxyHeaderWithFingerprintRemoved(
   void* iter = NULL;
   while (headers->EnumerateHeader(&iter, kChromeProxyHeader, &value)) {
     if (value.size() > chrome_proxy_fingerprint_prefix.size()) {
-      if (base::LowerCaseEqualsASCII(
-              value.begin(),
-              value.begin() + chrome_proxy_fingerprint_prefix.size(),
-              chrome_proxy_fingerprint_prefix.c_str())) {
+      if (base::StartsWith(value, chrome_proxy_fingerprint_prefix,
+                           base::CompareCase::INSENSITIVE_ASCII)) {
         continue;
       }
     }

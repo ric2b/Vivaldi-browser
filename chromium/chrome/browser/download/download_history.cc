@@ -28,6 +28,9 @@
 
 #include "chrome/browser/download/download_history.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "chrome/browser/download/download_crx_util.h"
 #include "components/history/content/browser/download_constants_utils.h"
@@ -192,7 +195,7 @@ void DownloadHistory::HistoryAdapter::UpdateDownload(
 }
 
 void DownloadHistory::HistoryAdapter::RemoveDownloads(
-    const std::set<uint32>& ids) {
+    const std::set<uint32_t>& ids) {
   history_->RemoveDownloads(ids);
 }
 
@@ -207,11 +210,11 @@ bool DownloadHistory::IsPersisted(const content::DownloadItem* item) {
 
 DownloadHistory::DownloadHistory(content::DownloadManager* manager,
                                  scoped_ptr<HistoryAdapter> history)
-  : notifier_(manager, this),
-    history_(history.Pass()),
-    loading_id_(content::DownloadItem::kInvalidId),
-    history_size_(0),
-    weak_ptr_factory_(this) {
+    : notifier_(manager, this),
+      history_(std::move(history)),
+      loading_id_(content::DownloadItem::kInvalidId),
+      history_size_(0),
+      weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::DownloadManager::DownloadVector items;
   notifier_.GetManager()->GetAllDownloads(&items);
@@ -295,7 +298,7 @@ void DownloadHistory::QueryCallback(scoped_ptr<InfoVector> infos) {
 void DownloadHistory::MaybeAddToHistory(content::DownloadItem* item) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  uint32 download_id = item->GetId();
+  uint32_t download_id = item->GetId();
   DownloadHistoryData* data = DownloadHistoryData::Get(item);
   bool removing = removing_ids_.find(download_id) != removing_ids_.end();
 
@@ -321,7 +324,7 @@ void DownloadHistory::MaybeAddToHistory(content::DownloadItem* item) {
       item, *data->info()));
 }
 
-void DownloadHistory::ItemAdded(uint32 download_id, bool success) {
+void DownloadHistory::ItemAdded(uint32_t download_id, bool success) {
   if (removed_while_adding_.find(download_id) !=
       removed_while_adding_.end()) {
     removed_while_adding_.erase(download_id);
@@ -444,7 +447,7 @@ void DownloadHistory::OnDownloadRemoved(
   --history_size_;
 }
 
-void DownloadHistory::ScheduleRemoveDownload(uint32 download_id) {
+void DownloadHistory::ScheduleRemoveDownload(uint32_t download_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // For database efficiency, batch removals together if they happen all at

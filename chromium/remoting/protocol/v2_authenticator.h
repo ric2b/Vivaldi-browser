@@ -5,11 +5,12 @@
 #ifndef REMOTING_PROTOCOL_V2_AUTHENTICATOR_H_
 #define REMOTING_PROTOCOL_V2_AUTHENTICATOR_H_
 
-#include <string>
 #include <queue>
+#include <string>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "crypto/p224_spake.h"
 #include "remoting/protocol/authenticator.h"
@@ -43,6 +44,7 @@ class V2Authenticator : public Authenticator {
   void ProcessMessage(const buzz::XmlElement* message,
                       const base::Closure& resume_callback) override;
   scoped_ptr<buzz::XmlElement> GetNextMessage() override;
+  const std::string& GetAuthKey() const override;
   scoped_ptr<ChannelAuthenticator> CreateChannelAuthenticator() const override;
 
  private:

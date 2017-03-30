@@ -12,7 +12,7 @@
   var DROPDOWN_OUTER_PADDING = 2;
 
   /** Minimum height of toolbar dropdowns (px). */
-  var MIN_DROPDOWN_HEIGHT = 300;
+  var MIN_DROPDOWN_HEIGHT = 200;
 
   Polymer({
     is: 'viewer-toolbar-dropdown',
@@ -30,6 +30,7 @@
       /** True if the dropdown is currently open. */
       dropdownOpen: {
         type: Boolean,
+        reflectToAttribute: true,
         value: false
       },
 
@@ -69,12 +70,9 @@
     toggleDropdown: function() {
       this.dropdownOpen = !this.dropdownOpen;
       if (this.dropdownOpen) {
-        this.$.icon.classList.add('open');
         this.$.dropdown.style.display = 'block';
         if (!this.maxHeightValid_)
           this.updateMaxHeight();
-      } else {
-        this.$.icon.classList.remove('open');
       }
       this.cancelAnimation_();
       this.playAnimation_(this.dropdownOpen);
@@ -102,9 +100,9 @@
      * @private
      */
     playAnimation_: function(isEntry) {
-      this._animation = isEntry ? this.animateEntry_() : this.animateExit_();
-      this._animation.onfinish = function() {
-        this._animation = null;
+      this.animation_ = isEntry ? this.animateEntry_() : this.animateExit_();
+      this.animation_.onfinish = function() {
+        this.animation_ = null;
         if (!this.dropdownOpen)
           this.$.dropdown.style.display = 'none';
       }.bind(this);
@@ -113,6 +111,9 @@
     animateEntry_: function() {
       var maxHeight = this.$.dropdown.getBoundingClientRect().height -
           DROPDOWN_OUTER_PADDING;
+
+      if (maxHeight < 0)
+        maxHeight = 0;
 
       var fade = new KeyframeEffect(this.$.dropdown, [
             {opacity: 0},

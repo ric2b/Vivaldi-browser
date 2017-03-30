@@ -6,26 +6,22 @@
 
 #include "base/location.h"
 #include "base/thread_task_runner_handle.h"
+#include "base/trace_event/trace_event.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
 
 namespace ui {
 
-GlRenderer::GlRenderer(gfx::AcceleratedWidget widget, const gfx::Size& size)
-    : RendererBase(widget, size), weak_ptr_factory_(this) {
-}
+GlRenderer::GlRenderer(gfx::AcceleratedWidget widget,
+                       const scoped_refptr<gfx::GLSurface>& surface,
+                       const gfx::Size& size)
+    : RendererBase(widget, size), surface_(surface), weak_ptr_factory_(this) {}
 
 GlRenderer::~GlRenderer() {
 }
 
 bool GlRenderer::Initialize() {
-  surface_ = CreateSurface();
-  if (!surface_.get()) {
-    LOG(ERROR) << "Failed to create GL surface";
-    return false;
-  }
-
   context_ = gfx::GLContext::CreateGLContext(NULL, surface_.get(),
                                              gfx::PreferIntegratedGpu);
   if (!context_.get()) {
@@ -33,7 +29,7 @@ bool GlRenderer::Initialize() {
     return false;
   }
 
-  surface_->Resize(size_);
+  surface_->Resize(size_, 1.f, true);
 
   if (!context_->MakeCurrent(surface_.get())) {
     LOG(ERROR) << "Failed to make GL context current";
@@ -45,6 +41,8 @@ bool GlRenderer::Initialize() {
 }
 
 void GlRenderer::RenderFrame() {
+  TRACE_EVENT0("ozone", "GlRenderer::RenderFrame");
+
   float fraction = NextFraction();
 
   context_->MakeCurrent(surface_.get());
@@ -53,19 +51,14 @@ void GlRenderer::RenderFrame() {
   glClearColor(1 - fraction, fraction, 0.0, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  if (!surface_->SwapBuffersAsync(base::Bind(&GlRenderer::PostRenderFrameTask,
-                                             weak_ptr_factory_.GetWeakPtr())))
-    LOG(FATAL) << "Failed to swap buffers";
+  surface_->SwapBuffersAsync(base::Bind(&GlRenderer::PostRenderFrameTask,
+                                        weak_ptr_factory_.GetWeakPtr()));
 }
 
 void GlRenderer::PostRenderFrameTask(gfx::SwapResult result) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&GlRenderer::RenderFrame, weak_ptr_factory_.GetWeakPtr()));
-}
-
-scoped_refptr<gfx::GLSurface> GlRenderer::CreateSurface() {
-  return gfx::GLSurface::CreateViewGLSurface(widget_);
 }
 
 }  // namespace ui

@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/navigation_controller.h"
@@ -48,7 +49,7 @@ class NewTabPageInterceptorTest : public InProcessBrowserTest {
   void ChangeDefaultSearchProvider(const char* new_tab_path) {
     TemplateURLService* template_url_service =
         TemplateURLServiceFactory::GetForProfile(browser()->profile());
-    ui_test_utils::WaitForTemplateURLServiceToLoad(template_url_service);
+    search_test_utils::WaitForTemplateURLServiceToLoad(template_url_service);
     UIThreadSearchTermsData::SetGoogleBaseURL("https://mock.http/");
     std::string base_url("{google:baseURL}");
     TemplateURLData data;
@@ -62,17 +63,14 @@ class NewTabPageInterceptorTest : public InProcessBrowserTest {
     template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
   }
 
-  static GURL GetMockURL(const base::FilePath::StringType& path) {
-    return net::URLRequestMockHTTPJob::GetMockHttpsUrl(base::FilePath(path));
-  }
-
  private:
   GURL new_tab_url_;
   base::FilePath path_;
 };
 
 IN_PROC_BROWSER_TEST_F(NewTabPageInterceptorTest, NoInterception) {
-  set_new_tab_url(GetMockURL(FILE_PATH_LITERAL("instant_extended.html")));
+  set_new_tab_url(
+      net::URLRequestMockHTTPJob::GetMockHttpsUrl("instant_extended.html"));
   ChangeDefaultSearchProvider("instant_extended.html");
 
   ui_test_utils::NavigateToURL(browser(), new_tab_url());
@@ -84,7 +82,7 @@ IN_PROC_BROWSER_TEST_F(NewTabPageInterceptorTest, NoInterception) {
 }
 
 IN_PROC_BROWSER_TEST_F(NewTabPageInterceptorTest, 404Interception) {
-  set_new_tab_url(GetMockURL(FILE_PATH_LITERAL("page404.html")));
+  set_new_tab_url(net::URLRequestMockHTTPJob::GetMockHttpsUrl("page404.html"));
   ChangeDefaultSearchProvider("page404.html");
 
   ui_test_utils::NavigateToURL(browser(), new_tab_url());
@@ -97,7 +95,7 @@ IN_PROC_BROWSER_TEST_F(NewTabPageInterceptorTest, 404Interception) {
 }
 
 IN_PROC_BROWSER_TEST_F(NewTabPageInterceptorTest, 204Interception) {
-  set_new_tab_url(GetMockURL(FILE_PATH_LITERAL("page204.html")));
+  set_new_tab_url(net::URLRequestMockHTTPJob::GetMockHttpsUrl("page204.html"));
   ChangeDefaultSearchProvider("page204.html");
 
   ui_test_utils::NavigateToURL(browser(), new_tab_url());
@@ -110,7 +108,8 @@ IN_PROC_BROWSER_TEST_F(NewTabPageInterceptorTest, 204Interception) {
 }
 
 IN_PROC_BROWSER_TEST_F(NewTabPageInterceptorTest, FailedRequestInterception) {
-  set_new_tab_url(GetMockURL(FILE_PATH_LITERAL("notarealfile.html")));
+  set_new_tab_url(
+      net::URLRequestMockHTTPJob::GetMockHttpsUrl("notarealfile.html"));
   ChangeDefaultSearchProvider("notarealfile.html");
 
   ui_test_utils::NavigateToURL(browser(), new_tab_url());

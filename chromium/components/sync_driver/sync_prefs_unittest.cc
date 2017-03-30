@@ -4,6 +4,10 @@
 
 #include "components/sync_driver/sync_prefs.h"
 
+#include <stdint.h>
+
+#include <map>
+
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_notifier_impl.h"
@@ -235,6 +239,25 @@ TEST_F(SyncPrefsTest, DeviceInfo) {
   sync_prefs.SetKeepEverythingSynced(false);
   EXPECT_TRUE(sync_prefs.GetPreferredDataTypes(syncer::UserTypes())
                   .Has(syncer::DEVICE_INFO));
+}
+
+// Verify that invalidation versions are persisted and loaded correctly.
+TEST_F(SyncPrefsTest, InvalidationVersions) {
+  std::map<syncer::ModelType, int64_t> versions;
+  versions[syncer::BOOKMARKS] = 10;
+  versions[syncer::SESSIONS] = 20;
+  versions[syncer::PREFERENCES] = 30;
+
+  SyncPrefs sync_prefs(&pref_service_);
+  sync_prefs.UpdateInvalidationVersions(versions);
+
+  std::map<syncer::ModelType, int64_t> versions2;
+  sync_prefs.GetInvalidationVersions(&versions2);
+
+  EXPECT_EQ(versions.size(), versions2.size());
+  for (auto map_iter : versions2) {
+    EXPECT_EQ(versions[map_iter.first], map_iter.second);
+  }
 }
 
 }  // namespace

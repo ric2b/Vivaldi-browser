@@ -9,59 +9,70 @@ import android.text.TextUtils;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.SysUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.components.variations.VariationsAssociatedData;
-
-import java.util.Arrays;
-import java.util.Locale;
 
 /**
  * Provides Field Trial support for the Contextual Search application within Chrome for Android.
  */
 public class ContextualSearchFieldTrial {
     private static final String FIELD_TRIAL_NAME = "ContextualSearch";
-    private static final String ENABLED_PARAM = "enabled";
+    private static final String DISABLED_PARAM = "disabled";
     private static final String ENABLED_VALUE = "true";
 
-    private static final String DISABLE_FOR_CJK = "disable_for_cjk";
-    private static final String DISABLE_FOR_CHINESE = "disable_for_chinese";
-    private static final String DISABLE_FOR_JAPANESE = "disable_for_japanese";
-    private static final String DISABLE_FOR_KOREAN = "disable_for_korean";
+    private static final String PEEK_PROMO_FORCED = "peek_promo_forced";
+    @VisibleForTesting
+    static final String PEEK_PROMO_ENABLED = "peek_promo_enabled";
+    private static final String PEEK_PROMO_MAX_SHOW_COUNT = "peek_promo_max_show_count";
+    private static final int PEEK_PROMO_DEFAULT_MAX_SHOW_COUNT = 10;
 
-    // TODO(pedrosimonetti): Confirm if we can delete promo_on_longpress_only now.
-    private static final String PROMO_ON_LONGPRESS_ONLY = "promo_on_longpress_only";
-    static final String PROMO_ON_LIMITED_TAPS = "promo_on_limited_taps";
-    static final String TAP_TRIGGERED_PROMO_LIMIT = "tap_triggered_promo_limit";
-    static final String TAP_RESOLVE_LIMIT_FOR_DECIDED = "tap_resolve_limit_for_decided";
-    static final String TAP_PREFETCH_LIMIT_FOR_DECIDED = "tap_prefetch_limit_for_decided";
-    static final String TAP_RESOLVE_LIMIT_FOR_UNDECIDED = "tap_resolve_limit_for_undecided";
-    static final String TAP_PREFETCH_LIMIT_FOR_UNDECIDED = "tap_prefetch_limit_for_undecided";
+    private static final String DISABLE_SEARCH_TERM_RESOLUTION = "disable_search_term_resolution";
+    private static final String DISABLE_EXTRA_SEARCH_BAR_ANIMATIONS =
+            "disable_extra_search_bar_animations";
+    private static final String ENABLE_DIGIT_BLACKLIST = "enable_digit_blacklist";
 
-    static final String ARROW_ICON_ENABLED = "contextual_search_arrow_icon_enabled";
-    static final String SIDE_SEARCH_PROVIDER_ICON_ENABLED =
-            "contextual_search_side_search_provider_icon_enabled";
+    // Translation.  All these members are private, except for usage by testing.
+    // Master switch, needed to enable any translate code for Contextual Search.
+    @VisibleForTesting
+    static final String ENABLE_TRANSLATION = "enable_translation";
+    // Switch to disable translation, but not logging, used for experiment comparison.
+    @VisibleForTesting
+    static final String DISABLE_FORCE_TRANSLATION_ONEBOX = "disable_force_translation_onebox";
+    // Disables translation when we need to auto-detect the source language (when we don't resolve).
+    @VisibleForTesting
+    static final String DISABLE_AUTO_DETECT_TRANSLATION_ONEBOX =
+            "disable_auto_detect_translation_onebox";
+    // Disables using the keyboard languages to determine the target language.
+    private static final String DISABLE_KEYBOARD_LANGUAGES_FOR_TRANSLATION =
+            "disable_keyboard_languages_for_translation";
+    // Disables using the accept-languages list to determine the target language.
+    private static final String DISABLE_ACCEPT_LANGUAGES_FOR_TRANSLATION =
+            "disable_accept_languages_for_translation";
+    // Enables usage of English as the target language even when it's the primary UI language.
+    private static final String ENABLE_ENGLISH_TARGET_TRANSLATION =
+            "enable_english_target_translation";
+    // Enables relying on the server to control whether the onebox is actually shown, rather
+    // than checking if translation is needed client-side based on source/target languages.
+    @VisibleForTesting
+    static final String ENABLE_SERVER_CONTROLLED_ONEBOX = "enable_server_controlled_onebox";
 
-    private static final String CHINESE_LANGUAGE_CODE = "zh";
-    private static final String JAPANESE_LANGUAGE_CODE = "ja";
-    private static final String KOREAN_LANGUAGE_CODE = "ko";
-    private static final String[] CJK_LANGUAGE_CODES = {CHINESE_LANGUAGE_CODE,
-        JAPANESE_LANGUAGE_CODE, KOREAN_LANGUAGE_CODE};
+    // Quick Answers.
+    private static final String ENABLE_QUICK_ANSWERS = "enable_quick_answers";
 
-    // The default navigation-detection-delay in milliseconds.
-    private static final int DEFAULT_TAP_NAVIGATION_DETECTION_DELAY = 16;
-    private static final String NAVIGATION_DETECTION_DELAY = "tap_navigation_detection_delay";
-
-    private static final int UNLIMITED_TAPS = -1;
-    private static final int DEFAULT_TAP_RESOLVE_LIMIT_FOR_DECIDED = UNLIMITED_TAPS;
-    private static final int DEFAULT_TAP_PREFETCH_LIMIT_FOR_DECIDED = UNLIMITED_TAPS;
-    private static final int DEFAULT_TAP_RESOLVE_LIMIT_FOR_UNDECIDED = 100;
-    private static final int DEFAULT_TAP_PREFETCH_LIMIT_FOR_UNDECIDED = 10;
-
-    // Cached value to avoid repeated and redundant JNI operations.
+    // Cached values to avoid repeated and redundant JNI operations.
     private static Boolean sEnabled;
-    private static Boolean sArrowIconEnabled;
-    private static Boolean sSideSearchProviderIconEnabled;
+    private static Boolean sDisableSearchTermResolution;
+    private static Boolean sIsPeekPromoEnabled;
+    private static Integer sPeekPromoMaxCount;
+    private static Boolean sIsTranslationEnabled;
+    private static Boolean sIsForceTranslationOneboxDisabled;
+    private static Boolean sIsAutoDetectTranslationOneboxDisabled;
+    private static Boolean sIsAcceptLanguagesForTranslationDisabled;
+    private static Boolean sIsKeyboardLanguagesForTranslationDisabled;
+    private static Boolean sIsEnglishTargetTranslationEnabled;
+    private static Boolean sIsServerControlledOneboxEnabled;
+    private static Boolean sIsQuickAnswersEnabled;
 
     /**
      * Don't instantiate.
@@ -71,6 +82,7 @@ public class ContextualSearchFieldTrial {
     /**
      * Checks the current Variations parameters associated with the active group as well as the
      * Chrome preference to determine if the service is enabled.
+     * @param context Context used to determine whether the device is a tablet or a phone.
      * @return Whether Contextual Search is enabled or not.
      */
     public static boolean isEnabled(Context context) {
@@ -99,38 +111,13 @@ public class ContextualSearchFieldTrial {
             return false;
         }
 
-        // Allow this user-flippable flag to override disabling due to language.
+        // Allow this user-flippable flag to enable the feature.
         if (CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_CONTEXTUAL_SEARCH)) {
             return true;
         }
 
-        String languageCode = Locale.getDefault().getLanguage();
-        if (!isLanguageSupported(languageCode)) return false;
-
-        if (ChromeVersionInfo.isLocalBuild()) return true;
-
-        return getBooleanParam(ENABLED_PARAM);
-    }
-
-    /**
-     * @param languageCode The language code of the system.
-     * @return Whether the language is supported, given the language code.
-     */
-    static boolean isLanguageSupported(String languageCode) {
-        if (Arrays.asList(CJK_LANGUAGE_CODES).contains(languageCode)
-                && getBooleanParam(DISABLE_FOR_CJK)) {
-            return false;
-        }
-
-        if (languageCode.equals(CHINESE_LANGUAGE_CODE) && getBooleanParam(DISABLE_FOR_CHINESE)) {
-            return false;
-        }
-
-        if (languageCode.equals(JAPANESE_LANGUAGE_CODE) && getBooleanParam(DISABLE_FOR_JAPANESE)) {
-            return false;
-        }
-
-        if (languageCode.equals(KOREAN_LANGUAGE_CODE) && getBooleanParam(DISABLE_FOR_KOREAN)) {
+        // Allow disabling the feature remotely.
+        if (getBooleanParam(DISABLED_PARAM)) {
             return false;
         }
 
@@ -138,124 +125,145 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * Gets whether the promo should be triggered on longpress only.
-     * @return {@code true} iff Finch says we should trigger the promo only on touch-and-hold.
+     * @return Whether the search term resolution is enabled.
      */
-    static boolean isPromoLongpressTriggeredOnly() {
-        return getBooleanParam(PROMO_ON_LONGPRESS_ONLY);
-    }
-
-    /**
-     * @return Whether the promo should be triggered by a limited number of taps.
-     */
-    public static boolean isPromoLimitedByTapCounts() {
-        return getBooleanParam(PROMO_ON_LIMITED_TAPS);
-    }
-
-    /**
-     * @return The maximum number of times the promo can be triggered by a tap, or
-     * {@code ContextualSearchUma#PROMO_TAPS_REMAINING_INVALID} if no value is present in the finch
-     * configuration.
-     */
-    static int getPromoTapTriggeredLimit() {
-        return getIntParamValueOrDefault(TAP_TRIGGERED_PROMO_LIMIT, UNLIMITED_TAPS);
-    }
-
-    /**
-     * @return The delay to use for navigation-detection when triggering on a Tap.
-     */
-    static int getNavigationDetectionDelay() {
-        return getIntParamValueOrDefault(NAVIGATION_DETECTION_DELAY,
-                DEFAULT_TAP_NAVIGATION_DETECTION_DELAY);
-    }
-
-    /**
-     * @return Whether Search Term Resolution in response to a Tap gesture is limited for decided
-     *         users.
-     */
-    static boolean isTapResolveLimitedForDecided() {
-        return getTapResolveLimitForDecided() != ContextualSearchFieldTrial.UNLIMITED_TAPS;
-    }
-
-    /**
-     * @return Whether prefetch in response to a Tap gesture is limited for decided users.
-     */
-    static boolean isTapPrefetchLimitedForDecided() {
-        return getTapPrefetchLimitForDecided() != ContextualSearchFieldTrial.UNLIMITED_TAPS;
-    }
-
-    /**
-     * @return Whether Search Term Resolution in response to a Tap gesture is limited for undecided
-     *         users.
-     */
-    static boolean isTapResolveLimitedForUndecided() {
-        return getTapResolveLimitForUndecided() != ContextualSearchFieldTrial.UNLIMITED_TAPS;
-    }
-
-    /**
-     * @return Whether prefetch in response to a Tap gesture is limited for undecided users.
-     */
-    static boolean isTapPrefetchLimitedForUndecided() {
-        return getTapPrefetchLimitForUndecided() != ContextualSearchFieldTrial.UNLIMITED_TAPS;
-    }
-    /**
-     * @return The limit on the number of taps to resolve for decided users, or the default if no
-     *         value is present in the Finch configuration.
-     */
-    static int getTapResolveLimitForDecided() {
-        return getIntParamValueOrDefault(TAP_RESOLVE_LIMIT_FOR_DECIDED,
-                DEFAULT_TAP_RESOLVE_LIMIT_FOR_DECIDED);
-    }
-
-    /**
-     * @return The limit on the number of prefetches to issue for decided users, or the default
-     *         if no value is present.
-     */
-    static int getTapPrefetchLimitForDecided() {
-        return getIntParamValueOrDefault(TAP_PREFETCH_LIMIT_FOR_DECIDED,
-                DEFAULT_TAP_PREFETCH_LIMIT_FOR_DECIDED);
-    }
-
-    /**
-     * @return The limit on the number of taps to resolve for undecided users, or the default if no
-     *         value is present in the Finch configuration.
-     */
-    static int getTapResolveLimitForUndecided() {
-        return getIntParamValueOrDefault(TAP_RESOLVE_LIMIT_FOR_UNDECIDED,
-                DEFAULT_TAP_RESOLVE_LIMIT_FOR_UNDECIDED);
-    }
-
-    /**
-     * @return The limit on the number of prefetches to issue for undecided users, or the default
-     *         if no value is present.
-     */
-    static int getTapPrefetchLimitForUndecided() {
-        return getIntParamValueOrDefault(TAP_PREFETCH_LIMIT_FOR_UNDECIDED,
-                DEFAULT_TAP_PREFETCH_LIMIT_FOR_UNDECIDED);
-    }
-
-    // --------------------------------------------------------------------------------------------
-    // Experimental UI Features.
-    // --------------------------------------------------------------------------------------------
-
-    /**
-     * @return {@code true} Whether the arrow icon should be displayed.
-     */
-    public static boolean isArrowIconEnabled() {
-        if (sArrowIconEnabled == null) {
-            sArrowIconEnabled = getBooleanParam(ARROW_ICON_ENABLED);
+    static boolean isSearchTermResolutionEnabled() {
+        if (sDisableSearchTermResolution == null) {
+            sDisableSearchTermResolution = getBooleanParam(DISABLE_SEARCH_TERM_RESOLUTION);
         }
-        return sArrowIconEnabled.booleanValue();
+
+        if (sDisableSearchTermResolution.booleanValue()) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
-     * @return {@code true} Whether the search provider icon should be displayed on the side.
+     * @return Whether the Peek Promo is forcibly enabled (used for testing).
      */
-    public static boolean isSideSearchProviderIconEnabled() {
-        if (sSideSearchProviderIconEnabled == null) {
-            sSideSearchProviderIconEnabled = getBooleanParam(SIDE_SEARCH_PROVIDER_ICON_ENABLED);
+    static boolean isPeekPromoForced() {
+        return CommandLine.getInstance().hasSwitch(PEEK_PROMO_FORCED);
+    }
+
+    /**
+     * @return Whether the Peek Promo is enabled.
+     */
+    static boolean isPeekPromoEnabled() {
+        if (sIsPeekPromoEnabled == null) {
+            sIsPeekPromoEnabled = getBooleanParam(PEEK_PROMO_ENABLED);
         }
-        return sSideSearchProviderIconEnabled.booleanValue();
+        return sIsPeekPromoEnabled.booleanValue();
+    }
+
+    /**
+     * @return Whether extra search bar animations are disabled.
+     */
+    static boolean areExtraSearchBarAnimationsDisabled() {
+        return getBooleanParam(DISABLE_EXTRA_SEARCH_BAR_ANIMATIONS);
+    }
+
+    /**
+     * @return Whether the digit blacklist is enabled.
+     */
+    static boolean isDigitBlacklistEnabled() {
+        return getBooleanParam(ENABLE_DIGIT_BLACKLIST);
+    }
+
+    /**
+     * @return The maximum number of times the Peek Promo should be displayed.
+     */
+    static int getPeekPromoMaxShowCount() {
+        if (sPeekPromoMaxCount == null) {
+            sPeekPromoMaxCount = getIntParamValueOrDefault(
+                    PEEK_PROMO_MAX_SHOW_COUNT,
+                    PEEK_PROMO_DEFAULT_MAX_SHOW_COUNT);
+        }
+        return sPeekPromoMaxCount.intValue();
+    }
+
+    /**
+     * @return Whether any translate code is enabled.
+     */
+    static boolean isTranslationEnabled() {
+        if (sIsTranslationEnabled == null) {
+            sIsTranslationEnabled = getBooleanParam(ENABLE_TRANSLATION);
+        }
+        return sIsTranslationEnabled.booleanValue();
+    }
+
+    /**
+     * @return Whether forcing a translation Onebox is disabled.
+     */
+    static boolean isForceTranslationOneboxDisabled() {
+        if (sIsForceTranslationOneboxDisabled == null) {
+            sIsForceTranslationOneboxDisabled = getBooleanParam(DISABLE_FORCE_TRANSLATION_ONEBOX);
+        }
+        return sIsForceTranslationOneboxDisabled.booleanValue();
+    }
+
+    /**
+     * @return Whether forcing a translation Onebox based on auto-detection of the source language
+     *         is disabled.
+     */
+    static boolean isAutoDetectTranslationOneboxDisabled() {
+        if (sIsAutoDetectTranslationOneboxDisabled == null) {
+            sIsAutoDetectTranslationOneboxDisabled = getBooleanParam(
+                    DISABLE_AUTO_DETECT_TRANSLATION_ONEBOX);
+        }
+        return sIsAutoDetectTranslationOneboxDisabled.booleanValue();
+    }
+
+    /**
+     * @return Whether considering accept-languages for translation is disabled.
+     */
+    static boolean isAcceptLanguagesForTranslationDisabled() {
+        if (sIsAcceptLanguagesForTranslationDisabled == null) {
+            sIsAcceptLanguagesForTranslationDisabled = getBooleanParam(
+                    DISABLE_ACCEPT_LANGUAGES_FOR_TRANSLATION);
+        }
+        return sIsAcceptLanguagesForTranslationDisabled.booleanValue();
+    }
+
+    /**
+     * @return Whether considering keyboards for translation is disabled.
+     */
+    static boolean isKeyboardLanguagesForTranslationDisabled() {
+        if (sIsKeyboardLanguagesForTranslationDisabled == null) {
+            sIsKeyboardLanguagesForTranslationDisabled =
+                    getBooleanParam(DISABLE_KEYBOARD_LANGUAGES_FOR_TRANSLATION);
+        }
+        return sIsKeyboardLanguagesForTranslationDisabled.booleanValue();
+    }
+
+    /**
+     * @return Whether English-target translation should be enabled (default is disabled for 'en').
+     */
+    static boolean isEnglishTargetTranslationEnabled() {
+        if (sIsEnglishTargetTranslationEnabled == null) {
+            sIsEnglishTargetTranslationEnabled = getBooleanParam(ENABLE_ENGLISH_TARGET_TRANSLATION);
+        }
+        return sIsEnglishTargetTranslationEnabled.booleanValue();
+    }
+
+    /**
+     * @return Whether relying on server-control of showing the translation one-box is enabled.
+     */
+    static boolean isServerControlledOneboxEnabled() {
+        if (sIsServerControlledOneboxEnabled == null) {
+            sIsServerControlledOneboxEnabled = getBooleanParam(ENABLE_SERVER_CONTROLLED_ONEBOX);
+        }
+        return sIsServerControlledOneboxEnabled.booleanValue();
+    }
+
+    /**
+     * @return Whether showing "quick answers" in the Bar is enabled.
+     */
+    static boolean isQuickAnswersEnabled() {
+        if (sIsQuickAnswersEnabled == null) {
+            sIsQuickAnswersEnabled = getBooleanParam(ENABLE_QUICK_ANSWERS);
+        }
+        return sIsQuickAnswersEnabled.booleanValue();
     }
 
     // --------------------------------------------------------------------------------------------

@@ -18,12 +18,12 @@ import tempfile
 import time
 
 sys.path.append(os.path.join(sys.path[0], '..', '..', 'build', 'android'))
+from devil.android import device_errors
+from devil.android import device_utils
+from devil.android import forwarder
+from devil.android.sdk import intent
 from pylib import constants
 from pylib import flag_changer
-from pylib import forwarder
-from pylib.device import device_errors
-from pylib.device import device_utils
-from pylib.device import intent
 
 sys.path.append(os.path.join(sys.path[0], '..', '..', 'tools', 'telemetry'))
 from telemetry.internal.util import webpagereplay
@@ -79,7 +79,7 @@ class WprManager(object):
   def Start(self):
     """Set up the device and host for WPR."""
     self.Stop()
-    #TODO(azarchs): make self._InstallTestCa() work
+    # TODO(lizeb,pasko): make self._InstallTestCa() work
     self._BringUpWpr()
     self._StartForwarder()
 
@@ -87,7 +87,7 @@ class WprManager(object):
     """Clean up the device and host's WPR setup."""
     self._StopForwarder()
     self._StopWpr()
-    #TODO(azarchs): make self._RemoveTestCa() work
+    # TODO(lizeb,pasko): make self._RemoveTestCa() work
 
   def __enter__(self):
     self.Start()
@@ -218,12 +218,15 @@ class AndroidProfileTool(object):
       The exit code for the tests.
     """
     device_path = '/data/local/tmp/cygprofile_unittests'
-    self._device.old_interface.PushIfNeeded(
-        self._cygprofile_tests, device_path)
-    (exit_code, _) = (
-        self._device.old_interface.GetShellCommandStatusAndOutput(
-            command=device_path, log_result=True))
-    return exit_code
+    self._device.PushChangedFiles([(self._cygprofile_tests, device_path)])
+    try:
+      self._device.RunShellCommand(device_path, check_return=True)
+    except device_errors.CommandFailedError:
+      # TODO(jbudorick): Let the exception propagate up once clients can
+      # handle it.
+      logging.exception('Failure while running cygprofile_unittests:')
+      return 1
+    return 0
 
   def CollectProfile(self, apk, package_info):
     """Run a profile and collect the log files.
@@ -237,8 +240,7 @@ class AndroidProfileTool(object):
     Raises:
       NoCyglogDataError: No data was found on the device.
     """
-    self._Install(apk, package_info)
-
+    self._Install(apk)
     try:
       changer = self._SetChromeFlags(package_info)
       self._SetUpDeviceFolders()
@@ -266,7 +268,7 @@ class AndroidProfileTool(object):
     self._DeleteDeviceData()
     self._DeleteHostData()
 
-  def _Install(self, apk, package_info):
+  def _Install(self, apk):
     """Installs Chrome.apk on the device.
     Args:
       apk: The location of the chrome apk to profile.
@@ -274,7 +276,7 @@ class AndroidProfileTool(object):
                     as from pylib/constants.
     """
     print 'Installing apk...'
-    self._device.old_interface.ManagedInstall(apk, package_info.package)
+    self._device.Install(apk)
 
   def _SetUpDevice(self):
     """When profiling, files are output to the disk by every process.  This
@@ -287,7 +289,7 @@ class AndroidProfileTool(object):
       # SELinux need to be in permissive mode, otherwise the process cannot
       # write the log files.
       print 'Putting SELinux in permissive mode...'
-      self._device.old_interface.RunShellCommand('setenforce 0')
+      self._device.RunShellCommand(['setenforce', '0'], check_return=True)
     except device_errors.CommandFailedError as e:
       # TODO(jbudorick) Handle this exception appropriately once interface
       #                 conversions are finished.
@@ -309,13 +311,15 @@ class AndroidProfileTool(object):
     """Creates folders on the device to store cyglog data. """
     print 'Setting up device folders...'
     self._DeleteDeviceData()
-    self._device.old_interface.RunShellCommand(
-        'mkdir -p %s' % self._DEVICE_CYGLOG_DIR)
+    self._device.RunShellCommand(
+        ['mkdir', '-p', str(self._DEVICE_CYGLOG_DIR)],
+        check_return=True)
 
   def _DeleteDeviceData(self):
     """Clears out cyglog storage locations on the device. """
-    self._device.old_interface.RunShellCommand(
-        'rm -rf %s' % self._DEVICE_CYGLOG_DIR)
+    self._device.RunShellCommand(
+        ['rm', '-rf', str(self._DEVICE_CYGLOG_DIR)],
+        check_return=True)
 
   def _StartChrome(self, package_info, url):
     print 'Launching chrome...'
@@ -347,7 +351,7 @@ class AndroidProfileTool(object):
     """
     print 'Pulling cyglog data...'
     self._SetUpHostFolders()
-    self._device.old_interface.Adb().Pull(
+    self._device.PullFile(
         self._DEVICE_CYGLOG_DIR, self._host_cyglog_dir)
     files = os.listdir(self._host_cyglog_dir)
 

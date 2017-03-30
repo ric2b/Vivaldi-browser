@@ -5,14 +5,15 @@
 #ifndef CHROMECAST_MEDIA_CMA_BASE_AUDIO_PIPELINE_IMPL_H_
 #define CHROMECAST_MEDIA_CMA_BASE_AUDIO_PIPELINE_IMPL_H_
 
-#include "base/callback.h"
+#include <vector>
+
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
-#include "base/memory/weak_ptr.h"
-#include "base/threading/thread_checker.h"
-#include "chromecast/media/cma/pipeline/audio_pipeline.h"
+#include "base/memory/scoped_ptr.h"
 #include "chromecast/media/cma/pipeline/av_pipeline_client.h"
+#include "chromecast/media/cma/pipeline/av_pipeline_impl.h"
+#include "chromecast/public/media/media_pipeline_backend.h"
 #include "chromecast/public/media/stream_id.h"
+#include "media/base/pipeline_status.h"
 
 namespace media {
 class AudioDecoderConfig;
@@ -21,56 +22,30 @@ class VideoDecoderConfig;
 
 namespace chromecast {
 namespace media {
-class AudioPipelineDevice;
-class AvPipelineImpl;
-class BrowserCdmCast;
-class BufferingState;
 class CodedFrameProvider;
 
-class AudioPipelineImpl : public AudioPipeline {
+class AudioPipelineImpl : public AvPipelineImpl {
  public:
-  // |buffering_controller| can be NULL.
-  explicit AudioPipelineImpl(AudioPipelineDevice* audio_device);
+  AudioPipelineImpl(MediaPipelineBackend::AudioDecoder* decoder,
+                    const AvPipelineClient& client);
   ~AudioPipelineImpl() override;
 
-  // Input port of the pipeline.
-  void SetCodedFrameProvider(scoped_ptr<CodedFrameProvider> frame_provider);
+  void Initialize(const ::media::AudioDecoderConfig& config,
+                  scoped_ptr<CodedFrameProvider> frame_provider,
+                  const ::media::PipelineStatusCB& status_cb);
 
-  // Provide the CDM to use to decrypt samples.
-  void SetCdm(BrowserCdmCast* media_keys);
+  void SetVolume(float volume);
 
-  // Functions to control the state of the audio pipeline.
-  void Initialize(
-      const ::media::AudioDecoderConfig& config,
-      scoped_ptr<CodedFrameProvider> frame_provider,
-      const ::media::PipelineStatusCB& status_cb);
-  bool StartPlayingFrom(base::TimeDelta time,
-                        const scoped_refptr<BufferingState>& buffering_state);
-  void Flush(const ::media::PipelineStatusCB& status_cb);
-  void Stop();
-
-  // Update the playback statistics for this audio stream.
-  void UpdateStatistics();
-
-  // AudioPipeline implementation.
-  void SetClient(const AvPipelineClient& client) override;
-  void SetVolume(float volume) override;
+  // AvPipelineImpl implementation:
+  void UpdateStatistics() override;
 
  private:
-  void OnFlushDone(const ::media::PipelineStatusCB& status_cb);
+  // AvPipelineImpl implementation:
   void OnUpdateConfig(StreamId id,
                       const ::media::AudioDecoderConfig& audio_config,
-                      const ::media::VideoDecoderConfig& video_config);
+                      const ::media::VideoDecoderConfig& video_config) override;
 
-  AudioPipelineDevice* audio_device_;
-
-  scoped_ptr<AvPipelineImpl> av_pipeline_impl_;
-  AvPipelineClient audio_client_;
-
-  ::media::PipelineStatistics previous_stats_;
-
-  base::WeakPtr<AudioPipelineImpl> weak_this_;
-  base::WeakPtrFactory<AudioPipelineImpl> weak_factory_;
+  MediaPipelineBackend::AudioDecoder* const audio_decoder_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioPipelineImpl);
 };

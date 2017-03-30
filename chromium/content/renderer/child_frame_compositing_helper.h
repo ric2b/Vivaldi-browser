@@ -5,9 +5,12 @@
 #ifndef CONTENT_RENDERER_CHILD_FRAME_COMPOSITING_HELPER_H_
 #define CONTENT_RENDERER_CHILD_FRAME_COMPOSITING_HELPER_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
@@ -44,7 +47,6 @@ class Size;
 }
 
 struct FrameHostMsg_CompositorFrameSwappedACK_Params;
-struct FrameHostMsg_BuffersSwappedACK_Params;
 struct FrameHostMsg_ReclaimCompositorResources_Params;
 
 namespace content {
@@ -64,11 +66,10 @@ class CONTENT_EXPORT ChildFrameCompositingHelper
       RenderFrameProxy* render_frame_proxy);
 
   void DidCommitCompositorFrame();
-  void EnableCompositing(bool);
   void OnContainerDestroy();
   void OnCompositorFrameSwapped(scoped_ptr<cc::CompositorFrame> frame,
                                 int route_id,
-                                uint32 output_surface_id,
+                                uint32_t output_surface_id,
                                 int host_id,
                                 base::SharedMemoryHandle handle);
   void OnSetSurface(const cc::SurfaceId& surface_id,
@@ -80,7 +81,6 @@ class CONTENT_EXPORT ChildFrameCompositingHelper
 
   // cc::DelegatedFrameProviderClient implementation.
   void UnusedResourcesAreAvailable() override;
-  void SetContentsOpaque(bool);
 
  protected:
   // Friend RefCounted so that the dtor can be non-public.
@@ -125,10 +125,11 @@ class CONTENT_EXPORT ChildFrameCompositingHelper
       int browser_plugin_instance_id,
       cc::SurfaceId id,
       cc::SurfaceSequence sequence);
+  void UpdateWebLayer(blink::WebLayer* layer);
 
   int host_routing_id_;
   int last_route_id_;
-  uint32 last_output_surface_id_;
+  uint32_t last_output_surface_id_;
   int last_host_id_;
   bool ack_pending_;
   bool opaque_;
@@ -144,11 +145,6 @@ class CONTENT_EXPORT ChildFrameCompositingHelper
   scoped_refptr<cc::DelegatedFrameResourceCollection> resource_collection_;
   scoped_refptr<cc::DelegatedFrameProvider> frame_provider_;
 
-  // For cc::Surface support.
-  scoped_refptr<cc::SurfaceLayer> surface_layer_;
-
-  scoped_refptr<cc::SolidColorLayer> background_layer_;
-  scoped_refptr<cc::DelegatedRendererLayer> delegated_layer_;
   scoped_ptr<blink::WebLayer> web_layer_;
   blink::WebFrame* frame_;
 

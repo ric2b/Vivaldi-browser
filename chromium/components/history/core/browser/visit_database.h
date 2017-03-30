@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "components/history/core/browser/history_types.h"
 
 namespace sql {
@@ -177,6 +178,16 @@ class VisitDatabase {
   bool GetVisibleVisitCountToHost(const GURL& url,
                                   int* count,
                                   base::Time* first_visit);
+
+  // Gets the number of URLs as seen in chrome://history within the time
+  // range [|begin_time|, |end_time|). "User-visible" is defined as in
+  // GetVisibleVisitsInRange() above, i.e. excluding redirects and subframes.
+  // Each URL is counted only once per day. For determination of the date,
+  // timestamps are converted to dates using local time. Returns false if
+  // there is a failure executing the statement. True otherwise.
+  bool GetHistoryCount(const base::Time& begin_time,
+                       const base::Time& end_time,
+                       int* count);
 
   // Get the time of the first item in our database.
   bool GetStartDate(base::Time* first_visit);

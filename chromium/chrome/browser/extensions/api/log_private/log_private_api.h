@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/files/scoped_file.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/log_private/filter_handler.h"
 #include "chrome/browser/extensions/api/log_private/log_parser.h"
@@ -83,7 +84,7 @@ class LogPrivateAPI : public BrowserContextKeyedAPI,
                            const Extension* extension,
                            UnloadedExtensionInfo::Reason reason) override;
 
-  // ChromeNetLog::ThreadSafeObserver implementation:
+  // NetLog::ThreadSafeObserver implementation:
   void OnAddEntry(const net::NetLog::Entry& entry) override;
 
   void PostPendingEntries();

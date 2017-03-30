@@ -4,6 +4,8 @@
 
 #include "chrome/browser/safe_browsing/two_phase_uploader.h"
 
+#include <stdint.h>
+
 #include "base/files/file_path.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/safe_browsing/local_two_phase_testserver.h"
@@ -17,6 +19,8 @@
 using content::BrowserThread;
 using content::MessageLoopRunner;
 
+namespace safe_browsing {
+
 namespace {
 
 class Delegate {
@@ -24,7 +28,7 @@ class Delegate {
   Delegate() : state_(TwoPhaseUploader::STATE_NONE) {
   }
 
-  void ProgressCallback(int64 current, int64 total) {}
+  void ProgressCallback(int64_t current, int64_t total) {}
 
   void FinishCallback(scoped_refptr<MessageLoopRunner> runner,
                       TwoPhaseUploader::State state,
@@ -187,3 +191,5 @@ TEST_F(TwoPhaseUploaderTest, PhaseTwoConnectionClosed) {
   EXPECT_EQ(net::URLFetcher::RESPONSE_CODE_INVALID, delegate.response_code_);
   EXPECT_EQ("", delegate.response_);
 }
+
+}  // namespace safe_browsing

@@ -6,9 +6,11 @@
 #define SQL_MOJO_SQL_TEST_BASE_H_
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/filesystem/public/interfaces/file_system.mojom.h"
-#include "mojo/application/public/cpp/application_test_base.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/shell/public/cpp/application_test_base.h"
 #include "sql/connection.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -26,7 +28,8 @@ class ScopedMojoFilesystemVFS;
 // #define. We need to have two different implementations because the mojo
 // version derives from mojo::test::ApplicationTestBase instead of
 // testing::Test.
-class SQLTestBase : public mojo::test::ApplicationTestBase {
+class SQLTestBase : public mojo::test::ApplicationTestBase,
+                    public filesystem::FileSystemClient {
  public:
   SQLTestBase();
   ~SQLTestBase() override;
@@ -68,6 +71,9 @@ class SQLTestBase : public mojo::test::ApplicationTestBase {
   void SetUp() override;
   void TearDown() override;
 
+  // Overridden from FileSystemClient:
+  void OnFileSystemShutdown() override;
+
  protected:
   filesystem::FileSystemPtr& files() { return files_; }
 
@@ -75,6 +81,7 @@ class SQLTestBase : public mojo::test::ApplicationTestBase {
   filesystem::FileSystemPtr files_;
 
   scoped_ptr<ScopedMojoFilesystemVFS> vfs_;
+  mojo::Binding<filesystem::FileSystemClient> binding_;
   sql::Connection db_;
 
   DISALLOW_COPY_AND_ASSIGN(SQLTestBase);

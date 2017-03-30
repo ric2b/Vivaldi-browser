@@ -4,34 +4,38 @@
 
 #include "chrome/browser/chromeos/policy/device_status_collector.h"
 
+#include <stddef.h>
 #include <stdint.h>
+#include <sys/statvfs.h>
 #include <cstdio>
 #include <limits>
 #include <sstream>
-#include <sys/statvfs.h>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "chromeos/network/device_state.h"
@@ -44,6 +48,7 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
@@ -85,9 +90,15 @@ const char kTimestamp[] = "timestamp";
 // The location we read our CPU statistics from.
 const char kProcStat[] = "/proc/stat";
 
+// The location we read our CPU temperature and channel label from.
+const char kHwmonDir[] = "/sys/class/hwmon/";
+const char kDeviceDir[] = "device";
+const char kHwmonDirectoryPattern[] = "hwmon*";
+const char kCPUTempFilePattern[] = "temp*_input";
+
 // Determine the day key (milliseconds since epoch for corresponding day in UTC)
 // for a given |timestamp|.
-int64 TimestampToDayKey(Time timestamp) {
+int64_t TimestampToDayKey(Time timestamp) {
   Time::Exploded exploded;
   timestamp.LocalMidnight().LocalExplode(&exploded);
   return (Time::FromUTCExploded(exploded) - Time::UnixEpoch()).InMilliseconds();
@@ -109,7 +120,8 @@ std::vector<em::VolumeInfo> GetVolumeInfo(
                             stat.f_frsize);
       result.push_back(info);
     } else {
-      LOG(ERROR) << "Unable to get volume status for " << mount_point;
+      LOG_IF(ERROR, !mount_point.empty()) << "Unable to get volume status for "
+                                          << mount_point;
     }
   }
   return result;
@@ -139,6 +151,64 @@ std::string ReadCPUStatistics() {
   return std::string();
 }
 
+// Reads the CPU temperature info from
+// /sys/class/hwmon/hwmon*/device/temp*_input and
+// /sys/class/hwmon/hwmon*/device/temp*_label files.
+//
+// temp*_input contains CPU temperature in millidegree Celsius
+// temp*_label contains appropriate temperature channel label.
+std::vector<em::CPUTempInfo> ReadCPUTempInfo() {
+  std::vector<em::CPUTempInfo> contents;
+  // Get directories /sys/class/hwmon/hwmon*
+  base::FileEnumerator hwmon_enumerator(base::FilePath(kHwmonDir), false,
+                                        base::FileEnumerator::DIRECTORIES,
+                                        kHwmonDirectoryPattern);
+
+  for (base::FilePath hwmon_path = hwmon_enumerator.Next(); !hwmon_path.empty();
+       hwmon_path = hwmon_enumerator.Next()) {
+    // Get files /sys/class/hwmon/hwmon*/device/temp*_input
+    const base::FilePath hwmon_device_dir = hwmon_path.Append(kDeviceDir);
+    base::FileEnumerator enumerator(hwmon_device_dir, false,
+                                    base::FileEnumerator::FILES,
+                                    kCPUTempFilePattern);
+    for (base::FilePath temperature_path = enumerator.Next();
+         !temperature_path.empty(); temperature_path = enumerator.Next()) {
+      // Get appropriate temp*_label file.
+      std::string label_path = temperature_path.MaybeAsASCII();
+      if (label_path.empty()) {
+        LOG(WARNING) << "Unable to parse a path to temp*_input file as ASCII";
+        continue;
+      }
+      base::ReplaceSubstringsAfterOffset(&label_path, 0, "input", "label");
+
+      // Read label.
+      std::string label;
+      if (!base::PathExists(base::FilePath(label_path)) ||
+          !base::ReadFileToString(base::FilePath(label_path), &label)) {
+        label = std::string();
+      }
+
+      // Read temperature in millidegree Celsius.
+      std::string temperature_string;
+      int32_t temperature = 0;
+      if (base::ReadFileToString(temperature_path, &temperature_string) &&
+          sscanf(temperature_string.c_str(), "%d", &temperature) == 1) {
+        // CPU temp in millidegree Celsius to Celsius
+        temperature /= 1000;
+
+        em::CPUTempInfo info;
+        info.set_cpu_label(label);
+        info.set_cpu_temp(temperature);
+        contents.push_back(info);
+      } else {
+        LOG(WARNING) << "Unable to read CPU temp from "
+                     << temperature_path.MaybeAsASCII();
+      }
+    }
+  }
+  return contents;
+}
+
 // Returns the DeviceLocalAccount associated with the current kiosk session.
 // Returns null if there is no active kiosk session, or if that kiosk
 // session has been removed from policy since the session started, in which
@@ -149,14 +219,14 @@ GetCurrentKioskDeviceLocalAccount(chromeos::CrosSettings* settings) {
     return scoped_ptr<policy::DeviceLocalAccount>();
   const user_manager::User* const user =
       user_manager::UserManager::Get()->GetActiveUser();
-  const std::string user_id = user->GetUserID();
   const std::vector<policy::DeviceLocalAccount> accounts =
       policy::GetDeviceLocalAccounts(settings);
 
   for (const auto& device_local_account : accounts) {
-    if (device_local_account.user_id == user_id) {
+    if (AccountId::FromUserEmail(device_local_account.user_id) ==
+        user->GetAccountId()) {
       return make_scoped_ptr(
-          new policy::DeviceLocalAccount(device_local_account)).Pass();
+          new policy::DeviceLocalAccount(device_local_account));
     }
   }
   LOG(WARNING) << "Kiosk app not found in list of device-local accounts";
@@ -172,7 +242,8 @@ DeviceStatusCollector::DeviceStatusCollector(
     chromeos::system::StatisticsProvider* provider,
     const LocationUpdateRequester& location_update_requester,
     const VolumeInfoFetcher& volume_info_fetcher,
-    const CPUStatisticsFetcher& cpu_statistics_fetcher)
+    const CPUStatisticsFetcher& cpu_statistics_fetcher,
+    const CPUTempFetcher& cpu_temp_fetcher)
     : max_stored_past_activity_days_(kMaxStoredPastActivityDays),
       max_stored_future_activity_days_(kMaxStoredFutureActivityDays),
       local_state_(local_state),
@@ -182,6 +253,7 @@ DeviceStatusCollector::DeviceStatusCollector(
       geolocation_update_in_progress_(false),
       volume_info_fetcher_(volume_info_fetcher),
       cpu_statistics_fetcher_(cpu_statistics_fetcher),
+      cpu_temp_fetcher_(cpu_temp_fetcher),
       statistics_provider_(provider),
       last_cpu_active_(0),
       last_cpu_idle_(0),
@@ -200,6 +272,9 @@ DeviceStatusCollector::DeviceStatusCollector(
 
   if (cpu_statistics_fetcher_.is_null())
     cpu_statistics_fetcher_ = base::Bind(&ReadCPUStatistics);
+
+  if (cpu_temp_fetcher_.is_null())
+    cpu_temp_fetcher_ = base::Bind(&ReadCPUTempInfo);
 
   idle_poll_timer_.Start(FROM_HERE,
                          TimeDelta::FromSeconds(kIdlePollIntervalSeconds),
@@ -239,7 +314,7 @@ DeviceStatusCollector::DeviceStatusCollector(
   // reacquire the location on every user session change or browser crash.
   content::Geoposition position;
   std::string timestamp_str;
-  int64 timestamp;
+  int64_t timestamp;
   const base::DictionaryValue* location =
       local_state_->GetDictionary(prefs::kDeviceLocation);
   if (location->GetDouble(kLatitude, &position.latitude) &&
@@ -374,16 +449,16 @@ void DeviceStatusCollector::PruneStoredActivityPeriods(Time base_time) {
                             TimestampToDayKey(max_time));
 }
 
-void DeviceStatusCollector::TrimStoredActivityPeriods(int64 min_day_key,
+void DeviceStatusCollector::TrimStoredActivityPeriods(int64_t min_day_key,
                                                       int min_day_trim_duration,
-                                                      int64 max_day_key) {
+                                                      int64_t max_day_key) {
   const base::DictionaryValue* activity_times =
       local_state_->GetDictionary(prefs::kDeviceActivityTimes);
 
   scoped_ptr<base::DictionaryValue> copy(activity_times->DeepCopy());
   for (base::DictionaryValue::Iterator it(*activity_times); !it.IsAtEnd();
        it.Advance()) {
-    int64 timestamp;
+    int64_t timestamp;
     if (base::StringToInt64(it.key(), &timestamp)) {
       // Remove data that is too old, or too far in the future.
       if (timestamp >= min_day_key && timestamp < max_day_key) {
@@ -415,7 +490,7 @@ void DeviceStatusCollector::AddActivePeriod(Time start, Time end) {
   Time midnight = start.LocalMidnight();
   while (midnight < end) {
     midnight += TimeDelta::FromDays(1);
-    int64 activity = (std::min(end, midnight) - start).InMilliseconds();
+    int64_t activity = (std::min(end, midnight) - start).InMilliseconds();
     std::string day_key = base::Int64ToString(TimestampToDayKey(start));
     int previous_activity = 0;
     activity_times->GetInteger(day_key, &previous_activity);
@@ -465,7 +540,7 @@ DeviceStatusCollector::GetAutoLaunchedKioskSessionInfo() {
     if (chromeos::KioskAppManager::Get()->GetApp(account->kiosk_app_id,
                                                  &current_app) &&
         current_app.was_auto_launched_with_zero_delay) {
-      return account.Pass();
+      return account;
     }
   }
   // No auto-launched kiosk session active.
@@ -492,7 +567,7 @@ void DeviceStatusCollector::SampleHardwareStatus() {
     mount_points.push_back(mount_info.first);
   }
 
-  // Call out to the blocking pool to measure disk and CPU usage.
+  // Call out to the blocking pool to measure disk, CPU usage and CPU temp.
   base::PostTaskAndReplyWithResult(
       content::BrowserThread::GetBlockingPool(),
       FROM_HERE,
@@ -504,6 +579,11 @@ void DeviceStatusCollector::SampleHardwareStatus() {
       content::BrowserThread::GetBlockingPool(), FROM_HERE,
       cpu_statistics_fetcher_,
       base::Bind(&DeviceStatusCollector::ReceiveCPUStatistics,
+                 weak_factory_.GetWeakPtr()));
+
+  base::PostTaskAndReplyWithResult(
+      content::BrowserThread::GetBlockingPool(), FROM_HERE, cpu_temp_fetcher_,
+      base::Bind(&DeviceStatusCollector::StoreCPUTempInfo,
                  weak_factory_.GetWeakPtr()));
 }
 
@@ -525,7 +605,7 @@ void DeviceStatusCollector::ReceiveCPUStatistics(const std::string& stats) {
     //
     // We only care about the first four numbers: user_time, nice_time,
     // sys_time, and idle_time.
-    uint64 user = 0, nice = 0, system = 0, idle = 0;
+    uint64_t user = 0, nice = 0, system = 0, idle = 0;
     int vals = sscanf(stats.c_str(),
                       "cpu %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64, &user,
                       &nice, &system, &idle);
@@ -533,9 +613,9 @@ void DeviceStatusCollector::ReceiveCPUStatistics(const std::string& stats) {
 
     // The values returned from /proc/stat are cumulative totals, so calculate
     // the difference between the last sample and this one.
-    uint64 active = user + nice + system;
-    uint64 total = active + idle;
-    uint64 last_total = last_cpu_active_ + last_cpu_idle_;
+    uint64_t active = user + nice + system;
+    uint64_t total = active + idle;
+    uint64_t last_total = last_cpu_active_ + last_cpu_idle_;
     DCHECK_GE(active, last_cpu_active_);
     DCHECK_GE(idle, last_cpu_idle_);
     DCHECK_GE(total, last_total);
@@ -560,6 +640,16 @@ void DeviceStatusCollector::ReceiveCPUStatistics(const std::string& stats) {
     resource_usage_.pop_front();
 }
 
+void DeviceStatusCollector::StoreCPUTempInfo(
+    const std::vector<em::CPUTempInfo>& info) {
+  if (info.empty()) {
+    DLOG(WARNING) << "Unable to read CPU temp information.";
+  }
+
+  if (report_hardware_status_)
+    cpu_temp_info_ = info;
+}
+
 void DeviceStatusCollector::GetActivityTimes(
     em::DeviceStatusReportRequest* request) {
   DictionaryPrefUpdate update(local_state_, prefs::kDeviceActivityTimes);
@@ -567,13 +657,13 @@ void DeviceStatusCollector::GetActivityTimes(
 
   for (base::DictionaryValue::Iterator it(*activity_times); !it.IsAtEnd();
        it.Advance()) {
-    int64 start_timestamp;
+    int64_t start_timestamp;
     int activity_milliseconds;
     if (base::StringToInt64(it.key(), &start_timestamp) &&
         it.value().GetAsInteger(&activity_milliseconds)) {
       // This is correct even when there are leap seconds, because when a leap
       // second occurs, two consecutive seconds have the same timestamp.
-      int64 end_timestamp = start_timestamp + Time::kMillisecondsPerDay;
+      int64_t end_timestamp = start_timestamp + Time::kMillisecondsPerDay;
 
       em::ActiveTimePeriod* active_period = request->add_active_period();
       em::TimePeriod* period = active_period->mutable_time_period();
@@ -592,8 +682,7 @@ void DeviceStatusCollector::GetActivityTimes(
 
 void DeviceStatusCollector::GetVersionInfo(
     em::DeviceStatusReportRequest* request) {
-  chrome::VersionInfo version_info;
-  request->set_browser_version(version_info.Version());
+  request->set_browser_version(version_info::GetVersionNumber());
   request->set_os_version(os_version_);
   request->set_firmware_version(firmware_version_);
 }
@@ -717,8 +806,9 @@ void DeviceStatusCollector::GetNetworkInterfaces(
       interface->set_device_path((*device)->path());
   }
 
-  // Don't write any network state if we aren't in a kiosk session.
-  if (!GetAutoLaunchedKioskSessionInfo())
+  // Don't write any network state if we aren't in a kiosk or public session.
+  if (!GetAutoLaunchedKioskSessionInfo() &&
+      !user_manager::UserManager::Get()->IsLoggedInAsPublicAccount())
     return;
 
   // Walk the various networks and store their state in the status report.
@@ -770,21 +860,18 @@ void DeviceStatusCollector::GetNetworkInterfaces(
 }
 
 void DeviceStatusCollector::GetUsers(em::DeviceStatusReportRequest* request) {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
   const user_manager::UserList& users =
-      user_manager::UserManager::Get()->GetUsers();
-  user_manager::UserList::const_iterator user;
-  for (user = users.begin(); user != users.end(); ++user) {
+      chromeos::ChromeUserManager::Get()->GetUsers();
+
+  for (const auto& user : users) {
     // Only users with gaia accounts (regular) are reported.
-    if (!(*user)->HasGaiaAccount())
+    if (!user->HasGaiaAccount())
       continue;
 
     em::DeviceUser* device_user = request->add_user();
-    const std::string& email = (*user)->email();
-    if (connector->GetUserAffiliation(email) == USER_AFFILIATION_MANAGED) {
+    if (chromeos::ChromeUserManager::Get()->ShouldReportUser(user->email())) {
       device_user->set_type(em::DeviceUser::USER_TYPE_MANAGED);
-      device_user->set_email(email);
+      device_user->set_email(user->email());
     } else {
       device_user->set_type(em::DeviceUser::USER_TYPE_UNMANAGED);
       // Do not report the email address of unmanaged users.
@@ -806,6 +893,12 @@ void DeviceStatusCollector::GetHardwareStatus(
   for (const ResourceUsage& usage : resource_usage_) {
     status->add_cpu_utilization_pct(usage.cpu_usage_percent);
     status->add_system_ram_free(usage.bytes_of_ram_free);
+  }
+
+  // Add CPU temp info.
+  status->clear_cpu_temp_info();
+  for (const em::CPUTempInfo& info : cpu_temp_info_) {
+    *status->add_cpu_temp_info() = info;
   }
 }
 
@@ -887,7 +980,7 @@ std::string DeviceStatusCollector::GetAppVersion(
 
 void DeviceStatusCollector::OnSubmittedSuccessfully() {
   TrimStoredActivityPeriods(last_reported_day_, duration_for_last_reported_day_,
-                            std::numeric_limits<int64>::max());
+                            std::numeric_limits<int64_t>::max());
 }
 
 void DeviceStatusCollector::OnOSVersion(const std::string& version) {

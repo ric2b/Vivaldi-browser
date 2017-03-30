@@ -9,8 +9,8 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "url/gurl.h"
 
@@ -140,6 +140,9 @@ class FakeGaia {
     return refresh_token_to_device_id_map_;
   }
 
+  // Returns an email that is filled into the the Email field (if any).
+  const std::string& prefilled_email() { return prefilled_email_; }
+
  protected:
   // HTTP handler for /MergeSession.
   virtual void HandleMergeSession(
@@ -192,6 +195,9 @@ class FakeGaia {
       net::test_server::BasicHttpResponse* http_response);
   void HandleSSO(const net::test_server::HttpRequest& request,
                  net::test_server::BasicHttpResponse* http_response);
+  void HandleDummySAMLContinue(
+      const net::test_server::HttpRequest& request,
+      net::test_server::BasicHttpResponse* http_response);
   void HandleAuthToken(const net::test_server::HttpRequest& request,
                        net::test_server::BasicHttpResponse* http_response);
   void HandleTokenInfo(const net::test_server::HttpRequest& request,
@@ -229,6 +235,7 @@ class FakeGaia {
   SamlAccountIdpMap saml_account_idp_map_;
   bool issue_oauth_code_cookie_;
   RefreshTokenToDeviceIdMap refresh_token_to_device_id_map_;
+  std::string prefilled_email_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeGaia);
 };

@@ -90,6 +90,15 @@ static_library("cacheinvalidation") {
   ]
 }
 
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("cacheinvalidation_unittests_run") {
+  testonly = true
+  deps = [
+    ":cacheinvalidation_unittests",
+  ]
+}
+
 test("cacheinvalidation_unittests") {
   sources = [
     "src/google/cacheinvalidation/impl/invalidation-client-impl_test.cc",
@@ -135,10 +144,12 @@ if (is_android) {
 
   # GYP: //third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_javalib
   android_library("cacheinvalidation_javalib") {
+    emma_never_instrument = true
     deps = [
       ":cacheinvalidation_proto_java",
       "//third_party/android_protobuf:protobuf_nano_javalib",
       "//third_party/android_tools:android_gcm_java",
+      google_play_services_library,
     ]
 
     DEPRECATED_java_in_dir = "src/java"

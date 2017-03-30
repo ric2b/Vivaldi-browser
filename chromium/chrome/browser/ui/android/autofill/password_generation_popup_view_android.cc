@@ -10,13 +10,13 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/logging.h"
-#include "chrome/browser/ui/android/window_android_helper.h"
+#include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/autofill/password_generation_popup_controller.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "jni/PasswordGenerationPopupBridge_jni.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
-#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/range/range.h"
 
 namespace autofill {
@@ -26,12 +26,15 @@ PasswordGenerationPopupViewAndroid::PasswordGenerationPopupViewAndroid(
     : controller_(controller) {}
 
 void PasswordGenerationPopupViewAndroid::SavedPasswordsLinkClicked(
-    JNIEnv* env, jobject obj) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (controller_)
     controller_->OnSavedPasswordsLinkClicked();
 }
 
-void PasswordGenerationPopupViewAndroid::Dismissed(JNIEnv* env, jobject obj) {
+void PasswordGenerationPopupViewAndroid::Dismissed(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (controller_)
     controller_->ViewDestroyed();
 
@@ -39,7 +42,8 @@ void PasswordGenerationPopupViewAndroid::Dismissed(JNIEnv* env, jobject obj) {
 }
 
 void PasswordGenerationPopupViewAndroid::PasswordSelected(
-    JNIEnv* env, jobject object) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>& object) {
   if (controller_)
     controller_->PasswordAccepted();
 }

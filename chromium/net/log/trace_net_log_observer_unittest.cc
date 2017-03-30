@@ -14,6 +14,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/trace_event/trace_buffer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "base/values.h"
@@ -75,9 +76,9 @@ class TraceNetLogObserverTest : public testing::Test {
     trace_buffer_.Finish();
 
     scoped_ptr<base::Value> trace_value;
-    trace_value.reset(base::JSONReader::DeprecatedRead(
+    trace_value = base::JSONReader::Read(
         json_output_.json_output,
-        base::JSON_PARSE_RFC | base::JSON_DETACHABLE_CHILDREN));
+        base::JSON_PARSE_RFC | base::JSON_DETACHABLE_CHILDREN);
 
     ASSERT_TRUE(trace_value) << json_output_.json_output;
     base::ListValue* trace_events = NULL;
@@ -127,7 +128,7 @@ class TraceNetLogObserverTest : public testing::Test {
         continue;
       filtered_trace_events->Append(dict->DeepCopy());
     }
-    return filtered_trace_events.Pass();
+    return filtered_trace_events;
   }
 
   base::ListValue* trace_events() const { return trace_events_.get(); }

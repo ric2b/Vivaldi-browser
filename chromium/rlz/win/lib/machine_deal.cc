@@ -7,9 +7,10 @@
 #include "rlz/win/lib/machine_deal.h"
 
 #include <windows.h>
+#include <stddef.h>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -57,7 +58,7 @@ bool IsGoodDccChar(char ch) {
 // reasonable size. It also assumes that normalized_dcc is at least
 // kMaxDccLength+1 long.
 void NormalizeDcc(const char* raw_dcc, char* normalized_dcc) {
-  int index = 0;
+  size_t index = 0;
   for (; raw_dcc[index] != 0 && index < rlz_lib::kMaxDccLength; ++index) {
     char current = raw_dcc[index];
     if (IsGoodDccChar(current)) {
@@ -103,11 +104,12 @@ bool GetResponseValue(const std::string& response_line,
 
   value->clear();
 
-  if (!base::StartsWithASCII(response_line, response_key, true))
+  if (!base::StartsWith(response_line, response_key,
+                        base::CompareCase::SENSITIVE))
     return false;
 
-  std::vector<std::string> tokens;
-  base::SplitString(response_line, ':', &tokens);
+  std::vector<std::string> tokens = base::SplitString(
+      response_line, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (tokens.size() != 2)
     return false;
 

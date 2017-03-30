@@ -19,6 +19,7 @@
 
 namespace base {
 class FilePath;
+class SequencedTaskRunner;
 class SingleThreadTaskRunner;
 }
 
@@ -26,17 +27,22 @@ namespace update_client {
 
 // Implements a downloader in terms of the BITS service. The public interface
 // of this class and the CrxDownloader overrides are expected to be called
-// from the main thread. The rest of the class code runs on a single thread
-// task runner. This task runner must be initialized to work with COM objects.
-// Instances of this class are created and destroyed in the main thread.
-// See the implementation of the class destructor for details regarding the
-// clean up of resources acquired in this class.
+// from the main thread. The rest of the class code runs on a sequenced
+// task runner, usually associated with a blocking thread pool. The task runner
+// must initialize COM.
+//
+// This class manages a COM client for Windows BITS. The client uses polling,
+// triggered by an one-shot timer, to get state updates from BITS. Since the
+// timer has thread afinity, the callbacks from the timer are delegated to
+// a sequenced task runner, which handles all client COM interaction with
+// the BITS service.
 class BackgroundDownloader : public CrxDownloader {
  protected:
   friend class CrxDownloader;
-  BackgroundDownloader(scoped_ptr<CrxDownloader> successor,
-                       net::URLRequestContextGetter* context_getter,
-                       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+  BackgroundDownloader(
+      scoped_ptr<CrxDownloader> successor,
+      net::URLRequestContextGetter* context_getter,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
   ~BackgroundDownloader() override;
 
  private:
@@ -47,30 +53,44 @@ class BackgroundDownloader : public CrxDownloader {
   // the download. |OnDownloading| can be called multiple times.
   // |EndDownload| switches the execution flow from the |task_runner_| to the
   // main thread. Accessing any data members of this object from the
-  // |task_runner_|after calling |EndDownload| is unsafe.
+  // |task_runner_| after calling |EndDownload| is unsafe.
   void BeginDownload(const GURL& url);
   void OnDownloading();
   void EndDownload(HRESULT hr);
 
-  // Handles the job state transitions to a final state.
-  void OnStateTransferred();
-  void OnStateError();
-  void OnStateCancelled();
-  void OnStateAcknowledged();
+  HRESULT BeginDownloadHelper(const GURL& url);
+
+  // Handles the job state transitions to a final state. Returns true always
+  // since the download has reached a final state and no further processing for
+  // this download is needed.
+  bool OnStateTransferred();
+  bool OnStateError();
+  bool OnStateCancelled();
+  bool OnStateAcknowledged();
 
   // Handles the transition to a transient state where the job is in the
-  // queue but not actively transferring data.
-  void OnStateQueued();
+  // queue but not actively transferring data. Returns true if the download has
+  // been in this state for too long and it will be abandoned, or false, if
+  // further processing for this download is needed.
+  bool OnStateQueued();
 
-  // Handles the job state transition to a transient, non-final error state.
-  void OnStateTransientError();
+  // Handles the job state transition to a transient error state, which may or
+  // may not be considered final, depending on the error. Returns true if
+  // the state is final, or false, if the download is allowed to continue.
+  bool OnStateTransientError();
 
-  // Handles the job state corresponding to transferring data.
-  void OnStateTransferring();
+  // Handles the job state corresponding to transferring data. Returns false
+  // always since this is never a final state.
+  bool OnStateTransferring();
 
-  HRESULT QueueBitsJob(const GURL& url);
-  HRESULT CreateOrOpenJob(const GURL& url);
-  HRESULT InitializeNewJob(const GURL& url);
+  void StartTimer();
+  void OnTimer();
+
+  HRESULT QueueBitsJob(const GURL& url, IBackgroundCopyJob** job);
+  HRESULT CreateOrOpenJob(const GURL& url, IBackgroundCopyJob** job);
+  HRESULT InitializeNewJob(
+      const base::win::ScopedComPtr<IBackgroundCopyJob>& job,
+      const GURL& url);
 
   // Returns true if at the time of the call, it appears that the job
   // has not been making progress toward completion.
@@ -80,6 +100,18 @@ class BackgroundDownloader : public CrxDownloader {
   // temporary file to its destination and removing it from the BITS queue.
   HRESULT CompleteJob();
 
+  // Revokes the interface pointers from GIT.
+  HRESULT ClearGit();
+
+  // Updates the BITS interface pointers so that they can be used by the
+  // thread calling the function. Call this function to get valid COM interface
+  // pointers when a thread from the thread pool enters the object.
+  HRESULT UpdateInterfacePointers();
+
+  // Resets the BITS interface pointers. Call this function when a thread
+  // from the thread pool leaves the object to release the interface pointers.
+  void ResetInterfacePointers();
+
   // Ensures that we are running on the same thread we created the object on.
   base::ThreadChecker thread_checker_;
 
@@ -88,13 +120,18 @@ class BackgroundDownloader : public CrxDownloader {
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
 
   net::URLRequestContextGetter* context_getter_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
-  // The timer and the BITS interface pointers have thread affinity. These
-  // members are initialized on the task runner and they must be destroyed
-  // on the task runner.
-  scoped_ptr<base::RepeatingTimer<BackgroundDownloader>> timer_;
+  // The timer has thread affinity. This member is initialized and destroyed
+  // on the main task runner.
+  scoped_ptr<base::OneShotTimer> timer_;
 
+  DWORD git_cookie_bits_manager_;
+  DWORD git_cookie_job_;
+
+  // COM interface pointers are valid for the thread that called
+  // |UpdateInterfacePointers| to get pointers to COM proxies, which are valid
+  // for that thread only.
   base::win::ScopedComPtr<IBackgroundCopyManager> bits_manager_;
   base::win::ScopedComPtr<IBackgroundCopyJob> job_;
 
@@ -103,9 +140,6 @@ class BackgroundDownloader : public CrxDownloader {
 
   // Contains the time when the BITS job is last seen making progress.
   base::Time job_stuck_begin_time_;
-
-  // True if EndDownload was called.
-  bool is_completed_;
 
   // Contains the path of the downloaded file if the download was successful.
   base::FilePath response_;

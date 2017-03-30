@@ -5,13 +5,14 @@
 #include "net/ssl/ssl_config.h"
 
 #include "net/cert/cert_verifier.h"
-#include "net/socket/ssl_client_socket.h"
 
 namespace net {
 
-const uint16 kDefaultSSLVersionMin = SSL_PROTOCOL_VERSION_TLS1;
+const uint16_t kDefaultSSLVersionMin = SSL_PROTOCOL_VERSION_TLS1;
 
-const uint16 kDefaultSSLVersionFallbackMin = SSL_PROTOCOL_VERSION_TLS1_1;
+const uint16_t kDefaultSSLVersionMax = SSL_PROTOCOL_VERSION_TLS1_2;
+
+const uint16_t kDefaultSSLVersionFallbackMin = SSL_PROTOCOL_VERSION_TLS1_1;
 
 SSLConfig::CertAndStatus::CertAndStatus() : cert_status(0) {}
 
@@ -21,9 +22,10 @@ SSLConfig::SSLConfig()
     : rev_checking_enabled(true),
       rev_checking_required_local_anchors(false),
       version_min(kDefaultSSLVersionMin),
-      version_max(SSLClientSocket::GetMaxSupportedSSLVersion()),
+      version_max(kDefaultSSLVersionMax),
       version_fallback_min(kDefaultSSLVersionFallbackMin),
-      enable_deprecated_cipher_suites(false),
+      deprecated_cipher_suites_enabled(false),
+      rc4_enabled(false),
       channel_id_enabled(true),
       false_start_enabled(true),
       signed_cert_timestamps_enabled(true),
@@ -32,10 +34,7 @@ SSLConfig::SSLConfig()
       verify_ev_cert(false),
       version_fallback(false),
       cert_io_enabled(true),
-      renego_allowed_default(false),
-      fastradio_padding_enabled(false),
-      fastradio_padding_eligible(false) {
-}
+      renego_allowed_default(false) {}
 
 SSLConfig::~SSLConfig() {}
 

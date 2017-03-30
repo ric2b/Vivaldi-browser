@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/nacl/config.gni")
+
 config("proxy_implementation") {
   defines = [ "PPAPI_PROXY_IMPLEMENTATION" ]
 }
@@ -19,6 +21,8 @@ component("proxy") {
     "../utility/completion_callback_factory.h",
     "audio_buffer_resource.cc",
     "audio_buffer_resource.h",
+    "audio_encoder_resource.cc",
+    "audio_encoder_resource.h",
     "broker_resource.cc",
     "broker_resource.h",
     "camera_capabilities_resource.cc",
@@ -196,13 +200,15 @@ component("proxy") {
 
   if (is_nacl) {
     sources += [
+      "../nacl_irt/irt_interfaces.cc",
+      "../nacl_irt/irt_interfaces.h",
+      "../nacl_irt/irt_pnacl_translator_compile.cc",
+      "../nacl_irt/irt_pnacl_translator_link.cc",
       "../nacl_irt/irt_ppapi.cc",
       "../nacl_irt/irt_ppapi.h",
       "../nacl_irt/irt_start.cc",
       "../nacl_irt/manifest_service.cc",
       "../nacl_irt/manifest_service.h",
-      "../nacl_irt/plugin_main.cc",
-      "../nacl_irt/plugin_main.h",
       "../nacl_irt/plugin_startup.cc",
       "../nacl_irt/plugin_startup.h",
       "../nacl_irt/ppapi_dispatcher.cc",
@@ -261,7 +267,14 @@ component("proxy") {
     ]
   }
 
-  configs += [ ":proxy_implementation" ]
+  configs += [
+    ":proxy_implementation",
+    "//build/config:precompiled_headers",
+  ]
+
+  public_deps = [
+    "//ppapi/proxy:ipc_sources",
+  ]
 
   deps = [
     "//base",
@@ -270,14 +283,10 @@ component("proxy") {
     "//ipc",
     "//media:shared_memory_support",
     "//ppapi/c",
-    "//ppapi/proxy:ipc_sources",
     "//ppapi/shared_impl",
-    "//third_party/icu",
   ]
 
-  if (is_nacl) {
-    deps += [ "//ui/events:latency_info" ]
-  } else {
+  if (!is_nacl) {
     deps += [
       "//base/third_party/dynamic_annotations",
       "//gin",
@@ -285,6 +294,10 @@ component("proxy") {
       "//ui/events:events_base",
       "//ui/surface",
     ]
+  }
+
+  if (!is_nacl_nonsfi) {
+    deps += [ "//third_party/icu" ]
   }
 }
 
@@ -336,10 +349,7 @@ source_set("ipc_sources") {
     "//ppapi/shared_impl",
   ]
   if (!is_nacl) {
-    deps += [
-      "//skia",
-      "//ui/events/ipc",
-    ]
+    deps += [ "//skia" ]
   }
 }
 

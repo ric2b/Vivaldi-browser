@@ -4,7 +4,10 @@
 
 #include "extensions/common/manifest_handlers/mime_types_handler.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -61,6 +64,18 @@ void MimeTypesHandler::AddMIMEType(const std::string& mime_type) {
 
 bool MimeTypesHandler::CanHandleMIMEType(const std::string& mime_type) const {
   return mime_type_set_.find(mime_type) != mime_type_set_.end();
+}
+
+bool MimeTypesHandler::HasPlugin() const {
+  return !handler_url_.empty();
+}
+
+base::FilePath MimeTypesHandler::GetPluginPath() const {
+  // TODO(raymes): Storing the extension URL in a base::FilePath is really
+  // nasty. We should probably just use the extension ID as the placeholder path
+  // instead.
+  return base::FilePath::FromUTF8Unsafe(
+      std::string(extensions::kExtensionScheme) + "://" + extension_id_ + "/");
 }
 
 // static

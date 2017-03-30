@@ -6,10 +6,11 @@
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "remoting/base/auto_thread_task_runner.h"
 
 #if defined(OS_WIN)
@@ -30,7 +31,7 @@ scoped_ptr<base::win::ScopedCOMInitializer> CreateComInitializer(
   } else if (type == AutoThread::COM_INIT_STA) {
     initializer.reset(new base::win::ScopedCOMInitializer());
   }
-  return initializer.Pass();
+  return initializer;
 }
 #endif
 
@@ -164,7 +165,7 @@ void AutoThread::QuitThread(
     return;
   }
 
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
   was_quit_properly_ = true;
 
   if (joiner_.get()) {
@@ -207,7 +208,7 @@ void AutoThread::ThreadMain() {
 
   message_loop.Run();
 
-  // Assert that MessageLoop::Quit was called by AutoThread::QuitThread.
+  // Assert that MessageLoop::QuitWhenIdle was called by AutoThread::QuitThread.
   DCHECK(was_quit_properly_);
 }
 

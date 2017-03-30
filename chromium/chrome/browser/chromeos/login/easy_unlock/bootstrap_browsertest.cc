@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "chrome/browser/chromeos/login/easy_unlock/bootstrap_user_context_initializer.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -21,7 +22,6 @@
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
 
@@ -57,12 +57,9 @@ ScopedCompleteCallbackForTesting::~ScopedCompleteCallbackForTesting() {
 
 }  // namespace
 
-// Boolean parameter is used to run this test for webview (true) and for
-// iframe (false) GAIA sign in.
-class BootstrapTest : public OobeBaseTest,
-                      public testing::WithParamInterface<bool> {
+class BootstrapTest : public OobeBaseTest {
  public:
-  BootstrapTest() { set_use_webview(GetParam()); }
+  BootstrapTest() {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     OobeBaseTest::SetUpCommandLine(command_line);
@@ -134,7 +131,7 @@ class BootstrapTest : public OobeBaseTest,
   }
 };
 
-IN_PROC_BROWSER_TEST_P(BootstrapTest, Basic) {
+IN_PROC_BROWSER_TEST_F(BootstrapTest, Basic) {
   ScopedCompleteCallbackForTesting scoped_bootstrap_initialized(base::Bind(
       &BootstrapTest::OnBootstrapInitialized, base::Unretained(this)));
 
@@ -147,7 +144,7 @@ IN_PROC_BROWSER_TEST_P(BootstrapTest, Basic) {
       content::NotificationService::AllSources()).Wait();
 }
 
-IN_PROC_BROWSER_TEST_P(BootstrapTest, PRE_CleanUpFailedUser) {
+IN_PROC_BROWSER_TEST_F(BootstrapTest, PRE_CleanUpFailedUser) {
   ScopedCompleteCallbackForTesting scoped_bootstrap_initialized(base::Bind(
       &BootstrapTest::OnBootstrapInitialized, base::Unretained(this)));
 
@@ -159,13 +156,9 @@ IN_PROC_BROWSER_TEST_P(BootstrapTest, PRE_CleanUpFailedUser) {
   content::RunMessageLoop();
 }
 
-IN_PROC_BROWSER_TEST_P(BootstrapTest, CleanUpFailedUser) {
-  EXPECT_FALSE(user_manager::UserManager::Get()->IsKnownUser(kFakeUser));
+IN_PROC_BROWSER_TEST_F(BootstrapTest, CleanUpFailedUser) {
+  EXPECT_FALSE(user_manager::UserManager::Get()->IsKnownUser(
+      AccountId::FromUserEmail(kFakeUser)));
 }
-
-// TODO(nkostylev): Fix this test for webview. http://crbug.com/477402
-INSTANTIATE_TEST_CASE_P(BootstrapTestSuite,
-                        BootstrapTest,
-                        testing::Values(false));
 
 }  // namespace chromeos

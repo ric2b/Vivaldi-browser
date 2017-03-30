@@ -55,4 +55,14 @@ AudioChannelLayoutTag ChromeChannelLayoutToCoreAudioTag(
   }
 }
 
+std::string FourCCToString(uint32_t fourcc) {
+  const char buffer[] = {
+      (fourcc >> 24) & 0xff,
+      (fourcc >> 16) & 0xff,
+      (fourcc >>  8) & 0xff,
+      (fourcc >>  0) & 0xff,
+  };
+  return std::string(buffer, arraysize(buffer));
+}
+
 }  // namespace media

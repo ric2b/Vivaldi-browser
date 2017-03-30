@@ -4,6 +4,8 @@
 
 #include "components/gcm_driver/registration_info.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 
@@ -17,23 +19,23 @@ const int kInsanceIDSerializationPrefixLength =
 
 // static
 scoped_ptr<RegistrationInfo> RegistrationInfo::BuildFromString(
-    const std::string& serialzied_key,
-    const std::string& serialzied_value,
+    const std::string& serialized_key,
+    const std::string& serialized_value,
     std::string* registration_id) {
   scoped_ptr<RegistrationInfo> registration;
 
-  if (base::StartsWithASCII(serialzied_key, kInsanceIDSerializationPrefix,
-                            true))
+  if (base::StartsWith(serialized_key, kInsanceIDSerializationPrefix,
+                       base::CompareCase::SENSITIVE))
     registration.reset(new InstanceIDTokenInfo);
   else
     registration.reset(new GCMRegistrationInfo);
 
-  if (!registration->Deserialize(serialzied_key,
-                                 serialzied_value,
+  if (!registration->Deserialize(serialized_key,
+                                 serialized_value,
                                  registration_id)) {
     registration.reset();
   }
-  return registration.Pass();
+  return registration;
 }
 
 RegistrationInfo::RegistrationInfo() {
@@ -98,22 +100,22 @@ std::string GCMRegistrationInfo::GetSerializedValue(
 }
 
 bool GCMRegistrationInfo::Deserialize(
-    const std::string& serialzied_key,
-    const std::string& serialzied_value,
+    const std::string& serialized_key,
+    const std::string& serialized_value,
     std::string* registration_id) {
-  if (serialzied_key.empty() || serialzied_value.empty())
+  if (serialized_key.empty() || serialized_value.empty())
     return false;
 
   // Application ID is same as the serialized key.
-  app_id = serialzied_key;
+  app_id = serialized_key;
 
   // Sender IDs and registration ID are constructed from the serialized value.
-  size_t pos = serialzied_value.find('=');
+  size_t pos = serialized_value.find('=');
   if (pos == std::string::npos)
     return false;
 
-  std::string senders = serialzied_value.substr(0, pos);
-  std::string registration_id_str = serialzied_value.substr(pos + 1);
+  std::string senders = serialized_value.substr(0, pos);
+  std::string registration_id_str = serialized_value.substr(pos + 1);
 
   sender_ids = base::SplitString(
       senders, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
@@ -184,8 +186,8 @@ bool InstanceIDTokenInfo::Deserialize(
   if (serialized_key.empty() || serialized_value.empty())
     return false;
 
-  if (!base::StartsWithASCII(serialized_key, kInsanceIDSerializationPrefix,
-                             true))
+  if (!base::StartsWith(serialized_key, kInsanceIDSerializationPrefix,
+                        base::CompareCase::SENSITIVE))
     return false;
 
   std::vector<std::string> fields = base::SplitString(

@@ -11,11 +11,11 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -360,7 +360,7 @@ class LocalFileSyncContext
 
   // Used only on IO thread for available changes notifications.
   base::Time last_notified_changes_;
-  scoped_ptr<base::OneShotTimer<LocalFileSyncContext> > timer_on_io_;
+  scoped_ptr<base::OneShotTimer> timer_on_io_;
   std::vector<base::Closure> pending_completion_callbacks_;
   std::set<GURL> origins_with_pending_changes_;
 

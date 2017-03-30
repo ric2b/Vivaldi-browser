@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/system_indicator/system_indicator_manager.h"
 
+#include <utility>
+
 #include "base/memory/linked_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_action.h"
@@ -82,11 +84,10 @@ void ExtensionIndicatorIcon::OnStatusIconClicked() {
       api::system_indicator::OnClicked::Create());
 
   EventRouter* event_router = EventRouter::Get(profile_);
-  scoped_ptr<Event> event(new Event(events::UNKNOWN,
+  scoped_ptr<Event> event(new Event(events::SYSTEM_INDICATOR_ON_CLICKED,
                                     system_indicator::OnClicked::kEventName,
-                                    params.Pass(), profile_));
-  event_router->DispatchEventToExtension(
-      extension_->id(), event.Pass());
+                                    std::move(params), profile_));
+  event_router->DispatchEventToExtension(extension_->id(), std::move(event));
 }
 
 void ExtensionIndicatorIcon::OnIconUpdated() {
@@ -161,8 +162,7 @@ void SystemIndicatorManager::OnExtensionActionUpdated(
 }
 
 bool SystemIndicatorManager::SendClickEventToExtensionForTest(
-    const std::string extension_id) {
-
+    const std::string& extension_id) {
     extensions::SystemIndicatorManager::SystemIndicatorMap::iterator it =
         system_indicators_.find(extension_id);
 

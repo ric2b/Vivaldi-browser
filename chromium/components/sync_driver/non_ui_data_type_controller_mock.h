@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_BROWSER_SYNC_GLUE_NON_UI_DATA_TYPE_CONTROLLER_MOCK_H_
-#define CHROME_BROWSER_SYNC_GLUE_NON_UI_DATA_TYPE_CONTROLLER_MOCK_H_
+#ifndef COMPONENTS_SYNC_DRIVER_NON_UI_DATA_TYPE_CONTROLLER_MOCK_H_
+#define COMPONENTS_SYNC_DRIVER_NON_UI_DATA_TYPE_CONTROLLER_MOCK_H_
+
+#include <string>
 
 #include "components/sync_driver/non_ui_data_type_controller.h"
 #include "sync/api/sync_error.h"
@@ -20,7 +22,6 @@ class NonUIDataTypeControllerMock
   MOCK_METHOD1(StartAssociating,
                  void(const StartCallback& start_callback));
   MOCK_METHOD1(LoadModels, void(const ModelLoadCallback& model_load_callback));
-  MOCK_METHOD0(OnModelLoaded, void());
   MOCK_METHOD0(Stop, void());
   MOCK_CONST_METHOD0(type, syncer::ModelType());
   MOCK_CONST_METHOD0(name, std::string());
@@ -53,4 +54,4 @@ class NonUIDataTypeControllerMock
 
 }  // namespace sync_driver
 
-#endif  // CHROME_BROWSER_SYNC_GLUE_NON_UI_DATA_TYPE_CONTROLLER_MOCK_H_
+#endif  // COMPONENTS_SYNC_DRIVER_NON_UI_DATA_TYPE_CONTROLLER_MOCK_H_

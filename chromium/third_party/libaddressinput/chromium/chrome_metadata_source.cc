@@ -4,8 +4,12 @@
 
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/stl_util.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -81,9 +85,7 @@ void ChromeMetadataSource::OnURLFetchComplete(const net::URLFetcher* source) {
 ChromeMetadataSource::Request::Request(const std::string& key,
                                        scoped_ptr<net::URLFetcher> fetcher,
                                        const Callback& callback)
-    : key(key),
-      fetcher(fetcher.Pass()),
-      callback(callback) {}
+    : key(key), fetcher(std::move(fetcher)), callback(callback) {}
 
 void ChromeMetadataSource::Download(const std::string& key,
                                     const Callback& downloaded) {
@@ -99,7 +101,7 @@ void ChromeMetadataSource::Download(const std::string& key,
       net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SAVE_COOKIES);
   fetcher->SetRequestContext(getter_);
 
-  Request* request = new Request(key, fetcher.Pass(), downloaded);
+  Request* request = new Request(key, std::move(fetcher), downloaded);
   request->fetcher->SaveResponseWithWriter(
       scoped_ptr<net::URLFetcherResponseWriter>(
           new UnownedStringWriter(&request->data)));

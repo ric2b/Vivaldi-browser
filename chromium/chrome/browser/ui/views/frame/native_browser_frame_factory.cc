@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/native_browser_frame_factory.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/native_browser_frame.h"
 
 namespace {
@@ -26,20 +27,3 @@ void NativeBrowserFrameFactory::Set(NativeBrowserFrameFactory* new_factory) {
   delete factory;
   factory = new_factory;
 }
-
-#if !defined(OS_WIN)
-// static
-chrome::HostDesktopType NativeBrowserFrameFactory::AdjustHostDesktopType(
-    chrome::HostDesktopType desktop_type) {
-  return desktop_type;
-}
-#endif  // !defined(OS_WIN)
-
-#if !defined(USE_ASH) || defined(OS_CHROMEOS)
-// static
-bool NativeBrowserFrameFactory::ShouldCreateForAshDesktop(
-    BrowserView* browser_view) {
-  NOTREACHED();
-  return false;
-}
-#endif  // !defined(OS_WIN) || !defined(USE_ASH)

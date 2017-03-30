@@ -4,12 +4,12 @@
 
 #include "chrome/browser/ui/sync/profile_signin_confirmation_helper.h"
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_notifier_impl.h"
@@ -19,15 +19,16 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -99,7 +100,8 @@ const base::FilePath::CharType kExtensionFilePath[] =
 
 static scoped_refptr<extensions::Extension> CreateExtension(
     const std::string& name,
-    const std::string& id) {
+    const std::string& id,
+    extensions::Manifest::Location location) {
   base::DictionaryValue manifest;
   manifest.SetString(extensions::manifest_keys::kVersion, "1.0.0.0");
   manifest.SetString(extensions::manifest_keys::kName, name);
@@ -107,7 +109,7 @@ static scoped_refptr<extensions::Extension> CreateExtension(
   scoped_refptr<extensions::Extension> extension =
     extensions::Extension::Create(
         base::FilePath(kExtensionFilePath).AppendASCII(name),
-        extensions::Manifest::INTERNAL,
+        location,
         manifest,
         extensions::Extension::NO_FLAGS,
         id,
@@ -129,14 +131,13 @@ class ProfileSigninConfirmationHelperTest : public testing::Test {
     // Create the profile.
     TestingProfile::Builder builder;
     user_prefs_ = new TestingPrefStoreWithCustomReadError;
-    TestingPrefServiceSyncable* pref_service = new TestingPrefServiceSyncable(
-        new TestingPrefStore(),
-        user_prefs_,
-        new TestingPrefStore(),
-        new user_prefs::PrefRegistrySyncable(),
-        new PrefNotifierImpl());
+    syncable_prefs::TestingPrefServiceSyncable* pref_service =
+        new syncable_prefs::TestingPrefServiceSyncable(
+            new TestingPrefStore(), user_prefs_, new TestingPrefStore(),
+            new user_prefs::PrefRegistrySyncable(), new PrefNotifierImpl());
     chrome::RegisterUserProfilePrefs(pref_service->registry());
-    builder.SetPrefService(make_scoped_ptr<PrefServiceSyncable>(pref_service));
+    builder.SetPrefService(
+        make_scoped_ptr<syncable_prefs::PrefServiceSyncable>(pref_service));
     profile_ = builder.Build();
 
     // Initialize the services we check.
@@ -209,17 +210,19 @@ TEST_F(ProfileSigninConfirmationHelperTest, PromptForNewProfile_Extensions) {
 
   // (The web store doesn't count.)
   scoped_refptr<extensions::Extension> webstore =
-      CreateExtension("web store", extensions::kWebStoreAppId);
-  extensions::ExtensionPrefs::Get(profile_.get())->AddGrantedPermissions(
-      webstore->id(), make_scoped_refptr(new extensions::PermissionSet).get());
+      CreateExtension("web store",
+                      extensions::kWebStoreAppId,
+                      extensions::Manifest::COMPONENT);
+  extensions::ExtensionPrefs::Get(profile_.get())
+      ->AddGrantedPermissions(webstore->id(), extensions::PermissionSet());
   extensions->AddExtension(webstore.get());
   EXPECT_FALSE(GetCallbackResult(
       base::Bind(&ui::CheckShouldPromptForNewProfile, profile_.get())));
 
   scoped_refptr<extensions::Extension> extension =
-      CreateExtension("foo", std::string());
-  extensions::ExtensionPrefs::Get(profile_.get())->AddGrantedPermissions(
-      extension->id(), make_scoped_refptr(new extensions::PermissionSet).get());
+      CreateExtension("foo", std::string(), extensions::Manifest::INTERNAL);
+  extensions::ExtensionPrefs::Get(profile_.get())
+      ->AddGrantedPermissions(extension->id(), extensions::PermissionSet());
   extensions->AddExtension(extension.get());
   EXPECT_TRUE(GetCallbackResult(
       base::Bind(&ui::CheckShouldPromptForNewProfile, profile_.get())));

@@ -4,6 +4,8 @@
 
 #include "content/browser/webui/shared_resources_data_source.h"
 
+#include <stddef.h>
+
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
@@ -47,7 +49,8 @@ const ResourcesMap* CreateResourcesMap() {
     const int resource_id = kWebuiResources[i].value;
     AddResource(resource_name, resource_id, result);
     for (const char* (&alias)[2]: kPathAliases) {
-      if (base::StartsWithASCII(resource_name, alias[0], true)) {
+      if (base::StartsWith(resource_name, alias[0],
+                           base::CompareCase::SENSITIVE)) {
         AddResource(alias[1] + resource_name.substr(strlen(alias[0])),
                     resource_id, result);
       }
@@ -88,6 +91,9 @@ void SharedResourcesDataSource::StartDataRequest(
 
   if (idr == IDR_WEBUI_CSS_TEXT_DEFAULTS) {
     std::string css = webui::GetWebUiCssTextDefaults();
+    bytes = base::RefCountedString::TakeString(&css);
+  } else if (idr == IDR_WEBUI_CSS_TEXT_DEFAULTS_MD) {
+    std::string css = webui::GetWebUiCssTextDefaultsMd();
     bytes = base::RefCountedString::TakeString(&css);
   } else {
     bytes = GetContentClient()->GetDataResourceBytes(idr);

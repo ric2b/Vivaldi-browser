@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
@@ -25,7 +26,7 @@ class TwoClientSearchEnginesSyncTest : public SyncTest {
 };
 
 // TCM ID - 8898628.
-IN_PROC_BROWSER_TEST_F(TwoClientSearchEnginesSyncTest, E2ETest_Add) {
+IN_PROC_BROWSER_TEST_F(TwoClientSearchEnginesSyncTest, E2E_ENABLED(Add)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(search_engines_helper::AllServicesMatch());
 
@@ -40,7 +41,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientSearchEnginesSyncTest, E2ETest_Add) {
 }
 
 // TCM ID - 8898660.
-IN_PROC_BROWSER_TEST_F(TwoClientSearchEnginesSyncTest, E2ETest_Delete) {
+IN_PROC_BROWSER_TEST_F(TwoClientSearchEnginesSyncTest, E2E_ENABLED(Delete)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(search_engines_helper::AllServicesMatch());
 

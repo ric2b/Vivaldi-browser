@@ -21,8 +21,9 @@ void PasswordFormToJSON(const PasswordForm& form,
                         base::DictionaryValue* target) {
   target->SetInteger("scheme", form.scheme);
   target->SetString("signon_realm", form.signon_realm);
-  target->SetString("signon_realm", form.signon_realm);
-  target->SetString("original_signon_realm", form.original_signon_realm);
+  target->SetBoolean("is_public_suffix_match", form.is_public_suffix_match);
+  target->SetBoolean("is_affiliation_based_match",
+                     form.is_affiliation_based_match);
   target->SetString("origin", form.origin.possibly_invalid_spec());
   target->SetString("action", form.action.possibly_invalid_spec());
   target->SetString("submit_element", form.submit_element);
@@ -31,12 +32,17 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetString("username_value", form.username_value);
   target->SetString("password_elem", form.password_element);
   target->SetString("password_value", form.password_value);
+  target->SetBoolean("password_value_is_default",
+                     form.password_value_is_default);
   target->SetString("new_password_element", form.new_password_element);
   target->SetString("new_password_value", form.new_password_value);
+  target->SetBoolean("new_password_value_is_default",
+                     form.new_password_value_is_default);
   target->SetBoolean("new_password_marked_by_site",
                      form.new_password_marked_by_site);
   target->SetString("other_possible_usernames",
-                    JoinString(form.other_possible_usernames, '|'));
+                    base::JoinString(form.other_possible_usernames,
+                                     base::ASCIIToUTF16("|")));
   target->SetBoolean("blacklisted", form.blacklisted_by_user);
   target->SetBoolean("preferred", form.preferred);
   target->SetBoolean("ssl_valid", form.ssl_valid);
@@ -49,7 +55,7 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetString("form_data", form_data_string_stream.str());
   target->SetInteger("generation_upload_status", form.generation_upload_status);
   target->SetString("display_name", form.display_name);
-  target->SetString("avatar_url", form.avatar_url.possibly_invalid_spec());
+  target->SetString("icon_url", form.icon_url.possibly_invalid_spec());
   target->SetString("federation_url",
                     form.federation_url.possibly_invalid_spec());
   target->SetBoolean("skip_next_zero_click", form.skip_zero_click);
@@ -65,6 +71,8 @@ void PasswordFormToJSON(const PasswordForm& form,
 PasswordForm::PasswordForm()
     : scheme(SCHEME_HTML),
       username_marked_by_site(false),
+      password_value_is_default(false),
+      new_password_value_is_default(false),
       new_password_marked_by_site(false),
       ssl_valid(false),
       preferred(false),
@@ -75,17 +83,13 @@ PasswordForm::PasswordForm()
       skip_zero_click(false),
       layout(Layout::LAYOUT_OTHER),
       was_parsed_using_autofill_predictions(false),
-      is_alive(true) {
-}
+      is_alive(true),
+      is_public_suffix_match(false),
+      is_affiliation_based_match(false) {}
 
 PasswordForm::~PasswordForm() {
   CHECK(is_alive);
   is_alive = false;
-}
-
-bool PasswordForm::IsPublicSuffixMatch() const {
-  CHECK(is_alive);
-  return !original_signon_realm.empty();
 }
 
 bool PasswordForm::IsPossibleChangePasswordForm() const {
@@ -93,42 +97,70 @@ bool PasswordForm::IsPossibleChangePasswordForm() const {
          layout != PasswordForm::Layout::LAYOUT_LOGIN_AND_SIGNUP;
 }
 
+bool PasswordForm::IsPossibleChangePasswordFormWithoutUsername() const {
+  return IsPossibleChangePasswordForm() && username_element.empty();
+}
+
 bool PasswordForm::operator==(const PasswordForm& form) const {
-  return scheme == form.scheme &&
-      signon_realm == form.signon_realm &&
-      original_signon_realm == form.original_signon_realm &&
-      origin == form.origin &&
-      action == form.action &&
-      submit_element == form.submit_element &&
-      username_element == form.username_element &&
-      username_marked_by_site == form.username_marked_by_site &&
-      username_value == form.username_value &&
-      other_possible_usernames == form.other_possible_usernames &&
-      password_element == form.password_element &&
-      password_value == form.password_value &&
-      new_password_element == form.new_password_element &&
-      new_password_marked_by_site == form.new_password_marked_by_site &&
-      new_password_value == form.new_password_value &&
-      ssl_valid == form.ssl_valid &&
-      preferred == form.preferred &&
-      date_created == form.date_created &&
-      date_synced == form.date_synced &&
-      blacklisted_by_user == form.blacklisted_by_user &&
-      type == form.type &&
-      times_used == form.times_used &&
-      form_data.SameFormAs(form.form_data) &&
-      generation_upload_status == form.generation_upload_status &&
-      display_name == form.display_name &&
-      avatar_url == form.avatar_url &&
-      federation_url == form.federation_url &&
-      skip_zero_click == form.skip_zero_click &&
-      layout == form.layout &&
-      was_parsed_using_autofill_predictions ==
-          form.was_parsed_using_autofill_predictions;
+  return scheme == form.scheme && signon_realm == form.signon_realm &&
+         origin == form.origin && action == form.action &&
+         submit_element == form.submit_element &&
+         username_element == form.username_element &&
+         username_marked_by_site == form.username_marked_by_site &&
+         username_value == form.username_value &&
+         other_possible_usernames == form.other_possible_usernames &&
+         password_element == form.password_element &&
+         password_value == form.password_value &&
+         new_password_element == form.new_password_element &&
+         new_password_marked_by_site == form.new_password_marked_by_site &&
+         new_password_value == form.new_password_value &&
+         ssl_valid == form.ssl_valid && preferred == form.preferred &&
+         date_created == form.date_created && date_synced == form.date_synced &&
+         blacklisted_by_user == form.blacklisted_by_user && type == form.type &&
+         times_used == form.times_used &&
+         form_data.SameFormAs(form.form_data) &&
+         generation_upload_status == form.generation_upload_status &&
+         display_name == form.display_name && icon_url == form.icon_url &&
+         federation_url == form.federation_url &&
+         skip_zero_click == form.skip_zero_click && layout == form.layout &&
+         was_parsed_using_autofill_predictions ==
+             form.was_parsed_using_autofill_predictions &&
+         is_public_suffix_match == form.is_public_suffix_match &&
+         is_affiliation_based_match == form.is_affiliation_based_match;
 }
 
 bool PasswordForm::operator!=(const PasswordForm& form) const {
   return !operator==(form);
+}
+
+bool ArePasswordFormUniqueKeyEqual(const PasswordForm& left,
+                                   const PasswordForm& right) {
+  return (left.signon_realm == right.signon_realm &&
+          left.origin == right.origin &&
+          left.username_element == right.username_element &&
+          left.username_value == right.username_value &&
+          left.password_element == right.password_element);
+}
+
+bool LessThanUniqueKey::operator()(const PasswordForm* left,
+                                   const PasswordForm* right) const {
+  int result = left->signon_realm.compare(right->signon_realm);
+  if (result)
+    return result < 0;
+
+  result = left->username_element.compare(right->username_element);
+  if (result)
+    return result < 0;
+
+  result = left->username_value.compare(right->username_value);
+  if (result)
+    return result < 0;
+
+  result = left->password_element.compare(right->password_element);
+  if (result)
+    return result < 0;
+
+  return left->origin < right->origin;
 }
 
 std::ostream& operator<<(std::ostream& os, PasswordForm::Layout layout) {

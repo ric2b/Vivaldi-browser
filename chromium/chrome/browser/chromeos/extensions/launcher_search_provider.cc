@@ -4,9 +4,11 @@
 
 #include "chrome/browser/chromeos/extensions/launcher_search_provider.h"
 
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/launcher_search_provider/error_reporter.h"
-#include "chrome/browser/chromeos/launcher_search_provider/service.h"
+#include "chrome/browser/chromeos/launcher_search_provider/launcher_search_provider_service.h"
 #include "chrome/common/extensions/api/launcher_search_provider.h"
 #include "content/public/browser/render_frame_host.h"
 
@@ -27,7 +29,7 @@ bool LauncherSearchProviderSetSearchResultsFunction::RunSync() {
   scoped_ptr<ErrorReporter> error_reporter(
       new ErrorReporter(render_frame_host()));
   Service* const service = Service::Get(GetProfile());
-  service->SetSearchResults(extension(), error_reporter.Pass(),
+  service->SetSearchResults(extension(), std::move(error_reporter),
                             params->query_id, params->results);
 
   return true;

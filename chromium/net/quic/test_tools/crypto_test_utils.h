@@ -6,16 +6,19 @@
 #define NET_QUIC_TEST_TOOLS_CRYPTO_TEST_UTILS_H_
 
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "net/quic/crypto/crypto_framer.h"
 #include "net/quic/quic_framer.h"
 #include "net/quic/quic_protocol.h"
+#include "net/quic/test_tools/quic_test_utils.h"
 
 namespace net {
 
@@ -31,6 +34,7 @@ class QuicCryptoServerConfig;
 class QuicCryptoServerStream;
 class QuicCryptoStream;
 class QuicRandom;
+class QuicServerId;
 
 namespace test {
 
@@ -52,14 +56,20 @@ class CryptoTestUtils {
     virtual void RunPendingCallbacks() = 0;
   };
 
+  // FakeServerOptions bundles together a number of options for configuring the
+  // server in HandshakeWithFakeServer.
+  struct FakeServerOptions {
+    FakeServerOptions();
+
+    // If token_binding_enabled is true, then the server will attempt to
+    // negotiate Token Binding.
+    bool token_binding_enabled;
+  };
+
   // FakeClientOptions bundles together a number of options for configuring
   // HandshakeWithFakeClient.
   struct FakeClientOptions {
     FakeClientOptions();
-
-    // If dont_verify_certs is true then no ProofVerifier is set on the client.
-    // Thus no certificates will be requested or checked.
-    bool dont_verify_certs;
 
     // If channel_id_enabled is true then the client will attempt to send a
     // ChannelID.
@@ -68,15 +78,23 @@ class CryptoTestUtils {
     // If channel_id_source_async is true then the client will use an async
     // ChannelIDSource for testing. Ignored if channel_id_enabled is false.
     bool channel_id_source_async;
+
+    // If token_binding_enabled is true, then the client will attempt to
+    // negotiate Token Binding.
+    bool token_binding_enabled;
   };
 
   // returns: the number of client hellos that the client sent.
-  static int HandshakeWithFakeServer(PacketSavingConnection* client_conn,
-                                     QuicCryptoClientStream* client);
+  static int HandshakeWithFakeServer(MockConnectionHelper* helper,
+                                     PacketSavingConnection* client_conn,
+                                     QuicCryptoClientStream* client,
+                                     const FakeServerOptions& options);
 
   // returns: the number of client hellos that the client sent.
-  static int HandshakeWithFakeClient(PacketSavingConnection* server_conn,
+  static int HandshakeWithFakeClient(MockConnectionHelper* helper,
+                                     PacketSavingConnection* server_conn,
                                      QuicCryptoServerStream* server,
+                                     const QuicServerId& server_id,
                                      const FakeClientOptions& options);
 
   // SetupCryptoServerConfigForTest configures |config| and |crypto_config|
@@ -85,7 +103,8 @@ class CryptoTestUtils {
       const QuicClock* clock,
       QuicRandom* rand,
       QuicConfig* config,
-      QuicCryptoServerConfig* crypto_config);
+      QuicCryptoServerConfig* crypto_config,
+      const FakeServerOptions& options);
 
   // CommunicateHandshakeMessages moves messages from |a| to |b| and back until
   // |a|'s handshake has completed.
@@ -126,24 +145,24 @@ class CryptoTestUtils {
   // Returns a |ProofVerifier| that uses the QUIC testing root CA.
   static ProofVerifier* ProofVerifierForTesting();
 
+  // Returns a real ProofVerifier (not a fake proof verifier) for testing.
+  static ProofVerifier* RealProofVerifierForTesting();
+
   // Returns a |ProofVerifyContext| that must be used with the verifier
   // returned by |ProofVerifierForTesting|.
   static ProofVerifyContext* ProofVerifyContextForTesting();
 
-  // These functions return a fake |ProofSource|, |ProofVerifier|, or
-  // |ProofVerifyContext| that works with each other. These are suitable for
-  // unit tests that aren't concerned with |ProofSource| and |ProofVerifier|.
-  // TODO(wtc): delete these when Chromium has a working
-  // ProofSourceForTesting().
-  static ProofSource* FakeProofSourceForTesting();
-  static ProofVerifier* FakeProofVerifierForTesting();
-  static ProofVerifyContext* FakeProofVerifyContextForTesting();
-
   // MockCommonCertSets returns a CommonCertSets that contains a single set with
   // hash |hash|, consisting of the certificate |cert| at index |index|.
   static CommonCertSets* MockCommonCertSets(base::StringPiece cert,
-                                            uint64 hash,
-                                            uint32 index);
+                                            uint64_t hash,
+                                            uint32_t index);
+
+  // Creates a minimal dummy reject message that will pass the client-config
+  // validation tests. This will include a server config, but no certs, proof
+  // source address token, or server nonce.
+  static void FillInDummyReject(CryptoHandshakeMessage* rej,
+                                bool reject_is_stateless);
 
   // ParseTag returns a QuicTag from parsing |tagstr|. |tagstr| may either be
   // in the format "EXMP" (i.e. ASCII format), or "#11223344" (an explicit hex
@@ -164,18 +183,20 @@ class CryptoTestUtils {
   //       nullptr);
   static CryptoHandshakeMessage Message(const char* message_tag, ...);
 
-  // BuildMessage is the same as |Message|, but takes the variable arguments
-  // explicitly. TODO(rtenneti): Investigate whether it'd be better for
-  // Message() and BuildMessage() to return a CryptoHandshakeMessage* pointer
-  // instead, to avoid copying the return value.
-  static CryptoHandshakeMessage BuildMessage(const char* message_tag,
-                                             va_list ap);
-
   // ChannelIDSourceForTesting returns a ChannelIDSource that generates keys
   // deterministically based on the hostname given in the GetChannelIDKey call.
   // This ChannelIDSource works in synchronous mode, i.e., its GetChannelIDKey
   // method never returns QUIC_PENDING.
   static ChannelIDSource* ChannelIDSourceForTesting();
+
+  // MovePackets parses crypto handshake messages from packet number
+  // |*inout_packet_index| through to the last packet (or until a packet fails
+  // to decrypt) and has |dest_stream| process them. |*inout_packet_index| is
+  // updated with an index one greater than the last packet processed.
+  static void MovePackets(PacketSavingConnection* source_conn,
+                          size_t* inout_packet_index,
+                          QuicCryptoStream* dest_stream,
+                          PacketSavingConnection* dest_conn);
 
  private:
   static void CompareClientAndServerKeys(QuicCryptoClientStream* client,

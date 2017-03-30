@@ -4,12 +4,14 @@
 
 #include "mandoline/services/updater/updater_app.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "mandoline/services/updater/updater_impl.h"
-#include "mojo/application/public/cpp/application_connection.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/application_runner.h"
 #include "mojo/public/c/system/main.h"
+#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/application_runner.h"
 
 namespace updater {
 
@@ -31,7 +33,7 @@ bool UpdaterApp::ConfigureIncomingConnection(
 
 void UpdaterApp::Create(mojo::ApplicationConnection* connection,
                         mojo::InterfaceRequest<Updater> request) {
-  new UpdaterImpl(app_impl_, this, request.Pass());
+  new UpdaterImpl(app_impl_, this, std::move(request));
 }
 
 }  // namespace updater

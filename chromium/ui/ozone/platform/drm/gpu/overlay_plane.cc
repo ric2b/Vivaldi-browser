@@ -4,18 +4,19 @@
 
 #include "ui/ozone/platform/drm/gpu/overlay_plane.h"
 
-#include "base/logging.h"
+#include <stddef.h>
+
 #include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
 
 namespace ui {
 
-OverlayPlane::OverlayPlane(scoped_refptr<ScanoutBuffer> buffer)
+OverlayPlane::OverlayPlane(const scoped_refptr<ScanoutBuffer>& buffer)
     : buffer(buffer),
+      plane_transform(gfx::OVERLAY_TRANSFORM_INVALID),
       display_bounds(gfx::Point(), buffer->GetSize()),
-      crop_rect(0, 0, 1, 1) {
-}
+      crop_rect(0, 0, 1, 1) {}
 
-OverlayPlane::OverlayPlane(scoped_refptr<ScanoutBuffer> buffer,
+OverlayPlane::OverlayPlane(const scoped_refptr<ScanoutBuffer>& buffer,
                            int z_order,
                            gfx::OverlayTransform plane_transform,
                            const gfx::Rect& display_bounds,
@@ -24,10 +25,28 @@ OverlayPlane::OverlayPlane(scoped_refptr<ScanoutBuffer> buffer,
       z_order(z_order),
       plane_transform(plane_transform),
       display_bounds(display_bounds),
-      crop_rect(crop_rect) {
-}
+      crop_rect(crop_rect) {}
 
 OverlayPlane::~OverlayPlane() {
+}
+
+OverlayPlane::OverlayPlane(const scoped_refptr<ScanoutBuffer>& buffer,
+                           int z_order,
+                           gfx::OverlayTransform plane_transform,
+                           const gfx::Rect& display_bounds,
+                           const gfx::RectF& crop_rect,
+                           const ProcessBufferCallback& processing_callback)
+    : buffer(buffer),
+      z_order(z_order),
+      plane_transform(plane_transform),
+      display_bounds(display_bounds),
+      crop_rect(crop_rect),
+      processing_callback(processing_callback) {}
+
+bool OverlayPlane::operator<(const OverlayPlane& plane) const {
+  return std::tie(z_order, display_bounds, crop_rect, plane_transform) <
+         std::tie(plane.z_order, plane.display_bounds, plane.crop_rect,
+                  plane.plane_transform);
 }
 
 // static

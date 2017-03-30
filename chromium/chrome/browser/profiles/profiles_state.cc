@@ -4,13 +4,17 @@
 
 #include "chrome/browser/profiles/profiles_state.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/profiles/gaia_info_update_service.h"
 #include "chrome/browser/profiles/gaia_info_update_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -24,6 +28,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/text_elider.h"
@@ -97,16 +102,16 @@ base::string16 GetAvatarButtonTextForProfile(Profile* profile) {
                              kMaxCharactersToDisplay,
                              gfx::CHARACTER_BREAK);
   if (profile->IsLegacySupervised()) {
-    name = l10n_util::GetStringFUTF16(IDS_SUPERVISED_USER_NEW_AVATAR_LABEL,
-                                      name);
+    name = l10n_util::GetStringFUTF16(
+        IDS_LEGACY_SUPERVISED_USER_NEW_AVATAR_LABEL, name);
   }
   return name;
 }
 
 base::string16 GetProfileSwitcherTextForItem(const AvatarMenu::Item& item) {
   if (item.legacy_supervised) {
-    return l10n_util::GetStringFUTF16(IDS_SUPERVISED_USER_NEW_AVATAR_LABEL,
-                                      item.name);
+    return l10n_util::GetStringFUTF16(
+        IDS_LEGACY_SUPERVISED_USER_NEW_AVATAR_LABEL, item.name);
   }
   if (item.child_account)
     return l10n_util::GetStringFUTF16(IDS_CHILD_AVATAR_LABEL, item.name);
@@ -144,8 +149,7 @@ std::vector<std::string> GetSecondaryAccountsForProfile(
   // The vector returned by ProfileOAuth2TokenService::GetAccounts() contains
   // the primary account too, so we need to remove it from the list.
   std::vector<std::string>::iterator primary_index =
-      std::find_if(accounts.begin(), accounts.end(),
-                   std::bind1st(std::equal_to<std::string>(), primary_account));
+      std::find(accounts.begin(), accounts.end(), primary_account);
   DCHECK(primary_index != accounts.end());
   accounts.erase(primary_index);
 
@@ -228,13 +232,13 @@ void RemoveBrowsingDataForProfile(const base::FilePath& profile_path) {
   if (!profile)
     return;
 
-  // For guest the browsing data is in the OTR profile.
+  // For guest profiles the browsing data is in the OTR profile.
   if (profile->IsGuestSession())
     profile = profile->GetOffTheRecordProfile();
 
-  BrowsingDataRemover::CreateForUnboundedRange(profile)->Remove(
+  BrowsingDataRemoverFactory::GetForBrowserContext(profile)->Remove(
+      BrowsingDataRemover::Unbounded(),
       BrowsingDataRemover::REMOVE_WIPE_PROFILE, BrowsingDataHelper::ALL);
-  // BrowsingDataRemover deletes itself.
 }
 
 void SetLastUsedProfile(const std::string& profile_dir) {

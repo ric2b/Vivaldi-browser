@@ -5,19 +5,6 @@
 cr.define('cr.ui', function() {
   /**
    * A class to manage focus between given horizontally arranged elements.
-   * For example, given the page:
-   *
-   *   <input type="checkbox"> <label>Check me!</label> <button>X</button>
-   *
-   * One could create a FocusRow by doing:
-   *
-   *   var focusRow = new cr.ui.FocusRow(rowBoundary, rowEl);
-   *
-   *   focusRow.addFocusableElement(checkboxEl);
-   *   focusRow.addFocusableElement(labelEl);
-   *   focusRow.addFocusableElement(buttonEl);
-   *
-   *   focusRow.setInitialFocusability(true);
    *
    * Pressing left cycles backward and pressing right cycles forward in item
    * order. Pressing Home goes to the beginning of the list and End goes to the
@@ -28,107 +15,189 @@ cr.define('cr.ui', function() {
    * changes to a node inside |this.boundary_|. If |boundary| isn't specified,
    * any focus change deactivates the row.
    *
+   * @param {!Element} root The root of this focus row. Focus classes are
+   *     applied to |root| and all added elements must live within |root|.
+   * @param {?Node} boundary Focus events are ignored outside of this node.
+   * @param {cr.ui.FocusRow.Delegate=} opt_delegate An optional event delegate.
    * @constructor
-   * @extends {HTMLDivElement}
    */
-  function FocusRow() {}
+  function FocusRow(root, boundary, opt_delegate) {
+    /** @type {!Element} */
+    this.root = root;
+
+    /** @private {!Node} */
+    this.boundary_ = boundary || document;
+
+    /** @type {cr.ui.FocusRow.Delegate|undefined} */
+    this.delegate = opt_delegate;
+
+    /** @protected {!EventTracker} */
+    this.eventTracker = new EventTracker;
+  }
 
   /** @interface */
   FocusRow.Delegate = function() {};
 
   FocusRow.Delegate.prototype = {
     /**
-     * Called when a key is pressed while an item in |this.focusableElements| is
-     * focused. If |e|'s default is prevented, further processing is skipped.
-     * @param {cr.ui.FocusRow} row The row that detected a keydown.
-     * @param {Event} e
+     * Called when a key is pressed while on a FocusRow's item. If true is
+     * returned, further processing is skipped.
+     * @param {!cr.ui.FocusRow} row The row that detected a keydown.
+     * @param {!Event} e
      * @return {boolean} Whether the event was handled.
      */
     onKeydown: assertNotReached,
 
     /**
-     * @param {cr.ui.FocusRow} row The row that detected the mouse going down.
-     * @param {Event} e
-     * @return {boolean} Whether the event was handled.
+     * @param {!cr.ui.FocusRow} row
+     * @param {!Event} e
      */
-    onMousedown: assertNotReached,
+    onFocus: assertNotReached,
   };
 
   /** @const {string} */
   FocusRow.ACTIVE_CLASS = 'focus-row-active';
 
+  /**
+   * Whether it's possible that |element| can be focused.
+   * @param {Element} element
+   * @return {boolean} Whether the item is focusable.
+   */
+  FocusRow.isFocusable = function(element) {
+    if (!element || element.disabled)
+      return false;
+
+    // We don't check that element.tabIndex >= 0 here because inactive rows set
+    // a tabIndex of -1.
+
+    function isVisible(element) {
+      assertInstanceof(element, Element);
+
+      var style = window.getComputedStyle(element);
+      if (style.visibility == 'hidden' || style.display == 'none')
+        return false;
+
+      var parent = element.parentNode;
+      if (!parent)
+        return false;
+
+      if (parent == element.ownerDocument || parent instanceof DocumentFragment)
+        return true;
+
+      return isVisible(parent);
+    }
+
+    return isVisible(element);
+  };
+
   FocusRow.prototype = {
-    __proto__: HTMLDivElement.prototype,
-
     /**
-     * Should be called in the constructor to decorate |this|.
-     * @param {Node} boundary Focus events are ignored outside of this node.
-     * @param {cr.ui.FocusRow.Delegate=} opt_delegate A delegate to handle key
-     *     events.
+     * Register a new type of focusable element (or add to an existing one).
+     *
+     * Example: an (X) button might be 'delete' or 'close'.
+     *
+     * When FocusRow is used within a FocusGrid, these types are used to
+     * determine equivalent controls when Up/Down are pressed to change rows.
+     *
+     * Another example: mutually exclusive controls that hide eachother on
+     * activation (i.e. Play/Pause) could use the same type (i.e. 'play-pause')
+     * to indicate they're equivalent.
+     *
+     * @param {string} type The type of element to track focus of.
+     * @param {string} query The selector of the element from this row's root.
+     * @return {boolean} Whether a new item was added.
      */
-    decorate: function(boundary, opt_delegate) {
-      /** @private {!Node} */
-      this.boundary_ = boundary || document;
+    addItem: function(type, query) {
+      assert(type);
 
-      /** @type {cr.ui.FocusRow.Delegate|undefined} */
-      this.delegate = opt_delegate;
+      var element = this.root.querySelector(query);
+      if (!element)
+        return false;
 
-      /** @type {Array<Element>} */
-      this.focusableElements = [];
+      element.setAttribute('focus-type', type);
+      element.tabIndex = this.isActive() ? 0 : -1;
 
-      /** @private {!EventTracker} */
-      this.eventTracker_ = new EventTracker;
-      this.eventTracker_.add(cr.doc, 'focusin', this.onFocusin_.bind(this));
-      this.eventTracker_.add(cr.doc, 'keydown', this.onKeydown_.bind(this));
+      this.eventTracker.add(element, 'blur', this.onBlur_.bind(this));
+      this.eventTracker.add(element, 'focus', this.onFocus_.bind(this));
+      this.eventTracker.add(element, 'keydown', this.onKeydown_.bind(this));
+      this.eventTracker.add(element, 'mousedown',
+                             this.onMousedown_.bind(this));
+      return true;
+    },
+
+    /** Dereferences nodes and removes event handlers. */
+    destroy: function() {
+      this.eventTracker.removeAll();
     },
 
     /**
-     * Called when the row's active state changes and it is added/removed from
-     * the focus order.
-     * @param {boolean} state Whether the row has become active or inactive.
+     * @param {Element} sampleElement An element for to find an equivalent for.
+     * @return {!Element} An equivalent element to focus for |sampleElement|.
+     * @protected
      */
-    onActiveStateChanged: function(state) {},
+    getCustomEquivalent: function(sampleElement) {
+      return assert(this.getFirstFocusable());
+    },
+
+    /**
+     * @return {!Array<!Element>} All registered elements (regardless of
+     *     focusability).
+     */
+    getElements: function() {
+      var elements = this.root.querySelectorAll('[focus-type]');
+      return Array.prototype.slice.call(elements);
+    },
 
     /**
      * Find the element that best matches |sampleElement|.
-     * @param {Element} sampleElement An element from a row of the same type
+     * @param {!Element} sampleElement An element from a row of the same type
      *     which previously held focus.
      * @return {!Element} The element that best matches sampleElement.
      */
-    getEquivalentElement: function(sampleElement) { assertNotReached(); },
+    getEquivalentElement: function(sampleElement) {
+      if (this.getFocusableElements().indexOf(sampleElement) >= 0)
+        return sampleElement;
 
-    /**
-     * Add an element to this FocusRow. No-op if |element| is not provided.
-     * @param {Element} element The element that should be added.
-     */
-    addFocusableElement: function(element) {
-      if (!element)
-        return;
+      var sampleFocusType = this.getTypeForElement(sampleElement);
+      if (sampleFocusType) {
+        var sameType = this.getFirstFocusable(sampleFocusType);
+        if (sameType)
+          return sameType;
+      }
 
-      assert(this.focusableElements.indexOf(element) == -1);
-      assert(this.contains(element));
-
-      element.tabIndex = this.isActive() ? 0 : -1;
-
-      this.focusableElements.push(element);
-      this.eventTracker_.add(element, 'mousedown',
-                             this.onMousedown_.bind(this));
+      return this.getCustomEquivalent(sampleElement);
     },
 
     /**
-     * Called when focus changes to activate/deactivate the row. Focus is
-     * removed from the row when |element| is not in the FocusRow.
-     * @param {Element} element The element that has focus. null if focus should
-     *     be removed.
-     * @private
-    */
-    onFocusChange_: function(element) {
-      this.makeActive(this.contains(element));
+     * @param {string=} opt_type An optional type to search for.
+     * @return {?Element} The first focusable element with |type|.
+     */
+    getFirstFocusable: function(opt_type) {
+      var filter = opt_type ? '="' + opt_type + '"' : '';
+      var elements = this.root.querySelectorAll('[focus-type' + filter + ']');
+      for (var i = 0; i < elements.length; ++i) {
+        if (cr.ui.FocusRow.isFocusable(elements[i]))
+          return elements[i];
+      }
+      return null;
+    },
+
+    /** @return {!Array<!Element>} Registered, focusable elements. */
+    getFocusableElements: function() {
+      return this.getElements().filter(cr.ui.FocusRow.isFocusable);
+    },
+
+    /**
+     * @param {!Element} element An element to determine a focus type for.
+     * @return {string} The focus type for |element| or '' if none.
+     */
+    getTypeForElement: function(element) {
+      return element.getAttribute('focus-type') || '';
     },
 
     /** @return {boolean} Whether this row is currently active. */
     isActive: function() {
-      return this.classList.contains(FocusRow.ACTIVE_CLASS);
+      return this.root.classList.contains(FocusRow.ACTIVE_CLASS);
     },
 
     /**
@@ -140,40 +209,56 @@ cr.define('cr.ui', function() {
       if (active == this.isActive())
         return;
 
-      this.focusableElements.forEach(function(element) {
+      this.getElements().forEach(function(element) {
         element.tabIndex = active ? 0 : -1;
       });
 
-      this.classList.toggle(FocusRow.ACTIVE_CLASS, active);
-      this.onActiveStateChanged(active);
-    },
-
-    /** Dereferences nodes and removes event handlers. */
-    destroy: function() {
-      this.focusableElements.length = 0;
-      this.eventTracker_.removeAll();
+      this.root.classList.toggle(FocusRow.ACTIVE_CLASS, active);
     },
 
     /**
-     * @param {Event} e The focusin event.
+     * @param {!Event} e
      * @private
      */
-    onFocusin_: function(e) {
-      var target = assertInstanceof(e.target, Element);
-      if (this.boundary_.contains(target))
-        this.onFocusChange_(target);
+    onBlur_: function(e) {
+      if (!this.boundary_.contains(/** @type {Node} */(e.relatedTarget)))
+        return;
+
+      if (this.getFocusableElements().indexOf(e.currentTarget) >= 0)
+        this.makeActive(false);
     },
 
     /**
-     * Handles a keypress for an element in this FocusRow.
+     * @param {!Event} e
+     * @private
+     */
+    onFocus_: function(e) {
+      if (this.delegate)
+        this.delegate.onFocus(this, e);
+    },
+
+    /**
+     * @param {!Event} e A mousedown event.
+     * @private
+     */
+    onMousedown_: function(e) {
+      // Only accept left mouse clicks.
+      if (e.button)
+        return;
+
+      // Allow the element under the mouse cursor to be focusable.
+      if (!e.currentTarget.disabled)
+        e.currentTarget.tabIndex = 0;
+    },
+
+    /**
      * @param {Event} e The keydown event.
      * @private
      */
     onKeydown_: function(e) {
-      var element = assertInstanceof(e.target, Element);
-      var elementIndex = this.focusableElements.indexOf(element);
-      if (elementIndex < 0)
-        return;
+      var elements = this.getFocusableElements();
+      var elementIndex = elements.indexOf(e.currentTarget);
+      assert(elementIndex >= 0);
 
       if (this.delegate && this.delegate.onKeydown(this, e))
         return;
@@ -190,27 +275,12 @@ cr.define('cr.ui', function() {
       else if (e.keyIdentifier == 'Home')
         index = 0;
       else if (e.keyIdentifier == 'End')
-        index = this.focusableElements.length - 1;
+        index = elements.length - 1;
 
-      var elementToFocus = this.focusableElements[index];
+      var elementToFocus = elements[index];
       if (elementToFocus) {
         this.getEquivalentElement(elementToFocus).focus();
         e.preventDefault();
-      }
-    },
-
-    /**
-     * @param {Event} e A click event.
-     * @private
-     */
-    onMousedown_: function(e) {
-      if (this.delegate && this.delegate.onMousedown(this, e))
-        return;
-
-      // Only accept the left mouse click.
-      if (!e.button) {
-        // Focus this row if the target is one of the elements in this row.
-        this.onFocusChange_(assertInstanceof(e.target, Element));
       }
     },
   };

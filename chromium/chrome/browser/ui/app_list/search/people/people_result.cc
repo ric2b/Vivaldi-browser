@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/search/people/people_result.h"
 
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -37,15 +39,6 @@ namespace {
 const char kImageSizePath[] = "s64-p/";
 const char kEmailUrlPrefix[] = "mailto:";
 
-const char* const kHangoutsExtensionIds[] = {
-  "nckgahadagoaajjgafhacjanaoiihapd",
-  "ljclpkphhpbpinifbeabbhlfddcpfdde",
-  "ppleadejekpmccmnpjdimmlfljlkdfej",
-  "eggnbpckecmjlblplehfpjjdhhidfdoj",
-  "jfjjdfefebklmdbmenmlehlopoocnoeh",
-  "knipolnnllmklapflnccelgolnpehhpl"
-};
-
 // Add a query parameter to specify the size to fetch the image in. The
 // original profile image can be of an arbitrary size, we ask the server to
 // crop it to a square 64x64 using its smart cropping algorithm.
@@ -66,7 +59,7 @@ PeopleResult::PeopleResult(Profile* profile,
                            scoped_ptr<Person> person)
     : profile_(profile),
       controller_(controller),
-      person_(person.Pass()),
+      person_(std::move(person)),
       weak_factory_(this) {
   set_id(person_->id);
   set_title(base::UTF8ToUTF16(person_->display_name));
@@ -119,7 +112,7 @@ void PeopleResult::InvokeAction(int action_index, int event_flags) {
 
 scoped_ptr<SearchResult> PeopleResult::Duplicate() const {
   return scoped_ptr<SearchResult>(
-      new PeopleResult(profile_, controller_, person_->Duplicate().Pass()));
+      new PeopleResult(profile_, controller_, person_->Duplicate()));
 }
 
 void PeopleResult::OnIconLoaded() {
@@ -160,7 +153,7 @@ void PeopleResult::OpenChat() {
   SigninManagerBase* signin_manager =
       SigninManagerFactory::GetInstance()->GetForProfile(profile_);
   DCHECK(signin_manager);
-  request.from = signin_manager->GetAuthenticatedUsername();
+  request.from = signin_manager->GetAuthenticatedAccountInfo().email;
 
   // to: list of users with whom to start this hangout is with.
   linked_ptr<User> target(new User());
@@ -174,7 +167,7 @@ void PeopleResult::OpenChat() {
   // TODO(rkc): Change this once we remove the hangoutsPrivate API.
   // See crbug.com/306672
   extensions::EventRouter::Get(profile_)
-      ->DispatchEventToExtension(hangouts_extension_id_, event.Pass());
+      ->DispatchEventToExtension(hangouts_extension_id_, std::move(event));
 
   content::RecordAction(base::UserMetricsAction("PeopleSearch_OpenChat"));
 }
@@ -188,12 +181,10 @@ void PeopleResult::SendEmail() {
 }
 
 void PeopleResult::RefreshHangoutsExtensionId() {
-  // TODO(rkc): Change this once we remove the hangoutsPrivate API.
-  // See crbug.com/306672
-  for (size_t i = 0; i < arraysize(kHangoutsExtensionIds); ++i) {
-    if (extensions::EventRouter::Get(profile_)->ExtensionHasEventListener(
-            kHangoutsExtensionIds[i], OnHangoutRequested::kEventName)) {
-      hangouts_extension_id_ = kHangoutsExtensionIds[i];
+  for (const char* id : extension_misc::kHangoutsExtensionIds) {
+    if (extensions::EventRouter::Get(profile_)
+            ->ExtensionHasEventListener(id, OnHangoutRequested::kEventName)) {
+      hangouts_extension_id_ = id;
       return;
     }
   }

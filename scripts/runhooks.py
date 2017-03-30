@@ -1,5 +1,6 @@
 import sys, os, os.path
 import subprocess
+import read_deps_file as deps_utils
 
 script_name = sys.argv[0]
 if not os.path.isabs(script_name):
@@ -10,9 +11,6 @@ sourcedir = os.path.abspath(os.path.join(os.path.split(script_name)[0],".."))
 prefix_name = os.path.split(sourcedir)[1]
 
 workdir = os.path.abspath(os.path.join(sourcedir,".."))
-
-sys.path.append(os.path.join(sourcedir, "chromium", "tools", "deps2git"))
-import deps_utils
 
 def fix_action(str):
 	if str.startswith("vivaldi/") or str.startswith("vivaldi\\"):
@@ -39,8 +37,11 @@ if "--clobber-out" in sys.argv:
   out_dir = os.path.join(sourcedir,build_dir)
   if os.access(out_dir, os.R_OK):
     print "Deleting ", out_dir
-    for _ in range(3):
-      shutil.rmtree(out_dir)
+    for _ in range(4):
+      try:
+        shutil.rmtree(out_dir)
+      except:
+        pass
       if not os.access(out_dir, os.R_OK):
         break
     if os.access(out_dir, os.R_OK):

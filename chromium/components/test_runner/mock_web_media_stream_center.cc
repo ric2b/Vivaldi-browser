@@ -4,7 +4,10 @@
 
 #include "components/test_runner/mock_web_media_stream_center.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "components/test_runner/test_interfaces.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "third_party/WebKit/public/platform/WebAudioDestinationConsumer.h"
@@ -20,41 +23,15 @@
 namespace test_runner {
 
 namespace {
-class NewTrackTask : public WebMethodTask<MockWebMediaStreamCenter> {
- public:
-  NewTrackTask(MockWebMediaStreamCenter* object,
-               const blink::WebMediaStream& stream)
-      : WebMethodTask<MockWebMediaStreamCenter>(object), stream_(stream) {
-    DCHECK(!stream_.isNull());
-  }
-
-  ~NewTrackTask() override {}
-
-  void RunIfValid() override {
-    blink::WebMediaStreamSource source;
-    blink::WebMediaStreamTrack track;
-    source.initialize("MagicVideoDevice#1",
-                      blink::WebMediaStreamSource::TypeVideo,
-                      "Magic video track",
-                      false /* remote */, true /* readonly */);
-    track.initialize(source);
-    stream_.addTrack(track);
-  }
-
- private:
-  blink::WebMediaStream stream_;
-
-  DISALLOW_COPY_AND_ASSIGN(NewTrackTask);
-};
 
 class MockWebAudioDestinationConsumer
     : public blink::WebAudioDestinationConsumer {
  public:
   MockWebAudioDestinationConsumer() {}
-  virtual ~MockWebAudioDestinationConsumer() {}
-  virtual void setFormat(size_t number_of_channels, float sample_rate) {}
-  virtual void consumeAudio(const blink::WebVector<const float*>&,
-                            size_t number_of_frames) {}
+  ~MockWebAudioDestinationConsumer() override {}
+  void setFormat(size_t number_of_channels, float sample_rate) override {}
+  void consumeAudio(const blink::WebVector<const float*>&,
+                    size_t number_of_frames) override {}
 
   DISALLOW_COPY_AND_ASSIGN(MockWebAudioDestinationConsumer);
 };
@@ -125,7 +102,6 @@ void MockWebMediaStreamCenter::didCreateMediaStream(
       delete consumer;
     }
   }
-  interfaces_->GetDelegate()->PostTask(new NewTrackTask(this, stream));
 }
 
 blink::WebAudioSourceProvider*

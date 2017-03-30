@@ -7,9 +7,10 @@
 #include <algorithm>
 #include <string>
 
-#include "base/command_line.h"
+#include "base/memory/memory_pressure_monitor.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/sessions/session_restore_stats_collector.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -22,6 +23,8 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+
+#include "app/vivaldi_apptools.h"
 
 using content::NavigationController;
 using content::RenderWidgetHost;
@@ -70,8 +73,8 @@ void TabLoader::RestoreTabs(const std::vector<RestoredTab>& tabs,
   if (!shared_tab_loader_)
     shared_tab_loader_ = new TabLoader(restore_started);
 
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
-    shared_tab_loader_->stats_collector_->TrackTabs(tabs);
+  if (!vivaldi::IsVivaldiRunning()) {
+  shared_tab_loader_->stats_collector_->TrackTabs(tabs);
   }
   shared_tab_loader_->StartLoading(tabs);
 }
@@ -82,11 +85,11 @@ TabLoader::TabLoader(base::TimeTicks restore_started)
       force_load_delay_multiplier_(1),
       loading_enabled_(true),
       restore_started_(restore_started) {
-  if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
-    stats_collector_ = new SessionRestoreStatsCollector(
-        restore_started,
-        make_scoped_ptr(
-            new SessionRestoreStatsCollector::UmaStatsReportingDelegate()));
+  if (!vivaldi::IsVivaldiRunning()) {
+  stats_collector_ = new SessionRestoreStatsCollector(
+      restore_started,
+      make_scoped_ptr(
+          new SessionRestoreStatsCollector::UmaStatsReportingDelegate()));
   }
   shared_tab_loader_ = this;
   this_retainer_ = this;
@@ -131,7 +134,17 @@ void TabLoader::StartLoading(const std::vector<RestoredTab>& tabs) {
   if (!delegate_) {
     delegate_ = TabLoaderDelegate::Create(this);
     // There is already at least one tab loading (the active tab). As such we
-    // only have to start the timeout timer here.
+    // only have to start the timeout timer here. But, don't restore background
+    // tabs if the system is under memory pressure.
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level =
+        CurrentMemoryPressureLevel();
+
+    if (memory_pressure_level !=
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
+      OnMemoryPressure(memory_pressure_level);
+      return;
+    }
+
     StartFirstTimer();
   }
 }
@@ -140,7 +153,25 @@ void TabLoader::LoadNextTab() {
   // LoadNextTab should only get called after we have started the tab
   // loading.
   CHECK(delegate_);
+
+  // Abort if loading is not enabled.
+  if (!loading_enabled_)
+    return;
+
   if (!tabs_to_load_.empty()) {
+    // Check the memory pressure before restoring the next tab, and abort if
+    // there is pressure. This is important on the Mac because of the sometimes
+    // large delay between a memory pressure event and receiving a notification
+    // of that event (in that case tab restore can trigger memory pressure but
+    // will complete before the notification arrives).
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level =
+        CurrentMemoryPressureLevel();
+    if (memory_pressure_level !=
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
+      OnMemoryPressure(memory_pressure_level);
+      return;
+    }
+
     NavigationController* controller = tabs_to_load_.front();
     DCHECK(controller);
     tabs_loading_.insert(controller);
@@ -212,22 +243,20 @@ void TabLoader::RegisterForNotifications(NavigationController* controller) {
 
 void TabLoader::HandleTabClosedOrLoaded(NavigationController* controller) {
   RemoveTab(controller);
-  if (delegate_ && loading_enabled_)
+  if (delegate_)
     LoadNextTab();
+}
+
+base::MemoryPressureListener::MemoryPressureLevel
+    TabLoader::CurrentMemoryPressureLevel() {
+  if (base::MemoryPressureMonitor::Get())
+    return base::MemoryPressureMonitor::Get()->GetCurrentPressureLevel();
+
+  return base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE;
 }
 
 void TabLoader::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
-  // On Windows and Mac this mechanism is only experimentally enabled.
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
-  // If memory pressure integration isn't explicitly enabled then ignore these
-  // calls.
-  std::string react_to_memory_pressure = variations::GetVariationParamValue(
-      "IntelligentSessionRestore", "ReactToMemoryPressure");
-  if (react_to_memory_pressure != "true")
-    return;
-#endif
-
   // When receiving a resource pressure level warning, we stop pre-loading more
   // tabs since we are running in danger of loading more tabs by throwing out
   // old ones.
@@ -242,8 +271,8 @@ void TabLoader::OnMemoryPressure(
 
     // Notify the stats collector that a tab's loading has been deferred due to
     // memory pressure.
-    if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
-      stats_collector_->DeferTab(tab);
+    if (!vivaldi::IsVivaldiRunning()) {
+    stats_collector_->DeferTab(tab);
     }
   }
   // By calling |LoadNextTab| explicitly, we make sure that the

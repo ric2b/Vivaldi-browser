@@ -4,6 +4,8 @@
 
 #include "net/disk_cache/blockfile/in_flight_backend_io.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
@@ -115,6 +117,10 @@ void BackendIO::DoomEntriesSince(const base::Time initial_time) {
   initial_time_ = initial_time;
 }
 
+void BackendIO::CalculateSizeOfAllEntries() {
+  operation_ = OP_SIZE_ALL;
+}
+
 void BackendIO::OpenNextEntry(Rankings::Iterator* iterator,
                               Entry** next_entry) {
   operation_ = OP_OPEN_NEXT;
@@ -124,7 +130,7 @@ void BackendIO::OpenNextEntry(Rankings::Iterator* iterator,
 
 void BackendIO::EndEnumeration(scoped_ptr<Rankings::Iterator> iterator) {
   operation_ = OP_END_ENUMERATION;
-  scoped_iterator_ = iterator.Pass();
+  scoped_iterator_ = std::move(iterator);
 }
 
 void BackendIO::OnExternalCacheHit(const std::string& key) {
@@ -172,8 +178,10 @@ void BackendIO::WriteData(EntryImpl* entry, int index, int offset,
   truncate_ = truncate;
 }
 
-void BackendIO::ReadSparseData(EntryImpl* entry, int64 offset,
-                               net::IOBuffer* buf, int buf_len) {
+void BackendIO::ReadSparseData(EntryImpl* entry,
+                               int64_t offset,
+                               net::IOBuffer* buf,
+                               int buf_len) {
   operation_ = OP_READ_SPARSE;
   entry_ = entry;
   offset64_ = offset;
@@ -181,8 +189,10 @@ void BackendIO::ReadSparseData(EntryImpl* entry, int64 offset,
   buf_len_ = buf_len;
 }
 
-void BackendIO::WriteSparseData(EntryImpl* entry, int64 offset,
-                                net::IOBuffer* buf, int buf_len) {
+void BackendIO::WriteSparseData(EntryImpl* entry,
+                                int64_t offset,
+                                net::IOBuffer* buf,
+                                int buf_len) {
   operation_ = OP_WRITE_SPARSE;
   entry_ = entry;
   offset64_ = offset;
@@ -190,8 +200,10 @@ void BackendIO::WriteSparseData(EntryImpl* entry, int64 offset,
   buf_len_ = buf_len;
 }
 
-void BackendIO::GetAvailableRange(EntryImpl* entry, int64 offset, int len,
-                                  int64* start) {
+void BackendIO::GetAvailableRange(EntryImpl* entry,
+                                  int64_t offset,
+                                  int len,
+                                  int64_t* start) {
   operation_ = OP_GET_RANGE;
   entry_ = entry;
   offset64_ = offset;
@@ -244,11 +256,14 @@ void BackendIO::ExecuteBackendOperation() {
     case OP_DOOM_SINCE:
       result_ = backend_->SyncDoomEntriesSince(initial_time_);
       break;
+    case OP_SIZE_ALL:
+      result_ = backend_->SyncCalculateSizeOfAllEntries();
+      break;
     case OP_OPEN_NEXT:
       result_ = backend_->SyncOpenNextEntry(iterator_, entry_ptr_);
       break;
     case OP_END_ENUMERATION:
-      backend_->SyncEndEnumeration(scoped_iterator_.Pass());
+      backend_->SyncEndEnumeration(std::move(scoped_iterator_));
       result_ = net::OK;
       break;
     case OP_ON_EXTERNAL_CACHE_HIT:
@@ -375,6 +390,13 @@ void InFlightBackendIO::DoomEntriesBetween(const base::Time initial_time,
   PostOperation(operation.get());
 }
 
+void InFlightBackendIO::CalculateSizeOfAllEntries(
+    const net::CompletionCallback& callback) {
+  scoped_refptr<BackendIO> operation(new BackendIO(this, backend_, callback));
+  operation->CalculateSizeOfAllEntries();
+  PostOperation(operation.get());
+}
+
 void InFlightBackendIO::DoomEntriesSince(
     const base::Time initial_time, const net::CompletionCallback& callback) {
   scoped_refptr<BackendIO> operation(new BackendIO(this, backend_, callback));
@@ -394,7 +416,7 @@ void InFlightBackendIO::EndEnumeration(
     scoped_ptr<Rankings::Iterator> iterator) {
   scoped_refptr<BackendIO> operation(
       new BackendIO(this, backend_, net::CompletionCallback()));
-  operation->EndEnumeration(iterator.Pass());
+  operation->EndEnumeration(std::move(iterator));
   PostOperation(operation.get());
 }
 
@@ -450,7 +472,10 @@ void InFlightBackendIO::WriteData(EntryImpl* entry, int index, int offset,
 }
 
 void InFlightBackendIO::ReadSparseData(
-    EntryImpl* entry, int64 offset, net::IOBuffer* buf, int buf_len,
+    EntryImpl* entry,
+    int64_t offset,
+    net::IOBuffer* buf,
+    int buf_len,
     const net::CompletionCallback& callback) {
   scoped_refptr<BackendIO> operation(new BackendIO(this, backend_, callback));
   operation->ReadSparseData(entry, offset, buf, buf_len);
@@ -458,7 +483,10 @@ void InFlightBackendIO::ReadSparseData(
 }
 
 void InFlightBackendIO::WriteSparseData(
-    EntryImpl* entry, int64 offset, net::IOBuffer* buf, int buf_len,
+    EntryImpl* entry,
+    int64_t offset,
+    net::IOBuffer* buf,
+    int buf_len,
     const net::CompletionCallback& callback) {
   scoped_refptr<BackendIO> operation(new BackendIO(this, backend_, callback));
   operation->WriteSparseData(entry, offset, buf, buf_len);
@@ -466,7 +494,10 @@ void InFlightBackendIO::WriteSparseData(
 }
 
 void InFlightBackendIO::GetAvailableRange(
-    EntryImpl* entry, int64 offset, int len, int64* start,
+    EntryImpl* entry,
+    int64_t offset,
+    int len,
+    int64_t* start,
     const net::CompletionCallback& callback) {
   scoped_refptr<BackendIO> operation(new BackendIO(this, backend_, callback));
   operation->GetAvailableRange(entry, offset, len, start);

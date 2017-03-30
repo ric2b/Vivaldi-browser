@@ -4,6 +4,8 @@
 
 #include "sync/internal_api/sync_rollback_manager_base.h"
 
+#include <stdint.h>
+
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/read_transaction.h"
@@ -26,7 +28,7 @@ class DummyEntryptionHandler : public syncer::SyncEncryptionHandler {
                                bool is_explicit) override {}
   void SetDecryptionPassphrase(const std::string& passphrase) override {}
   void EnableEncryptEverything() override {}
-  bool EncryptEverythingEnabled() const override { return false; }
+  bool IsEncryptEverythingEnabled() const override { return false; }
   syncer::PassphraseType GetPassphraseType() const override {
     return syncer::KEYSTORE_PASSPHRASE;
   }
@@ -49,9 +51,9 @@ bool SyncRollbackManagerBase::InitInternal(
     const base::FilePath& database_location,
     InternalComponentsFactory* internal_components_factory,
     InternalComponentsFactory::StorageOption storage,
-    scoped_ptr<UnrecoverableErrorHandler> unrecoverable_error_handler,
+    const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
     const base::Closure& report_unrecoverable_error_function) {
-  unrecoverable_error_handler_ = unrecoverable_error_handler.Pass();
+  unrecoverable_error_handler_ = unrecoverable_error_handler;
   report_unrecoverable_error_function_ = report_unrecoverable_error_function;
 
   if (!InitBackupDB(database_location, internal_components_factory, storage)) {
@@ -85,8 +87,8 @@ void SyncRollbackManagerBase::UpdateCredentials(
 }
 
 void SyncRollbackManagerBase::StartSyncingNormally(
-    const ModelSafeRoutingInfo& routing_info, base::Time last_poll_time){
-}
+    const ModelSafeRoutingInfo& routing_info,
+    base::Time last_poll_time) {}
 
 void SyncRollbackManagerBase::ConfigureSyncer(
       ConfigureReason reason,
@@ -165,7 +167,6 @@ SyncEncryptionHandler* SyncRollbackManagerBase::GetEncryptionHandler() {
 }
 
 void SyncRollbackManagerBase::RefreshTypes(ModelTypeSet types) {
-
 }
 
 void SyncRollbackManagerBase::HandleTransactionCompleteChangeEvent(
@@ -179,16 +180,14 @@ ModelTypeSet SyncRollbackManagerBase::HandleTransactionEndingChangeEvent(
 }
 
 void SyncRollbackManagerBase::HandleCalculateChangesChangeEventFromSyncApi(
-      const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
-      syncable::BaseTransaction* trans,
-      std::vector<int64>* entries_changed) {
-}
+    const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
+    syncable::BaseTransaction* trans,
+    std::vector<int64_t>* entries_changed) {}
 
 void SyncRollbackManagerBase::HandleCalculateChangesChangeEventFromSyncer(
-      const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
-      syncable::BaseTransaction* trans,
-      std::vector<int64>* entries_changed) {
-}
+    const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
+    syncable::BaseTransaction* trans,
+    std::vector<int64_t>* entries_changed) {}
 
 void SyncRollbackManagerBase::OnTransactionWrite(
     const syncable::ImmutableWriteTransactionInfo& write_transaction_info,
@@ -213,13 +212,13 @@ void SyncRollbackManagerBase::NotifyInitializationFailure() {
           false, ModelTypeSet()));
 }
 
-syncer::SyncContextProxy* SyncRollbackManagerBase::GetSyncContextProxy() {
+syncer_v2::SyncContextProxy* SyncRollbackManagerBase::GetSyncContextProxy() {
   return NULL;
 }
 
 ScopedVector<syncer::ProtocolEvent>
 SyncRollbackManagerBase::GetBufferedProtocolEvents() {
-  return ScopedVector<syncer::ProtocolEvent>().Pass();
+  return ScopedVector<syncer::ProtocolEvent>();
 }
 
 scoped_ptr<base::ListValue> SyncRollbackManagerBase::GetAllNodesForType(
@@ -228,7 +227,7 @@ scoped_ptr<base::ListValue> SyncRollbackManagerBase::GetAllNodesForType(
   scoped_ptr<base::ListValue> nodes(
       trans.GetDirectory()->GetNodeDetailsForType(trans.GetWrappedTrans(),
                                                   type));
-  return nodes.Pass();
+  return nodes;
 }
 
 bool SyncRollbackManagerBase::InitBackupDB(
@@ -238,14 +237,14 @@ bool SyncRollbackManagerBase::InitBackupDB(
   base::FilePath backup_db_path = sync_folder.Append(
       syncable::Directory::kSyncDatabaseFilename);
   scoped_ptr<syncable::DirectoryBackingStore> backing_store =
-      internal_components_factory->BuildDirectoryBackingStore(
-          storage, "backup", backup_db_path).Pass();
+      internal_components_factory->BuildDirectoryBackingStore(storage, "backup",
+                                                              backup_db_path);
 
   DCHECK(backing_store.get());
   share_.directory.reset(
       new syncable::Directory(
           backing_store.release(),
-          unrecoverable_error_handler_.get(),
+          unrecoverable_error_handler_,
           report_unrecoverable_error_function_,
           NULL,
           NULL));
@@ -323,5 +322,8 @@ bool SyncRollbackManagerBase::HasDirectoryTypeDebugInfoObserver(
     syncer::TypeDebugInfoObserver* observer) { return false; }
 
 void SyncRollbackManagerBase::RequestEmitDebugInfo() {}
+
+void SyncRollbackManagerBase::ClearServerData(
+    const ClearServerDataCallback& callback) {}
 
 }  // namespace syncer

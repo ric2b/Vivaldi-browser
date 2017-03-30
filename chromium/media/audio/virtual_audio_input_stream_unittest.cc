@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <list>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
@@ -41,7 +44,7 @@ class MockInputCallback : public AudioInputStream::AudioInputCallback {
   MOCK_METHOD4(OnData,
                void(AudioInputStream* stream,
                     const AudioBus* source,
-                    uint32 hardware_delay_bytes,
+                    uint32_t hardware_delay_bytes,
                     double volume));
   MOCK_METHOD1(OnError, void(AudioInputStream* stream));
 
@@ -66,9 +69,11 @@ class TestAudioSource : public SineWaveAudioSource {
 
   ~TestAudioSource() override {}
 
-  int OnMoreData(AudioBus* audio_bus, uint32 total_bytes_delay) override {
-    const int ret = SineWaveAudioSource::OnMoreData(audio_bus,
-                                                    total_bytes_delay);
+  int OnMoreData(AudioBus* audio_bus,
+                 uint32_t total_bytes_delay,
+                 uint32_t frames_skipped) override {
+    const int ret = SineWaveAudioSource::OnMoreData(
+        audio_bus, total_bytes_delay, frames_skipped);
     data_pulled_.Signal();
     return ret;
   }

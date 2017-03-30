@@ -5,7 +5,9 @@
 #ifndef CONTENT_BROWSER_NET_BROWSER_ONLINE_STATE_OBSERVER_H_
 #define CONTENT_BROWSER_NET_BROWSER_ONLINE_STATE_OBSERVER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
 #include "net/base/network_change_notifier.h"
 
 namespace content {
@@ -13,16 +15,25 @@ namespace content {
 // Listens for changes to the online state and manages sending
 // updates to each RenderProcess via RenderProcessHost IPC.
 class BrowserOnlineStateObserver
-    : public net::NetworkChangeNotifier::ConnectionTypeObserver {
+    : public net::NetworkChangeNotifier::MaxBandwidthObserver,
+      public content::NotificationObserver {
  public:
   BrowserOnlineStateObserver();
   ~BrowserOnlineStateObserver() override;
 
-  // ConnectionTypeObserver implementation.
-  void OnConnectionTypeChanged(
+  // MaxBandwidthObserver implementation
+  void OnMaxBandwidthChanged(
+      double max_bandwidth_mbps,
       net::NetworkChangeNotifier::ConnectionType type) override;
 
+  // NotificationObserver implementation
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+
  private:
+  content::NotificationRegistrar registrar_;
+
   DISALLOW_COPY_AND_ASSIGN(BrowserOnlineStateObserver);
 };
 

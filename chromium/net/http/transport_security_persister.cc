@@ -4,6 +4,8 @@
 
 #include "net/http/transport_security_persister.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
@@ -77,6 +79,7 @@ const char kPinningOnly[] = "pinning-only";
 const char kCreated[] = "created";
 const char kStsObserved[] = "sts_observed";
 const char kPkpObserved[] = "pkp_observed";
+const char kReportUri[] = "report-uri";
 
 std::string LoadState(const base::FilePath& path) {
   std::string result;
@@ -161,7 +164,7 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
         continue;
     }
 
-    toplevel.Set(key, serialized.Pass());
+    toplevel.Set(key, std::move(serialized));
   }
 
   TransportSecurityState::PKPStateIterator pkp_iterator(
@@ -180,7 +183,7 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
           new base::DictionaryValue);
       serialized = serialized_scoped.get();
       PopulateEntryWithDefaults(serialized);
-      toplevel.Set(key, serialized_scoped.Pass());
+      toplevel.Set(key, std::move(serialized_scoped));
     }
 
     serialized->SetBoolean(kPkpIncludeSubdomains, pkp_state.include_subdomains);
@@ -188,10 +191,17 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
     serialized->SetDouble(kDynamicSPKIHashesExpiry,
                           pkp_state.expiry.ToDoubleT());
 
+    // TODO(svaldez): Historically, both SHA-1 and SHA-256 hashes were
+    // accepted in pins. Per spec, only SHA-256 is accepted now, however
+    // existing serialized pins are still processed. Migrate historical pins
+    // with SHA-1 hashes properly, either by dropping just the bad hashes or
+    // the entire pin. See https://crbug.com/448501.
     if (now < pkp_state.expiry) {
       serialized->Set(kDynamicSPKIHashes,
                       SPKIHashesToListValue(pkp_state.spki_hashes));
     }
+
+    serialized->SetString(kReportUri, pkp_state.report_uri.spec());
   }
 
   base::JSONWriter::WriteWithOptions(
@@ -281,6 +291,13 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
 
     sts_state.expiry = base::Time::FromDoubleT(expiry);
     pkp_state.expiry = base::Time::FromDoubleT(dynamic_spki_hashes_expiry);
+
+    // Don't fail if this key is not present.
+    std::string report_uri_str;
+    parsed->GetString(kReportUri, &report_uri_str);
+    GURL report_uri(report_uri_str);
+    if (report_uri.is_valid())
+      pkp_state.report_uri = report_uri;
 
     double sts_observed;
     double pkp_observed;

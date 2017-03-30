@@ -5,17 +5,20 @@
 #ifndef MEDIA_BLINK_BUFFERED_DATA_SOURCE_H_
 #define MEDIA_BLINK_BUFFERED_DATA_SOURCE_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "media/base/data_source.h"
-#include "media/base/media_export.h"
 #include "media/base/ranges.h"
 #include "media/blink/buffered_resource_loader.h"
+#include "media/blink/media_blink_export.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -25,26 +28,23 @@ class SingleThreadTaskRunner;
 namespace media {
 class MediaLog;
 
-class MEDIA_EXPORT BufferedDataSourceHost {
+class MEDIA_BLINK_EXPORT BufferedDataSourceHost {
  public:
   // Notify the host of the total size of the media file.
-  virtual void SetTotalBytes(int64 total_bytes) = 0;
+  virtual void SetTotalBytes(int64_t total_bytes) = 0;
 
   // Notify the host that byte range [start,end] has been buffered.
   // TODO(fischman): remove this method when demuxing is push-based instead of
   // pull-based.  http://crbug.com/131444
-  virtual void AddBufferedByteRange(int64 start, int64 end) = 0;
+  virtual void AddBufferedByteRange(int64_t start, int64_t end) = 0;
 
  protected:
   virtual ~BufferedDataSourceHost() {}
 };
 
-// A data source capable of loading URLs and buffering the data using an
-// in-memory sliding window.
-//
-// BufferedDataSource must be created and destroyed on the thread associated
-// with the |task_runner| passed in the constructor.
-class MEDIA_EXPORT BufferedDataSource : public DataSource {
+// This interface is temporary and will go away once MultibufferDataSource
+// has been fully evaluated.
+class BufferedDataSourceInterface : public DataSource {
  public:
   // Used to specify video preload states. They are "hints" to the browser about
   // how aggressively the browser should load and buffer data.
@@ -58,6 +58,70 @@ class MEDIA_EXPORT BufferedDataSource : public DataSource {
     METADATA,
     AUTO,
   };
+
+  // Enum values must match the values in
+  // blink::WebMediaPlayer::BufferingStrategy and there will be assertions at
+  // compile time if they do not match.
+  enum BufferingStrategy {
+    BUFFERING_STRATEGY_NORMAL,
+    BUFFERING_STRATEGY_AGGRESSIVE,
+  };
+
+  // Executes |init_cb| with the result of initialization when it has completed.
+  //
+  // Method called on the render thread.
+  typedef base::Callback<void(bool)> InitializeCB;
+  virtual void Initialize(const InitializeCB& init_cb) = 0;
+
+  // Adjusts the buffering algorithm based on the given preload value.
+  virtual void SetPreload(Preload preload) = 0;
+
+  // Adjusts the buffering algorithm based on the given buffering strategy
+  // value.
+  virtual void SetBufferingStrategy(BufferingStrategy buffering_strategy) = 0;
+
+  // Returns true if the media resource has a single origin, false otherwise.
+  // Only valid to call after Initialize() has completed.
+  //
+  // Method called on the render thread.
+  virtual bool HasSingleOrigin() = 0;
+
+  // Returns true if the media resource passed a CORS access control check.
+  virtual bool DidPassCORSAccessCheck() const = 0;
+
+  // Cancels initialization, any pending loaders, and any pending read calls
+  // from the demuxer. The caller is expected to release its reference to this
+  // object and never call it again.
+  //
+  // Method called on the render thread.
+  virtual void Abort() = 0;
+
+  // Notifies changes in playback state for controlling media buffering
+  // behavior.
+  virtual void MediaPlaybackRateChanged(double playback_rate) = 0;
+  virtual void MediaIsPlaying() = 0;
+  virtual bool media_has_played() const = 0;
+
+  // Returns true if the resource is local.
+  virtual bool assume_fully_buffered() = 0;
+
+  // Cancels any open network connections once reaching the deferred state for
+  // preload=metadata, non-streaming resources that have not started playback.
+  // If already deferred, connections will be immediately closed.
+  virtual void OnBufferingHaveEnough() = 0;
+
+  // Returns an estimate of the number of bytes held by the data source.
+  virtual int64_t GetMemoryUsage() const = 0;
+};
+
+// A data source capable of loading URLs and buffering the data using an
+// in-memory sliding window.
+//
+// BufferedDataSource must be created and destroyed on the thread associated
+// with the |task_runner| passed in the constructor.
+class MEDIA_BLINK_EXPORT BufferedDataSource
+    : NON_EXPORTED_BASE(public BufferedDataSourceInterface) {
+ public:
   typedef base::Callback<void(bool)> DownloadingCB;
 
   // |url| and |cors_mode| are passed to the object. Buffered byte range changes
@@ -77,55 +141,61 @@ class MEDIA_EXPORT BufferedDataSource : public DataSource {
   //
   // Method called on the render thread.
   typedef base::Callback<void(bool)> InitializeCB;
-  void Initialize(const InitializeCB& init_cb);
+  void Initialize(const InitializeCB& init_cb) override;
 
   // Adjusts the buffering algorithm based on the given preload value.
-  void SetPreload(Preload preload);
+  void SetPreload(Preload preload) override;
+
+  // Adjusts the buffering algorithm based on the given buffering strategy
+  // value.
+  void SetBufferingStrategy(BufferingStrategy buffering_strategy) override;
 
   // Returns true if the media resource has a single origin, false otherwise.
   // Only valid to call after Initialize() has completed.
   //
   // Method called on the render thread.
-  bool HasSingleOrigin();
+  bool HasSingleOrigin() override;
 
   // Returns true if the media resource passed a CORS access control check.
-  bool DidPassCORSAccessCheck() const;
+  bool DidPassCORSAccessCheck() const override;
 
   // Cancels initialization, any pending loaders, and any pending read calls
   // from the demuxer. The caller is expected to release its reference to this
   // object and never call it again.
   //
   // Method called on the render thread.
-  void Abort();
+  void Abort() override;
 
   // Notifies changes in playback state for controlling media buffering
   // behavior.
-  void MediaPlaybackRateChanged(double playback_rate);
-  void MediaIsPlaying();
-  void MediaIsPaused();
-  bool media_has_played() const { return media_has_played_; }
+  void MediaPlaybackRateChanged(double playback_rate) override;
+  void MediaIsPlaying() override;
+  bool media_has_played() const override;
 
   // Sets the target buffer capacity in both the backward and forward
   // directions. Pass base::TimeDelta() to use default values.
   void SetTargetBufferDuration(base::TimeDelta behind, base::TimeDelta ahead);
 
   // Returns true if the resource is local.
-  bool assume_fully_buffered() { return !url_.SchemeIsHTTPOrHTTPS(); }
+  bool assume_fully_buffered() override;
 
   // Cancels any open network connections once reaching the deferred state for
   // preload=metadata, non-streaming resources that have not started playback.
   // If already deferred, connections will be immediately closed.
-  void OnBufferingHaveEnough();
+  void OnBufferingHaveEnough() override;
+
+  // Returns an estimate of the number of bytes held by the data source.
+  int64_t GetMemoryUsage() const override;
 
   // DataSource implementation.
   // Called from demuxer thread.
   void Stop() override;
 
-  void Read(int64 position,
+  void Read(int64_t position,
             int size,
-            uint8* data,
+            uint8_t* data,
             const DataSource::ReadCB& read_cb) override;
-  bool GetSize(int64* size_out) override;
+  bool GetSize(int64_t* size_out) override;
   bool IsStreaming() override;
   void SetBitrate(int bitrate) override;
 
@@ -137,7 +207,8 @@ class MEDIA_EXPORT BufferedDataSource : public DataSource {
   // parameters. We can override this file to object a mock
   // BufferedResourceLoader for testing.
   virtual BufferedResourceLoader* CreateResourceLoader(
-      int64 first_byte_position, int64 last_byte_position);
+      int64_t first_byte_position,
+      int64_t last_byte_position);
 
  private:
   friend class BufferedDataSourceTest;
@@ -172,11 +243,10 @@ class MEDIA_EXPORT BufferedDataSource : public DataSource {
   // BufferedResourceLoader callbacks.
   void ReadCallback(BufferedResourceLoader::Status status, int bytes_read);
   void LoadingStateChangedCallback(BufferedResourceLoader::LoadingState state);
-  void ProgressCallback(int64 position);
+  void ProgressCallback(int64_t position);
 
-  // Update |loader_|'s deferring strategy in response to a play/pause, or
-  // change in playback rate.
-  void UpdateDeferStrategy(bool paused);
+  // Update |loader_|'s deferring strategy.
+  void UpdateDeferStrategy();
 
   // URL of the resource requested.
   GURL url_;
@@ -186,7 +256,7 @@ class MEDIA_EXPORT BufferedDataSource : public DataSource {
   // The total size of the resource. Set during StartCallback() if the size is
   // known, otherwise it will remain kPositionNotSpecified until the size is
   // determined by reaching EOF.
-  int64 total_bytes_;
+  int64_t total_bytes_;
 
   // The mime type of the resource.  Set during StartCallback() if the type is
   // known, otherwise it will remain empty.
@@ -220,7 +290,7 @@ class MEDIA_EXPORT BufferedDataSource : public DataSource {
   // because we want buffer to be passed into BufferedResourceLoader to be
   // always non-null. And by initializing this member with a default size we can
   // avoid creating zero-sized buffered if the first read has zero size.
-  std::vector<uint8> intermediate_read_buffer_;
+  std::vector<uint8_t> intermediate_read_buffer_;
 
   // The task runner of the render thread.
   const scoped_refptr<base::SingleThreadTaskRunner> render_task_runner_;
@@ -234,6 +304,9 @@ class MEDIA_EXPORT BufferedDataSource : public DataSource {
   // This variable is true when the user has requested the video to play at
   // least once.
   bool media_has_played_;
+
+  // Buffering strategy as configured by SetBufferingStrategy().
+  BufferingStrategy buffering_strategy_;
 
   // This variable holds the value of the preload attribute for the video
   // element.

@@ -47,20 +47,19 @@ AwRenderThreadContextProvider::Create(
 
 AwRenderThreadContextProvider::AwRenderThreadContextProvider(
     scoped_refptr<gfx::GLSurface> surface,
-    scoped_refptr<gpu::InProcessCommandBuffer::Service> service)
-    : destroyed_(false) {
+    scoped_refptr<gpu::InProcessCommandBuffer::Service> service) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
 
   blink::WebGraphicsContext3D::Attributes attributes;
   attributes.antialias = false;
   attributes.depth = false;
-  attributes.stencil = false;
+  attributes.stencil = true;
   attributes.shareResources = true;
   attributes.noAutomaticFlushes = true;
   gpu::gles2::ContextCreationAttribHelper attribs_for_gles2;
   gpu_blink::WebGraphicsContext3DImpl::ConvertAttributes(attributes,
                                                          &attribs_for_gles2);
-  attribs_for_gles2.lose_context_when_out_of_memory = true;
+  attribs_for_gles2.lose_context_when_out_of_memory = false;
 
   context_.reset(gpu::GLInProcessContext::Create(
       service,
@@ -131,8 +130,8 @@ class GrContext* AwRenderThreadContextProvider::GrContext() {
   g_gles2_initializer.Get();
   gles2::SetGLContext(ContextGL());
 
-  skia::RefPtr<GrGLInterface> interface =
-      skia::AdoptRef(skia_bindings::CreateCommandBufferSkiaGLBinding());
+  skia::RefPtr<GrGLInterface> interface = skia::AdoptRef(new GrGLInterface);
+  skia_bindings::InitCommandBufferSkiaGLBinding(interface.get());
   interface->fCallback = BindGrContextCallback;
   interface->fCallbackData = reinterpret_cast<GrGLInterfaceCallbackData>(this);
 
@@ -157,9 +156,6 @@ base::Lock* AwRenderThreadContextProvider::GetLock() {
   return &context_lock_;
 }
 
-void AwRenderThreadContextProvider::VerifyContexts() {
-}
-
 void AwRenderThreadContextProvider::DeleteCachedResources() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
 
@@ -170,28 +166,13 @@ void AwRenderThreadContextProvider::DeleteCachedResources() {
   }
 }
 
-bool AwRenderThreadContextProvider::DestroyedOnMainThread() {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
-
-  return destroyed_;
-}
-
 void AwRenderThreadContextProvider::SetLostContextCallback(
     const LostContextCallback& lost_context_callback) {
   lost_context_callback_ = lost_context_callback;
 }
 
-void AwRenderThreadContextProvider::SetMemoryPolicyChangedCallback(
-    const MemoryPolicyChangedCallback& memory_policy_changed_callback) {
-  // There's no memory manager for the in-process implementation.
-}
-
 void AwRenderThreadContextProvider::OnLostContext() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
-
-  if (destroyed_)
-    return;
-  destroyed_ = true;
 
   if (!lost_context_callback_.is_null())
     base::ResetAndReturn(&lost_context_callback_).Run();

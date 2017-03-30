@@ -6,8 +6,8 @@
 #define CONTENT_COMMON_GPU_CLIENT_GL_HELPER_H_
 
 #include "base/atomicops.h"
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -188,7 +188,7 @@ class CONTENT_EXPORT GLHelper {
   // assumed to be GL_TEXTURE_2D.
   void CropScaleReadbackAndCleanMailbox(
       const gpu::Mailbox& src_mailbox,
-      uint32 sync_point,
+      const gpu::SyncToken& sync_token,
       const gfx::Size& src_size,
       const gfx::Rect& src_subrect,
       const gfx::Size& dst_size,
@@ -233,7 +233,8 @@ class CONTENT_EXPORT GLHelper {
 
   // Copies all pixels from |previous_texture| into |texture| that are
   // inside the region covered by |old_damage| but not part of |new_damage|.
-  void CopySubBufferDamage(GLuint texture,
+  void CopySubBufferDamage(GLenum target,
+                           GLuint texture,
                            GLuint previous_texture,
                            const SkRegion& new_damage,
                            const SkRegion& old_damage);
@@ -243,10 +244,11 @@ class CONTENT_EXPORT GLHelper {
   // Deletes a texture.
   void DeleteTexture(GLuint texture_id);
 
-  // Insert a sync point into the GL command buffer.
-  uint32 InsertSyncPoint();
-  // Wait for the sync point before executing further GL commands.
-  void WaitSyncPoint(uint32 sync_point);
+  // Inserts a fence sync, flushes, and generates a sync token.
+  void GenerateSyncToken(gpu::SyncToken* sync_token);
+
+  // Wait for the sync token before executing further GL commands.
+  void WaitSyncToken(const gpu::SyncToken& sync_token);
 
   // Creates a mailbox holder that is attached to the given texture id, with a
   // sync point to wait on before using the mailbox. Returns a holder with an
@@ -257,7 +259,7 @@ class CONTENT_EXPORT GLHelper {
   // Creates a texture and consumes a mailbox into it. Returns 0 on failure.
   // Note the mailbox is assumed to be GL_TEXTURE_2D.
   GLuint ConsumeMailboxToTexture(const gpu::Mailbox& mailbox,
-                                 uint32 sync_point);
+                                 const gpu::SyncToken& sync_token);
 
   // Resizes the texture's size to |size|.
   void ResizeTexture(GLuint texture, const gfx::Size& size);
@@ -368,7 +370,7 @@ class CONTENT_EXPORT ReadbackYUVInterface {
   // the call to CreateReadbackPipelineYUV() must be fully contained within
   // |target->visible_rect()|.
   virtual void ReadbackYUV(const gpu::Mailbox& mailbox,
-                           uint32 sync_point,
+                           const gpu::SyncToken& sync_token,
                            const scoped_refptr<media::VideoFrame>& target,
                            const gfx::Point& paste_location,
                            const base::Callback<void(bool)>& callback) = 0;

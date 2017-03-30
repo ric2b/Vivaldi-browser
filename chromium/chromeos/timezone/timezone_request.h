@@ -5,9 +5,9 @@
 #ifndef CHROMEOS_TIMEZONE_TIMEZONE_REQUEST_H_
 #define CHROMEOS_TIMEZONE_TIMEZONE_REQUEST_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -118,7 +118,7 @@ class CHROMEOS_EXPORT TimeZoneRequest : private net::URLFetcherDelegate {
   base::Time retry_timeout_abs_;
 
   // Pending retry.
-  base::OneShotTimer<TimeZoneRequest> timezone_request_scheduled_;
+  base::OneShotTimer timezone_request_scheduled_;
 
   base::TimeDelta retry_sleep_on_server_error_;
 

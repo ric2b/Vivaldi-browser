@@ -5,9 +5,12 @@
 #ifndef MEDIA_FORMATS_MP2T_MP2T_STREAM_PARSER_H_
 #define MEDIA_FORMATS_MP2T_MP2T_STREAM_PARSER_H_
 
+#include <stdint.h>
+
 #include <list>
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/audio_decoder_config.h"
@@ -31,17 +34,16 @@ class MEDIA_EXPORT Mp2tStreamParser : public StreamParser {
   ~Mp2tStreamParser() override;
 
   // StreamParser implementation.
-  void Init(
-      const InitCB& init_cb,
-      const NewConfigCB& config_cb,
-      const NewBuffersCB& new_buffers_cb,
-      bool ignore_text_tracks,
-      const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
-      const NewMediaSegmentCB& new_segment_cb,
-      const base::Closure& end_of_segment_cb,
-      const LogCB& log_cb) override;
+  void Init(const InitCB& init_cb,
+            const NewConfigCB& config_cb,
+            const NewBuffersCB& new_buffers_cb,
+            bool ignore_text_tracks,
+            const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
+            const NewMediaSegmentCB& new_segment_cb,
+            const base::Closure& end_of_segment_cb,
+            const scoped_refptr<MediaLog>& media_log) override;
   void Flush() override;
-  bool Parse(const uint8* buf, int size) override;
+  bool Parse(const uint8_t* buf, int size) override;
 
  private:
   typedef std::map<int, PidState*> PidMap;
@@ -101,7 +103,7 @@ class MEDIA_EXPORT Mp2tStreamParser : public StreamParser {
   EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
   NewMediaSegmentCB new_segment_cb_;
   base::Closure end_of_segment_cb_;
-  LogCB log_cb_;
+  scoped_refptr<MediaLog> media_log_;
 
   // True when AAC SBR extension is signalled in the mimetype
   // (mp4a.40.5 in the codecs parameter).

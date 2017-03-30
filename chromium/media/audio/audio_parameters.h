@@ -5,27 +5,63 @@
 #ifndef MEDIA_AUDIO_AUDIO_PARAMETERS_H_
 #define MEDIA_AUDIO_AUDIO_PARAMETERS_H_
 
+#include <stdint.h>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/compiler_specific.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
+#include "media/audio/point.h"
+#include "media/base/audio_bus.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_export.h"
 
 namespace media {
 
-struct MEDIA_EXPORT AudioInputBufferParameters {
+// Use a struct-in-struct approach to ensure that we can calculate the required
+// size as sizeof(Audio{Input,Output}BufferParameters) + #(bytes in audio
+// buffer) without using packing. Also align Audio{Input,Output}BufferParameters
+// instead of in Audio{Input,Output}Buffer to be able to calculate size like so.
+// Use a macro for the alignment value that's the same as
+// AudioBus::kChannelAlignment, since MSVC doesn't accept the latter to be used.
+#if defined(OS_WIN)
+#pragma warning(push)
+#pragma warning(disable: 4324)  // Disable warning for added padding.
+#endif
+#define PARAMETERS_ALIGNMENT 16
+static_assert(AudioBus::kChannelAlignment == PARAMETERS_ALIGNMENT,
+              "Audio buffer parameters struct alignment not same as AudioBus");
+struct MEDIA_EXPORT ALIGNAS(PARAMETERS_ALIGNMENT) AudioInputBufferParameters {
   double volume;
-  uint32 size;
+  uint32_t size;
+  uint32_t hardware_delay_bytes;
+  uint32_t id;
   bool key_pressed;
 };
+struct MEDIA_EXPORT ALIGNAS(PARAMETERS_ALIGNMENT) AudioOutputBufferParameters {
+  uint32_t frames_skipped;
+};
+#undef PARAMETERS_ALIGNMENT
+#if defined(OS_WIN)
+#pragma warning(pop)
+#endif
 
-// Use a struct-in-struct approach to ensure that we can calculate the required
-// size as sizeof(AudioInputBufferParameters) + #(bytes in audio buffer) without
-// using packing.
+static_assert(sizeof(AudioInputBufferParameters) %
+                      AudioBus::kChannelAlignment ==
+                  0,
+              "AudioInputBufferParameters not aligned");
+static_assert(sizeof(AudioOutputBufferParameters) %
+                      AudioBus::kChannelAlignment ==
+                  0,
+              "AudioOutputBufferParameters not aligned");
+
 struct MEDIA_EXPORT AudioInputBuffer {
   AudioInputBufferParameters params;
-  int8 audio[1];
+  int8_t audio[1];
+};
+struct MEDIA_EXPORT AudioOutputBuffer {
+  AudioOutputBufferParameters params;
+  int8_t audio[1];
 };
 
 class MEDIA_EXPORT AudioParameters {
@@ -57,18 +93,19 @@ class MEDIA_EXPORT AudioParameters {
   };
 
   AudioParameters();
-  AudioParameters(Format format, ChannelLayout channel_layout,
-                  int sample_rate, int bits_per_sample,
+  AudioParameters(Format format,
+                  ChannelLayout channel_layout,
+                  int sample_rate,
+                  int bits_per_sample,
                   int frames_per_buffer);
-  AudioParameters(Format format, ChannelLayout channel_layout,
-                  int sample_rate, int bits_per_sample,
-                  int frames_per_buffer, int effects);
-  AudioParameters(Format format, ChannelLayout channel_layout,
-                  int channels, int sample_rate, int bits_per_sample,
-                  int frames_per_buffer, int effects);
 
-  void Reset(Format format, ChannelLayout channel_layout,
-             int channels, int sample_rate, int bits_per_sample,
+  ~AudioParameters();
+
+  // Re-initializes all members.
+  void Reset(Format format,
+             ChannelLayout channel_layout,
+             int sample_rate,
+             int bits_per_sample,
              int frames_per_buffer);
 
   // Checks that all values are in the expected range. All limits are specified
@@ -95,26 +132,67 @@ class MEDIA_EXPORT AudioParameters {
   // Comparison with other AudioParams.
   bool Equals(const AudioParameters& other) const;
 
+  void set_format(Format format) { format_ = format; }
   Format format() const { return format_; }
+
+  // A setter for channel_layout_ is intentionally excluded.
   ChannelLayout channel_layout() const { return channel_layout_; }
-  int sample_rate() const { return sample_rate_; }
-  int bits_per_sample() const { return bits_per_sample_; }
-  int frames_per_buffer() const { return frames_per_buffer_; }
+
+  // The number of channels is usually computed from channel_layout_. Setting
+  // this explictly is only required with CHANNEL_LAYOUT_DISCRETE.
+  void set_channels_for_discrete(int channels) {
+    DCHECK(channel_layout_ == CHANNEL_LAYOUT_DISCRETE ||
+           channels == ChannelLayoutToChannelCount(channel_layout_));
+    channels_ = channels;
+  }
   int channels() const { return channels_; }
+
+  void set_sample_rate(int sample_rate) { sample_rate_ = sample_rate; }
+  int sample_rate() const { return sample_rate_; }
+
+  void set_bits_per_sample(int bits_per_sample) {
+    bits_per_sample_ = bits_per_sample;
+  }
+  int bits_per_sample() const { return bits_per_sample_; }
+
+  void set_frames_per_buffer(int frames_per_buffer) {
+    frames_per_buffer_ = frames_per_buffer;
+  }
+  int frames_per_buffer() const { return frames_per_buffer_; }
+
+  void set_effects(int effects) { effects_ = effects; }
   int effects() const { return effects_; }
 
+  void set_mic_positions(const std::vector<Point>& mic_positions) {
+    mic_positions_ = mic_positions;
+  }
+  const std::vector<Point>& mic_positions() const { return mic_positions_; }
+
+  AudioParameters(const AudioParameters&);
+  AudioParameters& operator=(const AudioParameters&);
+
  private:
-  // These members are mutable to support entire struct assignment. They should
-  // not be mutated individually.
   Format format_;                 // Format of the stream.
   ChannelLayout channel_layout_;  // Order of surround sound channels.
+  int channels_;                  // Number of channels. Value set based on
+                                  // |channel_layout|.
   int sample_rate_;               // Sampling frequency/rate.
   int bits_per_sample_;           // Number of bits per sample.
   int frames_per_buffer_;         // Number of frames in a buffer.
-
-  int channels_;                  // Number of channels. Value set based on
-                                  // |channel_layout|.
   int effects_;                   // Bitmask using PlatformEffectsMask.
+
+  // Microphone positions using Cartesian coordinates:
+  // x: the horizontal dimension, with positive to the right from the camera's
+  //    perspective.
+  // y: the depth dimension, with positive forward from the camera's
+  //    perspective.
+  // z: the vertical dimension, with positive upwards.
+  //
+  // Usually, the center of the microphone array will be treated as the origin
+  // (often the position of the camera).
+  //
+  // An empty vector indicates unknown positions.
+  std::vector<Point> mic_positions_;
 };
 
 // Comparison is useful when AudioParameters is used with std structures.

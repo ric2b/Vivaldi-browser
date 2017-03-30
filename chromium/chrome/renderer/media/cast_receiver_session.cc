@@ -36,8 +36,8 @@ class CastReceiverSession::AudioCapturerSource :
 };
 
 // This is a render thread object.
-class CastReceiverSession::VideoCapturerSource :
-    public media::VideoCapturerSource {
+class CastReceiverSession::VideoCapturerSource
+    : public media::VideoCapturerSource {
  public:
   explicit VideoCapturerSource(
       const scoped_refptr<CastReceiverSession> cast_receiver_session);
@@ -47,11 +47,9 @@ class CastReceiverSession::VideoCapturerSource :
       int max_requested_height,
       double max_requested_frame_rate,
       const VideoCaptureDeviceFormatsCB& callback) override;
-  void StartCapture(
-      const media::VideoCaptureParams& params,
-      const content::VideoCaptureDeliverFrameCB& frame_callback,
-      scoped_refptr<base::SingleThreadTaskRunner> frame_callback_task_runner,
-      const RunningCallback& running_callback) override;
+  void StartCapture(const media::VideoCaptureParams& params,
+                    const VideoCaptureDeliverFrameCB& frame_callback,
+                    const RunningCallback& running_callback) override;
   void StopCapture() override;
  private:
   const scoped_refptr<CastReceiverSession> cast_receiver_session_;
@@ -134,23 +132,15 @@ void CastReceiverSession::VideoCapturerSource::GetCurrentSupportedFormats(
     double max_requested_frame_rate,
     const VideoCaptureDeviceFormatsCB& callback) {
   std::vector<media::VideoCaptureFormat> formats;
-  if (cast_receiver_session_->format_.IsValid()) {
+  if (cast_receiver_session_->format_.IsValid())
     formats.push_back(cast_receiver_session_->format_);
-  }
   callback.Run(formats);
 }
 
 void CastReceiverSession::VideoCapturerSource::StartCapture(
       const media::VideoCaptureParams& params,
-      const content::VideoCaptureDeliverFrameCB& frame_callback,
-      scoped_refptr<base::SingleThreadTaskRunner> frame_callback_task_runner,
+      const VideoCaptureDeliverFrameCB& frame_callback,
       const RunningCallback& running_callback) {
-  if (frame_callback_task_runner !=
-      content::RenderThread::Get()->GetIOMessageLoopProxy()) {
-    DCHECK(false) << "Only IO thread supported right now.";
-    running_callback.Run(false);
-    return;
-  }
   cast_receiver_session_->StartVideo(frame_callback);
   running_callback.Run(true);
 }
@@ -176,7 +166,7 @@ void CastReceiverSession::AudioCapturerSource::Initialize(
   if (params.sample_rate() !=
       cast_receiver_session_->audio_config_.rtp_timebase ||
       params.channels() != cast_receiver_session_->audio_config_.channels) {
-    callback->OnCaptureError();
+    callback->OnCaptureError(std::string());
     return;
   }
   audio_valve_ = new CastReceiverAudioValve(callback);

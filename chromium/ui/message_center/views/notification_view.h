@@ -7,9 +7,13 @@
 
 #include <vector>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/views/view_targeter_delegate.h"
+
+class GURL;
 
 namespace views {
 class ProgressBar;
@@ -21,8 +25,10 @@ class BoundedLabel;
 class MessageCenter;
 class MessageCenterController;
 class NotificationButton;
+class NotificationProgressBarBase;
 class NotificationView;
 class PaddedButton;
+class ProportionalImageView;
 
 // View that displays all current types of notification (web, basic, image, and
 // list). Future notification types may be handled by other classes, in which
@@ -72,7 +78,13 @@ class MESSAGE_CENTER_EXPORT NotificationView
 
  private:
   FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, CreateOrUpdateTest);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewTest,
+                           CreateOrUpdateTestSettingsButton);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, FormatContextMessageTest);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, SettingsButtonTest);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, TestLineLimits);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, TestIconSizing);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, TestImageSizing);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, UpdateButtonsStateTest);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, UpdateButtonCountTest);
 
@@ -87,6 +99,7 @@ class MESSAGE_CENTER_EXPORT NotificationView
   void CreateOrUpdateTitleView(const Notification& notification);
   void CreateOrUpdateMessageView(const Notification& notification);
   void CreateOrUpdateContextMessageView(const Notification& notification);
+  void CreateOrUpdateSettingsButtonView(const Notification& notification);
   void CreateOrUpdateProgressBarView(const Notification& notification);
   void CreateOrUpdateListItemViews(const Notification& notification);
   void CreateOrUpdateIconView(const Notification& notification);
@@ -95,6 +108,12 @@ class MESSAGE_CENTER_EXPORT NotificationView
 
   int GetMessageLineLimit(int title_lines, int width) const;
   int GetMessageHeight(int width, int limit) const;
+
+  // Formats the context message to be displayed based on |context|
+  // so it shows as much information as possible
+  // given the space available in the ContextMessage section of the
+  // notification.
+  base::string16 FormatContextMessage(const Notification& notification) const;
 
   MessageCenterController* controller_;  // Weak, lives longer then views.
 
@@ -106,11 +125,13 @@ class MESSAGE_CENTER_EXPORT NotificationView
   BoundedLabel* title_view_;
   BoundedLabel* message_view_;
   BoundedLabel* context_message_view_;
+  views::ImageButton* settings_button_view_;
   std::vector<views::View*> item_views_;
-  views::View* icon_view_;
+  ProportionalImageView* icon_view_;
   views::View* bottom_view_;
-  views::View* image_view_;
-  views::ProgressBar* progress_bar_view_;
+  views::View* image_container_;
+  ProportionalImageView* image_view_;
+  NotificationProgressBarBase* progress_bar_view_;
   std::vector<NotificationButton*> action_buttons_;
   std::vector<views::View*> separators_;
 
@@ -119,4 +140,4 @@ class MESSAGE_CENTER_EXPORT NotificationView
 
 }  // namespace message_center
 
-#endif // UI_MESSAGE_CENTER_VIEWS_NOTIFICATION_VIEW_H_
+#endif  // UI_MESSAGE_CENTER_VIEWS_NOTIFICATION_VIEW_H_

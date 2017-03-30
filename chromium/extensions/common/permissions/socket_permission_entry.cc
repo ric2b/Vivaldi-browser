@@ -4,8 +4,11 @@
 
 #include "extensions/common/permissions/socket_permission_entry.h"
 
+#include <stdint.h>
+
 #include <cstdlib>
 #include <sstream>
+#include <tuple>
 #include <vector>
 
 #include "base/logging.h"
@@ -24,8 +27,8 @@ using content::SocketPermissionRequest;
 const char kColon = ':';
 const char kDot = '.';
 const char kWildcard[] = "*";
-const uint16 kWildcardPortNumber = 0;
-const uint16 kInvalidPort = 65535;
+const uint16_t kWildcardPortNumber = 0;
+const uint16_t kInvalidPort = 65535;
 
 bool StartsOrEndsWithWhitespace(const std::string& str) {
   return !str.empty() && (base::IsUnicodeWhitespace(str[0]) ||
@@ -43,24 +46,10 @@ SocketPermissionEntry::SocketPermissionEntry()
 SocketPermissionEntry::~SocketPermissionEntry() {}
 
 bool SocketPermissionEntry::operator<(const SocketPermissionEntry& rhs) const {
-  if (pattern_.type < rhs.pattern_.type)
-    return true;
-  if (pattern_.type > rhs.pattern_.type)
-    return false;
-
-  if (pattern_.host < rhs.pattern_.host)
-    return true;
-  if (pattern_.host > rhs.pattern_.host)
-    return false;
-
-  if (match_subdomains_ < rhs.match_subdomains_)
-    return true;
-  if (match_subdomains_ > rhs.match_subdomains_)
-    return false;
-
-  if (pattern_.port < rhs.pattern_.port)
-    return true;
-  return false;
+  return std::tie(pattern_.type, pattern_.host, match_subdomains_,
+                  pattern_.port) <
+         std::tie(rhs.pattern_.type, rhs.pattern_.host, rhs.match_subdomains_,
+                  rhs.pattern_.port);
 }
 
 bool SocketPermissionEntry::operator==(const SocketPermissionEntry& rhs) const {
@@ -75,7 +64,7 @@ bool SocketPermissionEntry::Check(
   if (pattern_.type != request.type)
     return false;
 
-  std::string lhost = base::StringToLowerASCII(request.host);
+  std::string lhost = base::ToLowerASCII(request.host);
   if (pattern_.host != lhost) {
     if (!match_subdomains_)
       return false;
@@ -128,8 +117,9 @@ bool SocketPermissionEntry::ParseHostPattern(
     SocketPermissionRequest::OperationType type,
     const std::string& pattern,
     SocketPermissionEntry* entry) {
-  std::vector<std::string> tokens;
-  base::SplitStringDontTrim(pattern, kColon, &tokens);
+  std::vector<std::string> tokens =
+      base::SplitString(pattern, std::string(1, kColon), base::KEEP_WHITESPACE,
+                        base::SPLIT_WANT_ALL);
   return ParseHostPattern(type, tokens, entry);
 }
 
@@ -165,11 +155,12 @@ bool SocketPermissionEntry::ParseHostPattern(
   if (!result.pattern_.host.empty()) {
     if (StartsOrEndsWithWhitespace(result.pattern_.host))
       return false;
-    result.pattern_.host = base::StringToLowerASCII(result.pattern_.host);
+    result.pattern_.host = base::ToLowerASCII(result.pattern_.host);
 
     // The first component can optionally be '*' to match all subdomains.
-    std::vector<std::string> host_components;
-    base::SplitString(result.pattern_.host, kDot, &host_components);
+    std::vector<std::string> host_components =
+        base::SplitString(result.pattern_.host, std::string(1, kDot),
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     DCHECK(!host_components.empty());
 
     if (host_components[0] == kWildcard || host_components[0].empty()) {
@@ -178,7 +169,7 @@ bool SocketPermissionEntry::ParseHostPattern(
     } else {
       result.match_subdomains_ = false;
     }
-    result.pattern_.host = JoinString(host_components, kDot);
+    result.pattern_.host = base::JoinString(host_components, ".");
   }
 
   if (pattern_tokens.size() == 1 || pattern_tokens[1].empty() ||
@@ -193,7 +184,7 @@ bool SocketPermissionEntry::ParseHostPattern(
   int port;
   if (!base::StringToInt(pattern_tokens[1], &port) || port < 1 || port > 65535)
     return false;
-  result.pattern_.port = static_cast<uint16>(port);
+  result.pattern_.port = static_cast<uint16_t>(port);
 
   *entry = result;
   return true;
@@ -216,7 +207,7 @@ std::string SocketPermissionEntry::GetHostPatternAsString() const {
   if (pattern_.port == kWildcardPortNumber)
     result.append(1, kColon).append(kWildcard);
   else
-    result.append(1, kColon).append(base::IntToString(pattern_.port));
+    result.append(1, kColon).append(base::UintToString(pattern_.port));
 
   return result;
 }

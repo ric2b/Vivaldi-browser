@@ -5,7 +5,7 @@
 #ifndef CHROME_RENDERER_SEARCHBOX_SEARCHBOX_EXTENSION_H_
 #define CHROME_RENDERER_SEARCHBOX_SEARCHBOX_EXTENSION_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 
 namespace v8 {
@@ -40,12 +40,10 @@ class SearchBoxExtension {
   static void DispatchInputCancel(blink::WebFrame* frame);
   static void DispatchInputStart(blink::WebFrame* frame);
   static void DispatchKeyCaptureChange(blink::WebFrame* frame);
-  static void DispatchMarginChange(blink::WebFrame* frame);
   static void DispatchMostVisitedChanged(blink::WebFrame* frame);
   static void DispatchSubmit(blink::WebFrame* frame);
   static void DispatchSuggestionChange(blink::WebFrame* frame);
   static void DispatchThemeChange(blink::WebFrame* frame);
-  static void DispatchToggleVoiceSearch(blink::WebFrame* frame);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(SearchBoxExtension);

@@ -5,6 +5,8 @@
 #ifndef CC_RESOURCES_UI_RESOURCE_BITMAP_H_
 #define CC_RESOURCES_UI_RESOURCE_BITMAP_H_
 
+#include <stdint.h>
+
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
@@ -29,15 +31,9 @@ class CC_EXPORT UIResourceBitmap {
     ALPHA_8,
     ETC1
   };
-  enum UIResourceWrapMode {
-    CLAMP_TO_EDGE,
-    REPEAT
-  };
 
   gfx::Size GetSize() const { return size_; }
   UIResourceFormat GetFormat() const { return format_; }
-  UIResourceWrapMode GetWrapMode() const { return wrap_mode_; }
-  void SetWrapMode(UIResourceWrapMode wrap_mode) { wrap_mode_ = wrap_mode; }
   bool GetOpaque() const { return opaque_; }
   void SetOpaque(bool opaque) { opaque_ = opaque; }
 
@@ -58,7 +54,6 @@ class CC_EXPORT UIResourceBitmap {
 
   skia::RefPtr<SkPixelRef> pixel_ref_;
   UIResourceFormat format_;
-  UIResourceWrapMode wrap_mode_;
   gfx::Size size_;
   bool opaque_;
 };

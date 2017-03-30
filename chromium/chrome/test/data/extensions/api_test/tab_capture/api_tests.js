@@ -4,6 +4,21 @@
 
 var tabCapture = chrome.tabCapture;
 
+var helloWorldPageUri = 'data:text/html;charset=UTF-8,' +
+    encodeURIComponent('<html><body>Hello world!</body></html>');
+
+function assertIsSameSetOfTabs(list_a, list_b, id_field_name) {
+  chrome.test.assertEq(list_a.length, list_b.length);
+  function tabIdSortFunction(a, b) {
+    return (a[id_field_name] || 0) - (b[id_field_name] || 0);
+  }
+  list_a.sort(tabIdSortFunction);
+  list_b.sort(tabIdSortFunction);
+  for (var i = 0, end = list_a.length; i < end; ++i) {
+    chrome.test.assertEq(list_a[i][id_field_name], list_b[i][id_field_name]);
+  }
+}
+
 chrome.test.runTests([
   function captureTabAndVerifyStateTransitions() {
     // Tab capture events in the order they happen.
@@ -24,7 +39,8 @@ chrome.test.runTests([
 
     tabCapture.capture({audio: true, video: true}, function(stream) {
       chrome.test.assertTrue(!!stream);
-      stream.stop();
+      stream.getVideoTracks()[0].stop();
+      stream.getAudioTracks()[0].stop();
     });
   },
 
@@ -66,7 +82,8 @@ chrome.test.runTests([
       // returns 'active' capturing status for the second tab.
       var capturedTabsAfterStartCapture = function(infos) {
         checkInfoForSecondTabHasStatus(infos, 'active');
-        activeStream.stop();
+        activeStream.getVideoTracks()[0].stop();
+        activeStream.getAudioTracks()[0].stop();
         tabCapture.getCapturedTabs(capturedTabsAfterStopCapture);
       };
 
@@ -86,7 +103,8 @@ chrome.test.runTests([
       chrome.test.assertLastError(
           'Cannot capture a tab with an active stream.');
       chrome.test.assertTrue(!stream);
-      stream1.stop();
+      stream1.getVideoTracks()[0].stop();
+      stream1.getAudioTracks()[0].stop();
       chrome.test.succeed();
     };
 
@@ -103,14 +121,14 @@ chrome.test.runTests([
     chrome.tabs.getCurrent(function(tab) {
       var stopListener = chrome.test.listenForever(chrome.tabs.onUpdated,
           function(tabId, changeInfo, updatedTab) {
-        if ((changeInfo["muted"] === true)) {
+        if ((changeInfo.mutedInfo.muted === true)) {
           tabCapture.capture({audio: true}, function(stream) {
             stream1 = stream;
           });
         }
-        else if ((changeInfo["mutedCause"] == "capture") &&
-                 (changeInfo["muted"] === false)) {
-          stream1.stop();
+        else if ((changeInfo.mutedInfo.reason == "capture") &&
+                 (changeInfo.mutedInfo.muted === false)) {
+          stream1.getAudioTracks()[0].stop();
           stopListener();
         }
       });
@@ -122,7 +140,7 @@ chrome.test.runTests([
   function onlyVideo() {
     tabCapture.capture({video: true}, function(stream) {
       chrome.test.assertTrue(!!stream);
-      stream.stop();
+      stream.getVideoTracks()[0].stop();
       chrome.test.succeed();
     });
   },
@@ -130,7 +148,7 @@ chrome.test.runTests([
   function onlyAudio() {
     tabCapture.capture({audio: true}, function(stream) {
       chrome.test.assertTrue(!!stream);
-      stream.stop();
+      stream.getAudioTracks()[0].stop();
       chrome.test.succeed();
     });
   },
@@ -140,6 +158,38 @@ chrome.test.runTests([
     tabCapture.capture({audio: false}, function(stream) {
       chrome.test.assertTrue(!stream);
       chrome.test.succeed();
+    });
+  },
+
+  function offscreenTabsDoNotShowUpAsCapturedTabs() {
+    tabCapture.getCapturedTabs(function(tab_list_before) {
+      tabCapture.captureOffscreenTab(
+          helloWorldPageUri,
+          {video: true},
+          function(stream) {
+            chrome.test.assertTrue(!!stream);
+            tabCapture.getCapturedTabs(function(tab_list_after) {
+              assertIsSameSetOfTabs(tab_list_before, tab_list_after, 'tabId');
+              stream.getVideoTracks()[0].stop();
+              chrome.test.succeed();
+            });
+          });
+    });
+  },
+
+  function offscreenTabsDoNotShowUpInTabsQuery() {
+    chrome.tabs.query({/* all tabs */}, function(tab_list_before) {
+      tabCapture.captureOffscreenTab(
+          helloWorldPageUri,
+          {video: true},
+          function(stream) {
+            chrome.test.assertTrue(!!stream);
+            chrome.tabs.query({/* all tabs */}, function(tab_list_after) {
+              assertIsSameSetOfTabs(tab_list_before, tab_list_after, 'id');
+              stream.getVideoTracks()[0].stop();
+              chrome.test.succeed();
+            });
+          });
     });
   }
 ]);

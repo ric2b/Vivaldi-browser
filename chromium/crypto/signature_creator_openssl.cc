@@ -6,10 +6,11 @@
 
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/stl_util.h"
 #include "crypto/openssl_util.h"
 #include "crypto/rsa_private_key.h"
 #include "crypto/scoped_openssl_types.h"
@@ -60,9 +61,9 @@ SignatureCreator* SignatureCreator::Create(RSAPrivateKey* key,
 // static
 bool SignatureCreator::Sign(RSAPrivateKey* key,
                             HashAlgorithm hash_alg,
-                            const uint8* data,
+                            const uint8_t* data,
                             int data_len,
-                            std::vector<uint8>* signature) {
+                            std::vector<uint8_t>* signature) {
   ScopedRSA rsa_key(EVP_PKEY_get1_RSA(key->key()));
   if (!rsa_key)
     return false;
@@ -70,7 +71,7 @@ bool SignatureCreator::Sign(RSAPrivateKey* key,
 
   unsigned int len = 0;
   if (!RSA_sign(ToOpenSSLDigestType(hash_alg), data, data_len,
-                vector_as_array(signature), &len, rsa_key.get())) {
+                signature->data(), &len, rsa_key.get())) {
     signature->clear();
     return false;
   }
@@ -86,12 +87,12 @@ SignatureCreator::~SignatureCreator() {
   EVP_MD_CTX_destroy(sign_context_);
 }
 
-bool SignatureCreator::Update(const uint8* data_part, int data_part_len) {
+bool SignatureCreator::Update(const uint8_t* data_part, int data_part_len) {
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
   return !!EVP_DigestSignUpdate(sign_context_, data_part, data_part_len);
 }
 
-bool SignatureCreator::Final(std::vector<uint8>* signature) {
+bool SignatureCreator::Final(std::vector<uint8_t>* signature) {
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
 
   // Determine the maximum length of the signature.
@@ -103,7 +104,7 @@ bool SignatureCreator::Final(std::vector<uint8>* signature) {
   signature->resize(len);
 
   // Sign it.
-  if (!EVP_DigestSignFinal(sign_context_, vector_as_array(signature), &len)) {
+  if (!EVP_DigestSignFinal(sign_context_, signature->data(), &len)) {
     signature->clear();
     return false;
   }

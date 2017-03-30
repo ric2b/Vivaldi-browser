@@ -5,9 +5,12 @@
 #include "sandbox/mac/os_compatibility.h"
 
 #include <servers/bootstrap.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <unistd.h>
 
 #include "base/mac/mac_util.h"
+#include "sandbox/mac/xpc.h"
 
 namespace sandbox {
 
@@ -69,67 +72,140 @@ size_t strnlen(const char* str, size_t maxlen) {
   return len;
 }
 
-uint64_t MachGetMessageID(const IPCMessage message) {
-  return message.mach->msgh_id;
-}
+class OSCompatibility_10_6 : public OSCompatibility {
+ public:
+  OSCompatibility_10_6() {}
+  ~OSCompatibility_10_6() override {}
 
-template <typename R>
-std::string LaunchdLookUp2GetRequestName(const IPCMessage message) {
-  mach_msg_header_t* header = message.mach;
-  DCHECK_EQ(sizeof(R), header->msgh_size);
-  const R* request = reinterpret_cast<const R*>(header);
-  // Make sure the name is properly NUL-terminated.
-  const size_t name_length =
-      strnlen(request->servicename, BOOTSTRAP_MAX_NAME_LEN);
-  std::string name = std::string(request->servicename, name_length);
-  return name;
-}
+  uint64_t GetMessageSubsystem(const IPCMessage message) override {
+    return (message.mach->msgh_id / 100) * 100;
+  }
 
-template <typename R>
-void LaunchdLookUp2FillReply(IPCMessage message, mach_port_t port) {
-  R* reply = reinterpret_cast<R*>(message.mach);
-  reply->Head.msgh_size = sizeof(R);
-  reply->Head.msgh_bits =
-      MACH_MSGH_BITS_REMOTE(MACH_MSG_TYPE_MOVE_SEND_ONCE) |
-      MACH_MSGH_BITS_COMPLEX;
-  reply->msgh_body.msgh_descriptor_count = 1;
-  reply->service_port.name = port;
-  reply->service_port.disposition = MACH_MSG_TYPE_COPY_SEND;
-  reply->service_port.type = MACH_MSG_PORT_DESCRIPTOR;
-}
+  uint64_t GetMessageID(const IPCMessage message) override {
+    return message.mach->msgh_id;
+  }
 
-template <typename R>
-bool LaunchdSwapIntegerIsGetOnly(const IPCMessage message) {
-  const R* request = reinterpret_cast<const R*>(message.mach);
-  return request->inkey == 0 && request->inval == 0 && request->outkey != 0;
-}
+  bool IsServiceLookUpRequest(const IPCMessage message) override {
+    return GetMessageID(message) == 404;
+  }
+
+  bool IsVprocSwapInteger(const IPCMessage message) override {
+    return GetMessageID(message) == 416;
+  }
+
+  bool IsXPCDomainManagement(const IPCMessage message) override {
+    return false;
+  }
+
+  std::string GetServiceLookupName(const IPCMessage message) override {
+    return GetRequestName<look_up2_request_10_6>(message);
+  }
+
+  void WriteServiceLookUpReply(IPCMessage message,
+                               mach_port_t service_port) override {
+    auto reply = reinterpret_cast<look_up2_reply_10_6*>(message.mach);
+    reply->Head.msgh_size = sizeof(*reply);
+    reply->Head.msgh_bits =
+        MACH_MSGH_BITS_REMOTE(MACH_MSG_TYPE_MOVE_SEND_ONCE) |
+        MACH_MSGH_BITS_COMPLEX;
+    reply->msgh_body.msgh_descriptor_count = 1;
+    reply->service_port.name = service_port;
+    reply->service_port.disposition = MACH_MSG_TYPE_COPY_SEND;
+    reply->service_port.type = MACH_MSG_PORT_DESCRIPTOR;
+  }
+
+  bool IsSwapIntegerReadOnly(const IPCMessage message) override {
+    auto request =
+        reinterpret_cast<const swap_integer_request_10_6*>(message.mach);
+    return request->inkey == 0 && request->inval == 0 && request->outkey != 0;
+  }
+
+ protected:
+  // The 10.6 and 10.7 implementations are the same except for struct offsets,
+  // so provide this templatized helper.
+  template <typename R>
+  static std::string GetRequestName(const IPCMessage message) {
+    mach_msg_header_t* header = message.mach;
+    DCHECK_EQ(sizeof(R), header->msgh_size);
+    const R* request = reinterpret_cast<const R*>(header);
+    // Make sure the name is properly NUL-terminated.
+    const size_t name_length =
+        strnlen(request->servicename, BOOTSTRAP_MAX_NAME_LEN);
+    std::string name = std::string(request->servicename, name_length);
+    return name;
+  }
+};
+
+class OSCompatibility_10_7 : public OSCompatibility_10_6 {
+ public:
+  OSCompatibility_10_7() {}
+  ~OSCompatibility_10_7() override {}
+
+  std::string GetServiceLookupName(const IPCMessage message) override {
+    return GetRequestName<look_up2_request_10_7>(message);
+  }
+};
+
+class OSCompatibility_10_10 : public OSCompatibility {
+ public:
+  OSCompatibility_10_10() {}
+  ~OSCompatibility_10_10() override {}
+
+  uint64_t GetMessageSubsystem(const IPCMessage message) override {
+    return xpc_dictionary_get_uint64(message.xpc, "subsystem");
+  }
+
+  uint64_t GetMessageID(const IPCMessage message) override {
+    return xpc_dictionary_get_uint64(message.xpc, "routine");
+  }
+
+  bool IsServiceLookUpRequest(const IPCMessage message) override {
+    uint64_t subsystem = GetMessageSubsystem(message);
+    uint64_t id = GetMessageID(message);
+    // Lookup requests in XPC can either go through the Mach bootstrap subsytem
+    // (5) from bootstrap_look_up(), or the XPC domain subsystem (3) for
+    // xpc_connection_create(). Both use the same message format.
+    return (subsystem == 5 && id == 207) || (subsystem == 3 && id == 804);
+  }
+
+  bool IsVprocSwapInteger(const IPCMessage message) override {
+    return GetMessageSubsystem(message) == 6 && GetMessageID(message) == 301;
+  }
+
+  bool IsXPCDomainManagement(const IPCMessage message) override {
+    return GetMessageSubsystem(message) == 3;
+  }
+
+  std::string GetServiceLookupName(const IPCMessage message) override {
+    const char* name = xpc_dictionary_get_string(message.xpc, "name");
+    const size_t name_length = strnlen(name, BOOTSTRAP_MAX_NAME_LEN);
+    return std::string(name, name_length);
+  }
+
+  void WriteServiceLookUpReply(IPCMessage message,
+                               mach_port_t service_port) override {
+    xpc_dictionary_set_mach_send(message.xpc, "port", service_port);
+  }
+
+  bool IsSwapIntegerReadOnly(const IPCMessage message) override {
+    return xpc_dictionary_get_bool(message.xpc, "set") == false &&
+           xpc_dictionary_get_uint64(message.xpc, "ingsk") == 0 &&
+           xpc_dictionary_get_int64(message.xpc, "in") == 0;
+  }
+};
 
 }  // namespace
 
-const LaunchdCompatibilityShim GetLaunchdCompatibilityShim() {
-  LaunchdCompatibilityShim shim = {
-    .ipc_message_get_id = &MachGetMessageID,
-    .msg_id_look_up2 = 404,
-    .msg_id_swap_integer = 416,
-    .look_up2_fill_reply = &LaunchdLookUp2FillReply<look_up2_reply_10_6>,
-    .swap_integer_is_get_only =
-        &LaunchdSwapIntegerIsGetOnly<swap_integer_request_10_6>,
-  };
-
-  if (base::mac::IsOSSnowLeopard()) {
-    shim.look_up2_get_request_name =
-        &LaunchdLookUp2GetRequestName<look_up2_request_10_6>;
-  } else if (base::mac::IsOSLionOrLater() &&
-             !base::mac::IsOSYosemiteOrLater()) {
-    shim.look_up2_get_request_name =
-        &LaunchdLookUp2GetRequestName<look_up2_request_10_7>;
-  } else {
-    DLOG(ERROR) << "Unknown OS, using launchd compatibility shim from 10.7.";
-    shim.look_up2_get_request_name =
-        &LaunchdLookUp2GetRequestName<look_up2_request_10_7>;
-  }
-
-  return shim;
+// static
+scoped_ptr<OSCompatibility> OSCompatibility::CreateForPlatform() {
+  if (base::mac::IsOSSnowLeopard())
+    return make_scoped_ptr(new OSCompatibility_10_6());
+  else if (base::mac::IsOSLionOrLater() && base::mac::IsOSMavericksOrEarlier())
+    return make_scoped_ptr(new OSCompatibility_10_7());
+  else
+    return make_scoped_ptr(new OSCompatibility_10_10());
 }
+
+OSCompatibility::~OSCompatibility() {}
 
 }  // namespace sandbox

@@ -4,8 +4,12 @@
 
 #include "net/test/spawned_test_server/spawner_communicator.h"
 
+#include <limits>
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/supports_user_data.h"
 #include "base/test/test_timeouts.h"
@@ -13,7 +17,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "net/base/elements_upload_data_stream.h"
-#include "net/base/net_util.h"
+#include "net/base/port_util.h"
 #include "net/base/request_priority.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/http/http_response_headers.h"
@@ -24,7 +28,7 @@ namespace net {
 
 namespace {
 
-GURL GenerateSpawnerCommandURL(const std::string& command, uint16 port) {
+GURL GenerateSpawnerCommandURL(const std::string& command, uint16_t port) {
   // Always performs HTTP request for sending command to the spawner server.
   return GURL(base::StringPrintf("%s:%u/%s", "http://127.0.0.1", port,
                                  command.c_str()));
@@ -98,7 +102,7 @@ class SpawnerRequestData : public base::SupportsUserData::Data {
 
 }  // namespace
 
-SpawnerCommunicator::SpawnerCommunicator(uint16 port)
+SpawnerCommunicator::SpawnerCommunicator(uint16_t port)
     : io_thread_("spawner_communicator"),
       event_(false, false),
       port_(port),
@@ -189,7 +193,7 @@ void SpawnerCommunicator::SendCommandAndWaitForResultOnIOThread(
     scoped_ptr<UploadElementReader> reader(
         UploadOwnedBytesElementReader::CreateWithString(post_data));
     cur_request_->set_upload(
-        ElementsUploadDataStream::CreateWithReader(reader.Pass(), 0));
+        ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
     HttpRequestHeaders headers;
     headers.SetHeader(HttpRequestHeaders::kContentType,
                       "application/json");
@@ -324,7 +328,7 @@ void SpawnerCommunicator::OnReadCompleted(URLRequest* request, int num_bytes) {
 }
 
 bool SpawnerCommunicator::StartServer(const std::string& arguments,
-                                      uint16* port) {
+                                      uint16_t* port) {
   *port = 0;
   // Send the start command to spawner server to start the Python test server
   // on remote machine.
@@ -352,11 +356,11 @@ bool SpawnerCommunicator::StartServer(const std::string& arguments,
   }
   int int_port;
   if (!server_data->GetInteger("port", &int_port) || int_port <= 0 ||
-      int_port > kuint16max) {
+      int_port > std::numeric_limits<uint16_t>::max()) {
     LOG(ERROR) << "Invalid port value: " << int_port;
     return false;
   }
-  *port = static_cast<uint16>(int_port);
+  *port = static_cast<uint16_t>(int_port);
   return true;
 }
 

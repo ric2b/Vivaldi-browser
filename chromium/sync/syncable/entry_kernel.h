@@ -5,7 +5,12 @@
 #ifndef SYNC_SYNCABLE_ENTRY_KERNEL_H_
 #define SYNC_SYNCABLE_ENTRY_KERNEL_H_
 
+#include <stdint.h>
+
+#include <algorithm>
+#include <map>
 #include <set>
+#include <string>
 
 #include "base/time/time.h"
 #include "base/values.h"
@@ -13,8 +18,10 @@
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/base/unique_position.h"
 #include "sync/internal_api/public/util/immutable.h"
+#include "sync/internal_api/public/util/proto_value_ptr.h"
+#include "sync/protocol/attachments.pb.h"
+#include "sync/protocol/sync.pb.h"
 #include "sync/syncable/metahandle_set.h"
-#include "sync/syncable/proto_value_ptr.h"
 #include "sync/syncable/syncable_id.h"
 #include "sync/util/time.h"
 
@@ -35,7 +42,7 @@ namespace syncable {
 //    directory_backing_store.cc
 //  - TestSimpleFieldsPreservedDuringSaveChanges in syncable_unittest.cc
 
-static const int64 kInvalidMetaHandle = 0;
+static const int64_t kInvalidMetaHandle = 0;
 
 enum {
   BEGIN_FIELDS = 0,
@@ -124,8 +131,8 @@ enum StringField {
   // A tag string which identifies this node as a particular top-level
   // permanent object.  The tag can be thought of as a unique key that
   // identifies a singleton instance.
-  UNIQUE_SERVER_TAG,  // Tagged by the server
-  UNIQUE_CLIENT_TAG,  // Tagged by the client
+  UNIQUE_SERVER_TAG,    // Tagged by the server
+  UNIQUE_CLIENT_TAG,    // Tagged by the client
   UNIQUE_BOOKMARK_TAG,  // Client tags for bookmark items
   STRING_FIELDS_END,
 };
@@ -191,13 +198,15 @@ enum {
   BIT_TEMPS_COUNT = BIT_TEMPS_END - BIT_TEMPS_BEGIN
 };
 
-
-
-struct SYNC_EXPORT_PRIVATE EntryKernel {
+struct SYNC_EXPORT EntryKernel {
  private:
+  typedef syncer::ProtoValuePtr<sync_pb::EntitySpecifics> EntitySpecificsPtr;
+  typedef syncer::ProtoValuePtr<sync_pb::AttachmentMetadata>
+      AttachmentMetadataPtr;
+
   std::string string_fields[STRING_FIELDS_COUNT];
   EntitySpecificsPtr specifics_fields[PROTO_FIELDS_COUNT];
-  int64 int64_fields[INT64_FIELDS_COUNT];
+  int64_t int64_fields[INT64_FIELDS_COUNT];
   base::Time time_fields[TIME_FIELDS_COUNT];
   Id id_fields[ID_FIELDS_COUNT];
   UniquePosition unique_position_fields[UNIQUE_POSITION_FIELDS_COUNT];
@@ -205,6 +214,8 @@ struct SYNC_EXPORT_PRIVATE EntryKernel {
       attachment_metadata_fields[ATTACHMENT_METADATA_FIELDS_COUNT];
   std::bitset<BIT_FIELDS_COUNT> bit_fields;
   std::bitset<BIT_TEMPS_COUNT> bit_temps;
+
+  friend std::ostream& operator<<(std::ostream& s, const EntryKernel& e);
 
  public:
   EntryKernel();
@@ -237,10 +248,10 @@ struct SYNC_EXPORT_PRIVATE EntryKernel {
   }
 
   // Setters.
-  inline void put(MetahandleField field, int64 value) {
+  inline void put(MetahandleField field, int64_t value) {
     int64_fields[field - INT64_FIELDS_BEGIN] = value;
   }
-  inline void put(Int64Field field, int64 value) {
+  inline void put(Int64Field field, int64_t value) {
     int64_fields[field - INT64_FIELDS_BEGIN] = value;
   }
   inline void put(TimeField field, const base::Time& value) {
@@ -252,7 +263,7 @@ struct SYNC_EXPORT_PRIVATE EntryKernel {
   inline void put(IdField field, const Id& value) {
     id_fields[field - ID_FIELDS_BEGIN] = value;
   }
-  inline void put(BaseVersion field, int64 value) {
+  inline void put(BaseVersion field, int64_t value) {
     int64_fields[field - INT64_FIELDS_BEGIN] = value;
   }
   inline void put(IndexedBitField field, bool value) {
@@ -283,10 +294,10 @@ struct SYNC_EXPORT_PRIVATE EntryKernel {
   }
 
   // Const ref getters.
-  inline int64 ref(MetahandleField field) const {
+  inline int64_t ref(MetahandleField field) const {
     return int64_fields[field - INT64_FIELDS_BEGIN];
   }
-  inline int64 ref(Int64Field field) const {
+  inline int64_t ref(Int64Field field) const {
     return int64_fields[field - INT64_FIELDS_BEGIN];
   }
   inline const base::Time& ref(TimeField field) const {
@@ -295,7 +306,7 @@ struct SYNC_EXPORT_PRIVATE EntryKernel {
   inline const Id& ref(IdField field) const {
     return id_fields[field - ID_FIELDS_BEGIN];
   }
-  inline int64 ref(BaseVersion field) const {
+  inline int64_t ref(BaseVersion field) const {
     return int64_fields[field - INT64_FIELDS_BEGIN];
   }
   inline bool ref(IndexedBitField field) const {
@@ -334,6 +345,18 @@ struct SYNC_EXPORT_PRIVATE EntryKernel {
   }
   inline UniquePosition& mutable_ref(UniquePositionField field) {
     return unique_position_fields[field - UNIQUE_POSITION_FIELDS_BEGIN];
+  }
+
+  // Deserialization methods for ::google::protobuf::MessageLite derived types.
+  inline void load(ProtoField field, const void* blob, int length) {
+    specifics_fields[field - PROTO_FIELDS_BEGIN].load(blob, length);
+  }
+
+  inline void load(AttachmentMetadataField field,
+                   const void* blob,
+                   int length) {
+    attachment_metadata_fields[field - ATTACHMENT_METADATA_FIELDS_BEGIN].load(
+        blob, length);
   }
 
   // Sharing data methods for ::google::protobuf::MessageLite derived types.
@@ -381,7 +404,7 @@ struct EntryKernelMutation {
   EntryKernel original, mutated;
 };
 
-typedef std::map<int64, EntryKernelMutation> EntryKernelMutationMap;
+typedef std::map<int64_t, EntryKernelMutation> EntryKernelMutationMap;
 
 typedef Immutable<EntryKernelMutationMap> ImmutableEntryKernelMutationMap;
 
@@ -393,7 +416,9 @@ base::DictionaryValue* EntryKernelMutationToValue(
 base::ListValue* EntryKernelMutationMapToValue(
     const EntryKernelMutationMap& mutations);
 
+std::ostream& operator<<(std::ostream& os, const EntryKernel& entry_kernel);
+
 }  // namespace syncable
 }  // namespace syncer
 
-#endif // SYNC_SYNCABLE_ENTRY_KERNEL_H_
+#endif  // SYNC_SYNCABLE_ENTRY_KERNEL_H_

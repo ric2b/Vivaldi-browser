@@ -21,7 +21,7 @@
 struct MediaPipelineMsg_DecodedDataReady_Params;
 
 namespace base {
-class SingleThreadTaskRunner;
+class SequencedTaskRunner;
 }
 
 namespace media {
@@ -37,8 +37,8 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
  public:
   IPCMediaPipelineHostImpl(
       GpuChannelHost* channel,
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+      media::GpuVideoAcceleratorFactories* factories,
       media::DataSource* data_source);
   ~IPCMediaPipelineHostImpl() override;
 
@@ -91,7 +91,7 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
 
   // Performs an actual read operation on the data source and
   // returns the red data to the media pipeline over the IPC.
-  void OnReadRawData(int64 position, int size);
+  void OnReadRawData(int64_t position, int size);
   void OnReadRawDataFinished(int size);
 
   void OnDecodedDataReady(
@@ -103,18 +103,18 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
       media::PlatformMediaDataType type) const {
     return type == media::PLATFORM_MEDIA_VIDEO &&
            video_config_.decoding_mode ==
-               media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE;
+               media::PlatformMediaDecodingMode::HARDWARE;
   }
 
   bool is_read_in_progress(media::PlatformMediaDataType type) const {
     return !decoded_data_read_callbacks_[type].is_null();
   }
 
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   media::DataSource* data_source_;
   scoped_refptr<content::GpuChannelHost> channel_;
-  int32 routing_id_;
+  int32_t routing_id_;
 
   InitializeCB init_callback_;
   media::PipelineStatusCB seek_callback_;
@@ -133,7 +133,7 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
   media::PlatformAudioConfig audio_config_;
   media::PlatformVideoConfig video_config_;
 
-  scoped_refptr<media::GpuVideoAcceleratorFactories> factories_;
+  media::GpuVideoAcceleratorFactories* factories_;
 
   scoped_ptr<PictureBufferManager> picture_buffer_manager_;
 

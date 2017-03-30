@@ -4,6 +4,9 @@
 
 #include "content/renderer/battery_status/battery_status_dispatcher.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "content/public/test/mock_render_thread.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -14,7 +17,7 @@ namespace content {
 class MockBatteryStatusListener : public blink::WebBatteryStatusListener {
  public:
   MockBatteryStatusListener() : did_change_battery_status_(false) {}
-  virtual ~MockBatteryStatusListener() {}
+  ~MockBatteryStatusListener() override {}
 
   // blink::WebBatteryStatusListener method.
   void updateBatteryStatus(const blink::WebBatteryStatus& status) override {
@@ -37,7 +40,7 @@ class BatteryStatusDispatcherTest : public testing::Test {
   void UpdateBatteryStatus(const device::BatteryStatus& status) {
     device::BatteryStatusPtr status_ptr(device::BatteryStatus::New());
     *status_ptr = status;
-    dispatcher_->DidChange(status_ptr.Pass());
+    dispatcher_->DidChange(std::move(status_ptr));
   }
 
   const MockBatteryStatusListener& listener() const {

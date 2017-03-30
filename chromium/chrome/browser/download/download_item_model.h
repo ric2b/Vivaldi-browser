@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_DOWNLOAD_DOWNLOAD_ITEM_MODEL_H_
 #define CHROME_BROWSER_DOWNLOAD_DOWNLOAD_ITEM_MODEL_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/download/download_target_info.h"
 
 class SavePackage;
 
@@ -68,11 +71,11 @@ class DownloadItemModel {
   base::string16 GetWarningConfirmButtonText() const;
 
   // Get the number of bytes that has completed so far. Virtual for testing.
-  int64 GetCompletedBytes() const;
+  int64_t GetCompletedBytes() const;
 
   // Get the total number of bytes for this download. Should return 0 if the
   // total size of the download is not known. Virual for testing.
-  int64 GetTotalBytes() const;
+  int64_t GetTotalBytes() const;
 
   // Rough percent complete. Returns -1 if the progress is unknown.
   int PercentComplete() const;
@@ -137,15 +140,13 @@ class DownloadItemModel {
   // Change what's returned by ShouldPreferOpeningInBrowser to |preference|.
   void SetShouldPreferOpeningInBrowser(bool preference);
 
-  // Mark that the download should be considered dangerous based on the file
-  // type. This value may differ from the download's danger type in cases where
-  // the SafeBrowsing service hasn't returned a verdict about the download. If
-  // SafeBrowsing fails to return a decision, then the download should be
-  // considered dangerous based on this flag. Defaults to false.
-  bool IsDangerousFileBasedOnType() const;
+  // Return the danger level determined during download target determination.
+  // The value returned here is independent of the danger level as determined by
+  // the Safe Browsing.
+  download_util::DownloadDangerLevel GetDangerLevel() const;
 
-  // Change what's returned by IsDangerousFileBasedOnType().
-  void SetIsDangerousFileBasedOnType(bool dangerous);
+  // Change what's returned by GetDangerLevel().
+  void SetDangerLevel(download_util::DownloadDangerLevel danger_level);
 
   // Open the download using the platform handler for the download. The behavior
   // of this method will be different from DownloadItem::OpenDownload() if
@@ -160,7 +161,6 @@ class DownloadItemModel {
 
   content::DownloadItem* download() { return download_; }
 
- private:
   // Returns a string representations of the current download progress sizes. If
   // the total size of the download is known, this string looks like: "100/200
   // MB" where the numerator is the transferred size and the denominator is the
@@ -168,6 +168,7 @@ class DownloadItemModel {
   // string (e.g.: "100 MB").
   base::string16 GetProgressSizesString() const;
 
+ private:
   // Returns a string indicating the status of an in-progress download.
   base::string16 GetInProgressStatusString() const;
 

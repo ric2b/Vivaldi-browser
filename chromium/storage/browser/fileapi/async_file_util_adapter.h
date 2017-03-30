@@ -5,6 +5,9 @@
 #ifndef STORAGE_BROWSER_FILEAPI_ASYNC_FILE_UTIL_ADAPTER_H_
 #define STORAGE_BROWSER_FILEAPI_ASYNC_FILE_UTIL_ADAPTER_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "storage/browser/fileapi/async_file_util.h"
 
@@ -52,6 +55,7 @@ class STORAGE_EXPORT AsyncFileUtilAdapter
                        const StatusCallback& callback) override;
   void GetFileInfo(scoped_ptr<FileSystemOperationContext> context,
                    const FileSystemURL& url,
+                   int /* fields */,
                    const GetFileInfoCallback& callback) override;
   void ReadDirectory(scoped_ptr<FileSystemOperationContext> context,
                      const FileSystemURL& url,
@@ -63,7 +67,7 @@ class STORAGE_EXPORT AsyncFileUtilAdapter
              const StatusCallback& callback) override;
   void Truncate(scoped_ptr<FileSystemOperationContext> context,
                 const FileSystemURL& url,
-                int64 length,
+                int64_t length,
                 const StatusCallback& callback) override;
   void CopyFileLocal(scoped_ptr<FileSystemOperationContext> context,
                      const FileSystemURL& src_url,

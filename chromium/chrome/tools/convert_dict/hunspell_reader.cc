@@ -4,6 +4,8 @@
 
 #include "chrome/tools/convert_dict/hunspell_reader.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_util.h"
 
 namespace convert_dict {
@@ -23,7 +25,7 @@ void TrimLine(std::string* line) {
   // Treat this text as an ASCII text and trim whitespace characters as
   // hunspell does. The returned text is to be converted into UTF-8 text with
   // the encoding defined in an affix file.
-  base::TrimWhitespace(*line, base::TRIM_ALL, line);
+  base::TrimWhitespaceASCII(*line, base::TRIM_ALL, line);
 }
 
 std::string ReadLine(FILE* file) {

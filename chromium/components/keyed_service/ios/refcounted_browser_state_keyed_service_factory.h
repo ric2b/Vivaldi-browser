@@ -5,8 +5,8 @@
 #ifndef COMPONENTS_KEYED_SERVICE_IOS_REFCOUNTED_BROWSER_STATE_KEYED_SERVICE_FACTORY_H_
 #define COMPONENTS_KEYED_SERVICE_IOS_REFCOUNTED_BROWSER_STATE_KEYED_SERVICE_FACTORY_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/keyed_service/core/keyed_service_export.h"
 #include "components/keyed_service/core/refcounted_keyed_service_factory.h"
@@ -62,7 +62,7 @@ class KEYED_SERVICE_EXPORT RefcountedBrowserStateKeyedServiceFactory
   //   }
   RefcountedBrowserStateKeyedServiceFactory(
       const char* name,
-      /*BrowserState*/DependencyManager* manager);
+      BrowserStateDependencyManager* manager);
   ~RefcountedBrowserStateKeyedServiceFactory() override;
 
   // Common implementation that maps |context| to some service object. Deals
@@ -126,12 +126,6 @@ class KEYED_SERVICE_EXPORT RefcountedBrowserStateKeyedServiceFactory
   bool IsOffTheRecord(base::SupportsUserData* context) const final;
 
   // KeyedServiceBaseFactory:
-#if defined(OS_IOS)
-  base::SupportsUserData* GetTypedContext(
-      base::SupportsUserData* context) const override;
-  base::SupportsUserData* GetContextForDependencyManager(
-      base::SupportsUserData* context) const override;
-#endif  // defined(OS_IOS)
   base::SupportsUserData* GetContextToUse(
       base::SupportsUserData* context) const final;
   bool ServiceIsCreatedWithContext() const final;

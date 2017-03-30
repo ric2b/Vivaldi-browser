@@ -4,6 +4,7 @@
 
 #include "ash/virtual_keyboard_controller.h"
 
+#include <utility>
 #include <vector>
 
 #include "ash/shell.h"
@@ -47,12 +48,12 @@ class VirtualKeyboardControllerTest : public AshTestBase {
   void SetEventBlocker(
       scoped_ptr<ScopedDisableInternalMouseAndKeyboard> blocker) {
     Shell::GetInstance()->maximize_mode_controller()->event_blocker_ =
-        blocker.Pass();
+        std::move(blocker);
   }
 
   void SetUp() override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        keyboard::switches::kSmartVirtualKeyboard, "disabled");
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        keyboard::switches::kDisableSmartVirtualKeyboard);
     AshTestBase::SetUp();
     UpdateKeyboardDevices(std::vector<ui::KeyboardDevice>());
     UpdateTouchscreenDevices(std::vector<ui::TouchscreenDevice>());
@@ -103,7 +104,7 @@ TEST_F(VirtualKeyboardControllerTest, RestoreKeyboardDevices) {
       ->EnableMaximizeModeWindowManager(true);
   scoped_ptr<ScopedDisableInternalMouseAndKeyboard> blocker(
       new MockEventBlocker);
-  SetEventBlocker(blocker.Pass());
+  SetEventBlocker(std::move(blocker));
 }
 
 class VirtualKeyboardControllerAutoTest : public VirtualKeyboardControllerTest,

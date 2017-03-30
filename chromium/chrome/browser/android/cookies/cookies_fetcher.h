@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_ANDROID_COOKIES_COOKIES_FETCHER_H_
 #define CHROME_BROWSER_ANDROID_COOKIES_COOKIES_FETCHER_H_
 
+#include <stdint.h>
+
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/url_request/url_request_context_getter.h"
 
@@ -26,25 +28,26 @@ class CookiesFetcher {
   ~CookiesFetcher();
 
   // Called by the Java object when it is getting GC'd.
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   // Callback used after the cookie jar populate the cookie list for us.
   void OnCookiesFetchFinished(const net::CookieList& cookies);
 
   // Fetches all cookies from the cookie jar.
-  void PersistCookies(JNIEnv* env, jobject obj);
+  void PersistCookies(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj);
 
   // Saves a cookie to the cookie jar.
   void RestoreCookies(JNIEnv* env,
-                      jobject obj,
-                      jstring url,
-                      jstring name,
-                      jstring value,
-                      jstring domain,
-                      jstring path,
-                      int64 creation,
-                      int64 expiration,
-                      int64 last_access,
+                      const base::android::JavaParamRef<jobject>& obj,
+                      const base::android::JavaParamRef<jstring>& url,
+                      const base::android::JavaParamRef<jstring>& name,
+                      const base::android::JavaParamRef<jstring>& value,
+                      const base::android::JavaParamRef<jstring>& domain,
+                      const base::android::JavaParamRef<jstring>& path,
+                      int64_t creation,
+                      int64_t expiration,
+                      int64_t last_access,
                       bool secure,
                       bool httponly,
                       bool firstpartyonly,

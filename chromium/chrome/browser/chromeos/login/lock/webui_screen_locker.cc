@@ -90,6 +90,7 @@ void WebUIScreenLocker::LockScreen() {
   lock_window_ = lock_window->GetWidget();
   lock_window_->AddObserver(this);
   WebUILoginView::Init();
+  content::WebContentsObserver::Observe(webui_login_->GetWebContents());
   lock_window_->SetContentsView(this);
   lock_window_->SetBounds(bounds);
   lock_window_->Show();
@@ -220,10 +221,6 @@ void WebUIScreenLocker::CancelPasswordChangedFlow()  {
   NOTREACHED();
 }
 
-void WebUIScreenLocker::CreateAccount() {
-  NOTREACHED();
-}
-
 void WebUIScreenLocker::CompleteLogin(const UserContext& user_context) {
   NOTREACHED();
 }
@@ -285,7 +282,7 @@ void WebUIScreenLocker::Signout() {
   chromeos::ScreenLocker::default_screen_locker()->Signout();
 }
 
-bool WebUIScreenLocker::IsUserWhitelisted(const std::string& user_id) {
+bool WebUIScreenLocker::IsUserWhitelisted(const AccountId& account_id) {
   NOTREACHED();
   return true;
 }
@@ -350,7 +347,7 @@ void WebUIScreenLocker::SuspendDone(const base::TimeDelta& sleep_duration) {
 void WebUIScreenLocker::RenderProcessGone(base::TerminationStatus status) {
   if (browser_shutdown::GetShutdownType() == browser_shutdown::NOT_VALID &&
       status != base::TERMINATION_STATUS_NORMAL_TERMINATION) {
-    LOG(ERROR) << "Renderer crash on lock screen";
+    LOG(ERROR) << "Renderer crash on lock screen; signing out";
     Signout();
   }
 }

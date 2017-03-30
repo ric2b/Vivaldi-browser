@@ -5,12 +5,14 @@
 #ifndef UI_VIEWS_FOCUS_WIDGET_FOCUS_MANAGER_H_
 #define UI_VIEWS_FOCUS_WIDGET_FOCUS_MANAGER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/views_export.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 namespace views {
 
@@ -48,7 +50,7 @@ class VIEWS_EXPORT WidgetFocusManager {
   void DisableNotifications() { enabled_ = false; }
 
  private:
-  friend struct DefaultSingletonTraits<WidgetFocusManager>;
+  friend struct base::DefaultSingletonTraits<WidgetFocusManager>;
 
   WidgetFocusManager();
   ~WidgetFocusManager();

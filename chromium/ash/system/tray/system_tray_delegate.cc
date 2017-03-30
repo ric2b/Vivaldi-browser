@@ -67,23 +67,23 @@ user::LoginStatus SystemTrayDelegate::GetUserLoginStatus() const {
 void SystemTrayDelegate::ChangeProfilePicture() {
 }
 
-const std::string SystemTrayDelegate::GetEnterpriseDomain() const {
+std::string SystemTrayDelegate::GetEnterpriseDomain() const {
   return std::string();
 }
 
-const base::string16 SystemTrayDelegate::GetEnterpriseMessage() const {
+base::string16 SystemTrayDelegate::GetEnterpriseMessage() const {
   return base::string16();
 }
 
-const std::string SystemTrayDelegate::GetSupervisedUserManager() const {
+std::string SystemTrayDelegate::GetSupervisedUserManager() const {
   return std::string();
 }
 
-const base::string16 SystemTrayDelegate::GetSupervisedUserManagerName() const {
+base::string16 SystemTrayDelegate::GetSupervisedUserManagerName() const {
   return base::string16();
 }
 
-const base::string16 SystemTrayDelegate::GetSupervisedUserMessage() const {
+base::string16 SystemTrayDelegate::GetSupervisedUserMessage() const {
   return base::string16();
 }
 
@@ -123,6 +123,8 @@ void SystemTrayDelegate::ShowNetworkSettingsForGuid(const std::string& guid) {
 
 void SystemTrayDelegate::ShowDisplaySettings() {
 }
+
+void SystemTrayDelegate::ShowPowerSettings() {}
 
 void SystemTrayDelegate::ShowChromeSlow() {
 }
@@ -220,7 +222,7 @@ bool SystemTrayDelegate::GetBluetoothDiscovering() {
 void SystemTrayDelegate::ChangeProxySettings() {
 }
 
-CastConfigDelegate* SystemTrayDelegate::GetCastConfigDelegate() const {
+CastConfigDelegate* SystemTrayDelegate::GetCastConfigDelegate() {
   return nullptr;
 }
 
@@ -256,11 +258,6 @@ void SystemTrayDelegate::ActiveUserWasChanged() {
 
 bool SystemTrayDelegate::IsSearchKeyMappedToCapsLock() {
   return false;
-}
-
-tray::UserAccountsDelegate* SystemTrayDelegate::GetUserAccountsDelegate(
-    const std::string& user_id) {
-  return nullptr;
 }
 
 void SystemTrayDelegate::AddCustodianInfoTrayObserver(

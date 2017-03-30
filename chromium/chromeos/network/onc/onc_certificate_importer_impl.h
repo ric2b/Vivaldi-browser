@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -64,19 +64,8 @@ class CHROMEOS_EXPORT CertificateImporterImpl : public CertificateImporter {
                                         base::ListValue* certificates,
                                         net::NSSCertDatabase* nssdb);
 
-  // Lists the certificates that have the string |label| as their certificate
-  // nickname (exact match).
-  static void ListCertsWithNickname(const std::string& label,
-                                    net::CertificateList* result,
-                                    net::NSSCertDatabase* target_nssdb);
-
-  // Deletes any certificate that has the string |label| as its nickname (exact
-  // match).
-  static bool DeleteCertAndKeyByNickname(const std::string& label,
-                                         net::NSSCertDatabase* target_nssdb);
-
-  // Parses and stores/removes |certificate| in/from the certificate
-  // store. Returns true if the operation succeeded.
+  // Parses and stores |certificate| in the certificate store. Returns true if
+  // the operation succeeded.
   static bool ParseAndStoreCertificate(
       bool allow_trust_imports,
       const base::DictionaryValue& certificate,

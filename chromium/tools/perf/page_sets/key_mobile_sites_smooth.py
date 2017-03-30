@@ -14,7 +14,7 @@ def _IssueMarkerAndScroll(action_runner):
 
 
 def _CreatePageClassWithSmoothInteractions(page_cls):
-  class DerivedSmoothPage(page_cls):  # pylint: disable=W0232
+  class DerivedSmoothPage(page_cls):  # pylint: disable=no-init
 
     def RunPageInteractions(self, action_runner):
       _IssueMarkerAndScroll(action_runner)
@@ -49,7 +49,6 @@ class LinkedInSmoothPage(key_mobile_sites_pages.LinkedInPage):
   def RunNavigateSteps(self, action_runner):
     super(LinkedInSmoothPage, self).RunNavigateSteps(action_runner)
     action_runner.ScrollPage()
-    action_runner.ReloadPage()
     super(LinkedInSmoothPage, self).RunNavigateSteps(action_runner)
 
 
@@ -65,7 +64,6 @@ class WowwikiSmoothPage(KeyMobileSitesSmoothPage):
   def RunNavigateSteps(self, action_runner):
     super(WowwikiSmoothPage, self).RunNavigateSteps(action_runner)
     action_runner.ScrollPage()
-    action_runner.ReloadPage()
     super(WowwikiSmoothPage, self).RunNavigateSteps(action_runner)
 
 
@@ -185,7 +183,6 @@ class KeyMobileSitesSmoothPageSet(story.StorySet):
 
     # Why: #18 (Alexa global), Picked an interesting post """
     self.AddStory(KeyMobileSitesSmoothPage(
-      # pylint: disable=line-too-long
       url='http://en.blog.wordpress.com/2012/09/04/freshly-pressed-editors-picks-for-august-2012/',
       page_set=self,
       name='Wordpress'))
@@ -239,7 +236,6 @@ class KeyMobileSitesSmoothPageSet(story.StorySet):
     # Add simple pages with no custom navigation logic or labels.
     urls_list = [
       # Why: Social; top Google property; Public profile; infinite scrolls.
-      # pylint: disable=line-too-long
       'https://plus.google.com/app/basic/110031535020051778989/posts?source=apppromo',
       # Why: crbug.com/242544
       ('http://www.androidpolice.com/2012/10/03/rumor-evidence-mounts-that-an-'
@@ -260,7 +256,6 @@ class KeyMobileSitesSmoothPageSet(story.StorySet):
       # Why: #1 commerce website by time spent by users in US
       'http://shop.mobileweb.ebay.com/searchresults?kw=viking+helmet',
       # Why: #1 Alexa recreation
-      # pylint: disable=line-too-long
       'http://www.booking.com/searchresults.html?src=searchresults&latitude=65.0500&longitude=25.4667',
       # Why: Top tech blog
       'http://techcrunch.com',

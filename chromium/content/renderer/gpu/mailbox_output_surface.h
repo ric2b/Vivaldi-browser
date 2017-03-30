@@ -5,6 +5,9 @@
 #ifndef CONTENT_RENDERER_GPU_MAILBOX_OUTPUT_SURFACE_H_
 #define CONTENT_RENDERER_GPU_MAILBOX_OUTPUT_SURFACE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <queue>
 
 #include "base/memory/ref_counted.h"
@@ -27,49 +30,47 @@ class FrameSwapMessageQueue;
 class MailboxOutputSurface : public CompositorOutputSurface {
  public:
   MailboxOutputSurface(
-      int32 routing_id,
-      uint32 output_surface_id,
+      int32_t routing_id,
+      uint32_t output_surface_id,
       const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
       const scoped_refptr<ContextProviderCommandBuffer>&
           worker_context_provider,
-      scoped_ptr<cc::SoftwareOutputDevice> software_device,
       scoped_refptr<FrameSwapMessageQueue> swap_frame_message_queue,
       cc::ResourceFormat format);
   ~MailboxOutputSurface() override;
 
   // cc::OutputSurface implementation.
+  void DetachFromClient() override;
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
-  void Reshape(const gfx::Size& size, float scale_factor) override;
+  void Reshape(const gfx::Size& size, float scale_factor, bool alpha) override;
   void BindFramebuffer() override;
   void SwapBuffers(cc::CompositorFrame* frame) override;
 
  private:
   // CompositorOutputSurface overrides.
-  void OnSwapAck(uint32 output_surface_id,
+  void OnSwapAck(uint32_t output_surface_id,
                  const cc::CompositorFrameAck& ack) override;
 
   size_t GetNumAcksPending();
 
   struct TransferableFrame {
-    TransferableFrame() : texture_id(0), sync_point(0) {}
-
-    TransferableFrame(uint32 texture_id,
+    TransferableFrame();
+    TransferableFrame(uint32_t texture_id,
                       const gpu::Mailbox& mailbox,
-                      const gfx::Size size)
-        : texture_id(texture_id), mailbox(mailbox), size(size), sync_point(0) {}
+                      const gfx::Size size);
 
-    uint32 texture_id;
+    uint32_t texture_id;
     gpu::Mailbox mailbox;
+    gpu::SyncToken sync_token;
     gfx::Size size;
-    uint32 sync_point;
   };
 
   TransferableFrame current_backing_;
   std::deque<TransferableFrame> pending_textures_;
   std::queue<TransferableFrame> returned_textures_;
 
-  uint32 fbo_;
+  uint32_t fbo_;
   bool is_backbuffer_discarded_;
   cc::ResourceFormat format_;
 };

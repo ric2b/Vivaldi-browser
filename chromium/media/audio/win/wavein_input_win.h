@@ -9,9 +9,10 @@
 
 #include <windows.h>
 #include <mmsystem.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "base/win/scoped_handle.h"
@@ -100,7 +101,7 @@ class PCMWaveInAudioInputStream : public AudioInputStream {
   const int num_buffers_;
 
   // The size in bytes of each audio buffer.
-  uint32 buffer_size_;
+  uint32_t buffer_size_;
 
   // Channels, 1 or 2.
   const int channels_;

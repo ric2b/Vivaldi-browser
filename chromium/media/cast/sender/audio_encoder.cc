@@ -4,6 +4,8 @@
 
 #include "media/cast/sender/audio_encoder.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 #include <string>
@@ -11,10 +13,14 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/sys_byteorder.h"
 #include "base/time/time.h"
-#include "media/cast/cast_defines.h"
+#include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
+#include "media/cast/common/rtp_time.h"
+#include "media/cast/constants.h"
 
 #if !defined(OS_IOS)
 #include "third_party/opus/src/include/opus.h"
@@ -59,8 +65,7 @@ class AudioEncoder::ImplBase
             base::Time::kMicrosecondsPerSecond * samples_per_frame_ /
             sampling_rate)),
         buffer_fill_end_(0),
-        frame_id_(0),
-        frame_rtp_timestamp_(0),
+        frame_id_(kFirstFrameId),
         samples_dropped_from_buffer_(0) {
     // Support for max sampling rate of 48KHz, 2 channels, 100 ms duration.
     const int kMaxSamplesTimesChannelsPerFrame = 48 * 2 * 100;
@@ -97,16 +102,20 @@ class AudioEncoder::ImplBase
     if (!frame_capture_time_.is_null()) {
       const base::TimeDelta amount_ahead_by =
           recorded_time - (frame_capture_time_ + buffer_fill_duration);
-      const int64 num_frames_missed = amount_ahead_by / frame_duration_;
+      const int64_t num_frames_missed = amount_ahead_by / frame_duration_;
       if (num_frames_missed > kUnderrunSkipThreshold) {
         samples_dropped_from_buffer_ += buffer_fill_end_;
         buffer_fill_end_ = 0;
         buffer_fill_duration = base::TimeDelta();
         frame_rtp_timestamp_ +=
-            static_cast<uint32>(num_frames_missed * samples_per_frame_);
+            RtpTimeDelta::FromTicks(num_frames_missed * samples_per_frame_);
         DVLOG(1) << "Skipping RTP timestamp ahead to account for "
                  << num_frames_missed * samples_per_frame_
                  << " samples' worth of underrun.";
+        TRACE_EVENT_INSTANT2("cast.stream", "Audio Skip",
+                             TRACE_EVENT_SCOPE_THREAD,
+                             "frames missed", num_frames_missed,
+                             "samples dropped", samples_dropped_from_buffer_);
       }
     }
     frame_capture_time_ = recorded_time - buffer_fill_duration;
@@ -138,6 +147,11 @@ class AudioEncoder::ImplBase
       audio_frame->rtp_timestamp = frame_rtp_timestamp_;
       audio_frame->reference_time = frame_capture_time_;
 
+      TRACE_EVENT_ASYNC_BEGIN2(
+          "cast.stream",
+          "Audio Encode", audio_frame.get(),
+          "frame_id", frame_id_,
+          "rtp_timestamp", frame_rtp_timestamp_.lower_32_bits());
       if (EncodeFromFilledBuffer(&audio_frame->data)) {
         // Compute deadline utilization as the real-world time elapsed divided
         // by the signal duration.
@@ -145,6 +159,12 @@ class AudioEncoder::ImplBase
             (base::TimeTicks::Now() - start_time).InSecondsF() /
                 frame_duration_.InSecondsF();
 
+        TRACE_EVENT_ASYNC_END1("cast.stream", "Audio Encode", audio_frame.get(),
+                               "Deadline utilization",
+                               audio_frame->deadline_utilization);
+
+        audio_frame->encode_completion_time =
+            cast_environment_->Clock()->NowTicks();
         cast_environment_->PostTask(
             CastEnvironment::MAIN,
             FROM_HERE,
@@ -157,7 +177,7 @@ class AudioEncoder::ImplBase
       // Reset the internal buffer, frame ID, and timestamps for the next frame.
       buffer_fill_end_ = 0;
       ++frame_id_;
-      frame_rtp_timestamp_ += samples_per_frame_;
+      frame_rtp_timestamp_ += RtpTimeDelta::FromTicks(samples_per_frame_);
       frame_capture_time_ += frame_duration_;
     }
   }
@@ -192,14 +212,13 @@ class AudioEncoder::ImplBase
   int buffer_fill_end_;
 
   // A counter used to label EncodedFrames.
-  uint32 frame_id_;
+  uint32_t frame_id_;
 
   // The RTP timestamp for the next frame of encoded audio.  This is defined as
   // the number of audio samples encoded so far, plus the estimated number of
   // samples that were missed due to data underruns.  A receiver uses this value
-  // to detect gaps in the audio signal data being provided.  Per the spec, RTP
-  // timestamp values are allowed to overflow and roll around past zero.
-  uint32 frame_rtp_timestamp_;
+  // to detect gaps in the audio signal data being provided.
+  RtpTimeTicks frame_rtp_timestamp_;
 
   // The local system time associated with the start of the next frame of
   // encoded audio.  This value is passed on to a receiver as a reference clock
@@ -229,7 +248,7 @@ class AudioEncoder::OpusImpl : public AudioEncoder::ImplBase {
                  sampling_rate,
                  sampling_rate / kDefaultFramesPerSecond, /* 10 ms frames */
                  callback),
-        encoder_memory_(new uint8[opus_encoder_get_size(num_channels)]),
+        encoder_memory_(new uint8_t[opus_encoder_get_size(num_channels)]),
         opus_encoder_(reinterpret_cast<OpusEncoder*>(encoder_memory_.get())),
         buffer_(new float[num_channels * samples_per_frame_]) {
     if (ImplBase::operational_status_ != STATUS_UNINITIALIZED ||
@@ -276,12 +295,9 @@ class AudioEncoder::OpusImpl : public AudioEncoder::ImplBase {
 
   bool EncodeFromFilledBuffer(std::string* out) final {
     out->resize(kOpusMaxPayloadSize);
-    const opus_int32 result =
-        opus_encode_float(opus_encoder_,
-                          buffer_.get(),
-                          samples_per_frame_,
-                          reinterpret_cast<uint8*>(string_as_array(out)),
-                          kOpusMaxPayloadSize);
+    const opus_int32 result = opus_encode_float(
+        opus_encoder_, buffer_.get(), samples_per_frame_,
+        reinterpret_cast<uint8_t*>(string_as_array(out)), kOpusMaxPayloadSize);
     if (result > 1) {
       out->resize(result);
       return true;
@@ -305,7 +321,7 @@ class AudioEncoder::OpusImpl : public AudioEncoder::ImplBase {
            duration == base::TimeDelta::FromMilliseconds(60);
   }
 
-  const scoped_ptr<uint8[]> encoder_memory_;
+  const scoped_ptr<uint8_t[]> encoder_memory_;
   OpusEncoder* const opus_encoder_;
   const scoped_ptr<float[]> buffer_;
 
@@ -479,8 +495,8 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
 
     // Allocate a buffer to store one access unit. This is the only location
     // where the implementation modifies |access_unit_buffer_|.
-    const_cast<scoped_ptr<uint8[]>&>(access_unit_buffer_)
-        .reset(new uint8[max_access_unit_size]);
+    const_cast<scoped_ptr<uint8_t[]>&>(access_unit_buffer_)
+        .reset(new uint8_t[max_access_unit_size]);
 
     // Initialize the converter ABL. Note that the buffer size has to be set
     // before every encode operation, since the field is modified to indicate
@@ -499,7 +515,7 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
                                       nullptr) != noErr) {
       return false;
     }
-    scoped_ptr<uint8[]> cookie_data(new uint8[cookie_size]);
+    scoped_ptr<uint8_t[]> cookie_data(new uint8_t[cookie_size]);
     if (AudioConverterGetProperty(converter_,
                                   kAudioConverterCompressionMagicCookie,
                                   &cookie_size,
@@ -508,10 +524,10 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
     }
 
     if (AudioFileInitializeWithCallbacks(this,
-                                         nullptr,
+                                         &FileReadCallback,
                                          &FileWriteCallback,
-                                         nullptr,
-                                         nullptr,
+                                         &FileGetSizeCallback,
+                                         &FileSetSizeCallback,
                                          kAudioFileAAC_ADTSType,
                                          &out_asbd,
                                          0,
@@ -631,6 +647,17 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
     return noErr;
   }
 
+  // The AudioFile read callback function.
+  static OSStatus FileReadCallback(void* in_encoder,
+                                   SInt64 in_position,
+                                   UInt32 in_size,
+                                   void* in_buffer,
+                                   UInt32* out_size) {
+    // This class only does writing.
+    NOTREACHED();
+    return kAudioFileNotOpenError;
+  }
+
   // The AudioFile write callback function. Appends the data to the encoder's
   // current |output_buffer_|.
   static OSStatus FileWriteCallback(void* in_encoder,
@@ -651,6 +678,18 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
     return noErr;
   }
 
+  // The AudioFile getsize callback function.
+  static SInt64 FileGetSizeCallback(void* in_encoder) {
+    // This class only does writing.
+    NOTREACHED();
+    return 0;
+  }
+
+  // The AudioFile setsize callback function.
+  static OSStatus FileSetSizeCallback(void* in_encoder, SInt64 in_size) {
+    return noErr;
+  }
+
   // Buffer that holds one AAC access unit worth of samples. The input callback
   // function provides samples from this buffer via |input_bus_| to the encoder.
   const scoped_ptr<AudioBus> input_buffer_;
@@ -665,7 +704,7 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
 
   // A buffer that holds one AAC access unit. Initialized in |Initialize| once
   // the maximum access unit size is known.
-  const scoped_ptr<uint8[]> access_unit_buffer_;
+  const scoped_ptr<uint8_t[]> access_unit_buffer_;
 
   // The maximum size of an access unit that the encoder can emit.
   const uint32_t max_access_unit_size_;
@@ -713,7 +752,7 @@ class AudioEncoder::Pcm16Impl : public AudioEncoder::ImplBase {
                  sampling_rate,
                  sampling_rate / kDefaultFramesPerSecond, /* 10 ms frames */
                  callback),
-        buffer_(new int16[num_channels * samples_per_frame_]) {
+        buffer_(new int16_t[num_channels * samples_per_frame_]) {
     if (ImplBase::operational_status_ != STATUS_UNINITIALIZED)
       return;
     operational_status_ = STATUS_INITIALIZED;
@@ -727,25 +766,23 @@ class AudioEncoder::Pcm16Impl : public AudioEncoder::ImplBase {
                                  int buffer_fill_offset,
                                  int num_samples) final {
     audio_bus->ToInterleavedPartial(
-        source_offset,
-        num_samples,
-        sizeof(int16),
+        source_offset, num_samples, sizeof(int16_t),
         buffer_.get() + buffer_fill_offset * num_channels_);
   }
 
   bool EncodeFromFilledBuffer(std::string* out) final {
     // Output 16-bit PCM integers in big-endian byte order.
-    out->resize(num_channels_ * samples_per_frame_ * sizeof(int16));
-    const int16* src = buffer_.get();
-    const int16* const src_end = src + num_channels_ * samples_per_frame_;
-    uint16* dest = reinterpret_cast<uint16*>(&out->at(0));
+    out->resize(num_channels_ * samples_per_frame_ * sizeof(int16_t));
+    const int16_t* src = buffer_.get();
+    const int16_t* const src_end = src + num_channels_ * samples_per_frame_;
+    uint16_t* dest = reinterpret_cast<uint16_t*>(&out->at(0));
     for (; src < src_end; ++src, ++dest)
       *dest = base::HostToNet16(*src);
     return true;
   }
 
  private:
-  const scoped_ptr<int16[]> buffer_;
+  const scoped_ptr<int16_t[]> buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(Pcm16Impl);
 };

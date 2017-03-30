@@ -10,7 +10,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/quic/quic_protocol.h"
 
 namespace net {
@@ -37,8 +37,8 @@ class QuicPacketReader {
   virtual ~QuicPacketReader();
 
   // Reads a number of packets from the given fd, and then passes them off to
-  // the PacketProcessInterface.  Returns true if at least 1 packet is read,
-  // false otherwise.
+  // the PacketProcessInterface.  Returns true if there may be additional
+  // packets available on the socket.
   // Populates |packets_dropped| if it is non-null and the socket is configured
   // to track dropped packets and some packets are read.
   virtual bool ReadAndDispatchPackets(int fd,
@@ -61,7 +61,9 @@ class QuicPacketReader {
   // cbuf_ is used for ancillary data from the kernel on recvmmsg.
   char cbuf_[kSpaceForOverflowAndIp * kNumPacketsPerReadMmsgCall];
   // buf_ is used for the data read from the kernel on recvmmsg.
-  char buf_[2 * kMaxPacketSize * kNumPacketsPerReadMmsgCall];
+  // TODO(danzh): change it to be a pointer to avoid the allocation on the stack
+  // from exceeding maximum allowed frame size.
+  char buf_[kMaxPacketSize * kNumPacketsPerReadMmsgCall];
   // iov_ and mmsg_hdr_ are used to supply cbuf and buf to the recvmmsg call.
   iovec iov_[kNumPacketsPerReadMmsgCall];
   mmsghdr mmsg_hdr_[kNumPacketsPerReadMmsgCall];

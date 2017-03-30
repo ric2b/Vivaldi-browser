@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 
 namespace base {
@@ -28,7 +28,7 @@ class AutomationExtension {
   Status CaptureScreenshot(std::string* screenshot);
 
   // Launches an app with the specified id.
-  Status LaunchApp(std::string id);
+  Status LaunchApp(const std::string& id);
 
   // Gets the position of the current window.
   Status GetWindowPosition(int* x, int* y);

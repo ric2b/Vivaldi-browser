@@ -4,7 +4,10 @@
 
 #include "chrome/browser/chromeos/file_system_provider/throttled_file_system.h"
 
+#include <stddef.h>
+
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "base/files/file.h"
@@ -15,7 +18,7 @@ namespace file_system_provider {
 
 ThrottledFileSystem::ThrottledFileSystem(
     scoped_ptr<ProvidedFileSystemInterface> file_system)
-    : file_system_(file_system.Pass()), weak_ptr_factory_(this) {
+    : file_system_(std::move(file_system)), weak_ptr_factory_(this) {
   const int opened_files_limit =
       file_system_->GetFileSystemInfo().opened_files_limit();
   open_queue_.reset(opened_files_limit
@@ -39,16 +42,16 @@ AbortCallback ThrottledFileSystem::GetMetadata(
 }
 
 AbortCallback ThrottledFileSystem::GetActions(
-    const base::FilePath& entry_path,
+    const std::vector<base::FilePath>& entry_paths,
     const GetActionsCallback& callback) {
-  return file_system_->GetActions(entry_path, callback);
+  return file_system_->GetActions(entry_paths, callback);
 }
 
 AbortCallback ThrottledFileSystem::ExecuteAction(
-    const base::FilePath& entry_path,
+    const std::vector<base::FilePath>& entry_paths,
     const std::string& action_id,
     const storage::AsyncFileUtil::StatusCallback& callback) {
-  return file_system_->ExecuteAction(entry_path, action_id, callback);
+  return file_system_->ExecuteAction(entry_paths, action_id, callback);
 }
 
 AbortCallback ThrottledFileSystem::ReadDirectory(
@@ -60,7 +63,7 @@ AbortCallback ThrottledFileSystem::ReadDirectory(
 AbortCallback ThrottledFileSystem::ReadFile(
     int file_handle,
     net::IOBuffer* buffer,
-    int64 offset,
+    int64_t offset,
     int length,
     const ReadChunkReceivedCallback& callback) {
   return file_system_->ReadFile(file_handle, buffer, offset, length, callback);
@@ -121,7 +124,7 @@ AbortCallback ThrottledFileSystem::CopyEntry(
 AbortCallback ThrottledFileSystem::WriteFile(
     int file_handle,
     net::IOBuffer* buffer,
-    int64 offset,
+    int64_t offset,
     int length,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   return file_system_->WriteFile(file_handle, buffer, offset, length, callback);
@@ -136,7 +139,7 @@ AbortCallback ThrottledFileSystem::MoveEntry(
 
 AbortCallback ThrottledFileSystem::Truncate(
     const base::FilePath& file_path,
-    int64 length,
+    int64_t length,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   return file_system_->Truncate(file_path, length, callback);
 }
@@ -193,7 +196,7 @@ void ThrottledFileSystem::Notify(
     const std::string& tag,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   return file_system_->Notify(entry_path, recursive, change_type,
-                              changes.Pass(), tag, callback);
+                              std::move(changes), tag, callback);
 }
 
 void ThrottledFileSystem::Configure(

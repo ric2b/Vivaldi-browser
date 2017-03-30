@@ -7,6 +7,7 @@
 
 #include <deque>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/web_modal/single_web_contents_dialog_manager.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -73,7 +74,6 @@ class WebContentsModalDialogManager
  private:
   explicit WebContentsModalDialogManager(content::WebContents* web_contents);
   friend class content::WebContentsUserData<WebContentsModalDialogManager>;
-  friend class PopupManager;
 
   struct DialogState {
     DialogState(gfx::NativeWindow dialog,

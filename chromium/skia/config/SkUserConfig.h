@@ -44,29 +44,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-/*  Scalars (the fractional value type in skia) can be implemented either as
-    floats or 16.16 integers (fixed). Exactly one of these two symbols must be
-    defined.
-*/
-//#define SK_SCALAR_IS_FLOAT
-//#define SK_SCALAR_IS_FIXED
-
-
-/*  Somewhat independent of how SkScalar is implemented, Skia also wants to know
-    if it can use floats at all. Naturally, if SK_SCALAR_IS_FLOAT is defined,
-    then so muse SK_CAN_USE_FLOAT, but if scalars are fixed, SK_CAN_USE_FLOAT
-    can go either way.
- */
-//#define SK_CAN_USE_FLOAT
-
-/*  For some performance-critical scalar operations, skia will optionally work
-    around the standard float operators if it knows that the CPU does not have
-    native support for floats. If your environment uses software floating point,
-    define this flag.
- */
-//#define SK_SOFTWARE_FLOAT
-
-
 /*  Skia has lots of debug-only code. Often this is just null checks or other
     parameter checking, but sometimes it can be quite intrusive (e.g. check that
     each 32bit pixel is in premultiplied form). This code can be very useful
@@ -97,18 +74,6 @@
 //#define SK_CPU_BENDIAN
 //#define SK_CPU_LENDIAN
 
-
-/*  Some compilers don't support long long for 64bit integers. If yours does
-    not, define this to the appropriate type.
- */
-//#define SkLONGLONG int64_t
-
-
-/*  Some envorinments do not suport writable globals (eek!). If yours does not,
-    define this flag.
- */
-//#define SK_USE_RUNTIME_GLOBALS
-
 /*  If zlib is available and you want to support the flate compression
     algorithm (used in PDF generation), define SK_ZLIB_INCLUDE to be the
     include path.
@@ -125,7 +90,7 @@
     PDF documents.
  */
 #define SK_SFNTLY_SUBSETTER \
-    "third_party/sfntly/cpp/src/sample/chromium/font_subsetter.h"
+    "third_party/sfntly/src/cpp/src/sample/chromium/font_subsetter.h"
 
 /*  To write debug messages to a console, skia will call SkDebugf(...) following
     printf conventions (e.g. const char* format, ...). If you want to redirect
@@ -249,28 +214,28 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_GETDEVICE
 #endif
 
-#ifndef    SK_IGNORE_ETC1_SUPPORT
-#   define SK_IGNORE_ETC1_SUPPORT
+#ifndef    SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
+#   define SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
-#   define SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
+#ifndef    SK_IGNORE_ETC1_SUPPORT
+#   define SK_IGNORE_ETC1_SUPPORT
 #endif
 
 #ifndef    SK_IGNORE_GPU_DITHER
 #   define SK_IGNORE_GPU_DITHER
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
-#   define SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
+#ifndef    SK_SUPPORT_LEGACY_HQ_DOWNSAMPLING
+#   define SK_SUPPORT_LEGACY_HQ_DOWNSAMPLING
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_XFERMODES
-#   define SK_SUPPORT_LEGACY_XFERMODES
+#ifndef    SK_SUPPORT_LEGACY_PATH_MEASURE_TVALUE
+#   define SK_SUPPORT_LEGACY_PATH_MEASURE_TVALUE
 #endif
 
-#ifndef    SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
-#   define SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
+#ifndef    SK_SUPPORT_LEGACY_BITMAP_FILTER
+#   define SK_SUPPORT_LEGACY_BITMAP_FILTER
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -280,16 +245,13 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
  */
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
 
-/* Forcing the unoptimized path for the offset image filter in skia until
- * all filters used in Blink support the optimized path properly
- */
-#define SK_DISABLE_OFFSETIMAGEFILTER_OPTIMIZATION
-
 /* This flag forces Skia not to use typographic metrics with GDI.
  */
 #define SK_GDI_ALWAYS_USE_TEXTMETRICS_FOR_FONT_METRICS
 
-#define IGNORE_ROT_AA_RECT_OPT
+#ifndef SK_IGNORE_GL_TEXTURE_TARGET
+#   define SK_IGNORE_GL_TEXTURE_TARGET
+#endif
 #define SK_IGNORE_BLURRED_RRECT_OPT
 #define SK_USE_DISCARDABLE_SCALEDIMAGECACHE
 #define SK_WILL_NEVER_DRAW_PERSPECTIVE_TEXT
@@ -297,6 +259,14 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_ATTR_DEPRECATED          SK_NOTHING_ARG1
 #define SK_ENABLE_INST_COUNT        0
 #define GR_GL_CUSTOM_SETUP_HEADER   "GrGLConfig_chrome.h"
+
+// Blink layout tests are baselined to Clang optimizing through the UB in SkDivBits.
+#define SK_SUPPORT_LEGACY_DIVBITS_UB
+
+// mtklein's fiddling with Src / SrcOver.  Will rebaseline these only once when done.
+#define SK_SUPPORT_LEGACY_X86_BLITS
+
+#define SK_DISABLE_TILE_IMAGE_FILTER_OPTIMIZATION
 
 // ===== End Chrome-specific definitions =====
 

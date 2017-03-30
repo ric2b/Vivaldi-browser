@@ -4,9 +4,11 @@
 
 #include "media/base/android/media_player_bridge.h"
 
+#include <utility>
+
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "jni/MediaPlayerBridge_jni.h"
@@ -14,7 +16,7 @@
 #include "media/base/android/media_player_manager.h"
 #include "media/base/android/media_resource_getter.h"
 #include "media/base/android/media_url_interceptor.h"
-#include "media/base/buffers.h"
+#include "media/base/timestamp_constants.h"
 
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ScopedJavaLocalRef;
@@ -28,12 +30,12 @@ MediaPlayerBridge::MediaPlayerBridge(
     const std::string& user_agent,
     bool hide_url_log,
     MediaPlayerManager* manager,
-    const RequestMediaResourcesCB& request_media_resources_cb,
+    const OnDecoderResourcesReleasedCB& on_decoder_resources_released_cb,
     const GURL& frame_url,
     bool allow_credentials)
     : MediaPlayerAndroid(player_id,
                          manager,
-                         request_media_resources_cb,
+                         on_decoder_resources_released_cb,
                          frame_url),
       prepared_(false),
       pending_play_(false),
@@ -109,16 +111,16 @@ void MediaPlayerBridge::SetDuration(base::TimeDelta duration) {
 }
 
 void MediaPlayerBridge::SetVideoSurface(gfx::ScopedJavaSurface surface) {
-  if (j_media_player_bridge_.is_null()) {
-    if (surface.IsEmpty())
-      return;
-    Prepare();
-  }
+  surface_ = std::move(surface);
+
+  if (j_media_player_bridge_.is_null())
+    return;
 
   JNIEnv* env = base::android::AttachCurrentThread();
   CHECK(env);
+
   Java_MediaPlayerBridge_setSurface(
-      env, j_media_player_bridge_.obj(), surface.j_surface().obj());
+      env, j_media_player_bridge_.obj(), surface_.j_surface().obj());
 }
 
 void MediaPlayerBridge::Prepare() {
@@ -143,8 +145,8 @@ void MediaPlayerBridge::SetDataSource(const std::string& url) {
   CHECK(env);
 
   int fd;
-  int64 offset;
-  int64 size;
+  int64_t offset;
+  int64_t size;
   if (InterceptMediaUrl(url, &fd, &offset, &size)) {
     if (!Java_MediaPlayerBridge_setDataSourceFromFd(
         env, j_media_player_bridge_.obj(), fd, offset, size)) {
@@ -160,7 +162,7 @@ void MediaPlayerBridge::SetDataSource(const std::string& url) {
     DCHECK(j_context);
 
     const std::string data_uri_prefix("data:");
-    if (base::StartsWithASCII(url, data_uri_prefix, true)) {
+    if (base::StartsWith(url, data_uri_prefix, base::CompareCase::SENSITIVE)) {
       if (!Java_MediaPlayerBridge_setDataUriDataSource(
           env, j_media_player_bridge_.obj(), j_context, j_url_string.obj())) {
         OnMediaError(MEDIA_ERROR_FORMAT);
@@ -181,13 +183,14 @@ void MediaPlayerBridge::SetDataSource(const std::string& url) {
     }
   }
 
-  request_media_resources_cb_.Run(player_id());
   if (!Java_MediaPlayerBridge_prepareAsync(env, j_media_player_bridge_.obj()))
     OnMediaError(MEDIA_ERROR_FORMAT);
 }
 
-bool MediaPlayerBridge::InterceptMediaUrl(
-    const std::string& url, int* fd, int64* offset, int64* size) {
+bool MediaPlayerBridge::InterceptMediaUrl(const std::string& url,
+                                          int* fd,
+                                          int64_t* offset,
+                                          int64_t* size) {
   // Sentinel value to check whether the output arguments have been set.
   const int kUnsetValue = -1;
 
@@ -205,14 +208,15 @@ bool MediaPlayerBridge::InterceptMediaUrl(
   return false;
 }
 
-void MediaPlayerBridge::OnDidSetDataUriDataSource(JNIEnv* env, jobject obj,
+void MediaPlayerBridge::OnDidSetDataUriDataSource(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
     jboolean success) {
   if (!success) {
     OnMediaError(MEDIA_ERROR_FORMAT);
     return;
   }
 
-  request_media_resources_cb_.Run(player_id());
   if (!Java_MediaPlayerBridge_prepareAsync(env, j_media_player_bridge_.obj()))
     OnMediaError(MEDIA_ERROR_FORMAT);
 }
@@ -240,12 +244,13 @@ void MediaPlayerBridge::OnAuthCredentialsRetrieved(
 void MediaPlayerBridge::ExtractMediaMetadata(const std::string& url) {
   if (url.empty()) {
     OnMediaError(MEDIA_ERROR_FORMAT);
+    on_decoder_resources_released_cb_.Run(player_id());
     return;
   }
 
   int fd;
-  int64 offset;
-  int64 size;
+  int64_t offset;
+  int64_t size;
   if (InterceptMediaUrl(url, &fd, &offset, &size)) {
     manager()->GetMediaResourceGetter()->ExtractMediaMetadata(
         fd, offset, size,
@@ -268,6 +273,7 @@ void MediaPlayerBridge::OnMediaMetadataExtracted(
   }
   manager()->OnMediaMetadataChanged(
       player_id(), duration_, width_, height_, success);
+  on_decoder_resources_released_cb_.Run(player_id());
 }
 
 void MediaPlayerBridge::Start() {
@@ -304,6 +310,18 @@ bool MediaPlayerBridge::IsPlaying() {
   return result;
 }
 
+bool MediaPlayerBridge::HasVideo() const {
+  DCHECK(prepared_);
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_MediaPlayerBridge_hasVideo(env, j_media_player_bridge_.obj());
+}
+
+bool MediaPlayerBridge::HasAudio() const {
+  DCHECK(prepared_);
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_MediaPlayerBridge_hasAudio(env, j_media_player_bridge_.obj());
+}
+
 int MediaPlayerBridge::GetVideoWidth() {
   if (!prepared_)
     return width_;
@@ -325,10 +343,8 @@ void MediaPlayerBridge::SeekTo(base::TimeDelta timestamp) {
   pending_seek_ = timestamp;
   should_seek_on_prepare_ = true;
 
-  if (j_media_player_bridge_.is_null())
-    Prepare();
-  else if (prepared_)
-    SeekInternal(timestamp);
+  if (prepared_)
+    SeekInternal(GetCurrentTime(), timestamp);
 }
 
 base::TimeDelta MediaPlayerBridge::GetCurrentTime() {
@@ -351,10 +367,9 @@ base::TimeDelta MediaPlayerBridge::GetDuration() {
 }
 
 void MediaPlayerBridge::Release() {
+  on_decoder_resources_released_cb_.Run(player_id());
   if (j_media_player_bridge_.is_null())
     return;
-
-  SetAudible(false);
 
   time_update_timer_.Stop();
   if (prepared_) {
@@ -372,22 +387,16 @@ void MediaPlayerBridge::Release() {
 }
 
 void MediaPlayerBridge::SetVolume(double volume) {
-  volume_ = volume;
-
-  if (j_media_player_bridge_.is_null())
+  if (j_media_player_bridge_.is_null()) {
+    volume_ = volume;
     return;
+  }
 
   JNIEnv* env = base::android::AttachCurrentThread();
   CHECK(env);
 
-  // Update the audible state if we are playing.
-  jboolean is_playing = Java_MediaPlayerBridge_isPlaying(
-      env, j_media_player_bridge_.obj());
-  if (is_playing)
-    SetAudible(volume_ > 0);
-
   Java_MediaPlayerBridge_setVolume(
-      env, j_media_player_bridge_.obj(), volume_);
+      env, j_media_player_bridge_.obj(), volume);
 }
 
 void MediaPlayerBridge::OnVideoSizeChanged(int width, int height) {
@@ -397,13 +406,11 @@ void MediaPlayerBridge::OnVideoSizeChanged(int width, int height) {
 }
 
 void MediaPlayerBridge::OnPlaybackComplete() {
-  SetAudible(false);
   time_update_timer_.Stop();
   MediaPlayerAndroid::OnPlaybackComplete();
 }
 
 void MediaPlayerBridge::OnMediaInterrupted() {
-  SetAudible(false);
   time_update_timer_.Stop();
   MediaPlayerAndroid::OnMediaInterrupted();
 }
@@ -422,6 +429,9 @@ void MediaPlayerBridge::OnMediaPrepared() {
     pending_seek_ = base::TimeDelta::FromMilliseconds(0);
     should_seek_on_prepare_ = false;
   }
+
+  if (!surface_.IsEmpty())
+    SetVideoSurface(std::move(surface_));
 
   if (pending_play_) {
     StartInternal();
@@ -455,7 +465,7 @@ void MediaPlayerBridge::UpdateAllowedOperations() {
 }
 
 void MediaPlayerBridge::StartInternal() {
-  if (!manager()->RequestPlay(player_id())) {
+  if (!manager()->RequestPlay(player_id(), duration_, HasAudio())) {
     Pause(true);
     return;
   }
@@ -468,23 +478,28 @@ void MediaPlayerBridge::StartInternal() {
         base::TimeDelta::FromMilliseconds(kTimeUpdateInterval),
         this, &MediaPlayerBridge::OnTimeUpdateTimerFired);
   }
-
-  SetAudible(volume_ > 0);
 }
 
 void MediaPlayerBridge::PauseInternal() {
-  SetAudible(false);
-
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_MediaPlayerBridge_pause(env, j_media_player_bridge_.obj());
   time_update_timer_.Stop();
 }
 
 void MediaPlayerBridge::PendingSeekInternal(const base::TimeDelta& time) {
-  SeekInternal(time);
+  SeekInternal(GetCurrentTime(), time);
 }
 
-void MediaPlayerBridge::SeekInternal(base::TimeDelta time) {
+bool MediaPlayerBridge::SeekInternal(base::TimeDelta current_time,
+                                     base::TimeDelta time) {
+  // Seeking on content like live streams may cause the media player to
+  // get stuck in an error state.
+  if (time < current_time && !CanSeekBackward())
+    return false;
+
+  if (time >= current_time && !CanSeekForward())
+    return false;
+
   if (time > duration_)
     time = duration_;
 
@@ -492,7 +507,7 @@ void MediaPlayerBridge::SeekInternal(base::TimeDelta time) {
   // error state.
   if (time < base::TimeDelta()) {
     DCHECK_EQ(-1.0, time.InMillisecondsF());
-    return;
+    return false;
   }
 
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -500,11 +515,16 @@ void MediaPlayerBridge::SeekInternal(base::TimeDelta time) {
   int time_msec = static_cast<int>(time.InMilliseconds());
   Java_MediaPlayerBridge_seekTo(
       env, j_media_player_bridge_.obj(), time_msec);
+  return true;
 }
 
 void MediaPlayerBridge::OnTimeUpdateTimerFired() {
-  manager()->OnTimeUpdate(
-      player_id(), GetCurrentTime(), base::TimeTicks::Now());
+  base::TimeDelta current_timestamp = GetCurrentTime();
+  if (last_time_update_timestamp_ == current_timestamp)
+    return;
+  manager()->OnTimeUpdate(player_id(), current_timestamp,
+                          base::TimeTicks::Now());
+  last_time_update_timestamp_ = current_timestamp;
 }
 
 bool MediaPlayerBridge::RegisterMediaPlayerBridge(JNIEnv* env) {

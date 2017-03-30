@@ -5,10 +5,12 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/cookies/cookies_fetcher.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_switches.h"
 #include "jni/CookiesFetcher_jni.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
@@ -20,11 +22,12 @@ CookiesFetcher::CookiesFetcher(JNIEnv* env, jobject obj, Profile* profile) {
 CookiesFetcher::~CookiesFetcher() {
 }
 
-void CookiesFetcher::Destroy(JNIEnv* env, jobject obj) {
+void CookiesFetcher::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
-void CookiesFetcher::PersistCookies(JNIEnv* env, jobject obj) {
+void CookiesFetcher::PersistCookies(JNIEnv* env,
+                                    const JavaParamRef<jobject>& obj) {
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
   if (!profile->HasOffTheRecordProfile()) {
     // There is no work to be done. We might consider calling
@@ -78,7 +81,7 @@ void CookiesFetcher::OnCookiesFetchFinished(const net::CookieList& cookies) {
       i != cookies.end(); ++i) {
     ScopedJavaLocalRef<jobject> java_cookie = Java_CookiesFetcher_createCookie(
         env, jobject_.obj(),
-        base::android::ConvertUTF8ToJavaString(env, i->Source()).obj(),
+        base::android::ConvertUTF8ToJavaString(env, i->Source().spec()).obj(),
         base::android::ConvertUTF8ToJavaString(env, i->Name()).obj(),
         base::android::ConvertUTF8ToJavaString(env, i->Value()).obj(),
         base::android::ConvertUTF8ToJavaString(env, i->Domain()).obj(),
@@ -96,15 +99,15 @@ void CookiesFetcher::OnCookiesFetchFinished(const net::CookieList& cookies) {
 }
 
 void CookiesFetcher::RestoreCookies(JNIEnv* env,
-                                    jobject obj,
-                                    jstring url,
-                                    jstring name,
-                                    jstring value,
-                                    jstring domain,
-                                    jstring path,
-                                    int64 creation,
-                                    int64 expiration,
-                                    int64 last_access,
+                                    const JavaParamRef<jobject>& obj,
+                                    const JavaParamRef<jstring>& url,
+                                    const JavaParamRef<jstring>& name,
+                                    const JavaParamRef<jstring>& value,
+                                    const JavaParamRef<jstring>& domain,
+                                    const JavaParamRef<jstring>& path,
+                                    int64_t creation,
+                                    int64_t expiration,
+                                    int64_t last_access,
                                     bool secure,
                                     bool httponly,
                                     bool firstpartyonly,
@@ -154,14 +157,22 @@ void CookiesFetcher::RestoreToCookieJarInternal(
   net::CookieMonster* monster = store->GetCookieMonster();
   base::Callback<void(bool success)> cb;
 
+  // TODO(estark): Remove kEnableExperimentalWebPlatformFeatures check
+  // when we decide whether to ship cookie
+  // prefixes. https://crbug.com/541511
+  bool experimental_features_enabled =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableExperimentalWebPlatformFeatures);
   monster->SetCookieWithDetailsAsync(
-      GURL(cookie.Source()), cookie.Name(), cookie.Value(), cookie.Domain(),
+      cookie.Source(), cookie.Name(), cookie.Value(), cookie.Domain(),
       cookie.Path(), cookie.ExpiryDate(), cookie.IsSecure(),
-      cookie.IsHttpOnly(), cookie.IsFirstPartyOnly(), cookie.Priority(), cb);
+      cookie.IsHttpOnly(), cookie.IsFirstPartyOnly(),
+      experimental_features_enabled, experimental_features_enabled,
+      cookie.Priority(), cb);
 }
 
 // JNI functions
-static jlong Init(JNIEnv* env, jobject obj) {
+static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   return reinterpret_cast<intptr_t>(new CookiesFetcher(env, obj, 0));
 }
 

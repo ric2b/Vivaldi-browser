@@ -43,12 +43,14 @@ namespace networkingPrivate {
   enum DeviceStateType {
     // Device is available but not initialized.
     Uninitialized,
-    // Device is intialized but not enabled.
+    // Device is initialized but not enabled.
     Disabled,
     // Enabled state has been requested but has not completed.
     Enabling,
     // Device is enabled.
-    Enabled
+    Enabled,
+    // Device is prohibited.
+    Prohibited
   };
 
   enum IPConfigType {
@@ -63,8 +65,95 @@ namespace networkingPrivate {
     Direct, Manual, PAC, WPAD
   };
 
+  // Managed property types. These types all share a common structure:
+  // Active: For properties that are translated from the configuration
+  //     manager (e.g. Shill), the 'active' value currently in use by the
+  //     configuration manager.
+  // Effective: The effective source for the property: UserPolicy, DevicePolicy,
+  //     UserSetting or SharedSetting.
+  // UserPolicy: The value provided by the user policy.
+  // DevicePolicy: The value provided by the device policy.
+  // UserSetting: The value set by the logged in user. Only provided if
+  //     UserEditable is true (i.e. no policy affects the property or the
+  //     policy provided value is recommened only).
+  // SharedSetting: The value set for all users of the device. Only provided if
+  //     DeviceEditiable is true (i.e. no policy affects the property or the
+  //     policy provided value is recommened only).
+  // UserEditable: True if a UserPolicy exists and allows the property to be
+  //     edited (i.e. is a recommended value). Defaults to False.
+  // DeviceEditable: True if a DevicePolicy exists and allows the property to be
+  //     edited (i.e. is a recommended value). Defaults to False.
+
+  dictionary ManagedBoolean {
+    boolean? Active;
+    DOMString? Effective;
+    boolean? UserPolicy;
+    boolean? DevicePolicy;
+    boolean? UserSetting;
+    boolean? SharedSetting;
+    boolean? UserEditable;
+    boolean? DeviceEditable;
+  };
+
+  dictionary ManagedLong {
+    long? Active;
+    DOMString? Effective;
+    long? UserPolicy;
+    long? DevicePolicy;
+    long? UserSetting;
+    long? SharedSetting;
+    boolean? UserEditable;
+    boolean? DeviceEditable;
+  };
+
+  dictionary ManagedDOMString {
+    DOMString? Active;
+    DOMString? Effective;
+    DOMString? UserPolicy;
+    DOMString? DevicePolicy;
+    DOMString? UserSetting;
+    DOMString? SharedSetting;
+    boolean? UserEditable;
+    boolean? DeviceEditable;
+  };
+
+  dictionary ManagedDOMStringList {
+    DOMString[]? Active;
+    DOMString? Effective;
+    DOMString[]? UserPolicy;
+    DOMString[]? DevicePolicy;
+    DOMString[]? UserSetting;
+    DOMString[]? SharedSetting;
+    boolean? UserEditable;
+    boolean? DeviceEditable;
+  };
+
+  dictionary ManagedIPConfigType {
+    IPConfigType? Active;
+    DOMString? Effective;
+    IPConfigType? UserPolicy;
+    IPConfigType? DevicePolicy;
+    IPConfigType? UserSetting;
+    IPConfigType? SharedSetting;
+    boolean? UserEditable;
+    boolean? DeviceEditable;
+  };
+
+  dictionary ManagedProxySettingsType {
+    ProxySettingsType? Active;
+    DOMString? Effective;
+    ProxySettingsType? UserPolicy;
+    ProxySettingsType? DevicePolicy;
+    ProxySettingsType? UserSetting;
+    ProxySettingsType? SharedSetting;
+    boolean? UserEditable;
+    boolean? DeviceEditable;
+  };
+
+  // Sub-dictionary types.
+
   dictionary APNProperties {
-    DOMString? AccessPointName;
+    DOMString AccessPointName;
     DOMString? Language;
     DOMString? LocalizedName;
     DOMString? Name;
@@ -72,38 +161,107 @@ namespace networkingPrivate {
     DOMString? Username;
   };
 
-  dictionary CellularConfigProperties {
-    boolean? AutoConnect;
-    APNProperties? APN;
-
-    // Specifies which carrier to use for Cellular configurations that support
-    // multiple carriers. May be set with $(ref:setProperties), but will be
-    // ignored by $(ref:createConfiguration).
-    DOMString? Carrier;
+  dictionary ManagedAPNProperties {
+    ManagedDOMString AccessPointName;
+    ManagedDOMString? Language;
+    ManagedDOMString? LocalizedName;
+    ManagedDOMString? Name;
+    ManagedDOMString? Password;
+    ManagedDOMString? Username;
   };
 
-  dictionary CellularStateProperties {
-    ActivationStateType? ActivationState;
-    DOMString? NetworkTechnology;
-    DOMString? RoamingState;
-    boolean? SIMPresent;
-    long? SignalStrength;
+  dictionary ManagedAPNList {
+    APNProperties[]? Active;
+    DOMString? Effective;
+    APNProperties[]? UserPolicy;
+    APNProperties[]? DevicePolicy;
+    APNProperties[]? UserSetting;
+    APNProperties[]? SharedSetting;
+    boolean? UserEditable;
+    boolean? DeviceEditable;
   };
 
-  dictionary DeviceStateProperties {
-    // Set if the device is enabled. True if the device is currently scanning.
-    boolean? Scanning;
-
-    // The current state of the device.
-    DeviceStateType State;
-
-    // The network type associated with the device (Cellular, Ethernet, WiFi, or
-    // WiMAX).
-    NetworkType Type;
+  dictionary CellularProviderProperties {
+    DOMString Name;
+    DOMString Code;
+    DOMString? Country;
   };
 
-  dictionary EthernetStateProperties {
-    DOMString Authentication;
+  dictionary CellularSimState {
+    // Whether or not a PIN should be required.
+    boolean requirePin;
+
+    // The current PIN (required for any change, even when the SIM is unlocked).
+    DOMString currentPin;
+
+    // If provided, change the PIN to |newPin|. |requirePin| must be true.
+    DOMString? newPin;
+  };
+
+  dictionary IssuerSubjectPattern {
+    DOMString? CommonName;
+    DOMString? Locality;
+    DOMString? Organization;
+    DOMString? OrganizationalUnit;    
+  };
+
+  dictionary ManagedIssuerSubjectPattern {
+    ManagedDOMString? CommonName;
+    ManagedDOMString? Locality;
+    ManagedDOMString? Organization;
+    ManagedDOMString? OrganizationalUnit;    
+  };
+
+  dictionary CertificatePattern {
+    DOMString[]? EnrollmentURI;
+    IssuerSubjectPattern? Issuer;
+    DOMString[]? IssuerCARef;
+    IssuerSubjectPattern? Subject;
+  };
+
+  dictionary ManagedCertificatePattern {
+    ManagedDOMStringList? EnrollmentURI;
+    ManagedIssuerSubjectPattern? Issuer;
+    ManagedDOMStringList? IssuerCARef;
+    ManagedIssuerSubjectPattern? Subject;
+  };
+
+  dictionary EAPProperties {
+    DOMString? AnonymousIdentity;
+    CertificatePattern? ClientCertPattern;
+    DOMString? ClientCertRef;
+    DOMString? ClientCertType;
+    DOMString? Identity;
+    DOMString? Inner;
+    DOMString Outer;
+    DOMString? Password;
+    boolean? SaveCredentials;
+    DOMString[]? ServerCARefs;
+    boolean? UseProactiveKeyCaching;
+    boolean? UseSystemCAs;
+  };
+
+  dictionary ManagedEAPProperties {
+    ManagedDOMString? AnonymousIdentity;
+    ManagedCertificatePattern? ClientCertPattern;
+    ManagedDOMString? ClientCertRef;
+    ManagedDOMString? ClientCertType;
+    ManagedDOMString? Identity;
+    ManagedDOMString? Inner;
+    ManagedDOMString Outer;
+    ManagedDOMString? Password;
+    ManagedBoolean? SaveCredentials;
+    ManagedDOMStringList? ServerCARefs;
+    ManagedBoolean? UseProactiveKeyCaching;
+    ManagedBoolean? UseSystemCAs;
+  };
+
+  dictionary FoundNetworkProperties {
+    DOMString Status;
+    DOMString NetworkId;
+    DOMString Technology;
+    DOMString? ShortName;
+    DOMString? LongName;
   };
 
   dictionary IPConfigProperties {
@@ -115,13 +273,83 @@ namespace networkingPrivate {
     DOMString? WebProxyAutoDiscoveryUrl;
   };
 
+  dictionary ManagedIPConfigProperties {
+    ManagedDOMString? Gateway;
+    ManagedDOMString? IPAddress;
+    ManagedDOMString[]? NameServers;
+    ManagedLong? RoutingPrefix;
+    ManagedDOMString? Type;
+    ManagedDOMString? WebProxyAutoDiscoveryUrl;
+  };
+
+  dictionary XAUTHProperties {
+    DOMString? Password;
+    boolean? SaveCredentials;
+    DOMString? Username;
+  };
+
+  dictionary ManagedXAUTHProperties {
+    ManagedDOMString? Password;
+    ManagedBoolean? SaveCredentials;
+    ManagedDOMString? Username;
+  };
+
   dictionary IPSecProperties {
     DOMString AuthenticationType;
+    CertificatePattern? ClientCertPattern;
+    DOMString? ClientCertRef;
+    DOMString? ClientCertType;
+    EAPProperties? EAP;
+    DOMString? Group;
+    long? IKEVersion;
+    DOMString? PSK;
+    boolean? SaveCredentials;
+    DOMString[]? ServerCARefs;
+    XAUTHProperties? XAUTH;
+  };
+
+  dictionary ManagedIPSecProperties {
+    ManagedDOMString AuthenticationType;
+    ManagedCertificatePattern? ClientCertPattern;
+    ManagedDOMString? ClientCertRef;
+    ManagedDOMString? ClientCertType;
+    ManagedEAPProperties? EAP;
+    ManagedDOMString? Group;
+    ManagedLong IKEVersion;
+    ManagedDOMString? PSK;
+    ManagedBoolean? SaveCredentials;
+    ManagedDOMStringList? ServerCARefs;
+    ManagedXAUTHProperties? XAUTH;
+  };
+
+  dictionary L2TPProperties {
+    boolean? LcpEchoDisabled;
+    DOMString? Password;
+    boolean? SaveCredentials;
+    DOMString? Username;
+  };
+
+  dictionary ManagedL2TPProperties {
+    ManagedBoolean? LcpEchoDisabled;
+    ManagedDOMString? Password;
+    ManagedBoolean? SaveCredentials;
+    ManagedDOMString? Username;
+  };
+
+  dictionary PaymentPortal {
+    DOMString Method;
+    DOMString? PostData;
+    DOMString? Url;
   };
 
   dictionary ProxyLocation {
     DOMString Host;
     long Port;
+  };
+
+  dictionary ManagedProxyLocation {
+    ManagedDOMString Host;
+    ManagedLong Port;
   };
 
   dictionary ManualProxySettings {
@@ -131,6 +359,13 @@ namespace networkingPrivate {
     ProxyLocation? SOCKS;
   };
 
+  dictionary ManagedManualProxySettings {
+    ManagedProxyLocation? HTTPProxy;
+    ManagedProxyLocation? SecureHTTPProxy;
+    ManagedProxyLocation? FTPProxy;
+    ManagedProxyLocation? SOCKS;
+  };
+
   dictionary ProxySettings {
     ProxySettingsType Type;
     ManualProxySettings? Manual;
@@ -138,23 +373,223 @@ namespace networkingPrivate {
     DOMString? PAC;
   };
 
+  dictionary ManagedProxySettings {
+    ManagedProxySettingsType Type;
+    ManagedManualProxySettings? Manual;
+    ManagedDOMStringList? ExcludeDomains;
+    ManagedDOMString? PAC;
+  };
+
+  dictionary VerifyX509 {
+    DOMString? Name;
+    DOMString? Type;
+  };
+
+  dictionary ManagedVerifyX509 {
+    ManagedDOMString? Name;
+    ManagedDOMString? Type;
+  };
+
   dictionary OpenVPNProperties {
+    DOMString? Auth;
+    DOMString? AuthRetry;
+    boolean? AuthNoCache;
+    DOMString? Cipher;
+    DOMString? ClientCertRef;
+    CertificatePattern? ClientCertPattern;
+    DOMString? ClientCertType;
+    DOMString? CompLZO;
+    boolean? CompNoAdapt;
+    boolean? IgnoreDefaultRoute;
+    DOMString? KeyDirection;
+    DOMString? NsCertType;
     DOMString? OTP;
     DOMString? Password;
+    long? Port;
+    DOMString? Proto;
+    DOMString? PushPeerInfo;
+    DOMString? RemoteCertEKU;
+    DOMString[]? RemoteCertKU;
+    DOMString? RemoteCertTLS;
+    long? RenegSec;
+    boolean? SaveCredentials;
+    DOMString[]? ServerCARefs;
+    DOMString? ServerCertRef;
+    long? ServerPollTimeout;
+    long? Shaper;
+    DOMString? StaticChallenge;
+    DOMString? TLSAuthContents;
+    DOMString? TLSRemote;
     DOMString? UserAuthenticationType;
     DOMString? Username;
+    DOMString? Verb;
+    DOMString? VerifyHash;
+    VerifyX509? VerifyX509;
+  };
+
+  dictionary ManagedOpenVPNProperties {
+    ManagedDOMString? Auth;
+    ManagedDOMString? AuthRetry;
+    ManagedBoolean? AuthNoCache;
+    ManagedDOMString? Cipher;
+    ManagedDOMString? ClientCertRef;
+    ManagedCertificatePattern? ClientCertPattern;
+    ManagedDOMString? ClientCertType;
+    ManagedDOMString? CompLZO;
+    ManagedBoolean? CompNoAdapt;
+    ManagedBoolean? IgnoreDefaultRoute;
+    ManagedDOMString? KeyDirection;
+    ManagedDOMString? NsCertType;
+    ManagedDOMString? OTP;
+    ManagedDOMString? Password;
+    ManagedLong? Port;
+    ManagedDOMString? Proto;
+    ManagedDOMString? PushPeerInfo;
+    ManagedDOMString? RemoteCertEKU;
+    ManagedDOMString[]? RemoteCertKU;
+    ManagedDOMString? RemoteCertTLS;
+    ManagedLong? RenegSec;
+    ManagedBoolean? SaveCredentials;
+    ManagedDOMString[]? ServerCARefs;
+    ManagedDOMString? ServerCertRef;
+    ManagedLong? ServerPollTimeout;
+    ManagedLong? Shaper;
+    ManagedDOMString? StaticChallenge;
+    ManagedDOMString? TLSAuthContents;
+    ManagedDOMString? TLSRemote;
+    ManagedDOMString? UserAuthenticationType;
+    ManagedDOMString? Username;
+    ManagedDOMString? Verb;
+    ManagedDOMString? VerifyHash;
+    ManagedVerifyX509? VerifyX509;
+  };
+
+  dictionary SIMLockStatus {
+    DOMString LockType;  // sim-pin, sim-puk, or ''
+    boolean LockEnabled;
+    long? RetriesLeft;
   };
 
   dictionary ThirdPartyVPNProperties {
     DOMString ExtensionID;
+    DOMString? ProviderName;
   };
 
-  dictionary VPNConfigProperties {
+  dictionary ManagedThirdPartyVPNProperties {
+    ManagedDOMString ExtensionID;
+    DOMString? ProviderName;
+  };
+
+  // Network type dictionary types.
+
+  dictionary CellularProperties {
+    boolean? AutoConnect;
+    APNProperties? APN;
+    APNProperties[]? APNList;
+    DOMString? ActivationType;
+    ActivationStateType? ActivationState;
+    boolean? AllowRoaming;
+    DOMString? Carrier;
+    DOMString? ESN;
+    DOMString? Family;
+    DOMString? FirmwareRevision;
+    FoundNetworkProperties[]? FoundNetworks;
+    DOMString? HardwareRevision;
+    CellularProviderProperties? HomeProvider;
+    DOMString? ICCID;
+    DOMString? IMEI;
+    APNProperties? LastGoodAPN;
+    DOMString? Manufacturer;
+    DOMString? MDN;
+    DOMString? MEID;
+    DOMString? MIN;
+    DOMString? ModelID;
+    DOMString? NetworkTechnology;
+    PaymentPortal? PaymentPortal;
+    long? PRLVersion;
+    DOMString? RoamingState;
+    CellularProviderProperties? ServingOperator;
+    SIMLockStatus? SIMLockStatus;
+    boolean? SIMPresent;
+    boolean? SupportNetworkScan;
+    DOMString[]? SupportedCarriers;
+  };
+
+  dictionary ManagedCellularProperties {
+    ManagedBoolean? AutoConnect;
+    ManagedAPNProperties? APN;
+    ManagedAPNList? APNList;
+    DOMString? ActivationType;
+    ActivationStateType? ActivationState;
+    boolean? AllowRoaming;
+    ManagedDOMString? Carrier;
+    DOMString? ESN;
+    DOMString? Family;
+    DOMString? FirmwareRevision;
+    FoundNetworkProperties[]? FoundNetworks;
+    DOMString? HardwareRevision;
+    CellularProviderProperties[]? HomeProvider;
+    DOMString? ICCID;
+    DOMString? IMEI;
+    APNProperties? LastGoodAPN;
+    DOMString? Manufacturer;
+    DOMString? MDN;
+    DOMString? MEID;
+    DOMString? MIN;
+    DOMString? ModelID;
+    DOMString? NetworkTechnology;
+    PaymentPortal? PaymentPortal;
+    long? PRLVersion;
+    DOMString? RoamingState;
+    CellularProviderProperties? ServingOperator;
+    SIMLockStatus? SIMLockStatus;
+    boolean? SIMPresent;
+    boolean? SupportNetworkScan;
+    DOMString[]? SupportedCarriers;
+  };
+
+  dictionary CellularStateProperties {
+    ActivationStateType? ActivationState;
+    DOMString? NetworkTechnology;
+    DOMString? RoamingState;
+    boolean? SIMPresent;
+    long? SignalStrength;
+  };
+
+  dictionary EthernetProperties {
+    boolean? AutoConnect;
+    DOMString? Authentication;
+    EAPProperties? EAP;
+  };
+
+  dictionary ManagedEthernetProperties {
+    ManagedBoolean? AutoConnect;
+    ManagedDOMString? Authentication;
+    ManagedEAPProperties? EAP;
+  };
+
+  dictionary EthernetStateProperties {
+    DOMString Authentication;
+  };
+
+  dictionary VPNProperties {
     boolean? AutoConnect;
     DOMString? Host;
+    IPSecProperties? IPsec;
+    L2TPProperties? L2TP;
     OpenVPNProperties? OpenVPN;
     ThirdPartyVPNProperties? ThirdPartyVPN;
     DOMString? Type;
+  };
+
+  dictionary ManagedVPNProperties {
+    ManagedBoolean? AutoConnect;
+    ManagedDOMString? Host;
+    ManagedIPSecProperties? IPsec;
+    ManagedL2TPProperties? L2TP;
+    ManagedOpenVPNProperties? OpenVPN;
+    ManagedThirdPartyVPNProperties? ThirdPartyVPN;
+    ManagedDOMString Type;
   };
 
   dictionary VPNStateProperties {
@@ -163,13 +598,36 @@ namespace networkingPrivate {
     ThirdPartyVPNProperties? ThirdPartyVPN;
   };
 
-  dictionary WiFiConfigProperties {
+  dictionary WiFiProperties {
+    boolean? AllowGatewayARPPolling;
     boolean? AutoConnect;
+    DOMString? BSSID;
+    EAPProperties? EAP;
+    long? Frequency;
+    long[]? FrequencyList;
     DOMString? HexSSID;
     boolean? HiddenSSID;
     DOMString? Passphrase;
+    long? RoamThreshold;
     DOMString? SSID;
     DOMString? Security;
+    long? SignalStrength;
+  };
+
+  dictionary ManagedWiFiProperties {
+    ManagedBoolean? AllowGatewayARPPolling;
+    ManagedBoolean? AutoConnect;
+    DOMString? BSSID;
+    ManagedEAPProperties? EAP;
+    long? Frequency;
+    long[]? FrequencyList;
+    ManagedDOMString? HexSSID;
+    ManagedBoolean? HiddenSSID;
+    ManagedDOMString? Passphrase;
+    ManagedLong? RoamThreshold;
+    ManagedDOMString? SSID;
+    ManagedDOMString Security;
+    long? SignalStrength;
   };
 
   dictionary WiFiStateProperties {
@@ -177,8 +635,16 @@ namespace networkingPrivate {
     long? SignalStrength;
   };
 
-  dictionary WiMaxConfigProperties {
+  dictionary WiMAXProperties {
     boolean? AutoConnect;
+    EAPProperties? EAP;
+    long? SignalStrength;
+  };
+
+  dictionary ManagedWiMAXProperties {
+    ManagedBoolean? AutoConnect;
+    ManagedEAPProperties? EAP;
+    long? SignalStrength;
   };
 
   dictionary WiMAXStateProperties {
@@ -186,7 +652,8 @@ namespace networkingPrivate {
   };
 
   dictionary NetworkConfigProperties {
-    CellularConfigProperties? Cellular;
+    CellularProperties? Cellular;
+    EthernetProperties? Ethernet;
     DOMString? GUID;
     IPConfigType? IPAddressConfigType;
     DOMString? Name;
@@ -195,9 +662,57 @@ namespace networkingPrivate {
     ProxySettings? ProxySettings;
     IPConfigProperties? StaticIPConfig;
     NetworkType? Type;
-    VPNConfigProperties? VPN;
-    WiFiConfigProperties? WiFi;
-    WiMaxConfigProperties? WiMAX;
+    VPNProperties? VPN;
+    WiFiProperties? WiFi;
+    WiMAXProperties? WiMAX;
+  };
+
+  dictionary NetworkProperties {
+    CellularProperties? Cellular;
+    boolean? Connectable;
+    ConnectionStateType? ConnectionState;
+    DOMString? ErrorState;
+    EthernetProperties? Ethernet;
+    DOMString GUID;
+    IPConfigType? IPAddressConfigType;
+    IPConfigProperties[]? IPConfigs;
+    DOMString? MacAddress;
+    DOMString? Name;
+    IPConfigType? NameServersConfigType;
+    long? Priority;
+    ProxySettings? ProxySettings;
+    boolean? RestrictedConnectivity;
+    IPConfigProperties? StaticIPConfig;
+    IPConfigProperties? SavedIPConfig;
+    DOMString? Source;
+    NetworkType Type;
+    VPNProperties? VPN;
+    WiFiProperties? WiFi;
+    WiMAXProperties? WiMAX;
+  };
+
+  dictionary ManagedProperties {
+    ManagedCellularProperties? Cellular;
+    boolean? Connectable;
+    ConnectionStateType? ConnectionState;
+    DOMString? ErrorState;
+    ManagedEthernetProperties? Ethernet;
+    DOMString GUID;
+    ManagedIPConfigType? IPAddressConfigType;
+    IPConfigProperties[]? IPConfigs;
+    DOMString? MacAddress;
+    ManagedDOMString? Name;
+    ManagedIPConfigType? NameServersConfigType;
+    ManagedLong? Priority;
+    ManagedProxySettings? ProxySettings;
+    boolean? RestrictedConnectivity;
+    ManagedIPConfigProperties? StaticIPConfig;
+    IPConfigProperties? SavedIPConfig;
+    DOMString? Source;
+    NetworkType Type;
+    ManagedVPNProperties? VPN;
+    ManagedWiFiProperties? WiFi;
+    ManagedWiMAXProperties? WiMAX;
   };
 
   dictionary NetworkStateProperties {
@@ -214,6 +729,25 @@ namespace networkingPrivate {
     VPNStateProperties? VPN;
     WiFiStateProperties? WiFi;
     WiMAXStateProperties? WiMAX;
+  };
+
+  dictionary DeviceStateProperties {
+    // Set if the device is enabled. True if the device is currently scanning.
+    boolean? Scanning;
+
+    // Set to the SIM lock type if the device type is Cellular and the device
+    // is locked.
+    DOMString? SimLockType;
+
+    // Set to the SIM present state if the device type is Cellular.
+    boolean? SimPresent;
+
+    // The current state of the device.
+    DeviceStateType State;
+
+    // The network type associated with the device (Cellular, Ethernet, WiFi, or
+    // WiMAX).
+    NetworkType Type;
   };
 
   dictionary VerificationProperties {
@@ -272,9 +806,9 @@ namespace networkingPrivate {
   callback BooleanCallback = void(boolean result);
   callback StringCallback = void(DOMString result);
   // TODO(stevenjb): Use NetworkProperties for |result| once defined.
-  callback GetPropertiesCallback = void(object result);
+  callback GetPropertiesCallback = void(NetworkProperties result);
   // TODO(stevenjb): Use ManagedNetworkProperties for |result| once defined.
-  callback GetManagedPropertiesCallback = void(object result);
+  callback GetManagedPropertiesCallback = void(ManagedProperties result);
   callback GetStatePropertiesCallback = void(NetworkStateProperties result);
   callback GetNetworksCallback = void(NetworkStateProperties[] result);
   callback GetDeviceStatesCallback = void(DeviceStateProperties[] result);
@@ -396,7 +930,10 @@ namespace networkingPrivate {
     static void startDisconnect(DOMString networkGuid,
                                 optional VoidCallback callback);
 
-    // Starts activation of the Cellular network with networkGuid.
+    // Starts activation of the Cellular network with networkGuid. If called
+    // for a network that is already activated, or for a network with a carrier
+    // that can not be directly activated, this will show the account details
+    // page for the carrier if possible.
     // |networkGuid|: The GUID of the Cellular network to activate.
     // |carrier|: Optional name of carrier to activate.
     // |callback|: Called when the activation request has been sent. See note
@@ -462,6 +999,35 @@ namespace networkingPrivate {
     //     network captive portal status.
     static void getCaptivePortalStatus(DOMString networkGuid,
                                        CaptivePortalStatusCallback callback);
+
+    // Unlocks a Cellular SIM card.
+    // * If the SIM is PIN locked, |pin| will be used to unlock the SIM and
+    //   the |puk| argument will be ignored if provided.
+    // * If the SIM is PUK locked, |puk| and |pin| must be provided. If the
+    //   operation succeeds (|puk| is valid), the PIN will be set to |pin|.
+    //   (If |pin| is empty or invalid the operation will fail).
+    // |networkGuid|: The GUID of the cellular network to unlock.
+    // |pin|: The current SIM PIN, or the new PIN if PUK is provided.
+    // |puk|: The operator provided PUK for unblocking a blocked SIM.
+    // |callback|: Called when the operation has completed.
+    static void unlockCellularSim(DOMString networkGuid,
+                                  DOMString pin,
+                                  optional DOMString puk,
+                                  optional VoidCallback callback);
+
+    // Sets whether or not SIM locking is enabled (i.e a PIN will be required
+    // when the device is powered) and changes the PIN if a new PIN is
+    // specified. If the new PIN is provided but not valid (e.g. too short)
+    // the operation will fail. This will not lock the SIM; that is handled
+    // automatically by the device. NOTE: If the SIM is locked, it must first be
+    // unlocked with unlockCellularSim() before this can be called (otherwise it
+    // will fail and chrome.runtime.lastError will be set to Error.SimLocked).
+    // |networkGuid|: The GUID of the cellular network to set the SIM state of.
+    // |simState|: The SIM state to set.
+    // |callback|: Called when the operation has completed.
+    static void setCellularSimState(DOMString networkGuid,
+                                    CellularSimState simState,
+                                    optional VoidCallback callback);
   };
 
   interface Events {

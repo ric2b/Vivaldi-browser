@@ -130,7 +130,7 @@ class SSLClientSocketPoolTest
     pool_.reset(new SSLClientSocketPool(
         kMaxSockets, kMaxSocketsPerGroup, NULL /* cert_verifier */,
         NULL /* channel_id_service */, NULL /* transport_security_state */,
-        NULL /* cert_transparency_verifier */, NULL /* cert_policy_enforcer */,
+        NULL /* cert_transparency_verifier */, NULL /* ct_policy_enforcer */,
         std::string() /* ssl_session_cache_shard */, &socket_factory_,
         transport_pool ? &transport_socket_pool_ : NULL,
         socks_pool ? &socks_socket_pool_ : NULL,
@@ -185,7 +185,7 @@ class SSLClientSocketPoolTest
   const scoped_refptr<SSLConfigService> ssl_config_service_;
   const scoped_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_;
   HttpServerPropertiesImpl http_server_properties_;
-  const scoped_refptr<HttpNetworkSession> session_;
+  const scoped_ptr<HttpNetworkSession> session_;
 
   scoped_refptr<TransportSocketParams> direct_transport_socket_params_;
   MockTransportClientSocketPool transport_socket_pool_;
@@ -205,7 +205,6 @@ class SSLClientSocketPoolTest
 INSTANTIATE_TEST_CASE_P(NextProto,
                         SSLClientSocketPoolTest,
                         testing::Values(kProtoSPDY31,
-                                        kProtoHTTP2_14,
                                         kProtoHTTP2));
 
 TEST_P(SSLClientSocketPoolTest, TCPFail) {
@@ -829,7 +828,7 @@ TEST_P(SSLClientSocketPoolTest, IPPooling) {
 
   CreatePool(true /* tcp pool */, false, false);
   base::WeakPtr<SpdySession> spdy_session =
-      CreateSecureSpdySession(session_, test_hosts[0].key, BoundNetLog());
+      CreateSecureSpdySession(session_.get(), test_hosts[0].key, BoundNetLog());
 
   EXPECT_TRUE(
       HasSpdySession(session_->spdy_session_pool(), test_hosts[0].key));
@@ -886,7 +885,7 @@ void SSLClientSocketPoolTest::TestIPPoolingDisabled(
 
   CreatePool(true /* tcp pool */, false, false);
   base::WeakPtr<SpdySession> spdy_session =
-      CreateSecureSpdySession(session_, test_hosts[0].key, BoundNetLog());
+      CreateSecureSpdySession(session_.get(), test_hosts[0].key, BoundNetLog());
 
   EXPECT_TRUE(
       HasSpdySession(session_->spdy_session_pool(), test_hosts[0].key));

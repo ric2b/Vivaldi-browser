@@ -5,9 +5,26 @@
 #ifndef UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_H_
 #define UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_H_
 
+#include "build/build_config.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/gfx/native_widget_types.h"
+
+// Set PLATFORM_HAS_AX_PLATFORM_NODE_IMPL if this platform has a specific
+// implementation of AxPlatfromNode::Create().
+#undef PLATFORM_HAS_AX_PLATFORM_NODE_IMPL
+
+#if defined(OS_WIN)
+#define PLATFORM_HAS_AX_PLATFORM_NODE_IMPL 1
+#endif
+
+#if defined(OS_MACOSX)
+#define PLATFORM_HAS_AX_PLATFORM_NODE_IMPL 1
+#endif
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_X11)
+#define PLATFORM_HAS_AX_PLATFORM_NODE_IMPL 1
+#endif
 
 namespace ui {
 

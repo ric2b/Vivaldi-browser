@@ -12,8 +12,10 @@
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/infobars/core/infobar_delegate.h"
 #include "components/infobars/core/simple_alert_infobar_delegate.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/vector_icons_public.h"
 
 ChromeSelectFilePolicy::ChromeSelectFilePolicy(
     content::WebContents* source_contents)
@@ -31,7 +33,9 @@ void ChromeSelectFilePolicy::SelectFileDenied() {
   if (source_contents_) {
     SimpleAlertInfoBarDelegate::Create(
         InfoBarService::FromWebContents(source_contents_),
+        infobars::InfoBarDelegate::CHROME_SELECT_FILE_POLICY,
         infobars::InfoBarDelegate::kNoIconID,
+        gfx::VectorIconId::VECTOR_ICON_NONE,
         l10n_util::GetStringUTF16(IDS_FILE_SELECTION_DIALOG_INFOBAR), true);
   } else {
     LOG(WARNING) << "File-selection dialogs are disabled but no WebContents "

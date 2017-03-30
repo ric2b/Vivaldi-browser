@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/extension_reenabler.h"
@@ -65,15 +66,10 @@ class CallbackHelper {
   // Create a test ExtensionInstallPrompt that will not display any UI (which
   // causes unit tests to crash), but rather runs the given |quit_closure| (with
   // the prompt still active|.
-  scoped_ptr<ExtensionInstallPrompt> CreateTestPrompt(
-      content::WebContents* web_contents,
+  ExtensionInstallPrompt::ShowDialogCallback CreateShowCallback(
       const base::Closure& quit_closure) {
     quit_closure_ = quit_closure;
-    scoped_ptr<ExtensionInstallPrompt> prompt(
-        new ExtensionInstallPrompt(web_contents));
-    prompt->set_callback_for_test(base::Bind(&CallbackHelper::OnShow,
-                                             base::Unretained(this)));
-    return prompt.Pass();
+    return base::Bind(&CallbackHelper::OnShow, base::Unretained(this));
   }
 
  private:
@@ -84,8 +80,8 @@ class CallbackHelper {
 
   // The callback to run when a test ExtensionInstallPrompt is ready to show.
   void OnShow(ExtensionInstallPromptShowParams* show_params,
-              ExtensionInstallPrompt::Delegate* delegate,
-              scoped_refptr<ExtensionInstallPrompt::Prompt> prompt) {
+              const ExtensionInstallPrompt::DoneCallback& done_callback,
+              scoped_ptr<ExtensionInstallPrompt::Prompt> prompt) {
     DCHECK(!quit_closure_.is_null());
     quit_closure_.Run();
     quit_closure_ = base::Closure();
@@ -139,13 +135,14 @@ void ExtensionReenablerUnitTest::TearDown() {
 TEST_F(ExtensionReenablerUnitTest, TestReenablingDisabledExtension) {
   // Create a simple extension and add it to the service.
   scoped_refptr<const Extension> extension =
-      ExtensionBuilder().
-          SetManifest(DictionaryBuilder().Set("name", "test ext").
-                                          Set("version", "1.0").
-                                          Set("manifest_version", 2).
-                                          Set("description", "a test ext")).
-          SetID(crx_file::id_util::GenerateId("test ext")).
-          Build();
+      ExtensionBuilder()
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "test ext")
+                                     .Set("version", "1.0")
+                                     .Set("manifest_version", 2)
+                                     .Set("description", "a test ext")))
+          .SetID(crx_file::id_util::GenerateId("test ext"))
+          .Build();
   service()->AddExtension(extension.get());
   EXPECT_TRUE(registry()->enabled_extensions().Contains(extension->id()));
 
@@ -235,11 +232,9 @@ TEST_F(ExtensionReenablerUnitTest, TestReenablingDisabledExtension) {
   {
     base::RunLoop run_loop;
     scoped_ptr<ExtensionReenabler> extension_reenabler =
-        ExtensionReenabler::PromptForReenableWithPromptForTest(
-            extension,
-            profile(),
-            callback_helper.GetCallback(),
-            callback_helper.CreateTestPrompt(nullptr, run_loop.QuitClosure()));
+        ExtensionReenabler::PromptForReenableWithCallbackForTest(
+            extension, profile(), callback_helper.GetCallback(),
+            callback_helper.CreateShowCallback(run_loop.QuitClosure()));
     run_loop.Run();
 
     // We shouldn't have any result yet (the user hasn't confirmed or canceled).
@@ -259,11 +254,9 @@ TEST_F(ExtensionReenablerUnitTest, TestReenablingDisabledExtension) {
                                 Extension::DISABLE_PERMISSIONS_INCREASE);
     base::RunLoop run_loop;
     scoped_ptr<ExtensionReenabler> extension_reenabler =
-        ExtensionReenabler::PromptForReenableWithPromptForTest(
-            extension,
-            profile(),
-            callback_helper.GetCallback(),
-            callback_helper.CreateTestPrompt(nullptr, run_loop.QuitClosure()));
+        ExtensionReenabler::PromptForReenableWithCallbackForTest(
+            extension, profile(), callback_helper.GetCallback(),
+            callback_helper.CreateShowCallback(run_loop.QuitClosure()));
     run_loop.Run();
     EXPECT_FALSE(callback_helper.has_result());
     // Destroy the reenabler to simulate the owning context being shut down

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/copresence/chrome_whispernet_client.h"
 
+#include <stddef.h>
+
 #include <cmath>
 #include <cstdlib>
 #include <string>
@@ -13,6 +15,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/copresence/copresence_api.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
@@ -103,8 +106,7 @@ class ChromeWhispernetClientTest : public ExtensionBrowserTest,
     coder_params_ = media::AudioParameters(
         default_params_.format(), audio_modem::kDefaultChannelLayout,
         audio_modem::kDefaultSampleRate, audio_modem::kDefaultBitsPerSample,
-        default_params_.frames_per_buffer(),
-        media::AudioParameters::NO_EFFECTS);
+        default_params_.frames_per_buffer());
 
     converter_.reset(new media::AudioConverter(
         coder_params_, default_params_,

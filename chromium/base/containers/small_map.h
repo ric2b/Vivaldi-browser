@@ -5,11 +5,12 @@
 #ifndef BASE_CONTAINERS_SMALL_MAP_H_
 #define BASE_CONTAINERS_SMALL_MAP_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
 #include "base/memory/manual_constructor.h"
@@ -187,7 +188,7 @@ class SmallMap {
   // particular, gcc 2.95.3 does it but later versions allow 0-length
   // arrays.  Therefore, we explicitly reject non-positive kArraySize
   // here.
-  COMPILE_ASSERT(kArraySize > 0, default_initial_size_should_be_positive);
+  static_assert(kArraySize > 0, "default initial size should be positive");
 
  public:
   typedef typename NormalMap::key_type key_type;

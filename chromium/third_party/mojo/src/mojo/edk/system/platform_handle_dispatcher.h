@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_PLATFORM_HANDLE_DISPATCHER_H_
-#define MOJO_EDK_SYSTEM_PLATFORM_HANDLE_DISPATCHER_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_PLATFORM_HANDLE_DISPATCHER_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_PLATFORM_HANDLE_DISPATCHER_H_
 
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/edk/system/simple_dispatcher.h"
-#include "mojo/edk/system/system_impl_export.h"
+#include <utility>
+
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/system/simple_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace mojo {
 namespace system {
@@ -21,7 +23,7 @@ class MOJO_SYSTEM_IMPL_EXPORT PlatformHandleDispatcher final
   static scoped_refptr<PlatformHandleDispatcher> Create(
       embedder::ScopedPlatformHandle platform_handle) {
     return make_scoped_refptr(
-        new PlatformHandleDispatcher(platform_handle.Pass()));
+        new PlatformHandleDispatcher(std::move(platform_handle)));
   }
 
   embedder::ScopedPlatformHandle PassPlatformHandle();
@@ -48,14 +50,16 @@ class MOJO_SYSTEM_IMPL_EXPORT PlatformHandleDispatcher final
       override;
   void StartSerializeImplNoLock(Channel* channel,
                                 size_t* max_size,
-                                size_t* max_platform_handles) override;
+                                size_t* max_platform_handles) override
+      MOJO_NOT_THREAD_SAFE;
   bool EndSerializeAndCloseImplNoLock(
       Channel* channel,
       void* destination,
       size_t* actual_size,
-      embedder::PlatformHandleVector* platform_handles) override;
+      embedder::PlatformHandleVector* platform_handles) override
+      MOJO_NOT_THREAD_SAFE;
 
-  embedder::ScopedPlatformHandle platform_handle_;
+  embedder::ScopedPlatformHandle platform_handle_ MOJO_GUARDED_BY(mutex());
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(PlatformHandleDispatcher);
 };
@@ -63,4 +67,4 @@ class MOJO_SYSTEM_IMPL_EXPORT PlatformHandleDispatcher final
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_PLATFORM_HANDLE_DISPATCHER_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_PLATFORM_HANDLE_DISPATCHER_H_

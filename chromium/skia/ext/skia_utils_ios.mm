@@ -5,6 +5,8 @@
 #include "skia/ext/skia_utils_ios.h"
 
 #import <ImageIO/ImageIO.h>
+#include <stddef.h>
+#include <stdint.h>
 #import <UIKit/UIKit.h>
 
 #include "base/ios/ios_util.h"
@@ -15,7 +17,7 @@
 
 namespace {
 
-const uint8 kICOHeaderMagic[4] = {0x00, 0x00, 0x01, 0x00};
+const uint8_t kICOHeaderMagic[4] = {0x00, 0x00, 0x01, 0x00};
 
 // Returns whether the data encodes an ico image.
 bool EncodesIcoImage(NSData* image_data) {
@@ -27,7 +29,7 @@ bool EncodesIcoImage(NSData* image_data) {
 
 }  // namespace
 
-namespace gfx {
+namespace skia {
 
 SkBitmap CGImageToSkBitmap(CGImageRef image, CGSize size, bool is_opaque) {
   SkBitmap bitmap;
@@ -123,4 +125,11 @@ std::vector<SkBitmap> ImageDataToSkBitmaps(NSData* image_data) {
   return frames;
 }
 
-}  // namespace gfx
+UIColor* UIColorFromSkColor(SkColor color) {
+  return [UIColor colorWithRed:SkColorGetR(color) / 255.0f
+                         green:SkColorGetG(color) / 255.0f
+                          blue:SkColorGetB(color) / 255.0f
+                         alpha:SkColorGetA(color) / 255.0f];
+}
+
+}  // namespace skia

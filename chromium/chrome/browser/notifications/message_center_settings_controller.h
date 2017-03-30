@@ -5,14 +5,16 @@
 #ifndef CHROME_BROWSER_NOTIFICATIONS_MESSAGE_CENTER_SETTINGS_CONTROLLER_H_
 #define CHROME_BROWSER_NOTIFICATIONS_MESSAGE_CENTER_SETTINGS_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/app_icon_loader.h"
 #include "chrome/browser/profiles/profile_info_cache_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -127,7 +129,9 @@ class MessageCenterSettingsController
 
   // The list of all configurable notifier groups. This is each profile that is
   // loaded (and in the ProfileInfoCache - so no incognito profiles go here).
-  ScopedVector<message_center::ProfileNotifierGroup> notifier_groups_;
+  std::vector<scoped_ptr<message_center::ProfileNotifierGroup>>
+      notifier_groups_;
+
   size_t current_notifier_group_;
 
   content::NotificationRegistrar registrar_;

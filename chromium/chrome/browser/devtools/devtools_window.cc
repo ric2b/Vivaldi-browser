@@ -8,13 +8,14 @@
 
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/task_management/web_contents_tags.h"
@@ -31,9 +32,9 @@
 #include "chrome/browser/ui/webui/devtools_ui.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/render_messages.h"
 #include "chrome/common/url_constants.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/ui/zoom/page_zoom.h"
 #include "components/ui/zoom/zoom_controller.h"
 #include "content/public/browser/browser_thread.h"
@@ -54,6 +55,8 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+
+#include "app/vivaldi_apptools.h"
 
 using base::DictionaryValue;
 using blink::WebInputEvent;
@@ -260,7 +263,11 @@ bool DevToolsEventForwarder::ForwardEvent(
 
   int key_code = ui::LocatedToNonLocatedKeyboardCode(
       static_cast<ui::KeyboardCode>(event.windowsKeyCode));
-  int key = CombineKeyCodeAndModifiers(key_code, event.modifiers);
+  int modifiers = event.modifiers & (WebInputEvent::ShiftKey |
+                                     WebInputEvent::ControlKey |
+                                     WebInputEvent::AltKey |
+                                     WebInputEvent::MetaKey);
+  int key = CombineKeyCodeAndModifiers(key_code, modifiers);
   if (whitelisted_keys_.find(key) == whitelisted_keys_.end())
     return false;
 
@@ -268,7 +275,7 @@ bool DevToolsEventForwarder::ForwardEvent(
   event_data.SetString("type", event_type);
   event_data.SetString("keyIdentifier", event.keyIdentifier);
   event_data.SetInteger("keyCode", key_code);
-  event_data.SetInteger("modifiers", event.modifiers);
+  event_data.SetInteger("modifiers", modifiers);
   devtools_window_->bindings_->CallClientFunction(
       "DevToolsAPI.keyEventUnhandled", &event_data, NULL, NULL);
   return true;
@@ -493,7 +500,7 @@ void DevToolsWindow::ToggleDevToolsWindow(
     window = Create(
         profile, GURL(), inspected_web_contents,
         false, std::string(),
-        !base::CommandLine::ForCurrentProcess()->IsRunningVivaldi(),
+        !vivaldi::IsVivaldiRunning(),
         settings);
     if (!window)
       return;
@@ -514,21 +521,36 @@ void DevToolsWindow::ToggleDevToolsWindow(
 
 // static
 void DevToolsWindow::InspectElement(
-    content::WebContents* inspected_web_contents,
+    content::RenderFrameHost* inspected_frame_host,
     int x,
     int y) {
   scoped_refptr<DevToolsAgentHost> agent(
-      DevToolsAgentHost::GetOrCreateFor(inspected_web_contents));
-  agent->InspectElement(x, y);
+      DevToolsAgentHost::GetOrCreateFor(inspected_frame_host));
   bool should_measure_time = FindDevToolsWindow(agent.get()) == NULL;
   base::TimeTicks start_time = base::TimeTicks::Now();
   // TODO(loislo): we should initiate DevTools window opening from within
   // renderer. Otherwise, we still can hit a race condition here.
-  OpenDevToolsWindow(inspected_web_contents);
+  if (agent->GetType() == content::DevToolsAgentHost::TYPE_WEB_CONTENTS) {
+    OpenDevToolsWindow(agent->GetWebContents());
+  } else {
+    OpenDevToolsWindow(Profile::FromBrowserContext(agent->GetBrowserContext()),
+                       agent);
+  }
+
+  agent->InspectElement(x, y);
 
   DevToolsWindow* window = FindDevToolsWindow(agent.get());
   if (should_measure_time && window)
     window->inspect_element_start_time_ = start_time;
+}
+
+// static
+content::DevToolsExternalAgentProxyDelegate*
+DevToolsWindow::CreateWebSocketAPIChannel(const std::string& path) {
+  if (path.find("/devtools/frontend_api") != 0)
+    return nullptr;
+
+  return DevToolsUIBindings::CreateWebSocketAPIChannel();
 }
 
 void DevToolsWindow::ScheduleShow(const DevToolsToggleAction& action) {
@@ -664,7 +686,7 @@ bool DevToolsWindow::HasFiredBeforeUnloadEventForDevToolsBrowser(
 
 // static
 void DevToolsWindow::OnPageCloseCanceled(WebContents* contents) {
-  DevToolsWindow *window =
+  DevToolsWindow* window =
       DevToolsWindow::GetInstanceForInspectedWebContents(contents);
   if (!window)
     return;
@@ -736,8 +758,8 @@ DevToolsWindow* DevToolsWindow::Create(
     const std::string& remote_frontend,
     bool can_dock,
     const std::string& settings) {
-  // If developer tools disabled by policy don't open the window.
-  if (profile->GetPrefs()->GetBoolean(prefs::kDevToolsDisabled))
+  if (profile->GetPrefs()->GetBoolean(prefs::kDevToolsDisabled) ||
+      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kKioskMode))
     return nullptr;
 
   if (inspected_web_contents) {
@@ -846,6 +868,17 @@ WebContents* DevToolsWindow::OpenURLFromTab(
   content::NavigationController::LoadURLParams load_url_params(params.url);
   main_web_contents_->GetController().LoadURLWithParams(load_url_params);
   return main_web_contents_;
+}
+
+void DevToolsWindow::ShowCertificateViewer(int certificate_id) {
+  WebContents* inspected_contents = is_docked_ ?
+      GetInspectedWebContents() : main_web_contents_;
+  Browser* browser = NULL;
+  int tab = 0;
+  if (!FindInspectedBrowserAndTabIndex(inspected_contents, &browser, &tab))
+    return;
+  gfx::NativeWindow parent = browser->window()->GetNativeWindow();
+  ::ShowCertificateViewerByID(inspected_contents, parent, certificate_id);
 }
 
 void DevToolsWindow::ActivateContents(WebContents* contents) {
@@ -1170,11 +1203,18 @@ BrowserWindow* DevToolsWindow::GetInspectedBrowserWindow() {
 
 void DevToolsWindow::DoAction(const DevToolsToggleAction& action) {
   switch (action.type()) {
-    case DevToolsToggleAction::kShowConsole:
-      bindings_->CallClientFunction(
-          "DevToolsAPI.showConsole", NULL, NULL, NULL);
+    case DevToolsToggleAction::kShowConsole: {
+      base::StringValue panel_name("console");
+      bindings_->CallClientFunction("DevToolsAPI.showPanel", &panel_name, NULL,
+                                    NULL);
       break;
-
+    }
+    case DevToolsToggleAction::kShowSecurityPanel: {
+      base::StringValue panel_name("security");
+      bindings_->CallClientFunction("DevToolsAPI.showPanel", &panel_name, NULL,
+                                    NULL);
+      break;
+    }
     case DevToolsToggleAction::kInspect:
       bindings_->CallClientFunction(
           "DevToolsAPI.enterInspectElementMode", NULL, NULL, NULL);
@@ -1242,4 +1282,15 @@ void DevToolsWindow::SetLoadCompletedCallback(const base::Closure& closure) {
 bool DevToolsWindow::ForwardKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   return event_forwarder_->ForwardEvent(event);
+}
+
+bool DevToolsWindow::ReloadInspectedWebContents(bool ignore_cache) {
+  // Only route reload via front-end if the agent is attached.
+  WebContents* wc = GetInspectedWebContents();
+  if (!wc || wc->GetCrashedStatus() != base::TERMINATION_STATUS_STILL_RUNNING)
+    return false;
+  base::FundamentalValue ignore_cache_value(ignore_cache);
+  bindings_->CallClientFunction("DevToolsAPI.reloadInspectedPage",
+                                &ignore_cache_value, nullptr, nullptr);
+  return true;
 }

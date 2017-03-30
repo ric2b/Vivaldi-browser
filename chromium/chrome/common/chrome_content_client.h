@@ -10,11 +10,14 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "build/build_config.h"
 #include "content/public/common/content_client.h"
 
 #if defined(ENABLE_PLUGINS)
 #include "content/public/common/pepper_plugin_info.h"
 #endif
+
+#include "url/url_util.h"
 
 // Returns the user agent of Chrome.
 std::string GetUserAgent();
@@ -29,13 +32,6 @@ class ChromeContentClient : public content::ContentClient {
   // pointers for built-in plugins. We avoid linking these plugins into
   // chrome_common because then on Windows we would ship them twice because of
   // the split DLL.
-#if defined(ENABLE_REMOTING)
-  static void SetRemotingEntryFunctions(
-      content::PepperPluginInfo::GetInterfaceFunc get_interface,
-      content::PepperPluginInfo::PPP_InitializeModuleFunc initialize_module,
-      content::PepperPluginInfo::PPP_ShutdownModuleFunc shutdown_module);
-#endif
-
 #if !defined(DISABLE_NACL)
   static void SetNaClEntryFunctions(
       content::PepperPluginInfo::GetInterfaceFunc get_interface,
@@ -48,14 +44,24 @@ class ChromeContentClient : public content::ContentClient {
       content::PepperPluginInfo::GetInterfaceFunc get_interface,
       content::PepperPluginInfo::PPP_InitializeModuleFunc initialize_module,
       content::PepperPluginInfo::PPP_ShutdownModuleFunc shutdown_module);
+
+  // This returns the most recent plugin based on the plugin versions. In the
+  // event of a tie, a debug plugin will be considered more recent than a
+  // non-debug plugin.
+  // It does not make sense to call this on a vector that contains more than one
+  // plugin type. This function may return a nullptr if given an empty vector.
+  // The method is only visible for testing purposes.
+  static content::PepperPluginInfo* FindMostRecentPlugin(
+      const std::vector<content::PepperPluginInfo*>& plugins);
 #endif
 
   void SetActiveURL(const GURL& url) override;
   void SetGpuInfo(const gpu::GPUInfo& gpu_info) override;
   void AddPepperPlugins(
       std::vector<content::PepperPluginInfo>* plugins) override;
-  void AddAdditionalSchemes(std::vector<std::string>* standard_schemes,
+  void AddAdditionalSchemes(std::vector<url::SchemeWithType>* standard_schemes,
                             std::vector<std::string>* saveable_shemes) override;
+  bool CanSendWhileSwappedOut(const IPC::Message* message) override;
   std::string GetProduct() const override;
   std::string GetUserAgent() const override;
   base::string16 GetLocalizedString(int message_id) const override;
@@ -75,6 +81,10 @@ class ChromeContentClient : public content::ContentClient {
 
   void AddSecureSchemesAndOrigins(std::set<std::string>* schemes,
                                   std::set<GURL>* origins) override;
+
+  void AddServiceWorkerSchemes(std::set<std::string>* schemes) override;
+
+  bool IsSupplementarySiteIsolationModeEnabled() override;
 };
 
 #endif  // CHROME_COMMON_CHROME_CONTENT_CLIENT_H_

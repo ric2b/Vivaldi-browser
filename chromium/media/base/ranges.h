@@ -5,11 +5,13 @@
 #ifndef MEDIA_BASE_RANGES_H_
 #define MEDIA_BASE_RANGES_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <ostream>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"
@@ -19,7 +21,7 @@ namespace media {
 // Ranges allows holding an ordered list of ranges of [start,end) intervals.
 // The canonical example use-case is holding the list of ranges of buffered
 // bytes or times in a <video> tag.
-template<class T>  // Endpoint type; typically a base::TimeDelta or an int64.
+template <class T>  // Endpoint type; typically a base::TimeDelta or an int64_t.
 class Ranges {
  public:
   // Allow copy & assign.

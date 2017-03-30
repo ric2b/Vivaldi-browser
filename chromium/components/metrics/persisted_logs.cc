@@ -13,7 +13,7 @@
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/sha1.h"
 #include "base/timer/elapsed_timer.h"
-#include "components/metrics/compression_utils.h"
+#include "third_party/zlib/google/compression_utils.h"
 
 namespace metrics {
 
@@ -49,7 +49,7 @@ void AppendBase64String(const std::string& str, base::ListValue* list_value) {
 void PersistedLogs::LogHashPair::Init(const std::string& log_data) {
   DCHECK(!log_data.empty());
 
-  if (!GzipCompress(log_data, &compressed_log_data)) {
+  if (!compression::GzipCompress(log_data, &compressed_log_data)) {
     NOTREACHED();
     return;
   }
@@ -57,10 +57,6 @@ void PersistedLogs::LogHashPair::Init(const std::string& log_data) {
   UMA_HISTOGRAM_PERCENTAGE(
       "UMA.ProtoCompressionRatio",
       static_cast<int>(100 * compressed_log_data.size() / log_data.size()));
-  UMA_HISTOGRAM_CUSTOM_COUNTS(
-      "UMA.ProtoGzippedKBSaved",
-      static_cast<int>((log_data.size() - compressed_log_data.size()) / 1024),
-      1, 2000, 50);
 
   hash = base::SHA1HashString(log_data);
 }

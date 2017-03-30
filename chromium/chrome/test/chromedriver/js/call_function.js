@@ -149,7 +149,15 @@ function getPageCache(opt_doc) {
  * @return {*} The wrapped value.
  */
 function wrap(value) {
-  if (typeof(value) == 'object' && value != null) {
+  // As of crrev.com/1316933002, typeof() for some elements will return
+  // 'function', not 'object'. So we need to check for both non-null objects, as
+  // well Elements that also happen to be callable functions (e.g. <embed> and
+  // <object> elements). Note that we can not use |value instanceof Object| here
+  // since this does not work with frames/iframes, for example
+  // frames[0].document.body instanceof Object == false even though
+  // typeof(frames[0].document.body) == 'object'.
+  if ((typeof(value) == 'object' && value != null) ||
+      (typeof(value) == 'function' && value instanceof Element)) {
     var nodeType = value['nodeType'];
     if (nodeType == NodeType.ELEMENT || nodeType == NodeType.DOCUMENT
         || (SHADOW_DOM_ENABLED && value instanceof ShadowRoot)) {

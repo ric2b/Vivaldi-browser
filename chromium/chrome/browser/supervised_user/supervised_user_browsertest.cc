@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,7 +20,6 @@
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/common/chrome_switches.h"
@@ -33,7 +34,9 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using content::InterstitialPage;
@@ -116,8 +119,8 @@ class SupervisedUserBlockModeTest : public InProcessBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Enable the test server and remap all URLs to it.
-    ASSERT_TRUE(test_server()->Start());
-    std::string host_port = test_server()->host_port_pair().ToString();
+    ASSERT_TRUE(embedded_test_server()->Start());
+    std::string host_port = embedded_test_server()->host_port_pair().ToString();
     command_line->AppendSwitchASCII(switches::kHostResolverRules,
         "MAP *.example.com " + host_port + "," +
         "MAP *.new-example.com " + host_port + "," +
@@ -175,7 +178,7 @@ class MockTabStripModelObserver : public TabStripModelObserver {
 // Navigates to a blocked URL.
 IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest,
                        SendAccessRequestOnBlockedURL) {
-  GURL test_url("http://www.example.com/files/simple.html");
+  GURL test_url("http://www.example.com/simple.html");
   ui_test_utils::NavigateToURL(browser(), test_url);
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
@@ -201,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest, OpenBlockedURLInNewTab) {
   WebContents* prev_tab = tab_strip->GetActiveWebContents();
 
   // Open blocked URL in a new tab.
-  GURL test_url("http://www.example.com/files/simple.html");
+  GURL test_url("http://www.example.com/simple.html");
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), test_url, NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
@@ -225,7 +228,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest, OpenBlockedURLInNewTab) {
 // Tests whether a visit attempt adds a special history entry.
 IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest,
                        HistoryVisitRecorded) {
-  GURL allowed_url("http://www.example.com/files/simple.html");
+  GURL allowed_url("http://www.example.com/simple.html");
 
   scoped_refptr<SupervisedUserURLFilter> filter =
       supervised_user_service_->GetURLFilterForUIThread();
@@ -237,7 +240,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest,
       SupervisedUserSettingsServiceFactory::GetForProfile(
           browser()->profile());
   supervised_user_settings_service->SetLocalSetting(
-      supervised_users::kContentPackManualBehaviorHosts, dict.Pass());
+      supervised_users::kContentPackManualBehaviorHosts, std::move(dict));
   EXPECT_EQ(SupervisedUserURLFilter::ALLOW,
             filter->GetFilteringBehaviorForURL(allowed_url));
   EXPECT_EQ(SupervisedUserURLFilter::ALLOW,
@@ -250,7 +253,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest,
   CheckShownPageIsNotInterstitial(tab);
 
   // Navigate to a blocked page and go back on the interstitial.
-  GURL blocked_url("http://www.new-example.com/files/simple.html");
+  GURL blocked_url("http://www.new-example.com/simple.html");
   ui_test_utils::NavigateToURL(browser(), blocked_url);
 
   tab = browser()->tab_strip_model()->GetActiveWebContents();
@@ -283,7 +286,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest, Unblock) {
-  GURL test_url("http://www.example.com/files/simple.html");
+  GURL test_url("http://www.example.com/simple.html");
   ui_test_utils::NavigateToURL(browser(), test_url);
 
   WebContents* web_contents =
@@ -302,7 +305,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserBlockModeTest, Unblock) {
       SupervisedUserSettingsServiceFactory::GetForProfile(
           browser()->profile());
   supervised_user_settings_service->SetLocalSetting(
-      supervised_users::kContentPackManualBehaviorHosts, dict.Pass());
+      supervised_users::kContentPackManualBehaviorHosts, std::move(dict));
 
   scoped_refptr<SupervisedUserURLFilter> filter =
       supervised_user_service_->GetURLFilterForUIThread();

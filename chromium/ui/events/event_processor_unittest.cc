@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/events/event.h"
+
+#include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/events/event.h"
 #include "ui/events/event_target_iterator.h"
 #include "ui/events/event_targeter.h"
 #include "ui/events/event_utils.h"
@@ -62,7 +65,7 @@ TEST_F(EventProcessorTest, Basic) {
   child->SetEventTargeter(
       make_scoped_ptr(new TestEventTargeter(child.get(), false)));
   SetTarget(child.get());
-  root()->AddChild(child.Pass());
+  root()->AddChild(std::move(child));
 
   MouseEvent mouse(ET_MOUSE_MOVED, gfx::Point(10, 10), gfx::Point(10, 10),
                    EventTimeForNow(), EF_NONE, EF_NONE);
@@ -120,7 +123,7 @@ TEST_F(EventProcessorTest, NestedEventProcessing) {
   // Add one child to the default event processor used in this test suite.
   scoped_ptr<TestEventTarget> child(new TestEventTarget());
   SetTarget(child.get());
-  root()->AddChild(child.Pass());
+  root()->AddChild(std::move(child));
 
   // Define a second root target and child.
   scoped_ptr<EventTarget> second_root_scoped(new TestEventTarget());
@@ -129,17 +132,17 @@ TEST_F(EventProcessorTest, NestedEventProcessing) {
   scoped_ptr<TestEventTarget> second_child(new TestEventTarget());
   second_root->SetEventTargeter(
       make_scoped_ptr(new TestEventTargeter(second_child.get(), false)));
-  second_root->AddChild(second_child.Pass());
+  second_root->AddChild(std::move(second_child));
 
   // Define a second event processor which owns the second root.
   scoped_ptr<TestEventProcessor> second_processor(new TestEventProcessor());
-  second_processor->SetRoot(second_root_scoped.Pass());
+  second_processor->SetRoot(std::move(second_root_scoped));
 
   // Indicate that an event which is dispatched to the child target owned by the
   // first event processor should be handled by |target_handler| instead.
   scoped_ptr<TestEventHandler> target_handler(
       new ReDispatchEventHandler(second_processor.get(), root()->child_at(0)));
-  root()->child_at(0)->set_target_handler(target_handler.get());
+  ignore_result(root()->child_at(0)->SetTargetHandler(target_handler.get()));
 
   // Dispatch a mouse event to the tree of event targets owned by the first
   // event processor, checking in ReDispatchEventHandler that the phase and
@@ -150,11 +153,13 @@ TEST_F(EventProcessorTest, NestedEventProcessing) {
 
   // Verify also that |mouse| was seen by the child nodes contained in both
   // event processors and that the event was not handled.
-  EXPECT_TRUE(root()->child_at(0)->DidReceiveEvent(ET_MOUSE_MOVED));
+  EXPECT_EQ(1, target_handler->num_mouse_events());
   EXPECT_TRUE(second_root->child_at(0)->DidReceiveEvent(ET_MOUSE_MOVED));
   EXPECT_FALSE(mouse.handled());
   second_root->child_at(0)->ResetReceivedEvents();
   root()->child_at(0)->ResetReceivedEvents();
+
+  target_handler->Reset();
 
   // Indicate that the child of the second root should handle events, and
   // dispatch another mouse event to verify that it is marked as handled.
@@ -162,7 +167,7 @@ TEST_F(EventProcessorTest, NestedEventProcessing) {
   MouseEvent mouse2(ET_MOUSE_MOVED, gfx::Point(10, 10), gfx::Point(10, 10),
                     EventTimeForNow(), EF_NONE, EF_NONE);
   DispatchEvent(&mouse2);
-  EXPECT_TRUE(root()->child_at(0)->DidReceiveEvent(ET_MOUSE_MOVED));
+  EXPECT_EQ(1, target_handler->num_mouse_events());
   EXPECT_TRUE(second_root->child_at(0)->DidReceiveEvent(ET_MOUSE_MOVED));
   EXPECT_TRUE(mouse2.handled());
 }
@@ -173,7 +178,7 @@ TEST_F(EventProcessorTest, OnEventProcessingFinished) {
   scoped_ptr<TestEventTarget> child(new TestEventTarget());
   child->set_mark_events_as_handled(true);
   SetTarget(child.get());
-  root()->AddChild(child.Pass());
+  root()->AddChild(std::move(child));
 
   // Dispatch a mouse event. We expect the event to be seen by the target,
   // handled, and we expect OnEventProcessingFinished() to be invoked once.
@@ -193,7 +198,7 @@ TEST_F(EventProcessorTest, OnEventProcessingFinished) {
 TEST_F(EventProcessorTest, OnEventProcessingStarted) {
   scoped_ptr<TestEventTarget> child(new TestEventTarget());
   SetTarget(child.get());
-  root()->AddChild(child.Pass());
+  root()->AddChild(std::move(child));
 
   // Dispatch a mouse event. We expect the event to be seen by the target,
   // OnEventProcessingStarted() should be called once, and
@@ -235,8 +240,8 @@ TEST_F(EventProcessorTest, DispatchToNextBestTarget) {
   // Install a TestEventTargeter which permits bubbling.
   root()->SetEventTargeter(
       make_scoped_ptr(new TestEventTargeter(grandchild.get(), true)));
-  child->AddChild(grandchild.Pass());
-  root()->AddChild(child.Pass());
+  child->AddChild(std::move(grandchild));
+  root()->AddChild(std::move(child));
 
   ASSERT_EQ(1u, root()->child_count());
   ASSERT_EQ(1u, root()->child_at(0)->child_count());
@@ -309,8 +314,8 @@ TEST_F(EventProcessorTest, HandlerSequence) {
   // Install a TestEventTargeter which permits bubbling.
   root()->SetEventTargeter(
       make_scoped_ptr(new TestEventTargeter(grandchild.get(), true)));
-  child->AddChild(grandchild.Pass());
-  root()->AddChild(child.Pass());
+  child->AddChild(std::move(grandchild));
+  root()->AddChild(std::move(child));
 
   ASSERT_EQ(1u, root()->child_count());
   ASSERT_EQ(1u, root()->child_at(0)->child_count());

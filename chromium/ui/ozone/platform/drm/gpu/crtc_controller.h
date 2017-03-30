@@ -9,8 +9,10 @@
 #include <stdint.h>
 #include <xf86drmMode.h>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "ui/gfx/swap_result.h"
 #include "ui/ozone/ozone_export.h"
 #include "ui/ozone/platform/drm/common/scoped_drm_types.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager.h"
@@ -54,8 +56,14 @@ class OZONE_EXPORT CrtcController
                         bool test_only,
                         scoped_refptr<PageFlipRequest> page_flip_request);
 
-  // Called if the page flip for this CRTC fails after being scheduled.
-  void PageFlipFailed();
+  // Returns true if hardware plane with z_order equal to |z_order| can support
+  // |fourcc_format| format.
+  bool IsFormatSupported(uint32_t fourcc_format, uint32_t z_order) const;
+
+  // Called if the page flip event wasn't scheduled (ie: page flip fails). This
+  // will then signal the request such that the caller doesn't wait for the
+  // event forever.
+  void SignalPageFlipRequest(gfx::SwapResult result);
 
   // Called when the page flip event occurred. The event is provided by the
   // kernel when a VBlank event finished. This allows the controller to
@@ -73,11 +81,7 @@ class OZONE_EXPORT CrtcController
  private:
   bool ResetCursor();
 
-  void SignalPageFlipRequest();
-
   scoped_refptr<DrmDevice> drm_;
-
-  HardwareDisplayPlaneManager* overlay_plane_manager_;  // Not owned.
 
   // Buffers need to be declared first so that they are destroyed last. Needed
   // since the controllers may reference the buffers.

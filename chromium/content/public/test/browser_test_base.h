@@ -8,6 +8,8 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -17,10 +19,6 @@ class FilePath;
 }
 
 namespace net {
-namespace test_server {
-class EmbeddedTestServer;
-}
-
 class RuleBasedHostResolverProc;
 }  // namespace net
 
@@ -84,18 +82,18 @@ class BrowserTestBase : public testing::Test {
   // Sets expected browser exit code, in case it's different than 0 (success).
   void set_expected_exit_code(int code) { expected_exit_code_ = code; }
 
-  // Returns the testing server. Guaranteed to be non-NULL.
-  // TODO(phajdan.jr): Remove test_server accessor (http://crbug.com/96594).
-  const net::SpawnedTestServer* test_server() const {
-    return test_server_.get();
+  const net::SpawnedTestServer* spawned_test_server() const {
+    return spawned_test_server_.get();
   }
-  net::SpawnedTestServer* test_server() { return test_server_.get(); }
+  net::SpawnedTestServer* spawned_test_server() {
+    return spawned_test_server_.get();
+  }
 
   // Returns the embedded test server. Guaranteed to be non-NULL.
-  const net::test_server::EmbeddedTestServer* embedded_test_server() const {
+  const net::EmbeddedTestServer* embedded_test_server() const {
     return embedded_test_server_.get();
   }
-  net::test_server::EmbeddedTestServer* embedded_test_server() {
+  net::EmbeddedTestServer* embedded_test_server() {
     return embedded_test_server_.get();
   }
 
@@ -134,10 +132,10 @@ class BrowserTestBase : public testing::Test {
   void ProxyRunTestOnMainThreadLoop();
 
   // Testing server, started on demand.
-  scoped_ptr<net::SpawnedTestServer> test_server_;
+  scoped_ptr<net::SpawnedTestServer> spawned_test_server_;
 
   // Embedded test server, cheap to create, started on demand.
-  scoped_ptr<net::test_server::EmbeddedTestServer> embedded_test_server_;
+  scoped_ptr<net::EmbeddedTestServer> embedded_test_server_;
 
   // Host resolver used during tests.
   scoped_refptr<net::RuleBasedHostResolverProc> rule_based_resolver_;
@@ -151,6 +149,11 @@ class BrowserTestBase : public testing::Test {
 
   // When true, do compositing with the software backend instead of using GL.
   bool use_software_compositing_;
+
+  // Whether SetUp was called. This value is checked in the destructor of this
+  // class to ensure that SetUp was called. If it's not called, the test will
+  // not run and report a false positive result.
+  bool set_up_called_;
 
 #if defined(OS_POSIX)
   bool handle_sigterm_;

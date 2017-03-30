@@ -42,15 +42,7 @@ AutofillOptionsWebUITest.prototype = {
 };
 
 // Test opening the autofill options has correct location.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_testOpenAutofillOptions ' +
-    'DISABLED_testOpenAutofillOptions');
-GEN('#else');
-GEN('#define MAYBE_testOpenAutofillOptions ' +
-    'testOpenAutofillOptions');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('AutofillOptionsWebUITest', 'MAYBE_testOpenAutofillOptions', function () {
+TEST_F('AutofillOptionsWebUITest', 'testOpenAutofillOptions', function() {
   assertEquals(this.browsePreload, document.location.href);
 });
 

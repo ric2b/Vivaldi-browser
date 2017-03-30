@@ -4,6 +4,8 @@
 
 #include "cc/animation/transform_operations.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "ui/gfx/animation/tween.h"
@@ -224,8 +226,7 @@ void TransformOperations::AppendScale(SkMScalar x, SkMScalar y, SkMScalar z) {
 
 void TransformOperations::AppendSkew(SkMScalar x, SkMScalar y) {
   TransformOperation to_add;
-  to_add.matrix.SkewX(x);
-  to_add.matrix.SkewY(y);
+  to_add.matrix.Skew(x, y);
   to_add.type = TransformOperation::TRANSFORM_OPERATION_SKEW;
   to_add.skew.x = x;
   to_add.skew.y = y;
@@ -277,9 +278,10 @@ bool TransformOperations::BlendInternal(const TransformOperations& from,
     for (size_t i = 0; i < num_operations; ++i) {
       gfx::Transform blended;
       if (!TransformOperation::BlendTransformOperations(
-              from.operations_.size() <= i ? 0 : &from.operations_[i],
-              operations_.size() <= i ? 0 : &operations_[i], progress,
-              &blended))
+          from_identity ? 0 : &from.operations_[i],
+          to_identity ? 0 : &operations_[i],
+          progress,
+          &blended))
           return false;
       result->PreconcatTransform(blended);
     }

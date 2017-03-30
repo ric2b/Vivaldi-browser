@@ -6,6 +6,7 @@
 #define REMOTING_PROTOCOL_FAKE_AUTHENTICATOR_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/channel_authenticator.h"
@@ -19,7 +20,7 @@ class FakeChannelAuthenticator : public ChannelAuthenticator {
   ~FakeChannelAuthenticator() override;
 
   // ChannelAuthenticator interface.
-  void SecureAndAuthenticate(scoped_ptr<net::StreamSocket> socket,
+  void SecureAndAuthenticate(scoped_ptr<P2PStreamSocket> socket,
                              const DoneCallback& done_callback) override;
 
  private:
@@ -31,7 +32,7 @@ class FakeChannelAuthenticator : public ChannelAuthenticator {
   int result_;
   bool async_;
 
-  scoped_ptr<net::StreamSocket> socket_;
+  scoped_ptr<P2PStreamSocket> socket_;
   DoneCallback done_callback_;
 
   bool did_read_bytes_;
@@ -70,6 +71,7 @@ class FakeAuthenticator : public Authenticator {
   void ProcessMessage(const buzz::XmlElement* message,
                       const base::Closure& resume_callback) override;
   scoped_ptr<buzz::XmlElement> GetNextMessage() override;
+  const std::string& GetAuthKey() const override;
   scoped_ptr<ChannelAuthenticator> CreateChannelAuthenticator() const override;
 
  protected:
@@ -83,6 +85,8 @@ class FakeAuthenticator : public Authenticator {
   // Number of messages that the authenticator needs to process before started()
   // returns true.  Default to 0.
   int messages_till_started_;
+
+  std::string auth_key_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeAuthenticator);
 };

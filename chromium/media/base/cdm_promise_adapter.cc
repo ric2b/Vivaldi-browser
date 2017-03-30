@@ -4,6 +4,8 @@
 
 #include "media/base/cdm_promise_adapter.h"
 
+#include <utility>
+
 #include "media/base/media_keys.h"
 
 namespace media {
@@ -13,12 +15,14 @@ CdmPromiseAdapter::CdmPromiseAdapter() : next_promise_id_(1) {
 
 CdmPromiseAdapter::~CdmPromiseAdapter() {
   DCHECK(promises_.empty());
+  DCHECK(thread_checker_.CalledOnValidThread());
   Clear();
 }
 
 uint32_t CdmPromiseAdapter::SavePromise(scoped_ptr<CdmPromise> promise) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   uint32_t promise_id = next_promise_id_++;
-  promises_.add(promise_id, promise.Pass());
+  promises_.add(promise_id, std::move(promise));
   return promise_id;
 }
 
@@ -44,7 +48,7 @@ void CdmPromiseAdapter::ResolvePromise(uint32_t promise_id,
 
 void CdmPromiseAdapter::RejectPromise(uint32_t promise_id,
                                       MediaKeys::Exception exception_code,
-                                      uint32 system_code,
+                                      uint32_t system_code,
                                       const std::string& error_message) {
   scoped_ptr<CdmPromise> promise = TakePromise(promise_id);
   if (!promise) {
@@ -57,12 +61,14 @@ void CdmPromiseAdapter::RejectPromise(uint32_t promise_id,
 
 void CdmPromiseAdapter::Clear() {
   // Reject all outstanding promises.
+  DCHECK(thread_checker_.CalledOnValidThread());
   for (auto& promise : promises_)
     promise.second->reject(MediaKeys::UNKNOWN_ERROR, 0, "Operation aborted.");
   promises_.clear();
 }
 
 scoped_ptr<CdmPromise> CdmPromiseAdapter::TakePromise(uint32_t promise_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   PromiseMap::iterator it = promises_.find(promise_id);
   if (it == promises_.end())
     return nullptr;

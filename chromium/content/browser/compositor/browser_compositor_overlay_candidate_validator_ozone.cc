@@ -4,27 +4,25 @@
 
 #include "content/browser/compositor/browser_compositor_overlay_candidate_validator_ozone.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "cc/output/overlay_strategy_single_on_top.h"
+#include "cc/output/overlay_strategy_underlay.h"
 #include "ui/ozone/public/overlay_candidates_ozone.h"
 
 namespace content {
 
-static ui::SurfaceFactoryOzone::BufferFormat GetOzoneFormat(
-    cc::ResourceFormat overlay_format) {
+static gfx::BufferFormat GetBufferFormat(cc::ResourceFormat overlay_format) {
   switch (overlay_format) {
     // TODO(dshwang): overlay video still uses RGBA_8888.
     case cc::RGBA_8888:
     case cc::BGRA_8888:
-      return ui::SurfaceFactoryOzone::BGRA_8888;
-    case cc::RGBA_4444:
-    case cc::ALPHA_8:
-    case cc::LUMINANCE_8:
-    case cc::RGB_565:
-    case cc::ETC1:
-    case cc::RED_8:
-      break;
+      return gfx::BufferFormat::BGRA_8888;
+    default:
+      NOTREACHED();
+      return gfx::BufferFormat::BGRA_8888;
   }
-  NOTREACHED();
-  return ui::SurfaceFactoryOzone::UNKNOWN;
 }
 
 BrowserCompositorOverlayCandidateValidatorOzone::
@@ -32,12 +30,22 @@ BrowserCompositorOverlayCandidateValidatorOzone::
         gfx::AcceleratedWidget widget,
         scoped_ptr<ui::OverlayCandidatesOzone> overlay_candidates)
     : widget_(widget),
-      overlay_candidates_(overlay_candidates.Pass()),
-      software_mirror_active_(false) {
-}
+      overlay_candidates_(std::move(overlay_candidates)),
+      software_mirror_active_(false) {}
 
 BrowserCompositorOverlayCandidateValidatorOzone::
     ~BrowserCompositorOverlayCandidateValidatorOzone() {
+}
+
+void BrowserCompositorOverlayCandidateValidatorOzone::GetStrategies(
+    cc::OverlayProcessor::StrategyList* strategies) {
+  strategies->push_back(
+      make_scoped_ptr(new cc::OverlayStrategySingleOnTop(this)));
+  strategies->push_back(make_scoped_ptr(new cc::OverlayStrategyUnderlay(this)));
+}
+
+bool BrowserCompositorOverlayCandidateValidatorOzone::AllowCALayerOverlays() {
+  return false;
 }
 
 void BrowserCompositorOverlayCandidateValidatorOzone::CheckOverlaySupport(
@@ -53,9 +61,13 @@ void BrowserCompositorOverlayCandidateValidatorOzone::CheckOverlaySupport(
 
   for (size_t i = 0; i < surfaces->size(); i++) {
     ozone_surface_list.at(i).transform = surfaces->at(i).transform;
-    ozone_surface_list.at(i).format = GetOzoneFormat(surfaces->at(i).format);
+    ozone_surface_list.at(i).format = GetBufferFormat(surfaces->at(i).format);
     ozone_surface_list.at(i).display_rect = surfaces->at(i).display_rect;
     ozone_surface_list.at(i).crop_rect = surfaces->at(i).uv_rect;
+    ozone_surface_list.at(i).quad_rect_in_target_space =
+        surfaces->at(i).quad_rect_in_target_space;
+    ozone_surface_list.at(i).clip_rect = surfaces->at(i).clip_rect;
+    ozone_surface_list.at(i).is_clipped = surfaces->at(i).is_clipped;
     ozone_surface_list.at(i).plane_z_order = surfaces->at(i).plane_z_order;
     ozone_surface_list.at(i).buffer_size =
         surfaces->at(i).resource_size_in_pixels;

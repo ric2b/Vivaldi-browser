@@ -11,6 +11,8 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
 
+#include "app/vivaldi_apptools.h"
+
 using extensions::Extension;
 using extensions::ProcessManager;
 
@@ -47,7 +49,7 @@ bool ContextMenuContentTypePlatformApp::SupportsGroup(int group) {
     case ITEM_GROUP_CURRENT_EXTENSION:
       // Espen/Vivaldi. Return false to prevent unwanted custom menu elements
       // in panel sidebar (button area).
-      if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
+      if (vivaldi::IsVivaldiRunning())
         return false;
       return true;
     case ITEM_GROUP_DEVTOOLS_UNPACKED_EXT:

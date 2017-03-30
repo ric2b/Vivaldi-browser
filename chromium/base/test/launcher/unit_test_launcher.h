@@ -5,9 +5,13 @@
 #ifndef BASE_TEST_LAUNCHER_UNIT_TEST_LAUNCHER_H_
 #define BASE_TEST_LAUNCHER_UNIT_TEST_LAUNCHER_H_
 
+#include <stddef.h>
+
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/test/launcher/test_launcher.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -24,6 +28,19 @@ int LaunchUnitTestsSerially(int argc,
                             char** argv,
                             const RunTestSuiteCallback& run_test_suite);
 
+// Launches unit tests in given test suite. Returns exit code.
+// |default_jobs| is the default number of parallel test jobs.
+// |default_batch_limit| is the default size of test batch
+// (use 0 to disable batching).
+// |use_job_objects| determines whether to use job objects.
+int LaunchUnitTestsWithOptions(
+    int argc,
+    char** argv,
+    int default_jobs,
+    int default_batch_limit,
+    bool use_job_objects,
+    const RunTestSuiteCallback& run_test_suite);
+
 #if defined(OS_WIN)
 // Launches unit tests in given test suite. Returns exit code.
 // |use_job_objects| determines whether to use job objects.
@@ -38,7 +55,7 @@ class UnitTestPlatformDelegate {
  public:
   // Called to get names of tests available for running. The delegate
   // must put the result in |output| and return true on success.
-  virtual bool GetTests(std::vector<SplitTestName>* output) = 0;
+  virtual bool GetTests(std::vector<TestIdentifier>* output) = 0;
 
   // Called to create a temporary file. The delegate must put the resulting
   // path in |path| and return true on success.
@@ -86,7 +103,7 @@ class UnitTestLauncherDelegate : public TestLauncherDelegate {
 
  private:
   // TestLauncherDelegate:
-  bool GetTests(std::vector<SplitTestName>* output) override;
+  bool GetTests(std::vector<TestIdentifier>* output) override;
   bool ShouldRunTest(const std::string& test_case_name,
                      const std::string& test_name) override;
   size_t RunTests(TestLauncher* test_launcher,

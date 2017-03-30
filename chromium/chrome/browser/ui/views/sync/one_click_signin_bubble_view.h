@@ -5,10 +5,10 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_SYNC_ONE_CLICK_SIGNIN_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_SYNC_ONE_CLICK_SIGNIN_BUBBLE_VIEW_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -88,10 +88,10 @@ class OneClickSigninBubbleView : public views::BubbleDelegateView,
   void WindowClosing() override;
   ui::ModalType GetModalType() const override;
 
-  // Builds a popup bubble anchored under the wrench menu
+  // Builds a popup bubble anchored under the app menu.
   void InitBubbleContent(views::GridLayout* layout);
 
-  // Builds a modal dialog aligned center top
+  // Builds a modal dialog aligned center top.
   void InitDialogContent(views::GridLayout* layout);
 
   // Initializes the OK/Undo buttons to be used at the bottom of the bubble.

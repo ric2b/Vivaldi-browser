@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -9,6 +11,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "build/build_config.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/common/chrome_paths.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -78,3 +81,35 @@ TEST_F(FileSelectHelperTest, ZipPackage) {
   }
 }
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+
+TEST_F(FileSelectHelperTest, GetSanitizedFileName) {
+  // The empty path should be preserved.
+  EXPECT_EQ(base::FilePath(FILE_PATH_LITERAL("")),
+            FileSelectHelper::GetSanitizedFileName(base::FilePath()));
+
+  EXPECT_EQ(base::FilePath(FILE_PATH_LITERAL("ascii.txt")),
+            FileSelectHelper::GetSanitizedFileName(
+                base::FilePath(FILE_PATH_LITERAL("ascii.txt"))));
+  EXPECT_EQ(base::FilePath(FILE_PATH_LITERAL("trailing-spaces-")),
+            FileSelectHelper::GetSanitizedFileName(
+                base::FilePath(FILE_PATH_LITERAL("trailing-spaces "))));
+  EXPECT_EQ(base::FilePath(FILE_PATH_LITERAL("path-components-in-name")),
+            FileSelectHelper::GetSanitizedFileName(
+                base::FilePath(FILE_PATH_LITERAL("path/components/in/name"))));
+
+#if defined(OS_WIN)
+  // Invalid UTF-16. However, note that on Windows, the invalid UTF-16 will pass
+  // through without error.
+  base::FilePath::CharType kBadName[] = {0xd801, 0xdc37, 0xdc17, 0};
+#else
+  // Invalid UTF-8
+  base::FilePath::CharType kBadName[] = {0xe3, 0x81, 0x81, 0x81, 0x82, 0};
+#endif
+  base::FilePath bad_filename(kBadName);
+  ASSERT_FALSE(bad_filename.empty());
+  // The only thing we are testing is that if the source filename was non-empty,
+  // the resulting filename is also not empty. Invalid encoded filenames can
+  // cause conversions to fail. Such failures shouldn't cause the resulting
+  // filename to disappear.
+  EXPECT_FALSE(FileSelectHelper::GetSanitizedFileName(bad_filename).empty());
+}

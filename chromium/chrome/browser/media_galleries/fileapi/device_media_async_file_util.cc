@@ -4,8 +4,12 @@
 
 #include "chrome/browser/media_galleries/fileapi/device_media_async_file_util.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/callback.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
 #include "chrome/browser/media_galleries/fileapi/media_path_filter.h"
@@ -313,11 +317,9 @@ void DeviceMediaAsyncFileUtil::CreateOrOpen(
     return;
   }
   CreateSnapshotFile(
-      context.Pass(),
-      url,
+      std::move(context), url,
       base::Bind(&NativeMediaFileUtil::CreatedSnapshotFileForCreateOrOpen,
-                 make_scoped_refptr(context->task_runner()),
-                 file_flags,
+                 make_scoped_refptr(context->task_runner()), file_flags,
                  callback));
 }
 
@@ -356,6 +358,7 @@ void DeviceMediaAsyncFileUtil::CreateDirectory(
 void DeviceMediaAsyncFileUtil::GetFileInfo(
     scoped_ptr<FileSystemOperationContext> context,
     const FileSystemURL& url,
+    int /* flags */,
     const GetFileInfoCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   MTPDeviceAsyncDelegate* delegate = GetMTPDeviceDelegate(url);
@@ -407,7 +410,7 @@ void DeviceMediaAsyncFileUtil::Touch(
 void DeviceMediaAsyncFileUtil::Truncate(
     scoped_ptr<FileSystemOperationContext> context,
     const FileSystemURL& url,
-    int64 length,
+    int64_t length,
     const StatusCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   NOTIMPLEMENTED();
@@ -566,7 +569,7 @@ void DeviceMediaAsyncFileUtil::CreateSnapshotFile(
 scoped_ptr<storage::FileStreamReader>
 DeviceMediaAsyncFileUtil::GetFileStreamReader(
     const FileSystemURL& url,
-    int64 offset,
+    int64_t offset,
     const base::Time& expected_modification_time,
     storage::FileSystemContext* context) {
   MTPDeviceAsyncDelegate* delegate = GetMTPDeviceDelegate(url);

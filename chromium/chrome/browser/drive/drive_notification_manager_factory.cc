@@ -5,11 +5,11 @@
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
 
 #include "base/logging.h"
-#include "chrome/browser/drive/drive_notification_manager.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/drive/drive_notification_manager.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 
@@ -43,7 +43,7 @@ DriveNotificationManagerFactory::GetForBrowserContext(
 // static
 DriveNotificationManagerFactory*
 DriveNotificationManagerFactory::GetInstance() {
-  return Singleton<DriveNotificationManagerFactory>::get();
+  return base::Singleton<DriveNotificationManagerFactory>::get();
 }
 
 DriveNotificationManagerFactory::DriveNotificationManagerFactory()

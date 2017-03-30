@@ -6,10 +6,13 @@
 
 #import <UIKit/UIKit.h>
 
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/sysctl.h>
 #include <string>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
@@ -23,8 +26,8 @@ struct UAVersions {
 };
 
 struct OSVersionMap {
-  int32 major_os_version;
-  int32 minor_os_version;
+  int32_t major_os_version;
+  int32_t minor_os_version;
   UAVersions ua_versions;
 };
 
@@ -33,16 +36,15 @@ const UAVersions& GetUAVersionsForCurrentOS() {
   // Safari version can't be, so a lookup table is used instead (for both, since
   // the reported versions should stay in sync).
   static const OSVersionMap version_map[] = {
-    { 8, 0, { "600.1.4",   "600.1.4" } },
-    { 7, 1, { "9537.53",   "537.51.2" } },
-    { 7, 0, { "9537.53",   "537.51.1" } },
-    // 6.1 has the same values as 6.0.
-    { 6, 0, { "8536.25",   "536.26" } },
+      {9, 0, {"601.1.46", "601.1"}},
+      {8, 0, {"600.1.4", "600.1.4"}},
+      {7, 1, {"9537.53", "537.51.2"}},
+      {7, 0, {"9537.53", "537.51.1"}},
   };
 
-  int32 os_major_version = 0;
-  int32 os_minor_version = 0;
-  int32 os_bugfix_version = 0;
+  int32_t os_major_version = 0;
+  int32_t os_minor_version = 0;
+  int32_t os_bugfix_version = 0;
   base::SysInfo::OperatingSystemVersionNumbers(&os_major_version,
                                                &os_minor_version,
                                                &os_bugfix_version);
@@ -59,10 +61,14 @@ const UAVersions& GetUAVersionsForCurrentOS() {
   return version_map[arraysize(version_map) - 1].ua_versions;
 }
 
+}  // namespace
+
+namespace web {
+
 std::string BuildOSCpuInfo() {
-  int32 os_major_version = 0;
-  int32 os_minor_version = 0;
-  int32 os_bugfix_version = 0;
+  int32_t os_major_version = 0;
+  int32_t os_minor_version = 0;
+  int32_t os_bugfix_version = 0;
   base::SysInfo::OperatingSystemVersionNumbers(&os_major_version,
                                                &os_minor_version,
                                                &os_bugfix_version);
@@ -98,10 +104,6 @@ std::string BuildOSCpuInfo() {
 
   return os_cpu;
 }
-
-}  // namespace
-
-namespace web {
 
 std::string BuildUserAgentFromProduct(const std::string& product) {
   // Retrieve the kernel build number.

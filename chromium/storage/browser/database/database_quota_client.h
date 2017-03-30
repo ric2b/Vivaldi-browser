@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "storage/browser/quota/quota_client.h"
@@ -21,8 +22,7 @@ class DatabaseTracker;
 // A QuotaClient implementation to integrate WebSQLDatabases
 // with the quota  management system. This interface is used
 // on the IO thread by the quota manager.
-class STORAGE_EXPORT_PRIVATE DatabaseQuotaClient
-    : public storage::QuotaClient {
+class STORAGE_EXPORT DatabaseQuotaClient : public storage::QuotaClient {
  public:
   DatabaseQuotaClient(
       base::SingleThreadTaskRunner* tracker_thread,

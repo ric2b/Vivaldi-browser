@@ -4,7 +4,10 @@
 
 #include "chrome/browser/profiles/profile_manager.h"
 
+#include <stdint.h>
+
 #include <set>
+#include <string>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -20,14 +23,18 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/startup_task_runner_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/download/download_service.h"
 #include "chrome/browser/download/download_service_factory.h"
+#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/password_manager/password_manager_setting_migrator_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/bookmark_model_loaded_observer.h"
@@ -35,6 +42,7 @@
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_metrics.h"
+#include "chrome/browser/profiles/profile_statistics.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
@@ -43,7 +51,6 @@
 #include "chrome/browser/signin/cross_device_promo_factory.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_iterator.h"
@@ -57,20 +64,29 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/startup_task_runner_service.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/invalidation/impl/profile_invalidation_provider.h"
+#include "components/invalidation/public/invalidation_service.h"
 #include "components/password_manager/core/browser/password_store.h"
+#include "components/password_manager/sync/browser/password_manager_setting_migrator_service.h"
+#include "components/search_engines/default_search_manager.h"
 #include "components/signin/core/browser/account_fetcher_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/user_metrics.h"
+#include "content/public/common/content_switches.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job.h"
+#include "sync/internal_api/public/base/stop_source.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(ENABLE_EXTENSIONS)
@@ -94,7 +110,6 @@
 #endif  // !defined (OS_IOS)
 
 #if defined(OS_WIN)
-#include "base/win/metro.h"
 #include "chrome/installer/util/browser_distribution.h"
 #endif
 
@@ -119,9 +134,9 @@ std::vector<base::FilePath>& ProfilesToDelete() {
   return profiles_to_delete;
 }
 
-int64 ComputeFilesSize(const base::FilePath& directory,
-                       const base::FilePath::StringType& pattern) {
-  int64 running_size = 0;
+int64_t ComputeFilesSize(const base::FilePath& directory,
+                         const base::FilePath::StringType& pattern) {
+  int64_t running_size = 0;
   base::FileEnumerator iter(directory, false, base::FileEnumerator::FILES,
                             pattern);
   while (!iter.Next().empty())
@@ -132,9 +147,9 @@ int64 ComputeFilesSize(const base::FilePath& directory,
 // Simple task to log the size of the current profile.
 void ProfileSizeTask(const base::FilePath& path, int enabled_app_count) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  const int64 kBytesInOneMB = 1024 * 1024;
+  const int64_t kBytesInOneMB = 1024 * 1024;
 
-  int64 size = ComputeFilesSize(path, FILE_PATH_LITERAL("*"));
+  int64_t size = ComputeFilesSize(path, FILE_PATH_LITERAL("*"));
   int size_MB = static_cast<int>(size / kBytesInOneMB);
   UMA_HISTOGRAM_COUNTS_10000("Profile.TotalSize", size_MB);
 
@@ -183,9 +198,11 @@ void ProfileSizeTask(const base::FilePath& path, int enabled_app_count) {
     UMA_HISTOGRAM_COUNTS_10000("Profile.AppCount", enabled_app_count);
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 void QueueProfileDirectoryForDeletion(const base::FilePath& path) {
   ProfilesToDelete().push_back(path);
 }
+#endif
 
 bool IsProfileMarkedForDeletion(const base::FilePath& profile_path) {
   return std::find(ProfilesToDelete().begin(), ProfilesToDelete().end(),
@@ -346,23 +363,19 @@ Profile* ProfileManager::GetActiveUserProfile() {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 #if defined(OS_CHROMEOS)
   if (!profile_manager)
-    return NULL;
+    return nullptr;
 
-  if (!profile_manager->IsLoggedIn() ||
-      !user_manager::UserManager::IsInitialized()) {
-    return profile_manager->GetActiveUserOrOffTheRecordProfileFromPath(
-        profile_manager->user_data_dir());
+  if (profile_manager->IsLoggedIn() &&
+      user_manager::UserManager::IsInitialized()) {
+    user_manager::UserManager* manager = user_manager::UserManager::Get();
+    const user_manager::User* user = manager->GetActiveUser();
+    // To avoid an endless loop (crbug.com/334098) we have to additionally check
+    // if the profile of the user was already created. If the profile was not
+    // yet created we load the profile using the profile directly.
+    // TODO: This should be cleaned up with the new profile manager.
+    if (user && user->is_profile_created())
+      return chromeos::ProfileHelper::Get()->GetProfileByUserUnsafe(user);
   }
-
-  user_manager::UserManager* manager = user_manager::UserManager::Get();
-  const user_manager::User* user = manager->GetActiveUser();
-  // To avoid an endless loop (crbug.com/334098) we have to additionally check
-  // if the profile of the user was already created. If the profile was not yet
-  // created we load the profile using the profile directly.
-  // TODO: This should be cleaned up with the new profile manager.
-  if (user && user->is_profile_created())
-    return chromeos::ProfileHelper::Get()->GetProfileByUserUnsafe(user);
-
 #endif
   Profile* profile =
       profile_manager->GetActiveUserOrOffTheRecordProfileFromPath(
@@ -395,7 +408,7 @@ void ProfileManager::CreateProfileAsync(
     const base::FilePath& profile_path,
     const CreateCallback& callback,
     const base::string16& name,
-    const base::string16& icon_url,
+    const std::string& icon_url,
     const std::string& supervised_user_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   TRACE_EVENT1("browser,startup",
@@ -422,8 +435,8 @@ void ProfileManager::CreateProfileAsync(
     ProfileInfoCache& cache = GetProfileInfoCache();
     // Get the icon index from the user's icon url
     size_t icon_index;
-    std::string icon_url_std = base::UTF16ToASCII(icon_url);
-    if (profiles::IsDefaultAvatarIconUrl(icon_url_std, &icon_index)) {
+    DCHECK(base::IsStringASCII(icon_url));
+    if (profiles::IsDefaultAvatarIconUrl(icon_url, &icon_index)) {
       // add profile to cache with user selected name and avatar
       cache.AddProfileToCache(profile_path, name, std::string(),
                               base::string16(), icon_index, supervised_user_id);
@@ -458,7 +471,7 @@ void ProfileManager::CreateProfileAsync(
   }
 }
 
-bool ProfileManager::IsValidProfile(Profile* profile) {
+bool ProfileManager::IsValidProfile(void* profile) {
   for (ProfilesInfoMap::iterator iter = profiles_info_.begin();
        iter != profiles_info_.end(); ++iter) {
     if (iter->second->created) {
@@ -583,7 +596,7 @@ Profile* ProfileManager::GetProfileByPath(const base::FilePath& path) const {
 // static
 base::FilePath ProfileManager::CreateMultiProfileAsync(
     const base::string16& name,
-    const base::string16& icon_url,
+    const std::string& icon_url,
     const CreateCallback& callback,
     const std::string& supervised_user_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -653,6 +666,7 @@ ProfileShortcutManager* ProfileManager::profile_shortcut_manager() {
   return profile_shortcut_manager_.get();
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 void ProfileManager::ScheduleProfileForDeletion(
     const base::FilePath& profile_dir,
     const CreateCallback& callback) {
@@ -685,19 +699,17 @@ void ProfileManager::ScheduleProfileForDeletion(
     }
   }
 
-  base::FilePath new_path;
   if (last_non_supervised_profile_path.empty()) {
-    // If we are using --new-avatar-menu, then assign the default
-    // placeholder avatar and name. Otherwise, use random ones.
-    bool is_new_avatar_menu = switches::IsNewAvatarMenu();
-    int avatar_index = profiles::GetPlaceholderAvatarIndex();
-    base::string16 new_avatar_url = is_new_avatar_menu ?
-        base::UTF8ToUTF16(profiles::GetDefaultAvatarIconUrl(avatar_index)) :
-        base::string16();
-    base::string16 new_profile_name = is_new_avatar_menu ?
-        cache.ChooseNameForNewProfile(avatar_index) : base::string16();
+    std::string new_avatar_url;
+    base::string16 new_profile_name;
 
-    new_path = GenerateNextProfileDirectoryPath();
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+    int avatar_index = profiles::GetPlaceholderAvatarIndex();
+    new_avatar_url = profiles::GetDefaultAvatarIconUrl(avatar_index);
+    new_profile_name = cache.ChooseNameForNewProfile(avatar_index);
+#endif
+
+    base::FilePath new_path(GenerateNextProfileDirectoryPath());
     CreateProfileAsync(new_path,
                        base::Bind(&ProfileManager::OnNewActiveProfileLoaded,
                                   base::Unretained(this),
@@ -728,7 +740,7 @@ void ProfileManager::ScheduleProfileForDeletion(
                                   last_non_supervised_profile_path,
                                   callback),
                        base::string16(),
-                       base::string16(),
+                       std::string(),
                        std::string());
     return;
   }
@@ -736,6 +748,7 @@ void ProfileManager::ScheduleProfileForDeletion(
 
   FinishDeletingProfile(profile_dir, last_non_supervised_profile_path);
 }
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
 void ProfileManager::AutoloadProfiles() {
   // If running in the background is disabled for the browser, do not autoload
@@ -822,12 +835,13 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
           cache.GetSupervisedUserIdOfProfileAtIndex(profile_cache_index);
     } else if (profile->GetPath() ==
                profiles::GetDefaultProfileDir(cache.GetUserDataDir())) {
-      // The --new-avatar-menu flag no longer uses the "First User" name.
-      bool is_new_avatar_menu = switches::IsNewAvatarMenu();
       avatar_index = profiles::GetPlaceholderAvatarIndex();
-      profile_name = is_new_avatar_menu ?
-          base::UTF16ToUTF8(cache.ChooseNameForNewProfile(avatar_index)) :
-          l10n_util::GetStringUTF8(IDS_DEFAULT_PROFILE_NAME);
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+      profile_name =
+          base::UTF16ToUTF8(cache.ChooseNameForNewProfile(avatar_index));
+#else
+      profile_name = l10n_util::GetStringUTF8(IDS_DEFAULT_PROFILE_NAME);
+#endif
     } else {
       avatar_index = cache.ChooseAvatarIconIndexForNewProfile();
       profile_name =
@@ -1046,6 +1060,15 @@ void ProfileManager::DoFinalInit(Profile* profile, bool go_off_the_record) {
       chrome::NOTIFICATION_PROFILE_ADDED,
       content::Source<Profile>(profile),
       content::NotificationService::NoDetails());
+
+  // Record statistics to ProfileInfoCache if statistics were not recorded
+  // during shutdown, i.e. the last shutdown was a system shutdown or a crash.
+  if (!profile->IsGuestSession() && !profile->IsSystemProfile() &&
+      !profile->IsNewProfile() && !go_off_the_record &&
+      profile->GetLastSessionExitType() != Profile::EXIT_NORMAL) {
+    profiles::GatherProfileStatistics(
+        profile, profiles::ProfileStatisticsCallback(), nullptr);
+  }
 }
 
 void ProfileManager::DoFinalInitForServices(Profile* profile,
@@ -1055,13 +1078,23 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
 
 #if defined(ENABLE_EXTENSIONS)
   ProfileInfoCache& cache = GetProfileInfoCache();
+
+  // Ensure that the HostContentSettingsMap has been created before the
+  // ExtensionSystem is initialized otherwise the ExtensionSystem will be
+  // registered twice
+  HostContentSettingsMap* content_settings_map =
+    HostContentSettingsMapFactory::GetForProfile(profile);
+
   extensions::ExtensionSystem::Get(profile)->InitForRegularProfile(
       !go_off_the_record);
   // During tests, when |profile| is an instance of TestingProfile,
   // ExtensionSystem might not create an ExtensionService.
+  // This block is duplicated in the HostContentSettingsMapFactory
+  // ::BuildServiceInstanceFor method, it should be called once when both the
+  // HostContentSettingsMap and the extension_service are set up.
   if (extensions::ExtensionSystem::Get(profile)->extension_service()) {
     extensions::ExtensionSystem::Get(profile)->extension_service()->
-        RegisterContentSettings(profile->GetHostContentSettingsMap());
+        RegisterContentSettings(content_settings_map);
   }
   // Set the block extensions bit on the ExtensionService. There likely are no
   // blockable extensions to block.
@@ -1098,8 +1131,24 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
       MaybeActivateDataReductionProxy(true);
 
   GaiaCookieManagerServiceFactory::GetForProfile(profile)->Init();
-  AccountFetcherServiceFactory::GetForProfile(profile)->EnableNetworkFetches();
+  invalidation::ProfileInvalidationProvider* invalidation_provider =
+      invalidation::ProfileInvalidationProviderFactory::GetForProfile(profile);
+  // Chrome OS login and guest profiles do not support invalidation. This is
+  // fine as they do not have GAIA credentials anyway. http://crbug.com/358169
+  invalidation::InvalidationService* invalidation_service =
+      invalidation_provider ? invalidation_provider->GetInvalidationService()
+                            : nullptr;
+  AccountFetcherServiceFactory::GetForProfile(profile)
+      ->SetupInvalidationsOnProfileLoad(invalidation_service);
   AccountReconcilorFactory::GetForProfile(profile);
+
+  // Service is responsible for migration of the legacy password manager
+  // preference which controls behaviour of the Chrome to the new preference
+  // which controls password management behaviour on Chrome and Android. After
+  // migration will be performed for all users it's planned to remove the
+  // migration code, rough time estimates are Q1 2016.
+  PasswordManagerSettingMigratorServiceFactory::GetForProfile(profile)
+      ->InitializeMigration(ProfileSyncServiceFactory::GetForProfile(profile));
 }
 
 void ProfileManager::DoFinalInitLogging(Profile* profile) {
@@ -1211,6 +1260,7 @@ Profile* ProfileManager::CreateAndInitializeProfile(
   return profile;
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 void ProfileManager::FinishDeletingProfile(
     const base::FilePath& profile_dir,
     const base::FilePath& new_active_profile_dir) {
@@ -1241,6 +1291,15 @@ void ProfileManager::FinishDeletingProfile(
     // Disable sync for doomed profile.
     if (ProfileSyncServiceFactory::GetInstance()->HasProfileSyncService(
         profile)) {
+      ProfileSyncService* sync_service =
+          ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
+      if (sync_service->IsSyncRequested()) {
+        // Record sync stopped by profile destruction if it was on before.
+        UMA_HISTOGRAM_ENUMERATION("Sync.StopSource",
+                                  syncer::PROFILE_DESTRUCTION,
+                                  syncer::STOP_SOURCE_LIMIT);
+      }
+      // Ensure data is cleared even if sync was already off.
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(
           profile)->RequestStop(ProfileSyncService::CLEAR_DATA);
     }
@@ -1272,6 +1331,7 @@ void ProfileManager::FinishDeletingProfile(
   cache.DeleteProfileFromCache(profile_dir);
   ProfileMetrics::UpdateReportedProfilesStatistics(this);
 }
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
 ProfileManager::ProfileInfo* ProfileManager::RegisterProfile(
     Profile* profile,
@@ -1301,9 +1361,8 @@ void ProfileManager::AddProfileToCache(Profile* profile) {
       SigninManagerFactory::GetForProfile(profile);
   AccountTrackerService* account_tracker =
       AccountTrackerServiceFactory::GetForProfile(profile);
-  AccountTrackerService::AccountInfo account_info =
-      account_tracker->GetAccountInfo(
-          signin_manager->GetAuthenticatedAccountId());
+  AccountInfo account_info = account_tracker->GetAccountInfo(
+      signin_manager->GetAuthenticatedAccountId());
   base::string16 username = base::UTF8ToUTF16(account_info.email);
 
   size_t profile_index = cache.GetIndexOfProfileWithPath(profile->GetPath());
@@ -1419,19 +1478,26 @@ void ProfileManager::BrowserListObserver::OnBrowserAdded(
 void ProfileManager::BrowserListObserver::OnBrowserRemoved(
     Browser* browser) {
   Profile* profile = browser->profile();
+  Profile* original_profile = profile->GetOriginalProfile();
+  // Do nothing if the closed window is not the last window of the same profile.
   for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    if (it->profile()->GetOriginalProfile() == profile->GetOriginalProfile())
-      // Not the last window for this profile.
+    if (it->profile()->GetOriginalProfile() == original_profile)
       return;
   }
 
-  // If the last browser of a profile that is scheduled for deletion is closed
-  // do that now.
   base::FilePath path = profile->GetPath();
-  if (profile->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles) &&
-      !IsProfileMarkedForDeletion(path)) {
+  if (IsProfileMarkedForDeletion(path)) {
+    // Do nothing if the profile is already being deleted.
+  } else if (profile->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles)) {
+    // Delete if the profile is an ephemeral profile.
     g_browser_process->profile_manager()->ScheduleProfileForDeletion(
         path, ProfileManager::CreateCallback());
+  } else if (!profile->IsSystemProfile()) {
+    // Gather statistics and store into ProfileInfoCache. For incognito profile
+    // we gather the statistics of its parent profile instead, because a window
+    // of the parent profile was open.
+    profiles::GatherProfileStatistics(
+        original_profile, profiles::ProfileStatisticsCallback(), nullptr);
   }
 }
 
@@ -1453,7 +1519,6 @@ void ProfileManager::BrowserListObserver::OnBrowserSetLastActive(
 
   profile_manager_->UpdateLastUser(last_active);
 }
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
 void ProfileManager::OnNewActiveProfileLoaded(
     const base::FilePath& profile_to_delete_path,
@@ -1480,6 +1545,7 @@ void ProfileManager::OnNewActiveProfileLoaded(
   if (!original_callback.is_null())
     original_callback.Run(loaded_profile, status);
 }
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
 ProfileManagerWithoutInit::ProfileManagerWithoutInit(
     const base::FilePath& user_data_dir) : ProfileManager(user_data_dir) {

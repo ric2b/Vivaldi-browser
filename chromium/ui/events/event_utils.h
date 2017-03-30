@@ -5,15 +5,18 @@
 #ifndef UI_EVENTS_EVENT_UTILS_H_
 #define UI_EVENTS_EVENT_UTILS_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/event_types.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
+#include "ui/events/event.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/events_export.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/events/events_export.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -51,6 +54,8 @@ EVENTS_EXPORT EventType EventTypeFromNative(
 EVENTS_EXPORT int EventFlagsFromNative(const base::NativeEvent& native_event);
 
 // Get the timestamp from a native event.
+// Note: This is not a pure function meaning that multiple applications on the
+// same native event may return different values.
 EVENTS_EXPORT base::TimeDelta EventTimeFromNative(
     const base::NativeEvent& native_event);
 
@@ -85,17 +90,16 @@ EVENTS_EXPORT KeyboardCode KeyboardCodeFromNative(
 // keyboard) from a native event.
 EVENTS_EXPORT DomCode CodeFromNative(const base::NativeEvent& native_event);
 
-// Returns the platform related key code (interpretation, not scan code).
-// For X11 and xkbcommon, this is the KeySym value.
-EVENTS_EXPORT uint32 PlatformKeycodeFromNative(
-    const base::NativeEvent& native_event);
-
 // Returns true if the keyboard event is a character event rather than
 // a keystroke event.
 EVENTS_EXPORT bool IsCharFromNative(const base::NativeEvent& native_event);
 
 // Returns the flags of the button that changed during a press/release.
 EVENTS_EXPORT int GetChangedMouseButtonFlagsFromNative(
+    const base::NativeEvent& native_event);
+
+// Returns the detailed pointer information for mouse events.
+EVENTS_EXPORT PointerDetails GetMousePointerDetailsFromNative(
     const base::NativeEvent& native_event);
 
 // Gets the mouse wheel offsets from a native event.
@@ -153,7 +157,6 @@ EVENTS_EXPORT bool ShouldDefaultToNaturalScroll();
 EVENTS_EXPORT gfx::Display::TouchSupport GetInternalDisplayTouchSupport();
 
 #if defined(OS_WIN)
-EVENTS_EXPORT int GetModifiersFromACCEL(const ACCEL& accel);
 EVENTS_EXPORT int GetModifiersFromKeyState();
 
 // Returns true if |message| identifies a mouse event that was generated as the
@@ -162,8 +165,8 @@ EVENTS_EXPORT bool IsMouseEventFromTouch(UINT message);
 
 // Converts scan code and lParam each other.  The scan code
 // representing an extended key contains 0xE000 bits.
-EVENTS_EXPORT uint16 GetScanCodeFromLParam(LPARAM lParam);
-EVENTS_EXPORT LPARAM GetLParamFromScanCode(uint16 scan_code);
+EVENTS_EXPORT uint16_t GetScanCodeFromLParam(LPARAM lParam);
+EVENTS_EXPORT LPARAM GetLParamFromScanCode(uint16_t scan_code);
 
 #endif
 

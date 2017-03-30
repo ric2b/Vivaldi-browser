@@ -8,10 +8,14 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.widget.FadingShadow;
 import org.chromium.chrome.browser.widget.FadingShadowView;
+import org.chromium.chrome.browser.widget.LoadingView;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -19,14 +23,14 @@ import java.util.List;
 
 /**
  * A ViewGroup that holds an {@link EnhancedBookmarkActionBar}, a {@link FadingShadowView}, a
- * {@link EnhancedBookmarkRecyclerView} and a {@link EnhancedBookmarkLoadingView}.
+ * {@link EnhancedBookmarkRecyclerView} and a {@link LoadingView}.
  */
 public class EnhancedBookmarkContentView extends RelativeLayout implements
         EnhancedBookmarkUIObserver {
     private EnhancedBookmarkDelegate mDelegate;
     private EnhancedBookmarkRecyclerView mItemsContainer;
     private EnhancedBookmarkActionBar mActionBar;
-    private EnhancedBookmarkLoadingView mLoadingView;
+    private LoadingView mLoadingView;
 
     /**
      * Creates an instance of {@link EnhancedBookmarkContentView}. This constructor should be used
@@ -40,16 +44,17 @@ public class EnhancedBookmarkContentView extends RelativeLayout implements
     protected void onFinishInflate() {
         super.onFinishInflate();
         mItemsContainer = (EnhancedBookmarkRecyclerView) findViewById(R.id.eb_items_container);
-        mItemsContainer.setEmptyView(findViewById(R.id.eb_empty_view));
+        TextView emptyView = (TextView) findViewById(R.id.eb_empty_view);
+        emptyView.setText(OfflinePageUtils.getStringId(R.string.bookmarks_folder_empty));
+        mItemsContainer.setEmptyView(emptyView);
         mActionBar = (EnhancedBookmarkActionBar) findViewById(R.id.eb_action_bar);
-        mLoadingView = (EnhancedBookmarkLoadingView) findViewById(R.id.eb_initial_loading_view);
+        mLoadingView = (LoadingView) findViewById(R.id.eb_initial_loading_view);
         FadingShadowView shadow = (FadingShadowView) findViewById(R.id.shadow);
         if (DeviceFormFactor.isLargeTablet(getContext())) {
             shadow.setVisibility(View.GONE);
         } else {
-            shadow.init(getResources().getColor(R.color.enhanced_bookmark_app_bar_shadow_color),
-                    FadingShadow.POSITION_TOP);
-            shadow.setStrength(1.0f);
+            shadow.init(ApiCompatibilityUtils.getColor(getResources(),
+                    R.color.enhanced_bookmark_app_bar_shadow_color), FadingShadow.POSITION_TOP);
         }
     }
 
@@ -93,6 +98,11 @@ public class EnhancedBookmarkContentView extends RelativeLayout implements
 
     @Override
     public void onFolderStateSet(BookmarkId folder) {
+        mLoadingView.hideLoadingUI();
+    }
+
+    @Override
+    public void onFilterStateSet(EnhancedBookmarkFilter filter) {
         mLoadingView.hideLoadingUI();
     }
 

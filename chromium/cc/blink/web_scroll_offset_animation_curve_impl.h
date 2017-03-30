@@ -5,6 +5,7 @@
 #ifndef CC_BLINK_WEB_SCROLL_OFFSET_ANIMATION_CURVE_IMPL_H_
 #define CC_BLINK_WEB_SCROLL_OFFSET_ANIMATION_CURVE_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/blink/cc_blink_export.h"
 #include "third_party/WebKit/public/platform/WebScrollOffsetAnimationCurve.h"
@@ -21,18 +22,20 @@ class WebScrollOffsetAnimationCurveImpl
  public:
   CC_BLINK_EXPORT WebScrollOffsetAnimationCurveImpl(
       blink::WebFloatPoint target_value,
-      TimingFunctionType timing_function);
-  virtual ~WebScrollOffsetAnimationCurveImpl();
+      TimingFunctionType timing_function,
+      ScrollDurationBehavior duration_behavior);
+  ~WebScrollOffsetAnimationCurveImpl() override;
 
   // blink::WebCompositorAnimationCurve implementation.
-  virtual AnimationCurveType type() const;
+  AnimationCurveType type() const override;
 
   // blink::WebScrollOffsetAnimationCurve implementation.
-  virtual void setInitialValue(blink::WebFloatPoint initial_value);
-  virtual blink::WebFloatPoint getValue(double time) const;
-  virtual double duration() const;
-  virtual blink::WebFloatPoint targetValue() const;
-  virtual void updateTarget(double time, blink::WebFloatPoint new_target);
+  void setInitialValue(blink::WebFloatPoint initial_value) override;
+  blink::WebFloatPoint getValue(double time) const override;
+  double duration() const override;
+
+  blink::WebFloatPoint targetValue() const override;
+  void updateTarget(double time, blink::WebFloatPoint new_target) override;
 
   scoped_ptr<cc::AnimationCurve> CloneToAnimationCurve() const;
 

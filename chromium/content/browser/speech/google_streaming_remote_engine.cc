@@ -36,10 +36,9 @@ const char kWebServiceBaseUrl[] =
     "https://www.google.com/speech-api/full-duplex/v1";
 const char kDownstreamUrl[] = "/down?";
 const char kUpstreamUrl[] = "/up?";
-const AudioEncoder::Codec kDefaultAudioCodec = AudioEncoder::CODEC_FLAC;
 
 // This matches the maximum maxAlternatives value supported by the server.
-const uint32 kMaxMaxAlternatives = 30;
+const uint32_t kMaxMaxAlternatives = 30;
 
 // TODO(hans): Remove this and other logging when we don't need it anymore.
 void DumpResponse(const std::string& response) {
@@ -51,6 +50,8 @@ void DumpResponse(const std::string& response) {
   }
   if (event.has_status())
     DVLOG(1) << "STATUS\t" << event.status();
+  if (event.has_endpoint())
+    DVLOG(1) << "ENDPOINT\t" << event.endpoint();
   for (int i = 0; i < event.result_size(); ++i) {
     DVLOG(1) << "RESULT #" << i << ":";
     const proto::SpeechRecognitionResult& res = event.result(i);
@@ -120,7 +121,9 @@ void GoogleStreamingRemoteEngine::OnURLFetchComplete(const URLFetcher* source) {
 }
 
 void GoogleStreamingRemoteEngine::OnURLFetchDownloadProgress(
-    const URLFetcher* source, int64 current, int64 total) {
+    const URLFetcher* source,
+    int64_t current,
+    int64_t total) {
   const bool kPartialResponse = false;
   DispatchHTTPResponse(source, kPartialResponse);
 }
@@ -294,9 +297,8 @@ GoogleStreamingRemoteEngine::ConnectBothStreams(const FSMEventArgs&) {
   DCHECK(!upstream_fetcher_.get());
   DCHECK(!downstream_fetcher_.get());
 
-  encoder_.reset(AudioEncoder::Create(kDefaultAudioCodec,
-                                      config_.audio_sample_rate,
-                                      config_.audio_num_bits_per_sample));
+  encoder_.reset(new AudioEncoder(config_.audio_sample_rate,
+                                  config_.audio_num_bits_per_sample));
   DCHECK(encoder_.get());
   const std::string request_key = GenerateRequestKey();
 
@@ -306,8 +308,7 @@ GoogleStreamingRemoteEngine::ConnectBothStreams(const FSMEventArgs&) {
                            !config_.auth_token.empty() &&
                            !config_.auth_scope.empty());
   if (use_framed_post_data_) {
-    preamble_encoder_.reset(AudioEncoder::Create(
-        kDefaultAudioCodec,
+    preamble_encoder_.reset(new AudioEncoder(
         config_.preamble->sample_rate,
         config_.preamble->sample_depth * 8));
   }
@@ -320,7 +321,7 @@ GoogleStreamingRemoteEngine::ConnectBothStreams(const FSMEventArgs&) {
   downstream_args.push_back("output=pb");
   GURL downstream_url(std::string(kWebServiceBaseUrl) +
                       std::string(kDownstreamUrl) +
-                      JoinString(downstream_args, '&'));
+                      base::JoinString(downstream_args, "&"));
 
   downstream_fetcher_ = URLFetcher::Create(
       kDownstreamUrlFetcherIdForTesting, downstream_url, URLFetcher::GET, this);
@@ -342,18 +343,26 @@ GoogleStreamingRemoteEngine::ConnectBothStreams(const FSMEventArgs&) {
   upstream_args.push_back(
       config_.filter_profanities ? "pFilter=2" : "pFilter=0");
   if (config_.max_hypotheses > 0U) {
-    int max_alternatives = std::min(kMaxMaxAlternatives,
-                                    config_.max_hypotheses);
+    uint32_t max_alternatives =
+        std::min(kMaxMaxAlternatives, config_.max_hypotheses);
     upstream_args.push_back("maxAlternatives=" +
                             base::UintToString(max_alternatives));
   }
-  upstream_args.push_back("client=chromium");
+  upstream_args.push_back("app=chromium");
   if (!config_.hardware_info.empty()) {
     upstream_args.push_back(
         "xhw=" + net::EscapeQueryParamValue(config_.hardware_info, true));
   }
+  for (const SpeechRecognitionGrammar& grammar : config_.grammars) {
+    std::string grammar_value(
+        base::DoubleToString(grammar.weight) + ":" + grammar.url);
+    upstream_args.push_back(
+        "grammar=" + net::EscapeQueryParamValue(grammar_value, true));
+  }
   if (config_.continuous)
     upstream_args.push_back("continuous");
+  else
+    upstream_args.push_back("endpoint=1");
   if (config_.interim_results)
     upstream_args.push_back("interim");
   if (!config_.auth_token.empty() && !config_.auth_scope.empty()) {
@@ -365,21 +374,21 @@ GoogleStreamingRemoteEngine::ConnectBothStreams(const FSMEventArgs&) {
   if (use_framed_post_data_) {
     std::string audio_format;
     if (preamble_encoder_)
-      audio_format = preamble_encoder_->mime_type() + ",";
-    audio_format += encoder_->mime_type();
+      audio_format = preamble_encoder_->GetMimeType() + ",";
+    audio_format += encoder_->GetMimeType();
     upstream_args.push_back(
         "audioFormat=" + net::EscapeQueryParamValue(audio_format, true));
   }
   GURL upstream_url(std::string(kWebServiceBaseUrl) +
                     std::string(kUpstreamUrl) +
-                    JoinString(upstream_args, '&'));
+                    base::JoinString(upstream_args, "&"));
 
   upstream_fetcher_ = URLFetcher::Create(kUpstreamUrlFetcherIdForTesting,
                                          upstream_url, URLFetcher::POST, this);
   if (use_framed_post_data_)
     upstream_fetcher_->SetChunkedUpload("application/octet-stream");
   else
-    upstream_fetcher_->SetChunkedUpload(encoder_->mime_type());
+    upstream_fetcher_->SetChunkedUpload(encoder_->GetMimeType());
   upstream_fetcher_->SetRequestContext(url_context_.get());
   upstream_fetcher_->SetReferrer(config_.origin_url);
   upstream_fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SAVE_COOKIES |
@@ -391,9 +400,8 @@ GoogleStreamingRemoteEngine::ConnectBothStreams(const FSMEventArgs&) {
   if (preamble_encoder_) {
     // Encode and send preamble right away.
     scoped_refptr<AudioChunk> chunk = new AudioChunk(
-        reinterpret_cast<const uint8*>(config_.preamble->sample_data.data()),
-        config_.preamble->sample_data.size(),
-        config_.preamble->sample_depth);
+        reinterpret_cast<const uint8_t*>(config_.preamble->sample_data.data()),
+        config_.preamble->sample_data.size(), config_.preamble->sample_depth);
     preamble_encoder_->Encode(*chunk);
     preamble_encoder_->Flush();
     scoped_refptr<AudioChunk> encoded_data(
@@ -427,14 +435,6 @@ GoogleStreamingRemoteEngine::ProcessDownstreamResponse(
                                             event_args.response->end())))
     return AbortWithError(event_args);
 
-  // An empty (default) event is used to notify us that the upstream has
-  // been connected. Ignore.
-  if (!ws_event.result_size() && (!ws_event.has_status() ||
-      ws_event.status() == proto::SpeechRecognitionEvent::STATUS_SUCCESS)) {
-    DVLOG(1) << "Received empty response";
-    return state_;
-  }
-
   if (ws_event.has_status()) {
     switch (ws_event.status()) {
       case proto::SpeechRecognitionEvent::STATUS_SUCCESS:
@@ -456,6 +456,11 @@ GoogleStreamingRemoteEngine::ProcessDownstreamResponse(
       case proto::SpeechRecognitionEvent::STATUS_LANGUAGE_NOT_SUPPORTED:
         return Abort(SPEECH_RECOGNITION_ERROR_LANGUAGE_NOT_SUPPORTED);
     }
+  }
+
+  if (!config_.continuous && ws_event.has_endpoint() &&
+      ws_event.endpoint() == proto::SpeechRecognitionEvent::END_OF_UTTERANCE) {
+    delegate()->OnSpeechRecognitionEngineEndOfUtterance();
   }
 
   SpeechRecognitionResults results;
@@ -484,8 +489,9 @@ GoogleStreamingRemoteEngine::ProcessDownstreamResponse(
       result.hypotheses.push_back(hypothesis);
     }
   }
-
-  delegate()->OnSpeechRecognitionEngineResults(results);
+  if (results.size()) {
+    delegate()->OnSpeechRecognitionEngineResults(results);
+  }
 
   return state_;
 }
@@ -514,7 +520,7 @@ GoogleStreamingRemoteEngine::CloseUpstreamAndWaitForResults(
   size_t sample_count =
       config_.audio_sample_rate * kAudioPacketIntervalMs / 1000;
   scoped_refptr<AudioChunk> dummy_chunk = new AudioChunk(
-      sample_count * sizeof(int16), encoder_->bits_per_sample() / 8);
+      sample_count * sizeof(int16_t), encoder_->GetBitsPerSample() / 8);
   encoder_->Encode(*dummy_chunk.get());
   encoder_->Flush();
   scoped_refptr<AudioChunk> encoded_dummy_data =
@@ -602,13 +608,13 @@ std::string GoogleStreamingRemoteEngine::GetAcceptedLanguages() const {
 
 // TODO(primiano): Is there any utility in the codebase that already does this?
 std::string GoogleStreamingRemoteEngine::GenerateRequestKey() const {
-  const int64 kKeepLowBytes = 0x00000000FFFFFFFFLL;
-  const int64 kKeepHighBytes = 0xFFFFFFFF00000000LL;
+  const int64_t kKeepLowBytes = 0x00000000FFFFFFFFLL;
+  const int64_t kKeepHighBytes = 0xFFFFFFFF00000000LL;
 
   // Just keep the least significant bits of timestamp, in order to reduce
   // probability of collisions.
-  int64 key = (base::Time::Now().ToInternalValue() & kKeepLowBytes) |
-              (base::RandUint64() & kKeepHighBytes);
+  int64_t key = (base::Time::Now().ToInternalValue() & kKeepLowBytes) |
+                (base::RandUint64() & kKeepHighBytes);
   return base::HexEncode(reinterpret_cast<void*>(&key), sizeof(key));
 }
 

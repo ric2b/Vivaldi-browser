@@ -4,13 +4,18 @@
 
 #include "components/cronet/android/url_request_context_adapter.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <limits>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "components/cronet/url_request_context_config.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #include "net/base/net_errors.h"
@@ -68,9 +73,6 @@ class BasicNetworkDelegate : public net::NetworkDelegateImpl {
 
   void OnResponseStarted(net::URLRequest* request) override {}
 
-  void OnRawBytesRead(const net::URLRequest& request,
-                      int bytes_read) override {}
-
   void OnCompleted(net::URLRequest* request, bool started) override {}
 
   void OnURLRequestDestroyed(net::URLRequest* request) override {}
@@ -124,12 +126,12 @@ void URLRequestContextAdapter::Initialize(
   base::Thread::Options options;
   options.message_loop_type = base::MessageLoop::TYPE_IO;
   network_thread_->StartWithOptions(options);
-  config_ = config.Pass();
+  config_ = std::move(config);
 }
 
 void URLRequestContextAdapter::InitRequestContextOnMainThread() {
-  proxy_config_service_.reset(net::ProxyService::CreateSystemProxyConfigService(
-      GetNetworkTaskRunner(), NULL));
+  proxy_config_service_ = net::ProxyService::CreateSystemProxyConfigService(
+      GetNetworkTaskRunner(), NULL);
   GetNetworkTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&URLRequestContextAdapter::InitRequestContextOnNetworkThread,
@@ -141,11 +143,20 @@ void URLRequestContextAdapter::InitRequestContextOnNetworkThread() {
   DCHECK(config_);
   // TODO(mmenke):  Add method to have the builder enable SPDY.
   net::URLRequestContextBuilder context_builder;
-  context_builder.set_network_delegate(new BasicNetworkDelegate());
-  context_builder.set_proxy_config_service(proxy_config_service_.get());
-  config_->ConfigureURLRequestContextBuilder(&context_builder);
 
-  context_.reset(context_builder.Build());
+  // TODO(mef): Remove this work around for crbug.com/543366 once it is fixed.
+  net::URLRequestContextBuilder::HttpNetworkSessionParams
+      custom_http_network_session_params;
+  custom_http_network_session_params.use_alternative_services = false;
+  context_builder.set_http_network_session_params(
+      custom_http_network_session_params);
+
+  context_builder.set_network_delegate(
+      make_scoped_ptr(new BasicNetworkDelegate()));
+  context_builder.set_proxy_config_service(std::move(proxy_config_service_));
+  config_->ConfigureURLRequestContextBuilder(&context_builder, nullptr);
+
+  context_ = context_builder.Build();
 
   if (config_->enable_sdch) {
     DCHECK(context_->sdch_manager());
@@ -173,15 +184,15 @@ void URLRequestContextAdapter::InitRequestContextOnNetworkThread() {
         continue;
       }
 
-      if (quic_hint.port <= std::numeric_limits<uint16>::min() ||
-          quic_hint.port > std::numeric_limits<uint16>::max()) {
+      if (quic_hint.port <= std::numeric_limits<uint16_t>::min() ||
+          quic_hint.port > std::numeric_limits<uint16_t>::max()) {
         LOG(ERROR) << "Invalid QUIC hint port: "
                    << quic_hint.port;
         continue;
       }
 
-      if (quic_hint.alternate_port <= std::numeric_limits<uint16>::min() ||
-          quic_hint.alternate_port > std::numeric_limits<uint16>::max()) {
+      if (quic_hint.alternate_port <= std::numeric_limits<uint16_t>::min() ||
+          quic_hint.alternate_port > std::numeric_limits<uint16_t>::max()) {
         LOG(ERROR) << "Invalid QUIC hint alternate port: "
                    << quic_hint.alternate_port;
         continue;
@@ -191,9 +202,10 @@ void URLRequestContextAdapter::InitRequestContextOnNetworkThread() {
                                                  quic_hint.port);
       net::AlternativeService alternative_service(
           net::AlternateProtocol::QUIC, "",
-          static_cast<uint16>(quic_hint.alternate_port));
+          static_cast<uint16_t>(quic_hint.alternate_port));
       context_->http_server_properties()->SetAlternativeService(
-          quic_hint_host_port_pair, alternative_service, 1.0f);
+          quic_hint_host_port_pair, alternative_service, 1.0f,
+          base::Time::Max());
     }
   }
   load_disable_cache_ = config_->load_disable_cache;
@@ -294,8 +306,8 @@ void URLRequestContextAdapter::StartNetLogToFileHelper(
     write_to_file_observer_->set_capture_mode(
         net::NetLogCaptureMode::IncludeSocketBytes());
   }
-  write_to_file_observer_->StartObserving(context_->net_log(), file.Pass(),
-                                  nullptr, context_.get());
+  write_to_file_observer_->StartObserving(context_->net_log(), std::move(file),
+                                          nullptr, context_.get());
 }
 
 void URLRequestContextAdapter::StopNetLogHelper() {

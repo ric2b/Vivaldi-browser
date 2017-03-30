@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 
 #include "base/bind.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/media_log.h"
@@ -117,11 +120,11 @@ class BufferedResourceLoaderTest : public testing::Test {
         view_->mainFrame());
   }
 
-  void FullResponse(int64 instance_size) {
+  void FullResponse(int64_t instance_size) {
     FullResponse(instance_size, BufferedResourceLoader::kOk);
   }
 
-  void FullResponse(int64 instance_size,
+  void FullResponse(int64_t instance_size,
                     BufferedResourceLoader::Status status) {
     EXPECT_CALL(*this, StartCallback(status));
 
@@ -141,13 +144,17 @@ class BufferedResourceLoaderTest : public testing::Test {
     EXPECT_FALSE(loader_->range_supported());
   }
 
-  void PartialResponse(int64 first_position, int64 last_position,
-                       int64 instance_size) {
+  void PartialResponse(int64_t first_position,
+                       int64_t last_position,
+                       int64_t instance_size) {
     PartialResponse(first_position, last_position, instance_size, false, true);
   }
 
-  void PartialResponse(int64 first_position, int64 last_position,
-                       int64 instance_size, bool chunked, bool accept_ranges) {
+  void PartialResponse(int64_t first_position,
+                       int64_t last_position,
+                       int64_t instance_size,
+                       bool chunked,
+                       bool accept_ranges) {
     EXPECT_CALL(*this, StartCallback(BufferedResourceLoader::kOk));
 
     WebURLResponse response(gurl_);
@@ -159,7 +166,7 @@ class BufferedResourceLoaderTest : public testing::Test {
                                             instance_size)));
 
     // HTTP 1.1 doesn't permit Content-Length with Transfer-Encoding: chunked.
-    int64 content_length = -1;
+    int64_t content_length = -1;
     if (chunked) {
       response.setHTTPHeaderField(WebString::fromUTF8("Transfer-Encoding"),
                                   WebString::fromUTF8("chunked"));
@@ -194,7 +201,7 @@ class BufferedResourceLoaderTest : public testing::Test {
     blink::WebURLRequest newRequest(redirectUrl);
     blink::WebURLResponse redirectResponse(gurl_);
 
-    loader_->willSendRequest(url_loader_, newRequest, redirectResponse);
+    loader_->willFollowRedirect(url_loader_, newRequest, redirectResponse);
 
     base::MessageLoop::current()->RunUntilIdle();
   }
@@ -233,18 +240,18 @@ class BufferedResourceLoaderTest : public testing::Test {
   }
 
   // Helper method to read from |loader_|.
-  void ReadLoader(int64 position, int size, uint8* buffer) {
+  void ReadLoader(int64_t position, int size, uint8_t* buffer) {
     loader_->Read(position, size, buffer,
                   base::Bind(&BufferedResourceLoaderTest::ReadCallback,
                              base::Unretained(this)));
   }
 
   // Verifies that data in buffer[0...size] is equal to data_[pos...pos+size].
-  void VerifyBuffer(uint8* buffer, int pos, int size) {
+  void VerifyBuffer(uint8_t* buffer, int pos, int size) {
     EXPECT_EQ(0, memcmp(buffer, data_ + pos, size));
   }
 
-  void ConfirmLoaderOffsets(int64 expected_offset,
+  void ConfirmLoaderOffsets(int64_t expected_offset,
                             int expected_first_offset,
                             int expected_last_offset) {
     EXPECT_EQ(loader_->offset_, expected_offset);
@@ -260,6 +267,7 @@ class BufferedResourceLoaderTest : public testing::Test {
     EXPECT_EQ(backward_capacity, loader_->buffer_.backward_capacity());
     EXPECT_EQ(forward_bytes, loader_->buffer_.forward_bytes());
     EXPECT_EQ(forward_capacity, loader_->buffer_.forward_capacity());
+    EXPECT_EQ(backward_bytes + forward_bytes, loader_->GetMemoryUsage());
   }
 
   void ConfirmLoaderBufferBackwardCapacity(int expected_backward_capacity) {
@@ -289,12 +297,12 @@ class BufferedResourceLoaderTest : public testing::Test {
   MOCK_METHOD1(StartCallback, void(BufferedResourceLoader::Status));
   MOCK_METHOD2(ReadCallback, void(BufferedResourceLoader::Status, int));
   MOCK_METHOD1(LoadingCallback, void(BufferedResourceLoader::LoadingState));
-  MOCK_METHOD1(ProgressCallback, void(int64));
+  MOCK_METHOD1(ProgressCallback, void(int64_t));
 
  protected:
   GURL gurl_;
-  int64 first_position_;
-  int64 last_position_;
+  int64_t first_position_;
+  int64_t last_position_;
 
   scoped_ptr<BufferedResourceLoader> loader_;
   NiceMock<MockWebURLLoader>* url_loader_;
@@ -305,7 +313,7 @@ class BufferedResourceLoaderTest : public testing::Test {
 
   base::MessageLoop message_loop_;
 
-  uint8 data_[kDataSize];
+  uint8_t data_[kDataSize];
 
  private:
   DISALLOW_COPY_AND_ASSIGN(BufferedResourceLoaderTest);
@@ -400,7 +408,7 @@ TEST_F(BufferedResourceLoaderTest, BufferAndRead) {
   Start();
   PartialResponse(10, 29, 30);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
   InSequence s;
 
   // Writes 10 bytes and read them back.
@@ -452,7 +460,7 @@ TEST_F(BufferedResourceLoaderTest, ReadExtendBuffer) {
   Start();
   PartialResponse(10, 0x014FFFFFF, 0x015000000);
 
-  uint8 buffer[20];
+  uint8_t buffer[20];
   InSequence s;
 
   // Write more than forward capacity and read it back. Ensure forward capacity
@@ -501,7 +509,7 @@ TEST_F(BufferedResourceLoaderTest, ReadOutsideBuffer) {
   Start();
   PartialResponse(10, 0x00FFFFFF, 0x01000000);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
   InSequence s;
 
   // Read very far ahead will get a cache miss.
@@ -530,7 +538,7 @@ TEST_F(BufferedResourceLoaderTest, RequestFailedWhenRead) {
   Start();
   PartialResponse(10, 29, 30);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
   InSequence s;
 
   // We should convert any error we receive to BufferedResourceLoader::kFailed.
@@ -548,7 +556,7 @@ TEST_F(BufferedResourceLoaderTest, RequestFailedWithNoPendingReads) {
   Start();
   PartialResponse(10, 29, 30);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
   InSequence s;
 
   // Write enough data so that a read would technically complete had the request
@@ -572,7 +580,7 @@ TEST_F(BufferedResourceLoaderTest, RequestCancelledWhenRead) {
   Start();
   PartialResponse(10, 29, 30);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
   InSequence s;
 
   // We should convert any error we receive to BufferedResourceLoader::kFailed.
@@ -593,7 +601,7 @@ TEST_F(BufferedResourceLoaderTest, NeverDeferStrategy) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
 
   // Read past the buffer size; should not defer regardless.
   WriteLoader(10, 10);
@@ -614,7 +622,7 @@ TEST_F(BufferedResourceLoaderTest, ReadThenDeferStrategy) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
 
   // Make an outstanding read request.
   ReadLoader(10, 10, buffer);
@@ -663,7 +671,7 @@ TEST_F(BufferedResourceLoaderTest, ThresholdDeferStrategy) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
   InSequence s;
 
   // Write half of capacity: keep not deferring.
@@ -691,7 +699,7 @@ TEST_F(BufferedResourceLoaderTest, Tricky_ReadForwardsPastBuffered) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[256];
+  uint8_t buffer[256];
   InSequence s;
 
   // PRECONDITION
@@ -736,7 +744,7 @@ TEST_F(BufferedResourceLoaderTest, Tricky_ReadBackwardsPastBuffered) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[256];
+  uint8_t buffer[256];
   InSequence s;
 
   // PRECONDITION
@@ -769,7 +777,7 @@ TEST_F(BufferedResourceLoaderTest, Tricky_SmallReadWithinThreshold) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[256];
+  uint8_t buffer[256];
   InSequence s;
 
   // PRECONDITION
@@ -817,7 +825,7 @@ TEST_F(BufferedResourceLoaderTest, Tricky_LargeReadWithinThreshold) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[256];
+  uint8_t buffer[256];
   InSequence s;
 
   // PRECONDITION
@@ -872,7 +880,7 @@ TEST_F(BufferedResourceLoaderTest, Tricky_LargeReadBackwards) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[256];
+  uint8_t buffer[256];
   InSequence s;
 
   // PRECONDITION
@@ -933,7 +941,7 @@ TEST_F(BufferedResourceLoaderTest, Tricky_ReadPastThreshold) {
   Start();
   PartialResponse(10, kSize - 1, kSize);
 
-  uint8 buffer[256];
+  uint8_t buffer[256];
   InSequence s;
 
   // PRECONDITION
@@ -1091,10 +1099,12 @@ TEST_F(BufferedResourceLoaderTest, BufferWindow_PlaybackRate_AboveUpperBound) {
   StopWhenLoad();
 }
 
-static void ExpectContentRange(
-    const std::string& str, bool expect_success,
-    int64 expected_first, int64 expected_last, int64 expected_size) {
-  int64 first, last, size;
+static void ExpectContentRange(const std::string& str,
+                               bool expect_success,
+                               int64_t expected_first,
+                               int64_t expected_last,
+                               int64_t expected_size) {
+  int64_t first, last, size;
   ASSERT_EQ(expect_success, BufferedResourceLoader::ParseContentRange(
       str, &first, &last, &size)) << str;
   if (!expect_success)
@@ -1108,9 +1118,10 @@ static void ExpectContentRangeFailure(const std::string& str) {
   ExpectContentRange(str, false, 0, 0, 0);
 }
 
-static void ExpectContentRangeSuccess(
-    const std::string& str,
-    int64 expected_first, int64 expected_last, int64 expected_size) {
+static void ExpectContentRangeSuccess(const std::string& str,
+                                      int64_t expected_first,
+                                      int64_t expected_last,
+                                      int64_t expected_size) {
   ExpectContentRange(str, true, expected_first, expected_last, expected_size);
 }
 
@@ -1141,7 +1152,7 @@ TEST_F(BufferedResourceLoaderTest, CancelAfterDeferral) {
   Start();
   PartialResponse(10, 99, 100);
 
-  uint8 buffer[10];
+  uint8_t buffer[10];
 
   // Make an outstanding read request.
   ReadLoader(10, 10, buffer);

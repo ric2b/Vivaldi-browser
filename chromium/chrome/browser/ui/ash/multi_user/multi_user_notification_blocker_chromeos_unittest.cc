@@ -8,12 +8,14 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shell_delegate.h"
+#include "base/macros.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_notification_blocker_chromeos.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_chromeos.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/user_info.h"
 #include "ui/message_center/message_center.h"
@@ -48,7 +50,8 @@ class MultiUserNotificationBlockerChromeOSTest
     ash::test::TestSessionStateDelegate* session_state_delegate =
         static_cast<ash::test::TestSessionStateDelegate*>(
             ash::Shell::GetInstance()->session_state_delegate());
-    session_state_delegate->AddUser("test2@example.com");
+    session_state_delegate->AddUser(
+        AccountId::FromUserEmail("test2@example.com"));
 
     chromeos::WallpaperManager::Initialize();
 
@@ -82,7 +85,8 @@ class MultiUserNotificationBlockerChromeOSTest
     return ash::Shell::GetInstance()
         ->session_state_delegate()
         ->GetUserInfo(0)
-        ->GetUserID();
+        ->GetAccountId()
+        .GetUserEmail();
   }
 
   const message_center::NotificationBlocker* blocker() {
@@ -94,12 +98,14 @@ class MultiUserNotificationBlockerChromeOSTest
   }
 
   void SwitchActiveUser(const std::string& name) {
-    ash::Shell::GetInstance()->session_state_delegate()->SwitchActiveUser(name);
+    const AccountId account_id(AccountId::FromUserEmail(name));
+    ash::Shell::GetInstance()->session_state_delegate()->SwitchActiveUser(
+        account_id);
     if (chrome::MultiUserWindowManager::GetMultiProfileMode() ==
         chrome::MultiUserWindowManager::MULTI_PROFILE_MODE_SEPARATED) {
       static_cast<chrome::MultiUserWindowManagerChromeOS*>(
-          chrome::MultiUserWindowManager::GetInstance())->ActiveUserChanged(
-              name);
+          chrome::MultiUserWindowManager::GetInstance())
+          ->ActiveUserChanged(account_id);
     }
   }
 
@@ -127,7 +133,8 @@ class MultiUserNotificationBlockerChromeOSTest
 
   aura::Window* CreateWindowForProfile(const std::string& name) {
     aura::Window* window = CreateTestWindowInShellWithId(window_id_++);
-    chrome::MultiUserWindowManager::GetInstance()->SetWindowOwner(window, name);
+    chrome::MultiUserWindowManager::GetInstance()->SetWindowOwner(
+        window, AccountId::FromUserEmail(name));
     return window;
   }
 

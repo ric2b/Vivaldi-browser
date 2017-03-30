@@ -4,10 +4,15 @@
 
 #include "net/server/web_socket_encoder.h"
 
+#include <utility>
+#include <vector>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/io_buffer.h"
+#include "net/websockets/websocket_deflate_parameters.h"
+#include "net/websockets/websocket_extension.h"
 #include "net/websockets/websocket_extension_parser.h"
 
 namespace net {
@@ -87,7 +92,7 @@ WebSocket::ParseResult DecodeFrameHybi17(const base::StringPiece& frame,
   if (client_frame && !masked)  // In Hybi-17 spec client MUST mask its frame.
     return WebSocket::FRAME_ERROR;
 
-  uint64 payload_length64 = second_byte & kPayloadLengthMask;
+  uint64_t payload_length64 = second_byte & kPayloadLengthMask;
   if (payload_length64 > kMaxSingleBytePayloadLength) {
     int extended_payload_length_size;
     if (payload_length64 == kTwoBytePayloadLengthField)
@@ -106,7 +111,7 @@ WebSocket::ParseResult DecodeFrameHybi17(const base::StringPiece& frame,
   }
 
   size_t actual_masking_key_length = masked ? kMaskingKeyWidthInBytes : 0;
-  static const uint64 max_payload_length = 0x7FFFFFFFFFFFFFFFull;
+  static const uint64_t max_payload_length = 0x7FFFFFFFFFFFFFFFull;
   static size_t max_length = std::numeric_limits<size_t>::max();
   if (payload_length64 > max_payload_length ||
       payload_length64 + actual_masking_key_length > max_length) {
@@ -145,9 +150,9 @@ void EncodeFrameHybi17(const std::string& message,
   int reserved1 = compressed ? kReserved1Bit : 0;
   frame.push_back(kFinalBit | op_code | reserved1);
   char mask_key_bit = masking_key != 0 ? kMaskBit : 0;
-  if (data_length <= kMaxSingleBytePayloadLength)
-    frame.push_back(data_length | mask_key_bit);
-  else if (data_length <= 0xFFFF) {
+  if (data_length <= kMaxSingleBytePayloadLength) {
+    frame.push_back(static_cast<char>(data_length) | mask_key_bit);
+  } else if (data_length <= 0xFFFF) {
     frame.push_back(kTwoBytePayloadLengthField | mask_key_bit);
     frame.push_back((data_length & 0xFF00) >> 8);
     frame.push_back(data_length & 0xFF);
@@ -180,151 +185,114 @@ void EncodeFrameHybi17(const std::string& message,
 }  // anonymous namespace
 
 // static
-WebSocketEncoder* WebSocketEncoder::CreateServer(
-    const std::string& request_extensions,
-    std::string* response_extensions) {
-  bool deflate;
-  bool has_client_window_bits;
-  int client_window_bits;
-  int server_window_bits;
-  bool client_no_context_takeover;
-  bool server_no_context_takeover;
-  ParseExtensions(request_extensions, &deflate, &has_client_window_bits,
-                  &client_window_bits, &server_window_bits,
-                  &client_no_context_takeover, &server_no_context_takeover);
-
-  if (deflate) {
-    *response_extensions = base::StringPrintf(
-        "permessage-deflate; server_max_window_bits=%d%s", server_window_bits,
-        server_no_context_takeover ? "; server_no_context_takeover" : "");
-    if (has_client_window_bits) {
-      base::StringAppendF(response_extensions, "; client_max_window_bits=%d",
-                          client_window_bits);
-    } else {
-      DCHECK_EQ(client_window_bits, 15);
-    }
-    return new WebSocketEncoder(true /* is_server */, server_window_bits,
-                                client_window_bits, server_no_context_takeover);
-  } else {
-    *response_extensions = std::string();
-    return new WebSocketEncoder(true /* is_server */);
-  }
+scoped_ptr<WebSocketEncoder> WebSocketEncoder::CreateServer() {
+  return make_scoped_ptr(new WebSocketEncoder(FOR_SERVER, nullptr, nullptr));
 }
 
 // static
-WebSocketEncoder* WebSocketEncoder::CreateClient(
-    const std::string& response_extensions) {
-  bool deflate;
-  bool has_client_window_bits;
-  int client_window_bits;
-  int server_window_bits;
-  bool client_no_context_takeover;
-  bool server_no_context_takeover;
-  ParseExtensions(response_extensions, &deflate, &has_client_window_bits,
-                  &client_window_bits, &server_window_bits,
-                  &client_no_context_takeover, &server_no_context_takeover);
-
-  if (deflate) {
-    return new WebSocketEncoder(false /* is_server */, client_window_bits,
-                                server_window_bits, client_no_context_takeover);
-  } else {
-    return new WebSocketEncoder(false /* is_server */);
-  }
-}
-
-// static
-void WebSocketEncoder::ParseExtensions(const std::string& header_value,
-                                       bool* deflate,
-                                       bool* has_client_window_bits,
-                                       int* client_window_bits,
-                                       int* server_window_bits,
-                                       bool* client_no_context_takeover,
-                                       bool* server_no_context_takeover) {
-  *deflate = false;
-  *has_client_window_bits = false;
-  *client_window_bits = 15;
-  *server_window_bits = 15;
-  *client_no_context_takeover = false;
-  *server_no_context_takeover = false;
-
-  if (header_value.empty())
-    return;
-
+scoped_ptr<WebSocketEncoder> WebSocketEncoder::CreateServer(
+    const std::string& extensions,
+    WebSocketDeflateParameters* deflate_parameters) {
   WebSocketExtensionParser parser;
-  if (!parser.Parse(header_value))
-    return;
-  const std::vector<WebSocketExtension>& extensions = parser.extensions();
-  // TODO(tyoshino): Fail if this method is used for parsing a response and
-  // there are multiple permessage-deflate extensions or there are any unknown
-  // extensions.
-  for (const auto& extension : extensions) {
-    if (extension.name() != "permessage-deflate") {
+  if (!parser.Parse(extensions)) {
+    // Failed to parse Sec-WebSocket-Extensions header. We MUST fail the
+    // connection.
+    return nullptr;
+  }
+
+  for (const auto& extension : parser.extensions()) {
+    std::string failure_message;
+    WebSocketDeflateParameters offer;
+    if (!offer.Initialize(extension, &failure_message) ||
+        !offer.IsValidAsRequest(&failure_message)) {
+      // We decline unknown / malformed extensions.
       continue;
     }
 
-    const std::vector<WebSocketExtension::Parameter>& parameters =
-        extension.parameters();
-    for (const auto& param : parameters) {
-      const std::string& name = param.name();
-      // TODO(tyoshino): Fail the connection when an invalid value is given.
-      if (name == "client_max_window_bits") {
-        *has_client_window_bits = true;
-        if (param.HasValue()) {
-          int bits = 0;
-          if (base::StringToInt(param.value(), &bits) && bits >= 8 &&
-              bits <= 15) {
-            *client_window_bits = bits;
-          }
-        }
-      }
-      if (name == "server_max_window_bits" && param.HasValue()) {
-        int bits = 0;
-        if (base::StringToInt(param.value(), &bits) && bits >= 8 && bits <= 15)
-          *server_window_bits = bits;
-      }
-      if (name == "client_no_context_takeover")
-        *client_no_context_takeover = true;
-      if (name == "server_no_context_takeover")
-        *server_no_context_takeover = true;
+    WebSocketDeflateParameters response = offer;
+    if (offer.is_client_max_window_bits_specified() &&
+        !offer.has_client_max_window_bits_value()) {
+      // We need to choose one value for the response.
+      response.SetClientMaxWindowBits(15);
     }
-    *deflate = true;
-
-    break;
+    DCHECK(response.IsValidAsResponse());
+    DCHECK(offer.IsCompatibleWith(response));
+    auto deflater = make_scoped_ptr(
+        new WebSocketDeflater(response.server_context_take_over_mode()));
+    auto inflater = make_scoped_ptr(
+        new WebSocketInflater(kInflaterChunkSize, kInflaterChunkSize));
+    if (!deflater->Initialize(response.PermissiveServerMaxWindowBits()) ||
+        !inflater->Initialize(response.PermissiveClientMaxWindowBits())) {
+      // For some reason we cannot accept the parameters.
+      continue;
+    }
+    *deflate_parameters = response;
+    return make_scoped_ptr(new WebSocketEncoder(FOR_SERVER, std::move(deflater),
+                                                std::move(inflater)));
   }
+
+  // We cannot find an acceptable offer.
+  return make_scoped_ptr(new WebSocketEncoder(FOR_SERVER, nullptr, nullptr));
 }
 
-WebSocketEncoder::WebSocketEncoder(bool is_server) : is_server_(is_server) {
-}
+// static
+scoped_ptr<WebSocketEncoder> WebSocketEncoder::CreateClient(
+    const std::string& response_extensions) {
+  // TODO(yhirano): Add a way to return an error.
 
-WebSocketEncoder::WebSocketEncoder(bool is_server,
-                                   int deflate_bits,
-                                   int inflate_bits,
-                                   bool no_context_takeover)
-    : is_server_(is_server) {
-  deflater_.reset(new WebSocketDeflater(
-      no_context_takeover ? WebSocketDeflater::DO_NOT_TAKE_OVER_CONTEXT
-                          : WebSocketDeflater::TAKE_OVER_CONTEXT));
-  inflater_.reset(
+  WebSocketExtensionParser parser;
+  if (!parser.Parse(response_extensions)) {
+    // Parse error. Note that there are two cases here.
+    // 1) There is no Sec-WebSocket-Extensions header.
+    // 2) There is a malformed Sec-WebSocketExtensions header.
+    // We should return a deflate-disabled encoder for the former case and
+    // fail the connection for the latter case.
+    return make_scoped_ptr(new WebSocketEncoder(FOR_CLIENT, nullptr, nullptr));
+  }
+  if (parser.extensions().size() != 1) {
+    // Only permessage-deflate extension is supported.
+    // TODO (yhirano): Fail the connection.
+    return make_scoped_ptr(new WebSocketEncoder(FOR_CLIENT, nullptr, nullptr));
+  }
+  const auto& extension = parser.extensions()[0];
+  WebSocketDeflateParameters params;
+  std::string failure_message;
+  if (!params.Initialize(extension, &failure_message) ||
+      !params.IsValidAsResponse(&failure_message)) {
+    // TODO (yhirano): Fail the connection.
+    return make_scoped_ptr(new WebSocketEncoder(FOR_CLIENT, nullptr, nullptr));
+  }
+
+  auto deflater = make_scoped_ptr(
+      new WebSocketDeflater(params.client_context_take_over_mode()));
+  auto inflater = make_scoped_ptr(
       new WebSocketInflater(kInflaterChunkSize, kInflaterChunkSize));
-
-  if (!deflater_->Initialize(deflate_bits) ||
-      !inflater_->Initialize(inflate_bits)) {
-    // Disable deflate support.
-    deflater_.reset();
-    inflater_.reset();
+  if (!deflater->Initialize(params.PermissiveClientMaxWindowBits()) ||
+      !inflater->Initialize(params.PermissiveServerMaxWindowBits())) {
+    // TODO (yhirano): Fail the connection.
+    return make_scoped_ptr(new WebSocketEncoder(FOR_CLIENT, nullptr, nullptr));
   }
+
+  return make_scoped_ptr(new WebSocketEncoder(FOR_CLIENT, std::move(deflater),
+                                              std::move(inflater)));
 }
 
-WebSocketEncoder::~WebSocketEncoder() {
-}
+WebSocketEncoder::WebSocketEncoder(Type type,
+                                   scoped_ptr<WebSocketDeflater> deflater,
+                                   scoped_ptr<WebSocketInflater> inflater)
+    : type_(type),
+      deflater_(std::move(deflater)),
+      inflater_(std::move(inflater)) {}
+
+WebSocketEncoder::~WebSocketEncoder() {}
 
 WebSocket::ParseResult WebSocketEncoder::DecodeFrame(
     const base::StringPiece& frame,
     int* bytes_consumed,
     std::string* output) {
   bool compressed;
-  WebSocket::ParseResult result =
-      DecodeFrameHybi17(frame, is_server_, bytes_consumed, output, &compressed);
+  WebSocket::ParseResult result = DecodeFrameHybi17(
+      frame, type_ == FOR_SERVER, bytes_consumed, output, &compressed);
   if (result == WebSocket::FRAME_OK && compressed) {
     if (!Inflate(output))
       result = WebSocket::FRAME_ERROR;

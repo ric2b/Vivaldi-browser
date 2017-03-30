@@ -13,6 +13,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
@@ -23,6 +24,7 @@
 #include "media/base/android/media_decoder_job.h"
 #include "media/base/android/media_drm_bridge.h"
 #include "media/base/android/media_player_android.h"
+#include "media/base/android/media_statistics.h"
 #include "media/base/media_export.h"
 #include "media/base/time_delta_interpolator.h"
 
@@ -38,11 +40,12 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
  public:
   // Constructs a player with the given ID and demuxer. |manager| must outlive
   // the lifetime of this object.
-  MediaSourcePlayer(int player_id,
-                    MediaPlayerManager* manager,
-                    const RequestMediaResourcesCB& request_media_resources_cb,
-                    scoped_ptr<DemuxerAndroid> demuxer,
-                    const GURL& frame_url);
+  MediaSourcePlayer(
+      int player_id,
+      MediaPlayerManager* manager,
+      const OnDecoderResourcesReleasedCB& on_decoder_resources_released_cb,
+      scoped_ptr<DemuxerAndroid> demuxer,
+      const GURL& frame_url);
   ~MediaSourcePlayer() override;
 
   // MediaPlayerAndroid implementation.
@@ -52,6 +55,8 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
   void SeekTo(base::TimeDelta timestamp) override;
   void Release() override;
   void SetVolume(double volume) override;
+  bool HasVideo() const override;
+  bool HasAudio() const override;
   int GetVideoWidth() override;
   int GetVideoHeight() override;
   base::TimeDelta GetCurrentTime() override;
@@ -61,7 +66,7 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
   bool CanSeekForward() override;
   bool CanSeekBackward() override;
   bool IsPlayerReady() override;
-  void SetCdm(BrowserCdm* cdm) override;
+  void SetCdm(const scoped_refptr<MediaKeys>& cdm) override;
 
   // DemuxerAndroidClient implementation.
   void OnDemuxerConfigsAvailable(const DemuxerConfigs& params) override;
@@ -83,10 +88,11 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
   void PlaybackCompleted(bool is_audio);
 
   // Called when the decoder finishes its task.
-  void MediaDecoderCallback(
-        bool is_audio, MediaCodecStatus status,
-        base::TimeDelta current_presentation_timestamp,
-        base::TimeDelta max_presentation_timestamp);
+  void MediaDecoderCallback(bool is_audio,
+                            MediaCodecStatus status,
+                            bool is_late_frame,
+                            base::TimeDelta current_presentation_timestamp,
+                            base::TimeDelta max_presentation_timestamp);
 
   bool IsPrerollFinished(bool is_audio) const;
 
@@ -94,7 +100,8 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
   base::android::ScopedJavaLocalRef<jobject> GetMediaCrypto();
 
   // Callback to notify that MediaCrypto is ready in |drm_bridge_|.
-  void OnMediaCryptoReady();
+  void OnMediaCryptoReady(MediaDrmBridge::JavaObjectPtr media_crypto,
+                          bool needs_protected_surface);
 
   // Handle pending events if all the decoder jobs are not currently decoding.
   void ProcessPendingEvents();
@@ -105,10 +112,6 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
   // Called to decode more data.
   void DecodeMoreAudio();
   void DecodeMoreVideo();
-
-  // Functions check whether audio/video is present.
-  bool HasVideo() const;
-  bool HasAudio() const;
 
   // Functions that check whether audio/video stream has reached end of output
   // or are not present in player configuration.
@@ -160,9 +163,6 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
   // Called to resume playback after NO_KEY is received, but a new key is
   // available.
   void ResumePlaybackAfterKeyAdded();
-
-  // Called when the CDM is detached.
-  void OnCdmUnset();
 
   // Test-only method to setup hook for the completion of the next decode cycle.
   // This callback state is cleared when it is next run.
@@ -241,7 +241,9 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
   // elapses.
   base::CancelableClosure decoder_starvation_callback_;
 
-  MediaDrmBridge* drm_bridge_;
+  // Holds a ref-count to the CDM.
+  scoped_refptr<MediaKeys> cdm_;
+
   int cdm_registration_id_;
 
   // No decryption key available to decrypt the encrypted buffer. In this case,
@@ -266,6 +268,10 @@ class MEDIA_EXPORT MediaSourcePlayer : public MediaPlayerAndroid,
 
   // Whether audio or video decoder is in the process of prerolling.
   bool prerolling_;
+
+  // Gathers and reports playback quality statistics to UMA.
+  // Use pointer to enable replacement of this object for tests.
+  scoped_ptr<MediaStatistics> media_stat_;
 
   // Weak pointer passed to media decoder jobs for callbacks.
   base::WeakPtr<MediaSourcePlayer> weak_this_;

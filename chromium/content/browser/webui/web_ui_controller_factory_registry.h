@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_WEBUI_WEB_UI_CONTROLLER_FACTORY_REGISTRY_H_
 #define CONTENT_BROWSER_WEBUI_WEB_UI_CONTROLLER_FACTORY_REGISTRY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/web_ui_controller_factory.h"
 
@@ -35,7 +36,7 @@ class CONTENT_EXPORT WebUIControllerFactoryRegistry
                                const GURL& url) const;
 
  private:
-  friend struct DefaultSingletonTraits<WebUIControllerFactoryRegistry>;
+  friend struct base::DefaultSingletonTraits<WebUIControllerFactoryRegistry>;
 
   WebUIControllerFactoryRegistry();
   ~WebUIControllerFactoryRegistry() override;

@@ -19,6 +19,7 @@
         '../../events/events.gyp:events',
         '../../gfx/gfx.gyp:gfx',
         '../../gfx/gfx.gyp:gfx_geometry',
+        '../../gfx/gfx.gyp:gfx_vector_icons',
         '../../resources/ui_resources.gyp:ui_resources',
         '../../resources/ui_resources.gyp:ui_test_pak',
         '../views.gyp:views',
@@ -27,6 +28,7 @@
         '../../..',
       ],
       'defines': [
+        'GFX_VECTOR_ICONS_UNSAFE',
         'VIEWS_EXAMPLES_IMPLEMENTATION',
       ],
       'sources': [
@@ -80,6 +82,8 @@
         'tree_view_example.cc',
         'tree_view_example.h',
         'views_examples_export.h',
+        'vector_example.cc',
+        'vector_example.h',
         'widget_example.cc',
         'widget_example.h',
       ],
@@ -186,7 +190,7 @@
           },
           'dependencies': [
             '../../../sandbox/sandbox.gyp:sandbox',
-            '../../../content/content.gyp:content_startup_helper_win',
+            '../../../content/content.gyp:sandbox_helper_win',
           ],
         }],
         ['OS=="win" and component!="shared_library" and win_use_allocator_shim==1', {

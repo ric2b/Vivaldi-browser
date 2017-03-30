@@ -13,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
@@ -241,7 +242,7 @@ HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
       !ParseDomainASCII(buffer, &localname)) {
     return HOSTS_PARSE_WIN_COMPUTER_NAME_FAILED;
   }
-  base::StringToLowerASCII(&localname);
+  localname = base::ToLowerASCII(localname);
 
   bool have_ipv4 =
       hosts->count(DnsHostsKey(localname, ADDRESS_FAMILY_IPV4)) > 0;
@@ -333,7 +334,7 @@ class RegistryWatcher : public base::NonThreadSafe {
 bool IsStatelessDiscoveryAddress(const IPAddressNumber& address) {
   if (address.size() != kIPv6AddressSize)
     return false;
-  const uint8 kPrefix[] = {
+  const uint8_t kPrefix[] = {
       0xfe, 0xc0, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   };

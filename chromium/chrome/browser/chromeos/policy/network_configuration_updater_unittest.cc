@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/values.h"
@@ -24,6 +28,8 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_service_impl.h"
+#include "components/policy/core/common/policy_types.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -52,7 +58,7 @@ const char kFakeUsernameHash[] = "fake hash";
 
 class FakeUser : public user_manager::User {
  public:
-  FakeUser() : User(kFakeUserEmail) {
+  FakeUser() : User(AccountId::FromUserEmail(kFakeUserEmail)) {
     set_display_email(kFakeUserEmail);
     set_username_hash(kFakeUsernameHash);
   }
@@ -265,7 +271,7 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
     if (set_cert_importer) {
       EXPECT_TRUE(certificate_importer_owned_);
       updater->SetCertificateImporterForTest(
-          certificate_importer_owned_.Pass());
+          std::move(certificate_importer_owned_));
     }
     network_configuration_updater_.reset(updater);
     return updater;
@@ -344,6 +350,7 @@ TEST_F(NetworkConfigurationUpdaterTest, PolicyIsValidatedAndRepaired) {
   policy.Set(key::kOpenNetworkConfiguration,
              POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER,
+             POLICY_SOURCE_CLOUD,
              new base::StringValue(onc_policy),
              NULL);
   UpdateProviderPolicy(policy);
@@ -467,6 +474,7 @@ TEST_F(NetworkConfigurationUpdaterTest,
   policy.Set(key::kOpenNetworkConfiguration,
              POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER,
+             POLICY_SOURCE_CLOUD,
              new base::StringValue(kFakeONC),
              NULL);
   UpdateProviderPolicy(policy);
@@ -488,7 +496,8 @@ TEST_F(NetworkConfigurationUpdaterTest,
        DontImportCertificateBeforeCertificateImporterSet) {
   PolicyMap policy;
   policy.Set(key::kOpenNetworkConfiguration, POLICY_LEVEL_MANDATORY,
-             POLICY_SCOPE_USER, new base::StringValue(kFakeONC), NULL);
+             POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+             new base::StringValue(kFakeONC), nullptr);
   UpdateProviderPolicy(policy);
 
   EXPECT_CALL(network_config_handler_,
@@ -510,7 +519,8 @@ TEST_F(NetworkConfigurationUpdaterTest,
   certificate_importer_->SetExpectedONCSource(onc::ONC_SOURCE_USER_POLICY);
 
   ASSERT_TRUE(certificate_importer_owned_);
-  updater->SetCertificateImporterForTest(certificate_importer_owned_.Pass());
+  updater->SetCertificateImporterForTest(
+      std::move(certificate_importer_owned_));
   EXPECT_EQ(1u, certificate_importer_->GetAndResetImportCount());
 }
 
@@ -554,7 +564,7 @@ class NetworkConfigurationUpdaterTestWithParam
 TEST_P(NetworkConfigurationUpdaterTestWithParam, InitialUpdates) {
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             new base::StringValue(kFakeONC), NULL);
+             POLICY_SOURCE_CLOUD, new base::StringValue(kFakeONC), nullptr);
   UpdateProviderPolicy(policy);
 
   EXPECT_CALL(network_config_handler_,
@@ -575,7 +585,7 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam,
        PolicyNotSetBeforePolicyProviderInitialized) {
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             new base::StringValue(kFakeONC), NULL);
+             POLICY_SOURCE_CLOUD, new base::StringValue(kFakeONC), nullptr);
   UpdateProviderPolicy(policy);
 
   CreateNetworkConfigurationUpdater();
@@ -602,7 +612,7 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam,
 
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             new base::StringValue(kFakeONC), NULL);
+             POLICY_SOURCE_CLOUD, new base::StringValue(kFakeONC), nullptr);
   UpdateProviderPolicy(policy);
 
   EXPECT_CALL(network_config_handler_,
@@ -641,7 +651,7 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam, PolicyChange) {
 
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             new base::StringValue(kFakeONC), NULL);
+             POLICY_SOURCE_CLOUD, new base::StringValue(kFakeONC), nullptr);
   UpdateProviderPolicy(policy);
   Mock::VerifyAndClearExpectations(&network_config_handler_);
   EXPECT_EQ(ExpectedImportCertificatesCallCount(),

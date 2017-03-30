@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
@@ -10,16 +13,19 @@
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/extensions/extension_toolbar_model.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_registry.h"
@@ -28,14 +34,18 @@
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/feature_switch.h"
+#include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "grit/theme_resources.h"
+#include "net/dns/mock_host_resolver.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/image/image_unittest_util.h"
 #include "ui/gfx/skia_util.h"
 
 using content::WebContents;
@@ -63,26 +73,19 @@ const char kEmptyImageDataError[] =
     "of ImageData objects.";
 const char kEmptyPathError[] = "The path property must not be empty.";
 
-// Views platforms have the icon superimposed over a button's background.
-// Macs don't, but still need a 29x29-sized image (and the easiest way to do
-// that is to superimpose the icon over a blank background).
-gfx::ImageSkia AddBackground(const gfx::ImageSkia& icon) {
-#if !defined(OS_MACOSX)
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  gfx::ImageSkia bg = *rb.GetImageSkiaNamed(IDR_BROWSER_ACTION);
-#else
-  const gfx::Size size(29, 29);  // Size of browser actions buttons.
-  gfx::ImageSkia bg(new BlankImageSource(size), size);
-#endif
-  return gfx::ImageSkiaOperations::CreateSuperimposedImage(bg, icon);
-}
+// Makes sure |bar_rendering| has |model_icon| in the middle (there's additional
+// padding that correlates to the rest of the button, and this is ignored).
+void VerifyIconsMatch(const gfx::Image& bar_rendering,
+                      const gfx::Image& model_icon) {
+  gfx::Rect icon_portion(gfx::Point(), bar_rendering.Size());
+  icon_portion.ClampToCenteredSize(model_icon.Size());
 
-bool ImagesAreEqualAtScale(const gfx::ImageSkia& i1,
-                           const gfx::ImageSkia& i2,
-                           float scale) {
-  SkBitmap bitmap1 = i1.GetRepresentation(scale).sk_bitmap();
-  SkBitmap bitmap2 = i2.GetRepresentation(scale).sk_bitmap();
-  return gfx::BitmapsAreEqual(bitmap1, bitmap2);
+  EXPECT_TRUE(gfx::test::AreBitmapsEqual(
+      model_icon.AsImageSkia().GetRepresentation(1.0f).sk_bitmap(),
+      gfx::ImageSkiaOperations::ExtractSubset(bar_rendering.AsImageSkia(),
+                                              icon_portion)
+          .GetRepresentation(1.0f)
+          .sk_bitmap()));
 }
 
 class BrowserActionApiTest : public ExtensionApiTest {
@@ -120,7 +123,7 @@ class BrowserActionApiTest : public ExtensionApiTest {
 };
 
 IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, Basic) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(RunExtensionTest("browser_action/basics")) << message_;
   const Extension* extension = GetSingleLoadedExtension();
   ASSERT_TRUE(extension) << message_;
@@ -142,8 +145,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, Basic) {
             action->GetBadgeBackgroundColor(ExtensionAction::kDefaultTabId));
 
   // Simulate the browser action being clicked.
-  ui_test_utils::NavigateToURL(browser(),
-      test_server()->GetURL("files/extensions/test_file.txt"));
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/extensions/test_file.txt"));
 
   ExtensionActionAPI::Get(browser()->profile())->ExecuteExtensionAction(
       extension, browser(), true);
@@ -183,140 +186,147 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, DynamicBrowserAction) {
   ASSERT_EQ(action_icon_last_id,
             icon_factory.GetIcon(0).ToSkBitmap()->getGenerationID());
 
-  uint32_t action_icon_current_id = 0;
+  gfx::Image last_bar_icon = GetBrowserActionsBar()->GetIcon(0);
+  EXPECT_TRUE(gfx::test::AreImagesEqual(last_bar_icon,
+                                        GetBrowserActionsBar()->GetIcon(0)));
 
-  ResultCatcher catcher;
+  // The reason we don't test more standard scales (like 1x, 2x, etc.) is that
+  // these may be generated from the provided scales.
+  float kSmallIconScale = 21.f / ExtensionAction::ActionIconSize();
+  float kLargeIconScale = 42.f / ExtensionAction::ActionIconSize();
+  ASSERT_FALSE(ui::IsSupportedScale(kSmallIconScale));
+  ASSERT_FALSE(ui::IsSupportedScale(kLargeIconScale));
 
   // Tell the extension to update the icon using ImageData object.
+  ResultCatcher catcher;
   GetBrowserActionsBar()->Press(0);
   ASSERT_TRUE(catcher.GetNextResult());
 
-  action_icon = icon_factory.GetIcon(0);
+  EXPECT_FALSE(gfx::test::AreImagesEqual(last_bar_icon,
+                                         GetBrowserActionsBar()->GetIcon(0)));
+  last_bar_icon = GetBrowserActionsBar()->GetIcon(0);
 
-  action_icon_current_id = action_icon.ToSkBitmap()->getGenerationID();
+  action_icon = icon_factory.GetIcon(0);
+  uint32_t action_icon_current_id = action_icon.ToSkBitmap()->getGenerationID();
   EXPECT_GT(action_icon_current_id, action_icon_last_id);
   action_icon_last_id = action_icon_current_id;
+  VerifyIconsMatch(last_bar_icon, action_icon);
 
-  EXPECT_FALSE(action_icon.ToImageSkia()->HasRepresentation(2.0f));
-
-  EXPECT_TRUE(
-      ImagesAreEqualAtScale(AddBackground(*action_icon.ToImageSkia()),
-                            *GetBrowserActionsBar()->GetIcon(0).ToImageSkia(),
-                            1.0f));
+  // Check that only the smaller size was set (only a 21px icon was provided).
+  EXPECT_TRUE(action_icon.ToImageSkia()->HasRepresentation(kSmallIconScale));
+  EXPECT_FALSE(action_icon.ToImageSkia()->HasRepresentation(kLargeIconScale));
 
   // Tell the extension to update the icon using path.
   GetBrowserActionsBar()->Press(0);
   ASSERT_TRUE(catcher.GetNextResult());
 
-  action_icon = icon_factory.GetIcon(0);
+  // Make sure the browser action bar updated.
+  EXPECT_FALSE(gfx::test::AreImagesEqual(last_bar_icon,
+                                         GetBrowserActionsBar()->GetIcon(0)));
+  last_bar_icon = GetBrowserActionsBar()->GetIcon(0);
 
+  action_icon = icon_factory.GetIcon(0);
   action_icon_current_id = action_icon.ToSkBitmap()->getGenerationID();
   EXPECT_GT(action_icon_current_id, action_icon_last_id);
   action_icon_last_id = action_icon_current_id;
+  VerifyIconsMatch(last_bar_icon, action_icon);
 
-  EXPECT_FALSE(
-      action_icon.ToImageSkia()->HasRepresentation(2.0f));
-
-  EXPECT_TRUE(
-      ImagesAreEqualAtScale(AddBackground(*action_icon.ToImageSkia()),
-                            *GetBrowserActionsBar()->GetIcon(0).ToImageSkia(),
-                            1.0f));
+  // Check that only the smaller size was set (only a 21px icon was provided).
+  EXPECT_TRUE(action_icon.ToImageSkia()->HasRepresentation(kSmallIconScale));
+  EXPECT_FALSE(action_icon.ToImageSkia()->HasRepresentation(kLargeIconScale));
 
   // Tell the extension to update the icon using dictionary of ImageData
   // objects.
   GetBrowserActionsBar()->Press(0);
   ASSERT_TRUE(catcher.GetNextResult());
 
-  action_icon = icon_factory.GetIcon(0);
+  EXPECT_FALSE(gfx::test::AreImagesEqual(last_bar_icon,
+                                         GetBrowserActionsBar()->GetIcon(0)));
+  last_bar_icon = GetBrowserActionsBar()->GetIcon(0);
 
+  action_icon = icon_factory.GetIcon(0);
   action_icon_current_id = action_icon.ToSkBitmap()->getGenerationID();
   EXPECT_GT(action_icon_current_id, action_icon_last_id);
   action_icon_last_id = action_icon_current_id;
+  VerifyIconsMatch(last_bar_icon, action_icon);
 
-  EXPECT_TRUE(action_icon.ToImageSkia()->HasRepresentation(2.0f));
-
-  EXPECT_TRUE(
-      ImagesAreEqualAtScale(AddBackground(*action_icon.ToImageSkia()),
-                            *GetBrowserActionsBar()->GetIcon(0).ToImageSkia(),
-                            1.0f));
+  // Check both sizes were set (as two icon sizes were provided).
+  EXPECT_TRUE(action_icon.ToImageSkia()->HasRepresentation(kSmallIconScale));
+  EXPECT_TRUE(action_icon.AsImageSkia().HasRepresentation(kLargeIconScale));
 
   // Tell the extension to update the icon using dictionary of paths.
   GetBrowserActionsBar()->Press(0);
   ASSERT_TRUE(catcher.GetNextResult());
 
-  action_icon = icon_factory.GetIcon(0);
+  EXPECT_FALSE(gfx::test::AreImagesEqual(last_bar_icon,
+                                         GetBrowserActionsBar()->GetIcon(0)));
+  last_bar_icon = GetBrowserActionsBar()->GetIcon(0);
 
+  action_icon = icon_factory.GetIcon(0);
   action_icon_current_id = action_icon.ToSkBitmap()->getGenerationID();
   EXPECT_GT(action_icon_current_id, action_icon_last_id);
   action_icon_last_id = action_icon_current_id;
+  VerifyIconsMatch(last_bar_icon, action_icon);
 
-  EXPECT_TRUE(action_icon.ToImageSkia()->HasRepresentation(2.0f));
-
-  EXPECT_TRUE(
-      ImagesAreEqualAtScale(AddBackground(*action_icon.ToImageSkia()),
-                            *GetBrowserActionsBar()->GetIcon(0).ToImageSkia(),
-                            1.0f));
+  // Check both sizes were set (as two icon sizes were provided).
+  EXPECT_TRUE(action_icon.ToImageSkia()->HasRepresentation(kSmallIconScale));
+  EXPECT_TRUE(action_icon.AsImageSkia().HasRepresentation(kLargeIconScale));
 
   // Tell the extension to update the icon using dictionary of ImageData
-  // objects, but setting only size 19.
+  // objects, but setting only one size.
   GetBrowserActionsBar()->Press(0);
   ASSERT_TRUE(catcher.GetNextResult());
 
-  action_icon = icon_factory.GetIcon(0);
+  EXPECT_FALSE(gfx::test::AreImagesEqual(last_bar_icon,
+                                         GetBrowserActionsBar()->GetIcon(0)));
+  last_bar_icon = GetBrowserActionsBar()->GetIcon(0);
 
+  action_icon = icon_factory.GetIcon(0);
   action_icon_current_id = action_icon.ToSkBitmap()->getGenerationID();
   EXPECT_GT(action_icon_current_id, action_icon_last_id);
   action_icon_last_id = action_icon_current_id;
+  VerifyIconsMatch(last_bar_icon, action_icon);
 
-  EXPECT_FALSE(action_icon.ToImageSkia()->HasRepresentation(2.0f));
-
-  EXPECT_TRUE(
-      ImagesAreEqualAtScale(AddBackground(*action_icon.ToImageSkia()),
-                            *GetBrowserActionsBar()->GetIcon(0).ToImageSkia(),
-                            1.0f));
+  // Check that only the smaller size was set (only a 21px icon was provided).
+  EXPECT_TRUE(action_icon.ToImageSkia()->HasRepresentation(kSmallIconScale));
+  EXPECT_FALSE(action_icon.ToImageSkia()->HasRepresentation(kLargeIconScale));
 
   // Tell the extension to update the icon using dictionary of paths, but
-  // setting only size 19.
+  // setting only one size.
   GetBrowserActionsBar()->Press(0);
   ASSERT_TRUE(catcher.GetNextResult());
 
-  action_icon = icon_factory.GetIcon(0);
+  EXPECT_FALSE(gfx::test::AreImagesEqual(last_bar_icon,
+                                         GetBrowserActionsBar()->GetIcon(0)));
+  last_bar_icon = GetBrowserActionsBar()->GetIcon(0);
 
+  action_icon = icon_factory.GetIcon(0);
   action_icon_current_id = action_icon.ToSkBitmap()->getGenerationID();
   EXPECT_GT(action_icon_current_id, action_icon_last_id);
   action_icon_last_id = action_icon_current_id;
+  VerifyIconsMatch(last_bar_icon, action_icon);
 
-  EXPECT_FALSE(action_icon.ToImageSkia()->HasRepresentation(2.0f));
-
-  EXPECT_TRUE(
-      ImagesAreEqualAtScale(AddBackground(*action_icon.ToImageSkia()),
-                            *GetBrowserActionsBar()->GetIcon(0).ToImageSkia(),
-                            1.0f));
+  // Check that only the smaller size was set (only a 21px icon was provided).
+  EXPECT_TRUE(action_icon.ToImageSkia()->HasRepresentation(kSmallIconScale));
+  EXPECT_FALSE(action_icon.ToImageSkia()->HasRepresentation(kLargeIconScale));
 
   // Tell the extension to update the icon using dictionary of ImageData
-  // objects, but setting only size 38.
+  // objects, but setting only size 42.
   GetBrowserActionsBar()->Press(0);
   ASSERT_TRUE(catcher.GetNextResult());
 
+  EXPECT_FALSE(gfx::test::AreImagesEqual(last_bar_icon,
+                                         GetBrowserActionsBar()->GetIcon(0)));
+  last_bar_icon = GetBrowserActionsBar()->GetIcon(0);
+
   action_icon = icon_factory.GetIcon(0);
-
-  const gfx::ImageSkia* action_icon_skia = action_icon.ToImageSkia();
-
-  EXPECT_FALSE(action_icon_skia->HasRepresentation(1.0f));
-  EXPECT_TRUE(action_icon_skia->HasRepresentation(2.0f));
-
   action_icon_current_id = action_icon.ToSkBitmap()->getGenerationID();
   EXPECT_GT(action_icon_current_id, action_icon_last_id);
   action_icon_last_id = action_icon_current_id;
 
-  EXPECT_TRUE(gfx::BitmapsAreEqual(
-      *action_icon.ToSkBitmap(),
-      action_icon_skia->GetRepresentation(2.0f).sk_bitmap()));
-
-  EXPECT_TRUE(
-      ImagesAreEqualAtScale(AddBackground(*action_icon_skia),
-                            *GetBrowserActionsBar()->GetIcon(0).ToImageSkia(),
-                            2.0f));
+  // Check that only the larger size was set (only a 42px icon was provided).
+  EXPECT_FALSE(action_icon.ToImageSkia()->HasRepresentation(kSmallIconScale));
+  EXPECT_TRUE(action_icon.AsImageSkia().HasRepresentation(kLargeIconScale));
 
   // Try setting icon with empty dictionary of ImageData objects.
   GetBrowserActionsBar()->Press(0);
@@ -485,7 +495,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionRemovePopup) {
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, IncognitoBasic) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(RunExtensionTest("browser_action/basics")) << message_;
   const Extension* extension = GetSingleLoadedExtension();
@@ -538,7 +548,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, IncognitoSplit) {
                                         browser()->host_desktop_type()));
   base::RunLoop().RunUntilIdle();  // Wait for profile initialization.
   // Navigate just to have a tab in this window, otherwise wonky things happen.
-  ui_test_utils::OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
+  OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
   ASSERT_EQ(1,
             BrowserActionTestUtil(incognito_browser).NumberOfBrowserActions());
 
@@ -587,7 +597,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, DISABLED_CloseBackgroundPage) {
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BadgeBackgroundColor) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(RunExtensionTest("browser_action/color")) << message_;
   const Extension* extension = GetSingleLoadedExtension();
   ASSERT_TRUE(extension) << message_;
@@ -617,6 +627,14 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BadgeBackgroundColor) {
   // Test that array values set color correctly.
   ASSERT_EQ(SkColorSetARGB(255, 255, 255, 255),
             action->GetBadgeBackgroundColor(ExtensionAction::kDefaultTabId));
+
+  ui_test_utils::NavigateToURL(browser(),
+                               GURL(extension->GetResourceURL("update3.html")));
+  ASSERT_TRUE(catcher.GetNextResult());
+
+  // Test that hsl() values 'hsl(120, 100%, 50%)' set color correctly.
+  ASSERT_EQ(SkColorSetARGB(255, 0, 255, 0),
+            action->GetBadgeBackgroundColor(ExtensionAction::kDefaultTabId));
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, Getters) {
@@ -641,7 +659,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, Getters) {
 
 // Verify triggering browser action.
 IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TestTriggerBrowserAction) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(RunExtensionTest("trigger_actions/browser_action")) << message_;
   const Extension* extension = GetSingleLoadedExtension();
@@ -650,9 +668,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TestTriggerBrowserAction) {
   // Test that there is a browser action in the toolbar.
   ASSERT_EQ(1, GetBrowserActionsBar()->NumberOfBrowserActions());
 
-  ui_test_utils::NavigateToURL(
-     browser(),
-     test_server()->GetURL("files/simple.html"));
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/simple.html"));
 
   ExtensionAction* browser_action = GetBrowserAction(*extension);
   EXPECT_TRUE(browser_action != NULL);
@@ -675,6 +692,96 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TestTriggerBrowserAction) {
   std::string result;
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(tab, script, &result));
   EXPECT_EQ(result, "red");
+}
+
+// Test that a browser action popup with a web iframe works correctly. This
+// primarily targets --isolate-extensions and --site-per-process modes, where
+// the iframe runs in a separate process.  See https://crbug.com/546267.
+IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionPopupWithIframe) {
+  host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ASSERT_TRUE(LoadExtension(
+      test_data_dir_.AppendASCII("browser_action/popup_with_iframe")));
+  BrowserActionTestUtil* actions_bar = GetBrowserActionsBar();
+  const Extension* extension = GetSingleLoadedExtension();
+  ASSERT_TRUE(extension) << message_;
+
+  // Simulate a click on the browser action to open the popup.
+  ASSERT_TRUE(OpenPopup(0));
+
+  // Find the RenderFrameHost associated with the iframe in the popup.
+  content::RenderFrameHost* frame_host = nullptr;
+  extensions::ProcessManager* manager =
+      extensions::ProcessManager::Get(browser()->profile());
+  std::set<content::RenderFrameHost*> frame_hosts =
+      manager->GetRenderFrameHostsForExtension(extension->id());
+  for (auto host : frame_hosts) {
+    if (host->GetFrameName() == "child_frame") {
+      frame_host = host;
+      break;
+    }
+  }
+
+  ASSERT_TRUE(frame_host);
+  EXPECT_EQ(extension->GetResourceURL("frame.html"),
+            frame_host->GetLastCommittedURL());
+  EXPECT_TRUE(frame_host->GetParent());
+
+  // Navigate the popup's iframe to a (cross-site) web page, and wait for that
+  // page to send a message, which will ensure that the page has loaded.
+  GURL foo_url(embedded_test_server()->GetURL("foo.com", "/popup_iframe.html"));
+  std::string script = "location.href = '" + foo_url.spec() + "'";
+  std::string result;
+  EXPECT_TRUE(
+      content::ExecuteScriptAndExtractString(frame_host, script, &result));
+  EXPECT_EQ("DONE", result);
+
+  EXPECT_TRUE(actions_bar->HidePopup());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionWithRectangularIcon) {
+  ExtensionTestMessageListener ready_listener("ready", true);
+  ASSERT_TRUE(LoadExtension(
+      test_data_dir_.AppendASCII("browser_action").AppendASCII("rect_icon")));
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
+  gfx::Image first_icon = GetBrowserActionsBar()->GetIcon(0);
+  ResultCatcher catcher;
+  ready_listener.Reply(std::string());
+  EXPECT_TRUE(catcher.GetNextResult());
+  gfx::Image next_icon = GetBrowserActionsBar()->GetIcon(0);
+  EXPECT_FALSE(gfx::test::AreImagesEqual(first_icon, next_icon));
+}
+
+// Test that we don't try and show a browser action popup with
+// browserAction.openPopup if there is no toolbar (e.g., for web popup windows).
+// Regression test for crbug.com/584747.
+IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionOpenPopupOnPopup) {
+  // Open a new web popup window.
+  chrome::NavigateParams params(browser(), GURL("http://www.google.com/"),
+                                ui::PAGE_TRANSITION_LINK);
+  params.disposition = NEW_POPUP;
+  params.window_action = chrome::NavigateParams::SHOW_WINDOW;
+  ui_test_utils::NavigateToURL(&params);
+  Browser* popup_browser = params.browser;
+  // Verify it is a popup, and it is the active window.
+  ASSERT_TRUE(popup_browser);
+  EXPECT_FALSE(browser()->window()->IsActive());
+  EXPECT_FALSE(popup_browser->SupportsWindowFeature(Browser::FEATURE_TOOLBAR));
+  EXPECT_EQ(popup_browser,
+            chrome::FindLastActiveWithProfile(browser()->profile(),
+                                              chrome::GetActiveDesktop()));
+
+  // Load up the extension, which will call chrome.browserAction.openPopup()
+  // when it is loaded and verify that the popup didn't open.
+  ExtensionTestMessageListener listener("ready", true);
+  EXPECT_TRUE(LoadExtension(
+      test_data_dir_.AppendASCII("browser_action/open_popup_on_reply")));
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
+
+  ResultCatcher catcher;
+  listener.Reply(std::string());
+  EXPECT_TRUE(catcher.GetNextResult()) << message_;
 }
 
 }  // namespace

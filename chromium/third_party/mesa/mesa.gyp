@@ -136,6 +136,8 @@
         'clang_warning_flags': [
           '-Wno-tautological-constant-out-of-range-compare',
           '-Wno-mismatched-tags',  # Fixed upstream.
+          # https://bugs.freedesktop.org/show_bug.cgi?id=91645:
+          '-Wno-overloaded-virtual',
         ],
         'clang_warning_flags_unset': [
           # Don't warn about string->bool used in asserts.
@@ -269,12 +271,17 @@
       # Mesa is ever rolled and the warnings are fixed.
       'msvs_disabled_warnings': [
           4005, 4018, 4090, 4099, 4146, 4291, 4305, 4334, 4748, 4267,
+          # TODO(brucedawson): http://crbug.com/554200 4311 is a VS
+          # 2015 64-bit warning for pointer truncation
+          4311,
       ],
       'variables': {
         'clang_warning_flags': [
           '-Wno-tautological-constant-out-of-range-compare',
           '-Wno-absolute-value',  # Fires on st_atom_array.c, might be a bug
           '-Wno-mismatched-tags',  # Fixed upstream.
+          # mesa's STATIC_ASSERT() macro expands to an ununused typedef.
+          '-Wno-unused-local-typedef',
         ],
         'clang_warning_flags_unset': [
           # Don't warn about string->bool used in asserts.
@@ -694,6 +701,16 @@
             ],
           },
         }],
+        ['OS=="linux" and chromecast==1', {
+          'sources': [
+            'chromium/empty.cc',
+          ],
+          'link_settings': {
+            'libraries!': [
+              '-lstdc++',
+            ],
+          },
+        }],
       ],
       'include_dirs': [
         'src/src/mapi',
@@ -745,6 +762,30 @@
               ],
             },
           ],
+        },
+      ],
+    }],
+    [ 'OS=="linux"', {
+      'targets': [
+        {
+          'target_name': 'wayland_drm_protocol',
+          'type': 'static_library',
+          'dependencies' : [
+            '../wayland/wayland.gyp:wayland_util',
+          ],
+          'include_dirs': [
+            '<(generated_src_dir)/egl/wayland/wayland-drm',
+          ],
+          'sources': [
+            '<(generated_src_dir)/egl/wayland/wayland-drm/wayland-drm-client-protocol.h',
+            '<(generated_src_dir)/egl/wayland/wayland-drm/wayland-drm-protocol.c',
+            '<(generated_src_dir)/egl/wayland/wayland-drm/wayland-drm-server-protocol.h',
+          ],
+          'direct_dependent_settings': {
+            'include_dirs': [
+              '<(generated_src_dir)/egl/wayland/wayland-drm',
+            ],
+          },
         },
       ],
     }],

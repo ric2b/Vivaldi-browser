@@ -4,10 +4,10 @@
 
 #include <stdint.h>
 
-#include "base/basictypes.h"
 #include "base/files/file_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -65,7 +65,7 @@ scoped_ptr<disk_cache::BackendImpl> CreateExistingEntryCache(
     return scoped_ptr<disk_cache::BackendImpl>();
   entry->Close();
 
-  return cache.Pass();
+  return cache;
 }
 
 }  // namespace
@@ -89,6 +89,10 @@ class DiskCacheBackendTest : public DiskCacheTestWithCache {
                              std::set<std::string>* keys_to_match,
                              size_t* count);
 
+  // Computes the expected size of entry metadata, i.e. the total size without
+  // the actual data stored. This depends only on the entry's |key| size.
+  int GetEntryMetadataSize(std::string key);
+
   // Actual tests:
   void BackendBasics();
   void BackendKeying();
@@ -110,6 +114,7 @@ class DiskCacheBackendTest : public DiskCacheTestWithCache {
   void BackendFixEnumerators();
   void BackendDoomRecent();
   void BackendDoomBetween();
+  void BackendCalculateSizeOfAllEntries();
   void BackendTransaction(const std::string& name, int num_entries, bool load);
   void BackendRecoverInsert();
   void BackendRecoverRemove();
@@ -252,7 +257,7 @@ bool DiskCacheBackendTest::CreateSetOfRandomEntries(
     key_pool->insert(key);
     entry->Close();
   }
-  return key_pool->size() == implicit_cast<size_t>(cache_->GetEntryCount());
+  return key_pool->size() == static_cast<size_t>(cache_->GetEntryCount());
 }
 
 // Performs iteration over the backend and checks that the keys of entries
@@ -274,11 +279,23 @@ bool DiskCacheBackendTest::EnumerateAndMatchKeys(
     EXPECT_EQ(1U, keys_to_match->erase(entry->GetKey()));
     entry->Close();
     ++(*count);
-    if (max_to_open >= 0 && implicit_cast<int>(*count) >= max_to_open)
+    if (max_to_open >= 0 && static_cast<int>(*count) >= max_to_open)
       break;
   };
 
   return true;
+}
+
+int DiskCacheBackendTest::GetEntryMetadataSize(std::string key) {
+  // For blockfile and memory backends, it is just the key size.
+  if (!simple_cache_mode_)
+    return key.size();
+
+  // For the simple cache, we must add the file header and EOF, and that for
+  // every stream.
+  return disk_cache::kSimpleEntryStreamCount *
+         (sizeof(disk_cache::SimpleFileHeader) +
+          sizeof(disk_cache::SimpleFileEOF) + key.size());
 }
 
 void DiskCacheBackendTest::BackendBasics() {
@@ -504,7 +521,7 @@ TEST_F(DiskCacheBackendTest, ExternalFiles) {
 // Tests that we deal with file-level pending operations at destruction time.
 void DiskCacheBackendTest::BackendShutdownWithPendingFileIO(bool fast) {
   ASSERT_TRUE(CleanupCacheDir());
-  uint32 flags = disk_cache::kNoBuffering;
+  uint32_t flags = disk_cache::kNoBuffering;
   if (!fast)
     flags |= disk_cache::kNoRandom;
 
@@ -606,7 +623,7 @@ void DiskCacheBackendTest::BackendShutdownWithPendingIO(bool fast) {
     ASSERT_TRUE(cache_thread.StartWithOptions(
         base::Thread::Options(base::MessageLoop::TYPE_IO, 0)));
 
-    uint32 flags = disk_cache::kNoBuffering;
+    uint32_t flags = disk_cache::kNoBuffering;
     if (!fast)
       flags |= disk_cache::kNoRandom;
 
@@ -1674,13 +1691,90 @@ TEST_F(DiskCacheBackendTest, DoomEntriesBetweenSparse) {
   EXPECT_EQ(3, cache_->GetEntryCount());
 }
 
+void DiskCacheBackendTest::BackendCalculateSizeOfAllEntries() {
+  InitCache();
+
+  // The cache is initially empty.
+  EXPECT_EQ(0, CalculateSizeOfAllEntries());
+
+  // Generate random entries and populate them with data of respective
+  // sizes 0, 1, ..., count - 1 bytes.
+  std::set<std::string> key_pool;
+  CreateSetOfRandomEntries(&key_pool);
+
+  int count = 0;
+  for (std::string key : key_pool) {
+    std::string data(count, ' ');
+    scoped_refptr<net::StringIOBuffer> buffer = new net::StringIOBuffer(data);
+
+    // Alternate between writing to first two streams to test that we do not
+    // take only one stream into account.
+    disk_cache::Entry* entry;
+    ASSERT_EQ(net::OK, OpenEntry(key, &entry));
+    ASSERT_EQ(count, WriteData(entry, count % 2, 0, buffer.get(), count, true));
+    entry->Close();
+
+    ++count;
+  }
+
+  // The resulting size should be (0 + 1 + ... + count - 1) plus keys.
+  int result = CalculateSizeOfAllEntries();
+  int total_metadata_size = 0;
+  for (std::string key : key_pool)
+    total_metadata_size += GetEntryMetadataSize(key);
+  EXPECT_EQ((count - 1) * count / 2 + total_metadata_size, result);
+
+  // Add another entry and test if the size is updated. Then remove it and test
+  // if the size is back to original value.
+  {
+    const int last_entry_size = 47;
+    std::string data(last_entry_size, ' ');
+    scoped_refptr<net::StringIOBuffer> buffer = new net::StringIOBuffer(data);
+
+    disk_cache::Entry* entry;
+    std::string key = GenerateKey(true);
+    ASSERT_EQ(net::OK, CreateEntry(key, &entry));
+    ASSERT_EQ(last_entry_size,
+              WriteData(entry, 0, 0, buffer.get(), last_entry_size, true));
+    entry->Close();
+
+    int new_result = CalculateSizeOfAllEntries();
+    EXPECT_EQ(result + last_entry_size + GetEntryMetadataSize(key), new_result);
+
+    DoomEntry(key);
+    new_result = CalculateSizeOfAllEntries();
+    EXPECT_EQ(result, new_result);
+  }
+
+  // After dooming the entries, the size should be back to zero.
+  ASSERT_EQ(net::OK, DoomAllEntries());
+  EXPECT_EQ(0, CalculateSizeOfAllEntries());
+}
+
+TEST_F(DiskCacheBackendTest, CalculateSizeOfAllEntries) {
+  BackendCalculateSizeOfAllEntries();
+}
+
+TEST_F(DiskCacheBackendTest, MemoryOnlyCalculateSizeOfAllEntries) {
+  SetMemoryOnlyMode();
+  BackendCalculateSizeOfAllEntries();
+}
+
+TEST_F(DiskCacheBackendTest, SimpleCacheCalculateSizeOfAllEntries) {
+  // Use net::APP_CACHE to make size estimations deterministic via
+  // non-optimistic writes.
+  SetCacheType(net::APP_CACHE);
+  SetSimpleCacheMode();
+  BackendCalculateSizeOfAllEntries();
+}
+
 void DiskCacheBackendTest::BackendTransaction(const std::string& name,
                                               int num_entries, bool load) {
   success_ = false;
   ASSERT_TRUE(CopyTestCache(name));
   DisableFirstCleanup();
 
-  uint32 mask;
+  uint32_t mask;
   if (load) {
     mask = 0xf;
     SetMaxSize(0x100000);
@@ -1908,8 +2002,8 @@ TEST_F(DiskCacheTest, SimpleCacheControlRestart) {
 
     disk_cache::Entry* entry = NULL;
     rv = cache->OpenEntry(kExistingEntryKey, &entry, cb.callback());
-    EXPECT_EQ(net::OK, cb.GetResult(rv));
-    EXPECT_TRUE(entry);
+    ASSERT_EQ(net::OK, cb.GetResult(rv));
+    EXPECT_NE(nullptr, entry);
     entry->Close();
   }
 }
@@ -1949,8 +2043,8 @@ TEST_F(DiskCacheTest, SimpleCacheControlLeave) {
 
     disk_cache::Entry* entry = NULL;
     rv = cache->OpenEntry(kExistingEntryKey, &entry, cb.callback());
-    EXPECT_EQ(net::OK, cb.GetResult(rv));
-    EXPECT_TRUE(entry);
+    ASSERT_EQ(net::OK, cb.GetResult(rv));
+    EXPECT_NE(nullptr, entry);
     entry->Close();
   }
 }
@@ -2773,6 +2867,44 @@ TEST_F(DiskCacheBackendTest, NewEvictionDisabledAPI) {
   BackendDisabledAPI();
 }
 
+// This overly specific looking test is a regression test aimed at
+// crbug.com/589186.
+TEST_F(DiskCacheBackendTest, MemoryOnlyUseAfterFree) {
+  SetMemoryOnlyMode();
+
+  const int kMaxSize = 200 * 1024;
+  const int kMaxEntryCount = 20;
+  const int kWriteSize = kMaxSize / kMaxEntryCount;
+
+  SetMaxSize(kMaxSize);
+  InitCache();
+
+  scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kWriteSize));
+  CacheTestFillBuffer(buffer->data(), kWriteSize, false);
+
+  // Create an entry to be our sparse entry that gets written later.
+  disk_cache::Entry* entry;
+  ASSERT_EQ(net::OK, CreateEntry("first parent", &entry));
+  disk_cache::ScopedEntryPtr first_parent(entry);
+
+  // Create a ton of entries, and keep them open, to put the cache well above
+  // its eviction threshhold.
+  const int kTooManyEntriesCount = kMaxEntryCount * 2;
+  std::list<disk_cache::ScopedEntryPtr> open_entries;
+  std::string key_prefix("prefix");
+  for (int i = 0; i < kTooManyEntriesCount; ++i) {
+    ASSERT_EQ(net::OK, CreateEntry(key_prefix + base::IntToString(i), &entry));
+    EXPECT_EQ(kWriteSize,
+              WriteData(entry, 1, 0, buffer.get(), kWriteSize, false));
+    open_entries.push_back(disk_cache::ScopedEntryPtr(entry));
+  }
+  EXPECT_LT(kMaxSize, CalculateSizeOfAllEntries());
+
+  // Writing this sparse data should not crash.
+  EXPECT_EQ(1024, first_parent->WriteSparseData(32768, buffer.get(), 1024,
+                                                net::CompletionCallback()));
+}
+
 TEST_F(DiskCacheTest, Backend_UsageStatsTimer) {
   MessageLoopHelper helper;
 
@@ -2981,7 +3113,7 @@ TEST_F(DiskCacheTest, MultipleInstances) {
 // Test the six regions of the curve that determines the max cache size.
 TEST_F(DiskCacheTest, AutomaticMaxSize) {
   using disk_cache::kDefaultCacheSize;
-  int64 large_size = kDefaultCacheSize;
+  int64_t large_size = kDefaultCacheSize;
 
   // Region 1: expected = available * 0.8
   EXPECT_EQ((kDefaultCacheSize - 1) * 8 / 10,
@@ -3014,7 +3146,7 @@ TEST_F(DiskCacheTest, AutomaticMaxSize) {
             disk_cache::PreferredCacheSize(large_size * 250 - 1));
 
   // Region 5: expected = available * 0.1
-  int64 largest_size = kDefaultCacheSize * 4;
+  int64_t largest_size = kDefaultCacheSize * 4;
   EXPECT_EQ(kDefaultCacheSize * 25 / 10,
             disk_cache::PreferredCacheSize(large_size * 250));
   EXPECT_EQ(largest_size - 1,
@@ -3327,10 +3459,9 @@ TEST_F(DiskCacheBackendTest, SimpleCacheOpenBadFile) {
 
   disk_cache::SimpleFileHeader header;
   header.initial_magic_number = UINT64_C(0xbadf00d);
-  EXPECT_EQ(
-      implicit_cast<int>(sizeof(header)),
-      base::WriteFile(entry_file1_path, reinterpret_cast<char*>(&header),
-                           sizeof(header)));
+  EXPECT_EQ(static_cast<int>(sizeof(header)),
+            base::WriteFile(entry_file1_path, reinterpret_cast<char*>(&header),
+                            sizeof(header)));
   ASSERT_EQ(net::ERR_FAILED, OpenEntry(key, &entry));
 }
 
@@ -3489,8 +3620,7 @@ TEST_F(DiskCacheBackendTest, SimpleCacheEnumerationCorruption) {
 
   EXPECT_TRUE(disk_cache::simple_util::CreateCorruptFileForTests(
       key, cache_path_));
-  EXPECT_EQ(key_pool.size() + 1,
-            implicit_cast<size_t>(cache_->GetEntryCount()));
+  EXPECT_EQ(key_pool.size() + 1, static_cast<size_t>(cache_->GetEntryCount()));
 
   // Check that enumeration returns all entries but the corrupt one.
   std::set<std::string> keys_to_match(key_pool);

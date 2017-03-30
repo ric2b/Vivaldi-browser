@@ -16,16 +16,21 @@
 #include "grit/theme_resources.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSColor+Luminance.h"
+#include "ui/base/default_theme_provider.h"
 #include "ui/gfx/canvas_skia_paint.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/scoped_ns_graphics_context_save_gstate_mac.h"
 #include "ui/gfx/text_elider.h"
+#include "ui/native_theme/native_theme.h"
 
 // Distance from top border to icon.
 const CGFloat kImagePaddingTop = 7;
 
 // Distance from left border to icon.
 const CGFloat kImagePaddingLeft = 9;
+
+// Horizontal distance from the icon to the text.
+const CGFloat kImagePaddingRight = 7;
 
 // Width of icon.
 const CGFloat kImageWidth = 16;
@@ -35,7 +40,7 @@ const CGFloat kImageHeight = 16;
 
 // x coordinate of download name string, in view coords.
 const CGFloat kTextPosLeft = kImagePaddingLeft +
-    kImageWidth + DownloadShelf::kSmallProgressIconOffset;
+    kImageWidth + DownloadShelf::kFiletypeIconOffset + kImagePaddingRight;
 
 // Distance from end of download name string to dropdown area.
 const CGFloat kTextPaddingRight = 3;
@@ -76,16 +81,6 @@ const CGFloat kInterruptedAnimationDuration = 2.5;
 
 using content::DownloadItem;
 
-namespace {
-
-// Passed as a callback to DownloadShelf paint functions. On toolkit-views
-// platforms it will mirror the position of the download progress, but that's
-// not done on Mac.
-void DummyRTLMirror(gfx::Rect* bounds) {
-}
-
-}  // namespace
-
 // This is a helper class to animate the fading out of the status text.
 @interface DownloadItemCellAnimation : NSAnimation {
  @private
@@ -123,8 +118,8 @@ void DummyRTLMirror(gfx::Rect* bounds) {
 - (void)stopIndeterminateAnimation;
 - (NSString*)elideTitle:(int)availableWidth;
 - (NSString*)elideStatus:(int)availableWidth;
-- (ui::ThemeProvider*)backgroundThemeWrappingProvider:
-    (ui::ThemeProvider*)provider;
+- (const ui::ThemeProvider*)backgroundThemeWrappingProvider:
+    (const ui::ThemeProvider*)provider;
 - (BOOL)pressedWithDefaultThemeOnPart:(DownloadItemMousePosition)part;
 - (NSColor*)titleColorForPart:(DownloadItemMousePosition)part;
 - (void)drawSecondaryTitleInRect:(NSRect)innerFrame;
@@ -140,7 +135,6 @@ void DummyRTLMirror(gfx::Rect* bounds) {
   isStatusTextVisible_ = NO;
   titleY_ = kPrimaryTextOnlyPosTop;
   statusAlpha_ = 0.0;
-  indeterminateProgressAngle_ = DownloadShelf::kStartAngleDegrees;
 
   [self setFont:[NSFont systemFontOfSize:
       [NSFont systemFontSizeForControlSize:NSSmallControlSize]]];
@@ -252,6 +246,7 @@ void DummyRTLMirror(gfx::Rect* bounds) {
         if (!indeterminateProgressTimer_) {
           indeterminateProgressTimer_.reset([[IndeterminateProgressTimer alloc]
               initWithDownloadItemCell:self]);
+          progressStartTime_ = base::TimeTicks::Now();
         }
       } else {
         percentDone_ = downloadModel->PercentComplete();
@@ -391,8 +386,8 @@ void DummyRTLMirror(gfx::Rect* bounds) {
       availableWidth, gfx::ELIDE_TAIL));
 }
 
-- (ui::ThemeProvider*)backgroundThemeWrappingProvider:
-    (ui::ThemeProvider*)provider {
+- (const ui::ThemeProvider*)backgroundThemeWrappingProvider:
+    (const ui::ThemeProvider*)provider {
   if (!themeProvider_.get()) {
     themeProvider_.reset(new BackgroundTheme(provider));
   }
@@ -408,7 +403,7 @@ void DummyRTLMirror(gfx::Rect* bounds) {
 
 // Returns the text color that should be used to draw text on |part|.
 - (NSColor*)titleColorForPart:(DownloadItemMousePosition)part {
-  ui::ThemeProvider* themeProvider =
+  const ui::ThemeProvider* themeProvider =
       [[[self controlView] window] themeProvider];
   if ([self pressedWithDefaultThemeOnPart:part] || !themeProvider)
     return [NSColor alternateSelectedControlTextColor];
@@ -448,7 +443,7 @@ void DummyRTLMirror(gfx::Rect* bounds) {
 }
 
 - (BOOL)isDefaultTheme {
-  ui::ThemeProvider* themeProvider =
+  const ui::ThemeProvider* themeProvider =
       [[[self controlView] window] themeProvider];
   if (!themeProvider)
     return YES;
@@ -468,7 +463,7 @@ void DummyRTLMirror(gfx::Rect* bounds) {
   // with a background that looks like windows (some transparent white) if a
   // theme is used. Use custom theme object with a white color gradient to trick
   // the superclass into drawing what we want.
-  ui::ThemeProvider* themeProvider =
+  const ui::ThemeProvider* themeProvider =
       [[[self controlView] window] themeProvider];
 
   NSGradient* bgGradient = nil;
@@ -553,31 +548,39 @@ void DummyRTLMirror(gfx::Rect* bounds) {
 
     // Always repaint the whole disk.
     NSPoint imagePosition = [self imageRectForBounds:cellFrame].origin;
-    int x = imagePosition.x - DownloadShelf::kSmallProgressIconOffset;
-    int y = imagePosition.y - DownloadShelf::kSmallProgressIconOffset;
+    int x = imagePosition.x - DownloadShelf::kFiletypeIconOffset;
+    int y = imagePosition.y - DownloadShelf::kFiletypeIconOffset;
     NSRect dirtyRect = NSMakeRect(
-        x, y,
-        DownloadShelf::kSmallProgressIconSize,
-        DownloadShelf::kSmallProgressIconSize);
+        x - 1, y - 1,
+        DownloadShelf::kProgressIndicatorSize + 2,
+        DownloadShelf::kProgressIndicatorSize + 2);
 
     gfx::CanvasSkiaPaint canvas(dirtyRect, false);
     canvas.set_composite_alpha(true);
+    canvas.Translate(gfx::Vector2d(x, y));
+
+    const ui::ThemeProvider* themeProvider =
+        [[[self controlView] window] themeProvider];
+    ui::DefaultThemeProvider defaultTheme;
+    if (!themeProvider)
+      themeProvider = &defaultTheme;
+
     if (completionAnimation_.get()) {
       if ([completionAnimation_ isAnimating]) {
         if (percentDone_ == -1) {
           DownloadShelf::PaintDownloadComplete(
-              &canvas, base::Bind(&DummyRTLMirror), x, y,
+              &canvas, *themeProvider,
               [completionAnimation_ currentValue]);
         } else {
           DownloadShelf::PaintDownloadInterrupted(
-              &canvas, base::Bind(&DummyRTLMirror), x, y,
+              &canvas, *themeProvider,
               [completionAnimation_ currentValue]);
         }
       }
     } else if (percentDone_ >= 0 || indeterminateProgressTimer_) {
-      DownloadShelf::PaintDownloadProgress(&canvas, base::Bind(&DummyRTLMirror),
-                                           x, y, indeterminateProgressAngle_,
-                                           percentDone_);
+      DownloadShelf::PaintDownloadProgress(
+          &canvas, *themeProvider,
+          base::TimeTicks::Now() - progressStartTime_, percentDone_);
     }
   }
 
@@ -689,9 +692,6 @@ void DummyRTLMirror(gfx::Rect* bounds) {
 }
 
 - (void)updateIndeterminateDownload {
-  indeterminateProgressAngle_ =
-      (indeterminateProgressAngle_ + DownloadShelf::kUnknownIncrementDegrees) %
-      DownloadShelf::kMaxDegrees;
   [[self controlView] setNeedsDisplay:YES];
 }
 

@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "base/logging.h"
+#include "base/mac/mac_util.h"
 #import "base/mac/scoped_nsobject.h"
 #import "chrome/browser/themes/theme_properties.h"
 #import "chrome/browser/themes/theme_service.h"
@@ -339,7 +340,7 @@ static const NSTimeInterval kAnimationContinuousCycleDuration = 0.4;
 }
 
 // TODO(viettrungluu): clean up/reorganize.
-- (void)drawBorderAndFillForTheme:(ui::ThemeProvider*)themeProvider
+- (void)drawBorderAndFillForTheme:(const ui::ThemeProvider*)themeProvider
                       controlView:(NSView*)controlView
                         innerPath:(NSBezierPath*)innerPath
               showClickedGradient:(BOOL)showClickedGradient
@@ -374,8 +375,7 @@ static const NSTimeInterval kAnimationContinuousCycleDuration = 0.4;
   // The basic gradient shown inside; see above.
   NSGradient* gradient;
   if (hoverAlpha == 0 && !useThemeGradient) {
-    gradient = defaultGradient ? defaultGradient
-                               : gradient_;
+    gradient = defaultGradient ? defaultGradient : gradient_.get();
   } else {
     gradient = [self gradientForHoverAlpha:hoverAlpha
                                   isThemed:useThemeGradient];
@@ -525,17 +525,23 @@ static const NSTimeInterval kAnimationContinuousCycleDuration = 0.4;
   BOOL pressed = ([((NSControl*)[self controlView]) isEnabled] &&
                   [self isHighlighted]);
   NSWindow* window = [controlView window];
-  ui::ThemeProvider* themeProvider = [window themeProvider];
+  const ui::ThemeProvider* themeProvider = [window themeProvider];
   BOOL active = [window isKeyWindow] || [window isMainWindow];
+
+  // Draw custom focus ring only if AppKit won't draw one automatically.
+  // The new focus ring APIs became available with 10.7, but did not get
+  // applied to buttons (only editable text fields) until 10.8.
+  BOOL shouldDrawFocusRing = base::mac::IsOSLionOrEarlier() &&
+                             [self showsFirstResponder];
 
   // Stroke the borders and appropriate fill gradient. If we're borderless, the
   // only time we want to draw the inner gradient is if we're highlighted or if
-  // we're the first responder (when "Full Keyboard Access" is turned on).
+  // we're drawing the focus ring manually.
   if (([self isBordered] && ![self showsBorderOnlyWhileMouseInside]) ||
       pressed ||
       [self isMouseInside] ||
       [self isContinuousPulsing] ||
-      [self showsFirstResponder]) {
+      shouldDrawFocusRing) {
 
     // When pulsing we want the bookmark to stand out a little more.
     BOOL showClickedGradient = pressed ||
@@ -569,8 +575,7 @@ static const NSTimeInterval kAnimationContinuousCycleDuration = 0.4;
   }
   [self drawInteriorWithFrame:innerFrame inView:controlView];
 
-  // Draws the blue focus ring.
-  if ([self showsFirstResponder]) {
+  if (shouldDrawFocusRing) {
     gfx::ScopedNSGraphicsContextSaveGState scoped_state;
     const CGFloat lineWidth = [controlView cr_lineWidth];
     // insetX = 1.0 is used for the drawing of blue highlight so that this
@@ -598,13 +603,13 @@ static const NSTimeInterval kAnimationContinuousCycleDuration = 0.4;
     CGContextRef context =
         (CGContextRef)([[NSGraphicsContext currentContext] graphicsPort]);
 
-    ThemeService* themeProvider = static_cast<ThemeService*>(
-        [[controlView window] themeProvider]);
+    const ui::ThemeProvider* themeProvider =
+        [[controlView window] themeProvider];
     NSColor* color = themeProvider ?
         themeProvider->GetNSColorTint(ThemeProperties::TINT_BUTTONS) :
         [NSColor blackColor];
 
-    if (isTemplate && themeProvider && themeProvider->UsingDefaultTheme()) {
+    if (isTemplate && themeProvider && themeProvider->UsingSystemTheme()) {
       base::scoped_nsobject<NSShadow> shadow([[NSShadow alloc] init]);
       [shadow.get() setShadowColor:themeProvider->GetNSColor(
           ThemeProperties::COLOR_TOOLBAR_BEZEL)];

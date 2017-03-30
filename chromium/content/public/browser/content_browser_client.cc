@@ -5,8 +5,11 @@
 #include "content/public/browser/content_browser_client.h"
 
 #include "base/files/file_path.h"
+#include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/common/sandbox_type.h"
+#include "media/base/cdm_factory.h"
+#include "storage/browser/quota/quota_manager.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
 
@@ -46,6 +49,21 @@ bool ContentBrowserClient::ShouldUseProcessPerSite(
   return false;
 }
 
+bool ContentBrowserClient::DoesSiteRequireDedicatedProcess(
+    BrowserContext* browser_context,
+    const GURL& effective_url) {
+  return false;
+}
+
+bool ContentBrowserClient::ShouldLockToOrigin(BrowserContext* browser_context,
+                                              const GURL& effective_url) {
+  return true;
+}
+
+bool ContentBrowserClient::LogWebUIUrl(const GURL& web_ui_url) const {
+  return false;
+}
+
 net::URLRequestContextGetter* ContentBrowserClient::CreateRequestContext(
     BrowserContext* browser_context,
     ProtocolHandlerMap* protocol_handlers,
@@ -72,6 +90,12 @@ bool ContentBrowserClient::CanCommitURL(RenderProcessHost* process_host,
   return true;
 }
 
+bool ContentBrowserClient::IsIllegalOrigin(ResourceContext* resource_context,
+                                           int child_process_id,
+                                           const GURL& origin) {
+  return false;
+}
+
 bool ContentBrowserClient::ShouldAllowOpenURL(SiteInstance* site_instance,
                                               const GURL& url) {
   return true;
@@ -96,6 +120,10 @@ bool ContentBrowserClient::ShouldSwapBrowsingInstancesForNavigation(
     const GURL& current_url,
     const GURL& new_url) {
   return false;
+}
+
+scoped_ptr<media::CdmFactory> ContentBrowserClient::CreateCdmFactory() {
+  return nullptr;
 }
 
 bool ContentBrowserClient::ShouldSwapProcessesForRedirect(
@@ -155,7 +183,7 @@ bool ContentBrowserClient::AllowSetCookie(const GURL& url,
                                           ResourceContext* context,
                                           int render_process_id,
                                           int render_frame_id,
-                                          net::CookieOptions* options) {
+                                          const net::CookieOptions& options) {
   return true;
 }
 
@@ -197,8 +225,19 @@ bool ContentBrowserClient::AllowWebRTCIdentityCache(const GURL& url,
 }
 #endif  // defined(ENABLE_WEBRTC)
 
+bool ContentBrowserClient::AllowKeygen(const GURL& url,
+                                       content::ResourceContext* context) {
+  return true;
+}
+
 QuotaPermissionContext* ContentBrowserClient::CreateQuotaPermissionContext() {
   return nullptr;
+}
+
+scoped_ptr<storage::QuotaEvictionPolicy>
+ContentBrowserClient::GetTemporaryStorageEvictionPolicy(
+    content::BrowserContext* context) {
+  return scoped_ptr<storage::QuotaEvictionPolicy>();
 }
 
 void ContentBrowserClient::SelectClientCertificate(
@@ -292,6 +331,10 @@ std::string ContentBrowserClient::GetDefaultDownloadName() {
   return std::string();
 }
 
+base::FilePath ContentBrowserClient::GetShaderDiskCacheDirectory() {
+  return base::FilePath();
+}
+
 BrowserPpapiHost*
     ContentBrowserClient::GetExternalBrowserPpapiHost(int plugin_process_id) {
   return nullptr;
@@ -351,9 +394,19 @@ void ContentBrowserClient::OpenURL(
   callback.Run(nullptr);
 }
 
+ScopedVector<NavigationThrottle>
+ContentBrowserClient::CreateThrottlesForNavigation(
+    NavigationHandle* navigation_handle) {
+  return ScopedVector<NavigationThrottle>();
+}
+
 #if defined(OS_WIN)
 const wchar_t* ContentBrowserClient::GetResourceDllName() {
   return nullptr;
+}
+
+bool ContentBrowserClient::PreSpawnRenderer(sandbox::TargetPolicy* policy) {
+  return true;
 }
 
 base::string16 ContentBrowserClient::GetAppContainerSidForSandboxType(
@@ -365,7 +418,18 @@ base::string16 ContentBrowserClient::GetAppContainerSidForSandboxType(
       L"S-1-15-2-3251537155-1984446955-2931258699-841473695-1938553385-"
       L"924012148-129201922");
 }
-#endif
+
+bool ContentBrowserClient::IsWin32kLockdownEnabledForMimeType(
+    const std::string& mime_type) const {
+  // TODO(wfh): Enable this by default once Win32k lockdown for PPAPI processes
+  // is enabled by default in Chrome. See crbug.com/523278.
+  return false;
+}
+
+bool ContentBrowserClient::ShouldUseWindowsPrefetchArgument() const {
+  return true;
+}
+#endif  // defined(OS_WIN)
 
 #if defined(VIDEO_HOLE)
 ExternalVideoSurfaceContainer*

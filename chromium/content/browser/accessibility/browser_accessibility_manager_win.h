@@ -7,6 +7,7 @@
 
 #include <oleacc.h>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/win/scoped_comptr.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
@@ -72,13 +73,13 @@ class CONTENT_EXPORT BrowserAccessibilityManagerWin
   // TODO(dmazzoni): remove once http://crbug.com/113483 is fixed.
   BrowserAccessibilityWin* tracked_scroll_object_;
 
-  // A mapping from the Windows-specific unique IDs (unique within the
-  // browser process) to accessibility ids within this page.
-  base::hash_map<long, int32> unique_id_to_ax_id_map_;
-
   // Set to true if we need to fire a focus event on the root as soon as
   // possible.
   bool focus_event_on_root_needed_;
+
+  // A flag to keep track of if we're inside the OnWindowFocused call stack
+  // so we don't keep calling it recursively.
+  bool inside_on_window_focused_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityManagerWin);
 };

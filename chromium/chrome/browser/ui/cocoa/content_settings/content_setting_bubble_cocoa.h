@@ -6,6 +6,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #import "chrome/browser/ui/cocoa/base_bubble_controller.h"
 #include "content/public/common/media_stream_request.h"
@@ -40,7 +41,7 @@ struct MediaMenuParts {
 
 // Comparator used by MediaMenuPartsMap to order its keys.
 struct compare_button {
-  bool operator()(NSPopUpButton *const a, NSPopUpButton *const b) {
+  bool operator()(NSPopUpButton *const a, NSPopUpButton *const b) const {
     return [a tag] < [b tag];
   }
 };

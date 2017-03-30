@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef SYNC_ENGINE_MODEL_TYPE_REGISTRY_H_
-#define SYNC_ENGINE_MODEL_TYPE_REGISTRY_H_
+#ifndef SYNC_SESSIONS_MODEL_TYPE_REGISTRY_H_
+#define SYNC_SESSIONS_MODEL_TYPE_REGISTRY_H_
 
 #include <map>
+#include <string>
+#include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -20,6 +22,12 @@
 #include "sync/internal_api/public/sync_context.h"
 #include "sync/internal_api/public/sync_encryption_handler.h"
 
+namespace syncer_v2 {
+struct DataTypeState;
+class ModelTypeProcessor;
+class ModelTypeWorker;
+}
+
 namespace syncer {
 
 namespace syncable {
@@ -30,8 +38,6 @@ class CommitContributor;
 class DirectoryCommitContributor;
 class DirectoryUpdateHandler;
 class DirectoryTypeDebugInfoEmitter;
-class ModelTypeSyncWorkerImpl;
-class ModelTypeSyncProxyImpl;
 class UpdateHandler;
 
 typedef std::map<ModelType, UpdateHandler*> UpdateHandlerMap;
@@ -40,9 +46,8 @@ typedef std::map<ModelType, DirectoryTypeDebugInfoEmitter*>
     DirectoryTypeDebugInfoEmitterMap;
 
 // Keeps track of the sets of active update handlers and commit contributors.
-class SYNC_EXPORT_PRIVATE ModelTypeRegistry
-    : public SyncContext,
-      public SyncEncryptionHandler::Observer {
+class SYNC_EXPORT ModelTypeRegistry : public syncer_v2::SyncContext,
+                                      public SyncEncryptionHandler::Observer {
  public:
   // Constructs a ModelTypeRegistry that supports directory types.
   ModelTypeRegistry(const std::vector<scoped_refptr<ModelSafeWorker> >& workers,
@@ -59,10 +64,7 @@ class SYNC_EXPORT_PRIVATE ModelTypeRegistry
   // Expects that the proxy's ModelType is not currently enabled.
   void ConnectSyncTypeToWorker(
       syncer::ModelType type,
-      const DataTypeState& data_type_state,
-      const syncer::UpdateResponseDataList& saved_pending_updates,
-      const scoped_refptr<base::SequencedTaskRunner>& type_task_runner,
-      const base::WeakPtr<ModelTypeSyncProxyImpl>& proxy) override;
+      scoped_ptr<syncer_v2::ActivationContext> activation_context) override;
 
   // Disables the syncing of an off-thread type.
   //
@@ -116,7 +118,7 @@ class SYNC_EXPORT_PRIVATE ModelTypeRegistry
   ScopedVector<DirectoryTypeDebugInfoEmitter>
       directory_type_debug_info_emitters_;
 
-  ScopedVector<ModelTypeSyncWorkerImpl> model_type_sync_workers_;
+  ScopedVector<syncer_v2::ModelTypeWorker> model_type_workers_;
 
   // Maps of UpdateHandlers and CommitContributors.
   // They do not own any of the objects they point to.
@@ -161,4 +163,4 @@ class SYNC_EXPORT_PRIVATE ModelTypeRegistry
 
 }  // namespace syncer
 
-#endif // SYNC_ENGINE_MODEL_TYPE_REGISTRY_H_
+#endif  // SYNC_SESSIONS_MODEL_TYPE_REGISTRY_H_

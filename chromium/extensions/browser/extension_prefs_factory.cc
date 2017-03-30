@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "extensions/browser/extension_prefs_factory.h"
+
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -9,7 +13,6 @@
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_pref_value_map_factory.h"
 #include "extensions/browser/extension_prefs.h"
-#include "extensions/browser/extension_prefs_factory.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/constants.h"
 
@@ -24,13 +27,14 @@ ExtensionPrefs* ExtensionPrefsFactory::GetForBrowserContext(
 
 // static
 ExtensionPrefsFactory* ExtensionPrefsFactory::GetInstance() {
-  return Singleton<ExtensionPrefsFactory>::get();
+  return base::Singleton<ExtensionPrefsFactory>::get();
 }
 
 void ExtensionPrefsFactory::SetInstanceForTesting(
     content::BrowserContext* context,
     scoped_ptr<ExtensionPrefs> prefs) {
-  Associate(context, prefs.Pass());
+  Disassociate(context);
+  Associate(context, std::move(prefs));
 }
 
 ExtensionPrefsFactory::ExtensionPrefsFactory()
@@ -48,10 +52,9 @@ KeyedService* ExtensionPrefsFactory::BuildServiceInstanceFor(
   std::vector<ExtensionPrefsObserver*> prefs_observers;
   client->GetEarlyExtensionPrefsObservers(context, &prefs_observers);
   return ExtensionPrefs::Create(
-      client->GetPrefServiceForContext(context),
+      context, client->GetPrefServiceForContext(context),
       context->GetPath().AppendASCII(extensions::kInstallDirectoryName),
       ExtensionPrefValueMapFactory::GetForBrowserContext(context),
-      client->CreateAppSorting().Pass(),
       client->AreExtensionsDisabled(*base::CommandLine::ForCurrentProcess(),
                                     context),
       prefs_observers);

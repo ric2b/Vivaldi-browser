@@ -5,6 +5,8 @@
 #ifndef CONTENT_RENDERER_CACHE_STORAGE_CACHE_STORAGE_DISPATCHER_H_
 #define CONTENT_RENDERER_CACHE_STORAGE_CACHE_STORAGE_DISPATCHER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/id_map.h"
@@ -12,11 +14,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "content/child/worker_task_runner.h"
+#include "content/public/child/worker_thread.h"
 #include "content/public/renderer/render_process_observer.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerCache.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerCacheError.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerCacheStorage.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerCache.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerCacheError.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
 
 namespace content {
 
@@ -26,7 +28,7 @@ struct ServiceWorkerResponse;
 
 // Handle the Cache Storage messaging for this context thread. The
 // main thread and each worker thread have their own instances.
-class CacheStorageDispatcher : public WorkerTaskRunner::Observer {
+class CacheStorageDispatcher : public WorkerThread::Observer {
  public:
   explicit CacheStorageDispatcher(ThreadSafeSender* thread_safe_sender);
   ~CacheStorageDispatcher() override;
@@ -36,8 +38,8 @@ class CacheStorageDispatcher : public WorkerTaskRunner::Observer {
   static CacheStorageDispatcher* ThreadSpecificInstance(
       ThreadSafeSender* thread_safe_sender);
 
-  // WorkerTaskRunner::Observer implementation.
-  void OnWorkerRunLoopStopped() override;
+  // WorkerThread::Observer implementation.
+  void WillStopCurrentWorkerThread() override;
 
   bool Send(IPC::Message* msg);
 
@@ -162,7 +164,7 @@ class CacheStorageDispatcher : public WorkerTaskRunner::Observer {
   typedef IDMap<blink::WebServiceWorkerCacheStorage::CacheStorageMatchCallbacks,
                 IDMapOwnPointer> StorageMatchCallbacksMap;
 
-  typedef base::hash_map<int32, base::TimeTicks> TimeMap;
+  typedef base::hash_map<int32_t, base::TimeTicks> TimeMap;
 
   typedef IDMap<blink::WebServiceWorkerCache::CacheMatchCallbacks,
                 IDMapOwnPointer> MatchCallbacksMap;
@@ -173,9 +175,7 @@ class CacheStorageDispatcher : public WorkerTaskRunner::Observer {
   using BatchCallbacksMap =
       IDMap<blink::WebServiceWorkerCache::CacheBatchCallbacks, IDMapOwnPointer>;
 
-  static int32 CurrentWorkerId() {
-    return WorkerTaskRunner::Instance()->CurrentWorkerId();
-  }
+  static int32_t CurrentWorkerId() { return WorkerThread::GetCurrentId(); }
 
   void PopulateWebResponseFromResponse(
       const ServiceWorkerResponse& response,

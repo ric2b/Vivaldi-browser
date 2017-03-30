@@ -4,12 +4,15 @@
 
 #include "storage/browser/quota/quota_manager_proxy.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_runner_util.h"
+#include "base/trace_event/trace_event.h"
 
 namespace storage {
 
@@ -18,7 +21,9 @@ namespace {
 void DidGetUsageAndQuota(
     base::SequencedTaskRunner* original_task_runner,
     const QuotaManagerProxy::GetUsageAndQuotaCallback& callback,
-    QuotaStatusCode status, int64 usage, int64 quota) {
+    QuotaStatusCode status,
+    int64_t usage,
+    int64_t quota) {
   if (!original_task_runner->RunsTasksOnCurrentThread()) {
     original_task_runner->PostTask(
         FROM_HERE,
@@ -27,6 +32,9 @@ void DidGetUsageAndQuota(
                    callback, status, usage, quota));
     return;
   }
+
+  // crbug.com/349708
+  TRACE_EVENT0("io", "QuotaManagerProxy DidGetUsageAndQuota");
   callback.Run(status, usage, quota);
 }
 
@@ -62,11 +70,10 @@ void QuotaManagerProxy::NotifyStorageAccessed(
     manager_->NotifyStorageAccessed(client_id, origin, type);
 }
 
-void QuotaManagerProxy::NotifyStorageModified(
-    QuotaClient::ID client_id,
-    const GURL& origin,
-    StorageType type,
-    int64 delta) {
+void QuotaManagerProxy::NotifyStorageModified(QuotaClient::ID client_id,
+                                              const GURL& origin,
+                                              StorageType type,
+                                              int64_t delta) {
   if (!io_thread_->BelongsToCurrentThread()) {
     io_thread_->PostTask(
         FROM_HERE,
@@ -137,6 +144,10 @@ void QuotaManagerProxy::GetUsageAndQuota(
     DidGetUsageAndQuota(original_task_runner, callback, kQuotaErrorAbort, 0, 0);
     return;
   }
+
+  // crbug.com/349708
+  TRACE_EVENT0("io", "QuotaManagerProxy::GetUsageAndQuota");
+
   manager_->GetUsageAndQuota(
       origin, type,
       base::Bind(&DidGetUsageAndQuota,

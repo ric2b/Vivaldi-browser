@@ -4,6 +4,7 @@
 
 #include "media/cast/net/rtcp/receiver_rtcp_event_subscriber.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace media {
@@ -69,8 +70,8 @@ void ReceiverRtcpEventSubscriber::OnReceivePacketEvent(
 }
 
 struct CompareByFirst {
-  bool operator()(const std::pair<RtpTimestamp, RtcpEvent>& a,
-                  const std::pair<RtpTimestamp, RtcpEvent>& b) {
+  bool operator()(const std::pair<RtpTimeTicks, RtcpEvent>& a,
+                  const std::pair<RtpTimeTicks, RtcpEvent>& b) {
     return a.first < b.first;
   }
 };
@@ -80,7 +81,7 @@ void ReceiverRtcpEventSubscriber::GetRtcpEventsWithRedundancy(
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(rtcp_events);
 
-  uint64 event_level = rtcp_events_.size() + popped_events_;
+  uint64_t event_level = rtcp_events_.size() + popped_events_;
   event_levels_for_past_frames_.push_back(event_level);
 
   for (size_t i = 0; i < kNumResends; i++) {
@@ -88,8 +89,9 @@ void ReceiverRtcpEventSubscriber::GetRtcpEventsWithRedundancy(
     if (event_levels_for_past_frames_.size() < resend_delay + 1)
       break;
 
-    uint64 send_limit = event_levels_for_past_frames_[
-        event_levels_for_past_frames_.size() - 1 - resend_delay];
+    uint64_t send_limit =
+        event_levels_for_past_frames_[event_levels_for_past_frames_.size() - 1 -
+                                      resend_delay];
 
     if (send_ptrs_[i] < popped_events_) {
       send_ptrs_[i] = popped_events_;

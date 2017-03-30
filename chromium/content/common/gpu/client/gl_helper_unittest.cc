@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -16,6 +19,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -24,6 +28,7 @@
 #include "base/test/test_suite.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/common/gpu/client/gl_helper.h"
 #include "content/common/gpu/client/gl_helper_readback_support.h"
 #include "content/common/gpu/client/gl_helper_scaling.h"
@@ -110,9 +115,8 @@ class GLHelperTest : public testing::Test {
     json_data.append("]");
 
     std::string error_msg;
-    scoped_ptr<base::Value> trace_data(
-        base::JSONReader::DeprecatedReadAndReturnError(json_data, 0, NULL,
-                                                       &error_msg));
+    scoped_ptr<base::Value> trace_data =
+        base::JSONReader::ReadAndReturnError(json_data, 0, NULL, &error_msg);
     CHECK(trace_data)
         << "JSON parsing failed (" << error_msg << ") JSON data:" << std::endl
         << json_data;
@@ -129,7 +133,7 @@ class GLHelperTest : public testing::Test {
         std::string trace_type;
         CHECK(dict->GetString("ph", &trace_type));
         // Count all except END traces, as they come in BEGIN/END pairs.
-        if (trace_type != "E")
+        if (trace_type != "E" && trace_type != "e")
           (*event_counts)[name]++;
         VLOG(1) << "trace name: " << name;
       }
@@ -155,7 +159,7 @@ class GLHelperTest : public testing::Test {
   // bitmaps.  Clamp x/y.
   int Channel(SkBitmap* pixels, int x, int y, int c) {
     if (pixels->bytesPerPixel() == 4) {
-      uint32* data =
+      uint32_t* data =
           pixels->getAddr32(std::max(0, std::min(x, pixels->width() - 1)),
                             std::max(0, std::min(y, pixels->height() - 1)));
       return (*data) >> (c * 8) & 0xff;
@@ -175,13 +179,13 @@ class GLHelperTest : public testing::Test {
     DCHECK_LT(x, pixels->width());
     DCHECK_LT(y, pixels->height());
     if (pixels->bytesPerPixel() == 4) {
-      uint32* data = pixels->getAddr32(x, y);
+      uint32_t* data = pixels->getAddr32(x, y);
       v = std::max(0, std::min(v, 255));
       *data = (*data & ~(0xffu << (c * 8))) | (v << (c * 8));
     } else {
       DCHECK_EQ(pixels->bytesPerPixel(), 1);
       DCHECK_EQ(c, 0);
-      uint8* data = pixels->getAddr8(x, y);
+      uint8_t* data = pixels->getAddr8(x, y);
       v = std::max(0, std::min(v, 255));
       *data = v;
     }
@@ -698,7 +702,7 @@ class GLHelperTest : public testing::Test {
         }
       }
     }
-    return bitmap.Pass();
+    return bitmap;
   }
 
   // Binds texture and framebuffer and loads the bitmap pixels into the texture.
@@ -737,7 +741,7 @@ class GLHelperTest : public testing::Test {
     WebGLId src_texture = context_->createTexture();
     WebGLId framebuffer = context_->createFramebuffer();
     scoped_ptr<SkBitmap> input_pixels =
-        CreateTestBitmap(xsize, ysize, test_pattern).Pass();
+        CreateTestBitmap(xsize, ysize, test_pattern);
     BindTextureAndFrameBuffer(
         src_texture, framebuffer, input_pixels.get(), xsize, ysize);
 
@@ -831,7 +835,7 @@ class GLHelperTest : public testing::Test {
     WebGLId src_texture = context_->createTexture();
     WebGLId framebuffer = context_->createFramebuffer();
     scoped_ptr<SkBitmap> input_pixels =
-        CreateTestBitmap(xsize, ysize, test_pattern).Pass();
+        CreateTestBitmap(xsize, ysize, test_pattern);
     BindTextureAndFrameBuffer(
         src_texture, framebuffer, input_pixels.get(), xsize, ysize);
 
@@ -1261,7 +1265,7 @@ class GLHelperTest : public testing::Test {
     // Initialize the output bitmap with Green color.
     // When the readback is over output bitmap should have the red color.
     output_pixels.eraseColor(SK_ColorGREEN);
-    uint8* pixels = static_cast<uint8*>(output_pixels.getPixels());
+    uint8_t* pixels = static_cast<uint8_t*>(output_pixels.getPixels());
     ReadBackTexture(src_texture, src_size, pixels, color_type, async);
     bool result = IsEqual(input_pixels, output_pixels);
     if (!result) {
@@ -1364,7 +1368,12 @@ class GLHelperTest : public testing::Test {
     context_->genMailboxCHROMIUM(mailbox.name);
     EXPECT_FALSE(mailbox.IsZero());
     context_->produceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
-    uint32 sync_point = context_->insertSyncPoint();
+    const blink::WGC3Duint64 fence_sync = context_->insertFenceSyncCHROMIUM();
+    context_->shallowFlushCHROMIUM();
+
+    gpu::SyncToken sync_token;
+    ASSERT_TRUE(context_->genSyncTokenCHROMIUM(fence_sync,
+                                               sync_token.GetData()));
 
     std::string message = base::StringPrintf(
         "input size: %dx%d "
@@ -1391,7 +1400,7 @@ class GLHelperTest : public testing::Test {
 
     scoped_refptr<media::VideoFrame> output_frame =
         media::VideoFrame::CreateFrame(
-            media::VideoFrame::YV12,
+            media::PIXEL_FORMAT_YV12,
             // The coded size of the output frame is rounded up to the next
             // 16-byte boundary.  This tests that the readback is being
             // positioned inside the frame's visible region, and not dependent
@@ -1402,16 +1411,13 @@ class GLHelperTest : public testing::Test {
             base::TimeDelta::FromSeconds(0));
     scoped_refptr<media::VideoFrame> truth_frame =
         media::VideoFrame::CreateFrame(
-            media::VideoFrame::YV12,
-            gfx::Size(output_xsize, output_ysize),
+            media::PIXEL_FORMAT_YV12, gfx::Size(output_xsize, output_ysize),
             gfx::Rect(0, 0, output_xsize, output_ysize),
             gfx::Size(output_xsize, output_ysize),
             base::TimeDelta::FromSeconds(0));
 
     base::RunLoop run_loop;
-    yuv_reader->ReadbackYUV(mailbox,
-                            sync_point,
-                            output_frame.get(),
+    yuv_reader->ReadbackYUV(mailbox, sync_token, output_frame.get(),
                             gfx::Point(xmargin, ymargin),
                             base::Bind(&callcallback, run_loop.QuitClosure()));
     run_loop.Run();
@@ -1423,9 +1429,9 @@ class GLHelperTest : public testing::Test {
     unsigned char* Y = truth_frame->visible_data(media::VideoFrame::kYPlane);
     unsigned char* U = truth_frame->visible_data(media::VideoFrame::kUPlane);
     unsigned char* V = truth_frame->visible_data(media::VideoFrame::kVPlane);
-    int32 y_stride = truth_frame->stride(media::VideoFrame::kYPlane);
-    int32 u_stride = truth_frame->stride(media::VideoFrame::kUPlane);
-    int32 v_stride = truth_frame->stride(media::VideoFrame::kVPlane);
+    int32_t y_stride = truth_frame->stride(media::VideoFrame::kYPlane);
+    int32_t u_stride = truth_frame->stride(media::VideoFrame::kUPlane);
+    int32_t v_stride = truth_frame->stride(media::VideoFrame::kVPlane);
     memset(Y, 0x00, y_stride * output_ysize);
     memset(U, 0x80, u_stride * output_ysize / 2);
     memset(V, 0x80, v_stride * output_ysize / 2);
@@ -1757,9 +1763,10 @@ TEST_F(GLHelperTest, RGB565ASyncReadbackTest) {
 }
 
 TEST_F(GLHelperPixelTest, YUVReadbackOptTest) {
-  // This test uses the cb_command tracing events to detect how many
-  // scaling passes are actually performed by the YUV readback pipeline.
-  StartTracing(TRACE_DISABLED_BY_DEFAULT("cb_command"));
+  // This test uses the gpu.service/gpu_decoder tracing events to detect how
+  // many scaling passes are actually performed by the YUV readback pipeline.
+  StartTracing(TRACE_DISABLED_BY_DEFAULT("gpu.service") ","
+               TRACE_DISABLED_BY_DEFAULT("gpu_decoder"));
 
   TestYUVReadback(800,
                   400,
@@ -1792,39 +1799,44 @@ TEST_F(GLHelperPixelTest, YUVReadbackOptTest) {
   }
 }
 
-TEST_F(GLHelperPixelTest, YUVReadbackTest) {
-  int sizes[] = {2, 4, 14};
-  for (int flip = 0; flip <= 1; flip++) {
-    for (int use_mrt = 0; use_mrt <= 1; use_mrt++) {
-      for (unsigned int x = 0; x < arraysize(sizes); x++) {
-        for (unsigned int y = 0; y < arraysize(sizes); y++) {
-          for (unsigned int ox = x; ox < arraysize(sizes); ox++) {
-            for (unsigned int oy = y; oy < arraysize(sizes); oy++) {
-              // If output is a subsection of the destination frame, (letterbox)
-              // then try different variations of where the subsection goes.
-              for (Margin xm = x < ox ? MarginLeft : MarginRight;
-                   xm <= MarginRight;
-                   xm = NextMargin(xm)) {
-                for (Margin ym = y < oy ? MarginLeft : MarginRight;
-                     ym <= MarginRight;
-                     ym = NextMargin(ym)) {
-                  for (int pattern = 0; pattern < 3; pattern++) {
-                    TestYUVReadback(sizes[x],
-                                    sizes[y],
-                                    sizes[ox],
-                                    sizes[oy],
-                                    compute_margin(sizes[x], sizes[ox], xm),
-                                    compute_margin(sizes[y], sizes[oy], ym),
-                                    pattern,
-                                    flip == 1,
-                                    use_mrt == 1,
-                                    content::GLHelper::SCALER_QUALITY_GOOD);
-                    if (HasFailure()) {
-                      return;
-                    }
-                  }
-                }
-              }
+class GLHelperPixelYuvReadback :
+    public GLHelperPixelTest,
+    public ::testing::WithParamInterface<
+        std::tr1::tuple<bool, bool, unsigned int, unsigned int>> {};
+
+int kYUVReadBackSizes[] = {2, 4, 14};
+
+TEST_P(GLHelperPixelYuvReadback, Test) {
+  bool flip = std::tr1::get<0>(GetParam());
+  bool use_mrt = std::tr1::get<1>(GetParam());
+  unsigned int x = std::tr1::get<2>(GetParam());
+  unsigned int y = std::tr1::get<3>(GetParam());
+
+  for (unsigned int ox = x; ox < arraysize(kYUVReadBackSizes); ox++) {
+    for (unsigned int oy = y; oy < arraysize(kYUVReadBackSizes); oy++) {
+      // If output is a subsection of the destination frame, (letterbox)
+      // then try different variations of where the subsection goes.
+      for (Margin xm = x < ox ? MarginLeft : MarginRight;
+           xm <= MarginRight;
+           xm = NextMargin(xm)) {
+        for (Margin ym = y < oy ? MarginLeft : MarginRight;
+             ym <= MarginRight;
+             ym = NextMargin(ym)) {
+          for (int pattern = 0; pattern < 3; pattern++) {
+            TestYUVReadback(kYUVReadBackSizes[x],
+                            kYUVReadBackSizes[y],
+                            kYUVReadBackSizes[ox],
+                            kYUVReadBackSizes[oy],
+                            compute_margin(kYUVReadBackSizes[x],
+                                           kYUVReadBackSizes[ox], xm),
+                            compute_margin(kYUVReadBackSizes[y],
+                                           kYUVReadBackSizes[oy], ym),
+                            pattern,
+                            flip,
+                            use_mrt,
+                            content::GLHelper::SCALER_QUALITY_GOOD);
+            if (HasFailure()) {
+              return;
             }
           }
         }
@@ -1832,6 +1844,17 @@ TEST_F(GLHelperPixelTest, YUVReadbackTest) {
     }
   }
 }
+
+// First argument is intentionally empty.
+INSTANTIATE_TEST_CASE_P(
+    ,
+    GLHelperPixelYuvReadback,
+    ::testing::Combine(
+         ::testing::Bool(),
+         ::testing::Bool(),
+         ::testing::Range<unsigned int>(0, arraysize(kYUVReadBackSizes)),
+         ::testing::Range<unsigned int>(0, arraysize(kYUVReadBackSizes))));
+
 
 // Per pixel tests, all sizes are small so that we can print
 // out the generated bitmaps.

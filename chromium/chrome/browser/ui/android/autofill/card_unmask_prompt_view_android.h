@@ -9,6 +9,7 @@
 
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
 
@@ -23,15 +24,20 @@ class CardUnmaskPromptViewAndroid : public CardUnmaskPromptView {
   explicit CardUnmaskPromptViewAndroid(CardUnmaskPromptController* controller,
                                        content::WebContents* web_contents);
 
-  bool CheckUserInputValidity(JNIEnv* env, jobject obj, jstring response);
+  bool CheckUserInputValidity(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& response);
   void OnUserInput(JNIEnv* env,
-                   jobject obj,
-                   jstring cvc,
-                   jstring month,
-                   jstring year,
+                   const base::android::JavaParamRef<jobject>& obj,
+                   const base::android::JavaParamRef<jstring>& cvc,
+                   const base::android::JavaParamRef<jstring>& month,
+                   const base::android::JavaParamRef<jstring>& year,
                    jboolean should_store_locally);
-  void OnNewCardLinkClicked(JNIEnv* env, jobject obj);
-  void PromptDismissed(JNIEnv* env, jobject obj);
+  void OnNewCardLinkClicked(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>& obj);
+  void PromptDismissed(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj);
 
   // CardUnmaskPromptView implementation.
   void Show() override;

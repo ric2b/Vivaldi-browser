@@ -15,7 +15,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.PopupMenu;
 
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 
@@ -31,6 +30,7 @@ public class AppMenuHandler {
     private Menu mMenu;
     private final ArrayList<AppMenuObserver> mObservers;
     private final int mMenuResourceId;
+    private final View mHardwareButtonMenuAnchor;
 
     private final AppMenuPropertiesDelegate mDelegate;
     private final Activity mActivity;
@@ -48,6 +48,9 @@ public class AppMenuHandler {
         mDelegate = delegate;
         mObservers = new ArrayList<AppMenuObserver>();
         mMenuResourceId = menuResourceId;
+        mHardwareButtonMenuAnchor = activity.findViewById(R.id.menu_anchor_stub);
+        assert mHardwareButtonMenuAnchor != null
+                : "Using AppMenu requires to have menu_anchor_stub view";
     }
 
     /**
@@ -63,21 +66,35 @@ public class AppMenuHandler {
 
     /**
      * Show the app menu.
-     * @param anchorView         Anchor view (usually a menu button) to be used for the popup.
-     * @param isByHardwareButton True if hardware button triggered it. (oppose to software
-     *                           button)
+     * @param anchorView         Anchor view (usually a menu button) to be used for the popup, if
+     *                           null is passed then hardware menu button anchor will be used.
      * @param startDragging      Whether dragging is started. For example, if the app menu is
      *                           showed by tapping on a button, this should be false. If it is
      *                           showed by start dragging down on the menu button, this should
-     *                           be true. Note that if isByHardwareButton is true, this must
+     *                           be true. Note that if anchorView is null, this must
      *                           be false since we no longer support hardware menu button
      *                           dragging.
      * @return True, if the menu is shown, false, if menu is not shown, example reasons:
      *         the menu is not yet available to be shown, or the menu is already showing.
      */
-    public boolean showAppMenu(View anchorView, boolean isByHardwareButton, boolean startDragging) {
-        assert !(isByHardwareButton && startDragging);
+    public boolean showAppMenu(View anchorView, boolean startDragging) {
         if (!mDelegate.shouldShowAppMenu() || isAppMenuShowing()) return false;
+        boolean isByPermanentButton = false;
+
+        if (anchorView == null) {
+            // This fixes the bug where the bottom of the menu starts at the top of
+            // the keyboard, instead of overlapping the keyboard as it should.
+            int displayHeight = mActivity.getResources().getDisplayMetrics().heightPixels;
+            Rect rect = new Rect();
+            mActivity.getWindow().getDecorView().getWindowVisibleDisplayFrame(rect);
+            int statusBarHeight = rect.top;
+            mHardwareButtonMenuAnchor.setY((displayHeight - statusBarHeight));
+
+            anchorView = mHardwareButtonMenuAnchor;
+            isByPermanentButton = true;
+        }
+
+        assert !(isByPermanentButton && startDragging);
 
         if (mMenu == null) {
             // Use a PopupMenu to create the Menu object. Note this is not the same as the
@@ -116,7 +133,7 @@ public class AppMenuHandler {
         int rotation = mActivity.getWindowManager().getDefaultDisplay().getRotation();
         Point pt = new Point();
         mActivity.getWindowManager().getDefaultDisplay().getSize(pt);
-        mAppMenu.show(wrapper, anchorView, isByHardwareButton,
+        mAppMenu.show(wrapper, anchorView, isByPermanentButton,
                 rotation, appRect, pt.y, mDelegate.getFooterResourceId());
         mAppMenuDragHelper.onShow(startDragging);
         RecordUserAction.record("MobileMenuShow");
@@ -137,8 +154,7 @@ public class AppMenuHandler {
     /**
      * @return The App Menu that the menu handler is interacting with.
      */
-    @VisibleForTesting
-    public AppMenu getAppMenuForTest() {
+    public AppMenu getAppMenu() {
         return mAppMenu;
     }
 

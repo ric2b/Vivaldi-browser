@@ -5,12 +5,13 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_TASK_QUEUE_H_
 #define SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_TASK_QUEUE_H_
 
+#include <stddef.h>
 #include <deque>
 #include <set>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -234,7 +235,7 @@ template <typename T>
 void TaskQueue<T>::SetTimerForTest(scoped_ptr<base::Timer> timer) {
   DCHECK(CalledOnValidThread());
   DCHECK(timer.get());
-  backoff_timer_ = timer.Pass();
+  backoff_timer_ = std::move(timer);
 }
 
 template <typename T>
@@ -280,4 +281,4 @@ bool TaskQueue<T>::ShouldDispatch() {
 
 }  // namespace syncer
 
-#endif  //  SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_TASK_QUEUE_H_
+#endif  // SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_TASK_QUEUE_H_

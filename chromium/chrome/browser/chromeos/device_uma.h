@@ -5,10 +5,12 @@
 #ifndef CHROME_BROWSER_CHROMEOS_DEVICE_UMA_H_
 #define CHROME_BROWSER_CHROMEOS_DEVICE_UMA_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "ui/events/platform/platform_event_observer.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 namespace chromeos {
 
@@ -22,7 +24,7 @@ class DeviceUMA : public ui::PlatformEventObserver {
   void Stop();
 
  private:
-  friend struct DefaultSingletonTraits<DeviceUMA>;
+  friend struct base::DefaultSingletonTraits<DeviceUMA>;
 
   DeviceUMA();
   ~DeviceUMA() override;

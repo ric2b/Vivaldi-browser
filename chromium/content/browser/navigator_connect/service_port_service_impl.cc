@@ -4,6 +4,8 @@
 
 #include "content/browser/navigator_connect/service_port_service_impl.h"
 
+#include <utility>
+
 #include "content/browser/message_port_message_filter.h"
 #include "content/browser/message_port_service.h"
 #include "content/browser/navigator_connect/navigator_connect_context_impl.h"
@@ -52,7 +54,7 @@ void ServicePortServiceImpl::PostMessageToClient(
   std::vector<int> new_routing_ids;
   message_port_message_filter_->UpdateMessagePortsWithNewRoutes(
       sent_message_ports, &new_routing_ids);
-  client_->PostMessage(
+  client_->PostMessageToPort(
       port_id, mojo::String::From(message.message_as_string),
       mojo::Array<MojoTransferredMessagePortPtr>::From(sent_message_ports),
       mojo::Array<int32_t>::From(new_routing_ids));
@@ -65,14 +67,14 @@ void ServicePortServiceImpl::CreateOnIOThread(
     mojo::InterfaceRequest<ServicePortService> request) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   new ServicePortServiceImpl(navigator_connect_context,
-                             message_port_message_filter, request.Pass());
+                             message_port_message_filter, std::move(request));
 }
 
 ServicePortServiceImpl::ServicePortServiceImpl(
     const scoped_refptr<NavigatorConnectContextImpl>& navigator_connect_context,
     const scoped_refptr<MessagePortMessageFilter>& message_port_message_filter,
     mojo::InterfaceRequest<ServicePortService> request)
-    : binding_(this, request.Pass()),
+    : binding_(this, std::move(request)),
       navigator_connect_context_(navigator_connect_context),
       message_port_message_filter_(message_port_message_filter),
       weak_ptr_factory_(this) {
@@ -82,7 +84,7 @@ ServicePortServiceImpl::ServicePortServiceImpl(
 void ServicePortServiceImpl::SetClient(ServicePortServiceClientPtr client) {
   DCHECK(!client_.get());
   // TODO(mek): Set ErrorHandler to listen for errors.
-  client_ = client.Pass();
+  client_ = std::move(client);
 }
 
 void ServicePortServiceImpl::Connect(const mojo::String& target_url,
@@ -94,7 +96,7 @@ void ServicePortServiceImpl::Connect(const mojo::String& target_url,
                  weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
-void ServicePortServiceImpl::PostMessage(
+void ServicePortServiceImpl::PostMessageToPort(
     int32_t port_id,
     const mojo::String& message,
     mojo::Array<MojoTransferredMessagePortPtr> ports) {
@@ -110,10 +112,9 @@ void ServicePortServiceImpl::PostMessage(
     mps->QueueMessages(port.id);
   }
 
-  // Second, pass of the actual to MessagePortService now ServicePort instances
-  // are still backed by MessagePort.
-  mps->PostMessage(port_id, MessagePortMessage(message.To<base::string16>()),
-                   transferred_ports);
+  navigator_connect_context_->PostMessage(
+      port_id, MessagePortMessage(message.To<base::string16>()),
+      transferred_ports);
 }
 
 void ServicePortServiceImpl::ClosePort(int32_t port_id) {

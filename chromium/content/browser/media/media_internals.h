@@ -13,6 +13,7 @@
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/synchronization/lock.h"
 #include "base/values.h"
@@ -21,7 +22,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "media/audio/audio_logging.h"
 #include "media/base/media_log.h"
-#include "media/video/capture/video_capture_device_info.h"
+#include "media/capture/video/video_capture_device_info.h"
 
 namespace media {
 class AudioParameters;

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -9,6 +11,8 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/webrtc_audio_private/webrtc_audio_private_api.h"
 #include "chrome/browser/extensions/component_loader.h"
@@ -116,7 +120,7 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
     scoped_ptr<base::Value> result(
         RunFunctionAndReturnSingleResult(function.get(), "[]", browser()));
     result->GetAsList(sink_list);
-    return result.Pass();
+    return result;
   }
 
   // Synchronously (from the calling thread's point of view) runs the
@@ -266,6 +270,12 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, SetActiveSinkNoMediaStream) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetAndSetWithMediaStream) {
+  // Disabled on Win 7. https://crbug.com/500432.
+#if defined(OS_WIN)
+  if (base::win::GetVersion() == base::win::VERSION_WIN7)
+    return;
+#endif
+
   // First retrieve the list of all sinks, so that we can run a test
   // where we set the active sink to each of the different available
   // sinks in turn.
@@ -357,7 +367,14 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetAssociatedSink) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, TriggerEvent) {
+// Times out frequently on Windows, CrOS: http://crbug.com/517112
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#define MAYBE_TriggerEvent DISABLED_TriggerEvent
+#else
+#define MAYBE_TriggerEvent TriggerEvent
+#endif
+
+IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, MAYBE_TriggerEvent) {
   WebrtcAudioPrivateEventService* service =
       WebrtcAudioPrivateEventService::GetFactoryInstance()->Get(profile());
 

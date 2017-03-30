@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/commands/command_service.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/lazy_instance.h"
@@ -288,9 +289,8 @@ bool CommandService::AddKeybindingPref(
   scoped_ptr<base::DictionaryValue> suggested_key_prefs(
       new base::DictionaryValue);
   suggested_key_prefs->Set(command_name, command_keys.release());
-  MergeSuggestedKeyPrefs(extension_id,
-                         ExtensionPrefs::Get(profile_),
-                         suggested_key_prefs.Pass());
+  MergeSuggestedKeyPrefs(extension_id, ExtensionPrefs::Get(profile_),
+                         std::move(suggested_key_prefs));
 
   // Fetch the newly-updated command, and notify the observers.
   FOR_EACH_OBSERVER(
@@ -315,7 +315,6 @@ void CommandService::OnExtensionWillBeInstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     bool is_update,
-    bool from_ephemeral,
     const std::string& old_name) {
   UpdateKeybindings(extension);
 }
@@ -389,12 +388,12 @@ Command CommandService::FindCommandByName(const std::string& extension_id,
     bool global = false;
     item->GetBoolean(kGlobal, &global);
 
-    std::vector<std::string> tokens;
-    base::SplitString(shortcut, ':', &tokens);
+    std::vector<base::StringPiece> tokens = base::SplitStringPiece(
+        shortcut, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     CHECK(tokens.size() >= 2);
-    shortcut = tokens[1];
 
-    return Command(command_name, base::string16(), shortcut, global);
+    return Command(command_name, base::string16(), tokens[1].as_string(),
+           global);
   }
 
   return Command();
@@ -676,9 +675,8 @@ void CommandService::UpdateExtensionSuggestedCommandPrefs(
   }
 
   // Merge into current prefs, if present.
-  MergeSuggestedKeyPrefs(extension->id(),
-                         ExtensionPrefs::Get(profile_),
-                         suggested_key_prefs.Pass());
+  MergeSuggestedKeyPrefs(extension->id(), ExtensionPrefs::Get(profile_),
+                         std::move(suggested_key_prefs));
 }
 
 void CommandService::RemoveDefunctExtensionSuggestedCommandPrefs(

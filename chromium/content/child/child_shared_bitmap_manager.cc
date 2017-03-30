@@ -4,9 +4,13 @@
 
 #include "content/child/child_shared_bitmap_manager.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/debug/alias.h"
 #include "base/process/memory.h"
 #include "base/process/process_metrics.h"
+#include "build/build_config.h"
 #include "content/child/child_thread_impl.h"
 #include "content/common/child_process_messages.h"
 #include "ui/gfx/geometry/size.h"
@@ -20,7 +24,7 @@ class ChildSharedBitmap : public SharedMemoryBitmap {
   ChildSharedBitmap(scoped_refptr<ThreadSafeSender> sender,
                     base::SharedMemory* shared_memory,
                     const cc::SharedBitmapId& id)
-      : SharedMemoryBitmap(static_cast<uint8*>(shared_memory->memory()),
+      : SharedMemoryBitmap(static_cast<uint8_t*>(shared_memory->memory()),
                            id,
                            shared_memory),
         sender_(sender) {}
@@ -29,7 +33,7 @@ class ChildSharedBitmap : public SharedMemoryBitmap {
                     scoped_ptr<base::SharedMemory> shared_memory_holder,
                     const cc::SharedBitmapId& id)
       : ChildSharedBitmap(sender, shared_memory_holder.get(), id) {
-    shared_memory_holder_ = shared_memory_holder.Pass();
+    shared_memory_holder_ = std::move(shared_memory_holder);
   }
 
   ~ChildSharedBitmap() override {
@@ -67,11 +71,10 @@ void CollectMemoryUsageAndDie(const gfx::Size& size, size_t alloc_size) {
 
 }  // namespace
 
-SharedMemoryBitmap::SharedMemoryBitmap(uint8* pixels,
+SharedMemoryBitmap::SharedMemoryBitmap(uint8_t* pixels,
                                        const cc::SharedBitmapId& id,
                                        base::SharedMemory* shared_memory)
-    : SharedBitmap(pixels, id), shared_memory_(shared_memory) {
-}
+    : SharedBitmap(pixels, id), shared_memory_(shared_memory) {}
 
 ChildSharedBitmapManager::ChildSharedBitmapManager(
     scoped_refptr<ThreadSafeSender> sender)
@@ -88,7 +91,7 @@ scoped_ptr<cc::SharedBitmap> ChildSharedBitmapManager::AllocateSharedBitmap(
   if (bitmap)
     bitmap->shared_memory()->Close();
 #endif
-  return bitmap.Pass();
+  return std::move(bitmap);
 }
 
 scoped_ptr<SharedMemoryBitmap>
@@ -120,7 +123,7 @@ ChildSharedBitmapManager::AllocateSharedMemoryBitmap(const gfx::Size& size) {
   sender_->Send(new ChildProcessHostMsg_AllocatedSharedBitmap(
       memory_size, handle_to_send, id));
 #endif
-  return make_scoped_ptr(new ChildSharedBitmap(sender_, memory.Pass(), id));
+  return make_scoped_ptr(new ChildSharedBitmap(sender_, std::move(memory), id));
 }
 
 scoped_ptr<cc::SharedBitmap> ChildSharedBitmapManager::GetSharedBitmapFromId(

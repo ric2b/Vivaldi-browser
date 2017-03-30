@@ -5,6 +5,10 @@
 #ifndef CONTENT_PUBLIC_TEST_TEST_SYNCHRONOUS_COMPOSITOR_ANDROID_H_
 #define CONTENT_PUBLIC_TEST_TEST_SYNCHRONOUS_COMPOSITOR_ANDROID_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/android/synchronous_compositor_client.h"
 
@@ -19,21 +23,25 @@ class CONTENT_EXPORT TestSynchronousCompositor : public SynchronousCompositor {
 
   // SynchronousCompositor overrides.
   scoped_ptr<cc::CompositorFrame> DemandDrawHw(
-      gfx::Size surface_size,
+      const gfx::Size& surface_size,
       const gfx::Transform& transform,
-      gfx::Rect viewport,
-      gfx::Rect clip,
-      gfx::Rect viewport_rect_for_tile_priority,
+      const gfx::Rect& viewport,
+      const gfx::Rect& clip,
+      const gfx::Rect& viewport_rect_for_tile_priority,
       const gfx::Transform& transform_for_tile_priority) override;
   void ReturnResources(const cc::CompositorFrameAck& frame_ack) override {}
   bool DemandDrawSw(SkCanvas* canvas) override;
   void SetMemoryPolicy(size_t bytes_limit) override {}
-  void DidChangeRootLayerScrollOffset() override {}
+  void DidChangeRootLayerScrollOffset(
+      const gfx::ScrollOffset& root_offset) override {}
   void SetIsActive(bool is_active) override {}
+  void OnComputeScroll(base::TimeTicks animate_time) override {}
+
+  void SetHardwareFrame(scoped_ptr<cc::CompositorFrame> frame);
 
  private:
   SynchronousCompositorClient* client_;
-  bool hardware_initialized_;
+  scoped_ptr<cc::CompositorFrame> hardware_frame_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSynchronousCompositor);
 };

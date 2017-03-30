@@ -7,7 +7,11 @@
 #include "chrome/installer/setup/setup_util.h"
 
 #include <windows.h>
-#include <stdint.h>
+#include <stddef.h>
+
+#include <algorithm>
+#include <iterator>
+#include <set>
 
 #include "base/command_line.h"
 #include "base/cpu.h"
@@ -15,29 +19,19 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/process/kill.h"
-#include "base/process/launch.h"
-#include "base/process/process_handle.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_split.h"
+#include "base/macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "base/win/registry.h"
-#include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "chrome/installer/setup/setup_constants.h"
-#include "chrome/installer/setup/update_active_setup_version_work_item.h"
 #include "chrome/installer/util/app_registration_data.h"
-#include "chrome/installer/util/app_registration_data.h"
-#include "chrome/installer/util/copy_tree_work_item.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/installer_state.h"
-#include "chrome/installer/util/master_preferences.h"
 #include "chrome/installer/util/util_constants.h"
-#include "chrome/installer/util/work_item.h"
 #include "courgette/courgette.h"
 #include "courgette/third_party/bsdiff.h"
 #include "third_party/bspatch/mbspatch.h"
@@ -45,53 +39,6 @@
 namespace installer {
 
 namespace {
-
-// Launches |setup_exe| with |command_line|, save --install-archive and its
-// value if present. Returns false if the process failed to launch. Otherwise,
-// waits indefinitely for it to exit and populates |exit_code| as expected. On
-// the off chance that waiting itself fails, |exit_code| is set to
-// WAIT_FOR_EXISTING_FAILED.
-bool LaunchAndWaitForExistingInstall(const base::FilePath& setup_exe,
-                                     const base::CommandLine& command_line,
-                                     int* exit_code) {
-  DCHECK(exit_code);
-  base::CommandLine new_cl(setup_exe);
-
-  // Copy over all switches but --install-archive.
-  base::CommandLine::SwitchMap switches(command_line.GetSwitches());
-  switches.erase(switches::kInstallArchive);
-  for (base::CommandLine::SwitchMap::const_iterator i = switches.begin();
-       i != switches.end(); ++i) {
-    if (i->second.empty())
-      new_cl.AppendSwitch(i->first);
-    else
-      new_cl.AppendSwitchNative(i->first, i->second);
-  }
-
-  // Copy over all arguments.
-  base::CommandLine::StringVector args(command_line.GetArgs());
-  for (base::CommandLine::StringVector::const_iterator i = args.begin();
-       i != args.end(); ++i) {
-    new_cl.AppendArgNative(*i);
-  }
-
-  // Launch the process and wait for it to exit.
-  VLOG(1) << "Launching existing installer with command: "
-          << new_cl.GetCommandLineString();
-  base::Process process = base::LaunchProcess(new_cl, base::LaunchOptions());
-  if (!process.IsValid()) {
-    PLOG(ERROR) << "Failed to launch existing installer with command: "
-                << new_cl.GetCommandLineString();
-    return false;
-  }
-  if (!process.WaitForExit(exit_code)) {
-    PLOG(DFATAL) << "Failed to get exit code from existing installer";
-    *exit_code = WAIT_FOR_EXISTING_FAILED;
-  } else {
-    VLOG(1) << "Existing installer returned exit code " << *exit_code;
-  }
-  return true;
-}
 
 // Returns true if product |type| cam be meaningfully installed without the
 // --multi-install flag.
@@ -104,104 +51,6 @@ bool SupportsSingleInstall(BrowserDistribution::Type type) {
 }
 
 }  // namespace
-
-bool UpdateLastOSUpgradeHandledByActiveSetup(BrowserDistribution* dist) {
-  // FIRST: Find the value of the latest OS upgrade registered in the Active
-  // Setup version (bumped on every major OS upgrade), defaults to 0 if no OS
-  // upgrade was ever encountered by this install.
-  DWORD latest_os_upgrade = 0;
-
-  {
-    const base::string16 active_setup_key_path(
-        InstallUtil::GetActiveSetupPath(dist));
-
-    base::win::RegKey active_setup_key;
-    if (active_setup_key.Open(HKEY_LOCAL_MACHINE, active_setup_key_path.c_str(),
-                              KEY_QUERY_VALUE) == ERROR_SUCCESS) {
-      base::string16 existing_version;
-      if (active_setup_key.ReadValue(L"Version",
-                                     &existing_version) == ERROR_SUCCESS) {
-        std::vector<base::string16> version_components =
-            base::SplitString(existing_version, L",", base::TRIM_WHITESPACE,
-                              base::SPLIT_WANT_NONEMPTY);
-        uint32_t latest_os_upgrade_uint = 0;
-        if (version_components.size() == 4U &&
-            base::StringToUint(
-                version_components[UpdateActiveSetupVersionWorkItem::
-                                       VersionComponent::OS_UPGRADES],
-                &latest_os_upgrade_uint)) {
-          latest_os_upgrade = static_cast<DWORD>(latest_os_upgrade_uint);
-        } else {
-          LOG(ERROR) << "Failed to parse OS_UPGRADES component of "
-                     << existing_version;
-        }
-      }
-    }
-  }
-
-  // Whether the read failed or the existing value is 0, do not proceed.
-  if (latest_os_upgrade == 0U)
-    return false;
-
-  static const wchar_t kLastOSUpgradeHandledRegName[] = L"LastOSUpgradeHandled";
-
-  // SECOND: Find out the value of the last OS upgrade handled, defaults to 0 if
-  // none was ever handled.
-  DWORD last_os_upgrade_handled = 0;
-
-  base::string16 last_upgrade_handled_key_path =
-      dist->GetAppRegistrationData().GetStateMediumKey();
-  last_upgrade_handled_key_path.push_back(L'\\');
-  last_upgrade_handled_key_path.append(kLastOSUpgradeHandledRegName);
-
-  base::string16 user_specific_value;
-  // This should never fail. If it does, the beacon will be written in the key's
-  // default value, which is okay since the majority case is likely a machine
-  // with a single user.
-  if (!base::win::GetUserSidString(&user_specific_value))
-    NOTREACHED();
-
-  base::win::RegKey last_upgrade_key;
-  if (last_upgrade_key.Create(
-          HKEY_LOCAL_MACHINE, last_upgrade_handled_key_path.c_str(),
-          KEY_WOW64_32KEY | KEY_QUERY_VALUE | KEY_SET_VALUE) != ERROR_SUCCESS) {
-    LOG(ERROR) << "Failed to create LastOSUpgradeHandled value @ "
-               << last_upgrade_handled_key_path;
-    // If the key is not read/writeable, do not proceed as this could result in
-    // handling an OS upgrade twice.
-    return false;
-  }
-
-  // It's okay for this read to fail (i.e. there is an OS upgrade available but
-  // this user never handled one yet).
-  last_upgrade_key.ReadValueDW(user_specific_value.c_str(),
-                               &last_os_upgrade_handled);
-
-  // THIRD: Figure out whether the latest OS upgrade has been handled already.
-
-  if (last_os_upgrade_handled >= latest_os_upgrade) {
-    LOG_IF(ERROR, last_os_upgrade_handled > latest_os_upgrade)
-        << "Last OS upgrade handled is somehow ahead of the latest OS upgrade?";
-    VLOG_IF(1, last_os_upgrade_handled == latest_os_upgrade)
-        << "Latest OS upgrade already handled.";
-    return false;
-  }
-
-  // At this point |last_os_upgrade_handled < latest_os_upgrade| so,
-  // FOURTH: store the fact that the latest OS upgrade has been handled and
-  // return true for the caller to act accordingly.
-
-  if (last_upgrade_key.WriteValue(user_specific_value.c_str(),
-                                  latest_os_upgrade) != ERROR_SUCCESS) {
-    LOG(ERROR) << "Failed to save latest_os_upgrade value ("
-               << latest_os_upgrade << ") to " << last_upgrade_handled_key_path;
-    // Do not proceed if the write fails as this could otherwise result in
-    // handling this OS upgrade multiple times.
-    return false;
-  }
-
-  return true;
-}
 
 int CourgettePatchFiles(const base::FilePath& src,
                         const base::FilePath& patch,
@@ -310,7 +159,7 @@ base::FilePath FindArchiveToPatch(const InstallationState& original_state,
 }
 
 bool DeleteFileFromTempProcess(const base::FilePath& path,
-                               uint32 delay_before_delete_ms) {
+                               uint32_t delay_before_delete_ms) {
   static const wchar_t kRunDll32Path[] =
       L"%SystemRoot%\\System32\\rundll32.exe";
   wchar_t rundll32[MAX_PATH];
@@ -331,7 +180,8 @@ bool DeleteFileFromTempProcess(const base::FilePath& path,
     // This runs before the main routine of the process runs, so it doesn't
     // matter much which executable we choose except that we don't want to
     // use e.g. a console app that causes a window to be created.
-    size = (path.value().length() + 1) * sizeof(path.value()[0]);
+    size = static_cast<DWORD>(
+        (path.value().length() + 1) * sizeof(path.value()[0]));
     void* mem = ::VirtualAllocEx(pi.hProcess, NULL, size, MEM_COMMIT,
                                  PAGE_READWRITE);
     if (mem) {
@@ -365,65 +215,6 @@ bool DeleteFileFromTempProcess(const base::FilePath& path,
   }
 
   return ok != FALSE;
-}
-
-bool GetExistingHigherInstaller(
-    const InstallationState& original_state,
-    bool system_install,
-    const Version& installer_version,
-    base::FilePath* setup_exe) {
-  DCHECK(setup_exe);
-  bool trying_single_browser = false;
-  const ProductState* existing_state =
-      original_state.GetProductState(system_install,
-                                     BrowserDistribution::CHROME_BINARIES);
-  if (!existing_state) {
-    // The binaries aren't installed, but perhaps a single-install Chrome is.
-    trying_single_browser = true;
-    existing_state =
-        original_state.GetProductState(system_install,
-                                       BrowserDistribution::CHROME_BROWSER);
-  }
-
-  if (!existing_state ||
-      existing_state->version().CompareTo(installer_version) <= 0) {
-    return false;
-  }
-
-  *setup_exe = existing_state->GetSetupPath();
-
-  VLOG_IF(1, !setup_exe->empty()) << "Found a higher version of "
-      << (trying_single_browser ? "single-install Chrome."
-          : "multi-install Chrome binaries.");
-
-  return !setup_exe->empty();
-}
-
-bool DeferToExistingInstall(const base::FilePath& setup_exe,
-                            const base::CommandLine& command_line,
-                            const InstallerState& installer_state,
-                            const base::FilePath& temp_path,
-                            InstallStatus* install_status) {
-  // Copy a master_preferences file if there is one.
-  base::FilePath prefs_source_path(command_line.GetSwitchValueNative(
-      switches::kInstallerData));
-  base::FilePath prefs_dest_path(installer_state.target_path().AppendASCII(
-      kDefaultMasterPrefs));
-  scoped_ptr<WorkItem> copy_prefs(WorkItem::CreateCopyTreeWorkItem(
-      prefs_source_path, prefs_dest_path, temp_path, WorkItem::ALWAYS,
-      base::FilePath()));
-  // There's nothing to rollback if the copy fails, so punt if so.
-  if (!copy_prefs->Do())
-    copy_prefs.reset();
-
-  int exit_code = 0;
-  if (!LaunchAndWaitForExistingInstall(setup_exe, command_line, &exit_code)) {
-    if (copy_prefs)
-      copy_prefs->Rollback();
-    return false;
-  }
-  *install_status = static_cast<InstallStatus>(exit_code);
-  return true;
 }
 
 // There are 4 disjoint cases => return values {false,true}:
@@ -583,6 +374,173 @@ base::string16 GetRegistrationDataCommandKey(
       .append(1, base::FilePath::kSeparators[0])
       .append(name);
   return cmd_key;
+}
+
+void DeleteRegistryKeyPartial(
+    HKEY root,
+    const base::string16& path,
+    const std::vector<base::string16>& keys_to_preserve) {
+  // Downcase the list of keys to preserve (all must be ASCII strings).
+  std::set<base::string16> lowered_keys_to_preserve;
+  std::transform(
+      keys_to_preserve.begin(), keys_to_preserve.end(),
+      std::inserter(lowered_keys_to_preserve, lowered_keys_to_preserve.begin()),
+      [](const base::string16& str) {
+        DCHECK(!str.empty());
+        DCHECK(base::IsStringASCII(str));
+        return base::ToLowerASCII(str);
+      });
+  base::win::RegKey key;
+  LONG result = key.Open(root, path.c_str(), (KEY_ENUMERATE_SUB_KEYS |
+                                              KEY_QUERY_VALUE | KEY_SET_VALUE));
+  if (result != ERROR_SUCCESS) {
+    LOG_IF(ERROR, result != ERROR_FILE_NOT_FOUND) << "Failed to open " << path
+                                                  << "; result = " << result;
+    return;
+  }
+
+  // Repeatedly iterate over all subkeys deleting those that should not be
+  // preserved until only those remain. Multiple passes are needed since
+  // deleting one key may change the enumeration order of all remaining keys.
+
+  // Subkeys or values to be skipped on subsequent passes.
+  std::set<base::string16> to_skip;
+  DWORD index = 0;
+  const size_t kMaxKeyNameLength = 256;  // MSDN says 255; +1 for terminator.
+  base::string16 name(kMaxKeyNameLength, base::char16());
+  bool did_delete = false;  // True if at least one item was deleted.
+  while (true) {
+    DWORD name_length = base::saturated_cast<DWORD>(name.capacity());
+    name.resize(name_length);
+    result = ::RegEnumKeyEx(key.Handle(), index, &name[0], &name_length,
+                            nullptr, nullptr, nullptr, nullptr);
+    if (result == ERROR_MORE_DATA) {
+      // Unexpected, but perhaps the max key name length was raised. MSDN
+      // doesn't clearly say that name_length will contain the necessary
+      // length in this case, so double the buffer and try again.
+      name.reserve(name.capacity() * 2);
+      continue;
+    }
+    if (result == ERROR_NO_MORE_ITEMS) {
+      if (!did_delete)
+        break;  // All subkeys were deleted. The job is done.
+      // Otherwise, loop again.
+      did_delete = false;
+      index = 0;
+      continue;
+    }
+    if (result != ERROR_SUCCESS)
+      break;
+    // Shrink the string to the actual length of the name.
+    name.resize(name_length);
+
+    // Skip over this key if it couldn't be deleted on a previous iteration.
+    if (to_skip.count(name)) {
+      ++index;
+      continue;
+    }
+
+    // Skip over this key if it is one of the keys to preserve.
+    if (base::IsStringASCII(name) &&
+        lowered_keys_to_preserve.count(base::ToLowerASCII(name))) {
+      // Add the true name of the key to the list of keys to skip for subsequent
+      // iterations.
+      to_skip.insert(name);
+      ++index;
+      continue;
+    }
+
+    // Delete this key.
+    result = key.DeleteKey(name.c_str());
+    if (result != ERROR_SUCCESS) {
+      LOG(ERROR) << "Failed to delete subkey " << name << " under path "
+                 << path;
+      // Skip over this key on subsequent iterations.
+      to_skip.insert(name);
+      ++index;
+      continue;
+    }
+    did_delete = true;
+  }
+
+  // Delete the key if it no longer has any subkeys.
+  if (to_skip.empty()) {
+    result = key.DeleteEmptyKey(L"");
+    LOG_IF(ERROR, result != ERROR_SUCCESS) << "Failed to delete empty key "
+                                           << path << "; result: " << result;
+    return;
+  }
+
+  // Delete all values since subkeys are being preserved.
+  to_skip.clear();
+  did_delete = false;
+  index = 0;
+  while (true) {
+    DWORD name_length = base::saturated_cast<int16_t>(name.capacity());
+    name.resize(name_length);
+    result = ::RegEnumValue(key.Handle(), index, &name[0], &name_length,
+                            nullptr, nullptr, nullptr, nullptr);
+    if (result == ERROR_MORE_DATA) {
+      if (name_length <
+          static_cast<DWORD>(std::numeric_limits<int16_t>::max())) {
+        // Double the space to hold the value name and try again.
+        name.reserve(name.capacity() * 2);
+        continue;
+      }
+      // Otherwise, the max has been exceeded. Nothing more to be done.
+      break;
+    }
+    if (result == ERROR_NO_MORE_ITEMS) {
+      if (!did_delete)
+        break;  // All values were deleted. The job is done.
+      // Otherwise, loop again.
+      did_delete = false;
+      index = 0;
+      continue;
+    }
+    if (result != ERROR_SUCCESS)
+      break;
+    // Shrink the string to the actual length of the name.
+    name.resize(name_length);
+
+    // Skip over this value if it couldn't be deleted on a previous iteration.
+    if (to_skip.count(name)) {
+      ++index;
+      continue;
+    }
+
+    // Delete this value.
+    result = key.DeleteValue(name.c_str());
+    if (result != ERROR_SUCCESS) {
+      LOG(ERROR) << "Failed to delete value " << name << " in key " << path;
+      // Skip over this value on subsequent iterations.
+      to_skip.insert(name);
+      ++index;
+      continue;
+    }
+    did_delete = true;
+  }
+}
+
+base::string16 GuidToSquid(const base::string16& guid) {
+  base::string16 squid;
+  squid.reserve(32);
+  auto input = guid.begin();
+  auto output = std::back_inserter(squid);
+
+  // Reverse-copy relevant characters, skipping separators.
+  std::reverse_copy(input + 0, input + 8, output);
+  std::reverse_copy(input + 9, input + 13, output);
+  std::reverse_copy(input + 14, input + 18, output);
+  std::reverse_copy(input + 19, input + 21, output);
+  std::reverse_copy(input + 21, input + 23, output);
+  std::reverse_copy(input + 24, input + 26, output);
+  std::reverse_copy(input + 26, input + 28, output);
+  std::reverse_copy(input + 28, input + 30, output);
+  std::reverse_copy(input + 30, input + 32, output);
+  std::reverse_copy(input + 32, input + 34, output);
+  std::reverse_copy(input + 34, input + 36, output);
+  return squid;
 }
 
 ScopedTokenPrivilege::ScopedTokenPrivilege(const wchar_t* privilege_name)

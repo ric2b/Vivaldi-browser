@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -89,7 +90,8 @@ void SendNativeCommandShift(int key_code) {
       event_source, kVK_Shift, true));
   ScopedCFTypeRef<CGEventRef> key_down(CGEventCreateKeyboardEvent(
       event_source, key_code, true));
-  CGEventSetFlags(key_down, kCGEventFlagMaskCommand | kCGEventFlagMaskShift);
+  CGEventSetFlags(key_down, static_cast<CGEventFlags>(kCGEventFlagMaskCommand |
+                                                      kCGEventFlagMaskShift));
 
   // Create the keyboard release events.
   ScopedCFTypeRef<CGEventRef> command_up(CGEventCreateKeyboardEvent(
@@ -98,7 +100,8 @@ void SendNativeCommandShift(int key_code) {
       event_source, kVK_Shift, false));
   ScopedCFTypeRef<CGEventRef> key_up(CGEventCreateKeyboardEvent(
       event_source, key_code, false));
-  CGEventSetFlags(key_up, kCGEventFlagMaskCommand | kCGEventFlagMaskShift);
+  CGEventSetFlags(key_up, static_cast<CGEventFlags>(kCGEventFlagMaskCommand |
+                                                    kCGEventFlagMaskShift));
 
   // Post all of the events.
   CGEventPost(event_tap_location, command_down);

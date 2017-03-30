@@ -4,10 +4,14 @@
 
 #include "content/browser/download/drag_download_file.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "content/browser/download/download_stats.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -68,8 +72,8 @@ class DragDownloadFile::DragDownloadFileUI : public DownloadItem::Observer {
     params->set_callback(base::Bind(&DragDownloadFileUI::OnDownloadStarted,
                                     weak_ptr_factory_.GetWeakPtr()));
     params->set_file_path(file_path);
-    params->set_file(file.Pass());  // Nulls file.
-    download_manager->DownloadUrl(params.Pass());
+    params->set_file(std::move(file));  // Nulls file.
+    download_manager->DownloadUrl(std::move(params));
   }
 
   void Cancel() {
@@ -159,7 +163,7 @@ DragDownloadFile::DragDownloadFile(const base::FilePath& file_path,
                                    const std::string& referrer_encoding,
                                    WebContents* web_contents)
     : file_path_(file_path),
-      file_(file.Pass()),
+      file_(std::move(file)),
       drag_message_loop_(base::MessageLoop::current()),
       state_(INITIALIZED),
       drag_ui_(NULL),

@@ -5,13 +5,14 @@
 #ifndef EXTENSIONS_BROWSER_API_CAST_CHANNEL_KEEP_ALIVE_DELEGATE_H_
 #define EXTENSIONS_BROWSER_API_CAST_CHANNEL_KEEP_ALIVE_DELEGATE_H_
 
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "extensions/browser/api/cast_channel/cast_transport.h"
 #include "extensions/common/api/cast_channel/cast_channel.pb.h"
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 
 class CastSocket;
@@ -110,7 +111,7 @@ class KeepAliveDelegate : public CastTransport::Delegate {
 };
 
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_CAST_CHANNEL_KEEP_ALIVE_DELEGATE_H_

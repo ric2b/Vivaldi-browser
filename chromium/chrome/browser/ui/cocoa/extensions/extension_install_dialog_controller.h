@@ -8,8 +8,10 @@
 #import <Cocoa/Cocoa.h>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_mac.h"
+#import "chrome/browser/ui/cocoa/extensions/extension_install_view_controller.h"
 
 namespace content {
 class PageNavigator;
@@ -25,18 +27,19 @@ class ExtensionInstallPromptShowParams;
 
 // Displays an extension install prompt as a tab modal dialog.
 class ExtensionInstallDialogController :
-    public ExtensionInstallPrompt::Delegate,
+    public ExtensionInstallViewDelegate,
     public ConstrainedWindowMacDelegate {
  public:
   ExtensionInstallDialogController(
       ExtensionInstallPromptShowParams* show_params,
-      ExtensionInstallPrompt::Delegate* delegate,
-      scoped_refptr<ExtensionInstallPrompt::Prompt> prompt);
+      const ExtensionInstallPrompt::DoneCallback& done_callback,
+      scoped_ptr<ExtensionInstallPrompt::Prompt> prompt);
   ~ExtensionInstallDialogController() override;
 
-  // ExtensionInstallPrompt::Delegate implementation.
-  void InstallUIProceed() override;
-  void InstallUIAbort(bool user_initiated) override;
+  // ExtensionInstallViewDelegate implementation.
+  void OnOkButtonClicked() override;
+  void OnCancelButtonClicked() override;
+  void OnStoreLinkClicked() override;
 
   // ConstrainedWindowMacDelegate implementation.
   void OnConstrainedWindowClosed(ConstrainedWindowMac* window) override;
@@ -49,10 +52,15 @@ class ExtensionInstallDialogController :
   }
 
  private:
-  ExtensionInstallPrompt::Delegate* delegate_;
+  void OnPromptButtonClicked(ExtensionInstallPrompt::Result result,
+                             const char* decision_event);
+
+  ExtensionInstallPrompt::DoneCallback done_callback_;
   base::scoped_nsobject<ExtensionInstallViewController> view_controller_;
   scoped_ptr<ConstrainedWindowMac> constrained_window_;
   scoped_ptr<extensions::ExperienceSamplingEvent> sampling_event_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionInstallDialogController);
 };
 
 #endif  // CHROME_BROWSER_UI_COCOA_EXTENSIONS_EXTENSION_INSTALL_DIALOG_CONTROLLER_H_

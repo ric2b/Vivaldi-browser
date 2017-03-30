@@ -4,29 +4,32 @@
 
 #include "chrome/browser/ui/toolbar/recent_tabs_sub_menu_model.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_restore.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
-#include "chrome/browser/sessions/tab_restore_service_delegate.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_live_tab_context.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/toolbar/wrench_menu_model.h"
+#include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/favicon_base/favicon_types.h"
-#include "components/sync_driver/glue/synced_session.h"
-#include "components/sync_driver/open_tabs_ui_delegate.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/sync_sessions/open_tabs_ui_delegate.h"
+#include "components/sync_sessions/synced_session.h"
 #include "content/public/browser/user_metrics.h"
 #include "grit/browser_resources.h"
 #include "grit/theme_resources.h"
@@ -34,6 +37,12 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
+
+#if !defined(OS_MACOSX)
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
+#endif
 
 #if defined(USE_ASH)
 #include "ash/accelerators/accelerator_table.h"
@@ -57,9 +66,9 @@ namespace {
 // GetIndexOfCommandId().
 // The range of all command ID's used in RecentTabsSubMenuModel, including the
 // "Recently closed" headers, must be between
-// |WrenchMenuModel::kMinRecentTabsCommandId| i.e. 1001 and 1200
-// (|WrenchMenuModel::kMaxRecentTabsCommandId|) inclusively.
-const int kFirstLocalTabCommandId = WrenchMenuModel::kMinRecentTabsCommandId;
+// |AppMenuModel::kMinRecentTabsCommandId| i.e. 1001 and 1200
+// (|AppMenuModel::kMaxRecentTabsCommandId|) inclusively.
+const int kFirstLocalTabCommandId = AppMenuModel::kMinRecentTabsCommandId;
 const int kFirstLocalWindowCommandId = 1031;
 const int kFirstOtherDevicesTabCommandId = 1051;
 const int kMinDeviceNameCommandId = 1100;
@@ -78,13 +87,6 @@ const int kHistorySeparatorIndex = 1;
 bool SortSessionsByRecency(const sync_driver::SyncedSession* s1,
                            const sync_driver::SyncedSession* s2) {
   return s1->modified_time > s2->modified_time;
-}
-
-// Comparator function for use with std::sort that will sort tabs by
-// descending timestamp (i.e., most recent first).
-bool SortTabsByRecency(const sessions::SessionTab* t1,
-                       const sessions::SessionTab* t2) {
-  return t1->timestamp > t2->timestamp;
 }
 
 // Returns true if the command id identifies a tab menu item.
@@ -126,6 +128,12 @@ int CommandIdToWindowVectorIndex(int command_id) {
   DCHECK(IsWindowModelCommandId(command_id));
   return command_id - kFirstLocalWindowCommandId;
 }
+
+#if !defined(OS_MACOSX)
+gfx::Image CreateFavicon(gfx::VectorIconId id) {
+  return gfx::Image(gfx::CreateVectorIcon(id, 16, gfx::kChromeIconGrey));
+}
+#endif
 
 }  // namespace
 
@@ -182,7 +190,7 @@ RecentTabsSubMenuModel::RecentTabsSubMenuModel(
   // Invoke asynchronous call to load tabs from local last session, which does
   // nothing if the tabs have already been loaded or they shouldn't be loaded.
   // TabRestoreServiceChanged() will be called after the tabs are loaded.
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
   if (service) {
     service->LoadTabsFromLastSession();
@@ -222,7 +230,7 @@ RecentTabsSubMenuModel::RecentTabsSubMenuModel(
 }
 
 RecentTabsSubMenuModel::~RecentTabsSubMenuModel() {
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
   if (service)
     service->RemoveObserver(this);
@@ -267,6 +275,8 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
   if (command_id == IDC_SHOW_HISTORY) {
     UMA_HISTOGRAM_ENUMERATION("WrenchMenu.RecentTabsSubMenu", SHOW_MORE,
                               LIMIT_RECENT_TAB_ACTION);
+    UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.ShowHistory",
+                               menu_opened_timer_.Elapsed());
     // We show all "other devices" on the history page.
     chrome::ExecuteCommandWithDisposition(browser_, IDC_SHOW_HISTORY,
         ui::DispositionFromEventFlags(event_flags));
@@ -281,10 +291,10 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
   if (disposition == CURRENT_TAB)  // Force to open a new foreground tab.
     disposition = NEW_FOREGROUND_TAB;
 
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
-  TabRestoreServiceDelegate* delegate =
-      TabRestoreServiceDelegate::FindDelegateForWebContents(
+  sessions::LiveTabContext* context =
+      BrowserLiveTabContext::FindContextForWebContents(
           browser_->tab_strip_model()->GetActiveWebContents());
   if (IsTabModelCommandId(command_id)) {
     TabNavigationItems* tab_items = NULL;
@@ -293,12 +303,12 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
     DCHECK(item.tab_id > -1 && item.url.is_valid());
 
     if (item.session_tag.empty()) {  // Restore tab of local session.
-      if (service && delegate) {
+      if (service && context) {
         content::RecordAction(
             base::UserMetricsAction("WrenchMenu_OpenRecentTabFromLocal"));
         UMA_HISTOGRAM_ENUMERATION("WrenchMenu.RecentTabsSubMenu",
                                   LOCAL_SESSION_TAB, LIMIT_RECENT_TAB_ACTION);
-        service->RestoreEntryById(delegate, item.tab_id,
+        service->RestoreEntryById(context, item.tab_id,
                                   browser_->host_desktop_type(), disposition);
       }
     } else {  // Restore tab of session from other devices.
@@ -320,7 +330,7 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
     }
   } else {
     DCHECK(IsWindowModelCommandId(command_id));
-    if (service && delegate) {
+    if (service && context) {
       int window_items_idx = CommandIdToWindowVectorIndex(command_id);
       DCHECK(window_items_idx >= 0 &&
              window_items_idx < static_cast<int>(local_window_items_.size()));
@@ -328,7 +338,7 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
           base::UserMetricsAction("WrenchMenu_OpenRecentWindow"));
       UMA_HISTOGRAM_ENUMERATION("WrenchMenu.RecentTabsSubMenu", RESTORE_WINDOW,
                                 LIMIT_RECENT_TAB_ACTION);
-      service->RestoreEntryById(delegate, local_window_items_[window_items_idx],
+      service->RestoreEntryById(context, local_window_items_[window_items_idx],
                                 browser_->host_desktop_type(), disposition);
     }
   }
@@ -405,7 +415,7 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
   // We're appending if building the entries for the first time i.e. invoked
   // from Constructor(), inserting when local entries change subsequently i.e.
   // invoked from TabRestoreServiceChanged().
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
 
   if (!service || service->entries().size() == 0) {
@@ -418,18 +428,23 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
     InsertItemWithStringIdAt(++last_local_model_index_,
                              kRecentlyClosedHeaderCommandId,
                              IDS_RECENTLY_CLOSED);
+#if defined(OS_MACOSX)
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     SetIcon(last_local_model_index_,
             rb.GetNativeImageNamed(IDR_RECENTLY_CLOSED_WINDOW));
+#else
+    SetIcon(last_local_model_index_, CreateFavicon(gfx::VectorIconId::TAB));
+#endif
 
     int added_count = 0;
-    TabRestoreService::Entries entries = service->entries();
-    for (TabRestoreService::Entries::const_iterator it = entries.begin();
+    sessions::TabRestoreService::Entries entries = service->entries();
+    for (sessions::TabRestoreService::Entries::const_iterator it =
+             entries.begin();
          it != entries.end() && added_count < kMaxLocalEntries; ++it) {
-      TabRestoreService::Entry* entry = *it;
-      if (entry->type == TabRestoreService::TAB) {
-        TabRestoreService::Tab* tab =
-            static_cast<TabRestoreService::Tab*>(entry);
+      sessions::TabRestoreService::Entry* entry = *it;
+      if (entry->type == sessions::TabRestoreService::TAB) {
+        sessions::TabRestoreService::Tab* tab =
+            static_cast<sessions::TabRestoreService::Tab*>(entry);
         const sessions::SerializedNavigationEntry& current_navigation =
             tab->navigations.at(tab->current_navigation_index);
         BuildLocalTabItem(
@@ -438,10 +453,10 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
             current_navigation.virtual_url(),
             ++last_local_model_index_);
       } else  {
-        DCHECK_EQ(entry->type, TabRestoreService::WINDOW);
+        DCHECK_EQ(entry->type, sessions::TabRestoreService::WINDOW);
         BuildLocalWindowItem(
-            entry->id,
-            static_cast<TabRestoreService::Window*>(entry)->tabs.size(),
+            entry->id, static_cast<sessions::TabRestoreService::Window*>(entry)
+                           ->tabs.size(),
             ++last_local_model_index_);
       }
       ++added_count;
@@ -474,36 +489,11 @@ void RecentTabsSubMenuModel::BuildTabsFromOtherDevices() {
     const sync_driver::SyncedSession* session = sessions[i];
     const std::string& session_tag = session->session_tag;
 
-    // Get windows of session.
-    std::vector<const sessions::SessionWindow*> windows;
-    if (!open_tabs->GetForeignSession(session_tag, &windows) ||
-        windows.empty()) {
-      continue;
-    }
-
-    // Collect tabs from all windows of session, pruning those that are not
-    // syncable or are NewTabPage, then sort them from most recent to least
-    // recent, independent of which window the tabs were from.
+    // Collect tabs from all windows of the session, ordered by recency.
     std::vector<const sessions::SessionTab*> tabs_in_session;
-    for (size_t j = 0; j < windows.size(); ++j) {
-      const sessions::SessionWindow* window = windows[j];
-      for (size_t t = 0; t < window->tabs.size(); ++t) {
-        const sessions::SessionTab* tab = window->tabs[t];
-        if (tab->navigations.empty())
-          continue;
-        const sessions::SerializedNavigationEntry& current_navigation =
-            tab->navigations.at(tab->normalized_navigation_index());
-        if (chrome::IsNTPURL(current_navigation.virtual_url(),
-                             browser_->profile())) {
-          continue;
-        }
-        tabs_in_session.push_back(tab);
-      }
-    }
-    if (tabs_in_session.empty())
+    if (!open_tabs->GetForeignSessionTabs(session_tag, &tabs_in_session) ||
+        tabs_in_session.empty())
       continue;
-    std::sort(tabs_in_session.begin(), tabs_in_session.end(),
-              SortTabsByRecency);
 
     // Add the header for the device session.
     DCHECK(!session->session_name.empty());
@@ -551,8 +541,12 @@ void RecentTabsSubMenuModel::BuildLocalWindowItem(
   // See comments in BuildLocalEntries() about usage of InsertItem*At().
   InsertItemAt(curr_model_index, command_id, l10n_util::GetPluralStringFUTF16(
       IDS_RECENTLY_CLOSED_WINDOW, num_tabs));
+#if defined(OS_MACOSX)
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   SetIcon(curr_model_index, rb.GetNativeImageNamed(IDR_RECENTLY_CLOSED_WINDOW));
+#else
+  SetIcon(curr_model_index, CreateFavicon(gfx::VectorIconId::TAB));
+#endif
   local_window_items_.push_back(window_id);
 }
 
@@ -579,6 +573,7 @@ void RecentTabsSubMenuModel::BuildOtherDevicesTabItem(
 void RecentTabsSubMenuModel::AddDeviceFavicon(
     int index_in_menu,
     sync_driver::SyncedSession::DeviceType device_type) {
+#if defined(OS_MACOSX)
   int favicon_id = -1;
   switch (device_type) {
     case sync_driver::SyncedSession::TYPE_PHONE:
@@ -601,6 +596,29 @@ void RecentTabsSubMenuModel::AddDeviceFavicon(
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   SetIcon(index_in_menu, rb.GetNativeImageNamed(favicon_id));
+#else
+  gfx::VectorIconId favicon_id = gfx::VectorIconId::VECTOR_ICON_NONE;
+  switch (device_type) {
+    case sync_driver::SyncedSession::TYPE_PHONE:
+      favicon_id = gfx::VectorIconId::SMARTPHONE;
+      break;
+
+    case sync_driver::SyncedSession::TYPE_TABLET:
+      favicon_id = gfx::VectorIconId::TABLET;
+      break;
+
+    case sync_driver::SyncedSession::TYPE_CHROMEOS:
+    case sync_driver::SyncedSession::TYPE_WIN:
+    case sync_driver::SyncedSession::TYPE_MACOSX:
+    case sync_driver::SyncedSession::TYPE_LINUX:
+    case sync_driver::SyncedSession::TYPE_OTHER:
+    case sync_driver::SyncedSession::TYPE_UNSET:
+      favicon_id = gfx::VectorIconId::LAPTOP;
+      break;
+  }
+
+  SetIcon(index_in_menu, CreateFavicon(favicon_id));
+#endif
 }
 
 void RecentTabsSubMenuModel::AddTabFavicon(int command_id, const GURL& url) {
@@ -696,7 +714,7 @@ RecentTabsSubMenuModel::GetOpenTabsUIDelegate() {
 }
 
 void RecentTabsSubMenuModel::TabRestoreServiceChanged(
-    TabRestoreService* service) {
+    sessions::TabRestoreService* service) {
   ClearLocalEntries();
 
   BuildLocalEntries();
@@ -707,6 +725,6 @@ void RecentTabsSubMenuModel::TabRestoreServiceChanged(
 }
 
 void RecentTabsSubMenuModel::TabRestoreServiceDestroyed(
-    TabRestoreService* service) {
+    sessions::TabRestoreService* service) {
   TabRestoreServiceChanged(service);
 }

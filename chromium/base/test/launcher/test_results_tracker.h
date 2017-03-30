@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/test/launcher/test_result.h"
 #include "base/threading/thread_checker.h"
 
@@ -42,7 +43,7 @@ class TestResultsTracker {
 
   // Adds |test_name| to the set of discovered tests (this includes all tests
   // present in the executable, not necessarily run).
-  void AddTest(const std::string& test_name);
+  void AddTest(const std::string& test_name, const std::string& file, int line);
 
   // Adds |test_name| to the set of disabled tests.
   void AddDisabledTest(const std::string& test_name);
@@ -77,6 +78,11 @@ class TestResultsTracker {
  private:
   void GetTestStatusForIteration(int iteration, TestStatusMap* map) const;
 
+  template<typename InputIterator>
+  void PrintTests(InputIterator first,
+                  InputIterator last,
+                  const std::string& description) const;
+
   struct AggregateTestResult {
     AggregateTestResult();
     ~AggregateTestResult();
@@ -93,6 +99,14 @@ class TestResultsTracker {
     ResultsMap results;
   };
 
+  struct CodeLocation {
+    CodeLocation(const std::string& f, int l) : file(f), line(l) {
+    }
+
+    std::string file;
+    int line;
+  };
+
   ThreadChecker thread_checker_;
 
   // Set of global tags, i.e. strings indicating conditions that apply to
@@ -101,6 +115,8 @@ class TestResultsTracker {
 
   // Set of all test names discovered in the current executable.
   std::set<std::string> all_tests_;
+
+  std::map<std::string, CodeLocation> test_locations_;
 
   // Set of all disabled tests in the current executable.
   std::set<std::string> disabled_tests_;

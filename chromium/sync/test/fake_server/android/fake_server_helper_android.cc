@@ -5,9 +5,12 @@
 #include "sync/test/fake_server/android/fake_server_helper_android.h"
 
 #include <jni.h>
+#include <stddef.h>
+#include <set>
+#include <vector>
 
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "jni/FakeServerHelper_jni.h"
@@ -29,20 +32,23 @@ FakeServerHelperAndroid::FakeServerHelperAndroid(JNIEnv* env, jobject obj) {
 
 FakeServerHelperAndroid::~FakeServerHelperAndroid() { }
 
-static jlong Init(JNIEnv* env, jobject obj) {
+static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   FakeServerHelperAndroid* fake_server_android =
       new FakeServerHelperAndroid(env, obj);
   return reinterpret_cast<intptr_t>(fake_server_android);
 }
 
-jlong FakeServerHelperAndroid::CreateFakeServer(JNIEnv* env, jobject obj) {
+jlong FakeServerHelperAndroid::CreateFakeServer(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   fake_server::FakeServer* fake_server = new fake_server::FakeServer();
   return reinterpret_cast<intptr_t>(fake_server);
 }
 
-jlong FakeServerHelperAndroid::CreateNetworkResources(JNIEnv* env,
-                                                      jobject obj,
-                                                      jlong fake_server) {
+jlong FakeServerHelperAndroid::CreateNetworkResources(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong fake_server) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
   syncer::NetworkResources* resources =
@@ -51,7 +57,7 @@ jlong FakeServerHelperAndroid::CreateNetworkResources(JNIEnv* env,
 }
 
 void FakeServerHelperAndroid::DeleteFakeServer(JNIEnv* env,
-                                               jobject obj,
+                                               const JavaParamRef<jobject>& obj,
                                                jlong fake_server) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
@@ -60,17 +66,12 @@ void FakeServerHelperAndroid::DeleteFakeServer(JNIEnv* env,
 
 jboolean FakeServerHelperAndroid::VerifyEntityCountByTypeAndName(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jlong fake_server,
     jlong count,
-    jstring model_type_string,
-    jstring name) {
-  syncer::ModelType model_type;
-  if (!NotificationTypeToRealModelType(base::android::ConvertJavaStringToUTF8(
-      env, model_type_string), &model_type)) {
-    LOG(WARNING) << "Invalid ModelType string.";
-    return false;
-  }
+    jint model_type_int,
+    const JavaParamRef<jstring>& name) {
+  syncer::ModelType model_type = static_cast<syncer::ModelType>(model_type_int);
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
   fake_server::FakeServerVerifier fake_server_verifier(fake_server_ptr);
@@ -86,9 +87,9 @@ jboolean FakeServerHelperAndroid::VerifyEntityCountByTypeAndName(
 
 jboolean FakeServerHelperAndroid::VerifySessions(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jlong fake_server,
-    jobjectArray url_array) {
+    const JavaParamRef<jobjectArray>& url_array) {
   std::multiset<std::string> tab_urls;
   for (int i = 0; i < env->GetArrayLength(url_array); i++) {
     jstring s = (jstring) env->GetObjectArrayElement(url_array, i);
@@ -109,18 +110,41 @@ jboolean FakeServerHelperAndroid::VerifySessions(
   return result;
 }
 
+base::android::ScopedJavaLocalRef<jobjectArray>
+FakeServerHelperAndroid::GetSyncEntitiesByModelType(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong fake_server,
+    jint model_type_int) {
+  fake_server::FakeServer* fake_server_ptr =
+      reinterpret_cast<fake_server::FakeServer*>(fake_server);
+
+  syncer::ModelType model_type = static_cast<syncer::ModelType>(model_type_int);
+
+  std::vector<sync_pb::SyncEntity> entities =
+      fake_server_ptr->GetSyncEntitiesByModelType(model_type);
+
+  std::vector<std::string> entity_strings;
+  for (size_t i = 0; i < entities.size(); ++i) {
+    std::string s;
+    entities[i].SerializeToString(&s);
+    entity_strings.push_back(s);
+  }
+  return base::android::ToJavaArrayOfByteArray(env, entity_strings);
+}
+
 void FakeServerHelperAndroid::InjectUniqueClientEntity(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jlong fake_server,
-    jstring name,
-    jbyteArray serialized_entity_specifics) {
+    const JavaParamRef<jstring>& name,
+    const JavaParamRef<jbyteArray>& serialized_entity_specifics) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
 
   sync_pb::EntitySpecifics entity_specifics;
   DeserializeEntitySpecifics(env, serialized_entity_specifics,
-                             entity_specifics);
+                             &entity_specifics);
 
   fake_server_ptr->InjectEntity(
       fake_server::UniqueClientEntity::CreateForInjection(
@@ -129,16 +153,16 @@ void FakeServerHelperAndroid::InjectUniqueClientEntity(
 
 void FakeServerHelperAndroid::ModifyEntitySpecifics(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jlong fake_server,
-    jstring id,
-    jbyteArray serialized_entity_specifics) {
+    const JavaParamRef<jstring>& id,
+    const JavaParamRef<jbyteArray>& serialized_entity_specifics) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
 
   sync_pb::EntitySpecifics entity_specifics;
   DeserializeEntitySpecifics(env, serialized_entity_specifics,
-                             entity_specifics);
+                             &entity_specifics);
 
   fake_server_ptr->ModifyEntitySpecifics(
       base::android::ConvertJavaStringToUTF8(env, id), entity_specifics);
@@ -147,35 +171,36 @@ void FakeServerHelperAndroid::ModifyEntitySpecifics(
 void FakeServerHelperAndroid::DeserializeEntitySpecifics(
     JNIEnv* env,
     jbyteArray serialized_entity_specifics,
-    sync_pb::EntitySpecifics& entity_specifics) {
+    sync_pb::EntitySpecifics* entity_specifics) {
   int specifics_bytes_length = env->GetArrayLength(serialized_entity_specifics);
   jbyte* specifics_bytes =
       env->GetByteArrayElements(serialized_entity_specifics, NULL);
   std::string specifics_string(reinterpret_cast<char *>(specifics_bytes),
                                specifics_bytes_length);
 
-  if (!entity_specifics.ParseFromString(specifics_string))
+  if (!entity_specifics->ParseFromString(specifics_string))
     NOTREACHED() << "Could not deserialize EntitySpecifics";
 }
 
 void FakeServerHelperAndroid::InjectBookmarkEntity(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jlong fake_server,
-    jstring title,
-    jstring url,
-    jstring parent_id) {
+    const JavaParamRef<jstring>& title,
+    const JavaParamRef<jstring>& url,
+    const JavaParamRef<jstring>& parent_id) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
   fake_server_ptr->InjectEntity(
       CreateBookmarkEntity(env, title, url, parent_id));
 }
 
-void FakeServerHelperAndroid::InjectBookmarkFolderEntity(JNIEnv* env,
-                                                         jobject obj,
-                                                         jlong fake_server,
-                                                         jstring title,
-                                                         jstring parent_id) {
+void FakeServerHelperAndroid::InjectBookmarkFolderEntity(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong fake_server,
+    const JavaParamRef<jstring>& title,
+    const JavaParamRef<jstring>& parent_id) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
 
@@ -189,30 +214,33 @@ void FakeServerHelperAndroid::InjectBookmarkFolderEntity(JNIEnv* env,
   fake_server_ptr->InjectEntity(bookmark_builder.BuildFolder());
 }
 
-void FakeServerHelperAndroid::ModifyBookmarkEntity(JNIEnv* env,
-                                                   jobject obj,
-                                                   jlong fake_server,
-                                                   jstring entity_id,
-                                                   jstring title,
-                                                   jstring url,
-                                                   jstring parent_id) {
+void FakeServerHelperAndroid::ModifyBookmarkEntity(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong fake_server,
+    const JavaParamRef<jstring>& entity_id,
+    const JavaParamRef<jstring>& title,
+    const JavaParamRef<jstring>& url,
+    const JavaParamRef<jstring>& parent_id) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
   scoped_ptr<fake_server::FakeServerEntity> bookmark =
       CreateBookmarkEntity(env, title, url, parent_id);
   sync_pb::SyncEntity proto;
   bookmark->SerializeAsProto(&proto);
-  fake_server_ptr->ModifyEntitySpecifics(
+  fake_server_ptr->ModifyBookmarkEntity(
       base::android::ConvertJavaStringToUTF8(env, entity_id),
+      base::android::ConvertJavaStringToUTF8(env, parent_id),
       proto.specifics());
 }
 
-void FakeServerHelperAndroid::ModifyBookmarkFolderEntity(JNIEnv* env,
-                                                         jobject obj,
-                                                         jlong fake_server,
-                                                         jstring entity_id,
-                                                         jstring title,
-                                                         jstring parent_id) {
+void FakeServerHelperAndroid::ModifyBookmarkFolderEntity(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong fake_server,
+    const JavaParamRef<jstring>& entity_id,
+    const JavaParamRef<jstring>& title,
+    const JavaParamRef<jstring>& parent_id) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
 
@@ -225,8 +253,9 @@ void FakeServerHelperAndroid::ModifyBookmarkFolderEntity(JNIEnv* env,
 
   sync_pb::SyncEntity proto;
   bookmark_builder.BuildFolder()->SerializeAsProto(&proto);
-  fake_server_ptr->ModifyEntitySpecifics(
+  fake_server_ptr->ModifyBookmarkEntity(
       base::android::ConvertJavaStringToUTF8(env, entity_id),
+      base::android::ConvertJavaStringToUTF8(env, parent_id),
       proto.specifics());
 }
 
@@ -254,7 +283,7 @@ FakeServerHelperAndroid::CreateBookmarkEntity(JNIEnv* env,
 base::android::ScopedJavaLocalRef<jstring>
 FakeServerHelperAndroid::GetBookmarkBarFolderId(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jlong fake_server) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
@@ -262,16 +291,23 @@ FakeServerHelperAndroid::GetBookmarkBarFolderId(
       env, fake_server_ptr->GetBookmarkBarFolderId());
 }
 
-void FakeServerHelperAndroid::DeleteEntity(
-    JNIEnv* env,
-    jobject obj,
-    jlong fake_server,
-    jstring id) {
+void FakeServerHelperAndroid::DeleteEntity(JNIEnv* env,
+                                           const JavaParamRef<jobject>& obj,
+                                           jlong fake_server,
+                                           const JavaParamRef<jstring>& id) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
   std::string native_id = base::android::ConvertJavaStringToUTF8(env, id);
   fake_server_ptr->InjectEntity(
       fake_server::TombstoneEntity::Create(native_id));
+}
+
+void FakeServerHelperAndroid::ClearServerData(JNIEnv* env,
+                                              const JavaParamRef<jobject>& obj,
+                                              jlong fake_server) {
+  fake_server::FakeServer* fake_server_ptr =
+      reinterpret_cast<fake_server::FakeServer*>(fake_server);
+  fake_server_ptr->ClearServerData();
 }
 
 // static

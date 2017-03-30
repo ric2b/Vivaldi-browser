@@ -7,9 +7,14 @@
 namespace scheduler {
 namespace switches {
 
-// Disable the Blink Scheduler. Ensures there's no reordering of blink tasks.
-// This switch is intended only for performance tests.
-const char kDisableBlinkScheduler[] = "disable-blink-scheduler";
+// Enable Virtualized time where the render thread's time source skips forward
+// to the next scheduled delayed time if there is no more non-delayed work to be
+// done.
+const char kEnableVirtualizedTime[] = "enable-virtualized-time";
+
+// Disable task throttling of timer tasks from background pages.
+const char kDisableBackgroundTimerThrottling[] =
+    "disable-background-timer-throttling";
 
 }  // namespace switches
 }  // namespace scheduler

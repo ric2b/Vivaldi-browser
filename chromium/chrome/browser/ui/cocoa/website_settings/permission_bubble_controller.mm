@@ -7,10 +7,12 @@
 #include <algorithm>
 
 #include "base/mac/bind_objc_block.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/chrome_style.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
@@ -18,6 +20,7 @@
 #import "chrome/browser/ui/cocoa/hover_close_button.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
+#import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #include "chrome/browser/ui/cocoa/website_settings/permission_bubble_cocoa.h"
 #include "chrome/browser/ui/cocoa/website_settings/permission_selector_button.h"
 #include "chrome/browser/ui/cocoa/website_settings/split_block_button.h"
@@ -28,6 +31,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/user_metrics.h"
+#include "grit/components_strings.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/controls/hyperlink_text_view.h"
 #import "ui/base/cocoa/menu_controller.h"
@@ -170,6 +174,12 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
 
 @interface PermissionBubbleController ()
 
+// Determines if the bubble has an anchor in a corner or no anchor at all.
+- (info_bubble::BubbleArrowLocation)getExpectedArrowLocation;
+
+// Returns the expected parent for this bubble.
+- (NSWindow*)getExpectedParentWindow;
+
 // Returns an autoreleased NSView displaying the icon and label for |request|.
 - (NSView*)labelForRequest:(PermissionBubbleRequest*)request;
 
@@ -217,10 +227,10 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
 
 @implementation PermissionBubbleController
 
-- (id)initWithParentWindow:(NSWindow*)parentWindow
-                    bridge:(PermissionBubbleCocoa*)bridge {
-  DCHECK(parentWindow);
+- (id)initWithBrowser:(Browser*)browser bridge:(PermissionBubbleCocoa*)bridge {
+  DCHECK(browser);
   DCHECK(bridge);
+  browser_ = browser;
   base::scoped_nsobject<PermissionBubbleWindow> window(
       [[PermissionBubbleWindow alloc]
           initWithContentRect:ui::kWindowSizeDeterminedLater
@@ -230,22 +240,26 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
   [window setAllowedAnimations:info_bubble::kAnimateNone];
   [window setReleasedWhenClosed:NO];
   if ((self = [super initWithWindow:window
-                       parentWindow:parentWindow
+                       parentWindow:[self getExpectedParentWindow]
                          anchoredAt:NSZeroPoint])) {
     [self setShouldCloseOnResignKey:NO];
     [self setShouldOpenAsKeyWindow:YES];
-    [[self bubble] setArrowLocation:bridge->GetArrowLocation()];
+    [[self bubble] setArrowLocation:[self getExpectedArrowLocation]];
     bridge_ = bridge;
     NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
     [center addObserver:self
                selector:@selector(parentWindowDidMove:)
                    name:NSWindowDidMoveNotification
-                 object:parentWindow];
+                 object:[self getExpectedParentWindow]];
   }
   return self;
 }
 
 - (void)windowWillClose:(NSNotification*)notification {
+  [[NSNotificationCenter defaultCenter]
+      removeObserver:self
+                name:NSWindowDidMoveNotification
+              object:nil];
   bridge_->OnBubbleClosing();
   [super windowWillClose:notification];
 }
@@ -256,18 +270,17 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
 
 - (void)parentWindowDidResize:(NSNotification*)notification {
   DCHECK(bridge_);
-  [self setAnchorPoint:bridge_->GetAnchorPoint()];
+  [self setAnchorPoint:[self getExpectedAnchorPoint]];
 }
 
 - (void)parentWindowDidMove:(NSNotification*)notification {
   DCHECK(bridge_);
-  [self setAnchorPoint:bridge_->GetAnchorPoint()];
+  [self setAnchorPoint:[self getExpectedAnchorPoint]];
 }
 
-- (void)showAtAnchor:(NSPoint)anchorPoint
-         withDelegate:(PermissionBubbleView::Delegate*)delegate
-          forRequests:(const std::vector<PermissionBubbleRequest*>&)requests
-         acceptStates:(const std::vector<bool>&)acceptStates {
+- (void)showWithDelegate:(PermissionBubbleView::Delegate*)delegate
+             forRequests:(const std::vector<PermissionBubbleRequest*>&)requests
+            acceptStates:(const std::vector<bool>&)acceptStates {
   DCHECK(!requests.empty());
   DCHECK(delegate);
   delegate_ = delegate;
@@ -418,11 +431,44 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
     [[self window] setFrame:bubbleFrame display:YES];
   } else {
     [[self window] setFrame:bubbleFrame display:NO];
-    [self setAnchorPoint:anchorPoint];
+    [self setAnchorPoint:[self getExpectedAnchorPoint]];
     [self showWindow:nil];
     [[self window] makeFirstResponder:nil];
     [[self window] setInitialFirstResponder:allowOrOkButton.get()];
   }
+}
+
+- (void)updateAnchorPosition {
+  [self setParentWindow:[self getExpectedParentWindow]];
+  [self setAnchorPoint:[self getExpectedAnchorPoint]];
+}
+
+- (NSPoint)getExpectedAnchorPoint {
+  NSPoint anchor;
+  if ([self hasLocationBar]) {
+    LocationBarViewMac* location_bar =
+        [[[self getExpectedParentWindow] windowController] locationBarBridge];
+    anchor = location_bar->GetPageInfoBubblePoint();
+  } else {
+    // Center the bubble if there's no location bar.
+    NSRect contentFrame = [[[self getExpectedParentWindow] contentView] frame];
+    anchor = NSMakePoint(NSMidX(contentFrame), NSMaxY(contentFrame));
+  }
+
+  return [[self getExpectedParentWindow] convertBaseToScreen:anchor];
+}
+
+- (bool)hasLocationBar {
+  return browser_->SupportsWindowFeature(Browser::FEATURE_LOCATIONBAR);
+}
+
+- (info_bubble::BubbleArrowLocation)getExpectedArrowLocation {
+  return [self hasLocationBar] ? info_bubble::kTopLeft : info_bubble::kNoArrow;
+}
+
+- (NSWindow*)getExpectedParentWindow {
+  DCHECK(browser_->window());
+  return browser_->window()->GetNativeWindow();
 }
 
 - (NSView*)labelForRequest:(PermissionBubbleRequest*)request {
@@ -432,7 +478,7 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
   base::scoped_nsobject<NSImageView> permissionIcon(
       [[NSImageView alloc] initWithFrame:NSZeroRect]);
   [permissionIcon setImage:ui::ResourceBundle::GetSharedInstance().
-      GetNativeImageNamed(request->GetIconID()).ToNSImage()];
+      GetNativeImageNamed(request->GetIconId()).ToNSImage()];
   [permissionIcon setFrameSize:kPermissionIconSize];
   [permissionView addSubview:permissionIcon];
 

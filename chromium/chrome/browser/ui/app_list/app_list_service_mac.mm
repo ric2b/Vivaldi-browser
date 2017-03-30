@@ -6,6 +6,9 @@
 
 #include <ApplicationServices/ApplicationServices.h>
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
+
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -28,12 +31,13 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_mac.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/mac/app_mode_common.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/google_chrome_strings.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/manifest_handlers/file_handler_info.h"
@@ -78,7 +82,7 @@ class ImageSkia;
 namespace {
 
 // Version of the app list shortcut version installed.
-const int kShortcutVersion = 2;
+const int kShortcutVersion = 4;
 
 // Duration of show and hide animations.
 const NSTimeInterval kAnimationDuration = 0.2;
@@ -89,8 +93,8 @@ const CGFloat kDistanceMovedOnShow = 20;
 scoped_ptr<web_app::ShortcutInfo> GetAppListShortcutInfo(
     const base::FilePath& profile_path) {
   scoped_ptr<web_app::ShortcutInfo> shortcut_info(new web_app::ShortcutInfo);
-  chrome::VersionInfo::Channel channel = chrome::VersionInfo::GetChannel();
-  if (channel == chrome::VersionInfo::CHANNEL_CANARY) {
+  version_info::Channel channel = chrome::GetChannel();
+  if (channel == version_info::Channel::CANARY) {
     shortcut_info->title =
         l10n_util::GetStringUTF16(IDS_APP_LIST_SHORTCUT_NAME_CANARY);
   } else {
@@ -112,8 +116,8 @@ void CreateAppListShim(const base::FilePath& profile_path) {
       GetAppListShortcutInfo(profile_path);
 
   ResourceBundle& resource_bundle = ResourceBundle::GetSharedInstance();
-  chrome::VersionInfo::Channel channel = chrome::VersionInfo::GetChannel();
-  if (channel == chrome::VersionInfo::CHANNEL_CANARY) {
+  version_info::Channel channel = chrome::GetChannel();
+  if (channel == version_info::Channel::CANARY) {
 #if defined(GOOGLE_CHROME_BUILD)
     shortcut_info->favicon.Add(
         *resource_bundle.GetImageSkiaNamed(IDR_APP_LIST_CANARY_16));
@@ -149,7 +153,7 @@ void CreateAppListShim(const base::FilePath& profile_path) {
   if (installed_version == 0)
     shortcut_locations.in_quick_launch_bar = true;
 
-  web_app::CreateNonAppShortcut(shortcut_locations, shortcut_info.Pass());
+  web_app::CreateNonAppShortcut(shortcut_locations, std::move(shortcut_info));
 
   local_state->SetInteger(prefs::kAppLauncherShortcutVersion,
                           kShortcutVersion);
@@ -249,7 +253,7 @@ void GetAppListWindowOrigins(
   const NSSize ns_window_size = [window frame].size;
   gfx::Size window_size(ns_window_size.width, ns_window_size.height);
   int primary_display_height =
-      NSMaxY([[[NSScreen screens] objectAtIndex:0] frame]);
+      NSMaxY([[[NSScreen screens] firstObject] frame]);
   AppListServiceMac::FindAnchorPoint(window_size,
                                      display,
                                      primary_display_height,
@@ -346,12 +350,6 @@ void AppListServiceMac::Init(Profile* initial_profile) {
 void AppListServiceMac::InitWithProfilePath(
     Profile* initial_profile,
     const base::FilePath& profile_path) {
-  // App list profiles should not be off-the-record. It is currently possible to
-  // get here in an off-the-record profile via the Web Store
-  // (http://crbug.com/416380).
-  // TODO(mgiuca): DCHECK that requested_profile->IsOffTheRecord() and
-  // requested_profile->IsGuestSession() are false, once that is resolved.
-
   // On Mac, Init() is called multiple times for a process: any time there is no
   // browser window open and a new window is opened, and during process startup
   // to handle the silent launch case (e.g. for app shims). In the startup case,

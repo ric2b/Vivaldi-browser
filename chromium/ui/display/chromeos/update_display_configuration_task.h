@@ -5,8 +5,11 @@
 #ifndef UI_DISPLAY_CHROMEOS_UPDATE_DISPLAY_CONFIGURATION_TASK_H_
 #define UI_DISPLAY_CHROMEOS_UPDATE_DISPLAY_CONFIGURATION_TASK_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/display/chromeos/configure_displays_task.h"
 #include "ui/display/chromeos/display_configurator.h"
@@ -34,6 +37,12 @@ class DISPLAY_EXPORT UpdateDisplayConfigurationTask {
                                  bool force_configure,
                                  const ResponseCallback& callback);
   ~UpdateDisplayConfigurationTask();
+
+  // The pointers to the DisplaySnapshots in this vector are owned by
+  // DisplayConfigurator.
+  void set_virtual_display_snapshots(std::vector<DisplaySnapshot*> snapshots) {
+    virtual_display_snapshots_ = snapshots;
+  }
 
   void Run();
 
@@ -91,6 +100,9 @@ class DISPLAY_EXPORT UpdateDisplayConfigurationTask {
 
   // List of updated displays.
   std::vector<DisplaySnapshot*> cached_displays_;
+
+  // Vector of unowned VirtualDisplaySnapshots to be added when doing the task.
+  std::vector<DisplaySnapshot*> virtual_display_snapshots_;
 
   gfx::Size framebuffer_size_;
 

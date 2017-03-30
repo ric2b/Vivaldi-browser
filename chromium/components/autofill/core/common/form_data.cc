@@ -4,6 +4,10 @@
 
 #include "components/autofill/core/common/form_data.h"
 
+#include <stddef.h>
+
+#include <tuple>
+
 #include "base/base64.h"
 #include "base/pickle.h"
 #include "base/strings/string_util.h"
@@ -14,7 +18,7 @@ namespace autofill {
 
 namespace {
 
-const int kPickleVersion = 3;
+const int kPickleVersion = 5;
 
 bool ReadGURL(base::PickleIterator* iter, GURL* url) {
   std::string spec;
@@ -56,29 +60,23 @@ void LogDeserializationError(int version) {
 
 }  // namespace
 
-FormData::FormData()
-    : user_submitted(false),
-      is_form_tag(true) {
-}
+FormData::FormData() : is_form_tag(true), is_formless_checkout(false) {}
 
 FormData::FormData(const FormData& data)
     : name(data.name),
       origin(data.origin),
       action(data.action),
-      user_submitted(data.user_submitted),
       is_form_tag(data.is_form_tag),
-      fields(data.fields) {
-}
+      is_formless_checkout(data.is_formless_checkout),
+      fields(data.fields) {}
 
 FormData::~FormData() {
 }
 
 bool FormData::SameFormAs(const FormData& form) const {
-  if (name != form.name ||
-      origin != form.origin ||
-      action != form.action ||
-      user_submitted != form.user_submitted ||
+  if (name != form.name || origin != form.origin || action != form.action ||
       is_form_tag != form.is_form_tag ||
+      is_formless_checkout != form.is_formless_checkout ||
       fields.size() != form.fields.size())
     return false;
   for (size_t i = 0; i < fields.size(); ++i) {
@@ -89,25 +87,15 @@ bool FormData::SameFormAs(const FormData& form) const {
 }
 
 bool FormData::operator<(const FormData& form) const {
-  if (name != form.name)
-    return name < form.name;
-  if (origin != form.origin)
-    return origin < form.origin;
-  if (action != form.action)
-    return action < form.action;
-  if (user_submitted != form.user_submitted)
-    return user_submitted < form.user_submitted;
-  if (is_form_tag != form.is_form_tag)
-    return is_form_tag < form.is_form_tag;
-  return fields < form.fields;
+  return std::tie(name, origin, action, is_form_tag, is_formless_checkout,
+                  fields) < std::tie(form.name, form.origin, form.action,
+                                     form.is_form_tag,
+                                     form.is_formless_checkout, form.fields);
 }
 
 std::ostream& operator<<(std::ostream& os, const FormData& form) {
-  os << base::UTF16ToUTF8(form.name) << " "
-     << form.origin << " "
-     << form.action << " "
-     << form.user_submitted << " "
-     << form.is_form_tag << " "
+  os << base::UTF16ToUTF8(form.name) << " " << form.origin << " " << form.action
+     << " " << form.is_form_tag << " " << form.is_formless_checkout << " "
      << "Fields:";
   for (size_t i = 0; i < form.fields.size(); ++i) {
     os << form.fields[i] << ",";
@@ -120,9 +108,9 @@ void SerializeFormData(const FormData& form_data, base::Pickle* pickle) {
   pickle->WriteString16(form_data.name);
   pickle->WriteString(form_data.origin.spec());
   pickle->WriteString(form_data.action.spec());
-  pickle->WriteBool(form_data.user_submitted);
   SerializeFormFieldDataVector(form_data.fields, pickle);
   pickle->WriteBool(form_data.is_form_tag);
+  pickle->WriteBool(form_data.is_formless_checkout);
 }
 
 void SerializeFormDataToBase64String(const FormData& form_data,
@@ -160,21 +148,30 @@ bool DeserializeFormData(base::PickleIterator* iter, FormData* form_data) {
     }
   }
 
+  bool unused_user_submitted;
   if (!ReadGURL(iter, &temp_form_data.origin) ||
       !ReadGURL(iter, &temp_form_data.action) ||
-      !iter->ReadBool(&temp_form_data.user_submitted) ||
+      // user_submitted was removed/no longer serialized in version 4.
+      (version < 4 && !iter->ReadBool(&unused_user_submitted)) ||
       !DeserializeFormFieldDataVector(iter, &temp_form_data.fields)) {
     LogDeserializationError(version);
     return false;
   }
 
-  if (version == 3) {
+  if (version >= 3) {
     if (!iter->ReadBool(&temp_form_data.is_form_tag)) {
       LogDeserializationError(version);
       return false;
     }
   } else {
     form_data->is_form_tag = true;
+  }
+
+  if (version >= 5) {
+    if (!iter->ReadBool(&temp_form_data.is_formless_checkout)) {
+      LogDeserializationError(version);
+      return false;
+    }
   }
 
   *form_data = temp_form_data;

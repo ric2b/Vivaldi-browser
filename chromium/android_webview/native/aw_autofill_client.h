@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "base/android/jni_weak_ref.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service_factory.h"
 #include "components/autofill/core/browser/autofill_client.h"
@@ -33,6 +33,10 @@ class WebContents;
 
 namespace gfx {
 class RectF;
+}
+
+namespace sync_driver {
+class SyncService;
 }
 
 class PersonalDataManager;
@@ -59,6 +63,7 @@ class AwAutofillClient : public autofill::AutofillClient,
   autofill::PersonalDataManager* GetPersonalDataManager() override;
   scoped_refptr<autofill::AutofillWebDataService> GetDatabase() override;
   PrefService* GetPrefs() override;
+  sync_driver::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporService* GetRapporService() override;
   void HideRequestAutocompleteDialog() override;
@@ -66,8 +71,15 @@ class AwAutofillClient : public autofill::AutofillClient,
   void ShowUnmaskPrompt(
       const autofill::CreditCard& card,
       base::WeakPtr<autofill::CardUnmaskDelegate> delegate) override;
-  void OnUnmaskVerificationResult(GetRealPanResult result) override;
-  void ConfirmSaveCreditCard(const base::Closure& save_card_callback) override;
+  void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
+  void ConfirmSaveCreditCardLocally(const autofill::CreditCard& card,
+                                    const base::Closure& callback) override;
+  void ConfirmSaveCreditCardToCloud(
+      const autofill::CreditCard& card,
+      scoped_ptr<base::DictionaryValue> legal_message,
+      const base::Closure& callback) override;
+  void LoadRiskData(
+      const base::Callback<void(const std::string&)>& callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(const CreditCardScanCallback& callback) override;
   void ShowRequestAutocompleteDialog(const autofill::FormData& form,
@@ -89,10 +101,11 @@ class AwAutofillClient : public autofill::AutofillClient,
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
   void OnFirstUserGestureObserved() override;
-  void LinkClicked(const GURL& url, WindowOpenDisposition disposition) override;
   bool IsContextSecure(const GURL& form_origin) override;
 
-  void SuggestionSelected(JNIEnv* env, jobject obj, jint position);
+  void SuggestionSelected(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          jint position);
 
  private:
   AwAutofillClient(content::WebContents* web_contents);

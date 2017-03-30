@@ -4,10 +4,11 @@
 
 #include "chrome/browser/memory_details.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
@@ -18,9 +19,9 @@
 #include "base/threading/thread.h"
 #include "chrome/browser/process_info_snapshot.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/process_type.h"
@@ -63,9 +64,8 @@ void CollectProcessDataForChromeProcess(
   else
     info.process_type = content::PROCESS_TYPE_UNKNOWN;
 
-  chrome::VersionInfo version_info;
-  info.product_name = base::ASCIIToUTF16(version_info.Name());
-  info.version = base::ASCIIToUTF16(version_info.Version());
+  info.product_name = base::ASCIIToUTF16(version_info::GetProductName());
+  info.version = base::ASCIIToUTF16(version_info::GetVersionNumber());
 
   // Check if this is one of the child processes whose data was already
   // collected and exists in |child_data|.
@@ -211,28 +211,13 @@ void MemoryDetails::CollectProcessData(
     }
   }
 
-  // The helper might show up as these different flavors depending on the
-  // executable flags required.
-  std::vector<std::string> helper_names;
-  helper_names.push_back(chrome::kHelperProcessExecutableName);
-  for (const char* const* suffix = chrome::kHelperFlavorSuffixes;
-       *suffix;
-       ++suffix) {
-    std::string helper_name = chrome::kHelperProcessExecutableName;
-    helper_name.append(1, ' ');
-    helper_name.append(*suffix);
-    helper_names.push_back(helper_name);
-  }
-
-  // Get PIDs of helpers.
+  // Get PIDs of the helper.
   std::vector<base::ProcessId> helper_pids;
-  for (size_t i = 0; i < helper_names.size(); ++i) {
-    std::string helper_name = helper_names[i];
-    base::NamedProcessIterator helper_it(helper_name, NULL);
-    while (const base::ProcessEntry* entry = helper_it.NextProcessEntry()) {
-      helper_pids.push_back(entry->pid());
-      all_pids.push_back(entry->pid());
-    }
+  base::NamedProcessIterator helper_it(chrome::kHelperProcessExecutableName,
+                                       NULL);
+  while (const base::ProcessEntry* entry = helper_it.NextProcessEntry()) {
+    helper_pids.push_back(entry->pid());
+    all_pids.push_back(entry->pid());
   }
 
   if (mode == FROM_ALL_BROWSERS) {

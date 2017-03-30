@@ -37,10 +37,6 @@ class ChromeFrameDistribution : public BrowserDistribution {
 
   std::string GetSafeBrowsingName() override;
 
-  std::string GetNetworkStatsServer() const override;
-
-  base::string16 GetUninstallLinkName() override;
-
   base::string16 GetUninstallRegPath() override;
 
   base::string16 GetIconFilename() override;
@@ -49,7 +45,7 @@ class ChromeFrameDistribution : public BrowserDistribution {
 
   bool CanCreateDesktopShortcuts() override;
 
-  bool GetCommandExecuteImplClsid(base::string16* handler_class_uuid) override;
+  base::string16 GetCommandExecuteImplClsid() override;
 
   void UpdateInstallStatus(bool system_install,
                            installer::ArchiveType archive_type,

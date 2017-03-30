@@ -4,6 +4,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/download/download_file_factory.h"
 #include "content/browser/download/download_file_impl.h"
@@ -51,9 +52,9 @@ class DragDownloadFileTest : public ContentBrowserTest {
   ~DragDownloadFileTest() override {}
 
   void Succeed() {
-    BrowserThread::PostTask(BrowserThread::UI,
-                            FROM_HERE,
-                            base::MessageLoopForUI::current()->QuitClosure());
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::MessageLoopForUI::current()->QuitWhenIdleClosure());
   }
 
   void FailFast() {
@@ -92,8 +93,7 @@ class DragDownloadFileTest : public ContentBrowserTest {
 IN_PROC_BROWSER_TEST_F(DragDownloadFileTest, DragDownloadFileTest_NetError) {
   base::FilePath name(downloads_directory().AppendASCII(
       "DragDownloadFileTest_NetError.txt"));
-  GURL url(net::URLRequestMockHTTPJob::GetMockUrl(
-      base::FilePath(FILE_PATH_LITERAL("download-test.lib"))));
+  GURL url(net::URLRequestMockHTTPJob::GetMockUrl("download-test.lib"));
   Referrer referrer;
   std::string referrer_encoding;
   scoped_refptr<DragDownloadFile> file(
@@ -112,8 +112,7 @@ IN_PROC_BROWSER_TEST_F(DragDownloadFileTest, DragDownloadFileTest_NetError) {
 IN_PROC_BROWSER_TEST_F(DragDownloadFileTest, DragDownloadFileTest_Complete) {
   base::FilePath name(downloads_directory().AppendASCII(
         "DragDownloadFileTest_Complete.txt"));
-  GURL url(net::URLRequestMockHTTPJob::GetMockUrl(
-      base::FilePath(FILE_PATH_LITERAL("download-test.lib"))));
+  GURL url(net::URLRequestMockHTTPJob::GetMockUrl("download-test.lib"));
   Referrer referrer;
   std::string referrer_encoding;
   SetUpServer();

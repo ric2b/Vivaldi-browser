@@ -4,13 +4,16 @@
 //
 // An object to store user feedback to a single spellcheck suggestion.
 //
-// Stores the spellcheck suggestion, its uint32 hash identifier, and user's
+// Stores the spellcheck suggestion, its uint32_t hash identifier, and user's
 // feedback. The feedback is indirect, in the sense that we record user's
 // |action| instead of asking them how they feel about a spellcheck suggestion.
 // The object can serialize itself.
 
 #ifndef CHROME_BROWSER_SPELLCHECKER_MISSPELLING_H_
 #define CHROME_BROWSER_SPELLCHECKER_MISSPELLING_H_
+
+#include <stddef.h>
+#include <stdint.h>
 
 #include <vector>
 
@@ -25,26 +28,17 @@
 //    misspelling.suggestions =
 //        std::vector<base::string16>(1, base::ASCIIToUTF16("Hello"));
 //    misspelling.hash = GenerateRandomHash();
-//    misspelling.action.type = SpellcheckAction::TYPE_SELECT;
-//    misspelling.action.index = 0;
-//    Process(misspelling.Serialize());
-class Misspelling {
- public:
+//    misspelling.action.set_type(SpellcheckAction::TYPE_SELECT);
+//    misspelling.action.set_index(0);
+//    Process(SerializeMisspelling(misspelling));
+struct Misspelling {
   Misspelling();
   Misspelling(const base::string16& context,
               size_t location,
               size_t length,
               const std::vector<base::string16>& suggestions,
-              uint32 hash);
+              uint32_t hash);
   ~Misspelling();
-
-  // Serializes the data in this object into a dictionary value. The caller owns
-  // the result.
-  base::DictionaryValue* Serialize() const;
-
-  // Returns the substring of |context| that begins at |location| and contains
-  // |length| characters.
-  base::string16 GetMisspelledString() const;
 
   // A several-word text snippet that immediately surrounds the misspelling.
   base::string16 context;
@@ -60,7 +54,7 @@ class Misspelling {
   std::vector<base::string16> suggestions;
 
   // The hash that identifies the misspelling.
-  uint32 hash;
+  uint32_t hash;
 
   // User action.
   SpellcheckAction action;
@@ -68,5 +62,16 @@ class Misspelling {
   // The time when the user applied the action.
   base::Time timestamp;
 };
+
+// Serializes the data in this object into a dictionary value. The caller owns
+// the result.
+base::DictionaryValue* SerializeMisspelling(const Misspelling& misspelling);
+
+// Returns the substring of |context| that begins at |location| and contains
+// |length| characters.
+base::string16 GetMisspelledString(const Misspelling& misspelling);
+
+// Returns the approximate size of the misspelling when serialized.
+size_t ApproximateSerializedSize(const Misspelling& misspelling);
 
 #endif  // CHROME_BROWSER_SPELLCHECKER_MISSPELLING_H_

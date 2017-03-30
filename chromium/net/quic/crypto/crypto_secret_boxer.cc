@@ -35,7 +35,9 @@ static const size_t kKeySize = 16;
 static const size_t kBoxNonceSize = 12;
 
 // static
-size_t CryptoSecretBoxer::GetKeySize() { return kKeySize; }
+size_t CryptoSecretBoxer::GetKeySize() {
+  return kKeySize;
+}
 
 void CryptoSecretBoxer::SetKey(StringPiece key) {
   DCHECK_EQ(kKeySize, key.size());
@@ -59,9 +61,9 @@ string CryptoSecretBoxer::Box(QuicRandom* rand, StringPiece plaintext) const {
   rand->RandBytes(data, kBoxNonceSize);
   memcpy(data + kBoxNonceSize, plaintext.data(), plaintext.size());
 
-  if (!encrypter->Encrypt(StringPiece(data, kBoxNonceSize), StringPiece(),
-                          plaintext, reinterpret_cast<unsigned char*>(
-                                         data + kBoxNonceSize))) {
+  if (!encrypter->Encrypt(
+          StringPiece(data, kBoxNonceSize), StringPiece(), plaintext,
+          reinterpret_cast<unsigned char*>(data + kBoxNonceSize))) {
     DLOG(DFATAL) << "CryptoSecretBoxer's Encrypt failed.";
     return string();
   }
@@ -78,11 +80,10 @@ bool CryptoSecretBoxer::Unbox(StringPiece ciphertext,
 
   StringPiece nonce(ciphertext.data(), kBoxNonceSize);
   ciphertext.remove_prefix(kBoxNonceSize);
-  QuicPacketSequenceNumber sequence_number;
-  StringPiece nonce_prefix(nonce.data(),
-                           nonce.size() - sizeof(sequence_number));
-  memcpy(&sequence_number, nonce.data() + nonce_prefix.size(),
-         sizeof(sequence_number));
+  QuicPacketNumber packet_number;
+  StringPiece nonce_prefix(nonce.data(), nonce.size() - sizeof(packet_number));
+  memcpy(&packet_number, nonce.data() + nonce_prefix.size(),
+         sizeof(packet_number));
 
   scoped_ptr<Aes128Gcm12Decrypter> decrypter(new Aes128Gcm12Decrypter());
   if (!decrypter->SetKey(key_)) {
@@ -93,8 +94,8 @@ bool CryptoSecretBoxer::Unbox(StringPiece ciphertext,
   char plaintext[kMaxPacketSize];
   size_t plaintext_length = 0;
   const bool success = decrypter->DecryptPacket(
-      sequence_number, StringPiece() /* associated data */, ciphertext,
-      plaintext, &plaintext_length, kMaxPacketSize);
+      packet_number, StringPiece() /* associated data */, ciphertext, plaintext,
+      &plaintext_length, kMaxPacketSize);
   if (!success) {
     return false;
   }

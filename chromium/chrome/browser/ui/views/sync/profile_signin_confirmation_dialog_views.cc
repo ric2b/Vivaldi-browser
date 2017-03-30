@@ -4,11 +4,14 @@
 
 #include "chrome/browser/ui/views/sync/profile_signin_confirmation_dialog_views.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
@@ -59,8 +62,7 @@ void ProfileSigninConfirmationDialogViews::ShowDialog(
   // bubble.
   // TODO(guohui): removes the workaround once the profile confirmation dialog
   // is fixed.
-  if (switches::IsNewAvatarMenu() && ProfileChooserView::IsShowing())
-    ProfileChooserView::Hide();
+  ProfileChooserView::Hide();
 
   ProfileSigninConfirmationDialogViews* dialog =
       new ProfileSigninConfirmationDialogViews(
@@ -148,7 +150,7 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
 
   const SkColor kPromptBarBackgroundColor =
       ui::GetSigninConfirmationPromptBarColor(
-          ui::kSigninConfirmationPromptBarBackgroundAlpha);
+          GetNativeTheme(), ui::kSigninConfirmationPromptBarBackgroundAlpha);
 
   // Create the prompt label.
   size_t offset;
@@ -170,12 +172,9 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
   // Create the prompt bar.
   views::View* prompt_bar = new views::View;
   prompt_bar->SetBorder(views::Border::CreateSolidSidedBorder(
-      1,
-      0,
-      1,
-      0,
+      1, 0, 1, 0,
       ui::GetSigninConfirmationPromptBarColor(
-          ui::kSigninConfirmationPromptBarBorderAlpha)));
+          GetNativeTheme(), ui::kSigninConfirmationPromptBarBorderAlpha)));
   prompt_bar->set_background(views::Background::CreateSolidBackground(
       kPromptBarBackgroundColor));
 
@@ -232,6 +231,7 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
 }
 
 void ProfileSigninConfirmationDialogViews::StyledLabelLinkClicked(
+    views::StyledLabel* label,
     const gfx::Range& range,
     int event_flags) {
   chrome::NavigateParams params(

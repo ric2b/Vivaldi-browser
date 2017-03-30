@@ -5,8 +5,11 @@
 #ifndef MEDIA_BASE_KEYBOARD_EVENT_COUNTER_H_
 #define MEDIA_BASE_KEYBOARD_EVENT_COUNTER_H_
 
+#include <stddef.h>
+
 #include <set>
 
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "media/base/media_export.h"
 #include "ui/events/event_constants.h"

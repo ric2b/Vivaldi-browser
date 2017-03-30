@@ -68,19 +68,23 @@ UpdateClientImpl::UpdateClientImpl(
     scoped_ptr<PingManager> ping_manager,
     UpdateChecker::Factory update_checker_factory,
     CrxDownloader::Factory crx_downloader_factory)
-    : config_(config),
-      ping_manager_(ping_manager.Pass()),
+    : is_stopped_(false),
+      config_(config),
+      ping_manager_(std::move(ping_manager)),
       update_engine_(
           new UpdateEngine(config,
                            update_checker_factory,
                            crx_downloader_factory,
                            ping_manager_.get(),
                            base::Bind(&UpdateClientImpl::NotifyObservers,
-                                      base::Unretained(this)))) {
-}
+                                      base::Unretained(this)))) {}
 
 UpdateClientImpl::~UpdateClientImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  DCHECK(task_queue_.empty());
+  DCHECK(tasks_.empty());
+
   config_ = nullptr;
 }
 
@@ -89,7 +93,7 @@ void UpdateClientImpl::Install(const std::string& id,
                                const CompletionCallback& completion_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (update_engine_->IsUpdating(id)) {
+  if (IsUpdating(id)) {
     completion_callback.Run(Error::ERROR_UPDATE_IN_PROGRESS);
     return;
   }
@@ -104,8 +108,8 @@ void UpdateClientImpl::Install(const std::string& id,
   scoped_ptr<TaskUpdate> task(new TaskUpdate(update_engine_.get(), true, ids,
                                              crx_data_callback, callback));
 
-  auto it = tasks_.insert(task.release()).first;
-  RunTask(*it);
+  // Install tasks are run concurrently and never queued up.
+  RunTask(std::move(task));
 }
 
 void UpdateClientImpl::Update(const std::vector<std::string>& ids,
@@ -118,18 +122,20 @@ void UpdateClientImpl::Update(const std::vector<std::string>& ids,
   scoped_ptr<TaskUpdate> task(new TaskUpdate(update_engine_.get(), false, ids,
                                              crx_data_callback, callback));
 
+  // If no other tasks are running at the moment, run this update task.
+  // Otherwise, queue the task up.
   if (tasks_.empty()) {
-    auto it = tasks_.insert(task.release()).first;
-    RunTask(*it);
+    RunTask(std::move(task));
   } else {
     task_queue_.push(task.release());
   }
 }
 
-void UpdateClientImpl::RunTask(Task* task) {
+void UpdateClientImpl::RunTask(scoped_ptr<Task> task) {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&Task::Run, base::Unretained(task)));
+      FROM_HERE, base::Bind(&Task::Run, base::Unretained(task.get())));
+  tasks_.insert(task.release());
 }
 
 void UpdateClientImpl::OnTaskComplete(
@@ -142,11 +148,21 @@ void UpdateClientImpl::OnTaskComplete(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(completion_callback, error));
 
+  // Remove the task from the set of the running tasks. Only tasks handled by
+  // the update engine can be in this data structure.
   tasks_.erase(task);
+
+  // Delete the completed task. A task can be completed because the update
+  // engine has run it or because it has been canceled but never run.
   delete task;
 
-  if (!task_queue_.empty()) {
-    RunTask(task_queue_.front());
+  if (is_stopped_)
+    return;
+
+  // Pick up a task from the queue if the queue has pending tasks and no other
+  // task is running.
+  if (tasks_.empty() && !task_queue_.empty()) {
+    RunTask(scoped_ptr<Task>(task_queue_.front()));
     task_queue_.pop();
   }
 }
@@ -173,13 +189,64 @@ bool UpdateClientImpl::GetCrxUpdateState(const std::string& id,
 }
 
 bool UpdateClientImpl::IsUpdating(const std::string& id) const {
-  return update_engine_->IsUpdating(id);
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  for (const auto& task : tasks_) {
+    const auto ids(task->GetIds());
+    if (std::find(ids.begin(), ids.end(), id) != ids.end()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void UpdateClientImpl::Stop() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  is_stopped_ = true;
+
+  // In the current implementation it is sufficient to cancel the pending
+  // tasks only. The tasks that are run by the update engine will stop
+  // making progress naturally, as the main task runner stops running task
+  // actions. Upon the browser shutdown, the resources employed by the active
+  // tasks will leak, as the operating system kills the thread associated with
+  // the update engine task runner. Further refactoring may be needed in this
+  // area, to cancel the running tasks by canceling the current action update.
+  // This behavior would be expected, correct, and result in no resource leaks
+  // in all cases, in shutdown or not.
+  //
+  // Cancel the pending tasks. These tasks are safe to cancel and delete since
+  // they have not picked up by the update engine, and not shared with any
+  // task runner yet.
+  while (!task_queue_.empty()) {
+    const auto task(task_queue_.front());
+    task_queue_.pop();
+    task->Cancel();
+  }
+}
+
+void UpdateClientImpl::SendUninstallPing(const std::string& id,
+                                         const Version& version,
+                                         int reason) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  // The implementation of PingManager::SendPing contains a self-deleting
+  // object responsible for sending the ping.
+  CrxUpdateItem item;
+  item.state = CrxUpdateItem::State::kUninstalled;
+  item.id = id;
+  item.previous_version = version;
+  item.next_version = base::Version("0");
+  item.extra_code1 = reason;
+
+  ping_manager_->SendPing(&item);
 }
 
 scoped_refptr<UpdateClient> UpdateClientFactory(
     const scoped_refptr<Configurator>& config) {
-  scoped_ptr<PingManager> ping_manager(new PingManager(*config));
-  return new UpdateClientImpl(config, ping_manager.Pass(),
+  scoped_ptr<PingManager> ping_manager(new PingManager(config));
+  return new UpdateClientImpl(config, std::move(ping_manager),
                               &UpdateChecker::Create, &CrxDownloader::Create);
 }
 

@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -145,7 +146,8 @@ class NetworkConnectionHandlerTest : public testing::Test {
     managed_config_handler_.reset(new ManagedNetworkConfigurationHandlerImpl());
     managed_config_handler_->Init(
         network_state_handler_.get(), network_profile_handler_.get(),
-        network_config_handler_.get(), nullptr /* network_device_handler */);
+        network_config_handler_.get(), nullptr /* network_device_handler */,
+        nullptr /* prohibited_tecnologies_handler */);
 
     network_connection_handler_.reset(new NetworkConnectionHandler);
     network_connection_handler_->Init(network_state_handler_.get(),
@@ -274,10 +276,10 @@ class NetworkConnectionHandlerTest : public testing::Test {
                    const base::DictionaryValue& global_config,
                    bool user_policy) {
     std::string error;
-    scoped_ptr<base::Value> network_configs_value(
-        base::JSONReader::DeprecatedReadAndReturnError(
-            network_configs_json, base::JSON_ALLOW_TRAILING_COMMAS, nullptr,
-            &error));
+    scoped_ptr<base::Value> network_configs_value =
+        base::JSONReader::ReadAndReturnError(network_configs_json,
+                                             base::JSON_ALLOW_TRAILING_COMMAS,
+                                             nullptr, &error);
     ASSERT_TRUE(network_configs_value) << error;
 
     base::ListValue* network_configs = nullptr;
@@ -332,6 +334,11 @@ const char* kConfigRequiresPassphrase =
     "{ \"GUID\": \"wifi3\", \"Type\": \"wifi\", "
     "  \"PassphraseRequired\": true }";
 
+const char* kPolicyWifi0 =
+    "[{ \"GUID\": \"wifi0\",  \"IPAddressConfigType\": \"DHCP\", "
+    "   \"Type\": \"WiFi\", \"Name\": \"My WiFi Network\","
+    "   \"WiFi\": { \"SSID\": \"wifi0\"}}]";
+
 }  // namespace
 
 TEST_F(NetworkConnectionHandlerTest, NetworkConnectionHandlerConnectSuccess) {
@@ -343,6 +350,23 @@ TEST_F(NetworkConnectionHandlerTest, NetworkConnectionHandlerConnectSuccess) {
   // Observer expectations
   EXPECT_TRUE(network_connection_observer_->GetRequested(kWifi0));
   EXPECT_EQ(kSuccessResult, network_connection_observer_->GetResult(kWifi0));
+}
+
+TEST_F(NetworkConnectionHandlerTest,
+       NetworkConnectionHandlerConnectProhibited) {
+  EXPECT_TRUE(Configure(kConfigConnectable));
+  base::DictionaryValue global_config;
+  global_config.SetBooleanWithoutPathExpansion(
+      ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect, true);
+  SetupPolicy("[]", global_config, false /* load as device policy */);
+  LoginToRegularUser();
+  Connect(kWifi0);
+  EXPECT_EQ(NetworkConnectionHandler::kErrorUnmanagedNetwork,
+            GetResultAndReset());
+
+  SetupPolicy(kPolicyWifi0, global_config, false /* load as device policy */);
+  Connect(kWifi0);
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
 }
 
 // Handles basic failure cases.

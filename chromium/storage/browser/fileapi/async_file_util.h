@@ -5,12 +5,14 @@
 #ifndef STORAGE_BROWSER_FILEAPI_ASYNC_FILE_UTIL_H_
 #define STORAGE_BROWSER_FILEAPI_ASYNC_FILE_UTIL_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/files/file.h"
 #include "base/files/file_util_proxy.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "storage/browser/fileapi/file_system_operation.h"
 #include "storage/browser/storage_browser_export.h"
@@ -77,9 +79,10 @@ class AsyncFileUtil {
            const scoped_refptr<storage::ShareableFileReference>& file_ref)>
       CreateSnapshotFileCallback;
 
-  typedef base::Callback<void(int64 size)> CopyFileProgressCallback;
+  typedef base::Callback<void(int64_t size)> CopyFileProgressCallback;
 
   typedef FileSystemOperation::CopyOrMoveOption CopyOrMoveOption;
+  typedef FileSystemOperation::GetMetadataField GetMetadataField;
 
   // Creates an AsyncFileUtil instance which performs file operations on
   // local native file system. The created instance assumes
@@ -149,10 +152,10 @@ class AsyncFileUtil {
   // - File::FILE_ERROR_NOT_FOUND if the file doesn't exist.
   // - Other error code if there was an error while retrieving the file info.
   //
-  virtual void GetFileInfo(
-      scoped_ptr<FileSystemOperationContext> context,
-      const FileSystemURL& url,
-      const GetFileInfoCallback& callback) = 0;
+  virtual void GetFileInfo(scoped_ptr<FileSystemOperationContext> context,
+                           const FileSystemURL& url,
+                           int fields,
+                           const GetFileInfoCallback& callback) = 0;
 
   // Reads contents of a directory at |path|.
   //
@@ -200,11 +203,10 @@ class AsyncFileUtil {
   // This reports following error code via |callback|:
   // - File::FILE_ERROR_NOT_FOUND if the file doesn't exist.
   //
-  virtual void Truncate(
-      scoped_ptr<FileSystemOperationContext> context,
-      const FileSystemURL& url,
-      int64 length,
-      const StatusCallback& callback) = 0;
+  virtual void Truncate(scoped_ptr<FileSystemOperationContext> context,
+                        const FileSystemURL& url,
+                        int64_t length,
+                        const StatusCallback& callback) = 0;
 
   // Copies a file from |src_url| to |dest_url|.
   // This must be called for files that belong to the same filesystem

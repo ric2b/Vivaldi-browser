@@ -17,7 +17,7 @@ import java.util.Locale;
  * the origin of logs, and enable or disable logging in different parts of the code.
  * </p>
  * <p>
- * @see usage documentation: <a href="README_logging.md">README_logging.md</a>.
+ * Usage documentation: {@code //docs/logging.md}.
  * </p>
  */
 public class Log {
@@ -39,6 +39,9 @@ public class Log {
     /** Convenience property, same as {@link android.util.Log#WARN}. */
     public static final int WARN = android.util.Log.WARN;
 
+    private static final String sTagPrefix = "cr_";
+    private static final String sDeprecatedTagPrefix = "cr.";
+
     private Log() {
         // Static only access
     }
@@ -53,6 +56,24 @@ public class Log {
     }
 
     /**
+     * Returns a normalized tag that will be in the form: "cr_foo". This function is called by the
+     * various Log overrides. If using {@link #isLoggable(String, int)}, you might want to call it
+     * to get the tag that will actually be used.
+     * @see #sTagPrefix
+     */
+    public static String normalizeTag(String tag) {
+        if (tag.startsWith(sTagPrefix)) return tag;
+
+        // TODO(dgn) simplify this once 'cr.' is out of the repo (http://crbug.com/533072)
+        int unprefixedTagStart = 0;
+        if (tag.startsWith(sDeprecatedTagPrefix)) {
+            unprefixedTagStart = sDeprecatedTagPrefix.length();
+        }
+
+        return sTagPrefix + tag.substring(unprefixedTagStart, tag.length());
+    }
+
+    /**
      * Returns a formatted log message, using the supplied format and arguments.
      * The message will be prepended with the filename and line number of the call.
      */
@@ -60,7 +81,12 @@ public class Log {
         return "[" + getCallOrigin() + "] " + formatLog(messageTemplate, params);
     }
 
-    /** Convenience function, forwards to {@link android.util.Log#isLoggable(String, int)}. */
+    /**
+     * Convenience function, forwards to {@link android.util.Log#isLoggable(String, int)}.
+     *
+     * Note: Has no effect on whether logs are sent or not. Use a method with
+     * {@link RemovableInRelease} to log something in Debug builds only.
+     */
     public static boolean isLoggable(String tag, int level) {
         return android.util.Log.isLoggable(tag, level);
     }
@@ -72,21 +98,20 @@ public class Log {
      * than 7 parameters, consider building your log message using a function annotated with
      * {@link RemovableInRelease}.
      *
-     * @param tag Used to identify the source of a log message.
+     * @param tag Used to identify the source of a log message. Might be modified in the output
+     *            (see {@link #normalizeTag(String)})
      * @param messageTemplate The message you would like logged. It is to be specified as a format
      *                        string.
      * @param args Arguments referenced by the format specifiers in the format string. If the last
      *             one is a {@link Throwable}, its trace will be printed.
      */
     private static void verbose(String tag, String messageTemplate, Object... args) {
-        if (Log.isLoggable(tag, Log.VERBOSE)) {
-            String message = formatLogWithStack(messageTemplate, args);
-            Throwable tr = getThrowableToLog(args);
-            if (tr != null) {
-                android.util.Log.v(tag, message, tr);
-            } else {
-                android.util.Log.v(tag, message);
-            }
+        String message = formatLogWithStack(messageTemplate, args);
+        Throwable tr = getThrowableToLog(args);
+        if (tr != null) {
+            android.util.Log.v(normalizeTag(tag), message, tr);
+        } else {
+            android.util.Log.v(normalizeTag(tag), message);
         }
     }
 
@@ -158,21 +183,20 @@ public class Log {
      * than 7 parameters, consider building your log message using a function annotated with
      * {@link RemovableInRelease}.
      *
-     * @param tag Used to identify the source of a log message.
+     * @param tag Used to identify the source of a log message. Might be modified in the output
+     *            (see {@link #normalizeTag(String)})
      * @param messageTemplate The message you would like logged. It is to be specified as a format
      *                        string.
      * @param args Arguments referenced by the format specifiers in the format string. If the last
      *             one is a {@link Throwable}, its trace will be printed.
      */
     private static void debug(String tag, String messageTemplate, Object... args) {
-        if (isLoggable(tag, Log.DEBUG)) {
-            String message = formatLogWithStack(messageTemplate, args);
-            Throwable tr = getThrowableToLog(args);
-            if (tr != null) {
-                android.util.Log.d(tag, message, tr);
-            } else {
-                android.util.Log.d(tag, message);
-            }
+        String message = formatLogWithStack(messageTemplate, args);
+        Throwable tr = getThrowableToLog(args);
+        if (tr != null) {
+            android.util.Log.d(normalizeTag(tag), message, tr);
+        } else {
+            android.util.Log.d(normalizeTag(tag), message);
         }
     }
 
@@ -238,7 +262,8 @@ public class Log {
     /**
      * Sends an {@link android.util.Log#INFO} log message.
      *
-     * @param tag Used to identify the source of a log message.
+     * @param tag Used to identify the source of a log message. Might be modified in the output
+     *            (see {@link #normalizeTag(String)})
      * @param messageTemplate The message you would like logged. It is to be specified as a format
      *                        string.
      * @param args Arguments referenced by the format specifiers in the format string. If the last
@@ -246,21 +271,20 @@ public class Log {
      */
     @VisibleForTesting
     public static void i(String tag, String messageTemplate, Object... args) {
-        if (Log.isLoggable(tag, Log.INFO)) {
-            String message = formatLog(messageTemplate, args);
-            Throwable tr = getThrowableToLog(args);
-            if (tr != null) {
-                android.util.Log.i(tag, message, tr);
-            } else {
-                android.util.Log.i(tag, message);
-            }
+        String message = formatLog(messageTemplate, args);
+        Throwable tr = getThrowableToLog(args);
+        if (tr != null) {
+            android.util.Log.i(normalizeTag(tag), message, tr);
+        } else {
+            android.util.Log.i(normalizeTag(tag), message);
         }
     }
 
     /**
      * Sends a {@link android.util.Log#WARN} log message.
      *
-     * @param tag Used to identify the source of a log message.
+     * @param tag Used to identify the source of a log message. Might be modified in the output
+     *            (see {@link #normalizeTag(String)})
      * @param messageTemplate The message you would like logged. It is to be specified as a format
      *                        string.
      * @param args Arguments referenced by the format specifiers in the format string. If the last
@@ -268,21 +292,20 @@ public class Log {
      */
     @VisibleForTesting
     public static void w(String tag, String messageTemplate, Object... args) {
-        if (Log.isLoggable(tag, Log.WARN)) {
-            String message = formatLog(messageTemplate, args);
-            Throwable tr = getThrowableToLog(args);
-            if (tr != null) {
-                android.util.Log.w(tag, message, tr);
-            } else {
-                android.util.Log.w(tag, message);
-            }
+        String message = formatLog(messageTemplate, args);
+        Throwable tr = getThrowableToLog(args);
+        if (tr != null) {
+            android.util.Log.w(normalizeTag(tag), message, tr);
+        } else {
+            android.util.Log.w(normalizeTag(tag), message);
         }
     }
 
     /**
      * Sends an {@link android.util.Log#ERROR} log message.
      *
-     * @param tag Used to identify the source of a log message.
+     * @param tag Used to identify the source of a log message. Might be modified in the output
+     *            (see {@link #normalizeTag(String)})
      * @param messageTemplate The message you would like logged. It is to be specified as a format
      *                        string.
      * @param args Arguments referenced by the format specifiers in the format string. If the last
@@ -290,14 +313,12 @@ public class Log {
      */
     @VisibleForTesting
     public static void e(String tag, String messageTemplate, Object... args) {
-        if (Log.isLoggable(tag, Log.ERROR)) {
-            String message = formatLog(messageTemplate, args);
-            Throwable tr = getThrowableToLog(args);
-            if (tr != null) {
-                android.util.Log.e(tag, message, tr);
-            } else {
-                android.util.Log.e(tag, message);
-            }
+        String message = formatLog(messageTemplate, args);
+        Throwable tr = getThrowableToLog(args);
+        if (tr != null) {
+            android.util.Log.e(normalizeTag(tag), message, tr);
+        } else {
+            android.util.Log.e(normalizeTag(tag), message);
         }
     }
 
@@ -308,7 +329,8 @@ public class Log {
      *
      * @see android.util.Log#wtf(String, String, Throwable)
      *
-     * @param tag Used to identify the source of a log message.
+     * @param tag Used to identify the source of a log message. Might be modified in the output
+     *            (see {@link #normalizeTag(String)})
      * @param messageTemplate The message you would like logged. It is to be specified as a format
      *                        string.
      * @param args Arguments referenced by the format specifiers in the format string. If the last
@@ -316,14 +338,12 @@ public class Log {
      */
     @VisibleForTesting
     public static void wtf(String tag, String messageTemplate, Object... args) {
-        if (Log.isLoggable(tag, Log.ASSERT)) {
-            String message = formatLog(messageTemplate, args);
-            Throwable tr = getThrowableToLog(args);
-            if (tr != null) {
-                android.util.Log.wtf(tag, message, tr);
-            } else {
-                android.util.Log.wtf(tag, message);
-            }
+        String message = formatLog(messageTemplate, args);
+        Throwable tr = getThrowableToLog(args);
+        if (tr != null) {
+            android.util.Log.wtf(normalizeTag(tag), message, tr);
+        } else {
+            android.util.Log.wtf(normalizeTag(tag), message);
         }
     }
 

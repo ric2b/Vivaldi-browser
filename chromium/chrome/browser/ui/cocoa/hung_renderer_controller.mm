@@ -7,6 +7,7 @@
 #import <Cocoa/Cocoa.h>
 
 #include "base/mac/bundle_locations.h"
+#include "base/macros.h"
 #include "base/process/process.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/ui/cocoa/multi_key_equivalent_button.h"
@@ -17,6 +18,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/result_codes.h"
 #include "grit/theme_resources.h"
@@ -165,7 +167,9 @@ class HungRendererWebContentsObserverBridge
 
 - (IBAction)wait:(id)sender {
   if (hungContents_ && hungContents_->GetRenderViewHost())
-    hungContents_->GetRenderViewHost()->RestartHangMonitorTimeout();
+    hungContents_->GetRenderViewHost()
+        ->GetWidget()
+        ->RestartHangMonitorTimeout();
   // Cannot call performClose:, because the close button is disabled.
   [self close];
 }

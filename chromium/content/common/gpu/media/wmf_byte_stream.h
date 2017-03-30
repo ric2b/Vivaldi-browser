@@ -13,7 +13,6 @@
 
 #include <vector>
 
-#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/win/iunknown_impl.h"
 #include "base/win/scoped_comptr.h"
@@ -33,10 +32,6 @@ class WMFByteStream : public IMFByteStream,
 
   // Overrides from IUnknown
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) override;
-  // It is assumed that WMFByteStream object's lifetime will be controlled by
-  // the classes that create and use it, as giving control to WMF can cause some
-  // subtle problems (e.g. DNA-34245). Methods below are provided as they are a
-  // part of IUnknown interfae, but they usage is limited to debugging purposes.
   ULONG STDMETHODCALLTYPE AddRef() override;
   ULONG STDMETHODCALLTYPE Release() override;
 
@@ -118,7 +113,7 @@ class WMFByteStream : public IMFByteStream,
   HRESULT STDMETHODCALLTYPE CopyAllItems(IMFAttributes* dest) override;
 
  private:
-  static const int64 kUnknownSize;
+  static const int64_t kUnknownSize;
 
   void OnReadData(int size);
 
@@ -131,20 +126,12 @@ class WMFByteStream : public IMFByteStream,
   // standard IMFAttributes class, which we store a reference to here.
   base::win::ScopedComPtr<IMFAttributes> attributes_;
 
-  // Cached number of bytes last read from the data source.
-  int last_read_bytes_;
-
   // Cached position within the data source.
-  int64 read_position_;
+  int64_t read_position_;
 
   bool stopped_;
 
-  // Used only for debugging purposes.
-  base::AtomicRefCount ref_count_;
-
   base::ThreadChecker thread_checker_;
-
-  base::WeakPtrFactory<WMFByteStream> weak_factory_;
 };
 
 }  // namespace content

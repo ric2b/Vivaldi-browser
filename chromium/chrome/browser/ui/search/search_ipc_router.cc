@@ -4,9 +4,12 @@
 
 #include "chrome/browser/ui/search/search_ipc_router.h"
 
+#include <utility>
+
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/common/render_messages.h"
+#include "components/search/search.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/web_contents.h"
 
@@ -29,10 +32,11 @@ bool IsProviderValid(const base::string16& provider) {
 }  // namespace
 
 SearchIPCRouter::SearchIPCRouter(content::WebContents* web_contents,
-                                 Delegate* delegate, scoped_ptr<Policy> policy)
+                                 Delegate* delegate,
+                                 scoped_ptr<Policy> policy)
     : WebContentsObserver(web_contents),
       delegate_(delegate),
-      policy_(policy.Pass()),
+      policy_(std::move(policy)),
       commit_counter_(0),
       is_active_tab_(false) {
   DCHECK(web_contents);
@@ -80,10 +84,10 @@ void SearchIPCRouter::SetDisplayInstantResults() {
   if (!policy_->ShouldSendSetDisplayInstantResults())
     return;
 
-  bool is_search_results_page = !chrome::GetSearchTerms(web_contents()).empty();
-  bool display_instant_results = is_search_results_page ?
-      chrome::ShouldPrefetchSearchResultsOnSRP() :
-          chrome::ShouldPrefetchSearchResults();
+  bool is_search_results_page = !search::GetSearchTerms(web_contents()).empty();
+  bool display_instant_results =
+      is_search_results_page ? search::ShouldPrefetchSearchResultsOnSRP()
+                             : search::ShouldPrefetchSearchResults();
   Send(new ChromeViewMsg_SearchBoxSetDisplayInstantResults(
        routing_id(), display_instant_results));
 }
@@ -95,13 +99,6 @@ void SearchIPCRouter::SetSuggestionToPrefetch(
 
   Send(new ChromeViewMsg_SearchBoxSetSuggestionToPrefetch(routing_id(),
                                                           suggestion));
-}
-
-void SearchIPCRouter::SetOmniboxStartMargin(int start_margin) {
-  if (!policy_->ShouldSendSetOmniboxStartMargin())
-    return;
-
-  Send(new ChromeViewMsg_SearchBoxMarginChange(routing_id(), start_margin));
 }
 
 void SearchIPCRouter::SetInputInProgress(bool input_in_progress) {
@@ -136,13 +133,6 @@ void SearchIPCRouter::SendThemeBackgroundInfo(
   Send(new ChromeViewMsg_SearchBoxThemeChanged(routing_id(), theme_info));
 }
 
-void SearchIPCRouter::ToggleVoiceSearch() {
-  if (!policy_->ShouldSendToggleVoiceSearch())
-    return;
-
-  Send(new ChromeViewMsg_SearchBoxToggleVoiceSearch(routing_id()));
-}
-
 void SearchIPCRouter::Submit(const base::string16& text,
                              const EmbeddedSearchRequestParams& params) {
   if (!policy_->ShouldSubmitQuery())
@@ -165,15 +155,13 @@ bool SearchIPCRouter::OnMessageReceived(const IPC::Message& message) {
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  if (!chrome::IsRenderedInInstantProcess(web_contents(), profile))
+  if (!search::IsRenderedInInstantProcess(web_contents(), profile))
     return false;
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(SearchIPCRouter, message)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_InstantSupportDetermined,
                         OnInstantSupportDetermined)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_SetVoiceSearchSupported,
-                        OnVoiceSearchSupportDetermined)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_FocusOmnibox, OnFocusOmnibox);
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_SearchBoxNavigate,
                         OnSearchBoxNavigate);
@@ -205,19 +193,6 @@ void SearchIPCRouter::OnInstantSupportDetermined(int page_seq_no,
     return;
 
   delegate_->OnInstantSupportDetermined(instant_support);
-}
-
-void SearchIPCRouter::OnVoiceSearchSupportDetermined(
-    int page_seq_no,
-    bool supports_voice_search) const {
-  if (page_seq_no != commit_counter_)
-    return;
-
-  delegate_->OnInstantSupportDetermined(true);
-  if (!policy_->ShouldProcessSetVoiceSearchSupport())
-    return;
-
-  delegate_->OnSetVoiceSearchSupport(supports_voice_search);
 }
 
 void SearchIPCRouter::OnFocusOmnibox(int page_seq_no,

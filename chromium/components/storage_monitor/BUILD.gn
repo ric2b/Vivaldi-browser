@@ -5,7 +5,7 @@
 import("//build/config/features.gni")
 
 # GYP version: components/storage_monitor.gypi:storage_monitor
-static_library("storage_monitor") {
+source_set("storage_monitor") {
   sources = [
     "image_capture_device.h",
     "image_capture_device.mm",
@@ -44,6 +44,8 @@ static_library("storage_monitor") {
 
   deps = [
     "//base",
+    "//content/public/browser",
+    "//ui/base",
   ]
 
   if (is_mac) {
@@ -81,11 +83,13 @@ static_library("storage_monitor") {
       "storage_monitor_linux.cc",
       "storage_monitor_linux.h",
     ]
+    deps += [ "//chromeos" ]
   }
 }
 
 # GYP version: components/storage_monitor.gypi:storage_monitor_test_support
-static_library("test_support") {
+source_set("test_support") {
+  testonly = true
   sources = [
     "mock_removable_storage_observer.cc",
     "mock_removable_storage_observer.h",
@@ -101,16 +105,58 @@ static_library("test_support") {
     "test_volume_mount_watcher_win.h",
   ]
 
-  deps = [
-    "//base",
+  public_deps = [
     ":storage_monitor",
+    "//base",
+    "//content/public/browser",
   ]
 
   if (is_linux) {
-    deps += [
+    deps = [
       "//device/media_transfer_protocol",
       "//device/media_transfer_protocol:mtp_file_entry_proto",
       "//device/media_transfer_protocol:mtp_storage_info_proto",
+    ]
+  }
+
+  if (is_win) {
+    deps = [
+      "//testing/gtest",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "image_capture_device_manager_unittest.mm",
+    "media_storage_util_unittest.cc",
+    "media_transfer_protocol_device_observer_linux_unittest.cc",
+    "storage_info_unittest.cc",
+    "storage_monitor_mac_unittest.mm",
+    "storage_monitor_unittest.cc",
+    "storage_monitor_win_unittest.cc",
+  ]
+
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    ":test_support",
+    "//content/test:test_support",
+    "//testing/gtest",
+  ]
+
+  if (is_linux) {
+    deps += [ "//device/media_transfer_protocol" ]
+    if (!is_chromeos) {
+      sources += [ "storage_monitor_linux_unittest.cc" ]
+    }
+  }
+  if (is_chromeos) {
+    sources += [ "storage_monitor_chromeos_unittest.cc" ]
+    deps += [
+      "//chromeos:test_support",
+      "//testing/gmock",
     ]
   }
 }

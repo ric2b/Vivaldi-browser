@@ -10,6 +10,7 @@
 
 #include <windows.h>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/storage_monitor/storage_monitor_win.h"
 
@@ -26,7 +27,7 @@ class TestStorageMonitorWin: public StorageMonitorWin {
 
   ~TestStorageMonitorWin() override;
 
-  void InjectDeviceChange(UINT event_type, DWORD data);
+  void InjectDeviceChange(UINT event_type, LPARAM data);
 
   VolumeMountWatcherWin* volume_mount_watcher();
 

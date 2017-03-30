@@ -5,8 +5,10 @@
 #ifndef CONTENT_RENDERER_PEPPER_RESOURCE_CREATION_IMPL_H_
 #define CONTENT_RENDERER_PEPPER_RESOURCE_CREATION_IMPL_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ppapi/thunk/resource_creation_api.h"
 
 namespace content {
@@ -31,6 +33,7 @@ class ResourceCreationImpl : public ppapi::thunk::ResourceCreationAPI {
                           PP_Resource config_id,
                           PPB_Audio_Callback audio_callback,
                           void* user_data) override;
+  PP_Resource CreateAudioEncoder(PP_Instance instance) override;
   PP_Resource CreateAudioTrusted(PP_Instance instance) override;
   PP_Resource CreateAudioConfig(PP_Instance instance,
                                 PP_AudioSampleRate sample_rate,
@@ -56,7 +59,8 @@ class ResourceCreationImpl : public ppapi::thunk::ResourceCreationAPI {
       PP_Resource share_context,
       const int32_t* attrib_list,
       gpu::Capabilities* capabilities,
-      base::SharedMemoryHandle* shared_state) override;
+      base::SharedMemoryHandle* shared_state,
+      uint64_t* command_buffer_id) override;
   PP_Resource CreateHostResolver(PP_Instance instance) override;
   PP_Resource CreateHostResolverPrivate(PP_Instance instance) override;
   PP_Resource CreateImageData(PP_Instance instance,

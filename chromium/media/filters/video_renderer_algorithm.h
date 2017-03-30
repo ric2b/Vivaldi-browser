@@ -5,9 +5,13 @@
 #ifndef MEDIA_FILTERS_VIDEO_RENDERER_ALGORITHM_H_
 #define MEDIA_FILTERS_VIDEO_RENDERER_ALGORITHM_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"
@@ -116,6 +120,9 @@ class MEDIA_EXPORT VideoRendererAlgorithm {
   // In either case, frames enqueued before the last displayed frame will not
   // be counted as effective.
   size_t EffectiveFramesQueued() const;
+
+  // Returns an estimate of the amount of memory (in bytes) used for frames.
+  int64_t GetMemoryUsage() const;
 
   // Tells the algorithm that Render() callbacks have been suspended for a known
   // reason and such stoppage shouldn't be counted against future frames.

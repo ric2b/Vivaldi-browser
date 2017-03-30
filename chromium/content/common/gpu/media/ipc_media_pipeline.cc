@@ -27,7 +27,7 @@ namespace {
 const char* const kDecodedDataReadTraceEventNames[] = {"GPU ReadAudioData",
                                                        "GPU ReadVideoData"};
 static_assert(arraysize(kDecodedDataReadTraceEventNames) ==
-                  media::PLATFORM_MEDIA_DATA_TYPE_COUNT,
+                  static_cast<size_t>(media::PlatformMediaDecodingMode::COUNT),
               "Incorrect number of defined tracing event names.");
 
 bool MakeDecoderContextCurrent(
@@ -50,7 +50,7 @@ bool MakeDecoderContextCurrent(
 namespace content {
 
 IPCMediaPipeline::IPCMediaPipeline(IPC::Sender* channel,
-                                   int32 routing_id,
+                                   int32_t routing_id,
                                    GpuCommandBufferStub* command_buffer)
     : state_(CONSTRUCTED),
       channel_(channel),
@@ -60,7 +60,8 @@ IPCMediaPipeline::IPCMediaPipeline(IPC::Sender* channel,
   DCHECK(channel_);
 
   std::fill(has_media_type_,
-            has_media_type_ + media::PLATFORM_MEDIA_DATA_TYPE_COUNT,
+            has_media_type_ +
+                static_cast<size_t>(media::PlatformMediaDecodingMode::COUNT),
             false);
 }
 
@@ -68,7 +69,7 @@ IPCMediaPipeline::~IPCMediaPipeline() {
   DCHECK(thread_checker_.CalledOnValidThread());
 }
 
-void IPCMediaPipeline::OnInitialize(int64 data_source_size,
+void IPCMediaPipeline::OnInitialize(int64_t data_source_size,
                                     bool is_data_source_streaming,
                                     const std::string& mime_type) {
   DVLOG(1) << __FUNCTION__;
@@ -84,11 +85,10 @@ void IPCMediaPipeline::OnInitialize(int64 data_source_size,
       channel_, routing_id_, data_source_size, is_data_source_streaming));
 
   media::PlatformMediaDecodingMode preferred_video_decoding_mode =
-      media::PLATFORM_MEDIA_DECODING_MODE_SOFTWARE;
+      media::PlatformMediaDecodingMode::SOFTWARE;
   PlatformMediaPipeline::MakeGLContextCurrentCB make_gl_context_current_cb;
   if (command_buffer_) {
-    preferred_video_decoding_mode =
-        media::PLATFORM_MEDIA_DECODING_MODE_HARDWARE;
+    preferred_video_decoding_mode = media::PlatformMediaDecodingMode::HARDWARE;
     make_gl_context_current_cb =
         base::Bind(&MakeDecoderContextCurrent, command_buffer_->AsWeakPtr());
   }
@@ -111,7 +111,7 @@ void IPCMediaPipeline::Initialized(
     const media::PlatformMediaTimeInfo& time_info,
     const media::PlatformAudioConfig& audio_config,
     const media::PlatformVideoConfig& video_config) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __FUNCTION__ << "(" << success << ")";
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, BUSY);
 

@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/character_encoding.h"
 #include "chrome/browser/net/url_request_mock_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -166,7 +170,8 @@ IN_PROC_BROWSER_TEST_P(BrowserEncodingTest, TestEncodingAliasMapping) {
   test_file_path = test_file_path.AppendASCII(
       GetParam().file_name);
 
-  GURL url = net::URLRequestMockHTTPJob::GetMockUrl(test_file_path);
+  GURL url =
+      net::URLRequestMockHTTPJob::GetMockUrl(test_file_path.MaybeAsASCII());
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_EQ(GetParam().encoding_name,
             browser()->tab_strip_model()->GetActiveWebContents()->
@@ -187,7 +192,8 @@ IN_PROC_BROWSER_TEST_F(BrowserEncodingTest, DISABLED_TestOverrideEncoding) {
   base::FilePath test_dir_path =
       base::FilePath(kTestDir).AppendASCII(kOverrideTestDir);
   test_dir_path = test_dir_path.AppendASCII(kTestFileName);
-  GURL url = net::URLRequestMockHTTPJob::GetMockUrl(test_dir_path);
+  GURL url =
+      net::URLRequestMockHTTPJob::GetMockUrl(test_dir_path.MaybeAsASCII());
   ui_test_utils::NavigateToURL(browser(), url);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -222,15 +228,15 @@ IN_PROC_BROWSER_TEST_F(BrowserEncodingTest, DISABLED_TestOverrideEncoding) {
 // For Hebrew, the expected encoding value is ISO-8859-8-I. See
 // http://crbug.com/2927 for more details.
 //
-// This test fails frequently on the win_rel trybot. See http://crbug.com/122053
-// It also times out frequently on Mac dbg. See http://crbug.com/351325
-// TODO(vivaldi) Reenable Mac for Vivaldi
-#if defined(OS_WIN) || defined(OS_MACOSX)
+// This test is failing consistently on ChromeOS, see http://crbug.com/512996.
+#if defined(OS_CHROMEOS)
 #define MAYBE_TestEncodingAutoDetect DISABLED_TestEncodingAutoDetect
 #else
 #define MAYBE_TestEncodingAutoDetect TestEncodingAutoDetect
 #endif
 // TODO(phajdan.jr): See if fix for http://crbug.com/122053 would help here.
+// Disabled to revert a depending Blink CL. crbug.com/328354, and
+// crbug.com/510422.
 IN_PROC_BROWSER_TEST_F(BrowserEncodingTest, DISABLED_TestEncodingAutoDetect) {
   struct EncodingAutoDetectTestData {
     const char* test_file_name;   // File name of test data.
@@ -306,7 +312,8 @@ IN_PROC_BROWSER_TEST_F(BrowserEncodingTest, DISABLED_TestEncodingAutoDetect) {
 
     base::FilePath test_file_path(test_dir_path);
     test_file_path = test_file_path.AppendASCII(kTestDatas[i].test_file_name);
-    GURL url = net::URLRequestMockHTTPJob::GetMockUrl(test_file_path);
+    GURL url =
+        net::URLRequestMockHTTPJob::GetMockUrl(test_file_path.MaybeAsASCII());
     ui_test_utils::NavigateToURL(browser(), url);
 
     // Get the encoding used for the page, it must be the default charset we

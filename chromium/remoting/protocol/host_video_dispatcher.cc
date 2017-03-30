@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/host_video_dispatcher.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "net/socket/stream_socket.h"
 #include "remoting/base/constants.h"
@@ -32,7 +34,7 @@ void HostVideoDispatcher::ProcessVideoPacket(scoped_ptr<VideoPacket> packet,
 void HostVideoDispatcher::OnVideoAck(scoped_ptr<VideoAck> ack,
                                      const base::Closure& done) {
   if (video_feedback_stub_)
-    video_feedback_stub_->ProcessVideoAck(ack.Pass());
+    video_feedback_stub_->ProcessVideoAck(std::move(ack));
 
   done.Run();
 }

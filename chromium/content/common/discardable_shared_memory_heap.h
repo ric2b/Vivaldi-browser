@@ -5,9 +5,13 @@
 #ifndef CONTENT_COMMON_DISCARDABLE_SHARED_MEMORY_HEAP_H_
 #define CONTENT_COMMON_DISCARDABLE_SHARED_MEMORY_HEAP_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/containers/linked_list.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -30,6 +34,7 @@ class CONTENT_EXPORT DiscardableSharedMemoryHeap {
     base::DiscardableSharedMemory* shared_memory() { return shared_memory_; }
     size_t start() const { return start_; }
     size_t length() const { return length_; }
+    void set_is_locked(bool is_locked) { is_locked_ = is_locked; }
 
    private:
     friend class DiscardableSharedMemoryHeap;
@@ -41,6 +46,7 @@ class CONTENT_EXPORT DiscardableSharedMemoryHeap {
     base::DiscardableSharedMemory* shared_memory_;
     size_t start_;
     size_t length_;
+    bool is_locked_;
 
     DISALLOW_COPY_AND_ASSIGN(Span);
   };
@@ -91,8 +97,15 @@ class CONTENT_EXPORT DiscardableSharedMemoryHeap {
   // Returns a unique identifier for a given tuple of (process id, segment id)
   // that can be used to match memory dumps across different processes.
   static base::trace_event::MemoryAllocatorDumpGuid GetSegmentGUIDForTracing(
-      uint64 tracing_process_id,
-      int32 segment_id);
+      uint64_t tracing_process_id,
+      int32_t segment_id);
+
+  // Returns a MemoryAllocatorDump for a given span on |pmd| with the size of
+  // the span.
+  base::trace_event::MemoryAllocatorDump* CreateMemoryAllocatorDump(
+      Span* span,
+      const char* name,
+      base::trace_event::ProcessMemoryDump* pmd) const;
 
  private:
   class ScopedMemorySegment {
@@ -106,6 +119,14 @@ class CONTENT_EXPORT DiscardableSharedMemoryHeap {
 
     bool IsUsed() const;
     bool IsResident() const;
+
+    bool ContainsSpan(Span* span) const;
+
+    base::trace_event::MemoryAllocatorDump* CreateMemoryAllocatorDump(
+        Span* span,
+        size_t block_size,
+        const char* name,
+        base::trace_event::ProcessMemoryDump* pmd) const;
 
     // Used for dumping memory statistics from the segment to chrome://tracing.
     void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) const;

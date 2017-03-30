@@ -5,6 +5,9 @@
 #ifndef CC_DEBUG_DEVTOOLS_INSTRUMENTATION_H_
 #define CC_DEBUG_DEVTOOLS_INSTRUMENTATION_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 
@@ -52,9 +55,10 @@ class ScopedLayerTask {
 
 class ScopedImageDecodeTask {
  public:
-  explicit ScopedImageDecodeTask(void* pixelRef) {
+  explicit ScopedImageDecodeTask(const void* imagePtr) {
     TRACE_EVENT_BEGIN1(internal::kCategory, internal::kImageDecodeTask,
-        internal::kPixelRefId, reinterpret_cast<uint64>(pixelRef));
+                       internal::kPixelRefId,
+                       reinterpret_cast<uint64_t>(imagePtr));
   }
   ~ScopedImageDecodeTask() {
     TRACE_EVENT_END0(internal::kCategory, internal::kImageDecodeTask);

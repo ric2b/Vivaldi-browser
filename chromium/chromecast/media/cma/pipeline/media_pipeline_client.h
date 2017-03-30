@@ -14,8 +14,8 @@ namespace chromecast {
 namespace media {
 
 struct MediaPipelineClient {
-  typedef base::Callback<void(
-      base::TimeDelta, base::TimeDelta, base::TimeTicks)> TimeUpdateCB;
+  typedef base::Callback<
+      void(base::TimeDelta, base::TimeDelta, base::TimeTicks)> TimeUpdateCB;
 
   MediaPipelineClient();
   ~MediaPipelineClient();
@@ -29,6 +29,11 @@ struct MediaPipelineClient {
 
   // Callback used to report the buffering status.
   ::media::BufferingStateCB buffering_state_cb;
+
+  // Callback used to report the creation and destruction of
+  // MediaPipelineBackend
+  base::Closure pipeline_backend_created_cb;
+  base::Closure pipeline_backend_destroyed_cb;
 };
 
 }  // namespace media

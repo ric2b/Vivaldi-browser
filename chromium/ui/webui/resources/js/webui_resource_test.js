@@ -143,11 +143,18 @@ function assertDeepEquals(expected, observed, opt_message) {
    */
   function runTests() {
     for (var name in window) {
-      if (typeof window[name] == 'function' && /^test/.test(name))
+      // To avoid unnecessary getting properties, test name first.
+      if (/^test/.test(name) && typeof window[name] == 'function')
         testCases.push(name);
     }
     if (!testCases.length) {
       console.error('Failed to find test cases.');
+      cleanTestRun = false;
+    }
+    try {
+      if (window.setUpPage)
+        window.setUpPage();
+    } catch(err) {
       cleanTestRun = false;
     }
     continueTesting();

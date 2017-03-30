@@ -61,8 +61,9 @@
     'jar_path': '<(intermediate_dir)/<(jar_name)',
     'jar_final_path': '<(jar_dir)/<(jar_name)',
     'jar_excluded_classes': [ '*/R.class', '*/R##*.class' ],
-    'instr_stamp': '<(intermediate_dir)/instr.stamp',
+    'emma_instr_stamp': '<(intermediate_dir)/emma_instr.stamp',
     'additional_input_paths': [],
+    'additional_locale_input_paths': [],
     'dex_path': '<(PRODUCT_DIR)/lib.java/<(_target_name).dex.jar',
     'generated_src_dirs': ['>@(generated_R_dirs)'],
     'generated_R_dirs': [],
@@ -82,8 +83,6 @@
     'java_in_dir_suffix%': '/src',
     'proguard_config%': '',
     'proguard_preprocess%': '0',
-    'enable_errorprone%': '0',
-    'errorprone_exe_path': '<(PRODUCT_DIR)/bin.java/chromium_errorprone',
     'variables': {
       'variables': {
         'proguard_preprocess%': 0,
@@ -104,6 +103,13 @@
     },
     'emma_instrument': '<(emma_instrument)',
     'javac_jar_path': '<(javac_jar_path)',
+    'conditions': [
+      ['chromium_code == 0', {
+        'enable_errorprone': 0,
+      }],
+    ],
+    'enable_errorprone%': 0,
+    'errorprone_exe_path': '<(PRODUCT_DIR)/bin.java/chromium_errorprone',
   },
   'conditions': [
     ['add_to_dependents_classpaths == 1', {
@@ -128,6 +134,7 @@
         'generated_src_dirs': ['<(R_dir)'],
         'additional_input_paths': ['<(resource_zip_path)', ],
 
+        'dependencies_locale_zip_paths': [],
         'dependencies_res_zip_paths': [],
         'resource_zip_path': '<(PRODUCT_DIR)/res.java/<(_target_name).zip',
       },
@@ -159,6 +166,10 @@
             # the list of inputs changes.
             'inputs_list_file': '>|(java_resources.<(_target_name).gypcmd >@(resource_input_paths))',
             'process_resources_options': [],
+            'local_dependencies_res_zip_paths': [
+              '>@(dependencies_res_zip_paths)',
+              '>@(dependencies_locale_zip_paths)'
+            ],
             'conditions': [
               ['res_v14_skip == 1', {
                 'process_resources_options': ['--v14-skip']
@@ -170,7 +181,7 @@
             '<(DEPTH)/build/android/gyp/process_resources.py',
             '<(DEPTH)/build/android/gyp/generate_v14_compatible_resources.py',
             '>@(resource_input_paths)',
-            '>@(dependencies_res_zip_paths)',
+            '>@(local_dependencies_res_zip_paths)',
             '>(inputs_list_file)',
           ],
           'outputs': [
@@ -178,14 +189,15 @@
           ],
           'action': [
             'python', '<(DEPTH)/build/android/gyp/process_resources.py',
-            '--android-sdk', '<(android_sdk)',
+            '--android-sdk-jar', '<(android_sdk_jar)',
             '--aapt-path', '<(android_aapt_path)',
-            '--non-constant-id',
+            # Need to generate onResourcesLoaded() in R.java, so could be used in java lib.
+            '--shared-resources',
 
             '--android-manifest', '<(android_manifest)',
             '--custom-package', '<(R_package)',
 
-            '--dependencies-res-zips', '>(dependencies_res_zip_paths)',
+            '--dependencies-res-zips', '>(local_dependencies_res_zip_paths)',
             '--resource-dirs', '<(res_input_dirs)',
 
             '--R-dir', '<(R_dir)',
@@ -202,7 +214,7 @@
           'action_name': 'proguard_<(_target_name)',
           'message': 'Proguard preprocessing <(_target_name) jar',
           'inputs': [
-            '<(android_sdk_root)/tools/proguard/lib/proguard.jar',
+            '<(DEPTH)/third_party/proguard/lib/proguard.jar',
             '<(DEPTH)/build/android/gyp/util/build_utils.py',
             '<(DEPTH)/build/android/gyp/proguard.py',
             '<(javac_jar_path)',
@@ -213,7 +225,7 @@
           ],
           'action': [
             'python', '<(DEPTH)/build/android/gyp/proguard.py',
-            '--proguard-path=<(android_sdk_root)/tools/proguard/lib/proguard.jar',
+            '--proguard-path=<(DEPTH)/third_party/proguard/lib/proguard.jar',
             '--input-path=<(javac_jar_path)',
             '--output-path=<(jar_path)',
             '--proguard-config=<(proguard_config)',
@@ -227,6 +239,17 @@
         {
           'action_name': 'findbugs_<(_target_name)',
           'message': 'Running findbugs on <(_target_name)',
+          'variables': {
+            'additional_findbugs_args': [],
+            'findbugs_verbose%': 0,
+          },
+          'conditions': [
+            ['findbugs_verbose == 1', {
+              'variables': {
+                'additional_findbugs_args+': ['-vv'],
+              },
+            }],
+          ],
           'inputs': [
             '<(DEPTH)/build/android/findbugs_diff.py',
             '<(DEPTH)/build/android/findbugs_filter/findbugs_exclude.xml',
@@ -242,6 +265,7 @@
             'python', '<(DEPTH)/build/android/findbugs_diff.py',
             '--auxclasspath-gyp', '>(input_jars_paths)',
             '--stamp', '<(findbugs_stamp)',
+            '<@(additional_findbugs_args)',
             '<(jar_final_path)',
           ],
         },
@@ -249,7 +273,7 @@
     }],
     ['enable_errorprone == 1', {
       'dependencies': [
-        '<(DEPTH)/third_party/errorprone/errorprone.gyp:chromium_errorprone',
+        '<(DEPTH)/third_party/errorprone/errorprone.gyp:require_errorprone',
       ],
     }],
   ],
@@ -258,6 +282,10 @@
       'action_name': 'javac_<(_target_name)',
       'message': 'Compiling <(_target_name) java sources',
       'variables': {
+        'local_additional_input_paths': [
+          '>@(additional_input_paths)',
+          '>@(additional_locale_input_paths)',
+        ],
         'extra_args': [],
         'extra_inputs': [],
         'java_sources': ['>!@(find >(java_in_dir)>(java_in_dir_suffix) >(additional_src_dirs) -name "*.java")'],
@@ -275,7 +303,7 @@
         '<(DEPTH)/build/android/gyp/javac.py',
         '>@(java_sources)',
         '>@(input_jars_paths)',
-        '>@(additional_input_paths)',
+        '>@(local_additional_input_paths)',
         '<@(extra_inputs)',
       ],
       'outputs': [
@@ -297,13 +325,14 @@
       ]
     },
     {
-      'action_name': 'instr_jar_<(_target_name)',
+      'action_name': 'emma_instr_jar_<(_target_name)',
       'message': 'Instrumenting <(_target_name) jar',
       'variables': {
         'input_path': '<(jar_path)',
         'output_path': '<(jar_final_path)',
-        'stamp_path': '<(instr_stamp)',
-        'instr_type': 'jar',
+        'coverage_file': '<(jar_dir)/<(_target_name).em',
+        'sources_list_file': '<(jar_dir)/<(_target_name)_sources.txt',
+        'stamp_path': '<(emma_instr_stamp)',
       },
       'outputs': [
         '<(jar_final_path)',
@@ -311,7 +340,7 @@
       'inputs': [
         '<(jar_path)',
       ],
-      'includes': [ 'android/instr_action.gypi' ],
+      'includes': [ 'android/emma_instr_action.gypi' ],
     },
     {
       'variables': {

@@ -4,6 +4,8 @@
 
 #include "ui/base/l10n/l10n_util_android.h"
 
+#include <stdint.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
@@ -17,8 +19,9 @@
 
 namespace l10n_util {
 
-jint GetFirstStrongCharacterDirection(JNIEnv* env, jclass clazz,
-                                      jstring string) {
+jint GetFirstStrongCharacterDirection(JNIEnv* env,
+                                      const JavaParamRef<jclass>& clazz,
+                                      const JavaParamRef<jstring>& string) {
   return base::i18n::GetFirstStrongCharacterDirection(
       base::android::ConvertJavaStringToUTF16(env, string));
 }
@@ -92,14 +95,16 @@ base::string16 GetDisplayNameForLocale(const std::string& locale,
   return ConvertJavaStringToUTF16(java_result);
 }
 
-jstring GetDurationString(JNIEnv* env, jclass clazz, jlong timeInMillis) {
+ScopedJavaLocalRef<jstring> GetDurationString(JNIEnv* env,
+                                              const JavaParamRef<jclass>& clazz,
+                                              jlong timeInMillis) {
   ScopedJavaLocalRef<jstring> jtime_remaining =
       base::android::ConvertUTF16ToJavaString(
           env,
           ui::TimeFormat::Simple(
               ui::TimeFormat::FORMAT_REMAINING, ui::TimeFormat::LENGTH_SHORT,
               base::TimeDelta::FromMilliseconds(timeInMillis)));
-  return jtime_remaining.Release();
+  return jtime_remaining;
 }
 
 bool RegisterLocalizationUtil(JNIEnv* env) {

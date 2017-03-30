@@ -4,9 +4,12 @@
 
 #include "ipc/mojo/ipc_mojo_bootstrap.h"
 
+#include <stdint.h>
+
 #include "base/base_paths.h"
 #include "base/files/file.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "ipc/ipc_test_base.h"
 
 #if defined(OS_POSIX)
@@ -23,7 +26,8 @@ class TestingDelegate : public IPC::MojoBootstrap::Delegate {
  public:
   TestingDelegate() : passed_(false) {}
 
-  void OnPipeAvailable(mojo::embedder::ScopedPlatformHandle handle) override;
+  void OnPipeAvailable(mojo::embedder::ScopedPlatformHandle handle,
+                       int32_t peer_pid) override;
   void OnBootstrapError() override;
 
   bool passed() const { return passed_; }
@@ -33,13 +37,14 @@ class TestingDelegate : public IPC::MojoBootstrap::Delegate {
 };
 
 void TestingDelegate::OnPipeAvailable(
-    mojo::embedder::ScopedPlatformHandle handle) {
+    mojo::embedder::ScopedPlatformHandle handle,
+    int32_t peer_pid) {
   passed_ = true;
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void TestingDelegate::OnBootstrapError() {
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 // Times out on Android; see http://crbug.com/502290
@@ -53,7 +58,7 @@ TEST_F(IPCMojoBootstrapTest, MAYBE_Connect) {
 
   TestingDelegate delegate;
   scoped_ptr<IPC::MojoBootstrap> bootstrap = IPC::MojoBootstrap::Create(
-      GetTestChannelHandle(), IPC::Channel::MODE_SERVER, &delegate, nullptr);
+      GetTestChannelHandle(), IPC::Channel::MODE_SERVER, &delegate);
 
   ASSERT_TRUE(bootstrap->Connect());
 #if defined(OS_POSIX)
@@ -75,7 +80,7 @@ MULTIPROCESS_IPC_TEST_CLIENT_MAIN(IPCMojoBootstrapTestClient) {
   TestingDelegate delegate;
   scoped_ptr<IPC::MojoBootstrap> bootstrap = IPC::MojoBootstrap::Create(
       IPCTestBase::GetChannelName("IPCMojoBootstrapTestClient"),
-      IPC::Channel::MODE_CLIENT, &delegate, nullptr);
+      IPC::Channel::MODE_CLIENT, &delegate);
 
   bootstrap->Connect();
 

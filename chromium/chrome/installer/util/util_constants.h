@@ -8,7 +8,7 @@
 #ifndef CHROME_INSTALLER_UTIL_UTIL_CONSTANTS_H_
 #define CHROME_INSTALLER_UTIL_UTIL_CONSTANTS_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
 
 namespace installer {
 
@@ -73,7 +73,7 @@ enum InstallStatus {
   // INSTALL_OF_GOOGLE_UPDATE_FAILED = 46,
   INVALID_STATE_FOR_OPTION = 47,  // A non-install option was called with an
                                   // invalid installer state.
-  WAIT_FOR_EXISTING_FAILED = 48,  // OS error waiting for existing setup.exe.
+  // WAIT_FOR_EXISTING_FAILED = 48,
   PATCH_INVALID_ARGUMENTS = 49,  // The arguments of --patch were missing or
                                  // they were invalid for any reason.
   DIFF_PATCH_SOURCE_MISSING = 50,  // No previous version archive found for
@@ -102,38 +102,37 @@ enum ArchiveType {
 // values to the end (before NUM_STAGES) and update the compile assert below
 // to assert on the last value added.
 enum InstallerStage {
-  NO_STAGE,                    // 0: No stage to report.
-  PRECONDITIONS,               // 1: Evaluating pre-install conditions.
-  UNCOMPRESSING,               // 2: Uncompressing chrome.packed.7z.
-  ENSEMBLE_PATCHING,           // 3: Patching chrome.7z using courgette.
-  BINARY_PATCHING,             // 4: Patching chrome.7z using bspatch.
-  UNPACKING,                   // 5: Unpacking chrome.7z.
-  BUILDING,                    // 6: Building the install work item list.
-  EXECUTING,                   // 7: Executing the install work item list.
-  ROLLINGBACK,                 // 8: Rolling-back the install work item list.
-  REFRESHING_POLICY,           // 9: Refreshing the elevation policy.
-  UPDATING_CHANNELS,           // 10: Updating channel information.
-  COPYING_PREFERENCES_FILE,    // 11: Copying preferences file.
-  CREATING_SHORTCUTS,          // 12: Creating shortcuts.
-  REGISTERING_CHROME,          // 13: Performing Chrome registration.
-  REMOVING_OLD_VERSIONS,       // 14: Deleting old version directories.
-  FINISHING,                   // 15: Finishing the install.
-  CONFIGURE_AUTO_LAUNCH,       // 16: Configuring Chrome to auto-launch.
-  CREATING_VISUAL_MANIFEST,    // 17: Creating VisualElementsManifest.xml
-  DEFERRING_TO_HIGHER_VERSION,  // 18: Deferring to an installed higher version.
-  UNINSTALLING_BINARIES,       // 19: Uninstalling unused binaries.
-  UNINSTALLING_CHROME_FRAME,   // 20: Uninstalling multi-install Chrome Frame.
-  NUM_STAGES                   // 21: The number of stages.
+  NO_STAGE = 0,                    // No stage to report.
+  PRECONDITIONS = 1,               // Evaluating pre-install conditions.
+  UNCOMPRESSING = 2,               // Uncompressing chrome.packed.7z.
+  ENSEMBLE_PATCHING = 3,           // Patching chrome.7z using courgette.
+  BINARY_PATCHING = 4,             // Patching chrome.7z using bspatch.
+  UNPACKING = 5,                   // Unpacking chrome.7z.
+  BUILDING = 6,                    // Building the install work item list.
+  EXECUTING = 7,                   // Executing the install work item list.
+  ROLLINGBACK = 8,                 // Rolling-back the install work item list.
+  REFRESHING_POLICY = 9,           // Refreshing the elevation policy.
+  UPDATING_CHANNELS = 10,          // Updating channel information.
+  COPYING_PREFERENCES_FILE = 11,   // Copying preferences file.
+  CREATING_SHORTCUTS = 12,         // Creating shortcuts.
+  REGISTERING_CHROME = 13,         // Performing Chrome registration.
+  REMOVING_OLD_VERSIONS = 14,      // Deleting old version directories.
+  FINISHING = 15,                  // Finishing the install.
+  // CONFIGURE_AUTO_LAUNCH = 16,
+  CREATING_VISUAL_MANIFEST = 17,   // Creating VisualElementsManifest.xml
+  // DEFERRING_TO_HIGHER_VERSION = 18,
+  UNINSTALLING_BINARIES = 19,      // Uninstalling unused binaries.
+  UNINSTALLING_CHROME_FRAME = 20,  // Uninstalling multi-install Chrome Frame.
+  NUM_STAGES                       // The number of stages.
 };
 
 // When we start reporting the numerical values from the enum, the order
 // above MUST be preserved.
-COMPILE_ASSERT(UNINSTALLING_CHROME_FRAME == 20,
-               never_ever_ever_change_InstallerStage_values_bang);
+static_assert(UNINSTALLING_CHROME_FRAME == 20,
+              "Never ever ever change InstallerStage values!");
 
 namespace switches {
 
-extern const char kAutoLaunchChrome[];
 extern const char kChrome[];
 #ifndef OMIT_CHROME_FRAME
 extern const char kChromeFrame[];
@@ -189,6 +188,7 @@ extern const char kVivaldiInstallDir[];
 extern const char kVivaldiStandalone[];
 extern const char kVivaldiForceLaunch[];
 extern const char kVivaldiUpdate[];
+extern const char kVivaldiCrashLogging[];
 }  // namespace switches
 
 namespace env_vars {
@@ -212,7 +212,6 @@ extern const wchar_t kChromeNewExe[];
 extern const wchar_t kChromeOldExe[];
 extern const wchar_t kCmdOnOsUpgrade[];
 extern const wchar_t kCmdQuickEnableCf[];
-extern const wchar_t kDelegateExecuteExe[];
 extern const wchar_t kEULASentinelFile[];
 extern const wchar_t kGoogleChromeInstallSubDir1[];
 extern const wchar_t kGoogleChromeInstallSubDir2[];

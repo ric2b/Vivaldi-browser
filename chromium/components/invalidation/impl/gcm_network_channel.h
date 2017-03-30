@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "components/invalidation/impl/gcm_network_channel_delegate.h"
@@ -46,7 +46,7 @@ struct GCMNetworkChannelDiagnostic {
 
 // GCMNetworkChannel is an implementation of SyncNetworkChannel that routes
 // messages through GCMService.
-class INVALIDATION_EXPORT_PRIVATE GCMNetworkChannel
+class INVALIDATION_EXPORT GCMNetworkChannel
     : public SyncNetworkChannel,
       public net::URLFetcherDelegate,
       public net::NetworkChangeNotifier::NetworkChangeObserver,
@@ -96,12 +96,6 @@ class INVALIDATION_EXPORT_PRIVATE GCMNetworkChannel
   void OnConnectionStateChanged(bool online);
   void UpdateGcmChannelState(bool online);
   void UpdateHttpChannelState(bool online);
-  // Base64 encoding/decoding with URL safe alphabet.
-  // http://tools.ietf.org/html/rfc4648#page-7
-  static void Base64EncodeURLSafe(const std::string& input,
-                                  std::string* output);
-  static bool Base64DecodeURLSafe(const std::string& input,
-                                  std::string* output);
 
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
   scoped_ptr<GCMNetworkChannelDelegate> delegate_;

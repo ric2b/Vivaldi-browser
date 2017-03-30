@@ -4,6 +4,8 @@
 
 #include "mojo/common/common_type_converters.h"
 
+#include <stdint.h>
+
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/common/url_type_converters.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -104,6 +106,13 @@ TEST(CommonTypeConvertersTest, StdStringToArrayUint8) {
   EXPECT_EQ('a', data[1]);
   EXPECT_EQ('t', data[2]);
   EXPECT_EQ('a', data[3]);
+}
+
+TEST(CommonTypeConvertersTest, EmptyStringToArrayUint8) {
+  Array<uint8_t> data = Array<uint8_t>::From(std::string());
+
+  ASSERT_EQ(0ul, data.size());
+  EXPECT_FALSE(data.is_null());
 }
 
 }  // namespace test

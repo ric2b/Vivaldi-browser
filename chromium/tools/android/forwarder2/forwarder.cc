@@ -4,8 +4,10 @@
 
 #include "tools/android/forwarder2/forwarder.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "tools/android/forwarder2/socket.h"
 
@@ -96,7 +98,7 @@ class Forwarder::BufferedCopier {
       case STATE_CLOSING:
         break;  // T10
       case STATE_CLOSED:
-        ;
+        break;
     }
   }
 
@@ -194,7 +196,7 @@ class Forwarder::BufferedCopier {
         break;
 
       case STATE_CLOSED:
-        ;
+        break;
     }
   }
 
@@ -221,10 +223,9 @@ class Forwarder::BufferedCopier {
   DISALLOW_COPY_AND_ASSIGN(BufferedCopier);
 };
 
-Forwarder::Forwarder(scoped_ptr<Socket> socket1,
-                     scoped_ptr<Socket> socket2)
-    : socket1_(socket1.Pass()),
-      socket2_(socket2.Pass()),
+Forwarder::Forwarder(scoped_ptr<Socket> socket1, scoped_ptr<Socket> socket2)
+    : socket1_(std::move(socket1)),
+      socket2_(std::move(socket2)),
       buffer1_(new BufferedCopier(socket1_.get(), socket2_.get())),
       buffer2_(new BufferedCopier(socket2_.get(), socket1_.get())) {
   buffer1_->SetPeer(buffer2_.get());

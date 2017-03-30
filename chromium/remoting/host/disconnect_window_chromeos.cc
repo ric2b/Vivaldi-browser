@@ -6,6 +6,7 @@
 
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray_notifier.h"
+#include "base/macros.h"
 #include "remoting/host/client_session_control.h"
 #include "remoting/host/host_window.h"
 
@@ -40,7 +41,7 @@ void DisconnectWindowAura::Start(
   base::string16 helper_name;
   ash::Shell::GetInstance()->system_tray_notifier()->NotifyScreenShareStart(
       base::Bind(&ClientSessionControl::DisconnectSession,
-                 client_session_control),
+                 client_session_control, protocol::OK),
       helper_name);
 }
 

@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/translate/core/browser/translate_driver.h"
 #include "components/translate/ios/browser/language_detection_controller.h"
@@ -64,7 +64,7 @@ class IOSTranslateDriver : public TranslateDriver,
   void OpenUrlInNewTab(const GURL& url) override;
 
  private:
-  // Called when the translation was successfull.
+  // Called when the translation was successful.
   void TranslationDidSucceed(const std::string& source_lang,
                              const std::string& target_lang,
                              int page_seq_no,

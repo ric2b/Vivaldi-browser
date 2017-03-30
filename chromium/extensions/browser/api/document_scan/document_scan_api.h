@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "extensions/browser/api/async_api_function.h"
 #include "extensions/browser/api/document_scan/document_scan_interface.h"
@@ -15,7 +16,7 @@
 
 namespace extensions {
 
-namespace core_api {
+namespace api {
 
 class DocumentScanScanFunction : public AsyncApiFunction {
  public:
@@ -47,7 +48,7 @@ class DocumentScanScanFunction : public AsyncApiFunction {
   DISALLOW_COPY_AND_ASSIGN(DocumentScanScanFunction);
 };
 
-}  // namespace core_api
+}  // namespace api
 
 }  // namespace extensions
 

@@ -4,22 +4,18 @@
 
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
-#include "chrome/browser/ui/sync/inline_login_dialog.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/url_constants.h"
+#include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/common/profile_management_switches.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/app_mode/app_mode_utils.h"
-#endif
 
 LoginUIService::LoginUIService(Profile* profile)
     : ui_(NULL), profile_(profile) {
@@ -62,36 +58,28 @@ void LoginUIService::UntrustedLoginUIShown() {
 
 void LoginUIService::ShowLoginPopup() {
 #if defined(OS_CHROMEOS)
-  if (chrome::IsRunningInForcedAppMode())
-    InlineLoginDialog::Show(profile_);
+  NOTREACHED();
 #else
   chrome::ScopedTabbedBrowserDisplayer displayer(
       profile_, chrome::GetActiveDesktop());
   chrome::ShowBrowserSignin(
-      displayer.browser(), signin_metrics::SOURCE_APP_LAUNCHER);
+      displayer.browser(),
+      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS);
 #endif
 }
 
 void LoginUIService::DisplayLoginResult(Browser* browser,
                                         const base::string16& message) {
-  last_login_result_ = message;
-  if (switches::IsNewAvatarMenu()) {
-    browser->window()->ShowAvatarBubbleFromAvatarButton(
-        message.empty() ? BrowserWindow::AVATAR_BUBBLE_MODE_CONFIRM_SIGNIN :
-                          BrowserWindow::AVATAR_BUBBLE_MODE_SHOW_ERROR,
-        signin::ManageAccountsParams());
-  } else {
-#if defined(ENABLE_ONE_CLICK_SIGNIN)
-    browser->window()->ShowOneClickSigninBubble(
-        BrowserWindow::ONE_CLICK_SIGNIN_BUBBLE_TYPE_BUBBLE,
-        base::string16(), /* no SAML email */
-        message,
-        // This callback is never invoked.
-        // TODO(rogerta): Separate out the bubble API so we don't have to pass
-        // ignored |email| and |callback| params.
-        BrowserWindow::StartSyncCallback());
+#if defined(OS_CHROMEOS)
+  // ChromeOS doesn't have the avatar bubble so it never calls this function.
+  NOTREACHED();
 #endif
-  }
+  last_login_result_ = message;
+  browser->window()->ShowAvatarBubbleFromAvatarButton(
+      message.empty() ? BrowserWindow::AVATAR_BUBBLE_MODE_CONFIRM_SIGNIN
+                      : BrowserWindow::AVATAR_BUBBLE_MODE_SHOW_ERROR,
+      signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS);
 }
 
 const base::string16& LoginUIService::GetLastLoginResult() {

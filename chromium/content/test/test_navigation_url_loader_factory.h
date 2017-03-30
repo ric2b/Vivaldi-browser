@@ -5,6 +5,7 @@
 #ifndef CONTENT_TEST_TEST_NAVIGATION_URL_LOADER_FACTORY_H_
 #define CONTENT_TEST_TEST_NAVIGATION_URL_LOADER_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/loader/navigation_url_loader_factory.h"
 
@@ -26,8 +27,8 @@ class TestNavigationURLLoaderFactory : public NavigationURLLoaderFactory {
   // TestNavigationURLLoaderFactory implementation.
   scoped_ptr<NavigationURLLoader> CreateLoader(
       BrowserContext* browser_context,
-      int frame_tree_node_id,
       scoped_ptr<NavigationRequestInfo> request_info,
+      ServiceWorkerNavigationHandle* service_worker_handle,
       NavigationURLLoaderDelegate* delegate) override;
 
  private:

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 
@@ -79,16 +80,12 @@ class CastMetricsHelper {
   // Logs UMA record of the time the app made its first paint.
   virtual void LogTimeToFirstPaint();
 
+  // Logs UMA record of the time the app pushed its first audio frame.
+  virtual void LogTimeToFirstAudio();
+
   // Logs UMA record of the time needed to re-buffer A/V.
   virtual void LogTimeToBufferAv(BufferingType buffering_type,
                                  base::TimeDelta time);
-
-  virtual void ResetVideoFrameSampling();
-
-  // Logs UMA statistics for video decoder and rendering data.
-  // Negative values are considered invalid and will not be logged.
-  virtual void LogFramesPer5Seconds(int displayed_frames, int dropped_frames,
-                                    int delayed_frames, int error_frames);
 
   // Returns metrics name with app name between prefix and suffix.
   virtual std::string GetMetricsNameWithAppName(
@@ -140,9 +137,10 @@ class CastMetricsHelper {
   std::string session_id_;
   std::string sdk_version_;
 
-  base::TimeTicks previous_video_stat_sample_time_;
-
   MetricsSink* metrics_sink_;
+
+  bool logged_first_audio_;
+
   // Default RecordAction callback when metrics_sink_ is not set.
   RecordActionCallback record_action_callback_;
 

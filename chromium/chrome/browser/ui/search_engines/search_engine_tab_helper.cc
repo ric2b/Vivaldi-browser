@@ -4,10 +4,14 @@
 
 #include "chrome/browser/ui/search_engines/search_engine_tab_helper.h"
 
+#include "base/metrics/histogram_macros.h"
+#include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_fetcher_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/ui/search_engines/edit_search_engine_controller.h"
 #include "chrome/browser/ui/search_engines/search_engine_tab_helper_delegate.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/url_constants.h"
 #include "components/search_engines/template_url.h"
@@ -37,7 +41,8 @@ bool IsFormSubmit(const NavigationEntry* entry) {
 }
 
 base::string16 GenerateKeywordFromNavigationEntry(
-    const NavigationEntry* entry) {
+    const NavigationEntry* entry,
+    const std::string& accept_languages) {
   // Don't autogenerate keywords for pages that are the result of form
   // submissions.
   if (IsFormSubmit(entry))
@@ -52,16 +57,19 @@ base::string16 GenerateKeywordFromNavigationEntry(
       return base::string16();
   }
 
-  // Don't autogenerate keywords for referrers that are anything other than HTTP
-  // or have a path.
+  // Don't autogenerate keywords for referrers that
+  // a) are anything other than HTTP/HTTPS or
+  // b) have a path.
   //
   // If we relax the path constraint, we need to be sure to sanitize the path
   // elements and update AutocompletePopup to look for keywords using the path.
   // See http://b/issue?id=863583.
-  if (!url.SchemeIs(url::kHttpScheme) || (url.path().length() > 1))
+  if (!(url.SchemeIs(url::kHttpScheme) || url.SchemeIs(url::kHttpsScheme)) ||
+      (url.path().length() > 1)) {
     return base::string16();
+  }
 
-  return TemplateURL::GenerateKeyword(url);
+  return TemplateURL::GenerateKeyword(url, accept_languages);
 }
 
 void AssociateURLFetcherWithWebContents(content::WebContents* web_contents,
@@ -94,6 +102,12 @@ bool SearchEngineTabHelper::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
+bool SearchEngineTabHelper::OnMessageReceived(
+    const IPC::Message& message,
+    content::RenderFrameHost* render_frame_host) {
+  return OnMessageReceived(message);
+}
+
 SearchEngineTabHelper::SearchEngineTabHelper(WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       delegate_(nullptr),
@@ -109,6 +123,18 @@ void SearchEngineTabHelper::OnPageHasOSDD(
   // necessary uses TemplateURLFetcher to download the OSDD and create a
   // keyword.
 
+  TemplateURLFetcher::ProviderType provider_type =
+      (msg_provider_type == search_provider::AUTODETECTED_PROVIDER)
+          ? TemplateURLFetcher::AUTODETECTED_PROVIDER
+          : TemplateURLFetcher::EXPLICIT_PROVIDER;
+
+  if (provider_type == TemplateURLFetcher::EXPLICIT_PROVIDER) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Search.AddSearchProvider2",
+        EditSearchEngineController::ADD_SEARCH_PROVIDER_CALLED,
+        EditSearchEngineController::NUM_EDIT_SEARCH_ENGINE_ACTIONS);
+  }
+
   // Make sure that the page is the current page and other basic checks.
   // When |page_url| has file: scheme, this method doesn't work because of
   // http://b/issue?id=863583. For that reason, this doesn't check and allow
@@ -122,11 +148,6 @@ void SearchEngineTabHelper::OnPageHasOSDD(
       !TemplateURLFetcherFactory::GetForProfile(profile) ||
       profile->IsOffTheRecord())
     return;
-
-  TemplateURLFetcher::ProviderType provider_type =
-      (msg_provider_type == search_provider::AUTODETECTED_PROVIDER) ?
-          TemplateURLFetcher::AUTODETECTED_PROVIDER :
-          TemplateURLFetcher::EXPLICIT_PROVIDER;
 
   // If the current page is a form submit, find the last page that was not a
   // form submit and use its url to generate the keyword from.
@@ -143,7 +164,8 @@ void SearchEngineTabHelper::OnPageHasOSDD(
   // generate a keyword later after fetching the OSDD.
   base::string16 keyword;
   if (provider_type == TemplateURLFetcher::AUTODETECTED_PROVIDER) {
-    keyword = GenerateKeywordFromNavigationEntry(entry);
+    keyword = GenerateKeywordFromNavigationEntry(
+        entry, profile->GetPrefs()->GetString(prefs::kAcceptLanguages));
     if (keyword.empty())
       return;
   }
@@ -185,7 +207,8 @@ void SearchEngineTabHelper::GenerateKeywordIfNecessary(
     return;
 
   base::string16 keyword(GenerateKeywordFromNavigationEntry(
-      controller.GetEntryAtIndex(last_index - 1)));
+      controller.GetEntryAtIndex(last_index - 1),
+      profile->GetPrefs()->GetString(prefs::kAcceptLanguages)));
   if (keyword.empty())
     return;
 

@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/extensions/wallpaper_api.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ash/desktop_background/desktop_background_controller.h"
@@ -104,8 +105,9 @@ bool WallpaperSetWallpaperFunction::RunAsync() {
   params_ = set_wallpaper::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_);
 
-  // Gets email address and username hash while at UI thread.
-  user_id_ = user_manager::UserManager::Get()->GetLoggedInUser()->email();
+  // Gets account id and username hash while at UI thread.
+  account_id_ =
+      user_manager::UserManager::Get()->GetLoggedInUser()->GetAccountId();
   user_id_hash_ =
       user_manager::UserManager::Get()->GetLoggedInUser()->username_hash();
 
@@ -141,55 +143,41 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
               base::SequencedWorkerPool::BLOCK_SHUTDOWN);
   wallpaper::WallpaperLayout layout = wallpaper_api_util::GetLayoutEnum(
       extensions::api::wallpaper::ToString(params_->details.layout));
+  wallpaper_api_util::RecordCustomWallpaperLayout(layout);
+
   bool update_wallpaper =
-      user_id_ == user_manager::UserManager::Get()->GetActiveUser()->email();
-  wallpaper_manager->SetCustomWallpaper(user_id_,
-                                        user_id_hash_,
-                                        params_->details.filename,
-                                        layout,
-                                        user_manager::User::CUSTOMIZED,
-                                        image,
-                                        update_wallpaper);
+      account_id_ ==
+      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId();
+  wallpaper_manager->SetCustomWallpaper(
+      account_id_, user_id_hash_, params_->details.filename, layout,
+      user_manager::User::CUSTOMIZED, image, update_wallpaper);
   unsafe_wallpaper_decoder_ = NULL;
 
-  if (params_->details.thumbnail) {
-    image.EnsureRepsForSupportedScales();
-    scoped_ptr<gfx::ImageSkia> deep_copy(image.DeepCopy());
-    // Generates thumbnail before call api function callback. We can then
-    // request thumbnail in the javascript callback.
-    task_runner->PostTask(
-        FROM_HERE,
-        base::Bind(&WallpaperSetWallpaperFunction::GenerateThumbnail,
-                   this,
-                   thumbnail_path,
-                   base::Passed(deep_copy.Pass())));
+  // Save current extenion name. It will be displayed in the component
+  // wallpaper picker app. If current extension is the component wallpaper
+  // picker, set an empty string.
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  if (extension()->id() == extension_misc::kWallpaperManagerId) {
+    profile->GetPrefs()->SetString(prefs::kCurrentWallpaperAppName,
+                                   std::string());
   } else {
-    // Save current extenion name. It will be displayed in the component
-    // wallpaper picker app. If current extension is the component wallpaper
-    // picker, set an empty string.
-    Profile* profile = Profile::FromBrowserContext(browser_context());
-    if (extension()->id() == extension_misc::kWallpaperManagerId) {
-      profile->GetPrefs()->SetString(prefs::kCurrentWallpaperAppName,
-                                     std::string());
-    } else {
-      profile->GetPrefs()->SetString(prefs::kCurrentWallpaperAppName,
-                                     extension()->name());
-    }
-    SendResponse(true);
+    profile->GetPrefs()->SetString(prefs::kCurrentWallpaperAppName,
+                                   extension()->name());
   }
 
-  // Inform the native Wallpaper Picker Application that the current wallpaper
-  // has been modified by a third party application.
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  extensions::EventRouter* event_router = extensions::EventRouter::Get(profile);
-  scoped_ptr<base::ListValue> event_args(new base::ListValue());
-  scoped_ptr<extensions::Event> event(new extensions::Event(
-      extensions::events::WALLPAPER_PRIVATE_ON_WALLPAPER_CHANGED_BY_3RD_PARTY,
-      extensions::api::wallpaper_private::OnWallpaperChangedBy3rdParty::
-          kEventName,
-      event_args.Pass()));
-  event_router->DispatchEventToExtension(extension_misc::kWallpaperManagerId,
-                                         event.Pass());
+  if (!params_->details.thumbnail)
+    SendResponse(true);
+
+  // We need to generate thumbnail image anyway to make the current third party
+  // wallpaper syncable through different devices.
+  image.EnsureRepsForSupportedScales();
+  scoped_ptr<gfx::ImageSkia> deep_copy(image.DeepCopy());
+  // Generates thumbnail before call api function callback. We can then
+  // request thumbnail in the javascript callback.
+  task_runner->PostTask(
+      FROM_HERE,
+      base::Bind(&WallpaperSetWallpaperFunction::GenerateThumbnail, this,
+                 thumbnail_path, base::Passed(std::move(deep_copy))));
 }
 
 void WallpaperSetWallpaperFunction::GenerateThumbnail(
@@ -199,24 +187,52 @@ void WallpaperSetWallpaperFunction::GenerateThumbnail(
   if (!base::PathExists(thumbnail_path.DirName()))
     base::CreateDirectory(thumbnail_path.DirName());
 
-  scoped_refptr<base::RefCountedBytes> data;
+  scoped_refptr<base::RefCountedBytes> original_data;
+  scoped_refptr<base::RefCountedBytes> thumbnail_data;
+  chromeos::WallpaperManager::Get()->ResizeImage(
+      *image, wallpaper::WALLPAPER_LAYOUT_STRETCH, image->width(),
+      image->height(), &original_data, NULL);
   chromeos::WallpaperManager::Get()->ResizeImage(
       *image, wallpaper::WALLPAPER_LAYOUT_STRETCH,
       wallpaper::kWallpaperThumbnailWidth, wallpaper::kWallpaperThumbnailHeight,
-      &data, NULL);
+      &thumbnail_data, NULL);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(
-          &WallpaperSetWallpaperFunction::ThumbnailGenerated,
-          this, data));
+      base::Bind(&WallpaperSetWallpaperFunction::ThumbnailGenerated, this,
+                 original_data, thumbnail_data));
 }
 
 void WallpaperSetWallpaperFunction::ThumbnailGenerated(
-    base::RefCountedBytes* data) {
-  BinaryValue* result = BinaryValue::CreateWithCopiedBuffer(
-      reinterpret_cast<const char*>(data->front()), data->size());
-  SetResult(result);
-  SendResponse(true);
+    base::RefCountedBytes* original_data,
+    base::RefCountedBytes* thumbnail_data) {
+  BinaryValue* original_result = BinaryValue::CreateWithCopiedBuffer(
+      reinterpret_cast<const char*>(original_data->front()),
+      original_data->size());
+  BinaryValue* thumbnail_result = BinaryValue::CreateWithCopiedBuffer(
+      reinterpret_cast<const char*>(thumbnail_data->front()),
+      thumbnail_data->size());
+
+  if (params_->details.thumbnail) {
+    SetResult(thumbnail_result);
+    SendResponse(true);
+  }
+
+  // Inform the native Wallpaper Picker Application that the current wallpaper
+  // has been modified by a third party application.
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  extensions::EventRouter* event_router = extensions::EventRouter::Get(profile);
+  scoped_ptr<base::ListValue> event_args(new base::ListValue());
+  event_args->Append(original_result);
+  event_args->Append(thumbnail_result);
+  event_args->Append(new base::StringValue(
+      extensions::api::wallpaper::ToString(params_->details.layout)));
+  scoped_ptr<extensions::Event> event(new extensions::Event(
+      extensions::events::WALLPAPER_PRIVATE_ON_WALLPAPER_CHANGED_BY_3RD_PARTY,
+      extensions::api::wallpaper_private::OnWallpaperChangedBy3rdParty::
+          kEventName,
+      std::move(event_args)));
+  event_router->DispatchEventToExtension(extension_misc::kWallpaperManagerId,
+                                         std::move(event));
 }
 
 void WallpaperSetWallpaperFunction::OnWallpaperFetched(

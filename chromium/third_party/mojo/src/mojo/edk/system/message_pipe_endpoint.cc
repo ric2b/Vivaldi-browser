@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/message_pipe_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_endpoint.h"
 
 #include "base/logging.h"
 
@@ -29,7 +29,7 @@ HandleSignalsState MessagePipeEndpoint::GetHandleSignalsState() const {
 
 MojoResult MessagePipeEndpoint::AddAwakable(Awakable* /*awakable*/,
                                             MojoHandleSignals /*signals*/,
-                                            uint32_t /*context*/,
+                                            uintptr_t /*context*/,
                                             HandleSignalsState* signals_state) {
   NOTREACHED();
   if (signals_state)

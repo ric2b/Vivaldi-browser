@@ -4,7 +4,7 @@
 
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 
-#include "chrome/browser/sync/profile_sync_service.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "sync/internal_api/public/sessions/sync_session_snapshot.h"
 
 UpdatedProgressMarkerChecker::UpdatedProgressMarkerChecker(
@@ -38,7 +38,7 @@ bool UpdatedProgressMarkerChecker::IsExitConditionSatisfied() {
   const syncer::sessions::SyncSessionSnapshot& snap =
       service()->GetLastSessionSnapshot();
   return snap.model_neutral_state().num_successful_commits == 0 &&
-         !service()->HasUnsyncedItems();
+         service()->IsSyncActive() && !service()->HasUnsyncedItems();
 }
 
 std::string UpdatedProgressMarkerChecker::GetDebugMessage() const {

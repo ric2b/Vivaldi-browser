@@ -2,18 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
+#include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "media/base/media_log.h"
+#include "media/base/media_util.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
+#include "media/base/timestamp_constants.h"
 #include "media/filters/chunk_demuxer.h"
 #include "media/filters/frame_processor.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -54,15 +61,16 @@ class FrameProcessorTestCallbackHelper {
 class FrameProcessorTest : public testing::TestWithParam<bool> {
  protected:
   FrameProcessorTest()
-      : frame_processor_(new FrameProcessor(base::Bind(
-            &FrameProcessorTestCallbackHelper::OnPossibleDurationIncrease,
-            base::Unretained(&callbacks_)))),
+      : frame_processor_(new FrameProcessor(
+            base::Bind(
+                &FrameProcessorTestCallbackHelper::OnPossibleDurationIncrease,
+                base::Unretained(&callbacks_)),
+            new MediaLog())),
         append_window_end_(kInfiniteDuration()),
         new_media_segment_(false),
         audio_id_(FrameProcessor::kAudioTrackId),
         video_id_(FrameProcessor::kVideoTrackId),
-        frame_duration_(base::TimeDelta::FromMilliseconds(10)) {
-  }
+        frame_duration_(base::TimeDelta::FromMilliseconds(10)) {}
 
   enum StreamFlags {
     HAS_AUDIO = 1 << 0,
@@ -98,21 +106,21 @@ class FrameProcessorTest : public testing::TestWithParam<bool> {
   BufferQueue StringToBufferQueue(const std::string& buffers_to_append,
                                   const TrackId track_id,
                                   const DemuxerStream::Type type) {
-    std::vector<std::string> timestamps;
-    base::SplitString(buffers_to_append, ' ', &timestamps);
+    std::vector<std::string> timestamps = base::SplitString(
+        buffers_to_append, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
     BufferQueue buffers;
     for (size_t i = 0; i < timestamps.size(); i++) {
       bool is_keyframe = false;
-      if (base::EndsWith(timestamps[i], "K", true)) {
+      if (base::EndsWith(timestamps[i], "K", base::CompareCase::SENSITIVE)) {
         is_keyframe = true;
         // Remove the "K" off of the token.
         timestamps[i] = timestamps[i].substr(0, timestamps[i].length() - 1);
       }
 
       // Use custom decode timestamp if included.
-      std::vector<std::string> buffer_timestamps;
-      base::SplitString(timestamps[i], '|', &buffer_timestamps);
+      std::vector<std::string> buffer_timestamps = base::SplitString(
+          timestamps[i], "|", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       if (buffer_timestamps.size() == 1)
         buffer_timestamps.push_back(buffer_timestamps[0]);
       CHECK_EQ(2u, buffer_timestamps.size());
@@ -124,7 +132,8 @@ class FrameProcessorTest : public testing::TestWithParam<bool> {
       // Create buffer. Encode the original time_in_ms as the buffer's data to
       // enable later verification of possible buffer relocation in presentation
       // timeline due to coded frame processing.
-      const uint8* timestamp_as_data = reinterpret_cast<uint8*>(&time_in_ms);
+      const uint8_t* timestamp_as_data =
+          reinterpret_cast<uint8_t*>(&time_in_ms);
       scoped_refptr<StreamParserBuffer> buffer =
           StreamParserBuffer::CopyFrom(timestamp_as_data, sizeof(time_in_ms),
                                        is_keyframe, type, track_id);
@@ -161,8 +170,8 @@ class FrameProcessorTest : public testing::TestWithParam<bool> {
     std::stringstream ss;
     ss << "{ ";
     for (size_t i = 0; i < r.size(); ++i) {
-      int64 start = r.start(i).InMilliseconds();
-      int64 end = r.end(i).InMilliseconds();
+      int64_t start = r.start(i).InMilliseconds();
+      int64_t end = r.end(i).InMilliseconds();
       ss << "[" << start << "," << end << ") ";
     }
     ss << "}";
@@ -192,8 +201,8 @@ class FrameProcessorTest : public testing::TestWithParam<bool> {
   // as timestamp_in_ms.
   void CheckReadsThenReadStalls(ChunkDemuxerStream* stream,
                                 const std::string& expected) {
-    std::vector<std::string> timestamps;
-    base::SplitString(expected, ' ', &timestamps);
+    std::vector<std::string> timestamps = base::SplitString(
+        expected, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     std::stringstream ss;
     for (size_t i = 0; i < timestamps.size(); ++i) {
       int loop_count = 0;
@@ -220,8 +229,7 @@ class FrameProcessorTest : public testing::TestWithParam<bool> {
 
       // Decode the original_time_in_ms from the buffer's data.
       double original_time_in_ms;
-      ASSERT_EQ(static_cast<int>(sizeof(original_time_in_ms)),
-                last_read_buffer_->data_size());
+      ASSERT_EQ(sizeof(original_time_in_ms), last_read_buffer_->data_size());
       original_time_in_ms = *(reinterpret_cast<const double*>(
           last_read_buffer_->data()));
       if (original_time_in_ms != time_in_ms)
@@ -280,23 +288,18 @@ class FrameProcessorTest : public testing::TestWithParam<bool> {
       case DemuxerStream::AUDIO: {
         ASSERT_FALSE(audio_);
         audio_.reset(new ChunkDemuxerStream(DemuxerStream::AUDIO, true));
-        AudioDecoderConfig decoder_config(kCodecVorbis,
-                                          kSampleFormatPlanarF32,
-                                          CHANNEL_LAYOUT_STEREO,
-                                          1000,
-                                          NULL,
-                                          0,
-                                          false);
+        AudioDecoderConfig decoder_config(kCodecVorbis, kSampleFormatPlanarF32,
+                                          CHANNEL_LAYOUT_STEREO, 1000,
+                                          EmptyExtraData(), false);
         frame_processor_->OnPossibleAudioConfigUpdate(decoder_config);
-        ASSERT_TRUE(audio_->UpdateAudioConfig(decoder_config,
-                                              base::Bind(&AddLogEntryForTest)));
+        ASSERT_TRUE(audio_->UpdateAudioConfig(decoder_config, new MediaLog()));
         break;
       }
       case DemuxerStream::VIDEO: {
         ASSERT_FALSE(video_);
         video_.reset(new ChunkDemuxerStream(DemuxerStream::VIDEO, true));
         ASSERT_TRUE(video_->UpdateVideoConfig(TestVideoConfig::Normal(),
-                                              base::Bind(&AddLogEntryForTest)));
+                                              new MediaLog()));
         break;
       }
       // TODO(wolenetz): Test text coded frame processing.
@@ -737,6 +740,23 @@ TEST_P(FrameProcessorTest, PartialAppendWindowFilterNoNewMediaSegment) {
   CheckExpectedRangesByTimestamp(video_.get(), "{ [0,20) }");
   CheckReadsThenReadStalls(audio_.get(), "0:-5");
   CheckReadsThenReadStalls(video_.get(), "0 10");
+}
+
+TEST_F(FrameProcessorTest, AudioOnly_SequenceModeContinuityAcrossReset) {
+  InSequence s;
+  AddTestTracks(HAS_AUDIO);
+  new_media_segment_ = true;
+  frame_processor_->SetSequenceMode(true);
+  EXPECT_CALL(callbacks_, PossibleDurationIncrease(frame_duration_));
+  ProcessFrames("0K", "");
+  frame_processor_->Reset();
+  EXPECT_CALL(callbacks_, PossibleDurationIncrease(frame_duration_ * 2));
+  ProcessFrames("100K", "");
+
+  EXPECT_EQ(frame_duration_ * -9, timestamp_offset_);
+  EXPECT_FALSE(new_media_segment_);
+  CheckExpectedRangesByTimestamp(audio_.get(), "{ [0,20) }");
+  CheckReadsThenReadStalls(audio_.get(), "0 10:100");
 }
 
 INSTANTIATE_TEST_CASE_P(SequenceMode, FrameProcessorTest, Values(true));

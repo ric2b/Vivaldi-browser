@@ -5,9 +5,12 @@
 #ifndef NET_DISK_CACHE_BLOCKFILE_IN_FLIGHT_BACKEND_IO_H_
 #define NET_DISK_CACHE_BLOCKFILE_IN_FLIGHT_BACKEND_IO_H_
 
+#include <stdint.h>
+
 #include <list>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -56,6 +59,7 @@ class BackendIO : public BackgroundIO {
   void DoomEntriesBetween(const base::Time initial_time,
                           const base::Time end_time);
   void DoomEntriesSince(const base::Time initial_time);
+  void CalculateSizeOfAllEntries();
   void OpenNextEntry(Rankings::Iterator* iterator, Entry** next_entry);
   void EndEnumeration(scoped_ptr<Rankings::Iterator> iterator);
   void OnExternalCacheHit(const std::string& key);
@@ -67,11 +71,18 @@ class BackendIO : public BackgroundIO {
                 int buf_len);
   void WriteData(EntryImpl* entry, int index, int offset, net::IOBuffer* buf,
                  int buf_len, bool truncate);
-  void ReadSparseData(EntryImpl* entry, int64 offset, net::IOBuffer* buf,
+  void ReadSparseData(EntryImpl* entry,
+                      int64_t offset,
+                      net::IOBuffer* buf,
                       int buf_len);
-  void WriteSparseData(EntryImpl* entry, int64 offset, net::IOBuffer* buf,
+  void WriteSparseData(EntryImpl* entry,
+                       int64_t offset,
+                       net::IOBuffer* buf,
                        int buf_len);
-  void GetAvailableRange(EntryImpl* entry, int64 offset, int len, int64* start);
+  void GetAvailableRange(EntryImpl* entry,
+                         int64_t offset,
+                         int len,
+                         int64_t* start);
   void CancelSparseIO(EntryImpl* entry);
   void ReadyForSparseIO(EntryImpl* entry);
 
@@ -90,6 +101,7 @@ class BackendIO : public BackgroundIO {
     OP_DOOM_ALL,
     OP_DOOM_BETWEEN,
     OP_DOOM_SINCE,
+    OP_SIZE_ALL,
     OP_OPEN_NEXT,
     OP_END_ENUMERATION,
     OP_ON_EXTERNAL_CACHE_HIT,
@@ -135,8 +147,8 @@ class BackendIO : public BackgroundIO {
   scoped_refptr<net::IOBuffer> buf_;
   int buf_len_;
   bool truncate_;
-  int64 offset64_;
-  int64* start_;
+  int64_t offset64_;
+  int64_t* start_;
   base::TimeTicks start_time_;
   base::Closure task_;
 
@@ -165,6 +177,7 @@ class InFlightBackendIO : public InFlightIO {
                           const net::CompletionCallback& callback);
   void DoomEntriesSince(const base::Time initial_time,
                         const net::CompletionCallback& callback);
+  void CalculateSizeOfAllEntries(const net::CompletionCallback& callback);
   void OpenNextEntry(Rankings::Iterator* iterator, Entry** next_entry,
                      const net::CompletionCallback& callback);
   void EndEnumeration(scoped_ptr<Rankings::Iterator> iterator);
@@ -179,11 +192,20 @@ class InFlightBackendIO : public InFlightIO {
   void WriteData(
       EntryImpl* entry, int index, int offset, net::IOBuffer* buf,
       int buf_len, bool truncate, const net::CompletionCallback& callback);
-  void ReadSparseData(EntryImpl* entry, int64 offset, net::IOBuffer* buf,
-                      int buf_len, const net::CompletionCallback& callback);
-  void WriteSparseData(EntryImpl* entry, int64 offset, net::IOBuffer* buf,
-                       int buf_len, const net::CompletionCallback& callback);
-  void GetAvailableRange(EntryImpl* entry, int64 offset, int len, int64* start,
+  void ReadSparseData(EntryImpl* entry,
+                      int64_t offset,
+                      net::IOBuffer* buf,
+                      int buf_len,
+                      const net::CompletionCallback& callback);
+  void WriteSparseData(EntryImpl* entry,
+                       int64_t offset,
+                       net::IOBuffer* buf,
+                       int buf_len,
+                       const net::CompletionCallback& callback);
+  void GetAvailableRange(EntryImpl* entry,
+                         int64_t offset,
+                         int len,
+                         int64_t* start,
                          const net::CompletionCallback& callback);
   void CancelSparseIO(EntryImpl* entry);
   void ReadyForSparseIO(EntryImpl* entry,

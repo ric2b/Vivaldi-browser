@@ -4,9 +4,9 @@
 
 #include "ui/base/ime/win/imm32_manager.h"
 
-#include <msctf.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -72,9 +72,9 @@ void GetCompositionUnderlines(HIMC imm_context,
                               ui::CompositionUnderlines* underlines) {
   int clause_size = ::ImmGetCompositionString(imm_context, GCS_COMPCLAUSE,
                                               NULL, 0);
-  int clause_length = clause_size / sizeof(uint32);
+  int clause_length = clause_size / sizeof(uint32_t);
   if (clause_length) {
-    scoped_ptr<uint32[]> clause_data(new uint32[clause_length]);
+    scoped_ptr<uint32_t[]> clause_data(new uint32_t[clause_length]);
     if (clause_data.get()) {
       ::ImmGetCompositionString(imm_context, GCS_COMPCLAUSE,
                                 clause_data.get(), clause_size);
@@ -87,8 +87,8 @@ void GetCompositionUnderlines(HIMC imm_context,
         underline.background_color = SK_ColorTRANSPARENT;
 
         // Use thick underline for the target clause.
-        if (underline.start_offset >= static_cast<uint32>(target_start) &&
-            underline.end_offset <= static_cast<uint32>(target_end)) {
+        if (underline.start_offset >= static_cast<uint32_t>(target_start) &&
+            underline.end_offset <= static_cast<uint32_t>(target_end)) {
           underline.thick = true;
         }
         underlines->push_back(underline);
@@ -118,7 +118,6 @@ namespace ui {
 
 IMM32Manager::IMM32Manager()
     : is_composing_(false),
-      ime_status_(false),
       input_language_id_(LANG_USER_DEFAULT),
       system_caret_(false),
       caret_rect_(-1, -1, 0, 0),
@@ -128,7 +127,7 @@ IMM32Manager::IMM32Manager()
 IMM32Manager::~IMM32Manager() {
 }
 
-bool IMM32Manager::SetInputLanguage() {
+void IMM32Manager::SetInputLanguage() {
   // Retrieve the current keyboard layout from Windows and determine whether
   // or not the current input context has IMEs.
   // Also save its input language for language-specific operations required
@@ -136,24 +135,6 @@ bool IMM32Manager::SetInputLanguage() {
   HKL keyboard_layout = ::GetKeyboardLayout(0);
   input_language_id_ =
       static_cast<LANGID>(reinterpret_cast<uintptr_t>(keyboard_layout));
-
-  // Check TSF Input Processor first.
-  // If the active profile is TSF INPUTPROCESSOR, this is IME.
-  base::win::ScopedComPtr<ITfInputProcessorProfileMgr> prof_mgr;
-  TF_INPUTPROCESSORPROFILE prof;
-  if (SUCCEEDED(prof_mgr.CreateInstance(CLSID_TF_InputProcessorProfiles)) &&
-      SUCCEEDED(prof_mgr->GetActiveProfile(GUID_TFCAT_TIP_KEYBOARD, &prof)) &&
-      prof.hkl == NULL &&
-      prof.dwProfileType == TF_PROFILETYPE_INPUTPROCESSOR) {
-      ime_status_ = true;
-  } else {
-    // If the curent language is not using TSF, check IMM32 based IMEs.
-    // As ImmIsIME always returns non-0 value on Vista+, use ImmGetIMEFileName
-    // instead to check if this HKL has any associated IME file.
-    ime_status_ = (ImmGetIMEFileName(keyboard_layout, NULL, 0) != 0);
-  }
-
-  return ime_status_;
 }
 
 void IMM32Manager::CreateImeWindow(HWND window_handle) {
@@ -348,19 +329,19 @@ void IMM32Manager::GetCompositionInfo(HIMC imm_context, LPARAM lparam,
     underline.background_color = SK_ColorTRANSPARENT;
     if (target_start > 0) {
       underline.start_offset = 0U;
-      underline.end_offset = static_cast<uint32>(target_start);
+      underline.end_offset = static_cast<uint32_t>(target_start);
       underline.thick = false;
       composition->underlines.push_back(underline);
     }
     if (target_end > target_start) {
-      underline.start_offset = static_cast<uint32>(target_start);
-      underline.end_offset = static_cast<uint32>(target_end);
+      underline.start_offset = static_cast<uint32_t>(target_start);
+      underline.end_offset = static_cast<uint32_t>(target_end);
       underline.thick = true;
       composition->underlines.push_back(underline);
     }
     if (target_end < length) {
-      underline.start_offset = static_cast<uint32>(target_end);
-      underline.end_offset = static_cast<uint32>(length);
+      underline.start_offset = static_cast<uint32_t>(target_end);
+      underline.end_offset = static_cast<uint32_t>(length);
       underline.thick = false;
       composition->underlines.push_back(underline);
     }

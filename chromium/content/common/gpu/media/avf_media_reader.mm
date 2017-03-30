@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/mac/sdk_forward_declarations.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #import "content/common/gpu/media/data_source_loader.h"
@@ -127,7 +128,7 @@ scoped_refptr<media::DataBuffer> ReadVideoSample(
 
     plane_sizes[plane] =
         stride *
-        media::VideoFrame::PlaneSize(media::VideoFrame::YV12,
+        media::VideoFrame::PlaneSize(media::PIXEL_FORMAT_YV12,
                                      video_frame_planes[plane],
                                      coded_size).height();
   }
@@ -254,8 +255,9 @@ AudioStreamBasicDescription AVFMediaReader::audio_stream_format() const {
           [[GetTrack(media::PLATFORM_MEDIA_AUDIO) formatDescriptions]
               objectAtIndex:0]);
 
-  return *CoreMediaGlue::CMAudioFormatDescriptionGetStreamBasicDescription(
-             audio_format);
+  return CoreMediaGlue::CMAudioFormatDescriptionGetRichestDecodableFormat(
+             audio_format)
+      ->mASBD;
 }
 
 CMFormatDescriptionRef AVFMediaReader::video_stream_format() const {

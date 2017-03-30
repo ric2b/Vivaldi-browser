@@ -2,26 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/child/indexed_db/indexed_db_dispatcher.h"
 #include "content/child/indexed_db/indexed_db_key_builders.h"
+#include "content/child/indexed_db/mock_webidbcallbacks.h"
 #include "content/child/indexed_db/webidbcursor_impl.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/indexed_db/indexed_db_key.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBCallbacks.h"
 
 using blink::WebBlobInfo;
 using blink::WebData;
 using blink::WebIDBCallbacks;
-using blink::WebIDBDatabase;
 using blink::WebIDBKey;
 using blink::WebIDBKeyTypeNumber;
+using blink::WebIDBValue;
 using blink::WebVector;
+using testing::StrictMock;
 
 namespace content {
 
@@ -41,7 +46,7 @@ class MockDispatcher : public IndexedDBDispatcher {
 
   void RequestIDBCursorPrefetch(int n,
                                 WebIDBCallbacks* callbacks,
-                                int32 ipc_cursor_id) override {
+                                int32_t ipc_cursor_id) override {
     ++prefetch_calls_;
     last_prefetch_count_ = n;
     callbacks_.reset(callbacks);
@@ -49,15 +54,15 @@ class MockDispatcher : public IndexedDBDispatcher {
 
   void RequestIDBCursorPrefetchReset(int used_prefetches,
                                      int unused_prefetches,
-                                     int32 ipc_cursor_id) override {
+                                     int32_t ipc_cursor_id) override {
     ++reset_calls_;
     last_used_count_ = used_prefetches;
   }
 
   void RequestIDBCursorAdvance(unsigned long count,
                                WebIDBCallbacks* callbacks,
-                               int32 ipc_cursor_id,
-                               int64 transaction_id) override {
+                               int32_t ipc_cursor_id,
+                               int64_t transaction_id) override {
     ++advance_calls_;
     callbacks_.reset(callbacks);
   }
@@ -65,13 +70,13 @@ class MockDispatcher : public IndexedDBDispatcher {
   void RequestIDBCursorContinue(const IndexedDBKey& key,
                                 const IndexedDBKey& primary_key,
                                 WebIDBCallbacks* callbacks,
-                                int32 ipc_cursor_id,
-                                int64 transaction_id) override {
+                                int32_t ipc_cursor_id,
+                                int64_t transaction_id) override {
     ++continue_calls_;
     callbacks_.reset(callbacks);
   }
 
-  void CursorDestroyed(int32 ipc_cursor_id) override {
+  void CursorDestroyed(int32_t ipc_cursor_id) override {
     destroyed_cursor_id_ = ipc_cursor_id;
   }
 
@@ -81,7 +86,7 @@ class MockDispatcher : public IndexedDBDispatcher {
   int last_used_count() { return last_used_count_; }
   int advance_calls() { return advance_calls_; }
   int continue_calls() { return continue_calls_; }
-  int32 destroyed_cursor_id() { return destroyed_cursor_id_; }
+  int32_t destroyed_cursor_id() { return destroyed_cursor_id_; }
 
  private:
   int prefetch_calls_;
@@ -90,11 +95,11 @@ class MockDispatcher : public IndexedDBDispatcher {
   int last_used_count_;
   int advance_calls_;
   int continue_calls_;
-  int32 destroyed_cursor_id_;
+  int32_t destroyed_cursor_id_;
   scoped_ptr<WebIDBCallbacks> callbacks_;
 };
 
-class MockContinueCallbacks : public WebIDBCallbacks {
+class MockContinueCallbacks : public StrictMock<MockWebIDBCallbacks> {
  public:
   MockContinueCallbacks(IndexedDBKey* key = 0,
                         WebVector<WebBlobInfo>* webBlobInfo = 0)
@@ -102,17 +107,25 @@ class MockContinueCallbacks : public WebIDBCallbacks {
 
   void onSuccess(const WebIDBKey& key,
                  const WebIDBKey& primaryKey,
-                 const WebData& value,
-                 const WebVector<WebBlobInfo>& webBlobInfo) override {
+                 const WebIDBValue& value) override {
     if (key_)
       *key_ = IndexedDBKeyBuilder::Build(key);
     if (web_blob_info_)
-      *web_blob_info_ = webBlobInfo;
+      *web_blob_info_ = value.webBlobInfo;
   }
 
  private:
   IndexedDBKey* key_;
   WebVector<WebBlobInfo>* web_blob_info_;
+};
+
+class MockSyncMessageFilter : public IPC::SyncMessageFilter {
+ public:
+  MockSyncMessageFilter()
+      : SyncMessageFilter(nullptr, false /* is_channel_send_thread_safe */) {}
+
+ private:
+  ~MockSyncMessageFilter() override {}
 };
 
 }  // namespace
@@ -121,9 +134,8 @@ class WebIDBCursorImplTest : public testing::Test {
  public:
   WebIDBCursorImplTest() {
     null_key_.assignNull();
-    sync_message_filter_ = new IPC::SyncMessageFilter(NULL);
     thread_safe_sender_ = new ThreadSafeSender(
-        base::ThreadTaskRunnerHandle::Get(), sync_message_filter_.get());
+        base::ThreadTaskRunnerHandle::Get(), new MockSyncMessageFilter);
     dispatcher_ =
         make_scoped_ptr(new MockDispatcher(thread_safe_sender_.get()));
   }
@@ -135,13 +147,11 @@ class WebIDBCursorImplTest : public testing::Test {
   scoped_ptr<MockDispatcher> dispatcher_;
 
  private:
-  scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
-
   DISALLOW_COPY_AND_ASSIGN(WebIDBCursorImplTest);
 };
 
 TEST_F(WebIDBCursorImplTest, PrefetchTest) {
-  const int64 transaction_id = 1;
+  const int64_t transaction_id = 1;
   {
     WebIDBCursorImpl cursor(WebIDBCursorImpl::kInvalidCursorId,
                             transaction_id,
@@ -177,14 +187,13 @@ TEST_F(WebIDBCursorImplTest, PrefetchTest) {
       // Fill the prefetch cache as requested.
       std::vector<IndexedDBKey> keys;
       std::vector<IndexedDBKey> primary_keys(prefetch_count);
-      std::vector<WebData> values(prefetch_count);
-      std::vector<WebVector<WebBlobInfo> > blob_info;
+      std::vector<WebIDBValue> values(prefetch_count);
       for (int i = 0; i < prefetch_count; ++i) {
         keys.push_back(IndexedDBKey(expected_key + i, WebIDBKeyTypeNumber));
-        blob_info.push_back(
-            WebVector<WebBlobInfo>(static_cast<size_t>(expected_key + i)));
+        values[i].webBlobInfo =
+            WebVector<WebBlobInfo>(static_cast<size_t>(expected_key + i));
       }
-      cursor.SetPrefetchData(keys, primary_keys, values, blob_info);
+      cursor.SetPrefetchData(keys, primary_keys, values);
 
       // Note that the real dispatcher would call cursor->CachedContinue()
       // immediately after cursor->SetPrefetchData() to service the request
@@ -211,7 +220,7 @@ TEST_F(WebIDBCursorImplTest, PrefetchTest) {
 }
 
 TEST_F(WebIDBCursorImplTest, AdvancePrefetchTest) {
-  const int64 transaction_id = 1;
+  const int64_t transaction_id = 1;
   WebIDBCursorImpl cursor(WebIDBCursorImpl::kInvalidCursorId,
                           transaction_id,
                           thread_safe_sender_.get());
@@ -237,14 +246,13 @@ TEST_F(WebIDBCursorImplTest, AdvancePrefetchTest) {
   int expected_key = 0;
   std::vector<IndexedDBKey> keys;
   std::vector<IndexedDBKey> primary_keys(prefetch_count);
-  std::vector<WebData> values(prefetch_count);
-  std::vector<WebVector<WebBlobInfo> > blob_info;
+  std::vector<WebIDBValue> values(prefetch_count);
   for (int i = 0; i < prefetch_count; ++i) {
     keys.push_back(IndexedDBKey(expected_key + i, WebIDBKeyTypeNumber));
-    blob_info.push_back(
-        WebVector<WebBlobInfo>(static_cast<size_t>(expected_key + i)));
+    values[i].webBlobInfo =
+        WebVector<WebBlobInfo>(static_cast<size_t>(expected_key + i));
   }
-  cursor.SetPrefetchData(keys, primary_keys, values, blob_info);
+  cursor.SetPrefetchData(keys, primary_keys, values);
 
   // Note that the real dispatcher would call cursor->CachedContinue()
   // immediately after cursor->SetPrefetchData() to service the request
@@ -282,7 +290,7 @@ TEST_F(WebIDBCursorImplTest, AdvancePrefetchTest) {
 }
 
 TEST_F(WebIDBCursorImplTest, PrefetchReset) {
-  const int64 transaction_id = 1;
+  const int64_t transaction_id = 1;
   WebIDBCursorImpl cursor(WebIDBCursorImpl::kInvalidCursorId,
                           transaction_id,
                           thread_safe_sender_.get());
@@ -312,16 +320,15 @@ TEST_F(WebIDBCursorImplTest, PrefetchReset) {
   int prefetch_count = dispatcher_->last_prefetch_count();
   std::vector<IndexedDBKey> keys(prefetch_count);
   std::vector<IndexedDBKey> primary_keys(prefetch_count);
-  std::vector<WebData> values(prefetch_count);
-  std::vector<WebVector<WebBlobInfo> > blob_info(prefetch_count);
-  cursor.SetPrefetchData(keys, primary_keys, values, blob_info);
+  std::vector<WebIDBValue> values(prefetch_count);
+  cursor.SetPrefetchData(keys, primary_keys, values);
 
   // No reset should have been sent since prefetch data hasn't been used.
   EXPECT_EQ(0, dispatcher_->reset_calls());
 
   // The real dispatcher would call cursor->CachedContinue(), so do that:
-  scoped_ptr<WebIDBCallbacks> callbacks(new MockContinueCallbacks());
-  cursor.CachedContinue(callbacks.get());
+  MockContinueCallbacks callbacks;
+  cursor.CachedContinue(&callbacks);
 
   // Now the cursor should have reset the rest of the cache.
   EXPECT_EQ(1, dispatcher_->reset_calls());

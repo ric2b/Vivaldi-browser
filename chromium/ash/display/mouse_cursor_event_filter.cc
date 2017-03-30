@@ -15,18 +15,16 @@
 namespace ash {
 
 MouseCursorEventFilter::MouseCursorEventFilter() : mouse_warp_enabled_(true) {
-  Shell::GetInstance()->display_controller()->AddObserver(this);
+  Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
 }
 
 MouseCursorEventFilter::~MouseCursorEventFilter() {
-  Shell::GetInstance()->display_controller()->RemoveObserver(this);
+  Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
 }
 
 void MouseCursorEventFilter::ShowSharedEdgeIndicator(aura::Window* from) {
-  mouse_warp_controller_ = Shell::GetInstance()
-                               ->display_manager()
-                               ->CreateMouseWarpController(from)
-                               .Pass();
+  mouse_warp_controller_ =
+      Shell::GetInstance()->display_manager()->CreateMouseWarpController(from);
 }
 
 void MouseCursorEventFilter::HideSharedEdgeIndicator() {
@@ -38,10 +36,9 @@ void MouseCursorEventFilter::OnDisplaysInitialized() {
 }
 
 void MouseCursorEventFilter::OnDisplayConfigurationChanged() {
-  mouse_warp_controller_ = Shell::GetInstance()
-                               ->display_manager()
-                               ->CreateMouseWarpController(nullptr)
-                               .Pass();
+  mouse_warp_controller_ =
+      Shell::GetInstance()->display_manager()->CreateMouseWarpController(
+          nullptr);
 }
 
 void MouseCursorEventFilter::OnMouseEvent(ui::MouseEvent* event) {
@@ -57,8 +54,10 @@ void MouseCursorEventFilter::OnMouseEvent(ui::MouseEvent* event) {
       return;
   }
 
-  Shell::GetInstance()->display_controller()->
-      cursor_window_controller()->UpdateLocation();
+  Shell::GetInstance()
+      ->window_tree_host_manager()
+      ->cursor_window_controller()
+      ->UpdateLocation();
   mouse_warp_controller_->SetEnabled(mouse_warp_enabled_);
 
   if (mouse_warp_controller_->WarpMouseCursor(event))

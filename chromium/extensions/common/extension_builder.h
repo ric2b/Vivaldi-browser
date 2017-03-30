@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "extensions/common/manifest.h"
@@ -24,13 +25,13 @@ class ExtensionBuilder {
   ExtensionBuilder();
   ~ExtensionBuilder();
 
+  // Move constructor and operator=.
+  ExtensionBuilder(ExtensionBuilder&& other);
+  ExtensionBuilder& operator=(ExtensionBuilder&& other);
+
   // Can only be called once, after which it's invalid to use the builder.
   // CHECKs that the extension was created successfully.
   scoped_refptr<Extension> Build();
-
-  // Workaround to allow you to pass rvalue ExtensionBuilders by reference to
-  // other functions, e.g. UseBuilder(ExtensionBuilder().Pass())
-  ExtensionBuilder& Pass() { return *this; }
 
   // Defaults to FilePath().
   ExtensionBuilder& SetPath(const base::FilePath& path);
@@ -39,7 +40,7 @@ class ExtensionBuilder {
   ExtensionBuilder& SetLocation(Manifest::Location location);
 
   ExtensionBuilder& SetManifest(scoped_ptr<base::DictionaryValue> manifest);
-  ExtensionBuilder& SetManifest(DictionaryBuilder& manifest_builder) {
+  ExtensionBuilder& SetManifest(DictionaryBuilder manifest_builder) {
     return SetManifest(manifest_builder.Build());
   }
 
@@ -58,6 +59,8 @@ class ExtensionBuilder {
   scoped_ptr<base::DictionaryValue> manifest_;
   int flags_;
   std::string id_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionBuilder);
 };
 
 }  // namespace extensions

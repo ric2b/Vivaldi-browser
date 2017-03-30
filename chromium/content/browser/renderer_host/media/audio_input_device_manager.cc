@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/media_stream_request.h"
 #include "media/audio/audio_input_ipc.h"
@@ -213,6 +214,7 @@ void AudioInputDeviceManager::OpenOnDeviceThread(
     input_params.channel_layout = params.channel_layout();
     input_params.frames_per_buffer = params.frames_per_buffer();
     input_params.effects = params.effects();
+    input_params.mic_positions = params.mic_positions();
 
     // Add preferred output device information if a matching output device
     // exists.

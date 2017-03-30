@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <ostream>
+#include <string>
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,7 +15,7 @@ using autofill::PasswordForm;
 
 namespace password_manager {
 
-const char kTestingAvatarUrlSpec[] = "https://accounts.google.com/Avatar";
+const char kTestingIconUrlSpec[] = "https://accounts.google.com/Icon";
 const char kTestingFederationUrlSpec[] = "https://accounts.google.com/login";
 const int kTestingDaysAfterPasswordsAreSynced = 1;
 const wchar_t kTestingFederatedLoginMarker[] = L"__federated__";
@@ -54,8 +55,8 @@ scoped_ptr<PasswordForm> CreatePasswordFormFromDataForTesting(
   } else {
     form->blacklisted_by_user = true;
   }
-  form->avatar_url = GURL(kTestingAvatarUrlSpec);
-  return form.Pass();
+  form->icon_url = GURL(kTestingIconUrlSpec);
+  return form;
 }
 
 bool ContainsEqualPasswordFormsUnordered(
@@ -93,5 +94,9 @@ bool ContainsEqualPasswordFormsUnordered(
 
   return !had_mismatched_actual_form && remaining_expectations.empty();
 }
+
+MockPasswordStoreObserver::MockPasswordStoreObserver() {}
+
+MockPasswordStoreObserver::~MockPasswordStoreObserver() {}
 
 }  // namespace password_manager

@@ -19,33 +19,12 @@ cr.define('options', function() {
 
   BrowserOptions.prototype = {
     __proto__: Page.prototype,
-  };
 
-  BrowserOptions.showBluetoothSettings = function() {
-  };
-
-  BrowserOptions.setBluetoothState = function() {
-  };
-
-  /**
-   * Handles addBluetoothDevice call, display the Bluetooth pairing overlay
-   * for the pairing device.
-   * @param {{name: string,
-   *          address: string,
-   *          paired: boolean,
-   *          pairing: string | undefined
-   *          pincode: string | undefined
-   *          passkey: number | undefined
-   *          connected: boolean}} device
-   */
-  BrowserOptions.addBluetoothDevice = function(device) {
-    // One device can be in the process of pairing.  If found, display
-    // the Bluetooth pairing overlay.
-    if (device.pairing)
-      BluetoothPairing.showDialog(device);
-  };
-
-  BrowserOptions.removeBluetoothDevice = function(address) {
+    /** @override */
+    initializePage: function() {
+      chrome.bluetoothPrivate.onPairing.addListener(
+          BluetoothPairing.onBluetoothPairingEvent);
+    }
   };
 
   // Export

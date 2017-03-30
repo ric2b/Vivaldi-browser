@@ -37,10 +37,6 @@ ONC_EXPORT extern const char kAugmentationSharedSetting[];
 ONC_EXPORT extern const char kAugmentationUserEditable[];
 ONC_EXPORT extern const char kAugmentationDeviceEditable[];
 
-// This is no ONC key or value but used for logging only.
-// TODO(pneubeck): Remove.
-ONC_EXPORT extern const char kNetworkConfiguration[];
-
 // Common keys/values.
 ONC_EXPORT extern const char kRecommended[];
 ONC_EXPORT extern const char kRemove[];
@@ -397,6 +393,7 @@ ONC_EXPORT extern const char kPasswordAndOTP[];
 
 namespace third_party_vpn {
 ONC_EXPORT extern const char kExtensionID[];
+ONC_EXPORT extern const char kProviderName[];
 }  // third_party_vpn
 
 namespace verify_x509 {
@@ -432,6 +429,8 @@ ONC_EXPORT extern const char kWPAD[];
 
 namespace global_network_config {
 ONC_EXPORT extern const char kAllowOnlyPolicyNetworksToAutoconnect[];
+ONC_EXPORT extern const char kAllowOnlyPolicyNetworksToConnect[];
+ONC_EXPORT extern const char kDisableNetworkTypes[];
 }  // global_network_config
 
 namespace device_state {

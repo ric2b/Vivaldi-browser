@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_TEST_VIEWS_TEST_HELPER_H_
 #define UI_VIEWS_TEST_VIEWS_TEST_HELPER_H_
 
+#include "base/macros.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace base {
@@ -21,7 +22,7 @@ namespace views {
 // required for running tests.
 class ViewsTestHelper {
  public:
-  explicit ViewsTestHelper();
+  ViewsTestHelper();
   virtual ~ViewsTestHelper();
 
   // Create a platform specific instance.

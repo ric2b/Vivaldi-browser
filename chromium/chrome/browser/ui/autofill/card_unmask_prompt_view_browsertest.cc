@@ -4,9 +4,10 @@
 
 #include "base/bind.h"
 #include "base/guid.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/autofill/risk_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/card_unmask_prompt_view_tester.h"
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
 #include "chrome/browser/ui/browser.h"
@@ -16,6 +17,7 @@
 #include "components/autofill/core/browser/card_unmask_delegate.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_controller_impl.h"
 #include "components/user_prefs/user_prefs.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_utils.h"
 
@@ -54,18 +56,15 @@ class TestCardUnmaskPromptController : public CardUnmaskPromptControllerImpl {
   TestCardUnmaskPromptController(
       content::WebContents* contents,
       scoped_refptr<content::MessageLoopRunner> runner)
-      : CardUnmaskPromptControllerImpl(base::Bind(&LoadRiskData, 0, contents),
-            user_prefs::UserPrefs::Get(contents->GetBrowserContext()), false),
+      : CardUnmaskPromptControllerImpl(
+            user_prefs::UserPrefs::Get(contents->GetBrowserContext()),
+            false),
         runner_(runner),
         weak_factory_(this) {}
 
   // CardUnmaskPromptControllerImpl implementation.
   base::TimeDelta GetSuccessMessageDuration() const override {
     return base::TimeDelta::FromMilliseconds(10);
-  }
-
-  void LoadRiskFingerprint() override {
-    OnDidLoadRiskFingerprint("risk_data");
   }
 
   base::WeakPtr<TestCardUnmaskPromptController> GetWeakPtr() {

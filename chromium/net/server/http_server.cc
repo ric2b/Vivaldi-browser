@@ -4,6 +4,8 @@
 
 #include "net/server/http_server.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
@@ -29,7 +31,7 @@ namespace net {
 
 HttpServer::HttpServer(scoped_ptr<ServerSocket> server_socket,
                        HttpServer::Delegate* delegate)
-    : server_socket_(server_socket.Pass()),
+    : server_socket_(std::move(server_socket)),
       delegate_(delegate),
       last_id_(0),
       weak_ptr_factory_(this) {
@@ -123,13 +125,13 @@ int HttpServer::GetLocalAddress(IPEndPoint* address) {
   return server_socket_->GetLocalAddress(address);
 }
 
-void HttpServer::SetReceiveBufferSize(int connection_id, int32 size) {
+void HttpServer::SetReceiveBufferSize(int connection_id, int32_t size) {
   HttpConnection* connection = FindConnection(connection_id);
   if (connection)
     connection->read_buf()->set_max_buffer_size(size);
 }
 
-void HttpServer::SetSendBufferSize(int connection_id, int32 size) {
+void HttpServer::SetSendBufferSize(int connection_id, int32_t size) {
   HttpConnection* connection = FindConnection(connection_id);
   if (connection)
     connection->write_buf()->set_max_buffer_size(size);
@@ -159,7 +161,7 @@ int HttpServer::HandleAcceptResult(int rv) {
   }
 
   HttpConnection* connection =
-      new HttpConnection(++last_id_, accepted_socket_.Pass());
+      new HttpConnection(++last_id_, std::move(accepted_socket_));
   id_to_connection_[connection->id()] = connection;
   delegate_->OnConnect(connection->id());
   if (!HasClosedConnection(connection))
@@ -236,11 +238,8 @@ int HttpServer::HandleReadResult(HttpConnection* connection, int rv) {
     connection->socket()->GetPeerAddress(&request.peer);
 
     if (request.HasHeaderValue("connection", "upgrade")) {
-      scoped_ptr<WebSocket> websocket(
-          WebSocket::CreateWebSocket(this, connection, request, &pos));
-      if (!websocket)  // Not enough data was received.
-        break;
-      connection->SetWebSocket(websocket.Pass());
+      connection->SetWebSocket(
+          make_scoped_ptr(new WebSocket(this, connection)));
       read_buf->DidConsume(pos);
       delegate_->OnWebSocketRequest(connection->id(), request);
       if (HasClosedConnection(connection))
@@ -349,17 +348,16 @@ enum header_parse_states {
 };
 
 // State transition table
-int parser_state[MAX_STATES][MAX_INPUTS] = {
-/* METHOD    */ { ST_URL,       ST_ERR,     ST_ERR,   ST_ERR,       ST_METHOD },
-/* URL       */ { ST_PROTO,     ST_ERR,     ST_ERR,   ST_URL,       ST_URL },
-/* PROTOCOL  */ { ST_ERR,       ST_HEADER,  ST_NAME,  ST_ERR,       ST_PROTO },
-/* HEADER    */ { ST_ERR,       ST_ERR,     ST_NAME,  ST_ERR,       ST_ERR },
-/* NAME      */ { ST_SEPARATOR, ST_DONE,    ST_ERR,   ST_VALUE,     ST_NAME },
-/* SEPARATOR */ { ST_SEPARATOR, ST_ERR,     ST_ERR,   ST_VALUE,     ST_ERR },
-/* VALUE     */ { ST_VALUE,     ST_HEADER,  ST_NAME,  ST_VALUE,     ST_VALUE },
-/* DONE      */ { ST_DONE,      ST_DONE,    ST_DONE,  ST_DONE,      ST_DONE },
-/* ERR       */ { ST_ERR,       ST_ERR,     ST_ERR,   ST_ERR,       ST_ERR }
-};
+const int parser_state[MAX_STATES][MAX_INPUTS] = {
+    /* METHOD    */ {ST_URL, ST_ERR, ST_ERR, ST_ERR, ST_METHOD},
+    /* URL       */ {ST_PROTO, ST_ERR, ST_ERR, ST_URL, ST_URL},
+    /* PROTOCOL  */ {ST_ERR, ST_HEADER, ST_NAME, ST_ERR, ST_PROTO},
+    /* HEADER    */ {ST_ERR, ST_ERR, ST_NAME, ST_ERR, ST_ERR},
+    /* NAME      */ {ST_SEPARATOR, ST_DONE, ST_ERR, ST_VALUE, ST_NAME},
+    /* SEPARATOR */ {ST_SEPARATOR, ST_ERR, ST_ERR, ST_VALUE, ST_ERR},
+    /* VALUE     */ {ST_VALUE, ST_HEADER, ST_NAME, ST_VALUE, ST_VALUE},
+    /* DONE      */ {ST_DONE, ST_DONE, ST_DONE, ST_DONE, ST_DONE},
+    /* ERR       */ {ST_ERR, ST_ERR, ST_ERR, ST_ERR, ST_ERR}};
 
 // Convert an input character to the parser's input token.
 int charToInput(char ch) {
@@ -412,7 +410,7 @@ bool HttpServer::ParseHeaders(const char* data,
           buffer.clear();
           break;
         case ST_NAME:
-          header_name = base::StringToLowerASCII(buffer);
+          header_name = base::ToLowerASCII(buffer);
           buffer.clear();
           break;
         case ST_VALUE:

@@ -323,17 +323,25 @@ function removeGetUserMediaForRenderer(data) {
 
 
 /**
- * Notification that the AEC recording file selection dialog was cancelled,
- * i.e. AEC has not been enabled.
+ * Notification that the audio debug recordings file selection dialog was
+ * cancelled, i.e. recordings have not been enabled.
  */
-function aecRecordingFileSelectionCancelled() {
-  dumpCreator.disableAecRecording();
+function audioDebugRecordingsFileSelectionCancelled() {
+  dumpCreator.disableAudioDebugRecordings();
 }
 
 
 /**
+ * Notification that the event log recordings file selection dialog was
+ * cancelled, i.e. recordings have not been enabled.
+ */
+function eventLogRecordingsFileSelectionCancelled() {
+  dumpCreator.disableEventLogRecordings();
+}
+
+/**
  * Set
  */
-function enableAecRecording() {
-  dumpCreator.enableAecRecording();
+function enableAudioDebugRecordings() {
+  dumpCreator.enableAudioDebugRecordings();
 }

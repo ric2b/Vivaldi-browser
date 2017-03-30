@@ -17,8 +17,8 @@
 #include "net/base/connection_type_histograms.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
-#include "net/ftp/ftp_network_session.h"
+#include "net/base/port_util.h"
+#include "net/base/url_util.h"
 #include "net/ftp/ftp_request_info.h"
 #include "net/ftp/ftp_util.h"
 #include "net/log/net_log.h"
@@ -202,14 +202,13 @@ bool ExtractPortFromPASVResponse(const FtpCtrlResponse& response, int* port) {
 }  // namespace
 
 FtpNetworkTransaction::FtpNetworkTransaction(
-    FtpNetworkSession* session,
+    HostResolver* resolver,
     ClientSocketFactory* socket_factory)
     : command_sent_(COMMAND_NONE),
       io_callback_(base::Bind(&FtpNetworkTransaction::OnIOComplete,
                               base::Unretained(this))),
-      session_(session),
       request_(NULL),
-      resolver_(session->host_resolver()),
+      resolver_(resolver),
       read_ctrl_buf_(new IOBuffer(kCtrlBufLen)),
       read_data_buf_len_(0),
       last_error_(OK),
@@ -320,7 +319,7 @@ LoadState FtpNetworkTransaction::GetLoadState() const {
   return LOAD_STATE_IDLE;
 }
 
-uint64 FtpNetworkTransaction::GetUploadProgress() const {
+uint64_t FtpNetworkTransaction::GetUploadProgress() const {
   return 0;
 }
 
@@ -371,7 +370,8 @@ int FtpNetworkTransaction::ProcessCtrlResponse() {
   int rv = OK;
   switch (command_sent_) {
     case COMMAND_NONE:
-      // TODO(phajdan.jr): Check for errors in the welcome message.
+      // TODO(phajdan.jr): https://crbug.com/526721: Check for errors in the
+      // welcome message.
       next_state_ = STATE_CTRL_WRITE_USER;
       break;
     case COMMAND_USER:
@@ -819,7 +819,7 @@ int FtpNetworkTransaction::ProcessResponseSYST(
       // comparisons easily. If it is not ASCII, we leave the system type
       // as unknown.
       if (base::IsStringASCII(line)) {
-        line = base::StringToLowerASCII(line);
+        line = base::ToLowerASCII(line);
 
         // Remove all whitespace, to correctly handle cases like fancy "V M S"
         // response instead of "VMS".
@@ -961,7 +961,7 @@ int FtpNetworkTransaction::ProcessResponseEPSV(
           !IsPortAllowedForScheme(port, url::kFtpScheme)) {
         return Stop(ERR_UNSAFE_PORT);
       }
-      data_connection_port_ = static_cast<uint16>(port);
+      data_connection_port_ = static_cast<uint16_t>(port);
       next_state_ = STATE_DATA_CONNECT;
       break;
     }
@@ -999,7 +999,7 @@ int FtpNetworkTransaction::ProcessResponsePASV(
           !IsPortAllowedForScheme(port, url::kFtpScheme)) {
         return Stop(ERR_UNSAFE_PORT);
       }
-      data_connection_port_ = static_cast<uint16>(port);
+      data_connection_port_ = static_cast<uint16_t>(port);
       next_state_ = STATE_DATA_CONNECT;
       break;
     }
@@ -1068,7 +1068,7 @@ int FtpNetworkTransaction::ProcessResponseSIZE(
     case ERROR_CLASS_OK:
       if (response.lines.size() != 1)
         return Stop(ERR_INVALID_RESPONSE);
-      int64 size;
+      int64_t size;
       if (!base::StringToInt64(response.lines[0], &size))
         return Stop(ERR_INVALID_RESPONSE);
       if (size < 0)
@@ -1085,7 +1085,7 @@ int FtpNetworkTransaction::ProcessResponseSIZE(
       break;
     case ERROR_CLASS_PERMANENT_ERROR:
       // It's possible that SIZE failed because the path is a directory.
-      // TODO(xunjieli): Add a test for this case.
+      // TODO(xunjieli): https://crbug.com/526724: Add a test for this case.
       if (resource_type_ == RESOURCE_TYPE_UNKNOWN &&
           response.status_code != 550) {
         return Stop(GetNetErrorCodeForFtpResponseCode(response.status_code));
@@ -1242,8 +1242,8 @@ int FtpNetworkTransaction::DoDataConnectComplete(int result) {
   if (result != OK && use_epsv_) {
     // It's possible we hit a broken server, sadly. They can break in different
     // ways. Some time out, some reset a connection. Fall back to PASV.
-    // TODO(phajdan.jr): remember it for future transactions with this server.
-    // TODO(phajdan.jr): write a test for this code path.
+    // TODO(phajdan.jr): https://crbug.com/526723: remember it for future
+    // transactions with this server.
     use_epsv_ = false;
     next_state_ = STATE_CTRL_WRITE_PASV;
     return OK;

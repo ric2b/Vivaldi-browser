@@ -4,6 +4,9 @@
 
 #include "chrome/renderer/extensions/extension_localization_peer.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "chrome/common/url_constants.h"
@@ -61,8 +64,8 @@ ExtensionLocalizationPeer::CreateExtensionLocalizationPeer(
              : NULL;
 }
 
-void ExtensionLocalizationPeer::OnUploadProgress(
-    uint64 position, uint64 size) {
+void ExtensionLocalizationPeer::OnUploadProgress(uint64_t position,
+                                                 uint64_t size) {
   NOTREACHED();
 }
 
@@ -88,7 +91,7 @@ void ExtensionLocalizationPeer::OnCompletedRequest(
     bool stale_copy_in_cache,
     const std::string& security_info,
     const base::TimeTicks& completion_time,
-    int64 total_transfer_size) {
+    int64_t total_transfer_size) {
   // Make sure we delete ourselves at the end of this call.
   scoped_ptr<ExtensionLocalizationPeer> this_deleter(this);
   // Give sub-classes a chance at altering the data.
@@ -105,8 +108,9 @@ void ExtensionLocalizationPeer::OnCompletedRequest(
   scoped_ptr<StringData> data_to_pass(data_.empty() ? nullptr
                                                     : new StringData(data_));
   original_peer_->OnReceivedCompletedResponse(
-      response_info_, data_to_pass.Pass(), error_code, was_ignored_by_handler,
-      stale_copy_in_cache, security_info, completion_time, total_transfer_size);
+      response_info_, std::move(data_to_pass), error_code,
+      was_ignored_by_handler, stale_copy_in_cache, security_info,
+      completion_time, total_transfer_size);
 }
 
 void ExtensionLocalizationPeer::OnReceivedCompletedResponse(
@@ -117,11 +121,11 @@ void ExtensionLocalizationPeer::OnReceivedCompletedResponse(
     bool stale_copy_in_cache,
     const std::string& security_info,
     const base::TimeTicks& completion_time,
-    int64 total_transfer_size) {
+    int64_t total_transfer_size) {
   // Make sure we delete ourselves at the end of this call.
   scoped_ptr<ExtensionLocalizationPeer> this_deleter(this);
   original_peer_->OnReceivedCompletedResponse(
-      info, data.Pass(), error_code, was_ignored_by_handler,
+      info, std::move(data), error_code, was_ignored_by_handler,
       stale_copy_in_cache, security_info, completion_time, total_transfer_size);
 }
 

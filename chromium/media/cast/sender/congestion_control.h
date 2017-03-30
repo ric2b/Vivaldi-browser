@@ -5,9 +5,9 @@
 #ifndef MEDIA_CAST_CONGESTION_CONTROL_CONGESTION_CONTROL_H_
 #define MEDIA_CAST_CONGESTION_CONTROL_CONGESTION_CONTROL_H_
 
-#include <deque>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -25,25 +25,28 @@ class CongestionControl {
   // Called with an updated target playout delay value.
   virtual void UpdateTargetPlayoutDelay(base::TimeDelta delay) = 0;
 
-  // Called when an encoded frame is sent to the transport.
-  virtual void SendFrameToTransport(uint32 frame_id,
-                                    size_t frame_size,
+  // Called when an encoded frame is enqueued for transport.
+  virtual void SendFrameToTransport(uint32_t frame_id,
+                                    size_t frame_size_in_bits,
                                     base::TimeTicks when) = 0;
-  // Called when we receive an ACK for a frame.
-  virtual void AckFrame(uint32 frame_id, base::TimeTicks when) = 0;
 
-  // Returns the bitrate we should use for the next frame.
-  virtual uint32 GetBitrate(base::TimeTicks playout_time,
-                            base::TimeDelta playout_delay) = 0;
+  // Called when we receive an ACK for a frame.
+  virtual void AckFrame(uint32_t frame_id, base::TimeTicks when) = 0;
+
+  // Returns the bitrate we should use for the next frame.  |soft_max_bitrate|
+  // is a soft upper-bound applied to the computed target bitrate before the
+  // hard upper- and lower-bounds are applied.
+  virtual int GetBitrate(base::TimeTicks playout_time,
+                         base::TimeDelta playout_delay) = 0;
 };
 
 CongestionControl* NewAdaptiveCongestionControl(
     base::TickClock* clock,
-    uint32 max_bitrate_configured,
-    uint32 min_bitrate_configured,
+    int max_bitrate_configured,
+    int min_bitrate_configured,
     double max_frame_rate);
 
-CongestionControl* NewFixedCongestionControl(uint32 bitrate);
+CongestionControl* NewFixedCongestionControl(int bitrate);
 
 }  // namespace cast
 }  // namespace media

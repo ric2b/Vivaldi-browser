@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//content/child/child.gni")
@@ -16,6 +15,11 @@ source_set("child") {
                         ".",
                         "//content")
 
+  configs += [
+    "//build/config:precompiled_headers",
+    "//content/public/common:mojo_shell_client",
+  ]
+
   public_deps = [
     "//third_party/mojo/src/mojo/edk/system",
   ]
@@ -27,9 +31,11 @@ source_set("child") {
     "//components/tracing:startup_tracing",
     "//components/webcrypto",
     "//content/common:mojo_bindings",
-    "//mojo/application/public/interfaces",
     "//mojo/common",
     "//mojo/environment:chromium",
+    "//mojo/message_pump",
+    "//mojo/shell/public/interfaces",
+    "//net",
     "//skia",
     "//third_party/icu",
     "//ui/base",
@@ -53,6 +59,10 @@ source_set("child") {
 
   if (enable_plugins) {
     deps += [ "//ppapi/proxy" ]
+
+    if (is_win || is_android || !use_aura) {
+      sources -= [ "npapi/webplugin_delegate_impl_aura.cc" ]
+    }
   } else {
     sources -= [
       "browser_font_resource_trusted.cc",
@@ -62,15 +72,6 @@ source_set("child") {
       "npapi/plugin_instance.h",
       "npapi/plugin_lib.cc",
       "npapi/plugin_lib.h",
-      "npapi/plugin_stream.cc",
-      "npapi/plugin_stream.h",
-      "npapi/plugin_stream_posix.cc",
-      "npapi/plugin_stream_url.cc",
-      "npapi/plugin_stream_url.h",
-      "npapi/plugin_string_stream.cc",
-      "npapi/plugin_string_stream.h",
-      "npapi/plugin_url_fetcher.cc",
-      "npapi/plugin_url_fetcher.h",
       "npapi/webplugin.h",
       "npapi/webplugin_delegate.h",
       "npapi/webplugin_delegate_impl.cc",
@@ -88,7 +89,6 @@ source_set("child") {
       ]
     } else if (is_win) {
       sources -= [
-        "npapi/plugin_stream_win.cc",
         "npapi/webplugin_delegate_impl_win.cc",
         "npapi/webplugin_ime_win.cc",
         "npapi/webplugin_ime_win.h",
@@ -96,9 +96,7 @@ source_set("child") {
     } else if (is_android) {
       sources -= [ "npapi/webplugin_delegate_impl_android.cc" ]
     }
-    if (use_aura) {
-      sources -= [ "npapi/webplugin_delegate_impl_aura.cc" ]
-    }
+    sources -= [ "npapi/webplugin_delegate_impl_aura.cc" ]
   }
 
   configs += [
@@ -127,9 +125,5 @@ source_set("child") {
   if (use_aura && is_mac) {
     # This file is already excluded on non-Mac.
     sources -= [ "npapi/webplugin_delegate_impl_mac.mm" ]
-  }
-
-  if (is_win || !use_aura) {
-    sources -= [ "npapi/webplugin_delegate_impl_aura.cc" ]
   }
 }

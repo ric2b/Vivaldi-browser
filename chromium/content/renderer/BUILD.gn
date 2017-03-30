@@ -19,54 +19,77 @@ source_set("renderer") {
   configs += [
     "//content:content_implementation",
     "//build/config/compiler:no_size_t_to_int_warning",
+    "//content/public/common:mojo_shell_client",
   ]
+  defines = []
 
   deps = [
+    "//base:i18n",
+
     # TODO(GYP) bug 376846 remove this. This should be inherited from //net but
     # those don't cross component boundaries.
-    "//crypto:platform",
     "//base/allocator",
     "//cc",
     "//cc/blink",
+    "//cc/proto",
+    "//cc/surfaces",
     "//components/scheduler:scheduler",
+    "//components/startup_metric_utils/common",
+    "//components/url_formatter",
+    "//components/webusb",
     "//content:resources",
     "//content/common:mojo_bindings",
     "//content/public/child:child_sources",
     "//content/public/common:common_sources",
     "//content/public/common:mojo_bindings",
+    "//crypto:platform",
     "//device/battery:mojo_bindings",
+    "//device/bluetooth",
+    "//device/devices_app/public/cpp",
+    "//device/devices_app/usb/public/interfaces",
     "//device/vibration:mojo_bindings",
     "//gin",
     "//gpu",
+    "//gpu/blink",
     "//gpu/command_buffer/client:gles2_interface",
+    "//ipc/mojo",
     "//jingle:jingle_glue",
     "//media",
     "//media/blink",
-    "//mojo/application/public/interfaces",
-    "//mojo/environment:chromium",
-    "//mojo/common:url_type_converters",
+    "//media/midi",
+    "//mojo/common",
     "//mojo/converters/geometry",
+    "//mojo/environment:chromium",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/js",
+    "//mojo/shell/public/cpp",
+    "//mojo/shell/public/interfaces",
     "//net",
     "//skia",
     "//skia/public",
     "//storage/common",
+    "//third_party/WebKit/public:blink",
     "//third_party/icu",
     "//third_party/libjingle",
+    "//third_party/libyuv",
     "//third_party/mojo/src/mojo/edk/js",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
-    "//third_party/mojo/src/mojo/public/js",
     "//third_party/npapi",
-    "//third_party/WebKit/public:blink",
     "//third_party/widevine/cdm:version_h",
     "//ui/accessibility",
     "//ui/base",
-    "//ui/events:events_base",
+    "//ui/base/ime",
     "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/events/blink",
     "//ui/gl",
     "//ui/native_theme",
     "//ui/surface",
     "//v8",
   ]
+
+  if (use_aura) {
+    deps += [ "//content/renderer/mus" ]
+  }
 
   if (is_mac) {
     sources -= [
@@ -80,7 +103,6 @@ source_set("renderer") {
   }
 
   if (is_android) {
-    sources -= [ "media/audio_decoder.cc" ]
     sources += [
       "external_popup_menu.cc",
       "external_popup_menu.h",
@@ -114,6 +136,8 @@ source_set("renderer") {
     sources -= [
       "media/media_stream_audio_level_calculator.cc",
       "media/media_stream_audio_level_calculator.h",
+      "media/media_stream_audio_track.cc",
+      "media/media_stream_audio_track.h",
       "media/media_stream_center.h",
       "media/media_stream_constraints_util.cc",
       "media/media_stream_constraints_util.h",
@@ -129,14 +153,17 @@ source_set("renderer") {
             content_renderer_gypi_values.private_renderer_webrtc_sources,
             ".",
             "//content")
+
     deps += [
       "//crypto",
-      "//third_party/libyuv",
-      "//third_party/webrtc/modules/audio_device",
-      "//third_party/webrtc/modules/audio_processing",
       "//third_party/libjingle:libjingle_webrtc",
       "//third_party/libjingle:libpeerconnection",
       "//third_party/libjingle:libstunprober",
+      "//third_party/webrtc/base:rtc_base",
+      "//third_party/webrtc/common_video",
+      "//third_party/webrtc/modules/audio_device",
+      "//third_party/webrtc/modules/audio_processing",
+      "//third_party/webrtc/system_wrappers",
     ]
   } else {
     sources += [
@@ -154,17 +181,9 @@ source_set("renderer") {
       "//ppapi/host",
       "//ppapi/proxy",
       "//ppapi/shared_impl",
-      "//third_party/libvpx",
-      "//third_party/libyuv",
+      "//third_party/libvpx_new",
+      "//third_party/opus",
     ]
-  } else {
-    # These files are in the WebRTC list, but also require plugins.
-    if (enable_webrtc) {
-      sources -= [
-        "media/webrtc/video_destination_handler.cc",
-        "media/webrtc/video_destination_handler.h",
-      ]
-    }
   }
 
   if (enable_plugins && enable_webrtc) {
@@ -176,11 +195,11 @@ source_set("renderer") {
 
   if (!enable_pepper_cdms) {
     sources -= [
-      "media/crypto/pepper_cdm_wrapper.h",
-      "media/crypto/pepper_cdm_wrapper_impl.cc",
-      "media/crypto/pepper_cdm_wrapper_impl.h",
-      "media/crypto/ppapi_decryptor.cc",
-      "media/crypto/ppapi_decryptor.h",
+      "media/cdm/pepper_cdm_wrapper.h",
+      "media/cdm/pepper_cdm_wrapper_impl.cc",
+      "media/cdm/pepper_cdm_wrapper_impl.h",
+      "media/cdm/ppapi_decryptor.cc",
+      "media/cdm/ppapi_decryptor.h",
     ]
   }
 
@@ -190,15 +209,18 @@ source_set("renderer") {
 
   if (enable_browser_cdms) {
     sources += [
-      "media/crypto/proxy_media_keys.cc",
-      "media/crypto/proxy_media_keys.h",
-      "media/crypto/renderer_cdm_manager.cc",
-      "media/crypto/renderer_cdm_manager.h",
+      "media/cdm/proxy_media_keys.cc",
+      "media/cdm/proxy_media_keys.h",
+      "media/cdm/renderer_cdm_manager.cc",
+      "media/cdm/renderer_cdm_manager.h",
     ]
   }
 
   if (enable_mojo_media != "none") {
-    deps += [ "//media/mojo/services:proxy" ]
+    deps += [
+      "//media/mojo/interfaces",
+      "//media/mojo/services:proxy",
+    ]
   }
 
   if (enable_webvr) {
@@ -208,5 +230,9 @@ source_set("renderer") {
       "vr/vr_type_converters.cc",
       "vr/vr_type_converters.h",
     ]
+  }
+
+  if (use_seccomp_bpf) {
+    defines += [ "USE_SECCOMP_BPF" ]
   }
 }

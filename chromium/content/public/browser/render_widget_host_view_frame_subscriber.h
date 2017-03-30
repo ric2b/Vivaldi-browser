@@ -40,7 +40,11 @@ class RenderWidgetHostViewFrameSubscriber {
   // If |frame_captured| is false then the content in frame provided is
   // invalid. There was an error during the process of frame capture or the
   // platform layer is shutting down. |timestamp| is also invalid in this case.
+  //
+  // |region_in_frame| is the location within the Videoframe where the
+  // captured content resides, with the rest of the VideoFrame blacked out.
   typedef base::Callback<void(base::TimeTicks /* timestamp */,
+                              const gfx::Rect& /* region_in_frame */,
                               bool /* frame_captured */)> DeliverFrameCallback;
 
   // Called when a new frame is going to be presented at time
@@ -54,7 +58,7 @@ class RenderWidgetHostViewFrameSubscriber {
   // space conversion to fit into the output frame.
   //
   // Destination format is determined by |storage|, currently only
-  // media::VideoFrame::YV12 is supported. Platform layer will perform color
+  // media::PIXEL_FORMAT_YV12 is supported. Platform layer will perform color
   // space conversion if needed.
   //
   // When the frame is available |callback| will be called. It is up to the

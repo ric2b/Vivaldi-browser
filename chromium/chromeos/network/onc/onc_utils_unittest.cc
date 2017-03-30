@@ -8,6 +8,7 @@
 
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "chromeos/chromeos_test_utils.h"
@@ -21,11 +22,11 @@ namespace chromeos {
 namespace {
 
 scoped_ptr<base::Value> ReadTestJson(const std::string& filename) {
-  base::Value* result = nullptr;
   base::FilePath path;
+  scoped_ptr<base::Value> result;
   if (!test_utils::GetTestDataPath("network", filename, &path)) {
     NOTREACHED() << "Unable to get test file path for: " << filename;
-    return make_scoped_ptr(result);
+    return result;
   }
   JSONFileValueDeserializer deserializer(path);
   deserializer.set_allow_trailing_comma(true);
@@ -33,7 +34,7 @@ scoped_ptr<base::Value> ReadTestJson(const std::string& filename) {
   result = deserializer.Deserialize(nullptr, &error_message);
   CHECK(result != nullptr) << "Couldn't json-deserialize file: " << filename
                            << ": " << error_message;
-  return make_scoped_ptr(result);
+  return result;
 }
 
 }  // namespace

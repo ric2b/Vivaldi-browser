@@ -10,6 +10,7 @@ from telemetry.internal.results import page_test_results
 from telemetry.page import page as page_module
 from telemetry.timeline import async_slice
 from telemetry.timeline import model as model_module
+from telemetry.value import improvement_direction
 from telemetry.value import scalar
 from telemetry.web_perf.metrics import timeline_based_metric
 from telemetry.web_perf import timeline_based_measurement as tbm_module
@@ -19,25 +20,40 @@ class FakeSmoothMetric(timeline_based_metric.TimelineBasedMetric):
 
   def AddResults(self, model, renderer_thread, interaction_records, results):
     results.AddValue(scalar.ScalarValue(
-        results.current_page, 'FakeSmoothMetric', 'ms', 1))
+        results.current_page, 'FakeSmoothMetric', 'ms', 1,
+        improvement_direction=improvement_direction.DOWN))
     results.AddValue(scalar.ScalarValue(
         results.current_page, 'SmoothMetricRecords', 'count',
-        len(interaction_records)))
+        len(interaction_records),
+        improvement_direction=improvement_direction.DOWN))
 
 
 class FakeLoadingMetric(timeline_based_metric.TimelineBasedMetric):
 
   def AddResults(self, model, renderer_thread, interaction_records, results):
     results.AddValue(scalar.ScalarValue(
-        results.current_page, 'FakeLoadingMetric', 'ms', 2))
+        results.current_page, 'FakeLoadingMetric', 'ms', 2,
+        improvement_direction=improvement_direction.DOWN))
     results.AddValue(scalar.ScalarValue(
         results.current_page, 'LoadingMetricRecords', 'count',
-        len(interaction_records)))
+        len(interaction_records),
+        improvement_direction=improvement_direction.DOWN))
+
+
+class FakeStartupMetric(timeline_based_metric.TimelineBasedMetric):
+
+  def AddResults(self, model, renderer_thread, interaction_records, results):
+    pass
+
+  def AddWholeTraceResults(self, model, results):
+    results.AddValue(scalar.ScalarValue(
+        results.current_page, 'FakeStartupMetric', 'ms', 3,
+        improvement_direction=improvement_direction.DOWN))
 
 
 class TimelineBasedMetricTestData(object):
 
-  def __init__(self):
+  def __init__(self, options):
     self._model = model_module.TimelineModel()
     renderer_process = self._model.GetOrCreateProcess(1)
     self._renderer_thread = renderer_process.GetOrCreateThread(2)
@@ -45,9 +61,11 @@ class TimelineBasedMetricTestData(object):
     self._foo_thread = renderer_process.GetOrCreateThread(3)
     self._foo_thread.name = 'CrFoo'
 
+    self._results_wrapper = tbm_module._TBMResultWrapper()
     self._results = page_test_results.PageTestResults()
     self._story_set = None
     self._threads_to_records_map = None
+    self._tbm_options = options
 
   @property
   def model(self):
@@ -86,10 +104,17 @@ class TimelineBasedMetricTestData(object):
     self._results.WillRunPage(self._story_set.stories[0])
 
   def AddResults(self):
+    all_metrics = self._tbm_options.GetTimelineBasedMetrics()
+
     for thread, records in self._threads_to_records_map.iteritems():
-      metric = tbm_module._TimelineBasedMetrics(  # pylint: disable=W0212
-        self._model, thread, records)
+      # pylint: disable=protected-access
+      metric = tbm_module._TimelineBasedMetrics(
+          self._model, thread, records, self._results_wrapper, all_metrics)
       metric.AddResults(self._results)
+
+    for metric in all_metrics:
+      metric.AddWholeTraceResults(self._model, self._results)
+
     self._results.DidRunPage(self._story_set.stories[0])
 
 
@@ -97,14 +122,15 @@ class TimelineBasedMetricsTests(unittest.TestCase):
 
   def setUp(self):
     self.actual_get_all_tbm_metrics = tbm_module._GetAllTimelineBasedMetrics
-    fake_tbm_metrics = (FakeSmoothMetric(), FakeLoadingMetric())
-    tbm_module._GetAllTimelineBasedMetrics = lambda: fake_tbm_metrics
+    self._options = tbm_module.Options()
+    self._options.SetTimelineBasedMetrics(
+        (FakeSmoothMetric(), FakeLoadingMetric(), FakeStartupMetric()))
 
   def tearDown(self):
     tbm_module._GetAllTimelineBasedMetrics = self.actual_get_all_tbm_metrics
 
   def testGetRendererThreadsToInteractionRecordsMap(self):
-    d = TimelineBasedMetricTestData()
+    d = TimelineBasedMetricTestData(self._options)
     # Insert 2 interaction records to renderer_thread and 1 to foo_thread
     d.AddInteraction(d.renderer_thread, ts=0, duration=20,
                      marker='Interaction.LogicalName1')
@@ -134,20 +160,22 @@ class TimelineBasedMetricsTests(unittest.TestCase):
     self.assertEquals(65, interactions[0].end)
 
   def testAddResults(self):
-    d = TimelineBasedMetricTestData()
+    d = TimelineBasedMetricTestData(self._options)
     d.AddInteraction(d.renderer_thread, ts=0, duration=20,
                      marker='Interaction.LogicalName1')
     d.AddInteraction(d.foo_thread, ts=25, duration=5,
                      marker='Interaction.LogicalName2')
     d.FinalizeImport()
     d.AddResults()
+    self.assertEquals(1, len(d.results.FindAllPageSpecificValuesFromIRNamed(
+        'LogicalName1', 'FakeSmoothMetric')))
+    self.assertEquals(1, len(d.results.FindAllPageSpecificValuesFromIRNamed(
+        'LogicalName2', 'FakeLoadingMetric')))
     self.assertEquals(1, len(d.results.FindAllPageSpecificValuesNamed(
-        'LogicalName1-FakeSmoothMetric')))
-    self.assertEquals(1, len(d.results.FindAllPageSpecificValuesNamed(
-        'LogicalName2-FakeLoadingMetric')))
+        'FakeStartupMetric')))
 
   def testDuplicateInteractionsInDifferentThreads(self):
-    d = TimelineBasedMetricTestData()
+    d = TimelineBasedMetricTestData(self._options)
     d.AddInteraction(d.renderer_thread, ts=10, duration=5,
                      marker='Interaction.LogicalName/repeatable')
     d.AddInteraction(d.foo_thread, ts=20, duration=5,
@@ -155,16 +183,15 @@ class TimelineBasedMetricsTests(unittest.TestCase):
     self.assertRaises(tbm_module.InvalidInteractions, d.FinalizeImport)
 
   def testDuplicateRepeatableInteractionsInDifferentThreads(self):
-    d = TimelineBasedMetricTestData()
+    d = TimelineBasedMetricTestData(self._options)
     d.AddInteraction(d.renderer_thread, ts=10, duration=5,
                      marker='Interaction.LogicalName/repeatable')
     d.AddInteraction(d.foo_thread, ts=20, duration=5,
                      marker='Interaction.LogicalName/repeatable')
     self.assertRaises(tbm_module.InvalidInteractions, d.FinalizeImport)
 
-
   def testDuplicateUnrepeatableInteractionsInSameThread(self):
-    d = TimelineBasedMetricTestData()
+    d = TimelineBasedMetricTestData(self._options)
     d.AddInteraction(d.renderer_thread, ts=10, duration=5,
                      marker='Interaction.LogicalName')
     d.AddInteraction(d.renderer_thread, ts=20, duration=5,
@@ -173,7 +200,7 @@ class TimelineBasedMetricsTests(unittest.TestCase):
     self.assertRaises(tbm_module.InvalidInteractions, d.AddResults)
 
   def testDuplicateRepeatableInteractions(self):
-    d = TimelineBasedMetricTestData()
+    d = TimelineBasedMetricTestData(self._options)
     d.AddInteraction(d.renderer_thread, ts=10, duration=5,
                      marker='Interaction.LogicalName/repeatable')
     d.AddInteraction(d.renderer_thread, ts=20, duration=5,

@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_OMNIBOX_OMNIBOX_RESULT_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_OMNIBOX_OMNIBOX_RESULT_VIEW_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -43,13 +45,8 @@ class OmniboxResultView : public views::View,
     TEXT,
     DIMMED_TEXT,
     URL,
-    DIVIDER,
     NUM_KINDS
   };
-
-  // The minimum distance between the top and bottom of the text and the
-  // top or bottom of the row.
-  static const int kMinimumTextVerticalPadding = 3;
 
   OmniboxResultView(OmniboxPopupContentsView* model,
                     int model_index,
@@ -68,8 +65,12 @@ class OmniboxResultView : public views::View,
 
   void Invalidate();
 
+  // Invoked when this result view has been selected.
+  void OnSelected();
+
   // views::View:
   gfx::Size GetPreferredSize() const override;
+  void GetAccessibleState(ui::AXViewState* state) override;
 
   ResultViewState GetState() const;
 
@@ -84,6 +85,13 @@ class OmniboxResultView : public views::View,
   void SetAnswerImage(const gfx::ImageSkia& image);
 
  protected:
+  enum RenderTextType {
+    CONTENTS = 0,
+    SEPARATOR,
+    DESCRIPTION,
+    NUM_TYPES
+  };
+
   // Paints the given |match| using the RenderText instances |contents| and
   // |description| at offset |x| in the bounds of this view.
   virtual void PaintMatch(const AutocompleteMatch& match,
@@ -93,14 +101,14 @@ class OmniboxResultView : public views::View,
                           int x) const;
 
   // Draws given |render_text| on |canvas| at given location (|x|, |y|).
-  // |contents| indicates whether the |render_text| is for the match contents
-  // (rather than the separator or the description).  Additional properties from
-  // |match| are used to render Infinite suggestions correctly.  If |max_width|
-  // is a non-negative number, the text will be elided to fit within
-  // |max_width|.  Returns the x position to the right of the string.
+  // |contents| indicates if the |render_text| is for the match contents,
+  // separator, or description.  Additional properties from |match| are used to
+  // render Infinite suggestions correctly.  If |max_width| is a non-negative
+  // number, the text will be elided to fit within |max_width|.  Returns the x
+  // position to the right of the string.
   int DrawRenderText(const AutocompleteMatch& match,
                      gfx::RenderText* render_text,
-                     bool contents,
+                     RenderTextType render_text_type,
                      gfx::Canvas* canvas,
                      int x,
                      int y,
@@ -119,15 +127,16 @@ class OmniboxResultView : public views::View,
 
   const gfx::Rect& text_bounds() const { return text_bounds_; }
 
-  void set_edge_item_padding(int value) { edge_item_padding_ = value; }
-  void set_item_padding(int value) { item_padding_ = value; }
-
  private:
   // views::View:
   const char* GetClassName() const override;
 
   gfx::ImageSkia GetIcon() const;
-  const gfx::ImageSkia* GetKeywordIcon() const;
+
+  gfx::ImageSkia GetKeywordIcon() const;
+
+  // Utility function for creating vector icons.
+  gfx::ImageSkia GetVectorIcon(gfx::VectorIconId icon_id) const;
 
   // Whether to render only the keyword match.  Returns true if |match_| has an
   // associated keyword match that has been animated so close to the start that
@@ -179,11 +188,14 @@ class OmniboxResultView : public views::View,
                               int text_type,
                               bool is_bold);
 
-  static int default_icon_size_;
+  // Returns the necessary margin, if any, at the start and end of the view.
+  // This allows us to keep the icon and text in the view aligned with the
+  // location bar contents. For a left-to-right language, StartMargin()
+  // and EndMargin() correspond to the left and right margins, respectively.
+  int StartMargin() const;
+  int EndMargin() const;
 
-  // Default values cached here, may be overridden using the setters above.
-  int edge_item_padding_;
-  int item_padding_;
+  static int default_icon_size_;
 
   // This row's model and model index.
   OmniboxPopupContentsView* model_;

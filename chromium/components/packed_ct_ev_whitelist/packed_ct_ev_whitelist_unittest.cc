@@ -4,10 +4,13 @@
 
 #include "components/packed_ct_ev_whitelist/packed_ct_ev_whitelist.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 
 #include "base/big_endian.h"
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -104,6 +107,7 @@ TEST(PackedEVCertsWhitelistTest, UncompressesWhitelistCorrectly) {
   std::vector<uint64_t> res;
   ASSERT_TRUE(PackedEVCertsWhitelist::UncompressEVWhitelist(
       GetAllWhitelistData(), &res));
+  ASSERT_TRUE(res.size() == res.capacity());
 
   // Ensure first hash is found
   EXPECT_TRUE(std::find(res.begin(), res.end(), HashToUint64(GetFirstHash())) !=

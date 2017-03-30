@@ -6,22 +6,31 @@
  * Scrollable thumbnail ribbon at the bottom of the Gallery in the Slide mode.
  *
  * @param {!Document} document Document.
+ * @param {!Window} targetWindow A window which this ribbon is attached to.
  * @param {!cr.ui.ArrayDataModel} dataModel Data model.
  * @param {!cr.ui.ListSelectionModel} selectionModel Selection model.
  * @param {!ThumbnailModel} thumbnailModel
  * @extends {HTMLDivElement}
  * @constructor
- * @suppress {checkStructDictInheritance}
  * @struct
  */
-function Ribbon(document, dataModel, selectionModel, thumbnailModel) {
+function Ribbon(
+    document, targetWindow, dataModel, selectionModel, thumbnailModel) {
   if (this instanceof Ribbon) {
     return Ribbon.call(/** @type {Ribbon} */ (document.createElement('div')),
-        document, dataModel, selectionModel, thumbnailModel);
+        document, targetWindow, dataModel, selectionModel, thumbnailModel);
   }
 
   this.__proto__ = Ribbon.prototype;
   this.className = 'ribbon';
+  this.setAttribute('role', 'listbox');
+  this.tabIndex = 0;
+
+  /**
+   * @private {!Window}
+   * @const
+   */
+  this.targetWindow_ = targetWindow;
 
   /**
    * @private {!cr.ui.ArrayDataModel}
@@ -83,6 +92,14 @@ function Ribbon(document, dataModel, selectionModel, thumbnailModel) {
    */
   this.removeTimeout_ = null;
 
+  /**
+   * @private {number}
+   */
+  this.thumbnailElementId_ = 0;
+
+  this.targetWindow_.addEventListener(
+      'resize', this.onWindowResize_.bind(this));
+
   return this;
 }
 
@@ -92,11 +109,38 @@ function Ribbon(document, dataModel, selectionModel, thumbnailModel) {
 Ribbon.prototype.__proto__ = HTMLDivElement.prototype;
 
 /**
- * Max number of thumbnails in the ribbon.
- * @type {number}
- * @const
+ * Margin of thumbnails.
+ * @const {number}
  */
-Ribbon.ITEMS_COUNT = 5;
+Ribbon.MARGIN = 2; // px
+
+/**
+ * Width of thumbnail on the ribbon.
+ * @const {number}
+ */
+Ribbon.THUMBNAIL_WIDTH = 71; // px
+
+/**
+ * Height of thumbnail on the ribbon.
+ * @const {number}
+ */
+Ribbon.THUMBNAIL_HEIGHT = 40; // px
+
+/**
+ * Returns number of items in the viewport.
+ * @return {number} Number of items in the viewport.
+ */
+Ribbon.prototype.getItemCount_ = function() {
+  return Math.ceil(this.targetWindow_.innerWidth /
+      (Ribbon.THUMBNAIL_WIDTH + Ribbon.MARGIN * 2));
+};
+
+/**
+ * Handles resize event of target window.
+ */
+Ribbon.prototype.onWindowResize_ = function() {
+  this.redraw();
+};
 
 /**
  * Force redraw the ribbon.
@@ -226,29 +270,24 @@ Ribbon.prototype.onSplice_ = function(event) {
  */
 Ribbon.prototype.onSelection_ = function() {
   var indexes = this.selectionModel_.selectedIndexes;
-  if (indexes.length == 0)
+  if (indexes.length === 0)
     return;  // Ignore temporary empty selection.
   var selectedIndex = indexes[0];
 
   var length = this.dataModel_.length;
-
-  // TODO(dgozman): use margin instead of 2 here.
-  var itemWidth = this.clientHeight - 2;
-  var fullItems = Math.min(Ribbon.ITEMS_COUNT, length);
+  var fullItems = Math.min(this.getItemCount_(), length);
   var right = Math.floor((fullItems - 1) / 2);
-
-  var fullWidth = fullItems * itemWidth;
-  this.style.width = fullWidth + 'px';
 
   var lastIndex = selectedIndex + right;
   lastIndex = Math.max(lastIndex, fullItems - 1);
   lastIndex = Math.min(lastIndex, length - 1);
+
   var firstIndex = lastIndex - fullItems + 1;
 
-  if (this.firstVisibleIndex_ != firstIndex ||
-      this.lastVisibleIndex_ != lastIndex) {
+  if (this.firstVisibleIndex_ !== firstIndex ||
+      this.lastVisibleIndex_ !== lastIndex) {
 
-    if (this.lastVisibleIndex_ == -1) {
+    if (this.lastVisibleIndex_ === -1) {
       this.firstVisibleIndex_ = firstIndex;
       this.lastVisibleIndex_ = lastIndex;
     }
@@ -265,9 +304,11 @@ Ribbon.prototype.onSelection_ = function() {
       if (this.lastVisibleIndex_ < index && index < firstIndex ||
           lastIndex < index && index < this.firstVisibleIndex_)
         continue;
+
       var box = this.renderThumbnail_(index);
-      box.style.marginLeft = '0';
+      box.style.marginLeft = Ribbon.MARGIN + 'px';
       this.appendChild(box);
+
       if (index < firstIndex || index > lastIndex) {
         // If the node is not in the new viewport we only need it while
         // the animation is playing out.
@@ -275,38 +316,37 @@ Ribbon.prototype.onSelection_ = function() {
       }
     }
 
-    var slideCount = this.childNodes.length + 1 - Ribbon.ITEMS_COUNT;
-    var margin = itemWidth * slideCount;
+    var slideCount = this.childNodes.length + 1 - fullItems;
+    var margin = Ribbon.THUMBNAIL_WIDTH * slideCount;
     var startBox = this.renderThumbnail_(startIndex);
-    if (startIndex == firstIndex) {
+
+    if (startIndex === firstIndex) {
       // Sliding to the right.
       startBox.style.marginLeft = -margin + 'px';
+
       if (this.firstChild)
         this.insertBefore(startBox, this.firstChild);
       else
         this.appendChild(startBox);
+
       setTimeout(function() {
-        startBox.style.marginLeft = '0';
+        startBox.style.marginLeft = Ribbon.MARGIN + 'px';
       }, 0);
     } else {
       // Sliding to the left. Start item will become invisible and should be
       // removed afterwards.
       startBox.setAttribute('vanishing', 'slide');
-      startBox.style.marginLeft = '0';
+      startBox.style.marginLeft = Ribbon.MARGIN + 'px';
+
       if (this.firstChild)
         this.insertBefore(startBox, this.firstChild);
       else
         this.appendChild(startBox);
+
       setTimeout(function() {
         startBox.style.marginLeft = -margin + 'px';
       }, 0);
     }
-
-    ImageUtil.setClass(this, 'fade-left',
-        firstIndex > 0 && selectedIndex != firstIndex);
-
-    ImageUtil.setClass(this, 'fade-right',
-        lastIndex < length - 1 && selectedIndex != lastIndex);
 
     this.firstVisibleIndex_ = firstIndex;
     this.lastVisibleIndex_ = lastIndex;
@@ -314,14 +354,26 @@ Ribbon.prototype.onSelection_ = function() {
     this.scheduleRemove_();
   }
 
+  ImageUtil.setClass(
+      this,
+      'fade-left',
+      firstIndex > 0 && selectedIndex !== firstIndex);
+  ImageUtil.setClass(
+      this,
+      'fade-right',
+      lastIndex < length - 1 && selectedIndex !== lastIndex);
+
   var oldSelected = this.querySelector('[selected]');
   if (oldSelected)
     oldSelected.removeAttribute('selected');
 
   var newSelected =
       this.renderCache_[this.dataModel_.item(selectedIndex).getEntry().toURL()];
-  if (newSelected)
+  if (newSelected) {
     newSelected.setAttribute('selected', true);
+    this.setAttribute('aria-activedescendant', newSelected.id);
+    this.focus();
+  }
 };
 
 /**
@@ -362,7 +414,7 @@ Ribbon.prototype.removeVanishing_ = function() {
  * @private
  */
 Ribbon.prototype.renderThumbnail_ = function(index) {
-  var item = assertInstanceof(this.dataModel_.item(index), Gallery.Item);
+  var item = assertInstanceof(this.dataModel_.item(index), GalleryItem);
   var url = item.getEntry().toURL();
 
   var cached = this.renderCache_[url];
@@ -375,7 +427,9 @@ Ribbon.prototype.renderThumbnail_ = function(index) {
 
   var thumbnail = assertInstanceof(this.ownerDocument.createElement('div'),
       HTMLDivElement);
+  thumbnail.id = `thumbnail-${this.thumbnailElementId_++}`;
   thumbnail.className = 'ribbon-image';
+  thumbnail.setAttribute('role', 'listitem');
   thumbnail.addEventListener('click', function() {
     var index = this.dataModel_.indexOf(item);
     this.selectionModel_.unselectAll();
@@ -383,6 +437,7 @@ Ribbon.prototype.renderThumbnail_ = function(index) {
   }.bind(this));
 
   util.createChild(thumbnail, 'image-wrapper');
+  util.createChild(thumbnail, 'selection-frame');
 
   this.setThumbnailImage_(thumbnail, item);
 
@@ -397,21 +452,33 @@ Ribbon.prototype.renderThumbnail_ = function(index) {
  * Set the thumbnail image.
  *
  * @param {!Element} thumbnail Thumbnail element.
- * @param {!Gallery.Item} item Gallery item.
+ * @param {!GalleryItem} item Gallery item.
  * @private
  */
 Ribbon.prototype.setThumbnailImage_ = function(thumbnail, item) {
+  thumbnail.setAttribute('title', item.getFileName());
+
   if (!item.getThumbnailMetadataItem())
     return;
+
   this.thumbnailModel_.get([item.getEntry()]).then(function(metadataList) {
     var loader = new ThumbnailLoader(
         item.getEntry(),
         ThumbnailLoader.LoaderType.IMAGE,
         metadataList[0]);
+    // Pass 0.35 as auto fill threshold. This value allows to fill 4:3 and 3:2
+    // photos in 16:9 box (ratio factors for them are ~1.34 and ~1.18
+    // respectively).
     loader.load(
         thumbnail.querySelector('.image-wrapper'),
-        ThumbnailLoader.FillMode.FILL /* fill */,
-        ThumbnailLoader.OptimizationMode.NEVER_DISCARD);
+        ThumbnailLoader.FillMode.AUTO,
+        ThumbnailLoader.OptimizationMode.NEVER_DISCARD,
+        undefined /* opt_onSuccess */,
+        undefined /* opt_onError */,
+        undefined /* opt_onGeneric */,
+        0.35 /* opt_autoFillThreshold */,
+        Ribbon.THUMBNAIL_WIDTH /* opt_boxWidth */,
+        Ribbon.THUMBNAIL_HEIGHT /* opt_boxHeight */);
   });
 };
 

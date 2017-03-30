@@ -10,6 +10,7 @@
 #include <string>
 
 #import "base/ios/weak_nsobject.h"
+#include "base/macros.h"
 #import "ios/web/public/web_state/web_state_observer.h"
 
 class GURL;
@@ -54,12 +55,6 @@ class GURL;
                                    value:(const std::string&)value
                                  keyCode:(int)keyCode
                             inputMissing:(BOOL)inputMissing;
-
-// Invoked by WebStateObserverBridge::AutocompleteRequested.
-- (void)webState:(web::WebState*)webState
-    requestAutocompleteForFormNamed:(const std::string&)formName
-                          sourceURL:(const GURL&)sourceURL
-                      userInitiated:(BOOL)userInitiated;
 
 // Invoked by WebStateObserverBridge::FaviconUrlUpdated.
 - (void)webState:(web::WebState*)webState
@@ -109,9 +104,6 @@ class WebStateObserverBridge : public web::WebStateObserver {
                               const std::string& value,
                               int key_code,
                               bool input_missing) override;
-  void AutocompleteRequested(const GURL& source_url,
-                             const std::string& form_name,
-                             bool user_initiated) override;
   void FaviconUrlUpdated(const std::vector<FaviconURL>& candidates) override;
   void WebStateDestroyed() override;
   void DidStartLoading() override;

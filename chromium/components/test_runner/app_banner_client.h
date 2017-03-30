@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "components/test_runner/test_runner_export.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
 
@@ -18,7 +19,7 @@ class TEST_RUNNER_EXPORT AppBannerClient
     : public NON_EXPORTED_BASE(blink::WebAppBannerClient) {
  public:
   AppBannerClient();
-  virtual ~AppBannerClient();
+  ~AppBannerClient() override;
 
   // blink::WebAppBannerClient:
   void registerBannerCallbacks(

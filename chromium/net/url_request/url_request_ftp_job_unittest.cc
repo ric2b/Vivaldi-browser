@@ -4,11 +4,14 @@
 
 #include "net/url_request/url_request_ftp_job.h"
 
+#include <utility>
+#include <vector>
+
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/run_loop.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/load_states.h"
 #include "net/base/request_priority.h"
 #include "net/ftp/ftp_auth_cache.h"
 #include "net/http/http_transaction_test_util.h"
@@ -32,15 +35,26 @@ namespace {
 
 class MockProxyResolverFactory : public ProxyResolverFactory {
  public:
-  MockProxyResolverFactory() : ProxyResolverFactory(false) {}
+  MockProxyResolverFactory()
+      : ProxyResolverFactory(false), resolver_(nullptr) {}
+
   int CreateProxyResolver(
       const scoped_refptr<ProxyResolverScriptData>& pac_script,
       scoped_ptr<ProxyResolver>* resolver,
       const CompletionCallback& callback,
       scoped_ptr<Request>* request) override {
-    resolver->reset(new MockAsyncProxyResolver());
+    EXPECT_FALSE(resolver_);
+    scoped_ptr<MockAsyncProxyResolver> owned_resolver(
+        new MockAsyncProxyResolver());
+    resolver_ = owned_resolver.get();
+    *resolver = std::move(owned_resolver);
     return OK;
   }
+
+  MockAsyncProxyResolver* resolver() { return resolver_; }
+
+ private:
+  MockAsyncProxyResolver* resolver_;
 };
 
 }  // namespace
@@ -48,17 +62,19 @@ class MockProxyResolverFactory : public ProxyResolverFactory {
 class FtpTestURLRequestContext : public TestURLRequestContext {
  public:
   FtpTestURLRequestContext(ClientSocketFactory* socket_factory,
-                           ProxyService* proxy_service,
+                           scoped_ptr<ProxyService> proxy_service,
                            NetworkDelegate* network_delegate,
                            FtpTransactionFactory* ftp_transaction_factory)
       : TestURLRequestContext(true),
         ftp_protocol_handler_(new FtpProtocolHandler(ftp_transaction_factory)) {
     set_client_socket_factory(socket_factory);
-    context_storage_.set_proxy_service(proxy_service);
+    context_storage_.set_proxy_service(std::move(proxy_service));
     set_network_delegate(network_delegate);
-    URLRequestJobFactoryImpl* job_factory = new URLRequestJobFactoryImpl;
-    job_factory->SetProtocolHandler("ftp", ftp_protocol_handler_);
-    context_storage_.set_job_factory(job_factory);
+    scoped_ptr<URLRequestJobFactoryImpl> job_factory =
+        make_scoped_ptr(new URLRequestJobFactoryImpl);
+    job_factory->SetProtocolHandler("ftp",
+                                    make_scoped_ptr(ftp_protocol_handler_));
+    context_storage_.set_job_factory(std::move(job_factory));
     Init();
   }
 
@@ -66,8 +82,8 @@ class FtpTestURLRequestContext : public TestURLRequestContext {
     return ftp_protocol_handler_->ftp_auth_cache_.get();
   }
 
-  void set_proxy_service(ProxyService* proxy_service) {
-    context_storage_.set_proxy_service(proxy_service);
+  void set_proxy_service(scoped_ptr<ProxyService> proxy_service) {
+    context_storage_.set_proxy_service(std::move(proxy_service));
   }
 
  private:
@@ -114,6 +130,7 @@ class TestURLRequestFtpJob : public URLRequestFtpJob {
                        FtpTransactionFactory* ftp_factory,
                        FtpAuthCache* ftp_auth_cache)
       : URLRequestFtpJob(request, NULL, ftp_factory, ftp_auth_cache) {}
+  ~TestURLRequestFtpJob() override {}
 
   using URLRequestFtpJob::SetPriority;
   using URLRequestFtpJob::Start;
@@ -121,12 +138,13 @@ class TestURLRequestFtpJob : public URLRequestFtpJob {
   using URLRequestFtpJob::priority;
 
  protected:
-  ~TestURLRequestFtpJob() override {}
 };
 
 class MockFtpTransactionFactory : public FtpTransactionFactory {
  public:
-  FtpTransaction* CreateTransaction() override { return NULL; }
+  scoped_ptr<FtpTransaction> CreateTransaction() override {
+    return scoped_ptr<FtpTransaction>();
+  }
 
   void Suspend(bool suspend) override {}
 };
@@ -136,7 +154,9 @@ class MockFtpTransactionFactory : public FtpTransactionFactory {
 class URLRequestFtpJobPriorityTest : public testing::Test {
  protected:
   URLRequestFtpJobPriorityTest()
-      : proxy_service_(new SimpleProxyConfigService, NULL, NULL),
+      : proxy_service_(make_scoped_ptr(new SimpleProxyConfigService),
+                       NULL,
+                       NULL),
         req_(context_.CreateRequest(GURL("ftp://ftp.example.com"),
                                     DEFAULT_PRIORITY,
                                     &delegate_)) {
@@ -156,8 +176,8 @@ class URLRequestFtpJobPriorityTest : public testing::Test {
 // Make sure that SetPriority actually sets the URLRequestFtpJob's
 // priority, both before and after start.
 TEST_F(URLRequestFtpJobPriorityTest, SetPriorityBasic) {
-  scoped_refptr<TestURLRequestFtpJob> job(new TestURLRequestFtpJob(
-      req_.get(), &ftp_factory_, &ftp_auth_cache_));
+  scoped_ptr<TestURLRequestFtpJob> job(
+      new TestURLRequestFtpJob(req_.get(), &ftp_factory_, &ftp_auth_cache_));
   EXPECT_EQ(DEFAULT_PRIORITY, job->priority());
 
   job->SetPriority(LOWEST);
@@ -176,8 +196,8 @@ TEST_F(URLRequestFtpJobPriorityTest, SetPriorityBasic) {
 // Make sure that URLRequestFtpJob passes on its priority to its
 // transaction on start.
 TEST_F(URLRequestFtpJobPriorityTest, SetTransactionPriorityOnStart) {
-  scoped_refptr<TestURLRequestFtpJob> job(new TestURLRequestFtpJob(
-      req_.get(), &ftp_factory_, &ftp_auth_cache_));
+  scoped_ptr<TestURLRequestFtpJob> job(
+      new TestURLRequestFtpJob(req_.get(), &ftp_factory_, &ftp_auth_cache_));
   job->SetPriority(LOW);
 
   EXPECT_FALSE(network_layer_.last_transaction());
@@ -191,8 +211,8 @@ TEST_F(URLRequestFtpJobPriorityTest, SetTransactionPriorityOnStart) {
 // Make sure that URLRequestFtpJob passes on its priority updates to
 // its transaction.
 TEST_F(URLRequestFtpJobPriorityTest, SetTransactionPriority) {
-  scoped_refptr<TestURLRequestFtpJob> job(new TestURLRequestFtpJob(
-      req_.get(), &ftp_factory_, &ftp_auth_cache_));
+  scoped_ptr<TestURLRequestFtpJob> job(
+      new TestURLRequestFtpJob(req_.get(), &ftp_factory_, &ftp_auth_cache_));
   job->SetPriority(LOW);
   job->Start();
   ASSERT_TRUE(network_layer_.last_transaction());
@@ -205,8 +225,8 @@ TEST_F(URLRequestFtpJobPriorityTest, SetTransactionPriority) {
 // Make sure that URLRequestFtpJob passes on its priority updates to
 // newly-created transactions after the first one.
 TEST_F(URLRequestFtpJobPriorityTest, SetSubsequentTransactionPriority) {
-  scoped_refptr<TestURLRequestFtpJob> job(new TestURLRequestFtpJob(
-      req_.get(), &ftp_factory_, &ftp_auth_cache_));
+  scoped_ptr<TestURLRequestFtpJob> job(
+      new TestURLRequestFtpJob(req_.get(), &ftp_factory_, &ftp_auth_cache_));
   job->Start();
 
   job->SetPriority(LOW);
@@ -226,11 +246,12 @@ class URLRequestFtpJobTest : public testing::Test {
  public:
   URLRequestFtpJobTest()
       : request_context_(&socket_factory_,
-                         new ProxyService(
-                             new SimpleProxyConfigService, NULL, NULL),
+                         make_scoped_ptr(new ProxyService(
+                             make_scoped_ptr(new SimpleProxyConfigService),
+                             NULL,
+                             NULL)),
                          &network_delegate_,
-                         &ftp_transaction_factory_) {
-  }
+                         &ftp_transaction_factory_) {}
 
   ~URLRequestFtpJobTest() override {
     // Clean up any remaining tasks that mess up unrelated tests.
@@ -239,19 +260,19 @@ class URLRequestFtpJobTest : public testing::Test {
 
   void AddSocket(MockRead* reads, size_t reads_size,
                  MockWrite* writes, size_t writes_size) {
-    SequencedSocketData* socket_data =
-        new SequencedSocketData(reads, reads_size, writes, writes_size);
+    scoped_ptr<SequencedSocketData> socket_data(make_scoped_ptr(
+        new SequencedSocketData(reads, reads_size, writes, writes_size)));
     socket_data->set_connect_data(MockConnect(SYNCHRONOUS, OK));
-    socket_factory_.AddSocketDataProvider(socket_data);
+    socket_factory_.AddSocketDataProvider(socket_data.get());
 
-    socket_data_.push_back(socket_data);
+    socket_data_.push_back(std::move(socket_data));
   }
 
   FtpTestURLRequestContext* request_context() { return &request_context_; }
   TestNetworkDelegate* network_delegate() { return &network_delegate_; }
 
  private:
-  ScopedVector<SequencedSocketData> socket_data_;
+  std::vector<scoped_ptr<SequencedSocketData>> socket_data_;
   MockClientSocketFactory socket_factory_;
   TestNetworkDelegate network_delegate_;
   MockFtpTransactionFactory ftp_transaction_factory_;
@@ -291,21 +312,65 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequest) {
   EXPECT_EQ("test.html", request_delegate.data_received());
 }
 
-// Regression test for http://crbug.com/237526 .
+// Regression test for http://crbug.com/237526.
 TEST_F(URLRequestFtpJobTest, FtpProxyRequestOrphanJob) {
+  scoped_ptr<MockProxyResolverFactory> owned_resolver_factory(
+      new MockProxyResolverFactory());
+  MockProxyResolverFactory* resolver_factory = owned_resolver_factory.get();
+
   // Use a PAC URL so that URLRequestFtpJob's |pac_request_| field is non-NULL.
-  request_context()->set_proxy_service(new ProxyService(
-      new ProxyConfigServiceFixed(
-          ProxyConfig::CreateFromCustomPacURL(GURL("http://foo"))),
-      make_scoped_ptr(new MockProxyResolverFactory), NULL));
+  request_context()->set_proxy_service(make_scoped_ptr(new ProxyService(
+      make_scoped_ptr(new ProxyConfigServiceFixed(
+          ProxyConfig::CreateFromCustomPacURL(GURL("http://foo")))),
+      std::move(owned_resolver_factory), nullptr)));
 
   TestDelegate request_delegate;
   scoped_ptr<URLRequest> url_request(request_context()->CreateRequest(
       GURL("ftp://ftp.example.com/"), DEFAULT_PRIORITY, &request_delegate));
   url_request->Start();
 
-  // Now |url_request| will be deleted before its completion,
-  // resulting in it being orphaned. It should not crash.
+  // Verify PAC request is in progress.
+  EXPECT_EQ(net::LoadState::LOAD_STATE_RESOLVING_PROXY_FOR_URL,
+            url_request->GetLoadState().state);
+  EXPECT_EQ(1u, resolver_factory->resolver()->pending_requests().size());
+  EXPECT_EQ(0u, resolver_factory->resolver()->cancelled_requests().size());
+
+  // Destroying the request should cancel the PAC request.
+  url_request.reset();
+  EXPECT_EQ(0u, resolver_factory->resolver()->pending_requests().size());
+  EXPECT_EQ(1u, resolver_factory->resolver()->cancelled_requests().size());
+}
+
+// Make sure PAC requests are cancelled on request cancellation.  Requests can
+// hang around a bit without being deleted in the cancellation case, so the
+// above test is not sufficient.
+TEST_F(URLRequestFtpJobTest, FtpProxyRequestCancelRequest) {
+  scoped_ptr<MockProxyResolverFactory> owned_resolver_factory(
+      new MockProxyResolverFactory());
+  MockProxyResolverFactory* resolver_factory = owned_resolver_factory.get();
+
+  // Use a PAC URL so that URLRequestFtpJob's |pac_request_| field is non-NULL.
+  request_context()->set_proxy_service(make_scoped_ptr(new ProxyService(
+      make_scoped_ptr(new ProxyConfigServiceFixed(
+          ProxyConfig::CreateFromCustomPacURL(GURL("http://foo")))),
+      std::move(owned_resolver_factory), nullptr)));
+
+  TestDelegate request_delegate;
+  scoped_ptr<URLRequest> url_request(request_context()->CreateRequest(
+      GURL("ftp://ftp.example.com/"), DEFAULT_PRIORITY, &request_delegate));
+
+  // Verify PAC request is in progress.
+  url_request->Start();
+  EXPECT_EQ(net::LoadState::LOAD_STATE_RESOLVING_PROXY_FOR_URL,
+            url_request->GetLoadState().state);
+  EXPECT_EQ(1u, resolver_factory->resolver()->pending_requests().size());
+  EXPECT_EQ(0u, resolver_factory->resolver()->cancelled_requests().size());
+
+  // Cancelling the request should cancel the PAC request.
+  url_request->Cancel();
+  EXPECT_EQ(net::LoadState::LOAD_STATE_IDLE, url_request->GetLoadState().state);
+  EXPECT_EQ(0u, resolver_factory->resolver()->pending_requests().size());
+  EXPECT_EQ(1u, resolver_factory->resolver()->cancelled_requests().size());
 }
 
 TEST_F(URLRequestFtpJobTest, FtpProxyRequestNeedProxyAuthNoCredentials) {

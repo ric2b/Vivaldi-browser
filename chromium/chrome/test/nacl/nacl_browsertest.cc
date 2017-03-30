@@ -19,6 +19,7 @@
 #include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/nacl/nacl_browsertest_util.h"
@@ -43,17 +44,7 @@ IN_PROC_BROWSER_TEST_F(NaClBrowserTestNonSfiMode, MAYBE_NONSFI(Messaging)) {
   RunLoadTest(FILE_PATH_LITERAL("libc_free.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(NaClBrowserTestTransitionalNonSfi,
-                       MAYBE_TRANSITIONAL_NONSFI(Messaging)) {
-  RunLoadTest(FILE_PATH_LITERAL("libc_free.html"));
-}
-
 IN_PROC_BROWSER_TEST_F(NaClBrowserTestNonSfiMode, MAYBE_NONSFI(Irt)) {
-  RunNaClIntegrationTest(FILE_PATH_LITERAL("irt_test.html"));
-}
-
-IN_PROC_BROWSER_TEST_F(NaClBrowserTestTransitionalNonSfi,
-                       MAYBE_TRANSITIONAL_NONSFI(Irt)) {
   RunNaClIntegrationTest(FILE_PATH_LITERAL("irt_test.html"));
 }
 
@@ -165,10 +156,6 @@ IN_PROC_BROWSER_TEST_F(NaClBrowserTestPnaclNonSfi,
                        MAYBE_PNACL_NONSFI(IrtManifestFile)) {
   RunNaClIntegrationTest(FILE_PATH_LITERAL("irt_manifest_file_test.html"));
 }
-IN_PROC_BROWSER_TEST_F(NaClBrowserTestPnaclTransitionalNonSfi,
-                       MAYBE_PNACL_TRANSITIONAL_NONSFI(IrtManifestFile)) {
-  RunNaClIntegrationTest(FILE_PATH_LITERAL("irt_manifest_file_test.html"));
-}
 
 #if defined(OS_WIN)
 // http://crbug.com/416272
@@ -181,10 +168,6 @@ IN_PROC_BROWSER_TEST_F(NaClBrowserTestNewlib, MAYBE_IrtException) {
 }
 IN_PROC_BROWSER_TEST_F(NaClBrowserTestPnaclNonSfi,
                        MAYBE_PNACL_NONSFI(IrtException)) {
-  RunNaClIntegrationTest(FILE_PATH_LITERAL("irt_exception_test.html"));
-}
-IN_PROC_BROWSER_TEST_F(NaClBrowserTestPnaclTransitionalNonSfi,
-                       MAYBE_PNACL_TRANSITIONAL_NONSFI(IrtException)) {
   RunNaClIntegrationTest(FILE_PATH_LITERAL("irt_exception_test.html"));
 }
 
@@ -376,18 +359,18 @@ IN_PROC_BROWSER_TEST_F(NaClBrowserTestPnaclDebugMasked,
       "pnacl_debug_url.html?nmf_file=pnacl_has_debug_flag_off.nmf"));
 }
 
-IN_PROC_BROWSER_TEST_F(NaClBrowserTestPnacl,
-                       MAYBE_PNACL(PnaclErrorHandling)) {
-  RunNaClIntegrationTest(FILE_PATH_LITERAL("pnacl_error_handling.html"));
-}
-
-// NaClBrowserTestPnaclSubzero.PnaclErrorHandling is flaky on Win XP.
+// NaClBrowserTestPnacl{,Subzero}.PnaclErrorHandling are flaky on Win XP.
 // http://crbug.com/499878
 #if defined(OS_WIN)
 #define MAYBE_PnaclErrorHandling DISABLED_PnaclErrorHandling
 #else
 #define MAYBE_PnaclErrorHandling PnaclErrorHandling
 #endif
+
+IN_PROC_BROWSER_TEST_F(NaClBrowserTestPnacl,
+                       MAYBE_PnaclErrorHandling) {
+  RunNaClIntegrationTest(FILE_PATH_LITERAL("pnacl_error_handling.html"));
+}
 
 // Test Subzero. Subzero is triggered by the O0 option so reuse
 // test harnesses that use "optlevel": 0.

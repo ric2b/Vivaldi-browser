@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -30,7 +31,7 @@ class RecoveryInstallGlobalError : public GlobalErrorWithStandardBubble,
   bool HasMenuItem() override;
   int MenuItemCommandID() override;
   base::string16 MenuItemLabel() override;
-  int MenuItemIconResourceID() override;
+  gfx::Image MenuItemIcon() override;
   void ExecuteMenuItem(Browser* browser) override;
   bool HasBubbleView() override;
   bool HasShownBubbleView() override;

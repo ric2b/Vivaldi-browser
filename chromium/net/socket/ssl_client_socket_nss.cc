@@ -63,12 +63,15 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -84,14 +87,14 @@
 #include "crypto/rsa_private_key.h"
 #include "crypto/scoped_nss_types.h"
 #include "net/base/address_list.h"
-#include "net/base/dns_util.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "net/base/sockaddr_storage.h"
 #include "net/cert/asn1_util.h"
-#include "net/cert/cert_policy_enforcer.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_ev_whitelist.h"
+#include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/ct_verify_result.h"
 #include "net/cert/scoped_nss_types.h"
@@ -99,6 +102,7 @@
 #include "net/cert/x509_certificate_net_log_param.h"
 #include "net/cert/x509_util.h"
 #include "net/cert_net/nss_ocsp.h"
+#include "net/dns/dns_util.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
 #include "net/socket/client_socket_handle.h"
@@ -133,14 +137,6 @@ namespace net {
       VLOG(1) << (void *)this << " " << __FUNCTION__ << " jump to state " << s;\
       next_handshake_state_ = s;\
     } while (0)
-#endif
-
-#if !defined(CKM_AES_GCM)
-#define CKM_AES_GCM 0x00001087
-#endif
-
-#if !defined(CKM_NSS_CHACHA20_POLY1305)
-#define CKM_NSS_CHACHA20_POLY1305 (CKM_NSS + 26)
 #endif
 
 namespace {
@@ -654,10 +650,8 @@ class SSLClientSocketNSS::Core : public base::RefCountedThreadSafe<Core> {
   void OnNSSBufferUpdated(int amount_in_read_buffer);
   void DidNSSRead(int result);
   void DidNSSWrite(int result);
-  void RecordChannelIDSupportOnNetworkTaskRunner(
-      bool negotiated_channel_id,
-      bool channel_id_enabled,
-      bool supports_ecc) const;
+  void RecordChannelIDSupportOnNetworkTaskRunner(bool negotiated_channel_id,
+                                                 bool channel_id_enabled) const;
 
   ////////////////////////////////////////////////////////////////////////////
   // Methods that are called on both the network task runner and the NSS
@@ -849,17 +843,18 @@ bool SSLClientSocketNSS::Core::Init(PRFileDesc* socket,
 
   SECStatus rv = SECSuccess;
 
-  if (!ssl_config_.next_protos.empty()) {
+  if (!ssl_config_.alpn_protos.empty()) {
+    NextProtoVector alpn_protos = ssl_config_.alpn_protos;
     // TODO(bnc): Check ssl_config_.disabled_cipher_suites.
-    const bool adequate_encryption =
-        PK11_TokenExists(CKM_AES_GCM) ||
-        PK11_TokenExists(CKM_NSS_CHACHA20_POLY1305);
-    const bool adequate_key_agreement = PK11_TokenExists(CKM_DH_PKCS_DERIVE) ||
-                                        PK11_TokenExists(CKM_ECDH1_DERIVE);
-    std::vector<uint8_t> wire_protos =
-        SerializeNextProtos(ssl_config_.next_protos,
-                            adequate_encryption && adequate_key_agreement &&
-                                IsTLSVersionAdequateForHTTP2(ssl_config_));
+    if (!IsTLSVersionAdequateForHTTP2(ssl_config_))
+      DisableHTTP2(&alpn_protos);
+    // |ssl_config_| has fallback protocol at the end of the list, but NSS
+    // expects fallback at the first place, thus protocols need to be reordered.
+    ReorderNextProtos(&alpn_protos);
+    // NSS only supports a single protocol vector to be used with ALPN and NPN.
+    // Because of this limitation, |alpn_prototos| will be used for both.
+    // However, it is possible to enable ALPN and NPN separately.
+    std::vector<uint8_t> wire_protos = SerializeNextProtos(alpn_protos);
     rv = SSL_SetNextProtoNego(
         nss_fd_, wire_protos.empty() ? NULL : &wire_protos[0],
         wire_protos.size());
@@ -868,9 +863,11 @@ bool SSLClientSocketNSS::Core::Init(PRFileDesc* socket,
     rv = SSL_OptionSet(nss_fd_, SSL_ENABLE_ALPN, PR_TRUE);
     if (rv != SECSuccess)
       LogFailedNSSFunction(*weak_net_log_, "SSL_OptionSet", "SSL_ENABLE_ALPN");
-    rv = SSL_OptionSet(nss_fd_, SSL_ENABLE_NPN, PR_TRUE);
-    if (rv != SECSuccess)
-      LogFailedNSSFunction(*weak_net_log_, "SSL_OptionSet", "SSL_ENABLE_NPN");
+    if (!ssl_config_.npn_protos.empty()) {
+      rv = SSL_OptionSet(nss_fd_, SSL_ENABLE_NPN, PR_TRUE);
+      if (rv != SECSuccess)
+        LogFailedNSSFunction(*weak_net_log_, "SSL_OptionSet", "SSL_ENABLE_NPN");
+    }
   }
 
   rv = SSL_AuthCertificateHook(
@@ -1270,7 +1267,7 @@ SECStatus SSLClientSocketNSS::Core::CanFalseStartCallback(
       SSL_GetChannelInfo(socket, &channel_info, sizeof(channel_info));
   if (ok != SECSuccess || channel_info.length != sizeof(channel_info) ||
       channel_info.protocolVersion < SSL_LIBRARY_VERSION_TLS_1_2 ||
-      !IsFalseStartableTLSCipherSuite(channel_info.cipherSuite)) {
+      !IsSecureTLSCipherSuite(channel_info.cipherSuite)) {
     *can_false_start = PR_FALSE;
     return SECSuccess;
   }
@@ -2071,7 +2068,7 @@ void SSLClientSocketNSS::Core::UpdateConnectionStatus() {
 }
 
 void SSLClientSocketNSS::Core::UpdateNextProto() {
-  uint8 buf[256];
+  uint8_t buf[256];
   SSLNextProtoState state;
   unsigned buf_len;
 
@@ -2139,23 +2136,17 @@ void SSLClientSocketNSS::Core::RecordChannelIDSupportOnNSSTaskRunner() {
   // network task runner state.
   PostOrRunCallback(
       FROM_HERE,
-      base::Bind(&Core::RecordChannelIDSupportOnNetworkTaskRunner,
-                 this,
-                 channel_id_xtn_negotiated_,
-                 ssl_config_.channel_id_enabled,
-                 crypto::ECPrivateKey::IsSupported()));
+      base::Bind(&Core::RecordChannelIDSupportOnNetworkTaskRunner, this,
+                 channel_id_xtn_negotiated_, ssl_config_.channel_id_enabled));
 }
 
 void SSLClientSocketNSS::Core::RecordChannelIDSupportOnNetworkTaskRunner(
     bool negotiated_channel_id,
-    bool channel_id_enabled,
-    bool supports_ecc) const {
+    bool channel_id_enabled) const {
   DCHECK(OnNetworkTaskRunner());
 
-  RecordChannelIDSupport(channel_id_service_,
-                         negotiated_channel_id,
-                         channel_id_enabled,
-                         supports_ecc);
+  RecordChannelIDSupport(channel_id_service_, negotiated_channel_id,
+                         channel_id_enabled);
 }
 
 int SSLClientSocketNSS::Core::DoBufferRecv(IOBuffer* read_buffer, int len) {
@@ -2346,11 +2337,10 @@ void SSLClientSocketNSS::Core::PostOrRunCallback(
 }
 
 void SSLClientSocketNSS::Core::AddCertProvidedEvent(int cert_count) {
-  PostOrRunCallback(
-      FROM_HERE,
-      base::Bind(&AddLogEventWithCallback, weak_net_log_,
-                 NetLog::TYPE_SSL_CLIENT_CERT_PROVIDED,
-                 NetLog::IntegerCallback("cert_count", cert_count)));
+  PostOrRunCallback(FROM_HERE,
+                    base::Bind(&AddLogEventWithCallback, weak_net_log_,
+                               NetLog::TYPE_SSL_CLIENT_CERT_PROVIDED,
+                               NetLog::IntCallback("cert_count", cert_count)));
 }
 
 void SSLClientSocketNSS::Core::SetChannelIDProvided() {
@@ -2366,13 +2356,11 @@ void SSLClientSocketNSS::Core::SetChannelIDProvided() {
 }
 
 SSLClientSocketNSS::SSLClientSocketNSS(
-    base::SequencedTaskRunner* nss_task_runner,
     scoped_ptr<ClientSocketHandle> transport_socket,
     const HostPortPair& host_and_port,
     const SSLConfig& ssl_config,
     const SSLClientSocketContext& context)
-    : nss_task_runner_(nss_task_runner),
-      transport_(transport_socket.Pass()),
+    : transport_(std::move(transport_socket)),
       host_and_port_(host_and_port),
       ssl_config_(ssl_config),
       cert_verifier_(context.cert_verifier),
@@ -2381,10 +2369,11 @@ SSLClientSocketNSS::SSLClientSocketNSS(
       ssl_session_cache_shard_(context.ssl_session_cache_shard),
       completed_handshake_(false),
       next_handshake_state_(STATE_NONE),
+      disconnected_(false),
       nss_fd_(NULL),
       net_log_(transport_->socket()->NetLog()),
       transport_security_state_(context.transport_security_state),
-      policy_enforcer_(context.cert_policy_enforcer),
+      policy_enforcer_(context.ct_policy_enforcer),
       valid_thread_id_(base::kInvalidThreadId) {
   DCHECK(cert_verifier_);
 
@@ -2407,20 +2396,6 @@ void SSLClientSocket::ClearSessionCache() {
     return;
 
   SSL_ClearSessionCache();
-}
-
-#if !defined(CKM_NSS_TLS_MASTER_KEY_DERIVE_DH_SHA256)
-#define CKM_NSS_TLS_MASTER_KEY_DERIVE_DH_SHA256 (CKM_NSS + 24)
-#endif
-
-// static
-uint16 SSLClientSocket::GetMaxSupportedSSLVersion() {
-  crypto::EnsureNSSInit();
-  if (PK11_TokenExists(CKM_NSS_TLS_MASTER_KEY_DERIVE_DH_SHA256)) {
-    return SSL_PROTOCOL_VERSION_TLS1_2;
-  } else {
-    return SSL_PROTOCOL_VERSION_TLS1_1;
-  }
 }
 
 bool SSLClientSocketNSS::GetSSLInfo(SSLInfo* ssl_info) {
@@ -2469,6 +2444,11 @@ bool SSLClientSocketNSS::GetSSLInfo(SSLInfo* ssl_info) {
 
 void SSLClientSocketNSS::GetConnectionAttempts(ConnectionAttempts* out) const {
   out->clear();
+}
+
+int64_t SSLClientSocketNSS::GetTotalReceivedBytes() const {
+  NOTIMPLEMENTED();
+  return 0;
 }
 
 void SSLClientSocketNSS::GetSSLCertRequestInfo(
@@ -2532,6 +2512,14 @@ int SSLClientSocketNSS::Connect(const CompletionCallback& callback) {
   DCHECK(user_connect_callback_.is_null());
   DCHECK(!callback.is_null());
 
+  // Although StreamSocket does allow calling Connect() after Disconnect(),
+  // this has never worked for layered sockets. CHECK to detect any consumers
+  // reconnecting an SSL socket.
+  //
+  // TODO(davidben,mmenke): Remove this API feature. See
+  // https://crbug.com/499289.
+  CHECK(!disconnected_);
+
   EnsureThreadIdAssigned();
 
   net_log_.BeginEvent(NetLog::TYPE_SSL_CONNECT);
@@ -2576,6 +2564,8 @@ void SSLClientSocketNSS::Disconnect() {
   core_->Detach();
   cert_verifier_request_.reset();
   transport_->socket()->Disconnect();
+
+  disconnected_ = true;
 
   // Reset object state.
   user_connect_callback_.Reset();
@@ -2673,11 +2663,11 @@ int SSLClientSocketNSS::Write(IOBuffer* buf, int buf_len,
   return rv;
 }
 
-int SSLClientSocketNSS::SetReceiveBufferSize(int32 size) {
+int SSLClientSocketNSS::SetReceiveBufferSize(int32_t size) {
   return transport_->socket()->SetReceiveBufferSize(size);
 }
 
-int SSLClientSocketNSS::SetSendBufferSize(int32 size) {
+int SSLClientSocketNSS::SetSendBufferSize(int32_t size) {
   return transport_->socket()->SetSendBufferSize(size);
 }
 
@@ -2702,13 +2692,12 @@ int SSLClientSocketNSS::Init() {
 }
 
 void SSLClientSocketNSS::InitCore() {
+  // TODO(davidben): Both task runners are now always the same. Unwind this code
+  // further, although the entire class is due to be deleted eventually, so it
+  // may not be worth bothering.
   core_ = new Core(base::ThreadTaskRunnerHandle::Get().get(),
-                   nss_task_runner_.get(),
-                   transport_.get(),
-                   host_and_port_,
-                   ssl_config_,
-                   &net_log_,
-                   channel_id_service_);
+                   base::ThreadTaskRunnerHandle::Get().get(), transport_.get(),
+                   host_and_port_, ssl_config_, &net_log_, channel_id_service_);
 }
 
 int SSLClientSocketNSS::InitializeSSLOptions() {
@@ -2785,7 +2774,7 @@ int SSLClientSocketNSS::InitializeSSLOptions() {
     }
   }
 
-  for (std::vector<uint16>::const_iterator it =
+  for (std::vector<uint16_t>::const_iterator it =
            ssl_config_.disabled_cipher_suites.begin();
        it != ssl_config_.disabled_cipher_suites.end(); ++it) {
     // This will fail if the specified cipher is not implemented by NSS, but
@@ -2793,17 +2782,23 @@ int SSLClientSocketNSS::InitializeSSLOptions() {
     SSL_CipherPrefSet(nss_fd_, *it, PR_FALSE);
   }
 
-  if (!ssl_config_.enable_deprecated_cipher_suites) {
-    const PRUint16* const ssl_ciphers = SSL_GetImplementedCiphers();
-    const PRUint16 num_ciphers = SSL_GetNumImplementedCiphers();
-    for (int i = 0; i < num_ciphers; i++) {
-      SSLCipherSuiteInfo info;
-      if (SSL_GetCipherSuiteInfo(ssl_ciphers[i], &info, sizeof(info)) !=
-          SECSuccess) {
-        continue;
-      }
-      if (info.symCipher == ssl_calg_rc4)
-        SSL_CipherPrefSet(nss_fd_, ssl_ciphers[i], PR_FALSE);
+  const PRUint16* const ssl_ciphers = SSL_GetImplementedCiphers();
+  const PRUint16 num_ciphers = SSL_GetNumImplementedCiphers();
+  for (int i = 0; i < num_ciphers; i++) {
+    SSLCipherSuiteInfo info;
+    if (SSL_GetCipherSuiteInfo(ssl_ciphers[i], &info, sizeof(info)) !=
+        SECSuccess) {
+      continue;
+    }
+    if (info.symCipher == ssl_calg_rc4 &&
+        !(ssl_config_.rc4_enabled &&
+          ssl_config_.deprecated_cipher_suites_enabled)) {
+      SSL_CipherPrefSet(nss_fd_, ssl_ciphers[i], PR_FALSE);
+    }
+    if (info.keaType == ssl_kea_dh &&
+        !ssl_config_.deprecated_cipher_suites_enabled) {
+      // Only offer DHE on the second handshake. https://crbug.com/538690
+      SSL_CipherPrefSet(nss_fd_, ssl_ciphers[i], PR_FALSE);
     }
   }
 
@@ -2919,8 +2914,12 @@ int SSLClientSocketNSS::InitializeSSLPeerName() {
       NOTREACHED();
   }
   peer_id += "/";
-  if (ssl_config_.enable_deprecated_cipher_suites)
+  if (ssl_config_.deprecated_cipher_suites_enabled)
     peer_id += "deprecated";
+
+  peer_id += "/";
+  if (ssl_config_.channel_id_enabled)
+    peer_id += "channelid";
 
   SECStatus rv = SSL_SetSockPeerID(nss_fd_, const_cast<char*>(peer_id.c_str()));
   if (rv != SECSuccess)
@@ -2986,6 +2985,7 @@ int SSLClientSocketNSS::DoHandshakeLoop(int last_io_result) {
 
 int SSLClientSocketNSS::DoHandshake() {
   EnterFunction("");
+
   int rv = core_->Connect(
       base::Bind(&SSLClientSocketNSS::OnHandshakeIOComplete,
                  base::Unretained(this)));
@@ -3026,6 +3026,12 @@ int SSLClientSocketNSS::DoVerifyCert(int result) {
 
   GotoState(STATE_VERIFY_CERT_COMPLETE);
 
+  // NSS decoded the certificate, but the platform certificate implementation
+  // could not. This is treated as a fatal SSL-level protocol error rather than
+  // a certificate error. See https://crbug.com/91341.
+  if (!core_->state().server_cert.get())
+    return ERR_SSL_SERVER_CERT_BAD_FORMAT;
+
   // If the certificate is expected to be bad we can use the expectation as
   // the cert status.
   base::StringPiece der_cert(
@@ -3040,14 +3046,6 @@ int SSLClientSocketNSS::DoVerifyCert(int result) {
     server_cert_verify_result_.cert_status = cert_status;
     server_cert_verify_result_.verified_cert = core_->state().server_cert;
     return OK;
-  }
-
-  // We may have failed to create X509Certificate object if we are
-  // running inside sandbox.
-  if (!core_->state().server_cert.get()) {
-    server_cert_verify_result_.Reset();
-    server_cert_verify_result_.cert_status = CERT_STATUS_INVALID;
-    return ERR_CERT_INVALID;
   }
 
   start_cert_verification_time_ = base::TimeTicks::Now();
@@ -3090,10 +3088,11 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
       (result == OK ||
        (IsCertificateError(result) && IsCertStatusMinorError(cert_status))) &&
       !transport_security_state_->CheckPublicKeyPins(
-          host_and_port_.host(),
-          server_cert_verify_result_.is_issued_by_known_root,
+          host_and_port_, server_cert_verify_result_.is_issued_by_known_root,
           server_cert_verify_result_.public_key_hashes,
-          &pinning_failure_log_)) {
+          core_->state().server_cert.get(),
+          server_cert_verify_result_.verified_cert.get(),
+          TransportSecurityState::ENABLE_PIN_REPORTS, &pinning_failure_log_)) {
     result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
   }
 
@@ -3139,6 +3138,8 @@ void SSLClientSocketNSS::VerifyCT() {
               << server_cert_verify_result_.verified_cert->subject()
                      .GetDisplayName()
               << " does not conform to CT policy, removing EV status.";
+      server_cert_verify_result_.cert_status |=
+          CERT_STATUS_CT_COMPLIANCE_FAILED;
       server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
     }
   }
@@ -3158,25 +3159,20 @@ bool SSLClientSocketNSS::CalledOnValidThread() const {
 }
 
 void SSLClientSocketNSS::AddSCTInfoToSSLInfo(SSLInfo* ssl_info) const {
-  for (ct::SCTList::const_iterator iter =
-       ct_verify_result_.verified_scts.begin();
-       iter != ct_verify_result_.verified_scts.end(); ++iter) {
-    ssl_info->signed_certificate_timestamps.push_back(
-        SignedCertificateTimestampAndStatus(*iter, ct::SCT_STATUS_OK));
+  ssl_info->UpdateSignedCertificateTimestamps(ct_verify_result_);
+}
+
+// static
+void SSLClientSocketNSS::ReorderNextProtos(NextProtoVector* next_protos) {
+  if (next_protos->size() < 2) {
+    return;
   }
-  for (ct::SCTList::const_iterator iter =
-       ct_verify_result_.invalid_scts.begin();
-       iter != ct_verify_result_.invalid_scts.end(); ++iter) {
-    ssl_info->signed_certificate_timestamps.push_back(
-        SignedCertificateTimestampAndStatus(*iter, ct::SCT_STATUS_INVALID));
+
+  NextProto fallback_proto = next_protos->back();
+  for (size_t i = next_protos->size() - 1; i > 0; --i) {
+    (*next_protos)[i] = (*next_protos)[i - 1];
   }
-  for (ct::SCTList::const_iterator iter =
-       ct_verify_result_.unknown_logs_scts.begin();
-       iter != ct_verify_result_.unknown_logs_scts.end(); ++iter) {
-    ssl_info->signed_certificate_timestamps.push_back(
-        SignedCertificateTimestampAndStatus(*iter,
-                                            ct::SCT_STATUS_LOG_UNKNOWN));
-  }
+  (*next_protos)[0] = fallback_proto;
 }
 
 ChannelIDService* SSLClientSocketNSS::GetChannelIDService() const {

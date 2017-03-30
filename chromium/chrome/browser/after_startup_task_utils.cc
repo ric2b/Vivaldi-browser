@@ -4,7 +4,10 @@
 
 #include "chrome/browser/after_startup_task_utils.h"
 
+#include <utility>
+
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_info.h"
@@ -12,6 +15,7 @@
 #include "base/synchronization/cancellation_flag.h"
 #include "base/task_runner.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -66,7 +70,7 @@ void ScheduleTask(scoped_ptr<AfterStartupTask> queued_task) {
   scoped_refptr<base::TaskRunner> target_runner = queued_task->task_runner;
   tracked_objects::Location from_here = queued_task->from_here;
   target_runner->PostDelayedTask(
-      from_here, base::Bind(&RunTask, base::Passed(queued_task.Pass())),
+      from_here, base::Bind(&RunTask, base::Passed(std::move(queued_task))),
       base::TimeDelta::FromSeconds(base::RandInt(kMinDelaySec, kMaxDelaySec)));
 }
 
@@ -74,14 +78,14 @@ void QueueTask(scoped_ptr<AfterStartupTask> queued_task) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(QueueTask, base::Passed(queued_task.Pass())));
+        base::Bind(QueueTask, base::Passed(std::move(queued_task))));
     return;
   }
 
   // The flag may have been set while the task to invoke this method
   // on the UI thread was inflight.
   if (IsBrowserStartupComplete()) {
-    ScheduleTask(queued_task.Pass());
+    ScheduleTask(std::move(queued_task));
     return;
   }
   g_after_startup_tasks.Get().push_back(queued_task.release());
@@ -174,10 +178,10 @@ void StartupObserver::Start() {
     delay = base::TimeDelta::FromMinutes(kLongerDelayMins);
   }
 #else
-  // TODO(michaeln): We should probably monitor the initial page load here too,
-  // but since ChromeBrowserMainExtraPartsMetrics doesn't, not doing that yet.
-  const int kAndroidDelaySecs = 10;
-  delay = base::TimeDelta::FromSeconds(kAndroidDelaySecs);
+  // Startup completion is signaled via AfterStartupTaskUtils.java,
+  // this is just a failsafe timeout.
+  const int kLongerDelayMins = 3;
+  delay = base::TimeDelta::FromMinutes(kLongerDelayMins);
 #endif  // !defined(OS_ANDROID)
 
   BrowserThread::PostDelayedTask(BrowserThread::UI, FROM_HERE,
@@ -204,7 +208,11 @@ void AfterStartupTaskUtils::PostTask(
 
   scoped_ptr<AfterStartupTask> queued_task(
       new AfterStartupTask(from_here, task_runner, task));
-  QueueTask(queued_task.Pass());
+  QueueTask(std::move(queued_task));
+}
+
+void AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting() {
+  ::SetBrowserStartupIsComplete();
 }
 
 void AfterStartupTaskUtils::SetBrowserStartupIsComplete() {

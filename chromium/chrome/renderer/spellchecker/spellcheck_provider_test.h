@@ -5,6 +5,8 @@
 #ifndef CHROME_RENDERER_SPELLCHECKER_SPELLCHECK_PROVIDER_TEST_H_
 #define CHROME_RENDERER_SPELLCHECKER_SPELLCHECK_PROVIDER_TEST_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/memory/scoped_vector.h"
@@ -37,6 +39,8 @@ class FakeTextCheckingCompletion : public blink::WebTextCheckingCompletion {
 class TestingSpellCheckProvider : public SpellCheckProvider {
  public:
   TestingSpellCheckProvider();
+  // Takes ownership of |spellcheck|.
+  explicit TestingSpellCheckProvider(SpellCheck* spellcheck);
 
   ~TestingSpellCheckProvider() override;
   bool Send(IPC::Message* message) override;

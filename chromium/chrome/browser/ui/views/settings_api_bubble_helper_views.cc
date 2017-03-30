@@ -4,17 +4,20 @@
 
 #include "chrome/browser/ui/views/settings_api_bubble_helper_views.h"
 
-#include "chrome/browser/extensions/ntp_overridden_bubble_controller.h"
-#include "chrome/browser/extensions/settings_api_bubble_controller.h"
+#include <utility>
+
+#include "build/build_config.h"
+#include "chrome/browser/extensions/ntp_overridden_bubble_delegate.h"
+#include "chrome/browser/extensions/settings_api_bubble_delegate.h"
 #include "chrome/browser/extensions/settings_api_helpers.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/extensions/extension_message_bubble_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/settings_api_bubble_helper_views.h"
+#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/home_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/toolbar/wrench_toolbar_button.h"
 #include "chrome/common/extensions/manifest_handlers/settings_overrides_handler.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/browser_url_handler.h"
@@ -25,19 +28,19 @@ namespace extensions {
 namespace {
 
 void ShowSettingsApiBubble(SettingsApiOverrideType type,
-                           Profile* profile,
+                           Browser* browser,
                            views::View* anchor_view,
                            views::BubbleBorder::Arrow arrow) {
-  scoped_ptr<SettingsApiBubbleController> settings_api_bubble(
-      new SettingsApiBubbleController(profile, type));
+  scoped_ptr<ExtensionMessageBubbleController> settings_api_bubble(
+      new ExtensionMessageBubbleController(
+          new SettingsApiBubbleDelegate(browser->profile(), type), browser));
   if (!settings_api_bubble->ShouldShow())
     return;
 
-  SettingsApiBubbleController* controller = settings_api_bubble.get();
-  ExtensionMessageBubbleView* bubble_delegate = new ExtensionMessageBubbleView(
-      anchor_view, arrow, settings_api_bubble.Pass());
-  views::BubbleDelegateView::CreateBubble(bubble_delegate);
-  controller->Show(bubble_delegate);
+  ExtensionMessageBubbleView* bubble = new ExtensionMessageBubbleView(
+      anchor_view, arrow, std::move(settings_api_bubble));
+  views::BubbleDelegateView::CreateBubble(bubble);
+  bubble->Show();
 }
 
 }  // namespace
@@ -51,7 +54,7 @@ void MaybeShowExtensionControlledHomeNotification(Browser* browser) {
   views::View* anchor_view = BrowserView::GetBrowserViewForBrowser(browser)->
       toolbar()->home_button();
   ShowSettingsApiBubble(BUBBLE_TYPE_HOME_PAGE,
-                        browser->profile(),
+                        browser,
                         anchor_view,
                         views::BubbleBorder::TOP_LEFT);
 }
@@ -66,12 +69,11 @@ void MaybeShowExtensionControlledSearchNotification(
 
   if (AutocompleteMatch::IsSearchType(match.type) &&
       match.type != AutocompleteMatchType::SEARCH_OTHER_ENGINE) {
+    Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
     ToolbarView* toolbar =
-        BrowserView::GetBrowserViewForBrowser(
-            chrome::FindBrowserWithWebContents(web_contents))->toolbar();
-    ShowSettingsApiBubble(BUBBLE_TYPE_SEARCH_ENGINE,
-                          profile,
-                          toolbar->app_menu(),
+        BrowserView::GetBrowserViewForBrowser(browser)->toolbar();
+    ShowSettingsApiBubble(BUBBLE_TYPE_SEARCH_ENGINE, browser,
+                          toolbar->app_menu_button(),
                           views::BubbleBorder::TOP_RIGHT);
   }
 }
@@ -100,18 +102,19 @@ void MaybeShowExtensionControlledNewTabPage(
   if (ntp_url != active_url)
     return;  // Not being overridden by an extension.
 
-  scoped_ptr<NtpOverriddenBubbleController> ntp_overridden_bubble(
-      new NtpOverriddenBubbleController(browser->profile()));
-  if (!ntp_overridden_bubble->ShouldShow(ntp_url.host()))
+  scoped_ptr<ExtensionMessageBubbleController> ntp_overridden_bubble(
+      new ExtensionMessageBubbleController(
+          new NtpOverriddenBubbleDelegate(browser->profile()), browser));
+  if (!ntp_overridden_bubble->ShouldShow())
     return;
 
-  NtpOverriddenBubbleController* controller = ntp_overridden_bubble.get();
-  ExtensionMessageBubbleView* bubble_delegate = new ExtensionMessageBubbleView(
-      BrowserView::GetBrowserViewForBrowser(browser)->toolbar()->app_menu(),
-      views::BubbleBorder::TOP_RIGHT,
-      ntp_overridden_bubble.Pass());
-  views::BubbleDelegateView::CreateBubble(bubble_delegate);
-  controller->Show(bubble_delegate);
+  ExtensionMessageBubbleView* bubble = new ExtensionMessageBubbleView(
+      BrowserView::GetBrowserViewForBrowser(browser)
+          ->toolbar()
+          ->app_menu_button(),
+      views::BubbleBorder::TOP_RIGHT, std::move(ntp_overridden_bubble));
+  views::BubbleDelegateView::CreateBubble(bubble);
+  bubble->Show();
 }
 
 }  // namespace extensions

@@ -53,6 +53,8 @@
         '../base/base.gyp:base_prefs',
         '../google_apis/google_apis.gyp:google_apis',
         '../jingle/jingle.gyp:notifier',
+        '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_proto_cpp',
+        'data_use_measurement_core',
         'gcm_driver',
         'keyed_service_core',
         'pref_registry',
@@ -118,6 +120,8 @@
               'invalidation/impl/sync_system_resources.h',
               'invalidation/impl/ticl_invalidation_service.cc',
               'invalidation/impl/ticl_invalidation_service.h',
+              'invalidation/impl/ticl_profile_settings_provider.cc',
+              'invalidation/impl/ticl_profile_settings_provider.h',
               'invalidation/impl/ticl_settings_provider.cc',
               'invalidation/impl/ticl_settings_provider.h',
             ],
@@ -150,6 +154,9 @@
         '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_proto_cpp',
         'gcm_driver_test_support',
         'keyed_service_core',
+      ],
+      'export_dependent_settings': [
+        '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_proto_cpp',
       ],
       'include_dirs': [
         '..',
@@ -220,28 +227,12 @@
           'dependencies': [
             'invalidation_java',
             '../base/base.gyp:base_java_test_support',
+            '../content/content_shell_and_tests.gyp:content_java_test_support',
           ],
           'variables': {
             'java_in_dir': 'invalidation/impl/android/javatests',
           },
           'includes': [ '../build/java.gypi' ],
-        },
-        {
-          'target_name': 'invalidation_junit_tests',
-          'type': 'none',
-          'dependencies': [
-            'invalidation_java',
-            '../base/base.gyp:base_java',
-            '../base/base.gyp:base_java_test_support',
-            '../testing/android/junit/junit_test.gyp:junit_test_support',
-          ],
-          'variables': {
-            'main_class': 'org.chromium.testing.local.JunitTestMain',
-            'src_paths': [
-              'invalidation/impl/android/junit/'
-            ],
-          },
-          'includes': [ '../build/host_jar.gypi' ],
         },
         {
           'target_name': 'invalidation_jni_headers',

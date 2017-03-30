@@ -2,16 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/services/gcm/gcm_profile_service.h"
+#include "components/gcm_driver/gcm_profile_service.h"
 
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
+#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/test/base/testing_profile.h"
 #if defined(OS_CHROMEOS)
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -23,6 +29,7 @@
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -37,13 +44,30 @@ const char kUserID[] = "user";
 
 scoped_ptr<KeyedService> BuildGCMProfileService(
     content::BrowserContext* context) {
-  return make_scoped_ptr(new GCMProfileService(
-      Profile::FromBrowserContext(context),
-      scoped_ptr<GCMClientFactory>(new FakeGCMClientFactory(
+  Profile* profile = Profile::FromBrowserContext(context);
+  base::SequencedWorkerPool* worker_pool =
+      content::BrowserThread::GetBlockingPool();
+  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
+      worker_pool->GetSequencedTaskRunnerWithShutdownBehavior(
+          worker_pool->GetSequenceToken(),
+          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+  return make_scoped_ptr(new gcm::GCMProfileService(
+      profile->GetPrefs(), profile->GetPath(), profile->GetRequestContext(),
+      chrome::GetChannel(),
+      scoped_ptr<ProfileIdentityProvider>(new ProfileIdentityProvider(
+          SigninManagerFactory::GetForProfile(profile),
+          ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
+          LoginUIServiceFactory::GetShowLoginPopupCallbackForProfile(profile))),
+      scoped_ptr<gcm::GCMClientFactory>(new gcm::FakeGCMClientFactory(
           content::BrowserThread::GetMessageLoopProxyForThread(
               content::BrowserThread::UI),
           content::BrowserThread::GetMessageLoopProxyForThread(
-              content::BrowserThread::IO)))));
+              content::BrowserThread::IO))),
+      content::BrowserThread::GetMessageLoopProxyForThread(
+          content::BrowserThread::UI),
+      content::BrowserThread::GetMessageLoopProxyForThread(
+          content::BrowserThread::IO),
+      blocking_task_runner));
 }
 
 }  // namespace
@@ -63,7 +87,7 @@ class GCMProfileServiceTest : public testing::Test {
 
   void RegisterAndWaitForCompletion(const std::vector<std::string>& sender_ids);
   void UnregisterAndWaitForCompletion();
-  void SendAndWaitForCompletion(const GCMClient::OutgoingMessage& message);
+  void SendAndWaitForCompletion(const OutgoingMessage& message);
 
   void RegisterCompleted(const base::Closure& callback,
                          const std::string& registration_id,
@@ -159,7 +183,7 @@ void GCMProfileServiceTest::UnregisterAndWaitForCompletion() {
 }
 
 void GCMProfileServiceTest::SendAndWaitForCompletion(
-    const GCMClient::OutgoingMessage& message) {
+    const OutgoingMessage& message) {
   base::RunLoop run_loop;
   gcm_profile_service_->driver()->Send(
       kTestAppID,
@@ -215,7 +239,7 @@ TEST_F(GCMProfileServiceTest, RegisterAndUnregister) {
 TEST_F(GCMProfileServiceTest, Send) {
   CreateGCMProfileService();
 
-  GCMClient::OutgoingMessage message;
+  OutgoingMessage message;
   message.id = "1";
   message.data["key1"] = "value1";
   SendAndWaitForCompletion(message);

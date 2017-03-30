@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/chrome_content_browser_client.h"
@@ -18,19 +22,21 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
-#include "extensions/browser/guest_view/extensions_guest_view_manager_delegate.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/ime/composition_text.h"
@@ -39,7 +45,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 
 using extensions::AppWindow;
-using extensions::ExtensionsGuestViewManagerDelegate;
+using extensions::ExtensionsAPIClient;
 using guest_view::GuestViewBase;
 using guest_view::GuestViewManager;
 using guest_view::TestGuestViewManager;
@@ -66,9 +72,8 @@ class WebViewInteractiveTest
       manager = static_cast<TestGuestViewManager*>(
           GuestViewManager::CreateWithDelegate(
               browser()->profile(),
-              scoped_ptr<guest_view::GuestViewManagerDelegate>(
-                  new ExtensionsGuestViewManagerDelegate(
-                      browser()->profile()))));
+              ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(
+                  browser()->profile())));
     }
     return manager;
   }
@@ -210,7 +215,7 @@ class WebViewInteractiveTest
       return scoped_ptr<ExtensionTestMessageListener>();
     }
 
-    return done_listener.Pass();
+    return done_listener;
   }
 
   void TestHelper(const std::string& test_name,
@@ -225,6 +230,12 @@ class WebViewInteractiveTest
     ASSERT_TRUE(done_listener->WaitUntilSatisfied());
 
     guest_web_contents_ = GetGuestViewManager()->WaitForSingleGuestCreated();
+  }
+
+  void SendMessageToEmbedder(const std::string& message) {
+    ASSERT_TRUE(content::ExecuteScript(
+        GetFirstAppWindowWebContents(),
+        base::StringPrintf("onAppMessage('%s');", message.c_str())));
   }
 
   void SetupTest(const std::string& app_name,
@@ -287,7 +298,10 @@ class WebViewInteractiveTest
     mouse_event.x = mouse_event.windowX = x;
     mouse_event.y = mouse_event.windowY = y;
     mouse_event.modifiers = 0;
-
+    // Needed for the WebViewTest.ContextMenuPositionAfterCSSTransforms
+    gfx::Rect rect = rwh->GetView()->GetViewBounds();
+    mouse_event.globalX = x + rect.x();
+    mouse_event.globalY = y + rect.y();
     mouse_event.type = blink::WebInputEvent::MouseDown;
     rwh->ForwardMouseEvent(mouse_event);
     mouse_event.type = blink::WebInputEvent::MouseUp;
@@ -303,7 +317,8 @@ class WebViewInteractiveTest
     ~PopupCreatedObserver() {}
 
     void Wait() {
-      if (CountWidgets() == initial_widget_count_ + 1) {
+      if (CountWidgets() == initial_widget_count_ + 1 &&
+          last_render_widget_host_->GetView()->GetNativeView()) {
         gfx::Rect popup_bounds =
             last_render_widget_host_->GetView()->GetViewBounds();
         if (!popup_bounds.size().IsEmpty()) {
@@ -343,7 +358,7 @@ class WebViewInteractiveTest
           content::RenderWidgetHost::GetRenderWidgetHosts());
       size_t num_widgets = 0;
       while (content::RenderWidgetHost* widget = widgets->GetNextHost()) {
-        if (widget->IsRenderView())
+        if (content::RenderViewHost::From(widget))
           continue;
         ++num_widgets;
         last_render_widget_host_ = widget;
@@ -374,7 +389,8 @@ class WebViewInteractiveTest
 
     content::RenderViewHost* embedder_rvh =
         GetFirstAppWindowWebContents()->GetRenderViewHost();
-    gfx::Rect embedder_bounds = embedder_rvh->GetView()->GetViewBounds();
+    gfx::Rect embedder_bounds =
+        embedder_rvh->GetWidget()->GetView()->GetViewBounds();
     gfx::Vector2d diff = popup_bounds.origin() - embedder_bounds.origin();
     LOG(INFO) << "DIFF: x = " << diff.x() << ", y = " << diff.y();
 
@@ -558,7 +574,7 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_PointerLock) {
 }
 
 // flaky http://crbug.com/412086
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, PointerLockFocus) {
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_PointerLockFocus) {
   SetupTest("web_view/pointer_lock_focus",
             "/extensions/platform_apps/web_view/pointer_lock_focus/guest.html");
 
@@ -607,7 +623,7 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, Focus_FocusTracksEmbedder) {
                   "window.runCommand('testFocusTracksEmbedderRunNextStep');"));
 
   // Blur the embedder.
-  embedder_web_contents->GetRenderViewHost()->Blur();
+  embedder_web_contents->GetRenderViewHost()->GetWidget()->Blur();
   // Ensure that the guest is also blurred.
   ASSERT_TRUE(next_step_listener.WaitUntilSatisfied());
 }
@@ -625,8 +641,9 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, Focus_AdvanceFocus) {
   {
     ExtensionTestMessageListener listener("button1-focused", false);
     listener.set_failure_message("TEST_FAILED");
-    SimulateRWHMouseClick(embedder_web_contents->GetRenderViewHost(),
-                          blink::WebMouseEvent::ButtonLeft, 200, 20);
+    SimulateRWHMouseClick(
+        embedder_web_contents->GetRenderViewHost()->GetWidget(),
+        blink::WebMouseEvent::ButtonLeft, 200, 20);
     content::SimulateKeyPress(embedder_web_contents, ui::VKEY_TAB,
         false, false, false, false);
     ASSERT_TRUE(listener.WaitUntilSatisfied());
@@ -676,7 +693,7 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, EditCommands) {
 
 // Tests that guests receive edit commands and respond appropriately.
 // http://crbug.com/417892
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, EditCommandsNoMenu) {
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_EditCommandsNoMenu) {
   SetupTest("web_view/edit_commands_no_menu",
       "/extensions/platform_apps/web_view/edit_commands_no_menu/"
       "guest.html");
@@ -707,9 +724,8 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
              NEEDS_TEST_SERVER);
 }
 
-//Disabled in vivaldi
 IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
-                       DISABLED_NewWindow_WebViewNameTakesPrecedence) {
+                       NewWindow_WebViewNameTakesPrecedence) {
   TestHelper("testNewWindowWebViewNameTakesPrecedence",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
@@ -721,9 +737,8 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, NewWindow_NoName) {
              NEEDS_TEST_SERVER);
 }
 
-//Disabled in vivaldi
 // Flaky on win_chromium_rel_ng. https://crbug.com/504054
-#if 1 || defined(OS_WIN)
+#if defined(OS_WIN)
 #define MAYBE_NewWindow_Redirect DISABLED_NewWindow_Redirect
 #else
 #define MAYBE_NewWindow_Redirect NewWindow_Redirect
@@ -752,13 +767,8 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, NewWindow_ExecuteScript) {
              NEEDS_TEST_SERVER);
 }
 
-#if defined(OS_WIN)
-#define MAYBE_NewWindow_DeclarativeWebRequest DISABLED_NewWindow_DeclarativeWebRequest
-#else
-#define MAYBE_NewWindow_DeclarativeWebRequest NewWindow_DeclarativeWebRequest
-#endif
 IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
-                       DISABLED_NewWindow_DeclarativeWebRequest) {
+                       NewWindow_DeclarativeWebRequest) {
   TestHelper("testNewWindowDeclarativeWebRequest",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
@@ -771,7 +781,13 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, NewWindow_WebRequest) {
+// Causes problems on windows: http://crbug.com/544037
+#if defined(OS_WIN)
+#define MAYBE_NewWindow_WebRequest DISABLED_NewWindow_WebRequest
+#else
+#define MAYBE_NewWindow_WebRequest NewWindow_WebRequest
+#endif
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, MAYBE_NewWindow_WebRequest) {
   TestHelper("testNewWindowWebRequest",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
@@ -830,7 +846,7 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
   TestHelper("testNewWindowOpenerDestroyedWhileUnattached",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
-  ASSERT_EQ(2, GetGuestViewManager()->num_guests_created());
+  ASSERT_EQ(2u, GetGuestViewManager()->num_guests_created());
 
   // We have two guests in this test, one is the intial one, the other
   // is the newwindow one.
@@ -842,16 +858,13 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
 // Tests whether <webview> context menu sees <webview> local coordinates
 // in its RenderViewContextMenu params.
 // Local coordinates are required for plugin actions to work properly.
-
-// tomas@vivaldi.com: disable test because of restrictions to webview API
-// VB-682
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_ContextMenuParamCoordinates) {
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, ContextMenuParamCoordinates) {
   TestHelper("testCoordinates", "web_view/context_menus/coordinates",
              NO_TEST_SERVER);
   ASSERT_TRUE(guest_web_contents());
 
   ContextMenuWaiter menu_observer(content::NotificationService::AllSources());
-  SimulateRWHMouseClick(guest_web_contents()->GetRenderViewHost(),
+  SimulateRWHMouseClick(guest_web_contents()->GetRenderViewHost()->GetWidget(),
                         blink::WebMouseEvent::ButtonRight, 10, 20);
   // Wait until the context menu is opened and closed.
   menu_observer.WaitForMenuOpenAndClose();
@@ -859,13 +872,68 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_ContextMenuParamCoordina
   ASSERT_EQ(20, menu_observer.params().y);
 }
 
+// Tests whether <webview> context menu sees <webview> local coordinates in its
+// RenderViewContextMenu params, when it is subject to CSS transforms.
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
+                       ContextMenuParamsAfterCSSTransforms) {
+  LoadAndLaunchPlatformApp("web_view/context_menus/coordinates_with_transforms",
+                           "Launched");
+
+  if (!embedder_web_contents_)
+    embedder_web_contents_ = GetFirstAppWindowWebContents();
+  EXPECT_TRUE(embedder_web_contents());
+
+  if (!guest_web_contents_)
+    guest_web_contents_ = GetGuestViewManager()->WaitForSingleGuestCreated();
+  EXPECT_TRUE(guest_web_contents());
+
+  // We will send the input event to the embedder rather than the guest; which
+  // is more realistic. We need to do this to make sure that the MouseDown event
+  // is received forwarded by the BrowserPlugin to the RWHVG and eventually back
+  // to the guest. The RWHVG will in turn notify the ChromeWVGDelegate of the
+  // newly observed mouse down (potentially a context menu).
+  const std::string transforms[] = {"rotate(20deg)", "scale(1.5, 2.0)",
+                                    "translate(20px, 30px)", "NONE"};
+  for (size_t index = 0; index < 4; ++index) {
+    std::string command =
+        base::StringPrintf("setTransform('%s')", transforms[index].c_str());
+    ExtensionTestMessageListener transform_set_listener("TRANSFORM_SET", false);
+    EXPECT_TRUE(content::ExecuteScript(embedder_web_contents(), command));
+    ASSERT_TRUE(transform_set_listener.WaitUntilSatisfied());
+
+    gfx::Rect embedder_view_bounds =
+        embedder_web_contents()->GetRenderWidgetHostView()->GetViewBounds();
+    gfx::Rect guest_view_bounds =
+        guest_web_contents()->GetRenderWidgetHostView()->GetViewBounds();
+    ContextMenuWaiter menu_observer(content::NotificationService::AllSources());
+    gfx::Point guest_window_point(150, 150);
+    gfx::Point embedder_window_point = guest_window_point;
+    embedder_window_point += guest_view_bounds.OffsetFromOrigin();
+    embedder_window_point -= embedder_view_bounds.OffsetFromOrigin();
+    SimulateRWHMouseClick(
+        embedder_web_contents()->GetRenderViewHost()->GetWidget(),
+        blink::WebMouseEvent::ButtonRight,
+        /* Using window coordinates for the embedder */
+        embedder_window_point.x(), embedder_window_point.y());
+
+    menu_observer.WaitForMenuOpenAndClose();
+    EXPECT_EQ(menu_observer.params().x, guest_window_point.x());
+    EXPECT_EQ(menu_observer.params().y, guest_window_point.y());
+  }
+}
+
 IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, ExecuteCode) {
   ASSERT_TRUE(RunPlatformAppTestWithArg(
       "platform_apps/web_view/common", "execute_code")) << message_;
 }
 
-// TODO: Disabled in Vivaldi due to WebKit keyhandling changes
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_PopupPositioningBasic) {
+// Causes problems on windows: http://crbug.com/544037
+#if defined(OS_WIN)
+#define MAYBE_PopupPositioningBasic DISABLED_PopupPositioningBasic
+#else
+#define MAYBE_PopupPositioningBasic PopupPositioningBasic
+#endif
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, MAYBE_PopupPositioningBasic) {
   TestHelper("testBasic", "web_view/popup_positioning", NO_TEST_SERVER);
   ASSERT_TRUE(guest_web_contents());
   PopupTestHelper(gfx::Point());
@@ -874,10 +942,16 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_PopupPositioningBasic) {
   // make sure we keep rendering popups correct in webview.
 }
 
+// Flaky on ChromeOS: http://crbug.com/526886
+// Causes problems on windows: http://crbug.com/544037
+#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#define MAYBE_PopupPositioningMoved DISABLED_PopupPositioningMoved
+#else
+#define MAYBE_PopupPositioningMoved PopupPositioningMoved
+#endif
 // Tests that moving browser plugin (without resize/UpdateRects) correctly
 // repositions popup.
-// TODO: Disabled in Vivaldi due to WebKit keyhandling changes
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_PopupPositioningMoved) {
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, MAYBE_PopupPositioningMoved) {
   TestHelper("testMoved", "web_view/popup_positioning", NO_TEST_SERVER);
   ASSERT_TRUE(guest_web_contents());
   PopupTestHelper(gfx::Point(20, 0));
@@ -1064,7 +1138,9 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, Focus_FocusRestored) {
   // |text_input_client| is not available for mac and android.
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)
   ui::TextInputClient* text_input_client =
-      embedder_web_contents->GetRenderViewHost()->GetView()
+      embedder_web_contents->GetRenderViewHost()
+          ->GetWidget()
+          ->GetView()
           ->GetTextInputClient();
   ASSERT_TRUE(text_input_client);
   ASSERT_TRUE(text_input_client->GetTextInputType() !=
@@ -1074,7 +1150,7 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, Focus_FocusRestored) {
 
 // ui::TextInputClient is NULL for mac and android.
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, Focus_InputMethod) {
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_Focus_InputMethod) {
   content::WebContents* embedder_web_contents = NULL;
   scoped_ptr<ExtensionTestMessageListener> done_listener(
       RunAppHelper("testInputMethod", "web_view/focus", NO_TEST_SERVER,
@@ -1082,7 +1158,9 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, Focus_InputMethod) {
   ASSERT_TRUE(done_listener->WaitUntilSatisfied());
 
   ui::TextInputClient* text_input_client =
-      embedder_web_contents->GetRenderViewHost()->GetView()
+      embedder_web_contents->GetRenderViewHost()
+          ->GetWidget()
+          ->GetView()
           ->GetTextInputClient();
   ASSERT_TRUE(text_input_client);
 
@@ -1157,7 +1235,7 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, TextSelection) {
   // Wait until guest sees a context menu, select an arbitrary item (copy).
   ExtensionTestMessageListener ctx_listener("MSG_CONTEXTMENU", false);
   ContextMenuNotificationObserver menu_observer(IDC_CONTENT_CONTEXT_COPY);
-  SimulateRWHMouseClick(guest_web_contents()->GetRenderViewHost(),
+  SimulateRWHMouseClick(guest_web_contents()->GetRenderViewHost()->GetWidget(),
                         blink::WebMouseEvent::ButtonRight, 20, 20);
   ASSERT_TRUE(ctx_listener.WaitUntilSatisfied());
 
@@ -1170,3 +1248,42 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, TextSelection) {
   ASSERT_EQ("AAAAAAAAAA", selected_text.substr(0, 10));
 }
 #endif
+
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, FocusAndVisibility) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  LoadAndLaunchPlatformApp("web_view/focus_visibility",
+                           "WebViewInteractiveTest.LOADED");
+  ExtensionTestMessageListener test_init_listener(
+      "WebViewInteractiveTest.WebViewInitialized", false);
+  SendMessageToEmbedder("init");
+  test_init_listener.WaitUntilSatisfied();
+  // Send several tab-keys. The button inside webview should receive focus at
+  // least once.
+  for (size_t i = 0; i < 4; ++i)
+    SendKeyPressToPlatformApp(ui::VKEY_TAB);
+  ExtensionTestMessageListener webview_button_focused_listener(
+      "WebViewInteractiveTest.WebViewButtonWasFocused", false);
+  webview_button_focused_listener.set_failure_message(
+      "WebViewInteractiveTest.WebViewButtonWasNotFocused");
+  SendMessageToEmbedder("verify");
+  EXPECT_TRUE(webview_button_focused_listener.WaitUntilSatisfied());
+  // Now make the <webview> invisible.
+  ExtensionTestMessageListener reset_listener("WebViewInteractiveTest.DidReset",
+                                              false);
+  SendMessageToEmbedder("reset");
+  reset_listener.WaitUntilSatisfied();
+  ExtensionTestMessageListener did_hide_webview_listener(
+      "WebViewInteractiveTest.DidHideWebView", false);
+  SendMessageToEmbedder("hide-webview");
+  did_hide_webview_listener.WaitUntilSatisfied();
+  // Send the same number of keys and verify that the webview button was not
+  // this time.
+  for (size_t i = 0; i < 4; ++i)
+    SendKeyPressToPlatformApp(ui::VKEY_TAB);
+  ExtensionTestMessageListener webview_button_not_focused_listener(
+      "WebViewInteractiveTest.WebViewButtonWasNotFocused", false);
+  webview_button_not_focused_listener.set_failure_message(
+      "WebViewInteractiveTest.WebViewButtonWasFocused");
+  SendMessageToEmbedder("verify");
+  EXPECT_TRUE(webview_button_not_focused_listener.WaitUntilSatisfied());
+}

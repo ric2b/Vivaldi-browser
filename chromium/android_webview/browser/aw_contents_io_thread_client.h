@@ -5,8 +5,11 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_AW_CONTENTS_IO_THREAD_CLIENT_H_
 #define ANDROID_WEBVIEW_BROWSER_AW_CONTENTS_IO_THREAD_CLIENT_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/memory/scoped_ptr.h"
 
 class GURL;
@@ -63,14 +66,21 @@ class AwContentsIoThreadClient {
   static scoped_ptr<AwContentsIoThreadClient> FromID(int render_process_id,
                                                      int render_frame_id);
 
+  // Returns the global thread client for service worker related callbacks.
+  // An empty scoped_ptr is a valid return value.
+  static scoped_ptr<AwContentsIoThreadClient> GetServiceWorkerIoThreadClient();
+
   // Called on the IO thread when a subframe is created.
   static void SubFrameCreated(int render_process_id,
                               int parent_render_frame_id,
                               int child_render_frame_id);
 
   // This method is called on the IO thread only.
-  virtual scoped_ptr<AwWebResourceResponse> ShouldInterceptRequest(
-      const net::URLRequest* request) = 0;
+  typedef base::Callback<void(scoped_ptr<AwWebResourceResponse>)>
+      ShouldInterceptRequestResultCallback;
+  virtual void ShouldInterceptRequestAsync(
+      const net::URLRequest* request,
+      const ShouldInterceptRequestResultCallback callback) = 0;
 
   // Retrieve the AllowContentAccess setting value of this AwContents.
   // This method is called on the IO thread only.
@@ -94,7 +104,7 @@ class AwContentsIoThreadClient {
                            const std::string& user_agent,
                            const std::string& content_disposition,
                            const std::string& mime_type,
-                           int64 content_length) = 0;
+                           int64_t content_length) = 0;
 
   // Called when a new login request is detected. See the documentation for
   // WebViewClient.onReceivedLoginRequest for arguments. Note that |account|

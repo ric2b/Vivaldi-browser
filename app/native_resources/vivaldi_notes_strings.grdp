@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notes specific strings (included from vivaldi_native_strings.grd). -->
+<grit-part>
+  <message name="IDS_NOTES_GROUP_FROM_OPERA" desc="The group name of notes from Opera">
+    Imported From Opera
+  </message>
+  <message name="IDS_NOTES_TRASH_FOLDER_NAME" desc="The text in the notes folder view for the trash folder.">
+    Trash
+  </message>
+</grit-part>

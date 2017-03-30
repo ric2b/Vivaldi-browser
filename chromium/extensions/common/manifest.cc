@@ -4,7 +4,8 @@
 
 #include "extensions/common/manifest.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/strings/string_split.h"
@@ -109,9 +110,7 @@ Manifest::Location Manifest::GetHigherPriorityLocation(
 }
 
 Manifest::Manifest(Location location, scoped_ptr<base::DictionaryValue> value)
-    : location_(location),
-      value_(value.Pass()),
-      type_(TYPE_UNKNOWN) {
+    : location_(location), value_(std::move(value)), type_(TYPE_UNKNOWN) {
   if (value_->HasKey(keys::kTheme)) {
     type_ = TYPE_THEME;
   } else if (value_->HasKey(keys::kExport)) {
@@ -240,11 +239,10 @@ int Manifest::GetManifestVersion() const {
 }
 
 bool Manifest::CanAccessPath(const std::string& path) const {
-  std::vector<std::string> components;
-  base::SplitString(path, '.', &components);
   std::string key;
-  for (size_t i = 0; i < components.size(); ++i) {
-    key += components[i];
+  for (const base::StringPiece& component : base::SplitStringPiece(
+           path, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    component.AppendToString(&key);
     if (!CanAccessKey(key))
       return false;
     key += '.';

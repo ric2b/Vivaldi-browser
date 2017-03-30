@@ -8,6 +8,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/version_info/version_info.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -67,7 +68,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, DevLaunchApp) {
 // Test for crbug.com/410550. Wallpaper picker should be able to create
 // alpha enabled window successfully.
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, StableLaunchApp) {
-  extensions::ScopedCurrentChannel channel(chrome::VersionInfo::CHANNEL_STABLE);
+  extensions::ScopedCurrentChannel channel(version_info::Channel::STABLE);
   VerifyWallpaperManagerLoaded();
 }
 

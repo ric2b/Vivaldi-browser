@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "ash/display/display_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_item_delegate.h"
 #include "ash/shelf/shelf_item_delegate_manager.h"
@@ -20,17 +20,18 @@
 #include "ash/shelf/shelf_model_observer.h"
 #include "ash/shelf/shelf_types.h"
 #include "ash/shell_observer.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/prefs/pref_change_registrar.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/app_icon_loader.h"
-#include "chrome/browser/prefs/pref_service_syncable_observer.h"
 #include "chrome/browser/ui/ash/app_sync_ui_state_observer.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
+#include "components/syncable_prefs/pref_service_syncable_observer.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/constants.h"
 #include "ui/aura/window_observer.h"
@@ -83,17 +84,18 @@ typedef ScopedVector<ChromeLauncherAppMenuItem> ChromeLauncherAppMenuItems;
 // * App windows have AppWindowLauncherItemController, owned by
 //   AppWindowLauncherController.
 // * Shortcuts have no LauncherItemController.
-class ChromeLauncherController : public ash::ShelfDelegate,
-                                 public ash::ShelfModelObserver,
-                                 public ash::ShellObserver,
-                                 public ash::DisplayController::Observer,
-                                 public extensions::ExtensionRegistryObserver,
-                                 public extensions::AppIconLoader::Delegate,
-                                 public PrefServiceSyncableObserver,
-                                 public AppSyncUIStateObserver,
-                                 public ExtensionEnableFlowDelegate,
-                                 public ash::ShelfLayoutManagerObserver,
-                                 public ash::ShelfItemDelegateManagerObserver {
+class ChromeLauncherController
+    : public ash::ShelfDelegate,
+      public ash::ShelfModelObserver,
+      public ash::ShellObserver,
+      public ash::WindowTreeHostManager::Observer,
+      public extensions::ExtensionRegistryObserver,
+      public extensions::AppIconLoader::Delegate,
+      public syncable_prefs::PrefServiceSyncableObserver,
+      public AppSyncUIStateObserver,
+      public ExtensionEnableFlowDelegate,
+      public ash::ShelfLayoutManagerObserver,
+      public ash::ShelfItemDelegateManagerObserver {
  public:
   // Indicates if a shelf item is incognito or not.
   enum IncognitoState {
@@ -174,14 +176,6 @@ class ChromeLauncherController : public ash::ShelfDelegate,
   // Returns true if the specified item can be pinned or unpinned. Only apps can
   // be pinned.
   bool IsPinnable(ash::ShelfID id) const;
-
-  // Installs the specified id. Only valid if the id corresponds to an ephemeral
-  // app.
-  void Install(ash::ShelfID id);
-
-  // Returns true if the specified item can be installed. Only true for
-  // ephemeral apps.
-  bool CanInstall(ash::ShelfID id);
 
   // If there is no shelf item in the shelf for application |app_id|, one
   // gets created. The (existing or created) shelf items get then locked
@@ -296,9 +290,9 @@ class ChromeLauncherController : public ash::ShelfDelegate,
   ash::ShelfID GetShelfIDForAppID(const std::string& app_id) override;
   bool HasShelfIDToAppIDMapping(ash::ShelfID id) const override;
   const std::string& GetAppIDForShelfID(ash::ShelfID id) override;
+  bool GetAppIDForShelfIDConst(ash::ShelfID id, std::string* app_id) const;
   void PinAppWithID(const std::string& app_id) override;
   bool IsAppPinned(const std::string& app_id) override;
-  bool CanPin() const override;
   void UnpinAppWithID(const std::string& app_id) override;
 
   // ash::ShelfItemDelegateManagerObserver:
@@ -315,7 +309,7 @@ class ChromeLauncherController : public ash::ShelfDelegate,
   // ash::ShellObserver:
   void OnShelfAlignmentChanged(aura::Window* root_window) override;
 
-  // ash::DisplayController::Observer:
+  // ash::WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
 
   // ExtensionRegistryObserver:
@@ -326,7 +320,7 @@ class ChromeLauncherController : public ash::ShelfDelegate,
       const extensions::Extension* extension,
       extensions::UnloadedExtensionInfo::Reason reason) override;
 
-  // PrefServiceSyncableObserver:
+  // syncable_prefs::PrefServiceSyncableObserver:
   void OnIsSyncingChanged() override;
 
   // AppSyncUIStateObserver:
@@ -359,7 +353,7 @@ class ChromeLauncherController : public ash::ShelfDelegate,
 
   // Get the list of all tabs which belong to a certain application type.
   std::vector<content::WebContents*> GetV1ApplicationsFromAppId(
-      std::string app_id);
+      const std::string& app_id);
 
   // Activates a specified shell application.
   void ActivateShellApp(const std::string& app_id, int index);
@@ -410,6 +404,8 @@ class ChromeLauncherController : public ash::ShelfDelegate,
   AppWindowLauncherController* app_window_controller_for_test() {
     return app_window_controller_.get();
   }
+
+  bool CanPin(const std::string& app_id);
 
  protected:
   // Creates a new app shortcut item and controller on the shelf at |index|.

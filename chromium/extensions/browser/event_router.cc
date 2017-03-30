@@ -4,6 +4,9 @@
 
 #include "extensions/browser/event_router.h"
 
+#include <stddef.h>
+
+#include <tuple>
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
@@ -11,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/values.h"
 #include "content/public/browser/notification_service.h"
@@ -26,6 +30,7 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/process_map.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_messages.h"
@@ -74,7 +79,7 @@ void NotifyEventDispatched(void* browser_context_id,
   ApiActivityMonitor* monitor =
       ExtensionsBrowserClient::Get()->GetApiActivityMonitor(context);
   if (monitor)
-    monitor->OnApiEventDispatched(extension_id, event_name, args.Pass());
+    monitor->OnApiEventDispatched(extension_id, event_name, std::move(args));
 }
 
 // A global identifier used to distinguish extension events.
@@ -93,11 +98,8 @@ struct EventRouter::ListenerProcess {
       : process(process), extension_id(extension_id) {}
 
   bool operator<(const ListenerProcess& that) const {
-    if (process < that.process)
-      return true;
-    if (process == that.process && extension_id < that.extension_id)
-      return true;
-    return false;
+    return std::tie(process, extension_id) <
+           std::tie(that.process, that.extension_id);
   }
 };
 
@@ -147,25 +149,28 @@ std::string EventRouter::GetBaseEventName(const std::string& full_event_name) {
 }
 
 // static
-void EventRouter::DispatchEvent(IPC::Sender* ipc_sender,
-                                void* browser_context_id,
-                                const std::string& extension_id,
-                                const std::string& event_name,
-                                scoped_ptr<ListValue> event_args,
-                                UserGestureState user_gesture,
-                                const EventFilteringInfo& info) {
+void EventRouter::DispatchEventToSender(IPC::Sender* ipc_sender,
+                                        void* browser_context_id,
+                                        const std::string& extension_id,
+                                        events::HistogramValue histogram_value,
+                                        const std::string& event_name,
+                                        scoped_ptr<ListValue> event_args,
+                                        UserGestureState user_gesture,
+                                        const EventFilteringInfo& info) {
   int event_id = g_extension_event_id.GetNext();
 
-  if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
+  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
+    DoDispatchEventToSenderBookkeepingOnUI(browser_context_id, extension_id,
+                                           event_id, histogram_value,
+                                           event_name);
+  } else {
     // This is called from WebRequest API.
     // TODO(lazyboy): Skip this entirely: http://crbug.com/488747.
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&EventRouter::IncrementInFlightEventsOnUI,
-                   browser_context_id, extension_id, event_id, event_name));
-  } else {
-    IncrementInFlightEventsOnUI(browser_context_id, extension_id, event_id,
-                                event_name);
+        base::Bind(&EventRouter::DoDispatchEventToSenderBookkeepingOnUI,
+                   browser_context_id, extension_id, event_id, histogram_value,
+                   event_name));
   }
 
   DispatchExtensionMessage(ipc_sender, browser_context_id, extension_id,
@@ -477,7 +482,7 @@ void EventRouter::DispatchEventWithLazyListener(const std::string& extension_id,
   bool has_listener = ExtensionHasEventListener(extension_id, event_name);
   if (!has_listener)
     AddLazyEventListener(event_name, extension_id);
-  DispatchEventToExtension(extension_id, event.Pass());
+  DispatchEventToExtension(extension_id, std::move(event));
   if (!has_listener)
     RemoveLazyEventListener(event_name, extension_id);
 }
@@ -500,20 +505,17 @@ void EventRouter::DispatchEventImpl(const std::string& restrict_to_extension_id,
   // background page, and as that event needs to be delivered before we dispatch
   // the event we are dispatching here, we dispatch to the lazy listeners here
   // first.
-  for (std::set<const EventListener*>::iterator it = listeners.begin();
-       it != listeners.end(); it++) {
-    const EventListener* listener = *it;
+  for (const EventListener* listener : listeners) {
     if (restrict_to_extension_id.empty() ||
         restrict_to_extension_id == listener->extension_id()) {
       if (listener->IsLazy()) {
-        DispatchLazyEvent(listener->extension_id(), event, &already_dispatched);
+        DispatchLazyEvent(listener->extension_id(), event, &already_dispatched,
+                          listener->filter());
       }
     }
   }
 
-  for (std::set<const EventListener*>::iterator it = listeners.begin();
-       it != listeners.end(); it++) {
-    const EventListener* listener = *it;
+  for (const EventListener* listener : listeners) {
     if (restrict_to_extension_id.empty() ||
         restrict_to_extension_id == listener->extension_id()) {
       if (listener->process()) {
@@ -521,9 +523,9 @@ void EventRouter::DispatchEventImpl(const std::string& restrict_to_extension_id,
                                             listener->extension_id());
         if (!ContainsKey(already_dispatched, dispatch_id)) {
           DispatchEventToProcess(listener->extension_id(),
-                                 listener->listener_url(),
-                                 listener->process(),
-                                 event);
+                                 listener->listener_url(), listener->process(),
+                                 event, listener->filter(),
+                                 false /* did_enqueue */);
         }
       }
     }
@@ -533,7 +535,8 @@ void EventRouter::DispatchEventImpl(const std::string& restrict_to_extension_id,
 void EventRouter::DispatchLazyEvent(
     const std::string& extension_id,
     const linked_ptr<Event>& event,
-    std::set<EventDispatchIdentifier>* already_dispatched) {
+    std::set<EventDispatchIdentifier>* already_dispatched,
+    const base::DictionaryValue* listener_filter) {
   // Check both the original and the incognito browser context to see if we
   // should load a lazy bg page to handle the event. The latter case
   // occurs in the case of split-mode extensions.
@@ -543,8 +546,8 @@ void EventRouter::DispatchLazyEvent(
   if (!extension)
     return;
 
-  if (MaybeLoadLazyBackgroundPageToDispatchEvent(
-          browser_context_, extension, event)) {
+  if (MaybeLoadLazyBackgroundPageToDispatchEvent(browser_context_, extension,
+                                                 event, listener_filter)) {
     already_dispatched->insert(std::make_pair(browser_context_, extension_id));
   }
 
@@ -553,18 +556,21 @@ void EventRouter::DispatchLazyEvent(
       IncognitoInfo::IsSplitMode(extension)) {
     BrowserContext* incognito_context =
         browser_client->GetOffTheRecordContext(browser_context_);
-    if (MaybeLoadLazyBackgroundPageToDispatchEvent(
-            incognito_context, extension, event)) {
+    if (MaybeLoadLazyBackgroundPageToDispatchEvent(incognito_context, extension,
+                                                   event, listener_filter)) {
       already_dispatched->insert(
           std::make_pair(incognito_context, extension_id));
     }
   }
 }
 
-void EventRouter::DispatchEventToProcess(const std::string& extension_id,
-                                         const GURL& listener_url,
-                                         content::RenderProcessHost* process,
-                                         const linked_ptr<Event>& event) {
+void EventRouter::DispatchEventToProcess(
+    const std::string& extension_id,
+    const GURL& listener_url,
+    content::RenderProcessHost* process,
+    const linked_ptr<Event>& event,
+    const base::DictionaryValue* listener_filter,
+    bool did_enqueue) {
   BrowserContext* listener_context = process->GetBrowserContext();
   ProcessMap* process_map = ProcessMap::Get(listener_context);
 
@@ -590,7 +596,7 @@ void EventRouter::DispatchEventToProcess(const std::string& extension_id,
         event->event_url.host() != extension->id() &&  // event for self is ok
         !extension->permissions_data()
              ->active_permissions()
-             ->HasEffectiveAccessToURL(event->event_url)) {
+             .HasEffectiveAccessToURL(event->event_url)) {
       return;
     }
     // Secondly, if the event is for incognito mode, the Extension must be
@@ -623,7 +629,7 @@ void EventRouter::DispatchEventToProcess(const std::string& extension_id,
 
   if (!event->will_dispatch_callback.is_null() &&
       !event->will_dispatch_callback.Run(listener_context, extension,
-                                         event->event_args.get())) {
+                                         event.get(), listener_filter)) {
     return;
   }
 
@@ -633,6 +639,7 @@ void EventRouter::DispatchEventToProcess(const std::string& extension_id,
                            event->user_gesture, event->filter_info);
 
   if (extension) {
+    ReportEvent(event->histogram_value, extension, did_enqueue);
     IncrementInFlightEvents(listener_context, extension, event_id,
                             event->event_name);
   }
@@ -655,7 +662,8 @@ bool EventRouter::CanDispatchEventToBrowserContext(
 bool EventRouter::MaybeLoadLazyBackgroundPageToDispatchEvent(
     BrowserContext* context,
     const Extension* extension,
-    const linked_ptr<Event>& event) {
+    const linked_ptr<Event>& event,
+    const base::DictionaryValue* listener_filter) {
   if (!CanDispatchEventToBrowserContext(context, extension, event))
     return false;
 
@@ -669,7 +677,7 @@ bool EventRouter::MaybeLoadLazyBackgroundPageToDispatchEvent(
     if (!event->will_dispatch_callback.is_null()) {
       dispatched_event.reset(event->DeepCopy());
       if (!dispatched_event->will_dispatch_callback.Run(
-              context, extension, dispatched_event->event_args.get())) {
+              context, extension, dispatched_event.get(), listener_filter)) {
         // The event has been canceled.
         return true;
       }
@@ -687,25 +695,27 @@ bool EventRouter::MaybeLoadLazyBackgroundPageToDispatchEvent(
 }
 
 // static
-void EventRouter::IncrementInFlightEventsOnUI(void* browser_context_id,
-                                              const std::string& extension_id,
-                                              int event_id,
-                                              const std::string& event_name) {
+void EventRouter::DoDispatchEventToSenderBookkeepingOnUI(
+    void* browser_context_id,
+    const std::string& extension_id,
+    int event_id,
+    events::HistogramValue histogram_value,
+    const std::string& event_name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserContext* browser_context =
       reinterpret_cast<BrowserContext*>(browser_context_id);
   if (!ExtensionsBrowserClient::Get()->IsValidContext(browser_context))
-    return;
-  EventRouter* event_router = EventRouter::Get(browser_context);
-  if (!event_router)
     return;
   const Extension* extension =
       ExtensionRegistry::Get(browser_context)->enabled_extensions().GetByID(
           extension_id);
   if (!extension)
     return;
+  EventRouter* event_router = EventRouter::Get(browser_context);
   event_router->IncrementInFlightEvents(browser_context, extension, event_id,
                                         event_name);
+  event_router->ReportEvent(histogram_value, extension,
+                            false /* did_enqueue */);
 }
 
 void EventRouter::IncrementInFlightEvents(BrowserContext* context,
@@ -741,6 +751,51 @@ void EventRouter::OnEventAck(BrowserContext* context,
     pm->DecrementLazyKeepaliveCount(host->extension());
 }
 
+void EventRouter::ReportEvent(events::HistogramValue histogram_value,
+                              const Extension* extension,
+                              bool did_enqueue) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Record every event fired.
+  UMA_HISTOGRAM_ENUMERATION("Extensions.Events.Dispatch", histogram_value,
+                            events::ENUM_BOUNDARY);
+
+  // Record events for component extensions. These should be kept to a minimum,
+  // especially if they wake its event page. Component extensions should use
+  // declarative APIs as much as possible.
+  if (Manifest::IsComponentLocation(extension->location())) {
+    UMA_HISTOGRAM_ENUMERATION("Extensions.Events.DispatchToComponent",
+                              histogram_value, events::ENUM_BOUNDARY);
+  }
+
+  // Record events for background pages, if any. The most important statistic
+  // is DispatchWithSuspendedEventPage. Events reported there woke an event
+  // page. Implementing either filtered or declarative versions of these events
+  // should be prioritised.
+  //
+  // Note: all we know is that the extension *has* a persistent or event page,
+  // not that the event is being dispatched *to* such a page. However, this is
+  // academic, since extensions with any background page have that background
+  // page running (or in the case of suspended event pages, must be started)
+  // regardless of where the event is being dispatched. Events are dispatched
+  // to a *process* not a *frame*.
+  if (BackgroundInfo::HasPersistentBackgroundPage(extension)) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Extensions.Events.DispatchWithPersistentBackgroundPage",
+        histogram_value, events::ENUM_BOUNDARY);
+  } else if (BackgroundInfo::HasLazyBackgroundPage(extension)) {
+    if (did_enqueue) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "Extensions.Events.DispatchWithSuspendedEventPage", histogram_value,
+          events::ENUM_BOUNDARY);
+    } else {
+      UMA_HISTOGRAM_ENUMERATION(
+          "Extensions.Events.DispatchWithRunningEventPage", histogram_value,
+          events::ENUM_BOUNDARY);
+    }
+  }
+}
+
 void EventRouter::DispatchPendingEvent(const linked_ptr<Event>& event,
                                        ExtensionHost* host) {
   if (!host)
@@ -748,9 +803,9 @@ void EventRouter::DispatchPendingEvent(const linked_ptr<Event>& event,
 
   if (listeners_.HasProcessListener(host->render_process_host(),
                                     host->extension()->id())) {
-    // URL events cannot be lazy therefore can't be pending, hence the GURL().
-    DispatchEventToProcess(
-        host->extension()->id(), GURL(), host->render_process_host(), event);
+    DispatchEventToProcess(host->extension()->id(), host->GetURL(),
+                           host->render_process_host(), event, nullptr,
+                           true /* did_enqueue */);
   }
 }
 
@@ -797,41 +852,41 @@ void EventRouter::OnExtensionUnloaded(content::BrowserContext* browser_context,
 Event::Event(events::HistogramValue histogram_value,
              const std::string& event_name,
              scoped_ptr<base::ListValue> event_args)
-    : histogram_value(histogram_value),
-      event_name(event_name),
-      event_args(event_args.Pass()),
-      restrict_to_browser_context(NULL),
-      user_gesture(EventRouter::USER_GESTURE_UNKNOWN) {
-  DCHECK(this->event_args.get());
-}
+    : Event(histogram_value, event_name, std::move(event_args), nullptr) {}
 
 Event::Event(events::HistogramValue histogram_value,
              const std::string& event_name,
              scoped_ptr<base::ListValue> event_args,
              BrowserContext* restrict_to_browser_context)
-    : histogram_value(histogram_value),
-      event_name(event_name),
-      event_args(event_args.Pass()),
-      restrict_to_browser_context(restrict_to_browser_context),
-      user_gesture(EventRouter::USER_GESTURE_UNKNOWN) {
-  DCHECK(this->event_args.get());
-}
+    : Event(histogram_value,
+            event_name,
+            std::move(event_args),
+            restrict_to_browser_context,
+            GURL(),
+            EventRouter::USER_GESTURE_UNKNOWN,
+            EventFilteringInfo()) {}
 
 Event::Event(events::HistogramValue histogram_value,
              const std::string& event_name,
-             scoped_ptr<ListValue> event_args,
+             scoped_ptr<ListValue> event_args_tmp,
              BrowserContext* restrict_to_browser_context,
              const GURL& event_url,
              EventRouter::UserGestureState user_gesture,
              const EventFilteringInfo& filter_info)
     : histogram_value(histogram_value),
       event_name(event_name),
-      event_args(event_args.Pass()),
+      event_args(std::move(event_args_tmp)),
       restrict_to_browser_context(restrict_to_browser_context),
       event_url(event_url),
       user_gesture(user_gesture),
       filter_info(filter_info) {
-  DCHECK(this->event_args.get());
+  DCHECK(event_args);
+  DCHECK_NE(events::UNKNOWN, histogram_value)
+      << "events::UNKNOWN cannot be used as a histogram value.\n"
+      << "If this is a test, use events::FOR_TEST.\n"
+      << "If this is production code, it is important that you use a realistic "
+      << "value so that we can accurately track event usage. "
+      << "See extension_event_histogram_value.h for inspiration.";
 }
 
 Event::~Event() {}

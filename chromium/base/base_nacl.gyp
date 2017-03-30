@@ -35,10 +35,13 @@
               'sync_socket_nacl.cc',
               'time/time_posix.cc',
             ],
-            'gcc_compile_flags': [
+            'compile_flags': [
               '-fno-strict-aliasing',
             ],
           },
+          'dependencies': [
+            'base.gyp:base_debugging_flags',
+          ],
         },
         {
           'target_name': 'base_i18n_nacl',
@@ -57,8 +60,6 @@
               'strings/string16.cc',
               'sync_socket_nacl.cc',
               'time/time_posix.cc',
-              '../../base/vivaldi_switches.cpp',
-              '../../base/vivaldi_switches.h',
             ],
           },
           'dependencies': [
@@ -116,7 +117,8 @@
             'rand_util_nacl.cc',
           ],
           'dependencies': [
-            '../third_party/libevent/libevent_nacl_nonsfi.gyp:event_nacl_nonsfi',
+            'base.gyp:base_debugging_flags',
+            'third_party/libevent/libevent_nacl_nonsfi.gyp:event_nacl_nonsfi',
           ],
         },
         {

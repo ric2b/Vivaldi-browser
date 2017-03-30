@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/networking_private/networking_private_delegate_factory.h"
 
+#include "build/build_config.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -29,6 +30,10 @@ NetworkingPrivateDelegateFactory::VerifyDelegateFactory::
     ~VerifyDelegateFactory() {
 }
 
+NetworkingPrivateDelegateFactory::UIDelegateFactory::UIDelegateFactory() {}
+
+NetworkingPrivateDelegateFactory::UIDelegateFactory::~UIDelegateFactory() {}
+
 // static
 NetworkingPrivateDelegate*
 NetworkingPrivateDelegateFactory::GetForBrowserContext(
@@ -40,7 +45,7 @@ NetworkingPrivateDelegateFactory::GetForBrowserContext(
 // static
 NetworkingPrivateDelegateFactory*
 NetworkingPrivateDelegateFactory::GetInstance() {
-  return Singleton<NetworkingPrivateDelegateFactory>::get();
+  return base::Singleton<NetworkingPrivateDelegateFactory>::get();
 }
 
 NetworkingPrivateDelegateFactory::NetworkingPrivateDelegateFactory()
@@ -57,24 +62,38 @@ void NetworkingPrivateDelegateFactory::SetVerifyDelegateFactory(
   verify_factory_.reset(factory.release());
 }
 
+void NetworkingPrivateDelegateFactory::SetUIDelegateFactory(
+    scoped_ptr<UIDelegateFactory> factory) {
+  ui_factory_.reset(factory.release());
+}
+
 KeyedService* NetworkingPrivateDelegateFactory::BuildServiceInstanceFor(
     BrowserContext* browser_context) const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   scoped_ptr<NetworkingPrivateDelegate::VerifyDelegate> verify_delegate;
   if (verify_factory_)
-    verify_delegate = verify_factory_->CreateDelegate().Pass();
+    verify_delegate = verify_factory_->CreateDelegate();
+
+  NetworkingPrivateDelegate* delegate;
 #if defined(OS_CHROMEOS)
-  return new NetworkingPrivateChromeOS(browser_context, verify_delegate.Pass());
+  delegate = new NetworkingPrivateChromeOS(browser_context,
+                                           std::move(verify_delegate));
 #elif defined(OS_LINUX)
-  return new NetworkingPrivateLinux(browser_context, verify_delegate.Pass());
+  delegate =
+      new NetworkingPrivateLinux(browser_context, std::move(verify_delegate));
 #elif defined(OS_WIN) || defined(OS_MACOSX)
   scoped_ptr<wifi::WiFiService> wifi_service(wifi::WiFiService::Create());
-  return new NetworkingPrivateServiceClient(wifi_service.Pass(),
-                                            verify_delegate.Pass());
+  delegate = new NetworkingPrivateServiceClient(std::move(wifi_service),
+                                                std::move(verify_delegate));
 #else
   NOTREACHED();
-  return nullptr;
+  delegate = nullptr;
 #endif
+
+  if (ui_factory_)
+    delegate->set_ui_delegate(ui_factory_->CreateDelegate());
+
+  return delegate;
 }
 
 BrowserContext* NetworkingPrivateDelegateFactory::GetBrowserContextToUse(

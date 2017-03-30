@@ -4,10 +4,14 @@
 
 #include "chrome/test/chromedriver/chrome/log.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "build/build_config.h"
 
 void Log::AddEntry(Level level, const std::string& message) {
   AddEntry(level, "", message);
@@ -49,7 +53,7 @@ scoped_ptr<base::Value> SmartDeepCopy(const base::Value* value) {
       dict_copy->SetWithoutPathExpansion(it.key(),
                                          SmartDeepCopy(child).release());
     }
-    return dict_copy.Pass();
+    return std::move(dict_copy);
   } else if (value->GetAsList(&list)) {
     scoped_ptr<base::ListValue> list_copy(new base::ListValue());
     for (size_t i = 0; i < list->GetSize(); ++i) {
@@ -62,7 +66,7 @@ scoped_ptr<base::Value> SmartDeepCopy(const base::Value* value) {
       }
       list_copy->Append(SmartDeepCopy(child).release());
     }
-    return list_copy.Pass();
+    return std::move(list_copy);
   } else if (value->GetAsString(&data)) {
     TruncateString(&data);
     return scoped_ptr<base::Value>(new base::StringValue(data));

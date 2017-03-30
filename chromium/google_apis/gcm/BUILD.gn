@@ -116,9 +116,19 @@ executable("mcs_probe") {
     ":gcm",
     ":test_support",
     "//base",
+    "//build/config/sanitizers:deps",
     "//net",
     "//net:test_support",
     "//third_party/protobuf:protobuf_lite",
+  ]
+}
+
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("gcm_unit_tests_run") {
+  testonly = true
+  deps = [
+    ":gcm_unit_tests",
   ]
 }
 
@@ -131,6 +141,8 @@ test("gcm_unit_tests") {
     "engine/checkin_request_unittest.cc",
     "engine/connection_factory_impl_unittest.cc",
     "engine/connection_handler_impl_unittest.cc",
+    "engine/gcm_request_test_base.cc",
+    "engine/gcm_request_test_base.h",
     "engine/gcm_store_impl_unittest.cc",
     "engine/gservices_settings_unittest.cc",
     "engine/heartbeat_manager_unittest.cc",

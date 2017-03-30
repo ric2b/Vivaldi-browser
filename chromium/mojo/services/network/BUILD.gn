@@ -11,7 +11,7 @@ if (is_android) {
 
   mojo_android_application("network") {
     output_name = "network_service"
-    input_so = "$root_out_dir/lib.stripped/libnetwork_service.so"
+    input_so = "$root_shlib_dir/${shlib_prefix}network_service$shlib_extension"
     input_dex_jar = java_library_path
     deps = [
       ":java_library",
@@ -29,6 +29,7 @@ if (is_android) {
     deps = [
       ":sources",
       "//base",
+      "//build/config/sanitizers:deps",
       "//net",
     ]
   }
@@ -58,6 +59,8 @@ source_set("lib") {
     "http_connection_impl.h",
     "http_server_impl.cc",
     "http_server_impl.h",
+    "mojo_persistent_cookie_store.cc",
+    "mojo_persistent_cookie_store.h",
     "net_adapters.cc",
     "net_adapters.h",
     "net_address_type_converters.cc",
@@ -66,6 +69,7 @@ source_set("lib") {
     "network_context.h",
     "network_service_delegate.cc",
     "network_service_delegate.h",
+    "network_service_delegate_observer.h",
     "network_service_impl.cc",
     "network_service_impl.h",
     "tcp_bound_socket_impl.cc",
@@ -80,19 +84,28 @@ source_set("lib") {
     "url_loader_factory_impl.h",
     "url_loader_impl.cc",
     "url_loader_impl.h",
+    "web_socket_factory_impl.cc",
+    "web_socket_factory_impl.h",
     "web_socket_impl.cc",
     "web_socket_impl.h",
   ]
 
   deps = [
     "//base",
-    "//mojo/application/public/cpp",
+    "//components/filesystem/public/interfaces",
+    "//mojo/common:common_base",
+    "//mojo/common:url_type_converters",
+    "//mojo/message_pump",
+    "//mojo/public/cpp/system:system",
     "//mojo/services/network/public/cpp",
     "//mojo/services/network/public/interfaces",
+    "//mojo/services/tracing/public/cpp",
+    "//mojo/shell/public/cpp",
     "//net",
+    "//net:extras",
     "//net:http_server",
-    "//url",
     "//sql/mojo",
+    "//url",
   ]
 }
 
@@ -106,11 +119,11 @@ source_set("sources") {
   deps = [
     ":lib",
     "//base",
-    "//mojo/application/public/cpp",
+    "//mojo/public/c/system:for_shared_library",
+    "//mojo/public/cpp/bindings:bindings",
     "//mojo/services/network/public/cpp",
     "//mojo/services/network/public/interfaces",
-    "//third_party/mojo/src/mojo/public/c/system:for_shared_library",
-    "//third_party/mojo/src/mojo/public/cpp/bindings:bindings",
+    "//mojo/shell/public/cpp",
   ]
 }
 
@@ -128,12 +141,15 @@ mojo_native_application("apptests") {
     ":lib",
     ":network",
     "//base",
-    "//mojo/application/public/cpp:test_support",
+    "//mojo/common:common_base",
+    "//mojo/message_pump",
+    "//mojo/public/cpp/bindings:callback",
     "//mojo/services/network/public/cpp",
     "//mojo/services/network/public/interfaces",
+    "//mojo/shell/public/cpp:sources",
+    "//mojo/shell/public/cpp:test_support",
     "//net",
     "//net:test_support",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/public/cpp/bindings:callback",
   ]
 }

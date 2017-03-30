@@ -5,11 +5,14 @@
 #ifndef NET_HTTP_HTTP_STREAM_FACTORY_IMPL_H_
 #define NET_HTTP_HTTP_STREAM_FACTORY_IMPL_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "net/base/host_port_pair.h"
 #include "net/http/http_stream_factory.h"
@@ -48,9 +51,16 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       WebSocketHandshakeStreamBase::CreateHelper* create_helper,
       const BoundNetLog& net_log) override;
 
+  HttpStreamRequest* RequestBidirectionalStreamJob(
+      const HttpRequestInfo& info,
+      RequestPriority priority,
+      const SSLConfig& server_ssl_config,
+      const SSLConfig& proxy_ssl_config,
+      HttpStreamRequest::Delegate* delegate,
+      const BoundNetLog& net_log) override;
+
   void PreconnectStreams(int num_streams,
                          const HttpRequestInfo& info,
-                         RequestPriority priority,
                          const SSLConfig& server_ssl_config,
                          const SSLConfig& proxy_ssl_config) override;
   const HostMappingRules* GetHostMappingRules() const override;
@@ -75,7 +85,9 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       WebSocketHandshakeStreamBase::CreateHelper* create_helper,
       const BoundNetLog& net_log);
 
-  AlternativeServiceVector GetAlternativeServicesFor(const GURL& original_url);
+  AlternativeService GetAlternativeServiceFor(
+      const HttpRequestInfo& request_info,
+      HttpStreamRequest::Delegate* delegate);
 
   // Detaches |job| from |request|.
   void OrphanJob(Job* job, const Request* request);
@@ -105,6 +117,10 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
 
   // Called when the Preconnect completes. Used for testing.
   virtual void OnPreconnectsCompleteInternal() {}
+
+  // Returns true if QUIC is whitelisted for |host|, which should be
+  // the result of calling ApplyHostMappingRules().
+  bool IsQuicWhitelistedForHost(const std::string& host);
 
   HttpNetworkSession* const session_;
 

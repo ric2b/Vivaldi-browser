@@ -5,10 +5,10 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_INPUT_H_
 #define COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_INPUT_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
-#include "base/gtest_prod_util.h"
 #include "base/strings/string16.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/metrics/proto/omnibox_input_type.pb.h"

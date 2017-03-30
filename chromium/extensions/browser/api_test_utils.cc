@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api_test_utils.h"
 
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
@@ -24,11 +26,7 @@ scoped_ptr<base::Value> ParseJSON(const std::string& data) {
 }
 
 scoped_ptr<base::ListValue> ParseList(const std::string& data) {
-  scoped_ptr<base::Value> result = ParseJSON(data);
-  scoped_ptr<base::ListValue> list_result;
-  if (result->GetAsList(nullptr))
-    list_result.reset(static_cast<base::ListValue*>(result.release()));
-  return list_result;
+  return base::ListValue::From(ParseJSON(data));
 }
 
 // This helps us be able to wait until an UIThreadExtensionFunction calls
@@ -59,7 +57,7 @@ class SendResponseDelegate
     response_.reset(new bool);
     *response_ = success;
     if (should_post_quit_) {
-      base::MessageLoopForUI::current()->Quit();
+      base::MessageLoopForUI::current()->QuitWhenIdle();
     }
   }
 
@@ -75,11 +73,7 @@ namespace extensions {
 namespace api_test_utils {
 
 scoped_ptr<base::DictionaryValue> ParseDictionary(const std::string& data) {
-  scoped_ptr<base::Value> result = ParseJSON(data);
-  scoped_ptr<base::DictionaryValue> dict_result;
-  if (result->GetAsDictionary(nullptr))
-    dict_result.reset(static_cast<base::DictionaryValue*>(result.release()));
-  return dict_result;
+  return base::DictionaryValue::From(ParseJSON(data));
 }
 
 bool GetBoolean(const base::DictionaryValue* val, const std::string& key) {
@@ -139,7 +133,7 @@ base::Value* RunFunctionWithDelegateAndReturnSingleResult(
     content::BrowserContext* context,
     scoped_ptr<extensions::ExtensionFunctionDispatcher> dispatcher) {
   return RunFunctionWithDelegateAndReturnSingleResult(
-      function, args, context, dispatcher.Pass(), NONE);
+      function, args, context, std::move(dispatcher), NONE);
 }
 
 base::Value* RunFunctionWithDelegateAndReturnSingleResult(
@@ -151,7 +145,7 @@ base::Value* RunFunctionWithDelegateAndReturnSingleResult(
   scoped_refptr<ExtensionFunction> function_owner(function);
   // Without a callback the function will not generate a result.
   function->set_has_callback(true);
-  RunFunction(function, args, context, dispatcher.Pass(), flags);
+  RunFunction(function, args, context, std::move(dispatcher), flags);
   EXPECT_TRUE(function->GetError().empty())
       << "Unexpected error: " << function->GetError();
   const base::Value* single_result = NULL;
@@ -178,7 +172,7 @@ base::Value* RunFunctionAndReturnSingleResult(
       new ExtensionFunctionDispatcher(context));
 
   return RunFunctionWithDelegateAndReturnSingleResult(
-      function, args, context, dispatcher.Pass(), flags);
+      function, args, context, std::move(dispatcher), flags);
 }
 
 std::string RunFunctionAndReturnError(UIThreadExtensionFunction* function,
@@ -196,7 +190,7 @@ std::string RunFunctionAndReturnError(UIThreadExtensionFunction* function,
   scoped_refptr<ExtensionFunction> function_owner(function);
   // Without a callback the function will not generate a result.
   function->set_has_callback(true);
-  RunFunction(function, args, context, dispatcher.Pass(), flags);
+  RunFunction(function, args, context, std::move(dispatcher), flags);
   EXPECT_FALSE(function->GetResultList()) << "Did not expect a result";
   return function->GetError();
 }
@@ -206,7 +200,7 @@ bool RunFunction(UIThreadExtensionFunction* function,
                  content::BrowserContext* context) {
   scoped_ptr<ExtensionFunctionDispatcher> dispatcher(
       new ExtensionFunctionDispatcher(context));
-  return RunFunction(function, args, context, dispatcher.Pass(), NONE);
+  return RunFunction(function, args, context, std::move(dispatcher), NONE);
 }
 
 bool RunFunction(UIThreadExtensionFunction* function,
@@ -217,8 +211,8 @@ bool RunFunction(UIThreadExtensionFunction* function,
   scoped_ptr<base::ListValue> parsed_args = ParseList(args);
   EXPECT_TRUE(parsed_args.get())
       << "Could not parse extension function arguments: " << args;
-  return RunFunction(
-      function, parsed_args.Pass(), context, dispatcher.Pass(), flags);
+  return RunFunction(function, std::move(parsed_args), context,
+                     std::move(dispatcher), flags);
 }
 
 bool RunFunction(UIThreadExtensionFunction* function,

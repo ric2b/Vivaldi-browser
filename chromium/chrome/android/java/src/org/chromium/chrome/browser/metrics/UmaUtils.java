@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.metrics;
 
-import org.chromium.base.CalledByNative;
+import org.chromium.base.annotations.CalledByNative;
 
 /**
  * Utilities to support startup metrics - Android version.
@@ -47,7 +47,7 @@ public class UmaUtils {
     }
 
     @CalledByNative
-    private static long getMainEntryPointTime() {
+    public static long getMainEntryPointTime() {
         return sApplicationStartWallClockMs;
     }
 

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/metrics/metrics_memory_details.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/location.h"
@@ -11,6 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/nacl/common/nacl_process_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_constants.h"
@@ -195,8 +198,19 @@ void MetricsMemoryDetails::UpdateHistograms() {
   // TODO(viettrungluu): Do we want separate counts for the other
   // (platform-specific) process types?
 
-  int total_sample = static_cast<int>(aggregate_memory / 1000);
-  UMA_HISTOGRAM_MEMORY_MB("Memory.Total", total_sample);
+  // TODO(rkaplow): Remove once we've verified Memory.Total2 is ok.
+  int total_sample_old = static_cast<int>(aggregate_memory / 1000);
+  UMA_HISTOGRAM_MEMORY_MB("Memory.Total", total_sample_old);
+  int total_sample = static_cast<int>(aggregate_memory / 1024);
+  UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Total2", total_sample);
+
+  // Predict the number of processes needed when isolating all sites and when
+  // isolating only HTTPS sites.
+  int all_renderer_count = renderer_count + chrome_count + extension_count;
+  int non_renderer_count = browser.processes.size() - all_renderer_count;
+  DCHECK_GE(non_renderer_count, 1);
+  SiteDetails::UpdateHistograms(browser.site_data, all_renderer_count,
+                                non_renderer_count);
 
 #if defined(OS_CHROMEOS)
   UpdateSwapHistograms();
@@ -272,8 +286,11 @@ void MetricsMemoryDetails::UpdateSwapHistograms() {
     }
   }
 
-  int total_sample = static_cast<int>(aggregate_memory / 1000);
-  UMA_HISTOGRAM_MEMORY_MB("Memory.Swap.Total", total_sample);
+  // TODO(rkaplow): Remove once we've verified Memory.Swap.Total2 is ok.
+  int total_sample_old = static_cast<int>(aggregate_memory / 1000);
+  UMA_HISTOGRAM_MEMORY_MB("Memory.Swap.Total", total_sample_old);
+  int total_sample = static_cast<int>(aggregate_memory / 1024);
+  UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Swap.Total2", total_sample);
 
   UMA_HISTOGRAM_CUSTOM_COUNTS("Memory.Swap.CompressedDataSize",
                               swap_info().compr_data_size / (1024 * 1024), 1,

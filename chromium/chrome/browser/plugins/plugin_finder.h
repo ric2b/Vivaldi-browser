@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string16.h"
@@ -74,8 +75,7 @@ class PluginFinder {
       const content::WebPluginInfo& plugin);
 
  private:
-  friend struct DefaultSingletonTraits<PluginFinder>;
-  friend class Singleton<PluginFinder>;
+  friend struct base::DefaultSingletonTraits<PluginFinder>;
   FRIEND_TEST_ALL_PREFIXES(PluginFinderTest, JsonSyntax);
   FRIEND_TEST_ALL_PREFIXES(PluginFinderTest, PluginGroups);
 

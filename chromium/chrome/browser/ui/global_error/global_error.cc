@@ -5,10 +5,17 @@
 #include "chrome/browser/ui/global_error/global_error.h"
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/global_error/global_error_bubble_view_base.h"
 #include "grit/theme_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
+
+#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
+#endif
 
 // GlobalError ---------------------------------------------------------------
 
@@ -18,10 +25,14 @@ GlobalError::~GlobalError() {}
 
 GlobalError::Severity GlobalError::GetSeverity() { return SEVERITY_MEDIUM; }
 
-int GlobalError::MenuItemIconResourceID() {
-  // If you change this make sure to also change the bubble icon and the wrench
-  // icon color.
-  return IDR_INPUT_ALERT_MENU;
+gfx::Image GlobalError::MenuItemIcon() {
+#if defined(OS_MACOSX) || defined(OS_ANDROID)
+  return ResourceBundle::GetSharedInstance().GetNativeImageNamed(
+      IDR_INPUT_ALERT_MENU);
+#else
+  return gfx::Image(gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, 18,
+                                          gfx::kGoogleYellow700));
+#endif
 }
 
 // GlobalErrorWithStandardBubble ---------------------------------------------
@@ -39,13 +50,8 @@ bool GlobalErrorWithStandardBubble::HasShownBubbleView() {
 
 void GlobalErrorWithStandardBubble::ShowBubbleView(Browser* browser) {
   has_shown_bubble_view_ = true;
-#if defined(OS_ANDROID)
-  // http://crbug.com/136506
-  NOTIMPLEMENTED() << "Chrome for Android doesn't support global errors";
-#else
   bubble_view_ =
       GlobalErrorBubbleViewBase::ShowStandardBubbleView(browser, AsWeakPtr());
-#endif
 }
 
 GlobalErrorBubbleViewBase* GlobalErrorWithStandardBubble::GetBubbleView() {
@@ -57,7 +63,7 @@ bool GlobalErrorWithStandardBubble::ShouldCloseOnDeactivate() const {
 }
 
 gfx::Image GlobalErrorWithStandardBubble::GetBubbleViewIcon() {
-  // If you change this make sure to also change the menu icon and the wrench
+  // If you change this make sure to also change the menu icon and the app menu
   // icon color.
   return ResourceBundle::GetSharedInstance().GetNativeImageNamed(
       IDR_INPUT_ALERT);

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/safe_browsing/download_feedback_service.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util_proxy.h"
@@ -18,7 +20,7 @@ namespace safe_browsing {
 
 namespace {
 
-const void* kPingKey = &kPingKey;
+const void* const kPingKey = &kPingKey;
 
 class DownloadFeedbackPings : public base::SupportsUserData::Data {
  public:
@@ -91,9 +93,16 @@ void DownloadFeedbackService::MaybeStorePingsForDownload(
     content::DownloadItem* download,
     const std::string& ping,
     const std::string& response) {
-  if (result != DownloadProtectionService::UNCOMMON &&
-      result != DownloadProtectionService::DANGEROUS_HOST)
-    return;
+  switch (result) {
+    case DownloadProtectionService::UNKNOWN:
+    case DownloadProtectionService::SAFE:
+    case DownloadProtectionService::DANGEROUS:
+      return;
+    case DownloadProtectionService::UNCOMMON:
+    case DownloadProtectionService::DANGEROUS_HOST:
+    case DownloadProtectionService::POTENTIALLY_UNWANTED:
+      break;  // Fall through.
+  }
   UMA_HISTOGRAM_COUNTS("SBDownloadFeedback.SizeEligibleKB",
                        download->GetReceivedBytes() / 1024);
   if (download->GetReceivedBytes() > DownloadFeedback::kMaxUploadSize)
@@ -178,13 +187,13 @@ void DownloadFeedbackService::BeginFeedback(
     const std::string& ping_response,
     const base::FilePath& path) {
   DCHECK(CalledOnValidThread());
-  DownloadFeedback* feedback =
+  scoped_ptr<DownloadFeedback> feedback(
       DownloadFeedback::Create(request_context_getter_.get(),
                                file_task_runner_.get(),
                                path,
                                ping_request,
-                               ping_response);
-  active_feedback_.push_back(feedback);
+                               ping_response));
+  active_feedback_.push_back(std::move(feedback));
   UMA_HISTOGRAM_COUNTS_100("SBDownloadFeedback.ActiveFeedbacks",
                            active_feedback_.size());
 

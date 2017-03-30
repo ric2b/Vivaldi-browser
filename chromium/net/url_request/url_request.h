@@ -5,12 +5,14 @@
 #ifndef NET_URL_REQUEST_URL_REQUEST_H_
 #define NET_URL_REQUEST_URL_REQUEST_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/debug/leak_tracker.h"
 #include "base/logging.h"
-#include "base/memory/ref_counted.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/supports_user_data.h"
@@ -20,6 +22,7 @@
 #include "net/base/completion_callback.h"
 #include "net/base/load_states.h"
 #include "net/base/load_timing_info.h"
+#include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
 #include "net/base/request_priority.h"
@@ -31,6 +34,7 @@
 #include "net/socket/connection_attempts.h"
 #include "net/url_request/url_request_status.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace base {
 class Value;
@@ -50,6 +54,7 @@ struct LoadTimingInfo;
 struct RedirectInfo;
 class SSLCertRequestInfo;
 class SSLInfo;
+class SSLPrivateKey;
 class UploadDataStream;
 class URLRequestContext;
 class URLRequestJob;
@@ -170,8 +175,9 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
     // Called when we receive an SSL CertificateRequest message for client
     // authentication.  The delegate should call
     // request->ContinueWithCertificate() with the client certificate the user
-    // selected, or request->ContinueWithCertificate(NULL) to continue the SSL
-    // handshake without a client certificate.
+    // selected and its private key, or request->ContinueWithCertificate(NULL,
+    // NULL)
+    // to continue the SSL handshake without a client certificate.
     virtual void OnCertificateRequested(
         URLRequest* request,
         SSLCertRequestInfo* cert_request_info);
@@ -250,7 +256,8 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   const GURL& url() const { return url_chain_.back(); }
 
   // The URL that should be consulted for the third-party cookie blocking
-  // policy.
+  // policy, as defined in Section 2.1.1 and 2.1.2 of
+  // https://tools.ietf.org/html/draft-west-first-party-cookies.
   //
   // WARNING: This URL must only be used for the third-party cookie blocking
   //          policy. It MUST NEVER be used for any kind of SECURITY check.
@@ -261,6 +268,11 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   //          a security check, an attacker might try to get around this check
   //          by starting from some page that redirects to the
   //          host-to-be-attacked.
+  //
+  // TODO(mkwst): Convert this to a 'url::Origin'. Several callsites are using
+  // this value as a proxy for the "top-level frame URL", which is simply
+  // incorrect and fragile. We don't need the full URL for any //net checks,
+  // so we should drop the pieces we don't need. https://crbug.com/577565
   const GURL& first_party_for_cookies() const {
     return first_party_for_cookies_;
   }
@@ -274,6 +286,26 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
     return first_party_url_policy_;
   }
   void set_first_party_url_policy(FirstPartyURLPolicy first_party_url_policy);
+
+  // The origin of the context which initiated the request. This is distinct
+  // from the "first party for cookies" discussed above in a number of ways:
+  //
+  // 1. The request's initiator does not change during a redirect. If a form
+  //    submission from `https://example.com/` redirects through a number of
+  //    sites before landing on `https://not-example.com/`, the initiator for
+  //    each of those requests will be `https://example.com/`.
+  //
+  // 2. The request's initiator is the origin of the frame or worker which made
+  //    the request, even for top-level navigations. That is, if
+  //    `https://example.com/`'s form submission is made in the top-level frame,
+  //    the first party for cookies would be the target URL's origin. The
+  //    initiator remains `https://example.com/`.
+  //
+  // This value is used to perform the cross-origin check specified in Section
+  // 4.3 of https://tools.ietf.org/html/draft-west-first-party-cookies.
+  const url::Origin& initiator() const { return initiator_; }
+  // This method may only be called before Start().
+  void set_initiator(const url::Origin& initiator);
 
   // The request method, as an uppercase string.  "GET" is the default value.
   // The request method may only be changed before Start() is called and
@@ -294,8 +326,9 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   ReferrerPolicy referrer_policy() const { return referrer_policy_; }
   void set_referrer_policy(ReferrerPolicy referrer_policy);
 
-  // Sets the delegate of the request.  This value may be changed at any time,
-  // and it is permissible for it to be null.
+  // Sets the delegate of the request.  This is only to allow creating a request
+  // before creating its delegate.  |delegate| must be non-NULL and the request
+  // must not yet have a Delegate set.
   void set_delegate(Delegate* delegate);
 
   // Indicates that the request body should be sent using chunked transfer
@@ -356,8 +389,16 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   bool GetFullRequestHeaders(HttpRequestHeaders* headers) const;
 
   // Gets the total amount of data received from network after SSL decoding and
-  // proxy handling.
-  int64 GetTotalReceivedBytes() const;
+  // proxy handling. Pertains only to the last URLRequestJob issued by this
+  // URLRequest, i.e. reset on redirects, but not reset when multiple roundtrips
+  // are used for range requests or auth.
+  int64_t GetTotalReceivedBytes() const;
+
+  // Gets the total amount of data sent over the network before SSL encoding and
+  // proxy handling. Pertains only to the last URLRequestJob issued by this
+  // URLRequest, i.e. reset on redirects, but not reset when multiple roundtrips
+  // are used for range requests or auth.
+  int64_t GetTotalSentBytes() const;
 
   // Returns the current load state for the request. The returned value's
   // |param| field is an optional parameter describing details related to the
@@ -445,6 +486,22 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // non-cached HTTP responses.
   void GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const;
 
+  // Gets the networkd error details of the most recent origin that the network
+  // stack makes the request to.
+  void PopulateNetErrorDetails(NetErrorDetails* details) const;
+
+  // Gets the remote endpoint of the most recent socket that the network stack
+  // used to make this request.
+  //
+  // Note that GetSocketAddress returns the |socket_address| field from
+  // HttpResponseInfo, which is only populated once the response headers are
+  // received, and can return cached values for cache revalidation requests.
+  // GetRemoteEndpoint will only return addresses from the current request.
+  //
+  // Returns true and fills in |endpoint| if the endpoint is available; returns
+  // false and leaves |endpoint| unchanged if it is unavailable.
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) const;
+
   // Returns the cookie values included in the response, if the request is one
   // that can have cookies.  Returns true if the request is a cookie-bearing
   // type, false otherwise.  This method may only be called once the
@@ -487,10 +544,11 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   const URLRequestStatus& status() const { return status_; }
 
   // Returns a globally unique identifier for this request.
-  uint64 identifier() const { return identifier_; }
+  uint64_t identifier() const { return identifier_; }
 
   // This method is called to start the request.  The delegate will receive
-  // a OnResponseStarted callback when the request is started.
+  // a OnResponseStarted callback when the request is started.  The request
+  // must have a delegate set before this method is called.
   void Start();
 
   // This method may be called at any time after Start() has been called to
@@ -560,7 +618,8 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // This method can be called after the user selects a client certificate to
   // instruct this URLRequest to continue with the request with the
   // certificate.  Pass NULL if the user doesn't have a client certificate.
-  void ContinueWithCertificate(X509Certificate* client_cert);
+  void ContinueWithCertificate(X509Certificate* client_cert,
+                               SSLPrivateKey* client_private_key);
 
   // This method can be called after some error notifications to instruct this
   // URLRequest to ignore the current error and continue with the request.  To
@@ -573,7 +632,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   const BoundNetLog& net_log() const { return net_log_; }
 
   // Returns the expected content size if available
-  int64 GetExpectedContentSize() const;
+  int64_t GetExpectedContentSize() const;
 
   // Returns the priority level for this request.
   RequestPriority priority() const { return priority_; }
@@ -587,19 +646,20 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // due to HSTS. If so, |redirect_url| is rewritten to the new HTTPS URL.
   bool GetHSTSRedirect(GURL* redirect_url) const;
 
-  // TODO(willchan): Undo this. Only temporarily public.
-  bool has_delegate() const { return delegate_ != NULL; }
-
   // NOTE(willchan): This is just temporary for debugging
   // http://crbug.com/90971.
   // Allows to setting debug info into the URLRequest.
   void set_stack_trace(const base::debug::StackTrace& stack_trace);
   const base::debug::StackTrace* stack_trace() const;
 
-  void set_received_response_content_length(int64 received_content_length) {
+  void set_received_response_content_length(int64_t received_content_length) {
     received_response_content_length_ = received_content_length;
   }
-  int64 received_response_content_length() const {
+
+  // The number of bytes in the raw response body (before any decompression,
+  // etc.). This is only available after the final Read completes. Not available
+  // for FTP responses.
+  int64_t received_response_content_length() const {
     return received_response_content_length_;
   }
 
@@ -658,6 +718,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // paused).
   void BeforeRequestComplete(int error);
 
+  // TODO(mmenke):  Make this take a scoped_ptr.
   void StartJob(URLRequestJob* job);
 
   // Restarting involves replacing the current job with a new one such as what
@@ -687,9 +748,8 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // occurs.
   void NotifyResponseStarted();
 
-  // These functions delegate to |delegate_| and may only be used if
-  // |delegate_| is not NULL. See URLRequest::Delegate for the meaning
-  // of these functions.
+  // These functions delegate to |delegate_|.  See URLRequest::Delegate for the
+  // meaning of these functions.
   void NotifyAuthRequired(AuthChallengeInfo* auth_info);
   void NotifyAuthRequiredComplete(NetworkDelegate::AuthRequiredResponse result);
   void NotifyCertificateRequested(SSLCertRequestInfo* cert_request_info);
@@ -720,7 +780,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // Tracks the time spent in various load states throughout this request.
   BoundNetLog net_log_;
 
-  scoped_refptr<URLRequestJob> job_;
+  scoped_ptr<URLRequestJob> job_;
   scoped_ptr<UploadDataStream> upload_data_stream_;
   // TODO(mmenke):  Make whether or not an upload is chunked transparent to the
   // URLRequest.
@@ -728,6 +788,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
 
   std::vector<GURL> url_chain_;
   GURL first_party_for_cookies_;
+  url::Origin initiator_;
   GURL delegate_redirect_url_;
   std::string method_;  // "GET", "POST", etc. Should be all uppercase.
   std::string referrer_;
@@ -779,7 +840,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // needs to be done outside of the URLRequest anyway. Therefore, this
   // identifier should be deleted here. http://crbug.com/89321
   // A globally unique identifier for this request.
-  const uint64 identifier_;
+  const uint64_t identifier_;
 
   // True if this request is currently calling a delegate, or is blocked waiting
   // for the URL request or network delegate to resume it.
@@ -808,7 +869,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   AuthCredentials auth_credentials_;
   scoped_refptr<AuthChallengeInfo> auth_info_;
 
-  int64 received_response_content_length_;
+  int64_t received_response_content_length_;
 
   base::TimeTicks creation_time_;
 

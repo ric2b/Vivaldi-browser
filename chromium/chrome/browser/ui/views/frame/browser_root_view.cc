@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/frame/browser_root_view.h"
 
+#include <cmath>
+
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/profiles/profile.h"
@@ -28,11 +30,13 @@ BrowserRootView::BrowserRootView(BrowserView* browser_view,
                                  views::Widget* widget)
     : views::internal::RootView(widget),
       browser_view_(browser_view),
-      forwarding_to_tab_strip_(false) { }
+      forwarding_to_tab_strip_(false),
+      scroll_remainder_x_(0),
+      scroll_remainder_y_(0) {}
 
 bool BrowserRootView::GetDropFormats(
       int* formats,
-      std::set<ui::OSExchangeData::CustomFormat>* custom_formats) {
+      std::set<ui::Clipboard::FormatType>* format_types) {
   if (tabstrip() && tabstrip()->visible()) {
     *formats = ui::OSExchangeData::URL | ui::OSExchangeData::STRING;
     return true;
@@ -130,25 +134,52 @@ bool BrowserRootView::OnMouseWheel(const ui::MouseWheelEvent& event) {
     if (tabstrip()->Contains(hit_view) ||
         hittest == HTCAPTION ||
         hittest == HTTOP) {
-      int scroll_offset = abs(event.y_offset()) > abs(event.x_offset()) ?
-          event.y_offset() : event.x_offset();
+      scroll_remainder_x_ += event.x_offset();
+      scroll_remainder_y_ += event.y_offset();
+
+      // Number of integer scroll events that have passed in each direction.
+      int whole_scroll_amount_x =
+          std::lround(static_cast<double>(scroll_remainder_x_) /
+                      ui::MouseWheelEvent::kWheelDelta);
+      int whole_scroll_amount_y =
+          std::lround(static_cast<double>(scroll_remainder_y_) /
+                      ui::MouseWheelEvent::kWheelDelta);
+
+      // Adjust the remainder such that any whole scrolls we have taken action
+      // for don't count towards the scroll remainder.
+      scroll_remainder_x_ -=
+          whole_scroll_amount_x * ui::MouseWheelEvent::kWheelDelta;
+      scroll_remainder_y_ -=
+          whole_scroll_amount_y * ui::MouseWheelEvent::kWheelDelta;
+
+      // Count a scroll in either axis - summing the axes works for this.
+      int whole_scroll_offset = whole_scroll_amount_x + whole_scroll_amount_y;
+
       Browser* browser = browser_view_->browser();
       TabStripModel* model = browser->tab_strip_model();
       // Switch to the next tab only if not at the end of the tab-strip.
-      if (scroll_offset < 0 && model->active_index() + 1 < model->count()) {
+      if (whole_scroll_offset < 0 &&
+          model->active_index() + 1 < model->count()) {
         chrome::SelectNextTab(browser);
         return true;
       }
 
       // Switch to the previous tab only if not at the beginning of the
       // tab-strip.
-      if (scroll_offset > 0 && model->active_index() > 0) {
+      if (whole_scroll_offset > 0 && model->active_index() > 0) {
         chrome::SelectPreviousTab(browser);
         return true;
       }
     }
   }
   return RootView::OnMouseWheel(event);
+}
+
+void BrowserRootView::OnMouseExited(const ui::MouseEvent& event) {
+  // Reset the remainders so tab switches occur halfway through a smooth scroll.
+  scroll_remainder_x_ = 0;
+  scroll_remainder_y_ = 0;
+  RootView::OnMouseExited(event);
 }
 
 void BrowserRootView::OnEventProcessingStarted(ui::Event* event) {

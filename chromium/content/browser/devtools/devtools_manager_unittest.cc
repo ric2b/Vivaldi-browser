@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -141,10 +141,11 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
   client_host.InspectAgentHost(agent_host.get());
 
   // Start with a short timeout.
-  inspected_rvh->StartHangMonitorTimeout(TimeDelta::FromMilliseconds(10));
+  inspected_rvh->GetWidget()->StartHangMonitorTimeout(
+      TimeDelta::FromMilliseconds(10));
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMilliseconds(10));
   base::MessageLoop::current()->Run();
   EXPECT_FALSE(delegate.renderer_unresponsive_received());
@@ -152,10 +153,11 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
   // Now close devtools and check that the notification is delivered.
   client_host.Close();
   // Start with a short timeout.
-  inspected_rvh->StartHangMonitorTimeout(TimeDelta::FromMilliseconds(10));
+  inspected_rvh->GetWidget()->StartHangMonitorTimeout(
+      TimeDelta::FromMilliseconds(10));
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMilliseconds(10));
   base::MessageLoop::current()->Run();
   EXPECT_TRUE(delegate.renderer_unresponsive_received());
@@ -172,6 +174,7 @@ TEST_F(DevToolsManagerTest, ReattachOnCancelPendingNavigation) {
   contents()->GetMainFrame()->PrepareForCommit();
   contents()->TestDidNavigate(contents()->GetMainFrame(), 1, pending_id, true,
                               url, ui::PAGE_TRANSITION_TYPED);
+  contents()->GetMainFrame()->SimulateNavigationStop();
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
 
   TestDevToolsClientHost client_host;

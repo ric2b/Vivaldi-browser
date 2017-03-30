@@ -4,13 +4,14 @@
 
 #include "cc/trees/occlusion_tracker.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "cc/base/math_util.h"
 #include "cc/base/region.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
-#include "cc/layers/render_surface.h"
 #include "cc/layers/render_surface_impl.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -164,11 +165,6 @@ void OcclusionTracker::EnterRenderTarget(const LayerImpl* new_target) {
           gfx::Rect(), old_target_to_new_target_transform));
 }
 
-static bool LayerIsHidden(const LayerImpl* layer) {
-  return layer->hide_layer_and_subtree() ||
-         (layer->parent() && LayerIsHidden(layer->parent()));
-}
-
 void OcclusionTracker::FinishedRenderTarget(const LayerImpl* finished_target) {
   // Make sure we know about the target surface.
   EnterRenderTarget(finished_target);
@@ -178,7 +174,7 @@ void OcclusionTracker::FinishedRenderTarget(const LayerImpl* finished_target) {
   // Readbacks always happen on render targets so we only need to check
   // for readbacks here.
   bool target_is_only_for_copy_request =
-      finished_target->HasCopyRequest() && LayerIsHidden(finished_target);
+      finished_target->HasCopyRequest() && finished_target->LayerIsHidden();
 
   // If the occlusion within the surface can not be applied to things outside of
   // the surface's subtree, then clear the occlusion here so it won't be used.
@@ -362,8 +358,9 @@ void OcclusionTracker::MarkOccludedBehindLayer(const LayerImpl* layer) {
 
   DCHECK(layer->visible_layer_rect().Contains(opaque_layer_region.bounds()));
 
+  gfx::Transform draw_transform = layer->DrawTransform();
   // TODO(danakj): Find a rect interior to each transformed quad.
-  if (!layer->draw_transform().Preserves2dAxisAlignment())
+  if (!draw_transform.Preserves2dAxisAlignment())
     return;
 
   gfx::Rect clip_rect_in_target = ScreenSpaceClipRectInTargetSurface(
@@ -378,7 +375,7 @@ void OcclusionTracker::MarkOccludedBehindLayer(const LayerImpl* layer) {
   for (size_t i = 0; i < opaque_layer_region.GetRegionComplexity(); ++i) {
     gfx::Rect transformed_rect =
         MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
-            layer->draw_transform(), opaque_layer_region.GetRect(i));
+            draw_transform, opaque_layer_region.GetRect(i));
     transformed_rect.Intersect(clip_rect_in_target);
     if (transformed_rect.width() < minimum_tracking_size_.width() &&
         transformed_rect.height() < minimum_tracking_size_.height())

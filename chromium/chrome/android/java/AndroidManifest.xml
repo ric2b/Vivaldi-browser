@@ -22,11 +22,22 @@ by a child template that "extends" this file.
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+      Enable Bluetooth permission via uses-permission in tip of tree builds
+      only for ease of development on Android L and earlier. For consumer
+      channels use "runtime permission" uses-permission-sdk-m which provides
+      permission on Android M and later without a prompt.
+    -->
     {% if channel in ['default'] %}
         <uses-permission android:name="android.permission.BLUETOOTH"/>
         <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
     {% endif %}
+    <uses-permission-sdk-m android:name="android.permission.BLUETOOTH"/>
+    <uses-permission-sdk-m android:name="android.permission.BLUETOOTH_ADMIN"/>
+
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     <uses-permission android:name="android.permission.GET_ACCOUNTS"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.MANAGE_ACCOUNTS"/>
@@ -34,6 +45,7 @@ by a child template that "extends" this file.
     <uses-permission android:name="android.permission.NFC"/>
     <uses-permission android:name="android.permission.READ_SYNC_SETTINGS"/>
     <uses-permission android:name="android.permission.READ_SYNC_STATS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.USE_CREDENTIALS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
@@ -108,8 +120,8 @@ by a child template that "extends" this file.
             android:resource="@xml/app_restrictions"/>
         {% endif %}
 
-        <!-- Note: Set android:hardwareAccelerated to "false" in the ".Main"
-             activity below to go into software, browser tiling mode.
+        <!-- Note: All activities directly or indirectly derived from ChromeActivity
+             must specify android:hardwareAccelerated="false".
 
              Since this activity (shown in the launcher) and the application
              (shown in Android's Settings/Apps list) share the same label, we
@@ -196,7 +208,7 @@ by a child template that "extends" this file.
             android:persistableMode="persistAcrossReboots"
             android:autoRemoveFromRecents="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
-            android:hardwareAccelerated="true">
+            android:hardwareAccelerated="false">
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.document.DocumentActivity"
             android:targetActivity="org.chromium.chrome.browser.document.DocumentActivity"
@@ -210,7 +222,7 @@ by a child template that "extends" this file.
             android:persistableMode="persistNever"
             android:autoRemoveFromRecents="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
-            android:hardwareAccelerated="true">
+            android:hardwareAccelerated="false">
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.document.IncognitoDocumentActivity"
             android:targetActivity="org.chromium.chrome.browser.document.IncognitoDocumentActivity"
@@ -220,7 +232,7 @@ by a child template that "extends" this file.
             android:exported="false"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
-            android:hardwareAccelerated="true">
+            android:hardwareAccelerated="false">
         </activity>
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity"
              android:theme="@style/MainTheme"
@@ -229,7 +241,7 @@ by a child template that "extends" this file.
              android:windowSoftInputMode="adjustResize"
              android:launchMode="singleTask"
              android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
-             android:hardwareAccelerated="true">
+             android:hardwareAccelerated="false">
         </activity>
         <activity android:name="org.chromium.chrome.browser.multiwindow.MultiInstanceChromeTabbedActivity"
             android:theme="@style/MainTheme"
@@ -237,7 +249,7 @@ by a child template that "extends" this file.
             android:windowBackground="@drawable/window_background"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
-            android:hardwareAccelerated="true">
+            android:hardwareAccelerated="false">
         </activity>
         <activity android:name="org.chromium.chrome.browser.sync.ui.PassphraseActivity"
             android:theme="@style/MainTheme"
@@ -248,12 +260,6 @@ by a child template that "extends" this file.
             android:label="@string/save_bookmark"
             android:windowSoftInputMode="stateHidden|adjustPan"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="chrome" android:host="editbookmark" />
-            </intent-filter>
             <intent-filter>
                 <!-- This is sent by the BrowserProviderProxy as a result of
                      calls to android.provider.Browser.saveBookmark(). -->
@@ -276,7 +282,7 @@ by a child template that "extends" this file.
         </activity>
         <activity android:name="org.chromium.chrome.browser.EmbedContentViewActivity"
             android:theme="@style/ThemeWithActionBar"
-            android:hardwareAccelerated="true"
+            android:hardwareAccelerated="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
         </activity>
         <activity android:name="org.chromium.chrome.browser.prerender.PrerenderAPITestActivity"
@@ -290,7 +296,6 @@ by a child template that "extends" this file.
         </activity>
         <activity android:name="org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkEditActivity"
             android:theme="@style/EnhancedBookmarkDialogWhite"
-            android:label="@string/edit_bookmark"
             android:windowSoftInputMode="stateHidden"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc" >
         </activity>
@@ -328,12 +333,12 @@ by a child template that "extends" this file.
             android:targetActivity="org.chromium.chrome.browser.webapps.WebappLauncherActivity">
         </activity-alias>
         <activity android:name="org.chromium.chrome.browser.webapps.WebappActivity"
-            android:theme="@style/MainTheme"
+            android:theme="@style/WebappTheme"
             android:label="@string/webapp_activity_title"
             android:documentLaunchMode="intoExisting"
             android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
-            android:hardwareAccelerated="true"
+            android:hardwareAccelerated="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.webapps.WebappActivity"
@@ -342,13 +347,13 @@ by a child template that "extends" this file.
         </activity-alias>
         {% for i in range(10) %}
         <activity android:name="org.chromium.chrome.browser.webapps.WebappActivity{{ i }}"
-            android:theme="@style/MainTheme"
+            android:theme="@style/WebappTheme"
             android:icon="@mipmap/app_shortcut_icon"
             android:label="@string/webapp_activity_title"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
-            android:hardwareAccelerated="true"
+            android:hardwareAccelerated="false"
             android:taskAffinity="{{ manifest_package }}.webapps.WebappActivity{{ i }}"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
         </activity>
@@ -375,11 +380,46 @@ by a child template that "extends" this file.
             android:excludeFromRecents="true">
         </activity>
 
+        <!-- This activity is started along with IncognitoDocumentActivity, so it also must
+             disable hardware acceleration. Besides, it doesn't have any UI. -->
         <activity android:name="org.chromium.chrome.browser.document.CipherKeyActivity"
             android:launchMode="singleInstance"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:excludeFromRecents="true">
+            android:excludeFromRecents="true"
+            android:hardwareAccelerated="false">
         </activity>
+
+        <!-- This activity is used to restart the main Chrome process.  Should never be exported. -->
+        <activity android:name="org.chromium.chrome.browser.BrowserRestartActivity"
+            android:launchMode="singleInstance"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:process=":browser_restart_process">
+        </activity>
+
+        <!-- Activity to list Physical Web Urls -->
+        <activity android:name="org.chromium.chrome.browser.physicalweb.ListUrlsActivity"
+            android:label="@string/physical_web_list_urls_activity_title"
+            android:theme="@style/PhysicalWebNearbyUrlsListStyle"
+            android:autoRemoveFromRecents="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
+            android:exported="false" >
+        </activity>
+
+        <!-- Opt-in activity for Physical Web -->
+        <activity android:name="org.chromium.chrome.browser.physicalweb.PhysicalWebOptInActivity"
+            android:label="@string/physical_web_list_urls_activity_title"
+            android:theme="@style/PhysicalWebOptInStyle"
+            android:autoRemoveFromRecents="true"
+            android:exported="false">
+        </activity>
+
+        <!-- Broadcast receiver that will clean up Physical web notifications at scheduled
+             intervals -->
+        <receiver android:name="org.chromium.chrome.browser.physicalweb.ClearNotificationAlarmReceiver"
+            android:exported="false">
+        </receiver>
 
         <!-- Providers for chrome data. -->
         <provider android:name="org.chromium.chrome.browser.ChromeBrowserProvider"
@@ -396,6 +436,12 @@ by a child template that "extends" this file.
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
+        </provider>
+
+        <provider android:name="org.chromium.chrome.browser.superviseduser.SupervisedUserContentProvider"
+            android:authorities="{{ manifest_package }}.SupervisedUserProvider"
+            android:permission="android.permission.INTERNET"
+            android:exported="true">
         </provider>
 
         <!-- Sync adapter for browser invalidation. -->
@@ -415,7 +461,17 @@ by a child template that "extends" this file.
             </intent-filter>
         </receiver>
 
-        <!-- Precache service. -->
+        <!-- Download service -->
+        <service android:name="org.chromium.chrome.browser.download.DownloadNotificationService"
+            android:exported="false">
+        </service>
+
+        <!-- Precache service.
+        Not enabled on Stable or Work channels. This is currently an experiment
+        on beta channel (crbug/309216) but the mere existence of these can lead
+        to some process churn, so omit them while not relevant. b/24776372
+        -->
+        {% if channel in ['default', 'canary', 'dev', 'beta'] %}
         <service android:name="org.chromium.chrome.browser.precache.PrecacheService"
             android:exported="false" />
         <receiver android:name="org.chromium.chrome.browser.precache.PrecacheServiceLauncher">
@@ -423,6 +479,17 @@ by a child template that "extends" this file.
                 <action android:name="android.intent.action.ACTION_POWER_CONNECTED"/>
                 <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED"/>
                 <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+        </receiver>
+        {% endif %}
+
+        <service android:name="org.chromium.components.variations.firstrun.VariationsSeedService"
+            android:exported="false" />
+
+        <receiver android:name="org.chromium.components.variations.firstrun.VariationsSeedServiceLauncher"
+            android:permission="{{ manifest_package }}.TOS_ACKED">
+            <intent-filter>
+                <action android:name="{{ manifest_package }}.TOS_ACKED" />
             </intent-filter>
         </receiver>
 
@@ -433,21 +500,7 @@ by a child template that "extends" this file.
             </intent-filter>
         </receiver>
 
-        <activity android:name="org.chromium.chrome.browser.bookmark.ShortcutActivity"
-            android:enabled="{{ 'true' if channel in ['stable', 'default'] else 'false' }}"
-            android:label="@string/bookmark_shortcut_name"
-            android:icon="@mipmap/bookmark_shortcut_icon"
-            android:theme="@style/ThemeWithActionBar"
-            android:hardwareAccelerated="true">
-
-            <intent-filter>
-                <action android:name="android.intent.action.CREATE_SHORTCUT" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
         <receiver android:name="com.google.android.apps.chrome.appwidget.bookmarks.BookmarkThumbnailWidgetProvider"
-            android:enabled="{{ 'true' if channel in ['stable', 'default'] else 'false' }}"
             android:label="@string/bookmarks">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -462,9 +515,9 @@ by a child template that "extends" this file.
             android:exported="false" />
         <receiver android:name="org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProxy"
             android:exported="false" />
-
-        <!-- Receiver for GCM messages. Rebroadcasts them locally for sync and cloudprint. -->
-        <receiver android:name="com.google.ipc.invalidation.external.client.contrib.MultiplexingGcmListener$GCMReceiver"
+            
+        <!-- Receiver for GCM messages. -->
+        <receiver android:name="org.chromium.chrome.browser.services.gcm.ChromeGcmReceiver"
             android:exported="true"
             android:permission="com.google.android.c2dm.permission.SEND">
             <intent-filter>
@@ -473,11 +526,32 @@ by a child template that "extends" this file.
                <category android:name="{{ manifest_package }}"/>
             </intent-filter>
         </receiver>
-        <service android:name="com.google.ipc.invalidation.external.client.contrib.MultiplexingGcmListener"
-            android:exported="false">
-            <meta-data android:name="sender_ids"
-                android:value="cloudprint.c2dm@gmail.com,ipc.invalidation@gmail.com"/>
+        <!-- GcmTaskService for registration for Invalidations. -->
+        <service android:name="com.google.ipc.invalidation.ticl.android2.channel.GcmRegistrationTaskService"
+            android:exported="true"
+            android:permission="com.google.android.gms.permission.BIND_NETWORK_TASK_SERVICE" >
+            <intent-filter>
+                <action android:name="com.google.android.gms.gcm.ACTION_TASK_READY"/>
+            </intent-filter>
         </service>
+        <!-- InstanceIDListenerService for token refresh events from GCM. -->
+        <service android:name="com.google.ipc.invalidation.ticl.android2.channel.AndroidInstanceIDListenerService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.android.gms.iid.InstanceID"/>
+            </intent-filter>
+        </service>
+        <!-- GcmListenerService for messages from GCM. -->
+        <service android:name="org.chromium.chrome.browser.services.gcm.ChromeGcmListenerService"
+            android:exported="false" >
+            <intent-filter>
+              <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+            </intent-filter>
+        </service>
+        <meta-data android:name="ipc.invalidation.ticl.gcm_upstream_service_class"
+            android:value="org.chromium.chrome.browser.services.gcm.InvalidationGcmUpstreamSender" />
+        <service android:name="org.chromium.chrome.browser.services.gcm.InvalidationGcmUpstreamSender"
+            android:exported="false"/>
 
         <!-- Notification service for sync. -->
         <meta-data android:name="ipc.invalidation.ticl.listener_service_class"
@@ -497,27 +571,6 @@ by a child template that "extends" this file.
         <receiver android:name="com.google.ipc.invalidation.external.client2.contrib.AndroidListener$AlarmReceiver"
             android:exported="false"/>
 
-        <!-- Notification service multiplexed GCM receiver -->
-        <service android:name="com.google.ipc.invalidation.ticl.android2.channel.AndroidMessageReceiverService"
-            android:exported="false"
-            android:enabled="true"/>
-        <receiver android:name="com.google.ipc.invalidation.ticl.android2.channel.AndroidMessageReceiverService$Receiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.ipc.invalidation.gcmmplex.EVENT" />
-            </intent-filter>
-        </receiver>
-
-        <!-- GCMDriver multiplexed GCM receiver -->
-        <service android:name="org.chromium.chrome.browser.services.gcm.GCMListener"
-            android:exported="false"/>
-        <receiver android:name="org.chromium.chrome.browser.services.gcm.GCMListener$Receiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.ipc.invalidation.gcmmplex.EVENT" />
-            </intent-filter>
-        </receiver>
-
         <!-- Android Notification service listener -->
         <service android:name="org.chromium.chrome.browser.notifications.NotificationService"
             android:exported="false"/>
@@ -529,14 +582,14 @@ by a child template that "extends" this file.
             </intent-filter>
         </receiver>
 
-        <!-- Service Worker Background Sync service listener -->
-        <service android:name="org.chromium.content.browser.BackgroundSyncLauncherService"
-            android:exported="false" />
-        <receiver android:name="org.chromium.content.browser.BackgroundSyncLauncherService$Receiver">
+        <!-- Service Worker Background Sync GCM scheduler task -->
+        <service android:name="org.chromium.chrome.browser.BackgroundSyncLauncherService"
+            android:permission="com.google.android.gms.permission.BIND_NETWORK_TASK_SERVICE"
+            android:exported="true">
             <intent-filter>
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+                <action android:name="com.google.android.gms.gcm.ACTION_TASK_READY" />
             </intent-filter>
-        </receiver>
+        </service>
 
         <service android:name="org.chromium.chrome.browser.prerender.ChromePrerenderService"
             android:exported="true"
@@ -571,15 +624,23 @@ by a child template that "extends" this file.
             android:process=":sandboxed_process{{ i }}"
             android:permission="{{ manifest_package }}.permission.CHILD_SERVICE"
             android:isolatedProcess="true"
-            android:exported="false" />
+            android:exported="{{sandboxed_service_exported|default(false)}}"
+            {% if (sandboxed_service_exported|default(false)) == 'true' %}
+            tools:ignore="ExportedService"
+            {% endif %}
+            {{sandboxed_service_extra_flags|default('')}} />
         {% endfor %}
 
         {% set num_privileged_services = 3 %}
         <meta-data android:name="org.chromium.content.browser.NUM_PRIVILEGED_SERVICES"
             android:value="{{ num_privileged_services }}"/>
         {% for i in range(num_privileged_services) %}
+        {% set privileged_process_name = ':privileged_process%d' % i %}
+        <!-- TODO(tedchoc): Omit this for release builds as MultiDex is debug only. --> 
+        <meta-data android:name="{{ manifest_package }}{{ privileged_process_name }}.ignore_multidex"
+android:value="true" />
         <service android:name="org.chromium.content.app.PrivilegedProcessService{{ i }}"
-            android:process=":privileged_process{{ i }}"
+            android:process="{{ privileged_process_name }}"
             android:permission="{{ manifest_package }}.permission.CHILD_SERVICE"
             android:isolatedProcess="false"
             android:exported="false" />
@@ -603,10 +664,33 @@ by a child template that "extends" this file.
         <!--  Receiver for lock screen input when casting -->
         <receiver android:name="org.chromium.chrome.browser.media.remote.LockScreenTransportControl$MediaButtonIntentReceiver"/>
 
-        <service android:name="org.chromium.chrome.browser.media.MediaNotificationService"
+        <service android:name="org.chromium.chrome.browser.media.MediaCaptureNotificationService"
             android:exported="false"/>
-        <service android:name="org.chromium.chrome.browser.media.ui.NotificationMediaPlaybackControls$ListenerService"
-            android:exported="false"/>
+        <service android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$PlaybackListenerService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </service>
+        <service android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$PresentationListenerService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </service>
+
+
+        <receiver android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$PlaybackMediaButtonReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+        <receiver android:name="org.chromium.chrome.browser.media.ui.MediaNotificationManager$PresentationMediaButtonReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
 
         <meta-data android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />

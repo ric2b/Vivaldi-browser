@@ -1,5 +1,21 @@
 {
-  "Android MotoE Perf": {
+  "Android Galaxy S5 Perf (1)": {
+    "scripts": [
+      {
+        "name": "host_info",
+        "script": "host_info.py"
+      }
+    ]
+  },
+  "Android Galaxy S5 Perf (2)": {
+    "scripts": [
+      {
+        "name": "host_info",
+        "script": "host_info.py"
+      }
+    ]
+  },
+  "Android Galaxy S5 Perf (3)": {
     "scripts": [
       {
         "name": "host_info",
@@ -21,7 +37,15 @@
       }
     ]
   },
-  "Android Nexus10 Perf": {
+  "Android Nexus5 Perf (1)": {
+    "scripts": [
+      {
+        "name": "host_info",
+        "script": "host_info.py"
+      }
+    ]
+  },
+  "Android Nexus5 Perf (2)": {
     "scripts": [
       {
         "name": "host_info",
@@ -43,7 +67,30 @@
       }
     ]
   },
-  "Android Nexus4 Perf": {
+  "Android Nexus6 Perf (1)": {
+    "scripts": [
+      {
+        "name": "host_info",
+        "script": "host_info.py"
+      }
+    ]
+  },
+  "Android Nexus6 Perf (2)": {
+    "scripts": [
+      {
+        "name": "host_info",
+        "script": "host_info.py"
+      },
+      {
+        "args": [
+          "cc_perftests"
+        ],
+        "name": "cc_perftests",
+        "script": "gtest_perf_test.py"
+      }
+    ]
+  },
+  "Android Nexus7v2 Perf (1)": {
     "scripts": [
       {
         "name": "host_info",
@@ -65,7 +112,7 @@
       }
     ]
   },
-  "Android Nexus5 Perf": {
+  "Android Nexus7v2 Perf (2)": {
     "scripts": [
       {
         "name": "host_info",
@@ -87,44 +134,15 @@
       }
     ]
   },
-  "Android Nexus6 Perf": {
+  "Android Nexus9 Perf (1)": {
     "scripts": [
       {
         "name": "host_info",
         "script": "host_info.py"
-      },
-      {
-        "args": [
-          "cc_perftests"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
       }
     ]
   },
-  "Android Nexus7v2 Perf": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
-      },
-      {
-        "args": [
-          "gpu_perftests"
-        ],
-        "name": "gpu_perftests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "cc_perftests"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Android Nexus9 Perf": {
+  "Android Nexus9 Perf (2)": {
     "scripts": [
       {
         "name": "host_info",
@@ -136,17 +154,18 @@
         ],
         "name": "gpu_perftests",
         "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "cc_perftests"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
       }
     ]
   },
-  "Android One Perf": {
+  "Android One Perf (1)": {
+    "scripts": [
+      {
+        "name": "host_info",
+        "script": "host_info.py"
+      }
+    ]
+  },
+  "Android One Perf (2)": {
     "scripts": [
       {
         "name": "host_info",
@@ -427,6 +446,17 @@
   },
   "Win 8 Perf (2)": {
     "scripts": [
+      {
+        "args": [
+          "performance_browser_tests",
+          "--test-launcher-print-test-stdio=always",
+          "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
+          "--test-launcher-jobs=1",
+          "--enable-gpu"
+        ],
+        "name": "performance_browser_tests",
+        "script": "gtest_perf_test.py"
+      },
       {
         "args": [
           "load_library_perf_tests",

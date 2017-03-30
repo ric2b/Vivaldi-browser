@@ -5,9 +5,13 @@
 #ifndef CHROME_BROWSER_UI_PASSWORDS_PASSWORD_MANAGER_PRESENTER_H_
 #define CHROME_BROWSER_UI_PASSWORDS_PASSWORD_MANAGER_PRESENTER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/prefs/pref_member.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -64,10 +68,6 @@ class PasswordManagerPresenter
   // Returns the password store associated with the currently active profile.
   password_manager::PasswordStore* GetPasswordStore();
 
-  // Returns true if the user needs to be authenticated before a plaintext
-  // password is revealed.
-  bool IsAuthenticationRequired();
-
   // Sets the password and exception list of the UI view.
   void SetPasswordList();
   void SetPasswordExceptionList();
@@ -115,15 +115,15 @@ class PasswordManagerPresenter
   PasswordListPopulater populater_;
   PasswordExceptionListPopulater exception_populater_;
 
-  ScopedVector<autofill::PasswordForm> password_list_;
-  ScopedVector<autofill::PasswordForm> password_exception_list_;
+  std::vector<scoped_ptr<autofill::PasswordForm>> password_list_;
+  std::vector<scoped_ptr<autofill::PasswordForm>> password_exception_list_;
 
   // Whether to show stored passwords or not.
   BooleanPrefMember show_passwords_;
 
   // Indicates whether or not the password manager should require the user to
   // reauthenticate before revealing plaintext passwords.
-  bool require_reauthentication_;
+  const bool require_reauthentication_;
 
   // The last time the user was successfully authenticated.
   // Used to determine whether or not to reveal plaintext passwords.

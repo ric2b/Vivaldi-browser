@@ -1,0 +1,104 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../tools/bindings/mojom.gni")
+
+mojom("test_interfaces") {
+  testonly = true
+  sources = [
+    "math_calculator.mojom",
+    "no_module.mojom",
+    "ping_service.mojom",
+    "rect.mojom",
+    "regression_tests.mojom",
+    "sample_factory.mojom",
+    "sample_import.mojom",
+    "sample_import2.mojom",
+    "sample_interfaces.mojom",
+    "sample_service.mojom",
+    "scoping.mojom",
+    "serialization_test_structs.mojom",
+    "test_constants.mojom",
+    "test_native_types.mojom",
+    "test_structs.mojom",
+    "validation_test_interfaces.mojom",
+  ]
+
+  with_environment = false
+}
+
+mojom("test_interfaces_experimental") {
+  testonly = true
+  sources = [
+    "test_unions.mojom",
+  ]
+
+  with_environment = false
+}
+
+mojom("test_associated_interfaces") {
+  # These files are not included in the test_interfaces target because
+  # associated interfaces are not supported by all bindings languages yet.
+  testonly = true
+  sources = [
+    "test_associated_interfaces.mojom",
+    "validation_test_associated_interfaces.mojom",
+  ]
+
+  with_environment = false
+}
+
+mojom("versioning_test_service_interfaces") {
+  # FIXME: Dart packaged applications cannot depend on testonly mojoms.
+  # testonly = true
+  sources = [
+    "versioning_test_service.mojom",
+  ]
+
+  with_environment = false
+}
+
+mojom("versioning_test_client_interfaces") {
+  # FIXME: Dart packaged applications cannot depend on testonly mojoms.
+  # testonly = true
+  sources = [
+    "versioning_test_client.mojom",
+  ]
+
+  with_environment = false
+}
+
+mojom("test_interfaces_chromium") {
+  testonly = true
+
+  sources = [
+    "test_native_types.mojom",
+  ]
+
+  variant = "chromium"
+  typemaps = [ "chromium_test.typemap" ]
+
+  with_environment = false
+
+  public_deps = [
+    ":test_interfaces",
+  ]
+}
+
+mojom("test_interfaces_blink") {
+  testonly = true
+
+  sources = [
+    "test_native_types.mojom",
+  ]
+
+  variant = "blink"
+  typemaps = [ "blink_test.typemap" ]
+
+  with_environment = false
+
+  public_deps = [
+    ":test_interfaces",
+  ]
+}

@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_TEST_RUNNER_EVENT_SENDER_H_
 #define COMPONENTS_TEST_RUNNER_EVENT_SENDER_H_
 
+#include <stdint.h>
+
 #include <queue>
 #include <string>
 #include <vector>
@@ -15,6 +17,7 @@
 #include "build/build_config.h"
 #include "components/test_runner/web_task.h"
 #include "third_party/WebKit/public/platform/WebDragData.h"
+#include "third_party/WebKit/public/platform/WebInputEventResult.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/web/WebDragOperation.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
@@ -60,6 +63,8 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
 
   void MouseDown(int button_number, int modifiers);
   void MouseUp(int button_number, int modifiers);
+  void SetMouseButtonState(int button_number, int modifiers);
+
   void KeyDown(const std::string& code_str,
                int modifiers,
                KeyLocationCode location);
@@ -101,7 +106,7 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
 
   void ClearTouchPoints();
   void ReleaseTouchPoint(unsigned index);
-  void UpdateTouchPoint(unsigned index, float x, float y);
+  void UpdateTouchPoint(unsigned index, float x, float y, gin::Arguments* args);
   void CancelTouchPoint(unsigned index);
   void SetTouchModifier(const std::string& key_name, bool set_mask);
   void SetTouchCancelable(bool cancelable);
@@ -127,7 +132,7 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
 
   void BeginDragWithFiles(const std::vector<std::string>& files);
 
-  void AddTouchPoint(gin::Arguments* args);
+  void AddTouchPoint(float x, float y, gin::Arguments* args);
 
   void MouseDragBegin();
   void MouseDragEnd();
@@ -153,10 +158,6 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
   void TrackpadScroll(gin::Arguments* args);
   void TrackpadScrollEnd();
   void MouseScrollBy(gin::Arguments* args);
-  void MouseMomentumBegin();
-  void MouseMomentumBegin2(gin::Arguments* args);
-  void MouseMomentumScrollBy(gin::Arguments* args);
-  void MouseMomentumEnd();
   void ScheduleAsynchronousClick(int button_number, int modifiers);
   void ScheduleAsynchronousKeyDown(const std::string& code_str,
                                    int modifiers,
@@ -176,13 +177,20 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
   void InitMouseWheelEvent(gin::Arguments* args,
                            bool continuous,
                            blink::WebMouseWheelEvent* event);
+  void InitPointerProperties(gin::Arguments* args,
+                             blink::WebPointerProperties* e,
+                             float* radius_x,
+                             float* radius_y);
 
   void FinishDragAndDrop(const blink::WebMouseEvent&, blink::WebDragOperation);
 
   void DoMouseUp(const blink::WebMouseEvent&);
   void DoMouseMove(const blink::WebMouseEvent&);
   void ReplaySavedEvents();
-  bool HandleInputEventOnViewOrPopup(const blink::WebInputEvent&);
+  blink::WebInputEventResult HandleInputEventOnViewOrPopup(
+      const blink::WebInputEvent&);
+
+  double last_event_timestamp() { return last_event_timestamp_; }
 
   bool force_layout_on_events() const { return force_layout_on_events_; }
   void set_force_layout_on_events(bool force) {
@@ -254,8 +262,13 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
   // Location of the touch point that initiated a gesture.
   blink::WebPoint current_gesture_location_;
 
-  // Currently pressed mouse button (Left/Right/Middle or None).
+  // Last pressed mouse button (Left/Right/Middle or None).
   static blink::WebMouseEvent::Button pressed_button_;
+
+  // A bitwise OR of the WebMouseEvent::*ButtonDown values corresponding to
+  // currently pressed buttons of mouse.
+  static int current_buttons_;
+
   static int modifiers_;
 
   bool replaying_saved_events_;
@@ -277,8 +290,10 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
 
   blink::WebDragOperation current_drag_effect_;
 
-  uint32 time_offset_ms_;
+  uint32_t time_offset_ms_;
   int click_count_;
+  // Timestamp (in seconds) of the last event that was dispatched
+  double last_event_timestamp_;
 
   base::WeakPtrFactory<EventSender> weak_factory_;
 

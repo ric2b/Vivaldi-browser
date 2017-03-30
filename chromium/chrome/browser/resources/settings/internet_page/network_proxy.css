@@ -6,23 +6,27 @@
   display: inline-block;
 }
 
+#selectTypeDiv {
+  margin: 10px 0;
+}
+
 select {
-  font-size: 16px;
-  margin-bottom: 10px;
-  margin-top: 10px;
   padding: 5px;
 }
 
 span {
-  @apply(--paper-font-subhead);
-  @apply(--paper-input-container-input);
   margin: 5px;
 }
 
-cr-checkbox {
+cr-policy-network-indicator {
+  -webkit-margin-end: 10px;
+  mwrgin-bottom: 5px;
+}
+
+paper-checkbox {
   margin-bottom: 10px;
 }
 
-cr-input {
+paper-input {
   margin: -9px 5px 0 5px;
 }

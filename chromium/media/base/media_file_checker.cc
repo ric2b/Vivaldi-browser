@@ -4,7 +4,10 @@
 
 #include "media/base/media_file_checker.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <map>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/time/time.h"
@@ -15,20 +18,19 @@
 
 namespace media {
 
-static const int64 kMaxCheckTimeInSeconds = 5;
+static const int64_t kMaxCheckTimeInSeconds = 5;
 
 static void OnError(bool* called) {
   *called = false;
 }
 
-MediaFileChecker::MediaFileChecker(base::File file) : file_(file.Pass()) {
-}
+MediaFileChecker::MediaFileChecker(base::File file) : file_(std::move(file)) {}
 
 MediaFileChecker::~MediaFileChecker() {
 }
 
 bool MediaFileChecker::Start(base::TimeDelta check_time) {
-  media::FileDataSource source(file_.Pass());
+  media::FileDataSource source(std::move(file_));
   bool read_ok = true;
   media::BlockingUrlProtocol protocol(&source, base::Bind(&OnError, &read_ok));
   media::FFmpegGlue glue(&protocol);
@@ -66,14 +68,11 @@ bool MediaFileChecker::Start(base::TimeDelta check_time) {
     result = av_read_frame(glue.format_context(), &packet);
     if (result < 0)
       break;
-    result = av_dup_packet(&packet);
-    if (result < 0)
-      break;
 
     std::map<int, AVCodecContext*>::const_iterator it =
         stream_contexts.find(packet.stream_index);
     if (it == stream_contexts.end()) {
-      av_free_packet(&packet);
+      av_packet_unref(&packet);
       continue;
     }
     AVCodecContext* av_context = it->second;
@@ -81,7 +80,7 @@ bool MediaFileChecker::Start(base::TimeDelta check_time) {
     int frame_decoded = 0;
     if (av_context->codec_type == AVMEDIA_TYPE_AUDIO) {
       // A shallow copy of packet so we can slide packet.data as frames are
-      // decoded; otherwise av_free_packet() will corrupt memory.
+      // decoded; otherwise av_packet_unref() will corrupt memory.
       AVPacket temp_packet = packet;
       do {
         result = avcodec_decode_audio4(av_context, frame.get(), &frame_decoded,
@@ -99,7 +98,7 @@ bool MediaFileChecker::Start(base::TimeDelta check_time) {
       if (result >= 0 && frame_decoded)
         av_frame_unref(frame.get());
     }
-    av_free_packet(&packet);
+    av_packet_unref(&packet);
   } while (base::TimeTicks::Now() < deadline && read_ok && result >= 0);
 
   return read_ok && (result == AVERROR_EOF || result >= 0);

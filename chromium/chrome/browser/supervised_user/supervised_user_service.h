@@ -5,24 +5,29 @@
 #ifndef CHROME_BROWSER_SUPERVISED_USER_SUPERVISED_USER_SERVICE_H_
 #define CHROME_BROWSER_SUPERVISED_USER_SUPERVISED_USER_SERVICE_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/supervised_user/experimental/supervised_user_blacklist.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 #include "chrome/browser/supervised_user/supervised_users.h"
-#include "chrome/browser/sync/sync_type_preference_provider.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync_driver/sync_service_observer.h"
+#include "components/sync_driver/sync_type_preference_provider.h"
 #include "net/url_request/url_request_context_getter.h"
 
 #if defined(ENABLE_EXTENSIONS)
@@ -30,10 +35,10 @@
 #endif
 
 class Browser;
+class FileDownloader;
 class GoogleServiceAuthError;
 class PermissionRequestCreator;
 class Profile;
-class SupervisedUserBlacklistDownloader;
 class SupervisedUserRegistrationUtility;
 class SupervisedUserServiceObserver;
 class SupervisedUserSettingsService;
@@ -66,8 +71,10 @@ class SupervisedUserService : public KeyedService,
                               public extensions::ManagementPolicy::Provider,
 #endif
                               public SyncTypePreferenceProvider,
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
                               public sync_driver::SyncServiceObserver,
                               public chrome::BrowserListObserver,
+#endif
                               public SupervisedUserURLFilter::Observer {
  public:
   using NavigationBlockedCallback = base::Callback<void(content::WebContents*)>;
@@ -84,10 +91,10 @@ class SupervisedUserService : public KeyedService,
 
   ~SupervisedUserService() override;
 
-  // ProfileKeyedService override:
-  void Shutdown() override;
-
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+  // Initializes this object.
+  void Init();
 
   void SetDelegate(Delegate* delegate);
 
@@ -114,6 +121,16 @@ class SupervisedUserService : public KeyedService,
                                  const base::Version& version,
                                  const SuccessCallback& callback);
 
+  // Same as above, but without a callback, just logging errors on failure.
+  void AddExtensionUpdateRequest(const std::string& extension_id,
+                                 const base::Version& version);
+
+  // Get the string used to identify an extension update request. Public for
+  // testing.
+  static std::string GetExtensionUpdateRequestId(
+      const std::string& extension_id,
+      const base::Version& version);
+
   // Returns the email address of the custodian.
   std::string GetCustodianEmailAddress() const;
 
@@ -129,9 +146,11 @@ class SupervisedUserService : public KeyedService,
   // is empty, or the empty string is there is no second custodian.
   std::string GetSecondCustodianName() const;
 
-  // Initializes this object.
-  void Init();
+  // Returns a message saying that extensions can only be modified by the
+  // custodian.
+  base::string16 GetExtensionsLockedMessage() const;
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
   // Initializes this profile for syncing, using the provided |refresh_token| to
   // mint access tokens for Sync.
   void InitSync(const std::string& refresh_token);
@@ -146,6 +165,7 @@ class SupervisedUserService : public KeyedService,
       Profile* custodian_profile,
       const std::string& supervised_user_id,
       const AuthErrorCallback& callback);
+#endif
 
   void AddNavigationBlockedCallback(const NavigationBlockedCallback& callback);
   void DidBlockNavigation(content::WebContents* web_contents);
@@ -156,14 +176,19 @@ class SupervisedUserService : public KeyedService,
   void AddPermissionRequestCreator(
       scoped_ptr<PermissionRequestCreator> creator);
 
+  // ProfileKeyedService override:
+  void Shutdown() override;
+
   // SyncTypePreferenceProvider implementation:
   syncer::ModelTypeSet GetPreferredDataTypes() const override;
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
   // sync_driver::SyncServiceObserver implementation:
   void OnStateChanged() override;
 
   // chrome::BrowserListObserver implementation:
   void OnBrowserSetLastActive(Browser* browser) override;
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
   // SupervisedUserURLFilter::Observer implementation:
   void OnSiteListUpdated() override;
@@ -198,13 +223,17 @@ class SupervisedUserService : public KeyedService,
         SupervisedUserURLFilter::FilteringBehavior behavior);
     void LoadWhitelists(
         const std::vector<scoped_refptr<SupervisedUserSiteList>>& site_lists);
-    void LoadBlacklist(const base::FilePath& path,
-                       const base::Closure& callback);
+    // TODO(treib): Make SupervisedUserBlacklist refcounted, so the IO thread
+    // will retain a reference to the blacklist.
+    void SetBlacklist(const SupervisedUserBlacklist* blacklist);
+    bool HasBlacklist() const;
     void SetManualHosts(scoped_ptr<std::map<std::string, bool>> host_map);
     void SetManualURLs(scoped_ptr<std::map<GURL, bool>> url_map);
 
     void InitAsyncURLChecker(
         const scoped_refptr<net::URLRequestContextGetter>& context);
+    bool HasAsyncURLChecker() const;
+    void ClearAsyncURLChecker();
 
     void Clear();
 
@@ -220,8 +249,6 @@ class SupervisedUserService : public KeyedService,
     scoped_refptr<SupervisedUserURLFilter> ui_url_filter_;
     scoped_refptr<SupervisedUserURLFilter> io_url_filter_;
 
-    SupervisedUserBlacklist blacklist_;
-
     DISALLOW_COPY_AND_ASSIGN(URLFilterContext);
   };
 
@@ -231,6 +258,7 @@ class SupervisedUserService : public KeyedService,
 
   void SetActive(bool active);
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
   void OnCustodianProfileDownloaded(const base::string16& full_name);
 
   void OnSupervisedUserRegistered(const AuthErrorCallback& callback,
@@ -242,6 +270,7 @@ class SupervisedUserService : public KeyedService,
   void StartSetupSync();
   void FinishSetupSyncWhenReady();
   void FinishSetupSync();
+#endif
 
   bool ProfileIsSupervised() const;
 
@@ -278,6 +307,8 @@ class SupervisedUserService : public KeyedService,
 
   void OnDefaultFilteringBehaviorChanged();
 
+  void OnSafeSitesSettingChanged();
+
   void OnSiteListsChanged(
       const std::vector<scoped_refptr<SupervisedUserSiteList>>& site_lists);
 
@@ -297,6 +328,8 @@ class SupervisedUserService : public KeyedService,
   void OnBlacklistDownloadDone(const base::FilePath& path, bool success);
 
   void OnBlacklistLoaded();
+
+  void UpdateBlacklist();
 
   // Updates the manual overrides for hosts in the URL filters when the
   // corresponding preference is changed.
@@ -344,7 +377,15 @@ class SupervisedUserService : public KeyedService,
   bool did_shutdown_;
 
   URLFilterContext url_filter_context_;
-  scoped_ptr<SupervisedUserBlacklistDownloader> blacklist_downloader_;
+
+  enum class BlacklistLoadState {
+    NOT_LOADED,
+    LOAD_STARTED,
+    LOADED
+  } blacklist_state_;
+
+  SupervisedUserBlacklist blacklist_;
+  scoped_ptr<FileDownloader> blacklist_downloader_;
 
   scoped_ptr<SupervisedUserWhitelistService> whitelist_service_;
 

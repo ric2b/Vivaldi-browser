@@ -4,22 +4,20 @@
 
 #include "components/webcrypto/jwk.h"
 
+#include <stddef.h>
+
 #include <set>
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
+#include "components/webcrypto/algorithms/util.h"
 #include "components/webcrypto/crypto_data.h"
 #include "components/webcrypto/status.h"
-#include "components/webcrypto/webcrypto_util.h"
-
-// TODO(eroman): The algorithm-specific logic in this file for AES and RSA
-// should be moved into the corresponding AlgorithmImplementation file. It
-// exists in this file to avoid duplication between OpenSSL and NSS
-// implementations.
 
 // JSON Web Key Format (JWK) is defined by:
 // http://tools.ietf.org/html/draft-ietf-jose-json-web-key
@@ -99,7 +97,7 @@ scoped_ptr<base::ListValue> CreateJwkKeyOpsFromWebCryptoUsages(
     if (usages & kJwkWebCryptoUsageMap[i].webcrypto_usage)
       jwk_key_ops->AppendString(kJwkWebCryptoUsageMap[i].jwk_key_op);
   }
-  return jwk_key_ops.Pass();
+  return jwk_key_ops;
 }
 
 // Composes a Web Crypto usage mask from an array of JWK key_ops values.
@@ -288,8 +286,13 @@ Status JwkReader::GetBytes(const std::string& member_name,
   if (status.IsError())
     return status;
 
-  if (!Base64DecodeUrlSafe(base64_string, result))
+  // The JSON web signature spec says that padding is omitted.
+  // https://tools.ietf.org/html/draft-ietf-jose-json-web-signature-36#section-2
+  if (!base::Base64UrlDecode(base64_string,
+                             base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+                             result)) {
     return Status::ErrorJwkBase64Decode(member_name);
+  }
 
   return Status::Success();
 }
@@ -362,251 +365,21 @@ void JwkWriter::SetString(const std::string& member_name,
 
 void JwkWriter::SetBytes(const std::string& member_name,
                          const CryptoData& value) {
-  dict_.SetString(member_name, Base64EncodeUrlSafe(base::StringPiece(
-                                   reinterpret_cast<const char*>(value.bytes()),
-                                   value.byte_length())));
+  // The JSON web signature spec says that padding is omitted.
+  // https://tools.ietf.org/html/draft-ietf-jose-json-web-signature-36#section-2
+  std::string base64url_encoded;
+  base::Base64UrlEncode(
+      base::StringPiece(reinterpret_cast<const char*>(value.bytes()),
+                        value.byte_length()),
+      base::Base64UrlEncodePolicy::OMIT_PADDING, &base64url_encoded);
+
+  dict_.SetString(member_name, base64url_encoded);
 }
 
 void JwkWriter::ToJson(std::vector<uint8_t>* utf8_bytes) const {
   std::string json;
   base::JSONWriter::Write(dict_, &json);
   utf8_bytes->assign(json.begin(), json.end());
-}
-
-Status ReadSecretKeyNoExpectedAlg(const CryptoData& key_data,
-                                  bool expected_extractable,
-                                  blink::WebCryptoKeyUsageMask expected_usages,
-                                  std::vector<uint8_t>* raw_key_data,
-                                  JwkReader* jwk) {
-  Status status = jwk->Init(key_data, expected_extractable, expected_usages,
-                            "oct", std::string());
-  if (status.IsError())
-    return status;
-
-  std::string jwk_k_value;
-  status = jwk->GetBytes("k", &jwk_k_value);
-  if (status.IsError())
-    return status;
-  raw_key_data->assign(jwk_k_value.begin(), jwk_k_value.end());
-
-  return Status::Success();
-}
-
-void WriteSecretKeyJwk(const CryptoData& raw_key_data,
-                       const std::string& algorithm,
-                       bool extractable,
-                       blink::WebCryptoKeyUsageMask usages,
-                       std::vector<uint8_t>* jwk_key_data) {
-  JwkWriter writer(algorithm, extractable, usages, "oct");
-  writer.SetBytes("k", raw_key_data);
-  writer.ToJson(jwk_key_data);
-}
-
-Status ReadSecretKeyJwk(const CryptoData& key_data,
-                        const std::string& expected_alg,
-                        bool expected_extractable,
-                        blink::WebCryptoKeyUsageMask expected_usages,
-                        std::vector<uint8_t>* raw_key_data) {
-  JwkReader jwk;
-  Status status = ReadSecretKeyNoExpectedAlg(
-      key_data, expected_extractable, expected_usages, raw_key_data, &jwk);
-  if (status.IsError())
-    return status;
-  return jwk.VerifyAlg(expected_alg);
-}
-
-std::string MakeJwkAesAlgorithmName(const std::string& suffix,
-                                    size_t keylen_bytes) {
-  if (keylen_bytes == 16)
-    return std::string("A128") + suffix;
-  if (keylen_bytes == 24)
-    return std::string("A192") + suffix;
-  if (keylen_bytes == 32)
-    return std::string("A256") + suffix;
-  return std::string();
-}
-
-Status ReadAesSecretKeyJwk(const CryptoData& key_data,
-                           const std::string& algorithm_name_suffix,
-                           bool expected_extractable,
-                           blink::WebCryptoKeyUsageMask expected_usages,
-                           std::vector<uint8_t>* raw_key_data) {
-  JwkReader jwk;
-  Status status = ReadSecretKeyNoExpectedAlg(
-      key_data, expected_extractable, expected_usages, raw_key_data, &jwk);
-  if (status.IsError())
-    return status;
-
-  bool has_jwk_alg;
-  std::string jwk_alg;
-  status = jwk.GetAlg(&jwk_alg, &has_jwk_alg);
-  if (status.IsError())
-    return status;
-
-  if (has_jwk_alg) {
-    std::string expected_algorithm_name =
-        MakeJwkAesAlgorithmName(algorithm_name_suffix, raw_key_data->size());
-
-    if (jwk_alg != expected_algorithm_name) {
-      // Give a different error message if the key length was wrong.
-      if (jwk_alg == MakeJwkAesAlgorithmName(algorithm_name_suffix, 16) ||
-          jwk_alg == MakeJwkAesAlgorithmName(algorithm_name_suffix, 24) ||
-          jwk_alg == MakeJwkAesAlgorithmName(algorithm_name_suffix, 32)) {
-        return Status::ErrorJwkIncorrectKeyLength();
-      }
-      return Status::ErrorJwkAlgorithmInconsistent();
-    }
-  }
-
-  return Status::Success();
-}
-
-// Writes an RSA public key to a JWK dictionary
-void WriteRsaPublicKeyJwk(const CryptoData& n,
-                          const CryptoData& e,
-                          const std::string& algorithm,
-                          bool extractable,
-                          blink::WebCryptoKeyUsageMask usages,
-                          std::vector<uint8_t>* jwk_key_data) {
-  JwkWriter writer(algorithm, extractable, usages, "RSA");
-  writer.SetBytes("n", n);
-  writer.SetBytes("e", e);
-  writer.ToJson(jwk_key_data);
-}
-
-// Writes an RSA private key to a JWK dictionary
-void WriteRsaPrivateKeyJwk(const CryptoData& n,
-                           const CryptoData& e,
-                           const CryptoData& d,
-                           const CryptoData& p,
-                           const CryptoData& q,
-                           const CryptoData& dp,
-                           const CryptoData& dq,
-                           const CryptoData& qi,
-                           const std::string& algorithm,
-                           bool extractable,
-                           blink::WebCryptoKeyUsageMask usages,
-                           std::vector<uint8_t>* jwk_key_data) {
-  JwkWriter writer(algorithm, extractable, usages, "RSA");
-
-  writer.SetBytes("n", n);
-  writer.SetBytes("e", e);
-  writer.SetBytes("d", d);
-  // Although these are "optional" in the JWA, WebCrypto spec requires them to
-  // be emitted.
-  writer.SetBytes("p", p);
-  writer.SetBytes("q", q);
-  writer.SetBytes("dp", dp);
-  writer.SetBytes("dq", dq);
-  writer.SetBytes("qi", qi);
-  writer.ToJson(jwk_key_data);
-}
-
-JwkRsaInfo::JwkRsaInfo() : is_private_key(false) {
-}
-
-JwkRsaInfo::~JwkRsaInfo() {
-}
-
-Status ReadRsaKeyJwk(const CryptoData& key_data,
-                     const std::string& expected_alg,
-                     bool expected_extractable,
-                     blink::WebCryptoKeyUsageMask expected_usages,
-                     JwkRsaInfo* result) {
-  JwkReader jwk;
-  Status status = jwk.Init(key_data, expected_extractable, expected_usages,
-                           "RSA", expected_alg);
-  if (status.IsError())
-    return status;
-
-  // An RSA public key must have an "n" (modulus) and an "e" (exponent) entry
-  // in the JWK, while an RSA private key must have those, plus at least a "d"
-  // (private exponent) entry.
-  // See http://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-18,
-  // section 6.3.
-  status = jwk.GetBigInteger("n", &result->n);
-  if (status.IsError())
-    return status;
-  status = jwk.GetBigInteger("e", &result->e);
-  if (status.IsError())
-    return status;
-
-  result->is_private_key = jwk.HasMember("d");
-  if (!result->is_private_key)
-    return Status::Success();
-
-  status = jwk.GetBigInteger("d", &result->d);
-  if (status.IsError())
-    return status;
-
-  // The "p", "q", "dp", "dq", and "qi" properties are optional in the JWA
-  // spec. However they are required by Chromium's WebCrypto implementation.
-
-  status = jwk.GetBigInteger("p", &result->p);
-  if (status.IsError())
-    return status;
-
-  status = jwk.GetBigInteger("q", &result->q);
-  if (status.IsError())
-    return status;
-
-  status = jwk.GetBigInteger("dp", &result->dp);
-  if (status.IsError())
-    return status;
-
-  status = jwk.GetBigInteger("dq", &result->dq);
-  if (status.IsError())
-    return status;
-
-  status = jwk.GetBigInteger("qi", &result->qi);
-  if (status.IsError())
-    return status;
-
-  return Status::Success();
-}
-
-const char* GetJwkHmacAlgorithmName(blink::WebCryptoAlgorithmId hash) {
-  switch (hash) {
-    case blink::WebCryptoAlgorithmIdSha1:
-      return "HS1";
-    case blink::WebCryptoAlgorithmIdSha256:
-      return "HS256";
-    case blink::WebCryptoAlgorithmIdSha384:
-      return "HS384";
-    case blink::WebCryptoAlgorithmIdSha512:
-      return "HS512";
-    default:
-      return NULL;
-  }
-}
-
-bool Base64DecodeUrlSafe(const std::string& input, std::string* output) {
-  // The JSON web signature spec specifically says that padding is omitted.
-  if (input.find_first_of("+/=") != std::string::npos)
-    return false;
-
-  std::string base64_encoded_text(input);
-  std::replace(base64_encoded_text.begin(), base64_encoded_text.end(), '-',
-               '+');
-  std::replace(base64_encoded_text.begin(), base64_encoded_text.end(), '_',
-               '/');
-  base64_encoded_text.append((4 - base64_encoded_text.size() % 4) % 4, '=');
-  return base::Base64Decode(base64_encoded_text, output);
-}
-
-std::string Base64EncodeUrlSafe(const base::StringPiece& input) {
-  std::string output;
-  base::Base64Encode(input, &output);
-  std::replace(output.begin(), output.end(), '+', '-');
-  std::replace(output.begin(), output.end(), '/', '_');
-  output.erase(std::remove(output.begin(), output.end(), '='), output.end());
-  return output;
-}
-
-std::string Base64EncodeUrlSafe(const std::vector<uint8_t>& input) {
-  const base::StringPiece string_piece(
-      reinterpret_cast<const char*>(vector_as_array(&input)), input.size());
-  return Base64EncodeUrlSafe(string_piece);
 }
 
 Status GetWebCryptoUsagesFromJwkKeyOpsForTest(

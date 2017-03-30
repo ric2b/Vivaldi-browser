@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "sync/base/sync_export.h"
@@ -36,12 +36,12 @@ namespace sessions {
 
 class NudgeTracker;
 
-class SYNC_EXPORT_PRIVATE SyncSession {
+class SYNC_EXPORT SyncSession {
  public:
   // The Delegate services events that occur during the session requiring an
   // explicit (and session-global) action, as opposed to events that are simply
   // recorded in per-session state.
-  class SYNC_EXPORT_PRIVATE Delegate {
+  class SYNC_EXPORT Delegate {
    public:
     // The client was throttled and should cease-and-desist syncing activity
     // until the specified time.

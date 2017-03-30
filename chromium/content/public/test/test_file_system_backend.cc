@@ -6,10 +6,12 @@
 
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequenced_task_runner.h"
@@ -93,21 +95,22 @@ class TestFileSystemBackend::QuotaUtil : public storage::FileSystemQuotaUtil,
     NOTREACHED();
   }
 
-  int64 GetOriginUsageOnFileTaskRunner(FileSystemContext* context,
-                                       const GURL& origin_url,
-                                       storage::FileSystemType type) override {
+  int64_t GetOriginUsageOnFileTaskRunner(
+      FileSystemContext* context,
+      const GURL& origin_url,
+      storage::FileSystemType type) override {
     return usage_;
   }
 
   // FileUpdateObserver overrides.
   void OnStartUpdate(const FileSystemURL& url) override {}
-  void OnUpdate(const FileSystemURL& url, int64 delta) override {
+  void OnUpdate(const FileSystemURL& url, int64_t delta) override {
     usage_ += delta;
   }
   void OnEndUpdate(const FileSystemURL& url) override {}
 
  private:
-  int64 usage_;
+  int64_t usage_;
   DISALLOW_COPY_AND_ASSIGN(QuotaUtil);
 };
 
@@ -169,7 +172,7 @@ TestFileSystemBackend::GetCopyOrMoveFileValidatorFactory(
 void TestFileSystemBackend::InitializeCopyOrMoveFileValidatorFactory(
     scoped_ptr<storage::CopyOrMoveFileValidatorFactory> factory) {
   if (!copy_or_move_file_validator_factory_)
-    copy_or_move_file_validator_factory_ = factory.Pass();
+    copy_or_move_file_validator_factory_ = std::move(factory);
 }
 
 FileSystemOperation* TestFileSystemBackend::CreateFileSystemOperation(
@@ -180,7 +183,8 @@ FileSystemOperation* TestFileSystemBackend::CreateFileSystemOperation(
       new FileSystemOperationContext(context));
   operation_context->set_update_observers(*GetUpdateObservers(url.type()));
   operation_context->set_change_observers(*GetChangeObservers(url.type()));
-  return FileSystemOperation::Create(url, context, operation_context.Pass());
+  return FileSystemOperation::Create(url, context,
+                                     std::move(operation_context));
 }
 
 bool TestFileSystemBackend::SupportsStreaming(
@@ -196,8 +200,8 @@ bool TestFileSystemBackend::HasInplaceCopyImplementation(
 scoped_ptr<storage::FileStreamReader>
 TestFileSystemBackend::CreateFileStreamReader(
     const FileSystemURL& url,
-    int64 offset,
-    int64 max_bytes_to_read,
+    int64_t offset,
+    int64_t max_bytes_to_read,
     const base::Time& expected_modification_time,
     FileSystemContext* context) const {
   return scoped_ptr<storage::FileStreamReader>(
@@ -208,7 +212,7 @@ TestFileSystemBackend::CreateFileStreamReader(
 scoped_ptr<storage::FileStreamWriter>
 TestFileSystemBackend::CreateFileStreamWriter(
     const FileSystemURL& url,
-    int64 offset,
+    int64_t offset,
     FileSystemContext* context) const {
   return scoped_ptr<storage::FileStreamWriter>(
       new storage::SandboxFileStreamWriter(

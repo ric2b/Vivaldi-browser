@@ -4,16 +4,16 @@
 
 #include "content/browser/site_instance_impl.h"
 
-#include "base/command_line.h"
 #include "content/browser/browsing_instance.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/frame_host/debug_urls.h"
+#include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host_factory.h"
 #include "content/public/browser/web_ui_controller_factory.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 
@@ -21,7 +21,7 @@ namespace content {
 
 const RenderProcessHostFactory*
     SiteInstanceImpl::g_render_process_host_factory_ = NULL;
-int32 SiteInstanceImpl::next_site_instance_id_ = 1;
+int32_t SiteInstanceImpl::next_site_instance_id_ = 1;
 
 SiteInstanceImpl::SiteInstanceImpl(BrowsingInstance* browsing_instance)
     : id_(next_site_instance_id_++),
@@ -46,7 +46,7 @@ SiteInstanceImpl::~SiteInstanceImpl() {
         static_cast<SiteInstance*>(this));
 }
 
-int32 SiteInstanceImpl::GetId() {
+int32_t SiteInstanceImpl::GetId() {
   return id_;
 }
 
@@ -211,12 +211,36 @@ bool SiteInstanceImpl::HasWrongProcessForURL(const GURL& url) {
       GetProcess(), browsing_instance_->browser_context(), site_url);
 }
 
+bool SiteInstanceImpl::RequiresDedicatedProcess() {
+  if (!has_site_)
+    return false;
+  return SiteInstanceImpl::DoesSiteRequireDedicatedProcess(GetBrowserContext(),
+                                                           site_);
+}
+
+void SiteInstanceImpl::IncrementActiveFrameCount() {
+  active_frame_count_++;
+}
+
+void SiteInstanceImpl::DecrementActiveFrameCount() {
+  if (--active_frame_count_ == 0)
+    FOR_EACH_OBSERVER(Observer, observers_, ActiveFrameCountIsZero(this));
+}
+
 void SiteInstanceImpl::IncrementRelatedActiveContentsCount() {
   browsing_instance_->increment_active_contents_count();
 }
 
 void SiteInstanceImpl::DecrementRelatedActiveContentsCount() {
   browsing_instance_->decrement_active_contents_count();
+}
+
+void SiteInstanceImpl::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void SiteInstanceImpl::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 void SiteInstanceImpl::set_render_process_host_factory(
@@ -228,12 +252,12 @@ BrowserContext* SiteInstanceImpl::GetBrowserContext() const {
   return browsing_instance_->browser_context();
 }
 
-/*static*/
+// static
 SiteInstance* SiteInstance::Create(BrowserContext* browser_context) {
   return new SiteInstanceImpl(new BrowsingInstance(browser_context));
 }
 
-/*static*/
+// static
 SiteInstance* SiteInstance::CreateForURL(BrowserContext* browser_context,
                                          const GURL& url) {
   // This will create a new SiteInstance and BrowsingInstance.
@@ -242,7 +266,7 @@ SiteInstance* SiteInstance::CreateForURL(BrowserContext* browser_context,
   return instance->GetSiteInstanceForURL(url);
 }
 
-/*static*/
+// static
 bool SiteInstance::IsSameWebSite(BrowserContext* browser_context,
                                  const GURL& real_src_url,
                                  const GURL& real_dest_url) {
@@ -282,7 +306,7 @@ bool SiteInstance::IsSameWebSite(BrowserContext* browser_context,
       net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 }
 
-/*static*/
+// static
 GURL SiteInstance::GetSiteForURL(BrowserContext* browser_context,
                                  const GURL& real_url) {
   // TODO(fsamuel, creis): For some reason appID is not recognized as a host.
@@ -327,11 +351,29 @@ GURL SiteInstance::GetSiteForURL(BrowserContext* browser_context,
   return GURL();
 }
 
-/*static*/
+// static
 GURL SiteInstanceImpl::GetEffectiveURL(BrowserContext* browser_context,
                                        const GURL& url) {
   return GetContentClient()->browser()->
       GetEffectiveURL(browser_context, url);
+}
+
+// static
+bool SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
+    BrowserContext* browser_context,
+    const GURL& effective_url) {
+  // If --site-per-process is enabled, site isolation is enabled everywhere.
+  if (SiteIsolationPolicy::UseDedicatedProcessesForAllSites())
+    return true;
+
+  // Let the content embedder enable site isolation for specific URLs.
+  if (GetContentClient()->IsSupplementarySiteIsolationModeEnabled() &&
+      GetContentClient()->browser()->DoesSiteRequireDedicatedProcess(
+          browser_context, effective_url)) {
+    return true;
+  }
+
+  return false;
 }
 
 void SiteInstanceImpl::RenderProcessHostDestroyed(RenderProcessHost* host) {
@@ -340,18 +382,44 @@ void SiteInstanceImpl::RenderProcessHostDestroyed(RenderProcessHost* host) {
   process_ = NULL;
 }
 
+void SiteInstanceImpl::RenderProcessWillExit(RenderProcessHost* host) {
+  // TODO(nick): http://crbug.com/575400 - RenderProcessWillExit might not serve
+  // any purpose here.
+  FOR_EACH_OBSERVER(Observer, observers_, RenderProcessGone(this));
+}
+
+void SiteInstanceImpl::RenderProcessExited(RenderProcessHost* host,
+                                           base::TerminationStatus status,
+                                           int exit_code) {
+  FOR_EACH_OBSERVER(Observer, observers_, RenderProcessGone(this));
+}
+
 void SiteInstanceImpl::LockToOrigin() {
-  // We currently only restrict this process to a particular site if --site-per-
-  // process flag is present.
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kSitePerProcess)) {
+  // TODO(nick): When all sites are isolated, this operation provides strong
+  // protection. If only some sites are isolated, we need additional logic to
+  // prevent the non-isolated sites from requesting resources for isolated
+  // sites. https://crbug.com/509125
+  if (RequiresDedicatedProcess()) {
     // Guest processes cannot be locked to its site because guests always have
     // a fixed SiteInstance. The site of GURLs a guest loads doesn't match that
     // SiteInstance. So we skip locking the guest process to the site.
     // TODO(ncarter): Remove this exclusion once we can make origin lock per
     // RenderFrame routing id.
     if (site_.SchemeIs(content::kGuestScheme))
+      return;
+
+    // TODO(creis, nick) https://crbug.com/510588 Chrome UI pages use the same
+    // site (chrome://chrome), so they can't be locked because the site being
+    // loaded doesn't match the SiteInstance.
+    if (site_.SchemeIs(content::kChromeUIScheme))
+      return;
+
+    // TODO(creis, nick): Until we can handle sites with effective URLs at the
+    // call sites of ChildProcessSecurityPolicy::CanAccessDataForOrigin, we
+    // must give the embedder a chance to exempt some sites to avoid process
+    // kills.
+    if (!GetContentClient()->browser()->ShouldLockToOrigin(
+            browsing_instance_->browser_context(), site_))
       return;
 
     ChildProcessSecurityPolicyImpl* policy =

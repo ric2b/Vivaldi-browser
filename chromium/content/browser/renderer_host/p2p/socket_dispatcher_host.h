@@ -5,11 +5,14 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_P2P_SOCKET_DISPATCHER_HOST_H_
 #define CONTENT_BROWSER_RENDERER_HOST_P2P_SOCKET_DISPATCHER_HOST_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "content/browser/renderer_host/p2p/socket_host_throttler.h"
 #include "content/common/p2p_socket_type.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -71,8 +74,7 @@ class P2PSocketDispatcherHost
   // Handlers for the messages coming from the renderer.
   void OnStartNetworkNotifications();
   void OnStopNetworkNotifications();
-  void OnGetHostAddress(const std::string& host_name,
-                        int32 request_id);
+  void OnGetHostAddress(const std::string& host_name, int32_t request_id);
 
   void OnCreateSocket(P2PSocketType type,
                       int socket_id,
@@ -85,12 +87,19 @@ class P2PSocketDispatcherHost
               const net::IPEndPoint& socket_address,
               const std::vector<char>& data,
               const rtc::PacketOptions& options,
-              uint64 packet_id);
+              uint64_t packet_id);
   void OnSetOption(int socket_id, P2PSocketOption option, int value);
   void OnDestroySocket(int socket_id);
 
   void DoGetNetworkList();
-  void SendNetworkList(const net::NetworkInterfaceList& list);
+  void SendNetworkList(const net::NetworkInterfaceList& list,
+                       const net::IPAddressNumber& default_ipv4_local_address,
+                       const net::IPAddressNumber& default_ipv6_local_address);
+
+  // This connects a UDP socket to a public IP address and gets local
+  // address. Since it binds to the "any" address (0.0.0.0 or ::) internally, it
+  // retrieves the default local address.
+  net::IPAddressNumber GetDefaultLocalAddress(int family);
 
   void OnAddressResolved(DnsRequest* request,
                          const net::IPAddressList& addresses);
@@ -106,6 +115,9 @@ class P2PSocketDispatcherHost
 
   std::set<DnsRequest*> dns_requests_;
   P2PMessageThrottler throttler_;
+
+  net::IPAddressNumber default_ipv4_local_address_;
+  net::IPAddressNumber default_ipv6_local_address_;
 
   bool dump_incoming_rtp_packet_;
   bool dump_outgoing_rtp_packet_;

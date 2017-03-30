@@ -5,13 +5,17 @@
 #ifndef CHROME_BROWSER_CHROMEOS_INPUT_METHOD_MOCK_INPUT_METHOD_ENGINE_H_
 #define CHROME_BROWSER_CHROMEOS_INPUT_METHOD_MOCK_INPUT_METHOD_ENGINE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "chrome/browser/chromeos/input_method/input_method_engine_interface.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
+#include "ui/base/ime/ime_engine_handler_interface.h"
 
 namespace ui {
+class IMEEngineHandlerInterface;
 class KeyEvent;
 
 namespace ime {
@@ -25,15 +29,14 @@ class CompositionText;
 
 namespace input_method {
 class CandidateWindow;
-struct KeyEventHandle;
 }
 
-class MockInputMethodEngine : public InputMethodEngineInterface {
+class MockInputMethodEngine : public ui::IMEEngineHandlerInterface {
  public:
   MockInputMethodEngine();
   ~MockInputMethodEngine() override;
 
-  // InputMethodEngineInterface overrides.
+  // IMEEngineHandlerInterface overrides.
   const std::string& GetActiveComponentId() const override;
   bool SetComposition(int context_id,
                       const char* text,
@@ -76,11 +79,12 @@ class MockInputMethodEngine : public InputMethodEngineInterface {
   void Reset() override;
   bool IsInterestedInKeyEvent() const override;
   void ProcessKeyEvent(const ui::KeyEvent& key_event,
-                       const KeyEventDoneCallback& callback) override;
-  void CandidateClicked(uint32 index) override;
+                       KeyEventDoneCallback& callback) override;
+  void CandidateClicked(uint32_t index) override;
   void SetSurroundingText(const std::string& text,
-                          uint32 cursor_pos,
-                          uint32 anchor_pos) override;
+                          uint32_t cursor_pos,
+                          uint32_t anchor_pos,
+                          uint32_t offset_pos) override;
   void SetCompositionBounds(const std::vector<gfx::Rect>& bounds) override;
   void HideInputView() override;
 

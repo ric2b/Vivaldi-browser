@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "tools/gn/err.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/functions.h"
@@ -174,7 +176,7 @@ const char kGetPathInfo_Help[] =
     "\n"
     "  \"abspath\"\n"
     "      The full absolute path name to the file or directory. It will be\n"
-    "      resolved relative to the currebt directory, and then the source-\n"
+    "      resolved relative to the current directory, and then the source-\n"
     "      absolute version will be returned. If the input is system-\n"
     "      absolute, the same input will be returned.\n"
     "        \"foo/bar.txt\" => \"//mydir/foo/bar.txt\"\n"

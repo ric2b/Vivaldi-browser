@@ -13,14 +13,14 @@ import sys
 
 from util import build_utils
 
-BUILD_ANDROID_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
-sys.path.append(BUILD_ANDROID_DIR)
+from devil.android import device_errors
+from devil.android import device_utils
+from devil.android.sdk import adb_wrapper
 
-from pylib import android_commands
-from pylib.device import device_errors
-from pylib.device import device_utils
 
-GetAttachedDevices = android_commands.GetAttachedDevices
+def GetAttachedDevices():
+  return [a.GetDeviceSerial()
+          for a in adb_wrapper.AdbWrapper.Devices()]
 
 
 class BuildDevice(object):
@@ -49,9 +49,9 @@ class BuildDevice(object):
     """Gets the metadata on the device for the apk_package apk."""
     # Matches lines like:
     # -rw-r--r-- system   system    7376582 2013-04-19 16:34 \
-    #   org.chromium.chrome.shell.apk
+    #   org.chromium.chrome.apk
     # -rw-r--r-- system   system    7376582 2013-04-19 16:34 \
-    #   org.chromium.chrome.shell-1.apk
+    #   org.chromium.chrome-1.apk
     apk_matcher = lambda s: re.match('.*%s(-[0-9]*)?.apk$' % apk_package, s)
     matches = filter(apk_matcher, self.install_metadata)
     return matches[0] if matches else None

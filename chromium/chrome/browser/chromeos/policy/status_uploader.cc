@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/policy/status_uploader.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -27,7 +28,7 @@ const int kMinUploadDelayMs = 60 * 1000;  // 60 seconds
 
 namespace policy {
 
-const int64 StatusUploader::kDefaultUploadDelayMs =
+const int64_t StatusUploader::kDefaultUploadDelayMs =
     3 * 60 * 60 * 1000;  // 3 hours
 
 StatusUploader::StatusUploader(
@@ -35,7 +36,7 @@ StatusUploader::StatusUploader(
     scoped_ptr<DeviceStatusCollector> collector,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner)
     : client_(client),
-      collector_(collector.Pass()),
+      collector_(std::move(collector)),
       task_runner_(task_runner),
       upload_frequency_(
           base::TimeDelta::FromMilliseconds(kDefaultUploadDelayMs)),

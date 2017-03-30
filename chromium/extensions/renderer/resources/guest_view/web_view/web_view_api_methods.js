@@ -103,18 +103,7 @@ var WEB_VIEW_API_METHODS = [
   'stopFinding',
 
   // Forcibly kills the guest web page's renderer process.
-  'terminate',
-
-
-  // Vivaldi methods
-  'setVisible',
-  'getThumbnail',
-  'getThumbnailFromService',
-  'addToThumbnailService',
-  'showPageInfo',
-  'setIsFullscreen',
-  'setShowImages',
-  'getPageHistory'
+  'terminate'
 ];
 
 // -----------------------------------------------------------------------------
@@ -206,70 +195,6 @@ WebViewImpl.prototype.setZoom = function(zoomFactor, callback) {
   this.cachedZoomFactor = 1;
   WebViewInternal.setZoom(this.guest.getId(), zoomFactor, callback);
   return true;
-};
-
-WebViewImpl.prototype.setVisible = function (isVisible) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewInternal.setVisible(this.guest.getId(), isVisible);
-};
-
-WebViewImpl.prototype.showPageInfo = function (pos) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewInternal.showPageInfo(this.guest.getId(), pos);
-};
-
-WebViewImpl.prototype.getThumbnail = function (dimensions, callback) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  var args = $Array.concat([this.guest.getId()], $Array.slice(arguments));
-  $Function.apply(WebViewInternal.getThumbnail, null, args);
-};
-
-WebViewImpl.prototype.getThumbnailFromService = function (callback) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewInternal.getThumbnailFromService(this.guest.getId(), callback);
-};
-
-WebViewImpl.prototype.addToThumbnailService = function (key, dimensions, callback) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewInternal.addToThumbnailService(this.guest.getId(), key, dimensions, callback);
-};
-
-WebViewImpl.prototype.setIsFullscreen = function (isFullscreen) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewInternal.setIsFullscreen(this.guest.getId(), isFullscreen);
-};
-
-WebViewImpl.prototype.setShowImages = function (showImages, loadOnlyFromCache, enablePlugins) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewInternal.setShowImages(this.guest.getId(), showImages, loadOnlyFromCache, enablePlugins);
-};
-
-WebViewImpl.prototype.contextMenusCreate = function (createProperties) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewInternal.contextMenusCreate(this.guest.getId(), createProperties);
-};
-
-WebViewImpl.prototype.getPageHistory = function (callback) {
-  if (!this.guest.getId()) {
-      return;
-  }
-  WebViewInternal.getPageHistory(this.guest.getId(), callback);
 };
 
 // -----------------------------------------------------------------------------

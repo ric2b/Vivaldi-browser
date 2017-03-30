@@ -2,11 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/invalidation/impl/gcm_network_channel.h"
+
+#include <utility>
+
+#include "base/base64url.h"
 #include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
-#include "components/invalidation/impl/gcm_network_channel.h"
+#include "build/build_config.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
@@ -81,7 +86,7 @@ class TestGCMNetworkChannel : public GCMNetworkChannel {
   TestGCMNetworkChannel(
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
       scoped_ptr<GCMNetworkChannelDelegate> delegate)
-      :  GCMNetworkChannel(request_context_getter, delegate.Pass()) {
+      : GCMNetworkChannel(request_context_getter, std::move(delegate)) {
     ResetRegisterBackoffEntryForTest(&kTestBackoffPolicy);
   }
 
@@ -137,8 +142,7 @@ class GCMNetworkChannelTest
     delegate_ = new TestGCMNetworkChannelDelegate();
     scoped_ptr<GCMNetworkChannelDelegate> delegate(delegate_);
     gcm_network_channel_.reset(new TestGCMNetworkChannel(
-        request_context_getter_,
-        delegate.Pass()));
+        request_context_getter_, std::move(delegate)));
     gcm_network_channel_->AddObserver(this);
     gcm_network_channel_->SetMessageReceiver(
         invalidation::NewPermanentCallback(
@@ -155,23 +159,12 @@ class GCMNetworkChannelTest
     return gcm_network_channel_->GCMNetworkChannel::BuildUrl(registration_id);
   }
 
-  static void Base64EncodeURLSafe(const std::string& input,
-                                  std::string* output) {
-    GCMNetworkChannel::Base64EncodeURLSafe(input, output);
-  }
-
-  static bool Base64DecodeURLSafe(const std::string& input,
-                                  std::string* output) {
-    return GCMNetworkChannel::Base64DecodeURLSafe(input, output);
-  }
-
   void OnNetworkChannelStateChanged(
       InvalidatorState invalidator_state) override {
     last_invalidator_state_ = invalidator_state;
   }
 
-  void OnIncomingMessage(std::string incoming_message) {
-  }
+  void OnIncomingMessage(std::string /* incoming_message */) {}
 
   GCMNetworkChannel* network_channel() {
     return gcm_network_channel_.get();
@@ -233,7 +226,8 @@ void TestNetworkChannelURLFetcher::AddExtraRequestHeader(
   net::FakeURLFetcher::AddExtraRequestHeader(header_line);
   std::string header_name("echo-token: ");
   std::string echo_token;
-  if (base::StartsWithASCII(header_line, header_name, false)) {
+  if (base::StartsWith(header_line, header_name,
+                       base::CompareCase::INSENSITIVE_ASCII)) {
     echo_token = header_line;
     base::ReplaceFirstSubstringAfterOffset(
         &echo_token, 0, header_name, std::string());
@@ -384,33 +378,6 @@ TEST_F(GCMNetworkChannelTest, RequestTokenNeverCompletes) {
   EXPECT_FALSE(delegate()->request_token_callback.is_null());
 }
 
-TEST_F(GCMNetworkChannelTest, Base64EncodeDecode) {
-  std::string input;
-  std::string plain;
-  std::string base64;
-  // Empty string.
-  Base64EncodeURLSafe(input, &base64);
-  EXPECT_TRUE(base64.empty());
-  EXPECT_TRUE(Base64DecodeURLSafe(base64, &plain));
-  EXPECT_EQ(input, plain);
-  // String length: 1..7.
-  for (int length = 1; length < 8; length++) {
-    input = "abra.cadabra";
-    input.resize(length);
-    Base64EncodeURLSafe(input, &base64);
-    // Ensure no padding at the end.
-    EXPECT_NE(base64[base64.size() - 1], '=');
-    EXPECT_TRUE(Base64DecodeURLSafe(base64, &plain));
-    EXPECT_EQ(input, plain);
-  }
-  // Presence of '-', '_'.
-  input = "\xfb\xff";
-  Base64EncodeURLSafe(input, &base64);
-  EXPECT_EQ("-_8", base64);
-  EXPECT_TRUE(Base64DecodeURLSafe(base64, &plain));
-  EXPECT_EQ(input, plain);
-}
-
 TEST_F(GCMNetworkChannelTest, ChannelState) {
   EXPECT_FALSE(delegate()->message_callback.is_null());
   // POST will fail.
@@ -465,7 +432,9 @@ TEST_F(GCMNetworkChannelTest, BuildUrl) {
   std::vector<std::string> parts = base::SplitString(
       url.path(), "/", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   std::string buffer;
-  EXPECT_TRUE(Base64DecodeURLSafe(parts[parts.size() - 1], &buffer));
+  EXPECT_TRUE(base::Base64UrlDecode(parts.back(),
+                                    base::Base64UrlDecodePolicy::IGNORE_PADDING,
+                                    &buffer));
 }
 
 TEST_F(GCMNetworkChannelTest, EchoToken) {

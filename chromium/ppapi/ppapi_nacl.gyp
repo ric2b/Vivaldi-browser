@@ -13,11 +13,37 @@
   ],
   'targets': [
     {
+      'target_name': 'nacl_elf_loader',
+      'type': 'none',
+      'conditions': [
+        ['target_arch=="arm" and disable_glibc==0', {
+          'dependencies': [
+            '<(DEPTH)/native_client/src/untrusted/elf_loader/elf_loader.gyp:elf_loader_nexe',
+          ],
+          'actions': [
+          {
+            'action_name': 'copy_arm_elf_loader',
+            'message': 'Copying elf_loader_arm.nexe',
+            'inputs': [
+              '<(PRODUCT_DIR)/elf_loader_newlib_arm.nexe',
+            ],
+            'outputs': [
+              '>(tc_lib_dir_glibc_arm)/elf_loader_arm.nexe',
+            ],
+            'action': [
+              'python', '<(DEPTH)/build/cp.py', '>@(_inputs)', '>@(_outputs)'
+            ],
+          }],
+        }],
+      ],
+    },
+    {
       'target_name': 'ppapi_cpp_lib',
       'type': 'none',
       'variables': {
         'nlib_target': 'libppapi_cpp.a',
         'nso_target': 'libppapi_cpp.so',
+        'nacl_untrusted_build': 1,
         'build_glibc': 1,
         'build_newlib': 1,
         'build_pnacl_newlib': 1,
@@ -33,6 +59,7 @@
       'type': 'none',
       'variables': {
         'nlib_target': 'libppapi_gles2.a',
+        'nacl_untrusted_build': 1,
         'nso_target': 'libppapi_gles2.so',
         'build_glibc': 1,
         'build_newlib': 1,
@@ -54,6 +81,7 @@
          '<(DEPTH)/native_client/src/untrusted/nacl/nacl.gyp:nacl_lib',
          '<(DEPTH)/native_client/src/untrusted/pthread/pthread.gyp:pthread_lib',
          'ppapi_cpp_lib',
+         'nacl_elf_loader',
          'native_client/native_client.gyp:ppapi_lib',
       ],
       'variables': {
@@ -76,6 +104,7 @@
           'GL_GLEXT_PROTOTYPES',
         ],
         'nexe_target': 'ppapi_nacl_tests',
+        'nacl_untrusted_build': 1,
         'build_newlib': 1,
         'include_dirs': [
           'lib/gl/include',
@@ -131,15 +160,24 @@
         'extra_args': [
           '--strip-all',
         ],
+        'variables': {
+          'conditions': [
+            ['target_arch=="arm"', {
+              'objdump': '>(nacl_glibc_tc_root)/bin/arm-nacl-objdump'
+            }, {
+              'objdump': '>(nacl_glibc_tc_root)/bin/x86_64-nacl-objdump'
+            }],
+          ]
+        },
         'create_nmf': '<(DEPTH)/native_client_sdk/src/tools/create_nmf.py',
         'create_nmf_flags': [
           '--no-default-libpath',
-          '--objdump=>(nacl_glibc_tc_root)/bin/x86_64-nacl-objdump',
+          '--objdump=<(objdump)',
         ],
         'create_nonsfi_test_nmf': 'tests/create_nonsfi_test_nmf.py',
       },
       'conditions': [
-        ['(target_arch=="ia32" or target_arch=="x64") and disable_glibc==0', {
+        ['target_arch!="mipsel" and disable_glibc==0', {
           'variables': {
             'build_glibc': 1,
             # NOTE: Use /lib, not /lib64 here; it is a symbolic link which
@@ -172,6 +210,13 @@
                   '--library-path=>(tc_lib_dir_glibc32)',
                 ],
                 'inputs': ['>(out_glibc32)'],
+              }],
+              ['target_arch=="arm"', {
+                'action': [
+                  '--library-path=>(nacl_glibc_tc_root)/arm-nacl/lib',
+                  '--library-path=>(tc_lib_dir_glibc_arm)',
+                ],
+                'inputs': ['>(out_glibc_arm)'],
               }],
               ['target_arch=="x64" or (target_arch=="ia32" and OS=="win")', {
                 'action': [

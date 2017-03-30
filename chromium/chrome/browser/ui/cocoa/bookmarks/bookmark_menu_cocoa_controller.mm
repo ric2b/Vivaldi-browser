@@ -9,6 +9,7 @@
 #import "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
+#include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.h"
@@ -42,6 +43,8 @@ const NSUInteger kMaximumMenuPixelsWide = 300;
 
 + (NSString*)tooltipForNode:(const BookmarkNode*)node {
   NSString* title = base::SysUTF16ToNSString(node->GetTitle());
+  if (node->is_folder())
+    return title;
   std::string urlString = node->url().possibly_invalid_spec();
   NSString* url = base::SysUTF8ToNSString(urlString);
   return cocoa_l10n_util::TooltipForURLAndTitle(url, title);

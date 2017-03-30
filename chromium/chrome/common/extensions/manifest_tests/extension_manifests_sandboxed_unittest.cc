@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "chrome/common/extensions/manifest_tests/chrome_manifest_test.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/csp_info.h"
@@ -35,7 +36,8 @@ TEST_F(SandboxedPagesManifestTest, SandboxedPages) {
   scoped_refptr<Extension> extension5(
       LoadAndExpectSuccess("sandboxed_pages_valid_5.json"));
 
-  const char kSandboxedCSP[] = "sandbox allow-scripts allow-forms allow-popups";
+  const char kSandboxedCSP[] =
+      "sandbox allow-scripts allow-forms allow-popups allow-modals";
   const char kDefaultCSP[] =
       "script-src 'self' blob: filesystem: chrome-extension-resource:; "
       "object-src 'self' blob: filesystem:;";

@@ -8,32 +8,51 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/menu_model.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/screen.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 
-ToolbarButton::ToolbarButton(views::ButtonListener* listener,
+ToolbarButton::ToolbarButton(Profile* profile,
+                             views::ButtonListener* listener,
                              ui::MenuModel* model)
     : views::LabelButton(listener, base::string16()),
+      profile_(profile),
       model_(model),
       menu_showing_(false),
       y_position_on_lbuttondown_(0),
+      ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)),
       show_menu_factory_(this) {
+  set_ink_drop_delegate(ink_drop_delegate_.get());
+  set_has_ink_drop_action_on_click(true);
   set_context_menu_controller(this);
+
+  const int kInkDropLargeSize = 32;
+  const int kInkDropLargeCornerRadius = 5;
+  const int kInkDropSmallSize = 24;
+  const int kInkDropSmallCornerRadius = 2;
+  ink_drop_delegate()->SetInkDropSize(
+      kInkDropLargeSize, kInkDropLargeCornerRadius, kInkDropSmallSize,
+      kInkDropSmallCornerRadius);
 }
 
-ToolbarButton::~ToolbarButton() {
-}
+ToolbarButton::~ToolbarButton() {}
 
 void ToolbarButton::Init() {
   SetFocusable(false);
@@ -52,14 +71,27 @@ bool ToolbarButton::IsMenuShowing() const {
 gfx::Size ToolbarButton::GetPreferredSize() const {
   gfx::Size size(image()->GetPreferredSize());
   gfx::Size label_size = label()->GetPreferredSize();
-  if (label_size.width() > 0)
-    size.Enlarge(label_size.width() + LocationBarView::kItemPadding, 0);
+  if (label_size.width() > 0) {
+    size.Enlarge(
+        label_size.width() + GetLayoutConstant(LOCATION_BAR_HORIZONTAL_PADDING),
+        0);
+  }
+  // For non-material assets the entire size of the button is captured in the
+  // image resource. For Material Design the excess whitespace is being removed
+  // from the image assets. Enlarge the button by the theme provided insets.
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    const ui::ThemeProvider* provider = GetThemeProvider();
+    if (provider) {
+      gfx::Insets insets(GetLayoutInsets(TOOLBAR_BUTTON));
+      size.Enlarge(insets.width(), insets.height());
+    }
+  }
   return size;
 }
 
 bool ToolbarButton::OnMousePressed(const ui::MouseEvent& event) {
-  if (enabled() && ShouldShowMenu() &&
-      IsTriggerableEvent(event) && HitTestPoint(event.location())) {
+  if (IsTriggerableEvent(event) && enabled() && ShouldShowMenu() &&
+      HitTestPoint(event.location())) {
     // Store the y pos of the mouse coordinates so we can use them later to
     // determine if the user dragged the mouse down (which should pop up the
     // drag down menu immediately, instead of waiting for the timer)
@@ -73,6 +105,7 @@ bool ToolbarButton::OnMousePressed(const ui::MouseEvent& event) {
                               ui::GetMenuSourceTypeForEvent(event)),
         base::TimeDelta::FromMilliseconds(kMenuTimerDelay));
   }
+
   return LabelButton::OnMousePressed(event);
 }
 
@@ -109,7 +142,7 @@ void ToolbarButton::OnMouseExited(const ui::MouseEvent& event) {
   // Starting a drag results in a MouseExited, we need to ignore it.
   // A right click release triggers an exit event. We want to
   // remain in a PUSHED state until the drop down menu closes.
-  if (state_ != STATE_DISABLED && !InDrag() && state_ != STATE_PRESSED)
+  if (state() != STATE_DISABLED && !InDrag() && state() != STATE_PRESSED)
     SetState(STATE_NORMAL);
 }
 
@@ -133,16 +166,24 @@ void ToolbarButton::GetAccessibleState(ui::AXViewState* state) {
 scoped_ptr<views::LabelButtonBorder>
 ToolbarButton::CreateDefaultBorder() const {
   scoped_ptr<views::LabelButtonBorder> border =
-      LabelButton::CreateDefaultBorder();
+      views::LabelButton::CreateDefaultBorder();
 
-  ui::ThemeProvider* provider = GetThemeProvider();
-  if (provider && provider->UsingSystemTheme()) {
-    // We set smaller insets here to accommodate the slightly larger GTK+
-    // icons.
-    border->set_insets(gfx::Insets(2, 2, 2, 2));
-  }
+  if (ThemeServiceFactory::GetForProfile(profile_)->UsingSystemTheme())
+    border->set_insets(GetLayoutInsets(TOOLBAR_BUTTON));
 
-  return border.Pass();
+  return border;
+}
+
+void ToolbarButton::AddInkDropLayer(ui::Layer* ink_drop_layer) {
+  image()->SetPaintToLayer(true);
+  image()->SetFillsBoundsOpaquely(false);
+  views::LabelButton::AddInkDropLayer(ink_drop_layer);
+}
+
+void ToolbarButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
+  views::LabelButton::RemoveInkDropLayer(ink_drop_layer);
+  image()->SetFillsBoundsOpaquely(true);
+  image()->SetPaintToLayer(false);
 }
 
 void ToolbarButton::ShowContextMenuForView(View* source,
@@ -155,17 +196,8 @@ void ToolbarButton::ShowContextMenuForView(View* source,
   ShowDropDownMenu(source_type);
 }
 
-bool ToolbarButton::ShouldEnterPushedState(const ui::Event& event) {
-  // Enter PUSHED state on press with Left or Right mouse button or on taps.
-  // Remain in this state while the context menu is open.
-  return event.type() == ui::ET_GESTURE_TAP ||
-         event.type() == ui::ET_GESTURE_TAP_DOWN ||
-         (event.IsMouseEvent() && ((ui::EF_LEFT_MOUSE_BUTTON |
-             ui::EF_RIGHT_MOUSE_BUTTON) & event.flags()) != 0);
-}
-
 bool ToolbarButton::ShouldShowMenu() {
-  return model_ != NULL;
+  return model_ != nullptr;
 }
 
 void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
@@ -210,44 +242,41 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
 
   menu_showing_ = true;
 
+  ink_drop_delegate()->OnAction(views::InkDropState::ACTIVATED);
+
   // Create and run menu.  Display an empty menu if model is NULL.
+  views::MenuRunner::RunResult result;
   if (model_.get()) {
     views::MenuModelAdapter menu_delegate(model_.get());
     menu_delegate.set_triggerable_event_flags(triggerable_event_flags());
     menu_runner_.reset(new views::MenuRunner(menu_delegate.CreateMenu(),
                                              views::MenuRunner::HAS_MNEMONICS));
-    views::MenuRunner::RunResult result =
-        menu_runner_->RunMenuAt(GetWidget(),
-                                NULL,
-                                gfx::Rect(menu_position, gfx::Size(0, 0)),
-                                views::MENU_ANCHOR_TOPLEFT,
-                                source_type);
-    if (result == views::MenuRunner::MENU_DELETED)
-      return;
+    result = menu_runner_->RunMenuAt(GetWidget(), nullptr,
+                                     gfx::Rect(menu_position, gfx::Size(0, 0)),
+                                     views::MENU_ANCHOR_TOPLEFT, source_type);
   } else {
     views::MenuDelegate menu_delegate;
     views::MenuItemView* menu = new views::MenuItemView(&menu_delegate);
     menu_runner_.reset(
         new views::MenuRunner(menu, views::MenuRunner::HAS_MNEMONICS));
-    views::MenuRunner::RunResult result =
-        menu_runner_->RunMenuAt(GetWidget(),
-                                NULL,
-                                gfx::Rect(menu_position, gfx::Size(0, 0)),
-                                views::MENU_ANCHOR_TOPLEFT,
-                                source_type);
-    if (result == views::MenuRunner::MENU_DELETED)
-      return;
+    result = menu_runner_->RunMenuAt(GetWidget(), nullptr,
+                                     gfx::Rect(menu_position, gfx::Size(0, 0)),
+                                     views::MENU_ANCHOR_TOPLEFT, source_type);
   }
+  if (result == views::MenuRunner::MENU_DELETED)
+    return;
+
+  ink_drop_delegate()->OnAction(views::InkDropState::DEACTIVATED);
 
   menu_showing_ = false;
 
   // Need to explicitly clear mouse handler so that events get sent
   // properly after the menu finishes running. If we don't do this, then
   // the first click to other parts of the UI is eaten.
-  SetMouseHandler(NULL);
+  SetMouseHandler(nullptr);
 
   // Set the state back to normal after the drop down menu is closed.
-  if (state_ != STATE_DISABLED)
+  if (state() != STATE_DISABLED)
     SetState(STATE_NORMAL);
 }
 

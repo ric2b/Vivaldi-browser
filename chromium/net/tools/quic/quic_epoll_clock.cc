@@ -10,8 +10,7 @@ namespace net {
 namespace tools {
 
 QuicEpollClock::QuicEpollClock(EpollServer* epoll_server)
-    : epoll_server_(epoll_server) {
-}
+    : epoll_server_(epoll_server) {}
 
 QuicEpollClock::~QuicEpollClock() {}
 
@@ -23,6 +22,11 @@ QuicTime QuicEpollClock::ApproximateNow() const {
 QuicTime QuicEpollClock::Now() const {
   return QuicTime::Zero().Add(
       QuicTime::Delta::FromMicroseconds(epoll_server_->NowInUsec()));
+}
+
+QuicWallTime QuicEpollClock::WallNow() const {
+  return QuicWallTime::FromUNIXMicroseconds(
+      epoll_server_->ApproximateNowInUsec());
 }
 
 }  // namespace tools

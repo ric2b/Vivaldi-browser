@@ -4,8 +4,11 @@
 
 #include "base/memory/scoped_vector.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -24,7 +27,8 @@ class LifeCycleObject {
   };
 
   ~LifeCycleObject() {
-    observer_->OnLifeCycleDestroy(this);
+    if (observer_)
+      observer_->OnLifeCycleDestroy(this);
   }
 
  private:
@@ -33,6 +37,10 @@ class LifeCycleObject {
   explicit LifeCycleObject(Observer* observer)
       : observer_(observer) {
     observer_->OnLifeCycleConstruct(this);
+  }
+
+  void DisconnectObserver() {
+    observer_ = nullptr;
   }
 
   Observer* observer_;
@@ -62,7 +70,13 @@ enum LifeCycleState {
 class LifeCycleWatcher : public LifeCycleObject::Observer {
  public:
   LifeCycleWatcher() : life_cycle_state_(LC_INITIAL) {}
-  ~LifeCycleWatcher() override {}
+  ~LifeCycleWatcher() override {
+    // Stop watching the watched object. Without this, the object's destructor
+    // will call into OnLifeCycleDestroy when destructed, which happens after
+    // this destructor has finished running.
+    if (constructed_life_cycle_object_)
+      constructed_life_cycle_object_->DisconnectObserver();
+  }
 
   // Assert INITIAL -> CONSTRUCTED and no LifeCycleObject associated with this
   // LifeCycleWatcher.
@@ -214,7 +228,7 @@ TEST(ScopedVectorTest, MoveConstruct) {
     EXPECT_FALSE(scoped_vector.empty());
     EXPECT_TRUE(watcher.IsWatching(scoped_vector.back()));
 
-    ScopedVector<LifeCycleObject> scoped_vector_copy(scoped_vector.Pass());
+    ScopedVector<LifeCycleObject> scoped_vector_copy(std::move(scoped_vector));
     EXPECT_TRUE(scoped_vector.empty());
     EXPECT_FALSE(scoped_vector_copy.empty());
     EXPECT_TRUE(watcher.IsWatching(scoped_vector_copy.back()));
@@ -234,7 +248,7 @@ TEST(ScopedVectorTest, MoveAssign) {
     EXPECT_FALSE(scoped_vector.empty());
     EXPECT_TRUE(watcher.IsWatching(scoped_vector.back()));
 
-    scoped_vector_assign = scoped_vector.Pass();
+    scoped_vector_assign = std::move(scoped_vector);
     EXPECT_TRUE(scoped_vector.empty());
     EXPECT_FALSE(scoped_vector_assign.empty());
     EXPECT_TRUE(watcher.IsWatching(scoped_vector_assign.back()));
@@ -264,7 +278,7 @@ class DeleteCounter {
 
 template <typename T>
 ScopedVector<T> PassThru(ScopedVector<T> scoper) {
-  return scoper.Pass();
+  return scoper;
 }
 
 TEST(ScopedVectorTest, Passed) {
@@ -315,7 +329,7 @@ TEST(ScopedVectorTest, PushBackScopedPtr) {
   EXPECT_EQ(0, delete_counter);
   {
     ScopedVector<DeleteCounter> v;
-    v.push_back(elem.Pass());
+    v.push_back(std::move(elem));
     EXPECT_EQ(0, delete_counter);
   }
   EXPECT_EQ(1, delete_counter);

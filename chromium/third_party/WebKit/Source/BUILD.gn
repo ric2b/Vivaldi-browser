@@ -1,0 +1,115 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("config.gni")
+if (is_clang) {
+  import("//build/config/clang/clang.gni")
+}
+
+visibility = [ "//third_party/WebKit/*" ]
+
+# features ---------------------------------------------------------------------
+
+config("features") {
+  defines = feature_defines_list
+}
+
+# inside_blink -----------------------------------------------------------------
+
+config("inside_blink") {
+  defines = [
+    "BLINK_IMPLEMENTATION=1",
+    "INSIDE_BLINK",
+  ]
+}
+
+# config -----------------------------------------------------------------------
+
+config("config") {
+  include_dirs = [
+    ".",
+    "..",
+    "$root_gen_dir/blink",
+  ]
+
+  cflags = []
+  defines = []
+
+  if (is_win) {
+    cflags += [
+      "/wd4305",  # Truncation from 'type1' to 'type2'.
+      "/wd4324",  # Struct padded due to declspec(align).
+      "/wd4714",  # Function marked forceinline not inlined.
+      "/wd4800",  # Value forced to bool.
+      "/wd4996",  # Deprecated function call.
+    ]
+  }
+
+  if (is_win) {
+    if (is_component_build) {
+      defines += [ "USING_V8_SHARED" ]
+    }
+  }
+
+  if (is_clang && blink_gc_plugin && clang_use_chrome_plugins) {
+    if (is_mac || is_ios) {
+      cflags += [
+        "-Xclang",
+        "-load",
+        "-Xclang",
+        rebase_path(
+            "//third_party/llvm-build/Release+Asserts/lib/libBlinkGCPlugin.dylib",
+            root_build_dir),
+      ]
+    } else if (is_linux) {
+      cflags += [
+        "-Xclang",
+        "-load",
+        "-Xclang",
+        rebase_path(
+            "//third_party/llvm-build/Release+Asserts/lib/libBlinkGCPlugin.so",
+            root_build_dir),
+      ]
+    }
+
+    cflags += [
+      "-Xclang",
+      "-add-plugin",
+      "-Xclang",
+      "blink-gc-plugin",
+    ]
+
+    if (enable_oilpan) {
+      cflags += [
+        "-Xclang",
+        "-plugin-arg-blink-gc-plugin",
+        "-Xclang",
+        "enable-oilpan",
+      ]
+    }
+  }
+
+  ## TODO(GYP) : gn does not yet support use_system_icu.
+  #if (use_system_icu) {
+  #  defines += [ "USING_SYSTEM_ICU" ]
+  #}
+}
+
+# The follow configs apply to all targets except for unit tests, which rely on
+# static initializers.
+config("non_test_config") {
+  cflags = []
+
+  if (is_clang) {
+    cflags += [ "-Wglobal-constructors" ]
+  }
+}
+
+if (is_mac) {
+  # This sets up precompiled headers for Mac.
+  config("mac_precompiled_headers") {
+    precompiled_header = rebase_path("build/mac/Prefix.h", root_build_dir)
+    precompiled_source = "//third_party/WebKit/Source/build/mac/Prefix.h"
+  }
+}

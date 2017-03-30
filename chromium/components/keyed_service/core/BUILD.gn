@@ -23,7 +23,6 @@ component("core") {
     "refcounted_keyed_service.h",
     "refcounted_keyed_service_factory.cc",
     "refcounted_keyed_service_factory.h",
-    "service_access_types.h",
   ]
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
@@ -33,6 +32,20 @@ component("core") {
   deps = [
     "//base",
     "//base:prefs",
+    "//components/pref_registry",
     "//components/user_prefs",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "dependency_graph_unittest.cc",
+  ]
+  deps = [
+    ":core",
+    "//base",
+    "//testing/gtest",
+    "//third_party/re2",
   ]
 }

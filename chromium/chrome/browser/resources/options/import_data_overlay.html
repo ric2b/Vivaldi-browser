@@ -9,15 +9,7 @@
           <option i18n-content="importLoading"></option>
         </select>
       </div>
-      
-        <div id="useOperaDefault" class="checkbox" >
-            <input id="useOperaDefaultLocation" type="checkbox">
-            <label for="useOperaDefaultLocation" i18n-content="useOperaDefaultLocation"></label>
-          
-              </span>
-        </div>  
-        
-        <div id="import-checkboxes">
+      <div id="import-checkboxes">
         <div i18n-content="importDescription"></div>
         <div class="checkbox controlled-setting-with-label"
               id="import-history-with-label">
@@ -76,28 +68,13 @@
           <span class="controlled-setting-indicator"
               pref="import_autofill_form_data"></span>
         </div>
-        <div class="checkbox">
-          <span id="import-notes-with-label"
-                class="controlled-setting-with-label">
-            <input id="import-notes" type="checkbox"
-                pref="import_notes">
-              <span>
-                <label for="import-notes" i18n-content="importNotes"></label>
-                <span class="controlled-setting-indicator"
-                    pref="import_notes">
-                </span>
-              </span>
-            </span>
-        </div>
       </div>
     </div>
     <div class="import-data-success" hidden>
       <div id="import-success-header">
         <strong i18n-content="importSucceeded"></strong>
       </div>
-      <div id="import-success-image">
-        <img src="../../../../ui/webui/resources/images/success.png">
-      </div>
+      <div id="import-success-image"></div>
       <div id="import-find-your-bookmarks">
         <span i18n-content="findYourImportedBookmarks"></span>
         <div class="checkbox controlled-setting-with-label">
@@ -139,9 +116,4 @@
       </div>
     </div>
   </div>
-<if expr="is_macosx">
-  <div id="mac-password-keychain" class="gray-bottom-bar">
-    <span i18n-content="macPasswordKeychain"></span>
-  </div>
-</if>
 </div>

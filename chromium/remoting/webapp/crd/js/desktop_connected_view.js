@@ -36,13 +36,13 @@ remoting.DesktopConnectedView = function(container, connectionInfo) {
   /** @private {remoting.DesktopViewport} */
   this.viewport_ = null;
 
-  /** private {remoting.ConnectedView} */
+  /** @private {remoting.ConnectedView} */
   this.view_ = null;
 
   /** @private {remoting.VideoFrameRecorder} */
   this.videoFrameRecorder_ = null;
 
-  /** private {base.Disposable} */
+  /** @private {base.Disposable} */
   this.eventHooks_ = null;
 
   /** @private */
@@ -111,7 +111,7 @@ remoting.DesktopConnectedView.prototype.getResizeToClient = function() {
  *     (Windows, Command) key.
  */
 remoting.DesktopConnectedView.prototype.getMapRightCtrl = function() {
-  return this.host_.options.remapKeys[0x0700e4] === 0x0700e7;
+  return this.host_.options.getRemapKeys()[0x0700e4] === 0x0700e7;
 };
 
 remoting.DesktopConnectedView.prototype.toggleStats = function() {
@@ -138,6 +138,12 @@ remoting.DesktopConnectedView.prototype.getViewportForTesting = function() {
   return this.viewport_;
 };
 
+/** @return {remoting.ConnectedView} */
+remoting.DesktopConnectedView.prototype.getConnectedViewForTesting =
+    function() {
+  return this.view_;
+};
+
 /** @private */
 remoting.DesktopConnectedView.prototype.initPlugin_ = function() {
   console.assert(remoting.app instanceof remoting.DesktopRemoting,
@@ -145,13 +151,8 @@ remoting.DesktopConnectedView.prototype.initPlugin_ = function() {
   var drApp = /** @type {remoting.DesktopRemoting} */ (remoting.app);
   var mode = drApp.getConnectionMode();
 
-  // Show the Send Keys menu only if the plugin has the injectKeyEvent feature,
-  // and the Ctrl-Alt-Del button only in Me2Me mode.
-  if (!this.plugin_.hasFeature(
-          remoting.ClientPlugin.Feature.INJECT_KEY_EVENT)) {
-    var sendKeysElement = document.getElementById('send-keys-menu');
-    sendKeysElement.hidden = true;
-  } else if (mode == remoting.DesktopRemoting.Mode.IT2ME) {
+  // Show the Ctrl-Alt-Del button only in Me2Me mode.
+  if (mode == remoting.DesktopRemoting.Mode.IT2ME) {
     var sendCadElement = document.getElementById('send-ctrl-alt-del');
     sendCadElement.hidden = true;
   }
@@ -254,12 +255,13 @@ remoting.DesktopConnectedView.prototype.setMapRightCtrl = function(enable) {
     return;  // In case right Ctrl is mapped, but not to right Meta.
   }
 
+  var remapKeys = this.host_.options.getRemapKeys();
   if (enable) {
-    this.host_.options.remapKeys[0x0700e4] = 0x0700e7;
+    remapKeys[0x0700e4] = 0x0700e7;
   } else {
-    delete this.host_.options.remapKeys[0x0700e4]
+    delete remapKeys[0x0700e4]
   }
-  this.setRemapKeys(this.host_.options.remapKeys);
+  this.setRemapKeys(remapKeys);
 };
 
 /**
@@ -286,14 +288,13 @@ remoting.DesktopConnectedView.prototype.sendPrintScreen = function() {
  * Sets and stores the key remapping setting for the current host. If set,
  * these mappings override the defaults for the client platform.
  *
- * @param {!Object} remappings
+ * @param {string|!Object} remappings
  */
 remoting.DesktopConnectedView.prototype.setRemapKeys = function(remappings) {
-  this.plugin_.setRemapKeys(remappings);
   // Save the new remapping setting.
-  this.host_.options.remapKeys =
-      /** @type {!Object} */ (base.deepCopy(remappings));
+  this.host_.options.setRemapKeys(remappings);
   this.host_.options.save();
+  this.plugin_.setRemapKeys(this.host_.options.getRemapKeys());
 };
 
 /** @param {remoting.VideoFrameRecorder} recorder */
@@ -328,4 +329,16 @@ remoting.DesktopConnectedView.prototype.startStopRecording = function() {
   if (this.videoFrameRecorder_) {
     this.videoFrameRecorder_.startStopRecording();
   }
+};
+
+/**
+ * Factory function so that it can be overwritten in unit test to avoid
+ * UI dependencies.
+ *
+ * @param {HTMLElement} container
+ * @param {remoting.ConnectionInfo} connectionInfo
+ * @return  {remoting.DesktopConnectedView}
+ */
+remoting.DesktopConnectedView.create = function(container, connectionInfo) {
+  return new remoting.DesktopConnectedView(container, connectionInfo);
 };

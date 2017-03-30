@@ -4,6 +4,9 @@
 
 #include "base/json/string_escape.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -21,6 +24,8 @@ TEST(JSONStringEscapeTest, EscapeUTF8) {
     {"b\x0f\x7f\xf0\xff!",  // \xf0\xff is not a valid UTF-8 unit.
         "b\\u000F\x7F\xEF\xBF\xBD\xEF\xBF\xBD!"},
     {"c<>d", "c\\u003C>d"},
+    {"Hello\xe2\x80\xa8world", "Hello\\u2028world"},
+    {"\xe2\x80\xa9purple", "\\u2029purple"},
   };
 
   for (size_t i = 0; i < arraysize(cases); ++i) {
@@ -79,6 +84,8 @@ TEST(JSONStringEscapeTest, EscapeUTF16) {
         "a\\b\\f\\n\\r\\t\\u000B\\u0001\\\\.\\\"z"},
     {L"b\x0f\x7f\xf0\xff!", "b\\u000F\x7F\xC3\xB0\xC3\xBF!"},
     {L"c<>d", "c\\u003C>d"},
+    {L"Hello\u2028world", "Hello\\u2028world"},
+    {L"\u2029purple", "\\u2029purple"},
   };
 
   for (size_t i = 0; i < arraysize(cases); ++i) {

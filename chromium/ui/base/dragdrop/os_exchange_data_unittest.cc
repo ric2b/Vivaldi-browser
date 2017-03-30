@@ -6,6 +6,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/pickle.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "net/base/filename_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -144,8 +145,8 @@ TEST_F(OSExchangeDataTest, TestFileToURLConversion) {
 }
 
 TEST_F(OSExchangeDataTest, TestPickledData) {
-  const OSExchangeData::CustomFormat kTestFormat =
-      ui::Clipboard::GetFormatType("application/vnd.chromium.test");
+  const Clipboard::FormatType kTestFormat =
+      Clipboard::GetFormatType("application/vnd.chromium.test");
 
   base::Pickle saved_pickle;
   saved_pickle.WriteInt(1);

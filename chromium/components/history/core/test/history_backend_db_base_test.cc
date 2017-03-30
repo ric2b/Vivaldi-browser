@@ -78,7 +78,7 @@ void HistoryBackendDBBaseTest::TearDown() {
   // Make sure we don't have any event pending that could disrupt the next
   // test.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::MessageLoop::QuitClosure());
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   base::MessageLoop::current()->Run();
 }
 
@@ -109,14 +109,6 @@ void HistoryBackendDBBaseTest::CreateDBVersion(int version) {
       ExecuteSQLScript(data_path, history_dir_.Append(kHistoryFilename)));
 }
 
-void HistoryBackendDBBaseTest::CreateArchivedDB() {
-  base::FilePath data_path;
-  ASSERT_TRUE(GetTestDataHistoryDir(&data_path));
-  data_path = data_path.AppendASCII("archived_history.4.sql");
-  ASSERT_NO_FATAL_FAILURE(ExecuteSQLScript(
-      data_path, history_dir_.Append(kArchivedHistoryFilename)));
-}
-
 void HistoryBackendDBBaseTest::DeleteBackend() {
   if (backend_.get()) {
     backend_->Closing();
@@ -124,7 +116,7 @@ void HistoryBackendDBBaseTest::DeleteBackend() {
   }
 }
 
-bool HistoryBackendDBBaseTest::AddDownload(uint32 id,
+bool HistoryBackendDBBaseTest::AddDownload(uint32_t id,
                                            DownloadState state,
                                            base::Time time) {
   std::vector<GURL> url_chain;

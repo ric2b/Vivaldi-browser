@@ -5,9 +5,11 @@
 #include "net/spdy/spdy_buffer.h"
 
 #include <cstring>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "net/base/io_buffer.h"
 #include "net/spdy/spdy_protocol.h"
 
@@ -28,7 +30,7 @@ scoped_ptr<SpdyFrame> MakeSpdyFrame(const char* data, size_t size) {
   std::memcpy(frame_data.get(), data, size);
   scoped_ptr<SpdyFrame> frame(
       new SpdyFrame(frame_data.release(), size, true /* owns_buffer */));
-  return frame.Pass();
+  return frame;
 }
 
 }  // namespace
@@ -57,7 +59,7 @@ class SpdyBuffer::SharedFrameIOBuffer : public IOBuffer {
 SpdyBuffer::SpdyBuffer(scoped_ptr<SpdyFrame> frame)
     : shared_frame_(new SharedFrame()),
       offset_(0) {
-  shared_frame_->data = frame.Pass();
+  shared_frame_->data = std::move(frame);
 }
 
 // The given data may not be strictly a SPDY frame; we (ab)use

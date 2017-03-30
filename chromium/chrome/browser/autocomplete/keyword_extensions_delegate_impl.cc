@@ -4,6 +4,8 @@
 
 #include "chrome/browser/autocomplete/keyword_extensions_delegate_impl.h"
 
+#include <stddef.h>
+
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/api/omnibox/omnibox_api.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -160,10 +162,13 @@ void KeywordExtensionsDelegateImpl::Observe(
       if (suggestions.request_id != current_input_id_)
         return;  // This is an old result. Just ignore.
 
+      // ExtractKeywordFromInput() can fail if e.g. this code is triggered by
+      // direct calls from the development console, outside the normal flow of
+      // user input.
       base::string16 keyword, remaining_input;
-      bool result = KeywordProvider::ExtractKeywordFromInput(
-          input, &keyword, &remaining_input);
-      DCHECK(result);
+      if (!KeywordProvider::ExtractKeywordFromInput(input, &keyword,
+                                                    &remaining_input))
+        return;
       const TemplateURL* template_url =
           model->GetTemplateURLForKeyword(keyword);
 
@@ -179,14 +184,14 @@ void KeywordExtensionsDelegateImpl::Observe(
         // is true, because we wouldn't get results from the extension unless
         // the full keyword had been typed.
         int first_relevance = KeywordProvider::CalculateRelevance(
-            input.type(), true, true, input.prefer_keyword(),
+            input.type(), true, true, true, input.prefer_keyword(),
             input.allow_exact_keyword_match());
         // Because these matches are async, we should never let them become the
         // default match, lest we introduce race conditions in the omnibox user
         // interaction.
         extension_suggest_matches_.push_back(
             provider_->CreateAutocompleteMatch(
-                template_url, input, keyword.length(),
+                template_url, keyword.length(), input, keyword.length(),
                 base::UTF8ToUTF16(suggestion.content), false,
                 first_relevance - (i + 1)));
 

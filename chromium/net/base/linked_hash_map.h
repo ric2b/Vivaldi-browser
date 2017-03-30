@@ -15,11 +15,14 @@
 #ifndef UTIL_GTL_LINKED_HASH_MAP_H_
 #define UTIL_GTL_LINKED_HASH_MAP_H_
 
+#include <stddef.h>
+
 #include <list>
 #include <utility>
 
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
+#include "base/macros.h"
 
 // This holds a list of pair<Key, Value> items.  This list is what gets
 // traversed, and it's iterators from this list that we return from
@@ -232,6 +235,10 @@ class linked_hash_map {
 
   // The list component, used for maintaining insertion order
   ListType list_;
+
+  // |map_| contains iterators to |list_|, therefore a default copy constructor
+  // or copy assignment operator would result in an inconsistent state.
+  DISALLOW_COPY_AND_ASSIGN(linked_hash_map);
 };
 
 #endif  // UTIL_GTL_LINKED_HASH_MAP_H_

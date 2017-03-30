@@ -4,7 +4,10 @@
 
 #include "base/prefs/json_pref_store.h"
 
+#include <stddef.h>
+
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -12,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_filter.h"
@@ -60,16 +64,12 @@ PersistentPrefStore::PrefReadError HandleReadErrors(
     switch (error_code) {
       case JSONFileValueDeserializer::JSON_ACCESS_DENIED:
         return PersistentPrefStore::PREF_READ_ERROR_ACCESS_DENIED;
-        break;
       case JSONFileValueDeserializer::JSON_CANNOT_READ_FILE:
         return PersistentPrefStore::PREF_READ_ERROR_FILE_OTHER;
-        break;
       case JSONFileValueDeserializer::JSON_FILE_LOCKED:
         return PersistentPrefStore::PREF_READ_ERROR_FILE_LOCKED;
-        break;
       case JSONFileValueDeserializer::JSON_NO_SUCH_FILE:
         return PersistentPrefStore::PREF_READ_ERROR_NO_FILE;
-        break;
       default:
         // JSON errors indicate file corruption of some sort.
         // Since the file is corrupt, move it to the side and continue with
@@ -87,9 +87,9 @@ PersistentPrefStore::PrefReadError HandleReadErrors(
         return bad_existed ? PersistentPrefStore::PREF_READ_ERROR_JSON_REPEAT
                            : PersistentPrefStore::PREF_READ_ERROR_JSON_PARSE;
     }
-  } else if (!value->IsType(base::Value::TYPE_DICTIONARY)) {
-    return PersistentPrefStore::PREF_READ_ERROR_JSON_TYPE;
   }
+  if (!value->IsType(base::Value::TYPE_DICTIONARY))
+    return PersistentPrefStore::PREF_READ_ERROR_JSON_TYPE;
   return PersistentPrefStore::PREF_READ_ERROR_NONE;
 }
 
@@ -122,7 +122,7 @@ scoped_ptr<JsonPrefStore::ReadResult> ReadPrefsFromDisk(
   scoped_ptr<JsonPrefStore::ReadResult> read_result(
       new JsonPrefStore::ReadResult);
   JSONFileValueDeserializer deserializer(path);
-  read_result->value.reset(deserializer.Deserialize(&error_code, &error_msg));
+  read_result->value = deserializer.Deserialize(&error_code, &error_msg);
   read_result->error =
       HandleReadErrors(read_result->value.get(), path, error_code, error_msg);
   read_result->no_dir = !base::PathExists(path.DirName());
@@ -130,7 +130,7 @@ scoped_ptr<JsonPrefStore::ReadResult> ReadPrefsFromDisk(
   if (read_result->error == PersistentPrefStore::PREF_READ_ERROR_NONE)
     RecordJsonDataSizeHistogram(path, deserializer.get_last_read_size());
 
-  return read_result.Pass();
+  return read_result;
 }
 
 }  // namespace
@@ -147,27 +147,26 @@ scoped_refptr<base::SequencedTaskRunner> JsonPrefStore::GetTaskRunnerForFile(
 }
 
 JsonPrefStore::JsonPrefStore(
-    const base::FilePath& filename,
+    const base::FilePath& pref_filename,
     const scoped_refptr<base::SequencedTaskRunner>& sequenced_task_runner,
     scoped_ptr<PrefFilter> pref_filter)
-    : JsonPrefStore(filename,
+    : JsonPrefStore(pref_filename,
                     base::FilePath(),
                     sequenced_task_runner,
-                    pref_filter.Pass()) {
-}
+                    std::move(pref_filter)) {}
 
 JsonPrefStore::JsonPrefStore(
-    const base::FilePath& filename,
-    const base::FilePath& alternate_filename,
+    const base::FilePath& pref_filename,
+    const base::FilePath& pref_alternate_filename,
     const scoped_refptr<base::SequencedTaskRunner>& sequenced_task_runner,
     scoped_ptr<PrefFilter> pref_filter)
-    : path_(filename),
-      alternate_path_(alternate_filename),
+    : path_(pref_filename),
+      alternate_path_(pref_alternate_filename),
       sequenced_task_runner_(sequenced_task_runner),
       prefs_(new base::DictionaryValue()),
       read_only_(false),
-      writer_(filename, sequenced_task_runner),
-      pref_filter_(pref_filter.Pass()),
+      writer_(pref_filename, sequenced_task_runner),
+      pref_filter_(std::move(pref_filter)),
       initialized_(false),
       filtering_in_progress_(false),
       pending_lossy_write_(false),
@@ -180,7 +179,7 @@ bool JsonPrefStore::GetValue(const std::string& key,
                              const base::Value** result) const {
   DCHECK(CalledOnValidThread());
 
-  base::Value* tmp = NULL;
+  base::Value* tmp = nullptr;
   if (!prefs_->Get(key, &tmp))
     return false;
 
@@ -222,43 +221,44 @@ bool JsonPrefStore::GetMutableValue(const std::string& key,
 
 void JsonPrefStore::SetValue(const std::string& key,
                              scoped_ptr<base::Value> value,
-                             uint32 flags) {
+                             uint32_t flags) {
   DCHECK(CalledOnValidThread());
 
   DCHECK(value);
-  base::Value* old_value = NULL;
+  base::Value* old_value = nullptr;
   prefs_->Get(key, &old_value);
   if (!old_value || !value->Equals(old_value)) {
-    prefs_->Set(key, value.Pass());
+    prefs_->Set(key, std::move(value));
     ReportValueChanged(key, flags);
   }
 }
 
 void JsonPrefStore::SetValueSilently(const std::string& key,
                                      scoped_ptr<base::Value> value,
-                                     uint32 flags) {
+                                     uint32_t flags) {
   DCHECK(CalledOnValidThread());
 
   DCHECK(value);
-  base::Value* old_value = NULL;
+  base::Value* old_value = nullptr;
   prefs_->Get(key, &old_value);
   if (!old_value || !value->Equals(old_value)) {
-    prefs_->Set(key, value.Pass());
+    prefs_->Set(key, std::move(value));
     ScheduleWrite(flags);
   }
 }
 
-void JsonPrefStore::RemoveValue(const std::string& key, uint32 flags) {
+void JsonPrefStore::RemoveValue(const std::string& key, uint32_t flags) {
   DCHECK(CalledOnValidThread());
 
-  if (prefs_->RemovePath(key, NULL))
+  if (prefs_->RemovePath(key, nullptr))
     ReportValueChanged(key, flags);
 }
 
-void JsonPrefStore::RemoveValueSilently(const std::string& key, uint32 flags) {
+void JsonPrefStore::RemoveValueSilently(const std::string& key,
+                                        uint32_t flags) {
   DCHECK(CalledOnValidThread());
 
-  prefs_->RemovePath(key, NULL);
+  prefs_->RemovePath(key, nullptr);
   ScheduleWrite(flags);
 }
 
@@ -312,7 +312,7 @@ void JsonPrefStore::SchedulePendingLossyWrites() {
     writer_.ScheduleWrite(this);
 }
 
-void JsonPrefStore::ReportValueChanged(const std::string& key, uint32 flags) {
+void JsonPrefStore::ReportValueChanged(const std::string& key, uint32_t flags) {
   DCHECK(CalledOnValidThread());
 
   if (pref_filter_)
@@ -358,7 +358,6 @@ void JsonPrefStore::OnFileRead(scoped_ptr<ReadResult> read_result) {
       case PREF_READ_ERROR_NO_FILE:
         // If the file just doesn't exist, maybe this is first run.  In any case
         // there's no harm in writing out default prefs in this case.
-        break;
       case PREF_READ_ERROR_JSON_PARSE:
       case PREF_READ_ERROR_JSON_REPEAT:
         break;
@@ -366,13 +365,6 @@ void JsonPrefStore::OnFileRead(scoped_ptr<ReadResult> read_result) {
         // This is a special error code to be returned by ReadPrefs when it
         // can't complete synchronously, it should never be returned by the read
         // operation itself.
-        NOTREACHED();
-        break;
-      case PREF_READ_ERROR_LEVELDB_IO:
-      case PREF_READ_ERROR_LEVELDB_CORRUPTION_READ_ONLY:
-      case PREF_READ_ERROR_LEVELDB_CORRUPTION:
-        // These are specific to LevelDBPrefStore.
-        NOTREACHED();
       case PREF_READ_ERROR_MAX_ENUM:
         NOTREACHED();
         break;
@@ -386,9 +378,10 @@ void JsonPrefStore::OnFileRead(scoped_ptr<ReadResult> read_result) {
             &JsonPrefStore::FinalizeFileRead, AsWeakPtr(),
             initialization_successful));
     pref_filter_->FilterOnLoad(post_filter_on_load_callback,
-                               unfiltered_prefs.Pass());
+                               std::move(unfiltered_prefs));
   } else {
-    FinalizeFileRead(initialization_successful, unfiltered_prefs.Pass(), false);
+    FinalizeFileRead(initialization_successful, std::move(unfiltered_prefs),
+                     false);
   }
 }
 
@@ -428,7 +421,7 @@ void JsonPrefStore::FinalizeFileRead(bool initialization_successful,
     return;
   }
 
-  prefs_ = prefs.Pass();
+  prefs_ = std::move(prefs);
 
   initialized_ = true;
 
@@ -445,7 +438,7 @@ void JsonPrefStore::FinalizeFileRead(bool initialization_successful,
   return;
 }
 
-void JsonPrefStore::ScheduleWrite(uint32 flags) {
+void JsonPrefStore::ScheduleWrite(uint32_t flags) {
   if (read_only_)
     return;
 
@@ -506,9 +499,9 @@ void JsonPrefStore::WriteCountHistogram::ReportOutstandingWrites() {
 
   // There may be several report intervals that elapsed that don't have any
   // writes in them. Report these too.
-  int64 total_num_intervals_elapsed =
+  int64_t total_num_intervals_elapsed =
       (time_since_last_report / report_interval_);
-  for (int64 i = 0; i < total_num_intervals_elapsed - 1; ++i)
+  for (int64_t i = 0; i < total_num_intervals_elapsed - 1; ++i)
     histogram->Add(0);
 
   writes_since_last_report_ = 0;

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/thumbnails/content_analysis.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <cmath>
 #include <deque>
@@ -165,9 +168,10 @@ void ConstrainedProfileThresholding(const std::vector<float>& profile,
           current_clip_index / 255.0f + range.first;
       // Recount, rather than assume. One-offs due to rounding can be very
       // harmful when eroding / dilating the result.
-      size_for_threshold = std::count_if(
-          profile.begin(), profile.end(),
-          std::bind2nd(std::greater<float>(), current_threshold));
+      size_for_threshold = std::count_if(profile.begin(), profile.end(),
+                                         [current_threshold](float value) {
+                                           return value > current_threshold;
+                                         });
     }
   }
 
@@ -317,7 +321,7 @@ void ApplyGaussianGradientMagnitudeFilter(SkBitmap* input_bitmap,
       int bit_shift = 8 - static_cast<int>(
           std::log10(static_cast<float>(smoothed_max)) / std::log10(2.0f));
       for (int r = 0; r < image_size.height(); ++r) {
-        uint8* row = input_bitmap->getAddr8(0, r);
+        uint8_t* row = input_bitmap->getAddr8(0, r);
         for (int c = 0; c < image_size.width(); ++c, ++row) {
           *row <<= bit_shift;
         }
@@ -348,8 +352,8 @@ void ApplyGaussianGradientMagnitudeFilter(SkBitmap* input_bitmap,
 
   unsigned grad_max = 0;
   for (int r = 0; r < image_size.height(); ++r) {
-    const uint8* grad_x_row = intermediate.getAddr8(0, r);
-    const uint8* grad_y_row = intermediate2.getAddr8(0, r);
+    const uint8_t* grad_x_row = intermediate.getAddr8(0, r);
+    const uint8_t* grad_y_row = intermediate2.getAddr8(0, r);
     for (int c = 0; c < image_size.width(); ++c) {
       unsigned grad_x = grad_x_row[c];
       unsigned grad_y = grad_y_row[c];
@@ -362,9 +366,9 @@ void ApplyGaussianGradientMagnitudeFilter(SkBitmap* input_bitmap,
     bit_shift = static_cast<int>(
         std::log10(static_cast<float>(grad_max)) / std::log10(2.0f)) - 7;
   for (int r = 0; r < image_size.height(); ++r) {
-    const uint8* grad_x_row = intermediate.getAddr8(0, r);
-    const uint8* grad_y_row = intermediate2.getAddr8(0, r);
-    uint8* target_row = input_bitmap->getAddr8(0, r);
+    const uint8_t* grad_x_row = intermediate.getAddr8(0, r);
+    const uint8_t* grad_y_row = intermediate2.getAddr8(0, r);
+    uint8_t* target_row = input_bitmap->getAddr8(0, r);
     for (int c = 0; c < image_size.width(); ++c) {
       unsigned grad_x = grad_x_row[c];
       unsigned grad_y = grad_y_row[c];
@@ -397,7 +401,7 @@ void ExtractImageProfileInformation(const SkBitmap& input_bitmap,
 
   for (int r = 0; r < area.height(); ++r) {
     // Points to the first byte of the row in the rectangle.
-    const uint8* image_row = input_bitmap.getAddr8(area.x(), r + area.y());
+    const uint8_t* image_row = input_bitmap.getAddr8(area.x(), r + area.y());
     unsigned row_sum = 0;
     for (int c = 0; c < area.width(); ++c, ++image_row) {
       row_sum += *image_row;
@@ -612,10 +616,10 @@ void ConstrainedProfileSegmentation(const std::vector<float>& row_profile,
 
   int auto_segmented_width = count_if(
       column_profile.begin(), column_profile.end(),
-      std::bind2nd(std::greater<float>(), column_threshold));
-  int auto_segmented_height = count_if(
-      row_profile.begin(), row_profile.end(),
-      std::bind2nd(std::greater<float>(), row_threshold));
+      [column_threshold](float value) { return value > column_threshold; });
+  int auto_segmented_height =
+      count_if(row_profile.begin(), row_profile.end(),
+               [row_threshold](float value) { return value > row_threshold; });
 
   gfx::Size computed_size = AdjustClippingSizeToAspectRatio(
       target_size,
@@ -685,10 +689,10 @@ SkBitmap ComputeDecimatedImage(const SkBitmap& bitmap,
   for (int r = 0; r < bitmap.height(); ++r) {
     if (!rows[r])
       continue;  // We can just skip this one.
-    uint8* src_row =
-        static_cast<uint8*>(bitmap.getPixels()) + r * bitmap.rowBytes();
-    uint8* insertion_target = static_cast<uint8*>(target.getPixels()) +
-        target_row * target.rowBytes();
+    uint8_t* src_row =
+        static_cast<uint8_t*>(bitmap.getPixels()) + r * bitmap.rowBytes();
+    uint8_t* insertion_target = static_cast<uint8_t*>(target.getPixels()) +
+                                target_row * target.rowBytes();
     int left_copy_pixel = -1;
     for (int c = 0; c < bitmap.width(); ++c) {
       if (left_copy_pixel < 0 && columns[c]) {
@@ -766,4 +770,4 @@ SkBitmap CreateRetargetedThumbnailImage(
   return ComputeDecimatedImage(source_bitmap, included_rows, included_columns);
 }
 
-}  // thumbnailing_utils
+}  // namespace thumbnailing_utils

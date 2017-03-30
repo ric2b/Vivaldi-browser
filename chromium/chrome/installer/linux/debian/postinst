@@ -54,10 +54,6 @@ update-alternatives --install /usr/bin/vivaldi vivaldi \
 
 @@include@@../common/apt.include
 
-@@include@@../common/symlinks.include
-
-remove_udev_symlinks
-
 ## MAIN ##
 if [ ! -e "$DEFAULTS_FILE" ]; then
   echo 'repo_add_once="true"' > "$DEFAULTS_FILE"

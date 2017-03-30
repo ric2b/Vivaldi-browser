@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/protocol/sync.pb.h"
@@ -87,14 +86,16 @@ PermanentEntity::PermanentEntity(const string& id,
   SetSpecifics(specifics);
 }
 
+bool PermanentEntity::RequiresParentId() const {
+  return true;
+}
+
 string PermanentEntity::GetParentId() const {
   return parent_id_;
 }
 
 void PermanentEntity::SerializeAsProto(sync_pb::SyncEntity* proto) const {
   FakeServerEntity::SerializeBaseProtoFields(proto);
-
-  proto->set_parent_id_string(parent_id_);
   proto->set_server_defined_unique_tag(server_defined_unique_tag_);
 }
 

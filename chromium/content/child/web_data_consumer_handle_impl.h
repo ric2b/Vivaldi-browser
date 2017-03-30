@@ -5,11 +5,13 @@
 #ifndef CONTENT_CHILD_WEB_DATA_CONSUMER_HANDLE_IMPL_H_
 #define CONTENT_CHILD_WEB_DATA_CONSUMER_HANDLE_IMPL_H_
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
-#include "mojo/common/handle_watcher.h"
+#include "mojo/message_pump/handle_watcher.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "third_party/WebKit/public/platform/WebDataConsumerHandle.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
 
 namespace content {
 
@@ -22,12 +24,15 @@ class CONTENT_EXPORT WebDataConsumerHandleImpl final
   class CONTENT_EXPORT ReaderImpl final : public NON_EXPORTED_BASE(Reader) {
    public:
     ReaderImpl(scoped_refptr<Context> context, Client* client);
-    virtual ~ReaderImpl();
-    virtual Result read(void* data, size_t size, Flags flags, size_t* readSize);
-    virtual Result beginRead(const void** buffer,
-                             Flags flags,
-                             size_t* available);
-    virtual Result endRead(size_t readSize);
+    ~ReaderImpl() override;
+    Result read(void* data,
+                size_t size,
+                Flags flags,
+                size_t* readSize) override;
+    Result beginRead(const void** buffer,
+                     Flags flags,
+                     size_t* available) override;
+    Result endRead(size_t readSize) override;
 
    private:
     Result HandleReadResult(MojoResult);
@@ -41,10 +46,10 @@ class CONTENT_EXPORT WebDataConsumerHandleImpl final
   scoped_ptr<Reader> ObtainReader(Client* client);
 
   explicit WebDataConsumerHandleImpl(Handle handle);
-  virtual ~WebDataConsumerHandleImpl();
+  ~WebDataConsumerHandleImpl() override;
 
  private:
-  virtual ReaderImpl* obtainReaderInternal(Client* client);
+  ReaderImpl* obtainReaderInternal(Client* client) override;
   const char* debugName() const override;
 
   scoped_refptr<Context> context_;

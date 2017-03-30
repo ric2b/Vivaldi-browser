@@ -14,9 +14,9 @@
 #include "base/task_runner.h"
 #include "base/task_runner_util.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
@@ -58,8 +58,8 @@ std::string CheckAndResolveLocales(const std::string& languages) {
   DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
   if (languages.empty())
     return languages;
-  std::vector<std::string> values;
-  base::SplitString(languages, ',', &values);
+  std::vector<std::string> values = base::SplitString(
+      languages, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   const std::string app_locale = g_browser_process->GetApplicationLocale();
 
@@ -92,7 +92,7 @@ std::string CheckAndResolveLocales(const std::string& languages) {
     value_iter = values.erase(value_iter);
   }
 
-  return JoinString(values, ',');
+  return base::JoinString(values, ",");
 }
 
 // Appends tokens from |src| that are not in |dest| to |dest|.
@@ -113,13 +113,12 @@ void MergeLists(std::vector<std::string>* dest,
 }  // anonymous namespace
 
 InputMethodSyncer::InputMethodSyncer(
-    PrefServiceSyncable* prefs,
+    syncable_prefs::PrefServiceSyncable* prefs,
     scoped_refptr<input_method::InputMethodManager::State> ime_state)
     : prefs_(prefs),
       ime_state_(ime_state),
       merging_(false),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 InputMethodSyncer::~InputMethodSyncer() {
   prefs_->RemoveObserver(this);
@@ -191,30 +190,36 @@ void InputMethodSyncer::MergeSyncedPrefs() {
   std::vector<std::string> new_tokens;
 
   // First, set the syncable prefs to the union of the local and synced prefs.
-  base::SplitString(
-      preferred_languages_syncable_.GetValue(), ',', &synced_tokens);
-  base::SplitString(preferred_languages_.GetValue(), ',', &new_tokens);
+  synced_tokens =
+      base::SplitString(preferred_languages_syncable_.GetValue(), ",",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  new_tokens = base::SplitString(preferred_languages_.GetValue(), ",",
+                                 base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   // Append the synced values to the current values.
   MergeLists(&new_tokens, synced_tokens);
-  preferred_languages_syncable_.SetValue(JoinString(new_tokens, ','));
+  preferred_languages_syncable_.SetValue(base::JoinString(new_tokens, ","));
 
-  base::SplitString(
-      enabled_extension_imes_syncable_.GetValue(), ',', &synced_tokens);
-  base::SplitString(enabled_extension_imes_.GetValue(), ',', &new_tokens);
+  synced_tokens =
+      base::SplitString(enabled_extension_imes_syncable_.GetValue(), ",",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  new_tokens = base::SplitString(enabled_extension_imes_.GetValue(), ",",
+                                 base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   MergeLists(&new_tokens, synced_tokens);
-  enabled_extension_imes_syncable_.SetValue(JoinString(new_tokens, ','));
+  enabled_extension_imes_syncable_.SetValue(base::JoinString(new_tokens, ","));
 
   // Revert preload engines to legacy component IDs.
-  base::SplitString(preload_engines_.GetValue(), ',', &new_tokens);
+  new_tokens = base::SplitString(preload_engines_.GetValue(), ",",
+                                 base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   std::transform(new_tokens.begin(), new_tokens.end(), new_tokens.begin(),
                  extension_ime_util::GetComponentIDByInputMethodID);
-  base::SplitString(
-      preload_engines_syncable_.GetValue(), ',', &synced_tokens);
+  synced_tokens =
+      base::SplitString(preload_engines_syncable_.GetValue(), ",",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   MergeLists(&new_tokens, synced_tokens);
-  preload_engines_syncable_.SetValue(JoinString(new_tokens, ','));
+  preload_engines_syncable_.SetValue(base::JoinString(new_tokens, ","));
 
   // Second, set the local prefs, incorporating new values from the sync server.
   preload_engines_.SetValue(
@@ -243,10 +248,10 @@ std::string InputMethodSyncer::AddSupportedInputMethodValues(
     const std::string& pref,
     const std::string& synced_pref,
     const char* pref_name) {
-  std::vector<std::string> old_tokens;
-  std::vector<std::string> new_tokens;
-  base::SplitString(pref, ',', &old_tokens);
-  base::SplitString(synced_pref, ',', &new_tokens);
+  std::vector<std::string> old_tokens =
+      base::SplitString(pref, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  std::vector<std::string> new_tokens = base::SplitString(
+      synced_pref, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   // Check and convert the new tokens.
   if (pref_name == prefs::kLanguagePreloadEngines ||
@@ -278,7 +283,7 @@ std::string InputMethodSyncer::AddSupportedInputMethodValues(
 
   // Do the actual merging.
   MergeLists(&old_tokens, new_tokens);
-  return JoinString(old_tokens, ',');
+  return base::JoinString(old_tokens, ",");
 }
 
 void InputMethodSyncer::FinishMerge(const std::string& languages) {
@@ -307,11 +312,12 @@ void InputMethodSyncer::OnPreferenceChanged(const std::string& pref_name) {
 
   // For preload engines, use legacy xkb IDs so the preference can sync
   // across Chrome OS and Chromium OS.
-  std::vector<std::string> engines;
-  base::SplitString(preload_engines_.GetValue(), ',', &engines);
+  std::vector<std::string> engines =
+      base::SplitString(preload_engines_.GetValue(), ",", base::TRIM_WHITESPACE,
+                        base::SPLIT_WANT_ALL);
   std::transform(engines.begin(), engines.end(), engines.begin(),
                  extension_ime_util::GetComponentIDByInputMethodID);
-  preload_engines_syncable_.SetValue(JoinString(engines, ','));
+  preload_engines_syncable_.SetValue(base::JoinString(engines, ","));
 }
 
 void InputMethodSyncer::OnIsSyncingChanged() {

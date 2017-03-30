@@ -9,7 +9,7 @@
 
 #include <set>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "ui/base/glib/glib_signal.h"
@@ -28,7 +28,7 @@ class GlobalMenuBarRegistrarX11 {
   void OnWindowUnmapped(unsigned long xid);
 
  private:
-  friend struct DefaultSingletonTraits<GlobalMenuBarRegistrarX11>;
+  friend struct base::DefaultSingletonTraits<GlobalMenuBarRegistrarX11>;
 
   GlobalMenuBarRegistrarX11();
   ~GlobalMenuBarRegistrarX11();

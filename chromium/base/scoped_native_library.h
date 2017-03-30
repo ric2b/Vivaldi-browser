@@ -6,6 +6,7 @@
 #define BASE_SCOPED_NATIVE_LIBRARY_H_
 
 #include "base/base_export.h"
+#include "base/macros.h"
 #include "base/native_library.h"
 
 namespace base {
@@ -30,6 +31,8 @@ class BASE_EXPORT ScopedNativeLibrary {
 
   // Returns true if there's a valid library loaded.
   bool is_valid() const { return !!library_; }
+
+  NativeLibrary get() const { return library_; }
 
   void* GetFunctionPointer(const char* function_name) const;
 

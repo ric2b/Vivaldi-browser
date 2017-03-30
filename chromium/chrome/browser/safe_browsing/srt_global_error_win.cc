@@ -9,14 +9,17 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/prefs/pref_service.h"
 #include "base/process/launch.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/safe_browsing/srt_field_trial_win.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
+#include "components/component_updater/pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "grit/chromium_strings.h"
 #include "grit/generated_resources.h"
@@ -25,6 +28,8 @@
 using base::SingleThreadTaskRunner;
 using base::ThreadTaskRunnerHandle;
 using content::BrowserThread;
+
+namespace safe_browsing {
 
 namespace {
 
@@ -83,6 +88,10 @@ SRTGlobalError::SRTGlobalError(GlobalErrorService* global_error_service,
 }
 
 SRTGlobalError::~SRTGlobalError() {
+  if (!interacted_) {
+    BrowserThread::PostBlockingPoolTask(
+        FROM_HERE, base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
+  }
 }
 
 bool SRTGlobalError::HasMenuItem() {
@@ -98,12 +107,18 @@ base::string16 SRTGlobalError::MenuItemLabel() {
 }
 
 void SRTGlobalError::ExecuteMenuItem(Browser* browser) {
+  RecordSRTPromptHistogram(SRT_PROMPT_SHOWN_FROM_MENU);
+  show_dismiss_button_ = true;
   ShowBubbleView(browser);
 }
 
 void SRTGlobalError::ShowBubbleView(Browser* browser) {
-  safe_browsing::RecordSRTPromptHistogram(safe_browsing::SRT_PROMPT_SHOWN);
+  RecordSRTPromptHistogram(SRT_PROMPT_SHOWN);
   GlobalErrorWithStandardBubble::ShowBubbleView(browser);
+}
+
+bool SRTGlobalError::ShouldShowCloseButton() const {
+  return true;
 }
 
 base::string16 SRTGlobalError::GetBubbleViewTitle() {
@@ -123,30 +138,40 @@ base::string16 SRTGlobalError::GetBubbleViewAcceptButtonLabel() {
 }
 
 bool SRTGlobalError::ShouldAddElevationIconToAcceptButton() {
-  return !downloaded_path_.empty() &&
-         safe_browsing::SRTPromptNeedsElevationIcon();
+  return !downloaded_path_.empty() && SRTPromptNeedsElevationIcon();
 }
 
 base::string16 SRTGlobalError::GetBubbleViewCancelButtonLabel() {
-  return l10n_util::GetStringUTF16(IDS_SRT_BUBBLE_DISMISS);
+  if (show_dismiss_button_)
+    return l10n_util::GetStringUTF16(IDS_SRT_BUBBLE_DISMISS);
+  return base::string16();
 }
 
 void SRTGlobalError::OnBubbleViewDidClose(Browser* browser) {
+  if (!interacted_) {
+    // If user didn't interact with the bubble, it means they used the generic
+    // close bubble button.
+    RecordSRTPromptHistogram(SRT_PROMPT_CLOSED);
+    g_browser_process->local_state()->SetBoolean(
+        prefs::kSwReporterPendingPrompt, true);
+  }
 }
 
 void SRTGlobalError::BubbleViewAcceptButtonPressed(Browser* browser) {
-  safe_browsing::RecordSRTPromptHistogram(safe_browsing::SRT_PROMPT_ACCEPTED);
+  RecordSRTPromptHistogram(SRT_PROMPT_ACCEPTED);
+  interacted_ = true;
   global_error_service_->RemoveGlobalError(this);
   MaybeExecuteSRT();
 }
 
 void SRTGlobalError::BubbleViewCancelButtonPressed(Browser* browser) {
-  safe_browsing::RecordSRTPromptHistogram(safe_browsing::SRT_PROMPT_DENIED);
+  RecordSRTPromptHistogram(SRT_PROMPT_DENIED);
+  interacted_ = true;
   global_error_service_->RemoveGlobalError(this);
 
   BrowserThread::PostBlockingPoolTask(
       FROM_HERE, base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
-  DestroySelf();
+  OnUserinteractionDone();
 }
 
 bool SRTGlobalError::ShouldCloseOnDeactivate() const {
@@ -164,14 +189,14 @@ void SRTGlobalError::MaybeExecuteSRT() {
   BrowserThread::PostBlockingPoolTask(
       FROM_HERE, base::Bind(&MaybeExecuteSRTFromBlockingPool, downloaded_path_,
                             base::ThreadTaskRunnerHandle::Get(),
-                            base::Bind(&SRTGlobalError::DestroySelf,
+                            base::Bind(&SRTGlobalError::OnUserinteractionDone,
                                        base::Unretained(this)),
                             base::Bind(&SRTGlobalError::FallbackToDownloadPage,
                                        base::Unretained(this))));
 }
 
 void SRTGlobalError::FallbackToDownloadPage() {
-  safe_browsing::RecordSRTPromptHistogram(safe_browsing::SRT_PROMPT_FALLBACK);
+  RecordSRTPromptHistogram(SRT_PROMPT_FALLBACK);
 
   chrome::HostDesktopType desktop_type = chrome::GetActiveDesktop();
   Browser* browser = chrome::FindLastActiveWithHostDesktopType(desktop_type);
@@ -183,9 +208,16 @@ void SRTGlobalError::FallbackToDownloadPage() {
 
   BrowserThread::PostBlockingPoolTask(
       FROM_HERE, base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
-  DestroySelf();
+  OnUserinteractionDone();
 }
 
-void SRTGlobalError::DestroySelf() {
+void SRTGlobalError::OnUserinteractionDone() {
+  DCHECK(interacted_);
+  // Once the user interacted with the bubble, we can forget about any pending
+  // prompt.
+  g_browser_process->local_state()->SetBoolean(prefs::kSwReporterPendingPrompt,
+                                               false);
   delete this;
 }
+
+}  // namespace safe_browsing

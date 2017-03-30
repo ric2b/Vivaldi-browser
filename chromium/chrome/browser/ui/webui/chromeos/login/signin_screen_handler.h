@@ -9,10 +9,10 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -35,6 +35,7 @@
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/events/event_handler.h"
 
+class AccountId;
 class EasyUnlockService;
 
 namespace base {
@@ -77,7 +78,8 @@ class LoginDisplayWebUIHandler {
  public:
   virtual void ClearAndEnablePassword() = 0;
   virtual void ClearUserPodPassword() = 0;
-  virtual void OnUserRemoved(const std::string& username) = 0;
+  virtual void OnUserRemoved(const AccountId& account_id,
+                             bool last_user_removed) = 0;
   virtual void OnUserImageChanged(const user_manager::User& user) = 0;
   virtual void OnPreferencesChanged() = 0;
   virtual void ResetSigninScreenHandlerDelegate() = 0;
@@ -86,7 +88,6 @@ class LoginDisplayWebUIHandler {
                          const std::string& help_link_text,
                          HelpAppLauncher::HelpTopic help_topic_id) = 0;
   virtual void ShowErrorScreen(LoginDisplay::SigninError error_id) = 0;
-  virtual void ShowGaiaPasswordChanged(const std::string& username) = 0;
   virtual void ShowSigninUI(const std::string& email) = 0;
   virtual void ShowPasswordChangedDialog(bool show_password_error,
                                          const std::string& email) = 0;
@@ -120,9 +121,6 @@ class SigninScreenHandlerDelegate {
   // Used for both known and new users.
   virtual void Login(const UserContext& user_context,
                      const SigninSpecifics& specifics) = 0;
-
-  // Sign in as guest to create a new Google account.
-  virtual void CreateAccount() = 0;
 
   // Returns true if sign in is in progress.
   virtual bool IsSigninInProgress() const = 0;
@@ -162,20 +160,17 @@ class SigninScreenHandlerDelegate {
   // Cancels user adding.
   virtual void CancelUserAdding() = 0;
 
-  // Load wallpaper for given |username|.
-  virtual void LoadWallpaper(const std::string& username) = 0;
+  // Load wallpaper for given |account_id|.
+  virtual void LoadWallpaper(const AccountId& account_id) = 0;
 
   // Loads the default sign-in wallpaper.
   virtual void LoadSigninWallpaper() = 0;
 
   // Attempts to remove given user.
-  virtual void RemoveUser(const std::string& username) = 0;
+  virtual void RemoveUser(const AccountId& account_id) = 0;
 
   // Let the delegate know about the handler it is supposed to be using.
   virtual void SetWebUIHandler(LoginDisplayWebUIHandler* webui_handler) = 0;
-
-  // Returns users list to be shown.
-  virtual const user_manager::UserList& GetUsers() const = 0;
 
   // Whether login as guest is available.
   virtual bool IsShowGuest() const = 0;
@@ -191,10 +186,10 @@ class SigninScreenHandlerDelegate {
   virtual void HandleGetUsers() = 0;
 
   // Runs an OAuth token validation check for user.
-  virtual void CheckUserStatus(const std::string& user_id) = 0;
+  virtual void CheckUserStatus(const AccountId& account_id) = 0;
 
   // Returns true if user is allowed to log in by domain policy.
-  virtual bool IsUserWhitelisted(const std::string& user_id) = 0;
+  virtual bool IsUserWhitelisted(const AccountId& account_id) = 0;
 
  protected:
   virtual ~SigninScreenHandlerDelegate() {}
@@ -291,7 +286,8 @@ class SigninScreenHandler
   // LoginDisplayWebUIHandler implementation:
   void ClearAndEnablePassword() override;
   void ClearUserPodPassword() override;
-  void OnUserRemoved(const std::string& username) override;
+  void OnUserRemoved(const AccountId& account_id,
+                     bool last_user_removed) override;
   void OnUserImageChanged(const user_manager::User& user) override;
   void OnPreferencesChanged() override;
   void ResetSigninScreenHandlerDelegate() override;
@@ -299,7 +295,6 @@ class SigninScreenHandler
                  const std::string& error_text,
                  const std::string& help_link_text,
                  HelpAppLauncher::HelpTopic help_topic_id) override;
-  void ShowGaiaPasswordChanged(const std::string& username) override;
   void ShowSigninUI(const std::string& email) override;
   void ShowPasswordChangedDialog(bool show_password_error,
                                  const std::string& email) override;
@@ -318,9 +313,6 @@ class SigninScreenHandler
   void OnMaximizeModeStarted() override;
   void OnMaximizeModeEnded() override;
 
-  // Updates authentication extension. Called when device settings that affect
-  // sign-in (allow BWSI and allow whitelist) are changed.
-  void UserSettingsChanged();
   void UpdateAddButtonStatus();
 
   // Restore input focus to current user pod.
@@ -328,31 +320,30 @@ class SigninScreenHandler
 
   // WebUI message handlers.
   void HandleGetUsers();
-  void HandleAuthenticateUser(const std::string& username,
+  void HandleAuthenticateUser(const AccountId& account_id,
                               const std::string& password);
   void HandleAttemptUnlock(const std::string& username);
   void HandleLaunchIncognito();
-  void HandleLaunchPublicSession(const std::string& user_id,
+  void HandleLaunchPublicSession(const AccountId& account_id,
                                  const std::string& locale,
                                  const std::string& input_method);
   void HandleOfflineLogin(const base::ListValue* args);
   void HandleShutdownSystem();
-  void HandleLoadWallpaper(const std::string& email);
+  void HandleLoadWallpaper(const AccountId& account_id);
   void HandleRebootSystem();
-  void HandleRemoveUser(const std::string& email);
+  void HandleRemoveUser(const AccountId& account_id);
   void HandleShowAddUser(const base::ListValue* args);
   void HandleToggleEnrollmentScreen();
   void HandleToggleEnableDebuggingScreen();
   void HandleToggleKioskEnableScreen();
   void HandleToggleResetScreen();
   void HandleToggleKioskAutolaunchScreen();
-  void HandleCreateAccount();
   void HandleAccountPickerReady();
   void HandleWallpaperReady();
   void HandleSignOutUser();
   void HandleOpenProxySettings();
   void HandleLoginVisible(const std::string& source);
-  void HandleCancelPasswordChangedFlow(const std::string& user_id);
+  void HandleCancelPasswordChangedFlow(const AccountId& account_id);
   void HandleCancelUserAdding();
   void HandleMigrateUserData(const std::string& password);
   void HandleResyncUserData();
@@ -360,23 +351,22 @@ class SigninScreenHandler
   void HandleUnlockOnLoginSuccess();
   void HandleLoginScreenUpdate();
   void HandleShowLoadingTimeoutError();
-  void HandleUpdateOfflineLogin(bool offline_login_active);
   void HandleShowSupervisedUserCreationScreen();
-  void HandleFocusPod(const std::string& user_id);
+  void HandleFocusPod(const AccountId& account_id);
   void HandleHardlockPod(const std::string& user_id);
-  void HandleLaunchKioskApp(const std::string& app_id, bool diagnostic_mode);
-  void HandleGetPublicSessionKeyboardLayouts(const std::string& user_id,
+  void HandleLaunchKioskApp(const AccountId& app_account_id,
+                            bool diagnostic_mode);
+  void HandleGetPublicSessionKeyboardLayouts(const AccountId& account_id,
                                              const std::string& locale);
-  void HandleCancelConsumerManagementEnrollment();
   void HandleGetTouchViewState();
   void HandleLogRemoveUserWarningShown();
-  void HandleFirstIncorrectPasswordAttempt(const std::string& email);
-  void HandleMaxIncorrectPasswordAttempts(const std::string& email);
+  void HandleFirstIncorrectPasswordAttempt(const AccountId& account_id);
+  void HandleMaxIncorrectPasswordAttempts(const AccountId& account_id);
 
   // Sends the list of |keyboard_layouts| available for the |locale| that is
   // currently selected for the public session identified by |user_id|.
   void SendPublicSessionKeyboardLayouts(
-      const std::string& user_id,
+      const AccountId& account_id,
       const std::string& locale,
       scoped_ptr<base::ListValue> keyboard_layouts);
 
@@ -455,7 +445,6 @@ class SigninScreenHandler
   NetworkErrorModel* network_error_model_;
   CoreOobeActor* core_oobe_actor_;
 
-  bool offline_login_active_ = false;
   NetworkStateInformer::State last_network_state_ =
       NetworkStateInformer::UNKNOWN;
 
@@ -473,17 +462,14 @@ class SigninScreenHandler
   NetworkError::ErrorReason gaia_reload_reason_ =
       NetworkError::ERROR_REASON_NONE;
 
-  bool caps_lock_enabled_;
+  bool caps_lock_enabled_ = false;
 
   // Non-owning ptr.
   // TODO(antrim@): remove this dependency.
-  GaiaScreenHandler* gaia_screen_handler_;
+  GaiaScreenHandler* gaia_screen_handler_ = nullptr;
 
   // Maximized mode controller delegate.
   scoped_ptr<TouchViewControllerDelegate> max_mode_delegate_;
-
-  // Whether consumer management enrollment is in progress.
-  bool is_enrolling_consumer_management_ = false;
 
   // Input Method Engine state used at signin screen.
   scoped_refptr<input_method::InputMethodManager::State> ime_state_;

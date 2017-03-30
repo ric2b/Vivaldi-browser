@@ -42,7 +42,8 @@ void AppLaunchSigninScreen::Show() {
 
 void AppLaunchSigninScreen::InitOwnerUserList() {
   user_manager::UserManager* user_manager = GetUserManager();
-  const std::string& owner_email = user_manager->GetOwnerEmail();
+  const std::string& owner_email =
+      user_manager->GetOwnerAccountId().GetUserEmail();
   const user_manager::UserList& all_users = user_manager->GetUsers();
 
   owner_user_list_.clear();
@@ -76,10 +77,6 @@ void AppLaunchSigninScreen::CancelUserAdding() {
   NOTREACHED();
 }
 
-void AppLaunchSigninScreen::CreateAccount() {
-  NOTREACHED();
-}
-
 void AppLaunchSigninScreen::CompleteLogin(const UserContext& user_context) {
   NOTREACHED();
 }
@@ -100,8 +97,7 @@ void AppLaunchSigninScreen::MigrateUserData(const std::string& old_password) {
   NOTREACHED();
 }
 
-void AppLaunchSigninScreen::LoadWallpaper(const std::string& username) {
-}
+void AppLaunchSigninScreen::LoadWallpaper(const AccountId& account_id) {}
 
 void AppLaunchSigninScreen::LoadSigninWallpaper() {
 }
@@ -109,7 +105,7 @@ void AppLaunchSigninScreen::LoadSigninWallpaper() {
 void AppLaunchSigninScreen::OnSigninScreenReady() {
 }
 
-void AppLaunchSigninScreen::RemoveUser(const std::string& username) {
+void AppLaunchSigninScreen::RemoveUser(const AccountId& account_id) {
   NOTREACHED();
 }
 
@@ -217,10 +213,9 @@ void AppLaunchSigninScreen::HandleGetUsers() {
   webui_handler_->LoadUsers(users_list, false);
 }
 
-void AppLaunchSigninScreen::CheckUserStatus(const std::string& user_id) {
-}
+void AppLaunchSigninScreen::CheckUserStatus(const AccountId& account_id) {}
 
-bool AppLaunchSigninScreen::IsUserWhitelisted(const std::string& user_id) {
+bool AppLaunchSigninScreen::IsUserWhitelisted(const AccountId& account_id) {
   NOTREACHED();
   return true;
 }

@@ -9,6 +9,7 @@
 #import <Carbon/Carbon.h>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
 namespace ui {
@@ -200,38 +201,48 @@ const KeyCodeMap kKeyCodesMap[] = {
   { VKEY_OEM_CLEAR /* 0xFE */, kVK_ANSI_KeypadClear, kClearCharCode }
 };
 
+bool IsKeypadEvent(NSEvent* event) {
+  // Check that this is the type of event that has a keyCode.
+  switch ([event type]) {
+    case NSKeyDown:
+    case NSKeyUp:
+    case NSFlagsChanged:
+      break;
+    default:
+      return false;
+  }
+
+  switch ([event keyCode]) {
+    case kVK_ANSI_KeypadClear:
+    case kVK_ANSI_KeypadEquals:
+    case kVK_ANSI_KeypadMultiply:
+    case kVK_ANSI_KeypadDivide:
+    case kVK_ANSI_KeypadMinus:
+    case kVK_ANSI_KeypadPlus:
+    case kVK_ANSI_KeypadEnter:
+    case kVK_ANSI_KeypadDecimal:
+    case kVK_ANSI_Keypad0:
+    case kVK_ANSI_Keypad1:
+    case kVK_ANSI_Keypad2:
+    case kVK_ANSI_Keypad3:
+    case kVK_ANSI_Keypad4:
+    case kVK_ANSI_Keypad5:
+    case kVK_ANSI_Keypad6:
+    case kVK_ANSI_Keypad7:
+    case kVK_ANSI_Keypad8:
+    case kVK_ANSI_Keypad9:
+      return true;
+  }
+
+  return false;
+}
+
 // A convenient array for getting symbol characters on the number keys.
 const char kShiftCharsForNumberKeys[] = ")!@#$%^&*(";
 
 // Translates from character code to keyboard code.
 KeyboardCode KeyboardCodeFromCharCode(unichar charCode) {
   switch (charCode) {
-    case 8: case 0x7F: return VKEY_BACK;
-    case 9: return VKEY_TAB;
-    case 0xD: case 3: return VKEY_RETURN;
-    case 0x1B: return VKEY_ESCAPE;
-    case ' ': return VKEY_SPACE;
-    case NSHomeFunctionKey: return VKEY_HOME;
-    case NSEndFunctionKey: return VKEY_END;
-    case NSPageUpFunctionKey: return VKEY_PRIOR;
-    case NSPageDownFunctionKey: return VKEY_NEXT;
-    case NSUpArrowFunctionKey: return VKEY_UP;
-    case NSDownArrowFunctionKey: return VKEY_DOWN;
-    case NSLeftArrowFunctionKey: return VKEY_LEFT;
-    case NSRightArrowFunctionKey: return VKEY_RIGHT;
-    case NSDeleteFunctionKey: return VKEY_DELETE;
-
-    case '0': case ')': return VKEY_0;
-    case '1': case '!': return VKEY_1;
-    case '2': case '@': return VKEY_2;
-    case '3': case '#': return VKEY_3;
-    case '4': case '$': return VKEY_4;
-    case '5': case '%': return VKEY_5;
-    case '6': case '^': return VKEY_6;
-    case '7': case '&': return VKEY_7;
-    case '8': case '*': return VKEY_8;
-    case '9': case '(': return VKEY_9;
-
     case 'a': case 'A': return VKEY_A;
     case 'b': case 'B': return VKEY_B;
     case 'c': case 'C': return VKEY_C;
@@ -265,36 +276,13 @@ KeyboardCode KeyboardCodeFromCharCode(unichar charCode) {
     case NSExecuteFunctionKey: return VKEY_EXECUTE;
     case NSPrintScreenFunctionKey: return VKEY_SNAPSHOT;
     case NSInsertFunctionKey: return VKEY_INSERT;
-    case NSHelpFunctionKey: return VKEY_INSERT;
-
-    case NSF1FunctionKey: return VKEY_F1;
-    case NSF2FunctionKey: return VKEY_F2;
-    case NSF3FunctionKey: return VKEY_F3;
-    case NSF4FunctionKey: return VKEY_F4;
-    case NSF5FunctionKey: return VKEY_F5;
-    case NSF6FunctionKey: return VKEY_F6;
-    case NSF7FunctionKey: return VKEY_F7;
-    case NSF8FunctionKey: return VKEY_F8;
-    case NSF9FunctionKey: return VKEY_F9;
-    case NSF10FunctionKey: return VKEY_F10;
-    case NSF11FunctionKey: return VKEY_F11;
-    case NSF12FunctionKey: return VKEY_F12;
-    case NSF13FunctionKey: return VKEY_F13;
-    case NSF14FunctionKey: return VKEY_F14;
-    case NSF15FunctionKey: return VKEY_F15;
-    case NSF16FunctionKey: return VKEY_F16;
-    case NSF17FunctionKey: return VKEY_F17;
-    case NSF18FunctionKey: return VKEY_F18;
-    case NSF19FunctionKey: return VKEY_F19;
-    case NSF20FunctionKey: return VKEY_F20;
-
     case NSF21FunctionKey: return VKEY_F21;
     case NSF22FunctionKey: return VKEY_F22;
     case NSF23FunctionKey: return VKEY_F23;
     case NSF24FunctionKey: return VKEY_F24;
     case NSScrollLockFunctionKey: return VKEY_SCROLL;
 
-      // U.S. Specific mappings.  Mileage may vary.
+    // U.S. Specific mappings.  Mileage may vary.
     case ';': case ':': return VKEY_OEM_1;
     case '=': case '+': return VKEY_OEM_PLUS;
     case ',': case '<': return VKEY_OEM_COMMA;
@@ -449,6 +437,204 @@ KeyboardCode KeyboardCodeFromKeyCode(unsigned short keyCode) {
   return kKeyboardCodes[keyCode];
 }
 
+DomKey DomKeyFromKeyCode(unsigned short keyCode) {
+  switch (keyCode) {
+    case kVK_Return:
+      return DomKey::ENTER;
+    case kVK_Tab:
+      return DomKey::TAB;
+    case kVK_Delete:
+      return DomKey::BACKSPACE;
+    case kVK_Escape:
+      return DomKey::ESCAPE;
+    case kVK_Command:
+      return DomKey::META;
+    case kVK_Shift:
+    case kVK_RightShift:
+      return DomKey::SHIFT;
+    case kVK_CapsLock:
+      return DomKey::CAPS_LOCK;
+    case kVK_Option:
+    case kVK_RightOption:
+      return DomKey::ALT;
+    case kVK_Control:
+    case kVK_RightControl:
+      return DomKey::CONTROL;
+    case kVK_Function:
+      return DomKey::FN;
+    case kVK_VolumeUp:
+      return DomKey::VOLUME_UP;
+    case kVK_VolumeDown:
+      return DomKey::VOLUME_DOWN;
+    case kVK_Mute:
+      return DomKey::VOLUME_MUTE;
+    case kVK_F1:
+      return DomKey::F1;
+    case kVK_F2:
+      return DomKey::F2;
+    case kVK_F3:
+      return DomKey::F3;
+    case kVK_F4:
+      return DomKey::F4;
+    case kVK_F5:
+      return DomKey::F5;
+    case kVK_F6:
+      return DomKey::F6;
+    case kVK_F7:
+      return DomKey::F7;
+    case kVK_F8:
+      return DomKey::F8;
+    case kVK_F9:
+      return DomKey::F9;
+    case kVK_F10:
+      return DomKey::F10;
+    case kVK_F11:
+      return DomKey::F11;
+    case kVK_F12:
+      return DomKey::F12;
+    case kVK_F13:
+      return DomKey::F13;
+    case kVK_F14:
+      return DomKey::F14;
+    case kVK_F15:
+      return DomKey::F15;
+    case kVK_F16:
+      return DomKey::F16;
+    case kVK_F17:
+      return DomKey::F17;
+    case kVK_F18:
+      return DomKey::F18;
+    case kVK_F19:
+      return DomKey::F19;
+    case kVK_F20:
+      return DomKey::F20;
+    case kVK_Help:
+      return DomKey::HELP;
+    case kVK_Home:
+      return DomKey::HOME;
+    case kVK_PageUp:
+      return DomKey::PAGE_UP;
+    case kVK_ForwardDelete:
+      return DomKey::DEL;
+    case kVK_End:
+      return DomKey::END;
+    case kVK_PageDown:
+      return DomKey::PAGE_DOWN;
+    case kVK_LeftArrow:
+      return DomKey::ARROW_LEFT;
+    case kVK_RightArrow:
+      return DomKey::ARROW_RIGHT;
+    case kVK_DownArrow:
+      return DomKey::ARROW_DOWN;
+    case kVK_UpArrow:
+      return DomKey::ARROW_UP;
+    default:
+      return DomKey::NONE;
+  }
+}
+
+DomKey DomKeyFromCharCode(unichar char_code) {
+  switch (char_code) {
+    case 0x03:
+      return DomKey::ENTER;  // Numpad Enter
+    // Mac maps backspace to forward delete unicode.
+    case 0x7f:
+      return DomKey::BACKSPACE;
+    case NSUpArrowFunctionKey:
+      return DomKey::ARROW_UP;
+    case NSDownArrowFunctionKey:
+      return DomKey::ARROW_DOWN;
+    case NSLeftArrowFunctionKey:
+      return DomKey::ARROW_LEFT;
+    case NSRightArrowFunctionKey:
+      return DomKey::ARROW_RIGHT;
+    case NSF1FunctionKey:
+      return DomKey::F1;
+    case NSF2FunctionKey:
+      return DomKey::F2;
+    case NSF3FunctionKey:
+      return DomKey::F3;
+    case NSF4FunctionKey:
+      return DomKey::F4;
+    case NSF5FunctionKey:
+      return DomKey::F5;
+    case NSF6FunctionKey:
+      return DomKey::F6;
+    case NSF7FunctionKey:
+      return DomKey::F7;
+    case NSF8FunctionKey:
+      return DomKey::F8;
+    case NSF9FunctionKey:
+      return DomKey::F9;
+    case NSF10FunctionKey:
+      return DomKey::F10;
+    case NSF11FunctionKey:
+      return DomKey::F11;
+    case NSF12FunctionKey:
+      return DomKey::F12;
+    case NSF13FunctionKey:
+      return DomKey::F13;
+    case NSF14FunctionKey:
+      return DomKey::F14;
+    case NSF15FunctionKey:
+      return DomKey::F15;
+    case NSF16FunctionKey:
+      return DomKey::F16;
+    case NSF17FunctionKey:
+      return DomKey::F17;
+    case NSF18FunctionKey:
+      return DomKey::F18;
+    case NSF19FunctionKey:
+      return DomKey::F19;
+    case NSF20FunctionKey:
+      return DomKey::F20;
+    case NSF21FunctionKey:
+      return DomKey::F21;
+    case NSF22FunctionKey:
+      return DomKey::F22;
+    case NSF23FunctionKey:
+      return DomKey::F23;
+    case NSF24FunctionKey:
+      return DomKey::F24;
+    case NSInsertFunctionKey:
+      return DomKey::INSERT;
+    case NSDeleteFunctionKey:
+      return DomKey::DEL;
+    case NSHomeFunctionKey:
+      return DomKey::HOME;
+    case NSEndFunctionKey:
+      return DomKey::END;
+    case NSPageUpFunctionKey:
+      return DomKey::PAGE_UP;
+    case NSPageDownFunctionKey:
+      return DomKey::PAGE_DOWN;
+    case NSPrintScreenFunctionKey:
+      return DomKey::PRINT_SCREEN;
+    case NSScrollLockFunctionKey:
+      return DomKey::SCROLL_LOCK;
+    case NSPauseFunctionKey:
+      return DomKey::PAUSE;
+    case NSPrintFunctionKey:
+      return DomKey::PRINT;
+    case NSClearLineFunctionKey:
+      return DomKey::CLEAR;
+    case NSSelectFunctionKey:
+      return DomKey::SELECT;
+    case NSExecuteFunctionKey:
+      return DomKey::EXECUTE;
+    case NSUndoFunctionKey:
+      return DomKey::UNDO;
+    case NSRedoFunctionKey:
+      return DomKey::REDO;
+    case NSFindFunctionKey:
+      return DomKey::FIND;
+    case NSHelpFunctionKey:
+      return DomKey::HELP;
+    default:
+      return DomKey::FromCharacter(char_code);
+  }
+}
+
 }  // namespace
 
 int MacKeyCodeForWindowsKeyCode(KeyboardCode keycode,
@@ -533,7 +719,8 @@ int MacKeyCodeForWindowsKeyCode(KeyboardCode keycode,
 KeyboardCode KeyboardCodeFromNSEvent(NSEvent* event) {
   KeyboardCode code = VKEY_UNKNOWN;
 
-  if ([event type] == NSKeyDown || [event type] == NSKeyUp) {
+  if (!IsKeypadEvent(event) &&
+      ([event type] == NSKeyDown || [event type] == NSKeyUp)) {
     NSString* characters = [event characters];
     if ([characters length] > 0)
       code = KeyboardCodeFromCharCode([characters characterAtIndex:0]);
@@ -549,8 +736,20 @@ KeyboardCode KeyboardCodeFromNSEvent(NSEvent* event) {
   return KeyboardCodeFromKeyCode([event keyCode]);
 }
 
-DomCode CodeFromNSEvent(NSEvent* event) {
+DomCode DomCodeFromNSEvent(NSEvent* event) {
   return ui::KeycodeConverter::NativeKeycodeToDomCode([event keyCode]);
+}
+
+DomKey DomKeyFromNSEvent(NSEvent* event) {
+  // Apply the lookup based on the character first since that has the
+  // Keyboard layout and modifers already applied; whereas the keyCode
+  // doesn't.
+  if ([event type] == NSKeyDown || [event type] == NSKeyUp) {
+    NSString* characters = [event characters];
+    if ([characters length] > 0)
+      return DomKeyFromCharCode([characters characterAtIndex:0]);
+  }
+  return DomKeyFromKeyCode([event keyCode]);
 }
 
 }  // namespace ui

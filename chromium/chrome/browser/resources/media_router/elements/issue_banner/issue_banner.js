@@ -9,26 +9,17 @@ Polymer({
 
   properties: {
     /**
-     * The issue to show.
-     * @type {?media_router.Issue}
-     */
-    issue: {
-      type: Object,
-      value: null,
-      observer: 'updateActionButtonText_',
-    },
-
-    /**
      * Maps an issue action type to the resource identifier of the text shown
      * in the action button.
-     * This is a property of issue-banner because it is used in tests.
-     * @type {!Array<string>}
+     * This is a property of issue-banner because it is used in tests. This
+     * property should always be set before |issue| is set or updated.
+     * @private {!Array<string>}
      */
-    issueActionTypeToButtonTextResource_: {
+    actionTypeToButtonTextResource_: {
       type: Array,
+      readOnly: true,
       value: function() {
-        return ['okButton', 'cancelButton', 'dismissButton',
-            'learnMoreButton'];
+        return ['dismissButton', 'learnMoreText'];
       },
     },
 
@@ -39,6 +30,16 @@ Polymer({
     defaultActionButtonText_: {
       type: String,
       value: '',
+    },
+
+    /**
+     * The issue to show.
+     * @type {?media_router.Issue}
+     */
+    issue: {
+      type: Object,
+      value: null,
+      observer: 'updateActionButtonText_',
     },
 
     /**
@@ -61,13 +62,15 @@ Polymer({
   },
 
   /**
-   * Returns true to hide the non-blocking issue UI, false to show it.
-   *
-   * @param {?media_router.Issue} issue
+   * @param {?media_router.Issue} issue The current issue.
+   * @return {string} The class for the overall issue-banner.
    * @private
    */
-  computeIsNonBlockingIssueHidden_: function(issue) {
-    return !issue || issue.isBlocking;
+  computeIssueClass_: function(issue) {
+    if (!issue)
+      return '';
+
+    return issue.isBlocking ? 'blocking' : 'non-blocking';
   },
 
   /**
@@ -110,7 +113,8 @@ Polymer({
    * @private
    */
   onClickOptAction_: function(event) {
-    this.fireIssueActionClick_(this.issue.secondaryActionType);
+    this.fireIssueActionClick_(
+        /** @type {number} */(this.issue.secondaryActionType));
   },
 
   /**
@@ -124,12 +128,12 @@ Polymer({
     var secondaryText = '';
     if (this.issue) {
       defaultText = loadTimeData.getString(
-          this.issueActionTypeToButtonTextResource_[
+          this.actionTypeToButtonTextResource_[
           this.issue.defaultActionType]);
 
       if (this.issue.secondaryActionType) {
         secondaryText = loadTimeData.getString(
-            this.issueActionTypeToButtonTextResource_[
+            this.actionTypeToButtonTextResource_[
             this.issue.secondaryActionType]);
       }
     }

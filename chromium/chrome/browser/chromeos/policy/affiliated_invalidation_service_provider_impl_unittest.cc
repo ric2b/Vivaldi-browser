@@ -5,7 +5,9 @@
 #include "chrome/browser/chromeos/policy/affiliated_invalidation_service_provider_impl.h"
 
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -49,7 +51,7 @@ scoped_ptr<KeyedService> BuildProfileInvalidationProvider(
   invalidation_service->SetInvalidatorState(
       syncer::TRANSIENT_INVALIDATION_ERROR);
   return make_scoped_ptr(new invalidation::ProfileInvalidationProvider(
-      invalidation_service.Pass()));
+      std::move(invalidation_service)));
 }
 
 }  // namespace
@@ -87,8 +89,10 @@ class AffiliatedInvalidationServiceProviderImplTest : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
-  // Ownership is not passed. The Profile is owned by the global ProfileManager.
-  Profile* LogInAndReturnProfile(const std::string& user_id);
+  // Both functions don't pass ownership of the profile. The Profile is owned
+  // by the global ProfileManager.
+  Profile* LogInAndReturnAffiliatedProfile(const std::string& user_id);
+  Profile* LogInAndReturnNonAffiliatedProfile(const std::string& user_id);
 
   // Logs in as an affiliated user and indicates that the per-profile
   // invalidation service for this user connected. Verifies that this
@@ -116,6 +120,9 @@ class AffiliatedInvalidationServiceProviderImplTest : public testing::Test {
       bool create);
 
  protected:
+  // Ownership is not passed. The Profile is owned by the global ProfileManager.
+  Profile* LogInAndReturnProfile(const std::string& user_id,
+                                 bool is_affiliated);
   scoped_ptr<AffiliatedInvalidationServiceProviderImpl> provider_;
   scoped_ptr<FakeConsumer> consumer_;
   invalidation::TiclInvalidationService* device_invalidation_service_;
@@ -220,9 +227,22 @@ void AffiliatedInvalidationServiceProviderImplTest::TearDown() {
   chromeos::SystemSaltGetter::Shutdown();
 }
 
-Profile* AffiliatedInvalidationServiceProviderImplTest::LogInAndReturnProfile(
+Profile*
+AffiliatedInvalidationServiceProviderImplTest::LogInAndReturnAffiliatedProfile(
     const std::string& user_id) {
-  fake_user_manager_->AddUser(user_id);
+  return LogInAndReturnProfile(user_id, true);
+}
+
+Profile* AffiliatedInvalidationServiceProviderImplTest::
+    LogInAndReturnNonAffiliatedProfile(const std::string& user_id) {
+  return LogInAndReturnProfile(user_id, false);
+}
+
+Profile* AffiliatedInvalidationServiceProviderImplTest::LogInAndReturnProfile(
+    const std::string& user_id,
+    bool is_affiliated) {
+  fake_user_manager_->AddUserWithAffiliation(AccountId::FromUserEmail(user_id),
+                                             is_affiliated);
   Profile* profile = profile_manager_.CreateTestingProfile(user_id);
   content::NotificationService::current()->Notify(
       chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED,
@@ -234,7 +254,7 @@ Profile* AffiliatedInvalidationServiceProviderImplTest::LogInAndReturnProfile(
 void AffiliatedInvalidationServiceProviderImplTest::
     LogInAsAffiliatedUserAndConnectInvalidationService() {
   // Log in as an affiliated user.
-  Profile* profile = LogInAndReturnProfile(kAffiliatedUserID1);
+  Profile* profile = LogInAndReturnAffiliatedProfile(kAffiliatedUserID1);
   EXPECT_TRUE(profile);
 
   // Verify that a per-profile invalidation service has been created.
@@ -260,7 +280,7 @@ void AffiliatedInvalidationServiceProviderImplTest::
 void AffiliatedInvalidationServiceProviderImplTest::
     LogInAsUnaffiliatedUserAndConnectInvalidationService() {
   // Log in as an unaffiliated user.
-  Profile* profile = LogInAndReturnProfile(kUnaffiliatedUserID);
+  Profile* profile = LogInAndReturnNonAffiliatedProfile(kUnaffiliatedUserID);
   EXPECT_TRUE(profile);
 
   // Verify that a per-profile invalidation service has been created.
@@ -335,7 +355,7 @@ TEST_F(AffiliatedInvalidationServiceProviderImplTest, NoConsumers) {
   EXPECT_FALSE(provider_->GetDeviceInvalidationServiceForTest());
 
   // Log in as an affiliated user.
-  EXPECT_TRUE(LogInAndReturnProfile(kAffiliatedUserID1));
+  EXPECT_TRUE(LogInAndReturnAffiliatedProfile(kAffiliatedUserID1));
 
   // Verify that no device-global invalidation service has been created.
   EXPECT_FALSE(provider_->GetDeviceInvalidationServiceForTest());
@@ -506,7 +526,7 @@ TEST_F(AffiliatedInvalidationServiceProviderImplTest,
   LogInAsAffiliatedUserAndConnectInvalidationService();
 
   // Log in as a second affiliated user.
-  Profile* second_profile = LogInAndReturnProfile(kAffiliatedUserID2);
+  Profile* second_profile = LogInAndReturnAffiliatedProfile(kAffiliatedUserID2);
   EXPECT_TRUE(second_profile);
 
   // Verify that the device-global invalidation service still does not exist.
@@ -605,7 +625,7 @@ TEST_F(AffiliatedInvalidationServiceProviderImplTest, NoServiceAfterShutdown) {
   EXPECT_FALSE(provider_->GetDeviceInvalidationServiceForTest());
 
   // Log in as a second affiliated user.
-  Profile* second_profile = LogInAndReturnProfile(kAffiliatedUserID2);
+  Profile* second_profile = LogInAndReturnAffiliatedProfile(kAffiliatedUserID2);
   EXPECT_TRUE(second_profile);
 
   // Verify that the device-global invalidation service still does not exist.

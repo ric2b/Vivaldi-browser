@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/thread_task_runner_handle.h"
-#include "cc/output/software_frame_data.h"
 #include "content/browser/compositor/software_output_device_ozone.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/skia/include/core/SkDevice.h"
-#include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/test/context_factories_for_test.h"
 #include "ui/gfx/geometry/size.h"
@@ -41,6 +40,9 @@ class TestPlatformWindowDelegate : public ui::PlatformWindowDelegate {
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget,
                                     float device_pixel_ratio) override {
     widget_ = widget;
+  }
+  void OnAcceleratedWidgetDestroyed() override {
+    NOTREACHED();
   }
   void OnActivationChanged(bool active) override {}
 
@@ -88,14 +90,15 @@ void SoftwareOutputDeviceOzoneTest::SetUp() {
   const gfx::Size size(500, 400);
   window_ = ui::OzonePlatform::GetInstance()->CreatePlatformWindow(
       &window_delegate_, gfx::Rect(size));
-  compositor_.reset(new ui::Compositor(window_delegate_.GetAcceleratedWidget(),
-                                       context_factory,
-                                       base::ThreadTaskRunnerHandle::Get()));
+  compositor_.reset(
+      new ui::Compositor(context_factory, base::ThreadTaskRunnerHandle::Get()));
+  compositor_->SetAcceleratedWidget(window_delegate_.GetAcceleratedWidget());
   compositor_->SetScaleAndSize(1.0f, size);
 
-  output_device_.reset(new content::SoftwareOutputDeviceOzone(
-      compositor_.get()));
-  output_device_->Resize(size, 1.f);
+  output_device_ =
+      content::SoftwareOutputDeviceOzone::Create(compositor_.get());
+  if (output_device_)
+    output_device_->Resize(size, 1.f);
 }
 
 void SoftwareOutputDeviceOzoneTest::TearDown() {
@@ -117,14 +120,18 @@ void SoftwareOutputDeviceOzonePixelTest::SetUp() {
 }
 
 TEST_F(SoftwareOutputDeviceOzoneTest, CheckCorrectResizeBehavior) {
+  // Check if software rendering mode is not supported.
+  if (!output_device_)
+    return;
+
   gfx::Rect damage(0, 0, 100, 100);
   gfx::Size size(200, 100);
   // Reduce size.
   output_device_->Resize(size, 1.f);
 
   SkCanvas* canvas = output_device_->BeginPaint(damage);
-  gfx::Size canvas_size(canvas->getDeviceSize().width(),
-                        canvas->getDeviceSize().height());
+  gfx::Size canvas_size(canvas->getBaseLayerSize().width(),
+                        canvas->getBaseLayerSize().height());
   EXPECT_EQ(size.ToString(), canvas_size.ToString());
 
   size.SetSize(1000, 500);
@@ -132,8 +139,8 @@ TEST_F(SoftwareOutputDeviceOzoneTest, CheckCorrectResizeBehavior) {
   output_device_->Resize(size, 1.f);
 
   canvas = output_device_->BeginPaint(damage);
-  canvas_size.SetSize(canvas->getDeviceSize().width(),
-                      canvas->getDeviceSize().height());
+  canvas_size.SetSize(canvas->getBaseLayerSize().width(),
+                      canvas->getBaseLayerSize().height());
   EXPECT_EQ(size.ToString(), canvas_size.ToString());
 
 }

@@ -8,12 +8,15 @@
 #include <map>
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "ui/compositor/compositor_export.h"
 #include "ui/compositor/layer_animation_element.h"
 
 namespace ui {
+
+namespace test {
+class LayerAnimationObserverTestApi;
+}  // namespace test
 
 class LayerAnimationSequence;
 class ScopedLayerAnimationSettings;
@@ -22,6 +25,9 @@ class ImplicitAnimationObserver;
 // LayerAnimationObservers are notified when animations complete.
 class COMPOSITOR_EXPORT LayerAnimationObserver  {
  public:
+  // Called when the |sequence| starts.
+  virtual void OnLayerAnimationStarted(LayerAnimationSequence* sequence);
+
   // Called when the |sequence| ends. Not called if |sequence| is aborted.
   virtual void OnLayerAnimationEnded(
       LayerAnimationSequence* sequence) = 0;
@@ -41,11 +47,23 @@ class COMPOSITOR_EXPORT LayerAnimationObserver  {
   LayerAnimationObserver();
   virtual ~LayerAnimationObserver();
 
-  // If the animator is destroyed during an animation, the animations are
+  // If the LayerAnimator is destroyed during an animation, the animations are
   // aborted. The resulting NotifyAborted notifications will NOT be sent to
-  // this observer if this function returns false. NOTE: IF YOU override THIS
-  // FUNCTION TO RETURN TRUE, YOU MUST REMEMBER TO REMOVE YOURSELF AS AN
-  // OBSERVER WHEN YOU ARE DESTROYED.
+  // this observer if this function returns false. An observer who wants to
+  // receive the NotifyAborted notifications during destruction can override
+  // this function to return true.
+  //
+  // *** IMPORTANT ***: If a class overrides this function to return true and
+  // that class is a direct or indirect owner of the LayerAnimationSequence
+  // being observed, then the class must explicitly remove itself as an
+  // observer during destruction of the LayerAnimationObserver! This is to
+  // ensure that a partially destroyed observer isn't notified with an
+  // OnLayerAnimationAborted() call when the LayerAnimator is destroyed.
+  //
+  // This opt-in pattern is used because it is common for a class to be the
+  // observer of a LayerAnimationSequence that it owns indirectly because it
+  // owns the Layer which owns the LayerAnimator which owns the
+  // LayerAnimationSequence.
   virtual bool RequiresNotificationWhenAnimatorDestroyed() const;
 
   // Called when |this| is added to |sequence|'s observer list.
@@ -63,6 +81,7 @@ class COMPOSITOR_EXPORT LayerAnimationObserver  {
 
  private:
   friend class LayerAnimationSequence;
+  friend class test::LayerAnimationObserverTestApi;
 
   // Called when |this| is added to |sequence|'s observer list.
   void AttachedToSequence(LayerAnimationSequence* sequence);
@@ -78,6 +97,8 @@ class COMPOSITOR_EXPORT LayerAnimationObserver  {
 // An implicit animation observer is intended to be used in conjunction with a
 // ScopedLayerAnimationSettings object in order to receive a notification when
 // all implicit animations complete.
+// TODO(bruthig): Unify the ImplicitAnimationObserver with the
+// CallbackLayerAnimationObserver. (See www.crbug.com/542825).
 class COMPOSITOR_EXPORT ImplicitAnimationObserver
     : public LayerAnimationObserver {
  public:

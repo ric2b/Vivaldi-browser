@@ -4,14 +4,19 @@
 
 #include "ui/base/resource/resource_bundle.h"
 
+#include <stdint.h>
+
 #include <limits>
+#include <utility>
 #include <vector>
 
+#include "app/vivaldi_apptools.h"
 #include "base/big_endian.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
@@ -25,6 +30,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/data_pack.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -38,6 +44,7 @@
 
 #if defined(OS_ANDROID)
 #include "ui/base/resource/resource_bundle_android.h"
+#include "ui/gfx/android/device_display_info.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -91,6 +98,19 @@ ScaleFactor FindClosestScaleFactorUnsafe(float scale) {
   return closest_match;
 }
 #endif  // OS_ANDROID
+
+base::FilePath GetResourcesPakFilePath(const std::string& pak_name) {
+  base::FilePath path;
+  if (PathService::Get(base::DIR_MODULE, &path))
+    return path.AppendASCII(pak_name.c_str());
+
+  // Return just the name of the pak file.
+#if defined(OS_WIN)
+  return base::FilePath(base::ASCIIToUTF16(pak_name));
+#else
+  return base::FilePath(pak_name.c_str());
+#endif  // OS_WIN
+}
 
 }  // namespace
 
@@ -162,7 +182,7 @@ void ResourceBundle::InitSharedInstanceWithPakFileRegion(
     const base::MemoryMappedFile::Region& region) {
   InitSharedInstance(NULL);
   scoped_ptr<DataPack> data_pack(new DataPack(SCALE_FACTOR_100P));
-  if (!data_pack->LoadFromFileRegion(pak_file.Pass(), region)) {
+  if (!data_pack->LoadFromFileRegion(std::move(pak_file), region)) {
     NOTREACHED() << "failed to load pak file";
     return;
   }
@@ -202,22 +222,7 @@ ResourceBundle& ResourceBundle::GetSharedInstance() {
 bool ResourceBundle::LocaleDataPakExists(const std::string& locale) {
   bool locale_file_path_exists = !GetLocaleFilePath(locale, true).empty();
   if (!locale_file_path_exists) {
-    locale_file_path_exists =
-// Need to update this when adding languages to Vivaldi that are 'unsupported'
-// in Chromium.
-// Keep this list in sync with extensions/common/extension_l10n_util.cc
-      (locale == "be") ||
-      (locale == "eo") ||
-      (locale == "fy") ||
-      (locale == "gl") ||
-      (locale == "hy") ||
-      (locale == "io") ||
-      (locale == "is") ||
-      (locale == "jbo") ||
-      (locale == "ku") ||
-      (locale == "mk") ||
-      (locale == "sq") ||
-      (locale == "nn");
+    locale_file_path_exists = vivaldi::IsVivaldiExtraLocale(locale);
   }
   return locale_file_path_exists;
 }
@@ -247,8 +252,9 @@ void ResourceBundle::AddOptionalMaterialDesignDataPackFromPath(
 
 void ResourceBundle::AddDataPackFromFile(base::File file,
                                          ScaleFactor scale_factor) {
-  AddDataPackFromFileRegion(
-      file.Pass(), base::MemoryMappedFile::Region::kWholeFile, scale_factor);
+  AddDataPackFromFileRegion(std::move(file),
+                            base::MemoryMappedFile::Region::kWholeFile,
+                            scale_factor);
 }
 
 void ResourceBundle::AddDataPackFromFileRegion(
@@ -257,7 +263,7 @@ void ResourceBundle::AddDataPackFromFileRegion(
     ScaleFactor scale_factor) {
   scoped_ptr<DataPack> data_pack(
       new DataPack(scale_factor));
-  if (data_pack->LoadFromFileRegion(file.Pass(), region)) {
+  if (data_pack->LoadFromFileRegion(std::move(file), region)) {
     AddDataPack(data_pack.release());
   } else {
     LOG(ERROR) << "Failed to load data pack from file."
@@ -312,9 +318,9 @@ std::string ResourceBundle::LoadLocaleResources(
       locale_file_path = GetLocaleFilePath("en-US", true);
     }
     if (locale_file_path.empty()) {
-      // It's possible that there is no locale.pak.
+    // It's possible that there is no locale.pak.
     LOG(WARNING) << "locale_file_path.empty() for locale " << app_locale;
-      return std::string();
+    return std::string();
     }
   }
 
@@ -476,7 +482,7 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
   if (scale_factor != ui::SCALE_FACTOR_100P) {
     for (size_t i = 0; i < data_packs_.size(); i++) {
       if (data_packs_[i]->GetScaleFactor() == scale_factor &&
-          data_packs_[i]->GetStringPiece(static_cast<uint16>(resource_id),
+          data_packs_[i]->GetStringPiece(static_cast<uint16_t>(resource_id),
                                          &data))
         return data;
     }
@@ -487,7 +493,7 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
          data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_200P ||
          data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_300P ||
          data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_NONE) &&
-        data_packs_[i]->GetStringPiece(static_cast<uint16>(resource_id),
+        data_packs_[i]->GetStringPiece(static_cast<uint16_t>(resource_id),
                                        &data))
       return data;
   }
@@ -517,7 +523,7 @@ base::string16 ResourceBundle::GetLocalizedString(int message_id) {
   }
 
   base::StringPiece data;
-  if (!locale_resources_data_->GetStringPiece(static_cast<uint16>(message_id),
+  if (!locale_resources_data_->GetStringPiece(static_cast<uint16_t>(message_id),
                                               &data)) {
     // Fall back on the main data pack (shouldn't be any strings here except in
     // unittests).
@@ -620,9 +626,13 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   supported_scale_factors.push_back(SCALE_FACTOR_100P);
 #endif
 #if defined(OS_ANDROID)
-  const gfx::Display display =
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay();
-  const float display_density = display.device_scale_factor();
+  float display_density;
+  if (gfx::Display::HasForceDeviceScaleFactor()) {
+    display_density = gfx::Display::GetForcedDeviceScaleFactor();
+  } else {
+    gfx::DeviceDisplayInfo device_info;
+    display_density = device_info.GetDIPScale();
+  }
   const ScaleFactor closest = FindClosestScaleFactorUnsafe(display_density);
   if (closest != SCALE_FACTOR_100P)
     supported_scale_factors.push_back(closest);
@@ -658,15 +668,43 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
     supported_scale_factors.push_back(SCALE_FACTOR_100P);
 #endif
   ui::SetSupportedScaleFactors(supported_scale_factors);
-#if defined(OS_WIN)
-  // Must be called _after_ supported scale factors are set since it
-  // uses them.
-  gfx::InitDeviceScaleFactor(gfx::GetDPIScale());
-#endif
 }
 
 void ResourceBundle::FreeImages() {
   images_.clear();
+}
+
+void ResourceBundle::LoadChromeResources() {
+  // The material design data packs contain some of the same asset IDs as in
+  // the non-material design data packs. Add these to the ResourceBundle
+  // first so that they are searched first when a request for an asset is
+  // made.
+  if (MaterialDesignController::IsModeMaterial()) {
+    if (IsScaleFactorSupported(SCALE_FACTOR_100P)) {
+      AddMaterialDesignDataPackFromPath(
+          GetResourcesPakFilePath("vivaldi_material_100_percent.pak"),
+          SCALE_FACTOR_100P);
+    }
+
+    if (IsScaleFactorSupported(SCALE_FACTOR_200P)) {
+      AddOptionalMaterialDesignDataPackFromPath(
+          GetResourcesPakFilePath("vivaldi_material_200_percent.pak"),
+          SCALE_FACTOR_200P);
+    }
+  }
+
+  // Always load the 1x data pack first as the 2x data pack contains both 1x and
+  // 2x images. The 1x data pack only has 1x images, thus passes in an accurate
+  // scale factor to gfx::ImageSkia::AddRepresentation.
+  if (IsScaleFactorSupported(SCALE_FACTOR_100P)) {
+    AddDataPackFromPath(GetResourcesPakFilePath(
+        "vivaldi_100_percent.pak"), SCALE_FACTOR_100P);
+  }
+
+  if (IsScaleFactorSupported(SCALE_FACTOR_200P)) {
+    AddOptionalDataPackFromPath(GetResourcesPakFilePath(
+        "vivaldi_200_percent.pak"), SCALE_FACTOR_200P);
+  }
 }
 
 void ResourceBundle::AddDataPackFromPathInternal(
@@ -799,7 +837,7 @@ bool ResourceBundle::LoadBitmap(const ResourceHandle& data_handle,
                                 bool* fell_back_to_1x) const {
   DCHECK(fell_back_to_1x);
   scoped_refptr<base::RefCountedMemory> memory(
-      data_handle.GetStaticMemory(static_cast<uint16>(resource_id)));
+      data_handle.GetStaticMemory(static_cast<uint16_t>(resource_id)));
   if (!memory.get())
     return false;
 
@@ -870,15 +908,16 @@ bool ResourceBundle::PNGContainsFallbackMarker(const unsigned char* buf,
   for (;;) {
     if (size - pos < kPngChunkMetadataSize)
       break;
-    uint32 length = 0;
+    uint32_t length = 0;
     base::ReadBigEndian(reinterpret_cast<const char*>(buf + pos), &length);
     if (size - pos - kPngChunkMetadataSize < length)
       break;
-    if (length == 0 && memcmp(buf + pos + sizeof(uint32), kPngScaleChunkType,
-                              arraysize(kPngScaleChunkType)) == 0) {
+    if (length == 0 &&
+        memcmp(buf + pos + sizeof(uint32_t), kPngScaleChunkType,
+               arraysize(kPngScaleChunkType)) == 0) {
       return true;
     }
-    if (memcmp(buf + pos + sizeof(uint32), kPngDataChunkType,
+    if (memcmp(buf + pos + sizeof(uint32_t), kPngDataChunkType,
                arraysize(kPngDataChunkType)) == 0) {
       // Stop looking for custom chunks, any custom chunks should be before an
       // IDAT chunk.

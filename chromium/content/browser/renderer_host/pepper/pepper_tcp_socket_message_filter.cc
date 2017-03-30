@@ -5,6 +5,7 @@
 #include "content/browser/renderer_host/pepper/pepper_tcp_socket_message_filter.h"
 
 #include <cstring>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -35,6 +36,10 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/proxy/tcp_socket_resource_base.h"
 #include "ppapi/shared_impl/private/net_address_private_impl.h"
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/network/firewall_hole.h"
+#endif  // defined(OS_CHROMEOS)
 
 using ppapi::NetAddressPrivateImpl;
 using ppapi::host::NetErrorToPepperError;
@@ -104,7 +109,7 @@ PepperTCPSocketMessageFilter::PepperTCPSocketMessageFilter(
       rcvbuf_size_(0),
       sndbuf_size_(0),
       address_index_(0),
-      socket_(socket.Pass()),
+      socket_(std::move(socket)),
       ssl_context_helper_(host->ssl_context_helper()),
       pending_accept_(false),
       pending_read_on_unthrottle_(false),
@@ -317,7 +322,7 @@ int32_t PepperTCPSocketMessageFilter::OnMsgSSLHandshake(
 
   scoped_ptr<net::ClientSocketHandle> handle(new net::ClientSocketHandle());
   handle->SetSocket(make_scoped_ptr<net::StreamSocket>(
-      new net::TCPClientSocket(socket_.Pass(), peer_address)));
+      new net::TCPClientSocket(std::move(socket_), peer_address)));
   net::ClientSocketFactory* factory =
       net::ClientSocketFactory::GetDefaultFactory();
   net::HostPortPair host_port_pair(server_name, server_port);
@@ -325,11 +330,9 @@ int32_t PepperTCPSocketMessageFilter::OnMsgSSLHandshake(
   ssl_context.cert_verifier = ssl_context_helper_->GetCertVerifier();
   ssl_context.transport_security_state =
       ssl_context_helper_->GetTransportSecurityState();
-  ssl_socket_ =
-      factory->CreateSSLClientSocket(handle.Pass(),
-                                     host_port_pair,
-                                     ssl_context_helper_->ssl_config(),
-                                     ssl_context);
+  ssl_socket_ = factory->CreateSSLClientSocket(
+      std::move(handle), host_port_pair, ssl_context_helper_->ssl_config(),
+      ssl_context);
   if (!ssl_socket_) {
     LOG(WARNING) << "Failed to create an SSL client socket.";
     state_.CompletePendingTransition(false);
@@ -474,6 +477,10 @@ int32_t PepperTCPSocketMessageFilter::OnMsgClose(
     return PP_OK;
 
   state_.DoTransition(TCPSocketState::CLOSE, true);
+#if defined(OS_CHROMEOS)
+  // Close the firewall hole, it is no longer needed.
+  firewall_hole_.reset();
+#endif  // defined(OS_CHROMEOS)
   // Make sure we get no further callbacks from |socket_| or |ssl_socket_|.
   if (socket_) {
     socket_->Close();
@@ -567,7 +574,7 @@ void PepperTCPSocketMessageFilter::DoBind(
   int pp_result = PP_OK;
   do {
     net::IPAddressNumber address;
-    uint16 port;
+    uint16_t port;
     if (!NetAddressPrivateImpl::NetAddressToIPEndPoint(
             net_addr, &address, &port)) {
       pp_result = PP_ERROR_ADDRESS_INVALID;
@@ -657,7 +664,7 @@ void PepperTCPSocketMessageFilter::DoConnectWithNetAddress(
   state_.SetPendingTransition(TCPSocketState::CONNECT);
 
   net::IPAddressNumber address;
-  uint16 port;
+  uint16_t port;
   if (!NetAddressPrivateImpl::NetAddressToIPEndPoint(
           net_addr, &address, &port)) {
     state_.CompletePendingTransition(false);
@@ -717,8 +724,11 @@ void PepperTCPSocketMessageFilter::DoListen(
   }
 
   int32_t pp_result = NetErrorToPepperError(socket_->Listen(backlog));
-  SendListenReply(context, pp_result);
-  state_.DoTransition(TCPSocketState::LISTEN, pp_result == PP_OK);
+#if defined(OS_CHROMEOS)
+  OpenFirewallHole(context, pp_result);
+#else
+  OnListenCompleted(context, pp_result);
+#endif
 }
 
 void PepperTCPSocketMessageFilter::OnResolveCompleted(
@@ -930,6 +940,47 @@ void PepperTCPSocketMessageFilter::OnWriteCompleted(
   write_buffer_base_ = NULL;
 }
 
+void PepperTCPSocketMessageFilter::OnListenCompleted(
+    const ppapi::host::ReplyMessageContext& context,
+    int32_t pp_result) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  SendListenReply(context, pp_result);
+  state_.DoTransition(TCPSocketState::LISTEN, pp_result == PP_OK);
+}
+
+#if defined(OS_CHROMEOS)
+void PepperTCPSocketMessageFilter::OpenFirewallHole(
+    const ppapi::host::ReplyMessageContext& context,
+    int32_t pp_result) {
+  if (pp_result != PP_OK) {
+    return;
+  }
+
+  net::IPEndPoint local_addr;
+  // Has already been called successfully in DoBind().
+  socket_->GetLocalAddress(&local_addr);
+  pepper_socket_utils::FirewallHoleOpenCallback callback =
+      base::Bind(&PepperTCPSocketMessageFilter::OnFirewallHoleOpened, this,
+                 context, pp_result);
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::Bind(&pepper_socket_utils::OpenTCPFirewallHole,
+                                     local_addr, callback));
+}
+
+void PepperTCPSocketMessageFilter::OnFirewallHoleOpened(
+    const ppapi::host::ReplyMessageContext& context,
+    int32_t result,
+    scoped_ptr<chromeos::FirewallHole> hole) {
+  LOG_IF(WARNING, !hole.get()) << "Firewall hole could not be opened.";
+  firewall_hole_.reset(hole.release());
+
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&PepperTCPSocketMessageFilter::OnListenCompleted, this,
+                 context, result));
+}
+#endif  // defined(OS_CHROMEOS)
+
 void PepperTCPSocketMessageFilter::OnAcceptCompleted(
     const ppapi::host::ReplyMessageContext& context,
     int net_result) {
@@ -971,14 +1022,14 @@ void PepperTCPSocketMessageFilter::OnAcceptCompleted(
   // in CONNECTED state have a NULL |factory_|, while getting here requires
   // LISTENING state.
   scoped_ptr<ppapi::host::ResourceHost> host =
-      factory_->CreateAcceptedTCPSocket(
-          instance_, version_, accepted_socket_.Pass());
+      factory_->CreateAcceptedTCPSocket(instance_, version_,
+                                        std::move(accepted_socket_));
   if (!host) {
     SendAcceptError(context, PP_ERROR_NOSPACE);
     return;
   }
   int pending_host_id =
-      host_->GetPpapiHost()->AddPendingResourceHost(host.Pass());
+      host_->GetPpapiHost()->AddPendingResourceHost(std::move(host));
   if (pending_host_id)
     SendAcceptReply(context, PP_OK, pending_host_id, local_addr, remote_addr);
   else

@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/plugins/plugin_data_remover_helper.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -46,6 +47,7 @@ const char kLocalStorageKey[] = "localStorage";
 const char kPasswordsKey[] = "passwords";
 const char kPluginDataKey[] = "pluginData";
 const char kServiceWorkersKey[] = "serviceWorkers";
+const char kCacheStorageKey[] = "cacheStorage";
 const char kWebSQLKey[] = "webSQL";
 
 // Option keys.
@@ -98,6 +100,8 @@ int MaskForKey(const char* key) {
   if (strcmp(key, extension_browsing_data_api_constants::kServiceWorkersKey) ==
       0)
     return BrowsingDataRemover::REMOVE_SERVICE_WORKERS;
+  if (strcmp(key, extension_browsing_data_api_constants::kCacheStorageKey) == 0)
+    return BrowsingDataRemover::REMOVE_CACHE_STORAGE;
   if (strcmp(key, extension_browsing_data_api_constants::kWebSQLKey) == 0)
     return BrowsingDataRemover::REMOVE_WEBSQL;
 
@@ -182,6 +186,9 @@ bool BrowsingDataSettingsFunction::RunSync() {
   SetDetails(selected.get(), permitted.get(),
              extension_browsing_data_api_constants::kServiceWorkersKey,
              delete_site_data);
+  SetDetails(selected.get(), permitted.get(),
+             extension_browsing_data_api_constants::kCacheStorageKey,
+             delete_site_data);
 
   SetDetails(selected.get(), permitted.get(),
       extension_browsing_data_api_constants::kPluginDataKey,
@@ -225,8 +232,13 @@ void BrowsingDataSettingsFunction::SetDetails(
   permitted_dict->SetBoolean(data_type, is_permitted);
 }
 
+BrowsingDataRemoverFunction::BrowsingDataRemoverFunction() : observer_(this) {}
+
 void BrowsingDataRemoverFunction::OnBrowsingDataRemoverDone() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  observer_.RemoveAll();
+
   this->SendResponse(true);
 
   Release();  // Balanced in RunAsync.
@@ -285,6 +297,8 @@ bool BrowsingDataRemoverFunction::RunAsync() {
   return true;
 }
 
+BrowsingDataRemoverFunction::~BrowsingDataRemoverFunction() {}
+
 void BrowsingDataRemoverFunction::CheckRemovingPluginDataSupported(
     scoped_refptr<PluginPrefs> plugin_prefs) {
   if (!PluginDataRemoverHelper::IsSupported(plugin_prefs.get()))
@@ -296,7 +310,9 @@ void BrowsingDataRemoverFunction::CheckRemovingPluginDataSupported(
 }
 
 void BrowsingDataRemoverFunction::StartRemoving() {
-  if (BrowsingDataRemover::is_removing()) {
+  BrowsingDataRemover* remover =
+      BrowsingDataRemoverFactory::GetForBrowserContext(GetProfile());
+  if (remover->is_removing()) {
     error_ = extension_browsing_data_api_constants::kOneAtATimeError;
     SendResponse(false);
     return;
@@ -309,10 +325,10 @@ void BrowsingDataRemoverFunction::StartRemoving() {
   // that we're notified after removal) and call remove() with the arguments
   // we've generated above. We can use a raw pointer here, as the browsing data
   // remover is responsible for deleting itself once data removal is complete.
-  BrowsingDataRemover* remover = BrowsingDataRemover::CreateForRange(
-      GetProfile(), remove_since_, base::Time::Max());
-  remover->AddObserver(this);
-  remover->Remove(removal_mask_, origin_type_mask_);
+  observer_.Add(remover);
+  remover->Remove(
+      BrowsingDataRemover::TimeRange(remove_since_, base::Time::Max()),
+      removal_mask_, origin_type_mask_);
 }
 
 int BrowsingDataRemoverFunction::ParseOriginTypeMask(
@@ -431,6 +447,10 @@ int BrowsingDataRemovePasswordsFunction::GetRemovalMask() {
 
 int BrowsingDataRemoveServiceWorkersFunction::GetRemovalMask() {
   return BrowsingDataRemover::REMOVE_SERVICE_WORKERS;
+}
+
+int BrowsingDataRemoveCacheStorageFunction::GetRemovalMask() {
+  return BrowsingDataRemover::REMOVE_CACHE_STORAGE;
 }
 
 int BrowsingDataRemoveWebSQLFunction::GetRemovalMask() {

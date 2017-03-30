@@ -4,6 +4,8 @@
 
 #include "chrome/browser/upgrade_detector_impl.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
@@ -19,12 +21,14 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/google/google_brand.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/pref_names.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 
 #if defined(OS_WIN)
@@ -53,7 +57,7 @@ const int kNotifyCycleTimeMs = 20 * 60 * 1000;  // 20 minutes.
 const int kNotifyCycleTimeForTestingMs = 500;  // Half a second.
 
 // The number of days after which we identify a build/install as outdated.
-const uint64 kOutdatedBuildAgeInDays = 12 * 7;
+const uint64_t kOutdatedBuildAgeInDays = 12 * 7;
 
 // Return the string that was passed as a value for the
 // kCheckForUpdateIntervalSec switch.
@@ -90,18 +94,21 @@ int GetCheckForUpgradeEveryMs() {
   return kCheckForUpgradeMs;
 }
 
+#if !defined(OS_WIN) || defined(GOOGLE_CHROME_BUILD)
 // Return true if the current build is one of the unstable channels.
 bool IsUnstableChannel() {
   // TODO(mad): Investigate whether we still need to be on the file thread for
   // this. On Windows, the file thread used to be required for registry access
   // but no anymore. But other platform may still need the file thread.
   // crbug.com/366647.
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
-  chrome::VersionInfo::Channel channel = chrome::VersionInfo::GetChannel();
-  return channel == chrome::VersionInfo::CHANNEL_DEV ||
-         channel == chrome::VersionInfo::CHANNEL_CANARY;
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  version_info::Channel channel = chrome::GetChannel();
+  return channel == version_info::Channel::DEV ||
+         channel == version_info::Channel::CANARY;
 }
+#endif  // !defined(OS_WIN) || defined(GOOGLE_CHROME_BUILD)
 
+#if !defined(OS_WIN)
 // This task identifies whether we are running an unstable version. And then it
 // unconditionally calls back the provided task.
 void CheckForUnstableChannel(const base::Closure& callback_task,
@@ -109,8 +116,7 @@ void CheckForUnstableChannel(const base::Closure& callback_task,
   *is_unstable_channel = IsUnstableChannel();
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, callback_task);
 }
-
-#if defined(OS_WIN)
+#else
 // Return true if the currently running Chrome is a system install.
 bool IsSystemInstall() {
   // Get the version of the currently *installed* instance of Chrome,
@@ -125,6 +131,7 @@ bool IsSystemInstall() {
   return !InstallUtil::IsPerUserInstall(exe_path);
 }
 
+#if defined(GOOGLE_CHROME_BUILD)
 // Sets |is_unstable_channel| to true if the current chrome is on the dev or
 // canary channels. Sets |is_auto_update_enabled| to true if Google Update will
 // update the current chrome. Unconditionally posts |callback_task| to the UI
@@ -132,7 +139,7 @@ bool IsSystemInstall() {
 void DetectUpdatability(const base::Closure& callback_task,
                         bool* is_unstable_channel,
                         bool* is_auto_update_enabled) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   // Don't try to turn on autoupdate when we failed previously.
   if (is_auto_update_enabled) {
@@ -142,7 +149,8 @@ void DetectUpdatability(const base::Closure& callback_task,
   *is_unstable_channel = IsUnstableChannel();
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, callback_task);
 }
-#endif  // defined(OS_WIN)
+#endif  // defined(GOOGLE_CHROME_BUILD)
+#endif  // !defined(OS_WIN)
 
 // Gets the currently installed version. On Windows, if |critical_update| is not
 // NULL, also retrieves the critical update version info if available.
@@ -244,7 +252,7 @@ UpgradeDetectorImpl::UpgradeDetectorImpl()
   // Register for experiment notifications. Note that since this class is a
   // singleton, it does not need to unregister for notifications when destroyed,
   // since it outlives the VariationsService.
-  chrome_variations::VariationsService* variations_service =
+  variations::VariationsService* variations_service =
       g_browser_process->variations_service();
   if (variations_service)
     variations_service->AddObserver(this);
@@ -306,15 +314,14 @@ base::Version UpgradeDetectorImpl::GetCurrentlyInstalledVersion() {
 // be interrupted from the UI thread.
 void UpgradeDetectorImpl::DetectUpgradeTask(
     base::WeakPtr<UpgradeDetectorImpl> upgrade_detector) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   Version critical_update;
   Version installed_version =
       GetCurrentlyInstalledVersionImpl(&critical_update);
 
   // Get the version of the currently *running* instance of Chrome.
-  chrome::VersionInfo version_info;
-  Version running_version(version_info.Version());
+  Version running_version(version_info::GetVersionNumber());
   if (!running_version.IsValid()) {
     NOTREACHED();
     return;
@@ -435,7 +442,7 @@ void UpgradeDetectorImpl::OnExperimentChangesDetected(Severity severity) {
 }
 
 void UpgradeDetectorImpl::UpgradeDetected(UpgradeAvailable upgrade_available) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   set_upgrade_available(upgrade_available);
 
   // Stop the recurring timer (that is checking for changes).
@@ -507,7 +514,7 @@ void UpgradeDetectorImpl::NotifyOnUpgrade() {
 
 // static
 UpgradeDetectorImpl* UpgradeDetectorImpl::GetInstance() {
-  return Singleton<UpgradeDetectorImpl>::get();
+  return base::Singleton<UpgradeDetectorImpl>::get();
 }
 
 // static

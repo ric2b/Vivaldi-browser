@@ -5,16 +5,22 @@
 #ifndef CHROME_BROWSER_NET_CHROME_NETWORK_DELEGATE_H_
 #define CHROME_BROWSER_NET_CHROME_NETWORK_DELEGATE_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
+#include "build/build_config.h"
 #include "net/base/network_delegate_impl.h"
+
+#if !defined(OS_IOS)
+#include "components/data_use_measurement/content/data_use_measurement.h"
+#endif
 
 class ChromeExtensionsNetworkDelegate;
 class PrefService;
@@ -34,6 +40,10 @@ class Predictor;
 
 namespace content_settings {
 class CookieSettings;
+}
+
+namespace data_usage {
+class DataUseAggregator;
 }
 
 namespace domain_reliability {
@@ -114,6 +124,10 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
     domain_reliability_monitor_ = monitor;
   }
 
+  void set_data_use_aggregator(
+      data_usage::DataUseAggregator* data_use_aggregator,
+      bool is_data_usage_off_the_record);
+
   // Binds the pref members to |pref_service| and moves them to the IO thread.
   // |enable_referrers| cannot be NULL, the others can.
   // This method should be called on the UI thread.
@@ -147,7 +161,10 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   void OnBeforeRedirect(net::URLRequest* request,
                         const GURL& new_location) override;
   void OnResponseStarted(net::URLRequest* request) override;
-  void OnRawBytesRead(const net::URLRequest& request, int bytes_read) override;
+  void OnNetworkBytesReceived(net::URLRequest* request,
+                              int64_t bytes_received) override;
+  void OnNetworkBytesSent(net::URLRequest* request,
+                          int64_t bytes_sent) override;
   void OnCompleted(net::URLRequest* request, bool started) override;
   void OnURLRequestDestroyed(net::URLRequest* request) override;
   void OnPACScriptError(int line_number, const base::string16& error) override;
@@ -166,15 +183,18 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   bool OnCanEnablePrivacyMode(
       const GURL& url,
       const GURL& first_party_for_cookies) const override;
-  bool OnFirstPartyOnlyCookieExperimentEnabled() const override;
+  bool OnAreExperimentalCookieFeaturesEnabled() const override;
+  bool OnAreStrictSecureCookiesEnabled() const override;
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(
       const net::URLRequest& request,
       const GURL& target_url,
       const GURL& referrer_url) const override;
 
-  void AccumulateContentLength(
-      int64 received_payload_byte_count,
-      int64 original_payload_byte_count);
+  // Convenience function for reporting network usage to the
+  // |data_use_aggregator_|.
+  void ReportDataUsageStats(net::URLRequest* request,
+                            int64_t tx_bytes,
+                            int64_t rx_bytes);
 
   scoped_ptr<ChromeExtensionsNetworkDelegate> extensions_delegate_;
 
@@ -199,7 +219,17 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   // When true, allow access to all file:// URLs.
   static bool g_allow_file_access_;
 
+// Component to measure data use.
+#if !defined(OS_IOS)
+  data_use_measurement::DataUseMeasurement data_use_measurement_;
+#endif
+
   bool experimental_web_platform_features_enabled_;
+
+  // Aggregates and reports network usage.
+  data_usage::DataUseAggregator* data_use_aggregator_;
+  // Controls whether network usage is reported as being off the record.
+  bool is_data_usage_off_the_record_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeNetworkDelegate);
 };

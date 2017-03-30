@@ -4,7 +4,9 @@
 
 #include <math.h>
 #include <sapi.h>
+#include <stdint.h>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,7 +59,7 @@ class TtsPlatformImplWin : public TtsPlatformImpl {
   int char_position_;
   bool paused_;
 
-  friend struct DefaultSingletonTraits<TtsPlatformImplWin>;
+  friend struct base::DefaultSingletonTraits<TtsPlatformImplWin>;
 
   DISALLOW_COPY_AND_ASSIGN(TtsPlatformImplWin);
 };
@@ -87,7 +89,7 @@ bool TtsPlatformImplWin::Speak(
     //   0.1 -> -10
     //   1.0 -> 0
     //  10.0 -> 10
-    speech_synthesizer_->SetRate(static_cast<int32>(10 * log10(params.rate)));
+    speech_synthesizer_->SetRate(static_cast<int32_t>(10 * log10(params.rate)));
   }
 
   if (params.pitch >= 0.0) {
@@ -102,7 +104,7 @@ bool TtsPlatformImplWin::Speak(
 
   if (params.volume >= 0.0) {
     // The TTS api allows a range of 0 to 100 for speech volume.
-    speech_synthesizer_->SetVolume(static_cast<uint16>(params.volume * 100));
+    speech_synthesizer_->SetVolume(static_cast<uint16_t>(params.volume * 100));
   }
 
   // TODO(dmazzoni): convert SSML to SAPI xml. http://crbug.com/88072
@@ -220,6 +222,8 @@ void TtsPlatformImplWin::OnSpeechEvent() {
           utterance_id_, TTS_EVENT_SENTENCE, char_position_,
           std::string());
       break;
+    default:
+      break;
     }
   }
 }
@@ -246,8 +250,8 @@ TtsPlatformImplWin::TtsPlatformImplWin()
 
 // static
 TtsPlatformImplWin* TtsPlatformImplWin::GetInstance() {
-  return Singleton<TtsPlatformImplWin,
-                   LeakySingletonTraits<TtsPlatformImplWin> >::get();
+  return base::Singleton<TtsPlatformImplWin,
+                         base::LeakySingletonTraits<TtsPlatformImplWin>>::get();
 }
 
 // static

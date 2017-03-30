@@ -21,7 +21,7 @@ BUILD_TOOLS_DIR = os.path.dirname(SCRIPT_DIR)
 sys.path.append(BUILD_TOOLS_DIR)
 import manifest_util
 import update_nacl_manifest
-from update_nacl_manifest import CANARY_BUNDLE_NAME, BIONIC_CANARY_BUNDLE_NAME
+from update_nacl_manifest import CANARY_BUNDLE_NAME
 
 
 HTTPS_BASE_URL = 'https://storage.googleapis.com' \
@@ -51,11 +51,6 @@ def GetPlatformArchiveUrl(host_os, version):
   return GetArchiveURL(basename, version)
 
 
-def GetBionicArchiveUrl(version):
-  basename = 'naclsdk_bionic.tar.bz2'
-  return GetArchiveURL(basename, version)
-
-
 def MakeGsUrl(rel_path):
   return update_nacl_manifest.GS_BUCKET_PATH + rel_path
 
@@ -82,10 +77,6 @@ def MakeArchive(url, host_os):
 
 def MakePlatformArchive(host_os, version):
   return MakeArchive(GetPlatformArchiveUrl(host_os, version), host_os)
-
-
-def MakeBionicArchive(host_os, version):
-  return MakeArchive(GetBionicArchiveUrl(version), host_os)
 
 
 def MakeNonPlatformArchive(basename, version):
@@ -280,13 +271,11 @@ BCANARY_NONE = MakePepperBundle(0, stability=CANARY,
                                 bundle_name=CANARY_BUNDLE_NAME)
 B21_0_1145_0_MLW = MakePlatformBundle(21, 138079, V21_0_1145_0, OS_MLW)
 B21_0_1166_0_MW = MakePlatformBundle(21, 140819, V21_0_1166_0, OS_MW)
+B21_NONE = MakePlatformBundle(21)
 B26_NONE = MakePlatformBundle(26)
 B26_0_1386_0_MLW = MakePlatformBundle(26, 177362, V26_0_1386_0, OS_MLW)
 B26_0_1386_1_MLW = MakePlatformBundle(26, 177439, V26_0_1386_1, OS_MLW)
 BTRUNK_140819_MLW = MakePlatformBundle(21, 140819, VTRUNK_140819, OS_MLW)
-BBIONIC_NONE = MakePepperBundle(0, stability=CANARY,
-                                bundle_name=BIONIC_CANARY_BUNDLE_NAME)
-BBIONIC_TRUNK_277776 = MakeBionicBundle(37, 277776, VTRUNK_277776, OS_L)
 NON_PEPPER_BUNDLE_NOARCHIVES = MakeNonPepperBundle('foo')
 NON_PEPPER_BUNDLE_ARCHIVES = MakeNonPepperBundle('bar', with_archives=True)
 
@@ -574,7 +563,7 @@ class TestUpdateManifest(unittest.TestCase):
     self.files.Add(B18_0_1025_184_MLW)
 
     self._MakeDelegate()
-    self._Run(OS_MLW, None, [('pepper_18', '18.0.1025.184')])
+    self._Run(OS_MLW, fixed_bundle_versions=[('pepper_18', '18.0.1025.184')])
     self._ReadUploadedManifest()
     self._AssertUploadedManifestHasBundle(B18_0_1025_184_MLW, BETA)
     self.assertEqual(len(self.uploaded_manifest.GetBundles()), 1)
@@ -585,7 +574,7 @@ class TestUpdateManifest(unittest.TestCase):
     self.files.Add(B18_0_1025_163_MLW)
 
     self._MakeDelegate()
-    self._Run(OS_MLW, None, [('pepper_18', '18.0.1025.184')])
+    self._Run(OS_MLW, fixed_bundle_versions=[('pepper_18', '18.0.1025.184')])
     # Nothing should be uploaded if the user gives a missing fixed version.
     self.assertFalse(self.delegate.called_gsutil_cp)
 
@@ -606,24 +595,49 @@ class TestUpdateManifest(unittest.TestCase):
     uploaded_bundle = self.uploaded_manifest.GetBundle('pepper_26')
     self.assertEqual(1, len(uploaded_bundle.GetHostOSArchives()))
 
-  def testNaclportsBundle(self):
-    self.manifest = MakeManifest(B26_NONE)
+  def _AddNaclportBundles(self):
+    # Add NaclPorts "bundle" for 18, 21 and 26.
+    self.manifest = MakeManifest(B18_NONE, B21_NONE, B26_NONE)
     self.history.Add(OS_MLW, BETA, V26_0_1386_0)
     self.files.Add(B26_0_1386_0_MLW)
+    self.history.Add(OS_MLW, BETA, V21_0_1145_0)
+    self.files.Add(B21_0_1145_0_MLW)
+    self.history.Add(OS_MLW, BETA, V18_0_1025_163)
+    self.files.Add(B18_0_1025_163_MLW)
 
-    # NaclPorts "bundle".
     naclports_bundle = MakePepperBundle(26, 1, V26_0_1386_0, BETA)
     naclports_archive = MakeNonPlatformArchive('naclports.tar.bz2',
                                                V26_0_1386_0)
     naclports_bundle.AddArchive(naclports_archive)
     self.files.AddArchive(naclports_bundle, naclports_archive)
 
+    naclports_bundle = MakePepperBundle(21, 1, V21_0_1145_0, BETA)
+    naclports_archive = MakeNonPlatformArchive('naclports.tar.bz2',
+                                               V21_0_1145_0)
+    naclports_bundle.AddArchive(naclports_archive)
+    self.files.AddArchive(naclports_bundle, naclports_archive)
+
+    naclports_bundle = MakePepperBundle(18, 1, V18_0_1025_163, BETA)
+    naclports_archive = MakeNonPlatformArchive('naclports.tar.bz2',
+                                               V18_0_1025_163)
+    naclports_bundle.AddArchive(naclports_archive)
+    self.files.AddArchive(naclports_bundle, naclports_archive)
+
+  def testNaclportsBundle(self):
+    self._AddNaclportBundles()
     self._MakeDelegate()
-    self._Run(OS_MLW, [('naclports.tar.bz2', '26.0.1386.0')])
+    extra_archives = [('naclports.tar.bz2', '19.0.0.0', '22.0.0.0')]
+    self._Run(OS_MLW, extra_archives=extra_archives)
     self._ReadUploadedManifest()
 
     uploaded_bundle = self.uploaded_manifest.GetBundle('pepper_26')
+    self.assertEqual(1, len(uploaded_bundle.GetHostOSArchives()))
+
+    uploaded_bundle = self.uploaded_manifest.GetBundle('pepper_21')
     self.assertEqual(2, len(uploaded_bundle.GetHostOSArchives()))
+
+    uploaded_bundle = self.uploaded_manifest.GetBundle('pepper_18')
+    self.assertEqual(1, len(uploaded_bundle.GetHostOSArchives()))
 
   def testKeepBundleOrder(self):
     # This is a regression test: when a bundle is skipped (because it isn't
@@ -672,18 +686,6 @@ class TestUpdateManifest(unittest.TestCase):
     self._MakeDelegate()
     self.assertRaises(update_nacl_manifest.UnknownLockedBundleException,
                       self._Run, OS_MLW)
-
-  def testUpdateBionic(self):
-    bionic_bundle = copy.deepcopy(BBIONIC_NONE)
-    self.manifest = MakeManifest(bionic_bundle)
-    self.history.Add(OS_MW, CANARY, V37_0_2054_0)
-    self.files.Add(BBIONIC_TRUNK_277776)
-    self.version_mapping[V37_0_2054_0] = VTRUNK_277776
-    self._MakeDelegate()
-    self._Run(OS_MLW)
-    self._ReadUploadedManifest()
-    self._AssertUploadedManifestHasBundle(BBIONIC_TRUNK_277776, CANARY,
-                                          bundle_name=BIONIC_CANARY_BUNDLE_NAME)
 
 
 class TestUpdateVitals(unittest.TestCase):

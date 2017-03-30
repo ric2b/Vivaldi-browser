@@ -9,14 +9,15 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/thread_checker.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/permissions/api_permission.h"
-#include "extensions/common/permissions/coalesced_permission_message.h"
 #include "extensions/common/permissions/permission_message.h"
-#include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/permissions/permission_set.h"
 
 class GURL;
@@ -27,6 +28,14 @@ class URLPatternSet;
 
 // A container for the permissions state of an extension, including active,
 // withheld, and tab-specific permissions.
+// Thread-Safety: Since this is an object on the Extension object, *some* thread
+// safety is provided. All utility functions for checking if a permission is
+// present or an operation is allowed are thread-safe. However, permissions can
+// only be set (or updated) on the thread to which this object is bound.
+// Permissions may be accessed synchronously on that same thread.
+// Accessing on an improper thread will DCHECK().
+// This is necessary to prevent a scenario in which one thread will access
+// permissions while another thread changes them.
 class PermissionsData {
  public:
   // The possible types of access for a given frame.
@@ -37,7 +46,7 @@ class PermissionsData {
                      // the given page.
   };
 
-  using TabPermissionsMap = std::map<int, scoped_refptr<const PermissionSet>>;
+  using TabPermissionsMap = std::map<int, scoped_ptr<const PermissionSet>>;
 
   // Delegate class to allow different contexts (e.g. browser vs renderer) to
   // have control over policy decisions.
@@ -63,14 +72,6 @@ class PermissionsData {
   // whitelist of extensions that can script all pages.
   static bool CanExecuteScriptEverywhere(const Extension* extension);
 
-  // Returns true if the --scripts-require-action flag would possibly affect
-  // the given |extension| and |permissions|. We pass in the |permissions|
-  // explicitly, as we may need to check with permissions other than the ones
-  // that are currently on the extension's PermissionsData.
-  static bool ScriptsMayRequireActionForExtension(
-      const Extension* extension,
-      const PermissionSet* permissions);
-
   // Returns true if we should skip the permissions warning for the extension
   // with the given |extension_id|.
   static bool ShouldSkipPermissionWarnings(const std::string& extension_id);
@@ -82,16 +83,22 @@ class PermissionsData {
                               const Extension* extension,
                               std::string* error);
 
+  // Locks the permissions data to the current thread. We don't do this on
+  // construction, since extensions are initialized across multiple threads.
+  void BindToCurrentThread() const;
+
   // Sets the runtime permissions of the given |extension| to |active| and
   // |withheld|.
-  void SetPermissions(const scoped_refptr<const PermissionSet>& active,
-                      const scoped_refptr<const PermissionSet>& withheld) const;
+  void SetPermissions(scoped_ptr<const PermissionSet> active,
+                      scoped_ptr<const PermissionSet> withheld) const;
+
+  // Sets the active permissions, leaving withheld the same.
+  void SetActivePermissions(scoped_ptr<const PermissionSet> active) const;
 
   // Updates the tab-specific permissions of |tab_id| to include those from
   // |permissions|.
-  void UpdateTabSpecificPermissions(
-      int tab_id,
-      scoped_refptr<const PermissionSet> permissions) const;
+  void UpdateTabSpecificPermissions(int tab_id,
+                                    const PermissionSet& permissions) const;
 
   // Clears the tab-specific permissions of |tab_id|.
   void ClearTabSpecificPermissions(int tab_id) const;
@@ -130,20 +137,9 @@ class PermissionsData {
   // network, etc.)
   bool HasEffectiveAccessToAllHosts() const;
 
-  // Returns the full list of legacy permission message IDs.
-  // Deprecated. You DO NOT want to call this!
-  // TODO(treib): Remove once we've switched to the new system.
-  PermissionMessageIDs GetLegacyPermissionMessageIDs() const;
-
-  // Returns the full list of permission messages that should display at install
-  // time, including their submessages, as strings.
-  // TODO(treib): Remove this and move callers over to
-  // GetCoalescedPermissionMessages once we've fully switched to the new system.
-  PermissionMessageStrings GetPermissionMessageStrings() const;
-
   // Returns the full list of permission details for messages that should
   // display at install time, in a nested format ready for display.
-  CoalescedPermissionMessages GetCoalescedPermissionMessages() const;
+  PermissionMessages GetPermissionMessages() const;
 
   // Returns true if the extension has requested all-hosts permissions (or
   // something close to it), but has had it withheld.
@@ -195,24 +191,24 @@ class PermissionsData {
   // page itself.
   bool CanCaptureVisiblePage(int tab_id, std::string* error) const;
 
-  // Returns the tab permissions map.
-  TabPermissionsMap CopyTabSpecificPermissionsMap() const;
-
-  scoped_refptr<const PermissionSet> active_permissions() const {
-    // We lock so that we can't also be setting the permissions while returning.
-    base::AutoLock auto_lock(runtime_lock_);
-    return active_permissions_unsafe_;
+  const TabPermissionsMap& tab_specific_permissions() const {
+    DCHECK(!thread_checker_ || thread_checker_->CalledOnValidThread());
+    return tab_specific_permissions_;
   }
 
-  scoped_refptr<const PermissionSet> withheld_permissions() const {
-    // We lock so that we can't also be setting the permissions while returning.
-    base::AutoLock auto_lock(runtime_lock_);
-    return withheld_permissions_unsafe_;
+  const PermissionSet& active_permissions() const {
+    DCHECK(!thread_checker_ || thread_checker_->CalledOnValidThread());
+    return *active_permissions_unsafe_;
+  }
+
+  const PermissionSet& withheld_permissions() const {
+    DCHECK(!thread_checker_ || thread_checker_->CalledOnValidThread());
+    return *withheld_permissions_unsafe_;
   }
 
 #if defined(UNIT_TEST)
-  scoped_refptr<const PermissionSet> GetTabSpecificPermissionsForTesting(
-      int tab_id) const {
+  const PermissionSet* GetTabSpecificPermissionsForTesting(int tab_id) const {
+    base::AutoLock auto_lock(runtime_lock_);
     return GetTabSpecificPermissions(tab_id);
   }
 #endif
@@ -220,19 +216,21 @@ class PermissionsData {
  private:
   // Gets the tab-specific host permissions of |tab_id|, or NULL if there
   // aren't any.
-  scoped_refptr<const PermissionSet> GetTabSpecificPermissions(
-      int tab_id) const;
+  // Must be called with |runtime_lock_| acquired.
+  const PermissionSet* GetTabSpecificPermissions(int tab_id) const;
 
   // Returns true if the |extension| has tab-specific permission to operate on
   // the tab specified by |tab_id| with the given |url|.
   // Note that if this returns false, it doesn't mean the extension can't run on
   // the given tab, only that it does not have tab-specific permission to do so.
+  // Must be called with |runtime_lock_| acquired.
   bool HasTabSpecificPermissionToExecuteScript(int tab_id,
                                                const GURL& url) const;
 
   // Returns whether or not the extension is permitted to run on the given page,
   // checking against |permitted_url_patterns| in addition to blocking special
   // sites (like the webstore or chrome:// urls).
+  // Must be called with |runtime_lock_| acquired.
   AccessType CanRunOnPage(const Extension* extension,
                           const GURL& document_url,
                           int tab_id,
@@ -254,16 +252,18 @@ class PermissionsData {
   // Unsafe indicates that we must lock anytime this is directly accessed.
   // Unless you need to change |active_permissions_unsafe_|, use the (safe)
   // active_permissions() accessor.
-  mutable scoped_refptr<const PermissionSet> active_permissions_unsafe_;
+  mutable scoped_ptr<const PermissionSet> active_permissions_unsafe_;
 
   // The permissions the extension requested, but was not granted due because
   // they are too powerful. This includes things like all_hosts.
   // Unsafe indicates that we must lock anytime this is directly accessed.
   // Unless you need to change |withheld_permissions_unsafe_|, use the (safe)
   // withheld_permissions() accessor.
-  mutable scoped_refptr<const PermissionSet> withheld_permissions_unsafe_;
+  mutable scoped_ptr<const PermissionSet> withheld_permissions_unsafe_;
 
   mutable TabPermissionsMap tab_specific_permissions_;
+
+  mutable scoped_ptr<base::ThreadChecker> thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(PermissionsData);
 };

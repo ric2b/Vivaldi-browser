@@ -6,6 +6,7 @@
 #define UI_PLATFORM_WINDOW_PLATFORM_WINDOW_H_
 
 #include "base/memory/scoped_ptr.h"
+#include "base/strings/string16.h"
 #include "ui/base/cursor/cursor.h"
 
 namespace gfx {
@@ -14,6 +15,7 @@ class Rect;
 
 namespace ui {
 
+class PlatformImeController;
 class PlatformWindowDelegate;
 
 // Platform window.
@@ -33,6 +35,8 @@ class PlatformWindow {
   virtual void SetBounds(const gfx::Rect& bounds) = 0;
   virtual gfx::Rect GetBounds() = 0;
 
+  virtual void SetTitle(const base::string16& title) = 0;
+
   virtual void SetCapture() = 0;
   virtual void ReleaseCapture() = 0;
 
@@ -49,6 +53,10 @@ class PlatformWindow {
   // Confines the cursor to |bounds| when it is in the platform window. |bounds|
   // is in platform window coordinates.
   virtual void ConfineCursorToBounds(const gfx::Rect& bounds) = 0;
+
+  // The PlatformImeController is owned by the PlatformWindow, the ownership is
+  // not transferred.
+  virtual PlatformImeController* GetPlatformImeController() = 0;
 };
 
 }  // namespace ui

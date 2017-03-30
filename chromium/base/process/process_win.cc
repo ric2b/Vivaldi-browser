@@ -6,10 +6,8 @@
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/metrics/field_trial.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/kill.h"
-#include "base/strings/string_util.h"
 #include "base/win/windows_version.h"
 
 namespace {
@@ -27,21 +25,20 @@ Process::Process(ProcessHandle handle)
   CHECK_NE(handle, ::GetCurrentProcess());
 }
 
-Process::Process(RValue other)
-    : is_current_process_(other.object->is_current_process_),
-      process_(other.object->process_.Take()) {
-  other.object->Close();
+Process::Process(Process&& other)
+    : is_current_process_(other.is_current_process_),
+      process_(other.process_.Take()) {
+  other.Close();
 }
 
 Process::~Process() {
 }
 
-Process& Process::operator=(RValue other) {
-  if (this != other.object) {
-    process_.Set(other.object->process_.Take());
-    is_current_process_ = other.object->is_current_process_;
-    other.object->Close();
-  }
+Process& Process::operator=(Process&& other) {
+  DCHECK_NE(this, &other);
+  process_.Set(other.process_.Take());
+  is_current_process_ = other.is_current_process_;
+  other.Close();
   return *this;
 }
 
@@ -180,23 +177,7 @@ bool Process::SetProcessBackgrounded(bool value) {
     priority = value ? PROCESS_MODE_BACKGROUND_BEGIN :
                        PROCESS_MODE_BACKGROUND_END;
   } else {
-    // Experiment (http://crbug.com/458594) with using IDLE_PRIORITY_CLASS as a
-    // background priority for background renderers (this code path is
-    // technically for more than just the renderers but they're the only use
-    // case in practice and experimenting here direclty is thus easier -- plus
-    // it doesn't really hurt as above we already state our intent of using
-    // PROCESS_MODE_BACKGROUND_BEGIN if available which is essentially
-    // IDLE_PRIORITY_CLASS plus lowered IO priority). Enabled by default in the
-    // asbence of field trials to get coverage on the perf waterfall.
-    DWORD background_priority = IDLE_PRIORITY_CLASS;
-    base::FieldTrial* trial =
-        base::FieldTrialList::Find("BackgroundRendererProcesses");
-    if (trial && StartsWith(trial->group_name(), "AllowBelowNormalFromBrowser",
-                            CompareCase::SENSITIVE)) {
-      background_priority = BELOW_NORMAL_PRIORITY_CLASS;
-    }
-
-    priority = value ? background_priority : NORMAL_PRIORITY_CLASS;
+    priority = value ? IDLE_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS;
   }
 
   return (::SetPriorityClass(Handle(), priority) != 0);

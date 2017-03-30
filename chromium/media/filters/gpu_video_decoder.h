@@ -5,12 +5,16 @@
 #ifndef MEDIA_FILTERS_GPU_VIDEO_DECODER_H_
 #define MEDIA_FILTERS_GPU_VIDEO_DECODER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <map>
 #include <set>
 #include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/video_decoder.h"
@@ -21,6 +25,10 @@ template <class T> class scoped_refptr;
 namespace base {
 class SharedMemory;
 class SingleThreadTaskRunner;
+}
+
+namespace gpu {
+struct SyncToken;
 }
 
 namespace media {
@@ -37,13 +45,13 @@ class MEDIA_EXPORT GpuVideoDecoder
     : public VideoDecoder,
       public VideoDecodeAccelerator::Client {
  public:
-  explicit GpuVideoDecoder(
-      const scoped_refptr<GpuVideoAcceleratorFactories>& factories);
+  explicit GpuVideoDecoder(GpuVideoAcceleratorFactories* factories);
 
   // VideoDecoder implementation.
   std::string GetDisplayName() const override;
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
+                  const SetCdmReadyCB& set_cdm_ready_cb,
                   const InitCB& init_cb,
                   const OutputCB& output_cb) override;
   void Decode(const scoped_refptr<DecoderBuffer>& buffer,
@@ -54,12 +62,13 @@ class MEDIA_EXPORT GpuVideoDecoder
   int GetMaxDecodeRequests() const override;
 
   // VideoDecodeAccelerator::Client implementation.
-  void ProvidePictureBuffers(uint32 count,
+  void NotifyCdmAttached(bool success) override;
+  void ProvidePictureBuffers(uint32_t count,
                              const gfx::Size& size,
-                             uint32 texture_target) override;
-  void DismissPictureBuffer(int32 id) override;
+                             uint32_t texture_target) override;
+  void DismissPictureBuffer(int32_t id) override;
   void PictureReady(const media::Picture& picture) override;
-  void NotifyEndOfBitstreamBuffer(int32 id) override;
+  void NotifyEndOfBitstreamBuffer(int32_t id) override;
   void NotifyFlushDone() override;
   void NotifyResetDone() override;
   void NotifyError(media::VideoDecodeAccelerator::Error error) override;
@@ -96,24 +105,29 @@ class MEDIA_EXPORT GpuVideoDecoder
     DecodeCB done_cb;
   };
 
-  typedef std::map<int32, PictureBuffer> PictureBufferMap;
+  typedef std::map<int32_t, PictureBuffer> PictureBufferMap;
+
+  // Callback to set CDM. |cdm_attached_cb| is called when the decryptor in the
+  // CDM has been completely attached to the pipeline.
+  void SetCdm(CdmContext* cdm_context, const CdmAttachedCB& cdm_attached_cb);
 
   void DeliverFrame(const scoped_refptr<VideoFrame>& frame);
 
   // Static method is to allow it to run even after GVD is deleted.
-  static void ReleaseMailbox(
-      base::WeakPtr<GpuVideoDecoder> decoder,
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& factories,
-      int64 picture_buffer_id,
-      uint32 texture_id,
-      uint32 release_sync_point);
+  static void ReleaseMailbox(base::WeakPtr<GpuVideoDecoder> decoder,
+                             media::GpuVideoAcceleratorFactories* factories,
+                             int64_t picture_buffer_id,
+                             uint32_t texture_id,
+                             const gpu::SyncToken& release_sync_token);
   // Indicate the picture buffer can be reused by the decoder.
-  void ReusePictureBuffer(int64 picture_buffer_id);
+  void ReusePictureBuffer(int64_t picture_buffer_id);
 
   void RecordBufferData(
       const BitstreamBuffer& bitstream_buffer, const DecoderBuffer& buffer);
-  void GetBufferData(int32 id, base::TimeDelta* timetamp,
-                     gfx::Rect* visible_rect, gfx::Size* natural_size);
+  void GetBufferData(int32_t id,
+                     base::TimeDelta* timetamp,
+                     gfx::Rect* visible_rect,
+                     gfx::Size* natural_size);
 
   void DestroyVDA();
 
@@ -127,21 +141,25 @@ class MEDIA_EXPORT GpuVideoDecoder
   // Destroy all PictureBuffers in |buffers|, and delete their textures.
   void DestroyPictureBuffers(PictureBufferMap* buffers);
 
-  // Returns true if the video decoder can support |profile| and |coded_size|.
-  bool IsProfileSupported(VideoCodecProfile profile,
-                          const gfx::Size& coded_size);
+  // Returns true if the video decoder with |capabilities| can support
+  // |profile| and |coded_size|.
+  bool IsProfileSupported(
+      const VideoDecodeAccelerator::Capabilities& capabilities,
+      VideoCodecProfile profile,
+      const gfx::Size& coded_size);
 
   // Assert the contract that this class is operated on the right thread.
   void DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent() const;
 
   bool needs_bitstream_conversion_;
 
-  scoped_refptr<GpuVideoAcceleratorFactories> factories_;
+  GpuVideoAcceleratorFactories* factories_;
 
   // Populated during Initialize() (on success) and unchanged until an error
   // occurs.
   scoped_ptr<VideoDecodeAccelerator> vda_;
 
+  InitCB init_cb_;
   OutputCB output_cb_;
 
   DecodeCB eos_decode_cb_;
@@ -153,28 +171,34 @@ class MEDIA_EXPORT GpuVideoDecoder
 
   VideoDecoderConfig config_;
 
+  // Callback to request/cancel CDM ready notification.
+  SetCdmReadyCB set_cdm_ready_cb_;
+  CdmAttachedCB cdm_attached_cb_;
+
   // Shared-memory buffer pool.  Since allocating SHM segments requires a
   // round-trip to the browser process, we keep allocation out of the
   // steady-state of the decoder.
   std::vector<SHMBuffer*> available_shm_segments_;
 
-  std::map<int32, PendingDecoderBuffer> bitstream_buffers_in_decoder_;
+  std::map<int32_t, PendingDecoderBuffer> bitstream_buffers_in_decoder_;
   PictureBufferMap assigned_picture_buffers_;
   // PictureBuffers given to us by VDA via PictureReady, which we sent forward
   // as VideoFrames to be rendered via decode_cb_, and which will be returned
   // to us via ReusePictureBuffer.
-  typedef std::map<int32 /* picture_buffer_id */, uint32 /* texture_id */>
+  typedef std::map<int32_t /* picture_buffer_id */, uint32_t /* texture_id */>
       PictureBufferTextureMap;
   PictureBufferTextureMap picture_buffers_at_display_;
 
   // The texture target used for decoded pictures.
-  uint32 decoder_texture_target_;
+  uint32_t decoder_texture_target_;
 
   struct BufferData {
-    BufferData(int32 bbid, base::TimeDelta ts, const gfx::Rect& visible_rect,
+    BufferData(int32_t bbid,
+               base::TimeDelta ts,
+               const gfx::Rect& visible_rect,
                const gfx::Size& natural_size);
     ~BufferData();
-    int32 bitstream_buffer_id;
+    int32_t bitstream_buffer_id;
     base::TimeDelta timestamp;
     gfx::Rect visible_rect;
     gfx::Size natural_size;
@@ -183,12 +207,18 @@ class MEDIA_EXPORT GpuVideoDecoder
 
   // picture_buffer_id and the frame wrapping the corresponding Picture, for
   // frames that have been decoded but haven't been requested by a Decode() yet.
-  int32 next_picture_buffer_id_;
-  int32 next_bitstream_buffer_id_;
+  int32_t next_picture_buffer_id_;
+  int32_t next_bitstream_buffer_id_;
 
   // Set during ProvidePictureBuffers(), used for checking and implementing
   // HasAvailableOutputFrames().
   int available_pictures_;
+
+  // If true, the client cannot expect the VDA to produce any new decoded
+  // frames, until it returns all PictureBuffers it may be holding back to the
+  // VDA. In other words, the VDA may require all PictureBuffers to be able to
+  // proceed with decoding the next frame.
+  bool needs_all_picture_buffers_to_decode_;
 
   // Bound to factories_->GetMessageLoop().
   // NOTE: Weak pointers must be invalidated before all other member variables.

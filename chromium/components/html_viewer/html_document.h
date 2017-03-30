@@ -9,185 +9,168 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/memory/scoped_vector.h"
+#include "components/devtools_service/public/interfaces/devtools_service.mojom.h"
 #include "components/html_viewer/ax_provider_impl.h"
-#include "components/html_viewer/touch_handler.h"
-#include "components/view_manager/public/cpp/view_manager_client_factory.h"
-#include "components/view_manager/public/cpp/view_manager_delegate.h"
-#include "components/view_manager/public/cpp/view_observer.h"
-#include "mandoline/services/navigation/public/interfaces/navigation.mojom.h"
-#include "mojo/application/public/cpp/app_lifetime_helper.h"
-#include "mojo/application/public/cpp/interface_factory.h"
-#include "mojo/application/public/cpp/lazy_interface_ptr.h"
-#include "mojo/application/public/cpp/service_provider_impl.h"
-#include "mojo/application/public/interfaces/application.mojom.h"
-#include "mojo/application/public/interfaces/content_handler.mojom.h"
+#include "components/html_viewer/html_frame_delegate.h"
+#include "components/html_viewer/public/interfaces/test_html_viewer.mojom.h"
+#include "components/mus/public/cpp/window_tree_delegate.h"
+#include "components/web_view/public/interfaces/frame.mojom.h"
 #include "mojo/services/network/public/interfaces/url_loader.mojom.h"
-#include "third_party/WebKit/public/web/WebFrameClient.h"
-#include "third_party/WebKit/public/web/WebSandboxFlags.h"
-#include "third_party/WebKit/public/web/WebViewClient.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_impl.h"
+#include "mojo/shell/public/cpp/app_lifetime_helper.h"
+#include "mojo/shell/public/cpp/interface_factory.h"
+#include "mojo/shell/public/cpp/service_provider_impl.h"
+#include "mojo/shell/public/interfaces/application.mojom.h"
 
 namespace base {
 class SingleThreadTaskRunner;
 }
 
-namespace mojo {
-class ViewManager;
-class View;
+namespace mus {
+class Window;
+class WindowTreeConnection;
 }
 
 namespace html_viewer {
 
 class AxProviderImpl;
-class DevToolsAgentImpl;
-class GeolocationClientImpl;
+class DocumentResourceWaiter;
 class GlobalState;
+class HTMLFactory;
+class HTMLFrame;
+class TestHTMLViewerImpl;
+class WindowTreeDelegateImpl;
 class WebLayerTreeViewImpl;
 
-// A view for a single HTML document.
+// A window for a single HTML document.
 //
 // HTMLDocument is deleted in one of two ways:
-// . When the View the HTMLDocument is embedded in is destroyed.
+// . When the Window the HTMLDocument is embedded in is destroyed.
 // . Explicitly by way of Destroy().
-class HTMLDocument : public blink::WebViewClient,
-                     public blink::WebFrameClient,
-                     public mojo::ViewManagerDelegate,
-                     public mojo::ViewObserver,
-                     public mojo::InterfaceFactory<mojo::AxProvider> {
+class HTMLDocument
+    : public mus::WindowTreeDelegate,
+      public HTMLFrameDelegate,
+      public mojo::InterfaceFactory<mojo::AxProvider>,
+      public mojo::InterfaceFactory<web_view::mojom::FrameClient>,
+      public mojo::InterfaceFactory<TestHTMLViewer>,
+      public mojo::InterfaceFactory<devtools_service::DevToolsAgent>,
+      public mojo::InterfaceFactory<mus::mojom::WindowTreeClient> {
  public:
   using DeleteCallback = base::Callback<void(HTMLDocument*)>;
-
-  struct CreateParams {
-    CreateParams(mojo::ApplicationImpl* html_document_app,
-                 mojo::ApplicationConnection* connection,
-                 mojo::URLResponsePtr response,
-                 GlobalState* global_state,
-                 const DeleteCallback& delete_callback);
-    ~CreateParams();
-
-    mojo::ApplicationImpl* html_document_app;
-    mojo::ApplicationConnection* connection;
-    mojo::URLResponsePtr response;
-    GlobalState* global_state;
-    DeleteCallback delete_callback;
-  };
 
   // Load a new HTMLDocument with |response|.
   // |html_document_app| is the application this app was created in, and
   // |connection| the specific connection triggering this new instance.
   // |setup| is used to obtain init type state (such as resources).
-  explicit HTMLDocument(CreateParams* params);
+  HTMLDocument(mojo::ApplicationImpl* html_document_app,
+               mojo::ApplicationConnection* connection,
+               mojo::URLResponsePtr response,
+               GlobalState* setup,
+               const DeleteCallback& delete_callback,
+               HTMLFactory* factory);
 
   // Deletes this object.
   void Destroy();
 
-  blink::WebView* web_view() const { return web_view_; }
-
- protected:
-  ~HTMLDocument() override;
-
-  // WebViewClient methods:
-  virtual blink::WebStorageNamespace* createSessionStorageNamespace();
-
-  // WebWidgetClient methods:
-  void initializeLayerTreeView() override;
-  blink::WebLayerTreeView* layerTreeView() override;
-
-  // WebFrameClient methods:
-  virtual blink::WebMediaPlayer* createMediaPlayer(
-      blink::WebLocalFrame* frame,
-      const blink::WebURL& url,
-      blink::WebMediaPlayerClient* client,
-      blink::WebContentDecryptionModule* initial_cdm);
-  virtual blink::WebFrame* createChildFrame(
-      blink::WebLocalFrame* parent,
-      blink::WebTreeScopeType scope,
-      const blink::WebString& frameName,
-      blink::WebSandboxFlags sandboxFlags);
-  virtual void frameDetached(blink::WebFrame* frame, DetachType type);
-  virtual blink::WebCookieJar* cookieJar(blink::WebLocalFrame* frame);
-  virtual blink::WebNavigationPolicy decidePolicyForNavigation(
-      const NavigationPolicyInfo& info);
-  virtual blink::WebGeolocationClient* geolocationClient();
-
-  virtual void didAddMessageToConsole(const blink::WebConsoleMessage& message,
-                                      const blink::WebString& source_name,
-                                      unsigned source_line,
-                                      const blink::WebString& stack_trace);
-  virtual void didFinishLoad(blink::WebLocalFrame* frame);
-  virtual void didNavigateWithinPage(blink::WebLocalFrame* frame,
-                                     const blink::WebHistoryItem& history_item,
-                                     blink::WebHistoryCommitType commit_type);
-  virtual blink::WebEncryptedMediaClient* encryptedMediaClient();
-
  private:
-  // Data associated with a child iframe.
-  struct ChildFrameData {
-    mojo::View* view;
-    blink::WebTreeScopeType scope;
+  friend class DocumentResourceWaiter;  // So it can call Load().
+
+  // Requests for interfaces before the document is loaded go here. Once
+  // loaded the requests are bound and BeforeLoadCache is deleted.
+  struct BeforeLoadCache {
+    BeforeLoadCache();
+    ~BeforeLoadCache();
+
+    std::set<mojo::InterfaceRequest<mojo::AxProvider>*> ax_provider_requests;
+    std::set<mojo::InterfaceRequest<TestHTMLViewer>*> test_interface_requests;
   };
 
-  // Updates the size and scale factor of the webview and related classes from
-  // |root_|.
-  void UpdateWebviewSizeFromViewSize();
+  // Any state that needs to be moved when rendering transfers from one frame
+  // to another is stored here.
+  struct TransferableState {
+    TransferableState();
+    ~TransferableState();
 
-  void InitGlobalStateAndLoadIfNecessary();
+    // Takes the state from |other|.
+    void Move(TransferableState* other);
 
-  // ViewManagerDelegate methods:
-  void OnEmbed(mojo::View* root) override;
-  void OnViewManagerDestroyed(mojo::ViewManager* view_manager) override;
+    bool owns_window_tree_connection;
+    mus::Window* root;
+    scoped_ptr<WindowTreeDelegateImpl> window_tree_delegate_impl;
+  };
 
-  // ViewObserver methods:
-  void OnViewBoundsChanged(mojo::View* view,
-                           const mojo::Rect& old_bounds,
-                           const mojo::Rect& new_bounds) override;
-  void OnViewViewportMetricsChanged(
-      mojo::View* view,
-      const mojo::ViewportMetrics& old_metrics,
-      const mojo::ViewportMetrics& new_metrics) override;
-  void OnViewDestroyed(mojo::View* view) override;
-  void OnViewInputEvent(mojo::View* view, const mojo::EventPtr& event) override;
-  void OnViewFocusChanged(mojo::View* gained_focus,
-                          mojo::View* lost_focus) override;
+  ~HTMLDocument() override;
 
-  // mojo::InterfaceFactory<mojo::AxProvider>
+  void Load();
+
+  BeforeLoadCache* GetBeforeLoadCache();
+
+  // WindowTreeDelegate:
+  void OnEmbed(mus::Window* root) override;
+  void OnConnectionLost(mus::WindowTreeConnection* connection) override;
+
+  // HTMLFrameDelegate:
+  mojo::ApplicationImpl* GetApp() override;
+  HTMLFactory* GetHTMLFactory() override;
+  void OnFrameDidFinishLoad() override;
+  void OnFrameSwappedToRemote() override;
+  void OnSwap(HTMLFrame* frame, HTMLFrameDelegate* old_delegate) override;
+  void OnFrameDestroyed() override;
+
+  // mojo::InterfaceFactory<mojo::AxProvider>:
   void Create(mojo::ApplicationConnection* connection,
               mojo::InterfaceRequest<mojo::AxProvider> request) override;
 
-  void Load(mojo::URLResponsePtr response);
+  // mojo::InterfaceFactory<web_view::mojom::FrameClient>:
+  void Create(
+      mojo::ApplicationConnection* connection,
+      mojo::InterfaceRequest<web_view::mojom::FrameClient> request) override;
 
-  // Converts a WebLocalFrame to a WebRemoteFrame. Used once we know the
-  // url of a frame to trigger the navigation.
-  void ConvertLocalFrameToRemoteFrame(blink::WebLocalFrame* frame);
+  // mojo::InterfaceFactory<TestHTMLViewer>:
+  void Create(mojo::ApplicationConnection* connection,
+              mojo::InterfaceRequest<TestHTMLViewer> request) override;
 
-  // Updates the focus state of |web_view_| based on the focus state of |root_|.
-  void UpdateFocus();
+  // mojo::InterfaceFactory<devtools_service::DevToolsAgent>:
+  void Create(
+      mojo::ApplicationConnection* connection,
+      mojo::InterfaceRequest<devtools_service::DevToolsAgent> request) override;
+
+  // mojo::InterfaceFactory<mus::WindowTreeClient>:
+  void Create(
+      mojo::ApplicationConnection* connection,
+      mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request) override;
 
   scoped_ptr<mojo::AppRefCount> app_refcount_;
   mojo::ApplicationImpl* html_document_app_;
-  mojo::URLResponsePtr response_;
-  mojo::LazyInterfacePtr<mojo::NavigatorHost> navigator_host_;
-  blink::WebView* web_view_;
-  mojo::View* root_;
-  mojo::ViewManagerClientFactory view_manager_client_factory_;
-  scoped_ptr<WebLayerTreeViewImpl> web_layer_tree_view_impl_;
-  scoped_refptr<base::SingleThreadTaskRunner> compositor_thread_;
-  scoped_ptr<GeolocationClientImpl> geolocation_client_impl_;
+  mojo::ApplicationConnection* connection_;
 
   // HTMLDocument owns these pointers; binding requests after document load.
-  std::set<mojo::InterfaceRequest<mojo::AxProvider>*> ax_provider_requests_;
   std::set<AxProviderImpl*> ax_providers_;
 
-  // A flag set on didFinishLoad.
-  bool did_finish_load_ = false;
+  ScopedVector<TestHTMLViewerImpl> test_html_viewers_;
+
+  // Set to true when the local frame has finished loading.
+  bool did_finish_local_frame_load_ = false;
 
   GlobalState* global_state_;
 
-  scoped_ptr<TouchHandler> touch_handler_;
+  HTMLFrame* frame_;
 
-  scoped_ptr<DevToolsAgentImpl> devtools_agent_;
+  scoped_ptr<DocumentResourceWaiter> resource_waiter_;
+
+  scoped_ptr<BeforeLoadCache> before_load_cache_;
 
   DeleteCallback delete_callback_;
+
+  HTMLFactory* factory_;
+
+  TransferableState transferable_state_;
+
+  // Cache interface request of DevToolsAgent if |frame_| hasn't been
+  // initialized.
+  mojo::InterfaceRequest<devtools_service::DevToolsAgent>
+      devtools_agent_request_;
 
   DISALLOW_COPY_AND_ASSIGN(HTMLDocument);
 };

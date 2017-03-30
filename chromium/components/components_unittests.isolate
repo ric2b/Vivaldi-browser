@@ -37,6 +37,7 @@
     ['OS=="android" or OS=="linux" or OS=="mac" or OS=="win"', {
       'variables': {
         'files': [
+          '../net/data/',
           'test/data/',
           '<(PRODUCT_DIR)/components_tests_resources.pak',
           '<(PRODUCT_DIR)/ui_test.pak',
@@ -47,7 +48,6 @@
       'variables': {
         'files': [
           '../testing/test_env.py',
-          '<(PRODUCT_DIR)/components_unittests<(EXECUTABLE_SUFFIX)',
         ],
       },
     }],
@@ -91,6 +91,6 @@
   ],
   'includes': [
     '../base/base.isolate',
-    '../third_party/angle/angle.isolate',
+    '../ui/gl/gl.isolate',
   ],
 }

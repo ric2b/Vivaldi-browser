@@ -4,6 +4,9 @@
 
 #include "content/renderer/media/webrtc/media_stream_remote_video_source.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
@@ -11,9 +14,11 @@
 #include "base/trace_event/trace_event.h"
 #include "content/renderer/media/webrtc/track_observer.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "third_party/libjingle/source/talk/media/base/videoframe.h"
+#include "third_party/webrtc/system_wrappers/include/tick_util.h"
 
 namespace content {
 
@@ -47,14 +52,26 @@ class MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate
 
   // |frame_callback_| is accessed on the IO thread.
   VideoCaptureDeliverFrameCB frame_callback_;
+
+  // Timestamp of the first received frame.
+  base::TimeDelta start_timestamp_;
+  // WebRTC Chromium timestamp diff
+  const base::TimeDelta time_diff_;
 };
 
 MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::
     RemoteVideoSourceDelegate(
         scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
         const VideoCaptureDeliverFrameCB& new_frame_callback)
-    : io_task_runner_(io_task_runner), frame_callback_(new_frame_callback) {
-}
+    : io_task_runner_(io_task_runner),
+      frame_callback_(new_frame_callback),
+      start_timestamp_(media::kNoTimestamp()),
+      // TODO(qiangchen): There can be two differences between clocks: 1)
+      // the offset, 2) the rate (i.e., one clock runs faster than the other).
+      // See http://crbug/516700
+      time_diff_(base::TimeTicks::Now() - base::TimeTicks() -
+                 base::TimeDelta::FromMicroseconds(
+                     webrtc::TickTime::MicrosecondTimestamp())) {}
 
 MediaStreamRemoteVideoSource::
 RemoteVideoSourceDelegate::~RemoteVideoSourceDelegate() {
@@ -62,24 +79,30 @@ RemoteVideoSourceDelegate::~RemoteVideoSourceDelegate() {
 
 void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::RenderFrame(
     const cricket::VideoFrame* incoming_frame) {
-  TRACE_EVENT0("webrtc", "RemoteVideoSourceDelegate::RenderFrame");
-  base::TimeDelta timestamp = base::TimeDelta::FromMicroseconds(
-      incoming_frame->GetElapsedTime() / rtc::kNumNanosecsPerMicrosec);
+  const base::TimeDelta incoming_timestamp = base::TimeDelta::FromMicroseconds(
+      incoming_frame->GetTimeStamp() / rtc::kNumNanosecsPerMicrosec);
+  const base::TimeTicks render_time =
+      base::TimeTicks() + incoming_timestamp + time_diff_;
+
+  TRACE_EVENT1("webrtc", "RemoteVideoSourceDelegate::RenderFrame",
+               "Ideal Render Instant", render_time.ToInternalValue());
+
+  CHECK_NE(media::kNoTimestamp(), incoming_timestamp);
+  if (start_timestamp_ == media::kNoTimestamp())
+    start_timestamp_ = incoming_timestamp;
+  const base::TimeDelta elapsed_timestamp =
+      incoming_timestamp - start_timestamp_;
 
   scoped_refptr<media::VideoFrame> video_frame;
   if (incoming_frame->GetNativeHandle() != NULL) {
     video_frame =
         static_cast<media::VideoFrame*>(incoming_frame->GetNativeHandle());
-    video_frame->set_timestamp(timestamp);
+    video_frame->set_timestamp(elapsed_timestamp);
   } else {
     const cricket::VideoFrame* frame =
         incoming_frame->GetCopyWithRotationApplied();
 
     gfx::Size size(frame->GetWidth(), frame->GetHeight());
-
-    // Non-square pixels are unsupported.
-    DCHECK_EQ(frame->GetPixelWidth(), 1u);
-    DCHECK_EQ(frame->GetPixelHeight(), 1u);
 
     // Make a shallow copy. Both |frame| and |video_frame| will share a single
     // reference counted frame buffer. Const cast and hope no one will overwrite
@@ -87,14 +110,19 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::RenderFrame(
     // TODO(magjed): Update media::VideoFrame to support const data so we don't
     // need to const cast here.
     video_frame = media::VideoFrame::WrapExternalYuvData(
-        media::VideoFrame::YV12, size, gfx::Rect(size), size,
+        media::PIXEL_FORMAT_YV12, size, gfx::Rect(size), size,
         frame->GetYPitch(), frame->GetUPitch(), frame->GetVPitch(),
         const_cast<uint8_t*>(frame->GetYPlane()),
         const_cast<uint8_t*>(frame->GetUPlane()),
-        const_cast<uint8_t*>(frame->GetVPlane()), timestamp);
+        const_cast<uint8_t*>(frame->GetVPlane()), elapsed_timestamp);
+    if (!video_frame)
+      return;
     video_frame->AddDestructionObserver(
         base::Bind(&base::DeletePointer<cricket::VideoFrame>, frame->Copy()));
   }
+
+  video_frame->metadata()->SetTimeTicks(
+      media::VideoFrameMetadata::REFERENCE_TIME, render_time);
 
   io_task_runner_->PostTask(
       FROM_HERE, base::Bind(&RemoteVideoSourceDelegate::DoRenderFrameOnIOThread,
@@ -112,7 +140,7 @@ RemoteVideoSourceDelegate::DoRenderFrameOnIOThread(
 
 MediaStreamRemoteVideoSource::MediaStreamRemoteVideoSource(
     scoped_ptr<TrackObserver> observer)
-    : observer_(observer.Pass()) {
+    : observer_(std::move(observer)) {
   // The callback will be automatically cleared when 'observer_' goes out of
   // scope and no further callbacks will occur.
   observer_->SetCallback(base::Bind(&MediaStreamRemoteVideoSource::OnChanged,
@@ -121,6 +149,12 @@ MediaStreamRemoteVideoSource::MediaStreamRemoteVideoSource(
 
 MediaStreamRemoteVideoSource::~MediaStreamRemoteVideoSource() {
   DCHECK(CalledOnValidThread());
+  DCHECK(!observer_);
+}
+
+void MediaStreamRemoteVideoSource::OnSourceTerminated() {
+  DCHECK(CalledOnValidThread());
+  StopSourceImpl();
 }
 
 void MediaStreamRemoteVideoSource::GetCurrentSupportedFormats(
@@ -150,10 +184,18 @@ void MediaStreamRemoteVideoSource::StartSourceImpl(
 
 void MediaStreamRemoteVideoSource::StopSourceImpl() {
   DCHECK(CalledOnValidThread());
+  // StopSourceImpl is called either when MediaStreamTrack.stop is called from
+  // JS or blink gc the MediaStreamSource object or when OnSourceTerminated()
+  // is called. Garbage collection will happen after the PeerConnection no
+  // longer receives the video track.
+  if (!observer_)
+    return;
   DCHECK(state() != MediaStreamVideoSource::ENDED);
   scoped_refptr<webrtc::VideoTrackInterface> video_track(
       static_cast<webrtc::VideoTrackInterface*>(observer_->track().get()));
   video_track->RemoveRenderer(delegate_.get());
+  // This removes the references to the webrtc video track.
+  observer_.reset();
 }
 
 webrtc::VideoRendererInterface*

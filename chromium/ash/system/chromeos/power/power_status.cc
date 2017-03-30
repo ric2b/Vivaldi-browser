@@ -65,6 +65,36 @@ base::string16 GetBatteryTimeAccessibilityString(int hour, int min) {
                              base::TimeDelta::FromMinutes(min)));
 }
 
+int PowerSourceToMessageID(
+    const power_manager::PowerSupplyProperties_PowerSource& source) {
+  switch (source.port()) {
+    case power_manager::PowerSupplyProperties_PowerSource_Port_UNKNOWN:
+      return IDS_ASH_POWER_SOURCE_PORT_UNKNOWN;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_LEFT:
+      return IDS_ASH_POWER_SOURCE_PORT_LEFT;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_RIGHT:
+      return IDS_ASH_POWER_SOURCE_PORT_RIGHT;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_BACK:
+      return IDS_ASH_POWER_SOURCE_PORT_BACK;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_FRONT:
+      return IDS_ASH_POWER_SOURCE_PORT_FRONT;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_LEFT_FRONT:
+      return IDS_ASH_POWER_SOURCE_PORT_LEFT_FRONT;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_LEFT_BACK:
+      return IDS_ASH_POWER_SOURCE_PORT_LEFT_BACK;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_RIGHT_FRONT:
+      return IDS_ASH_POWER_SOURCE_PORT_RIGHT_FRONT;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_RIGHT_BACK:
+      return IDS_ASH_POWER_SOURCE_PORT_RIGHT_BACK;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_BACK_LEFT:
+      return IDS_ASH_POWER_SOURCE_PORT_BACK_LEFT;
+    case power_manager::PowerSupplyProperties_PowerSource_Port_BACK_RIGHT:
+      return IDS_ASH_POWER_SOURCE_PORT_BACK_RIGHT;
+  }
+  NOTREACHED();
+  return 0;
+}
+
 static PowerStatus* g_power_status = NULL;
 
 // Minimum battery percentage rendered in UI.
@@ -137,6 +167,11 @@ void PowerStatus::RequestStatusUpdate() {
       RequestStatusUpdate();
 }
 
+void PowerStatus::SetPowerSource(const std::string& id) {
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->SetPowerSource(
+      id);
+}
+
 bool PowerStatus::IsBatteryPresent() const {
   return proto_.battery_state() !=
       power_manager::PowerSupplyProperties_BatteryState_NOT_PRESENT;
@@ -195,6 +230,33 @@ bool PowerStatus::IsUsbChargerConnected() const {
 
 bool PowerStatus::SupportsDualRoleDevices() const {
   return proto_.supports_dual_role_devices();
+}
+
+bool PowerStatus::HasDualRoleDevices() const {
+  if (!SupportsDualRoleDevices())
+    return false;
+
+  for (int i = 0; i < proto_.available_external_power_source_size(); i++) {
+    if (!proto_.available_external_power_source(i).active_by_default())
+      return true;
+  }
+  return false;
+}
+
+std::vector<PowerStatus::PowerSource> PowerStatus::GetPowerSources() const {
+  std::vector<PowerSource> sources;
+  for (int i = 0; i < proto_.available_external_power_source_size(); i++) {
+    const auto& source = proto_.available_external_power_source(i);
+    sources.push_back(
+        {source.id(),
+         source.active_by_default() ? DEDICATED_CHARGER : DUAL_ROLE_USB,
+         PowerSourceToMessageID(source)});
+  }
+  return sources;
+}
+
+std::string PowerStatus::GetCurrentPowerSourceID() const {
+  return proto_.external_power_source_id();
 }
 
 gfx::ImageSkia PowerStatus::GetBatteryImage(IconSet icon_set) const {

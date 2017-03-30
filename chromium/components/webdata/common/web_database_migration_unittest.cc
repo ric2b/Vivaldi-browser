@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
@@ -61,11 +62,7 @@ class WebDatabaseMigrationTest : public testing::Test {
   // Load the database via the WebDatabase class and migrate the database to
   // the current version.
   void DoMigration() {
-    // TODO(joi): This whole unit test file needs to stay in //chrome
-    // for now, as it needs to know about all the different table
-    // types. Once all webdata datatypes have been componentized, this
-    // could move to components_unittests.
-    AutofillTable autofill_table("en-US");
+    AutofillTable autofill_table;
     KeywordTable keyword_table;
     LoginsTable logins_table;
     TokenServiceTable token_service_table;

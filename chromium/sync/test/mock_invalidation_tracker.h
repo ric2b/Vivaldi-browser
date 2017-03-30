@@ -5,7 +5,10 @@
 #ifndef SYNC_TEST_MOCK_INVALIDATION_TRACKER_H_
 #define SYNC_TEST_MOCK_INVALIDATION_TRACKER_H_
 
+#include <stdint.h>
+
 #include <set>
+#include <string>
 
 #include "base/memory/scoped_ptr.h"
 #include "sync/test/trackable_mock_invalidation.h"
@@ -20,7 +23,7 @@ class MockInvalidationTracker {
   // object.
   scoped_ptr<TrackableMockInvalidation> IssueUnknownVersionInvalidation();
   scoped_ptr<TrackableMockInvalidation> IssueInvalidation(
-      int64 version,
+      int64_t version,
       const std::string& payload);
 
   MockInvalidationTracker();

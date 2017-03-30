@@ -5,6 +5,7 @@
 #include "base/threading/platform_thread.h"
 
 #include <errno.h>
+#include <stddef.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/types.h>
@@ -37,8 +38,7 @@ const ThreadPriorityToNiceValuePair kThreadPriorityToNiceValueMap[4] = {
     {ThreadPriority::REALTIME_AUDIO, -16},
 };
 
-bool SetThreadPriorityForPlatform(PlatformThreadHandle handle,
-                                  ThreadPriority priority) {
+bool SetCurrentThreadPriorityForPlatform(ThreadPriority priority) {
   // On Android, we set the Audio priority through JNI as Audio priority
   // will also allow the process to run while it is backgrounded.
   if (priority == ThreadPriority::REALTIME_AUDIO) {
@@ -49,9 +49,15 @@ bool SetThreadPriorityForPlatform(PlatformThreadHandle handle,
   return false;
 }
 
-bool GetThreadPriorityForPlatform(PlatformThreadHandle handle,
-                                  ThreadPriority* priority) {
-  NOTIMPLEMENTED();
+bool GetCurrentThreadPriorityForPlatform(ThreadPriority* priority) {
+  DCHECK(priority);
+  *priority = ThreadPriority::NORMAL;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  if (Java_ThreadUtils_isThreadPriorityAudio(
+      env, PlatformThread::CurrentId())) {
+    *priority = ThreadPriority::REALTIME_AUDIO;
+    return true;
+  }
   return false;
 }
 
@@ -81,8 +87,7 @@ void InitThreading() {
 void InitOnThread() {
   // Threads on linux/android may inherit their priority from the thread
   // where they were created. This sets all new threads to the default.
-  PlatformThread::SetThreadPriority(PlatformThread::CurrentHandle(),
-                                    ThreadPriority::NORMAL);
+  PlatformThread::SetCurrentThreadPriority(ThreadPriority::NORMAL);
 }
 
 void TerminateOnThread() {

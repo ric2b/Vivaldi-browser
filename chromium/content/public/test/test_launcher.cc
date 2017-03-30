@@ -4,7 +4,10 @@
 
 #include "content/public/test/test_launcher.h"
 
+#include <stddef.h>
+
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -14,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -26,9 +30,9 @@
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/public/app/content_main.h"
 #include "content/public/app/content_main_delegate.h"
-#include "content/public/app/startup_helper_win.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandbox_init.h"
 #include "content/public/test/browser_test.h"
@@ -38,6 +42,7 @@
 #if defined(OS_WIN)
 #include "base/base_switches.h"
 #include "content/common/sandbox_win.h"
+#include "content/public/app/sandbox_helper_win.h"
 #include "sandbox/win/src/sandbox_factory.h"
 #include "sandbox/win/src/sandbox_types.h"
 #elif defined(OS_MACOSX)
@@ -120,7 +125,7 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
   }
 
   // base::TestLauncherDelegate:
-  bool GetTests(std::vector<base::SplitTestName>* output) override;
+  bool GetTests(std::vector<base::TestIdentifier>* output) override;
   bool ShouldRunTest(const std::string& test_case_name,
                      const std::string& test_name) override;
   size_t RunTests(base::TestLauncher* test_launcher,
@@ -129,8 +134,8 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
                     const std::vector<std::string>& test_names) override;
 
  private:
-  void DoRunTest(base::TestLauncher* test_launcher,
-                 const std::string& test_name);
+  void DoRunTests(base::TestLauncher* test_launcher,
+                  const std::vector<std::string>& test_names);
 
   // Launches test named |test_name| using parallel launcher,
   // given result of PRE_ test |pre_test_result|.
@@ -141,6 +146,7 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
   // Callback to receive result of a test.
   void GTestCallback(
       base::TestLauncher* test_launcher,
+      const std::vector<std::string>& test_names,
       const std::string& test_name,
       int exit_code,
       const base::TimeDelta& elapsed_time,
@@ -173,7 +179,7 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
 };
 
 bool WrapperTestLauncherDelegate::GetTests(
-    std::vector<base::SplitTestName>* output) {
+    std::vector<base::TestIdentifier>* output) {
   *output = base::GetCompiledInTests();
   return true;
 }
@@ -183,12 +189,14 @@ bool WrapperTestLauncherDelegate::ShouldRunTest(
     const std::string& test_name) {
   all_test_names_.insert(test_case_name + "." + test_name);
 
-  if (base::StartsWithASCII(test_name, kManualTestPrefix, true) &&
+  if (base::StartsWith(test_name, kManualTestPrefix,
+                       base::CompareCase::SENSITIVE) &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch(kRunManualTestsFlag)) {
     return false;
   }
 
-  if (base::StartsWithASCII(test_name, kPreTestPrefix, true)) {
+  if (base::StartsWith(test_name, kPreTestPrefix,
+                       base::CompareCase::SENSITIVE)) {
     // We will actually run PRE_ tests, but to ensure they run on the same shard
     // as dependent tests, handle all these details internally.
     return false;
@@ -251,7 +259,9 @@ size_t WrapperTestLauncherDelegate::RunTests(
     while (ContainsKey(reverse_dependent_test_map_, full_name))
       full_name = GetPreTestName(full_name);
 
-    DoRunTest(test_launcher, full_name);
+    std::vector<std::string> test_list;
+    test_list.push_back(full_name);
+    DoRunTests(test_launcher, test_list);
   }
 
   return test_names.size() + additional_tests_to_run_count;
@@ -313,14 +323,21 @@ size_t WrapperTestLauncherDelegate::RetryTests(
       tests_to_run_now.push_back(full_name);
   }
 
-  for (size_t i = 0; i < tests_to_run_now.size(); i++)
-    DoRunTest(test_launcher, tests_to_run_now[i]);
+  DoRunTests(test_launcher, tests_to_run_now);
 
   return test_names_set.size();
 }
 
-void WrapperTestLauncherDelegate::DoRunTest(base::TestLauncher* test_launcher,
-                                            const std::string& test_name) {
+void WrapperTestLauncherDelegate::DoRunTests(
+    base::TestLauncher* test_launcher,
+    const std::vector<std::string>& test_names) {
+  if (test_names.empty())
+    return;
+
+  std::string test_name(test_names.front());
+  std::vector<std::string> test_names_copy(
+      test_names.begin() + 1, test_names.end());
+
   std::string test_name_no_pre(RemoveAnyPrePrefixes(test_name));
 
   base::CommandLine cmd_line(*base::CommandLine::ForCurrentProcess());
@@ -356,6 +373,7 @@ void WrapperTestLauncherDelegate::DoRunTest(base::TestLauncher* test_launcher,
       base::Bind(&WrapperTestLauncherDelegate::GTestCallback,
                  base::Unretained(this),
                  test_launcher,
+                 test_names_copy,
                  test_name));
 }
 
@@ -365,7 +383,9 @@ void WrapperTestLauncherDelegate::RunDependentTest(
     const base::TestResult& pre_test_result) {
   if (pre_test_result.status == base::TestResult::TEST_SUCCESS) {
     // Only run the dependent test if PRE_ test succeeded.
-    DoRunTest(test_launcher, test_name);
+    std::vector<std::string> test_list;
+    test_list.push_back(test_name);
+    DoRunTests(test_launcher, test_list);
   } else {
     // Otherwise skip the test.
     base::TestResult test_result;
@@ -383,6 +403,7 @@ void WrapperTestLauncherDelegate::RunDependentTest(
 
 void WrapperTestLauncherDelegate::GTestCallback(
     base::TestLauncher* test_launcher,
+    const std::vector<std::string>& test_names,
     const std::string& test_name,
     int exit_code,
     const base::TimeDelta& elapsed_time,
@@ -419,6 +440,8 @@ void WrapperTestLauncherDelegate::GTestCallback(
   }
 
   test_launcher->OnTestFinished(result);
+
+  DoRunTests(test_launcher, test_names);
 }
 
 }  // namespace

@@ -5,7 +5,7 @@
 #ifndef CONTENT_COMMON_INPUT_INPUT_EVENT_H_
 #define CONTENT_COMMON_INPUT_INPUT_EVENT_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
 #include "content/common/input/scoped_web_input_event.h"
@@ -22,13 +22,11 @@ class CONTENT_EXPORT InputEvent {
  public:
   InputEvent();
   InputEvent(const blink::WebInputEvent& web_event,
-             const ui::LatencyInfo& latency_info,
-             bool is_keyboard_shortcut);
+             const ui::LatencyInfo& latency_info);
   ~InputEvent();
 
   ScopedWebInputEvent web_event;
   ui::LatencyInfo latency_info;
-  bool is_keyboard_shortcut;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InputEvent);

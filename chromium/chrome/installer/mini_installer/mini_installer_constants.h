@@ -34,13 +34,14 @@ extern const wchar_t kLZMAResourceType[];
 // Registry value names.
 extern const wchar_t kApRegistryValue[];
 extern const wchar_t kCleanupRegistryValue[];
+extern const wchar_t kInstallerErrorRegistryValue[];
+extern const wchar_t kInstallerExtraCode1RegistryValue[];
+extern const wchar_t kInstallerResultRegistryValue[];
 extern const wchar_t kUninstallRegistryValue[];
 
 // Registry key paths.
 extern const wchar_t kClientStateKeyBase[];
 extern const wchar_t kCleanupRegistryKey[];
-
-extern const size_t kMaxResourceSize;
 
 }  // namespace mini_installer
 

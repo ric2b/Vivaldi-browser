@@ -6,11 +6,11 @@
 #define CHROMECAST_BROWSER_ANDROID_CAST_WINDOW_ANDROID_H_
 
 #include <jni.h>
+#include <stdint.h>
 #include <vector>
 
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -33,8 +33,8 @@ class WebContents;
 }  // namespace content
 
 namespace chromecast {
-class CastContentWindow;
 namespace shell {
+class CastContentWindow;
 
 class CastWindowAndroid : public content::WebContentsDelegate,
                           public content::WebContentsObserver {
@@ -66,12 +66,11 @@ class CastWindowAndroid : public content::WebContentsDelegate,
   void CloseContents(content::WebContents* source) override;
   bool CanOverscrollContent() const override;
   bool AddMessageToConsole(content::WebContents* source,
-                           int32 level,
+                           int32_t level,
                            const base::string16& message,
-                           int32 line_no,
+                           int32_t line_no,
                            const base::string16& source_id) override;
   void ActivateContents(content::WebContents* contents) override;
-  void DeactivateContents(content::WebContents* contents) override;
 
   // content::WebContentsObserver implementation:
   void RenderProcessGone(base::TerminationStatus status) override;

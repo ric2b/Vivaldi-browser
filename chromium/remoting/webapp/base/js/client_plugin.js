@@ -34,9 +34,10 @@ remoting.ClientPlugin.prototype.extensions = function() {};
 remoting.ClientPlugin.prototype.element = function() {};
 
 /**
- * @param {function(boolean):void} onDone Completion callback.
+ * @return {Promise<void>}  A promise that will resolve when the plugin is
+ *     initialized or reject if it fails.
  */
-remoting.ClientPlugin.prototype.initialize = function(onDone) {};
+remoting.ClientPlugin.prototype.initialize = function() {};
 
 /**
  * @param {remoting.Host} host The host to connect to.
@@ -86,18 +87,6 @@ remoting.ClientPlugin.prototype.releaseAllKeys = function() {};
  * @param {string} iq
  */
 remoting.ClientPlugin.prototype.onIncomingIq = function(iq) {};
-
-/**
- * @return {boolean} True if the web-app and plugin are compatible.
- */
-remoting.ClientPlugin.prototype.isSupportedVersion = function() {};
-
-/**
- * @param {remoting.ClientPlugin.Feature} feature
- * @return {boolean} True if the plugin supports the specified feature.
- */
-remoting.ClientPlugin.prototype.hasFeature = function(feature) {};
-
 
 /**
  * @param {remoting.ClientSession.Capability} capability
@@ -180,29 +169,6 @@ remoting.ClientPlugin.prototype.setClipboardHandler = function(handler) {};
  */
 remoting.ClientPlugin.prototype.setDebugDirtyRegionHandler =
     function(handler) {};
-
-
-/**
- * Set of features for which hasFeature() can be used to test.
- *
- * @enum {string}
- */
-remoting.ClientPlugin.Feature = {
-  INJECT_KEY_EVENT: 'injectKeyEvent',
-  NOTIFY_CLIENT_RESOLUTION: 'notifyClientResolution',
-  ASYNC_PIN: 'asyncPin',
-  PAUSE_VIDEO: 'pauseVideo',
-  PAUSE_AUDIO: 'pauseAudio',
-  REMAP_KEY: 'remapKey',
-  SEND_CLIPBOARD_ITEM: 'sendClipboardItem',
-  THIRD_PARTY_AUTH: 'thirdPartyAuth',
-  TRAP_KEY: 'trapKey',
-  PINLESS_AUTH: 'pinlessAuth',
-  ALLOW_MOUSE_LOCK: 'allowMouseLock',
-  EXTENSION_MESSAGE: 'extensionMessage',
-  VIDEO_CONTROL: 'videoControl'
-};
-
 
 /**
  * @interface

@@ -19,12 +19,19 @@ class MediaRouter;
 // a MediaSource has been updated.
 // A MediaSinksObserver implementation can be registered to MediaRouter to
 // receive results. It can then interpret / process the results accordingly.
+// More documentation can be found at
+// docs.google.com/document/d/1RDXdzi2y7lRuL08HAe-qlSJG2DMz2iH3gBzMs0IRR78
 class MediaSinksObserver {
  public:
   // Constructs an observer that will observe for sinks compatible
   // with |source|.
   MediaSinksObserver(MediaRouter* router, const MediaSource& source);
   virtual ~MediaSinksObserver();
+
+  // Registers with MediaRouter to start observing. Must be called before the
+  // observer will start receiving updates. Returns |true| if the observer is
+  // initialized. This method is no-op if the observer is already initialized.
+  bool Init();
 
   // This function is invoked when the list of sinks compatible
   // with |source_| has been updated.
@@ -38,6 +45,7 @@ class MediaSinksObserver {
  private:
   const MediaSource source_;
   MediaRouter* router_;
+  bool initialized_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaSinksObserver);
 };

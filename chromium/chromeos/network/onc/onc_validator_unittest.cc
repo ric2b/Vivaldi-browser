@@ -40,7 +40,7 @@ class ONCValidatorTest : public ::testing::Test {
       validator.reset(new Validator(false, false, false, managed_onc));
     }
     validator->SetOncSource(onc_source);
-    original_object_ = onc_object.Pass();
+    original_object_ = std::move(onc_object);
     repaired_object_ = validator->ValidateAndRepairObject(signature,
                                                           *original_object_,
                                                           &validation_result_);
@@ -146,6 +146,16 @@ INSTANTIATE_TEST_CASE_P(
         // Check that at least one configuration is accepted for
         // device policies.
         OncParams("managed_toplevel_wifi_peap.onc",
+                  &kToplevelConfigurationSignature,
+                  true,
+                  ::onc::ONC_SOURCE_DEVICE_POLICY),
+        // Disabled technologies are only allowed for device policies.
+        OncParams("managed_toplevel_with_disabled_technologies.onc",
+                  &kToplevelConfigurationSignature,
+                  true,
+                  ::onc::ONC_SOURCE_DEVICE_POLICY),
+        // AllowOnlyPolicyNetworksToConnect is only allowed for device policies.
+        OncParams("managed_toplevel_with_only_managed.onc",
                   &kToplevelConfigurationSignature,
                   true,
                   ::onc::ONC_SOURCE_DEVICE_POLICY),
@@ -474,6 +484,10 @@ INSTANTIATE_TEST_CASE_P(
     StrictAndLiberalInvalid,
     ONCValidatorTestRepairable,
     ::testing::Values(
+        std::make_pair(OncParams("global-disabled-technologies",
+                                 &kGlobalNetworkConfigurationSignature,
+                                 false),
+                       ExpectBothNotValid("", "")),
         std::make_pair(OncParams("network-unknown-value",
                                  &kNetworkConfigurationSignature,
                                  false),

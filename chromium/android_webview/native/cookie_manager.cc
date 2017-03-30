@@ -4,6 +4,8 @@
 
 #include "android_webview/native/cookie_manager.h"
 
+#include <utility>
+
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_cookie_access_policy.h"
 #include "android_webview/browser/net/init_native_callback.h"
@@ -340,7 +342,7 @@ void CookieManager::SetCookie(
     const std::string& cookie_value,
     scoped_ptr<BoolCookieCallbackHolder> callback_holder) {
   BoolCallback callback =
-      BoolCookieCallbackHolder::ConvertToCallback(callback_holder.Pass());
+      BoolCookieCallbackHolder::ConvertToCallback(std::move(callback_holder));
   ExecCookieTask(base::Bind(&CookieManager::SetCookieHelper,
                             base::Unretained(this),
                             host,
@@ -402,7 +404,7 @@ void CookieManager::GetCookieValueCompleted(base::Closure complete,
 void CookieManager::RemoveSessionCookies(
     scoped_ptr<BoolCookieCallbackHolder> callback_holder) {
   BoolCallback callback =
-      BoolCookieCallbackHolder::ConvertToCallback(callback_holder.Pass());
+      BoolCookieCallbackHolder::ConvertToCallback(std::move(callback_holder));
   ExecCookieTask(base::Bind(&CookieManager::RemoveSessionCookiesHelper,
                             base::Unretained(this),
                             callback));
@@ -430,7 +432,7 @@ void CookieManager::RemoveCookiesCompleted(
 void CookieManager::RemoveAllCookies(
     scoped_ptr<BoolCookieCallbackHolder> callback_holder) {
   BoolCallback callback =
-      BoolCookieCallbackHolder::ConvertToCallback(callback_holder.Pass());
+      BoolCookieCallbackHolder::ConvertToCallback(std::move(callback_holder));
   ExecCookieTask(base::Bind(&CookieManager::RemoveAllCookiesHelper,
                             base::Unretained(this),
                             callback));
@@ -507,94 +509,100 @@ void CookieManager::SetAcceptFileSchemeCookies(bool accept) {
 }
 
 void CookieManager::SetAcceptFileSchemeCookiesLocked(bool accept) {
-  // The docs on CookieManager base class state the API must not be called after
-  // creating a CookieManager instance (which contradicts its own internal
-  // implementation) but this code does rely on the essence of that comment, as
-  // the monster will DCHECK here if it has already been lazy initialized (i.e.
-  // if cookies have been read or written from the store). If that turns out to
-  // be a problemin future, it looks like it maybe possible to relax the DCHECK.
   cookie_monster_->SetEnableFileScheme(accept);
 }
 
 }  // namespace
 
-static void SetShouldAcceptCookies(JNIEnv* env, jobject obj, jboolean accept) {
+static void SetShouldAcceptCookies(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj,
+                                   jboolean accept) {
   CookieManager::GetInstance()->SetShouldAcceptCookies(accept);
 }
 
-static jboolean GetShouldAcceptCookies(JNIEnv* env, jobject obj) {
+static jboolean GetShouldAcceptCookies(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
   return CookieManager::GetInstance()->GetShouldAcceptCookies();
 }
 
 static void SetCookie(JNIEnv* env,
-                      jobject obj,
-                      jstring url,
-                      jstring value,
-                      jobject java_callback) {
+                      const JavaParamRef<jobject>& obj,
+                      const JavaParamRef<jstring>& url,
+                      const JavaParamRef<jstring>& value,
+                      const JavaParamRef<jobject>& java_callback) {
   GURL host(ConvertJavaStringToUTF16(env, url));
   std::string cookie_value(ConvertJavaStringToUTF8(env, value));
   scoped_ptr<BoolCookieCallbackHolder> callback(
       new BoolCookieCallbackHolder(env, java_callback));
-  CookieManager::GetInstance()->SetCookie(host, cookie_value, callback.Pass());
+  CookieManager::GetInstance()->SetCookie(host, cookie_value,
+                                          std::move(callback));
 }
 
 static void SetCookieSync(JNIEnv* env,
-                      jobject obj,
-                      jstring url,
-                      jstring value) {
+                          const JavaParamRef<jobject>& obj,
+                          const JavaParamRef<jstring>& url,
+                          const JavaParamRef<jstring>& value) {
   GURL host(ConvertJavaStringToUTF16(env, url));
   std::string cookie_value(ConvertJavaStringToUTF8(env, value));
 
   CookieManager::GetInstance()->SetCookieSync(host, cookie_value);
 }
 
-static jstring GetCookie(JNIEnv* env, jobject obj, jstring url) {
+static ScopedJavaLocalRef<jstring> GetCookie(JNIEnv* env,
+                                             const JavaParamRef<jobject>& obj,
+                                             const JavaParamRef<jstring>& url) {
   GURL host(ConvertJavaStringToUTF16(env, url));
 
   return base::android::ConvertUTF8ToJavaString(
-      env,
-      CookieManager::GetInstance()->GetCookie(host)).Release();
+      env, CookieManager::GetInstance()->GetCookie(host));
 }
 
 static void RemoveSessionCookies(JNIEnv* env,
-                                jobject obj,
-                                jobject java_callback) {
+                                 const JavaParamRef<jobject>& obj,
+                                 const JavaParamRef<jobject>& java_callback) {
   scoped_ptr<BoolCookieCallbackHolder> callback(
       new BoolCookieCallbackHolder(env, java_callback));
-  CookieManager::GetInstance()->RemoveSessionCookies(callback.Pass());
+  CookieManager::GetInstance()->RemoveSessionCookies(std::move(callback));
 }
 
-static void RemoveSessionCookiesSync(JNIEnv* env, jobject obj) {
+static void RemoveSessionCookiesSync(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj) {
     CookieManager::GetInstance()->RemoveSessionCookiesSync();
 }
 
-static void RemoveAllCookies(JNIEnv* env, jobject obj, jobject java_callback) {
+static void RemoveAllCookies(JNIEnv* env,
+                             const JavaParamRef<jobject>& obj,
+                             const JavaParamRef<jobject>& java_callback) {
   scoped_ptr<BoolCookieCallbackHolder> callback(
       new BoolCookieCallbackHolder(env, java_callback));
-  CookieManager::GetInstance()->RemoveAllCookies(callback.Pass());
+  CookieManager::GetInstance()->RemoveAllCookies(std::move(callback));
 }
 
-static void RemoveAllCookiesSync(JNIEnv* env, jobject obj) {
+static void RemoveAllCookiesSync(JNIEnv* env,
+                                 const JavaParamRef<jobject>& obj) {
   CookieManager::GetInstance()->RemoveAllCookiesSync();
 }
 
-static void RemoveExpiredCookies(JNIEnv* env, jobject obj) {
+static void RemoveExpiredCookies(JNIEnv* env,
+                                 const JavaParamRef<jobject>& obj) {
   CookieManager::GetInstance()->RemoveExpiredCookies();
 }
 
-static void FlushCookieStore(JNIEnv* env, jobject obj) {
+static void FlushCookieStore(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   CookieManager::GetInstance()->FlushCookieStore();
 }
 
-static jboolean HasCookies(JNIEnv* env, jobject obj) {
+static jboolean HasCookies(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   return CookieManager::GetInstance()->HasCookies();
 }
 
-static jboolean AllowFileSchemeCookies(JNIEnv* env, jobject obj) {
+static jboolean AllowFileSchemeCookies(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
   return CookieManager::GetInstance()->AllowFileSchemeCookies();
 }
 
-static void SetAcceptFileSchemeCookies(JNIEnv* env, jobject obj,
+static void SetAcceptFileSchemeCookies(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj,
                                        jboolean accept) {
   return CookieManager::GetInstance()->SetAcceptFileSchemeCookies(accept);
 }

@@ -4,9 +4,11 @@
 
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_base.h"
 
+#include <stdint.h>
+
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
-#include "chrome/browser/drive/event_logger.h"
+#include "components/drive/event_logger.h"
 
 namespace extensions {
 namespace {
@@ -26,7 +28,7 @@ LoggedAsyncExtensionFunction::~LoggedAsyncExtensionFunction() {
 void LoggedAsyncExtensionFunction::SendResponse(bool success) {
   drive::EventLogger* logger = file_manager::util::GetLogger(GetProfile());
   if (logger) {
-    int64 elapsed = (base::Time::Now() - start_time_).InMilliseconds();
+    int64_t elapsed = (base::Time::Now() - start_time_).InMilliseconds();
     if (log_on_completion_) {
       logger->Log(logging::LOG_INFO, "%s[%d] %s. (elapsed time: %sms)", name(),
                   request_id(), success ? "succeeded" : "failed",

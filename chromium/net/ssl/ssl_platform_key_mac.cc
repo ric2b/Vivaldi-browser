@@ -14,21 +14,21 @@
 #include <Security/SecIdentity.h>
 #include <Security/SecKey.h>
 
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
 #include "base/memory/scoped_policy.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/sequenced_task_runner.h"
-#include "base/stl_util.h"
 #include "base/synchronization/lock.h"
 #include "crypto/mac_security_services_lock.h"
 #include "crypto/openssl_util.h"
 #include "crypto/scoped_openssl_types.h"
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
+#include "net/ssl/ssl_platform_key_task_runner.h"
 #include "net/ssl/ssl_private_key.h"
 #include "net/ssl/threaded_ssl_private_key.h"
 
@@ -102,7 +102,13 @@ class SSLPlatformKeyMac : public ThreadedSSLPrivateKey::Delegate {
     }
   }
 
-  bool SupportsHash(SSLPrivateKey::Hash hash) override { return true; }
+  std::vector<SSLPrivateKey::Hash> GetDigestPreferences() override {
+    static const SSLPrivateKey::Hash kHashes[] = {
+        SSLPrivateKey::Hash::SHA512, SSLPrivateKey::Hash::SHA384,
+        SSLPrivateKey::Hash::SHA256, SSLPrivateKey::Hash::SHA1};
+    return std::vector<SSLPrivateKey::Hash>(kHashes,
+                                            kHashes + arraysize(kHashes));
+  }
 
   size_t GetMaxSignatureLengthInBytes() override {
     if (cssm_key_->KeyHeader.AlgorithmId == CSSM_ALGID_RSA) {
@@ -193,7 +199,7 @@ class SSLPlatformKeyMac : public ThreadedSSLPrivateKey::Delegate {
     signature->resize(GetMaxSignatureLengthInBytes());
     CSSM_DATA signature_data;
     signature_data.Length = signature->size();
-    signature_data.Data = vector_as_array(signature);
+    signature_data.Data = signature->data();
 
     if (CSSM_SignData(cssm_signature.get(), &hash_data, 1, CSSM_ALGID_NONE,
                       &signature_data) != CSSM_OK) {
@@ -212,9 +218,8 @@ class SSLPlatformKeyMac : public ThreadedSSLPrivateKey::Delegate {
 
 }  // namespace
 
-scoped_ptr<SSLPrivateKey> FetchClientCertPrivateKey(
-    X509Certificate* certificate,
-    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+scoped_refptr<SSLPrivateKey> FetchClientCertPrivateKey(
+    X509Certificate* certificate) {
   // Look up the private key.
   base::ScopedCFTypeRef<SecKeyRef> private_key(
       FetchSecKeyRefForCertificate(certificate));
@@ -231,9 +236,9 @@ scoped_ptr<SSLPrivateKey> FetchClientCertPrivateKey(
     LOG(ERROR) << "Unknown key type: " << cssm_key->KeyHeader.AlgorithmId;
     return nullptr;
   }
-  return make_scoped_ptr(new ThreadedSSLPrivateKey(
+  return make_scoped_refptr(new ThreadedSSLPrivateKey(
       make_scoped_ptr(new SSLPlatformKeyMac(private_key.get(), cssm_key)),
-      task_runner.Pass()));
+      GetSSLPlatformKeyTaskRunner()));
 }
 
 }  // namespace net

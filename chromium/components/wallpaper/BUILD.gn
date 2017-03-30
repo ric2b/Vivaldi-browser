@@ -12,11 +12,12 @@ component("wallpaper") {
 
   defines = [ "WALLPAPER_IMPLEMENTATION" ]
 
-  deps = [
+  public_deps = [
     "//base",
-    "//base:prefs",
-    "//content",
     "//skia",
+  ]
+  deps = [
+    "//base:prefs",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//url",
@@ -27,9 +28,22 @@ component("wallpaper") {
       "wallpaper_manager_base.h",
     ]
     deps += [
-      "//chromeos",
+      "//components/signin/core/account_id",
       "//components/user_manager",
-      "//content/public/browser",
     ]
   }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "wallpaper_resizer_unittest.cc",
+  ]
+
+  deps = [
+    ":wallpaper",
+    "//base/test:test_support",
+    "//testing/gtest",
+    "//ui/gfx",
+  ]
 }

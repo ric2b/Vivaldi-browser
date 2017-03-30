@@ -108,8 +108,8 @@ bool DeviceSettingsTestHelper::IsScreenLocked() const { return false; }
 
 void DeviceSettingsTestHelper::EmitLoginPromptVisible() {}
 
-void DeviceSettingsTestHelper::RestartJob(int pid,
-                                          const std::string& command_line) {}
+void DeviceSettingsTestHelper::RestartJob(
+    const std::vector<std::string>& argv) {}
 
 void DeviceSettingsTestHelper::StartSession(const std::string& user_email) {}
 
@@ -180,6 +180,14 @@ void DeviceSettingsTestHelper::SetFlagsForUser(
 void DeviceSettingsTestHelper::GetServerBackedStateKeys(
     const StateKeysCallback& callback) {}
 
+void DeviceSettingsTestHelper::CheckArcAvailability(
+    const ArcCallback& callback) {}
+
+void DeviceSettingsTestHelper::StartArcInstance(const std::string& socket_path,
+                                                const ArcCallback& callback) {}
+
+void DeviceSettingsTestHelper::StopArcInstance(const ArcCallback& callback) {}
+
 DeviceSettingsTestHelper::PolicyState::PolicyState()
     : store_result_(true) {}
 
@@ -246,12 +254,12 @@ void DeviceSettingsTestBase::ReloadDeviceSettings() {
   FlushDeviceSettings();
 }
 
-void DeviceSettingsTestBase::InitOwner(const std::string& user_id,
+void DeviceSettingsTestBase::InitOwner(const AccountId& account_id,
                                        bool tpm_is_ready) {
-  const user_manager::User* user = user_manager_->FindUser(user_id);
+  const user_manager::User* user = user_manager_->FindUser(account_id);
   if (!user) {
-    user = user_manager_->AddUser(user_id);
-    profile_->set_profile_name(user_id);
+    user = user_manager_->AddUser(account_id);
+    profile_->set_profile_name(account_id.GetUserEmail());
 
     ProfileHelper::Get()->SetUserToProfileMappingForTesting(user,
                                                             profile_.get());

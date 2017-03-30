@@ -50,11 +50,13 @@ enum {
   DIR_USER_APPLICATIONS,        // ~/Applications
   DIR_USER_LIBRARY,             // ~/Library
 #endif
-#if defined(OS_CHROMEOS) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_CHROMEOS) || (defined(OS_LINUX) && defined(CHROMIUM_BUILD)) || \
+    (defined(OS_MACOSX) && !defined(OS_IOS))
   DIR_USER_EXTERNAL_EXTENSIONS,  // Directory for per-user external extensions
-                                 // on Chrome Mac.  On Chrome OS, this path is
-                                 // used for OEM customization.
-                                 // Getting this path does not create it.
+                                 // on Chrome Mac and Chromium Linux.
+                                 // On Chrome OS, this path is used for OEM
+                                 // customization. Getting this path does not
+                                 // create it.
 #endif
 
 #if defined(OS_LINUX)
@@ -112,6 +114,9 @@ enum {
   DIR_SUPERVISED_USERS_DEFAULT_APPS,  // Directory where installer places .crx
                                       // files to be installed when managed user
                                       // session starts.
+  DIR_SUPERVISED_USER_INSTALLED_WHITELISTS,  // Directory where sanitized
+                                             // supervised user whitelists are
+                                             // installed.
 #if defined(OS_LINUX) || (defined(OS_MACOSX) && !defined(OS_IOS))
   DIR_NATIVE_MESSAGING,         // System directory where native messaging host
                                 // manifest files are stored.
@@ -127,6 +132,10 @@ enum {
   DIR_GEN_TEST_DATA,            // Directory where generated test data resides.
   DIR_TEST_DATA,                // Directory where unit test data resides.
   DIR_TEST_TOOLS,               // Directory where unit test tools reside.
+#if defined(OS_LINUX)
+  FILE_COMPONENT_FLASH_HINT,    // A file in a known location that points to
+                                // the component updated flash plugin.
+#endif // defined(OS_LINUX)
 
   DIR_VIVALDI_TEST_DATA,        // Directory where unit test date for Vivaldi resides
 

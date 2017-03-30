@@ -2,17 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/policy/core/common/cloud/cloud_policy_validator.h"
+
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
-#include "components/policy/core/common/cloud/cloud_policy_validator.h"
 #include "components/policy/core/common/cloud/policy_builder.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "crypto/rsa_private_key.h"
@@ -57,8 +61,8 @@ class CloudPolicyValidatorTest : public testing::Test {
       testing::Action<void(UserCloudPolicyValidator*)> check_action,
       scoped_ptr<enterprise_management::PolicyFetchResponse> policy_response) {
     // Create a validator.
-    scoped_ptr<UserCloudPolicyValidator> validator = CreateValidator(
-        policy_response.Pass());
+    scoped_ptr<UserCloudPolicyValidator> validator =
+        CreateValidator(std::move(policy_response));
 
     // Run validation and check the result.
     EXPECT_CALL(*this, ValidationCompletion(validator.get())).WillOnce(
@@ -72,19 +76,19 @@ class CloudPolicyValidatorTest : public testing::Test {
 
   scoped_ptr<UserCloudPolicyValidator> CreateValidator(
       scoped_ptr<enterprise_management::PolicyFetchResponse> policy_response) {
-    std::vector<uint8> public_key_bytes;
+    std::vector<uint8_t> public_key_bytes;
     EXPECT_TRUE(
         PolicyBuilder::CreateTestSigningKey()->ExportPublicKey(
             &public_key_bytes));
 
     // Convert from bytes to string format (which is what ValidateSignature()
     // takes).
-    std::string public_key = std::string(
-        reinterpret_cast<const char*>(vector_as_array(&public_key_bytes)),
-        public_key_bytes.size());
+    std::string public_key =
+        std::string(reinterpret_cast<const char*>(public_key_bytes.data()),
+                    public_key_bytes.size());
 
     UserCloudPolicyValidator* validator = UserCloudPolicyValidator::Create(
-        policy_response.Pass(), base::ThreadTaskRunnerHandle::Get());
+        std::move(policy_response), base::ThreadTaskRunnerHandle::Get());
     validator->ValidateTimestamp(timestamp_, timestamp_,
                                  timestamp_option_);
     validator->ValidateUsername(PolicyBuilder::kFakeUsername, true);
@@ -162,7 +166,7 @@ TEST_F(CloudPolicyValidatorTest, SuccessfulRunValidationWithNoDMTokens) {
 
 TEST_F(CloudPolicyValidatorTest, UsernameCanonicalization) {
   policy_.policy_data().set_username(
-      base::StringToUpperASCII(std::string(PolicyBuilder::kFakeUsername)));
+      base::ToUpperASCII(PolicyBuilder::kFakeUsername));
   Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_OK));
 }
 

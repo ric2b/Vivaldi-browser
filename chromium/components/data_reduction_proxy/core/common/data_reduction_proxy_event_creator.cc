@@ -4,6 +4,8 @@
 
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
@@ -29,7 +31,7 @@ scoped_ptr<base::Value> BuildDataReductionProxyEvent(
   return entry_value;
 }
 
-int64 GetExpirationTicks(int bypass_seconds) {
+int64_t GetExpirationTicks(int bypass_seconds) {
   base::TimeTicks expiration_ticks =
       base::TimeTicks::Now() + base::TimeDelta::FromSeconds(bypass_seconds);
   return (expiration_ticks - base::TimeTicks()).InMilliseconds();
@@ -53,10 +55,10 @@ scoped_ptr<base::Value> EnableDataReductionProxyCallback(
   for (const auto& proxy : proxies_for_https)
     https_proxy_list->AppendString(proxy.ToURI());
 
-  dict->Set("http_proxy_list", http_proxy_list.Pass());
-  dict->Set("https_proxy_list", https_proxy_list.Pass());
+  dict->Set("http_proxy_list", std::move(http_proxy_list));
+  dict->Set("https_proxy_list", std::move(https_proxy_list));
 
-  return dict.Pass();
+  return std::move(dict);
 }
 
 // A callback which creates a base::Value containing information about disabling
@@ -65,7 +67,7 @@ scoped_ptr<base::Value> DisableDataReductionProxyCallback(
     net::NetLogCaptureMode /* capture_mode */) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetBoolean("enabled", false);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 // A callback which creates a base::Value containing information about bypassing
@@ -76,7 +78,7 @@ scoped_ptr<base::Value> UrlBypassActionCallback(
     const GURL& url,
     bool should_retry,
     int bypass_seconds,
-    int64 expiration_ticks,
+    int64_t expiration_ticks,
     net::NetLogCaptureMode /* capture_mode */) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger("bypass_action_type", action);
@@ -86,7 +88,7 @@ scoped_ptr<base::Value> UrlBypassActionCallback(
   dict->SetString("bypass_duration_seconds",
                   base::Int64ToString(bypass_seconds));
   dict->SetString("expiration", base::Int64ToString(expiration_ticks));
-  return dict.Pass();
+  return std::move(dict);
 }
 
 // A callback which creates a base::Value containing information about bypassing
@@ -97,7 +99,7 @@ scoped_ptr<base::Value> UrlBypassTypeCallback(
     const GURL& url,
     bool should_retry,
     int bypass_seconds,
-    int64 expiration_ticks,
+    int64_t expiration_ticks,
     net::NetLogCaptureMode /* capture_mode */) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger("bypass_type", bypass_type);
@@ -107,7 +109,7 @@ scoped_ptr<base::Value> UrlBypassTypeCallback(
   dict->SetString("bypass_duration_seconds",
                   base::Int64ToString(bypass_seconds));
   dict->SetString("expiration", base::Int64ToString(expiration_ticks));
-  return dict.Pass();
+  return std::move(dict);
 }
 
 // A callback that creates a base::Value containing information about a proxy
@@ -119,7 +121,7 @@ scoped_ptr<base::Value> FallbackCallback(
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("proxy", proxy_url);
   dict->SetInteger("net_error", net_error);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 // A callback which creates a base::Value containing information about
@@ -133,7 +135,7 @@ scoped_ptr<base::Value> EndCanaryRequestCallback(
   dict->SetInteger("net_error", net_error);
   dict->SetInteger("http_response_code", http_response_code);
   dict->SetBoolean("check_succeeded", succeeded);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 // A callback that creates a base::Value containing information about
@@ -142,14 +144,22 @@ scoped_ptr<base::Value> EndConfigRequestCallback(
     int net_error,
     int http_response_code,
     int failure_count,
-    int64 expiration_ticks,
+    const std::vector<net::ProxyServer>& proxies_for_http,
+    int64_t refresh_duration_minutes,
+    int64_t expiration_ticks,
     net::NetLogCaptureMode /* capture_mode */) {
+  scoped_ptr<base::ListValue> http_proxy_list(new base::ListValue());
+  for (const auto& proxy : proxies_for_http)
+    http_proxy_list->AppendString(proxy.ToURI());
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger("net_error", net_error);
   dict->SetInteger("http_response_code", http_response_code);
   dict->SetInteger("failure_count", failure_count);
+  dict->Set("http_proxy_list_in_config", std::move(http_proxy_list));
+  dict->SetString("refresh_duration",
+                  base::Int64ToString(refresh_duration_minutes) + " minutes");
   dict->SetString("expiration", base::Int64ToString(expiration_ticks));
-  return dict.Pass();
+  return std::move(dict);
 }
 
 }  // namespace
@@ -195,7 +205,7 @@ void DataReductionProxyEventCreator::AddBypassActionEvent(
     bool should_retry,
     const base::TimeDelta& bypass_duration) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  int64 expiration_ticks = GetExpirationTicks(bypass_duration.InSeconds());
+  int64_t expiration_ticks = GetExpirationTicks(bypass_duration.InSeconds());
   const net::NetLog::ParametersCallback& parameters_callback =
       base::Bind(&UrlBypassActionCallback, bypass_action, request_method, url,
                  should_retry, bypass_duration.InSeconds(), expiration_ticks);
@@ -212,7 +222,7 @@ void DataReductionProxyEventCreator::AddBypassTypeEvent(
     bool should_retry,
     const base::TimeDelta& bypass_duration) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  int64 expiration_ticks = GetExpirationTicks(bypass_duration.InSeconds());
+  int64_t expiration_ticks = GetExpirationTicks(bypass_duration.InSeconds());
   const net::NetLog::ParametersCallback& parameters_callback =
       base::Bind(&UrlBypassTypeCallback, bypass_type, request_method, url,
                  should_retry, bypass_duration.InSeconds(), expiration_ticks);
@@ -278,11 +288,14 @@ void DataReductionProxyEventCreator::EndConfigRequest(
     int net_error,
     int http_response_code,
     int failure_count,
+    const std::vector<net::ProxyServer>& proxies_for_http,
+    const base::TimeDelta& refresh_duration,
     const base::TimeDelta& retry_delay) {
-  int64 expiration_ticks = GetExpirationTicks(retry_delay.InSeconds());
-  const net::NetLog::ParametersCallback& parameters_callback =
-      base::Bind(&EndConfigRequestCallback, net_error, http_response_code,
-                 failure_count, expiration_ticks);
+  int64_t refresh_duration_minutes = refresh_duration.InMinutes();
+  int64_t expiration_ticks = GetExpirationTicks(retry_delay.InSeconds());
+  const net::NetLog::ParametersCallback& parameters_callback = base::Bind(
+      &EndConfigRequestCallback, net_error, http_response_code, failure_count,
+      proxies_for_http, refresh_duration_minutes, expiration_ticks);
   PostBoundNetLogConfigRequestEvent(
       net_log, net::NetLog::TYPE_DATA_REDUCTION_PROXY_CONFIG_REQUEST,
       net::NetLog::PHASE_END, parameters_callback);
@@ -295,7 +308,7 @@ void DataReductionProxyEventCreator::PostEvent(
   scoped_ptr<base::Value> event = BuildDataReductionProxyEvent(
       type, net::NetLog::Source(), net::NetLog::PHASE_NONE, callback);
   if (event)
-    storage_delegate_->AddEvent(event.Pass());
+    storage_delegate_->AddEvent(std::move(event));
 
   if (net_log)
     net_log->AddGlobalEntry(type, callback);
@@ -309,7 +322,7 @@ void DataReductionProxyEventCreator::PostEnabledEvent(
   scoped_ptr<base::Value> event = BuildDataReductionProxyEvent(
       type, net::NetLog::Source(), net::NetLog::PHASE_NONE, callback);
   if (event)
-    storage_delegate_->AddEnabledEvent(event.Pass(), enabled);
+    storage_delegate_->AddEnabledEvent(std::move(event), enabled);
 
   if (net_log)
     net_log->AddGlobalEntry(type, callback);
@@ -319,12 +332,13 @@ void DataReductionProxyEventCreator::PostBoundNetLogBypassEvent(
     const net::BoundNetLog& net_log,
     net::NetLog::EventType type,
     net::NetLog::EventPhase phase,
-    int64 expiration_ticks,
+    int64_t expiration_ticks,
     const net::NetLog::ParametersCallback& callback) {
   scoped_ptr<base::Value> event =
       BuildDataReductionProxyEvent(type, net_log.source(), phase, callback);
   if (event)
-    storage_delegate_->AddAndSetLastBypassEvent(event.Pass(), expiration_ticks);
+    storage_delegate_->AddAndSetLastBypassEvent(std::move(event),
+                                                expiration_ticks);
   net_log.AddEntry(type, phase, callback);
 }
 
@@ -337,7 +351,8 @@ void DataReductionProxyEventCreator::PostBoundNetLogSecureProxyCheckEvent(
   scoped_ptr<base::Value> event(
       BuildDataReductionProxyEvent(type, net_log.source(), phase, callback));
   if (event)
-    storage_delegate_->AddEventAndSecureProxyCheckState(event.Pass(), state);
+    storage_delegate_->AddEventAndSecureProxyCheckState(std::move(event),
+                                                        state);
   net_log.AddEntry(type, phase, callback);
 }
 
@@ -349,7 +364,7 @@ void DataReductionProxyEventCreator::PostBoundNetLogConfigRequestEvent(
   scoped_ptr<base::Value> event(
       BuildDataReductionProxyEvent(type, net_log.source(), phase, callback));
   if (event) {
-    storage_delegate_->AddEvent(event.Pass());
+    storage_delegate_->AddEvent(std::move(event));
     net_log.AddEntry(type, phase, callback);
   }
 }

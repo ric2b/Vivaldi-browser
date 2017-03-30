@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread.h"
@@ -23,10 +24,6 @@ class SingleThreadTaskRunner;
 class WaitableEvent;
 }  // namespace base
 
-namespace net {
-class URLRequestContextGetter;
-}  // namespace net
-
 namespace webrtc {
 class MediaStreamInterface;
 }  // namespace webrtc
@@ -36,7 +33,7 @@ namespace remoting {
 class CastCreateSessionDescriptionObserver;
 
 namespace protocol {
-struct NetworkSettings;
+class TransportContext;
 }  // namespace protocol
 
 // A HostExtensionSession implementation that enables WebRTC support using
@@ -50,9 +47,7 @@ class CastExtensionSession : public HostExtensionSession,
   // initialization steps on it. The caller must take ownership of the returned
   // object.
   static scoped_ptr<CastExtensionSession> Create(
-      scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
-      scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
-      const protocol::NetworkSettings& network_settings,
+      scoped_refptr<protocol::TransportContext> transport_context,
       ClientSessionControl* client_session_control,
       protocol::ClientStub* client_stub);
 
@@ -86,9 +81,7 @@ class CastExtensionSession : public HostExtensionSession,
 
  private:
   CastExtensionSession(
-      scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
-      scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
-      const protocol::NetworkSettings& network_settings,
+      scoped_refptr<protocol::TransportContext> transport_context,
       ClientSessionControl* client_session_control,
       protocol::ClientStub* client_stub);
 
@@ -198,9 +191,8 @@ class CastExtensionSession : public HostExtensionSession,
   rtc::scoped_refptr<CastCreateSessionDescriptionObserver>
       create_session_desc_observer_;
 
-  // Parameters passed to ChromiumPortAllocatorFactory on creation.
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
-  const protocol::NetworkSettings& network_settings_;
+  // TransportContext for P2P transport.
+  scoped_refptr<protocol::TransportContext> transport_context_;
 
   // Interface to interact with ClientSession.
   ClientSessionControl* client_session_control_;
@@ -212,7 +204,7 @@ class CastExtensionSession : public HostExtensionSession,
   rtc::scoped_refptr<webrtc::StatsObserver> stats_observer_;
 
   // Used to repeatedly poll stats from the |peer_connection_|.
-  base::RepeatingTimer<CastExtensionSession> stats_polling_timer_;
+  base::RepeatingTimer stats_polling_timer_;
 
   // True if a PeerConnection offer from the client has been received. This
   // necessarily means that the host is not the caller in this attempted

@@ -20,10 +20,16 @@
   2010-05-26 - Use a paged array for V and I. The address space may be too
                fragmented for these big arrays to be contiguous.
                  --Stephen Adams <sra@chromium.org>
+  2015-08-03 - Extract qsufsort portion to a separate file.
+                 --Samuel Huang <huangs@chromium.org>
+  2015-08-12 - Interface change to qsufsort search().
+                 --Samuel Huang <huangs@chromium.org>
 */
 
 #include "courgette/third_party/bsdiff.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <algorithm>
 
@@ -35,161 +41,9 @@
 #include "courgette/crc.h"
 #include "courgette/streams.h"
 #include "courgette/third_party/paged_array.h"
+#include "courgette/third_party/qsufsort.h"
 
 namespace courgette {
-
-// ------------------------------------------------------------------------
-//
-// The following code is taken verbatim from 'bsdiff.c'. Please keep all the
-// code formatting and variable names.  The changes from the original are (1)
-// replacing tabs with spaces, (2) indentation, (3) using 'const', and (4)
-// changing the V and I parameters from int* to PagedArray<int>&.
-//
-// The code appears to be a rewritten version of the suffix array algorithm
-// presented in "Faster Suffix Sorting" by N. Jesper Larsson and Kunihiko
-// Sadakane, special cased for bytes.
-
-static void
-split(PagedArray<int>& I,PagedArray<int>& V,int start,int len,int h)
-{
-  int i,j,k,x,tmp,jj,kk;
-
-  if(len<16) {
-    for(k=start;k<start+len;k+=j) {
-      j=1;x=V[I[k]+h];
-      for(i=1;k+i<start+len;i++) {
-        if(V[I[k+i]+h]<x) {
-          x=V[I[k+i]+h];
-          j=0;
-        };
-        if(V[I[k+i]+h]==x) {
-          tmp=I[k+j];I[k+j]=I[k+i];I[k+i]=tmp;
-          j++;
-        };
-      };
-      for(i=0;i<j;i++) V[I[k+i]]=k+j-1;
-      if(j==1) I[k]=-1;
-    };
-    return;
-  };
-
-  x=V[I[start+len/2]+h];
-  jj=0;kk=0;
-  for(i=start;i<start+len;i++) {
-    if(V[I[i]+h]<x) jj++;
-    if(V[I[i]+h]==x) kk++;
-  };
-  jj+=start;kk+=jj;
-
-  i=start;j=0;k=0;
-  while(i<jj) {
-    if(V[I[i]+h]<x) {
-      i++;
-    } else if(V[I[i]+h]==x) {
-      tmp=I[i];I[i]=I[jj+j];I[jj+j]=tmp;
-      j++;
-    } else {
-      tmp=I[i];I[i]=I[kk+k];I[kk+k]=tmp;
-      k++;
-    };
-  };
-
-  while(jj+j<kk) {
-    if(V[I[jj+j]+h]==x) {
-      j++;
-    } else {
-      tmp=I[jj+j];I[jj+j]=I[kk+k];I[kk+k]=tmp;
-      k++;
-    };
-  };
-
-  if(jj>start) split(I,V,start,jj-start,h);
-
-  for(i=0;i<kk-jj;i++) V[I[jj+i]]=kk-1;
-  if(jj==kk-1) I[jj]=-1;
-
-  if(start+len>kk) split(I,V,kk,start+len-kk,h);
-}
-
-static void
-qsufsort(PagedArray<int>& I, PagedArray<int>& V,const unsigned char *old,int oldsize)
-{
-  int buckets[256];
-  int i,h,len;
-
-  for(i=0;i<256;i++) buckets[i]=0;
-  for(i=0;i<oldsize;i++) buckets[old[i]]++;
-  for(i=1;i<256;i++) buckets[i]+=buckets[i-1];
-  for(i=255;i>0;i--) buckets[i]=buckets[i-1];
-  buckets[0]=0;
-
-  for(i=0;i<oldsize;i++) I[++buckets[old[i]]]=i;
-  I[0]=oldsize;
-  for(i=0;i<oldsize;i++) V[i]=buckets[old[i]];
-  V[oldsize]=0;
-  for(i=1;i<256;i++) if(buckets[i]==buckets[i-1]+1) I[buckets[i]]=-1;
-  I[0]=-1;
-
-  for(h=1;I[0]!=-(oldsize+1);h+=h) {
-    len=0;
-    for(i=0;i<oldsize+1;) {
-      if(I[i]<0) {
-        len-=I[i];
-        i-=I[i];
-      } else {
-        if(len) I[i-len]=-len;
-        len=V[I[i]]+1-i;
-        split(I,V,i,len,h);
-        i+=len;
-        len=0;
-      };
-    };
-    if(len) I[i-len]=-len;
-  };
-
-  for(i=0;i<oldsize+1;i++) I[V[i]]=i;
-}
-
-static int
-matchlen(const unsigned char *old,int oldsize,const unsigned char *newbuf,int newsize)
-{
-  int i;
-
-  for(i=0;(i<oldsize)&&(i<newsize);i++)
-    if(old[i]!=newbuf[i]) break;
-
-  return i;
-}
-
-static int
-search(PagedArray<int>& I,const unsigned char *old,int oldsize,
-       const unsigned char *newbuf,int newsize,int st,int en,int *pos)
-{
-  int x,y;
-
-  if(en-st<2) {
-    x=matchlen(old+I[st],oldsize-I[st],newbuf,newsize);
-    y=matchlen(old+I[en],oldsize-I[en],newbuf,newsize);
-
-    if(x>y) {
-      *pos=I[st];
-      return x;
-    } else {
-      *pos=I[en];
-      return y;
-    }
-  }
-
-  x=st+(en-st)/2;
-  if(memcmp(old+I[x],newbuf,std::min(oldsize-I[x],newsize))<0) {
-    return search(I,old,oldsize,newbuf,newsize,x,en,pos);
-  } else {
-    return search(I,old,oldsize,newbuf,newsize,st,x,pos);
-  }
-}
-
-//  End of 'verbatim' code.
-// ------------------------------------------------------------------------
 
 static CheckBool WriteHeader(SinkStream* stream, MBSPatchHeader* header) {
   bool ok = stream->Write(header->tag, sizeof(header->tag));
@@ -215,10 +69,10 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
   SinkStream* diff_bytes = patch_streams.stream(4);
   SinkStream* extra_bytes = patch_streams.stream(5);
 
-  const uint8* old = old_stream->Buffer();
+  const uint8_t* old = old_stream->Buffer();
   const int oldsize = static_cast<int>(old_stream->Remaining());
 
-  uint32 pending_diff_zeros = 0;
+  uint32_t pending_diff_zeros = 0;
 
   PagedArray<int> I;
   PagedArray<int> V;
@@ -236,12 +90,12 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
   }
 
   base::Time q_start_time = base::Time::Now();
-  qsufsort(I, V, old, oldsize);
+  qsuf::qsufsort<PagedArray<int>&>(I, V, old, oldsize);
   VLOG(1) << " done qsufsort "
           << (base::Time::Now() - q_start_time).InSecondsF();
   V.clear();
 
-  const uint8* newbuf = new_stream->Buffer();
+  const uint8_t* newbuf = new_stream->Buffer();
   const int newsize = static_cast<int>(new_stream->Remaining());
 
   int control_length = 0;
@@ -300,9 +154,8 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
 
     scan += match_length;
     for (int scsc = scan;  scan < newsize;  ++scan) {
-      match_length = search(I, old, oldsize,
-                            newbuf + scan, newsize - scan,
-                            0, oldsize, &pos);
+      match_length = qsuf::search<PagedArray<int>&>(
+          I, old, oldsize, newbuf + scan, newsize - scan, &pos);
 
       for ( ; scsc < scan + match_length ; scsc++)
         if ((scsc + lastoffset < oldsize) &&
@@ -373,7 +226,7 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
       };
 
       for (int i = 0;  i < lenf;  i++) {
-        uint8 diff_byte = newbuf[lastscan + i] - old[lastpos + i];
+        uint8_t diff_byte = newbuf[lastscan + i] - old[lastpos + i];
         if (diff_byte) {
           ++diff_bytes_nonzero;
           if (!diff_skips->WriteVarint32(pending_diff_zeros))
@@ -394,9 +247,9 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
       diff_bytes_length += lenf;
       extra_bytes_length += gap;
 
-      uint32 copy_count = lenf;
-      uint32 extra_count = gap;
-      int32 seek_adjustment = ((pos - lenb) - (lastpos + lenf));
+      uint32_t copy_count = lenf;
+      uint32_t extra_count = gap;
+      int32_t seek_adjustment = ((pos - lenb) - (lastpos + lenf));
 
       if (!control_stream_copy_counts->WriteVarint32(copy_count) ||
           !control_stream_extra_counts->WriteVarint32(extra_count) ||
@@ -451,4 +304,4 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
   return OK;
 }
 
-}  // namespace
+}  // namespace courgette

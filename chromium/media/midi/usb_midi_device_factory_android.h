@@ -9,9 +9,8 @@
 #include <vector>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/callback.h"
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "media/midi/usb_midi_device.h"
 #include "media/midi/usb_midi_export.h"
@@ -30,11 +29,18 @@ class USB_MIDI_EXPORT UsbMidiDeviceFactoryAndroid
   void EnumerateDevices(UsbMidiDeviceDelegate* delegate,
                         Callback callback) override;
 
-  void OnUsbMidiDeviceRequestDone(JNIEnv* env,
-                                  jobject caller,
-                                  jobjectArray devices);
-  void OnUsbMidiDeviceAttached(JNIEnv* env, jobject caller, jobject device);
-  void OnUsbMidiDeviceDetached(JNIEnv* env, jobject caller, jint index);
+  void OnUsbMidiDeviceRequestDone(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller,
+      const base::android::JavaParamRef<jobjectArray>& devices);
+  void OnUsbMidiDeviceAttached(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller,
+      const base::android::JavaParamRef<jobject>& device);
+  void OnUsbMidiDeviceDetached(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller,
+      jint index);
 
   static bool RegisterUsbMidiDeviceFactory(JNIEnv* env);
 

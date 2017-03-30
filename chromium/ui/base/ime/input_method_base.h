@@ -5,12 +5,13 @@
 #ifndef UI_BASE_IME_INPUT_METHOD_BASE_H_
 #define UI_BASE_IME_INPUT_METHOD_BASE_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/ui_base_ime_export.h"
+#include "ui/events/event_dispatcher.h"
 
 namespace gfx {
 class Rect;
@@ -33,9 +34,6 @@ class UI_BASE_IME_EXPORT InputMethodBase
 
   // Overriden from InputMethod.
   void SetDelegate(internal::InputMethodDelegate* delegate) override;
-  // If a derived class overrides OnFocus()/OnBlur(), it should call parent's
-  // implementation first, to make sure |system_toplevel_window_focused_| flag
-  // can be updated correctly.
   void OnFocus() override;
   void OnBlur() override;
   void SetFocusedTextInputClient(TextInputClient* client) override;
@@ -76,7 +74,8 @@ class UI_BASE_IME_EXPORT InputMethodBase
 
   // Convenience method to call delegate_->DispatchKeyEventPostIME().
   // Returns true if the event was processed
-  bool DispatchKeyEventPostIME(const ui::KeyEvent& event) const;
+  ui::EventDispatchDetails DispatchKeyEventPostIME(
+      ui::KeyEvent* event) const;
 
   // Convenience method to notify all observers of TextInputClient changes.
   void NotifyTextInputStateChanged(const TextInputClient* client);
@@ -85,10 +84,6 @@ class UI_BASE_IME_EXPORT InputMethodBase
   // |client| which is the text input client with focus.
   void NotifyTextInputCaretBoundsChanged(const TextInputClient* client);
 
-  bool system_toplevel_window_focused() const {
-    return system_toplevel_window_focused_;
-  }
-
  private:
   void SetFocusedTextInputClientInternal(TextInputClient* client);
 
@@ -96,8 +91,6 @@ class UI_BASE_IME_EXPORT InputMethodBase
   TextInputClient* text_input_client_;
 
   base::ObserverList<InputMethodObserver> observer_list_;
-
-  bool system_toplevel_window_focused_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodBase);
 };

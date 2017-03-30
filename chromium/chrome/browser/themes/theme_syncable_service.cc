@@ -4,7 +4,11 @@
 
 #include "chrome/browser/themes/theme_syncable_service.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/strings/stringprintf.h"
+#include "base/version.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -63,8 +67,8 @@ syncer::SyncMergeResult ThemeSyncableService::MergeDataAndStartSyncing(
   DCHECK(error_handler.get());
 
   syncer::SyncMergeResult merge_result(type);
-  sync_processor_ = sync_processor.Pass();
-  sync_error_handler_ = error_handler.Pass();
+  sync_processor_ = std::move(sync_processor);
+  sync_error_handler_ = std::move(error_handler);
 
   if (initial_sync_data.size() > 1) {
     sync_error_handler_->CreateAndUploadError(
@@ -86,8 +90,11 @@ syncer::SyncMergeResult ThemeSyncableService::MergeDataAndStartSyncing(
       initial_sync_data.rbegin(); sync_data != initial_sync_data.rend();
       ++sync_data) {
     if (sync_data->GetSpecifics().has_theme()) {
-      MaybeSetTheme(current_specifics, *sync_data);
-      return merge_result;
+      if (!current_specifics.use_custom_theme() ||
+          sync_data->GetSpecifics().theme().use_custom_theme()) {
+        MaybeSetTheme(current_specifics, *sync_data);
+        return merge_result;
+      }
     }
   }
 
@@ -232,6 +239,7 @@ void ThemeSyncableService::SetCurrentThemeFromThemeSpecifics(
       if (!extensions_service->pending_extension_manager()->AddFromSync(
               id,
               update_url,
+              base::Version(),
               &IsTheme,
               kRemoteInstall,
               kInstalledByCustodian)) {
@@ -257,8 +265,7 @@ bool ThemeSyncableService::GetThemeSpecificsFromCurrentTheme(
           extensions::ExtensionSystem::Get(profile_)->extension_service()->
               GetExtensionById(theme_service_->GetThemeID(), false);
   if (current_theme && !extensions::sync_helper::IsSyncable(current_theme)) {
-    DVLOG(1) << "Ignoring extension from external source: " <<
-        current_theme->location();
+    DVLOG(1) << "Ignoring non-syncable extension: " << current_theme->id();
     return false;
   }
   bool use_custom_theme = (current_theme != NULL);

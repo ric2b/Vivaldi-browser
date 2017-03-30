@@ -4,10 +4,14 @@
 
 #include "chrome/browser/ui/webui/options/chromeos/internet_options_handler_strings.h"
 
+#include <stddef.h>
+
 #include "base/macros.h"
 #include "base/values.h"
 #include "chrome/grit/generated_resources.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
 
 namespace chromeos {
 namespace internet_options_strings {
@@ -29,8 +33,12 @@ StringResource kStringResources[] = {
     {"vpnTitle", IDS_OPTIONS_SETTINGS_SECTION_TITLE_PRIVATE_NETWORK},
     {"vpnNameTemplate",
      IDS_OPTIONS_SETTINGS_SECTION_THIRD_PARTY_VPN_NAME_TEMPLATE},
+    {"defaultThirdPartyProviderName",
+     IDS_OPTIONS_SETTINGS_SECTION_DEFAULT_THIRD_PARTY_PROVIDER_NAME},
+    {"vpnBuiltInProvider", IDS_NETWORK_VPN_BUILT_IN_PROVIDER},
     {"joinOtherNetwork", IDS_OPTIONS_SETTINGS_NETWORK_OTHER},
     {"networkDisabled", IDS_OPTIONS_SETTINGS_NETWORK_DISABLED},
+    {"networkProhibited", IDS_OPTIONS_SETTINGS_NETWORK_PROHIBITED},
     {"turnOffWifi", IDS_OPTIONS_SETTINGS_NETWORK_DISABLE_WIFI},
     {"turnOffWimax", IDS_OPTIONS_SETTINGS_NETWORK_DISABLE_WIMAX},
     {"turnOffCellular", IDS_OPTIONS_SETTINGS_NETWORK_DISABLE_CELLULAR},
@@ -46,6 +54,8 @@ StringResource kStringResources[] = {
     {"disableDataRoaming", IDS_OPTIONS_SETTINGS_DISABLE_DATA_ROAMING},
     {"dataRoamingDisableToggleTooltip",
      IDS_OPTIONS_SETTINGS_TOGGLE_DATA_ROAMING_RESTRICTION},
+    {"prohibitedNetwork", IDS_OPTIONS_SETTINGS_PROHIBITED_NETWORK},
+    {"prohibitedNetworkOther", IDS_OPTIONS_SETTINGS_PROHIBITED_NETWORK_OTHER},
 
     // ONC network states. Format is 'Onc' + key + value.
     // Note: '.' must be replaced with '-', e.g. VPN.Type -> OncVPN-Type
@@ -92,6 +102,7 @@ StringResource kStringResources[] = {
     {"restrictedConnectivity",
      IDS_OPTIONS_SETTINGS_INTERNET_CELLULAR_RESTRICTED_POOL},
     {"inetAddress", IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_ADDRESS},
+    {"ipv6Address", IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_ADDRESS_IPV6},
     {"inetNetmask", IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_SUBNETMASK},
     {"inetGateway", IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_GATEWAY},
     {"inetNameServers", IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_DNSSERVER},

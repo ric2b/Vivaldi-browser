@@ -242,18 +242,10 @@ DataReductionProxyTask.prototype = {
 /**
  * Loads a page and checks bandwidth statistics.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsSessionBandwidthSucceed ' +
-    'DISABLED_netInternalsSessionBandwidthSucceed');
-GEN('#else');
-GEN('#define MAYBE_netInternalsSessionBandwidthSucceed ' +
-    'netInternalsSessionBandwidthSucceed');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsSessionBandwidthSucceed', function () {
+TEST_F('NetInternalsTest', 'netInternalsSessionBandwidthSucceed', function() {
   var taskQueue = new NetInternalsTest.TaskQueue(true);
   taskQueue.addTask(
-      new NetInternalsTest.GetTestServerURLTask('files/title1.html'));
+      new NetInternalsTest.GetTestServerURLTask('/title1.html'));
   // Load a page with a content length of 66 bytes and a 45-byte favicon.
   taskQueue.addTask(new BandwidthTask(66, 45));
   taskQueue.run();

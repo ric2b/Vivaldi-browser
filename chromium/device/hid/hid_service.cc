@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
+#include "build/build_config.h"
 #include "components/device_event_log/device_event_log.h"
 
 #if defined(OS_LINUX) && defined(USE_UDEV)
@@ -20,11 +21,6 @@
 #endif
 
 namespace device {
-
-namespace {
-
-HidService* g_service;
-}
 
 void HidService::Observer::OnDeviceAdded(
     scoped_refptr<HidDeviceInfo> device_info) {
@@ -38,29 +34,17 @@ void HidService::Observer::OnDeviceRemovedCleanup(
     scoped_refptr<HidDeviceInfo> device_info) {
 }
 
-HidService* HidService::GetInstance(
+scoped_ptr<HidService> HidService::Create(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner) {
-  if (g_service == NULL) {
 #if defined(OS_LINUX) && defined(USE_UDEV)
-    g_service = new HidServiceLinux(file_task_runner);
+  return make_scoped_ptr(new HidServiceLinux(file_task_runner));
 #elif defined(OS_MACOSX)
-    g_service = new HidServiceMac(file_task_runner);
+  return make_scoped_ptr(new HidServiceMac(file_task_runner));
 #elif defined(OS_WIN)
-    g_service = new HidServiceWin(file_task_runner);
+  return make_scoped_ptr(new HidServiceWin(file_task_runner));
+#else
+  return nullptr;
 #endif
-    if (g_service != nullptr) {
-      base::AtExitManager::RegisterTask(base::Bind(
-          &base::DeletePointer<HidService>, base::Unretained(g_service)));
-    }
-  }
-  return g_service;
-}
-
-void HidService::SetInstanceForTest(HidService* instance) {
-  DCHECK(!g_service);
-  g_service = instance;
-  base::AtExitManager::RegisterTask(base::Bind(&base::DeletePointer<HidService>,
-                                               base::Unretained(g_service)));
 }
 
 void HidService::GetDevices(const GetDevicesCallback& callback) {

@@ -6,7 +6,7 @@
 
 #include "base/thread_task_runner_handle.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/child/worker_task_runner.h"
+#include "content/child/worker_thread_registry.h"
 #include "ipc/ipc_message_macros.h"
 
 namespace content {
@@ -29,7 +29,7 @@ base::TaskRunner* WorkerThreadMessageFilter::OverrideTaskRunnerForMessage(
   DCHECK(success);
   if (!ipc_thread_id)
     return main_thread_task_runner_.get();
-  return WorkerTaskRunner::Instance()->GetTaskRunnerFor(ipc_thread_id);
+  return WorkerThreadRegistry::Instance()->GetTaskRunnerFor(ipc_thread_id);
 }
 
 bool WorkerThreadMessageFilter::OnMessageReceived(const IPC::Message& msg) {
@@ -38,7 +38,7 @@ bool WorkerThreadMessageFilter::OnMessageReceived(const IPC::Message& msg) {
   // If the IPC message is received in a worker thread, but it has already been
   // stopped, then drop the message.
   if (!main_thread_task_runner_->BelongsToCurrentThread() &&
-      !WorkerTaskRunner::Instance()->CurrentWorkerId()) {
+      !WorkerThread::GetCurrentId()) {
     return false;
   }
   OnFilteredMessageReceived(msg);

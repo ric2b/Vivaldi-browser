@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/policy/login_profile_policy_provider.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -64,6 +65,7 @@ void ApplyDevicePolicyAsRecommendedPolicy(const std::string& device_policy,
     user_policy_map->Set(user_policy,
                          POLICY_LEVEL_RECOMMENDED,
                          POLICY_SCOPE_USER,
+                         POLICY_SOURCE_CLOUD,
                          value->DeepCopy(),
                          NULL);
   }
@@ -78,6 +80,7 @@ void ApplyValueAsMandatoryPolicy(const base::Value* value,
     user_policy_map->Set(user_policy,
                          POLICY_LEVEL_MANDATORY,
                          POLICY_SCOPE_USER,
+                         POLICY_SOURCE_CLOUD,
                          value->DeepCopy(),
                          NULL);
   }
@@ -200,7 +203,7 @@ void LoginProfilePolicyProvider::UpdateFromDevicePolicy() {
     }
   }
 
-  UpdatePolicy(bundle.Pass());
+  UpdatePolicy(std::move(bundle));
 }
 
 }  // namespace policy

@@ -4,19 +4,15 @@
 
 package org.chromium.android_webview.test;
 
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwWebContentsDelegate;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 
 /**
  * Tests for the ContentViewClient.addMessageToConsole() method.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class ClientAddMessageToConsoleTest extends AwTestBase {
 
     // Line number at which the console message is logged in the page returned by the
@@ -133,26 +129,5 @@ public class ClientAddMessageToConsoleTest extends AwTestBase {
                    + data + "].", addMessageToConsoleHelper.getSourceId().endsWith(data));
         assertEquals(LOG_MESSAGE_JAVASCRIPT_DATA_LINE_NUMBER,
                      addMessageToConsoleHelper.getLineNumber());
-    }
-
-    /**
-     * http://crbug.com/481013
-     * Only the first argument makes it to onConsoleMessage:
-     *   junit.framework.ComparisonFailure: expected:<1[ 2 3]> but was:<1[]>
-     *
-     * @SmallTest
-     * @Feature({"AndroidWebView"})
-     */
-    @DisabledTest
-    public void testAddMessageToConsoleWithMultipleArgs() throws Throwable {
-        TestAwContentsClient.AddMessageToConsoleHelper addMessageToConsoleHelper =
-                mContentsClient.getAddMessageToConsoleHelper();
-
-        int callCount = addMessageToConsoleHelper.getCallCount();
-        String data = getLogMessageJavaScriptData("log", "1, 2, 3", false);
-        loadDataSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
-                     data, "text/html", false);
-        addMessageToConsoleHelper.waitForCallback(callCount);
-        assertEquals("1 2 3", addMessageToConsoleHelper.getMessage());
     }
 }

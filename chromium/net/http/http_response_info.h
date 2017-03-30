@@ -29,11 +29,9 @@ class NET_EXPORT HttpResponseInfo {
  public:
   // Describes the kind of connection used to fetch this response.
   //
-  // NOTE: This is persisted to the cache, so make sure not to reorder
-  // these values.
-  //
-  // TODO(akalin): Better yet, just use a string instead of an enum,
-  // like |npn_negotiated_protocol|.
+  // NOTE: Please keep in sync with Net.HttpResponseInfo.ConnectionInfo
+  // histogram.  Because of that, and also because these values are persisted to
+  // the cache, please make sure not to delete or reorder values.
   enum ConnectionInfo {
     CONNECTION_INFO_UNKNOWN = 0,
     CONNECTION_INFO_HTTP1 = 1,
@@ -105,6 +103,11 @@ class NET_EXPORT HttpResponseInfo {
   // True if the resource was originally fetched for a prefetch and has not been
   // used since.
   bool unused_since_prefetch;
+
+  // True if this resource is stale and requires async revalidation.
+  // This value is not persisted by Persist(); it is only ever set when the
+  // response is retrieved from the cache.
+  bool async_revalidation_required;
 
   // Remote address of the socket which fetched this resource.
   //

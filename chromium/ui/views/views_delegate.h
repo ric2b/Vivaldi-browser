@@ -13,7 +13,9 @@
 
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/native_widget_types.h"
@@ -64,6 +66,9 @@ class NativeWidgetDelegate;
 // implementation of ViewsDelegate (the constructor will set the instance).
 class VIEWS_EXPORT ViewsDelegate {
  public:
+  using NativeWidgetFactory =
+      base::Callback<NativeWidget*(const Widget::InitParams&,
+                                   internal::NativeWidgetDelegate*)>;
 #if defined(OS_WIN)
   enum AppbarAutohideEdge {
     EDGE_TOP    = 1 << 0,
@@ -73,10 +78,29 @@ class VIEWS_EXPORT ViewsDelegate {
   };
 #endif
 
+  enum class ProcessMenuAcceleratorResult {
+    // The accelerator was handled while the menu was showing. No further action
+    // is needed and the menu should be kept open.
+    LEAVE_MENU_OPEN,
+
+    // The accelerator was not handled. Menu should be closed and the
+    // accelerator will be reposted to be handled after the menu closes.
+    CLOSE_MENU
+  };
+
   virtual ~ViewsDelegate();
 
   // Returns the ViewsDelegate instance if there is one, or nullptr otherwise.
   static ViewsDelegate* GetInstance();
+
+  // Call this method to set a factory callback that will be used to construct
+  // NativeWidget implementations overriding the platform defaults.
+  void set_native_widget_factory(NativeWidgetFactory factory) {
+    native_widget_factory_ = factory;
+  }
+  const NativeWidgetFactory& native_widget_factory() {
+    return native_widget_factory_;
+  }
 
   // Saves the position, size and "show" state for the window with the
   // specified name.
@@ -101,6 +125,13 @@ class VIEWS_EXPORT ViewsDelegate {
                                      int item_index,
                                      int item_count,
                                      bool has_submenu);
+
+  // If |accelerator| can be processed while a menu is showing, it will be
+  // processed now and LEAVE_MENU_OPEN is returned. Otherwise, |accelerator|
+  // will be reposted for processing later after the menu closes and CLOSE_MENU
+  // will be returned.
+  virtual ProcessMenuAcceleratorResult ProcessAcceleratorWhileMenuShowing(
+      const ui::Accelerator& accelerator);
 
 #if defined(OS_WIN)
   // Retrieves the default window icon to use for windows if none is specified.
@@ -171,6 +202,8 @@ class VIEWS_EXPORT ViewsDelegate {
 #if defined(USE_AURA)
   scoped_ptr<TouchSelectionMenuRunnerViews> touch_selection_menu_runner_;
 #endif
+
+  NativeWidgetFactory native_widget_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ViewsDelegate);
 };

@@ -78,7 +78,7 @@ cvox.MathShifter.prototype.sync = function(sel) {
  * @override
  */
 cvox.MathShifter.prototype.getName = function() {
-  return cvox.ChromeVox.msgs.getMsg('math_shifter');
+  return Msgs.getMsg('math_shifter');
 };
 
 
@@ -89,7 +89,7 @@ cvox.MathShifter.prototype.getDescription = function(prevSel, sel) {
   var descs = cvox.SpeechRuleEngine.getInstance().evaluateNode(
       cvox.TraverseMath.getInstance().activeNode);
   if (this.bumped_ && descs.length > 0) {
-    descs[0].pushEarcon(cvox.AbstractEarcons.WRAP_EDGE);
+    descs[0].pushEarcon(cvox.Earcon.WRAP_EDGE);
   }
   return descs;
 };

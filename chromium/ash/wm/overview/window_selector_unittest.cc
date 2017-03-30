@@ -30,7 +30,6 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/memory/scoped_vector.h"
@@ -125,7 +124,7 @@ class WindowSelectorTest : public test::AshTestBase {
     widget->Init(params);
     widget->Show();
     ParentWindowInPrimaryRootWindow(widget->GetNativeWindow());
-    return widget.Pass();
+    return widget;
   }
 
   aura::Window* CreatePanelWindow(const gfx::Rect& bounds) {
@@ -167,7 +166,7 @@ class WindowSelectorTest : public test::AshTestBase {
   }
 
   gfx::RectF GetTransformedBoundsInRootWindow(aura::Window* window) {
-    gfx::RectF bounds = gfx::Rect(window->bounds().size());
+    gfx::RectF bounds = gfx::RectF(gfx::SizeF(window->bounds().size()));
     aura::Window* root = window->GetRootWindow();
     CHECK(window->layer());
     CHECK(root->layer());
@@ -305,6 +304,38 @@ class WindowSelectorTest : public test::AshTestBase {
   DISALLOW_COPY_AND_ASSIGN(WindowSelectorTest);
 };
 
+// Tests that the text field in the overview menu is repositioned and resized
+// after a screen rotation.
+TEST_F(WindowSelectorTest, OverviewScreenRotation) {
+  gfx::Rect bounds(0, 0, 400, 300);
+  scoped_ptr<aura::Window> window1(CreateWindow(bounds));
+  scoped_ptr<aura::Window> panel1(CreatePanelWindow(bounds));
+
+  // In overview mode the windows should no longer overlap and the text filter
+  // widget should be focused.
+  ToggleOverview();
+
+  views::Widget* text_filter = text_filter_widget();
+  UpdateDisplay("400x300");
+
+  // Formula for initial placement found in window_selector.cc using
+  // width = 400, height = 300:
+  // x: root_window->bounds().width() / 2 * (1 - kTextFilterScreenProportion).
+  // y: -kTextFilterDistanceFromTop (since there's no text in the filter).
+  // w: root_window->bounds().width() * kTextFilterScreenProportion.
+  // h: kTextFilterHeight.
+  EXPECT_EQ("150,-32 100x32",
+            text_filter->GetClientAreaBoundsInScreen().ToString());
+
+  // Rotates the display, which triggers the WindowSelector's
+  // RepositionTextFilterOnDisplayMetricsChange method.
+  UpdateDisplay("400x300/r");
+
+  // Uses the same formulas as abuve using width = 300, height = 400.
+  EXPECT_EQ("112,-32 75x32",
+            text_filter->GetClientAreaBoundsInScreen().ToString());
+}
+
 // Tests that an a11y alert is sent on entering overview mode.
 TEST_F(WindowSelectorTest, A11yAlertOnOverviewMode) {
   gfx::Rect bounds(0, 0, 400, 400);
@@ -316,6 +347,18 @@ TEST_F(WindowSelectorTest, A11yAlertOnOverviewMode) {
   ToggleOverview();
   EXPECT_EQ(delegate->GetLastAccessibilityAlert(),
             ui::A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED);
+}
+
+// Tests that there are no crashes when there is not enough screen space
+// available to show all of the windows.
+TEST_F(WindowSelectorTest, SmallDisplay) {
+  UpdateDisplay("3x1");
+  gfx::Rect bounds(0, 0, 1, 1);
+  scoped_ptr<aura::Window> window1(CreateWindow(bounds));
+  scoped_ptr<aura::Window> window2(CreateWindow(bounds));
+  scoped_ptr<aura::Window> window3(CreateWindow(bounds));
+  scoped_ptr<aura::Window> window4(CreateWindow(bounds));
+  ToggleOverview();
 }
 
 // Tests entering overview mode with two windows and selecting one by clicking.
@@ -695,8 +738,7 @@ TEST_F(WindowSelectorTest, WindowDoesNotReceiveEvents) {
 
   // The event should target the window because we are still not in overview
   // mode.
-  EXPECT_EQ(window, static_cast<aura::Window*>(
-      targeter->FindTargetForEvent(root_target, &event1)));
+  EXPECT_EQ(window.get(), targeter->FindTargetForEvent(root_target, &event1));
 
   ToggleOverview();
 
@@ -707,8 +749,7 @@ TEST_F(WindowSelectorTest, WindowDoesNotReceiveEvents) {
                         ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
 
   // Now the transparent window should be intercepting this event.
-  EXPECT_NE(window, static_cast<aura::Window*>(
-        targeter->FindTargetForEvent(root_target, &event2)));
+  EXPECT_NE(window.get(), targeter->FindTargetForEvent(root_target, &event2));
 }
 
 // Tests that clicking on the close button effectively closes the window.

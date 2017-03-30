@@ -4,13 +4,15 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/sync_engine_initializer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
-#include "chrome/browser/drive/drive_api_util.h"
-#include "chrome/browser/drive/drive_uploader.h"
-#include "chrome/browser/drive/fake_drive_service.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_test_util.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.h"
@@ -18,6 +20,9 @@
 #include "chrome/browser/sync_file_system/drive_backend/sync_engine_context.h"
 #include "chrome/browser/sync_file_system/drive_backend/sync_task_manager.h"
 #include "chrome/browser/sync_file_system/sync_file_system_test_util.h"
+#include "components/drive/drive_api_util.h"
+#include "components/drive/drive_uploader.h"
+#include "components/drive/service/fake_drive_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,7 +34,7 @@ namespace drive_backend {
 
 namespace {
 
-const int64 kInitialLargestChangeID = 1234;
+const int64_t kInitialLargestChangeID = 1234;
 
 }  // namespace
 
@@ -48,16 +53,15 @@ class SyncEngineInitializerTest : public testing::Test {
     ASSERT_TRUE(database_dir_.CreateUniqueTempDir());
     in_memory_env_.reset(leveldb::NewMemEnv(leveldb::Env::Default()));
 
-    scoped_ptr<drive::DriveServiceInterface>
+    scoped_ptr<drive::FakeDriveService>
         fake_drive_service(new drive::FakeDriveService);
+    fake_drive_service_ = fake_drive_service.get();
 
     sync_context_.reset(new SyncEngineContext(
-        fake_drive_service.Pass(),
-        scoped_ptr<drive::DriveUploaderInterface>(),
-        nullptr /* task_logger */,
+        std::move(fake_drive_service),
+        scoped_ptr<drive::DriveUploaderInterface>(), nullptr /* task_logger */,
         base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get(),
-        nullptr /* worker_pool */));
+        base::ThreadTaskRunnerHandle::Get(), nullptr /* worker_pool */));
 
     sync_task_manager_.reset(new SyncTaskManager(
         base::WeakPtr<SyncTaskManager::Client>(),
@@ -133,13 +137,15 @@ class SyncEngineInitializerTest : public testing::Test {
       const std::string& title) {
     google_apis::DriveApiErrorCode error = google_apis::DRIVE_OTHER_ERROR;
     scoped_ptr<google_apis::FileResource> entry;
+    drive::AddNewDirectoryOptions options;
+    options.visibility = google_apis::drive::FILE_VISIBILITY_PRIVATE;
     sync_context_->GetDriveService()->AddNewDirectory(
-        parent_folder_id, title, drive::AddNewDirectoryOptions(),
+        parent_folder_id, title, options,
         CreateResultReceiver(&error, &entry));
     base::RunLoop().RunUntilIdle();
 
     EXPECT_EQ(google_apis::HTTP_CREATED, error);
-    return entry.Pass();
+    return entry;
   }
 
   scoped_ptr<google_apis::FileResource> CreateRemoteSyncRoot() {
@@ -156,15 +162,26 @@ class SyncEngineInitializerTest : public testing::Test {
       EXPECT_EQ(google_apis::HTTP_NO_CONTENT, error);
     }
 
-    return sync_root.Pass();
+    return sync_root;
   }
 
   std::string GetSyncRootFolderID() {
-    int64 sync_root_tracker_id = metadata_database_->GetSyncRootTrackerID();
+    int64_t sync_root_tracker_id = metadata_database_->GetSyncRootTrackerID();
     FileTracker sync_root_tracker;
     EXPECT_TRUE(metadata_database_->FindTrackerByTrackerID(
         sync_root_tracker_id, &sync_root_tracker));
     return sync_root_tracker.file_id();
+  }
+
+  bool VerifyFolderVisibility(const std::string& folder_id) {
+    google_apis::drive::FileVisibility visibility;
+    if (google_apis::HTTP_SUCCESS !=
+        fake_drive_service_->GetFileVisibility(
+            folder_id, &visibility))
+      return false;
+    if (visibility != google_apis::drive::FILE_VISIBILITY_PRIVATE)
+      return false;
+    return true;
   }
 
   size_t CountTrackersForFile(const std::string& file_id) {
@@ -217,6 +234,7 @@ class SyncEngineInitializerTest : public testing::Test {
   scoped_ptr<MetadataDatabase> metadata_database_;
   scoped_ptr<SyncTaskManager> sync_task_manager_;
   scoped_ptr<SyncEngineContext> sync_context_;
+  drive::FakeDriveService* fake_drive_service_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(SyncEngineInitializerTest);
 };
@@ -231,6 +249,7 @@ TEST_F(SyncEngineInitializerTest, EmptyDatabase_NoRemoteSyncRoot) {
 
   EXPECT_EQ(1u, CountFileMetadata());
   EXPECT_EQ(1u, CountFileTracker());
+  EXPECT_TRUE(VerifyFolderVisibility(sync_root_folder_id));
 }
 
 TEST_F(SyncEngineInitializerTest, EmptyDatabase_RemoteSyncRootExists) {

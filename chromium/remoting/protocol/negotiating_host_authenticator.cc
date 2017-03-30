@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -45,7 +46,7 @@ scoped_ptr<Authenticator> NegotiatingHostAuthenticator::CreateWithSharedSecret(
   if (pairing_registry.get()) {
     result->AddMethod(AuthenticationMethod::Spake2Pair());
   }
-  return result.Pass();
+  return std::move(result);
 }
 
 // static
@@ -56,9 +57,9 @@ NegotiatingHostAuthenticator::CreateWithThirdPartyAuth(
     scoped_ptr<TokenValidator> token_validator) {
   scoped_ptr<NegotiatingHostAuthenticator> result(
       new NegotiatingHostAuthenticator(local_cert, key_pair));
-  result->token_validator_ = token_validator.Pass();
+  result->token_validator_ = std::move(token_validator);
   result->AddMethod(AuthenticationMethod::ThirdParty());
-  return result.Pass();
+  return std::move(result);
 }
 
 NegotiatingHostAuthenticator::~NegotiatingHostAuthenticator() {
@@ -99,12 +100,12 @@ void NegotiatingHostAuthenticator::ProcessMessage(
 
     // Find the first mutually-supported method in the client's list of
     // supported-methods.
-    std::vector<std::string> supported_methods_strs;
-    base::SplitString(supported_methods_attr, kSupportedMethodsSeparator,
-                      &supported_methods_strs);
-    for (std::vector<std::string>::iterator it = supported_methods_strs.begin();
-         it != supported_methods_strs.end(); ++it) {
-      AuthenticationMethod list_value = AuthenticationMethod::FromString(*it);
+    for (const std::string& method_str :
+         base::SplitString(supported_methods_attr,
+                           std::string(1, kSupportedMethodsSeparator),
+                           base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+      AuthenticationMethod list_value =
+          AuthenticationMethod::FromString(method_str);
       if (list_value.is_valid() &&
           std::find(methods_.begin(),
                     methods_.end(), list_value) != methods_.end()) {
@@ -163,7 +164,7 @@ void NegotiatingHostAuthenticator::CreateAuthenticator(
     // one |ThirdPartyHostAuthenticator| will need to be created per session.
     DCHECK(token_validator_);
     current_authenticator_.reset(new ThirdPartyHostAuthenticator(
-        local_cert_, local_key_pair_, token_validator_.Pass()));
+        local_cert_, local_key_pair_, std::move(token_validator_)));
   } else if (current_method_ == AuthenticationMethod::Spake2Pair() &&
              preferred_initial_state == WAITING_MESSAGE) {
     // If the client requested Spake2Pair and sent an initial message, attempt

@@ -5,8 +5,11 @@
 #ifndef CHROMECAST_APP_ANDROID_CAST_CRASH_REPORTER_CLIENT_ANDROID_H_
 #define CHROMECAST_APP_ANDROID_CAST_CRASH_REPORTER_CLIENT_ANDROID_H_
 
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
-#include "components/crash/app/crash_reporter_client.h"
+#include "base/macros.h"
+#include "components/crash/content/app/crash_reporter_client.h"
 
 namespace chromecast {
 

@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.externalnav;
 
+import android.Manifest.permission;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
@@ -12,29 +13,35 @@ import android.content.DialogInterface.OnCancelListener;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.TransactionTooLargeException;
 import android.provider.Browser;
+import android.provider.Telephony;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
 import android.util.Log;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.PathUtils;
+import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.Tab;
-import org.chromium.chrome.browser.UrlUtilities;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler.OverrideUrlLoadingResult;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.ui.base.PageTransition;
-import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.base.WindowAndroid.PermissionCallback;
 
 import java.util.List;
 
@@ -60,10 +67,25 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     }
 
     /**
+     * If the intent is for a pdf, resolves intent handlers to find the platform pdf viewer if
+     * it is available and force is for the provided |intent| so that the user doesn't need to
+     * choose it from Intent picker.
+     *
+     * @param context Context of the app.
+     * @param intent Intent to open.
+     */
+    public static void forcePdfViewerAsIntentHandlerIfNeeded(Context context, Intent intent) {
+        if (intent == null || !isPdfIntent(intent)) return;
+        resolveIntent(context, intent, true /* allowSelfOpen (ignored) */);
+    }
+
+    /**
      * Retrieve the best activity for the given intent. If a default activity is provided,
      * choose the default one. Otherwise, return the Intent picker if there are more than one
      * capable activities. If the intent is pdf type, return the platform pdf viewer if
      * it is available so user don't need to choose it from Intent picker.
+     *
+     * Note this function is slow on Android versions less than Lollipop.
      *
      * @param context Context of the app.
      * @param intent Intent to open.
@@ -93,9 +115,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
                             if (packageName.equals(pName)) {
                                 canSelfOpen = true;
                             } else if (PDF_VIEWER.equals(pName)) {
-                                String filename = intent.getData().getLastPathSegment();
-                                if ((filename != null && filename.endsWith(PDF_SUFFIX))
-                                        || PDF_MIME.equals(intent.getType())) {
+                                if (isPdfIntent(intent)) {
                                     intent.setClassName(pName, resolveInfo.activityInfo.name);
                                     hasPdfViewer = true;
                                     break;
@@ -115,43 +135,88 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
         return false;
     }
 
+    private static boolean isPdfIntent(Intent intent) {
+        if (intent == null || intent.getData() == null) return false;
+        String filename = intent.getData().getLastPathSegment();
+        return (filename != null && filename.endsWith(PDF_SUFFIX))
+                || PDF_MIME.equals(intent.getType());
+    }
+
+    /**
+     * Retrieve information about the Activity that will handle the given Intent.
+     *
+     * Note this function is slow on Android versions less than Lollipop.
+     *
+     * @param intent Intent to resolve.
+     * @return       ResolveInfo of the Activity that will handle the Intent, or null if it failed.
+     */
+    public static ResolveInfo resolveActivity(Intent intent) {
+        // This function is expensive on KK and below and should not be called from main thread.
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                || !ThreadUtils.runningOnUiThread();
+        try {
+            Context context = ApplicationStatus.getApplicationContext();
+            PackageManager pm = context.getPackageManager();
+            return pm.resolveActivity(intent, 0);
+        } catch (RuntimeException e) {
+            logTransactionTooLargeOrRethrow(e, intent);
+        }
+        return null;
+    }
+
+    /**
+     * Determines whether Chrome will be handling the given Intent.
+     *
+     * Note this function is slow on Android versions less than Lollipop.
+     *
+     * @param context           Context that will be firing the Intent.
+     * @param intent            Intent that will be fired.
+     * @param matchDefaultOnly  See {@link PackageManager#MATCH_DEFAULT_ONLY}.
+     * @return                  True if Chrome will definitely handle the intent, false otherwise.
+     */
+    public static boolean willChromeHandleIntent(
+            Context context, Intent intent, boolean matchDefaultOnly) {
+        try {
+            ResolveInfo info = context.getPackageManager().resolveActivity(
+                    intent, matchDefaultOnly ? PackageManager.MATCH_DEFAULT_ONLY : 0);
+            return info != null
+                    && info.activityInfo.packageName.equals(context.getPackageName());
+        } catch (RuntimeException e) {
+            logTransactionTooLargeOrRethrow(e, intent);
+            return false;
+        }
+    }
+
     @Override
     public List<ComponentName> queryIntentActivities(Intent intent) {
         return IntentUtils.getIntentHandlers(mActivity, intent);
     }
 
     @Override
-    public boolean canResolveActivity(Intent intent) {
-        try {
-            return mActivity.getPackageManager().resolveActivity(intent, 0) != null;
-        } catch (RuntimeException e) {
-            logTransactionTooLargeOrRethrow(e, intent);
-            return false;
-        }
-    }
-
-    @Override
     public boolean willChromeHandleIntent(Intent intent) {
-        try {
-            ResolveInfo info = mActivity.getPackageManager().resolveActivity(intent, 0);
-            return info != null
-                    && info.activityInfo.packageName.equals(mActivity.getPackageName());
-        } catch (RuntimeException e) {
-            logTransactionTooLargeOrRethrow(e, intent);
-            return false;
-        }
+        return willChromeHandleIntent(mActivity, intent, false);
     }
 
     @Override
     public boolean isSpecializedHandlerAvailable(Intent intent) {
+        return isPackageSpecializedHandler(mActivity, null, intent);
+    }
+
+    /**
+     * Check whether the given package is a specialized handler for the given intent
+     *
+     * @param context {@link Context} to use for getting the {@link PackageManager}.
+     * @param packageName Package name to check against. Can be null or empty.
+     * @param intent The intent to resolve for.
+     * @return Whether the given package is a specialized handler for the given intent. If there is
+     *         no package name given checks whether there is any specialized handler.
+     */
+    public static boolean isPackageSpecializedHandler(
+            Context context, String packageName, Intent intent) {
         try {
-            PackageManager pm = mActivity.getPackageManager();
-            List<ResolveInfo> handlers = pm.queryIntentActivities(
-                    intent,
-                    PackageManager.GET_RESOLVED_FILTER);
-            if (handlers == null || handlers.size() == 0) {
-                return false;
-            }
+            List<ResolveInfo> handlers = context.getPackageManager().queryIntentActivities(
+                    intent, PackageManager.GET_RESOLVED_FILTER);
+            if (handlers == null || handlers.size() == 0) return false;
             for (ResolveInfo resolveInfo : handlers) {
                 IntentFilter filter = resolveInfo.filter;
                 if (filter == null) {
@@ -163,6 +228,10 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
                     // Generic handler, skip
                     continue;
                 }
+                if (TextUtils.isEmpty(packageName)) return true;
+                ActivityInfo activityInfo = resolveInfo.activityInfo;
+                if (activityInfo == null) continue;
+                if (!activityInfo.packageName.equals(packageName)) continue;
                 return true;
             }
         } catch (RuntimeException e) {
@@ -179,7 +248,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     @Override
     public void startActivity(Intent intent) {
         try {
-            resolveIntent(mActivity, intent, true);
+            forcePdfViewerAsIntentHandlerIfNeeded(mActivity, intent);
             mActivity.startActivity(intent);
         } catch (RuntimeException e) {
             logTransactionTooLargeOrRethrow(e, intent);
@@ -189,7 +258,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     @Override
     public boolean startActivityIfNeeded(Intent intent) {
         try {
-            resolveIntent(mActivity, intent, true);
+            forcePdfViewerAsIntentHandlerIfNeeded(mActivity, intent);
             return mActivity.startActivityIfNeeded(intent, -1);
         } catch (RuntimeException e) {
             logTransactionTooLargeOrRethrow(e, intent);
@@ -229,20 +298,29 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     }
 
     @Override
-    public boolean shouldRequestFileAccess(Tab tab) {
+    public boolean shouldRequestFileAccess(String url, Tab tab) {
         // If the tab is null, then do not attempt to prompt for access.
         if (tab == null) return false;
 
-        return !tab.getWindowAndroid().hasFileAccess();
+        // If the url points inside of Chromium's data directory, no permissions are necessary.
+        // This is required to prevent permission prompt when uses wants to access offline pages.
+        if (url.startsWith("file://" + PathUtils.getDataDirectory(
+                mActivity.getApplicationContext()))) {
+            return false;
+        }
+
+        return !tab.getWindowAndroid().hasPermission(permission.WRITE_EXTERNAL_STORAGE)
+                && tab.getWindowAndroid().canRequestPermission(permission.WRITE_EXTERNAL_STORAGE);
     }
 
     @Override
     public void startFileIntent(final Intent intent, final String referrerUrl, final Tab tab,
             final boolean needsToCloseTab) {
-        tab.getWindowAndroid().requestFileAccess(new WindowAndroid.FileAccessCallback() {
+        PermissionCallback permissionCallback = new PermissionCallback() {
             @Override
-            public void onFileAccessResult(boolean granted) {
-                if (granted) {
+            public void onRequestPermissionsResult(String[] permissions, int[] grantResults) {
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     loadIntent(intent, referrerUrl, null, tab, needsToCloseTab, tab.isIncognito());
                 } else {
                     // TODO(tedchoc): Show an indication to the user that the navigation failed
@@ -253,7 +331,9 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
                     }
                 }
             }
-        });
+        };
+        tab.getWindowAndroid().requestPermissions(
+                new String[] {permission.WRITE_EXTERNAL_STORAGE}, permissionCallback);
     }
 
     private void loadIntent(Intent intent, String referrerUrl, String fallbackUrl, Tab tab,
@@ -277,7 +357,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
             intent.putExtra(Browser.EXTRA_APPLICATION_ID, getPackageName());
             if (launchIncogntio) intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
             intent.addCategory(Intent.CATEGORY_BROWSABLE);
-            intent.setPackage(getPackageName());
+            intent.setClassName(getPackageName(), ChromeLauncherActivity.class.getName());
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             IntentHandler.addTrustedIntentExtras(intent, mActivity);
             startActivity(intent);
@@ -329,9 +409,15 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
         return FeatureUtilities.isDocumentMode(mActivity);
     }
 
+    @Override
+    public String getDefaultSmsPackageName() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) return null;
+        return Telephony.Sms.getDefaultSmsPackage(mActivity);
+    }
+
     private static void logTransactionTooLargeOrRethrow(RuntimeException e, Intent intent) {
         // See http://crbug.com/369574.
-        if (e.getCause() != null && e.getCause() instanceof TransactionTooLargeException) {
+        if (e.getCause() instanceof TransactionTooLargeException) {
             Log.e(TAG, "Could not resolve Activity for intent " + intent.toString(), e);
         } else {
             throw e;

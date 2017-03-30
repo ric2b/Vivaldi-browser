@@ -6,6 +6,7 @@
 #define UI_VIEWS_BUBBLE_BUBBLE_DELEGATE_H_
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -28,6 +29,13 @@ class VIEWS_EXPORT BubbleDelegateView : public WidgetDelegateView,
   // Internal class name.
   static const char kViewClassName[];
 
+  enum class CloseReason {
+    DEACTIVATION,
+    ESCAPE,
+    CLOSE_BUTTON,
+    UNKNOWN,
+  };
+
   BubbleDelegateView();
   BubbleDelegateView(View* anchor_view, BubbleBorder::Arrow arrow);
   ~BubbleDelegateView() override;
@@ -44,6 +52,7 @@ class VIEWS_EXPORT BubbleDelegateView : public WidgetDelegateView,
   const char* GetClassName() const override;
 
   // WidgetObserver overrides:
+  void OnWidgetClosing(Widget* widget) override;
   void OnWidgetDestroying(Widget* widget) override;
   void OnWidgetVisibilityChanging(Widget* widget, bool visible) override;
   void OnWidgetVisibilityChanged(Widget* widget, bool visible) override;
@@ -92,6 +101,8 @@ class VIEWS_EXPORT BubbleDelegateView : public WidgetDelegateView,
 
   bool adjust_if_offscreen() const { return adjust_if_offscreen_; }
   void set_adjust_if_offscreen(bool adjust) { adjust_if_offscreen_ = adjust; }
+
+  CloseReason close_reason() const { return close_reason_; }
 
   // Get the arrow's anchor rect in screen space.
   virtual gfx::Rect GetAnchorRect() const;
@@ -191,6 +202,8 @@ class VIEWS_EXPORT BubbleDelegateView : public WidgetDelegateView,
 
   // Parent native window of the bubble.
   gfx::NativeView parent_window_;
+
+  CloseReason close_reason_;
 
   DISALLOW_COPY_AND_ASSIGN(BubbleDelegateView);
 };

@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_context.h"
 
@@ -22,7 +23,6 @@ class GLContextWGL : public GLContextReal {
   // Implement GLContext.
   bool Initialize(GLSurface* compatible_surface,
                   GpuPreference gpu_preference) override;
-  void Destroy() override;
   bool MakeCurrent(GLSurface* surface) override;
   void ReleaseCurrent(GLSurface* surface) override;
   bool IsCurrent(GLSurface* surface) override;
@@ -32,6 +32,7 @@ class GLContextWGL : public GLContextReal {
 
  private:
   ~GLContextWGL() override;
+  void Destroy();
 
   HGLRC context_;
 

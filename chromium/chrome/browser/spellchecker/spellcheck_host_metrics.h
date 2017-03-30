@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_SPELLCHECKER_SPELLCHECK_HOST_METRICS_H_
 #define CHROME_BROWSER_SPELLCHECKER_SPELLCHECK_HOST_METRICS_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -88,7 +90,7 @@ class SpellCheckHostMetrics {
   base::TimeTicks start_time_;
   // Set of checked words in the hashed form.
   base::hash_set<std::string> checked_word_hashes_;
-  base::RepeatingTimer<SpellCheckHostMetrics> recording_timer_;
+  base::RepeatingTimer recording_timer_;
 };
 
 #endif  // CHROME_BROWSER_SPELLCHECKER_SPELLCHECK_HOST_METRICS_H_

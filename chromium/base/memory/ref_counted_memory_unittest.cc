@@ -4,6 +4,8 @@
 
 #include "base/memory/ref_counted_memory.h"
 
+#include <stdint.h>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -17,7 +19,7 @@ TEST(RefCountedMemoryUnitTest, RefCountedStaticMemory) {
 }
 
 TEST(RefCountedMemoryUnitTest, RefCountedBytes) {
-  std::vector<uint8> data;
+  std::vector<uint8_t> data;
   data.push_back(45);
   data.push_back(99);
   scoped_refptr<RefCountedMemory> mem = RefCountedBytes::TakeVector(&data);
@@ -48,16 +50,6 @@ TEST(RefCountedMemoryUnitTest, RefCountedString) {
   EXPECT_EQ(10U, mem->size());
   EXPECT_EQ('d', mem->front()[0]);
   EXPECT_EQ('e', mem->front()[1]);
-}
-
-TEST(RefCountedMemoryUnitTest, RefCountedMallocedMemory) {
-  void* data = malloc(6);
-  memcpy(data, "hello", 6);
-
-  scoped_refptr<RefCountedMemory> mem = new RefCountedMallocedMemory(data, 6);
-
-  EXPECT_EQ(6U, mem->size());
-  EXPECT_EQ(0, memcmp("hello", mem->front(), 6));
 }
 
 TEST(RefCountedMemoryUnitTest, Equals) {

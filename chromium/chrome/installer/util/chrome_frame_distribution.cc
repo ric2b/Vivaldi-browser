@@ -10,7 +10,6 @@
 #include "chrome/installer/util/chrome_frame_distribution.h"
 
 #include "base/strings/string_util.h"
-#include "chrome/common/net/test_server_locations.h"
 #include "chrome/installer/util/channel_info.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
@@ -82,14 +81,6 @@ std::string ChromeFrameDistribution::GetSafeBrowsingName() {
   return "googlechromeframe";
 }
 
-std::string ChromeFrameDistribution::GetNetworkStatsServer() const {
-  return chrome_common_net::kEchoTestServerLocation;
-}
-
-base::string16 ChromeFrameDistribution::GetUninstallLinkName() {
-  return L"Uninstall Chrome Frame";
-}
-
 base::string16 ChromeFrameDistribution::GetUninstallRegPath() {
   return L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"
          L"Google Chrome Frame";
@@ -118,9 +109,8 @@ bool ChromeFrameDistribution::CanCreateDesktopShortcuts() {
   return false;
 }
 
-bool ChromeFrameDistribution::GetCommandExecuteImplClsid(
-    base::string16* handler_class_uuid) {
-  return false;
+base::string16 ChromeFrameDistribution::GetCommandExecuteImplClsid() {
+  return base::string16();
 }
 
 void ChromeFrameDistribution::UpdateInstallStatus(bool system_install,

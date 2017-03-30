@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_MEDIA_GALLERIES_LINUX_MTP_DEVICE_DELEGATE_IMPL_LINUX_H_
 #define CHROME_BROWSER_MEDIA_GALLERIES_LINUX_MTP_DEVICE_DELEGATE_IMPL_LINUX_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <map>
 #include <set>
@@ -14,9 +16,11 @@
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/media_galleries/fileapi/mtp_device_async_delegate.h"
+#include "chrome/browser/media_galleries/linux/mtp_device_task_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "storage/browser/fileapi/async_file_util.h"
 
@@ -59,10 +63,10 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
   class MTPFileNode;
 
   // Maps file ids to file nodes.
-  typedef std::map<uint32, MTPFileNode*> FileIdToMTPFileNodeMap;
+  typedef std::map<uint32_t, MTPFileNode*> FileIdToMTPFileNodeMap;
 
   // Maps file paths to file info.
-  typedef std::map<base::FilePath, storage::DirectoryEntry> FileInfoCache;
+  typedef std::map<base::FilePath, MTPDeviceTaskHelper::MTPEntry> FileInfoCache;
 
   typedef base::Closure DeleteObjectSuccessCallback;
 
@@ -95,7 +99,7 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
   bool IsStreaming() override;
   void ReadBytes(const base::FilePath& device_file_path,
                  const scoped_refptr<net::IOBuffer>& buf,
-                 int64 offset,
+                 int64_t offset,
                  int buf_len,
                  const ReadBytesSuccessCallback& success_callback,
                  const ErrorCallback& error_callback) override;
@@ -159,7 +163,9 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
       const ErrorCallback& error_callback);
   virtual void ReadBytesInternal(
       const base::FilePath& device_file_path,
-      net::IOBuffer* buf, int64 offset, int buf_len,
+      net::IOBuffer* buf,
+      int64_t offset,
+      int buf_len,
       const ReadBytesSuccessCallback& success_callback,
       const ErrorCallback& error_callback);
   virtual void MoveFileLocalInternal(
@@ -200,22 +206,22 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
       const bool exclusive,
       const CreateDirectorySuccessCallback& success_callback,
       const ErrorCallback& error_callback,
-      const storage::AsyncFileUtil::EntryList& /* file_list */,
+      const storage::AsyncFileUtil::EntryList& entries,
       const bool has_more);
 
   // Called when ReadDirectory succeeds.
   virtual void OnDidReadDirectoryToDeleteDirectory(
       const base::FilePath& directory_path,
-      const uint32 directory_id,
+      const uint32_t directory_id,
       const DeleteDirectorySuccessCallback& success_callback,
       const ErrorCallback& error_callback,
-      const storage::AsyncFileUtil::EntryList& entries,
+      const MTPDeviceTaskHelper::MTPEntries& entries,
       const bool has_more);
 
   // Calls DeleteObjectOnUIThread on UI thread.
   virtual void RunDeleteObjectOnUIThread(
       const base::FilePath& object_path,
-      const uint32 object_id,
+      const uint32_t object_id,
       const DeleteObjectSuccessCallback& success_callback,
       const ErrorCallback& error_callback);
 
@@ -288,7 +294,7 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
   // If |dir_id| is not a directory, |error_callback| is invoked to notify the
   // caller about the file error and process the next pending request.
   void OnDidGetFileInfoToReadDirectory(
-      uint32 dir_id,
+      uint32_t dir_id,
       const ReadDirectorySuccessCallback& success_callback,
       const ErrorCallback& error_callback,
       const base::File::Info& file_info);
@@ -346,9 +352,9 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
   // file entries.
   // |file_list| contains the directory file entries with their file ids.
   // |has_more| is true if there are more file entries to read.
-  void OnDidReadDirectory(uint32 dir_id,
+  void OnDidReadDirectory(uint32_t dir_id,
                           const ReadDirectorySuccessCallback& success_callback,
-                          const storage::AsyncFileUtil::EntryList& file_list,
+                          const MTPDeviceTaskHelper::MTPEntries& mtp_entries,
                           bool has_more);
 
   // Called when WriteDataIntoSnapshotFile() succeeds.
@@ -377,9 +383,10 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
                       const base::File::Info& file_info, int bytes_read);
 
   // Called when FillFileCache() succeeds.
-  void OnDidFillFileCache(const base::FilePath& path,
-                          const storage::AsyncFileUtil::EntryList& file_list,
-                          bool has_more);
+  void OnDidFillFileCache(
+      const base::FilePath& path,
+      const storage::AsyncFileUtil::EntryList& /* entries */,
+      bool has_more);
 
   // Called when FillFileCache() fails.
   void OnFillFileCacheFailed(base::File::Error error);
@@ -411,7 +418,7 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
   void OnDidMoveFileLocalWithRename(
       const MoveFileLocalSuccessCallback& success_callback,
       const base::FilePath& source_file_path,
-      const uint32 file_id);
+      const uint32_t file_id);
 
   // Called when CopyFileFromLocal() succeeds.
   void OnDidCopyFileFromLocal(
@@ -431,7 +438,7 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
 
   // Called when DeleteObject() succeeds.
   void OnDidDeleteObject(const base::FilePath& object_path,
-                         const uint32 object_id,
+                         const uint32_t object_id,
                          const DeleteObjectSuccessCallback success_callback);
 
   // Called when DeleteFileOrDirectory() fails.
@@ -441,7 +448,7 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
   // Handles the device file |error| while operating on |file_id|.
   // |error_callback| is invoked to notify the caller about the file error.
   void HandleDeviceFileError(const ErrorCallback& error_callback,
-                             uint32 file_id,
+                             uint32_t file_id,
                              base::File::Error error);
 
   // Given a full path, returns a non-empty sub-path that needs to be read into
@@ -456,10 +463,10 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
 
   // Given a full path, if it exists in the cache, writes the file's id to |id|
   // and return true.
-  bool CachedPathToId(const base::FilePath& path, uint32* id) const;
+  bool CachedPathToId(const base::FilePath& path, uint32_t* id) const;
 
   // Evict the cache of |id|.
-  void EvictCachedPathToId(const uint32 id);
+  void EvictCachedPathToId(const uint32_t id);
 
   // MTP device initialization state.
   InitializationState init_state_;

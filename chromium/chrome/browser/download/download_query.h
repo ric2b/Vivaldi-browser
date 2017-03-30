@@ -5,11 +5,15 @@
 #ifndef CHROME_BROWSER_DOWNLOAD_DOWNLOAD_QUERY_H_
 #define CHROME_BROWSER_DOWNLOAD_DOWNLOAD_QUERY_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/macros.h"
+#include "base/strings/string16.h"
 #include "content/public/browser/download_item.h"
 
 namespace base {
@@ -88,6 +92,9 @@ class DownloadQuery {
     ASCENDING,
     DESCENDING,
   };
+
+  static bool MatchesQuery(const std::vector<base::string16>& query_terms,
+                           const content::DownloadItem& item);
 
   DownloadQuery();
   ~DownloadQuery();

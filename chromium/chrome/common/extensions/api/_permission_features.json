@@ -20,81 +20,6 @@
 // chrome/test/data/extensions/api_test/stubs_app/manifest.json
 
 {
-  "importData": {
-   "vivaldi": true,
-   "channel": "stable",
-    "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-    ]
-  },
-  "editcommand": {
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-    ]
-  },
-  "uizoom": {
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-    ]
-  },
-  "notes": {
-    "channel": "stable",
-    "extension_types": [ "platform_app" ],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
-    ]
-  },
-  "autoUpdate": {
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-    ]
-  },
-  "savedpasswords": {
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-    ]
-  },
-  "settings": {
-    "channel": "stable",
-    "extension_types": [ "platform_app" ],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
-    ]
-  },
-  "showMenu": {
-    "vivaldi": true,
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli",  // Vivaldi
-      "nngaafnlpkkdofeeiaeaaojibnemfnml"   // showMenu test
-    ]
-  },
-  "thumbnails": {
-    "vivaldi": true,
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"  // Vivaldi
-    ]
-  },
-  "utilities": {
-    "vivaldi": true,
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"  // Vivaldi
-    ]
-  },
   "accessibilityFeatures.modify": {
     "channel": "stable",
     "extension_types": ["extension", "platform_app"]
@@ -117,11 +42,12 @@
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
     "whitelist": [
-      "EE17C698905F7F2E6DDC87C9C30F11E164C829F4",  // Watchdog release
-      "90113DA9516526D24DAF156C629CC41C049E8882",  // Watchdog testing
-      "A9EFD71948A480C87D3B7C758FD938215F445F00",   // Obsolete
-      "AE27D69DBE571F4B1694F05C89B710C646792231", // Published ADT.
-      "5107DE9024C329EEA9C9A72D94C16723790C6422"  // Apps Developer Tool Dev.
+      "EE17C698905F7F2E6DDC87C9C30F11E164C829F4",  // For unit testing ALP
+      "90113DA9516526D24DAF156C629CC41C049E8882",  // http://crbug.com/520205
+      "736F218710D373A285B3A9C70BF90C567B22321A",  // http://crbug.com/520205
+      "A9EFD71948A480C87D3B7C758FD938215F445F00",  // Obsolete
+      "AE27D69DBE571F4B1694F05C89B710C646792231",  // Published ADT.
+      "5107DE9024C329EEA9C9A72D94C16723790C6422"   // Apps Developer Tool Dev.
     ]
   },
   "audioModem": [
@@ -170,10 +96,7 @@
   },
   "bookmarks": [{
     "channel": "stable",
-    "extension_types": ["extension"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"
-    ]
+    "extension_types": ["extension"]
   },{
     "channel": "stable",
     "extension_types": ["platform_app"],
@@ -194,19 +117,6 @@
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"]
   },
-  "cast": {
-    "channel": "stable",
-    "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
-    "whitelist": [
-      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Dev
-      "FA01E0B81978950F2BC5A50512FD769725F57510",  // Beta
-      "B11A93E7E5B541F8010245EBDE2C74647D6C14B9",  // Canary
-      "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // Google Cast Beta
-      "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // Google Cast Stable
-      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/457908
-      "EF2AB692559EA97C3BBDEA018A8C45F92457BD4E"   // http://crbug.com/457908
-    ]
-  },
   "cast.streaming": [{
     "channel": "dev",
     "extension_types": ["extension"]
@@ -220,9 +130,14 @@
       "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // Google Cast Beta
       "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // Google Cast Stable
       "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/457908
-      "EF2AB692559EA97C3BBDEA018A8C45F92457BD4E"   // http://crbug.com/457908
+      "226CF815E39A363090A1E547D53063472B8279FA"   // http://crbug.com/574889
     ]
   }],
+  "certificateProvider": {
+    "channel": "stable",
+    "platforms": ["chromeos"],
+    "extension_types": ["extension", "platform_app"]
+  },
   "chromePrivate": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"],
@@ -244,20 +159,13 @@
       "307E96539209F95A1A8740C713E6998A73657D96",  // http://crbug.com/329690
       "A291B26E088FA6BA53FFD72F0916F06EBA7C585A",  // http://crbug.com/341258
       "D7986543275120831B39EF28D1327552FC343960",  // http://crbug.com/329088
-      // http://crbug.com/343701
-      // TODO(tbarzic): Remove the following six when http://crbug.com/346572
-      // gets fixed.
-      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Dev
-      "FA01E0B81978950F2BC5A50512FD769725F57510",  // Beta
-      "B11A93E7E5B541F8010245EBDE2C74647D6C14B9",  // Canary
-      "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // Google Cast Beta
-      "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // Google Cast Stable
       "4F25792AF1AA7483936DE29C07806F203C7170A0",  // http://crbug.com/407693
       "BD8781D757D830FC2E85470A1B6E8A718B7EE0D9",  // http://crbug.com/407693
       "4AC2B6C63C6480D150DFDA13E4A5956EB1D0DDBB",  // http://crbug.com/407693
       "81986D4F846CEDDDB962643FA501D1780DD441BB",  // http://crbug.com/407693
       "B620CF4203315F9F2E046EDED22C7571A935958D",  // http://crbug.com/510270
-      "B206D8716769728278D2D300349C6CB7D7DE2EF9"   // http://crbug.com/510270
+      "B206D8716769728278D2D300349C6CB7D7DE2EF9",  // http://crbug.com/510270
+      "F0CA817739BF63A227F634D6BF570C34CC6E676E"   // http://crbug.com/557054
     ]
   },
   "clipboardRead": {
@@ -454,7 +362,7 @@
       "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // Google Cast Beta
       "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // Google Cast Stable
       "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/457908
-      "EF2AB692559EA97C3BBDEA018A8C45F92457BD4E"   // http://crbug.com/457908
+      "226CF815E39A363090A1E547D53063472B8279FA"   // http://crbug.com/574889
 
     ]
   },
@@ -466,6 +374,12 @@
   "embeddedExtensionOptions": {
     "channel": "trunk",
     "extension_types": ["extension"]
+  },
+  "enterprise.deviceAttributes": {
+    "channel": "stable",
+    "platforms": ["chromeos"],
+    "extension_types": ["extension", "platform_app"],
+    "location": "policy"
   },
   "enterprise.platformKeys": {
     "channel": "stable",
@@ -480,7 +394,8 @@
     "whitelist": [
       "657FEC7E77355CA205B0E226586621F86B33F611",  // http://crbug.com/246857
       "5894126C625EF31852F215ED301A5FF1F9B7D026",  // http://crbug.com/246857
-      "8DAE23A10703C926B21862B2F318FB4E110B17BD"   // http://crbug.com/487455
+      "8DAE23A10703C926B21862B2F318FB4E110B17BD",  // http://crbug.com/487455
+      "34412790FC81BC9B563CBE599ED10ABF26B209F7"   // http://crbug.com/509149
     ]
   },
   "experienceSamplingPrivate": {
@@ -495,13 +410,6 @@
     "command_line_switch": "experimental-extension-apis",
     "extension_types": [
       "extension", "legacy_packaged_app", "hosted_app", "platform_app"
-    ]
-  },
-  "extensionActionUtils": {
-    "channel": "stable",
-    "extension_types": [ "platform_app" ],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
     ]
   },
   "feedbackPrivate": {
@@ -592,10 +500,16 @@
     "location": "component",
     "platforms": ["chromeos"]
   },
-  "fontSettings": {
+  "fontSettings": [{
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"]
-  },
+  },{
+     "channel": "stable",
+     "extension_types": ["platform_app"],
+     "whitelist": [
+       "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+     ]
+ }],
   "gcdPrivate": {
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
@@ -653,13 +567,19 @@
     "channel": "trunk",
     "extension_types": ["extension"]
   },
-  "input": {
+  "input": [{
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"],
     // TODO(kalman): Um what does this inply?
     "inplies_full_url_access": true,
     "platforms": ["chromeos"]
-  },
+  }, {
+    "channel": "dev",
+    "extension_types": ["extension", "legacy_packaged_app"],
+    // TODO(kalman): Um what does this inply?
+    "inplies_full_url_access": true,
+    "platforms": ["win", "linux"]
+  }],
   "inputMethodPrivate": [{
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
@@ -674,6 +594,11 @@
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
     "location": "component"
   }],
+  "languageSettingsPrivate": {
+    "channel": "trunk",
+    "extension_types": ["extension", "platform_app"],
+    "location": "component"
+  },
   "launcherSearchProvider": {
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
@@ -787,7 +712,7 @@
     "channel": "stable",
     "extension_types": ["extension"],
     "whitelist": [
-      "EF2AB692559EA97C3BBDEA018A8C45F92457BD4E",  // http://crbug.com/448569
+      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/574889
       "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/448569
       "A45DABDB47A31CC812E5490AB748C7D05E2D32E9",  // http://crbug.com/448569
       "BFEE2E3B80BE21A645E63E9346DFC383E7CB3BDA",  // http://crbug.com/448569
@@ -836,7 +761,7 @@
       "C449A798C495E6CF7D6AF10162113D564E67AD12",  // CRD Dogfood
       "01E9FFA9A8F3C18271FE91BEE46207F3B81755CC",  // Pre-release CRD
       "97B23E01B2AA064E8332EE43A7A85C628AADC3F2",  // Sample app_remoting app.
-      "EF2AB692559EA97C3BBDEA018A8C45F92457BD4E",  // http://crbug.com/504940
+      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/574889
       "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/504940
       "A45DABDB47A31CC812E5490AB748C7D05E2D32E9",  // http://crbug.com/504940
       "BFEE2E3B80BE21A645E63E9346DFC383E7CB3BDA",  // http://crbug.com/504940
@@ -859,7 +784,8 @@
       "9193D3A51E2FE33B496CDA53EA330423166E7F02",  // http://crbug.com/397691
       "F9119B8B18C7C82B51E7BC6FF816B694F2EC3E89",  // http://crbug.com/397691
       "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/457908
-      "EF2AB692559EA97C3BBDEA018A8C45F92457BD4E"   // http://crbug.com/457908
+      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/457908
+      "1BFB3A47AA4A1E1C4714D919217602685CDD0FA7"   // http://crbug.com/574600
     ]
   },
   {
@@ -1024,14 +950,12 @@
       "F9119B8B18C7C82B51E7BC6FF816B694F2EC3E89"  // http://crbug.com/439526
     ]
   }],
-  "readingListPrivate": {
+  "resourcesPrivate": {
     "channel": "stable",
-    "extension_types": ["extension"],
-    "whitelist": [
-      "D5736E4B5CF695CB93A2FB57E4FDC6E5AFAB6FE2", // http://crbug.com/312900
-      "D57DE394F36DC1C3220E7604C575D29C51A6C495", // http://crbug.com/319444
-      "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9"  // http://crbug.com/371562
-    ]
+    "extension_types": [
+      "extension", "legacy_packaged_app", "platform_app"
+    ],
+    "location": "component"
   },
   "rtcPrivate": {
     "channel": "stable",
@@ -1064,13 +988,8 @@
       "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
     ]
   },{
-    //tomas@vivaldi.com: added for extension so unit tests will pass,
-    //whitelisted for vivaldi to keep restrictions the same.
     "channel": "stable",
-    "extension_types": ["extension"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-    ]
+    "extension_types": ["extension"]
   }],
   "settingsPrivate": {
     "channel": "trunk",

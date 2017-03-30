@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "components/sync_driver/pref_names.h"
 
 namespace sync_driver {
@@ -106,6 +107,24 @@ const char kSyncMemoryPressureWarningCount[] = "sync.memory_warning_count";
 
 // Stores if sync shutdown cleanly.
 const char kSyncShutdownCleanly[] = "sync.shutdown_cleanly";
+
+// Dictionary of last seen invalidation versions for each model type.
+const char kSyncInvalidationVersions[] = "sync.invalidation_versions";
+
+// The product version from the last restart of Chrome.
+const char kSyncLastRunVersion[] = "sync.last_run_version";
+
+// Flag indicating that passphrase encryption transition is in progress.
+// Transition involves multiple steps and should continue across restarts.
+const char kSyncPassphraseEncryptionTransitionInProgress[] =
+    "sync.passphrase_encryption_transition_in_progress";
+
+// Updated Nigori state after user entering passphrase. This Nigori state should
+// be persisted across restarts and passed to backend when it is initialized
+// after directory cleanup. Preference contains base64 encoded serialized
+// sync_pb::NigoriSpecifics.
+const char kSyncNigoriStateForPassphraseTransition[] =
+    "sync.nigori_state_for_passphrase_transition";
 
 }  // namespace prefs
 

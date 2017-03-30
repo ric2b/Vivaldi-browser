@@ -20,8 +20,6 @@ class SkpicturePrinterUnitTest(page_test_test_case.PageTestTestCase):
   def tearDown(self):
     shutil.rmtree(self._skp_outdir)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   @decorators.Disabled('android')
   def testSkpicturePrinter(self):
     ps = self.CreateStorySetFromFileInUnittestDataDir('blank.html')

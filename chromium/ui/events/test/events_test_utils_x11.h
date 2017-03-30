@@ -5,6 +5,7 @@
 #ifndef UI_EVENTS_TEST_EVENTS_TEST_UTILS_X11_H_
 #define UI_EVENTS_TEST_EVENTS_TEST_UTILS_X11_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #include "ui/events/event_constants.h"
@@ -41,6 +42,9 @@ class ScopedXI2Event {
   void InitKeyEvent(EventType type,
                     KeyboardCode key_code,
                     int flags);
+  void InitMotionEvent(const gfx::Point& location,
+                       const gfx::Point& root_location,
+                       int flags);
 
   // Initializes an Xinput2 key event.
   // |deviceid| is the master, and |sourceid| is the slave device.

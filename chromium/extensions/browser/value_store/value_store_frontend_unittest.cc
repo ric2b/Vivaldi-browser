@@ -2,17 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "extensions/browser/value_store/value_store_frontend.h"
+
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "content/public/test/test_browser_thread.h"
-#include "extensions/browser/value_store/value_store_frontend.h"
 #include "extensions/common/extension_paths.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::BrowserThread;
+
+const char kDatabaseUMAClientName[] = "Test";
 
 class ValueStoreFrontendTest : public testing::Test {
  public:
@@ -40,7 +45,7 @@ class ValueStoreFrontendTest : public testing::Test {
 
   // Reset the value store, reloading the DB from disk.
   void ResetStorage() {
-    storage_.reset(new ValueStoreFrontend(db_path_));
+    storage_.reset(new ValueStoreFrontend(kDatabaseUMAClientName, db_path_));
   }
 
   bool Get(const std::string& key, scoped_ptr<base::Value>* output) {
@@ -53,8 +58,8 @@ class ValueStoreFrontendTest : public testing::Test {
  protected:
   void GetAndWait(scoped_ptr<base::Value>* output,
                   scoped_ptr<base::Value> result) {
-    *output = result.Pass();
-    base::MessageLoop::current()->Quit();
+    *output = std::move(result);
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   scoped_ptr<ValueStoreFrontend> storage_;

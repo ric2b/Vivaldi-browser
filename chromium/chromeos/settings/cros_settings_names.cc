@@ -121,6 +121,10 @@ const char kHeartbeatEnabled[] = "cros.device_status.heartbeat_enabled";
 // How frequently heartbeats are sent up, in milliseconds.
 const char kHeartbeatFrequency[] = "cros.device_status.heartbeat_frequency";
 
+// Determines whether system logs should be sent to the management server.
+const char kSystemLogUploadEnabled[] =
+    "cros.device_status.system_log_upload_enabled";
+
 // This policy should not appear in the protobuf ever but is used internally to
 // signal that we are running in a "safe-mode" for policy recovery.
 const char kPolicyMissingMitigationMode[] =
@@ -170,5 +174,13 @@ const char kRebootOnShutdown[] = "cros.device.reboot_on_shutdown";
 // An integer pref that specifies the limit of the device's extension cache
 // size in bytes.
 const char kExtensionCacheSize[] = "cros.device.extension_cache_size";
+
+// An integer pref that sets the display rotation at startup to a certain
+// value, overriding the user value:
+// 0 = 0 degrees rotation
+// 1 = 90 degrees clockwise rotation
+// 2 = 180 degrees rotation
+// 3 = 270 degrees clockwise rotation
+const char kDisplayRotationDefault[] = "cros.display_rotation_default";
 
 }  // namespace chromeos

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_JS_HANDLE_H_
-#define MOJO_EDK_JS_HANDLE_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_JS_HANDLE_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_JS_HANDLE_H_
 
 #include "base/observer_list.h"
 #include "gin/converter.h"
@@ -48,7 +48,7 @@ class HandleWrapper : public gin::Wrappable<HandleWrapper> {
 namespace gin {
 
 // Note: It's important to use this converter rather than the one for
-// MojoHandle, since that will do a simple int32 conversion. It's unfortunate
+// MojoHandle, since that will do a simple int32_t conversion. It's unfortunate
 // there's no way to prevent against accidental use.
 // TODO(mpcomplete): define converters for all Handle subtypes.
 template<>
@@ -95,4 +95,4 @@ struct Converter<gin::Handle<mojo::js::HandleWrapper> > {
 
 }  // namespace gin
 
-#endif  // MOJO_EDK_JS_HANDLE_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_JS_HANDLE_H_

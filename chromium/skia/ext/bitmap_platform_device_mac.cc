@@ -5,6 +5,7 @@
 #include "skia/ext/bitmap_platform_device_mac.h"
 
 #import <ApplicationServices/ApplicationServices.h>
+#include <stddef.h>
 #include <time.h>
 
 #include "base/mac/mac_util.h"
@@ -13,6 +14,7 @@
 #include "skia/ext/platform_canvas.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "third_party/skia/include/core/SkMatrix.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "third_party/skia/include/core/SkTypes.h"
 #include "third_party/skia/include/core/SkUtils.h"
@@ -98,7 +100,7 @@ static void LoadTransformToCGContext(CGContextRef context,
   transformed_matrix.setTranslateY(ty + (SkScalar)height);
 
   CGAffineTransform cg_matrix =
-      gfx::SkMatrixToCGAffineTransform(transformed_matrix);
+      skia::SkMatrixToCGAffineTransform(transformed_matrix);
 
   // Load final transform into context.
   CGContextConcatCTM(context, cg_matrix);
@@ -112,7 +114,7 @@ static void LoadClippingRegionToCGContext(CGContextRef context,
     // region can be empty, in which case everything will be clipped.
     SkRect rect;
     rect.setEmpty();
-    CGContextClipToRect(context, gfx::SkRectToCGRect(rect));
+    CGContextClipToRect(context, skia::SkRectToCGRect(rect));
   } else if (region.isRect()) {
     // CoreGraphics applies the current transform to clip rects, which is
     // unwanted. Inverse-transform the rect before sending it to CG. This only
@@ -128,7 +130,7 @@ static void LoadClippingRegionToCGContext(CGContextRef context,
     t.mapRect(&rect);
     SkIRect irect;
     rect.round(&irect);
-    CGContextClipToRect(context, gfx::SkIRectToCGRect(irect));
+    CGContextClipToRect(context, skia::SkIRectToCGRect(irect));
   } else {
     // It is complex.
     SkPath path;
@@ -295,28 +297,6 @@ SkCanvas* CreatePlatformCanvas(int width, int height, bool is_opaque,
   skia::RefPtr<SkBaseDevice> dev = skia::AdoptRef(
       BitmapPlatformDevice::CreateWithData(data, width, height, is_opaque));
   return CreateCanvas(dev, failureType);
-}
-
-// Port of PlatformBitmap to mac
-
-PlatformBitmap::~PlatformBitmap() {
-  if (surface_)
-    CGContextRelease(surface_);
-}
-
-bool PlatformBitmap::Allocate(int width, int height, bool is_opaque) {
-  if (RasterDeviceTooBigToAllocate(width, height))
-    return false;
-    
-  if (!bitmap_.tryAllocN32Pixels(width, height, is_opaque))
-    return false;
-
-  if (!is_opaque)
-    bitmap_.eraseColor(0);
-
-  surface_ = CGContextForData(bitmap_.getPixels(), bitmap_.width(),
-                              bitmap_.height());
-  return true;
 }
 
 }  // namespace skia

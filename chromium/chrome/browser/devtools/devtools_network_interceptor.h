@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_DEVTOOLS_DEVTOOLS_NETWORK_INTERCEPTOR_H_
 #define CHROME_BROWSER_DEVTOOLS_DEVTOOLS_NETWORK_INTERCEPTOR_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <utility>
@@ -15,7 +17,6 @@
 #include "base/timer/timer.h"
 
 class DevToolsNetworkConditions;
-class DevToolsNetworkTransaction;
 
 namespace base {
 class TimeDelta;
@@ -25,8 +26,9 @@ class TimeTicks;
 // DevToolsNetworkInterceptor emulates network conditions for transactions with
 // specific client id.
 class DevToolsNetworkInterceptor {
-
  public:
+  using ThrottleCallback = base::Callback<void(int, int64_t)>;
+
   DevToolsNetworkInterceptor();
   virtual ~DevToolsNetworkInterceptor();
 
@@ -35,43 +37,62 @@ class DevToolsNetworkInterceptor {
   // Applies network emulation configuration.
   void UpdateConditions(scoped_ptr<DevToolsNetworkConditions> conditions);
 
-  void AddTransaction(DevToolsNetworkTransaction* transaction);
-  void RemoveTransaction(DevToolsNetworkTransaction* transaction);
+  // Throttles with |is_upload == true| always succeed, even in offline mode.
+  int StartThrottle(int result,
+                    int64_t bytes,
+                    base::TimeTicks send_end,
+                    bool start,
+                    bool is_upload,
+                    const ThrottleCallback& callback);
+  void StopThrottle(const ThrottleCallback& callback);
 
-  bool ShouldFail(const DevToolsNetworkTransaction* transaction);
-  bool ShouldThrottle(const DevToolsNetworkTransaction* transaction);
-  void ThrottleTransaction(DevToolsNetworkTransaction* transaction, bool start);
-
-  const DevToolsNetworkConditions* conditions() const {
-    return conditions_.get();
-  }
+  bool IsOffline();
 
  private:
-  scoped_ptr<DevToolsNetworkConditions> conditions_;
+  struct ThrottleRecord {
+   public:
+    ThrottleRecord();
+    ~ThrottleRecord();
+    int result;
+    int64_t bytes;
+    int64_t send_end;
+    bool is_upload;
+    ThrottleCallback callback;
+  };
+  using ThrottleRecords = std::vector<ThrottleRecord>;
 
-  void UpdateThrottledTransactions(base::TimeTicks now);
-  void UpdateSuspendedTransactions(base::TimeTicks now);
-  void ArmTimer(base::TimeTicks now);
+  void FinishRecords(ThrottleRecords* records, bool offline);
+
+  uint64_t UpdateThrottledRecords(base::TimeTicks now, ThrottleRecords* records,
+      uint64_t last_tick, base::TimeDelta tick_length);
+  void UpdateThrottled(base::TimeTicks now);
+  void UpdateSuspended(base::TimeTicks now);
+
+  void CollectFinished(ThrottleRecords* records, ThrottleRecords* finished);
   void OnTimer();
 
-  void FireThrottledCallback(DevToolsNetworkTransaction* transaction);
+  base::TimeTicks CalculateDesiredTime(const ThrottleRecords& records,
+    uint64_t last_tick, base::TimeDelta tick_length);
+  void ArmTimer(base::TimeTicks now);
 
-  typedef std::set<DevToolsNetworkTransaction*> Transactions;
-  Transactions transactions_;
+  void RemoveRecord(ThrottleRecords* records, const ThrottleCallback& callback);
 
-  // Transactions suspended for a "latency" period.
-  typedef std::pair<DevToolsNetworkTransaction*, int64_t> SuspendedTransaction;
-  typedef std::vector<SuspendedTransaction> SuspendedTransactions;
-  SuspendedTransactions suspended_transactions_;
+  scoped_ptr<DevToolsNetworkConditions> conditions_;
 
-  // Transactions waiting certain amount of transfer to be "accounted".
-  std::vector<DevToolsNetworkTransaction*> throttled_transactions_;
+  // Throttables suspended for a "latency" period.
+  ThrottleRecords suspended_;
 
-  base::OneShotTimer<DevToolsNetworkInterceptor> timer_;
+  // Throttables waiting certain amount of transfer to be "accounted".
+  ThrottleRecords download_;
+  ThrottleRecords upload_;
+
+  base::OneShotTimer timer_;
   base::TimeTicks offset_;
-  base::TimeDelta tick_length_;
+  base::TimeDelta download_tick_length_;
+  base::TimeDelta upload_tick_length_;
   base::TimeDelta latency_length_;
-  uint64_t last_tick_;
+  uint64_t download_last_tick_;
+  uint64_t upload_last_tick_;
 
   base::WeakPtrFactory<DevToolsNetworkInterceptor> weak_ptr_factory_;
 

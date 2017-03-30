@@ -4,7 +4,10 @@
 
 #include "net/proxy/proxy_service_mojo.h"
 
+#include <utility>
+
 #include "base/logging.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/thread_task_runner_handle.h"
 #include "net/dns/mojo_host_resolver_impl.h"
 #include "net/interfaces/proxy_resolver_service.mojom.h"
@@ -19,11 +22,11 @@
 
 namespace net {
 
-ProxyService* CreateProxyServiceUsingMojoFactory(
+scoped_ptr<ProxyService> CreateProxyServiceUsingMojoFactory(
     MojoProxyResolverFactory* mojo_proxy_factory,
-    ProxyConfigService* proxy_config_service,
+    scoped_ptr<ProxyConfigService> proxy_config_service,
     ProxyScriptFetcher* proxy_script_fetcher,
-    DhcpProxyScriptFetcher* dhcp_proxy_script_fetcher,
+    scoped_ptr<DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher,
     HostResolver* host_resolver,
     NetLog* net_log,
     NetworkDelegate* network_delegate) {
@@ -32,32 +35,33 @@ ProxyService* CreateProxyServiceUsingMojoFactory(
   DCHECK(dhcp_proxy_script_fetcher);
   DCHECK(host_resolver);
 
-  ProxyService* proxy_service = new ProxyService(
-      proxy_config_service,
+  scoped_ptr<ProxyService> proxy_service(new ProxyService(
+      std::move(proxy_config_service),
       make_scoped_ptr(new ProxyResolverFactoryMojo(
           mojo_proxy_factory, host_resolver,
           base::Bind(&NetworkDelegateErrorObserver::Create, network_delegate,
                      base::ThreadTaskRunnerHandle::Get()),
           net_log)),
-      net_log);
+      net_log));
 
   // Configure fetchers to use for PAC script downloads and auto-detect.
   proxy_service->SetProxyScriptFetchers(proxy_script_fetcher,
-                                        dhcp_proxy_script_fetcher);
+                                        std::move(dhcp_proxy_script_fetcher));
 
   return proxy_service;
 }
 
-ProxyService* CreateProxyServiceUsingMojoInProcess(
-    ProxyConfigService* proxy_config_service,
+scoped_ptr<ProxyService> CreateProxyServiceUsingMojoInProcess(
+    scoped_ptr<ProxyConfigService> proxy_config_service,
     ProxyScriptFetcher* proxy_script_fetcher,
-    DhcpProxyScriptFetcher* dhcp_proxy_script_fetcher,
+    scoped_ptr<DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher,
     HostResolver* host_resolver,
     NetLog* net_log,
     NetworkDelegate* network_delegate) {
   return CreateProxyServiceUsingMojoFactory(
-      InProcessMojoProxyResolverFactory::GetInstance(), proxy_config_service,
-      proxy_script_fetcher, dhcp_proxy_script_fetcher, host_resolver, net_log,
+      InProcessMojoProxyResolverFactory::GetInstance(),
+      std::move(proxy_config_service), proxy_script_fetcher,
+      std::move(dhcp_proxy_script_fetcher), host_resolver, net_log,
       network_delegate);
 }
 

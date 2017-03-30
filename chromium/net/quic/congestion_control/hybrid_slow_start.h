@@ -16,7 +16,9 @@
 #ifndef NET_QUIC_CONGESTION_CONTROL_HYBRID_SLOW_START_H_
 #define NET_QUIC_CONGESTION_CONTROL_HYBRID_SLOW_START_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "net/base/net_export.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_time.h"
@@ -27,10 +29,9 @@ class NET_EXPORT_PRIVATE HybridSlowStart {
  public:
   HybridSlowStart();
 
-  void OnPacketAcked(QuicPacketSequenceNumber acked_sequence_number,
-                     bool in_slow_start);
+  void OnPacketAcked(QuicPacketNumber acked_packet_number, bool in_slow_start);
 
-  void OnPacketSent(QuicPacketSequenceNumber sequence_number);
+  void OnPacketSent(QuicPacketNumber packet_number);
 
   // ShouldExitSlowStart should be called on every new ack frame, since a new
   // RTT measurement can be made then.
@@ -46,18 +47,16 @@ class NET_EXPORT_PRIVATE HybridSlowStart {
 
   // TODO(ianswett): The following methods should be private, but that requires
   // a follow up CL to update the unit test.
-  // Returns true if this ack the last sequence number of our current slow start
+  // Returns true if this ack the last packet number of our current slow start
   // round.
   // Call Reset if this returns true.
-  bool IsEndOfRound(QuicPacketSequenceNumber ack) const;
+  bool IsEndOfRound(QuicPacketNumber ack) const;
 
   // Call for the start of each receive round (burst) in the slow start phase.
-  void StartReceiveRound(QuicPacketSequenceNumber last_sent);
+  void StartReceiveRound(QuicPacketNumber last_sent);
 
   // Whether slow start has started.
-  bool started() const {
-    return started_;
-  }
+  bool started() const { return started_; }
 
  private:
   // Whether a condition for exiting slow start has been found.
@@ -69,12 +68,12 @@ class NET_EXPORT_PRIVATE HybridSlowStart {
   // Whether the hybrid slow start has been started.
   bool started_;
   HystartState hystart_found_;
-  // Last sequence number sent which was CWND limited.
-  QuicPacketSequenceNumber last_sent_sequence_number_;
+  // Last packet number sent which was CWND limited.
+  QuicPacketNumber last_sent_packet_number_;
 
   // Variables for tracking acks received during a slow start round.
-  QuicPacketSequenceNumber end_sequence_number_;  // End of the receive round.
-  uint32 rtt_sample_count_;  // Number of rtt samples in the current round.
+  QuicPacketNumber end_packet_number_;  // End of the receive round.
+  uint32_t rtt_sample_count_;  // Number of rtt samples in the current round.
   QuicTime::Delta current_min_rtt_;  // The minimum rtt of current round.
 
   DISALLOW_COPY_AND_ASSIGN(HybridSlowStart);

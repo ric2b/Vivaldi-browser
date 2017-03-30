@@ -4,21 +4,23 @@
 
 #include "chrome/browser/ui/android/infobars/confirm_infobar.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/media/media_stream_infobar_delegate.h"
+#include "chrome/browser/media/media_stream_infobar_delegate_android.h"
 #include "chrome/browser/permissions/permission_infobar_delegate.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/web_contents.h"
-#include "jni/ConfirmInfoBarDelegate_jni.h"
+#include "jni/ConfirmInfoBar_jni.h"
 #include "ui/android/window_android.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/image/image.h"
@@ -27,22 +29,20 @@
 
 scoped_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
     scoped_ptr<ConfirmInfoBarDelegate> delegate) {
-  return make_scoped_ptr(new ConfirmInfoBar(delegate.Pass()));
+  return make_scoped_ptr(new ConfirmInfoBar(std::move(delegate)));
 }
 
 
 // ConfirmInfoBar -------------------------------------------------------------
 
 ConfirmInfoBar::ConfirmInfoBar(scoped_ptr<ConfirmInfoBarDelegate> delegate)
-    : InfoBarAndroid(delegate.Pass()), java_confirm_delegate_() {
-}
+    : InfoBarAndroid(std::move(delegate)) {}
 
 ConfirmInfoBar::~ConfirmInfoBar() {
 }
 
 base::android::ScopedJavaLocalRef<jobject> ConfirmInfoBar::CreateRenderInfoBar(
     JNIEnv* env) {
-  java_confirm_delegate_.Reset(Java_ConfirmInfoBarDelegate_create(env));
   base::android::ScopedJavaLocalRef<jstring> ok_button_text =
       base::android::ConvertUTF16ToJavaString(
           env, GetTextFor(ConfirmInfoBarDelegate::BUTTON_OK));
@@ -58,7 +58,8 @@ base::android::ScopedJavaLocalRef<jobject> ConfirmInfoBar::CreateRenderInfoBar(
           env, delegate->GetLinkText());
 
   ScopedJavaLocalRef<jobject> java_bitmap;
-  if (!delegate->GetIcon().IsEmpty()) {
+  if (delegate->GetIconId() == infobars::InfoBarDelegate::kNoIconID &&
+      !delegate->GetIcon().IsEmpty()) {
     java_bitmap = gfx::ConvertToJavaBitmap(delegate->GetIcon().ToSkBitmap());
   }
 
@@ -66,9 +67,9 @@ base::android::ScopedJavaLocalRef<jobject> ConfirmInfoBar::CreateRenderInfoBar(
   if (delegate->AsPermissionInfobarDelegate()) {
     content_settings.push_back(
         delegate->AsPermissionInfobarDelegate()->content_setting());
-  } else if (delegate->AsMediaStreamInfoBarDelegate()) {
-    MediaStreamInfoBarDelegate* media_delegate =
-        delegate->AsMediaStreamInfoBarDelegate();
+  } else if (delegate->AsMediaStreamInfoBarDelegateAndroid()) {
+    MediaStreamInfoBarDelegateAndroid* media_delegate =
+        delegate->AsMediaStreamInfoBarDelegateAndroid();
     if (media_delegate->IsRequestingVideoAccess()) {
       content_settings.push_back(
           ContentSettingsType::CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
@@ -88,15 +89,15 @@ base::android::ScopedJavaLocalRef<jobject> ConfirmInfoBar::CreateRenderInfoBar(
   base::android::ScopedJavaLocalRef<jobject> jwindow_android =
       cvc->GetWindowAndroid()->GetJavaObject();
 
-  return Java_ConfirmInfoBarDelegate_showConfirmInfoBar(
-      env, java_confirm_delegate_.obj(),
-      jwindow_android.obj(), GetEnumeratedIconId(), java_bitmap.obj(),
+  return Java_ConfirmInfoBar_create(
+      env, jwindow_android.obj(), GetEnumeratedIconId(), java_bitmap.obj(),
       message_text.obj(), link_text.obj(), ok_button_text.obj(),
       cancel_button_text.obj(),
       base::android::ToJavaIntArray(env, content_settings).obj());
 }
 
-void ConfirmInfoBar::OnLinkClicked(JNIEnv* env, jobject obj) {
+void ConfirmInfoBar::OnLinkClicked(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj) {
   if (!owner())
       return; // We're closing; don't call anything, it might access the owner.
 
@@ -104,8 +105,7 @@ void ConfirmInfoBar::OnLinkClicked(JNIEnv* env, jobject obj) {
     RemoveSelf();
 }
 
-void ConfirmInfoBar::ProcessButton(int action,
-                                   const std::string& action_value) {
+void ConfirmInfoBar::ProcessButton(int action) {
   if (!owner())
     return; // We're closing; don't call anything, it might access the owner.
 
@@ -131,6 +131,6 @@ base::string16 ConfirmInfoBar::GetTextFor(
 
 // Native JNI methods ---------------------------------------------------------
 
-bool RegisterConfirmInfoBarDelegate(JNIEnv* env) {
+bool RegisterConfirmInfoBar(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }

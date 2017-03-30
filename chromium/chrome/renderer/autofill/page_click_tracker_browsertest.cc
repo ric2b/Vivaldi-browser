@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "chrome/test/base/chrome_render_view_test.h"
 #include "components/autofill/content/renderer/page_click_listener.h"
 #include "components/autofill/content/renderer/page_click_tracker.h"
@@ -13,7 +12,6 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
-#include "third_party/WebKit/public/web/WebTextAreaElement.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -126,7 +124,7 @@ TEST_F(PageClickTrackerTest, PageClickTrackerInputRightClicked) {
 
 TEST_F(PageClickTrackerTest, PageClickTrackerInputFocusedAndClicked) {
   // Focus the text field without a click.
-  ExecuteJavaScript("document.getElementById('text_1').focus();");
+  ExecuteJavaScriptForTests("document.getElementById('text_1').focus();");
   EXPECT_FALSE(test_listener_.form_control_element_clicked_called_);
   test_listener_.ClearResults();
 
@@ -161,7 +159,7 @@ TEST_F(PageClickTrackerTest, PageClickTrackerTextAreaClicked) {
 
 TEST_F(PageClickTrackerTest, PageClickTrackerTextAreaFocusedAndClicked) {
   // Focus the textarea without a click.
-  ExecuteJavaScript("document.getElementById('textarea_1').focus();");
+  ExecuteJavaScriptForTests("document.getElementById('textarea_1').focus();");
   EXPECT_FALSE(test_listener_.form_control_element_clicked_called_);
   test_listener_.ClearResults();
 
@@ -176,7 +174,7 @@ TEST_F(PageClickTrackerTest, PageClickTrackerTextAreaFocusedAndClicked) {
 TEST_F(PageClickTrackerTest, PageClickTrackerScaledTextareaClicked) {
   EXPECT_NE(textarea_, textarea_.document().focusedElement());
   view_->GetWebView()->setPageScaleFactor(3);
-  view_->GetWebView()->setPinchViewportOffset(blink::WebFloatPoint(50, 50));
+  view_->GetWebView()->setVisualViewportOffset(blink::WebFloatPoint(50, 50));
 
   // Click textarea_1.
   SimulatePointClick(gfx::Point(30, 30));
@@ -188,7 +186,7 @@ TEST_F(PageClickTrackerTest, PageClickTrackerScaledTextareaClicked) {
 TEST_F(PageClickTrackerTest, PageClickTrackerScaledTextareaTapped) {
   EXPECT_NE(textarea_, textarea_.document().focusedElement());
   view_->GetWebView()->setPageScaleFactor(3);
-  view_->GetWebView()->setPinchViewportOffset(blink::WebFloatPoint(50, 50));
+  view_->GetWebView()->setVisualViewportOffset(blink::WebFloatPoint(50, 50));
 
   // Tap textarea_1.
   SimulateRectTap(gfx::Rect(30, 30, 30, 30));

@@ -2,25 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/data_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe.h"
 
 #include <string.h>
-
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/memory/aligned_memory.h"
-#include "mojo/edk/system/awakable_list.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/configuration.h"
-#include "mojo/edk/system/data_pipe_impl.h"
-#include "mojo/edk/system/incoming_endpoint.h"
-#include "mojo/edk/system/local_data_pipe_impl.h"
-#include "mojo/edk/system/memory.h"
-#include "mojo/edk/system/options_validation.h"
-#include "mojo/edk/system/remote_consumer_data_pipe_impl.h"
-#include "mojo/edk/system/remote_producer_data_pipe_impl.h"
+#include "third_party/mojo/src/mojo/edk/system/awakable_list.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/configuration.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe_impl.h"
+#include "third_party/mojo/src/mojo/edk/system/incoming_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/local_data_pipe_impl.h"
+#include "third_party/mojo/src/mojo/edk/system/memory.h"
+#include "third_party/mojo/src/mojo/edk/system/options_validation.h"
+#include "third_party/mojo/src/mojo/edk/system/remote_consumer_data_pipe_impl.h"
+#include "third_party/mojo/src/mojo/edk/system/remote_producer_data_pipe_impl.h"
 
 namespace mojo {
 namespace system {
@@ -115,10 +115,10 @@ DataPipe* DataPipe::CreateRemoteProducerFromExisting(
   // ongoing call to |IncomingEndpoint::OnReadMessage()| return false. This will
   // make |ChannelEndpoint::OnReadMessage()| retry, until its |ReplaceClient()|
   // is called.
-  DataPipe* data_pipe =
-      new DataPipe(false, true, validated_options,
-                   make_scoped_ptr(new RemoteProducerDataPipeImpl(
-                       channel_endpoint, buffer.Pass(), 0, buffer_num_bytes)));
+  DataPipe* data_pipe = new DataPipe(
+      false, true, validated_options,
+      make_scoped_ptr(new RemoteProducerDataPipeImpl(
+          channel_endpoint, std::move(buffer), 0, buffer_num_bytes)));
   if (channel_endpoint) {
     if (!channel_endpoint->ReplaceClient(data_pipe, 0))
       data_pipe->OnDetachFromChannel(0);
@@ -148,7 +148,7 @@ DataPipe* DataPipe::CreateRemoteConsumerFromExisting(
   DataPipe* data_pipe =
       new DataPipe(true, false, validated_options,
                    make_scoped_ptr(new RemoteConsumerDataPipeImpl(
-                       channel_endpoint, consumer_num_bytes)));
+                       channel_endpoint, consumer_num_bytes, nullptr, 0)));
   if (channel_endpoint) {
     if (!channel_endpoint->ReplaceClient(data_pipe, 0))
       data_pipe->OnDetachFromChannel(0);
@@ -187,15 +187,15 @@ bool DataPipe::ProducerDeserialize(Channel* channel,
   }
 
   if (!consumer_open) {
-    if (s->consumer_num_bytes != static_cast<size_t>(-1)) {
+    if (s->consumer_num_bytes != static_cast<uint32_t>(-1)) {
       LOG(ERROR)
           << "Invalid serialized data pipe producer (bad consumer_num_bytes)";
       return false;
     }
 
-    *data_pipe = new DataPipe(
-        true, false, revalidated_options,
-        make_scoped_ptr(new RemoteConsumerDataPipeImpl(nullptr, 0)));
+    *data_pipe = new DataPipe(true, false, revalidated_options,
+                              make_scoped_ptr(new RemoteConsumerDataPipeImpl(
+                                  nullptr, 0, nullptr, 0)));
     (*data_pipe)->SetConsumerClosed();
 
     return true;
@@ -306,8 +306,7 @@ MojoResult DataPipe::ProducerWriteData(UserPointer<const void> elements,
 
 MojoResult DataPipe::ProducerBeginWriteData(
     UserPointer<void*> buffer,
-    UserPointer<uint32_t> buffer_num_bytes,
-    bool all_or_none) {
+    UserPointer<uint32_t> buffer_num_bytes) {
   base::AutoLock locker(lock_);
   DCHECK(has_local_producer_no_lock());
 
@@ -316,15 +315,7 @@ MojoResult DataPipe::ProducerBeginWriteData(
   if (!consumer_open_no_lock())
     return MOJO_RESULT_FAILED_PRECONDITION;
 
-  uint32_t min_num_bytes_to_write = 0;
-  if (all_or_none) {
-    min_num_bytes_to_write = buffer_num_bytes.Get();
-    if (min_num_bytes_to_write % element_num_bytes() != 0)
-      return MOJO_RESULT_INVALID_ARGUMENT;
-  }
-
-  MojoResult rv = impl_->ProducerBeginWriteData(buffer, buffer_num_bytes,
-                                                min_num_bytes_to_write);
+  MojoResult rv = impl_->ProducerBeginWriteData(buffer, buffer_num_bytes);
   if (rv != MOJO_RESULT_OK)
     return rv;
   // Note: No need to awake producer awakables, even though we're going from
@@ -377,7 +368,7 @@ HandleSignalsState DataPipe::ProducerGetHandleSignalsState() {
 
 MojoResult DataPipe::ProducerAddAwakable(Awakable* awakable,
                                          MojoHandleSignals signals,
-                                         uint32_t context,
+                                         uintptr_t context,
                                          HandleSignalsState* signals_state) {
   base::AutoLock locker(lock_);
   DCHECK(has_local_producer_no_lock());
@@ -530,23 +521,14 @@ MojoResult DataPipe::ConsumerQueryData(UserPointer<uint32_t> num_bytes) {
 
 MojoResult DataPipe::ConsumerBeginReadData(
     UserPointer<const void*> buffer,
-    UserPointer<uint32_t> buffer_num_bytes,
-    bool all_or_none) {
+    UserPointer<uint32_t> buffer_num_bytes) {
   base::AutoLock locker(lock_);
   DCHECK(has_local_consumer_no_lock());
 
   if (consumer_in_two_phase_read_no_lock())
     return MOJO_RESULT_BUSY;
 
-  uint32_t min_num_bytes_to_read = 0;
-  if (all_or_none) {
-    min_num_bytes_to_read = buffer_num_bytes.Get();
-    if (min_num_bytes_to_read % element_num_bytes() != 0)
-      return MOJO_RESULT_INVALID_ARGUMENT;
-  }
-
-  MojoResult rv = impl_->ConsumerBeginReadData(buffer, buffer_num_bytes,
-                                               min_num_bytes_to_read);
+  MojoResult rv = impl_->ConsumerBeginReadData(buffer, buffer_num_bytes);
   if (rv != MOJO_RESULT_OK)
     return rv;
   DCHECK(consumer_in_two_phase_read_no_lock());
@@ -560,6 +542,8 @@ MojoResult DataPipe::ConsumerEndReadData(uint32_t num_bytes_read) {
   if (!consumer_in_two_phase_read_no_lock())
     return MOJO_RESULT_FAILED_PRECONDITION;
 
+  HandleSignalsState old_consumer_state =
+      impl_->ConsumerGetHandleSignalsState();
   HandleSignalsState old_producer_state =
       impl_->ProducerGetHandleSignalsState();
   MojoResult rv;
@@ -576,7 +560,7 @@ MojoResult DataPipe::ConsumerEndReadData(uint32_t num_bytes_read) {
   // during the two-phase read), so awake consumer awakables.
   HandleSignalsState new_consumer_state =
       impl_->ConsumerGetHandleSignalsState();
-  if (new_consumer_state.satisfies(MOJO_HANDLE_SIGNAL_READABLE))
+  if (!new_consumer_state.equals(old_consumer_state))
     AwakeConsumerAwakablesForStateChangeNoLock(new_consumer_state);
   HandleSignalsState new_producer_state =
       impl_->ProducerGetHandleSignalsState();
@@ -593,7 +577,7 @@ HandleSignalsState DataPipe::ConsumerGetHandleSignalsState() {
 
 MojoResult DataPipe::ConsumerAddAwakable(Awakable* awakable,
                                          MojoHandleSignals signals,
-                                         uint32_t context,
+                                         uintptr_t context,
                                          HandleSignalsState* signals_state) {
   base::AutoLock locker(lock_);
   DCHECK(has_local_consumer_no_lock());
@@ -675,7 +659,7 @@ DataPipe::DataPipe(bool has_local_producer,
                                                  : nullptr),
       producer_two_phase_max_num_bytes_written_(0),
       consumer_two_phase_max_num_bytes_read_(0),
-      impl_(impl.Pass()) {
+      impl_(std::move(impl)) {
   impl_->set_owner(this);
 
 #if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
@@ -699,10 +683,10 @@ scoped_ptr<DataPipeImpl> DataPipe::ReplaceImplNoLock(
   DCHECK(new_impl);
 
   impl_->set_owner(nullptr);
-  scoped_ptr<DataPipeImpl> rv(impl_.Pass());
-  impl_ = new_impl.Pass();
+  scoped_ptr<DataPipeImpl> rv(std::move(impl_));
+  impl_ = std::move(new_impl);
   impl_->set_owner(this);
-  return rv.Pass();
+  return rv;
 }
 
 void DataPipe::SetProducerClosedNoLock() {

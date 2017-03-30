@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/threading/worker_pool.h"
 #include "base/win/windows_version.h"
 #include "net/base/address_list.h"
@@ -109,8 +110,11 @@ class AddressSorterWin : public AddressSorter {
         list.reserve(output_buffer_->iAddressCount);
         for (int i = 0; i < output_buffer_->iAddressCount; ++i) {
           IPEndPoint ipe;
-          ipe.FromSockAddr(output_buffer_->Address[i].lpSockaddr,
-                           output_buffer_->Address[i].iSockaddrLength);
+          bool result =
+              ipe.FromSockAddr(output_buffer_->Address[i].lpSockaddr,
+                               output_buffer_->Address[i].iSockaddrLength);
+          DCHECK(result) << "Unable to roundtrip between IPEndPoint and "
+                         << "SOCKET_ADDRESS!";
           // Unmap V4MAPPED IPv6 addresses so that Happy Eyeballs works.
           if (IsIPv4Mapped(ipe.address())) {
             ipe = IPEndPoint(ConvertIPv4MappedToIPv4(ipe.address()),

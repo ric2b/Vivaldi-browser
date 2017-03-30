@@ -11,13 +11,13 @@ import android.test.suitebuilder.annotation.SmallTest;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.Tab;
-import org.chromium.chrome.browser.TabObserver;
+import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.content.browser.test.NativeLibraryTestBase;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -59,6 +59,11 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
         };
 
         TabModelOrderController orderController = new TabModelOrderController(mSelector);
+        TabContentManager tabContentManager =
+                new TabContentManager(getInstrumentation().getTargetContext(), null, false);
+        TabPersistentStore tabPersistentStore = new TabPersistentStore(mSelector, 0,
+                getInstrumentation().getTargetContext(), null, null);
+
         TabModelDelegate delegate = new TabModelDelegate() {
             @Override
             public void selectModel(boolean incognito) {
@@ -94,31 +99,11 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
                 return false;
             }
         };
-        mNormalTabModel = new TabModelBase(false, orderController, delegate) {
-            @Override
-            protected Tab createTabWithWebContents(boolean incognito, WebContents webContents,
-                    int parentId) {
-                return null;
-            }
+        mNormalTabModel = new TabModelImpl(false, null, null, null, orderController,
+                tabContentManager, tabPersistentStore, delegate, false);
 
-            @Override
-            protected Tab createNewTabForDevTools(String url) {
-                return null;
-            }
-        };
-
-        mIncognitoTabModel = new TabModelBase(true, orderController, delegate) {
-            @Override
-            protected Tab createTabWithWebContents(boolean incognito, WebContents webContents,
-                    int parentId) {
-                return null;
-            }
-
-            @Override
-            protected Tab createNewTabForDevTools(String url) {
-                return null;
-            }
-        };
+        mIncognitoTabModel = new TabModelImpl(true, null, null, null, orderController,
+                tabContentManager, tabPersistentStore, delegate, false);
 
         mSelector.initialize(false, mNormalTabModel, mIncognitoTabModel);
     }
@@ -127,7 +112,7 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
     @SmallTest
     public void testAddingTab() {
         TestTabModelSelectorTabObserver observer = new TestTabModelSelectorTabObserver();
-        TestTab tab = new TestTab(false);
+        Tab tab = createTestTab(false);
         assertTabDoesNotHaveObserver(tab, observer);
         mNormalTabModel.addTab(tab, 0, TabModel.TabLaunchType.FROM_LINK);
         assertTabHasObserver(tab, observer);
@@ -137,7 +122,7 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
     @SmallTest
     public void testRemovingTab() {
         TestTabModelSelectorTabObserver observer = new TestTabModelSelectorTabObserver();
-        TestTab tab = new TestTab(false);
+        Tab tab = createTestTab(false);
         mNormalTabModel.addTab(tab, 0, TabModel.TabLaunchType.FROM_LINK);
         assertTabHasObserver(tab, observer);
         mNormalTabModel.closeTab(tab);
@@ -147,14 +132,14 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
     @UiThreadTest
     @SmallTest
     public void testPreExistingTabs() {
-        TestTab normalTab1 = new TestTab(false);
+        Tab normalTab1 = createTestTab(false);
         mNormalTabModel.addTab(normalTab1, 0, TabModel.TabLaunchType.FROM_LINK);
-        TestTab normalTab2 = new TestTab(false);
+        Tab normalTab2 = createTestTab(false);
         mNormalTabModel.addTab(normalTab2, 1, TabModel.TabLaunchType.FROM_LINK);
 
-        TestTab incognitoTab1 = new TestTab(true);
+        Tab incognitoTab1 = createTestTab(true);
         mIncognitoTabModel.addTab(incognitoTab1, 0, TabModel.TabLaunchType.FROM_LINK);
-        TestTab incognitoTab2 = new TestTab(true);
+        Tab incognitoTab2 = createTestTab(true);
         mIncognitoTabModel.addTab(incognitoTab2, 1, TabModel.TabLaunchType.FROM_LINK);
 
         TestTabModelSelectorTabObserver observer = new TestTabModelSelectorTabObserver();
@@ -167,9 +152,9 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
     @UiThreadTest
     @SmallTest
     public void testDestroyRemovesObserver() {
-        TestTab normalTab1 = new TestTab(false);
+        Tab normalTab1 = createTestTab(false);
         mNormalTabModel.addTab(normalTab1, 0, TabModel.TabLaunchType.FROM_LINK);
-        TestTab incognitoTab1 = new TestTab(true);
+        Tab incognitoTab1 = createTestTab(true);
         mIncognitoTabModel.addTab(incognitoTab1, 0, TabModel.TabLaunchType.FROM_LINK);
 
         TestTabModelSelectorTabObserver observer = new TestTabModelSelectorTabObserver();
@@ -194,26 +179,19 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
         TestTabModelSelectorTabObserver observer = new TestTabModelSelectorTabObserver();
         mSelector.initialize(false, mNormalTabModel, mIncognitoTabModel);
 
-        TestTab normalTab1 = new TestTab(false);
+        Tab normalTab1 = createTestTab(false);
         mNormalTabModel.addTab(normalTab1, 0, TabModel.TabLaunchType.FROM_LINK);
         assertTabHasObserver(normalTab1, observer);
 
-        TestTab incognitoTab1 = new TestTab(true);
+        Tab incognitoTab1 = createTestTab(true);
         mIncognitoTabModel.addTab(incognitoTab1, 0, TabModel.TabLaunchType.FROM_LINK);
         assertTabHasObserver(incognitoTab1, observer);
     }
 
-    private class TestTab extends Tab {
-        public TestTab(boolean incognito) {
-            super(incognito, null, mWindowAndroid);
-            initializeNative();
-        }
-
-        // Exists to expose the method to the test.
-        @Override
-        protected ObserverList.RewindableIterator<TabObserver> getTabObservers() {
-            return super.getTabObservers();
-        }
+    private Tab createTestTab(boolean incognito) {
+        Tab testTab = new Tab(Tab.INVALID_TAB_ID, incognito, mWindowAndroid);
+        testTab.initializeNative();
+        return testTab;
     }
 
     private class TestTabModelSelectorTabObserver extends TabModelSelectorTabObserver {
@@ -222,7 +200,7 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
         }
     }
 
-    private void assertTabHasObserver(TestTab tab, TabObserver observer) {
+    private void assertTabHasObserver(Tab tab, TabObserver observer) {
         ObserverList.RewindableIterator<TabObserver> tabObservers = tab.getTabObservers();
         tabObservers.rewind();
         boolean containsObserver = false;
@@ -235,7 +213,7 @@ public class TabModelSelectorTabObserverTest extends NativeLibraryTestBase {
         assertTrue(containsObserver);
     }
 
-    private void assertTabDoesNotHaveObserver(TestTab tab, TabObserver observer) {
+    private void assertTabDoesNotHaveObserver(Tab tab, TabObserver observer) {
         ObserverList.RewindableIterator<TabObserver> tabObservers = tab.getTabObservers();
         tabObservers.rewind();
         while (tabObservers.hasNext()) {

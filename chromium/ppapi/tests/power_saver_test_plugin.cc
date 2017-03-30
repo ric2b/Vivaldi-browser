@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "ppapi/cpp/graphics_2d.h"
@@ -57,10 +59,13 @@ class PowerSaverTestInstance : public pp::Instance {
     if (image.is_null())
       return;
 
-    // Draw black and white stripes to present an "interesting" keyframe.
+    // Draw blue and green checkerboard pattern to show "interesting" keyframe.
+    const int kSquareSizePixels = 8;
     for (int y = 0; y < view_.GetRect().size().height(); ++y) {
       for (int x = 0; x < view_.GetRect().size().width(); ++x) {
-        uint32_t color = x % 2 ? 0xFF0000FF : 0xFFFFFFFF;
+        int x_square = x / kSquareSizePixels;
+        int y_square = y / kSquareSizePixels;
+        uint32_t color = ((x_square + y_square) % 2) ? 0xFF0000FF : 0xFF00FF00;
         *image.GetAddr32(pp::Point(x, y)) = color;
       }
     }

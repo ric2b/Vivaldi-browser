@@ -4,6 +4,8 @@
 
 #include "content/browser/download/base_file.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -12,6 +14,7 @@
 #include "base/pickle.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "content/browser/download/download_interrupt_reasons_impl.h"
 #include "content/browser/download/download_net_log_parameters.h"
 #include "content/browser/download/download_stats.h"
@@ -28,7 +31,7 @@ const unsigned char BaseFile::kEmptySha256Hash[] = { 0 };
 BaseFile::BaseFile(const base::FilePath& full_path,
                    const GURL& source_url,
                    const GURL& referrer_url,
-                   int64 received_bytes,
+                   int64_t received_bytes,
                    bool calculate_hash,
                    const std::string& hash_state_bytes,
                    base::File file,
@@ -36,7 +39,7 @@ BaseFile::BaseFile(const base::FilePath& full_path,
     : full_path_(full_path),
       source_url_(source_url),
       referrer_url_(referrer_url),
-      file_(file.Pass()),
+      file_(std::move(file)),
       bytes_so_far_(received_bytes),
       start_tick_(base::TimeTicks::Now()),
       calculate_hash_(calculate_hash),
@@ -200,7 +203,11 @@ void BaseFile::Finish() {
 
   if (calculate_hash_)
     secure_hash_->Finish(sha256_hash_, crypto::kSHA256Length);
+  Close();
+}
 
+void BaseFile::FinishWithError() {
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
   Close();
 }
 
@@ -272,7 +279,7 @@ DownloadInterruptReason BaseFile::Open() {
 
   // We may be re-opening the file after rename. Always make sure we're
   // writing at the end of the file.
-  int64 file_size = file_.Seek(base::File::FROM_END, 0);
+  int64_t file_size = file_.Seek(base::File::FROM_END, 0);
   if (file_size < 0) {
     logging::SystemErrorCode error = logging::GetLastSystemErrorCode();
     ClearFile();

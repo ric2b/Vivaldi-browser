@@ -72,7 +72,7 @@
                 ['chromeos==0 and use_ozone==0', {
                   'dependencies': [
                     # use GTK on Linux, even for Aura builds.
-                    '../build/linux/system.gyp:gtk',
+                    '../build/linux/system.gyp:gtk2',
                   ],
                 }]
               ],
@@ -95,6 +95,7 @@
               'sources!' : [
                 'host/clipboard_x11.cc',
                 'host/continue_window_linux.cc',
+                'host/curtain_mode_linux.cc',
                 'host/disconnect_window_linux.cc',
                 'host/linux/x_server_clipboard.cc',
                 'host/linux/x_server_clipboard.h',
@@ -181,11 +182,15 @@
             ['enable_webrtc==1', {
               'dependencies': [
                 '../third_party/webrtc/modules/modules.gyp:desktop_capture',
-                '../third_party/libjingle/libjingle.gyp:libpeerconnection',
               ],
               'sources': [
                 '<@(remoting_cast_sources)',
               ],
+            }],
+            ['remoting_use_gcd==1', {
+              'defines': [
+                'USE_GCD',
+              ]
             }],
           ],
         },  # end of target 'remoting_host'
@@ -259,6 +264,7 @@
 
         # Generates native messaging manifest files.
         {
+          # GN: //remoting/host:remoting_native_messaging_manifests
           'target_name': 'remoting_native_messaging_manifests',
           'type': 'none',
           'conditions': [
@@ -334,6 +340,7 @@
           ],
         },  # end of target 'remoting_start_host'
         {
+          # GN: //remoting/host:remoting_infoplist_strings
           'target_name': 'remoting_infoplist_strings',
           'type': 'none',
           'dependencies': [
@@ -414,14 +421,8 @@
             'VERSION=<(version_full)',
           ],
           'sources': [
-            'host/curtain_mode.h',
-            'host/curtain_mode_linux.cc',
-            'host/curtain_mode_mac.cc',
-            'host/curtain_mode_win.cc',
             'host/pam_authorization_factory_posix.cc',
             'host/pam_authorization_factory_posix.h',
-            'host/posix/signal_handler.cc',
-            'host/posix/signal_handler.h',
             'host/remoting_me2me_host.cc',
           ],
           'conditions': [
@@ -446,6 +447,11 @@
               'defines': [
                 'USE_REMOTING_MACOSX_INTERNAL'
               ],
+            }],
+            ['remoting_use_gcd==1', {
+              'defines': [
+                'USE_GCD',
+              ]
             }],
           ],  # end of 'conditions'
         },  # end of target 'remoting_me2me_host_static'
@@ -547,6 +553,7 @@
           ],  # end of 'conditions'
         },  # end of target 'remoting_me2me_host'
         {
+          # GN: //remoting/host:native_messaging_host
           'target_name': 'remoting_me2me_native_messaging_host',
           'type': 'executable',
           'product_name': 'native_messaging_host',
@@ -639,6 +646,7 @@
         ['chromeos==0', {
           'targets': [
             {
+              # GN: //remoting/host/it2me:remote_assistance_host
               'target_name': 'remoting_it2me_native_messaging_host',
               'type': 'executable',
               'product_name': 'remote_assistance_host',
@@ -664,7 +672,7 @@
                 ['OS=="linux" and chromeos==0 and use_ozone==0', {
                   'dependencies': [
                     # Always use GTK on Linux, even for Aura builds.
-                    '../build/linux/system.gyp:gtk',
+                    '../build/linux/system.gyp:gtk2',
                   ],
                 }],
                 ['OS=="linux" and use_allocator!="none"', {

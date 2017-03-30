@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_CHROME_WEB_UI_CONTROLLER_FACTORY_H_
 #define CHROME_BROWSER_UI_WEBUI_CHROME_WEB_UI_CONTROLLER_FACTORY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/favicon_base/favicon_callback.h"
 #include "content/public/browser/web_ui.h"
@@ -45,7 +45,7 @@ class ChromeWebUIControllerFactory : public content::WebUIControllerFactory {
   ~ChromeWebUIControllerFactory() override;
 
  private:
-  friend struct DefaultSingletonTraits<ChromeWebUIControllerFactory>;
+  friend struct base::DefaultSingletonTraits<ChromeWebUIControllerFactory>;
 
   // Gets the data for the favicon for a WebUI page. Returns NULL if the WebUI
   // does not have a favicon.

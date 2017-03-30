@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_aura.h"
 
+#include <utility>
+
 #include "apps/ui/views/app_window_frame_view.h"
 #include "ash/ash_constants.h"
 #include "ash/frame/custom_frame_view_ash.h"
@@ -15,6 +17,8 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_delegate.h"
 #include "ash/wm/window_state_observer.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/host_desktop.h"
@@ -317,17 +321,18 @@ ChromeNativeAppWindowViewsAura::CreateNonClientFrameView(
     // Set the delegate now because CustomFrameViewAsh sets the
     // WindowStateDelegate if one is not already set.
     ash::wm::GetWindowState(GetNativeWindow())
-        ->SetDelegate(
-            scoped_ptr<ash::wm::WindowStateDelegate>(
-                new NativeAppWindowStateDelegate(app_window(), this)).Pass());
+        ->SetDelegate(scoped_ptr<ash::wm::WindowStateDelegate>(
+            new NativeAppWindowStateDelegate(app_window(), this)));
 
     if (IsFrameless())
       return CreateNonStandardAppFrame();
 
     if (app_window()->window_type_is_panel()) {
-      views::NonClientFrameView* frame_view =
+      ash::PanelFrameView* frame_view =
           new ash::PanelFrameView(widget, ash::PanelFrameView::FRAME_ASH);
       frame_view->set_context_menu_controller(this);
+      if (HasFrameColor())
+        frame_view->SetFrameColors(ActiveFrameColor(), InactiveFrameColor());
       return frame_view;
     }
 
@@ -374,7 +379,7 @@ void ChromeNativeAppWindowViewsAura::SetFullscreen(int fullscreen_types) {
 void ChromeNativeAppWindowViewsAura::UpdateShape(scoped_ptr<SkRegion> region) {
   bool had_shape = !!shape();
 
-  ChromeNativeAppWindowViews::UpdateShape(region.Pass());
+  ChromeNativeAppWindowViews::UpdateShape(std::move(region));
 
   aura::Window* native_window = widget()->GetNativeWindow();
   if (shape() && !had_shape) {

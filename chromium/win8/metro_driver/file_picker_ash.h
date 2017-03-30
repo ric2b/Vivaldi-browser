@@ -6,9 +6,9 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 
 class ChromeAppViewAsh;
@@ -83,9 +83,7 @@ class OpenFilePickerSession : public FilePickerSessionBase {
     return filenames_;
   }
 
-  const bool allow_multi_select() const {
-    return allow_multi_select_;
-  }
+  bool allow_multi_select() const { return allow_multi_select_; }
 
  private:
   HRESULT StartFilePicker() override;

@@ -4,6 +4,8 @@
 
 #include "cc/debug/debug_rect_history.h"
 
+#include <stddef.h>
+
 #include "cc/base/math_util.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/layer_iterator.h"
@@ -65,20 +67,20 @@ void DebugRectHistory::SaveDebugRectsForCurrentFrame(
 void DebugRectHistory::SavePaintRects(LayerImpl* layer) {
   // We would like to visualize where any layer's paint rect (update rect) has
   // changed, regardless of whether this layer is skipped for actual drawing or
-  // not. Therefore we traverse recursively over all layers, not just the render
-  // surface list.
+  // not. Therefore we traverse over all layers, not just the render surface
+  // list.
 
-  Region invalidation_region = layer->GetInvalidationRegion();
+  Region invalidation_region = layer->GetInvalidationRegionForDebugging();
   if (!invalidation_region.IsEmpty() && layer->DrawsContent()) {
     for (Region::Iterator it(invalidation_region); it.has_rect(); it.next()) {
       debug_rects_.push_back(DebugRect(
           PAINT_RECT_TYPE, MathUtil::MapEnclosingClippedRect(
-                               layer->screen_space_transform(), it.rect())));
+                               layer->ScreenSpaceTransform(), it.rect())));
     }
   }
 
   for (unsigned i = 0; i < layer->children().size(); ++i)
-    SavePaintRects(layer->children()[i]);
+    SavePaintRects(layer->children()[i].get());
 }
 
 void DebugRectHistory::SavePropertyChangedRects(
@@ -108,7 +110,7 @@ void DebugRectHistory::SavePropertyChangedRects(
 
       debug_rects_.push_back(DebugRect(
           PROPERTY_CHANGED_RECT_TYPE,
-          MathUtil::MapEnclosingClippedRect(layer->screen_space_transform(),
+          MathUtil::MapEnclosingClippedRect(layer->ScreenSpaceTransform(),
                                             gfx::Rect(layer->bounds()))));
     }
   }
@@ -167,7 +169,7 @@ void DebugRectHistory::SaveTouchEventHandlerRectsCallback(LayerImpl* layer) {
     debug_rects_.push_back(
         DebugRect(TOUCH_EVENT_HANDLER_RECT_TYPE,
                   MathUtil::MapEnclosingClippedRect(
-                      layer->screen_space_transform(), iter.rect())));
+                      layer->ScreenSpaceTransform(), iter.rect())));
   }
 }
 
@@ -181,10 +183,10 @@ void DebugRectHistory::SaveWheelEventHandlerRectsCallback(LayerImpl* layer) {
   if (!layer->have_wheel_event_handlers())
     return;
 
-  debug_rects_.push_back(DebugRect(
-      WHEEL_EVENT_HANDLER_RECT_TYPE,
-      MathUtil::MapEnclosingClippedRect(layer->screen_space_transform(),
-                                        gfx::Rect(layer->bounds()))));
+  debug_rects_.push_back(
+      DebugRect(WHEEL_EVENT_HANDLER_RECT_TYPE,
+                MathUtil::MapEnclosingClippedRect(layer->ScreenSpaceTransform(),
+                                                  gfx::Rect(layer->bounds()))));
 }
 
 void DebugRectHistory::SaveScrollEventHandlerRects(LayerImpl* layer) {
@@ -197,10 +199,10 @@ void DebugRectHistory::SaveScrollEventHandlerRectsCallback(LayerImpl* layer) {
   if (!layer->have_scroll_event_handlers())
     return;
 
-  debug_rects_.push_back(DebugRect(
-      SCROLL_EVENT_HANDLER_RECT_TYPE,
-      MathUtil::MapEnclosingClippedRect(layer->screen_space_transform(),
-                                        gfx::Rect(layer->bounds()))));
+  debug_rects_.push_back(
+      DebugRect(SCROLL_EVENT_HANDLER_RECT_TYPE,
+                MathUtil::MapEnclosingClippedRect(layer->ScreenSpaceTransform(),
+                                                  gfx::Rect(layer->bounds()))));
 }
 
 void DebugRectHistory::SaveNonFastScrollableRects(LayerImpl* layer) {
@@ -216,7 +218,7 @@ void DebugRectHistory::SaveNonFastScrollableRectsCallback(LayerImpl* layer) {
     debug_rects_.push_back(
         DebugRect(NON_FAST_SCROLLABLE_RECT_TYPE,
                   MathUtil::MapEnclosingClippedRect(
-                      layer->screen_space_transform(), iter.rect())));
+                      layer->ScreenSpaceTransform(), iter.rect())));
   }
 }
 

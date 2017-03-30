@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
@@ -28,9 +30,9 @@ namespace attestation {
 
 namespace {
 
-const int64 kCertValid = 90;
-const int64 kCertExpiringSoon = 20;
-const int64 kCertExpired = -20;
+const int64_t kCertValid = 90;
+const int64_t kCertExpiringSoon = 20;
+const int64_t kCertExpired = -20;
 
 void DBusCallbackFalse(const BoolDBusMethodCallback& callback) {
   base::MessageLoop::current()->PostTask(
@@ -177,32 +179,32 @@ TEST_F(AttestationPolicyObserverTest, NewCertificate) {
 
 TEST_F(AttestationPolicyObserverTest, KeyExistsNotUploaded) {
   std::string certificate;
-  ASSERT_TRUE(GetFakeCertificate(base::TimeDelta::FromDays(kCertValid),
-                                 &certificate));
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(kCertValid),
+                                    &certificate));
   SetupMocks(MOCK_KEY_EXISTS, certificate);
   Run();
 }
 
 TEST_F(AttestationPolicyObserverTest, KeyExistsAlreadyUploaded) {
   std::string certificate;
-  ASSERT_TRUE(GetFakeCertificate(base::TimeDelta::FromDays(kCertValid),
-                                 &certificate));
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(kCertValid),
+                                    &certificate));
   SetupMocks(MOCK_KEY_EXISTS | MOCK_KEY_UPLOADED, certificate);
   Run();
 }
 
 TEST_F(AttestationPolicyObserverTest, KeyExistsCertExpiringSoon) {
   std::string certificate;
-  ASSERT_TRUE(GetFakeCertificate(base::TimeDelta::FromDays(kCertExpiringSoon),
-                                 &certificate));
+  ASSERT_TRUE(GetFakeCertificatePEM(
+      base::TimeDelta::FromDays(kCertExpiringSoon), &certificate));
   SetupMocks(MOCK_KEY_EXISTS | MOCK_KEY_UPLOADED | MOCK_NEW_KEY, certificate);
   Run();
 }
 
 TEST_F(AttestationPolicyObserverTest, KeyExistsCertExpired) {
   std::string certificate;
-  ASSERT_TRUE(GetFakeCertificate(base::TimeDelta::FromDays(kCertExpired),
-                                 &certificate));
+  ASSERT_TRUE(GetFakeCertificatePEM(base::TimeDelta::FromDays(kCertExpired),
+                                    &certificate));
   SetupMocks(MOCK_KEY_EXISTS | MOCK_KEY_UPLOADED | MOCK_NEW_KEY, certificate);
   Run();
 }

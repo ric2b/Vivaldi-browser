@@ -54,4 +54,13 @@ PaintContext::PaintContext(const PaintContext& other,
 PaintContext::~PaintContext() {
 }
 
+gfx::Rect PaintContext::ToLayerSpaceBounds(
+    const gfx::Size& size_in_context) const {
+  return gfx::Rect(size_in_context) + offset_;
+}
+
+gfx::Rect PaintContext::ToLayerSpaceRect(const gfx::Rect& rect) const {
+  return rect + offset_;
+}
+
 }  // namespace ui

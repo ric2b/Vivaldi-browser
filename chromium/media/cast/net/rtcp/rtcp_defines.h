@@ -2,14 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_CAST_RTCP_RTCP_DEFINES_H_
-#define MEDIA_CAST_RTCP_RTCP_DEFINES_H_
+#ifndef MEDIA_CAST_NET_RTCP_RTCP_DEFINES_H_
+#define MEDIA_CAST_NET_RTCP_RTCP_DEFINES_H_
 
-#include <map>
-#include <set>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "media/cast/cast_config.h"
-#include "media/cast/cast_defines.h"
+#include <list>
+#include <utility>
+#include <vector>
+
+#include "base/callback_forward.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "media/cast/logging/logging_defines.h"
 #include "media/cast/net/cast_transport_defines.h"
 
@@ -20,15 +25,32 @@ static const size_t kRtcpCastLogHeaderSize = 12;
 static const size_t kRtcpReceiverFrameLogSize = 8;
 static const size_t kRtcpReceiverEventLogSize = 4;
 
+// The maximum number of Cast receiver events to keep in history for the
+// purpose of sending the events through RTCP.
+// The number chosen should be more than the number of events that can be
+// stored in a RTCP packet.
+const size_t kReceiverRtcpEventHistorySize = 512;
+
+enum RtcpPacketFields {
+  kPacketTypeLow = 194,  // SMPTE time-code mapping.
+  kPacketTypeSenderReport = 200,
+  kPacketTypeReceiverReport = 201,
+  kPacketTypeApplicationDefined = 204,
+  kPacketTypeGenericRtpFeedback = 205,
+  kPacketTypePayloadSpecific = 206,
+  kPacketTypeXr = 207,
+  kPacketTypeHigh = 210,  // Port Mapping.
+};
+
 // Handle the per frame ACK and NACK messages.
 struct RtcpCastMessage {
-  explicit RtcpCastMessage(uint32 ssrc);
+  explicit RtcpCastMessage(uint32_t ssrc);
   RtcpCastMessage();
   ~RtcpCastMessage();
 
-  uint32 media_ssrc;
-  uint32 ack_frame_id;
-  uint16 target_delay_ms;
+  uint32_t media_ssrc;
+  uint32_t ack_frame_id;
+  uint16_t target_delay_ms;
   MissingFramesAndPacketsMap missing_frames_and_packets;
 };
 
@@ -40,42 +62,28 @@ struct RtcpReceiverEventLogMessage {
   CastLoggingEvent type;
   base::TimeTicks event_timestamp;
   base::TimeDelta delay_delta;
-  uint16 packet_id;
+  uint16_t packet_id;
 };
 
 typedef std::list<RtcpReceiverEventLogMessage> RtcpReceiverEventLogMessages;
 
 struct RtcpReceiverFrameLogMessage {
-  explicit RtcpReceiverFrameLogMessage(uint32 rtp_timestamp);
+  explicit RtcpReceiverFrameLogMessage(RtpTimeTicks rtp_timestamp);
   ~RtcpReceiverFrameLogMessage();
 
-  uint32 rtp_timestamp_;
+  const RtpTimeTicks rtp_timestamp_;
   RtcpReceiverEventLogMessages event_log_messages_;
-
-  // TODO(mikhal): Investigate what's the best way to allow adding
-  // DISALLOW_COPY_AND_ASSIGN, as currently it contradicts the implementation
-  // and possible changes have a big impact on design.
 };
 
 typedef std::list<RtcpReceiverFrameLogMessage> RtcpReceiverLogMessage;
-
-struct RtcpNackMessage {
-  RtcpNackMessage();
-  ~RtcpNackMessage();
-
-  uint32 remote_ssrc;
-  std::list<uint16> nack_list;
-
-  DISALLOW_COPY_AND_ASSIGN(RtcpNackMessage);
-};
 
 struct RtcpReceiverReferenceTimeReport {
   RtcpReceiverReferenceTimeReport();
   ~RtcpReceiverReferenceTimeReport();
 
-  uint32 remote_ssrc;
-  uint32 ntp_seconds;
-  uint32 ntp_fraction;
+  uint32_t remote_ssrc;
+  uint32_t ntp_seconds;
+  uint32_t ntp_fraction;
 };
 
 inline bool operator==(RtcpReceiverReferenceTimeReport lhs,
@@ -101,7 +109,7 @@ struct RtcpEvent {
   base::TimeDelta delay_delta;
 
   // Only set for packet events.
-  uint16 packet_id;
+  uint16_t packet_id;
 };
 
 typedef base::Callback<void(const RtcpCastMessage&)> RtcpCastMessageCallback;
@@ -112,16 +120,16 @@ base::Callback<void(const RtcpReceiverLogMessage&)> RtcpLogMessageCallback;
 // TODO(hubbe): Document members of this struct.
 struct RtpReceiverStatistics {
   RtpReceiverStatistics();
-  uint8 fraction_lost;
-  uint32 cumulative_lost;  // 24 bits valid.
-  uint32 extended_high_sequence_number;
-  uint32 jitter;
+  uint8_t fraction_lost;
+  uint32_t cumulative_lost;  // 24 bits valid.
+  uint32_t extended_high_sequence_number;
+  uint32_t jitter;
 };
 
-// These are intended to only be created using Rtcp::ConvertToNTPAndSave.
+// Created on a RTP receiver to be passed over IPC.
 struct RtcpTimeData {
-  uint32 ntp_seconds;
-  uint32 ntp_fraction;
+  uint32_t ntp_seconds;
+  uint32_t ntp_fraction;
   base::TimeTicks timestamp;
 };
 
@@ -130,12 +138,12 @@ struct RtcpTimeData {
 struct SendRtcpFromRtpReceiver_Params {
   SendRtcpFromRtpReceiver_Params();
   ~SendRtcpFromRtpReceiver_Params();
-  uint32 ssrc;
-  uint32 sender_ssrc;
+  uint32_t ssrc;
+  uint32_t sender_ssrc;
   RtcpTimeData time_data;
   scoped_ptr<RtcpCastMessage> cast_message;
   base::TimeDelta target_delay;
-  scoped_ptr<std::vector<std::pair<RtpTimestamp, RtcpEvent> > > rtcp_events;
+  scoped_ptr<std::vector<std::pair<RtpTimeTicks, RtcpEvent>>> rtcp_events;
   scoped_ptr<RtpReceiverStatistics> rtp_receiver_statistics;
 };
 
@@ -143,4 +151,4 @@ struct SendRtcpFromRtpReceiver_Params {
 }  // namespace cast
 }  // namespace media
 
-#endif  // MEDIA_CAST_RTCP_RTCP_DEFINES_H_
+#endif  // MEDIA_CAST_NET_RTCP_RTCP_DEFINES_H_

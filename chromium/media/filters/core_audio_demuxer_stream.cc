@@ -168,13 +168,12 @@ void CoreAudioDemuxerStream::InitializeAudioDecoderConfig() {
   if (input_format_.mChannelsPerFrame == 1)
     channel_layout = CHANNEL_LAYOUT_MONO;
 
+  std::vector<uint8> extra_data;
   audio_config_.Initialize(kCodecPCM,
                            kSampleFormatS16,
                            channel_layout,
                            input_format_.mSampleRate,
-                           NULL,
-                           0,
-                           false,
+                           extra_data,
                            false,
                            base::TimeDelta(),
                            0);
@@ -192,7 +191,7 @@ void CoreAudioDemuxerStream::Read(const ReadCB& read_cb) {
   demuxer_->ReadDataSourceIfNeeded();
 }
 
-void CoreAudioDemuxerStream::ReadCompleted(uint8* read_data, int read_size) {
+void CoreAudioDemuxerStream::ReadCompleted(uint8_t* read_data, int read_size) {
   if (read_cb_.is_null())
     return;
 
@@ -227,7 +226,7 @@ void CoreAudioDemuxerStream::ReadCompleted(uint8* read_data, int read_size) {
 
   base::ResetAndReturn(&read_cb_)
       .Run(kOk, DecoderBuffer::CopyFrom(
-                    reinterpret_cast<uint8*>(output_buffer_->mAudioData),
+                    reinterpret_cast<uint8_t*>(output_buffer_->mAudioData),
                     frames_decoded_));
 }
 

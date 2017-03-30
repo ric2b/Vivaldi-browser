@@ -28,7 +28,7 @@ public class JSUtils {
             final OnEvaluateJavaScriptResultHelper onEvaluateJavaScriptResultHelper,
             final String linkId) throws Exception {
 
-        Assert.assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {
@@ -42,12 +42,12 @@ public class JSUtils {
                     return false;
                 }
             }
-        }, WAIT_TIMEOUT_MS, CHECK_INTERVAL));
+        }, WAIT_TIMEOUT_MS, CHECK_INTERVAL);
 
         testCase.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                awContents.getWebContents().evaluateJavaScript(
+                awContents.getWebContents().evaluateJavaScriptForTests(
                         "var evObj = document.createEvent('Events'); "
                                 + "evObj.initEvent('click', true, false); "
                                 + "document.getElementById('" + linkId + "').dispatchEvent(evObj);"
@@ -65,7 +65,7 @@ public class JSUtils {
         testCase.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                onEvaluateJavaScriptResultHelper.evaluateJavaScript(
+                onEvaluateJavaScriptResultHelper.evaluateJavaScriptForTests(
                         awContents.getWebContents(), code);
             }
         });

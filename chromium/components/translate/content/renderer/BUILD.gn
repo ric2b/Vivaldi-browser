@@ -6,8 +6,6 @@ import("//build/config/features.gni")
 
 static_library("renderer") {
   sources = [
-    "data_file_renderer_cld_data_provider.cc",
-    "data_file_renderer_cld_data_provider.h",
     "renderer_cld_data_provider.cc",
     "renderer_cld_data_provider.h",
     "renderer_cld_data_provider_factory.cc",
@@ -31,7 +29,11 @@ static_library("renderer") {
     "//v8",
   ]
 
-  if (cld_version == 0 || cld_version == 2) {
+  if (cld_version == 2) {
+    sources += [
+      "data_file_renderer_cld_data_provider.cc",
+      "data_file_renderer_cld_data_provider.h",
+    ]
     deps += [ "//third_party/cld_2" ]
   }
 }

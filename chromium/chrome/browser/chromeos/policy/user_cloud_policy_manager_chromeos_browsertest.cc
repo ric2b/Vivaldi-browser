@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -17,21 +18,16 @@
 
 namespace policy {
 
-// Boolean parameter is used to run this test for webview (true) and for
-// iframe (false) GAIA sign in.
-class UserCloudPolicyManagerTest : public LoginPolicyTestBase,
-                                   public testing::WithParamInterface<bool> {
+class UserCloudPolicyManagerTest : public LoginPolicyTestBase {
  protected:
-  UserCloudPolicyManagerTest() : LoginPolicyTestBase() {
-    set_use_webview(GetParam());
-  }
+  UserCloudPolicyManagerTest() {}
 
   void GetMandatoryPoliciesValue(base::DictionaryValue* policy) const override {
     scoped_ptr<base::ListValue> list(new base::ListValue);
     list->AppendString("chrome://policy");
     list->AppendString("chrome://about");
 
-    policy->Set(key::kRestoreOnStartupURLs, list.Pass());
+    policy->Set(key::kRestoreOnStartupURLs, std::move(list));
     policy->SetInteger(key::kRestoreOnStartup,
                        SessionStartupPref::kPrefValueURLs);
   }
@@ -40,7 +36,7 @@ class UserCloudPolicyManagerTest : public LoginPolicyTestBase,
   DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyManagerTest);
 };
 
-IN_PROC_BROWSER_TEST_P(UserCloudPolicyManagerTest, StartSession) {
+IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, StartSession) {
   const char* const kStartupURLs[] = {"chrome://policy", "chrome://about"};
 
   SkipToLoginScreen();
@@ -62,9 +58,5 @@ IN_PROC_BROWSER_TEST_P(UserCloudPolicyManagerTest, StartSession) {
               tabs->GetWebContentsAt(i)->GetVisibleURL());
   }
 }
-
-INSTANTIATE_TEST_CASE_P(UserCloudPolicyManagerTestSuite,
-                        UserCloudPolicyManagerTest,
-                        testing::Bool());
 
 }  // namespace policy

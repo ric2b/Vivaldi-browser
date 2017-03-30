@@ -29,18 +29,18 @@ const char kCompanyRe[] =
     "|单位|公司"  // zh-CN
     "|회사|직장";  // ko-KR
 const char kAddressLine1Re[] =
-    "address.*line|address1|addr1|street"
-    "|(shipping|billing)address$"
+    "^address$|address[_-]?line(one)?|address1|addr1|street"
+    "|(?:shipping|billing)address$"
     "|strasse|straße|hausnummer|housenumber"  // de-DE
     "|house.?name"  // en-GB
     "|direccion|dirección"  // es
     "|adresse"  // fr-FR
     "|indirizzo"  // it-IT
-    "|住所1"  // ja-JP
+    "|^住所$|住所1"  // ja-JP
     "|morada|endereço"  // pt-BR, pt-PT
     "|Адрес"  // ru
     "|地址"  // zh-CN
-    "|주소.?1";  // ko-KR
+    "|^주소.?$|주소.?1";  // ko-KR
 const char kAddressLine1LabelRe[] =
     "address"
     "|adresse"  // fr-FR
@@ -49,7 +49,7 @@ const char kAddressLine1LabelRe[] =
     "|地址"  // zh-CN
     "|주소";  // ko-KR
 const char kAddressLine2Re[] =
-    "address.*line2|address2|addr2|street|suite|unit"
+    "address[_-]?line(2|two)|address2|addr2|street|suite|unit"
     "|adresszusatz|ergänzende.?angaben"  // de-DE
     "|direccion2|colonia|adicional"  // es
     "|addresssuppl|complementnom|appartement"  // fr-FR
@@ -124,7 +124,8 @@ const char kStateRe[] =
 // credit_card_field.cc
 /////////////////////////////////////////////////////////////////////////////
 const char kNameOnCardRe[] =
-    "card.?(holder|owner)|name.*\\bon\\b.*card|(card|cc).?name|cc.?full.?name"
+    "card.?(?:holder|owner)|name.*\\bon\\b.*card"
+    "|(?:card|cc).?name|cc.?full.?name"
     "|karteninhaber"  // de-DE
     "|nombre.*tarjeta"  // es
     "|nom.*carte"  // fr-FR
@@ -136,7 +137,7 @@ const char kNameOnCardRe[] =
 const char kNameOnCardContextualRe[] =
     "name";
 const char kCardNumberRe[] =
-    "(card|cc|acct).?(number|#|no|num)"
+    "(add)?(?:card|cc|acct).?(?:number|#|no|num|field)"
     "|nummer"  // de-DE
     "|credito|numero|número"  // es
     "|numéro"  // fr-FR
@@ -146,8 +147,8 @@ const char kCardNumberRe[] =
     "|信用卡卡號"  // zh-TW
     "|카드";  // ko-KR
 const char kCardCvcRe[] =
-    "verification|card identification|security code|card code"
-    "|cvn|cvv|cvc|csc|cvd|cid|ccv"
+    "verification|card.?identification|security.?code|card.?code"
+    "|(cvn|cvv|cvc|csc|cvd|cid|ccv)(field)?"
     "|\\bcid\\b";
 
 // "Expiration date" is the most common label here, but some pages have
@@ -163,7 +164,7 @@ const char kCardCvcRe[] =
 //   https://rps.fidelity.com/ftgw/rps/RtlCust/CreatePIN/Init.
 // Instead, we match only words beginning with "month".
 const char kExpirationMonthRe[] =
-    "expir|exp.*mo|exp.*date|ccmonth|cardmonth"
+    "expir|exp.*mo|exp.*date|ccmonth|cardmonth|addmonth"
     "|gueltig|gültig|monat"  // de-DE
     "|fecha"  // es
     "|date.*exp"  // fr-FR
@@ -173,8 +174,8 @@ const char kExpirationMonthRe[] =
     "|Срок действия карты"  // ru
     "|月";  // zh-CN
 const char kExpirationYearRe[] =
-    "exp|^/|year"
-    "|ablaufdatum|gueltig|gültig|yahr"  // de-DE
+    "exp|^/|(add)?year"
+    "|ablaufdatum|gueltig|gültig|jahr"  // de-DE
     "|fecha"  // es
     "|scadenza"  // it-IT
     "|有効期限"  // ja-JP
@@ -184,11 +185,11 @@ const char kExpirationYearRe[] =
 
 // The "yy" portion of the regex is just looking for two adjacent y's.
 const char kExpirationDate2DigitYearRe[] =
-    "(exp.*date.*|mm\\s*[-/]\\s*)[^y]yy([^y]|$)";
+    "(?:exp.*date.*|mm\\s*[-/]\\s*)[^y]yy([^y]|$)";
 const char kExpirationDate4DigitYearRe[] =
     "^mm\\s*[-/]\\syyyy$";
 const char kExpirationDateRe[] =
-    "expir|exp.*date"
+    "expir|exp.*date|^expfield$"
     "|gueltig|gültig"  // de-DE
     "|fecha"  // es
     "|date.*exp"  // fr-FR
@@ -199,7 +200,7 @@ const char kExpirationDateRe[] =
 const char kGiftCardRe[] =
     "gift.?card";
 const char kDebitGiftCardRe[] =
-    "(visa|mastercard|discover|amex|american express).*gift.?card";
+    "(?:visa|mastercard|discover|amex|american express).*gift.?card";
 const char kDebitCardRe[] =
     "debit.*card";
 
@@ -214,7 +215,7 @@ const char kEmailRe[] =
     "|Электронной.?Почты"  // ru
     "|邮件|邮箱"  // zh-CN
     "|電郵地址"  // zh-TW
-    "|(이메일|전자.?우편|[Ee]-?mail)(.?주소)?";  // ko-KR
+    "|(?:이메일|전자.?우편|[Ee]-?mail)(.?주소)?";  // ko-KR
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -224,7 +225,7 @@ const char kNameIgnoredRe[] =
     "user.?name|user.?id|nickname|maiden name|title|prefix|suffix"
     "|vollständiger.?name"  // de-DE
     "|用户名"  // zh-CN
-    "|(사용자.?)?아이디|사용자.?ID";  // ko-KR
+    "|(?:사용자.?)?아이디|사용자.?ID";  // ko-KR
 const char kNameRe[] =
     "^name|full.?name|your.?name|customer.?name|bill.?name|ship.?name"
     "|name.*first.*last|firstandlastname"
@@ -274,7 +275,7 @@ const char kPhoneRe[] =
     "|telefone|telemovel"  // pt-BR, pt-PT
     "|телефон"  // ru
     "|电话"  // zh-CN
-    "|(전화|핸드폰|휴대폰|휴대전화)(.?번호)?";  // ko-KR
+    "|(?:전화|핸드폰|휴대폰|휴대전화)(?:.?번호)?";  // ko-KR
 const char kCountryCodeRe[] =
     "country.*code|ccode|_cc";
 const char kAreaCodeNotextRe[] =

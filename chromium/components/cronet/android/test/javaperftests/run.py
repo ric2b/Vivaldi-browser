@@ -43,26 +43,28 @@ import urllib
 REPOSITORY_ROOT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), '..', '..', '..', '..', '..'))
 
-sys.path.append(os.path.join(REPOSITORY_ROOT, 'tools/telemetry'))
-sys.path.append(os.path.join(REPOSITORY_ROOT, 'build/android'))
+sys.path.append(os.path.join(REPOSITORY_ROOT, 'tools', 'telemetry'))
+sys.path.append(os.path.join(REPOSITORY_ROOT, 'build', 'android'))
 
 import lighttpd_server
+from pylib import constants
 from pylib import pexpect
+from pylib.device import device_utils
 from pylib.device import intent
 from telemetry import android
 from telemetry import benchmark
 from telemetry import benchmark_runner
 from telemetry import story
-from telemetry.internal.backends import adb_commands
 from telemetry.internal import forwarders
 from telemetry.internal.forwarders import android_forwarder
 from telemetry.value import scalar
 from telemetry.web_perf import timeline_based_measurement
 
-BUILD_DIR = REPOSITORY_ROOT + '/out/Release/'
-QUIC_SERVER = BUILD_DIR + 'quic_server'
-QUIC_CLIENT = BUILD_DIR + 'quic_client'
-APP_APK = BUILD_DIR + 'apks/CronetPerfTest.apk'
+BUILD_TYPE = 'Release'
+BUILD_DIR = os.path.join(REPOSITORY_ROOT, 'out', BUILD_TYPE)
+QUIC_SERVER = os.path.join(BUILD_DIR, 'quic_server')
+QUIC_CLIENT = os.path.join(BUILD_DIR, 'quic_client')
+APP_APK = os.path.join(BUILD_DIR, 'apks', 'CronetPerfTest.apk')
 APP_PACKAGE = 'org.chromium.net'
 APP_ACTIVITY = '.CronetPerfTestActivity'
 APP_ACTION = 'android.intent.action.MAIN'
@@ -99,24 +101,22 @@ BENCHMARK_CONFIG = {
 globals().update(BENCHMARK_CONFIG)
 
 
-def GetAdb():
-  devices = adb_commands.GetAttachedDevices()
+def GetDevice():
+  devices = device_utils.DeviceUtils.HealthyDevices()
   assert len(devices) == 1
-  adb = adb_commands.AdbCommands(devices[0])
-  adb_commands.SetupPrebuiltTools(adb)
-  return adb
+  return devices[0]
 
 
-def GetForwarderFactory(adb):
-  return android_forwarder.AndroidForwarderFactory(adb, True)
+def GetForwarderFactory(device):
+  return android_forwarder.AndroidForwarderFactory(device, True)
 
 
-def GetServersHost(adb):
-  return GetForwarderFactory(adb).host_ip
+def GetServersHost(device):
+  return GetForwarderFactory(device).host_ip
 
 
-def GetHttpServerURL(adb, resource):
-  return 'http://%s:%d/%s' % (GetServersHost(adb), HTTP_PORT, resource)
+def GetHttpServerURL(device, resource):
+  return 'http://%s:%d/%s' % (GetServersHost(device), HTTP_PORT, resource)
 
 
 class CronetPerfTestAndroidStory(android.AndroidStory):
@@ -124,11 +124,11 @@ class CronetPerfTestAndroidStory(android.AndroidStory):
   # Launches Cronet perf test app and waits for execution to complete
   # by waiting for presence of DONE_FILE.
 
-  def __init__(self, adb):
-    self._adb = adb
-    adb.RunShellCommand('rm %s' % DONE_FILE)
+  def __init__(self, device):
+    self._device = device
+    device.RunShellCommand('rm %s' % DONE_FILE)
     config = BENCHMARK_CONFIG
-    config['HOST'] = GetServersHost(adb)
+    config['HOST'] = GetServersHost(device)
     start_intent = intent.Intent(
         package=APP_PACKAGE,
         activity=APP_ACTIVITY,
@@ -140,19 +140,23 @@ class CronetPerfTestAndroidStory(android.AndroidStory):
         extras=None,
         category=None)
     super(CronetPerfTestAndroidStory, self).__init__(
-        start_intent, name='CronetPerfTest')
+        start_intent, name='CronetPerfTest',
+        # No reason to wait for app; Run() will wait for results.  By default
+        # StartActivity will timeout waiting for CronetPerfTest, so override
+        # |is_app_ready_predicate| to not wait.
+        is_app_ready_predicate=lambda app: True)
 
   def Run(self, shared_user_story_state):
-    while not self._adb.FileExistsOnDevice(DONE_FILE):
+    while not self._device.FileExists(DONE_FILE):
       sleep(1.0)
 
 
 class CronetPerfTestStorySet(story.StorySet):
 
-  def __init__(self, adb):
+  def __init__(self, device):
     super(CronetPerfTestStorySet, self).__init__()
     # Create and add Cronet perf test AndroidStory.
-    self.AddStory(CronetPerfTestAndroidStory(adb))
+    self.AddStory(CronetPerfTestAndroidStory(device))
 
 
 class CronetPerfTestMeasurement(
@@ -161,18 +165,18 @@ class CronetPerfTestMeasurement(
   # TimelineBasedMeasurements, so implement one that just forwards results from
   # Cronet perf test app.
 
-  def __init__(self, adb, options):
+  def __init__(self, device, options):
     super(CronetPerfTestMeasurement, self).__init__(options)
-    self._adb = adb
+    self._device = device
 
-  def WillRunStory(self, tracing_controller, synthetic_delay_categories=None):
+  def WillRunStory(self, platform):
     # Skip parent implementation which doesn't apply to Cronet perf test app as
     # it is not a browser with a timeline interface.
     pass
 
-  def Measure(self, tracing_controller, results):
+  def Measure(self, platform, results):
     # Reads results from |RESULTS_FILE| on target and adds to |results|.
-    jsonResults = json.loads(self._adb.GetFileContents(RESULTS_FILE)[0])
+    jsonResults = json.loads(self._device.ReadFile(RESULTS_FILE))
     for test in jsonResults:
       results.AddValue(scalar.ScalarValue(results.current_page, test,
           'ms', jsonResults[test]))
@@ -185,13 +189,13 @@ class CronetPerfTestBenchmark(benchmark.Benchmark):
 
   def __init__(self, max_failures=None):
     super(CronetPerfTestBenchmark, self).__init__(max_failures)
-    self._adb = GetAdb()
+    self._device = GetDevice()
 
   def CreatePageTest(self, options):
-    return CronetPerfTestMeasurement(self._adb, options)
+    return CronetPerfTestMeasurement(self._device, options)
 
   def CreateStorySet(self, options):
-    return CronetPerfTestStorySet(self._adb)
+    return CronetPerfTestStorySet(self._device)
 
 
 class QuicServer:
@@ -200,7 +204,7 @@ class QuicServer:
     self._process = None
     self._quic_server_doc_root = quic_server_doc_root
 
-  def StartupQuicServer(self, adb):
+  def StartupQuicServer(self, device):
     self._process = pexpect.spawn(QUIC_SERVER,
                                   ['--quic_in_memory_cache_dir=%s' %
                                       self._quic_server_doc_root,
@@ -209,10 +213,10 @@ class QuicServer:
     # Wait for quic_server to start serving.
     waited_s = 0
     while subprocess.call([QUIC_CLIENT,
-                           '--host=%s' % GetServersHost(adb),
+                           '--host=%s' % GetServersHost(device),
                            '--port=%d' % QUIC_PORT,
-                           'http://%s:%d/%s' % (GetServersHost(adb), QUIC_PORT,
-                                                SMALL_RESOURCE)],
+                           'http://%s:%d/%s' % (GetServersHost(device),
+                                                QUIC_PORT, SMALL_RESOURCE)],
                           stdout=open(os.devnull, 'w')) != 0:
       sleep(0.1)
       waited_s += 0.1
@@ -243,19 +247,19 @@ def GenerateHttpTestResources():
   return http_server_doc_root
 
 
-def GenerateQuicTestResources(adb):
+def GenerateQuicTestResources(device):
   quic_server_doc_root = tempfile.mkdtemp()
   # Use wget to build up fake QUIC in-memory cache dir for serving.
   # quic_server expects the dir/file layout that wget produces.
   for resource in [SMALL_RESOURCE, LARGE_RESOURCE]:
     assert subprocess.Popen(['wget', '-p', '-q', '--save-headers',
-                             GetHttpServerURL(adb, resource)],
+                             GetHttpServerURL(device, resource)],
                             cwd=quic_server_doc_root).wait() == 0
   # wget places results in host:port directory.  Adjust for QUIC port.
   os.rename(os.path.join(quic_server_doc_root,
-                         "%s:%d" % (GetServersHost(adb), HTTP_PORT)),
+                         "%s:%d" % (GetServersHost(device), HTTP_PORT)),
             os.path.join(quic_server_doc_root,
-                         "%s:%d" % (GetServersHost(adb), QUIC_PORT)))
+                         "%s:%d" % (GetServersHost(device), QUIC_PORT)))
   return quic_server_doc_root
 
 
@@ -272,16 +276,17 @@ def GenerateLighttpdConfig(config_file, http_server_doc_root, http_server):
 
 
 def main():
+  constants.SetBuildType(BUILD_TYPE)
   # Install APK
-  adb = GetAdb()
-  adb.device().EnableRoot()
-  adb.device().Install(APP_APK)
+  device = GetDevice()
+  device.EnableRoot()
+  device.Install(APP_APK)
   # Start USB reverse tethering.
   # Port map is ignored for tethering; must create one to placate assertions.
   named_port_pair_map = {'http': (forwarders.PortPair(0, 0)),
       'https': None, 'dns': None}
   port_pairs = forwarders.PortPairs(**named_port_pair_map)
-  forwarder = GetForwarderFactory(adb).Create(port_pairs)
+  forwarder = GetForwarderFactory(device).Create(port_pairs)
   # Start HTTP server.
   http_server_doc_root = GenerateHttpTestResources()
   config_file = tempfile.NamedTemporaryFile()
@@ -291,17 +296,22 @@ def main():
   assert http_server.StartupHttpServer()
   config_file.close()
   # Start QUIC server.
-  quic_server_doc_root = GenerateQuicTestResources(adb)
+  quic_server_doc_root = GenerateQuicTestResources(device)
   quic_server = QuicServer(quic_server_doc_root)
-  quic_server.StartupQuicServer(adb)
+  quic_server.StartupQuicServer(device)
   # Launch Telemetry's benchmark_runner on CronetPerfTestBenchmark.
   # By specifying this file's directory as the benchmark directory, it will
   # allow benchmark_runner to in turn open this file up and find the
   # CronetPerfTestBenchmark class to run the benchmark.
   top_level_dir = os.path.dirname(os.path.realpath(__file__))
+  # The perf config file is required to continue using dependencies on the
+  # Chromium checkout in Telemetry.
+  perf_config_file = os.path.join(REPOSITORY_ROOT, 'tools', 'perf', 'core',
+      'binary_dependencies.json')
   runner_config = benchmark_runner.ProjectConfig(
       top_level_dir=top_level_dir,
-      benchmark_dirs=[top_level_dir])
+      benchmark_dirs=[top_level_dir],
+      client_config=perf_config_file)
   sys.argv.insert(1, 'run')
   sys.argv.insert(2, 'run.CronetPerfTestBenchmark')
   sys.argv.insert(3, '--android-rndis')

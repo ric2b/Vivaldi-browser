@@ -31,10 +31,10 @@ enum MediaDataStatus {
 };
 
 // Order is important, be careful when adding new values.
-enum PlatformMediaDecodingMode {
-  PLATFORM_MEDIA_DECODING_MODE_SOFTWARE,
-  PLATFORM_MEDIA_DECODING_MODE_HARDWARE,
-  PLATFORM_MEDIA_DECODING_MODE_COUNT  // Always keep this as the last one.
+enum class PlatformMediaDecodingMode {
+  SOFTWARE,
+  HARDWARE,
+  COUNT  // Always keep this as the last one.
 };
 
 struct PlatformMediaTimeInfo {
@@ -77,7 +77,7 @@ struct MEDIA_EXPORT PlatformVideoConfig {
            !natural_size.IsEmpty() && planes[VideoFrame::kYPlane].is_valid() &&
            planes[VideoFrame::kVPlane].is_valid() &&
            planes[VideoFrame::kUPlane].is_valid() &&
-           decoding_mode < PLATFORM_MEDIA_DECODING_MODE_COUNT;
+           decoding_mode < PlatformMediaDecodingMode::COUNT;
   }
 
   gfx::Size coded_size;

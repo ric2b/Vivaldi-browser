@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/input/touch_emulator.h"
 
+#include "build/build_config.h"
 #include "content/browser/renderer_host/input/motion_event_web.h"
 #include "content/browser/renderer_host/input/web_input_event_util.h"
 #include "content/common/input/web_touch_event_traits.h"
@@ -15,7 +16,6 @@
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/gfx/image/image.h"
-#include "ui/gfx/screen.h"
 
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -45,7 +45,8 @@ const double kMouseMoveDropIntervalSeconds = 5.f / 1000;
 
 } // namespace
 
-TouchEmulator::TouchEmulator(TouchEmulatorClient* client)
+TouchEmulator::TouchEmulator(TouchEmulatorClient* client,
+                             float device_scale_factor)
     : client_(client),
       gesture_provider_config_type_(
           ui::GestureProviderConfigType::CURRENT_PLATFORM),
@@ -55,8 +56,7 @@ TouchEmulator::TouchEmulator(TouchEmulatorClient* client)
   DCHECK(client_);
   ResetState();
 
-  bool use_2x = gfx::Screen::GetNativeScreen()->
-      GetPrimaryDisplay().device_scale_factor() > 1.5f;
+  bool use_2x = device_scale_factor > 1.5f;
   float cursor_scale_factor = use_2x ? 2.f : 1.f;
   cursor_size_ = InitCursorFromResource(&touch_cursor_,
       cursor_scale_factor,
@@ -131,7 +131,7 @@ gfx::SizeF TouchEmulator::InitCursorFromResource(
 #endif
 
   cursor->InitFromCursorInfo(cursor_info);
-  return gfx::ScaleSize(cursor_image.Size(), 1.f / scale);
+  return gfx::ScaleSize(gfx::SizeF(cursor_image.Size()), 1.f / scale);
 }
 
 bool TouchEmulator::HandleMouseEvent(const WebMouseEvent& mouse_event) {
@@ -286,7 +286,7 @@ void TouchEmulator::OnGestureEvent(const ui::GestureEventData& gesture) {
       return;
 
     case WebInputEvent::GestureScrollBegin:
-      client_->ForwardGestureEvent(gesture_event);
+      client_->ForwardEmulatedGestureEvent(gesture_event);
       // PinchBegin must always follow ScrollBegin.
       if (InPinchGestureMode())
         PinchBegin(gesture_event);
@@ -303,7 +303,7 @@ void TouchEmulator::OnGestureEvent(const ui::GestureEventData& gesture) {
         // Pass scroll update further. If shift was released, end the pinch.
         if (pinch_gesture_active_)
           PinchEnd(gesture_event);
-        client_->ForwardGestureEvent(gesture_event);
+        client_->ForwardEmulatedGestureEvent(gesture_event);
       }
       break;
 
@@ -311,7 +311,7 @@ void TouchEmulator::OnGestureEvent(const ui::GestureEventData& gesture) {
       // PinchEnd must precede ScrollEnd.
       if (pinch_gesture_active_)
         PinchEnd(gesture_event);
-      client_->ForwardGestureEvent(gesture_event);
+      client_->ForwardEmulatedGestureEvent(gesture_event);
       break;
 
     case WebInputEvent::GestureFlingStart:
@@ -324,20 +324,20 @@ void TouchEmulator::OnGestureEvent(const ui::GestureEventData& gesture) {
         ScrollEnd(gesture_event);
       } else {
         suppress_next_fling_cancel_ = false;
-        client_->ForwardGestureEvent(gesture_event);
+        client_->ForwardEmulatedGestureEvent(gesture_event);
       }
       break;
 
     case WebInputEvent::GestureFlingCancel:
       // If fling start was suppressed, we should not send fling cancel either.
       if (!suppress_next_fling_cancel_)
-        client_->ForwardGestureEvent(gesture_event);
+        client_->ForwardEmulatedGestureEvent(gesture_event);
       suppress_next_fling_cancel_ = false;
       break;
 
     default:
       // Everything else goes through.
-      client_->ForwardGestureEvent(gesture_event);
+      client_->ForwardEmulatedGestureEvent(gesture_event);
   }
 }
 
@@ -377,7 +377,7 @@ void TouchEmulator::PinchBegin(const WebGestureEvent& event) {
   pinch_scale_ = 1.f;
   FillPinchEvent(event);
   pinch_event_.type = WebInputEvent::GesturePinchBegin;
-  client_->ForwardGestureEvent(pinch_event_);
+  client_->ForwardEmulatedGestureEvent(pinch_event_);
 }
 
 void TouchEmulator::PinchUpdate(const WebGestureEvent& event) {
@@ -387,7 +387,7 @@ void TouchEmulator::PinchUpdate(const WebGestureEvent& event) {
   FillPinchEvent(event);
   pinch_event_.type = WebInputEvent::GesturePinchUpdate;
   pinch_event_.data.pinchUpdate.scale = scale / pinch_scale_;
-  client_->ForwardGestureEvent(pinch_event_);
+  client_->ForwardEmulatedGestureEvent(pinch_event_);
   pinch_scale_ = scale;
 }
 
@@ -396,7 +396,7 @@ void TouchEmulator::PinchEnd(const WebGestureEvent& event) {
   pinch_gesture_active_ = false;
   FillPinchEvent(event);
   pinch_event_.type = WebInputEvent::GesturePinchEnd;
-  client_->ForwardGestureEvent(pinch_event_);
+  client_->ForwardEmulatedGestureEvent(pinch_event_);
 }
 
 void TouchEmulator::FillPinchEvent(const WebInputEvent& event) {
@@ -413,7 +413,7 @@ void TouchEmulator::ScrollEnd(const WebGestureEvent& event) {
   scroll_event.modifiers = event.modifiers;
   scroll_event.sourceDevice = blink::WebGestureDeviceTouchscreen;
   scroll_event.type = WebInputEvent::GestureScrollEnd;
-  client_->ForwardGestureEvent(scroll_event);
+  client_->ForwardEmulatedGestureEvent(scroll_event);
 }
 
 void TouchEmulator::FillTouchEventAndPoint(const WebMouseEvent& mouse_event) {
@@ -447,6 +447,8 @@ void TouchEmulator::FillTouchEventAndPoint(const WebMouseEvent& mouse_event) {
   point.screenPosition.x = mouse_event.globalX;
   point.position.y = mouse_event.y;
   point.screenPosition.y = mouse_event.globalY;
+  point.tiltX = 0;
+  point.tiltY = 0;
 }
 
 bool TouchEmulator::InPinchGestureMode() const {

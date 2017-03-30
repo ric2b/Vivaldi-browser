@@ -7,6 +7,7 @@
 
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -79,7 +80,7 @@ class GFX_EXPORT AnimationContainer
   // Minimum interval the timers run at.
   base::TimeDelta min_timer_interval_;
 
-  base::RepeatingTimer<AnimationContainer> timer_;
+  base::RepeatingTimer timer_;
 
   AnimationContainerObserver* observer_;
 

@@ -9,24 +9,35 @@
 #include "content/browser/download/save_file.h"
 #include "content/browser/download/save_file_manager.h"
 #include "content/browser/download/save_package.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace content {
+
+namespace {
+
+SaveItemId GetNextSaveItemId() {
+  static int g_next_save_item_id = 1;
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  return SaveItemId::FromUnsafeValue(g_next_save_item_id++);
+}
+
+}  // namespace
 
 // Constructor for SaveItem when creating each saving job.
 SaveItem::SaveItem(const GURL& url,
                    const Referrer& referrer,
                    SavePackage* package,
                    SaveFileCreateInfo::SaveFileSource save_source)
-  : save_id_(-1),
-    url_(url),
-    referrer_(referrer),
-    total_bytes_(0),
-    received_bytes_(0),
-    state_(WAIT_START),
-    has_final_name_(false),
-    is_success_(false),
-    save_source_(save_source),
-    package_(package) {
+    : save_item_id_(GetNextSaveItemId()),
+      url_(url),
+      referrer_(referrer),
+      total_bytes_(0),
+      received_bytes_(0),
+      state_(WAIT_START),
+      has_final_name_(false),
+      is_success_(false),
+      save_source_(save_source),
+      package_(package) {
   DCHECK(package);
 }
 
@@ -41,7 +52,7 @@ void SaveItem::Start() {
 
 // If we've received more data than we were expecting (bad server info?),
 // revert to 'unknown size mode'.
-void SaveItem::UpdateSize(int64 bytes_so_far) {
+void SaveItem::UpdateSize(int64_t bytes_so_far) {
   received_bytes_ = bytes_so_far;
   if (received_bytes_ >= total_bytes_)
     total_bytes_ = 0;
@@ -50,7 +61,7 @@ void SaveItem::UpdateSize(int64 bytes_so_far) {
 // Updates from the file thread may have been posted while this saving job
 // was being canceled in the UI thread, so we'll accept them unless we're
 // complete.
-void SaveItem::Update(int64 bytes_so_far) {
+void SaveItem::Update(int64_t bytes_so_far) {
   if (state_ != IN_PROGRESS) {
     NOTREACHED();
     return;
@@ -75,17 +86,8 @@ void SaveItem::Cancel() {
 }
 
 // Set finish state for a save item
-void SaveItem::Finish(int64 size, bool is_success) {
-  // When this function is called, the SaveItem should be one of following
-  // three situations.
-  // a) The data of this SaveItem is finished saving. So it should have
-  // generated final name.
-  // b) Error happened before the start of saving process. So no |save_id_| is
-  // generated for this SaveItem and the |is_success_| should be false.
-  // c) Error happened in the start of saving process, the SaveItem has a save
-  // id, |is_success_| should be false, and the |size| should be 0.
-  DCHECK(has_final_name() || (save_id_ == -1 && !is_success_) ||
-         (save_id_ != -1 && !is_success_ && !size));
+void SaveItem::Finish(int64_t size, bool is_success) {
+  DCHECK(has_final_name() || !is_success_);
   state_ = COMPLETE;
   is_success_ = is_success;
   UpdateSize(size);
@@ -120,12 +122,7 @@ void SaveItem::Rename(const base::FilePath& full_path) {
   has_final_name_ = true;
 }
 
-void SaveItem::SetSaveId(int32 save_id) {
-  DCHECK_EQ(-1, save_id_);
-  save_id_ = save_id;
-}
-
-void SaveItem::SetTotalBytes(int64 total_bytes) {
+void SaveItem::SetTotalBytes(int64_t total_bytes) {
   DCHECK_EQ(0, total_bytes_);
   total_bytes_ = total_bytes;
 }

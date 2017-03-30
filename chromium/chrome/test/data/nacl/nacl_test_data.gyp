@@ -8,6 +8,7 @@
   ],
   'targets': [
     {
+      # TODO bug 512902 this needs to be ported to GN.
       'target_name': 'shared_test_files',
       'type': 'none',
       'variables': {
@@ -123,7 +124,7 @@
           # Note that the .nexe names are embedded in this file.
           'extension_validation_cache/manifest.json',
           'load_util.js',
-	  'simple_cc.js',
+          'simple_cc.js',
         ],
       },
     },
@@ -489,7 +490,6 @@
           '-lppapi',
           '-lplatform',
           '-lgio',
-          '-lweak_ref',
           '-lnacl',
         ],
         'sources': [
@@ -513,7 +513,6 @@
         '<(DEPTH)/native_client/src/shared/platform/platform.gyp:platform_lib',
         '<(DEPTH)/native_client/src/shared/gio/gio.gyp:gio_lib',
         '<(DEPTH)/native_client/src/untrusted/nacl/nacl.gyp:nacl_lib',
-        '<(DEPTH)/native_client/src/trusted/weak_ref/weak_ref.gyp:weak_ref_lib',
       ],
       'conditions': [
         # These are needed to build a non-SFI nexe binary.
@@ -863,7 +862,7 @@
     },
   ],
   'conditions': [
-    ['target_arch!="arm"', {
+    ['target_arch!="arm" and disable_newlib==0', {
       # Source file does not have asm for ARM.
       'targets': [
         {

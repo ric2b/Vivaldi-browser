@@ -6,36 +6,22 @@
 
 namespace content {
 
-scoped_ptr<ServiceWorkerDiskCache>
-ServiceWorkerDiskCache::CreateWithBlockFileBackend() {
-  return make_scoped_ptr(
-      new ServiceWorkerDiskCache(false /* use_simple_cache*/));
-}
-
-scoped_ptr<ServiceWorkerDiskCache>
-ServiceWorkerDiskCache::CreateWithSimpleBackend() {
-  return make_scoped_ptr(
-      new ServiceWorkerDiskCache(true /* use_simple_cache */));
-}
-
-ServiceWorkerDiskCache::ServiceWorkerDiskCache(bool use_simple_cache)
-    : AppCacheDiskCache(use_simple_cache) {
-}
+ServiceWorkerDiskCache::ServiceWorkerDiskCache()
+    : AppCacheDiskCache(true /* use_simple_cache */) {}
 
 ServiceWorkerResponseReader::ServiceWorkerResponseReader(
-    int64 response_id, ServiceWorkerDiskCache* disk_cache)
-    : AppCacheResponseReader(response_id, 0, disk_cache) {
-}
+    int64_t resource_id,
+    ServiceWorkerDiskCache* disk_cache)
+    : AppCacheResponseReader(resource_id, 0, disk_cache) {}
 
 ServiceWorkerResponseWriter::ServiceWorkerResponseWriter(
-    int64 response_id, ServiceWorkerDiskCache* disk_cache)
-    : AppCacheResponseWriter(response_id, 0, disk_cache) {
-}
+    int64_t resource_id,
+    ServiceWorkerDiskCache* disk_cache)
+    : AppCacheResponseWriter(resource_id, 0, disk_cache) {}
 
 ServiceWorkerResponseMetadataWriter::ServiceWorkerResponseMetadataWriter(
-    int64 response_id,
+    int64_t resource_id,
     ServiceWorkerDiskCache* disk_cache)
-    : AppCacheResponseMetadataWriter(response_id, 0, disk_cache) {
-}
+    : AppCacheResponseMetadataWriter(resource_id, 0, disk_cache) {}
 
 }  // namespace content

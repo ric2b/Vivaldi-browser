@@ -4,6 +4,8 @@
 
 #import "chrome/browser/ui/cocoa/confirm_bubble_controller.h"
 
+#include <utility>
+
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/confirm_bubble_cocoa.h"
@@ -19,7 +21,7 @@
   if ((self = [super initWithNibName:nil bundle:nil])) {
     parent_ = parent;
     origin_ = origin;
-    model_ = model.Pass();
+    model_ = std::move(model);
   }
   return self;
 }
@@ -51,6 +53,10 @@
   return base::SysUTF16ToNSString(model_->GetLinkText());
 }
 
+- (NSString*)linkURL {
+  return base::SysUTF8ToNSString(model_->GetLinkURL().spec());
+}
+
 - (NSString*)okButtonText {
   return base::SysUTF16ToNSString(
       model_->GetButtonLabel(ConfirmBubbleModel::BUTTON_OK));
@@ -67,11 +73,6 @@
 
 - (BOOL)hasCancelButton {
   return (model_->GetButtons() & ConfirmBubbleModel::BUTTON_CANCEL) ? YES : NO;
-}
-
-- (NSImage*)icon {
-  gfx::Image* image = model_->GetIcon();
-  return !image ? nil : image->ToNSImage();
 }
 
 // Action handlers.

@@ -5,19 +5,21 @@
 #ifndef CONTENT_BROWSER_SHARED_WORKER_SHARED_WORKER_MESSAGE_FILTER_H_
 #define CONTENT_BROWSER_SHARED_WORKER_SHARED_WORKER_MESSAGE_FILTER_H_
 
+#include "base/macros.h"
 #include "content/browser/shared_worker/worker_storage_partition.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_message_filter.h"
 
 class GURL;
 struct ViewHostMsg_CreateWorker_Params;
+struct ViewHostMsg_CreateWorker_Reply;
 
 namespace content {
 class MessagePortMessageFilter;
 class ResourceContext;
 
-// If "enable-embedded-shared-worker" is set this class will be used instead of
-// WorkerMessageFilter.
+// Handles SharedWorker related IPC messages for one renderer process by
+// forwarding them to the SharedWorkerServiceImpl singleton.
 class CONTENT_EXPORT SharedWorkerMessageFilter : public BrowserMessageFilter {
  public:
   SharedWorkerMessageFilter(int render_process_id,
@@ -43,7 +45,7 @@ class CONTENT_EXPORT SharedWorkerMessageFilter : public BrowserMessageFilter {
  private:
   // Message handlers.
   void OnCreateWorker(const ViewHostMsg_CreateWorker_Params& params,
-                      int* route_id);
+                      ViewHostMsg_CreateWorker_Reply* reply);
   void OnForwardToWorker(const IPC::Message& message);
   void OnDocumentDetached(unsigned long long document_id);
   void OnWorkerContextClosed(int worker_route_id);

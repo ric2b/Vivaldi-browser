@@ -117,34 +117,36 @@ TEST_F(ScreenUtilTest, ConvertRect) {
 TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktop) {
   if (!SupportsMultipleDisplays())
     return;
-  test::DisplayManagerTestApi::EnableUnifiedDesktopForTest();
-
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  display_manager->SetDefaultMultiDisplayMode(DisplayManager::UNIFIED);
-  display_manager->SetMultiDisplayMode(DisplayManager::UNIFIED);
+
+  display_manager->SetUnifiedDesktopEnabled(true);
 
   views::Widget* widget = views::Widget::CreateWindowWithContextAndBounds(
       NULL, CurrentContext(), gfx::Rect(10, 10, 100, 100));
 
   UpdateDisplay("500x400");
-  EXPECT_EQ("0,0 500x400", ScreenUtil::GetShelfDisplayBoundsInScreen(
-                               widget->GetNativeWindow()).ToString());
+  EXPECT_EQ("0,0 500x400",
+            ScreenUtil::GetShelfDisplayBoundsInRoot(widget->GetNativeWindow())
+                .ToString());
 
   UpdateDisplay("500x400,600x400");
-  EXPECT_EQ("0,0 500x400", ScreenUtil::GetShelfDisplayBoundsInScreen(
-                               widget->GetNativeWindow()).ToString());
+  EXPECT_EQ("0,0 500x400",
+            ScreenUtil::GetShelfDisplayBoundsInRoot(widget->GetNativeWindow())
+                .ToString());
 
   // Move to the 2nd physical display. Shelf's display still should be
   // the first.
   widget->SetBounds(gfx::Rect(800, 0, 100, 100));
   ASSERT_EQ("800,0 100x100", widget->GetWindowBoundsInScreen().ToString());
 
-  EXPECT_EQ("0,0 500x400", ScreenUtil::GetShelfDisplayBoundsInScreen(
-                               widget->GetNativeWindow()).ToString());
+  EXPECT_EQ("0,0 500x400",
+            ScreenUtil::GetShelfDisplayBoundsInRoot(widget->GetNativeWindow())
+                .ToString());
 
   UpdateDisplay("600x500");
-  EXPECT_EQ("0,0 600x500", ScreenUtil::GetShelfDisplayBoundsInScreen(
-                               widget->GetNativeWindow()).ToString());
+  EXPECT_EQ("0,0 600x500",
+            ScreenUtil::GetShelfDisplayBoundsInRoot(widget->GetNativeWindow())
+                .ToString());
 }
 
 }  // namespace test

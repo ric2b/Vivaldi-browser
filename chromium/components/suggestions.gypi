@@ -16,10 +16,11 @@
         '../net/net.gyp:net',
         '../ui/gfx/gfx.gyp:gfx',
         '../url/url.gyp:url_lib',
+        'components.gyp:data_use_measurement_core',
         'components.gyp:keyed_service_core',
         'components.gyp:pref_registry',
         'components.gyp:variations',
-        'components.gyp:variations_http_provider',
+        'components.gyp:variations_net',
       ],
       'sources': [
         'suggestions/blacklist_store.cc',

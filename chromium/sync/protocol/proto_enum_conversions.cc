@@ -6,7 +6,6 @@
 
 #include "sync/protocol/proto_enum_conversions.h"
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 
 namespace syncer {
@@ -155,18 +154,19 @@ const char* GetErrorTypeString(sync_pb::SyncEnums::ErrorType error_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, ErrorType, SUCCESS, UNKNOWN);
   switch (error_type) {
     ENUM_CASE(sync_pb::SyncEnums, SUCCESS);
-    ENUM_CASE(sync_pb::SyncEnums, ACCESS_DENIED);
+    ENUM_CASE(sync_pb::SyncEnums, DEPRECATED_ACCESS_DENIED);
     ENUM_CASE(sync_pb::SyncEnums, NOT_MY_BIRTHDAY);
     ENUM_CASE(sync_pb::SyncEnums, THROTTLED);
-    ENUM_CASE(sync_pb::SyncEnums, AUTH_EXPIRED);
-    ENUM_CASE(sync_pb::SyncEnums, USER_NOT_ACTIVATED);
-    ENUM_CASE(sync_pb::SyncEnums, AUTH_INVALID);
+    ENUM_CASE(sync_pb::SyncEnums, DEPRECATED_AUTH_EXPIRED);
+    ENUM_CASE(sync_pb::SyncEnums, DEPRECATED_USER_NOT_ACTIVATED);
+    ENUM_CASE(sync_pb::SyncEnums, DEPRECATED_AUTH_INVALID);
     ENUM_CASE(sync_pb::SyncEnums, CLEAR_PENDING);
     ENUM_CASE(sync_pb::SyncEnums, TRANSIENT_ERROR);
     ENUM_CASE(sync_pb::SyncEnums, MIGRATION_DONE);
     ENUM_CASE(sync_pb::SyncEnums, DISABLED_BY_ADMIN);
     ENUM_CASE(sync_pb::SyncEnums, USER_ROLLBACK);
     ENUM_CASE(sync_pb::SyncEnums, PARTIAL_FAILURE);
+    ENUM_CASE(sync_pb::SyncEnums, CLIENT_DATA_OBSOLETE);
     ENUM_CASE(sync_pb::SyncEnums, UNKNOWN);
   }
   NOTREACHED();
@@ -186,7 +186,6 @@ const char* GetActionString(sync_pb::SyncEnums::Action action) {
   }
   NOTREACHED();
   return "";
-
 }
 
 const char* GetLaunchTypeString(sync_pb::AppSpecifics::LaunchType launch_type) {

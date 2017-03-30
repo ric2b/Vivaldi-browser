@@ -1,6 +1,6 @@
-Name: OTS
+Name: OTS (OpenType Sanitizer)
 URL: https://github.com/khaledhosny/ots.git
-Version: 767d6040439e6ebcdb867271fcb686bd3f8ac739
+Version: 99a3b7ff8fb241e0f68a25a41726cc3421d1f9bf
 Security Critical: yes
 License: BSD
 
@@ -8,7 +8,7 @@ Local Modifications:
 - This only includes src/ and include/ directories, and the files under the
   repository root. Unneeded direcories such as tests/, tools/ are removed.
 
-- src/woff2.cc: Changed include path to brotli/dec/decode.h.
+- src/ots.cc: Changed include path to woff2_dec.h.
 - BUILD.gn: Added.
 - ots.gyp: Added.
 - ots-common.gypi: Added.

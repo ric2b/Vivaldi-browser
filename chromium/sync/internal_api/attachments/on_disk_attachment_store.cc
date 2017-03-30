@@ -4,6 +4,10 @@
 
 #include "sync/internal_api/public/attachments/on_disk_attachment_store.h"
 
+#include <stdint.h>
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
@@ -32,7 +36,7 @@ const char kMetadataPrefix[] = "metadata-";
 
 const char kDatabaseMetadataKey[] = "database-metadata";
 
-const int32 kCurrentSchemaVersion = 1;
+const int32_t kCurrentSchemaVersion = 1;
 
 const base::FilePath::CharType kLeveldbDirectory[] =
     FILE_PATH_LITERAL("leveldb");
@@ -334,7 +338,7 @@ void OnDiskAttachmentStore::ReadMetadata(
         result_code = AttachmentStore::UNSPECIFIED_ERROR;
         continue;
       }
-      DCHECK(record_metadata.component_size() > 0);
+      DCHECK_GT(record_metadata.component_size(), 0);
       if (AttachmentHasReferenceFromComponent(record_metadata, proto_component))
         metadata_list->push_back(MakeAttachmentMetadata(id, record_metadata));
     }
@@ -395,7 +399,7 @@ AttachmentStore::Result OnDiskAttachmentStore::OpenOrCreate(
     return AttachmentStore::UNSPECIFIED_ERROR;
   }
 
-  db_ = db.Pass();
+  db_ = std::move(db);
   return AttachmentStore::SUCCESS;
 }
 
@@ -405,11 +409,11 @@ scoped_ptr<Attachment> OnDiskAttachmentStore::ReadSingleAttachment(
   scoped_ptr<Attachment> attachment;
   attachment_store_pb::RecordMetadata record_metadata;
   if (!ReadSingleRecordMetadata(attachment_id, &record_metadata)) {
-    return attachment.Pass();
+    return attachment;
   }
   if (!AttachmentHasReferenceFromComponent(record_metadata,
                                            ComponentToProto(component)))
-    return attachment.Pass();
+    return attachment;
 
   const std::string key = MakeDataKeyFromAttachmentId(attachment_id);
   std::string data_str;
@@ -417,7 +421,7 @@ scoped_ptr<Attachment> OnDiskAttachmentStore::ReadSingleAttachment(
       MakeNonCachingReadOptions(), key, &data_str);
   if (!status.ok()) {
     DVLOG(1) << "DB::Get for data failed: status=" << status.ToString();
-    return attachment.Pass();
+    return attachment;
   }
   scoped_refptr<base::RefCountedMemory> data =
       base::RefCountedString::TakeString(&data_str);
@@ -425,16 +429,16 @@ scoped_ptr<Attachment> OnDiskAttachmentStore::ReadSingleAttachment(
   if (record_metadata.has_crc32c()) {
     if (record_metadata.crc32c() != crc32c) {
       DVLOG(1) << "Attachment crc32c does not match value read from store";
-      return attachment.Pass();
+      return attachment;
     }
     if (record_metadata.crc32c() != attachment_id.GetCrc32c()) {
       DVLOG(1) << "Attachment crc32c does not match value in AttachmentId";
-      return attachment.Pass();
+      return attachment;
     }
   }
   attachment.reset(
       new Attachment(Attachment::CreateFromParts(attachment_id, data)));
-  return attachment.Pass();
+  return attachment;
 }
 
 bool OnDiskAttachmentStore::WriteSingleAttachment(
@@ -496,7 +500,7 @@ bool OnDiskAttachmentStore::ReadSingleRecordMetadata(
     DVLOG(1) << "RecordMetadata::ParseFromString failed";
     return false;
   }
-  DCHECK(record_metadata->component_size() > 0);
+  DCHECK_GT(record_metadata->component_size(), 0);
   return true;
 }
 

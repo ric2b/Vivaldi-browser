@@ -34,7 +34,7 @@ bool GetLoadedBlacklistedModules(std::vector<base::string16>* module_names) {
 
   std::set<ModuleInfo>::const_iterator module_iter(module_info_set.begin());
   for (; module_iter != module_info_set.end(); ++module_iter) {
-    base::string16 module_file_name(base::StringToLowerASCII(
+    base::string16 module_file_name(base::ToLowerASCII(
         base::FilePath(module_iter->name).BaseName().value()));
     if (blacklist::GetBlacklistIndex(module_file_name.c_str()) != -1) {
       module_names->push_back(module_iter->name);
@@ -64,7 +64,7 @@ void VerifyBlacklistLoadState(scoped_ptr<IncidentReceiver> incident_receiver) {
       blacklist_load->set_path(base::WideToUTF8(sanitized_path.value()));
 
       // Digest.
-      scoped_refptr<safe_browsing::BinaryFeatureExtractor>
+      scoped_refptr<BinaryFeatureExtractor>
           binary_feature_extractor(new BinaryFeatureExtractor());
       base::TimeTicks start_time = base::TimeTicks::Now();
       binary_feature_extractor->ExtractDigest(module_path,

@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/features/feature_channel.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/version_info/version_info.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -80,9 +83,8 @@ IN_PROC_BROWSER_TEST_F(ExperimentalPlatformAppBrowserTest, WindowsApiSetIcon) {
 // (crbug.com/162794 and https://bugs.launchpad.net/unity/+bug/998073).
 // TODO(linux_aura) http://crbug.com/163931
 // Flaky on Mac, http://crbug.com/232330
-#if defined(TOOLKIT_VIEWS) && !(defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA)) \
-&& !defined(OS_MACOSX)
-//Disabled in mac by vivaldi
+#if defined(TOOLKIT_VIEWS) && !(defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA))
+
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, WindowsApiProperties) {
   EXPECT_TRUE(
       RunExtensionTest("platform_apps/windows_api_properties")) << message_;
@@ -153,7 +155,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, WindowsApiAlphaEnabledInStable) {
-  extensions::ScopedCurrentChannel channel(chrome::VersionInfo::CHANNEL_STABLE);
+  extensions::ScopedCurrentChannel channel(version_info::Channel::STABLE);
   EXPECT_TRUE(RunPlatformAppTestWithFlags(
       "platform_apps/windows_api_alpha_enabled/in_stable",
       // Ignore manifest warnings because the extension will not load at all
@@ -171,7 +173,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
                        WindowsApiVisibleOnAllWorkspacesInStable) {
-  extensions::ScopedCurrentChannel channel(chrome::VersionInfo::CHANNEL_STABLE);
+  extensions::ScopedCurrentChannel channel(version_info::Channel::STABLE);
   EXPECT_TRUE(RunPlatformAppTest(
       "platform_apps/windows_api_visible_on_all_workspaces/in_stable"))
       << message_;

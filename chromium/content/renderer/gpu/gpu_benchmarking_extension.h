@@ -5,7 +5,7 @@
 #ifndef CONTENT_RENDERER_GPU_GPU_BENCHMARKING_EXTENSION_H_
 #define CONTENT_RENDERER_GPU_GPU_BENCHMARKING_EXTENSION_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "gin/wrappable.h"
 
 namespace blink {
@@ -48,6 +48,8 @@ class GpuBenchmarking : public gin::Wrappable<GpuBenchmarking> {
   bool Swipe(gin::Arguments* args);
   bool ScrollBounce(gin::Arguments* args);
   bool PinchBy(gin::Arguments* args);
+  float VisualViewportHeight();
+  float VisualViewportWidth();
   bool Tap(gin::Arguments* args);
   void ClearImageCache();
   int RunMicroBenchmark(gin::Arguments* args);

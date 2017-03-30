@@ -8,8 +8,12 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
+#include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_prefs_observer.h"
+#include "extensions/common/view_type.h"
 
 class ExtensionFunctionRegistry;
 class PrefService;
@@ -33,10 +37,13 @@ class URLRequest;
 class URLRequestJob;
 }
 
+namespace update_client {
+class UpdateClient;
+}
+
 namespace extensions {
 
 class ApiActivityMonitor;
-class AppSorting;
 class ComponentExtensionResourceManager;
 class Extension;
 class ExtensionCache;
@@ -160,11 +167,11 @@ class ExtensionsBrowserClient {
   // ExternalProtocolHandler::PermitLaunchUrl() in Chrome.
   virtual void PermitExternalProtocolHandler() = 0;
 
-  // Creates a new AppSorting instance.
-  virtual scoped_ptr<AppSorting> CreateAppSorting() = 0;
-
   // Return true if the system is run in forced app mode.
   virtual bool IsRunningInForcedAppMode() = 0;
+
+  // Return true if the user is logged in as a public session.
+  virtual bool IsLoggedInAsPublicAccount() = 0;
 
   // Returns the embedder's ApiActivityMonitor for |context|. Returns NULL if
   // the embedder does not monitor extension API activity.
@@ -196,7 +203,8 @@ class ExtensionsBrowserClient {
 
   // Propagate a event to all the renderers in every browser context. The
   // implementation must be safe to call from any thread.
-  virtual void BroadcastEventToRenderers(const std::string& event_name,
+  virtual void BroadcastEventToRenderers(events::HistogramValue histogram_value,
+                                         const std::string& event_name,
                                          scoped_ptr<base::ListValue> args) = 0;
 
   // Returns the embedder's net::NetLog.
@@ -224,7 +232,19 @@ class ExtensionsBrowserClient {
 
   // Cleans up browser-side state associated with a WebView that is being
   // destroyed.
-  virtual void CleanUpWebView(int embedder_process_id, int view_instance_id) {}
+  virtual void CleanUpWebView(content::BrowserContext* browser_context,
+                              int embedder_process_id,
+                              int view_instance_id) {}
+
+  // Attaches the task manager extension tag to |web_contents|, if needed based
+  // on |view_type|, so that its corresponding task shows up in the task
+  // manager.
+  virtual void AttachExtensionTaskManagerTag(content::WebContents* web_contents,
+                                             ViewType view_type) {}
+
+  // Returns a new UpdateClient.
+  virtual scoped_refptr<update_client::UpdateClient> CreateUpdateClient(
+      content::BrowserContext* context);
 
   // Returns the single instance of |this|.
   static ExtensionsBrowserClient* Get();

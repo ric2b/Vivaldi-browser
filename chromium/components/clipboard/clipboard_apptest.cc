@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "components/clipboard/public/interfaces/clipboard.mojom.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/application_test_base.h"
 #include "mojo/common/common_type_converters.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/application_test_base.h"
 
 using mojo::Array;
 using mojo::Clipboard;
@@ -54,9 +58,7 @@ class ClipboardAppTest : public mojo::test::ApplicationTestBase {
 
   void SetUp() override {
     mojo::test::ApplicationTestBase::SetUp();
-    mojo::URLRequestPtr request(mojo::URLRequest::New());
-    request->url = mojo::String::From("mojo:clipboard");
-    application_impl()->ConnectToService(request.Pass(), &clipboard_);
+    application_impl()->ConnectToService("mojo:clipboard", &clipboard_);
   }
 
   uint64_t GetSequenceNumber() {
@@ -94,7 +96,7 @@ class ClipboardAppTest : public mojo::test::ApplicationTestBase {
     Map<String, Array<uint8_t>> mime_data;
     mime_data[Clipboard::MIME_TYPE_TEXT] = Array<uint8_t>::From(data);
     clipboard_->WriteClipboardData(Clipboard::TYPE_COPY_PASTE,
-                                   mime_data.Pass());
+                                   std::move(mime_data));
   }
 
  protected:
@@ -129,7 +131,8 @@ TEST_F(ClipboardAppTest, CanSetMultipleDataTypesAtOnce) {
   mime_data[Clipboard::MIME_TYPE_HTML] =
       Array<uint8_t>::From(std::string(kHtmlData));
 
-  clipboard_->WriteClipboardData(Clipboard::TYPE_COPY_PASTE, mime_data.Pass());
+  clipboard_->WriteClipboardData(Clipboard::TYPE_COPY_PASTE,
+                                 std::move(mime_data));
 
   EXPECT_EQ(1ul, GetSequenceNumber());
 
@@ -149,7 +152,8 @@ TEST_F(ClipboardAppTest, CanClearClipboardWithZeroArray) {
   EXPECT_EQ(kPlainTextData, data);
 
   Map<String, Array<uint8_t>> mime_data;
-  clipboard_->WriteClipboardData(Clipboard::TYPE_COPY_PASTE, mime_data.Pass());
+  clipboard_->WriteClipboardData(Clipboard::TYPE_COPY_PASTE,
+                                 std::move(mime_data));
 
   EXPECT_EQ(2ul, GetSequenceNumber());
   EXPECT_FALSE(GetDataOfType(Clipboard::MIME_TYPE_TEXT, &data));

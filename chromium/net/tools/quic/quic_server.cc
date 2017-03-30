@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 
 #include "net/base/ip_endpoint.h"
+#include "net/base/sockaddr_storage.h"
 #include "net/quic/crypto/crypto_handshake.h"
 #include "net/quic/crypto/quic_random.h"
 #include "net/quic/quic_clock.h"
@@ -46,19 +47,11 @@ const char kSourceAddressTokenSecret[] = "secret";
 
 }  // namespace
 
-QuicServer::QuicServer()
-    : port_(0),
-      fd_(-1),
-      packets_dropped_(0),
-      overflow_supported_(false),
-      use_recvmmsg_(false),
-      crypto_config_(kSourceAddressTokenSecret, QuicRandom::GetInstance()),
-      supported_versions_(QuicSupportedVersions()),
-      packet_reader_(new QuicPacketReader()) {
-  Initialize();
-}
+QuicServer::QuicServer(ProofSource* proof_source)
+    : QuicServer(proof_source, QuicConfig(), QuicSupportedVersions()) {}
 
-QuicServer::QuicServer(const QuicConfig& config,
+QuicServer::QuicServer(ProofSource* proof_source,
+                       const QuicConfig& config,
                        const QuicVersionVector& supported_versions)
     : port_(0),
       fd_(-1),
@@ -66,7 +59,9 @@ QuicServer::QuicServer(const QuicConfig& config,
       overflow_supported_(false),
       use_recvmmsg_(false),
       config_(config),
-      crypto_config_(kSourceAddressTokenSecret, QuicRandom::GetInstance()),
+      crypto_config_(kSourceAddressTokenSecret,
+                     QuicRandom::GetInstance(),
+                     proof_source),
       supported_versions_(supported_versions),
       packet_reader_(new QuicPacketReader()) {
   Initialize();
@@ -79,8 +74,8 @@ void QuicServer::Initialize() {
 
   // If an initial flow control window has not explicitly been set, then use a
   // sensible value for a server: 1 MB for session, 64 KB for each stream.
-  const uint32 kInitialSessionFlowControlWindow = 1 * 1024 * 1024;  // 1 MB
-  const uint32 kInitialStreamFlowControlWindow = 64 * 1024;         // 64 KB
+  const uint32_t kInitialSessionFlowControlWindow = 1 * 1024 * 1024;  // 1 MB
+  const uint32_t kInitialStreamFlowControlWindow = 64 * 1024;         // 64 KB
   if (config_.GetInitialStreamFlowControlWindowToSend() ==
       kMinimumFlowControlSendWindow) {
     config_.SetInitialStreamFlowControlWindowToSend(
@@ -102,13 +97,11 @@ void QuicServer::Initialize() {
   QuicEpollClock clock(&epoll_server_);
 
   scoped_ptr<CryptoHandshakeMessage> scfg(
-      crypto_config_.AddDefaultConfig(
-          QuicRandom::GetInstance(), &clock,
-          QuicCryptoServerConfig::ConfigOptions()));
+      crypto_config_.AddDefaultConfig(QuicRandom::GetInstance(), &clock,
+                                      QuicCryptoServerConfig::ConfigOptions()));
 }
 
-QuicServer::~QuicServer() {
-}
+QuicServer::~QuicServer() {}
 
 bool QuicServer::Listen(const IPEndPoint& address) {
   port_ = address.port();
@@ -129,8 +122,8 @@ bool QuicServer::Listen(const IPEndPoint& address) {
   }
 
   int get_overflow = 1;
-  rc = setsockopt(
-      fd_, SOL_SOCKET, SO_RXQ_OVFL, &get_overflow, sizeof(get_overflow));
+  rc = setsockopt(fd_, SOL_SOCKET, SO_RXQ_OVFL, &get_overflow,
+                  sizeof(get_overflow));
 
   if (rc < 0) {
     DLOG(WARNING) << "Socket overflow detection not supported";
@@ -154,9 +147,8 @@ bool QuicServer::Listen(const IPEndPoint& address) {
   socklen_t raw_addr_len = sizeof(raw_addr);
   CHECK(address.ToSockAddr(reinterpret_cast<sockaddr*>(&raw_addr),
                            &raw_addr_len));
-  rc = bind(fd_,
-            reinterpret_cast<const sockaddr*>(&raw_addr),
-            sizeof(raw_addr));
+  rc =
+      bind(fd_, reinterpret_cast<const sockaddr*>(&raw_addr), sizeof(raw_addr));
   if (rc < 0) {
     LOG(ERROR) << "Bind failed: " << strerror(errno);
     return false;
@@ -187,12 +179,8 @@ QuicDefaultPacketWriter* QuicServer::CreateWriter(int fd) {
 }
 
 QuicDispatcher* QuicServer::CreateQuicDispatcher() {
-  return new QuicDispatcher(
-      config_,
-      &crypto_config_,
-      supported_versions_,
-      new QuicDispatcher::DefaultPacketWriterFactory(),
-      new QuicEpollConnectionHelper(&epoll_server_));
+  return new QuicDispatcher(config_, &crypto_config_, supported_versions_,
+                            new QuicEpollConnectionHelper(&epoll_server_));
 }
 
 void QuicServer::WaitForEvents() {
@@ -214,14 +202,14 @@ void QuicServer::OnEvent(int fd, EpollEvent* event) {
 
   if (event->in_events & EPOLLIN) {
     DVLOG(1) << "EPOLLIN";
-    bool read = true;
-    while (read) {
+    bool more_to_read = true;
+    while (more_to_read) {
       if (use_recvmmsg_) {
-        read = packet_reader_->ReadAndDispatchPackets(
+        more_to_read = packet_reader_->ReadAndDispatchPackets(
             fd_, port_, dispatcher_.get(),
             overflow_supported_ ? &packets_dropped_ : nullptr);
       } else {
-        read = QuicPacketReader::ReadAndDispatchSinglePacket(
+        more_to_read = QuicPacketReader::ReadAndDispatchSinglePacket(
             fd_, port_, dispatcher_.get(),
             overflow_supported_ ? &packets_dropped_ : nullptr);
       }

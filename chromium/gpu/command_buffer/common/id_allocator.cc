@@ -6,13 +6,15 @@
 
 #include "gpu/command_buffer/common/id_allocator.h"
 
+#include <stdint.h>
+
 #include <limits>
 #include "base/logging.h"
 
 namespace gpu {
 
 IdAllocator::IdAllocator() {
-  COMPILE_ASSERT(kInvalidResource == 0u, invalid_resource_is_not_zero);
+  static_assert(kInvalidResource == 0u, "kInvalidResource must be 0");
   // Simplify the code by making sure that lower_bound(id) never
   // returns the beginning of the map, if id is valid (eg !=
   // kInvalidResource).
@@ -142,8 +144,8 @@ void IdAllocator::FreeID(ResourceId id) {
   FreeIDRange(id, 1u);
 }
 
-void IdAllocator::FreeIDRange(ResourceId first_id, uint32 range) {
-  COMPILE_ASSERT(kInvalidResource == 0u, invalid_resource_is_not_zero);
+void IdAllocator::FreeIDRange(ResourceId first_id, uint32_t range) {
+  static_assert(kInvalidResource == 0u, "kInvalidResource must be 0");
 
   if (range == 0u || (first_id == 0u && range == 1u)) {
     return;

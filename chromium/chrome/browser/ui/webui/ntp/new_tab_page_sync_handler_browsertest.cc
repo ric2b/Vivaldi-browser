@@ -12,6 +12,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/test/browser_test_utils.h"
@@ -24,8 +25,10 @@ typedef InProcessBrowserTest NewTabPageSyncHandlerBrowserTest;
 
 class MockNewTabPageSyncHandler : public NewTabPageSyncHandler {
  public:
-  MOCK_METHOD3(SendSyncMessageToPage, void(MessageType type, std::string msg,
-      std::string linktext));
+  MOCK_METHOD3(SendSyncMessageToPage,
+               void(MessageType type,
+                    const std::string& msg,
+                    const std::string& linktext));
 
   void SetWaitingForInitialPageLoad(bool waiting) {
     waiting_for_initial_page_load_ = waiting;

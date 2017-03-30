@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 
 #include <vector>
 
@@ -9,6 +10,7 @@
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
@@ -67,9 +69,9 @@ class TestWallpaperObserver : public WallpaperManager::Observer {
     wallpaper_manager_->RemoveObserver(this);
   }
 
-  void OnWallpaperAnimationFinished(const std::string&) override {
+  void OnWallpaperAnimationFinished(const AccountId&) override {
     finished_ = true;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void WaitForWallpaperAnimationFinished() {
@@ -138,7 +140,7 @@ class TestWallpaperImageURLFetcherCallback {
         new net::HttpResponseHeaders(std::string());
     download_headers->AddHeader("Content-Type: image/jpeg");
     fetcher->set_response_headers(download_headers);
-    return fetcher.Pass();
+    return fetcher;
   }
 
   void Initialize(net::FakeURLFetcherFactory* factory) {
@@ -260,7 +262,7 @@ class CustomizationWallpaperDownloaderBrowserTest
 IN_PROC_BROWSER_TEST_F(CustomizationWallpaperDownloaderBrowserTest,
                        OEMWallpaperIsPresent) {
   CreateCmdlineWallpapers();
-  WallpaperManager::Get()->SetDefaultWallpaperNow(std::string());
+  WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
   EXPECT_TRUE(wallpaper_manager_test_utils::ImageIsNearColor(
       controller_->GetWallpaper(),
@@ -289,7 +291,7 @@ IN_PROC_BROWSER_TEST_F(CustomizationWallpaperDownloaderBrowserTest,
 IN_PROC_BROWSER_TEST_F(CustomizationWallpaperDownloaderBrowserTest,
                        OEMWallpaperRetryFetch) {
   CreateCmdlineWallpapers();
-  WallpaperManager::Get()->SetDefaultWallpaperNow(std::string());
+  WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
   EXPECT_TRUE(wallpaper_manager_test_utils::ImageIsNearColor(
       controller_->GetWallpaper(),

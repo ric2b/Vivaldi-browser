@@ -9,7 +9,6 @@
 #include <windows.h>
 #endif
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 

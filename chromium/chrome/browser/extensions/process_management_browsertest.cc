@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -40,8 +43,7 @@ class ProcessManagementTest : public ExtensionBrowserTest {
 
 
 // TODO(nasko): crbug.com/173137
-// TODO(vivaldi) Reenable mac for Vivaldi
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN)
 #define MAYBE_ProcessOverflow DISABLED_ProcessOverflow
 #else
 #define MAYBE_ProcessOverflow ProcessOverflow
@@ -55,7 +57,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest, MAYBE_ProcessOverflow) {
   content::RenderProcessHost::SetMaxRendererProcessCount(1);
 
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII("isolated_apps/app1")));
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII("isolated_apps/app2")));
@@ -193,7 +195,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest, MAYBE_ExtensionProcessBalancing) {
   content::RenderProcessHost::SetMaxRendererProcessCount(6);
 
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // The app under test acts on URLs whose host is "localhost",
   // so the URLs we navigate to must have host "localhost".

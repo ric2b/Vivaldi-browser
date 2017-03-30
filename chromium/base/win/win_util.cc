@@ -12,25 +12,34 @@
 #include <shlobj.h>
 #include <shobjidl.h>  // Must be before propkey.
 #include <initguid.h>
+#include <inspectable.h>
 #include <propkey.h>
 #include <propvarutil.h>
+#include <psapi.h>
+#include <roapi.h>
 #include <sddl.h>
 #include <setupapi.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdlib.h>
+#include <uiviewsettingsinterop.h>
+#include <windows.ui.viewmanagement.h>
+#include <winstring.h>
+#include <wrl/wrappers/corewrappers.h>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/win/metro.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_co_mem.h"
+#include "base/win/scoped_comptr.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_propvariant.h"
 #include "base/win/windows_version.h"
@@ -57,9 +66,129 @@ void __cdecl ForceCrashOnSigAbort(int) {
   *((volatile int*)0) = 0x1337;
 }
 
+typedef decltype(GetProcessMitigationPolicy)* GetProcessMitigationPolicyType;
+
+class LazyIsUser32AndGdi32Available {
+ public:
+  LazyIsUser32AndGdi32Available() : value_(!IsWin32kSyscallsDisabled()) {}
+
+  ~LazyIsUser32AndGdi32Available() {}
+
+  bool value() { return value_; }
+
+ private:
+  static bool IsWin32kSyscallsDisabled() {
+    // Can't disable win32k prior to windows 8.
+    if (base::win::GetVersion() < base::win::VERSION_WIN8)
+      return false;
+
+    GetProcessMitigationPolicyType get_process_mitigation_policy_func =
+        reinterpret_cast<GetProcessMitigationPolicyType>(GetProcAddress(
+            GetModuleHandle(L"kernel32.dll"), "GetProcessMitigationPolicy"));
+
+    if (!get_process_mitigation_policy_func)
+      return false;
+
+    PROCESS_MITIGATION_SYSTEM_CALL_DISABLE_POLICY policy = {};
+    if (get_process_mitigation_policy_func(GetCurrentProcess(),
+                                           ProcessSystemCallDisablePolicy,
+                                           &policy, sizeof(policy))) {
+      return policy.DisallowWin32kSystemCalls != 0;
+    }
+
+    return false;
+  }
+
+  const bool value_;
+
+  DISALLOW_COPY_AND_ASSIGN(LazyIsUser32AndGdi32Available);
+};
+
 const wchar_t kWindows8OSKRegPath[] =
     L"Software\\Classes\\CLSID\\{054AAE20-4BEA-4347-8A35-64A533254A9D}"
     L"\\LocalServer32";
+
+// Returns the current platform role. We use the PowerDeterminePlatformRoleEx
+// API for that.
+POWER_PLATFORM_ROLE GetPlatformRole() {
+  return PowerDeterminePlatformRoleEx(POWER_PLATFORM_ROLE_V2);
+}
+
+// Uses the Windows 10 WRL API's to query the current system state. The API's
+// we are using in the function below are supported in Win32 apps as per msdn.
+// It looks like the API implementation is buggy at least on Surface 4 causing
+// it to always return UserInteractionMode_Touch which as per documentation
+// indicates tablet mode.
+bool IsWindows10TabletDevice() {
+  if (GetVersion() < VERSION_WIN10)
+    return false;
+
+  using RoGetActivationFactoryFunction = decltype(&RoGetActivationFactory);
+  using WindowsCreateStringFunction = decltype(&WindowsCreateString);
+
+  static RoGetActivationFactoryFunction get_factory = nullptr;
+  static WindowsCreateStringFunction create_string = nullptr;
+
+  if (!get_factory) {
+    DCHECK_EQ(create_string, static_cast<WindowsCreateStringFunction>(
+        nullptr));
+
+    HMODULE combase_dll = ::LoadLibrary(L"combase.dll");
+    if (!combase_dll)
+      return false;
+
+    get_factory = reinterpret_cast<RoGetActivationFactoryFunction>(
+        ::GetProcAddress(combase_dll, "RoGetActivationFactory"));
+    if (!get_factory) {
+      CHECK(false);
+      return false;
+    }
+
+    create_string = reinterpret_cast<WindowsCreateStringFunction>(
+        ::GetProcAddress(combase_dll, "WindowsCreateString"));
+    if (!create_string) {
+      CHECK(false);
+      return false;
+    }
+  }
+
+  HRESULT hr = E_FAIL;
+  // This HSTRING is allocated on the heap and is leaked.
+  static HSTRING view_settings_guid = NULL;
+  if (!view_settings_guid) {
+    hr = create_string(
+        RuntimeClass_Windows_UI_ViewManagement_UIViewSettings,
+        static_cast<UINT32>(
+            wcslen(RuntimeClass_Windows_UI_ViewManagement_UIViewSettings)),
+        &view_settings_guid);
+    if (FAILED(hr))
+      return false;
+  }
+
+  base::win::ScopedComPtr<IUIViewSettingsInterop> view_settings_interop;
+  hr = get_factory(view_settings_guid,
+                   __uuidof(IUIViewSettingsInterop),
+                   view_settings_interop.ReceiveVoid());
+  if (FAILED(hr))
+    return false;
+
+  base::win::ScopedComPtr<ABI::Windows::UI::ViewManagement::IUIViewSettings>
+      view_settings;
+  // TODO(ananta)
+  // Avoid using GetForegroundWindow here and pass in the HWND of the window
+  // intiating the request to display the keyboard.
+  hr = view_settings_interop->GetForWindow(
+      ::GetForegroundWindow(),
+      __uuidof(ABI::Windows::UI::ViewManagement::IUIViewSettings),
+      view_settings.ReceiveVoid());
+  if (FAILED(hr))
+    return false;
+
+  ABI::Windows::UI::ViewManagement::UserInteractionMode mode =
+      ABI::Windows::UI::ViewManagement::UserInteractionMode_Mouse;
+  view_settings->get_UserInteractionMode(&mode);
+  return mode == ABI::Windows::UI::ViewManagement::UserInteractionMode_Touch;
+}
 
 }  // namespace
 
@@ -71,7 +200,7 @@ const wchar_t kWindows8OSKRegPath[] =
 bool IsKeyboardPresentOnSlate(std::string* reason) {
   bool result = false;
 
-  if (GetVersion() < VERSION_WIN7) {
+  if (GetVersion() < VERSION_WIN8) {
     *reason = "Detection not supported";
     return false;
   }
@@ -95,10 +224,14 @@ bool IsKeyboardPresentOnSlate(std::string* reason) {
     }
   }
 
-  // If the device is docked, the user is treating the device as a PC.
-  if (GetSystemMetrics(SM_SYSTEMDOCKED) != 0) {
+  // If it is a tablet device we assume that there is no keyboard attached.
+  if (IsTabletDevice(reason)) {
+    if (reason)
+      *reason += "Tablet device.\n";
+    return false;
+  } else {
     if (reason) {
-      *reason += "SM_SYSTEMDOCKED\n";
+      *reason += "Not a tablet device";
       result = true;
     } else {
       return true;
@@ -142,23 +275,6 @@ bool IsKeyboardPresentOnSlate(std::string* reason) {
         return true;
       }
     }
-  }
-
-  // Check if the device is being used as a laptop or a tablet. This can be
-  // checked by first checking the role of the device and then the
-  // corresponding system metric (SM_CONVERTIBLESLATEMODE). If it is being used
-  // as a tablet then we want the OSK to show up.
-  POWER_PLATFORM_ROLE role = PowerDeterminePlatformRole();
-
-  if (((role == PlatformRoleMobile) || (role == PlatformRoleSlate)) &&
-       (GetSystemMetrics(SM_CONVERTIBLESLATEMODE) == 0)) {
-      if (reason) {
-        *reason += (role == PlatformRoleMobile) ? "PlatformRoleMobile\n" :
-                                                  "PlatformRoleSlate\n";
-        // Don't change result here if it's already true.
-      } else {
-        return false;
-      }
   }
 
   const GUID KEYBOARD_CLASS_GUID =
@@ -250,23 +366,6 @@ bool GetUserSidString(std::wstring* user_sid) {
   ::LocalFree(sid_string);
 
   return true;
-}
-
-bool IsShiftPressed() {
-  return (::GetKeyState(VK_SHIFT) & 0x8000) == 0x8000;
-}
-
-bool IsCtrlPressed() {
-  return (::GetKeyState(VK_CONTROL) & 0x8000) == 0x8000;
-}
-
-bool IsAltPressed() {
-  return (::GetKeyState(VK_MENU) & 0x8000) == 0x8000;
-}
-
-bool IsAltGrPressed() {
-  return (::GetKeyState(VK_MENU) & 0x8000) == 0x8000 &&
-      (::GetKeyState(VK_CONTROL) & 0x8000) == 0x8000;
 }
 
 bool UserAccountControlIsEnabled() {
@@ -369,30 +468,60 @@ void SetAbortBehaviorForCrashReporting() {
   signal(SIGABRT, ForceCrashOnSigAbort);
 }
 
-bool IsTabletDevice() {
-  if (GetSystemMetrics(SM_MAXIMUMTOUCHES) == 0)
+bool IsTabletDevice(std::string* reason) {
+  if (GetVersion() < VERSION_WIN8) {
+    if (reason)
+      *reason = "Tablet device detection not supported below Windows 8\n";
     return false;
+  }
 
-  Version version = GetVersion();
-  if (version == VERSION_XP)
-    return (GetSystemMetrics(SM_TABLETPC) != 0);
+  if (IsWindows10TabletDevice())
+    return true;
+
+  if (GetSystemMetrics(SM_MAXIMUMTOUCHES) == 0) {
+    if (reason) {
+      *reason += "Device does not support touch.\n";
+    } else {
+      return false;
+    }
+  }
 
   // If the device is docked, the user is treating the device as a PC.
-  if (GetSystemMetrics(SM_SYSTEMDOCKED) != 0)
-    return false;
+  if (GetSystemMetrics(SM_SYSTEMDOCKED) != 0) {
+    if (reason) {
+      *reason += "SM_SYSTEMDOCKED\n";
+    } else {
+      return false;
+    }
+  }
 
-  // PlatformRoleSlate was only added in Windows 8, but prior to Win8 it is
-  // still possible to check for a mobile power profile.
-  POWER_PLATFORM_ROLE role = PowerDeterminePlatformRole();
+  // PlatformRoleSlate was added in Windows 8+.
+  POWER_PLATFORM_ROLE role = GetPlatformRole();
   bool mobile_power_profile = (role == PlatformRoleMobile);
-  bool slate_power_profile = false;
-  if (version >= VERSION_WIN8)
-    slate_power_profile = (role == PlatformRoleSlate);
+  bool slate_power_profile = (role == PlatformRoleSlate);
 
-  if (mobile_power_profile || slate_power_profile)
-    return (GetSystemMetrics(SM_CONVERTIBLESLATEMODE) == 0);
-
-  return false;
+  bool is_tablet = false;
+  bool is_tablet_pc = false;
+  if (mobile_power_profile || slate_power_profile) {
+    is_tablet_pc = !GetSystemMetrics(SM_TABLETPC);
+    is_tablet = !GetSystemMetrics(SM_CONVERTIBLESLATEMODE);
+    if (!is_tablet) {
+      if (reason) {
+        *reason += "Not in slate mode.\n";
+      } else {
+        return false;
+      }
+    } else {
+      if (reason) {
+        *reason += (role == PlatformRoleMobile) ? "PlatformRoleMobile\n" :
+                                                  "PlatformRoleSlate\n";
+      }
+    }
+  } else {
+    if (reason)
+      *reason += "Device role is not mobile or slate.\n";
+  }
+  return is_tablet && is_tablet_pc;
 }
 
 bool DisplayVirtualKeyboard() {
@@ -491,8 +620,6 @@ bool DismissVirtualKeyboard() {
   return false;
 }
 
-typedef HWND (*MetroRootWindow) ();
-
 enum DomainEnrollementState {UNKNOWN = -1, NOT_ENROLLED, ENROLLED};
 static volatile long int g_domain_state = UNKNOWN;
 
@@ -535,6 +662,12 @@ bool MaybeHasSHA256Support() {
 
   DCHECK(os_info->version() >= VERSION_VISTA);
   return true;  // New enough to have SHA-256 support.
+}
+
+bool IsUser32AndGdi32Available() {
+  static base::LazyInstance<LazyIsUser32AndGdi32Available>::Leaky available =
+      LAZY_INSTANCE_INITIALIZER;
+  return available.Get().value();
 }
 
 }  // namespace win

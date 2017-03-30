@@ -24,9 +24,7 @@ void GetStringList(
   if (!value)
     return;  // No value, empty input and succeed.
 
-  std::vector<std::string> result;
-  ExtractListOfStringValues(*value, &result, err);
-  (config_values->*accessor)().swap(result);
+  ExtractListOfStringValues(*value, &(config_values->*accessor)(), err);
 }
 
 void GetDirList(
@@ -69,6 +67,7 @@ void ConfigValuesGenerator::Run() {
     GetDirList(scope_, #name, config_values_, input_dir_, \
                &ConfigValues::name, err_);
 
+  FILL_STRING_CONFIG_VALUE(asmflags)
   FILL_STRING_CONFIG_VALUE(cflags)
   FILL_STRING_CONFIG_VALUE(cflags_c)
   FILL_STRING_CONFIG_VALUE(cflags_cc)
@@ -78,10 +77,16 @@ void ConfigValuesGenerator::Run() {
   FILL_DIR_CONFIG_VALUE(   include_dirs)
   FILL_STRING_CONFIG_VALUE(ldflags)
   FILL_DIR_CONFIG_VALUE(   lib_dirs)
-  FILL_STRING_CONFIG_VALUE(libs)
 
 #undef FILL_STRING_CONFIG_VALUE
 #undef FILL_DIR_CONFIG_VALUE
+
+  // Libs
+  const Value* libs_value = scope_->GetValue("libs", true);
+  if (libs_value) {
+    ExtractListOfLibs(scope_->settings()->build_settings(), *libs_value,
+                      input_dir_, &config_values_->libs(), err_);
+  }
 
   // Precompiled headers.
   const Value* precompiled_header_value =

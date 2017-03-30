@@ -10,6 +10,8 @@
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
+#include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,7 +25,6 @@
 #include "chrome/browser/ui/translate/translate_bubble_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
-#include "components/translate/content/browser/browser_cld_data_provider_factory.h"
 #include "components/translate/content/common/cld_data_source.h"
 #include "components/translate/content/common/translate_messages.h"
 #include "components/translate/core/browser/language_state.h"
@@ -34,6 +35,7 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/common/language_detection_details.h"
+#include "components/variations/service/variations_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -58,14 +60,13 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       translate_driver_(&web_contents->GetController()),
       translate_manager_(
-          new translate::TranslateManager(this, prefs::kAcceptLanguages)),
-      cld_data_provider_(
-          translate::BrowserCldDataProviderFactory::Get()->
-            CreateBrowserCldDataProvider(web_contents)) {
+          new translate::TranslateManager(this, prefs::kAcceptLanguages)) {
   translate_driver_.AddObserver(this);
   translate_driver_.set_translate_manager(translate_manager_.get());
   // Customization: for the standalone data source, we configure the path to
   // CLD data immediately on startup.
+  // TODO(andrewhayden): This belongs in the data source implementation, not
+  // here.
   if (translate::CldDataSource::IsUsingStandaloneDataSource() &&
       !g_cld_file_path_initialized_) {
     DVLOG(1) << "Initializing CLD file path for the first time.";
@@ -98,8 +99,21 @@ ChromeTranslateClient::CreateTranslatePrefs(PrefService* prefs) {
 #else
   const char* preferred_languages_prefs = NULL;
 #endif
-  return scoped_ptr<translate::TranslatePrefs>(new translate::TranslatePrefs(
-      prefs, prefs::kAcceptLanguages, preferred_languages_prefs));
+  scoped_ptr<translate::TranslatePrefs> translate_prefs(
+      new translate::TranslatePrefs(prefs, prefs::kAcceptLanguages,
+                                    preferred_languages_prefs));
+
+  // We need to obtain the country here, since it comes from VariationsService.
+  // components/ does not have access to that.
+  DCHECK(g_browser_process);
+  variations::VariationsService* variations_service =
+      g_browser_process->variations_service();
+  if (variations_service) {
+    translate_prefs->SetCountry(
+        variations_service->GetStoredPermanentCountry());
+  }
+
+  return translate_prefs;
 }
 
 // static
@@ -151,11 +165,8 @@ void ChromeTranslateClient::GetTranslateLanguages(
     }
   }
 
-  std::string accept_languages_str = prefs->GetString(prefs::kAcceptLanguages);
-  std::vector<std::string> accept_languages_list;
-  base::SplitString(accept_languages_str, ',', &accept_languages_list);
   *target =
-      translate::TranslateManager::GetTargetLanguage(accept_languages_list);
+      translate::TranslateManager::GetTargetLanguage(translate_prefs.get());
 }
 
 translate::TranslateManager* ChromeTranslateClient::GetTranslateManager() {
@@ -164,44 +175,46 @@ translate::TranslateManager* ChromeTranslateClient::GetTranslateManager() {
 
 void ChromeTranslateClient::ShowTranslateUI(
     translate::TranslateStep step,
-    const std::string source_language,
-    const std::string target_language,
+    const std::string& source_language,
+    const std::string& target_language,
     translate::TranslateErrors::Type error_type,
     bool triggered_from_menu) {
   DCHECK(web_contents());
   if (error_type != translate::TranslateErrors::NONE)
     step = translate::TRANSLATE_STEP_TRANSLATE_ERROR;
 
-  if (TranslateService::IsTranslateBubbleEnabled()) {
-    // Bubble UI.
-    if (step == translate::TRANSLATE_STEP_BEFORE_TRANSLATE) {
-      // TODO(droger): Move this logic out of UI code.
-      GetLanguageState().SetTranslateEnabled(true);
-      if (!GetLanguageState().HasLanguageChanged())
-        return;
-
-      if (!triggered_from_menu) {
-        if (web_contents()->GetBrowserContext()->IsOffTheRecord())
-          return;
-        if (GetTranslatePrefs()->IsTooOftenDenied(source_language))
-          return;
-      }
-    }
-    ShowBubble(step, error_type);
+#if !defined(USE_AURA)
+  if (!TranslateService::IsTranslateBubbleEnabled()) {
+    // Infobar UI.
+    translate::TranslateInfoBarDelegate::Create(
+        step != translate::TRANSLATE_STEP_BEFORE_TRANSLATE,
+        translate_manager_->GetWeakPtr(),
+        InfoBarService::FromWebContents(web_contents()),
+        web_contents()->GetBrowserContext()->IsOffTheRecord(),
+        step,
+        source_language,
+        target_language,
+        error_type,
+        triggered_from_menu);
     return;
   }
+#endif
 
-  // Infobar UI.
-  translate::TranslateInfoBarDelegate::Create(
-      step != translate::TRANSLATE_STEP_BEFORE_TRANSLATE,
-      translate_manager_->GetWeakPtr(),
-      InfoBarService::FromWebContents(web_contents()),
-      web_contents()->GetBrowserContext()->IsOffTheRecord(),
-      step,
-      source_language,
-      target_language,
-      error_type,
-      triggered_from_menu);
+  // Bubble UI.
+  if (step == translate::TRANSLATE_STEP_BEFORE_TRANSLATE) {
+    // TODO(droger): Move this logic out of UI code.
+    GetLanguageState().SetTranslateEnabled(true);
+    if (!GetLanguageState().HasLanguageChanged())
+      return;
+
+    if (!triggered_from_menu) {
+      if (web_contents()->GetBrowserContext()->IsOffTheRecord())
+        return;
+      if (GetTranslatePrefs()->IsTooOftenDenied(source_language))
+        return;
+    }
+  }
+  ShowBubble(step, error_type);
 }
 
 translate::TranslateDriver* ChromeTranslateClient::GetTranslateDriver() {
@@ -230,7 +243,12 @@ ChromeTranslateClient::GetTranslateAcceptLanguages() {
 }
 
 int ChromeTranslateClient::GetInfobarIconID() const {
+#if defined(USE_AURA)
+  NOTREACHED();
+  return 0;
+#else
   return IDR_INFOBAR_TRANSLATE;
+#endif
 }
 
 bool ChromeTranslateClient::IsTranslatableURL(const GURL& url) {
@@ -253,10 +271,6 @@ void ChromeTranslateClient::ShowReportLanguageDetectionErrorUI(
   chrome::AddSelectedTabWithURL(
       browser, report_url, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
 #endif  // defined(OS_ANDROID)
-}
-
-bool ChromeTranslateClient::OnMessageReceived(const IPC::Message& message) {
-  return cld_data_provider_->OnMessageReceived(message);
 }
 
 void ChromeTranslateClient::WebContentsDestroyed() {

@@ -11,8 +11,8 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "chrome/browser/supervised_user/supervised_users.h"
 #include "sync/api/syncable_service.h"
@@ -58,9 +58,14 @@ class SupervisedUserWhitelistService : public syncer::SyncableService {
   // site lists.
   void AddSiteListsChangedCallback(const SiteListsChangedCallback& callback);
 
+  // Returns a map (from CRX ID to name) of whitelists to be installed,
+  // specified on the command line.
+  static std::map<std::string, std::string> GetWhitelistsFromCommandLine();
+
   // Loads an already existing whitelist on disk (i.e. without downloading it as
   // a component).
   void LoadWhitelistForTesting(const std::string& id,
+                               const base::string16& title,
                                const base::FilePath& path);
 
   // Unloads a whitelist. Public for testing.
@@ -93,10 +98,15 @@ class SupervisedUserWhitelistService : public syncer::SyncableService {
       const sync_pb::ManagedUserWhitelistSpecifics& whitelist);
   void RemoveWhitelist(base::DictionaryValue* pref_dict, const std::string& id);
 
+  enum WhitelistSource {
+    FROM_SYNC,
+    FROM_COMMAND_LINE,
+  };
+
   // Registers a new or existing whitelist.
   void RegisterWhitelist(const std::string& id,
                          const std::string& name,
-                         bool new_installation);
+                         WhitelistSource source);
 
   void GetLoadedWhitelists(
       std::vector<scoped_refptr<SupervisedUserSiteList>>* whitelists);
@@ -104,6 +114,7 @@ class SupervisedUserWhitelistService : public syncer::SyncableService {
   void NotifyWhitelistsChanged();
 
   void OnWhitelistReady(const std::string& id,
+                        const base::string16& title,
                         const base::FilePath& whitelist_path);
   void OnWhitelistLoaded(
       const std::string& id,

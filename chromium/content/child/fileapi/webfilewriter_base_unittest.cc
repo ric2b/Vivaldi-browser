@@ -4,7 +4,10 @@
 
 #include "content/child/fileapi/webfilewriter_base.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,15 +60,15 @@ class TestableFileWriter : public WebFileWriterBase {
 
   bool received_truncate_;
   GURL received_truncate_path_;
-  int64 received_truncate_offset_;
+  int64_t received_truncate_offset_;
   bool received_write_;
   GURL received_write_path_;
   std::string received_write_blob_uuid_;
-  int64 received_write_offset_;
+  int64_t received_write_offset_;
   bool received_cancel_;
 
  protected:
-  void DoTruncate(const GURL& path, int64 offset) override {
+  void DoTruncate(const GURL& path, int64_t offset) override {
     received_truncate_ = true;
     received_truncate_path_ = path;
     received_truncate_offset_ = offset;
@@ -89,7 +92,7 @@ class TestableFileWriter : public WebFileWriterBase {
 
   void DoWrite(const GURL& path,
                const std::string& blob_uuid,
-               int64 offset) override {
+               int64_t offset) override {
     received_write_ = true;
     received_write_path_ = path;
     received_write_offset_ = offset;
@@ -137,7 +140,7 @@ class FileWriterTest : public testing::Test,
   }
 
   // WebFileWriterClient overrides
-  virtual void didWrite(long long bytes, bool complete) {
+  void didWrite(long long bytes, bool complete) override {
     EXPECT_FALSE(received_did_write_complete_);
     ++received_did_write_count_;
     received_did_write_bytes_total_ += bytes;
@@ -148,14 +151,14 @@ class FileWriterTest : public testing::Test,
       testable_writer_.reset(NULL);
   }
 
-  virtual void didTruncate() {
+  void didTruncate() override {
     EXPECT_FALSE(received_did_truncate_);
     received_did_truncate_ = true;
     if (delete_in_client_callback_)
       testable_writer_.reset(NULL);
   }
 
-  virtual void didFail(blink::WebFileError error) {
+  void didFail(blink::WebFileError error) override {
     EXPECT_FALSE(received_did_fail_);
     received_did_fail_ = true;
     fail_error_received_ = error;

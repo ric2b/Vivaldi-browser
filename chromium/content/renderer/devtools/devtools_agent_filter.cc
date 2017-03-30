@@ -25,14 +25,15 @@ class MessageImpl : public WebDevToolsAgent::MessageDescriptor {
       : msg_(message),
         routing_id_(routing_id) {
   }
-  virtual ~MessageImpl() {}
-  virtual WebDevToolsAgent* agent() {
+  ~MessageImpl() override {}
+  WebDevToolsAgent* agent() override {
     DevToolsAgent* agent = DevToolsAgent::FromRoutingId(routing_id_);
     if (!agent)
       return 0;
     return agent->GetWebAgent();
   }
-  virtual WebString message() { return WebString::fromUTF8(msg_); }
+  WebString message() override { return WebString::fromUTF8(msg_); }
+
  private:
   std::string msg_;
   int routing_id_;
@@ -59,6 +60,7 @@ bool DevToolsAgentFilter::OnMessageReceived(const IPC::Message& message) {
 DevToolsAgentFilter::~DevToolsAgentFilter() {}
 
 void DevToolsAgentFilter::OnDispatchOnInspectorBackend(
+    int session_id,
     const std::string& message) {
   if (embedded_worker_routes_.find(current_routing_id_) !=
       embedded_worker_routes_.end()) {
@@ -68,29 +70,30 @@ void DevToolsAgentFilter::OnDispatchOnInspectorBackend(
   if (WebDevToolsAgent::shouldInterruptForMessage(
           WebString::fromUTF8(message))) {
     WebDevToolsAgent::interruptAndDispatch(
-        new MessageImpl(message, current_routing_id_));
+        session_id, new MessageImpl(message, current_routing_id_));
   }
 
 }
 
-void DevToolsAgentFilter::AddEmbeddedWorkerRouteOnMainThread(int32 routing_id) {
+void DevToolsAgentFilter::AddEmbeddedWorkerRouteOnMainThread(
+    int32_t routing_id) {
   io_task_runner_->PostTask(
       FROM_HERE, base::Bind(&DevToolsAgentFilter::AddEmbeddedWorkerRoute, this,
                             routing_id));
 }
 
 void DevToolsAgentFilter::RemoveEmbeddedWorkerRouteOnMainThread(
-    int32 routing_id) {
+    int32_t routing_id) {
   io_task_runner_->PostTask(
       FROM_HERE, base::Bind(&DevToolsAgentFilter::RemoveEmbeddedWorkerRoute,
                             this, routing_id));
 }
 
-void DevToolsAgentFilter::AddEmbeddedWorkerRoute(int32 routing_id) {
+void DevToolsAgentFilter::AddEmbeddedWorkerRoute(int32_t routing_id) {
   embedded_worker_routes_.insert(routing_id);
 }
 
-void DevToolsAgentFilter::RemoveEmbeddedWorkerRoute(int32 routing_id) {
+void DevToolsAgentFilter::RemoveEmbeddedWorkerRoute(int32_t routing_id) {
   embedded_worker_routes_.erase(routing_id);
 }
 

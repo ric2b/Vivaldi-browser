@@ -5,9 +5,8 @@
 #ifndef BASE_MESSAGE_LOOP_MESSAGE_PUMP_LIBEVENT_H_
 #define BASE_MESSAGE_LOOP_MESSAGE_PUMP_LIBEVENT_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
-#include "base/memory/weak_ptr.h"
+#include "base/macros.h"
 #include "base/message_loop/message_pump.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
@@ -86,7 +85,9 @@ class BASE_EXPORT MessagePumpLibevent : public MessagePump {
     event* event_;
     MessagePumpLibevent* pump_;
     Watcher* watcher_;
-    WeakPtrFactory<FileDescriptorWatcher> weak_factory_;
+    // If this pointer is non-NULL, the pointee is set to true in the
+    // destructor.
+    bool* was_destroyed_;
 
     DISALLOW_COPY_AND_ASSIGN(FileDescriptorWatcher);
   };

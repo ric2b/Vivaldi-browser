@@ -9,8 +9,9 @@
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "grit/components_strings.h"
 #include "ios/chrome/browser/translate/translate_infobar_tags.h"
+#include "ios/chrome/grit/ios_chromium_strings.h"
+#include "ios/chrome/grit/ios_google_chrome_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/string_provider.h"
 #import "ios/public/provider/chrome/browser/ui/infobar_view_delegate.h"
 #import "ios/public/provider/chrome/browser/ui/infobar_view_protocol.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -35,19 +36,17 @@
   translate::TranslateInfoBarDelegate* translateInfoBarDelegate =
       delegate->AsTranslateInfoBarDelegate();
   ios::ChromeBrowserProvider* provider = ios::GetChromeBrowserProvider();
-  infoBarView.reset(
-      ios::GetChromeBrowserProvider()->CreateInfoBarView(frame, self.delegate));
+  infoBarView.reset(provider->CreateInfoBarView(frame, self.delegate));
   // Icon
   gfx::Image icon = translateInfoBarDelegate->GetIcon();
   if (!icon.IsEmpty())
     [infoBarView addLeftIcon:icon.ToUIImage()];
   // Main text.
-  base::string16 originalLanguage = translateInfoBarDelegate->language_name_at(
-      translateInfoBarDelegate->original_language_index());
-  [infoBarView addLabel:l10n_util::GetNSStringF(
-                            IDS_TRANSLATE_INFOBAR_NEVER_MESSAGE_IOS,
-                            provider->GetStringProvider()->GetProductName(),
-                            originalLanguage)];
+  base::string16 originalLanguage =
+      translateInfoBarDelegate->original_language_name();
+  [infoBarView
+      addLabel:l10n_util::GetNSStringF(IDS_IOS_TRANSLATE_INFOBAR_NEVER_MESSAGE,
+                                       originalLanguage)];
   // Close button.
   [infoBarView addCloseButtonWithTag:TranslateInfoBarIOSTag::CLOSE
                               target:self

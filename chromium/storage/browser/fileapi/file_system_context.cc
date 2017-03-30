@@ -4,7 +4,12 @@
 
 #include "storage/browser/fileapi/file_system_context.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
@@ -155,7 +160,7 @@ FileSystemContext::FileSystemContext(
                                              partition_path,
                                              special_storage_policy,
                                              options)),
-      additional_backends_(additional_backends.Pass()),
+      additional_backends_(std::move(additional_backends)),
       auto_mount_handlers_(auto_mount_handlers),
       external_mount_points_(external_mount_points),
       partition_path_(partition_path),
@@ -438,8 +443,8 @@ void FileSystemContext::DeleteFileSystem(
 
 scoped_ptr<storage::FileStreamReader> FileSystemContext::CreateFileStreamReader(
     const FileSystemURL& url,
-    int64 offset,
-    int64 max_bytes_to_read,
+    int64_t offset,
+    int64_t max_bytes_to_read,
     const base::Time& expected_modification_time) {
   if (!url.is_valid())
     return scoped_ptr<storage::FileStreamReader>();
@@ -452,7 +457,7 @@ scoped_ptr<storage::FileStreamReader> FileSystemContext::CreateFileStreamReader(
 
 scoped_ptr<FileStreamWriter> FileSystemContext::CreateFileStreamWriter(
     const FileSystemURL& url,
-    int64 offset) {
+    int64_t offset) {
   if (!url.is_valid())
     return scoped_ptr<FileStreamWriter>();
   FileSystemBackend* backend = GetFileSystemBackend(url.type());
@@ -626,8 +631,12 @@ void FileSystemContext::DidOpenFileSystemForResolveURL(
     DCHECK(result);
   }
 
+  // TODO(mtomasz): Not all fields should be required for ResolveURL.
   operation_runner()->GetMetadata(
-      url, base::Bind(&DidGetMetadataForResolveURL, path, callback, info));
+      url, FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
+               FileSystemOperation::GET_METADATA_FIELD_SIZE |
+               FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
+      base::Bind(&DidGetMetadataForResolveURL, path, callback, info));
 }
 
 }  // namespace storage

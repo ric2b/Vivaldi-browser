@@ -10,17 +10,11 @@
 #include "base/logging.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
+#include "browser/vivaldi_download_status.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "ui/views/win/hwnd_util.h"
-
-#define VIVALDI_DOWNLOAD_PROGRESS
-#ifdef VIVALDI_DOWNLOAD_PROGRESS
-#include "chrome/browser/ui/views/apps/chrome_native_app_window_views_win.h"
-//TODO : andre@vivaldi.com make this multiwindow aware, if it is needed.
-extensions::AppWindow* current_vivaldi_window_ = NULL;
-#endif
 
 namespace {
 
@@ -61,41 +55,6 @@ void UpdateTaskbarProgressBar(int download_count,
   }
 }
 
-#ifdef VIVALDI_DOWNLOAD_PROGRESS
-void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
-                                               bool progress_known,
-                                               float progress) {
-
-  // Taskbar progress bar is only supported on Win7.
-  if (base::win::GetVersion() < base::win::VERSION_WIN7)
-    return;
-
-  base::win::ScopedComPtr<ITaskbarList3> taskbar;
-  HRESULT result = taskbar.CreateInstance(CLSID_TaskbarList, NULL,
-    CLSCTX_INPROC_SERVER);
-  if (FAILED(result)) {
-    return;
-  }
-
-  result = taskbar->HrInit();
-  if (FAILED(result)) {
-    return;
-  }
-
-  if (current_vivaldi_window_)
-  {
-    HWND frame = views::HWNDForNativeWindow(current_vivaldi_window_->GetNativeWindow());
-    if (download_count == 0 || progress == 1.0f)
-      taskbar->SetProgressState(frame, TBPF_NOPROGRESS);
-    else if (!progress_known)
-      taskbar->SetProgressState(frame, TBPF_INDETERMINATE);
-    else
-      taskbar->SetProgressValue(frame, static_cast<int>(progress * 100), 100);
-  }
-
-}
-#endif //VIVALDI_DOWNLOAD_PROGRESS
-
 }  // namespace
 
 void DownloadStatusUpdater::UpdateAppIconDownloadProgress(
@@ -107,11 +66,12 @@ void DownloadStatusUpdater::UpdateAppIconDownloadProgress(
   bool progress_known = GetProgress(&progress, &download_count);
   UpdateTaskbarProgressBar(download_count, progress_known, progress);
 
-#ifdef VIVALDI_DOWNLOAD_PROGRESS
+#ifdef VIVALDI_BUILD
   // Only update progress for Vivaldi when running.
-  UpdateTaskbarProgressBarForVivaldiWindows(download->IsPaused() ? 0 : download_count,
-                                            progress_known,
-                                            progress);
-#endif //VIVALDI_DOWNLOAD_PROGRESS
+  vivaldi::UpdateTaskbarProgressBarForVivaldiWindows(
+                                download->IsPaused() ? 0 : download_count,
+                                progress_known,
+                                progress);
+#endif //VIVALDI_BUILD
 
  }

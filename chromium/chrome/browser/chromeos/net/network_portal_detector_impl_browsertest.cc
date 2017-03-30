@@ -14,7 +14,6 @@
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_test_utils.h"
 #include "chrome/browser/chromeos/net/network_portal_notification_controller.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
@@ -24,6 +23,7 @@
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
 #include "components/captive_portal/captive_portal_testing_utils.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_utils.h"
 #include "dbus/object_path.h"
 #include "net/base/net_errors.h"
@@ -128,8 +128,9 @@ class NetworkPortalDetectorImplBrowserTest
         base::Bind(&ErrorCallbackFunction));
 
     network_portal_detector_ = new NetworkPortalDetectorImpl(
-        g_browser_process->system_request_context());
-    NetworkPortalDetector::InitializeForTesting(network_portal_detector_);
+        g_browser_process->system_request_context(),
+        true /* create_notification_controller */);
+    network_portal_detector::InitializeForTesting(network_portal_detector_);
     network_portal_detector_->Enable(false /* start_detection */);
     set_detector(network_portal_detector_->captive_portal_detector_.get());
     PortalDetectorStrategy::set_delay_till_next_attempt_for_testing(
@@ -151,12 +152,12 @@ class NetworkPortalDetectorImplBrowserTest
 
   void SetIgnoreNoNetworkForTesting() {
     network_portal_detector_->notification_controller_
-        .SetIgnoreNoNetworkForTesting();
+        ->SetIgnoreNoNetworkForTesting();
   }
 
   const NetworkPortalWebDialog* GetDialog() const {
     return network_portal_detector_->notification_controller_
-        .GetDialogForTesting();
+        ->GetDialogForTesting();
   }
 
  private:
@@ -199,9 +200,10 @@ IN_PROC_BROWSER_TEST_F(NetworkPortalDetectorImplBrowserTest,
   // Check that wifi is marked as behind the portal and that notification
   // is displayed.
   ASSERT_TRUE(message_center()->FindVisibleNotificationById(kNotificationId));
-  ASSERT_EQ(
-      NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL,
-      NetworkPortalDetector::Get()->GetCaptivePortalState(kWifiGuid).status);
+  ASSERT_EQ(NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL,
+            network_portal_detector::GetInstance()
+                ->GetCaptivePortalState(kWifiGuid)
+                .status);
 
   // Wait until notification is displayed.
   observer.WaitAndReset();
@@ -266,9 +268,10 @@ void NetworkPortalDetectorImplBrowserTestIgnoreProxy::TestImpl(
   // Check that WiFi is marked as behind a portal and that a notification
   // is displayed.
   EXPECT_TRUE(message_center()->FindVisibleNotificationById(kNotificationId));
-  EXPECT_EQ(
-      NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL,
-      NetworkPortalDetector::Get()->GetCaptivePortalState(kWifiGuid).status);
+  EXPECT_EQ(NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL,
+            network_portal_detector::GetInstance()
+                ->GetCaptivePortalState(kWifiGuid)
+                .status);
 
   // Wait until notification is displayed.
   observer.WaitAndReset();

@@ -2,11 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import cloud_storage_test_base
-import gpu_rasterization_expectations
-import optparse
+from gpu_tests import cloud_storage_test_base
+from gpu_tests import gpu_rasterization_expectations
 import page_sets
 
+from telemetry.page import page_test
 from telemetry.util import image_util
 
 
@@ -30,12 +30,15 @@ test_harness_script = r"""
 def _DidTestSucceed(tab):
   return tab.EvaluateJavaScript('domAutomationController._succeeded')
 
-class _GpuRasterizationValidator(cloud_storage_test_base.ValidatorBase):
+class GpuRasterizationValidator(cloud_storage_test_base.ValidatorBase):
   def CustomizeBrowserOptions(self, options):
+    # --test-type=gpu is used only to suppress the "Google API Keys are missing"
+    # infobar, which causes flakiness in tests.
     options.AppendExtraBrowserArgs(['--enable-threaded-compositing',
                                     '--enable-impl-side-painting',
                                     '--force-gpu-rasterization',
-                                    '--enable-gpu-benchmarking'])
+                                    '--enable-gpu-benchmarking',
+                                    '--test-type=gpu'])
 
   def ValidateAndMeasurePage(self, page, tab, results):
     if not _DidTestSucceed(tab):
@@ -66,17 +69,20 @@ class _GpuRasterizationValidator(cloud_storage_test_base.ValidatorBase):
 
 class GpuRasterization(cloud_storage_test_base.TestBase):
   """Tests that GPU rasterization produces valid content"""
-  test = _GpuRasterizationValidator
+  test = GpuRasterizationValidator
+
+  def __init__(self, max_failures=None):
+    super(GpuRasterization, self).__init__(max_failures=max_failures)
 
   @classmethod
   def Name(cls):
     return 'gpu_rasterization'
 
   def CreateStorySet(self, options):
-    story_set = page_sets.GpuRasterizationTestsStorySet()
+    story_set = page_sets.GpuRasterizationTestsStorySet(self.GetExpectations())
     for page in story_set:
       page.script_to_evaluate_on_commit = test_harness_script
     return story_set
 
-  def CreateExpectations(self):
+  def _CreateExpectations(self):
     return gpu_rasterization_expectations.GpuRasterizationExpectations()

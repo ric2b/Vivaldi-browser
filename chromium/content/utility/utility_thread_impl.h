@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "content/child/child_thread_impl.h"
 #include "content/common/content_export.h"
 #include "content/common/process_control.mojom.h"
@@ -43,6 +44,7 @@ class UtilityThreadImpl : public UtilityThread,
   void Shutdown() override;
 
   void ReleaseProcessIfNeeded() override;
+  void EnsureBlinkInitialized() override;
 
  private:
   void Init();

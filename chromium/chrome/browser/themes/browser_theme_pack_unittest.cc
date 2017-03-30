@@ -4,12 +4,15 @@
 
 #include "chrome/browser/themes/browser_theme_pack.h"
 
+#include <stddef.h>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_reader.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/test/test_browser_thread.h"
@@ -51,11 +54,10 @@ class BrowserThemePackTest : public ::testing::Test {
   }
 
   void GenerateDefaultFrameColor(std::map<int, SkColor>* colors,
-                                 int color, int tint) {
+                                 int color, int tint, bool otr) {
     (*colors)[color] = HSLShift(
-        ThemeProperties::GetDefaultColor(
-            ThemeProperties::COLOR_FRAME),
-        ThemeProperties::GetDefaultTint(tint));
+        ThemeProperties::GetDefaultColor(ThemeProperties::COLOR_FRAME, false),
+        ThemeProperties::GetDefaultTint(tint, otr));
   }
 
   // Returns a mapping from each COLOR_* constant to the default value for this
@@ -63,23 +65,24 @@ class BrowserThemePackTest : public ::testing::Test {
   // run the resulting thing through VerifyColorMap().
   std::map<int, SkColor> GetDefaultColorMap() {
     std::map<int, SkColor> colors;
-    for (int i = ThemeProperties::COLOR_FRAME;
-         i <= ThemeProperties::COLOR_BUTTON_BACKGROUND; ++i) {
-      colors[i] = ThemeProperties::GetDefaultColor(i);
-    }
-
     GenerateDefaultFrameColor(&colors, ThemeProperties::COLOR_FRAME,
-                              ThemeProperties::TINT_FRAME);
+                              ThemeProperties::TINT_FRAME, false);
     GenerateDefaultFrameColor(&colors,
                               ThemeProperties::COLOR_FRAME_INACTIVE,
-                              ThemeProperties::TINT_FRAME_INACTIVE);
+                              ThemeProperties::TINT_FRAME_INACTIVE, false);
     GenerateDefaultFrameColor(&colors,
                               ThemeProperties::COLOR_FRAME_INCOGNITO,
-                              ThemeProperties::TINT_FRAME_INCOGNITO);
+                              ThemeProperties::TINT_FRAME, true);
     GenerateDefaultFrameColor(
         &colors,
         ThemeProperties::COLOR_FRAME_INCOGNITO_INACTIVE,
-        ThemeProperties::TINT_FRAME_INCOGNITO_INACTIVE);
+        ThemeProperties::TINT_FRAME_INACTIVE, true);
+
+    // For the rest, use default colors.
+    for (int i = ThemeProperties::COLOR_FRAME_INCOGNITO_INACTIVE + 1;
+         i <= ThemeProperties::COLOR_BUTTON_BACKGROUND; ++i) {
+      colors[i] = ThemeProperties::GetDefaultColor(i, false);
+    }
 
     return colors;
   }
@@ -87,8 +90,9 @@ class BrowserThemePackTest : public ::testing::Test {
   void VerifyColorMap(const std::map<int, SkColor>& color_map) {
     for (std::map<int, SkColor>::const_iterator it = color_map.begin();
          it != color_map.end(); ++it) {
-      SkColor color = ThemeProperties::GetDefaultColor(it->first);
-      theme_pack_->GetColor(it->first, &color);
+      SkColor color;
+      if (!theme_pack_->GetColor(it->first, &color))
+        color = ThemeProperties::GetDefaultColor(it->first, false);
       EXPECT_EQ(it->second, color) << "Color id = " << it->first;
     }
   }
@@ -155,9 +159,8 @@ class BrowserThemePackTest : public ::testing::Test {
         extension_path.AppendASCII("manifest.json");
     std::string error;
     JSONFileValueDeserializer deserializer(manifest_path);
-    scoped_ptr<base::DictionaryValue> valid_value(
-        static_cast<base::DictionaryValue*>(
-            deserializer.Deserialize(NULL, &error)));
+    scoped_ptr<base::DictionaryValue> valid_value =
+        base::DictionaryValue::From(deserializer.Deserialize(NULL, &error));
     EXPECT_EQ("", error);
     ASSERT_TRUE(valid_value.get());
     scoped_refptr<Extension> extension(

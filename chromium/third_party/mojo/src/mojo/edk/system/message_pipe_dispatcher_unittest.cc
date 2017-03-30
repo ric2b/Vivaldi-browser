@@ -7,7 +7,7 @@
 // increase tolerance and reduce observed flakiness (though doing so reduces the
 // meaningfulness of the test).
 
-#include "mojo/edk/system/message_pipe_dispatcher.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe_dispatcher.h"
 
 #include <string.h>
 
@@ -17,12 +17,12 @@
 #include "base/memory/scoped_vector.h"
 #include "base/rand_util.h"
 #include "base/threading/simple_thread.h"
-#include "mojo/edk/system/message_pipe.h"
-#include "mojo/edk/system/test_utils.h"
-#include "mojo/edk/system/waiter.h"
-#include "mojo/edk/system/waiter_test_utils.h"
 #include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/system/message_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/test_utils.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter_test_utils.h"
 
 namespace mojo {
 namespace system {
@@ -51,7 +51,7 @@ TEST(MessagePipeDispatcherTest, Basic) {
       d1->Init(mp, i ^ 1);  // 1, 0.
     }
     Waiter w;
-    uint32_t context = 0;
+    uintptr_t context = 0;
     HandleSignalsState hss;
 
     // Try adding a writable waiter when already writable.
@@ -353,7 +353,7 @@ TEST(MessagePipeDispatcherTest, MAYBE_BasicThreaded) {
   MojoDeadline elapsed;
   bool did_wait;
   MojoResult result;
-  uint32_t context;
+  uintptr_t context;
   HandleSignalsState hss;
 
   // Run this test both with |d0| as port 0, |d1| as port 1 and vice versa.

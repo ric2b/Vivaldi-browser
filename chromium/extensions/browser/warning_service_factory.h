@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_WARNING_SERVICE_FACTORY_H_
 #define EXTENSIONS_BROWSER_WARNING_SERVICE_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -18,7 +19,7 @@ class WarningServiceFactory : public BrowserContextKeyedServiceFactory {
   static WarningServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<WarningServiceFactory>;
+  friend struct base::DefaultSingletonTraits<WarningServiceFactory>;
 
   WarningServiceFactory();
   ~WarningServiceFactory() override;

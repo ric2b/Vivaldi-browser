@@ -111,9 +111,6 @@ goog.require('__crWeb.message');
         // The following condition is true if the iframe is in a different
         // domain; no further information is accessible.
         if (typeof(currentElement.contentWindow.document) == 'undefined') {
-          invokeOnHost_({
-              'command': 'window.error',
-              'message': 'iframe contentWindow.document is not accessible.'});
           return currentElement;
         }
         var framePosition = getPositionInWindow(currentElement);
@@ -378,9 +375,10 @@ goog.require('__crWeb.message');
     }, 0);
   };
 
-  // Keep the original replaceState() method. It's needed to update UIWebView's
-  // URL and window.history.state property during history navigations that don't
-  // cause a page load.
+  // Keep the original pushState() and replaceState() methods. It's needed to
+  // update the web view's URL and window.history.state property during history
+  // navigations that don't cause a page load.
+  var originalWindowHistoryPushState = window.history.pushState;
   var originalWindowHistoryReplaceState = window.history.replaceState;
   __gCrWeb['replaceWebViewURL'] = function(url, stateObject) {
     originalWindowHistoryReplaceState.call(history, stateObject, '', url);
@@ -404,7 +402,8 @@ goog.require('__crWeb.message');
         typeof(stateObject) == 'undefined' ? '' :
             __gCrWeb.common.JSONStringify(stateObject);
     pageUrl = pageUrl || window.location.href;
-    originalWindowHistoryReplaceState.call(history, stateObject, '', pageUrl);
+    originalWindowHistoryPushState.call(history, stateObject,
+                                        pageTitle, pageUrl);
     invokeOnHost_({'command': 'window.history.didPushState',
                    'stateObject': serializedState,
                    'baseUrl': document.baseURI,
@@ -419,7 +418,8 @@ goog.require('__crWeb.message');
         typeof(stateObject) == 'undefined' ? '' :
             __gCrWeb.common.JSONStringify(stateObject);
     pageUrl = pageUrl || window.location.href;
-    originalWindowHistoryReplaceState.call(history, stateObject, '', pageUrl);
+    originalWindowHistoryReplaceState.call(history, stateObject,
+                                           pageTitle, pageUrl);
     invokeOnHost_({'command': 'window.history.didReplaceState',
                    'stateObject': serializedState,
                    'baseUrl': document.baseURI,
@@ -432,6 +432,24 @@ goog.require('__crWeb.message');
     var anchor = document.createElement('a');
     anchor.href = originalURL;
     return anchor.href;
+  };
+
+  __gCrWeb['sendFaviconsToHost'] = function() {
+    __gCrWeb.message.invokeOnHost({'command': 'document.favicons',
+                                   'favicons': __gCrWeb.common.getFavicons()});
+  }
+
+  // Tracks whether user is in the middle of scrolling/dragging. If user is
+  // scrolling, ignore window.scrollTo() until user stops scrolling.
+  var webViewScrollViewIsDragging_ = false;
+  __gCrWeb['setWebViewScrollViewIsDragging'] = function(state) {
+    webViewScrollViewIsDragging_ = state;
+  };
+  var originalWindowScrollTo = window.scrollTo;
+  window.scrollTo = function(x, y) {
+    if (webViewScrollViewIsDragging_)
+      return;
+    originalWindowScrollTo(x, y);
   };
 
   // Intercept window.close calls.
@@ -648,12 +666,4 @@ goog.require('__crWeb.message');
   };
 
   __gCrWeb.core.documentInject();
-
-  // Form prototype loaded with event to supply Autocomplete API
-  // functionality.
-  HTMLFormElement.prototype.requestAutocomplete = function() {
-    invokeOnHost_(
-         {'command': 'form.requestAutocomplete',
-         'formName': __gCrWeb.common.getFormIdentifier(this)});
-  };
 }());  // End of anonymous object

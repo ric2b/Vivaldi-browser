@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 
+#include <utility>
+
 #include "base/debug/leak_annotations.h"
 #include "base/i18n/rtl.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -31,10 +34,15 @@
 #if defined(OS_CHROMEOS)
 #include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
+#include "ui/native_theme/native_theme_dark_aura.h"
 #endif
 
 #if defined(OS_LINUX)
 #include "chrome/browser/ui/views/frame/browser_command_handler_linux.h"
+#endif
+
+#if defined(OS_WIN)
+#include "ui/native_theme/native_theme_dark_win.h"
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -45,8 +53,9 @@ BrowserFrame::BrowserFrame(BrowserView* browser_view)
       root_view_(nullptr),
       browser_frame_view_(nullptr),
       browser_view_(browser_view),
-      theme_provider_(ThemeServiceFactory::GetForProfile(
-                          browser_view_->browser()->profile())) {
+      theme_provider_(
+          &ThemeService::GetThemeProviderForProfile(browser_view_->browser()
+                                                        ->profile())) {
   browser_view_->set_frame(this);
   set_is_secondary_widget(false);
   // Don't focus anything on creation, selecting a tab will set the focus.
@@ -75,6 +84,15 @@ void BrowserFrame::InitBrowserFrame() {
                                              &params.bounds,
                                              &params.show_state);
   }
+
+  if (browser_view_->browser()->profile()->IsOffTheRecord()) {
+#if defined(OS_WIN)
+    params.native_theme = ui::NativeThemeDarkWin::instance();
+#elif defined(OS_CHROMEOS)
+    params.native_theme = ui::NativeThemeDarkAura::instance();
+#endif
+  }
+
   Init(params);
 
   if (!native_browser_frame_->UsesNativeSystemMenu()) {
@@ -88,7 +106,7 @@ void BrowserFrame::InitBrowserFrame() {
 }
 
 void BrowserFrame::SetThemeProvider(scoped_ptr<ui::ThemeProvider> provider) {
-  owned_theme_provider_ = provider.Pass();
+  owned_theme_provider_ = std::move(provider);
   theme_provider_ = owned_theme_provider_.get();
 }
 
@@ -102,8 +120,8 @@ gfx::Rect BrowserFrame::GetBoundsForTabStrip(views::View* tabstrip) const {
       browser_frame_view_->GetBoundsForTabStrip(tabstrip) : gfx::Rect();
 }
 
-int BrowserFrame::GetTopInset() const {
-  return browser_frame_view_->GetTopInset();
+int BrowserFrame::GetTopInset(bool restored) const {
+  return browser_frame_view_->GetTopInset(restored);
 }
 
 int BrowserFrame::GetThemeBackgroundXInset() const {
@@ -139,6 +157,10 @@ void BrowserFrame::GetWindowPlacement(gfx::Rect* bounds,
   return native_browser_frame_->GetWindowPlacement(bounds, show_state);
 }
 
+void BrowserFrame::OnBrowserViewInitViewsComplete() {
+  browser_frame_view_->OnBrowserViewInitViewsComplete();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserFrame, views::Widget overrides:
 
@@ -158,7 +180,7 @@ bool BrowserFrame::GetAccelerator(int command_id,
   return browser_view_->GetAccelerator(command_id, accelerator);
 }
 
-ui::ThemeProvider* BrowserFrame::GetThemeProvider() const {
+const ui::ThemeProvider* BrowserFrame::GetThemeProvider() const {
   return theme_provider_;
 }
 
@@ -241,10 +263,8 @@ AvatarMenuButton* BrowserFrame::GetAvatarMenuButton() {
   return browser_frame_view_->avatar_button();
 }
 
+#if defined(FRAME_AVATAR_BUTTON)
 NewAvatarButton* BrowserFrame::GetNewAvatarMenuButton() {
   return browser_frame_view_->new_avatar_button();
 }
-
-bool BrowserFrame::ShouldLeaveOffsetNearTopBorder() {
-  return !IsMaximized();
-}
+#endif

@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_PREDICTORS_AUTOCOMPLETE_ACTION_PREDICTOR_FACTORY_H_
 #define CHROME_BROWSER_PREDICTORS_AUTOCOMPLETE_ACTION_PREDICTOR_FACTORY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -26,7 +26,8 @@ class AutocompleteActionPredictorFactory
   static AutocompleteActionPredictorFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<AutocompleteActionPredictorFactory>;
+  friend struct base::DefaultSingletonTraits<
+      AutocompleteActionPredictorFactory>;
 
   AutocompleteActionPredictorFactory();
   ~AutocompleteActionPredictorFactory() override;

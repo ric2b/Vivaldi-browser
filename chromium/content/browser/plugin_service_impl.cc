@@ -4,6 +4,8 @@
 
 #include "content/browser/plugin_service_impl.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -15,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "content/browser/ppapi_plugin_process_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -39,6 +42,8 @@
 #if defined(OS_POSIX)
 #include "content/browser/plugin_loader_posix.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 #if defined(OS_POSIX) && !defined(OS_OPENBSD) && !defined(OS_ANDROID)
 using ::base::FilePathWatcher;
@@ -107,7 +112,8 @@ void NotifyPluginsOfActivation() {
 }
 #endif
 
-#if defined(OS_POSIX) && !defined(OS_OPENBSD) && !defined(OS_ANDROID)
+#if defined(OS_POSIX)
+#if !defined(OS_OPENBSD) && !defined(OS_ANDROID)
 void NotifyPluginDirChanged(const base::FilePath& path, bool error) {
   if (error) {
     // TODO(pastarmovj): Add some sensible error handling. Maybe silently
@@ -123,13 +129,14 @@ void NotifyPluginDirChanged(const base::FilePath& path, bool error) {
       base::Bind(&PluginService::PurgePluginListCache,
                  static_cast<BrowserContext*>(NULL), false));
 }
-#endif
+#endif  // !defined(OS_OPENBSD) && !defined(OS_ANDROID)
 
 void ForwardCallback(base::SingleThreadTaskRunner* target_task_runner,
                      const PluginService::GetPluginsCallback& callback,
                      const std::vector<WebPluginInfo>& plugins) {
   target_task_runner->PostTask(FROM_HERE, base::Bind(callback, plugins));
 }
+#endif  // defined(OS_POSIX)
 
 }  // namespace
 
@@ -150,7 +157,7 @@ void PluginService::PurgePluginListCache(BrowserContext* browser_context,
 
 // static
 PluginServiceImpl* PluginServiceImpl::GetInstance() {
-  return Singleton<PluginServiceImpl>::get();
+  return base::Singleton<PluginServiceImpl>::get();
 }
 
 PluginServiceImpl::PluginServiceImpl()
@@ -172,7 +179,7 @@ PluginServiceImpl::~PluginServiceImpl() {
 }
 
 void PluginServiceImpl::Init() {
-  plugin_list_token_ = BrowserThread::GetBlockingPool()->GetSequenceToken();
+  plugin_list_token_ = base::SequencedWorkerPool::GetSequenceToken();
   PluginList::Singleton()->set_will_load_plugins_callback(
       base::Bind(&WillLoadPluginsCallback, plugin_list_token_));
 
@@ -581,7 +588,8 @@ base::string16 PluginServiceImpl::GetPluginDisplayNameByPath(
     // Many plugins on the Mac have .plugin in the actual name, which looks
     // terrible, so look for that and strip it off if present.
     const std::string kPluginExtension = ".plugin";
-    if (base::EndsWith(plugin_name, base::ASCIIToUTF16(kPluginExtension), true))
+    if (base::EndsWith(plugin_name, base::ASCIIToUTF16(kPluginExtension),
+                       base::CompareCase::SENSITIVE))
       plugin_name.erase(plugin_name.length() - kPluginExtension.length());
 #endif  // OS_MACOSX
   }
@@ -794,7 +802,9 @@ void PluginServiceImpl::GetInternalPlugins(
 
 bool PluginServiceImpl::NPAPIPluginsSupported() {
 #if defined(OS_WIN) || defined(OS_MACOSX)
-  npapi_plugins_enabled_ = GetContentClient()->browser()->IsNPAPIEnabled();
+  npapi_plugins_enabled_ =
+    vivaldi::IsVivaldiRunning() ||
+      GetContentClient()->browser()->IsNPAPIEnabled();
 #if defined(OS_WIN)
   // NPAPI plugins don't play well with Win32k renderer lockdown.
   if (npapi_plugins_enabled_)

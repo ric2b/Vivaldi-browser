@@ -8,6 +8,7 @@ These classes abstract away the various setups needed to run the WebDriver java
 tests in various environments.
 """
 
+import logging
 import os
 import sys
 
@@ -17,11 +18,14 @@ import util
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 
 if util.IsLinux():
+  sys.path.insert(0, os.path.join(chrome_paths.GetSrc(), 'third_party',
+                                  'catapult', 'devil'))
+  from devil.android import device_errors
+  from devil.android import device_utils
+  from devil.android import forwarder
+
   sys.path.insert(0, os.path.join(chrome_paths.GetSrc(), 'build', 'android'))
-  from pylib import forwarder
-  from pylib import valgrind_tools
-  from pylib.device import device_errors
-  from pylib.device import device_utils
+  import devil_chromium
 
 ANDROID_TEST_HTTP_PORT = 2311
 ANDROID_TEST_HTTPS_PORT = 2411
@@ -93,6 +97,8 @@ class AndroidTestEnvironment(DesktopTestEnvironment):
 
   # override
   def GlobalSetUp(self):
+    devil_chromium.Initialize()
+
     os.putenv('TEST_HTTP_PORT', str(ANDROID_TEST_HTTP_PORT))
     os.putenv('TEST_HTTPS_PORT', str(ANDROID_TEST_HTTPS_PORT))
     devices = device_utils.DeviceUtils.HealthyDevices()

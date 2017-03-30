@@ -16,15 +16,15 @@ enum ViewType {
   VIEW_TYPE_INVALID,
   VIEW_TYPE_APP_WINDOW,
   VIEW_TYPE_BACKGROUND_CONTENTS,
+  VIEW_TYPE_COMPONENT,  // For custom parts of Chrome if no other type applies.
   VIEW_TYPE_EXTENSION_BACKGROUND_PAGE,
   VIEW_TYPE_EXTENSION_DIALOG,
+  VIEW_TYPE_EXTENSION_GUEST,
   VIEW_TYPE_EXTENSION_POPUP,
   VIEW_TYPE_LAUNCHER_PAGE,
   VIEW_TYPE_PANEL,
   VIEW_TYPE_TAB_CONTENTS,
-  VIEW_TYPE_VIVALDIGUEST,
-  VIEW_TYPE_VIRTUAL_KEYBOARD,
-  VIEW_TYPE_LAST = VIEW_TYPE_VIRTUAL_KEYBOARD
+  VIEW_TYPE_LAST = VIEW_TYPE_TAB_CONTENTS
 };
 
 // Constant strings corresponding to the Type enumeration values.  Used
@@ -37,7 +37,6 @@ extern const char kViewTypeLauncherPage[];
 extern const char kViewTypePanel[];
 extern const char kViewTypePopup[];
 extern const char kViewTypeTabContents[];
-extern const char kViewVivaldi[];
 
 }  // namespace extensions
 

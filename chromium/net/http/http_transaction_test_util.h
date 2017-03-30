@@ -7,6 +7,8 @@
 
 #include "net/http/http_transaction.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
@@ -15,6 +17,7 @@
 #include "base/strings/string16.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
+#include "net/base/net_error_details.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/base/test_completion_callback.h"
@@ -30,6 +33,7 @@ namespace net {
 
 class HttpRequestHeaders;
 class IOBuffer;
+class SSLPrivateKey;
 class X509Certificate;
 struct HttpRequestInfo;
 
@@ -180,6 +184,7 @@ class MockNetworkTransaction
   int RestartIgnoringLastError(const CompletionCallback& callback) override;
 
   int RestartWithCertificate(X509Certificate* client_cert,
+                             SSLPrivateKey* client_private_key,
                              const CompletionCallback& callback) override;
 
   int RestartWithAuth(const AuthCredentials& credentials,
@@ -190,12 +195,15 @@ class MockNetworkTransaction
   int Read(IOBuffer* buf,
            int buf_len,
            const CompletionCallback& callback) override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) const override;
 
   void StopCaching() override;
 
   bool GetFullRequestHeaders(HttpRequestHeaders* headers) const override;
 
-  int64 GetTotalReceivedBytes() const override;
+  int64_t GetTotalReceivedBytes() const override;
+
+  int64_t GetTotalSentBytes() const override;
 
   void DoneReading() override;
 
@@ -208,6 +216,8 @@ class MockNetworkTransaction
   void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
 
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
 
   void SetPriority(RequestPriority priority) override;
 
@@ -230,6 +240,13 @@ class MockNetworkTransaction
   RequestPriority priority() const { return priority_; }
   const HttpRequestInfo* request() const { return request_; }
 
+  // Bogus value that will be returned by GetTotalReceivedBytes() if the
+  // MockNetworkTransaction was started.
+  static const int64_t kTotalReceivedBytes;
+  // Bogus value that will be returned by GetTotalSentBytes() if the
+  // MockNetworkTransaction was started.
+  static const int64_t kTotalSentBytes;
+
  private:
   int StartInternal(const HttpRequestInfo* request,
                     const CompletionCallback& callback,
@@ -245,12 +262,15 @@ class MockNetworkTransaction
   RequestPriority priority_;
   CreateHelper* websocket_handshake_stream_create_helper_;
   base::WeakPtr<MockNetworkLayer> transaction_factory_;
-  int64 received_bytes_;
+  int64_t received_bytes_;
+  int64_t sent_bytes_;
 
   // NetLog ID of the fake / non-existent underlying socket used by the
   // connection. Requires Start() be passed a BoundNetLog with a real NetLog to
   // be initialized.
   unsigned int socket_log_id_;
+
+  bool done_reading_called_;
 
   base::WeakPtrFactory<MockNetworkTransaction> weak_factory_;
 

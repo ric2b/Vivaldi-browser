@@ -24,6 +24,7 @@
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/native_theme_mac.h"
 
 const CGFloat kMinimumWidth = 460;
 const CGFloat kMaximumWidth = 1000;
@@ -149,7 +150,6 @@ scoped_ptr<ScreenCaptureNotificationUI> ScreenCaptureNotificationUI::Create(
       [[HyperlinkButtonCell alloc]
        initTextCell:l10n_util::GetNSString(
                         IDS_PASSWORDS_PAGE_VIEW_HIDE_BUTTON)]);
-  [cell setShouldUnderline:NO];
 
   minimizeButton_.reset([[NSButton alloc] initWithFrame:NSZeroRect]);
   [minimizeButton_ setCell:cell.get()];
@@ -236,7 +236,7 @@ scoped_ptr<ScreenCaptureNotificationUI> ScreenCaptureNotificationUI::Create(
 @implementation ScreenCaptureNotificationView
 
 - (void)drawRect:(NSRect)dirtyRect {
-  [gfx::SkColorToSRGBNSColor(ui::NativeTheme::instance()->GetSystemColor(
+  [skia::SkColorToSRGBNSColor(ui::NativeThemeMac::instance()->GetSystemColor(
       ui::NativeTheme::kColorId_DialogBackground)) set];
   [[NSBezierPath bezierPathWithRoundedRect:[self bounds]
                                    xRadius:kWindowCornerRadius

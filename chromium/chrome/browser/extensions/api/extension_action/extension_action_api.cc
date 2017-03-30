@@ -4,8 +4,12 @@
 
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
@@ -13,7 +17,6 @@
 #include "chrome/browser/extensions/active_script_controller.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/extensions/extension_toolbar_model.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,8 +26,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
-#include "chrome/common/render_messages.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_registry.h"
@@ -228,11 +231,19 @@ bool ExtensionActionAPI::ShowExtensionActionPopup(
     // enabled.
     return browser->window()->GetLocationBar()->ShowPageActionPopup(
         extension, grant_active_tab_permissions);
-  } else {
-    return ExtensionToolbarModel::Get(browser->profile())->
-        ShowExtensionActionPopup(
-            extension, browser, grant_active_tab_permissions);
   }
+
+  // Don't support showing action popups in a popup window.
+  if (!browser->SupportsWindowFeature(Browser::FEATURE_TOOLBAR))
+    return false;
+
+  ToolbarActionsBar* toolbar_actions_bar =
+      browser->window()->GetToolbarActionsBar();
+  // ToolbarActionsBar could be null if, e.g., this is a popup window with no
+  // toolbar.
+  return toolbar_actions_bar &&
+         toolbar_actions_bar->ShowToolbarActionPopup(
+             extension->id(), grant_active_tab_permissions);
 }
 
 bool ExtensionActionAPI::ExtensionWantsToRun(
@@ -300,32 +311,37 @@ ExtensionPrefs* ExtensionActionAPI::GetExtensionPrefs() {
 void ExtensionActionAPI::DispatchEventToExtension(
     content::BrowserContext* context,
     const std::string& extension_id,
+    events::HistogramValue histogram_value,
     const std::string& event_name,
     scoped_ptr<base::ListValue> event_args) {
   if (!EventRouter::Get(context))
     return;
 
   scoped_ptr<Event> event(
-      new Event(events::UNKNOWN, event_name, event_args.Pass()));
+      new Event(histogram_value, event_name, std::move(event_args)));
   event->restrict_to_browser_context = context;
   event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
   EventRouter::Get(context)
-      ->DispatchEventToExtension(extension_id, event.Pass());
+      ->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 void ExtensionActionAPI::ExtensionActionExecuted(
     const ExtensionAction& extension_action,
     WebContents* web_contents) {
+  events::HistogramValue histogram_value = events::UNKNOWN;
   const char* event_name = NULL;
   switch (extension_action.action_type()) {
     case ActionInfo::TYPE_BROWSER:
+      histogram_value = events::BROWSER_ACTION_ON_CLICKED;
       event_name = "browserAction.onClicked";
       break;
     case ActionInfo::TYPE_PAGE:
+      histogram_value = events::PAGE_ACTION_ON_CLICKED;
       event_name = "pageAction.onClicked";
       break;
     case ActionInfo::TYPE_SYSTEM_INDICATOR:
       // The System Indicator handles its own clicks.
+      NOTREACHED();
       break;
   }
 
@@ -335,11 +351,9 @@ void ExtensionActionAPI::ExtensionActionExecuted(
         ExtensionTabUtil::CreateTabValue(web_contents);
     args->Append(tab_value);
 
-    DispatchEventToExtension(
-        web_contents->GetBrowserContext(),
-        extension_action.extension_id(),
-        event_name,
-        args.Pass());
+    DispatchEventToExtension(web_contents->GetBrowserContext(),
+                             extension_action.extension_id(), histogram_value,
+                             event_name, std::move(args));
   }
 }
 
@@ -353,13 +367,13 @@ void ExtensionActionAPI::NotifyPageActionsChanged(
   if (browser->is_vivaldi()) {
     FOR_EACH_OBSERVER(Observer, observers_, OnPageActionsUpdated(web_contents));
   } else {
-    LocationBar* location_bar =
-        browser->window() ? browser->window()->GetLocationBar() : NULL;
-    if (!location_bar)
-      return;
-    location_bar->UpdatePageActions();
+  LocationBar* location_bar =
+      browser->window() ? browser->window()->GetLocationBar() : NULL;
+  if (!location_bar)
+    return;
+  location_bar->UpdatePageActions();
 
-    FOR_EACH_OBSERVER(Observer, observers_, OnPageActionsUpdated(web_contents));
+  FOR_EACH_OBSERVER(Observer, observers_, OnPageActionsUpdated(web_contents));
   }
 }
 
@@ -508,6 +522,11 @@ bool ExtensionActionSetIconFunction::RunExtensionAction() {
     EXTENSION_FUNCTION_VALIDATE(
         ExtensionAction::ParseIconFromCanvasDictionary(*canvas_set, &icon));
 
+    if (icon.isNull()) {
+      error_ = "Icon invalid.";
+      return false;
+    }
+
     extension_action_->SetIcon(tab_id_, gfx::Image(icon));
   } else if (details_->GetInteger("iconIndex", &icon_index)) {
     // Obsolete argument: ignore it.
@@ -571,7 +590,7 @@ bool ExtensionActionSetBadgeBackgroundColorFunction::RunExtensionAction() {
   } else if (color_value->IsType(base::Value::TYPE_STRING)) {
     std::string color_string;
     EXTENSION_FUNCTION_VALIDATE(details_->GetString("color", &color_string));
-    if (!image_util::ParseCSSColorString(color_string, &color))
+    if (!image_util::ParseCssColorString(color_string, &color))
       return false;
   }
 

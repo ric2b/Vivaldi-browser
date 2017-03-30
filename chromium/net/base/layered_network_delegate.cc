@@ -4,12 +4,13 @@
 
 #include "net/base/layered_network_delegate.h"
 
+#include <utility>
+
 namespace net {
 
 LayeredNetworkDelegate::LayeredNetworkDelegate(
     scoped_ptr<NetworkDelegate> nested_network_delegate)
-    : nested_network_delegate_(nested_network_delegate.Pass()) {
-}
+    : nested_network_delegate_(std::move(nested_network_delegate)) {}
 
 LayeredNetworkDelegate::~LayeredNetworkDelegate() {
 }
@@ -138,15 +139,24 @@ void LayeredNetworkDelegate::OnResponseStarted(URLRequest* request) {
 void LayeredNetworkDelegate::OnResponseStartedInternal(URLRequest* request) {
 }
 
-void LayeredNetworkDelegate::OnRawBytesRead(const URLRequest& request,
-                                            int bytes_read) {
-  OnRawBytesReadInternal(request, bytes_read);
-  nested_network_delegate_->NotifyRawBytesRead(request, bytes_read);
+void LayeredNetworkDelegate::OnNetworkBytesReceived(URLRequest* request,
+                                                    int64_t bytes_received) {
+  OnNetworkBytesReceivedInternal(request, bytes_received);
+  nested_network_delegate_->NotifyNetworkBytesReceived(request, bytes_received);
 }
 
-void LayeredNetworkDelegate::OnRawBytesReadInternal(const URLRequest& request,
-                                                    int bytes_read) {
+void LayeredNetworkDelegate::OnNetworkBytesReceivedInternal(
+    URLRequest* request,
+    int64_t bytes_received) {}
+
+void LayeredNetworkDelegate::OnNetworkBytesSent(URLRequest* request,
+                                                int64_t bytes_sent) {
+  OnNetworkBytesSentInternal(request, bytes_sent);
+  nested_network_delegate_->NotifyNetworkBytesSent(request, bytes_sent);
 }
+
+void LayeredNetworkDelegate::OnNetworkBytesSentInternal(URLRequest* request,
+                                                        int64_t bytes_sent) {}
 
 void LayeredNetworkDelegate::OnCompleted(URLRequest* request, bool started) {
   OnCompletedInternal(request, started);
@@ -242,14 +252,20 @@ void LayeredNetworkDelegate::OnCanEnablePrivacyModeInternal(
     const GURL& first_party_for_cookies) const {
 }
 
-bool LayeredNetworkDelegate::OnFirstPartyOnlyCookieExperimentEnabled() const {
-  OnFirstPartyOnlyCookieExperimentEnabledInternal();
-  return nested_network_delegate_->FirstPartyOnlyCookieExperimentEnabled();
+bool LayeredNetworkDelegate::OnAreExperimentalCookieFeaturesEnabled() const {
+  OnAreExperimentalCookieFeaturesEnabledInternal();
+  return nested_network_delegate_->AreExperimentalCookieFeaturesEnabled();
 }
 
-void LayeredNetworkDelegate::OnFirstPartyOnlyCookieExperimentEnabledInternal()
-    const {
+bool LayeredNetworkDelegate::OnAreStrictSecureCookiesEnabled() const {
+  OnAreStrictSecureCookiesEnabledInternal();
+  return nested_network_delegate_->AreStrictSecureCookiesEnabled();
 }
+
+void LayeredNetworkDelegate::OnAreExperimentalCookieFeaturesEnabledInternal()
+    const {}
+
+void LayeredNetworkDelegate::OnAreStrictSecureCookiesEnabledInternal() const {}
 
 bool LayeredNetworkDelegate::
     OnCancelURLRequestWithPolicyViolatingReferrerHeader(

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/speech/chrome_speech_recognition_manager_delegate.h"
 #include "chrome/browser/ui/browser.h"
@@ -80,16 +81,14 @@ class SpeechWebContentsObserver : public content::WebContentsObserver {
 // when a WebContents goes away (WCO::WebContentsDestroyed) or the RVH
 // changes within a WebContents (WCO::RenderViewHostChanged).
 IN_PROC_BROWSER_TEST_F(ChromeSpeechRecognitionTest, BasicTearDown) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
-  net::SpawnedTestServer::SSLOptions ssl_options;
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS, ssl_options,
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
 
   GURL http_url =
       embedded_test_server()->GetURL("/speech/web_speech_test.html");
-  GURL https_url(https_server.GetURL("files/speech/web_speech_test.html"));
+  GURL https_url(https_server.GetURL("/speech/web_speech_test.html"));
 
   scoped_ptr<ChromeSpeechRecognitionManagerDelegate> delegate(
       new ChromeSpeechRecognitionManagerDelegate());

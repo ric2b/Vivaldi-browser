@@ -4,14 +4,20 @@
 
 package org.chromium.chrome.browser.media.ui;
 
+import android.app.Activity;
+import android.media.AudioManager;
+
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.EmptyTabObserver;
-import org.chromium.chrome.browser.Tab;
-import org.chromium.chrome.browser.TabObserver;
-import org.chromium.chrome.browser.UrlUtilities;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.metrics.MediaSessionUMA;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -21,64 +27,97 @@ import java.net.URISyntaxException;
  * media actions from the controls to the {@link org.chromium.content.browser.MediaSession}
  */
 public class MediaSessionTabHelper {
-    private static final String TAG = "cr.MediaSession";
+    private static final String TAG = "MediaSession";
+
+    private static final String UNICODE_PLAY_CHARACTER = "\u25B6";
 
     private Tab mTab;
     private WebContents mWebContents;
     private WebContentsObserver mWebContentsObserver;
+    private int mPreviousVolumeControlStream = AudioManager.USE_DEFAULT_STREAM_TYPE;
+    private MediaNotificationInfo.Builder mNotificationInfoBuilder = null;
 
-    private MediaPlaybackListener mControlsListener = new MediaPlaybackListener() {
+    private MediaNotificationListener mControlsListener = new MediaNotificationListener() {
         @Override
-        public void onPlay() {
-            assert mWebContents != null;
+        public void onPlay(int actionSource) {
+            MediaSessionUMA
+                    .recordPlay(MediaSessionTabHelper.convertMediaActionSourceToUMA(actionSource));
+
             mWebContents.resumeMediaSession();
         }
 
         @Override
-        public void onPause() {
-            assert mWebContents != null;
+        public void onPause(int actionSource) {
+            MediaSessionUMA.recordPause(
+                    MediaSessionTabHelper.convertMediaActionSourceToUMA(actionSource));
+
             mWebContents.suspendMediaSession();
         }
+
+        @Override
+        public void onStop(int actionSource) {
+            MediaSessionUMA
+                    .recordStop(MediaSessionTabHelper.convertMediaActionSourceToUMA(actionSource));
+
+            mWebContents.stopMediaSession();
+        }
     };
+
+    void hideNotification() {
+        if (mTab == null) {
+            return;
+        }
+        MediaNotificationManager.hide(mTab.getId(), R.id.media_playback_notification);
+        Activity activity = getActivityFromTab(mTab);
+        if (activity != null) {
+            activity.setVolumeControlStream(mPreviousVolumeControlStream);
+        }
+        mNotificationInfoBuilder = null;
+    }
 
     private WebContentsObserver createWebContentsObserver(WebContents webContents) {
         return new WebContentsObserver(webContents) {
             @Override
             public void destroy() {
-                if (mTab == null) {
-                    NotificationMediaPlaybackControls.clear();
-                } else {
-                    NotificationMediaPlaybackControls.hide(mTab.getId());
-                }
+                hideNotification();
                 super.destroy();
             }
 
             @Override
             public void mediaSessionStateChanged(boolean isControllable, boolean isPaused) {
-                assert mTab != null;
                 if (!isControllable) {
-                    NotificationMediaPlaybackControls.hide(mTab.getId());
+                    hideNotification();
                     return;
                 }
                 String origin = mTab.getUrl();
                 try {
-                    origin = UrlUtilities.getOriginForDisplay(new URI(origin), true);
+                    origin = UrlUtilities.formatUrlForSecurityDisplay(new URI(origin), true);
                 } catch (URISyntaxException e) {
                     Log.e(TAG, "Unable to parse the origin from the URL. "
                             + "Showing the full URL instead.");
                 }
-                NotificationMediaPlaybackControls.show(
-                        ApplicationStatus.getApplicationContext(),
-                        new MediaNotificationInfo(
-                                mTab.getTitle(),
-                                isPaused,
-                                origin,
-                                mTab.getId(),
-                                mTab.isIncognito(),
-                                mControlsListener));
+
+                mNotificationInfoBuilder = new MediaNotificationInfo.Builder()
+                        .setTitle(sanitizeMediaTitle(mTab.getTitle()))
+                        .setPaused(isPaused)
+                        .setOrigin(origin)
+                        .setTabId(mTab.getId())
+                        .setPrivate(mTab.isIncognito())
+                        .setIcon(R.drawable.audio_playing)
+                        .setActions(MediaNotificationInfo.ACTION_PLAY_PAUSE
+                                | MediaNotificationInfo.ACTION_SWIPEAWAY)
+                        .setId(R.id.media_playback_notification)
+                        .setListener(mControlsListener);
+
+                MediaNotificationManager.show(ApplicationStatus.getApplicationContext(),
+                        mNotificationInfoBuilder.build());
+
+                Activity activity = getActivityFromTab(mTab);
+                if (activity != null) {
+                    activity.setVolumeControlStream(AudioManager.STREAM_MUSIC);
+                }
             }
         };
-
     }
 
     private void setWebContents(WebContents webContents) {
@@ -103,12 +142,22 @@ public class MediaSessionTabHelper {
         }
 
         @Override
+        public void onTitleUpdated(Tab tab) {
+            assert tab == mTab;
+            if (mNotificationInfoBuilder == null) return;
+
+            mNotificationInfoBuilder.setTitle(sanitizeMediaTitle(mTab.getTitle()));
+            MediaNotificationManager.show(ApplicationStatus.getApplicationContext(),
+                    mNotificationInfoBuilder.build());
+        }
+
+        @Override
         public void onDestroyed(Tab tab) {
             assert mTab == tab;
 
             cleanupWebContents();
 
-            NotificationMediaPlaybackControls.hide(mTab.getId());
+            hideNotification();
             mTab.removeObserver(this);
             mTab = null;
         }
@@ -118,6 +167,11 @@ public class MediaSessionTabHelper {
         mTab = tab;
         mTab.addObserver(mTabObserver);
         if (mTab.getWebContents() != null) setWebContents(tab.getWebContents());
+
+        Activity activity = getActivityFromTab(mTab);
+        if (activity != null) {
+            mPreviousVolumeControlStream = activity.getVolumeControlStream();
+        }
     }
 
     /**
@@ -126,5 +180,44 @@ public class MediaSessionTabHelper {
      */
     public static void createForTab(Tab tab) {
         new MediaSessionTabHelper(tab);
+    }
+
+    /**
+     * Removes all the leading/trailing white spaces and the quite common unicode play character.
+     * It improves the visibility of the title in the notification.
+     *
+     * @param title The original tab title, e.g. "   ▶   Foo - Bar  "
+     * @return The sanitized tab title, e.g. "Foo - Bar"
+     */
+    private String sanitizeMediaTitle(String title) {
+        title = title.trim();
+        return title.startsWith(UNICODE_PLAY_CHARACTER) ? title.substring(1).trim() : title;
+    }
+
+    /**
+     * Converts the {@link MediaNotificationListener} action source enum into the
+     * {@link MediaSessionUMA} one to ensure matching the histogram values.
+     * @param source the source id, must be one of the ACTION_SOURCE_* constants defined in the
+     *               {@link MediaNotificationListener} interface.
+     * @return the corresponding histogram value.
+     */
+    public static int convertMediaActionSourceToUMA(int source) {
+        if (source == MediaNotificationListener.ACTION_SOURCE_MEDIA_NOTIFICATION) {
+            return MediaSessionUMA.MEDIA_SESSION_ACTION_SOURCE_MEDIA_NOTIFICATION;
+        } else if (source == MediaNotificationListener.ACTION_SOURCE_MEDIA_SESSION) {
+            return MediaSessionUMA.MEDIA_SESSION_ACTION_SOURCE_MEDIA_SESSION;
+        } else if (source == MediaNotificationListener.ACTION_SOURCE_HEADSET_UNPLUG) {
+            return MediaSessionUMA.MEDIA_SESSION_ACTION_SOURCE_HEADSET_UNPLUG;
+        }
+
+        assert false;
+        return MediaSessionUMA.MEDIA_SESSION_ACTION_SOURCE_MAX;
+    }
+
+    private Activity getActivityFromTab(Tab tab) {
+        WindowAndroid windowAndroid = tab.getWindowAndroid();
+        if (windowAndroid == null) return null;
+
+        return windowAndroid.getActivity().get();
     }
 }

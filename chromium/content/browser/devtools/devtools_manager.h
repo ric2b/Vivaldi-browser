@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_DEVTOOLS_DEVTOOLS_MANAGER_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/devtools_manager_delegate.h"
@@ -31,7 +32,7 @@ class CONTENT_EXPORT DevToolsManager {
   void AgentHostStateChanged(DevToolsAgentHostImpl* agent_host, bool attached);
 
  private:
-  friend struct DefaultSingletonTraits<DevToolsManager>;
+  friend struct base::DefaultSingletonTraits<DevToolsManager>;
 
   scoped_ptr<DevToolsManagerDelegate> delegate_;
   int attached_hosts_count_;

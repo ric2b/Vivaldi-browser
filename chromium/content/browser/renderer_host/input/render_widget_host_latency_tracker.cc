@@ -4,8 +4,11 @@
 
 #include "content/browser/renderer_host/input/render_widget_host_latency_tracker.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 
 using blink::WebGestureEvent;
@@ -18,40 +21,40 @@ using ui::LatencyInfo;
 namespace content {
 namespace {
 
-const uint32 kMaxInputCoordinates = LatencyInfo::kMaxInputCoordinates;
-const size_t kBrowserCompositeLatencyHistorySize = 60;
-const double kBrowserCompositeLatencyEstimationPercentile = 90.0;
-const double kBrowserCompositeLatencyEstimationSlack = 1.1;
-
 void UpdateLatencyCoordinatesImpl(const blink::WebTouchEvent& touch,
-                                  LatencyInfo* latency) {
-  latency->input_coordinates_size =
-      std::min(kMaxInputCoordinates, touch.touchesLength);
-  for (uint32 i = 0; i < latency->input_coordinates_size; ++i) {
-    latency->input_coordinates[i] = LatencyInfo::InputCoordinate(
-        touch.touches[i].position.x, touch.touches[i].position.y);
+                                  LatencyInfo* latency,
+                                  float device_scale_factor) {
+  for (uint32_t i = 0; i < touch.touchesLength; ++i) {
+    LatencyInfo::InputCoordinate coordinate(
+        touch.touches[i].position.x * device_scale_factor,
+        touch.touches[i].position.y * device_scale_factor);
+    if (!latency->AddInputCoordinate(coordinate))
+      break;
   }
 }
 
 void UpdateLatencyCoordinatesImpl(const WebGestureEvent& gesture,
-                                  LatencyInfo* latency) {
-  latency->input_coordinates_size = 1;
-  latency->input_coordinates[0] =
-      LatencyInfo::InputCoordinate(gesture.x, gesture.y);
+                                  LatencyInfo* latency,
+                                  float device_scale_factor) {
+  latency->AddInputCoordinate(
+      LatencyInfo::InputCoordinate(gesture.x * device_scale_factor,
+                                   gesture.y * device_scale_factor));
 }
 
 void UpdateLatencyCoordinatesImpl(const WebMouseEvent& mouse,
-                                  LatencyInfo* latency) {
-  latency->input_coordinates_size = 1;
-  latency->input_coordinates[0] =
-      LatencyInfo::InputCoordinate(mouse.x, mouse.y);
+                                  LatencyInfo* latency,
+                                  float device_scale_factor) {
+  latency->AddInputCoordinate(
+      LatencyInfo::InputCoordinate(mouse.x * device_scale_factor,
+                                   mouse.y * device_scale_factor));
 }
 
 void UpdateLatencyCoordinatesImpl(const WebMouseWheelEvent& wheel,
-                                  LatencyInfo* latency) {
-  latency->input_coordinates_size = 1;
-  latency->input_coordinates[0] =
-      LatencyInfo::InputCoordinate(wheel.x, wheel.y);
+                                  LatencyInfo* latency,
+                                  float device_scale_factor) {
+  latency->AddInputCoordinate(
+      LatencyInfo::InputCoordinate(wheel.x * device_scale_factor,
+                                   wheel.y * device_scale_factor));
 }
 
 void UpdateLatencyCoordinates(const WebInputEvent& event,
@@ -59,27 +62,21 @@ void UpdateLatencyCoordinates(const WebInputEvent& event,
                               LatencyInfo* latency) {
   if (WebInputEvent::isMouseEventType(event.type)) {
     UpdateLatencyCoordinatesImpl(static_cast<const WebMouseEvent&>(event),
-                                 latency);
+                                 latency, device_scale_factor);
   } else if (WebInputEvent::isGestureEventType(event.type)) {
     UpdateLatencyCoordinatesImpl(static_cast<const WebGestureEvent&>(event),
-                                 latency);
+                                 latency, device_scale_factor);
   } else if (WebInputEvent::isTouchEventType(event.type)) {
     UpdateLatencyCoordinatesImpl(static_cast<const WebTouchEvent&>(event),
-                                 latency);
+                                 latency, device_scale_factor);
   } else if (event.type == WebInputEvent::MouseWheel) {
     UpdateLatencyCoordinatesImpl(static_cast<const WebMouseWheelEvent&>(event),
-                                 latency);
-  }
-  if (device_scale_factor == 1)
-    return;
-  for (uint32 i = 0; i < latency->input_coordinates_size; ++i) {
-    latency->input_coordinates[i].x *= device_scale_factor;
-    latency->input_coordinates[i].y *= device_scale_factor;
+                                 latency, device_scale_factor);
   }
 }
 
 void ComputeInputLatencyHistograms(WebInputEvent::Type type,
-                                   int64 latency_component_id,
+                                   int64_t latency_component_id,
                                    const LatencyInfo& latency) {
   LatencyInfo::LatencyComponent rwh_component;
   if (!latency.FindLatency(ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
@@ -158,7 +155,7 @@ void ComputeInputLatencyHistograms(WebInputEvent::Type type,
 void ComputeScrollLatencyHistograms(
     const LatencyInfo::LatencyComponent& gpu_swap_begin_component,
     const LatencyInfo::LatencyComponent& gpu_swap_end_component,
-    int64 latency_component_id,
+    int64_t latency_component_id,
     const LatencyInfo& latency) {
   DCHECK(!gpu_swap_begin_component.event_time.is_null());
   DCHECK(!gpu_swap_end_component.event_time.is_null());
@@ -262,26 +259,30 @@ void ComputeScrollLatencyHistograms(
 // provided to them by the browser process. This function adds the correct
 // component ID where necessary.
 void AddLatencyInfoComponentIds(LatencyInfo* latency,
-                                int64 latency_component_id) {
-  LatencyInfo::LatencyMap new_components;
-  auto lc = latency->latency_components.begin();
-  while (lc != latency->latency_components.end()) {
-    ui::LatencyComponentType component_type = lc->first.first;
+                                int64_t latency_component_id) {
+  std::vector<std::pair<ui::LatencyComponentType, int64_t>> new_components_key;
+  std::vector<LatencyInfo::LatencyComponent> new_components_value;
+  for (const auto& lc : latency->latency_components()) {
+    ui::LatencyComponentType component_type = lc.first.first;
     if (component_type == ui::WINDOW_SNAPSHOT_FRAME_NUMBER_COMPONENT) {
       // Generate a new component entry with the correct component ID
-      auto key = std::make_pair(component_type, latency_component_id);
-      new_components[key] = lc->second;
-
-      // Remove the old entry
-      latency->latency_components.erase(lc++);
-    } else {
-      ++lc;
+      new_components_key.push_back(std::make_pair(component_type,
+                                                  latency_component_id));
+      new_components_value.push_back(lc.second);
     }
   }
 
+  // Remove the entries with invalid component IDs.
+  latency->RemoveLatency(ui::WINDOW_SNAPSHOT_FRAME_NUMBER_COMPONENT);
+
   // Add newly generated components into the latency info
-  for (lc = new_components.begin(); lc != new_components.end(); ++lc) {
-    latency->latency_components[lc->first] = lc->second;
+  for (size_t i = 0; i < new_components_key.size(); i++) {
+    latency->AddLatencyNumberWithTimestamp(
+        new_components_key[i].first,
+        new_components_key[i].second,
+        new_components_value[i].sequence_number,
+        new_components_value[i].event_time,
+        new_components_value[i].event_count);
   }
 }
 
@@ -291,8 +292,7 @@ RenderWidgetHostLatencyTracker::RenderWidgetHostLatencyTracker()
     : last_event_id_(0),
       latency_component_id_(0),
       device_scale_factor_(1),
-      has_seent_first_gesture_scroll_update_(false),
-      browser_composite_latency_history_(kBrowserCompositeLatencyHistorySize) {
+      has_seent_first_gesture_scroll_update_(false) {
 }
 
 RenderWidgetHostLatencyTracker::~RenderWidgetHostLatencyTracker() {
@@ -302,7 +302,7 @@ void RenderWidgetHostLatencyTracker::Initialize(int routing_id,
                                                 int process_id) {
   DCHECK_EQ(0, last_event_id_);
   DCHECK_EQ(0, latency_component_id_);
-  last_event_id_ = static_cast<int64>(process_id) << 32;
+  last_event_id_ = static_cast<int64_t>(process_id) << 32;
   latency_component_id_ = routing_id | last_event_id_;
 }
 
@@ -318,12 +318,22 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
   if (event.timeStampSeconds &&
       !latency->FindLatency(ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
                             0, NULL)) {
+    base::TimeTicks timestamp_now = base::TimeTicks::Now();
+    base::TimeTicks timestamp_original = base::TimeTicks() +
+        base::TimeDelta::FromSecondsD(event.timeStampSeconds);
+
+    // Timestamp from platform input can wrap, e.g. 32 bits timestamp
+    // for Xserver and Window MSG time will wrap about 49.6 days. Do a
+    // sanity check here and if wrap does happen, use TimeTicks::Now()
+    // as the timestamp instead.
+    if ((timestamp_now - timestamp_original).InDays() > 0)
+      timestamp_original = timestamp_now;
+
     latency->AddLatencyNumberWithTimestamp(
         ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
         0,
         0,
-        base::TimeTicks() +
-        base::TimeDelta::FromSecondsD(event.timeStampSeconds),
+        timestamp_original,
         1);
   }
 
@@ -390,15 +400,24 @@ void RenderWidgetHostLatencyTracker::OnInputEventAck(
     latency->AddLatencyNumber(ui::INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT, 0, 0);
     if (!rendering_scheduled) {
       latency->AddLatencyNumber(
-          ui::INPUT_EVENT_LATENCY_TERMINATED_MOUSE_COMPONENT, 0, 0);
+          ui::INPUT_EVENT_LATENCY_TERMINATED_MOUSE_WHEEL_COMPONENT, 0, 0);
     }
     ComputeInputLatencyHistograms(WebInputEvent::MouseWheel,
                                   latency_component_id_, *latency);
     return;
   }
 
-  // TODO(jdduke): Determine if mouse and keyboard events are worth hooking
-  // into LatencyInfo.
+  if (WebInputEvent::isMouseEventType(event.type) && !rendering_scheduled) {
+      latency->AddLatencyNumber(
+          ui::INPUT_EVENT_LATENCY_TERMINATED_MOUSE_COMPONENT, 0, 0);
+    return;
+  }
+
+  if (WebInputEvent::isKeyboardEventType(event.type) && !rendering_scheduled) {
+      latency->AddLatencyNumber(
+          ui::INPUT_EVENT_LATENCY_TERMINATED_KEYBOARD_COMPONENT, 0, 0);
+    return;
+  }
 }
 
 void RenderWidgetHostLatencyTracker::OnSwapCompositorFrame(
@@ -444,27 +463,6 @@ void RenderWidgetHostLatencyTracker::OnFrameSwapped(
   ComputeScrollLatencyHistograms(gpu_swap_begin_component,
                                  gpu_swap_end_component, latency_component_id_,
                                  latency);
-
-  LatencyInfo::LatencyComponent browser_swap_component;
-  if (latency.FindLatency(
-          ui::INPUT_EVENT_BROWSER_RECEIVED_RENDERER_SWAP_COMPONENT, 0,
-          &browser_swap_component)) {
-    base::TimeDelta delta =
-        gpu_swap_begin_component.event_time - browser_swap_component.event_time;
-    browser_composite_latency_history_.InsertSample(delta);
-  }
-}
-
-base::TimeDelta
-RenderWidgetHostLatencyTracker::GetEstimatedBrowserCompositeTime() const {
-  // TODO(brianderson): Remove lower bound on estimate once we're sure it won't
-  // cause regressions.
-  return std::max(
-      browser_composite_latency_history_.Percentile(
-          kBrowserCompositeLatencyEstimationPercentile) *
-          kBrowserCompositeLatencyEstimationSlack,
-      base::TimeDelta::FromMicroseconds(
-          (1.0f * base::Time::kMicrosecondsPerSecond) / (3.0f * 60)));
 }
 
 }  // namespace content

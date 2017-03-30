@@ -31,13 +31,6 @@ QuicPacketWriter* QuicDispatcherPeer::GetWriter(QuicDispatcher* dispatcher) {
 }
 
 // static
-void QuicDispatcherPeer::SetPacketWriterFactory(
-    QuicDispatcher* dispatcher,
-    QuicDispatcher::PacketWriterFactory* packet_writer_factory) {
-  dispatcher->packet_writer_factory_.reset(packet_writer_factory);
-}
-
-// static
 QuicConnectionHelperInterface* QuicDispatcherPeer::GetHelper(
     QuicDispatcher* dispatcher) {
   return dispatcher->helper_.get();
@@ -55,6 +48,12 @@ QuicErrorCode QuicDispatcherPeer::GetAndClearLastError(
   QuicErrorCode ret = dispatcher->last_error_;
   dispatcher->last_error_ = QUIC_NO_ERROR;
   return ret;
+}
+
+// static
+const QuicDispatcher::SessionMap& QuicDispatcherPeer::session_map(
+    QuicDispatcher* dispatcher) {
+  return dispatcher->session_map();
 }
 
 }  // namespace test

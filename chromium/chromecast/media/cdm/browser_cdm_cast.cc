@@ -4,15 +4,73 @@
 
 #include "chromecast/media/cdm/browser_cdm_cast.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
+#include "base/thread_task_runner_handle.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/cdm_promise.h"
 #include "media/cdm/player_tracker_impl.h"
 
 namespace chromecast {
 namespace media {
+
+namespace {
+
+// media::CdmPromiseTemplate implementation that wraps a promise so as to
+// allow passing to other threads.
+template <typename... T>
+class CdmPromiseInternal : public ::media::CdmPromiseTemplate<T...> {
+ public:
+  CdmPromiseInternal(scoped_ptr<::media::CdmPromiseTemplate<T...>> promise)
+      : task_runner_(base::ThreadTaskRunnerHandle::Get()),
+        promise_(std::move(promise)) {}
+
+  ~CdmPromiseInternal() final {
+    // Promise must be resolved or rejected before destruction.
+    DCHECK(!promise_);
+  }
+
+  // CdmPromiseTemplate<> implementation.
+  void resolve(const T&... result) final;
+
+  void reject(::media::MediaKeys::Exception exception,
+              uint32_t system_code,
+              const std::string& error_message) final {
+    MarkPromiseSettled();
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&::media::CdmPromiseTemplate<T...>::reject,
+                   base::Owned(promise_.release()),
+                   exception, system_code, error_message));
+  }
+
+ private:
+  using ::media::CdmPromiseTemplate<T...>::MarkPromiseSettled;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_ptr<::media::CdmPromiseTemplate<T...>> promise_;
+};
+
+template <typename... T>
+void CdmPromiseInternal<T...>::resolve(const T&... result) {
+  MarkPromiseSettled();
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&::media::CdmPromiseTemplate<T...>::resolve,
+                 base::Owned(promise_.release()),
+                 result...));
+}
+
+template <typename... T>
+scoped_ptr<CdmPromiseInternal<T...>> BindPromiseToCurrentLoop(
+    scoped_ptr<::media::CdmPromiseTemplate<T...>> promise) {
+  return make_scoped_ptr(new CdmPromiseInternal<T...>(std::move(promise)));
+}
+
+}  // namespace
 
 BrowserCdmCast::BrowserCdmCast() {
   thread_checker_.DetachFromThread();
@@ -32,7 +90,7 @@ void BrowserCdmCast::Initialize(
     const ::media::SessionExpirationUpdateCB& session_expiration_update_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  player_tracker_impl_.reset(new ::media::PlayerTrackerImpl);
+  player_tracker_impl_.reset(new ::media::PlayerTrackerImpl());
 
   session_message_cb_ = session_message_cb;
   session_closed_cb_ = session_closed_cb;
@@ -54,11 +112,6 @@ void BrowserCdmCast::UnregisterPlayer(int registration_id) {
   player_tracker_impl_->UnregisterPlayer(registration_id);
 }
 
-::media::CdmContext* BrowserCdmCast::GetCdmContext() {
-  NOTREACHED();
-  return nullptr;
-}
-
 void BrowserCdmCast::OnSessionMessage(
     const std::string& session_id,
     const std::vector<uint8_t>& message,
@@ -74,19 +127,26 @@ void BrowserCdmCast::OnSessionClosed(const std::string& session_id) {
   session_closed_cb_.Run(session_id);
 }
 
-void BrowserCdmCast::OnSessionKeysChange(
-    const std::string& session_id,
-    const ::media::KeyIdAndKeyPairs& keys) {
-  ::media::CdmKeysInfo cdm_keys_info;
-  for (const std::pair<std::string, std::string>& key : keys) {
-    scoped_ptr< ::media::CdmKeyInformation> cdm_key_information(
-        new ::media::CdmKeyInformation());
-    cdm_key_information->key_id.assign(key.first.begin(), key.first.end());
-    cdm_keys_info.push_back(cdm_key_information.release());
-  }
-  session_keys_change_cb_.Run(session_id, true, cdm_keys_info.Pass());
+void BrowserCdmCast::OnSessionKeysChange(const std::string& session_id,
+                                         bool newly_usable_keys,
+                                         ::media::CdmKeysInfo keys_info) {
+  session_keys_change_cb_.Run(session_id, newly_usable_keys,
+                              std::move(keys_info));
 
-  player_tracker_impl_->NotifyNewKey();
+  if (newly_usable_keys)
+    player_tracker_impl_->NotifyNewKey();
+}
+
+void BrowserCdmCast::KeyIdAndKeyPairsToInfo(
+    const ::media::KeyIdAndKeyPairs& keys,
+    ::media::CdmKeysInfo* keys_info) {
+  DCHECK(keys_info);
+  for (const std::pair<std::string, std::string>& key : keys) {
+    scoped_ptr<::media::CdmKeyInformation> cdm_key_information(
+        new ::media::CdmKeyInformation(key.first,
+                                       ::media::CdmKeyInformation::USABLE, 0));
+    keys_info->push_back(cdm_key_information.release());
+  }
 }
 
 // A macro runs current member function on |task_runner_| thread.
@@ -97,24 +157,16 @@ void BrowserCdmCast::OnSessionKeysChange(
                  base::Unretained(browser_cdm_cast_.get()), ##__VA_ARGS__))
 
 BrowserCdmCastUi::BrowserCdmCastUi(
-    scoped_ptr<BrowserCdmCast> browser_cdm_cast,
+    const scoped_refptr<BrowserCdmCast>& browser_cdm_cast,
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : browser_cdm_cast_(browser_cdm_cast.Pass()), task_runner_(task_runner) {
-}
+    : browser_cdm_cast_(browser_cdm_cast), task_runner_(task_runner) {}
 
 BrowserCdmCastUi::~BrowserCdmCastUi() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  task_runner_->DeleteSoon(FROM_HERE, browser_cdm_cast_.release());
-}
-
-int BrowserCdmCastUi::RegisterPlayer(const base::Closure& new_key_cb,
-                                     const base::Closure& cdm_unset_cb) {
-  NOTREACHED() << "RegisterPlayer should be called on BrowserCdmCast";
-  return -1;
-}
-
-void BrowserCdmCastUi::UnregisterPlayer(int registration_id) {
-  NOTREACHED() << "UnregisterPlayer should be called on BrowserCdmCast";
+  browser_cdm_cast_->AddRef();
+  BrowserCdmCast* raw_cdm = browser_cdm_cast_.get();
+  browser_cdm_cast_ = nullptr;
+  task_runner_->ReleaseSoon(FROM_HERE, raw_cdm);
 }
 
 BrowserCdmCast* BrowserCdmCastUi::browser_cdm_cast() const {
@@ -127,9 +179,8 @@ void BrowserCdmCastUi::SetServerCertificate(
     scoped_ptr<::media::SimpleCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
-      SetServerCertificate,
-      certificate,
-      base::Passed(&promise));
+      SetServerCertificate, certificate,
+      base::Passed(BindPromiseToCurrentLoop(std::move(promise))));
 }
 
 void BrowserCdmCastUi::CreateSessionAndGenerateRequest(
@@ -139,11 +190,8 @@ void BrowserCdmCastUi::CreateSessionAndGenerateRequest(
     scoped_ptr<::media::NewSessionCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
-      CreateSessionAndGenerateRequest,
-      session_type,
-      init_data_type,
-      init_data,
-      base::Passed(&promise));
+      CreateSessionAndGenerateRequest, session_type, init_data_type, init_data,
+      base::Passed(BindPromiseToCurrentLoop(std::move(promise))));
 }
 
 void BrowserCdmCastUi::LoadSession(
@@ -152,7 +200,8 @@ void BrowserCdmCastUi::LoadSession(
     scoped_ptr<::media::NewSessionCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
-      LoadSession, session_type, session_id, base::Passed(&promise));
+      LoadSession, session_type, session_id,
+      base::Passed(BindPromiseToCurrentLoop(std::move(promise))));
 }
 
 void BrowserCdmCastUi::UpdateSession(
@@ -161,29 +210,26 @@ void BrowserCdmCastUi::UpdateSession(
     scoped_ptr<::media::SimpleCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
-      UpdateSession,
-      session_id,
-      response,
-      base::Passed(&promise));
+      UpdateSession, session_id, response,
+      base::Passed(BindPromiseToCurrentLoop(std::move(promise))));
 }
 
 void BrowserCdmCastUi::CloseSession(
     const std::string& session_id,
     scoped_ptr<::media::SimpleCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  FORWARD_ON_CDM_THREAD(CloseSession, session_id, base::Passed(&promise));
+  FORWARD_ON_CDM_THREAD(
+      CloseSession, session_id,
+      base::Passed(BindPromiseToCurrentLoop(std::move(promise))));
 }
 
 void BrowserCdmCastUi::RemoveSession(
     const std::string& session_id,
     scoped_ptr<::media::SimpleCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  FORWARD_ON_CDM_THREAD(RemoveSession, session_id, base::Passed(&promise));
-}
-
-::media::CdmContext* BrowserCdmCastUi::GetCdmContext() {
-  NOTREACHED();
-  return nullptr;
+  FORWARD_ON_CDM_THREAD(
+      RemoveSession, session_id,
+      base::Passed(BindPromiseToCurrentLoop(std::move(promise))));
 }
 
 // A default empty implementation for subclasses that don't need to provide

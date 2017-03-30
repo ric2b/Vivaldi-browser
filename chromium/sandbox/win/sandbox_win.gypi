@@ -104,6 +104,8 @@
             'src/sandbox_policy_base.cc',
             'src/sandbox_policy_base.h',
             'src/sandbox_policy.h',
+            'src/sandbox_rand.cc',
+            'src/sandbox_rand.h',
             'src/sandbox_types.h',
             'src/sandbox_utils.cc',
             'src/sandbox_utils.h',
@@ -112,8 +114,6 @@
             'src/security_level.h',
             'src/service_resolver.cc',
             'src/service_resolver.h',
-            'src/shared_handles.cc',
-            'src/shared_handles.h',
             'src/sharedmem_ipc_client.cc',
             'src/sharedmem_ipc_client.h',
             'src/sharedmem_ipc_server.cc',
@@ -132,6 +132,8 @@
             'src/target_process.h',
             'src/target_services.cc',
             'src/target_services.h',
+            'src/top_level_dispatcher.cc',
+            'src/top_level_dispatcher.h',
             'src/win_utils.cc',
             'src/win_utils.h',
             'src/win2k_threadpool.cc',
@@ -187,12 +189,6 @@
       'include_dirs': [
         '../..',
       ],
-      'direct_dependent_settings': {
-        'include_dirs': [
-          'src',
-          '../..',
-        ],
-      },
       'target_conditions': [
         ['target_arch=="ia32"', {
           'copies': [
@@ -225,6 +221,7 @@
         'src/handle_closer_test.cc',
         'src/integrity_level_test.cc',
         'src/ipc_ping_test.cc',
+        'src/lpc_policy_test.cc',
         'src/named_pipe_policy_test.cc',
         'src/policy_target_test.cc',
         'src/process_mitigations_test.cc',
@@ -276,6 +273,7 @@
         'src/policy_low_level_unittest.cc',
         'src/policy_opcodes_unittest.cc',
         'src/ipc_unittest.cc',
+        'src/sandbox_nt_util_unittest.cc',
         'src/threadpool_unittest.cc',
         'src/win_utils_unittest.cc',
         'tests/common/test_utils.cc',
@@ -283,55 +281,55 @@
         'tests/unit_tests/unit_tests.cc',
       ],
     },
-    #{
-    #  'target_name': 'sandbox_poc',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    'sandbox',
-    #    'pocdll',
-    #  ],
-    #  'sources': [
-    #    'sandbox_poc/main_ui_window.cc',
-    #    'sandbox_poc/main_ui_window.h',
-    #    'sandbox_poc/resource.h',
-    #    'sandbox_poc/sandbox.cc',
-    #    'sandbox_poc/sandbox.h',
-    #    'sandbox_poc/sandbox.ico',
-    #    'sandbox_poc/sandbox.rc',
-    #  ],
-    #  'link_settings': {
-    #    'libraries': [
-    #      '-lcomctl32.lib',
-    #    ],
-    #  },
-    #  'msvs_settings': {
-    #    'VCLinkerTool': {
-    #      'SubSystem': '2',         # Set /SUBSYSTEM:WINDOWS
-    #    },
-    #  },
-    #},
-    #{
-    #  'target_name': 'pocdll',
-    #  'type': 'shared_library',
-    #  'sources': [
-    #    'sandbox_poc/pocdll/exports.h',
-    #    'sandbox_poc/pocdll/fs.cc',
-    #    'sandbox_poc/pocdll/handles.cc',
-    #    'sandbox_poc/pocdll/invasive.cc',
-    #    'sandbox_poc/pocdll/network.cc',
-    #    'sandbox_poc/pocdll/pocdll.cc',
-    #    'sandbox_poc/pocdll/processes_and_threads.cc',
-    #    'sandbox_poc/pocdll/registry.cc',
-    #    'sandbox_poc/pocdll/spyware.cc',
-    #    'sandbox_poc/pocdll/utils.h',
-    #  ],
-    #  'defines': [
-    #    'POCDLL_EXPORTS',
-    #  ],
-    #  'include_dirs': [
-    #    '../..',
-    #  ],
-    #},
+    {
+      'target_name': 'sandbox_poc',
+      'type': 'executable',
+      'dependencies': [
+        'sandbox',
+        'pocdll',
+      ],
+      'sources': [
+        'sandbox_poc/main_ui_window.cc',
+        'sandbox_poc/main_ui_window.h',
+        'sandbox_poc/resource.h',
+        'sandbox_poc/sandbox.cc',
+        'sandbox_poc/sandbox.h',
+        'sandbox_poc/sandbox.ico',
+        'sandbox_poc/sandbox.rc',
+      ],
+      'link_settings': {
+        'libraries': [
+          '-lcomctl32.lib',
+        ],
+      },
+      'msvs_settings': {
+        'VCLinkerTool': {
+          'SubSystem': '2',         # Set /SUBSYSTEM:WINDOWS
+        },
+      },
+    },
+    {
+      'target_name': 'pocdll',
+      'type': 'shared_library',
+      'sources': [
+        'sandbox_poc/pocdll/exports.h',
+        'sandbox_poc/pocdll/fs.cc',
+        'sandbox_poc/pocdll/handles.cc',
+        'sandbox_poc/pocdll/invasive.cc',
+        'sandbox_poc/pocdll/network.cc',
+        'sandbox_poc/pocdll/pocdll.cc',
+        'sandbox_poc/pocdll/processes_and_threads.cc',
+        'sandbox_poc/pocdll/registry.cc',
+        'sandbox_poc/pocdll/spyware.cc',
+        'sandbox_poc/pocdll/utils.h',
+      ],
+      'defines': [
+        'POCDLL_EXPORTS',
+      ],
+      'include_dirs': [
+        '../..',
+      ],
+    },
   ],
   'conditions': [
     ['OS=="win" and target_arch=="ia32"', {
@@ -355,12 +353,6 @@
           'include_dirs': [
             '../..',
           ],
-          'direct_dependent_settings': {
-            'include_dirs': [
-              'src',
-              '../..',
-            ],
-          },
           'defines': [
             '<@(nacl_win64_defines)',
           ]
@@ -380,6 +372,32 @@
           ],
           'sources': [
             '../sbox_integration_tests.isolate',
+          ],
+        },
+        {
+          'target_name': 'sbox_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'sbox_unittests',
+          ],
+          'includes': [
+            '../../build/isolate.gypi',
+          ],
+          'sources': [
+            '../sbox_unittests.isolate',
+          ],
+        },
+        {
+          'target_name': 'sbox_validation_tests_run',
+          'type': 'none',
+          'dependencies': [
+            'sbox_validation_tests',
+          ],
+          'includes': [
+            '../../build/isolate.gypi',
+          ],
+          'sources': [
+            '../sbox_validation_tests.isolate',
           ],
         },
       ],

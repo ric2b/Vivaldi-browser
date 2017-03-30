@@ -30,11 +30,9 @@ void QuicServerInfo::State::Clear() {
 }
 
 QuicServerInfo::QuicServerInfo(const QuicServerId& server_id)
-    : server_id_(server_id) {
-}
+    : server_id_(server_id) {}
 
-QuicServerInfo::~QuicServerInfo() {
-}
+QuicServerInfo::~QuicServerInfo() {}
 
 const QuicServerInfo::State& QuicServerInfo::state() const {
   return state_;
@@ -91,13 +89,13 @@ bool QuicServerInfo::ParseInner(const string& data) {
   }
 
   // Read certs.
-  uint32 num_certs;
+  uint32_t num_certs;
   if (!iter.ReadUInt32(&num_certs)) {
     DVLOG(1) << "Malformed num_certs";
     return false;
   }
 
-  for (uint32 i = 0; i < num_certs; i++) {
+  for (uint32_t i = 0; i < num_certs; i++) {
     string cert;
     if (!iter.ReadString(&cert)) {
       DVLOG(1) << "Malformed cert";
@@ -122,7 +120,7 @@ string QuicServerInfo::SerializeInner() const {
       !p.WriteString(state_.server_config) ||
       !p.WriteString(state_.source_address_token) ||
       !p.WriteString(state_.server_config_sig) ||
-      state_.certs.size() > std::numeric_limits<uint32>::max() ||
+      state_.certs.size() > std::numeric_limits<uint32_t>::max() ||
       !p.WriteUInt32(state_.certs.size())) {
     return string();
   }
@@ -133,7 +131,7 @@ string QuicServerInfo::SerializeInner() const {
     }
   }
 
-  return string(reinterpret_cast<const char *>(p.data()), p.size());
+  return string(reinterpret_cast<const char*>(p.data()), p.size());
 }
 
 QuicServerInfoFactory::~QuicServerInfoFactory() {}

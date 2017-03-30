@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -16,18 +17,23 @@
 namespace {
 class TestCompletionCallback {
  public:
-  TestCompletionCallback()
-      : have_result_(false) {
+  TestCompletionCallback() {}
+
+  bool have_result() const { return info_collection_.get(); }
+
+  content::AppCacheInfoCollection* info_collection() const {
+    return info_collection_.get();
   }
 
-  bool have_result() const { return have_result_; }
-
-  void callback() {
-    have_result_ = true;
+  void set_info_collection(
+      scoped_refptr<content::AppCacheInfoCollection> info_collection) {
+    info_collection_ = info_collection;
   }
 
  private:
-  bool have_result_;
+  scoped_refptr<content::AppCacheInfoCollection> info_collection_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestCompletionCallback);
 };
 
 }  // namespace
@@ -54,12 +60,12 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, SetInfo) {
   helper->AddAppCache(manifest3);
 
   TestCompletionCallback callback;
-  helper->StartFetching(base::Bind(&TestCompletionCallback::callback,
+  helper->StartFetching(base::Bind(&TestCompletionCallback::set_info_collection,
                                    base::Unretained(&callback)));
   ASSERT_TRUE(callback.have_result());
 
   std::map<GURL, content::AppCacheInfoVector>& collection =
-      helper->info_collection()->infos_by_origin;
+      callback.info_collection()->infos_by_origin;
 
   ASSERT_EQ(2u, collection.size());
   EXPECT_TRUE(ContainsKey(collection, manifest1.GetOrigin()));
@@ -86,12 +92,12 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, Unique) {
   helper->AddAppCache(manifest);
 
   TestCompletionCallback callback;
-  helper->StartFetching(base::Bind(&TestCompletionCallback::callback,
+  helper->StartFetching(base::Bind(&TestCompletionCallback::set_info_collection,
                                    base::Unretained(&callback)));
   ASSERT_TRUE(callback.have_result());
 
   std::map<GURL, content::AppCacheInfoVector>& collection =
-      helper->info_collection()->infos_by_origin;
+      callback.info_collection()->infos_by_origin;
 
   ASSERT_EQ(1u, collection.size());
   EXPECT_TRUE(ContainsKey(collection, manifest.GetOrigin()));
@@ -132,8 +138,7 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, Delete) {
   EXPECT_EQ(3u, helper->GetAppCacheCount());
   helper->DeleteAppCacheGroup(manifest2);
   EXPECT_EQ(2u, helper->GetAppCacheCount());
-  EXPECT_TRUE(helper->GetOriginAppCacheInfoMap().find(manifest2) ==
-              helper->GetOriginAppCacheInfoMap().end());
+  EXPECT_FALSE(ContainsKey(helper->GetOriginAppCacheInfoMap(), manifest2));
 }
 
 TEST_F(CannedBrowsingDataAppCacheHelperTest, IgnoreExtensionsAndDevTools) {

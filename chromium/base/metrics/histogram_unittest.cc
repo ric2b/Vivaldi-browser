@@ -4,8 +4,12 @@
 
 #include "base/metrics/histogram.h"
 
-#include <climits>
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
+#include <climits>
 #include <vector>
 
 #include "base/logging.h"
@@ -81,7 +85,7 @@ TEST_F(HistogramTest, NameMatchTest) {
 }
 
 TEST_F(HistogramTest, ExponentialRangesTest) {
-  // Check that we got a nice exponential when there was enough rooom.
+  // Check that we got a nice exponential when there was enough room.
   BucketRanges ranges(9);
   Histogram::InitializeBucketRanges(1, 64, &ranges);
   EXPECT_EQ(0, ranges.range(0));
@@ -229,6 +233,30 @@ TEST_F(HistogramTest, CustomHistogramWithOnly2Buckets) {
   EXPECT_EQ(0, ranges->range(0));
   EXPECT_EQ(4, ranges->range(1));
   EXPECT_EQ(HistogramBase::kSampleType_MAX, ranges->range(2));
+}
+
+// Test the AddCount function.
+TEST_F(HistogramTest, AddCountTest) {
+  const size_t kBucketCount = 50;
+  Histogram* histogram = static_cast<Histogram*>(
+      Histogram::FactoryGet("AddCountHistogram", 10, 100, kBucketCount,
+                            HistogramBase::kNoFlags));
+
+  histogram->AddCount(20, 15);
+  histogram->AddCount(30, 14);
+
+  scoped_ptr<SampleVector> samples = histogram->SnapshotSampleVector();
+  EXPECT_EQ(29, samples->TotalCount());
+  EXPECT_EQ(15, samples->GetCount(20));
+  EXPECT_EQ(14, samples->GetCount(30));
+
+  histogram->AddCount(20, 25);
+  histogram->AddCount(30, 24);
+
+  scoped_ptr<SampleVector> samples2 = histogram->SnapshotSampleVector();
+  EXPECT_EQ(78, samples2->TotalCount());
+  EXPECT_EQ(40, samples2->GetCount(20));
+  EXPECT_EQ(38, samples2->GetCount(30));
 }
 
 // Make sure histogram handles out-of-bounds data gracefully.
@@ -390,11 +418,11 @@ TEST_F(HistogramTest, HistogramSerializeInfo) {
   EXPECT_TRUE(iter.ReadInt(&max));
   EXPECT_EQ(64, max);
 
-  int64 bucket_count;
+  int64_t bucket_count;
   EXPECT_TRUE(iter.ReadInt64(&bucket_count));
   EXPECT_EQ(8, bucket_count);
 
-  uint32 checksum;
+  uint32_t checksum;
   EXPECT_TRUE(iter.ReadUInt32(&checksum));
   EXPECT_EQ(histogram->bucket_ranges()->checksum(), checksum);
 
@@ -419,8 +447,8 @@ TEST_F(HistogramTest, CustomHistogramSerializeInfo) {
 
   int i;
   std::string s;
-  int64 bucket_count;
-  uint32 ui32;
+  int64_t bucket_count;
+  uint32_t ui32;
   EXPECT_TRUE(iter.ReadInt(&i) && iter.ReadString(&s) && iter.ReadInt(&i) &&
               iter.ReadInt(&i) && iter.ReadInt(&i) &&
               iter.ReadInt64(&bucket_count) && iter.ReadUInt32(&ui32));

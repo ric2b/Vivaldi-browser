@@ -4,6 +4,7 @@
 
 #include "components/policy/core/common/cloud/mock_device_management_service.h"
 
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "net/base/net_errors.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -34,7 +35,6 @@ class MockRequestJobBase : public DeviceManagementRequestJob {
                        gaia_token_,
                        ExtractParameter(dm_protocol::kParamOAuthToken),
                        dm_token_,
-                       ExtractParameter(dm_protocol::kParamUserAffiliation),
                        ExtractParameter(dm_protocol::kParamDeviceID),
                        request_);
   }

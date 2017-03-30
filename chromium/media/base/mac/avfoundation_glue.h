@@ -14,9 +14,12 @@
 
 #if defined(__OBJC__)
 #import <Foundation/Foundation.h>
+#import <AVFoundation/AVFoundation.h>
 #endif  // defined(__OBJC__)
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "media/base/mac/coremedia_glue.h"
 #include "media/base/mac/mediatoolbox_glue.h"
 #include "media/base/media_export.h"
@@ -171,11 +174,11 @@ MEDIA_EXPORT
 @end
 
 MEDIA_EXPORT
-@interface CrAVCaptureInput  // Originally from AVCaptureInput.h.
+@interface CrAVCaptureInput : NSObject  // Originally from AVCaptureInput.h.
 @end
 
 MEDIA_EXPORT
-@interface CrAVCaptureOutput  // Originally from AVCaptureOutput.h.
+@interface CrAVCaptureOutput : NSObject  // Originally from AVCaptureOutput.h.
 @end
 
 // Originally AVCaptureSession and coming from AVCaptureSession.h.
@@ -248,7 +251,7 @@ MEDIA_EXPORT
 @end
 
 // Originally AVMutableAudioMixInputParameters and coming from AVAudioMix.h.
-@interface CrAVMutableAudioMixInputParameters : NSObject
+@interface CrAVMutableAudioMixInputParameters : AVAudioMixInputParameters
 
 - (void)setAudioTapProcessor:(MediaToolboxGlue::MTAudioProcessingTapRef)tap;
 

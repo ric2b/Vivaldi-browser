@@ -9,8 +9,8 @@ import static org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Ani
 import android.content.Context;
 import android.view.animation.Interpolator;
 
-import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel.PanelState;
-import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel.StateChangeReason;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Animatable;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Animation;
@@ -20,7 +20,7 @@ import org.chromium.chrome.browser.util.MathUtils;
 /**
  * Base abstract class for animating the Contextual Search Panel.
  */
-abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
+public abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
         implements Animatable<ContextualSearchPanelAnimation.Property> {
 
     /**
@@ -28,19 +28,20 @@ abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
      */
     protected enum Property {
         PANEL_HEIGHT,
-        PROMO_VISIBILITY
+        PROMO_VISIBILITY,
+        BOTTOM_BAR_TEXT_VISIBILITY
     }
 
     /**
      * The base duration of animations in milliseconds. This value is based on
      * the Kennedy specification for slow animations.
      */
-    private static final long BASE_ANIMATION_DURATION_MS = 218;
+    protected static final long BASE_ANIMATION_DURATION_MS = 218;
 
     /**
      * The maximum animation duration in milliseconds.
      */
-    private static final long MAXIMUM_ANIMATION_DURATION_MS = 350;
+    static final long MAXIMUM_ANIMATION_DURATION_MS = 350;
 
     /**
      * The minimum animation duration in milliseconds.
@@ -100,6 +101,12 @@ abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
     // ============================================================================================
 
     /**
+     * Notifies that the acceptance animation has finished.
+     */
+    protected void onPromoAcceptanceAnimationFinished() {
+    }
+
+    /**
      * Animates the Contextual Search Panel to its maximized state.
      *
      * @param reason The reason for the change of panel state.
@@ -139,13 +146,21 @@ abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
 
     @Override
     protected void closePanel(StateChangeReason reason, boolean animate) {
-        if (!mIsAnimatingPanelClosing) {
-            if (animate) {
-                mIsAnimatingPanelClosing = true;
-                animatePanelToState(PanelState.CLOSED, reason);
+        // If close without animation is called while the panel is already animating closed, cancel
+        // the animation and finish closing immediately.
+        if (mIsAnimatingPanelClosing) {
+            if (!animate) {
+                cancelAnimation(this, Property.PANEL_HEIGHT);
             } else {
-                resizePanelToState(PanelState.CLOSED, reason);
+                return;
             }
+        }
+
+        if (animate) {
+            mIsAnimatingPanelClosing = true;
+            animatePanelToState(PanelState.CLOSED, reason);
+        } else {
+            resizePanelToState(PanelState.CLOSED, reason);
         }
     }
 
@@ -180,7 +195,7 @@ abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
      * @param state The state to resize to.
      * @param reason The reason for the change of panel state.
      */
-    private void resizePanelToState(PanelState state, StateChangeReason reason) {
+    protected void resizePanelToState(PanelState state, StateChangeReason reason) {
         cancelHeightAnimation();
 
         final float height = getPanelHeightFromState(state);
@@ -198,6 +213,19 @@ abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
         hidePromoView();
         mIsAnimatingPromoAcceptance = true;
         animateProperty(Property.PROMO_VISIBILITY, 1.f, 0.f, BASE_ANIMATION_DURATION_MS);
+    }
+
+    @Override
+    protected void animateSearchTermResolution() {
+        animateProperty(Property.BOTTOM_BAR_TEXT_VISIBILITY, 0.f, 1.f,
+                MAXIMUM_ANIMATION_DURATION_MS);
+    }
+
+    @Override
+    protected void cancelSearchTermResolutionAnimation() {
+        if (animationIsRunning()) {
+            cancelAnimation(this, Property.BOTTOM_BAR_TEXT_VISIBILITY);
+        }
     }
 
     /**
@@ -229,11 +257,13 @@ abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
         PanelState projectedState = findNearestPanelStateFromHeight(projectedHeight);
 
         // Prevent the fling gesture from moving the Panel from PEEKED to MAXIMIZED if the Panel
-        // Promo is available. This is to make sure the Promo will be visible, considering that
-        // the EXPANDED state is the only one that will show the Promo.
+        // Promo is available and we are running in full screen panel mode. This is to make sure
+        // the Promo will be visible, considering that the EXPANDED state is the only one that will
+        // show the Promo in full screen panel mode. In narrow panel UI the Promo is visible in
+        // maximized so this project state change is not needed.
         if (projectedState == PanelState.MAXIMIZED
                 && getPanelState() == PanelState.PEEKED
-                && isPromoAvailable()) {
+                && isPromoVisible()) {
             projectedState = PanelState.EXPANDED;
         }
 
@@ -389,7 +419,7 @@ abstract class ContextualSearchPanelAnimation extends ContextualSearchPanelBase
     protected void onAnimationFinished() {
         if (mIsAnimatingPromoAcceptance) {
             mIsAnimatingPromoAcceptance = false;
-            setPreferenceState(true);
+            onPromoAcceptanceAnimationFinished();
         }
 
         if (mIsAnimatingPanelClosing) {

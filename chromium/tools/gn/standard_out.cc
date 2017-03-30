@@ -4,11 +4,15 @@
 
 #include "tools/gn/standard_out.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "tools/gn/switches.h"
 
@@ -63,10 +67,12 @@ void EnsureInitialized() {
 #endif
 }
 
+#if !defined(OS_WIN)
 void WriteToStdOut(const std::string& output) {
   size_t written_bytes = fwrite(output.data(), 1, output.size(), stdout);
   DCHECK_EQ(output.size(), written_bytes);
 }
+#endif  // !defined(OS_WIN)
 
 void OutputMarkdownDec(TextDecoration dec) {
   // The markdown rendering turns "dim" text to italics and any
@@ -122,7 +128,15 @@ void OutputString(const std::string& output, TextDecoration dec) {
     }
   }
 
-  ::WriteFile(hstdout, output.c_str(), static_cast<DWORD>(output.size()),
+  std::string tmpstr = output;
+  if (is_markdown && dec == DECORATION_YELLOW) {
+    // https://code.google.com/p/gitiles/issues/detail?id=77
+    // Gitiles will replace "--" with an em dash in non-code text.
+    // Figuring out all instances of this might be difficult, but we can
+    // at least escape the instances where this shows up in a heading.
+    base::ReplaceSubstringsAfterOffset(&tmpstr, 0, "--", "\\--");
+  }
+  ::WriteFile(hstdout, tmpstr.c_str(), static_cast<DWORD>(tmpstr.size()),
               &written, nullptr);
 
   if (is_markdown) {
@@ -160,7 +174,15 @@ void OutputString(const std::string& output, TextDecoration dec) {
     }
   }
 
-  WriteToStdOut(output.data());
+  std::string tmpstr = output;
+  if (is_markdown && dec == DECORATION_YELLOW) {
+    // https://code.google.com/p/gitiles/issues/detail?id=77
+    // Gitiles will replace "--" with an em dash in non-code text.
+    // Figuring out all instances of this might be difficult, but we can
+    // at least escape the instances where this shows up in a heading.
+    base::ReplaceSubstringsAfterOffset(&tmpstr, 0, "--", "\\--");
+  }
+  WriteToStdOut(tmpstr.data());
 
   if (is_markdown) {
     OutputMarkdownDec(dec);
@@ -202,12 +224,10 @@ void PrintShortHelp(const std::string& line) {
 void PrintLongHelp(const std::string& text) {
   EnsureInitialized();
 
-  std::vector<std::string> lines;
-  base::SplitStringDontTrim(text, '\n', &lines);
-
   bool first_header = true;
   bool in_body = false;
-  for (const auto& line : lines) {
+  for (const std::string& line : base::SplitString(
+           text, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL)) {
     // Check for a heading line.
     if (!line.empty() && line[0] != ' ') {
       if (is_markdown) {

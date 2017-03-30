@@ -111,7 +111,7 @@
 //   scoped_ptr<Foo> f(new Foo());
 //
 //   // |cb| is given ownership of Foo(). |f| is now NULL.
-//   // You can use f.Pass() in place of &f, but it's more verbose.
+//   // You can use std::move(f) in place of &f, but it's more verbose.
 //   Closure cb = Bind(&TakesOwnership, Passed(&f));
 //
 //   // Run was never called so |cb| still owns Foo() and deletes
@@ -143,10 +143,15 @@
 #ifndef BASE_BIND_HELPERS_H_
 #define BASE_BIND_HELPERS_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include <type_traits>
+#include <utility>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/template_util.h"
+#include "build/build_config.h"
 
 namespace base {
 namespace internal {
@@ -185,7 +190,7 @@ namespace internal {
 // want to probe for.  Then we create a class Base that inherits from both T
 // (the class we wish to probe) and BaseMixin.  Note that the function
 // signature in BaseMixin does not need to match the signature of the function
-// we are probing for; thus it's easiest to just use void(void).
+// we are probing for; thus it's easiest to just use void().
 //
 // Now, if TargetFunc exists somewhere in T, then &Base::TargetFunc has an
 // ambiguous resolution between BaseMixin and T.  This lets us write the
@@ -222,8 +227,8 @@ namespace internal {
 // See http://crbug.com/82038.
 template <typename T>
 class SupportsAddRefAndRelease {
-  typedef char Yes[1];
-  typedef char No[2];
+  using Yes = char[1];
+  using No = char[2];
 
   struct BaseMixin {
     void AddRef();
@@ -242,7 +247,7 @@ class SupportsAddRefAndRelease {
 #pragma warning(pop)
 #endif
 
-  template <void(BaseMixin::*)(void)> struct Helper {};
+  template <void(BaseMixin::*)()> struct Helper {};
 
   template <typename C>
   static No& Check(Helper<&C::AddRef>*);
@@ -276,8 +281,8 @@ struct UnsafeBindtoRefCountedArg<T*>
 
 template <typename T>
 class HasIsMethodTag {
-  typedef char Yes[1];
-  typedef char No[2];
+  using Yes = char[1];
+  using No = char[2];
 
   template <typename U>
   static Yes& Check(typename U::IsMethod*);
@@ -359,22 +364,24 @@ class OwnedWrapper {
 // created when we are explicitly trying to do a destructive move.
 //
 // Two notes:
-//  1) PassedWrapper supports any type that has a "Pass()" function.
-//     This is intentional. The whitelisting of which specific types we
-//     support is maintained by CallbackParamTraits<>.
+//  1) PassedWrapper supports any type that has a move constructor, however
+//     the type will need to be specifically whitelisted in order for it to be
+//     bound to a Callback. We guard this explicitly at the call of Passed()
+//     to make for clear errors. Things not given to Passed() will be forwarded
+//     and stored by value which will not work for general move-only types.
 //  2) is_valid_ is distinct from NULL because it is valid to bind a "NULL"
 //     scoper to a Callback and allow the Callback to execute once.
 template <typename T>
 class PassedWrapper {
  public:
-  explicit PassedWrapper(T scoper) : is_valid_(true), scoper_(scoper.Pass()) {}
+  explicit PassedWrapper(T&& scoper)
+      : is_valid_(true), scoper_(std::move(scoper)) {}
   PassedWrapper(const PassedWrapper& other)
-      : is_valid_(other.is_valid_), scoper_(other.scoper_.Pass()) {
-  }
+      : is_valid_(other.is_valid_), scoper_(std::move(other.scoper_)) {}
   T Pass() const {
     CHECK(is_valid_);
     is_valid_ = false;
-    return scoper_.Pass();
+    return std::move(scoper_);
   }
 
  private:
@@ -385,13 +392,13 @@ class PassedWrapper {
 // Unwrap the stored parameters for the wrappers above.
 template <typename T>
 struct UnwrapTraits {
-  typedef const T& ForwardType;
+  using ForwardType = const T&;
   static ForwardType Unwrap(const T& o) { return o; }
 };
 
 template <typename T>
 struct UnwrapTraits<UnretainedWrapper<T> > {
-  typedef T* ForwardType;
+  using ForwardType = T*;
   static ForwardType Unwrap(UnretainedWrapper<T> unretained) {
     return unretained.get();
   }
@@ -399,7 +406,7 @@ struct UnwrapTraits<UnretainedWrapper<T> > {
 
 template <typename T>
 struct UnwrapTraits<ConstRefWrapper<T> > {
-  typedef const T& ForwardType;
+  using ForwardType = const T&;
   static ForwardType Unwrap(ConstRefWrapper<T> const_ref) {
     return const_ref.get();
   }
@@ -407,19 +414,19 @@ struct UnwrapTraits<ConstRefWrapper<T> > {
 
 template <typename T>
 struct UnwrapTraits<scoped_refptr<T> > {
-  typedef T* ForwardType;
+  using ForwardType = T*;
   static ForwardType Unwrap(const scoped_refptr<T>& o) { return o.get(); }
 };
 
 template <typename T>
 struct UnwrapTraits<WeakPtr<T> > {
-  typedef const WeakPtr<T>& ForwardType;
+  using ForwardType = const WeakPtr<T>&;
   static ForwardType Unwrap(const WeakPtr<T>& o) { return o; }
 };
 
 template <typename T>
 struct UnwrapTraits<OwnedWrapper<T> > {
-  typedef T* ForwardType;
+  using ForwardType = T*;
   static ForwardType Unwrap(const OwnedWrapper<T>& o) {
     return o.get();
   }
@@ -427,7 +434,7 @@ struct UnwrapTraits<OwnedWrapper<T> > {
 
 template <typename T>
 struct UnwrapTraits<PassedWrapper<T> > {
-  typedef T ForwardType;
+  using ForwardType = T;
   static T Unwrap(PassedWrapper<T>& o) {
     return o.Pass();
   }
@@ -510,17 +517,42 @@ struct DropTypeListItemImpl<n, TypeList<T, List...>>
 
 template <typename T, typename... List>
 struct DropTypeListItemImpl<0, TypeList<T, List...>> {
-  typedef TypeList<T, List...> Type;
+  using Type = TypeList<T, List...>;
 };
 
 template <>
 struct DropTypeListItemImpl<0, TypeList<>> {
-  typedef TypeList<> Type;
+  using Type = TypeList<>;
 };
 
 // A type-level function that drops |n| list item from given TypeList.
 template <size_t n, typename List>
 using DropTypeListItem = typename DropTypeListItemImpl<n, List>::Type;
+
+// Used for TakeTypeListItem implementation.
+template <size_t n, typename List, typename... Accum>
+struct TakeTypeListItemImpl;
+
+// Do not use enable_if and SFINAE here to avoid MSVC2013 compile failure.
+template <size_t n, typename T, typename... List, typename... Accum>
+struct TakeTypeListItemImpl<n, TypeList<T, List...>, Accum...>
+    : TakeTypeListItemImpl<n - 1, TypeList<List...>, Accum..., T> {};
+
+template <typename T, typename... List, typename... Accum>
+struct TakeTypeListItemImpl<0, TypeList<T, List...>, Accum...> {
+  using Type = TypeList<Accum...>;
+};
+
+template <typename... Accum>
+struct TakeTypeListItemImpl<0, TypeList<>, Accum...> {
+  using Type = TypeList<Accum...>;
+};
+
+// A type-level function that takes first |n| list item from given TypeList.
+// E.g. TakeTypeListItem<3, TypeList<A, B, C, D>> is evaluated to
+// TypeList<A, B, C>.
+template <size_t n, typename List>
+using TakeTypeListItem = typename TakeTypeListItemImpl<n, List>::Type;
 
 // Used for ConcatTypeLists implementation.
 template <typename List1, typename List2>
@@ -528,7 +560,7 @@ struct ConcatTypeListsImpl;
 
 template <typename... Types1, typename... Types2>
 struct ConcatTypeListsImpl<TypeList<Types1...>, TypeList<Types2...>> {
-  typedef TypeList<Types1..., Types2...> Type;
+  using Type = TypeList<Types1..., Types2...>;
 };
 
 // A type-level function that concats two TypeLists.
@@ -541,13 +573,29 @@ struct MakeFunctionTypeImpl;
 
 template <typename R, typename... Args>
 struct MakeFunctionTypeImpl<R, TypeList<Args...>> {
-  typedef R(Type)(Args...);
+  // MSVC 2013 doesn't support Type Alias of function types.
+  // Revisit this after we update it to newer version.
+  typedef R Type(Args...);
 };
 
 // A type-level function that constructs a function type that has |R| as its
 // return type and has TypeLists items as its arguments.
 template <typename R, typename ArgList>
 using MakeFunctionType = typename MakeFunctionTypeImpl<R, ArgList>::Type;
+
+// Used for ExtractArgs.
+template <typename Signature>
+struct ExtractArgsImpl;
+
+template <typename R, typename... Args>
+struct ExtractArgsImpl<R(Args...)> {
+  using Type = TypeList<Args...>;
+};
+
+// A type-level function that extracts function arguments into a TypeList.
+// E.g. ExtractArgs<R(A, B, C)> is evaluated to TypeList<A, B, C>.
+template <typename Signature>
+using ExtractArgs = typename ExtractArgsImpl<Signature>::Type;
 
 }  // namespace internal
 
@@ -566,17 +614,25 @@ static inline internal::OwnedWrapper<T> Owned(T* o) {
   return internal::OwnedWrapper<T>(o);
 }
 
-// We offer 2 syntaxes for calling Passed().  The first takes a temporary and
-// is best suited for use with the return value of a function. The second
-// takes a pointer to the scoper and is just syntactic sugar to avoid having
-// to write Passed(scoper.Pass()).
-template <typename T>
-static inline internal::PassedWrapper<T> Passed(T scoper) {
-  return internal::PassedWrapper<T>(scoper.Pass());
+// We offer 2 syntaxes for calling Passed().  The first takes an rvalue and
+// is best suited for use with the return value of a function or other temporary
+// rvalues. The second takes a pointer to the scoper and is just syntactic sugar
+// to avoid having to write Passed(std::move(scoper)).
+//
+// Both versions of Passed() prevent T from being an lvalue reference. The first
+// via use of enable_if, and the second takes a T* which will not bind to T&.
+template <typename T,
+          typename std::enable_if<internal::IsMoveOnlyType<T>::value &&
+                                  !std::is_lvalue_reference<T>::value>::type* =
+              nullptr>
+static inline internal::PassedWrapper<T> Passed(T&& scoper) {
+  return internal::PassedWrapper<T>(std::move(scoper));
 }
-template <typename T>
+template <typename T,
+          typename std::enable_if<internal::IsMoveOnlyType<T>::value>::type* =
+              nullptr>
 static inline internal::PassedWrapper<T> Passed(T* scoper) {
-  return internal::PassedWrapper<T>(scoper->Pass());
+  return internal::PassedWrapper<T>(std::move(*scoper));
 }
 
 template <typename T>

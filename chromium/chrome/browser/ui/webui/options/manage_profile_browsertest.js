@@ -94,15 +94,7 @@ ManageProfileUITest.prototype = {
 
 // Receiving the new profile defaults in the manage-user overlay shouldn't mess
 // up the focus in a visible higher-level overlay.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_NewProfileDefaultsFocus ' +
-    'DISABLED_NewProfileDefaultsFocus');
-GEN('#else');
-GEN('#define MAYBE_NewProfileDefaultsFocus ' +
-    'NewProfileDefaultsFocus');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_NewProfileDefaultsFocus', function() {
+TEST_F('ManageProfileUITest', 'NewProfileDefaultsFocus', function() {
   var self = this;
 
   function checkFocus(pageName, expectedFocus, initialFocus) {
@@ -133,15 +125,7 @@ TEST_F('ManageProfileUITest', 'MAYBE_NewProfileDefaultsFocus', function() {
 });
 
 // The default options should be reset each time the creation overlay is shown.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_DefaultCreateOptions ' +
-    'DISABLED_DefaultCreateOptions');
-GEN('#else');
-GEN('#define MAYBE_DefaultCreateOptions ' +
-    'DefaultCreateOptions');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_DefaultCreateOptions', function () {
+TEST_F('ManageProfileUITest', 'DefaultCreateOptions', function() {
   PageManager.showPageByName('createProfile');
   var shortcutsAllowed = loadTimeData.getBoolean('profileShortcutsEnabled');
   var createShortcut = $('create-shortcut');
@@ -158,15 +142,7 @@ TEST_F('ManageProfileUITest', 'MAYBE_DefaultCreateOptions', function () {
 });
 
 // The checkbox label should change depending on whether the user is signed in.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_CreateSupervisedUserText ' +
-    'DISABLED_CreateSupervisedUserText');
-GEN('#else');
-GEN('#define MAYBE_CreateSupervisedUserText ' +
-    'CreateSupervisedUserText');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_CreateSupervisedUserText', function() {
+TEST_F('ManageProfileUITest', 'CreateSupervisedUserText', function() {
   var signedInText = $('create-profile-supervised-signed-in');
   var notSignedInText = $('create-profile-supervised-not-signed-in');
 
@@ -200,15 +176,7 @@ ManageProfileUITestAsync.prototype = {
 
 // The import link should show up if the user tries to create a profile with the
 // same name as an existing supervised user profile.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_CreateExistingSupervisedUser ' +
-    'DISABLED_CreateExistingSupervisedUser');
-GEN('#else');
-GEN('#define MAYBE_CreateExistingSupervisedUser ' +
-    'CreateExistingSupervisedUser');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITestAsync', 'MAYBE_CreateExistingSupervisedUser', function () {
+TEST_F('ManageProfileUITestAsync', 'CreateExistingSupervisedUser', function() {
   // Initialize the list of existing supervised users.
   var supervisedUsers = [
     {
@@ -234,7 +202,14 @@ TEST_F('ManageProfileUITestAsync', 'MAYBE_CreateExistingSupervisedUser', functio
     },
     {
       id: 'supervisedUser4',
-      name: 'SameName',
+      name: 'RepeatingName',
+      iconURL: 'chrome://path/to/icon/image',
+      onCurrentDevice: true,
+      needAvatar: false
+    },
+    {
+      id: 'supervisedUser5',
+      name: 'RepeatingName',
       iconURL: 'chrome://path/to/icon/image',
       onCurrentDevice: false,
       needAvatar: false
@@ -250,10 +225,10 @@ TEST_F('ManageProfileUITestAsync', 'MAYBE_CreateExistingSupervisedUser', functio
                CreateProfileOverlay.getInstance().signedInEmail_);
   this.setProfileSupervised_(false, 'create');
 
-  // Also add the names 'Test' and 'SameName' to |existingProfileNames_| to
+  // Also add the names 'Test' and 'RepeatingName' to |existingProfileNames_| to
   // simulate that profiles with those names exist on the device.
   ManageProfileOverlay.getInstance().existingProfileNames_.Test = true;
-  ManageProfileOverlay.getInstance().existingProfileNames_.SameName = true;
+  ManageProfileOverlay.getInstance().existingProfileNames_.RepeatingName = true;
 
   // Initially, the ok button should be enabled and the import link should not
   // exist.
@@ -284,12 +259,13 @@ TEST_F('ManageProfileUITestAsync', 'MAYBE_CreateExistingSupervisedUser', functio
     ManageProfileOverlay.getInstance().onNameChanged_('create');
     return options.SupervisedUserListData.getInstance().promise_;
   }).then(function() {
-    assertFalse($('create-profile-ok').disabled);
+    assertTrue($('create-profile-ok').disabled);
     assertTrue($('supervised-user-import-existing') == null);
 
-    // A profile which does not exist on the device, but there is a profile with
-    // the same name already on the device.
-    nameField.value = 'SameName';
+    // A supervised user profile that is on the device, but has the same name
+    // as a supervised user profile that is not imported.
+    // This can happen due to a bug (https://crbug.com/557445)
+    nameField.value = 'RepeatingName';
     ManageProfileOverlay.getInstance().onNameChanged_('create');
     return options.SupervisedUserListData.getInstance().promise_;
   }).then(function() {
@@ -309,15 +285,7 @@ TEST_F('ManageProfileUITestAsync', 'MAYBE_CreateExistingSupervisedUser', functio
 
 // Supervised users should not be able to edit their profile names, and the
 // initial focus should be adjusted accordingly.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_EditSupervisedUserNameAllowed ' +
-    'DISABLED_EditSupervisedUserNameAllowed');
-GEN('#else');
-GEN('#define MAYBE_EditSupervisedUserNameAllowed ' +
-    'EditSupervisedUserNameAllowed');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_EditSupervisedUserNameAllowed', function () {
+TEST_F('ManageProfileUITest', 'EditSupervisedUserNameAllowed', function() {
   var nameField = $('manage-profile-name');
 
   this.setProfileSupervised_(false, 'manage');
@@ -334,15 +302,7 @@ TEST_F('ManageProfileUITest', 'MAYBE_EditSupervisedUserNameAllowed', function ()
 });
 
 // Setting profile information should allow the confirmation to be shown.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_ShowCreateConfirmation ' +
-    'DISABLED_ShowCreateConfirmation');
-GEN('#else');
-GEN('#define MAYBE_ShowCreateConfirmation ' +
-    'ShowCreateConfirmation');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_ShowCreateConfirmation', function () {
+TEST_F('ManageProfileUITest', 'ShowCreateConfirmation', function() {
   var testProfile = this.testProfileInfo_(true);
   testProfile.custodianEmail = 'foo@bar.example.com';
   SupervisedUserCreateConfirmOverlay.setProfileInfo(testProfile);
@@ -354,15 +314,7 @@ TEST_F('ManageProfileUITest', 'MAYBE_ShowCreateConfirmation', function () {
 
 // Trying to show a confirmation dialog with no profile information should fall
 // back to the default (main) settings page.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_NoEmptyConfirmation ' +
-    'DISABLED_NoEmptyConfirmation');
-GEN('#else');
-GEN('#define MAYBE_NoEmptyConfirmation ' +
-    'NoEmptyConfirmation');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_NoEmptyConfirmation', function () {
+TEST_F('ManageProfileUITest', 'NoEmptyConfirmation', function() {
   assertEquals('manageProfile', PageManager.getTopmostVisiblePage().name);
   assertFalse(SupervisedUserCreateConfirmOverlay.getInstance().canShowPage());
   PageManager.showPageByName('supervisedUserCreateConfirm', true);
@@ -370,15 +322,7 @@ TEST_F('ManageProfileUITest', 'MAYBE_NoEmptyConfirmation', function () {
 });
 
 // A confirmation dialog should be shown after creating a new supervised user.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_ShowCreateConfirmationOnSuccess ' +
-    'DISABLED_ShowCreateConfirmationOnSuccess');
-GEN('#else');
-GEN('#define MAYBE_ShowCreateConfirmationOnSuccess ' +
-    'ShowCreateConfirmationOnSuccess');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_ShowCreateConfirmationOnSuccess', function () {
+TEST_F('ManageProfileUITest', 'ShowCreateConfirmationOnSuccess', function() {
   PageManager.showPageByName('createProfile');
   assertEquals('createProfile', PageManager.getTopmostVisiblePage().name);
   CreateProfileOverlay.onSuccess(this.testProfileInfo_(false));
@@ -405,15 +349,7 @@ TEST_F('ManageProfileUITest', 'NoCreateConfirmationOnError', function() {
 });
 
 // The name and email should be inserted into the confirmation dialog.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_CreateConfirmationText ' +
-    'DISABLED_CreateConfirmationText');
-GEN('#else');
-GEN('#define MAYBE_CreateConfirmationText ' +
-    'CreateConfirmationText');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_CreateConfirmationText', function() {
+TEST_F('ManageProfileUITest', 'CreateConfirmationText', function() {
   var self = this;
   var custodianEmail = 'foo@example.com';
 
@@ -482,16 +418,49 @@ TEST_F('ManageProfileUITest', 'MAYBE_CreateConfirmationText', function() {
       name60Characters, name49Characters + '\u2026', escaped + '\u2026');
 });
 
+// The confirmation dialog should close if the new supervised user is deleted.
+TEST_F('ManageProfileUITest', 'CloseConfirmationOnDelete', function() {
+  // Configure the test profile and show the confirmation dialog.
+  var testProfile = this.testProfileInfo_(true);
+  CreateProfileOverlay.onSuccess(testProfile);
+  assertEquals('supervisedUserCreateConfirm',
+               PageManager.getTopmostVisiblePage().name);
+
+  SupervisedUserCreateConfirmOverlay.onDeletedProfile(testProfile.filePath);
+  assertEquals('settings', PageManager.getTopmostVisiblePage().name, name);
+});
+
+// The confirmation dialog should update if the new supervised user's name is
+// changed.
+TEST_F('ManageProfileUITest', 'UpdateConfirmationOnRename', function() {
+  // Configure the test profile and show the confirmation dialog.
+  var testProfile = this.testProfileInfo_(true);
+  CreateProfileOverlay.onSuccess(testProfile);
+  assertEquals('supervisedUserCreateConfirm',
+               PageManager.getTopmostVisiblePage().name);
+
+  var oldName = testProfile.name;
+  var newName = 'New Name';
+  SupervisedUserCreateConfirmOverlay.onUpdatedProfileName(testProfile.filePath,
+                                                          newName);
+  assertEquals('supervisedUserCreateConfirm',
+               PageManager.getTopmostVisiblePage().name);
+
+  var titleElement = $('supervised-user-created-title');
+  var switchElement = $('supervised-user-created-switch');
+  var messageElement = $('supervised-user-created-text');
+
+  assertEquals(-1, titleElement.textContent.indexOf(oldName));
+  assertEquals(-1, switchElement.textContent.indexOf(oldName));
+  assertEquals(-1, messageElement.textContent.indexOf(oldName));
+
+  assertNotEquals(-1, titleElement.textContent.indexOf(newName));
+  assertNotEquals(-1, switchElement.textContent.indexOf(newName));
+  assertNotEquals(-1, messageElement.textContent.indexOf(newName));
+});
+
 // An additional warning should be shown when deleting a supervised user.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_DeleteSupervisedUserWarning ' +
-    'DISABLED_DeleteSupervisedUserWarning');
-GEN('#else');
-GEN('#define MAYBE_DeleteSupervisedUserWarning ' +
-    'DeleteSupervisedUserWarning');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_DeleteSupervisedUserWarning', function () {
+TEST_F('ManageProfileUITest', 'DeleteSupervisedUserWarning', function() {
   var addendum = $('delete-supervised-profile-addendum');
 
   ManageProfileOverlay.showDeleteDialog(this.testProfileInfo_(true));
@@ -502,15 +471,7 @@ TEST_F('ManageProfileUITest', 'MAYBE_DeleteSupervisedUserWarning', function () {
 });
 
 // The policy prohibiting supervised users should update the UI dynamically.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_PolicyDynamicRefresh ' +
-    'DISABLED_PolicyDynamicRefresh');
-GEN('#else');
-GEN('#define MAYBE_PolicyDynamicRefresh ' +
-    'PolicyDynamicRefresh');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_PolicyDynamicRefresh', function () {
+TEST_F('ManageProfileUITest', 'PolicyDynamicRefresh', function() {
   ManageProfileOverlay.getInstance().initializePage();
 
   var custodianEmail = 'chrome.playpen.test@gmail.com';
@@ -561,15 +522,7 @@ TEST_F('ManageProfileUITest', 'MAYBE_PolicyDynamicRefresh', function () {
 
 // The supervised user checkbox should correctly update its state during profile
 // creation and afterwards.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_CreateInProgress ' +
-    'DISABLED_CreateInProgress');
-GEN('#else');
-GEN('#define MAYBE_CreateInProgress ' +
-    'CreateInProgress');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('ManageProfileUITest', 'MAYBE_CreateInProgress', function () {
+TEST_F('ManageProfileUITest', 'CreateInProgress', function() {
   ManageProfileOverlay.getInstance().initializePage();
 
   var custodianEmail = 'chrome.playpen.test@gmail.com';

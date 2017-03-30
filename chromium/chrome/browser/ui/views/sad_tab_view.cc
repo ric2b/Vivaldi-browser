@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/metrics/histogram.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/url_constants.h"
@@ -15,9 +16,13 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "grit/components_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
+#include "ui/native_theme/common_theme.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/blue_button.h"
 #include "ui/views/controls/image_view.h"
@@ -73,6 +78,8 @@ void RecordKillDisplayedOOM() {
 
 }  // namespace
 
+int SadTabView::total_crashes_ = 0;
+
 SadTabView::SadTabView(WebContents* web_contents, chrome::SadTabKind kind)
     : web_contents_(web_contents),
       kind_(kind),
@@ -88,8 +95,7 @@ SadTabView::SadTabView(WebContents* web_contents, chrome::SadTabKind kind)
   // tab discard events in memory::OomPriorityManager so they can be directly
   // compared.
   // TODO(jamescook): Maybe track time between sad tabs?
-  static int total_crashes = 0;
-  total_crashes++;
+  total_crashes_++;
 
   switch (kind_) {
     case chrome::SAD_TAB_KIND_CRASHED: {
@@ -135,15 +141,15 @@ SadTabView::SadTabView(WebContents* web_contents, chrome::SadTabKind kind)
   columns->AddPaddingColumn(1, views::kPanelSubVerticalSpacing);
 
   views::ImageView* image = new views::ImageView();
-  image->SetImage(
-      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(IDR_SAD_TAB));
+
+  image->SetImage(gfx::CreateVectorIcon(gfx::VectorIconId::CRASHED_TAB, 48,
+                                        gfx::kChromeIconGrey));
   layout->AddPaddingRow(1, views::kPanelVerticalSpacing);
   layout->StartRow(0, column_set_id);
   layout->AddView(image, 2, 1);
 
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-
   title_ = CreateLabel(l10n_util::GetStringUTF16(IDS_SAD_TAB_TITLE));
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   title_->SetFontList(rb.GetFontList(ui::ResourceBundle::LargeFont));
   title_->SetMultiLine(true);
   title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -174,7 +180,7 @@ SadTabView::SadTabView(WebContents* web_contents, chrome::SadTabKind kind)
   if (web_contents_) {
     // In the cases of multiple crashes in a session the 'Feedback' button
     // replaces the 'Reload' button as primary action.
-    int button_type = total_crashes > kCrashesBeforeFeedbackIsDisplayed ?
+    int button_type = total_crashes_ > kCrashesBeforeFeedbackIsDisplayed ?
         SAD_TAB_BUTTON_FEEDBACK : SAD_TAB_BUTTON_RELOAD;
     action_button_ = new views::BlueButton(this,
         l10n_util::GetStringUTF16(button_type == SAD_TAB_BUTTON_FEEDBACK
@@ -197,7 +203,9 @@ SadTabView::~SadTabView() {}
 
 void SadTabView::LinkClicked(views::Link* source, int event_flags) {
   DCHECK(web_contents_);
-  OpenURLParams params(GURL(chrome::kCrashReasonURL), content::Referrer(),
+  OpenURLParams params(GURL(total_crashes_ > kCrashesBeforeFeedbackIsDisplayed ?
+                       chrome::kCrashReasonFeedbackDisplayedURL :
+                       chrome::kCrashReasonURL), content::Referrer(),
                        CURRENT_TAB, ui::PAGE_TRANSITION_LINK, false);
   web_contents_->OpenURL(params);
 }

@@ -3,17 +3,18 @@
 // found in the LICENSE file.
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "sync/syncable/directory.h"
 #include "sync/test/directory_backing_store_corruption_testing.h"
@@ -108,7 +109,15 @@ IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
   // Write a bunch of bookmarks and flush the directory to ensure sync notices
   // the corruption. The key here is to force sync to actually write a lot of
   // data to its DB so it will see the corruption we introduced above.
-  const GURL url("https://www.google.com");
+  const GURL url(
+      "https://"
+      "www."
+      "gooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooogle.com");
   const bookmarks::BookmarkNode* top = bookmarks_helper::AddFolder(
       0, bookmarks_helper::GetOtherNode(0), 0, "top");
   for (int i = 0; i < kNumEntriesRequiredForCorruption; ++i) {

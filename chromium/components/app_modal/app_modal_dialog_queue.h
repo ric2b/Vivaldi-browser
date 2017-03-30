@@ -7,9 +7,11 @@
 
 #include <deque>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 namespace app_modal {
 
@@ -59,7 +61,7 @@ class AppModalDialogQueue {
   iterator end() { return app_modal_dialog_queue_.end(); }
 
  private:
-  friend struct DefaultSingletonTraits<AppModalDialogQueue>;
+  friend struct base::DefaultSingletonTraits<AppModalDialogQueue>;
 
   AppModalDialogQueue();
   ~AppModalDialogQueue();

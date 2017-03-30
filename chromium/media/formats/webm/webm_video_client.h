@@ -5,9 +5,12 @@
 #ifndef MEDIA_FORMATS_WEBM_WEBM_VIDEO_CLIENT_H_
 #define MEDIA_FORMATS_WEBM_WEBM_VIDEO_CLIENT_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "media/base/media_log.h"
 #include "media/formats/webm/webm_parser.h"
 
@@ -17,7 +20,7 @@ class VideoDecoderConfig;
 // Helper class used to parse a Video element inside a TrackEntry element.
 class WebMVideoClient : public WebMParserClient {
  public:
-  explicit WebMVideoClient(const LogCB& log_cb);
+  explicit WebMVideoClient(const scoped_refptr<MediaLog>& media_log);
   ~WebMVideoClient() override;
 
   // Reset this object's state so it can process a new video track element.
@@ -31,27 +34,27 @@ class WebMVideoClient : public WebMParserClient {
   // video track element fields. The contents of |config| are undefined in this
   // case and should not be relied upon.
   bool InitializeConfig(const std::string& codec_id,
-                        const std::vector<uint8>& codec_private,
+                        const std::vector<uint8_t>& codec_private,
                         bool is_encrypted,
                         VideoDecoderConfig* config);
 
  private:
   // WebMParserClient implementation.
-  bool OnUInt(int id, int64 val) override;
-  bool OnBinary(int id, const uint8* data, int size) override;
+  bool OnUInt(int id, int64_t val) override;
+  bool OnBinary(int id, const uint8_t* data, int size) override;
   bool OnFloat(int id, double val) override;
 
-  LogCB log_cb_;
-  int64 pixel_width_;
-  int64 pixel_height_;
-  int64 crop_bottom_;
-  int64 crop_top_;
-  int64 crop_left_;
-  int64 crop_right_;
-  int64 display_width_;
-  int64 display_height_;
-  int64 display_unit_;
-  int64 alpha_mode_;
+  scoped_refptr<MediaLog> media_log_;
+  int64_t pixel_width_;
+  int64_t pixel_height_;
+  int64_t crop_bottom_;
+  int64_t crop_top_;
+  int64_t crop_left_;
+  int64_t crop_right_;
+  int64_t display_width_;
+  int64_t display_height_;
+  int64_t display_unit_;
+  int64_t alpha_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMVideoClient);
 };

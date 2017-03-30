@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/webui/mojo_web_ui_handler.h"
@@ -14,7 +15,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/common/service_registry.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/core.h"
+#include "mojo/public/cpp/system/core.h"
 
 class MojoWebUIHandler;
 
@@ -29,10 +30,6 @@ class MojoWebUIControllerBase : public content::WebUIController {
 
   // WebUIController overrides:
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
-
- protected:
-  // Invoke to register mapping between binding file and resource id (IDR_...).
-  void AddMojoResourcePath(const std::string& path, int resource_id);
 
  private:
   // Bindings files are registered here.

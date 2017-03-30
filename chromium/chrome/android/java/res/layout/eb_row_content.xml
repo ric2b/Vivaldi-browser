@@ -9,8 +9,9 @@
     xmlns:chrome="http://schemas.android.com/apk/res-auto" >
 
     <LinearLayout
+        android:id="@+id/bookmark_row"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal" >
 
@@ -21,25 +22,44 @@
             android:contentDescription="@null"
             android:scaleType="center" />
 
-        <TextView
-            android:id="@+id/title"
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_weight="1"
-            android:singleLine="true"
-            android:textAlignment="viewStart"
-            android:textColor="@color/default_text_color"
-            android:textSize="16sp" />
+            android:gravity="center_vertical"
+            android:orientation="vertical" >
+
+            <TextView
+                android:id="@+id/title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:textAlignment="viewStart"
+                android:textColor="@color/default_text_color"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/offline_page_size"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:textAlignment="viewStart"
+                android:textColor="@color/secondary_text_default_material_light"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
         <org.chromium.chrome.browser.widget.TintedImageButton
             android:id="@+id/more"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
+            android:visibility="gone"
             android:background="@null"
             android:contentDescription="@string/accessibility_enhanced_bookmark_more_info"
             android:paddingEnd="16dp"
             android:paddingStart="16dp"
-            android:src="@drawable/eb_item_more"
+            android:src="@drawable/btn_menu"
             chrome:tint="@color/dark_mode_tint" />
     </LinearLayout>
 

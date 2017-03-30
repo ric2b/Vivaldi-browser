@@ -12,10 +12,14 @@
 #ifndef CHROME_BROWSER_SPELLCHECKER_FEEDBACK_H_
 #define CHROME_BROWSER_SPELLCHECKER_FEEDBACK_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <vector>
 
+#include "base/macros.h"
 #include "chrome/browser/spellchecker/misspelling.h"
 
 namespace spellcheck {
@@ -26,24 +30,24 @@ namespace spellcheck {
 //        base::ASCIIToUTF16("Helllo world"), 0, 6,
 //        std::vector<base::string16>(), GenerateRandomHash()));
 //    feedback.FinalizeRemovedMisspellings(renderer_process_id,
-//                                         std::vector<uint32>());
+//                                         std::vector<uint32_t>());
 //    ProcessFeedback(feedback.GetMisspellingsInRenderer(renderer_process_id));
 //    feedback.EraseFinalizedMisspellings(renderer_process_id);
 class Feedback {
  public:
-  Feedback();
+  explicit Feedback(size_t max_total_text_size);
   ~Feedback();
 
   // Returns the misspelling identified by |hash|. Returns NULL if there's no
   // misspelling identified by |hash|. Retains the ownership of the result. The
   // caller should not modify the hash in the returned misspelling.
-  Misspelling* GetMisspelling(uint32 hash);
+  Misspelling* GetMisspelling(uint32_t hash);
 
   // Finalizes the user actions on misspellings that are removed from the
   // renderer process with ID |renderer_process_id|.
   void FinalizeRemovedMisspellings(
       int renderer_process_id,
-      const std::vector<uint32>& remaining_markers);
+      const std::vector<uint32_t>& remaining_markers);
 
   // Returns true if the renderer with process ID |renderer_process_id| has
   // misspellings.
@@ -59,7 +63,7 @@ class Feedback {
   void EraseFinalizedMisspellings(int renderer_process_id);
 
   // Returns true if there's a misspelling with |hash| identifier.
-  bool HasMisspelling(uint32 hash) const;
+  bool HasMisspelling(uint32_t hash) const;
 
   // Adds the |misspelling| to feedback data. If the |misspelling| has a
   // duplicate hash, then replaces the existing misspelling with the same hash.
@@ -81,18 +85,25 @@ class Feedback {
   void Clear();
 
   // Returns a list of all misspelling identifiers for |misspelled_text|.
-  const std::set<uint32>& FindMisspellings(
+  const std::set<uint32_t>& FindMisspellings(
       const base::string16& misspelled_text) const;
 
  private:
-  typedef std::map<uint32, Misspelling> HashMisspellingMap;
-  typedef std::set<uint32> HashCollection;
+  typedef std::map<uint32_t, Misspelling> HashMisspellingMap;
+  typedef std::set<uint32_t> HashCollection;
   typedef std::map<int, HashCollection> RendererHashesMap;
   typedef std::map<base::string16, HashCollection> TextHashesMap;
 
   // An empty hash collection to return when FindMisspellings() does not find
   // misspellings.
   const HashCollection empty_hash_collection_;
+
+  // The limit on the amount of data to send to the server at once.
+  const size_t max_total_text_size_;
+
+  // Size of all feedback text, used to limit the estimated amount of data sent
+  // to the server at once.
+  size_t total_text_size_;
 
   // A map of hashes that identify document markers to feedback data to be sent
   // to spelling service.

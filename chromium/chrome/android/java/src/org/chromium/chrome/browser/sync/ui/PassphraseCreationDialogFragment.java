@@ -4,10 +4,10 @@
 
 package org.chromium.chrome.browser.sync.ui;
 
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.os.Bundle;
+import android.support.v7.app.AlertDialog;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -22,6 +22,9 @@ import org.chromium.chrome.R;
  * Dialog to ask the user to enter a new custom passphrase.
  */
 public class PassphraseCreationDialogFragment extends DialogFragment {
+    interface Listener {
+        void onPassphraseCreated(String passphrase);
+    }
 
     private EditText mEnterPassphrase;
     private EditText mConfirmPassphrase;
@@ -44,12 +47,14 @@ public class PassphraseCreationDialogFragment extends DialogFragment {
             }
         });
 
-        return new AlertDialog.Builder(getActivity())
+        AlertDialog dialog = new AlertDialog.Builder(getActivity(), R.style.AlertDialogTheme)
                 .setView(view)
                 .setTitle(R.string.sync_passphrase_type_custom)
                 .setPositiveButton(R.string.ok, null)
                 .setNegativeButton(R.string.cancel, null)
                 .create();
+        dialog.getDelegate().setHandleNativeActionModesEnabled(false);
+        return dialog;
     }
 
     @Override
@@ -80,9 +85,7 @@ public class PassphraseCreationDialogFragment extends DialogFragment {
         }
 
         // The passphrase is not empty and matches.
-        PassphraseDialogFragment.Listener listener =
-                (PassphraseDialogFragment.Listener) getTargetFragment();
-        listener.onPassphraseEntered(passphrase, false, true);
+        ((Listener) getTargetFragment()).onPassphraseCreated(passphrase);
         getDialog().dismiss();
     }
 }

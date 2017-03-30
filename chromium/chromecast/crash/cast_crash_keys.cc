@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "chromecast/crash/cast_crash_keys.h"
 
 // TODO(kjoswiak): Potentially refactor chunk size info as well as non-cast
@@ -21,9 +22,9 @@ const size_t kLargeSize = kSmallSize * 16;
 
 // The maximum lengths specified by breakpad include the trailing NULL, so
 // the actual length of the string is one less.
-static const size_t kSingleChunkLength = 63;
+static const size_t kChunkMaxLength = 63;
 
-}
+}  // namespace
 
 namespace chromecast {
 namespace crash_keys {
@@ -46,8 +47,8 @@ size_t RegisterCastCrashKeys() {
   };
 
   return base::debug::InitCrashKeys(fixed_keys, arraysize(fixed_keys),
-                                    kSingleChunkLength);
+                                    kChunkMaxLength);
 }
 
-}  // namespace chromecast
 }  // namespace crash_keys
+}  // namespace chromecast

@@ -15,7 +15,7 @@
 
 // static
 InstantService* InstantServiceFactory::GetForProfile(Profile* profile) {
-  if (!chrome::IsInstantExtendedAPIEnabled())
+  if (!search::IsInstantExtendedAPIEnabled())
     return NULL;
 
   return static_cast<InstantService*>(
@@ -24,7 +24,7 @@ InstantService* InstantServiceFactory::GetForProfile(Profile* profile) {
 
 // static
 InstantServiceFactory* InstantServiceFactory::GetInstance() {
-  return Singleton<InstantServiceFactory>::get();
+  return base::Singleton<InstantServiceFactory>::get();
 }
 
 InstantServiceFactory::InstantServiceFactory()
@@ -48,6 +48,7 @@ content::BrowserContext* InstantServiceFactory::GetBrowserContextToUse(
 
 KeyedService* InstantServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {
-  return chrome::IsInstantExtendedAPIEnabled() ?
-      new InstantService(static_cast<Profile*>(profile)) : NULL;
+  return search::IsInstantExtendedAPIEnabled()
+             ? new InstantService(static_cast<Profile*>(profile))
+             : NULL;
 }

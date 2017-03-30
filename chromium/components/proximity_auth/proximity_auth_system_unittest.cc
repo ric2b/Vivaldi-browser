@@ -9,19 +9,7 @@
 namespace proximity_auth {
 
 TEST(ProximityAuthSystemTest, GetRemoteDevices) {
-  RemoteDevice device1 = {"device 1"};
-  RemoteDevice device2 = {"device 2"};
-
-  std::vector<RemoteDevice> device_list;
-  device_list.push_back(device1);
-  device_list.push_back(device2);
-
-  ProximityAuthSystem system(device_list);
-
-  const std::vector<RemoteDevice>& returned_list = system.GetRemoteDevices();
-  ASSERT_EQ(2u, returned_list.size());
-  EXPECT_EQ(device1.name, returned_list[0].name);
-  EXPECT_EQ(device2.name, returned_list[1].name);
+  // TODO(tengs): Reimplement this test.
 }
 
 }  // namespace proximity_auth

@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//tools/grit/grit_rule.gni")
+import("//build/config/nacl/config.gni")
 
 # Applied by targets internal to content.
 config("content_implementation") {
@@ -37,28 +38,51 @@ config("content_implementation") {
 # targets make sure the dependency goes through the content shared library
 # when doing a component build).
 
-content_shared_components = [
-  "//content/gpu:gpu_sources",
-  "//content/public/browser:browser_sources",
-  "//content/public/child:child_sources",
-  "//content/public/common:common_sources",
-  "//content/public/plugin:plugin_sources",
-  "//content/public/renderer:renderer_sources",
-  "//content/public/utility:utility_sources",
-]
+if (!is_nacl_nonsfi) {
+  content_shared_components = [
+    "//content/gpu:gpu_sources",
+    "//content/public/browser:browser_sources",
+    "//content/public/child:child_sources",
+    "//content/public/common:common_sources",
+    "//content/public/plugin:plugin_sources",
+    "//content/public/renderer:renderer_sources",
+    "//content/public/utility:utility_sources",
+  ]
 
-if (enable_plugins) {
-  content_shared_components += [ "//content/ppapi_plugin:ppapi_plugin_sources" ]
+  if (enable_plugins) {
+    content_shared_components +=
+        [ "//content/ppapi_plugin:ppapi_plugin_sources" ]
+  }
 }
 
 if (is_component_build) {
-  shared_library("content") {
+  component("content") {
     public_deps =
         content_shared_components + [ "//content/public/app:both_sources" ]
+    deps = [
+      "//build/config/sanitizers:deps",
+    ]
+  }
+} else if (is_nacl_nonsfi) {
+  source_set("content") {
+    set_sources_assignment_filter([])
+    sources = [
+      "common/sandbox_linux/sandbox_init_linux.cc",
+      "common/sandbox_linux/sandbox_seccomp_bpf_linux.cc",
+      "common/send_zygote_child_ping_linux.cc",
+      "public/common/content_switches.cc",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+
+    defines = [ "USE_SECCOMP_BPF=1" ]
+
+    deps = [
+      "//base",
+    ]
   }
 } else {
   group("content") {
-    deps = content_shared_components
+    public_deps = content_shared_components
   }
 }
 
@@ -68,7 +92,6 @@ grit("resources") {
   outputs = [
     "grit/content_resources.h",
     "content_resources.pak",
-    "content_resources.rc",
   ]
 }
 
@@ -77,23 +100,21 @@ grit("resources") {
 source_set("export") {
   visibility = [ "//content/*" ]
   sources = [
-    "content/common/content_export.h",
+    "common/content_export.h",
   ]
 }
 
 # In the GYP build, this file is listed in several targets. In GN just have
 # those targets depend on this one. This can be depended on for any
 # platform for simplicity, and is a no-op on non-Windows.
-source_set("startup_helper_win") {
+source_set("sandbox_helper_win") {
   if (is_win) {
     sources = [
-      "app/startup_helper_win.cc",
-      "public/app/startup_helper_win.h",
+      "app/sandbox_helper_win.cc",
+      "public/app/sandbox_helper_win.h",
     ]
 
     deps = [
-      "//base",
-      "//base:i18n",
       "//sandbox",
     ]
   }

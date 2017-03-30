@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/scoped_observer.h"
@@ -160,9 +161,6 @@ class WebstoreInstaller : public content::NotificationObserver,
     // Required minimum version.
     scoped_ptr<Version> minimum_version;
 
-    // Ephemeral apps are transiently installed.
-    bool is_ephemeral;
-
     // The authuser index required to download the item being installed. May be
     // the empty string, in which case no authuser parameter is used.
     std::string authuser;
@@ -276,7 +274,7 @@ class WebstoreInstaller : public content::NotificationObserver,
   // Used to periodically update the extension's download status. This will
   // trigger at least every second, though sometimes more frequently (depending
   // on number of modules, etc).
-  base::OneShotTimer<WebstoreInstaller> download_progress_timer_;
+  base::OneShotTimer download_progress_timer_;
   scoped_ptr<Approval> approval_;
   GURL download_url_;
   scoped_refptr<CrxInstaller> crx_installer_;

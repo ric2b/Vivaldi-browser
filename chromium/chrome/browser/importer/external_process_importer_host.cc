@@ -5,6 +5,7 @@
 #include "chrome/browser/importer/external_process_importer_host.h"
 
 #include "base/bind.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/importer/external_process_importer_client.h"
@@ -19,6 +20,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/common/importer/importer_type.h"
+
+#include "app/vivaldi_resources.h"
 
 using bookmarks::BookmarkModel;
 using content::BrowserThread;
@@ -47,12 +50,17 @@ void ExternalProcessImporterHost::Cancel() {
 void ExternalProcessImporterHost::StartImportSettings(
       const importer::SourceProfile& source_profile,
       Profile* target_profile,
-      int16 imported_items,
+      uint16_t imported_items,
       ProfileWriter* writer)
 {
   importer::ImportConfig import_config;
 
   import_config.imported_items = imported_items;
+  if (!source_profile.master_password.empty()) {
+    import_config.arguments.resize(1);
+    import_config.arguments[0] =
+        base::UTF8ToUTF16(source_profile.master_password);
+  }
 
   StartImportSettings(source_profile, target_profile, import_config, writer);
 }
@@ -194,8 +202,8 @@ void ExternalProcessImporterHost::ShowChromeWarningDialog() {
     importerLockString);
 }
 
-
-void ExternalProcessImporterHost::OnChromiumImportLockDialogEnd(bool is_continue){
+void ExternalProcessImporterHost::OnChromiumImportLockDialogEnd(
+    bool is_continue) {
   if (is_continue) {
     // User chose to continue, then we check the lock again to make
     // sure that Chromium has been closed. Try to import the settings
@@ -204,16 +212,13 @@ void ExternalProcessImporterHost::OnChromiumImportLockDialogEnd(bool is_continue
     if (chromium_lock_->HasAcquired()) {
       is_source_readable_ = true;
       LaunchImportIfReady();
-    }
-    else {
+    } else {
       ShowChromeWarningDialog();
     }
-  }
-  else {
+  } else {
     NotifyImportEnded();
   }
 }
-
 
 void ExternalProcessImporterHost::OnImportLockDialogEnd(bool is_continue) {
   if (is_continue) {
@@ -279,7 +284,7 @@ bool ExternalProcessImporterHost::CheckForFirefoxLock(
   return true;
 }
 
-void ExternalProcessImporterHost::CheckForLoadedModels(uint16 items) {
+void ExternalProcessImporterHost::CheckForLoadedModels(uint16_t items) {
   // A target profile must be loaded by StartImportSettings().
   DCHECK(profile_);
 

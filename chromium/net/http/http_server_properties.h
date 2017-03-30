@@ -5,18 +5,22 @@
 #ifndef NET_HTTP_HTTP_SERVER_PROPERTIES_H_
 #define NET_HTTP_HTTP_SERVER_PROPERTIES_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
+#include <tuple>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/mru_cache.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/ip_address_number.h"
 #include "net/base/net_export.h"
-#include "net/base/net_util.h"
 #include "net/quic/quic_bandwidth.h"
+#include "net/quic/quic_server_id.h"
 #include "net/socket/next_proto.h"
 #include "net/spdy/spdy_framer.h"  // TODO(willchan): Reconsider this.
 #include "net/spdy/spdy_protocol.h"
@@ -62,13 +66,10 @@ NET_EXPORT void HistogramBrokenAlternateProtocolLocation(
     BrokenAlternateProtocolLocation location);
 
 enum AlternateProtocol {
-  DEPRECATED_NPN_SPDY_2 = 0,
-  ALTERNATE_PROTOCOL_MINIMUM_VALID_VERSION = DEPRECATED_NPN_SPDY_2,
-  NPN_SPDY_MINIMUM_VERSION = DEPRECATED_NPN_SPDY_2,
-  NPN_SPDY_3,
   NPN_SPDY_3_1,
-  NPN_HTTP_2_14,  // HTTP/2 draft-14
-  NPN_HTTP_2,     // HTTP/2
+  ALTERNATE_PROTOCOL_MINIMUM_VALID_VERSION = NPN_SPDY_3_1,
+  NPN_SPDY_MINIMUM_VERSION = NPN_SPDY_3_1,
+  NPN_HTTP_2,
   NPN_SPDY_MAXIMUM_VERSION = NPN_HTTP_2,
   QUIC,
   ALTERNATE_PROTOCOL_MAXIMUM_VALID_VERSION = QUIC,
@@ -100,7 +101,7 @@ struct NET_EXPORT AlternativeService {
 
   AlternativeService(AlternateProtocol protocol,
                      const std::string& host,
-                     uint16 port)
+                     uint16_t port)
       : protocol(protocol), host(host), port(port) {}
 
   AlternativeService(AlternateProtocol protocol,
@@ -125,32 +126,35 @@ struct NET_EXPORT AlternativeService {
   }
 
   bool operator<(const AlternativeService& other) const {
-    if (protocol != other.protocol)
-      return protocol < other.protocol;
-    if (host != other.host)
-      return host < other.host;
-    return port < other.port;
+    return std::tie(protocol, host, port) <
+           std::tie(other.protocol, other.host, other.port);
   }
 
   std::string ToString() const;
 
   AlternateProtocol protocol;
   std::string host;
-  uint16 port;
+  uint16_t port;
 };
 
 struct NET_EXPORT AlternativeServiceInfo {
   AlternativeServiceInfo() : alternative_service(), probability(0.0) {}
 
   AlternativeServiceInfo(const AlternativeService& alternative_service,
-                         double probability)
-      : alternative_service(alternative_service), probability(probability) {}
+                         double probability,
+                         base::Time expiration)
+      : alternative_service(alternative_service),
+        probability(probability),
+        expiration(expiration) {}
 
   AlternativeServiceInfo(AlternateProtocol protocol,
                          const std::string& host,
-                         uint16 port,
-                         double probability)
-      : alternative_service(protocol, host, port), probability(probability) {}
+                         uint16_t port,
+                         double probability,
+                         base::Time expiration)
+      : alternative_service(protocol, host, port),
+        probability(probability),
+        expiration(expiration) {}
 
   AlternativeServiceInfo(
       const AlternativeServiceInfo& alternative_service_info) = default;
@@ -159,7 +163,7 @@ struct NET_EXPORT AlternativeServiceInfo {
 
   bool operator==(const AlternativeServiceInfo& other) const {
     return alternative_service == other.alternative_service &&
-           probability == other.probability;
+           probability == other.probability && expiration == other.expiration;
   }
 
   bool operator!=(const AlternativeServiceInfo& other) const {
@@ -170,6 +174,7 @@ struct NET_EXPORT AlternativeServiceInfo {
 
   AlternativeService alternative_service;
   double probability;
+  base::Time expiration;
 };
 
 struct NET_EXPORT SupportsQuic {
@@ -207,14 +212,23 @@ typedef base::MRUCache<HostPortPair, AlternativeServiceInfoVector>
     AlternativeServiceMap;
 typedef base::MRUCache<HostPortPair, SettingsMap> SpdySettingsMap;
 typedef base::MRUCache<HostPortPair, ServerNetworkStats> ServerNetworkStatsMap;
+typedef base::MRUCache<QuicServerId, std::string> QuicServerInfoMap;
+
+// Persist 5 QUIC Servers. This is mainly used by cronet.
+const int kMaxQuicServersToPersist = 5;
 
 extern const char kAlternateProtocolHeader[];
+extern const char kAlternativeServiceHeader[];
 
 // The interface for setting/retrieving the HTTP server properties.
 // Currently, this class manages servers':
-// * SPDY support (based on NPN results)
-// * alternative service support
-// * Spdy Settings (like CWND ID field)
+// * SPDY support (based on NPN results).
+// * alternative service support.
+// * SPDY Settings (like CWND ID field).
+// * QUIC data (like ServerNetworkStats and QuicServerInfo).
+//
+// Embedders must ensure that HttpServerProperites is completely initialized
+// before the first request is issued.
 class NET_EXPORT HttpServerProperties {
  public:
   HttpServerProperties() {}
@@ -264,7 +278,8 @@ class NET_EXPORT HttpServerProperties {
   virtual bool SetAlternativeService(
       const HostPortPair& origin,
       const AlternativeService& alternative_service,
-      double alternative_probability) = 0;
+      double alternative_probability,
+      base::Time expiration) = 0;
 
   // Set alternative services for |origin|.  Previous alternative services for
   // |origin| are discarded.
@@ -327,7 +342,7 @@ class NET_EXPORT HttpServerProperties {
   virtual bool SetSpdySetting(const HostPortPair& host_port_pair,
                               SpdySettingsIds id,
                               SpdySettingsFlags flags,
-                              uint32 value) = 0;
+                              uint32_t value) = 0;
 
   // Clears all SPDY settings for a host.
   virtual void ClearSpdySettings(const HostPortPair& host_port_pair) = 0;
@@ -351,6 +366,25 @@ class NET_EXPORT HttpServerProperties {
       const HostPortPair& host_port_pair) = 0;
 
   virtual const ServerNetworkStatsMap& server_network_stats_map() const = 0;
+
+  // Save QuicServerInfo (in std::string form) for the given |server_id|.
+  // Returns true if the value has changed otherwise it returns false.
+  virtual bool SetQuicServerInfo(const QuicServerId& server_id,
+                                 const std::string& server_info) = 0;
+
+  // Get QuicServerInfo (in std::string form) for the given |server_id|.
+  virtual const std::string* GetQuicServerInfo(
+      const QuicServerId& server_id) = 0;
+
+  // Returns all persistent QuicServerInfo objects.
+  virtual const QuicServerInfoMap& quic_server_info_map() const = 0;
+
+  // Returns the number of server configs (QuicServerInfo objects) persisted.
+  virtual size_t max_server_configs_stored_in_properties() const = 0;
+
+  // Sets the number of server configs (QuicServerInfo objects) to be persisted.
+  virtual void SetMaxServerConfigsStoredInProperties(
+      size_t max_server_configs_stored_in_properties) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HttpServerProperties);

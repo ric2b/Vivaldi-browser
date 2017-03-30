@@ -4,7 +4,8 @@
 
 #include "ash/display/resolution_notification_controller.h"
 
-#include "ash/display/display_controller.h"
+#include <utility>
+
 #include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
@@ -94,14 +95,14 @@ const char ResolutionNotificationController::kNotificationId[] =
     "chrome://settings/display/resolution";
 
 struct ResolutionNotificationController::ResolutionChangeInfo {
-  ResolutionChangeInfo(int64 display_id,
+  ResolutionChangeInfo(int64_t display_id,
                        const DisplayMode& old_resolution,
                        const DisplayMode& new_resolution,
                        const base::Closure& accept_callback);
   ~ResolutionChangeInfo();
 
   // The id of the display where the resolution change happens.
-  int64 display_id;
+  int64_t display_id;
 
   // The resolution before the change.
   DisplayMode old_resolution;
@@ -117,19 +118,19 @@ struct ResolutionNotificationController::ResolutionChangeInfo {
   base::Closure accept_callback;
 
   // The remaining timeout in seconds. 0 if the change does not time out.
-  uint8 timeout_count;
+  uint8_t timeout_count;
 
   // The timer to invoke OnTimerTick() every second. This cannot be
   // OneShotTimer since the message contains text "automatically closed in xx
   // seconds..." which has to be updated every second.
-  base::RepeatingTimer<ResolutionNotificationController> timer;
+  base::RepeatingTimer timer;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ResolutionChangeInfo);
 };
 
 ResolutionNotificationController::ResolutionChangeInfo::ResolutionChangeInfo(
-    int64 display_id,
+    int64_t display_id,
     const DisplayMode& old_resolution,
     const DisplayMode& new_resolution,
     const base::Closure& accept_callback)
@@ -150,20 +151,21 @@ ResolutionNotificationController::ResolutionChangeInfo::
 }
 
 ResolutionNotificationController::ResolutionNotificationController() {
-  Shell::GetInstance()->display_controller()->AddObserver(this);
+  Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
   Shell::GetScreen()->AddObserver(this);
 }
 
 ResolutionNotificationController::~ResolutionNotificationController() {
-  Shell::GetInstance()->display_controller()->RemoveObserver(this);
+  Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
   Shell::GetScreen()->RemoveObserver(this);
 }
 
 void ResolutionNotificationController::PrepareNotification(
-    int64 display_id,
+    int64_t display_id,
     const DisplayMode& old_resolution,
     const DisplayMode& new_resolution,
     const base::Closure& accept_callback) {
+  DCHECK(!gfx::Display::IsInternalDisplayId(display_id));
   // If multiple resolution changes are invoked for the same display,
   // the original resolution for the first resolution change has to be used
   // instead of the specified |old_resolution|.
@@ -226,20 +228,16 @@ void ResolutionNotificationController::CreateOrUpdateNotification(
 
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   scoped_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
-      kNotificationId,
-      message,
-      timeout_message,
-      bundle.GetImageNamed(IDR_AURA_NOTIFICATION_DISPLAY),
-      base::string16() /* display_source */,
+      message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, message,
+      timeout_message, bundle.GetImageNamed(IDR_AURA_NOTIFICATION_DISPLAY),
+      base::string16() /* display_source */, GURL(),
       message_center::NotifierId(
           message_center::NotifierId::SYSTEM_COMPONENT,
           system_notifier::kNotifierDisplayResolutionChange),
-      data,
-      new ResolutionChangeNotificationDelegate(
-          this, change_info_->timeout_count > 0)));
+      data, new ResolutionChangeNotificationDelegate(
+                this, change_info_->timeout_count > 0)));
   notification->SetSystemPriority();
-  message_center->AddNotification(notification.Pass());
+  message_center->AddNotification(std::move(notification));
 }
 
 void ResolutionNotificationController::OnTimerTick() {
@@ -271,7 +269,7 @@ void ResolutionNotificationController::RevertResolutionChange() {
       kNotificationId, false /* by_user */);
   if (!change_info_)
     return;
-  int64 display_id = change_info_->display_id;
+  int64_t display_id = change_info_->display_id;
   DisplayMode old_resolution = change_info_->old_resolution;
   change_info_.reset();
   Shell::GetInstance()->display_manager()->SetDisplayMode(

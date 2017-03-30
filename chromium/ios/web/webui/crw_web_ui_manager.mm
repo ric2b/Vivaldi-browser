@@ -88,6 +88,10 @@ const char kScriptCommandPrefix[] = "webui";
 - (void)webState:(web::WebState*)webState
     didStartProvisionalNavigationForURL:(const GURL&)URL {
   DCHECK(webState == _webState);
+  // If URL is not an application specific URL, ignore the navigation.
+  if (!web::GetWebClient()->IsAppSpecificURL(URL))
+    return;
+
   GURL navigationURL(URL);
   // Add request group ID to the URL, if not present. Request group ID may
   // already be added if restoring state to a WebUI page.
@@ -105,6 +109,12 @@ const char kScriptCommandPrefix[] = "webui";
                                       navigationURL);
             }
           }];
+}
+
+- (void)webStateDidLoadPage:(web::WebState*)webState {
+  DCHECK_EQ(webState, _webState);
+  // All WebUI pages are HTML based.
+  _webState->SetContentsMimeType("text/html");
 }
 
 - (void)webStateDestroyed:(web::WebState*)webState {
@@ -145,7 +155,7 @@ const char kScriptCommandPrefix[] = "webui";
       };
 
   _fetchers.push_back(
-      [self fetcherForURL:URL completionHandler:fetcherCompletion].Pass());
+      [self fetcherForURL:URL completionHandler:fetcherCompletion]);
   _fetchers.back()->Start();
 }
 

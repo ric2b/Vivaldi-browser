@@ -36,14 +36,23 @@ array instead of the names array. Each version has the following keys:
    extensions: Extra Extensions for which the function is bound. Only needed
                in some cases where the extension cannot be parsed from the
                headers.
-
+   is_optional: True if the GetProcAddress can return NULL for the
+                function.  This may happen for example when functions
+                are added to a new version of an extension, but the
+                extension string is not modified.
 By default, the function gets its name from the first name in its names or
 versions array. This can be overridden by supplying a 'known_as' key.
+
 """
 GL_FUNCTIONS = [
 { 'return_type': 'void',
   'names': ['glActiveTexture'],
   'arguments': 'GLenum texture', },
+{ 'return_type': 'void',
+  'known_as': 'glApplyFramebufferAttachmentCMAAINTEL',
+  'versions': [{ 'name': 'glApplyFramebufferAttachmentCMAAINTEL',
+                 'extensions': ['GL_INTEL_framebuffer_CMAA'] }],
+  'arguments': 'void', },
 { 'return_type': 'void',
   'names': ['glAttachShader'],
   'arguments': 'GLuint program, GLuint shader', },
@@ -70,15 +79,30 @@ GL_FUNCTIONS = [
   'arguments': 'GLenum target, GLuint index, GLuint buffer, GLintptr offset, '
                'GLsizeiptr size', },
 { 'return_type': 'void',
-  'names': ['glBindFragDataLocation'],
+  'versions': [{ 'name': 'glBindFragDataLocation',
+                 'extensions': ['GL_ARB_blend_func_extended'] },
+               { 'name': 'glBindFragDataLocationEXT',
+                 'extensions': ['GL_EXT_blend_func_extended'] }],
   'arguments': 'GLuint program, GLuint colorNumber, const char* name', },
 { 'return_type': 'void',
-  'names': ['glBindFragDataLocationIndexed'],
+  'versions': [{ 'name': 'glBindFragDataLocationIndexed',
+                 'extensions': ['GL_ARB_blend_func_extended'] },
+               { 'name': 'glBindFragDataLocationIndexedEXT',
+                 'extensions': ['GL_EXT_blend_func_extended'] }],
   'arguments':
-      'GLuint program, GLuint colorNumber, GLuint index, const char* name', },
+      'GLuint program, GLuint colorNumber, GLuint index, const char* name',
+},
 { 'return_type': 'void',
   'names': ['glBindFramebufferEXT', 'glBindFramebuffer'],
   'arguments': 'GLenum target, GLuint framebuffer', },
+{ 'return_type': 'void',
+  'known_as': 'glBindImageTextureEXT',
+  'versions': [{ 'name': 'glBindImageTexture',
+                 'extensions': ['GL_ARB_shader_image_load_store'] },
+               { 'name': 'glBindImageTextureEXT',
+                 'extensions': ['GL_EXT_shader_image_load_store'] }],
+  'arguments': 'GLuint index, GLuint texture, GLint level, GLboolean layered,'
+               'GLint layer, GLenum access, GLint format', },
 { 'return_type': 'void',
   'names': ['glBindRenderbufferEXT', 'glBindRenderbuffer'],
   'arguments': 'GLenum target, GLuint renderbuffer', },
@@ -235,6 +259,25 @@ GL_FUNCTIONS = [
   'arguments':
       'GLenum target, GLint level, GLint xoffset, GLint yoffset, '
       'GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height', },
+{ 'return_type': 'void',
+  'names': ['glCoverageModulationNV'],
+  'arguments': 'GLenum components'},
+{ 'return_type': 'void',
+  'names': ['glCoverFillPathInstancedNV'],
+  'arguments': 'GLsizei numPaths, GLenum pathNameType, const void* paths, '
+  'GLuint pathBase, GLenum coverMode, GLenum transformType, '
+  'const GLfloat* transformValues' },
+{ 'return_type': 'void',
+  'names': ['glCoverFillPathNV'],
+  'arguments': 'GLuint path, GLenum coverMode' },
+{ 'return_type': 'void',
+  'names': ['glCoverStrokePathInstancedNV'],
+  'arguments': 'GLsizei numPaths, GLenum pathNameType, const void* paths, '
+  'GLuint pathBase, GLenum coverMode, GLenum transformType, '
+  'const GLfloat* transformValues' },
+{ 'return_type': 'void',
+  'names': ['glCoverStrokePathNV'],
+  'arguments': 'GLuint name, GLenum coverMode' },
 { 'return_type': 'GLuint',
   'names': ['glCreateProgram'],
   'arguments': 'void', },
@@ -259,6 +302,9 @@ GL_FUNCTIONS = [
 { 'return_type': 'void',
   'names': ['glDeleteFramebuffersEXT', 'glDeleteFramebuffers'],
   'arguments': 'GLsizei n, const GLuint* framebuffers', },
+{ 'return_type': 'void',
+  'names': ['glDeletePathsNV'],
+  'arguments': 'GLuint path, GLsizei range' },
 { 'return_type': 'void',
   'names': ['glDeleteProgram'],
   'arguments': 'GLuint program', },
@@ -438,6 +484,9 @@ GL_FUNCTIONS = [
 { 'return_type': 'void',
   'names': ['glGenFramebuffersEXT', 'glGenFramebuffers'],
   'arguments': 'GLsizei n, GLuint* framebuffers', },
+{ 'return_type': 'GLuint',
+  'names': ['glGenPathsNV'],
+  'arguments': 'GLsizei range' },
 { 'return_type': 'void',
   'versions': [{ 'name': 'glGenQueries' },
                { 'name': 'glGenQueriesARB', },
@@ -512,6 +561,12 @@ GL_FUNCTIONS = [
   'names': ['glGetFloatv'],
   'arguments': 'GLenum pname, GLfloat* params', },
 { 'return_type': 'GLint',
+  'versions': [{'name': 'glGetFragDataIndex',
+                'extensions': ['GL_ARB_blend_func_extended']},
+               {'name': 'glGetFragDataIndexEXT',
+                'extensions': ['GL_EXT_blend_func_extended']}],
+  'arguments': 'GLuint program, const char* name', },
+{ 'return_type': 'GLint',
   'versions': [{ 'name': 'glGetFragDataLocation' }],
   'arguments': 'GLuint program, const char* name', },
 { 'return_type': 'void',
@@ -553,11 +608,27 @@ GL_FUNCTIONS = [
   'arguments':
       'GLuint program, GLsizei bufsize, GLsizei* length, char* infolog', },
 { 'return_type': 'void',
+  'versions': [{'name': 'glGetProgramInterfaceiv',
+                'extensions': ['GL_ARB_program_interface_query']}],
+  'arguments': 'GLuint program, GLenum programInterface, GLenum pname, '
+  'GLint* params'},
+{ 'return_type': 'void',
   'names': ['glGetProgramiv'],
   'arguments': 'GLuint program, GLenum pname, GLint* params', },
+{ 'return_type': 'void',
+  'versions': [{'name': 'glGetProgramResourceiv',
+                'extensions': ['GL_ARB_program_interface_query']}],
+  'arguments': 'GLuint program, GLenum programInterface, GLuint index, '
+  'GLsizei propCount, const GLenum* props, GLsizei bufSize, '
+  'GLsizei* length, GLint* params'},
 { 'return_type': 'GLint',
   'names': ['glGetProgramResourceLocation'],
   'arguments': 'GLuint program, GLenum programInterface, const char* name', },
+{ 'return_type': 'void',
+  'versions': [{'name': 'glGetProgramResourceName',
+                'extensions': ['GL_ARB_program_interface_query']}],
+  'arguments': 'GLuint program, GLenum programInterface, GLuint index, '
+  'GLsizei bufSize, GLsizei* length, GLchar* name'},
 { 'return_type': 'void',
   'versions': [{ 'name': 'glGetQueryiv' },
                { 'name': 'glGetQueryivARB' },
@@ -705,6 +776,9 @@ GL_FUNCTIONS = [
   'names': ['glIsFramebufferEXT', 'glIsFramebuffer'],
   'arguments': 'GLuint framebuffer', },
 { 'return_type': 'GLboolean',
+  'names': ['glIsPathNV'],
+  'arguments': 'GLuint path' },
+{ 'return_type': 'GLboolean',
   'names': ['glIsProgram'],
   'arguments': 'GLuint program', },
 { 'return_type': 'GLboolean',
@@ -771,6 +845,26 @@ GL_FUNCTIONS = [
                                 'GL_NV_path_rendering'] },],
   'arguments': 'GLenum matrixMode' },
 { 'return_type': 'void',
+  'known_as': 'glMemoryBarrierEXT',
+  'versions': [{ 'name': 'glMemoryBarrier',
+                 'extensions': ['GL_ARB_shader_image_load_store'] },
+               { 'name': 'glMemoryBarrierEXT',
+                 'extensions': ['GL_EXT_shader_image_load_store'] }],
+  'arguments': 'GLbitfield barriers', },
+{ 'return_type': 'void',
+  'names': ['glPathCommandsNV'],
+  'arguments': 'GLuint path, GLsizei numCommands, const GLubyte* commands, '
+  'GLsizei numCoords, GLenum coordType, const GLvoid* coords' },
+{ 'return_type': 'void',
+  'names': ['glPathParameterfNV'],
+  'arguments': 'GLuint path, GLenum pname, GLfloat value' },
+{ 'return_type': 'void',
+  'names': ['glPathParameteriNV'],
+  'arguments': 'GLuint path, GLenum pname, GLint value' },
+{ 'return_type': 'void',
+  'names': ['glPathStencilFuncNV'],
+  'arguments': 'GLenum func, GLint ref, GLuint mask' },
+{ 'return_type': 'void',
   'versions': [{ 'name': 'glPauseTransformFeedback' }],
   'arguments': 'void', },
 { 'return_type': 'void',
@@ -796,6 +890,11 @@ GL_FUNCTIONS = [
   'versions': [{ 'name': 'glProgramParameteri',
                  'extensions': ['GL_ARB_get_program_binary'] }],
   'arguments': 'GLuint program, GLenum pname, GLint value' },
+{ 'return_type': 'void',
+  'names': ['glProgramPathFragmentInputGenNV'],
+  'arguments': 'GLuint program, GLint location, GLenum genMode, '
+  'GLint components, const GLfloat* coeffs',
+  'is_optional': True, },
 { 'return_type': 'void',
   'names': ['glPushGroupMarkerEXT'],
   'arguments': 'GLsizei length, const char* marker', },
@@ -889,6 +988,14 @@ GL_FUNCTIONS = [
   });
 """, },
 { 'return_type': 'void',
+  'names': ['glStencilFillPathInstancedNV'],
+  'arguments': 'GLsizei numPaths, GLenum pathNameType, const void* paths, '
+  'GLuint pathBase, GLenum fillMode, GLuint mask, GLenum transformType, '
+  'const GLfloat* transformValues' },
+{ 'return_type': 'void',
+  'names': ['glStencilFillPathNV'],
+  'arguments': 'GLuint path, GLenum fillMode, GLuint mask' },
+{ 'return_type': 'void',
   'names': ['glStencilFunc'],
   'arguments': 'GLenum func, GLint ref, GLuint mask', },
 { 'return_type': 'void',
@@ -906,6 +1013,34 @@ GL_FUNCTIONS = [
 { 'return_type': 'void',
   'names': ['glStencilOpSeparate'],
   'arguments': 'GLenum face, GLenum fail, GLenum zfail, GLenum zpass', },
+{ 'return_type': 'void',
+  'names': ['glStencilStrokePathInstancedNV'],
+  'arguments': 'GLsizei numPaths, GLenum pathNameType, const void* paths, '
+  'GLuint pathBase, GLint ref, GLuint mask, GLenum transformType, '
+  'const GLfloat* transformValues' },
+{ 'return_type': 'void',
+  'names': ['glStencilStrokePathNV'],
+  'arguments': 'GLuint path, GLint reference, GLuint mask' },
+{ 'return_type': 'void',
+  'names': ['glStencilThenCoverFillPathInstancedNV'],
+  'arguments': 'GLsizei numPaths, GLenum pathNameType, const void* paths, '
+  'GLuint pathBase, GLenum fillMode, GLuint mask, GLenum coverMode, '
+  'GLenum transformType, const GLfloat* transformValues',
+  'is_optional': True, },
+{ 'return_type': 'void',
+  'names': ['glStencilThenCoverFillPathNV'],
+  'arguments': 'GLuint path, GLenum fillMode, GLuint mask, GLenum coverMode',
+  'is_optional': True, },
+{ 'return_type': 'void',
+  'names': ['glStencilThenCoverStrokePathInstancedNV'],
+  'arguments': 'GLsizei numPaths, GLenum pathNameType, const void* paths, '
+  'GLuint pathBase, GLint ref, GLuint mask, GLenum coverMode, '
+  'GLenum transformType, const GLfloat* transformValues',
+  'is_optional': True, },
+{ 'return_type': 'void',
+  'names': ['glStencilThenCoverStrokePathNV'],
+  'arguments': 'GLuint path, GLint reference, GLuint mask, GLenum coverMode',
+  'is_optional': True, },
 { 'return_type': 'GLboolean',
   'known_as': 'glTestFenceAPPLE',
   'versions': [{ 'name': 'glTestFenceAPPLE',
@@ -1905,7 +2040,9 @@ namespace gfx {
         file.write('  else if (%s) {\n  ' % (cond))
 
       WriteFuncBinding(file, known_as, version['name'])
-      file.write('DCHECK(fn.%sFn);\n' % known_as)
+      if options.validate_bindings:
+        if not 'is_optional' in func or not func['is_optional']:
+          file.write('DCHECK(fn.%sFn);\n' % known_as)
       file.write('}\n')
       i += 1
       first_version = False
@@ -2276,7 +2413,7 @@ def GenerateEnumUtils(out_file, input_filenames):
   out_file.write(LICENSE_AND_HEADER)
   out_file.write("static const GLEnums::EnumToString "
                  "enum_to_string_table[] = {\n")
-  for value in dict:
+  for value in sorted(dict):
     out_file.write('  { %s, "%s", },\n' % (value, dict[value]))
   out_file.write("""};
 
@@ -2537,6 +2674,9 @@ def main(argv):
   parser.add_option('--generate-dchecks', action='store_true',
                     help='Generates DCHECKs into the logging functions '
                         'asserting no GL errors (useful for debugging)')
+  parser.add_option('--validate-bindings', action='store_true',
+                    help='Generate DCHECKs to validate function bindings '
+                         ' were correctly supplied (useful for debugging)')
 
   options, args = parser.parse_args(argv)
 

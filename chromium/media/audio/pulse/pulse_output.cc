@@ -5,6 +5,7 @@
 #include "media/audio/pulse/pulse_output.h"
 
 #include <pulse/pulseaudio.h>
+#include <stdint.h>
 
 #include "base/single_thread_task_runner.h"
 #include "media/audio/audio_manager_base.h"
@@ -62,9 +63,10 @@ PulseAudioOutputStream::~PulseAudioOutputStream() {
 
 bool PulseAudioOutputStream::Open() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return pulse::CreateOutputStream(&pa_mainloop_, &pa_context_, &pa_stream_,
-                                   params_, device_id_, &StreamNotifyCallback,
-                                   &StreamRequestCallback, this);
+  return pulse::CreateOutputStream(
+      &pa_mainloop_, &pa_context_, &pa_stream_, params_, device_id_,
+      AudioManager::GetGlobalAppName(), &StreamNotifyCallback,
+      &StreamRequestCallback, this);
 }
 
 void PulseAudioOutputStream::Reset() {
@@ -129,10 +131,10 @@ void PulseAudioOutputStream::FulfillWriteRequest(size_t requested_bytes) {
 
     int frames_filled = 0;
     if (source_callback_) {
-      const uint32 hardware_delay = pulse::GetHardwareLatencyInBytes(
+      const uint32_t hardware_delay = pulse::GetHardwareLatencyInBytes(
           pa_stream_, params_.sample_rate(), params_.GetBytesPerFrame());
-      frames_filled = source_callback_->OnMoreData(
-          audio_bus_.get(), hardware_delay);
+      frames_filled =
+          source_callback_->OnMoreData(audio_bus_.get(), hardware_delay, 0);
 
       // Zero any unfilled data so it plays back as silence.
       if (frames_filled < audio_bus_->frames()) {

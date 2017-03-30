@@ -4,8 +4,11 @@
 
 #include "chrome/browser/android/profiles/profile_downloader_android.h"
 
+#include <stddef.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/macros.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -120,9 +123,10 @@ class AccountInfoRetriever : public ProfileDownloaderDelegate {
 }  // namespace
 
 // static
-jstring GetCachedFullNameForPrimaryAccount(JNIEnv* env,
-                                           jclass clazz,
-                                           jobject jprofile) {
+ScopedJavaLocalRef<jstring> GetCachedFullNameForPrimaryAccount(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& jprofile) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(jprofile);
   ProfileInfoInterface& info =
       g_browser_process->profile_manager()->GetProfileInfoCache();
@@ -132,13 +136,14 @@ jstring GetCachedFullNameForPrimaryAccount(JNIEnv* env,
   if (index != std::string::npos)
     name = info.GetGAIANameOfProfileAtIndex(index);
 
-  return base::android::ConvertUTF16ToJavaString(env, name).Release();
+  return base::android::ConvertUTF16ToJavaString(env, name);
 }
 
 // static
-jstring GetCachedGivenNameForPrimaryAccount(JNIEnv* env,
-                                            jclass clazz,
-                                            jobject jprofile) {
+ScopedJavaLocalRef<jstring> GetCachedGivenNameForPrimaryAccount(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& jprofile) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(jprofile);
   ProfileInfoInterface& info =
       g_browser_process->profile_manager()->GetProfileInfoCache();
@@ -148,13 +153,14 @@ jstring GetCachedGivenNameForPrimaryAccount(JNIEnv* env,
   if (index != std::string::npos)
     name = info.GetGAIAGivenNameOfProfileAtIndex(index);
 
-  return base::android::ConvertUTF16ToJavaString(env, name).Release();
+  return base::android::ConvertUTF16ToJavaString(env, name);
 }
 
 // static
-jobject GetCachedAvatarForPrimaryAccount(JNIEnv* env,
-                                         jclass clazz,
-                                         jobject jprofile) {
+ScopedJavaLocalRef<jobject> GetCachedAvatarForPrimaryAccount(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& jprofile) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(jprofile);
   ProfileInfoInterface& info =
       g_browser_process->profile_manager()->GetProfileInfoCache();
@@ -171,29 +177,26 @@ jobject GetCachedAvatarForPrimaryAccount(JNIEnv* env,
     }
   }
 
-  return jbitmap.Release();
+  return jbitmap;
 }
 
 // static
-void StartFetchingAccountInfoFor(
-    JNIEnv* env,
-    jclass clazz,
-    jobject jprofile,
-    jstring jemail,
-    jint image_side_pixels,
-    jboolean is_pre_signin) {
+void StartFetchingAccountInfoFor(JNIEnv* env,
+                                 const JavaParamRef<jclass>& clazz,
+                                 const JavaParamRef<jobject>& jprofile,
+                                 const JavaParamRef<jstring>& jemail,
+                                 jint image_side_pixels,
+                                 jboolean is_pre_signin) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(jprofile);
   const std::string email =
       base::android::ConvertJavaStringToUTF8(env, jemail);
-  // TODO(rogerta): the java code will need to pass in the gaia-id
-  // of the account instead of the email when chrome uses gaia-id as key.
-  DCHECK_EQ(AccountTrackerService::MIGRATION_NOT_STARTED,
-            AccountTrackerServiceFactory::GetForProfile(profile)->
-                GetMigrationState());
-  AccountInfoRetriever* retriever =
-      new AccountInfoRetriever(
-          profile, gaia::CanonicalizeEmail(gaia::SanitizeEmail(email)), email,
-          image_side_pixels, is_pre_signin);
+  AccountTrackerService* account_tracker_service =
+      AccountTrackerServiceFactory::GetForProfile(profile);
+
+  AccountInfoRetriever* retriever = new AccountInfoRetriever(
+      profile,
+      account_tracker_service->FindAccountInfoByEmail(email).account_id, email,
+      image_side_pixels, is_pre_signin);
   retriever->Start();
 }
 

@@ -76,9 +76,9 @@ void IPCDataSourceImpl::Resume() {
   suspended_ = false;
 }
 
-void IPCDataSourceImpl::Read(int64 position,
+void IPCDataSourceImpl::Read(int64_t position,
                              int size,
-                             uint8* data,
+                             uint8_t* data,
                              const ReadCB& read_cb) {
   DCHECK_GE(size, 0);
   {
@@ -111,13 +111,13 @@ void IPCDataSourceImpl::Stop() {
       return;
 
     if (read_operation_.get() != NULL)
-      ReadOperation::Finish(read_operation_.Pass(), NULL, kReadError);
+      ReadOperation::Finish(std::move(read_operation_), NULL, kReadError);
 
     stopped_ = true;
   }
 }
 
-bool IPCDataSourceImpl::GetSize(int64* size) {
+bool IPCDataSourceImpl::GetSize(int64_t* size) {
   *size = size_;
   return size_ >= 0;
 }
@@ -139,19 +139,19 @@ void IPCDataSourceImpl::OnBufferForRawDataReady(
   }
 
   if (!base::SharedMemory::IsHandleValid(handle)) {
-    ReadOperation::Finish(read_operation_.Pass(), NULL, kReadError);
+    ReadOperation::Finish(std::move(read_operation_), NULL, kReadError);
     return;
   }
 
   if (base::saturated_cast<int>(buffer_size) < read_operation_->size()) {
     DLOG(ERROR) << "Received buffer is too small.";
-    ReadOperation::Finish(read_operation_.Pass(), NULL, kReadError);
+    ReadOperation::Finish(std::move(read_operation_), NULL, kReadError);
     return;
   }
 
   shared_data_.reset(new base::SharedMemory(handle, true));
   if (!shared_data_->Map(buffer_size)) {
-    ReadOperation::Finish(read_operation_.Pass(), NULL, kReadError);
+    ReadOperation::Finish(std::move(read_operation_), NULL, kReadError);
     return;
   }
 
@@ -169,7 +169,7 @@ void IPCDataSourceImpl::OnRawDataReady(int size) {
     if (should_discard_next_buffer_) {
       DCHECK(read_operation_);
       should_discard_next_buffer_ = false;
-      ReadOperation::Finish(read_operation_.Pass(), NULL, kReadInterrupted);
+      ReadOperation::Finish(std::move(read_operation_), NULL, kReadInterrupted);
       return;
     }
 
@@ -181,7 +181,7 @@ void IPCDataSourceImpl::OnRawDataReady(int size) {
     if (size > 0) {
       if (shared_data_.get() != NULL &&
           base::saturated_cast<int>(shared_data_->mapped_size()) >= size) {
-        ReadOperation::Finish(read_operation_.Pass(),
+        ReadOperation::Finish(std::move(read_operation_),
                               static_cast<uint8_t*>(shared_data_->memory()),
                               size);
         return;
@@ -190,7 +190,7 @@ void IPCDataSourceImpl::OnRawDataReady(int size) {
       size = kReadError;
     }
 
-    ReadOperation::Finish(read_operation_.Pass(), NULL, size);
+    ReadOperation::Finish(std::move(read_operation_), NULL, size);
   }
 }
 

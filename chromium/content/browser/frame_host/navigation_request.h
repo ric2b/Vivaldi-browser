@@ -5,7 +5,7 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_NAVIGATION_REQUEST_H_
 #define CONTENT_BROWSER_FRAME_HOST_NAVIGATION_REQUEST_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
@@ -13,13 +13,16 @@
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/navigation_params.h"
+#include "content/public/browser/navigation_throttle.h"
 
 namespace content {
 
 class FrameNavigationEntry;
 class FrameTreeNode;
 class NavigationControllerImpl;
+class NavigationHandleImpl;
 class NavigationURLLoader;
+class NavigatorDelegate;
 class ResourceRequestBody;
 class SiteInstanceImpl;
 struct NavigationRequestInfo;
@@ -63,12 +66,14 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
       const NavigationEntryImpl& entry,
       FrameMsg_Navigate_Type::Value navigation_type,
       bool is_same_document_history_load,
-      base::TimeTicks navigation_start,
+      const base::TimeTicks& navigation_start,
       NavigationControllerImpl* controller);
 
   // Creates a request for a renderer-intiated navigation.
   // Note: |body| is sent to the IO thread when calling BeginNavigation, and
   // should no longer be manipulated afterwards on the UI thread.
+  // TODO(clamy): see if ResourceRequestBody could be un-refcounted to avoid
+  // threading subtleties.
   static scoped_ptr<NavigationRequest> CreateRendererInitiated(
       FrameTreeNode* frame_tree_node,
       const CommonNavigationParams& common_params,
@@ -79,11 +84,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
 
   ~NavigationRequest() override;
 
-  // Called on the UI thread by the Navigator to start the navigation. Returns
-  // whether a request was made on the IO thread.
-  // TODO(clamy): see if ResourceRequestBody could be un-refcounted to avoid
-  // threading subtleties.
-  bool BeginNavigation();
+  // Called on the UI thread by the Navigator to start the navigation.
+  void BeginNavigation();
 
   const CommonNavigationParams& common_params() const { return common_params_; }
 
@@ -120,6 +122,22 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     state_ = WAITING_FOR_RENDERER_RESPONSE;
   }
 
+  NavigationHandleImpl* navigation_handle() const {
+    return navigation_handle_.get();
+  }
+
+  // Creates a NavigationHandle. This should be called after any previous
+  // NavigationRequest for the FrameTreeNode has been destroyed.
+  void CreateNavigationHandle();
+
+  // Transfers the ownership of the NavigationHandle to |render_frame_host|.
+  // This should be called when the navigation is ready to commit, because the
+  // NavigationHandle outlives the NavigationRequest. The NavigationHandle's
+  // lifetime is the entire navigation, while the NavigationRequest is
+  // destroyed when a navigation is ready for commit.
+  void TransferNavigationHandleOwnership(
+      RenderFrameHostImpl* render_frame_host);
+
  private:
   NavigationRequest(FrameTreeNode* frame_tree_node,
                     const CommonNavigationParams& common_params,
@@ -139,6 +157,14 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   void OnRequestFailed(bool has_stale_copy_in_cache, int net_error) override;
   void OnRequestStarted(base::TimeTicks timestamp) override;
 
+  // Called when the NavigationThrottles have been checked by the
+  // NavigationHandle.
+  void OnStartChecksComplete(NavigationThrottle::ThrottleCheckResult result);
+  void OnRedirectChecksComplete(NavigationThrottle::ThrottleCheckResult result);
+
+  // Called when the navigation is about to be sent to the IO thread.
+  void InitializeServiceWorkerHandleIfNeeded();
+
   FrameTreeNode* frame_tree_node_;
 
   // Initialized on creation of the NavigationRequest. Sent to the renderer when
@@ -146,9 +172,13 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // Note: When the navigation is ready to commit, the url in |common_params|
   // will be set to the final navigation url, obtained after following all
   // redirects.
+  // Note: |common_params_| and |begin_params_| are not const as they can be
+  // modified during redirects.
+  // Note: |request_params_| is not const because service_worker_provider_id
+  // and should_create_service_worker will be set in OnResponseStarted.
   CommonNavigationParams common_params_;
-  const BeginNavigationParams begin_params_;
-  const RequestNavigationParams request_params_;
+  BeginNavigationParams begin_params_;
+  RequestNavigationParams request_params_;
   const bool browser_initiated_;
 
   NavigationState state_;
@@ -168,6 +198,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   NavigationEntryImpl::RestoreType restore_type_;
   bool is_view_source_;
   int bindings_;
+
+  scoped_ptr<NavigationHandleImpl> navigation_handle_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationRequest);
 };

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/file_manager/file_manager_browsertest_base.h"
 
+#include <stddef.h>
+
 #include <deque>
 
 #include "base/json/json_reader.h"
@@ -13,17 +15,17 @@
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/drive/file_system_interface.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
-#include "chrome/browser/chromeos/file_manager/drive_test_util.h"
+#include "chrome/browser/chromeos/file_manager/mount_test_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
-#include "chrome/browser/drive/fake_drive_service.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/drive/file_system_interface.h"
+#include "components/drive/service/fake_drive_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/test/test_api.h"
@@ -51,6 +53,20 @@ enum SharedOption {
   NONE,
   SHARED,
 };
+
+// Obtains file manager test data directory.
+base::FilePath GetTestFilePath(const std::string& relative_path) {
+  base::FilePath path;
+  if (!PathService::Get(base::DIR_SOURCE_ROOT, &path))
+    return base::FilePath();
+  path = path.AppendASCII("chrome")
+             .AppendASCII("test")
+             .AppendASCII("data")
+             .AppendASCII("chromeos")
+             .AppendASCII("file_manager")
+             .Append(base::FilePath::FromUTF8Unsafe(relative_path));
+  return path;
+}
 
 // Maps the given string to EntryType. Returns true on success.
 bool MapStringToEntryType(const base::StringPiece& value, EntryType* output) {
@@ -218,7 +234,7 @@ class FileManagerTestListener : public content::NotificationObserver {
             ? content::Source<extensions::TestSendMessageFunction>(source).ptr()
             : NULL;
     messages_.push_back(entry);
-    base::MessageLoopForUI::current()->Quit();
+    base::MessageLoopForUI::current()->QuitWhenIdle();
   }
 
  private:
@@ -248,8 +264,7 @@ class LocalTestVolume : public TestVolume {
     switch (entry.type) {
       case FILE: {
         const base::FilePath source_path =
-            google_apis::test_util::GetTestFilePath("chromeos/file_manager")
-                .AppendASCII(entry.source_file_name);
+            GetTestFilePath(entry.source_file_name);
         ASSERT_TRUE(base::CopyFile(source_path, target_path))
             << "Copy from " << source_path.value() << " to "
             << target_path.value() << " failed.";
@@ -417,9 +432,7 @@ class DriveTestVolume : public TestVolume {
 
     std::string content_data;
     if (!source_file_name.empty()) {
-      base::FilePath source_file_path =
-          google_apis::test_util::GetTestFilePath("chromeos/file_manager")
-              .AppendASCII(source_file_name);
+      base::FilePath source_file_path = GetTestFilePath(source_file_name);
       ASSERT_TRUE(base::ReadFileToString(source_file_path, &content_data));
     }
 
@@ -495,21 +508,24 @@ void FileManagerBrowserTestBase::SetUpInProcessBrowserTestFixture() {
   }
 }
 
+void FileManagerBrowserTestBase::SetUp() {
+  net::NetworkChangeNotifier::SetTestNotificationsOnly(true);
+  ExtensionApiTest::SetUp();
+}
+
 void FileManagerBrowserTestBase::SetUpOnMainThread() {
   ExtensionApiTest::SetUpOnMainThread();
   ASSERT_TRUE(local_volume_->Mount(profile()));
 
   if (GetGuestModeParam() != IN_GUEST_MODE) {
     // Install the web server to serve the mocked share dialog.
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+    ASSERT_TRUE(embedded_test_server()->Start());
     const GURL share_url_base(embedded_test_server()->GetURL(
         "/chromeos/file_manager/share_dialog_mock/index.html"));
     drive_volume_ = drive_volumes_[profile()->GetOriginalProfile()];
     drive_volume_->ConfigureShareUrlBase(share_url_base);
     test_util::WaitUntilDriveMountPointIsAdded(profile());
   }
-
-  net::NetworkChangeNotifier::SetTestNotificationsOnly(true);
 }
 
 void FileManagerBrowserTestBase::SetUpCommandLine(
@@ -560,8 +576,8 @@ void FileManagerBrowserTestBase::RunTestMessageLoop() {
     }
 
     // Parse the message value as JSON.
-    const scoped_ptr<const base::Value> value(
-        base::JSONReader::DeprecatedRead(entry.message));
+    const scoped_ptr<const base::Value> value =
+        base::JSONReader::Read(entry.message);
 
     // If the message is not the expected format, just ignore it.
     const base::DictionaryValue* message_dictionary = NULL;
@@ -671,7 +687,9 @@ void FileManagerBrowserTestBase::OnMessage(const std::string& name,
   }
 
   if (name == "useCellularNetwork") {
-    net::NetworkChangeNotifier::NotifyObserversOfConnectionTypeChangeForTests(
+    net::NetworkChangeNotifier::NotifyObserversOfMaxBandwidthChangeForTests(
+        net::NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+            net::NetworkChangeNotifier::SUBTYPE_HSPA),
         net::NetworkChangeNotifier::CONNECTION_3G);
     return;
   }

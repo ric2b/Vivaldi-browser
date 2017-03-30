@@ -5,13 +5,14 @@
 #include "chrome/browser/ui/views/toolbar/back_button.h"
 
 #include "ui/gfx/geometry/insets.h"
+#include "ui/views/animation/ink_drop_animation_controller.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/painter.h"
 
-BackButton::BackButton(views::ButtonListener* listener,
+BackButton::BackButton(Profile* profile,
+                       views::ButtonListener* listener,
                        ui::MenuModel* model)
-    : ToolbarButton(listener, model),
-      margin_leading_(0) {}
+    : ToolbarButton(profile, listener, model), margin_leading_(0) {}
 
 BackButton::~BackButton() {}
 
@@ -20,15 +21,20 @@ void BackButton::SetLeadingMargin(int margin) {
 
   UpdateThemedBorder();
 
-  // Similarly fiddle the focus border. Value consistent with LabelButton.
-  // TODO(gbillock): Refactor this magic number somewhere global to views,
-  // probably a FocusBorder constant.
-  const int kFocusRectInset = 3;
-  SetFocusPainter(views::Painter::CreateDashedFocusPainterWithInsets(
-                      gfx::Insets(kFocusRectInset, kFocusRectInset + margin,
-                                  kFocusRectInset, kFocusRectInset)));
-
+  const int inset = LabelButton::kFocusRectInset;
+  const bool is_rtl = base::i18n::IsRTL();
+  const gfx::Insets insets(inset, inset + (is_rtl ? 0 : margin),
+                           inset, inset + (is_rtl ? margin : 0));
+  SetFocusPainter(views::Painter::CreateDashedFocusPainterWithInsets(insets));
   InvalidateLayout();
+}
+
+gfx::Point BackButton::CalculateInkDropCenter() const {
+  int visible_width = GetPreferredSize().width();
+  return gfx::Point(
+      GetMirroredXWithWidthInView(margin_leading_, visible_width) +
+          visible_width / 2,
+      height() / 2);
 }
 
 const char* BackButton::GetClassName() const {
@@ -41,17 +47,18 @@ scoped_ptr<views::LabelButtonBorder> BackButton::CreateDefaultBorder() const {
 
   // Adjust border insets to follow the margin change,
   // which will be reflected in where the border is painted
-  // through |GetThemePaintRect|.
+  // through GetThemePaintRect().
   const gfx::Insets insets(border->GetInsets());
   border->set_insets(gfx::Insets(insets.top(), insets.left() + margin_leading_,
                                  insets.bottom(), insets.right()));
 
-  return border.Pass();
+  return border;
 }
 
-gfx::Rect BackButton::GetThemePaintRect() const  {
+gfx::Rect BackButton::GetThemePaintRect() const {
   gfx::Rect rect(LabelButton::GetThemePaintRect());
-  rect.Inset(margin_leading_, 0, 0, 0);
+  const bool is_rtl = base::i18n::IsRTL();
+  rect.Inset(is_rtl ? 0 : margin_leading_, 0, is_rtl ? margin_leading_ : 0, 0);
   return rect;
 }
 

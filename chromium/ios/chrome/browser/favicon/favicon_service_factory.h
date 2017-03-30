@@ -9,8 +9,11 @@
 #include "base/memory/scoped_ptr.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
+namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
+}  // namespace base
+
 enum class ServiceAccessType;
 
 namespace favicon {
@@ -31,7 +34,7 @@ class FaviconServiceFactory : public BrowserStateKeyedServiceFactory {
   static FaviconServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<FaviconServiceFactory>;
+  friend struct base::DefaultSingletonTraits<FaviconServiceFactory>;
 
   FaviconServiceFactory();
   ~FaviconServiceFactory() override;
@@ -39,7 +42,6 @@ class FaviconServiceFactory : public BrowserStateKeyedServiceFactory {
   // BrowserStateKeyedServiceFactory implementation.
   scoped_ptr<KeyedService> BuildServiceInstanceFor(
       web::BrowserState* context) const override;
-  bool ServiceIsNULLWhileTesting() const override;
 
   DISALLOW_COPY_AND_ASSIGN(FaviconServiceFactory);
 };

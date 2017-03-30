@@ -18,10 +18,17 @@ component("test_runner") {
     "accessibility_controller.h",
     "app_banner_client.cc",
     "app_banner_client.h",
+    "blink_test_platform_support.h",
+    "blink_test_platform_support_android.cc",
+    "blink_test_platform_support_linux.cc",
+    "blink_test_platform_support_mac.mm",
+    "blink_test_platform_support_win.cc",
     "event_sender.cc",
     "event_sender.h",
     "gamepad_controller.cc",
     "gamepad_controller.h",
+    "gc_controller.cc",
+    "gc_controller.h",
     "mock_color_chooser.cc",
     "mock_color_chooser.h",
     "mock_constraints.cc",
@@ -56,6 +63,8 @@ component("test_runner") {
     "spell_check_client.h",
     "test_common.cc",
     "test_common.h",
+    "test_info_extractor.cc",
+    "test_info_extractor.h",
     "test_interfaces.cc",
     "test_interfaces.h",
     "test_plugin.cc",
@@ -90,13 +99,16 @@ component("test_runner") {
     "//base:base",
     "//base:i18n",
     "//cc",
+    "//cc/blink",
     "//gin",
     "//gpu",
+    "//net",
     "//skia",
     "//third_party/WebKit/public:blink",
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
     "//ui/gfx",
+    "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//url",
     "//v8",
@@ -179,5 +191,9 @@ if (is_mac || is_win) {
     if (is_mac) {
       libs = [ "AppKit.framework" ]
     }
+
+    deps = [
+      "//build/config/sanitizers:deps",
+    ]
   }
 }

@@ -41,7 +41,7 @@ class LayerTreePixelTest : public LayerTreeTest {
   ~LayerTreePixelTest() override;
 
   scoped_ptr<OutputSurface> CreateOutputSurface() override;
-  void WillActivateTreeOnThread(LayerTreeHostImpl* impl) override;
+  void WillCommitCompleteOnThread(LayerTreeHostImpl* impl) override;
 
   virtual scoped_ptr<CopyOutputRequest> CreateCopyOutputRequest();
 
@@ -61,8 +61,6 @@ class LayerTreePixelTest : public LayerTreeTest {
       SkColor color,
       int border_width,
       SkColor border_color);
-  scoped_refptr<TextureLayer> CreateTextureLayer(const gfx::Rect& rect,
-                                                 const SkBitmap& bitmap);
 
   void RunPixelTest(PixelTestType type,
                     scoped_refptr<Layer> content_root,
@@ -81,15 +79,7 @@ class LayerTreePixelTest : public LayerTreeTest {
       const gfx::Size& size,
       const TextureMailbox& texture_mailbox);
 
-  void CopyBitmapToTextureMailboxAsTexture(
-      const SkBitmap& bitmap,
-      TextureMailbox* texture_mailbox,
-      scoped_ptr<SingleReleaseCallback>* release_callback);
-
-  void ReleaseTextureMailbox(scoped_ptr<gpu::GLInProcessContext> context,
-                             uint32 texture,
-                             uint32 sync_point,
-                             bool lost_resource);
+  void Finish();
 
   void set_enlarge_texture_amount(const gfx::Vector2d& enlarge_texture_amount) {
     enlarge_texture_amount_ = enlarge_texture_amount;

@@ -11,10 +11,12 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "components/gcm_driver/gcm_account_mapper.h"
 #include "components/gcm_driver/gcm_app_handler.h"
 #include "components/gcm_driver/gcm_channel_status_syncer.h"
@@ -51,7 +53,7 @@ class GCMDriverDesktop::IOWorker : public GCMClient::Delegate {
                       const std::string& message_id,
                       GCMClient::Result result) override;
   void OnMessageReceived(const std::string& app_id,
-                         const GCMClient::IncomingMessage& message) override;
+                         const IncomingMessage& message) override;
   void OnMessagesDeleted(const std::string& app_id) override;
   void OnMessageSendError(
       const std::string& app_id,
@@ -79,8 +81,8 @@ class GCMDriverDesktop::IOWorker : public GCMClient::Delegate {
   void Unregister(const std::string& app_id);
   void Send(const std::string& app_id,
             const std::string& receiver_id,
-            const GCMClient::OutgoingMessage& message);
-  void GetGCMStatistics(bool clear_logs);
+            const OutgoingMessage& message);
+  void GetGCMStatistics(GCMDriver::ClearActivityLogs clear_logs);
   void SetGCMRecording(bool recording);
 
   void SetAccountTokens(
@@ -229,7 +231,7 @@ void GCMDriverDesktop::IOWorker::OnSendFinished(const std::string& app_id,
 
 void GCMDriverDesktop::IOWorker::OnMessageReceived(
     const std::string& app_id,
-    const GCMClient::IncomingMessage& message) {
+    const IncomingMessage& message) {
   DCHECK(io_thread_->RunsTasksOnCurrentThread());
 
   ui_thread_->PostTask(
@@ -284,7 +286,7 @@ void GCMDriverDesktop::IOWorker::OnActivityRecorded() {
   DCHECK(io_thread_->RunsTasksOnCurrentThread());
   // When an activity is recorded, get all the stats and refresh the UI of
   // gcm-internals page.
-  GetGCMStatistics(false);
+  GetGCMStatistics(GCMDriver::KEEP_LOGS);
 }
 
 void GCMDriverDesktop::IOWorker::OnConnected(
@@ -335,21 +337,21 @@ void GCMDriverDesktop::IOWorker::Unregister(const std::string& app_id) {
       make_linked_ptr<RegistrationInfo>(gcm_info.release()));
 }
 
-void GCMDriverDesktop::IOWorker::Send(
-    const std::string& app_id,
-    const std::string& receiver_id,
-    const GCMClient::OutgoingMessage& message) {
+void GCMDriverDesktop::IOWorker::Send(const std::string& app_id,
+                                      const std::string& receiver_id,
+                                      const OutgoingMessage& message) {
   DCHECK(io_thread_->RunsTasksOnCurrentThread());
 
   gcm_client_->Send(app_id, receiver_id, message);
 }
 
-void GCMDriverDesktop::IOWorker::GetGCMStatistics(bool clear_logs) {
+void GCMDriverDesktop::IOWorker::GetGCMStatistics(
+    ClearActivityLogs clear_logs) {
   DCHECK(io_thread_->RunsTasksOnCurrentThread());
   gcm::GCMClient::GCMStatistics stats;
 
   if (gcm_client_.get()) {
-    if (clear_logs)
+    if (clear_logs == GCMDriver::CLEAR_LOGS)
       gcm_client_->ClearActivityLogs();
     stats = gcm_client_->GetStatistics();
   }
@@ -478,7 +480,7 @@ void GCMDriverDesktop::IOWorker::WakeFromSuspendForHeartbeat(bool wake) {
   else
     timer.reset(new base::Timer(true, false));
 
-  gcm_client_->UpdateHeartbeatTimer(timer.Pass());
+  gcm_client_->UpdateHeartbeatTimer(std::move(timer));
 #endif
 }
 
@@ -505,7 +507,8 @@ GCMDriverDesktop::GCMDriverDesktop(
     const scoped_refptr<base::SequencedTaskRunner>& ui_thread,
     const scoped_refptr<base::SequencedTaskRunner>& io_thread,
     const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner)
-    : gcm_channel_status_syncer_(
+    : GCMDriver(store_path, blocking_task_runner),
+      gcm_channel_status_syncer_(
           new GCMChannelStatusSyncer(this,
                                      prefs,
                                      channel_status_request_url,
@@ -692,7 +695,7 @@ void GCMDriverDesktop::DoUnregister(const std::string& app_id) {
 
 void GCMDriverDesktop::SendImpl(const std::string& app_id,
                                 const std::string& receiver_id,
-                                const GCMClient::OutgoingMessage& message) {
+                                const OutgoingMessage& message) {
   // Delay the send operation until all GCMClient is ready.
   if (!delayed_task_controller_->CanRunTaskWithoutDelay()) {
     delayed_task_controller_->AddTask(base::Bind(&GCMDriverDesktop::DoSend,
@@ -708,7 +711,7 @@ void GCMDriverDesktop::SendImpl(const std::string& app_id,
 
 void GCMDriverDesktop::DoSend(const std::string& app_id,
                               const std::string& receiver_id,
-                              const GCMClient::OutgoingMessage& message) {
+                              const OutgoingMessage& message) {
   DCHECK(ui_thread_->RunsTasksOnCurrentThread());
   io_thread_->PostTask(
       FROM_HERE,
@@ -735,7 +738,7 @@ bool GCMDriverDesktop::IsConnected() const {
 
 void GCMDriverDesktop::GetGCMStatistics(
     const GetGCMStatisticsCallback& callback,
-    bool clear_logs) {
+    ClearActivityLogs clear_logs) {
   DCHECK(ui_thread_->RunsTasksOnCurrentThread());
   DCHECK(!callback.is_null());
 
@@ -1187,16 +1190,15 @@ void GCMDriverDesktop::RemoveCachedData() {
   ClearCallbacks();
 }
 
-void GCMDriverDesktop::MessageReceived(
-    const std::string& app_id,
-    const GCMClient::IncomingMessage& message) {
+void GCMDriverDesktop::MessageReceived(const std::string& app_id,
+                                       const IncomingMessage& message) {
   DCHECK(ui_thread_->RunsTasksOnCurrentThread());
 
   // Drop the event if the service has been stopped.
   if (!gcm_started_)
     return;
 
-  GetAppHandler(app_id)->OnMessage(app_id, message);
+  DispatchMessage(app_id, message);
 }
 
 void GCMDriverDesktop::MessagesDeleted(const std::string& app_id) {

@@ -5,7 +5,9 @@
 #include "chrome/browser/extensions/api/virtual_keyboard_private/chrome_virtual_keyboard_delegate.h"
 
 #include <string>
+#include <utility>
 
+#include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/user_metrics_action.h"
@@ -23,7 +25,7 @@
 #include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_util.h"
 
-namespace keyboard_api = extensions::core_api::virtual_keyboard_private;
+namespace keyboard_api = extensions::api::virtual_keyboard_private;
 
 namespace {
 
@@ -33,7 +35,7 @@ aura::Window* GetKeyboardContainer() {
   return controller ? controller->GetContainerWindow() : nullptr;
 }
 
-std::string GenerateFeatureFlag(std::string feature, bool enabled) {
+std::string GenerateFeatureFlag(const std::string& feature, bool enabled) {
   return feature + (enabled ? "-enabled" : "-disabled");
 }
 
@@ -49,6 +51,20 @@ keyboard::KeyboardMode getKeyboardModeEnum(keyboard_api::KeyboardMode mode) {
   return keyboard::NONE;
 }
 
+keyboard::KeyboardState getKeyboardStateEnum(
+    keyboard_api::KeyboardState state) {
+  switch (state) {
+    case keyboard_api::KEYBOARD_STATE_ENABLED:
+      return keyboard::KEYBOARD_STATE_ENABLED;
+    case keyboard_api::KEYBOARD_STATE_DISABLED:
+      return keyboard::KEYBOARD_STATE_DISABLED;
+    case keyboard_api::KEYBOARD_STATE_AUTO:
+    case keyboard_api::KEYBOARD_STATE_NONE:
+      return keyboard::KEYBOARD_STATE_AUTO;
+  }
+  return keyboard::KEYBOARD_STATE_AUTO;
+}
+
 }  // namespace
 
 namespace extensions {
@@ -57,7 +73,10 @@ bool ChromeVirtualKeyboardDelegate::GetKeyboardConfig(
     base::DictionaryValue* results) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   results->SetString("layout", keyboard::GetKeyboardLayout());
+  // TODO(bshe): Consolidate a11y, hotrod and normal mode into a mode enum. See
+  // crbug.com/529474.
   results->SetBoolean("a11ymode", keyboard::GetAccessibilityKeyboardEnabled());
+  results->SetBoolean("hotrodmode", keyboard::GetHotrodKeyboardEnabled());
   scoped_ptr<base::ListValue> features(new base::ListValue());
   features->AppendString(GenerateFeatureFlag(
       "floatingvirtualkeyboard", keyboard::IsFloatingVirtualKeyboardEnabled()));
@@ -65,13 +84,11 @@ bool ChromeVirtualKeyboardDelegate::GetKeyboardConfig(
       GenerateFeatureFlag("gesturetyping", keyboard::IsGestureTypingEnabled()));
   features->AppendString(GenerateFeatureFlag(
       "gestureediting", keyboard::IsGestureEditingEnabled()));
-  features->AppendString(GenerateFeatureFlag(
-      "materialdesign", keyboard::IsMaterialDesignEnabled()));
   features->AppendString(
       GenerateFeatureFlag("voiceinput", keyboard::IsVoiceInputEnabled()));
   features->AppendString(GenerateFeatureFlag("experimental",
       keyboard::IsExperimentalInputViewEnabled()));
-  results->Set("features", features.Pass());
+  results->Set("features", std::move(features));
   return true;
 }
 
@@ -102,6 +119,18 @@ bool ChromeVirtualKeyboardDelegate::OnKeyboardLoaded() {
   keyboard::MarkKeyboardLoadFinished();
   base::UserMetricsAction("VirtualKeyboardLoaded");
   return true;
+}
+
+void ChromeVirtualKeyboardDelegate::SetHotrodKeyboard(bool enable) {
+  if (keyboard::GetHotrodKeyboardEnabled() == enable)
+    return;
+
+  keyboard::SetHotrodKeyboardEnabled(enable);
+  // This reloads virtual keyboard even if it exists. This ensures virtual
+  // keyboard gets the correct state of the hotrod keyboard through
+  // chrome.virtualKeyboardPrivate.getKeyboardConfig.
+  if (keyboard::IsKeyboardEnabled())
+    ash::Shell::GetInstance()->CreateKeyboard();
 }
 
 bool ChromeVirtualKeyboardDelegate::LockKeyboard(bool state) {
@@ -147,6 +176,22 @@ bool ChromeVirtualKeyboardDelegate::SetVirtualKeyboardMode(int mode_enum) {
     return false;
 
   controller->SetKeyboardMode(keyboard_mode);
+  return true;
+}
+
+bool ChromeVirtualKeyboardDelegate::SetRequestedKeyboardState(int state_enum) {
+  keyboard::KeyboardState keyboard_state = getKeyboardStateEnum(
+      static_cast<keyboard_api::KeyboardState>(state_enum));
+  bool was_enabled = keyboard::IsKeyboardEnabled();
+  keyboard::SetRequestedKeyboardState(keyboard_state);
+  bool is_enabled = keyboard::IsKeyboardEnabled();
+  if (was_enabled == is_enabled)
+    return true;
+  if (is_enabled) {
+    ash::Shell::GetInstance()->CreateKeyboard();
+  } else {
+    ash::Shell::GetInstance()->DeactivateKeyboard();
+  }
   return true;
 }
 

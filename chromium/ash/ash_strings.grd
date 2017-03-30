@@ -12,65 +12,33 @@ This file contains the strings for ash.
     </output>
     <output filename="ash_strings_am.pak" type="data_package" lang="am" />
     <output filename="ash_strings_ar.pak" type="data_package" lang="ar" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_ast.pak" type="data_package" lang="ast" />
-    </if>
     <output filename="ash_strings_bg.pak" type="data_package" lang="bg" />
     <output filename="ash_strings_bn.pak" type="data_package" lang="bn" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_bs.pak" type="data_package" lang="bs" />
-    </if>
     <output filename="ash_strings_ca.pak" type="data_package" lang="ca" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_ca@valencia.pak" type="data_package" lang="ca@valencia" />
-    </if>
     <output filename="ash_strings_cs.pak" type="data_package" lang="cs" />
     <output filename="ash_strings_da.pak" type="data_package" lang="da" />
     <output filename="ash_strings_de.pak" type="data_package" lang="de" />
     <output filename="ash_strings_el.pak" type="data_package" lang="el" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_en-AU.pak" type="data_package" lang="en-AU" />
-    </if>
     <output filename="ash_strings_en-GB.pak" type="data_package" lang="en-GB" />
     <output filename="ash_strings_en-US.pak" type="data_package" lang="en" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_eo.pak" type="data_package" lang="eo" />
-    </if>
     <output filename="ash_strings_es.pak" type="data_package" lang="es" />
     <output filename="ash_strings_es-419.pak" type="data_package" lang="es-419" />
     <output filename="ash_strings_et.pak" type="data_package" lang="et" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_eu.pak" type="data_package" lang="eu" />
-    </if>
     <output filename="ash_strings_fa.pak" type="data_package" lang="fa" />
     <output filename="ash_strings_fake-bidi.pak" type="data_package" lang="fake-bidi" />
     <output filename="ash_strings_fi.pak" type="data_package" lang="fi" />
     <output filename="ash_strings_fil.pak" type="data_package" lang="fil" />
     <output filename="ash_strings_fr.pak" type="data_package" lang="fr" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_gl.pak" type="data_package" lang="gl" />
-    </if>
     <output filename="ash_strings_gu.pak" type="data_package" lang="gu" />
     <output filename="ash_strings_he.pak" type="data_package" lang="he" />
     <output filename="ash_strings_hi.pak" type="data_package" lang="hi" />
     <output filename="ash_strings_hr.pak" type="data_package" lang="hr" />
     <output filename="ash_strings_hu.pak" type="data_package" lang="hu" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_hy.pak" type="data_package" lang="hy" />
-      <output filename="ash_strings_ia.pak" type="data_package" lang="ia" />
-    </if>
     <output filename="ash_strings_id.pak" type="data_package" lang="id" />
     <output filename="ash_strings_it.pak" type="data_package" lang="it" />
     <output filename="ash_strings_ja.pak" type="data_package" lang="ja" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_ka.pak" type="data_package" lang="ka" />
-    </if>
     <output filename="ash_strings_kn.pak" type="data_package" lang="kn" />
     <output filename="ash_strings_ko.pak" type="data_package" lang="ko" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_ku.pak" type="data_package" lang="ku" />
-      <output filename="ash_strings_kw.pak" type="data_package" lang="kw" />
-    </if>
     <output filename="ash_strings_lt.pak" type="data_package" lang="lt" />
     <output filename="ash_strings_lv.pak" type="data_package" lang="lv" />
     <output filename="ash_strings_ml.pak" type="data_package" lang="ml" />
@@ -94,9 +62,6 @@ This file contains the strings for ash.
     <output filename="ash_strings_te.pak" type="data_package" lang="te" />
     <output filename="ash_strings_th.pak" type="data_package" lang="th" />
     <output filename="ash_strings_tr.pak" type="data_package" lang="tr" />
-    <if expr="use_third_party_translations">
-      <output filename="ash_strings_ug.pak" type="data_package" lang="ug" />
-    </if>
     <output filename="ash_strings_uk.pak" type="data_package" lang="uk" />
     <output filename="ash_strings_vi.pak" type="data_package" lang="vi" />
     <output filename="ash_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
@@ -261,10 +226,10 @@ Press Ctrl+Alt+Z to disable.
         Cast screen
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_DESKTOP" desc="The label used in the tray popup to tell the user we are casting the desktop.">
-        Casting screen to $1
+        Casting screen to <ph name="RECEIVER_NAME">$1<ex>Living Room</ex></ph>
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_TAB" desc="The title label used in the tray popup to tell the user we are casting a tab.">
-        Casting $1 to $2
+        Casting <ph name="TAB_NAME">$1<ex>YouTube</ex></ph> to <ph name="RECEIVER_NAME">$2<ex>Living Room</ex></ph>
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_UNKNOWN" desc="The label used when we have detected we are casting but do not know what we are casting or who we are casting to.">
         Casting to an unknown receiver
@@ -398,8 +363,11 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_NOTIFICATION_UNREAD_COUNT_NINE_PLUS" desc="The text shown in the notification icon for the unread count when the count is more than 9.">
         9+
       </message>
-      <message name="IDS_ASH_INTERNAL_DISPLAY_NAME" desc="The name of the internal display which is shown in the display settings.">
+      <message name="IDS_ASH_INTERNAL_DISPLAY_NAME" desc="The name used for internal displays, which is shown in the display settings.">
         Internal Display
+      </message>
+      <message name="IDS_ASH_VIRTUAL_DISPLAY_NAME" desc="The name used for virtual displays, which is shown in the display settings. Virtual displays are not associated with a physical monitor.">
+        Virtual Display
       </message>
       <message name="IDS_ASH_EXIT_WARNING_POPUP_TEXT" desc="The text of the popup when the user preses the exit shortcut.">
         Press Ctrl+Shift+Q twice to quit.
@@ -425,18 +393,6 @@ Press Ctrl+Alt+Z to disable.
       </message>
       <message name="IDS_ASH_MOD3_KEY" desc="Name of ISOLevel5 (mod3) key name. Shouldn't be translated in many languages actually. This name should be lower case.">
         mod3
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_ACCOUNTS_TITLE" desc="The footer label of the menu which is used to manage the profile accounts.">
-        Manage accounts
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_ACCOUNT_LIST_TITLE" desc="The title label for the menu which holds the accounts list.">
-        Accounts
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_PRIMARY_ACCOUNT_LABEL" desc="The primary user account label in the accounts menu.">
-        <ph name="PRIMARY_ACCOUNT">$1<ex>test@gmail.com</ex></ph> (primary)
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_ADD_ACCOUNT_LABEL" desc="The label of the button which launches the dialog to add a new account.">
-        Add an account for <ph name="GIVEN_NAME">$1<ex>Jenn</ex></ph>
       </message>
 
       <!-- Overview Mode -->

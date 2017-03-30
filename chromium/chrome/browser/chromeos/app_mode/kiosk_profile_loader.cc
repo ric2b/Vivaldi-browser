@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_profile_loader.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
@@ -21,6 +22,7 @@
 #include "chromeos/login/auth/auth_status_consumer.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/login/user_names.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
@@ -157,8 +159,8 @@ void KioskProfileLoader::OnAuthSuccess(const UserContext& user_context) {
   // we switch this back to the demo user name to correctly identify this
   // user as a demo user.
   UserContext context = user_context;
-  if (context.GetUserID() == chromeos::login::kGuestUserName)
-    context.SetUserID(DemoAppLauncher::kDemoUserName);
+  if (context.GetAccountId() == login::GuestAccountId())
+    context.SetUserID(login::DemoAccountId().GetUserEmail());
   UserSessionManager::GetInstance()->StartSession(
       context, UserSessionManager::PRIMARY_USER_SESSION,
       false,  // has_auth_cookies
@@ -176,11 +178,6 @@ void KioskProfileLoader::WhiteListCheckFailed(const std::string& email) {
 
 void KioskProfileLoader::PolicyLoadFailed() {
   ReportLaunchResult(KioskAppLaunchError::POLICY_LOAD_FAILED);
-}
-
-void KioskProfileLoader::OnOnlineChecked(
-    const std::string& email, bool success) {
-  NOTREACHED();
 }
 
 void KioskProfileLoader::OnProfilePrepared(Profile* profile,

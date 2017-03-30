@@ -29,6 +29,8 @@ template_h = string.Template(header + """\
 #ifndef CONTENT_BROWSER_DEVTOOLS_PROTOCOL_DEVTOOLS_PROTOCOL_DISPATCHER_H_
 #define CONTENT_BROWSER_DEVTOOLS_PROTOCOL_DEVTOOLS_PROTOCOL_DISPATCHER_H_
 
+#include <utility>
+
 #include "content/browser/devtools/protocol/devtools_protocol_client.h"
 
 namespace content {
@@ -74,11 +76,11 @@ ${types}\
 
 class DevToolsProtocolDispatcher {
  public:
-  using Notifier = DevToolsProtocolClient::RawMessageCallback;
   using CommandHandler =
-      base::Callback<bool(int, scoped_ptr<base::DictionaryValue>)>;
+      base::Callback<bool(DevToolsCommandId,
+                          scoped_ptr<base::DictionaryValue>)>;
 
-  explicit DevToolsProtocolDispatcher(const Notifier& notifier);
+  explicit DevToolsProtocolDispatcher(DevToolsProtocolDelegate* notifier);
   ~DevToolsProtocolDispatcher();
 
   CommandHandler FindCommandHandler(const std::string& method);
@@ -91,7 +93,7 @@ ${setters}\
 
 ${methods}\
 
-  Notifier notifier_;
+  DevToolsProtocolDelegate* notifier_;
   DevToolsProtocolClient client_;
   CommandHandlers command_handlers_;
 ${fields}\
@@ -132,6 +134,8 @@ ${methods}\
 
  private:
   friend struct ${declared_name}Builder<0>;
+  friend class base::RefCounted<${declared_name}Builder<MASK>>;
+  ~${declared_name}Builder() {}
 
   ${declared_name}Builder() : dict_(new base::DictionaryValue()) {
   }
@@ -206,7 +210,7 @@ tmpl_client = string.Template("""\
 namespace ${domain} {
 class Client : public DevToolsProtocolClient {
  public:
-  explicit Client(const RawMessageCallback& raw_message_callback);
+  explicit Client(DevToolsProtocolDelegate* notifier);
   ~Client() override;
 
 ${methods}\
@@ -250,7 +254,7 @@ ${includes}\
 namespace content {
 
 DevToolsProtocolDispatcher::DevToolsProtocolDispatcher(
-    const Notifier& notifier)
+    DevToolsProtocolDelegate* notifier)
     : notifier_(notifier),
       client_(notifier),
       ${fields_init} {
@@ -332,7 +336,7 @@ ${prep}\
     return false;
   scoped_ptr<base::DictionaryValue> result(new base::DictionaryValue());
 ${wrap}\
-  client_.SendSuccess(command_id, result.Pass());
+  client_.SendSuccess(command_id, std::move(result));
   return true;
 }
 """)
@@ -403,8 +407,8 @@ tmpl_object_pass = string.Template(
 tmpl_client_impl = string.Template("""\
 namespace ${domain} {
 
-Client::Client(const RawMessageCallback& raw_message_callback)
-    : DevToolsProtocolClient(raw_message_callback) {
+Client::Client(DevToolsProtocolDelegate* notifier)
+    : DevToolsProtocolClient(notifier) {
 }
 
 Client::~Client() {
@@ -419,7 +423,7 @@ tmpl_event_impl = string.Template("""\
 void Client::${Command}(
     scoped_refptr<${Command}Params> params) {
   SendNotification("${Domain}.${command}",
-                   params->ToValue().Pass());
+                   params->ToValue());
 }
 """)
 
@@ -427,7 +431,7 @@ tmpl_response_impl = string.Template("""\
 void Client::Send${Command}Response(
     DevToolsCommandId command_id,
     scoped_refptr<${Command}Response> params) {
-  SendSuccess(command_id, params->ToValue().Pass());
+  SendSuccess(command_id, params->ToValue());
 }
 """)
 

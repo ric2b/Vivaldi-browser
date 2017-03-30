@@ -7,6 +7,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -108,7 +109,7 @@ class MediaGalleriesGalleryWatchApiTest : public ExtensionApiTest {
   void ExecuteCmdAndCheckReply(const std::string& js_command,
                                const std::string& ok_message) {
     ExtensionTestMessageListener listener(ok_message, false);
-    background_host_->GetMainFrame()->ExecuteJavaScript(
+    background_host_->GetMainFrame()->ExecuteJavaScriptForTests(
         base::ASCIIToUTF16(js_command));
     EXPECT_TRUE(listener.WaitUntilSatisfied());
   }

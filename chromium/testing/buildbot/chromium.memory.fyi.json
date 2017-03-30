@@ -126,9 +126,9 @@
         "test": "gcm_unit_tests"
       },
       {
-        "test": "gl_unittests"
-      },
-      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "google_apis_unittests"
       },
       {
@@ -163,6 +163,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "media_unittests"
       },
       {
@@ -172,18 +178,33 @@
         "test": "midi_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_common_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_bindings_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_environment_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_utility_unittests"
       },
       {
@@ -402,9 +423,9 @@
         "test": "gfx_unittests"
       },
       {
-        "test": "gl_unittests"
-      },
-      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "google_apis_unittests"
       },
       {
@@ -438,6 +459,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "media_unittests"
       },
       {
@@ -447,18 +474,33 @@
         "test": "midi_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_common_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_bindings_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_environment_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_utility_unittests"
       },
       {
@@ -664,9 +706,9 @@
         "test": "gfx_unittests"
       },
       {
-        "test": "gl_unittests"
-      },
-      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "google_apis_unittests"
       },
       {
@@ -694,6 +736,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "media_unittests"
       },
       {
@@ -703,6 +751,9 @@
         "test": "midi_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_common_unittests"
       },
       {
@@ -784,6 +835,101 @@
           "can_use_on_swarming_builders": true
         },
         "test": "wm_unittests"
+      }
+    ]
+  },
+  "Linux Tests (valgrind)(1)": {
+    "gtest_tests": [
+      {
+        "test": "crypto_unittests"
+      },
+      {
+        "test": "display_unittests"
+      },
+      {
+        "test": "ipc_tests"
+      },
+      {
+        "test": "jingle_unittests"
+      },
+      {
+        "test": "net_unittests"
+      },
+      {
+        "test": "ppapi_unittests"
+      },
+      {
+        "test": "printing_unittests"
+      },
+      {
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "test": "sql_unittests"
+      },
+      {
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "url_unittests"
+      }
+    ]
+  },
+  "Linux Tests (valgrind)(2)": {
+    "gtest_tests": [
+      {
+        "test": "extensions_unittests"
+      }
+    ]
+  },
+  "Linux Tests (valgrind)(3)": {
+    "gtest_tests": [
+      {
+        "test": "media_unittests"
+      },
+      {
+        "test": "midi_unittests"
+      },
+      {
+        "test": "remoting_unittests"
+      },
+      {
+        "shard_index": 0,
+        "test": "unit_tests",
+        "total_shards": 3
+      }
+    ]
+  },
+  "Linux Tests (valgrind)(4)": {
+    "gtest_tests": [
+      {
+        "test": "components_unittests"
+      },
+      {
+        "test": "content_unittests"
+      },
+      {
+        "shard_index": 1,
+        "test": "unit_tests",
+        "total_shards": 3
+      }
+    ]
+  },
+  "Linux Tests (valgrind)(5)": {
+    "gtest_tests": [
+      {
+        "test": "base_unittests"
+      },
+      {
+        "test": "gpu_unittests"
+      },
+      {
+        "shard_index": 2,
+        "test": "unit_tests",
+        "total_shards": 3
       }
     ]
   }

@@ -6,11 +6,11 @@ package org.chromium.chrome.browser.historyreport;
 
 import android.text.TextUtils;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 
 import java.io.PrintWriter;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @JNINamespace("history_report")
 public class HistoryReportJniBridge implements SearchJniBridge {
-    private static final String TAG = "cr.historyreport";
+    private static final String TAG = "historyreport";
 
     private long mNativeHistoryReportJniBridge;
     private DataChangeObserver mDataChangeObserver;

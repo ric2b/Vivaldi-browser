@@ -6,8 +6,8 @@ package org.chromium.chrome.browser.enhancedbookmarks;
 
 import android.support.v4.widget.DrawerLayout;
 
-import org.chromium.chrome.browser.enhanced_bookmarks.EnhancedBookmarksModel;
-import org.chromium.chrome.browser.enhanced_bookmarks.LaunchLocation;
+import org.chromium.chrome.browser.favicon.LargeIconBridge;
+import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.components.bookmarks.BookmarkId;
 
 import java.util.List;
@@ -40,6 +40,13 @@ interface EnhancedBookmarkDelegate {
      * @param folder Parent folder that contains bookmarks to show as its children.
      */
     void openFolder(BookmarkId folder);
+
+    /**
+     * Corresponds to any filter named list item in the side drawer. Shows bookmarks that match
+     * that filter.
+     * @param filter A filter that will narrow down a list of bookmarks to show.
+     */
+    void openFilter(EnhancedBookmarkFilter filter);
 
     /**
      * Clear all selected items. After this call, {@link #isSelectionEnabled()} will return false.
@@ -98,9 +105,14 @@ interface EnhancedBookmarkDelegate {
     void openBookmark(BookmarkId bookmark, int launchLocation);
 
     /**
-     * Closes the EnhancedBookmark Activity on Phone. Does nothing on tablet.
+     * Shows the search UI.
      */
-    void finishActivityOnPhone();
+    void openSearchUI();
+
+    /**
+     * Dismisses the search UI.
+     */
+    void closeSearchUI();
 
     /**
      * Add an observer to enhanced bookmark UI changes.
@@ -119,7 +131,17 @@ interface EnhancedBookmarkDelegate {
 
     /**
      * @return Current UIState of Enhanced Bookmark main UI. If no mode is stored,
-     *         {@link UIState#STATE_LOADING} is returned.
+     *         {@link EnhancedBookmarkUIState#STATE_LOADING} is returned.
      */
     int getCurrentState();
+
+    /**
+     * @return LargeIconBridge instance. By sharing the instance, we can also share the cache.
+     */
+    LargeIconBridge getLargeIconBridge();
+
+    /**
+     * @return SnackbarManager instance.
+     */
+    SnackbarManager getSnackbarManager();
 }

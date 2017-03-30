@@ -7,6 +7,7 @@
 #include "base/files/file_tracing.h"
 #include "base/metrics/histogram.h"
 #include "base/timer/elapsed_timer.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -26,10 +27,8 @@ File::File()
 }
 
 #if !defined(OS_NACL)
-File::File(const FilePath& path, uint32 flags)
-    : error_details_(FILE_OK),
-      created_(false),
-      async_(false) {
+File::File(const FilePath& path, uint32_t flags)
+    : error_details_(FILE_OK), created_(false), async_(false) {
   Initialize(path, flags);
 }
 #endif
@@ -50,13 +49,12 @@ File::File(Error error_details)
       async_(false) {
 }
 
-File::File(RValue other)
-    : file_(other.object->TakePlatformFile()),
-      tracing_path_(other.object->tracing_path_),
-      error_details_(other.object->error_details()),
-      created_(other.object->created()),
-      async_(other.object->async_) {
-}
+File::File(File&& other)
+    : file_(other.TakePlatformFile()),
+      tracing_path_(other.tracing_path_),
+      error_details_(other.error_details()),
+      created_(other.created()),
+      async_(other.async_) {}
 
 File::~File() {
   // Go through the AssertIOAllowed logic.
@@ -69,23 +67,22 @@ File File::CreateForAsyncHandle(PlatformFile platform_file) {
   // It would be nice if we could validate that |platform_file| was opened with
   // FILE_FLAG_OVERLAPPED on Windows but this doesn't appear to be possible.
   file.async_ = true;
-  return file.Pass();
+  return file;
 }
 
-File& File::operator=(RValue other) {
-  if (this != other.object) {
-    Close();
-    SetPlatformFile(other.object->TakePlatformFile());
-    tracing_path_ = other.object->tracing_path_;
-    error_details_ = other.object->error_details();
-    created_ = other.object->created();
-    async_ = other.object->async_;
-  }
+File& File::operator=(File&& other) {
+  DCHECK_NE(this, &other);
+  Close();
+  SetPlatformFile(other.TakePlatformFile());
+  tracing_path_ = other.tracing_path_;
+  error_details_ = other.error_details();
+  created_ = other.created();
+  async_ = other.async_;
   return *this;
 }
 
 #if !defined(OS_NACL)
-void File::Initialize(const FilePath& path, uint32 flags) {
+void File::Initialize(const FilePath& path, uint32_t flags) {
   if (path.ReferencesParent()) {
     error_details_ = FILE_ERROR_ACCESS_DENIED;
     return;

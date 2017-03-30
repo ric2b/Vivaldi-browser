@@ -9,7 +9,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/bindings_policy.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/core.h"
+#include "mojo/public/cpp/system/core.h"
 
 MojoWebUIControllerBase::MojoWebUIControllerBase(content::WebUI* contents)
     : WebUIController(contents), mojo_data_source_(NULL) {
@@ -21,13 +21,4 @@ MojoWebUIControllerBase::~MojoWebUIControllerBase() {
 void MojoWebUIControllerBase::RenderViewCreated(
     content::RenderViewHost* render_view_host) {
   render_view_host->AllowBindings(content::BINDINGS_POLICY_WEB_UI);
-}
-
-void MojoWebUIControllerBase::AddMojoResourcePath(const std::string& path,
-                                                  int resource_id) {
-  if (!mojo_data_source_) {
-    mojo_data_source_ = content::WebUIDataSource::AddMojoDataSource(
-        Profile::FromWebUI(web_ui()));
-  }
-  mojo_data_source_->AddResourcePath(path, resource_id);
 }

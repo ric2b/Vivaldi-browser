@@ -30,16 +30,19 @@ class ToughTextureUploadCasesPageSet(story.StorySet):
 
     urls_list = [
       'file://tough_texture_upload_cases/background_color_animation.html',
-      # pylint: disable=C0301
+      # pylint: disable=line-too-long
       'file://tough_texture_upload_cases/background_color_animation_and_transform_animation.html',
-      # pylint: disable=C0301
+      # pylint: disable=line-too-long
       'file://tough_texture_upload_cases/background_color_animation_with_gradient.html',
-      # pylint: disable=C0301
+      # pylint: disable=line-too-long
       'file://tough_texture_upload_cases/background_color_animation_with_gradient_and_transform_animation.html',
       'file://tough_texture_upload_cases/small_texture_uploads.html',
       'file://tough_texture_upload_cases/medium_texture_uploads.html',
       'file://tough_texture_upload_cases/large_texture_uploads.html',
-      'file://tough_texture_upload_cases/extra_large_texture_uploads.html',
+      # http://crbug.com/453131 - Our memory usage on low memory devices are
+      # not constrained enough to run this page, disable until we are more
+      # bounded on memory usage.
+      # 'file://tough_texture_upload_cases/extra_large_texture_uploads.html',
     ]
     for url in urls_list:
       self.AddStory(ToughTextureUploadCasesPage(url, self))

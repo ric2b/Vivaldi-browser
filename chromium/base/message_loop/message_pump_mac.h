@@ -22,7 +22,7 @@
 //
 // Typically, MessagePumpNSApplication only makes sense on a Cocoa
 // application's main thread.  If a CFRunLoop-based message pump is needed on
-// any other thread, one of the other concrete subclasses is preferrable.
+// any other thread, one of the other concrete subclasses is preferable.
 // MessagePumpMac::Create is defined, which returns a new NSApplication-based
 // or NSRunLoop-based MessagePump subclass depending on which thread it is
 // called on.
@@ -32,12 +32,13 @@
 
 #include "base/message_loop/message_pump.h"
 
-#include "base/basictypes.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/timer_slack.h"
+#include "build/build_config.h"
 
 #if defined(__OBJC__)
 #if defined(OS_IOS)

@@ -10,13 +10,22 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "cc/animation/layer_animation_event_observer.h"
 #include "ui/compositor/compositor_export.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/gfx/animation/tween.h"
+
+namespace cc {
+class Animation;
+class AnimationPlayer;
+class AnimationTimeline;
+class Layer;
+}
 
 namespace gfx {
 class Animation;
@@ -25,6 +34,7 @@ class Transform;
 }
 
 namespace ui {
+class Compositor;
 class Layer;
 class LayerAnimationSequence;
 class LayerAnimationDelegate;
@@ -41,7 +51,9 @@ class ScopedLayerAnimationSettings;
 // ensure that it is not disposed of until it finishes executing. It does this
 // by holding a reference to itself for the duration of methods for which it
 // must guarantee that |this| is valid.
-class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator> {
+class COMPOSITOR_EXPORT LayerAnimator
+    : public base::RefCounted<LayerAnimator>,
+      NON_EXPORTED_BASE(public cc::LayerAnimationEventObserver) {
  public:
   enum PreemptionStrategy {
     IMMEDIATELY_SET_NEW_TARGET,
@@ -96,6 +108,21 @@ class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator> {
   // delegate for most of its operations, so do not call any methods without
   // a valid delegate installed.
   void SetDelegate(LayerAnimationDelegate* delegate);
+
+  // Unsubscribe from |cc_layer_| and subscribe to |new_layer|.
+  void SwitchToLayer(scoped_refptr<cc::Layer> new_layer);
+
+  // Attach AnimationPlayer to Layer and AnimationTimeline
+  void SetCompositor(Compositor* compositor);
+  // Detach AnimationPlayer from Layer and AnimationTimeline
+  void ResetCompositor(Compositor* compositor);
+
+  // TODO(loyso): Rework it as an implementation for
+  // LayerThreadedAnimationDelegate and make it private.
+  void AddThreadedAnimation(scoped_ptr<cc::Animation> animation);
+  void RemoveThreadedAnimation(int animation_id);
+
+  cc::AnimationPlayer* GetAnimationPlayerForTesting() const;
 
   // Sets the animation preemption strategy. This determines the behaviour if
   // a property is set during an animation. The default is
@@ -193,7 +220,7 @@ class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator> {
   void RemoveFromCollection(LayerAnimatorCollection* collection);
 
  protected:
-  virtual ~LayerAnimator();
+  ~LayerAnimator() override;
 
   LayerAnimationDelegate* delegate() { return delegate_; }
   const LayerAnimationDelegate* delegate() const { return delegate_; }
@@ -311,11 +338,20 @@ class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator> {
 
   LayerAnimatorCollection* GetLayerAnimatorCollection();
 
+  // LayerAnimationEventObserver
+  void OnAnimationStarted(const cc::AnimationEvent& event) override;
+
+  void AttachLayerToAnimationPlayer(int layer_id);
+  void DetachLayerFromAnimationPlayer();
+
   // This is the queue of animations to run.
   AnimationQueue animation_queue_;
 
   // The target of all layer animations.
   LayerAnimationDelegate* delegate_;
+
+  // Plays CC animations.
+  scoped_refptr<cc::AnimationPlayer> animation_player_;
 
   // The currently running animations.
   RunningAnimations running_animations_;

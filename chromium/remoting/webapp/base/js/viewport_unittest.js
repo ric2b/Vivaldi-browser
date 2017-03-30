@@ -326,4 +326,40 @@ QUnit.test('choosePluginSize() full-screen multi-monitor optimization',
     assert.deepEqual(pluginSize, size(640 / 2.0, (2 * 480) / 2.0));
 });
 
+QUnit.test('choosePluginSize() handling of desktopScale',
+  function(assert) {
+    // 1. Verify that a high-DPI client correctly up-scales the host to account
+    //    for desktopScale.
+    var pluginSize = remoting.Viewport.choosePluginSize(
+        size(640, 480), 2.0, size(1.5 * 640, 1.5 * 480), dpi(96, 96), 1.5,
+        true, true);
+    assert.deepEqual(pluginSize, size(640, 480));
+
+    // 2. Verify that a high-DPI client correctly up-scales the host to fit
+    //    if desktopScale would make it larger, but shrink-to-fit is set.
+    pluginSize = remoting.Viewport.choosePluginSize(
+        size(640, 480), 2.0, size(1280, 900), dpi(96, 96), 1.5,
+        true, true);
+    assert.deepEqual(pluginSize, size(640, 900 * (640 / 1280)));
+
+    // 3. Verify that a high-DPI client correctly up-scales the host based on
+    //    desktopScale and shrink-to-fit is not set.
+    pluginSize = remoting.Viewport.choosePluginSize(
+        size(640, 480), 2.0, size(1280, 900), dpi(96, 96), 1.5,
+        true, false);
+    assert.deepEqual(pluginSize, size(1.5 * 1280, 1.5 * 900));
+});
+
+QUnit.test('choosePluginSize() handling of 1.25x pixel ratio client',
+  function(assert) {
+    // 1. Verify that if the client has a devicePixelRatio of 1.25x then the
+    //    host is still sized 1:1 host:logical pixels, rather than 1:1
+    //    host:device pixels. The latter would appear as a 1.25x down-scale on
+    //    such a client).
+    var pluginSize = remoting.Viewport.choosePluginSize(
+        size(640, 480), 1.25, size(480, 320), dpi(96, 96), 1.0,
+        true, true);
+    assert.deepEqual(pluginSize, size(480, 320));
+});
+
 })();

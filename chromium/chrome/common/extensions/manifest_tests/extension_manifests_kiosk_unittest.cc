@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/common/extensions/manifest_tests/chrome_manifest_test.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
@@ -62,6 +63,8 @@ TEST_F(ExtensionManifestKioskModeTest, KioskEnabledDefaultRequired) {
   EXPECT_FALSE(KioskModeInfo::IsKioskOnly(extension.get()));
 }
 
+// 'kiosk_only' key should be set only from ChromeOS.
+#if defined(OS_CHROMEOS)
 TEST_F(ExtensionManifestKioskModeTest, KioskOnlyPlatformApp) {
   scoped_refptr<Extension> extension(
       LoadAndExpectSuccess("kiosk_only_platform_app.json"));
@@ -95,5 +98,11 @@ TEST_F(ExtensionManifestKioskModeTest, KioskOnlyExtension) {
       LoadAndExpectSuccess("kiosk_only_extension.json"));
   EXPECT_FALSE(KioskModeInfo::IsKioskOnly(extension.get()));
 }
+#else
+TEST_F(ExtensionManifestKioskModeTest, KioskOnlyFromNonChromeos) {
+  LoadAndExpectWarning("kiosk_only_platform_app.json",
+                       "'kiosk_only' is not allowed for specified platform.");
+}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace extensions

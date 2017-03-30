@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_CHROMEOS_CUSTOMIZATION_CUSTOMIZATION_DOCUMENT_H_
 #define CHROME_BROWSER_CHROMEOS_CUSTOMIZATION_CUSTOMIZATION_DOCUMENT_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
@@ -108,7 +111,7 @@ class StartupCustomizationDocument : public CustomizationDocument {
   friend class OobeLocalizationTest;
   friend void InitStartupCustomizationDocumentForTesting(
       const std::string& manifest);
-  friend struct DefaultSingletonTraits<StartupCustomizationDocument>;
+  friend struct base::DefaultSingletonTraits<StartupCustomizationDocument>;
 
   // C-tor for singleton construction.
   StartupCustomizationDocument();
@@ -198,7 +201,7 @@ class ServicesCustomizationDocument : public CustomizationDocument,
   }
 
  private:
-  friend struct DefaultSingletonTraits<ServicesCustomizationDocument>;
+  friend struct base::DefaultSingletonTraits<ServicesCustomizationDocument>;
   FRIEND_TEST_ALL_PREFIXES(CustomizationWallpaperDownloaderBrowserTest,
                            OEMWallpaperIsPresent);
   FRIEND_TEST_ALL_PREFIXES(CustomizationWallpaperDownloaderBrowserTest,

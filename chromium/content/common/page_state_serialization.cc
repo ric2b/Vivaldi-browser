@@ -4,6 +4,8 @@
 
 #include "content/common/page_state_serialization.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <limits>
 
@@ -11,6 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "ui/gfx/screen.h"
 
 namespace content {
@@ -234,12 +237,12 @@ int ReadInteger(SerializeObject* obj) {
   return 0;
 }
 
-void WriteInteger64(int64 data, SerializeObject* obj) {
+void WriteInteger64(int64_t data, SerializeObject* obj) {
   obj->pickle.WriteInt64(data);
 }
 
-int64 ReadInteger64(SerializeObject* obj) {
-  int64 tmp = 0;
+int64_t ReadInteger64(SerializeObject* obj) {
+  int64_t tmp = 0;
   if (obj->iter.ReadInt64(&tmp))
     return tmp;
   obj->parse_error = true;
@@ -446,15 +449,15 @@ void ReadHttpBody(SerializeObject* obj, ExplodedHttpBody* http_body) {
       }
     } else if (type == blink::WebHTTPBody::Element::TypeFile) {
       base::NullableString16 file_path = ReadString(obj);
-      int64 file_start = ReadInteger64(obj);
-      int64 file_length = ReadInteger64(obj);
+      int64_t file_start = ReadInteger64(obj);
+      int64_t file_length = ReadInteger64(obj);
       double file_modification_time = ReadReal(obj);
       AppendFileRangeToHttpBody(http_body, file_path, file_start, file_length,
                                 file_modification_time);
     } else if (type == blink::WebHTTPBody::Element::TypeFileSystemURL) {
       GURL url = ReadGURL(obj);
-      int64 file_start = ReadInteger64(obj);
-      int64 file_length = ReadInteger64(obj);
+      int64_t file_start = ReadInteger64(obj);
+      int64_t file_length = ReadInteger64(obj);
       double file_modification_time = ReadReal(obj);
       AppendURLRangeToHttpBody(http_body, url, file_start, file_length,
                                file_modification_time);
@@ -495,8 +498,8 @@ void WriteFrameState(
   WriteInteger64(state.item_sequence_number, obj);
   WriteInteger64(state.document_sequence_number, obj);
   WriteInteger(state.referrer_policy, obj);
-  WriteReal(state.pinch_viewport_scroll_offset.x(), obj);
-  WriteReal(state.pinch_viewport_scroll_offset.y(), obj);
+  WriteReal(state.visual_viewport_scroll_offset.x(), obj);
+  WriteReal(state.visual_viewport_scroll_offset.y(), obj);
 
   WriteInteger(state.scroll_restoration_type, obj);
 
@@ -566,9 +569,9 @@ void ReadFrameState(SerializeObject* obj, bool is_top,
   if (obj->version >= 20) {
     double x = ReadReal(obj);
     double y = ReadReal(obj);
-    state->pinch_viewport_scroll_offset = gfx::PointF(x, y);
+    state->visual_viewport_scroll_offset = gfx::PointF(x, y);
   } else {
-    state->pinch_viewport_scroll_offset = gfx::PointF(-1, -1);
+    state->visual_viewport_scroll_offset = gfx::PointF(-1, -1);
   }
 
   if (obj->version >= 22) {
@@ -708,7 +711,7 @@ void ExplodedFrameState::assign(const ExplodedFrameState& other) {
   state_object = other.state_object;
   document_state = other.document_state;
   scroll_restoration_type = other.scroll_restoration_type;
-  pinch_viewport_scroll_offset = other.pinch_viewport_scroll_offset;
+  visual_viewport_scroll_offset = other.visual_viewport_scroll_offset;
   scroll_offset = other.scroll_offset;
   item_sequence_number = other.item_sequence_number;
   document_sequence_number = other.document_sequence_number;

@@ -4,6 +4,8 @@
 
 #include "cc/base/region.h"
 
+#include <stddef.h>
+
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
 #include "cc/base/simple_enclosed_region.h"
@@ -127,7 +129,7 @@ scoped_ptr<base::Value> Region::AsValue() const {
     result->AppendInteger(rect.width());
     result->AppendInteger(rect.height());
   }
-  return result.Pass();
+  return std::move(result);
 }
 
 void Region::AsValueInto(base::trace_event::TracedValue* result) const {

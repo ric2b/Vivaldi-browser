@@ -12,6 +12,7 @@
 #include "media/base/video_frame.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
+#include "media/cast/cast_sender.h"
 #include "media/cast/sender/sender_encoded_frame.h"
 #include "media/cast/sender/video_frame_factory.h"
 
@@ -57,9 +58,6 @@ class VideoEncoder {
 
   // Inform the encoder to encode the next frame as a key frame.
   virtual void GenerateKeyFrame() = 0;
-
-  // Inform the encoder to only reference frames older or equal to frame_id;
-  virtual void LatestFrameIdToReference(uint32 frame_id) = 0;
 
   // Creates a |VideoFrameFactory| object to vend |VideoFrame| object with
   // encoder affinity (defined as offering some sort of performance benefit).

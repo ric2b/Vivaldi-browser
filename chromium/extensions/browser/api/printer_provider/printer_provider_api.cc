@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/printer_provider/printer_provider_api.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <utility>
@@ -266,14 +268,13 @@ class PrinterProviderAPIImpl : public PrinterProviderAPI,
   void OnGetCapabilityResult(const Extension* extension,
                              int request_id,
                              const base::DictionaryValue& result) override;
-  void OnPrintResult(
-      const Extension* extension,
-      int request_id,
-      core_api::printer_provider_internal::PrintError error) override;
+  void OnPrintResult(const Extension* extension,
+                     int request_id,
+                     api::printer_provider_internal::PrintError error) override;
   void OnGetUsbPrinterInfoResult(
       const Extension* extension,
       int request_id,
-      const core_api::printer_provider::PrinterInfo* printer_info) override;
+      const api::printer_provider::PrinterInfo* printer_info) override;
 
   // ExtensionRegistryObserver implementation:
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
@@ -288,7 +289,8 @@ class PrinterProviderAPIImpl : public PrinterProviderAPI,
   bool WillRequestPrinters(int request_id,
                            content::BrowserContext* browser_context,
                            const Extension* extension,
-                           base::ListValue* args);
+                           Event* event,
+                           const base::DictionaryValue* listener_filter);
 
   content::BrowserContext* browser_context_;
 
@@ -511,7 +513,7 @@ void PrinterProviderAPIImpl::DispatchGetPrintersRequested(
     const GetPrintersCallback& callback) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (!event_router->HasEventListener(
-          core_api::printer_provider::OnGetPrintersRequested::kEventName)) {
+          api::printer_provider::OnGetPrintersRequested::kEventName)) {
     callback.Run(base::ListValue(), true /* done */);
     return;
   }
@@ -527,16 +529,16 @@ void PrinterProviderAPIImpl::DispatchGetPrintersRequested(
   internal_args->AppendInteger(request_id);
 
   scoped_ptr<Event> event(
-      new Event(events::UNKNOWN,
-                core_api::printer_provider::OnGetPrintersRequested::kEventName,
-                internal_args.Pass()));
+      new Event(events::PRINTER_PROVIDER_ON_GET_PRINTERS_REQUESTED,
+                api::printer_provider::OnGetPrintersRequested::kEventName,
+                std::move(internal_args)));
   // This callback is called synchronously during |BroadcastEvent|, so
   // Unretained is safe.
   event->will_dispatch_callback =
       base::Bind(&PrinterProviderAPIImpl::WillRequestPrinters,
                  base::Unretained(this), request_id);
 
-  event_router->BroadcastEvent(event.Pass());
+  event_router->BroadcastEvent(std::move(event));
 }
 
 void PrinterProviderAPIImpl::DispatchGetCapabilityRequested(
@@ -552,7 +554,7 @@ void PrinterProviderAPIImpl::DispatchGetCapabilityRequested(
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (!event_router->ExtensionHasEventListener(
           extension_id,
-          core_api::printer_provider::OnGetCapabilityRequested::kEventName)) {
+          api::printer_provider::OnGetCapabilityRequested::kEventName)) {
     callback.Run(base::DictionaryValue());
     return;
   }
@@ -565,12 +567,12 @@ void PrinterProviderAPIImpl::DispatchGetCapabilityRequested(
   internal_args->AppendInteger(request_id);
   internal_args->AppendString(internal_printer_id);
 
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN,
-      core_api::printer_provider::OnGetCapabilityRequested::kEventName,
-      internal_args.Pass()));
+  scoped_ptr<Event> event(
+      new Event(events::PRINTER_PROVIDER_ON_GET_CAPABILITY_REQUESTED,
+                api::printer_provider::OnGetCapabilityRequested::kEventName,
+                std::move(internal_args)));
 
-  event_router->DispatchEventToExtension(extension_id, event.Pass());
+  event_router->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 void PrinterProviderAPIImpl::DispatchPrintRequested(
@@ -585,23 +587,21 @@ void PrinterProviderAPIImpl::DispatchPrintRequested(
 
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (!event_router->ExtensionHasEventListener(
-          extension_id,
-          core_api::printer_provider::OnPrintRequested::kEventName)) {
+          extension_id, api::printer_provider::OnPrintRequested::kEventName)) {
     callback.Run(false, PrinterProviderAPI::GetDefaultPrintError());
     return;
   }
 
-  core_api::printer_provider::PrintJob print_job;
+  api::printer_provider::PrintJob print_job;
   print_job.printer_id = internal_printer_id;
 
   JSONStringValueDeserializer deserializer(job.ticket_json);
-  scoped_ptr<base::Value> ticket_value(deserializer.Deserialize(NULL, NULL));
+  scoped_ptr<base::Value> ticket_value = deserializer.Deserialize(NULL, NULL);
   if (!ticket_value ||
-      !core_api::printer_provider::PrintJob::Ticket::Populate(
-          *ticket_value, &print_job.ticket)) {
-    callback.Run(false,
-                 core_api::printer_provider::ToString(
-                     core_api::printer_provider::PRINT_ERROR_INVALID_TICKET));
+      !api::printer_provider::PrintJob::Ticket::Populate(*ticket_value,
+                                                         &print_job.ticket)) {
+    callback.Run(false, api::printer_provider::ToString(
+                            api::printer_provider::PRINT_ERROR_INVALID_TICKET));
     return;
   }
 
@@ -614,10 +614,11 @@ void PrinterProviderAPIImpl::DispatchPrintRequested(
   // custom bindings.
   internal_args->AppendInteger(request_id);
   internal_args->Append(print_job.ToValue().release());
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, core_api::printer_provider::OnPrintRequested::kEventName,
-      internal_args.Pass()));
-  event_router->DispatchEventToExtension(extension_id, event.Pass());
+  scoped_ptr<Event> event(
+      new Event(events::PRINTER_PROVIDER_ON_PRINT_REQUESTED,
+                api::printer_provider::OnPrintRequested::kEventName,
+                std::move(internal_args)));
+  event_router->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 const PrinterProviderPrintJob* PrinterProviderAPIImpl::GetPrintJob(
@@ -635,30 +636,27 @@ void PrinterProviderAPIImpl::DispatchGetUsbPrinterInfoRequested(
     const PrinterProviderAPI::GetPrinterInfoCallback& callback) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (!event_router->ExtensionHasEventListener(
-          extension_id, core_api::printer_provider::
-                            OnGetUsbPrinterInfoRequested::kEventName)) {
+          extension_id,
+          api::printer_provider::OnGetUsbPrinterInfoRequested::kEventName)) {
     callback.Run(base::DictionaryValue());
     return;
   }
 
   int request_id =
       pending_usb_printer_info_requests_[extension_id].Add(callback);
-  core_api::usb::Device usb_device;
-  usb_device.device =
-      UsbGuidMap::Get(browser_context_)->GetIdFromGuid(device->guid());
-  usb_device.vendor_id = device->vendor_id();
-  usb_device.product_id = device->product_id();
+  api::usb::Device api_device;
+  UsbGuidMap::Get(browser_context_)->GetApiDevice(device, &api_device);
 
-  scoped_ptr<base::ListValue> internal_args(new base::ListValue);
+  scoped_ptr<base::ListValue> internal_args(new base::ListValue());
   // Request id is not part of the public API and it will be massaged out in
   // custom bindings.
   internal_args->AppendInteger(request_id);
-  internal_args->Append(usb_device.ToValue().release());
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN,
-      core_api::printer_provider::OnGetUsbPrinterInfoRequested::kEventName,
-      internal_args.Pass()));
-  event_router->DispatchEventToExtension(extension_id, event.Pass());
+  internal_args->Append(api_device.ToValue());
+  scoped_ptr<Event> event(
+      new Event(events::PRINTER_PROVIDER_ON_GET_USB_PRINTER_INFO_REQUESTED,
+                api::printer_provider::OnGetUsbPrinterInfoRequested::kEventName,
+                std::move(internal_args)));
+  event_router->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 void PrinterProviderAPIImpl::OnGetPrintersResult(
@@ -672,7 +670,7 @@ void PrinterProviderAPIImpl::OnGetPrintersResult(
   for (size_t i = 0; i < result.size(); ++i) {
     scoped_ptr<base::DictionaryValue> printer(result[i]->ToValue());
     UpdatePrinterWithExtensionInfo(printer.get(), extension);
-    printer_list.Append(printer.Pass());
+    printer_list.Append(std::move(printer));
   }
 
   pending_get_printers_requests_.CompleteForExtension(extension->id(),
@@ -689,20 +687,20 @@ void PrinterProviderAPIImpl::OnGetCapabilityResult(
 void PrinterProviderAPIImpl::OnPrintResult(
     const Extension* extension,
     int request_id,
-    core_api::printer_provider_internal::PrintError error) {
+    api::printer_provider_internal::PrintError error) {
   const std::string error_str =
-      error == core_api::printer_provider_internal::PRINT_ERROR_NONE
+      error == api::printer_provider_internal::PRINT_ERROR_NONE
           ? PrinterProviderAPI::GetDefaultPrintError()
-          : core_api::printer_provider_internal::ToString(error);
+          : api::printer_provider_internal::ToString(error);
   pending_print_requests_[extension->id()].Complete(
-      request_id, error == core_api::printer_provider_internal::PRINT_ERROR_OK,
+      request_id, error == api::printer_provider_internal::PRINT_ERROR_OK,
       error_str);
 }
 
 void PrinterProviderAPIImpl::OnGetUsbPrinterInfoResult(
     const Extension* extension,
     int request_id,
-    const core_api::printer_provider::PrinterInfo* result) {
+    const api::printer_provider::PrinterInfo* result) {
   if (result) {
     scoped_ptr<base::DictionaryValue> printer(result->ToValue());
     UpdatePrinterWithExtensionInfo(printer.get(), extension);
@@ -743,13 +741,14 @@ bool PrinterProviderAPIImpl::WillRequestPrinters(
     int request_id,
     content::BrowserContext* browser_context,
     const Extension* extension,
-    base::ListValue* args) {
+    Event* event,
+    const base::DictionaryValue* listener_filter) {
   if (!extension)
     return false;
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (!event_router->ExtensionHasEventListener(
           extension->id(),
-          core_api::printer_provider::OnGetPrintersRequested::kEventName)) {
+          api::printer_provider::OnGetPrintersRequested::kEventName)) {
     return false;
   }
 
@@ -766,8 +765,8 @@ PrinterProviderAPI* PrinterProviderAPI::Create(
 
 // static
 std::string PrinterProviderAPI::GetDefaultPrintError() {
-  return core_api::printer_provider_internal::ToString(
-      core_api::printer_provider_internal::PRINT_ERROR_FAILED);
+  return api::printer_provider_internal::ToString(
+      api::printer_provider_internal::PRINT_ERROR_FAILED);
 }
 
 }  // namespace extensions

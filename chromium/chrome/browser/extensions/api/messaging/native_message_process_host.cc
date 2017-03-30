@@ -4,14 +4,18 @@
 
 #include "chrome/browser/extensions/api/messaging/native_message_process_host.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/process/kill.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/messaging/native_messaging_host_manifest.h"
 #include "chrome/browser/extensions/api/messaging/native_process_launcher.h"
-#include "chrome/common/chrome_version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/features/feature.h"
@@ -45,7 +49,7 @@ NativeMessageProcessHost::NativeMessageProcessHost(
     : client_(NULL),
       source_extension_id_(source_extension_id),
       native_host_name_(native_host_name),
-      launcher_(launcher.Pass()),
+      launcher_(std::move(launcher)),
       closed_(false),
 #if defined(OS_POSIX)
       read_file_(-1),
@@ -71,7 +75,7 @@ NativeMessageProcessHost::~NativeMessageProcessHost() {
         FROM_HERE,
         base::Bind(&base::EnsureProcessTerminated, Passed(&process_)));
 #else
-    base::EnsureProcessTerminated(process_.Pass());
+    base::EnsureProcessTerminated(std::move(process_));
 #endif
   }
 }
@@ -96,12 +100,10 @@ scoped_ptr<NativeMessageHost> NativeMessageProcessHost::CreateWithLauncher(
     scoped_ptr<NativeProcessLauncher> launcher) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  scoped_ptr<NativeMessageHost> process(
-      new NativeMessageProcessHost(source_extension_id,
-                                   native_host_name,
-                                   launcher.Pass()));
+  scoped_ptr<NativeMessageHost> process(new NativeMessageProcessHost(
+      source_extension_id, native_host_name, std::move(launcher)));
 
-  return process.Pass();
+  return process;
 }
 
 void NativeMessageProcessHost::LaunchHostProcess() {
@@ -137,7 +139,7 @@ void NativeMessageProcessHost::OnHostProcessLaunched(
       break;
   }
 
-  process_ = process.Pass();
+  process_ = std::move(process);
 #if defined(OS_POSIX)
   // This object is not the owner of the file so it should not keep an fd.
   read_file_ = read_file.GetPlatformFile();
@@ -148,8 +150,8 @@ void NativeMessageProcessHost::OnHostProcessLaunched(
           GetTaskRunnerWithShutdownBehavior(
               base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
 
-  read_stream_.reset(new net::FileStream(read_file.Pass(), task_runner));
-  write_stream_.reset(new net::FileStream(write_file.Pass(), task_runner));
+  read_stream_.reset(new net::FileStream(std::move(read_file), task_runner));
+  write_stream_.reset(new net::FileStream(std::move(write_file), task_runner));
 
   WaitRead();
   DoWrite();
@@ -166,9 +168,9 @@ void NativeMessageProcessHost::OnMessage(const std::string& json) {
       new net::IOBufferWithSize(json.size() + kMessageHeaderSize);
 
   // Copy size and content of the message to the buffer.
-  static_assert(sizeof(uint32) == kMessageHeaderSize,
+  static_assert(sizeof(uint32_t) == kMessageHeaderSize,
                 "kMessageHeaderSize is incorrect");
-  *reinterpret_cast<uint32*>(buffer->data()) = json.size();
+  *reinterpret_cast<uint32_t*>(buffer->data()) = json.size();
   memcpy(buffer->data() + kMessageHeaderSize, json.data(), json.size());
 
   // Push new message to the write queue.
@@ -285,7 +287,7 @@ void NativeMessageProcessHost::ProcessIncomingData(
       return;
 
     size_t message_size =
-        *reinterpret_cast<const uint32*>(incoming_data_.data());
+        *reinterpret_cast<const uint32_t*>(incoming_data_.data());
 
     if (message_size > kMaximumMessageSize) {
       LOG(ERROR) << "Native Messaging host tried sending a message that is "

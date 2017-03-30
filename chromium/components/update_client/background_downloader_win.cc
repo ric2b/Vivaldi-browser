@@ -6,6 +6,7 @@
 
 #include <atlbase.h>
 #include <atlcom.h>
+#include <stddef.h>
 
 #include <stdint.h>
 #include <functional>
@@ -16,12 +17,11 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
-#include "base/single_thread_task_runner.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/win/scoped_co_mem.h"
 #include "components/update_client/utils.h"
-#include "ui/base/win/atl_module.h"
 #include "url/gurl.h"
 
 using base::win::ScopedCoMem;
@@ -125,6 +125,28 @@ const int kSetNoProgressTimeoutDays = 1;
 // default policy is to cancel jobs after 90 days of inactivity.
 const int kPurgeStaleJobsAfterDays = 7;
 const int kPurgeStaleJobsIntervalBetweenChecksDays = 1;
+
+// Retrieves the singleton instance of GIT for this process.
+HRESULT GetGit(ScopedComPtr<IGlobalInterfaceTable>* git) {
+  return git->CreateInstance(CLSID_StdGlobalInterfaceTable, NULL,
+                             CLSCTX_INPROC_SERVER);
+}
+
+// Retrieves an interface pointer from the process GIT for a given |cookie|.
+template <typename T>
+HRESULT GetInterfaceFromGit(const ScopedComPtr<IGlobalInterfaceTable>& git,
+                            DWORD cookie,
+                            ScopedComPtr<T>* p) {
+  return git->GetInterfaceFromGlobal(cookie, __uuidof(T), p->ReceiveVoid());
+}
+
+// Registers an interface pointer in GIT and returns its corresponding |cookie|.
+template <typename T>
+HRESULT RegisterInterfaceInGit(const ScopedComPtr<IGlobalInterfaceTable>& git,
+                               const ScopedComPtr<T>& p,
+                               DWORD* cookie) {
+  return git->RegisterInterfaceInGlobal(p.get(), __uuidof(T), cookie);
+}
 
 // Returns the status code from a given BITS error.
 int GetHttpStatusFromBitsError(HRESULT error) {
@@ -288,19 +310,22 @@ HRESULT FindBitsJobIf(Predicate pred,
 
 // Compares the job creation time and returns true if the job creation time
 // is older than |num_days|.
-struct JobCreationOlderThanDays
-    : public std::binary_function<IBackgroundCopyJob*, int, bool> {
-  bool operator()(IBackgroundCopyJob* job, int num_days) const;
+class JobCreationOlderThanDays {
+ public:
+  JobCreationOlderThanDays(int num_days) : num_days_(num_days) {}
+  bool operator()(IBackgroundCopyJob* job) const;
+
+ private:
+  int num_days_;
 };
 
-bool JobCreationOlderThanDays::operator()(IBackgroundCopyJob* job,
-                                          int num_days) const {
+bool JobCreationOlderThanDays::operator()(IBackgroundCopyJob* job) const {
   BG_JOB_TIMES times = {};
   HRESULT hr = job->GetTimes(&times);
   if (FAILED(hr))
     return false;
 
-  const base::TimeDelta time_delta(base::TimeDelta::FromDays(num_days));
+  const base::TimeDelta time_delta(base::TimeDelta::FromDays(num_days_));
   const base::Time creation_time(base::Time::FromFileTime(times.CreationTime));
 
   return creation_time + time_delta < base::Time::Now();
@@ -308,15 +333,17 @@ bool JobCreationOlderThanDays::operator()(IBackgroundCopyJob* job,
 
 // Compares the url of a file in a job and returns true if the remote name
 // of any file in a job matches the argument.
-struct JobFileUrlEqual : public std::binary_function<IBackgroundCopyJob*,
-                                                     const base::string16&,
-                                                     bool> {
-  bool operator()(IBackgroundCopyJob* job,
-                  const base::string16& remote_name) const;
+class JobFileUrlEqual {
+ public:
+  JobFileUrlEqual(const base::string16& remote_name)
+      : remote_name_(remote_name) {}
+  bool operator()(IBackgroundCopyJob* job) const;
+
+ private:
+  base::string16 remote_name_;
 };
 
-bool JobFileUrlEqual::operator()(IBackgroundCopyJob* job,
-                                 const base::string16& remote_name) const {
+bool JobFileUrlEqual::operator()(IBackgroundCopyJob* job) const {
   std::vector<ScopedComPtr<IBackgroundCopyFile>> files;
   HRESULT hr = GetFilesInJob(job, &files);
   if (FAILED(hr))
@@ -325,7 +352,7 @@ bool JobFileUrlEqual::operator()(IBackgroundCopyJob* job,
   for (size_t i = 0; i != files.size(); ++i) {
     ScopedCoMem<base::char16> name;
     if (SUCCEEDED(files[i]->GetRemoteName(&name)) &&
-        remote_name.compare(name) == 0)
+        remote_name_.compare(name) == 0)
       return true;
   }
 
@@ -333,7 +360,7 @@ bool JobFileUrlEqual::operator()(IBackgroundCopyJob* job,
 }
 
 // Creates an instance of the BITS manager.
-HRESULT GetBitsManager(IBackgroundCopyManager** bits_manager) {
+HRESULT CreateBitsManager(IBackgroundCopyManager** bits_manager) {
   ScopedComPtr<IBackgroundCopyManager> object;
   HRESULT hr = object.CreateInstance(__uuidof(BackgroundCopyManager));
   if (FAILED(hr)) {
@@ -357,7 +384,7 @@ void CleanupJobFiles(IBackgroundCopyJob* job) {
 
 // Cleans up incompleted jobs that are too old.
 HRESULT CleanupStaleJobs(
-    base::win::ScopedComPtr<IBackgroundCopyManager> bits_manager) {
+    const ScopedComPtr<IBackgroundCopyManager>& bits_manager) {
   if (!bits_manager.get())
     return E_FAIL;
 
@@ -373,7 +400,7 @@ HRESULT CleanupStaleJobs(
 
   std::vector<ScopedComPtr<IBackgroundCopyJob>> jobs;
   HRESULT hr = FindBitsJobIf(
-      std::bind2nd(JobCreationOlderThanDays(), kPurgeStaleJobsAfterDays),
+      JobCreationOlderThanDays(kPurgeStaleJobsAfterDays),
       bits_manager.get(), &jobs);
   if (FAILED(hr))
     return hr;
@@ -391,115 +418,147 @@ HRESULT CleanupStaleJobs(
 BackgroundDownloader::BackgroundDownloader(
     scoped_ptr<CrxDownloader> successor,
     net::URLRequestContextGetter* context_getter,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner)
     : CrxDownloader(successor.Pass()),
       main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       context_getter_(context_getter),
       task_runner_(task_runner),
-      is_completed_(false) {
-}
+      git_cookie_bits_manager_(0),
+      git_cookie_job_(0) {}
 
 BackgroundDownloader::~BackgroundDownloader() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  timer_.reset();
+}
 
-  // The following objects have thread affinity and can't be destroyed on the
-  // main thread. The resources managed by these objects are acquired at the
-  // beginning of a download and released at the end of the download. Most of
-  // the time, when this destructor is called, these resources have been already
-  // disposed by. Releasing the ownership here is a NOP. However, if the browser
-  // is shutting down while a download is in progress, the timer is active and
-  // the interface pointers are valid. Releasing the ownership means leaking
-  // these objects and their associated resources.
-  timer_.release();
-  bits_manager_.Detach();
-  job_.Detach();
+void BackgroundDownloader::StartTimer() {
+  timer_.reset(new base::OneShotTimer);
+  timer_->Start(FROM_HERE, base::TimeDelta::FromSeconds(kJobPollingIntervalSec),
+                this, &BackgroundDownloader::OnTimer);
+}
+
+void BackgroundDownloader::OnTimer() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&BackgroundDownloader::OnDownloading, base::Unretained(this)));
 }
 
 void BackgroundDownloader::DoStartDownload(const GURL& url) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
   task_runner_->PostTask(FROM_HERE,
                          base::Bind(&BackgroundDownloader::BeginDownload,
                                     base::Unretained(this), url));
 }
 
-// Called once when this class is asked to do a download. Creates or opens
-// an existing bits job, hooks up the notifications, and starts the timer.
+// Called one time when this class is asked to do a download.
 void BackgroundDownloader::BeginDownload(const GURL& url) {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
-  DCHECK(!timer_);
-
-  is_completed_ = false;
   download_start_time_ = base::Time::Now();
   job_stuck_begin_time_ = download_start_time_;
 
-  HRESULT hr = QueueBitsJob(url);
+  HRESULT hr = BeginDownloadHelper(url);
   if (FAILED(hr)) {
     EndDownload(hr);
     return;
   }
 
-  // A repeating timer retains the user task. This timer can be stopped and
-  // reset multiple times.
-  timer_.reset(new base::RepeatingTimer<BackgroundDownloader>);
-  timer_->Start(FROM_HERE, base::TimeDelta::FromSeconds(kJobPollingIntervalSec),
-                this, &BackgroundDownloader::OnDownloading);
+  ResetInterfacePointers();
+  main_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&BackgroundDownloader::StartTimer, base::Unretained(this)));
+}
+
+// Creates or opens an existing bits job, and handles the marshalling of
+// the interfaces in GIT.
+HRESULT BackgroundDownloader::BeginDownloadHelper(const GURL& url) {
+  ScopedComPtr<IGlobalInterfaceTable> git;
+  HRESULT hr = GetGit(&git);
+  if (FAILED(hr))
+    return hr;
+
+  hr = CreateBitsManager(bits_manager_.Receive());
+  if (FAILED(hr))
+    return hr;
+
+  hr = RegisterInterfaceInGit(git, bits_manager_, &git_cookie_bits_manager_);
+  if (FAILED(hr))
+    return hr;
+
+  hr = QueueBitsJob(url, job_.Receive());
+  if (FAILED(hr))
+    return hr;
+
+  hr = RegisterInterfaceInGit(git, job_, &git_cookie_job_);
+  if (FAILED(hr))
+    return hr;
+
+  return S_OK;
 }
 
 // Called any time the timer fires.
 void BackgroundDownloader::OnDownloading() {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
-  DCHECK(job_.get());
-
-  DCHECK(!is_completed_);
-  if (is_completed_)
-    return;
-
-  BG_JOB_STATE job_state = BG_JOB_STATE_ERROR;
-  HRESULT hr = job_->GetState(&job_state);
+  HRESULT hr = UpdateInterfacePointers();
   if (FAILED(hr)) {
     EndDownload(hr);
     return;
   }
 
+  BG_JOB_STATE job_state = BG_JOB_STATE_ERROR;
+  hr = job_->GetState(&job_state);
+  if (FAILED(hr)) {
+    EndDownload(hr);
+    return;
+  }
+
+  bool is_handled =  false;
   switch (job_state) {
     case BG_JOB_STATE_TRANSFERRED:
-      OnStateTransferred();
-      return;
+      is_handled = OnStateTransferred();
+      break;
 
     case BG_JOB_STATE_ERROR:
-      OnStateError();
-      return;
+      is_handled = OnStateError();
+      break;
 
     case BG_JOB_STATE_CANCELLED:
-      OnStateCancelled();
-      return;
+      is_handled = OnStateCancelled();
+      break;
 
     case BG_JOB_STATE_ACKNOWLEDGED:
-      OnStateAcknowledged();
-      return;
+      is_handled = OnStateAcknowledged();
+      break;
 
     case BG_JOB_STATE_QUEUED:
     // Fall through.
     case BG_JOB_STATE_CONNECTING:
     // Fall through.
     case BG_JOB_STATE_SUSPENDED:
-      OnStateQueued();
+      is_handled = OnStateQueued();
       break;
 
     case BG_JOB_STATE_TRANSIENT_ERROR:
-      OnStateTransientError();
+      is_handled = OnStateTransientError();
       break;
 
     case BG_JOB_STATE_TRANSFERRING:
-      OnStateTransferring();
+      is_handled = OnStateTransferring();
       break;
 
     default:
       break;
   }
+
+  if (is_handled)
+    return;
+
+  ResetInterfacePointers();
+  main_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&BackgroundDownloader::StartTimer, base::Unretained(this)));
 }
 
 // Completes the BITS download, picks up the file path of the response, and
@@ -507,10 +566,7 @@ void BackgroundDownloader::OnDownloading() {
 void BackgroundDownloader::EndDownload(HRESULT error) {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
-  DCHECK(!is_completed_);
-  is_completed_ = true;
-
-  timer_.reset();
+  DCHECK(!timer_->IsRunning());
 
   const base::Time download_end_time(base::Time::Now());
   const base::TimeDelta download_time =
@@ -527,10 +583,9 @@ void BackgroundDownloader::EndDownload(HRESULT error) {
     CleanupJobFiles(job_.get());
   }
 
-  job_ = NULL;
-
   CleanupStaleJobs(bits_manager_);
-  bits_manager_ = NULL;
+
+  ClearGit();
 
   // Consider the url handled if it has been successfully downloaded or a
   // 5xx has been received.
@@ -566,30 +621,46 @@ void BackgroundDownloader::EndDownload(HRESULT error) {
 // Called when the BITS job has been transferred successfully. Completes the
 // BITS job by removing it from the BITS queue and making the download
 // available to the caller.
-void BackgroundDownloader::OnStateTransferred() {
+bool BackgroundDownloader::OnStateTransferred() {
   EndDownload(CompleteJob());
+  return true;
 }
 
 // Called when the job has encountered an error and no further progress can
 // be made. Cancels this job and removes it from the BITS queue.
-void BackgroundDownloader::OnStateError() {
+bool BackgroundDownloader::OnStateError() {
   HRESULT error_code = S_OK;
   HRESULT hr = GetJobError(job_.get(), &error_code);
   if (FAILED(hr))
     error_code = hr;
+
   DCHECK(FAILED(error_code));
   EndDownload(error_code);
+  return true;
+}
+
+// Called when the download was completed. This notification is not seen
+// in the current implementation but provided here as a defensive programming
+// measure.
+bool BackgroundDownloader::OnStateAcknowledged() {
+  EndDownload(E_UNEXPECTED);
+  return true;
+}
+
+// Called when the download was cancelled. Same as above.
+bool BackgroundDownloader::OnStateCancelled() {
+  EndDownload(E_UNEXPECTED);
+  return true;
 }
 
 // Called when the job has encountered a transient error, such as a
 // network disconnect, a server error, or some other recoverable error.
-void BackgroundDownloader::OnStateTransientError() {
+bool BackgroundDownloader::OnStateTransientError() {
   // If the job appears to be stuck, handle the transient error as if
   // it were a final error. This causes the job to be cancelled and a specific
   // error be returned, if the error was available.
   if (IsStuck()) {
-    OnStateError();
-    return;
+    return OnStateError();
   }
 
   // Don't retry at all if the transient error was a 5xx.
@@ -597,17 +668,22 @@ void BackgroundDownloader::OnStateTransientError() {
   HRESULT hr = GetJobError(job_.get(), &error_code);
   if (SUCCEEDED(hr) &&
       IsHttpServerError(GetHttpStatusFromBitsError(error_code))) {
-    OnStateError();
-    return;
+    return OnStateError();
   }
+
+  return false;
 }
 
-void BackgroundDownloader::OnStateQueued() {
-  if (IsStuck())
-    EndDownload(E_ABORT);  // Return a generic error for now.
+bool BackgroundDownloader::OnStateQueued() {
+  if (!IsStuck())
+    return false;
+
+  // Terminate the download if the job has not made progress in a while.
+  EndDownload(E_ABORT);
+  return true;
 }
 
-void BackgroundDownloader::OnStateTransferring() {
+bool BackgroundDownloader::OnStateTransferring() {
   // Resets the baseline for detecting a stuck job since the job is transferring
   // data and it is making progress.
   job_stuck_begin_time_ = base::Time::Now();
@@ -616,7 +692,7 @@ void BackgroundDownloader::OnStateTransferring() {
   int64_t total_bytes = -1;
   HRESULT hr = GetJobByteCount(job_.get(), &downloaded_bytes, &total_bytes);
   if (FAILED(hr))
-    return;
+    return false;
 
   Result result;
   result.downloaded_bytes = downloaded_bytes;
@@ -625,68 +701,61 @@ void BackgroundDownloader::OnStateTransferring() {
   main_task_runner_->PostTask(
       FROM_HERE, base::Bind(&BackgroundDownloader::OnDownloadProgress,
                             base::Unretained(this), result));
-}
-
-// Called when the download was cancelled. Since the observer should have
-// been disconnected by now, this notification must not be seen.
-void BackgroundDownloader::OnStateCancelled() {
-  EndDownload(E_UNEXPECTED);
-}
-
-// Called when the download was completed. Same as above.
-void BackgroundDownloader::OnStateAcknowledged() {
-  EndDownload(E_UNEXPECTED);
+  return false;
 }
 
 // Creates or opens a job for the given url and queues it up. Tries to
 // install a job observer but continues on if an observer can't be set up.
-HRESULT BackgroundDownloader::QueueBitsJob(const GURL& url) {
+HRESULT BackgroundDownloader::QueueBitsJob(const GURL& url,
+                                           IBackgroundCopyJob** job) {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
-  HRESULT hr = S_OK;
-  if (bits_manager_.get() == NULL) {
-    hr = GetBitsManager(bits_manager_.Receive());
-    if (FAILED(hr))
-      return hr;
-  }
-
-  hr = CreateOrOpenJob(url);
+  ScopedComPtr<IBackgroundCopyJob> p;
+  HRESULT hr = CreateOrOpenJob(url, p.Receive());
   if (FAILED(hr))
     return hr;
 
   if (hr == S_OK) {
-    hr = InitializeNewJob(url);
+    // This is a new job and it needs initialization.
+    hr = InitializeNewJob(p, url);
     if (FAILED(hr))
       return hr;
   }
 
-  return job_->Resume();
+  hr = p->Resume();
+  if (FAILED(hr))
+    return hr;
+
+  *job = p.Detach();
+
+  return S_OK;
 }
 
-HRESULT BackgroundDownloader::CreateOrOpenJob(const GURL& url) {
+HRESULT BackgroundDownloader::CreateOrOpenJob(const GURL& url,
+                                              IBackgroundCopyJob** job) {
   std::vector<ScopedComPtr<IBackgroundCopyJob>> jobs;
   HRESULT hr = FindBitsJobIf(
-      std::bind2nd(JobFileUrlEqual(), base::SysUTF8ToWide(url.spec())),
+      JobFileUrlEqual(base::SysUTF8ToWide(url.spec())),
       bits_manager_.get(), &jobs);
   if (SUCCEEDED(hr) && !jobs.empty()) {
-    job_ = jobs.front();
+    *job = jobs.front().Detach();
     return S_FALSE;
   }
 
   // Use kJobDescription as a temporary job display name until the proper
   // display name is initialized later on.
   GUID guid = {0};
-  ScopedComPtr<IBackgroundCopyJob> job;
   hr = bits_manager_->CreateJob(kJobDescription, BG_JOB_TYPE_DOWNLOAD, &guid,
-                                job.Receive());
+                                job);
   if (FAILED(hr))
     return hr;
 
-  job_ = job;
   return S_OK;
 }
 
-HRESULT BackgroundDownloader::InitializeNewJob(const GURL& url) {
+HRESULT BackgroundDownloader::InitializeNewJob(
+    const base::win::ScopedComPtr<IBackgroundCopyJob>& job,
+    const GURL& url) {
   const base::string16 filename(base::SysUTF8ToWide(url.ExtractFileName()));
 
   base::FilePath tempdir;
@@ -694,29 +763,29 @@ HRESULT BackgroundDownloader::InitializeNewJob(const GURL& url) {
                                     &tempdir))
     return E_FAIL;
 
-  HRESULT hr = job_->AddFile(base::SysUTF8ToWide(url.spec()).c_str(),
-                             tempdir.Append(filename).AsUTF16Unsafe().c_str());
+  HRESULT hr = job->AddFile(base::SysUTF8ToWide(url.spec()).c_str(),
+                            tempdir.Append(filename).AsUTF16Unsafe().c_str());
   if (FAILED(hr))
     return hr;
 
-  hr = job_->SetDisplayName(filename.c_str());
+  hr = job->SetDisplayName(filename.c_str());
   if (FAILED(hr))
     return hr;
 
-  hr = job_->SetDescription(kJobDescription);
+  hr = job->SetDescription(kJobDescription);
   if (FAILED(hr))
     return hr;
 
-  hr = job_->SetPriority(BG_JOB_PRIORITY_NORMAL);
+  hr = job->SetPriority(BG_JOB_PRIORITY_NORMAL);
   if (FAILED(hr))
     return hr;
 
-  hr = job_->SetMinimumRetryDelay(60 * kMinimumRetryDelayMin);
+  hr = job->SetMinimumRetryDelay(60 * kMinimumRetryDelayMin);
   if (FAILED(hr))
     return hr;
 
   const int kSecondsDay = 60 * 60 * 24;
-  hr = job_->SetNoProgressTimeout(kSecondsDay * kSetNoProgressTimeoutDays);
+  hr = job->SetNoProgressTimeout(kSecondsDay * kSetNoProgressTimeoutDays);
   if (FAILED(hr))
     return hr;
 
@@ -755,6 +824,54 @@ HRESULT BackgroundDownloader::CompleteJob() {
   DCHECK_EQ(progress.BytesTotal, progress.BytesTransferred);
 
   response_ = base::FilePath(local_name);
+
+  return S_OK;
+}
+
+HRESULT BackgroundDownloader::UpdateInterfacePointers() {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+
+  ScopedComPtr<IGlobalInterfaceTable> git;
+  HRESULT hr = GetGit(&git);
+  if (FAILED(hr))
+    return hr;
+
+  bits_manager_ = nullptr;
+  hr = GetInterfaceFromGit(git, git_cookie_bits_manager_, &bits_manager_);
+  if (FAILED(hr))
+    return hr;
+
+  job_ = nullptr;
+  hr = GetInterfaceFromGit(git, git_cookie_job_, &job_);
+  if (FAILED(hr))
+    return hr;
+
+  return S_OK;
+}
+
+void BackgroundDownloader::ResetInterfacePointers() {
+  job_ = nullptr;
+  bits_manager_ = nullptr;
+}
+
+HRESULT BackgroundDownloader::ClearGit() {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+
+  ResetInterfacePointers();
+
+  ScopedComPtr<IGlobalInterfaceTable> git;
+  HRESULT hr = GetGit(&git);
+  if (FAILED(hr))
+    return hr;
+
+  const DWORD cookies[] = {
+      git_cookie_job_, git_cookie_bits_manager_
+  };
+
+  for (auto cookie : cookies) {
+    hr = git->RevokeInterfaceFromGlobal(cookie);
+    DCHECK(SUCCEEDED(hr));
+  }
 
   return S_OK;
 }

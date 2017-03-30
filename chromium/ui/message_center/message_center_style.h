@@ -5,7 +5,9 @@
 #ifndef UI_MESSAGE_CENTER_MESSAGE_CENTER_STYLE_H_
 #define UI_MESSAGE_CENTER_MESSAGE_CENTER_STYLE_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/message_center/message_center_export.h"
@@ -61,6 +63,11 @@ const int kIconToTextPadding = 16;  // H space between icon & title/message.
 const int kTextTopPadding = 12;     // V space between text elements.
 const int kIconBottomPadding = 16;  // Minimum non-zero V space between icon
                                     // and frame.
+// H space between the context message and the end of the card.
+const int kTextRightPadding = 23;
+const int kTextLeftPadding = kNotificationIconSize + kIconToTextPadding;
+const int kContextMessageViewWidth =
+    kNotificationWidth - kTextLeftPadding - kTextRightPadding;
 
 // Text sizes.
 const int kTitleFontSize = 14;             // For title only.
@@ -86,8 +93,9 @@ MESSAGE_CENTER_EXPORT extern const SkColor
 
 // Given the size of an image, returns the size of the properly scaled-up image
 // which fits into |container_size|.
-gfx::Size GetImageSizeForContainerSize(const gfx::Size& container_size,
-                                       const gfx::Size& image_size);
+MESSAGE_CENTER_EXPORT gfx::Size GetImageSizeForContainerSize(
+    const gfx::Size& container_size,
+    const gfx::Size& image_size);
 
 extern const int kNotificationMaximumImageHeight;  // For image notifications.
 extern const size_t kNotificationMaximumItems;     // For list notifications.
@@ -95,6 +103,7 @@ extern const size_t kNotificationMaximumItems;     // For list notifications.
 // Timing.
 extern const int kAutocloseDefaultDelaySeconds;
 extern const int kAutocloseHighPriorityDelaySeconds;
+extern const int kAutocloseWebPageDelaySeconds;
 
 // Buttons.
 const int kButtonHeight = 38;              // In DIPs.
@@ -111,8 +120,8 @@ const SkColor kHoveredButtonBackgroundColor = SkColorSetRGB(243, 243, 243);
 const int kProgressBarThickness = 5;
 const int kProgressBarTopPadding = 16;
 const int kProgressBarCornerRadius = 3;
-const SkColor kProgressBarBackgroundColor = SkColorSetRGB(216, 216, 216);
-const SkColor kProgressBarSliceColor = SkColorSetRGB(120, 120, 120);
+const SkColor kProgressBarBackgroundColor = SkColorSetARGB(26, 0, 0, 0);
+const SkColor kProgressBarSliceColor = SkColorSetRGB(26, 194, 34);
 
 // Line limits.
 const int kMaxTitleLines = 2;

@@ -8,6 +8,7 @@
 #define RLZ_TEST_RLZ_TEST_HELPERS_H
 
 #include "base/compiler_specific.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_POSIX)
@@ -19,7 +20,7 @@
 #endif
 
 // A test helper class that constructs and destructs platform dependent machine
-// state. It's used by src/chrome/browser/rlz/rlz_unittest.cc and
+// state. It's used by src/components/rlz/rlz_tracker_unittest.cc and
 // src/rlz/lib/rlz_lib_test.cc
 class RlzLibTestNoMachineStateHelper {
  public:

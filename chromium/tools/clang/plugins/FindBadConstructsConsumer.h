@@ -85,9 +85,8 @@ class FindBadConstructsConsumer
   static RefcountIssue CheckRecordForRefcountIssue(
       const clang::CXXRecordDecl* record,
       clang::SourceLocation& loc);
-  static bool IsRefCountedCallback(const clang::CXXBaseSpecifier* base,
-                                   clang::CXXBasePath& path,
-                                   void* user_data);
+  bool IsRefCounted(const clang::CXXBaseSpecifier* base,
+                    clang::CXXBasePath& path);
   static bool HasPublicDtorCallback(const clang::CXXBaseSpecifier* base,
                                     clang::CXXBasePath& path,
                                     void* user_data);

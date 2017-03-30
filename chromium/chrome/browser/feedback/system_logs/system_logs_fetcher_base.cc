@@ -4,6 +4,8 @@
 
 #include "chrome/browser/feedback/system_logs/system_logs_fetcher_base.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "content/public/browser/browser_thread.h"
@@ -34,18 +36,29 @@ void SystemLogsFetcherBase::Fetch(const SysLogsFetcherCallback& callback) {
   callback_ = callback;
   for (size_t i = 0; i < data_sources_.size(); ++i) {
     VLOG(1) << "Fetching SystemLogSource: " << data_sources_[i]->source_name();
-    data_sources_[i]->Fetch(base::Bind(&SystemLogsFetcherBase::AddResponse,
+    data_sources_[i]->Fetch(base::Bind(&SystemLogsFetcherBase::OnFetched,
                                        AsWeakPtr(),
                                        data_sources_[i]->source_name()));
   }
 }
 
-void SystemLogsFetcherBase::AddResponse(const std::string& source_name,
-                                        SystemLogsResponse* response) {
+void SystemLogsFetcherBase::OnFetched(const std::string& source_name,
+                                      SystemLogsResponse* response) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   VLOG(1) << "Received SystemLogSource: " << source_name;
 
+  Rewrite(source_name, response);
+  AddResponse(source_name, response);
+}
+
+void SystemLogsFetcherBase::Rewrite(const std::string& /* source_name */,
+                                    SystemLogsResponse* /* response */) {
+  // This implementation in the base class is intentionally empty.
+}
+
+void SystemLogsFetcherBase::AddResponse(const std::string& source_name,
+                                        SystemLogsResponse* response) {
   for (SystemLogsResponse::const_iterator it = response->begin();
        it != response->end();
        ++it) {
@@ -58,7 +71,7 @@ void SystemLogsFetcherBase::AddResponse(const std::string& source_name,
   if (num_pending_requests_ > 0)
     return;
 
-  callback_.Run(response_.Pass());
+  callback_.Run(std::move(response_));
   BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE, this);
 }
 

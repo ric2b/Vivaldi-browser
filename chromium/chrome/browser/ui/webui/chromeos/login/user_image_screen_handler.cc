@@ -12,6 +12,7 @@
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/screens/user_image_model.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
+#include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
@@ -19,8 +20,8 @@
 #include "chromeos/audio/chromeos_sounds.h"
 #include "components/login/localized_values_builder.h"
 #include "components/user_manager/user.h"
-#include "components/user_manager/user_image/default_user_images.h"
 #include "grit/browser_resources.h"
+#include "grit/components_strings.h"
 #include "media/audio/sounds/sounds_manager.h"
 #include "net/base/data_url.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -112,8 +113,6 @@ void UserImageScreenHandler::DeclareLocalizedValues(
   builder->Add("photoDiscardAccessibleText",
                IDS_OPTIONS_PHOTO_DISCARD_ACCESSIBLE_TEXT);
   builder->Add("syncingPreferences", IDS_IMAGE_SCREEN_SYNCING_PREFERENCES);
-  builder->Add("syncingPreferencesNewGaia",
-               IDS_IMAGE_SCREEN_SYNCING_PREFERENCES_NEW_GAIA_FLOW);
 }
 
 void UserImageScreenHandler::RegisterMessages() {
@@ -132,18 +131,18 @@ void UserImageScreenHandler::RegisterMessages() {
 // TODO(antrim) : It looks more like parameters for "Init" rather than callback.
 void UserImageScreenHandler::HandleGetImages() {
   base::ListValue image_urls;
-  for (int i = user_manager::kFirstDefaultImageIndex;
-       i < user_manager::kDefaultImagesCount;
-       ++i) {
+  for (int i = default_user_image::kFirstDefaultImageIndex;
+       i < default_user_image::kDefaultImagesCount; ++i) {
     scoped_ptr<base::DictionaryValue> image_data(new base::DictionaryValue);
-    image_data->SetString("url", user_manager::GetDefaultImageUrl(i));
-    image_data->SetString(
-        "author",
-        l10n_util::GetStringUTF16(user_manager::kDefaultImageAuthorIDs[i]));
-    image_data->SetString(
-        "website",
-        l10n_util::GetStringUTF16(user_manager::kDefaultImageWebsiteIDs[i]));
-    image_data->SetString("title", user_manager::GetDefaultImageDescription(i));
+    image_data->SetString("url", default_user_image::GetDefaultImageUrl(i));
+    image_data->SetString("author",
+                          l10n_util::GetStringUTF16(
+                              default_user_image::kDefaultImageAuthorIDs[i]));
+    image_data->SetString("website",
+                          l10n_util::GetStringUTF16(
+                              default_user_image::kDefaultImageWebsiteIDs[i]));
+    image_data->SetString("title",
+                          default_user_image::GetDefaultImageDescription(i));
     image_urls.Append(image_data.release());
   }
   CallJS("setDefaultImages", image_urls);

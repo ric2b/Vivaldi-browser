@@ -4,7 +4,8 @@
 
 #include "net/socket/socks5_client_socket.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
@@ -21,9 +22,9 @@ namespace net {
 const unsigned int SOCKS5ClientSocket::kGreetReadHeaderSize = 2;
 const unsigned int SOCKS5ClientSocket::kWriteHeaderSize = 10;
 const unsigned int SOCKS5ClientSocket::kReadHeaderSize = 5;
-const uint8 SOCKS5ClientSocket::kSOCKS5Version = 0x05;
-const uint8 SOCKS5ClientSocket::kTunnelCommand = 0x01;
-const uint8 SOCKS5ClientSocket::kNullByte = 0x00;
+const uint8_t SOCKS5ClientSocket::kSOCKS5Version = 0x05;
+const uint8_t SOCKS5ClientSocket::kTunnelCommand = 0x01;
+const uint8_t SOCKS5ClientSocket::kNullByte = 0x00;
 
 static_assert(sizeof(struct in_addr) == 4, "incorrect system size of IPv4");
 static_assert(sizeof(struct in6_addr) == 16, "incorrect system size of IPv6");
@@ -33,7 +34,7 @@ SOCKS5ClientSocket::SOCKS5ClientSocket(
     const HostResolver::RequestInfo& req_info)
     : io_callback_(base::Bind(&SOCKS5ClientSocket::OnIOComplete,
                               base::Unretained(this))),
-      transport_(transport_socket.Pass()),
+      transport_(std::move(transport_socket)),
       next_state_(STATE_NONE),
       completed_handshake_(false),
       bytes_sent_(0),
@@ -41,8 +42,7 @@ SOCKS5ClientSocket::SOCKS5ClientSocket(
       read_header_size(kReadHeaderSize),
       was_ever_used_(false),
       host_request_info_(req_info),
-      net_log_(transport_->socket()->NetLog()) {
-}
+      net_log_(transport_->socket()->NetLog()) {}
 
 SOCKS5ClientSocket::~SOCKS5ClientSocket() {
   Disconnect();
@@ -150,6 +150,10 @@ void SOCKS5ClientSocket::GetConnectionAttempts(ConnectionAttempts* out) const {
   out->clear();
 }
 
+int64_t SOCKS5ClientSocket::GetTotalReceivedBytes() const {
+  return transport_->socket()->GetTotalReceivedBytes();
+}
+
 // Read is called by the transport layer above to read. This can only be done
 // if the SOCKS handshake is complete.
 int SOCKS5ClientSocket::Read(IOBuffer* buf, int buf_len,
@@ -186,11 +190,11 @@ int SOCKS5ClientSocket::Write(IOBuffer* buf, int buf_len,
   return rv;
 }
 
-int SOCKS5ClientSocket::SetReceiveBufferSize(int32 size) {
+int SOCKS5ClientSocket::SetReceiveBufferSize(int32_t size) {
   return transport_->socket()->SetReceiveBufferSize(size);
 }
 
-int SOCKS5ClientSocket::SetSendBufferSize(int32 size) {
+int SOCKS5ClientSocket::SetSendBufferSize(int32_t size) {
   return transport_->socket()->SetSendBufferSize(size);
 }
 
@@ -343,12 +347,12 @@ int SOCKS5ClientSocket::DoGreetReadComplete(int result) {
   // Got the greet data.
   if (buffer_[0] != kSOCKS5Version) {
     net_log_.AddEvent(NetLog::TYPE_SOCKS_UNEXPECTED_VERSION,
-                      NetLog::IntegerCallback("version", buffer_[0]));
+                      NetLog::IntCallback("version", buffer_[0]));
     return ERR_SOCKS_CONNECTION_FAILED;
   }
   if (buffer_[1] != 0x00) {
     net_log_.AddEvent(NetLog::TYPE_SOCKS_UNEXPECTED_AUTH,
-                      NetLog::IntegerCallback("method", buffer_[1]));
+                      NetLog::IntCallback("method", buffer_[1]));
     return ERR_SOCKS_CONNECTION_FAILED;
   }
 
@@ -374,7 +378,7 @@ int SOCKS5ClientSocket::BuildHandshakeWriteBuffer(std::string* handshake)
       host_request_info_.hostname().size()));
   handshake->append(host_request_info_.hostname());
 
-  uint16 nw_port = base::HostToNet16(host_request_info_.port());
+  uint16_t nw_port = base::HostToNet16(host_request_info_.port());
   handshake->append(reinterpret_cast<char*>(&nw_port), sizeof(nw_port));
   return OK;
 }
@@ -451,12 +455,12 @@ int SOCKS5ClientSocket::DoHandshakeReadComplete(int result) {
   if (bytes_received_ == kReadHeaderSize) {
     if (buffer_[0] != kSOCKS5Version || buffer_[2] != kNullByte) {
       net_log_.AddEvent(NetLog::TYPE_SOCKS_UNEXPECTED_VERSION,
-                        NetLog::IntegerCallback("version", buffer_[0]));
+                        NetLog::IntCallback("version", buffer_[0]));
       return ERR_SOCKS_CONNECTION_FAILED;
     }
     if (buffer_[1] != 0x00) {
       net_log_.AddEvent(NetLog::TYPE_SOCKS_SERVER_ERROR,
-                        NetLog::IntegerCallback("error_code", buffer_[1]));
+                        NetLog::IntCallback("error_code", buffer_[1]));
       return ERR_SOCKS_CONNECTION_FAILED;
     }
 
@@ -468,14 +472,14 @@ int SOCKS5ClientSocket::DoHandshakeReadComplete(int result) {
     SocksEndPointAddressType address_type =
         static_cast<SocksEndPointAddressType>(buffer_[3]);
     if (address_type == kEndPointDomain)
-      read_header_size += static_cast<uint8>(buffer_[4]);
+      read_header_size += static_cast<uint8_t>(buffer_[4]);
     else if (address_type == kEndPointResolvedIPv4)
       read_header_size += sizeof(struct in_addr) - 1;
     else if (address_type == kEndPointResolvedIPv6)
       read_header_size += sizeof(struct in6_addr) - 1;
     else {
       net_log_.AddEvent(NetLog::TYPE_SOCKS_UNKNOWN_ADDRESS_TYPE,
-                        NetLog::IntegerCallback("address_type", buffer_[3]));
+                        NetLog::IntCallback("address_type", buffer_[3]));
       return ERR_SOCKS_CONNECTION_FAILED;
     }
 

@@ -5,10 +5,13 @@
 #ifndef COMPONENTS_NACL_BROWSER_PNACL_HOST_H_
 #define COMPONENTS_NACL_BROWSER_PNACL_HOST_H_
 
+#include <stddef.h>
+
 #include <map>
 
 #include "base/callback_forward.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -101,7 +104,7 @@ class PnaclHost {
   // PnaclHost is a singleton because there is only one translation cache, and
   // so that the BrowsingDataRemover can clear it even if no translation has
   // ever been started.
-  friend struct DefaultSingletonTraits<PnaclHost>;
+  friend struct base::DefaultSingletonTraits<PnaclHost>;
   friend class FileProxy;
   friend class pnacl::PnaclHostTest;
   friend class pnacl::PnaclHostTestDisk;

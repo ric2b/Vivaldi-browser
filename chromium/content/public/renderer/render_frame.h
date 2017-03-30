@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_RENDERER_RENDER_FRAME_H_
 #define CONTENT_PUBLIC_RENDERER_RENDER_FRAME_H_
 
+#include <stddef.h>
+
 #include "base/callback_forward.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
@@ -29,6 +31,11 @@ struct WebPluginParams;
 
 namespace gfx {
 class Range;
+class Size;
+}
+
+namespace url {
+class Origin;
 }
 
 namespace v8 {
@@ -52,6 +59,24 @@ struct WebPreferences;
 class CONTENT_EXPORT RenderFrame : public IPC::Listener,
                                    public IPC::Sender {
  public:
+  // These numeric values are used in UMA logs; do not change them.
+  enum PeripheralContentStatus {
+    // Content is peripheral because it doesn't meet any of the below criteria.
+    CONTENT_STATUS_PERIPHERAL = 0,
+    // Content is essential because it's same-origin with the top-level frame.
+    CONTENT_STATUS_ESSENTIAL_SAME_ORIGIN = 1,
+    // Content is essential even though it's cross-origin, because it's large.
+    CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_BIG = 2,
+    // Content is essential because there's large content from the same origin.
+    CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_WHITELISTED = 3,
+    // Content is essential because it's tiny in size.
+    CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_TINY = 4,
+    // Content is essential because it has an unknown size.
+    CONTENT_STATUS_ESSENTIAL_UNKNOWN_SIZE = 5,
+    // Must be last.
+    CONTENT_STATUS_NUM_ITEMS
+  };
+
   // Returns the RenderFrame given a WebFrame.
   static RenderFrame* FromWebFrame(blink::WebFrame* web_frame);
 
@@ -104,12 +129,14 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
       scoped_ptr<PluginInstanceThrottler> throttler) = 0;
 
   // The client should handle the navigation externally.
-  virtual void LoadURLExternally(blink::WebLocalFrame* frame,
-                                 const blink::WebURLRequest& request,
+  virtual void LoadURLExternally(const blink::WebURLRequest& request,
                                  blink::WebNavigationPolicy policy) = 0;
 
   // Execute a string of JavaScript in this frame's context.
   virtual void ExecuteJavaScript(const base::string16& javascript) = 0;
+
+  // Returns true if this is the main (top-level) frame.
+  virtual bool IsMainFrame() = 0;
 
   // Return true if this frame is hidden.
   virtual bool IsHidden() = 0;
@@ -122,8 +149,33 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // whitelist is later updated and includes |content_origin|, then
   // |unthrottle_callback| will be called.
   virtual void RegisterPeripheralPlugin(
-      const GURL& content_origin,
+      const url::Origin& content_origin,
       const base::Closure& unthrottle_callback) = 0;
+
+  // Returns the peripheral content heuristic decision.
+  //
+  // Power Saver is enabled for plugin content that are cross-origin and
+  // heuristically determined to be not essential to the web page content.
+  //
+  // Plugin content is defined to be cross-origin when the plugin source's
+  // origin differs from the top level frame's origin. For example:
+  //  - Cross-origin:  a.com -> b.com/plugin.swf
+  //  - Cross-origin:  a.com -> b.com/iframe.html -> b.com/plugin.swf
+  //  - Same-origin:   a.com -> b.com/iframe-to-a.html -> a.com/plugin.swf
+  //
+  // |main_frame_origin| is the origin of the main frame.
+  //
+  // |content_origin| is the origin of the plugin content.
+  //
+  // |unobscured_size| are zoom and device scale independent logical pixels.
+  virtual PeripheralContentStatus GetPeripheralContentStatus(
+      const url::Origin& main_frame_origin,
+      const url::Origin& content_origin,
+      const gfx::Size& unobscured_size) const = 0;
+
+  // Whitelists a |content_origin| so its content will never be throttled in
+  // this RenderFrame. Whitelist is cleared by top level navigation.
+  virtual void WhitelistContentOrigin(const url::Origin& content_origin) = 0;
 #endif
 
   // Returns true if this frame is a FTP directory listing.
@@ -150,6 +202,12 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Adds |message| to the DevTools console.
   virtual void AddMessageToConsole(ConsoleMessageLevel level,
                                    const std::string& message) = 0;
+
+  // Whether or not this frame is using Lo-Fi.
+  virtual bool IsUsingLoFi() const = 0;
+
+  // Whether or not this frame is currently pasting.
+  virtual bool IsPasting() const = 0;
 
  protected:
   ~RenderFrame() override {}

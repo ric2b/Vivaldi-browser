@@ -4,6 +4,7 @@
  * found in the LICENSE file.
  */
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -16,7 +17,8 @@
 #include "ppapi/native_client/src/untrusted/irt_stub/thread_creator.h"
 
 static void fatal_error(const char *message) {
-  write(2, message, strlen(message));
+  ssize_t wrote __attribute__((unused));
+  wrote = write(2, message, strlen(message));
   _exit(127);
 }
 

@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 /**
- * @fileoverview Polymer element for displaying a list of network state
- * properties in a list in the format:
+ * @fileoverview Polymer element for displaying a list of network properties
+ * in a list in the format:
  *    Key1.........Value1
  *    KeyTwo.......ValueTwo
  * This also supports editing fields inline for fields listed in editFieldTypes:
@@ -14,14 +14,15 @@
 Polymer({
   is: 'network-property-list',
 
+  behaviors: [CrPolicyNetworkBehavior],
+
   properties: {
     /**
-     * The network state containing the properties to display.
-     * @type {?CrOnc.NetworkStateProperties}
+     * The dictionary containing the properties to display.
+     * @type {!Object|undefined}
      */
-    networkState: {
-      type: Object,
-      value: null
+    propertyDict: {
+      type: Object
     },
 
     /**
@@ -39,7 +40,7 @@ Polymer({
      *   'String' - A text input will be displayed.
      *   TODO(stevenjb): Support types with custom validation, e.g. IPAddress.
      *   TODO(stevenjb): Support 'Number'.
-     * When a field changes, the 'changed' event will be fired with
+     * When a field changes, the 'property-change' event will be fired with
      * the field name and the new value provided in the event detail.
      */
     editFieldTypes: {
@@ -49,19 +50,26 @@ Polymer({
   },
 
   /**
-   * Event triggered when an input field changes. Fires a 'changed' event with
-   * the field (property) name set to the target id, and the value set to the
-   * target input value.
-   * @param {Event} event The input changed event.
+   * Event triggered when an input field changes. Fires a 'property-change'
+   * event with the field (property) name set to the target id, and the value
+   * set to the target input value.
+   * @param {Event} event The input change event.
    * @private
    */
-  onValueChanged_: function(event) {
+  onValueChange_: function(event) {
+    if (!this.propertyDict)
+      return;
     var field = event.target.id;
-    var curValue = CrOnc.getActiveValue(this.networkState, field);
+    var curValue = this.get(field, this.propertyDict);
+    if (typeof curValue == 'object') {
+      // Extract the property from an ONC managed dictionary.
+      curValue =
+          CrOnc.getActiveValue(/** @type {!CrOnc.ManagedProperty} */(curValue));
+    }
     var newValue = event.target.value;
     if (newValue == curValue)
       return;
-    this.fire('changed', { field: field, value: newValue });
+    this.fire('property-change', {field: field, value: newValue});
   },
 
   /**
@@ -75,61 +83,85 @@ Polymer({
   },
 
   /**
-   * @param {?CrOnc.NetworkStateProperties} state The network state properties.
+   * @param {!Object} propertyDict
    * @param {string} key The property key.
-   * @return {boolean} Whether or not the property exists in |state|.
+   * @return {boolean} Whether or not the property exists in |propertyDict|.
    * @private
    */
-  hasPropertyValue_: function(state, key) {
-    if (!state)
-      return false;
-    var value = this.get(key, state);
-    return (value !== undefined && value !== '');
+  hasPropertyValue_: function(propertyDict, key) {
+    var value = this.get(key, propertyDict);
+    return value !== undefined && value !== '';
   },
 
   /**
-   * @param {?CrOnc.NetworkStateProperties} state The network state properties.
-   * @param {Object} editFields The editFieldTypes object.
+   * @param {!Object} propertyDict
+   * @param {!Object} editFieldTypes The editFieldTypes object.
    * @param {string} key The property key.
-   * @return {boolean} True if |key| exists in |state| and is not editable.
+   * @return {boolean} Whether or not to show the property. Editable properties
+   *     are always shown.
    * @private
    */
-  showNoEdit_: function(state, editFieldTypes, key) {
-    if (!this.hasPropertyValue_(state, key))
-      return false;
-    var editType = editFieldTypes[key];
-    return !editType;
+  showProperty_: function(propertyDict, editFieldTypes, key) {
+    if (editFieldTypes.hasOwnProperty(key))
+      return true;
+    return this.hasPropertyValue_(propertyDict, key);
   },
 
   /**
-   * @param {?CrOnc.NetworkStateProperties} state The network state properties.
-   * @param {Object} editFields The editFieldTypes object.
+   * @param {!Object} propertyDict
+   * @param {!Object} editFieldTypes The editFieldTypes object.
+   * @param {string} key The property key.
+   * @return {boolean} True if |key| exists in |propertiesDict| and is not
+   *     editable.
+   * @private
+   */
+  showNoEdit_: function(propertyDict, editFieldTypes, key) {
+    if (!this.hasPropertyValue_(propertyDict, key))
+      return false;
+    var property = /** @type {!CrOnc.ManagedProperty|undefined} */(
+      this.get(key, propertyDict));
+    if (this.isNetworkPolicyEnforced(property))
+      return true;
+    return !editFieldTypes[key];
+  },
+
+  /**
+   * @param {!Object} propertyDict
+   * @param {!Object} editFieldTypes The editFieldTypes object.
    * @param {string} key The property key.
    * @param {string} type The field type.
-   * @return {boolean} True if |key| exists in |state| and is of editable
+   * @return {boolean} True if |key| exists in |propertyDict| and is of editable
    *     type |type|.
    * @private
    */
-  showEdit_: function(state, editFieldTypes, key, type) {
-    if (!this.hasPropertyValue_(state, key))
+  showEdit_: function(propertyDict, editFieldTypes, key, type) {
+    if (!this.hasPropertyValue_(propertyDict, key))
       return false;
-    var editType = editFieldTypes[key];
-    return editType == type;
+    var property = /** @type {!CrOnc.ManagedProperty|undefined} */(
+        this.get(key, propertyDict));
+    if (this.isNetworkPolicyEnforced(property))
+      return false;
+    return editFieldTypes[key] == type;
   },
 
   /**
-   * @param {?CrOnc.NetworkStateProperties} state The network state properties.
+   * @param {!Object} propertyDict
    * @param {string} key The property key.
    * @return {string} The text to display for the property value.
    * @private
    */
-  getPropertyValue_: function(state, key) {
-    if (!state)
-      return '';
-    var value = CrOnc.getActiveValue(state, key);
+  getPropertyValue_: function(propertyDict, key) {
+    var value = this.get(key, propertyDict);
     if (value === undefined)
       return '';
+    if (typeof value == 'object') {
+      // Extract the property from an ONC managed dictionary
+      value =
+          CrOnc.getActiveValue(/** @type {!CrOnc.ManagedProperty} */(value));
+    }
     // TODO(stevenjb): Localize.
-    return value;
+    if (typeof value == 'number' || typeof value == 'boolean')
+      return value.toString();
+    return /** @type {string} */(value);
   },
 });

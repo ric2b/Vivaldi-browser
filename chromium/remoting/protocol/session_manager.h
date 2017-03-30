@@ -56,7 +56,7 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/memory/ref_counted.h"
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "remoting/protocol/session.h"
 
@@ -70,20 +70,11 @@ class Authenticator;
 class AuthenticatorFactory;
 
 // Generic interface for Chromoting session manager.
-//
-// TODO(sergeyu): Split this into two separate interfaces: one for the
-// client side and one for the host side.
 class SessionManager : public base::NonThreadSafe {
  public:
-  SessionManager() {}
-  virtual ~SessionManager() {}
-
   enum IncomingSessionResponse {
     // Accept the session.
     ACCEPT,
-
-    // Reject the session due to incompatible session configuration.
-    INCOMPATIBLE,
 
     // Reject the session because the host is currently disabled due
     // to previous login attempts.
@@ -94,51 +85,36 @@ class SessionManager : public base::NonThreadSafe {
     DECLINE,
   };
 
-  class Listener {
-   public:
-    Listener() {}
+  // Callback used to accept incoming connections. If the host decides to accept
+  // the session it should set the |response| to ACCEPT. Otherwise it should set
+  // it to DECLINE, or INCOMPATIBLE. INCOMPATIBLE indicates that the session has
+  // incompatible configuration, and cannot be accepted. If the callback accepts
+  // the |session| then it must also set configuration for the |session| using
+  // Session::set_config(). The callback must take ownership of the |session| if
+  // it ACCEPTs it.
+  typedef base::Callback<void(Session* session,
+                              IncomingSessionResponse* response)>
+      IncomingSessionCallback;
 
-    // Called when the session manager is ready to create outgoing
-    // sessions. May be called from Init() or after Init()
-    // returns.
-    virtual void OnSessionManagerReady() = 0;
+  SessionManager() {}
+  virtual ~SessionManager() {}
 
-    // Called when a new session is received. If the host decides to
-    // accept the session it should set the |response| to
-    // ACCEPT. Otherwise it should set it to DECLINE, or
-    // INCOMPATIBLE. INCOMPATIBLE indicates that the session has
-    // incompatible configuration, and cannot be accepted. If the
-    // callback accepts the |session| then it must also set
-    // configuration for the |session| using Session::set_config().
-    // The callback must take ownership of the |session| if it ACCEPTs it.
-    virtual void OnIncomingSession(Session* session,
-                                   IncomingSessionResponse* response) = 0;
+  // Starts accepting incoming connections.
+  virtual void AcceptIncoming(
+      const IncomingSessionCallback& incoming_session_callback) = 0;
 
-   protected:
-    ~Listener() {}
-  };
+  // Sets local protocol configuration to be used when negotiating outgoing and
+  // incoming connections.
+  virtual void set_protocol_config(
+      scoped_ptr<CandidateSessionConfig> config) = 0;
 
-  // Initializes the session client. Caller retains ownership of the
-  // |signal_strategy| and |listener|.
-  virtual void Init(SignalStrategy* signal_strategy,
-                    Listener* listener) = 0;
-
-  // Tries to create a session to the host |jid|. Must be called only
-  // after initialization has finished successfully, i.e. after
-  // Listener::OnInitialized() has been called.
+  // Tries to create a session to the host |jid|.
   //
   // |host_jid| is the full jid of the host to connect to.
   // |authenticator| is a client authenticator for the session.
-  // |config| contains the session configurations that the client supports.
   virtual scoped_ptr<Session> Connect(
       const std::string& host_jid,
-      scoped_ptr<Authenticator> authenticator,
-      scoped_ptr<CandidateSessionConfig> config) = 0;
-
-  // Close session manager. Can be called only after all corresponding
-  // sessions are destroyed. No callbacks are called after this method
-  // returns.
-  virtual void Close() = 0;
+      scoped_ptr<Authenticator> authenticator) = 0;
 
   // Set authenticator factory that should be used to authenticate
   // incoming connection. No connections will be accepted if

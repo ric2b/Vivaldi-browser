@@ -2,11 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("../mojo_edk.gni")
-import("../../public/mojo.gni")
 import("//testing/test.gni")
 
-mojo_edk_source_set("test_support") {
+source_set("test_support") {
   testonly = true
   sources = [
     "multiprocess_test_helper.cc",
@@ -22,14 +20,15 @@ mojo_edk_source_set("test_support") {
     "//base",
     "//base/test:test_support",
     "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/system",
   ]
 
-  mojo_edk_deps = [ "mojo/edk/system" ]
-
-  mojo_sdk_public_deps = [ "mojo/public/cpp/system" ]
+  public_deps = [
+    "//mojo/public/cpp/system",
+  ]
 }
 
-mojo_edk_source_set("run_all_unittests") {
+source_set("run_all_unittests") {
   testonly = true
   sources = [
     "run_all_unittests.cc",
@@ -39,41 +38,35 @@ mojo_edk_source_set("run_all_unittests") {
     ":test_support_impl",
     "//base",
     "//base/test:test_support",
+    "//mojo/public/c/test_support",
     "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/system",
   ]
-
-  mojo_edk_deps = [ "mojo/edk/system" ]
-
-  mojo_sdk_deps = [ "mojo/public/c/test_support" ]
 }
 
-mojo_edk_source_set("run_all_perftests") {
+source_set("run_all_perftests") {
   testonly = true
   deps = [
     ":test_support_impl",
     "//base",
     "//base/test:test_support",
+    "//mojo/public/c/test_support",
+    "//third_party/mojo/src/mojo/edk/system",
   ]
-
-  mojo_edk_deps = [ "mojo/edk/system" ]
-
-  mojo_sdk_deps = [ "mojo/public/c/test_support" ]
 
   sources = [
     "run_all_perftests.cc",
   ]
 }
 
-mojo_edk_source_set("test_support_impl") {
+source_set("test_support_impl") {
   testonly = true
   deps = [
     "//base",
     "//base/test:test_support",
+    "//mojo/public/c/test_support",
+    "//mojo/public/cpp/system",
   ]
-
-  mojo_sdk_deps = [ "mojo/public/c/test_support" ]
-
-  mojo_sdk_public_deps = [ "mojo/public/cpp/system" ]
 
   sources = [
     "test_support_impl.cc",
@@ -89,66 +82,89 @@ mojo_edk_source_set("test_support_impl") {
 group("public_tests") {
   testonly = true
   deps = [
+    ":mojo_public_bindings_perftests",
     ":mojo_public_bindings_unittests",
     ":mojo_public_environment_unittests",
     ":mojo_public_system_perftests",
     ":mojo_public_system_unittests",
     ":mojo_public_utility_unittests",
-    ":mojo_system_impl_private_unittests",
   ]
-
-  if (mojo_use_application_in_sdk) {
-    deps += [ ":mojo_public_application_unittests" ]
-  }
-}
-
-if (mojo_use_application_in_sdk) {
-  test("mojo_public_application_unittests") {
-    deps = [
-      ":run_all_unittests",
-      "../../public/cpp/application/tests",
-    ]
-  }
 }
 
 test("mojo_public_bindings_unittests") {
   deps = [
     ":run_all_unittests",
-    "../../public/cpp/bindings/tests",
+    "//mojo/public/cpp/bindings/tests",
   ]
+
+  if (is_linux && !is_component_build) {
+    # This tests dynamically loads libmojo_test_support even in non-component
+    # builds.
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+  }
+}
+
+test("mojo_public_bindings_perftests") {
+  deps = [
+    ":run_all_perftests",
+    "//mojo/public/cpp/bindings/tests:perftests",
+  ]
+
+  if (is_linux && !is_component_build) {
+    # This tests dynamically loads libmojo_test_support even in non-component
+    # builds.
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+  }
 }
 
 test("mojo_public_environment_unittests") {
   deps = [
     ":run_all_unittests",
-    "../../public/cpp/environment/tests",
+    "//mojo/public/cpp/environment/tests",
   ]
+
+  if (is_linux && !is_component_build) {
+    # This tests dynamically loads libmojo_test_support even in non-component
+    # builds.
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+  }
 }
 
 test("mojo_public_system_perftests") {
   deps = [
     ":run_all_perftests",
-    "../../public/c/system/tests:perftests",
+    "//mojo/public/c/system/tests:perftests",
   ]
+
+  if (is_linux && !is_component_build) {
+    # This tests dynamically loads libmojo_test_support even in non-component
+    # builds.
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+  }
 }
 
 test("mojo_public_system_unittests") {
   deps = [
     ":run_all_unittests",
-    "../../public/cpp/system/tests",
+    "//mojo/public/cpp/system/tests",
   ]
+
+  if (is_linux && !is_component_build) {
+    # This tests dynamically loads libmojo_test_support even in non-component
+    # builds.
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+  }
 }
 
 test("mojo_public_utility_unittests") {
   deps = [
     ":run_all_unittests",
-    "../../public/cpp/utility/tests",
+    "//mojo/public/cpp/utility/tests",
   ]
-}
 
-test("mojo_system_impl_private_unittests") {
-  deps = [
-    ":run_all_unittests",
-    "../../public/platform/native:system_impl_private_tests",
-  ]
+  if (is_linux && !is_component_build) {
+    # This tests dynamically loads libmojo_test_support even in non-component
+    # builds.
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+  }
 }

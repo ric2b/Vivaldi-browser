@@ -83,7 +83,7 @@ bool AreAbsoluteWindowsPathsEqual(const base::StringPiece& a,
     return false;
 
   // For now, just do a case-insensitive ASCII comparison. We could convert to
-  // UTF-16 and use ICU if necessary. Or maybe base::strcasecmp is good enough?
+  // UTF-16 and use ICU if necessary.
   for (size_t i = 0; i < a.size(); i++) {
     if (NormalizeWindowsPathChar(a[i]) != NormalizeWindowsPathChar(b[i]))
       return false;
@@ -164,54 +164,6 @@ bool FilesystemStringsEqual(const base::FilePath::StringType& a,
 }
 
 }  // namespace
-
-const char* GetExtensionForOutputType(Target::OutputType type,
-                                      Settings::TargetOS os) {
-  switch (os) {
-    case Settings::MAC:
-      switch (type) {
-        case Target::EXECUTABLE:
-          return "";
-        case Target::SHARED_LIBRARY:
-          return "dylib";
-        case Target::STATIC_LIBRARY:
-          return "a";
-        default:
-          NOTREACHED();
-      }
-      break;
-
-    case Settings::WIN:
-      switch (type) {
-        case Target::EXECUTABLE:
-          return "exe";
-        case Target::SHARED_LIBRARY:
-          return "dll.lib";  // Extension of import library.
-        case Target::STATIC_LIBRARY:
-          return "lib";
-        default:
-          NOTREACHED();
-      }
-      break;
-
-    case Settings::LINUX:
-      switch (type) {
-        case Target::EXECUTABLE:
-          return "";
-        case Target::SHARED_LIBRARY:
-          return "so";
-        case Target::STATIC_LIBRARY:
-          return "a";
-        default:
-          NOTREACHED();
-      }
-      break;
-
-    default:
-      NOTREACHED();
-  }
-  return "";
-}
 
 std::string FilePathToUTF8(const base::FilePath::StringType& str) {
 #if defined(OS_WIN)
@@ -425,7 +377,7 @@ bool MakeAbsolutePathRelativeIfPossible(const base::StringPiece& source_root,
 #endif
 }
 
-void NormalizePath(std::string* path) {
+void NormalizePath(std::string* path, const base::StringPiece& source_root) {
   char* pathbuf = path->empty() ? nullptr : &(*path)[0];
 
   // top_index is the first character we can modify in the path. Anything
@@ -481,9 +433,48 @@ void NormalizePath(std::string* path) {
                 // up more levels.  Otherwise "../.." would collapse to
                 // nothing.
                 top_index = dest_i;
+              } else if (top_index == 2 && !source_root.empty()) {
+                // |path| was passed in as a source-absolute path. Prepend
+                // |source_root| to make |path| absolute. |source_root| must not
+                // end with a slash unless we are at root.
+                DCHECK(source_root.size() == 1u ||
+                       !IsSlash(source_root[source_root.size() - 1u]));
+                size_t source_root_len = source_root.size();
+
+#if defined(OS_WIN)
+                // On Windows, if the source_root does not start with a slash,
+                // append one here for consistency.
+                if (!IsSlash(source_root[0])) {
+                  path->insert(0, "/" + source_root.as_string());
+                  source_root_len++;
+                } else {
+                  path->insert(0, source_root.data(), source_root_len);
+                }
+
+                // Normalize slashes in source root portion.
+                for (size_t i = 0; i < source_root_len; ++i) {
+                  if ((*path)[i] == '\\')
+                    (*path)[i] = '/';
+                }
+#else
+                path->insert(0, source_root.data(), source_root_len);
+#endif
+
+                // |path| is now absolute, so |top_index| is 1. |dest_i| and
+                // |src_i| should be incremented to keep the same relative
+                // position. Comsume the leading "//" by decrementing |dest_i|.
+                top_index = 1;
+                pathbuf = &(*path)[0];
+                dest_i += source_root_len - 2;
+                src_i += source_root_len;
+
+                // Just find the previous slash or the beginning of input.
+                while (dest_i > 0 && !IsSlash(pathbuf[dest_i - 1]))
+                  dest_i--;
               }
-              // Otherwise we're at the beginning of an absolute path. Don't
-              // allow ".." to go up another level and just eat it.
+              // Otherwise we're at the beginning of a system-absolute path, or
+              // a source-absolute path for which we don't know the absolute
+              // path. Don't allow ".." to go up another level, and just eat it.
             } else {
               // Just find the previous slash or the beginning of input.
               while (dest_i > 0 && !IsSlash(pathbuf[dest_i - 1]))
@@ -729,13 +720,53 @@ SourceDir GetToolchainGenDir(const BuildSettings* build_settings,
 
 SourceDir GetOutputDirForSourceDir(const Settings* settings,
                                    const SourceDir& source_dir) {
-  return GetOutputDirForSourceDirAsOutputFile(settings, source_dir).AsSourceDir(
-      settings->build_settings());
+  return GetOutputDirForSourceDir(
+      settings->build_settings(), source_dir,
+      settings->toolchain_label(), settings->is_default());
 }
 
-OutputFile GetOutputDirForSourceDirAsOutputFile(const Settings* settings,
-                                                const SourceDir& source_dir) {
-  OutputFile result = settings->toolchain_output_subdir();
+void AppendFixedAbsolutePathSuffix(const BuildSettings* build_settings,
+                                   const SourceDir& source_dir,
+                                   OutputFile* result) {
+  const std::string& build_dir = build_settings->build_dir().value();
+
+  if (base::StartsWith(source_dir.value(), build_dir,
+                       base::CompareCase::SENSITIVE)) {
+    size_t build_dir_size = build_dir.size();
+    result->value().append(&source_dir.value()[build_dir_size],
+                           source_dir.value().size() - build_dir_size);
+  } else {
+    result->value().append("ABS_PATH");
+#if defined(OS_WIN)
+    // Windows absolute path contains ':' after drive letter. Remove it to
+    // avoid inserting ':' in the middle of path (eg. "ABS_PATH/C:/").
+    std::string src_dir_value = source_dir.value();
+    const auto colon_pos = src_dir_value.find(':');
+    if (colon_pos != std::string::npos)
+      src_dir_value.erase(src_dir_value.begin() + colon_pos);
+#else
+    const std::string& src_dir_value = source_dir.value();
+#endif
+    result->value().append(src_dir_value);
+  }
+}
+
+SourceDir GetOutputDirForSourceDir(
+    const BuildSettings* build_settings,
+    const SourceDir& source_dir,
+    const Label& toolchain_label,
+    bool is_default_toolchain) {
+  return GetOutputDirForSourceDirAsOutputFile(
+          build_settings, source_dir, toolchain_label, is_default_toolchain)
+      .AsSourceDir(build_settings);
+}
+
+OutputFile GetOutputDirForSourceDirAsOutputFile(
+    const BuildSettings* build_settings,
+    const SourceDir& source_dir,
+    const Label& toolchain_label,
+    bool is_default_toolchain) {
+  OutputFile result(GetOutputSubdirName(toolchain_label, is_default_toolchain));
   result.value().append("obj/");
 
   if (source_dir.is_source_absolute()) {
@@ -745,29 +776,16 @@ OutputFile GetOutputDirForSourceDirAsOutputFile(const Settings* settings,
                           source_dir.value().size() - 2);
   } else {
     // System-absolute.
-    const std::string& build_dir =
-        settings->build_settings()->build_dir().value();
-
-    if (base::StartsWithASCII(source_dir.value(), build_dir, true)) {
-      size_t build_dir_size = build_dir.size();
-      result.value().append(&source_dir.value()[build_dir_size],
-                            source_dir.value().size() - build_dir_size);
-    } else {
-      result.value().append("ABS_PATH");
-#if defined(OS_WIN)
-      // Windows absolute path contains ':' after drive letter. Remove it to
-      // avoid inserting ':' in the middle of path (eg. "ABS_PATH/C:/").
-      std::string src_dir_value = source_dir.value();
-      const auto colon_pos = src_dir_value.find(':');
-      if (colon_pos != std::string::npos)
-        src_dir_value.erase(src_dir_value.begin() + colon_pos);
-#else
-      const std::string& src_dir_value = source_dir.value();
-#endif
-      result.value().append(src_dir_value);
-    }
+    AppendFixedAbsolutePathSuffix(build_settings, source_dir, &result);
   }
   return result;
+}
+
+OutputFile GetOutputDirForSourceDirAsOutputFile(const Settings* settings,
+                                                const SourceDir& source_dir) {
+  return GetOutputDirForSourceDirAsOutputFile(
+      settings->build_settings(), source_dir,
+      settings->toolchain_label(), settings->is_default());
 }
 
 SourceDir GetGenDirForSourceDir(const Settings* settings,
@@ -786,6 +804,10 @@ OutputFile GetGenDirForSourceDirAsOutputFile(const Settings* settings,
     DCHECK(source_dir.is_source_absolute());
     result.value().append(&source_dir.value()[2],
                           source_dir.value().size() - 2);
+  } else {
+    // System-absolute.
+    AppendFixedAbsolutePathSuffix(settings->build_settings(), source_dir,
+                                  &result);
   }
   return result;
 }

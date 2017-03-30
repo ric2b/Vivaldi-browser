@@ -8,6 +8,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "content/common/content_export.h"
 #include "content/common/media/media_stream_options.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
@@ -34,7 +35,7 @@ class CONTENT_EXPORT MediaStreamSource
   static const char kSourceId[];
 
   MediaStreamSource();
-  virtual ~MediaStreamSource();
+  ~MediaStreamSource() override;
 
   // Returns device information about a source that has been created by a
   // JavaScript call to GetUserMedia, e.g., a camera or microphone.

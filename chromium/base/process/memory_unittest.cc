@@ -6,11 +6,14 @@
 
 #include "base/process/memory.h"
 
+#include <stddef.h>
+
 #include <limits>
 
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
@@ -25,12 +28,21 @@
 #include "base/process/memory_unittest_mac.h"
 #endif
 #if defined(OS_LINUX)
-#include <glib.h>
 #include <malloc.h>
 #include "base/test/malloc_wrapper.h"
 #endif
 
 #if defined(OS_WIN)
+
+#if defined(_MSC_VER)
+// ssize_t needed for OutOfMemoryTest.
+#if defined(_WIN64)
+typedef __int64 ssize_t;
+#else
+typedef long ssize_t;
+#endif
+#endif
+
 // HeapQueryInformation function pointer.
 typedef BOOL (WINAPI* HeapQueryFn)  \
     (HANDLE, HEAP_INFORMATION_CLASS, PVOID, SIZE_T, PSIZE_T);
@@ -131,8 +143,9 @@ TEST(ProcessMemoryTest, MacTerminateOnHeapCorruption) {
 // OutOfMemoryTest cases. OpenBSD does not support these tests either.
 // Don't test these on ASan/TSan/MSan configurations: only test the real
 // allocator.
-// TODO(vandebo) make this work on Windows too.
-#if !defined(OS_ANDROID) && !defined(OS_OPENBSD) && !defined(OS_WIN) && \
+// Windows only supports these tests with the allocator shim in place.
+#if !defined(OS_ANDROID) && !defined(OS_OPENBSD) &&   \
+    !(defined(OS_WIN) && !defined(ALLOCATOR_SHIM)) && \
     !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
 
 #if defined(USE_TCMALLOC)
@@ -152,6 +165,9 @@ class OutOfMemoryTest : public testing::Test {
     // Make test size as large as possible minus a few pages so
     // that alignment or other rounding doesn't make it wrap.
     test_size_(std::numeric_limits<std::size_t>::max() - 12 * 1024),
+    // A test size that is > 2Gb and will cause the allocators to reject
+    // the allocation due to security restrictions. See crbug.com/169327.
+    insecure_test_size_(std::numeric_limits<int>::max()),
     signed_test_size_(std::numeric_limits<ssize_t>::max()) {
   }
 
@@ -164,6 +180,7 @@ class OutOfMemoryTest : public testing::Test {
  protected:
   void* value_;
   size_t test_size_;
+  size_t insecure_test_size_;
   ssize_t signed_test_size_;
 };
 
@@ -214,6 +231,47 @@ TEST_F(OutOfMemoryDeathTest, Calloc) {
     }, kOomRegex);
 }
 
+// OS X has no 2Gb allocation limit.
+// See https://crbug.com/169327.
+#if !defined(OS_MACOSX)
+TEST_F(OutOfMemoryDeathTest, SecurityNew) {
+  ASSERT_DEATH({
+      SetUpInDeathAssert();
+      value_ = operator new(insecure_test_size_);
+    }, kOomRegex);
+}
+
+TEST_F(OutOfMemoryDeathTest, SecurityNewArray) {
+  ASSERT_DEATH({
+      SetUpInDeathAssert();
+      value_ = new char[insecure_test_size_];
+    }, kOomRegex);
+}
+
+TEST_F(OutOfMemoryDeathTest, SecurityMalloc) {
+  ASSERT_DEATH({
+      SetUpInDeathAssert();
+      value_ = malloc(insecure_test_size_);
+    }, kOomRegex);
+}
+
+TEST_F(OutOfMemoryDeathTest, SecurityRealloc) {
+  ASSERT_DEATH({
+      SetUpInDeathAssert();
+      value_ = realloc(NULL, insecure_test_size_);
+    }, kOomRegex);
+}
+
+TEST_F(OutOfMemoryDeathTest, SecurityCalloc) {
+  ASSERT_DEATH({
+      SetUpInDeathAssert();
+      value_ = calloc(1024, insecure_test_size_ / 1024L);
+    }, kOomRegex);
+}
+#endif  // !defined(OS_MACOSX)
+
+#if defined(OS_LINUX)
+
 TEST_F(OutOfMemoryDeathTest, Valloc) {
   ASSERT_DEATH({
       SetUpInDeathAssert();
@@ -221,13 +279,25 @@ TEST_F(OutOfMemoryDeathTest, Valloc) {
     }, kOomRegex);
 }
 
-#if defined(OS_LINUX)
+TEST_F(OutOfMemoryDeathTest, SecurityValloc) {
+  ASSERT_DEATH({
+      SetUpInDeathAssert();
+      value_ = valloc(insecure_test_size_);
+    }, kOomRegex);
+}
 
 #if PVALLOC_AVAILABLE == 1
 TEST_F(OutOfMemoryDeathTest, Pvalloc) {
   ASSERT_DEATH({
       SetUpInDeathAssert();
       value_ = pvalloc(test_size_);
+    }, kOomRegex);
+}
+
+TEST_F(OutOfMemoryDeathTest, SecurityPvalloc) {
+  ASSERT_DEATH({
+      SetUpInDeathAssert();
+      value_ = pvalloc(insecure_test_size_);
     }, kOomRegex);
 }
 #endif  // PVALLOC_AVAILABLE == 1
@@ -242,8 +312,6 @@ TEST_F(OutOfMemoryDeathTest, Memalign) {
 TEST_F(OutOfMemoryDeathTest, ViaSharedLibraries) {
   // This tests that the run-time symbol resolution is overriding malloc for
   // shared libraries as well as for our code.
-  //std::string format = base::StringPrintf("%%%zud", test_size_);
-  //char *value = NULL;
   ASSERT_DEATH({
     SetUpInDeathAssert();
     value_ = MallocWrapper(test_size_);
@@ -418,5 +486,5 @@ TEST_F(OutOfMemoryHandledTest, UncheckedCalloc) {
   EXPECT_TRUE(value_ == NULL);
 }
 #endif  // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
-#endif  // !defined(OS_ANDROID) && !defined(OS_OPENBSD) && !defined(OS_WIN) &&
-        // !defined(ADDRESS_SANITIZER)
+#endif  // !defined(OS_ANDROID) && !defined(OS_OPENBSD) && !(defined(OS_WIN) &&
+        // !defined(ALLOCATOR_SHIM)) && !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)

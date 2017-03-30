@@ -43,10 +43,12 @@
 #ifndef MEDIA_FILTERS_VP8_BOOL_DECODER_H_
 #define MEDIA_FILTERS_VP8_BOOL_DECODER_H_
 
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "media/base/media_export.h"
 
 namespace media {

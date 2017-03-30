@@ -4,9 +4,13 @@
 
 #include "chromeos/cryptohome/homedir_methods.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/cryptohome_client.h"
@@ -37,9 +41,9 @@ MATCHER_P(EqualsProto, expected_proto, "") {
 const char kUserID[] = "user@example.com";
 const char kKeyLabel[] = "key_label";
 
-const int64 kKeyRevision = 123;
+const int64_t kKeyRevision = 123;
 const char kProviderData1Name[] = "data_1";
-const int64 kProviderData1Number = 12345;
+const int64_t kProviderData1Number = 12345;
 const char kProviderData2Name[] = "data_2";
 const char kProviderData2Bytes[] = "data_2 bytes";
 
@@ -88,7 +92,7 @@ void HomedirMethodsTest::SetUp() {
       new chromeos::MockCryptohomeClient);
   cryptohome_client_ = cryptohome_client.get();
   chromeos::DBusThreadManager::GetSetterForTesting()->SetCryptohomeClient(
-      cryptohome_client.Pass());
+      std::move(cryptohome_client));
   HomedirMethods::Initialize();
 }
 

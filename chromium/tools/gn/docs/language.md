@@ -56,7 +56,7 @@ wrong.
 The variable `sources` has a special rule: when assigning to it, a list
 of exclusion patterns is applied to it. This is designed to
 automatically filter out some types of files. See `gn help
-set_sources_assignment_filter` and `gn help patterns` for more.
+set_sources_assignment_filter` and `gn help label_pattern` for more.
 
 ### Strings
 
@@ -93,8 +93,8 @@ Lists support appending:
 ```
 a = [ "first" ]
 a += [ "second" ]  # [ "first", "second" ]
-a += [ "third", "fourth" ]  # [ "first", "second", "third", "fourth" ] 
-b = a + [ "fifth" ]  # [ "first", "second", "third", "fourth", "fifth" ] 
+a += [ "third", "fourth" ]  # [ "first", "second", "third", "fourth" ]
+b = a + [ "fifth" ]  # [ "first", "second", "third", "fourth", "fifth" ]
 ```
 
 Appending a list to another list appends the items in the second list
@@ -160,7 +160,7 @@ Conditionals look like C:
     ...
   } else {
     ...
-  }  
+  }
 ```
 
 You can use them in most places, even around entire targets if the
@@ -246,7 +246,7 @@ means to look for the thing named "test\_support" in
 
 When loading a build file, if it doesn't exist in the given location
 relative to the source root, GN will look in the secondary tree in
-`tools/gn/secondary`. This structure of this tree mirrors the main
+`tools/gn/secondary`. The structure of this tree mirrors the main
 repository and is a way to add build files for directories that may be
 pulled from other repositories where we can't easily check in BUILD
 files.
@@ -260,7 +260,7 @@ below).
 "//base/test:test_support(//build/toolchain/win:msvc)"
 ```
 
-In this case it will look for the a toolchain definition called "msvc"
+In this case it will look for the toolchain definition called "msvc"
 in the file `//build/toolchain/win` to know how to compile this target.
 
 If you want to refer to something in the same buildfile, you can omit
@@ -376,11 +376,11 @@ more help) are:
   * `group`: A virtual dependency node that refers to one or more other
     targets.
   * `shared_library`: A .dll or .so.
+  * `loadable_module`: A .dll or .so loadable only at runtime.
   * `source_set`: A lightweight virtual static library (usually
     preferrable over a real static library since it will build faster).
   * `static_library`: A .lib or .a file (normally you'll want a
-    source\_set instead).
-  * `test`: Generates an executable but annotates it as a test.
+    `source_set` instead).
 
 You can extend this to make custom target types using templates (see below).
 
@@ -518,7 +518,7 @@ if (target_cpu == "x64") {
 ```
 
 If a 64-bit target wants to depend on a 32-bit binary, it would specify
-a dependency using `datadeps` (data deps are like deps that are only
+a dependency using `data_deps` (data deps are like deps that are only
 needed at runtime and aren't linked, since you can't link a 32-bit and a
 64-bit library).
 
@@ -527,7 +527,7 @@ executable("my_program") {
   ...
   if (target_cpu == "x64") {
     # The 64-bit build needs this 32-bit helper.
-    datadeps = [ ":helper(//toolchains:32)" ]
+    data_deps = [ ":helper(//toolchains:32)" ]
   }
 }
 
@@ -672,7 +672,8 @@ Patterns are used to generate the output file names for a given set of
 inputs for custom target types, and to automatically remove files from
 the `sources` variable (see `gn help set_sources_assignment_filter`).
 
-They are like simple regular expressions. See `gn help patterns` for more.
+They are like simple regular expressions. See `gn help label_pattern`
+for more.
 
 ### Executing scripts
 

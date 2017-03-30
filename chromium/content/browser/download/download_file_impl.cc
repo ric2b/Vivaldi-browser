@@ -5,6 +5,7 @@
 #include "content/browser/download/download_file_impl.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -48,15 +49,14 @@ DownloadFileImpl::DownloadFileImpl(
             save_info->offset,
             calculate_hash,
             save_info->hash_state,
-            save_info->file.Pass(),
+            std::move(save_info->file),
             bound_net_log),
       default_download_directory_(default_download_directory),
-      stream_reader_(stream.Pass()),
+      stream_reader_(std::move(stream)),
       bytes_seen_(0),
       bound_net_log_(bound_net_log),
       observer_(observer),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 DownloadFileImpl::~DownloadFileImpl() {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
@@ -66,7 +66,7 @@ DownloadFileImpl::~DownloadFileImpl() {
 void DownloadFileImpl::Initialize(const InitializeCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
-  update_timer_.reset(new base::RepeatingTimer<DownloadFileImpl>());
+  update_timer_.reset(new base::RepeatingTimer());
   DownloadInterruptReason result =
       file_.Initialize(default_download_directory_);
   if (result != DOWNLOAD_INTERRUPT_REASON_NONE) {
@@ -228,7 +228,7 @@ bool DownloadFileImpl::InProgress() const {
   return file_.in_progress();
 }
 
-int64 DownloadFileImpl::CurrentSpeed() const {
+int64_t DownloadFileImpl::CurrentSpeed() const {
   return rate_estimator_.GetCountPerSecond();
 }
 
@@ -280,7 +280,10 @@ void DownloadFileImpl::StreamActive() {
               stream_reader_->GetStatus());
           SendUpdate();
           base::TimeTicks close_start(base::TimeTicks::Now());
-          file_.Finish();
+          if (reason == DOWNLOAD_INTERRUPT_REASON_NONE)
+            file_.Finish();
+          else
+            file_.FinishWithError();
           base::TimeTicks now(base::TimeTicks::Now());
           disk_writes_time_ += (now - close_start);
           RecordFileBandwidth(

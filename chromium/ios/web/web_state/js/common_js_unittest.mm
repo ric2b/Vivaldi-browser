@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #import <UIKit/UIKit.h>
 
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/web/public/test/web_test_util.h"
-#include "ios/web/test/web_test.h"
+#import "ios/web/test/web_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 
@@ -31,10 +33,12 @@ template <typename WebTestT>
 class CommonJsTest : public WebTestT {};
 
 // Concrete test fixture to test core.js using UIWebView-based web controller.
-typedef CommonJsTest<web::UIWebViewWebTest> CommonJSUIWebViewTest;
+typedef CommonJsTest<web::WebTestWithUIWebViewWebController>
+    CommonJSUIWebViewTest;
 
 // Concrete test fixture to test core.js using WKWebView-based web controller.
-typedef CommonJsTest<web::WKWebViewWebTest> CommonJSWKWebViewTest;
+typedef CommonJsTest<web::WebTestWithWKWebViewWebController>
+    CommonJSWKWebViewTest;
 
 WEB_TEST_F(CommonJSUIWebViewTest, CommonJSWKWebViewTest, Foo) {
   this->LoadHtml(@"<html><body>"

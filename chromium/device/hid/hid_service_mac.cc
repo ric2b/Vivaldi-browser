@@ -6,6 +6,7 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/hid/IOHIDDevice.h>
+#include <stdint.h>
 
 #include <set>
 #include <string>
@@ -67,14 +68,14 @@ std::string GetHidStringProperty(IOHIDDeviceRef device, CFStringRef key) {
 
 bool TryGetHidDataProperty(IOHIDDeviceRef device,
                            CFStringRef key,
-                           std::vector<uint8>* result) {
+                           std::vector<uint8_t>* result) {
   CFDataRef ref =
       base::mac::CFCast<CFDataRef>(IOHIDDeviceGetProperty(device, key));
   if (!ref) {
     return false;
   }
   STLClearObject(result);
-  const uint8* bytes = CFDataGetBytePtr(ref);
+  const uint8_t* bytes = CFDataGetBytePtr(ref);
   result->insert(result->begin(), bytes, bytes + CFDataGetLength(ref));
   return true;
 }
@@ -129,6 +130,8 @@ HidServiceMac::HidServiceMac(
   FirstEnumerationComplete();
 }
 
+HidServiceMac::~HidServiceMac() {}
+
 void HidServiceMac::Connect(const HidDeviceId& device_id,
                             const ConnectCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -178,9 +181,6 @@ void HidServiceMac::Connect(const HidDeviceId& device_id,
       FROM_HERE, base::Bind(callback, make_scoped_refptr(new HidConnectionMac(
                                           hid_device.release(), device_info,
                                           file_task_runner_))));
-}
-
-HidServiceMac::~HidServiceMac() {
 }
 
 // static
@@ -252,11 +252,10 @@ scoped_refptr<HidDeviceInfo> HidServiceMac::CreateDeviceInfo(
     return nullptr;
   }
 
-  std::vector<uint8> report_descriptor;
+  std::vector<uint8_t> report_descriptor;
   if (!TryGetHidDataProperty(hid_device, CFSTR(kIOHIDReportDescriptorKey),
                              &report_descriptor)) {
-    HID_LOG(EVENT) << "Unable to get report descriptor for new device.";
-    return nullptr;
+    HID_LOG(DEBUG) << "Device report descriptor not available.";
   }
 
   return new HidDeviceInfo(

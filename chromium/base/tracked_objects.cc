@@ -18,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/third_party/valgrind/memcheck.h"
 #include "base/tracking_info.h"
+#include "build/build_config.h"
 
 using base::TimeDelta;
 
@@ -131,27 +132,31 @@ DeathData::~DeathData() {
 // We use a macro rather than a template to force this to inline.
 // Related code for calculating max is discussed on the web.
 #define CONDITIONAL_ASSIGN(assign_it, target, source) \
-    ((target) ^= ((target) ^ (source)) & -static_cast<int32>(assign_it))
+  ((target) ^= ((target) ^ (source)) & -static_cast<int32_t>(assign_it))
 
-void DeathData::RecordDeath(const int32 queue_duration,
-                            const int32 run_duration,
-                            const uint32 random_number) {
+void DeathData::RecordDeath(const int32_t queue_duration,
+                            const int32_t run_duration,
+                            const uint32_t random_number) {
   // We'll just clamp at INT_MAX, but we should note this in the UI as such.
   if (count_ < INT_MAX)
-    ++count_;
+    base::subtle::NoBarrier_Store(&count_, count_ + 1);
 
-  int sample_probability_count = sample_probability_count_;
+  int sample_probability_count =
+      base::subtle::NoBarrier_Load(&sample_probability_count_);
   if (sample_probability_count < INT_MAX)
     ++sample_probability_count;
-  sample_probability_count_ = sample_probability_count;
+  base::subtle::NoBarrier_Store(&sample_probability_count_,
+                                sample_probability_count);
 
-  queue_duration_sum_ += queue_duration;
-  run_duration_sum_ += run_duration;
+  base::subtle::NoBarrier_Store(&queue_duration_sum_,
+                                queue_duration_sum_ + queue_duration);
+  base::subtle::NoBarrier_Store(&run_duration_sum_,
+                                run_duration_sum_ + run_duration);
 
-  if (queue_duration_max_ < queue_duration)
-    queue_duration_max_ = queue_duration;
-  if (run_duration_max_ < run_duration)
-    run_duration_max_ = run_duration;
+  if (queue_duration_max() < queue_duration)
+    base::subtle::NoBarrier_Store(&queue_duration_max_, queue_duration);
+  if (run_duration_max() < run_duration)
+    base::subtle::NoBarrier_Store(&run_duration_max_, run_duration);
 
   // Take a uniformly distributed sample over all durations ever supplied during
   // the current profiling phase.
@@ -163,17 +168,17 @@ void DeathData::RecordDeath(const int32 queue_duration,
   // used them to generate random_number).
   CHECK_GT(sample_probability_count, 0);
   if (0 == (random_number % sample_probability_count)) {
-    queue_duration_sample_ = queue_duration;
-    run_duration_sample_ = run_duration;
+    base::subtle::NoBarrier_Store(&queue_duration_sample_, queue_duration);
+    base::subtle::NoBarrier_Store(&run_duration_sample_, run_duration);
   }
 }
 
 void DeathData::OnProfilingPhaseCompleted(int profiling_phase) {
   // Snapshotting and storing current state.
   last_phase_snapshot_ = new DeathDataPhaseSnapshot(
-      profiling_phase, count_, run_duration_sum_, run_duration_max_,
-      run_duration_sample_, queue_duration_sum_, queue_duration_max_,
-      queue_duration_sample_, last_phase_snapshot_);
+      profiling_phase, count(), run_duration_sum(), run_duration_max(),
+      run_duration_sample(), queue_duration_sum(), queue_duration_max(),
+      queue_duration_sample(), last_phase_snapshot_);
 
   // Not touching fields for which a delta can be computed by comparing with a
   // snapshot from the previous phase. Resetting other fields.  Sample values
@@ -192,15 +197,17 @@ void DeathData::OnProfilingPhaseCompleted(int profiling_phase) {
   // resets.
   // sample_probability_count_ is incrementable, but must be reset to 0 at the
   // phase end, so that we start a new uniformly randomized sample selection
-  // after the reset.  Corruptions due to race conditions are possible, but the
-  // damage is limited to selecting a wrong sample, which is not something that
-  // can cause accumulating or cascading effects.
-  // If there were no corruptions caused by race conditions, we never send a
+  // after the reset. These fields are updated using atomics. However, race
+  // conditions are possible since these are updated individually and not
+  // together atomically, resulting in the values being mutually inconsistent.
+  // The damage is limited to selecting a wrong sample, which is not something
+  // that can cause accumulating or cascading effects.
+  // If there were no inconsistencies caused by race conditions, we never send a
   // sample for the previous phase in the next phase's snapshot because
   // ThreadData::SnapshotExecutedTasks doesn't send deltas with 0 count.
-  sample_probability_count_ = 0;
-  run_duration_max_ = 0;
-  queue_duration_max_ = 0;
+  base::subtle::NoBarrier_Store(&sample_probability_count_, 0);
+  base::subtle::NoBarrier_Store(&run_duration_max_, 0);
+  base::subtle::NoBarrier_Store(&queue_duration_max_, 0);
 }
 
 //------------------------------------------------------------------------------
@@ -215,20 +222,19 @@ DeathDataSnapshot::DeathDataSnapshot()
 }
 
 DeathDataSnapshot::DeathDataSnapshot(int count,
-                                     int32 run_duration_sum,
-                                     int32 run_duration_max,
-                                     int32 run_duration_sample,
-                                     int32 queue_duration_sum,
-                                     int32 queue_duration_max,
-                                     int32 queue_duration_sample)
+                                     int32_t run_duration_sum,
+                                     int32_t run_duration_max,
+                                     int32_t run_duration_sample,
+                                     int32_t queue_duration_sum,
+                                     int32_t queue_duration_max,
+                                     int32_t queue_duration_sample)
     : count(count),
       run_duration_sum(run_duration_sum),
       run_duration_max(run_duration_max),
       run_duration_sample(run_duration_sample),
       queue_duration_sum(queue_duration_sum),
       queue_duration_max(queue_duration_max),
-      queue_duration_sample(queue_duration_sample) {
-}
+      queue_duration_sample(queue_duration_sample) {}
 
 DeathDataSnapshot::~DeathDataSnapshot() {
 }
@@ -310,7 +316,7 @@ base::LazyInstance<base::Lock>::Leaky
     ThreadData::list_lock_ = LAZY_INSTANCE_INITIALIZER;
 
 // static
-ThreadData::Status ThreadData::status_ = ThreadData::UNINITIALIZED;
+base::subtle::Atomic32 ThreadData::status_ = ThreadData::UNINITIALIZED;
 
 ThreadData::ThreadData(const std::string& suggested_name)
     : next_(NULL),
@@ -342,7 +348,7 @@ void ThreadData::PushToHeadOfList() {
   (void)VALGRIND_MAKE_MEM_DEFINED_IF_ADDRESSABLE(&random_number_,
                                                  sizeof(random_number_));
   MSAN_UNPOISON(&random_number_, sizeof(random_number_));
-  random_number_ += static_cast<uint32>(this - static_cast<ThreadData*>(0));
+  random_number_ += static_cast<uint32_t>(this - static_cast<ThreadData*>(0));
   random_number_ ^= (Now() - TrackedTime()).InMilliseconds();
 
   DCHECK(!next_);
@@ -499,15 +505,16 @@ Births* ThreadData::TallyABirth(const Location& location) {
 }
 
 void ThreadData::TallyADeath(const Births& births,
-                             int32 queue_duration,
+                             int32_t queue_duration,
                              const TaskStopwatch& stopwatch) {
-  int32 run_duration = stopwatch.RunDurationMs();
+  int32_t run_duration = stopwatch.RunDurationMs();
 
   // Stir in some randomness, plus add constant in case durations are zero.
-  const uint32 kSomePrimeNumber = 2147483647;
+  const uint32_t kSomePrimeNumber = 2147483647;
   random_number_ += queue_duration + run_duration + kSomePrimeNumber;
   // An address is going to have some randomness to it as well ;-).
-  random_number_ ^= static_cast<uint32>(&births - reinterpret_cast<Births*>(0));
+  random_number_ ^=
+      static_cast<uint32_t>(&births - reinterpret_cast<Births*>(0));
 
   // We don't have queue durations without OS timer.  OS timer is automatically
   // used for task-post-timing, so the use of an alternate timer implies all
@@ -560,7 +567,7 @@ void ThreadData::TallyRunOnNamedThreadIfTracking(
   // efficient by not calling for a genuine time value.  For simplicity, we'll
   // use a default zero duration when we can't calculate a true value.
   TrackedTime start_of_run = stopwatch.StartTime();
-  int32 queue_duration = 0;
+  int32_t queue_duration = 0;
   if (!start_of_run.is_null()) {
     queue_duration = (start_of_run - completed_task.EffectiveTimePosted())
         .InMilliseconds();
@@ -593,7 +600,7 @@ void ThreadData::TallyRunOnWorkerThreadIfTracking(
     return;
 
   TrackedTime start_of_run = stopwatch.StartTime();
-  int32 queue_duration = 0;
+  int32_t queue_duration = 0;
   if (!start_of_run.is_null()) {
     queue_duration = (start_of_run - time_posted).InMilliseconds();
   }
@@ -614,7 +621,7 @@ void ThreadData::TallyRunInAScopedRegionIfTracking(
   if (!current_thread_data)
     return;
 
-  int32 queue_duration = 0;
+  int32_t queue_duration = 0;
   current_thread_data->TallyADeath(*births, queue_duration, stopwatch);
 }
 
@@ -692,7 +699,7 @@ static void OptionallyInitializeAlternateTimer() {
 }
 
 void ThreadData::Initialize() {
-  if (status_ >= DEACTIVATED)
+  if (base::subtle::Acquire_Load(&status_) >= DEACTIVATED)
     return;  // Someone else did the initialization.
   // Due to racy lazy initialization in tests, we'll need to recheck status_
   // after we acquire the lock.
@@ -701,7 +708,7 @@ void ThreadData::Initialize() {
   // threaded in the product, but some tests may be racy and lazy about our
   // initialization.
   base::AutoLock lock(*list_lock_.Pointer());
-  if (status_ >= DEACTIVATED)
+  if (base::subtle::Acquire_Load(&status_) >= DEACTIVATED)
     return;  // Someone raced in here and beat us.
 
   // Put an alternate timer in place if the environment calls for it, such as
@@ -714,12 +721,12 @@ void ThreadData::Initialize() {
   // Perform the "real" TLS initialization now, and leave it intact through
   // process termination.
   if (!tls_index_.initialized()) {  // Testing may have initialized this.
-    DCHECK_EQ(status_, UNINITIALIZED);
+    DCHECK_EQ(base::subtle::NoBarrier_Load(&status_), UNINITIALIZED);
     tls_index_.Initialize(&ThreadData::OnThreadTermination);
     DCHECK(tls_index_.initialized());
   } else {
     // TLS was initialzed for us earlier.
-    DCHECK_EQ(status_, DORMANT_DURING_TESTS);
+    DCHECK_EQ(base::subtle::NoBarrier_Load(&status_), DORMANT_DURING_TESTS);
   }
 
   // Incarnation counter is only significant to testing, as it otherwise will
@@ -729,8 +736,8 @@ void ThreadData::Initialize() {
   // The lock is not critical for setting status_, but it doesn't hurt.  It also
   // ensures that if we have a racy initialization, that we'll bail as soon as
   // we get the lock earlier in this method.
-  status_ = kInitialStartupState;
-  DCHECK(status_ != UNINITIALIZED);
+  base::subtle::Release_Store(&status_, kInitialStartupState);
+  DCHECK(base::subtle::NoBarrier_Load(&status_) != UNINITIALIZED);
 }
 
 // static
@@ -742,17 +749,17 @@ void ThreadData::InitializeAndSetTrackingStatus(Status status) {
 
   if (status > DEACTIVATED)
     status = PROFILING_ACTIVE;
-  status_ = status;
+  base::subtle::Release_Store(&status_, status);
 }
 
 // static
 ThreadData::Status ThreadData::status() {
-  return status_;
+  return static_cast<ThreadData::Status>(base::subtle::Acquire_Load(&status_));
 }
 
 // static
 bool ThreadData::TrackingStatus() {
-  return status_ > DEACTIVATED;
+  return base::subtle::Acquire_Load(&status_) > DEACTIVATED;
 }
 
 // static
@@ -817,7 +824,8 @@ void ThreadData::ShutdownSingleThreadedCleanup(bool leak) {
   worker_thread_data_creation_count_ = 0;
   cleanup_count_ = 0;
   tls_index_.Set(NULL);
-  status_ = DORMANT_DURING_TESTS;  // Almost UNINITIALIZED.
+  // Almost UNINITIALIZED.
+  base::subtle::Release_Store(&status_, DORMANT_DURING_TESTS);
 
   // To avoid any chance of racing in unit tests, which is the only place we
   // call this function, we may sometimes leak all the data structures we
@@ -924,7 +932,7 @@ TrackedTime TaskStopwatch::StartTime() const {
   return start_time_;
 }
 
-int32 TaskStopwatch::RunDurationMs() const {
+int32_t TaskStopwatch::RunDurationMs() const {
 #if DCHECK_IS_ON()
   DCHECK(state_ == STOPPED);
 #endif
@@ -946,12 +954,12 @@ ThreadData* TaskStopwatch::GetThreadData() const {
 DeathDataPhaseSnapshot::DeathDataPhaseSnapshot(
     int profiling_phase,
     int count,
-    int32 run_duration_sum,
-    int32 run_duration_max,
-    int32 run_duration_sample,
-    int32 queue_duration_sum,
-    int32 queue_duration_max,
-    int32 queue_duration_sample,
+    int32_t run_duration_sum,
+    int32_t run_duration_max,
+    int32_t run_duration_sample,
+    int32_t queue_duration_sum,
+    int32_t queue_duration_max,
+    int32_t queue_duration_sample,
     const DeathDataPhaseSnapshot* prev)
     : profiling_phase(profiling_phase),
       death_data(count,
@@ -961,8 +969,7 @@ DeathDataPhaseSnapshot::DeathDataPhaseSnapshot(
                  queue_duration_sum,
                  queue_duration_max,
                  queue_duration_sample),
-      prev(prev) {
-}
+      prev(prev) {}
 
 //------------------------------------------------------------------------------
 // TaskSnapshot

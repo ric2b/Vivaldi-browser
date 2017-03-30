@@ -5,6 +5,9 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
+#include "base/strings/utf_string_conversion_utils.h"
+#include "build/build_config.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 
@@ -15,13 +18,15 @@ namespace {
 // Table of USB codes (equivalent to DomCode values), native scan codes,
 // and DOM Level 3 |code| strings.
 #if defined(OS_WIN)
-#define USB_KEYMAP(usb, xkb, win, mac, code, id) {usb, win, code}
+#define USB_KEYMAP(usb, evdev, xkb, win, mac, code, id) {usb, win, code}
 #elif defined(OS_LINUX)
-#define USB_KEYMAP(usb, xkb, win, mac, code, id) {usb, xkb, code}
+#define USB_KEYMAP(usb, evdev, xkb, win, mac, code, id) {usb, xkb, code}
 #elif defined(OS_MACOSX)
-#define USB_KEYMAP(usb, xkb, win, mac, code, id) {usb, mac, code}
+#define USB_KEYMAP(usb, evdev, xkb, win, mac, code, id) {usb, mac, code}
+#elif defined(OS_ANDROID)
+#define USB_KEYMAP(usb, evdev, xkb, win, mac, code, id) {usb, evdev, code}
 #else
-#define USB_KEYMAP(usb, xkb, win, mac, code, id) {usb, 0, code}
+#define USB_KEYMAP(usb, evdev, xkb, win, mac, code, id) {usb, 0, code}
 #endif
 #define USB_KEYMAP_DECLARATION const KeycodeMapEntry usb_keycode_map[] =
 #include "ui/events/keycodes/dom/keycode_converter_data.inc"
@@ -36,11 +41,17 @@ struct DomKeyMapEntry {
   const char* string;
 };
 
-#define DOM_KEY_MAP(key, id) {DomKey::id, key}
 #define DOM_KEY_MAP_DECLARATION const DomKeyMapEntry dom_key_map[] =
+#define DOM_KEY_UNI(key, id, value) {DomKey::id, key}
+#define DOM_KEY_MAP_BEGIN
+#define DOM_KEY_MAP(key, id)        {DomKey::id, key}
+#define DOM_KEY_MAP_END
 #include "ui/events/keycodes/dom/dom_key_data.inc"
-#undef DOM_KEY_MAP
 #undef DOM_KEY_MAP_DECLARATION
+#undef DOM_KEY_MAP_BEGIN
+#undef DOM_KEY_MAP
+#undef DOM_KEY_MAP_END
+#undef DOM_KEY_UNI
 
 const size_t kDomKeyMapEntries = arraysize(dom_key_map);
 
@@ -86,14 +97,11 @@ int KeycodeConverter::DomCodeToNativeKeycode(DomCode code) {
 }
 
 // static
-DomCode KeycodeConverter::CodeStringToDomCode(const char* code) {
-  if (!code || !*code) {
-    LOG(WARNING) << "empty code string";
+DomCode KeycodeConverter::CodeStringToDomCode(const std::string& code) {
+  if (code.empty())
     return DomCode::NONE;
-  }
   for (size_t i = 0; i < kKeycodeMapEntries; ++i) {
-    if (usb_keycode_map[i].code &&
-        strcmp(usb_keycode_map[i].code, code) == 0) {
+    if (usb_keycode_map[i].code && code == usb_keycode_map[i].code) {
       return static_cast<DomCode>(usb_keycode_map[i].usb_keycode);
     }
   }
@@ -163,25 +171,55 @@ DomKeyLocation KeycodeConverter::DomCodeToLocation(DomCode dom_code) {
 }
 
 // static
-DomKey KeycodeConverter::KeyStringToDomKey(const char* key) {
-  if (!key || !*key)
+DomKey KeycodeConverter::KeyStringToDomKey(const std::string& key) {
+  if (key.empty())
     return DomKey::NONE;
+  // Check for standard key names.
   for (size_t i = 0; i < kDomKeyMapEntries; ++i) {
-    if (dom_key_map[i].string &&
-        strcmp(dom_key_map[i].string, key) == 0) {
+    if (dom_key_map[i].string && key == dom_key_map[i].string) {
       return dom_key_map[i].dom_key;
     }
+  }
+  if (key == "Dead") {
+    // The web KeyboardEvent string does not encode the combining character,
+    // so we just set it to the Unicode designated non-character 0xFFFF.
+    // This will round-trip convert back to 'Dead' but take no part in
+    // character composition.
+    return DomKey::DeadKeyFromCombiningCharacter(0xFFFF);
+  }
+  // Otherwise, if the string contains a single Unicode character,
+  // the key value is that character.
+  int32_t char_index = 0;
+  uint32_t character;
+  if (base::ReadUnicodeCharacter(key.c_str(),
+                                 static_cast<int32_t>(key.length()),
+                                 &char_index, &character) &&
+      key[++char_index] == 0) {
+    return DomKey::FromCharacter(character);
   }
   return DomKey::NONE;
 }
 
 // static
-const char* KeycodeConverter::DomKeyToKeyString(DomKey dom_key) {
-  for (size_t i = 0; i < kDomKeyMapEntries; ++i) {
-    if (dom_key_map[i].dom_key == dom_key)
-      return dom_key_map[i].string;
+std::string KeycodeConverter::DomKeyToKeyString(DomKey dom_key) {
+  if (dom_key.IsDeadKey()) {
+    // All dead-key combining codes collapse to 'Dead', as UI Events
+    // KeyboardEvent represents the combining character separately.
+    return "Dead";
   }
-  return "";
+  for (size_t i = 0; i < kDomKeyMapEntries; ++i) {
+    if (dom_key_map[i].dom_key == dom_key) {
+      if (dom_key_map[i].string)
+        return dom_key_map[i].string;
+      break;
+    }
+  }
+  if (dom_key.IsCharacter()) {
+    std::string s;
+    base::WriteUnicodeCharacter(dom_key.ToCharacter(), &s);
+    return s;
+  }
+  return std::string();
 }
 
 // static
@@ -264,13 +302,12 @@ uint32_t KeycodeConverter::DomCodeToUsbKeycode(DomCode dom_code) {
 }
 
 // static
-uint32_t KeycodeConverter::CodeToUsbKeycode(const char* code) {
-  if (!code || !*code)
+uint32_t KeycodeConverter::CodeToUsbKeycode(const std::string& code) {
+  if (code.empty())
     return InvalidUsbKeycode();
 
   for (size_t i = 0; i < kKeycodeMapEntries; ++i) {
-    if (usb_keycode_map[i].code &&
-        strcmp(usb_keycode_map[i].code, code) == 0) {
+    if (usb_keycode_map[i].code && code == usb_keycode_map[i].code) {
       return usb_keycode_map[i].usb_keycode;
     }
   }

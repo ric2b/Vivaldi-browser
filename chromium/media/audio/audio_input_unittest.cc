@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/environment.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/audio/audio_unittest_util.h"
@@ -27,7 +30,7 @@ class TestInputCallback : public AudioInputStream::AudioInputCallback {
   }
   void OnData(AudioInputStream* stream,
               const AudioBus* source,
-              uint32 hardware_delay_bytes,
+              uint32_t hardware_delay_bytes,
               double volume) override {
     ++callback_count_;
   }
@@ -219,10 +222,9 @@ TEST_F(AudioInputTest, MAYBE_Record) {
   TestInputCallback test_callback;
   OpenAndStartAudioInputStreamOnAudioThread(&test_callback);
 
-  message_loop_.PostDelayedTask(
-      FROM_HERE,
-      base::MessageLoop::QuitClosure(),
-      base::TimeDelta::FromMilliseconds(500));
+  message_loop_.PostDelayedTask(FROM_HERE,
+                                base::MessageLoop::QuitWhenIdleClosure(),
+                                base::TimeDelta::FromMilliseconds(500));
   message_loop_.Run();
   EXPECT_GE(test_callback.callback_count(), 2);
   EXPECT_FALSE(test_callback.had_error());

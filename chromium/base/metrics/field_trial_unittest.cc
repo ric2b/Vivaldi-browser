@@ -4,7 +4,10 @@
 
 #include "base/metrics/field_trial.h"
 
+#include <stddef.h>
+
 #include "base/build_time.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -72,6 +75,8 @@ class FieldTrialTest : public testing::Test {
  private:
   MessageLoop message_loop_;
   FieldTrialList trial_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(FieldTrialTest);
 };
 
 // Test registration, and also check that destructors are called for trials
@@ -311,8 +316,19 @@ TEST_F(FieldTrialTest, ActiveGroups) {
   }
 }
 
+TEST_F(FieldTrialTest, GetActiveFieldTrialGroupsFromString) {
+  FieldTrial::ActiveGroups active_groups;
+  FieldTrialList::GetActiveFieldTrialGroupsFromString("*A/X/B/Y/*C/Z",
+                                                      &active_groups);
+  ASSERT_EQ(2U, active_groups.size());
+  EXPECT_EQ("A", active_groups[0].trial_name);
+  EXPECT_EQ("X", active_groups[0].group_name);
+  EXPECT_EQ("C", active_groups[1].trial_name);
+  EXPECT_EQ("Z", active_groups[1].group_name);
+}
+
 TEST_F(FieldTrialTest, AllGroups) {
-  FieldTrial::FieldTrialState field_trial_state;
+  FieldTrial::State field_trial_state;
   std::string one_winner("One Winner");
   scoped_refptr<FieldTrial> trial =
       CreateFieldTrial(one_winner, 10, "Default", NULL);
@@ -376,6 +392,28 @@ TEST_F(FieldTrialTest, ActiveGroupsNotFinalized) {
   EXPECT_EQ(active_group.group_name, active_groups[0].group_name);
 }
 
+TEST_F(FieldTrialTest, GetGroupNameWithoutActivation) {
+  const char kTrialName[] = "TestTrial";
+  const char kSecondaryGroupName[] = "SecondaryGroup";
+
+  int default_group = -1;
+  scoped_refptr<FieldTrial> trial =
+      CreateFieldTrial(kTrialName, 100, kDefaultGroupName, &default_group);
+  trial->AppendGroup(kSecondaryGroupName, 50);
+
+  // The trial should start inactive.
+  EXPECT_FALSE(FieldTrialList::IsTrialActive(kTrialName));
+
+  // Calling |GetGroupNameWithoutActivation()| should not activate the trial.
+  std::string group_name = trial->GetGroupNameWithoutActivation();
+  EXPECT_FALSE(group_name.empty());
+  EXPECT_FALSE(FieldTrialList::IsTrialActive(kTrialName));
+
+  // Calling |group_name()| should activate it and return the same group name.
+  EXPECT_EQ(group_name, trial->group_name());
+  EXPECT_TRUE(FieldTrialList::IsTrialActive(kTrialName));
+}
+
 TEST_F(FieldTrialTest, Save) {
   std::string save_string;
 
@@ -422,30 +460,34 @@ TEST_F(FieldTrialTest, SaveAll) {
   std::string save_string;
 
   scoped_refptr<FieldTrial> trial =
-      CreateFieldTrial("Some name", 10, "Default some name", NULL);
+      CreateFieldTrial("Some name", 10, "Default some name", nullptr);
   EXPECT_EQ("", trial->group_name_internal());
   FieldTrialList::AllStatesToString(&save_string);
   EXPECT_EQ("Some name/Default some name/", save_string);
+  // Getting all states should have finalized the trial.
+  EXPECT_EQ("Default some name", trial->group_name_internal());
   save_string.clear();
 
   // Create a winning group.
+  trial = CreateFieldTrial("trial2", 10, "Default some name", nullptr);
   trial->AppendGroup("Winner", 10);
   // Finalize the group selection by accessing the selected group.
   trial->group();
   FieldTrialList::AllStatesToString(&save_string);
-  EXPECT_EQ("*Some name/Winner/", save_string);
+  EXPECT_EQ("Some name/Default some name/*trial2/Winner/", save_string);
   save_string.clear();
 
   // Create a second trial and winning group.
   scoped_refptr<FieldTrial> trial2 =
-      CreateFieldTrial("xxx", 10, "Default xxx", NULL);
+      CreateFieldTrial("xxx", 10, "Default xxx", nullptr);
   trial2->AppendGroup("yyyy", 10);
   // Finalize the group selection by accessing the selected group.
   trial2->group();
 
   FieldTrialList::AllStatesToString(&save_string);
   // We assume names are alphabetized... though this is not critical.
-  EXPECT_EQ("*Some name/Winner/*xxx/yyyy/", save_string);
+  EXPECT_EQ("Some name/Default some name/*trial2/Winner/*xxx/yyyy/",
+            save_string);
   save_string.clear();
 
   // Create a third trial with only the default group.
@@ -453,7 +495,8 @@ TEST_F(FieldTrialTest, SaveAll) {
       CreateFieldTrial("zzz", 10, "default", NULL);
 
   FieldTrialList::AllStatesToString(&save_string);
-  EXPECT_EQ("*Some name/Winner/*xxx/yyyy/zzz/default/", save_string);
+  EXPECT_EQ("Some name/Default some name/*trial2/Winner/*xxx/yyyy/zzz/default/",
+            save_string);
 }
 
 TEST_F(FieldTrialTest, Restore) {

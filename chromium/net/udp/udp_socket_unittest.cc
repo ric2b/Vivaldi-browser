@@ -7,9 +7,9 @@
 #include "net/udp/udp_client_socket.h"
 #include "net/udp/udp_server_socket.h"
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -26,6 +26,10 @@
 #include "net/test/net_test_suite.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
+
+#if defined(OS_IOS)
+#include <TargetConditionals.h>
+#endif
 
 namespace net {
 
@@ -53,7 +57,7 @@ class UDPSocketTest : public PlatformTest {
   // If |address| is specified, then it is used for the destination
   // to send to. Otherwise, will send to the last socket this server
   // received from.
-  int SendToSocket(UDPServerSocket* socket, std::string msg) {
+  int SendToSocket(UDPServerSocket* socket, const std::string& msg) {
     return SendToSocket(socket, msg, recv_from_address_);
   }
 
@@ -94,7 +98,7 @@ class UDPSocketTest : public PlatformTest {
 
   // Loop until |msg| has been written to the socket or until an
   // error occurs.
-  int WriteSocket(UDPClientSocket* socket, std::string msg) {
+  int WriteSocket(UDPClientSocket* socket, const std::string& msg) {
     TestCompletionCallback callback;
 
     int length = msg.length();
@@ -116,12 +120,15 @@ class UDPSocketTest : public PlatformTest {
     return bytes_sent;
   }
 
-  void WriteSocketIgnoreResult(UDPClientSocket* socket, std::string msg) {
+  void WriteSocketIgnoreResult(UDPClientSocket* socket,
+                               const std::string& msg) {
     WriteSocket(socket, msg);
   }
 
   // Creates an address from ip address and port and writes it to |*address|.
-  void CreateUDPAddress(std::string ip_str, uint16 port, IPEndPoint* address) {
+  void CreateUDPAddress(const std::string& ip_str,
+                        uint16_t port,
+                        IPEndPoint* address) {
     IPAddressNumber ip_number;
     bool rv = ParseIPLiteralToNumber(ip_str, &ip_number);
     if (!rv)
@@ -146,7 +153,7 @@ void ReadCompleteCallback(int* result_out, base::Closure callback, int result) {
 }
 
 void UDPSocketTest::ConnectTest(bool use_nonblocking_io) {
-  const uint16 kPort = 9999;
+  const uint16_t kPort = 9999;
   std::string simple_message("hello world!");
 
   // Setup the server to listen.
@@ -272,7 +279,7 @@ TEST_F(UDPSocketTest, DISABLED_Broadcast) {
 #else
 TEST_F(UDPSocketTest, Broadcast) {
 #endif
-  const uint16 kPort = 9999;
+  const uint16_t kPort = 9999;
   std::string first_message("first message"), second_message("second message");
 
   IPEndPoint broadcast_address;
@@ -395,7 +402,14 @@ int PrivilegedRand(int min, int max) {
   return 4;
 }
 
-TEST_F(UDPSocketTest, ConnectFail) {
+#if defined(OS_IOS) && !TARGET_IPHONE_SIMULATOR
+// TODO(droger): On iOS this test fails on device (but passes on simulator).
+// See http://crbug.com/227760.
+#define MAYBE_ConnectFail DISABLED_ConnectFail
+#else
+#define MAYBE_ConnectFail ConnectFail
+#endif
+TEST_F(UDPSocketTest, MAYBE_ConnectFail) {
   IPEndPoint peer_address;
   CreateUDPAddress("0.0.0.0", 53, &peer_address);
 
@@ -422,8 +436,8 @@ TEST_F(UDPSocketTest, ConnectFail) {
 // not bind the client's reads to only be from that endpoint, and that we need
 // to always use recvfrom() to disambiguate.
 TEST_F(UDPSocketTest, VerifyConnectBindsAddr) {
-  const uint16 kPort1 = 9999;
-  const uint16 kPort2 = 10000;
+  const uint16_t kPort1 = 9999;
+  const uint16_t kPort2 = 10000;
   std::string simple_message("hello world!");
   std::string foreign_message("BAD MESSAGE TO GET!!");
 
@@ -488,8 +502,9 @@ TEST_F(UDPSocketTest, ClientGetLocalPeerAddresses) {
   } tests[] = {
     { "127.0.00.1", "127.0.0.1", false },
     { "::1", "::1", true },
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
     // Addresses below are disabled on Android. See crbug.com/161248
+    // They are also disabled on iOS. See https://crbug.com/523225
     { "192.168.1.1", "127.0.0.1", false },
     { "2001:db8:0::42", "::1", true },
 #endif
@@ -591,7 +606,7 @@ TEST_F(UDPSocketTest, CloseWithPendingRead) {
 #endif  // defined(OS_ANDROID)
 
 TEST_F(UDPSocketTest, MAYBE_JoinMulticastGroup) {
-  const uint16 kPort = 9999;
+  const uint16_t kPort = 9999;
   const char kGroup[] = "237.132.100.17";
 
   IPEndPoint bind_address;
@@ -616,7 +631,7 @@ TEST_F(UDPSocketTest, MAYBE_JoinMulticastGroup) {
 }
 
 TEST_F(UDPSocketTest, MulticastOptions) {
-  const uint16 kPort = 9999;
+  const uint16_t kPort = 9999;
   IPEndPoint bind_address;
   CreateUDPAddress("0.0.0.0", kPort, &bind_address);
 
@@ -711,8 +726,8 @@ BOOL WINAPI FakeQOSAddSocketToFlow(HANDLE handle,
                                    PQOS_FLOWID flow_id) {
   EXPECT_EQ(kFakeHandle, handle);
   EXPECT_EQ(NULL, addr);
-  EXPECT_EQ(QOS_NON_ADAPTIVE_FLOW, flags);
-  EXPECT_EQ(0, *flow_id);
+  EXPECT_EQ(static_cast<DWORD>(QOS_NON_ADAPTIVE_FLOW), flags);
+  EXPECT_EQ(0u, *flow_id);
   *flow_id = kFakeFlowId;
   return true;
 }
@@ -722,9 +737,9 @@ BOOL WINAPI FakeQOSRemoveSocketFromFlow(HANDLE handle,
                                         QOS_FLOWID flowid,
                                         DWORD reserved) {
   EXPECT_EQ(kFakeHandle, handle);
-  EXPECT_EQ(NULL, socket);
+  EXPECT_EQ(0u, socket);
   EXPECT_EQ(kFakeFlowId, flowid);
-  EXPECT_EQ(0, reserved);
+  EXPECT_EQ(0u, reserved);
   return true;
 }
 
@@ -742,7 +757,7 @@ BOOL WINAPI FakeQOSSetFlow(HANDLE handle,
   EXPECT_EQ(sizeof(DWORD), size);
   EXPECT_EQ(g_expected_dscp, *reinterpret_cast<DWORD*>(data));
   EXPECT_EQ(kFakeFlowId, flow_id);
-  EXPECT_EQ(0, reserved);
+  EXPECT_EQ(0u, reserved);
   EXPECT_EQ(NULL, overlapped);
   return true;
 }

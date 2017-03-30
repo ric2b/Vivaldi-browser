@@ -8,15 +8,10 @@
 #include <termios.h>
 
 #include "base/posix/eintr_wrapper.h"
+#include "build/build_config.h"
 
 #if defined(OS_LINUX)
 #include <linux/serial.h>
-#if defined(OS_CHROMEOS)
-#include "base/bind.h"
-#include "base/sys_info.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/permission_broker_client.h"
-#endif  // defined(OS_CHROMEOS)
 
 // The definition of struct termios2 is copied from asm-generic/termbits.h
 // because including that header directly conflicts with termios.h.
@@ -34,6 +29,10 @@ struct termios2 {
 }
 
 #endif  // defined(OS_LINUX)
+
+#if defined(OS_MACOSX)
+#include <IOKit/serial/ioss.h>
+#endif
 
 namespace {
 
@@ -75,6 +74,7 @@ bool BitrateToSpeedConstant(int bitrate, speed_t* speed) {
 #undef BITRATE_TO_SPEED_CASE
 }
 
+#if !defined(OS_LINUX)
 // Convert a known nominal speed into an integral bitrate. Returns |true|
 // if the conversion was successful and |false| otherwise.
 bool SpeedConstantToBitrate(speed_t speed, int* bitrate) {
@@ -99,47 +99,12 @@ bool SpeedConstantToBitrate(speed_t speed, int* bitrate) {
     SPEED_TO_BITRATE_CASE(9600)
     SPEED_TO_BITRATE_CASE(19200)
     SPEED_TO_BITRATE_CASE(38400)
-#if !defined(OS_MACOSX)
-    SPEED_TO_BITRATE_CASE(57600)
-    SPEED_TO_BITRATE_CASE(115200)
-    SPEED_TO_BITRATE_CASE(230400)
-    SPEED_TO_BITRATE_CASE(460800)
-    SPEED_TO_BITRATE_CASE(576000)
-    SPEED_TO_BITRATE_CASE(921600)
-#endif
     default:
       return false;
   }
 #undef SPEED_TO_BITRATE_CASE
 }
-
-bool SetCustomBitrate(base::PlatformFile file,
-                      struct termios* config,
-                      int bitrate) {
-#if defined(OS_LINUX)
-  struct termios2 tio;
-  if (ioctl(file, TCGETS2, &tio) < 0) {
-    VPLOG(1) << "Failed to get parameters to set custom bitrate";
-    return false;
-  }
-  tio.c_cflag &= ~CBAUD;
-  tio.c_cflag |= CBAUDEX;
-  tio.c_ispeed = bitrate;
-  tio.c_ospeed = bitrate;
-  if (ioctl(file, TCSETS2, &tio) < 0) {
-    VPLOG(1) << "Failed to set custom bitrate";
-    return false;
-  }
-  return true;
-#elif defined(OS_MACOSX)
-  speed_t speed = static_cast<speed_t>(bitrate);
-  cfsetispeed(config, speed);
-  cfsetospeed(config, speed);
-  return true;
-#else
-  return false;
 #endif
-}
 
 }  // namespace
 
@@ -151,35 +116,6 @@ scoped_refptr<SerialIoHandler> SerialIoHandler::Create(
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner) {
   return new SerialIoHandlerPosix(file_thread_task_runner,
                                   ui_thread_task_runner);
-}
-
-void SerialIoHandlerPosix::RequestAccess(
-    const std::string& port,
-    scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner) {
-#if defined(OS_LINUX) && defined(OS_CHROMEOS)
-  if (base::SysInfo::IsRunningOnChromeOS()) {
-    chromeos::PermissionBrokerClient* client =
-        chromeos::DBusThreadManager::Get()->GetPermissionBrokerClient();
-    if (!client) {
-      DVLOG(1) << "Could not get permission_broker client.";
-      OnRequestAccessComplete(port, false /* failure */);
-      return;
-    }
-    // PermissionBrokerClient should be called on the UI thread.
-    ui_task_runner->PostTask(
-        FROM_HERE,
-        base::Bind(
-            &chromeos::PermissionBrokerClient::RequestPathAccess,
-            base::Unretained(client), port, -1,
-            base::Bind(&SerialIoHandler::OnRequestAccessComplete, this, port)));
-  } else {
-    OnRequestAccessComplete(port, true /* success */);
-    return;
-  }
-#else
-  OnRequestAccessComplete(port, true /* success */);
-#endif  // defined(OS_LINUX) && defined(OS_CHROMEOS)
 }
 
 void SerialIoHandlerPosix::ReadImpl() {
@@ -213,16 +149,21 @@ void SerialIoHandlerPosix::CancelWriteImpl() {
 }
 
 bool SerialIoHandlerPosix::ConfigurePortImpl() {
+#if defined(OS_LINUX)
+  struct termios2 config;
+  if (ioctl(file().GetPlatformFile(), TCGETS2, &config) < 0) {
+#else
   struct termios config;
   if (tcgetattr(file().GetPlatformFile(), &config) != 0) {
-    VPLOG(1) << "Failed to get port attributes";
+#endif
+    VPLOG(1) << "Failed to get port configuration";
     return false;
   }
 
   // Set flags for 'raw' operation
   config.c_lflag &= ~(ICANON | ECHO | ECHOE | ECHONL | ISIG);
-  config.c_iflag &=
-      ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+  config.c_iflag &= ~(IGNBRK | BRKINT | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+  config.c_iflag |= PARMRK;
   config.c_oflag &= ~OPOST;
 
   // CLOCAL causes the system to disregard the DCD signal state.
@@ -231,15 +172,31 @@ bool SerialIoHandlerPosix::ConfigurePortImpl() {
 
   DCHECK(options().bitrate);
   speed_t bitrate_opt = B0;
+#if defined(OS_MACOSX)
+  bool need_iossiospeed = false;
+#endif
   if (BitrateToSpeedConstant(options().bitrate, &bitrate_opt)) {
+#if defined(OS_LINUX)
+    config.c_cflag &= ~CBAUD;
+    config.c_cflag |= bitrate_opt;
+#else
     cfsetispeed(&config, bitrate_opt);
     cfsetospeed(&config, bitrate_opt);
+#endif
   } else {
     // Attempt to set a custom speed.
-    if (!SetCustomBitrate(file().GetPlatformFile(), &config,
-                          options().bitrate)) {
-      return false;
-    }
+#if defined(OS_LINUX)
+    config.c_cflag &= ~CBAUD;
+    config.c_cflag |= CBAUDEX;
+    config.c_ispeed = config.c_ospeed = options().bitrate;
+#elif defined(OS_MACOSX)
+    // cfsetispeed and cfsetospeed sometimes work for custom baud rates on OS
+    // X but the IOSSIOSPEED ioctl is more reliable but has to be done after
+    // the rest of the port parameters are set or else it will be overwritten.
+    need_iossiospeed = true;
+#else
+    return false;
+#endif
   }
 
   DCHECK(options().data_bits != serial::DATA_BITS_NONE);
@@ -269,6 +226,19 @@ bool SerialIoHandlerPosix::ConfigurePortImpl() {
       break;
   }
 
+  error_detect_state_ = ErrorDetectState::NO_ERROR;
+  num_chars_stashed_ = 0;
+
+  if (config.c_cflag & PARENB) {
+    config.c_iflag &= ~IGNPAR;
+    config.c_iflag |= INPCK;
+    parity_check_enabled_ = true;
+  } else {
+    config.c_iflag |= IGNPAR;
+    config.c_iflag &= ~INPCK;
+    parity_check_enabled_ = false;
+  }
+
   DCHECK(options().stop_bits != serial::STOP_BITS_NONE);
   switch (options().stop_bits) {
     case serial::STOP_BITS_TWO:
@@ -287,10 +257,25 @@ bool SerialIoHandlerPosix::ConfigurePortImpl() {
     config.c_cflag &= ~CRTSCTS;
   }
 
+#if defined(OS_LINUX)
+  if (ioctl(file().GetPlatformFile(), TCSETS2, &config) < 0) {
+#else
   if (tcsetattr(file().GetPlatformFile(), TCSANOW, &config) != 0) {
+#endif
     VPLOG(1) << "Failed to set port attributes";
     return false;
   }
+
+#if defined(OS_MACOSX)
+  if (need_iossiospeed) {
+    speed_t bitrate = options().bitrate;
+    if (ioctl(file().GetPlatformFile(), IOSSIOSPEED, &bitrate) == -1) {
+      VPLOG(1) << "Failed to set custom baud rate";
+      return false;
+    }
+  }
+#endif
+
   return true;
 }
 
@@ -322,7 +307,19 @@ void SerialIoHandlerPosix::OnFileCanReadWithoutBlocking(int fd) {
     } else if (bytes_read == 0) {
       ReadCompleted(0, serial::RECEIVE_ERROR_DEVICE_LOST);
     } else {
-      ReadCompleted(bytes_read, serial::RECEIVE_ERROR_NONE);
+      bool break_detected = false;
+      bool parity_error_detected = false;
+      int new_bytes_read =
+          CheckReceiveError(pending_read_buffer(), pending_read_buffer_len(),
+                            bytes_read, break_detected, parity_error_detected);
+
+      if (break_detected) {
+        ReadCompleted(new_bytes_read, serial::RECEIVE_ERROR_BREAK);
+      } else if (parity_error_detected) {
+        ReadCompleted(new_bytes_read, serial::RECEIVE_ERROR_PARITY_ERROR);
+      } else {
+        ReadCompleted(new_bytes_read, serial::RECEIVE_ERROR_NONE);
+      }
     }
   } else {
     // Stop watching the fd if we get notifications with no pending
@@ -401,7 +398,7 @@ serial::DeviceControlSignalsPtr SerialIoHandlerPosix::GetControlSignals()
   signals->cts = (status & TIOCM_CTS) != 0;
   signals->dsr = (status & TIOCM_DSR) != 0;
   signals->ri = (status & TIOCM_RI) != 0;
-  return signals.Pass();
+  return signals;
 }
 
 bool SerialIoHandlerPosix::SetControlSignals(
@@ -437,12 +434,22 @@ bool SerialIoHandlerPosix::SetControlSignals(
 }
 
 serial::ConnectionInfoPtr SerialIoHandlerPosix::GetPortInfo() const {
+#if defined(OS_LINUX)
+  struct termios2 config;
+  if (ioctl(file().GetPlatformFile(), TCGETS2, &config) < 0) {
+#else
   struct termios config;
   if (tcgetattr(file().GetPlatformFile(), &config) == -1) {
+#endif
     VPLOG(1) << "Failed to get port info";
     return serial::ConnectionInfoPtr();
   }
+
   serial::ConnectionInfoPtr info(serial::ConnectionInfo::New());
+#if defined(OS_LINUX)
+  // Linux forces c_ospeed to contain the correct value, which is nice.
+  info->bitrate = config.c_ospeed;
+#else
   speed_t ispeed = cfgetispeed(&config);
   speed_t ospeed = cfgetospeed(&config);
   if (ispeed == ospeed) {
@@ -453,6 +460,8 @@ serial::ConnectionInfoPtr SerialIoHandlerPosix::GetPortInfo() const {
       info->bitrate = static_cast<int>(ispeed);
     }
   }
+#endif
+
   if ((config.c_cflag & CSIZE) == CS7) {
     info->data_bits = serial::DATA_BITS_SEVEN;
   } else if ((config.c_cflag & CSIZE) == CS8) {
@@ -469,7 +478,7 @@ serial::ConnectionInfoPtr SerialIoHandlerPosix::GetPortInfo() const {
   info->stop_bits =
       (config.c_cflag & CSTOPB) ? serial::STOP_BITS_TWO : serial::STOP_BITS_ONE;
   info->cts_flow_control = (config.c_cflag & CRTSCTS) != 0;
-  return info.Pass();
+  return info;
 }
 
 bool SerialIoHandlerPosix::SetBreak() {
@@ -487,6 +496,122 @@ bool SerialIoHandlerPosix::ClearBreak() {
     return false;
   }
   return true;
+}
+
+// break sequence:
+// '\377'       -->        ErrorDetectState::MARK_377_SEEN
+// '\0'         -->          ErrorDetectState::MARK_0_SEEN
+// '\0'         -->                         break detected
+//
+// parity error sequence:
+// '\377'       -->        ErrorDetectState::MARK_377_SEEN
+// '\0'         -->          ErrorDetectState::MARK_0_SEEN
+// character with parity error  -->  parity error detected
+//
+// break/parity error sequences are removed from the byte stream
+// '\377' '\377' sequence is replaced with '\377'
+int SerialIoHandlerPosix::CheckReceiveError(char* buffer,
+                                            int buffer_len,
+                                            int bytes_read,
+                                            bool& break_detected,
+                                            bool& parity_error_detected) {
+  int new_bytes_read = num_chars_stashed_;
+  DCHECK_LE(new_bytes_read, 2);
+
+  for (int i = 0; i < bytes_read; ++i) {
+    char ch = buffer[i];
+    if (new_bytes_read == 0) {
+      chars_stashed_[0] = ch;
+    } else if (new_bytes_read == 1) {
+      chars_stashed_[1] = ch;
+    } else {
+      buffer[new_bytes_read - 2] = ch;
+    }
+    ++new_bytes_read;
+    switch (error_detect_state_) {
+      case ErrorDetectState::NO_ERROR:
+        if (ch == '\377') {
+          error_detect_state_ = ErrorDetectState::MARK_377_SEEN;
+        }
+        break;
+      case ErrorDetectState::MARK_377_SEEN:
+        DCHECK_GE(new_bytes_read, 2);
+        if (ch == '\0') {
+          error_detect_state_ = ErrorDetectState::MARK_0_SEEN;
+        } else {
+          if (ch == '\377') {
+            // receive two bytes '\377' '\377', since ISTRIP is not set and
+            // PARMRK is set, a valid byte '\377' is passed to the program as
+            // two bytes, '\377' '\377'. Replace these two bytes with one byte
+            // of '\377', and set error_detect_state_ back to
+            // ErrorDetectState::NO_ERROR.
+            --new_bytes_read;
+          }
+          error_detect_state_ = ErrorDetectState::NO_ERROR;
+        }
+        break;
+      case ErrorDetectState::MARK_0_SEEN:
+        DCHECK_GE(new_bytes_read, 3);
+        if (ch == '\0') {
+          break_detected = true;
+          new_bytes_read -= 3;
+          error_detect_state_ = ErrorDetectState::NO_ERROR;
+        } else {
+          if (parity_check_enabled_) {
+            parity_error_detected = true;
+            new_bytes_read -= 3;
+            error_detect_state_ = ErrorDetectState::NO_ERROR;
+          } else if (ch == '\377') {
+            error_detect_state_ = ErrorDetectState::MARK_377_SEEN;
+          } else {
+            error_detect_state_ = ErrorDetectState::NO_ERROR;
+          }
+        }
+        break;
+    }
+  }
+  // Now new_bytes_read bytes should be returned to the caller (including the
+  // previously stashed characters that were stored at chars_stashed_[]) and are
+  // now stored at: chars_stashed_[0], chars_stashed_[1], buffer[...].
+
+  // Stash up to 2 characters that are potentially part of a break/parity error
+  // sequence. The buffer may also not be large enough to store all the bytes.
+  // tmp[] stores the characters that need to be stashed for this read.
+  char tmp[2];
+  num_chars_stashed_ = 0;
+  if (error_detect_state_ == ErrorDetectState::MARK_0_SEEN ||
+      new_bytes_read - buffer_len == 2) {
+    // need to stash the last two characters
+    if (new_bytes_read == 2) {
+      memcpy(tmp, chars_stashed_, new_bytes_read);
+    } else {
+      if (new_bytes_read == 3) {
+        tmp[0] = chars_stashed_[1];
+      } else {
+        tmp[0] = buffer[new_bytes_read - 4];
+      }
+      tmp[1] = buffer[new_bytes_read - 3];
+    }
+    num_chars_stashed_ = 2;
+  } else if (error_detect_state_ == ErrorDetectState::MARK_377_SEEN ||
+             new_bytes_read - buffer_len == 1) {
+    // need to stash the last character
+    if (new_bytes_read <= 2) {
+      tmp[0] = chars_stashed_[new_bytes_read - 1];
+    } else {
+      tmp[0] = buffer[new_bytes_read - 3];
+    }
+    num_chars_stashed_ = 1;
+  }
+
+  new_bytes_read -= num_chars_stashed_;
+  if (new_bytes_read > 2) {
+    // right shift two bytes to store bytes from chars_stashed_[]
+    memmove(buffer + 2, buffer, new_bytes_read - 2);
+  }
+  memcpy(buffer, chars_stashed_, std::min(new_bytes_read, 2));
+  memcpy(chars_stashed_, tmp, num_chars_stashed_);
+  return new_bytes_read;
 }
 
 std::string SerialIoHandler::MaybeFixUpPortName(const std::string& port_name) {

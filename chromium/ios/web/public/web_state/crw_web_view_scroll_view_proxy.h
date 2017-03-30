@@ -20,11 +20,12 @@
 // needed.
 // The class forwards some of the methods onto the UIScrollView. For more
 // information look at the UIScrollView documentation.
-// TODO(kkhorimoto): rename class to CRWContentViewScrollViewProxy.
+// TODO(crbug.com/546152): rename class to CRWContentViewScrollViewProxy.
 @interface CRWWebViewScrollViewProxy : NSObject<UIScrollViewDelegate>
 @property(nonatomic, assign) CGPoint contentOffset;
 @property(nonatomic, assign) UIEdgeInsets contentInset;
 @property(nonatomic, readonly) BOOL isZooming;
+@property(nonatomic, readonly) CGFloat zoomScale;
 @property(nonatomic, assign) UIEdgeInsets scrollIndicatorInsets;
 @property(nonatomic, assign) CGSize contentSize;
 @property(nonatomic, readonly) CGRect frame;
@@ -78,6 +79,8 @@
         (CRWWebViewScrollViewProxy*)webViewScrollViewProxy;
 - (void)webViewScrollViewDidZoom:
         (CRWWebViewScrollViewProxy*)webViewScrollViewProxy;
+- (void)webViewScrollViewDidResetContentSize:
+    (CRWWebViewScrollViewProxy*)webViewScrollViewProxy;
 @end
 
 // A protocol to be implemented by objects to listen for changes to the

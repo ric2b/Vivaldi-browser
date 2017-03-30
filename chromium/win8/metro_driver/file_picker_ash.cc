@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "stdafx.h"
 #include "win8/metro_driver/file_picker_ash.h"
 
@@ -11,7 +14,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/win/metro.h"
 #include "base/win/scoped_comptr.h"
 #include "ui/metro_viewer/metro_viewer_messages.h"
 #include "win8/metro_driver/chrome_app_view_ash.h"
@@ -459,7 +461,7 @@ HRESULT SaveFilePickerSession::StartFilePicker() {
 
   // The save picker requires at least one choice.  Callers are strongly advised
   // to provide sensible choices.  If none were given, fallback to .dat.
-  uint32 num_choices = 0;
+  uint32_t num_choices = 0;
   hr = choices->get_Size(&num_choices);
   if (FAILED(hr))
     return hr;

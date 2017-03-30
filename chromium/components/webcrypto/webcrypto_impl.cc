@@ -4,13 +4,15 @@
 
 #include "components/webcrypto/webcrypto_impl.h"
 
+#include <limits.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -19,7 +21,6 @@
 #include "components/webcrypto/crypto_data.h"
 #include "components/webcrypto/generate_key_result.h"
 #include "components/webcrypto/status.h"
-#include "components/webcrypto/webcrypto_util.h"
 #include "third_party/WebKit/public/platform/WebCryptoKeyAlgorithm.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 
@@ -63,7 +64,7 @@ namespace {
 //                 threads is silly.
 //
 // * WebCryptoAlgorithm and WebCryptoKey are threadsafe (however the key's
-//   handle(), which wraps an NSS/OpenSSL type, may not be and should only be
+//   handle(), which wraps an OpenSSL type, may not be and should only be
 //   used from the webcrypto thread).
 //
 // * blink::WebCryptoResult is not threadsafe and should only be operated on
@@ -119,7 +120,7 @@ void CompleteWithBufferOrError(const Status& status,
       // theoretically this could overflow.
       CompleteWithError(Status::ErrorUnexpected(), result);
     } else {
-      result->completeWithBuffer(vector_as_array(&buffer),
+      result->completeWithBuffer(buffer.data(),
                                  static_cast<unsigned int>(buffer.size()));
     }
   }
@@ -386,7 +387,7 @@ void DoEncrypt(scoped_ptr<EncryptState> passed_state) {
       webcrypto::Encrypt(state->algorithm, state->key,
                          webcrypto::CryptoData(state->data), &state->buffer);
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoEncryptReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoEncryptReply, base::Passed(&passed_state)));
 }
 
 void DoDecryptReply(scoped_ptr<DecryptState> state) {
@@ -401,7 +402,7 @@ void DoDecrypt(scoped_ptr<DecryptState> passed_state) {
       webcrypto::Decrypt(state->algorithm, state->key,
                          webcrypto::CryptoData(state->data), &state->buffer);
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoDecryptReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoDecryptReply, base::Passed(&passed_state)));
 }
 
 void DoDigestReply(scoped_ptr<DigestState> state) {
@@ -415,7 +416,7 @@ void DoDigest(scoped_ptr<DigestState> passed_state) {
   state->status = webcrypto::Digest(
       state->algorithm, webcrypto::CryptoData(state->data), &state->buffer);
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoDigestReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoDigestReply, base::Passed(&passed_state)));
 }
 
 void DoGenerateKeyReply(scoped_ptr<GenerateKeyState> state) {
@@ -434,7 +435,7 @@ void DoGenerateKey(scoped_ptr<GenerateKeyState> passed_state) {
       webcrypto::GenerateKey(state->algorithm, state->extractable,
                              state->usages, &state->generate_key_result);
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoGenerateKeyReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoGenerateKeyReply, base::Passed(&passed_state)));
 }
 
 void DoImportKeyReply(scoped_ptr<ImportKeyState> state) {
@@ -455,7 +456,7 @@ void DoImportKey(scoped_ptr<ImportKeyState> passed_state) {
   }
 
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoImportKeyReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoImportKeyReply, base::Passed(&passed_state)));
 }
 
 void DoExportKeyReply(scoped_ptr<ExportKeyState> state) {
@@ -468,7 +469,7 @@ void DoExportKeyReply(scoped_ptr<ExportKeyState> state) {
     CompleteWithError(state->status, &state->result);
   } else {
     state->result.completeWithJson(
-        reinterpret_cast<const char*>(vector_as_array(&state->buffer)),
+        reinterpret_cast<const char*>(state->buffer.data()),
         static_cast<unsigned int>(state->buffer.size()));
   }
 }
@@ -480,7 +481,7 @@ void DoExportKey(scoped_ptr<ExportKeyState> passed_state) {
   state->status =
       webcrypto::ExportKey(state->format, state->key, &state->buffer);
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoExportKeyReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoExportKeyReply, base::Passed(&passed_state)));
 }
 
 void DoSignReply(scoped_ptr<SignState> state) {
@@ -496,7 +497,7 @@ void DoSign(scoped_ptr<SignState> passed_state) {
                       webcrypto::CryptoData(state->data), &state->buffer);
 
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoSignReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoSignReply, base::Passed(&passed_state)));
 }
 
 void DoVerifyReply(scoped_ptr<VerifySignatureState> state) {
@@ -516,7 +517,7 @@ void DoVerify(scoped_ptr<VerifySignatureState> passed_state) {
       webcrypto::CryptoData(state->data), &state->verify_result);
 
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoVerifyReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoVerifyReply, base::Passed(&passed_state)));
 }
 
 void DoWrapKeyReply(scoped_ptr<WrapKeyState> state) {
@@ -532,7 +533,7 @@ void DoWrapKey(scoped_ptr<WrapKeyState> passed_state) {
                          state->wrap_algorithm, &state->buffer);
 
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoWrapKeyReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoWrapKeyReply, base::Passed(&passed_state)));
 }
 
 void DoUnwrapKeyReply(scoped_ptr<UnwrapKeyState> state) {
@@ -550,7 +551,7 @@ void DoUnwrapKey(scoped_ptr<UnwrapKeyState> passed_state) {
       &state->unwrapped_key);
 
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoUnwrapKeyReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoUnwrapKeyReply, base::Passed(&passed_state)));
 }
 
 void DoDeriveBitsReply(scoped_ptr<DeriveBitsState> state) {
@@ -566,7 +567,7 @@ void DoDeriveBits(scoped_ptr<DeriveBitsState> passed_state) {
       webcrypto::DeriveBits(state->algorithm, state->base_key,
                             state->length_bits, &state->derived_bytes);
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoDeriveBitsReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoDeriveBitsReply, base::Passed(&passed_state)));
 }
 
 void DoDeriveKeyReply(scoped_ptr<DeriveKeyState> state) {
@@ -582,7 +583,7 @@ void DoDeriveKey(scoped_ptr<DeriveKeyState> passed_state) {
       state->key_length_algorithm, state->extractable, state->usages,
       &state->derived_key);
   state->origin_thread->PostTask(
-      FROM_HERE, base::Bind(DoDeriveKeyReply, Passed(&passed_state)));
+      FROM_HERE, base::Bind(DoDeriveKeyReply, base::Passed(&passed_state)));
 }
 
 }  // namespace
@@ -602,8 +603,8 @@ void WebCryptoImpl::encrypt(const blink::WebCryptoAlgorithm& algorithm,
 
   scoped_ptr<EncryptState> state(
       new EncryptState(algorithm, key, data, data_size, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoEncrypt, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoEncrypt, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -617,8 +618,8 @@ void WebCryptoImpl::decrypt(const blink::WebCryptoAlgorithm& algorithm,
 
   scoped_ptr<DecryptState> state(
       new DecryptState(algorithm, key, data, data_size, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoDecrypt, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoDecrypt, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -632,7 +633,7 @@ void WebCryptoImpl::digest(const blink::WebCryptoAlgorithm& algorithm,
   scoped_ptr<DigestState> state(new DigestState(
       algorithm, blink::WebCryptoKey::createNull(), data, data_size, result));
   if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoDigest, Passed(&state)))) {
+                                  base::Bind(DoDigest, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -645,8 +646,8 @@ void WebCryptoImpl::generateKey(const blink::WebCryptoAlgorithm& algorithm,
 
   scoped_ptr<GenerateKeyState> state(
       new GenerateKeyState(algorithm, extractable, usages, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoGenerateKey, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoGenerateKey, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -660,8 +661,8 @@ void WebCryptoImpl::importKey(blink::WebCryptoKeyFormat format,
                               blink::WebCryptoResult result) {
   scoped_ptr<ImportKeyState> state(new ImportKeyState(
       format, key_data, key_data_size, algorithm, extractable, usages, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoImportKey, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoImportKey, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -670,8 +671,8 @@ void WebCryptoImpl::exportKey(blink::WebCryptoKeyFormat format,
                               const blink::WebCryptoKey& key,
                               blink::WebCryptoResult result) {
   scoped_ptr<ExportKeyState> state(new ExportKeyState(format, key, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoExportKey, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoExportKey, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -684,7 +685,7 @@ void WebCryptoImpl::sign(const blink::WebCryptoAlgorithm& algorithm,
   scoped_ptr<SignState> state(
       new SignState(algorithm, key, data, data_size, result));
   if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoSign, Passed(&state)))) {
+                                  base::Bind(DoSign, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -699,7 +700,7 @@ void WebCryptoImpl::verifySignature(const blink::WebCryptoAlgorithm& algorithm,
   scoped_ptr<VerifySignatureState> state(new VerifySignatureState(
       algorithm, key, signature, signature_size, data, data_size, result));
   if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoVerify, Passed(&state)))) {
+                                  base::Bind(DoVerify, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -711,8 +712,8 @@ void WebCryptoImpl::wrapKey(blink::WebCryptoKeyFormat format,
                             blink::WebCryptoResult result) {
   scoped_ptr<WrapKeyState> state(
       new WrapKeyState(format, key, wrapping_key, wrap_algorithm, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoWrapKey, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoWrapKey, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -730,8 +731,8 @@ void WebCryptoImpl::unwrapKey(
   scoped_ptr<UnwrapKeyState> state(new UnwrapKeyState(
       format, wrapped_key, wrapped_key_size, wrapping_key, unwrap_algorithm,
       unwrapped_key_algorithm, extractable, usages, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoUnwrapKey, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoUnwrapKey, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -742,8 +743,8 @@ void WebCryptoImpl::deriveBits(const blink::WebCryptoAlgorithm& algorithm,
                                blink::WebCryptoResult result) {
   scoped_ptr<DeriveBitsState> state(
       new DeriveBitsState(algorithm, base_key, length_bits, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoDeriveBits, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoDeriveBits, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }
@@ -759,8 +760,8 @@ void WebCryptoImpl::deriveKey(
   scoped_ptr<DeriveKeyState> state(
       new DeriveKeyState(algorithm, base_key, import_algorithm,
                          key_length_algorithm, extractable, usages, result));
-  if (!CryptoThreadPool::PostTask(FROM_HERE,
-                                  base::Bind(DoDeriveKey, Passed(&state)))) {
+  if (!CryptoThreadPool::PostTask(
+          FROM_HERE, base::Bind(DoDeriveKey, base::Passed(&state)))) {
     CompleteWithThreadPoolError(&result);
   }
 }

@@ -5,6 +5,7 @@
 #ifndef CHROME_RENDERER_MEDIA_CAST_RECEIVER_SESSION_DELEGATE_H_
 #define CHROME_RENDERER_MEDIA_CAST_RECEIVER_SESSION_DELEGATE_H_
 
+#include "base/macros.h"
 #include "chrome/renderer/media/cast_receiver_audio_valve.h"
 #include "chrome/renderer/media/cast_session_delegate.h"
 #include "content/public/renderer/media_stream_video_sink.h"
@@ -19,9 +20,6 @@ class CastReceiverSessionDelegate : public CastSessionDelegateBase {
   ~CastReceiverSessionDelegate() override;
 
   void ReceivePacket(scoped_ptr<media::cast::Packet> packet) override;
-  void LogRawEvents(
-      const std::vector<media::cast::PacketEvent>& packet_events,
-      const std::vector<media::cast::FrameEvent>& frame_events) override;
 
   void Start(const media::cast::FrameReceiverConfig& audio_config,
              const media::cast::FrameReceiverConfig& video_config,

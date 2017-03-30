@@ -5,14 +5,19 @@
 #ifndef CHROME_BROWSER_UI_ANDROID_CONTEXT_MENU_HELPER_H_
 #define CHROME_BROWSER_UI_ANDROID_CONTEXT_MENU_HELPER_H_
 
+#include <string>
+
 #include "base/android/jni_android.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/context_menu_params.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace content {
 struct ContextMenuParams;
+class RenderFrameHost;
 class WebContents;
 }
 
@@ -21,13 +26,19 @@ class ContextMenuHelper
  public:
   ~ContextMenuHelper() override;
 
-  void ShowContextMenu(const content::ContextMenuParams& params);
+  bool ShowContextMenu(content::RenderFrameHost* render_frame_host,
+                       const content::ContextMenuParams& params);
 
   void SetPopulator(jobject jpopulator);
 
   // Methods called from Java via JNI ------------------------------------------
-  void OnStartDownload(
-      JNIEnv* env, jobject obj, jboolean jis_link, jstring jheaders);
+  void OnStartDownload(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       jboolean jis_link,
+                       const base::android::JavaParamRef<jstring>& jheaders);
+  void SearchForImage(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj);
+  void ShareImage(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
  private:
   explicit ContextMenuHelper(content::WebContents* web_contents);
@@ -36,10 +47,15 @@ class ContextMenuHelper
   static base::android::ScopedJavaLocalRef<jobject> CreateJavaContextMenuParams(
       const content::ContextMenuParams& params);
 
+  void OnShareImage(const std::string& thumbnail_data,
+                    const gfx::Size& original_size);
+
   base::android::ScopedJavaGlobalRef<jobject> java_obj_;
   content::WebContents* web_contents_;
 
   content::ContextMenuParams context_menu_params_;
+  int render_frame_id_;
+  int render_process_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextMenuHelper);
 };

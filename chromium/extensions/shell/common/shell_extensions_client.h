@@ -5,8 +5,8 @@
 #ifndef EXTENSIONS_SHELL_COMMON_SHELL_EXTENSIONS_CLIENT_H_
 #define EXTENSIONS_SHELL_COMMON_SHELL_EXTENSIONS_CLIENT_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/permissions/extensions_api_permissions.h"
 
@@ -27,10 +27,6 @@ class ShellExtensionsClient : public ExtensionsClient {
       const std::string& name) const override;
   scoped_ptr<JSONFeatureProviderSource> CreateFeatureProviderSource(
       const std::string& name) const override;
-  void FilterHostPermissions(
-      const URLPatternSet& hosts,
-      URLPatternSet* new_hosts,
-      std::set<PermissionMessage>* messages) const override;
   void FilterHostPermissions(const URLPatternSet& hosts,
                              URLPatternSet* new_hosts,
                              PermissionIDSet* permissions) const override;

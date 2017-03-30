@@ -7,12 +7,19 @@ import gzip
 import hashlib
 import io
 import logging
+import os
+import sys
 import zlib
 
+from common import inspector_network
+from telemetry.timeline import model
+
+sys.path.append(
+    os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, 'perf'))
 from metrics import Metric
+
 from telemetry.page import page_test
 # All network metrics are Chrome only for now.
-from telemetry.internal.backends.chrome_inspector import inspector_network
 from telemetry.value import scalar
 
 
@@ -138,15 +145,20 @@ class NetworkMetric(Metric):
 
   def Start(self, page, tab):
     self._events = None
-    tab.StartTimelineRecording()
+    network = inspector_network.InspectorNetwork(
+        tab._inspector_backend._websocket)
+    self._timeline_recorder = network.timeline_recorder
+    self._timeline_recorder.Start()
 
   def Stop(self, page, tab):
     assert self._events is None
-    tab.StopTimelineRecording()
+    self._timeline_model = self._timeline_recorder.Stop()
 
   def IterResponses(self, tab):
     if self._events is None:
-      self._events = tab.timeline_model.GetAllEventsOfName('HTTPResponse')
+      if self._timeline_model is None:
+        return
+      self._events = self._timeline_model.GetAllEventsOfName('HTTPResponse')
     if len(self._events) == 0:
       return
     for e in self._events:

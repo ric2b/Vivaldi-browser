@@ -2,7 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-var $console = window.console;
+var logging = requireNative('logging');
+var chrome = requireNative('chrome').GetChrome();
+
+// Extract current extension ID and determine if the extension is Vivaldi
+var process = requireNative('process');
+var extensionId = process.GetExtensionId();
+var isVivaldi = extensionId === "mpognobbkildjkofajifpdfhcoklimli";
 
 /**
  * Returns a function that logs a 'not available' error to the console and
@@ -14,7 +20,7 @@ function generateDisabledMethodStub(messagePrefix, opt_messageSuffix) {
   var message = messagePrefix + ' is not available in packaged apps.';
   if (opt_messageSuffix) message = message + ' ' + opt_messageSuffix;
   return function() {
-    $console.error(message);
+    console.error(message);
     return;
   };
 }
@@ -67,10 +73,16 @@ function generateThrowingMethodStub(messagePrefix, opt_messageSuffix) {
  */
 function disableMethods(object, objectName, methodNames, useThrowingStubs) {
   $Array.forEach(methodNames, function(methodName) {
+    logging.DCHECK($Object.getOwnPropertyDescriptor(object, methodName),
+                   objectName + ': ' + methodName);
     var messagePrefix = objectName + '.' + methodName + '()';
-    object[methodName] = useThrowingStubs ?
-        generateThrowingMethodStub(messagePrefix) :
-        generateDisabledMethodStub(messagePrefix);
+    $Object.defineProperty(object, methodName, {
+      configurable: false,
+      enumerable: false,
+      value: useThrowingStubs ?
+                 generateThrowingMethodStub(messagePrefix) :
+                 generateDisabledMethodStub(messagePrefix)
+    });
   });
 }
 
@@ -87,9 +99,16 @@ function disableMethods(object, objectName, methodNames, useThrowingStubs) {
  *     referred to by web developers, e.g. "document" instead of
  *     "HTMLDocument").
  * @param {Array<string>} propertyNames names of properties to disable.
+ * @param {?string=} opt_messageSuffix An optional suffix for the message.
+ * @param {boolean=} opt_ignoreMissingProperty True if we allow disabling
+ *     getters for non-existent properties.
  */
-function disableGetters(object, objectName, propertyNames, opt_messageSuffix) {
+function disableGetters(object, objectName, propertyNames, opt_messageSuffix,
+                        opt_ignoreMissingProperty) {
   $Array.forEach(propertyNames, function(propertyName) {
+    logging.DCHECK(opt_ignoreMissingProperty ||
+                       $Object.getOwnPropertyDescriptor(object, propertyName),
+                   objectName + ': ' + propertyName);
     var stub = generateDisabledMethodStub(objectName + '.' + propertyName,
                                           opt_messageSuffix);
     stub._is_platform_app_disabled_getter = true;
@@ -132,10 +151,12 @@ function disableGetters(object, objectName, propertyNames, opt_messageSuffix) {
  */
 function disableSetters(object, objectName, propertyNames, opt_messageSuffix) {
   $Array.forEach(propertyNames, function(propertyName) {
+    logging.DCHECK($Object.getOwnPropertyDescriptor(object, propertyName),
+                   objectName + ': ' + propertyName);
     var stub = generateDisabledMethodStub(objectName + '.' + propertyName,
                                           opt_messageSuffix);
     $Object.defineProperty(object, propertyName, {
-      configurable: true,
+      configurable: false,
       enumerable: false,
       get: function() {
         return;
@@ -145,29 +166,42 @@ function disableSetters(object, objectName, propertyNames, opt_messageSuffix) {
   });
 }
 
-
 // Disable benign Document methods.
 // Vivaldi needs these.
-//disableMethods(HTMLDocument.prototype, 'document', ['open', 'clear', 'close']);
+if (!isVivaldi) {
+disableMethods(Document.prototype, 'document', ['open', 'close']);
+disableMethods(HTMLDocument.prototype, 'document', ['clear']);
+}
 
 // Replace evil Document methods with exception-throwing stubs.
 // Vivaldi needs these.
-//disableMethods(HTMLDocument.prototype, 'document', ['write', 'writeln'], true);
+if (!isVivaldi) {
+disableMethods(Document.prototype, 'document', ['write', 'writeln'], true);
+}
 
 // Disable history.
 // Vivaldi needs these.
-//Object.defineProperty(window, "history", { value: {} });
-//disableGetters(window.history, 'history',
-//    ['back', 'forward', 'go', 'length', 'pushState', 'replaceState']);
+if (!isVivaldi) {
+Object.defineProperty(window, "history", { value: {} });
+// Note: we just blew away the history object, so we need to ignore the fact
+// that these properties aren't defined on the object.
+disableGetters(window.history, 'history',
+    ['back', 'forward', 'go', 'length', 'pushState', 'replaceState', 'state'],
+    null, true);
+}
 
 // Disable find.
 // Vivaldi needs these.
-//disableMethods(Window.prototype, 'window', ['find']);
+if (!isVivaldi) {
+disableMethods(window, 'window', ['find']);
+}
 
 // Disable modal dialogs. Shell windows disable these anyway, but it's nice to
 // warn.
 // Vivaldi needs these.
-//disableMethods(Window.prototype, 'window', ['alert', 'confirm', 'prompt']);
+if (!isVivaldi) {
+disableMethods(window, 'window', ['alert', 'confirm', 'prompt']);
+}
 
 // Disable window.*bar.
 disableGetters(window, 'window',
@@ -178,11 +212,13 @@ disableGetters(window, 'window',
 // Sometimes DOM security policy prevents us from doing this (e.g. for data:
 // URLs) so wrap in try-catch.
 // Vivaldi needs these.
-//try {
-//  disableGetters(window, 'window',
-//      ['localStorage'],
-//      'Use chrome.storage.local instead.');
-//} catch (e) {}
+if (!isVivaldi) {
+try {
+  disableGetters(window, 'window',
+      ['localStorage'],
+      'Use chrome.storage.local instead.');
+} catch (e) {}
+}
 
 // Document instance properties that we wish to disable need to be set when
 // the document begins loading, since only then will the "document" reference
@@ -190,27 +226,41 @@ disableGetters(window, 'window',
 // We can't listen for the "readystatechange" event on the document (because
 // the object that it's dispatched on doesn't exist yet), but we can instead
 // do it at the window level in the capturing phase.
-//window.addEventListener('readystatechange', function (event) {
-//  if (document.readyState != 'loading')
-//    return;
+if (!isVivaldi) {
+window.addEventListener('readystatechange', function(event) {
+  if (document.readyState != 'loading')
+    return;
 
-//  // Deprecated document properties from
-//  // https://developer.mozilla.org/en/DOM/document.
-//  // To deprecate document.all, simply changing its getter and setter would
-//  // activate its cache mechanism, and degrade the performance. Here we assign
-//  // it first to 'undefined' to avoid this.
-//  document.all = undefined;
-//  disableGetters(document, 'document',
-//      ['alinkColor', 'all', 'bgColor', 'fgColor', 'linkColor', 'vlinkColor']);
-//}, true);
+  // Deprecated document properties from
+  // https://developer.mozilla.org/en/DOM/document.
+  // To deprecate document.all, simply changing its getter and setter would
+  // activate its cache mechanism, and degrade the performance. Here we assign
+  // it first to 'undefined' to avoid this.
+  document.all = undefined;
+  disableGetters(document, 'document',
+      ['alinkColor', 'all', 'bgColor', 'fgColor', 'linkColor', 'vlinkColor'],
+      null, true);
+}, true);
+}
 
 // Disable onunload, onbeforeunload.
 // Vivaldi needs these.
-//disableSetters(Window.prototype, 'window', ['onbeforeunload', 'onunload']);
-//var windowAddEventListener = Window.prototype.addEventListener;
-//Window.prototype.addEventListener = function(type) {
-//  if (type === 'unload' || type === 'beforeunload')
-//    generateDisabledMethodStub(type)();
-//  else
-//    return $Function.apply(windowAddEventListener, window, arguments);
-//};
+if (!isVivaldi) {
+disableSetters(window, 'window', ['onbeforeunload', 'onunload']);
+var eventTargetAddEventListener = EventTarget.prototype.addEventListener;
+EventTarget.prototype.addEventListener = function(type) {
+  var args = $Array.slice(arguments);
+  // Note: Force conversion to a string in order to catch any funny attempts
+  // to pass in something that evals to 'unload' but wouldn't === 'unload'.
+  var type = (args[0] += '');
+  if (type === 'unload' || type === 'beforeunload')
+    generateDisabledMethodStub(type)();
+  else
+    return $Function.apply(eventTargetAddEventListener, this, args);
+};
+}
+
+// Vivaldi needs these.
+if (!isVivaldi) {
+  disableGetters(chrome, 'chrome', ['tabs', 'windows'], null, true);
+}

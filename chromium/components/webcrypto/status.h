@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_WEBCRYPTO_STATUS_H_
 #define COMPONENTS_WEBCRYPTO_STATUS_H_
 
+#include <stddef.h>
+
 #include <string>
 #include "third_party/WebKit/public/platform/WebCrypto.h"
 
@@ -134,7 +136,7 @@ class Status {
   // Attempted to generate an AES key with an invalid length.
   static Status ErrorGenerateAesKeyLength();
 
-  // 192-bit AES keys are valid, however unsupported.
+  // 192-bit AES keys are valid, however unsupported (http://crbug.com/533699)
   static Status ErrorAes192BitUnsupported();
 
   // The wrong key was used for the operation. For instance, a public key was
@@ -264,6 +266,9 @@ class Status {
 
   // No length parameter was provided for PBKDF2's Derive Bits operation.
   static Status ErrorPbkdf2DeriveBitsLengthNotSpecified();
+
+  // PBKDF2 was called with iterations == 0.
+  static Status ErrorPbkdf2Iterations0();
 
  private:
   enum Type { TYPE_ERROR, TYPE_SUCCESS };

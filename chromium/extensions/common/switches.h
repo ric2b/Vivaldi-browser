@@ -14,23 +14,26 @@ namespace switches {
 extern const char kAllowHTTPBackgroundPage[];
 extern const char kAllowLegacyExtensionManifests[];
 extern const char kEmbeddedExtensionOptions[];
-extern const char kSurfaceWorker[];
 extern const char kEnableAppsShowOnFirstPaint[];
 extern const char kEnableAppWindowControls[];
 extern const char kEnableEmbeddedExtensionOptions[];
-extern const char kEnableSurfaceWorker[];
 extern const char kEnableExperimentalExtensionApis[];
 extern const char kEnableExtensionActionRedesign[];
 extern const char kEnableMojoSerialService[];
 extern const char kEnableOverrideBookmarksUI[];
+extern const char kEnableBLEAdvertising[];
 extern const char kErrorConsole[];
 extern const char kExtensionActionRedesign[];
 extern const char kExtensionProcess[];
 extern const char kExtensionsOnChromeURLs[];
 extern const char kForceDevModeHighlighting[];
+extern const char kIsolateExtensions[];
 extern const char kLoadApps[];
 extern const char kScriptsRequireAction[];
 extern const char kEnableScriptsRequireAction[];
+#if defined(CHROMIUM_BUILD)
+extern const char kPromptForExternalExtensions[];
+#endif
 extern const char kShowComponentExtensionOptions[];
 extern const char kTraceAppSource[];
 extern const char kWhitelistedExtensionID[];

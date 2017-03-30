@@ -4,9 +4,11 @@
 
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 using base::SharedMemory;
 
@@ -17,7 +19,7 @@ const static size_t kBufferSize = 1024;
 class TransferBufferManagerTest : public testing::Test {
  protected:
   void SetUp() override {
-    TransferBufferManager* manager = new TransferBufferManager();
+    TransferBufferManager* manager = new TransferBufferManager(nullptr);
     transfer_buffer_manager_ = manager;
     ASSERT_TRUE(manager->Initialize());
   }
@@ -42,11 +44,11 @@ TEST_F(TransferBufferManagerTest, CanRegisterTransferBuffer) {
   shm->CreateAndMapAnonymous(kBufferSize);
   base::SharedMemory* shm_raw_pointer = shm.get();
   scoped_ptr<SharedMemoryBufferBacking> backing(
-      new SharedMemoryBufferBacking(shm.Pass(), kBufferSize));
+      new SharedMemoryBufferBacking(std::move(shm), kBufferSize));
   SharedMemoryBufferBacking* backing_raw_ptr = backing.get();
 
   EXPECT_TRUE(
-      transfer_buffer_manager_->RegisterTransferBuffer(1, backing.Pass()));
+      transfer_buffer_manager_->RegisterTransferBuffer(1, std::move(backing)));
   scoped_refptr<Buffer> registered =
       transfer_buffer_manager_->GetTransferBuffer(1);
 

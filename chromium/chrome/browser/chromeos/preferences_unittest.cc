@@ -4,7 +4,10 @@
 
 #include "chrome/browser/chromeos/preferences.h"
 
+#include <utility>
+
 #include "base/json/json_string_value_serializer.h"
+#include "base/macros.h"
 #include "base/prefs/pref_member.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -17,9 +20,9 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "sync/api/attachments/attachment_id.h"
@@ -100,7 +103,7 @@ class MyMockInputMethodManager : public MockInputMethodManager {
     void AddInputMethodExtension(
         const std::string& id,
         const InputMethodDescriptors& descriptors,
-        InputMethodEngineInterface* instance) override {
+        ui::IMEEngineHandlerInterface* instance) override {
       InputMethodDescriptor descriptor(
           id, std::string(), std::string(), std::vector<std::string>(),
           std::vector<std::string>(), false, GURL(), GURL());
@@ -125,7 +128,7 @@ class MyMockInputMethodManager : public MockInputMethodManager {
   ~MyMockInputMethodManager() override {}
 
   scoped_ptr<InputMethodDescriptors> GetSupportedInputMethods() const override {
-    return whitelist_.GetSupportedInputMethods().Pass();
+    return whitelist_.GetSupportedInputMethods();
   }
 
   std::string last_input_method_id_;
@@ -155,9 +158,10 @@ class PreferencesTest : public testing::Test {
         new chromeos::ScopedUserManagerEnabler(user_manager));
 
     const char test_user_email[] = "test_user@example.com";
-    test_user_ = user_manager->AddUser(test_user_email);
-    user_manager->LoginUser(test_user_email);
-    user_manager->SwitchActiveUser(test_user_email);
+    const AccountId test_account_id(AccountId::FromUserEmail(test_user_email));
+    test_user_ = user_manager->AddUser(test_account_id);
+    user_manager->LoginUser(test_account_id);
+    user_manager->SwitchActiveUser(test_account_id);
 
     test_profile_ = profile_manager_->CreateTestingProfile(
         chrome::kInitialProfile);
@@ -203,7 +207,7 @@ class PreferencesTest : public testing::Test {
   // Not owned.
   const user_manager::User* test_user_;
   TestingProfile* test_profile_;
-  TestingPrefServiceSyncable* pref_service_;
+  syncable_prefs::TestingPrefServiceSyncable* pref_service_;
   input_method::MyMockInputMethodManager* mock_manager_;
 
  private:
@@ -268,11 +272,11 @@ class InputMethodPreferencesTest : public PreferencesTest {
     scoped_ptr<ComponentExtensionIMEManagerDelegate> delegate(mock_delegate);
     scoped_ptr<ComponentExtensionIMEManager> component_extension_ime_manager(
         new ComponentExtensionIMEManager);
-    component_extension_ime_manager->Initialize(delegate.Pass());
+    component_extension_ime_manager->Initialize(std::move(delegate));
 
     // Add the ComponentExtensionIMEManager to the mock InputMethodManager.
     mock_manager_->SetComponentExtensionIMEManager(
-        component_extension_ime_manager.Pass());
+        std::move(component_extension_ime_manager));
   }
 
   std::vector<ComponentExtensionIME> CreateImeList() {
@@ -339,12 +343,12 @@ class InputMethodPreferencesTest : public PreferencesTest {
   }
 
   // Translates engine IDs in a CSV string to input method IDs.
-  std::string ToInputMethodIds(std::string value) {
-    std::vector<std::string> tokens;
-    base::SplitString(value, ',', &tokens);
+  std::string ToInputMethodIds(const std::string& value) {
+    std::vector<std::string> tokens = base::SplitString(
+        value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     std::transform(tokens.begin(), tokens.end(), tokens.begin(),
                    &extension_ime_util::GetInputMethodIDByEngineID);
-    return JoinString(tokens, ',');
+    return base::JoinString(tokens, ",");
   }
 
   StringPrefMember preferred_languages_;

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_UPDATER_CHROMEOS_EXTENSION_CACHE_DELEGATE_H_
 #define CHROME_BROWSER_EXTENSIONS_UPDATER_CHROMEOS_EXTENSION_CACHE_DELEGATE_H_
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "chrome/browser/extensions/updater/extension_cache_delegate.h"
@@ -22,7 +24,7 @@ class ChromeOSExtensionCacheDelegate : public ExtensionCacheDelegate {
   size_t GetMaximumCacheSize() const override;
 
  private:
-  const base::FilePath cache_dir_;
+  base::FilePath cache_dir_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeOSExtensionCacheDelegate);
 };

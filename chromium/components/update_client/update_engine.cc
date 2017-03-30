@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "components/update_client/action_update_check.h"
@@ -35,7 +34,6 @@ UpdateContext::UpdateContext(
       callback(callback),
       main_task_runner(base::ThreadTaskRunnerHandle::Get()),
       blocking_task_runner(config->GetSequencedTaskRunner()),
-      single_thread_task_runner(config->GetSingleThreadTaskRunner()),
       update_checker_factory(update_checker_factory),
       crx_downloader_factory(crx_downloader_factory),
       ping_manager(ping_manager) {
@@ -60,20 +58,6 @@ UpdateEngine::UpdateEngine(
 
 UpdateEngine::~UpdateEngine() {
   DCHECK(thread_checker_.CalledOnValidThread());
-}
-
-bool UpdateEngine::IsUpdating(const std::string& id) const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  for (const auto& context : update_contexts_) {
-    const auto& ids = context->ids;
-    const auto it = std::find_if(
-        ids.begin(), ids.end(),
-        [id](const std::string& this_id) { return id == this_id; });
-    if (it != ids.end()) {
-      return true;
-    }
-  }
-  return false;
 }
 
 bool UpdateEngine::GetUpdateState(const std::string& id,
@@ -107,7 +91,7 @@ void UpdateEngine::Update(
 
   CrxUpdateItem update_item;
   scoped_ptr<ActionUpdateCheck> update_check_action(new ActionUpdateCheck(
-      (*update_context->update_checker_factory)(*config_).Pass(),
+      (*update_context->update_checker_factory)(config_),
       config_->GetBrowserVersion(), config_->ExtraRequestParams()));
 
   update_context->current_action.reset(update_check_action.release());

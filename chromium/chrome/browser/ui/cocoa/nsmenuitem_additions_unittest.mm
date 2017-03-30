@@ -306,8 +306,7 @@ NSString* keyCodeToCharacter(NSUInteger keyCode,
   return [(NSString*)temp autorelease];
 }
 
-// TODO: Re-enable for Vivaldi
-TEST(NSMenuItemAdditionsTest, DISABLED_TestMOnDifferentLayouts) {
+TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
   // There's one key -- "m" -- that has the same keycode on most keyboard
   // layouts. This function tests a menu item with cmd-m as key equivalent
   // can be fired on all layouts.
@@ -331,6 +330,7 @@ TEST(NSMenuItemAdditionsTest, DISABLED_TestMOnDifferentLayouts) {
         ref, kTISPropertyInputSourceID);
     if ([layoutId isEqualToString:@"com.apple.keylayout.Belgian"] ||
         [layoutId isEqualToString:@"com.apple.keylayout.Italian"] ||
+        [layoutId isEqualToString:@"com.apple.keylayout.ABC-AZERTY"] ||
         [layoutId hasPrefix:@"com.apple.keylayout.French"]) {
       keyCode = 0x29;
     } else if ([layoutId isEqualToString:@"com.apple.keylayout.Turkish"]) {

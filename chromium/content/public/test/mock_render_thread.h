@@ -5,9 +5,13 @@
 #ifndef CONTENT_PUBLIC_TEST_MOCK_RENDER_THREAD_H_
 #define CONTENT_PUBLIC_TEST_MOCK_RENDER_THREAD_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/memory/shared_memory.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "content/public/renderer/render_thread.h"
 #include "ipc/ipc_test_sink.h"
@@ -15,6 +19,7 @@
 #include "third_party/WebKit/public/web/WebPopupType.h"
 
 struct ViewHostMsg_CreateWindow_Params;
+struct ViewHostMsg_CreateWindow_Reply;
 
 namespace IPC {
 class MessageFilter;
@@ -24,6 +29,7 @@ class MessageReplyDeserializer;
 namespace blink {
 enum class WebSandboxFlags;
 enum class WebTreeScopeType;
+struct WebFrameOwnerProperties;
 }
 
 namespace content {
@@ -43,13 +49,12 @@ class MockRenderThread : public RenderThread {
 
   // RenderThread implementation:
   bool Send(IPC::Message* msg) override;
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() override;
   IPC::SyncChannel* GetChannel() override;
   std::string GetLocale() override;
   IPC::SyncMessageFilter* GetSyncMessageFilter() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetIOMessageLoopProxy() override;
-  void AddRoute(int32 routing_id, IPC::Listener* listener) override;
-  void RemoveRoute(int32 routing_id) override;
+  void AddRoute(int32_t routing_id, IPC::Listener* listener) override;
+  void RemoveRoute(int32_t routing_id) override;
   int GenerateRoutingID() override;
   void AddFilter(IPC::MessageFilter* filter) override;
   void RemoveFilter(IPC::MessageFilter* filter) override;
@@ -64,11 +69,11 @@ class MockRenderThread : public RenderThread {
       size_t buffer_size) override;
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   void RegisterExtension(v8::Extension* extension) override;
-  void ScheduleIdleHandler(int64 initial_delay_ms) override;
+  void ScheduleIdleHandler(int64_t initial_delay_ms) override;
   void IdleHandler() override;
-  int64 GetIdleNotificationDelayInMs() const override;
+  int64_t GetIdleNotificationDelayInMs() const override;
   void SetIdleNotificationDelayInMs(
-      int64 idle_notification_delay_in_ms) override;
+      int64_t idle_notification_delay_in_ms) override;
   void UpdateHistograms(int sequence_number) override;
   int PostTaskToAllWebWorkers(const base::Closure& closure) override;
   bool ResolveProxy(const GURL& url, std::string* proxy_list) override;
@@ -77,31 +82,22 @@ class MockRenderThread : public RenderThread {
   void PreCacheFont(const LOGFONT& log_font) override;
   void ReleaseCachedFonts() override;
 #endif
-  IPC::AttachmentBroker* GetAttachmentBroker() override;
   ServiceRegistry* GetServiceRegistry() override;
 
   //////////////////////////////////////////////////////////////////////////
   // The following functions are called by the test itself.
 
-  void set_routing_id(int32 id) {
-    routing_id_ = id;
+  void set_routing_id(int32_t id) { routing_id_ = id; }
+
+  int32_t opener_id() const { return opener_id_; }
+
+  void set_new_window_routing_id(int32_t id) { new_window_routing_id_ = id; }
+
+  void set_new_window_main_frame_widget_routing_id(int32_t id) {
+    new_window_main_frame_widget_routing_id_ = id;
   }
 
-  void set_surface_id(int32 id) {
-    surface_id_ = id;
-  }
-
-  int32 opener_id() const {
-    return opener_id_;
-  }
-
-  void set_new_window_routing_id(int32 id) {
-    new_window_routing_id_ = id;
-  }
-
-  void set_new_frame_routing_id(int32 id) {
-    new_frame_routing_id_ = id;
-  }
+  void set_new_frame_routing_id(int32_t id) { new_frame_routing_id_ = id; }
 
   // Simulates the Widget receiving a close message. This should result
   // on releasing the internal reference counts and destroying the internal
@@ -121,25 +117,22 @@ class MockRenderThread : public RenderThread {
   // The Widget expects to be returned valid route_id.
   void OnCreateWidget(int opener_id,
                       blink::WebPopupType popup_type,
-                      int* route_id,
-                      int* surface_id);
+                      int* route_id);
 
-  // The View expects to be returned a valid route_id different from its own.
-  // We do not keep track of the newly created widget in MockRenderThread,
+  // The View expects to be returned a valid |reply.route_id| different from its
+  // own. We do not keep track of the newly created widget in MockRenderThread,
   // so it must be cleaned up on its own.
-  void OnCreateWindow(
-    const ViewHostMsg_CreateWindow_Params& params,
-    int* route_id,
-    int* main_frame_route_id,
-    int* surface_id,
-    int64* cloned_session_storage_namespace_id);
+  void OnCreateWindow(const ViewHostMsg_CreateWindow_Params& params,
+                      ViewHostMsg_CreateWindow_Reply* reply);
 
   // The Frame expects to be returned a valid route_id different from its own.
-  void OnCreateChildFrame(int new_frame_routing_id,
-                          blink::WebTreeScopeType scope,
-                          const std::string& frame_name,
-                          blink::WebSandboxFlags sandbox_flags,
-                          int* new_render_frame_id);
+  void OnCreateChildFrame(
+      int new_frame_routing_id,
+      blink::WebTreeScopeType scope,
+      const std::string& frame_name,
+      blink::WebSandboxFlags sandbox_flags,
+      const blink::WebFrameOwnerProperties& frame_owner_properties,
+      int* new_render_frame_id);
 
 #if defined(OS_WIN)
   void OnDuplicateSection(base::SharedMemoryHandle renderer_handle,
@@ -149,18 +142,16 @@ class MockRenderThread : public RenderThread {
   IPC::TestSink sink_;
 
   // Routing id what will be assigned to the Widget.
-  int32 routing_id_;
-
-  // Surface id what will be assigned to the Widget.
-  int32 surface_id_;
+  int32_t routing_id_;
 
   // Opener id reported by the Widget.
-  int32 opener_id_;
+  int32_t opener_id_;
 
   // Routing id that will be assigned to a CreateWindow Widget.
-  int32 new_window_routing_id_;
-  int32 new_window_main_frame_routing_id_;
-  int32 new_frame_routing_id_;
+  int32_t new_window_routing_id_;
+  int32_t new_window_main_frame_routing_id_;
+  int32_t new_window_main_frame_widget_routing_id_;
+  int32_t new_frame_routing_id_;
 
   // The last known good deserializer for sync messages.
   scoped_ptr<IPC::MessageReplyDeserializer> reply_deserializer_;

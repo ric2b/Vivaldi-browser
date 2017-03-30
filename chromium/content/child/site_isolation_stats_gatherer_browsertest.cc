@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -13,7 +14,8 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 namespace content {
 
@@ -27,13 +29,13 @@ class SiteIsolationStatsGathererBrowserTest : public ContentBrowserTest {
   ~SiteIsolationStatsGathererBrowserTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ASSERT_TRUE(test_server()->Start());
+    ASSERT_TRUE(embedded_test_server()->Start());
     // Add a host resolver rule to map all outgoing requests to the test server.
     // This allows us to use "real" hostnames in URLs, which we can use to
     // create arbitrary SiteInstances.
     command_line->AppendSwitchASCII(
         switches::kHostResolverRules,
-        "MAP * " + test_server()->host_port_pair().ToString() +
+        "MAP * " + embedded_test_server()->host_port_pair().ToString() +
             ",EXCLUDE localhost");
 
     // Since we assume exploited renderer process, it can bypass the same origin
@@ -72,73 +74,38 @@ class SiteIsolationStatsGathererBrowserTest : public ContentBrowserTest {
 
     // A few histograms are incremented unconditionally.
     histograms.ExpectUniqueSample("SiteIsolation.AllResponses", 1, 1);
-    histograms.ExpectTotalCount("SiteIsolation.XSD.DataLength", 1);
-    histograms.ExpectUniqueSample("SiteIsolation.XSD.MimeType", mime_type, 1);
+    base::HistogramTester::CountsMap expected_metrics;
+    expected_metrics["SiteIsolation.XSD.DataLength"] = 1;
+    expected_metrics["SiteIsolation.XSD.MimeType"] = 1;
 
-    // Inspect the appropriate conditionally-incremented histogram[s].
-    std::set<std::string> expected_metrics;
-    std::string base_metric = "SiteIsolation.XSD." + bucket;
-    base_metric += should_be_blocked ? ".Blocked" : ".NotBlocked";
-    expected_metrics.insert(base_metric);
+    // Determine the appropriate conditionally-incremented histograms.
+    std::string base = "SiteIsolation.XSD." + bucket;
     if (should_be_blocked) {
-      expected_metrics.insert(base_metric + ".RenderableStatusCode");
-    } else if (base::MatchPattern(resource_name, "*js.*")) {
-      expected_metrics.insert(base_metric + ".MaybeJS");
-    }
-
-    for (std::string metric : expected_metrics) {
-      if (base::MatchPattern(metric, "*.RenderableStatusCode")) {
-        histograms.ExpectUniqueSample(metric, RESOURCE_TYPE_XHR, 1);
-      } else {
-        histograms.ExpectUniqueSample(metric, 1, 1);
+      expected_metrics[base + ".Blocked"] = 1;
+      expected_metrics[base + ".Blocked.RenderableStatusCode2"] = 1;
+    } else {
+      expected_metrics[base + ".NotBlocked"] = 1;
+      if (base::MatchPattern(resource_name, "*js.*")) {
+        expected_metrics[base + ".NotBlocked.MaybeJS"] = 1;
       }
     }
 
-    // Make sure no other conditionally-incremented histograms were touched.
-    const char* all_metrics[] = {
-        "SiteIsolation.XSD.HTML.Blocked",
-        "SiteIsolation.XSD.HTML.Blocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.HTML.Blocked.RenderableStatusCode",
-        "SiteIsolation.XSD.HTML.NoSniffBlocked",
-        "SiteIsolation.XSD.HTML.NoSniffBlocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.HTML.NoSniffBlocked.RenderableStatusCode",
-        "SiteIsolation.XSD.HTML.NotBlocked",
-        "SiteIsolation.XSD.HTML.NotBlocked.MaybeJS",
-        "SiteIsolation.XSD.JSON.Blocked",
-        "SiteIsolation.XSD.JSON.Blocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.JSON.Blocked.RenderableStatusCode",
-        "SiteIsolation.XSD.JSON.NoSniffBlocked",
-        "SiteIsolation.XSD.JSON.NoSniffBlocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.JSON.NoSniffBlocked.RenderableStatusCode",
-        "SiteIsolation.XSD.JSON.NotBlocked",
-        "SiteIsolation.XSD.JSON.NotBlocked.MaybeJS",
-        "SiteIsolation.XSD.Plain.HTML.Blocked",
-        "SiteIsolation.XSD.Plain.HTML.Blocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.Plain.HTML.Blocked.RenderableStatusCode",
-        "SiteIsolation.XSD.Plain.JSON.Blocked",
-        "SiteIsolation.XSD.Plain.JSON.Blocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.Plain.JSON.Blocked.RenderableStatusCode",
-        "SiteIsolation.XSD.Plain.NoSniffBlocked",
-        "SiteIsolation.XSD.Plain.NoSniffBlocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.Plain.NoSniffBlocked.RenderableStatusCode",
-        "SiteIsolation.XSD.Plain.NotBlocked",
-        "SiteIsolation.XSD.Plain.NotBlocked.MaybeJS",
-        "SiteIsolation.XSD.Plain.XML.Blocked",
-        "SiteIsolation.XSD.Plain.XML.Blocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.Plain.XML.Blocked.RenderableStatusCode",
-        "SiteIsolation.XSD.XML.Blocked",
-        "SiteIsolation.XSD.XML.Blocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.XML.Blocked.RenderableStatusCode",
-        "SiteIsolation.XSD.XML.NoSniffBlocked",
-        "SiteIsolation.XSD.XML.NoSniffBlocked.NonRenderableStatusCode",
-        "SiteIsolation.XSD.XML.NoSniffBlocked.RenderableStatusCode",
-        "SiteIsolation.XSD.XML.NotBlocked",
-        "SiteIsolation.XSD.XML.NotBlocked.MaybeJS"};
+    // Make sure that the expected metrics, and only those metrics, were
+    // incremented.
+    EXPECT_THAT(histograms.GetTotalCountsForPrefix("SiteIsolation.XSD."),
+                testing::ContainerEq(expected_metrics))
+        << "For resource_name=" << resource_name
+        << ", should_be_blocked=" << should_be_blocked;
 
-    for (const char* metric : all_metrics) {
-      if (!expected_metrics.count(metric)) {
-        histograms.ExpectTotalCount(metric, 0);
-      }
+    EXPECT_THAT(histograms.GetAllSamples("SiteIsolation.XSD.MimeType"),
+                testing::ElementsAre(base::Bucket(mime_type, 1)))
+        << "The wrong mime type bucket was incremented.";
+    if (should_be_blocked) {
+      static_assert(13 == RESOURCE_TYPE_XHR, "Histogram enums mustn't change.");
+      EXPECT_THAT(
+          histograms.GetAllSamples(base + ".Blocked.RenderableStatusCode2"),
+          testing::ElementsAre(base::Bucket(RESOURCE_TYPE_XHR, 1)))
+          << "The wrong RenderableStatusCode2 bucket was incremented.";
     }
   }
 
@@ -146,26 +113,15 @@ class SiteIsolationStatsGathererBrowserTest : public ContentBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(SiteIsolationStatsGathererBrowserTest);
 };
 
-// TODO(dsjang): we cannot run these tests on Android since SetUpCommandLine()
-// is executed before the I/O thread is created on Android. After this bug
-// (crbug.com/278425) is resolved, we can enable this test case on Android.
-#if defined(OS_ANDROID)
-#define MAYBE_CrossSiteDocumentBlockingForMimeType \
-  DISABLED_CrossSiteDocumentBlockingForMimeType
-#else
-#define MAYBE_CrossSiteDocumentBlockingForMimeType \
-  CrossSiteDocumentBlockingForMimeType
-#endif
-
 IN_PROC_BROWSER_TEST_F(SiteIsolationStatsGathererBrowserTest,
-                       MAYBE_CrossSiteDocumentBlockingForMimeType) {
+                       CrossSiteDocumentBlockingForMimeType) {
   // Load a page that issues illegal cross-site document requests to bar.com.
   // The page uses XHR to request HTML/XML/JSON documents from bar.com, and
   // inspects if any of them were successfully received. Currently, on illegal
   // access, the XHR requests should succeed, but the UMA histograms should
   // record that they would have been blocked. This test is only possible since
   // we run the browser without the same origin policy.
-  GURL foo("http://foo.com/files/cross_site_document_request.html");
+  GURL foo("http://foo.com/cross_site_document_request.html");
 
   NavigateToURL(shell(), foo);
 
@@ -226,19 +182,8 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationStatsGathererBrowserTest,
   }
 }
 
-// TODO(dsjang): we cannot run these tests on Android since SetUpCommandLine()
-// is executed before the I/O thread is created on Android. After this bug
-// (crbug.com/278425) is resolved, we can enable this test case on Android.
-#if defined(OS_ANDROID)
-#define MAYBE_CrossSiteDocumentBlockingForDifferentTargets \
-  DISABLED_CrossSiteDocumentBlockingForDifferentTargets
-#else
-#define MAYBE_CrossSiteDocumentBlockingForDifferentTargets \
-  CrossSiteDocumentBlockingForDifferentTargets
-#endif
-
 IN_PROC_BROWSER_TEST_F(SiteIsolationStatsGathererBrowserTest,
-                       MAYBE_CrossSiteDocumentBlockingForDifferentTargets) {
+                       CrossSiteDocumentBlockingForDifferentTargets) {
   // This webpage loads a cross-site HTML page in different targets such as
   // <img>,<link>,<embed>, etc. Since the requested document is blocked, and one
   // character string (' ') is returned instead, this tests that the renderer
@@ -248,7 +193,7 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationStatsGathererBrowserTest,
 
   // TODO(nick): Split up these cases, and add positive assertions here about
   // what actually happens in these various resource-block cases.
-  GURL foo("http://foo.com/files/cross_site_document_request_target.html");
+  GURL foo("http://foo.com/cross_site_document_request_target.html");
   NavigateToURL(shell(), foo);
 }
 

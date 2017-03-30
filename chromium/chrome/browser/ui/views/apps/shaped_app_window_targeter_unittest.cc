@@ -4,7 +4,11 @@
 
 #include "chrome/browser/ui/views/apps/shaped_app_window_targeter.h"
 
+#include <utility>
+
 #include "apps/ui/views/app_window_frame_view.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_aura.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/window.h"
@@ -74,7 +78,7 @@ TEST_F(ShapedAppWindowTargeterTest, HitTestBasic) {
 
   scoped_ptr<SkRegion> region(new SkRegion);
   region->op(SkIRect::MakeXYWH(0, 0, 0, 0), SkRegion::kUnion_Op);
-  app_window()->UpdateShape(region.Pass());
+  app_window()->UpdateShape(std::move(region));
   {
     // With an empty custom shape, all events within the window should fall
     // through to the root window.
@@ -99,7 +103,7 @@ TEST_F(ShapedAppWindowTargeterTest, HitTestBasic) {
   region.reset(new SkRegion);
   region->op(SkIRect::MakeXYWH(40, 0, 20, 100), SkRegion::kUnion_Op);
   region->op(SkIRect::MakeXYWH(0, 40, 100, 20), SkRegion::kUnion_Op);
-  app_window()->UpdateShape(region.Pass());
+  app_window()->UpdateShape(std::move(region));
   {
     // With the custom shape, the events that don't fall within the custom shape
     // will go through to the root window.
@@ -157,7 +161,7 @@ TEST_F(ShapedAppWindowTargeterTest, HitTestOnlyForShapedWindow) {
   scoped_ptr<SkRegion> region(new SkRegion);
   region->op(SkIRect::MakeXYWH(40, 0, 20, 100), SkRegion::kUnion_Op);
   region->op(SkIRect::MakeXYWH(0, 40, 100, 20), SkRegion::kUnion_Op);
-  app_window()->UpdateShape(region.Pass());
+  app_window()->UpdateShape(std::move(region));
   {
     // With the custom shape, the events that don't fall within the custom shape
     // will go through to the root window.

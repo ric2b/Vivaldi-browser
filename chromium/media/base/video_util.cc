@@ -25,58 +25,13 @@ gfx::Size GetNaturalSize(const gfx::Size& visible_size,
   double aspect_ratio = aspect_ratio_numerator /
       static_cast<double>(aspect_ratio_denominator);
 
-  int width = floor(visible_size.width() * aspect_ratio + 0.5);
-  int height = visible_size.height();
-
-  // An even width makes things easier for YV12 and appears to be the behavior
-  // expected by WebKit layout tests.
-  return gfx::Size(width & ~1, height);
+  return gfx::Size(round(visible_size.width() * aspect_ratio),
+                   visible_size.height());
 }
 
-void CopyPlane(size_t plane, const uint8* source, int stride, int rows,
-               VideoFrame* frame) {
-  uint8* dest = frame->data(plane);
-  int dest_stride = frame->stride(plane);
-
-  // Clamp in case source frame has smaller stride.
-  int bytes_to_copy_per_row = std::min(frame->row_bytes(plane), stride);
-
-  // Clamp in case source frame has smaller height.
-  int rows_to_copy = std::min(frame->rows(plane), rows);
-
-  // Copy!
-  for (int row = 0; row < rows_to_copy; ++row) {
-    memcpy(dest, source, bytes_to_copy_per_row);
-    source += stride;
-    dest += dest_stride;
-  }
-}
-
-void CopyYPlane(const uint8* source, int stride, int rows, VideoFrame* frame) {
-  CopyPlane(VideoFrame::kYPlane, source, stride, rows, frame);
-}
-
-void CopyUPlane(const uint8* source, int stride, int rows, VideoFrame* frame) {
-  CopyPlane(VideoFrame::kUPlane, source, stride, rows, frame);
-}
-
-void CopyVPlane(const uint8* source, int stride, int rows, VideoFrame* frame) {
-  CopyPlane(VideoFrame::kVPlane, source, stride, rows, frame);
-}
-
-void CopyAPlane(const uint8* source, int stride, int rows, VideoFrame* frame) {
-  CopyPlane(VideoFrame::kAPlane, source, stride, rows, frame);
-}
-
-void MakeOpaqueAPlane(int stride, int rows, VideoFrame* frame) {
-  int rows_to_clear = std::min(frame->rows(VideoFrame::kAPlane), rows);
-  memset(frame->data(VideoFrame::kAPlane), 255,
-         frame->stride(VideoFrame::kAPlane) * rows_to_clear);
-}
-
-void FillYUV(VideoFrame* frame, uint8 y, uint8 u, uint8 v) {
+void FillYUV(VideoFrame* frame, uint8_t y, uint8_t u, uint8_t v) {
   // Fill the Y plane.
-  uint8* y_plane = frame->data(VideoFrame::kYPlane);
+  uint8_t* y_plane = frame->data(VideoFrame::kYPlane);
   int y_rows = frame->rows(VideoFrame::kYPlane);
   int y_row_bytes = frame->row_bytes(VideoFrame::kYPlane);
   for (int i = 0; i < y_rows; ++i) {
@@ -85,8 +40,8 @@ void FillYUV(VideoFrame* frame, uint8 y, uint8 u, uint8 v) {
   }
 
   // Fill the U and V planes.
-  uint8* u_plane = frame->data(VideoFrame::kUPlane);
-  uint8* v_plane = frame->data(VideoFrame::kVPlane);
+  uint8_t* u_plane = frame->data(VideoFrame::kUPlane);
+  uint8_t* v_plane = frame->data(VideoFrame::kVPlane);
   int uv_rows = frame->rows(VideoFrame::kUPlane);
   int u_row_bytes = frame->row_bytes(VideoFrame::kUPlane);
   int v_row_bytes = frame->row_bytes(VideoFrame::kVPlane);
@@ -98,12 +53,12 @@ void FillYUV(VideoFrame* frame, uint8 y, uint8 u, uint8 v) {
   }
 }
 
-void FillYUVA(VideoFrame* frame, uint8 y, uint8 u, uint8 v, uint8 a) {
+void FillYUVA(VideoFrame* frame, uint8_t y, uint8_t u, uint8_t v, uint8_t a) {
   // Fill Y, U and V planes.
   FillYUV(frame, y, u, v);
 
   // Fill the A plane.
-  uint8* a_plane = frame->data(VideoFrame::kAPlane);
+  uint8_t* a_plane = frame->data(VideoFrame::kAPlane);
   int a_rows = frame->rows(VideoFrame::kAPlane);
   int a_row_bytes = frame->row_bytes(VideoFrame::kAPlane);
   for (int i = 0; i < a_rows; ++i) {
@@ -115,8 +70,8 @@ void FillYUVA(VideoFrame* frame, uint8 y, uint8 u, uint8 v, uint8 a) {
 static void LetterboxPlane(VideoFrame* frame,
                            int plane,
                            const gfx::Rect& view_area,
-                           uint8 fill_byte) {
-  uint8* ptr = frame->data(plane);
+                           uint8_t fill_byte) {
+  uint8_t* ptr = frame->data(plane);
   const int rows = frame->rows(plane);
   const int row_bytes = frame->row_bytes(plane);
   const int stride = frame->stride(plane);
@@ -159,8 +114,8 @@ void LetterboxYUV(VideoFrame* frame, const gfx::Rect& view_area) {
   DCHECK(!(view_area.y() & 1));
   DCHECK(!(view_area.width() & 1));
   DCHECK(!(view_area.height() & 1));
-  DCHECK(frame->format() == VideoFrame::YV12 ||
-         frame->format() == VideoFrame::I420);
+  DCHECK(frame->format() == PIXEL_FORMAT_YV12 ||
+         frame->format() == PIXEL_FORMAT_I420);
   LetterboxPlane(frame, VideoFrame::kYPlane, view_area, 0x00);
   gfx::Rect half_view_area(view_area.x() / 2,
                            view_area.y() / 2,
@@ -170,14 +125,13 @@ void LetterboxYUV(VideoFrame* frame, const gfx::Rect& view_area) {
   LetterboxPlane(frame, VideoFrame::kVPlane, half_view_area, 0x80);
 }
 
-void RotatePlaneByPixels(
-    const uint8* src,
-    uint8* dest,
-    int width,
-    int height,
-    int rotation,  // Clockwise.
-    bool flip_vert,
-    bool flip_horiz) {
+void RotatePlaneByPixels(const uint8_t* src,
+                         uint8_t* dest,
+                         int width,
+                         int height,
+                         int rotation,  // Clockwise.
+                         bool flip_vert,
+                         bool flip_horiz) {
   DCHECK((width > 0) && (height > 0) &&
          ((width & 1) == 0) && ((height & 1) == 0) &&
          (rotation >= 0) && (rotation < 360) && (rotation % 90 == 0));
@@ -260,8 +214,8 @@ void RotatePlaneByPixels(
 
   // Copy pixels.
   for (int row = 0; row < num_rows; ++row) {
-    const uint8* src_ptr = src;
-    uint8* dest_ptr = dest;
+    const uint8_t* src_ptr = src;
+    uint8_t* dest_ptr = dest;
     for (int col = 0; col < num_cols; ++col) {
       *dest_ptr = *src_ptr++;
       dest_ptr += dest_col_step;
@@ -272,10 +226,10 @@ void RotatePlaneByPixels(
 }
 
 // Helper function to return |a| divided by |b|, rounded to the nearest integer.
-static int RoundedDivision(int64 a, int b) {
+static int RoundedDivision(int64_t a, int b) {
   DCHECK_GE(a, 0);
   DCHECK_GT(b, 0);
-  base::CheckedNumeric<uint64> result(a);
+  base::CheckedNumeric<uint64_t> result(a);
   result += b / 2;
   result /= b;
   return base::checked_cast<int>(result.ValueOrDie());
@@ -290,8 +244,8 @@ static gfx::Size ScaleSizeToTarget(const gfx::Size& size,
   if (size.IsEmpty())
     return gfx::Size();  // Corner case: Aspect ratio is undefined.
 
-  const int64 x = static_cast<int64>(size.width()) * target.height();
-  const int64 y = static_cast<int64>(size.height()) * target.width();
+  const int64_t x = static_cast<int64_t>(size.width()) * target.height();
+  const int64_t y = static_cast<int64_t>(size.height()) * target.width();
   const bool use_target_width = fit_within_target ? (y < x) : (x < y);
   return use_target_width ?
       gfx::Size(target.width(), RoundedDivision(y, size.width())) :
@@ -325,14 +279,14 @@ gfx::Size PadToMatchAspectRatio(const gfx::Size& size,
   if (target.IsEmpty())
     return gfx::Size();  // Aspect ratio is undefined.
 
-  const int64 x = static_cast<int64>(size.width()) * target.height();
-  const int64 y = static_cast<int64>(size.height()) * target.width();
+  const int64_t x = static_cast<int64_t>(size.width()) * target.height();
+  const int64_t y = static_cast<int64_t>(size.height()) * target.width();
   if (x < y)
     return gfx::Size(RoundedDivision(y, target.height()), size.height());
   return gfx::Size(size.width(), RoundedDivision(x, target.width()));
 }
 
-void CopyRGBToVideoFrame(const uint8* source,
+void CopyRGBToVideoFrame(const uint8_t* source,
                          int stride,
                          const gfx::Rect& region_in_frame,
                          VideoFrame* frame) {

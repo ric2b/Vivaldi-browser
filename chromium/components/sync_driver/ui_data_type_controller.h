@@ -7,11 +7,11 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "components/sync_driver/data_type_controller.h"
+#include "components/sync_driver/directory_data_type_controller.h"
 #include "components/sync_driver/shared_change_processor.h"
 
 namespace base {
@@ -20,6 +20,7 @@ class TimeDelta;
 
 namespace syncer {
 class SyncableService;
+class SyncClient;
 class SyncError;
 }
 
@@ -29,13 +30,13 @@ namespace sync_driver {
 // thread we perform initialization on, so we don't have to worry about thread
 // safety. The main start/stop funtionality is implemented by default.
 // Note: RefCountedThreadSafe by way of DataTypeController.
-class UIDataTypeController : public DataTypeController {
+class UIDataTypeController : public DirectoryDataTypeController {
  public:
   UIDataTypeController(
-      scoped_refptr<base::SingleThreadTaskRunner> ui_thread,
+      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       const base::Closure& error_callback,
       syncer::ModelType type,
-      SyncApiComponentFactory* sync_factory);
+      SyncClient* sync_client);
 
   // DataTypeController interface.
   void LoadModels(const ModelLoadCallback& model_load_callback) override;
@@ -74,9 +75,6 @@ class UIDataTypeController : public DataTypeController {
   // the datatype controller. The default implementation is a no-op.
   virtual void StopModels();
 
-  // DataTypeController interface.
-  void OnModelLoaded() override;
-
   // Helper method for cleaning up state and invoking the start callback.
   virtual void StartDone(ConfigureResult result,
                          const syncer::SyncMergeResult& local_merge_result,
@@ -87,7 +85,12 @@ class UIDataTypeController : public DataTypeController {
   // Record causes of start failure.
   virtual void RecordStartFailure(ConfigureResult result);
 
-  SyncApiComponentFactory* const sync_factory_;
+  // If the DTC is waiting for models to load, once the models are
+  // loaded the datatype service will call this function on DTC to let
+  // us know that it is safe to start associating.
+  void OnModelLoaded();
+
+  SyncClient* const sync_client_;
 
   State state_;
 
@@ -121,8 +124,9 @@ class UIDataTypeController : public DataTypeController {
   base::WeakPtr<syncer::SyncableService> local_service_;
 
   scoped_refptr<base::SingleThreadTaskRunner> ui_thread_;
+
  private:
-   // Associate the sync model with the service's model, then start syncing.
+  // Associate the sync model with the service's model, then start syncing.
   virtual void Associate();
 
   virtual void AbortModelLoad();

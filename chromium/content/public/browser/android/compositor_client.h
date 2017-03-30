@@ -5,14 +5,15 @@
 #ifndef CONTENT_PUBLIC_BROWSER_ANDROID_COMPOSITOR_CLIENT_H_
 #define CONTENT_PUBLIC_BROWSER_ANDROID_COMPOSITOR_CLIENT_H_
 
+#include "base/macros.h"
 #include "content/common/content_export.h"
 
 namespace content {
 
 class CONTENT_EXPORT CompositorClient {
  public:
-  // Gives the client a chance for layout changes before compositing.
-  virtual void Layout() {}
+  // Gives the client a chance to update the layer tree host before compositing.
+  virtual void UpdateLayerTreeHost() {}
 
   // The compositor has completed swapping a frame.
   virtual void OnSwapBuffersCompleted(int pending_swap_buffers) {}

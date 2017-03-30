@@ -7,8 +7,12 @@
 
 #include "rlz/lib/rlz_lib.h"
 
+#include <algorithm>
+
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "rlz/lib/assert.h"
 #include "rlz/lib/crc32.h"
 #include "rlz/lib/financial_ping.h"
@@ -422,7 +426,8 @@ bool IsPingResponseValid(const char* response, int* checksum_idx) {
       return false;
   } else {
     checksum_param = "crc32: ";  // Empty response case.
-    if (!base::StartsWithASCII(response_string, checksum_param, true))
+    if (!base::StartsWith(response_string, checksum_param,
+                          base::CompareCase::SENSITIVE))
       return false;
 
     checksum_index = 0;
@@ -534,8 +539,8 @@ bool ParsePingResponse(Product product, const char* response) {
     std::string response_line;
     response_line = response_string.substr(line_begin, line_end - line_begin);
 
-    if (base::StartsWithASCII(response_line, kRlzCgiVariable,
-                              true)) {  // An RLZ.
+    if (base::StartsWith(response_line, kRlzCgiVariable,
+                         base::CompareCase::SENSITIVE)) {  // An RLZ.
       int separator_index = -1;
       if ((separator_index = response_line.find(": ")) < 0)
         continue;  // Not a valid key-value pair.
@@ -561,7 +566,8 @@ bool ParsePingResponse(Product product, const char* response) {
 
       if (IsAccessPointSupported(point))
         SetAccessPointRlz(point, rlz_value.substr(0, rlz_length).c_str());
-    } else if (base::StartsWithASCII(response_line, events_variable, true)) {
+    } else if (base::StartsWith(response_line, events_variable,
+                                base::CompareCase::SENSITIVE)) {
       // Clear events which server parsed.
       std::vector<ReturnedEvent> event_array;
       GetEventsFromResponseString(response_line, events_variable, &event_array);
@@ -569,8 +575,8 @@ bool ParsePingResponse(Product product, const char* response) {
         ClearProductEvent(product, event_array[i].access_point,
                           event_array[i].event_type);
       }
-    } else if (base::StartsWithASCII(response_line, stateful_events_variable,
-                                     true)) {
+    } else if (base::StartsWith(response_line, stateful_events_variable,
+                                base::CompareCase::SENSITIVE)) {
       // Record any stateful events the server send over.
       std::vector<ReturnedEvent> event_array;
       GetEventsFromResponseString(response_line, stateful_events_variable,

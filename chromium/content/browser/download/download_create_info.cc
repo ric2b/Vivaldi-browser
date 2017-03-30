@@ -5,6 +5,7 @@
 #include "content/browser/download/download_create_info.h"
 
 #include <string>
+#include <utility>
 
 #include "base/format_macros.h"
 #include "base/strings/stringprintf.h"
@@ -12,44 +13,37 @@
 namespace content {
 
 DownloadCreateInfo::DownloadCreateInfo(const base::Time& start_time,
-                                       int64 total_bytes,
+                                       int64_t total_bytes,
                                        const net::BoundNetLog& bound_net_log,
-                                       bool has_user_gesture,
-                                       ui::PageTransition transition_type,
                                        scoped_ptr<DownloadSaveInfo> save_info,
                                        bool open_when_done)
     : start_time(start_time),
       total_bytes(total_bytes),
       download_id(DownloadItem::kInvalidId),
-      has_user_gesture(has_user_gesture),
-      transition_type(transition_type),
-      save_info(save_info.Pass()),
+      has_user_gesture(false),
+      transition_type(ui::PAGE_TRANSITION_LINK),
+      save_info(std::move(save_info)),
       request_bound_net_log(bound_net_log),
       open_when_finished(open_when_done) {}
 
 DownloadCreateInfo::DownloadCreateInfo()
-    : total_bytes(0),
-      download_id(DownloadItem::kInvalidId),
-      has_user_gesture(false),
-      transition_type(ui::PAGE_TRANSITION_LINK),
-      save_info(new DownloadSaveInfo()),
-      open_when_finished(false) {
-}
+    : DownloadCreateInfo(base::Time(),
+                         0,
+                         net::BoundNetLog(),
+                         make_scoped_ptr(new DownloadSaveInfo),
+                         false) {}
 
-DownloadCreateInfo::~DownloadCreateInfo() {
-}
+DownloadCreateInfo::~DownloadCreateInfo() {}
 
 std::string DownloadCreateInfo::DebugString() const {
-  return base::StringPrintf("{"
-                            " download_id = %u"
-                            " url = \"%s\""
-                            " request_handle = %s"
-                            " total_bytes = %" PRId64
-                            " }",
-                            download_id,
-                            url().spec().c_str(),
-                            request_handle.DebugString().c_str(),
-                            total_bytes);
+  return base::StringPrintf(
+      "{"
+      " download_id = %u"
+      " url = \"%s\""
+      " request_handle = %s"
+      " total_bytes = %" PRId64 " }",
+      download_id, url().spec().c_str(), request_handle->DebugString().c_str(),
+      total_bytes);
 }
 
 const GURL& DownloadCreateInfo::url() const {

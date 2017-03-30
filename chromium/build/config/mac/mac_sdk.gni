@@ -6,9 +6,12 @@ import("//build/config/chrome_build.gni")
 
 declare_args() {
   # Minimum supported version of the Mac SDK.
-  mac_sdk_min = "10.6"
+  mac_sdk_min = "10.10"
 
-  # Path to a specific version of the Mac SDKJ, not including a backslash at
+  # Minimum supported version of OSX.
+  mac_deployment_target = "10.6"
+
+  # Path to a specific version of the Mac SDK, not including a backslash at
   # the end. If empty, the path to the lowest version greater than or equal to
   # mac_sdk_min is used.
   mac_sdk_path = ""
@@ -31,11 +34,5 @@ find_sdk_lines =
     exec_script("//build/mac/find_sdk.py", find_sdk_args, "list lines")
 mac_sdk_version = find_sdk_lines[1]
 if (mac_sdk_path == "") {
-  # TODO(brettw) http://crbug.com/335325  when everybody moves to XCode 5 we
-  # can remove the --print_sdk_path argument to find_sdk and instead just use
-  # the following two lines to get the path. Although it looks longer here, it
-  # saves forking a process in find_sdk.py so will be faster.
-  #mac_sdk_root = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX"
-  #mac_sdk_path = mac_sdk_root + mac_sdk_version + ".sdk"
   mac_sdk_path = find_sdk_lines[0]
 }

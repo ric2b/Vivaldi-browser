@@ -5,12 +5,13 @@
 #include "media/cast/net/rtp/receiver_stats.h"
 
 #include "base/logging.h"
-#include "media/cast/net/rtp/rtp_receiver_defines.h"
+#include "media/cast/cast_defines.h"
+#include "media/cast/net/rtp/rtp_defines.h"
 
 namespace media {
 namespace cast {
 
-static const uint32 kMaxSequenceNumber = 65536;
+static const uint32_t kMaxSequenceNumber = 65536;
 
 ReceiverStats::ReceiverStats(base::TickClock* clock)
     : clock_(clock),
@@ -42,7 +43,7 @@ RtpReceiverStatistics ReceiverStats::GetStatistics() {
     } else {
       float tmp_ratio =
           (1 - static_cast<float>(interval_number_packets_) / abs(diff));
-      ret.fraction_lost = static_cast<uint8>(256 * tmp_ratio);
+      ret.fraction_lost = static_cast<uint8_t>(256 * tmp_ratio);
     }
   }
 
@@ -62,7 +63,8 @@ RtpReceiverStatistics ReceiverStats::GetStatistics() {
   ret.extended_high_sequence_number =
       (sequence_number_cycles_ << 16) + max_sequence_number_;
 
-  ret.jitter = static_cast<uint32>(std::abs(jitter_.InMillisecondsRoundedUp()));
+  ret.jitter =
+      static_cast<uint32_t>(std::abs(jitter_.InMillisecondsRoundedUp()));
 
   // Reset interval values.
   interval_min_sequence_number_ = 0;
@@ -72,8 +74,9 @@ RtpReceiverStatistics ReceiverStats::GetStatistics() {
   return ret;
 }
 
-void ReceiverStats::UpdateStatistics(const RtpCastHeader& header) {
-  const uint16 new_seq_num = header.sequence_number;
+void ReceiverStats::UpdateStatistics(const RtpCastHeader& header,
+                                     int rtp_timebase) {
+  const uint16_t new_seq_num = header.sequence_number;
 
   if (interval_number_packets_ == 0) {
     // First packet in the interval.
@@ -95,17 +98,19 @@ void ReceiverStats::UpdateStatistics(const RtpCastHeader& header) {
   }
 
   // Compute Jitter.
-  base::TimeTicks now = clock_->NowTicks();
-  base::TimeDelta delta_new_timestamp =
-      base::TimeDelta::FromMilliseconds(header.rtp_timestamp);
+  const base::TimeTicks now = clock_->NowTicks();
   if (total_number_packets_ > 0) {
+    const base::TimeDelta packet_time_difference =
+        now - last_received_packet_time_;
+    const base::TimeDelta media_time_differerence =
+        (header.rtp_timestamp - last_received_rtp_timestamp_)
+            .ToTimeDelta(rtp_timebase);
+    const base::TimeDelta delta =
+        packet_time_difference - media_time_differerence;
     // Update jitter.
-    base::TimeDelta delta =
-        (now - last_received_packet_time_) -
-        ((delta_new_timestamp - last_received_timestamp_) / 90);
     jitter_ += (delta - jitter_) / 16;
   }
-  last_received_timestamp_ = delta_new_timestamp;
+  last_received_rtp_timestamp_ = header.rtp_timestamp;
   last_received_packet_time_ = now;
 
   // Increment counters.

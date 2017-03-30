@@ -4,11 +4,13 @@
 
 #include "cc/layers/layer_impl.h"
 
+#include "cc/animation/mutable_properties.h"
 #include "cc/layers/painted_scrollbar_layer_impl.h"
 #include "cc/layers/solid_color_scrollbar_layer_impl.h"
 #include "cc/output/filter_operation.h"
 #include "cc/output/filter_operations.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/animation_test_common.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/geometry_test_utils.h"
@@ -65,18 +67,22 @@ namespace {
   EXPECT_FALSE(child->LayerPropertyChanged());                                 \
   EXPECT_FALSE(grand_child->LayerPropertyChanged());
 
-#define VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(code_to_test)                      \
-  root->ResetAllChangeTrackingForSubtree();                                    \
-  host_impl.ForcePrepareToDraw();                                              \
-  EXPECT_FALSE(host_impl.active_tree()->needs_update_draw_properties());       \
-  code_to_test;                                                                \
+#define VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(code_to_test)                \
+  root->ResetAllChangeTrackingForSubtree();                              \
+  host_impl.active_tree()->property_trees()->needs_rebuild = true;       \
+  host_impl.active_tree()->BuildPropertyTreesForTesting();               \
+  host_impl.ForcePrepareToDraw();                                        \
+  EXPECT_FALSE(host_impl.active_tree()->needs_update_draw_properties()); \
+  code_to_test;                                                          \
   EXPECT_TRUE(host_impl.active_tree()->needs_update_draw_properties());
 
-#define VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(code_to_test)                   \
-  root->ResetAllChangeTrackingForSubtree();                                    \
-  host_impl.ForcePrepareToDraw();                                              \
-  EXPECT_FALSE(host_impl.active_tree()->needs_update_draw_properties());       \
-  code_to_test;                                                                \
+#define VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(code_to_test)             \
+  root->ResetAllChangeTrackingForSubtree();                              \
+  host_impl.active_tree()->property_trees()->needs_rebuild = true;       \
+  host_impl.active_tree()->BuildPropertyTreesForTesting();               \
+  host_impl.ForcePrepareToDraw();                                        \
+  EXPECT_FALSE(host_impl.active_tree()->needs_update_draw_properties()); \
+  code_to_test;                                                          \
   EXPECT_FALSE(host_impl.active_tree()->needs_update_draw_properties());
 
 TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
@@ -86,18 +92,21 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
 
   // The constructor on this will fake that we are on the correct thread.
   // Create a simple LayerImpl tree:
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  scoped_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
-  EXPECT_TRUE(host_impl.InitializeRenderer(FakeOutputSurface::Create3d()));
-  scoped_ptr<LayerImpl> root_clip =
+  host_impl.SetVisible(true);
+  EXPECT_TRUE(host_impl.InitializeRenderer(output_surface.get()));
+  scoped_ptr<LayerImpl> root_clip_ptr =
       LayerImpl::Create(host_impl.active_tree(), 1);
+  LayerImpl* root_clip = root_clip_ptr.get();
   scoped_ptr<LayerImpl> root_ptr =
       LayerImpl::Create(host_impl.active_tree(), 2);
   LayerImpl* root = root_ptr.get();
-  root_clip->AddChild(root_ptr.Pass());
+  root_clip_ptr->AddChild(std::move(root_ptr));
   scoped_ptr<LayerImpl> scroll_parent =
       LayerImpl::Create(host_impl.active_tree(), 3);
   LayerImpl* scroll_child = LayerImpl::Create(host_impl.active_tree(), 4).get();
@@ -114,9 +123,11 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   clip_children->insert(root);
 
   root->AddChild(LayerImpl::Create(host_impl.active_tree(), 7));
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
   child->AddChild(LayerImpl::Create(host_impl.active_tree(), 8));
-  LayerImpl* grand_child = child->children()[0];
+  LayerImpl* grand_child = child->children()[0].get();
+  host_impl.active_tree()->SetRootLayer(std::move(root_clip_ptr));
+  host_impl.active_tree()->BuildPropertyTreesForTesting();
 
   root->SetScrollClipLayer(root_clip->id());
 
@@ -189,12 +200,14 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   // changed.
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetBounds(arbitrary_size));
 
-  // Changing this property does not cause the layer to be marked as changed
+  // Changing these properties does not cause the layer to be marked as changed
   // but does cause the layer to need to push properties.
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetIsRootForIsolatedGroup(true));
-
-  // Changing these properties should cause the layer to need to push properties
+  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
+      root->SetElementId(2));
+  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
+      root->SetMutableProperties(kMutablePropertyOpacity));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetScrollParent(scroll_parent.get()));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
@@ -244,12 +257,14 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
 }
 
 TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  scoped_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
-  EXPECT_TRUE(host_impl.InitializeRenderer(FakeOutputSurface::Create3d()));
+  host_impl.SetVisible(true);
+  EXPECT_TRUE(host_impl.InitializeRenderer(output_surface.get()));
   host_impl.active_tree()->SetRootLayer(
       LayerImpl::Create(host_impl.active_tree(), 1));
   LayerImpl* root = host_impl.active_tree()->root_layer();
@@ -257,8 +272,13 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   scoped_ptr<LayerImpl> layer_ptr =
       LayerImpl::Create(host_impl.active_tree(), 2);
   LayerImpl* layer = layer_ptr.get();
-  root->AddChild(layer_ptr.Pass());
+  root->AddChild(std::move(layer_ptr));
   layer->SetScrollClipLayer(root->id());
+  scoped_ptr<LayerImpl> layer2_ptr =
+      LayerImpl::Create(host_impl.active_tree(), 3);
+  LayerImpl* layer2 = layer2_ptr.get();
+  root->AddChild(std::move(layer2_ptr));
+  host_impl.active_tree()->BuildPropertyTreesForTesting();
   DCHECK(host_impl.CanDraw());
 
   gfx::PointF arbitrary_point_f = gfx::PointF(0.125f, 0.25f);
@@ -277,13 +297,22 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   arbitrary_filters.Append(FilterOperation::CreateOpacityFilter(0.5f));
   SkXfermode::Mode arbitrary_blend_mode = SkXfermode::kMultiply_Mode;
 
-  // Render surface functions.
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
+  // Set layer to draw content so that their draw property by property trees is
+  // verified.
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetDrawsContent(true));
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer2->SetDrawsContent(true));
+  // Render surface functions should not trigger update draw properties, because
+  // creating render surface is part of update draw properties.
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(false));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(false));
   // Create a render surface, because we must have a render surface if we have
   // filters.
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
+
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(true));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(true));
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(false));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(false));
 
   // Related filter functions.
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetFilters(arbitrary_filters));
@@ -310,17 +339,16 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   // Unrelated functions, always set to new values, always set needs update.
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetMaskLayer(LayerImpl::Create(host_impl.active_tree(), 4)));
+  host_impl.active_tree()->BuildPropertyTreesForTesting();
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetMasksToBounds(true));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetContentsOpaque(true));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetReplicaLayer(LayerImpl::Create(host_impl.active_tree(), 5)));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetPosition(arbitrary_point_f));
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer2->SetPosition(arbitrary_point_f));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetShouldFlattenTransform(false));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->Set3dSortingContextId(1));
-
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetDoubleSided(false));  // constructor initializes it to "true".
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetDrawsContent(true));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetBackgroundColor(arbitrary_color));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
@@ -337,7 +365,8 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetFilters(arbitrary_filters));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetMasksToBounds(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetContentsOpaque(true));
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetPosition(arbitrary_point_f));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
+      layer2->SetPosition(arbitrary_point_f));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->Set3dSortingContextId(1));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetDoubleSided(false));  // constructor initializes it to "true".
@@ -354,15 +383,20 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetTransform(arbitrary_transform));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetElementId(2));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
+      layer->SetMutableProperties(kMutablePropertyTransform));
 }
 
 TEST(LayerImplTest, SafeOpaqueBackgroundColor) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  scoped_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
-  EXPECT_TRUE(host_impl.InitializeRenderer(FakeOutputSurface::Create3d()));
+  host_impl.SetVisible(true);
+  EXPECT_TRUE(host_impl.InitializeRenderer(output_surface.get()));
   scoped_ptr<LayerImpl> layer = LayerImpl::Create(host_impl.active_tree(), 1);
 
   for (int contents_opaque = 0; contents_opaque < 2; ++contents_opaque) {
@@ -390,10 +424,10 @@ TEST(LayerImplTest, SafeOpaqueBackgroundColor) {
 }
 
 TEST(LayerImplTest, TransformInvertibility) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<LayerImpl> layer = LayerImpl::Create(host_impl.active_tree(), 1);
@@ -425,7 +459,7 @@ class LayerImplScrollTest : public testing::Test {
  public:
   LayerImplScrollTest()
       : host_impl_(settings(),
-                   &proxy_,
+                   &task_runner_provider_,
                    &shared_bitmap_manager_,
                    &task_graph_runner_),
         root_id_(7) {
@@ -433,6 +467,7 @@ class LayerImplScrollTest : public testing::Test {
         LayerImpl::Create(host_impl_.active_tree(), root_id_));
     host_impl_.active_tree()->root_layer()->AddChild(
         LayerImpl::Create(host_impl_.active_tree(), root_id_ + 1));
+    host_impl_.active_tree()->BuildPropertyTreesForTesting();
     layer()->SetScrollClipLayer(root_id_);
     // Set the max scroll offset by noting that the root layer has bounds (1,1),
     // thus whatever bounds are set for the layer will be the max scroll
@@ -443,7 +478,7 @@ class LayerImplScrollTest : public testing::Test {
   }
 
   LayerImpl* layer() {
-    return host_impl_.active_tree()->root_layer()->children()[0];
+    return host_impl_.active_tree()->root_layer()->children()[0].get();
   }
 
   LayerTreeHostImpl& host_impl() { return host_impl_; }
@@ -456,7 +491,7 @@ class LayerImplScrollTest : public testing::Test {
   }
 
  private:
-  FakeImplProxy proxy_;
+  FakeImplTaskRunnerProvider task_runner_provider_;
   TestSharedBitmapManager shared_bitmap_manager_;
   TestTaskGraphRunner task_graph_runner_;
   FakeLayerTreeHostImpl host_impl_;
@@ -569,160 +604,6 @@ TEST_F(LayerImplScrollTest, PushPropertiesToMirrorsCurrentScrollOffset) {
   EXPECT_VECTOR_EQ(gfx::Vector2dF(22, 23), layer()->CurrentScrollOffset());
   EXPECT_VECTOR_EQ(layer()->CurrentScrollOffset(),
                    pending_layer->CurrentScrollOffset());
-}
-
-TEST_F(LayerImplScrollTest, SetNewScrollbarParameters) {
-  gfx::ScrollOffset scroll_offset(10, 5);
-  layer()->PushScrollOffsetFromMainThread(scroll_offset);
-
-  scoped_ptr<PaintedScrollbarLayerImpl> vertical_scrollbar(
-      PaintedScrollbarLayerImpl::Create(tree(), 100, VERTICAL));
-  vertical_scrollbar->SetScrollLayerAndClipLayerByIds(
-      layer()->id(), tree()->root_layer()->id());
-
-  int expected_vertical_maximum =
-      layer()->bounds().height() - tree()->root_layer()->bounds().height();
-  EXPECT_EQ(expected_vertical_maximum, vertical_scrollbar->maximum());
-  EXPECT_EQ(scroll_offset.y(), vertical_scrollbar->current_pos());
-
-  scoped_ptr<PaintedScrollbarLayerImpl> horizontal_scrollbar(
-      PaintedScrollbarLayerImpl::Create(tree(), 101, HORIZONTAL));
-  horizontal_scrollbar->SetScrollLayerAndClipLayerByIds(
-      layer()->id(), tree()->root_layer()->id());
-
-  int expected_horizontal_maximum =
-      layer()->bounds().width() - tree()->root_layer()->bounds().width();
-  EXPECT_EQ(expected_horizontal_maximum, horizontal_scrollbar->maximum());
-  EXPECT_EQ(scroll_offset.x(), horizontal_scrollbar->current_pos());
-}
-
-class LayerImplScrollbarSyncTest : public testing::Test {
- public:
-  enum {
-    ROOT = 1,
-    IV_CLIP = 2,
-    PAGE = 3,
-    IV_SCROLL = 4,
-    SCROLLBAR = 5,
-    OLD_ROOT = 6,
-    OV_CLIP = 7,
-    OV_SCROLL = 8,
-  };
-  enum TreeID {
-    PENDING,
-    ACTIVE
-  };
-
-  LayerImplScrollbarSyncTest()
-      : host_impl_(settings(),
-                   &proxy_,
-                   &shared_bitmap_manager_,
-                   &task_graph_runner_) {
-    host_impl_.CreatePendingTree();
-
-    CreateLayers(host_impl_.pending_tree());
-    CreateLayers(host_impl_.active_tree());
-  }
-
-  void CreateLayers(LayerTreeImpl * tree) {
-    tree->SetRootLayer(LayerImpl::Create(tree, ROOT));
-    LayerImpl * root = tree->root_layer();
-    ASSERT_TRUE(root != nullptr);
-
-    int hierarchy[] = {IV_CLIP, PAGE, IV_SCROLL, OLD_ROOT, OV_CLIP, OV_SCROLL};
-    LayerImpl * parent = root;
-    for (int child_id : hierarchy) {
-      parent->AddChild(LayerImpl::Create(tree, child_id));
-      parent = tree->LayerById(child_id);
-      ASSERT_TRUE(parent != nullptr);
-    }
-
-    root->AddChild(
-        SolidColorScrollbarLayerImpl::Create(tree, SCROLLBAR, HORIZONTAL,
-                                             5, 5, false, true));
-  }
-
-  LayerImpl* layer(int id, TreeID tree_id) {
-    LayerTreeImpl* tree =
-        ((tree_id == PENDING) ?
-         host_impl_.pending_tree() : host_impl_.active_tree());
-
-    assert(tree);
-    return tree->LayerById(id);
-  }
-
-  bool LayerHasScrollbar(int id, TreeID tree_id) {
-    return layer(id, tree_id)->HasScrollbar(HORIZONTAL);
-  }
-
-  ScrollbarLayerImplBase* pending_scrollbar() {
-    LayerImpl* layer_impl = layer(SCROLLBAR, PENDING);
-    assert(layer_impl);
-    return layer_impl->ToScrollbarLayer();
-  }
-
-  LayerImpl* pending_root() {
-    LayerImpl * result = layer(ROOT, PENDING);
-    assert(result);
-    return result;
-  }
-
-  LayerImpl* active_root() {
-    LayerImpl * result = layer(ROOT, ACTIVE);
-    assert(result);
-    return result;
-  }
-
-  LayerTreeSettings settings() {
-    LayerTreeSettings settings;
-    return settings;
-  }
-
- private:
-  FakeImplProxy proxy_;
-  TestSharedBitmapManager shared_bitmap_manager_;
-  TestTaskGraphRunner task_graph_runner_;
-  FakeLayerTreeHostImpl host_impl_;
-};
-
-TEST_F(LayerImplScrollbarSyncTest, LayerImplBecomesScrollable) {
-  // In the beginning IV_SCROLL layer is not scrollable.
-  ASSERT_FALSE(layer(IV_SCROLL, PENDING)->scrollable());
-
-  // For pinch virtual viewport the clip layer is the inner viewport
-  // clip layer (IV_CLIP) and the scroll one is the outer viewport
-  // scroll layer (OV_SCROLL).
-  pending_scrollbar()->SetScrollLayerAndClipLayerByIds(OV_SCROLL, IV_CLIP);
-
-  ASSERT_TRUE(LayerHasScrollbar(OV_SCROLL, PENDING));
-  ASSERT_TRUE(LayerHasScrollbar(IV_CLIP, PENDING));
-
-  // Synchronize with the active tree.
-  TreeSynchronizer::PushProperties(pending_root(), active_root());
-
-  ASSERT_TRUE(LayerHasScrollbar(OV_SCROLL, ACTIVE));
-  ASSERT_TRUE(LayerHasScrollbar(IV_CLIP, ACTIVE));
-
-  // Make IV_SCROLL layer scrollable.
-  layer(IV_SCROLL, PENDING)->SetScrollClipLayer(IV_CLIP);
-  layer(IV_SCROLL, PENDING)->SetNeedsPushProperties();
-  ASSERT_TRUE(layer(IV_SCROLL, PENDING)->scrollable());
-
-  pending_scrollbar()->SetScrollLayerAndClipLayerByIds(OV_SCROLL, IV_CLIP);
-
-  // Now IV_CLIP layer should also receive the scrollbar.
-  ASSERT_TRUE(LayerHasScrollbar(OV_SCROLL, PENDING));
-  ASSERT_TRUE(LayerHasScrollbar(IV_CLIP, PENDING));
-  ASSERT_TRUE(LayerHasScrollbar(IV_SCROLL, PENDING));
-
-  // Synchronize with the active tree.
-  TreeSynchronizer::PushProperties(pending_root(), active_root());
-
-  ASSERT_TRUE(layer(IV_SCROLL, ACTIVE)->scrollable());
-
-  ASSERT_TRUE(LayerHasScrollbar(OV_SCROLL, ACTIVE));
-  ASSERT_TRUE(LayerHasScrollbar(IV_CLIP, ACTIVE));
-  ASSERT_TRUE(LayerHasScrollbar(IV_SCROLL, ACTIVE));
 }
 
 }  // namespace

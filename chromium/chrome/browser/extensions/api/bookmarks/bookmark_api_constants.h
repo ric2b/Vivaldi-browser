@@ -23,6 +23,7 @@ extern const char kFolderNotEmptyError[];
 extern const char kInvalidIdError[];
 extern const char kInvalidIndexError[];
 extern const char kInvalidUrlError[];
+extern const char kNicknameExists[];
 extern const char kModifySpecialError[];
 extern const char kEditBookmarksDisabled[];
 extern const char kModifyManagedError[];

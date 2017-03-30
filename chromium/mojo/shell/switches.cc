@@ -4,7 +4,6 @@
 
 #include "mojo/shell/switches.h"
 
-#include "base/basictypes.h"
 
 namespace switches {
 
@@ -15,6 +14,13 @@ const char kDontDeleteOnDownload[] = "dont-delete-on-download";
 // TODO(vtl): Work in progress; doesn't work. Flip this to "disable" (or maybe
 // change it to "single-process") when it works.
 const char kEnableMultiprocess[] = "enable-multiprocess";
+
+// Disables the sandbox for debugging. (Why the Mojo prefix on the constant?
+// Because otherwise we conflict with content.)
+const char kMojoNoSandbox[] = "no-sandbox";
+
+// Load apps in a single processes.
+const char kMojoSingleProcess[] = "single-process";
 
 // If set apps downloaded are saved in with a predictable filename, to help
 // remote debugging: when gdb is used through gdbserver, it needs to be able to

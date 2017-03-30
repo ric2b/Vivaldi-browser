@@ -4,11 +4,16 @@
 
 #include "remoting/protocol/pairing_registry.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
@@ -79,7 +84,7 @@ scoped_ptr<base::DictionaryValue> PairingRegistry::Pairing::ToValue() const {
   pairing->SetString(kClientIdKey, client_id());
   if (!shared_secret().empty())
     pairing->SetString(kSharedSecretKey, shared_secret());
-  return pairing.Pass();
+  return pairing;
 }
 
 bool PairingRegistry::Pairing::operator==(const Pairing& other) const {
@@ -100,7 +105,7 @@ PairingRegistry::PairingRegistry(
     scoped_ptr<Delegate> delegate)
     : caller_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       delegate_task_runner_(delegate_task_runner),
-      delegate_(delegate.Pass()) {
+      delegate_(std::move(delegate)) {
   DCHECK(delegate_);
 }
 
@@ -247,7 +252,7 @@ void PairingRegistry::InvokeGetPairingCallbackAndScheduleNext(
 void PairingRegistry::InvokeGetAllPairingsCallbackAndScheduleNext(
     const GetAllPairingsCallback& callback,
     scoped_ptr<base::ListValue> pairings) {
-  callback.Run(pairings.Pass());
+  callback.Run(std::move(pairings));
   pending_requests_.pop();
   ServiceNextRequest();
 }
@@ -280,7 +285,7 @@ void PairingRegistry::SanitizePairings(const GetAllPairingsCallback& callback,
     sanitized_pairings->Append(sanitized_pairing.ToValue().release());
   }
 
-  callback.Run(sanitized_pairings.Pass());
+  callback.Run(std::move(sanitized_pairings));
 }
 
 void PairingRegistry::ServiceOrQueueRequest(const base::Closure& request) {

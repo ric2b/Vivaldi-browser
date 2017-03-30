@@ -9,6 +9,7 @@
 #include <initguid.h>
 #include <mmsystem.h>
 #include <setupapi.h>
+#include <stddef.h>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -283,10 +284,15 @@ void AudioManagerWin::GetAudioDeviceNamesImpl(
       GetOutputDeviceNamesWin(device_names);
   }
 
-  // Always add default device parameters as first element.
   if (!device_names->empty()) {
     AudioDeviceName name;
-    name.device_name = AudioManagerBase::kDefaultDeviceName;
+    if (enumeration_type() == kMMDeviceEnumeration) {
+      name.device_name = AudioManager::GetCommunicationsDeviceName();
+      name.unique_id = AudioManagerBase::kCommunicationsDeviceId;
+      device_names->push_front(name);
+    }
+    // Always add default device parameters as first element.
+    name.device_name = AudioManager::GetDefaultDeviceName();
     name.unique_id = AudioManagerBase::kDefaultDeviceId;
     device_names->push_front(name);
   }
@@ -312,17 +318,14 @@ AudioParameters AudioManagerWin::GetInputStreamParameters(
 
   if (FAILED(hr) || !parameters.IsValid()) {
     // Windows Wave implementation is being used.
-    parameters = AudioParameters(
-        AudioParameters::AUDIO_PCM_LINEAR, CHANNEL_LAYOUT_STEREO, 48000, 16,
-        kFallbackBufferSize, AudioParameters::NO_EFFECTS);
+    parameters =
+        AudioParameters(AudioParameters::AUDIO_PCM_LINEAR,
+                        CHANNEL_LAYOUT_STEREO, 48000, 16, kFallbackBufferSize);
   }
 
   int user_buffer_size = GetUserBufferSize();
-  if (user_buffer_size) {
-    parameters.Reset(parameters.format(), parameters.channel_layout(),
-                     parameters.channels(), parameters.sample_rate(),
-                     parameters.bits_per_sample(), user_buffer_size);
-  }
+  if (user_buffer_size)
+    parameters.set_frames_per_buffer(user_buffer_size);
 
   return parameters;
 }
@@ -377,11 +380,12 @@ AudioOutputStream* AudioManagerWin::MakeLowLatencyOutputStream(
   // Pass an empty string to indicate that we want the default device
   // since we consistently only check for an empty string in
   // WASAPIAudioOutputStream.
+  bool communications = device_id == AudioManagerBase::kCommunicationsDeviceId;
   return new WASAPIAudioOutputStream(this,
-      device_id == AudioManagerBase::kDefaultDeviceId ?
+      communications || device_id == AudioManagerBase::kDefaultDeviceId ?
           std::string() : device_id,
       params,
-      params.effects() & AudioParameters::DUCKING ? eCommunications : eConsole);
+      communications ? eCommunications : eConsole);
 }
 
 // Factory for the implementations of AudioInputStream for AUDIO_PCM_LINEAR
@@ -511,9 +515,10 @@ AudioParameters AudioManagerWin::GetPreferredOutputStreamParameters(
   if (user_buffer_size)
     buffer_size = user_buffer_size;
 
-  return AudioParameters(
-      AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
-      sample_rate, bits_per_sample, buffer_size, effects);
+  AudioParameters params(AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
+                         sample_rate, bits_per_sample, buffer_size);
+  params.set_effects(effects);
+  return params;
 }
 
 AudioInputStream* AudioManagerWin::CreatePCMWaveInAudioInputStream(

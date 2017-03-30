@@ -4,7 +4,10 @@
 
 #include "remoting/host/resizing_host_observer.h"
 
+#include <stdint.h>
+
 #include <list>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/logging.h"
@@ -67,9 +70,9 @@ class CandidateResolution {
   const ScreenResolution& resolution() const { return resolution_; }
   float client_scale_factor() const { return client_scale_factor_; }
   float aspect_ratio_goodness() const { return aspect_ratio_goodness_; }
-  int64 area() const {
-    return static_cast<int64>(resolution_.dimensions().width()) *
-        resolution_.dimensions().height();
+  int64_t area() const {
+    return static_cast<int64_t>(resolution_.dimensions().width()) *
+           resolution_.dimensions().height();
   }
 
   // TODO(jamiewalch): Also compare the DPI: http://crbug.com/172405
@@ -116,10 +119,9 @@ class CandidateResolution {
 
 ResizingHostObserver::ResizingHostObserver(
     scoped_ptr<DesktopResizer> desktop_resizer)
-    : desktop_resizer_(desktop_resizer.Pass()),
+    : desktop_resizer_(std::move(desktop_resizer)),
       now_function_(base::Bind(base::Time::Now)),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 ResizingHostObserver::~ResizingHostObserver() {
   if (!original_resolution_.IsEmpty())

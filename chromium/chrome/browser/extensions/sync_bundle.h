@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/api/sync_change.h"
 #include "sync/api/sync_change_processor.h"
@@ -17,60 +18,53 @@ class ExtensionSyncService;
 
 namespace extensions {
 
-class Extension;
 class ExtensionSyncData;
 
 class SyncBundle {
  public:
-  explicit SyncBundle(ExtensionSyncService* sync_service);
+  SyncBundle();
   ~SyncBundle();
 
-  void MergeDataAndStartSyncing(
-      const syncer::SyncDataList& initial_sync_data,
-      scoped_ptr<syncer::SyncChangeProcessor> sync_processor);
+  void StartSyncing(scoped_ptr<syncer::SyncChangeProcessor> sync_processor);
 
   // Resets this class back to its default values, which will disable all
   // syncing until StartSyncing is called again.
   void Reset();
 
   // Has this bundle started syncing yet?
-  // Returns true if MergeDataAndStartSyncing has been called, false otherwise.
+  // Returns true if StartSyncing has been called, false otherwise.
   bool IsSyncing() const;
-
-  // Checks if the extension with the given |id| is synced.
-  bool HasExtensionId(const std::string& id) const;
-
-  // Whether the given extension should be included in the SyncDataList to be
-  // sent to the server. Returns false if there is pending data that should be
-  // used instead.
-  bool ShouldIncludeInLocalSyncDataList(const Extension& extension) const;
 
   // Handles the given list of local SyncDatas. This updates the set of synced
   // extensions as appropriate, and then pushes the corresponding SyncChanges
   // to the server.
   void PushSyncDataList(const syncer::SyncDataList& sync_data_list);
 
-  // Handles the sync deletion of the given extension. This updates the set of
-  // synced extensions as appropriate, and then pushes a SyncChange to the
-  // server.
+  // Updates the set of synced extensions as appropriate, and then pushes a
+  // SyncChange to the server.
   void PushSyncDeletion(const std::string& extension_id,
                         const syncer::SyncData& sync_data);
 
-  // Pushes any sync changes to |extension| to the server.
-  void PushSyncChangeIfNeeded(const Extension& extension);
+  // Pushes any sync changes to an extension to the server and, if necessary,
+  // updates the set of synced extension. This also clears any pending data for
+  // the extension.
+  void PushSyncAddOrUpdate(const std::string& extension_id,
+                           const syncer::SyncData& sync_data);
 
-  // Applies the given SyncChange coming from the server.
-  void ApplySyncChange(const syncer::SyncChange& sync_change);
+  // Applies the given sync change coming in from the server. This just updates
+  // the list of synced extensions.
+  void ApplySyncData(const ExtensionSyncData& extension_sync_data);
 
-  // Checks if the extension with the given |id| is pending to be synced.
-  bool HasPendingExtensionId(const std::string& id) const;
+  // Checks if there is pending sync data for the extension with the given |id|,
+  // i.e. data to be sent to the sync server until the extension is installed
+  // locally.
+  bool HasPendingExtensionData(const std::string& id) const;
 
-  // Adds a pending extension to be synced.
-  void AddPendingExtension(const std::string& id,
-                           const ExtensionSyncData& sync_data);
+  // Adds pending data for the given extension.
+  void AddPendingExtensionData(const ExtensionSyncData& extension_sync_data);
 
-  // Returns a vector of all the pending sync data.
-  std::vector<ExtensionSyncData> GetPendingData() const;
+  // Returns a vector of all the pending extension data.
+  std::vector<ExtensionSyncData> GetPendingExtensionData() const;
 
  private:
   // Creates a SyncChange to add or update an extension.
@@ -82,16 +76,17 @@ class SyncBundle {
 
   void AddSyncedExtension(const std::string& id);
   void RemoveSyncedExtension(const std::string& id);
-
-  // Changes an extension from being pending to synced.
-  void MarkPendingExtensionSynced(const std::string& id);
-
-  ExtensionSyncService* sync_service_;  // Owns us.
+  bool HasSyncedExtension(const std::string& id) const;
 
   scoped_ptr<syncer::SyncChangeProcessor> sync_processor_;
 
+  // Stores the set of extensions we know about. Used to decide if a sync change
+  // should be ACTION_ADD or ACTION_UPDATE.
   std::set<std::string> synced_extensions_;
 
+  // This stores pending installs we got from sync. We'll send this back to the
+  // server until we've installed the extension locally, to prevent the sync
+  // state from flipping back and forth until all clients are up to date.
   std::map<std::string, ExtensionSyncData> pending_sync_data_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncBundle);

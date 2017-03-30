@@ -4,12 +4,16 @@
 
 #include "components/message_port/web_message_port_channel_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannelClient.h"
 #include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/message_pipe.h"
 
 using blink::WebMessagePortChannel;
 using blink::WebMessagePortChannelArray;
@@ -29,13 +33,13 @@ void WebMessagePortChannelImpl::CreatePair(
     return;
   }
 
-  *channel1 = new WebMessagePortChannelImpl(pipe1.Pass());;
-  *channel2 = new WebMessagePortChannelImpl(pipe2.Pass());
+  *channel1 = new WebMessagePortChannelImpl(std::move(pipe1));
+  *channel2 = new WebMessagePortChannelImpl(std::move(pipe2));
 }
 
 WebMessagePortChannelImpl::WebMessagePortChannelImpl(
     mojo::ScopedMessagePipeHandle pipe)
-    : client_(nullptr), pipe_(pipe.Pass()) {
+    : client_(nullptr), pipe_(std::move(pipe)) {
   WaitForNextMessage();
 }
 
@@ -108,7 +112,7 @@ bool WebMessagePortChannelImpl::tryGetMessage(
   for (size_t i = 0; i < handles.size(); ++i) {
     mojo::MessagePipeHandle mph(handles[i]);
     mojo::ScopedMessagePipeHandle handle(mph);
-    ports[i] = new WebMessagePortChannelImpl(handle.Pass());
+    ports[i] = new WebMessagePortChannelImpl(std::move(handle));
   }
   channels = ports;
   return true;
@@ -124,7 +128,15 @@ void WebMessagePortChannelImpl::WaitForNextMessage() {
 }
 
 void WebMessagePortChannelImpl::OnMessageAvailable(MojoResult result) {
+  // |result| can be MOJO_RESULT_ABORTED when the message loop shuts down, or
+  // MOJO_RESULT_FAILED_PRECONDITION when the end-of-file is reached.
+  if (result == MOJO_RESULT_ABORTED ||
+      result == MOJO_RESULT_FAILED_PRECONDITION)
+    return;
+
   DCHECK_EQ(MOJO_RESULT_OK, result);
+  if (!client_)
+    return;
   client_->messageAvailable();
   WaitForNextMessage();
 }

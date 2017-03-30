@@ -16,6 +16,7 @@
 #include "chrome/common/extensions/extension_test_util.h"
 #include "chrome/common/extensions/features/feature_channel.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/version_info/version_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/api/declarative/rules_cache_delegate.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
@@ -71,8 +72,8 @@ class RulesRegistryWithCacheTest : public testing::Test {
   std::string AddRule(const std::string& extension_id,
                       const std::string& rule_id,
                       TestRulesRegistry* registry) {
-    std::vector<linked_ptr<RulesRegistry::Rule> > add_rules;
-    add_rules.push_back(make_linked_ptr(new RulesRegistry::Rule));
+    std::vector<linked_ptr<api::events::Rule>> add_rules;
+    add_rules.push_back(make_linked_ptr(new api::events::Rule));
     add_rules[0]->id.reset(new std::string(rule_id));
     return registry->AddRules(extension_id, add_rules);
   }
@@ -91,7 +92,7 @@ class RulesRegistryWithCacheTest : public testing::Test {
 
   int GetNumberOfRules(const std::string& extension_id,
                        TestRulesRegistry* registry) {
-    std::vector<linked_ptr<RulesRegistry::Rule> > get_rules;
+    std::vector<linked_ptr<api::events::Rule>> get_rules;
     registry->GetAllRules(extension_id, &get_rules);
     return get_rules.size();
   }
@@ -187,7 +188,7 @@ TEST_F(RulesRegistryWithCacheTest, GetRules) {
   std::vector<std::string> rules_to_get;
   rules_to_get.push_back(kRuleId);
   rules_to_get.push_back("unknown_rule");
-  std::vector<linked_ptr<RulesRegistry::Rule> > gotten_rules;
+  std::vector<linked_ptr<api::events::Rule>> gotten_rules;
   registry_->GetRules(extension1_->id(), rules_to_get, &gotten_rules);
   ASSERT_EQ(1u, gotten_rules.size());
   ASSERT_TRUE(gotten_rules[0]->id.get());
@@ -201,15 +202,15 @@ TEST_F(RulesRegistryWithCacheTest, GetAllRules) {
   EXPECT_EQ("", AddRule(extension2_->id(), kRuleId));
 
   // Check that we get the correct rules.
-  std::vector<linked_ptr<RulesRegistry::Rule> > gotten_rules;
+  std::vector<linked_ptr<api::events::Rule>> gotten_rules;
   registry_->GetAllRules(extension1_->id(), &gotten_rules);
   EXPECT_EQ(2u, gotten_rules.size());
   ASSERT_TRUE(gotten_rules[0]->id.get());
   ASSERT_TRUE(gotten_rules[1]->id.get());
-  EXPECT_TRUE( (kRuleId == *(gotten_rules[0]->id) &&
-                kRule2Id == *(gotten_rules[1]->id)) ||
-               (kRuleId == *(gotten_rules[1]->id) &&
-                kRule2Id == *(gotten_rules[0]->id)) );
+  EXPECT_TRUE((kRuleId == *(gotten_rules[0]->id) &&
+               kRule2Id == *(gotten_rules[1]->id)) ||
+              (kRuleId == *(gotten_rules[1]->id) &&
+               kRule2Id == *(gotten_rules[0]->id)) );
 }
 
 TEST_F(RulesRegistryWithCacheTest, OnExtensionUninstalled) {
@@ -254,14 +255,14 @@ TEST_F(RulesRegistryWithCacheTest, DeclarativeRulesStored) {
 
   scoped_ptr<base::ListValue> value(new base::ListValue);
   value->AppendBoolean(true);
-  cache_delegate->WriteToStorage(extension1_->id(), value.Pass());
+  cache_delegate->WriteToStorage(extension1_->id(), std::move(value));
   EXPECT_TRUE(cache_delegate->GetDeclarativeRulesStored(extension1_->id()));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(write_count + 1, store->write_count());
   write_count = store->write_count();
 
   value.reset(new base::ListValue);
-  cache_delegate->WriteToStorage(extension1_->id(), value.Pass());
+  cache_delegate->WriteToStorage(extension1_->id(), std::move(value));
   EXPECT_FALSE(cache_delegate->GetDeclarativeRulesStored(extension1_->id()));
   base::RunLoop().RunUntilIdle();
   // No rules currently, but previously there were, so we expect a write.
@@ -269,7 +270,7 @@ TEST_F(RulesRegistryWithCacheTest, DeclarativeRulesStored) {
   write_count = store->write_count();
 
   value.reset(new base::ListValue);
-  cache_delegate->WriteToStorage(extension1_->id(), value.Pass());
+  cache_delegate->WriteToStorage(extension1_->id(), std::move(value));
   EXPECT_FALSE(cache_delegate->GetDeclarativeRulesStored(extension1_->id()));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(write_count, store->write_count());
@@ -328,7 +329,7 @@ TEST_F(RulesRegistryWithCacheTest, RulesPreservedAcrossRestart) {
 
   // TODO(vabr): Once some API using declarative rules enters the stable
   // channel, make sure to use that API here, and remove |channel|.
-  ScopedCurrentChannel channel(chrome::VersionInfo::CHANNEL_UNKNOWN);
+  ScopedCurrentChannel channel(version_info::Channel::UNKNOWN);
 
   ExtensionService* extension_service = env_.GetExtensionService();
 

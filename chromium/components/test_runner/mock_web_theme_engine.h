@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_TEST_RUNNER_MOCK_WEB_THEME_ENGINE_H_
 #define COMPONENTS_TEST_RUNNER_MOCK_WEB_THEME_ENGINE_H_
 
+#include "build/build_config.h"
 #include "third_party/WebKit/public/platform/WebThemeEngine.h"
 
 namespace test_runner {
@@ -15,12 +16,12 @@ class MockWebThemeEngine : public blink::WebThemeEngine {
 
 #if !defined(OS_MACOSX)
   // blink::WebThemeEngine:
-  virtual blink::WebSize getSize(blink::WebThemeEngine::Part);
-  virtual void paint(blink::WebCanvas*,
-                     blink::WebThemeEngine::Part,
-                     blink::WebThemeEngine::State,
-                     const blink::WebRect&,
-                     const blink::WebThemeEngine::ExtraParams*);
+  blink::WebSize getSize(blink::WebThemeEngine::Part) override;
+  void paint(blink::WebCanvas*,
+             blink::WebThemeEngine::Part,
+             blink::WebThemeEngine::State,
+             const blink::WebRect&,
+             const blink::WebThemeEngine::ExtraParams*) override;
 #endif  // !defined(OS_MACOSX)
 };
 

@@ -8,6 +8,7 @@
 #include <map>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -16,6 +17,7 @@
 namespace blink {
 class WebData;
 class WebURLLoader;
+class WebURLLoaderTestDelegate;
 }
 
 class WebURLLoaderMock;
@@ -37,11 +39,11 @@ class WebURLLoaderMockFactory {
   virtual blink::WebURLLoader* CreateURLLoader(
       blink::WebURLLoader* default_loader);
 
-  // Registers a response and the contents to be served when the specified URL
-  // is loaded.
+  // Registers a response and the file to be served when the specified URL
+  // is loaded. If no file is specified then the response content will be empty.
   void RegisterURL(const blink::WebURL& url,
                    const blink::WebURLResponse& response,
-                   const blink::WebString& filePath);
+                   const blink::WebString& filePath = blink::WebString());
 
   // Registers an error to be served when the specified URL is requested.
   void RegisterErrorURL(const blink::WebURL& url,
@@ -74,6 +76,10 @@ class WebURLLoaderMockFactory {
   // Removes the loader from the list of pending loaders.
   void CancelLoad(WebURLLoaderMock* loader);
 
+  void set_delegate(blink::WebURLLoaderTestDelegate* delegate) {
+    delegate_ = delegate;
+  }
+
  private:
   struct ResponseInfo {
     blink::WebURLResponse response;
@@ -94,6 +100,8 @@ class WebURLLoaderMockFactory {
   // Reads |m_filePath| and puts its content in |data|.
   // Returns true if it successfully read the file.
   static bool ReadFile(const base::FilePath& file_path, blink::WebData* data);
+
+  blink::WebURLLoaderTestDelegate* delegate_;
 
   // The loaders that have not being served data yet.
   typedef std::map<WebURLLoaderMock*, blink::WebURLRequest> LoaderToRequestMap;

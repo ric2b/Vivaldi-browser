@@ -4,11 +4,14 @@
 
 #include "net/http/http_response_body_drainer.h"
 
+#include <stdint.h>
+
 #include <cstring>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -54,7 +57,7 @@ class CloseResultWaiter {
     result_ = result;
     have_result_ = true;
     if (waiting_for_result_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
  private:
@@ -96,13 +99,14 @@ class MockHttpStream : public HttpStream {
     return ERR_UNEXPECTED;
   }
 
-  bool CanFindEndOfResponse() const override { return true; }
   bool IsConnectionReused() const override { return false; }
   void SetConnectionReused() override {}
-  bool IsConnectionReusable() const override { return false; }
-  int64 GetTotalReceivedBytes() const override { return 0; }
+  bool CanReuseConnection() const override { return false; }
+  int64_t GetTotalReceivedBytes() const override { return 0; }
+  int64_t GetTotalSentBytes() const override { return 0; }
   void GetSSLInfo(SSLInfo* ssl_info) override {}
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override {}
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) override { return false; }
 
   // Mocked API
   int ReadResponseBody(IOBuffer* buf,
@@ -118,13 +122,13 @@ class MockHttpStream : public HttpStream {
 
   bool IsResponseBodyComplete() const override { return is_complete_; }
 
-  bool IsSpdyHttpStream() const override { return false; }
-
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override {
     return false;
   }
 
   void Drain(HttpNetworkSession*) override {}
+
+  void PopulateNetErrorDetails(NetErrorDetails* details) override { return; }
 
   void SetPriority(RequestPriority priority) override {}
 
@@ -231,7 +235,7 @@ class HttpResponseBodyDrainerTest : public testing::Test {
   scoped_refptr<SSLConfigService> ssl_config_service_;
   scoped_ptr<HttpServerPropertiesImpl> http_server_properties_;
   scoped_ptr<TransportSecurityState> transport_security_state_;
-  const scoped_refptr<HttpNetworkSession> session_;
+  const scoped_ptr<HttpNetworkSession> session_;
   CloseResultWaiter result_waiter_;
   MockHttpStream* const mock_stream_;  // Owned by |drainer_|.
   HttpResponseBodyDrainer* const drainer_;  // Deletes itself.

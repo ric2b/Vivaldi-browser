@@ -23,18 +23,17 @@ using gpu::gles2::GLES2Interface;
 namespace content {
 
 MailboxOutputSurface::MailboxOutputSurface(
-    int32 routing_id,
-    uint32 output_surface_id,
+    int32_t routing_id,
+    uint32_t output_surface_id,
     const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
     const scoped_refptr<ContextProviderCommandBuffer>& worker_context_provider,
-    scoped_ptr<cc::SoftwareOutputDevice> software_device,
     scoped_refptr<FrameSwapMessageQueue> swap_frame_message_queue,
     cc::ResourceFormat format)
     : CompositorOutputSurface(routing_id,
                               output_surface_id,
                               context_provider,
                               worker_context_provider,
-                              software_device.Pass(),
+                              nullptr,
                               swap_frame_message_queue,
                               true),
       fbo_(0),
@@ -44,7 +43,9 @@ MailboxOutputSurface::MailboxOutputSurface(
   capabilities_.uses_default_gl_framebuffer = false;
 }
 
-MailboxOutputSurface::~MailboxOutputSurface() {
+MailboxOutputSurface::~MailboxOutputSurface() {}
+
+void MailboxOutputSurface::DetachFromClient() {
   DiscardBackbuffer();
   while (!pending_textures_.empty()) {
     if (pending_textures_.front().texture_id) {
@@ -53,6 +54,7 @@ MailboxOutputSurface::~MailboxOutputSurface() {
     }
     pending_textures_.pop_front();
   }
+  cc::OutputSurface::DetachFromClient();
 }
 
 void MailboxOutputSurface::EnsureBackbuffer() {
@@ -66,8 +68,8 @@ void MailboxOutputSurface::EnsureBackbuffer() {
       TransferableFrame& texture = returned_textures_.front();
       if (texture.size == surface_size_) {
         current_backing_ = texture;
-        if (current_backing_.sync_point)
-          gl->WaitSyncPointCHROMIUM(current_backing_.sync_point);
+        if (current_backing_.sync_token.HasData())
+          gl->WaitSyncTokenCHROMIUM(current_backing_.sync_token.GetConstData());
         returned_textures_.pop();
         break;
       }
@@ -122,7 +124,9 @@ void MailboxOutputSurface::DiscardBackbuffer() {
   }
 }
 
-void MailboxOutputSurface::Reshape(const gfx::Size& size, float scale_factor) {
+void MailboxOutputSurface::Reshape(const gfx::Size& size,
+                                   float scale_factor,
+                                   bool alpha) {
   if (size == surface_size_)
     return;
 
@@ -148,7 +152,7 @@ void MailboxOutputSurface::BindFramebuffer() {
                            0);
 }
 
-void MailboxOutputSurface::OnSwapAck(uint32 output_surface_id,
+void MailboxOutputSurface::OnSwapAck(uint32_t output_surface_id,
                                      const cc::CompositorFrameAck& ack) {
   // Ignore message if it's a stale one coming from a different output surface
   // (e.g. after a lost context).
@@ -171,7 +175,7 @@ void MailboxOutputSurface::OnSwapAck(uint32 output_surface_id,
       }
     }
     DCHECK(it != pending_textures_.end());
-    it->sync_point = ack.gl_frame_data->sync_point;
+    it->sync_token = ack.gl_frame_data->sync_token;
 
     if (!is_backbuffer_discarded_) {
       returned_textures_.push(*it);
@@ -185,7 +189,7 @@ void MailboxOutputSurface::OnSwapAck(uint32 output_surface_id,
     // The browser always keeps one texture as the frontbuffer.
     // If it does not return a mailbox, it discarded the frontbuffer which is
     // the oldest texture we sent.
-    uint32 texture_id = pending_textures_.front().texture_id;
+    uint32_t texture_id = pending_textures_.front().texture_id;
     if (texture_id)
       context_provider_->ContextGL()->DeleteTextures(1, &texture_id);
     pending_textures_.pop_front();
@@ -198,14 +202,20 @@ void MailboxOutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
   DCHECK(!surface_size_.IsEmpty());
   DCHECK(surface_size_ == current_backing_.size);
   DCHECK(frame->gl_frame_data->size == current_backing_.size);
-  DCHECK_IMPLIES(current_backing_.mailbox.IsZero(),
-                 context_provider_->ContextGL()->GetGraphicsResetStatusKHR() !=
-                     GL_NO_ERROR);
+  DCHECK(!current_backing_.mailbox.IsZero() ||
+         context_provider_->ContextGL()->GetGraphicsResetStatusKHR() !=
+             GL_NO_ERROR);
 
   frame->gl_frame_data->mailbox = current_backing_.mailbox;
-  context_provider_->ContextGL()->Flush();
-  frame->gl_frame_data->sync_point =
-      context_provider_->ContextGL()->InsertSyncPointCHROMIUM();
+
+  gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
+
+  const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
+  gl->Flush();
+
+  gl->GenSyncTokenCHROMIUM(fence_sync,
+                           frame->gl_frame_data->sync_token.GetData());
+
   CompositorOutputSurface::SwapBuffers(frame);
 
   pending_textures_.push_back(current_backing_);
@@ -216,5 +226,13 @@ size_t MailboxOutputSurface::GetNumAcksPending() {
   DCHECK(pending_textures_.size());
   return pending_textures_.size() - 1;
 }
+
+MailboxOutputSurface::TransferableFrame::TransferableFrame() : texture_id(0) {}
+
+MailboxOutputSurface::TransferableFrame::TransferableFrame(
+    uint32_t texture_id,
+    const gpu::Mailbox& mailbox,
+    const gfx::Size size)
+    : texture_id(texture_id), mailbox(mailbox), size(size) {}
 
 }  // namespace content

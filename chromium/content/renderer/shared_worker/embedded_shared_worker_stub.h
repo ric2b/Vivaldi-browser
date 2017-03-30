@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "content/child/child_message_filter.h"
 #include "content/child/scoped_child_process_reference.h"
 #include "ipc/ipc_listener.h"
@@ -56,24 +57,24 @@ class EmbeddedSharedWorkerStub : public IPC::Listener,
   void OnChannelError() override;
 
   // blink::WebSharedWorkerClient implementation.
-  virtual void workerContextClosed() override;
-  virtual void workerContextDestroyed() override;
-  virtual void workerReadyForInspection() override;
-  virtual void workerScriptLoaded() override;
-  virtual void workerScriptLoadFailed() override;
-  virtual void selectAppCacheID(long long) override;
-  virtual blink::WebNotificationPresenter* notificationPresenter() override;
-  virtual blink::WebApplicationCacheHost* createApplicationCacheHost(
+  void workerContextClosed() override;
+  void workerContextDestroyed() override;
+  void workerReadyForInspection() override;
+  void workerScriptLoaded() override;
+  void workerScriptLoadFailed() override;
+  void selectAppCacheID(long long) override;
+  blink::WebNotificationPresenter* notificationPresenter() override;
+  blink::WebApplicationCacheHost* createApplicationCacheHost(
       blink::WebApplicationCacheHostClient*) override;
-  virtual blink::WebWorkerContentSettingsClientProxy*
-      createWorkerContentSettingsClientProxy(
-          const blink::WebSecurityOrigin& origin) override;
-  virtual blink::WebServiceWorkerNetworkProvider*
-      createServiceWorkerNetworkProvider(blink::WebDataSource*) override;
-  virtual void sendDevToolsMessage(
-      int call_id,
-      const blink::WebString& message,
-      const blink::WebString& state) override;
+  blink::WebWorkerContentSettingsClientProxy*
+  createWorkerContentSettingsClientProxy(
+      const blink::WebSecurityOrigin& origin) override;
+  blink::WebServiceWorkerNetworkProvider* createServiceWorkerNetworkProvider(
+      blink::WebDataSource*) override;
+  void sendDevToolsMessage(int session_id,
+                           int call_id,
+                           const blink::WebString& message,
+                           const blink::WebString& state) override;
 
  private:
   ~EmbeddedSharedWorkerStub() override;

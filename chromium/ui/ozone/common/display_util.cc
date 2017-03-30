@@ -4,6 +4,8 @@
 
 #include "ui/ozone/common/display_util.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -48,6 +50,7 @@ DisplaySnapshot_Params GetDisplaySnapshotParams(
   params.is_aspect_preserving_scaling = display.is_aspect_preserving_scaling();
   params.has_overscan = display.has_overscan();
   params.display_name = display.display_name();
+  params.sys_path = display.sys_path();
   for (size_t i = 0; i < display.modes().size(); ++i)
     params.modes.push_back(GetDisplayModeParams(*display.modes()[i]));
 

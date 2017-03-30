@@ -5,10 +5,13 @@
 #ifndef CONTENT_BROWSER_APPCACHE_APPCACHE_SERVICE_IMPL_H_
 #define CONTENT_BROWSER_APPCACHE_APPCACHE_SERVICE_IMPL_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -99,10 +102,6 @@ class CONTENT_EXPORT AppCacheServiceImpl
   void ScheduleReinitialize();
 
   // AppCacheService implementation:
-  void CanHandleMainResourceOffline(
-      const GURL& url,
-      const GURL& first_party,
-      const net::CompletionCallback& callback) override;
   void GetAllAppCacheInfo(AppCacheInfoCollection* collection,
                           const net::CompletionCallback& callback) override;
   void DeleteAppCacheGroup(const GURL& manifest_url,
@@ -116,8 +115,9 @@ class CONTENT_EXPORT AppCacheServiceImpl
 
   // Checks the integrity of 'response_id' by reading the headers and data.
   // If it cannot be read, the cache group for 'manifest_url' is deleted.
-  void CheckAppCacheResponse(const GURL& manifest_url, int64 cache_id,
-                             int64 response_id);
+  void CheckAppCacheResponse(const GURL& manifest_url,
+                             int64_t cache_id,
+                             int64_t response_id);
 
   // Context for use during cache updates, should only be accessed
   // on the IO thread. We do NOT add a reference to the request context,
@@ -172,6 +172,10 @@ class CONTENT_EXPORT AppCacheServiceImpl
 
   AppCacheStorage* storage() const { return storage_.get(); }
 
+  base::WeakPtr<AppCacheServiceImpl> AsWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+
   // Disables the exit-time deletion of session-only data.
   void set_force_keep_session_state() { force_keep_session_state_ = true; }
   bool force_keep_session_state() const { return force_keep_session_state_; }
@@ -183,7 +187,6 @@ class CONTENT_EXPORT AppCacheServiceImpl
       ScheduleReinitialize);
 
   class AsyncHelper;
-  class CanHandleOfflineHelper;
   class DeleteHelper;
   class DeleteOriginHelper;
   class GetInfoHelper;
@@ -211,8 +214,11 @@ class CONTENT_EXPORT AppCacheServiceImpl
   bool force_keep_session_state_;
   base::Time last_reinit_time_;
   base::TimeDelta next_reinit_delay_;
-  base::OneShotTimer<AppCacheServiceImpl> reinit_timer_;
+  base::OneShotTimer reinit_timer_;
   base::ObserverList<Observer> observers_;
+
+ private:
+  base::WeakPtrFactory<AppCacheServiceImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheServiceImpl);
 };

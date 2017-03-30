@@ -4,8 +4,11 @@
 
 #include "google_apis/gcm/engine/gservices_settings.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -24,8 +27,8 @@ const char kMCSSecurePortKey[] = "gcm_secure_port";
 // The URL to get MCS registration IDs.
 const char kRegistrationURLKey[] = "gcm_registration_url";
 
-const int64 kDefaultCheckinInterval = 2 * 24 * 60 * 60;  // seconds = 2 days.
-const int64 kMinimumCheckinInterval = 12 * 60 * 60;      // seconds = 12 hours.
+const int64_t kDefaultCheckinInterval = 2 * 24 * 60 * 60;  // seconds = 2 days.
+const int64_t kMinimumCheckinInterval = 12 * 60 * 60;  // seconds = 12 hours.
 const char kDefaultCheckinURL[] = "https://android.clients.google.com/checkin";
 const char kDefaultMCSHostname[] = "mtalk.google.com";
 const int kDefaultMCSMainSecurePort = 5228;
@@ -61,12 +64,12 @@ bool VerifyCheckinInterval(
   if (iter == settings.end())
     return CanBeOmitted(kCheckinIntervalKey);
 
-  int64 checkin_interval = kMinimumCheckinInterval;
+  int64_t checkin_interval = kMinimumCheckinInterval;
   if (!base::StringToInt64(iter->second, &checkin_interval)) {
     DVLOG(1) << "Failed to parse checkin interval: " << iter->second;
     return false;
   }
-  if (checkin_interval == std::numeric_limits<int64>::max()) {
+  if (checkin_interval == std::numeric_limits<int64_t>::max()) {
     DVLOG(1) << "Checkin interval is too big: " << checkin_interval;
     return false;
   }
@@ -178,11 +181,6 @@ const base::TimeDelta GServicesSettings::MinimumCheckinInterval() {
 }
 
 // static
-const GURL GServicesSettings::DefaultCheckinURL() {
-  return GURL(kDefaultCheckinURL);
-}
-
-// static
 std::string GServicesSettings::CalculateDigest(const SettingsMap& settings) {
   unsigned char hash[base::kSHA1Length];
   std::string data;
@@ -198,7 +196,7 @@ std::string GServicesSettings::CalculateDigest(const SettingsMap& settings) {
       reinterpret_cast<const unsigned char*>(&data[0]), data.size(), hash);
   std::string digest =
       kDigestVersionPrefix + base::HexEncode(hash, base::kSHA1Length);
-  digest = base::StringToLowerASCII(digest);
+  digest = base::ToLowerASCII(digest);
   return digest;
 }
 
@@ -269,7 +267,7 @@ void GServicesSettings::UpdateFromLoadResult(
 }
 
 base::TimeDelta GServicesSettings::GetCheckinInterval() const {
-  int64 checkin_interval = kMinimumCheckinInterval;
+  int64_t checkin_interval = kMinimumCheckinInterval;
   SettingsMap::const_iterator iter = settings_.find(kCheckinIntervalKey);
   if (iter == settings_.end() ||
       !base::StringToInt64(iter->second, &checkin_interval)) {
@@ -283,6 +281,10 @@ base::TimeDelta GServicesSettings::GetCheckinInterval() const {
 }
 
 GURL GServicesSettings::GetCheckinURL() const {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kGCMCheckinURL))
+    return GURL(command_line->GetSwitchValueASCII(switches::kGCMCheckinURL));
+
   SettingsMap::const_iterator iter = settings_.find(kCheckinURLKey);
   if (iter == settings_.end() || iter->second.empty())
     return GURL(kDefaultCheckinURL);
@@ -290,6 +292,10 @@ GURL GServicesSettings::GetCheckinURL() const {
 }
 
 GURL GServicesSettings::GetMCSMainEndpoint() const {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kGCMMCSEndpoint))
+    return GURL(command_line->GetSwitchValueASCII(switches::kGCMMCSEndpoint));
+
   // Get alternative hostname or use default.
   std::string mcs_hostname;
   SettingsMap::const_iterator iter = settings_.find(kMCSHostnameKey);
@@ -316,6 +322,10 @@ GURL GServicesSettings::GetMCSMainEndpoint() const {
 }
 
 GURL GServicesSettings::GetMCSFallbackEndpoint() const {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kGCMMCSEndpoint))
+    return GURL();  // No fallback endpoint when using command line override.
+
   // Get alternative hostname or use default.
   std::string mcs_hostname;
   SettingsMap::const_iterator iter = settings_.find(kMCSHostnameKey);
@@ -335,15 +345,15 @@ GURL GServicesSettings::GetMCSFallbackEndpoint() const {
 }
 
 GURL GServicesSettings::GetRegistrationURL() const {
-  SettingsMap::const_iterator iter = settings_.find(kRegistrationURLKey);
-  if (iter == settings_.end() || iter->second.empty()) {
-    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-    if (!command_line->HasSwitch(switches::kGCMRegistrationURL))
-      return GURL(kDefaultRegistrationURL);
-
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kGCMRegistrationURL)) {
     return GURL(
         command_line->GetSwitchValueASCII(switches::kGCMRegistrationURL));
   }
+
+  SettingsMap::const_iterator iter = settings_.find(kRegistrationURLKey);
+  if (iter == settings_.end() || iter->second.empty())
+    return GURL(kDefaultRegistrationURL);
   return GURL(iter->second);
 }
 

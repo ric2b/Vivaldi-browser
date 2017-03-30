@@ -27,7 +27,6 @@ enum PixelResourceTestCase {
   GL_ZERO_COPY_2D_DRAW,
   GL_ZERO_COPY_RECT_DRAW,
   GL_ZERO_COPY_EXTERNAL_DRAW,
-  GL_ASYNC_UPLOAD_2D_DRAW,
 };
 
 class LayerTreeHostPixelResourceTest : public LayerTreePixelTest {
@@ -38,8 +37,7 @@ class LayerTreeHostPixelResourceTest : public LayerTreePixelTest {
   void CreateResourceAndTileTaskWorkerPool(
       LayerTreeHostImpl* host_impl,
       scoped_ptr<TileTaskWorkerPool>* tile_task_worker_pool,
-      scoped_ptr<ResourcePool>* resource_pool,
-      scoped_ptr<ResourcePool>* staging_resource_pool) override;
+      scoped_ptr<ResourcePool>* resource_pool) override;
 
   void RunPixelResourceTest(scoped_refptr<Layer> content_root,
                             base::FilePath file_name);
@@ -48,12 +46,10 @@ class LayerTreeHostPixelResourceTest : public LayerTreePixelTest {
     BITMAP_TILE_TASK_WORKER_POOL,
     GPU_TILE_TASK_WORKER_POOL,
     ZERO_COPY_TILE_TASK_WORKER_POOL,
-    ONE_COPY_TILE_TASK_WORKER_POOL,
-    PIXEL_BUFFER_TILE_TASK_WORKER_POOL,
+    ONE_COPY_TILE_TASK_WORKER_POOL
   };
 
  protected:
-  unsigned staging_texture_target_;
   unsigned draw_texture_target_;
   TileTaskWorkerPoolOption resource_pool_option_;
   bool initialized_;
@@ -64,19 +60,14 @@ class LayerTreeHostPixelResourceTest : public LayerTreePixelTest {
   PixelResourceTestCase test_case_;
 };
 
-#define INSTANTIATE_PIXEL_RESOURCE_TEST_CASE_P(framework_name) \
-  INSTANTIATE_TEST_CASE_P(                                     \
-      PixelResourceTest,                                       \
-      framework_name,                                          \
-      ::testing::Values(SOFTWARE,                              \
-                        GL_GPU_RASTER_2D_DRAW,                 \
-                        GL_ONE_COPY_2D_STAGING_2D_DRAW,        \
-                        GL_ONE_COPY_RECT_STAGING_2D_DRAW,      \
-                        GL_ONE_COPY_EXTERNAL_STAGING_2D_DRAW,  \
-                        GL_ZERO_COPY_2D_DRAW,                  \
-                        GL_ZERO_COPY_RECT_DRAW,                \
-                        GL_ZERO_COPY_EXTERNAL_DRAW,            \
-                        GL_ASYNC_UPLOAD_2D_DRAW))
+#define INSTANTIATE_PIXEL_RESOURCE_TEST_CASE_P(framework_name)             \
+  INSTANTIATE_TEST_CASE_P(                                                 \
+      PixelResourceTest, framework_name,                                   \
+      ::testing::Values(                                                   \
+          SOFTWARE, GL_GPU_RASTER_2D_DRAW, GL_ONE_COPY_2D_STAGING_2D_DRAW, \
+          GL_ONE_COPY_RECT_STAGING_2D_DRAW,                                \
+          GL_ONE_COPY_EXTERNAL_STAGING_2D_DRAW, GL_ZERO_COPY_2D_DRAW,      \
+          GL_ZERO_COPY_RECT_DRAW, GL_ZERO_COPY_EXTERNAL_DRAW))
 
 class ParameterizedPixelResourceTest
     : public LayerTreeHostPixelResourceTest,

@@ -4,8 +4,11 @@
 
 #import "chrome/browser/ui/cocoa/translate/translate_bubble_controller.h"
 
+#include <utility>
+
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/bubble_combobox.h"
@@ -17,6 +20,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
 #include "content/public/browser/browser_context.h"
+#include "grit/components_strings.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #import "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -90,7 +94,6 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 - (NSPopUpButton*)addPopUpButton:(ui::ComboboxModel*)model
                           action:(SEL)action
                           toView:(NSView*)view;
-- (void)handleTranslateButtonPressed;
 - (void)handleNopeButtonPressed;
 - (void)handleDoneButtonPressed;
 - (void)handleCancelButtonPressed;
@@ -123,7 +126,7 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
                        parentWindow:parentWindow
                          anchoredAt:NSZeroPoint])) {
     webContents_ = webContents;
-    model_ = model.Pass();
+    model_ = std::move(model);
     if (model_->GetViewState() !=
         TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE) {
       translateExecuted_ = YES;
@@ -219,6 +222,7 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
       [self addButton:title
                action:@selector(handleTranslateButtonPressed)
                toView:view];
+  [translateButton setKeyEquivalent:@"\r"];
 
   base::string16 originalLanguageName =
       model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex());

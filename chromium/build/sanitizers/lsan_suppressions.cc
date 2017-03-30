@@ -25,9 +25,6 @@ char kLSanDefaultSuppressions[] =
 // Leaks in Nvidia's libGL.
 "leak:libGL.so\n"
 
-// A small leak in V8. http://crbug.com/46571#c9
-"leak:blink::V8GCController::collectGarbage\n"
-
 // TODO(earthdok): revisit NSS suppressions after the switch to BoringSSL
 // NSS leaks in CertDatabaseNSSTest tests. http://crbug.com/51988
 "leak:net::NSSCertDatabase::ImportFromPKCS12\n"
@@ -51,29 +48,11 @@ char kLSanDefaultSuppressions[] =
 // xrandr leak. http://crbug.com/119677
 "leak:XRRFindDisplay\n"
 
-// Suppressions for objects which can be owned by the V8 heap. This is a
-// temporary workaround until LeakSanitizer supports the V8 heap.
-// Those should only fire in (browser)tests. If you see one of them in Chrome,
-// then it's a real leak.
-// http://crbug.com/328552
-"leak:WTF::StringImpl::createUninitialized\n"
-"leak:WTF::StringImpl::create8BitIfPossible\n"
-"leak:blink::MouseEvent::create\n"
-"leak:blink::*::*GetterCallback\n"
-"leak:blink::CSSComputedStyleDeclaration::create\n"
-"leak:blink::V8PerIsolateData::ensureDomInJSContext\n"
+// http://crbug.com/431213, http://crbug.com/416665
 "leak:gin/object_template_builder.h\n"
-"leak:gin::internal::Dispatcher\n"
-"leak:blink::LocalDOMWindow::getComputedStyle\n"
-// This should really be RemoteDOMWindow::create, but symbolization is
-// weird in release builds. https://crbug.com/484760
-"leak:blink::RemoteFrame::create\n"
-// Likewise, this should really be blink::WindowProxy::initializeIfNeeded.
-// https://crbug.com/484760
-"leak:blink::WindowProxy::createContext\n"
 
-// http://crbug.com/356785
-"leak:content::RenderViewImplTest_DecideNavigationPolicyForWebUI_Test::TestBody\n"
+// Leaks in swrast_dri.so. http://crbug.com/540042
+"leak:swrast_dri.so\n"
 
 // ================ Leaks in Chromium code ================
 // PLEASE DO NOT ADD SUPPRESSIONS FOR NEW LEAKS.
@@ -96,9 +75,6 @@ char kLSanDefaultSuppressions[] =
 
 // http://crbug.com/356306
 "leak:content::SetProcessTitleFromCommandLine\n"
-
-// http://crbug.com/506433
-"leak:blink::ResourceFetcher::garbageCollectDocumentResources\n"
 
 // PLEASE READ ABOVE BEFORE ADDING NEW SUPPRESSIONS.
 

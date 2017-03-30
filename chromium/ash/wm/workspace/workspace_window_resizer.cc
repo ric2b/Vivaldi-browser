@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/display/display_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -224,7 +224,7 @@ gfx::Rect BoundsForMagneticResizeAttach(const gfx::Rect& src,
 }
 
 // Converts a window component edge to the magnetic edge to snap to.
-uint32 WindowComponentToMagneticEdge(int window_component) {
+uint32_t WindowComponentToMagneticEdge(int window_component) {
   switch (window_component) {
     case HTTOPLEFT:
       return MAGNETISM_EDGE_LEFT | MAGNETISM_EDGE_TOP;
@@ -278,7 +278,7 @@ class WindowSize {
       max_ = size_;
   }
 
-  bool is_at_capacity(bool shrinking) {
+  bool is_at_capacity(bool shrinking) const {
     return size_ == (shrinking ? min_ : max_);
   }
 
@@ -383,8 +383,9 @@ void WorkspaceWindowResizer::Drag(const gfx::Point& location_in_parent,
   // Track the last screen that the pointer was on to keep the snap phantom
   // window there.
   if (display.is_valid()) {
-    root = Shell::GetInstance()->display_controller()->
-        GetRootWindowForDisplayId(display.id());
+    root = Shell::GetInstance()
+               ->window_tree_host_manager()
+               ->GetRootWindowForDisplayId(display.id());
   }
   if (!attached_windows_.empty())
     LayoutAttachedWindows(&bounds);
@@ -629,7 +630,7 @@ int WorkspaceWindowResizer::CalculateAttachedSizes(
 
   int leftover_pixels = 0;
   while (grow_attached_by != 0) {
-    int leftovers = GrowFairly(grow_attached_by, window_sizes);
+    int leftovers = GrowFairly(grow_attached_by, &window_sizes);
     if (leftovers == grow_attached_by) {
       leftover_pixels = leftovers;
       break;
@@ -643,14 +644,14 @@ int WorkspaceWindowResizer::CalculateAttachedSizes(
   return leftover_pixels;
 }
 
-int WorkspaceWindowResizer::GrowFairly(
-    int pixels,
-    std::vector<WindowSize>& sizes) const {
+int WorkspaceWindowResizer::GrowFairly(int pixels,
+                                       std::vector<WindowSize>* sizes) const {
   bool shrinking = pixels < 0;
   std::vector<WindowSize*> nonfull_windows;
-  for (size_t i = 0; i < sizes.size(); ++i) {
-    if (!sizes[i].is_at_capacity(shrinking))
-      nonfull_windows.push_back(&sizes[i]);
+  for (size_t i = 0; i < sizes->size(); ++i) {
+    WindowSize& current_window_size = (*sizes)[i];
+    if (!current_window_size.is_at_capacity(shrinking))
+      nonfull_windows.push_back(&current_window_size);
   }
   std::vector<float> ratios;
   CalculateGrowthRatios(nonfull_windows, &ratios);
@@ -716,8 +717,8 @@ void WorkspaceWindowResizer::MagneticallySnapToOtherWindows(gfx::Rect* bounds) {
 
 void WorkspaceWindowResizer::MagneticallySnapResizeToOtherWindows(
     gfx::Rect* bounds) {
-  const uint32 edges = WindowComponentToMagneticEdge(
-      details().window_component);
+  const uint32_t edges =
+      WindowComponentToMagneticEdge(details().window_component);
   if (UpdateMagnetismWindow(*bounds, edges)) {
     *bounds = ScreenUtil::ConvertRectFromScreen(
         GetTarget()->parent(),
@@ -729,7 +730,7 @@ void WorkspaceWindowResizer::MagneticallySnapResizeToOtherWindows(
 }
 
 bool WorkspaceWindowResizer::UpdateMagnetismWindow(const gfx::Rect& bounds,
-                                                   uint32 edges) {
+                                                   uint32_t edges) {
   // |bounds| are in coordinates of original window's parent.
   gfx::Rect bounds_in_screen =
       ScreenUtil::ConvertRectToScreen(GetTarget()->parent(), bounds);
@@ -864,8 +865,8 @@ void WorkspaceWindowResizer::StickToWorkAreaOnResize(
     const gfx::Rect& work_area,
     int sticky_size,
     gfx::Rect* bounds) const {
-  const uint32 edges = WindowComponentToMagneticEdge(
-      details().window_component);
+  const uint32_t edges =
+      WindowComponentToMagneticEdge(details().window_component);
   const int left_edge = work_area.x();
   const int right_edge = work_area.right();
   const int top_edge = work_area.y();

@@ -5,11 +5,15 @@
 #ifndef CHROME_BROWSER_UI_INFOBAR_CONTAINER_DELEGATE_H_
 #define CHROME_BROWSER_UI_INFOBAR_CONTAINER_DELEGATE_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "components/infobars/core/infobar_container.h"
 
 class InfoBarContainerDelegate : public infobars::InfoBarContainer::Delegate {
  public:
   static const int kDefaultBarTargetHeight;
+  static const int kDefaultBarTargetHeightMd;
   static const int kSeparatorLineHeight;
   static const int kDefaultArrowTargetHeight;
   static const int kMaximumArrowTargetHeight;

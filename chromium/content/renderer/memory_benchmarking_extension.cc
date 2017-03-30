@@ -4,8 +4,9 @@
 
 #include "content/renderer/memory_benchmarking_extension.h"
 
+#include "build/build_config.h"
 #include "content/common/memory_benchmark_messages.h"
-#include "content/renderer/chrome_object_extensions_utils.h"
+#include "content/public/renderer/chrome_object_extensions_utils.h"
 #include "content/renderer/render_thread_impl.h"
 #include "gin/arguments.h"
 #include "gin/handle.h"
@@ -68,9 +69,9 @@ void MemoryBenchmarkingExtension::HeapProfilerDump(gin::Arguments* args) {
   std::string process_type;
   std::string reason("benchmarking_extension");
 
-  if (args->PeekNext()->IsString()) {
+  if (!args->PeekNext().IsEmpty() && args->PeekNext()->IsString()) {
     args->GetNext(&process_type);
-    if (args->PeekNext()->IsString())
+    if (!args->PeekNext().IsEmpty() && args->PeekNext()->IsString())
       args->GetNext(&reason);
   }
 

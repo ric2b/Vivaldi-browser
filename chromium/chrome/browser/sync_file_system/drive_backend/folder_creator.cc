@@ -4,10 +4,13 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/folder_creator.h"
 
-#include "chrome/browser/drive/drive_api_util.h"
-#include "chrome/browser/drive/drive_service_interface.h"
+#include <stddef.h>
+#include <utility>
+
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_util.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.h"
+#include "components/drive/drive_api_util.h"
+#include "components/drive/service/drive_service_interface.h"
 #include "google_apis/drive/drive_api_parser.h"
 
 namespace drive {
@@ -33,8 +36,10 @@ FolderCreator::~FolderCreator() {
 }
 
 void FolderCreator::Run(const FileIDCallback& callback) {
+  drive::AddNewDirectoryOptions options;
+  options.visibility = google_apis::drive::FILE_VISIBILITY_PRIVATE;
   drive_service_->AddNewDirectory(
-      parent_folder_id_, title_, drive::AddNewDirectoryOptions(),
+      parent_folder_id_, title_, options,
       base::Bind(&FolderCreator::DidCreateFolder,
                  weak_ptr_factory_.GetWeakPtr(), callback));
 }
@@ -105,7 +110,7 @@ void FolderCreator::DidListFolders(
 
   std::string file_id = oldest->file_id();
 
-  status = metadata_database_->UpdateByFileResourceList(candidates.Pass());
+  status = metadata_database_->UpdateByFileResourceList(std::move(candidates));
   if (status != SYNC_STATUS_OK) {
     callback.Run(std::string(), status);
     return;

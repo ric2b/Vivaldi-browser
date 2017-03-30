@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "content/renderer/media/android/media_info_loader.h"
 #include "content/test/mock_webframeclient.h"
@@ -81,7 +82,7 @@ class MediaInfoLoaderTest : public testing::Test {
     blink::WebURLRequest new_request(redirect_url);
     blink::WebURLResponse redirect_response(gurl_);
 
-    loader_->willSendRequest(url_loader_, new_request, redirect_response);
+    loader_->willFollowRedirect(url_loader_, new_request, redirect_response);
 
     base::MessageLoop::current()->RunUntilIdle();
   }

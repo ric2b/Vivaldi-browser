@@ -7,11 +7,10 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
-#include "sync/internal_api/public/non_blocking_sync_common.h"
+#include "sync/internal_api/public/activation_context.h"
 #include "sync/internal_api/public/sync_context.h"
 
-namespace syncer {
+namespace syncer_v2 {
 
 SyncContextProxyImpl::SyncContextProxyImpl(
     const scoped_refptr<base::SequencedTaskRunner>& sync_task_runner,
@@ -23,22 +22,16 @@ SyncContextProxyImpl::~SyncContextProxyImpl() {
 }
 
 void SyncContextProxyImpl::ConnectTypeToSync(
-    ModelType type,
-    const DataTypeState& data_type_state,
-    const UpdateResponseDataList& saved_pending_updates,
-    const base::WeakPtr<ModelTypeSyncProxyImpl>& type_sync_proxy) {
+    syncer::ModelType type,
+    scoped_ptr<ActivationContext> activation_context) {
   VLOG(1) << "ConnectTypeToSync: " << ModelTypeToString(type);
-  sync_task_runner_->PostTask(FROM_HERE,
-                              base::Bind(&SyncContext::ConnectSyncTypeToWorker,
-                                         sync_context_,
-                                         type,
-                                         data_type_state,
-                                         saved_pending_updates,
-                                         base::ThreadTaskRunnerHandle::Get(),
-                                         type_sync_proxy));
+  sync_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&SyncContext::ConnectSyncTypeToWorker, sync_context_, type,
+                 base::Passed(&activation_context)));
 }
 
-void SyncContextProxyImpl::Disconnect(ModelType type) {
+void SyncContextProxyImpl::Disconnect(syncer::ModelType type) {
   sync_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&SyncContext::DisconnectSyncWorker, sync_context_, type));
@@ -49,4 +42,4 @@ scoped_ptr<SyncContextProxy> SyncContextProxyImpl::Clone() const {
       new SyncContextProxyImpl(sync_task_runner_, sync_context_));
 }
 
-}  // namespace syncer
+}  // namespace syncer_v2

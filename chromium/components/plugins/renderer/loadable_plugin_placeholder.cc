@@ -4,9 +4,9 @@
 
 #include "components/plugins/renderer/loadable_plugin_placeholder.h"
 
+#include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/command_line.h"
 #include "base/json/string_escape.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -14,11 +14,8 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/public/child/v8_value_converter.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
-#include "gin/handle.h"
-#include "gin/object_template_builder.h"
 #include "third_party/WebKit/public/web/WebDOMMessageEvent.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
@@ -29,6 +26,9 @@
 #include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "third_party/WebKit/public/web/WebSerializedScriptValue.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "url/gurl.h"
+#include "url/origin.h"
+
 using base::UserMetricsAction;
 using content::PluginInstanceThrottler;
 using content::RenderThread;
@@ -45,7 +45,7 @@ void LoadablePluginPlaceholder::BlockForPowerSaverPoster() {
   is_blocked_for_power_saver_poster_ = true;
 
   render_frame()->RegisterPeripheralPlugin(
-      GURL(GetPluginParams().url).GetOrigin(),
+      url::Origin(GURL(GetPluginParams().url)),
       base::Bind(&LoadablePluginPlaceholder::MarkPluginEssential,
                  weak_factory_.GetWeakPtr(),
                  PluginInstanceThrottler::UNTHROTTLE_METHOD_BY_WHITELIST));
@@ -72,8 +72,8 @@ LoadablePluginPlaceholder::LoadablePluginPlaceholder(
       allow_loading_(false),
       finished_loading_(false),
       in_size_recheck_(false),
-      weak_factory_(this) {
-}
+      heuristic_run_before_(premade_throttler_ != nullptr),
+      weak_factory_(this) {}
 
 LoadablePluginPlaceholder::~LoadablePluginPlaceholder() {
 }
@@ -87,7 +87,7 @@ void LoadablePluginPlaceholder::MarkPluginEssential(
 
   if (premade_throttler_)
     premade_throttler_->MarkPluginEssential(method);
-  else
+  else if (method != PluginInstanceThrottler::UNTHROTTLE_METHOD_DO_NOT_RECORD)
     PluginInstanceThrottler::RecordUnthrottleMethodMetric(method);
 
   if (is_blocked_for_power_saver_poster_) {
@@ -102,6 +102,13 @@ void LoadablePluginPlaceholder::ReplacePlugin(blink::WebPlugin* new_plugin) {
   if (!new_plugin)
     return;
   blink::WebPluginContainer* container = plugin()->container();
+  // This can occur if the container has been destroyed.
+  if (!container) {
+    new_plugin->destroy();
+    return;
+  }
+
+  CHECK(container->plugin() == plugin());
   // Set the new plugin on the container before initializing it.
   container->setPlugin(new_plugin);
   // Save the element in case the plugin is removed from the page during
@@ -110,8 +117,10 @@ void LoadablePluginPlaceholder::ReplacePlugin(blink::WebPlugin* new_plugin) {
   bool plugin_needs_initialization =
       !premade_throttler_ || new_plugin != premade_throttler_->GetWebPlugin();
   if (plugin_needs_initialization && !new_plugin->initialize(container)) {
-    // We couldn't initialize the new plugin. Restore the old one and abort.
+    // Since the we couldn't initialize the new plugin, we must destroy it and
+    // restore the old one.
     container->setPlugin(plugin());
+    new_plugin->destroy();
     return;
   }
 
@@ -180,17 +189,16 @@ v8::Local<v8::Object> LoadablePluginPlaceholder::GetV8ScriptableObject(
 
 void LoadablePluginPlaceholder::OnUnobscuredRectUpdate(
     const gfx::Rect& unobscured_rect) {
-  DCHECK(
-      content::RenderThread::Get()->GetTaskRunner()->BelongsToCurrentThread());
-  if (!power_saver_enabled_ || !premade_throttler_ || !finished_loading_)
+  DCHECK(content::RenderThread::Get());
+  if (!power_saver_enabled_ || !finished_loading_)
     return;
 
-  unobscured_rect_ = unobscured_rect;
-
-  // During a size recheck, we will get another notification into this method.
-  // Use this flag to early exit to prevent reentrancy issues.
-  if (in_size_recheck_)
+  // Only update the unobscured rect during the recheck phase. Also early exit
+  // to prevent reentrancy issues.
+  if (in_size_recheck_) {
+    unobscured_rect_ = unobscured_rect;
     return;
+  }
 
   if (!size_update_timer_.IsRunning()) {
     // TODO(tommycli): We have to post a delayed task to recheck the size, as
@@ -271,31 +279,29 @@ void LoadablePluginPlaceholder::DidFinishLoadingCallback() {
   if (premade_throttler_ && power_saver_enabled_)
     premade_throttler_->SetHiddenForPlaceholder(true /* hidden */);
 
+  // In case our initial geometry was reported before the placeholder finished
+  // loading, request another one. Needed for correct large poster unthrottling.
+  if (plugin()) {
+    CHECK(plugin()->container());
+    plugin()->container()->reportGeometry();
+  }
+}
+
+void LoadablePluginPlaceholder::DidFinishIconRepositionForTestingCallback() {
   // Set an attribute and post an event, so browser tests can wait for the
   // placeholder to be ready to receive simulated user input.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnablePluginPlaceholderTesting)) {
-    blink::WebElement element = plugin()->container()->element();
-    element.setAttribute("placeholderLoaded", "true");
+  blink::WebElement element = plugin()->container()->element();
+  element.setAttribute("placeholderReady", "true");
 
-    scoped_ptr<content::V8ValueConverter> converter(
-        content::V8ValueConverter::create());
-    base::StringValue value("placeholderLoaded");
-    blink::WebSerializedScriptValue message_data =
-        blink::WebSerializedScriptValue::serialize(converter->ToV8Value(
-            &value, element.document().frame()->mainWorldScriptContext()));
+  scoped_ptr<content::V8ValueConverter> converter(
+      content::V8ValueConverter::create());
+  base::StringValue value("placeholderReady");
+  blink::WebSerializedScriptValue message_data =
+      blink::WebSerializedScriptValue::serialize(converter->ToV8Value(
+          &value, element.document().frame()->mainWorldScriptContext()));
+  blink::WebDOMMessageEvent msg_event(message_data);
 
-    blink::WebDOMEvent event = element.document().createEvent("MessageEvent");
-    blink::WebDOMMessageEvent msg_event = event.to<blink::WebDOMMessageEvent>();
-    msg_event.initMessageEvent("message",     // type
-                               false,         // canBubble
-                               false,         // cancelable
-                               message_data,  // data
-                               "",            // origin [*]
-                               NULL,          // source [*]
-                               "");           // lastEventId
-    element.dispatchEvent(msg_event);
-  }
+  element.dispatchEvent(msg_event);
 }
 
 void LoadablePluginPlaceholder::SetPluginInfo(
@@ -322,39 +328,58 @@ bool LoadablePluginPlaceholder::LoadingBlocked() const {
 }
 
 void LoadablePluginPlaceholder::RecheckSizeAndMaybeUnthrottle() {
-  DCHECK(
-      content::RenderThread::Get()->GetTaskRunner()->BelongsToCurrentThread());
+  DCHECK(content::RenderThread::Get());
   DCHECK(!in_size_recheck_);
+  DCHECK(finished_loading_);
+
+  base::AutoReset<bool> recheck_scope(&in_size_recheck_, true);
 
   if (!plugin())
     return;
 
-  in_size_recheck_ = true;
+  gfx::Rect old_rect = unobscured_rect_;
 
   // Re-check the size in case the reported size was incorrect.
   plugin()->container()->reportGeometry();
 
-  float zoom_factor = plugin()->container()->pageZoomFactor();
+  if (old_rect == unobscured_rect_)
+    return;
 
-  // Adjust padding using clip coordinates to center play button for plugins
-  // that have their top or left portions obscured.
+  float zoom_factor = plugin()->container()->pageZoomFactor();
+  int width = roundf(unobscured_rect_.width() / zoom_factor);
+  int height = roundf(unobscured_rect_.height() / zoom_factor);
+
   if (is_blocked_for_power_saver_poster_) {
+    // Adjust poster container padding and dimensions to center play button for
+    // plugins and plugin posters that have their top or left portions obscured.
     int x = roundf(unobscured_rect_.x() / zoom_factor);
     int y = roundf(unobscured_rect_.y() / zoom_factor);
-    std::string script =
-        base::StringPrintf("window.setPosterMargin('%dpx', '%dpx')", x, y);
+    std::string script = base::StringPrintf(
+        "window.resizePoster('%dpx', '%dpx', '%dpx', '%dpx')", x, y, width,
+        height);
     plugin()->web_view()->mainFrame()->executeScript(
         blink::WebScriptSource(base::UTF8ToUTF16(script)));
-  }
 
-  if (PluginInstanceThrottler::IsLargeContent(
-          roundf(unobscured_rect_.width() / zoom_factor),
-          roundf(unobscured_rect_.height() / zoom_factor))) {
-    MarkPluginEssential(
-        PluginInstanceThrottler::UNTHROTTLE_METHOD_BY_SIZE_CHANGE);
-  }
+    // On a size update check if we now qualify as a essential plugin.
+    url::Origin content_origin = url::Origin(GetPluginParams().url);
+    auto status = render_frame()->GetPeripheralContentStatus(
+        render_frame()->GetWebFrame()->top()->securityOrigin(), content_origin,
+        gfx::Size(width, height));
+    if (status != content::RenderFrame::CONTENT_STATUS_PERIPHERAL) {
+      MarkPluginEssential(
+          heuristic_run_before_
+              ? PluginInstanceThrottler::UNTHROTTLE_METHOD_BY_SIZE_CHANGE
+              : PluginInstanceThrottler::UNTHROTTLE_METHOD_DO_NOT_RECORD);
 
-  in_size_recheck_ = false;
+      if (!heuristic_run_before_ &&
+          status ==
+              content::RenderFrame::CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_BIG) {
+        render_frame()->WhitelistContentOrigin(content_origin);
+      }
+    }
+
+    heuristic_run_before_ = true;
+  }
 }
 
 }  // namespace plugins

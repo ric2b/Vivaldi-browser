@@ -10,9 +10,12 @@
 #include "base/json/json_writer.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "components/dom_distiller/core/dom_distiller_service.h"
+#include "components/dom_distiller/core/experiments.h"
 #include "components/dom_distiller/core/proto/distilled_article.pb.h"
 #include "components/dom_distiller/core/proto/distilled_page.pb.h"
 #include "components/dom_distiller/core/task_tracker.h"
@@ -90,11 +93,6 @@ const std::string GetFontCssClass(DistilledPagePrefs::FontFamily font_family) {
   return kSansSerifCssClass;
 }
 
-void EnsureNonEmptyTitle(std::string* title) {
-  if (title->empty())
-    *title = l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_VIEWER_NO_DATA_TITLE);
-}
-
 void EnsureNonEmptyContent(std::string* content) {
   UMA_HISTOGRAM_BOOLEAN("DomDistiller.PageHasDistilledData", !content->empty());
   if (content->empty()) {
@@ -113,15 +111,15 @@ std::string ReplaceHtmlTemplateValues(
   std::vector<std::string> substitutions;
 
   std::ostringstream css;
-  std::ostringstream script;
+  std::ostringstream svg;
 #if defined(OS_IOS)
   // On iOS the content is inlined as there is no API to detect those requests
   // and return the local data once a page is loaded.
   css << "<style>" << viewer::GetCss() << viewer::GetIOSCss() << "</style>";
-  script << "<script>\n" << viewer::GetJavaScript() << "\n</script>";
+  svg << viewer::GetLoadingImage();
 #else
   css << "<link rel=\"stylesheet\" href=\"/" << kViewerCssPath << "\">";
-  script << "<script src=\"" << kViewerJsPath << "\"></script>";
+  svg << "<img src=\"/" << kViewerLoadingImagePath << "\">";
 #endif  // defined(OS_IOS)
 
   substitutions.push_back(
@@ -132,19 +130,19 @@ std::string ReplaceHtmlTemplateValues(
                           GetFontCssClass(font_family));                  // $3
 
   substitutions.push_back(
-      l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_VIEWER_NO_DATA_TITLE));  // $4
+      l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_VIEWER_LOADING_TITLE));  // $4
   substitutions.push_back(
       l10n_util::GetStringUTF8(
           IDS_DOM_DISTILLER_JAVASCRIPT_DISABLED_CONTENT));                // $5
 
-  substitutions.push_back(original_url);                                  // $6
+  substitutions.push_back(svg.str());                                     // $6
+
+  substitutions.push_back(original_url);                                  // $7
   substitutions.push_back(
       l10n_util::GetStringUTF8(
-          IDS_DOM_DISTILLER_VIEWER_CLOSE_READER_VIEW));                   // $7
+          IDS_DOM_DISTILLER_VIEWER_CLOSE_READER_VIEW));                   // $8
 
-  substitutions.push_back(script.str());                                  // $8
-
-  return ReplaceStringPlaceholders(html_template, substitutions, NULL);
+  return base::ReplaceStringPlaceholders(html_template, substitutions, NULL);
 }
 
 }  // namespace
@@ -185,17 +183,24 @@ const std::string GetUnsafeIncrementalDistilledPageJs(
 }
 
 const std::string GetErrorPageJs() {
+  std::string title(l10n_util::GetStringUTF8(
+      IDS_DOM_DISTILLER_VIEWER_FAILED_TO_FIND_ARTICLE_TITLE));
+  std::string page_update(GetSetTitleJs(title));
+
   base::StringValue value(l10n_util::GetStringUTF8(
       IDS_DOM_DISTILLER_VIEWER_FAILED_TO_FIND_ARTICLE_CONTENT));
   std::string output;
   base::JSONWriter::Write(value, &output);
-  std::string page_update("addToPage(");
-  page_update += output + ");";
+  page_update += "addToPage(" + output + ");";
+  page_update += GetSetTextDirectionJs(std::string("auto"));
+  page_update += GetToggleLoadingIndicatorJs(true);
+  if (ShouldShowFeedbackForm()) {
+    page_update += GetShowFeedbackFormJs();
+  }
   return page_update;
 }
 
 const std::string GetSetTitleJs(std::string title) {
-  EnsureNonEmptyTitle(&title);
   base::StringValue value(title);
   std::string output;
   base::JSONWriter::Write(value, &output);
@@ -246,6 +251,11 @@ const std::string GetCss() {
           IDR_DISTILLER_CSS).as_string();
 }
 
+const std::string GetLoadingImage() {
+  return ResourceBundle::GetSharedInstance().GetRawDataResource(
+          IDR_DISTILLER_LOADING_IMAGE).as_string();
+}
+
 const std::string GetIOSCss() {
   return ResourceBundle::GetSharedInstance().GetRawDataResource(
           IDR_DISTILLER_IOS_CSS).as_string();
@@ -265,7 +275,7 @@ scoped_ptr<ViewerHandle> CreateViewRequest(
   std::string entry_id =
       url_utils::GetValueForKeyInUrlPathQuery(path, kEntryIdKey);
   bool has_valid_entry_id = !entry_id.empty();
-  entry_id = base::StringToUpperASCII(entry_id);
+  entry_id = base::ToUpperASCII(entry_id);
 
   std::string requested_url_str =
       url_utils::GetValueForKeyInUrlPathQuery(path, kUrlKey);
@@ -282,12 +292,12 @@ scoped_ptr<ViewerHandle> CreateViewRequest(
     return dom_distiller_service->ViewEntry(
         view_request_delegate,
         dom_distiller_service->CreateDefaultDistillerPage(render_view_size),
-        entry_id).Pass();
+        entry_id);
   } else if (has_valid_url) {
     return dom_distiller_service->ViewUrl(
         view_request_delegate,
         dom_distiller_service->CreateDefaultDistillerPage(render_view_size),
-        requested_url).Pass();
+        requested_url);
   }
 
   // It is invalid to not specify a query param for |kEntryIdKey| or |kUrlKey|.
@@ -301,6 +311,10 @@ const std::string GetDistilledPageThemeJs(DistilledPagePrefs::Theme theme) {
 const std::string GetDistilledPageFontFamilyJs(
     DistilledPagePrefs::FontFamily font_family) {
   return "useFontFamily('" + GetJsFontFamily(font_family) + "');";
+}
+
+const std::string GetDistilledPageFontScalingJs(float scaling) {
+  return "useFontScaling(" + base::DoubleToString(scaling) + ");";
 }
 
 }  // namespace viewer

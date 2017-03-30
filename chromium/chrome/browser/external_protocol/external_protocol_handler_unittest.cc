@@ -23,11 +23,20 @@ class FakeExternalProtocolHandlerWorker
  private:
   ~FakeExternalProtocolHandlerWorker() override {}
 
-  ShellIntegration::DefaultWebClientState CheckIsDefault() override {
-    return os_state_;
+  void CheckIsDefault() override {
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&FakeExternalProtocolHandlerWorker::OnCheckIsDefaultComplete,
+                   this, os_state_));
   }
 
-  bool SetAsDefault(bool interactive_permitted) override { return true; }
+  void SetAsDefault(bool interactive_permitted) override {
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(
+            &FakeExternalProtocolHandlerWorker::OnSetAsDefaultAttemptComplete,
+            this, AttemptResult::SUCCESS));
+  }
 
   ShellIntegration::DefaultWebClientState os_state_;
 };
@@ -76,7 +85,7 @@ class FakeExternalProtocolHandlerDelegate
   }
 
   void FinishedProcessingCheck() override {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void set_os_state(ShellIntegration::DefaultWebClientState value) {

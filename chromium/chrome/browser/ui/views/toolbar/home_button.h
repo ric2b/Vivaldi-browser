@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_HOME_BUTTON_H_
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_HOME_BUTTON_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 
 class Browser;
@@ -21,7 +21,7 @@ class HomeButton : public ToolbarButton {
   const char* GetClassName() const override;
   bool GetDropFormats(
       int* formats,
-      std::set<OSExchangeData::CustomFormat>* custom_formats) override;
+      std::set<ui::Clipboard::FormatType>* format_types) override;
   bool CanDrop(const OSExchangeData& data) override;
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
   int OnPerformDrop(const ui::DropTargetEvent& event) override;

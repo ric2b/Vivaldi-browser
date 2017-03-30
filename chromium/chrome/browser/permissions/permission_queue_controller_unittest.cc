@@ -4,6 +4,7 @@
 
 #include "chrome/browser/permissions/permission_queue_controller.h"
 
+#include "base/macros.h"
 #include "base/synchronization/waitable_event.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -11,6 +12,7 @@
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -28,8 +30,7 @@ class PermissionQueueControllerTests : public ChromeRenderViewHostTestHarness {
     return PermissionRequestID(
         web_contents()->GetRenderProcessHost()->GetID(),
         web_contents()->GetMainFrame()->GetRoutingID(),
-        bridge_id,
-        GURL());
+        bridge_id);
   }
 
  private:
@@ -65,9 +66,10 @@ class ObservationCountingQueueController : public PermissionQueueController {
 
 ObservationCountingQueueController::ObservationCountingQueueController(
     Profile* profile)
-    : PermissionQueueController(profile, CONTENT_SETTINGS_TYPE_GEOLOCATION),
-      call_count_(0) {
-}
+    : PermissionQueueController(profile,
+                                content::PermissionType::GEOLOCATION,
+                                CONTENT_SETTINGS_TYPE_GEOLOCATION),
+      call_count_(0) {}
 
 ObservationCountingQueueController::~ObservationCountingQueueController() {
 }

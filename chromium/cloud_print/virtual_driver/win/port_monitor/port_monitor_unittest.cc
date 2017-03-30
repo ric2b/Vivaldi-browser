@@ -4,9 +4,11 @@
 
 #include "cloud_print/virtual_driver/win/port_monitor/port_monitor.h"
 
+#include <stddef.h>
 #include <winspool.h>
 
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/win/registry.h"
@@ -143,7 +145,7 @@ TEST_F(PortMonitorTest, EnumPortsTest) {
                                  0,
                                  &needed_bytes,
                                  &returned));
-  EXPECT_EQ(ERROR_INSUFFICIENT_BUFFER, GetLastError());
+  EXPECT_EQ(static_cast<DWORD>(ERROR_INSUFFICIENT_BUFFER), GetLastError());
   EXPECT_NE(0u, needed_bytes);
   EXPECT_EQ(0u, returned);
 
@@ -171,7 +173,7 @@ TEST_F(PortMonitorTest, EnumPortsTest) {
                                  0,
                                  &needed_bytes,
                                  &returned));
-  EXPECT_EQ(ERROR_INSUFFICIENT_BUFFER, GetLastError());
+  EXPECT_EQ(static_cast<DWORD>(ERROR_INSUFFICIENT_BUFFER), GetLastError());
   EXPECT_NE(0u, needed_bytes);
   EXPECT_EQ(0u, returned);
 
@@ -213,14 +215,9 @@ TEST_F(PortMonitorTest, FlowTest) {
   EXPECT_TRUE(monitor2->pfnXcvOpenPort(monitor_handle, NULL, 0, &xcv_handle));
   EXPECT_TRUE(xcv_handle != NULL);
   EXPECT_TRUE(monitor2->pfnXcvDataPort != NULL);
-  EXPECT_EQ(ERROR_ACCESS_DENIED,
-            monitor2->pfnXcvDataPort(xcv_handle,
-                                     kXcvDataItem,
-                                     NULL,
-                                     0,
-                                     buffer,
-                                     kBufferSize,
-                                     &bytes_needed));
+  EXPECT_EQ(static_cast<DWORD>(ERROR_ACCESS_DENIED),
+            monitor2->pfnXcvDataPort(xcv_handle, kXcvDataItem, NULL, 0, buffer,
+                                     kBufferSize, &bytes_needed));
   EXPECT_TRUE(monitor2->pfnXcvClosePort != NULL);
   EXPECT_TRUE(monitor2->pfnXcvClosePort(xcv_handle));
   EXPECT_TRUE(monitor2->pfnXcvOpenPort(monitor_handle,
@@ -229,14 +226,9 @@ TEST_F(PortMonitorTest, FlowTest) {
                                        &xcv_handle));
   EXPECT_TRUE(xcv_handle != NULL);
   EXPECT_TRUE(monitor2->pfnXcvDataPort != NULL);
-  EXPECT_EQ(ERROR_SUCCESS,
-            monitor2->pfnXcvDataPort(xcv_handle,
-                                     kXcvDataItem,
-                                     NULL,
-                                     0,
-                                     buffer,
-                                     kBufferSize,
-                                     &bytes_needed));
+  EXPECT_EQ(static_cast<DWORD>(ERROR_SUCCESS),
+            monitor2->pfnXcvDataPort(xcv_handle, kXcvDataItem, NULL, 0, buffer,
+                                     kBufferSize, &bytes_needed));
   EXPECT_TRUE(monitor2->pfnXcvClosePort != NULL);
   EXPECT_TRUE(monitor2->pfnXcvClosePort(xcv_handle));
 
@@ -256,7 +248,7 @@ TEST_F(PortMonitorTest, FlowTest) {
                                      buffer,
                                      kBufferSize,
                                      &bytes_processed));
-  EXPECT_EQ(0, bytes_processed);
+  EXPECT_EQ(0u, bytes_processed);
   EXPECT_FALSE(monitor2->pfnReadPort(port_handle,
                                      buffer,
                                      sizeof(buffer),

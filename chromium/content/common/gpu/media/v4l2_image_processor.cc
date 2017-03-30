@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/videodev2.h>
 #include <poll.h>
+#include <string.h>
 #include <sys/eventfd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -64,8 +66,8 @@ V4L2ImageProcessor::JobRecord::~JobRecord() {
 }
 
 V4L2ImageProcessor::V4L2ImageProcessor(const scoped_refptr<V4L2Device>& device)
-    : input_format_(media::VideoFrame::UNKNOWN),
-      output_format_(media::VideoFrame::UNKNOWN),
+    : input_format_(media::PIXEL_FORMAT_UNKNOWN),
+      output_format_(media::PIXEL_FORMAT_UNKNOWN),
       input_format_fourcc_(0),
       output_format_fourcc_(0),
       input_planes_count_(0),
@@ -97,8 +99,8 @@ void V4L2ImageProcessor::NotifyError() {
     error_cb_.Run();
 }
 
-bool V4L2ImageProcessor::Initialize(media::VideoFrame::Format input_format,
-                                    media::VideoFrame::Format output_format,
+bool V4L2ImageProcessor::Initialize(media::VideoPixelFormat input_format,
+                                    media::VideoPixelFormat output_format,
                                     gfx::Size input_visible_size,
                                     gfx::Size output_visible_size,
                                     gfx::Size output_allocated_size,
@@ -108,14 +110,14 @@ bool V4L2ImageProcessor::Initialize(media::VideoFrame::Format input_format,
 
   // TODO(posciak): Replace Exynos-specific format/parameter hardcoding in this
   // class with proper capability enumeration.
-  DCHECK_EQ(input_format, media::VideoFrame::I420);
-  DCHECK_EQ(output_format, media::VideoFrame::NV12);
+  DCHECK_EQ(input_format, media::PIXEL_FORMAT_I420);
+  DCHECK_EQ(output_format, media::PIXEL_FORMAT_NV12);
 
   input_format_ = input_format;
   output_format_ = output_format;
-  input_format_fourcc_ = V4L2Device::VideoFrameFormatToV4L2PixFmt(input_format);
+  input_format_fourcc_ = V4L2Device::VideoPixelFormatToV4L2PixFmt(input_format);
   output_format_fourcc_ =
-      V4L2Device::VideoFrameFormatToV4L2PixFmt(output_format);
+      V4L2Device::VideoPixelFormatToV4L2PixFmt(output_format);
 
   if (!input_format_fourcc_ || !output_format_fourcc_) {
     LOG(ERROR) << "Unrecognized format(s)";
@@ -134,8 +136,7 @@ bool V4L2ImageProcessor::Initialize(media::VideoFrame::Format input_format,
   // Capabilities check.
   struct v4l2_capability caps;
   memset(&caps, 0, sizeof(caps));
-  const __u32 kCapsRequired = V4L2_CAP_VIDEO_CAPTURE_MPLANE |
-                              V4L2_CAP_VIDEO_OUTPUT_MPLANE | V4L2_CAP_STREAMING;
+  const __u32 kCapsRequired = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_QUERYCAP, &caps);
   if ((caps.capabilities & kCapsRequired) != kCapsRequired) {
     LOG(ERROR) << "Initialize(): ioctl() failed: VIDIOC_QUERYCAP: "
@@ -158,10 +159,9 @@ bool V4L2ImageProcessor::Initialize(media::VideoFrame::Format input_format,
                  base::Unretained(this)));
 
   DVLOG(1) << "V4L2ImageProcessor initialized for "
-           << " input_format:"
-           << media::VideoFrame::FormatToString(input_format)
+           << " input_format:" << media::VideoPixelFormatToString(input_format)
            << ", output_format:"
-           << media::VideoFrame::FormatToString(output_format)
+           << media::VideoPixelFormatToString(output_format)
            << ", input_visible_size: " << input_visible_size.ToString()
            << ", input_allocated_size: " << input_allocated_size_.ToString()
            << ", output_visible_size: " << output_visible_size.ToString()
@@ -561,6 +561,10 @@ void V4L2ImageProcessor::Dequeue() {
             output_visible_size_,
             output_record.fds,
             job_record->frame->timestamp());
+    if (!output_frame) {
+      NOTIFY_ERROR();
+      return;
+    }
     output_frame->AddDestructionObserver(media::BindToCurrentLoop(
         base::Bind(&V4L2ImageProcessor::ReuseOutputBuffer,
                    device_weak_factory_.GetWeakPtr(),

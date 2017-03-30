@@ -19,8 +19,12 @@ class CONTENT_EXPORT ResourceController {
   virtual void Cancel() = 0;
   virtual void CancelAndIgnore() = 0;
   virtual void CancelWithError(int error_code) = 0;
-  virtual void Resume(bool open_when_done=false,
-                      bool ask_for_target=false) = 0;
+  /* NOTE(yngve): Risk of infinite loop, should only be a problem for us,
+   * if we add new subclasses, chromium will still use the abstract definition.
+   */
+  virtual void Resume();
+  virtual void Resume(bool open_when_done,
+                      bool ask_for_target=false);
  protected:
   virtual ~ResourceController() {}
 };

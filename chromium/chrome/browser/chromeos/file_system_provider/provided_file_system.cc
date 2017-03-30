@@ -4,9 +4,11 @@
 
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/chromeos/file_system_provider/notification_manager.h"
 #include "chrome/browser/chromeos/file_system_provider/operations/abort.h"
@@ -113,7 +115,7 @@ struct ProvidedFileSystem::NotifyInQueueArgs {
         entry_path(entry_path),
         recursive(recursive),
         change_type(change_type),
-        changes(changes.Pass()),
+        changes(std::move(changes)),
         tag(tag),
         callback(callback) {}
   ~NotifyInQueueArgs() {}
@@ -159,7 +161,7 @@ void ProvidedFileSystem::SetEventRouterForTesting(
 
 void ProvidedFileSystem::SetNotificationManagerForTesting(
     scoped_ptr<NotificationManagerInterface> notification_manager) {
-  notification_manager_ = notification_manager.Pass();
+  notification_manager_ = std::move(notification_manager);
   request_manager_.reset(new RequestManager(
       profile_, file_system_info_.extension_id(), notification_manager_.get()));
 }
@@ -198,12 +200,12 @@ AbortCallback ProvidedFileSystem::GetMetadata(
 }
 
 AbortCallback ProvidedFileSystem::GetActions(
-    const base::FilePath& entry_path,
+    const std::vector<base::FilePath>& entry_paths,
     const GetActionsCallback& callback) {
   const int request_id = request_manager_->CreateRequest(
       GET_ACTIONS,
       scoped_ptr<RequestManager::HandlerInterface>(new operations::GetActions(
-          event_router_, file_system_info_, entry_path, callback)));
+          event_router_, file_system_info_, entry_paths, callback)));
   if (!request_id) {
     callback.Run(Actions(), base::File::FILE_ERROR_SECURITY);
     return AbortCallback();
@@ -214,14 +216,14 @@ AbortCallback ProvidedFileSystem::GetActions(
 }
 
 AbortCallback ProvidedFileSystem::ExecuteAction(
-    const base::FilePath& entry_path,
+    const std::vector<base::FilePath>& entry_paths,
     const std::string& action_id,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   const int request_id = request_manager_->CreateRequest(
       EXECUTE_ACTION,
       scoped_ptr<RequestManager::HandlerInterface>(
           new operations::ExecuteAction(event_router_, file_system_info_,
-                                        entry_path, action_id, callback)));
+                                        entry_paths, action_id, callback)));
   if (!request_id) {
     callback.Run(base::File::FILE_ERROR_SECURITY);
     return AbortCallback();
@@ -253,7 +255,7 @@ AbortCallback ProvidedFileSystem::ReadDirectory(
 AbortCallback ProvidedFileSystem::ReadFile(
     int file_handle,
     net::IOBuffer* buffer,
-    int64 offset,
+    int64_t offset,
     int length,
     const ReadChunkReceivedCallback& callback) {
   TRACE_EVENT1(
@@ -294,8 +296,8 @@ AbortCallback ProvidedFileSystem::OpenFile(const base::FilePath& file_path,
     return AbortCallback();
   }
 
-  return base::Bind(
-      &ProvidedFileSystem::Abort, weak_ptr_factory_.GetWeakPtr(), request_id);
+  return base::Bind(&ProvidedFileSystem::Abort, weak_ptr_factory_.GetWeakPtr(),
+                    request_id);
 }
 
 AbortCallback ProvidedFileSystem::CloseFile(
@@ -394,7 +396,7 @@ AbortCallback ProvidedFileSystem::CopyEntry(
 AbortCallback ProvidedFileSystem::WriteFile(
     int file_handle,
     net::IOBuffer* buffer,
-    int64 offset,
+    int64_t offset,
     int length,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   TRACE_EVENT1("file_system_provider",
@@ -443,7 +445,7 @@ AbortCallback ProvidedFileSystem::MoveEntry(
 
 AbortCallback ProvidedFileSystem::Truncate(
     const base::FilePath& file_path,
-    int64 length,
+    int64_t length,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   const int request_id = request_manager_->CreateRequest(
       TRUNCATE,
@@ -527,7 +529,7 @@ void ProvidedFileSystem::Notify(
                         base::Unretained(this),  // Outlived by the queue.
                         base::Passed(make_scoped_ptr(new NotifyInQueueArgs(
                             token, entry_path, recursive, change_type,
-                            changes.Pass(), tag, callback)))));
+                            std::move(changes), tag, callback)))));
 }
 
 void ProvidedFileSystem::Configure(
@@ -541,16 +543,32 @@ void ProvidedFileSystem::Configure(
 }
 
 void ProvidedFileSystem::Abort(int operation_request_id) {
-  request_manager_->RejectRequest(operation_request_id,
-                                  make_scoped_ptr(new RequestValue()),
-                                  base::File::FILE_ERROR_ABORT);
   if (!request_manager_->CreateRequest(
           ABORT,
           scoped_ptr<RequestManager::HandlerInterface>(new operations::Abort(
               event_router_, file_system_info_, operation_request_id,
-              base::Bind(&EmptyStatusCallback))))) {
+              base::Bind(&ProvidedFileSystem::OnAbortCompleted,
+                         weak_ptr_factory_.GetWeakPtr(),
+                         operation_request_id))))) {
+    // If the aborting event is not handled, then the operation should simply
+    // be not aborted. Instead we'll wait until it completes.
     LOG(ERROR) << "Failed to create an abort request.";
   }
+}
+
+void ProvidedFileSystem::OnAbortCompleted(int operation_request_id,
+                                          base::File::Error result) {
+  if (result != base::File::FILE_OK) {
+    // If an error in aborting happens, then do not abort the request in the
+    // request manager, as the operation is supposed to complete. The only case
+    // it wouldn't complete is if there is a bug in the extension code, and
+    // the extension never calls the callback. We consiously *do not* handle
+    // bugs in extensions here.
+    return;
+  }
+  request_manager_->RejectRequest(operation_request_id,
+                                  make_scoped_ptr(new RequestValue()),
+                                  base::File::FILE_ERROR_ABORT);
 }
 
 AbortCallback ProvidedFileSystem::AddWatcherInQueue(
@@ -642,20 +660,20 @@ AbortCallback ProvidedFileSystem::NotifyInQueue(
   const WatcherKey key(args->entry_path, args->recursive);
   const auto& watcher_it = watchers_.find(key);
   if (watcher_it == watchers_.end()) {
-    OnNotifyInQueueCompleted(args.Pass(), base::File::FILE_ERROR_NOT_FOUND);
+    OnNotifyInQueueCompleted(std::move(args), base::File::FILE_ERROR_NOT_FOUND);
     return AbortCallback();
   }
 
   // The tag must be provided if and only if it's explicitly supported.
   if (file_system_info_.supports_notify_tag() == args->tag.empty()) {
-    OnNotifyInQueueCompleted(args.Pass(),
+    OnNotifyInQueueCompleted(std::move(args),
                              base::File::FILE_ERROR_INVALID_OPERATION);
     return AbortCallback();
   }
 
   // It's illegal to provide a tag which is not unique.
   if (!args->tag.empty() && args->tag == watcher_it->second.last_tag) {
-    OnNotifyInQueueCompleted(args.Pass(),
+    OnNotifyInQueueCompleted(std::move(args),
                              base::File::FILE_ERROR_INVALID_OPERATION);
     return AbortCallback();
   }

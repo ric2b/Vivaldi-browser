@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-module mojo;
+module media.interfaces;
 
 import "media/mojo/interfaces/decryptor.mojom";
 
@@ -26,7 +26,9 @@ enum CdmKeyStatus {
   USABLE,
   INTERNAL_ERROR,
   EXPIRED,
-  OUTPUT_NOT_ALLOWED
+  OUTPUT_RESTRICTED,
+  OUTPUT_DOWNSCALED,
+  KEY_STATUS_PENDING
 };
 
 // Transport layer of media::CdmConfig (see media/base/cdm_config.h).
@@ -85,11 +87,13 @@ interface ContentDecryptionModule {
   // Sets ContentDecryptionModuleClient. Must be called before any other calls.
   SetClient(ContentDecryptionModuleClient client);
 
-  // Initializes the CDM. |cdm_id| will later be used to locate the CDM at the
-  // remote side. If initialization failed (e.g. |key_system| or |cdm_config| is
-  // not supported), |result.success| will be false.
-  Initialize(string key_system, string security_origin, CdmConfig cdm_config,
-             int32 cdm_id) => (CdmPromiseResult result);
+  // Initializes the CDM. If initialization failed (e.g. |key_system| or
+  // |cdm_config| is not supported), |result.success| will be false and |cdm_id|
+  // will be zero. Upon success, |cdm_id| will be non-zero and will later be
+  // used to locate the CDM at the remote side. |decryptor| is the remote
+  // Decryptor.
+  Initialize(string key_system, string security_origin, CdmConfig cdm_config)
+      => (CdmPromiseResult result, int32 cdm_id, Decryptor? decryptor);
 
   // Provides a server certificate to be used to encrypt messages to the
   // license server.
@@ -123,9 +127,6 @@ interface ContentDecryptionModule {
   // Removes stored session data associated with the active session specified by
   // |session_id|.
   RemoveSession(string session_id) => (CdmPromiseResult result);
-
-  // Retrieves the |decryptor| associated with this CDM instance.
-  GetDecryptor(Decryptor&? decryptor);
 };
 
 // Session callbacks. See media/base/media_keys.h for details.

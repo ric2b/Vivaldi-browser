@@ -4,8 +4,6 @@
 
 source_set("cryptauth") {
   sources = [
-    "base64url.cc",
-    "base64url.h",
     "cryptauth_access_token_fetcher.h",
     "cryptauth_access_token_fetcher_impl.cc",
     "cryptauth_access_token_fetcher_impl.h",
@@ -23,10 +21,16 @@ source_set("cryptauth") {
     "cryptauth_enrollment_manager.h",
     "cryptauth_enrollment_utils.cc",
     "cryptauth_enrollment_utils.h",
+    "cryptauth_gcm_manager.cc",
+    "cryptauth_gcm_manager.h",
+    "cryptauth_gcm_manager_impl.cc",
+    "cryptauth_gcm_manager_impl.h",
     "pref_names.cc",
     "pref_names.h",
     "secure_message_delegate.cc",
     "secure_message_delegate.h",
+    "switches.cc",
+    "switches.h",
     "sync_scheduler.cc",
     "sync_scheduler.h",
     "sync_scheduler_impl.cc",
@@ -35,14 +39,17 @@ source_set("cryptauth") {
 
   deps = [
     "//base",
-    "//crypto",
+    "//base:prefs",
+    "//components/gcm_driver",
+    "//components/gcm_driver/common",
     "//components/proximity_auth/logging",
+    "//crypto",
     "//google_apis",
     "//net",
   ]
 
   public_deps = [
-    "proto",
+    "//components/proximity_auth/cryptauth/proto",
   ]
 }
 
@@ -50,6 +57,8 @@ source_set("test_support") {
   testonly = true
 
   sources = [
+    "fake_cryptauth_gcm_manager.cc",
+    "fake_cryptauth_gcm_manager.h",
     "fake_secure_message_delegate.cc",
     "fake_secure_message_delegate.h",
     "mock_cryptauth_client.cc",
@@ -58,27 +67,27 @@ source_set("test_support") {
     "mock_sync_scheduler.h",
   ]
 
-  deps = [
+  public_deps = [
     ":cryptauth",
-    "//base",
-    "//testing/gmock",
+    "//components/proximity_auth/cryptauth/proto",
   ]
 
-  public_deps = [
-    "proto",
+  deps = [
+    "//base",
+    "//testing/gmock",
   ]
 }
 
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "base64url_unittest.cc",
     "cryptauth_access_token_fetcher_impl_unittest.cc",
     "cryptauth_api_call_flow_unittest.cc",
     "cryptauth_client_impl_unittest.cc",
     "cryptauth_device_manager_unittest.cc",
     "cryptauth_enroller_impl_unittest.cc",
     "cryptauth_enrollment_manager_unittest.cc",
+    "cryptauth_gcm_manager_impl_unittest.cc",
     "fake_secure_message_delegate_unittest.cc",
     "sync_scheduler_impl_unittest.cc",
   ]
@@ -88,6 +97,8 @@ source_set("unit_tests") {
     ":test_support",
     "//base:prefs_test_support",
     "//base/test:test_support",
+    "//components/gcm_driver:test_support",
+    "//components/proximity_auth",
     "//google_apis:test_support",
     "//net:test_support",
     "//testing/gtest",

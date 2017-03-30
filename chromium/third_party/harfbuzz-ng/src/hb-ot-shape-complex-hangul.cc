@@ -188,7 +188,7 @@ preprocess_text_hangul (const hb_ot_shape_plan_t *plan,
 				    */
   unsigned int count = buffer->len;
 
-  for (buffer->idx = 0; buffer->idx < count;)
+  for (buffer->idx = 0; buffer->idx < count && !buffer->in_error;)
   {
     hb_codepoint_t u = buffer->cur().codepoint;
 
@@ -205,11 +205,11 @@ preprocess_text_hangul (const hb_ot_shape_plan_t *plan,
 	buffer->next_glyph ();
 	if (!is_zero_width_char (font, u))
 	{
+	  buffer->merge_out_clusters (start, end + 1);
 	  hb_glyph_info_t *info = buffer->out_info;
 	  hb_glyph_info_t tone = info[end];
 	  memmove (&info[start + 1], &info[start], (end - start) * sizeof (hb_glyph_info_t));
 	  info[start] = tone;
-	  buffer->merge_out_clusters (start, end + 1);
 	}
       }
       else
@@ -411,13 +411,14 @@ const hb_ot_complex_shaper_t _hb_ot_complex_shaper_hangul =
   "hangul",
   collect_features_hangul,
   override_features_hangul,
-  data_create_hangul, /* data_create */
-  data_destroy_hangul, /* data_destroy */
+  data_create_hangul,
+  data_destroy_hangul,
   preprocess_text_hangul,
+  NULL, /* postprocess_glyphs */
   HB_OT_SHAPE_NORMALIZATION_MODE_NONE,
   NULL, /* decompose */
   NULL, /* compose */
-  setup_masks_hangul, /* setup_masks */
+  setup_masks_hangul,
   HB_OT_SHAPE_ZERO_WIDTH_MARKS_NONE,
   false, /* fallback_position */
 };

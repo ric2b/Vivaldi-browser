@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -146,7 +147,8 @@ TEST_F(ManagementApiUnitTest, ManagementSetEnabled) {
 }
 
 // Tests management.uninstall.
-TEST_F(ManagementApiUnitTest, ManagementUninstall) {
+// http://crbug.com/527228 flaky
+TEST_F(ManagementApiUnitTest, DISABLED_ManagementUninstall) {
   // We need to be on the UI thread for this.
   ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
   scoped_refptr<const Extension> extension = test_util::CreateEmptyExtension();

@@ -4,8 +4,12 @@
 
 #include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
 
+#include <utility>
+
 #include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "url/gurl.h"
 
@@ -16,11 +20,14 @@ CredentialManagerPendingRequestTask::CredentialManagerPendingRequestTask(
     int request_id,
     bool request_zero_click_only,
     const GURL& request_origin,
-    const std::vector<GURL>& request_federations)
+    const std::vector<GURL>& request_federations,
+    const std::vector<std::string>& affiliated_realms)
     : delegate_(delegate),
       id_(request_id),
       zero_click_only_(request_zero_click_only),
-      origin_(request_origin) {
+      origin_(request_origin),
+      affiliated_realms_(affiliated_realms.begin(), affiliated_realms.end()) {
+  CHECK(!delegate_->client()->DidLastPageLoadEncounterSSLErrors());
   for (const GURL& origin : request_federations)
     federations_.insert(origin.spec());
 }
@@ -36,9 +43,9 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
   }
 
   ScopedVector<autofill::PasswordForm> local_results;
+  ScopedVector<autofill::PasswordForm> affiliated_results;
   ScopedVector<autofill::PasswordForm> federated_results;
   const autofill::PasswordForm* zero_click_form_to_return = nullptr;
-  bool found_zero_clickable_credential = false;
   for (auto& form : results) {
     // PasswordFrom and GURL have different definition of origin.
     // PasswordForm definition: scheme, host, port and path.
@@ -46,17 +53,11 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     // So we can't compare them directly.
     if (form->origin.GetOrigin() == origin_.GetOrigin()) {
       local_results.push_back(form);
-
-      // If this is a zero-clickable PasswordForm, and we haven't found any
-      // other zero-clickable PasswordForms, then store this one for later.
-      // If we have found other zero-clickable PasswordForms, then clear
-      // the stored form (we return zero-click forms iff there is a single,
-      // unambigious choice).
-      if (!form->skip_zero_click) {
-        zero_click_form_to_return =
-            found_zero_clickable_credential ? nullptr : form;
-        found_zero_clickable_credential = true;
-      }
+      form = nullptr;
+    } else if (affiliated_realms_.count(form->signon_realm) &&
+               AffiliatedMatchHelper::IsValidAndroidCredential(*form)) {
+      form->is_affiliation_based_match = true;
+      affiliated_results.push_back(form);
       form = nullptr;
     }
 
@@ -68,12 +69,31 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     // they will be safely deleted after this task executes.
   }
 
+  if (!affiliated_results.empty()) {
+    // TODO(mkwst): This doesn't create a PasswordForm that we can use to create
+    // a FederatedCredential (via CreatePasswordFormFromCredentialInfo). We need
+    // to fix that.
+    password_manager_util::TrimUsernameOnlyCredentials(&affiliated_results);
+    local_results.insert(local_results.end(), affiliated_results.begin(),
+                         affiliated_results.end());
+    affiliated_results.weak_clear();
+  }
+
   if ((local_results.empty() && federated_results.empty())) {
     delegate_->SendCredential(id_, CredentialInfo());
     return;
   }
 
+  // We only perform zero-click sign-in when the result is completely
+  // unambigious. If the user could theoretically choose from more than one
+  // option, cancel zero-click.
+  if (local_results.size() == 1u && !local_results[0]->skip_zero_click)
+    zero_click_form_to_return = local_results[0];
+
   if (zero_click_form_to_return && delegate_->IsZeroClickAllowed()) {
+    // TODO(mkwst): This is all too complex now. We should just be able to check
+    // the first item in the list, since we're now only doing any of this work
+    // when there's only one item. Kill it all with fire in a future CL.
     auto it = std::find(local_results.begin(), local_results.end(),
                         zero_click_form_to_return);
     CredentialInfo info(*zero_click_form_to_return,
@@ -84,14 +104,14 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     std::swap(*it, local_results[0]);
     // Clear the form pointer since its owner is being passed.
     zero_click_form_to_return = nullptr;
-    delegate_->client()->NotifyUserAutoSignin(local_results.Pass());
+    delegate_->client()->NotifyUserAutoSignin(std::move(local_results));
     delegate_->SendCredential(id_, info);
     return;
   }
 
   if (zero_click_only_ ||
       !delegate_->client()->PromptUserToChooseCredentials(
-          local_results.Pass(), federated_results.Pass(), origin_,
+          std::move(local_results), std::move(federated_results), origin_,
           base::Bind(
               &CredentialManagerPendingRequestTaskDelegate::SendCredential,
               base::Unretained(delegate_), id_))) {

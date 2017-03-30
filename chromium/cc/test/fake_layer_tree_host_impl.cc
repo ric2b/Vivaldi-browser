@@ -2,48 +2,55 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
+#include "cc/test/layer_tree_settings_for_testing.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/layer_tree_impl.h"
 
 namespace cc {
 
-FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(Proxy* proxy,
-                                             SharedBitmapManager* manager,
-                                             TaskGraphRunner* task_graph_runner)
-    : LayerTreeHostImpl(LayerTreeSettings(),
+FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
+    TaskRunnerProvider* task_runner_provider,
+    SharedBitmapManager* manager,
+    TaskGraphRunner* task_graph_runner)
+    : FakeLayerTreeHostImpl(LayerTreeSettingsForTesting(),
+                            task_runner_provider,
+                            manager,
+                            task_graph_runner,
+                            nullptr) {}
+
+FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
+    const LayerTreeSettings& settings,
+    TaskRunnerProvider* task_runner_provider,
+    SharedBitmapManager* manager,
+    TaskGraphRunner* task_graph_runner)
+    : FakeLayerTreeHostImpl(settings,
+                            task_runner_provider,
+                            manager,
+                            task_graph_runner,
+                            nullptr) {}
+
+FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
+    const LayerTreeSettings& settings,
+    TaskRunnerProvider* task_runner_provider,
+    SharedBitmapManager* manager,
+    TaskGraphRunner* task_graph_runner,
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
+    : LayerTreeHostImpl(settings,
                         &client_,
-                        proxy,
+                        task_runner_provider,
                         &stats_instrumentation_,
                         manager,
-                        NULL,
+                        gpu_memory_buffer_manager,
                         task_graph_runner,
-                        0) {
+                        0),
+      notify_tile_state_changed_called_(false) {
   // Explicitly clear all debug settings.
   SetDebugState(LayerTreeDebugState());
   SetViewportSize(gfx::Size(100, 100));
-
-  // Start an impl frame so tests have a valid frame_time to work with.
-  base::TimeTicks time_ticks = base::TimeTicks::FromInternalValue(1);
-  WillBeginImplFrame(
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, time_ticks));
-}
-
-FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(const LayerTreeSettings& settings,
-                                             Proxy* proxy,
-                                             SharedBitmapManager* manager,
-                                             TaskGraphRunner* task_graph_runner)
-    : LayerTreeHostImpl(settings,
-                        &client_,
-                        proxy,
-                        &stats_instrumentation_,
-                        manager,
-                        NULL,
-                        task_graph_runner,
-                        0) {
-  // Explicitly clear all debug settings.
-  SetDebugState(LayerTreeDebugState());
 
   // Start an impl frame so tests have a valid frame_time to work with.
   base::TimeTicks time_ticks = base::TimeTicks::FromInternalValue(1);
@@ -58,6 +65,11 @@ void FakeLayerTreeHostImpl::CreatePendingTree() {
   float arbitrary_large_page_scale = 100000.f;
   pending_tree()->PushPageScaleFromMainThread(
       1.f, 1.f / arbitrary_large_page_scale, arbitrary_large_page_scale);
+}
+
+void FakeLayerTreeHostImpl::NotifyTileStateChanged(const Tile* tile) {
+  LayerTreeHostImpl::NotifyTileStateChanged(tile);
+  notify_tile_state_changed_called_ = true;
 }
 
 BeginFrameArgs FakeLayerTreeHostImpl::CurrentBeginFrameArgs() const {
@@ -75,7 +87,7 @@ int FakeLayerTreeHostImpl::RecursiveUpdateNumChildren(LayerImpl* layer) {
   int num_children_that_draw_content = 0;
   for (size_t i = 0; i < layer->children().size(); ++i) {
     num_children_that_draw_content +=
-        RecursiveUpdateNumChildren(layer->children()[i]);
+        RecursiveUpdateNumChildren(layer->children()[i].get());
   }
   if (layer->DrawsContent() && layer->HasDelegatedContent())
     num_children_that_draw_content += 1000;
@@ -91,6 +103,7 @@ void FakeLayerTreeHostImpl::UpdateNumChildrenAndDrawProperties(
     LayerTreeImpl* layerTree) {
   RecursiveUpdateNumChildren(layerTree->root_layer());
   bool update_lcd_text = false;
+  layerTree->BuildPropertyTreesForTesting();
   layerTree->UpdateDrawProperties(update_lcd_text);
 }
 

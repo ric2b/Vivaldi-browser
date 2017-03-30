@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -24,7 +28,7 @@ namespace {
 void OnUnblockOnProfileCreation(Profile* profile,
                                 Profile::CreateStatus status) {
   if (status == Profile::CREATE_STATUS_INITIALIZED)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 }  // namespace
@@ -83,8 +87,7 @@ IN_PROC_BROWSER_TEST_F(ProfileListDesktopBrowserTest, MAYBE_SignOut) {
   UserManager::Hide();
 }
 
-//tomas@vivaldi.com: disabled browser_tests (VB-7468)
-#if 1 || defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
 // This test doesn't make sense for Chrome OS since it has a different
 // multi-profiles menu in the system tray instead.
 #define MAYBE_SwitchToProfile DISABLED_SwitchToProfile
@@ -113,7 +116,7 @@ IN_PROC_BROWSER_TEST_F(ProfileListDesktopBrowserTest, MAYBE_SwitchToProfile) {
       FILE_PATH_LITERAL("New Profile 2"));
   profile_manager->CreateProfileAsync(path_profile2,
                                       base::Bind(&OnUnblockOnProfileCreation),
-                                      base::string16(), base::string16(),
+                                      base::string16(), std::string(),
                                       std::string());
 
   // Spin to allow profile creation to take place, loop is terminated

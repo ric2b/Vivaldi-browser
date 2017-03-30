@@ -15,7 +15,7 @@ if (is_android) {
 
 # Common configuration for targets in the media/midi directory.
 config("midi_config") {
-  if (use_alsa) {
+  if (use_alsa && use_udev) {
     defines = [
       "USE_ALSA",
       "USE_UDEV",
@@ -54,6 +54,10 @@ if (is_android) {
 
   generate_jni("midi_jni_headers") {
     sources = [
+      "java/src/org/chromium/media/midi/MidiDeviceAndroid.java",
+      "java/src/org/chromium/media/midi/MidiInputPortAndroid.java",
+      "java/src/org/chromium/media/midi/MidiManagerAndroid.java",
+      "java/src/org/chromium/media/midi/MidiOutputPortAndroid.java",
       "java/src/org/chromium/media/midi/UsbMidiDeviceAndroid.java",
       "java/src/org/chromium/media/midi/UsbMidiDeviceFactoryAndroid.java",
     ]
@@ -78,6 +82,8 @@ component("midi") {
     "midi_port_info.h",
     "midi_scheduler.cc",
     "midi_scheduler.h",
+    "midi_switches.cc",
+    "midi_switches.h",
   ]
 
   configs += [ ":midi_config" ]
@@ -89,10 +95,18 @@ component("midi") {
   libs = []
 
   if (is_android) {
+    # TODO(yhirano): Consider having "android" subdirectory.
     sources += [
+                 "midi_device_android.cc",
+                 "midi_device_android.h",
                  "midi_jni_registrar.cc",
                  "midi_jni_registrar.h",
+                 "midi_input_port_android.cc",
+                 "midi_input_port_android.h",
                  "midi_manager_android.cc",
+                 "midi_manager_android.h",
+                 "midi_output_port_android.cc",
+                 "midi_output_port_android.h",
                  "usb_midi_device_android.cc",
                  "usb_midi_device_android.h",
                  "usb_midi_device_factory_android.cc",
@@ -103,8 +117,8 @@ component("midi") {
     defines += [ "EXPORT_USB_MIDI" ]
 
     deps += [
-      "//base:i18n",
       ":midi_jni_headers",
+      "//base:i18n",
     ]
   }
 
@@ -136,6 +150,15 @@ component("midi") {
   }
 }
 
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("midi_unittests_run") {
+  testonly = true
+  deps = [
+    ":midi_unittests",
+  ]
+}
+
 test("midi_unittests") {
   sources = [
     "midi_manager_unittest.cc",
@@ -156,6 +179,7 @@ test("midi_unittests") {
   ]
 
   if (is_android) {
+    deps += [ ":midi_java" ]
     isolate_file = "midi_unittests.isolate"
   }
 

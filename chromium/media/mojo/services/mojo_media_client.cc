@@ -6,57 +6,29 @@
 
 namespace media {
 
-namespace internal {
-extern scoped_ptr<PlatformMojoMediaClient> CreatePlatformMojoMediaClient();
-}  // namespace internal
+MojoMediaClient::MojoMediaClient() {}
 
-static base::LazyInstance<MojoMediaClient>::Leaky g_mojo_media_client =
-    LAZY_INSTANCE_INITIALIZER;
+MojoMediaClient::~MojoMediaClient() {}
 
-// static
-MojoMediaClient* MojoMediaClient::Get() {
-  return g_mojo_media_client.Pointer();
-}
+void MojoMediaClient::Initialize() {}
 
 scoped_ptr<RendererFactory> MojoMediaClient::CreateRendererFactory(
     const scoped_refptr<MediaLog>& media_log) {
-  return mojo_media_client_->CreateRendererFactory(media_log);
+  return nullptr;
 }
 
-ScopedVector<AudioDecoder> MojoMediaClient::CreateAudioDecoders(
-    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-    const scoped_refptr<MediaLog>& media_log) {
-  return mojo_media_client_->CreateAudioDecoders(media_task_runner, media_log);
+AudioRendererSink* MojoMediaClient::CreateAudioRendererSink() {
+  return nullptr;
 }
 
-ScopedVector<VideoDecoder> MojoMediaClient::CreateVideoDecoders(
-    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-    const scoped_refptr<MediaLog>& media_log) {
-  return mojo_media_client_->CreateVideoDecoders(media_task_runner, media_log);
-}
-
-scoped_refptr<AudioRendererSink> MojoMediaClient::CreateAudioRendererSink() {
-  return mojo_media_client_->CreateAudioRendererSink();
-}
-
-scoped_ptr<VideoRendererSink> MojoMediaClient::CreateVideoRendererSink(
+VideoRendererSink* MojoMediaClient::CreateVideoRendererSink(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
-  return mojo_media_client_->CreateVideoRendererSink(task_runner);
+  return nullptr;
 }
 
-const AudioHardwareConfig& MojoMediaClient::GetAudioHardwareConfig() {
-  return mojo_media_client_->GetAudioHardwareConfig();
-}
-
-scoped_ptr<CdmFactory> MojoMediaClient::CreateCdmFactory() {
-  return mojo_media_client_->CreateCdmFactory();
-}
-
-MojoMediaClient::MojoMediaClient()
-    : mojo_media_client_(internal::CreatePlatformMojoMediaClient().Pass()) {
-}
-
-MojoMediaClient::~MojoMediaClient() {
+scoped_ptr<CdmFactory> MojoMediaClient::CreateCdmFactory(
+    mojo::ServiceProvider* service_provider) {
+  return nullptr;
 }
 
 }  // namespace media

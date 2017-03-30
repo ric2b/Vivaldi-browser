@@ -7,41 +7,36 @@
 ; *** The contents of content/common/common.sb are implicitly included here. ***
 
 ; Needed for Fonts.
-(allow file-read* (regex #"^/System/Library/Fonts($|/)"))  ; 10.5.6
-; 10.6 for loading fonts in the renderer.
-; on 10.5 this is needed for the PDF plugin.
+(allow file-read* (regex #"^/System/Library/Fonts($|/)"))
 (allow file-read* (regex #"^/Library/Fonts($|/)"))
-(allow mach-lookup (global-name "com.apple.FontObjectsServer"))  ; 10.5.6
-(allow mach-lookup (global-name "com.apple.FontServer"))  ; 10.6
+(allow mach-lookup (global-name "com.apple.FontObjectsServer"))
+(allow mach-lookup (global-name "com.apple.FontServer"))
 
 (allow file-read*
-  (regex #"^/System/Library/ColorSync($|/)")  ; 10.5.6 - http://crbug.com/46648
-  (regex #"^/System/Library/Keyboard Layouts($|/)")  ; http://crbug.com/152566
-  (literal "/Library/Preferences/.GlobalPreferences.plist") ; http://crbug.com/60917
-  (literal "@USER_HOMEDIR_AS_LITERAL@/Library/Preferences/.GlobalPreferences.plist")
-)
+  (regex #"^/System/Library/ColorSync($|/)")  ; https://crbug.com/46648
+  (regex #"^/System/Library/Keyboard Layouts($|/)")  ; https://crbug.com/152566
+  (literal "/Library/Preferences/.GlobalPreferences.plist") ; https://crbug.com/60917
+  (literal (user-homedir-path "/Library/Preferences/.GlobalPreferences.plist")))
 
-; http://crbug.com/11269
-(allow file-read* (subpath "@USER_HOMEDIR_AS_LITERAL@/Library/Fonts"))  ; 10.6
+; https://crbug.com/11269
+(allow file-read* (subpath (user-homedir-path "/Library/Fonts")))
 
-; http://crbug.com/60917
+; https://crbug.com/60917
 (allow file-read-metadata
   (literal "/")
-  (literal "/var")
-)
+  (literal "/var"))
 
-; http://crbug.com/288697
+; https://crbug.com/288697
 (allow file-read*
   (regex #"^/(private/)?etc/localtime$")
-  (regex #"^/usr/share/zoneinfo/")
-)
-(allow file-read-metadata
-  (regex #"^/(private/)?etc$")
-)
+  (regex #"^/usr/share/zoneinfo/"))
 
-; Need on 10.11 for http://crbug.com/508935
-;10.11_OR_ABOVE  (allow file-read*
-;10.11_OR_ABOVE    (literal "/usr/lib/libcsfde.dylib")
-;10.11_OR_ABOVE    (literal "/usr/lib/libcurl.4.dylib")
-;10.11_OR_ABOVE    (literal "/usr/lib/libCoreStorage.dylib")
-;10.11_OR_ABOVE    (literal "/usr/lib/libutil.dylib"))
+(allow file-read-metadata (regex #"^/(private/)?etc$"))
+
+; https://crbug.com/508935
+(if (param-true? elcap-or-later)
+  (allow file-read*
+    (literal "/usr/lib/libcsfde.dylib")
+    (literal "/usr/lib/libcurl.4.dylib")
+    (literal "/usr/lib/libCoreStorage.dylib")
+    (literal "/usr/lib/libutil.dylib")))

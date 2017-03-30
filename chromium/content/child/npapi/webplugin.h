@@ -5,10 +5,12 @@
 #ifndef CONTENT_CHILD_NPAPI_WEBPLUGIN_H_
 #define CONTENT_CHILD_NPAPI_WEBPLUGIN_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "build/build_config.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gpu_preference.h"
@@ -70,25 +72,8 @@ class WebPlugin {
   virtual std::string GetCookies(const GURL& url,
                                  const GURL& first_party_for_cookies) = 0;
 
-  // Handles GetURL/GetURLNotify/PostURL/PostURLNotify requests initiated
-  // by plugins.  If the plugin wants notification of the result, notify_id will
-  // be non-zero.
-  virtual void HandleURLRequest(const char* url,
-                                const char* method,
-                                const char* target,
-                                const char* buf,
-                                unsigned int len,
-                                int notify_id,
-                                bool popups_allowed,
-                                bool notify_redirects) = 0;
-
   // Cancels document load.
   virtual void CancelDocumentLoad() = 0;
-
-  // Initiates a HTTP range request for an existing stream.
-  virtual void InitiateHTTPRangeRequest(const char* url,
-                                        const char* range_info,
-                                        int range_request_id) = 0;
 
   virtual void DidStartLoading() = 0;
   virtual void DidStopLoading() = 0;
@@ -136,9 +121,9 @@ class WebPlugin {
   // Core Animation plugin support. CA plugins always render through
   // the compositor.
   virtual void AcceleratedPluginEnabledRendering() = 0;
-  virtual void AcceleratedPluginAllocatedIOSurface(int32 width,
-                                                   int32 height,
-                                                   uint32 surface_id) = 0;
+  virtual void AcceleratedPluginAllocatedIOSurface(int32_t width,
+                                                   int32_t height,
+                                                   uint32_t surface_id) = 0;
   virtual void AcceleratedPluginSwappedIOSurface() = 0;
 #endif
 };

@@ -24,7 +24,7 @@ class ChromiumProfileImporter
  public:
    ChromiumProfileImporter();
    ~ChromiumProfileImporter();
-   void DetectChromiumProfiles(std::vector<importer::SourceProfile*>* profiles);
+   void DetectChromiumProfiles(std::vector<importer::SourceProfile>* profiles);
 
  private:
    ChromiumProfile GetChromeProfile(importer::ImporterType importerType);

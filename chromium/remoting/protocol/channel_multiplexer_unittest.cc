@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/channel_multiplexer.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -12,7 +14,7 @@
 #include "net/socket/stream_socket.h"
 #include "remoting/base/constants.h"
 #include "remoting/protocol/connection_tester.h"
-#include "remoting/protocol/fake_session.h"
+#include "remoting/protocol/fake_stream_socket.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -34,8 +36,8 @@ const char kTestChannelName2[] = "test2";
 
 
 void QuitCurrentThread() {
-  base::MessageLoop::current()->PostTask(FROM_HERE,
-                                         base::MessageLoop::QuitClosure());
+  base::MessageLoop::current()->PostTask(
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
 class MockSocketCallback {
@@ -45,8 +47,8 @@ class MockSocketCallback {
 
 class MockConnectCallback {
  public:
-  MOCK_METHOD1(OnConnectedPtr, void(net::StreamSocket* socket));
-  void OnConnected(scoped_ptr<net::StreamSocket> socket) {
+  MOCK_METHOD1(OnConnectedPtr, void(P2PStreamSocket* socket));
+  void OnConnected(scoped_ptr<P2PStreamSocket> socket) {
     OnConnectedPtr(socket.release());
   }
 };
@@ -71,31 +73,21 @@ class ChannelMultiplexerTest : public testing::Test {
 
  protected:
   void SetUp() override {
+    host_channel_factory_.PairWith(&client_channel_factory_);
+
     // Create pair of multiplexers and connect them to each other.
-    host_mux_.reset(new ChannelMultiplexer(
-        host_session_.GetTransportChannelFactory(), kMuxChannelName));
-    client_mux_.reset(new ChannelMultiplexer(
-        client_session_.GetTransportChannelFactory(), kMuxChannelName));
-  }
+    host_mux_.reset(
+        new ChannelMultiplexer(&host_channel_factory_, kMuxChannelName));
+    client_mux_.reset(
+        new ChannelMultiplexer(&client_channel_factory_, kMuxChannelName));
 
-  // Connect sockets to each other. Must be called after we've created at least
-  // one channel with each multiplexer.
-  void ConnectSockets() {
-    FakeStreamSocket* host_socket =
-        host_session_.fake_channel_factory().GetFakeChannel(
-            ChannelMultiplexer::kMuxChannelName);
-    FakeStreamSocket* client_socket =
-        client_session_.fake_channel_factory().GetFakeChannel(
-            ChannelMultiplexer::kMuxChannelName);
-    host_socket->PairWith(client_socket);
-
-    // Make writes asynchronous in one direction.
-    host_socket->set_async_write(true);
+    // Make writes asynchronous in one direction
+    host_channel_factory_.set_async_write(true);
   }
 
   void CreateChannel(const std::string& name,
-                     scoped_ptr<net::StreamSocket>* host_socket,
-                     scoped_ptr<net::StreamSocket>* client_socket) {
+                     scoped_ptr<P2PStreamSocket>* host_socket,
+                     scoped_ptr<P2PStreamSocket>* client_socket) {
     int counter = 2;
     host_mux_->CreateChannel(name, base::Bind(
         &ChannelMultiplexerTest::OnChannelConnected, base::Unretained(this),
@@ -111,10 +103,10 @@ class ChannelMultiplexerTest : public testing::Test {
   }
 
   void OnChannelConnected(
-      scoped_ptr<net::StreamSocket>* storage,
+      scoped_ptr<P2PStreamSocket>* storage,
       int* counter,
-      scoped_ptr<net::StreamSocket> socket) {
-    *storage = socket.Pass();
+      scoped_ptr<P2PStreamSocket> socket) {
+    *storage = std::move(socket);
     --(*counter);
     EXPECT_GE(*counter, 0);
     if (*counter == 0)
@@ -132,26 +124,24 @@ class ChannelMultiplexerTest : public testing::Test {
 
   base::MessageLoop message_loop_;
 
-  FakeSession host_session_;
-  FakeSession client_session_;
+  FakeStreamChannelFactory host_channel_factory_;
+  FakeStreamChannelFactory client_channel_factory_;
 
   scoped_ptr<ChannelMultiplexer> host_mux_;
   scoped_ptr<ChannelMultiplexer> client_mux_;
 
-  scoped_ptr<net::StreamSocket> host_socket1_;
-  scoped_ptr<net::StreamSocket> client_socket1_;
-  scoped_ptr<net::StreamSocket> host_socket2_;
-  scoped_ptr<net::StreamSocket> client_socket2_;
+  scoped_ptr<P2PStreamSocket> host_socket1_;
+  scoped_ptr<P2PStreamSocket> client_socket1_;
+  scoped_ptr<P2PStreamSocket> host_socket2_;
+  scoped_ptr<P2PStreamSocket> client_socket2_;
 };
 
 
 TEST_F(ChannelMultiplexerTest, OneChannel) {
-  scoped_ptr<net::StreamSocket> host_socket;
-  scoped_ptr<net::StreamSocket> client_socket;
+  scoped_ptr<P2PStreamSocket> host_socket;
+  scoped_ptr<P2PStreamSocket> client_socket;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName, &host_socket, &client_socket));
-
-  ConnectSockets();
 
   StreamConnectionTester tester(host_socket.get(), client_socket.get(),
                                 kMessageSize, kMessages);
@@ -161,17 +151,15 @@ TEST_F(ChannelMultiplexerTest, OneChannel) {
 }
 
 TEST_F(ChannelMultiplexerTest, TwoChannels) {
-  scoped_ptr<net::StreamSocket> host_socket1_;
-  scoped_ptr<net::StreamSocket> client_socket1_;
+  scoped_ptr<P2PStreamSocket> host_socket1_;
+  scoped_ptr<P2PStreamSocket> client_socket1_;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName, &host_socket1_, &client_socket1_));
 
-  scoped_ptr<net::StreamSocket> host_socket2_;
-  scoped_ptr<net::StreamSocket> client_socket2_;
+  scoped_ptr<P2PStreamSocket> host_socket2_;
+  scoped_ptr<P2PStreamSocket> client_socket2_;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName2, &host_socket2_, &client_socket2_));
-
-  ConnectSockets();
 
   StreamConnectionTester tester1(host_socket1_.get(), client_socket1_.get(),
                                 kMessageSize, kMessages);
@@ -188,27 +176,25 @@ TEST_F(ChannelMultiplexerTest, TwoChannels) {
 
 // Four channels, two in each direction
 TEST_F(ChannelMultiplexerTest, FourChannels) {
-  scoped_ptr<net::StreamSocket> host_socket1_;
-  scoped_ptr<net::StreamSocket> client_socket1_;
+  scoped_ptr<P2PStreamSocket> host_socket1_;
+  scoped_ptr<P2PStreamSocket> client_socket1_;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName, &host_socket1_, &client_socket1_));
 
-  scoped_ptr<net::StreamSocket> host_socket2_;
-  scoped_ptr<net::StreamSocket> client_socket2_;
+  scoped_ptr<P2PStreamSocket> host_socket2_;
+  scoped_ptr<P2PStreamSocket> client_socket2_;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName2, &host_socket2_, &client_socket2_));
 
-  scoped_ptr<net::StreamSocket> host_socket3;
-  scoped_ptr<net::StreamSocket> client_socket3;
+  scoped_ptr<P2PStreamSocket> host_socket3;
+  scoped_ptr<P2PStreamSocket> client_socket3;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel("test3", &host_socket3, &client_socket3));
 
-  scoped_ptr<net::StreamSocket> host_socket4;
-  scoped_ptr<net::StreamSocket> client_socket4;
+  scoped_ptr<P2PStreamSocket> host_socket4;
+  scoped_ptr<P2PStreamSocket> client_socket4;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel("ch4", &host_socket4, &client_socket4));
-
-  ConnectSockets();
 
   StreamConnectionTester tester1(host_socket1_.get(), client_socket1_.get(),
                                 kMessageSize, kMessages);
@@ -233,39 +219,34 @@ TEST_F(ChannelMultiplexerTest, FourChannels) {
 }
 
 TEST_F(ChannelMultiplexerTest, WriteFailSync) {
-  scoped_ptr<net::StreamSocket> host_socket1_;
-  scoped_ptr<net::StreamSocket> client_socket1_;
+  scoped_ptr<P2PStreamSocket> host_socket1_;
+  scoped_ptr<P2PStreamSocket> client_socket1_;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName, &host_socket1_, &client_socket1_));
 
-  scoped_ptr<net::StreamSocket> host_socket2_;
-  scoped_ptr<net::StreamSocket> client_socket2_;
+  scoped_ptr<P2PStreamSocket> host_socket2_;
+  scoped_ptr<P2PStreamSocket> client_socket2_;
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName2, &host_socket2_, &client_socket2_));
 
-  ConnectSockets();
-
-  host_session_.fake_channel_factory().GetFakeChannel(kMuxChannelName)->
-      set_next_write_error(net::ERR_FAILED);
-  host_session_.fake_channel_factory().GetFakeChannel(kMuxChannelName)->
-      set_async_write(false);
+  FakeStreamSocket* socket =
+      host_channel_factory_.GetFakeChannel(kMuxChannelName);
+  socket->set_next_write_error(net::ERR_FAILED);
+  socket->set_async_write(false);
 
   scoped_refptr<net::IOBufferWithSize> buf = CreateTestBuffer(100);
 
   MockSocketCallback cb1;
   MockSocketCallback cb2;
+  EXPECT_CALL(cb1, OnDone(net::ERR_FAILED));
+  EXPECT_CALL(cb2, OnDone(net::ERR_FAILED));
 
-  EXPECT_CALL(cb1, OnDone(_))
-      .Times(0);
-  EXPECT_CALL(cb2, OnDone(_))
-      .Times(0);
-
-  EXPECT_EQ(net::ERR_FAILED,
+  EXPECT_EQ(net::ERR_IO_PENDING,
             host_socket1_->Write(buf.get(),
                                  buf->size(),
                                  base::Bind(&MockSocketCallback::OnDone,
                                             base::Unretained(&cb1))));
-  EXPECT_EQ(net::ERR_FAILED,
+  EXPECT_EQ(net::ERR_IO_PENDING,
             host_socket2_->Write(buf.get(),
                                  buf->size(),
                                  base::Bind(&MockSocketCallback::OnDone,
@@ -281,12 +262,10 @@ TEST_F(ChannelMultiplexerTest, WriteFailAsync) {
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName2, &host_socket2_, &client_socket2_));
 
-  ConnectSockets();
-
-  host_session_.fake_channel_factory().GetFakeChannel(kMuxChannelName)->
-      set_next_write_error(net::ERR_FAILED);
-  host_session_.fake_channel_factory().GetFakeChannel(kMuxChannelName)->
-      set_async_write(true);
+  FakeStreamSocket* socket =
+      host_channel_factory_.GetFakeChannel(kMuxChannelName);
+  socket->set_next_write_error(net::ERR_FAILED);
+  socket->set_async_write(true);
 
   scoped_refptr<net::IOBufferWithSize> buf = CreateTestBuffer(100);
 
@@ -315,12 +294,10 @@ TEST_F(ChannelMultiplexerTest, DeleteWhenFailed) {
   ASSERT_NO_FATAL_FAILURE(
       CreateChannel(kTestChannelName2, &host_socket2_, &client_socket2_));
 
-  ConnectSockets();
-
-  host_session_.fake_channel_factory().GetFakeChannel(kMuxChannelName)->
-      set_next_write_error(net::ERR_FAILED);
-  host_session_.fake_channel_factory().GetFakeChannel(kMuxChannelName)->
-      set_async_write(true);
+  FakeStreamSocket* socket =
+      host_channel_factory_.GetFakeChannel(kMuxChannelName);
+  socket->set_next_write_error(net::ERR_FAILED);
+  socket->set_async_write(true);
 
   scoped_refptr<net::IOBufferWithSize> buf = CreateTestBuffer(100);
 
@@ -352,8 +329,8 @@ TEST_F(ChannelMultiplexerTest, DeleteWhenFailed) {
 }
 
 TEST_F(ChannelMultiplexerTest, SessionFail) {
-  host_session_.fake_channel_factory().set_asynchronous_create(true);
-  host_session_.fake_channel_factory().set_fail_create(true);
+  host_channel_factory_.set_asynchronous_create(true);
+  host_channel_factory_.set_fail_create(true);
 
   MockConnectCallback cb1;
   MockConnectCallback cb2;

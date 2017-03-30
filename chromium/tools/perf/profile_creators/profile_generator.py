@@ -15,15 +15,16 @@ import tempfile
 from profile_creators import profile_extender
 from telemetry.core import discover
 from telemetry.core import util
+from telemetry.internal import story_runner
 from telemetry.internal.browser import browser_finder
 from telemetry.internal.browser import browser_options
-from telemetry.internal import story_runner
+from telemetry.internal.util import binary_manager
 
 
 def _DiscoverProfileExtenderClasses():
   profile_extenders_dir = os.path.abspath(os.path.join(util.GetBaseDir(),
-      os.pardir, 'perf', 'profile_creators'))
-  base_dir = os.path.abspath(os.path.join(profile_extenders_dir, os.pardir))
+      '..', 'perf', 'profile_creators'))
+  base_dir = os.path.abspath(os.path.join(profile_extenders_dir, '..'))
 
   profile_extenders_unfiltered = discover.DiscoverClasses(
       profile_extenders_dir, base_dir, profile_extender.ProfileExtender)
@@ -85,25 +86,36 @@ class ProfileGenerator(object):
       options: Instance of BrowserFinderOptions to search for proper browser.
 
     Returns:
-      The path of generated profile or existing profile if --profile-dir
-      is given. Could be None if it's generated on default location
-      (e.g., crytohome on CrOS).
+      A 2-tuple (path, new_profile).
+
+      path: The path of the generated profile or existing profile if
+      --profile-dir is given. Could be None if it's generated on default
+      location (e.g., cryptohome on CrOS).
+
+      new_profile: Whether a new profile has been generated. If this is True,
+      the caller is responsible for deleting the profile.
     """
     possible_browser = browser_finder.FindBrowser(options)
-    is_cros = possible_browser.browser_type.startswith('cros')
 
-    out_dir = None
-    if is_cros:
+    if possible_browser.browser_type.startswith('cros'):
       self.Create(options, None)
-    else:
-      # Decide profile output path.
-      out_dir = (options.browser_options.profile_dir or
-          os.path.abspath(os.path.join(
-              tempfile.gettempdir(), self._profile_name, self._profile_name)))
-      if not os.path.exists(out_dir):
-        self.Create(options, out_dir)
+      return (None, False)
 
-    return out_dir
+    # Use the given --profile-dir.
+    if options.browser_options.profile_dir:
+      return (options.browser_options.profile_dir, False)
+
+    out_dir = os.path.abspath(os.path.join(
+        tempfile.gettempdir(), self._profile_name, self._profile_name))
+
+    # Never reuse a generated profile, since it might be for a different version
+    # of Chrome.
+    if os.path.exists(out_dir):
+      assert os.path.isdir(out_dir)
+      shutil.rmtree(out_dir)
+
+    self.Create(options, out_dir)
+    return (out_dir, True)
 
   def Create(self, options, out_dir):
     """Generate profile.
@@ -184,6 +196,7 @@ def ProcessCommandLineArgs(parser, args):
 
 
 def Main():
+  binary_manager.InitDependencyManager(None)
   options = browser_options.BrowserFinderOptions()
   parser = options.CreateParser(
       "%%prog <--profile-type-to-generate=...> <--browser=...> <--output-dir>")

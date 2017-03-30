@@ -5,18 +5,19 @@
 #include "components/nacl/zygote/nacl_fork_delegate_linux.h"
 
 #include <signal.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/path_service.h"
@@ -113,7 +114,7 @@ bool SendIPCRequestAndReadReply(int ipc_channel,
   }
 
   // Then read the remote reply.
-  ScopedVector<base::ScopedFD> received_fds;
+  std::vector<base::ScopedFD> received_fds;
   const ssize_t msg_len =
       base::UnixDomainSocket::RecvMsg(ipc_channel, reply_data_buffer,
                                       reply_data_buffer_size, &received_fds);
@@ -447,8 +448,9 @@ void NaClForkDelegate::AddPassthroughEnvToOptions(
   std::string pass_through_string;
   std::vector<std::string> pass_through_vars;
   if (env->GetVar(kNaClEnvPassthrough, &pass_through_string)) {
-    base::SplitString(
-        pass_through_string, kNaClEnvPassthroughDelimiter, &pass_through_vars);
+    pass_through_vars = base::SplitString(
+        pass_through_string, std::string(1, kNaClEnvPassthroughDelimiter),
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   }
   pass_through_vars.push_back(kNaClExeStderr);
   pass_through_vars.push_back(kNaClExeStdout);

@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/bookmark_app_helper.h"
@@ -19,7 +21,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/app_sorting.h"
-#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
@@ -334,14 +335,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientAppsSyncTest, UpdateCWSOrdinals) {
 
   // Change the app launch ordinal.
   syncer::StringOrdinal cws_app_launch_ordinal =
-      extensions::ExtensionPrefs::Get(GetProfile(0))
+      extensions::ExtensionSystem::Get(GetProfile(0))
           ->app_sorting()
           ->GetAppLaunchOrdinal(extensions::kWebStoreAppId);
-  extensions::ExtensionPrefs::Get(GetProfile(0))
+  extensions::ExtensionSystem::Get(GetProfile(0))
       ->app_sorting()
       ->SetAppLaunchOrdinal(extensions::kWebStoreAppId,
                             cws_app_launch_ordinal.CreateAfter());
-  extensions::ExtensionPrefs::Get(verifier())
+  extensions::ExtensionSystem::Get(verifier())
       ->app_sorting()
       ->SetAppLaunchOrdinal(extensions::kWebStoreAppId,
                             cws_app_launch_ordinal.CreateAfter());
@@ -349,13 +350,17 @@ IN_PROC_BROWSER_TEST_F(TwoClientAppsSyncTest, UpdateCWSOrdinals) {
 
   // Change the page ordinal.
   syncer::StringOrdinal cws_page_ordinal =
-      extensions::ExtensionPrefs::Get(GetProfile(1))
+      extensions::ExtensionSystem::Get(GetProfile(1))
           ->app_sorting()
           ->GetPageOrdinal(extensions::kWebStoreAppId);
-  extensions::ExtensionPrefs::Get(GetProfile(1))->app_sorting()->SetPageOrdinal(
-      extensions::kWebStoreAppId, cws_page_ordinal.CreateAfter());
-  extensions::ExtensionPrefs::Get(verifier())->app_sorting()->SetPageOrdinal(
-      extensions::kWebStoreAppId, cws_page_ordinal.CreateAfter());
+  extensions::ExtensionSystem::Get(GetProfile(1))
+      ->app_sorting()
+      ->SetPageOrdinal(extensions::kWebStoreAppId,
+                       cws_page_ordinal.CreateAfter());
+  extensions::ExtensionSystem::Get(verifier())
+      ->app_sorting()
+      ->SetPageOrdinal(extensions::kWebStoreAppId,
+                       cws_page_ordinal.CreateAfter());
   ASSERT_TRUE(AwaitAllProfilesHaveSameApps());
 }
 

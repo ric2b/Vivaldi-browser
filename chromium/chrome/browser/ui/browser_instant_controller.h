@@ -5,16 +5,13 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_INSTANT_CONTROLLER_H_
 #define CHROME_BROWSER_UI_BROWSER_INSTANT_CONTROLLER_H_
 
-#include <string>
-
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/ui/search/instant_controller.h"
 #include "chrome/browser/ui/search/search_model_observer.h"
 
 class Browser;
-struct InstantSuggestion;
 class Profile;
 
 namespace content {

@@ -140,14 +140,12 @@ void DriverGLX::InitializeExtensionBindings() {
   if (ext.b_GLX_EXT_texture_from_pixmap) {
     fn.glXBindTexImageEXTFn = reinterpret_cast<glXBindTexImageEXTProc>(
         GetGLProcAddress("glXBindTexImageEXT"));
-    DCHECK(fn.glXBindTexImageEXTFn);
   }
 
   debug_fn.glXCopySubBufferMESAFn = 0;
   if (ext.b_GLX_MESA_copy_sub_buffer) {
     fn.glXCopySubBufferMESAFn = reinterpret_cast<glXCopySubBufferMESAProc>(
         GetGLProcAddress("glXCopySubBufferMESA"));
-    DCHECK(fn.glXCopySubBufferMESAFn);
   }
 
   debug_fn.glXCreateContextAttribsARBFn = 0;
@@ -155,7 +153,6 @@ void DriverGLX::InitializeExtensionBindings() {
     fn.glXCreateContextAttribsARBFn =
         reinterpret_cast<glXCreateContextAttribsARBProc>(
             GetGLProcAddress("glXCreateContextAttribsARB"));
-    DCHECK(fn.glXCreateContextAttribsARBFn);
   }
 
   debug_fn.glXGetFBConfigFromVisualSGIXFn = 0;
@@ -163,49 +160,42 @@ void DriverGLX::InitializeExtensionBindings() {
     fn.glXGetFBConfigFromVisualSGIXFn =
         reinterpret_cast<glXGetFBConfigFromVisualSGIXProc>(
             GetGLProcAddress("glXGetFBConfigFromVisualSGIX"));
-    DCHECK(fn.glXGetFBConfigFromVisualSGIXFn);
   }
 
   debug_fn.glXGetMscRateOMLFn = 0;
   if (ext.b_GLX_OML_sync_control) {
     fn.glXGetMscRateOMLFn = reinterpret_cast<glXGetMscRateOMLProc>(
         GetGLProcAddress("glXGetMscRateOML"));
-    DCHECK(fn.glXGetMscRateOMLFn);
   }
 
   debug_fn.glXGetSyncValuesOMLFn = 0;
   if (ext.b_GLX_OML_sync_control) {
     fn.glXGetSyncValuesOMLFn = reinterpret_cast<glXGetSyncValuesOMLProc>(
         GetGLProcAddress("glXGetSyncValuesOML"));
-    DCHECK(fn.glXGetSyncValuesOMLFn);
   }
 
   debug_fn.glXReleaseTexImageEXTFn = 0;
   if (ext.b_GLX_EXT_texture_from_pixmap) {
     fn.glXReleaseTexImageEXTFn = reinterpret_cast<glXReleaseTexImageEXTProc>(
         GetGLProcAddress("glXReleaseTexImageEXT"));
-    DCHECK(fn.glXReleaseTexImageEXTFn);
   }
 
   debug_fn.glXSwapIntervalEXTFn = 0;
   if (ext.b_GLX_EXT_swap_control) {
     fn.glXSwapIntervalEXTFn = reinterpret_cast<glXSwapIntervalEXTProc>(
         GetGLProcAddress("glXSwapIntervalEXT"));
-    DCHECK(fn.glXSwapIntervalEXTFn);
   }
 
   debug_fn.glXSwapIntervalMESAFn = 0;
   if (ext.b_GLX_MESA_swap_control) {
     fn.glXSwapIntervalMESAFn = reinterpret_cast<glXSwapIntervalMESAProc>(
         GetGLProcAddress("glXSwapIntervalMESA"));
-    DCHECK(fn.glXSwapIntervalMESAFn);
   }
 
   debug_fn.glXWaitVideoSyncSGIFn = 0;
   if (ext.b_GLX_SGI_video_sync) {
     fn.glXWaitVideoSyncSGIFn = reinterpret_cast<glXWaitVideoSyncSGIProc>(
         GetGLProcAddress("glXWaitVideoSyncSGI"));
-    DCHECK(fn.glXWaitVideoSyncSGIFn);
   }
 
   if (g_debugBindingsInitialized)
@@ -240,8 +230,9 @@ Debug_glXChooseFBConfig(Display* dpy,
   return result;
 }
 
-static XVisualInfo* GL_BINDING_CALL
-Debug_glXChooseVisual(Display* dpy, int screen, int* attribList) {
+static XVisualInfo* GL_BINDING_CALL Debug_glXChooseVisual(Display* dpy,
+                                                          int screen,
+                                                          int* attribList) {
   GL_SERVICE_LOG("glXChooseVisual"
                  << "(" << static_cast<const void*>(dpy) << ", " << screen
                  << ", " << static_cast<const void*>(attribList) << ")");
@@ -305,8 +296,9 @@ Debug_glXCreateContextAttribsARB(Display* dpy,
   return result;
 }
 
-static GLXPixmap GL_BINDING_CALL
-Debug_glXCreateGLXPixmap(Display* dpy, XVisualInfo* visual, Pixmap pixmap) {
+static GLXPixmap GL_BINDING_CALL Debug_glXCreateGLXPixmap(Display* dpy,
+                                                          XVisualInfo* visual,
+                                                          Pixmap pixmap) {
   GL_SERVICE_LOG("glXCreateGLXPixmap"
                  << "(" << static_cast<const void*>(dpy) << ", "
                  << static_cast<const void*>(visual) << ", " << pixmap << ")");
@@ -373,47 +365,47 @@ static GLXWindow GL_BINDING_CALL Debug_glXCreateWindow(Display* dpy,
   return result;
 }
 
-static void GL_BINDING_CALL
-Debug_glXDestroyContext(Display* dpy, GLXContext ctx) {
+static void GL_BINDING_CALL Debug_glXDestroyContext(Display* dpy,
+                                                    GLXContext ctx) {
   GL_SERVICE_LOG("glXDestroyContext"
                  << "(" << static_cast<const void*>(dpy) << ", " << ctx << ")");
   g_driver_glx.debug_fn.glXDestroyContextFn(dpy, ctx);
 }
 
-static void GL_BINDING_CALL
-Debug_glXDestroyGLXPixmap(Display* dpy, GLXPixmap pixmap) {
+static void GL_BINDING_CALL Debug_glXDestroyGLXPixmap(Display* dpy,
+                                                      GLXPixmap pixmap) {
   GL_SERVICE_LOG("glXDestroyGLXPixmap"
                  << "(" << static_cast<const void*>(dpy) << ", " << pixmap
                  << ")");
   g_driver_glx.debug_fn.glXDestroyGLXPixmapFn(dpy, pixmap);
 }
 
-static void GL_BINDING_CALL
-Debug_glXDestroyPbuffer(Display* dpy, GLXPbuffer pbuf) {
+static void GL_BINDING_CALL Debug_glXDestroyPbuffer(Display* dpy,
+                                                    GLXPbuffer pbuf) {
   GL_SERVICE_LOG("glXDestroyPbuffer"
                  << "(" << static_cast<const void*>(dpy) << ", " << pbuf
                  << ")");
   g_driver_glx.debug_fn.glXDestroyPbufferFn(dpy, pbuf);
 }
 
-static void GL_BINDING_CALL
-Debug_glXDestroyPixmap(Display* dpy, GLXPixmap pixmap) {
+static void GL_BINDING_CALL Debug_glXDestroyPixmap(Display* dpy,
+                                                   GLXPixmap pixmap) {
   GL_SERVICE_LOG("glXDestroyPixmap"
                  << "(" << static_cast<const void*>(dpy) << ", " << pixmap
                  << ")");
   g_driver_glx.debug_fn.glXDestroyPixmapFn(dpy, pixmap);
 }
 
-static void GL_BINDING_CALL
-Debug_glXDestroyWindow(Display* dpy, GLXWindow window) {
+static void GL_BINDING_CALL Debug_glXDestroyWindow(Display* dpy,
+                                                   GLXWindow window) {
   GL_SERVICE_LOG("glXDestroyWindow"
                  << "(" << static_cast<const void*>(dpy) << ", " << window
                  << ")");
   g_driver_glx.debug_fn.glXDestroyWindowFn(dpy, window);
 }
 
-static const char* GL_BINDING_CALL
-Debug_glXGetClientString(Display* dpy, int name) {
+static const char* GL_BINDING_CALL Debug_glXGetClientString(Display* dpy,
+                                                            int name) {
   GL_SERVICE_LOG("glXGetClientString"
                  << "(" << static_cast<const void*>(dpy) << ", " << name
                  << ")");
@@ -422,8 +414,10 @@ Debug_glXGetClientString(Display* dpy, int name) {
   return result;
 }
 
-static int GL_BINDING_CALL
-Debug_glXGetConfig(Display* dpy, XVisualInfo* visual, int attrib, int* value) {
+static int GL_BINDING_CALL Debug_glXGetConfig(Display* dpy,
+                                              XVisualInfo* visual,
+                                              int attrib,
+                                              int* value) {
   GL_SERVICE_LOG("glXGetConfig"
                  << "(" << static_cast<const void*>(dpy) << ", "
                  << static_cast<const void*>(visual) << ", " << attrib << ", "
@@ -494,8 +488,9 @@ Debug_glXGetFBConfigFromVisualSGIX(Display* dpy, XVisualInfo* visualInfo) {
   return result;
 }
 
-static GLXFBConfig* GL_BINDING_CALL
-Debug_glXGetFBConfigs(Display* dpy, int screen, int* nelements) {
+static GLXFBConfig* GL_BINDING_CALL Debug_glXGetFBConfigs(Display* dpy,
+                                                          int screen,
+                                                          int* nelements) {
   GL_SERVICE_LOG("glXGetFBConfigs"
                  << "(" << static_cast<const void*>(dpy) << ", " << screen
                  << ", " << static_cast<const void*>(nelements) << ")");
@@ -507,8 +502,8 @@ Debug_glXGetFBConfigs(Display* dpy, int screen, int* nelements) {
 
 static bool GL_BINDING_CALL Debug_glXGetMscRateOML(Display* dpy,
                                                    GLXDrawable drawable,
-                                                   int32* numerator,
-                                                   int32* denominator) {
+                                                   int32_t* numerator,
+                                                   int32_t* denominator) {
   GL_SERVICE_LOG("glXGetMscRateOML"
                  << "(" << static_cast<const void*>(dpy) << ", " << drawable
                  << ", " << static_cast<const void*>(numerator) << ", "
@@ -530,9 +525,9 @@ static void GL_BINDING_CALL Debug_glXGetSelectedEvent(Display* dpy,
 
 static bool GL_BINDING_CALL Debug_glXGetSyncValuesOML(Display* dpy,
                                                       GLXDrawable drawable,
-                                                      int64* ust,
-                                                      int64* msc,
-                                                      int64* sbc) {
+                                                      int64_t* ust,
+                                                      int64_t* msc,
+                                                      int64_t* sbc) {
   GL_SERVICE_LOG("glXGetSyncValuesOML"
                  << "(" << static_cast<const void*>(dpy) << ", " << drawable
                  << ", " << static_cast<const void*>(ust) << ", "
@@ -576,8 +571,9 @@ static int GL_BINDING_CALL Debug_glXMakeContextCurrent(Display* dpy,
   return result;
 }
 
-static int GL_BINDING_CALL
-Debug_glXMakeCurrent(Display* dpy, GLXDrawable drawable, GLXContext ctx) {
+static int GL_BINDING_CALL Debug_glXMakeCurrent(Display* dpy,
+                                                GLXDrawable drawable,
+                                                GLXContext ctx) {
   GL_SERVICE_LOG("glXMakeCurrent"
                  << "(" << static_cast<const void*>(dpy) << ", " << drawable
                  << ", " << ctx << ")");
@@ -586,8 +582,10 @@ Debug_glXMakeCurrent(Display* dpy, GLXDrawable drawable, GLXContext ctx) {
   return result;
 }
 
-static int GL_BINDING_CALL
-Debug_glXQueryContext(Display* dpy, GLXContext ctx, int attribute, int* value) {
+static int GL_BINDING_CALL Debug_glXQueryContext(Display* dpy,
+                                                 GLXContext ctx,
+                                                 int attribute,
+                                                 int* value) {
   GL_SERVICE_LOG("glXQueryContext"
                  << "(" << static_cast<const void*>(dpy) << ", " << ctx << ", "
                  << attribute << ", " << static_cast<const void*>(value)
@@ -609,8 +607,9 @@ static void GL_BINDING_CALL Debug_glXQueryDrawable(Display* dpy,
   g_driver_glx.debug_fn.glXQueryDrawableFn(dpy, draw, attribute, value);
 }
 
-static int GL_BINDING_CALL
-Debug_glXQueryExtension(Display* dpy, int* errorb, int* event) {
+static int GL_BINDING_CALL Debug_glXQueryExtension(Display* dpy,
+                                                   int* errorb,
+                                                   int* event) {
   GL_SERVICE_LOG("glXQueryExtension"
                  << "(" << static_cast<const void*>(dpy) << ", "
                  << static_cast<const void*>(errorb) << ", "
@@ -620,8 +619,8 @@ Debug_glXQueryExtension(Display* dpy, int* errorb, int* event) {
   return result;
 }
 
-static const char* GL_BINDING_CALL
-Debug_glXQueryExtensionsString(Display* dpy, int screen) {
+static const char* GL_BINDING_CALL Debug_glXQueryExtensionsString(Display* dpy,
+                                                                  int screen) {
   GL_SERVICE_LOG("glXQueryExtensionsString"
                  << "(" << static_cast<const void*>(dpy) << ", " << screen
                  << ")");
@@ -631,8 +630,9 @@ Debug_glXQueryExtensionsString(Display* dpy, int screen) {
   return result;
 }
 
-static const char* GL_BINDING_CALL
-Debug_glXQueryServerString(Display* dpy, int screen, int name) {
+static const char* GL_BINDING_CALL Debug_glXQueryServerString(Display* dpy,
+                                                              int screen,
+                                                              int name) {
   GL_SERVICE_LOG("glXQueryServerString"
                  << "(" << static_cast<const void*>(dpy) << ", " << screen
                  << ", " << name << ")");
@@ -642,8 +642,9 @@ Debug_glXQueryServerString(Display* dpy, int screen, int name) {
   return result;
 }
 
-static int GL_BINDING_CALL
-Debug_glXQueryVersion(Display* dpy, int* maj, int* min) {
+static int GL_BINDING_CALL Debug_glXQueryVersion(Display* dpy,
+                                                 int* maj,
+                                                 int* min) {
   GL_SERVICE_LOG("glXQueryVersion"
                  << "(" << static_cast<const void*>(dpy) << ", "
                  << static_cast<const void*>(maj) << ", "
@@ -653,32 +654,35 @@ Debug_glXQueryVersion(Display* dpy, int* maj, int* min) {
   return result;
 }
 
-static void GL_BINDING_CALL
-Debug_glXReleaseTexImageEXT(Display* dpy, GLXDrawable drawable, int buffer) {
+static void GL_BINDING_CALL Debug_glXReleaseTexImageEXT(Display* dpy,
+                                                        GLXDrawable drawable,
+                                                        int buffer) {
   GL_SERVICE_LOG("glXReleaseTexImageEXT"
                  << "(" << static_cast<const void*>(dpy) << ", " << drawable
                  << ", " << buffer << ")");
   g_driver_glx.debug_fn.glXReleaseTexImageEXTFn(dpy, drawable, buffer);
 }
 
-static void GL_BINDING_CALL
-Debug_glXSelectEvent(Display* dpy, GLXDrawable drawable, unsigned long mask) {
+static void GL_BINDING_CALL Debug_glXSelectEvent(Display* dpy,
+                                                 GLXDrawable drawable,
+                                                 unsigned long mask) {
   GL_SERVICE_LOG("glXSelectEvent"
                  << "(" << static_cast<const void*>(dpy) << ", " << drawable
                  << ", " << mask << ")");
   g_driver_glx.debug_fn.glXSelectEventFn(dpy, drawable, mask);
 }
 
-static void GL_BINDING_CALL
-Debug_glXSwapBuffers(Display* dpy, GLXDrawable drawable) {
+static void GL_BINDING_CALL Debug_glXSwapBuffers(Display* dpy,
+                                                 GLXDrawable drawable) {
   GL_SERVICE_LOG("glXSwapBuffers"
                  << "(" << static_cast<const void*>(dpy) << ", " << drawable
                  << ")");
   g_driver_glx.debug_fn.glXSwapBuffersFn(dpy, drawable);
 }
 
-static void GL_BINDING_CALL
-Debug_glXSwapIntervalEXT(Display* dpy, GLXDrawable drawable, int interval) {
+static void GL_BINDING_CALL Debug_glXSwapIntervalEXT(Display* dpy,
+                                                     GLXDrawable drawable,
+                                                     int interval) {
   GL_SERVICE_LOG("glXSwapIntervalEXT"
                  << "(" << static_cast<const void*>(dpy) << ", " << drawable
                  << ", " << interval << ")");
@@ -691,8 +695,10 @@ static void GL_BINDING_CALL Debug_glXSwapIntervalMESA(unsigned int interval) {
   g_driver_glx.debug_fn.glXSwapIntervalMESAFn(interval);
 }
 
-static void GL_BINDING_CALL
-Debug_glXUseXFont(Font font, int first, int count, int list) {
+static void GL_BINDING_CALL Debug_glXUseXFont(Font font,
+                                              int first,
+                                              int count,
+                                              int list) {
   GL_SERVICE_LOG("glXUseXFont"
                  << "(" << font << ", " << first << ", " << count << ", "
                  << list << ")");
@@ -706,8 +712,9 @@ static void GL_BINDING_CALL Debug_glXWaitGL(void) {
   g_driver_glx.debug_fn.glXWaitGLFn();
 }
 
-static int GL_BINDING_CALL
-Debug_glXWaitVideoSyncSGI(int divisor, int remainder, unsigned int* count) {
+static int GL_BINDING_CALL Debug_glXWaitVideoSyncSGI(int divisor,
+                                                     int remainder,
+                                                     unsigned int* count) {
   GL_SERVICE_LOG("glXWaitVideoSyncSGI"
                  << "(" << divisor << ", " << remainder << ", "
                  << static_cast<const void*>(count) << ")");
@@ -1080,8 +1087,8 @@ GLXFBConfig* GLXApiBase::glXGetFBConfigsFn(Display* dpy,
 
 bool GLXApiBase::glXGetMscRateOMLFn(Display* dpy,
                                     GLXDrawable drawable,
-                                    int32* numerator,
-                                    int32* denominator) {
+                                    int32_t* numerator,
+                                    int32_t* denominator) {
   return driver_->fn.glXGetMscRateOMLFn(dpy, drawable, numerator, denominator);
 }
 
@@ -1093,9 +1100,9 @@ void GLXApiBase::glXGetSelectedEventFn(Display* dpy,
 
 bool GLXApiBase::glXGetSyncValuesOMLFn(Display* dpy,
                                        GLXDrawable drawable,
-                                       int64* ust,
-                                       int64* msc,
-                                       int64* sbc) {
+                                       int64_t* ust,
+                                       int64_t* msc,
+                                       int64_t* sbc) {
   return driver_->fn.glXGetSyncValuesOMLFn(dpy, drawable, ust, msc, sbc);
 }
 
@@ -1379,8 +1386,8 @@ GLXFBConfig* TraceGLXApi::glXGetFBConfigsFn(Display* dpy,
 
 bool TraceGLXApi::glXGetMscRateOMLFn(Display* dpy,
                                      GLXDrawable drawable,
-                                     int32* numerator,
-                                     int32* denominator) {
+                                     int32_t* numerator,
+                                     int32_t* denominator) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glXGetMscRateOML")
   return glx_api_->glXGetMscRateOMLFn(dpy, drawable, numerator, denominator);
 }
@@ -1394,9 +1401,9 @@ void TraceGLXApi::glXGetSelectedEventFn(Display* dpy,
 
 bool TraceGLXApi::glXGetSyncValuesOMLFn(Display* dpy,
                                         GLXDrawable drawable,
-                                        int64* ust,
-                                        int64* msc,
-                                        int64* sbc) {
+                                        int64_t* ust,
+                                        int64_t* msc,
+                                        int64_t* sbc) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glXGetSyncValuesOML")
   return glx_api_->glXGetSyncValuesOMLFn(dpy, drawable, ust, msc, sbc);
 }

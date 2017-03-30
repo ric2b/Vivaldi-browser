@@ -4,6 +4,9 @@
 
 #include "content/common/cc_messages.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "cc/output/compositor_frame.h"
 #include "cc/output/filter_operations.h"
 #include "cc/quads/draw_quad.h"
@@ -300,7 +303,6 @@ void ParamTraits<cc::RenderPass>::Write(
   WriteParam(m, p.damage_rect);
   WriteParam(m, p.transform_to_root_target);
   WriteParam(m, p.has_transparent_background);
-  WriteParam(m, p.referenced_surfaces);
   WriteParam(m, p.quad_list.size());
 
   cc::SharedQuadStateList::ConstIterator shared_quad_state_iter =
@@ -317,9 +319,6 @@ void ParamTraits<cc::RenderPass>::Write(
         << " opaque_rect: " << quad->opaque_rect.ToString();
 
     switch (quad->material) {
-      case cc::DrawQuad::CHECKERBOARD:
-        WriteParam(m, *cc::CheckerboardDrawQuad::MaterialCast(quad));
-        break;
       case cc::DrawQuad::DEBUG_BORDER:
         WriteParam(m, *cc::DebugBorderDrawQuad::MaterialCast(quad));
         break;
@@ -387,9 +386,6 @@ static size_t ReserveSizeForRenderPassWrite(const cc::RenderPass& p) {
 
   // The largest quad type, verified by a unit test.
   to_reserve += p.quad_list.size() * cc::LargestDrawQuadSize();
-
-  // The actual list of referenced surfaces.
-  to_reserve += p.referenced_surfaces.size() * sizeof(cc::SurfaceId);
   return to_reserve;
 }
 
@@ -411,14 +407,12 @@ bool ParamTraits<cc::RenderPass>::Read(const Message* m,
   gfx::Rect damage_rect;
   gfx::Transform transform_to_root_target;
   bool has_transparent_background;
-  std::vector<cc::SurfaceId> referenced_surfaces;
   size_t quad_list_size;
 
   if (!ReadParam(m, iter, &id) || !ReadParam(m, iter, &output_rect) ||
       !ReadParam(m, iter, &damage_rect) ||
       !ReadParam(m, iter, &transform_to_root_target) ||
       !ReadParam(m, iter, &has_transparent_background) ||
-      !ReadParam(m, iter, &referenced_surfaces) ||
       !ReadParam(m, iter, &quad_list_size))
     return false;
 
@@ -427,7 +421,6 @@ bool ParamTraits<cc::RenderPass>::Read(const Message* m,
             damage_rect,
             transform_to_root_target,
             has_transparent_background);
-  p->referenced_surfaces.swap(referenced_surfaces);
 
   for (size_t i = 0; i < quad_list_size; ++i) {
     cc::DrawQuad::Material material;
@@ -437,9 +430,6 @@ bool ParamTraits<cc::RenderPass>::Read(const Message* m,
 
     cc::DrawQuad* draw_quad = NULL;
     switch (material) {
-      case cc::DrawQuad::CHECKERBOARD:
-        draw_quad = ReadDrawQuad<cc::CheckerboardDrawQuad>(m, iter, p);
-        break;
       case cc::DrawQuad::DEBUG_BORDER:
         draw_quad = ReadDrawQuad<cc::DebugBorderDrawQuad>(m, iter, p);
         break;
@@ -519,8 +509,6 @@ void ParamTraits<cc::RenderPass>::Log(
   l->append(", ");
   LogParam(p.has_transparent_background, l);
   l->append(", ");
-  LogParam(p.referenced_surfaces, l);
-  l->append(", ");
 
   l->append("[");
   for (const auto& shared_quad_state : p.shared_quad_state_list) {
@@ -533,9 +521,6 @@ void ParamTraits<cc::RenderPass>::Log(
     if (quad != p.quad_list.front())
       l->append(", ");
     switch (quad->material) {
-      case cc::DrawQuad::CHECKERBOARD:
-        LogParam(*cc::CheckerboardDrawQuad::MaterialCast(quad), l);
-        break;
       case cc::DrawQuad::DEBUG_BORDER:
         LogParam(*cc::DebugBorderDrawQuad::MaterialCast(quad), l);
         break;
@@ -578,7 +563,6 @@ namespace {
     NO_FRAME,
     DELEGATED_FRAME,
     GL_FRAME,
-    SOFTWARE_FRAME,
   };
 }
 
@@ -587,16 +571,11 @@ void ParamTraits<cc::CompositorFrame>::Write(Message* m,
   WriteParam(m, p.metadata);
   if (p.delegated_frame_data) {
     DCHECK(!p.gl_frame_data);
-    DCHECK(!p.software_frame_data);
     WriteParam(m, static_cast<int>(DELEGATED_FRAME));
     WriteParam(m, *p.delegated_frame_data);
   } else if (p.gl_frame_data) {
-    DCHECK(!p.software_frame_data);
     WriteParam(m, static_cast<int>(GL_FRAME));
     WriteParam(m, *p.gl_frame_data);
-  } else if (p.software_frame_data) {
-    WriteParam(m, static_cast<int>(SOFTWARE_FRAME));
-    WriteParam(m, *p.software_frame_data);
   } else {
     WriteParam(m, static_cast<int>(NO_FRAME));
   }
@@ -623,11 +602,6 @@ bool ParamTraits<cc::CompositorFrame>::Read(const Message* m,
       if (!ReadParam(m, iter, p->gl_frame_data.get()))
         return false;
       break;
-    case SOFTWARE_FRAME:
-      p->software_frame_data.reset(new cc::SoftwareFrameData());
-      if (!ReadParam(m, iter, p->software_frame_data.get()))
-        return false;
-      break;
     case NO_FRAME:
       break;
     default:
@@ -645,15 +619,12 @@ void ParamTraits<cc::CompositorFrame>::Log(const param_type& p,
     LogParam(*p.delegated_frame_data, l);
   else if (p.gl_frame_data)
     LogParam(*p.gl_frame_data, l);
-  else if (p.software_frame_data)
-    LogParam(*p.software_frame_data, l);
   l->append(")");
 }
 
 void ParamTraits<cc::CompositorFrameAck>::Write(Message* m,
                                                 const param_type& p) {
   WriteParam(m, p.resources);
-  WriteParam(m, p.last_software_frame_id);
   if (p.gl_frame_data) {
     WriteParam(m, static_cast<int>(GL_FRAME));
     WriteParam(m, *p.gl_frame_data);
@@ -666,9 +637,6 @@ bool ParamTraits<cc::CompositorFrameAck>::Read(const Message* m,
                                                base::PickleIterator* iter,
                                                param_type* p) {
   if (!ReadParam(m, iter, &p->resources))
-    return false;
-
-  if (!ReadParam(m, iter, &p->last_software_frame_id))
     return false;
 
   int compositor_frame_type;
@@ -694,8 +662,6 @@ void ParamTraits<cc::CompositorFrameAck>::Log(const param_type& p,
   l->append("CompositorFrameAck(");
   LogParam(p.resources, l);
   l->append(", ");
-  LogParam(p.last_software_frame_id, l);
-  l->append(", ");
   if (p.gl_frame_data)
     LogParam(*p.gl_frame_data, l);
   l->append(")");
@@ -707,8 +673,7 @@ void ParamTraits<cc::DelegatedFrameData>::Write(Message* m,
 
   size_t to_reserve = sizeof(p.device_scale_factor);
   to_reserve += p.resource_list.size() * sizeof(cc::TransferableResource);
-  for (size_t i = 0; i < p.render_pass_list.size(); ++i) {
-    const cc::RenderPass* pass = p.render_pass_list[i];
+  for (const auto& pass : p.render_pass_list) {
     to_reserve += sizeof(size_t) * 2;
     to_reserve += ReserveSizeForRenderPassWrite(*pass);
   }
@@ -717,7 +682,7 @@ void ParamTraits<cc::DelegatedFrameData>::Write(Message* m,
   WriteParam(m, p.device_scale_factor);
   WriteParam(m, p.resource_list);
   WriteParam(m, p.render_pass_list.size());
-  for (const auto* pass : p.render_pass_list) {
+  for (const auto& pass : p.render_pass_list) {
     WriteParam(m, pass->quad_list.size());
     WriteParam(m, pass->shared_quad_state_list.size());
     WriteParam(m, *pass);
@@ -764,7 +729,7 @@ bool ParamTraits<cc::DelegatedFrameData>::Read(const Message* m,
         return false;
     }
     pass_set.insert(render_pass->id);
-    p->render_pass_list.push_back(render_pass.Pass());
+    p->render_pass_list.push_back(std::move(render_pass));
   }
   return true;
 }
@@ -781,45 +746,6 @@ void ParamTraits<cc::DelegatedFrameData>::Log(const param_type& p,
     LogParam(*p.render_pass_list[i], l);
   }
   l->append("])");
-}
-
-void ParamTraits<cc::SoftwareFrameData>::Write(Message* m,
-                                               const param_type& p) {
-  DCHECK(cc::SharedBitmap::VerifySizeInBytes(p.size));
-
-  m->Reserve(sizeof(cc::SoftwareFrameData));
-  WriteParam(m, p.id);
-  WriteParam(m, p.size);
-  WriteParam(m, p.damage_rect);
-  WriteParam(m, p.bitmap_id);
-}
-
-bool ParamTraits<cc::SoftwareFrameData>::Read(const Message* m,
-                                              base::PickleIterator* iter,
-                                              param_type* p) {
-  if (!ReadParam(m, iter, &p->id))
-    return false;
-  if (!ReadParam(m, iter, &p->size) ||
-      !cc::SharedBitmap::VerifySizeInBytes(p->size))
-    return false;
-  if (!ReadParam(m, iter, &p->damage_rect))
-    return false;
-  if (!ReadParam(m, iter, &p->bitmap_id))
-    return false;
-  return true;
-}
-
-void ParamTraits<cc::SoftwareFrameData>::Log(const param_type& p,
-                                             std::string* l) {
-  l->append("SoftwareFrameData(");
-  LogParam(p.id, l);
-  l->append(", ");
-  LogParam(p.size, l);
-  l->append(", ");
-  LogParam(p.damage_rect, l);
-  l->append(", ");
-  LogParam(p.bitmap_id, l);
-  l->append(")");
 }
 
 void ParamTraits<cc::DrawQuad::Resources>::Write(Message* m,
@@ -867,7 +793,6 @@ void ParamTraits<cc::StreamVideoDrawQuad::OverlayResources>::Write(
     const param_type& p) {
   for (size_t i = 0; i < cc::DrawQuad::Resources::kMaxResourceIdCount; ++i) {
     WriteParam(m, p.size_in_pixels[i]);
-    WriteParam(m, p.allow_overlay[i]);
   }
 }
 
@@ -877,8 +802,6 @@ bool ParamTraits<cc::StreamVideoDrawQuad::OverlayResources>::Read(
     param_type* p) {
   for (size_t i = 0; i < cc::DrawQuad::Resources::kMaxResourceIdCount; ++i) {
     if (!ReadParam(m, iter, &p->size_in_pixels[i]))
-      return false;
-    if (!ReadParam(m, iter, &p->allow_overlay[i]))
       return false;
   }
   return true;
@@ -890,8 +813,6 @@ void ParamTraits<cc::StreamVideoDrawQuad::OverlayResources>::Log(
   l->append("StreamVideoDrawQuad::OverlayResources([");
   for (size_t i = 0; i < cc::DrawQuad::Resources::kMaxResourceIdCount; ++i) {
     LogParam(p.size_in_pixels[i], l);
-    l->append(", ");
-    LogParam(p.allow_overlay[i], l);
     if (i < (cc::DrawQuad::Resources::kMaxResourceIdCount - 1))
       l->append(", ");
   }
@@ -903,7 +824,6 @@ void ParamTraits<cc::TextureDrawQuad::OverlayResources>::Write(
     const param_type& p) {
   for (size_t i = 0; i < cc::DrawQuad::Resources::kMaxResourceIdCount; ++i) {
     WriteParam(m, p.size_in_pixels[i]);
-    WriteParam(m, p.allow_overlay[i]);
   }
 }
 
@@ -913,8 +833,6 @@ bool ParamTraits<cc::TextureDrawQuad::OverlayResources>::Read(
     param_type* p) {
   for (size_t i = 0; i < cc::DrawQuad::Resources::kMaxResourceIdCount; ++i) {
     if (!ReadParam(m, iter, &p->size_in_pixels[i]))
-      return false;
-    if (!ReadParam(m, iter, &p->allow_overlay[i]))
       return false;
   }
   return true;
@@ -926,8 +844,6 @@ void ParamTraits<cc::TextureDrawQuad::OverlayResources>::Log(
   l->append("TextureDrawQuad::OverlayResources([");
   for (size_t i = 0; i < cc::DrawQuad::Resources::kMaxResourceIdCount; ++i) {
     LogParam(p.size_in_pixels[i], l);
-    l->append(", ");
-    LogParam(p.allow_overlay[i], l);
     if (i < (cc::DrawQuad::Resources::kMaxResourceIdCount - 1))
       l->append(", ");
   }

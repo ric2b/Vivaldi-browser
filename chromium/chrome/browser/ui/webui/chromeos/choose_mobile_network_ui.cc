@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/chromeos/choose_mobile_network_ui.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 
@@ -11,6 +13,7 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/values.h"
@@ -27,6 +30,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
 #include "grit/browser_resources.h"
+#include "grit/components_strings.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 using content::WebContents;
@@ -110,6 +114,7 @@ class ChooseMobileNetworkHandler
   std::string device_path_;
   base::ListValue networks_list_;
   bool is_page_ready_;
+  bool scanning_;
   bool has_pending_results_;
 
   DISALLOW_COPY_AND_ASSIGN(ChooseMobileNetworkHandler);
@@ -119,6 +124,7 @@ class ChooseMobileNetworkHandler
 
 ChooseMobileNetworkHandler::ChooseMobileNetworkHandler()
     : is_page_ready_(false),
+      scanning_(false),
       has_pending_results_(false) {
   NetworkStateHandler* handler = GetNetworkStateHandler();
   const DeviceState* cellular =
@@ -167,9 +173,12 @@ void ChooseMobileNetworkHandler::DeviceListChanged() {
   }
   if (cellular->scanning()) {
     NET_LOG_EVENT("ChooseMobileNetwork", "Device is scanning for networks.");
-    web_ui()->CallJavascriptFunction(kJsApiShowScanning);
+    scanning_ = true;
+    if (is_page_ready_)
+      web_ui()->CallJavascriptFunction(kJsApiShowScanning);
     return;
   }
+  scanning_ = false;
   const DeviceState::CellularScanResults& scan_results =
       cellular->scan_results();
   std::set<std::string> network_ids;
@@ -246,6 +255,8 @@ void ChooseMobileNetworkHandler::HandlePageReady(const base::ListValue* args) {
     web_ui()->CallJavascriptFunction(kJsApiShowNetworks, networks_list_);
     networks_list_.Clear();
     has_pending_results_ = false;
+  } else if (scanning_) {
+    web_ui()->CallJavascriptFunction(kJsApiShowScanning);
   }
   is_page_ready_ = true;
 }

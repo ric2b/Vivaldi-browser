@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
 #include "url/gurl.h"
@@ -50,6 +51,7 @@ class AppShortcutLauncherItemController : public LauncherItemController {
   ui::MenuModel* CreateContextMenu(aura::Window* root_window) override;
   ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
   bool IsDraggable() override;
+  bool CanPin() const override;
   bool ShouldShowTooltip() override;
   void Close() override;
 
@@ -79,7 +81,7 @@ class AppShortcutLauncherItemController : public LauncherItemController {
       content::WebContents* content);
 
   // Advance to the next item if an owned item is already active. The function
-  // will return true if it has sucessfully advanced.
+  // will return true if it has successfully advanced.
   bool AdvanceToNextApp();
 
   // Returns true if the application is a V2 app.

@@ -4,6 +4,7 @@
 
 import logging
 import urllib2
+import os
 
 from telemetry.core import exceptions
 from telemetry.core import util
@@ -64,7 +65,7 @@ class CrOSLoginTest(cros_test_case.CrOSTestCase):
         pass
       util.WaitFor(lambda: not self._IsCryptohomeMounted(), 20)
 
-  @decorators.Disabled
+  @decorators.Disabled('all')
   def testGaiaLogin(self):
     """Tests gaia login. Credentials are expected to be found in a
     credentials.txt file, with a single line of format username:password."""
@@ -79,30 +80,33 @@ class CrOSLoginTest(cros_test_case.CrOSTestCase):
                              password=password):
       self.assertTrue(util.WaitFor(self._IsCryptohomeMounted, 10))
 
-  @decorators.Disabled
+  @decorators.Enabled('chromeos')
   def testEnterpriseEnroll(self):
     """Tests enterprise enrollment. Credentials are expected to be found in a
     credentials.txt file, with a single line of format username:password.
     The account must be from an enterprise domain and have device enrollment
-    permission. This test is disabled by default because ununrollment requires
-    wiping the device."""
+    permission."""
     if self._is_guest:
       return
 
     # Read username and password from credentials.txt. The file is of the
     # format username:password
-    username = ''
-    password = ''
-    with open('credentials.txt') as f:
-      username, password = f.read().rstrip().split(':')
+    credentials_file = os.path.join(os.path.dirname(__file__),
+                                    'credentials.txt')
+    if not os.path.exists(credentials_file):
+      return
+    with open(credentials_file) as f:
+      username, password = f.read().strip().split(':')
 
-    # Enroll the device.
-    with self._CreateBrowser(auto_login=False) as browser:
-      browser.oobe.NavigateEnterpriseEnrollment(username, password)
+      # Enroll the device.
+      with self._CreateBrowser(auto_login=False) as browser:
+        browser.oobe.NavigateGaiaLogin(username, password,
+                                       enterprise_enroll=True,
+                                       for_user_triggered_enrollment=True)
 
-    # Check for the existence of the device policy file.
-    self.assertTrue(util.WaitFor(lambda: self._cri.FileExistsOnDevice(
-        '/home/.shadow/install_attributes.pb'), 15))
+      # Check for the existence of the device policy file.
+      self.assertTrue(util.WaitFor(lambda: self._cri.FileExistsOnDevice(
+          '/home/.shadow/install_attributes.pb'), 15))
 
 
 class CrOSScreenLockerTest(cros_test_case.CrOSTestCase):
@@ -148,7 +152,7 @@ class CrOSScreenLockerTest(cros_test_case.CrOSTestCase):
     util.WaitFor(lambda: not browser.oobe_exists, 10)
     self.assertFalse(self._IsScreenLocked(browser))
 
-  @decorators.Disabled
+  @decorators.Disabled('all')
   def testScreenLock(self):
     """Tests autotestPrivate.screenLock"""
     if self._is_guest:

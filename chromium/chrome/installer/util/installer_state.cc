@@ -4,6 +4,8 @@
 
 #include "chrome/installer/util/installer_state.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <functional>
 #include <utility>
@@ -13,6 +15,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -520,9 +523,8 @@ void InstallerState::Clear() {
   verbose_logging_ = false;
 }
 
-bool InstallerState::AnyExistsAndIsInUse(
-    const InstallationState& machine_state,
-    uint32 file_bits) const {
+bool InstallerState::AnyExistsAndIsInUse(const InstallationState& machine_state,
+                                         uint32_t file_bits) const {
   static const wchar_t* const kBinaryFileNames[] = {
     kChromeDll,
     kChromeFrameDll,
@@ -531,10 +533,13 @@ bool InstallerState::AnyExistsAndIsInUse(
   };
   DCHECK_NE(file_bits, 0U);
   DCHECK_LT(file_bits, 1U << NUM_BINARIES);
-  COMPILE_ASSERT(CHROME_DLL == 1, no_youre_out_of_order);
-  COMPILE_ASSERT(CHROME_FRAME_DLL == 2, no_youre_out_of_order);
-  COMPILE_ASSERT(CHROME_FRAME_HELPER_DLL == 4, no_youre_out_of_order);
-  COMPILE_ASSERT(CHROME_FRAME_HELPER_EXE == 8, no_youre_out_of_order);
+  static_assert(CHROME_DLL == 1, "binary file names and values must match");
+  static_assert(CHROME_FRAME_DLL == 2,
+                "binary file names and values must match");
+  static_assert(CHROME_FRAME_HELPER_DLL == 4,
+                "binary file names and values must match");
+  static_assert(CHROME_FRAME_HELPER_EXE == 8,
+                "binary file names and values must match");
 
   // Check only for the current version (i.e., the version we are upgrading
   // _from_). Later versions from pending in-use updates need not be checked
@@ -563,7 +568,7 @@ void InstallerState::GetExistingExeVersions(
     installer::kChromeOldExe,
   };
 
-  for (int i = 0; i < arraysize(kChromeFilenames); ++i) {
+  for (size_t i = 0; i < arraysize(kChromeFilenames); ++i) {
     base::FilePath chrome_exe(target_path().Append(kChromeFilenames[i]));
     scoped_ptr<FileVersionInfo> file_version_info(
         FileVersionInfo::CreateFileVersionInfo(chrome_exe));
@@ -619,9 +624,8 @@ void InstallerState::RemoveOldVersionDirectories(
 
 void InstallerState::AddComDllList(
     std::vector<base::FilePath>* com_dll_list) const {
-  std::for_each(products_.begin(), products_.end(),
-                std::bind2nd(std::mem_fun(&Product::AddComDllList),
-                             com_dll_list));
+  for (auto* product : products_)
+    product->AddComDllList(com_dll_list);
 }
 
 void InstallerState::UpdateStage(installer::InstallerStage stage) const {

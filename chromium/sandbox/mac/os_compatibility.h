@@ -13,46 +13,49 @@
 #define SANDBOX_MAC_OS_COMPATIBILITY_H_
 
 #include <mach/mach.h>
+#include <stdint.h>
 
 #include <string>
 
+#include "base/memory/scoped_ptr.h"
 #include "sandbox/mac/message_server.h"
 
 namespace sandbox {
 
-typedef uint64_t (*IPCMessageGetID)(const IPCMessage);
+class OSCompatibility {
+ public:
+  // Creates an OSCompatibility instance for the current OS X version.
+  static scoped_ptr<OSCompatibility> CreateForPlatform();
 
-typedef std::string (*LookUp2GetRequestName)(const IPCMessage);
-typedef void (*LookUp2FillReply)(IPCMessage, mach_port_t service_port);
+  virtual ~OSCompatibility();
 
-typedef bool (*SwapIntegerIsGetOnly)(const IPCMessage);
+  // Gets the message and subsystem ID of an IPC message.
+  virtual uint64_t GetMessageSubsystem(const IPCMessage message) = 0;
+  virtual uint64_t GetMessageID(const IPCMessage message) = 0;
 
-struct LaunchdCompatibilityShim {
-  // Gets the message ID of an IPC message.
-  IPCMessageGetID ipc_message_get_id;
+  // Returns true if the message is a Launchd look up request.
+  virtual bool IsServiceLookUpRequest(const IPCMessage message) = 0;
 
-  // The msgh_id for look_up2.
-  uint64_t msg_id_look_up2;
+  // Returns true if the message is a Launchd vproc swap_integer request.
+  virtual bool IsVprocSwapInteger(const IPCMessage message) = 0;
 
-  // The msgh_id for swap_integer.
-  uint64_t msg_id_swap_integer;
+  // Returns true if the message is an XPC domain management message.
+  virtual bool IsXPCDomainManagement(const IPCMessage message) = 0;
 
   // A function to take a look_up2 message and return the string service name
   // that was requested via the message.
-  LookUp2GetRequestName look_up2_get_request_name;
+  virtual std::string GetServiceLookupName(const IPCMessage message) = 0;
 
   // A function to formulate a reply to a look_up2 message, given the reply
   // message and the port to return as the service.
-  LookUp2FillReply look_up2_fill_reply;
+  virtual void WriteServiceLookUpReply(IPCMessage reply,
+                                       mach_port_t service_port) = 0;
 
   // A function to take a swap_integer message and return true if the message
   // is only getting the value of a key, neither setting it directly, nor
   // swapping two keys.
-  SwapIntegerIsGetOnly swap_integer_is_get_only;
+  virtual bool IsSwapIntegerReadOnly(const IPCMessage message) = 0;
 };
-
-// Gets the compatibility shim for the launchd job subsystem.
-const LaunchdCompatibilityShim GetLaunchdCompatibilityShim();
 
 }  // namespace sandbox
 

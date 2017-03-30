@@ -91,7 +91,7 @@ void PrepareAndSetFavicon(JNIEnv* env, jbyte* icon_bytes, int icon_len,
   }
 }
 
-const BookmarkNode* GetNodeByID(const BookmarkNode* parent, int64 id) {
+const BookmarkNode* GetNodeByID(const BookmarkNode* parent, int64_t id) {
   if (parent->id() == id)
     return parent;
   for (int i= 0, child_count = parent->child_count(); i < child_count; ++i) {
@@ -114,32 +114,36 @@ PartnerBookmarksReader::PartnerBookmarksReader(
 
 PartnerBookmarksReader::~PartnerBookmarksReader() {}
 
-void PartnerBookmarksReader::PartnerBookmarksCreationComplete(JNIEnv*,
-                                                              jobject) {
+void PartnerBookmarksReader::PartnerBookmarksCreationComplete(
+    JNIEnv*,
+    const JavaParamRef<jobject>&) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   partner_bookmarks_shim_->SetPartnerBookmarksRoot(
       wip_partner_bookmarks_root_.release());
   wip_next_available_id_ = 0;
 }
 
-void PartnerBookmarksReader::Destroy(JNIEnv* env, jobject obj) {
+void PartnerBookmarksReader::Destroy(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
-void PartnerBookmarksReader::Reset(JNIEnv* env, jobject obj) {
+void PartnerBookmarksReader::Reset(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   wip_partner_bookmarks_root_.reset();
   wip_next_available_id_ = 0;
 }
 
-jlong PartnerBookmarksReader::AddPartnerBookmark(JNIEnv* env,
-                                                 jobject obj,
-                                                 jstring jurl,
-                                                 jstring jtitle,
-                                                 jboolean is_folder,
-                                                 jlong parent_id,
-                                                 jbyteArray favicon,
-                                                 jbyteArray touchicon) {
+jlong PartnerBookmarksReader::AddPartnerBookmark(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& jurl,
+    const JavaParamRef<jstring>& jtitle,
+    jboolean is_folder,
+    jlong parent_id,
+    const JavaParamRef<jbyteArray>& favicon,
+    const JavaParamRef<jbyteArray>& touchicon) {
   base::string16 url;
   base::string16 title;
   if (jurl)
@@ -183,7 +187,8 @@ jlong PartnerBookmarksReader::AddPartnerBookmark(JNIEnv* env,
 }
 
 // static
-static void DisablePartnerBookmarksEditing(JNIEnv* env, jclass clazz) {
+static void DisablePartnerBookmarksEditing(JNIEnv* env,
+                                           const JavaParamRef<jclass>& clazz) {
   PartnerBookmarksShim::DisablePartnerBookmarksEditing();
 }
 
@@ -194,7 +199,7 @@ bool PartnerBookmarksReader::RegisterPartnerBookmarksReader(JNIEnv* env) {
 
 // ----------------------------------------------------------------
 
-static jlong Init(JNIEnv* env, jobject obj) {
+static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   PartnerBookmarksShim* partner_bookmarks_shim =
       PartnerBookmarksShim::BuildForBrowserContext(profile);

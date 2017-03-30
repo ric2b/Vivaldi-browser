@@ -10,61 +10,35 @@
 namespace media {
 
 AudioParameters::AudioParameters()
-    : format_(AUDIO_PCM_LINEAR),
-      channel_layout_(CHANNEL_LAYOUT_NONE),
-      sample_rate_(0),
-      bits_per_sample_(0),
-      frames_per_buffer_(0),
-      channels_(0),
-      effects_(NO_EFFECTS) {
+    : AudioParameters(AUDIO_PCM_LINEAR, CHANNEL_LAYOUT_NONE, 0, 0, 0) {}
+
+AudioParameters::AudioParameters(Format format,
+                                 ChannelLayout channel_layout,
+                                 int sample_rate,
+                                 int bits_per_sample,
+                                 int frames_per_buffer) {
+  Reset(format, channel_layout, sample_rate, bits_per_sample,
+        frames_per_buffer);
 }
 
-AudioParameters::AudioParameters(Format format, ChannelLayout channel_layout,
-                                 int sample_rate, int bits_per_sample,
-                                 int frames_per_buffer)
-    : format_(format),
-      channel_layout_(channel_layout),
-      sample_rate_(sample_rate),
-      bits_per_sample_(bits_per_sample),
-      frames_per_buffer_(frames_per_buffer),
-      channels_(ChannelLayoutToChannelCount(channel_layout)),
-      effects_(NO_EFFECTS) {
-}
+AudioParameters::~AudioParameters() {}
 
-AudioParameters::AudioParameters(Format format, ChannelLayout channel_layout,
-                                 int sample_rate, int bits_per_sample,
-                                 int frames_per_buffer, int effects)
-    : format_(format),
-      channel_layout_(channel_layout),
-      sample_rate_(sample_rate),
-      bits_per_sample_(bits_per_sample),
-      frames_per_buffer_(frames_per_buffer),
-      channels_(ChannelLayoutToChannelCount(channel_layout)),
-      effects_(effects) {
-}
+AudioParameters::AudioParameters(const AudioParameters&) = default;
+AudioParameters& AudioParameters::operator=(const AudioParameters&) = default;
 
-AudioParameters::AudioParameters(Format format, ChannelLayout channel_layout,
-                                 int channels, int sample_rate,
-                                 int bits_per_sample, int frames_per_buffer,
-                                 int effects)
-    : format_(format),
-      channel_layout_(channel_layout),
-      sample_rate_(sample_rate),
-      bits_per_sample_(bits_per_sample),
-      frames_per_buffer_(frames_per_buffer),
-      channels_(channels),
-      effects_(effects) {
-}
-
-void AudioParameters::Reset(Format format, ChannelLayout channel_layout,
-                            int channels, int sample_rate,
-                            int bits_per_sample, int frames_per_buffer) {
+void AudioParameters::Reset(Format format,
+                            ChannelLayout channel_layout,
+                            int sample_rate,
+                            int bits_per_sample,
+                            int frames_per_buffer) {
   format_ = format;
   channel_layout_ = channel_layout;
-  channels_ = channels;
+  channels_ = ChannelLayoutToChannelCount(channel_layout);
   sample_rate_ = sample_rate;
   bits_per_sample_ = bits_per_sample;
   frames_per_buffer_ = frames_per_buffer;
+  effects_ = NO_EFFECTS;
+  mic_positions_.clear();
 }
 
 bool AudioParameters::IsValid() const {
@@ -82,12 +56,12 @@ bool AudioParameters::IsValid() const {
 
 std::string AudioParameters::AsHumanReadableString() const {
   std::ostringstream s;
-  s << "format: " << format()
-    << " channels: " << channels()
-    << " channel_layout: " << channel_layout()
-    << " sample_rate: " << sample_rate()
+  s << "format: " << format() << " channel_layout: " << channel_layout()
+    << " channels: " << channels() << " sample_rate: " << sample_rate()
     << " bits_per_sample: " << bits_per_sample()
-    << " frames_per_buffer: " << frames_per_buffer();
+    << " frames_per_buffer: " << frames_per_buffer()
+    << " effects: " << effects()
+    << " mic_positions: " << PointsToString(mic_positions_);
   return s.str();
 }
 
@@ -104,19 +78,18 @@ int AudioParameters::GetBytesPerFrame() const {
 }
 
 base::TimeDelta AudioParameters::GetBufferDuration() const {
-  return base::TimeDelta::FromMicroseconds(static_cast<int64>(
+  return base::TimeDelta::FromMicroseconds(static_cast<int64_t>(
       frames_per_buffer_ * base::Time::kMicrosecondsPerSecond /
       static_cast<float>(sample_rate_)));
 }
 
 bool AudioParameters::Equals(const AudioParameters& other) const {
-  return format_ == other.format() &&
-         sample_rate_ == other.sample_rate() &&
+  return format_ == other.format() && sample_rate_ == other.sample_rate() &&
          channel_layout_ == other.channel_layout() &&
          channels_ == other.channels() &&
          bits_per_sample_ == other.bits_per_sample() &&
          frames_per_buffer_ == other.frames_per_buffer() &&
-         effects_ == other.effects();
+         effects_ == other.effects() && mic_positions_ == other.mic_positions_;
 }
 
 }  // namespace media

@@ -1,0 +1,58 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//mojo/public/mojo_application.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//tools/grit/repack.gni")
+
+executable("window_type_launcher") {
+  output_name = "window_type_launcher_exe"
+  testonly = true
+
+  sources = [
+    "main.cc",
+    "window_type_launcher.cc",
+    "window_type_launcher.h",
+  ]
+
+  deps = [
+    ":window_type_launcher_resources",
+    "//base",
+    "//base:base_static",
+    "//build/config/sanitizers:deps",
+    "//components/mus/public/interfaces",
+    "//mojo/common:common_base",
+    "//mojo/converters/geometry",
+    "//mojo/message_pump",
+    "//mojo/public/cpp/bindings",
+    "//mojo/runner:init",
+    "//mojo/runner/child:lib",
+    "//mojo/shell/public/cpp",
+    "//mojo/shell/public/interfaces",
+    "//skia",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//ui/aura",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/views",
+    "//ui/views/mus:for_shared_library",
+  ]
+
+  data_deps = [
+    "//components/mus",
+  ]
+}
+
+copy("window_type_launcher_resources") {
+  sources = [
+    "$root_out_dir/views_mus_resources.pak",
+  ]
+  outputs = [
+    "$root_out_dir/window_type_launcher_exe_res/resources/views_mus_resources.pak",
+  ]
+  deps = [
+    "//ui/views/mus:resources",
+  ]
+}

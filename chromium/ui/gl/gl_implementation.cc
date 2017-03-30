@@ -4,16 +4,21 @@
 
 #include "ui/gl/gl_implementation.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_gl_api_implementation.h"
+#include "ui/gl/gl_version_info.h"
 
 namespace gfx {
 
@@ -162,8 +167,8 @@ std::string FilterGLExtensionList(
   if (extensions == NULL)
     return "";
 
-  std::vector<std::string> extension_vec;
-  base::SplitString(extensions, ' ', &extension_vec);
+  std::vector<std::string> extension_vec = base::SplitString(
+      extensions, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   auto is_disabled = [&disabled_extensions](const std::string& ext) {
     return std::find(disabled_extensions.begin(), disabled_extensions.end(),
@@ -173,7 +178,7 @@ std::string FilterGLExtensionList(
       std::remove_if(extension_vec.begin(), extension_vec.end(), is_disabled),
       extension_vec.end());
 
-  return JoinString(extension_vec, " ");
+  return base::JoinString(extension_vec, " ");
 }
 
 DisableNullDrawGLBindings::DisableNullDrawGLBindings() {
@@ -186,5 +191,32 @@ DisableNullDrawGLBindings::~DisableNullDrawGLBindings() {
 
 GLWindowSystemBindingInfo::GLWindowSystemBindingInfo()
     : direct_rendering(true) {}
+
+std::string GetGLExtensionsFromCurrentContext() {
+  if (WillUseGLGetStringForExtensions()) {
+    return reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+  }
+
+  std::vector<std::string> exts;
+  GLint num_extensions = 0;
+  glGetIntegerv(GL_NUM_EXTENSIONS, &num_extensions);
+  for (GLint i = 0; i < num_extensions; ++i) {
+    const char* extension = reinterpret_cast<const char*>(
+        glGetStringi(GL_EXTENSIONS, i));
+    DCHECK(extension != NULL);
+    exts.push_back(extension);
+  }
+  return base::JoinString(exts, " ");
+}
+
+bool WillUseGLGetStringForExtensions() {
+  const char* version_str =
+      reinterpret_cast<const char*>(glGetString(GL_VERSION));
+  unsigned major_version, minor_version;
+  bool is_es, is_es3;
+  gfx::GLVersionInfo::ParseVersionString(
+      version_str, &major_version, &minor_version, &is_es, &is_es3);
+  return is_es || major_version < 3;
+}
 
 }  // namespace gfx

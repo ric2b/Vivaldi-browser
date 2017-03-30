@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/command_line.h"
@@ -21,9 +23,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/service_messages.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -53,7 +55,7 @@ class MockServiceProcessControl : public ServiceProcessControl {
   MOCK_METHOD0(Disconnect, void());
 
   MOCK_METHOD1(OnMessageReceived, bool(const IPC::Message&));
-  MOCK_METHOD1(OnChannelConnected, void(int32 peer_pid));
+  MOCK_METHOD1(OnChannelConnected, void(int32_t peer_pid));
   MOCK_METHOD0(OnChannelError, void());
 
   MOCK_METHOD1(Send, bool(IPC::Message*));
@@ -116,31 +118,28 @@ void MockServiceProcessControl::SetConnectSuccessMockExpectations(
 }
 
 void MockServiceProcessControl::SetServiceEnabledExpectations() {
-  EXPECT_CALL(
-      *this,
-      Send(Property(&IPC::Message::type,
-                    static_cast<int32>(ServiceMsg_GetCloudPrintProxyInfo::ID))))
-      .Times(1).WillOnce(
-          DoAll(
-              DeleteArg<0>(),
-              WithoutArgs(
-                  Invoke(this, &MockServiceProcessControl::SendEnabledInfo))));
+  EXPECT_CALL(*this, Send(Property(&IPC::Message::type,
+                                   static_cast<int32_t>(
+                                       ServiceMsg_GetCloudPrintProxyInfo::ID))))
+      .Times(1)
+      .WillOnce(DoAll(DeleteArg<0>(),
+                      WithoutArgs(Invoke(
+                          this, &MockServiceProcessControl::SendEnabledInfo))));
 }
 
 void MockServiceProcessControl::SetServiceDisabledExpectations() {
-  EXPECT_CALL(
-      *this,
-      Send(Property(&IPC::Message::type,
-                    static_cast<int32>(ServiceMsg_GetCloudPrintProxyInfo::ID))))
-      .Times(1).WillOnce(
-          DoAll(
-              DeleteArg<0>(),
-              WithoutArgs(
-                  Invoke(this, &MockServiceProcessControl::SendDisabledInfo))));
+  EXPECT_CALL(*this, Send(Property(&IPC::Message::type,
+                                   static_cast<int32_t>(
+                                       ServiceMsg_GetCloudPrintProxyInfo::ID))))
+      .Times(1)
+      .WillOnce(
+          DoAll(DeleteArg<0>(),
+                WithoutArgs(Invoke(
+                    this, &MockServiceProcessControl::SendDisabledInfo))));
 }
 
 void MockServiceProcessControl::SetWillBeEnabledExpectations() {
-  int32 message_id = ServiceMsg_EnableCloudPrintProxyWithRobot::ID;
+  int32_t message_id = ServiceMsg_EnableCloudPrintProxyWithRobot::ID;
   EXPECT_CALL(
       *this,
       Send(Property(&IPC::Message::type, message_id)))
@@ -148,11 +147,11 @@ void MockServiceProcessControl::SetWillBeEnabledExpectations() {
 }
 
 void MockServiceProcessControl::SetWillBeDisabledExpectations() {
-  EXPECT_CALL(
-      *this,
-      Send(Property(&IPC::Message::type,
-                    static_cast<int32>(ServiceMsg_DisableCloudPrintProxy::ID))))
-      .Times(1).WillOnce(DoAll(DeleteArg<0>(), Return(true)));
+  EXPECT_CALL(*this, Send(Property(&IPC::Message::type,
+                                   static_cast<int32_t>(
+                                       ServiceMsg_DisableCloudPrintProxy::ID))))
+      .Times(1)
+      .WillOnce(DoAll(DeleteArg<0>(), Return(true)));
 }
 
 bool MockServiceProcessControl::SendEnabledInfo() {
@@ -242,7 +241,8 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyDisabled) {
   service.GetMockServiceProcessControl()->SetConnectSuccessMockExpectations(
       MockServiceProcessControl::kServiceStateDisabled, false);
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(
       prefs::kCloudPrintEmail,
       new base::StringValue(MockServiceProcessControl::EnabledUserId()));
@@ -258,7 +258,8 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyEnabled) {
   service.GetMockServiceProcessControl()->SetConnectSuccessMockExpectations(
       MockServiceProcessControl::kServiceStateEnabled, false);
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
                      new base::StringValue(std::string()));
 
@@ -275,7 +276,8 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithPolicySetProxyDisabled) {
   service.GetMockServiceProcessControl()->SetConnectSuccessMockExpectations(
       MockServiceProcessControl::kServiceStateDisabled, false);
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
                      new base::StringValue(std::string()));
   prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
@@ -293,7 +295,8 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithPolicySetProxyEnabled) {
       MockServiceProcessControl::kServiceStateEnabled, false);
   service.GetMockServiceProcessControl()->SetWillBeDisabledExpectations();
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
                      new base::StringValue(std::string()));
   prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
@@ -310,7 +313,8 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyDisabledThenSetPolicy) {
   service.GetMockServiceProcessControl()->SetConnectSuccessMockExpectations(
       MockServiceProcessControl::kServiceStateDisabled, false);
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(
       prefs::kCloudPrintEmail,
       new base::StringValue(MockServiceProcessControl::EnabledUserId()));
@@ -331,7 +335,8 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyEnabledThenSetPolicy) {
   service.GetMockServiceProcessControl()->SetConnectSuccessMockExpectations(
       MockServiceProcessControl::kServiceStateEnabled, false);
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
                      new base::StringValue(std::string()));
 
@@ -355,7 +360,8 @@ TEST_F(CloudPrintProxyPolicyTest,
   service.GetMockServiceProcessControl()->SetConnectSuccessMockExpectations(
       MockServiceProcessControl::kServiceStateDisabled, false);
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
                      new base::StringValue(std::string()));
   prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
@@ -376,7 +382,8 @@ TEST_F(CloudPrintProxyPolicyTest,
       MockServiceProcessControl::kServiceStateEnabled, false);
   service.GetMockServiceProcessControl()->SetWillBeDisabledExpectations();
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
                      new base::StringValue(std::string()));
   prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,
@@ -395,7 +402,8 @@ TEST_F(CloudPrintProxyPolicyTest, StartWithNoPolicyProxyDisabledThenEnable) {
   service.GetMockServiceProcessControl()->SetConnectSuccessMockExpectations(
       MockServiceProcessControl::kServiceStateDisabled, false);
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(
       prefs::kCloudPrintEmail,
       new base::StringValue(MockServiceProcessControl::EnabledUserId()));
@@ -418,7 +426,8 @@ TEST_F(CloudPrintProxyPolicyTest,
       MockServiceProcessControl::kServiceStateEnabled, false);
   service.GetMockServiceProcessControl()->SetWillBeDisabledExpectations();
 
-  TestingPrefServiceSyncable* prefs = profile_.GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile_.GetTestingPrefService();
   prefs->SetUserPref(prefs::kCloudPrintEmail,
                      new base::StringValue(std::string()));
   prefs->SetManagedPref(prefs::kCloudPrintProxyEnabled,

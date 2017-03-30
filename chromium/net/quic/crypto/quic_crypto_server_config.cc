@@ -5,8 +5,10 @@
 #include "net/quic/crypto/quic_crypto_server_config.h"
 
 #include <stdlib.h>
+
 #include <algorithm>
 
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "crypto/hkdf.h"
@@ -15,7 +17,7 @@
 #include "net/quic/crypto/aes_128_gcm_12_decrypter.h"
 #include "net/quic/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/crypto/cert_compressor.h"
-#include "net/quic/crypto/chacha20_poly1305_encrypter.h"
+#include "net/quic/crypto/chacha20_poly1305_rfc7539_encrypter.h"
 #include "net/quic/crypto/channel_id.h"
 #include "net/quic/crypto/crypto_framer.h"
 #include "net/quic/crypto/crypto_handshake_message.h"
@@ -50,14 +52,18 @@ namespace net {
 
 namespace {
 
+// kMultiplier is the multiple of the CHLO message size that a REJ message
+// must stay under when the client doesn't present a valid source-address
+// token. This is used to protect QUIC from amplification attacks.
+// TODO(rch): Reduce this to 2 again once b/25933682 is fixed.
+const size_t kMultiplier = 3;
+
 const int kMaxTokenAddresses = 4;
 
 string DeriveSourceAddressTokenKey(StringPiece source_address_token_secret) {
-  crypto::HKDF hkdf(source_address_token_secret,
-                    StringPiece() /* no salt */,
+  crypto::HKDF hkdf(source_address_token_secret, StringPiece() /* no salt */,
                     "QUIC source address token key",
-                    CryptoSecretBoxer::GetKeySize(),
-                    0 /* no fixed IV needed */,
+                    CryptoSecretBoxer::GetKeySize(), 0 /* no fixed IV needed */,
                     0 /* no subkey secret */);
   return hkdf.server_write_key().as_string();
 }
@@ -75,8 +81,7 @@ class ValidateClientHelloHelper {
  public:
   ValidateClientHelloHelper(ValidateClientHelloResultCallback::Result* result,
                             ValidateClientHelloResultCallback* done_cb)
-      : result_(result), done_cb_(done_cb) {
-  }
+      : result_(result), done_cb_(done_cb) {}
 
   ~ValidateClientHelloHelper() {
     LOG_IF(DFATAL, done_cb_ != nullptr)
@@ -90,9 +95,7 @@ class ValidateClientHelloHelper {
     DetachCallback();
   }
 
-  void StartedAsyncCallback() {
-    DetachCallback();
-  }
+  void StartedAsyncCallback() { DetachCallback(); }
 
  private:
   void DetachCallback() {
@@ -112,15 +115,13 @@ class VerifyNonceIsValidAndUniqueCallback
   VerifyNonceIsValidAndUniqueCallback(
       ValidateClientHelloResultCallback::Result* result,
       ValidateClientHelloResultCallback* done_cb)
-      : result_(result), done_cb_(done_cb) {
-  }
+      : result_(result), done_cb_(done_cb) {}
 
  protected:
   void RunImpl(bool nonce_is_valid_and_unique,
                InsertStatus nonce_error) override {
     DVLOG(1) << "Using client nonce, unique: " << nonce_is_valid_and_unique
              << " nonce_error: " << nonce_error;
-    result_->info.unique = nonce_is_valid_and_unique;
     if (!nonce_is_valid_and_unique) {
       HandshakeFailureReason client_nonce_error;
       switch (nonce_error) {
@@ -168,21 +169,13 @@ const char QuicCryptoServerConfig::TESTING[] = "secret string for testing";
 
 ClientHelloInfo::ClientHelloInfo(const IPAddressNumber& in_client_ip,
                                  QuicWallTime in_now)
-    : client_ip(in_client_ip),
-      now(in_now),
-      valid_source_address_token(false),
-      client_nonce_well_formed(false),
-      unique(false) {
-}
+    : client_ip(in_client_ip), now(in_now), valid_source_address_token(false) {}
 
-ClientHelloInfo::~ClientHelloInfo() {
-}
+ClientHelloInfo::~ClientHelloInfo() {}
 
-PrimaryConfigChangedCallback::PrimaryConfigChangedCallback() {
-}
+PrimaryConfigChangedCallback::PrimaryConfigChangedCallback() {}
 
-PrimaryConfigChangedCallback::~PrimaryConfigChangedCallback() {
-}
+PrimaryConfigChangedCallback::~PrimaryConfigChangedCallback() {}
 
 ValidateClientHelloResultCallback::Result::Result(
     const CryptoHandshakeMessage& in_client_hello,
@@ -190,17 +183,13 @@ ValidateClientHelloResultCallback::Result::Result(
     QuicWallTime in_now)
     : client_hello(in_client_hello),
       info(in_client_ip, in_now),
-      error_code(QUIC_NO_ERROR) {
-}
+      error_code(QUIC_NO_ERROR) {}
 
-ValidateClientHelloResultCallback::Result::~Result() {
-}
+ValidateClientHelloResultCallback::Result::~Result() {}
 
-ValidateClientHelloResultCallback::ValidateClientHelloResultCallback() {
-}
+ValidateClientHelloResultCallback::ValidateClientHelloResultCallback() {}
 
-ValidateClientHelloResultCallback::~ValidateClientHelloResultCallback() {
-}
+ValidateClientHelloResultCallback::~ValidateClientHelloResultCallback() {}
 
 void ValidateClientHelloResultCallback::Run(const Result* result) {
   RunImpl(result->client_hello, *result);
@@ -211,31 +200,38 @@ void ValidateClientHelloResultCallback::Run(const Result* result) {
 QuicCryptoServerConfig::ConfigOptions::ConfigOptions()
     : expiry_time(QuicWallTime::Zero()),
       channel_id_enabled(false),
+      token_binding_enabled(false),
       p256(false) {}
 
 QuicCryptoServerConfig::QuicCryptoServerConfig(
     StringPiece source_address_token_secret,
-    QuicRandom* rand)
+    QuicRandom* server_nonce_entropy,
+    ProofSource* proof_source)
     : replay_protection_(true),
+      chlo_multiplier_(kMultiplier),
       configs_lock_(),
       primary_config_(nullptr),
       next_config_promotion_time_(QuicWallTime::Zero()),
       server_nonce_strike_register_lock_(),
+      proof_source_(proof_source),
       strike_register_no_startup_period_(false),
       strike_register_max_entries_(1 << 10),
       strike_register_window_secs_(600),
       source_address_token_future_secs_(3600),
       source_address_token_lifetime_secs_(86400),
       server_nonce_strike_register_max_entries_(1 << 10),
-      server_nonce_strike_register_window_secs_(120) {
+      server_nonce_strike_register_window_secs_(120),
+      enable_serving_sct_(false) {
+  DCHECK(proof_source_.get());
   default_source_address_token_boxer_.SetKey(
       DeriveSourceAddressTokenKey(source_address_token_secret));
 
   // Generate a random key and orbit for server nonces.
-  rand->RandBytes(server_nonce_orbit_, sizeof(server_nonce_orbit_));
+  server_nonce_entropy->RandBytes(server_nonce_orbit_,
+                                  sizeof(server_nonce_orbit_));
   const size_t key_size = server_nonce_boxer_.GetKeySize();
-  scoped_ptr<uint8[]> key_bytes(new uint8[key_size]);
-  rand->RandBytes(key_bytes.get(), key_size);
+  scoped_ptr<uint8_t[]> key_bytes(new uint8_t[key_size]);
+  server_nonce_entropy->RandBytes(key_bytes.get(), key_size);
 
   server_nonce_boxer_.SetKey(
       StringPiece(reinterpret_cast<char*>(key_bytes.get()), key_size));
@@ -293,10 +289,11 @@ QuicServerConfigProtobuf* QuicCryptoServerConfig::GenerateConfig(
   } else {
     msg.SetTaglist(kKEXS, kC255, 0);
   }
-  if (ChaCha20Poly1305Encrypter::IsSupported()) {
-    msg.SetTaglist(kAEAD, kAESG, kCC12, 0);
+  if (FLAGS_quic_use_rfc7539 &&
+      ChaCha20Poly1305Rfc7539Encrypter::IsSupported()) {
+    msg.SetTaglist(kAEAD, kAESG, kCC12, kCC20, 0);
   } else {
-    msg.SetTaglist(kAEAD, kAESG, 0);
+    msg.SetTaglist(kAEAD, kAESG, kCC12, 0);
   }
   msg.SetStringPiece(kPUBS, encoded_public_values);
 
@@ -304,7 +301,7 @@ QuicServerConfigProtobuf* QuicCryptoServerConfig::GenerateConfig(
     const QuicWallTime now = clock->WallNow();
     const QuicWallTime expiry = now.Add(QuicTime::Delta::FromSeconds(
         60 * 60 * 24 * 180 /* 180 days, ~six months */));
-    const uint64 expiry_seconds = expiry.ToUNIXSeconds();
+    const uint64_t expiry_seconds = expiry.ToUNIXSeconds();
     msg.SetValue(kEXPY, expiry_seconds);
   } else {
     msg.SetValue(kEXPY, options.expiry_time.ToUNIXSeconds());
@@ -321,6 +318,10 @@ QuicServerConfigProtobuf* QuicCryptoServerConfig::GenerateConfig(
 
   if (options.channel_id_enabled) {
     msg.SetTaglist(kPDMD, kCHID, 0);
+  }
+
+  if (options.token_binding_enabled) {
+    msg.SetTaglist(kTBKP, kP256, 0);
   }
 
   if (options.id.empty()) {
@@ -405,7 +406,7 @@ CryptoHandshakeMessage* QuicCryptoServerConfig::AddDefaultConfig(
 bool QuicCryptoServerConfig::SetConfigs(
     const vector<QuicServerConfigProtobuf*>& protobufs,
     const QuicWallTime now) {
-  vector<scoped_refptr<Config> > parsed_configs;
+  vector<scoped_refptr<Config>> parsed_configs;
   bool ok = true;
 
   for (vector<QuicServerConfigProtobuf*>::const_iterator i = protobufs.begin();
@@ -432,31 +433,32 @@ bool QuicCryptoServerConfig::SetConfigs(
     base::AutoLock locked(configs_lock_);
     ConfigMap new_configs;
 
-    for (vector<scoped_refptr<Config> >::const_iterator i =
+    for (vector<scoped_refptr<Config>>::const_iterator i =
              parsed_configs.begin();
          i != parsed_configs.end(); ++i) {
       scoped_refptr<Config> config = *i;
 
       ConfigMap::iterator it = configs_.find(config->id);
       if (it != configs_.end()) {
-        VLOG(1)
-            << "Keeping scid: " << base::HexEncode(
-                config->id.data(), config->id.size())
-            << " orbit: " << base::HexEncode(
-                reinterpret_cast<const char *>(config->orbit), kOrbitSize)
-            << " new primary_time " << config->primary_time.ToUNIXSeconds()
-            << " old primary_time " << it->second->primary_time.ToUNIXSeconds()
-            << " new priority " << config->priority
-            << " old priority " << it->second->priority;
+        VLOG(1) << "Keeping scid: "
+                << base::HexEncode(config->id.data(), config->id.size())
+                << " orbit: "
+                << base::HexEncode(reinterpret_cast<const char*>(config->orbit),
+                                   kOrbitSize)
+                << " new primary_time " << config->primary_time.ToUNIXSeconds()
+                << " old primary_time "
+                << it->second->primary_time.ToUNIXSeconds() << " new priority "
+                << config->priority << " old priority " << it->second->priority;
         // Update primary_time and priority.
         it->second->primary_time = config->primary_time;
         it->second->priority = config->priority;
         new_configs.insert(*it);
       } else {
-        VLOG(1) << "Adding scid: " << base::HexEncode(
-                    config->id.data(), config->id.size())
-                << " orbit: " << base::HexEncode(
-                    reinterpret_cast<const char *>(config->orbit), kOrbitSize)
+        VLOG(1) << "Adding scid: "
+                << base::HexEncode(config->id.data(), config->id.size())
+                << " orbit: "
+                << base::HexEncode(reinterpret_cast<const char*>(config->orbit),
+                                   kOrbitSize)
                 << " primary_time " << config->primary_time.ToUNIXSeconds()
                 << " priority " << config->priority;
         new_configs.insert(std::make_pair(config->id, config));
@@ -474,28 +476,32 @@ bool QuicCryptoServerConfig::SetConfigs(
 
 void QuicCryptoServerConfig::GetConfigIds(vector<string>* scids) const {
   base::AutoLock locked(configs_lock_);
-  for (ConfigMap::const_iterator it = configs_.begin();
-       it != configs_.end(); ++it) {
+  for (ConfigMap::const_iterator it = configs_.begin(); it != configs_.end();
+       ++it) {
     scids->push_back(it->first);
   }
 }
 
 void QuicCryptoServerConfig::ValidateClientHello(
     const CryptoHandshakeMessage& client_hello,
-    IPAddressNumber client_ip,
+    const IPAddressNumber& client_ip,
+    const IPAddressNumber& server_ip,
+    QuicVersion version,
     const QuicClock* clock,
+    QuicCryptoProof* crypto_proof,
     ValidateClientHelloResultCallback* done_cb) const {
   const QuicWallTime now(clock->WallNow());
 
   ValidateClientHelloResultCallback::Result* result =
-      new ValidateClientHelloResultCallback::Result(
-          client_hello, client_ip, now);
+      new ValidateClientHelloResultCallback::Result(client_hello, client_ip,
+                                                    now);
 
   StringPiece requested_scid;
   client_hello.GetStringPiece(kSCID, &requested_scid);
 
-  uint8 primary_orbit[kOrbitSize];
+  uint8_t primary_orbit[kOrbitSize];
   scoped_refptr<Config> requested_config;
+  scoped_refptr<Config> primary_config;
   {
     base::AutoLock locked(configs_lock_);
 
@@ -514,10 +520,13 @@ void QuicCryptoServerConfig::ValidateClientHello(
     }
 
     requested_config = GetConfigWithScid(requested_scid);
+    primary_config = primary_config_;
+    crypto_proof->primary_scid = primary_config->id;
   }
 
   if (result->error_code == QUIC_NO_ERROR) {
-    EvaluateClientHello(primary_orbit, requested_config, result, done_cb);
+    EvaluateClientHello(server_ip, version, primary_orbit, requested_config,
+                        primary_config, crypto_proof, result, done_cb);
   } else {
     done_cb->Run(result);
   }
@@ -535,6 +544,7 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
     const QuicClock* clock,
     QuicRandom* rand,
     QuicCryptoNegotiatedParameters* params,
+    QuicCryptoProof* crypto_proof,
     CryptoHandshakeMessage* out,
     string* error_details) const {
   DCHECK(error_details);
@@ -543,27 +553,10 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
       validate_chlo_result.client_hello;
   const ClientHelloInfo& info = validate_chlo_result.info;
 
-  // If the client's preferred version is not the version we are currently
-  // speaking, then the client went through a version negotiation.  In this
-  // case, we need to make sure that we actually do not support this version
-  // and that it wasn't a downgrade attack.
-  QuicTag client_version_tag;
-  if (client_hello.GetUint32(kVER, &client_version_tag) != QUIC_NO_ERROR) {
-    *error_details = "client hello missing version list";
-    return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
-  }
-  QuicVersion client_version = QuicTagToQuicVersion(client_version_tag);
-  if (client_version != version) {
-    // Just because client_version is a valid version enum doesn't mean that
-    // this server actually supports that version, so we check to see if
-    // it's actually in the supported versions list.
-    for (size_t i = 0; i < supported_versions.size(); ++i) {
-      if (client_version == supported_versions[i]) {
-        *error_details = "Downgrade attack detected";
-        return QUIC_VERSION_NEGOTIATION_MISMATCH;
-      }
-    }
-  }
+  QuicErrorCode valid = CryptoUtils::ValidateClientHello(
+      client_hello, version, supported_versions, error_details);
+  if (valid != QUIC_NO_ERROR)
+    return valid;
 
   StringPiece requested_scid;
   client_hello.GetStringPiece(kSCID, &requested_scid);
@@ -589,7 +582,16 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
     // We'll use the config that the client requested in order to do
     // key-agreement. Otherwise we'll give it a copy of |primary_config_|
     // to use.
-    primary_config = primary_config_;
+    if (FLAGS_quic_use_primary_config_for_proof) {
+      primary_config = GetConfigWithScid(crypto_proof->primary_scid);
+      if (!primary_config) {
+        *error_details = "Configuration not found";
+        LOG(DFATAL) << "Primary config not found";
+        return QUIC_CRYPTO_INTERNAL_ERROR;
+      }
+    } else {
+      primary_config = primary_config_;
+    }
 
     requested_config = GetConfigWithScid(requested_scid);
   }
@@ -601,26 +603,42 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
 
   out->Clear();
 
-  if (!info.valid_source_address_token ||
-      !info.client_nonce_well_formed ||
-      !info.unique ||
-      !requested_config.get()) {
-    BuildRejection(server_ip, *primary_config.get(), client_hello, info,
+  bool x509_supported = false;
+  bool x509_ecdsa_supported = false;
+  ParseProofDemand(client_hello, &x509_supported, &x509_ecdsa_supported);
+  DCHECK(proof_source_.get());
+  if (!crypto_proof->certs &&
+      !proof_source_->GetProof(server_ip, info.sni.as_string(),
+                               primary_config->serialized, x509_ecdsa_supported,
+                               &crypto_proof->certs, &crypto_proof->signature,
+                               &crypto_proof->cert_sct)) {
+    return QUIC_HANDSHAKE_FAILED;
+  }
+
+  if (version > QUIC_VERSION_29) {
+    StringPiece cert_sct;
+    if (client_hello.GetStringPiece(kCertificateSCTTag, &cert_sct) &&
+        cert_sct.empty()) {
+      params->sct_supported_by_client = true;
+    }
+  }
+
+  if (!info.reject_reasons.empty() || !requested_config.get()) {
+    BuildRejection(version, *primary_config, client_hello, info,
                    validate_chlo_result.cached_network_params,
                    use_stateless_rejects, server_designated_connection_id, rand,
-                   params, out);
+                   params, *crypto_proof, out);
     return QUIC_NO_ERROR;
   }
 
   const QuicTag* their_aeads;
   const QuicTag* their_key_exchanges;
   size_t num_their_aeads, num_their_key_exchanges;
-  if (client_hello.GetTaglist(kAEAD, &their_aeads,
-                              &num_their_aeads) != QUIC_NO_ERROR ||
+  if (client_hello.GetTaglist(kAEAD, &their_aeads, &num_their_aeads) !=
+          QUIC_NO_ERROR ||
       client_hello.GetTaglist(kKEXS, &their_key_exchanges,
                               &num_their_key_exchanges) != QUIC_NO_ERROR ||
-      num_their_aeads != 1 ||
-      num_their_key_exchanges != 1) {
+      num_their_aeads != 1 || num_their_key_exchanges != 1) {
     *error_details = "Missing or invalid AEAD or KEXS";
     return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
   }
@@ -629,12 +647,31 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
   if (!QuicUtils::FindMutualTag(requested_config->aead, their_aeads,
                                 num_their_aeads, QuicUtils::LOCAL_PRIORITY,
                                 &params->aead, nullptr) ||
-      !QuicUtils::FindMutualTag(
-          requested_config->kexs, their_key_exchanges, num_their_key_exchanges,
-          QuicUtils::LOCAL_PRIORITY, &params->key_exchange,
-          &key_exchange_index)) {
+      !QuicUtils::FindMutualTag(requested_config->kexs, their_key_exchanges,
+                                num_their_key_exchanges,
+                                QuicUtils::LOCAL_PRIORITY,
+                                &params->key_exchange, &key_exchange_index)) {
     *error_details = "Unsupported AEAD or KEXS";
     return QUIC_CRYPTO_NO_SUPPORT;
+  }
+
+  if (!requested_config->tb_key_params.empty()) {
+    const QuicTag* their_tbkps;
+    size_t num_their_tbkps;
+    switch (client_hello.GetTaglist(kTBKP, &their_tbkps, &num_their_tbkps)) {
+      case QUIC_CRYPTO_MESSAGE_PARAMETER_NOT_FOUND:
+        break;
+      case QUIC_NO_ERROR:
+        if (QuicUtils::FindMutualTag(
+                requested_config->tb_key_params, their_tbkps, num_their_tbkps,
+                QuicUtils::LOCAL_PRIORITY, &params->token_binding_key_param,
+                nullptr)) {
+          break;
+        }
+      default:
+        *error_details = "Invalid Token Binding key parameter";
+        return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+    }
   }
 
   StringPiece public_value;
@@ -667,6 +704,14 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
   hkdf_suffix.append(client_hello_serialized.data(),
                      client_hello_serialized.length());
   hkdf_suffix.append(requested_config->serialized);
+  DCHECK(proof_source_.get());
+  if (version > QUIC_VERSION_25) {
+    if (crypto_proof->certs->empty()) {
+      *error_details = "Failed to get certs";
+      return QUIC_CRYPTO_INTERNAL_ERROR;
+    }
+    hkdf_suffix.append(crypto_proof->certs->at(0));
+  }
 
   StringPiece cetv_ciphertext;
   if (requested_config->channel_id_enabled &&
@@ -698,7 +743,7 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
     char plaintext[kMaxPacketSize];
     size_t plaintext_length = 0;
     const bool success = crypters.decrypter->DecryptPacket(
-        0 /* sequence number */, StringPiece() /* associated data */,
+        0 /* packet number */, StringPiece() /* associated data */,
         cetv_ciphertext, plaintext, &plaintext_length, kMaxPacketSize);
     if (!success) {
       *error_details = "CETV decryption failure";
@@ -762,11 +807,17 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
                                    label_len);
   forward_secure_hkdf_input.append(hkdf_suffix);
 
+  string shlo_nonce;
+  if (version > QUIC_VERSION_26) {
+    shlo_nonce = NewServerNonce(rand, info.now);
+    out->SetStringPiece(kServerNonceTag, shlo_nonce);
+  }
   if (!CryptoUtils::DeriveKeys(
           params->forward_secure_premaster_secret, params->aead,
-          info.client_nonce, info.server_nonce, forward_secure_hkdf_input,
-          Perspective::IS_SERVER, &params->forward_secure_crypters,
-          &params->subkey_secret)) {
+          info.client_nonce,
+          shlo_nonce.empty() ? info.server_nonce : shlo_nonce,
+          forward_secure_hkdf_input, Perspective::IS_SERVER,
+          &params->forward_secure_crypters, &params->subkey_secret)) {
     *error_details = "Symmetric key setup failed";
     return QUIC_CRYPTO_SYMMETRIC_KEY_SETUP_FAILED;
   }
@@ -774,8 +825,8 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
   out->set_tag(kSHLO);
   QuicTagVector supported_version_tags;
   for (size_t i = 0; i < supported_versions.size(); ++i) {
-    supported_version_tags.push_back
-        (QuicVersionToQuicTag(supported_versions[i]));
+    supported_version_tags.push_back(
+        QuicVersionToQuicTag(supported_versions[i]));
   }
   out->SetVector(kVER, supported_version_tags);
   out->SetStringPiece(
@@ -828,11 +879,11 @@ bool QuicCryptoServerConfig::ConfigPrimaryTimeLessThan(
 
 void QuicCryptoServerConfig::SelectNewPrimaryConfig(
     const QuicWallTime now) const {
-  vector<scoped_refptr<Config> > configs;
+  vector<scoped_refptr<Config>> configs;
   configs.reserve(configs_.size());
 
-  for (ConfigMap::const_iterator it = configs_.begin();
-       it != configs_.end(); ++it) {
+  for (ConfigMap::const_iterator it = configs_.begin(); it != configs_.end();
+       ++it) {
     // TODO(avd) Exclude expired configs?
     configs.push_back(it->second);
   }
@@ -881,8 +932,8 @@ void QuicCryptoServerConfig::SelectNewPrimaryConfig(
     new_primary->is_primary = true;
     DVLOG(1) << "New primary config.  orbit: "
              << base::HexEncode(
-                 reinterpret_cast<const char*>(primary_config_->orbit),
-                 kOrbitSize);
+                    reinterpret_cast<const char*>(primary_config_->orbit),
+                    kOrbitSize);
     if (primary_config_changed_cb_.get() != nullptr) {
       primary_config_changed_cb_->Run(primary_config_->id);
     }
@@ -900,8 +951,8 @@ void QuicCryptoServerConfig::SelectNewPrimaryConfig(
   new_primary->is_primary = true;
   DVLOG(1) << "New primary config.  orbit: "
            << base::HexEncode(
-               reinterpret_cast<const char*>(primary_config_->orbit),
-               kOrbitSize)
+                  reinterpret_cast<const char*>(primary_config_->orbit),
+                  kOrbitSize)
            << " scid: " << base::HexEncode(primary_config_->id.data(),
                                            primary_config_->id.size());
   next_config_promotion_time_ = QuicWallTime::Zero();
@@ -911,14 +962,17 @@ void QuicCryptoServerConfig::SelectNewPrimaryConfig(
 }
 
 void QuicCryptoServerConfig::EvaluateClientHello(
-    const uint8* primary_orbit,
+    const IPAddressNumber& server_ip,
+    QuicVersion version,
+    const uint8_t* primary_orbit,
     scoped_refptr<Config> requested_config,
+    scoped_refptr<Config> primary_config,
+    QuicCryptoProof* crypto_proof,
     ValidateClientHelloResultCallback::Result* client_hello_state,
     ValidateClientHelloResultCallback* done_cb) const {
   ValidateClientHelloHelper helper(client_hello_state, done_cb);
 
-  const CryptoHandshakeMessage& client_hello =
-      client_hello_state->client_hello;
+  const CryptoHandshakeMessage& client_hello = client_hello_state->client_hello;
   ClientHelloInfo* info = &(client_hello_state->info);
 
   if (client_hello.size() < kClientHelloMinimumSize) {
@@ -936,6 +990,27 @@ void QuicCryptoServerConfig::EvaluateClientHello(
 
   client_hello.GetStringPiece(kUAID, &info->user_agent_id);
 
+  HandshakeFailureReason source_address_token_error = MAX_FAILURE_REASON;
+  StringPiece srct;
+  if (FLAGS_quic_validate_stk_without_scid) {
+    if (client_hello.GetStringPiece(kSourceAddressTokenTag, &srct)) {
+      Config& config =
+          requested_config != nullptr ? *requested_config : *primary_config;
+      source_address_token_error =
+          ParseSourceAddressToken(config, srct, &info->source_address_tokens);
+
+      if (source_address_token_error == HANDSHAKE_OK) {
+        source_address_token_error = ValidateSourceAddressTokens(
+            info->source_address_tokens, info->client_ip, info->now,
+            &client_hello_state->cached_network_params);
+      }
+      info->valid_source_address_token =
+          (source_address_token_error == HANDSHAKE_OK);
+    } else {
+      source_address_token_error = SOURCE_ADDRESS_TOKEN_INVALID_FAILURE;
+    }
+  }
+
   if (!requested_config.get()) {
     StringPiece requested_scid;
     if (client_hello.GetStringPiece(kSCID, &requested_scid)) {
@@ -948,21 +1023,21 @@ void QuicCryptoServerConfig::EvaluateClientHello(
     return;
   }
 
-  HandshakeFailureReason source_address_token_error;
-  StringPiece srct;
-  if (client_hello.GetStringPiece(kSourceAddressTokenTag, &srct)) {
-    source_address_token_error = ParseSourceAddressToken(
-        *requested_config, srct, &info->source_address_tokens);
+  if (!FLAGS_quic_validate_stk_without_scid) {
+    if (client_hello.GetStringPiece(kSourceAddressTokenTag, &srct)) {
+      source_address_token_error = ParseSourceAddressToken(
+          *requested_config, srct, &info->source_address_tokens);
 
-    if (source_address_token_error == HANDSHAKE_OK) {
-      source_address_token_error = ValidateSourceAddressTokens(
-          info->source_address_tokens, info->client_ip, info->now,
-          &client_hello_state->cached_network_params);
+      if (source_address_token_error == HANDSHAKE_OK) {
+        source_address_token_error = ValidateSourceAddressTokens(
+            info->source_address_tokens, info->client_ip, info->now,
+            &client_hello_state->cached_network_params);
+      }
+      info->valid_source_address_token =
+          (source_address_token_error == HANDSHAKE_OK);
+    } else {
+      source_address_token_error = SOURCE_ADDRESS_TOKEN_INVALID_FAILURE;
     }
-    info->valid_source_address_token =
-        (source_address_token_error == HANDSHAKE_OK);
-  } else {
-    source_address_token_error = SOURCE_ADDRESS_TOKEN_INVALID_FAILURE;
   }
 
   bool found_error = false;
@@ -976,10 +1051,32 @@ void QuicCryptoServerConfig::EvaluateClientHello(
     found_error = true;
   }
 
-  if (client_hello.GetStringPiece(kNONC, &info->client_nonce) &&
-      info->client_nonce.size() == kNonceSize) {
-    info->client_nonce_well_formed = true;
-  } else {
+  if (version > QUIC_VERSION_25) {
+    bool x509_supported = false;
+    bool x509_ecdsa_supported = false;
+    ParseProofDemand(client_hello, &x509_supported, &x509_ecdsa_supported);
+    string serialized_config;
+    if (FLAGS_quic_use_primary_config_for_proof) {
+      serialized_config = primary_config->serialized;
+    } else {
+      serialized_config = requested_config->serialized;
+    }
+    if (!proof_source_->GetProof(server_ip, info->sni.as_string(),
+                                 serialized_config, x509_ecdsa_supported,
+                                 &crypto_proof->certs, &crypto_proof->signature,
+                                 &crypto_proof->cert_sct)) {
+      found_error = true;
+      info->reject_reasons.push_back(SERVER_CONFIG_UNKNOWN_CONFIG_FAILURE);
+    }
+
+    if (!ValidateExpectedLeafCertificate(client_hello, *crypto_proof)) {
+      found_error = true;
+      info->reject_reasons.push_back(INVALID_EXPECTED_LEAF_CERTIFICATE);
+    }
+  }
+
+  if (!client_hello.GetStringPiece(kNONC, &info->client_nonce) ||
+      info->client_nonce.size() != kNonceSize) {
     info->reject_reasons.push_back(CLIENT_NONCE_INVALID_FAILURE);
     // Invalid client nonce.
     DVLOG(1) << "Invalid client nonce.";
@@ -990,27 +1087,44 @@ void QuicCryptoServerConfig::EvaluateClientHello(
     found_error = true;
   }
 
-  if (!replay_protection_) {
-    if (!found_error) {
-      info->unique = true;
+  // Server nonce is optional, and used for key derivation if present.
+  client_hello.GetStringPiece(kServerNonceTag, &info->server_nonce);
+
+  if (version > QUIC_VERSION_30) {
+    DVLOG(1) << "No 0-RTT replay protection in QUIC_VERSION_31 and higher.";
+    // If the server nonce is empty and we're requiring handshake confirmation
+    // for DoS reasons then we must reject the CHLO.
+    if (FLAGS_quic_require_handshake_confirmation &&
+        info->server_nonce.empty()) {
+      info->reject_reasons.push_back(SERVER_NONCE_REQUIRED_FAILURE);
     }
+    helper.ValidationComplete(QUIC_NO_ERROR, "");
+    return;
+  }
+
+  if (!replay_protection_) {
     DVLOG(1) << "No replay protection.";
     helper.ValidationComplete(QUIC_NO_ERROR, "");
     return;
   }
 
-  client_hello.GetStringPiece(kServerNonceTag, &info->server_nonce);
   if (!info->server_nonce.empty()) {
     // If the server nonce is present, use it to establish uniqueness.
     HandshakeFailureReason server_nonce_error =
         ValidateServerNonce(info->server_nonce, info->now);
-    if (server_nonce_error == HANDSHAKE_OK) {
-      info->unique = true;
-    } else {
+    bool is_unique = server_nonce_error == HANDSHAKE_OK;
+    if (!is_unique) {
       info->reject_reasons.push_back(server_nonce_error);
-      info->unique = false;
     }
-    DVLOG(1) << "Using server nonce, unique: " << info->unique;
+    DVLOG(1) << "Using server nonce, unique: " << is_unique;
+    helper.ValidationComplete(QUIC_NO_ERROR, "");
+    return;
+  }
+  // If we hit this block, the server nonce was empty.  If we're requiring
+  // handshake confirmation for DoS reasons and there's no server nonce present,
+  // reject the CHLO.
+  if (FLAGS_quic_require_handshake_confirmation) {
+    info->reject_reasons.push_back(SERVER_NONCE_REQUIRED_FAILURE);
     helper.ValidationComplete(QUIC_NO_ERROR, "");
     return;
   }
@@ -1028,26 +1142,36 @@ void QuicCryptoServerConfig::EvaluateClientHello(
     base::AutoLock locked(strike_register_client_lock_);
 
     if (strike_register_client_.get() == nullptr) {
-      strike_register_client_.reset(new LocalStrikeRegisterClient(
-          strike_register_max_entries_,
-          static_cast<uint32>(info->now.ToUNIXSeconds()),
-          strike_register_window_secs_,
-          primary_orbit,
-          strike_register_no_startup_period_ ?
-          StrikeRegister::NO_STARTUP_PERIOD_NEEDED :
-          StrikeRegister::DENY_REQUESTS_AT_STARTUP));
+      if (!FLAGS_require_strike_register_or_server_nonce) {
+        strike_register_client_.reset(new LocalStrikeRegisterClient(
+            strike_register_max_entries_,
+            static_cast<uint32_t>(info->now.ToUNIXSeconds()),
+            strike_register_window_secs_, primary_orbit,
+            strike_register_no_startup_period_
+                ? StrikeRegister::NO_STARTUP_PERIOD_NEEDED
+                : StrikeRegister::DENY_REQUESTS_AT_STARTUP));
+      }
     }
     strike_register_client = strike_register_client_.get();
   }
 
+  if (!strike_register_client) {
+    // Either a valid server nonces or a strike register is required.
+    // Since neither are present, reject the handshake which will send a
+    // server nonce to the client.
+    info->reject_reasons.push_back(SERVER_NONCE_REQUIRED_FAILURE);
+    helper.ValidationComplete(QUIC_NO_ERROR, "");
+    return;
+  }
+
   strike_register_client->VerifyNonceIsValidAndUnique(
-      info->client_nonce,
-      info->now,
+      info->client_nonce, info->now,
       new VerifyNonceIsValidAndUniqueCallback(client_hello_state, done_cb));
   helper.StartedAsyncCallback();
 }
 
 bool QuicCryptoServerConfig::BuildServerConfigUpdateMessage(
+    QuicVersion version,
     const SourceAddressTokens& previous_source_address_tokens,
     const IPAddressNumber& server_ip,
     const IPAddressNumber& client_ip,
@@ -1065,16 +1189,12 @@ bool QuicCryptoServerConfig::BuildServerConfigUpdateMessage(
                             previous_source_address_tokens, client_ip, rand,
                             clock->WallNow(), cached_network_params));
 
-  if (proof_source_ == nullptr) {
-    // Insecure QUIC, can send SCFG without proof.
-    return true;
-  }
-
   const vector<string>* certs;
   string signature;
+  string cert_sct;
   if (!proof_source_->GetProof(
           server_ip, params.sni, primary_config_->serialized,
-          params.x509_ecdsa_supported, &certs, &signature)) {
+          params.x509_ecdsa_supported, &certs, &signature, &cert_sct)) {
     DVLOG(1) << "Server: failed to get proof.";
     return false;
   }
@@ -1085,11 +1205,19 @@ bool QuicCryptoServerConfig::BuildServerConfigUpdateMessage(
 
   out->SetStringPiece(kCertificateTag, compressed);
   out->SetStringPiece(kPROF, signature);
+  if (params.sct_supported_by_client && version > QUIC_VERSION_29 &&
+      enable_serving_sct_) {
+    if (cert_sct.empty()) {
+      DLOG(WARNING) << "SCT is expected but it is empty.";
+    } else {
+      out->SetStringPiece(kCertificateSCTTag, cert_sct);
+    }
+  }
   return true;
 }
 
 void QuicCryptoServerConfig::BuildRejection(
-    const IPAddressNumber& server_ip,
+    QuicVersion version,
     const Config& config,
     const CryptoHandshakeMessage& client_hello,
     const ClientHelloInfo& info,
@@ -1098,6 +1226,7 @@ void QuicCryptoServerConfig::BuildRejection(
     QuicConnectionId server_designated_connection_id,
     QuicRandom* rand,
     QuicCryptoNegotiatedParameters* params,
+    const QuicCryptoProof& crypto_proof,
     CryptoHandshakeMessage* out) const {
   if (FLAGS_enable_quic_stateless_reject_support && use_stateless_rejects) {
     DVLOG(1) << "QUIC Crypto server config returning stateless reject "
@@ -1122,38 +1251,10 @@ void QuicCryptoServerConfig::BuildRejection(
   out->SetVector(kRREJ, info.reject_reasons);
 
   // The client may have requested a certificate chain.
-  const QuicTag* their_proof_demands;
-  size_t num_their_proof_demands;
-
-  if (proof_source_.get() == nullptr ||
-      client_hello.GetTaglist(kPDMD, &their_proof_demands,
-                              &num_their_proof_demands) !=
-          QUIC_NO_ERROR) {
-    return;
-  }
-
   bool x509_supported = false;
-  for (size_t i = 0; i < num_their_proof_demands; i++) {
-    switch (their_proof_demands[i]) {
-      case kX509:
-        x509_supported = true;
-        params->x509_ecdsa_supported = true;
-        break;
-      case kX59R:
-        x509_supported = true;
-        break;
-    }
-  }
-
+  ParseProofDemand(client_hello, &x509_supported,
+                   &params->x509_ecdsa_supported);
   if (!x509_supported) {
-    return;
-  }
-
-  const vector<string>* certs;
-  string signature;
-  if (!proof_source_->GetProof(server_ip, info.sni.as_string(),
-                               config.serialized, params->x509_ecdsa_supported,
-                               &certs, &signature)) {
     return;
   }
 
@@ -1168,7 +1269,7 @@ void QuicCryptoServerConfig::BuildRejection(
   }
 
   const string compressed = CertCompressor::CompressChain(
-      *certs, params->client_common_set_hashes,
+      *crypto_proof.certs, params->client_common_set_hashes,
       params->client_cached_cert_hashes, config.common_cert_sets);
 
   // kREJOverheadBytes is a very rough estimate of how much of a REJ
@@ -1179,21 +1280,28 @@ void QuicCryptoServerConfig::BuildRejection(
   //   SCID: 16 bytes
   //   PUBS: 38 bytes
   const size_t kREJOverheadBytes = 166;
-  // kMultiplier is the multiple of the CHLO message size that a REJ message
-  // must stay under when the client doesn't present a valid source-address
-  // token.
-  const size_t kMultiplier = 2;
-  // max_unverified_size is the number of bytes that the certificate chain
-  // and signature can consume before we will demand a valid source-address
-  // token.
+  // max_unverified_size is the number of bytes that the certificate chain,
+  // signature, and (optionally) signed certificate timestamp can consume before
+  // we will demand a valid source-address token.
   const size_t max_unverified_size =
-      client_hello.size() * kMultiplier - kREJOverheadBytes;
+      client_hello.size() * chlo_multiplier_ - kREJOverheadBytes;
   static_assert(kClientHelloMinimumSize * kMultiplier >= kREJOverheadBytes,
-                "overhead calculation may overflow");
+                "overhead calculation may underflow");
+  bool should_return_sct = params->sct_supported_by_client &&
+                           version > QUIC_VERSION_29 && enable_serving_sct_;
+  const size_t sct_size = should_return_sct ? crypto_proof.cert_sct.size() : 0;
   if (info.valid_source_address_token ||
-      signature.size() + compressed.size() < max_unverified_size) {
+      crypto_proof.signature.size() + compressed.size() + sct_size <
+          max_unverified_size) {
     out->SetStringPiece(kCertificateTag, compressed);
-    out->SetStringPiece(kPROF, signature);
+    out->SetStringPiece(kPROF, crypto_proof.signature);
+    if (should_return_sct) {
+      if (crypto_proof.cert_sct.empty()) {
+        DLOG(WARNING) << "SCT is expected but it is empty.";
+      } else {
+        out->SetStringPiece(kCertificateSCTTag, crypto_proof.cert_sct);
+      }
+    }
   }
 }
 
@@ -1253,6 +1361,17 @@ QuicCryptoServerConfig::ParseConfigProtobuf(
     return nullptr;
   }
 
+  const QuicTag* tbkp_tags;
+  size_t tbkp_len;
+  QuicErrorCode err;
+  if ((err = msg->GetTaglist(kTBKP, &tbkp_tags, &tbkp_len)) !=
+          QUIC_CRYPTO_MESSAGE_PARAMETER_NOT_FOUND &&
+      err != QUIC_NO_ERROR) {
+    LOG(WARNING) << "Server config message is missing or has invalid TBKP";
+    return nullptr;
+  }
+  config->tb_key_params = vector<QuicTag>(tbkp_tags, tbkp_tags + tbkp_len);
+
   StringPiece orbit;
   if (!msg->GetStringPiece(kORBT, &orbit)) {
     LOG(WARNING) << "Server config message is missing ORBT";
@@ -1261,7 +1380,8 @@ QuicCryptoServerConfig::ParseConfigProtobuf(
 
   if (orbit.size() != kOrbitSize) {
     LOG(WARNING) << "Orbit value in server config is the wrong length."
-                    " Got " << orbit.size() << " want " << kOrbitSize;
+                    " Got "
+                 << orbit.size() << " want " << kOrbitSize;
     return nullptr;
   }
   static_assert(sizeof(config->orbit) == kOrbitSize,
@@ -1279,7 +1399,7 @@ QuicCryptoServerConfig::ParseConfigProtobuf(
         !strike_register_client->IsKnownOrbit(orbit)) {
       LOG(WARNING)
           << "Rejecting server config with orbit that the strike register "
-          "client doesn't know about.";
+             "client doesn't know about.";
       return nullptr;
     }
   }
@@ -1319,7 +1439,8 @@ QuicCryptoServerConfig::ParseConfigProtobuf(
 
     if (private_key.empty()) {
       LOG(WARNING) << "Server config contains key exchange method without "
-                      "corresponding private key: " << tag;
+                      "corresponding private key: "
+                   << tag;
       return nullptr;
     }
 
@@ -1343,7 +1464,8 @@ QuicCryptoServerConfig::ParseConfigProtobuf(
         break;
       default:
         LOG(WARNING) << "Server config message contains unknown key exchange "
-                        "method: " << tag;
+                        "method: "
+                     << tag;
         return nullptr;
     }
 
@@ -1358,10 +1480,6 @@ QuicCryptoServerConfig::ParseConfigProtobuf(
   }
 
   return config;
-}
-
-void QuicCryptoServerConfig::SetProofSource(ProofSource* proof_source) {
-  proof_source_.reset(proof_source);
 }
 
 void QuicCryptoServerConfig::SetEphemeralKeySource(
@@ -1380,6 +1498,10 @@ void QuicCryptoServerConfig::set_replay_protection(bool on) {
   replay_protection_ = on;
 }
 
+void QuicCryptoServerConfig::set_chlo_multiplier(size_t multiplier) {
+  chlo_multiplier_ = multiplier;
+}
+
 void QuicCryptoServerConfig::set_strike_register_no_startup_period() {
   base::AutoLock locker(strike_register_client_lock_);
   DCHECK(!strike_register_client_.get());
@@ -1387,39 +1509,43 @@ void QuicCryptoServerConfig::set_strike_register_no_startup_period() {
 }
 
 void QuicCryptoServerConfig::set_strike_register_max_entries(
-    uint32 max_entries) {
+    uint32_t max_entries) {
   base::AutoLock locker(strike_register_client_lock_);
   DCHECK(!strike_register_client_.get());
   strike_register_max_entries_ = max_entries;
 }
 
 void QuicCryptoServerConfig::set_strike_register_window_secs(
-    uint32 window_secs) {
+    uint32_t window_secs) {
   base::AutoLock locker(strike_register_client_lock_);
   DCHECK(!strike_register_client_.get());
   strike_register_window_secs_ = window_secs;
 }
 
 void QuicCryptoServerConfig::set_source_address_token_future_secs(
-    uint32 future_secs) {
+    uint32_t future_secs) {
   source_address_token_future_secs_ = future_secs;
 }
 
 void QuicCryptoServerConfig::set_source_address_token_lifetime_secs(
-    uint32 lifetime_secs) {
+    uint32_t lifetime_secs) {
   source_address_token_lifetime_secs_ = lifetime_secs;
 }
 
 void QuicCryptoServerConfig::set_server_nonce_strike_register_max_entries(
-    uint32 max_entries) {
+    uint32_t max_entries) {
   DCHECK(!server_nonce_strike_register_.get());
   server_nonce_strike_register_max_entries_ = max_entries;
 }
 
 void QuicCryptoServerConfig::set_server_nonce_strike_register_window_secs(
-    uint32 window_secs) {
+    uint32_t window_secs) {
   DCHECK(!server_nonce_strike_register_.get());
   server_nonce_strike_register_window_secs_ = window_secs;
+}
+
+void QuicCryptoServerConfig::set_enable_serving_sct(bool enable_serving_sct) {
+  enable_serving_sct_ = enable_serving_sct;
 }
 
 void QuicCryptoServerConfig::AcquirePrimaryConfigChangedCb(
@@ -1464,10 +1590,6 @@ string QuicCryptoServerConfig::NewSourceAddressToken(
 
   return config.source_address_token_boxer->Box(
       rand, source_address_tokens.SerializeAsString());
-}
-
-bool QuicCryptoServerConfig::HasProofSource() const {
-  return proof_source_ != nullptr;
 }
 
 int QuicCryptoServerConfig::NumberOfConfigs() const {
@@ -1560,14 +1682,14 @@ static const size_t kServerNoncePlaintextSize =
 
 string QuicCryptoServerConfig::NewServerNonce(QuicRandom* rand,
                                               QuicWallTime now) const {
-  const uint32 timestamp = static_cast<uint32>(now.ToUNIXSeconds());
+  const uint32_t timestamp = static_cast<uint32_t>(now.ToUNIXSeconds());
 
-  uint8 server_nonce[kServerNoncePlaintextSize];
+  uint8_t server_nonce[kServerNoncePlaintextSize];
   static_assert(sizeof(server_nonce) > sizeof(timestamp), "nonce too small");
-  server_nonce[0] = static_cast<uint8>(timestamp >> 24);
-  server_nonce[1] = static_cast<uint8>(timestamp >> 16);
-  server_nonce[2] = static_cast<uint8>(timestamp >> 8);
-  server_nonce[3] = static_cast<uint8>(timestamp);
+  server_nonce[0] = static_cast<uint8_t>(timestamp >> 24);
+  server_nonce[1] = static_cast<uint8_t>(timestamp >> 16);
+  server_nonce[2] = static_cast<uint8_t>(timestamp >> 8);
+  server_nonce[3] = static_cast<uint8_t>(timestamp);
   rand->RandBytes(&server_nonce[sizeof(timestamp)],
                   sizeof(server_nonce) - sizeof(timestamp));
 
@@ -1586,8 +1708,8 @@ HandshakeFailureReason QuicCryptoServerConfig::ValidateServerNonce(
   }
 
   // plaintext contains:
-  //   uint32 timestamp
-  //   uint8[20] random bytes
+  //   uint32_t timestamp
+  //   uint8_t[20] random bytes
 
   if (plaintext.size() != kServerNoncePlaintextSize) {
     // This should never happen because the value decrypted correctly.
@@ -1595,7 +1717,7 @@ HandshakeFailureReason QuicCryptoServerConfig::ValidateServerNonce(
     return SERVER_NONCE_INVALID_FAILURE;
   }
 
-  uint8 server_nonce[32];
+  uint8_t server_nonce[32];
   memcpy(server_nonce, plaintext.data(), 4);
   memcpy(server_nonce + 4, server_nonce_orbit_, sizeof(server_nonce_orbit_));
   memcpy(server_nonce + 4 + sizeof(server_nonce_orbit_), plaintext.data() + 4,
@@ -1609,12 +1731,12 @@ HandshakeFailureReason QuicCryptoServerConfig::ValidateServerNonce(
     if (server_nonce_strike_register_.get() == nullptr) {
       server_nonce_strike_register_.reset(new StrikeRegister(
           server_nonce_strike_register_max_entries_,
-          static_cast<uint32>(now.ToUNIXSeconds()),
+          static_cast<uint32_t>(now.ToUNIXSeconds()),
           server_nonce_strike_register_window_secs_, server_nonce_orbit_,
           StrikeRegister::NO_STARTUP_PERIOD_NEEDED));
     }
     nonce_error = server_nonce_strike_register_->Insert(
-        server_nonce, static_cast<uint32>(now.ToUNIXSeconds()));
+        server_nonce, static_cast<uint32_t>(now.ToUNIXSeconds()));
   }
 
   switch (nonce_error) {
@@ -1636,6 +1758,47 @@ HandshakeFailureReason QuicCryptoServerConfig::ValidateServerNonce(
   }
 }
 
+bool QuicCryptoServerConfig::ValidateExpectedLeafCertificate(
+    const CryptoHandshakeMessage& client_hello,
+    const QuicCryptoProof& crypto_proof) const {
+  if (crypto_proof.certs->empty()) {
+    return false;
+  }
+
+  uint64_t hash_from_client;
+  if (client_hello.GetUint64(kXLCT, &hash_from_client) != QUIC_NO_ERROR) {
+    return false;
+  }
+  return CryptoUtils::ComputeLeafCertHash(crypto_proof.certs->at(0)) ==
+         hash_from_client;
+}
+
+void QuicCryptoServerConfig::ParseProofDemand(
+    const CryptoHandshakeMessage& client_hello,
+    bool* x509_supported,
+    bool* x509_ecdsa_supported) const {
+  const QuicTag* their_proof_demands;
+  size_t num_their_proof_demands;
+
+  if (client_hello.GetTaglist(kPDMD, &their_proof_demands,
+                              &num_their_proof_demands) != QUIC_NO_ERROR) {
+    return;
+  }
+
+  *x509_supported = false;
+  for (size_t i = 0; i < num_their_proof_demands; i++) {
+    switch (their_proof_demands[i]) {
+      case kX509:
+        *x509_supported = true;
+        *x509_ecdsa_supported = true;
+        break;
+      case kX59R:
+        *x509_supported = true;
+        break;
+    }
+  }
+}
+
 QuicCryptoServerConfig::Config::Config()
     : channel_id_enabled(false),
       is_primary(false),
@@ -1643,6 +1806,8 @@ QuicCryptoServerConfig::Config::Config()
       priority(0),
       source_address_token_boxer(nullptr) {}
 
-QuicCryptoServerConfig::Config::~Config() { STLDeleteElements(&key_exchanges); }
+QuicCryptoServerConfig::Config::~Config() {
+  STLDeleteElements(&key_exchanges);
+}
 
 }  // namespace net

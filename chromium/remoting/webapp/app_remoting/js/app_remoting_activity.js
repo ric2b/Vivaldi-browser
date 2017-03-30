@@ -29,12 +29,14 @@ remoting.AppHostResponse;
  * @param {remoting.Application} app
  * @param {remoting.WindowShape} windowShape
  * @param {string} subscriptionToken
+ * @param {base.WindowMessageDispatcher} windowMessageDispatcher
  *
  * @constructor
  * @implements {remoting.Activity}
  */
 remoting.AppRemotingActivity = function(appCapabilities, app, windowShape,
-                                        subscriptionToken) {
+                                        subscriptionToken,
+                                        windowMessageDispatcher) {
   /** @private */
   this.sessionFactory_ = new remoting.ClientSessionFactory(
       document.querySelector('#client-container .client-plugin-container'),
@@ -54,6 +56,9 @@ remoting.AppRemotingActivity = function(appCapabilities, app, windowShape,
 
   /** @private */
   this.subscriptionToken_ = subscriptionToken;
+
+  /** @private {base.WindowMessageDispatcher} */
+  this.windowMessageDispatcher_ = windowMessageDispatcher;
 };
 
 remoting.AppRemotingActivity.prototype.dispose = function() {
@@ -146,13 +151,12 @@ remoting.AppRemotingActivity.prototype.onAppHostResponse_ =
       var credentialsProvider = new remoting.CredentialsProvider(
               {fetchThirdPartyToken: fetchThirdPartyToken});
       var that = this;
+      var logger = remoting.SessionLogger.createForClient();
 
-      this.sessionFactory_.createSession(this).then(
+      this.sessionFactory_.createSession(this, logger).then(
         function(/** remoting.ClientSession */ session) {
           that.session_ = session;
-          session.logHostOfflineErrors(true);
-          session.getLogger().setLogEntryMode(
-              remoting.ChromotingEvent.Mode.LGAPP);
+          logger.setLogEntryMode(remoting.ChromotingEvent.Mode.LGAPP);
           session.connect(host, credentialsProvider);
       });
     } else if (response && response.status == 'pending') {
@@ -177,7 +181,7 @@ remoting.AppRemotingActivity.prototype.onAppHostResponse_ =
 remoting.AppRemotingActivity.prototype.onConnected = function(connectionInfo) {
   var connectedView = new remoting.AppConnectedView(
       document.getElementById('client-container'),
-      this.windowShape_, connectionInfo);
+      this.windowShape_, connectionInfo, this.windowMessageDispatcher_);
 
   var idleDetector = new remoting.IdleDetector(
       document.getElementById('idle-dialog'),

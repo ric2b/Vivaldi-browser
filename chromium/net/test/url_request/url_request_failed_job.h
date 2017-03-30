@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/url_request/url_request_job.h"
 #include "url/gurl.h"
@@ -39,7 +40,7 @@ class URLRequestFailedJob : public URLRequestJob {
 
   // URLRequestJob implementation:
   void Start() override;
-  bool ReadRawData(IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(IOBuffer* buf, int buf_size) override;
   int GetResponseCode() const override;
   void GetResponseInfo(HttpResponseInfo* info) override;
 
@@ -71,6 +72,7 @@ class URLRequestFailedJob : public URLRequestJob {
 
  protected:
   ~URLRequestFailedJob() override;
+  void StartAsync();
 
  private:
   HttpResponseInfo response_info_;

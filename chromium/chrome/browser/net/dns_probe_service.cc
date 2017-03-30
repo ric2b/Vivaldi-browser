@@ -4,6 +4,8 @@
 
 #include "chrome/browser/net/dns_probe_service.h"
 
+#include <utility>
+
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
@@ -15,7 +17,7 @@
 
 using base::FieldTrialList;
 using base::StringToInt;
-using chrome_common_net::DnsProbeStatus;
+using error_page::DnsProbeStatus;
 using net::DnsClient;
 using net::DnsConfig;
 using net::IPAddressNumber;
@@ -47,39 +49,39 @@ DnsProbeStatus EvaluateResults(DnsProbeRunner::Result system_result,
                                DnsProbeRunner::Result public_result) {
   // If the system DNS is working, assume the domain doesn't exist.
   if (system_result == DnsProbeRunner::CORRECT)
-    return chrome_common_net::DNS_PROBE_FINISHED_NXDOMAIN;
+    return error_page::DNS_PROBE_FINISHED_NXDOMAIN;
 
   // If the system DNS is unknown (e.g. on Android), but the public server is
   // reachable, assume the domain doesn't exist.
   if (system_result == DnsProbeRunner::UNKNOWN &&
       public_result == DnsProbeRunner::CORRECT) {
-    return chrome_common_net::DNS_PROBE_FINISHED_NXDOMAIN;
+    return error_page::DNS_PROBE_FINISHED_NXDOMAIN;
   }
 
   // If the system DNS is not working but another public server is, assume the
   // DNS config is bad (or perhaps the DNS servers are down or broken).
   if (public_result == DnsProbeRunner::CORRECT)
-    return chrome_common_net::DNS_PROBE_FINISHED_BAD_CONFIG;
+    return error_page::DNS_PROBE_FINISHED_BAD_CONFIG;
 
   // If the system DNS is not working and another public server is unreachable,
   // assume the internet connection is down (note that system DNS may be a
   // router on the LAN, so it may be reachable but returning errors.)
   if (public_result == DnsProbeRunner::UNREACHABLE)
-    return chrome_common_net::DNS_PROBE_FINISHED_NO_INTERNET;
+    return error_page::DNS_PROBE_FINISHED_NO_INTERNET;
 
   // Otherwise: the system DNS is not working and another public server is
   // responding but with errors or incorrect results.  This is an awkward case;
   // an invasive captive portal or a restrictive firewall may be intercepting
   // or rewriting DNS traffic, or the public server may itself be failing or
   // down.
-  return chrome_common_net::DNS_PROBE_FINISHED_INCONCLUSIVE;
+  return error_page::DNS_PROBE_FINISHED_INCONCLUSIVE;
 }
 
 void HistogramProbe(DnsProbeStatus status, base::TimeDelta elapsed) {
-  DCHECK(chrome_common_net::DnsProbeStatusIsFinished(status));
+  DCHECK(error_page::DnsProbeStatusIsFinished(status));
 
   UMA_HISTOGRAM_ENUMERATION("DnsProbe.ProbeResult", status,
-                            chrome_common_net::DNS_PROBE_MAX);
+                            error_page::DNS_PROBE_MAX);
   UMA_HISTOGRAM_MEDIUM_TIMES("DnsProbe.ProbeDuration", elapsed);
 }
 
@@ -126,12 +128,12 @@ void DnsProbeService::OnInitialDNSConfigRead() {
 
 void DnsProbeService::SetSystemClientForTesting(
     scoped_ptr<DnsClient> system_client) {
-  system_runner_.SetClient(system_client.Pass());
+  system_runner_.SetClient(std::move(system_client));
 }
 
 void DnsProbeService::SetPublicClientForTesting(
     scoped_ptr<DnsClient> public_client) {
-  public_runner_.SetClient(public_client.Pass());
+  public_runner_.SetClient(std::move(public_client));
 }
 
 void DnsProbeService::ClearCachedResultForTesting() {
@@ -148,7 +150,7 @@ void DnsProbeService::SetSystemClientToCurrentConfig() {
   scoped_ptr<DnsClient> system_client(DnsClient::CreateClient(NULL));
   system_client->SetConfig(system_config);
 
-  system_runner_.SetClient(system_client.Pass());
+  system_runner_.SetClient(std::move(system_client));
 }
 
 void DnsProbeService::SetPublicClientToGooglePublicDns() {
@@ -161,7 +163,7 @@ void DnsProbeService::SetPublicClientToGooglePublicDns() {
   scoped_ptr<DnsClient> public_client(DnsClient::CreateClient(NULL));
   public_client->SetConfig(public_config);
 
-  public_runner_.SetClient(public_client.Pass());
+  public_runner_.SetClient(std::move(public_client));
 }
 
 void DnsProbeService::StartProbes() {
@@ -198,7 +200,7 @@ void DnsProbeService::OnProbeComplete() {
 
 void DnsProbeService::CallCallbacks() {
   DCHECK_EQ(STATE_RESULT_CACHED, state_);
-  DCHECK(chrome_common_net::DnsProbeStatusIsFinished(cached_result_));
+  DCHECK(error_page::DnsProbeStatusIsFinished(cached_result_));
   DCHECK(!pending_callbacks_.empty());
 
   std::vector<ProbeCallback> callbacks;
@@ -213,7 +215,7 @@ void DnsProbeService::CallCallbacks() {
 void DnsProbeService::ClearCachedResult() {
   if (state_ == STATE_RESULT_CACHED) {
     state_ = STATE_NO_RESULT;
-    cached_result_ = chrome_common_net::DNS_PROBE_MAX;
+    cached_result_ = error_page::DNS_PROBE_MAX;
   }
 }
 

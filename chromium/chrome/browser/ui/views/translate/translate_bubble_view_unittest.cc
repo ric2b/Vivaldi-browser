@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/views/translate/translate_bubble_view.h"
 
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/translate/translate_bubble_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/combobox/combobox.h"
+#include "ui/views/test/combobox_test_api.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
 
@@ -142,9 +145,8 @@ class TranslateBubbleViewTest : public views::ViewsTestBase {
         TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE);
     scoped_ptr<TranslateBubbleModel> model(mock_model_);
     bubble_ = new TranslateBubbleView(anchor_widget_->GetContentsView(),
-                                      model.Pass(),
-                                      translate::TranslateErrors::NONE,
-                                      NULL);
+                                      std::move(model),
+                                      translate::TranslateErrors::NONE, NULL);
     views::BubbleDelegateView::CreateBubble(bubble_)->Show();
   }
 
@@ -154,6 +156,9 @@ class TranslateBubbleViewTest : public views::ViewsTestBase {
 
     views::ViewsTestBase::TearDown();
   }
+
+  views::Combobox* denial_combobox() { return bubble_->denial_combobox_; }
+  bool denial_button_clicked() { return bubble_->denial_button_clicked_; }
 
   scoped_ptr<views::Widget> anchor_widget_;
   MockTranslateBubbleModel* mock_model_;
@@ -166,6 +171,43 @@ TEST_F(TranslateBubbleViewTest, TranslateButton) {
   // Press the "Translate" button.
   bubble_->HandleButtonPressed(TranslateBubbleView::BUTTON_ID_TRANSLATE);
   EXPECT_TRUE(mock_model_->translate_called_);
+}
+
+TEST_F(TranslateBubbleViewTest, ComboboxNope) {
+  views::test::ComboboxTestApi test_api(denial_combobox());
+  EXPECT_FALSE(denial_button_clicked());
+  EXPECT_FALSE(bubble_->GetWidget()->IsClosed());
+
+  test_api.PerformActionAt(static_cast<int>(
+      TranslateBubbleView::DenialComboboxIndex::DONT_TRANSLATE));
+  EXPECT_TRUE(denial_button_clicked());
+  EXPECT_TRUE(bubble_->GetWidget()->IsClosed());
+}
+
+TEST_F(TranslateBubbleViewTest, ComboboxNeverTranslateLanguage) {
+  views::test::ComboboxTestApi test_api(denial_combobox());
+  EXPECT_FALSE(bubble_->GetWidget()->IsClosed());
+  EXPECT_FALSE(mock_model_->never_translate_language_);
+  EXPECT_FALSE(denial_button_clicked());
+
+  test_api.PerformActionAt(static_cast<int>(
+      TranslateBubbleView::DenialComboboxIndex::NEVER_TRANSLATE_LANGUAGE));
+  EXPECT_TRUE(denial_button_clicked());
+  EXPECT_TRUE(mock_model_->never_translate_language_);
+  EXPECT_TRUE(bubble_->GetWidget()->IsClosed());
+}
+
+TEST_F(TranslateBubbleViewTest, ComboboxNeverTranslateSite) {
+  views::test::ComboboxTestApi test_api(denial_combobox());
+  EXPECT_FALSE(mock_model_->never_translate_site_);
+  EXPECT_FALSE(denial_button_clicked());
+  EXPECT_FALSE(bubble_->GetWidget()->IsClosed());
+
+  test_api.PerformActionAt(static_cast<int>(
+      TranslateBubbleView::DenialComboboxIndex::NEVER_TRANSLATE_SITE));
+  EXPECT_TRUE(denial_button_clicked());
+  EXPECT_TRUE(mock_model_->never_translate_site_);
+  EXPECT_TRUE(bubble_->GetWidget()->IsClosed());
 }
 
 TEST_F(TranslateBubbleViewTest, AdvancedLink) {

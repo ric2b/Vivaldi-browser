@@ -5,24 +5,22 @@
  * Incognito and guest mode NTP shared CSS.
  */
 
-html {
-  background: #fafafa;
-}
-
-body {
-  line-height: 1.5;
-}
-
 h1 {
-  font-size: 1.7em;
-  font-weight: normal;
-  line-height: 1.2em;
-  margin-top: 0;
+  font-size: 200%;
+  font-weight: 300;
+  margin-bottom: 1.33em;
+}
+
+p {
+  line-height: 1.5;
+  margin-bottom: 2em;
+  text-align: start;
 }
 
 a {
-  color: rgb(39, 110, 242);
+  font-size: 108.3%;
   text-decoration: none;
+  text-transform: uppercase;
 }
 
 a:hover {
@@ -30,24 +28,21 @@ a:hover {
 }
 
 .content {
-  background-color: white;
-  border-radius: 2px;
-  box-shadow: 0 4px 6px 1px rgba(50, 50, 50, 0.14);
   box-sizing: border-box;
-  color: black;
-  line-height: 1.5;
-  margin: 5.5em auto 0;
-  max-width: 640px;
-  padding: 30px 35px 30px 37px;
-  width: 100%;
+  margin: 3.5em auto 0;
+  max-width: 420px;
+  min-width: 240px;
+  padding: 30px 35px;
+  text-align: center;
+}
+
+html[hascustombackground='true'] .content {
+  border-radius: 2px;
+  box-shadow: 0 4px 6px 1px rgba(0, 0, 0, 0.4);
 }
 
 .content > span {
   display: block;
-}
-
-.content p:last-child {
-  margin-bottom: 4px;
 }
 
 @media (max-width:700px) {
@@ -59,6 +54,11 @@ a:hover {
 @media (max-width:400px) {
   body {
     margin: 3em 1.5em 2em;
+  }
+
+  /* Adjustment for narrow screen to prevent horizontal scrollbar. */
+  .content {
+    padding: 16px 8px;
   }
 }
 

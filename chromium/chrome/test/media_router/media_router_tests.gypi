@@ -6,7 +6,12 @@
   'variables': {
     'media_router_integration_test_resources': [
       'resources/basic_test.html',
-      'resources/common.js'
+      'resources/common.js',
+      'resources/fail_create_route.json',
+      'resources/fail_reconnect_session.html',
+      'resources/fail_reconnect_session.json',
+      'resources/no_provider.json',
+      'resources/route_creation_timed_out.json',
     ],
   }, # end of variables
   'targets': [

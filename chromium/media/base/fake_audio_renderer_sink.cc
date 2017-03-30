@@ -8,13 +8,14 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
+#include "media/base/fake_output_device.h"
 
 namespace media {
 
 FakeAudioRendererSink::FakeAudioRendererSink()
     : state_(kUninitialized),
-      callback_(NULL) {
-}
+      callback_(NULL),
+      output_device_(new FakeOutputDevice) {}
 
 FakeAudioRendererSink::~FakeAudioRendererSink() {
   DCHECK(!callback_);
@@ -55,19 +56,17 @@ bool FakeAudioRendererSink::SetVolume(double volume) {
   return true;
 }
 
-void FakeAudioRendererSink::SwitchOutputDevice(
-    const std::string& device_id,
-    const GURL& security_origin,
-    const SwitchOutputDeviceCB& callback) {
-  callback.Run(SWITCH_OUTPUT_DEVICE_RESULT_SUCCESS);
+OutputDevice* FakeAudioRendererSink::GetOutputDevice() {
+  return output_device_.get();
 }
 
-bool FakeAudioRendererSink::Render(AudioBus* dest, int audio_delay_milliseconds,
+bool FakeAudioRendererSink::Render(AudioBus* dest,
+                                   uint32_t audio_delay_milliseconds,
                                    int* frames_written) {
   if (state_ != kPlaying)
     return false;
 
-  *frames_written = callback_->Render(dest, audio_delay_milliseconds);
+  *frames_written = callback_->Render(dest, audio_delay_milliseconds, 0);
   return true;
 }
 

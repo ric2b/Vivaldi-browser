@@ -4,6 +4,7 @@
 
 #include "content/browser/time_zone_monitor_android.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "jni/TimeZoneMonitor_jni.h"
 
@@ -25,8 +26,9 @@ bool TimeZoneMonitorAndroid::Register(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
-void TimeZoneMonitorAndroid::TimeZoneChangedFromJava(JNIEnv* env,
-                                                     jobject caller) {
+void TimeZoneMonitorAndroid::TimeZoneChangedFromJava(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& caller) {
   NotifyRenderers();
 }
 

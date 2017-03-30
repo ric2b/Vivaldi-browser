@@ -13,11 +13,16 @@ import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContent;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
 import org.chromium.chrome.browser.compositor.eventfilter.MockEventFilterHost;
+import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.ContextualSearchEventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilterHost;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.GestureHandler;
+import org.chromium.chrome.browser.compositor.scene_layer.ContextualSearchSceneLayer;
 
 /**
  * Class responsible for testing the ContextualSearchEventFilter.
@@ -27,6 +32,12 @@ public class ContextualSearchEventFilterTest extends InstrumentationTestCase
 
     private static final float SEARCH_PANEL_ALMOST_MAXIMIZED_OFFSET_Y_DP = 50.f;
     private static final float SEARCH_BAR_HEIGHT_DP = 100.f;
+
+    private static final float LAYOUT_WIDTH_DP = 600.f;
+    private static final float LAYOUT_HEIGHT_DP = 800.f;
+
+    // A small value used to check whether two floats are almost equal.
+    private static final float EPSILON = 1e-04f;
 
     private float mTouchSlopDp;
     private float mDpToPx;
@@ -79,8 +90,8 @@ public class ContextualSearchEventFilterTest extends InstrumentationTestCase
             // Check that the event offset is correct.
             if (!mShouldLockHorizontalMotionInSearchContentView) {
                 float propagatedEventY = mEventPropagatedToSearchContentView.getY();
-                float offsetY = mContextualSearchPanel.getSearchContentViewOffsetY() * mDpToPx;
-                assertEquals(propagatedEventY - offsetY, e.getY());
+                float offsetY = mContextualSearchPanel.getContentY() * mDpToPx;
+                assertEquals(propagatedEventY - offsetY, e.getY(), EPSILON);
             }
 
             // Propagates the event to the GestureDetector in order to be able to tell
@@ -99,8 +110,8 @@ public class ContextualSearchEventFilterTest extends InstrumentationTestCase
      */
     public class ContextualSearchEventFilterWrapper extends ContextualSearchEventFilter {
         public ContextualSearchEventFilterWrapper(Context context, EventFilterHost host,
-                GestureHandler handler, ContextualSearchPanel contextualSearchPanel) {
-            super(context, host, handler, contextualSearchPanel);
+                GestureHandler handler, OverlayPanelManager panelManager) {
+            super(context, host, handler, panelManager);
         }
 
         @Override
@@ -113,6 +124,73 @@ public class ContextualSearchEventFilterTest extends InstrumentationTestCase
             mEventPropagatedToSearchContentView = MotionEvent.obtain(e);
             super.propagateEventToSearchContentView(e);
             mEventPropagatedToSearchContentView.recycle();
+        }
+    }
+
+    // --------------------------------------------------------------------------------------------
+    // MockContextualSearchPanel
+    // --------------------------------------------------------------------------------------------
+
+    /**
+     * Mocks the ContextualSearchPanel, so it doesn't create ContentViewCore.
+     */
+    public static class MockContextualSearchPanel extends ContextualSearchPanel {
+
+        public MockContextualSearchPanel(Context context, LayoutUpdateHost updateHost,
+                OverlayPanelManager panelManager) {
+            super(context, updateHost, panelManager);
+        }
+
+        @Override
+        public OverlayPanelContent createNewOverlayPanelContent() {
+            return new MockOverlayPanelContent();
+        }
+
+        @Override
+        protected ContextualSearchSceneLayer createNewContextualSearchSceneLayer() {
+            return null;
+        }
+
+        /**
+         * Override creation and destruction of the ContentViewCore as they rely on native methods.
+         */
+        private static class MockOverlayPanelContent extends OverlayPanelContent {
+            public MockOverlayPanelContent() {
+                super(null, null, null);
+            }
+
+            @Override
+            public void removeLastHistoryEntry(String url, long timeInMs) {}
+        }
+
+        @Override
+        protected float getPeekPromoHeight() {
+            // Android Views are not used in this test so we cannot get the actual height.
+            return 0.f;
+        }
+    }
+
+    // --------------------------------------------------------------------------------------------
+    // MockOverlayPanelManager
+    // --------------------------------------------------------------------------------------------
+
+    /**
+     * OverlayPanelManager that always returns the MockContextualSearchPanel as the active
+     * panel.
+     */
+    private static class MockOverlayPanelManager extends OverlayPanelManager {
+        private OverlayPanel mPanel;
+
+        public MockOverlayPanelManager() {
+        }
+
+        public void setOverlayPanel(OverlayPanel panel) {
+            mPanel = panel;
+        }
+
+        @Override
+        public OverlayPanel getActivePanel() {
+            return mPanel;
         }
     }
 
@@ -130,11 +208,19 @@ public class ContextualSearchEventFilterTest extends InstrumentationTestCase
         mTouchSlopDp = ViewConfiguration.get(context).getScaledTouchSlop() / mDpToPx;
 
         EventFilterHost eventFilterHost = new MockEventFilterHostWrapper(context);
-        mContextualSearchPanel = new ContextualSearchPanel(context, null);
+        MockOverlayPanelManager panelManager = new MockOverlayPanelManager();
+        mContextualSearchPanel = new MockContextualSearchPanel(context, null, panelManager);
+        panelManager.setOverlayPanel(mContextualSearchPanel);
         mEventFilter = new ContextualSearchEventFilterWrapper(context, eventFilterHost, this,
-                mContextualSearchPanel);
+                panelManager);
 
         mContextualSearchPanel.setSearchBarHeightForTesting(SEARCH_BAR_HEIGHT_DP);
+        mContextualSearchPanel.setHeightForTesting(LAYOUT_HEIGHT_DP);
+        mContextualSearchPanel.setIsFullscreenSizePanelForTesting(true);
+
+        // NOTE(pedrosimonetti): This should be called after calling the method
+        // setIsFullscreenSizePanelForTesting(), otherwise it will crash the test.
+        mContextualSearchPanel.onSizeChanged(LAYOUT_WIDTH_DP, LAYOUT_HEIGHT_DP, false);
 
         setSearchContentViewVerticalScroll(0);
 
@@ -408,7 +494,7 @@ public class ContextualSearchEventFilterTest extends InstrumentationTestCase
     // --------------------------------------------------------------------------------------------
 
     @Override
-    public void onDown(float x, float y) {}
+    public void onDown(float x, float y, boolean fromMouse, int buttons) {}
 
     @Override
     public void onUpOrCancel() {}
@@ -419,7 +505,7 @@ public class ContextualSearchEventFilterTest extends InstrumentationTestCase
     }
 
     @Override
-    public void click(float x, float y) {
+    public void click(float x, float y, boolean fromMouse, int buttons) {
         mWasTapDetectedOnSearchPanel = true;
     }
 

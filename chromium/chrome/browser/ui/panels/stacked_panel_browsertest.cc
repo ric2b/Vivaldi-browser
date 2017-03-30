@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/panels/base_panel_browser_test.h"
 #include "chrome/browser/ui/panels/detached_panel_collection.h"
@@ -17,13 +18,7 @@
 class StackedPanelBrowserTest : public BasePanelBrowserTest {
 };
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CheckStackedPanelProperties DISABLED_CheckStackedPanelProperties
-#else
-#define MAYBE_CheckStackedPanelProperties CheckStackedPanelProperties
-#endif
-IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_CheckStackedPanelProperties) {
+IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, CheckStackedPanelProperties) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 stacked panels.
@@ -116,14 +111,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_CheckStackedPanelPropertie
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CheckMinimizedStackedPanelProperties DISABLED_CheckMinimizedStackedPanelProperties
-#else
-#define MAYBE_CheckMinimizedStackedPanelProperties CheckMinimizedStackedPanelProperties
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_CheckMinimizedStackedPanelProperties) {
+                       CheckMinimizedStackedPanelProperties) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 stacked panels.
@@ -220,13 +209,7 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ClickTitlebar DISABLED_ClickTitlebar
-#else
-#define MAYBE_ClickTitlebar ClickTitlebar
-#endif
-IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_ClickTitlebar) {
+IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, ClickTitlebar) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 stacked panels.
@@ -309,13 +292,7 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_ClickTitlebar) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_CallMinimizeAndRestoreApi DISABLED_CallMinimizeAndRestoreApi
-#else
-#define MAYBE_CallMinimizeAndRestoreApi CallMinimizeAndRestoreApi
-#endif
-IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_CallMinimizeAndRestoreApi) {
+IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, CallMinimizeAndRestoreApi) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 stacked panels.
@@ -360,13 +337,7 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_CallMinimizeAndRestoreApi)
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ExpandToFitWithinScreen DISABLED_ExpandToFitWithinScreen
-#else
-#define MAYBE_ExpandToFitWithinScreen ExpandToFitWithinScreen
-#endif
-IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_ExpandToFitWithinScreen) {
+IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, ExpandToFitWithinScreen) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   gfx::Rect work_area =
       panel_manager->display_settings_provider()->GetPrimaryWorkArea();
@@ -473,13 +444,7 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_ExpandToFitWithinScreen) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ExpandAllToFitWithinScreen DISABLED_ExpandAllToFitWithinScreen
-#else
-#define MAYBE_ExpandAllToFitWithinScreen ExpandAllToFitWithinScreen
-#endif
-IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_ExpandAllToFitWithinScreen) {
+IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, ExpandAllToFitWithinScreen) {
   PanelManager* panel_manager = PanelManager::GetInstance();
   gfx::Rect work_area =
       panel_manager->display_settings_provider()->GetPrimaryWorkArea();
@@ -529,13 +494,7 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_ExpandAllToFitWithinScreen
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_MinimizeButtonVisibility DISABLED_MinimizeButtonVisibility
-#else
-#define MAYBE_MinimizeButtonVisibility MinimizeButtonVisibility
-#endif
-IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_MinimizeButtonVisibility) {
+IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MinimizeButtonVisibility) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 3 stacked panels.
@@ -636,13 +595,7 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, DISABLED_ClickMinimizeButton) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UngroupMinimizedPanels DISABLED_UngroupMinimizedPanels
-#else
-#define MAYBE_UngroupMinimizedPanels UngroupMinimizedPanels
-#endif
-IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_UngroupMinimizedPanels) {
+IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, UngroupMinimizedPanels) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 3 stacked panels.
@@ -736,14 +689,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_UngroupMinimizedPanels) {
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelToStackWithMostPanels DISABLED_AddNewPanelToStackWithMostPanels
-#else
-#define MAYBE_AddNewPanelToStackWithMostPanels AddNewPanelToStackWithMostPanels
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelToStackWithMostPanels) {
+                       AddNewPanelToStackWithMostPanels) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create one stack with 2 panels.
@@ -778,14 +725,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelToRightMostStack DISABLED_AddNewPanelToRightMostStack
-#else
-#define MAYBE_AddNewPanelToRightMostStack AddNewPanelToRightMostStack
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelToRightMostStack) {
+                       AddNewPanelToRightMostStack) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create one stack with 2 panels.
@@ -819,14 +760,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelToTopMostStack DISABLED_AddNewPanelToTopMostStack
-#else
-#define MAYBE_AddNewPanelToTopMostStack AddNewPanelToTopMostStack
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelToTopMostStack) {
+                       AddNewPanelToTopMostStack) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create one stack with 2 panels.
@@ -861,14 +796,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelToGroupWithRightMostDetachedPanel DISABLED_AddNewPanelToGroupWithRightMostDetachedPanel
-#else
-#define MAYBE_AddNewPanelToGroupWithRightMostDetachedPanel AddNewPanelToGroupWithRightMostDetachedPanel
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelToGroupWithRightMostDetachedPanel) {
+                       AddNewPanelToGroupWithRightMostDetachedPanel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 detached panels.
@@ -894,14 +823,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelToGroupWitTopMostDetachedPanel DISABLED_AddNewPanelToGroupWitTopMostDetachedPanel
-#else
-#define MAYBE_AddNewPanelToGroupWitTopMostDetachedPanel AddNewPanelToGroupWitTopMostDetachedPanel
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelToGroupWitTopMostDetachedPanel) {
+                       AddNewPanelToGroupWitTopMostDetachedPanel) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 detached panels.
@@ -927,14 +850,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelToStackWithCollapseToFit DISABLED_AddNewPanelToStackWithCollapseToFit
-#else
-#define MAYBE_AddNewPanelToStackWithCollapseToFit AddNewPanelToStackWithCollapseToFit
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelToStackWithCollapseToFit) {
+                       AddNewPanelToStackWithCollapseToFit) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create one stack with 4 panels.
@@ -989,14 +906,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelToGroupWithDetachedPanelWithCollapseToFit DISABLED_AddNewPanelToGroupWithDetachedPanelWithCollapseToFit
-#else
-#define MAYBE_AddNewPanelToGroupWithDetachedPanelWithCollapseToFit AddNewPanelToGroupWithDetachedPanelWithCollapseToFit
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelToGroupWithDetachedPanelWithCollapseToFit) {
+                       AddNewPanelToGroupWithDetachedPanelWithCollapseToFit) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 detached panels.
@@ -1028,14 +939,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelAsDetachedDueToNoPanelToGroupWith DISABLED_AddNewPanelAsDetachedDueToNoPanelToGroupWith
-#else
-#define MAYBE_AddNewPanelAsDetachedDueToNoPanelToGroupWith AddNewPanelAsDetachedDueToNoPanelToGroupWith
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelAsDetachedDueToNoPanelToGroupWith) {
+                       AddNewPanelAsDetachedDueToNoPanelToGroupWith) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create one stack with 2 panels.
@@ -1067,14 +972,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_AddNewPanelFromDifferentExtension DISABLED_AddNewPanelFromDifferentExtension
-#else
-#define MAYBE_AddNewPanelFromDifferentExtension AddNewPanelFromDifferentExtension
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_AddNewPanelFromDifferentExtension) {
+                       AddNewPanelFromDifferentExtension) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 test extensions.
@@ -1144,9 +1043,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       DISABLED_AddNewPanelFromDifferentProfile) {
+                       AddNewPanelFromDifferentProfile) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create a new profile.
@@ -1281,13 +1179,7 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ClosePanels DISABLED_ClosePanels
-#else
-#define MAYBE_ClosePanels ClosePanels
-#endif
-IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, MAYBE_ClosePanels) {
+IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest, ClosePanels) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 3 stacked panels.
@@ -1411,14 +1303,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_ExpandCollapsedTopPanelOnBottomPanelClose DISABLED_ExpandCollapsedTopPanelOnBottomPanelClose
-#else
-#define MAYBE_ExpandCollapsedTopPanelOnBottomPanelClose ExpandCollapsedTopPanelOnBottomPanelClose
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_ExpandCollapsedTopPanelOnBottomPanelClose) {
+                       ExpandCollapsedTopPanelOnBottomPanelClose) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 stacked panels.
@@ -1453,8 +1339,7 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
 }
 
 // The activation waiting logic does not work well on MacOSX. Disabled for now.
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_FocusCollapsedStackedPanel DISABLED_FocusCollapsedStackedPanel
 #else
 #define MAYBE_FocusCollapsedStackedPanel FocusCollapsedStackedPanel
@@ -1487,14 +1372,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_UpdateStackedPanelsOnPrimaryDisplayChange DISABLED_UpdateStackedPanelsOnPrimaryDisplayChange
-#else
-#define MAYBE_UpdateStackedPanelsOnPrimaryDisplayChange UpdateStackedPanelsOnPrimaryDisplayChange
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_UpdateStackedPanelsOnPrimaryDisplayChange) {
+                       UpdateStackedPanelsOnPrimaryDisplayChange) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create one stack with 5 panels.
@@ -1558,14 +1437,8 @@ IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
   panel_manager->CloseAll();
 }
 
-// TODO reenable test for Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_KeepShowingStackedPanelCreatedBeforeFullScreenMode DISABLED_KeepShowingStackedPanelCreatedBeforeFullScreenMode
-#else
-#define MAYBE_KeepShowingStackedPanelCreatedBeforeFullScreenMode KeepShowingStackedPanelCreatedBeforeFullScreenMode
-#endif
 IN_PROC_BROWSER_TEST_F(StackedPanelBrowserTest,
-                       MAYBE_KeepShowingStackedPanelCreatedBeforeFullScreenMode) {
+                       KeepShowingStackedPanelCreatedBeforeFullScreenMode) {
   PanelManager* panel_manager = PanelManager::GetInstance();
 
   // Create 2 stacked panels.

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_CRITICAL_NOTIFICATION_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_CRITICAL_NOTIFICATION_BUBBLE_VIEW_H_
 
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "ui/views/bubble/bubble_delegate.h"
 #include "ui/views/controls/button/button.h"
@@ -57,7 +58,7 @@ class CriticalNotificationBubbleView : public views::BubbleDelegateView,
   views::LabelButton* dismiss_button_;
 
   // A timer to refresh the bubble to show new countdown value.
-  base::RepeatingTimer<CriticalNotificationBubbleView> refresh_timer_;
+  base::RepeatingTimer refresh_timer_;
 
   // When the bubble was created.
   base::Time bubble_created_;

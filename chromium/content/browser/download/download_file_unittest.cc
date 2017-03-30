@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -10,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_file_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/byte_stream.h"
 #include "content/browser/download/download_create_info.h"
@@ -50,15 +55,14 @@ class MockByteStreamReader : public ByteStreamReader {
 
 class MockDownloadDestinationObserver : public DownloadDestinationObserver {
  public:
-  MOCK_METHOD3(DestinationUpdate, void(int64, int64, const std::string&));
+  MOCK_METHOD3(DestinationUpdate, void(int64_t, int64_t, const std::string&));
   MOCK_METHOD1(DestinationError, void(DownloadInterruptReason));
   MOCK_METHOD1(DestinationCompleted, void(const std::string&));
 
   // Doesn't override any methods in the base class.  Used to make sure
   // that the last DestinationUpdate before a Destination{Completed,Error}
   // had the right values.
-  MOCK_METHOD3(CurrentUpdateStatus,
-               void(int64, int64, const std::string&));
+  MOCK_METHOD3(CurrentUpdateStatus, void(int64_t, int64_t, const std::string&));
 };
 
 MATCHER(IsNullCallback, "") { return (arg.is_null()); }
@@ -79,12 +83,12 @@ class TestDownloadFileImpl : public DownloadFileImpl {
                        scoped_ptr<ByteStreamReader> stream,
                        const net::BoundNetLog& bound_net_log,
                        base::WeakPtr<DownloadDestinationObserver> observer)
-      : DownloadFileImpl(save_info.Pass(),
+      : DownloadFileImpl(std::move(save_info),
                          default_downloads_directory,
                          url,
                          referrer_url,
                          calculate_hash,
-                         stream.Pass(),
+                         std::move(stream),
                          bound_net_log,
                          observer) {}
 
@@ -112,7 +116,7 @@ class DownloadFileTest : public testing::Test {
   static const char* kTestData2;
   static const char* kTestData3;
   static const char* kDataHash;
-  static const uint32 kDummyDownloadId;
+  static const uint32_t kDummyDownloadId;
   static const int kDummyChildId;
   static const int kDummyRequestId;
 
@@ -129,7 +133,8 @@ class DownloadFileTest : public testing::Test {
 
   ~DownloadFileTest() override {}
 
-  void SetUpdateDownloadInfo(int64 bytes, int64 bytes_per_sec,
+  void SetUpdateDownloadInfo(int64_t bytes,
+                             int64_t bytes_per_sec,
                              const std::string& hash_state) {
     bytes_ = bytes;
     bytes_per_sec_ = bytes_per_sec;
@@ -172,16 +177,14 @@ class DownloadFileTest : public testing::Test {
 
     scoped_ptr<DownloadSaveInfo> save_info(new DownloadSaveInfo());
     scoped_ptr<TestDownloadFileImpl> download_file_impl(
-        new TestDownloadFileImpl(save_info.Pass(),
-                                 base::FilePath(),
-                                 GURL(),  // Source
-                                 GURL(),  // Referrer
-                                 calculate_hash,
-                                 scoped_ptr<ByteStreamReader>(input_stream_),
-                                 net::BoundNetLog(),
-                                 observer_factory_.GetWeakPtr()));
+        new TestDownloadFileImpl(
+            std::move(save_info), base::FilePath(),
+            GURL(),  // Source
+            GURL(),  // Referrer
+            calculate_hash, scoped_ptr<ByteStreamReader>(input_stream_),
+            net::BoundNetLog(), observer_factory_.GetWeakPtr()));
     download_file_impl->SetClientGuid("12345678-ABCD-1234-DCBA-123456789ABC");
-    download_file_ = download_file_impl.Pass();
+    download_file_ = std::move(download_file_impl);
 
     EXPECT_CALL(*input_stream_, Read(_, _))
         .WillOnce(Return(ByteStreamReader::STREAM_EMPTY))
@@ -234,7 +237,7 @@ class DownloadFileTest : public testing::Test {
 
   void VerifyStreamAndSize() {
     ::testing::Mock::VerifyAndClearExpectations(input_stream_);
-    int64 size;
+    int64_t size;
     EXPECT_TRUE(base::GetFileSize(download_file_->FullPath(), &size));
     EXPECT_EQ(expected_data_.size(), static_cast<size_t>(size));
   }
@@ -335,8 +338,8 @@ class DownloadFileTest : public testing::Test {
   base::Closure sink_callback_;
 
   // Latest update sent to the observer.
-  int64 bytes_;
-  int64 bytes_per_sec_;
+  int64_t bytes_;
+  int64_t bytes_per_sec_;
   std::string hash_state_;
 
   base::MessageLoop loop_;
@@ -397,7 +400,7 @@ const char* DownloadFileTest::kTestData3 = "Final line.";
 const char* DownloadFileTest::kDataHash =
     "CBF68BF10F8003DB86B31343AFAC8C7175BD03FB5FC905650F8C80AF087443A8";
 
-const uint32 DownloadFileTest::kDummyDownloadId = 23;
+const uint32_t DownloadFileTest::kDummyDownloadId = 23;
 const int DownloadFileTest::kDummyChildId = 3;
 const int DownloadFileTest::kDummyRequestId = 67;
 
@@ -778,11 +781,11 @@ TEST_F(DownloadFileTest, ConfirmUpdate) {
 
   // Run the message loops for 750ms and check for results.
   loop_.task_runner()->PostDelayedTask(FROM_HERE,
-                                       base::MessageLoop::QuitClosure(),
+                                       base::MessageLoop::QuitWhenIdleClosure(),
                                        base::TimeDelta::FromMilliseconds(750));
   loop_.Run();
 
-  EXPECT_EQ(static_cast<int64>(strlen(kTestData1) + strlen(kTestData2)),
+  EXPECT_EQ(static_cast<int64_t>(strlen(kTestData1) + strlen(kTestData2)),
             bytes_);
   EXPECT_EQ(download_file_->GetHashState(), hash_state_);
 

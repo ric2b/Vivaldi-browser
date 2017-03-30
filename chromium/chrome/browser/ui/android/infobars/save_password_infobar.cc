@@ -4,14 +4,15 @@
 
 #include "chrome/browser/ui/android/infobars/save_password_infobar.h"
 
+#include <utility>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "jni/SavePasswordInfoBar_jni.h"
 
 SavePasswordInfoBar::SavePasswordInfoBar(
     scoped_ptr<SavePasswordInfoBarDelegate> delegate)
-    : ConfirmInfoBar(delegate.Pass()) {
-}
+    : ConfirmInfoBar(std::move(delegate)) {}
 
 SavePasswordInfoBar::~SavePasswordInfoBar() {
 }
@@ -28,15 +29,19 @@ SavePasswordInfoBar::CreateRenderInfoBar(JNIEnv* env) {
       env, GetTextFor(ConfirmInfoBarDelegate::BUTTON_CANCEL));
   ScopedJavaLocalRef<jstring> message_text = ConvertUTF16ToJavaString(
       env, save_password_delegate->GetMessageText());
+  ScopedJavaLocalRef<jstring> first_run_experience_message =
+      ConvertUTF16ToJavaString(
+          env, save_password_delegate->GetFirstRunExperienceMessage());
 
   return Java_SavePasswordInfoBar_show(
       env, GetEnumeratedIconId(), message_text.obj(),
-      save_password_delegate->title_link_range().start(),
-      save_password_delegate->title_link_range().end(), ok_button_text.obj(),
-      cancel_button_text.obj(), save_password_delegate->ShouldShowMoreButton());
+      save_password_delegate->message_link_range().start(),
+      save_password_delegate->message_link_range().end(), ok_button_text.obj(),
+      cancel_button_text.obj(), first_run_experience_message.obj());
 }
 
-void SavePasswordInfoBar::OnLinkClicked(JNIEnv* env, jobject obj) {
+void SavePasswordInfoBar::OnLinkClicked(JNIEnv* env,
+                                        const JavaParamRef<jobject>& obj) {
   GetDelegate()->LinkClicked(NEW_FOREGROUND_TAB);
 }
 
@@ -46,5 +51,5 @@ bool SavePasswordInfoBar::Register(JNIEnv* env) {
 
 scoped_ptr<infobars::InfoBar> CreateSavePasswordInfoBar(
     scoped_ptr<SavePasswordInfoBarDelegate> delegate) {
-  return make_scoped_ptr(new SavePasswordInfoBar(delegate.Pass()));
+  return make_scoped_ptr(new SavePasswordInfoBar(std::move(delegate)));
 }

@@ -3,13 +3,30 @@
  * found in the LICENSE file. */
 
 :host {
+  @apply(--layout-vertical);
+  @apply(--layout-fit);
+  @apply(--paper-font-body1);
   -webkit-user-select: none;
-  background-color: rgb(219, 222, 224);
-  display: block;
-  font-family: Roboto;
-  height: 100%;
+  background-color: #f2f2f2;
+  color: rgba(0, 0, 0, .87);
 }
 
-cr-settings-main paper-icon-button {
+paper-toolbar {
+  @apply(--shadow-elevation-4dp);
+  background-color: rgb(63, 85, 102);
+  position: relative;
+  z-index: 10;
+}
+
+paper-drawer-panel {
+  @apply(--layout-flex);
+  --paper-drawer-panel-left-drawer-container: {
+    background-color: #f2f2f2;
+    margin-top: 34px;
+  };
+  position: relative;
+}
+
+settings-main paper-icon-button {
   z-index: 10;
 }

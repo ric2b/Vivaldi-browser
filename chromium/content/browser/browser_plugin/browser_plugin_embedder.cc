@@ -50,8 +50,8 @@ void BrowserPluginEmbedder::DragLeftGuest(BrowserPluginGuest* guest) {
 bool BrowserPluginEmbedder::NotifyScreenInfoChanged(
     WebContents* guest_web_contents) {
   if (guest_web_contents->GetRenderViewHost()) {
-    auto render_widget_host =
-        RenderWidgetHostImpl::From(guest_web_contents->GetRenderViewHost());
+    auto render_widget_host = RenderWidgetHostImpl::From(
+        guest_web_contents->GetRenderViewHost()->GetWidget());
     render_widget_host->NotifyScreenInfoChanged();
   }
 
@@ -105,8 +105,9 @@ void BrowserPluginEmbedder::ClearGuestDragStateIfApplicable() {
 // static
 bool BrowserPluginEmbedder::DidSendScreenRectsCallback(
    WebContents* guest_web_contents) {
-  static_cast<RenderViewHostImpl*>(
-      guest_web_contents->GetRenderViewHost())->SendScreenRects();
+  RenderWidgetHostImpl::From(
+      guest_web_contents->GetRenderViewHost()->GetWidget())
+      ->SendScreenRects();
   // Not handled => Iterate over all guests.
   return false;
 }
@@ -194,6 +195,23 @@ bool BrowserPluginEmbedder::HandleKeyboardEvent(
   return event_consumed;
 }
 
+bool BrowserPluginEmbedder::Find(int request_id,
+                                 const base::string16& search_text,
+                                 const blink::WebFindOptions& options) {
+  return GetBrowserPluginGuestManager()->ForEachGuest(
+      web_contents(),
+      base::Bind(&BrowserPluginEmbedder::FindInGuest,
+                 request_id,
+                 search_text,
+                 options));
+}
+
+bool BrowserPluginEmbedder::StopFinding(StopFindAction action) {
+  return GetBrowserPluginGuestManager()->ForEachGuest(
+      web_contents(),
+      base::Bind(&BrowserPluginEmbedder::StopFindingInGuest, action));
+}
+
 BrowserPluginGuest* BrowserPluginEmbedder::GetFullPageGuest() {
   WebContentsImpl* guest_contents = static_cast<WebContentsImpl*>(
       GetBrowserPluginGuestManager()->GetFullPageGuest(web_contents()));
@@ -211,6 +229,34 @@ bool BrowserPluginEmbedder::UnlockMouseIfNecessaryCallback(bool* mouse_unlocked,
   guest->GotResponseToLockMouseRequest(false);
 
   // Returns false to iterate over all guests.
+  return false;
+}
+
+// static
+bool BrowserPluginEmbedder::FindInGuest(int request_id,
+                                        const base::string16& search_text,
+                                        const blink::WebFindOptions& options,
+                                        WebContents* guest) {
+  if (static_cast<WebContentsImpl*>(guest)
+          ->GetBrowserPluginGuest()
+          ->HandleFindForEmbedder(request_id, search_text, options)) {
+    // There can only ever currently be one browser plugin that handles find so
+    // we can break the iteration at this point.
+    return true;
+  }
+  return false;
+}
+
+// static
+bool BrowserPluginEmbedder::StopFindingInGuest(StopFindAction action,
+                                               WebContents* guest) {
+  if (static_cast<WebContentsImpl*>(guest)
+          ->GetBrowserPluginGuest()
+          ->HandleStopFindingForEmbedder(action)) {
+    // There can only ever currently be one browser plugin that handles find so
+    // we can break the iteration at this point.
+    return true;
+  }
   return false;
 }
 

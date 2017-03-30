@@ -1,7 +1,15 @@
 include_rules = [
+  "+components/data_use_measurement/core",
+  "+components/invalidation",
   "+components/os_crypt",
+  "+components/policy",
   "+components/pref_registry",
-  "+components/sessions",
+  "+components/signin/core/browser",
+  "+components/syncable_prefs",
+  "+components/version_info",
+  "+google",
   "+google_apis",
+  "+net",
+  "+policy",
   "+sync",
 ]

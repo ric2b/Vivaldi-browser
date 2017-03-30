@@ -1,4 +1,4 @@
-#  Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -11,13 +11,16 @@ import time
 from catapult_base import cloud_storage
 from telemetry.core import exceptions
 from telemetry.internal.actions import page_action
+from telemetry.internal.browser import browser_finder
 from telemetry.internal.results import results_options
 from telemetry.internal.util import exception_formatter
+from telemetry import page
 from telemetry.page import page_test
 from telemetry import story as story_module
 from telemetry.util import wpr_modes
 from telemetry.value import failure
 from telemetry.value import skip
+from telemetry.web_perf import story_test
 
 
 class ArchiveError(Exception):
@@ -64,24 +67,22 @@ def ProcessCommandLineArgs(parser, args):
     parser.error('--pageset-repeat must be a positive integer.')
 
 
-def _RunStoryAndProcessErrorIfNeeded(expectations, story, results,
-                                         state):
+def _RunStoryAndProcessErrorIfNeeded(story, results, state, test):
   def ProcessError():
-    if expectation == 'fail':
-      msg = 'Expected exception while running %s' % story.display_name
-      exception_formatter.PrintFormattedException(msg=msg)
-    else:
-      msg = 'Exception while running %s' % story.display_name
-      results.AddValue(failure.FailureValue(story, sys.exc_info()))
+    results.AddValue(failure.FailureValue(story, sys.exc_info()))
   try:
-    expectation = None
+    if isinstance(test, story_test.StoryTest):
+      test.WillRunStory(state.platform)
     state.WillRunStory(story)
-    expectation, skip_value = state.GetTestExpectationAndSkipValue(expectations)
-    if expectation == 'skip':
-      assert skip_value
-      results.AddValue(skip_value)
+    if not state.CanRunStory(story):
+      results.AddValue(skip.SkipValue(
+          story,
+          'Skipped because story is not supported '
+          '(SharedState.CanRunStory() returns False).'))
       return
     state.RunStory(results)
+    if isinstance(test, story_test.StoryTest):
+      test.Measure(state.platform, results)
   except (page_test.Failure, exceptions.TimeoutException,
           exceptions.LoginException, exceptions.ProfilingException):
     ProcessError()
@@ -96,20 +97,23 @@ def _RunStoryAndProcessErrorIfNeeded(expectations, story, results,
         failure.FailureValue(
             story, sys.exc_info(), 'Unhandlable exception raised.'))
     raise
-  else:
-    if expectation == 'fail':
-      logging.warning(
-          '%s was expected to fail, but passed.\n', story.display_name)
   finally:
-    has_existing_exception = sys.exc_info() is not None
+    has_existing_exception = (sys.exc_info() != (None, None, None))
     try:
       state.DidRunStory(results)
+      # if state.DidRunStory raises exception, things are messed up badly and we
+      # do not need to run test.DidRunStory at that point.
+      if isinstance(test, story_test.StoryTest):
+        test.DidRunStory(state.platform)
+      else:
+        test.DidRunPage(state.platform)
     except Exception:
       if not has_existing_exception:
         raise
       # Print current exception and propagate existing exception.
       exception_formatter.PrintFormattedException(
-          msg='Exception from DidRunStory: ')
+          msg='Exception raised when cleaning story run: ')
+
 
 class StoryGroup(object):
   def __init__(self, shared_state_class):
@@ -166,8 +170,7 @@ def StoriesGroupedByStateClass(story_set, allow_multiple_groups):
   return story_groups
 
 
-def Run(test, story_set, expectations, finder_options, results,
-        max_failures=None):
+def Run(test, story_set, finder_options, results, max_failures=None):
   """Runs a given test against a given page_set with the given options.
 
   Stop execution for unexpected exceptions such as KeyboardInterrupt.
@@ -212,8 +215,7 @@ def Run(test, story_set, expectations, finder_options, results,
             results.WillRunPage(story)
             try:
               _WaitForThermalThrottlingIfNeeded(state.platform)
-              _RunStoryAndProcessErrorIfNeeded(
-                  expectations, story, results, state)
+              _RunStoryAndProcessErrorIfNeeded(story, results, state, test)
             except exceptions.Error:
               # Catch all Telemetry errors to give the story a chance to retry.
               # The retry is enabled by tearing down the state and creating
@@ -226,7 +228,7 @@ def Run(test, story_set, expectations, finder_options, results,
                 # Later finally-blocks use state, so ensure it is cleared.
                 state = None
             finally:
-              has_existing_exception = sys.exc_info() is not None
+              has_existing_exception = sys.exc_info() != (None, None, None)
               try:
                 if state:
                   _CheckThermalThrottling(state.platform)
@@ -243,7 +245,7 @@ def Run(test, story_set, expectations, finder_options, results,
             return
     finally:
       if state:
-        has_existing_exception = sys.exc_info() is not None
+        has_existing_exception = sys.exc_info() != (None, None, None)
         try:
           state.TearDownState()
         except Exception:
@@ -252,6 +254,64 @@ def Run(test, story_set, expectations, finder_options, results,
           # Print current exception and propagate existing exception.
           exception_formatter.PrintFormattedException(
               msg='Exception from TearDownState:')
+
+
+def RunBenchmark(benchmark, finder_options):
+  """Run this test with the given options.
+
+  Returns:
+    The number of failure values (up to 254) or 255 if there is an uncaught
+    exception.
+  """
+  benchmark.CustomizeBrowserOptions(finder_options.browser_options)
+
+  possible_browser = browser_finder.FindBrowser(finder_options)
+  if possible_browser and benchmark.ShouldDisable(possible_browser):
+    logging.warning('%s is disabled on the selected browser', benchmark.Name())
+    if finder_options.run_disabled_tests:
+      logging.warning(
+          'Running benchmark anyway due to: --also-run-disabled-tests')
+    else:
+      logging.warning(
+          'Try --also-run-disabled-tests to force the benchmark to run.')
+      return 1
+
+  pt = benchmark.CreatePageTest(finder_options)
+  pt.__name__ = benchmark.__class__.__name__
+
+  if hasattr(benchmark, '_disabled_strings'):
+    # pylint: disable=protected-access
+    pt._disabled_strings = benchmark._disabled_strings
+  if hasattr(benchmark, '_enabled_strings'):
+    # pylint: disable=protected-access
+    pt._enabled_strings = benchmark._enabled_strings
+
+  stories = benchmark.CreateStorySet(finder_options)
+  if isinstance(pt, page_test.PageTest):
+    if any(not isinstance(p, page.Page) for p in stories.stories):
+      raise Exception(
+          'PageTest must be used with StorySet containing only '
+          'telemetry.page.Page stories.')
+
+  benchmark_metadata = benchmark.GetMetadata()
+  with results_options.CreateResults(
+      benchmark_metadata, finder_options,
+      benchmark.ValueCanBeAddedPredicate) as results:
+    try:
+      Run(pt, stories, finder_options, results, benchmark.max_failures)
+      return_code = min(254, len(results.failures))
+    except Exception:
+      exception_formatter.PrintFormattedException()
+      return_code = 255
+
+    try:
+      bucket = cloud_storage.BUCKET_ALIASES[finder_options.upload_bucket]
+      if finder_options.upload_results:
+        results.UploadTraceFilesToCloud(bucket)
+        results.UploadProfilingFilesToCloud(bucket)
+    finally:
+      results.PrintSummary()
+  return return_code
 
 
 def _UpdateAndCheckArchives(archive_data_file, wpr_archive_info,

@@ -5,13 +5,14 @@
 #ifndef CONTENT_BROWSER_MEDIA_CDM_BROWSER_CDM_MANAGER_H_
 #define CONTENT_BROWSER_MEDIA_CDM_BROWSER_CDM_MANAGER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
-#include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
@@ -28,7 +29,7 @@
 struct CdmHostMsg_CreateSessionAndGenerateRequest_Params;
 
 namespace media {
-class BrowserCdm;
+class CdmFactory;
 }
 
 namespace content {
@@ -55,7 +56,9 @@ class CONTENT_EXPORT BrowserCdmManager : public BrowserMessageFilter {
       const IPC::Message& message) override;
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  media::BrowserCdm* GetCdm(int render_frame_id, int cdm_id) const;
+  // Returns the CDM associated with |render_frame_id| and |cdm_id|. Returns
+  // null if no such CDM exists.
+  scoped_refptr<media::MediaKeys> GetCdm(int render_frame_id, int cdm_id) const;
 
   // Notifies that the render frame has been deleted so that all CDMs belongs
   // to this render frame needs to be destroyed as well. This is needed because
@@ -82,12 +85,16 @@ class CONTENT_EXPORT BrowserCdmManager : public BrowserMessageFilter {
   ~BrowserCdmManager() override;
 
  private:
+  // Returns the CdmFactory that can be used to create CDMs. Returns null if
+  // CDM is not supported.
+  media::CdmFactory* GetCdmFactory();
+
   // CDM callbacks.
   void OnSessionMessage(int render_frame_id,
                         int cdm_id,
                         const std::string& session_id,
                         media::MediaKeys::MessageType message_type,
-                        const std::vector<uint8>& message,
+                        const std::vector<uint8_t>& message,
                         const GURL& legacy_destination_url);
   void OnSessionClosed(int render_frame_id,
                        int cdm_id,
@@ -129,7 +136,7 @@ class CONTENT_EXPORT BrowserCdmManager : public BrowserMessageFilter {
                        int cdm_id,
                        uint32_t promise_id,
                        const std::string& session_id,
-                       const std::vector<uint8>& response);
+                       const std::vector<uint8_t>& response);
   void OnCloseSession(int render_frame_id,
                       int cdm_id,
                       uint32_t promise_id,
@@ -140,20 +147,19 @@ class CONTENT_EXPORT BrowserCdmManager : public BrowserMessageFilter {
                        const std::string& session_id);
   void OnDestroyCdm(int render_frame_id, int cdm_id);
 
-  // Adds a new CDM identified by |cdm_id| for the given |key_system| and
-  // |security_origin|.
-  void AddCdm(int render_frame_id,
-              int cdm_id,
-              uint32_t promise_id,
-              const std::string& key_system,
-              const GURL& security_origin,
-              bool use_hw_secure_codecs);
+  // Callback for CDM creation.
+  void OnCdmCreated(int render_frame_id,
+                    int cdm_id,
+                    const GURL& security_origin,
+                    scoped_ptr<media::SimpleCdmPromise> promise,
+                    const scoped_refptr<media::MediaKeys>& cdm,
+                    const std::string& error_message);
 
   // Removes all CDMs associated with |render_frame_id|.
   void RemoveAllCdmForFrame(int render_frame_id);
 
   // Removes the CDM with the specified id.
-  void RemoveCdm(uint64 id);
+  void RemoveCdm(uint64_t id);
 
   using PermissionStatusCB = base::Callback<void(bool)>;
 
@@ -177,7 +183,7 @@ class CONTENT_EXPORT BrowserCdmManager : public BrowserMessageFilter {
       int cdm_id,
       media::MediaKeys::SessionType session_type,
       media::EmeInitDataType init_data_type,
-      const std::vector<uint8>& init_data,
+      const std::vector<uint8_t>& init_data,
       scoped_ptr<media::NewSessionCdmPromise> promise,
       bool permission_was_allowed);
 
@@ -196,15 +202,17 @@ class CONTENT_EXPORT BrowserCdmManager : public BrowserMessageFilter {
   // dispatched to the browser UI thread.
   scoped_refptr<base::TaskRunner> task_runner_;
 
+  scoped_ptr<media::CdmFactory> cdm_factory_;
+
   // The key in the following maps is a combination of |render_frame_id| and
   // |cdm_id|.
 
-  // Map of managed BrowserCdms.
-  typedef base::ScopedPtrHashMap<uint64, scoped_ptr<media::BrowserCdm>> CdmMap;
+  // Map of managed CDMs.
+  typedef std::map<uint64_t, scoped_refptr<media::MediaKeys>> CdmMap;
   CdmMap cdm_map_;
 
   // Map of CDM's security origin.
-  std::map<uint64, GURL> cdm_security_origin_map_;
+  std::map<uint64_t, GURL> cdm_security_origin_map_;
 
   base::WeakPtrFactory<BrowserCdmManager> weak_ptr_factory_;
 

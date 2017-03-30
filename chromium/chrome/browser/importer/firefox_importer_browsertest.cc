@@ -2,15 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/importer/importer_progress_observer.h"
 #include "chrome/browser/importer/importer_unittest_utils.h"
@@ -144,7 +148,7 @@ class FirefoxObserver : public ProfileWriter,
   void ImportItemStarted(importer::ImportItem item) override {}
   void ImportItemEnded(importer::ImportItem item) override {}
   void ImportEnded() override {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
     EXPECT_EQ(arraysize(kFirefoxBookmarks), bookmark_count_);
     EXPECT_EQ(1U, history_count_);
     EXPECT_EQ(arraysize(kFirefoxPasswords), password_count_);
@@ -349,4 +353,11 @@ IN_PROC_BROWSER_TEST_F(FirefoxProfileImporterBrowserTest,
                        MAYBE_IMPORTER(FirefoxImporter)) {
   scoped_refptr<FirefoxObserver> observer(new FirefoxObserver(true));
   FirefoxImporterBrowserTest("firefox_profile", observer.get(), observer.get());
+}
+
+IN_PROC_BROWSER_TEST_F(FirefoxProfileImporterBrowserTest,
+                       MAYBE_IMPORTER(Firefox320Importer)) {
+  scoped_refptr<FirefoxObserver> observer(new FirefoxObserver(true));
+  FirefoxImporterBrowserTest("firefox320_profile", observer.get(),
+                             observer.get());
 }

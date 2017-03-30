@@ -5,6 +5,7 @@
 #include "extensions/common/manifest_handlers/options_page_info.h"
 
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "extensions/common/api/extensions_manifest_types.h"
@@ -23,7 +24,7 @@ namespace extensions {
 namespace keys = manifest_keys;
 namespace errors = manifest_errors;
 
-using core_api::extensions_manifest_types::OptionsUI;
+using api::extensions_manifest_types::OptionsUI;
 
 namespace {
 

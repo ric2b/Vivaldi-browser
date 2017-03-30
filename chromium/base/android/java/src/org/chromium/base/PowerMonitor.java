@@ -11,6 +11,9 @@ import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
+
 
 /**
  * Integrates native PowerMonitor with the java side.
@@ -56,7 +59,7 @@ public class PowerMonitor implements ApplicationStatus.ApplicationStateListener 
             ApplicationStatus.registerApplicationStateListener(sInstance);
             IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
             Intent batteryStatusIntent = context.registerReceiver(null, ifilter);
-            onBatteryChargingChanged(batteryStatusIntent);
+            if (batteryStatusIntent != null) onBatteryChargingChanged(batteryStatusIntent);
         }
     }
 

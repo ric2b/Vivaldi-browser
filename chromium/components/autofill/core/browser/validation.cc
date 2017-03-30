@@ -4,6 +4,8 @@
 
 #include "components/autofill/core/browser/validation.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -108,10 +110,8 @@ bool IsValidCreditCardSecurityCode(const base::string16& text) {
   if (text.size() < 3U || text.size() > 4U)
     return false;
 
-  for (base::string16::const_iterator iter = text.begin();
-       iter != text.end();
-       ++iter) {
-    if (!base::IsAsciiDigit(*iter))
+  for (const base::char16& it : text) {
+    if (!base::IsAsciiDigit(it))
       return false;
   }
   return true;

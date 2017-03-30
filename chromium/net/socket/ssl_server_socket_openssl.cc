@@ -6,6 +6,7 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <utility>
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
@@ -28,18 +29,18 @@ void EnableSSLServerSockets() {
 scoped_ptr<SSLServerSocket> CreateSSLServerSocket(
     scoped_ptr<StreamSocket> socket,
     X509Certificate* certificate,
-    crypto::RSAPrivateKey* key,
-    const SSLConfig& ssl_config) {
+    const crypto::RSAPrivateKey& key,
+    const SSLServerConfig& ssl_config) {
   crypto::EnsureOpenSSLInit();
-  return scoped_ptr<SSLServerSocket>(
-      new SSLServerSocketOpenSSL(socket.Pass(), certificate, key, ssl_config));
+  return scoped_ptr<SSLServerSocket>(new SSLServerSocketOpenSSL(
+      std::move(socket), certificate, key, ssl_config));
 }
 
 SSLServerSocketOpenSSL::SSLServerSocketOpenSSL(
     scoped_ptr<StreamSocket> transport_socket,
     scoped_refptr<X509Certificate> certificate,
-    crypto::RSAPrivateKey* key,
-    const SSLConfig& ssl_config)
+    const crypto::RSAPrivateKey& key,
+    const SSLServerConfig& ssl_config)
     : transport_send_busy_(false),
       transport_recv_busy_(false),
       transport_recv_eof_(false),
@@ -48,16 +49,13 @@ SSLServerSocketOpenSSL::SSLServerSocketOpenSSL(
       transport_write_error_(OK),
       ssl_(NULL),
       transport_bio_(NULL),
-      transport_socket_(transport_socket.Pass()),
+      transport_socket_(std::move(transport_socket)),
       ssl_config_(ssl_config),
       cert_(certificate),
+      key_(key.Copy()),
       next_handshake_state_(STATE_NONE),
       completed_handshake_(false) {
-  // TODO(byungchul): Need a better way to clone a key.
-  std::vector<uint8> key_bytes;
-  CHECK(key->ExportPrivateKey(&key_bytes));
-  key_.reset(crypto::RSAPrivateKey::CreateFromPrivateKeyInfo(key_bytes));
-  CHECK(key_.get());
+  CHECK(key_);
 }
 
 SSLServerSocketOpenSSL::~SSLServerSocketOpenSSL() {
@@ -134,7 +132,7 @@ int SSLServerSocketOpenSSL::Read(IOBuffer* buf, int buf_len,
                                  const CompletionCallback& callback) {
   DCHECK(user_read_callback_.is_null());
   DCHECK(user_handshake_callback_.is_null());
-  DCHECK(!user_read_buf_.get());
+  DCHECK(!user_read_buf_);
   DCHECK(!callback.is_null());
 
   user_read_buf_ = buf;
@@ -157,7 +155,7 @@ int SSLServerSocketOpenSSL::Read(IOBuffer* buf, int buf_len,
 int SSLServerSocketOpenSSL::Write(IOBuffer* buf, int buf_len,
                                   const CompletionCallback& callback) {
   DCHECK(user_write_callback_.is_null());
-  DCHECK(!user_write_buf_.get());
+  DCHECK(!user_write_buf_);
   DCHECK(!callback.is_null());
 
   user_write_buf_ = buf;
@@ -174,11 +172,11 @@ int SSLServerSocketOpenSSL::Write(IOBuffer* buf, int buf_len,
   return rv;
 }
 
-int SSLServerSocketOpenSSL::SetReceiveBufferSize(int32 size) {
+int SSLServerSocketOpenSSL::SetReceiveBufferSize(int32_t size) {
   return transport_socket_->SetReceiveBufferSize(size);
 }
 
-int SSLServerSocketOpenSSL::SetSendBufferSize(int32 size) {
+int SSLServerSocketOpenSSL::SetSendBufferSize(int32_t size) {
   return transport_socket_->SetSendBufferSize(size);
 }
 
@@ -253,6 +251,10 @@ void SSLServerSocketOpenSSL::GetConnectionAttempts(
   out->clear();
 }
 
+int64_t SSLServerSocketOpenSSL::GetTotalReceivedBytes() const {
+  return transport_socket_->GetTotalReceivedBytes();
+}
+
 void SSLServerSocketOpenSSL::OnSendComplete(int result) {
   if (next_handshake_state_ == STATE_HANDSHAKE) {
     // In handshake phase.
@@ -265,7 +267,7 @@ void SSLServerSocketOpenSSL::OnSendComplete(int result) {
   if (!completed_handshake_)
     return;
 
-  if (user_write_buf_.get()) {
+  if (user_write_buf_) {
     int rv = DoWriteLoop(result);
     if (rv != ERR_IO_PENDING)
       DoWriteCallback(rv);
@@ -284,7 +286,7 @@ void SSLServerSocketOpenSSL::OnRecvComplete(int result) {
 
   // Network layer received some data, check if client requested to read
   // decrypted data.
-  if (!user_read_buf_.get() || !completed_handshake_)
+  if (!user_read_buf_ || !completed_handshake_)
     return;
 
   int rv = DoReadLoop(result);
@@ -309,7 +311,7 @@ int SSLServerSocketOpenSSL::BufferSend() {
   if (transport_send_busy_)
     return ERR_IO_PENDING;
 
-  if (!send_buffer_.get()) {
+  if (!send_buffer_) {
     // Get a fresh send buffer out of the send BIO.
     size_t max_read = BIO_pending(transport_bio_);
     if (!max_read)
@@ -358,7 +360,7 @@ void SSLServerSocketOpenSSL::TransportWriteComplete(int result) {
     (void)BIO_shutdown_wr(transport_bio_);
     send_buffer_ = NULL;
   } else {
-    DCHECK(send_buffer_.get());
+    DCHECK(send_buffer_);
     send_buffer_->DidConsume(result);
     DCHECK_GE(send_buffer_->BytesRemaining(), 0);
     if (send_buffer_->BytesRemaining() <= 0)
@@ -427,7 +429,7 @@ int SSLServerSocketOpenSSL::TransportReadComplete(int result) {
     // the CHECK. http://crbug.com/335557.
     result = transport_write_error_;
   } else {
-    DCHECK(recv_buffer_.get());
+    DCHECK(recv_buffer_);
     int ret = BIO_write(transport_bio_, recv_buffer_->data(), result);
     // A write into a memory BIO should always succeed.
     DCHECK_EQ(result, ret);
@@ -456,7 +458,7 @@ bool SSLServerSocketOpenSSL::DoTransportIO() {
 }
 
 int SSLServerSocketOpenSSL::DoPayloadRead() {
-  DCHECK(user_read_buf_.get());
+  DCHECK(user_read_buf_);
   DCHECK_GT(user_read_buf_len_, 0);
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
   int rv = SSL_read(ssl_, user_read_buf_->data(), user_read_buf_len_);
@@ -475,7 +477,7 @@ int SSLServerSocketOpenSSL::DoPayloadRead() {
 }
 
 int SSLServerSocketOpenSSL::DoPayloadWrite() {
-  DCHECK(user_write_buf_.get());
+  DCHECK(user_write_buf_);
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
   int rv = SSL_write(ssl_, user_write_buf_->data(), user_write_buf_len_);
   if (rv >= 0)
@@ -614,6 +616,10 @@ int SSLServerSocketOpenSSL::Init() {
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
 
   ScopedSSL_CTX ssl_ctx(SSL_CTX_new(SSLv23_server_method()));
+
+  if (ssl_config_.require_client_cert)
+    SSL_CTX_set_verify(ssl_ctx.get(), SSL_VERIFY_PEER, NULL);
+
   ssl_ = SSL_new(ssl_ctx.get());
   if (!ssl_)
     return ERR_UNEXPECTED;
@@ -644,7 +650,7 @@ int SSLServerSocketOpenSSL::Init() {
       reinterpret_cast<const unsigned char*>(der_string.data());
 
   ScopedX509 x509(d2i_X509(NULL, &der_string_array, der_string.length()));
-  if (!x509.get())
+  if (!x509)
     return ERR_UNEXPECTED;
 
   // On success, SSL_use_certificate acquires a reference to |x509|.
@@ -681,38 +687,21 @@ int SSLServerSocketOpenSSL::Init() {
   SSL_set_mode(ssl_, mode.set_mask);
   SSL_clear_mode(ssl_, mode.clear_mask);
 
-  // Removing ciphers by ID from OpenSSL is a bit involved as we must use the
-  // textual name with SSL_set_cipher_list because there is no public API to
-  // directly remove a cipher by ID.
-  STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(ssl_);
-  DCHECK(ciphers);
-  // See SSLConfig::disabled_cipher_suites for description of the suites
+  // See SSLServerConfig::disabled_cipher_suites for description of the suites
   // disabled by default. Note that !SHA256 and !SHA384 only remove HMAC-SHA256
   // and HMAC-SHA384 cipher suites, not GCM cipher suites with SHA256 or SHA384
   // as the handshake hash.
   std::string command("DEFAULT:!SHA256:!SHA384:!AESGCM+AES256:!aPSK");
-  // Walk through all the installed ciphers, seeing if any need to be
-  // appended to the cipher removal |command|.
-  for (size_t i = 0; i < sk_SSL_CIPHER_num(ciphers); ++i) {
-    const SSL_CIPHER* cipher = sk_SSL_CIPHER_value(ciphers, i);
-    const uint16_t id = static_cast<uint16_t>(SSL_CIPHER_get_id(cipher));
 
-    bool disable = false;
-    if (ssl_config_.require_ecdhe) {
-      base::StringPiece kx_name(SSL_CIPHER_get_kx_name(cipher));
-      disable = kx_name != "ECDHE_RSA" && kx_name != "ECDHE_ECDSA";
-    }
-    if (!disable) {
-      disable = std::find(ssl_config_.disabled_cipher_suites.begin(),
-                          ssl_config_.disabled_cipher_suites.end(),
-                          id) != ssl_config_.disabled_cipher_suites.end();
-    }
-    if (disable) {
-      const char* name = SSL_CIPHER_get_name(cipher);
-      DVLOG(3) << "Found cipher to remove: '" << name << "', ID: " << id
-               << " strength: " << SSL_CIPHER_get_bits(cipher, NULL);
+  if (ssl_config_.require_ecdhe)
+    command.append(":!kRSA:!kDHE");
+
+  // Remove any disabled ciphers.
+  for (uint16_t id : ssl_config_.disabled_cipher_suites) {
+    const SSL_CIPHER* cipher = SSL_get_cipher_by_value(id);
+    if (cipher) {
       command.append(":!");
-      command.append(name);
+      command.append(SSL_CIPHER_get_name(cipher));
     }
   }
 

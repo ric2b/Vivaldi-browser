@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "tools/gn/exec_process.h"
+
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "tools/gn/exec_process.h"
 
 #if defined(OS_WIN)
 #include "base/strings/utf_string_conversions.h"
@@ -14,6 +16,10 @@
 
 namespace internal {
 
+// TODO(cjhopman): Enable these tests when windows ExecProcess handles stderr.
+// 'python' is not runnable on Windows. Adding ["cmd", "/c"] fails because
+// CommandLine does unusual reordering of args.
+#if !defined(OS_WIN)
 namespace {
 bool ExecPython(const std::string& command,
                 std::string* std_out,
@@ -35,10 +41,6 @@ bool ExecPython(const std::string& command,
 }
 }  // namespace
 
-// TODO(cjhopman): Enable these tests when windows ExecProcess handles stderr.
-// 'python' is not runnable on Windows. Adding ["cmd", "/c"] fails because
-// CommandLine does unusual reordering of args.
-#if !defined(OS_WIN)
 TEST(ExecProcessTest, TestExitCode) {
   std::string std_out, std_err;
   int exit_code;

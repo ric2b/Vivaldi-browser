@@ -46,11 +46,6 @@ class ChildAccountService : public KeyedService,
 
   void Init();
 
-  // Sets whether the signed-in account is a child account.
-  // Public so it can be called on platforms where child account detection
-  // happens outside of this class (like Android).
-  void SetIsChildAccount(bool is_child_account);
-
   // Responds whether at least one request for child status was successful.
   // And we got answer whether the profile belongs to a child account or not.
   bool IsChildAccountStatusKnown();
@@ -69,9 +64,11 @@ class ChildAccountService : public KeyedService,
   // SupervisedUserService::Delegate implementation.
   bool SetActive(bool active) override;
 
+  // Sets whether the signed-in account is a child account.
+  void SetIsChildAccount(bool is_child_account);
+
   // AccountTrackerService::Observer implementation.
-  void OnAccountUpdated(
-      const AccountTrackerService::AccountInfo& info) override;
+  void OnAccountUpdated(const AccountInfo& info) override;
 
   // FamilyInfoFetcher::Consumer implementation.
   void OnGetFamilyMembersSuccess(
@@ -97,7 +94,7 @@ class ChildAccountService : public KeyedService,
 
   scoped_ptr<FamilyInfoFetcher> family_fetcher_;
   // If fetching the family info fails, retry with exponential backoff.
-  base::OneShotTimer<ChildAccountService> family_fetch_timer_;
+  base::OneShotTimer family_fetch_timer_;
   net::BackoffEntry family_fetch_backoff_;
 
   // Callbacks to run when the user status becomes known.

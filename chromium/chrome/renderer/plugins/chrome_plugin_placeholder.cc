@@ -4,6 +4,9 @@
 
 #include "chrome/renderer/plugins/chrome_plugin_placeholder.h"
 
+#include <utility>
+
+#include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -16,6 +19,7 @@
 #include "chrome/renderer/plugins/plugin_preroller.h"
 #include "chrome/renderer/plugins/plugin_uma.h"
 #include "components/content_settings/content/common/content_settings_messages.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -108,26 +112,28 @@ ChromePluginPlaceholder* ChromePluginPlaceholder::CreateBlockedPlugin(
     const base::string16& name,
     int template_id,
     const base::string16& message,
-    const PlaceholderPosterInfo& poster_info) {
+    const PowerSaverInfo& power_saver_info) {
   base::DictionaryValue values;
   values.SetString("message", message);
   values.SetString("name", name);
   values.SetString("hide", l10n_util::GetStringUTF8(IDS_PLUGIN_HIDE));
   values.SetString("pluginType",
+                   frame->view()->mainFrame()->isWebLocalFrame() &&
                    frame->view()->mainFrame()->document().isPluginDocument()
                        ? "document"
                        : "embedded");
 
-  if (!poster_info.poster_attribute.empty()) {
-    values.SetString("poster", poster_info.poster_attribute);
-    values.SetString("baseurl", poster_info.base_url.spec());
+  if (!power_saver_info.poster_attribute.empty()) {
+    values.SetString("poster", power_saver_info.poster_attribute);
+    values.SetString("baseurl", power_saver_info.base_url.spec());
 
-    if (!poster_info.custom_poster_size.IsEmpty()) {
+    if (!power_saver_info.custom_poster_size.IsEmpty()) {
       float zoom_factor =
           blink::WebView::zoomLevelToZoomFactor(frame->view()->zoomLevel());
-      int width = roundf(poster_info.custom_poster_size.width() / zoom_factor);
+      int width =
+          roundf(power_saver_info.custom_poster_size.width() / zoom_factor);
       int height =
-          roundf(poster_info.custom_poster_size.height() / zoom_factor);
+          roundf(power_saver_info.custom_poster_size.height() / zoom_factor);
       values.SetString("visibleWidth", base::IntToString(width) + "px");
       values.SetString("visibleHeight", base::IntToString(height) + "px");
     }
@@ -144,10 +150,15 @@ ChromePluginPlaceholder* ChromePluginPlaceholder::CreateBlockedPlugin(
   ChromePluginPlaceholder* blocked_plugin = new ChromePluginPlaceholder(
       render_frame, frame, params, html_data, name);
 
-  if (!poster_info.poster_attribute.empty())
+  if (!power_saver_info.poster_attribute.empty())
     blocked_plugin->BlockForPowerSaverPoster();
   blocked_plugin->SetPluginInfo(info);
   blocked_plugin->SetIdentifier(identifier);
+
+  blocked_plugin->set_power_saver_enabled(power_saver_info.power_saver_enabled);
+  blocked_plugin->set_blocked_for_background_tab(
+      power_saver_info.blocked_for_background_tab);
+
   return blocked_plugin;
 }
 
@@ -157,7 +168,7 @@ void ChromePluginPlaceholder::SetStatus(
 }
 
 #if defined(ENABLE_PLUGIN_INSTALLATION)
-int32 ChromePluginPlaceholder::CreateRoutingId() {
+int32_t ChromePluginPlaceholder::CreateRoutingId() {
   placeholder_routing_id_ = RenderThread::Get()->GenerateRoutingID();
   RenderThread::Get()->AddRoute(placeholder_routing_id_, this);
   return placeholder_routing_id_;
@@ -247,10 +258,11 @@ void ChromePluginPlaceholder::PluginListChanged() {
 
   ChromeViewHostMsg_GetPluginInfo_Output output;
   std::string mime_type(GetPluginParams().mimeType.utf8());
+  blink::WebString top_origin = GetFrame()->top()->securityOrigin().toString();
   render_frame()->Send(
       new ChromeViewHostMsg_GetPluginInfo(routing_id(),
                                           GURL(GetPluginParams().url),
-                                          document.url(),
+                                          GURL(top_origin),
                                           mime_type,
                                           &output));
   if (output.status == status_)
@@ -324,8 +336,10 @@ void ChromePluginPlaceholder::ShowContextMenu(
 
   content::MenuItem hide_item;
   hide_item.action = chrome::MENU_COMMAND_PLUGIN_HIDE;
-  hide_item.enabled =
-      !GetFrame()->view()->mainFrame()->document().isPluginDocument();
+  bool is_main_frame_plugin_document =
+      GetFrame()->view()->mainFrame()->isWebLocalFrame() &&
+      GetFrame()->view()->mainFrame()->document().isPluginDocument();
+  hide_item.enabled = !is_main_frame_plugin_document;
   hide_item.label = l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_PLUGIN_HIDE);
   params.custom_items.push_back(hide_item);
 
@@ -349,20 +363,29 @@ blink::WebPlugin* ChromePluginPlaceholder::CreatePlugin() {
                         throttler.get());
   }
   return render_frame()->CreatePlugin(GetFrame(), GetPluginInfo(),
-                                      GetPluginParams(), throttler.Pass());
+                                      GetPluginParams(), std::move(throttler));
 }
 
 gin::ObjectTemplateBuilder ChromePluginPlaceholder::GetObjectTemplateBuilder(
     v8::Isolate* isolate) {
-  return gin::Wrappable<ChromePluginPlaceholder>::GetObjectTemplateBuilder(
-             isolate)
-      .SetMethod<void (ChromePluginPlaceholder::*)()>(
-           "hide", &ChromePluginPlaceholder::HideCallback)
-      .SetMethod<void (ChromePluginPlaceholder::*)()>(
-           "load", &ChromePluginPlaceholder::LoadCallback)
-      .SetMethod<void (ChromePluginPlaceholder::*)()>(
-           "didFinishLoading",
-           &ChromePluginPlaceholder::DidFinishLoadingCallback)
-      .SetMethod("openAboutPlugins",
-                 &ChromePluginPlaceholder::OpenAboutPluginsCallback);
+  gin::ObjectTemplateBuilder builder =
+      gin::Wrappable<ChromePluginPlaceholder>::GetObjectTemplateBuilder(isolate)
+          .SetMethod<void (ChromePluginPlaceholder::*)()>(
+              "hide", &ChromePluginPlaceholder::HideCallback)
+          .SetMethod<void (ChromePluginPlaceholder::*)()>(
+              "load", &ChromePluginPlaceholder::LoadCallback)
+          .SetMethod<void (ChromePluginPlaceholder::*)()>(
+              "didFinishLoading",
+              &ChromePluginPlaceholder::DidFinishLoadingCallback)
+          .SetMethod("openAboutPlugins",
+                     &ChromePluginPlaceholder::OpenAboutPluginsCallback);
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnablePluginPlaceholderTesting)) {
+    builder.SetMethod<void (ChromePluginPlaceholder::*)()>(
+        "didFinishIconRepositionForTesting",
+        &ChromePluginPlaceholder::DidFinishIconRepositionForTestingCallback);
+  }
+
+  return builder;
 }

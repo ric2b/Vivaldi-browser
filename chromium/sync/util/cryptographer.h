@@ -8,7 +8,7 @@
 #include <map>
 #include <string>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/base/sync_export.h"
@@ -24,7 +24,7 @@ namespace syncer {
 
 class Encryptor;
 
-SYNC_EXPORT_PRIVATE extern const char kNigoriTag[];
+SYNC_EXPORT extern const char kNigoriTag[];
 
 // The parameters used to initialize a Nigori instance.
 struct KeyParams {
@@ -117,7 +117,7 @@ class SYNC_EXPORT Cryptographer {
   // Updates the default key.
   // Will decrypt the pending keys and install them if possible (pending key
   // will not overwrite default).
-  bool AddKeyFromBootstrapToken(const std::string restored_bootstrap_token);
+  bool AddKeyFromBootstrapToken(const std::string& restored_bootstrap_token);
 
   // Creates a new Nigori instance using |params|. If successful, |params|
   // will be added to the nigori keybag, but will not be the default encryption
@@ -186,7 +186,7 @@ class SYNC_EXPORT Cryptographer {
 
   // Generates a new Nigori from |serialized_nigori_key|, and if successful
   // installs the new nigori as the default key.
-  bool ImportNigoriKey(const std::string serialized_nigori_key);
+  bool ImportNigoriKey(const std::string& serialized_nigori_key);
 
  private:
   typedef std::map<std::string, linked_ptr<const Nigori> > NigoriMap;

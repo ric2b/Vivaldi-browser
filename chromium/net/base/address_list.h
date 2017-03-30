@@ -5,10 +5,11 @@
 #ifndef NET_BASE_ADDRESS_LIST_H_
 #define NET_BASE_ADDRESS_LIST_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "net/base/ip_address_number.h"
 #include "net/base/ip_endpoint.h"
@@ -19,6 +20,8 @@ struct addrinfo;
 
 namespace net {
 
+class IPAddress;
+
 class NET_EXPORT AddressList
     : NON_EXPORTED_BASE(private std::vector<IPEndPoint>) {
  public:
@@ -28,7 +31,11 @@ class NET_EXPORT AddressList
   // Creates an address list for a single IP literal.
   explicit AddressList(const IPEndPoint& endpoint);
 
+  // DEPRECATED(crbug.com/496258): Use the method below that takes IPAddress.
   static AddressList CreateFromIPAddress(const IPAddressNumber& address,
+                                         uint16_t port);
+
+  static AddressList CreateFromIPAddress(const IPAddress& address,
                                          uint16_t port);
 
   static AddressList CreateFromIPAddressList(

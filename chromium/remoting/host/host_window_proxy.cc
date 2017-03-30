@@ -4,9 +4,12 @@
 
 #include "remoting/host/host_window_proxy.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "remoting/host/client_session_control.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
@@ -38,7 +41,7 @@ class HostWindowProxy::Core
 
   // ClientSessionControl interface.
   const std::string& client_jid() const override;
-  void DisconnectSession() override;
+  void DisconnectSession(protocol::ErrorCode error) override;
   void OnLocalMouseMoved(const webrtc::DesktopVector& position) override;
   void SetDisableInputs(bool disable_inputs) override;
   void ResetVideoPipeline() override;
@@ -74,7 +77,7 @@ HostWindowProxy::HostWindowProxy(
   // Detach |host_window| from the calling thread so that |Core| could run it on
   // the |ui_task_runner_| thread.
   host_window->DetachFromThread();
-  core_ = new Core(caller_task_runner, ui_task_runner, host_window.Pass());
+  core_ = new Core(caller_task_runner, ui_task_runner, std::move(host_window));
 }
 
 HostWindowProxy::~HostWindowProxy() {
@@ -96,7 +99,7 @@ HostWindowProxy::Core::Core(
     scoped_ptr<HostWindow> host_window)
     : caller_task_runner_(caller_task_runner),
       ui_task_runner_(ui_task_runner),
-      host_window_(host_window.Pass()),
+      host_window_(std::move(host_window)),
       weak_factory_(this) {
   DCHECK(caller_task_runner->BelongsToCurrentThread());
 }
@@ -143,15 +146,15 @@ const std::string& HostWindowProxy::Core::client_jid() const {
   return client_jid_;
 }
 
-void HostWindowProxy::Core::DisconnectSession() {
+void HostWindowProxy::Core::DisconnectSession(protocol::ErrorCode error) {
   if (!caller_task_runner_->BelongsToCurrentThread()) {
-    caller_task_runner_->PostTask(FROM_HERE,
-                                  base::Bind(&Core::DisconnectSession, this));
+    caller_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&Core::DisconnectSession, this, error));
     return;
   }
 
   if (client_session_control_.get())
-    client_session_control_->DisconnectSession();
+    client_session_control_->DisconnectSession(error);
 }
 
 void HostWindowProxy::Core::OnLocalMouseMoved(

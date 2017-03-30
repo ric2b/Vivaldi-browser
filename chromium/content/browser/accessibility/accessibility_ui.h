@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_ACCESSIBILITY_UI_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_ACCESSIBILITY_UI_H_
 
+#include "base/macros.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
 
@@ -22,6 +23,7 @@ class AccessibilityUI : public WebUIController {
  private:
   void ToggleAccessibility(const base::ListValue* args);
   void ToggleGlobalAccessibility(const base::ListValue* args);
+  void ToggleInternalTree(const base::ListValue* args);
   void RequestAccessibilityTree(const base::ListValue* args);
 
   DISALLOW_COPY_AND_ASSIGN(AccessibilityUI);

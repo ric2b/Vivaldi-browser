@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/metrics/task_switch_metrics_recorder.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 
@@ -33,7 +34,6 @@ enum UserMetricsAction {
   UMA_DESKTOP_SWITCH_TASK,
   UMA_DRAG_MAXIMIZE_LEFT,
   UMA_DRAG_MAXIMIZE_RIGHT,
-  UMA_GESTURE_OVERVIEW,
   UMA_LAUNCHER_BUTTON_PRESSED_WITH_MOUSE,
   UMA_LAUNCHER_BUTTON_PRESSED_WITH_TOUCH,
   UMA_LAUNCHER_CLICK_ON_APP,
@@ -187,7 +187,7 @@ class ASH_EXPORT UserMetricsRecorder {
   void StartTimer();
 
   // The periodic timer that triggers metrics to be recorded.
-  base::RepeatingTimer<UserMetricsRecorder> timer_;
+  base::RepeatingTimer timer_;
 
   TaskSwitchMetricsRecorder task_switch_metrics_recorder_;
 

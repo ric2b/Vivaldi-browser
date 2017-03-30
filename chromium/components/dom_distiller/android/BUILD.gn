@@ -51,3 +51,10 @@ java_cpp_template("dom_distiller_core_theme_javagen") {
     "../core/theme_list.h",
   ]
 }
+
+generate_jni("jni_headers") {
+  sources = [
+    "java/src/org/chromium/components/dom_distiller/content/DistillablePageUtils.java",
+  ]
+  jni_package = "dom_distiller_content"
+}

@@ -21,6 +21,8 @@
 
           'proxy/audio_buffer_resource.cc',
           'proxy/audio_buffer_resource.h',
+          'proxy/audio_encoder_resource.cc',
+          'proxy/audio_encoder_resource.h',
           'proxy/audio_input_resource.cc',
           'proxy/audio_input_resource.h',
           'proxy/broker_dispatcher.cc',
@@ -253,13 +255,15 @@
         'target_conditions': [
           ['>(nacl_untrusted_build)==1', {
             'sources': [
+              'nacl_irt/irt_interfaces.cc',
+              'nacl_irt/irt_interfaces.h',
+              'nacl_irt/irt_pnacl_translator_compile.cc',
+              'nacl_irt/irt_pnacl_translator_link.cc',
               'nacl_irt/irt_ppapi.cc',
               'nacl_irt/irt_ppapi.h',
               'nacl_irt/irt_start.cc',
               'nacl_irt/manifest_service.cc',
               'nacl_irt/manifest_service.h',
-              'nacl_irt/plugin_main.cc',
-              'nacl_irt/plugin_main.h',
               'nacl_irt/plugin_startup.cc',
               'nacl_irt/plugin_startup.h',
               'nacl_irt/ppapi_dispatcher.cc',

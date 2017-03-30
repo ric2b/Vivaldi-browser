@@ -7,48 +7,64 @@
  * @fileoverview Testing stub for messages.
  */
 
-goog.provide('cvox.TestMsgs');
+goog.provide('TestMsgs');
 
-goog.require('cvox.Msgs');
+goog.require('Msgs');
 goog.require('cvox.TestMessages');
-
 
 /**
  * @constructor
- * @extends {cvox.Msgs}
  */
-cvox.TestMsgs = function() {
-  cvox.Msgs.call(this);
-};
-goog.inherits(cvox.TestMsgs, cvox.Msgs);
-
+TestMsgs = function() {};
 
 /**
- * @override
+ * @type {function(string, Array<string>=): string}
+ * @private
  */
-cvox.TestMsgs.prototype.getLocale = function() {
+TestMsgs.applySubstitutions_ = Msgs.applySubstitutions_;
+
+/**
+ * @type {Object<string>}
+ */
+TestMsgs.Untranslated = Msgs.Untranslated;
+
+/**
+ * @return {string} The locale.
+ */
+TestMsgs.getLocale = function() {
   return 'testing';
 };
 
-
 /**
- * @override
+ * @param {string} messageId
+ * @param {Array<string>=} opt_subs
+ * @return {string}
  */
-cvox.TestMsgs.prototype.getMsg = function(messageId, opt_subs) {
+TestMsgs.getMsg = function(messageId, opt_subs) {
   if (!messageId) {
     throw Error('Message id required');
   }
-  var message = cvox.TestMessages[('chromevox_' + messageId).toUpperCase()];
-  if (message == undefined) {
-    throw Error('missing-msg: ' + messageId);
-  }
-
-  var messageString = message.message;
-  if (opt_subs) {
-    // Unshift a null to make opt_subs and message.placeholders line up.
-    for (var i = 0; i < opt_subs.length; i++) {
-      messageString = messageString.replace('$' + (i + 1), opt_subs[i]);
+  var messageString = TestMsgs.Untranslated[messageId.toUpperCase()];
+  if (messageString === undefined) {
+    var messageObj = cvox.TestMessages[(
+        'chromevox_' + messageId).toUpperCase()];
+    if (messageObj === undefined)
+      throw Error('missing-msg: ' + messageId);
+    var messageString = messageObj.message;
+    var placeholders = messageObj.placeholders;
+    if (placeholders) {
+      for (name in placeholders) {
+        messageString = messageString.replace(
+            '$' + name + '$',
+            placeholders[name].content);
+      }
     }
   }
-  return messageString;
+  return Msgs.applySubstitutions_(messageString, opt_subs);
 };
+
+/**
+ * @param {number} num
+ * @return {string}
+ */
+TestMsgs.getNumber = Msgs.getNumber;

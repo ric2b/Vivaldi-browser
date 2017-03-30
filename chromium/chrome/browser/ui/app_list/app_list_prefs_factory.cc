@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/app_list_prefs_factory.h"
 
+#include <utility>
+
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_prefs.h"
@@ -22,13 +24,13 @@ AppListPrefs* AppListPrefsFactory::GetForBrowserContext(
 
 // static
 AppListPrefsFactory* AppListPrefsFactory::GetInstance() {
-  return Singleton<AppListPrefsFactory>::get();
+  return base::Singleton<AppListPrefsFactory>::get();
 }
 
 void AppListPrefsFactory::SetInstanceForTesting(
     content::BrowserContext* context,
     scoped_ptr<AppListPrefs> prefs) {
-  Associate(context, prefs.Pass());
+  Associate(context, std::move(prefs));
 }
 
 AppListPrefsFactory::AppListPrefsFactory()

@@ -4,33 +4,51 @@
 
 #include "chrome/browser/ui/ash/chrome_shell_delegate.h"
 
-#include "ash/content_support/gpu_support_impl.h"
+#include <stddef.h>
+
+#include "ash/content/gpu_support_impl.h"
+#include "ash/session/session_state_delegate.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/app_list/app_list_view_delegate.h"
 #include "chrome/browser/ui/ash/app_list/app_list_service_ash.h"
-#include "chrome/browser/ui/ash/ash_keyboard_controller_proxy.h"
+#include "chrome/browser/ui/ash/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
+#include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/grit/chromium_strings.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_CHROMEOS)
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/display/display_configuration_observer.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #endif
+
+namespace {
+
+const char kKeyboardShortcutHelpPageUrl[] =
+    "https://support.google.com/chromebook/answer/183101";
+
+}  // namespace
 
 // static
 ChromeShellDelegate* ChromeShellDelegate::instance_ = NULL;
@@ -86,11 +104,8 @@ bool ChromeShellDelegate::IsRunningInForcedAppMode() const {
   return chrome::IsRunningInForcedAppMode();
 }
 
-bool ChromeShellDelegate::IsMultiAccountEnabled() const {
-#if defined(OS_CHROMEOS)
-  return switches::IsEnableAccountConsistency();
-#endif
-  return false;
+bool ChromeShellDelegate::CanShowWindowForUser(aura::Window* window) const {
+  return ::CanShowWindowForUser(window, base::Bind(&GetActiveBrowserContext));
 }
 
 bool ChromeShellDelegate::IsForceMaximizeOnFirstRun() const {
@@ -109,13 +124,6 @@ bool ChromeShellDelegate::IsForceMaximizeOnFirstRun() const {
 
 void ChromeShellDelegate::Exit() {
   chrome::AttemptUserExit();
-}
-
-content::BrowserContext* ChromeShellDelegate::GetActiveBrowserContext() {
-#if defined(OS_CHROMEOS)
-  DCHECK(user_manager::UserManager::Get()->GetLoggedInUsers().size());
-#endif
-  return ProfileManager::GetActiveUserProfile();
 }
 
 app_list::AppListViewDelegate* ChromeShellDelegate::GetAppListViewDelegate() {
@@ -157,10 +165,44 @@ base::string16 ChromeShellDelegate::GetProductName() const {
   return l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
 }
 
-keyboard::KeyboardControllerProxy*
-    ChromeShellDelegate::CreateKeyboardControllerProxy() {
-  return new AshKeyboardControllerProxy(
-      ProfileManager::GetActiveUserProfile());
+void ChromeShellDelegate::OpenKeyboardShortcutHelpPage() const {
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  Browser* browser =
+      chrome::FindTabbedBrowser(profile, false, chrome::HOST_DESKTOP_TYPE_ASH);
+
+  if (!browser) {
+    browser = new Browser(
+        Browser::CreateParams(profile, chrome::HOST_DESKTOP_TYPE_ASH));
+    browser->window()->Show();
+  }
+
+  browser->window()->Activate();
+
+  chrome::NavigateParams params(browser, GURL(kKeyboardShortcutHelpPageUrl),
+                                ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  params.disposition = SINGLETON_TAB;
+  chrome::Navigate(&params);
+}
+
+gfx::Image ChromeShellDelegate::GetDeprecatedAcceleratorImage() const {
+  return ui::ResourceBundle::GetSharedInstance().GetImageNamed(
+      IDR_BLUETOOTH_KEYBOARD);
+}
+
+void ChromeShellDelegate::ToggleTouchpad() {
+#if defined(OS_CHROMEOS)
+  chromeos::system::InputDeviceSettings::Get()->ToggleTouchpad();
+#endif  // defined(OS_CHROMEOS)
+}
+
+void ChromeShellDelegate::ToggleTouchscreen() {
+#if defined(OS_CHROMEOS)
+  chromeos::system::InputDeviceSettings::Get()->ToggleTouchscreen();
+#endif  // defined(OS_CHROMEOS)
+}
+
+keyboard::KeyboardUI* ChromeShellDelegate::CreateKeyboardUI() {
+  return new ChromeKeyboardUI(ProfileManager::GetActiveUserProfile());
 }
 
 void ChromeShellDelegate::VirtualKeyboardActivated(bool activated) {

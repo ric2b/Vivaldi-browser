@@ -5,6 +5,8 @@
 #ifndef PPAPI_PROXY_SERIALIZED_STRUCTS_H_
 #define PPAPI_PROXY_SERIALIZED_STRUCTS_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -13,6 +15,7 @@
 #include "build/build_config.h"
 #include "ppapi/c/dev/ppb_truetype_font_dev.h"
 #include "ppapi/c/pp_bool.h"
+#include "ppapi/c/pp_codecs.h"
 #include "ppapi/c/pp_instance.h"
 #include "ppapi/c/pp_point.h"
 #include "ppapi/c/pp_rect.h"
@@ -21,30 +24,20 @@
 #include "ppapi/proxy/ppapi_proxy_export.h"
 #include "ppapi/shared_impl/host_resource.h"
 
-struct PP_FontDescription_Dev;
 struct PP_BrowserFont_Trusted_Description;
 
 namespace ppapi {
 namespace proxy {
 
-// PP_FontDescription_Dev/PP_BrowserFontDescription (same definition, different
-// names) has to be redefined with a string in place of the PP_Var used for the
-// face name.
+// PP_BrowserFontDescription  has to be redefined with a string in place of the
+// PP_Var used for the face name.
 struct PPAPI_PROXY_EXPORT SerializedFontDescription {
   SerializedFontDescription();
   ~SerializedFontDescription();
 
-  // Converts a PP_FontDescription_Dev to a SerializedFontDescription.
-  //
-  // The reference of |face| owned by the PP_FontDescription_Dev will be
-  // unchanged and the caller is responsible for freeing it.
-  void SetFromPPFontDescription(const PP_FontDescription_Dev& desc);
   void SetFromPPBrowserFontDescription(
       const PP_BrowserFont_Trusted_Description& desc);
 
-  // Converts to a PP_FontDescription_Dev. The face name will have one ref
-  // assigned to it. The caller is responsible for freeing it.
-  void SetToPPFontDescription(PP_FontDescription_Dev* desc) const;
   void SetToPPBrowserFontDescription(
       PP_BrowserFont_Trusted_Description* desc) const;
 
@@ -81,7 +74,7 @@ struct PPAPI_PROXY_EXPORT SerializedTrueTypeFontDesc {
   // caller is responsible for releasing it.
   void SetFromPPTrueTypeFontDesc(const PP_TrueTypeFontDesc_Dev& desc);
 
-  // Converts this to a PP_FontDescription_Dev.
+  // Converts this to a PP_TrueTypeFontDesc_Dev.
   //
   // The desc.family PP_Var will have one reference assigned to it. The caller
   // is responsible for releasing it.
@@ -129,6 +122,15 @@ struct PPPDecryptor_Buffer {
   ppapi::HostResource resource;
   uint32_t size;
   base::SharedMemoryHandle handle;
+};
+
+struct PPB_AudioEncodeParameters {
+  uint32_t channels;
+  uint32_t input_sample_rate;
+  uint32_t input_sample_size;
+  PP_AudioProfile output_profile;
+  uint32_t initial_bitrate;
+  PP_HardwareAcceleration acceleration;
 };
 
 // TODO(raymes): Make ImageHandle compatible with SerializedHandle.

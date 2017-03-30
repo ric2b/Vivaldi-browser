@@ -15,11 +15,12 @@
 #include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/service_process_util.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/version_info/version_info.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_utils.h"
@@ -55,7 +56,7 @@ class ServiceProcessControlBrowserTest
   }
 
   static void QuitMessageLoop() {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   static void CloudPrintInfoCallback(
@@ -69,6 +70,8 @@ class ServiceProcessControlBrowserTest
   }
 
   void SetUp() override {
+    InProcessBrowserTest::SetUp();
+
     // This should not be needed because TearDown() ends with a closed
     // service_process_, but HistogramsTimeout and Histograms fail without this
     // on Mac.
@@ -89,6 +92,8 @@ class ServiceProcessControlBrowserTest
       EXPECT_EQ(0, exit_code);
       service_process_.Close();
     }
+
+    InProcessBrowserTest::TearDown();
   }
 
   void ProcessControlLaunched() {
@@ -107,14 +112,14 @@ class ServiceProcessControlBrowserTest
     // because this can get invoked in the context of a Launch() call and we
     // may not be in Run() yet.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitClosure());
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   }
 
   void ProcessControlLaunchFailed() {
     ADD_FAILURE();
     // Quit the current message.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitClosure());
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   }
 
  private:
@@ -168,7 +173,13 @@ IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, LaunchAndIPC) {
 
 // This tests the case when a service process is launched when the browser
 // starts but we try to launch it again while setting up Cloud Print.
-IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, LaunchTwice) {
+// Flaky on Mac. http://crbug.com/517420
+#if defined(OS_MACOSX)
+#define MAYBE_LaunchTwice DISABLED_LaunchTwice
+#else
+#define MAYBE_LaunchTwice LaunchTwice
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, MAYBE_LaunchTwice) {
   // Launch the service process the first time.
   LaunchServiceProcessControl();
 
@@ -190,27 +201,39 @@ static void DecrementUntilZero(int* count) {
   (*count)--;
   if (!(*count))
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitClosure());
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
+// Flaky on Mac. http://crbug.com/517420
+#if defined(OS_MACOSX)
+#define MAYBE_MultipleLaunchTasks DISABLED_MultipleLaunchTasks
+#else
+#define MAYBE_MultipleLaunchTasks MultipleLaunchTasks
+#endif
 // Invoke multiple Launch calls in succession and ensure that all the tasks
 // get invoked.
 IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest,
-                       MultipleLaunchTasks) {
+                       MAYBE_MultipleLaunchTasks) {
   ServiceProcessControl* process = ServiceProcessControl::GetInstance();
   int launch_count = 5;
   for (int i = 0; i < launch_count; i++) {
     // Launch the process asynchronously.
     process->Launch(base::Bind(&DecrementUntilZero, &launch_count),
-                    base::MessageLoop::QuitClosure());
+                    base::MessageLoop::QuitWhenIdleClosure());
   }
   // Then run the message loop to keep things running.
   content::RunMessageLoop();
   EXPECT_EQ(0, launch_count);
 }
 
+// Flaky on Mac. http://crbug.com/517420
+#if defined(OS_MACOSX)
+#define MAYBE_SameLaunchTask DISABLED_SameLaunchTask
+#else
+#define MAYBE_SameLaunchTask SameLaunchTask
+#endif
 // Make sure using the same task for success and failure tasks works.
-IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, SameLaunchTask) {
+IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, MAYBE_SameLaunchTask) {
   ServiceProcessControl* process = ServiceProcessControl::GetInstance();
   int launch_count = 5;
   for (int i = 0; i < launch_count; i++) {
@@ -225,7 +248,14 @@ IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, SameLaunchTask) {
 
 // Tests whether disconnecting from the service IPC causes the service process
 // to die.
-IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, DieOnDisconnect) {
+// Flaky on Mac. http://crbug.com/517420
+#if defined(OS_MACOSX)
+#define MAYBE_DieOnDisconnect DISABLED_DieOnDisconnect
+#else
+#define MAYBE_DieOnDisconnect DieOnDisconnect
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest,
+                       MAYBE_DieOnDisconnect) {
   // Launch the service process.
   LaunchServiceProcessControl();
   // Make sure we are connected to the service process.
@@ -233,7 +263,13 @@ IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, DieOnDisconnect) {
   Disconnect();
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, ForceShutdown) {
+// Flaky on Mac. http://crbug.com/517420
+#if defined(OS_MACOSX)
+#define MAYBE_ForceShutdown DISABLED_ForceShutdown
+#else
+#define MAYBE_ForceShutdown ForceShutdown
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, MAYBE_ForceShutdown) {
   // Launch the service process.
   LaunchServiceProcessControl();
   // Make sure we are connected to the service process.
@@ -241,11 +277,16 @@ IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, ForceShutdown) {
   base::ProcessId service_pid;
   EXPECT_TRUE(GetServiceProcessData(NULL, &service_pid));
   EXPECT_NE(static_cast<base::ProcessId>(0), service_pid);
-  chrome::VersionInfo version_info;
-  ForceServiceProcessShutdown(version_info.Version(), service_pid);
+  ForceServiceProcessShutdown(version_info::GetVersionNumber(), service_pid);
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, CheckPid) {
+// Flaky on Mac. http://crbug.com/517420
+#if defined(OS_MACOSX)
+#define MAYBE_CheckPid DISABLED_CheckPid
+#else
+#define MAYBE_CheckPid CheckPid
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, MAYBE_CheckPid) {
   base::ProcessId service_pid;
   EXPECT_FALSE(GetServiceProcessData(NULL, &service_pid));
   // Launch the service process.
@@ -265,7 +306,16 @@ IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, HistogramsNoService) {
       base::TimeDelta()));
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, HistogramsTimeout) {
+// Histograms disabled on OSX http://crbug.com/406227
+#if defined(OS_MACOSX)
+#define MAYBE_HistogramsTimeout DISABLED_HistogramsTimeout
+#define MAYBE_Histograms DISABLED_Histograms
+#else
+#define MAYBE_HistogramsTimeout HistogramsTimeout
+#define MAYBE_Histograms Histograms
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest,
+                       MAYBE_HistogramsTimeout) {
   LaunchServiceProcessControl();
   ASSERT_TRUE(ServiceProcessControl::GetInstance()->IsConnected());
   // Callback should not be called during GetHistograms call.
@@ -279,7 +329,7 @@ IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, HistogramsTimeout) {
   content::RunMessageLoop();
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, Histograms) {
+IN_PROC_BROWSER_TEST_F(ServiceProcessControlBrowserTest, MAYBE_Histograms) {
   LaunchServiceProcessControl();
   ASSERT_TRUE(ServiceProcessControl::GetInstance()->IsConnected());
   // Callback should not be called during GetHistograms call.

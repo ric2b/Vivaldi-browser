@@ -110,6 +110,26 @@ QUnit.test('copyWithoutNullFields(null) returns a new empty object',
         base.copyWithoutNullFields(undefined));
 });
 
+QUnit.test('copyWithoutNullFields does a deep copy',
+  function(assert) {
+    var obj = {
+      a: 'foo',
+      b: { c: 'bar' }
+    };
+    var copy = base.copyWithoutNullFields(obj);
+    assert.notEqual(obj.b, copy['b']);
+});
+
+QUnit.test('mergeWithoutNullFields(null) leaves the destination unchanged',
+  function(assert) {
+    var obj = { 'a': 1 };
+    var reference = base.deepCopy(obj);
+    base.mergeWithoutNullFields(obj, null);
+    assert.deepEqual(obj, reference);
+    base.mergeWithoutNullFields(obj, undefined);
+    assert.deepEqual(obj, reference);
+});
+
 QUnit.test('isEmptyObject works',
   function(assert) {
     assert.ok(base.isEmptyObject({}));
@@ -176,19 +196,33 @@ QUnit.test('escapeHTML(str) should escape special characters', function(assert){
     '&lt;script&gt;alert("hello")&lt;/script&gt;');
 });
 
+QUnit.test('Promise.sleep(delay,value) fulfills after delay', function(assert) {
+  var clock = this.clock;
+  var badPromise = new Promise(function() {});
+  var timeoutPromise = base.Promise.sleep(100, 'defaultValue');
+  var resolved = false;
+  timeoutPromise.then(function(value) {
+    resolved = true;
+  });
+  clock.tick(50);
+  return Promise.resolve().then(function() {
+    assert.ok(!resolved);
+    clock.tick(50);
+    return timeoutPromise;
+  }).then(function(/** string */ value) {
+    assert.equal(value, 'defaultValue');
+  });
+});
+
 QUnit.test('Promise.sleep(delay) should fulfill the promise after |delay|',
-  /**
-   * 'this' is not defined for jscompile, so it can't figure out the type of
-   * this.clock.
-   * @suppress {reportUnknownTypes|checkVars|checkTypes}
-   */
   function(assert) {
     var isCalled = false;
-    var clock = /** @type {QUnit.Clock} */ (this.clock);
+    var clock = this.clock;
 
-    var promise = base.Promise.sleep(100).then(function(){
+    var promise = base.Promise.sleep(100).then(function(/** void */ value){
       isCalled = true;
       assert.ok(true, 'Promise.sleep() is fulfilled after delay.');
+      assert.strictEqual(value, undefined);
     });
 
     // Tick the clock for 2 seconds and check if the promise is fulfilled.
@@ -219,6 +253,62 @@ QUnit.test('Promise.negate should fulfill iff the promise does not.',
     }).catch(function() {
       assert.ok(true);
     });
+});
+
+QUnit.test('Promise.withTimeout resolves to default value', function(assert) {
+  var clock = this.clock;
+  var badPromise = new Promise(function() {});
+  var timeoutPromise = base.Promise.withTimeout(
+      badPromise, 100, 'defaultValue');
+  var resolved = false;
+  timeoutPromise.then(function(value) {
+    resolved = true;
+  });
+  clock.tick(50);
+  return Promise.resolve().then(function() {
+    assert.ok(!resolved);
+    clock.tick(50);
+    return timeoutPromise;
+  }).then(function(/** string */ value) {
+    assert.equal(value, 'defaultValue');
+  });
+});
+
+QUnit.test('Promise.withTimeout can be rejected', function(assert) {
+  var clock = this.clock;
+  var badPromise = new Promise(function() {});
+  var timeoutPromise = base.Promise.withTimeout(
+      badPromise, 100, Promise.reject('defaultValue'));
+  var resolved = false;
+  timeoutPromise.catch(function(value) {
+    resolved = true;
+  });
+  clock.tick(50);
+  return Promise.resolve().then(function() {
+    assert.ok(!resolved);
+    clock.tick(50);
+    return timeoutPromise;
+  }).then(function() {
+    assert.ok(false);
+  }).catch(function(value) {
+    assert.equal(value, 'defaultValue');
+  });
+});
+
+QUnit.test('Promise.withTimeout can resolve early', function(assert) {
+  var timeoutPromise = base.Promise.withTimeout(
+      Promise.resolve('originalValue'), 100, 'defaultValue');
+  return timeoutPromise.then(function(value) {
+    assert.equal(value, 'originalValue');
+  });
+});
+
+QUnit.test('Promise.withTimeout can reject early', function(assert) {
+  var timeoutPromise = base.Promise.withTimeout(
+      Promise.reject('error'), 100, 'defaultValue');
+  return timeoutPromise.catch(function(error) {
+    assert.equal(error, 'error');
+  });
 });
 
 QUnit.test('generateUuid generates a UUID', function(assert) {

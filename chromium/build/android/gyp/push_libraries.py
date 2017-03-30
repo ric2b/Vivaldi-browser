@@ -12,14 +12,16 @@ import optparse
 import os
 import sys
 
-BUILD_ANDROID_DIR = os.path.join(os.path.dirname(__file__), os.pardir)
-sys.path.append(BUILD_ANDROID_DIR)
-
-from pylib import constants
-
 from util import build_device
 from util import build_utils
 from util import md5_check
+
+BUILD_ANDROID_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.append(BUILD_ANDROID_DIR)
+
+import devil_chromium
+from pylib import constants
 
 def DoPush(options):
   libraries = build_utils.ParseGypList(options.libraries)
@@ -40,7 +42,7 @@ def DoPush(options):
       if needs_directory:
         device.RunShellCommand('mkdir -p ' + options.device_dir)
         needs_directory[:] = [] # = False
-      device.PushChangedFiles([(host_path, device_path)])
+      device.PushChangedFiles([(os.path.abspath(host_path), device_path)])
 
     record_path = '%s.%s.push.md5.stamp' % (host_path, serial_number)
     md5_check.CallAndRecordIfStale(
@@ -62,13 +64,15 @@ def main(args):
   parser.add_option('--stamp', help='Path to touch on success.')
   parser.add_option('--build-device-configuration',
       help='Path to build device configuration.')
-  parser.add_option('--configuration-name',
-      help='The build CONFIGURATION_NAME')
+  parser.add_option('--output-directory',
+      help='The output directory.')
   options, _ = parser.parse_args(args)
 
   required_options = ['libraries', 'device_dir', 'libraries']
   build_utils.CheckOptions(options, parser, required=required_options)
-  constants.SetBuildType(options.configuration_name)
+
+  devil_chromium.Initialize(
+      output_directory=os.path.abspath(options.output_directory))
 
   DoPush(options)
 

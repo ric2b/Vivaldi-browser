@@ -9,6 +9,7 @@
 #include "base/android/jni_string.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/website_settings/website_settings.h"
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -27,9 +28,9 @@ using base::android::ConvertUTF8ToJavaString;
 
 // static
 static jlong Init(JNIEnv* env,
-                  jclass clazz,
-                  jobject obj,
-                  jobject java_web_contents) {
+                  const JavaParamRef<jclass>& clazz,
+                  const JavaParamRef<jobject>& obj,
+                  const JavaParamRef<jobject>& java_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(java_web_contents);
 
@@ -51,26 +52,29 @@ WebsiteSettingsPopupAndroid::WebsiteSettingsPopupAndroid(
 
   popup_jobject_.Reset(env, java_website_settings_pop);
 
+  ChromeSecurityStateModelClient* security_model_client =
+      ChromeSecurityStateModelClient::FromWebContents(web_contents);
+  DCHECK(security_model_client);
+
   presenter_.reset(new WebsiteSettings(
-      this,
-      Profile::FromBrowserContext(web_contents->GetBrowserContext()),
-      TabSpecificContentSettings::FromWebContents(web_contents),
-      InfoBarService::FromWebContents(web_contents),
-      nav_entry->GetURL(),
-      nav_entry->GetSSL(),
+      this, Profile::FromBrowserContext(web_contents->GetBrowserContext()),
+      TabSpecificContentSettings::FromWebContents(web_contents), web_contents,
+      nav_entry->GetURL(), security_model_client->GetSecurityInfo(),
       content::CertStore::GetInstance()));
 }
 
 WebsiteSettingsPopupAndroid::~WebsiteSettingsPopupAndroid() {}
 
-void WebsiteSettingsPopupAndroid::Destroy(JNIEnv* env, jobject obj) {
+void WebsiteSettingsPopupAndroid::Destroy(JNIEnv* env,
+                                          const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
-void WebsiteSettingsPopupAndroid::OnPermissionSettingChanged(JNIEnv* env,
-                                                             jobject obj,
-                                                             jint type,
-                                                             jint setting) {
+void WebsiteSettingsPopupAndroid::OnPermissionSettingChanged(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint type,
+    jint setting) {
   ContentSettingsType content_setting_type =
       static_cast<ContentSettingsType>(type);
   ContentSetting content_setting = static_cast<ContentSetting>(setting);
@@ -89,7 +93,10 @@ void WebsiteSettingsPopupAndroid::SetCookieInfo(
 }
 
 void WebsiteSettingsPopupAndroid::SetPermissionInfo(
-    const PermissionInfoList& permission_info_list) {
+    const PermissionInfoList& permission_info_list,
+    const ChosenObjectInfoList& chosen_object_info_list) {
+  // TODO(reillyg): Display the contents of |chosen_object_info_list|.
+  // https://crbug.com/424667.
   JNIEnv* env = base::android::AttachCurrentThread();
 
   // On Android, we only want to display a subset of the available options in a
@@ -102,6 +109,7 @@ void WebsiteSettingsPopupAndroid::SetPermissionInfo(
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_IMAGES);
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_JAVASCRIPT);
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_POPUPS);
+  permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_KEYGEN);
 
   std::map<ContentSettingsType, ContentSetting>
       user_specified_settings_to_display;

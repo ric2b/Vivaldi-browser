@@ -19,11 +19,12 @@
 #include "content/browser/ssl/ssl_request_info.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/ssl_status.h"
 #include "content/public/common/url_constants.h"
 #include "net/ssl/ssl_info.h"
-
+#include "url/gurl.h"
 
 namespace content {
 
@@ -104,7 +105,7 @@ void SSLPolicy::OnCertError(SSLCertErrorHandler* handler) {
 }
 
 void SSLPolicy::DidRunInsecureContent(NavigationEntryImpl* entry,
-                                      const std::string& security_origin) {
+                                      const GURL& security_origin) {
   if (!entry)
     return;
 
@@ -112,18 +113,19 @@ void SSLPolicy::DidRunInsecureContent(NavigationEntryImpl* entry,
   if (!site_instance)
       return;
 
-  backend_->HostRanInsecureContent(GURL(security_origin).host(),
+  backend_->HostRanInsecureContent(security_origin.host(),
                                    site_instance->GetProcess()->GetID());
 }
 
 void SSLPolicy::OnRequestStarted(SSLRequestInfo* info) {
-  // TODO(abarth): This mechanism is wrong.  What we should be doing is sending
-  // this information back through WebKit and out some FrameLoaderClient
-  // methods.
-
-  if (net::IsCertStatusError(info->ssl_cert_status())) {
-    backend_->HostRanInsecureContent(info->url().host(), info->child_id());
-  } else if (info->url().SchemeIsCryptographic()) {
+  if (info->ssl_cert_id() && info->url().SchemeIsCryptographic() &&
+      !net::IsCertStatusError(info->ssl_cert_status())) {
+    // If the scheme is https: or wss: *and* the security info for the
+    // cert has been set (i.e. the cert id is not 0) and the cert did
+    // not have any errors, revoke any previous decisions that
+    // have occurred. If the cert info has not been set, do nothing since it
+    // isn't known if the connection was actually a valid connection or if it
+    // had a cert error.
     SSLGoodCertSeenEvent event = NO_PREVIOUS_EXCEPTION;
     if (backend_->HasAllowException(info->url().host())) {
       // If there's no certificate error, a good certificate has been seen, so
@@ -138,37 +140,22 @@ void SSLPolicy::OnRequestStarted(SSLRequestInfo* info) {
 }
 
 void SSLPolicy::UpdateEntry(NavigationEntryImpl* entry,
-                            WebContentsImpl* web_contents) {
+                            WebContents* web_contents) {
   DCHECK(entry);
 
   InitializeEntryIfNeeded(entry);
 
-  if (!entry->GetURL().SchemeIsCryptographic())
+  if (entry->GetSSL().security_style == SECURITY_STYLE_UNAUTHENTICATED)
     return;
 
   if (!web_contents->DisplayedInsecureContent())
     entry->GetSSL().content_status &= ~SSLStatus::DISPLAYED_INSECURE_CONTENT;
 
-  // An HTTPS response may not have a certificate for some reason.  When that
-  // happens, use the unauthenticated (HTTP) rather than the authentication
-  // broken security style so that we can detect this error condition.
-  if (!entry->GetSSL().cert_id) {
-    entry->GetSSL().security_style = SECURITY_STYLE_UNAUTHENTICATED;
-    return;
-  }
-
   if (web_contents->DisplayedInsecureContent())
     entry->GetSSL().content_status |= SSLStatus::DISPLAYED_INSECURE_CONTENT;
 
-  if (net::IsCertStatusError(entry->GetSSL().cert_status)) {
-    // Minor errors don't lower the security style to
-    // SECURITY_STYLE_AUTHENTICATION_BROKEN.
-    if (!net::IsCertStatusMinorError(entry->GetSSL().cert_status)) {
-      entry->GetSSL().security_style =
-          SECURITY_STYLE_AUTHENTICATION_BROKEN;
-    }
+  if (entry->GetSSL().security_style == SECURITY_STYLE_AUTHENTICATION_BROKEN)
     return;
-  }
 
   SiteInstance* site_instance = entry->site_instance();
   // Note that |site_instance| can be NULL here because NavigationEntries don't
@@ -182,6 +169,27 @@ void SSLPolicy::UpdateEntry(NavigationEntryImpl* entry,
     entry->GetSSL().content_status |= SSLStatus::RAN_INSECURE_CONTENT;
     return;
   }
+}
+
+// Static
+SecurityStyle SSLPolicy::GetSecurityStyleForResource(
+    const GURL& url,
+    int cert_id,
+    net::CertStatus cert_status) {
+  // An HTTPS response may not have a certificate for some reason.  When that
+  // happens, use the unauthenticated (HTTP) rather than the authentication
+  // broken security style so that we can detect this error condition.
+  if (!url.SchemeIsCryptographic() || !cert_id)
+    return SECURITY_STYLE_UNAUTHENTICATED;
+
+  // Minor errors don't lower the security style to
+  // SECURITY_STYLE_AUTHENTICATION_BROKEN.
+  if (net::IsCertStatusError(cert_status) &&
+      !net::IsCertStatusMinorError(cert_status)) {
+    return SECURITY_STYLE_AUTHENTICATION_BROKEN;
+  }
+
+  return SECURITY_STYLE_AUTHENTICATED;
 }
 
 void SSLPolicy::OnAllowCertificate(scoped_refptr<SSLCertErrorHandler> handler,
@@ -220,17 +228,11 @@ void SSLPolicy::OnCertErrorInternal(SSLCertErrorHandler* handler,
   CertificateRequestResultType result =
       CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE;
   GetContentClient()->browser()->AllowCertificateError(
-      handler->render_process_id(),
-      handler->render_frame_id(),
-      handler->cert_error(),
-      handler->ssl_info(),
-      handler->request_url(),
-      handler->resource_type(),
-      overridable,
-      strict_enforcement,
+      handler->GetManager()->controller()->GetWebContents(),
+      handler->cert_error(), handler->ssl_info(), handler->request_url(),
+      handler->resource_type(), overridable, strict_enforcement,
       expired_previous_decision,
-      base::Bind(&SSLPolicy::OnAllowCertificate,
-                 base::Unretained(this),
+      base::Bind(&SSLPolicy::OnAllowCertificate, base::Unretained(this),
                  make_scoped_refptr(handler)),
       &result);
   switch (result) {
@@ -251,9 +253,8 @@ void SSLPolicy::InitializeEntryIfNeeded(NavigationEntryImpl* entry) {
   if (entry->GetSSL().security_style != SECURITY_STYLE_UNKNOWN)
     return;
 
-  entry->GetSSL().security_style = entry->GetURL().SchemeIsCryptographic()
-                                       ? SECURITY_STYLE_AUTHENTICATED
-                                       : SECURITY_STYLE_UNAUTHENTICATED;
+  entry->GetSSL().security_style = GetSecurityStyleForResource(
+      entry->GetURL(), entry->GetSSL().cert_id, entry->GetSSL().cert_status);
 }
 
 void SSLPolicy::OriginRanInsecureContent(const std::string& origin, int pid) {

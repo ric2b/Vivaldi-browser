@@ -44,7 +44,7 @@ ARCH_BASE_NAME = {
   'x86_64': 'x86'
 }
 
-NACL_TOOLCHAINS = ('newlib', 'glibc', 'pnacl', 'bionic', 'clang-newlib')
+NACL_TOOLCHAINS = ('glibc', 'pnacl', 'bionic', 'clang-newlib')
 HOST_TOOLCHAINS = ('linux', 'mac', 'win')
 VALID_TOOLCHAINS = list(HOST_TOOLCHAINS) + list(NACL_TOOLCHAINS) + ['host']
 
@@ -118,10 +118,6 @@ def CheckValidToolchainArch(toolchain, arch, arch_required=False):
     else:
       ExpectArch(arch, VALID_ARCHES)
 
-    if arch == 'arm':
-      Expect(toolchain in ['newlib', 'bionic', 'clang-newlib'],
-             'The arm arch only supports newlib.')
-
 
 def GetArchName(arch):
   return ARCH_NAME.get(arch)
@@ -194,8 +190,8 @@ def GetToolPath(toolchain, arch, tool):
     # Always use the same gdb; it supports multiple toolchains/architectures.
     # NOTE: this is always a i686 executable. i686-nacl-gdb is a symlink to
     # x86_64-nacl-gdb.
-    return posixpath.join(GetToolchainBinDir('newlib', 'x86_64'),
-                        'x86_64-nacl-gdb')
+    return posixpath.join(GetToolchainBinDir('glibc', 'x86_64'),
+                          'x86_64-nacl-gdb')
 
   if toolchain == 'pnacl':
     CheckValidToolchainArch(toolchain, arch)

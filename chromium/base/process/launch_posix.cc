@@ -10,6 +10,8 @@
 #include <sched.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
@@ -22,7 +24,6 @@
 #include <limits>
 #include <set>
 
-#include "base/allocator/type_profiler_control.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/debug/debugger.h"
@@ -392,11 +393,6 @@ Process LaunchProcess(const std::vector<std::string>& argv,
       }
     }
 
-    // Stop type-profiler.
-    // The profiler should be stopped between fork and exec since it inserts
-    // locks at new/delete expressions.  See http://crbug.com/36678.
-    base::type_profiler::Controller::Stop();
-
     if (options.maximize_rlimits) {
       // Some resource limits need to be maximal in this child.
       for (size_t i = 0; i < options.maximize_rlimits->size(); ++i) {
@@ -415,8 +411,6 @@ Process LaunchProcess(const std::vector<std::string>& argv,
 
 #if defined(OS_MACOSX)
     RestoreDefaultExceptionHandler();
-    if (!options.replacement_bootstrap_name.empty())
-      ReplaceBootstrapPort(options.replacement_bootstrap_name);
 #endif  // defined(OS_MACOSX)
 
     ResetChildSignalHandlersToDefaults();
@@ -530,7 +524,8 @@ enum GetAppOutputInternalResult {
 // path for the application; in that case, |envp| must be null, and it will use
 // the current environment. If |do_search_path| is false, |argv[0]| should fully
 // specify the path of the application, and |envp| will be used as the
-// environment. Redirects stderr to /dev/null.
+// environment. If |include_stderr| is true, includes stderr otherwise redirects
+// it to /dev/null.
 // If we successfully start the application and get all requested output, we
 // return GOT_MAX_OUTPUT, or if there is a problem starting or exiting
 // the application we return RUN_FAILURE. Otherwise we return EXECUTE_SUCCESS.
@@ -543,6 +538,7 @@ enum GetAppOutputInternalResult {
 static GetAppOutputInternalResult GetAppOutputInternal(
     const std::vector<std::string>& argv,
     char* const envp[],
+    bool include_stderr,
     std::string* output,
     size_t max_output,
     bool do_search_path,
@@ -591,13 +587,10 @@ static GetAppOutputInternalResult GetAppOutputInternal(
         if (dev_null < 0)
           _exit(127);
 
-        // Stop type-profiler.
-        // The profiler should be stopped between fork and exec since it inserts
-        // locks at new/delete expressions.  See http://crbug.com/36678.
-        base::type_profiler::Controller::Stop();
-
         fd_shuffle1.push_back(InjectionArc(pipe_fd[1], STDOUT_FILENO, true));
-        fd_shuffle1.push_back(InjectionArc(dev_null, STDERR_FILENO, true));
+        fd_shuffle1.push_back(InjectionArc(
+            include_stderr ? pipe_fd[1] : dev_null,
+            STDERR_FILENO, true));
         fd_shuffle1.push_back(InjectionArc(dev_null, STDIN_FILENO, true));
         // Adding another element here? Remeber to increase the argument to
         // reserve(), above.
@@ -666,8 +659,17 @@ bool GetAppOutput(const std::vector<std::string>& argv, std::string* output) {
   // Run |execve()| with the current environment and store "unlimited" data.
   int exit_code;
   GetAppOutputInternalResult result = GetAppOutputInternal(
-      argv, NULL, output, std::numeric_limits<std::size_t>::max(), true,
+      argv, NULL, false, output, std::numeric_limits<std::size_t>::max(), true,
       &exit_code);
+  return result == EXECUTE_SUCCESS && exit_code == EXIT_SUCCESS;
+}
+
+bool GetAppOutputAndError(const CommandLine& cl, std::string* output) {
+  // Run |execve()| with the current environment and store "unlimited" data.
+  int exit_code;
+  GetAppOutputInternalResult result = GetAppOutputInternal(
+      cl.argv(), NULL, true, output, std::numeric_limits<std::size_t>::max(),
+      true, &exit_code);
   return result == EXECUTE_SUCCESS && exit_code == EXIT_SUCCESS;
 }
 
@@ -679,7 +681,7 @@ bool GetAppOutputRestricted(const CommandLine& cl,
   char* const empty_environ = NULL;
   int exit_code;
   GetAppOutputInternalResult result = GetAppOutputInternal(
-      cl.argv(), &empty_environ, output, max_output, false, &exit_code);
+      cl.argv(), &empty_environ, false, output, max_output, false, &exit_code);
   return result == GOT_MAX_OUTPUT || (result == EXECUTE_SUCCESS &&
                                       exit_code == EXIT_SUCCESS);
 }
@@ -689,8 +691,8 @@ bool GetAppOutputWithExitCode(const CommandLine& cl,
                               int* exit_code) {
   // Run |execve()| with the current environment and store "unlimited" data.
   GetAppOutputInternalResult result = GetAppOutputInternal(
-      cl.argv(), NULL, output, std::numeric_limits<std::size_t>::max(), true,
-      exit_code);
+      cl.argv(), NULL, false, output, std::numeric_limits<std::size_t>::max(),
+      true, exit_code);
   return result == EXECUTE_SUCCESS;
 }
 

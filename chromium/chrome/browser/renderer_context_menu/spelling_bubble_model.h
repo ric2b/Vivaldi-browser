@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_RENDERER_CONTEXT_MENU_SPELLING_BUBBLE_MODEL_H_
 #define CHROME_BROWSER_RENDERER_CONTEXT_MENU_SPELLING_BUBBLE_MODEL_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/ui/confirm_bubble_model.h"
 
 class Profile;
@@ -19,19 +19,17 @@ class WebContents;
 // integrating the spelling service of Google to Chrome.
 class SpellingBubbleModel : public ConfirmBubbleModel {
  public:
-  SpellingBubbleModel(Profile* profile,
-                      content::WebContents* web_contents,
-                      bool include_autocorrect);
+  SpellingBubbleModel(Profile* profile, content::WebContents* web_contents);
   ~SpellingBubbleModel() override;
 
   // ConfirmBubbleModel implementation.
   base::string16 GetTitle() const override;
   base::string16 GetMessageText() const override;
-  gfx::Image* GetIcon() const override;
   base::string16 GetButtonLabel(BubbleButton button) const override;
   void Accept() override;
   void Cancel() override;
   base::string16 GetLinkText() const override;
+  GURL GetLinkURL() const override;
   void LinkClicked() override;
 
  private:
@@ -40,7 +38,6 @@ class SpellingBubbleModel : public ConfirmBubbleModel {
 
   Profile* profile_;
   content::WebContents* web_contents_;
-  bool include_autocorrect_;
 
   DISALLOW_COPY_AND_ASSIGN(SpellingBubbleModel);
 };

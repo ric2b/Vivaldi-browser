@@ -7,8 +7,8 @@
 #include "base/bind.h"
 #include "base/debug/debugger.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/sequenced_task_runner.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "content/public/browser/browser_thread.h"
@@ -27,9 +27,10 @@ bool g_in_x11_io_error_handler = false;
 const int kWaitForUIThreadSeconds = 10;
 
 int BrowserX11ErrorHandler(Display* d, XErrorEvent* error) {
-  if (!g_in_x11_io_error_handler)
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+  if (!g_in_x11_io_error_handler) {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&ui::LogErrorEventDescription, d, *error));
+  }
   return 0;
 }
 
@@ -51,12 +52,15 @@ int BrowserX11IOErrorHandler(Display* d) {
     WaitingForUIThreadToHandleIOError();
     return 0;
   }
-  // If there's an IO error it likely means the X server has gone away
-  if (!g_in_x11_io_error_handler) {
-    g_in_x11_io_error_handler = true;
-    LOG(ERROR) << "X IO error received (X server probably went away)";
-    chrome::SessionEnding();
-  }
+
+  // If there's an IO error it likely means the X server has gone away.
+  // If this CHECK fails, then that means SessionEnding() below triggered some
+  // code that tried to talk to the X server, resulting in yet another error.
+  CHECK(!g_in_x11_io_error_handler);
+
+  g_in_x11_io_error_handler = true;
+  LOG(ERROR) << "X IO error received (X server probably went away)";
+  chrome::SessionEnding();
 
   return 0;
 }

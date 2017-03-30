@@ -21,8 +21,18 @@ namespace content {
 class PageNavigator;
 }
 
+class ExtensionInstallViewDelegate {
+ public:
+  virtual void OnOkButtonClicked() = 0;
+  virtual void OnCancelButtonClicked() = 0;
+  virtual void OnStoreLinkClicked() = 0;
+
+ protected:
+  virtual ~ExtensionInstallViewDelegate() {}
+};
+
 // Displays the extension or bundle install prompt, and notifies the
-// ExtensionInstallPrompt::Delegate of success or failure
+// Delegate of success or failure.
 @interface ExtensionInstallViewController : NSViewController
                                            <NSOutlineViewDataSource,
                                             NSOutlineViewDelegate> {
@@ -45,8 +55,8 @@ class PageNavigator;
 
   Profile* profile_; // weak
   content::PageNavigator* navigator_;  // weak
-  ExtensionInstallPrompt::Delegate* delegate_;  // weak
-  scoped_refptr<ExtensionInstallPrompt::Prompt> prompt_;
+  ExtensionInstallViewDelegate* delegate_;  // weak
+  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt_;
 
   base::scoped_nsobject<NSArray> warnings_;
   BOOL isComputingRowHeight_;
@@ -67,8 +77,8 @@ class PageNavigator;
 
 - (id)initWithProfile:(Profile*)profile
             navigator:(content::PageNavigator*)navigator
-             delegate:(ExtensionInstallPrompt::Delegate*)delegate
-               prompt:(scoped_refptr<ExtensionInstallPrompt::Prompt>)prompt;
+             delegate:(ExtensionInstallViewDelegate*)delegate
+               prompt:(scoped_ptr<ExtensionInstallPrompt::Prompt>)prompt;
 - (IBAction)storeLinkClicked:(id)sender; // Callback for "View details" link.
 - (IBAction)cancel:(id)sender;
 - (IBAction)ok:(id)sender;

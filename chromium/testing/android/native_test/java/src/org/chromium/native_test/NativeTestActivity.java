@@ -13,8 +13,9 @@ import android.os.Handler;
 import android.os.Process;
 
 import org.chromium.base.CommandLine;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.Log;
+import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.multidex.ChromiumMultiDexInstaller;
 import org.chromium.test.reporter.TestStatusReporter;
 
 import java.io.File;
@@ -32,13 +33,14 @@ public class NativeTestActivity extends Activity {
             "org.chromium.native_test.NativeTestActivity.CommandLineFile";
     public static final String EXTRA_COMMAND_LINE_FLAGS =
             "org.chromium.native_test.NativeTestActivity.CommandLineFlags";
+    public static final String EXTRA_RUN_IN_SUB_THREAD =
+            "org.chromium.native_test.NativeTestActivity.RunInSubThread";
     public static final String EXTRA_SHARD =
             "org.chromium.native_test.NativeTestActivity.Shard";
     public static final String EXTRA_STDOUT_FILE =
             "org.chromium.native_test.NativeTestActivity.StdoutFile";
 
-    private static final String TAG = "cr.native_test";
-    private static final String EXTRA_RUN_IN_SUB_THREAD = "RunInSubThread";
+    private static final String TAG = "cr_NativeTest";
 
     private String mCommandLineFilePath;
     private StringBuilder mCommandLineFlags = new StringBuilder();
@@ -49,7 +51,9 @@ public class NativeTestActivity extends Activity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        ChromiumMultiDexInstaller.install(this);
         super.onCreate(savedInstanceState);
+
         CommandLine.init(new String[]{});
 
         parseArgumentsFromIntent(getIntent());
@@ -57,6 +61,14 @@ public class NativeTestActivity extends Activity {
     }
 
     private void parseArgumentsFromIntent(Intent intent) {
+        Log.i(TAG, "Extras:");
+        Bundle extras = intent.getExtras();
+        if (extras != null) {
+            for (String s : extras.keySet()) {
+                Log.i(TAG, "  %s", s);
+            }
+        }
+
         mCommandLineFilePath = intent.getStringExtra(EXTRA_COMMAND_LINE_FILE);
         if (mCommandLineFilePath == null) {
             mCommandLineFilePath = "";

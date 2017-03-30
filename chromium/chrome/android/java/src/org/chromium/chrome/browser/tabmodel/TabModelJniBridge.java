@@ -6,9 +6,11 @@ package org.chromium.chrome.browser.tabmodel;
 
 import android.os.SystemClock;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -97,21 +99,32 @@ public abstract class TabModelJniBridge implements TabModel {
     protected abstract boolean closeTabAt(int index);
 
     /**
+     * Returns a tab creator for this tab model.
+     * @param incognito Whether to return an incognito TabCreator.
+     */
+    protected abstract TabCreator getTabCreator(boolean incognito);
+
+    /**
      * Creates a Tab with the given WebContents.
-     * @param incognito Whether or not the tab is incognito.
+     * @param parent      The parent tab that creates the new tab.
+     * @param incognito   Whether or not the tab is incognito.
      * @param webContents A {@link WebContents} object.
-     * @param parentId ID of the parent.
+     * @param parentId    ID of the parent.
+     * @return Whether or not the Tab was successfully created.
      */
     @CalledByNative
-    protected abstract Tab createTabWithWebContents(
-            boolean incognito, WebContents webContents, int parentId);
+    protected abstract boolean createTabWithWebContents(Tab parent, boolean incognito,
+            WebContents webContents, int parentId);
 
     /**
      * Creates a Tab with the given WebContents for DevTools.
      * @param url URL to show.
      */
     @CalledByNative
-    protected abstract Tab createNewTabForDevTools(String url);
+    protected Tab createNewTabForDevTools(String url) {
+        return getTabCreator(false).createNewTab(new LoadUrlParams(url),
+                TabModel.TabLaunchType.FROM_MENU_OR_OVERVIEW, null);
+    }
 
     @Override
     @CalledByNative
@@ -138,7 +151,7 @@ public abstract class TabModelJniBridge implements TabModel {
     }
 
     /**
-     * Should be called a visible {@link ChromeTab} gets a frame to render in the browser process.
+     * Should be called a visible {@link Tab} gets a frame to render in the browser process.
      * If we don't get this call, we ignore requests to
      * {@link #flushActualTabSwitchLatencyMetric()}.
      */

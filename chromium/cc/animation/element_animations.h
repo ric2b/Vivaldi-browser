@@ -6,6 +6,7 @@
 #define CC_ANIMATION_ELEMENT_ANIMATIONS_H_
 
 #include "base/containers/linked_list.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/layer_animation_controller.h"
@@ -83,6 +84,8 @@ class CC_EXPORT ElementAnimations : public AnimationDelegate,
                            const gfx::Transform& transform);
   void SetScrollOffsetMutated(LayerTreeType tree_type,
                               const gfx::ScrollOffset& scroll_offset);
+  void SetTransformIsPotentiallyAnimatingChanged(LayerTreeType tree_type,
+                                                 bool is_animating);
 
   void CreateActiveValueObserver();
   void DestroyActiveValueObserver();
@@ -97,6 +100,9 @@ class CC_EXPORT ElementAnimations : public AnimationDelegate,
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
                                Animation::TargetProperty target_property,
                                int group) override;
+  void NotifyAnimationAborted(base::TimeTicks monotonic_time,
+                              Animation::TargetProperty target_property,
+                              int group) override;
 
   // LayerAnimationValueProvider implementation.
   gfx::ScrollOffset ScrollOffsetForAnimation() const override;

@@ -14,18 +14,18 @@ namespace {
 
 static const int kEventFlagFromModifiers[] = {
     EF_NONE,                 // EVDEV_MODIFIER_NONE,
-    EF_CAPS_LOCK_DOWN,       // EVDEV_MODIFIER_CAPS_LOCK
     EF_SHIFT_DOWN,           // EVDEV_MODIFIER_SHIFT
     EF_CONTROL_DOWN,         // EVDEV_MODIFIER_CONTROL
     EF_ALT_DOWN,             // EVDEV_MODIFIER_ALT
+    EF_COMMAND_DOWN,         // EVDEV_MODIFIER_COMMAND
+    EF_ALTGR_DOWN,           // EVDEV_MODIFIER_ALTGR
+    EF_MOD3_DOWN,            // EVDEV_MODIFIER_MOD3
+    EF_CAPS_LOCK_ON,         // EVDEV_MODIFIER_CAPS_LOCK
     EF_LEFT_MOUSE_BUTTON,    // EVDEV_MODIFIER_LEFT_MOUSE_BUTTON
     EF_MIDDLE_MOUSE_BUTTON,  // EVDEV_MODIFIER_MIDDLE_MOUSE_BUTTON
     EF_RIGHT_MOUSE_BUTTON,   // EVDEV_MODIFIER_RIGHT_MOUSE_BUTTON
     EF_BACK_MOUSE_BUTTON,    // EVDEV_MODIFIER_BACK_MOUSE_BUTTON
     EF_FORWARD_MOUSE_BUTTON, // EVDEV_MODIFIER_FORWARD_MOUSE_BUTTON
-    EF_COMMAND_DOWN,         // EVDEV_MODIFIER_COMMAND
-    EF_ALTGR_DOWN,           // EVDEV_MODIFIER_ALTGR
-    EF_MOD3_DOWN,            // EVDEV_MODIFIER_MOD3
 };
 
 }  // namespace
@@ -81,6 +81,21 @@ void EventModifiersEvdev::UpdateFlags(unsigned int modifier) {
 }
 
 int EventModifiersEvdev::GetModifierFlags() { return modifier_flags_; }
+
+void EventModifiersEvdev::ResetKeyboardModifiers() {
+  static const int kKeyboardModifiers[] = {
+    EVDEV_MODIFIER_SHIFT,
+    EVDEV_MODIFIER_CONTROL,
+    EVDEV_MODIFIER_ALT,
+    EVDEV_MODIFIER_COMMAND,
+    EVDEV_MODIFIER_ALTGR,
+    EVDEV_MODIFIER_MOD3
+  };
+  for (const int modifier : kKeyboardModifiers) {
+    modifiers_down_[modifier] = 0;
+    UpdateFlags(modifier);
+  }
+}
 
 // static
 int EventModifiersEvdev::GetEventFlagFromModifier(unsigned int modifier) {

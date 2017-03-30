@@ -12,6 +12,7 @@
 #include "base/threading/thread_id_name_manager.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
@@ -62,9 +63,12 @@ Thread::Thread(const std::string& name)
       stopping_(false),
       running_(false),
       thread_(0),
+      id_(kInvalidThreadId),
+      id_event_(true, false),
       message_loop_(nullptr),
       message_loop_timer_slack_(TIMER_SLACK_NONE),
-      name_(name) {
+      name_(name),
+      start_event_(false, false) {
 }
 
 Thread::~Thread() {
@@ -87,6 +91,10 @@ bool Thread::StartWithOptions(const Options& options) {
       (options.message_loop_type == MessageLoop::TYPE_UI));
 #endif
 
+  // Reset |id_| here to support restarting the thread.
+  id_event_.Reset();
+  id_ = kInvalidThreadId;
+
   SetThreadWasQuitProperly(false);
 
   MessageLoop::Type type = options.message_loop_type;
@@ -97,23 +105,16 @@ bool Thread::StartWithOptions(const Options& options) {
   scoped_ptr<MessageLoop> message_loop = MessageLoop::CreateUnbound(
       type, options.message_pump_factory);
   message_loop_ = message_loop.get();
-  start_event_.reset(new WaitableEvent(false, false));
+  start_event_.Reset();
 
   // Hold the thread_lock_ while starting a new thread, so that we can make sure
   // that thread_ is populated before the newly created thread accesses it.
   {
     AutoLock lock(thread_lock_);
-    bool created;
-    if (options.priority == ThreadPriority::NORMAL) {
-      created = PlatformThread::Create(options.stack_size, this, &thread_);
-    } else {
-      created = PlatformThread::CreateWithPriority(options.stack_size, this,
-                                                   &thread_, options.priority);
-    }
-    if (!created) {
+    if (!PlatformThread::CreateWithPriority(options.stack_size, this, &thread_,
+                                            options.priority)) {
       DLOG(ERROR) << "failed to create thread";
       message_loop_ = nullptr;
-      start_event_.reset();
       return false;
     }
   }
@@ -134,16 +135,17 @@ bool Thread::StartAndWaitForTesting() {
   return true;
 }
 
-bool Thread::WaitUntilThreadStarted() {
-  if (!start_event_)
+bool Thread::WaitUntilThreadStarted() const {
+  if (!message_loop_)
     return false;
   base::ThreadRestrictions::ScopedAllowWait allow_wait;
-  start_event_->Wait();
+  start_event_.Wait();
   return true;
 }
 
 void Thread::Stop() {
-  if (!start_event_)
+  AutoLock lock(thread_lock_);
+  if (thread_.is_null())
     return;
 
   StopSoon();
@@ -154,12 +156,10 @@ void Thread::Stop() {
   // the thread exits.  Some consumers are abusing the API.  Make them stop.
   //
   PlatformThread::Join(thread_);
+  thread_ = base::PlatformThreadHandle();
 
-  // The thread should NULL message_loop_ on exit.
+  // The thread should nullify message_loop_ on exit.
   DCHECK(!message_loop_);
-
-  // The thread no longer needs to be joined.
-  start_event_.reset();
 
   stopping_ = false;
 }
@@ -167,7 +167,7 @@ void Thread::Stop() {
 void Thread::StopSoon() {
   // We should only be called on the same thread that started us.
 
-  DCHECK_NE(thread_id(), PlatformThread::CurrentId());
+  DCHECK_NE(GetThreadId(), PlatformThread::CurrentId());
 
   if (stopping_ || !message_loop_)
     return;
@@ -176,9 +176,11 @@ void Thread::StopSoon() {
   task_runner()->PostTask(FROM_HERE, base::Bind(&ThreadQuitHelper));
 }
 
-PlatformThreadId Thread::thread_id() const {
-  AutoLock lock(thread_lock_);
-  return thread_.id();
+PlatformThreadId Thread::GetThreadId() const {
+  // If the thread is created but not started yet, wait for |id_| being ready.
+  base::ThreadRestrictions::ScopedAllowWait allow_wait;
+  id_event_.Wait();
+  return id_;
 }
 
 bool Thread::IsRunning() const {
@@ -211,6 +213,12 @@ bool Thread::GetThreadWasQuitProperly() {
 }
 
 void Thread::ThreadMain() {
+  // First, make GetThreadId() available to avoid deadlocks. It could be called
+  // any place in the following thread initialization code.
+  id_ = PlatformThread::CurrentId();
+  DCHECK_NE(kInvalidThreadId, id_);
+  id_event_.Signal();
+
   // Complete the initialization of our Thread object.
   PlatformThread::SetName(name_.c_str());
   ANNOTATE_THREAD_NAME(name_.c_str());  // Tell the name to race detector.
@@ -231,10 +239,6 @@ void Thread::ThreadMain() {
   }
 #endif
 
-  // Make sure the thread_id() returns current thread.
-  // (This internally acquires lock against PlatformThread::Create)
-  DCHECK_EQ(thread_id(), PlatformThread::CurrentId());
-
   // Let the thread do extra initialization.
   Init();
 
@@ -243,7 +247,7 @@ void Thread::ThreadMain() {
     running_ = true;
   }
 
-  start_event_->Signal();
+  start_event_.Signal();
 
   Run(message_loop_);
 
@@ -259,12 +263,16 @@ void Thread::ThreadMain() {
   com_initializer.reset();
 #endif
 
-  // Assert that MessageLoop::Quit was called by ThreadQuitHelper.
-  DCHECK(GetThreadWasQuitProperly());
+  if (message_loop->type() != MessageLoop::TYPE_CUSTOM) {
+    // Assert that MessageLoop::QuitWhenIdle was called by ThreadQuitHelper.
+    // Don't check for custom message pumps, because their shutdown might not
+    // allow this.
+    DCHECK(GetThreadWasQuitProperly());
+  }
 
   // We can't receive messages anymore.
   // (The message loop is destructed at the end of this block)
-  message_loop_ = NULL;
+  message_loop_ = nullptr;
 }
 
 }  // namespace base

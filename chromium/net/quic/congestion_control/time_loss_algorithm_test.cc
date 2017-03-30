@@ -9,7 +9,6 @@
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "net/quic/congestion_control/rtt_stats.h"
-#include "net/quic/quic_ack_notifier_manager.h"
 #include "net/quic/quic_unacked_packet_map.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -21,35 +20,31 @@ namespace test {
 namespace {
 
 // Default packet length.
-const uint32 kDefaultLength = 1000;
+const uint32_t kDefaultLength = 1000;
 
 class TimeLossAlgorithmTest : public ::testing::Test {
  protected:
-  TimeLossAlgorithmTest() : unacked_packets_(&ack_notifier_manager_) {
+  TimeLossAlgorithmTest() {
     rtt_stats_.UpdateRtt(QuicTime::Delta::FromMilliseconds(100),
-                         QuicTime::Delta::Zero(),
-                         clock_.Now());
+                         QuicTime::Delta::Zero(), clock_.Now());
   }
 
-  ~TimeLossAlgorithmTest() override {
-    STLDeleteElements(&packets_);
-  }
+  ~TimeLossAlgorithmTest() override { STLDeleteElements(&packets_); }
 
-  void SendDataPacket(QuicPacketSequenceNumber sequence_number) {
+  void SendDataPacket(QuicPacketNumber packet_number) {
     packets_.push_back(new QuicEncryptedPacket(nullptr, kDefaultLength));
-    SerializedPacket packet(sequence_number, PACKET_1BYTE_SEQUENCE_NUMBER,
-                            packets_.back(), 0,
-                            new RetransmittableFrames(ENCRYPTION_NONE));
-    unacked_packets_.AddSentPacket(packet, 0, NOT_RETRANSMISSION, clock_.Now(),
+    SerializedPacket packet(kDefaultPathId, packet_number,
+                            PACKET_1BYTE_PACKET_NUMBER, packets_.back(), 0,
+                            new RetransmittableFrames(), false, false);
+    unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, clock_.Now(),
                                    1000, true);
   }
 
-  void VerifyLosses(QuicPacketSequenceNumber largest_observed,
-                    QuicPacketSequenceNumber* losses_expected,
+  void VerifyLosses(QuicPacketNumber largest_observed,
+                    QuicPacketNumber* losses_expected,
                     size_t num_losses) {
-    SequenceNumberSet lost_packets =
-        loss_algorithm_.DetectLostPackets(
-            unacked_packets_, clock_.Now(), largest_observed, rtt_stats_);
+    PacketNumberSet lost_packets = loss_algorithm_.DetectLostPackets(
+        unacked_packets_, clock_.Now(), largest_observed, rtt_stats_);
     EXPECT_EQ(num_losses, lost_packets.size());
     for (size_t i = 0; i < num_losses; ++i) {
       EXPECT_TRUE(ContainsKey(lost_packets, losses_expected[i]));
@@ -57,7 +52,6 @@ class TimeLossAlgorithmTest : public ::testing::Test {
   }
 
   vector<QuicEncryptedPacket*> packets_;
-  AckNotifierManager ack_notifier_manager_;
   QuicUnackedPacketMap unacked_packets_;
   TimeLossAlgorithm loss_algorithm_;
   RttStats rtt_stats_;
@@ -71,7 +65,7 @@ TEST_F(TimeLossAlgorithmTest, NoLossFor500Nacks) {
     SendDataPacket(i);
   }
   unacked_packets_.RemoveFromInFlight(2);
-  for (size_t i = 1; i < 500; ++i) {
+  for (uint16_t i = 1; i < 500; ++i) {
     unacked_packets_.NackPacket(1, i);
     VerifyLosses(2, nullptr, 0);
   }
@@ -98,7 +92,7 @@ TEST_F(TimeLossAlgorithmTest, NoLossUntilTimeout) {
   unacked_packets_.NackPacket(1, 5);
   VerifyLosses(2, nullptr, 0);
   clock_.AdvanceTime(rtt_stats_.smoothed_rtt().Multiply(0.25));
-  QuicPacketSequenceNumber lost[] = { 1 };
+  QuicPacketNumber lost[] = {1};
   VerifyLosses(2, lost, arraysize(lost));
   EXPECT_EQ(QuicTime::Zero(), loss_algorithm_.GetLossTimeout());
 }
@@ -144,7 +138,7 @@ TEST_F(TimeLossAlgorithmTest, MultipleLossesAtOnce) {
   EXPECT_EQ(rtt_stats_.smoothed_rtt().Multiply(0.25),
             loss_algorithm_.GetLossTimeout().Subtract(clock_.Now()));
   clock_.AdvanceTime(rtt_stats_.smoothed_rtt().Multiply(0.25));
-  QuicPacketSequenceNumber lost[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  QuicPacketNumber lost[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
   VerifyLosses(10, lost, arraysize(lost));
   EXPECT_EQ(QuicTime::Zero(), loss_algorithm_.GetLossTimeout());
 }

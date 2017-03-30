@@ -4,15 +4,17 @@
 
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/thread_test_helper.h"
@@ -61,7 +63,7 @@ class BrowsingDataLocalStorageHelperTest : public InProcessBrowserTest {
     };
     for (size_t i = 0; i < arraysize(kFilesToCreate); ++i) {
       base::FilePath file_path = storage_path.Append(kFilesToCreate[i]);
-      base::WriteFile(file_path, NULL, 0);
+      base::WriteFile(file_path, nullptr, 0);
     }
   }
 
@@ -88,14 +90,10 @@ class StopTestOnCallback {
     const char* const kTestHosts[] = {"www.chromium.org", "www.google.com"};
     bool test_hosts_found[arraysize(kTestHosts)] = {false, false};
     ASSERT_EQ(arraysize(kTestHosts), local_storage_info.size());
-    typedef std::list<BrowsingDataLocalStorageHelper::LocalStorageInfo>
-        LocalStorageInfoList;
     for (size_t i = 0; i < arraysize(kTestHosts); ++i) {
-      for (LocalStorageInfoList::const_iterator info =
-           local_storage_info.begin(); info != local_storage_info.end();
-           ++info) {
-        ASSERT_TRUE(info->origin_url.SchemeIs("http"));
-        if (info->origin_url.host() == kTestHosts[i]) {
+      for (const auto& info : local_storage_info) {
+        ASSERT_TRUE(info.origin_url.SchemeIs("http"));
+        if (info.origin_url.host() == kTestHosts[i]) {
           ASSERT_FALSE(test_hosts_found[i]);
           test_hosts_found[i] = true;
         }
@@ -104,7 +102,7 @@ class StopTestOnCallback {
     for (size_t i = 0; i < arraysize(kTestHosts); ++i) {
       ASSERT_TRUE(test_hosts_found[i]) << kTestHosts[i];
     }
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
  private:

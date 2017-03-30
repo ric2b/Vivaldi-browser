@@ -5,12 +5,13 @@
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/banners/app_banner_data_fetcher_desktop.h"
 #include "chrome/common/chrome_switches.h"
 #include "extensions/common/constants.h"
 
 namespace {
-// TODO(dominickn) Enforce the set of icons which will guarantee the best
+// TODO(dominickn) Identify the best minimum icon size to guarantee the best
 // user experience.
 int kMinimumIconSize = extension_misc::EXTENSION_ICON_LARGE;
 }  // anonymous namespace
@@ -20,20 +21,25 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(banners::AppBannerManagerDesktop);
 namespace banners {
 
 bool AppBannerManagerDesktop::IsEnabled() {
+#if defined(OS_CHROMEOS)
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableAddToShelf);
+#else
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableAddToShelf);
+#endif
 }
 
 AppBannerDataFetcher* AppBannerManagerDesktop::CreateAppBannerDataFetcher(
-    base::WeakPtr<AppBannerDataFetcher::Delegate> weak_delegate,
-    const int ideal_icon_size) {
+    base::WeakPtr<AppBannerDataFetcher::Delegate> weak_delegate) {
   return new AppBannerDataFetcherDesktop(web_contents(), weak_delegate,
-                                         ideal_icon_size);
+                                         kMinimumIconSize,
+                                         kMinimumIconSize);
 }
 
 AppBannerManagerDesktop::AppBannerManagerDesktop(
     content::WebContents* web_contents)
-    : AppBannerManager(web_contents, kMinimumIconSize) {
+    : AppBannerManager(web_contents) {
 }
 
 }  // namespace banners

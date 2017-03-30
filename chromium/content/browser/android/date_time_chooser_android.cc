@@ -4,6 +4,8 @@
 
 #include "content/browser/android/date_time_chooser_android.h"
 
+#include <stddef.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/i18n/char_iterator.h"
@@ -19,6 +21,7 @@ using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
+using base::android::JavaRef;
 
 
 namespace {
@@ -50,12 +53,13 @@ DateTimeChooserAndroid::~DateTimeChooserAndroid() {
 }
 
 void DateTimeChooserAndroid::ReplaceDateTime(JNIEnv* env,
-                                             jobject,
+                                             const JavaRef<jobject>&,
                                              jdouble value) {
   host_->Send(new ViewMsg_ReplaceDateTime(host_->GetRoutingID(), value));
 }
 
-void DateTimeChooserAndroid::CancelDialog(JNIEnv* env, jobject) {
+void DateTimeChooserAndroid::CancelDialog(JNIEnv* env,
+                                          const JavaRef<jobject>&) {
   host_->Send(new ViewMsg_CancelDateTimeDialog(host_->GetRoutingID()));
 }
 
@@ -100,7 +104,7 @@ void DateTimeChooserAndroid::ShowDialog(
       step,
       suggestions_array.obj()));
   if (j_date_time_chooser_.is_null())
-    ReplaceDateTime(env, j_date_time_chooser_.obj(), dialog_value);
+    ReplaceDateTime(env, j_date_time_chooser_, dialog_value);
 }
 
 // ----------------------------------------------------------------------------

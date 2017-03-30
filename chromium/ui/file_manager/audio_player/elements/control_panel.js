@@ -25,13 +25,7 @@
     target.style.bottom = pos.bottom + 'px';
   }
 
-  /**
-   * @constructor
-   * @extends {PolymerElement}
-   */
-  var ControlPanelElement = function() {};
-
-  ControlPanelElement.prototype = {
+  Polymer({
     is: 'control-panel',
 
     properties: {
@@ -42,7 +36,9 @@
       playing: {
         type: Boolean,
         value: false,
-        notify: true
+        notify: true,
+        reflectToAttribute: true,
+        observer: 'playingChanged_'
       },
 
       /**
@@ -52,6 +48,15 @@
         type: Number,
         value: 0,
         notify: true
+      },
+
+      /**
+       * Current seeking position on the time slider in millisecond.
+       */
+      seekingTime: {
+        type: Number,
+        value: 0,
+        readOnly: true
       },
 
       /**
@@ -85,7 +90,10 @@
        */
       volume: {
         type: Number,
-        notify: true
+        value: 50,
+        notify: true,
+        reflectToAttribute: true,
+        observer: 'volumeChanged_'
       },
 
       /**
@@ -98,13 +106,20 @@
       },
 
       /**
-       * Whether the volume slider is expanded or not.
+       * Whether the knob of time slider is being dragged.
        */
-      volumeSliderShown: {
+      dragging: {
         type: Boolean,
         value: false,
-        observer: 'volumeSliderShownChanged',
         notify: true
+      },
+
+      /**
+       * Dictionary which contains aria-labels for each controls.
+       */
+      ariaLabels: {
+        type: Object,
+        observer: 'ariaLabelsChanged_'
       }
     },
 
@@ -113,10 +128,32 @@
      * element is ready.
      */
     ready: function() {
-      var onFocusoutBound = this.onVolumeControllerFocusout_.bind(this);
+      var timeSlider = /** @type {PaperSliderElement} */ (this.$.timeSlider);
+      timeSlider.addEventListener('change', function() {
+        if (this.dragging)
+          this.dragging = false;
+        this._setSeekingTime(0);
+      }.bind(this));
+      timeSlider.addEventListener('immediate-value-change', function() {
+        this._setSeekingTime(timeSlider.immediateValue);
+        if (!this.dragging)
+          this.dragging = true;
+      }.bind(this));
+      timeSlider.addEventListener('keydown',
+          this.onProgressKeyDownOrKeyPress_.bind(this));
+      timeSlider.addEventListener('keypress',
+          this.onProgressKeyDownOrKeyPress_.bind(this));
 
-      this.$.volumeSlider.addEventListener('focusout', onFocusoutBound);
-      this.$.volumeButton.addEventListener('focusout', onFocusoutBound);
+      // Update volume on user inputs for volume slider.
+      // During a drag operation, the volume should be updated immediately.
+      var volumeSlider =
+          /** @type {PaperSliderElement} */ (this.$.volumeSlider);
+      volumeSlider.addEventListener('change', function() {
+        this.volume = volumeSlider.value;
+      }.bind(this));
+      volumeSlider.addEventListener('immediate-value-change', function() {
+        this.volume = volumeSlider.immediateValue;
+      }.bind(this));
     },
 
     /**
@@ -141,40 +178,14 @@
     },
 
     /**
-     * Invoked when the property 'volumeSliderShown' changes.
-     * @param {boolean} shown
+     * Invoked when the volume button is clicked.
      */
-    volumeSliderShownChanged: function(shown) {
-      this.showVolumeController_(shown);
-    },
-
-    /**
-     * Invoked when the focus goes out of the volume elements.
-     * @param {!FocusEvent} event The focusout event.
-     * @private
-     */
-    onVolumeControllerFocusout_: function(event) {
-      if (this.volumeSliderShown) {
-        // If the focus goes out of the volume, hide the volume control.
-        if (!event.relatedTarget ||
-            (event.relatedTarget !== this.$.volumeButton &&
-             event.relatedTarget !== this.$.volumeSlider)) {
-          this.volumeSliderShown = false;
-        }
-      }
-    },
-
-    /**
-     * Shows/hides the volume controller.
-     * @param {boolean} show True to show the controller, false to hide.
-     * @private
-     */
-    showVolumeController_: function(show) {
-      if (show) {
-        matchBottomLine(this.$.volumeContainer, this.$.volumeButton);
-        this.$.volumeContainer.style.visibility = 'visible';
+    volumeClick: function() {
+      if (this.volume !== 0) {
+        this.savedVolume_ = this.volume;
+        this.volume = 0;
       } else {
-        this.$.volumeContainer.style.visibility = 'hidden';
+        this.volume = this.savedVolume_ || 50;
       }
     },
 
@@ -188,21 +199,104 @@
     },
 
     /**
-     * Computes state for play button based on 'playing' property.
-     * @return {string}
+     * Converts the time and duration into human friendly string.
+     * @param {number} time Time to be converted.
+     * @param {number} duration Duration to be converted.
+     * @return {string} String representation of the given time
      */
-    computePlayState_: function(playing) {
-      return playing ? "playing" : "ended";
+    computeTimeString_: function(time, duration) {
+      return this.time2string_(time) + ' / ' + this.time2string_(duration);
     },
 
     /**
-     * Computes style for '.filled' element of progress bar.
-     * @return {string}
+     * Computes string representation of displayed time. If a user is dragging
+     * the knob of seek bar, seeking position should be shown. Otherwise,
+     * playing position should be shown.
+     * @param {boolean} dragging Whether the know of seek bar is being dragged.
+     * @param {number} time Time corresponding to the playing position.
+     * @param {number} seekingTime Time corresponding to the seeking position.
+     * @param {number} duration Duration of the audio file.
+     * @return {string} String representation to be displayed as current time.
      */
-    computeProgressBarStyle_: function(time, duration) {
-      return 'width: ' + (time / duration * 100) + '%;';
-    }
-  };
+    computeDisplayTimeString_: function(dragging, time, seekingTime, duration) {
+      if (dragging)
+        return this.computeTimeString_(seekingTime, duration);
+      else
+        return this.computeTimeString_(time, duration);
+    },
 
-  Polymer(ControlPanelElement.prototype);
+    /**
+     * Invoked when the playing property is changed.
+     * @param {boolean} playing
+     * @private
+     */
+    playingChanged_: function(playing) {
+      if (this.ariaLabels) {
+        this.$.play.setAttribute('aria-label',
+            playing ? this.ariaLabels.pause : this.ariaLabels.play);
+      }
+    },
+
+    /**
+     * Invoked when the volume property is changed.
+     * @param {number} volume
+     * @private
+     */
+    volumeChanged_: function(volume) {
+      if (!this.$.volumeSlider.dragging)
+        this.$.volumeSlider.value = volume;
+
+      if (this.ariaLabels) {
+        this.$.volumeButton.setAttribute('aria-label',
+            volume !== 0 ? this.ariaLabels.mute : this.ariaLabels.unmute);
+      }
+    },
+
+    /**
+     * Invoked when the ariaLabels property is changed.
+     * @param {Object} ariaLabels
+     * @private
+     */
+    ariaLabelsChanged_: function(ariaLabels) {
+      assert(ariaLabels);
+      // TODO(fukino): Use data bindings.
+      this.$.volumeSlider.setAttribute('aria-label', ariaLabels.volumeSlider);
+      this.$.shuffle.setAttribute('aria-label', ariaLabels.shuffle);
+      this.$.repeat.setAttribute('aria-label', ariaLabels.repeat);
+      this.$.previous.setAttribute('aria-label', ariaLabels.previous);
+      this.$.play.setAttribute('aria-label',
+          this.playing ? ariaLabels.pause : ariaLabels.play);
+      this.$.next.setAttribute('aria-label', ariaLabels.next);
+      this.$.volumeButton.setAttribute('aria-label', ariaLabels.volume);
+      this.$.playList.setAttribute('aria-label', ariaLabels.playList);
+      this.$.timeSlider.setAttribute('aria-label', ariaLabels.seekSlider);
+      this.$.volumeButton.setAttribute('aria-label',
+          this.volume !== 0 ? ariaLabels.mute : ariaLabels.unmute);
+      this.$.volumeSlider.setAttribute('aria-label', ariaLabels.volumeSlider);
+    },
+
+    /**
+     * Handles arrow keys on time slider to skip forward/backword.
+     * @param {!Event} event
+     * @private
+     */
+    onProgressKeyDownOrKeyPress_: function(event) {
+      if (event.code !== 'ArrowRight' && event.code !== 'ArrowLeft' &&
+          event.code !== 'ArrowUp' && event.code !== 'ArrowDown') {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (this.duration > 0) {
+        // Skip 5 seconds or 10% of duration, whichever is smaller.
+        var millisecondsToSkip = Math.min(5000, this.duration / 10);
+        if (event.code === 'ArrowRight' || event.code === 'ArrowUp') {
+          this.time = Math.min(this.time + millisecondsToSkip, this.duration);
+        } else {
+          this.time = Math.max(this.time - millisecondsToSkip, 0);
+        }
+      }
+    }
+  });
 })();  // Anonymous closure

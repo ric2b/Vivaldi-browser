@@ -4,6 +4,8 @@
 
 #include "content/renderer/child_frame_compositing_helper.h"
 
+#include <utility>
+
 #include "cc/blink/web_layer_impl.h"
 #include "cc/layers/delegated_frame_provider.h"
 #include "cc/layers/delegated_frame_resource_collection.h"
@@ -43,10 +45,9 @@ ChildFrameCompositingHelper::CreateForBrowserPlugin(
 ChildFrameCompositingHelper*
 ChildFrameCompositingHelper::CreateForRenderFrameProxy(
     RenderFrameProxy* render_frame_proxy) {
-  return new ChildFrameCompositingHelper(base::WeakPtr<BrowserPlugin>(),
-                                         render_frame_proxy->web_frame(),
-                                         render_frame_proxy,
-                                         render_frame_proxy->routing_id());
+  return new ChildFrameCompositingHelper(
+      base::WeakPtr<BrowserPlugin>(), render_frame_proxy->web_frame(),
+      render_frame_proxy, render_frame_proxy->routing_id());
 }
 
 ChildFrameCompositingHelper::ChildFrameCompositingHelper(
@@ -59,11 +60,9 @@ ChildFrameCompositingHelper::ChildFrameCompositingHelper(
       last_output_surface_id_(0),
       last_host_id_(0),
       ack_pending_(true),
-      opaque_(true),
       browser_plugin_(browser_plugin),
       render_frame_proxy_(render_frame_proxy),
-      frame_(frame) {
-}
+      frame_(frame) {}
 
 ChildFrameCompositingHelper::~ChildFrameCompositingHelper() {
   if (resource_collection_.get())
@@ -97,8 +96,8 @@ void ChildFrameCompositingHelper::SendCompositorFrameSwappedACKToBrowser(
   // BrowserPlugin is modified to use a RenderFrame.
   if (GetBrowserPluginManager()) {
     GetBrowserPluginManager()->Send(
-        new BrowserPluginHostMsg_CompositorFrameSwappedACK(
-            GetInstanceID(), params));
+        new BrowserPluginHostMsg_CompositorFrameSwappedACK(GetInstanceID(),
+                                                           params));
   } else if (render_frame_proxy_) {
     render_frame_proxy_->Send(
         new FrameHostMsg_CompositorFrameSwappedACK(host_routing_id_, params));
@@ -111,8 +110,8 @@ void ChildFrameCompositingHelper::SendReclaimCompositorResourcesToBrowser(
   // BrowserPlugin is modified to use a RenderFrame.
   if (GetBrowserPluginManager()) {
     GetBrowserPluginManager()->Send(
-        new BrowserPluginHostMsg_ReclaimCompositorResources(
-            GetInstanceID(), params));
+        new BrowserPluginHostMsg_ReclaimCompositorResources(GetInstanceID(),
+                                                            params));
   } else if (render_frame_proxy_) {
     render_frame_proxy_->Send(
         new FrameHostMsg_ReclaimCompositorResources(host_routing_id_, params));
@@ -135,21 +134,13 @@ void ChildFrameCompositingHelper::DidCommitCompositorFrame() {
   ack_pending_ = false;
 }
 
-void ChildFrameCompositingHelper::EnableCompositing(bool enable) {
-  if (enable && !background_layer_.get()) {
-    background_layer_ =
-        cc::SolidColorLayer::Create(cc_blink::WebLayerImpl::LayerSettings());
-    background_layer_->SetMasksToBounds(true);
-    background_layer_->SetBackgroundColor(
-        SkColorSetARGBInline(255, 255, 255, 255));
-    web_layer_.reset(new cc_blink::WebLayerImpl(background_layer_));
-  }
-
+void ChildFrameCompositingHelper::UpdateWebLayer(blink::WebLayer* layer) {
   if (GetContainer()) {
-    GetContainer()->setWebLayer(enable ? web_layer_.get() : nullptr);
+    GetContainer()->setWebLayer(layer);
   } else if (frame_) {
-    frame_->setRemoteWebLayer(enable ? web_layer_.get() : nullptr);
+    frame_->setRemoteWebLayer(layer);
   }
+  web_layer_.reset(layer);
 }
 
 void ChildFrameCompositingHelper::CheckSizeAndAdjustLayerProperties(
@@ -161,14 +152,10 @@ void ChildFrameCompositingHelper::CheckSizeAndAdjustLayerProperties(
     // The container size is in DIP, so is the layer size.
     // Buffer size is in physical pixels, so we need to adjust
     // it by the device scale factor.
-    gfx::Size device_scale_adjusted_size = gfx::ToFlooredSize(
-        gfx::ScaleSize(buffer_size_, 1.0f / device_scale_factor));
+    gfx::Size device_scale_adjusted_size =
+        gfx::ScaleToFlooredSize(buffer_size_, 1.0f / device_scale_factor);
     layer->SetBounds(device_scale_adjusted_size);
   }
-
-  // Manually manage background layer for transparent webview.
-  if (!opaque_)
-    background_layer_->SetIsDrawable(false);
 }
 
 void ChildFrameCompositingHelper::OnContainerDestroy() {
@@ -176,8 +163,7 @@ void ChildFrameCompositingHelper::OnContainerDestroy() {
   // future.
   DidCommitCompositorFrame();
 
-  if (GetContainer())
-    GetContainer()->setWebLayer(nullptr);
+  UpdateWebLayer(nullptr);
 
   if (resource_collection_.get())
     resource_collection_->SetClient(nullptr);
@@ -185,37 +171,31 @@ void ChildFrameCompositingHelper::OnContainerDestroy() {
   ack_pending_ = false;
   resource_collection_ = nullptr;
   frame_provider_ = nullptr;
-  delegated_layer_ = nullptr;
-  background_layer_ = nullptr;
-  surface_layer_ = nullptr;
-  web_layer_.reset();
 }
 
 void ChildFrameCompositingHelper::ChildFrameGone() {
-  background_layer_->SetBackgroundColor(SkColorSetARGBInline(255, 0, 128, 0));
-  background_layer_->RemoveAllChildren();
-  background_layer_->SetIsDrawable(true);
-  background_layer_->SetContentsOpaque(true);
+  scoped_refptr<cc::SolidColorLayer> crashed_layer =
+      cc::SolidColorLayer::Create(cc_blink::WebLayerImpl::LayerSettings());
+  crashed_layer->SetMasksToBounds(true);
+  crashed_layer->SetBackgroundColor(SkColorSetARGBInline(255, 0, 128, 0));
+  blink::WebLayer* layer = new cc_blink::WebLayerImpl(crashed_layer);
+  UpdateWebLayer(layer);
 }
 
 void ChildFrameCompositingHelper::OnCompositorFrameSwapped(
     scoped_ptr<cc::CompositorFrame> frame,
     int route_id,
-    uint32 output_surface_id,
+    uint32_t output_surface_id,
     int host_id,
     base::SharedMemoryHandle handle) {
   cc::DelegatedFrameData* frame_data = frame->delegated_frame_data.get();
 
-  // Surface IDs and compositor frames should never be received
-  // interchangeably.
-  DCHECK(!surface_layer_.get());
-
   // Do nothing if we are getting destroyed or have no frame data.
-  if (!frame_data || !background_layer_.get())
+  if (!frame_data)
     return;
 
   DCHECK(!frame_data->render_pass_list.empty());
-  cc::RenderPass* root_pass = frame_data->render_pass_list.back();
+  cc::RenderPass* root_pass = frame_data->render_pass_list.back().get();
   gfx::Size frame_size = root_pass->output_rect.size();
 
   if (last_route_id_ != route_id ||
@@ -248,23 +228,22 @@ void ChildFrameCompositingHelper::OnCompositorFrameSwapped(
   }
   if (!frame_provider_.get() || frame_provider_->frame_size() != frame_size) {
     frame_provider_ = new cc::DelegatedFrameProvider(
-        resource_collection_.get(), frame->delegated_frame_data.Pass());
-    if (delegated_layer_.get())
-      delegated_layer_->RemoveFromParent();
-    delegated_layer_ = cc::DelegatedRendererLayer::Create(
-        cc_blink::WebLayerImpl::LayerSettings(), frame_provider_.get());
-    delegated_layer_->SetIsDrawable(true);
+        resource_collection_.get(), std::move(frame->delegated_frame_data));
+    scoped_refptr<cc::DelegatedRendererLayer> delegated_layer =
+        cc::DelegatedRendererLayer::Create(
+            cc_blink::WebLayerImpl::LayerSettings(), frame_provider_.get());
+    delegated_layer->SetIsDrawable(true);
     buffer_size_ = gfx::Size();
-    SetContentsOpaque(opaque_);
-    background_layer_->AddChild(delegated_layer_);
+    blink::WebLayer* layer = new cc_blink::WebLayerImpl(delegated_layer);
+    UpdateWebLayer(layer);
   } else {
-    frame_provider_->SetFrameData(frame->delegated_frame_data.Pass());
+    frame_provider_->SetFrameData(std::move(frame->delegated_frame_data));
   }
 
   CheckSizeAndAdjustLayerProperties(
       frame_data->render_pass_list.back()->output_rect.size(),
       frame->metadata.device_scale_factor,
-      delegated_layer_.get());
+      static_cast<cc_blink::WebLayerImpl*>(web_layer_.get())->layer());
 
   ack_pending_ = true;
 }
@@ -314,41 +293,33 @@ void ChildFrameCompositingHelper::OnSetSurface(
     const gfx::Size& frame_size,
     float scale_factor,
     const cc::SurfaceSequence& sequence) {
-  // Surface IDs and compositor frames should never be received
-  // interchangably.
-  DCHECK(!delegated_layer_.get());
+  scoped_refptr<ThreadSafeSender> sender(
+      RenderThreadImpl::current()->thread_safe_sender());
+  cc::SurfaceLayer::SatisfyCallback satisfy_callback =
+      render_frame_proxy_
+          ? base::Bind(&ChildFrameCompositingHelper::SatisfyCallback, sender,
+                       host_routing_id_)
+          : base::Bind(
+                &ChildFrameCompositingHelper::SatisfyCallbackBrowserPlugin,
+                sender, host_routing_id_,
+                browser_plugin_->browser_plugin_instance_id());
+  cc::SurfaceLayer::RequireCallback require_callback =
+      render_frame_proxy_
+          ? base::Bind(&ChildFrameCompositingHelper::RequireCallback, sender,
+                       host_routing_id_)
+          : base::Bind(
+                &ChildFrameCompositingHelper::RequireCallbackBrowserPlugin,
+                sender, host_routing_id_,
+                browser_plugin_->browser_plugin_instance_id());
+  scoped_refptr<cc::SurfaceLayer> surface_layer =
+      cc::SurfaceLayer::Create(cc_blink::WebLayerImpl::LayerSettings(),
+                               satisfy_callback, require_callback);
+  surface_layer->SetSurfaceId(surface_id, scale_factor, frame_size);
+  surface_layer->SetMasksToBounds(true);
+  blink::WebLayer* layer = new cc_blink::WebLayerImpl(surface_layer);
+  UpdateWebLayer(layer);
 
-  // Do nothing if we are getting destroyed.
-  if (!background_layer_.get())
-    return;
-
-  if (!surface_layer_.get()) {
-    scoped_refptr<ThreadSafeSender> sender(
-        RenderThreadImpl::current()->thread_safe_sender());
-    cc::SurfaceLayer::SatisfyCallback satisfy_callback =
-        render_frame_proxy_
-            ? base::Bind(&ChildFrameCompositingHelper::SatisfyCallback, sender,
-                         host_routing_id_)
-            : base::Bind(
-                  &ChildFrameCompositingHelper::SatisfyCallbackBrowserPlugin,
-                  sender, host_routing_id_,
-                  browser_plugin_->browser_plugin_instance_id());
-    cc::SurfaceLayer::RequireCallback require_callback =
-        render_frame_proxy_
-            ? base::Bind(&ChildFrameCompositingHelper::RequireCallback, sender,
-                         host_routing_id_)
-            : base::Bind(
-                  &ChildFrameCompositingHelper::RequireCallbackBrowserPlugin,
-                  sender, host_routing_id_,
-                  browser_plugin_->browser_plugin_instance_id());
-    surface_layer_ =
-        cc::SurfaceLayer::Create(cc_blink::WebLayerImpl::LayerSettings(),
-                                 satisfy_callback, require_callback);
-  }
-  surface_layer_->SetSurfaceId(surface_id, scale_factor, frame_size);
   UpdateVisibility(true);
-  SetContentsOpaque(opaque_);
-  background_layer_->AddChild(surface_layer_);
 
   // The RWHV creates a destruction dependency on the surface that needs to be
   // satisfied. Note: render_frame_proxy_ is null in the case our client is a
@@ -361,15 +332,14 @@ void ChildFrameCompositingHelper::OnSetSurface(
     browser_plugin_->SendSatisfySequence(sequence);
   }
 
-  CheckSizeAndAdjustLayerProperties(frame_size, scale_factor,
-                                    surface_layer_.get());
+  CheckSizeAndAdjustLayerProperties(
+      frame_size, scale_factor,
+      static_cast<cc_blink::WebLayerImpl*>(web_layer_.get())->layer());
 }
 
 void ChildFrameCompositingHelper::UpdateVisibility(bool visible) {
-  if (delegated_layer_.get())
-    delegated_layer_->SetIsDrawable(visible);
-  if (surface_layer_.get())
-    surface_layer_->SetIsDrawable(visible);
+  if (web_layer_)
+    web_layer_->setDrawsContent(visible);
 }
 
 void ChildFrameCompositingHelper::UnusedResourcesAreAvailable() {
@@ -390,14 +360,6 @@ void ChildFrameCompositingHelper::SendReturnedDelegatedResources() {
   params.output_surface_id = last_output_surface_id_;
   params.renderer_host_id = last_host_id_;
   SendReclaimCompositorResourcesToBrowser(params);
-}
-
-void ChildFrameCompositingHelper::SetContentsOpaque(bool opaque) {
-  opaque_ = opaque;
-  if (delegated_layer_.get())
-    delegated_layer_->SetContentsOpaque(opaque_);
-  if (surface_layer_.get())
-    surface_layer_->SetContentsOpaque(opaque_);
 }
 
 }  // namespace content

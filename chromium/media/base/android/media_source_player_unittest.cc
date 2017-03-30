@@ -2,35 +2,32 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#include "media/base/android/media_source_player.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+#include <string>
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "media/base/android/audio_decoder_job.h"
-#include "media/base/android/media_codec_bridge.h"
+#include "media/base/android/media_codec_util.h"
 #include "media/base/android/media_drm_bridge.h"
 #include "media/base/android/media_player_manager.h"
-#include "media/base/android/media_source_player.h"
 #include "media/base/android/media_url_interceptor.h"
+#include "media/base/android/sdk_media_codec_bridge.h"
 #include "media/base/android/video_decoder_job.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/test_data_util.h"
+#include "media/base/timestamp_constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/gl/android/surface_texture.h"
 
 namespace media {
-
-// Helper macro to skip the test if MediaCodecBridge isn't available.
-#define SKIP_TEST_IF_MEDIA_CODEC_BRIDGE_IS_NOT_AVAILABLE()        \
-  do {                                                            \
-    if (!MediaCodecBridge::IsAvailable()) {                       \
-      VLOG(0) << "Could not run test - not supported on device."; \
-      return;                                                     \
-    }                                                             \
-  } while (0)
 
 const base::TimeDelta kDefaultDuration =
     base::TimeDelta::FromMilliseconds(10000);
@@ -44,11 +41,8 @@ class MockMediaPlayerManager : public MediaPlayerManager {
   explicit MockMediaPlayerManager(base::MessageLoop* message_loop)
       : message_loop_(message_loop),
         playback_completed_(false),
-        num_resources_requested_(0),
         num_metadata_changes_(0),
         timestamp_updated_(false),
-        is_audible_(false),
-        is_delay_expired_(false),
         allow_play_(true) {}
   ~MockMediaPlayerManager() override {}
 
@@ -70,7 +64,7 @@ class MockMediaPlayerManager : public MediaPlayerManager {
   void OnPlaybackComplete(int player_id) override {
     playback_completed_ = true;
     if (message_loop_->is_running())
-      message_loop_->Quit();
+      message_loop_->QuitWhenIdle();
   }
   void OnMediaInterrupted(int player_id) override {}
   void OnBufferingUpdate(int player_id, int percentage) override {}
@@ -81,29 +75,20 @@ class MockMediaPlayerManager : public MediaPlayerManager {
   void OnWaitingForDecryptionKey(int player_id) override {}
   MediaPlayerAndroid* GetFullscreenPlayer() override { return NULL; }
   MediaPlayerAndroid* GetPlayer(int player_id) override { return NULL; }
+  void OnDecorderResourcesReleased(int player_id) {}
 
-  bool RequestPlay(int player_id) override {
+  bool RequestPlay(int player_id,
+                   base::TimeDelta duration,
+                   bool has_audio) override {
     return allow_play_;
-  }
-
-  void OnAudibleStateChanged(int player_id, bool is_audible_now) override {
-    is_audible_ = is_audible_now;
   }
 
   bool playback_completed() const {
     return playback_completed_;
   }
 
-  int num_resources_requested() const {
-    return num_resources_requested_;
-  }
-
   int num_metadata_changes() const {
     return num_metadata_changes_;
-  }
-
-  void OnMediaResourcesRequested(int player_id) {
-    num_resources_requested_++;
   }
 
   bool timestamp_updated() const {
@@ -114,18 +99,6 @@ class MockMediaPlayerManager : public MediaPlayerManager {
     timestamp_updated_ = false;
   }
 
-  bool is_audible() const {
-    return is_audible_;
-  }
-
-  bool is_delay_expired() const {
-    return is_delay_expired_;
-  }
-
-  void SetDelayExpired(bool value) {
-    is_delay_expired_ = value;
-  }
-
   void set_allow_play(bool value) {
     allow_play_ = value;
   }
@@ -133,16 +106,10 @@ class MockMediaPlayerManager : public MediaPlayerManager {
  private:
   base::MessageLoop* message_loop_;
   bool playback_completed_;
-  // The number of resource requests this object has seen.
-  int num_resources_requested_;
   // The number of metadata changes reported by the player.
   int num_metadata_changes_;
   // Playback timestamp was updated.
   bool timestamp_updated_;
-  // Audible state of the pipeline
-  bool is_audible_;
-  // Helper flag to ensure delay for WaitForDelay().
-  bool is_delay_expired_;
   // Whether the manager will allow players that request playing.
   bool allow_play_;
 
@@ -162,7 +129,7 @@ class MockDemuxerAndroid : public DemuxerAndroid {
   void RequestDemuxerData(DemuxerStream::Type type) override {
     num_data_requests_++;
     if (message_loop_->is_running())
-      message_loop_->Quit();
+      message_loop_->QuitWhenIdle();
   }
   void RequestDemuxerSeek(const base::TimeDelta& time_to_seek,
                           bool is_browser_seek) override {
@@ -196,7 +163,7 @@ class MediaSourcePlayerTest : public testing::Test {
       : manager_(&message_loop_),
         demuxer_(new MockDemuxerAndroid(&message_loop_)),
         player_(0, &manager_,
-                base::Bind(&MockMediaPlayerManager::OnMediaResourcesRequested,
+                base::Bind(&MockMediaPlayerManager::OnDecorderResourcesReleased,
                            base::Unretained(&manager_)),
                 scoped_ptr<DemuxerAndroid>(demuxer_),
                 GURL()),
@@ -286,9 +253,8 @@ class MediaSourcePlayerTest : public testing::Test {
       configs.audio_sampling_rate = use_low_sample_rate ? 11025 : 44100;
       scoped_refptr<DecoderBuffer> buffer = ReadTestDataFile(
           "vorbis-extradata");
-      configs.audio_extra_data = std::vector<uint8>(
-          buffer->data(),
-          buffer->data() + buffer->data_size());
+      configs.audio_extra_data = std::vector<uint8_t>(
+          buffer->data(), buffer->data() + buffer->data_size());
       return configs;
     }
 
@@ -296,10 +262,9 @@ class MediaSourcePlayerTest : public testing::Test {
     EXPECT_EQ(audio_codec, kCodecAAC);
 
     configs.audio_sampling_rate = 48000;
-    uint8 aac_extra_data[] = { 0x13, 0x10 };
-    configs.audio_extra_data = std::vector<uint8>(
-        aac_extra_data,
-        aac_extra_data + 2);
+    uint8_t aac_extra_data[] = {0x13, 0x10};
+    configs.audio_extra_data =
+        std::vector<uint8_t>(aac_extra_data, aac_extra_data + 2);
     return configs;
   }
 
@@ -414,13 +379,13 @@ class MediaSourcePlayerTest : public testing::Test {
       buffer = ReadTestDataFile(
           use_large_size_video ? "vp8-I-frame-640x240" : "vp8-I-frame-320x240");
     }
-    unit.data = std::vector<uint8>(
-        buffer->data(), buffer->data() + buffer->data_size());
+    unit.data = std::vector<uint8_t>(buffer->data(),
+                                     buffer->data() + buffer->data_size());
 
     if (is_audio) {
       // Vorbis needs 4 extra bytes padding on Android to decode properly. Check
       // NuMediaExtractor.cpp in Android source code.
-      uint8 padding[4] = { 0xff , 0xff , 0xff , 0xff };
+      uint8_t padding[4] = {0xff, 0xff, 0xff, 0xff};
       unit.data.insert(unit.data.end(), padding, padding + 4);
     }
 
@@ -564,37 +529,6 @@ class MediaSourcePlayerTest : public testing::Test {
       WaitForDecodeDone(is_audio, !is_audio);
     }
     EXPECT_LE(target_timestamp, player_.GetCurrentTime());
-  }
-
-  void PlayAudioForTimeInterval(const base::TimeDelta& start_timestamp,
-                                const base::TimeDelta& target_timestamp ) {
-
-    DemuxerData data = CreateReadFromDemuxerAckForAudio(1);
-    int current_timestamp = start_timestamp.InMilliseconds();
-    int stop_timestamp = target_timestamp.InMilliseconds();
-    while (current_timestamp < stop_timestamp) {
-      data.access_units[0].timestamp =
-          base::TimeDelta::FromMilliseconds(current_timestamp);
-      player_.OnDemuxerDataAvailable(data);
-      current_timestamp += 30;
-      WaitForAudioDecodeDone();
-    }
-  }
-
-  void WaitForDelay(const base::TimeDelta& delay) {
-    // Let the message_loop_ process events.
-    // We post delayed task and RunUnitilIdle() until it signals.
-
-    manager_.SetDelayExpired(false);
-    message_loop_.PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&MockMediaPlayerManager::SetDelayExpired,
-                   base::Unretained(&manager_),
-                   true),
-        delay);
-
-    while (!manager_.is_delay_expired())
-      message_loop_.RunUntilIdle();
   }
 
   DemuxerData CreateReadFromDemuxerAckWithConfigChanged(
@@ -779,7 +713,7 @@ class MediaSourcePlayerTest : public testing::Test {
 
     surface_texture_a_is_next_ = !surface_texture_a_is_next_;
     gfx::ScopedJavaSurface surface = gfx::ScopedJavaSurface(surface_texture);
-    player_.SetVideoSurface(surface.Pass());
+    player_.SetVideoSurface(std::move(surface));
   }
 
   // Wait for one or both of the jobs to complete decoding. Media codec bridges
@@ -921,8 +855,6 @@ class MediaSourcePlayerTest : public testing::Test {
   bool surface_texture_a_is_next_;
   int next_texture_id_;
 
-  bool verify_not_audible_is_called_;
-
   DISALLOW_COPY_AND_ASSIGN(MediaSourcePlayerTest);
 };
 
@@ -944,7 +876,7 @@ TEST_F(MediaSourcePlayerTest, StartAudioDecoderWithInvalidConfig) {
   DemuxerConfigs configs = CreateAudioDemuxerConfigs(kCodecVorbis, false);
   // Replace with invalid |audio_extra_data|
   configs.audio_extra_data.clear();
-  uint8 invalid_codec_data[] = { 0x00, 0xff, 0xff, 0xff, 0xff };
+  uint8_t invalid_codec_data[] = {0x00, 0xff, 0xff, 0xff, 0xff};
   configs.audio_extra_data.insert(configs.audio_extra_data.begin(),
                                  invalid_codec_data, invalid_codec_data + 4);
   Start(configs);
@@ -952,107 +884,6 @@ TEST_F(MediaSourcePlayerTest, StartAudioDecoderWithInvalidConfig) {
   // Decoder is not created after data is received.
   player_.OnDemuxerDataAvailable(CreateReadFromDemuxerAckForAudio(0));
   EXPECT_FALSE(GetMediaCodecBridge(true));
-}
-
-// timav
-TEST_F(MediaSourcePlayerTest, AudioDecoderSetsAudibleState) {
-  SKIP_TEST_IF_MEDIA_CODEC_BRIDGE_IS_NOT_AVAILABLE();
-
-  // No data arrived yet
-  EXPECT_FALSE(manager_.is_audible());
-
-  // Initialize decoder
-  StartAudioDecoderJob();
-  player_.SetVolume(1.0);
-
-  // Process frames until prerolling is done.
-  SeekPlayerWithAbort(true, base::TimeDelta::FromMilliseconds(100));
-  EXPECT_TRUE(IsPrerolling(true));
-  PrerollDecoderToTime(
-      true, base::TimeDelta(), base::TimeDelta::FromMilliseconds(100), false);
-  EXPECT_TRUE(IsPrerolling(false));
-
-  // Send more packets
-  PlayAudioForTimeInterval(base::TimeDelta::FromMilliseconds(150),
-                           base::TimeDelta::FromMilliseconds(220));
-
-  // The player should trigger audible status
-  EXPECT_TRUE(manager_.is_audible());
-
-  // The player release should report a non-audible state.
-  ReleasePlayer();
-  EXPECT_FALSE(manager_.is_audible());
-}
-
-TEST_F(MediaSourcePlayerTest, AudioDecoderRemovesAudibleStateWhenPaused) {
-  SKIP_TEST_IF_MEDIA_CODEC_BRIDGE_IS_NOT_AVAILABLE();
-
-  // No data arrived yet
-  EXPECT_FALSE(manager_.is_audible());
-
-  // Initialize decoder
-  StartAudioDecoderJob();
-  player_.SetVolume(1.0);
-
-  // Process frames until prerolling is done.
-  SeekPlayerWithAbort(true, base::TimeDelta::FromMilliseconds(100));
-  EXPECT_TRUE(IsPrerolling(true));
-  PrerollDecoderToTime(
-      true, base::TimeDelta(), base::TimeDelta::FromMilliseconds(100), false);
-  EXPECT_TRUE(IsPrerolling(false));
-
-  // Send more packets
-  PlayAudioForTimeInterval(base::TimeDelta::FromMilliseconds(150),
-                           base::TimeDelta::FromMilliseconds(220));
-
-  // The player should trigger audible status
-  EXPECT_TRUE(manager_.is_audible());
-
-  // Pause the player
-  player_.Pause(true);
-
-  // Send more packets
-  PlayAudioForTimeInterval(base::TimeDelta::FromMilliseconds(240),
-                           base::TimeDelta::FromMilliseconds(280));
-
-  // The player should trigger audible status again
-  EXPECT_FALSE(manager_.is_audible());
-
-  player_.Release();
-}
-
-TEST_F(MediaSourcePlayerTest, AudioDecoderRemovesAudibleStateWhenIdle) {
-  SKIP_TEST_IF_MEDIA_CODEC_BRIDGE_IS_NOT_AVAILABLE();
-
-  // No data arrived yet
-  EXPECT_FALSE(manager_.is_audible());
-
-  // Initialize decoder
-  StartAudioDecoderJob();
-  player_.SetVolume(1.0);
-
-  // Process frames until prerolling is done.
-  SeekPlayerWithAbort(true, base::TimeDelta::FromMilliseconds(100));
-  EXPECT_TRUE(IsPrerolling(true));
-  PrerollDecoderToTime(
-      true, base::TimeDelta(), base::TimeDelta::FromMilliseconds(100), false);
-  EXPECT_TRUE(IsPrerolling(false));
-
-  // Send more packets
-  PlayAudioForTimeInterval(base::TimeDelta::FromMilliseconds(150),
-                           base::TimeDelta::FromMilliseconds(220));
-
-  // The player should trigger audible status
-  EXPECT_TRUE(manager_.is_audible());
-
-  // Simulate the freeze on demuxer: wait for 300 ms
-  WaitForDelay(base::TimeDelta::FromMilliseconds(300));
-
-  // By this time the player should have reported
-  // that there is no audio.
-  EXPECT_FALSE(manager_.is_audible());
-
-  ReleasePlayer();
 }
 
 TEST_F(MediaSourcePlayerTest, StartVideoCodecWithValidSurface) {
@@ -1089,7 +920,7 @@ TEST_F(MediaSourcePlayerTest, StartVideoCodecWithInvalidSurface) {
 
   // Release the surface texture.
   surface_texture = NULL;
-  player_.SetVideoSurface(surface.Pass());
+  player_.SetVideoSurface(std::move(surface));
 
   // Player should not seek the demuxer on setting initial surface.
   EXPECT_EQ(0, demuxer_->num_seek_requests());
@@ -1152,7 +983,7 @@ TEST_F(MediaSourcePlayerTest, ChangeMultipleSurfaceWhileDecoding) {
   // While the decoder is decoding, change multiple surfaces. Pass an empty
   // surface first.
   gfx::ScopedJavaSurface empty_surface;
-  player_.SetVideoSurface(empty_surface.Pass());
+  player_.SetVideoSurface(std::move(empty_surface));
   // Next, pass a new non-empty surface.
   CreateNextTextureAndSetVideoSurface();
 
@@ -1192,7 +1023,7 @@ TEST_F(MediaSourcePlayerTest, SetEmptySurfaceAndStarveWhileDecoding) {
 
   // While the decoder is decoding, pass an empty surface.
   gfx::ScopedJavaSurface empty_surface;
-  player_.SetVideoSurface(empty_surface.Pass());
+  player_.SetVideoSurface(std::move(empty_surface));
   // Let the player starve. However, it should not issue any new data request in
   // this case.
   TriggerPlayerStarvation();
@@ -1221,8 +1052,6 @@ TEST_F(MediaSourcePlayerTest, ReleaseVideoDecoderResourcesWhileDecoding) {
   // not be immediately released.
   CreateNextTextureAndSetVideoSurface();
   StartVideoDecoderJob();
-  // No resource is requested since there is no data to decode.
-  EXPECT_EQ(0, manager_.num_resources_requested());
   ReleasePlayer();
   player_.OnDemuxerDataAvailable(CreateReadFromDemuxerAckForVideo(false));
 
@@ -1232,7 +1061,6 @@ TEST_F(MediaSourcePlayerTest, ReleaseVideoDecoderResourcesWhileDecoding) {
   while (!GetMediaDecoderJob(false)->is_decoding())
     message_loop_.RunUntilIdle();
   EXPECT_EQ(0, demuxer_->num_browser_seek_requests());
-  EXPECT_EQ(1, manager_.num_resources_requested());
   ReleasePlayer();
   // Wait for the media codec bridge to finish decoding and be reset.
   while (GetMediaDecoderJob(false)->is_decoding())
@@ -2094,10 +1922,6 @@ TEST_F(MediaSourcePlayerTest, VideoDemuxerConfigChange) {
   EXPECT_TRUE(GetMediaCodecBridge(false));
   EXPECT_EQ(3, demuxer_->num_data_requests());
   EXPECT_EQ(0, demuxer_->num_seek_requests());
-
-  // 2 codecs should have been created, one before the config change, and one
-  // after it.
-  EXPECT_EQ(2, manager_.num_resources_requested());
   WaitForVideoDecodeDone();
 }
 
@@ -2113,9 +1937,6 @@ TEST_F(MediaSourcePlayerTest, VideoDemuxerConfigChangeWithAdaptivePlayback) {
   EXPECT_TRUE(GetMediaCodecBridge(false));
   EXPECT_EQ(3, demuxer_->num_data_requests());
   EXPECT_EQ(0, demuxer_->num_seek_requests());
-
-  // Only 1 codec should have been created so far.
-  EXPECT_EQ(1, manager_.num_resources_requested());
   WaitForVideoDecodeDone();
 }
 

@@ -7,10 +7,10 @@
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
 #include "android_webview/common/aw_version_info_values.h"
+#include "android_webview/native/aw_contents_io_thread_client_impl.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
-#include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/url_constants.h"
 #include "jni/AwContentsStatics_jni.h"
@@ -39,7 +39,9 @@ void NotifyClientCertificatesChanged() {
 }  // namespace
 
 // static
-void ClearClientCertPreferences(JNIEnv* env, jclass, jobject callback) {
+void ClearClientCertPreferences(JNIEnv* env,
+                                const JavaParamRef<jclass>&,
+                                const JavaParamRef<jobject>& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   ScopedJavaGlobalRef<jobject>* j_callback = new ScopedJavaGlobalRef<jobject>();
   j_callback->Reset(env, callback);
@@ -51,7 +53,9 @@ void ClearClientCertPreferences(JNIEnv* env, jclass, jobject callback) {
 }
 
 // static
-void SetDataReductionProxyKey(JNIEnv* env, jclass, jstring key) {
+void SetDataReductionProxyKey(JNIEnv* env,
+                              const JavaParamRef<jclass>&,
+                              const JavaParamRef<jstring>& key) {
   AwBrowserContext* browser_context = AwBrowserContext::GetDefault();
   DCHECK(browser_context);
   DCHECK(browser_context->GetRequestContext());
@@ -72,30 +76,43 @@ void SetDataReductionProxyKey(JNIEnv* env, jclass, jstring key) {
 }
 
 // static
-void SetDataReductionProxyEnabled(JNIEnv* env, jclass, jboolean enabled) {
+void SetDataReductionProxyEnabled(JNIEnv* env,
+                                  const JavaParamRef<jclass>&,
+                                  jboolean enabled) {
   AwBrowserContext::SetDataReductionProxyEnabled(enabled);
 }
 
 // static
-jstring GetUnreachableWebDataUrl(JNIEnv* env, jclass) {
+ScopedJavaLocalRef<jstring> GetUnreachableWebDataUrl(
+    JNIEnv* env,
+    const JavaParamRef<jclass>&) {
   return base::android::ConvertUTF8ToJavaString(
-             env, content::kUnreachableWebDataURL).Release();
+      env, content::kUnreachableWebDataURL);
 }
 
 // static
-void SetRecordFullDocument(JNIEnv* env, jclass, jboolean record_full_document) {
-  content::SynchronousCompositor::SetRecordFullDocument(record_full_document);
-}
-
-// static
-void SetLegacyCacheRemovalDelayForTest(JNIEnv*, jclass, jlong delay_ms) {
+void SetLegacyCacheRemovalDelayForTest(JNIEnv*,
+                                       const JavaParamRef<jclass>&,
+                                       jlong delay_ms) {
   AwBrowserContext::SetLegacyCacheRemovalDelayForTest(delay_ms);
 }
 
 // static
-jstring GetProductVersion(JNIEnv* env, jclass) {
-  return base::android::ConvertUTF8ToJavaString(env, PRODUCT_VERSION).Release();
+ScopedJavaLocalRef<jstring> GetProductVersion(JNIEnv* env,
+                                              const JavaParamRef<jclass>&) {
+  return base::android::ConvertUTF8ToJavaString(env, PRODUCT_VERSION);
 }
+
+// static
+void SetServiceWorkerIoThreadClient(
+    JNIEnv* env,
+    const JavaParamRef<jclass>&,
+    const base::android::JavaParamRef<jobject>& io_thread_client,
+    const base::android::JavaParamRef<jobject>& browser_context) {
+  AwContentsIoThreadClientImpl::SetServiceWorkerIoThreadClient(
+      io_thread_client, browser_context);
+}
+
 
 bool RegisterAwContentsStatics(JNIEnv* env) {
   return RegisterNativesImpl(env);

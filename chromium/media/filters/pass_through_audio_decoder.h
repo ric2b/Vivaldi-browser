@@ -20,6 +20,7 @@ class MEDIA_EXPORT PassThroughAudioDecoder : public AudioDecoder {
 
   // AudioDecoder implementation.
   void Initialize(const AudioDecoderConfig& config,
+                  const SetCdmReadyCB& set_cdm_ready_cb,
                   const InitCB& init_cb,
                   const OutputCB& output_cb) override;
   void Decode(const scoped_refptr<DecoderBuffer>& buffer,

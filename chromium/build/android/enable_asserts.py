@@ -9,11 +9,15 @@
 import argparse
 import sys
 
-from pylib.device import device_utils
+import devil_chromium
+from devil.android import device_blacklist
+from devil.android import device_utils
 
 
 def main():
   parser = argparse.ArgumentParser()
+
+  parser.add_argument('--blacklist-file', help='Device blacklist JSON file.')
 
   set_asserts_group = parser.add_mutually_exclusive_group(required=True)
   set_asserts_group.add_argument(
@@ -25,9 +29,16 @@ def main():
 
   args = parser.parse_args()
 
+  devil_chromium.Initialize()
+
+  blacklist = (device_blacklist.Blacklist(args.blacklist_file)
+               if args.blacklist_file
+               else None)
+
   # TODO(jbudorick): Accept optional serial number and run only for the
   # specified device when present.
-  devices = device_utils.DeviceUtils.parallel()
+  devices = device_utils.DeviceUtils.parallel(
+      device_utils.DeviceUtils.HealthyDevices(blacklist))
 
   def set_java_asserts_and_restart(device):
     if device.SetJavaAsserts(args.set_asserts):

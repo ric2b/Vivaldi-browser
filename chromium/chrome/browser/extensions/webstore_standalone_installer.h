@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/extensions/active_install_data.h"
@@ -44,7 +45,6 @@ class WebstoreDataFetcher;
 
 class WebstoreStandaloneInstaller
     : public base::RefCountedThreadSafe<WebstoreStandaloneInstaller>,
-      public ExtensionInstallPrompt::Delegate,
       public WebstoreDataFetcherDelegate,
       public WebstoreInstaller::Delegate,
       public WebstoreInstallHelper::Delegate {
@@ -120,7 +120,7 @@ class WebstoreStandaloneInstaller
 
   // Should return an installation prompt with desired properties or NULL if
   // no prompt should be shown.
-  virtual scoped_refptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
+  virtual scoped_ptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
       const = 0;
 
   // Perform all necessary checks to make sure inline install is permitted,
@@ -151,9 +151,8 @@ class WebstoreStandaloneInstaller
   // Create an approval to pass installation parameters to the CrxInstaller.
   virtual scoped_ptr<WebstoreInstaller::Approval> CreateApproval() const;
 
-  // ExtensionInstallPrompt::Delegate interface implementation.
-  void InstallUIProceed() override;
-  void InstallUIAbort(bool user_initiated) override;
+  // Called once the install prompt has finished.
+  virtual void OnInstallPromptDone(ExtensionInstallPrompt::Result result);
 
   // Accessors to be used by subclasses.
   bool show_user_count() const { return show_user_count_; }
@@ -177,7 +176,6 @@ class WebstoreStandaloneInstaller
 
  private:
   friend class base::RefCountedThreadSafe<WebstoreStandaloneInstaller>;
-  FRIEND_TEST_ALL_PREFIXES(WebstoreStandaloneInstallerTest, DomainVerification);
 
   // Several delegate/client interface implementations follow. The normal flow
   // (for successful installs) is:
@@ -226,7 +224,7 @@ class WebstoreStandaloneInstaller
 
   // Installation dialog and its underlying prompt.
   scoped_ptr<ExtensionInstallPrompt> install_ui_;
-  scoped_refptr<ExtensionInstallPrompt::Prompt> install_prompt_;
+  scoped_ptr<ExtensionInstallPrompt::Prompt> install_prompt_;
 
   // For fetching webstore JSON data.
   scoped_ptr<WebstoreDataFetcher> webstore_data_fetcher_;

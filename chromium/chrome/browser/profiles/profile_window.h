@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_PROFILES_PROFILE_WINDOW_H_
 
 #include "base/callback_forward.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -42,6 +43,11 @@ extern const char kUserManagerSelectProfileChromeSettings[];
 extern const char kUserManagerSelectProfileChromeMemory[];
 extern const char kUserManagerSelectProfileAppLauncher[];
 
+// Returns the path of the profile connected to the given email.  If no profile
+// is found an empty file path is returned.
+base::FilePath GetPathOfProfileWithEmail(ProfileManager* profile_manager,
+                                         const std::string& email);
+
 // Activates a window for |profile| on the desktop specified by
 // |desktop_type|. If no such window yet exists, or if |always_create| is
 // true, this first creates a new window, then activates
@@ -60,6 +66,7 @@ void FindOrCreateNewWindowForProfile(
 // even if a window for that profile already exists. When the browser is
 // opened, |callback| will be run if it isn't null.
 
+#if !defined(OS_ANDROID)
 void SwitchToProfile(const base::FilePath& path,
                      chrome::HostDesktopType desktop_type,
                      bool always_create,
@@ -69,6 +76,7 @@ void SwitchToProfile(const base::FilePath& path,
 // Opens a Browser for the guest profile and runs |callback| if it isn't null.
 void SwitchToGuestProfile(chrome::HostDesktopType desktop_type,
                           ProfileManager::CreateCallback callback);
+#endif
 
 // Returns true if |profile| has potential profile switch targets, ie there's at
 // least one other profile available to switch to, not counting guest. This is

@@ -4,6 +4,8 @@
 
 #include "android_webview/native/aw_dev_tools_server.h"
 
+#include <utility>
+
 #include "android_webview/common/aw_content_client.h"
 #include "android_webview/native/aw_contents.h"
 #include "base/bind.h"
@@ -50,6 +52,8 @@ class AwDevToolsServerDelegate :
   std::string GetDiscoveryPageHTML() override;
   std::string GetFrontendResource(const std::string& path) override;
   std::string GetPageThumbnailData(const GURL&) override;
+  content::DevToolsExternalAgentProxyDelegate*
+      HandleWebSocketConnection(const std::string& path) override;
 
  private:
 
@@ -74,6 +78,11 @@ std::string AwDevToolsServerDelegate::GetFrontendResource(
 
 std::string AwDevToolsServerDelegate::GetPageThumbnailData(const GURL&) {
   return std::string();
+}
+
+content::DevToolsExternalAgentProxyDelegate*
+AwDevToolsServerDelegate::HandleWebSocketConnection(const std::string& path) {
+  return nullptr;
 }
 
 // Factory for UnixDomainServerSocket.
@@ -107,7 +116,7 @@ class UnixDomainServerSocketFactory
     if (socket->ListenWithAddressAndPort(*name, 0, kBackLog) != net::OK)
       return scoped_ptr<net::ServerSocket>();
 
-    return socket.Pass();
+    return std::move(socket);
   }
 
   std::string socket_name_;
@@ -135,13 +144,10 @@ void AwDevToolsServer::Start() {
       new UnixDomainServerSocketFactory(
           base::StringPrintf(kSocketNameFormat, getpid())));
   devtools_http_handler_.reset(new DevToolsHttpHandler(
-      factory.Pass(),
+      std::move(factory),
       base::StringPrintf(kFrontEndURL, content::GetWebKitRevision().c_str()),
-      new AwDevToolsServerDelegate(),
-      base::FilePath(),
-      base::FilePath(),
-      GetProduct(),
-      GetUserAgent()));
+      new AwDevToolsServerDelegate(), base::FilePath(), base::FilePath(),
+      GetProduct(), GetUserAgent()));
 }
 
 void AwDevToolsServer::Stop() {
@@ -157,17 +163,19 @@ bool RegisterAwDevToolsServer(JNIEnv* env) {
 }
 
 static jlong InitRemoteDebugging(JNIEnv* env,
-                                jobject obj) {
+                                 const JavaParamRef<jobject>& obj) {
   AwDevToolsServer* server = new AwDevToolsServer();
   return reinterpret_cast<intptr_t>(server);
 }
 
-static void DestroyRemoteDebugging(JNIEnv* env, jobject obj, jlong server) {
+static void DestroyRemoteDebugging(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj,
+                                   jlong server) {
   delete reinterpret_cast<AwDevToolsServer*>(server);
 }
 
 static void SetRemoteDebuggingEnabled(JNIEnv* env,
-                                      jobject obj,
+                                      const JavaParamRef<jobject>& obj,
                                       jlong server,
                                       jboolean enabled) {
   AwDevToolsServer* devtools_server =

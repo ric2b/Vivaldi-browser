@@ -11,10 +11,18 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "components/gcm_driver/common/gcm_messages.h"
+#include "components/gcm_driver/crypto/gcm_encryption_provider.h"
 #include "components/gcm_driver/default_gcm_app_handler.h"
 #include "components/gcm_driver/gcm_client.h"
+
+namespace base {
+class FilePath;
+class SequencedTaskRunner;
+}
 
 namespace gcm {
 
@@ -71,11 +79,22 @@ class GCMDriver {
                               GCMClient::Result result)> RegisterCallback;
   typedef base::Callback<void(const std::string& message_id,
                               GCMClient::Result result)> SendCallback;
+  typedef base::Callback<void(const std::string&, const std::string&)>
+      GetEncryptionInfoCallback;
   typedef base::Callback<void(GCMClient::Result result)> UnregisterCallback;
   typedef base::Callback<void(const GCMClient::GCMStatistics& stats)>
       GetGCMStatisticsCallback;
 
-  GCMDriver();
+  // Enumeration to be used with GetGCMStatistics() for indicating whether the
+  // existing logs should be cleared or kept.
+  enum ClearActivityLogs {
+    CLEAR_LOGS,
+    KEEP_LOGS
+  };
+
+  GCMDriver(
+      const base::FilePath& store_path,
+      const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner);
   virtual ~GCMDriver();
 
   // Registers |sender_ids| for an app. A registration ID will be returned by
@@ -113,8 +132,14 @@ class GCMDriver {
   // |callback|: to be called once the asynchronous operation is done.
   void Send(const std::string& app_id,
             const std::string& receiver_id,
-            const GCMClient::OutgoingMessage& message,
+            const OutgoingMessage& message,
             const SendCallback& callback);
+
+  // Get the public encryption key and the authentication secret associated with
+  // |app_id|. If none have been associated with |app_id| yet, they will be
+  // created. The |callback| will be invoked when it is available.
+  void GetEncryptionInfo(const std::string& app_id,
+                         const GetEncryptionInfoCallback& callback);
 
   const GCMAppHandlerMap& app_handlers() const { return app_handlers_; }
 
@@ -154,11 +179,10 @@ class GCMDriver {
   // Returns true if the gcm client has an open and active connection.
   virtual bool IsConnected() const = 0;
 
-  // Get GCM client internal states and statistics.
-  // If clear_logs is true then activity logs will be cleared before the stats
-  // are returned.
+  // Get GCM client internal states and statistics. The activity logs will be
+  // cleared before returning the stats when |clear_logs| is set to CLEAR_LOGS.
   virtual void GetGCMStatistics(const GetGCMStatisticsCallback& callback,
-                                bool clear_logs) = 0;
+                                ClearActivityLogs clear_logs) = 0;
 
   // Enables/disables GCM activity recording, and then returns the stats.
   virtual void SetGCMRecording(const GetGCMStatisticsCallback& callback,
@@ -230,7 +254,7 @@ class GCMDriver {
   // Platform-specific implementation of Send.
   virtual void SendImpl(const std::string& app_id,
                         const std::string& receiver_id,
-                        const GCMClient::OutgoingMessage& message) = 0;
+                        const OutgoingMessage& message) = 0;
 
   // Runs the Register callback.
   void RegisterFinished(const std::string& app_id,
@@ -249,6 +273,13 @@ class GCMDriver {
   bool HasRegisterCallback(const std::string& app_id);
 
   void ClearCallbacks();
+
+  // Dispatches the OnMessage event to the app handler associated with |app_id|.
+  // If |message| has been encrypted, it will be decrypted asynchronously and
+  // dispatched when the decryption operation was successful. Otherwise, the
+  // |message| will be dispatched immediately to the handler for |app_id|.
+  void DispatchMessage(const std::string& app_id,
+                       const IncomingMessage& message);
 
  private:
   // Common code shared by Unregister and UnregisterWithSenderId.
@@ -272,6 +303,10 @@ class GCMDriver {
 
   // Callback map (from <app_id, message_id> to callback) for Send.
   std::map<std::pair<std::string, std::string>, SendCallback> send_callbacks_;
+
+  // The encryption provider, used for key management and decryption of
+  // encrypted, incoming messages.
+  GCMEncryptionProvider encryption_provider_;
 
   // App handler map (from app_id to handler pointer).
   // The handler is not owned.

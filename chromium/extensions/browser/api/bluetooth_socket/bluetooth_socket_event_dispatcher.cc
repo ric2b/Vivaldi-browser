@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/bluetooth_socket/bluetooth_socket_event_dispatcher.h"
 
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_socket.h"
@@ -14,7 +16,7 @@
 
 namespace {
 
-namespace bluetooth_socket = extensions::core_api::bluetooth_socket;
+namespace bluetooth_socket = extensions::api::bluetooth_socket;
 using extensions::BluetoothApiSocket;
 
 int kDefaultBufferSize = 4096;
@@ -54,7 +56,7 @@ bluetooth_socket::AcceptError MapAcceptErrorReason(
 }  // namespace
 
 namespace extensions {
-namespace core_api {
+namespace api {
 
 using content::BrowserThread;
 
@@ -100,7 +102,7 @@ BluetoothSocketEventDispatcher::SocketParams::~SocketParams() {}
 void BluetoothSocketEventDispatcher::OnSocketConnect(
     const std::string& extension_id,
     int socket_id) {
-  DCHECK(BrowserThread::CurrentlyOn(thread_id_));
+  DCHECK_CURRENTLY_ON(thread_id_);
 
   SocketParams params;
   params.thread_id = thread_id_;
@@ -115,7 +117,7 @@ void BluetoothSocketEventDispatcher::OnSocketConnect(
 void BluetoothSocketEventDispatcher::OnSocketListen(
     const std::string& extension_id,
     int socket_id) {
-  DCHECK(BrowserThread::CurrentlyOn(thread_id_));
+  DCHECK_CURRENTLY_ON(thread_id_);
 
   SocketParams params;
   params.thread_id = thread_id_;
@@ -130,7 +132,7 @@ void BluetoothSocketEventDispatcher::OnSocketListen(
 void BluetoothSocketEventDispatcher::OnSocketResume(
     const std::string& extension_id,
     int socket_id) {
-  DCHECK(BrowserThread::CurrentlyOn(thread_id_));
+  DCHECK_CURRENTLY_ON(thread_id_);
 
   SocketParams params;
   params.thread_id = thread_id_;
@@ -155,7 +157,7 @@ void BluetoothSocketEventDispatcher::OnSocketResume(
 
 // static
 void BluetoothSocketEventDispatcher::StartReceive(const SocketParams& params) {
-  DCHECK(BrowserThread::CurrentlyOn(params.thread_id));
+  DCHECK_CURRENTLY_ON(params.thread_id);
 
   BluetoothApiSocket* socket =
       params.sockets->Get(params.extension_id, params.socket_id);
@@ -186,7 +188,7 @@ void BluetoothSocketEventDispatcher::ReceiveCallback(
     const SocketParams& params,
     int bytes_read,
     scoped_refptr<net::IOBuffer> io_buffer) {
-  DCHECK(BrowserThread::CurrentlyOn(params.thread_id));
+  DCHECK_CURRENTLY_ON(params.thread_id);
 
   // Dispatch "onReceive" event.
   bluetooth_socket::ReceiveInfo receive_info;
@@ -194,9 +196,10 @@ void BluetoothSocketEventDispatcher::ReceiveCallback(
   receive_info.data.assign(io_buffer->data(), io_buffer->data() + bytes_read);
   scoped_ptr<base::ListValue> args =
       bluetooth_socket::OnReceive::Create(receive_info);
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, bluetooth_socket::OnReceive::kEventName, args.Pass()));
-  PostEvent(params, event.Pass());
+  scoped_ptr<Event> event(new Event(events::BLUETOOTH_SOCKET_ON_RECEIVE,
+                                    bluetooth_socket::OnReceive::kEventName,
+                                    std::move(args)));
+  PostEvent(params, std::move(event));
 
   // Post a task to delay the read until the socket is available, as
   // calling StartReceive at this point would error with ERR_IO_PENDING.
@@ -211,7 +214,7 @@ void BluetoothSocketEventDispatcher::ReceiveErrorCallback(
     const SocketParams& params,
     BluetoothApiSocket::ErrorReason error_reason,
     const std::string& error) {
-  DCHECK(BrowserThread::CurrentlyOn(params.thread_id));
+  DCHECK_CURRENTLY_ON(params.thread_id);
 
   if (error_reason == BluetoothApiSocket::kIOPending) {
     // This happens when resuming a socket which already had an active "read"
@@ -229,9 +232,9 @@ void BluetoothSocketEventDispatcher::ReceiveErrorCallback(
   scoped_ptr<base::ListValue> args =
       bluetooth_socket::OnReceiveError::Create(receive_error_info);
   scoped_ptr<Event> event(
-      new Event(events::UNKNOWN, bluetooth_socket::OnReceiveError::kEventName,
-                args.Pass()));
-  PostEvent(params, event.Pass());
+      new Event(events::BLUETOOTH_SOCKET_ON_RECEIVE_ERROR,
+                bluetooth_socket::OnReceiveError::kEventName, std::move(args)));
+  PostEvent(params, std::move(event));
 
   // Since we got an error, the socket is now "paused" until the application
   // "resumes" it.
@@ -244,7 +247,7 @@ void BluetoothSocketEventDispatcher::ReceiveErrorCallback(
 
 // static
 void BluetoothSocketEventDispatcher::StartAccept(const SocketParams& params) {
-  DCHECK(BrowserThread::CurrentlyOn(params.thread_id));
+  DCHECK_CURRENTLY_ON(params.thread_id);
 
   BluetoothApiSocket* socket =
       params.sockets->Get(params.extension_id, params.socket_id);
@@ -271,7 +274,7 @@ void BluetoothSocketEventDispatcher::AcceptCallback(
     const SocketParams& params,
     const device::BluetoothDevice* device,
     scoped_refptr<device::BluetoothSocket> socket) {
-  DCHECK(BrowserThread::CurrentlyOn(params.thread_id));
+  DCHECK_CURRENTLY_ON(params.thread_id);
 
   BluetoothApiSocket* server_api_socket =
       params.sockets->Get(params.extension_id, params.socket_id);
@@ -290,9 +293,10 @@ void BluetoothSocketEventDispatcher::AcceptCallback(
   accept_info.client_socket_id = client_socket_id;
   scoped_ptr<base::ListValue> args =
       bluetooth_socket::OnAccept::Create(accept_info);
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, bluetooth_socket::OnAccept::kEventName, args.Pass()));
-  PostEvent(params, event.Pass());
+  scoped_ptr<Event> event(new Event(events::BLUETOOTH_SOCKET_ON_ACCEPT,
+                                    bluetooth_socket::OnAccept::kEventName,
+                                    std::move(args)));
+  PostEvent(params, std::move(event));
 
   // Post a task to delay the accept until the socket is available, as
   // calling StartAccept at this point would error with ERR_IO_PENDING.
@@ -307,7 +311,7 @@ void BluetoothSocketEventDispatcher::AcceptErrorCallback(
     const SocketParams& params,
     BluetoothApiSocket::ErrorReason error_reason,
     const std::string& error) {
-  DCHECK(BrowserThread::CurrentlyOn(params.thread_id));
+  DCHECK_CURRENTLY_ON(params.thread_id);
 
   if (error_reason == BluetoothApiSocket::kIOPending) {
     // This happens when resuming a socket which already had an active "accept"
@@ -324,10 +328,10 @@ void BluetoothSocketEventDispatcher::AcceptErrorCallback(
   accept_error_info.error = MapAcceptErrorReason(error_reason);
   scoped_ptr<base::ListValue> args =
       bluetooth_socket::OnAcceptError::Create(accept_error_info);
-  scoped_ptr<Event> event(new Event(events::UNKNOWN,
+  scoped_ptr<Event> event(new Event(events::BLUETOOTH_SOCKET_ON_ACCEPT_ERROR,
                                     bluetooth_socket::OnAcceptError::kEventName,
-                                    args.Pass()));
-  PostEvent(params, event.Pass());
+                                    std::move(args)));
+  PostEvent(params, std::move(event));
 
   // Since we got an error, the socket is now "paused" until the application
   // "resumes" it.
@@ -341,15 +345,12 @@ void BluetoothSocketEventDispatcher::AcceptErrorCallback(
 // static
 void BluetoothSocketEventDispatcher::PostEvent(const SocketParams& params,
                                                scoped_ptr<Event> event) {
-  DCHECK(BrowserThread::CurrentlyOn(params.thread_id));
+  DCHECK_CURRENTLY_ON(params.thread_id);
 
   BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&DispatchEvent,
-                 params.browser_context_id,
-                 params.extension_id,
-                 base::Passed(event.Pass())));
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&DispatchEvent, params.browser_context_id, params.extension_id,
+                 base::Passed(std::move(event))));
 }
 
 // static
@@ -366,8 +367,8 @@ void BluetoothSocketEventDispatcher::DispatchEvent(
 
   EventRouter* router = EventRouter::Get(context);
   if (router)
-    router->DispatchEventToExtension(extension_id, event.Pass());
+    router->DispatchEventToExtension(extension_id, std::move(event));
 }
 
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

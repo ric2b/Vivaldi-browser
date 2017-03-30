@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_CONTENT_SETTINGS_LOCAL_SHARED_OBJECTS_CONTAINER_H_
 #define CHROME_BROWSER_CONTENT_SETTINGS_LOCAL_SHARED_OBJECTS_CONTAINER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/content_settings/core/browser/local_shared_objects_counter.h"
@@ -17,6 +20,7 @@ class CannedBrowsingDataFileSystemHelper;
 class CannedBrowsingDataIndexedDBHelper;
 class CannedBrowsingDataLocalStorageHelper;
 class CannedBrowsingDataServiceWorkerHelper;
+class CannedBrowsingDataCacheStorageHelper;
 class CookiesTreeModel;
 class Profile;
 
@@ -58,6 +62,9 @@ class LocalSharedObjectsContainer : public LocalSharedObjectsCounter {
   CannedBrowsingDataServiceWorkerHelper* service_workers() const {
     return service_workers_.get();
   }
+  CannedBrowsingDataCacheStorageHelper* cache_storages() const {
+    return cache_storages_.get();
+  }
   CannedBrowsingDataLocalStorageHelper* session_storages() const {
     return session_storages_.get();
   }
@@ -71,6 +78,7 @@ class LocalSharedObjectsContainer : public LocalSharedObjectsCounter {
   scoped_refptr<CannedBrowsingDataIndexedDBHelper> indexed_dbs_;
   scoped_refptr<CannedBrowsingDataLocalStorageHelper> local_storages_;
   scoped_refptr<CannedBrowsingDataServiceWorkerHelper> service_workers_;
+  scoped_refptr<CannedBrowsingDataCacheStorageHelper> cache_storages_;
   scoped_refptr<CannedBrowsingDataLocalStorageHelper> session_storages_;
 
   DISALLOW_COPY_AND_ASSIGN(LocalSharedObjectsContainer);

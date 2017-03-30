@@ -5,6 +5,7 @@
 #include "chrome/browser/content_settings/content_settings_supervised_provider.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
@@ -36,23 +37,28 @@ const ContentSettingsFromSupervisedSettingsEntry
 namespace content_settings {
 
 SupervisedProvider::SupervisedProvider(
-    SupervisedUserSettingsService* supervised_user_settings_service)
-    : weak_ptr_factory_(this) {
-  supervised_user_settings_service->Subscribe(base::Bind(
-      &content_settings::SupervisedProvider::OnSupervisedSettingsAvailable,
-      weak_ptr_factory_.GetWeakPtr()));
+    SupervisedUserSettingsService* supervised_user_settings_service) {
+
+  // The SupervisedProvider is owned by the HostContentSettingsMap which
+  // DependsOn the SupervisedUserSettingsService (through their factories).
+  // This means this will get destroyed before the SUSS and will be
+  // unsubscribed from it.
+  user_settings_subscription_ = supervised_user_settings_service->Subscribe(
+      base::Bind(
+          &content_settings::SupervisedProvider::OnSupervisedSettingsAvailable,
+          base::Unretained(this)));
 }
 
 SupervisedProvider::~SupervisedProvider() {
 }
 
-RuleIterator* SupervisedProvider::GetRuleIterator(
+scoped_ptr<RuleIterator> SupervisedProvider::GetRuleIterator(
     ContentSettingsType content_type,
     const ResourceIdentifier& resource_identifier,
     bool incognito) const {
   scoped_ptr<base::AutoLock> auto_lock(new base::AutoLock(lock_));
   return value_map_.GetRuleIterator(content_type, resource_identifier,
-                                    auto_lock.Pass());
+                                    std::move(auto_lock));
 }
 
 void SupervisedProvider::OnSupervisedSettingsAvailable(
@@ -98,7 +104,7 @@ void SupervisedProvider::ClearAllContentSettingsRules(
 void SupervisedProvider::ShutdownOnUIThread() {
   DCHECK(CalledOnValidThread());
   RemoveAllObservers();
-  weak_ptr_factory_.InvalidateWeakPtrs();
+  user_settings_subscription_.reset();
 }
 
 }  // namespace content_settings

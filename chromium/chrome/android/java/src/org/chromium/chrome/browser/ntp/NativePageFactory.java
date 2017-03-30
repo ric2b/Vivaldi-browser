@@ -9,10 +9,9 @@ import android.net.Uri;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.NativePage;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkPage;
-import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkUtils;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -39,17 +38,17 @@ public class NativePageFactory {
 
         protected NativePage buildBookmarksPage(Activity activity, Tab tab,
                 TabModelSelector tabModelSelector) {
-            if (EnhancedBookmarkUtils.isEnhancedBookmarkEnabled(
-                    tab.getProfile().getOriginalProfile()) && DeviceFormFactor.isTablet(activity)) {
+            if (DeviceFormFactor.isTablet(activity)) {
                 return EnhancedBookmarkPage.buildPage(activity, tab);
             } else {
+                // TODO(kkimlabs): Remove BookmarksPage completely. http://crbug.com/502911
                 return BookmarksPage.buildPage(activity, tab, tabModelSelector);
             }
         }
 
         protected NativePage buildRecentTabsPage(Activity activity, Tab tab) {
             RecentTabsManager recentTabsManager = FeatureUtilities.isDocumentMode(activity)
-                    ? new DocumentRecentTabsManager(tab, activity, false)
+                    ? new DocumentRecentTabsManager(tab, activity)
                     : new RecentTabsManager(tab, tab.getProfile(), activity);
             return new RecentTabsPage(activity, recentTabsManager);
         }

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -58,10 +59,6 @@ class DistillerPage {
   // The value returned between the JavaScript and the DistillerPage can be
   // either a dictionary with all the content, or a stringified version.
   virtual bool StringifyOutput() = 0;
-
-  // If true, forces the creation of a new window context to evaluate the
-  // JavaScript.
-  virtual bool CreateNewContext() = 0;
 
  private:
   bool ready_;

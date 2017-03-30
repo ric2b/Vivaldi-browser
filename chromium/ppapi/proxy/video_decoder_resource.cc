@@ -4,6 +4,8 @@
 
 #include "ppapi/proxy/video_decoder_resource.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
@@ -33,7 +35,7 @@ VideoDecoderResource::ShmBuffer::ShmBuffer(
     scoped_ptr<base::SharedMemory> shm_ptr,
     uint32_t size,
     uint32_t shm_id)
-    : shm(shm_ptr.Pass()), addr(NULL), shm_id(shm_id) {
+    : shm(std::move(shm_ptr)), addr(NULL), shm_id(shm_id) {
   if (shm->Map(size))
     addr = shm->memory();
 }
@@ -62,6 +64,7 @@ VideoDecoderResource::VideoDecoderResource(Connection connection,
                                            PP_Instance instance)
     : PluginResource(connection, instance),
       num_decodes_(0),
+      min_picture_count_(0),
       get_picture_(NULL),
       get_picture_0_1_(NULL),
       gles2_impl_(NULL),
@@ -98,6 +101,19 @@ int32_t VideoDecoderResource::Initialize0_1(
                     allow_software_fallback
                         ? PP_HARDWAREACCELERATION_WITHFALLBACK
                         : PP_HARDWAREACCELERATION_ONLY,
+                    0,
+                    callback);
+}
+
+int32_t VideoDecoderResource::Initialize0_2(
+    PP_Resource graphics_context,
+    PP_VideoProfile profile,
+    PP_HardwareAcceleration acceleration,
+    scoped_refptr<TrackedCallback> callback) {
+  return Initialize(graphics_context,
+                    profile,
+                    acceleration,
+                    0,
                     callback);
 }
 
@@ -105,15 +121,20 @@ int32_t VideoDecoderResource::Initialize(
     PP_Resource graphics_context,
     PP_VideoProfile profile,
     PP_HardwareAcceleration acceleration,
+    uint32_t min_picture_count,
     scoped_refptr<TrackedCallback> callback) {
   if (initialized_)
     return PP_ERROR_FAILED;
   if (profile < 0 || profile > PP_VIDEOPROFILE_MAX)
     return PP_ERROR_BADARGUMENT;
+  if (min_picture_count > kMaximumPictureCount)
+    return PP_ERROR_BADARGUMENT;
   if (initialize_callback_.get())
     return PP_ERROR_INPROGRESS;
   if (!graphics_context)
     return PP_ERROR_BADRESOURCE;
+
+  min_picture_count_ = min_picture_count;
 
   HostResource host_resource;
   if (!testing_) {
@@ -144,7 +165,7 @@ int32_t VideoDecoderResource::Initialize(
   Call<PpapiPluginMsg_VideoDecoder_InitializeReply>(
       RENDERER,
       PpapiHostMsg_VideoDecoder_Initialize(
-          host_resource, profile, acceleration),
+          host_resource, profile, acceleration, min_picture_count),
       base::Bind(&VideoDecoderResource::OnPluginMsgInitializeComplete, this));
 
   return PP_OK_COMPLETIONPENDING;
@@ -212,7 +233,7 @@ int32_t VideoDecoderResource::Decode(uint32_t decode_id,
     scoped_ptr<base::SharedMemory> shm(
         new base::SharedMemory(shm_handle, false /* read_only */));
     scoped_ptr<ShmBuffer> shm_buffer(
-        new ShmBuffer(shm.Pass(), shm_size, shm_id));
+        new ShmBuffer(std::move(shm), shm_size, shm_id));
     if (!shm_buffer->addr)
       return PP_ERROR_NOMEMORY;
 
@@ -359,6 +380,7 @@ void VideoDecoderResource::OnPluginMsgRequestTextures(
     uint32_t texture_target,
     const std::vector<gpu::Mailbox>& mailboxes) {
   DCHECK(num_textures);
+  DCHECK(num_textures >= min_picture_count_);
   DCHECK(mailboxes.empty() || mailboxes.size() == num_textures);
   std::vector<uint32_t> texture_ids(num_textures);
   if (gles2_impl_) {

@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/cast_channel/cast_framer.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
 
@@ -11,7 +13,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 class CastFramerTest : public testing::Test {
  public:
@@ -134,5 +136,5 @@ TEST_F(CastFramerTest, TestUnparsableBodyProto) {
   EXPECT_EQ(cast_channel::CHANNEL_ERROR_INVALID_MESSAGE, error);
 }
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

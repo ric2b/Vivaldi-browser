@@ -5,12 +5,15 @@
 #ifndef UI_APP_LIST_TEST_APP_LIST_TEST_VIEW_DELEGATE_H_
 #define UI_APP_LIST_TEST_APP_LIST_TEST_VIEW_DELEGATE_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "ui/app_list/app_list_view_delegate.h"
@@ -44,9 +47,9 @@ class AppListTestViewDelegate : public AppListViewDelegate {
     auto_launch_timeout_ = timeout;
   }
 
-  // Returns the value of |toggle_speech_recognition_count_| and then
-  // resets this value to 0.
-  int GetToggleSpeechRecognitionCountAndReset();
+  // Returns the value of |stop_speech_recognition_count_| and then resets this
+  // value to 0.
+  int GetStopSpeechRecognitionCountAndReset();
 
   // AppListViewDelegate overrides:
   bool ForceNativeDesktop() const override;
@@ -73,7 +76,8 @@ class AppListTestViewDelegate : public AppListViewDelegate {
   void OpenSettings() override {}
   void OpenHelp() override {}
   void OpenFeedback() override {}
-  void ToggleSpeechRecognition() override;
+  void StartSpeechRecognition() override {}
+  void StopSpeechRecognition() override;
   void ShowForProfileByPath(const base::FilePath& profile_path) override {}
 #if defined(TOOLKIT_VIEWS)
   views::View* CreateStartPageWebView(const gfx::Size& size) override;
@@ -96,7 +100,7 @@ class AppListTestViewDelegate : public AppListViewDelegate {
 
  private:
   int dismiss_count_;
-  int toggle_speech_recognition_count_;
+  int stop_speech_recognition_count_;
   int open_search_result_count_;
   int next_profile_app_count_;
   std::map<size_t, int> open_search_result_counts_;

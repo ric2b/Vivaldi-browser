@@ -5,11 +5,15 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_MEDIA_VIDEO_CAPTURE_DEVICE_CLIENT_H_
 #define CONTENT_BROWSER_RENDERER_HOST_MEDIA_VIDEO_CAPTURE_DEVICE_CLIENT_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
-#include "media/video/capture/video_capture_device.h"
+#include "media/capture/video/video_capture_device.h"
 
 namespace content {
 class VideoCaptureBufferPool;
@@ -36,19 +40,18 @@ class CONTENT_EXPORT VideoCaptureDeviceClient
  public:
   VideoCaptureDeviceClient(
       const base::WeakPtr<VideoCaptureController>& controller,
-      const scoped_refptr<VideoCaptureBufferPool>& buffer_pool,
-      const scoped_refptr<base::SingleThreadTaskRunner>& capture_task_runner);
+      const scoped_refptr<VideoCaptureBufferPool>& buffer_pool);
   ~VideoCaptureDeviceClient() override;
 
   // VideoCaptureDevice::Client implementation.
-  void OnIncomingCapturedData(const uint8* data,
+  void OnIncomingCapturedData(const uint8_t* data,
                               int length,
                               const media::VideoCaptureFormat& frame_format,
                               int rotation,
                               const base::TimeTicks& timestamp) override;
-  void OnIncomingCapturedYuvData(const uint8* y_data,
-                                 const uint8* u_data,
-                                 const uint8* v_data,
+  void OnIncomingCapturedYuvData(const uint8_t* y_data,
+                                 const uint8_t* u_data,
+                                 const uint8_t* v_data,
                                  size_t y_stride,
                                  size_t u_stride,
                                  size_t v_stride,
@@ -66,11 +69,30 @@ class CONTENT_EXPORT VideoCaptureDeviceClient
       scoped_ptr<Buffer> buffer,
       const scoped_refptr<media::VideoFrame>& frame,
       const base::TimeTicks& timestamp) override;
-  void OnError(const std::string& reason) override;
+  void OnError(const tracked_objects::Location& from_here,
+               const std::string& reason) override;
   void OnLog(const std::string& message) override;
   double GetBufferPoolUtilization() const override;
 
  private:
+  // Reserve output buffer into which I420 contents can be copied directly.
+  // The dimensions of the frame is described by |dimensions|, and requested
+  // output buffer format is specified by |storage|. The reserved output buffer
+  // is returned; and the pointer to Y plane is stored at [y_plane_data], U
+  // plane is stored at [u_plane_data], V plane is stored at [v_plane_data].
+  // Returns an nullptr if allocation fails.
+  //
+  // When requested |storage| is PIXEL_STORAGE_CPU, a single shared memory
+  // chunk is reserved; whereas for PIXEL_STORAGE_GPUMEMORYBUFFER, three
+  // GpuMemoryBuffers in R_8 format representing I420 planes are reserved. The
+  // output buffers stay reserved and mapped for use until the Buffer objects
+  // are destroyed or returned.
+  scoped_ptr<Buffer> ReserveI420OutputBuffer(const gfx::Size& dimensions,
+                                             media::VideoPixelStorage storage,
+                                             uint8_t** y_plane_data,
+                                             uint8_t** u_plane_data,
+                                             uint8_t** v_plane_data);
+
   // The controller to which we post events.
   const base::WeakPtr<VideoCaptureController> controller_;
 
@@ -83,12 +105,9 @@ class CONTENT_EXPORT VideoCaptureDeviceClient
   // The pool of shared-memory buffers used for capturing.
   const scoped_refptr<VideoCaptureBufferPool> buffer_pool_;
 
-  // Internal delegate for GpuMemoryBuffer-into-VideoFrame wrapping.
-  class TextureWrapHelper;
-  scoped_refptr<TextureWrapHelper> texture_wrap_helper_;
-  // Reference to Capture Thread task runner, where |texture_wrap_helper_|
-  // lives.
-  const scoped_refptr<base::SingleThreadTaskRunner> capture_task_runner_;
+  // Indication to the Client to copy-transform the incoming data into
+  // GpuMemoryBuffers.
+  const bool use_gpu_memory_buffers_;
 
   media::VideoPixelFormat last_captured_pixel_format_;
 

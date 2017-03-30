@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_EXTENSIONS_API_CHROME_EXTENSIONS_API_CLIENT_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "extensions/browser/api/extensions_api_client.h"
 
 namespace extensions {
@@ -29,6 +30,9 @@ class ChromeExtensionsAPIClient : public ExtensionsAPIClient {
   AppViewGuestDelegate* CreateAppViewGuestDelegate() const override;
   ExtensionOptionsGuestDelegate* CreateExtensionOptionsGuestDelegate(
       ExtensionOptionsGuest* guest) const override;
+  scoped_ptr<guest_view::GuestViewManagerDelegate>
+      CreateGuestViewManagerDelegate(
+          content::BrowserContext* context) const override;
   scoped_ptr<MimeHandlerViewGuestDelegate> CreateMimeHandlerViewGuestDelegate(
       MimeHandlerViewGuest* guest) const override;
   WebViewGuestDelegate* CreateWebViewGuestDelegate(

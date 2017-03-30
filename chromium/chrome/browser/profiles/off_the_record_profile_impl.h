@@ -7,7 +7,8 @@
 
 #include <string>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/off_the_record_profile_io_data.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -19,7 +20,9 @@
 using base::Time;
 using base::TimeDelta;
 
+namespace syncable_prefs {
 class PrefServiceSyncable;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -43,9 +46,9 @@ class OffTheRecordProfileImpl : public Profile {
   void DestroyOffTheRecordProfile() override;
   bool HasOffTheRecordProfile() override;
   Profile* GetOriginalProfile() override;
-  bool IsSupervised() override;
-  bool IsChild() override;
-  bool IsLegacySupervised() override;
+  bool IsSupervised() const override;
+  bool IsChild() const override;
+  bool IsLegacySupervised() const override;
   ExtensionSpecialStoragePolicy* GetExtensionSpecialStoragePolicy() override;
   PrefService* GetPrefs() override;
   const PrefService* GetPrefs() const override;
@@ -60,7 +63,6 @@ class OffTheRecordProfileImpl : public Profile {
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors) override;
   net::SSLConfigService* GetSSLConfigService() override;
-  HostContentSettingsMap* GetHostContentSettingsMap() override;
   bool IsSameProfile(Profile* profile) override;
   Time GetStartTime() const override;
   base::FilePath last_selected_directory() override;
@@ -78,7 +80,8 @@ class OffTheRecordProfileImpl : public Profile {
   PrefProxyConfigTracker* GetProxyConfigTracker() override;
 
   chrome_browser_net::Predictor* GetNetworkPredictor() override;
-  DevToolsNetworkController* GetDevToolsNetworkController() override;
+  DevToolsNetworkControllerHandle* GetDevToolsNetworkControllerHandle()
+      override;
   void ClearNetworkingHistorySince(base::Time time,
                                    const base::Closure& completion) override;
   GURL GetHomePage() override;
@@ -105,6 +108,7 @@ class OffTheRecordProfileImpl : public Profile {
   content::PushMessagingService* GetPushMessagingService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
+  content::BackgroundSyncController* GetBackgroundSyncController() override;
 
  private:
   void InitIoData();
@@ -126,15 +130,12 @@ class OffTheRecordProfileImpl : public Profile {
   Profile* profile_;
 
   // Weak pointer owned by |profile_|.
-  PrefServiceSyncable* prefs_;
+  syncable_prefs::PrefServiceSyncable* prefs_;
 
   scoped_ptr<content::HostZoomMap::Subscription> track_zoom_subscription_;
-  scoped_ptr<chrome::ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
+  scoped_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
       parent_default_zoom_level_subscription_;
   scoped_ptr<OffTheRecordProfileIOData::Handle> io_data_;
-
-  // We use a non-persistent content settings map for OTR.
-  scoped_refptr<HostContentSettingsMap> host_content_settings_map_;
 
   // Time we were started.
   Time start_time_;

@@ -15,11 +15,11 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_item_view.h"
 #include "ash/system/tray/tray_utils.h"
-#include "ash/system/user/accounts_detailed_view.h"
 #include "ash/system/user/rounded_image_view.h"
 #include "ash/system/user/user_view.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "grit/ash_strings.h"
 #include "ui/aura/window.h"
@@ -39,9 +39,9 @@ const int kUserLabelToIconPadding = 5;
 
 namespace ash {
 
-TrayUser::TrayUser(SystemTray* system_tray, MultiProfileIndex index)
+TrayUser::TrayUser(SystemTray* system_tray, UserIndex index)
     : SystemTrayItem(system_tray),
-      multiprofile_index_(index),
+      user_index_(index),
       user_(nullptr),
       layout_view_(nullptr),
       avatar_(nullptr),
@@ -95,9 +95,8 @@ views::View* TrayUser::CreateDefaultView(user::LoginStatus status) {
 
   // If the screen is locked or a system modal dialog box is shown, show only
   // the currently active user.
-  if (multiprofile_index_ &&
-      (session_state_delegate->IsUserSessionBlocked() ||
-       Shell::GetInstance()->IsSystemModalWindowOpen()))
+  if (user_index_ && (session_state_delegate->IsUserSessionBlocked() ||
+                      Shell::GetInstance()->IsSystemModalWindowOpen()))
     return nullptr;
 
   CHECK(user_ == nullptr);
@@ -105,24 +104,11 @@ views::View* TrayUser::CreateDefaultView(user::LoginStatus status) {
   int logged_in_users = session_state_delegate->NumberOfLoggedInUsers();
 
   // Do not show more UserView's then there are logged in users.
-  if (multiprofile_index_ >= logged_in_users)
+  if (user_index_ >= logged_in_users)
     return nullptr;
 
-  user_ = new tray::UserView(this, status, multiprofile_index_, false);
+  user_ = new tray::UserView(this, status, user_index_);
   return user_;
-}
-
-views::View* TrayUser::CreateDetailedView(user::LoginStatus status) {
-  std::string user_id = Shell::GetInstance()
-                            ->session_state_delegate()
-                            ->GetUserInfo(0)
-                            ->GetUserID();
-  tray::UserAccountsDelegate* delegate =
-      Shell::GetInstance()->system_tray_delegate()->GetUserAccountsDelegate(
-          user_id);
-  if (!delegate)
-    return nullptr;
-  return new tray::AccountsDetailedView(this, status, delegate);
 }
 
 void TrayUser::DestroyTrayView() {
@@ -135,14 +121,11 @@ void TrayUser::DestroyDefaultView() {
   user_ = nullptr;
 }
 
-void TrayUser::DestroyDetailedView() {
-}
-
 void TrayUser::UpdateAfterLoginStatusChange(user::LoginStatus status) {
   // Only the active user is represented in the tray.
   if (!layout_view_)
     return;
-  if (multiprofile_index_ > 0)
+  if (user_index_ > 0)
     return;
   bool need_label = false;
   bool need_avatar = false;
@@ -259,7 +242,7 @@ void TrayUser::OnUserAddedToSession() {
   SessionStateDelegate* session_state_delegate =
       Shell::GetInstance()->session_state_delegate();
   // Only create views for user items which are logged in.
-  if (multiprofile_index_ >= session_state_delegate->NumberOfLoggedInUsers())
+  if (user_index_ >= session_state_delegate->NumberOfLoggedInUsers())
     return;
 
   // Enforce a layout change that newly added items become visible.
@@ -274,11 +257,11 @@ void TrayUser::UpdateAvatarImage(user::LoginStatus status) {
   SessionStateDelegate* session_state_delegate =
       Shell::GetInstance()->session_state_delegate();
   if (!avatar_ ||
-      multiprofile_index_ >= session_state_delegate->NumberOfLoggedInUsers())
+      user_index_ >= session_state_delegate->NumberOfLoggedInUsers())
     return;
 
   const user_manager::UserInfo* user_info =
-      session_state_delegate->GetUserInfo(multiprofile_index_);
+      session_state_delegate->GetUserInfo(user_index_);
   CHECK(user_info);
   avatar_->SetImage(user_info->GetImage(),
                     gfx::Size(kTrayAvatarSize, kTrayAvatarSize));

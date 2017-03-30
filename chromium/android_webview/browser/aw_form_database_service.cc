@@ -4,7 +4,6 @@
 
 #include "android_webview/browser/aw_form_database_service.h"
 
-#include "base/android/locale_utils.h"
 #include "base/logging.h"
 #include "base/synchronization/waitable_event.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
@@ -31,9 +30,7 @@ AwFormDatabaseService::AwFormDatabaseService(const base::FilePath path) {
   web_database_ = new WebDatabaseService(path.Append(kWebDataFilename),
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB));
-  web_database_->AddTable(
-      scoped_ptr<WebDatabaseTable>(new autofill::AutofillTable(
-          base::android::GetDefaultLocale())));
+  web_database_->AddTable(make_scoped_ptr(new autofill::AutofillTable));
   web_database_->LoadDatabase();
 
   autofill_data_ = new autofill::AutofillWebDataService(
@@ -96,7 +93,8 @@ void AwFormDatabaseService::HasFormDataImpl(
     WaitableEvent* completion,
     bool* result) {
   WebDataServiceBase::Handle pending_query_handle =
-      autofill_data_->HasFormElements(this);
+      autofill_data_->GetCountOfValuesContainedBetween(
+          base::Time(), base::Time::Max(), this);
   PendingQuery query;
   query.result = result;
   query.completion = completion;
@@ -111,9 +109,9 @@ void AwFormDatabaseService::OnWebDataServiceRequestDone(
   bool has_form_data = false;
   if (result) {
     DCHECK_EQ(AUTOFILL_VALUE_RESULT, result->GetType());
-    const WDResult<bool>* autofill_result =
-        static_cast<const WDResult<bool>*>(result);
-    has_form_data = autofill_result->GetValue();
+    const WDResult<int>* autofill_result =
+        static_cast<const WDResult<int>*>(result);
+    has_form_data = autofill_result->GetValue() > 0;
   }
   QueryMap::const_iterator it = result_map_.find(h);
   if (it == result_map_.end()) {

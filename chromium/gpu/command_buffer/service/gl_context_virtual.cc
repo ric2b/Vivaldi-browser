@@ -4,11 +4,14 @@
 
 #include "gpu/command_buffer/service/gl_context_virtual.h"
 
+#include "base/callback.h"
 #include "gpu/command_buffer/service/gl_state_restorer_impl.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "ui/gl/gl_gl_api_implementation.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/gl/gpu_preference.h"
 #include "ui/gl/gpu_timing.h"
+#include "ui/gl/scoped_api.h"
 
 namespace gpu {
 
@@ -86,10 +89,6 @@ void GLContextVirtual::OnSetSwapInterval(int interval) {
 
 std::string GLContextVirtual::GetExtensions() {
   return shared_context_->GetExtensions();
-}
-
-bool GLContextVirtual::GetTotalGpuMemory(size_t* bytes) {
-  return shared_context_->GetTotalGpuMemory(bytes);
 }
 
 void GLContextVirtual::SetSafeToForceGpuSwitch() {

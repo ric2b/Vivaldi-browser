@@ -5,27 +5,33 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBMEDIAPLAYER_MS_H_
 #define CONTENT_RENDERER_MEDIA_WEBMEDIAPLAYER_MS_H_
 
-#include "base/memory/ref_counted.h"
+#include <string>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
-#include "cc/layers/video_frame_provider.h"
-#include "media/blink/skcanvas_video_renderer.h"
+#include "content/common/content_export.h"
+#include "content/public/renderer/render_frame_observer.h"
 #include "media/blink/webmediaplayer_util.h"
-#include "skia/ext/platform_canvas.h"
+#include "media/renderers/gpu_video_accelerator_factories.h"
+#include "media/renderers/skcanvas_video_renderer.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace blink {
 class WebFrame;
 class WebGraphicsContext3D;
 class WebMediaPlayerClient;
+class WebSecurityOrigin;
+class WebString;
 }
 
 namespace media {
 class MediaLog;
 class WebMediaPlayerDelegate;
+class VideoFrame;
 }
 
 namespace cc_blink {
@@ -36,86 +42,103 @@ namespace content {
 class MediaStreamAudioRenderer;
 class MediaStreamRendererFactory;
 class VideoFrameProvider;
+class WebMediaPlayerMSCompositor;
+class RenderFrameObserver;
 
 // WebMediaPlayerMS delegates calls from WebCore::MediaPlayerPrivate to
 // Chrome's media player when "src" is from media stream.
+//
+// All calls to WebMediaPlayerMS methods must be from the main thread of
+// Renderer process.
 //
 // WebMediaPlayerMS works with multiple objects, the most important ones are:
 //
 // VideoFrameProvider
 //   provides video frames for rendering.
 //
-// TODO(wjia): add AudioPlayer.
-// AudioPlayer
-//   plays audio streams.
-//
 // blink::WebMediaPlayerClient
 //   WebKit client of this media player object.
-class WebMediaPlayerMS
-    : public blink::WebMediaPlayer,
-      public cc::VideoFrameProvider,
-      public base::SupportsWeakPtr<WebMediaPlayerMS> {
+class CONTENT_EXPORT WebMediaPlayerMS
+    : public NON_EXPORTED_BASE(blink::WebMediaPlayer),
+      public NON_EXPORTED_BASE(base::SupportsWeakPtr<WebMediaPlayerMS>),
+      public NON_EXPORTED_BASE(RenderFrameObserver) {
  public:
   // Construct a WebMediaPlayerMS with reference to the client, and
   // a MediaStreamClient which provides VideoFrameProvider.
-  WebMediaPlayerMS(blink::WebFrame* frame,
-                   blink::WebMediaPlayerClient* client,
-                   base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
-                   media::MediaLog* media_log,
-                   scoped_ptr<MediaStreamRendererFactory> factory);
-  virtual ~WebMediaPlayerMS();
+  WebMediaPlayerMS(
+      blink::WebFrame* frame,
+      blink::WebMediaPlayerClient* client,
+      base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
+      media::MediaLog* media_log,
+      scoped_ptr<MediaStreamRendererFactory> factory,
+      const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      const scoped_refptr<base::TaskRunner>& worker_task_runner,
+      media::GpuVideoAcceleratorFactories* gpu_factories,
+      const blink::WebString& sink_id,
+      const blink::WebSecurityOrigin& security_origin);
 
-  virtual void load(LoadType load_type,
-                    const blink::WebURL& url,
-                    CORSMode cors_mode);
+  ~WebMediaPlayerMS() override;
+
+  void load(LoadType load_type,
+            const blink::WebURL& url,
+            CORSMode cors_mode) override;
 
   // Playback controls.
-  virtual void play();
-  virtual void pause();
-  virtual bool supportsSave() const;
-  virtual void seek(double seconds);
-  virtual void setRate(double rate);
-  virtual void setVolume(double volume);
-  virtual void setSinkId(const blink::WebString& device_id,
-                         media::WebSetSinkIdCB* web_callback);
-  virtual void setPreload(blink::WebMediaPlayer::Preload preload);
-  virtual blink::WebTimeRanges buffered() const;
-  virtual blink::WebTimeRanges seekable() const;
+  void play() override;
+  void pause() override;
+  bool supportsSave() const override;
+  void seek(double seconds) override;
+  void setRate(double rate) override;
+  void setVolume(double volume) override;
+  void setSinkId(const blink::WebString& sink_id,
+                 const blink::WebSecurityOrigin& security_origin,
+                 blink::WebSetSinkIdCallbacks* web_callback) override;
+  void setPreload(blink::WebMediaPlayer::Preload preload) override;
+  blink::WebTimeRanges buffered() const override;
+  blink::WebTimeRanges seekable() const override;
 
   // Methods for painting.
-  virtual void paint(blink::WebCanvas* canvas,
-                     const blink::WebRect& rect,
-                     unsigned char alpha,
-                     SkXfermode::Mode mode);
+  void paint(blink::WebCanvas* canvas,
+             const blink::WebRect& rect,
+             unsigned char alpha,
+             SkXfermode::Mode mode) override;
+  media::SkCanvasVideoRenderer* GetSkCanvasVideoRenderer();
+  void ResetCanvasCache();
 
   // True if the loaded media has a playable video/audio track.
-  virtual bool hasVideo() const;
-  virtual bool hasAudio() const;
+  bool hasVideo() const override;
+  bool hasAudio() const override;
 
   // Dimensions of the video.
-  virtual blink::WebSize naturalSize() const;
+  blink::WebSize naturalSize() const override;
 
   // Getters of playback state.
-  virtual bool paused() const;
-  virtual bool seeking() const;
-  virtual double duration() const;
-  virtual double currentTime() const;
+  bool paused() const override;
+  bool seeking() const override;
+  double duration() const override;
+  double currentTime() const override;
 
   // Internal states of loading and network.
-  virtual blink::WebMediaPlayer::NetworkState networkState() const;
-  virtual blink::WebMediaPlayer::ReadyState readyState() const;
+  blink::WebMediaPlayer::NetworkState networkState() const override;
+  blink::WebMediaPlayer::ReadyState readyState() const override;
 
-  virtual bool didLoadingProgress();
+  bool didLoadingProgress() override;
 
-  virtual bool hasSingleSecurityOrigin() const;
-  virtual bool didPassCORSAccessCheck() const;
+  bool hasSingleSecurityOrigin() const override;
+  bool didPassCORSAccessCheck() const override;
 
-  virtual double mediaTimeForTimeValue(double timeValue) const;
+  double mediaTimeForTimeValue(double timeValue) const override;
 
-  virtual unsigned decodedFrameCount() const;
-  virtual unsigned droppedFrameCount() const;
-  virtual unsigned audioDecodedByteCount() const;
-  virtual unsigned videoDecodedByteCount() const;
+  unsigned decodedFrameCount() const override;
+  unsigned droppedFrameCount() const override;
+  unsigned audioDecodedByteCount() const override;
+  unsigned videoDecodedByteCount() const override;
+
+  // RenderFrameObserver implementation. Called when the RenderFrame visiblity
+  // is changed.
+  void WasHidden() override;
+  void WasShown() override;
 
   bool copyVideoTextureToPlatformTexture(
       blink::WebGraphicsContext3D* web_graphics_context,
@@ -125,16 +148,9 @@ class WebMediaPlayerMS
       bool premultiply_alpha,
       bool flip_y) override;
 
-  // VideoFrameProvider implementation.
-  void SetVideoFrameProviderClient(
-      cc::VideoFrameProvider::Client* client) override;
-  bool UpdateCurrentFrame(base::TimeTicks deadline_min,
-                          base::TimeTicks deadline_max) override;
-  bool HasCurrentFrame() override;
-  scoped_refptr<media::VideoFrame> GetCurrentFrame() override;
-  void PutCurrentFrame() override;
-
  private:
+  friend class WebMediaPlayerMSTest;
+
   // The callback for VideoFrameProvider to signal a new frame is available.
   void OnFrameAvailable(const scoped_refptr<media::VideoFrame>& frame);
   // Need repaint due to state change.
@@ -149,58 +165,50 @@ class WebMediaPlayerMS
   void SetReadyState(blink::WebMediaPlayer::ReadyState state);
 
   // Getter method to |client_|.
-  blink::WebMediaPlayerClient* GetClient();
+  blink::WebMediaPlayerClient* get_client() { return client_; }
 
-  blink::WebFrame* frame_;
+  blink::WebFrame* const frame_;
 
   blink::WebMediaPlayer::NetworkState network_state_;
   blink::WebMediaPlayer::ReadyState ready_state_;
 
-  blink::WebTimeRanges buffered_;
+  const blink::WebTimeRanges buffered_;
 
-  float volume_;
+  blink::WebMediaPlayerClient* const client_;
 
-  // Used for DCHECKs to ensure methods calls executed in the correct thread.
-  base::ThreadChecker thread_checker_;
-
-  blink::WebMediaPlayerClient* client_;
-
-  base::WeakPtr<media::WebMediaPlayerDelegate> delegate_;
+  const base::WeakPtr<media::WebMediaPlayerDelegate> delegate_;
 
   // Specify content:: to disambiguate from cc::.
-  scoped_refptr<content::VideoFrameProvider> video_frame_provider_;
-  bool paused_;
-
-  // |current_frame_| is updated only on main thread. The object it holds
-  // can be freed on the compositor thread if it is the last to hold a
-  // reference but media::VideoFrame is a thread-safe ref-pointer. It is
-  // however read on the compositing thread so locking is required around all
-  // modifications on the main thread, and all reads on the compositing thread.
-  scoped_refptr<media::VideoFrame> current_frame_;
-  // |current_frame_used_| is updated on both main and compositing thread.
-  // It's used to track whether |current_frame_| was painted for detecting
-  // when to increase |dropped_frame_count_|.
-  bool current_frame_used_;
-  // |current_frame_lock_| protects |current_frame_used_| and |current_frame_|.
-  base::Lock current_frame_lock_;
+  scoped_refptr<content::VideoFrameProvider> video_frame_provider_;  // Weak
 
   scoped_ptr<cc_blink::WebLayerImpl> video_weblayer_;
 
-  // A pointer back to the compositor to inform it about state changes. This is
-  // not NULL while the compositor is actively using this webmediaplayer.
-  cc::VideoFrameProvider::Client* video_frame_provider_client_;
-
-  bool received_first_frame_;
-  base::TimeDelta current_time_;
-  unsigned total_frame_count_;
-  unsigned dropped_frame_count_;
+  scoped_refptr<MediaStreamAudioRenderer> audio_renderer_;  // Weak
   media::SkCanvasVideoRenderer video_renderer_;
 
-  scoped_refptr<MediaStreamAudioRenderer> audio_renderer_;
+  bool paused_;
+  bool render_frame_suspended_;
+  bool received_first_frame_;
 
   scoped_refptr<media::MediaLog> media_log_;
 
   scoped_ptr<MediaStreamRendererFactory> renderer_factory_;
+
+  const scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
+  const scoped_refptr<base::TaskRunner> worker_task_runner_;
+  media::GpuVideoAcceleratorFactories* gpu_factories_;
+
+  // Used for DCHECKs to ensure methods calls executed in the correct thread.
+  base::ThreadChecker thread_checker_;
+
+  // WebMediaPlayerMS owns |compositor_| and destroys it on
+  // |compositor_task_runner_|.
+  scoped_ptr<WebMediaPlayerMSCompositor> compositor_;
+
+  const scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
+
+  const std::string initial_audio_output_device_id_;
+  const url::Origin initial_security_origin_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerMS);
 };

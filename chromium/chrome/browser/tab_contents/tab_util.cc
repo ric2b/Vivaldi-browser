@@ -4,7 +4,6 @@
 
 #include "chrome/browser/tab_contents/tab_util.h"
 
-#include "base/command_line.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 #include "chrome/common/chrome_switches.h"
@@ -18,6 +17,8 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "extensions/browser/extension_registry.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 using content::RenderFrameHost;
 using content::RenderViewHost;
@@ -57,7 +58,7 @@ SiteInstance* GetSiteInstanceForNewTab(Profile* profile,
      return SiteInstance::CreateForURL(profile, url);
 #endif
 
-   if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+   if (vivaldi::IsVivaldiRunning()) {
      // We cannot start a new browsinginstance for our hiarchy, so we need a new
      // siteinstance for Vivaldi
      return SiteInstance::CreateForURL(profile, url);

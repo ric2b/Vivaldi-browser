@@ -4,6 +4,7 @@
 
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/stringize_macros.h"
+#include "build/build_config.h"
 #include "remoting/host/server_log_entry_host.h"
 #include "remoting/signaling/server_log_entry.h"
 #include "remoting/signaling/server_log_entry_unittest.h"
@@ -62,6 +63,7 @@ TEST(ServerLogEntryHostTest, AddHostFields) {
   keys.insert("os-version");
 #elif defined(OS_LINUX)
   key_value_pairs["os-name"] = "Linux";
+  keys.insert("os-version");
 #endif
 
   // The check below will compile but fail if VERSION isn't defined (STRINGIZE

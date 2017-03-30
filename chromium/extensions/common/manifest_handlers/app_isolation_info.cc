@@ -4,6 +4,8 @@
 
 #include "extensions/common/manifest_handlers/app_isolation_info.h"
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -68,8 +70,7 @@ bool AppIsolationHandler::Parse(Extension* extension, base::string16* error) {
     std::string isolation_string;
     if (!isolation_list->GetString(i, &isolation_string)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          manifest_errors::kInvalidIsolationValue,
-          base::UintToString(i));
+          manifest_errors::kInvalidIsolationValue, base::SizeTToString(i));
       return false;
     }
 

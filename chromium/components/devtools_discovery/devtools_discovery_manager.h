@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "components/devtools_discovery/devtools_target_descriptor.h"
@@ -38,7 +39,7 @@ class DevToolsDiscoveryManager {
   scoped_ptr<DevToolsTargetDescriptor> CreateNew(const GURL& url);
 
  private:
-  friend struct DefaultSingletonTraits<DevToolsDiscoveryManager>;
+  friend struct base::DefaultSingletonTraits<DevToolsDiscoveryManager>;
 
   DevToolsDiscoveryManager();
   ~DevToolsDiscoveryManager();

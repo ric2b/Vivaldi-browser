@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import logging
+
 from telemetry.page import page_test
 
 from metrics import memory
@@ -20,12 +22,12 @@ class Memory(page_test.PageTest):
   def DidStartBrowser(self, browser):
     self._memory_metric = memory.MemoryMetric(browser)
 
+  def WillNavigateToPage(self, page, tab):
+    tab.CollectGarbage()
+
   def DidNavigateToPage(self, page, tab):
     self._memory_metric.Start(page, tab)
     self._power_metric.Start(page, tab)
-
-  def CleanUpAfterPage(self, page, tab):
-    tab.CollectGarbage()
 
   def CustomizeBrowserOptions(self, options):
     memory.MemoryMetric.CustomizeBrowserOptions(options)
@@ -38,3 +40,8 @@ class Memory(page_test.PageTest):
     self._memory_metric.Stop(page, tab)
     self._memory_metric.AddResults(tab, results)
     self._power_metric.AddResults(tab, results)
+
+  def DidRunPage(self, platform):
+    # TODO(rnephew): Remove when crbug.com/553601 is solved.
+    logging.info('DidRunPage for memory metric')
+    self._power_metric.Close()

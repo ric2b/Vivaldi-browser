@@ -114,7 +114,13 @@ base::Time CoreAudioDemuxer::GetTimelineOffset() const {
   return base::Time();
 }
 
-void CoreAudioDemuxer::SetAudioDuration(int64 duration) {
+int64_t CoreAudioDemuxer::GetMemoryUsage() const {
+  // TODO(ckulakowski): Implement me. DNA-45936
+  return 0;
+}
+
+
+void CoreAudioDemuxer::SetAudioDuration(int64_t duration) {
   host_->SetDuration(base::TimeDelta::FromMilliseconds(duration));
 }
 
@@ -202,8 +208,8 @@ void CoreAudioDemuxer::AudioPacketsProc(
                                             &bit_rate_size,
                                             &demuxer->bit_rate_);
   if (err == noErr) {
-    int64 duration = 0;
-    int64 ds_size = 0;
+    int64_t duration = 0;
+    int64_t ds_size = 0;
     demuxer->data_source_->GetSize(&ds_size);
     if (demuxer->bit_rate_ > 0) {
       // some audio files gives bit_rate in 1000*bits/s, but others gives bits/s
@@ -261,7 +267,7 @@ void CoreAudioDemuxer::AudioPropertyListenerProc(
 }
 
 int CoreAudioDemuxer::ReadDataSource() {
-  int64 offset = 0;
+  int64_t offset = 0;
   url_protocol_->GetPosition(&offset);
   VLOG(1) << "ReadDataSource: at offset: " << offset;
   return url_protocol_->Read(kStreamInfoBufferSize, buffer_);
@@ -289,7 +295,7 @@ void CoreAudioDemuxer::OnReadDataSourceDone(int read_size) {
 // static
 bool CoreAudioDemuxer::IsSupported(const std::string& content_type,
                                    const GURL& url) {
-  std::string mime_type = base::StringToLowerASCII(content_type);
+  std::string mime_type = base::ToLowerASCII(content_type);
   if (mime_type.empty()) {
     base::FilePath file(url.ExtractFileName());
     if (!net::GetMimeTypeFromFile(file, &mime_type))

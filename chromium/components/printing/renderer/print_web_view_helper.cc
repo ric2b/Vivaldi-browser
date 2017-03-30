@@ -4,12 +4,16 @@
 
 #include "components/printing/renderer/print_web_view_helper.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
+#include <utility>
 
 #include "base/auto_reset.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
@@ -17,6 +21,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/printing/common/print_messages.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/render_frame.h"
@@ -24,6 +29,7 @@
 #include "content/public/renderer/render_view.h"
 #include "grit/components_resources.h"
 #include "net/base/escape.h"
+#include "printing/metafile_skia_wrapper.h"
 #include "printing/pdf_metafile_skia.h"
 #include "printing/units.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
@@ -32,6 +38,7 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
+#include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPlugin.h"
 #include "third_party/WebKit/public/web/WebPluginDocument.h"
@@ -71,10 +78,8 @@ enum PrintPreviewHelperEvents {
 
 const double kMinDpi = 1.0;
 
-#if !defined(ENABLE_PRINT_PREVIEW)
-bool g_is_preview_enabled_ = false;
-#else
-bool g_is_preview_enabled_ = true;
+#if defined(ENABLE_PRINT_PREVIEW)
+bool g_is_preview_enabled = true;
 
 const char kPageLoadScriptFormat[] =
     "document.open(); document.write(%s); document.close();";
@@ -89,7 +94,9 @@ void ExecuteScript(blink::WebFrame* frame,
   std::string script = base::StringPrintf(script_format, json.c_str());
   frame->executeScript(blink::WebString(base::UTF8ToUTF16(script)));
 }
-#endif  // !defined(ENABLE_PRINT_PREVIEW)
+#else
+bool g_is_preview_enabled = false;
+#endif  // defined(ENABLE_PRINT_PREVIEW)
 
 int GetDPI(const PrintMsg_Print_Params* print_params) {
 #if defined(OS_MACOSX)
@@ -285,18 +292,27 @@ void ComputeWebKitPrintParamsInDesiredDpi(
       print_params.page_size.height(), dpi, print_params.desired_dpi);
 }
 
-blink::WebPlugin* GetPlugin(const blink::WebFrame* frame) {
+blink::WebPlugin* GetPlugin(const blink::WebLocalFrame* frame) {
   return frame->document().isPluginDocument()
              ? frame->document().to<blink::WebPluginDocument>().plugin()
              : NULL;
 }
 
-bool PrintingNodeOrPdfFrame(const blink::WebFrame* frame,
+bool PrintingNodeOrPdfFrame(const blink::WebLocalFrame* frame,
                             const blink::WebNode& node) {
   if (!node.isNull())
     return true;
   blink::WebPlugin* plugin = GetPlugin(frame);
   return plugin && plugin->supportsPaginatedPrint();
+}
+
+#if defined(ENABLE_PRINT_PREVIEW)
+// Returns true if the current destination printer is PRINT_TO_PDF.
+bool IsPrintToPdfRequested(const base::DictionaryValue& job_settings) {
+  bool print_to_pdf = false;
+  if (!job_settings.GetBoolean(kSettingPrintToPDF, &print_to_pdf))
+    NOTREACHED();
+  return print_to_pdf;
 }
 
 bool PrintingFrameHasPageSizeStyle(blink::WebFrame* frame,
@@ -312,6 +328,7 @@ bool PrintingFrameHasPageSizeStyle(blink::WebFrame* frame,
   }
   return frame_has_custom_page_size_style;
 }
+#endif  // defined(ENABLE_PRINT_PREVIEW)
 
 // Disable scaling when either:
 // - The PDF specifies disabling scaling.
@@ -349,13 +366,16 @@ bool PDFShouldDisableScaling(blink::WebLocalFrame* frame,
   return PDFShouldDisableScalingBasedOnPreset(preset_options, params);
 }
 
+#if defined(ENABLE_BASIC_PRINTING)
 MarginType GetMarginsForPdf(blink::WebLocalFrame* frame,
                             const blink::WebNode& node,
                             const PrintMsg_Print_Params& params) {
   return PDFShouldDisableScaling(frame, node, params) ?
       NO_MARGINS : PRINTABLE_AREA_MARGINS;
 }
+#endif
 
+#if defined(ENABLE_PRINT_PREVIEW)
 bool FitToPageEnabled(const base::DictionaryValue& job_settings) {
   bool fit_to_paper_size = false;
   if (!job_settings.GetBoolean(kSettingFitToPageEnabled, &fit_to_paper_size)) {
@@ -397,6 +417,7 @@ blink::WebPrintScalingOption GetPrintScalingOption(
   }
   return blink::WebPrintScalingOptionFitToPrintableArea;
 }
+#endif  // defined(ENABLE_PRINT_PREVIEW)
 
 PrintMsg_Print_Params CalculatePrintParamsForCss(
     blink::WebFrame* frame,
@@ -520,9 +541,7 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
   options->SetString("pageNumber",
                      base::StringPrintf("%d/%d", page_number, total_pages));
 
-  // Fallback to initiator URL and title if it's empty for printed frame.
-  base::string16 url = source_frame.document().url().string();
-  options->SetString("url", url.empty() ? params.url : url);
+  options->SetString("url", params.url);
   base::string16 title = source_frame.document().title();
   options->SetString("title", title.empty() ? params.title : title);
 
@@ -562,7 +581,7 @@ class PrepareFrameAndViewForPrint : public blink::WebViewClient,
                               blink::WebLocalFrame* frame,
                               const blink::WebNode& node,
                               bool ignore_css_margins);
-  virtual ~PrepareFrameAndViewForPrint();
+  ~PrepareFrameAndViewForPrint() override;
 
   // Optional. Replaces |frame_| with selection if needed. Will call |on_ready|
   // when completed.
@@ -585,24 +604,22 @@ class PrepareFrameAndViewForPrint : public blink::WebViewClient,
     return owns_web_view_ && frame() && frame()->isLoading();
   }
 
+ private:
+  // blink::WebViewClient:
+  void didStopLoading() override;
   // TODO(ojan): Remove this override and have this class use a non-null
   // layerTreeView.
-  // blink::WebViewClient override:
-  virtual bool allowsBrokenNullLayerTreeView() const;
+  bool allowsBrokenNullLayerTreeView() const override;
 
- protected:
-  // blink::WebViewClient override:
-  virtual void didStopLoading();
-
-  // blink::WebFrameClient override:
-  virtual blink::WebFrame* createChildFrame(
+  // blink::WebFrameClient:
+  blink::WebFrame* createChildFrame(
       blink::WebLocalFrame* parent,
       blink::WebTreeScopeType scope,
       const blink::WebString& name,
-      blink::WebSandboxFlags sandboxFlags);
-  virtual void frameDetached(blink::WebFrame* frame, DetachType type);
+      blink::WebSandboxFlags sandboxFlags,
+      const blink::WebFrameOwnerProperties& frameOwnerProperties) override;
+  void frameDetached(blink::WebFrame* frame, DetachType type) override;
 
- private:
   void CallOnReady();
   void ResizeForPrinting();
   void RestoreSize();
@@ -712,7 +729,6 @@ void PrepareFrameAndViewForPrint::CopySelection(
   // on the page).
   WebPreferences prefs = preferences;
   prefs.javascript_enabled = false;
-  prefs.java_enabled = false;
 
   blink::WebView* web_view = blink::WebView::create(this);
   owns_web_view_ = true;
@@ -744,7 +760,8 @@ blink::WebFrame* PrepareFrameAndViewForPrint::createChildFrame(
     blink::WebLocalFrame* parent,
     blink::WebTreeScopeType scope,
     const blink::WebString& name,
-    blink::WebSandboxFlags sandboxFlags) {
+    blink::WebSandboxFlags sandboxFlags,
+    const blink::WebFrameOwnerProperties& frameOwnerProperties) {
   blink::WebFrame* frame = blink::WebLocalFrame::create(scope, this);
   parent->appendChild(frame);
   return frame;
@@ -811,7 +828,7 @@ PrintWebViewHelper::PrintWebViewHelper(content::RenderView* render_view,
       is_scripted_printing_blocked_(false),
       notify_browser_of_print_failure_(true),
       print_for_preview_(false),
-      delegate_(delegate.Pass()),
+      delegate_(std::move(delegate)),
       print_node_in_progress_(false),
       is_loading_(false),
       is_scripted_preview_delayed_(false),
@@ -826,7 +843,7 @@ PrintWebViewHelper::~PrintWebViewHelper() {
 
 // static
 void PrintWebViewHelper::DisablePreview() {
-  g_is_preview_enabled_ = false;
+  g_is_preview_enabled = false;
 }
 
 bool PrintWebViewHelper::IsScriptInitiatedPrintAllowed(blink::WebFrame* frame,
@@ -839,7 +856,7 @@ bool PrintWebViewHelper::IsScriptInitiatedPrintAllowed(blink::WebFrame* frame,
   // is app modal). If the print was initiated through user action, don't
   // throttle. Or, if the command line flag to skip throttling has been set.
   return !is_scripted_printing_blocked_ &&
-         (user_initiated || g_is_preview_enabled_ ||
+         (user_initiated || g_is_preview_enabled ||
           scripting_throttler_.IsAllowed(frame));
 }
 
@@ -870,11 +887,15 @@ void PrintWebViewHelper::PrintPage(blink::WebLocalFrame* frame,
   if (delegate_->OverridePrint(frame))
     return;
 
-  if (!g_is_preview_enabled_) {
-    Print(frame, blink::WebNode(), true);
-  } else {
+  if (g_is_preview_enabled) {
+#if defined(ENABLE_PRINT_PREVIEW)
     print_preview_context_.InitWithFrame(frame);
     RequestPrintPreview(PRINT_PREVIEW_SCRIPTED);
+#endif
+  } else {
+#if defined(ENABLE_BASIC_PRINTING)
+    Print(frame, blink::WebNode(), true);
+#endif
   }
 }
 
@@ -893,11 +914,15 @@ bool PrintWebViewHelper::OnMessageReceived(const IPC::Message& message) {
 #if defined(ENABLE_BASIC_PRINTING)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintPages, OnPrintPages)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintForSystemDialog, OnPrintForSystemDialog)
-#endif  // ENABLE_BASIC_PRINTING
+#endif  // defined(ENABLE_BASIC_PRINTING)
+#if defined(ENABLE_BASIC_PRINTING) && defined(ENABLE_PRINT_PREVIEW)
+    IPC_MESSAGE_HANDLER(PrintMsg_PrintForPrintPreview, OnPrintForPrintPreview)
+#endif
+#if defined(ENABLE_PRINT_PREVIEW)
     IPC_MESSAGE_HANDLER(PrintMsg_InitiatePrintPreview, OnInitiatePrintPreview)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintPreview, OnPrintPreview)
-    IPC_MESSAGE_HANDLER(PrintMsg_PrintForPrintPreview, OnPrintForPrintPreview)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintingDone, OnPrintingDone)
+#endif  // defined(ENABLE_PRINT_PREVIEW)
     IPC_MESSAGE_HANDLER(PrintMsg_SetScriptedPrintingBlocked,
                         SetScriptedPrintBlocked)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -907,6 +932,49 @@ bool PrintWebViewHelper::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
+bool PrintWebViewHelper::GetPrintFrame(blink::WebLocalFrame** frame) {
+  DCHECK(frame);
+  blink::WebView* webView = render_view()->GetWebView();
+  DCHECK(webView);
+  if (!webView)
+    return false;
+
+  // If the user has selected text in the currently focused frame we print
+  // only that frame (this makes print selection work for multiple frames).
+  blink::WebLocalFrame* focusedFrame =
+      webView->focusedFrame()->toWebLocalFrame();
+  *frame = focusedFrame->hasSelection()
+               ? focusedFrame
+               : webView->mainFrame()->toWebLocalFrame();
+  return true;
+}
+
+#if defined(ENABLE_BASIC_PRINTING)
+void PrintWebViewHelper::OnPrintPages() {
+  if (ipc_nesting_level_> 1)
+    return;
+  blink::WebLocalFrame* frame;
+  if (!GetPrintFrame(&frame))
+    return;
+  // If we are printing a PDF extension frame, find the plugin node and print
+  // that instead.
+  auto plugin = delegate_->GetPdfElement(frame);
+  Print(frame, plugin, false);
+}
+
+void PrintWebViewHelper::OnPrintForSystemDialog() {
+  if (ipc_nesting_level_> 1)
+    return;
+  blink::WebLocalFrame* frame = print_preview_context_.source_frame();
+  if (!frame) {
+    NOTREACHED();
+    return;
+  }
+  Print(frame, print_preview_context_.source_node(), false);
+}
+#endif  // defined(ENABLE_BASIC_PRINTING)
+
+#if defined(ENABLE_BASIC_PRINTING) && defined(ENABLE_PRINT_PREVIEW)
 void PrintWebViewHelper::OnPrintForPrintPreview(
     const base::DictionaryValue& job_settings) {
   CHECK_LE(ipc_nesting_level_, 1);
@@ -971,46 +1039,7 @@ void PrintWebViewHelper::OnPrintForPrintPreview(
     DidFinishPrinting(FAIL_PRINT);
   }
 }
-
-bool PrintWebViewHelper::GetPrintFrame(blink::WebLocalFrame** frame) {
-  DCHECK(frame);
-  blink::WebView* webView = render_view()->GetWebView();
-  DCHECK(webView);
-  if (!webView)
-    return false;
-
-  // If the user has selected text in the currently focused frame we print
-  // only that frame (this makes print selection work for multiple frames).
-  blink::WebLocalFrame* focusedFrame =
-      webView->focusedFrame()->toWebLocalFrame();
-  *frame = focusedFrame->hasSelection()
-               ? focusedFrame
-               : webView->mainFrame()->toWebLocalFrame();
-  return true;
-}
-
-#if defined(ENABLE_BASIC_PRINTING)
-void PrintWebViewHelper::OnPrintPages() {
-  CHECK_LE(ipc_nesting_level_, 1);
-  blink::WebLocalFrame* frame;
-  if (!GetPrintFrame(&frame))
-    return;
-  // If we are printing a PDF extension frame, find the plugin node and print
-  // that instead.
-  auto plugin = delegate_->GetPdfElement(frame);
-  Print(frame, plugin, false);
-}
-
-void PrintWebViewHelper::OnPrintForSystemDialog() {
-  CHECK_LE(ipc_nesting_level_, 1);
-  blink::WebLocalFrame* frame = print_preview_context_.source_frame();
-  if (!frame) {
-    NOTREACHED();
-    return;
-  }
-  Print(frame, print_preview_context_.source_node(), false);
-}
-#endif  // ENABLE_BASIC_PRINTING
+#endif  // defined(ENABLE_BASIC_PRINTING) && defined(ENABLE_PRINT_PREVIEW)
 
 void PrintWebViewHelper::GetPageSizeAndContentAreaFromPageLayout(
     const PageSizeMargins& page_layout_in_points,
@@ -1035,16 +1064,10 @@ void PrintWebViewHelper::UpdateFrameMarginsCssInfo(
   ignore_css_margins_ = (margins_type != DEFAULT_MARGINS);
 }
 
-bool PrintWebViewHelper::IsPrintToPdfRequested(
-    const base::DictionaryValue& job_settings) {
-  bool print_to_pdf = false;
-  if (!job_settings.GetBoolean(kSettingPrintToPDF, &print_to_pdf))
-    NOTREACHED();
-  return print_to_pdf;
-}
-
+#if defined(ENABLE_PRINT_PREVIEW)
 void PrintWebViewHelper::OnPrintPreview(const base::DictionaryValue& settings) {
-  CHECK_LE(ipc_nesting_level_, 1);
+  if (ipc_nesting_level_ > 1)
+    return;
 
   print_preview_context_.OnPrintPreview();
 
@@ -1202,17 +1225,53 @@ bool PrintWebViewHelper::CreatePreviewDocument() {
   return true;
 }
 
+#if !defined(OS_MACOSX) && defined(ENABLE_PRINT_PREVIEW)
+bool PrintWebViewHelper::RenderPreviewPage(
+    int page_number,
+    const PrintMsg_Print_Params& print_params) {
+  PrintMsg_PrintPage_Params page_params;
+  page_params.params = print_params;
+  page_params.page_number = page_number;
+  scoped_ptr<PdfMetafileSkia> draft_metafile;
+  PdfMetafileSkia* initial_render_metafile = print_preview_context_.metafile();
+  if (print_preview_context_.IsModifiable() && is_print_ready_metafile_sent_) {
+    draft_metafile.reset(new PdfMetafileSkia);
+    initial_render_metafile = draft_metafile.get();
+  }
+
+  base::TimeTicks begin_time = base::TimeTicks::Now();
+  PrintPageInternal(page_params, print_preview_context_.prepared_frame(),
+                    initial_render_metafile, nullptr, nullptr);
+  print_preview_context_.RenderedPreviewPage(
+      base::TimeTicks::Now() - begin_time);
+  if (draft_metafile.get()) {
+    draft_metafile->FinishDocument();
+  } else if (print_preview_context_.IsModifiable() &&
+             print_preview_context_.generate_draft_pages()) {
+    DCHECK(!draft_metafile.get());
+    draft_metafile =
+        print_preview_context_.metafile()->GetMetafileForCurrentPage();
+  }
+  return PreviewPageRendered(page_number, draft_metafile.get());
+}
+#endif  // !defined(OS_MACOSX) && defined(ENABLE_PRINT_PREVIEW)
+
 bool PrintWebViewHelper::FinalizePrintReadyDocument() {
   DCHECK(!is_print_ready_metafile_sent_);
   print_preview_context_.FinalizePrintReadyDocument();
 
-  // Get the size of the resulting metafile.
   PdfMetafileSkia* metafile = print_preview_context_.metafile();
-  uint32 buf_size = metafile->GetDataSize();
-  DCHECK_GT(buf_size, 0u);
-
   PrintHostMsg_DidPreviewDocument_Params preview_params;
-  preview_params.data_size = buf_size;
+
+  // Ask the browser to create the shared memory for us.
+  if (!CopyMetafileDataToSharedMem(*metafile,
+                                   &(preview_params.metafile_data_handle))) {
+    LOG(ERROR) << "CopyMetafileDataToSharedMem failed";
+    print_preview_context_.set_error(PREVIEW_ERROR_METAFILE_COPY_FAILED);
+    return false;
+  }
+
+  preview_params.data_size = metafile->GetDataSize();
   preview_params.document_cookie = print_pages_params_->params.document_cookie;
   preview_params.expected_pages_count =
       print_preview_context_.total_page_count();
@@ -1220,21 +1279,16 @@ bool PrintWebViewHelper::FinalizePrintReadyDocument() {
   preview_params.preview_request_id =
       print_pages_params_->params.preview_request_id;
 
-  // Ask the browser to create the shared memory for us.
-  if (!CopyMetafileDataToSharedMem(metafile,
-                                   &(preview_params.metafile_data_handle))) {
-    LOG(ERROR) << "CopyMetafileDataToSharedMem failed";
-    print_preview_context_.set_error(PREVIEW_ERROR_METAFILE_COPY_FAILED);
-    return false;
-  }
   is_print_ready_metafile_sent_ = true;
 
   Send(new PrintHostMsg_MetafileReadyForPrinting(routing_id(), preview_params));
   return true;
 }
+#endif  // defined(ENABLE_PRINT_PREVIEW)
 
 void PrintWebViewHelper::OnPrintingDone(bool success) {
-  CHECK_LE(ipc_nesting_level_, 1);
+  if (ipc_nesting_level_ > 1)
+    return;
   notify_browser_of_print_failure_ = false;
   if (!success)
     LOG(ERROR) << "Failure in OnPrintingDone";
@@ -1245,8 +1299,10 @@ void PrintWebViewHelper::SetScriptedPrintBlocked(bool blocked) {
   is_scripted_printing_blocked_ = blocked;
 }
 
+#if defined(ENABLE_PRINT_PREVIEW)
 void PrintWebViewHelper::OnInitiatePrintPreview(bool selection_only) {
-  CHECK_LE(ipc_nesting_level_, 1);
+  if (ipc_nesting_level_ > 1)
+    return;
   blink::WebLocalFrame* frame = NULL;
   GetPrintFrame(&frame);
   DCHECK(frame);
@@ -1262,6 +1318,7 @@ void PrintWebViewHelper::OnInitiatePrintPreview(bool selection_only) {
                           ? PRINT_PREVIEW_USER_INITIATED_SELECTION
                           : PRINT_PREVIEW_USER_INITIATED_ENTIRE_FRAME);
 }
+#endif
 
 bool PrintWebViewHelper::IsPrintingEnabled() {
   bool result = false;
@@ -1287,17 +1344,22 @@ void PrintWebViewHelper::PrintNode(const blink::WebNode& node) {
 
   // Make a copy of the node, in case RenderView::OnContextMenuClosed resets
   // its |context_menu_node_|.
-  if (!g_is_preview_enabled_) {
-    blink::WebNode duplicate_node(node);
-    Print(duplicate_node.document().frame(), duplicate_node, false);
-  } else {
+  if (g_is_preview_enabled) {
+#if defined(ENABLE_PRINT_PREVIEW)
     print_preview_context_.InitWithNode(node);
     RequestPrintPreview(PRINT_PREVIEW_USER_INITIATED_CONTEXT_NODE);
+#endif
+  } else {
+#if defined(ENABLE_BASIC_PRINTING)
+    blink::WebNode duplicate_node(node);
+    Print(duplicate_node.document().frame(), duplicate_node, false);
+#endif
   }
 
   print_node_in_progress_ = false;
 }
 
+#if defined(ENABLE_BASIC_PRINTING)
 void PrintWebViewHelper::Print(blink::WebLocalFrame* frame,
                                const blink::WebNode& node,
                                bool is_scripted) {
@@ -1334,6 +1396,7 @@ void PrintWebViewHelper::Print(blink::WebLocalFrame* frame,
   }
   scripting_throttler_.Reset();
 }
+#endif  // defined(ENABLE_BASIC_PRINTING)
 
 void PrintWebViewHelper::DidFinishPrinting(PrintingResult result) {
   switch (result) {
@@ -1351,6 +1414,7 @@ void PrintWebViewHelper::DidFinishPrinting(PrintingResult result) {
       }
       break;
 
+#if defined(ENABLE_PRINT_PREVIEW)
     case FAIL_PREVIEW:
       int cookie =
           print_pages_params_ ? print_pages_params_->params.document_cookie : 0;
@@ -1362,12 +1426,14 @@ void PrintWebViewHelper::DidFinishPrinting(PrintingResult result) {
       }
       print_preview_context_.Failed(notify_browser_of_print_failure_);
       break;
+#endif  // defined(ENABLE_PRINT_PREVIEW)
   }
   prep_frame_view_.reset();
   print_pages_params_.reset();
   notify_browser_of_print_failure_ = true;
 }
 
+#if defined(ENABLE_BASIC_PRINTING)
 void PrintWebViewHelper::OnFramePreparedForPrintPages() {
   PrintPages();
   FinishFramePrinting();
@@ -1376,6 +1442,7 @@ void PrintWebViewHelper::OnFramePreparedForPrintPages() {
 void PrintWebViewHelper::PrintPages() {
   if (!prep_frame_view_)  // Printing is already canceled or failed.
     return;
+
   prep_frame_view_->StartPrinting();
 
   int page_count = prep_frame_view_->GetExpectedPageCount();
@@ -1387,23 +1454,18 @@ void PrintWebViewHelper::PrintPages() {
   const PrintMsg_PrintPages_Params& params = *print_pages_params_;
   const PrintMsg_Print_Params& print_params = params.params;
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#if !defined(OS_ANDROID)
   // TODO(vitalybuka): should be page_count or valid pages from params.pages.
   // See http://crbug.com/161576
   Send(new PrintHostMsg_DidGetPrintedPagesCount(routing_id(),
                                                 print_params.document_cookie,
                                                 page_count));
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !defined(OS_ANDROID)
 
   if (print_params.preview_ui_id < 0) {
     // Printing for system dialog.
     int printed_count = params.pages.empty() ? page_count : params.pages.size();
-#if !defined(OS_CHROMEOS)
     UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.SystemDialog", printed_count);
-#else
-    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToCloudPrintWebDialog",
-                         printed_count);
-#endif  // !defined(OS_CHROMEOS)
   }
 
   if (!PrintPagesNative(prep_frame_view_->frame(), page_count)) {
@@ -1415,32 +1477,7 @@ void PrintWebViewHelper::PrintPages() {
 void PrintWebViewHelper::FinishFramePrinting() {
   prep_frame_view_.reset();
 }
-
-#if defined(OS_MACOSX)
-bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
-                                          int page_count) {
-  const PrintMsg_PrintPages_Params& params = *print_pages_params_;
-  const PrintMsg_Print_Params& print_params = params.params;
-
-  PrintMsg_PrintPage_Params page_params;
-  page_params.params = print_params;
-  if (params.pages.empty()) {
-    for (int i = 0; i < page_count; ++i) {
-      page_params.page_number = i;
-      PrintPageInternal(page_params, frame);
-    }
-  } else {
-    for (size_t i = 0; i < params.pages.size(); ++i) {
-      if (params.pages[i] >= page_count)
-        break;
-      page_params.page_number = params.pages[i];
-      PrintPageInternal(page_params, frame);
-    }
-  }
-  return true;
-}
-
-#endif  // OS_MACOSX
+#endif  // defined(ENABLE_BASIC_PRINTING)
 
 // static - Not anonymous so that platform implementations can use it.
 void PrintWebViewHelper::ComputePageLayoutInPointsForCss(
@@ -1456,6 +1493,25 @@ void PrintWebViewHelper::ComputePageLayoutInPointsForCss(
           blink::WebPrintScalingOptionFitToPrintableArea,
       scale_factor);
   CalculatePageLayoutFromPrintParams(params, page_layout_in_points);
+}
+
+// static - Not anonymous so that platform implementations can use it.
+std::vector<int> PrintWebViewHelper::GetPrintedPages(
+    const PrintMsg_PrintPages_Params& params,
+    int page_count) {
+  std::vector<int> printed_pages;
+  if (params.pages.empty()) {
+    for (int i = 0; i < page_count; ++i) {
+      printed_pages.push_back(i);
+    }
+  } else {
+    for (int page : params.pages) {
+      if (page >= 0 && page < page_count) {
+        printed_pages.push_back(page);
+      }
+    }
+  }
+  return printed_pages;
 }
 
 bool PrintWebViewHelper::InitPrintSettings(bool fit_to_paper_size) {
@@ -1502,6 +1558,7 @@ bool PrintWebViewHelper::CalculateNumberOfPages(blink::WebLocalFrame* frame,
   return true;
 }
 
+#if defined(ENABLE_PRINT_PREVIEW)
 bool PrintWebViewHelper::SetOptionsFromPdfDocument(
     PrintHostMsg_SetOptionsFromDocument_Params* options) {
   blink::WebLocalFrame* source_frame = print_preview_context_.source_frame();
@@ -1610,7 +1667,9 @@ bool PrintWebViewHelper::UpdatePrintSettings(
 
   return true;
 }
+#endif  // defined(ENABLE_PRINT_PREVIEW)
 
+#if defined(ENABLE_BASIC_PRINTING)
 bool PrintWebViewHelper::GetPrintSettingsFromUser(blink::WebLocalFrame* frame,
                                                   const blink::WebNode& node,
                                                   int expected_pages_count,
@@ -1650,6 +1709,7 @@ bool PrintWebViewHelper::RenderPagesForPrint(blink::WebLocalFrame* frame,
                                              const blink::WebNode& node) {
   if (!frame || prep_frame_view_)
     return false;
+
   const PrintMsg_PrintPages_Params& params = *print_pages_params_;
   const PrintMsg_Print_Params& print_params = params.params;
   prep_frame_view_.reset(new PrepareFrameAndViewForPrint(
@@ -1662,28 +1722,126 @@ bool PrintWebViewHelper::RenderPagesForPrint(blink::WebLocalFrame* frame,
                  base::Unretained(this)));
   return true;
 }
+#endif  // defined(ENABLE_BASIC_PRINTING)
 
-#if defined(OS_POSIX)
-bool PrintWebViewHelper::CopyMetafileDataToSharedMem(
+#if !defined(OS_MACOSX)
+void PrintWebViewHelper::PrintPageInternal(
+    const PrintMsg_PrintPage_Params& params,
+    blink::WebFrame* frame,
     PdfMetafileSkia* metafile,
-    base::SharedMemoryHandle* shared_mem_handle) {
-  uint32 buf_size = metafile->GetDataSize();
-  scoped_ptr<base::SharedMemory> shared_buf(
-      content::RenderThread::Get()
-          ->HostAllocateSharedMemoryBuffer(buf_size)
-          .release());
-
-  if (shared_buf) {
-    if (shared_buf->Map(buf_size)) {
-      metafile->GetData(shared_buf->memory(), buf_size);
-      return shared_buf->GiveToProcess(base::GetCurrentProcessHandle(),
-                                       shared_mem_handle);
-    }
+    gfx::Size* page_size_in_dpi,
+    gfx::Rect* content_area_in_dpi) {
+  PageSizeMargins page_layout_in_points;
+  double css_scale_factor = 1.0f;
+  ComputePageLayoutInPointsForCss(frame, params.page_number, params.params,
+                                  ignore_css_margins_, &css_scale_factor,
+                                  &page_layout_in_points);
+  gfx::Size page_size;
+  gfx::Rect content_area;
+  GetPageSizeAndContentAreaFromPageLayout(page_layout_in_points, &page_size,
+                                          &content_area);
+  int dpi = static_cast<int>(params.params.dpi);
+  // Calculate the actual page size and content area in dpi.
+  if (page_size_in_dpi) {
+    *page_size_in_dpi =
+        gfx::Size(static_cast<int>(ConvertUnitDouble(page_size.width(),
+                                                     kPointsPerInch, dpi)),
+                  static_cast<int>(ConvertUnitDouble(page_size.height(),
+                                                     kPointsPerInch, dpi)));
   }
-  return false;
-}
-#endif  // defined(OS_POSIX)
 
+  if (content_area_in_dpi) {
+    // Output PDF matches paper size and should be printer edge to edge.
+    *content_area_in_dpi =
+        gfx::Rect(0, 0, page_size_in_dpi->width(), page_size_in_dpi->height());
+  }
+
+  gfx::Rect canvas_area =
+      params.params.display_header_footer ? gfx::Rect(page_size) : content_area;
+
+#if defined(OS_WIN) || defined(ENABLE_PRINT_PREVIEW)
+  float webkit_page_shrink_factor =
+      frame->getPrintPageShrink(params.page_number);
+  float scale_factor = css_scale_factor * webkit_page_shrink_factor;
+#endif
+  // TODO(thestig) GetVectorCanvasForNewPage() and RenderPageContent() take a
+  // different scale factor vs Windows. Figure out why and combine the two.
+#if defined(OS_WIN)
+  float platform_scale_factor = scale_factor;
+#else
+  float platform_scale_factor = css_scale_factor;
+#endif  // defined(OS_WIN)
+
+  skia::PlatformCanvas* canvas = metafile->GetVectorCanvasForNewPage(
+      page_size, canvas_area, platform_scale_factor);
+  if (!canvas)
+    return;
+
+  MetafileSkiaWrapper::SetMetafileOnCanvas(*canvas, metafile);
+
+#if defined(ENABLE_PRINT_PREVIEW)
+  if (params.params.display_header_footer) {
+    // |page_number| is 0-based, so 1 is added.
+    PrintHeaderAndFooter(canvas, params.page_number + 1,
+                         print_preview_context_.total_page_count(), *frame,
+                         scale_factor, page_layout_in_points, params.params);
+  }
+#endif  // defined(ENABLE_PRINT_PREVIEW)
+
+  float webkit_scale_factor =
+      RenderPageContent(frame, params.page_number, canvas_area, content_area,
+                        platform_scale_factor, canvas);
+  DCHECK_GT(webkit_scale_factor, 0.0f);
+
+  // Done printing. Close the canvas to retrieve the compiled metafile.
+  if (!metafile->FinishPage())
+    NOTREACHED() << "metafile failed";
+}
+#endif  // !defined(OS_MACOSX)
+
+bool PrintWebViewHelper::CopyMetafileDataToSharedMem(
+    const PdfMetafileSkia& metafile,
+    base::SharedMemoryHandle* shared_mem_handle) {
+  uint32_t buf_size = metafile.GetDataSize();
+  if (buf_size == 0)
+    return false;
+
+#if defined(OS_WIN)
+  base::SharedMemory shared_buf;
+  // Allocate a shared memory buffer to hold the generated metafile data.
+  if (!shared_buf.CreateAndMapAnonymous(buf_size))
+    return false;
+
+  // Copy the bits into shared memory.
+  if (!metafile.GetData(shared_buf.memory(), buf_size))
+    return false;
+
+  if (!shared_buf.GiveToProcess(base::GetCurrentProcessHandle(),
+                                shared_mem_handle)) {
+    return false;
+  }
+
+  Send(new PrintHostMsg_DuplicateSection(routing_id(), *shared_mem_handle,
+                                         shared_mem_handle));
+  return true;
+#else
+  scoped_ptr<base::SharedMemory> shared_buf(
+      content::RenderThread::Get()->HostAllocateSharedMemoryBuffer(buf_size));
+  if (!shared_buf)
+    return false;
+
+  if (!shared_buf->Map(buf_size))
+    return false;
+
+  if (!metafile.GetData(shared_buf->memory(), buf_size))
+    return false;
+
+  return shared_buf->GiveToProcess(base::GetCurrentProcessHandle(),
+                                   shared_mem_handle);
+#endif  // defined(OS_WIN)
+}
+
+#if defined(ENABLE_PRINT_PREVIEW)
 void PrintWebViewHelper::ShowScriptedPrintPreview() {
   if (is_scripted_preview_delayed_) {
     is_scripted_preview_delayed_ = false;
@@ -1797,15 +1955,13 @@ bool PrintWebViewHelper::PreviewPageRendered(int page_number,
 
   PrintHostMsg_DidPreviewPage_Params preview_page_params;
   // Get the size of the resulting metafile.
-  uint32 buf_size = metafile->GetDataSize();
-  DCHECK_GT(buf_size, 0u);
   if (!CopyMetafileDataToSharedMem(
-          metafile, &(preview_page_params.metafile_data_handle))) {
+          *metafile, &(preview_page_params.metafile_data_handle))) {
     LOG(ERROR) << "CopyMetafileDataToSharedMem failed";
     print_preview_context_.set_error(PREVIEW_ERROR_METAFILE_COPY_FAILED);
     return false;
   }
-  preview_page_params.data_size = buf_size;
+  preview_page_params.data_size = metafile->GetDataSize();
   preview_page_params.page_number = page_number;
   preview_page_params.preview_request_id =
       print_pages_params_->params.preview_request_id;
@@ -1813,6 +1969,7 @@ bool PrintWebViewHelper::PreviewPageRendered(int page_number,
   Send(new PrintHostMsg_DidPreviewPage(routing_id(), preview_page_params));
   return true;
 }
+#endif  // defined(ENABLE_PRINT_PREVIEW)
 
 PrintWebViewHelper::PrintPreviewContext::PrintPreviewContext()
     : total_page_count_(0),

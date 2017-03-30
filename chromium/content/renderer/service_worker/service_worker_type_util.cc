@@ -10,9 +10,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerRequest.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerResponse.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
 
 namespace content {
 
@@ -23,10 +23,11 @@ class HeaderVisitor : public blink::WebHTTPHeaderVisitor {
   HeaderVisitor(ServiceWorkerHeaderMap* headers) : headers_(headers) {}
   virtual ~HeaderVisitor() {}
 
-  virtual void visitHeader(const blink::WebString& name,
-                           const blink::WebString& value) {
-    const std::string header_name = base::UTF16ToASCII(name);
-    const std::string header_value = base::UTF16ToASCII(value);
+  void visitHeader(const blink::WebString& name,
+                   const blink::WebString& value) override {
+    // Headers are ISO Latin 1.
+    const std::string& header_name = name.latin1();
+    const std::string& header_value = value.latin1();
     CHECK(header_name.find('\0') == std::string::npos);
     CHECK(header_value.find('\0') == std::string::npos);
     headers_->insert(ServiceWorkerHeaderMap::value_type(
@@ -38,7 +39,7 @@ class HeaderVisitor : public blink::WebHTTPHeaderVisitor {
 };
 
 scoped_ptr<HeaderVisitor> MakeHeaderVisitor(ServiceWorkerHeaderMap* headers) {
-  return scoped_ptr<HeaderVisitor>(new HeaderVisitor(headers)).Pass();
+  return scoped_ptr<HeaderVisitor>(new HeaderVisitor(headers));
 }
 
 }  // namespace

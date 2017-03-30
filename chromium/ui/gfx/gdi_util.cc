@@ -4,6 +4,10 @@
 
 #include "ui/gfx/gdi_util.h"
 
+#include <stddef.h>
+
+#include <algorithm>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 
@@ -131,7 +135,7 @@ void StretchDIBits(HDC hdc, int dest_x, int dest_y, int dest_w, int dest_h,
                          src_x, bottom_up_src_y, src_w, src_h,
                          pixels, bitmap_info, DIB_RGB_COLORS, SRCCOPY);
   }
-  DCHECK(rv != GDI_ERROR);
+  DCHECK(rv != static_cast<int>(GDI_ERROR));
 }
 
 }  // namespace gfx

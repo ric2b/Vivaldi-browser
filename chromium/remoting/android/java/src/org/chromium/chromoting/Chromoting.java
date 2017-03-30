@@ -4,73 +4,67 @@
 
 package org.chromium.chromoting;
 
-import android.accounts.Account;
-import android.accounts.AccountManager;
-import android.accounts.AccountManagerCallback;
-import android.accounts.AccountManagerFuture;
-import android.accounts.AuthenticatorException;
-import android.accounts.OperationCanceledException;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
-import android.content.res.Resources;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v4.widget.DrawerLayout;
-import android.support.v7.app.ActionBarActivity;
 import android.support.v7.app.ActionBarDrawerToggle;
+import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.text.TextUtils;
-import android.util.Log;
+import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.Spinner;
 import android.widget.Toast;
 
+import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.Log;
+import org.chromium.chromoting.accountswitcher.AccountSwitcher;
+import org.chromium.chromoting.accountswitcher.AccountSwitcherFactory;
+import org.chromium.chromoting.help.HelpContext;
+import org.chromium.chromoting.help.HelpSingleton;
+import org.chromium.chromoting.jni.ConnectionListener;
 import org.chromium.chromoting.jni.JniInterface;
 
-import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Locale;
 
 /**
  * The user interface for querying and displaying a user's host list from the directory server. It
  * also requests and renews authentication tokens using the system account manager.
  */
-public class Chromoting extends ActionBarActivity implements JniInterface.ConnectionListener,
-        AccountManagerCallback<Bundle>, AdapterView.OnItemSelectedListener, HostListLoader.Callback,
-        View.OnClickListener {
+public class Chromoting extends AppCompatActivity implements ConnectionListener,
+        AccountSwitcher.Callback, HostListLoader.Callback, View.OnClickListener {
+    private static final String TAG = "Chromoting";
+
     /** Only accounts of this type will be selectable for authentication. */
     private static final String ACCOUNT_TYPE = "com.google";
 
-    /** Scopes at which the authentication token we request will be valid. */
-    private static final String TOKEN_SCOPE = "oauth2:https://www.googleapis.com/auth/chromoting "
-            + "https://www.googleapis.com/auth/googletalk";
+    /** Result code used for starting {@link DesktopActivity}. */
+    public static final int DESKTOP_ACTIVITY = 0;
 
-    /** Web page to be displayed in the Help screen when launched from this activity. */
-    private static final String HELP_URL =
-            "https://support.google.com/chrome/?p=mobile_crd_hostslist";
+    /** Result code used for starting {@link CardboardDesktopActivity}. */
+    public static final int CARDBOARD_DESKTOP_ACTIVITY = 1;
 
-    /** Web page to be displayed when user triggers the hyperlink for setting up hosts. */
-    private static final String HOST_SETUP_URL =
-            "https://support.google.com/chrome/answer/1649523";
+    /** Preference names for storing selected and recent accounts. */
+    private static final String PREFERENCE_SELECTED_ACCOUNT = "account_name";
+    private static final String PREFERENCE_RECENT_ACCOUNT_PREFIX = "recent_account_";
 
-    /** User's account details. */
-    private Account mAccount;
-
-    /** List of accounts on the system. */
-    private Account[] mAccounts;
-
-    /** SpinnerAdapter used in the action bar for selecting accounts. */
-    private AccountsAdapter mAccountsAdapter;
+    /** User's account name (email). */
+    private String mAccount;
 
     /** Account auth token. */
     private String mToken;
@@ -113,7 +107,11 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
      */
     private boolean mWaitingForAuthToken = false;
 
+    private DrawerLayout mDrawerLayout;
+
     private ActionBarDrawerToggle mDrawerToggle;
+
+    private AccountSwitcher mAccountSwitcher;
 
     /** Shows a warning explaining that a Google account is required, then closes the activity. */
     private void showNoAccountsDialog() {
@@ -192,12 +190,51 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
 
         findViewById(R.id.host_setup_link_android).setOnClickListener(this);
 
-        DrawerLayout drawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
-        mDrawerToggle = new ActionBarDrawerToggle(this, drawerLayout,
+        mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
+        mDrawerToggle = new ActionBarDrawerToggle(this, mDrawerLayout, toolbar,
                 R.string.open_navigation_drawer, R.string.close_navigation_drawer);
-        drawerLayout.setDrawerListener(mDrawerToggle);
+        mDrawerLayout.setDrawerListener(mDrawerToggle);
 
-        ListView navigationMenu = (ListView) findViewById(R.id.navigation_menu);
+        // Disable the hamburger icon animation. This is more complex than it ought to be.
+        // The animation can be customized by tweaking some style parameters - see
+        // http://developer.android.com/reference/android/support/v7/appcompat/R.styleable.html#DrawerArrowToggle .
+        // But these can't disable the animation completely.
+        // The icon can only be changed by disabling the drawer indicator, which has side-effects
+        // that must be worked around. It disables the built-in click listener, so this has to be
+        // implemented and added. This also requires that the toolbar be passed to the
+        // ActionBarDrawerToggle ctor above (otherwise the listener is ignored and warnings are
+        // logged).
+        // Also, the animation itself is a private implementation detail - it is not possible to
+        // simply access the first frame of the animation. And the hamburger menu icon doesn't
+        // exist as a builtin Android resource, so it has to be provided as an application
+        // resource instead (R.drawable.ic_menu). And, on Lollipop devices and above, it should be
+        // tinted to match the colorControlNormal theme attribute.
+        mDrawerToggle.setDrawerIndicatorEnabled(false);
+        mDrawerToggle.setToolbarNavigationClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        if (mDrawerLayout.isDrawerOpen(Gravity.START)) {
+                            mDrawerLayout.closeDrawer(Gravity.START);
+                        } else {
+                            mDrawerLayout.openDrawer(Gravity.START);
+                        }
+                    }
+                });
+
+        // Set the three-line icon instead of the default which is a tinted arrow icon.
+        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        Drawable menuIcon = ApiCompatibilityUtils.getDrawable(getResources(), R.drawable.ic_menu);
+        DrawableCompat.setTint(menuIcon.mutate(),
+                ChromotingUtil.getColorAttribute(this, R.attr.colorControlNormal));
+        getSupportActionBar().setHomeAsUpIndicator(menuIcon);
+
+        ListView navigationMenu = new ListView(this);
+        navigationMenu.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
+        navigationMenu.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT));
+
         String[] navigationMenuItems = new String[] {
             getString(R.string.actionbar_help)
         };
@@ -209,12 +246,20 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
                     @Override
                     public void onItemClick(AdapterView<?> parent, View view, int position,
                             long id) {
-                        HelpActivity.launch(Chromoting.this, HELP_URL);
+                        HelpSingleton.getInstance().launchHelp(Chromoting.this,
+                                HelpContext.HOST_LIST);
                     }
                 });
 
-        // Make the navigation drawer icon visible in the ActionBar.
-        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        mAccountSwitcher = AccountSwitcherFactory.getInstance().createAccountSwitcher(this, this);
+        mAccountSwitcher.setNavigation(navigationMenu);
+        LinearLayout navigationDrawer = (LinearLayout) findViewById(R.id.navigation_drawer);
+        mAccountSwitcher.setDrawer(navigationDrawer);
+        View switcherView = mAccountSwitcher.getView();
+        switcherView.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        navigationDrawer.addView(switcherView, 0);
 
         // Bring native components online.
         JniInterface.loadLibrary(this);
@@ -244,35 +289,46 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
     public void onStart() {
         super.onStart();
 
-        mAccounts = AccountManager.get(this).getAccountsByType(ACCOUNT_TYPE);
-        if (mAccounts.length == 0) {
-            showNoAccountsDialog();
-            return;
-        }
-
-        SharedPreferences prefs = getPreferences(MODE_PRIVATE);
-        int index = -1;
-        if (prefs.contains("account_name") && prefs.contains("account_type")) {
-            mAccount = new Account(prefs.getString("account_name", null),
-                    prefs.getString("account_type", null));
-            index = Arrays.asList(mAccounts).indexOf(mAccount);
-        }
-        if (index == -1) {
-            // Preference not loaded, or does not correspond to a valid account, so just pick the
-            // first account arbitrarily.
-            index = 0;
-            mAccount = mAccounts[0];
-        }
-
         getSupportActionBar().setTitle(R.string.mode_me2me);
 
-        mAccountsAdapter = new AccountsAdapter(this, mAccounts);
-        Spinner accountsSpinner = (Spinner) findViewById(R.id.accounts_spinner);
-        accountsSpinner.setAdapter(mAccountsAdapter);
-        accountsSpinner.setOnItemSelectedListener(this);
-        accountsSpinner.setSelection(index);
+        // Load any previously-selected account and recents from Preferences.
+        SharedPreferences prefs = getPreferences(MODE_PRIVATE);
 
-        refreshHostList();
+        String selected = prefs.getString(PREFERENCE_SELECTED_ACCOUNT, null);
+
+        ArrayList<String> recents = new ArrayList<String>();
+        for (int i = 0;; i++) {
+            String prefName = PREFERENCE_RECENT_ACCOUNT_PREFIX + i;
+            String recent = prefs.getString(prefName, null);
+            if (recent != null) {
+                recents.add(recent);
+            } else {
+                break;
+            }
+        }
+
+        String[] recentsArray = recents.toArray(new String[recents.size()]);
+        mAccountSwitcher.setSelectedAndRecentAccounts(selected, recentsArray);
+        mAccountSwitcher.reloadAccounts();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        String[] recents = mAccountSwitcher.getRecentAccounts();
+
+        SharedPreferences.Editor preferences = getPreferences(MODE_PRIVATE).edit();
+        if (mAccount != null) {
+            preferences.putString(PREFERENCE_SELECTED_ACCOUNT, mAccount);
+        }
+
+        for (int i = 0; i < recents.length; i++) {
+            String prefName = PREFERENCE_RECENT_ACCOUNT_PREFIX + i;
+            preferences.putString(prefName, recents[i]);
+        }
+
+        preferences.apply();
     }
 
     /** Called when the activity is finally finished. */
@@ -280,6 +336,41 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
     public void onDestroy() {
         super.onDestroy();
         JniInterface.disconnectFromHost();
+        mAccountSwitcher.destroy();
+    }
+
+    /** Called when a child Activity exits and sends a result back to this Activity. */
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        mAccountSwitcher.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == OAuthTokenFetcher.REQUEST_CODE_RECOVER_FROM_OAUTH_ERROR) {
+            if (resultCode == RESULT_OK) {
+                // User gave OAuth permission to this app (or recovered from any OAuth failure),
+                // so retry fetching the token.
+                requestAuthToken(false);
+            } else {
+                // User denied permission or cancelled the dialog, so cancel the request.
+                mWaitingForAuthToken = false;
+                setHostListProgressVisible(false);
+            }
+        }
+    }
+
+    /** Called when a permissions request has returned. */
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            int[] grantResults) {
+        // This is currently only used by AccountSwitcherBasic.
+        // Check that the user has granted the needed permission, and reload the accounts.
+        // Otherwise, assume something unexpected occurred, or the user cancelled the request.
+        if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            mAccountSwitcher.reloadAccounts();
+        } else if (permissions.length == 0) {
+            Log.e(TAG, "User cancelled the permission request.");
+        } else {
+            Log.e(TAG, "Permission %s was not granted.", permissions[0]);
+        }
     }
 
     /** Called when the display is rotated (as registered in the manifest). */
@@ -300,6 +391,8 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
             // If there is no account, don't allow the user to refresh the listing.
             mRefreshButton.setEnabled(false);
         }
+
+        ChromotingUtil.tintMenuIcons(this, menu);
 
         return super.onCreateOptionsMenu(menu);
     }
@@ -322,7 +415,7 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
     /** Called when the user touches hyperlinked text. */
     @Override
     public void onClick(View view) {
-        HelpActivity.launch(this, HOST_SETUP_URL);
+        HelpSingleton.getInstance().launchHelp(this, HelpContext.HOST_SETUP);
     }
 
     /** Called when the user taps on a host entry. */
@@ -331,22 +424,8 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
         if (host.isOnline) {
             connectToHost(host);
         } else {
-            String tooltip = getHostOfflineTooltip(host.hostOfflineReason);
+            String tooltip = host.getHostOfflineReasonText(this);
             Toast.makeText(this, tooltip, Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private String getHostOfflineTooltip(String hostOfflineReason) {
-        if (TextUtils.isEmpty(hostOfflineReason)) {
-            return getString(R.string.host_offline_tooltip);
-        }
-        try {
-            String resourceName = "offline_reason_" + hostOfflineReason.toLowerCase(Locale.ENGLISH);
-            int resourceId = getResources().getIdentifier(resourceName, "string",
-                    getPackageName());
-            return getString(resourceId);
-        } catch (Resources.NotFoundException ignored) {
-            return getString(R.string.offline_reason_unknown, hostOfflineReason);
         }
     }
 
@@ -365,7 +444,7 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
                 });
         SessionConnector connector = new SessionConnector(this, this, mHostListLoader);
         mAuthenticator = new SessionAuthenticator(this, host);
-        connector.connectToHost(mAccount.name, mToken, host, mAuthenticator);
+        connector.connectToHost(mAccount, mToken, host, mAuthenticator);
     }
 
     private void refreshHostList() {
@@ -377,52 +456,41 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
         setHostListProgressVisible(true);
 
         // The refresh button simply makes use of the currently-chosen account.
-        requestAuthToken();
+        requestAuthToken(false);
     }
 
-    private void requestAuthToken() {
-        AccountManager.get(this).getAuthToken(mAccount, TOKEN_SCOPE, null, this, this, null);
+    private void requestAuthToken(boolean expireCurrentToken) {
         mWaitingForAuthToken = true;
+
+        OAuthTokenFetcher fetcher = new OAuthTokenFetcher(this, mAccount,
+                new OAuthTokenFetcher.Callback() {
+                    @Override
+                    public void onTokenFetched(String token) {
+                        mWaitingForAuthToken = false;
+                        mToken = token;
+                        mHostListLoader.retrieveHostList(mToken, Chromoting.this);
+                    }
+
+                    @Override
+                    public void onError(int errorResource) {
+                        mWaitingForAuthToken = false;
+                        setHostListProgressVisible(false);
+                        String explanation = getString(errorResource);
+                        Toast.makeText(Chromoting.this, explanation, Toast.LENGTH_LONG).show();
+                    }
+                });
+
+        if (expireCurrentToken) {
+            fetcher.clearAndFetch(mToken);
+            mToken = null;
+        } else {
+            fetcher.fetch();
+        }
     }
 
     @Override
-    public void run(AccountManagerFuture<Bundle> future) {
-        Log.i("auth", "User finished with auth dialogs");
-        mWaitingForAuthToken = false;
-
-        Bundle result = null;
-        String explanation = null;
-        try {
-            // Here comes our auth token from the Android system.
-            result = future.getResult();
-        } catch (OperationCanceledException ex) {
-            // User canceled authentication. No need to report an error.
-        } catch (AuthenticatorException ex) {
-            explanation = getString(R.string.error_unexpected);
-        } catch (IOException ex) {
-            explanation = getString(R.string.error_network_error);
-        }
-
-        if (result == null) {
-            setHostListProgressVisible(false);
-            if (explanation != null) {
-                Toast.makeText(this, explanation, Toast.LENGTH_LONG).show();
-            }
-            return;
-        }
-
-        mToken = result.getString(AccountManager.KEY_AUTHTOKEN);
-        Log.i("auth", "Received an auth token from system");
-
-        mHostListLoader.retrieveHostList(mToken, this);
-    }
-
-    @Override
-    public void onItemSelected(AdapterView<?> parent, View view, int itemPosition, long itemId) {
-        mAccount = mAccounts[itemPosition];
-
-        getPreferences(MODE_PRIVATE).edit().putString("account_name", mAccount.name)
-                .putString("account_type", mAccount.type).apply();
+    public void onAccountSelected(String accountName) {
+        mAccount = accountName;
 
         // The current host list is no longer valid for the new account, so clear the list.
         mHosts = new HostInfo[0];
@@ -431,7 +499,13 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
     }
 
     @Override
-    public void onNothingSelected(AdapterView<?> parent) {
+    public void onAccountsListEmpty() {
+        showNoAccountsDialog();
+    }
+
+    @Override
+    public void onRequestCloseDrawer() {
+        mDrawerLayout.closeDrawers();
     }
 
     @Override
@@ -472,20 +546,14 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
 
         if (!mTriedNewAuthToken) {
             // This was our first connection attempt.
-
-            AccountManager authenticator = AccountManager.get(this);
             mTriedNewAuthToken = true;
-
-            Log.w("auth", "Requesting renewal of rejected auth token");
-            authenticator.invalidateAuthToken(mAccount.type, mToken);
-            mToken = null;
-            requestAuthToken();
+            requestAuthToken(true);
 
             // We're not in an error state *yet*.
             return;
         } else {
             // Authentication truly failed.
-            Log.e("auth", "Fresh auth token was also rejected");
+            Log.e(TAG, "Fresh auth token was rejected.");
             explanation = getString(R.string.error_authentication_failed);
             Toast.makeText(this, explanation, Toast.LENGTH_LONG).show();
             setHostListProgressVisible(false);
@@ -499,14 +567,12 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
         if (mRefreshButton != null) {
             mRefreshButton.setEnabled(mAccount != null);
         }
-        ArrayAdapter<HostInfo> displayer = new HostListAdapter(this, R.layout.host, mHosts);
-        Log.i("hostlist", "About to populate host list display");
+        ArrayAdapter<HostInfo> displayer = new HostListAdapter(this, mHosts);
         mHostListView.setAdapter(displayer);
     }
 
     @Override
-    public void onConnectionState(JniInterface.ConnectionListener.State state,
-            JniInterface.ConnectionListener.Error error) {
+    public void onConnectionState(ConnectionListener.State state, ConnectionListener.Error error) {
         boolean dismissProgress = false;
         switch (state) {
             case INITIALIZING:
@@ -518,14 +584,14 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
             case CONNECTED:
                 dismissProgress = true;
                 // Display the remote desktop.
-                startActivityForResult(new Intent(this, Desktop.class), 0);
+                startActivityForResult(new Intent(this, Desktop.class), DESKTOP_ACTIVITY);
                 break;
 
             case FAILED:
                 dismissProgress = true;
                 Toast.makeText(this, getString(error.message()), Toast.LENGTH_LONG).show();
                 // Close the Desktop view, if it is currently running.
-                finishActivity(0);
+                finishActivity(DESKTOP_ACTIVITY);
                 break;
 
             case CLOSED:
@@ -533,7 +599,7 @@ public class Chromoting extends ActionBarActivity implements JniInterface.Connec
                 // because of an error, which will trigger toast already. Or the disconnection will
                 // have been initiated by the user.
                 dismissProgress = true;
-                finishActivity(0);
+                finishActivity(DESKTOP_ACTIVITY);
                 break;
 
             default:

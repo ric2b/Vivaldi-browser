@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SYNC_DRIVER_GENERIC_CHANGE_PROCESSOR_FACTORY_H_
 #define COMPONENTS_SYNC_DRIVER_GENERIC_CHANGE_PROCESSOR_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "sync/internal_api/public/base/model_type.h"
 
@@ -19,7 +20,7 @@ namespace sync_driver {
 
 class DataTypeErrorHandler;
 class GenericChangeProcessor;
-class SyncApiComponentFactory;
+class SyncClient;
 
 // Because GenericChangeProcessors are created and used only from the model
 // thread, their lifetime is strictly shorter than other components like
@@ -40,7 +41,7 @@ class GenericChangeProcessorFactory {
       DataTypeErrorHandler* error_handler,
       const base::WeakPtr<syncer::SyncableService>& local_service,
       const base::WeakPtr<syncer::SyncMergeResult>& merge_result,
-      SyncApiComponentFactory* sync_factory);
+      SyncClient* sync_client);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GenericChangeProcessorFactory);

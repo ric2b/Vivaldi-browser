@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/common/instant_types.h"
 #include "chrome/common/ntp_logging_events.h"
@@ -121,9 +121,6 @@ class SearchBox : public content::RenderViewObserver,
   const ThemeBackgroundInfo& GetThemeBackgroundInfo();
   const EmbeddedSearchRequestParams& GetEmbeddedSearchRequestParams();
 
-  // Sends ChromeViewHostMsg_SetVoiceSearchSupported to the browser.
-  void SetVoiceSearchSupported(bool supported);
-
   // Sends ChromeViewHostMsg_StartCapturingKeyStrokes to the browser.
   void StartCapturingKeyStrokes();
 
@@ -143,7 +140,6 @@ class SearchBox : public content::RenderViewObserver,
   bool is_key_capture_enabled() const { return is_key_capture_enabled_; }
   bool display_instant_results() const { return display_instant_results_; }
   const base::string16& query() const { return query_; }
-  int start_margin() const { return start_margin_; }
   const InstantSuggestion& suggestion() const { return suggestion_; }
 
  private:
@@ -157,7 +153,6 @@ class SearchBox : public content::RenderViewObserver,
   void OnFocusChanged(OmniboxFocusState new_focus_state,
                       OmniboxFocusChangeReason reason);
   void OnHistorySyncCheckResult(bool sync_history);
-  void OnMarginChange(int margin);
   void OnMostVisitedChanged(
       const std::vector<InstantMostVisitedItem>& items);
   void OnPromoInformationReceived(bool is_app_launcher_enabled);
@@ -167,7 +162,6 @@ class SearchBox : public content::RenderViewObserver,
   void OnSubmit(const base::string16& query,
                 const EmbeddedSearchRequestParams& params);
   void OnThemeChanged(const ThemeBackgroundInfo& theme_info);
-  void OnToggleVoiceSearch();
 
   // Returns the current zoom factor of the render view or 1 on failure.
   double GetZoom() const;
@@ -188,7 +182,6 @@ class SearchBox : public content::RenderViewObserver,
   ThemeBackgroundInfo theme_info_;
   base::string16 query_;
   EmbeddedSearchRequestParams embedded_search_request_params_;
-  int start_margin_;
   InstantSuggestion suggestion_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchBox);

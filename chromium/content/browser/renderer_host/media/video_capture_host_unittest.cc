@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
@@ -10,12 +12,14 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/media_stream_requester.h"
@@ -79,7 +83,7 @@ class DumpVideo {
   void NewVideoFrame(const void* buffer) {
     if (file_.get() != NULL) {
       const int size = media::VideoFrame::AllocationSize(
-          media::VideoFrame::I420, coded_size_);
+          media::PIXEL_FORMAT_I420, coded_size_);
       ASSERT_EQ(1U, fwrite(buffer, size, 1, file_.get()));
     }
   }
@@ -151,7 +155,8 @@ class MockVideoCaptureHost : public VideoCaptureHost {
   void ReturnReceivedDibs(int device_id)  {
     int handle = GetReceivedDib();
     while (handle) {
-      this->OnRendererFinishedWithBuffer(device_id, handle, 0, -1.0);
+      this->OnRendererFinishedWithBuffer(device_id, handle, gpu::SyncToken(),
+                                         -1.0);
       handle = GetReceivedDib();
     }
   }
@@ -198,7 +203,7 @@ class MockVideoCaptureHost : public VideoCaptureHost {
   // These handler methods do minimal things and delegate to the mock methods.
   void OnNewBufferCreatedDispatch(int device_id,
                                   base::SharedMemoryHandle handle,
-                                  uint32 length,
+                                  uint32_t length,
                                   int buffer_id) {
     OnNewBufferCreated(device_id, handle, length, buffer_id);
     base::SharedMemory* dib = new base::SharedMemory(handle, false);
@@ -231,7 +236,7 @@ class MockVideoCaptureHost : public VideoCaptureHost {
     OnBufferFilled(params.device_id);
     if (return_buffers_) {
       VideoCaptureHost::OnRendererFinishedWithBuffer(
-          params.device_id, params.buffer_id, 0, -1.0);
+          params.device_id, params.buffer_id, gpu::SyncToken(), -1.0);
     }
   }
 
@@ -274,7 +279,8 @@ class VideoCaptureHostTest : public testing::Test {
         switches::kUseFakeDeviceForMediaStream);
 #endif
     media_stream_manager_.reset(new MediaStreamManager(audio_manager_.get()));
-    media_stream_manager_->UseFakeUI(scoped_ptr<FakeMediaStreamUIProxy>());
+    media_stream_manager_->UseFakeUIForTests(
+        scoped_ptr<FakeMediaStreamUIProxy>());
 
     // Create a Host and connect it to a simulated IPC channel.
     host_ = new MockVideoCaptureHost(media_stream_manager_.get());

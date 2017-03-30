@@ -2,46 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/timer/mock_timer.h"
-#include "chrome/browser/task_management/task_manager_interface.h"
+#include <stdint.h>
+
+#include "base/macros.h"
+#include "chrome/browser/task_management/test_task_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace task_management {
 
 namespace {
 
-// This is a partial stub implementation to test the behavior of the base class
-// TaskManagerInterface in response to adding and removing observers.
-class TestTaskManager : public TaskManagerInterface {
- public:
-  TestTaskManager() : TaskManagerInterface() {
-    set_timer_for_testing(scoped_ptr<base::Timer>(new base::MockTimer(true,
-                                                                      true)));
-  }
-  ~TestTaskManager() override {}
-
-  base::TimeDelta GetRefreshTime() {
-    return GetCurrentRefreshTime();
-  }
-
-  int64 GetEnabledFlags() {
-    return enabled_resources_flags();
-  }
-
- protected:
-  // task_management::TaskManager:
-  void Refresh() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestTaskManager);
-};
-
 // Defines a concrete observer that will be used for testing.
 class TestObserver : public TaskManagerObserver {
  public:
-  TestObserver(base::TimeDelta refresh_time, int64 resources_flags)
-      : TaskManagerObserver(refresh_time, resources_flags) {
-  }
+  TestObserver(base::TimeDelta refresh_time, int64_t resources_flags)
+      : TaskManagerObserver(refresh_time, resources_flags) {}
 
   ~TestObserver() override {}
 
@@ -76,11 +51,11 @@ class TaskManagerObserverTest : public testing::Test {
 TEST_F(TaskManagerObserverTest, Basic) {
   base::TimeDelta refresh_time1 = base::TimeDelta::FromSeconds(2);
   base::TimeDelta refresh_time2 = base::TimeDelta::FromMilliseconds(999);
-  int64 flags1 = RefreshType::REFRESH_TYPE_CPU |
-      RefreshType::REFRESH_TYPE_WEBCACHE_STATS |
-      RefreshType::REFRESH_TYPE_HANDLES;
-  int64 flags2 = RefreshType::REFRESH_TYPE_MEMORY |
-      RefreshType::REFRESH_TYPE_NACL;
+  int64_t flags1 = RefreshType::REFRESH_TYPE_CPU |
+                   RefreshType::REFRESH_TYPE_WEBCACHE_STATS |
+                   RefreshType::REFRESH_TYPE_HANDLES;
+  int64_t flags2 =
+      RefreshType::REFRESH_TYPE_MEMORY | RefreshType::REFRESH_TYPE_NACL;
 
   TestObserver observer1(refresh_time1, flags1);
   TestObserver observer2(refresh_time2, flags2);
@@ -102,14 +77,14 @@ TEST_F(TaskManagerObserverTest, TaskManagerResponseToObservers) {
   base::TimeDelta refresh_time2 = base::TimeDelta::FromSeconds(10);
   base::TimeDelta refresh_time3 = base::TimeDelta::FromSeconds(3);
   base::TimeDelta refresh_time4 = base::TimeDelta::FromSeconds(2);
-  int64 flags1 = RefreshType::REFRESH_TYPE_CPU |
-      RefreshType::REFRESH_TYPE_WEBCACHE_STATS |
-      RefreshType::REFRESH_TYPE_HANDLES;
-  int64 flags2 = RefreshType::REFRESH_TYPE_MEMORY |
-      RefreshType::REFRESH_TYPE_NACL;
-  int64 flags3 = RefreshType::REFRESH_TYPE_MEMORY |
-      RefreshType::REFRESH_TYPE_CPU;
-  int64 flags4 = RefreshType::REFRESH_TYPE_GPU_MEMORY;
+  int64_t flags1 = RefreshType::REFRESH_TYPE_CPU |
+                   RefreshType::REFRESH_TYPE_WEBCACHE_STATS |
+                   RefreshType::REFRESH_TYPE_HANDLES;
+  int64_t flags2 =
+      RefreshType::REFRESH_TYPE_MEMORY | RefreshType::REFRESH_TYPE_NACL;
+  int64_t flags3 =
+      RefreshType::REFRESH_TYPE_MEMORY | RefreshType::REFRESH_TYPE_CPU;
+  int64_t flags4 = RefreshType::REFRESH_TYPE_GPU_MEMORY;
 
   TestObserver observer1(refresh_time1, flags1);
   TestObserver observer2(refresh_time2, flags2);

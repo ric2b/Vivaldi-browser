@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "net/cert/cert_status_flags.h"
@@ -17,7 +17,7 @@
 namespace content {
 class NavigationControllerImpl;
 
-class SSLPolicyBackend {
+class CONTENT_EXPORT SSLPolicyBackend {
  public:
   explicit SSLPolicyBackend(NavigationControllerImpl* controller);
 

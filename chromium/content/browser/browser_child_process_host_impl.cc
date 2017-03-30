@@ -11,16 +11,20 @@
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
+#include "components/tracing/tracing_switches.h"
 #include "content/browser/histogram_message_filter.h"
 #include "content/browser/loader/resource_message_filter.h"
+#include "content/browser/memory/memory_message_filter.h"
 #include "content/browser/profiler_message_filter.h"
 #include "content/browser/tracing/trace_message_filter.h"
 #include "content/common/child_process_host_impl.h"
+#include "content/common/child_process_messages.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/browser_thread.h"
@@ -29,9 +33,18 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/result_codes.h"
+#include "ipc/attachment_broker.h"
+#include "ipc/attachment_broker_privileged.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 
 #if defined(OS_MACOSX)
 #include "content/browser/mach_broker_mac.h"
+#endif
+
+
+#if defined(MOJO_SHELL_CLIENT)
+#include "content/browser/mojo/mojo_shell_client_host.h"
+#include "content/common/mojo/mojo_shell_connection_impl.h"
 #endif
 
 namespace content {
@@ -42,6 +55,11 @@ static base::LazyInstance<BrowserChildProcessHostImpl::BrowserChildProcessList>
 
 base::LazyInstance<base::ObserverList<BrowserChildProcessObserver>>
     g_observers = LAZY_INSTANCE_INITIALIZER;
+
+void NotifyProcessLaunchedAndConnected(const ChildProcessData& data) {
+  FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
+                    BrowserChildProcessLaunchedAndConnected(data));
+}
 
 void NotifyProcessHostConnected(const ChildProcessData& data) {
   FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
@@ -56,6 +74,11 @@ void NotifyProcessHostDisconnected(const ChildProcessData& data) {
 void NotifyProcessCrashed(const ChildProcessData& data, int exit_code) {
   FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
                     BrowserChildProcessCrashed(data, exit_code));
+}
+
+void NotifyProcessKilled(const ChildProcessData& data, int exit_code) {
+  FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
+                    BrowserChildProcessKilled(data, exit_code));
 }
 
 }  // namespace
@@ -78,7 +101,7 @@ BrowserChildProcessHost* BrowserChildProcessHost::FromID(int child_process_id) {
 }
 
 #if defined(OS_MACOSX)
-base::ProcessMetrics::PortProvider* BrowserChildProcessHost::GetPortProvider() {
+base::PortProvider* BrowserChildProcessHost::GetPortProvider() {
   return MachBroker::GetInstance();
 }
 #endif
@@ -108,13 +131,28 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
     BrowserChildProcessHostDelegate* delegate)
     : data_(process_type),
       delegate_(delegate),
-      power_monitor_message_broadcaster_(this) {
+      power_monitor_message_broadcaster_(this),
+      is_channel_connected_(false) {
   data_.id = ChildProcessHostImpl::GenerateChildProcessUniqueId();
+
+#if USE_ATTACHMENT_BROKER
+  // Construct the privileged attachment broker early in the life cycle of a
+  // child process. This ensures that when a test is being run in one of the
+  // single process modes, the global attachment broker is the privileged
+  // attachment broker, rather than an unprivileged attachment broker.
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  IPC::AttachmentBrokerPrivileged::CreateBrokerIfNeeded(
+      MachBroker::GetInstance());
+#else
+  IPC::AttachmentBrokerPrivileged::CreateBrokerIfNeeded();
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // USE_ATTACHMENT_BROKER
 
   child_process_host_.reset(ChildProcessHost::Create(this));
   AddFilter(new TraceMessageFilter(data_.id));
   AddFilter(new ProfilerMessageFilter(process_type));
   AddFilter(new HistogramMessageFilter);
+  AddFilter(new MemoryMessageFilter(this, process_type));
 
   g_child_process_list.Get().push_back(this);
   GetContentClient()->browser()->BrowserChildProcessHostCreated(this);
@@ -157,6 +195,7 @@ void BrowserChildProcessHostImpl::Launch(
     switches::kTraceToConsole,
     switches::kV,
     switches::kVModule,
+    "use-new-edk",  // TODO(use_chrome_edk): temporary.
   };
   cmd_line->CopySwitchesFrom(browser_command_line, kForwardSwitches,
                              arraysize(kForwardSwitches));
@@ -244,18 +283,27 @@ bool BrowserChildProcessHostImpl::OnMessageReceived(
   return delegate_->OnMessageReceived(message);
 }
 
-void BrowserChildProcessHostImpl::OnChannelConnected(int32 peer_pid) {
+void BrowserChildProcessHostImpl::OnChannelConnected(int32_t peer_pid) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  is_channel_connected_ = true;
+
 #if defined(OS_WIN)
   // From this point onward, the exit of the child process is detected by an
   // error on the IPC channel.
   early_exit_watcher_.StopWatching();
 #endif
 
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::Bind(&NotifyProcessHostConnected, data_));
 
   delegate_->OnChannelConnected(peer_pid);
+
+  if (IsProcessLaunched()) {
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::Bind(&NotifyProcessLaunchedAndConnected,
+                                       data_));
+  }
 }
 
 void BrowserChildProcessHostImpl::OnChannelError() {
@@ -264,13 +312,17 @@ void BrowserChildProcessHostImpl::OnChannelError() {
 
 void BrowserChildProcessHostImpl::OnBadMessageReceived(
     const IPC::Message& message) {
+  TerminateOnBadMessageReceived(message.type());
+}
+
+void BrowserChildProcessHostImpl::TerminateOnBadMessageReceived(uint32_t type) {
   HistogramBadMessageTerminated(data_.process_type);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableKillAfterBadIPC)) {
     return;
   }
   LOG(ERROR) << "Terminating child process for bad IPC message of type "
-      << message.type();
+             << type;
 
   // Create a memory dump. This will contain enough stack frames to work out
   // what the bad message was.
@@ -306,11 +358,17 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
                                   PROCESS_TYPE_MAX);
         break;
       }
+#if defined(OS_ANDROID)
+      case base::TERMINATION_STATUS_OOM_PROTECTED:
+#endif
 #if defined(OS_CHROMEOS)
       case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
 #endif
       case base::TERMINATION_STATUS_PROCESS_WAS_KILLED: {
         delegate_->OnProcessCrashed(exit_code);
+        BrowserThread::PostTask(
+            BrowserThread::UI, FROM_HERE,
+            base::Bind(&NotifyProcessKilled, data_, exit_code));
         // Report that this child process was killed.
         UMA_HISTOGRAM_ENUMERATION("ChildProcess.Killed2",
                                   data_.process_type,
@@ -351,13 +409,30 @@ void BrowserChildProcessHostImpl::OnProcessLaunchFailed() {
 }
 
 void BrowserChildProcessHostImpl::OnProcessLaunched() {
-  // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/465841
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "465841 BrowserChildProcessHostImpl::OnProcessLaunched"));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   const base::Process& process = child_process_->GetProcess();
   DCHECK(process.IsValid());
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("use-new-edk")) {
+    mojo::embedder::ScopedPlatformHandle client_pipe;
+#if defined(MOJO_SHELL_CLIENT)
+    if (IsRunningInMojoShell()) {
+      client_pipe = RegisterProcessWithBroker(process.Pid());
+    } else
+#endif
+    {
+      client_pipe = mojo::embedder::ChildProcessLaunched(process.Handle());
+    }
+    Send(new ChildProcessMsg_SetMojoParentPipeHandle(
+        IPC::GetFileHandleForProcess(
+#if defined(OS_WIN)
+                                     client_pipe.release().handle,
+#else
+                                     client_pipe.release().fd,
+#endif
+                                     process.Handle(), true)));
+  }
 
 #if defined(OS_WIN)
   // Start a WaitableEventWatcher that will invoke OnProcessExitedEarly if the
@@ -365,12 +440,24 @@ void BrowserChildProcessHostImpl::OnProcessLaunched() {
   // connected and the exit of the child process is detecter by an error on the
   // IPC channel thereafter.
   DCHECK(!early_exit_watcher_.GetWatchedObject());
-  early_exit_watcher_.StartWatching(process.Handle(), this);
+  early_exit_watcher_.StartWatchingOnce(process.Handle(), this);
 #endif
 
   // TODO(rvargas) crbug.com/417532: Don't store a handle.
   data_.handle = process.Handle();
   delegate_->OnProcessLaunched();
+
+  if (is_channel_connected_) {
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::Bind(&NotifyProcessLaunchedAndConnected,
+                                       data_));
+  }
+}
+
+bool BrowserChildProcessHostImpl::IsProcessLaunched() const {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  return child_process_.get() && child_process_->GetProcess().IsValid();
 }
 
 #if defined(OS_WIN)

@@ -4,7 +4,6 @@
 
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 
-#include "base/win/metro.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/client/aura_constants.h"
@@ -96,6 +95,9 @@ DesktopWindowTreeHostWin::~DesktopWindowTreeHostWin() {
 
 // static
 aura::Window* DesktopWindowTreeHostWin::GetContentWindowForHWND(HWND hwnd) {
+  // All HWND's we create should have WindowTreeHost instances associated with
+  // them. There are exceptions like the content layer creating HWND's which
+  // are not associated with WindowTreeHost instances.
   aura::WindowTreeHost* host =
       aura::WindowTreeHost::GetForAcceleratedWidget(hwnd);
   return host ? host->window()->GetProperty(kContentWindowForRootWindow) : NULL;
@@ -140,12 +142,13 @@ void DesktopWindowTreeHostWin::Init(aura::Window* content_window,
 
   gfx::Rect pixel_bounds = gfx::win::DIPToScreenRect(params.bounds);
   message_handler_->Init(parent_hwnd, pixel_bounds);
-  if (params.type == Widget::InitParams::TYPE_MENU) {
+  if (params.force_software_compositing) {
     ::SetProp(GetAcceleratedWidget(),
               kForceSoftwareCompositor,
               reinterpret_cast<HANDLE>(true));
   }
-  CreateCompositor(GetAcceleratedWidget());
+  CreateCompositor();
+  OnAcceleratedWidgetAvailable();
 }
 
 void DesktopWindowTreeHostWin::OnNativeWidgetCreated(
@@ -622,6 +625,10 @@ bool DesktopWindowTreeHostWin::CanActivate() const {
   return native_widget_delegate_->CanActivate();
 }
 
+bool DesktopWindowTreeHostWin::WantsMouseEventsWhenInactive() const {
+  return false;
+}
+
 bool DesktopWindowTreeHostWin::WidgetSizeIsClientSize() const {
   const Widget* widget = GetWidget()->GetTopLevelWidget();
   return IsMaximized() || (widget && widget->ShouldUseNativeFrame());
@@ -804,15 +811,8 @@ bool DesktopWindowTreeHostWin::HandleMouseEvent(const ui::MouseEvent& event) {
   return event.handled();
 }
 
-bool DesktopWindowTreeHostWin::HandleKeyEvent(const ui::KeyEvent& event) {
-  return false;
-}
-
-bool DesktopWindowTreeHostWin::HandleUntranslatedKeyEvent(
-    const ui::KeyEvent& event) {
-  ui::KeyEvent duplicate_event(event);
-  SendEventToProcessor(&duplicate_event);
-  return duplicate_event.handled();
+void DesktopWindowTreeHostWin::HandleKeyEvent(ui::KeyEvent* event) {
+  GetInputMethod()->DispatchKeyEvent(event);
 }
 
 void DesktopWindowTreeHostWin::HandleTouchEvent(

@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 
@@ -84,13 +87,15 @@ class Mp2tStreamParserTest : public testing::Test {
     video_max_dts_ = kNoDecodeTimestamp();
   }
 
-  bool AppendData(const uint8* data, size_t length) {
+  bool AppendData(const uint8_t* data, size_t length) {
     return parser_->Parse(data, length);
   }
 
-  bool AppendDataInPieces(const uint8* data, size_t length, size_t piece_size) {
-    const uint8* start = data;
-    const uint8* end = data + length;
+  bool AppendDataInPieces(const uint8_t* data,
+                          size_t length,
+                          size_t piece_size) {
+    const uint8_t* start = data;
+    const uint8_t* end = data + length;
     while (start < end) {
       size_t append_size = std::min(piece_size,
                                     static_cast<size_t>(end - start));
@@ -171,7 +176,8 @@ class Mp2tStreamParserTest : public testing::Test {
     return true;
   }
 
-  void OnKeyNeeded(EmeInitDataType type, const std::vector<uint8>& init_data) {
+  void OnKeyNeeded(EmeInitDataType type,
+                   const std::vector<uint8_t>& init_data) {
     NOTREACHED() << "OnKeyNeeded not expected in the Mpeg2 TS parser";
   }
 
@@ -186,20 +192,15 @@ class Mp2tStreamParserTest : public testing::Test {
 
   void InitializeParser() {
     parser_->Init(
-        base::Bind(&Mp2tStreamParserTest::OnInit,
-                   base::Unretained(this)),
-        base::Bind(&Mp2tStreamParserTest::OnNewConfig,
-                   base::Unretained(this)),
-        base::Bind(&Mp2tStreamParserTest::OnNewBuffers,
-                   base::Unretained(this)),
+        base::Bind(&Mp2tStreamParserTest::OnInit, base::Unretained(this)),
+        base::Bind(&Mp2tStreamParserTest::OnNewConfig, base::Unretained(this)),
+        base::Bind(&Mp2tStreamParserTest::OnNewBuffers, base::Unretained(this)),
         true,
-        base::Bind(&Mp2tStreamParserTest::OnKeyNeeded,
-                   base::Unretained(this)),
-        base::Bind(&Mp2tStreamParserTest::OnNewSegment,
-                   base::Unretained(this)),
+        base::Bind(&Mp2tStreamParserTest::OnKeyNeeded, base::Unretained(this)),
+        base::Bind(&Mp2tStreamParserTest::OnNewSegment, base::Unretained(this)),
         base::Bind(&Mp2tStreamParserTest::OnEndOfSegment,
                    base::Unretained(this)),
-        LogCB());
+        new MediaLog());
   }
 
   bool ParseMpeg2TsFile(const std::string& filename, int append_bytes) {

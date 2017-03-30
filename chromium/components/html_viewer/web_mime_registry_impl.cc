@@ -19,8 +19,9 @@ namespace html_viewer {
 namespace {
 
 std::string ToASCIIOrEmpty(const blink::WebString& string) {
-  return base::IsStringASCII(string) ? base::UTF16ToASCII(string)
-                                     : std::string();
+  return base::IsStringASCII(string)
+      ? base::UTF16ToASCII(base::StringPiece16(string))
+      : std::string();
 }
 
 }  // namespace
@@ -44,7 +45,8 @@ WebMimeRegistryImpl::supportsImagePrefixedMIMEType(
     const blink::WebString& mime_type) {
   std::string ascii_mime_type = ToASCIIOrEmpty(mime_type);
   return (mime_util::IsSupportedImageMimeType(ascii_mime_type) ||
-          (base::StartsWithASCII(ascii_mime_type, "image/", true) &&
+          (base::StartsWith(ascii_mime_type, "image/",
+                            base::CompareCase::SENSITIVE) &&
            mime_util::IsSupportedNonImageMimeType(ascii_mime_type)))
              ? WebMimeRegistry::IsSupported
              : WebMimeRegistry::IsNotSupported;
@@ -63,31 +65,15 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsMediaMIMEType(
     const blink::WebString& codecs,
     const blink::WebString& key_system) {
   const std::string mime_type_ascii = ToASCIIOrEmpty(mime_type);
-  // Not supporting the container is a flat-out no.
-  if (!media::IsSupportedMediaMimeType(mime_type_ascii))
-    return IsNotSupported;
 
   // Mojo does not currently support any key systems.
   if (!key_system.isEmpty())
     return IsNotSupported;
 
-  // Check list of strict codecs to see if it is supported.
-  if (media::IsStrictMediaMimeType(mime_type_ascii)) {
-    // Check if the codecs are a perfect match.
-    std::vector<std::string> strict_codecs;
-    media::ParseCodecString(ToASCIIOrEmpty(codecs), &strict_codecs, false);
-    return static_cast<WebMimeRegistry::SupportsType>(
-        media::IsSupportedStrictMediaMimeType(mime_type_ascii, strict_codecs));
-  }
-
-  // If we don't recognize the codec, it's possible we support it.
-  std::vector<std::string> parsed_codecs;
-  media::ParseCodecString(ToASCIIOrEmpty(codecs), &parsed_codecs, true);
-  if (!media::AreSupportedMediaCodecs(parsed_codecs))
-    return MayBeSupported;
-
-  // Otherwise we have a perfect match.
-  return IsSupported;
+  std::vector<std::string> codec_vector;
+  media::ParseCodecString(ToASCIIOrEmpty(codecs), &codec_vector, false);
+  return static_cast<WebMimeRegistry::SupportsType>(
+      media::IsSupportedMediaFormat(mime_type_ascii, codec_vector));
 }
 
 bool WebMimeRegistryImpl::supportsMediaSourceMIMEType(
@@ -124,14 +110,6 @@ blink::WebString WebMimeRegistryImpl::wellKnownMimeTypeForExtension(
   std::string mime_type;
   net::GetWellKnownMimeTypeFromExtension(
       base::FilePath::FromUTF16Unsafe(file_extension).value(), &mime_type);
-  return blink::WebString::fromUTF8(mime_type);
-}
-
-blink::WebString WebMimeRegistryImpl::mimeTypeFromFile(
-    const blink::WebString& file_path) {
-  std::string mime_type;
-  net::GetMimeTypeFromFile(base::FilePath::FromUTF16Unsafe(file_path),
-                           &mime_type);
   return blink::WebString::fromUTF8(mime_type);
 }
 

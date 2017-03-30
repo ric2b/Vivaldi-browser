@@ -4,6 +4,10 @@
 
 #include "sync/test/local_sync_test_server.h"
 
+#include <stdint.h>
+
+#include <string>
+
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -20,11 +24,11 @@ LocalSyncTestServer::LocalSyncTestServer()
         base::FilePath()),
       xmpp_port_(0) {}
 
-LocalSyncTestServer::LocalSyncTestServer(uint16 port, uint16 xmpp_port)
+LocalSyncTestServer::LocalSyncTestServer(uint16_t port, uint16_t xmpp_port)
     : LocalTestServer(
-        net::SpawnedTestServer::TYPE_HTTP,  // Sync uses the HTTP scheme.
-        net::SpawnedTestServer::kLocalhost,
-        base::FilePath()),
+          net::SpawnedTestServer::TYPE_HTTP,  // Sync uses the HTTP scheme.
+          net::SpawnedTestServer::kLocalhost,
+          base::FilePath()),
       xmpp_port_(xmpp_port) {
   SetPort(port);
 }
@@ -36,7 +40,7 @@ bool LocalSyncTestServer::AddCommandLineArguments(
   if (!LocalTestServer::AddCommandLineArguments(command_line))
     return false;
   if (xmpp_port_ != 0) {
-    std::string xmpp_port_str = base::IntToString(xmpp_port_);
+    std::string xmpp_port_str = base::UintToString(xmpp_port_);
     command_line->AppendArg("--xmpp-port=" + xmpp_port_str);
   }
   return true;

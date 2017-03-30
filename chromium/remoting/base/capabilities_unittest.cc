@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "remoting/base/capabilities.h"
@@ -67,7 +70,7 @@ TEST(CapabilitiesTest, HasCapability) {
         base::SPLIT_WANT_NONEMPTY);
     do {
       EXPECT_EQ(data[i].result,
-                HasCapability(JoinString(caps, " "), data[i].key));
+                HasCapability(base::JoinString(caps, " "), data[i].key));
     } while (std::next_permutation(caps.begin(), caps.end()));
   }
 }
@@ -98,7 +101,8 @@ TEST(CapabilitiesTest, Intersect) {
         data[i].left, " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
     do {
       EXPECT_EQ(data[i].result,
-                IntersectCapabilities(JoinString(caps, " "), data[i].right));
+                IntersectCapabilities(base::JoinString(caps, " "),
+                                      data[i].right));
     } while (std::next_permutation(caps.begin(), caps.end()));
   }
 }

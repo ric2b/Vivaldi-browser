@@ -29,7 +29,7 @@ class FakeTaskRunner : public base::TaskRunner {
 namespace chromeos {
 
 MockUserManager::MockUserManager()
-    : ChromeUserManager(new FakeTaskRunner(), new FakeTaskRunner()),
+    : ChromeUserManager(new FakeTaskRunner()),
       user_flow_(new DefaultUserFlow()),
       supervised_user_manager_(new FakeSupervisedUserManager()) {
   ProfileHelper::SetProfileToUserForTestingEnabled(true);
@@ -56,8 +56,9 @@ user_manager::UserList MockUserManager::GetUnlockUsers() const {
   return user_list_;
 }
 
-const std::string& MockUserManager::GetOwnerEmail() const {
-  return GetLoggedInUser()->email();
+const AccountId& MockUserManager::GetOwnerAccountId() const {
+  temporary_owner_account_id_ = GetLoggedInUser()->GetAccountId();
+  return temporary_owner_account_id_;
 }
 
 const user_manager::User* MockUserManager::GetActiveUser() const {
@@ -81,7 +82,7 @@ MultiProfileUserController* MockUserManager::GetMultiProfileUserController() {
 }
 
 UserImageManager* MockUserManager::GetUserImageManager(
-    const std::string& user_id) {
+    const AccountId& account_id) {
   return NULL;
 }
 
@@ -90,48 +91,64 @@ SupervisedUserManager* MockUserManager::GetSupervisedUserManager() {
 }
 
 // Creates a new User instance.
-void MockUserManager::SetActiveUser(const std::string& email) {
+void MockUserManager::SetActiveUser(const AccountId& account_id) {
   ClearUserList();
-  AddUser(email);
+  AddUser(account_id);
 }
 
 UserFlow* MockUserManager::GetCurrentUserFlow() const {
   return user_flow_.get();
 }
 
-UserFlow* MockUserManager::GetUserFlow(const std::string&) const {
+UserFlow* MockUserManager::GetUserFlow(const AccountId&) const {
   return user_flow_.get();
 }
 
 user_manager::User* MockUserManager::CreatePublicAccountUser(
-    const std::string& email) {
+    const AccountId& account_id) {
   ClearUserList();
-  user_manager::User* user = user_manager::User::CreatePublicAccountUser(email);
+  user_manager::User* user =
+      user_manager::User::CreatePublicAccountUser(account_id);
   user_list_.push_back(user);
   ProfileHelper::Get()->SetProfileToUserMappingForTesting(user);
   return user_list_.back();
 }
 
 user_manager::User* MockUserManager::CreateKioskAppUser(
-    const std::string& email) {
+    const AccountId& account_id) {
   ClearUserList();
-  user_list_.push_back(user_manager::User::CreateKioskAppUser(email));
+  user_list_.push_back(user_manager::User::CreateKioskAppUser(account_id));
   ProfileHelper::Get()->SetProfileToUserMappingForTesting(user_list_.back());
   return user_list_.back();
 }
 
-void MockUserManager::AddUser(const std::string& email) {
-  user_manager::User* user = user_manager::User::CreateRegularUser(email);
+void MockUserManager::AddUser(const AccountId& account_id) {
+  AddUserWithAffiliation(account_id, false);
+}
+
+void MockUserManager::AddUserWithAffiliation(const AccountId& account_id,
+                                             bool is_affiliated) {
+  user_manager::User* user = user_manager::User::CreateRegularUser(account_id);
+  user->SetAffiliation(is_affiliated);
   user_list_.push_back(user);
   ProfileHelper::Get()->SetProfileToUserMappingForTesting(user);
 }
 
 void MockUserManager::ClearUserList() {
   // Can't use STLDeleteElements because of the protected destructor of User.
-  user_manager::UserList::iterator user;
-  for (user = user_list_.begin(); user != user_list_.end(); ++user)
+  for (user_manager::UserList::iterator user = user_list_.begin();
+       user != user_list_.end(); ++user)
     delete *user;
   user_list_.clear();
+}
+
+bool MockUserManager::ShouldReportUser(const std::string& user_id) const {
+  for (const auto& user : user_list_) {
+    if (user->email() == user_id)
+      return user->IsAffiliated();
+  }
+  NOTREACHED();
+  return false;
 }
 
 }  // namespace chromeos

@@ -4,10 +4,11 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/register_app_task.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
-#include "chrome/browser/drive/drive_api_util.h"
-#include "chrome/browser/drive/drive_service_interface.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/folder_creator.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.h"
@@ -15,6 +16,8 @@
 #include "chrome/browser/sync_file_system/drive_backend/sync_engine_context.h"
 #include "chrome/browser/sync_file_system/drive_backend/tracker_id_set.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
+#include "components/drive/drive_api_util.h"
+#include "components/drive/service/drive_service_interface.h"
 #include "google_apis/drive/drive_api_parser.h"
 
 namespace sync_file_system {
@@ -57,7 +60,7 @@ void RegisterAppTask::RunExclusive(const SyncStatusCallback& callback) {
     return;
   }
 
-  int64 sync_root = metadata_database()->GetSyncRootTrackerID();
+  int64_t sync_root = metadata_database()->GetSyncRootTrackerID();
   TrackerIDSet trackers;
   if (!metadata_database()->FindTrackersByParentAndTitle(
           sync_root, app_id_, &trackers)) {
@@ -82,7 +85,7 @@ void RegisterAppTask::RunExclusive(const SyncStatusCallback& callback) {
 }
 
 void RegisterAppTask::CreateAppRootFolder(const SyncStatusCallback& callback) {
-  int64 sync_root_tracker_id = metadata_database()->GetSyncRootTrackerID();
+  int64_t sync_root_tracker_id = metadata_database()->GetSyncRootTrackerID();
   FileTracker sync_root_tracker;
   bool should_success = metadata_database()->FindTrackerByTrackerID(
       sync_root_tracker_id,
@@ -102,7 +105,7 @@ void RegisterAppTask::DidCreateAppRootFolder(
     const SyncStatusCallback& callback,
     const std::string& folder_id,
     SyncStatusCode status) {
-  scoped_ptr<FolderCreator> deleter = folder_creator_.Pass();
+  scoped_ptr<FolderCreator> deleter = std::move(folder_creator_);
   if (status != SYNC_STATUS_OK) {
     callback.Run(status);
     return;
@@ -154,7 +157,7 @@ bool RegisterAppTask::FilterCandidates(const TrackerIDSet& trackers,
     if (oldest_tracker && CompareOnCTime(*oldest_tracker, *tracker))
       continue;
 
-    oldest_tracker = tracker.Pass();
+    oldest_tracker = std::move(tracker);
   }
 
   if (!oldest_tracker)

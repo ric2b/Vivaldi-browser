@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -51,13 +51,12 @@ class MockDeviceManagementService : public DeviceManagementService {
       const scoped_refptr<net::URLRequestContextGetter>&);
 
   MOCK_METHOD2(CreateJob, CreateJobFunction);
-  MOCK_METHOD7(
+  MOCK_METHOD6(
       StartJob,
       void(const std::string& request_type,
            const std::string& gaia_token,
            const std::string& oauth_token,
            const std::string& dm_token,
-           const std::string& user_affiliation,
            const std::string& client_id,
            const enterprise_management::DeviceManagementRequest& request));
 

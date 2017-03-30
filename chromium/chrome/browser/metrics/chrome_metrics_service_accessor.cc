@@ -4,72 +4,62 @@
 
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 
-#include "base/command_line.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/metrics/metrics_services_manager.h"
-#include "chrome/common/chrome_switches.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
-#include "components/metrics/metrics_service.h"
-#include "components/variations/metrics_util.h"
+#include "content/public/browser/browser_thread.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #endif
 
 // static
-// TODO(asvitkine): This function does not report the correct value on Android,
-// see http://crbug.com/362192.
-bool ChromeMetricsServiceAccessor::IsMetricsReportingEnabled() {
-  // If the user permits metrics reporting with the checkbox in the
-  // prefs, we turn on recording.  We disable metrics completely for
-  // non-official builds, or when field trials are forced.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kForceFieldTrials)) {
+bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() {
+  // TODO(blundell): Fix the unittests that don't set up the UI thread and
+  // change this to just be DCHECK_CURRENTLY_ON().
+  DCHECK(
+      !content::BrowserThread::IsMessageLoopValid(content::BrowserThread::UI) ||
+      content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+
+  // This is only possible during unit tests. If the unit test didn't set the
+  // local_state then it doesn't care about pref value and therefore we return
+  // false.
+  if (!g_browser_process->local_state()) {
+    DLOG(WARNING) << "Local state has not been set and pref cannot be read";
     return false;
   }
 
-  bool enabled = false;
-#if defined(GOOGLE_CHROME_BUILD)
-#if defined(OS_CHROMEOS)
-  chromeos::CrosSettings::Get()->GetBoolean(chromeos::kStatsReportingPref,
-                                            &enabled);
+#if !BUILDFLAG(ANDROID_JAVA_UI)
+  return IsMetricsReportingEnabled(g_browser_process->local_state());
 #else
-  enabled = g_browser_process->local_state()->
-      GetBoolean(prefs::kMetricsReportingEnabled);
-#endif  // #if defined(OS_CHROMEOS)
-#endif  // defined(GOOGLE_CHROME_BUILD)
-  return enabled;
-}
+  // Android currently obtain the value for whether the user has
+  // obtain metrics reporting in non-standard ways.
+  // TODO(gayane): Consolidate metric prefs on all platforms and eliminate this
+  // special-case code, instead having all platforms go through the above flow.
+  // http://crbug.com/362192, http://crbug.com/532084
+  bool pref_value = false;
 
-bool ChromeMetricsServiceAccessor::IsCrashReportingEnabled() {
-#if defined(GOOGLE_CHROME_BUILD)
-#if defined(OS_ANDROID)
-  // Android has its own settings for metrics / crash uploading.
-  const PrefService* prefs = g_browser_process->local_state();
-  return prefs->GetBoolean(prefs::kCrashReportingEnabled);
-#else
-  return ChromeMetricsServiceAccessor::IsMetricsReportingEnabled();
-#endif
-#else
-  return false;
-#endif
+  pref_value = g_browser_process->local_state()->GetBoolean(
+      prefs::kCrashReportingEnabled);
+  return IsMetricsReportingEnabledWithPrefValue(pref_value);
+#endif  // !BUILDFLAG(ANDROID_JAVA_UI)
 }
 
 // static
 bool ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
     const std::string& trial_name,
     const std::string& group_name) {
-  return RegisterSyntheticFieldTrialWithNameHash(metrics::HashName(trial_name),
-                                                 group_name);
+  return metrics::MetricsServiceAccessor::RegisterSyntheticFieldTrial(
+      g_browser_process->metrics_service(), trial_name, group_name);
 }
 
 // static
 bool ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrialWithNameHash(
     uint32_t trial_name_hash,
     const std::string& group_name) {
-  return metrics::MetricsServiceAccessor::RegisterSyntheticFieldTrial(
-      g_browser_process->metrics_service(),
-      trial_name_hash,
-      metrics::HashName(group_name));
+  return metrics::MetricsServiceAccessor::
+      RegisterSyntheticFieldTrialWithNameHash(
+          g_browser_process->metrics_service(), trial_name_hash, group_name);
 }

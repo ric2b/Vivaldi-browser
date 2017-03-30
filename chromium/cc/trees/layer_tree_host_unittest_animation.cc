@@ -4,10 +4,14 @@
 
 #include "cc/trees/layer_tree_host.h"
 
+#include <stdint.h>
+
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/layer_animation_controller.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "cc/animation/timing_function.h"
+#include "cc/animation/transform_operations.h"
+#include "cc/base/completion_event.h"
 #include "cc/base/time_util.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
@@ -22,6 +26,14 @@ namespace {
 
 class LayerTreeHostAnimationTest : public LayerTreeTest {
  public:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->use_compositor_animation_timelines = false;
+  }
+
+  void InitializeLayerSettings(LayerSettings* layer_settings) override {
+    layer_settings->use_compositor_animation_timelines = false;
+  }
+
   void SetupTree() override {
     LayerTreeTest::SetupTree();
     layer_tree_host()->root_layer()->set_layer_animation_delegate(this);
@@ -227,12 +239,11 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestAnimationsGetDeleted);
 class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
     : public LayerTreeHostAnimationTest {
  public:
-  LayerTreeHostAnimationTestAddAnimationWithTimingFunction() {}
-
   void SetupTree() override {
     LayerTreeHostAnimationTest::SetupTree();
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(picture_->bounds());
     layer_tree_host()->root_layer()->AddChild(picture_);
   }
 
@@ -240,6 +251,10 @@ class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
 
   void AnimateLayers(LayerTreeHostImpl* host_impl,
                      base::TimeTicks monotonic_time) override {
+    // TODO(ajuma): This test only checks the active tree. Add checks for
+    // pending tree too.
+    if (!host_impl->active_tree()->root_layer())
+      return;
     LayerAnimationController* controller_impl =
         host_impl->active_tree()->root_layer()->children()[0]->
         layer_animation_controller();
@@ -276,12 +291,11 @@ SINGLE_AND_MULTI_THREAD_TEST_F(
 class LayerTreeHostAnimationTestSynchronizeAnimationStartTimes
     : public LayerTreeHostAnimationTest {
  public:
-  LayerTreeHostAnimationTestSynchronizeAnimationStartTimes() {}
-
   void SetupTree() override {
     LayerTreeHostAnimationTest::SetupTree();
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(picture_->bounds());
     picture_->set_layer_animation_delegate(this);
     layer_tree_host()->root_layer()->AddChild(picture_);
   }
@@ -331,8 +345,6 @@ SINGLE_AND_MULTI_THREAD_TEST_F(
 class LayerTreeHostAnimationTestAnimationFinishedEvents
     : public LayerTreeHostAnimationTest {
  public:
-  LayerTreeHostAnimationTestAnimationFinishedEvents() {}
-
   void BeginTest() override {
     PostAddInstantAnimationToMainThread(layer_tree_host()->root_layer());
   }
@@ -360,12 +372,13 @@ class LayerTreeHostAnimationTestDoNotSkipLayersWithAnimatedOpacity
     : public LayerTreeHostAnimationTest {
  public:
   LayerTreeHostAnimationTestDoNotSkipLayersWithAnimatedOpacity()
-      : update_check_layer_(
-            FakePictureLayer::Create(layer_settings(), &client_)) {}
+      : update_check_layer_() {}
 
   void SetupTree() override {
+    update_check_layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     update_check_layer_->SetOpacity(0.f);
     layer_tree_host()->SetRootLayer(update_check_layer_);
+    client_.set_bounds(update_check_layer_->bounds());
     LayerTreeHostAnimationTest::SetupTree();
   }
 
@@ -404,8 +417,6 @@ SINGLE_AND_MULTI_THREAD_TEST_F(
 class LayerTreeHostAnimationTestLayerAddedWithAnimation
     : public LayerTreeHostAnimationTest {
  public:
-  LayerTreeHostAnimationTestLayerAddedWithAnimation() {}
-
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void DidCommit() override {
@@ -416,8 +427,8 @@ class LayerTreeHostAnimationTestLayerAddedWithAnimation
       // Any valid AnimationCurve will do here.
       scoped_ptr<AnimationCurve> curve(new FakeFloatAnimationCurve());
       scoped_ptr<Animation> animation(
-          Animation::Create(curve.Pass(), 1, 1, Animation::OPACITY));
-      layer->layer_animation_controller()->AddAnimation(animation.Pass());
+          Animation::Create(std::move(curve), 1, 1, Animation::OPACITY));
+      layer->layer_animation_controller()->AddAnimation(std::move(animation));
 
       // We add the animation *before* attaching the layer to the tree.
       layer_tree_host()->root_layer()->AddChild(layer);
@@ -492,7 +503,9 @@ class LayerTreeHostAnimationTestForceRedraw
       layer_tree_host()->SetNeedsAnimate();
   }
 
-  void Layout() override { layer_tree_host()->SetNextCommitForcesRedraw(); }
+  void UpdateLayerTreeHost() override {
+    layer_tree_host()->SetNextCommitForcesRedraw();
+  }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
     if (++num_draw_layers_ == 2)
@@ -547,49 +560,6 @@ class LayerTreeHostAnimationTestAnimateAfterSetNeedsCommit
 
 MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestAnimateAfterSetNeedsCommit);
 
-// Make sure the main thread can still execute animations when CanDraw() is not
-// true.
-class LayerTreeHostAnimationTestRunAnimationWhenNotCanDraw
-    : public LayerTreeHostAnimationTest {
- public:
-  LayerTreeHostAnimationTestRunAnimationWhenNotCanDraw() : started_times_(0) {}
-
-  void SetupTree() override {
-    LayerTreeHostAnimationTest::SetupTree();
-    picture_ = FakePictureLayer::Create(layer_settings(), &client_);
-    picture_->SetBounds(gfx::Size(4, 4));
-    picture_->set_layer_animation_delegate(this);
-    layer_tree_host()->root_layer()->AddChild(picture_);
-  }
-
-  void BeginTest() override {
-    layer_tree_host()->SetViewportSize(gfx::Size());
-    PostAddAnimationToMainThread(picture_.get());
-  }
-
-  void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              Animation::TargetProperty target_property,
-                              int group) override {
-    started_times_++;
-  }
-
-  void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               Animation::TargetProperty target_property,
-                               int group) override {
-    EndTest();
-  }
-
-  void AfterTest() override { EXPECT_EQ(1, started_times_); }
-
- private:
-  int started_times_;
-  FakeContentLayerClient client_;
-  scoped_refptr<FakePictureLayer> picture_;
-};
-
-SINGLE_AND_MULTI_THREAD_TEST_F(
-    LayerTreeHostAnimationTestRunAnimationWhenNotCanDraw);
-
 // Animations should not be started when frames are being skipped due to
 // checkerboard.
 class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
@@ -598,11 +568,13 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
     LayerTreeHostAnimationTest::SetupTree();
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(picture_->bounds());
     picture_->set_layer_animation_delegate(this);
     layer_tree_host()->root_layer()->AddChild(picture_);
   }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
+    LayerTreeHostAnimationTest::InitializeSettings(settings);
     // Make sure that drawing many times doesn't cause a checkerboarded
     // animation to start so we avoid flake in this test.
     settings->timeout_and_draw_when_animation_checkerboards = false;
@@ -610,7 +582,6 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
 
   void BeginTest() override {
     prevented_draw_ = 0;
-    added_animations_ = 0;
     started_times_ = 0;
 
     PostSetNeedsCommitToMainThread();
@@ -619,7 +590,8 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
   DrawResult PrepareToDrawOnThread(LayerTreeHostImpl* host_impl,
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
-    if (added_animations_ < 2)
+    // Don't checkerboard when the first animation wants to start.
+    if (host_impl->active_tree()->source_frame_number() < 2)
       return draw_result;
     if (TestEnded())
       return draw_result;
@@ -635,12 +607,10 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
       case 1:
         // The animation is longer than 1 BeginFrame interval.
         AddOpacityTransitionToLayer(picture_.get(), 0.1, 0.2f, 0.8f, false);
-        added_animations_++;
         break;
       case 2:
         // This second animation will not be drawn so it should not start.
         AddAnimatedTransformToLayer(picture_.get(), 0.1, 5, 5);
-        added_animations_++;
         break;
     }
   }
@@ -662,7 +632,6 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
   }
 
   int prevented_draw_;
-  int added_animations_;
   int started_times_;
   FakeContentLayerClient client_;
   scoped_refptr<FakePictureLayer> picture_;
@@ -677,14 +646,13 @@ MULTI_THREAD_TEST_F(
 class LayerTreeHostAnimationTestScrollOffsetChangesArePropagated
     : public LayerTreeHostAnimationTest {
  public:
-  LayerTreeHostAnimationTestScrollOffsetChangesArePropagated() {}
-
   void SetupTree() override {
     LayerTreeHostAnimationTest::SetupTree();
 
     scroll_layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     scroll_layer_->SetScrollClipLayerId(layer_tree_host()->root_layer()->id());
     scroll_layer_->SetBounds(gfx::Size(1000, 1000));
+    client_.set_bounds(scroll_layer_->bounds());
     scroll_layer_->SetScrollOffset(gfx::ScrollOffset(10, 20));
     layer_tree_host()->root_layer()->AddChild(scroll_layer_);
   }
@@ -698,10 +666,11 @@ class LayerTreeHostAnimationTestScrollOffsetChangesArePropagated
             ScrollOffsetAnimationCurve::Create(
                 gfx::ScrollOffset(500.f, 550.f),
                 EaseInOutTimingFunction::Create()));
-        scoped_ptr<Animation> animation(
-            Animation::Create(curve.Pass(), 1, 0, Animation::SCROLL_OFFSET));
+        scoped_ptr<Animation> animation(Animation::Create(
+            std::move(curve), 1, 0, Animation::SCROLL_OFFSET));
         animation->set_needs_synchronized_start_time(true);
-        bool animation_added = scroll_layer_->AddAnimation(animation.Pass());
+        bool animation_added =
+            scroll_layer_->AddAnimation(std::move(animation));
         bool impl_scrolling_supported =
             layer_tree_host()->proxy()->SupportsImplScrolling();
         EXPECT_EQ(impl_scrolling_supported, animation_added);
@@ -742,6 +711,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
     scroll_layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     scroll_layer_->SetScrollClipLayerId(layer_tree_host()->root_layer()->id());
     scroll_layer_->SetBounds(gfx::Size(10000, 10000));
+    client_.set_bounds(scroll_layer_->bounds());
     scroll_layer_->SetScrollOffset(gfx::ScrollOffset(100.0, 200.0));
     layer_tree_host()->root_layer()->AddChild(scroll_layer_);
 
@@ -749,9 +719,9 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
         ScrollOffsetAnimationCurve::Create(gfx::ScrollOffset(6500.f, 7500.f),
                                            EaseInOutTimingFunction::Create()));
     scoped_ptr<Animation> animation(
-        Animation::Create(curve.Pass(), 1, 0, Animation::SCROLL_OFFSET));
+        Animation::Create(std::move(curve), 1, 0, Animation::SCROLL_OFFSET));
     animation->set_needs_synchronized_start_time(true);
-    scroll_layer_->AddAnimation(animation.Pass());
+    scroll_layer_->AddAnimation(std::move(animation));
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -789,7 +759,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
     }
 
     LayerImpl* scroll_layer_impl =
-        host_impl->active_tree()->root_layer()->children()[0];
+        host_impl->active_tree()->root_layer()->children()[0].get();
     Animation* animation =
         scroll_layer_impl->layer_animation_controller()->GetAnimation(
             Animation::SCROLL_OFFSET);
@@ -812,7 +782,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
     if (host_impl->pending_tree()->source_frame_number() != 1)
       return;
     LayerImpl* scroll_layer_impl =
-        host_impl->pending_tree()->root_layer()->children()[0];
+        host_impl->pending_tree()->root_layer()->children()[0].get();
     EXPECT_EQ(final_postion_, scroll_layer_impl->CurrentScrollOffset());
   }
 
@@ -820,7 +790,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
     if (host_impl->active_tree()->source_frame_number() != 1)
       return;
     LayerImpl* scroll_layer_impl =
-        host_impl->active_tree()->root_layer()->children()[0];
+        host_impl->active_tree()->root_layer()->children()[0].get();
     EXPECT_EQ(final_postion_, scroll_layer_impl->CurrentScrollOffset());
     EndTest();
   }
@@ -921,13 +891,78 @@ class LayerTreeHostAnimationTestAnimationsAddedToNewAndExistingLayers
 MULTI_THREAD_BLOCKNOTIFY_TEST_F(
     LayerTreeHostAnimationTestAnimationsAddedToNewAndExistingLayers);
 
+class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
+    : public LayerTreeHostAnimationTest {
+ public:
+  void SetupTree() override {
+    LayerTreeHostAnimationTest::SetupTree();
+
+    layer_ = FakePictureLayer::Create(layer_settings(), &client_);
+    layer_->SetBounds(gfx::Size(2, 2));
+    client_.set_bounds(layer_->bounds());
+    // Transform the layer to 4,4 to start.
+    gfx::Transform start_transform;
+    start_transform.Translate(4.0, 4.0);
+    layer_->SetTransform(start_transform);
+
+    layer_tree_host()->root_layer()->AddChild(layer_);
+  }
+
+  void BeginTest() override {
+    // Add a translate from 6,7 to 8,9.
+    TransformOperations start;
+    start.AppendTranslate(6.f, 7.f, 0.f);
+    TransformOperations end;
+    end.AppendTranslate(8.f, 9.f, 0.f);
+    AddAnimatedTransformToLayer(layer_.get(), 4.0, start, end);
+
+    PostSetNeedsCommitToMainThread();
+  }
+
+  void WillPrepareTiles(LayerTreeHostImpl* host_impl) override {
+    if (host_impl->sync_tree()->source_frame_number() != 0)
+      return;
+
+    // After checking this on the sync tree, we will activate, which will cause
+    // PrepareTiles to happen again (which races with the test exiting).
+    if (TestEnded())
+      return;
+
+    LayerImpl* root = host_impl->sync_tree()->root_layer();
+    LayerImpl* child = root->children()[0].get();
+    LayerAnimationController* controller_impl =
+        child->layer_animation_controller();
+    Animation* animation = controller_impl->GetAnimation(Animation::TRANSFORM);
+
+    // The animation should be starting for the first frame.
+    EXPECT_EQ(Animation::STARTING, animation->run_state());
+
+    // And the transform should be propogated to the sync tree layer, at its
+    // starting state which is 6,7.
+    gfx::Transform expected_transform;
+    expected_transform.Translate(6.0, 7.0);
+    EXPECT_EQ(expected_transform, child->DrawTransform());
+    // And the sync tree layer should know it is animating.
+    EXPECT_TRUE(child->screen_space_transform_is_animating());
+
+    controller_impl->AbortAnimations(Animation::TRANSFORM);
+    EndTest();
+  }
+
+  void AfterTest() override {}
+
+  FakeContentLayerClient client_;
+  scoped_refptr<Layer> layer_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(
+    LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit);
+
 // When a layer with an animation is removed from the tree and later re-added,
 // the animation should resume.
 class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
     : public LayerTreeHostAnimationTest {
  public:
-  LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded() {}
-
   void SetupTree() override {
     LayerTreeHostAnimationTest::SetupTree();
     layer_ = Layer::Create(layer_settings());
@@ -1030,6 +1065,231 @@ class LayerTreeHostAnimationTestAddAnimationAfterAnimating
 SINGLE_AND_MULTI_THREAD_TEST_F(
     LayerTreeHostAnimationTestAddAnimationAfterAnimating);
 
+class LayerTreeHostAnimationTestRemoveAnimation
+    : public LayerTreeHostAnimationTest {
+ public:
+  void SetupTree() override {
+    LayerTreeHostAnimationTest::SetupTree();
+    layer_ = FakePictureLayer::Create(layer_settings(), &client_);
+    layer_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(layer_->bounds());
+    layer_tree_host()->root_layer()->AddChild(layer_);
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override {
+    switch (layer_tree_host()->source_frame_number()) {
+      case 1:
+        AddAnimatedTransformToLayer(layer_.get(), 1.0, 5, 5);
+        break;
+      case 2:
+        LayerAnimationController* controller =
+            layer_->layer_animation_controller();
+        Animation* animation = controller->GetAnimation(Animation::TRANSFORM);
+        layer_->RemoveAnimation(animation->id());
+        gfx::Transform transform;
+        transform.Translate(10.f, 10.f);
+        layer_->SetTransform(transform);
+
+        // Do something that causes property trees to get rebuilt. This is
+        // intended to simulate the conditions that caused the bug whose fix
+        // this is testing (the test will pass without it but won't test what
+        // we want it to). We were updating the wrong transform node at the end
+        // of an animation (we were assuming the layer with the finished
+        // animation still had its own transform node). But nodes can only get
+        // added/deleted when something triggers a rebuild. Adding a layer
+        // triggers a rebuild, and since the layer that had an animation before
+        // no longer has one, it doesn't get a transform node in the rebuild.
+        layer_->AddChild(Layer::Create(layer_settings()));
+        break;
+    }
+  }
+
+  void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
+    LayerImpl* root = host_impl->active_tree()->root_layer();
+    LayerImpl* child = root->children()[0].get();
+    switch (host_impl->active_tree()->source_frame_number()) {
+      case 0:
+        // No animation yet.
+        break;
+      case 1:
+        // Animation is started.
+        EXPECT_TRUE(child->screen_space_transform_is_animating());
+        break;
+      case 2: {
+        // The animation is removed, the transform that was set afterward is
+        // applied.
+        gfx::Transform expected_transform;
+        expected_transform.Translate(10.f, 10.f);
+        EXPECT_EQ(expected_transform, child->DrawTransform());
+        EXPECT_FALSE(child->screen_space_transform_is_animating());
+        EndTest();
+        break;
+      }
+      default:
+        NOTREACHED();
+    }
+  }
+
+  void AfterTest() override {}
+
+ private:
+  scoped_refptr<Layer> layer_;
+  FakeContentLayerClient client_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestRemoveAnimation);
+
+class LayerTreeHostAnimationTestIsAnimating
+    : public LayerTreeHostAnimationTest {
+ public:
+  void SetupTree() override {
+    LayerTreeHostAnimationTest::SetupTree();
+    layer_ = FakePictureLayer::Create(layer_settings(), &client_);
+    layer_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(layer_->bounds());
+    layer_tree_host()->root_layer()->AddChild(layer_);
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override {
+    switch (layer_tree_host()->source_frame_number()) {
+      case 1:
+        AddAnimatedTransformToLayer(layer_.get(), 1.0, 5, 5);
+        break;
+      case 2:
+        LayerAnimationController* controller =
+            layer_->layer_animation_controller();
+        Animation* animation = controller->GetAnimation(Animation::TRANSFORM);
+        layer_->RemoveAnimation(animation->id());
+        break;
+    }
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    LayerImpl* root = host_impl->sync_tree()->root_layer();
+    LayerImpl* child = root->children()[0].get();
+    switch (host_impl->sync_tree()->source_frame_number()) {
+      case 0:
+        // No animation yet.
+        break;
+      case 1:
+        // Animation is started.
+        EXPECT_TRUE(child->screen_space_transform_is_animating());
+        break;
+      case 2:
+        // The animation is removed/stopped.
+        EXPECT_FALSE(child->screen_space_transform_is_animating());
+        EndTest();
+        break;
+      default:
+        NOTREACHED();
+    }
+  }
+
+  void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
+    LayerImpl* root = host_impl->active_tree()->root_layer();
+    LayerImpl* child = root->children()[0].get();
+    switch (host_impl->active_tree()->source_frame_number()) {
+      case 0:
+        // No animation yet.
+        break;
+      case 1:
+        // Animation is started.
+        EXPECT_TRUE(child->screen_space_transform_is_animating());
+        break;
+      case 2:
+        // The animation is removed/stopped.
+        EXPECT_FALSE(child->screen_space_transform_is_animating());
+        EndTest();
+        break;
+      default:
+        NOTREACHED();
+    }
+  }
+
+  void AfterTest() override {}
+
+ private:
+  scoped_refptr<Layer> layer_;
+  FakeContentLayerClient client_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestIsAnimating);
+
+class LayerTreeHostAnimationTestAnimationFinishesDuringCommit
+    : public LayerTreeHostAnimationTest {
+ public:
+  LayerTreeHostAnimationTestAnimationFinishesDuringCommit()
+      : signalled_(false) {}
+
+  void SetupTree() override {
+    LayerTreeHostAnimationTest::SetupTree();
+    layer_ = FakePictureLayer::Create(layer_settings(), &client_);
+    layer_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(layer_->bounds());
+    layer_tree_host()->root_layer()->AddChild(layer_);
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override {
+    if (layer_tree_host()->source_frame_number() == 1)
+      AddAnimatedTransformToLayer(layer_.get(), 0.04, 5, 5);
+  }
+
+  void WillCommit() override {
+    if (layer_tree_host()->source_frame_number() == 2) {
+      // Block until the animation finishes on the compositor thread. Since
+      // animations have already been ticked on the main thread, when the commit
+      // happens the state on the main thread will be consistent with having a
+      // running animation but the state on the compositor thread will be
+      // consistent with having only a finished animation.
+      completion_.Wait();
+    }
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    switch (host_impl->sync_tree()->source_frame_number()) {
+      case 1:
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 2:
+        gfx::Transform expected_transform;
+        expected_transform.Translate(5.f, 5.f);
+        LayerImpl* layer_impl =
+            host_impl->sync_tree()->root_layer()->children()[0].get();
+        EXPECT_EQ(expected_transform, layer_impl->DrawTransform());
+        EndTest();
+        break;
+    }
+  }
+
+  void UpdateAnimationState(LayerTreeHostImpl* host_impl,
+                            bool has_unfinished_animation) override {
+    if (host_impl->active_tree()->source_frame_number() == 1 &&
+        !has_unfinished_animation && !signalled_) {
+      // The animation has finished, so allow the main thread to commit.
+      completion_.Signal();
+      signalled_ = true;
+    }
+  }
+
+  void AfterTest() override {}
+
+ private:
+  scoped_refptr<Layer> layer_;
+  FakeContentLayerClient client_;
+  CompletionEvent completion_;
+  bool signalled_;
+};
+
+// An animation finishing during commit can only happen when we have a separate
+// compositor thread.
+MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestAnimationFinishesDuringCommit);
+
 class LayerTreeHostAnimationTestNotifyAnimationFinished
     : public LayerTreeHostAnimationTest {
  public:
@@ -1040,12 +1300,12 @@ class LayerTreeHostAnimationTestNotifyAnimationFinished
     LayerTreeHostAnimationTest::SetupTree();
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(picture_->bounds());
     picture_->set_layer_animation_delegate(this);
     layer_tree_host()->root_layer()->AddChild(picture_);
   }
 
   void BeginTest() override {
-    layer_tree_host()->SetViewportSize(gfx::Size());
     PostAddLongAnimationToMainThread(picture_.get());
   }
 
@@ -1053,8 +1313,8 @@ class LayerTreeHostAnimationTestNotifyAnimationFinished
                               Animation::TargetProperty target_property,
                               int group) override {
     called_animation_started_ = true;
-    layer_tree_host()->AnimateLayers(
-        base::TimeTicks::FromInternalValue(std::numeric_limits<int64>::max()));
+    layer_tree_host()->AnimateLayers(base::TimeTicks::FromInternalValue(
+        std::numeric_limits<int64_t>::max()));
     PostSetNeedsCommitToMainThread();
   }
 

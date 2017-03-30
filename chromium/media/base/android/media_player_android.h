@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "media/base/android/media_player_listener.h"
@@ -19,7 +20,7 @@
 
 namespace media {
 
-class BrowserCdm;
+class MediaKeys;
 class MediaPlayerManager;
 
 // This class serves as the base class for different media player
@@ -37,8 +38,8 @@ class MEDIA_EXPORT MediaPlayerAndroid {
     MEDIA_ERROR_INVALID_CODE,
   };
 
-  // Callback when the player needs decoding resources.
-  typedef base::Callback<void(int player_id)> RequestMediaResourcesCB;
+  // Callback when the player releases decoding resources.
+  typedef base::Callback<void(int player_id)> OnDecoderResourcesReleasedCB;
 
   // Virtual destructor.
   // For most subclasses we can delete on the caller thread.
@@ -65,20 +66,27 @@ class MEDIA_EXPORT MediaPlayerAndroid {
   virtual void SetVolume(double volume) = 0;
 
   // Get the media information from the player.
+  virtual bool HasVideo() const = 0;
+  virtual bool HasAudio() const = 0;
   virtual int GetVideoWidth() = 0;
   virtual int GetVideoHeight() = 0;
   virtual base::TimeDelta GetDuration() = 0;
   virtual base::TimeDelta GetCurrentTime() = 0;
   virtual bool IsPlaying() = 0;
-  virtual bool IsPlayerReady() = 0;
   virtual bool CanPause() = 0;
   virtual bool CanSeekForward() = 0;
   virtual bool CanSeekBackward() = 0;
+  virtual bool IsPlayerReady() = 0;
   virtual GURL GetUrl();
   virtual GURL GetFirstPartyForCookies();
 
   // Associates the |cdm| with this player.
-  virtual void SetCdm(BrowserCdm* cdm);
+  virtual void SetCdm(const scoped_refptr<MediaKeys>& cdm);
+
+  // Requests playback permission from MediaPlayerManager.
+  // Overridden in MediaCodecPlayer to pass data between threads.
+  virtual void RequestPermissionAndPostResult(base::TimeDelta duration,
+                                              bool has_audio) {}
 
   // Overridden in MediaCodecPlayer to pass data between threads.
   virtual void OnMediaMetadataChanged(base::TimeDelta duration,
@@ -99,10 +107,11 @@ class MEDIA_EXPORT MediaPlayerAndroid {
   void DetachListener();
 
  protected:
-  MediaPlayerAndroid(int player_id,
-                     MediaPlayerManager* manager,
-                     const RequestMediaResourcesCB& request_media_resources_cb,
-                     const GURL& frame_url);
+  MediaPlayerAndroid(
+      int player_id,
+      MediaPlayerManager* manager,
+      const OnDecoderResourcesReleasedCB& on_decoder_resources_released_cb,
+      const GURL& frame_url);
 
   // TODO(qinmin): Simplify the MediaPlayerListener class to only listen to
   // media interrupt events. And have a separate child class to listen to all
@@ -120,13 +129,12 @@ class MEDIA_EXPORT MediaPlayerAndroid {
   // it is still required to destroy the |listener_| related stuff
   // on the UI thread.
   void DestroyListenerOnUIThread();
-  void SetAudible(bool is_audible);
 
   MediaPlayerManager* manager() { return manager_; }
 
   base::WeakPtr<MediaPlayerAndroid> WeakPtrForUIThread();
 
-  RequestMediaResourcesCB request_media_resources_cb_;
+  OnDecoderResourcesReleasedCB on_decoder_resources_released_cb_;
 
  private:
   friend class MediaPlayerListener;
@@ -142,9 +150,6 @@ class MEDIA_EXPORT MediaPlayerAndroid {
 
   // Listener object that listens to all the media player events.
   scoped_ptr<MediaPlayerListener> listener_;
-
-  // Maintains the audible state of the player, true if it is playing sound.
-  bool is_audible_;
 
   // Weak pointer passed to |listener_| for callbacks.
   // NOTE: Weak pointers must be invalidated before all other member variables.

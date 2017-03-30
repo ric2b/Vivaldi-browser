@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "media/base/audio_block_fifo.h"
@@ -31,7 +33,7 @@ void AudioBlockFifo::Push(const void* source,
   DCHECK_LT(available_blocks_, static_cast<int>(audio_blocks_.size()));
   CHECK_LE(frames, GetUnfilledFrames());
 
-  const uint8* source_ptr = static_cast<const uint8*>(source);
+  const uint8_t* source_ptr = static_cast<const uint8_t*>(source);
   int frames_to_push = frames;
   while (frames_to_push) {
     // Get the current write block.

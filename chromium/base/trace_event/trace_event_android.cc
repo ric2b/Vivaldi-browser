@@ -5,9 +5,12 @@
 #include "base/trace_event/trace_event_impl.h"
 
 #include <fcntl.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/format_macros.h"
 #include "base/logging.h"
+#include "base/posix/eintr_wrapper.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/trace_event/trace_event.h"
@@ -20,6 +23,21 @@ namespace {
 int g_atrace_fd = -1;
 const char kATraceMarkerFile[] = "/sys/kernel/debug/tracing/trace_marker";
 
+void WriteToATrace(int fd, const char* buffer, size_t size) {
+  size_t total_written = 0;
+  while (total_written < size) {
+    ssize_t written = HANDLE_EINTR(write(
+        fd, buffer + total_written, size - total_written));
+    if (written <= 0)
+      break;
+    total_written += written;
+  }
+  if (total_written < size) {
+    PLOG(WARNING) << "Failed to write buffer '" << std::string(buffer, size)
+                  << "' to " << kATraceMarkerFile;
+  }
+}
+
 void WriteEvent(
     char phase,
     const char* category_group,
@@ -29,10 +47,10 @@ void WriteEvent(
     const unsigned char* arg_types,
     const TraceEvent::TraceValue* arg_values,
     const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
-    unsigned char flags) {
+    unsigned int flags) {
   std::string out = StringPrintf("%c|%d|%s", phase, getpid(), name);
   if (flags & TRACE_EVENT_FLAG_HAS_ID)
-    StringAppendF(&out, "-%" PRIx64, static_cast<uint64>(id));
+    StringAppendF(&out, "-%" PRIx64, static_cast<uint64_t>(id));
   out += '|';
 
   for (int i = 0; i < kTraceMaxNumArgs && arg_names[i];
@@ -57,7 +75,7 @@ void WriteEvent(
 
   out += '|';
   out += category_group;
-  write(g_atrace_fd, out.c_str(), out.size());
+  WriteToATrace(g_atrace_fd, out.c_str(), out.size());
 }
 
 void NoOpOutputCallback(WaitableEvent* complete_event,
@@ -90,7 +108,7 @@ void TraceLog::StartATrace() {
   if (g_atrace_fd != -1)
     return;
 
-  g_atrace_fd = open(kATraceMarkerFile, O_WRONLY);
+  g_atrace_fd = HANDLE_EINTR(open(kATraceMarkerFile, O_WRONLY));
   if (g_atrace_fd == -1) {
     PLOG(WARNING) << "Couldn't open " << kATraceMarkerFile;
     return;
@@ -152,7 +170,7 @@ void TraceEvent::SendToATrace() {
       WriteEvent('B', category_group, name_, id_,
                  arg_names_, arg_types_, arg_values_, convertable_values_,
                  flags_);
-      write(g_atrace_fd, "E", 1);
+      WriteToATrace(g_atrace_fd, "E", 1);
       break;
 
     case TRACE_EVENT_PHASE_COUNTER:
@@ -161,10 +179,10 @@ void TraceEvent::SendToATrace() {
         std::string out = base::StringPrintf(
             "C|%d|%s-%s", getpid(), name_, arg_names_[i]);
         if (flags_ & TRACE_EVENT_FLAG_HAS_ID)
-          StringAppendF(&out, "-%" PRIx64, static_cast<uint64>(id_));
+          StringAppendF(&out, "-%" PRIx64, static_cast<uint64_t>(id_));
         StringAppendF(&out, "|%d|%s",
                       static_cast<int>(arg_values_[i].as_int), category_group);
-        write(g_atrace_fd, out.c_str(), out.size());
+        WriteToATrace(g_atrace_fd, out.c_str(), out.size());
       }
       break;
 
@@ -175,7 +193,7 @@ void TraceEvent::SendToATrace() {
 }
 
 void TraceLog::AddClockSyncMetadataEvent() {
-  int atrace_fd = open(kATraceMarkerFile, O_WRONLY | O_APPEND);
+  int atrace_fd = HANDLE_EINTR(open(kATraceMarkerFile, O_WRONLY | O_APPEND));
   if (atrace_fd == -1) {
     PLOG(WARNING) << "Couldn't open " << kATraceMarkerFile;
     return;
@@ -185,11 +203,10 @@ void TraceLog::AddClockSyncMetadataEvent() {
   // debugfs that takes the written data and pushes it onto the trace
   // buffer. So, to establish clock sync, we write our monotonic clock into that
   // trace buffer.
-  double now_in_seconds = (TraceTicks::Now() - TraceTicks()).InSecondsF();
+  double now_in_seconds = (TimeTicks::Now() - TimeTicks()).InSecondsF();
   std::string marker = StringPrintf(
       "trace_event_clock_sync: parent_ts=%f\n", now_in_seconds);
-  if (write(atrace_fd, marker.c_str(), marker.size()) == -1)
-    PLOG(WARNING) << "Couldn't write to " << kATraceMarkerFile;
+  WriteToATrace(atrace_fd, marker.c_str(), marker.size());
   close(atrace_fd);
 }
 

@@ -9,6 +9,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "ui/gfx/gfx_export.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -88,7 +89,7 @@ class GFX_EXPORT Font {
   int GetStyle() const;
 
   // Returns the specified font name in UTF-8.
-  std::string GetFontName() const;
+  const std::string& GetFontName() const;
 
   // Returns the actually used font name in UTF-8.
   std::string GetActualFontNameForTesting() const;

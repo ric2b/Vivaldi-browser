@@ -4,10 +4,11 @@
 
 #include "chrome/browser/ui/android/autofill/credit_card_scanner_view_android.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/ui/android/window_android_helper.h"
+#include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/autofill/credit_card_scanner_view_delegate.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "jni/CreditCardScanner_jni.h"
@@ -46,20 +47,23 @@ CreditCardScannerViewAndroid::CreditCardScannerViewAndroid(
           base::android::AttachCurrentThread(),
           reinterpret_cast<intptr_t>(this),
           base::android::GetApplicationContext(),
-          WindowAndroidHelper::FromWebContents(web_contents)
+          ViewAndroidHelper::FromWebContents(web_contents)->GetViewAndroid()
               ->GetWindowAndroid()->GetJavaObject().obj())) {}
 
 CreditCardScannerViewAndroid::~CreditCardScannerViewAndroid() {}
 
-void CreditCardScannerViewAndroid::ScanCancelled(JNIEnv* env, jobject object) {
+void CreditCardScannerViewAndroid::ScanCancelled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& object) {
   delegate_->ScanCancelled();
 }
 
-void CreditCardScannerViewAndroid::ScanCompleted(JNIEnv* env,
-                                                 jobject object,
-                                                 jstring card_number,
-                                                 jint expiration_month,
-                                                 jint expiration_year) {
+void CreditCardScannerViewAndroid::ScanCompleted(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& object,
+    const JavaParamRef<jstring>& card_number,
+    jint expiration_month,
+    jint expiration_year) {
   delegate_->ScanCompleted(
       base::android::ConvertJavaStringToUTF16(env, card_number),
       static_cast<int>(expiration_month), static_cast<int>(expiration_year));

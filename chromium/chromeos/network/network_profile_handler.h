@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chromeos/chromeos_export.h"
@@ -65,6 +65,7 @@ class CHROMEOS_EXPORT NetworkProfileHandler
   friend class ClientCertResolverTest;
   friend class NetworkConnectionHandlerTest;
   friend class NetworkHandler;
+  friend class ProhibitedTechnologiesHandlerTest;
   NetworkProfileHandler();
 
   // Add ShillManagerClient property observer and request initial list.
@@ -80,7 +81,7 @@ class CHROMEOS_EXPORT NetworkProfileHandler
   // properties are retrieved and the path is still in this set, a new profile
   // object is created.
   std::set<std::string> pending_profile_creations_;
-  base::ObserverList<NetworkProfileObserver> observers_;
+  base::ObserverList<NetworkProfileObserver, true> observers_;
 
   // For Shill client callbacks
   base::WeakPtrFactory<NetworkProfileHandler> weak_ptr_factory_;

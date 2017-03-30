@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/browser_finder.h"
 
+#include <stdint.h>
+
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -15,6 +18,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "components/signin/core/account_id/account_id.h"
 #endif
 
 using content::WebContents;
@@ -41,26 +45,25 @@ const int kMatchTabbed                  = 1 << 2;
 bool BrowserMatches(Browser* browser,
                     Profile* profile,
                     Browser::WindowFeature window_feature,
-                    uint32 match_types) {
-  if (match_types & kMatchCanSupportWindowFeature &&
+                    uint32_t match_types) {
+  if ((match_types & kMatchCanSupportWindowFeature) &&
       !browser->CanSupportWindowFeature(window_feature)) {
     return false;
   }
 
-  bool matches_profile = browser->profile() == profile;
 #if defined(OS_CHROMEOS)
   // Get the profile on which the window is currently shown.
   // MultiUserWindowManager might be NULL under test scenario.
   chrome::MultiUserWindowManager* const window_manager =
       chrome::MultiUserWindowManager::GetInstance();
+  Profile* shown_profile = nullptr;
   if (window_manager) {
-    const std::string& shown_user_id = window_manager->GetUserPresentingWindow(
+    const AccountId& shown_account_id = window_manager->GetUserPresentingWindow(
         browser->window()->GetNativeWindow());
-    Profile* shown_profile =
-        shown_user_id.empty()
-            ? nullptr
-            : multi_user_util::GetProfileFromUserID(shown_user_id);
-    matches_profile &= !shown_profile || shown_profile == profile;
+    shown_profile =
+        shown_account_id.is_valid()
+            ? multi_user_util::GetProfileFromAccountId(shown_account_id)
+            : nullptr;
   }
 #endif
 
@@ -68,8 +71,19 @@ bool BrowserMatches(Browser* browser,
     if (browser->profile()->GetOriginalProfile() !=
         profile->GetOriginalProfile())
       return false;
-  } else if (!matches_profile) {
-    return false;
+#if defined(OS_CHROMEOS)
+    if (shown_profile &&
+        shown_profile->GetOriginalProfile() != profile->GetOriginalProfile()) {
+      return false;
+    }
+#endif
+  } else {
+    if (browser->profile() != profile)
+      return false;
+#if defined(OS_CHROMEOS)
+    if (shown_profile && shown_profile != profile)
+      return false;
+#endif
   }
 
   if (match_types & kMatchTabbed)
@@ -86,7 +100,7 @@ Browser* FindBrowserMatching(const T& begin,
                              const T& end,
                              Profile* profile,
                              Browser::WindowFeature window_feature,
-                             uint32 match_types) {
+                             uint32_t match_types) {
   for (T i = begin; i != end; ++i) {
     if (BrowserMatches(*i, profile, window_feature, match_types))
       return *i;
@@ -101,7 +115,7 @@ Browser* FindBrowserWithTabbedOrAnyType(Profile* profile,
   BrowserList* browser_list_impl = BrowserList::GetInstance(desktop_type);
   if (!browser_list_impl)
     return NULL;
-  uint32 match_types = kMatchAny;
+  uint32_t match_types = kMatchAny;
   if (match_tabbed)
     match_types |= kMatchTabbed;
   if (match_original_profiles)
@@ -121,7 +135,7 @@ Browser* FindBrowserWithTabbedOrAnyType(Profile* profile,
 
 size_t GetBrowserCountImpl(Profile* profile,
                            chrome::HostDesktopType desktop_type,
-                           uint32 match_types) {
+                           uint32_t match_types) {
   BrowserList* browser_list_impl = BrowserList::GetInstance(desktop_type);
   size_t count = 0;
   if (browser_list_impl) {
@@ -201,13 +215,6 @@ Browser* FindLastActiveWithHostDesktopType(HostDesktopType type) {
   BrowserList* browser_list_impl = BrowserList::GetInstance(type);
   if (browser_list_impl)
     return browser_list_impl->GetLastActive();
-  return NULL;
-}
-
-Browser* FindVivaldiBrowser() {
-  BrowserList* browser_list_impl = BrowserList::GetInstance(HOST_DESKTOP_TYPE_FIRST);
-  if (browser_list_impl && browser_list_impl->size() > 0)
-    return browser_list_impl->get(0);
   return NULL;
 }
 

@@ -4,6 +4,8 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
@@ -24,6 +26,13 @@ namespace {
 const char kUMAProxyStartupStateHistogram[] =
     "DataReductionProxy.StartupState";
 
+void RecordSettingsEnabledState(
+    data_reduction_proxy::DataReductionSettingsEnabledAction action) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "DataReductionProxy.EnabledState", action,
+      data_reduction_proxy::DATA_REDUCTION_SETTINGS_ACTION_BOUNDARY);
+}
+
 }  // namespace
 
 namespace data_reduction_proxy {
@@ -38,6 +47,7 @@ DataReductionProxySettings::DataReductionProxySettings()
       promo_allowed_(false),
       lo_fi_mode_active_(false),
       lo_fi_load_image_requested_(false),
+      data_reduction_proxy_enabled_pref_name_(),
       prefs_(NULL),
       config_(nullptr) {
   lo_fi_user_requests_for_images_per_session_ =
@@ -56,8 +66,7 @@ DataReductionProxySettings::~DataReductionProxySettings() {
 void DataReductionProxySettings::InitPrefMembers() {
   DCHECK(thread_checker_.CalledOnValidThread());
   spdy_proxy_auth_enabled_.Init(
-      prefs::kDataReductionProxyEnabled,
-      GetOriginalProfilePrefs(),
+      data_reduction_proxy_enabled_pref_name_, GetOriginalProfilePrefs(),
       base::Bind(&DataReductionProxySettings::OnProxyEnabledPrefChange,
                  base::Unretained(this)));
 }
@@ -69,21 +78,26 @@ void DataReductionProxySettings::UpdateConfigValues() {
 }
 
 void DataReductionProxySettings::InitDataReductionProxySettings(
+    const std::string& data_reduction_proxy_enabled_pref_name,
     PrefService* prefs,
     DataReductionProxyIOData* io_data,
     scoped_ptr<DataReductionProxyService> data_reduction_proxy_service) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!data_reduction_proxy_enabled_pref_name.empty());
   DCHECK(prefs);
   DCHECK(io_data);
   DCHECK(io_data->config());
   DCHECK(data_reduction_proxy_service.get());
+  data_reduction_proxy_enabled_pref_name_ =
+      data_reduction_proxy_enabled_pref_name;
   prefs_ = prefs;
   config_ = io_data->config();
-  data_reduction_proxy_service_ = data_reduction_proxy_service.Pass();
+  data_reduction_proxy_service_ = std::move(data_reduction_proxy_service);
   data_reduction_proxy_service_->AddObserver(this);
   InitPrefMembers();
   UpdateConfigValues();
   RecordDataReductionInit();
+  data_reduction_proxy_service_->InitializeLoFiPrefs();
 }
 
 void DataReductionProxySettings::OnServiceInitialized() {
@@ -131,7 +145,7 @@ void DataReductionProxySettings::SetDataReductionProxyEnabled(bool enabled) {
   }
 }
 
-int64 DataReductionProxySettings::GetDataReductionLastUpdateTime() {
+int64_t DataReductionProxySettings::GetDataReductionLastUpdateTime() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(data_reduction_proxy_service_->compression_stats());
   return
@@ -175,8 +189,14 @@ void DataReductionProxySettings::SetLoFiLoadImageRequested() {
   lo_fi_load_image_requested_ = true;
 }
 
+void DataReductionProxySettings::IncrementLoFiSnackbarShown() {
+  prefs_->SetInteger(
+      prefs::kLoFiSnackbarsShownPerSession,
+      prefs_->GetInteger(prefs::kLoFiSnackbarsShownPerSession) + 1);
+}
+
 void DataReductionProxySettings::IncrementLoFiUserRequestsForImages() {
-  if (!prefs_ || params::IsLoFiAlwaysOnViaFlags())
+  if (!prefs_ || params::IsLoFiOnViaFlags())
     return;
   prefs_->SetInteger(prefs::kLoFiLoadImagesPerSession,
                      prefs_->GetInteger(prefs::kLoFiLoadImagesPerSession) + 1);
@@ -240,12 +260,16 @@ void DataReductionProxySettings::MaybeActivateDataReductionProxy(
   // related prefs.
   if (!prefs)
     return;
-  // TODO(marq): Consider moving this so stats are wiped the first time the
-  // proxy settings are actually (not maybe) turned on.
   if (spdy_proxy_auth_enabled_.GetValue() &&
       !prefs->GetBoolean(prefs::kDataReductionProxyWasEnabledBefore)) {
     prefs->SetBoolean(prefs::kDataReductionProxyWasEnabledBefore, true);
     ResetDataReductionStatistics();
+  }
+  if (!at_startup) {
+    if (IsDataReductionProxyEnabled())
+      RecordSettingsEnabledState(DATA_REDUCTION_SETTINGS_ACTION_OFF_TO_ON);
+    else
+      RecordSettingsEnabledState(DATA_REDUCTION_SETTINGS_ACTION_ON_TO_OFF);
   }
   // Configure use of the data reduction proxy if it is enabled.
   if (at_startup && !data_reduction_proxy_service_->Initialized())
@@ -344,9 +368,9 @@ DataReductionProxySettings::GetDailyContentLengths(const char* pref_name) {
 
 void DataReductionProxySettings::GetContentLengths(
     unsigned int days,
-    int64* original_content_length,
-    int64* received_content_length,
-    int64* last_update_time) {
+    int64_t* original_content_length,
+    int64_t* received_content_length,
+    int64_t* last_update_time) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(data_reduction_proxy_service_->compression_stats());
 

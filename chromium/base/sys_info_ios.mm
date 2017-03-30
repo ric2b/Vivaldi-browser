@@ -5,6 +5,8 @@
 #include "base/sys_info.h"
 
 #include <mach/mach.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #import <UIKit/UIKit.h>
@@ -12,6 +14,7 @@
 #include "base/logging.h"
 #include "base/mac/scoped_mach_port.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 
 namespace base {
@@ -43,9 +46,9 @@ std::string SysInfo::OperatingSystemVersion() {
 }
 
 // static
-void SysInfo::OperatingSystemVersionNumbers(int32* major_version,
-                                            int32* minor_version,
-                                            int32* bugfix_version) {
+void SysInfo::OperatingSystemVersionNumbers(int32_t* major_version,
+                                            int32_t* minor_version,
+                                            int32_t* bugfix_version) {
   base::mac::ScopedNSAutoreleasePool pool;
   std::string system_version = OperatingSystemVersion();
   if (!system_version.empty()) {
@@ -62,11 +65,11 @@ void SysInfo::OperatingSystemVersionNumbers(int32* major_version,
 }
 
 // static
-int64 SysInfo::AmountOfPhysicalMemory() {
+int64_t SysInfo::AmountOfPhysicalMemory() {
   struct host_basic_info hostinfo;
   mach_msg_type_number_t count = HOST_BASIC_INFO_COUNT;
   base::mac::ScopedMachSendRight host(mach_host_self());
-  int result = host_info(host,
+  int result = host_info(host.get(),
                          HOST_BASIC_INFO,
                          reinterpret_cast<host_info_t>(&hostinfo),
                          &count);
@@ -75,11 +78,11 @@ int64 SysInfo::AmountOfPhysicalMemory() {
     return 0;
   }
   DCHECK_EQ(HOST_BASIC_INFO_COUNT, count);
-  return static_cast<int64>(hostinfo.max_mem);
+  return static_cast<int64_t>(hostinfo.max_mem);
 }
 
 // static
-int64 SysInfo::AmountOfAvailablePhysicalMemory() {
+int64_t SysInfo::AmountOfAvailablePhysicalMemory() {
   base::mac::ScopedMachSendRight host(mach_host_self());
   vm_statistics_data_t vm_info;
   mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
@@ -91,8 +94,8 @@ int64 SysInfo::AmountOfAvailablePhysicalMemory() {
     return 0;
   }
 
-  return static_cast<int64>(
-      vm_info.free_count - vm_info.speculative_count) * PAGE_SIZE;
+  return static_cast<int64_t>(vm_info.free_count - vm_info.speculative_count) *
+         PAGE_SIZE;
 }
 
 // static

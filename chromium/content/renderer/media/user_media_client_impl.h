@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
@@ -50,22 +50,22 @@ class CONTENT_EXPORT UserMediaClientImpl
       RenderFrame* render_frame,
       PeerConnectionDependencyFactory* dependency_factory,
       scoped_ptr<MediaStreamDispatcher> media_stream_dispatcher);
-  virtual ~UserMediaClientImpl();
+  ~UserMediaClientImpl() override;
 
   MediaStreamDispatcher* media_stream_dispatcher() const {
     return media_stream_dispatcher_.get();
   }
 
   // blink::WebUserMediaClient implementation
-  virtual void requestUserMedia(
-      const blink::WebUserMediaRequest& user_media_request);
-  virtual void cancelUserMediaRequest(
-      const blink::WebUserMediaRequest& user_media_request);
-  virtual void requestMediaDevices(
+  void requestUserMedia(
+      const blink::WebUserMediaRequest& user_media_request) override;
+  void cancelUserMediaRequest(
+      const blink::WebUserMediaRequest& user_media_request) override;
+  void requestMediaDevices(
       const blink::WebMediaDevicesRequest& media_devices_request) override;
-  virtual void cancelMediaDevicesRequest(
+  void cancelMediaDevicesRequest(
       const blink::WebMediaDevicesRequest& media_devices_request) override;
-  virtual void requestSources(
+  void requestSources(
       const blink::WebMediaStreamTrackSourcesRequest& sources_request) override;
 
   // MediaStreamDispatcherEventHandler implementation.

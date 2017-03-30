@@ -124,68 +124,70 @@
     },
 
     # A standalone MCS (mobile connection server) client.
-    #{
-    #  # GN version: //google_apis/gcm:mcs_probe
-    #  'target_name': 'mcs_probe',
-    #  'type': 'executable',
-    #  'variables': { 'enable_wexit_time_destructors': 1, },
-    #  'include_dirs': [
-    #    '../..',
-    #  ],
-    #  'dependencies': [
-    #    '../../base/base.gyp:base',
-    #    '../../net/net.gyp:net',
-    #    '../../net/net.gyp:net_test_support',
-    #    '../../third_party/protobuf/protobuf.gyp:protobuf_lite',
-    #    'gcm',
-    #    'gcm_test_support'
-    #  ],
-    #  'sources': [
-    #    # Note: file list duplicated in GN build.
-    #    'tools/mcs_probe.cc',
-    #  ],
-    #},
+    {
+      # GN version: //google_apis/gcm:mcs_probe
+      'target_name': 'mcs_probe',
+      'type': 'executable',
+      'variables': { 'enable_wexit_time_destructors': 1, },
+      'include_dirs': [
+        '../..',
+      ],
+      'dependencies': [
+        '../../base/base.gyp:base',
+        '../../net/net.gyp:net',
+        '../../net/net.gyp:net_test_support',
+        '../../third_party/protobuf/protobuf.gyp:protobuf_lite',
+        'gcm',
+        'gcm_test_support'
+      ],
+      'sources': [
+        # Note: file list duplicated in GN build.
+        'tools/mcs_probe.cc',
+      ],
+    },
 
     # The main GCM unit tests.
-    #{
-    #  'target_name': 'gcm_unit_tests',
-    #  'type': '<(gtest_target_type)',
-    #  'variables': { 'enable_wexit_time_destructors': 1, },
-    #  'include_dirs': [
-    #    '../..',
-    #  ],
-    #  'export_dependent_settings': [
-    #    '../../third_party/protobuf/protobuf.gyp:protobuf_lite'
-    #  ],
-    #  'dependencies': [
-    #    '../../base/base.gyp:run_all_unittests',
-    #    '../../base/base.gyp:base',
-    #    '../../net/net.gyp:net',
-    #    '../../net/net.gyp:net_test_support',
-    #    '../../testing/gtest.gyp:gtest',
-    #    '../../third_party/protobuf/protobuf.gyp:protobuf_lite',
-    #    'gcm',
-    #    'gcm_test_support'
-    #  ],
-    #  'sources': [
-    #    'base/mcs_message_unittest.cc',
-    #    'base/mcs_util_unittest.cc',
-    #    'base/socket_stream_unittest.cc',
-    #    'engine/account_mapping_unittest.cc',
-    #    'engine/checkin_request_unittest.cc',
-    #    'engine/connection_factory_impl_unittest.cc',
-    #    'engine/connection_handler_impl_unittest.cc',
-    #    'engine/gcm_store_impl_unittest.cc',
-    #    'engine/gservices_settings_unittest.cc',
-    #    'engine/heartbeat_manager_unittest.cc',
-    #    'engine/mcs_client_unittest.cc',
-    #    'engine/registration_request_unittest.cc',
-    #    'engine/unregistration_request_unittest.cc',
-    #  ]
-    #},
+    {
+      'target_name': 'gcm_unit_tests',
+      'type': '<(gtest_target_type)',
+      'variables': { 'enable_wexit_time_destructors': 1, },
+      'include_dirs': [
+        '../..',
+      ],
+      'export_dependent_settings': [
+        '../../third_party/protobuf/protobuf.gyp:protobuf_lite'
+      ],
+      'dependencies': [
+        '../../base/base.gyp:run_all_unittests',
+        '../../base/base.gyp:base',
+        '../../net/net.gyp:net',
+        '../../net/net.gyp:net_test_support',
+        '../../testing/gtest.gyp:gtest',
+        '../../third_party/protobuf/protobuf.gyp:protobuf_lite',
+        'gcm',
+        'gcm_test_support'
+      ],
+      'sources': [
+        'base/mcs_message_unittest.cc',
+        'base/mcs_util_unittest.cc',
+        'base/socket_stream_unittest.cc',
+        'engine/account_mapping_unittest.cc',
+        'engine/checkin_request_unittest.cc',
+        'engine/connection_factory_impl_unittest.cc',
+        'engine/connection_handler_impl_unittest.cc',
+        'engine/gcm_request_test_base.cc',
+        'engine/gcm_request_test_base.h',
+        'engine/gcm_store_impl_unittest.cc',
+        'engine/gservices_settings_unittest.cc',
+        'engine/heartbeat_manager_unittest.cc',
+        'engine/mcs_client_unittest.cc',
+        'engine/registration_request_unittest.cc',
+        'engine/unregistration_request_unittest.cc',
+      ]
+    },
   ],
   'conditions': [
-    ['0 and test_isolation_mode != "noop"', {
+    ['test_isolation_mode != "noop"', {
       'targets': [
         {
           'target_name': 'gcm_unit_tests_run',

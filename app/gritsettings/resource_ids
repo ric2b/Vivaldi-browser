@@ -1,0 +1,21 @@
+# Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
+
+{
+  "SRCDIR": "../..",
+
+  "app/native_resources/vivaldi_native_resources.grd": {
+    "includes": [36000],
+    "structures": [36100],
+  },
+  "app/native_resources/vivaldi_native_strings.grd": {
+    "messages": [36200],
+  },
+  "app/native_resources/vivaldi_native_unscaled.grd": {
+    "includes": [36300],
+    "structures": [36400],
+  },
+  "extensions/vivaldi_extension_resources.grd": {
+    "includes": [36500],
+    "structures": [36600],
+  },
+}

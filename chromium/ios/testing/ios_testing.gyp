@@ -7,6 +7,7 @@
   },
   'targets': [
     {
+      # GN version: //ios/testing:ocmock_support
       'target_name': 'ocmock_support',
       'type': 'static_library',
       'dependencies': [
@@ -21,8 +22,12 @@
       'include_dirs': [
         '../..',
       ],
+      'export_dependent_settings': [
+        '../../third_party/google_toolbox_for_mac/google_toolbox_for_mac.gyp:google_toolbox_for_mac',
+      ],
     },
     {
+      # GN version: //ios/testing:ocmock_support_unittest
       'target_name': 'ocmock_support_unittest',
       'type': 'executable',
       'variables': {

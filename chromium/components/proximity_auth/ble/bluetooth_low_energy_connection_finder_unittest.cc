@@ -5,15 +5,19 @@
 #include "components/proximity_auth/ble/bluetooth_low_energy_connection_finder.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/proximity_auth/ble/bluetooth_low_energy_device_whitelist.h"
-#include "components/proximity_auth/connection.h"
+#include "components/proximity_auth/fake_connection.h"
+#include "components/proximity_auth/proximity_auth_test_util.h"
 #include "components/proximity_auth/remote_device.h"
 #include "components/proximity_auth/wire_message.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -35,34 +39,10 @@ using testing::SaveArg;
 namespace proximity_auth {
 namespace {
 
-const char kDeviceName[] = "Device name";
-const char kBluetoothAddress[] = "11:22:33:44:55:66";
-const RemoteDevice kRemoteDevice = {kDeviceName, kBluetoothAddress};
-
 const char kServiceUUID[] = "DEADBEEF-CAFE-FEED-FOOD-D15EA5EBEEEF";
-const char kToPeripheralCharUUID[] = "FBAE09F2-0482-11E5-8418-1697F925EC7B";
-const char kFromPeripheralCharUUID[] = "5539ED10-0483-11E5-8418-1697F925EC7B";
-
 const char kOtherUUID[] = "AAAAAAAA-AAAA-AAAA-AAAA-D15EA5EBEEEF";
-const char kOtherBluetoothAddress[] = "00:00:00:00:00:00";
 
 const int kMaxNumberOfAttempts = 2;
-
-class MockConnection : public Connection {
- public:
-  MockConnection() : Connection(kRemoteDevice) {}
-  ~MockConnection() override {}
-
-  MOCK_METHOD0(Connect, void());
-
-  using Connection::SetStatus;
-
- private:
-  void Disconnect() override {}
-  void SendMessageImpl(scoped_ptr<WireMessage> message) override {}
-
-  DISALLOW_COPY_AND_ASSIGN(MockConnection);
-};
 
 class MockBluetoothLowEnergyDeviceWhitelist
     : public BluetoothLowEnergyDeviceWhitelist {
@@ -78,14 +58,14 @@ class MockBluetoothLowEnergyConnectionFinder
     : public BluetoothLowEnergyConnectionFinder {
  public:
   MockBluetoothLowEnergyConnectionFinder(
-      const BluetoothLowEnergyDeviceWhitelist* device_whitelist)
-      : BluetoothLowEnergyConnectionFinder(kServiceUUID,
-                                           kToPeripheralCharUUID,
-                                           kFromPeripheralCharUUID,
+      const BluetoothLowEnergyDeviceWhitelist* device_whitelist,
+      FinderStrategy finder_strategy)
+      : BluetoothLowEnergyConnectionFinder(CreateLERemoteDeviceForTest(),
+                                           kServiceUUID,
+                                           finder_strategy,
                                            device_whitelist,
-                                           kMaxNumberOfAttempts) {
-    SetDelayForTesting(base::TimeDelta());
-  }
+                                           nullptr,
+                                           kMaxNumberOfAttempts) {}
 
   ~MockBluetoothLowEnergyConnectionFinder() override {}
 
@@ -99,9 +79,10 @@ class MockBluetoothLowEnergyConnectionFinder
   // created connection. Returns a reference to the created connection.
   // NOTE: The returned connection's lifetime is managed by the connection
   // finder.
-  MockConnection* ExpectCreateConnection() {
-    scoped_ptr<MockConnection> connection(new NiceMock<MockConnection>());
-    MockConnection* connection_alias = connection.get();
+  FakeConnection* ExpectCreateConnection() {
+    scoped_ptr<FakeConnection> connection(
+        new FakeConnection(CreateLERemoteDeviceForTest()));
+    FakeConnection* connection_alias = connection.get();
     EXPECT_CALL(*this, CreateConnectionProxy())
         .WillOnce(Return(connection.release()));
     return connection_alias;
@@ -111,15 +92,8 @@ class MockBluetoothLowEnergyConnectionFinder
 
  protected:
   scoped_ptr<Connection> CreateConnection(
-      scoped_ptr<device::BluetoothGattConnection> gatt_connection) override {
+      const std::string& device_address) override {
     return make_scoped_ptr(CreateConnectionProxy());
-  }
-
-  void CloseGattConnection(
-      scoped_ptr<device::BluetoothGattConnection> gatt_connection) override {
-    BluetoothLowEnergyConnectionFinder::CloseGattConnection(
-        gatt_connection.Pass());
-    CloseGattConnectionProxy();
   }
 
  private:
@@ -137,12 +111,13 @@ class ProximityAuthBluetoothLowEnergyConnectionFinderTest
             base::Bind(&ProximityAuthBluetoothLowEnergyConnectionFinderTest::
                            OnConnectionFound,
                        base::Unretained(this))),
-        device_(new NiceMock<device::MockBluetoothDevice>(adapter_.get(),
-                                                          0,
-                                                          kDeviceName,
-                                                          kBluetoothAddress,
-                                                          false,
-                                                          false)),
+        device_(new NiceMock<device::MockBluetoothDevice>(
+            adapter_.get(),
+            0,
+            kTestRemoteDeviceName,
+            kTestRemoteDeviceBluetoothAddress,
+            false,
+            false)),
         device_whitelist_(new MockBluetoothLowEnergyDeviceWhitelist()),
         last_discovery_session_alias_(nullptr) {
     device::BluetoothAdapterFactory::SetAdapterForTesting(adapter_);
@@ -158,7 +133,7 @@ class ProximityAuthBluetoothLowEnergyConnectionFinderTest
   }
 
   void OnConnectionFound(scoped_ptr<Connection> connection) {
-    last_found_connection_ = connection.Pass();
+    last_found_connection_ = std::move(connection);
   }
 
   void FindAndExpectStartDiscovery(
@@ -177,36 +152,22 @@ class ProximityAuthBluetoothLowEnergyConnectionFinderTest
         .WillByDefault(Return(true));
     connection_finder.Find(connection_callback_);
     ASSERT_FALSE(discovery_callback.is_null());
-    discovery_callback.Run(discovery_session.Pass());
+    discovery_callback.Run(std::move(discovery_session));
   }
 
-  void ExpectStopDiscoveryAndRemoveObserver() {
-    EXPECT_CALL(*last_discovery_session_alias_, Stop(_, _)).Times(AtLeast(1));
+  void ExpectRemoveObserver() {
     EXPECT_CALL(*adapter_, RemoveObserver(_)).Times(AtLeast(1));
   }
 
   // Prepare |device_| with |uuid|.
-  void PrepareDevice(const std::string& uuid) {
+  void PrepareDevice(const std::string& uuid,
+                     const std::string& address,
+                     bool paired) {
     std::vector<device::BluetoothUUID> uuids;
     uuids.push_back(device::BluetoothUUID(uuid));
     ON_CALL(*device_, GetUUIDs()).WillByDefault(Return(uuids));
-  }
-
-  // Prepare expectations to add/change a right device.
-  void PrepareForNewRightDevice(
-      const std::string& uuid,
-      device::BluetoothDevice::GattConnectionCallback& callback) {
-    PrepareDevice(uuid);
-    ON_CALL(*device_, IsPaired()).WillByDefault(Return(true));
-    EXPECT_CALL(*device_, CreateGattConnection(_, _))
-        .WillOnce(SaveArg<0>(&callback));
-  }
-
-  // Prepare expectations to add/change a wrong device.
-  void PrepareForNewWrongDevice(const std::string& uuid) {
-    PrepareDevice(uuid);
-    ON_CALL(*device_, IsPaired()).WillByDefault(Return(true));
-    EXPECT_CALL(*device_, CreateGattConnection(_, _)).Times(0);
+    ON_CALL(*device_, GetAddress()).WillByDefault(Return(address));
+    ON_CALL(*device_, IsPaired()).WillByDefault(Return(paired));
   }
 
   scoped_refptr<device::MockBluetoothAdapter> adapter_;
@@ -225,15 +186,17 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
   // Destroying a BluetoothConnectionFinder for which Find() has not been called
   // should not crash.
   BluetoothLowEnergyConnectionFinder connection_finder(
-      kServiceUUID, kToPeripheralCharUUID, kFromPeripheralCharUUID,
-      device_whitelist_.get(), kMaxNumberOfAttempts);
+      CreateLERemoteDeviceForTest(), kServiceUUID,
+      BluetoothLowEnergyConnectionFinder::FIND_PAIRED_DEVICE,
+      device_whitelist_.get(), nullptr, kMaxNumberOfAttempts);
 }
 
 TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
        Find_StartsDiscoverySession) {
   BluetoothLowEnergyConnectionFinder connection_finder(
-      kServiceUUID, kToPeripheralCharUUID, kFromPeripheralCharUUID,
-      device_whitelist_.get(), kMaxNumberOfAttempts);
+      CreateLERemoteDeviceForTest(), kServiceUUID,
+      BluetoothLowEnergyConnectionFinder::FIND_PAIRED_DEVICE,
+      device_whitelist_.get(), nullptr, kMaxNumberOfAttempts);
 
   EXPECT_CALL(*adapter_, StartDiscoverySessionWithFilterRaw(_, _, _));
   EXPECT_CALL(*adapter_, AddObserver(_));
@@ -243,8 +206,9 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
 TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
        Find_StopsDiscoverySessionBeforeDestroying) {
   BluetoothLowEnergyConnectionFinder connection_finder(
-      kServiceUUID, kToPeripheralCharUUID, kFromPeripheralCharUUID,
-      device_whitelist_.get(), kMaxNumberOfAttempts);
+      CreateLERemoteDeviceForTest(), kServiceUUID,
+      BluetoothLowEnergyConnectionFinder::FIND_PAIRED_DEVICE,
+      device_whitelist_.get(), nullptr, kMaxNumberOfAttempts);
 
   device::BluetoothAdapter::DiscoverySessionCallback discovery_callback;
   scoped_ptr<device::MockBluetoothDiscoverySession> discovery_session(
@@ -258,21 +222,20 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
   EXPECT_CALL(*adapter_, AddObserver(_));
   connection_finder.Find(connection_callback_);
 
-  EXPECT_CALL(*discovery_session_alias, Stop(_, _));
   ASSERT_FALSE(discovery_callback.is_null());
-  discovery_callback.Run(discovery_session.Pass());
+  discovery_callback.Run(std::move(discovery_session));
 
   EXPECT_CALL(*adapter_, RemoveObserver(_));
 }
 
+// TODO(sacomoto): Remove it when ProximityAuthBleSystem is not needed anymore.
 TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
-       Find_CreatesGattConnectionWhenWhitelistedDeviceIsAdded) {
-  BluetoothLowEnergyConnectionFinder connection_finder(
-      kServiceUUID, kToPeripheralCharUUID, kFromPeripheralCharUUID,
-      device_whitelist_.get(), kMaxNumberOfAttempts);
-  device::BluetoothDevice::GattConnectionCallback gatt_connection_callback;
+       Find_CreatesConnectionWhenWhitelistedDeviceIsAdded) {
+  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
+      device_whitelist_.get(),
+      BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE);
   FindAndExpectStartDiscovery(connection_finder);
-  ExpectStopDiscoveryAndRemoveObserver();
+  ExpectRemoveObserver();
 
   std::vector<device::BluetoothUUID> uuids;
   ON_CALL(*device_, GetUUIDs()).WillByDefault(Return(uuids));
@@ -280,164 +243,160 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
   ON_CALL(*device_whitelist_, HasDeviceWithAddress(_))
       .WillByDefault(Return(true));
 
-  EXPECT_CALL(*device_, CreateGattConnection(_, _))
-      .WillOnce(SaveArg<0>(&gatt_connection_callback));
-  EXPECT_TRUE(gatt_connection_callback.is_null());
-  connection_finder.DeviceAdded(adapter_.get(), device_.get());
-  EXPECT_FALSE(gatt_connection_callback.is_null());
-}
-
-TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
-       Find_CreatesGattConnectionWhenRightDeviceIsAdded) {
-  BluetoothLowEnergyConnectionFinder connection_finder(
-      kServiceUUID, kToPeripheralCharUUID, kFromPeripheralCharUUID,
-      device_whitelist_.get(), kMaxNumberOfAttempts);
-  device::BluetoothDevice::GattConnectionCallback gatt_connection_callback;
-  FindAndExpectStartDiscovery(connection_finder);
-  ExpectStopDiscoveryAndRemoveObserver();
-
-  PrepareForNewRightDevice(kServiceUUID, gatt_connection_callback);
-  connection_finder.DeviceAdded(adapter_.get(), device_.get());
-  ASSERT_FALSE(gatt_connection_callback.is_null());
-}
-
-TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
-       Find_DoesntCreateGattConnectionWhenWrongDeviceIsAdded) {
-  BluetoothLowEnergyConnectionFinder connection_finder(
-      kServiceUUID, kToPeripheralCharUUID, kFromPeripheralCharUUID,
-      device_whitelist_.get(), kMaxNumberOfAttempts);
-  FindAndExpectStartDiscovery(connection_finder);
-  ExpectStopDiscoveryAndRemoveObserver();
-
-  PrepareForNewWrongDevice(kOtherUUID);
-  connection_finder.DeviceAdded(adapter_.get(), device_.get());
-}
-
-TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
-       Find_CreatesGattConnectionWhenRightDeviceIsChanged) {
-  BluetoothLowEnergyConnectionFinder connection_finder(
-      kServiceUUID, kToPeripheralCharUUID, kFromPeripheralCharUUID,
-      device_whitelist_.get(), kMaxNumberOfAttempts);
-  device::BluetoothDevice::GattConnectionCallback gatt_connection_callback;
-  FindAndExpectStartDiscovery(connection_finder);
-  ExpectStopDiscoveryAndRemoveObserver();
-
-  PrepareForNewRightDevice(kServiceUUID, gatt_connection_callback);
-  connection_finder.DeviceChanged(adapter_.get(), device_.get());
-  ASSERT_FALSE(gatt_connection_callback.is_null());
-}
-
-TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
-       Find_DoesntCreateGattConnectionWhenWrongDeviceIsChanged) {
-  BluetoothLowEnergyConnectionFinder connection_finder(
-      kServiceUUID, kToPeripheralCharUUID, kFromPeripheralCharUUID,
-      device_whitelist_.get(), kMaxNumberOfAttempts);
-  FindAndExpectStartDiscovery(connection_finder);
-  ExpectStopDiscoveryAndRemoveObserver();
-
-  PrepareForNewWrongDevice(kOtherUUID);
-  connection_finder.DeviceChanged(adapter_.get(), device_.get());
-}
-
-TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
-       Find_CreatesTwoGattConnections) {
-  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
-      device_whitelist_.get());
-  FindAndExpectStartDiscovery(connection_finder);
-  ExpectStopDiscoveryAndRemoveObserver();
   connection_finder.ExpectCreateConnection();
+  connection_finder.DeviceAdded(adapter_.get(), device_.get());
+}
+
+TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
+       Find_CreatesConnectionWhenRightDeviceIsAdded_NoPublicAddress) {
+  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE);
+
+  FindAndExpectStartDiscovery(connection_finder);
+  ExpectRemoveObserver();
+
+  PrepareDevice(kServiceUUID, kTestRemoteDeviceBluetoothAddress, false);
+  ON_CALL(*device_, GetName())
+      .WillByDefault(Return(base::UTF8ToUTF16(kTestRemoteDeviceName)));
+
+  connection_finder.ExpectCreateConnection();
+  connection_finder.DeviceAdded(adapter_.get(), device_.get());
+}
+
+TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
+       Find_DoesntCreatesConnectionWhenWrongDeviceIsAdded_NoPublicAddress) {
+  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE);
+
+  FindAndExpectStartDiscovery(connection_finder);
+  ExpectRemoveObserver();
+
+  PrepareDevice(kOtherUUID, kTestRemoteDeviceBluetoothAddress, false);
+  ON_CALL(*device_, GetName())
+      .WillByDefault(Return(base::UTF8ToUTF16("Other name")));
+
+  EXPECT_CALL(connection_finder, CreateConnectionProxy()).Times(0);
+  connection_finder.DeviceAdded(adapter_.get(), device_.get());
+}
+
+TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
+       Find_CreatesConnectionWhenRightDeviceIsAdded_HasPublicAddress) {
+  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE);
+
+  FindAndExpectStartDiscovery(connection_finder);
+  ExpectRemoveObserver();
+
+  PrepareDevice(kServiceUUID, kTestRemoteDeviceBluetoothAddress, true);
+  connection_finder.ExpectCreateConnection();
+  connection_finder.DeviceAdded(adapter_.get(), device_.get());
+}
+
+TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
+       Find_DoesntCreateConnectionWhenWrongDeviceIsAdded_HasPublicAddress) {
+  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE);
+  FindAndExpectStartDiscovery(connection_finder);
+  ExpectRemoveObserver();
+
+  PrepareDevice(kOtherUUID, "", true);
+  EXPECT_CALL(connection_finder, CreateConnectionProxy()).Times(0);
+  connection_finder.DeviceAdded(adapter_.get(), device_.get());
+}
+
+TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
+       Find_CreatesConnectionWhenRightDeviceIsChanged_HasPublicAddress) {
+  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE);
+
+  FindAndExpectStartDiscovery(connection_finder);
+  ExpectRemoveObserver();
+
+  PrepareDevice(kServiceUUID, kTestRemoteDeviceBluetoothAddress, true);
+  connection_finder.ExpectCreateConnection();
+  connection_finder.DeviceChanged(adapter_.get(), device_.get());
+}
+
+TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
+       Find_DoesntCreateConnectionWhenWrongDeviceIsChanged_HasPublicAddress) {
+  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE);
+
+  FindAndExpectStartDiscovery(connection_finder);
+  ExpectRemoveObserver();
+
+  PrepareDevice(kOtherUUID, "", true);
+  EXPECT_CALL(connection_finder, CreateConnectionProxy()).Times(0);
+  connection_finder.DeviceChanged(adapter_.get(), device_.get());
+}
+
+TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
+       Find_CreatesOnlyOneConnection) {
+  StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE);
+  FindAndExpectStartDiscovery(connection_finder);
+  ExpectRemoveObserver();
 
   // Prepare to add |device_|.
-  device::BluetoothDevice::GattConnectionCallback gatt_connection_callback;
-  PrepareForNewRightDevice(kServiceUUID, gatt_connection_callback);
+  PrepareDevice(kServiceUUID, kTestRemoteDeviceBluetoothAddress, true);
 
   // Prepare to add |other_device|.
-  device::BluetoothDevice::GattConnectionCallback
-      other_gatt_connection_callback;
   NiceMock<device::MockBluetoothDevice> other_device(
-      adapter_.get(), 0, kDeviceName, kOtherBluetoothAddress, false, false);
+      adapter_.get(), 0, kTestRemoteDeviceName,
+      kTestRemoteDeviceBluetoothAddress, false, false);
   std::vector<device::BluetoothUUID> uuids;
   uuids.push_back(device::BluetoothUUID(kServiceUUID));
+  ON_CALL(other_device, GetAddress())
+      .WillByDefault(Return(kTestRemoteDeviceBluetoothAddress));
   ON_CALL(other_device, IsPaired()).WillByDefault(Return(true));
   ON_CALL(other_device, GetUUIDs()).WillByDefault((Return(uuids)));
-  EXPECT_CALL(other_device, CreateGattConnection(_, _))
-      .WillOnce(SaveArg<0>(&other_gatt_connection_callback));
+
+  // Only one connection should be created.
+  connection_finder.ExpectCreateConnection();
 
   // Add the devices.
   connection_finder.DeviceAdded(adapter_.get(), device_.get());
   connection_finder.DeviceAdded(adapter_.get(), &other_device);
-
-  ASSERT_FALSE(gatt_connection_callback.is_null());
-  ASSERT_FALSE(other_gatt_connection_callback.is_null());
-
-  base::RunLoop run_loop;
-  gatt_connection_callback.Run(make_scoped_ptr(
-      new NiceMock<device::MockBluetoothGattConnection>(kBluetoothAddress)));
-  run_loop.RunUntilIdle();
-
-  // The second device should be forgetten.
-  EXPECT_CALL(connection_finder, CloseGattConnectionProxy());
-  other_gatt_connection_callback.Run(
-      make_scoped_ptr(new NiceMock<device::MockBluetoothGattConnection>(
-          kOtherBluetoothAddress)));
 }
 
 TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
-       Find_ConnectionSucceeds) {
+       Find_ConnectionSucceeds_WithRemoteDevice) {
   StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
-      device_whitelist_.get());
-
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_PAIRED_DEVICE);
   // Starting discovery.
   FindAndExpectStartDiscovery(connection_finder);
-  ExpectStopDiscoveryAndRemoveObserver();
+  ExpectRemoveObserver();
 
-  // Finding and creating a GATT connection to the right device.
-  device::BluetoothDevice::GattConnectionCallback gatt_connection_callback;
-  PrepareForNewRightDevice(kServiceUUID, gatt_connection_callback);
+  // Finding and creating a connection to the right device.
+  FakeConnection* connection = connection_finder.ExpectCreateConnection();
+  PrepareDevice(kServiceUUID, kTestRemoteDeviceBluetoothAddress, true);
   connection_finder.DeviceAdded(adapter_.get(), device_.get());
 
   // Creating a connection.
-  MockConnection* connection = connection_finder.ExpectCreateConnection();
-  ASSERT_FALSE(gatt_connection_callback.is_null());
   base::RunLoop run_loop;
-  gatt_connection_callback.Run(make_scoped_ptr(
-      new NiceMock<device::MockBluetoothGattConnection>(kBluetoothAddress)));
-  run_loop.RunUntilIdle();
   EXPECT_FALSE(last_found_connection_);
   connection->SetStatus(Connection::IN_PROGRESS);
   connection->SetStatus(Connection::CONNECTED);
+  run_loop.RunUntilIdle();
   EXPECT_TRUE(last_found_connection_);
 }
 
 TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
        Find_ConnectionFails_RestartDiscoveryAndConnectionSucceeds) {
   StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
-      device_whitelist_.get());
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_PAIRED_DEVICE);
 
   // Starting discovery.
   FindAndExpectStartDiscovery(connection_finder);
-  base::Closure stop_discovery_session_callback;
-  EXPECT_CALL(*last_discovery_session_alias_, Stop(_, _))
-      .WillOnce(SaveArg<0>(&stop_discovery_session_callback));
 
   // Preparing to create a GATT connection to the right device.
-  device::BluetoothDevice::GattConnectionCallback gatt_connection_callback;
-  PrepareForNewRightDevice(kServiceUUID, gatt_connection_callback);
-  MockConnection* connection = connection_finder.ExpectCreateConnection();
+  PrepareDevice(kServiceUUID, kTestRemoteDeviceBluetoothAddress, true);
+  FakeConnection* connection = connection_finder.ExpectCreateConnection();
 
   // Trying to create a connection.
   connection_finder.DeviceAdded(adapter_.get(), device_.get());
-  ASSERT_FALSE(gatt_connection_callback.is_null());
-  base::RunLoop run_loop;
-  gatt_connection_callback.Run(make_scoped_ptr(
-      new NiceMock<device::MockBluetoothGattConnection>(kBluetoothAddress)));
-  run_loop.RunUntilIdle();
   ASSERT_FALSE(last_found_connection_);
   connection->SetStatus(Connection::IN_PROGRESS);
-
-  // Stopping the discovery session.
-  ASSERT_FALSE(stop_discovery_session_callback.is_null());
-  stop_discovery_session_callback.Run();
 
   // Preparing to restart the discovery session.
   device::BluetoothAdapter::DiscoverySessionCallback discovery_callback;
@@ -447,7 +406,11 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
       .WillOnce(SaveArg<1>(&discovery_callback));
 
   // Connection fails.
-  connection->SetStatus(Connection::DISCONNECTED);
+  {
+    base::RunLoop run_loop;
+    connection->SetStatus(Connection::DISCONNECTED);
+    run_loop.RunUntilIdle();
+  }
 
   // Restarting the discovery session.
   scoped_ptr<device::MockBluetoothDiscoverySession> discovery_session(
@@ -456,32 +419,30 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
   ON_CALL(*last_discovery_session_alias_, IsActive())
       .WillByDefault(Return(true));
   ASSERT_FALSE(discovery_callback.is_null());
-  discovery_callback.Run(discovery_session.Pass());
+  discovery_callback.Run(std::move(discovery_session));
 
   // Preparing to create a GATT connection to the right device.
-  PrepareForNewRightDevice(kServiceUUID, gatt_connection_callback);
+  PrepareDevice(kServiceUUID, kTestRemoteDeviceBluetoothAddress, true);
   connection = connection_finder.ExpectCreateConnection();
 
   // Trying to create a connection.
   connection_finder.DeviceAdded(adapter_.get(), device_.get());
-  EXPECT_CALL(*last_discovery_session_alias_, Stop(_, _)).Times(AtLeast(1));
-  ASSERT_FALSE(gatt_connection_callback.is_null());
-  base::RunLoop other_run_loop;
-  gatt_connection_callback.Run(make_scoped_ptr(
-      new NiceMock<device::MockBluetoothGattConnection>(kBluetoothAddress)));
-  other_run_loop.RunUntilIdle();
 
   // Completing the connection.
-  EXPECT_FALSE(last_found_connection_);
-  connection->SetStatus(Connection::IN_PROGRESS);
-  connection->SetStatus(Connection::CONNECTED);
+  {
+    base::RunLoop run_loop;
+    EXPECT_FALSE(last_found_connection_);
+    connection->SetStatus(Connection::IN_PROGRESS);
+    connection->SetStatus(Connection::CONNECTED);
+    run_loop.RunUntilIdle();
+  }
   EXPECT_TRUE(last_found_connection_);
 }
 
 TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
        Find_AdapterRemoved_RestartDiscoveryAndConnectionSucceeds) {
   StrictMock<MockBluetoothLowEnergyConnectionFinder> connection_finder(
-      device_whitelist_.get());
+      nullptr, BluetoothLowEnergyConnectionFinder::FIND_PAIRED_DEVICE);
 
   // Starting discovery.
   FindAndExpectStartDiscovery(connection_finder);
@@ -512,26 +473,21 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionFinderTest,
       .WillByDefault(Return(true));
 
   ASSERT_FALSE(discovery_callback.is_null());
-  discovery_callback.Run(discovery_session.Pass());
+  discovery_callback.Run(std::move(discovery_session));
 
   // Preparing to create a GATT connection to the right device.
-  device::BluetoothDevice::GattConnectionCallback gatt_connection_callback;
-  PrepareForNewRightDevice(kServiceUUID, gatt_connection_callback);
-  MockConnection* connection = connection_finder.ExpectCreateConnection();
+  PrepareDevice(kServiceUUID, kTestRemoteDeviceBluetoothAddress, true);
+  FakeConnection* connection = connection_finder.ExpectCreateConnection();
 
   // Trying to create a connection.
   connection_finder.DeviceAdded(adapter_.get(), device_.get());
-  EXPECT_CALL(*last_discovery_session_alias_, Stop(_, _)).Times(AtLeast(1));
-  ASSERT_FALSE(gatt_connection_callback.is_null());
-  base::RunLoop run_loop;
-  gatt_connection_callback.Run(make_scoped_ptr(
-      new NiceMock<device::MockBluetoothGattConnection>(kBluetoothAddress)));
-  run_loop.RunUntilIdle();
 
   // Completing the connection.
+  base::RunLoop run_loop;
   ASSERT_FALSE(last_found_connection_);
   connection->SetStatus(Connection::IN_PROGRESS);
   connection->SetStatus(Connection::CONNECTED);
+  run_loop.RunUntilIdle();
   EXPECT_TRUE(last_found_connection_);
 }
 

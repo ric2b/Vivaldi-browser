@@ -4,6 +4,9 @@
 
 #include "storage/browser/fileapi/file_writer_delegate.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_util_proxy.h"
@@ -23,15 +26,14 @@ static const int kReadBufSize = 32768;
 FileWriterDelegate::FileWriterDelegate(
     scoped_ptr<FileStreamWriter> file_stream_writer,
     FlushPolicy flush_policy)
-    : file_stream_writer_(file_stream_writer.Pass()),
+    : file_stream_writer_(std::move(file_stream_writer)),
       writing_started_(false),
       flush_policy_(flush_policy),
       bytes_written_backlog_(0),
       bytes_written_(0),
       bytes_read_(0),
       io_buffer_(new net::IOBufferWithSize(kReadBufSize)),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 FileWriterDelegate::~FileWriterDelegate() {
 }
@@ -39,16 +41,13 @@ FileWriterDelegate::~FileWriterDelegate() {
 void FileWriterDelegate::Start(scoped_ptr<net::URLRequest> request,
                                const DelegateWriteCallback& write_callback) {
   write_callback_ = write_callback;
-  request_ = request.Pass();
+  request_ = std::move(request);
   request_->Start();
 }
 
 void FileWriterDelegate::Cancel() {
-  if (request_) {
-    // This halts any callbacks on this delegate.
-    request_->set_delegate(NULL);
-    request_->Cancel();
-  }
+  // Destroy the request to prevent it from invoking any callbacks.
+  request_.reset();
 
   const int status = file_stream_writer_->Cancel(
       base::Bind(&FileWriterDelegate::OnWriteCancelled,
@@ -136,7 +135,7 @@ void FileWriterDelegate::OnDataReceived(int bytes_read) {
 
 void FileWriterDelegate::Write() {
   writing_started_ = true;
-  int64 bytes_to_write = bytes_read_ - bytes_written_;
+  int64_t bytes_to_write = bytes_read_ - bytes_written_;
   int write_response =
       file_stream_writer_->Write(cursor_.get(),
                                  static_cast<int>(bytes_to_write),
@@ -172,10 +171,8 @@ FileWriterDelegate::GetCompletionStatusOnError() const {
 }
 
 void FileWriterDelegate::OnError(base::File::Error error) {
-  if (request_) {
-    request_->set_delegate(NULL);
-    request_->Cancel();
-  }
+  // Destroy the request to prevent it from invoking any callbacks.
+  request_.reset();
 
   if (writing_started_)
     MaybeFlushForCompletion(error, 0, ERROR_WRITE_STARTED);

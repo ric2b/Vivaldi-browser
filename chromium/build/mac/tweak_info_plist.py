@@ -89,13 +89,13 @@ def _AddVersionKeys(plist, version=None,  version_source = None, vivaldi_build=N
                                     '@MAJOR@.@MINOR@.@BUILD@.@PATCH@'])
     source_version = stdout.rstrip()
 
-    (stdout, retval1) = _GetOutput([VERSION_TOOL, '-f', VERSION_FILE, 
+    (stdout, retval1) = _GetOutput([VERSION_TOOL, '-f', VERSION_FILE,
                                     '-f', VIVALDI_VERSION_FILE,
                                     '-e', 'VIVALDI_BUILD='+(vivaldi_build or '1'),
                                     '-t', '@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@'])
     full_version = stdout.rstrip()
 
-    (stdout, retval2) = _GetOutput([VERSION_TOOL, '-f', VERSION_FILE, 
+    (stdout, retval2) = _GetOutput([VERSION_TOOL, '-f', VERSION_FILE,
                                     '-f', VIVALDI_VERSION_FILE,
                                     '-t','@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@',
                                     '-e', 'VIVALDI_BUILD='+(vivaldi_build or '1')])
@@ -177,7 +177,7 @@ def _RemoveBreakpadKeys(plist):
 def _TagSuffixes():
   # Keep this list sorted in the order that tag suffix components are to
   # appear in a tag value. That is to say, it should be sorted per ASCII.
-  components = ('32bit', 'full')
+  components = ('full',)
   assert tuple(sorted(components)) == components
 
   components_len = len(components)
@@ -223,16 +223,15 @@ def _AddSparkleKeys(plist):
   plist['SUScheduledCheckInterval'] = 86400
   plist['SUEnableAutomaticChecks'] = 'YES'
   plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/mac/appcast.xml'
-  plist['SUPublicDSAKeyFile'] = 'dsa_pub.pem'
+  #plist['SUPublicDSAKeyFile'] = 'dsa_pub.pem'
 
 def _RemoveSparkleKeys(plist):
   """Removes any set Sparkle keys."""
   _RemoveKeys(plist,
     'SUScheduledCheckInterval',
     'SUEnableAutomaticChecks',
-    'SUFeedURL',
-    'SUPublicDSAKeyFile')
-
+    'SUFeedURL')#, note(tomas): remove DSA stuff for now
+    #'SUPublicDSAKeyFile')
 
 def Main(argv):
   parser = optparse.OptionParser('%prog [options]')

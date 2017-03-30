@@ -5,11 +5,12 @@
 #ifndef CONTENT_RENDERER_SERVICE_WORKER_WEB_SERVICE_WORKER_CACHE_STORAGE_IMPL_H_
 #define CONTENT_RENDERER_SERVICE_WORKER_WEB_SERVICE_WORKER_CACHE_STORAGE_IMPL_H_
 
+#include "base/macros.h"
 #include "content/child/thread_safe_sender.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerCache.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerCacheError.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerCacheStorage.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerCache.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerCacheError.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
 
 namespace content {
 
@@ -28,20 +29,20 @@ class WebServiceWorkerCacheStorageImpl
  public:
   WebServiceWorkerCacheStorageImpl(ThreadSafeSender* thread_safe_sender,
                                    const GURL& origin);
-  ~WebServiceWorkerCacheStorageImpl();
+  ~WebServiceWorkerCacheStorageImpl() override;
 
   // From WebServiceWorkerCacheStorage:
-  virtual void dispatchHas(CacheStorageCallbacks* callbacks,
-                           const blink::WebString& cacheName);
-  virtual void dispatchOpen(CacheStorageWithCacheCallbacks* callbacks,
-                            const blink::WebString& cacheName);
-  virtual void dispatchDelete(CacheStorageCallbacks* callbacks,
-                              const blink::WebString& cacheName);
-  virtual void dispatchKeys(CacheStorageKeysCallbacks* callbacks);
-  virtual void dispatchMatch(
+  void dispatchHas(CacheStorageCallbacks* callbacks,
+                   const blink::WebString& cacheName) override;
+  void dispatchOpen(CacheStorageWithCacheCallbacks* callbacks,
+                    const blink::WebString& cacheName) override;
+  void dispatchDelete(CacheStorageCallbacks* callbacks,
+                      const blink::WebString& cacheName) override;
+  void dispatchKeys(CacheStorageKeysCallbacks* callbacks) override;
+  void dispatchMatch(
       CacheStorageMatchCallbacks* callbacks,
       const blink::WebServiceWorkerRequest& request,
-      const blink::WebServiceWorkerCache::QueryParams& query_params);
+      const blink::WebServiceWorkerCache::QueryParams& query_params) override;
 
  private:
   // Helper to return the thread-specific dispatcher.

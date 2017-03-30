@@ -9,6 +9,7 @@
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/ppapi/ppapi_test.h"
 #include "components/nacl/browser/nacl_browser.h"
@@ -23,7 +24,8 @@ class NaClGdbDebugStubTest : public PPAPINaClNewlibTest {
   void SetUpCommandLine(base::CommandLine* command_line) override;
 
   void StartTestScript(base::Process* test_process,
-                       std::string test_name, int debug_stub_port);
+                       const std::string& test_name,
+                       int debug_stub_port);
   void RunDebugStubTest(const std::string& nacl_module,
                         const std::string& test_name);
 };
@@ -34,7 +36,7 @@ void NaClGdbDebugStubTest::SetUpCommandLine(base::CommandLine* command_line) {
 }
 
 void NaClGdbDebugStubTest::StartTestScript(base::Process* test_process,
-                                           std::string test_name,
+                                           const std::string& test_name,
                                            int debug_stub_port) {
   // We call python script to reuse GDB RSP protocol implementation.
   base::CommandLine cmd(base::FilePath(FILE_PATH_LITERAL("python")));

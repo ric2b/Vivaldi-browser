@@ -9,11 +9,14 @@
  */
 var windowCreateOptions = {
   id: 'gallery',
-  innerBounds: {
-    minWidth: 820,
+  outerBounds: {
+    minWidth: 860,
     minHeight: 554
   },
-  frame: 'none'
+  frame: {
+    color: '#1E2023'
+  },
+  hidden: true
 };
 
 /**
@@ -60,7 +63,12 @@ function openGalleryWindow(urls) {
       });
     });
   }).then(function(gallery) {
-    gallery.rawAppWindow.focus();
+    // If the window is minimized, we need to restore it first.
+    if (gallery.rawAppWindow.isMinimized())
+      gallery.rawAppWindow.restore();
+
+    gallery.rawAppWindow.show();
+
     return gallery.rawAppWindow.contentWindow.appID;
   }).catch(function(error) {
     console.error('Launch failed' + error.stack || error);

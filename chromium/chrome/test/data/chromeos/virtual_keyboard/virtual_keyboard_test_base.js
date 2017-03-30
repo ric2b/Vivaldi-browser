@@ -85,7 +85,9 @@ function mockExtensionApis(mockController) {
     'lockKeyboard',
     'moveCursor',
     'sendKeyEvent',
-    'setMode'
+    'setMode',
+    'setKeyboardState',
+    'setHotrodKeyboard'
   ];
 
   var inputMethodPrivateMethods = [

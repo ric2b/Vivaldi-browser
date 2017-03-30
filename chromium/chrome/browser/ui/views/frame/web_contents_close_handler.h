@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_WEB_CONTENTS_CLOSE_HANDLER_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_WEB_CONTENTS_CLOSE_HANDLER_H_
 
+#include "base/macros.h"
 #include "base/timer/timer.h"
 
 class WebContentsCloseHandlerDelegate;
@@ -47,7 +48,7 @@ class WebContentsCloseHandler {
   // was invoked following a WillCloseAllTabs()).
   bool tab_changed_after_clone_;
 
-  base::OneShotTimer<WebContentsCloseHandler> timer_;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsCloseHandler);
 };

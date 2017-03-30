@@ -5,9 +5,11 @@
 // This module implements the attributes of the <webview> tag.
 
 var GuestViewAttributes = require('guestViewAttributes').GuestViewAttributes;
+var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewImpl = require('webView').WebViewImpl;
 var WebViewInternal = require('webViewInternal').WebViewInternal;
+var WebViewAttributesPrivate = require('webViewAttributesPrivate');
 
 // -----------------------------------------------------------------------------
 // AllowScalingAttribute object.
@@ -206,48 +208,6 @@ SrcAttribute.prototype.detach = function() {
   this.beforeFirstNavigation = true;
 };
 
-// Vivaldi specific below.
-function TabIdAttribute(view) {
-  GuestViewAttributes.Attribute.call(this,
-    WebViewConstants.ATTRIBUTE_TAB_ID, view);
-}
-
-TabIdAttribute.prototype.__proto__ =
-  GuestViewAttributes.Attribute.prototype;
-
-TabIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
-  // nothing to do here
-};
-
-function WindowIdAttribute(view) {
-  GuestViewAttributes.Attribute.call(this,
-    WebViewConstants.ATTRIBUTE_WINDOW_ID, view);
-}
-
-WindowIdAttribute.prototype.__proto__ =
-  GuestViewAttributes.Attribute.prototype;
-
-WindowIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
-  // nothing to do here
-};
-
-function WasTypedAttribute(view) {
-  GuestViewAttributes.BooleanAttribute.call(this,
-     WebViewConstants.ATTRIBUTE_WASTYPED, view);
-  this.wasTyped = true;
-}
-
-WasTypedAttribute.prototype.__proto__ =
-  GuestViewAttributes.BooleanAttribute.prototype;
-
-WasTypedAttribute.prototype.handleMutation = function (oldValue, newValue) {
-  if (!newValue && oldValue) {
-    this.wasTyped = (newValue === 'true');
-    this.setValueIgnoreMutation(newValue);
-  }
-};
-// end vivaldi specific
-
 // The purpose of this mutation observer is to catch assignment to the src
 // attribute without any changes to its value. This is useful in the case
 // where the webview guest has crashed and navigating to the same address
@@ -273,13 +233,15 @@ SrcAttribute.prototype.setupMutationObserver =
 };
 
 SrcAttribute.prototype.parse = function() {
-  /* Vivaldi can have webviews that are detached and no partitionid.
+  // Vivaldi can have webviews that are detached and no partitionid.
+  if (!GuestViewInternalNatives.IsVivaldi()) {
   if (!this.view.elementAttached ||
       !this.view.attributes[
           WebViewConstants.ATTRIBUTE_PARTITION].validPartitionId ||
       !this.getValue()) {
     return;
-  }*/
+  }
+  }
 
   if (!this.view.guest.getId()) {
     if (this.beforeFirstNavigation) {
@@ -325,13 +287,5 @@ WebViewImpl.prototype.setupAttributes = function() {
   }
 
   // Vivaldi specific.
-  this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID] =
-      new TabIdAttribute(this);
-
-  this.attributes[WebViewConstants.ATTRIBUTE_WINDOW_ID] =
-      new WindowIdAttribute(this);
-
-  this.attributes[WebViewConstants.ATTRIBUTE_WASTYPED] =
-      new WasTypedAttribute(this);
-
+  WebViewAttributesPrivate.addPrivateAttributes(this);
 };

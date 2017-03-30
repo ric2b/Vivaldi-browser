@@ -4,8 +4,12 @@
 
 #include "chrome/browser/extensions/api/system_private/system_private_api.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/event_router_forwarder.h"
 #include "chrome/browser/profiles/profile.h"
@@ -47,13 +51,16 @@ const char kUpdatingState[] = "Updating";
 #endif  // defined(OS_CHROMEOS)
 
 // Dispatches an extension event with |argument|
-void DispatchEvent(const std::string& event_name, base::Value* argument) {
+void DispatchEvent(extensions::events::HistogramValue histogram_value,
+                   const std::string& event_name,
+                   base::Value* argument) {
   scoped_ptr<base::ListValue> list_args(new base::ListValue());
   if (argument) {
     list_args->Append(argument);
   }
-  g_browser_process->extension_event_router_forwarder()->
-      BroadcastEventToRenderers(event_name, list_args.Pass(), GURL());
+  g_browser_process->extension_event_router_forwarder()
+      ->BroadcastEventToRenderers(histogram_value, event_name,
+                                  std::move(list_args), GURL());
 }
 
 }  // namespace
@@ -143,22 +150,26 @@ void DispatchVolumeChangedEvent(double volume, bool is_volume_muted) {
   base::DictionaryValue* dict = new base::DictionaryValue();
   dict->SetDouble(kVolumeKey, volume);
   dict->SetBoolean(kIsVolumeMutedKey, is_volume_muted);
-  DispatchEvent(system_private::OnVolumeChanged::kEventName, dict);
+  DispatchEvent(extensions::events::SYSTEM_PRIVATE_ON_VOLUME_CHANGED,
+                system_private::OnVolumeChanged::kEventName, dict);
 }
 
 void DispatchBrightnessChangedEvent(int brightness, bool user_initiated) {
   base::DictionaryValue* dict = new base::DictionaryValue();
   dict->SetInteger(kBrightnessKey, brightness);
   dict->SetBoolean(kUserInitiatedKey, user_initiated);
-  DispatchEvent(system_private::OnBrightnessChanged::kEventName, dict);
+  DispatchEvent(extensions::events::SYSTEM_PRIVATE_ON_BRIGHTNESS_CHANGED,
+                system_private::OnBrightnessChanged::kEventName, dict);
 }
 
 void DispatchScreenUnlockedEvent() {
-  DispatchEvent(system_private::OnScreenUnlocked::kEventName, NULL);
+  DispatchEvent(extensions::events::SYSTEM_PRIVATE_ON_SCREEN_UNLOCKED,
+                system_private::OnScreenUnlocked::kEventName, NULL);
 }
 
 void DispatchWokeUpEvent() {
-  DispatchEvent(system_private::OnWokeUp::kEventName, NULL);
+  DispatchEvent(extensions::events::SYSTEM_PRIVATE_ON_WOKE_UP,
+                system_private::OnWokeUp::kEventName, NULL);
 }
 
 }  // namespace extensions

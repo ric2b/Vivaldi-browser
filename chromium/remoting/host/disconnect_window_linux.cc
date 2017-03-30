@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "remoting/base/string_resources.h"
@@ -172,7 +173,7 @@ void DisconnectWindowGtk::OnClicked(GtkButton* button) {
   DCHECK(CalledOnValidThread());
 
   if (client_session_control_.get())
-    client_session_control_->DisconnectSession();
+    client_session_control_->DisconnectSession(protocol::OK);
 }
 
 gboolean DisconnectWindowGtk::OnDelete(GtkWidget* window,
@@ -180,7 +181,7 @@ gboolean DisconnectWindowGtk::OnDelete(GtkWidget* window,
   DCHECK(CalledOnValidThread());
 
   if (client_session_control_.get())
-    client_session_control_->DisconnectSession();
+    client_session_control_->DisconnectSession(protocol::OK);
   return TRUE;
 }
 

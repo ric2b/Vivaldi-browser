@@ -7,9 +7,11 @@
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -43,6 +45,9 @@ class ExtensionManagementApiBrowserTest : public ExtensionBrowserTest {
     content::CrashTab(background_host->host_contents());
     return true;
   }
+
+ private:
+  ScopedInstallVerifierBypassForTest install_verifier_bypass_;
 };
 
 // We test this here instead of in an ExtensionApiTest because normal extensions

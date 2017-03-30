@@ -4,6 +4,8 @@
 
 #include "ash/accelerators/key_hold_detector.h"
 
+#include <utility>
+
 #include "ash/shell.h"
 #include "base/message_loop/message_loop.h"
 #include "ui/aura/window_tracker.h"
@@ -43,8 +45,7 @@ void PostPressedEvent(ui::KeyEvent* event) {
 }  // namespace
 
 KeyHoldDetector::KeyHoldDetector(scoped_ptr<Delegate> delegate)
-    : state_(INITIAL),
-      delegate_(delegate.Pass()) {}
+    : state_(INITIAL), delegate_(std::move(delegate)) {}
 
 KeyHoldDetector::~KeyHoldDetector() {}
 
@@ -61,16 +62,19 @@ void KeyHoldDetector::OnKeyEvent(ui::KeyEvent* event) {
           return;
         }
         state_ = PRESSED;
-        // Don't process ET_KEY_PRESSED event yet. The ET_KEY_PRESSED
-        // event will be generated upon ET_KEY_RELEASEED event below.
-        event->StopPropagation();
+        if (delegate_->ShouldStopEventPropagation()) {
+          // Don't process ET_KEY_PRESSED event yet. The ET_KEY_PRESSED
+          // event will be generated upon ET_KEY_RELEASEED event below.
+          event->StopPropagation();
+        }
         break;
       case PRESSED:
         state_ = HOLD;
         // pass through
       case HOLD:
         delegate_->OnKeyHold(event);
-        event->StopPropagation();
+        if (delegate_->ShouldStopEventPropagation())
+          event->StopPropagation();
         break;
       }
   } else if (event->type() == ui::ET_KEY_RELEASED) {
@@ -78,13 +82,16 @@ void KeyHoldDetector::OnKeyEvent(ui::KeyEvent* event) {
       case INITIAL:
         break;
       case PRESSED: {
-        PostPressedEvent(event);
-        event->StopPropagation();
+        if (delegate_->ShouldStopEventPropagation()) {
+          PostPressedEvent(event);
+          event->StopPropagation();
+        }
         break;
       }
       case HOLD: {
         delegate_->OnKeyUnhold(event);
-        event->StopPropagation();
+        if (delegate_->ShouldStopEventPropagation())
+          event->StopPropagation();
         break;
       }
     }

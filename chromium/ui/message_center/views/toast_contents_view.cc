@@ -9,6 +9,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -92,6 +93,11 @@ void ToastContentsView::UpdateContents(const Notification& notification,
   DCHECK_GT(child_count(), 0);
   MessageView* message_view = static_cast<MessageView*>(child_at(0));
   message_view->UpdateWithNotification(notification);
+  gfx::Size new_size = GetToastSizeForView(message_view);
+  if (preferred_size_ != new_size) {
+    preferred_size_ = new_size;
+    Layout();
+  }
   if (a11y_feedback_for_updates)
     NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, false);
 }
@@ -292,6 +298,12 @@ void ToastContentsView::ClickOnNotification(
     const std::string& notification_id) {
   if (collection_)
     collection_->ClickOnNotification(notification_id);
+}
+
+void ToastContentsView::ClickOnSettingsButton(
+    const std::string& notification_id) {
+  if (collection_)
+    collection_->ClickOnSettingsButton(notification_id);
 }
 
 void ToastContentsView::RemoveNotification(

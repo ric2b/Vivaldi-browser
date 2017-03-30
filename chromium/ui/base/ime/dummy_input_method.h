@@ -5,6 +5,7 @@
 #ifndef UI_BASE_IME_DUMMY_INPUT_METHOD_H_
 #define UI_BASE_IME_DUMMY_INPUT_METHOD_H_
 
+#include "base/macros.h"
 #include "ui/base/ime/input_method.h"
 
 namespace ui {
@@ -25,13 +26,12 @@ class DummyInputMethod : public InputMethod {
   void SetFocusedTextInputClient(TextInputClient* client) override;
   void DetachTextInputClient(TextInputClient* client) override;
   TextInputClient* GetTextInputClient() const override;
-  bool DispatchKeyEvent(const ui::KeyEvent& event) override;
+  void DispatchKeyEvent(ui::KeyEvent* event) override;
   void OnTextInputTypeChanged(const TextInputClient* client) override;
   void OnCaretBoundsChanged(const TextInputClient* client) override;
   void CancelComposition(const TextInputClient* client) override;
   void OnInputLocaleChanged() override;
   std::string GetInputLocale() override;
-  bool IsActive() override;
   TextInputType GetTextInputType() const override;
   TextInputMode GetTextInputMode() const override;
   int GetTextInputFlags() const override;

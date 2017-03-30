@@ -5,8 +5,8 @@
 #ifndef IOS_WEB_SHELL_SHELL_NETWORK_DELEGATE_H_
 #define IOS_WEB_SHELL_SHELL_NETWORK_DELEGATE_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "net/base/network_delegate_impl.h"
 
 namespace web {
@@ -35,7 +35,6 @@ class ShellNetworkDelegate : public net::NetworkDelegateImpl {
   void OnBeforeRedirect(net::URLRequest* request,
                         const GURL& new_location) override;
   void OnResponseStarted(net::URLRequest* request) override;
-  void OnRawBytesRead(const net::URLRequest& request, int bytes_read) override;
   void OnCompleted(net::URLRequest* request, bool started) override;
   void OnURLRequestDestroyed(net::URLRequest* request) override;
   void OnPACScriptError(int line_number, const base::string16& error) override;

@@ -2,9 +2,16 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-declare_args() {
-  # is_chromecast_chrome_branded is set to true for an official build
-  is_chromecast_chrome_branded = false
+import("//build/config/chromecast_build.gni")
 
+# This args block should contain arguments used within the //chromecast
+# directory. Arguments which are used in other Chrome components should
+# be instead declared in //build/config/chromecast_build.gni.
+declare_args() {
+  # chromecast_branding is used to include or exclude Google-branded components.
+  # Set it to "public" for a Chromium build.
+  chromecast_branding = "public"
+
+  # Use Playready CDMs.
   use_playready = false
 }

@@ -7,8 +7,11 @@
 #include "android_webview/browser/aw_content_browser_client.h"
 #include "android_webview/browser/browser_view_renderer.h"
 #include "android_webview/browser/scoped_allow_wait_for_legacy_web_view_api.h"
+#include "android_webview/common/aw_descriptors.h"
+#include "android_webview/common/aw_switches.h"
 #include "android_webview/crash_reporter/aw_microdump_crash_reporter.h"
 #include "android_webview/lib/aw_browser_dependency_factory_impl.h"
+#include "android_webview/native/aw_locale_manager_impl.h"
 #include "android_webview/native/aw_media_url_interceptor.h"
 #include "android_webview/native/aw_message_port_service_impl.h"
 #include "android_webview/native/aw_quota_manager_bridge_impl.h"
@@ -34,6 +37,7 @@
 #include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/base/media_switches.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 
 namespace android_webview {
@@ -85,7 +89,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   cl->AppendSwitch(switches::kDisableNotifications);
 
   // WebRTC hardware decoding is not supported, internal bug 15075307
+#if defined(ENABLE_WEBRTC)
   cl->AppendSwitch(switches::kDisableWebRtcHWDecoding);
+#endif
   cl->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
 
   // This is needed for sharing textures across the different GL threads.
@@ -105,46 +111,76 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // http://crbug.com/479767
   cl->AppendSwitch(switches::kEnableAggressiveDOMStorageFlushing);
 
-  // This is needed to be able to mmap the V8 snapshot and ICU data file
-  // directly from the WebView .apk.
-  // This needs to be here so that it gets to run before the code in
-  // content_main_runner that reads these values tries to do so.
-  // In multi-process mode this code would live in
-  // AwContentBrowserClient::GetAdditionalMappedFilesForChildProcess.
+  // Webview does not currently support the Presentation API, see
+  // https://crbug.com/521319
+  cl->AppendSwitch(switches::kDisablePresentationAPI);
+
+  if (cl->GetSwitchValueASCII(switches::kProcessType).empty()) {
+    // Browser process (no type specified).
+
+    // This code is needed to be able to mmap the V8 snapshot directly from
+    // the WebView .apk using architecture-specific names.
+    // This needs to be here so that it gets to run before the code in
+    // content_main_runner that reads these values tries to do so.
 #ifdef __LP64__
-  const char kNativesFileName[] = "assets/natives_blob_64.bin";
-  const char kSnapshotFileName[] = "assets/snapshot_blob_64.bin";
+    const char kNativesFileName[] = "assets/natives_blob_64.bin";
+    const char kSnapshotFileName[] = "assets/snapshot_blob_64.bin";
 #else
-  const char kNativesFileName[] = "assets/natives_blob_32.bin";
-  const char kSnapshotFileName[] = "assets/snapshot_blob_32.bin";
+    const char kNativesFileName[] = "assets/natives_blob_32.bin";
+    const char kSnapshotFileName[] = "assets/snapshot_blob_32.bin";
 #endif // __LP64__
-  // TODO(gsennton) we should use
-  // gin::IsolateHolder::kNativesFileName/kSnapshotFileName
-  // here when those files have arch specific names http://crbug.com/455699
-  CHECK(base::android::RegisterApkAssetWithGlobalDescriptors(
-      kV8NativesDataDescriptor, kNativesFileName));
-  CHECK(base::android::RegisterApkAssetWithGlobalDescriptors(
-      kV8SnapshotDataDescriptor, kSnapshotFileName));
-  CHECK(base::android::RegisterApkAssetWithGlobalDescriptors(
-      kAndroidICUDataDescriptor, "assets/icudtl.dat"));
+    // TODO(gsennton) we should use
+    // gin::IsolateHolder::kNativesFileName/kSnapshotFileName
+    // here when those files have arch specific names http://crbug.com/455699
+    CHECK(base::android::RegisterApkAssetWithGlobalDescriptors(
+        kV8NativesDataDescriptor, kNativesFileName));
+    CHECK(base::android::RegisterApkAssetWithGlobalDescriptors(
+        kV8SnapshotDataDescriptor, kSnapshotFileName));
+  }
+
+  if (cl->HasSwitch(switches::kWebViewSandboxedRenderer)) {
+    cl->AppendSwitch(switches::kInProcessGPU);
+    cl->AppendSwitchASCII(switches::kRendererProcessLimit, "1");
+    cl->AppendSwitch(switches::kDisableRendererBackgrounding);
+  }
 
   return false;
 }
 
 void AwMainDelegate::PreSandboxStartup() {
-  // TODO(torne): When we have a separate renderer process, we need to handle
-  // being passed open FDs for the resource paks here.
 #if defined(ARCH_CPU_ARM_FAMILY)
   // Create an instance of the CPU class to parse /proc/cpuinfo and cache
   // cpu_brand info.
   base::CPU cpu_info;
 #endif
 
-  crash_reporter::EnableMicrodumpCrashReporter();
-}
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  std::string process_type =
+      command_line.GetSwitchValueASCII(switches::kProcessType);
+  int crash_signal_fd = -1;
+  if (process_type == switches::kRendererProcess) {
+    auto global_descriptors = base::GlobalDescriptors::GetInstance();
+    int pak_fd = global_descriptors->Get(kAndroidWebViewLocalePakDescriptor);
+    base::MemoryMappedFile::Region pak_region =
+        global_descriptors->GetRegion(kAndroidWebViewLocalePakDescriptor);
+    ResourceBundle::InitSharedInstanceWithPakFileRegion(base::File(pak_fd),
+                                                        pak_region);
+    pak_fd = global_descriptors->Get(kAndroidWebViewMainPakDescriptor);
+    pak_region =
+        global_descriptors->GetRegion(kAndroidWebViewMainPakDescriptor);
+    ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
+        base::File(pak_fd), pak_region, ui::SCALE_FACTOR_NONE);
+    crash_signal_fd =
+        global_descriptors->Get(kAndroidWebViewCrashSignalDescriptor);
+  }
+  if (process_type.empty() &&
+      command_line.HasSwitch(switches::kSingleProcess)) {
+    // "webview" has a special treatment in breakpad_linux.cc.
+    process_type = "webview";
+  }
 
-void AwMainDelegate::SandboxInitialized(const std::string& process_type) {
-  // TODO(torne): Adjust linux OOM score here.
+  crash_reporter::EnableMicrodumpCrashReporter(process_type, crash_signal_fd);
 }
 
 int AwMainDelegate::RunProcess(
@@ -156,6 +192,12 @@ int AwMainDelegate::RunProcess(
     browser_runner_.reset(content::BrowserMainRunner::Create());
     int exit_code = browser_runner_->Initialize(main_function_params);
     DCHECK_LT(exit_code, 0);
+
+    // At this point the content client has received the GPU info required
+    // to create a GPU fingerpring, and we can pass it to the microdump
+    // crash handler on the same thread as the crash handler was initialized.
+    crash_reporter::AddGpuFingerprintToMicrodumpCrashHandler(
+        content_client_.gpu_fingerprint());
 
     g_allow_wait_in_ui_thread.Get().reset(
         new ScopedAllowWaitForLegacyWebViewApi);
@@ -202,6 +244,10 @@ AwWebPreferencesPopulater* AwMainDelegate::CreateWebPreferencesPopulater() {
 
 AwMessagePortService* AwMainDelegate::CreateAwMessagePortService() {
   return new AwMessagePortServiceImpl();
+}
+
+AwLocaleManager* AwMainDelegate::CreateAwLocaleManager() {
+  return new AwLocaleManagerImpl();
 }
 
 #if defined(VIDEO_HOLE)

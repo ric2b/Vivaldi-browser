@@ -4,6 +4,8 @@
 
 #include "net/socket/tcp_client_socket.h"
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -23,16 +25,17 @@ TCPClientSocket::TCPClientSocket(const AddressList& addresses,
       addresses_(addresses),
       current_address_index_(-1),
       next_connect_state_(CONNECT_STATE_NONE),
-      previously_disconnected_(false) {
-}
+      previously_disconnected_(false),
+      total_received_bytes_(0) {}
 
 TCPClientSocket::TCPClientSocket(scoped_ptr<TCPSocket> connected_socket,
                                  const IPEndPoint& peer_address)
-    : socket_(connected_socket.Pass()),
+    : socket_(std::move(connected_socket)),
       addresses_(AddressList(peer_address)),
       current_address_index_(0),
       next_connect_state_(CONNECT_STATE_NONE),
-      previously_disconnected_(false) {
+      previously_disconnected_(false),
+      total_received_bytes_(0) {
   DCHECK(socket_);
 
   socket_->SetDefaultOptionsForClient();
@@ -187,6 +190,7 @@ void TCPClientSocket::Disconnect() {
 }
 
 void TCPClientSocket::DoDisconnect() {
+  total_received_bytes_ = 0;
   EmitTCPMetricsHistogramsOnDisconnect();
   // If connecting or already connected, record that the socket has been
   // disconnected.
@@ -264,10 +268,12 @@ int TCPClientSocket::Read(IOBuffer* buf,
   // |socket_| is owned by this class and the callback won't be run once
   // |socket_| is gone. Therefore, it is safe to use base::Unretained() here.
   CompletionCallback read_callback = base::Bind(
-      &TCPClientSocket::DidCompleteReadWrite, base::Unretained(this), callback);
+      &TCPClientSocket::DidCompleteRead, base::Unretained(this), callback);
   int result = socket_->Read(buf, buf_len, read_callback);
-  if (result > 0)
+  if (result > 0) {
     use_history_.set_was_used_to_convey_data();
+    total_received_bytes_ += result;
+  }
 
   return result;
 }
@@ -280,7 +286,7 @@ int TCPClientSocket::Write(IOBuffer* buf,
   // |socket_| is owned by this class and the callback won't be run once
   // |socket_| is gone. Therefore, it is safe to use base::Unretained() here.
   CompletionCallback write_callback = base::Bind(
-      &TCPClientSocket::DidCompleteReadWrite, base::Unretained(this), callback);
+      &TCPClientSocket::DidCompleteWrite, base::Unretained(this), callback);
   int result = socket_->Write(buf, buf_len, write_callback);
   if (result > 0)
     use_history_.set_was_used_to_convey_data();
@@ -288,11 +294,11 @@ int TCPClientSocket::Write(IOBuffer* buf,
   return result;
 }
 
-int TCPClientSocket::SetReceiveBufferSize(int32 size) {
+int TCPClientSocket::SetReceiveBufferSize(int32_t size) {
   return socket_->SetReceiveBufferSize(size);
 }
 
-int TCPClientSocket::SetSendBufferSize(int32 size) {
+int TCPClientSocket::SetSendBufferSize(int32_t size) {
     return socket_->SetSendBufferSize(size);
 }
 
@@ -318,6 +324,10 @@ void TCPClientSocket::AddConnectionAttempts(
                               attempts.end());
 }
 
+int64_t TCPClientSocket::GetTotalReceivedBytes() const {
+  return total_received_bytes_;
+}
+
 void TCPClientSocket::DidCompleteConnect(int result) {
   DCHECK_EQ(next_connect_state_, CONNECT_STATE_CONNECT_COMPLETE);
   DCHECK_NE(result, ERR_IO_PENDING);
@@ -328,6 +338,19 @@ void TCPClientSocket::DidCompleteConnect(int result) {
     socket_->EndLoggingMultipleConnectAttempts(result);
     base::ResetAndReturn(&connect_callback_).Run(result);
   }
+}
+
+void TCPClientSocket::DidCompleteRead(const CompletionCallback& callback,
+                                      int result) {
+  if (result > 0)
+    total_received_bytes_ += result;
+
+  DidCompleteReadWrite(callback, result);
+}
+
+void TCPClientSocket::DidCompleteWrite(const CompletionCallback& callback,
+                                       int result) {
+  DidCompleteReadWrite(callback, result);
 }
 
 void TCPClientSocket::DidCompleteReadWrite(const CompletionCallback& callback,

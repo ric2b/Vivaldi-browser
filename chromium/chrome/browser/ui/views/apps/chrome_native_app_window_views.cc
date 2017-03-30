@@ -4,15 +4,18 @@
 
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "apps/ui/views/app_window_frame_view.h"
-#include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/views/apps/desktop_keyboard_capture.h"
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "chrome/browser/ui/views/frame/taskbar_decorator.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -23,15 +26,10 @@
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
-#if defined(OS_WIN)
-#include <shlobj.h>
-#include "base/win/registry.h"
-#include "base/win/shortcut.h"
-#include "base/win/windows_version.h"
-#include "chrome/browser/web_applications/web_app_win.h"
-#include "ui/base/win/shell.h"
-#endif
 #include "chrome/browser/ui/browser_commands.h"
+
+#include "app/vivaldi_apptools.h"
+#include "ui/views/vivaldi_pin_shortcut.h"
 
 using extensions::AppWindow;
 
@@ -48,14 +46,13 @@ struct AcceleratorMapping {
   int command_id;
 };
 
-// 13-11-2014 arnar@vivaldi.com removed the line:
-// { ui::VKEY_W, ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
-// from the array kAppWindowAcceleratorMap.
-// Vivaldi browser will handle ctrl+w and not close the app
+// NOTE(daniel@vivaldi): Vivaldi handles ctrl+w and ctrl+shift+w by itself
 const AcceleratorMapping kAppWindowAcceleratorMap[] = {
-    { ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
-    { ui::VKEY_F4, ui::EF_SHIFT_DOWN, IDC_CLOSE_WINDOW },
-    { ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN, IDC_TASK_MANAGER },
+#if !defined(VIVALDI_BUILD)
+  { ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
+  { ui::VKEY_W, ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
+#endif
+  { ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN, IDC_TASK_MANAGER },
 };
 
 // These accelerators will only be available in kiosk mode. These allow the
@@ -110,45 +107,6 @@ const std::map<ui::Accelerator, int>& GetAcceleratorTable() {
   return app_mode_accelerators;
 }
 
-#if defined(OS_WIN)
-void CreateIconAndSetRelaunchDetails(
-    const base::FilePath web_app_path,
-    const base::FilePath icon_file,
-    scoped_ptr<web_app::ShortcutInfo> shortcut_info,
-    const HWND hwnd) {
-  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
-
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
-  {
-	  // we don't want this info for the Vivaldi shortcut
-	  shortcut_info->extension_id.clear();
-	  shortcut_info->profile_path.clear();
-  }
-  // Set the relaunch data so "Pin this program to taskbar" has the app's
-  // information.
-  base::CommandLine command_line = ShellIntegration::CommandLineArgsForLauncher(
-      shortcut_info->url,
-      shortcut_info->extension_id,
-      shortcut_info->profile_path);
-
-  base::FilePath chrome_exe;
-  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
-     NOTREACHED();
-     return;
-  }
-  command_line.SetProgram(chrome_exe);
-  ui::win::SetRelaunchDetailsForWindow(command_line.GetCommandLineString(),
-      shortcut_info->title, hwnd);
-
-  if (!base::PathExists(web_app_path) &&
-      !base::CreateDirectory(web_app_path)) {
-    return;
-  }
-  ui::win::SetAppIconForWindow(icon_file.value(), hwnd);
-  web_app::internals::CheckAndSaveIcon(icon_file, shortcut_info->favicon, false);
-}
-#endif
-
 }  // namespace
 
 ChromeNativeAppWindowViews::ChromeNativeAppWindowViews()
@@ -158,49 +116,6 @@ ChromeNativeAppWindowViews::ChromeNativeAppWindowViews()
 }
 
 ChromeNativeAppWindowViews::~ChromeNativeAppWindowViews() {}
-
-#if defined(OS_WIN)
-void VivaldiShortcutPinToTaskbar(const base::string16 &app_id)
-{
-  const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
-  const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
-
-  if (base::win::GetVersion() >= base::win::VERSION_WIN7 && base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
-  {
-    base::win::RegKey key_ptt(HKEY_CURRENT_USER, kVivaldiKey, KEY_ALL_ACCESS);
-    if (!key_ptt.Valid())
-      return;
-
-    DWORD reg_pin_to_taskbar_enabled = 0;
-    key_ptt.ReadValueDW(kVivaldiPinToTaskbarValue, &reg_pin_to_taskbar_enabled);
-    if (reg_pin_to_taskbar_enabled != 0)
-    {
-      wchar_t system_buffer[MAX_PATH] = {0};
-      if (FAILED(SHGetFolderPath(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, system_buffer)))
-      {
-        return;
-      }
-      base::FilePath shortcut_link(system_buffer);
-      shortcut_link = shortcut_link.AppendASCII("Vivaldi.lnk");
-      // now apply the correct app id for the shortcut link
-      base::win::ShortcutProperties props;
-      props.set_app_id(app_id);
-      props.options = base::win::ShortcutProperties::PROPERTIES_APP_ID;
-      bool success = base::win::CreateOrUpdateShortcutLink(shortcut_link, props, base::win::SHORTCUT_UPDATE_EXISTING);
-      if (success)
-      {
-        // pin the modified shortcut link to the taskbar
-        success = base::win::TaskbarPinShortcutLink(shortcut_link);
-        if (success)
-        {
-          // only pin once, typically on first run
-          key_ptt.WriteValue(kVivaldiPinToTaskbarValue, DWORD(0));
-        }
-      }
-    }
-  }
-}
-#endif
 
 void ChromeNativeAppWindowViews::OnBeforeWidgetInit(
     const AppWindow::CreateParams& create_params,
@@ -217,11 +132,7 @@ void ChromeNativeAppWindowViews::OnBeforePanelWidgetInit(
 void ChromeNativeAppWindowViews::InitializeDefaultWindow(
     const AppWindow::CreateParams& create_params) {
 #if defined(OS_WIN)
-  std::string app_name = web_app::GenerateApplicationNameFromExtensionId(
-      app_window()->extension_id());
-  base::string16 app_name_wide;
-  app_name_wide.assign(app_name.begin(), app_name.end()); // convert to wide string
-  content::BrowserThread::PostBlockingPoolTask(FROM_HERE, base::Bind(&VivaldiShortcutPinToTaskbar, app_name_wide));
+  vivaldi::StartPinShortcutToTaskbar(app_window());
 #endif
   views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_WINDOW);
   init_params.delegate = this;
@@ -246,8 +157,10 @@ void ChromeNativeAppWindowViews::InitializeDefaultWindow(
   OnBeforeWidgetInit(create_params, &init_params, widget());
   widget()->Init(init_params);
 
-  // This will be used as window state for the first Show()
-  widget()->SetSavedShowState(create_params.state);
+  if (vivaldi::IsVivaldiRunning()) {
+    // This will be used as window state for the first Show()
+    widget()->SetSavedShowState(create_params.state);
+  }
 
   // The frame insets are required to resolve the bounds specifications
   // correctly. So we set the window bounds and constraints now.
@@ -480,7 +393,7 @@ bool ChromeNativeAppWindowViews::IsFullscreenOrPending() const {
 }
 
 void ChromeNativeAppWindowViews::UpdateShape(scoped_ptr<SkRegion> region) {
-  shape_ = region.Pass();
+  shape_ = std::move(region);
   widget()->SetShape(shape() ? new SkRegion(*shape()) : nullptr);
   widget()->OnSizeConstraintsChanged();
 }
@@ -495,14 +408,6 @@ SkColor ChromeNativeAppWindowViews::ActiveFrameColor() const {
 
 SkColor ChromeNativeAppWindowViews::InactiveFrameColor() const {
   return inactive_frame_color_;
-}
-
-void ChromeNativeAppWindowViews::SetInterceptAllKeys(bool want_all_keys) {
-  if (want_all_keys && (desktop_keyboard_capture_.get() == NULL)) {
-    desktop_keyboard_capture_.reset(new DesktopKeyboardCapture(widget()));
-  } else if (!want_all_keys) {
-    desktop_keyboard_capture_.reset(NULL);
-  }
 }
 
 // NativeAppWindowViews implementation.

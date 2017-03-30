@@ -4,12 +4,15 @@
 
 #include "extensions/browser/api/socket/tls_socket.h"
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "extensions/browser/api/api_resource.h"
 #include "net/base/address_list.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/base/net_util.h"
 #include "net/base/rand_callback.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_handle.h"
@@ -19,10 +22,10 @@
 
 namespace {
 
-// Returns the SSL protocol version (as a uint16) represented by a string.
+// Returns the SSL protocol version (as a uint16_t) represented by a string.
 // Returns 0 if the string is invalid.
-uint16 SSLProtocolVersionFromString(const std::string& version_str) {
-  uint16 version = 0;  // Invalid.
+uint16_t SSLProtocolVersionFromString(const std::string& version_str) {
+  uint16_t version = 0;  // Invalid.
   if (version_str == "tls1") {
     version = net::SSL_PROTOCOL_VERSION_TLS1;
   } else if (version_str == "tls1.1") {
@@ -52,11 +55,11 @@ void TlsConnectDone(scoped_ptr<net::SSLClientSocket> ssl_socket,
   // API. Set the handle of the socket to the new value, so that it can be
   // used for read/write/close/etc.
   scoped_ptr<extensions::TLSSocket> wrapper(
-      new extensions::TLSSocket(ssl_socket.Pass(), extension_id));
+      new extensions::TLSSocket(std::move(ssl_socket), extension_id));
 
   // Caller will end up deleting the prior TCPSocket, once it calls
   // SetSocket(..,wrapper).
-  callback.Run(wrapper.Pass(), result);
+  callback.Run(std::move(wrapper), result);
 }
 
 }  // namespace
@@ -68,8 +71,8 @@ const char kTLSSocketTypeInvalidError[] =
 
 TLSSocket::TLSSocket(scoped_ptr<net::StreamSocket> tls_socket,
                      const std::string& owner_extension_id)
-    : ResumableTCPSocket(owner_extension_id), tls_socket_(tls_socket.Pass()) {
-}
+    : ResumableTCPSocket(owner_extension_id),
+      tls_socket_(std::move(tls_socket)) {}
 
 TLSSocket::~TLSSocket() {
   Disconnect();
@@ -100,7 +103,7 @@ void TLSSocket::Read(int count, const ReadCompletionCallback& callback) {
     return;
   }
 
-  if (!tls_socket_.get() || !IsConnected()) {
+  if (!tls_socket_.get()) {
     callback.Run(net::ERR_SOCKET_NOT_CONNECTED, NULL);
     return;
   }
@@ -145,7 +148,7 @@ bool TLSSocket::SetNoDelay(bool no_delay) {
 }
 
 int TLSSocket::Listen(const std::string& address,
-                      uint16 port,
+                      uint16_t port,
                       int backlog,
                       std::string* error_msg) {
   *error_msg = kTLSSocketTypeInvalidError;
@@ -179,7 +182,7 @@ void TLSSocket::UpgradeSocketToTLS(
     net::CertVerifier* cert_verifier,
     net::TransportSecurityState* transport_security_state,
     const std::string& extension_id,
-    core_api::socket::SecureOptions* options,
+    api::socket::SecureOptions* options,
     const TLSSocket::SecureCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   TCPSocket* tcp_socket = static_cast<TCPSocket*>(socket);
@@ -195,16 +198,16 @@ void TLSSocket::UpgradeSocketToTLS(
                << ", IsConnected: " << tcp_socket->IsConnected()
                << ", HasPendingRead: " << tcp_socket->HasPendingRead();
     }
-    TlsConnectDone(
-        null_sock.Pass(), extension_id, callback, net::ERR_INVALID_ARGUMENT);
+    TlsConnectDone(std::move(null_sock), extension_id, callback,
+                   net::ERR_INVALID_ARGUMENT);
     return;
   }
 
   net::IPEndPoint dest_host_port_pair;
   if (!tcp_socket->GetPeerAddress(&dest_host_port_pair)) {
     DVLOG(1) << "Could not get peer address.";
-    TlsConnectDone(
-        null_sock.Pass(), extension_id, callback, net::ERR_INVALID_ARGUMENT);
+    TlsConnectDone(std::move(null_sock), extension_id, callback,
+                   net::ERR_INVALID_ARGUMENT);
     return;
   }
 
@@ -217,8 +220,8 @@ void TLSSocket::UpgradeSocketToTLS(
   // host, using this hostname.
   if (host_info.family == url::CanonHostInfo::BROKEN) {
     DVLOG(1) << "Could not canonicalize hostname";
-    TlsConnectDone(
-        null_sock.Pass(), extension_id, callback, net::ERR_INVALID_ARGUMENT);
+    TlsConnectDone(std::move(null_sock), extension_id, callback,
+                   net::ERR_INVALID_ARGUMENT);
     return;
   }
 
@@ -243,9 +246,8 @@ void TLSSocket::UpgradeSocketToTLS(
   net::SSLConfig ssl_config;
   ssl_config_service->GetSSLConfig(&ssl_config);
   if (options && options->tls_version.get()) {
-    uint16 version_min = 0, version_max = 0;
-    core_api::socket::TLSVersionConstraints* versions =
-        options->tls_version.get();
+    uint16_t version_min = 0, version_max = 0;
+    api::socket::TLSVersionConstraints* versions = options->tls_version.get();
     if (versions->min.get()) {
       version_min = SSLProtocolVersionFromString(*versions->min.get());
     }
@@ -266,7 +268,7 @@ void TLSSocket::UpgradeSocketToTLS(
   // Create the socket.
   scoped_ptr<net::SSLClientSocket> ssl_socket(
       socket_factory->CreateSSLClientSocket(
-          socket_handle.Pass(), host_and_port, ssl_config, context));
+          std::move(socket_handle), host_and_port, ssl_config, context));
 
   DVLOG(1) << "Attempting to secure a connection to " << tcp_socket->hostname()
            << ":" << dest_host_port_pair.port();

@@ -5,8 +5,8 @@
 #ifndef MEDIA_AUDIO_SOUNDS_SOUNDS_MANAGER_H_
 #define MEDIA_AUDIO_SOUNDS_SOUNDS_MANAGER_H_
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
@@ -41,6 +41,10 @@ class MEDIA_EXPORT SoundsManager : public base::NonThreadSafe {
   // Plays sound identified by |key|, returns false if SoundsManager
   // was not properly initialized.
   virtual bool Play(SoundKey key) = 0;
+
+  // Stops playing sound identified by |key|, returns false if SoundsManager
+  // was not properly initialized.
+  virtual bool Stop(SoundKey key) = 0;
 
   // Returns duration of the sound identified by |key|. If SoundsManager
   // was not properly initialized or |key| was not registered, this

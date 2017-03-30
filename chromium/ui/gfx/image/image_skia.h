@@ -7,7 +7,6 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -32,6 +31,11 @@ class TestOnThread;
 // ImageSkia should be used whenever possible instead of SkBitmap.
 // Functions that mutate the image should operate on the gfx::ImageSkiaRep
 // returned from ImageSkia::GetRepresentation, not on ImageSkia.
+//
+// NOTE: This class should *not* be used to store multiple logical sizes of an
+// image (e.g., small, medium and large versions of an icon); use an ImageFamily
+// for that. An ImageSkia represents an image of a single logical size, with
+// potentially many different densities for high-DPI displays.
 //
 // ImageSkia is cheap to copy and intentionally supports copy semantics.
 class GFX_EXPORT ImageSkia {

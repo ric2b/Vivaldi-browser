@@ -11,6 +11,7 @@
 
 #include "ash/shelf/shelf_delegate.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/aura/window_observer.h"
 
 namespace ash {
@@ -56,7 +57,6 @@ class TestShelfDelegate : public ShelfDelegate, public aura::WindowObserver {
   bool HasShelfIDToAppIDMapping(ShelfID id) const override;
   const std::string& GetAppIDForShelfID(ShelfID id) override;
   void PinAppWithID(const std::string& app_id) override;
-  bool CanPin() const override;
   bool IsAppPinned(const std::string& app_id) override;
   void UnpinAppWithID(const std::string& app_id) override;
 

@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/protocol/sync_protocol_error.h"
 
@@ -99,6 +98,10 @@ int StatusController::num_updates_applied() const {
 
 int StatusController::num_server_overwrites() const {
   return model_neutral_.num_server_overwrites;
+}
+
+int StatusController::num_local_overwrites() const {
+  return model_neutral_.num_local_overwrites;
 }
 
 int StatusController::num_encryption_conflicts() const {

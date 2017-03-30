@@ -5,12 +5,16 @@
 #ifndef CHROME_UTILITY_CHROME_CONTENT_UTILITY_CLIENT_H_
 #define CHROME_UTILITY_CHROME_CONTENT_UTILITY_CLIENT_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
+#include "build/build_config.h"
 #include "content/public/utility/content_utility_client.h"
 #include "ipc/ipc_platform_file.h"
 
@@ -29,6 +33,8 @@ class ChromeContentUtilityClient : public content::ContentUtilityClient {
   void UtilityThreadStarted() override;
   bool OnMessageReceived(const IPC::Message& message) override;
   void RegisterMojoServices(content::ServiceRegistry* registry) override;
+
+  void AddHandler(scoped_ptr<UtilityMessageHandler> handler);
 
   static void PreSandboxStartup();
 
@@ -69,12 +75,11 @@ class ChromeContentUtilityClient : public content::ContentUtilityClient {
   void OnAnalyzeZipFileForDownloadProtection(
       const IPC::PlatformFileForTransit& zip_file,
       const IPC::PlatformFileForTransit& temp_file);
-#endif
-#if defined(ENABLE_EXTENSIONS)
-  void OnParseMediaMetadata(const std::string& mime_type,
-                            int64 total_size,
-                            bool get_attached_images);
-#endif
+#if defined(OS_MACOSX)
+  void OnAnalyzeDmgFileForDownloadProtection(
+      const IPC::PlatformFileForTransit& dmg_file);
+#endif  // defined(OS_MACOSX)
+#endif  // defined(FULL_SAFE_BROWSING)
 
   typedef ScopedVector<UtilityMessageHandler> Handlers;
   Handlers handlers_;

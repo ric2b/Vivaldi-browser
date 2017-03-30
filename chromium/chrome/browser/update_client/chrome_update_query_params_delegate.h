@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "components/update_client/update_query_params_delegate.h"
 
 class ChromeUpdateQueryParamsDelegate
@@ -20,11 +21,6 @@ class ChromeUpdateQueryParamsDelegate
 
   // update_client::UpdateQueryParamsDelegate:
   std::string GetExtraParams() override;
-
-  // Returns the value we use for the "updaterchannel=" and "prodchannel="
-  // parameters. Possible return values include: "canary", "dev", "beta", and
-  // "stable".
-  static const char* GetChannelString();
 
   // Returns the language for the present locale. Possible return values are
   // standard tags for languages, such as "en", "en-US", "de", "fr", "af", etc.

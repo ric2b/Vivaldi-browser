@@ -5,7 +5,10 @@
 #ifndef MEDIA_CAST_SENDER_H264_VT_ENCODER_H_
 #define MEDIA_CAST_SENDER_H264_VT_ENCODER_H_
 
+#include <stdint.h>
+
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/mac/videotoolbox_glue.h"
@@ -44,7 +47,6 @@ class H264VideoToolboxEncoder : public VideoEncoder,
       const FrameEncodedCallback& frame_encoded_callback) final;
   void SetBitRate(int new_bit_rate) final;
   void GenerateKeyFrame() final;
-  void LatestFrameIdToReference(uint32 frame_id) final;
   scoped_ptr<VideoFrameFactory> CreateVideoFrameFactory() final;
   void EmitFrames() final;
 
@@ -113,7 +115,7 @@ class H264VideoToolboxEncoder : public VideoEncoder,
   scoped_refptr<VideoFrameFactoryImpl> video_frame_factory_;
 
   // The ID of the last frame that was emitted.
-  uint32 last_frame_id_;
+  uint32_t last_frame_id_;
 
   // Force next frame to be a keyframe.
   bool encode_next_frame_as_keyframe_;

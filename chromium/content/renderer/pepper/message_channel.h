@@ -9,7 +9,7 @@
 #include <list>
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/renderer/pepper/v8_var_converter.h"
 #include "gin/handle.h"
@@ -166,6 +166,10 @@ class MessageChannel :
   // This queue stores values being posted to JavaScript.
   std::deque<blink::WebSerializedScriptValue> js_message_queue_;
   MessageQueueState js_message_queue_state_;
+
+  // True if there is already a posted task to drain the JS message queue.
+  bool drain_js_message_queue_scheduled_;
+
   // When the renderer is sending a blocking message to the plugin, we will
   // queue Plugin->JS messages temporarily to avoid re-entering JavaScript. This
   // counts how many blocking renderer->plugin messages are on the stack so that

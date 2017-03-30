@@ -4,6 +4,8 @@
 
 #include "ui/events/x/keysym_to_unicode.h"
 
+#include <stddef.h>
+
 // Define XK_xxx before the #include of <X11/keysym.h> so that <X11/keysym.h>
 // defines all KeySyms we need.
 #define XK_MISCELLANY
@@ -39,8 +41,7 @@
 #define XK_dead_greek 0xfe8c
 #endif
 
-#include <unordered_map>
-
+#include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 
@@ -873,7 +874,7 @@ class KeySymToUnicode {
   }
 
  private:
-  typedef std::unordered_map<KeySym, uint16_t> KeySymToUnicodeMap;
+  typedef base::hash_map<KeySym, uint16_t> KeySymToUnicodeMap;
   KeySymToUnicodeMap keysym_to_unicode_map_;
 
   DISALLOW_COPY_AND_ASSIGN(KeySymToUnicode);

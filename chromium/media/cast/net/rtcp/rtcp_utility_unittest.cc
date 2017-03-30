@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/cast/cast_environment.h"
@@ -14,9 +17,9 @@
 namespace media {
 namespace cast {
 
-static const uint32 kSenderSsrc = 0x10203;
-static const uint32 kSourceSsrc = 0x40506;
-static const uint32 kUnknownSsrc = 0xDEAD;
+static const uint32_t kSenderSsrc = 0x10203;
+static const uint32_t kSourceSsrc = 0x40506;
+static const uint32_t kUnknownSsrc = 0xDEAD;
 static const base::TimeDelta kTargetDelay =
     base::TimeDelta::FromMilliseconds(100);
 
@@ -40,7 +43,8 @@ class RtcpParserTest : public ::testing::Test {
     EXPECT_TRUE(parser.has_sender_report());
     EXPECT_EQ(kNtpHigh, parser.sender_report().ntp_seconds);
     EXPECT_EQ(kNtpLow, parser.sender_report().ntp_fraction);
-    EXPECT_EQ(kRtpTimestamp, parser.sender_report().rtp_timestamp);
+    EXPECT_EQ(kRtpTimestamp,
+              parser.sender_report().rtp_timestamp.lower_32_bits());
     EXPECT_EQ(kSendPacketCount, parser.sender_report().send_packet_count);
     EXPECT_EQ(kSendOctetCount, parser.sender_report().send_octet_count);
   }
@@ -123,6 +127,7 @@ class RtcpParserTest : public ::testing::Test {
   scoped_ptr<base::SimpleTestTickClock> testing_clock_;
   scoped_refptr<test::FakeSingleThreadTaskRunner> task_runner_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(RtcpParserTest);
 };
 
@@ -322,14 +327,14 @@ TEST_F(RtcpParserTest, InjectReceiverReportPacketWithCastFeedback) {
 }
 
 TEST_F(RtcpParserTest, InjectReceiverReportWithReceiverLogVerificationBase) {
-  static const uint32 kTimeBaseMs = 12345678;
-  static const uint32 kTimeDelayMs = 10;
-  static const uint32 kDelayDeltaMs = 123;
+  static const uint32_t kTimeBaseMs = 12345678;
+  static const uint32_t kTimeDelayMs = 10;
+  static const uint32_t kDelayDeltaMs = 123;
   base::SimpleTestTickClock testing_clock;
   testing_clock.Advance(base::TimeDelta::FromMilliseconds(kTimeBaseMs));
 
   RtcpReceiverLogMessage receiver_log;
-  RtcpReceiverFrameLogMessage frame_log(kRtpTimestamp);
+  RtcpReceiverFrameLogMessage frame_log(RtpTimeTicks().Expand(kRtpTimestamp));
   RtcpReceiverEventLogMessage event_log;
 
   event_log.type = FRAME_ACK_SENT;
@@ -365,8 +370,8 @@ TEST_F(RtcpParserTest, InjectReceiverReportWithReceiverLogVerificationBase) {
 }
 
 TEST_F(RtcpParserTest, InjectReceiverReportWithReceiverLogVerificationMulti) {
-  static const uint32 kTimeBaseMs = 12345678;
-  static const uint32 kTimeDelayMs = 10;
+  static const uint32_t kTimeBaseMs = 12345678;
+  static const uint32_t kTimeDelayMs = 10;
   static const int kDelayDeltaMs = 123;  // To be varied for every frame.
   base::SimpleTestTickClock testing_clock;
   testing_clock.Advance(base::TimeDelta::FromMilliseconds(kTimeBaseMs));
@@ -374,7 +379,7 @@ TEST_F(RtcpParserTest, InjectReceiverReportWithReceiverLogVerificationMulti) {
   RtcpReceiverLogMessage receiver_log;
 
   for (int j = 0; j < 100; ++j) {
-    RtcpReceiverFrameLogMessage frame_log(kRtpTimestamp);
+    RtcpReceiverFrameLogMessage frame_log(RtpTimeTicks().Expand(kRtpTimestamp));
     RtcpReceiverEventLogMessage event_log;
     event_log.type = FRAME_ACK_SENT;
     event_log.event_timestamp = testing_clock.NowTicks();
@@ -392,12 +397,58 @@ TEST_F(RtcpParserTest, InjectReceiverReportWithReceiverLogVerificationMulti) {
   for (int i = 0; i < 100; ++i) {
     p.AddReceiverFrameLog(kRtpTimestamp, 1, kTimeBaseMs + i * kTimeDelayMs);
     const int delay = (i - 50) * kDelayDeltaMs;
-    p.AddReceiverEventLog(static_cast<uint16>(delay), FRAME_ACK_SENT, 0);
+    p.AddReceiverEventLog(static_cast<uint16_t>(delay), FRAME_ACK_SENT, 0);
   }
 
   RtcpParser parser(kSourceSsrc, kSenderSsrc);
   EXPECT_TRUE(parser.Parse(p.Reader()));
   ExpectReceiverLog(parser, receiver_log);
+}
+
+TEST(RtcpUtilityTest, NtpAndTime) {
+  const int64_t kSecondsbetweenYear1900and2010 = INT64_C(40176 * 24 * 60 * 60);
+  const int64_t kSecondsbetweenYear1900and2030 = INT64_C(47481 * 24 * 60 * 60);
+
+  uint32_t ntp_seconds_1 = 0;
+  uint32_t ntp_fraction_1 = 0;
+  base::TimeTicks input_time = base::TimeTicks::Now();
+  ConvertTimeTicksToNtp(input_time, &ntp_seconds_1, &ntp_fraction_1);
+
+  // Verify absolute value.
+  EXPECT_GT(ntp_seconds_1, kSecondsbetweenYear1900and2010);
+  EXPECT_LT(ntp_seconds_1, kSecondsbetweenYear1900and2030);
+
+  base::TimeTicks out_1 = ConvertNtpToTimeTicks(ntp_seconds_1, ntp_fraction_1);
+  EXPECT_EQ(input_time, out_1);  // Verify inverse.
+
+  base::TimeDelta time_delta = base::TimeDelta::FromMilliseconds(1000);
+  input_time += time_delta;
+
+  uint32_t ntp_seconds_2 = 0;
+  uint32_t ntp_fraction_2 = 0;
+
+  ConvertTimeTicksToNtp(input_time, &ntp_seconds_2, &ntp_fraction_2);
+  base::TimeTicks out_2 = ConvertNtpToTimeTicks(ntp_seconds_2, ntp_fraction_2);
+  EXPECT_EQ(input_time, out_2);  // Verify inverse.
+
+  // Verify delta.
+  EXPECT_EQ((out_2 - out_1), time_delta);
+  EXPECT_EQ((ntp_seconds_2 - ntp_seconds_1), UINT32_C(1));
+  EXPECT_NEAR(ntp_fraction_2, ntp_fraction_1, 1);
+
+  time_delta = base::TimeDelta::FromMilliseconds(500);
+  input_time += time_delta;
+
+  uint32_t ntp_seconds_3 = 0;
+  uint32_t ntp_fraction_3 = 0;
+
+  ConvertTimeTicksToNtp(input_time, &ntp_seconds_3, &ntp_fraction_3);
+  base::TimeTicks out_3 = ConvertNtpToTimeTicks(ntp_seconds_3, ntp_fraction_3);
+  EXPECT_EQ(input_time, out_3);  // Verify inverse.
+
+  // Verify delta.
+  EXPECT_EQ((out_3 - out_2), time_delta);
+  EXPECT_NEAR((ntp_fraction_3 - ntp_fraction_2), 0xffffffff / 2, 1);
 }
 
 }  // namespace cast

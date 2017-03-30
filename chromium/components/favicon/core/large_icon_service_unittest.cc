@@ -7,6 +7,7 @@
 #include <deque>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -88,18 +89,14 @@ class MockFaviconService : public FaviconService {
   DISALLOW_COPY_AND_ASSIGN(MockFaviconService);
 };
 
-// This class provides access to LargeIconService internals.
+// This class provides access to LargeIconService internals, using the current
+// thread's task runner for testing.
 class TestLargeIconService : public LargeIconService {
  public:
   explicit TestLargeIconService(MockFaviconService* mock_favicon_service)
-      : LargeIconService(mock_favicon_service) {
-  }
+      : LargeIconService(mock_favicon_service,
+                         base::MessageLoop::current()->task_runner()) {}
   ~TestLargeIconService() override {
-  }
-
-  // Using the current thread's task runner for testing.
-  scoped_refptr<base::TaskRunner> GetBackgroundTaskRunner() override {
-    return base::MessageLoop::current()->task_runner();
   }
 
  private:

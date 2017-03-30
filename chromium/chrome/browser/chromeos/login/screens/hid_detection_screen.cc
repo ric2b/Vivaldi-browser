@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/login/screens/hid_detection_screen.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,7 +21,8 @@ namespace {
 
 // Possible ui-states for device-blocks.
 const char kSearchingState[] = "searching";
-const char kUSBConnectedState[] = "connected";
+const char kUSBState[] = "usb";
+const char kConnectedState[] = "connected";
 const char kBTPairedState[] = "paired";
 const char kBTPairingState[] = "pairing";
 
@@ -181,8 +184,8 @@ void HIDDetectionScreen::DisplayPinCode(device::BluetoothDevice* device,
   SendKeyboardDeviceNotification();
 }
 
-void HIDDetectionScreen::DisplayPasskey(
-    device::BluetoothDevice* device, uint32 passkey) {
+void HIDDetectionScreen::DisplayPasskey(device::BluetoothDevice* device,
+                                        uint32_t passkey) {
   VLOG(1) << "DisplayPassKey id = " << device->GetDeviceID()
           << " name = " << device->GetName();
   std::string pincode = base::UintToString(passkey);
@@ -191,8 +194,8 @@ void HIDDetectionScreen::DisplayPasskey(
   DisplayPinCode(device, pincode);
 }
 
-void HIDDetectionScreen::KeysEntered(
-    device::BluetoothDevice* device, uint32 entered) {
+void HIDDetectionScreen::KeysEntered(device::BluetoothDevice* device,
+                                     uint32_t entered) {
   VLOG(1) << "Number of keys entered " << entered;
   GetContextEditor()
       .SetBoolean(kContextKeyNumKeysEnteredExpected, true)
@@ -200,8 +203,8 @@ void HIDDetectionScreen::KeysEntered(
   SendKeyboardDeviceNotification();
 }
 
-void HIDDetectionScreen::ConfirmPasskey(
-    device::BluetoothDevice* device, uint32 passkey) {
+void HIDDetectionScreen::ConfirmPasskey(device::BluetoothDevice* device,
+                                        uint32_t passkey) {
   VLOG(1) << "Confirm Passkey";
   device->CancelPairing();
 }
@@ -320,8 +323,10 @@ void HIDDetectionScreen::SendPointingDeviceNotification() {
     state = kSearchingState;
   else if (pointing_device_connect_type_ == InputDeviceInfo::TYPE_BLUETOOTH)
     state = kBTPairedState;
+  else if (pointing_device_connect_type_ == InputDeviceInfo::TYPE_USB)
+    state = kUSBState;
   else
-    state = kUSBConnectedState;
+    state = kConnectedState;
   GetContextEditor().SetString(kContextKeyMouseState, state)
                     .SetBoolean(
       kContextKeyContinueButtonEnabled,
@@ -351,7 +356,7 @@ void HIDDetectionScreen::SendKeyboardDeviceNotification() {
                     IDS_HID_DETECTION_PAIRED_BLUETOOTH_KEYBOARD,
                     base::UTF8ToUTF16(keyboard_device_name_)));
     } else {
-      editor.SetString(kContextKeyKeyboardState, kUSBConnectedState);
+      editor.SetString(kContextKeyKeyboardState, kUSBState);
     }
   }
   editor.SetString(kContextKeyKeyboardDeviceName, keyboard_device_name_)
@@ -360,10 +365,11 @@ void HIDDetectionScreen::SendKeyboardDeviceNotification() {
             !(pointing_device_id_.empty() && keyboard_device_id_.empty()));
 }
 
-void HIDDetectionScreen::SetKeyboardDeviceName_(std::string name) {
-  if (!(keyboard_device_id_.empty()) && name.empty())
-    name = l10n_util::GetStringUTF8(IDS_HID_DETECTION_DEFAULT_KEYBOARD_NAME);
-  keyboard_device_name_ = name;
+void HIDDetectionScreen::SetKeyboardDeviceName_(const std::string& name) {
+  keyboard_device_name_ =
+      keyboard_device_id_.empty() || !name.empty()
+          ? name
+          : l10n_util::GetStringUTF8(IDS_HID_DETECTION_DEFAULT_KEYBOARD_NAME);
 }
 
 void HIDDetectionScreen::DeviceAdded(
@@ -529,7 +535,7 @@ void HIDDetectionScreen::UpdateBTDevices() {
 void HIDDetectionScreen::OnStartDiscoverySession(
     scoped_ptr<device::BluetoothDiscoverySession> discovery_session) {
   VLOG(1) << "BT Discovery session started";
-  discovery_session_ = discovery_session.Pass();
+  discovery_session_ = std::move(discovery_session);
   UpdateDevices();
 }
 

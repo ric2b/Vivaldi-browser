@@ -4,8 +4,10 @@
 
 #include "components/translate/core/language_detection/language_detection_util.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
-#include "base/metrics/field_trial.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,13 +16,14 @@
 #include "components/translate/core/common/translate_metrics.h"
 #include "components/translate/core/common/translate_util.h"
 
-#if !defined(CLD_VERSION) || CLD_VERSION==1
+#if CLD_VERSION==1
 #include "third_party/cld/encodings/compact_lang_det/compact_lang_det.h"
 #include "third_party/cld/encodings/compact_lang_det/win/cld_unicodetext.h"
 #endif
 
-#if !defined(CLD_VERSION) || CLD_VERSION==2
+#if CLD_VERSION==2
 #include "third_party/cld_2/src/public/compact_lang_det.h"
+#include "third_party/cld_2/src/public/encodings.h"
 #endif
 
 namespace {
@@ -70,23 +73,13 @@ void ApplyLanguageCodeCorrection(std::string* code) {
   translate::ToTranslateLanguageSynonym(code);
 }
 
-int GetCLDMajorVersion() {
-#if !defined(CLD_VERSION)
-  std::string group_name = base::FieldTrialList::FindFullName("CLD1VsCLD2");
-  if (group_name == "CLD2")
-    return 2;
-  else
-    return 1;
-#else
-  return CLD_VERSION;
-#endif
-}
-
 // Returns the ISO 639 language code of the specified |text|, or 'unknown' if it
 // failed.
 // |is_cld_reliable| will be set as true if CLD says the detection is reliable.
 std::string DetermineTextLanguage(const base::string16& text,
-                                  bool* is_cld_reliable) {
+                                  bool* is_cld_reliable,
+                                  std::string& code,
+                                  std::string& html_lang) {
   std::string language = translate::kUnknownLanguageCode;
   int num_bytes_evaluated = 0;
   bool is_reliable = false;
@@ -96,45 +89,56 @@ std::string DetermineTextLanguage(const base::string16& text,
   int cld_language = 0;
   bool is_valid_language = false;
 
-  switch (GetCLDMajorVersion()) {
-#if !defined(CLD_VERSION) || CLD_VERSION==1
-    case 1: {
-      int num_languages = 0;
-      cld_language = DetectLanguageOfUnicodeText(
-          NULL, text.c_str(), is_plain_text, &is_reliable, &num_languages, NULL,
-          &num_bytes_evaluated);
-      is_valid_language = cld_language != NUM_LANGUAGES &&
-          cld_language != UNKNOWN_LANGUAGE &&
-          cld_language != TG_UNKNOWN_LANGUAGE;
-      break;
-    }
-#endif
-#if !defined(CLD_VERSION) || CLD_VERSION==2
-    case 2: {
-      const std::string utf8_text(base::UTF16ToUTF8(text));
-      const int num_utf8_bytes = static_cast<int>(utf8_text.size());
-      const char* raw_utf8_bytes = utf8_text.c_str();
-      cld_language = CLD2::DetectLanguageCheckUTF8(
-          raw_utf8_bytes, num_utf8_bytes, is_plain_text, &is_reliable,
-          &num_bytes_evaluated);
+#if CLD_VERSION==1
+  int num_languages = 0;
+  cld_language = DetectLanguageOfUnicodeText(NULL, text.c_str(), is_plain_text,
+                                             &is_reliable, &num_languages, NULL,
+                                             &num_bytes_evaluated);
+  is_valid_language = cld_language != NUM_LANGUAGES &&
+                      cld_language != UNKNOWN_LANGUAGE &&
+                      cld_language != TG_UNKNOWN_LANGUAGE;
+#elif CLD_VERSION==2
+  const std::string utf8_text(base::UTF16ToUTF8(text));
+  const int num_utf8_bytes = static_cast<int>(utf8_text.size());
+  const char* raw_utf8_bytes = utf8_text.c_str();
 
-      if (num_bytes_evaluated < num_utf8_bytes &&
-          cld_language == CLD2::UNKNOWN_LANGUAGE) {
-        // Invalid UTF8 encountered, see bug http://crbug.com/444258.
-        // Retry using only the valid characters. This time the check for valid
-        // UTF8 can be skipped since the precise number of valid bytes is known.
-        cld_language = CLD2::DetectLanguage(raw_utf8_bytes, num_bytes_evaluated,
-                                            is_plain_text, &is_reliable);
-      }
-      is_valid_language = cld_language != CLD2::NUM_LANGUAGES &&
-          cld_language != CLD2::UNKNOWN_LANGUAGE &&
-          cld_language != CLD2::TG_UNKNOWN_LANGUAGE;
-      break;
-    }
-#endif
-    default:
-      NOTREACHED();
+  CLD2::Language language3[3];
+  int percent3[3];
+  int flags = 0;   // No flags, see compact_lang_det.h for details.
+  int text_bytes;  // Amount of non-tag/letters-only text (assumed 0).
+  double normalized_score3[3];
+
+  const char* tld_hint = "";
+  int encoding_hint = CLD2::UNKNOWN_ENCODING;
+  CLD2::Language language_hint = CLD2::GetLanguageFromName(html_lang.c_str());
+  CLD2::CLDHints cldhints = {code.c_str(), tld_hint, encoding_hint,
+                             language_hint};
+
+  cld_language = CLD2::ExtDetectLanguageSummaryCheckUTF8(
+      raw_utf8_bytes, num_utf8_bytes, is_plain_text, &cldhints, flags,
+      language3, percent3, normalized_score3,
+      nullptr /* No ResultChunkVector used */, &text_bytes, &is_reliable,
+      &num_bytes_evaluated);
+
+  if (num_bytes_evaluated < num_utf8_bytes &&
+      cld_language == CLD2::UNKNOWN_LANGUAGE) {
+    // Invalid UTF8 encountered, see bug http://crbug.com/444258.
+    // Retry using only the valid characters. This time the check for valid
+    // UTF8 can be skipped since the precise number of valid bytes is known.
+    cld_language = CLD2::ExtDetectLanguageSummary(
+        raw_utf8_bytes, num_utf8_bytes, is_plain_text, &cldhints, flags,
+        language3, percent3, normalized_score3,
+        nullptr /* No ResultChunkVector used */, &text_bytes, &is_reliable);
   }
+  is_valid_language = cld_language != CLD2::NUM_LANGUAGES &&
+                      cld_language != CLD2::UNKNOWN_LANGUAGE &&
+                      cld_language != CLD2::TG_UNKNOWN_LANGUAGE;
+
+  // Choose top language.
+  cld_language = language3[0];
+#else
+# error "CLD_VERSION must be 1 or 2"
+#endif
 
   if (is_cld_reliable != NULL)
     *is_cld_reliable = is_reliable;
@@ -152,37 +156,27 @@ std::string DetermineTextLanguage(const base::string16& text,
     // |LanguageCodeWithDialect| will go through ISO 639-1, ISO-639-2 and
     // 'other' tables to do the 'right' thing. In addition, it'll return zh-CN
     // for Simplified Chinese.
-    switch (GetCLDMajorVersion()) {
-#if !defined(CLD_VERSION) || CLD_VERSION==1
-      case 1:
-        language =
-            LanguageCodeWithDialects(static_cast<Language>(cld_language));
-        break;
+#if CLD_VERSION==1
+    language = LanguageCodeWithDialects(static_cast<Language>(cld_language));
+#elif CLD_VERSION==2
+    // (1) CLD2's LanguageCode returns general Chinese 'zh' for
+    // CLD2::CHINESE, but Translate server doesn't accept it. This is
+    // converted to 'zh-CN' in the same way as CLD1's
+    // LanguageCodeWithDialects.
+    //
+    // (2) CLD2's LanguageCode returns zh-Hant instead of zh-TW for
+    // CLD2::CHINESE_T. This is technically more precise for the language
+    // code of traditional Chinese, while Translate server hasn't accepted
+    // zh-Hant yet.
+    if (cld_language == CLD2::CHINESE)
+      language = "zh-CN";
+    else if (cld_language == CLD2::CHINESE_T)
+      language = "zh-TW";
+    else
+      language = CLD2::LanguageCode(static_cast<CLD2::Language>(cld_language));
+#else
+# error "CLD_VERSION must be 1 or 2"
 #endif
-#if !defined(CLD_VERSION) || CLD_VERSION==2
-      case 2:
-        // (1) CLD2's LanguageCode returns general Chinese 'zh' for
-        // CLD2::CHINESE, but Translate server doesn't accept it. This is
-        // converted to 'zh-CN' in the same way as CLD1's
-        // LanguageCodeWithDialects.
-        //
-        // (2) CLD2's LanguageCode returns zh-Hant instead of zh-TW for
-        // CLD2::CHINESE_T. This is technically more precise for the language
-        // code of traditional Chinese, while Translate server hasn't accepted
-        // zh-Hant yet.
-        if (cld_language == CLD2::CHINESE) {
-          language = "zh-CN";
-        } else if (cld_language == CLD2::CHINESE_T) {
-          language = "zh-TW";
-        } else {
-          language =
-              CLD2::LanguageCode(static_cast<CLD2::Language>(cld_language));
-        }
-        break;
-#endif
-      default:
-        NOTREACHED();
-    }
   }
   VLOG(9) << "Detected lang_id: " << language << ", from Text:\n" << text
           << "\n*************************************\n";
@@ -198,7 +192,8 @@ bool CanCLDComplementSubCode(
   // which dialect is used, CLD language has priority.
   // TODO(hajimehoshi): How about the other dialects like zh-MO?
   return page_language == "zh" &&
-         base::StartsWithASCII(cld_language, "zh-", false);
+         base::StartsWith(cld_language, "zh-",
+                          base::CompareCase::INSENSITIVE_ASCII);
 }
 
 }  // namespace
@@ -212,15 +207,6 @@ std::string DeterminePageLanguage(const std::string& code,
                                   bool* is_cld_reliable_p) {
   base::TimeTicks begin_time = base::TimeTicks::Now();
   bool is_cld_reliable;
-  std::string cld_language = DetermineTextLanguage(contents, &is_cld_reliable);
-  translate::ReportLanguageDetectionTime(begin_time, base::TimeTicks::Now());
-
-  if (cld_language_p != NULL)
-    *cld_language_p = cld_language;
-  if (is_cld_reliable_p != NULL)
-    *is_cld_reliable_p = is_cld_reliable;
-  translate::ToTranslateLanguageSynonym(&cld_language);
-
   // Check if html lang attribute is valid.
   std::string modified_html_lang;
   if (!html_lang.empty()) {
@@ -237,6 +223,16 @@ std::string DeterminePageLanguage(const std::string& code,
     ApplyLanguageCodeCorrection(&modified_code);
     translate::ReportContentLanguage(code, modified_code);
   }
+
+  std::string cld_language = DetermineTextLanguage(
+      contents, &is_cld_reliable, modified_code, modified_html_lang);
+  translate::ReportLanguageDetectionTime(begin_time, base::TimeTicks::Now());
+
+  if (cld_language_p != NULL)
+    *cld_language_p = cld_language;
+  if (is_cld_reliable_p != NULL)
+    *is_cld_reliable_p = is_cld_reliable;
+  translate::ToTranslateLanguageSynonym(&cld_language);
 
   // Adopt |modified_html_lang| if it is valid. Otherwise, adopt
   // |modified_code|.
@@ -301,44 +297,42 @@ void CorrectLanguageCodeTypo(std::string* code) {
   // Change everything up to a dash to lower-case and everything after to upper.
   size_t dash_index = code->find('-');
   if (dash_index != std::string::npos) {
-    *code = base::StringToLowerASCII(code->substr(0, dash_index)) +
-        base::StringToUpperASCII(code->substr(dash_index));
+    *code = base::ToLowerASCII(code->substr(0, dash_index)) +
+        base::ToUpperASCII(code->substr(dash_index));
   } else {
-    *code = base::StringToLowerASCII(*code);
+    *code = base::ToLowerASCII(*code);
   }
 }
 
 bool IsValidLanguageCode(const std::string& code) {
   // Roughly check if the language code follows /[a-zA-Z]{2,3}(-[a-zA-Z]{2})?/.
   // TODO(hajimehoshi): How about es-419, which is used as an Accept language?
-  std::vector<std::string> chunks;
-  base::SplitString(code, '-', &chunks);
+  std::vector<base::StringPiece> chunks = base::SplitStringPiece(
+      code, "-", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   if (chunks.size() < 1 || 2 < chunks.size())
     return false;
 
-  const std::string& main_code = chunks[0];
+  const base::StringPiece& main_code = chunks[0];
 
   if (main_code.size() < 1 || 3 < main_code.size())
     return false;
 
-  for (std::string::const_iterator it = main_code.begin();
-       it != main_code.end(); ++it) {
-    if (!base::IsAsciiAlpha(*it))
+  for (char c : main_code) {
+    if (!base::IsAsciiAlpha(c))
       return false;
   }
 
   if (chunks.size() == 1)
     return true;
 
-  const std::string& sub_code = chunks[1];
+  const base::StringPiece& sub_code = chunks[1];
 
   if (sub_code.size() != 2)
     return false;
 
-  for (std::string::const_iterator it = sub_code.begin();
-       it != sub_code.end(); ++it) {
-    if (!base::IsAsciiAlpha(*it))
+  for (char c : sub_code) {
+    if (!base::IsAsciiAlpha(c))
       return false;
   }
 
@@ -347,17 +341,17 @@ bool IsValidLanguageCode(const std::string& code) {
 
 bool IsSameOrSimilarLanguages(const std::string& page_language,
                               const std::string& cld_language) {
-  std::vector<std::string> chunks;
-
-  base::SplitString(page_language, '-', &chunks);
+  std::vector<std::string> chunks = base::SplitString(
+      page_language, "-", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (chunks.size() == 0)
     return false;
-  std::string page_language_main_part = chunks[0];
+  std::string page_language_main_part = chunks[0];  // Need copy.
 
-  base::SplitString(cld_language, '-', &chunks);
+  chunks = base::SplitString(
+      cld_language, "-", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (chunks.size() == 0)
     return false;
-  std::string cld_language_main_part = chunks[0];
+  const std::string& cld_language_main_part = chunks[0];
 
   // Language code part of |page_language| is matched to one of |cld_language|.
   // Country code is ignored here.
@@ -381,7 +375,8 @@ bool IsSameOrSimilarLanguages(const std::string& page_language,
 bool MaybeServerWrongConfiguration(const std::string& page_language,
                                    const std::string& cld_language) {
   // If |page_language| is not "en-*", respect it and just return false here.
-  if (!base::StartsWithASCII(page_language, "en", false))
+  if (!base::StartsWith(page_language, "en",
+                        base::CompareCase::INSENSITIVE_ASCII))
     return false;
 
   // A server provides a language meta information representing "en-*". But it

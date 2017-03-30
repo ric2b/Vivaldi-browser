@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
@@ -26,12 +28,14 @@ static const struct TestOsWithFamily {
   { { "VISTA", GPUTestConfig::kOsWinVista }, kOsFamilyWin },
   { { "WIN7", GPUTestConfig::kOsWin7 }, kOsFamilyWin },
   { { "WIN8", GPUTestConfig::kOsWin8 }, kOsFamilyWin },
+  { { "WIN10", GPUTestConfig::kOsWin10 }, kOsFamilyWin },
   { { "LEOPARD", GPUTestConfig::kOsMacLeopard }, kOsFamilyMac },
   { { "SNOWLEOPARD", GPUTestConfig::kOsMacSnowLeopard }, kOsFamilyMac },
   { { "LION", GPUTestConfig::kOsMacLion }, kOsFamilyMac },
   { { "MOUNTAINLION", GPUTestConfig::kOsMacMountainLion }, kOsFamilyMac },
   { { "MAVERICKS", GPUTestConfig::kOsMacMavericks }, kOsFamilyMac },
   { { "YOSEMITE", GPUTestConfig::kOsMacYosemite }, kOsFamilyMac },
+  { { "ELCAPITAN", GPUTestConfig::kOsMacElCapitan }, kOsFamilyMac },
   { { "LINUX", GPUTestConfig::kOsLinux },
     { "LINUX", GPUTestConfig::kOsLinux } },
   { { "CHROMEOS", GPUTestConfig::kOsChromeOS },
@@ -70,12 +74,13 @@ class GPUTestExpectationsParserTest : public testing::Test {
     bot_config_.set_build_type(GPUTestConfig::kBuildTypeRelease);
     bot_config_.AddGPUVendor(0x10de);
     bot_config_.set_gpu_device_id(0x0640);
+    bot_config_.set_api(GPUTestConfig::kAPID3D11);
     ASSERT_TRUE(bot_config_.IsValid());
   }
 
   void TearDown() override {}
 
-  void set_os(int32 os) {
+  void set_os(int32_t os) {
     bot_config_.set_os(os);
     ASSERT_TRUE(bot_config_.IsValid());
   }
@@ -165,7 +170,7 @@ TEST_F(GPUTestExpectationsParserTest, ValidUnrelatedTestEntry) {
 
 TEST_F(GPUTestExpectationsParserTest, AllModifiers) {
   const std::string text =
-      "BUG12345 XP VISTA WIN7 WIN8 LEOPARD SNOWLEOPARD LION MOUNTAINLION "
+      "BUG12345 XP VISTA WIN7 WIN8 WIN10 LEOPARD SNOWLEOPARD LION MOUNTAINLION "
       "MAVERICKS LINUX CHROMEOS ANDROID "
       "NVIDIA INTEL AMD VMWARE RELEASE DEBUG : MyTest = "
       "PASS FAIL FLAKY TIMEOUT SKIP";
@@ -194,8 +199,8 @@ TEST_P(GPUTestExpectationsParserParamTest, DuplicateModifiers) {
 
 TEST_F(GPUTestExpectationsParserTest, AllModifiersLowerCase) {
   const std::string text =
-      "BUG12345 xp vista win7 leopard snowleopard lion linux chromeos android "
-      "nvidia intel amd vmware release debug : MyTest = "
+      "BUG12345 xp vista win7 win8 win10 leopard snowleopard lion linux "
+      "chromeos android nvidia intel amd vmware release debug : MyTest = "
       "pass fail flaky timeout skip";
 
   GPUTestExpectationsParser parser;
@@ -318,6 +323,25 @@ TEST_F(GPUTestExpectationsParserTest, StarMatching) {
             parser.GetTestExpectation("MyTest0", bot_config()));
   EXPECT_EQ(GPUTestExpectationsParser::kGpuTestPass,
             parser.GetTestExpectation("OtherTest", bot_config()));
+}
+
+TEST_F(GPUTestExpectationsParserTest, ValidAPI) {
+  const std::string text =
+      "BUG12345 WIN7 NVIDIA D3D9 D3D11 OPENGL GLES : MyTest = FAIL";
+
+  GPUTestExpectationsParser parser;
+  EXPECT_TRUE(parser.LoadTestExpectations(text));
+  EXPECT_EQ(0u, parser.GetErrorMessages().size());
+  EXPECT_EQ(GPUTestExpectationsParser::kGpuTestFail,
+            parser.GetTestExpectation("MyTest", bot_config()));
+}
+
+TEST_F(GPUTestExpectationsParserTest, MultipleAPIsConflict) {
+  const std::string text = "BUG12345 WIN7 NVIDIA D3D9 D3D9 : MyTest = FAIL";
+
+  GPUTestExpectationsParser parser;
+  EXPECT_FALSE(parser.LoadTestExpectations(text));
+  EXPECT_NE(0u, parser.GetErrorMessages().size());
 }
 
 INSTANTIATE_TEST_CASE_P(GPUTestExpectationsParser,

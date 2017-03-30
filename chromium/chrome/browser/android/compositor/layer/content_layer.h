@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_ANDROID_COMPOSITOR_LAYER_CONTENT_LAYER_H_
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_LAYER_CONTENT_LAYER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/output/filter_operations.h"
 #include "chrome/browser/android/compositor/layer/layer.h"
@@ -32,12 +32,10 @@ class ContentLayer : public Layer {
       TabContentManager* tab_content_manager);
   void SetProperties(int id,
                      bool can_use_live_layer,
-                     bool can_use_ntp_fallback,
                      float static_to_view_blend,
                      bool should_override_content_alpha,
                      float content_alpha_override,
                      float saturation,
-                     float brightness,
                      const gfx::Rect& desired_bounds,
                      const gfx::Size& content_size);
   bool ShowingLiveLayer() { return !static_attached_ && content_attached_; }
@@ -53,8 +51,7 @@ class ContentLayer : public Layer {
   void SetContentLayer(scoped_refptr<cc::Layer> layer);
   void SetStaticLayer(scoped_refptr<ThumbnailLayer> layer);
   void ClipContentLayer(scoped_refptr<cc::Layer> content_layer,
-                        gfx::Rect clipping,
-                        gfx::Size content_size);
+                        gfx::Rect clipping);
   void ClipStaticLayer(scoped_refptr<ThumbnailLayer> static_layer,
                        gfx::Rect clipping);
 

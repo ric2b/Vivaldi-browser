@@ -501,7 +501,7 @@ FileListModel.prototype.splice = function(index, deleteCount, var_args) {
     this.onAddEntryToList_(arguments[i]);
   }
 
-  cr.ui.ArrayDataModel.prototype.splice.apply(this, arguments);
+  return cr.ui.ArrayDataModel.prototype.splice.apply(this, arguments);
 };
 
 /**
@@ -698,8 +698,9 @@ FileListContext.createPrefetchPropertyNames_ = function() {
        i++) {
     set[ListContainer.METADATA_PREFETCH_PROPERTY_NAMES[i]] = true;
   }
-  for (var i = 0; i < Command.METADATA_PREFETCH_PROPERTY_NAMES.length; i++) {
-    set[Command.METADATA_PREFETCH_PROPERTY_NAMES[i]] = true;
+  for (var i = 0; i < ActionsModel.METADATA_PREFETCH_PROPERTY_NAMES.length;
+       i++) {
+    set[ActionsModel.METADATA_PREFETCH_PROPERTY_NAMES[i]] = true;
   }
   for (var i = 0;
        i < FileSelection.METADATA_PREFETCH_PROPERTY_NAMES.length;

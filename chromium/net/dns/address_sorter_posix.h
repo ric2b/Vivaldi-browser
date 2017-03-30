@@ -8,11 +8,11 @@
 #include <map>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "net/base/address_list.h"
-#include "net/base/net_errors.h"
+#include "net/base/ip_address_number.h"
 #include "net/base/net_export.h"
-#include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
 #include "net/dns/address_sorter.h"
 

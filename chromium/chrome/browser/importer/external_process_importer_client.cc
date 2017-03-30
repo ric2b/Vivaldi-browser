@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/importer/in_process_importer_bridge.h"
@@ -18,6 +19,8 @@
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "importer/vivaldi_profile_import_process_messages.h"
+
+#include "app/vivaldi_resources.h"
 
 using content::BrowserThread;
 using content::UtilityProcessHost;

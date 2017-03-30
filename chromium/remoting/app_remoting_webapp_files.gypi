@@ -10,6 +10,7 @@
       'webapp/app_remoting/html/feedback_consent.css',
       'webapp/app_remoting/html/loading_window.css',
       'webapp/app_remoting/html/context_menu.css',
+      'webapp/app_remoting/html/cloud_print_dialog.css',
       'resources/drag.webp',
       '<@(remoting_webapp_resource_files)',
     ],
@@ -27,10 +28,12 @@
     'ar_feedback_consent_html_all_js_files': [
       'webapp/app_remoting/js/feedback_consent.js',
       'webapp/base/js/base.js',
+      'webapp/base/js/chromoting_event.js',
       'webapp/base/js/error.js',
       'webapp/base/js/identity.js',
       'webapp/base/js/oauth2_api.js',
       'webapp/base/js/oauth2_api_impl.js',
+      'webapp/base/js/platform.js',
       'webapp/base/js/plugin_settings.js',
       'webapp/base/js/l10n.js',
       'webapp/base/js/xhr.js',
@@ -57,6 +60,7 @@
       'webapp/app_remoting/js/app_remoting.js',
       'webapp/app_remoting/js/app_remoting_activity.js',
       'webapp/app_remoting/js/ar_auth_dialog.js',
+      'webapp/app_remoting/js/cloud_print_dialog_container.js',
       'webapp/app_remoting/js/context_menu_adapter.js',
       'webapp/app_remoting/js/context_menu_chrome.js',
       'webapp/app_remoting/js/context_menu_dom.js',
@@ -79,6 +83,11 @@
       '<@(remoting_webapp_shared_js_ui_files)',
     ],
 
+    # The JavaScript files to be injected into the clould print dialog.
+    'ar_cloud_print_dialog_js_files': [
+      'webapp/app_remoting/js/cloud_print_dialog/cloud_print_dialog_injected.js',
+    ],
+
     # Variables for ar_background.html.
     'ar_background_template':
       '<(DEPTH)/remoting/webapp/app_remoting/html/template_background.html',
@@ -99,6 +108,7 @@
 
     'ar_all_js_files': [
       '<@(ar_main_js_files)',
+      '<@(ar_cloud_print_dialog_js_files)',
       '<@(ar_feedback_consent_html_js_files)',
       '<@(remoting_webapp_message_window_html_js_files)',
       '<@(remoting_webapp_wcs_sandbox_html_js_files)',

@@ -5,14 +5,16 @@
 #ifndef CC_QUADS_RENDER_PASS_H_
 #define CC_QUADS_RENDER_PASS_H_
 
-#include <utility>
+#include <stddef.h>
 
-#include "base/basictypes.h"
+#include <utility>
+#include <vector>
+
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/list_container.h"
-#include "cc/base/scoped_ptr_vector.h"
 #include "cc/quads/render_pass_id.h"
 #include "cc/surfaces/surface_id.h"
 #include "skia/ext/refptr.h"
@@ -64,8 +66,8 @@ class CC_EXPORT RenderPass {
   scoped_ptr<RenderPass> Copy(RenderPassId new_id) const;
 
   // A deep copy of the render passes in the list including the quads.
-  static void CopyAll(const ScopedPtrVector<RenderPass>& in,
-                      ScopedPtrVector<RenderPass>* out);
+  static void CopyAll(const std::vector<scoped_ptr<RenderPass>>& in,
+                      std::vector<scoped_ptr<RenderPass>>* out);
 
   void SetNew(RenderPassId id,
               const gfx::Rect& output_rect,
@@ -112,14 +114,10 @@ class CC_EXPORT RenderPass {
   // contents as a bitmap, and give a copy of the bitmap to each callback in
   // this list. This property should not be serialized between compositors, as
   // it only makes sense in the root compositor.
-  ScopedPtrVector<CopyOutputRequest> copy_requests;
+  std::vector<scoped_ptr<CopyOutputRequest>> copy_requests;
 
   QuadList quad_list;
   SharedQuadStateList shared_quad_state_list;
-
-  // This vector contains the complete set of SurfaceIds referenced by
-  // DrawQuads in quad_list.
-  std::vector<SurfaceId> referenced_surfaces;
 
  protected:
   explicit RenderPass(size_t num_layers);
@@ -147,7 +145,7 @@ struct hash<cc::RenderPassId> {
 }  // namespace BASE_HASH_NAMESPACE
 
 namespace cc {
-typedef ScopedPtrVector<RenderPass> RenderPassList;
+typedef std::vector<scoped_ptr<RenderPass>> RenderPassList;
 typedef base::hash_map<RenderPassId, RenderPass*> RenderPassIdHashMap;
 }  // namespace cc
 

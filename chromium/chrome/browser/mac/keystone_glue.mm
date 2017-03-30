@@ -18,17 +18,16 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
-#include "base/mac/scoped_nsexception_enabler.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/worker_pool.h"
 #include "build/build_config.h"
 #import "chrome/browser/mac/keystone_registration.h"
-#include "chrome/browser/mac/obsolete_system.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/version_info/version_info.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -198,12 +197,10 @@ class PerformBridge : public base::RefCountedThreadSafe<PerformBridge> {
 // which does not depend on applying a patch to existing files.
 - (BOOL)wantsFullInstaller;
 
-// Returns an NSString* suitable for appending to a Chrome Keystone tag value
-// or tag key. If the system has a 32-bit-only CPU, the tag suffix will
-// contain the string "-32bit". If a full installer (as opposed to a binary
-// diff/delta patch) is required, the tag suffix will contain the string
-// "-full". If no special treatment is required, the tag suffix will be an
-// empty string.
+// Returns an NSString* suitable for appending to a Chrome Keystone tag value or
+// tag key.  If a full installer (as opposed to a binary diff/delta patch) is
+// required, the tag suffix will contain the string "-full". If no special
+// treatment is required, the tag suffix will be an empty string.
 - (NSString*)tagSuffix;
 
 @end  // @interface KeystoneGlue (Private)
@@ -332,10 +329,10 @@ NSString* const kVersionKey = @"KSVersion";
     brandFileType_ = kBrandFileTypeNone;
 
     // Only the stable channel has a brand code.
-    chrome::VersionInfo::Channel channel = chrome::VersionInfo::GetChannel();
+    version_info::Channel channel = chrome::GetChannel();
 
-    if (channel == chrome::VersionInfo::CHANNEL_DEV ||
-        channel == chrome::VersionInfo::CHANNEL_BETA) {
+    if (channel == version_info::Channel::DEV ||
+        channel == version_info::Channel::BETA) {
 
       // If on the dev or beta channel, this installation may have replaced
       // an older system-level installation. Check for a user brand file and
@@ -350,7 +347,7 @@ NSString* const kVersionKey = @"KSVersion";
         [fm removeItemAtPath:userBrandFile error:NULL];
       }
 
-    } else if (channel == chrome::VersionInfo::CHANNEL_STABLE) {
+    } else if (channel == version_info::Channel::STABLE) {
 
       // If there is a system brand file, use it.
       if ([fm fileExistsAtPath:systemBrandFile]) {
@@ -542,14 +539,7 @@ NSString* const kVersionKey = @"KSVersion";
   [self updateStatus:kAutoupdateRegistering version:nil];
 
   NSDictionary* parameters = [self keystoneParameters];
-  BOOL result;
-  {
-    // TODO(shess): Allows Keystone to throw an exception when
-    // /usr/bin/python does not exist (really!).
-    // http://crbug.com/86221 and http://crbug.com/87931
-    base::mac::ScopedNSExceptionEnabler enabler;
-    result = [registration_ registerWithParameters:parameters];
-  }
+  BOOL result = [registration_ registerWithParameters:parameters];
   if (!result) {
     [self updateStatus:kAutoupdateRegisterFailed version:nil];
     return;
@@ -702,7 +692,11 @@ NSString* const kVersionKey = @"KSVersion";
     status = kAutoupdateInstalled;
   } else {
     NSString* currentVersion =
+#if defined(VIVALDI_BUILD)
+        [NSString stringWithUTF8String:chrome::kVivaldiVersion];
+#else
         [NSString stringWithUTF8String:chrome::kChromeVersion];
+#endif
     if (!version) {
       // If the version on disk could not be determined, assume that
       // whatever's running is current.
@@ -1087,9 +1081,6 @@ NSString* const kVersionKey = @"KSVersion";
   // Info.plist, tag suffix components should only be appended to the tag
   // suffix in ASCII sort order.
   NSString* tagSuffix = @"";
-  if (ObsoleteSystemMac::Has32BitOnlyCPU()) {
-    tagSuffix = [tagSuffix stringByAppendingString:@"-32bit"];
-  }
   if ([self wantsFullInstaller]) {
     tagSuffix = [tagSuffix stringByAppendingString:@"-full"];
   }

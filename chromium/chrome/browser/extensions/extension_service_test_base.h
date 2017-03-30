@@ -5,10 +5,16 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_EXTENSION_SERVICE_TEST_BASE_H_
 #define CHROME_BROWSER_EXTENSIONS_EXTENSION_SERVICE_TEST_BASE_H_
 
+#include <stddef.h>
+
+#include <string>
+
 #include "base/at_exit.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -69,7 +75,8 @@ class ExtensionServiceTestBase : public testing::Test {
   ExtensionServiceInitParams CreateDefaultInitParams();
 
   // Initialize an ExtensionService according to the given |params|.
-  void InitializeExtensionService(const ExtensionServiceInitParams& params);
+  virtual void InitializeExtensionService(
+      const ExtensionServiceInitParams& params);
 
   // Initialize an empty ExtensionService using the default init params.
   void InitializeEmptyExtensionService();
@@ -89,6 +96,20 @@ class ExtensionServiceTestBase : public testing::Test {
   // Resets the browser thread bundle to one with |options|.
   void ResetThreadBundle(int options);
 
+  // Helpers to check the existence and values of extension prefs.
+  size_t GetPrefKeyCount();
+  void ValidatePrefKeyCount(size_t count);
+  testing::AssertionResult ValidateBooleanPref(
+      const std::string& extension_id,
+      const std::string& pref_path,
+      bool expected_val);
+  void ValidateIntegerPref(const std::string& extension_id,
+                           const std::string& pref_path,
+                           int expected_val);
+  void ValidateStringPref(const std::string& extension_id,
+                          const std::string& pref_path,
+                          const std::string& expected_val);
+
   // TODO(rdevlin.cronin): Pull out more methods from ExtensionServiceTest that
   // are commonly used and/or reimplemented. For instance, methods to install
   // extensions from various locations, etc.
@@ -104,9 +125,14 @@ class ExtensionServiceTestBase : public testing::Test {
   const base::ScopedTempDir& temp_dir() const { return temp_dir_; }
 
  private:
+  // Must be declared before anything that may make use of the
+  // directory so as to ensure files are closed before cleanup.
+  base::ScopedTempDir temp_dir_;
+
   // Destroying at_exit_manager_ will delete all LazyInstances, so it must come
   // after thread_bundle_ in the destruction order.
   base::ShadowingAtExitManager at_exit_manager_;
+
   scoped_ptr<content::TestBrowserThreadBundle> thread_bundle_;
 
  protected:
@@ -124,10 +150,6 @@ class ExtensionServiceTestBase : public testing::Test {
 
  private:
   void CreateExtensionService(const ExtensionServiceInitParams& params);
-
-  // Destroy temp_dir_ after thread_bundle_ so clean-up tasks can still use the
-  // directory.
-  base::ScopedTempDir temp_dir_;
 
   // Whether or not the thread bundle was reset in the test.
   bool did_reset_thread_bundle_;
@@ -148,6 +170,8 @@ class ExtensionServiceTestBase : public testing::Test {
   chromeos::ScopedTestCrosSettings test_cros_settings_;
   chromeos::ScopedTestUserManager test_user_manager_;
 #endif
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionServiceTestBase);
 };
 
 }  // namespace extensions

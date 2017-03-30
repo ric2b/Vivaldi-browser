@@ -8,7 +8,7 @@
 
 #include "chromeos/accelerometer/accelerometer_reader.h"
 #include "chromeos/accelerometer/accelerometer_types.h"
-#include "content/browser/device_sensors/inertial_sensor_consts.h"
+#include "content/browser/device_sensors/device_sensors_consts.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 
 namespace {
@@ -140,11 +140,7 @@ void SensorManagerChromeOS::GenerateOrientationEvent(double x,
     return;
 
   // Create a unit vector for trigonometry
-  // TODO(jonross): Stop reversing signs for vector components once
-  // accelerometer values have been fixed. crbug.com/431391
-  // Ternaries are to remove -0.0f which gives incorrect trigonometrical
-  // results.
-  gfx::Vector3dF data(x, y ? -y : 0.0f, z ? -z : 0.0f);
+  gfx::Vector3dF data(x, y, z);
   data.Scale(1.0f / data.Length());
 
   // Transform accelerometer to W3C angles, using the Z-X-Y Eulerangles matrix.
@@ -153,7 +149,7 @@ void SensorManagerChromeOS::GenerateOrientationEvent(double x,
   // z = cos(beta) * cos(gamma)
   // With only accelerometer alpha cannot be provided.
   double beta = kRad2deg * atan2(data.y(), data.z());
-  double gamma = kRad2deg * asin(data.x());
+  double gamma = kRad2deg * asin(-data.x());
 
   // Convert beta and gamma to fit the intervals in the specification. Beta is
   // [-180, 180) and gamma is [-90, 90).

@@ -4,6 +4,11 @@
 
 #include "base/files/memory_mapped_file.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -14,16 +19,16 @@ namespace base {
 namespace {
 
 // Create a temporary buffer and fill it with a watermark sequence.
-scoped_ptr<uint8[]> CreateTestBuffer(size_t size, size_t offset) {
-  scoped_ptr<uint8[]> buf(new uint8[size]);
+scoped_ptr<uint8_t[]> CreateTestBuffer(size_t size, size_t offset) {
+  scoped_ptr<uint8_t[]> buf(new uint8_t[size]);
   for (size_t i = 0; i < size; ++i)
-    buf.get()[i] = static_cast<uint8>((offset + i) % 253);
-  return buf.Pass();
+    buf.get()[i] = static_cast<uint8_t>((offset + i) % 253);
+  return buf;
 }
 
 // Check that the watermark sequence is consistent with the |offset| provided.
-bool CheckBufferContents(const uint8* data, size_t size, size_t offset) {
-  scoped_ptr<uint8[]> test_data(CreateTestBuffer(size, offset));
+bool CheckBufferContents(const uint8_t* data, size_t size, size_t offset) {
+  scoped_ptr<uint8_t[]> test_data(CreateTestBuffer(size, offset));
   return memcmp(test_data.get(), data, size) == 0;
 }
 
@@ -41,7 +46,7 @@ class MemoryMappedFileTest : public PlatformTest {
               File::FLAG_CREATE_ALWAYS | File::FLAG_READ | File::FLAG_WRITE);
     EXPECT_TRUE(file.IsValid());
 
-    scoped_ptr<uint8[]> test_data(CreateTestBuffer(size, 0));
+    scoped_ptr<uint8_t[]> test_data(CreateTestBuffer(size, 0));
     size_t bytes_written =
         file.Write(0, reinterpret_cast<char*>(test_data.get()), size);
     EXPECT_EQ(size, bytes_written);
@@ -93,7 +98,7 @@ TEST_F(MemoryMappedFileTest, MapWholeFileUsingRegion) {
   MemoryMappedFile map;
 
   File file(temp_file_path(), File::FLAG_OPEN | File::FLAG_READ);
-  map.Initialize(file.Pass(), MemoryMappedFile::Region::kWholeFile);
+  map.Initialize(std::move(file), MemoryMappedFile::Region::kWholeFile);
   ASSERT_EQ(kFileSize, map.length());
   ASSERT_TRUE(map.data() != NULL);
   EXPECT_TRUE(map.IsValid());
@@ -108,7 +113,7 @@ TEST_F(MemoryMappedFileTest, MapPartialRegionAtBeginning) {
 
   File file(temp_file_path(), File::FLAG_OPEN | File::FLAG_READ);
   MemoryMappedFile::Region region = {0, kPartialSize};
-  map.Initialize(file.Pass(), region);
+  map.Initialize(std::move(file), region);
   ASSERT_EQ(kPartialSize, map.length());
   ASSERT_TRUE(map.data() != NULL);
   EXPECT_TRUE(map.IsValid());
@@ -124,7 +129,7 @@ TEST_F(MemoryMappedFileTest, MapPartialRegionAtEnd) {
 
   File file(temp_file_path(), File::FLAG_OPEN | File::FLAG_READ);
   MemoryMappedFile::Region region = {kOffset, kPartialSize};
-  map.Initialize(file.Pass(), region);
+  map.Initialize(std::move(file), region);
   ASSERT_EQ(kPartialSize, map.length());
   ASSERT_TRUE(map.data() != NULL);
   EXPECT_TRUE(map.IsValid());
@@ -141,7 +146,7 @@ TEST_F(MemoryMappedFileTest, MapSmallPartialRegionInTheMiddle) {
 
   File file(temp_file_path(), File::FLAG_OPEN | File::FLAG_READ);
   MemoryMappedFile::Region region = {kOffset, kPartialSize};
-  map.Initialize(file.Pass(), region);
+  map.Initialize(std::move(file), region);
   ASSERT_EQ(kPartialSize, map.length());
   ASSERT_TRUE(map.data() != NULL);
   EXPECT_TRUE(map.IsValid());
@@ -158,7 +163,7 @@ TEST_F(MemoryMappedFileTest, MapLargePartialRegionInTheMiddle) {
 
   File file(temp_file_path(), File::FLAG_OPEN | File::FLAG_READ);
   MemoryMappedFile::Region region = {kOffset, kPartialSize};
-  map.Initialize(file.Pass(), region);
+  map.Initialize(std::move(file), region);
   ASSERT_EQ(kPartialSize, map.length());
   ASSERT_TRUE(map.data() != NULL);
   EXPECT_TRUE(map.IsValid());

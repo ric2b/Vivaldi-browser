@@ -9,13 +9,14 @@
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scope.h"
 #include "tools/gn/target_generator.h"
+#include "tools/gn/template.h"
 #include "tools/gn/value.h"
 #include "tools/gn/variables.h"
 
 #define DEPENDENT_CONFIG_VARS \
     "  Dependent configs: all_dependent_configs, public_configs\n"
 #define DEPS_VARS \
-    "  Deps: data_deps, deps, forward_dependent_configs_from, public_deps\n"
+    "  Deps: data_deps, deps, public_deps\n"
 #define GENERAL_TARGET_VARS \
     "  General: check_includes, configs, data, inputs, output_name,\n" \
     "           output_extension, public, sources, testonly, visibility\n"
@@ -30,6 +31,10 @@ Value ExecuteGenericTarget(const char* target_type,
                            const std::vector<Value>& args,
                            BlockNode* block,
                            Err* err) {
+  NonNestableBlock non_nestable(scope, function, "target");
+  if (!non_nestable.Enter(err))
+    return Value();
+
   if (!EnsureNotProcessingImport(function, scope, err) ||
       !EnsureNotProcessingBuildConfig(function, scope, err))
     return Value();
@@ -103,6 +108,9 @@ const char kAction_Help[] =
     "  if an input file changes) by writing a depfile when the script is run\n"
     "  (see \"gn help depfile\"). This is more flexible than \"inputs\".\n"
     "\n"
+    "  If the command line length is very long, you can use response files\n"
+    "  to pass args to your script. See \"gn help response_file_contents\".\n"
+    "\n"
     "  It is recommended you put inputs to your script in the \"sources\"\n"
     "  variable, and stuff like other Python files required to run your\n"
     "  script in the \"inputs\" variable.\n"
@@ -122,8 +130,8 @@ const char kAction_Help[] =
     "\n"
     "Variables\n"
     "\n"
-    "  args, data, data_deps, depfile, deps, outputs*, script*,\n"
-    "  inputs, sources\n"
+    "  args, console, data, data_deps, depfile, deps, inputs, outputs*,\n"
+    "  response_file_contents, script*, sources\n"
     "  * = required\n"
     "\n"
     "Example\n"
@@ -177,6 +185,9 @@ const char kActionForEach_Help[] =
     "  listed in the \"inputs\" variable. These files are treated as\n"
     "  dependencies of each script invocation.\n"
     "\n"
+    "  If the command line length is very long, you can use response files\n"
+    "  to pass args to your script. See \"gn help response_file_contents\".\n"
+    "\n"
     "  You can dynamically write input dependencies (for incremental rebuilds\n"
     "  if an input file changes) by writing a depfile when the script is run\n"
     "  (see \"gn help depfile\"). This is more flexible than \"inputs\".\n"
@@ -193,8 +204,8 @@ const char kActionForEach_Help[] =
     "\n"
     "Variables\n"
     "\n"
-    "  args, data, data_deps, depfile, deps, outputs*, script*,\n"
-    "  inputs, sources*\n"
+    "  args, console, data, data_deps, depfile, deps, inputs, outputs*,\n"
+    "  response_file_contents, script*, sources*\n"
     "  * = required\n"
     "\n"
     "Example\n"
@@ -247,15 +258,16 @@ const char kCopy_Help[] =
     "  reference the output or generated intermediate file directories,\n"
     "  respectively.\n"
     "\n"
-    "  Both \"sources\" and \"outputs\" must be specified. Sources can\n"
+    "  Both \"sources\" and \"outputs\" must be specified. Sources can "
+    "include\n"
     "  as many files as you want, but there can only be one item in the\n"
     "  outputs list (plural is used for the name for consistency with\n"
     "  other target types).\n"
     "\n"
     "  If there is more than one source file, your output name should specify\n"
-    "  a mapping from each source files to output file names using source\n"
+    "  a mapping from each source file to an output file name using source\n"
     "  expansion (see \"gn help source_expansion\"). The placeholders will\n"
-    "  will look like \"{{source_name_part}}\", for example.\n"
+    "  look like \"{{source_name_part}}\", for example.\n"
     "\n"
     "Examples\n"
     "\n"
@@ -324,9 +336,7 @@ const char kGroup_Help[] =
     "  specify configs that apply to their dependents.\n"
     "\n"
     "  Depending on a group is exactly like depending directly on that\n"
-    "  group's deps. Direct dependent configs will get automatically\n"
-    "  forwarded through the group so you shouldn't need to use\n"
-    "  \"forward_dependent_configs_from.\n"
+    "  group's deps. \n"
     "\n"
     "Variables\n"
     "\n"
@@ -351,6 +361,38 @@ Value RunGroup(Scope* scope,
                               block, err);
 }
 
+// loadable_module -------------------------------------------------------------
+
+const char kLoadableModule[] = "loadable_module";
+const char kLoadableModule_HelpShort[] =
+    "loadable_module: Declare a loadable module target.";
+const char kLoadableModule_Help[] =
+    "loadable_module: Declare a loadable module target.\n"
+    "\n"
+    "  This target type allows you to create an object file that is (and can\n"
+    "  only be) loaded and unloaded at runtime.\n"
+    "\n"
+    "  A loadable module will be specified on the linker line for targets\n"
+    "  listing the loadable module in its \"deps\". If you don't want this\n"
+    "  (if you don't need to dynamically load the library at runtime), then\n"
+    "  you should use a \"shared_library\" target type instead.\n"
+    "\n"
+    "Variables\n"
+    "\n"
+    CONFIG_VALUES_VARS_HELP
+    DEPS_VARS
+    DEPENDENT_CONFIG_VARS
+    GENERAL_TARGET_VARS;
+
+Value RunLoadableModule(Scope* scope,
+                       const FunctionCallNode* function,
+                       const std::vector<Value>& args,
+                       BlockNode* block,
+                       Err* err) {
+  return ExecuteGenericTarget(functions::kLoadableModule, scope, function, args,
+                              block, err);
+}
+
 // shared_library --------------------------------------------------------------
 
 const char kSharedLibrary[] = "shared_library";
@@ -362,7 +404,8 @@ const char kSharedLibrary_Help[] =
     "  A shared library will be specified on the linker line for targets\n"
     "  listing the shared library in its \"deps\". If you don't want this\n"
     "  (say you dynamically load the library at runtime), then you should\n"
-    "  depend on the shared library via \"data_deps\" instead.\n"
+    "  depend on the shared library via \"data_deps\" or, on Darwin\n"
+    "  platforms, use a \"loadable_module\" target type instead.\n"
     "\n"
     "Variables\n"
     "\n"
@@ -454,6 +497,69 @@ Value RunStaticLibrary(Scope* scope,
                        BlockNode* block,
                        Err* err) {
   return ExecuteGenericTarget(functions::kStaticLibrary, scope, function, args,
+                              block, err);
+}
+
+// target ---------------------------------------------------------------------
+
+const char kTarget[] = "target";
+const char kTarget_HelpShort[] =
+    "target: Declare an target with the given programmatic type.";
+const char kTarget_Help[] =
+    "target: Declare an target with the given programmatic type.\n"
+    "\n"
+    "  target(target_type_string, target_name_string) { ... }\n"
+    "\n"
+    "  The target() function is a way to invoke a built-in target or template\n"
+    "  with a type determined at runtime. This is useful for cases where the\n"
+    "  type of a target might not be known statically.\n"
+    "\n"
+    "  Only templates and built-in target functions are supported for the\n"
+    "  target_type_string parameter. Arbitrary functions, configs, and\n"
+    "  toolchains are not supported.\n"
+    "\n"
+    "  The call:\n"
+    "    target(\"source_set\", \"doom_melon\") {\n"
+    "  Is equivalent to:\n"
+    "    source_set(\"doom_melon\") {\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  if (foo_build_as_shared) {\n"
+    "    my_type = \"shared_library\"\n"
+    "  } else {\n"
+    "    my_type = \"source_set\"\n"
+    "  }\n"
+    "\n"
+    "  target(my_type, \"foo\") {\n"
+    "    ...\n"
+    "  }\n";
+Value RunTarget(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err) {
+  if (args.size() != 2) {
+    *err = Err(function, "Expected two arguments.", "Try \"gn help target\".");
+    return Value();
+  }
+
+  // The first argument must be a string (the target type). Don't type-check
+  // the second argument since the target-specific function will do that.
+  if (!args[0].VerifyTypeIs(Value::STRING, err))
+    return Value();
+  const std::string& target_type = args[0].string_value();
+
+  // The rest of the args are passed to the function.
+  std::vector<Value> sub_args(args.begin() + 1, args.end());
+
+  // Run a template if it is one.
+  const Template* templ = scope->GetTemplate(target_type);
+  if (templ)
+    return templ->Invoke(scope, function, sub_args, block, err);
+
+  // Otherwise, assume the target is a built-in target type.
+  return ExecuteGenericTarget(target_type.c_str(), scope, function, sub_args,
                               block, err);
 }
 

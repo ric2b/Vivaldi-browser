@@ -35,12 +35,18 @@ TestingSpellCheckProvider::TestingSpellCheckProvider()
         spelling_service_call_count_(0) {
 }
 
+TestingSpellCheckProvider::TestingSpellCheckProvider(
+    SpellCheck* spellcheck)
+    : SpellCheckProvider(nullptr, spellcheck),
+      spelling_service_call_count_(0) {
+}
+
 TestingSpellCheckProvider::~TestingSpellCheckProvider() {
   delete spellcheck_;
 }
 
 bool TestingSpellCheckProvider::Send(IPC::Message* message)  {
-#if !defined(OS_MACOSX)
+#if !defined(USE_BROWSER_SPELLCHECKER)
   // Call our mock message handlers.
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(TestingSpellCheckProvider, *message)
@@ -63,7 +69,7 @@ void TestingSpellCheckProvider::OnCallSpellingService(int route_id,
                            int identifier,
                            const base::string16& text,
                            const std::vector<SpellCheckMarker>& markers) {
-#if defined (OS_MACOSX)
+#if defined (USE_BROWSER_SPELLCHECKER)
   NOTREACHED();
 #else
   ++spelling_service_call_count_;

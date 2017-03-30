@@ -6,6 +6,7 @@
 
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -236,7 +237,7 @@ void FastUnloadController::CancelWindowClose() {
     CoreTabHelper* core_tab_helper =
         CoreTabHelper::FromWebContents(tab_needing_before_unload_ack_);
     if (core_tab_helper) {
-      core_tab_helper->OnCloseCanceled();
+    core_tab_helper->OnCloseCanceled();
     }
     DevToolsWindow::OnPageCloseCanceled(tab_needing_before_unload_ack_);
     tab_needing_before_unload_ack_ = NULL;
@@ -247,7 +248,7 @@ void FastUnloadController::CancelWindowClose() {
 
     CoreTabHelper* core_tab_helper = CoreTabHelper::FromWebContents(contents);
     if (core_tab_helper) {
-      core_tab_helper->OnCloseCanceled();
+    core_tab_helper->OnCloseCanceled();
     }
     DevToolsWindow::OnPageCloseCanceled(contents);
   }
@@ -364,7 +365,7 @@ bool FastUnloadController::DetachWebContents(content::WebContents* contents) {
     contents->SetDelegate(detached_delegate_.get());
     CoreTabHelper* core_tab_helper = CoreTabHelper::FromWebContents(contents);
     if (core_tab_helper) {
-      core_tab_helper->OnUnloadDetachedStarted();
+    core_tab_helper->OnUnloadDetachedStarted();
     }
     return true;
   }
@@ -396,7 +397,7 @@ void FastUnloadController::ProcessPendingTabs() {
 
       CoreTabHelper* core_tab_helper = CoreTabHelper::FromWebContents(contents);
       if (core_tab_helper) {
-        core_tab_helper->OnCloseStarted();
+      core_tab_helper->OnCloseStarted();
       }
 
       // If there's a devtools window attached to |contents|,
@@ -431,7 +432,7 @@ void FastUnloadController::ProcessPendingTabs() {
         CoreTabHelper* core_tab_helper =
             CoreTabHelper::FromWebContents(contents);
         if (core_tab_helper) {
-          core_tab_helper->OnUnloadStarted();
+        core_tab_helper->OnUnloadStarted();
         }
         DetachWebContents(contents);
         contents->ClosePage();

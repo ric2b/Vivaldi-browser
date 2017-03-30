@@ -11,20 +11,26 @@
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
+#include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 
 using content::WebContents;
 
 const char FullscreenControllerTest::kFullscreenMouseLockHTML[] =
-    "files/fullscreen_mouselock/fullscreen_mouselock.html";
+    "/fullscreen_mouselock/fullscreen_mouselock.html";
 
 void FullscreenControllerTest::RequestToLockMouse(
     bool user_gesture,
     bool last_unlocked_by_target) {
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  MouseLockController* mouse_lock_controller =
+      GetExclusiveAccessManager()->mouse_lock_controller();
+  mouse_lock_controller->set_fake_mouse_lock_for_test(true);
   browser()->RequestToLockMouse(tab, user_gesture,
       last_unlocked_by_target);
+  mouse_lock_controller->set_fake_mouse_lock_for_test(false);
 }
 
 FullscreenController* FullscreenControllerTest::GetFullscreenController() {
@@ -40,7 +46,9 @@ void FullscreenControllerTest::LostMouseLock() {
 }
 
 bool FullscreenControllerTest::SendEscapeToFullscreenController() {
-  return GetExclusiveAccessManager()->HandleUserPressedEscape();
+  content::NativeWebKeyboardEvent event;
+  event.windowsKeyCode = ui::VKEY_ESCAPE;
+  return GetExclusiveAccessManager()->HandleUserKeyPress(event);
 }
 
 bool FullscreenControllerTest::IsFullscreenForBrowser() {

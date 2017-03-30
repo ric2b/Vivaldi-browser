@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/views/autofill/card_unmask_prompt_views.h"
 
-#include "base/basictypes.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -19,13 +18,17 @@
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
+#include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/compositing_recorder.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/combobox/combobox.h"
@@ -248,7 +251,7 @@ void CardUnmaskPromptViews::Layout() {
 
   // The progress overlay extends from the top of the input row
   // to the bottom of the content area.
-  gfx::RectF input_rect = input_row_->GetContentsBounds();
+  gfx::RectF input_rect = gfx::RectF(input_row_->GetContentsBounds());
   View::ConvertRectToTarget(input_row_, this, &input_rect);
   input_rect.set_height(contents_bounds.height());
   contents_bounds.Intersect(gfx::ToNearestRect(input_rect));
@@ -453,9 +456,8 @@ void CardUnmaskPromptViews::InitIfNecessary() {
 
   error_icon_ = new views::ImageView();
   error_icon_->SetVisible(false);
-  error_icon_->SetImage(ui::ResourceBundle::GetSharedInstance()
-                            .GetImageNamed(IDR_ALERT_RED)
-                            .ToImageSkia());
+  error_icon_->SetImage(gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, 16,
+                                              gfx::kGoogleRed700));
   temporary_error->AddChildView(error_icon_);
 
   // Reserve vertical space for the error label, assuming it's one line.
@@ -507,7 +509,9 @@ CardUnmaskPromptViews::FadeOutView::~FadeOutView() {
 
 void CardUnmaskPromptViews::FadeOutView::PaintChildren(
     const ui::PaintContext& context) {
-  ui::CompositingRecorder recorder(context, alpha_);
+  const bool kLcdTextRequiresOpaqueLayer = true;
+  ui::CompositingRecorder recorder(context, size(), alpha_,
+                                   kLcdTextRequiresOpaqueLayer);
   views::View::PaintChildren(context);
 }
 

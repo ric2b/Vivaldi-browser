@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/sys_info.h"
+#include "build/build_config.h"
 #include "sync/util/get_session_name.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -23,7 +24,7 @@ class GetSessionNameTest : public ::testing::Test {
  public:
   void SetSessionNameAndQuit(const std::string& session_name) {
     session_name_ = session_name;
-    message_loop_.Quit();
+    message_loop_.QuitWhenIdle();
   }
 
  protected:

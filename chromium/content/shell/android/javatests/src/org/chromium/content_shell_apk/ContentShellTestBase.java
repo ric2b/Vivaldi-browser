@@ -36,7 +36,6 @@ import java.lang.reflect.Method;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Base test class for all ContentShell based tests.
@@ -79,7 +78,7 @@ public class ContentShellTestBase
     protected void startActivityWithTestUrl(String url) throws Throwable {
         launchContentShellWithUrl(UrlUtils.getIsolatedTestFileUrl(url));
         assertNotNull(getActivity());
-        assertTrue(waitForActiveShellToBeDoneLoading());
+        waitForActiveShellToBeDoneLoading();
         assertEquals(UrlUtils.getIsolatedTestFileUrl(url),
                 getContentViewCore().getWebContents().getUrl());
     }
@@ -103,40 +102,33 @@ public class ContentShellTestBase
      * WAIT_FOR_ACTIVE_SHELL_LOADING_TIMEOUT milliseconds and it shouldn't be used for long
      * loading pages. Instead it should be used more for test initialization. The proper way
      * to wait is to use a TestCallbackHelperContainer after the initial load is completed.
-     * @return Whether or not the Shell was actually finished loading.
      * @throws InterruptedException
      */
-    protected boolean waitForActiveShellToBeDoneLoading() throws InterruptedException {
+    protected void waitForActiveShellToBeDoneLoading() throws InterruptedException {
         final ContentShellActivity activity = getActivity();
 
         // Wait for the Content Shell to be initialized.
-        return CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                try {
-                    final AtomicBoolean isLoaded = new AtomicBoolean(false);
-                    runTestOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            Shell shell = activity.getActiveShell();
-                            if (shell != null) {
-                                // There are two cases here that need to be accounted for.
-                                // The first is that we've just created a Shell and it isn't
-                                // loading because it has no URL set yet.  The second is that
-                                // we've set a URL and it actually is loading.
-                                isLoaded.set(!shell.isLoading()
-                                        && !TextUtils.isEmpty(shell.getContentViewCore()
-                                                .getWebContents().getUrl()));
-                            } else {
-                                isLoaded.set(false);
-                            }
-                        }
-                    });
-
-                    return isLoaded.get();
-                } catch (Throwable e) {
+                Shell shell = activity.getActiveShell();
+                // There are two cases here that need to be accounted for.
+                // The first is that we've just created a Shell and it isn't
+                // loading because it has no URL set yet.  The second is that
+                // we've set a URL and it actually is loading.
+                if (shell == null) {
+                    updateFailureReason("Shell is null.");
                     return false;
                 }
+                if (shell.isLoading()) {
+                    updateFailureReason("Shell is still loading.");
+                    return false;
+                }
+                if (TextUtils.isEmpty(shell.getContentViewCore().getWebContents().getUrl())) {
+                    updateFailureReason("Shell's URL is empty or null.");
+                    return false;
+                }
+                return true;
             }
         }, WAIT_FOR_ACTIVE_SHELL_LOADING_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
@@ -208,12 +200,12 @@ public class ContentShellTestBase
      */
     protected void assertWaitForPageScaleFactorMatch(final float expectedScale)
             throws InterruptedException {
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return getContentViewCore().getScale() == expectedScale;
             }
-        }));
+        });
     }
 
     /**
@@ -225,7 +217,7 @@ public class ContentShellTestBase
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
                 @Override
             public void run() {
-                ContentView cv = new ContentView(getActivity(), getContentViewCore());
+                ContentView cv = ContentView.createContentView(getActivity(), getContentViewCore());
                 ((ViewGroup) getContentViewCore().getContainerView().getParent()).addView(cv);
                 getContentViewCore().setContainerView(cv);
                 getContentViewCore().setContainerViewInternals(cv);

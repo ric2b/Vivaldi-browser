@@ -4,6 +4,9 @@
 
 #include "chrome/browser/password_manager/password_store_proxy_mac.h"
 
+#include <string>
+#include <utility>
+
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/password_manager/password_store_mac.h"
 #include "chrome/browser/password_manager/simple_password_store_mac.h"
@@ -19,7 +22,7 @@ PasswordStoreProxyMac::PasswordStoreProxyMac(
     scoped_ptr<password_manager::LoginDatabase> login_db,
     PrefService* prefs)
     : PasswordStore(main_thread_runner, nullptr),
-      login_metadata_db_(login_db.Pass()) {
+      login_metadata_db_(std::move(login_db)) {
   DCHECK(login_metadata_db_);
   migration_status_.Init(password_manager::prefs::kKeychainMigrationStatus,
                          prefs);
@@ -30,7 +33,7 @@ PasswordStoreProxyMac::PasswordStoreProxyMac(
         new SimplePasswordStoreMac(main_thread_runner, nullptr, nullptr);
   } else {
     password_store_mac_ =
-        new PasswordStoreMac(main_thread_runner, nullptr, keychain.Pass());
+        new PasswordStoreMac(main_thread_runner, nullptr, std::move(keychain));
   }
 }
 
@@ -56,9 +59,9 @@ bool PasswordStoreProxyMac::Init(
                  static_cast<MigrationStatus>(migration_status_.GetValue())));
 }
 
-void PasswordStoreProxyMac::Shutdown() {
+void PasswordStoreProxyMac::ShutdownOnUIThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  PasswordStore::Shutdown();
+  PasswordStore::ShutdownOnUIThread();
   thread_->Stop();
 
   // Execute the task which are still pending.
@@ -71,7 +74,7 @@ void PasswordStoreProxyMac::Shutdown() {
   // another. GetBackend() returns the correct result.
   // The backend doesn't need the background thread as PasswordStore::Init() and
   // other public methods were never called on it.
-  GetBackend()->Shutdown();
+  GetBackend()->ShutdownOnUIThread();
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -94,7 +97,7 @@ void PasswordStoreProxyMac::InitOnBackgroundThread(MigrationStatus status) {
 
   if (status == MigrationStatus::MIGRATED) {
     password_store_simple_->InitWithTaskRunner(GetBackgroundTaskRunner(),
-                                               login_metadata_db_.Pass());
+                                               std::move(login_metadata_db_));
   } else {
     password_store_mac_->set_login_metadata_db(login_metadata_db_.get());
     password_store_mac_->InitWithTaskRunner(GetBackgroundTaskRunner());
@@ -106,13 +109,13 @@ void PasswordStoreProxyMac::InitOnBackgroundThread(MigrationStatus status) {
         status = MigrationStatus::MIGRATED;
         // Switch from |password_store_mac_| to |password_store_simple_|.
         password_store_mac_->set_login_metadata_db(nullptr);
-        pending_ui_tasks_.push_back(
-            base::Bind(&PasswordStoreMac::Shutdown, password_store_mac_));
+        pending_ui_tasks_.push_back(base::Bind(
+            &PasswordStoreMac::ShutdownOnUIThread, password_store_mac_));
         password_store_mac_ = nullptr;
         DCHECK(!password_store_simple_);
         password_store_simple_ = new SimplePasswordStoreMac(
             main_thread_runner_, GetBackgroundTaskRunner(),
-            login_metadata_db_.Pass());
+            std::move(login_metadata_db_));
       } else {
         status = (status == MigrationStatus::FAILED_ONCE
                       ? MigrationStatus::FAILED_TWICE
@@ -166,6 +169,14 @@ PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginImpl(
   return GetBackend()->RemoveLoginImpl(form);
 }
 
+PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginsByOriginAndTimeImpl(
+    const url::Origin& origin,
+    base::Time delete_begin,
+    base::Time delete_end) {
+  return GetBackend()->RemoveLoginsByOriginAndTimeImpl(origin, delete_begin,
+                                                       delete_end);
+}
+
 PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginsCreatedBetweenImpl(
     base::Time delete_begin,
     base::Time delete_end) {
@@ -176,6 +187,13 @@ PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginsSyncedBetweenImpl(
     base::Time delete_begin,
     base::Time delete_end) {
   return GetBackend()->RemoveLoginsSyncedBetweenImpl(delete_begin, delete_end);
+}
+
+bool PasswordStoreProxyMac::RemoveStatisticsCreatedBetweenImpl(
+    base::Time delete_begin,
+    base::Time delete_end) {
+  return GetBackend()->RemoveStatisticsCreatedBetweenImpl(delete_begin,
+                                                          delete_end);
 }
 
 ScopedVector<autofill::PasswordForm> PasswordStoreProxyMac::FillMatchingLogins(
@@ -203,7 +221,7 @@ void PasswordStoreProxyMac::RemoveSiteStatsImpl(const GURL& origin_domain) {
   GetBackend()->RemoveSiteStatsImpl(origin_domain);
 }
 
-scoped_ptr<password_manager::InteractionsStats>
+std::vector<scoped_ptr<password_manager::InteractionsStats>>
 PasswordStoreProxyMac::GetSiteStatsImpl(const GURL& origin_domain) {
   return GetBackend()->GetSiteStatsImpl(origin_domain);
 }

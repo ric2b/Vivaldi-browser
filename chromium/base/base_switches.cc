@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/base_switches.h"
+#include "build/build_config.h"
 
 namespace switches {
 
@@ -14,6 +15,11 @@ const char kDisableBreakpad[]               = "disable-breakpad";
 // generated internally.
 const char kEnableCrashReporter[]           = "enable-crash-reporter";
 
+// Makes memory allocators keep track of their allocations and context, so a
+// detailed breakdown of memory usage can be presented in chrome://tracing when
+// the memory-infra category is enabled.
+const char kEnableHeapProfiling[]           = "enable-heap-profiling";
+
 // Generates full memory crash dump.
 const char kFullMemoryCrashReport[]         = "full-memory-crash-report";
 
@@ -22,6 +28,16 @@ const char kEnableLowEndDeviceMode[]        = "enable-low-end-device-mode";
 
 // Force disabling of low-end device mode when set.
 const char kDisableLowEndDeviceMode[]       = "disable-low-end-device-mode";
+
+// This option can be used to force field trials when testing changes locally.
+// The argument is a list of name and value pairs, separated by slashes. If a
+// trial name is prefixed with an asterisk, that trial will start activated.
+// For example, the following argument defines two trials, with the second one
+// activated: "GoogleNow/Enable/*MaterialDesignNTP/Default/" This option can
+// also be used by the browser process to send the list of trials to a
+// non-browser process, using the same format. See
+// FieldTrialList::CreateTrialsFromString() in field_trial.h for details.
+const char kForceFieldTrials[]              = "force-fieldtrials";
 
 // Suppresses all error dialogs when present.
 const char kNoErrorDialogs[]                = "noerrdialogs";
@@ -47,9 +63,6 @@ const char kVModule[]                       = "vmodule";
 
 // Will wait for 60 seconds for a debugger to come to attach to the process.
 const char kWaitForDebugger[]               = "wait-for-debugger";
-
-// Sends a pretty-printed version of tracing info to the console.
-const char kTraceToConsole[]                = "trace-to-console";
 
 // Sends trace events from these categories to a file.
 // --trace-to-file on its own sends to default categories.

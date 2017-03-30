@@ -109,6 +109,9 @@ class Authenticator {
   // authentication message that needs to be sent to the peer.
   virtual scoped_ptr<buzz::XmlElement> GetNextMessage() = 0;
 
+  // Returns the auth key received as result of the authentication handshake.
+  virtual const std::string& GetAuthKey() const = 0;
+
   // Creates new authenticator for a channel. Can be called only in
   // the ACCEPTED state.
   virtual scoped_ptr<ChannelAuthenticator>

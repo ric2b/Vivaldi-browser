@@ -5,6 +5,8 @@
 #ifndef PPAPI_TESTS_TEST_FLASH_FULLSCREEN_FOR_BROWSER_UI_H_
 #define PPAPI_TESTS_TEST_FLASH_FULLSCREEN_FOR_BROWSER_UI_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "ppapi/cpp/compositor.h"
@@ -40,6 +42,12 @@ class TestFlashFullscreenForBrowserUI : public TestCase {
  private:
   std::string TestEnterFullscreen();
   void Paint(int32_t last_compositor_result);
+  void SimulateUserGesture();
+  bool GotError();
+  std::string Error();
+  void FailFullscreenTest(const std::string& error);
+
+  std::string error_;
 
   pp::FlashFullscreen screen_mode_;
   NestedEvent view_change_event_;
@@ -47,8 +55,10 @@ class TestFlashFullscreenForBrowserUI : public TestCase {
   pp::Compositor compositor_;
   pp::Size layer_size_;
   pp::CompositorLayer color_layer_;
+  pp::Rect normal_position_;
 
   int num_trigger_events_;
+  bool request_fullscreen_;
 
   pp::CompletionCallbackFactory<TestFlashFullscreenForBrowserUI>
       callback_factory_;

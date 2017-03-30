@@ -4,6 +4,8 @@
 
 #include "net/proxy/proxy_script_decider.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
@@ -72,7 +74,7 @@ scoped_ptr<base::Value> ProxyScriptDecider::PacSource::NetLogCallback(
       break;
   }
   dict->SetString("source", source);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 ProxyScriptDecider::ProxyScriptDecider(
@@ -138,10 +140,10 @@ const ProxyConfig& ProxyScriptDecider::effective_config() const {
   return effective_config_;
 }
 
-// TODO(eroman): Return a const-pointer.
-ProxyResolverScriptData* ProxyScriptDecider::script_data() const {
+const scoped_refptr<ProxyResolverScriptData>&
+ProxyScriptDecider::script_data() const {
   DCHECK_EQ(STATE_NONE, next_state_);
-  return script_data_.get();
+  return script_data_;
 }
 
 // Initialize the fallback rules.

@@ -79,24 +79,21 @@ cr.define('options', function() {
 
     /**
      * Keeps track of whether the user is signed in or not.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     signedIn_: false,
 
     /**
      * Indicates whether signing out is allowed or whether a complete profile
      * wipe is required to remove the current enterprise account.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     signoutAllowed_: true,
 
     /**
      * Keeps track of whether |onShowHomeButtonChanged_| has been called. See
      * |onShowHomeButtonChanged_|.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     onShowHomeButtonChangedCalled_: false,
 
@@ -104,10 +101,27 @@ cr.define('options', function() {
      * Track if page initialization is complete.  All C++ UI handlers have the
      * chance to manipulate page content within their InitializePage methods.
      * This flag is set to true after all initializers have been called.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     initializationComplete_: false,
+
+    /**
+     * Current status of "Resolve Timezone by Geolocation" checkbox.
+     * @private {boolean}
+     */
+    resolveTimezoneByGeolocation_: false,
+
+    /**
+     * True if system timezone is managed by policy.
+     * @private {boolean}
+     */
+    systemTimezoneIsManaged_: false,
+
+    /**
+     * Cached bluetooth adapter state.
+     * @private {?chrome.bluetooth.AdapterState}
+     */
+    bluetoothAdapterState_: null,
 
     /** @override */
     initializePage: function() {
@@ -174,7 +188,8 @@ cr.define('options', function() {
       }
 
       // Sync (Sign in) section.
-      this.updateSyncState_(loadTimeData.getValue('syncData'));
+      this.updateSyncState_(/** @type {options.SyncStatus} */(
+          loadTimeData.getValue('syncData')));
 
       $('start-stop-sync').onclick = function(event) {
         if (self.signedIn_) {
@@ -185,7 +200,7 @@ cr.define('options', function() {
         } else if (cr.isChromeOS) {
           SyncSetupOverlay.showSetupUI();
         } else {
-          SyncSetupOverlay.startSignIn();
+          SyncSetupOverlay.startSignIn('access-point-settings');
         }
       };
       $('customize-sync').onclick = function(event) {
@@ -295,7 +310,7 @@ cr.define('options', function() {
       // Device section (ChromeOS only).
       if (cr.isChromeOS) {
         if (loadTimeData.getBoolean('showPowerStatus')) {
-          $('power-settings-button').onclick = function(evt) {
+          $('power-settings-link').onclick = function(evt) {
             PageManager.showPageByName('power-overlay');
             chrome.send('coreOptionsUserMetricsAction',
                         ['Options_ShowPowerSettings']);
@@ -333,7 +348,8 @@ cr.define('options', function() {
         profilesList.autoExpands = true;
 
         // The profiles info data in |loadTimeData| might be stale.
-        this.setProfilesInfo_(loadTimeData.getValue('profilesInfo'));
+        this.setProfilesInfo_(/** @type {!Array<!options.Profile>} */(
+            loadTimeData.getValue('profilesInfo')));
         chrome.send('requestProfilesInfo');
 
         profilesList.addEventListener('change',
@@ -407,9 +423,12 @@ cr.define('options', function() {
         // Timezone
         if (loadTimeData.getBoolean('enableTimeZoneTrackingOption')) {
           $('resolve-timezone-by-geolocation-selection').hidden = false;
-          this.setSystemTimezoneManaged_(false);
-          $('timezone-value-select').disabled = loadTimeData.getBoolean(
+          this.resolveTimezoneByGeolocation_ = loadTimeData.getBoolean(
               'resolveTimezoneByGeolocationInitialValue');
+          this.updateTimezoneSectionState_();
+          Preferences.getInstance().addEventListener(
+              'settings.resolve_timezone_by_geolocation',
+              this.onResolveTimezoneByGeolocationChanged_.bind(this));
         }
       }
 
@@ -421,8 +440,6 @@ cr.define('options', function() {
         $('set-as-default-browser').onclick = function(event) {
           chrome.send('becomeDefaultBrowser');
         };
-
-        $('auto-launch').onclick = this.handleAutoLaunchChanged_;
       }
 
       // Privacy section.
@@ -437,47 +454,53 @@ cr.define('options', function() {
         chrome.send('coreOptionsUserMetricsAction', ['Options_ClearData']);
       };
       $('privacyClearDataButton').hidden = OptionsPage.isSettingsApp();
-      // 'metricsReportingEnabled' element is only present on Chrome branded
-      // builds, and the 'metricsReportingCheckboxAction' message is only
-      // handled on ChromeOS.
-      if ($('metrics-reporting-enabled') && cr.isChromeOS) {
-        $('metrics-reporting-enabled').onclick = function(event) {
-          chrome.send('metricsReportingCheckboxAction',
-              [String(event.currentTarget.checked)]);
-        };
-      }
-      if ($('metrics-reporting-enabled') && !cr.isChromeOS) {
-        // The localized string has the | symbol on each side of the text that
-        // needs to be made into a button to restart Chrome. We parse the text
-        // and build the button from that.
-        var restartTextFragments =
-            loadTimeData.getString('metricsReportingResetRestart').split('|');
-        // Assume structure is something like "starting text |link text| ending
-        // text" where both starting text and ending text may or may not be
-        // present, but the split should always be in three pieces.
-        var restartElements =
-            $('metrics-reporting-reset-restart').querySelectorAll('*');
-        for (var i = 0; i < restartTextFragments.length; i++) {
-          restartElements[i].textContent = restartTextFragments[i];
-        }
-        restartElements[1].onclick = function(event) {
-          chrome.send('restartBrowser');
-        };
+
+      if ($('metrics-reporting-enabled')) {
+        $('metrics-reporting-enabled').checked =
+            loadTimeData.getBoolean('metricsReportingEnabledAtStart');
+
+        // A browser restart is never needed to toggle metrics reporting,
+        // and is only needed to toggle crash reporting when using Breakpad.
+        // Crashpad, used on Mac, does not require a browser restart.
+        var togglingMetricsRequiresRestart = !cr.isMac && !cr.isChromeOS;
         $('metrics-reporting-enabled').onclick = function(event) {
           chrome.send('metricsReportingCheckboxChanged',
               [Boolean(event.currentTarget.checked)]);
-          if (cr.isMac) {
-            // A browser restart is never needed to toggle metrics reporting,
-            // and is only needed to toggle crash reporting when using Breakpad.
-            // Crashpad, used on Mac, does not require a browser restart.
-            return;
+          if (cr.isChromeOS) {
+            // 'metricsReportingEnabled' element is only present on Chrome
+            // branded builds, and the 'metricsReportingCheckboxAction' message
+            // is only handled on ChromeOS.
+            chrome.send('metricsReportingCheckboxAction',
+                [String(event.currentTarget.checked)]);
           }
-          $('metrics-reporting-reset-restart').hidden =
-              loadTimeData.getBoolean('metricsReportingEnabledAtStart') ==
-                  $('metrics-reporting-enabled').checked;
+
+          if (togglingMetricsRequiresRestart) {
+            $('metrics-reporting-reset-restart').hidden =
+                loadTimeData.getBoolean('metricsReportingEnabledAtStart') ==
+                    $('metrics-reporting-enabled').checked;
+          }
+
         };
-        $('metrics-reporting-enabled').checked =
-            loadTimeData.getBoolean('metricsReportingEnabledAtStart');
+
+        // Initialize restart button if needed.
+        if (togglingMetricsRequiresRestart) {
+          // The localized string has the | symbol on each side of the text that
+          // needs to be made into a button to restart Chrome. We parse the text
+          // and build the button from that.
+          var restartTextFragments =
+              loadTimeData.getString('metricsReportingResetRestart').split('|');
+          // Assume structure is something like "starting text |link text|
+          // ending text" where both starting text and ending text may or may
+          // not be present, but the split should always be in three pieces.
+          var restartElements =
+              $('metrics-reporting-reset-restart').querySelectorAll('*');
+          for (var i = 0; i < restartTextFragments.length; i++) {
+            restartElements[i].textContent = restartTextFragments[i];
+          }
+          restartElements[1].onclick = function(event) {
+            chrome.send('restartBrowser');
+          };
+        }
       }
       $('networkPredictionOptions').onchange = function(event) {
         var value = (event.target.checked ?
@@ -494,11 +517,27 @@ cr.define('options', function() {
           loadTimeData.getBoolean('showWakeOnWifi')) {
         $('wake-on-wifi').hidden = false;
       }
-      $('spelling-enabled-container').hidden =
-          loadTimeData.getBoolean('enableMultilingualSpellChecker');
 
       // Bluetooth (CrOS only).
       if (cr.isChromeOS) {
+        // Request the intial bluetooth adapter state.
+        var adapterStateChanged =
+            this.onBluetoothAdapterStateChanged_.bind(this);
+        chrome.bluetooth.getAdapterState(adapterStateChanged);
+
+        // Set up observers.
+        chrome.bluetooth.onAdapterStateChanged.addListener(adapterStateChanged);
+        var deviceAddedOrChanged =
+            this.onBluetoothDeviceAddedOrChanged_.bind(this);
+        chrome.bluetooth.onDeviceAdded.addListener(deviceAddedOrChanged);
+        chrome.bluetooth.onDeviceChanged.addListener(deviceAddedOrChanged);
+        chrome.bluetooth.onDeviceRemoved.addListener(
+            this.onBluetoothDeviceRemoved_.bind(this));
+
+        chrome.bluetoothPrivate.onPairing.addListener(
+            this.onBluetoothPrivatePairing_.bind(this));
+
+        // Initialize UI.
         options.system.bluetooth.BluetoothDeviceList.decorate(
             $('bluetooth-paired-devices-list'));
 
@@ -507,16 +546,19 @@ cr.define('options', function() {
 
         $('enable-bluetooth').onchange = function(event) {
           var state = $('enable-bluetooth').checked;
-          chrome.send('bluetoothEnableChange', [Boolean(state)]);
+          chrome.bluetoothPrivate.setAdapterState({powered: state}, function() {
+            if (chrome.runtime.lastError) {
+              console.error('Error enabling bluetooth:',
+                            chrome.runtime.lastError.message);
+            }
+          });
         };
 
         $('bluetooth-reconnect-device').onclick = function(event) {
           chrome.send('coreOptionsUserMetricsAction',
                       ['Options_BluetoothConnectPairedDevice']);
           var device = $('bluetooth-paired-devices-list').selectedItem;
-          var address = device.address;
-          chrome.send('updateBluetoothDevice', [address, 'connect']);
-          PageManager.closeOverlay();
+          BluetoothPairing.connect(device);
         };
 
         $('bluetooth-paired-devices-list').addEventListener('change',
@@ -661,7 +703,6 @@ cr.define('options', function() {
             'settings.accessibility',
             updateAccessibilitySettingsButton);
         $('accessibility-learn-more').onclick = function(unused_event) {
-          window.open(loadTimeData.getString('accessibilityLearnMoreURL'));
           chrome.send('coreOptionsUserMetricsAction',
                       ['Options_AccessibilityLearnMore']);
         };
@@ -1309,16 +1350,6 @@ cr.define('options', function() {
       return url.replace(/^http:\/\//, '');
     },
 
-   /**
-    * Shows the autoLaunch preference and initializes its checkbox value.
-    * @param {boolean} enabled Whether autolaunch is enabled or or not.
-    * @private
-    */
-    updateAutoLaunchState_: function(enabled) {
-      $('auto-launch-option').hidden = false;
-      $('auto-launch').checked = enabled;
-    },
-
     /**
      * Called when the value of the download.default_directory preference
      * changes.
@@ -1410,14 +1441,6 @@ cr.define('options', function() {
       }
     },
 
-   /**
-     * Sets or clear whether Chrome should Auto-launch on computer startup.
-     * @private
-     */
-    handleAutoLaunchChanged_: function() {
-      chrome.send('toggleAutoLaunch', [$('auto-launch').checked]);
-    },
-
     /**
      * Get the selected profile item from the profile list. This also works
      * correctly if the list is not displayed.
@@ -1489,7 +1512,7 @@ cr.define('options', function() {
 
     /**
      * Adds all |profiles| to the list.
-     * @param {Array<!options.Profile>} profiles An array of profile info
+     * @param {!Array<!options.Profile>} profiles An array of profile info
      *     objects.
      * @private
      */
@@ -1652,26 +1675,44 @@ cr.define('options', function() {
     },
 
     /**
+     * This enables or disables dependent settings in timezone section.
+     * @private
+     */
+    updateTimezoneSectionState_: function() {
+      if (this.systemTimezoneIsManaged_) {
+        $('resolve-timezone-by-geolocation-selection').disabled = true;
+        $('resolve-timezone-by-geolocation').onclick = function(event) {};
+      } else {
+        this.enableElementIfPossible_(
+            getRequiredElement('resolve-timezone-by-geolocation-selection'));
+        $('resolve-timezone-by-geolocation').onclick = function(event) {
+          $('timezone-value-select').disabled = event.currentTarget.checked;
+        };
+        $('timezone-value-select').disabled =
+            this.resolveTimezoneByGeolocation_;
+      }
+    },
+
+    /**
      * This is called from chromium code when system timezone "managed" state
      * is changed. Enables or disables dependent settings.
      * @param {boolean} managed Is true when system Timezone is managed by
      *     enterprise policy. False otherwize.
      */
     setSystemTimezoneManaged_: function(managed) {
-      if (loadTimeData.getBoolean('enableTimeZoneTrackingOption')) {
-        if (managed) {
-          $('resolve-timezone-by-geolocation-selection').disabled = true;
-          $('resolve-timezone-by-geolocation').onclick = function(event) {};
-        } else {
-          this.enableElementIfPossible_(
-              getRequiredElement('resolve-timezone-by-geolocation-selection'));
-          $('resolve-timezone-by-geolocation').onclick = function(event) {
-            $('timezone-value-select').disabled = event.currentTarget.checked;
-          };
-          $('timezone-value-select').disabled =
-              $('resolve-timezone-by-geolocation').checked;
-        }
-      }
+      this.systemTimezoneIsManaged_ = managed;
+      this.updateTimezoneSectionState_();
+    },
+
+    /**
+     * This is Preferences event listener, which is called when
+     * kResolveTimezoneByGeolocation preference is changed.
+     * Enables or disables dependent settings.
+     * @param {Event} value New preference state.
+     */
+    onResolveTimezoneByGeolocationChanged_: function(value) {
+      this.resolveTimezoneByGeolocation_ = value.value.value;
+      this.updateTimezoneSectionState_();
     },
 
     /**
@@ -1681,7 +1722,6 @@ cr.define('options', function() {
     handleAddBluetoothDevice_: function() {
       chrome.send('coreOptionsUserMetricsAction',
                   ['Options_BluetoothShowAddDevice']);
-      chrome.send('findBluetoothDevices');
       PageManager.showPageByName('bluetooth', false);
     },
 
@@ -1716,18 +1756,24 @@ cr.define('options', function() {
      * Set the checked state of the metrics reporting checkbox.
      * @private
      */
-    setMetricsReportingCheckboxState_: function(checked, disabled) {
+    setMetricsReportingCheckboxState_: function(checked,
+                                                policyManaged,
+                                                ownerManaged) {
       $('metrics-reporting-enabled').checked = checked;
-      $('metrics-reporting-enabled').disabled = disabled;
+      $('metrics-reporting-enabled').disabled = policyManaged || ownerManaged;
 
       // If checkbox gets disabled then add an attribute for displaying the
       // special icon. Otherwise remove the indicator attribute.
-      if (disabled) {
+      if (policyManaged) {
         $('metrics-reporting-disabled-icon').setAttribute('controlled-by',
                                                           'policy');
+      } else if (ownerManaged) {
+        $('metrics-reporting-disabled-icon').setAttribute('controlled-by',
+                                                          'owner');
       } else {
         $('metrics-reporting-disabled-icon').removeAttribute('controlled-by');
       }
+
     },
 
     /**
@@ -1996,22 +2042,6 @@ cr.define('options', function() {
     },
 
     /**
-     * Activate the Bluetooth settings section on the System settings page.
-     * @private
-     */
-    showBluetoothSettings_: function() {
-      $('bluetooth-devices').hidden = false;
-    },
-
-    /**
-     * Dectivates the Bluetooth settings section from the System settings page.
-     * @private
-     */
-    hideBluetoothSettings_: function() {
-      $('bluetooth-devices').hidden = true;
-    },
-
-    /**
      * Sets the state of the checkbox indicating if Bluetooth is turned on. The
      * state of the "Find devices" button and the list of discovered devices may
      * also be affected by a change to the state.
@@ -2023,27 +2053,88 @@ cr.define('options', function() {
       $('bluetooth-paired-devices-list').parentNode.hidden = !checked;
       $('bluetooth-add-device').hidden = !checked;
       $('bluetooth-reconnect-device').hidden = !checked;
-      // Flush list of previously discovered devices if bluetooth is turned off.
-      if (!checked) {
-        $('bluetooth-paired-devices-list').clear();
-        $('bluetooth-unpaired-devices-list').clear();
+    },
+
+    /**
+     * Process a bluetooth.onAdapterStateChanged event.
+     * @param {!chrome.bluetooth.AdapterState} state
+     * @private
+     */
+    onBluetoothAdapterStateChanged_: function(state) {
+      if (!state || !state.available) {
+        this.bluetoothAdapterState_ = null;
+        $('bluetooth-devices').hidden = true;
+        return;
+      }
+      $('bluetooth-devices').hidden = false;
+      this.bluetoothAdapterState_ = state;
+      this.setBluetoothState_(state.powered);
+
+      // Flush the device lists.
+      $('bluetooth-paired-devices-list').clear();
+      $('bluetooth-unpaired-devices-list').clear();
+      if (state.powered) {
+        options.BluetoothOptions.updateDiscoveryState(state.discovering);
+        // Update the device lists.
+        chrome.bluetooth.getDevices(function(devices) {
+          for (var device of devices)
+            this.updateBluetoothDevicesList_(device);
+        }.bind(this));
       } else {
-        chrome.send('getPairedBluetoothDevices');
+        options.BluetoothOptions.dismissOverlay();
       }
     },
 
     /**
-     * Adds an element to the list of available Bluetooth devices. If an element
-     * with a matching address is found, the existing element is updated.
-     * @param {{name: string,
-     *          address: string,
-     *          paired: boolean,
-     *          connected: boolean}} device
-     *     Decription of the Bluetooth device.
+     * Process a bluetooth.onDeviceAdded or onDeviceChanged event and update the
+     * device list.
+     * @param {!chrome.bluetooth.Device} device
      * @private
      */
-    addBluetoothDevice_: function(device) {
-      var list = $('bluetooth-unpaired-devices-list');
+    onBluetoothDeviceAddedOrChanged_: function(device) {
+      this.updateBluetoothDevicesList_(device);
+    },
+
+    /**
+     * Process a bluetooth.onDeviceRemoved event and update the device list.
+     * @param {!chrome.bluetooth.Device} device
+     * @private
+     */
+    onBluetoothDeviceRemoved_: function(device) {
+      this.removeBluetoothDevice_(device.address);
+    },
+
+    /**
+     * Process a bluetoothPrivate onPairing event and update the device list.
+     * @param {!chrome.bluetoothPrivate.PairingEvent} pairing_event
+     * @private
+     */
+    onBluetoothPrivatePairing_: function(pairing_event) {
+      this.updateBluetoothDevicesList_(pairing_event.device);
+      BluetoothPairing.onBluetoothPairingEvent(pairing_event);
+    },
+
+    /**
+     * Add |device| to the appropriate list of Bluetooth devices.
+     * @param {!chrome.bluetooth.Device} device
+     * @private
+     */
+    addBluetoothDeviceToList_: function(device) {
+      // Display the "connecting" (already paired or not yet paired) and the
+      // paired devices in the same list.
+      if (device.paired || device.connecting)
+        $('bluetooth-paired-devices-list').appendDevice(device);
+      else
+        $('bluetooth-unpaired-devices-list').appendDevice(device);
+    },
+
+    /**
+     * Add |device| to the appropriate list of Bluetooth devices or update the
+     * entry if a device with a matching |address| property exists.
+     * @param {!chrome.bluetooth.Device} device
+     * @private
+     */
+    updateBluetoothDevicesList_: function(device) {
       // Display the "connecting" (already paired or not yet paired) and the
       // paired devices in the same list.
       if (device.paired || device.connecting) {
@@ -2052,7 +2143,6 @@ cr.define('options', function() {
         var index = $('bluetooth-unpaired-devices-list').find(device.address);
         if (index != undefined)
           $('bluetooth-unpaired-devices-list').deleteItemAtIndex(index);
-        list = $('bluetooth-paired-devices-list');
       } else {
         // Test to see if the device is currently in the paired list, in which
         // case it should be removed from that list.
@@ -2060,12 +2150,7 @@ cr.define('options', function() {
         if (index != undefined)
           $('bluetooth-paired-devices-list').deleteItemAtIndex(index);
       }
-      list.appendDevice(device);
-
-      // One device can be in the process of pairing.  If found, display
-      // the Bluetooth pairing overlay.
-      if (device.pairing)
-        BluetoothPairing.showDialog(device);
+      this.addBluetoothDeviceToList_(device);
     },
 
     /**
@@ -2135,23 +2220,20 @@ cr.define('options', function() {
     },
   };
 
-  //Forward public APIs to private implementations.
+  // Forward public APIs to private implementations.
   cr.makePublic(BrowserOptions, [
-    'addBluetoothDevice',
     'deleteCurrentProfile',
     'enableCertificateButton',
     'enableDisplaySettings',
     'enableFactoryResetSection',
     'getCurrentProfile',
     'getStartStopSyncButton',
-    'hideBluetoothSettings',
     'notifyInitializationComplete',
     'removeBluetoothDevice',
     'scrollToSection',
     'setAccountPictureManaged',
     'setWallpaperManaged',
     'setAutoOpenFileTypesDisplayed',
-    'setBluetoothState',
     'setCanSetTime',
     'setFontSize',
     'setHotwordRetrainLinkVisible',
@@ -2170,7 +2252,6 @@ cr.define('options', function() {
     'setupPageZoomSelector',
     'setupProxySettingsButton',
     'setAudioHistorySectionVisible',
-    'showBluetoothSettings',
     'showCreateProfileError',
     'showCreateProfileSuccess',
     'showCreateProfileWarning',
@@ -2183,7 +2264,6 @@ cr.define('options', function() {
     'showTouchpadControls',
     'toggleExtensionIndicators',
     'updateAccountPicture',
-    'updateAutoLaunchState',
     'updateDefaultBrowserState',
     'updateEasyUnlock',
     'updateManagesSupervisedUsers',
@@ -2214,7 +2294,7 @@ cr.define('options', function() {
       }
 
       button.hidden = false;
-      var strId;
+      /** @type {string} */ var strId;
       switch (status) {
         case ConsumerManagementOverlay.Status.STATUS_UNENROLLED:
           strId = 'consumerManagementEnrollButton';

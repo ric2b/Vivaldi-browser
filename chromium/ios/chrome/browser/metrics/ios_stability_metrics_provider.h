@@ -25,6 +25,7 @@ enum MobileSessionShutdownType {
   MOBILE_SESSION_SHUTDOWN_TYPE_COUNT,
 };
 
+// TODO(crbug.com/538547): Rename this class to something more specific.
 class IOSStabilityMetricsProvider : public metrics::MetricsProvider {
  public:
   explicit IOSStabilityMetricsProvider(

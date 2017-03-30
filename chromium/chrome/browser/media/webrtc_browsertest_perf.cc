@@ -4,6 +4,8 @@
 
 #include "chrome/browser/media/webrtc_browsertest_perf.h"
 
+#include <stddef.h>
+
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -35,6 +37,9 @@ static bool MaybePrintResultsForAudioReceive(
   EXPECT_TRUE(pc_dict.GetString(Statistic("packetsLost", ssrc), &value));
   perf_test::PrintResult(
       "audio_misc", modifier, "packets_lost", value, "frames", false);
+  EXPECT_TRUE(pc_dict.GetString(Statistic("googJitterReceived", ssrc), &value));
+  perf_test::PrintResult(
+      "audio_rx", modifier, "goog_jitter_recv", value, "ms", false);
 
   EXPECT_TRUE(pc_dict.GetString(Statistic("googExpandRate", ssrc), &value));
   perf_test::PrintResult(

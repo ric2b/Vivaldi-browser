@@ -8,6 +8,7 @@
 #include <map>
 #include <utility>
 
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "gpu/command_buffer/common/constants.h"
@@ -30,8 +31,8 @@ class GPU_EXPORT MailboxManagerImpl : public MailboxManager {
   Texture* ConsumeTexture(const Mailbox& mailbox) override;
   void ProduceTexture(const Mailbox& mailbox, Texture* texture) override;
   bool UsesSync() override;
-  void PushTextureUpdates(uint32 sync_point) override {}
-  void PullTextureUpdates(uint32 sync_point) override {}
+  void PushTextureUpdates(const SyncToken& token) override {}
+  void PullTextureUpdates(const SyncToken& token) override {}
   void TextureDeleted(Texture* texture) override;
 
  protected:

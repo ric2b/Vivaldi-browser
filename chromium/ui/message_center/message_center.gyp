@@ -15,6 +15,7 @@
         '../../base/base.gyp:base',
         '../../base/base.gyp:base_i18n',
         '../../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+        '../../components/url_formatter/url_formatter.gyp:url_formatter',
         '../../skia/skia.gyp:skia',
         '../../url/url.gyp:url_lib',
         '../base/ui_base.gyp:ui_base',
@@ -36,16 +37,6 @@
         'cocoa/popup_collection.mm',
         'cocoa/popup_controller.h',
         'cocoa/popup_controller.mm',
-        'cocoa/settings_controller.h',
-        'cocoa/settings_controller.mm',
-        'cocoa/settings_entry_view.h',
-        'cocoa/settings_entry_view.mm',
-        'cocoa/status_item_view.h',
-        'cocoa/status_item_view.mm',
-        'cocoa/tray_controller.h',
-        'cocoa/tray_controller.mm',
-        'cocoa/tray_view_controller.h',
-        'cocoa/tray_view_controller.mm',
         'dummy_message_center.cc',
         'message_center.cc',
         'message_center.h',
@@ -73,6 +64,8 @@
         'notification_types.h',
         'notifier_settings.cc',
         'notifier_settings.h',
+        'popup_timer.cc',
+        'popup_timer.h',
         'views/bounded_label.cc',
         'views/bounded_label.h',
         'views/constants.h',
@@ -97,6 +90,8 @@
         'views/message_view_context_menu_controller.h',
         'views/notification_button.cc',
         'views/notification_button.h',
+        'views/notification_progress_bar.cc',
+        'views/notification_progress_bar.h',
         'views/notification_view.cc',
         'views/notification_view.h',
         'views/notifier_settings_view.cc',
@@ -209,10 +204,6 @@
         'cocoa/notification_controller_unittest.mm',
         'cocoa/popup_collection_unittest.mm',
         'cocoa/popup_controller_unittest.mm',
-        'cocoa/settings_controller_unittest.mm',
-        'cocoa/status_item_view_unittest.mm',
-        'cocoa/tray_controller_unittest.mm',
-        'cocoa/tray_view_controller_unittest.mm',
         'message_center_impl_unittest.cc',
         'message_center_tray_unittest.cc',
         'notification_delegate_unittest.cc',
@@ -258,7 +249,7 @@
     },  # target_name: message_center_unittests
   ],
   'conditions': [
-    ['test_isolation_mode != "noop" and 0', {
+    ['test_isolation_mode != "noop"', {
       'targets': [
         {
           'target_name': 'message_center_unittests_run',

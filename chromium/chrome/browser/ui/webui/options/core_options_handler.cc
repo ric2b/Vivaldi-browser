@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/webui/options/core_options_handler.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/json/json_reader.h"
@@ -12,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -23,7 +27,8 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/user_metrics.h"
@@ -342,7 +347,7 @@ void CoreOptionsHandler::NotifyPrefChanged(
     const std::string& controlling_pref_name) {
   scoped_ptr<base::Value> value(
       CreateValueForPref(pref_name, controlling_pref_name));
-  DispatchPrefChangeNotification(pref_name, value.Pass());
+  DispatchPrefChangeNotification(pref_name, std::move(value));
 }
 
 void CoreOptionsHandler::DispatchPrefChangeNotification(
@@ -416,7 +421,7 @@ PrefService* CoreOptionsHandler::FindServiceForPref(
   // Elsewhere the proxy settings are stored in local state.
   // See http://crbug.com/157147
   PrefService* user_prefs = Profile::FromWebUI(web_ui())->GetPrefs();
-  if (pref_name == prefs::kProxy)
+  if (pref_name == proxy_config::prefs::kProxy)
 #if defined(OS_CHROMEOS)
     return user_prefs;
 #else
@@ -575,7 +580,7 @@ void CoreOptionsHandler::HandleSetPref(const base::ListValue* args,
         NOTREACHED();
         return;
       }
-      GURL fixed = url_fixer::FixupURL(original, std::string());
+      GURL fixed = url_formatter::FixupURL(original, std::string());
       temp_value.reset(new base::StringValue(fixed.spec()));
       value = temp_value.get();
       break;
@@ -587,7 +592,7 @@ void CoreOptionsHandler::HandleSetPref(const base::ListValue* args,
         NOTREACHED();
         return;
       }
-      temp_value.reset(base::JSONReader::DeprecatedRead(json_string));
+      temp_value = base::JSONReader::Read(json_string);
       value = temp_value.get();
       if (!value->IsType(base::Value::TYPE_LIST)) {
         NOTREACHED();

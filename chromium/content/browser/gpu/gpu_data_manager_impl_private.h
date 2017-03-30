@@ -5,15 +5,21 @@
 #ifndef CONTENT_BROWSER_GPU_GPU_DATA_MANAGER_IMPL_PRIVATE_H_
 #define CONTENT_BROWSER_GPU_GPU_DATA_MANAGER_IMPL_PRIVATE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list_threadsafe.h"
+#include "build/build_config.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "gpu/config/gpu_blacklist.h"
 #include "gpu/config/gpu_driver_bug_list.h"
@@ -96,16 +102,16 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   void BlockDomainFrom3DAPIs(
       const GURL& url, GpuDataManagerImpl::DomainGuilt guilt);
-  bool Are3DAPIsBlocked(const GURL& url,
+  bool Are3DAPIsBlocked(const GURL& top_origin_url,
                         int render_process_id,
-                        int render_view_id,
+                        int render_frame_id,
                         ThreeDAPIType requester);
 
   void DisableDomainBlockingFor3DAPIsForTesting();
 
-  void Notify3DAPIBlocked(const GURL& url,
+  void Notify3DAPIBlocked(const GURL& top_origin_url,
                           int render_process_id,
-                          int render_view_id,
+                          int render_frame_id,
                           ThreeDAPIType requester);
 
   size_t GetBlacklistedFeatureCount() const;
@@ -113,7 +119,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void SetDisplayCount(unsigned int display_count);
   unsigned int GetDisplayCount() const;
 
-  bool UpdateActiveGpu(uint32 vendor_id, uint32 device_id);
+  bool UpdateActiveGpu(uint32_t vendor_id, uint32_t device_id);
 
   void OnGpuProcessInitFailure();
 
@@ -226,7 +232,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
                                    base::Time at_time);
   GpuDataManagerImpl::DomainBlockStatus Are3DAPIsBlockedAtTime(
       const GURL& url, base::Time at_time) const;
-  int64 GetBlockAllDomainsDurationInMs() const;
+  int64_t GetBlockAllDomainsDurationInMs() const;
 
   bool complete_gpu_info_already_requested_;
 

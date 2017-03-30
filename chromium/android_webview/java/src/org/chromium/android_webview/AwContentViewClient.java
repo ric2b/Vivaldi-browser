@@ -5,6 +5,7 @@
 package org.chromium.android_webview;
 
 import android.content.Context;
+import android.content.Intent;
 import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.URLUtil;
@@ -13,8 +14,6 @@ import android.widget.FrameLayout;
 
 import org.chromium.content.browser.ContentVideoViewClient;
 import org.chromium.content.browser.ContentViewClient;
-import org.chromium.content.browser.SelectActionMode;
-import org.chromium.content.browser.SelectActionModeCallback.ActionHandler;
 
 /**
  * ContentViewClient implementation for WebView
@@ -40,16 +39,10 @@ public class AwContentViewClient extends ContentViewClient implements ContentVid
     }
 
     @Override
-    public void onStartContentIntent(Context context, String contentUrl) {
-        if (mAwContentsClient.hasWebViewClient()) {
-            //  Callback when detecting a click on a content link.
-            mAwContentsClient.shouldOverrideUrlLoading(contentUrl);
-            return;
-        }
-
+    public void onStartContentIntent(Context context, String contentUrl, boolean isMainFrame) {
         // Comes from WebViewImpl::detectContentOnTouch in Blink, so must be user-initiated, and
         // isn't a redirect.
-        AwContentsClient.sendBrowsingIntent(context, contentUrl, true, false);
+        mAwContentsClient.shouldIgnoreNavigation(context, contentUrl, isMainFrame, true, false);
     }
 
     @Override
@@ -67,17 +60,6 @@ public class AwContentViewClient extends ContentViewClient implements ContentVid
         }
 
         return super.shouldOverrideKeyEvent(event);
-    }
-
-    @Override
-    public SelectActionMode startActionMode(
-            View view, ActionHandler actionHandler, boolean floating) {
-        return mAwContentsClient.startActionMode(view, actionHandler, floating);
-    }
-
-    @Override
-    public boolean supportsFloatingActionMode() {
-        return mAwContentsClient.supportsFloatingActionMode();
     }
 
     @Override
@@ -114,6 +96,21 @@ public class AwContentViewClient extends ContentViewClient implements ContentVid
 
     @Override
     public void setSystemUiVisibility(boolean enterFullscreen) {
+    }
+
+    @Override
+    public boolean doesPerformProcessText() {
+        return true;
+    }
+
+    @Override
+    public void startProcessTextIntent(Intent intent) {
+        mAwContents.startProcessTextIntent(intent);
+    }
+
+    @Override
+    public boolean isSelectActionModeAllowed(int actionModeItem) {
+        return mAwContents.isSelectActionModeAllowed(actionModeItem);
     }
 
     /**
@@ -154,10 +151,5 @@ public class AwContentViewClient extends ContentViewClient implements ContentVid
             mAwContents.exitFullScreen();
             mAwContentsClient.onHideCustomView();
         }
-    }
-
-    @Override
-    public boolean isExternalScrollActive() {
-        return mAwContents.isSmoothScrollingActive();
     }
 }

@@ -7,15 +7,13 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/pickle.h"
 #include "extensions/common/permissions/api_permission_set.h"
-#include "extensions/common/permissions/coalesced_permission_message.h"
-#include "extensions/common/permissions/permission_message.h"
 
 namespace base {
 class PickleIterator;
-class ListValue;
 class Value;
 }
 
@@ -42,16 +40,6 @@ class ManifestPermission {
   // by PermissionMessageProvider to generate meaningful permission messages
   // for the app.
   virtual PermissionIDSet GetPermissions() const = 0;
-
-  // Returns true if this permission has any PermissionMessages.
-  // TODO(sashab): Deprecate this, using GetPermissions() above and adding
-  // message rules to ChromePermissionMessageProvider.
-  virtual bool HasMessages() const = 0;
-
-  // Returns the localized permission messages of this permission.
-  // TODO(sashab): Deprecate this, using GetPermissions() above and adding
-  // message rules to ChromePermissionMessageProvider.
-  virtual PermissionMessages GetMessages() const = 0;
 
   // Parses the ManifestPermission from |value|. Returns false if error happens.
   virtual bool FromValue(const base::Value* value) = 0;

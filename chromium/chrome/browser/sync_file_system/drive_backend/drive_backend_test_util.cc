@@ -7,10 +7,10 @@
 #include <set>
 #include <string>
 
-#include "chrome/browser/drive/drive_api_util.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.h"
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database.pb.h"
+#include "components/drive/drive_api_util.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -68,7 +68,7 @@ scoped_ptr<FileMetadata> CreateFolderMetadata(const std::string& file_id,
   metadata->set_file_id(file_id);
   *metadata->mutable_details() = details;
 
-  return metadata.Pass();
+  return metadata;
 }
 
 scoped_ptr<FileMetadata> CreateFileMetadata(const std::string& file_id,
@@ -84,16 +84,16 @@ scoped_ptr<FileMetadata> CreateFileMetadata(const std::string& file_id,
   metadata->set_file_id(file_id);
   *metadata->mutable_details() = details;
 
-  return metadata.Pass();
+  return metadata;
 }
 
 scoped_ptr<FileTracker> CreateTracker(const FileMetadata& metadata,
-                                      int64 tracker_id,
+                                      int64_t tracker_id,
                                       const FileTracker* parent_tracker) {
   scoped_ptr<FileTracker> tracker(new FileTracker);
   tracker->set_tracker_id(tracker_id);
-  int64 parent_id = parent_tracker ?
-      parent_tracker->tracker_id() : kInvalidTrackerID;
+  int64_t parent_id =
+      parent_tracker ? parent_tracker->tracker_id() : kInvalidTrackerID;
   tracker->set_parent_tracker_id(parent_id);
   tracker->set_file_id(metadata.file_id());
   if (parent_tracker)
@@ -103,12 +103,12 @@ scoped_ptr<FileTracker> CreateTracker(const FileMetadata& metadata,
   tracker->set_dirty(false);
   tracker->set_active(true);
   tracker->set_needs_folder_listing(false);
-  return tracker.Pass();
+  return tracker;
 }
 
 scoped_ptr<FileTracker> CreatePlaceholderTracker(
     const std::string& file_id,
-    int64 tracker_id,
+    int64_t tracker_id,
     const FileTracker* parent_tracker) {
   scoped_ptr<FileTracker> tracker(new FileTracker);
   tracker->set_tracker_id(tracker_id);
@@ -121,7 +121,7 @@ scoped_ptr<FileTracker> CreatePlaceholderTracker(
   tracker->set_dirty(true);
   tracker->set_active(false);
   tracker->set_needs_folder_listing(false);
-  return tracker.Pass();
+  return tracker;
 }
 
 FileResourceKind GetFileResourceKind(

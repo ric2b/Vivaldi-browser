@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_STUB_PASSWORD_MANAGER_DRIVER_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_STUB_PASSWORD_MANAGER_DRIVER_H_
 
+#include "base/macros.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 
 namespace password_manager {
@@ -22,8 +23,8 @@ class StubPasswordManagerDriver : public PasswordManagerDriver {
       const autofill::PasswordFormFillData& form_data) override;
   void AllowPasswordGenerationForForm(
       const autofill::PasswordForm& form) override;
-  void AccountCreationFormsFound(
-      const std::vector<autofill::FormData>& forms) override;
+  void FormsEligibleForGenerationFound(
+      const std::vector<autofill::PasswordFormGenerationData>& forms) override;
   void GeneratedPasswordAccepted(const base::string16& password) override;
   void FillSuggestion(const base::string16& username,
                       const base::string16& password) override;

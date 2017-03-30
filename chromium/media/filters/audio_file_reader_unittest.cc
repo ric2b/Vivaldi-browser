@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
@@ -14,6 +15,14 @@
 #include "media/filters/audio_file_reader.h"
 #include "media/filters/in_memory_url_protocol.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+// This test assumes proprietary media support built into FFmpeg, which is not
+// the case when USE_SYSTEM_PROPRIETARY_CODECS is defined.
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#undef USE_PROPRIETARY_CODECS
+
+#include "media/filters/ipc_audio_decoder.h"
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 namespace media {
 
@@ -73,7 +82,7 @@ class AudioFileReaderTest : public testing::Test {
           EXPECT_EQ(packet_md5_hashes_[j], md5_hash) << "j = " << j;
         }
 
-        av_free_packet(&packet);
+        av_packet_unref(&packet);
       }
       ASSERT_TRUE(reader_->SeekForTesting(start_timestamp));
     }
@@ -116,6 +125,9 @@ class AudioFileReaderTest : public testing::Test {
   }
 
  protected:
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  IPCAudioDecoder::ScopedDisableForTesting ipc_audio_decoder_disabler_;
+#endif
   scoped_refptr<DecoderBuffer> data_;
   scoped_ptr<InMemoryUrlProtocol> protocol_;
   scoped_ptr<AudioFileReader> reader_;
@@ -192,7 +204,7 @@ TEST_F(AudioFileReaderTest, WaveF32LE) {
           12719);
 }
 
-#if 0 && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
 TEST_F(AudioFileReaderTest, MP3) {
   RunTest("sfx.mp3",
           "1.30,2.72,4.56,5.08,3.74,2.03,",

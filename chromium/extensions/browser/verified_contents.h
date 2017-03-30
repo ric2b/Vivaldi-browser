@@ -5,11 +5,14 @@
 #ifndef EXTENSIONS_BROWSER_VERIFIED_CONTENTS_H_
 #define EXTENSIONS_BROWSER_VERIFIED_CONTENTS_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/version.h"
 
 namespace extensions {
@@ -20,19 +23,8 @@ namespace extensions {
 // corruption of extension files on local disk.
 class VerifiedContents {
  public:
-  // This function fixes up a string in base64url encoding to be in standard
-  // base64.
-  //
-  // The JSON signing spec we're following uses "base64url" encoding (RFC 4648
-  // section 5 without padding). The slight differences from regular base64
-  // encoding are:
-  //   1. uses '_' instead of '/'
-  //   2. uses '-' instead of '+'
-  //   3. omits trailing '=' padding
-  static bool FixupBase64Encoding(std::string* input);
-
   // Note: the public_key must remain valid for the lifetime of this object.
-  VerifiedContents(const uint8* public_key, int public_key_size);
+  VerifiedContents(const uint8_t* public_key, int public_key_size);
   ~VerifiedContents();
 
   // Returns true if we successfully parsed the verified_contents.json file at
@@ -71,7 +63,7 @@ class VerifiedContents {
                        const std::string& signature_bytes);
 
   // The public key we should use for signature verification.
-  const uint8* public_key_;
+  const uint8_t* public_key_;
   const int public_key_size_;
 
   // Indicates whether the signature was successfully validated or not.

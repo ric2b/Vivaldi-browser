@@ -12,10 +12,8 @@ TransferableResource::TransferableResource()
       format(RGBA_8888),
       filter(0),
       read_lock_fences_enabled(false),
-      is_repeated(false),
       is_software(false),
-      allow_overlay(false) {
-}
+      is_overlay_candidate(false) {}
 
 TransferableResource::~TransferableResource() {
 }
@@ -23,7 +21,7 @@ TransferableResource::~TransferableResource() {
 ReturnedResource TransferableResource::ToReturnedResource() const {
   ReturnedResource returned;
   returned.id = id;
-  returned.sync_point = mailbox_holder.sync_point;
+  returned.sync_token = mailbox_holder.sync_token;
   returned.count = 1;
   return returned;
 }

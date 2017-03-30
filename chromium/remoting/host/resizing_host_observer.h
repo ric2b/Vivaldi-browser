@@ -5,9 +5,11 @@
 #ifndef REMOTING_HOST_RESIZING_HOST_OBSERVER_H_
 #define REMOTING_HOST_RESIZING_HOST_OBSERVER_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -44,7 +46,7 @@ class ResizingHostObserver : public ScreenControls {
   ScreenResolution original_resolution_;
 
   // State to manage rate-limiting of desktop resizes.
-  base::OneShotTimer<ResizingHostObserver> deferred_resize_timer_;
+  base::OneShotTimer deferred_resize_timer_;
   base::Time previous_resize_time_;
   base::Callback<base::Time(void)> now_function_;
 

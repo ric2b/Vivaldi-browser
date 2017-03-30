@@ -5,6 +5,8 @@
 #ifndef PPAPI_CPP_PRIVATE_FLASH_FONT_FILE_H_
 #define PPAPI_CPP_PRIVATE_FLASH_FONT_FILE_H_
 
+#include <stdint.h>
+
 #include "ppapi/c/private/pp_private_font_charset.h"
 #include "ppapi/cpp/resource.h"
 
@@ -27,6 +29,9 @@ class FontFile : public Resource {
 
   // Returns true if the required interface is available.
   static bool IsAvailable();
+
+  // Returns true if this interface is supported for Windows.
+  bool IsSupportedForWindows();
 
   bool GetFontTable(uint32_t table, void* output, uint32_t* output_length);
 };

@@ -4,6 +4,10 @@
 
 #include "components/policy/core/common/cloud/component_cloud_policy_updater.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
@@ -24,10 +28,10 @@ namespace {
 const size_t kPolicyProtoMaxSize = 16 * 1024;
 
 // The maximum size of the downloaded policy data.
-const int64 kPolicyDataMaxSize = 5 * 1024 * 1024;
+const int64_t kPolicyDataMaxSize = 5 * 1024 * 1024;
 
 // Tha maximum number of policy data fetches to run in parallel.
-const int64 kMaxParallelPolicyDataFetches = 2;
+const int64_t kMaxParallelPolicyDataFetches = 2;
 
 }  // namespace
 
@@ -37,9 +41,8 @@ ComponentCloudPolicyUpdater::ComponentCloudPolicyUpdater(
     ComponentCloudPolicyStore* store)
     : store_(store),
       external_policy_data_updater_(task_runner,
-                                    external_policy_data_fetcher.Pass(),
-                                    kMaxParallelPolicyDataFetches) {
-}
+                                    std::move(external_policy_data_fetcher),
+                                    kMaxParallelPolicyDataFetches) {}
 
 ComponentCloudPolicyUpdater::~ComponentCloudPolicyUpdater() {
 }
@@ -57,7 +60,7 @@ void ComponentCloudPolicyUpdater::UpdateExternalPolicy(
   // Validate the policy before doing anything else.
   PolicyNamespace ns;
   em::ExternalPolicyData data;
-  if (!store_->ValidatePolicy(response.Pass(), &ns, &data)) {
+  if (!store_->ValidatePolicy(std::move(response), &ns, &data)) {
     LOG(ERROR) << "Failed to validate component policy fetched from DMServer";
     return;
   }
@@ -102,7 +105,7 @@ void ComponentCloudPolicyUpdater::CancelUpdate(const PolicyNamespace& ns) {
 std::string ComponentCloudPolicyUpdater::NamespaceToKey(
     const PolicyNamespace& ns) {
   const std::string domain = base::IntToString(ns.domain);
-  const std::string size = base::IntToString(domain.size());
+  const std::string size = base::SizeTToString(domain.size());
   return size + ":" + domain + ":" + ns.component_id;
 }
 

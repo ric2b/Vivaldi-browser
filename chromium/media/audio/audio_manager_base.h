@@ -9,10 +9,12 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "media/audio/audio_manager.h"
 
 #include "media/audio/audio_output_dispatcher.h"
@@ -28,13 +30,14 @@ class AudioOutputDispatcher;
 // AudioManagerBase provides AudioManager functions common for all platforms.
 class MEDIA_EXPORT AudioManagerBase : public AudioManager {
  public:
-  // TODO(sergeyu): The constants below belong to AudioManager interface, not
-  // to the base implementation.
-
-  // Name of the generic "default" device.
-  static const char kDefaultDeviceName[];
-  // Unique Id of the generic "default" device.
+  // TODO(ajm): Move these strings to AudioManager.
+  // Unique Id of the generic "default" device. Associated with the localized
+  // name returned from GetDefaultDeviceName().
   static const char kDefaultDeviceId[];
+
+  // Unique Id of the generic default communications device. Associated with
+  // the localized name returned from GetCommunicationsDeviceName().
+  static const char kCommunicationsDeviceId[];
 
   // Input device ID used to capture the default system playback stream. When
   // this device ID is passed to MakeAudioInputStream() the returned
@@ -48,27 +51,37 @@ class MEDIA_EXPORT AudioManagerBase : public AudioManager {
 
   ~AudioManagerBase() override;
 
+  // AudioManager:
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetWorkerTaskRunner() override;
-
   base::string16 GetAudioInputDeviceModel() override;
-
   void ShowAudioInputSettings() override;
-
   void GetAudioInputDeviceNames(AudioDeviceNames* device_names) override;
-
   void GetAudioOutputDeviceNames(AudioDeviceNames* device_names) override;
-
   AudioOutputStream* MakeAudioOutputStream(
       const AudioParameters& params,
       const std::string& device_id) override;
-
   AudioInputStream* MakeAudioInputStream(const AudioParameters& params,
                                          const std::string& device_id) override;
-
   AudioOutputStream* MakeAudioOutputStreamProxy(
       const AudioParameters& params,
       const std::string& device_id) override;
+
+  // Listeners will be notified on the GetTaskRunner() task runner.
+  void AddOutputDeviceChangeListener(AudioDeviceListener* listener) override;
+  void RemoveOutputDeviceChangeListener(AudioDeviceListener* listener) override;
+
+  AudioParameters GetDefaultOutputStreamParameters() override;
+  AudioParameters GetOutputStreamParameters(
+      const std::string& device_id) override;
+  AudioParameters GetInputStreamParameters(
+      const std::string& device_id) override;
+  std::string GetAssociatedOutputDeviceID(
+      const std::string& input_device_id) override;
+  scoped_ptr<AudioLog> CreateAudioLog(
+      AudioLogFactory::AudioComponent component) override;
+
+  // AudioManagerBase:
 
   // Called internally by the audio stream when it has been closed.
   virtual void ReleaseOutputStream(AudioOutputStream* stream);
@@ -92,25 +105,6 @@ class MEDIA_EXPORT AudioManagerBase : public AudioManager {
   // Creates the input stream for the |AUDIO_PCM_LOW_LATENCY| format.
   virtual AudioInputStream* MakeLowLatencyInputStream(
       const AudioParameters& params, const std::string& device_id) = 0;
-
-  // Listeners will be notified on the GetTaskRunner() task runner.
-  void AddOutputDeviceChangeListener(AudioDeviceListener* listener) override;
-  void RemoveOutputDeviceChangeListener(AudioDeviceListener* listener) override;
-
-  AudioParameters GetDefaultOutputStreamParameters() override;
-  AudioParameters GetOutputStreamParameters(
-      const std::string& device_id) override;
-
-  AudioParameters GetInputStreamParameters(
-      const std::string& device_id) override;
-
-  std::string GetAssociatedOutputDeviceID(
-      const std::string& input_device_id) override;
-
-  scoped_ptr<AudioLog> CreateAudioLog(
-      AudioLogFactory::AudioComponent component) override;
-
-  void SetHasKeyboardMic() override;
 
   // Get number of input or output streams.
   int input_stream_count() const { return num_input_streams_; }

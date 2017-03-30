@@ -5,12 +5,15 @@
 #ifndef CONTENT_PUBLIC_BROWSER_NAVIGATION_ENTRY_H_
 #define CONTENT_PUBLIC_BROWSER_NAVIGATION_ENTRY_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/page_type.h"
 #include "content/public/common/referrer.h"
@@ -55,6 +58,16 @@ class NavigationEntry {
   virtual void SetBaseURLForDataURL(const GURL& url) = 0;
   virtual const GURL& GetBaseURLForDataURL() const = 0;
 
+#if defined(OS_ANDROID)
+  // The real data: URL when it is received via WebView.loadDataWithBaseUrl
+  // method. Represented as a string to circumvent the size restriction
+  // of GURLs for compatibility with legacy Android WebView apps.
+  virtual void SetDataURLAsString(
+      scoped_refptr<base::RefCountedString> data_url) = 0;
+  virtual const scoped_refptr<const base::RefCountedString> GetDataURLAsString()
+      const = 0;
+#endif
+
   // The referring URL. Can be empty.
   virtual void SetReferrer(const content::Referrer& referrer) = 0;
   virtual const content::Referrer& GetReferrer() const = 0;
@@ -85,13 +98,13 @@ class NavigationEntry {
   // the format is modified in the future, we should still be able to deal with
   // older versions.
   virtual void SetPageState(const PageState& state) = 0;
-  virtual const PageState& GetPageState() const = 0;
+  virtual PageState GetPageState() const = 0;
 
   // Describes the current page that the tab represents. This is the ID that the
   // renderer generated for the page and is how we can tell new versus
   // renavigations.
   virtual void SetPageID(int page_id) = 0;
-  virtual int32 GetPageID() const = 0;
+  virtual int32_t GetPageID() const = 0;
 
   // Page-related helpers ------------------------------------------------------
 
@@ -136,8 +149,8 @@ class NavigationEntry {
   virtual bool GetHasPostData() const = 0;
 
   // The Post identifier associated with the page.
-  virtual void SetPostID(int64 post_id) = 0;
-  virtual int64 GetPostID() const = 0;
+  virtual void SetPostID(int64_t post_id) = 0;
+  virtual int64_t GetPostID() const = 0;
 
   // Holds the raw post data of a browser initiated post request.
   // For efficiency, this should be cleared when content_state is populated

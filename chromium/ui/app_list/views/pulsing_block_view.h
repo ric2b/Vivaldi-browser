@@ -5,8 +5,8 @@
 #ifndef UI_APP_LIST_VIEWS_PULSING_BLOCK_VIEW_H_
 #define UI_APP_LIST_VIEWS_PULSING_BLOCK_VIEW_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "ui/views/view.h"
 
@@ -30,7 +30,7 @@ class PulsingBlockView : public views::View {
   // views::View overrides:
   void OnPaint(gfx::Canvas* canvas) override;
 
-  base::OneShotTimer<PulsingBlockView> start_delay_timer_;
+  base::OneShotTimer start_delay_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(PulsingBlockView);
 };

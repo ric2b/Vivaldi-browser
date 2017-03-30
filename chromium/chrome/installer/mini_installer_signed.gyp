@@ -1,5 +1,9 @@
 {
   'variables': {
+    'version_py': '<(DEPTH)/build/util/version.py',
+    'version_path': '../../chrome/VERSION',
+    'lastchange_path': '<(DEPTH)/build/util/LASTCHANGE',
+    'branding_dir': '../app/theme/<(branding_path_component)',
     'msvs_use_common_release': 0,
     'msvs_use_common_linker_extras': 0,
     'mini_installer_internal_deps%': 0,
@@ -18,12 +22,14 @@
 
           'variables':{
             'sign_executables': ['--sign-executables'],
-            'manifest_name':"mini_installer_signed",
+            'chrome_dll_project': [
+              '../chrome.gyp:chrome_dll',
+            ],
+            'chrome_dll_path': [
+              '<(PRODUCT_DIR)/vivaldi.dll',
+            ],
+            'output_dir': '<(PRODUCT_DIR)',
           },
-
-          'libraries': [
-            '<(INTERMEDIATE_DIR)/../mini_installer_lib.lib',
-          ],
           'conditions' : [
             ['icu_use_data_file_flag == 0', {
               'sources': [
@@ -36,7 +42,7 @@
             }],
           ],
           # Do all the building here
-          'includes': [ 'mini_installer_step.gypi', ],
+          'includes': [ 'mini_installer.gypi', ],
         },
       ],
     }],

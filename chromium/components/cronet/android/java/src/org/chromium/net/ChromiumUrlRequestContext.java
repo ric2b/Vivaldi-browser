@@ -10,12 +10,12 @@ import android.os.Looper;
 import android.os.Process;
 import android.util.Log;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 
 /**
  * Provides context for the native HTTP operations.
- * @deprecated Use {@link CronetUrlRequestContext} instead.
+ * @deprecated Use {@link CronetEngine} instead.
  */
 @JNINamespace("cronet")
 @Deprecated
@@ -34,10 +34,11 @@ public class ChromiumUrlRequestContext {
      * Constructor.
      */
     protected ChromiumUrlRequestContext(
-            final Context context, String userAgent, UrlRequestContextConfig config) {
+            final Context context, String userAgent, CronetEngine.Builder config) {
         CronetLibraryLoader.ensureInitialized(context, config);
         mChromiumUrlRequestContextAdapter =
-                nativeCreateRequestContextAdapter(userAgent, getLoggingLevel(), config.toString());
+                nativeCreateRequestContextAdapter(userAgent, getLoggingLevel(),
+                        CronetUrlRequestContext.createNativeUrlRequestContextConfig(config));
         if (mChromiumUrlRequestContextAdapter == 0) {
             throw new NullPointerException("Context Adapter creation failed");
         }
@@ -111,7 +112,9 @@ public class ChromiumUrlRequestContext {
 
     @Override
     protected void finalize() throws Throwable {
-        nativeReleaseRequestContextAdapter(mChromiumUrlRequestContextAdapter);
+        if (mChromiumUrlRequestContextAdapter != 0) {
+            nativeReleaseRequestContextAdapter(mChromiumUrlRequestContextAdapter);
+        }
         super.finalize();
     }
 
@@ -138,7 +141,7 @@ public class ChromiumUrlRequestContext {
     // Returns an instance ChromiumUrlRequestContextAdapter to be stored in
     // mChromiumUrlRequestContextAdapter.
     private native long nativeCreateRequestContextAdapter(
-            String userAgent, int loggingLevel, String config);
+            String userAgent, int loggingLevel, long config);
 
     private native void nativeReleaseRequestContextAdapter(
             long chromiumUrlRequestContextAdapter);

@@ -9,7 +9,7 @@
 #include "extensions/common/api/cast_channel/logging.pb.h"
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 // Converts an IDL "ChannelError" to a proto enum "ErrorState".
 proto::ErrorState ErrorStateToProto(ChannelError state);
@@ -31,9 +31,6 @@ struct LastErrors {
 
   // The most recent net_return_value logged for the socket.
   int net_return_value;
-
-  // The most recent NSS error logged for the socket.
-  int nss_error_code;
 };
 
 }  // namespace cast_channel

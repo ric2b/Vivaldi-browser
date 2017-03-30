@@ -5,8 +5,11 @@
 #ifndef CHROME_BROWSER_MEDIA_ANDROID_REMOTE_REMOTE_MEDIA_PLAYER_MANAGER_H_
 #define CHROME_BROWSER_MEDIA_ANDROID_REMOTE_REMOTE_MEDIA_PLAYER_MANAGER_H_
 
+#include <set>
+#include <unordered_map>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "chrome/browser/media/android/remote/remote_media_player_bridge.h"
@@ -21,16 +24,12 @@ namespace remote_media {
 // remotely.
 class RemoteMediaPlayerManager : public content::BrowserMediaPlayerManager {
  public:
-  RemoteMediaPlayerManager(
-      content::RenderFrameHost* render_frame_host,
-      content::MediaPlayersObserver* audio_monitor);
+  explicit RemoteMediaPlayerManager(
+      content::RenderFrameHost* render_frame_host);
   ~RemoteMediaPlayerManager() override;
 
   void OnPlaying(int player_id);
   void OnPaused(int player_id);
-
-  // Callback to trigger when a remote device has been selected.
-  void OnRemoteDeviceSelected(int player_id);
 
   // Callback to trigger when a remote device has been unselected.
   void OnRemoteDeviceUnselected(int player_id);
@@ -47,35 +46,36 @@ class RemoteMediaPlayerManager : public content::BrowserMediaPlayerManager {
                               int height,
                               bool success) override;
 
+  // Swap which player is currently in use (local or remote).
+  void SwitchToRemotePlayer(int player_id, const std::string& casting_message);
+  void SwitchToLocalPlayer(int player_id);
+
  protected:
   void OnSetPoster(int player_id, const GURL& url) override;
+
+  void ReleaseResources(int player_id) override;
 
  private:
   // Returns a MediaPlayerAndroid implementation for playing the media remotely.
   RemoteMediaPlayerBridge* CreateRemoteMediaPlayer(
       media::MediaPlayerAndroid* local_player);
 
-  // Replaces the given local player with the remote one. Does nothing if the
-  // player is remote already.
-  void ReplaceLocalPlayerWithRemote(media::MediaPlayerAndroid* player);
-
   // Replaces the remote player with the local player this class is holding.
   // Does nothing if there is no remote player.
-  void ReplaceRemotePlayerWithLocal();
-
-  // Checks if the URL managed by the player should be played remotely.
-  // Returns true if the manager should do nothing, false if it needs to
-  // proceed.
-  bool MaybeStartPlayingRemotely(int player_id);
+  void ReplaceRemotePlayerWithLocal(int player_id);
 
   // content::BrowserMediaPlayerManager overrides.
   void OnStart(int player_id) override;
   void OnInitialize(
       const MediaPlayerHostMsg_Initialize_Params& media_player_params) override;
   void OnDestroyPlayer(int player_id) override;
-  void OnReleaseResources(int player_id) override;
+  void OnSuspendAndReleaseResources(int player_id) override;
+  void OnSuspend(int player_id) override;
+  void OnResume(int player_id) override;
   void OnRequestRemotePlayback(int player_id) override;
   void OnRequestRemotePlaybackControl(int player_id) override;
+
+  bool IsPlayingRemotely(int player_id) override;
 
   void ReleaseFullscreenPlayer(media::MediaPlayerAndroid* player) override;
 
@@ -92,18 +92,29 @@ class RemoteMediaPlayerManager : public content::BrowserMediaPlayerManager {
   // -1 in case something goes wrong.
   int GetTabId();
 
-  // Get the player id of current remote player, if any, or -1 if none.
-  int RemotePlayerId();
+  // Get the player that is not currently selected
+  ScopedVector<media::MediaPlayerAndroid>::iterator GetAlternativePlayer(
+      int player_id);
 
   // Get the remote player for a given player id, whether or not it is currently
   // playing remotely.
   RemoteMediaPlayerBridge* GetRemotePlayer(int player_id);
 
-  // The local player that we have replaced with a remote player. This is NULL
-  // if we do not have a remote player currently running.
-  scoped_ptr<media::MediaPlayerAndroid> replaced_local_player_;
+  // Get the local player for a given player id, whether or not it is currently
+  // playing locally.
+  media::MediaPlayerAndroid* GetLocalPlayer(int player_id);
 
-  ScopedVector<RemoteMediaPlayerBridge> remote_players_;
+  void SwapCurrentPlayer(int player_id);
+
+  void FetchPosterBitmap(int player_id);
+
+  // Contains the alternative players that are not currently in use, i.e. the
+  // remote players for videos that are playing locally, and the local players
+  // for videos that are playing remotely.
+  ScopedVector<media::MediaPlayerAndroid> alternative_players_;
+
+  std::set<int> players_playing_remotely_;
+  std::unordered_map<int, GURL> poster_urls_;
 
   base::WeakPtrFactory<RemoteMediaPlayerManager> weak_ptr_factory_;
 

@@ -4,7 +4,9 @@
 
 #include "components/proximity_auth/bluetooth_util.h"
 
+#include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <algorithm>
 #include <vector>
@@ -73,8 +75,8 @@ bool BluetoothAddressToBdaddr(const std::string& address, bdaddr_t* result) {
   if (canonical_address.empty())
     return false;
 
-  std::vector<std::string> octets;
-  base::SplitString(canonical_address, ':', &octets);
+  std::vector<base::StringPiece> octets = base::SplitStringPiece(
+      canonical_address, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   DCHECK_EQ(octets.size(), 6U);
 
   // BlueZ expects the octets in the reverse order.

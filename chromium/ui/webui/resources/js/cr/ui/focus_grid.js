@@ -25,53 +25,54 @@ cr.define('cr.ui', function() {
    *   focusable  focusable  focusable
    *
    * @constructor
+   * @implements {cr.ui.FocusRow.Delegate}
    */
   function FocusGrid() {
     /** @type {!Array<!cr.ui.FocusRow>} */
     this.rows = [];
-
-    /** @private {!EventTracker} */
-    this.eventTracker_ = new EventTracker;
-    this.eventTracker_.add(cr.doc, 'keydown', this.onKeydown_.bind(this));
-    this.eventTracker_.add(cr.doc, 'focusin', this.onFocusin_.bind(this));
-
-    /** @private {cr.ui.FocusRow.Delegate} */
-    this.delegate_ = new FocusGrid.RowDelegate(this);
   }
 
-  /**
-   * Row delegate to overwrite the behavior of a mouse click to deselect any row
-   * that wasn't clicked.
-   * @param {cr.ui.FocusGrid} focusGrid
-   * @constructor
-   * @implements {cr.ui.FocusRow.Delegate}
-   */
-  FocusGrid.RowDelegate = function(focusGrid) {
-    /** @private {cr.ui.FocusGrid} */
-    this.focusGrid_ = focusGrid;
-  };
-
-  FocusGrid.RowDelegate.prototype = {
-    /** @override */
-    onKeydown: function(row, e) { return false; },
-
-    /** @override */
-    onMousedown: function(row, e) {
-      // Only care about left mouse click.
-      if (e.button)
-        return false;
-
-      // Only the clicked row should be active.
-      var target = assertInstanceof(e.target, Node);
-      this.focusGrid_.rows.forEach(function(row) {
-        row.makeActive(row.contains(target));
-      });
-
-      return true;
-    },
-  };
-
   FocusGrid.prototype = {
+    /** @private {boolean} */
+    ignoreFocusChange_: false,
+
+    /** @override */
+    onFocus: function(row, e) {
+      if (this.ignoreFocusChange_)
+        this.ignoreFocusChange_ = false;
+      else
+        this.lastFocused_ = e.currentTarget;
+
+      this.rows.forEach(function(r) { r.makeActive(r == row); });
+    },
+
+    /** @override */
+    onKeydown: function(row, e) {
+      var rowIndex = this.rows.indexOf(row);
+      assert(rowIndex >= 0);
+
+      var newRow = -1;
+
+      if (e.keyIdentifier == 'Up')
+        newRow = rowIndex - 1;
+      else if (e.keyIdentifier == 'Down')
+        newRow = rowIndex + 1;
+      else if (e.keyIdentifier == 'PageUp')
+        newRow = 0;
+      else if (e.keyIdentifier == 'PageDown')
+        newRow = this.rows.length - 1;
+
+      var rowToFocus = this.rows[newRow];
+      if (rowToFocus) {
+        this.ignoreFocusChange_ = true;
+        rowToFocus.getEquivalentElement(this.lastFocused_).focus();
+        e.preventDefault();
+        return true;
+      }
+
+      return false;
+    },
+
     /**
      * Unregisters event handlers and removes all |this.rows|.
      */
@@ -86,56 +87,22 @@ cr.define('cr.ui', function() {
      */
     getRowIndexForTarget: function(target) {
       for (var i = 0; i < this.rows.length; ++i) {
-        if (this.rows[i].focusableElements.indexOf(target) >= 0)
+        if (this.rows[i].getElements().indexOf(target) >= 0)
           return i;
       }
       return -1;
     },
 
     /**
-     * Handles keyboard shortcuts to move up/down in the grid.
-     * @param {Event} e The key event.
-     * @private
+     * @param {Element} root An element to search for.
+     * @return {?cr.ui.FocusRow} The row with root of |root| or null.
      */
-    onKeydown_: function(e) {
-      var target = assertInstanceof(e.target, Node);
-      var rowIndex = this.getRowIndexForTarget(target);
-      if (rowIndex == -1)
-        return;
-
-      var row = -1;
-
-      if (e.keyIdentifier == 'Up')
-        row = rowIndex - 1;
-      else if (e.keyIdentifier == 'Down')
-        row = rowIndex + 1;
-      else if (e.keyIdentifier == 'PageUp')
-        row = 0;
-      else if (e.keyIdentifier == 'PageDown')
-        row = this.rows.length - 1;
-
-      var rowToFocus = this.rows[row];
-      if (rowToFocus) {
-        this.ignoreFocusChange_ = true;
-        rowToFocus.getEquivalentElement(this.lastFocused).focus();
-        e.preventDefault();
+    getRowForRoot: function(root) {
+      for (var i = 0; i < this.rows.length; ++i) {
+        if (this.rows[i].root == root)
+          return this.rows[i];
       }
-    },
-
-    /**
-     * Keep track of the last column that the user manually focused.
-     * @param {Event} e The focusin event.
-     * @private
-     */
-    onFocusin_: function(e) {
-      if (this.ignoreFocusChange_) {
-        this.ignoreFocusChange_ = false;
-        return;
-      }
-
-      var target = assertInstanceof(e.target, Node);
-      if (this.getRowIndexForTarget(target) != -1)
-        this.lastFocused = target;
+      return null;
     },
 
     /**
@@ -153,7 +120,7 @@ cr.define('cr.ui', function() {
      * @param {cr.ui.FocusRow} nextRow The row that should follow |row|.
      */
     addRowBefore: function(row, nextRow) {
-      row.delegate = row.delegate || this.delegate_;
+      row.delegate = row.delegate || this;
 
       var nextRowIndex = this.rows.indexOf(nextRow);
       if (nextRowIndex == -1)

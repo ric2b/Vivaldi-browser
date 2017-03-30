@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/waiter_test_utils.h"
+#include "third_party/mojo/src/mojo/edk/system/waiter_test_utils.h"
 
 namespace mojo {
 namespace system {
 namespace test {
 
-SimpleWaiterThread::SimpleWaiterThread(MojoResult* result, uint32_t* context)
+SimpleWaiterThread::SimpleWaiterThread(MojoResult* result, uintptr_t* context)
     : base::SimpleThread("waiter_thread"), result_(result), context_(context) {
   waiter_.Init();
   *result_ = 5420734;    // Totally invalid result.
@@ -26,10 +26,10 @@ void SimpleWaiterThread::Run() {
 WaiterThread::WaiterThread(scoped_refptr<Dispatcher> dispatcher,
                            MojoHandleSignals handle_signals,
                            MojoDeadline deadline,
-                           uint32_t context,
+                           uintptr_t context,
                            bool* did_wait_out,
                            MojoResult* result_out,
-                           uint32_t* context_out,
+                           uintptr_t* context_out,
                            HandleSignalsState* signals_state_out)
     : base::SimpleThread("waiter_thread"),
       dispatcher_(dispatcher),

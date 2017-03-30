@@ -4,6 +4,9 @@
 
 #include "media/base/mac/video_frame_mac.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "media/base/mac/corevideo_glue.h"
@@ -43,11 +46,11 @@ WrapVideoFrameInCVPixelBuffer(const VideoFrame& frame) {
   // represent I420 and NV12 frames. In addition, VideoFrame does not carry
   // colorimetric information, so this function assumes standard video range
   // and ITU Rec 709 primaries.
-  const VideoFrame::Format video_frame_format = frame.format();
+  const VideoPixelFormat video_frame_format = frame.format();
   OSType cv_format;
-  if (video_frame_format == VideoFrame::Format::I420) {
+  if (video_frame_format == PIXEL_FORMAT_I420) {
     cv_format = kCVPixelFormatType_420YpCbCr8Planar;
-  } else if (video_frame_format == VideoFrame::Format::NV12) {
+  } else if (video_frame_format == PIXEL_FORMAT_NV12) {
     cv_format = CoreVideoGlue::kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
   } else {
     DLOG(ERROR) << " unsupported frame format: " << video_frame_format;
@@ -72,7 +75,7 @@ WrapVideoFrameInCVPixelBuffer(const VideoFrame& frame) {
   size_t plane_heights[kMaxPlanes];
   size_t plane_bytes_per_row[kMaxPlanes];
   for (int plane_i = 0; plane_i < num_planes; ++plane_i) {
-    plane_ptrs[plane_i] = const_cast<uint8*>(frame.data(plane_i));
+    plane_ptrs[plane_i] = const_cast<uint8_t*>(frame.data(plane_i));
     gfx::Size plane_size =
         VideoFrame::PlaneSize(video_frame_format, plane_i, coded_size);
     plane_widths[plane_i] = plane_size.width();

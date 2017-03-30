@@ -2,5 +2,5 @@ skyostil@chromium.org
 tedchoc@chromium.org
 yfriedman@chromium.org
 
-# Input handling related
-jdduke@chromium.org
+per-file synchronous_compositor_*.h=boliu@chromium.org
+per-file synchronous_compositor_*.cc=boliu@chromium.org

@@ -6,10 +6,10 @@ package org.chromium.android_webview;
 
 import android.util.SparseArray;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 
 /**
  * Provides the Message Channel functionality for Android Webview. Specifically
@@ -46,7 +46,7 @@ public class AwMessagePortService {
     // A thread safe storage for Message Ports.
     private static class MessagePortStorage {
         private SparseArray<AwMessagePort> mMessagePorts = new SparseArray<AwMessagePort>();
-        private Object mLock = new Object();
+        private final Object mLock = new Object();
 
         public void remove(int portId) {
             synchronized (mLock) {

@@ -58,22 +58,23 @@ GalleryDataModel.prototype = {
  * Saves new image.
  *
  * @param {!VolumeManagerWrapper} volumeManager Volume manager instance.
- * @param {!Gallery.Item} item Original gallery item.
+ * @param {!GalleryItem} item Original gallery item.
  * @param {!HTMLCanvasElement} canvas Canvas containing new image.
- * @param {boolean} overwrite Whether to overwrite the image to the item or not.
+ * @param {boolean} overwrite Set true to overwrite original if it's possible.
  * @return {!Promise} Promise to be fulfilled with when the operation completes.
  */
 GalleryDataModel.prototype.saveItem = function(
     volumeManager, item, canvas, overwrite) {
   var oldEntry = item.getEntry();
   var oldLocationInfo = item.getLocationInfo();
+  var oldIsOriginal = item.isOriginal();
   return new Promise(function(fulfill, reject) {
     item.saveToFile(
         volumeManager,
         this.metadataModel_,
-        this.fallbackSaveDirectory,
-        overwrite,
+        assert(this.fallbackSaveDirectory),
         canvas,
+        overwrite,
         function(success) {
           if (!success) {
             reject('Failed to save the image.');
@@ -96,12 +97,12 @@ GalleryDataModel.prototype.saveItem = function(
             ]).then(function(itemLists) {
               // New entry is added and the item now tracks it.
               // Add another item for the old entry.
-              var anotherItem = new Gallery.Item(
+              var anotherItem = new GalleryItem(
                   oldEntry,
                   oldLocationInfo,
                   itemLists[0][0],
                   itemLists[1][0],
-                  item.isOriginal());
+                  oldIsOriginal);
               // The item must be added behind the existing item so that it does
               // not change the index of the existing item.
               // TODO(hirono): Update the item index of the selection model

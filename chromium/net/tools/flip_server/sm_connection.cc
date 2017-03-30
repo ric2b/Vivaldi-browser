@@ -14,6 +14,7 @@
 #include <string>
 
 #include "net/tools/flip_server/constants.h"
+#include "net/tools/flip_server/create_listener.h"
 #include "net/tools/flip_server/flip_config.h"
 #include "net/tools/flip_server/http_interface.h"
 #include "net/tools/flip_server/spdy_interface.h"
@@ -317,12 +318,6 @@ bool SMConnection::WasSpdyNegotiated(SpdyMajorVersion* version_negotiated) {
       std::string npn_proto_str((const char*)npn_proto, npn_proto_len);
       VLOG(1) << log_prefix_ << ACCEPTOR_CLIENT_IDENT
               << "NPN protocol detected: " << npn_proto_str;
-      if (!strncmp(reinterpret_cast<const char*>(npn_proto),
-                   "spdy/2",
-                   npn_proto_len)) {
-        *version_negotiated = SPDY2;
-        return true;
-      }
       if (!strncmp(reinterpret_cast<const char*>(npn_proto),
                    "spdy/3",
                    npn_proto_len)) {

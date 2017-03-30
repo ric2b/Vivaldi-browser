@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -24,7 +26,9 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/extension.h"
+#include "extensions/test/extension_test_message_listener.h"
 #include "net/url_request/test_url_request_interceptor.h"
 #include "sync/protocol/extension_specifics.pb.h"
 #include "sync/protocol/sync.pb.h"
@@ -46,9 +50,8 @@ class ExtensionDisabledGlobalErrorTest : public ExtensionBrowserTest {
   void SetUpOnMainThread() override {
     ExtensionBrowserTest::SetUpOnMainThread();
     EXPECT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
-    service_ = extensions::ExtensionSystem::Get(
-        browser()->profile())->extension_service();
-    registry_ = ExtensionRegistry::Get(browser()->profile());
+    service_ = extensions::ExtensionSystem::Get(profile())->extension_service();
+    registry_ = ExtensionRegistry::Get(profile());
     const base::FilePath test_dir =
         test_data_dir_.AppendASCII("permissions_increase");
     const base::FilePath pem_path = test_dir.AppendASCII("permissions.pem");
@@ -72,8 +75,8 @@ class ExtensionDisabledGlobalErrorTest : public ExtensionBrowserTest {
   // Returns the ExtensionDisabledGlobalError, if present.
   // Caution: currently only supports one error at a time.
   GlobalError* GetExtensionDisabledGlobalError() {
-    return GlobalErrorServiceFactory::GetForProfile(browser()->profile())->
-        GetGlobalErrorByMenuItemCommandID(IDC_EXTENSION_DISABLED_FIRST);
+    return GlobalErrorServiceFactory::GetForProfile(profile())->
+        GetGlobalErrorByMenuItemCommandID(IDC_EXTENSION_INSTALL_ERROR_FIRST);
   }
 
   // Install the initial version, which should happen just fine.
@@ -129,10 +132,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, AcceptPermissions) {
   ASSERT_TRUE(GetExtensionDisabledGlobalError());
   const size_t size_before = registry_->enabled_extensions().size();
 
+  ExtensionTestMessageListener listener("v2.onInstalled", false);
+  listener.set_failure_message("FAILED");
   service_->GrantPermissionsAndEnableExtension(extension);
   EXPECT_EQ(size_before + 1, registry_->enabled_extensions().size());
   EXPECT_EQ(0u, registry_->disabled_extensions().size());
   ASSERT_FALSE(GetExtensionDisabledGlobalError());
+  // Expect onInstalled event to fire.
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
 }
 
 // Tests uninstalling an extension that was disabled due to higher permissions.
@@ -181,11 +188,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, UserDisabled) {
 // version with higher permissions was installed by sync.
 IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest,
                        HigherPermissionsFromSync) {
-  // Get data for extension v2 (disabled) into sync.
+  // Get sync data for extension v2 (disabled).
   const Extension* extension = InstallAndUpdateIncreasingPermissionsExtension();
   std::string extension_id = extension->id();
-  ExtensionSyncService* sync_service = ExtensionSyncService::Get(
-      browser()->profile());
+  ExtensionSyncService* sync_service = ExtensionSyncService::Get(profile());
   extensions::ExtensionSyncData sync_data =
       sync_service->CreateSyncData(*extension);
   UninstallExtension(extension_id);
@@ -210,10 +216,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest,
   extensions::ExtensionUpdater::CheckParams params;
   service_->updater()->set_default_check_params(params);
 
-  // Sync is replacing an older version, so it pends.
-  EXPECT_FALSE(sync_service->ApplySyncData(sync_data));
+  extensions::TestExtensionRegistryObserver install_observer(registry_);
+  sync_service->ProcessSyncChanges(
+      FROM_HERE,
+      syncer::SyncChangeList(
+          1, sync_data.GetSyncChange(syncer::SyncChange::ACTION_ADD)));
 
-  WaitForExtensionInstall();
+  install_observer.WaitForExtensionWillBeInstalled();
   content::RunAllBlockingPoolTasksUntilIdle();
 
   extension = service_->GetExtensionById(extension_id, true);
@@ -229,8 +238,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest,
 // Test that an error appears if an extension gets installed server side.
 IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, RemoteInstall) {
   static const char extension_id[] = "pgdpcfcocojkjfbgpiianjngphoopgmo";
-  ExtensionSyncService* sync_service =
-      ExtensionSyncService::Get(browser()->profile());
 
   // Note: This interceptor gets requests on the IO thread.
   net::LocalHostTestURLRequestInterceptor interceptor(
@@ -252,6 +259,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, RemoteInstall) {
   specifics.mutable_extension()->set_id(extension_id);
   specifics.mutable_extension()->set_enabled(false);
   specifics.mutable_extension()->set_remote_install(true);
+  specifics.mutable_extension()->set_disable_reasons(
+      Extension::DISABLE_REMOTE_INSTALL);
   specifics.mutable_extension()->set_update_url(
       "http://localhost/autoupdate/updates.xml");
   specifics.mutable_extension()->set_version("2");
@@ -261,11 +270,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, RemoteInstall) {
                                          base::Time::Now(),
                                          syncer::AttachmentIdList(),
                                          syncer::AttachmentServiceProxy());
-  // Sync is installing a new extension, so it pends.
-  EXPECT_FALSE(sync_service->ApplySyncData(
-      *extensions::ExtensionSyncData::CreateFromSyncData(sync_data)));
 
-  WaitForExtensionInstall();
+  extensions::TestExtensionRegistryObserver install_observer(registry_);
+  ExtensionSyncService::Get(profile())->ProcessSyncChanges(
+      FROM_HERE,
+      syncer::SyncChangeList(
+          1, syncer::SyncChange(FROM_HERE,
+                                syncer::SyncChange::ACTION_ADD,
+                                sync_data)));
+
+  install_observer.WaitForExtensionWillBeInstalled();
   content::RunAllBlockingPoolTasksUntilIdle();
 
   const Extension* extension = service_->GetExtensionById(extension_id, true);

@@ -4,8 +4,13 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 
+#include <stddef.h>
+
+#include "ash/shell_window_ids.h"
+#include "ash/wm/screen_dimmer.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -19,7 +24,6 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/consumer_management_service.h"
 #include "chrome/browser/chromeos/settings/shutdown_policy_handler.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/extensions/signin/gaia_auth_extension_loader.h"
@@ -118,23 +122,15 @@ content::WebUIDataSource* CreateOobeUIDataSource(
           "frame-src chrome://terms/ %s/;",
           extensions::kGaiaAuthExtensionOrigin));
   source->OverrideContentSecurityPolicyObjectSrc("object-src *;");
-  bool is_webview_signin_enabled = StartupUtils::IsWebviewSigninEnabled();
-  source->AddResourcePath("gaia_auth_host.js", is_webview_signin_enabled ?
-      IDR_GAIA_AUTH_AUTHENTICATOR_JS : IDR_GAIA_AUTH_HOST_JS);
+  source->AddResourcePath("gaia_auth_host.js",
+                          StartupUtils::IsWebviewSigninEnabled()
+                              ? IDR_GAIA_AUTH_AUTHENTICATOR_JS
+                              : IDR_GAIA_AUTH_HOST_JS);
 
   // Serve deferred resources.
-  source->AddResourcePath(kEnrollmentHTMLPath,
-                          is_webview_signin_enabled
-                              ? IDR_OOBE_ENROLLMENT_WEBVIEW_HTML
-                              : IDR_OOBE_ENROLLMENT_HTML);
-  source->AddResourcePath(kEnrollmentCSSPath,
-                          is_webview_signin_enabled
-                              ? IDR_OOBE_ENROLLMENT_WEBVIEW_CSS
-                              : IDR_OOBE_ENROLLMENT_CSS);
-  source->AddResourcePath(kEnrollmentJSPath,
-                          is_webview_signin_enabled
-                              ? IDR_OOBE_ENROLLMENT_WEBVIEW_JS
-                              : IDR_OOBE_ENROLLMENT_JS);
+  source->AddResourcePath(kEnrollmentHTMLPath, IDR_OOBE_ENROLLMENT_HTML);
+  source->AddResourcePath(kEnrollmentCSSPath, IDR_OOBE_ENROLLMENT_CSS);
+  source->AddResourcePath(kEnrollmentJSPath, IDR_OOBE_ENROLLMENT_JS);
 
   if (display_type == OobeUI::kOobeDisplay) {
     source->AddResourcePath("Roboto-Thin.ttf", IDR_FONT_ROBOTO_THIN);
@@ -313,16 +309,11 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   user_image_view_ = user_image_screen_handler;
   AddScreenHandler(user_image_screen_handler);
 
-  policy::ConsumerManagementService* consumer_management =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos()->
-          GetConsumerManagementService();
-
   user_board_screen_handler_ = new UserBoardScreenHandler();
   AddScreenHandler(user_board_screen_handler_);
 
   gaia_screen_handler_ =
-      new GaiaScreenHandler(
-          core_handler_, network_state_informer_, consumer_management);
+      new GaiaScreenHandler(core_handler_, network_state_informer_);
   AddScreenHandler(gaia_screen_handler_);
 
   signin_screen_handler_ =
@@ -389,6 +380,9 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 OobeUI::~OobeUI() {
   core_handler_->SetDelegate(nullptr);
   network_dropdown_handler_->RemoveObserver(error_screen_handler_);
+  ash::ScreenDimmer::GetForContainer(
+      ash::kShellWindowId_LockScreenContainersContainer)
+      ->SetDimming(false);
 }
 
 CoreOobeActor* OobeUI::GetCoreOobeActor() {
@@ -547,6 +541,12 @@ void OobeUI::InitializeScreenMaps() {
   screen_names_[SCREEN_OOBE_HOST_PAIRING] = kScreenHostPairing;
   screen_names_[SCREEN_DEVICE_DISABLED] = kScreenDeviceDisabled;
 
+  dim_overlay_screen_ids_.push_back(SCREEN_CONFIRM_PASSWORD);
+  dim_overlay_screen_ids_.push_back(SCREEN_GAIA_SIGNIN);
+  dim_overlay_screen_ids_.push_back(SCREEN_OOBE_ENROLLMENT);
+  dim_overlay_screen_ids_.push_back(SCREEN_PASSWORD_CHANGED);
+  dim_overlay_screen_ids_.push_back(SCREEN_USER_IMAGE_PICKER);
+
   screen_ids_.clear();
   for (size_t i = 0; i < screen_names_.size(); ++i)
     screen_ids_[screen_names_[i]] = static_cast<Screen>(i);
@@ -643,6 +643,15 @@ void OobeUI::OnCurrentScreenChanged(const std::string& screen) {
   DCHECK(screen_ids_.count(screen))
       << "Screen should be registered in InitializeScreenMaps()";
   Screen new_screen = screen_ids_[screen];
+
+  bool should_dim =
+      std::find(dim_overlay_screen_ids_.begin(), dim_overlay_screen_ids_.end(),
+                new_screen) != dim_overlay_screen_ids_.end();
+  ash::ScreenDimmer* screen_dimmer = ash::ScreenDimmer::GetForContainer(
+      ash::kShellWindowId_LockScreenContainersContainer);
+  screen_dimmer->set_at_bottom(true);
+  screen_dimmer->SetDimming(should_dim);
+
   FOR_EACH_OBSERVER(Observer,
                     observer_list_,
                     OnCurrentScreenChanged(current_screen_, new_screen));

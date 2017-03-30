@@ -21,28 +21,24 @@ OnscreenDisplayClient::OnscreenDisplayClient(
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const RendererSettings& settings,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : output_surface_(output_surface.Pass()),
+    : output_surface_(std::move(output_surface)),
+      task_runner_(task_runner),
       display_(new Display(this,
                            manager,
                            bitmap_manager,
                            gpu_memory_buffer_manager,
                            settings)),
-      task_runner_(task_runner),
       output_surface_lost_(false),
-      disable_gpu_vsync_(settings.disable_gpu_vsync) {
-}
+      disable_display_vsync_(settings.disable_display_vsync) {}
 
 OnscreenDisplayClient::~OnscreenDisplayClient() {
 }
 
 bool OnscreenDisplayClient::Initialize() {
-  int max_frames_pending =
-      output_surface_ ? output_surface_->capabilities().max_frames_pending : 0;
-  if (max_frames_pending <= 0)
-    max_frames_pending = OutputSurface::DEFAULT_MAX_FRAMES_PENDING;
+  DCHECK(output_surface_);
 
   BeginFrameSource* frame_source;
-  if (disable_gpu_vsync_) {
+  if (disable_display_vsync_) {
     unthrottled_frame_source_ =
         BackToBackBeginFrameSource::Create(task_runner_.get());
     frame_source = unthrottled_frame_source_.get();
@@ -52,10 +48,11 @@ bool OnscreenDisplayClient::Initialize() {
     frame_source = synthetic_frame_source_.get();
   }
 
-  scheduler_.reset(new DisplayScheduler(
-      display_.get(), frame_source, task_runner_.get(), max_frames_pending));
+  scheduler_.reset(
+      new DisplayScheduler(display_.get(), frame_source, task_runner_.get(),
+                           output_surface_->capabilities().max_frames_pending));
 
-  return display_->Initialize(output_surface_.Pass(), scheduler_.get());
+  return display_->Initialize(std::move(output_surface_), scheduler_.get());
 }
 
 void OnscreenDisplayClient::CommitVSyncParameters(base::TimeTicks timebase,

@@ -5,13 +5,15 @@
 #ifndef IOS_PUBLIC_TEST_TEST_CHROME_BROWSER_PROVIDER_H_
 #define IOS_PUBLIC_TEST_TEST_CHROME_BROWSER_PROVIDER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 
+class FakeProfileOAuth2TokenServiceIOSProvider;
+
 namespace ios {
 
-class FakeProfileOAuth2TokenServiceIOSProvider;
-class FakeStringProvider;
+class TestUpdatableResourceProvider;
 
 class TestChromeBrowserProvider : public ChromeBrowserProvider {
  public:
@@ -22,11 +24,16 @@ class TestChromeBrowserProvider : public ChromeBrowserProvider {
   static TestChromeBrowserProvider* GetTestProvider();
 
   // ChromeBrowserProvider:
-  StringProvider* GetStringProvider() override;
-  const char* GetChromeUIScheme() override;
+  ProfileOAuth2TokenServiceIOSProvider*
+      GetProfileOAuth2TokenServiceIOSProvider() override;
+  ChromeIdentityService* GetChromeIdentityService() override;
+  UpdatableResourceProvider* GetUpdatableResourceProvider() override;
 
  private:
-  scoped_ptr<FakeStringProvider> string_provider_;
+  scoped_ptr<FakeProfileOAuth2TokenServiceIOSProvider>
+      oauth2_token_service_provider_;
+  scoped_ptr<ChromeIdentityService> chrome_identity_service_;
+  scoped_ptr<TestUpdatableResourceProvider> test_updatable_resource_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(TestChromeBrowserProvider);
 };

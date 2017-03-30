@@ -65,47 +65,43 @@ bool AppCacheBackendImpl::SetSpawningHostId(
 bool AppCacheBackendImpl::SelectCache(
     int host_id,
     const GURL& document_url,
-    const int64 cache_document_was_loaded_from,
+    const int64_t cache_document_was_loaded_from,
     const GURL& manifest_url) {
   AppCacheHost* host = GetHost(host_id);
-  if (!host || host->was_select_cache_called())
+  if (!host)
     return false;
 
-  host->SelectCache(document_url, cache_document_was_loaded_from,
+  return host->SelectCache(document_url, cache_document_was_loaded_from,
                     manifest_url);
-  return true;
 }
 
 bool AppCacheBackendImpl::SelectCacheForWorker(
     int host_id, int parent_process_id, int parent_host_id) {
   AppCacheHost* host = GetHost(host_id);
-  if (!host || host->was_select_cache_called())
+  if (!host)
     return false;
 
-  host->SelectCacheForWorker(parent_process_id, parent_host_id);
-  return true;
+  return host->SelectCacheForWorker(parent_process_id, parent_host_id);
 }
 
-bool AppCacheBackendImpl::SelectCacheForSharedWorker(
-    int host_id, int64 appcache_id) {
+bool AppCacheBackendImpl::SelectCacheForSharedWorker(int host_id,
+                                                     int64_t appcache_id) {
   AppCacheHost* host = GetHost(host_id);
-  if (!host || host->was_select_cache_called())
+  if (!host)
     return false;
 
-  host->SelectCacheForSharedWorker(appcache_id);
-  return true;
+  return host->SelectCacheForSharedWorker(appcache_id);
 }
 
 bool AppCacheBackendImpl::MarkAsForeignEntry(
     int host_id,
     const GURL& document_url,
-    int64 cache_document_was_loaded_from) {
+    int64_t cache_document_was_loaded_from) {
   AppCacheHost* host = GetHost(host_id);
   if (!host)
     return false;
 
-  host->MarkAsForeignEntry(document_url, cache_document_was_loaded_from);
-  return true;
+  return host->MarkAsForeignEntry(document_url, cache_document_was_loaded_from);
 }
 
 bool AppCacheBackendImpl::GetStatusWithCallback(

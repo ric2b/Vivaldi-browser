@@ -8,9 +8,15 @@
 #include <iosfwd>
 #include <string>
 
+#include "build/build_config.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+
+#if defined(OS_MACOSX)
+typedef struct CGRect CGRect;
+#endif
 
 namespace gfx {
 
@@ -26,6 +32,18 @@ class GFX_EXPORT RectF {
   explicit RectF(const SizeF& size) : size_(size) {}
   RectF(const PointF& origin, const SizeF& size)
       : origin_(origin), size_(size) {}
+
+  explicit RectF(const Rect& r)
+      : RectF(static_cast<float>(r.x()),
+              static_cast<float>(r.y()),
+              static_cast<float>(r.width()),
+              static_cast<float>(r.height())) {}
+
+#if defined(OS_MACOSX)
+  explicit RectF(const CGRect& r);
+  // Construct an equivalent CoreGraphics object.
+  CGRect ToCGRect() const;
+#endif
 
   ~RectF() {}
 

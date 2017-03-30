@@ -4,20 +4,20 @@
 
 /**
  * @fileoverview
- * 'cr-settings-main' displays the selected settings page.
+ * 'settings-main' displays the selected settings page.
  *
  * Example:
  *
- *     <cr-settings-main pages="[[pages]]" selected-page-id="{{selectedId}}">
- *     </cr-settings-main>
+ *     <settings-main pages="[[pages]]" selected-page-id="{{selectedId}}">
+ *     </settings-main>
  *
- * See cr-settings-drawer for example of use in 'paper-drawer-panel'.
+ * See settings-drawer for example of use in 'paper-drawer-panel'.
  *
  * @group Chrome Settings Elements
- * @element cr-settings-main
+ * @element settings-main
  */
 Polymer({
-  is: 'cr-settings-main',
+  is: 'settings-main',
 
   properties: {
     /**
@@ -31,91 +31,50 @@ Polymer({
     },
 
     /**
-     * Pages that may be shown.
-     * @type {!Array<!HTMLElement>}
+     * The current active route.
      */
-    pages: {
-      type: Array,
-      value: function() { return []; },
-      notify: true,
-      readOnly: true,
-    },
-
-    /**
-     * Currently selected page.
-     * @type {?HTMLElement}
-     */
-    selectedPage: {
+    currentRoute: {
       type: Object,
       notify: true,
+      observer: 'currentRouteChanged_',
     },
 
-    /**
-     * ID of the currently selected page.
-     */
-    selectedPageId: {
-      type: String,
-      notify: true,
-      value: '',
-      observer: 'selectedPageIdChanged_',
-    },
+    // If false the 'basic' page should be shown.
+    showAdvancedPage_: {
+      type: Boolean,
+      value: false
+    }
   },
 
-  /** @override */
-  ready: function() {
-    var observer = new MutationObserver(this.pageContainerUpdated_.bind(this));
-    observer.observe(this.$.pageContainer,
-                     /** @type {MutationObserverInit} */ {
-                       childList: true,
-                     });
-    this.pageContainerUpdated_();
+  listeners: {
+    'expand-animation-complete': 'onExpandAnimationComplete_',
   },
 
-  /**
-   * Polymer changed event for selectedPageId. See note for onIronSelect_ below.
-   * @private
-   */
-  selectedPageIdChanged_: function() {
-    this.$.pageContainer.selected = this.selectedPageId;
-  },
+  /** @private */
+  currentRouteChanged_: function(newRoute, oldRoute) {
+    this.showAdvancedPage_ = newRoute.page == 'advanced';
 
-  /**
-   * We observe $.pageContainer.on-iron-select instead of using data binding
-   * for two reasons:
-   * 1) We need to exclude subpages
-   * 2) There is a bug with data binding or our useage of it here causing
-   *    this.selectedPage to get set to the index of $.pageContainer instead of
-   *    the valueattr identifier (PAGE_ID). TODO(stevenjb/jlklien): Investigate
-   *    fixing this and using filters once we switch to Polymer 0.8.
-   * @private
-   */
-  onIronSelect_: function(event) {
-    if (event.target != this.$.pageContainer || event.detail.item.subpage) {
+    var pageContainer = this.$.pageContainer;
+    if (!oldRoute) {
+      pageContainer.classList.toggle('expanded', newRoute.section);
       return;
     }
-    this.selectedPageId = event.detail.item.PAGE_ID;
+
+    // For contraction only, apply new styling immediately.
+    if (!newRoute.section && oldRoute.section) {
+      pageContainer.classList.remove('expanded');
+
+      // TODO(tommycli): Save and restore scroll position. crbug.com/537359.
+      pageContainer.scrollTop = 0;
+    }
   },
 
-  /**
-   * If no page is selected, selects the first page. This happens on load and
-   * when a selected page is removed.
-   * @private
-   */
-  ensureSelection_: function() {
-    if (!this.pages.length)
-      return;
-    if (this.selectedPageId == '')
-      this.selectedPageId = this.pages[0].PAGE_ID;
-  },
-
-  /**
-   * Updates the list of pages using the pages in iron-pages.
-   * @private
-   */
-  pageContainerUpdated_: function() {
-    this._setPages(this.$.pageContainer.items.filter(function(item) {
-      return !item.subpage;
-    }));
-    this.ensureSelection_();
+  /** @private */
+  onExpandAnimationComplete_: function() {
+    if (this.currentRoute.section) {
+      var pageContainer = this.$.pageContainer;
+      pageContainer.classList.add('expanded');
+      pageContainer.scrollTop = 0;
+    }
   },
 });

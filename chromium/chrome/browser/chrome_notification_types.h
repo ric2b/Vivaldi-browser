@@ -57,18 +57,6 @@ enum NotificationType {
   // are expected.
   NOTIFICATION_BROWSER_CLOSE_CANCELLED,
 
-  // Indicates that a top window has been closed.  The source is the HWND
-  // that was closed, no details are expected.
-  NOTIFICATION_WINDOW_CLOSED,
-
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  // On Linux maximize can be an asynchronous operation. This notification
-  // indicates that the window has been maximized. The source is
-  // a Source<BrowserWindow> containing the BrowserWindow that was maximized.
-  // No details are expected.
-  NOTIFICATION_BROWSER_WINDOW_MAXIMIZED,
-#endif
-
   // Sent when the language (English, French...) for a page has been detected.
   // The details Details<std::string> contain the ISO 639-1 language code and
   // the source is Source<WebContents>.
@@ -279,10 +267,6 @@ enum NotificationType {
   // AutocompleteController, the details not used.
   NOTIFICATION_AUTOCOMPLETE_CONTROLLER_RESULT_READY,
 
-  // This is sent when an item of the Omnibox popup is selected. The source
-  // is the profile.
-  NOTIFICATION_OMNIBOX_OPENED_URL,
-
   // This is sent from Instant when the omnibox focus state changes.
   NOTIFICATION_OMNIBOX_FOCUS_CHANGED,
 
@@ -296,13 +280,6 @@ enum NotificationType {
   // Sent when a PrintJob has been released.
   // Source is the WebContents that holds the print job.
   NOTIFICATION_PRINT_JOB_RELEASED,
-
-  // Shutdown ----------------------------------------------------------------
-
-  // Sent when WM_ENDSESSION has been received, after the browsers have been
-  // closed but before browser process has been shutdown. The source/details
-  // are all source and no details.
-  NOTIFICATION_SESSION_END,
 
   // Upgrade notifications ---------------------------------------------------
 
@@ -338,58 +315,24 @@ enum NotificationType {
   // TabSpecificContentSettings object, there are no details.
   NOTIFICATION_COLLECTED_COOKIES_SHOWN,
 
-  // Sent when a non-default setting in the the notification content settings
-  // map has changed. The source is the DesktopNotificationService, the
-  // details are None.
-  NOTIFICATION_DESKTOP_NOTIFICATION_SETTINGS_CHANGED,
-
   // Sent when content settings change for a tab. The source is a
   // content::WebContents object, the details are None.
   NOTIFICATION_WEB_CONTENT_SETTINGS_CHANGED,
 
   // Sync --------------------------------------------------------------------
 
-  // The sync service has finished the datatype configuration process. The
-  // source is the ProfileSyncService object of the Profile. There are no
-  // details.
-  NOTIFICATION_SYNC_CONFIGURE_DONE,
-
-  // A service is requesting a sync datatype refresh for the current profile.
-  // The details value is a const syncer::ModelTypeSet.
-  // If the payload map is empty, it should be treated as an invalidation for
-  // all enabled types. This is used by session sync.
-  NOTIFICATION_SYNC_REFRESH_LOCAL,
-
-  // External notification requesting a sync datatype refresh for the current
-  // profile. The details value is a const syncer::ObjectIdInvalidationMap.
-  // If the payload map is empty, it should be treated as an invalidation for
-  // all enabled types. This is used for notifications on Android.
-  NOTIFICATION_SYNC_REFRESH_REMOTE,
-
   // The session service has been saved.  This notification type is only sent
   // if there were new SessionService commands to save, and not for no-op save
   // operations.
   NOTIFICATION_SESSION_SERVICE_SAVED,
 
-  // A foreign session has been updated.  If a new tab page is open, the
-  // foreign session handler needs to update the new tab page's foreign
-  // session data.
-  NOTIFICATION_FOREIGN_SESSION_UPDATED,
-
-  // Foreign sessions has been disabled. New tabs should not display foreign
-  // session data.
-  NOTIFICATION_FOREIGN_SESSION_DISABLED,
-
-  // All tab metadata has been loaded from disk asynchronously.
-  // Sent on the UI thread.
-  // The source is the Profile. There are no details.
-  NOTIFICATION_SESSION_RESTORE_COMPLETE,
-
   // Cookies -----------------------------------------------------------------
 
-  // Sent when a cookie changes. The source is a Profile object, the details
-  // are a ChromeCookieDetails object.
-  NOTIFICATION_COOKIE_CHANGED,
+#if defined(ENABLE_EXTENSIONS)
+  // Sent when a cookie changes, for consumption by extensions. The source is a
+  // Profile object, the details are a ChromeCookieDetails object.
+  NOTIFICATION_COOKIE_CHANGED_FOR_EXTENSIONS,
+#endif
 
   // Download Notifications --------------------------------------------------
 
@@ -511,10 +454,6 @@ enum NotificationType {
   // the Instant API or not.
   NOTIFICATION_INSTANT_TAB_SUPPORT_DETERMINED,
 
-  // Sent when the Instant Controller determines whether the NTP supports the
-  // Instant API or not.
-  NOTIFICATION_INSTANT_NTP_SUPPORT_DETERMINED,
-
   // Sent when the CaptivePortalService checks if we're behind a captive portal.
   // The Source is the Profile the CaptivePortalService belongs to, and the
   // Details are a Details<CaptivePortalService::CheckResults>.
@@ -573,11 +512,6 @@ enum NotificationType {
   // Sent when panel is minimized/restored/shows title only etc.
   // The source is the Panel, no details.
   NOTIFICATION_PANEL_CHANGED_EXPANSION_STATE,
-
-  // Sent when panel window size is known. This is for platforms where the
-  // window creation is async and size of the window only becomes known later.
-  // Used only in unit testing.
-  NOTIFICATION_PANEL_WINDOW_SIZE_KNOWN,
 
   // Sent when panel app icon is loaded.
   // Used only in unit testing.

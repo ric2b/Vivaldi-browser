@@ -5,6 +5,8 @@
 #ifndef CHROMECAST_BROWSER_MEDIA_CMA_MESSAGE_FILTER_HOST_H_
 #define CHROMECAST_BROWSER_MEDIA_CMA_MESSAGE_FILTER_HOST_H_
 
+#include <stddef.h>
+
 #include <map>
 
 #include "base/macros.h"
@@ -12,7 +14,6 @@
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "chromecast/common/media/cma_ipc_common.h"
-#include "chromecast/media/cma/backend/media_pipeline_device.h"
 #include "chromecast/media/cma/pipeline/load_type.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
@@ -25,7 +26,6 @@ class SingleThreadTaskRunner;
 }
 
 namespace gfx {
-class PointF;
 class Size;
 }
 
@@ -38,16 +38,22 @@ class VideoDecoderConfig;
 namespace chromecast {
 namespace media {
 
+class MediaPipelineBackend;
+struct MediaPipelineDeviceParams;
 class MediaPipelineHost;
+class CmaMediaPipelineClient;
 
 class CmaMessageFilterHost
     : public content::BrowserMessageFilter {
  public:
-  CmaMessageFilterHost(
-      int render_process_id,
-      const media::CreatePipelineDeviceCB& create_pipeline_device_cb);
+  // Factory method to create a MediaPipelineBackend
+  typedef base::Callback<scoped_ptr<MediaPipelineBackend>(
+      const MediaPipelineDeviceParams&)> CreateBackendCB;
 
-  // content::BrowserMessageFilter implementation.
+  CmaMessageFilterHost(int render_process_id,
+                       scoped_refptr<CmaMediaPipelineClient> client);
+
+  // content::BrowserMessageFilter implementation:
   void OnChannelClosing() override;
   void OnDestruct() const override;
   bool OnMessageReceived(const IPC::Message& message) override;
@@ -84,9 +90,6 @@ class CmaMessageFilterHost
   void SetPlaybackRate(int media_id, double playback_rate);
   void SetVolume(int media_id, TrackId track_id, float volume);
   void NotifyPipeWrite(int media_id, TrackId track_id);
-  void NotifyExternalSurface(int surface_id,
-                             const gfx::PointF& p0, const gfx::PointF& p1,
-                             const gfx::PointF& p2, const gfx::PointF& p3);
 
   // Audio/Video callbacks.
   void OnMediaStateChanged(int media_id,
@@ -100,6 +103,7 @@ class CmaMessageFilterHost
                     base::TimeDelta max_media_time,
                     base::TimeTicks stc);
   void OnBufferingNotification(int media_id, ::media::BufferingState state);
+  void OnWaitForKey(int media_id, TrackId track_id);
   void OnEos(int media_id, TrackId track_id);
   void OnPlaybackError(int media_id, TrackId track_id,
                        ::media::PipelineStatus status);
@@ -113,8 +117,9 @@ class CmaMessageFilterHost
   // Render process ID correponding to this message filter.
   const int process_id_;
 
-  // Factory function for device-specific part of media pipeline creation
-  media::CreatePipelineDeviceCB create_pipeline_device_cb_;
+  // Factory function for media pipeline backend.
+  CreateBackendCB create_backend_cb_;
+  scoped_refptr<CmaMediaPipelineClient> client_;
 
   // List of media pipeline and message loop media pipelines are running on.
   MediaPipelineMap media_pipelines_;

@@ -12,12 +12,12 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/prefs/pref_service.h"
+#include "chromecast/base/pref_names.h"
 #include "chromecast/browser/android/cast_window_android.h"
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_browser_main_parts.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_content_browser_client.h"
-#include "chromecast/common/pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "ipc/ipc_channel.h"
@@ -52,12 +52,15 @@ bool RegisterCastWindowManager(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
-void Init(JNIEnv* env, jclass clazz, jobject obj) {
-  g_window_manager.Get().Reset(
-      base::android::ScopedJavaLocalRef<jobject>(env, obj));
+void Init(JNIEnv* env,
+          const JavaParamRef<jclass>& clazz,
+          const JavaParamRef<jobject>& obj) {
+  g_window_manager.Get().Reset(obj);
 }
 
-jlong LaunchCastWindow(JNIEnv* env, jclass clazz, jstring jurl) {
+jlong LaunchCastWindow(JNIEnv* env,
+                       const JavaParamRef<jclass>& clazz,
+                       const JavaParamRef<jstring>& jurl) {
   GURL url(base::android::ConvertJavaStringToUTF8(env, jurl));
   return reinterpret_cast<jlong>(
       CastWindowAndroid::CreateNewWindow(
@@ -65,8 +68,10 @@ jlong LaunchCastWindow(JNIEnv* env, jclass clazz, jstring jurl) {
           url));
 }
 
-void StopCastWindow(JNIEnv* env, jclass clazz,
-                    jlong nativeCastWindow, jboolean gracefully) {
+void StopCastWindow(JNIEnv* env,
+                    const JavaParamRef<jclass>& clazz,
+                    jlong nativeCastWindow,
+                    jboolean gracefully) {
   CastWindowAndroid* window =
       reinterpret_cast<CastWindowAndroid*>(nativeCastWindow);
   DCHECK(window);
@@ -76,7 +81,9 @@ void StopCastWindow(JNIEnv* env, jclass clazz,
     window->Destroy();
 }
 
-void EnableDevTools(JNIEnv* env, jclass clazz, jboolean enable) {
+void EnableDevTools(JNIEnv* env,
+                    const JavaParamRef<jclass>& clazz,
+                    jboolean enable) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   CastBrowserProcess::GetInstance()->pref_service()->SetBoolean(
       prefs::kEnableRemoteDebugging, enable);

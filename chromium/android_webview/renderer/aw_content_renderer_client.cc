@@ -4,9 +4,14 @@
 
 #include "android_webview/renderer/aw_content_renderer_client.h"
 
+#include <vector>
+
 #include "android_webview/common/aw_resource.h"
+#include "android_webview/common/aw_switches.h"
 #include "android_webview/common/render_view_messages.h"
 #include "android_webview/common/url_constants.h"
+#include "android_webview/grit/aw_resources.h"
+#include "android_webview/grit/aw_strings.h"
 #include "android_webview/renderer/aw_content_settings_client.h"
 #include "android_webview/renderer/aw_key_systems.h"
 #include "android_webview/renderer/aw_message_port_client.h"
@@ -14,7 +19,10 @@
 #include "android_webview/renderer/aw_render_frame_ext.h"
 #include "android_webview/renderer/aw_render_view_ext.h"
 #include "android_webview/renderer/print_render_frame_observer.h"
+#include "base/command_line.h"
+#include "base/i18n/rtl.h"
 #include "base/message_loop/message_loop.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
@@ -35,46 +43,51 @@
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 using content::RenderThread;
 
 namespace android_webview {
 
-AwContentRendererClient::AwContentRendererClient() {
-}
+AwContentRendererClient::AwContentRendererClient()
+    : disable_page_visibility_(
+          base::CommandLine::ForCurrentProcess()
+              ->HasSwitch(switches::kDisablePageVisibility)) {}
 
 AwContentRendererClient::~AwContentRendererClient() {
 }
 
 void AwContentRendererClient::RenderThreadStarted() {
-  blink::WebString content_scheme(
-      base::ASCIIToUTF16(android_webview::kContentScheme));
-  blink::WebSecurityPolicy::registerURLSchemeAsLocal(content_scheme);
-
-  blink::WebString aw_scheme(
-      base::ASCIIToUTF16(android_webview::kAndroidWebViewVideoPosterScheme));
-  blink::WebSecurityPolicy::registerURLSchemeAsSecure(aw_scheme);
-
   RenderThread* thread = RenderThread::Get();
-
   aw_render_process_observer_.reset(new AwRenderProcessObserver);
   thread->AddObserver(aw_render_process_observer_.get());
 
   visited_link_slave_.reset(new visitedlink::VisitedLinkSlave);
   thread->AddObserver(visited_link_slave_.get());
+
+  // Using WebString requires blink initialization.
+  thread->EnsureWebKitInitialized();
+
+  blink::WebString content_scheme(base::ASCIIToUTF16(url::kContentScheme));
+  blink::WebSecurityPolicy::registerURLSchemeAsLocal(content_scheme);
+
+  blink::WebString aw_scheme(
+      base::ASCIIToUTF16(android_webview::kAndroidWebViewVideoPosterScheme));
+  blink::WebSecurityPolicy::registerURLSchemeAsSecure(aw_scheme);
 }
 
 bool AwContentRendererClient::HandleNavigation(
     content::RenderFrame* render_frame,
-    content::DocumentState* document_state,
+    bool is_content_initiated,
     int opener_id,
     blink::WebFrame* frame,
     const blink::WebURLRequest& request,
     blink::WebNavigationType type,
     blink::WebNavigationPolicy default_policy,
     bool is_redirect) {
-
   // Only GETs can be overridden.
   if (!request.httpMethod().equals("GET"))
     return false;
@@ -88,18 +101,18 @@ bool AwContentRendererClient::HandleNavigation(
   // works fine. This will stop working if android_webview starts swapping out
   // renderers on navigation.
   bool application_initiated =
-      !document_state->navigation_state()->IsContentInitiated() ||
-      type == blink::WebNavigationTypeBackForward;
+      !is_content_initiated || type == blink::WebNavigationTypeBackForward;
 
   // Don't offer application-initiated navigations unless it's a redirect.
   if (application_initiated && !is_redirect)
     return false;
 
+  bool is_main_frame = !frame->parent();
   const GURL& gurl = request.url();
   // For HTTP schemes, only top-level navigations can be overridden. Similarly,
   // WebView Classic lets app override only top level about:blank navigations.
   // So we filter out non-top about:blank navigations here.
-  if (frame->parent() &&
+  if (!is_main_frame &&
       (gurl.SchemeIs(url::kHttpScheme) || gurl.SchemeIs(url::kHttpsScheme) ||
        gurl.SchemeIs(url::kAboutScheme)))
     return false;
@@ -111,12 +124,13 @@ bool AwContentRendererClient::HandleNavigation(
   }
 
   bool ignore_navigation = false;
-  base::string16 url =  request.url().string();
+  base::string16 url = request.url().string();
   bool has_user_gesture = request.hasUserGesture();
 
   int render_frame_id = render_frame->GetRoutingID();
   RenderThread::Get()->Send(new AwViewHostMsg_ShouldOverrideUrlLoading(
-      render_frame_id, url, has_user_gesture, is_redirect, &ignore_navigation));
+      render_frame_id, url, has_user_gesture, is_redirect, is_main_frame,
+      &ignore_navigation));
   return ignore_navigation;
 }
 
@@ -161,26 +175,38 @@ bool AwContentRendererClient::HasErrorPage(int http_status_code,
 }
 
 void AwContentRendererClient::GetNavigationErrorStrings(
-    content::RenderView* /* render_view */,
-    blink::WebFrame* /* frame */,
+    content::RenderFrame* /* render_frame */,
     const blink::WebURLRequest& failed_request,
     const blink::WebURLError& error,
     std::string* error_html,
     base::string16* error_description) {
   if (error_html) {
-    GURL error_url(failed_request.url());
-    std::string err = base::UTF16ToUTF8(error.localizedDescription);
-    std::string contents;
-    if (err.empty()) {
-      contents = AwResource::GetNoDomainPageContent();
-    } else {
-      contents = AwResource::GetLoadErrorPageContent();
-      base::ReplaceSubstringsAfterOffset(&contents, 0, "%e", err);
-    }
+    std::string url =
+        net::EscapeForHTML(GURL(failed_request.url()).possibly_invalid_spec());
+    std::string err =
+        base::UTF16ToUTF8(base::StringPiece16(error.localizedDescription));
 
-    base::ReplaceSubstringsAfterOffset(&contents, 0, "%s",
-        net::EscapeForHTML(error_url.possibly_invalid_spec()));
-    *error_html = contents;
+    std::vector<std::string> replacements;
+    replacements.push_back(
+        l10n_util::GetStringUTF8(IDS_AW_WEBPAGE_NOT_AVAILABLE));
+    if (err.empty()) {
+      replacements.push_back(l10n_util::GetStringFUTF8(
+          IDS_AW_WEBPAGE_TEMPORARILY_DOWN, base::UTF8ToUTF16(url)));
+      replacements.push_back(l10n_util::GetStringUTF8(
+          IDS_AW_WEBPAGE_TEMPORARILY_DOWN_SUGGESTIONS));
+    } else {
+      replacements.push_back(l10n_util::GetStringFUTF8(
+          IDS_AW_WEBPAGE_CAN_NOT_BE_LOADED, base::UTF8ToUTF16(url)));
+      replacements.push_back(err);
+    }
+    if (base::i18n::IsRTL())
+      replacements.push_back("direction: rtl;");
+    else
+      replacements.push_back("");
+    *error_html = base::ReplaceStringPlaceholders(
+        ResourceBundle::GetSharedInstance().GetRawDataResource(
+            IDR_AW_LOAD_ERROR_HTML),
+        replacements, nullptr);
   }
   if (error_description) {
     if (error.localizedDescription.isEmpty())
@@ -208,9 +234,12 @@ void AwContentRendererClient::AddKeySystems(
 bool AwContentRendererClient::ShouldOverridePageVisibilityState(
     const content::RenderFrame* render_frame,
     blink::WebPageVisibilityState* override_state) {
-  // webview is always visible due to rendering requirements.
-  *override_state = blink::WebPageVisibilityStateVisible;
-  return true;
+  if (disable_page_visibility_) {
+    *override_state = blink::WebPageVisibilityStateVisible;
+    return true;
+  }
+
+  return false;
 }
 
 }  // namespace android_webview

@@ -4,6 +4,7 @@
 
 #include "content/renderer/pepper/resource_creation_impl.h"
 
+#include "build/build_config.h"
 #include "content/common/content_switches_internal.h"
 #include "content/renderer/pepper/ppb_audio_impl.h"
 #include "content/renderer/pepper/ppb_broker_impl.h"
@@ -64,6 +65,10 @@ PP_Resource ResourceCreationImpl::CreateAudioTrusted(PP_Instance instance) {
   return (new PPB_Audio_Impl(instance))->GetReference();
 }
 
+PP_Resource ResourceCreationImpl::CreateAudioEncoder(PP_Instance instance) {
+  return 0;  // Not supported in-process.
+}
+
 PP_Resource ResourceCreationImpl::CreateAudioInput(PP_Instance instance) {
   return 0;  // Not supported in-process.
 }
@@ -118,9 +123,11 @@ PP_Resource ResourceCreationImpl::CreateGraphics3DRaw(
     PP_Resource share_context,
     const int32_t* attrib_list,
     gpu::Capabilities* capabilities,
-    base::SharedMemoryHandle* shared_state) {
+    base::SharedMemoryHandle* shared_state,
+    uint64_t* command_buffer_id) {
   return PPB_Graphics3D_Impl::CreateRaw(instance, share_context, attrib_list,
-                                        capabilities, shared_state);
+                                        capabilities, shared_state,
+                                        command_buffer_id);
 }
 
 PP_Resource ResourceCreationImpl::CreateHostResolver(PP_Instance instance) {

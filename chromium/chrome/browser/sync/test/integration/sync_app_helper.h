@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "sync/api/string_ordinal.h"
 
@@ -53,7 +53,7 @@ class SyncAppHelper {
   void FixNTPOrdinalCollisions(Profile* profile);
 
  private:
-  friend struct DefaultSingletonTraits<SyncAppHelper>;
+  friend struct base::DefaultSingletonTraits<SyncAppHelper>;
 
   SyncAppHelper();
   ~SyncAppHelper();

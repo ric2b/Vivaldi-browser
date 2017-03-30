@@ -19,11 +19,10 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/browser/shell_integration.h"
-#include "grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_resources.h"
 #include "importer/chromium_importer.h"
-
 #include "importer/chrome_bookmark_reader.h"
 
 class ChromeBookmarkReader : public ChromeBookmarkFileReader {

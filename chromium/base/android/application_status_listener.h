@@ -9,7 +9,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/base_export.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list_threadsafe.h"
@@ -27,6 +27,7 @@ namespace android {
 // A Java counterpart will be generated for this enum.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.base
 enum ApplicationState {
+  APPLICATION_STATE_UNKNOWN = 0,
   APPLICATION_STATE_HAS_RUNNING_ACTIVITIES = 1,
   APPLICATION_STATE_HAS_PAUSED_ACTIVITIES = 2,
   APPLICATION_STATE_HAS_STOPPED_ACTIVITIES = 3,
@@ -72,6 +73,9 @@ class BASE_EXPORT ApplicationStatusListener {
 
   // Internal use only: must be public to be called from JNI and unit tests.
   static void NotifyApplicationStateChange(ApplicationState state);
+
+  // Expose jni call for ApplicationStatus.getStateForApplication.
+  static ApplicationState GetState();
 
  private:
   void Notify(ApplicationState state);

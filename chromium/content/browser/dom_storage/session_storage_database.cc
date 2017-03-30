@@ -4,6 +4,10 @@
 
 #include "content/browser/dom_storage/session_storage_database.h"
 
+#include <stddef.h>
+
+#include <vector>
+
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
@@ -61,7 +65,7 @@ namespace content {
 // should be in the database.
 class SessionStorageDatabase::DBOperation {
  public:
-  DBOperation(SessionStorageDatabase* session_storage_database)
+  explicit DBOperation(SessionStorageDatabase* session_storage_database)
       : session_storage_database_(session_storage_database) {
     base::AutoLock auto_lock(session_storage_database_->db_lock_);
     ++session_storage_database_->operation_count_;
@@ -76,14 +80,8 @@ class SessionStorageDatabase::DBOperation {
         !session_storage_database_->invalid_db_deleted_) {
       // No other operations are ongoing and the data is bad -> delete it now.
       session_storage_database_->db_.reset();
-#if defined(OS_WIN)
-      leveldb::DestroyDB(
-          base::WideToUTF8(session_storage_database_->file_path_.value()),
-          leveldb::Options());
-#else
-      leveldb::DestroyDB(session_storage_database_->file_path_.value(),
+      leveldb::DestroyDB(session_storage_database_->file_path_.AsUTF8Unsafe(),
                          leveldb::Options());
-#endif
       session_storage_database_->invalid_db_deleted_ = true;
     }
   }
@@ -152,15 +150,14 @@ bool SessionStorageDatabase::CommitAreaChanges(
                      &exists, &map_id))
     return false;
   if (exists) {
-    int64 ref_count;
+    int64_t ref_count;
     if (!GetMapRefCount(map_id, &ref_count))
       return false;
     if (ref_count > 1) {
       if (!DeepCopyArea(namespace_id, origin, !clear_all_first,
                         &map_id, &batch))
         return false;
-    }
-    else if (clear_all_first) {
+    } else if (clear_all_first) {
       if (!ClearMap(map_id, &batch))
         return false;
     }
@@ -386,11 +383,7 @@ leveldb::Status SessionStorageDatabase::TryToOpen(leveldb::DB** db) {
   options.max_open_files = 0;  // Use minimum.
   options.create_if_missing = true;
   options.reuse_logs = leveldb_env::kDefaultLogReuseOptionValue;
-#if defined(OS_WIN)
-  return leveldb::DB::Open(options, base::WideToUTF8(file_path_.value()), db);
-#elif defined(OS_POSIX)
-  return leveldb::DB::Open(options, file_path_.value(), db);
-#endif
+  return leveldb::DB::Open(options, file_path_.AsUTF8Unsafe(), db);
 }
 
 bool SessionStorageDatabase::IsOpen() const {
@@ -544,7 +537,7 @@ bool SessionStorageDatabase::CreateMapForArea(const std::string& namespace_id,
   leveldb::Status s = db_->Get(leveldb::ReadOptions(), next_map_id_key, map_id);
   if (!DatabaseErrorCheck(s.ok() || s.IsNotFound()))
     return false;
-  int64 next_map_id = 0;
+  int64_t next_map_id = 0;
   if (s.IsNotFound()) {
     *map_id = "0";
   } else {
@@ -619,7 +612,7 @@ void SessionStorageDatabase::WriteValuesToMap(const std::string& map_id,
 }
 
 bool SessionStorageDatabase::GetMapRefCount(const std::string& map_id,
-                                            int64* ref_count) {
+                                            int64_t* ref_count) {
   std::string ref_count_string;
   leveldb::Status s = db_->Get(leveldb::ReadOptions(),
                                MapRefCountKey(map_id), &ref_count_string);
@@ -632,7 +625,7 @@ bool SessionStorageDatabase::GetMapRefCount(const std::string& map_id,
 bool SessionStorageDatabase::IncreaseMapRefCount(const std::string& map_id,
                                                  leveldb::WriteBatch* batch) {
   // Increase the ref count for the map.
-  int64 old_ref_count;
+  int64_t old_ref_count;
   if (!GetMapRefCount(map_id, &old_ref_count))
     return false;
   batch->Put(MapRefCountKey(map_id), base::Int64ToString(++old_ref_count));
@@ -643,7 +636,7 @@ bool SessionStorageDatabase::DecreaseMapRefCount(const std::string& map_id,
                                                  int decrease,
                                                  leveldb::WriteBatch* batch) {
   // Decrease the ref count for the map.
-  int64 ref_count;
+  int64_t ref_count;
   if (!GetMapRefCount(map_id, &ref_count))
     return false;
   if (!ConsistencyCheck(decrease <= ref_count))

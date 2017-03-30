@@ -8,10 +8,11 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/memory/linked_ptr.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "extensions/renderer/native_handler.h"
 #include "extensions/renderer/object_backed_native_handler.h"
@@ -142,7 +143,7 @@ class ModuleSystem : public ObjectBackedNativeHandler,
 
   // Passes exceptions to |handler| rather than console::Fatal.
   void SetExceptionHandlerForTest(scoped_ptr<ExceptionHandler> handler) {
-    exception_handler_ = handler.Pass();
+    exception_handler_ = std::move(handler);
   }
 
  protected:
@@ -151,7 +152,7 @@ class ModuleSystem : public ObjectBackedNativeHandler,
   void Invalidate() override;
 
  private:
-  typedef std::map<std::string, linked_ptr<NativeHandler> > NativeHandlerMap;
+  typedef std::map<std::string, scoped_ptr<NativeHandler>> NativeHandlerMap;
 
   // Retrieves the lazily defined field specified by |property|.
   static void LazyFieldGetter(v8::Local<v8::Name> property,
@@ -240,7 +241,7 @@ class ModuleSystem : public ObjectBackedNativeHandler,
   // registering a NativeHandler when one was already registered with the same
   // name, or due to OverrideNativeHandlerForTest. This is needed so that they
   // can be later Invalidated. It should only happen in tests.
-  std::vector<linked_ptr<NativeHandler>> clobbered_native_handlers_;
+  std::vector<scoped_ptr<NativeHandler>> clobbered_native_handlers_;
 
   base::WeakPtrFactory<ModuleSystem> weak_factory_;
 

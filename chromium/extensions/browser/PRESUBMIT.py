@@ -41,6 +41,3 @@ def CheckChangeOnUpload(input_api, output_api):
   results += input_api.canned_checks.CheckPatchFormatted(input_api, output_api)
   return results
 
-
-def CheckChangeOnCommit(input_api, output_api):
-  return _RunHistogramValueCheckers(input_api, output_api)

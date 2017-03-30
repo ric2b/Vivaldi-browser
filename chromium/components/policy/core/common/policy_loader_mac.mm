@@ -14,6 +14,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/mac_util.h"
 #include "components/policy/core/common/policy_bundle.h"
@@ -86,8 +87,8 @@ scoped_ptr<PolicyBundle> PolicyLoaderMac::Load() {
     // TODO(joaodasilva): figure the policy scope.
     scoped_ptr<base::Value> policy = PropertyToValue(value);
     if (policy) {
-      chrome_policy.Set(it.key(), level, POLICY_SCOPE_USER, policy.release(),
-                        NULL);
+      chrome_policy.Set(it.key(), level, POLICY_SCOPE_USER,
+                        POLICY_SOURCE_PLATFORM, policy.release(), nullptr);
     } else {
       status.Add(POLICY_LOAD_STATUS_PARSE_ERROR);
     }
@@ -99,7 +100,7 @@ scoped_ptr<PolicyBundle> PolicyLoaderMac::Load() {
   // Load policy for the registered components.
   LoadPolicyForDomain(POLICY_DOMAIN_EXTENSIONS, "extensions", bundle.get());
 
-  return bundle.Pass();
+  return bundle;
 }
 
 base::Time PolicyLoaderMac::LastModificationTime() {
@@ -180,8 +181,8 @@ void PolicyLoaderMac::LoadPolicyForComponent(
         forced ? POLICY_LEVEL_MANDATORY : POLICY_LEVEL_RECOMMENDED;
     scoped_ptr<base::Value> policy_value = PropertyToValue(value);
     if (policy_value) {
-      policy->Set(it.key(), level, POLICY_SCOPE_USER, policy_value.release(),
-                  NULL);
+      policy->Set(it.key(), level, POLICY_SCOPE_USER, POLICY_SOURCE_PLATFORM,
+                  policy_value.release(), nullptr);
     }
   }
 }

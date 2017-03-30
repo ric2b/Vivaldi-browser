@@ -4,9 +4,12 @@
 
 #include "chrome/browser/signin/easy_unlock_screenlock_state_handler.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/signin/easy_unlock_metrics.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -103,16 +106,13 @@ bool IsLockedState(ScreenlockState state) {
 }  // namespace
 
 EasyUnlockScreenlockStateHandler::EasyUnlockScreenlockStateHandler(
-    const std::string& user_email,
+    const AccountId& account_id,
     HardlockState initial_hardlock_state,
     proximity_auth::ScreenlockBridge* screenlock_bridge)
     : state_(ScreenlockState::INACTIVE),
-      user_email_(user_email),
+      account_id_(account_id),
       screenlock_bridge_(screenlock_bridge),
-      hardlock_state_(initial_hardlock_state),
-      hardlock_ui_shown_(false),
-      is_trial_run_(false),
-      did_see_locked_phone_(false) {
+      hardlock_state_(initial_hardlock_state) {
   DCHECK(screenlock_bridge_);
   screenlock_bridge_->AddObserver(this);
 }
@@ -147,7 +147,7 @@ void EasyUnlockScreenlockStateHandler::ChangeState(ScreenlockState new_state) {
     return;
 
   // Do nothing when auth type is online.
-  if (screenlock_bridge_->lock_handler()->GetAuthType(user_email_) ==
+  if (screenlock_bridge_->lock_handler()->GetAuthType(account_id_) ==
       proximity_auth::ScreenlockBridge::LockHandler::ONLINE_SIGN_IN) {
     return;
   }
@@ -167,7 +167,7 @@ void EasyUnlockScreenlockStateHandler::ChangeState(ScreenlockState new_state) {
       GetIconForState(state_);
 
   if (icon == proximity_auth::ScreenlockBridge::USER_POD_CUSTOM_ICON_NONE) {
-    screenlock_bridge_->lock_handler()->HideUserPodCustomIcon(user_email_);
+    screenlock_bridge_->lock_handler()->HideUserPodCustomIcon(account_id_);
     return;
   }
 
@@ -188,7 +188,7 @@ void EasyUnlockScreenlockStateHandler::ChangeState(ScreenlockState new_state) {
         l10n_util::GetStringUTF16(IDS_SMART_LOCK_SPINNER_ACCESSIBILITY_LABEL));
   }
 
-  screenlock_bridge_->lock_handler()->ShowUserPodCustomIcon(user_email_,
+  screenlock_bridge_->lock_handler()->ShowUserPodCustomIcon(account_id_,
                                                             icon_options);
 }
 
@@ -251,8 +251,7 @@ void EasyUnlockScreenlockStateHandler::OnScreenDidUnlock(
 }
 
 void EasyUnlockScreenlockStateHandler::OnFocusedUserChanged(
-    const std::string& user_id) {
-}
+    const AccountId& account_id) {}
 
 void EasyUnlockScreenlockStateHandler::RefreshScreenlockState() {
   ScreenlockState last_state = state_;
@@ -270,7 +269,7 @@ void EasyUnlockScreenlockStateHandler::ShowHardlockUI() {
   // Do not override online signin.
   const proximity_auth::ScreenlockBridge::LockHandler::AuthType
       existing_auth_type =
-          screenlock_bridge_->lock_handler()->GetAuthType(user_email_);
+          screenlock_bridge_->lock_handler()->GetAuthType(account_id_);
   if (existing_auth_type ==
       proximity_auth::ScreenlockBridge::LockHandler::ONLINE_SIGN_IN)
     return;
@@ -278,13 +277,13 @@ void EasyUnlockScreenlockStateHandler::ShowHardlockUI() {
   if (existing_auth_type !=
       proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD) {
     screenlock_bridge_->lock_handler()->SetAuthType(
-        user_email_,
+        account_id_,
         proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD,
         base::string16());
   }
 
   if (hardlock_state_ == NO_PAIRING) {
-    screenlock_bridge_->lock_handler()->HideUserPodCustomIcon(user_email_);
+    screenlock_bridge_->lock_handler()->HideUserPodCustomIcon(account_id_);
     hardlock_ui_shown_ = false;
     return;
   }
@@ -325,7 +324,7 @@ void EasyUnlockScreenlockStateHandler::ShowHardlockUI() {
   }
   icon_options.SetTooltip(tooltip, true /* autoshow */);
 
-  screenlock_bridge_->lock_handler()->ShowUserPodCustomIcon(user_email_,
+  screenlock_bridge_->lock_handler()->ShowUserPodCustomIcon(account_id_,
                                                             icon_options);
   hardlock_ui_shown_ = true;
 }
@@ -376,7 +375,7 @@ void EasyUnlockScreenlockStateHandler::UpdateScreenlockAuthType() {
   // Do not override online signin.
   const proximity_auth::ScreenlockBridge::LockHandler::AuthType
       existing_auth_type =
-          screenlock_bridge_->lock_handler()->GetAuthType(user_email_);
+          screenlock_bridge_->lock_handler()->GetAuthType(account_id_);
   DCHECK_NE(proximity_auth::ScreenlockBridge::LockHandler::ONLINE_SIGN_IN,
             existing_auth_type);
 
@@ -384,7 +383,7 @@ void EasyUnlockScreenlockStateHandler::UpdateScreenlockAuthType() {
     if (existing_auth_type !=
         proximity_auth::ScreenlockBridge::LockHandler::USER_CLICK) {
       screenlock_bridge_->lock_handler()->SetAuthType(
-          user_email_,
+          account_id_,
           proximity_auth::ScreenlockBridge::LockHandler::USER_CLICK,
           l10n_util::GetStringUTF16(
               IDS_EASY_UNLOCK_SCREENLOCK_USER_POD_AUTH_VALUE));
@@ -392,7 +391,7 @@ void EasyUnlockScreenlockStateHandler::UpdateScreenlockAuthType() {
   } else if (existing_auth_type !=
              proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD) {
     screenlock_bridge_->lock_handler()->SetAuthType(
-        user_email_,
+        account_id_,
         proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD,
         base::string16());
   }

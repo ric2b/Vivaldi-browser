@@ -4,6 +4,8 @@
 
 #include "skia/public/type_converters.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "base/logging.h"
@@ -133,7 +135,7 @@ skia::BitmapPtr TypeConverter<skia::BitmapPtr, SkBitmap>::Convert(
   result->pixel_data = mojo::Array<uint8_t>::New(size);
   if (!bitmap.readPixels(info, &result->pixel_data[0], row_bytes, 0, 0))
     return nullptr;
-  return result.Pass();
+  return result;
 }
 
 }  // namespace mojo

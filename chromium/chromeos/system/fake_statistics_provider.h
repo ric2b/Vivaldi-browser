@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "chromeos/system/statistics_provider.h"
 
 namespace chromeos {
@@ -25,9 +26,7 @@ class FakeStatisticsProvider : public StatisticsProvider {
       bool load_oem_manifest) override;
   bool GetMachineStatistic(const std::string& name,
                            std::string* result) override;
-  bool HasMachineStatistic(const std::string& name) override;
   bool GetMachineFlag(const std::string& name, bool* result) override;
-  bool HasMachineFlag(const std::string& name) override;
   void Shutdown() override;
 
   void SetMachineStatistic(const std::string& key, const std::string& value);

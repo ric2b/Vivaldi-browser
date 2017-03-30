@@ -34,7 +34,7 @@ namespace {
 
 // The delay to perform configuration after RRNotify.  See the comment
 // in |Dispatch()|.
-const int64 kConfigureDelayMs = 500;
+const int64_t kConfigureDelayMs = 500;
 
 double GetDeviceScaleFactor() {
   float device_scale_factor = 1.0f;
@@ -45,11 +45,11 @@ double GetDeviceScaleFactor() {
 }
 
 gfx::Point PixelToDIPPoint(const gfx::Point& pixel_point) {
-  return ToFlooredPoint(ScalePoint(pixel_point, 1.0f / GetDeviceScaleFactor()));
+  return gfx::ScaleToFlooredPoint(pixel_point, 1.0f / GetDeviceScaleFactor());
 }
 
 gfx::Point DIPToPixelPoint(const gfx::Point& dip_point) {
-  return ToFlooredPoint(gfx::ScalePoint(dip_point, GetDeviceScaleFactor()));
+  return gfx::ScaleToFlooredPoint(dip_point, GetDeviceScaleFactor());
 }
 
 std::vector<gfx::Display> GetFallbackDisplayList() {
@@ -173,24 +173,23 @@ gfx::Display DesktopScreenX11::GetDisplayNearestWindow(
   // the DRWHX11 believes the window bounds are instead of going through the
   // aura::Window's screen bounds.
   if (window) {
-    aura::WindowTreeHost* host = window->GetHost();
-    if (host) {
-      DesktopWindowTreeHostX11* rwh = DesktopWindowTreeHostX11::GetHostForXID(
+  aura::WindowTreeHost* host = window->GetHost();
+  if (host) {
+    DesktopWindowTreeHostX11* rwh = DesktopWindowTreeHostX11::GetHostForXID(
         host->GetAcceleratedWidget());
-      if (rwh)
-        return GetDisplayMatching(rwh->GetX11RootWindowBounds());
-    }
+    if (rwh)
+      return GetDisplayMatching(rwh->GetX11RootWindowBounds());
+  }
   }
 
   return GetPrimaryDisplay();
 }
 
 gfx::Display DesktopScreenX11::GetDisplayNearestPoint(
-    const gfx::Point& requested_point) const {
-  const gfx::Point point_in_pixel = DIPToPixelPoint(requested_point);
+    const gfx::Point& point) const {
   for (std::vector<gfx::Display>::const_iterator it = displays_.begin();
        it != displays_.end(); ++it) {
-    if (it->bounds().Contains(point_in_pixel))
+    if (it->bounds().Contains(point))
       return *it;
   }
 
@@ -241,7 +240,7 @@ uint32_t DesktopScreenX11::DispatchEvent(const ui::PlatformEvent& event) {
     if (configure_timer_.get() && configure_timer_->IsRunning()) {
       configure_timer_->Reset();
     } else {
-      configure_timer_.reset(new base::OneShotTimer<DesktopScreenX11>());
+      configure_timer_.reset(new base::OneShotTimer());
       configure_timer_->Start(
           FROM_HERE,
           base::TimeDelta::FromMilliseconds(kConfigureDelayMs),
@@ -253,6 +252,13 @@ uint32_t DesktopScreenX11::DispatchEvent(const ui::PlatformEvent& event) {
   }
 
   return ui::POST_DISPATCH_NONE;
+}
+
+// static
+void DesktopScreenX11::UpdateDeviceScaleFactorForTest() {
+  DesktopScreenX11* screen =
+      static_cast<DesktopScreenX11*>(gfx::Screen::GetNativeScreen());
+  screen->ConfigureTimerFired();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -305,8 +311,8 @@ std::vector<gfx::Display> DesktopScreenX11::BuildDisplaysFromXRandRInfo() {
                       gfx::XObjectDeleter<XRRCrtcInfo, void, XRRFreeCrtcInfo>>
           crtc(XRRGetCrtcInfo(xdisplay_, resources.get(), output_info->crtc));
 
-      int64 display_id = -1;
-      if (!ui::GetDisplayId(output_id, static_cast<uint8>(i), &display_id)) {
+      int64_t display_id = -1;
+      if (!ui::GetDisplayId(output_id, static_cast<uint8_t>(i), &display_id)) {
         // It isn't ideal, but if we can't parse the EDID data, fallback on the
         // display number.
         display_id = i;
@@ -325,12 +331,10 @@ std::vector<gfx::Display> DesktopScreenX11::BuildDisplaysFromXRandRInfo() {
         // SetScaleAndBounds() above does the conversion from pixels to DIP for
         // us, but set_work_area does not, so we need to do it here.
         display.set_work_area(gfx::Rect(
-            gfx::ToFlooredPoint(
-                gfx::ScalePoint(intersection_in_pixels.origin(),
-                                1.0f / display.device_scale_factor())),
-            gfx::ToFlooredSize(
-                gfx::ScaleSize(intersection_in_pixels.size(),
-                               1.0f / display.device_scale_factor()))));
+            gfx::ScaleToFlooredPoint(intersection_in_pixels.origin(),
+                                     1.0f / display.device_scale_factor()),
+            gfx::ScaleToFlooredSize(intersection_in_pixels.size(),
+                                    1.0f / display.device_scale_factor())));
       }
 
       switch (crtc->rotation) {

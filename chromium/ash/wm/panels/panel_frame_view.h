@@ -6,7 +6,7 @@
 #define ASH_WM_PANELS_PANEL_FRAME_VIEW_H_
 
 #include "ash/ash_export.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "ui/views/window/non_client_view.h"
 
 namespace views {
@@ -30,6 +30,10 @@ class ASH_EXPORT PanelFrameView : public views::NonClientFrameView {
 
   PanelFrameView(views::Widget* frame, FrameType frame_type);
   ~PanelFrameView() override;
+
+  // Sets the active and inactive frame colors. Note the inactive frame color
+  // will have some transparency added when the frame is drawn.
+  void SetFrameColors(SkColor active_frame_color, SkColor inactive_frame_color);
 
   // Overridden from views::View:
   const char* GetClassName() const override;

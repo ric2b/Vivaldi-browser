@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <map>
 #include <queue>
 #include <set>
@@ -12,8 +14,10 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/public/test/async_file_test_helper.h"
 #include "content/public/test/test_file_system_context.h"
 #include "content/test/fileapi_test_file_set.h"
@@ -247,8 +251,8 @@ class DraggedFileUtilTest : public testing::Test {
   }
 
   scoped_ptr<storage::FileSystemOperationContext> GetOperationContext() {
-    return make_scoped_ptr(new storage::FileSystemOperationContext(
-                               file_system_context())).Pass();
+    return make_scoped_ptr(
+        new storage::FileSystemOperationContext(file_system_context()));
   }
 
 
@@ -374,8 +378,6 @@ TEST_F(DraggedFileUtilTest, ReadDirectoryTest) {
       storage::DirectoryEntry entry;
       entry.is_directory = file_info.IsDirectory();
       entry.name = current.BaseName().value();
-      entry.size = file_info.GetSize();
-      entry.last_modified_time = file_info.GetLastModifiedTime();
       expected_entry_map[entry.name] = entry;
 
 #if defined(OS_POSIX)
@@ -403,9 +405,6 @@ TEST_F(DraggedFileUtilTest, ReadDirectoryTest) {
       EXPECT_TRUE(found != expected_entry_map.end());
       EXPECT_EQ(found->second.name, entry.name);
       EXPECT_EQ(found->second.is_directory, entry.is_directory);
-      EXPECT_EQ(found->second.size, entry.size);
-      EXPECT_EQ(found->second.last_modified_time.ToDoubleT(),
-                entry.last_modified_time.ToDoubleT());
     }
   }
 }

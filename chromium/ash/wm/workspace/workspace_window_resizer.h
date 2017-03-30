@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef ASH_WM_WORKSPACE_WINDOW_RESIZER_H_
-#define ASH_WM_WORKSPACE_WINDOW_RESIZER_H_
+#ifndef ASH_WM_WORKSPACE_WORKSPACE_WINDOW_RESIZER_H_
+#define ASH_WM_WORKSPACE_WORKSPACE_WINDOW_RESIZER_H_
+
+#include <stdint.h>
 
 #include <vector>
 
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/workspace/magnetism_matcher.h"
 #include "base/compiler_specific.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/aura/window_tracker.h"
@@ -91,7 +93,7 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   // Divides |amount| evenly between |sizes|. If |amount| is negative it
   // indicates how many pixels |sizes| should be shrunk by.
   // Returns how many pixels failed to be allocated/removed from |sizes|.
-  int GrowFairly(int amount, std::vector<WindowSize>& sizes) const;
+  int GrowFairly(int amount, std::vector<WindowSize>* sizes) const;
 
   // Calculate the ratio of pixels that each WindowSize in |sizes| should
   // receive when growing or shrinking.
@@ -113,7 +115,7 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   // |magnetism_window_| and |magnetism_edge_| appropriately. |edges| is a
   // bitmask of the MagnetismEdges to match again. Returns true if a match is
   // found.
-  bool UpdateMagnetismWindow(const gfx::Rect& bounds, uint32 edges);
+  bool UpdateMagnetismWindow(const gfx::Rect& bounds, uint32_t edges);
 
   // Adjusts the bounds of the window: magnetically snapping, ensuring the
   // window has enough on screen... |snap_size| is the distance from an edge of
@@ -223,4 +225,4 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
 
 }  // namespace ash
 
-#endif  // ASH_WM_WORKSPACE_WINDOW_RESIZER_H_
+#endif  // ASH_WM_WORKSPACE_WORKSPACE_WINDOW_RESIZER_H_

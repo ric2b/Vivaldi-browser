@@ -4,7 +4,13 @@
 
 #include "sync/internal_api/public/attachments/attachment_service_impl.h"
 
+#include <algorithm>
+#include <map>
+#include <utility>
+#include <vector>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -156,6 +162,7 @@ class MockAttachmentDownloader
 
   std::map<AttachmentId, DownloadCallback> download_requests;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(MockAttachmentDownloader);
 };
 
@@ -182,6 +189,7 @@ class MockAttachmentUploader
 
   std::map<AttachmentId, UploadCallback> upload_requests;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(MockAttachmentUploader);
 };
 
@@ -224,7 +232,7 @@ class AttachmentServiceImplTest : public testing::Test,
     attachment_store_backend_ = attachment_store_backend->AsWeakPtr();
     scoped_ptr<AttachmentStore> attachment_store =
         AttachmentStore::CreateMockStoreForTest(
-            attachment_store_backend.Pass());
+            std::move(attachment_store_backend));
 
     if (uploader.get()) {
       attachment_uploader_ = uploader->AsWeakPtr();
@@ -233,14 +241,14 @@ class AttachmentServiceImplTest : public testing::Test,
       attachment_downloader_ = downloader->AsWeakPtr();
     }
     attachment_service_.reset(new AttachmentServiceImpl(
-        attachment_store->CreateAttachmentStoreForSync(), uploader.Pass(),
-        downloader.Pass(), delegate, base::TimeDelta::FromMinutes(1),
+        attachment_store->CreateAttachmentStoreForSync(), std::move(uploader),
+        std::move(downloader), delegate, base::TimeDelta::FromMinutes(1),
         base::TimeDelta::FromMinutes(8)));
 
     scoped_ptr<base::MockTimer> timer_to_pass(
         new base::MockTimer(false, false));
     mock_timer_ = timer_to_pass.get();
-    attachment_service_->SetTimerForTest(timer_to_pass.Pass());
+    attachment_service_->SetTimerForTest(std::move(timer_to_pass));
   }
 
   AttachmentService* attachment_service() { return attachment_service_.get(); }
@@ -255,7 +263,7 @@ class AttachmentServiceImplTest : public testing::Test,
   void DownloadDone(const AttachmentService::GetOrDownloadResult& result,
                     scoped_ptr<AttachmentMap> attachments) {
     download_results_.push_back(result);
-    last_download_attachments_ = attachments.Pass();
+    last_download_attachments_ = std::move(attachments);
   }
 
   void RunLoop() {

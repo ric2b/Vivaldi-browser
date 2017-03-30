@@ -8,10 +8,10 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/ui/toolbar/toolbar_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_model_delegate.h"
+#include "components/toolbar/toolbar_model.h"
 
 namespace content {
 class WebContents;
@@ -23,14 +23,15 @@ class ToolbarModelAndroid : public ToolbarModelDelegate {
   explicit ToolbarModelAndroid(JNIEnv* env, jobject jdelegate);
   ~ToolbarModelAndroid() override;
 
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   base::android::ScopedJavaLocalRef<jstring> GetText(
       JNIEnv* env,
-      jobject obj);
+      const base::android::JavaParamRef<jobject>& obj);
   base::android::ScopedJavaLocalRef<jstring> GetCorpusChipText(
       JNIEnv* env,
-      jobject obj);
-  jboolean WouldReplaceURL(JNIEnv* env, jobject obj);
+      const base::android::JavaParamRef<jobject>& obj);
+  jboolean WouldReplaceURL(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& obj);
 
   // ToolbarDelegate:
   content::WebContents* GetActiveWebContents() const override;

@@ -13,9 +13,10 @@
 
 #include <audioclient.h>
 #include <mmdeviceapi.h>
+#include <stdint.h>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "base/win/scoped_comptr.h"
 #include "media/audio/audio_device_name.h"
@@ -30,7 +31,7 @@ namespace media {
 // Represents audio channel configuration constants as understood by Windows.
 // E.g. KSAUDIO_SPEAKER_MONO.  For a list of possible values see:
 // http://msdn.microsoft.com/en-us/library/windows/hardware/ff537083(v=vs.85).aspx
-typedef uint32 ChannelConfig;
+typedef uint32_t ChannelConfig;
 
 class MEDIA_EXPORT CoreAudioUtil {
  public:
@@ -174,9 +175,6 @@ class MEDIA_EXPORT CoreAudioUtil {
   // there are no preferred settings for an exclusive mode stream.
   static HRESULT GetPreferredAudioParameters(IAudioClient* client,
                                              AudioParameters* params);
-  static HRESULT GetPreferredAudioParameters(EDataFlow data_flow,
-                                             ERole role,
-                                             AudioParameters* params);
   static HRESULT GetPreferredAudioParameters(const std::string& device_id,
                                              bool is_output_device,
                                              AudioParameters* params);
@@ -208,7 +206,7 @@ class MEDIA_EXPORT CoreAudioUtil {
   static HRESULT SharedModeInitialize(IAudioClient* client,
                                       const WAVEFORMATPCMEX* format,
                                       HANDLE event_handle,
-                                      uint32* endpoint_buffer_size,
+                                      uint32_t* endpoint_buffer_size,
                                       const GUID* session_guid);
 
   // TODO(henrika): add ExclusiveModeInitialize(...)
@@ -230,6 +228,11 @@ class MEDIA_EXPORT CoreAudioUtil {
   // given by |render_client|.
   static bool FillRenderEndpointBufferWithSilence(
       IAudioClient* client, IAudioRenderClient* render_client);
+
+  // Returns the default audio driver file name and version string according to
+  // DxDiag.  Used for crash reporting.  Can be slow (~seconds).
+  static bool GetDxDiagDetails(std::string* driver_name,
+                               std::string* driver_version);
 
  private:
   CoreAudioUtil() {}

@@ -24,10 +24,9 @@
         'keyed_service_core',
         'signin_core_browser',
         'sync_driver',
+        'variations',
       ],
       'sources': [
-        'enhanced_bookmarks/bookmark_image_service.cc',
-        'enhanced_bookmarks/bookmark_image_service.h',
         'enhanced_bookmarks/bookmark_server_cluster_service.cc',
         'enhanced_bookmarks/bookmark_server_cluster_service.h',
         'enhanced_bookmarks/bookmark_server_service.cc',
@@ -35,6 +34,8 @@
         'enhanced_bookmarks/enhanced_bookmark_model.cc',
         'enhanced_bookmarks/enhanced_bookmark_model.h',
         'enhanced_bookmarks/enhanced_bookmark_model_observer.h',
+        'enhanced_bookmarks/enhanced_bookmark_switches_ios.cc',
+        'enhanced_bookmarks/enhanced_bookmark_switches_ios.h',
         'enhanced_bookmarks/enhanced_bookmark_utils.cc',
         'enhanced_bookmarks/enhanced_bookmark_utils.h',
         'enhanced_bookmarks/image_record.cc',
@@ -69,6 +70,7 @@
         '..',
       ],
       'dependencies': [
+        '../skia/skia.gyp:skia',
         '../testing/gtest.gyp:gtest',
         'enhanced_bookmarks',
       ],

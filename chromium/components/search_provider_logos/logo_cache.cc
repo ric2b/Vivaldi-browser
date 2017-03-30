@@ -4,6 +4,10 @@
 
 #include "components/search_provider_logos/logo_cache.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -27,7 +31,7 @@ bool GetTimeValue(const base::DictionaryValue& dict,
                   const std::string& key,
                   base::Time* time) {
   std::string str;
-  int64 internal_time_value;
+  int64_t internal_time_value;
   if (dict.GetString(key, &str) &&
       base::StringToInt64(str, &internal_time_value)) {
     *time = base::Time::FromInternalValue(internal_time_value);
@@ -39,7 +43,7 @@ bool GetTimeValue(const base::DictionaryValue& dict,
 void SetTimeValue(base::DictionaryValue& dict,
                   const std::string& key,
                   const base::Time& time) {
-  int64 internal_time_value = time.ToInternalValue();
+  int64_t internal_time_value = time.ToInternalValue();
   dict.SetString(key, base::Int64ToString(internal_time_value));
 }
 
@@ -81,7 +85,7 @@ void LogoCache::SetCachedLogo(const EncodedLogo* logo) {
     metadata.reset(new LogoMetadata(logo->metadata));
     logo_num_bytes_ = static_cast<int>(logo->encoded_image->size());
   }
-  UpdateMetadata(metadata.Pass());
+  UpdateMetadata(std::move(metadata));
   WriteLogo(logo ? logo->encoded_image : NULL);
 }
 
@@ -109,7 +113,7 @@ scoped_ptr<EncodedLogo> LogoCache::GetCachedLogo() {
   scoped_ptr<EncodedLogo> logo(new EncodedLogo());
   logo->encoded_image = encoded_image;
   logo->metadata = *metadata_;
-  return logo.Pass();
+  return logo;
 }
 
 // static
@@ -134,7 +138,7 @@ scoped_ptr<LogoMetadata> LogoCache::LogoMetadataFromString(
     return scoped_ptr<LogoMetadata>();
   }
 
-  return metadata.Pass();
+  return metadata;
 }
 
 // static
@@ -164,7 +168,7 @@ base::FilePath LogoCache::GetMetadataPath() {
 }
 
 void LogoCache::UpdateMetadata(scoped_ptr<LogoMetadata> metadata) {
-  metadata_ = metadata.Pass();
+  metadata_ = std::move(metadata);
   metadata_is_valid_ = true;
 }
 
@@ -183,7 +187,7 @@ void LogoCache::ReadMetadataIfNeeded() {
     }
   }
 
-  UpdateMetadata(metadata.Pass());
+  UpdateMetadata(std::move(metadata));
 }
 
 void LogoCache::WriteMetadata() {

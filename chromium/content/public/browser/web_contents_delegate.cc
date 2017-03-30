@@ -4,9 +4,11 @@
 
 #include "content/public/browser/web_contents_delegate.h"
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/security_style_explanations.h"
 #include "content/public/browser/web_contents.h"
@@ -17,12 +19,26 @@
 
 namespace content {
 
+namespace {
+
+void ProxyCanDownloadCallback(
+    const base::Callback<void(const content::DownloadItemAction&)>& callback,
+    bool allow) {
+  callback.Run(content::DownloadItemAction(allow, false, false));
+}
+
+}  // namespace
+
 WebContentsDelegate::WebContentsDelegate() {
 }
 
 WebContents* WebContentsDelegate::OpenURLFromTab(WebContents* source,
                                                  const OpenURLParams& params) {
   return nullptr;
+}
+
+bool WebContentsDelegate::ShouldTransferNavigation() {
+  return true;
 }
 
 bool WebContentsDelegate::IsPopupOrPanel(const WebContents* source) const {
@@ -44,9 +60,9 @@ bool WebContentsDelegate::ShouldPreserveAbortedURLs(WebContents* source) {
 }
 
 bool WebContentsDelegate::AddMessageToConsole(WebContents* source,
-                                              int32 level,
+                                              int32_t level,
                                               const base::string16& message,
-                                              int32 line_no,
+                                              int32_t line_no,
                                               const base::string16& source_id) {
   return false;
 }
@@ -74,11 +90,19 @@ bool WebContentsDelegate::TakeFocus(WebContents* source, bool reverse) {
 }
 
 void WebContentsDelegate::CanDownload(
+      const GURL& url,
+      const std::string& request_method,
+      const base::Callback<void(bool)>& callback) {
+  callback.Run(true);
+}
+
+void WebContentsDelegate::CanDownload(
     const GURL& url,
     const std::string& request_method,
     const DownloadInformation& info,
     const base::Callback<void(const content::DownloadItemAction&)>& callback) {
-  callback.Run(content::DownloadItemAction(true, false, false));
+  CanDownload(url,request_method,
+      base::Bind(ProxyCanDownloadCallback, callback));
 }
 
 bool WebContentsDelegate::HandleContextMenu(
@@ -133,8 +157,9 @@ bool WebContentsDelegate::OnGoToEntryOffset(int offset) {
 
 bool WebContentsDelegate::ShouldCreateWebContents(
     WebContents* web_contents,
-    int route_id,
-    int main_frame_route_id,
+    int32_t route_id,
+    int32_t main_frame_route_id,
+    int32_t main_frame_widget_route_id,
     WindowContainerType window_container_type,
     const std::string& frame_name,
     const GURL& target_url,
@@ -145,6 +170,13 @@ bool WebContentsDelegate::ShouldCreateWebContents(
 
 JavaScriptDialogManager* WebContentsDelegate::GetJavaScriptDialogManager(
     WebContents* source) {
+  return nullptr;
+}
+
+scoped_ptr<BluetoothChooser> WebContentsDelegate::RunBluetoothChooser(
+    WebContents* web_contents,
+    const BluetoothChooser::EventHandler& event_handler,
+    const GURL& origin) {
   return nullptr;
 }
 
@@ -188,6 +220,14 @@ bool WebContentsDelegate::CheckMediaAccessPermission(
              << "Not supported.";
   return false;
 }
+
+#if defined(OS_ANDROID)
+void WebContentsDelegate::RequestMediaDecodePermission(
+    WebContents* web_contents,
+    const base::Callback<void(bool)>& callback) {
+  callback.Run(false);
+}
+#endif
 
 bool WebContentsDelegate::RequestPpapiBrokerPermission(
     WebContents* web_contents,
@@ -233,8 +273,9 @@ SecurityStyle WebContentsDelegate::GetSecurityStyle(
     SecurityStyleExplanations* security_style_explanations) {
   return content::SECURITY_STYLE_UNKNOWN;
 }
+
 DownloadInformation::DownloadInformation(
-    const int64 size,
+    const int64_t size,
     const std::string& mimetype,
     const base::string16& suggested_filename)
     : size(size),
@@ -251,6 +292,11 @@ DownloadItemAction::DownloadItemAction(
 }
 
 DownloadItemAction::~DownloadItemAction() {
+}
+
+void WebContentsDelegate::ShowCertificateViewerInDevTools(
+    WebContents* web_contents,
+    int cert_id) {
 }
 
 }  // namespace content

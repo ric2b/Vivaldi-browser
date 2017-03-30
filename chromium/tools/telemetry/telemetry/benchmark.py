@@ -4,15 +4,10 @@
 
 import optparse
 
-from catapult_base import cloud_storage
 from telemetry import decorators
-from telemetry.internal.results import results_options
 from telemetry.internal import story_runner
 from telemetry.internal.util import command_line
-from telemetry.internal.util import exception_formatter
-from telemetry import page
 from telemetry.page import page_test
-from telemetry.page import test_expectations
 from telemetry.web_perf import timeline_based_measurement
 
 Disabled = decorators.Disabled
@@ -41,6 +36,14 @@ class BenchmarkMetadata(object):
   @property
   def rerun_options(self):
     return self._rerun_options
+
+  def AsDict(self):
+    return {
+      'type': 'telemetry_benchmark',
+      'name': self._name,
+      'description': self._description,
+      'rerun_options': self._rerun_options,
+    }
 
 
 class Benchmark(command_line.Command):
@@ -71,6 +74,24 @@ class Benchmark(command_line.Command):
     assert self._has_original_tbm_options or has_original_create_page_test, (
         'Cannot override both CreatePageTest and '
         'CreateTimelineBasedMeasurementOptions.')
+
+  # pylint: disable=unused-argument
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    """Override this method to disable a benchmark under specific conditions.
+
+     Supports logic too complex for simple Enabled and Disabled decorators.
+     Decorators are still respected in cases where this function returns False.
+     """
+    return False
+
+  def Run(self, finder_options):
+    """Do not override this method."""
+    return story_runner.RunBenchmark(self, finder_options)
+
+  @property
+  def max_failures(self):
+    return self._max_failures
 
   @classmethod
   def Name(cls):
@@ -157,53 +178,6 @@ class Benchmark(command_line.Command):
     return BenchmarkMetadata(
         self.Name(), self.__doc__, self.GetTraceRerunCommands())
 
-  def Run(self, finder_options):
-    """Run this test with the given options.
-
-    Returns:
-      The number of failure values (up to 254) or 255 if there is an uncaught
-      exception.
-    """
-    self.CustomizeBrowserOptions(finder_options.browser_options)
-
-    pt = self.CreatePageTest(finder_options)
-    pt.__name__ = self.__class__.__name__
-
-    if hasattr(self, '_disabled_strings'):
-      # pylint: disable=protected-access
-      pt._disabled_strings = self._disabled_strings
-    if hasattr(self, '_enabled_strings'):
-      # pylint: disable=protected-access
-      pt._enabled_strings = self._enabled_strings
-
-    expectations = self.CreateExpectations()
-    stories = self.CreateStorySet(finder_options)
-    if isinstance(pt, page_test.PageTest):
-      if any(not isinstance(p, page.Page) for p in stories.stories):
-        raise Exception(
-            'PageTest must be used with StorySet containing only '
-            'telemetry.page.Page stories.')
-
-    benchmark_metadata = self.GetMetadata()
-    with results_options.CreateResults(
-        benchmark_metadata, finder_options,
-        self.ValueCanBeAddedPredicate) as results:
-      try:
-        story_runner.Run(pt, stories, expectations, finder_options, results,
-                              max_failures=self._max_failures)
-        return_code = min(254, len(results.failures))
-      except Exception:
-        exception_formatter.PrintFormattedException()
-        return_code = 255
-
-      bucket = cloud_storage.BUCKET_ALIASES[finder_options.upload_bucket]
-      if finder_options.upload_results:
-        results.UploadTraceFilesToCloud(bucket)
-        results.UploadProfilingFilesToCloud(bucket)
-
-      results.PrintSummary()
-    return return_code
-
   def CreateTimelineBasedMeasurementOptions(self):
     """Return the TimelineBasedMeasurementOptions for this Benchmark.
 
@@ -252,15 +226,6 @@ class Benchmark(command_line.Command):
     if not hasattr(self, 'page_set'):
       raise NotImplementedError('This test has no "page_set" attribute.')
     return self.page_set()
-
-  @classmethod
-  def CreateExpectations(cls):
-    """Get the expectations this test will run with.
-
-    By default, it will create an empty expectations set. Override to generate
-    custom expectations.
-    """
-    return test_expectations.TestExpectations()
 
 
 def AddCommandLineArgs(parser):

@@ -4,7 +4,9 @@
 
 #include "chrome/test/chromedriver/chrome/chrome_desktop_impl.h"
 
-#include "base/bind.h"
+#include <stddef.h>
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
@@ -12,6 +14,7 @@
 #include "base/sys_info.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/test/chromedriver/chrome/automation_extension.h"
 #include "chrome/test/chromedriver/chrome/devtools_client.h"
 #include "chrome/test/chromedriver/chrome/devtools_http_client.h"
@@ -60,13 +63,6 @@ bool KillProcess(const base::Process& process, bool kill_gracefully) {
   return true;
 }
 
-void GetWebViewIdForAppWindow(const std::string& url_prefix,
-                              std::string* web_view_id,
-                              const WebViewInfo& view) {
-  if (view.type == WebViewInfo::kApp && view.url.find(url_prefix) == 0)
-    *web_view_id = view.id;
-}
-
 }  // namespace
 
 ChromeDesktopImpl::ChromeDesktopImpl(
@@ -78,11 +74,11 @@ ChromeDesktopImpl::ChromeDesktopImpl(
     const base::CommandLine& command,
     base::ScopedTempDir* user_data_dir,
     base::ScopedTempDir* extension_dir)
-    : ChromeImpl(http_client.Pass(),
-                 websocket_client.Pass(),
+    : ChromeImpl(std::move(http_client),
+                 std::move(websocket_client),
                  devtools_event_listeners,
-                 port_reservation.Pass()),
-      process_(process.Pass()),
+                 std::move(port_reservation)),
+      process_(std::move(process)),
       command_(command) {
   if (user_data_dir->IsValid())
     CHECK(user_data_dir_.Set(user_data_dir->Take()));
@@ -109,6 +105,7 @@ Status ChromeDesktopImpl::WaitForPageToLoad(const std::string& url,
                                             scoped_ptr<WebView>* web_view) {
   base::TimeTicks deadline = base::TimeTicks::Now() + timeout;
   std::string id;
+  WebViewInfo::Type type = WebViewInfo::Type::kPage;
   while (base::TimeTicks::Now() < deadline) {
     WebViewsInfo views_info;
     Status status = devtools_http_client_->GetWebViewsInfo(&views_info);
@@ -116,8 +113,10 @@ Status ChromeDesktopImpl::WaitForPageToLoad(const std::string& url,
       return status;
 
     for (size_t i = 0; i < views_info.GetSize(); ++i) {
-      if (views_info.Get(i).url.find(url) == 0) {
-        id = views_info.Get(i).id;
+      const WebViewInfo& view_info = views_info.Get(i);
+      if (view_info.url.find(url) == 0) {
+        id = view_info.id;
+        type = view_info.type;
         break;
       }
     }
@@ -128,11 +127,20 @@ Status ChromeDesktopImpl::WaitForPageToLoad(const std::string& url,
   if (id.empty())
     return Status(kUnknownError, "page could not be found: " + url);
 
+  const DeviceMetrics* device_metrics = devtools_http_client_->device_metrics();
+  if (type == WebViewInfo::Type::kApp ||
+      type == WebViewInfo::Type::kBackgroundPage) {
+    // Apps and extensions don't work on Android, so it doesn't make sense to
+    // provide override device metrics in mobile emulation mode, and can also
+    // potentially crash the renderer, for more details see:
+    // https://code.google.com/p/chromedriver/issues/detail?id=1205
+    device_metrics = nullptr;
+  }
   scoped_ptr<WebView> web_view_tmp(
       new WebViewImpl(id,
                       devtools_http_client_->browser_info(),
                       devtools_http_client_->CreateClient(id),
-                      devtools_http_client_->device_metrics()));
+                      device_metrics));
   Status status = web_view_tmp->ConnectIfNecessary();
   if (status.IsError())
     return status;
@@ -140,7 +148,7 @@ Status ChromeDesktopImpl::WaitForPageToLoad(const std::string& url,
   status = web_view_tmp->WaitForPendingNavigations(
       std::string(), deadline - base::TimeTicks::Now(), false);
   if (status.IsOk())
-    *web_view = web_view_tmp.Pass();
+    *web_view = std::move(web_view_tmp);
   return status;
 }
 
@@ -156,7 +164,7 @@ Status ChromeDesktopImpl::GetAutomationExtension(
     if (status.IsError())
       return Status(kUnknownError, "cannot get automation extension", status);
 
-    automation_extension_.reset(new AutomationExtension(web_view.Pass()));
+    automation_extension_.reset(new AutomationExtension(std::move(web_view)));
   }
   *extension = automation_extension_.get();
   return Status(kOk);
@@ -192,26 +200,4 @@ Status ChromeDesktopImpl::QuitImpl() {
 
 const base::CommandLine& ChromeDesktopImpl::command() const {
   return command_;
-}
-
-Status ChromeDesktopImpl::WaitForNewAppWindow(const base::TimeDelta& timeout,
-                                              const std::string& app_id,
-                                              std::string* web_view_id) {
-  base::TimeTicks deadline = base::TimeTicks::Now() + timeout;
-  std::string url_prefix = "chrome-extension://" + app_id;
-  std::string web_view_id_tmp;
-  std::list<std::string> web_view_ids;
-  WebViewCallback callback =
-      base::Bind(&GetWebViewIdForAppWindow, url_prefix, &web_view_id_tmp);
-  while (base::TimeTicks::Now() < deadline) {
-    Status status = UpdateWebViewIds(&web_view_ids, callback);
-    if (status.IsError())
-      return status;
-    if (!web_view_id_tmp.empty()) {
-      *web_view_id = web_view_id_tmp;
-      return Status(kOk);
-    }
-    base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(50));
-  }
-  return Status(kUnknownError, "timed out waiting for app window to appear");
 }

@@ -5,7 +5,10 @@
 #ifndef CHROME_BROWSER_GLOBAL_KEYBOARD_SHORTCUTS_MAC_H_
 #define CHROME_BROWSER_GLOBAL_KEYBOARD_SHORTCUTS_MAC_H_
 
-#include "base/basictypes.h"
+#include <Carbon/Carbon.h>  // For unichar.
+#include <stddef.h>
+
+@class NSEvent;
 
 struct KeyboardShortcutData {
   bool command_key;

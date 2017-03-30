@@ -11,7 +11,7 @@ import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
@@ -132,7 +132,7 @@ public class AccessibilityTabModelAdapter extends BaseAdapter {
         assert tabId != Tab.INVALID_TAB_ID;
 
         AccessibilityTabModelListItem listItem;
-        if (convertView != null && convertView instanceof AccessibilityTabModelListItem) {
+        if (convertView instanceof AccessibilityTabModelListItem) {
             listItem = (AccessibilityTabModelListItem) convertView;
         } else {
             listItem = (AccessibilityTabModelListItem) LayoutInflater.from(mContext).inflate(

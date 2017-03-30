@@ -11,18 +11,13 @@
 #include "components/policy/core/browser/configuration_policy_handler.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace policy {
 
 namespace {
-// TODO: Vivaldi reneable for Mac when locale loading is fixed for tests
-#if defined(OS_MACOSX)
-#define MAYBE_LOCALE(test_name) DISABLED_##test_name
-#else
-#define MAYBE_LOCALE(test_name) test_name
-#endif
 
 void GetIntegerTypeMap(
     ScopedVector<StringMappingListPolicyHandler::MappingEntry>* result) {
@@ -53,7 +48,7 @@ class TestSchemaValidatingPolicyHandler : public SchemaValidatingPolicyHandler {
 
 }  // namespace
 
-TEST(StringToIntEnumListPolicyHandlerTest, MAYBE_LOCALE(CheckPolicySettings)) {
+TEST(StringToIntEnumListPolicyHandlerTest, CheckPolicySettings) {
   base::ListValue list;
   PolicyMap policy_map;
   PolicyErrorMap errors;
@@ -62,22 +57,22 @@ TEST(StringToIntEnumListPolicyHandlerTest, MAYBE_LOCALE(CheckPolicySettings)) {
       kTestPref,
       base::Bind(GetIntegerTypeMap));
 
-  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, list.DeepCopy(), NULL);
+  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY,  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD, list.DeepCopy(), nullptr);
   errors.Clear();
   EXPECT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
   EXPECT_TRUE(errors.empty());
 
   list.AppendString("one");
-  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, list.DeepCopy(), NULL);
+  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD, list.DeepCopy(), nullptr);
   errors.Clear();
   EXPECT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
   EXPECT_TRUE(errors.empty());
 
   list.AppendString("invalid");
-  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, list.DeepCopy(), NULL);
+  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD, list.DeepCopy(), nullptr);
   errors.Clear();
   EXPECT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
   EXPECT_FALSE(errors.empty());
@@ -86,6 +81,7 @@ TEST(StringToIntEnumListPolicyHandlerTest, MAYBE_LOCALE(CheckPolicySettings)) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue("no list"),
                  NULL);
   errors.Clear();
@@ -105,23 +101,23 @@ TEST(StringMappingListPolicyHandlerTest, ApplyPolicySettings) {
       kTestPref,
       base::Bind(GetIntegerTypeMap));
 
-  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, list.DeepCopy(), NULL);
+  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD, list.DeepCopy(), nullptr);
   handler.ApplyPolicySettings(policy_map, &prefs);
   EXPECT_TRUE(prefs.GetValue(kTestPref, &value));
   EXPECT_TRUE(base::Value::Equals(&expected, value));
 
   list.AppendString("two");
   expected.AppendInteger(2);
-  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, list.DeepCopy(), NULL);
+  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD, list.DeepCopy(), nullptr);
   handler.ApplyPolicySettings(policy_map, &prefs);
   EXPECT_TRUE(prefs.GetValue(kTestPref, &value));
   EXPECT_TRUE(base::Value::Equals(&expected, value));
 
   list.AppendString("invalid");
-  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, list.DeepCopy(), NULL);
+  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD, list.DeepCopy(), nullptr);
   handler.ApplyPolicySettings(policy_map, &prefs);
   EXPECT_TRUE(prefs.GetValue(kTestPref, &value));
   EXPECT_TRUE(base::Value::Equals(&expected, value));
@@ -139,6 +135,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(0),
                  NULL);
   errors.Clear();
@@ -148,6 +145,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(5),
                  NULL);
   errors.Clear();
@@ -157,6 +155,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(10),
                  NULL);
   errors.Clear();
@@ -168,6 +167,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(-5),
                  NULL);
   errors.Clear();
@@ -177,6 +177,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(15),
                  NULL);
   errors.Clear();
@@ -188,6 +189,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue("invalid"),
                  NULL);
   errors.Clear();
@@ -207,6 +209,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(0),
                  NULL);
   errors.Clear();
@@ -216,6 +219,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(5),
                  NULL);
   errors.Clear();
@@ -225,6 +229,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(10),
                  NULL);
   errors.Clear();
@@ -236,6 +241,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(-5),
                  NULL);
   errors.Clear();
@@ -245,6 +251,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(15),
                  NULL);
   errors.Clear();
@@ -256,6 +263,7 @@ TEST(IntRangePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue("invalid"),
                  NULL);
   errors.Clear();
@@ -277,6 +285,7 @@ TEST(IntRangePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(0),
                  NULL);
   prefs.Clear();
@@ -288,6 +297,7 @@ TEST(IntRangePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(5),
                  NULL);
   prefs.Clear();
@@ -299,6 +309,7 @@ TEST(IntRangePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(10),
                  NULL);
   prefs.Clear();
@@ -312,6 +323,7 @@ TEST(IntRangePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(-5),
                  NULL);
   prefs.Clear();
@@ -323,6 +335,7 @@ TEST(IntRangePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(15),
                  NULL);
   prefs.Clear();
@@ -346,6 +359,7 @@ TEST(IntRangePolicyHandler, ApplyPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(0),
                  NULL);
   prefs.Clear();
@@ -357,6 +371,7 @@ TEST(IntRangePolicyHandler, ApplyPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(5),
                  NULL);
   prefs.Clear();
@@ -368,6 +383,7 @@ TEST(IntRangePolicyHandler, ApplyPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(10),
                  NULL);
   prefs.Clear();
@@ -390,6 +406,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(0),
                  NULL);
   errors.Clear();
@@ -399,6 +416,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(5),
                  NULL);
   errors.Clear();
@@ -408,6 +426,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(10),
                  NULL);
   errors.Clear();
@@ -419,6 +438,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(-5),
                  NULL);
   errors.Clear();
@@ -428,6 +448,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(15),
                  NULL);
   errors.Clear();
@@ -439,6 +460,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue("invalid"),
                  NULL);
   errors.Clear();
@@ -459,6 +481,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(0),
                  NULL);
   errors.Clear();
@@ -468,6 +491,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(5),
                  NULL);
   errors.Clear();
@@ -477,6 +501,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(10),
                  NULL);
   errors.Clear();
@@ -488,6 +513,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(-5),
                  NULL);
   errors.Clear();
@@ -497,6 +523,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(15),
                  NULL);
   errors.Clear();
@@ -508,6 +535,7 @@ TEST(IntPercentageToDoublePolicyHandler, CheckPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue("invalid"),
                  NULL);
   errors.Clear();
@@ -530,6 +558,7 @@ TEST(IntPercentageToDoublePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(0),
                  NULL);
   prefs.Clear();
@@ -541,6 +570,7 @@ TEST(IntPercentageToDoublePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(5),
                  NULL);
   prefs.Clear();
@@ -552,6 +582,7 @@ TEST(IntPercentageToDoublePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(10),
                  NULL);
   prefs.Clear();
@@ -565,6 +596,7 @@ TEST(IntPercentageToDoublePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(-5),
                  NULL);
   prefs.Clear();
@@ -576,6 +608,7 @@ TEST(IntPercentageToDoublePolicyHandler, ApplyPolicySettingsClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(15),
                  NULL);
   prefs.Clear();
@@ -600,6 +633,7 @@ TEST(IntPercentageToDoublePolicyHandler, ApplyPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(0),
                  NULL);
   prefs.Clear();
@@ -611,6 +645,7 @@ TEST(IntPercentageToDoublePolicyHandler, ApplyPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(5),
                  NULL);
   prefs.Clear();
@@ -622,6 +657,7 @@ TEST(IntPercentageToDoublePolicyHandler, ApplyPolicySettingsDontClamp) {
   policy_map.Set(kTestPolicy,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(10),
                  NULL);
   prefs.Clear();
@@ -658,17 +694,17 @@ TEST(SchemaValidatingPolicyHandlerTest, CheckAndGetValue) {
       "    \"Colors\": \"White\""
       "  }"
       "}";
-  scoped_ptr<base::Value> policy_map_value(
-      base::JSONReader::DeprecatedReadAndReturnError(
-          kPolicyMapJson, base::JSON_PARSE_RFC, NULL, &error));
+  scoped_ptr<base::Value> policy_map_value =
+      base::JSONReader::ReadAndReturnError(kPolicyMapJson, base::JSON_PARSE_RFC,
+                                           NULL, &error);
   ASSERT_TRUE(policy_map_value) << error;
 
   const base::DictionaryValue* policy_map_dict = NULL;
   ASSERT_TRUE(policy_map_value->GetAsDictionary(&policy_map_dict));
 
   PolicyMap policy_map;
-  policy_map.LoadFrom(
-      policy_map_dict, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER);
+  policy_map.LoadFrom(policy_map_dict, POLICY_LEVEL_RECOMMENDED,
+                      POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD);
 
   TestSchemaValidatingPolicyHandler handler(schema, SCHEMA_ALLOW_INVALID);
   scoped_ptr<base::Value> output_value;
@@ -718,9 +754,9 @@ TEST(SimpleSchemaValidatingPolicyHandlerTest, CheckAndGetValue) {
       "    \"Colors\": \"Green\""
       "  }"
       "}";
-  scoped_ptr<base::Value> policy_map_value(
-      base::JSONReader::DeprecatedReadAndReturnError(
-          kPolicyMapJson, base::JSON_PARSE_RFC, NULL, &error));
+  scoped_ptr<base::Value> policy_map_value =
+      base::JSONReader::ReadAndReturnError(kPolicyMapJson, base::JSON_PARSE_RFC,
+                                           NULL, &error);
   ASSERT_TRUE(policy_map_value) << error;
 
   const base::DictionaryValue* policy_map_dict = NULL;
@@ -728,11 +764,13 @@ TEST(SimpleSchemaValidatingPolicyHandlerTest, CheckAndGetValue) {
 
   PolicyMap policy_map_recommended;
   policy_map_recommended.LoadFrom(
-      policy_map_dict, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER);
+      policy_map_dict, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
+      POLICY_SOURCE_CLOUD);
 
   PolicyMap policy_map_mandatory;
   policy_map_mandatory.LoadFrom(
-      policy_map_dict, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER);
+      policy_map_dict, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+      POLICY_SOURCE_CLOUD);
 
   SimpleSchemaValidatingPolicyHandler handler_all(
       policy_name,

@@ -8,18 +8,23 @@
 #include <string>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_tree_formatter.h"
+#include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_paths.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -47,16 +52,18 @@ DumpAccessibilityTestBase::~DumpAccessibilityTestBase() {
 
 base::string16
 DumpAccessibilityTestBase::DumpUnfilteredAccessibilityTreeAsString() {
-  WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
-      shell()->web_contents());
-  AccessibilityTreeFormatter formatter(
-      web_contents->GetRootBrowserAccessibilityManager()->GetRoot());
+  scoped_ptr<AccessibilityTreeFormatter> formatter(
+      CreateAccessibilityTreeFormatter());
   std::vector<Filter> filters;
   filters.push_back(Filter(base::ASCIIToUTF16("*"), Filter::ALLOW));
-  formatter.SetFilters(filters);
-  formatter.set_show_ids(true);
+  formatter->SetFilters(filters);
+  formatter->set_show_ids(true);
+  WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
+      shell()->web_contents());
   base::string16 ax_tree_dump;
-  formatter.FormatAccessibilityTree(&ax_tree_dump);
+  formatter->FormatAccessibilityTree(
+      web_contents->GetRootBrowserAccessibilityManager()->GetRoot(),
+      &ax_tree_dump);
   return ax_tree_dump;
 }
 
@@ -89,39 +96,59 @@ void DumpAccessibilityTestBase::ParseHtmlForExtraDirectives(
     const std::string& test_html,
     std::vector<Filter>* filters,
     std::string* wait_for) {
-  std::vector<std::string> lines;
-  base::SplitString(test_html, '\n', &lines);
-  for (std::vector<std::string>::const_iterator iter = lines.begin();
-       iter != lines.end();
-       ++iter) {
-    const std::string& line = *iter;
-    const std::string& allow_empty_str =
-        AccessibilityTreeFormatter::GetAllowEmptyString();
-    const std::string& allow_str =
-        AccessibilityTreeFormatter::GetAllowString();
-    const std::string& deny_str =
-        AccessibilityTreeFormatter::GetDenyString();
+  for (const std::string& line :
+       base::SplitString(test_html, "\n", base::TRIM_WHITESPACE,
+                         base::SPLIT_WANT_ALL)) {
+    const std::string& allow_empty_str = formatter_->GetAllowEmptyString();
+    const std::string& allow_str = formatter_->GetAllowString();
+    const std::string& deny_str = formatter_->GetDenyString();
     const std::string& wait_str = "@WAIT-FOR:";
-    if (base::StartsWithASCII(line, allow_empty_str, true)) {
+    if (base::StartsWith(line, allow_empty_str,
+                         base::CompareCase::SENSITIVE)) {
       filters->push_back(
           Filter(base::UTF8ToUTF16(line.substr(allow_empty_str.size())),
                  Filter::ALLOW_EMPTY));
-    } else if (base::StartsWithASCII(line, allow_str, true)) {
+    } else if (base::StartsWith(line, allow_str,
+                                base::CompareCase::SENSITIVE)) {
       filters->push_back(Filter(base::UTF8ToUTF16(
           line.substr(allow_str.size())),
                                 Filter::ALLOW));
-    } else if (base::StartsWithASCII(line, deny_str, true)) {
+    } else if (base::StartsWith(line, deny_str,
+                                base::CompareCase::SENSITIVE)) {
       filters->push_back(Filter(base::UTF8ToUTF16(
           line.substr(deny_str.size())),
                                 Filter::DENY));
-    } else if (base::StartsWithASCII(line, wait_str, true)) {
+    } else if (base::StartsWith(line, wait_str,
+                                base::CompareCase::SENSITIVE)) {
       *wait_for = line.substr(wait_str.size());
     }
   }
 }
 
+AccessibilityTreeFormatter*
+    DumpAccessibilityTestBase::CreateAccessibilityTreeFormatter() {
+  if (is_blink_pass_)
+    return new AccessibilityTreeFormatterBlink();
+  else
+    return AccessibilityTreeFormatter::Create();
+}
+
 void DumpAccessibilityTestBase::RunTest(
     const base::FilePath file_path, const char* file_dir) {
+#if !defined(OS_ANDROID)
+  // The blink tree is different on Android because we exclude inline
+  // text boxes, for performance.
+  is_blink_pass_ = true;
+  RunTestForPlatform(file_path, file_dir);
+#endif
+  is_blink_pass_ = false;
+  RunTestForPlatform(file_path, file_dir);
+}
+
+void DumpAccessibilityTestBase::RunTestForPlatform(
+    const base::FilePath file_path, const char* file_dir) {
+  formatter_.reset(CreateAccessibilityTreeFormatter());
+
   // Disable the "hot tracked" state (set when the mouse is hovering over
   // an object) because it makes test output change based on the mouse position.
   BrowserAccessibilityStateImpl::GetInstance()->
@@ -131,7 +158,9 @@ void DumpAccessibilityTestBase::RunTest(
 
   // Output the test path to help anyone who encounters a failure and needs
   // to know where to look.
-  printf("Testing: %s\n", file_path.MaybeAsASCII().c_str());
+  LOG(INFO) << "Testing: " << file_path.LossyDisplayName()
+            << (is_blink_pass_ ? " (internal Blink accessibility tree)"
+                : " (native accessibility tree for this platform)");
 
   std::string html_contents;
   base::ReadFileToString(file_path, &html_contents);
@@ -139,8 +168,18 @@ void DumpAccessibilityTestBase::RunTest(
   // Read the expected file.
   std::string expected_contents_raw;
   base::FilePath expected_file =
-    base::FilePath(file_path.RemoveExtension().value() +
-                   AccessibilityTreeFormatter::GetExpectedFileSuffix());
+      base::FilePath(file_path.RemoveExtension().value() +
+                     formatter_->GetExpectedFileSuffix());
+  if (!base::PathExists(expected_file)) {
+    LOG(INFO) << "File not found: " << expected_file.LossyDisplayName();
+    LOG(INFO) << "No expectation file present, ignoring test on this platform."
+              << " To run this test anyway, create "
+              << expected_file.LossyDisplayName()
+              << " (it can be empty) and then run content_browsertests "
+              << "with the switch: --"
+              << switches::kGenerateAccessibilityTestExpectations;
+    return;
+  }
   base::ReadFileToString(expected_file, &expected_contents_raw);
 
   // Tolerate Windows-style line endings (\r\n) in the expected file:
@@ -149,7 +188,7 @@ void DumpAccessibilityTestBase::RunTest(
   base::RemoveChars(expected_contents_raw, "\r", &expected_contents);
 
   if (!expected_contents.compare(0, strlen(kMarkSkipFile), kMarkSkipFile)) {
-    printf("Skipping this test on this platform.\n");
+    LOG(INFO) << "Skipping this test on this platform.";
     return;
   }
 
@@ -202,7 +241,7 @@ void DumpAccessibilityTestBase::RunTest(
   // file length differences are found.
   expected_lines.push_back(kMarkEndOfFile);
   actual_lines.push_back(kMarkEndOfFile);
-  std::string actual_contents = JoinString(actual_lines, "\n");
+  std::string actual_contents = base::JoinString(actual_lines, "\n");
 
   std::vector<int> diff_lines = DiffLines(expected_lines, actual_lines);
   bool is_different = diff_lines.size() > 0;
@@ -210,9 +249,11 @@ void DumpAccessibilityTestBase::RunTest(
   if (is_different) {
     OnDiffFailed();
 
+    std::string diff;
+
     // Mark the expected lines which did not match actual output with a *.
-    printf("* Line Expected\n");
-    printf("- ---- --------\n");
+    diff += "* Line Expected\n";
+    diff += "- ---- --------\n";
     for (int line = 0, diff_index = 0;
          line < static_cast<int>(expected_lines.size());
          ++line) {
@@ -222,25 +263,24 @@ void DumpAccessibilityTestBase::RunTest(
         is_diff = true;
         ++diff_index;
       }
-      printf("%1s %4d %s\n", is_diff? kSignalDiff : "", line + 1,
+      diff += base::StringPrintf(
+          "%1s %4d %s\n", is_diff? kSignalDiff : "", line + 1,
              expected_lines[line].c_str());
     }
-    printf("\nActual\n");
-    printf("------\n");
-    printf("%s\n", actual_contents.c_str());
-  }
+    diff += "\nActual\n";
+    diff += "------\n";
+    diff += actual_contents;
+    LOG(ERROR) << "Diff:\n" << diff;
 
-  if (!base::PathExists(expected_file)) {
-    base::FilePath actual_file =
-        base::FilePath(file_path.RemoveExtension().value() +
-                       AccessibilityTreeFormatter::GetActualFileSuffix());
-
-    EXPECT_TRUE(base::WriteFile(
-        actual_file, actual_contents.c_str(), actual_contents.size()));
-
-    ADD_FAILURE() << "No expectation found. Create it by doing:\n"
-                  << "mv " << actual_file.LossyDisplayName() << " "
-                  << expected_file.LossyDisplayName();
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kGenerateAccessibilityTestExpectations)) {
+      CHECK(base::WriteFile(
+          expected_file, actual_contents.c_str(), actual_contents.size()));
+      LOG(INFO) << "Wrote expectations to: "
+                << expected_file.LossyDisplayName();
+    }
+  } else {
+    LOG(INFO) << "Test output matches expectations.";
   }
 }
 

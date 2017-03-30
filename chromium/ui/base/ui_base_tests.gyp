@@ -44,6 +44,8 @@
         'resource/data_pack_literal.cc',
         'resource/data_pack_unittest.cc',
         'resource/resource_bundle_unittest.cc',
+        'resource/resource_bundle_mac_unittest.mm',
+        'template_expressions_unittest.cc',
         'test/run_all_unittests.cc',
       ],
       'all_sources': [
@@ -70,8 +72,8 @@
         'cocoa/tracking_area_unittest.mm',
         'dragdrop/os_exchange_data_provider_aurax11_unittest.cc',
         'ime/candidate_window_unittest.cc',
+        'ime/composition_text_unittest.cc',
         'ime/chromeos/character_composer_unittest.cc',
-        'ime/chromeos/composition_text_chromeos_unittest.cc',
         'ime/composition_text_util_pango_unittest.cc',
         'ime/input_method_base_unittest.cc',
         'ime/input_method_chromeos_unittest.cc',
@@ -287,8 +289,29 @@
           'includes': [ '../../build/apk_test.gypi' ],
         },
       ],
+      'conditions': [
+        ['test_isolation_mode != "noop"',
+          {
+            'targets': [
+              {
+                'target_name': 'ui_base_unittests_apk_run',
+                'type': 'none',
+                'dependencies': [
+                  'ui_base_unittests_apk',
+                ],
+                'includes': [
+                  '../../build/isolate.gypi',
+                ],
+                'sources': [
+                  'ui_base_unittests_apk.isolate',
+                ],
+              },
+            ],
+          },
+        ],
+      ],
     }],
-    ['test_isolation_mode != "noop"', {
+    ['test_isolation_mode != "noop" and OS != "android"', {
       'targets': [
         {
           'target_name': 'ui_base_unittests_run',

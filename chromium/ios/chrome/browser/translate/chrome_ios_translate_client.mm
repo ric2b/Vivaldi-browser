@@ -4,6 +4,7 @@
 
 #include "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/logging.h"
@@ -36,11 +37,10 @@ DEFINE_WEB_STATE_USER_DATA_KEY(ChromeIOSTranslateClient);
 ChromeIOSTranslateClient::ChromeIOSTranslateClient(web::WebState* web_state)
     : web::WebStateObserver(web_state),
       translate_manager_(
-          new translate::TranslateManager(this, ios::prefs::kAcceptLanguages)),
+          new translate::TranslateManager(this, prefs::kAcceptLanguages)),
       translate_driver_(web_state,
                         web_state->GetNavigationManager(),
-                        translate_manager_.get()) {
-}
+                        translate_manager_.get()) {}
 
 ChromeIOSTranslateClient::~ChromeIOSTranslateClient() {
 }
@@ -48,8 +48,8 @@ ChromeIOSTranslateClient::~ChromeIOSTranslateClient() {
 // static
 scoped_ptr<translate::TranslatePrefs>
 ChromeIOSTranslateClient::CreateTranslatePrefs(PrefService* prefs) {
-  return scoped_ptr<translate::TranslatePrefs>(new translate::TranslatePrefs(
-      prefs, ios::prefs::kAcceptLanguages, nullptr));
+  return scoped_ptr<translate::TranslatePrefs>(
+      new translate::TranslatePrefs(prefs, prefs::kAcceptLanguages, nullptr));
 }
 
 translate::TranslateManager* ChromeIOSTranslateClient::GetTranslateManager() {
@@ -62,7 +62,7 @@ scoped_ptr<infobars::InfoBar> ChromeIOSTranslateClient::CreateInfoBar(
     scoped_ptr<translate::TranslateInfoBarDelegate> delegate) const {
   translate::TranslateStep step = delegate->translate_step();
 
-  scoped_ptr<InfoBarIOS> infobar(new InfoBarIOS(delegate.Pass()));
+  scoped_ptr<InfoBarIOS> infobar(new InfoBarIOS(std::move(delegate)));
   base::scoped_nsobject<InfoBarController> controller;
   switch (step) {
     case translate::TRANSLATE_STEP_AFTER_TRANSLATE:
@@ -86,13 +86,13 @@ scoped_ptr<infobars::InfoBar> ChromeIOSTranslateClient::CreateInfoBar(
       NOTREACHED();
   }
   infobar->SetController(controller);
-  return infobar.Pass();
+  return std::move(infobar);
 }
 
 void ChromeIOSTranslateClient::ShowTranslateUI(
     translate::TranslateStep step,
-    const std::string source_language,
-    const std::string target_language,
+    const std::string& source_language,
+    const std::string& target_language,
     translate::TranslateErrors::Type error_type,
     bool triggered_from_menu) {
   DCHECK(web_state());
@@ -136,7 +136,7 @@ ChromeIOSTranslateClient::GetTranslateAcceptLanguages() {
 }
 
 int ChromeIOSTranslateClient::GetInfobarIconID() const {
-  return IDR_INFOBAR_TRANSLATE_IOS;
+  return IDR_IOS_INFOBAR_TRANSLATE;
 }
 
 bool ChromeIOSTranslateClient::IsTranslatableURL(const GURL& url) {

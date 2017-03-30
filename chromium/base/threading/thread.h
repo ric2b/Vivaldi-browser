@@ -5,21 +5,25 @@
 #ifndef BASE_THREADING_THREAD_H_
 #define BASE_THREADING_THREAD_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/base_export.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/timer_slack.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 
 namespace base {
 
 class MessagePump;
-class WaitableEvent;
 
 // A simple thread abstraction that establishes a MessageLoop on a new thread.
 // The consumer uses the MessageLoop of the thread to cause code to execute on
@@ -86,7 +90,7 @@ class BASE_EXPORT Thread : PlatformThread::Delegate {
   // init_com_with_mta(false) and then StartWithOptions() with any message loop
   // type other than TYPE_UI.
   void init_com_with_mta(bool use_mta) {
-    DCHECK(!start_event_);
+    DCHECK(!message_loop_);
     com_status_ = use_mta ? MTA : STA;
   }
 #endif
@@ -118,7 +122,7 @@ class BASE_EXPORT Thread : PlatformThread::Delegate {
   // Blocks until the thread starts running. Called within StartAndWait().
   // Note that calling this causes jank on the calling thread, must be used
   // carefully for production code.
-  bool WaitUntilThreadStarted();
+  bool WaitUntilThreadStarted() const;
 
   // Signals the thread to exit and returns once the thread has exited.  After
   // this method returns, the Thread object is completely reset and may be used
@@ -148,7 +152,7 @@ class BASE_EXPORT Thread : PlatformThread::Delegate {
   // Returns the message loop for this thread.  Use the MessageLoop's
   // PostTask methods to execute code on the thread.  This only returns
   // non-null after a successful call to Start.  After Stop has been called,
-  // this will return NULL.
+  // this will return nullptr.
   //
   // NOTE: You must not call this MessageLoop's Quit method directly.  Use
   // the Thread's Stop method instead.
@@ -156,7 +160,7 @@ class BASE_EXPORT Thread : PlatformThread::Delegate {
   MessageLoop* message_loop() const { return message_loop_; }
 
   // Returns a TaskRunner for this thread. Use the TaskRunner's PostTask
-  // methods to execute code on the thread. Returns NULL if the thread is not
+  // methods to execute code on the thread. Returns nullptr if the thread is not
   // running (e.g. before Start or after Stop have been called). Callers can
   // hold on to this even after the thread is gone; in this situation, attempts
   // to PostTask() will fail.
@@ -170,8 +174,13 @@ class BASE_EXPORT Thread : PlatformThread::Delegate {
   // The native thread handle.
   PlatformThreadHandle thread_handle() { return thread_; }
 
-  // The thread ID.
-  PlatformThreadId thread_id() const;
+  // Returns the thread ID.  Should not be called before the first Start*()
+  // call.  Keeps on returning the same ID even after a Stop() call. The next
+  // Start*() call renews the ID.
+  //
+  // WARNING: This function will block if the thread hasn't started yet.
+  //
+  PlatformThreadId GetThreadId() const;
 
   // Returns true if the thread has been started, and not yet stopped.
   bool IsRunning() const;
@@ -211,16 +220,22 @@ class BASE_EXPORT Thread : PlatformThread::Delegate {
 #endif
 
   // If true, we're in the middle of stopping, and shouldn't access
-  // |message_loop_|. It may non-NULL and invalid.
+  // |message_loop_|. It may non-nullptr and invalid.
+  // Should be written on the thread that created this thread. Also read data
+  // could be wrong on other threads.
   bool stopping_;
 
   // True while inside of Run().
   bool running_;
-  mutable base::Lock running_lock_;  // Protects running_.
+  mutable base::Lock running_lock_;  // Protects |running_|.
 
   // The thread's handle.
   PlatformThreadHandle thread_;
-  mutable base::Lock thread_lock_;  // Protects thread_.
+  mutable base::Lock thread_lock_;  // Protects |thread_|.
+
+  // The thread's id once it has started.
+  PlatformThreadId id_;
+  mutable WaitableEvent id_event_;  // Protects |id_|.
 
   // The thread's message loop.  Valid only while the thread is alive.  Set
   // by the created thread.
@@ -233,8 +248,8 @@ class BASE_EXPORT Thread : PlatformThread::Delegate {
   // The name of the thread.  Used for debugging purposes.
   std::string name_;
 
-  // Non-null if the thread has successfully started.
-  scoped_ptr<WaitableEvent> start_event_;
+  // Signaled when the created thread gets ready to use the message loop.
+  mutable WaitableEvent start_event_;
 
   friend void ThreadQuitHelper();
 

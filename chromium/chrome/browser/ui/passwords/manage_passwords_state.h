@@ -5,12 +5,15 @@
 #ifndef CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_STATE_H_
 #define CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_STATE_H_
 
+#include <vector>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_store_change.h"
+#include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 #include "url/gurl.h"
 
@@ -43,6 +46,10 @@ class ManagePasswordsState {
   void OnPendingPassword(
       scoped_ptr<password_manager::PasswordFormManager> form_manager);
 
+  // Move to PENDING_PASSWORD_UPDATE_STATE.
+  void OnUpdatePassword(
+      scoped_ptr<password_manager::PasswordFormManager> form_manager);
+
   // Move to CREDENTIAL_REQUEST_STATE.
   void OnRequestCredentials(
       ScopedVector<autofill::PasswordForm> local_credentials,
@@ -57,19 +64,29 @@ class ManagePasswordsState {
       scoped_ptr<password_manager::PasswordFormManager> form_manager);
 
   // Move to MANAGE_STATE or INACTIVE_STATE for PSL matched passwords.
-  void OnPasswordAutofilled(const autofill::PasswordFormMap& password_form_map);
+  // |password_form_map| contains best matches from the password store for the
+  // form which was autofilled, |origin| is an origin of the form which was
+  // autofilled.
+  void OnPasswordAutofilled(const autofill::PasswordFormMap& password_form_map,
+                            const GURL& origin);
 
   // Move to INACTIVE_STATE.
   void OnInactive();
 
   // Moves the object to |state| without resetting the internal data. Allowed:
-  // * -> BLACKLIST_STATE
   // * -> MANAGE_STATE
   void TransitionToState(password_manager::ui::State state);
 
   // Updates the internal state applying |changes|.
   void ProcessLoginsChanged(
       const password_manager::PasswordStoreChangeList& changes);
+
+  // Called when the user chooses a credential. Using data from |form| and
+  // |credential_type| it constructs the object which next is passed to the
+  // credentials callback. Method should be called in the
+  // CREDENTIAL_REQUEST_STATE state.
+  void ChooseCredential(const autofill::PasswordForm& form,
+                        password_manager::CredentialType credential_type);
 
   password_manager::ui::State state() const { return state_; }
   const GURL& origin() const { return origin_; }

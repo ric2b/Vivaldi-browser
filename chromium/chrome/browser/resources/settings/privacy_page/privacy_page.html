@@ -1,69 +1,206 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-material/paper-material.html">
-<link rel="import" href="chrome://resources/cr_elements/v1_0/cr_button/cr_button.html">
-<link rel="import" href="chrome://md-settings/checkbox/checkbox.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item-body.html">
+<link rel="import" href="chrome://md-settings/certificate_manager_page/certificate_manager_page.html">
+<link rel="import" href="chrome://md-settings/clear_browsing_data_page/clear_browsing_data_page.html">
+<link rel="import" href="chrome://md-settings/controls/settings_checkbox.html">
+<link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
+<link rel="import" href="chrome://md-settings/settings_page/settings_subheader.html">
+<link rel="import" href="chrome://md-settings/site_settings/constants.html">
+<link rel="import" href="chrome://md-settings/site_settings_page/site_settings_page.html">
 
-<dom-module id="cr-settings-privacy-page">
+<dom-module id="settings-privacy-page">
   <link rel="import" type="css"
-      href="chrome://md-settings/settings_page/settings_page.css">
+      href="chrome://md-settings/settings_shared.css">
   <link rel="import" type="css" href="privacy_page.css">
   <template>
-    <paper-material>
-      <p class="privacy-explanation"
-          i18n-values=".innerHTML:improveBrowsingExperience">
-      </p>
-      <cr-settings-checkbox
-          pref="{{prefs.alternate_error_pages.enabled}}"
-          i18n-values="label:linkDoctorPref">
-      </cr-settings-checkbox>
-      <cr-settings-checkbox
-          pref="{{prefs.search.suggest_enabled}}"
-          i18n-values="label:searchSuggestPref">
-      </cr-settings-checkbox>
-      <cr-settings-checkbox
-          pref="{{prefs.net.network_prediction_options}}"
-          i18n-values="label:networkPredictionEnabled">
-      </cr-settings-checkbox>
-      <cr-settings-checkbox
-          pref="{{prefs.safebrowsing.extended_reporting_enabled}}"
-          i18n-values="label:safeBrowsingEnableExtendedReporting">
-      </cr-settings-checkbox>
-      <cr-settings-checkbox pref="{{prefs.safebrowsing.enabled}}"
-          i18n-values="label:safeBrowsingEnableProtection">
-      </cr-settings-checkbox>
+    <settings-animated-pages id="pages" current-route="{{currentRoute}}"
+        section="privacy">
+      <neon-animatable id="main">
+        <div class="settings-box">
+          <p class="privacy-explanation"
+              i18n-values=".innerHTML:improveBrowsingExperience">
+          </p>
+          <settings-checkbox
+              pref="{{prefs.alternate_error_pages.enabled}}"
+              i18n-values="label:linkDoctorPref">
+          </settings-checkbox>
+          <settings-checkbox
+              pref="{{prefs.search.suggest_enabled}}"
+              i18n-values="label:searchSuggestPref">
+          </settings-checkbox>
+          <settings-checkbox
+              pref="{{prefs.net.network_prediction_options}}"
+              i18n-values="label:networkPredictionEnabled">
+          </settings-checkbox>
+          <settings-checkbox
+              pref="{{prefs.safebrowsing.extended_reporting_enabled}}"
+              i18n-values="label:safeBrowsingEnableExtendedReporting">
+          </settings-checkbox>
+          <settings-checkbox pref="{{prefs.safebrowsing.enabled}}"
+              i18n-values="label:safeBrowsingEnableProtection">
+          </settings-checkbox>
 <if expr="_google_chrome">
-      <cr-settings-checkbox
-          pref="{{prefs.spellcheck.use_spelling_service}}"
-          i18n-values="label:spellingPref">
-      </cr-settings-checkbox>
+          <settings-checkbox
+              pref="{{prefs.spellcheck.use_spelling_service}}"
+              i18n-values="label:spellingPref">
+          </settings-checkbox>
 <if expr="chromeos">
-      <cr-settings-checkbox
-          pref="{{prefs.cros.metrics.reportingEnabled}}"
-          i18n-values="label:enableLogging">
-      </cr-settings-checkbox>
+        <settings-checkbox
+              pref="{{prefs.cros.metrics.reportingEnabled}}"
+              i18n-values="label:enableLogging">
+          </settings-checkbox>
 </if>
-      <!-- TODO(jlklein): Add non-chromeos metrics box. -->
+          <!-- TODO(jlklein): Add non-chromeos metrics box. -->
 </if>
-      <cr-settings-checkbox pref="{{prefs.enable_do_not_track}}"
-          i18n-values="label:doNotTrack">
-      </cr-settings-checkbox>
+          <settings-checkbox pref="{{prefs.enable_do_not_track}}"
+              i18n-values="label:doNotTrack">
+          </settings-checkbox>
 <if expr="chromeos">
-      <cr-settings-checkbox
-          pref="{{prefs.cros.device.attestation_for_content_protection_enabled}}"
-          i18n-values="label:enableContentProtectionAttestation">
-      </cr-settings-checkbox>
-      <cr-settings-checkbox
-          pref="{{prefs.settings.internet.wake_on_wifi_ssid}}"
-          i18n-values="label:wakeOnWifi">
-      </cr-settings-checkbox>
+          <settings-checkbox
+              pref="{{prefs.cros.device.attestation_for_content_protection_enabled}}"
+              i18n-values="label:enableContentProtectionAttestation">
+          </settings-checkbox>
+          <settings-checkbox
+              pref="{{prefs.settings.internet.wake_on_wifi_darkconnect}}"
+              i18n-values="label:wakeOnWifi">
+          </settings-checkbox>
 </if>
-      <div class="privacy-buttons layout horizontal end-justified">
-        <cr-button i18n-content="siteSettingsLabel"></cr-button>
-        <cr-button raised i18n-content="clearBrowsingDataLabel">
-        </cr-button>
-      </div>
-    </paper-material>
+        </div>
+        <div class="settings-box" on-tap="onManageCertificatesTap_">
+          <div class="start">
+            <div i18n-content="manageCertificates"></div>
+            <div class="secondary">
+              <!-- TODO(dschuyler) replace this placeholder text -->
+              Contrary to popular belief, Lorem Ipsum is not simply random text.
+            </div>
+          </div>
+        </div>
+        <div class="settings-box" on-tap="onSiteSettingsTap_">
+          <div class="start">
+            <div i18n-content="siteSettings"></div>
+            <div class="secondary">
+              <!-- TODO(dschuyler) replace this placeholder text -->
+              Contrary to popular belief, Lorem Ipsum is not simply random text.
+            </div>
+          </div>
+        </div>
+        <div class="settings-box">
+          <paper-button on-tap="onClearBrowsingDataTap_"
+              i18n-content="clearBrowsingData">
+          </paper-button>
+        </div>
+      </neon-animatable>
+      <neon-animatable id="manage-certificates">
+        <settings-subheader i18n-values="page-title:manageCertificates">
+        </settings-subheader>
+        <settings-certificate-manager-page>
+        </settings-certificate-manager-page>
+      </neon-animatable>
+      <neon-animatable id="site-settings">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <settings-site-settings-page current-route="{{currentRoute}}"
+            prefs="{{prefs}}">
+        </settings-site-settings-page>
+      </neon-animatable>
+
+      <neon-animatable id="site-settings-category-camera">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.CAMERA}}">
+        </site-settings-category>
+      </neon-animatable>
+      <neon-animatable id="site-settings-category-cookies">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.COOKIES}}">
+        </site-settings-category>
+      </neon-animatable>
+      <neon-animatable id="site-settings-category-fullscreen">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.FULLSCREEN}}">
+        </site-settings-category>
+      </neon-animatable>
+      <neon-animatable id="site-settings-category-images">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.IMAGES}}">
+        </site-settings-category>
+      </neon-animatable>
+      <neon-animatable id="site-settings-category-location">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.GEOLOCATION}}">
+        </site-settings-category>
+      </neon-animatable>
+      <neon-animatable id="site-settings-category-javascript">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.JAVASCRIPT}}">
+        </site-settings-category>
+      </neon-animatable>
+      <neon-animatable id="site-settings-category-microphone">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.MIC}}">
+        </site-settings-category>
+      </neon-animatable>
+      <neon-animatable id="site-settings-category-notifications">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.NOTIFICATIONS}}">
+        </site-settings-category>
+      </neon-animatable>
+      <neon-animatable id="site-settings-category-popups">
+        <settings-subheader i18n-values="page-title:siteSettings">
+        </settings-subheader>
+        <site-settings-category
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}"
+            category="{{ContentSettingsTypes.POPUPS}}">
+        </site-settings-category>
+      </neon-animatable>
+
+      <neon-animatable id="site-details">
+        <site-details prefs="{{prefs}}" origin="{{originSelected}}">
+        </site-details>
+      </neon-animatable>
+      <neon-animatable id="clear-browsing-data">
+        <settings-subheader i18n-values="page-title:clearBrowsingData">
+        </settings-subheader>
+        <settings-clear-browsing-data-page prefs="{{prefs}}">
+        </settings-clear-browsing-data-page>
+      </neon-animatable>
+    </settings-animated-pages>
   </template>
   <script src="privacy_page.js"></script>
 </dom-module>

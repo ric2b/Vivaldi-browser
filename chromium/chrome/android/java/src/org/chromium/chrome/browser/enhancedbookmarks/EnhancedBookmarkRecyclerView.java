@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.enhancedbookmarks;
 
 import android.content.Context;
+import android.graphics.Rect;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.util.AttributeSet;
@@ -24,6 +25,23 @@ public class EnhancedBookmarkRecyclerView extends RecyclerView implements
 
     private EnhancedBookmarkDelegate mDelegate;
     private View mEmptyView;
+
+    /**
+     * Provides a way to override the default spacing between 2 items in RecyclerView.
+     */
+    private static class VerticalSpaceItemDecoration extends RecyclerView.ItemDecoration {
+        private final int mSpacing;
+
+        public VerticalSpaceItemDecoration(int spacing) {
+            this.mSpacing = spacing;
+        }
+
+        @Override
+        public void getItemOffsets(Rect outRect, View view, RecyclerView parent,
+                RecyclerView.State state) {
+            outRect.bottom = mSpacing;
+        }
+    }
 
     /**
      * Constructs a new instance of enhanced bookmark recycler view.
@@ -111,6 +129,12 @@ public class EnhancedBookmarkRecyclerView extends RecyclerView implements
     }
 
     @Override
+    public void onFilterStateSet(EnhancedBookmarkFilter filter) {
+        assert filter == EnhancedBookmarkFilter.OFFLINE_PAGES;
+        scrollToPosition(0);
+    }
+
+    @Override
     public void onSelectionStateChange(List<BookmarkId> selectedBookmarks) {
         if (!mDelegate.isSelectionEnabled()) {
             for (int i = 0; i < getLayoutManager().getChildCount(); ++i) {
@@ -118,5 +142,10 @@ public class EnhancedBookmarkRecyclerView extends RecyclerView implements
                 if (child instanceof Checkable) ((Checkable) child).setChecked(false);
             }
         }
+    }
+
+    @VisibleForTesting
+    public EnhancedBookmarkDelegate getDelegateForTesting() {
+        return mDelegate;
     }
 }

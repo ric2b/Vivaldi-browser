@@ -5,11 +5,12 @@
 #ifndef BASE_SHA1_H_
 #define BASE_SHA1_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/base_export.h"
-
-#include "base/basictypes.h"
 
 namespace base {
 
@@ -53,17 +54,17 @@ class SecureHashAlgorithm {
   void Pad();
   void Process();
 
-  uint32 A, B, C, D, E;
+  uint32_t A, B, C, D, E;
 
-  uint32 H[5];
+  uint32_t H[5];
 
   union {
-    uint32 W[80];
-    uint8 M[64];
+    uint32_t W[80];
+    uint8_t M[64];
   };
 
-  uint32 cursor;
-  uint64 l;
+  uint32_t cursor;
+  uint64_t l;
 };
 
 // These functions perform SHA-1 operations.

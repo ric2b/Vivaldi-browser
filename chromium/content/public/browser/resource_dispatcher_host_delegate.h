@@ -7,9 +7,10 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/files/file_path.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/resource_request_info.h"
 #include "content/public/common/resource_type.h"
 #include "ui/base/page_transition_types.h"
 
@@ -73,12 +74,13 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
   // Launches the url for the given tab. Returns true if an attempt to handle
   // the url was made, e.g. by launching an app. Note that this does not
   // guarantee that the app successfully handled it.
-  virtual bool HandleExternalProtocol(const GURL& url,
-                                      int child_id,
-                                      int route_id,
-                                      bool is_main_frame,
-                                      ui::PageTransition page_transition,
-                                      bool has_user_gesture);
+  virtual bool HandleExternalProtocol(
+      const GURL& url,
+      int child_id,
+      const ResourceRequestInfo::WebContentsGetter& web_contents_getter,
+      bool is_main_frame,
+      ui::PageTransition page_transition,
+      bool has_user_gesture);
 
   // Returns true if we should force the given resource to be downloaded.
   // Otherwise, the content layer decides.
@@ -86,20 +88,22 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
                                            const std::string& mime_type);
 
   // Returns true and sets |origin| if a Stream should be created for the
-  // resource.
-  // If true is returned, a new Stream will be created and OnStreamCreated()
-  // will be called with
-  // - a StreamHandle instance for the Stream. The handle contains the URL for
-  //   reading the Stream etc.
-  // The Stream's origin will be set to |origin|.
+  // resource. |plugin_path| is the plugin which will be used to handle the
+  // request (if the stream will be rendered in a BrowserPlugin). It may be
+  // empty. If true is returned, a new Stream will be created and
+  // OnStreamCreated() will be called with a StreamHandle instance for the
+  // Stream. The handle contains the URL for reading the Stream etc. The
+  // Stream's origin will be set to |origin|.
   //
   // If the stream will be rendered in a BrowserPlugin, |payload| will contain
   // the data that should be given to the old ResourceHandler to forward to the
   // renderer process.
-  virtual bool ShouldInterceptResourceAsStream(net::URLRequest* request,
-                                               const std::string& mime_type,
-                                               GURL* origin,
-                                               std::string* payload);
+  virtual bool ShouldInterceptResourceAsStream(
+      net::URLRequest* request,
+      const base::FilePath& plugin_path,
+      const std::string& mime_type,
+      GURL* origin,
+      std::string* payload);
 
   // Informs the delegate that a Stream was created. The Stream can be read from
   // the blob URL of the Stream, but can only be read once.
@@ -120,6 +124,11 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
 
   // Notification that a request has completed.
   virtual void RequestComplete(net::URLRequest* url_request);
+
+  // Asks the embedder if Lo-Fi mode should be enabled for the given request. It
+  // is only called for requests with an unspecified Lo-Fi value.
+  virtual bool ShouldEnableLoFiMode(const net::URLRequest& url_request,
+                                    content::ResourceContext* resource_context);
 
  protected:
   ResourceDispatcherHostDelegate();

@@ -4,12 +4,14 @@
 
 #include "mojo/runner/shell_test_base.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "mojo/public/cpp/bindings/error_handler.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/system/core.h"
 #include "mojo/services/test_service/test_request_tracker.mojom.h"
@@ -71,20 +73,6 @@ class ShellTestBaseTest : public ShellTestBase {
   TestTrackedRequestServicePtr request_tracking_;
 };
 
-class QuitMessageLoopErrorHandler : public ErrorHandler {
- public:
-  QuitMessageLoopErrorHandler() {}
-  ~QuitMessageLoopErrorHandler() override {}
-
-  // |ErrorHandler| implementation:
-  void OnConnectionError() override {
-    base::MessageLoop::current()->QuitWhenIdle();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(QuitMessageLoopErrorHandler);
-};
-
 // Tests that we can connect to a single service within a single app.
 TEST_F(ShellTestBaseTest, ConnectBasic) {
   InterfacePtr<TestService> service;
@@ -119,8 +107,8 @@ TEST_F(ShellTestBaseTest, ConnectInvalidService) {
 
   // It may have quit before an error was processed.
   if (!test_service.encountered_error()) {
-    QuitMessageLoopErrorHandler quitter;
-    test_service.set_error_handler(&quitter);
+    test_service.set_connection_error_handler(
+        []() { base::MessageLoop::current()->QuitWhenIdle(); });
     message_loop()->Run();
     EXPECT_TRUE(test_service.encountered_error());
   }
@@ -162,8 +150,8 @@ TEST_F(ShellTestBaseTest, DISABLED_ConnectInvalidServiceNetwork) {
   InterfacePtr<TestService> test_service;
   ConnectToService(GURL("http://example.com/non_existent_service"),
                    &test_service);
-  QuitMessageLoopErrorHandler quitter;
-  test_service.set_error_handler(&quitter);
+  test_service.set_connection_error_handler(
+      []() { base::MessageLoop::current()->QuitWhenIdle(); });
   bool was_run = false;
   test_service->Ping(SetAndQuit<bool>(&was_run, true));
   message_loop()->Run();
@@ -202,18 +190,18 @@ TEST_F(ShellTestBaseTest, ConnectMultipleInstancesPerApp) {
 // and parameters are passed around properly.
 TEST_F(ShellTestBaseTest, ConnectDifferentServicesInSingleApp) {
   // Have a TestService GetPartyTime on a TestTimeService in the same app.
-  int64 time_message;
+  int64_t time_message;
   TestServicePtr service;
   ConnectToService(test_app_url(), &service);
   service->ConnectToAppAndGetTime(test_app_url().spec(),
-                                  SetAndQuit<int64>(&time_message));
+                                  SetAndQuit<int64_t>(&time_message));
   message_loop()->Run();
 
   // Verify by hitting the TimeService directly.
   TestTimeServicePtr time_service;
   ConnectToService(test_app_url(), &time_service);
-  int64 party_time;
-  time_service->GetPartyTime(SetAndQuit<int64>(&party_time));
+  int64_t party_time;
+  time_service->GetPartyTime(SetAndQuit<int64_t>(&party_time));
   message_loop()->Run();
 
   EXPECT_EQ(time_message, party_time);
@@ -222,18 +210,18 @@ TEST_F(ShellTestBaseTest, ConnectDifferentServicesInSingleApp) {
 // Tests that a service A in App 1 can talk to service B in App 2 and
 // parameters are passed around properly.
 TEST_F(ShellTestBaseTest, ConnectDifferentServicesInDifferentApps) {
-  int64 time_message;
+  int64_t time_message;
   TestServicePtr service;
   ConnectToService(test_app_url(), &service);
   service->ConnectToAppAndGetTime("mojo:test_request_tracker_app",
-                                  SetAndQuit<int64>(&time_message));
+                                  SetAndQuit<int64_t>(&time_message));
   message_loop()->Run();
 
   // Verify by hitting the TimeService in the request tracker app directly.
   TestTimeServicePtr time_service;
   ConnectToService(GURL("mojo:test_request_tracker_app"), &time_service);
-  int64 party_time;
-  time_service->GetPartyTime(SetAndQuit<int64>(&party_time));
+  int64_t party_time;
+  time_service->GetPartyTime(SetAndQuit<int64_t>(&party_time));
   message_loop()->Run();
 
   EXPECT_EQ(time_message, party_time);
@@ -275,9 +263,9 @@ TEST_F(ShellTestBaseTest, ConnectManyClientsAndServices) {
   message_loop()->Run();
   for (int i = 0; i < 5; i++)
     service->Ping(Callback<void()>());
-  int64 time_result;
+  int64_t time_result;
   service->ConnectToAppAndGetTime("mojo:test_request_tracker_app",
-                                  SetAndQuit<int64>(&time_result));
+                                  SetAndQuit<int64_t>(&time_result));
   message_loop()->Run();
 
   // Also make a few requests to the TimeService in the test_app.
@@ -288,8 +276,8 @@ TEST_F(ShellTestBaseTest, ConnectManyClientsAndServices) {
   for (int i = 0; i < 18; i++)
     time_service->GetPartyTime(Callback<void(uint64_t)>());
   // Flush the tasks with one more to quit.
-  int64 party_time = 0;
-  time_service->GetPartyTime(SetAndQuit<int64>(&party_time));
+  int64_t party_time = 0;
+  time_service->GetPartyTime(SetAndQuit<int64_t>(&party_time));
   message_loop()->Run();
 
   std::vector<ServiceReport> reports;

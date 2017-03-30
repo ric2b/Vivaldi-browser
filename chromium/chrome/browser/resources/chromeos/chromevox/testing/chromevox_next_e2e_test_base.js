@@ -21,25 +21,38 @@ ChromeVoxNextE2ETest.prototype = {
   __proto__: ChromeVoxE2ETest.prototype,
 
   /**
-   * Launches a new tab with the given document, and runs callback when a load
-   * complete fires.
+   * Gets the desktop from the automation API and Launches a new tab with
+   * the given document, and runs |callback| when a load complete fires.
+   * Arranges to call |testDone()| after |callback| returns.
+   * NOTE: Callbacks creatd instide |opt_callback| must be wrapped with
+   * |this.newCallback| if passed to asynchonous calls.  Otherwise, the test
+   * will be finished prematurely.
    * @param {function() : void} doc Snippet wrapped inside of a function.
-   * @param {function()} opt_callback Called once the document is ready.
+   * @param {function(chrome.automation.AutomationNode)} callback
+   *     Called once the document is ready.
    */
   runWithLoadedTree: function(doc, callback) {
     callback = this.newCallback(callback);
     chrome.automation.getDesktop(function(r) {
-      var listener = function(evt) {
-        if (!evt.target.docUrl ||
-            evt.target.docUrl.indexOf('test') == -1)
-          return;
+      this.runWithTab(doc, function(newTabUrl) {
+        var listener = function(evt) {
+          if (!evt.target.docUrl || evt.target.docUrl != newTabUrl)
+            return;
 
-        r.removeEventListener(listener);
-        callback && callback(evt.target);
-        callback = null;
-      };
-      r.addEventListener('loadComplete', listener, true);
-      this.runWithTab(doc);
+          r.removeEventListener('loadComplete', listener, true);
+          callback && callback(evt.target);
+          callback = null;
+        };
+        r.addEventListener('loadComplete', listener, true);
+      }.bind(this));
     }.bind(this));
+  },
+
+  listenOnce: function(node, eventType, callback, capture) {
+    var innerCallback = this.newCallback(function() {
+      node.removeEventListener(eventType, innerCallback, capture);
+      callback.apply(this, arguments);
+    });
+    node.addEventListener(eventType, innerCallback, capture);
   }
 };

@@ -6,6 +6,7 @@
 #define CONTENT_RENDERER_MEDIA_MIDI_DISPATCHER_H_
 
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "content/common/permission_service.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "third_party/WebKit/public/web/WebMIDIClient.h"
@@ -24,14 +25,14 @@ class MidiDispatcher : public RenderFrameObserver,
                        public blink::WebMIDIClient {
  public:
   explicit MidiDispatcher(RenderFrame* render_frame);
-  virtual ~MidiDispatcher();
+  ~MidiDispatcher() override;
 
  private:
   // blink::WebMIDIClient implementation.
-  virtual void requestSysexPermission(
-      const blink::WebMIDIPermissionRequest& request);
-  virtual void cancelSysexPermissionRequest(
-      const blink::WebMIDIPermissionRequest& request);
+  void requestSysexPermission(
+      const blink::WebMIDIPermissionRequest& request) override;
+  void cancelSysexPermissionRequest(
+      const blink::WebMIDIPermissionRequest& request) override;
 
   // Permission for using system exclusive messages has been set.
   void OnSysExPermissionSet(int request_id, PermissionStatus status);

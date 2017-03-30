@@ -8,10 +8,13 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_MEDIA_GALLERIES_MEDIA_GALLERIES_API_H_
 #define CHROME_BROWSER_EXTENSIONS_API_MEDIA_GALLERIES_MEDIA_GALLERIES_API_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
@@ -23,6 +26,7 @@
 #include "components/storage_monitor/media_storage_util.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_event_histogram_value.h"
 
 namespace MediaGalleries = extensions::api::media_galleries;
 
@@ -73,6 +77,7 @@ class MediaGalleriesEventRouter : public BrowserContextKeyedAPI,
   friend class BrowserContextKeyedAPIFactory<MediaGalleriesEventRouter>;
 
   void DispatchEventToExtension(const std::string& extension_id,
+                                events::HistogramValue histogram_value,
                                 const std::string& event_name,
                                 scoped_ptr<base::ListValue> event_args);
 
@@ -284,7 +289,7 @@ class MediaGalleriesGetMetadataFunction : public ChromeAsyncExtensionFunction {
   void GetMetadata(MediaGalleries::GetMetadataType metadata_type,
                    const std::string& blob_uuid,
                    scoped_ptr<std::string> blob_header,
-                   int64 total_blob_length);
+                   int64_t total_blob_length);
 
   void OnSafeMediaMetadataParserDone(
       bool parse_success, scoped_ptr<base::DictionaryValue> result_dictionary,

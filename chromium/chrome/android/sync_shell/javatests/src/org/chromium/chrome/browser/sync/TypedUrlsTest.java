@@ -13,7 +13,7 @@ import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.sync.internal_api.pub.base.ModelType;
+import org.chromium.sync.ModelType;
 import org.chromium.sync.protocol.EntitySpecifics;
 import org.chromium.sync.protocol.SyncEnums;
 import org.chromium.sync.protocol.TypedUrlSpecifics;
@@ -51,7 +51,7 @@ public class TypedUrlsTest extends SyncTestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        setupTestAccountAndSignInToSync(CLIENT_ID);
+        setUpTestAccountAndSignInToSync();
         // Make sure the initial state is clean.
         assertClientTypedUrlCount(0);
         assertServerTypedUrlCountWithName(0, URL);
@@ -71,7 +71,8 @@ public class TypedUrlsTest extends SyncTestBase {
     @Feature({"Sync"})
     public void testDownloadTypedUrl() throws Exception {
         addServerTypedUrl(URL);
-        SyncTestUtil.triggerSyncAndWaitForCompletion(mContext);
+        SyncTestUtil.triggerSync();
+        waitForClientTypedUrlCount(1);
 
         // Verify data synced to client.
         List<TypedUrl> typedUrls = getClientTypedUrls();
@@ -87,15 +88,13 @@ public class TypedUrlsTest extends SyncTestBase {
     public void testDownloadDeletedTypedUrl() throws Exception {
         // Add the entity to test deleting.
         addServerTypedUrl(URL);
-        SyncTestUtil.triggerSyncAndWaitForCompletion(mContext);
-        assertServerTypedUrlCountWithName(1, URL);
-        assertClientTypedUrlCount(1);
+        SyncTestUtil.triggerSync();
+        waitForClientTypedUrlCount(1);
 
         // Delete on server, sync, and verify deleted locally.
         TypedUrl typedUrl = getClientTypedUrls().get(0);
         mFakeServerHelper.deleteEntity(typedUrl.id);
-        waitForServerTypedUrlCountWithName(0, URL);
-        SyncTestUtil.triggerSyncAndWaitForCompletion(mContext);
+        SyncTestUtil.triggerSync();
         waitForClientTypedUrlCount(0);
     }
 
@@ -104,7 +103,7 @@ public class TypedUrlsTest extends SyncTestBase {
             @Override
             public void run() {
                 LoadUrlParams params = new LoadUrlParams(url, PageTransition.TYPED);
-                getActivity().getActiveTab().loadUrl(params);
+                getActivity().getActivityTab().loadUrl(params);
             }
         });
     }
@@ -138,11 +137,12 @@ public class TypedUrlsTest extends SyncTestBase {
     private void assertServerTypedUrlCountWithName(int count, String name) {
         assertTrue("Expected " + count + " server typed URLs with name " + name + ".",
                 mFakeServerHelper.verifyEntityCountByTypeAndName(
-                        count, ModelType.TYPED_URL, name));
+                        count, ModelType.TYPED_URLS, name));
     }
 
     private void waitForClientTypedUrlCount(final int count) throws InterruptedException {
-        boolean success = CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria(
+                "Expected " + count + " local typed URL entities.") {
             @Override
             public boolean isSatisfied() {
                 try {
@@ -151,23 +151,22 @@ public class TypedUrlsTest extends SyncTestBase {
                     throw new RuntimeException(e);
                 }
             }
-        }, SyncTestUtil.UI_TIMEOUT_MS, SyncTestUtil.CHECK_INTERVAL_MS);
-        assertTrue("Expected " + count + " local typed URL entities.", success);
+        }, SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
     }
 
     private void waitForServerTypedUrlCountWithName(final int count, final String name)
             throws InterruptedException {
-        boolean success = CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria(
+                "Expected " + count + " server typed URLs with name " + name + ".") {
             @Override
             public boolean isSatisfied() {
                 try {
                     return mFakeServerHelper.verifyEntityCountByTypeAndName(
-                            count, ModelType.TYPED_URL, name);
+                            count, ModelType.TYPED_URLS, name);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
             }
-        }, SyncTestUtil.UI_TIMEOUT_MS, SyncTestUtil.CHECK_INTERVAL_MS);
-        assertTrue("Expected " + count + " server typed URLs with name " + name + ".", success);
+        }, SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
     }
 }

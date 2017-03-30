@@ -6,7 +6,9 @@
 
 #include <algorithm>
 
+#include "base/macros.h"
 #include "cc/animation/animation_delegate.h"
+#include "cc/animation/animation_events.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_player.h"
 #include "cc/animation/animation_registrar.h"
@@ -45,25 +47,22 @@ class AnimationHost::ScrollOffsetAnimations : public AnimationDelegate {
                              const gfx::ScrollOffset& target_offset,
                              const gfx::ScrollOffset& current_offset) {
     scoped_ptr<ScrollOffsetAnimationCurve> curve =
-        ScrollOffsetAnimationCurve::Create(target_offset,
-                                           EaseInOutTimingFunction::Create());
+        ScrollOffsetAnimationCurve::Create(
+            target_offset, EaseInOutTimingFunction::Create(),
+            ScrollOffsetAnimationCurve::DurationBehavior::INVERSE_DELTA);
     curve->SetInitialValue(current_offset);
 
     scoped_ptr<Animation> animation = Animation::Create(
-        curve.Pass(), AnimationIdProvider::NextAnimationId(),
+        std::move(curve), AnimationIdProvider::NextAnimationId(),
         AnimationIdProvider::NextGroupId(), Animation::SCROLL_OFFSET);
     animation->set_is_impl_only(true);
 
     DCHECK(scroll_offset_animation_player_);
     DCHECK(scroll_offset_animation_player_->animation_timeline());
 
-    if (scroll_offset_animation_player_->layer_id() != layer_id) {
-      if (scroll_offset_animation_player_->layer_id())
-        scroll_offset_animation_player_->DetachLayer();
-      scroll_offset_animation_player_->AttachLayer(layer_id);
-    }
+    ReattachScrollOffsetPlayerIfNeeded(layer_id);
 
-    scroll_offset_animation_player_->AddAnimation(animation.Pass());
+    scroll_offset_animation_player_->AddAnimation(std::move(animation));
   }
 
   bool ScrollAnimationUpdateTarget(int layer_id,
@@ -71,6 +70,9 @@ class AnimationHost::ScrollOffsetAnimations : public AnimationDelegate {
                                    const gfx::ScrollOffset& max_scroll_offset,
                                    base::TimeTicks frame_monotonic_time) {
     DCHECK(scroll_offset_animation_player_);
+    if (!scroll_offset_animation_player_->element_animations())
+      return false;
+
     DCHECK_EQ(layer_id, scroll_offset_animation_player_->layer_id());
 
     Animation* animation = scroll_offset_animation_player_->element_animations()
@@ -96,6 +98,11 @@ class AnimationHost::ScrollOffsetAnimations : public AnimationDelegate {
     return true;
   }
 
+  void ScrollAnimationAbort() {
+    DCHECK(scroll_offset_animation_player_);
+    scroll_offset_animation_player_->AbortAnimations(Animation::SCROLL_OFFSET);
+  }
+
   // AnimationDelegate implementation.
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
                               Animation::TargetProperty target_property,
@@ -107,8 +114,20 @@ class AnimationHost::ScrollOffsetAnimations : public AnimationDelegate {
     DCHECK(animation_host_->mutator_host_client());
     animation_host_->mutator_host_client()->ScrollOffsetAnimationFinished();
   }
+  void NotifyAnimationAborted(base::TimeTicks monotonic_time,
+                              Animation::TargetProperty target_property,
+                              int group) override {}
 
  private:
+  void ReattachScrollOffsetPlayerIfNeeded(int layer_id) {
+    if (scroll_offset_animation_player_->layer_id() != layer_id) {
+      if (scroll_offset_animation_player_->layer_id())
+        scroll_offset_animation_player_->DetachLayer();
+      if (layer_id)
+        scroll_offset_animation_player_->AttachLayer(layer_id);
+    }
+  }
+
   AnimationHost* animation_host_;
   scoped_refptr<AnimationTimeline> scroll_offset_timeline_;
 
@@ -207,7 +226,7 @@ void AnimationHost::RegisterPlayerForLayer(int layer_id,
     element_animations = new_element_animations.get();
 
     layer_to_element_animations_map_.add(layer_id,
-                                         new_element_animations.Pass());
+                                         std::move(new_element_animations));
     element_animations->CreateLayerAnimationController(layer_id);
   }
 
@@ -242,6 +261,11 @@ void AnimationHost::SetMutatorHostClient(MutatorHostClient* client) {
 void AnimationHost::SetNeedsCommit() {
   DCHECK(mutator_host_client_);
   mutator_host_client_->SetMutatorsNeedCommit();
+}
+
+void AnimationHost::SetNeedsRebuildPropertyTrees() {
+  DCHECK(mutator_host_client_);
+  mutator_host_client_->SetMutatorsNeedRebuildPropertyTrees();
 }
 
 void AnimationHost::PushPropertiesTo(AnimationHost* host_impl) {
@@ -337,18 +361,17 @@ bool AnimationHost::AnimateLayers(base::TimeTicks monotonic_time) {
 }
 
 bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
-                                         AnimationEventsVector* events) {
+                                         AnimationEvents* events) {
   return animation_registrar_->UpdateAnimationState(start_ready_animations,
                                                     events);
 }
 
-scoped_ptr<AnimationEventsVector> AnimationHost::CreateEvents() {
+scoped_ptr<AnimationEvents> AnimationHost::CreateEvents() {
   return animation_registrar_->CreateEvents();
 }
 
-void AnimationHost::SetAnimationEvents(
-    scoped_ptr<AnimationEventsVector> events) {
-  return animation_registrar_->SetAnimationEvents(events.Pass());
+void AnimationHost::SetAnimationEvents(scoped_ptr<AnimationEvents> events) {
+  return animation_registrar_->SetAnimationEvents(std::move(events));
 }
 
 bool AnimationHost::ScrollOffsetAnimationWasInterrupted(int layer_id) const {
@@ -357,41 +380,79 @@ bool AnimationHost::ScrollOffsetAnimationWasInterrupted(int layer_id) const {
                     : false;
 }
 
-bool AnimationHost::IsAnimatingFilterProperty(int layer_id) const {
-  LayerAnimationController* controller = GetControllerForLayerId(layer_id);
-  return controller ? controller->IsAnimatingProperty(Animation::FILTER)
-                    : false;
+static LayerAnimationController::ObserverType ObserverTypeFromTreeType(
+    LayerTreeType tree_type) {
+  return tree_type == LayerTreeType::ACTIVE
+             ? LayerAnimationController::ObserverType::ACTIVE
+             : LayerAnimationController::ObserverType::PENDING;
 }
 
-bool AnimationHost::IsAnimatingOpacityProperty(int layer_id) const {
+bool AnimationHost::IsAnimatingFilterProperty(int layer_id,
+                                              LayerTreeType tree_type) const {
   LayerAnimationController* controller = GetControllerForLayerId(layer_id);
-  return controller ? controller->IsAnimatingProperty(Animation::OPACITY)
-                    : false;
+  return controller
+             ? controller->IsCurrentlyAnimatingProperty(
+                   Animation::FILTER, ObserverTypeFromTreeType(tree_type))
+             : false;
 }
 
-bool AnimationHost::IsAnimatingTransformProperty(int layer_id) const {
+bool AnimationHost::IsAnimatingOpacityProperty(int layer_id,
+                                               LayerTreeType tree_type) const {
   LayerAnimationController* controller = GetControllerForLayerId(layer_id);
-  return controller ? controller->IsAnimatingProperty(Animation::TRANSFORM)
-                    : false;
+  return controller
+             ? controller->IsCurrentlyAnimatingProperty(
+                   Animation::OPACITY, ObserverTypeFromTreeType(tree_type))
+             : false;
 }
 
-bool AnimationHost::HasPotentiallyRunningOpacityAnimation(int layer_id) const {
+bool AnimationHost::IsAnimatingTransformProperty(
+    int layer_id,
+    LayerTreeType tree_type) const {
   LayerAnimationController* controller = GetControllerForLayerId(layer_id);
-  if (!controller)
-    return false;
+  return controller
+             ? controller->IsCurrentlyAnimatingProperty(
+                   Animation::TRANSFORM, ObserverTypeFromTreeType(tree_type))
+             : false;
+}
 
-  Animation* animation = controller->GetAnimation(Animation::OPACITY);
-  return animation && !animation->is_finished();
+bool AnimationHost::HasPotentiallyRunningFilterAnimation(
+    int layer_id,
+    LayerTreeType tree_type) const {
+  LayerAnimationController* controller = GetControllerForLayerId(layer_id);
+  return controller
+             ? controller->IsPotentiallyAnimatingProperty(
+                   Animation::FILTER, ObserverTypeFromTreeType(tree_type))
+             : false;
+}
+
+bool AnimationHost::HasPotentiallyRunningOpacityAnimation(
+    int layer_id,
+    LayerTreeType tree_type) const {
+  LayerAnimationController* controller = GetControllerForLayerId(layer_id);
+  return controller
+             ? controller->IsPotentiallyAnimatingProperty(
+                   Animation::OPACITY, ObserverTypeFromTreeType(tree_type))
+             : false;
 }
 
 bool AnimationHost::HasPotentiallyRunningTransformAnimation(
-    int layer_id) const {
+    int layer_id,
+    LayerTreeType tree_type) const {
+  LayerAnimationController* controller = GetControllerForLayerId(layer_id);
+  return controller
+             ? controller->IsPotentiallyAnimatingProperty(
+                   Animation::TRANSFORM, ObserverTypeFromTreeType(tree_type))
+             : false;
+}
+
+bool AnimationHost::HasAnyAnimationTargetingProperty(
+    int layer_id,
+    Animation::TargetProperty property) const {
   LayerAnimationController* controller = GetControllerForLayerId(layer_id);
   if (!controller)
     return false;
 
-  Animation* animation = controller->GetAnimation(Animation::TRANSFORM);
-  return animation && !animation->is_finished();
+  return !!controller->GetAnimation(property);
 }
 
 bool AnimationHost::FilterIsAnimatingOnImplOnly(int layer_id) const {
@@ -456,9 +517,14 @@ bool AnimationHost::TransformAnimationBoundsForBox(int layer_id,
                     : true;
 }
 
-bool AnimationHost::HasOnlyTranslationTransforms(int layer_id) const {
+bool AnimationHost::HasOnlyTranslationTransforms(
+    int layer_id,
+    LayerTreeType tree_type) const {
   LayerAnimationController* controller = GetControllerForLayerId(layer_id);
-  return controller ? controller->HasOnlyTranslationTransforms() : true;
+  return controller
+             ? controller->HasOnlyTranslationTransforms(
+                   ObserverTypeFromTreeType(tree_type))
+             : true;
 }
 
 bool AnimationHost::AnimationsPreserveAxisAlignment(int layer_id) const {
@@ -466,17 +532,26 @@ bool AnimationHost::AnimationsPreserveAxisAlignment(int layer_id) const {
   return controller ? controller->AnimationsPreserveAxisAlignment() : true;
 }
 
-bool AnimationHost::MaximumTargetScale(int layer_id, float* max_scale) const {
+bool AnimationHost::MaximumTargetScale(int layer_id,
+                                       LayerTreeType tree_type,
+                                       float* max_scale) const {
   *max_scale = 0.f;
   LayerAnimationController* controller = GetControllerForLayerId(layer_id);
-  return controller ? controller->MaximumTargetScale(max_scale) : true;
+  return controller
+             ? controller->MaximumTargetScale(
+                   ObserverTypeFromTreeType(tree_type), max_scale)
+             : true;
 }
 
 bool AnimationHost::AnimationStartScale(int layer_id,
+                                        LayerTreeType tree_type,
                                         float* start_scale) const {
   *start_scale = 0.f;
   LayerAnimationController* controller = GetControllerForLayerId(layer_id);
-  return controller ? controller->AnimationStartScale(start_scale) : true;
+  return controller
+             ? controller->AnimationStartScale(
+                   ObserverTypeFromTreeType(tree_type), start_scale)
+             : true;
 }
 
 bool AnimationHost::HasAnyAnimation(int layer_id) const {
@@ -506,6 +581,11 @@ bool AnimationHost::ImplOnlyScrollAnimationUpdateTarget(
   DCHECK(scroll_offset_animations_);
   return scroll_offset_animations_->ScrollAnimationUpdateTarget(
       layer_id, scroll_delta, max_scroll_offset, frame_monotonic_time);
+}
+
+void AnimationHost::ScrollAnimationAbort() {
+  DCHECK(scroll_offset_animations_);
+  return scroll_offset_animations_->ScrollAnimationAbort();
 }
 
 }  // namespace cc

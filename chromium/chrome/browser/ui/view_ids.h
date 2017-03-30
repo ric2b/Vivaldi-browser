@@ -57,8 +57,10 @@ enum ViewID {
   VIEW_ID_BROWSER_ACTION_TOOLBAR,
   VIEW_ID_BROWSER_ACTION,
   VIEW_ID_FEEDBACK_BUTTON,
+  VIEW_ID_LOCATION_ICON,
   VIEW_ID_OMNIBOX,
   VIEW_ID_SCRIPT_BUBBLE,
+  VIEW_ID_SAVE_CREDIT_CARD_BUTTON,
   VIEW_ID_TRANSLATE_BUTTON,
 
   // The Bookmark Bar.
@@ -86,9 +88,6 @@ enum ViewID {
 
   // The Download shelf.
   VIEW_ID_DOWNLOAD_SHELF,
-
-  // The omnibox icon to do voice-based search.
-  VIEW_ID_MIC_SEARCH_BUTTON,
 
   // Used in chrome/browser/ui/cocoa/view_id_util_browsertest.mm.
   // If you add new ids, make sure the above test passes.

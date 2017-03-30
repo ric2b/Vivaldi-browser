@@ -5,10 +5,13 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_NAVIGATION_ENTRY_IMPL_H_
 #define CONTENT_BROWSER_FRAME_HOST_NAVIGATION_ENTRY_IMPL_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/frame_navigation_entry.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/site_instance_impl.h"
@@ -82,6 +85,12 @@ class CONTENT_EXPORT NavigationEntryImpl
   const GURL& GetURL() const override;
   void SetBaseURLForDataURL(const GURL& url) override;
   const GURL& GetBaseURLForDataURL() const override;
+#if defined(OS_ANDROID)
+  void SetDataURLAsString(
+      scoped_refptr<base::RefCountedString> data_url) override;
+  const scoped_refptr<const base::RefCountedString> GetDataURLAsString()
+      const override;
+#endif
   void SetReferrer(const Referrer& referrer) override;
   const Referrer& GetReferrer() const override;
   void SetVirtualURL(const GURL& url) override;
@@ -89,9 +98,9 @@ class CONTENT_EXPORT NavigationEntryImpl
   void SetTitle(const base::string16& title) override;
   const base::string16& GetTitle() const override;
   void SetPageState(const PageState& state) override;
-  const PageState& GetPageState() const override;
+  PageState GetPageState() const override;
   void SetPageID(int page_id) override;
-  int32 GetPageID() const override;
+  int32_t GetPageID() const override;
   const base::string16& GetTitleForDisplay(
       const std::string& languages) const override;
   bool IsViewSourceMode() const override;
@@ -100,8 +109,8 @@ class CONTENT_EXPORT NavigationEntryImpl
   const GURL& GetUserTypedURL() const override;
   void SetHasPostData(bool has_post_data) override;
   bool GetHasPostData() const override;
-  void SetPostID(int64 post_id) override;
-  int64 GetPostID() const override;
+  void SetPostID(int64_t post_id) override;
+  int64_t GetPostID() const override;
   void SetBrowserInitiatedPostData(const base::RefCountedMemory* data) override;
   const base::RefCountedMemory* GetBrowserInitiatedPostData() const override;
   const FaviconStatus& GetFavicon() const override;
@@ -146,12 +155,12 @@ class CONTENT_EXPORT NavigationEntryImpl
   CommonNavigationParams ConstructCommonNavigationParams(
       const GURL& dest_url,
       const Referrer& dest_referrer,
-      const FrameNavigationEntry& frame_entry,
-      FrameMsg_Navigate_Type::Value navigation_type) const;
+      FrameMsg_Navigate_Type::Value navigation_type,
+      LoFiState lofi_state,
+      const base::TimeTicks& navigation_start) const;
   StartNavigationParams ConstructStartNavigationParams() const;
   RequestNavigationParams ConstructRequestNavigationParams(
       const FrameNavigationEntry& frame_entry,
-      base::TimeTicks navigation_start,
       bool is_same_document_history_load,
       bool has_committed_real_load,
       bool intended_as_new_entry,
@@ -179,8 +188,9 @@ class CONTENT_EXPORT NavigationEntryImpl
   // Does nothing if there is no entry already and |url| is about:blank, since
   // that does not count as a real commit.
   void AddOrUpdateFrameEntry(FrameTreeNode* frame_tree_node,
-                             int64 item_sequence_number,
-                             int64 document_sequence_number,
+                             const std::string& frame_unique_name,
+                             int64_t item_sequence_number,
+                             int64_t document_sequence_number,
                              SiteInstanceImpl* site_instance,
                              const GURL& url,
                              const Referrer& referrer,
@@ -189,6 +199,15 @@ class CONTENT_EXPORT NavigationEntryImpl
   // Returns the FrameNavigationEntry corresponding to |frame_tree_node|, if
   // there is one in this NavigationEntry.
   FrameNavigationEntry* GetFrameEntry(FrameTreeNode* frame_tree_node) const;
+
+  // Returns the FrameNavigationEntry corresponding to the frame with the given
+  // |unique_name|, if any. This is useful when the FrameTreeNode cannot be used
+  // to find the entry, such as for a newly created subframe in a history
+  // navigation. Callers should update the FrameTreeNode ID of the entry so that
+  // it can be found with |GetFrameEntry| above.
+  // TODO(creis): Generate or verify the unique_name in the browser process.
+  FrameNavigationEntry* GetFrameEntryByUniqueName(
+      const std::string& unique_name) const;
 
   void set_unique_id(int unique_id) {
     unique_id_ = unique_id;
@@ -333,6 +352,14 @@ class CONTENT_EXPORT NavigationEntryImpl
       const base::TimeTicks intent_received_timestamp) {
     intent_received_timestamp_ = intent_received_timestamp;
   }
+
+  bool has_user_gesture() const {
+    return has_user_gesture_;
+  }
+
+  void set_has_user_gesture (bool has_user_gesture) {
+    has_user_gesture_ = has_user_gesture;
+  }
 #endif
 
  private:
@@ -363,12 +390,12 @@ class CONTENT_EXPORT NavigationEntryImpl
   bool update_virtual_url_with_url_;
   base::string16 title_;
   FaviconStatus favicon_;
-  int32 page_id_;
+  int32_t page_id_;
   SSLStatus ssl_;
   ui::PageTransition transition_type_;
   GURL user_typed_url_;
   bool has_post_data_;
-  int64 post_id_;
+  int64_t post_id_;
   RestoreType restore_type_;
   GURL original_request_url_;
   bool is_overriding_user_agent_;
@@ -400,6 +427,12 @@ class CONTENT_EXPORT NavigationEntryImpl
   // Used for specifying base URL for pages loaded via data URLs. Only used and
   // persisted by Android WebView.
   GURL base_url_for_data_url_;
+
+#if defined(OS_ANDROID)
+  // Used for passing really big data URLs from browser to renderers. Only used
+  // and persisted by Android WebView.
+  scoped_refptr<const base::RefCountedString> data_url_as_string_;
+#endif
 
   // Whether the entry, while loading, was created for a renderer-initiated
   // navigation.  This dictates whether the URL should be displayed before the
@@ -460,6 +493,9 @@ class CONTENT_EXPORT NavigationEntryImpl
   // The time at which Chrome received the Android Intent that triggered this
   // URL load operation. Reset at commit and not persisted.
   base::TimeTicks intent_received_timestamp_;
+
+  // Whether the URL load carries a user gesture.
+  bool has_user_gesture_;
 #endif
 
   // Used to store extra data to support browser features. This member is not

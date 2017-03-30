@@ -19,8 +19,7 @@ SearchEngineManagerWebUITest.prototype = {
 };
 
 // See crosbug.com/22673
-// TODO(vivaldi) Reenable mac for Vivaldi
-GEN('#if defined(OS_CHROMEOS) || defined(OS_MACOSX)');
+GEN('#if defined(OS_CHROMEOS)');
 GEN('#define MAYBE_testOpenSearchEngineManager ' +
         'DISABLED_testOpenSearchEngineManager');
 GEN('#else');

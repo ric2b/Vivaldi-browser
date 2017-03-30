@@ -27,13 +27,15 @@ class WebGamepads;
 class WebHistoryItem;
 class WebLayer;
 class WebLocalFrame;
+class WebMediaStream;
 class WebPlugin;
 struct WebPluginParams;
-class WebURLResponse;
-class WebView;
+struct WebPoint;
 struct WebRect;
 struct WebSize;
 struct WebURLError;
+class WebURLResponse;
+class WebView;
 }
 
 namespace cc {
@@ -144,21 +146,46 @@ class WebTestDelegate {
   virtual void EvaluateInWebInspector(long call_id,
                                       const std::string& script) = 0;
 
+  // Evaluate the given script in the inspector overlay page.
+  virtual std::string EvaluateInWebInspectorOverlay(
+      const std::string& script) = 0;
+
   // Controls WebSQL databases.
   virtual void ClearAllDatabases() = 0;
   virtual void SetDatabaseQuota(int quota) = 0;
 
   // Controls Web Notifications.
-  virtual void SimulateWebNotificationClick(const std::string& title) = 0;
+  virtual void SimulateWebNotificationClick(const std::string& title,
+                                            int action_index) = 0;
 
   // Controls the device scale factor of the main WebView for hidpi tests.
   virtual void SetDeviceScaleFactor(float factor) = 0;
+
+  // Enable zoom-for-dsf option.
+  virtual void EnableUseZoomForDSF() = 0;
 
   // Change the device color profile while running a layout test.
   virtual void SetDeviceColorProfile(const std::string& name) = 0;
 
   // Change the bluetooth test data while running a layout test.
   virtual void SetBluetoothMockDataSet(const std::string& data_set) = 0;
+
+  // Makes the Bluetooth chooser record its input and wait for instructions from
+  // the test program on how to proceed.
+  virtual void SetBluetoothManualChooser() = 0;
+
+  // Returns the events recorded since the last call to this function.
+  virtual void GetBluetoothManualChooserEvents(
+      const base::Callback<void(const std::vector<std::string>& events)>&
+          callback) = 0;
+
+  // Calls the BluetoothChooser::EventHandler with the arguments here. Valid
+  // event strings are:
+  //  * "cancel" - simulates the user canceling the chooser.
+  //  * "select" - simulates the user selecting a device whose device ID is in
+  //               |argument|.
+  virtual void SendBluetoothManualChooserEvent(const std::string& event,
+                                               const std::string& argument) = 0;
 
   // Enables mock geofencing service while running a layout test.
   // |service_available| indicates if the mock service should mock geofencing
@@ -226,13 +253,11 @@ class WebTestDelegate {
   // Clear all the permissions set via SetPermission().
   virtual void ResetPermissions() = 0;
 
-  // Creates cc::TextureLayer for TestPlugin.
-  virtual scoped_refptr<cc::TextureLayer> CreateTextureLayerForMailbox(
-      cc::TextureLayerClient* client) = 0;
-
-  // Instantiates WebLayerImpl for TestPlugin.
-  virtual blink::WebLayer* InstantiateWebLayer(
-      scoped_refptr<cc::TextureLayer> layer) = 0;
+  // Add content MediaStream classes to the Blink MediaStream ones.
+  virtual bool AddMediaStreamVideoSourceAndTrack(
+      blink::WebMediaStream* stream) = 0;
+  virtual bool AddMediaStreamAudioSourceAndTrack(
+      blink::WebMediaStream* stream) = 0;
 
   virtual cc::SharedBitmapManager* GetSharedBitmapManager() = 0;
 
@@ -257,6 +282,12 @@ class WebTestDelegate {
   virtual blink::WebPlugin* CreatePluginPlaceholder(
     blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params) = 0;
+
+  virtual void OnWebTestProxyBaseDestroy(WebTestProxyBase* proxy) = 0;
+
+  // Convert the position in DIP to native coordinates.
+  virtual blink::WebPoint ConvertDIPToNative(
+      const blink::WebPoint& point_in_dip) const = 0;
 };
 
 }  // namespace test_runner

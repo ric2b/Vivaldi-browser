@@ -44,6 +44,12 @@ if (!link_pulseaudio) {
   }
 }
 
+config("platform_config") {
+  if (use_alsa) {
+    defines = [ "USE_ALSA" ]
+  }
+}
+
 source_set("audio") {
   visibility = [ "//media/*" ]
   sources = [
@@ -82,6 +88,8 @@ source_set("audio") {
     "audio_power_monitor.cc",
     "audio_power_monitor.h",
     "audio_source_diverter.h",
+    "audio_streams_tracker.cc",
+    "audio_streams_tracker.h",
     "clockless_audio_sink.cc",
     "clockless_audio_sink.h",
     "fake_audio_input_stream.cc",
@@ -116,6 +124,7 @@ source_set("audio") {
   deps = []
   libs = []
   configs += [
+    ":platform_config",
     "//media:media_config",
     "//media:media_implementation",
   ]
@@ -161,6 +170,8 @@ source_set("audio") {
       "win/waveout_output_win.cc",
       "win/waveout_output_win.h",
     ]
+
+    libs += [ "dxguid.lib" ]
   }
 
   if (is_android) {
@@ -178,20 +189,12 @@ source_set("audio") {
     deps += [ "//media/base/android:media_jni_headers" ]
   }
 
-  if (is_openbsd) {
-    sources += [
-      "openbsd/audio_manager_openbsd.cc",
-      "openbsd/audio_manager_openbsd.h",
-    ]
-  }
-
   if (is_linux) {
     sources += [ "linux/audio_manager_linux.cc" ]
   }
 
   if (use_alsa) {
     libs += [ "asound" ]
-    defines = [ "USE_ALSA" ]
     sources += [
       "alsa/alsa_input.cc",
       "alsa/alsa_input.h",
@@ -215,11 +218,8 @@ source_set("audio") {
       "cras/cras_unified.cc",
       "cras/cras_unified.h",
     ]
-
-    pkg_config("libcras") {
-      packages = [ "libcras" ]
-    }
     configs += [ ":libcras" ]
+    deps += [ "//chromeos:chromeos" ]
   }
 
   if (use_pulseaudio) {
@@ -235,9 +235,6 @@ source_set("audio") {
     ]
 
     if (link_pulseaudio) {
-      pkg_config("libpulse") {
-        packages = [ "libpulse" ]
-      }
       configs += [ ":libpulse" ]
     } else {
       # TODO(ajwong): Technically, this dl should go in the action.
@@ -248,6 +245,18 @@ source_set("audio") {
   }
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+}
+
+if (use_cras) {
+  pkg_config("libcras") {
+    packages = [ "libcras" ]
+  }
+}
+
+if (use_pulseaudio && link_pulseaudio) {
+  pkg_config("libpulse") {
+    packages = [ "libpulse" ]
+  }
 }
 
 source_set("test_support") {
@@ -262,6 +271,7 @@ source_set("test_support") {
     "test_audio_input_controller_factory.cc",
     "test_audio_input_controller_factory.h",
   ]
+  configs += [ ":platform_config" ]
   deps = [
     "//testing/gmock",
   ]
@@ -280,7 +290,9 @@ source_set("unittests") {
     "audio_output_proxy_unittest.cc",
     "audio_parameters_unittest.cc",
     "audio_power_monitor_unittest.cc",
+    "audio_streams_tracker_unittest.cc",
     "fake_audio_worker_unittest.cc",
+    "point_unittest.cc",
     "simple_sources_unittest.cc",
     "virtual_audio_input_stream_unittest.cc",
     "virtual_audio_output_stream_unittest.cc",
@@ -294,6 +306,7 @@ source_set("unittests") {
   ]
 
   configs += [
+    ":platform_config",
     "//build/config/compiler:no_size_t_to_int_warning",
     "//media:media_config",
   ]
@@ -301,8 +314,6 @@ source_set("unittests") {
   if (is_android) {
     sources += [ "android/audio_android_unittest.cc" ]
     deps += [ "//ui/gl" ]
-  } else {
-    sources += [ "audio_input_volume_unittest.cc" ]
   }
 
   if (is_mac) {
@@ -313,7 +324,7 @@ source_set("unittests") {
     ]
   }
 
-  if (is_chromeos) {
+  if (is_chromeos || is_chromecast) {
     sources += [
       "sounds/audio_stream_handler_unittest.cc",
       "sounds/sounds_manager_unittest.cc",

@@ -18,6 +18,7 @@
 #include "components/password_manager/core/browser/password_generation_manager.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -116,7 +117,7 @@ class PasswordGenerationInteractiveTest :
     content::NativeWebKeyboardEvent event;
     event.windowsKeyCode = key;
     event.type = blink::WebKeyboardEvent::RawKeyDown;
-    RenderViewHost()->ForwardKeyboardEvent(event);
+    RenderViewHost()->GetWidget()->ForwardKeyboardEvent(event);
   }
 
   bool GenerationPopupShowing() {
@@ -192,7 +193,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
 // Disabled due to flakiness due to resizes, see http://crbug.com/407998.
 IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
                        DISABLED_AutoSavingGeneratedPassword) {
-  password_manager::TestPasswordStore* password_store =
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
       static_cast<password_manager::TestPasswordStore*>(
           PasswordStoreFactory::GetForProfile(
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS).get());

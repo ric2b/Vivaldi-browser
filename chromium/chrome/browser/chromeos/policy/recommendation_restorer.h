@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/timer/timer.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -64,7 +64,7 @@ class RecommendationRestorer : public KeyedService,
 
   bool logged_in_;
 
-  base::OneShotTimer<RecommendationRestorer> restore_timer_;
+  base::OneShotTimer restore_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(RecommendationRestorer);
 };

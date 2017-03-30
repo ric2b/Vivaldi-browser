@@ -4,13 +4,14 @@
 
 #include "content/renderer/input/input_event_filter.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/input/input_handler.h"
 #include "content/common/input/did_overscroll_params.h"
 #include "content/common/input/web_input_event_traits.h"
 #include "content/common/input_messages.h"
@@ -18,6 +19,7 @@
 #include "content/public/common/content_switches.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "ui/events/blink/synchronous_input_handler_proxy.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
 using blink::WebInputEvent;
@@ -56,8 +58,10 @@ void InputEventFilter::SetBoundHandler(const Handler& handler) {
   handler_ = handler;
 }
 
-void InputEventFilter::DidAddInputHandler(int routing_id,
-                                          cc::InputHandler* input_handler) {
+void InputEventFilter::DidAddInputHandler(
+    int routing_id,
+    ui::SynchronousInputHandlerProxy*
+        synchronous_input_handler_proxy) {
   base::AutoLock locked(routes_lock_);
   routes_.insert(routing_id);
 }
@@ -147,7 +151,6 @@ void InputEventFilter::ForwardToHandler(const IPC::Message& message) {
     return;
   const WebInputEvent* event = base::get<0>(params);
   ui::LatencyInfo latency_info = base::get<1>(params);
-  bool is_keyboard_shortcut = base::get<2>(params);
   DCHECK(event);
 
   const bool send_ack = WebInputEventTraits::WillReceiveAckFromRenderer(*event);
@@ -167,8 +170,8 @@ void InputEventFilter::ForwardToHandler(const IPC::Message& message) {
         "input",
         "InputEventFilter::ForwardToHandler::ForwardToMainListener",
         TRACE_EVENT_SCOPE_THREAD);
-    IPC::Message new_msg = InputMsg_HandleInputEvent(
-        routing_id, event, latency_info, is_keyboard_shortcut);
+    IPC::Message new_msg =
+        InputMsg_HandleInputEvent(routing_id, event, latency_info);
     main_task_runner_->PostTask(FROM_HERE, base::Bind(main_listener_, new_msg));
     return;
   }
@@ -177,7 +180,7 @@ void InputEventFilter::ForwardToHandler(const IPC::Message& message) {
     return;
 
   InputEventAck ack(event->type, ack_state, latency_info,
-                    overscroll_params.Pass(),
+                    std::move(overscroll_params),
                     WebInputEventTraits::GetUniqueTouchEventId(*event));
   SendMessage(scoped_ptr<IPC::Message>(
       new InputHostMsg_HandleInputEvent_ACK(routing_id, ack)));

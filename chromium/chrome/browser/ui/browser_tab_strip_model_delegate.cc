@@ -4,16 +4,16 @@
 
 #include "chrome/browser/ui/browser_tab_strip_model_delegate.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/task_management/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/fast_unload_controller.h"
@@ -21,6 +21,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/unload_controller.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/sessions/content/content_live_tab.h"
+#include "components/sessions/core/tab_restore_service.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -112,13 +114,13 @@ void BrowserTabStripModelDelegate::CreateHistoricalTab(
   if (!browser_->profile() || browser_->profile()->IsOffTheRecord())
     return;
 
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
 
   // We only create historical tab entries for tabbed browser windows.
   if (service && browser_->CanSupportWindowFeature(Browser::FEATURE_TABSTRIP)) {
     service->CreateHistoricalTab(
-        contents,
+        sessions::ContentLiveTab::GetForWebContents(contents),
         browser_->tab_strip_model()->GetIndexOfWebContents(contents));
   }
 }

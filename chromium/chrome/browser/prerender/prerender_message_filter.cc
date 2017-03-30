@@ -5,6 +5,7 @@
 #include "chrome/browser/prerender/prerender_message_filter.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/prerender/prerender_link_manager.h"
 #include "chrome/browser/prerender/prerender_link_manager_factory.h"
@@ -23,11 +24,11 @@ class ShutdownNotifierFactory
     : public BrowserContextKeyedServiceShutdownNotifierFactory {
  public:
   static ShutdownNotifierFactory* GetInstance() {
-    return Singleton<ShutdownNotifierFactory>::get();
+    return base::Singleton<ShutdownNotifierFactory>::get();
   }
 
  private:
-  friend struct DefaultSingletonTraits<ShutdownNotifierFactory>;
+  friend struct base::DefaultSingletonTraits<ShutdownNotifierFactory>;
 
   ShutdownNotifierFactory()
       : BrowserContextKeyedServiceShutdownNotifierFactory(

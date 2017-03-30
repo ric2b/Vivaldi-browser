@@ -6,10 +6,14 @@
 #define BASE_MEMORY_DISCARDABLE_MEMORY_H_
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 
 namespace base {
+
+namespace trace_event {
+class MemoryAllocatorDump;
+class ProcessMemoryDump;
+}
 
 // Discardable memory is used to cache large objects without worrying about
 // blowing out memory, both on mobile devices where there is no swap, and
@@ -59,6 +63,14 @@ class BASE_EXPORT DiscardableMemory {
   template<typename T> T* data_as() const {
     return reinterpret_cast<T*>(data());
   }
+
+  // Used for dumping the statistics of discardable memory allocated in tracing.
+  // Returns a new MemoryAllocatorDump in the |pmd| with the size of the
+  // discardable memory. The MemoryAllocatorDump created is owned by |pmd|. See
+  // ProcessMemoryDump::CreateAllocatorDump.
+  virtual trace_event::MemoryAllocatorDump* CreateMemoryAllocatorDump(
+      const char* name,
+      trace_event::ProcessMemoryDump* pmd) const = 0;
 };
 
 }  // namespace base

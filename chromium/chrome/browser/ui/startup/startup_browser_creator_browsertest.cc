@@ -2,14 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -41,9 +45,12 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/metrics/metrics_pref_names.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_system.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -98,6 +105,44 @@ bool IsWindows10OrNewer() {
 #else
   return false;
 #endif
+}
+
+#if defined(OS_WIN)
+// This function is used to verify a callback was successfully invoked.
+void SetTrue(bool* value) {
+  ASSERT_TRUE(value);
+  *value = true;
+}
+
+bool TabStripContainsUrl(TabStripModel* tab_strip, GURL url) {
+  for (int i = 0; i < tab_strip->count(); ++i) {
+    if (tab_strip->GetWebContentsAt(i)->GetURL() == url)
+      return true;
+  }
+  return false;
+}
+
+void ProcessCommandLineAlreadyRunningDefaultProfile(
+    const base::CommandLine& cmdline) {
+  StartupBrowserCreator browser_creator;
+
+  base::FilePath current_dir;
+  ASSERT_TRUE(base::GetCurrentDirectory(&current_dir));
+  base::FilePath user_data_dir =
+      g_browser_process->profile_manager()->user_data_dir();
+  base::FilePath startup_profile_dir =
+      g_browser_process->profile_manager()->GetLastUsedProfileDir(
+          user_data_dir);
+
+  browser_creator.ProcessCommandLineAlreadyRunning(cmdline, current_dir,
+                                                   startup_profile_dir);
+}
+#endif  // defined(OS_WIN)
+
+GURL GetSigninPromoURL() {
+  return signin::GetPromoURL(
+      signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
+      signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false);
 }
 
 }  // namespace
@@ -216,14 +261,13 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenURLsPopup) {
 // Verify that startup URLs are honored when the process already exists but has
 // no tabbed browser windows (eg. as if the process is running only due to a
 // background application.
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
-                       DISABLED_StartupURLsOnNewWindowWithNoTabbedBrowsers) {
+                       StartupURLsOnNewWindowWithNoTabbedBrowsers) {
   // Use a couple same-site HTTP URLs.
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   std::vector<GURL> urls;
-  urls.push_back(test_server()->GetURL("files/title1.html"));
-  urls.push_back(test_server()->GetURL("files/title2.html"));
+  urls.push_back(embedded_test_server()->GetURL("/title1.html"));
+  urls.push_back(embedded_test_server()->GetURL("/title2.html"));
 
   Profile* profile = browser()->profile();
   chrome::HostDesktopType host_desktop_type = browser()->host_desktop_type();
@@ -303,9 +347,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
 // Verify that startup URLs aren't used when the process already exists
 // and has other tabbed browser windows.  This is the common case of starting a
 // new browser.
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
-                       DISABLED_StartupURLsOnNewWindow) {
+                       StartupURLsOnNewWindow) {
   // Use a couple arbitrary URLs.
   std::vector<GURL> urls;
   urls.push_back(ui_test_utils::GetTestUrl(
@@ -369,8 +412,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
 
 // App shortcuts are not implemented on mac os.
 #if !defined(OS_MACOSX)
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_OpenAppShortcutNoPref) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutNoPref) {
   // Load an app with launch.container = 'tab'.
   const Extension* extension_app = NULL;
   ASSERT_NO_FATAL_FAILURE(LoadApp("app_with_tab_container", &extension_app));
@@ -397,8 +439,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_OpenAppShortcutNoPref
   EXPECT_EQ(new_bookmark_apps_enabled, new_browser->is_type_tabbed());
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_OpenAppShortcutWindowPref) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutWindowPref) {
   const Extension* extension_app = NULL;
   ASSERT_NO_FATAL_FAILURE(LoadApp("app_with_tab_container", &extension_app));
 
@@ -428,8 +469,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_OpenAppShortcutWindow
       std::string::npos) << new_browser->app_name_;
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_OpenAppShortcutTabPref) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutTabPref) {
   // Load an app with launch.container = 'tab'.
   const Extension* extension_app = NULL;
   ASSERT_NO_FATAL_FAILURE(LoadApp("app_with_tab_container", &extension_app));
@@ -491,17 +531,19 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   EXPECT_FALSE(StartupBrowserCreator::WasRestarted());
 }
 
-// TODO reenable test for Vivaldi
 // Fails on official builds. See http://crbug.com/313856
-#if 1 || defined(GOOGLE_CHROME_BUILD)
+#if defined(GOOGLE_CHROME_BUILD)
 #define MAYBE_AddFirstRunTab DISABLED_AddFirstRunTab
 #else
 #define MAYBE_AddFirstRunTab AddFirstRunTab
 #endif
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, MAYBE_AddFirstRunTab) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title2.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title2.html"));
 
   // Do a simple non-process-startup browser launch.
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
@@ -525,18 +567,20 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, MAYBE_AddFirstRunTab) {
 
 // Test hard-coded special first run tabs (defined in
 // StartupBrowserCreatorImpl::AddStartupURLs()).
-// TODO reenable test for Vivaldi
 // Fails on official builds. See http://crbug.com/313856
-#if 1 || defined(GOOGLE_CHROME_BUILD)
+#if defined(GOOGLE_CHROME_BUILD)
 #define MAYBE_AddCustomFirstRunTab DISABLED_AddCustomFirstRunTab
 #else
 #define MAYBE_AddCustomFirstRunTab AddCustomFirstRunTab
 #endif
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, MAYBE_AddCustomFirstRunTab) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
   browser_creator.AddFirstRunTab(GURL("http://new_tab_page"));
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title2.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title2.html"));
   browser_creator.AddFirstRunTab(GURL("http://welcome_page"));
 
   // Do a simple non-process-startup browser launch.
@@ -563,8 +607,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, MAYBE_AddCustomFirstRunTab) {
             tab_strip->GetWebContentsAt(3)->GetURL());
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoNoWelcomePage) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, SyncPromoNoWelcomePage) {
   // Do a simple non-process-startup browser launch.
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
   StartupBrowserCreatorImpl launch(base::FilePath(), dummy,
@@ -581,8 +624,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoNoWelcomePag
   if (signin::ShouldShowPromoAtStartup(browser()->profile(), true)) {
     // The browser should show only the promo.
     ASSERT_EQ(1, tab_strip->count());
-    EXPECT_EQ(signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false),
-              tab_strip->GetWebContentsAt(0)->GetURL());
+    EXPECT_EQ(GetSigninPromoURL(), tab_strip->GetWebContentsAt(0)->GetURL());
   } else if (IsWindows10OrNewer()) {
     // The browser should show the welcome page and the NTP.
     ASSERT_EQ(2, tab_strip->count());
@@ -598,8 +640,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoNoWelcomePag
   }
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoWithWelcomePage) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, SyncPromoWithWelcomePage) {
   first_run::SetShouldShowWelcomePage();
 
   // Do a simple non-process-startup browser launch.
@@ -623,8 +664,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoWithWelcomeP
               tab_strip->GetWebContentsAt(1)->GetURL());
   } else {
     if (signin::ShouldShowPromoAtStartup(browser()->profile(), true)) {
-      EXPECT_EQ(signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false),
-                tab_strip->GetWebContentsAt(0)->GetURL());
+      EXPECT_EQ(GetSigninPromoURL(), tab_strip->GetWebContentsAt(0)->GetURL());
     } else {
       EXPECT_EQ(GURL(chrome::kChromeUINewTabURL),
                 tab_strip->GetWebContentsAt(0)->GetURL());
@@ -634,10 +674,11 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoWithWelcomeP
   }
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoWithFirstRunTabs) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, SyncPromoWithFirstRunTabs) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
 
   // The welcome page should not be shown, even if
   // first_run::ShouldShowWelcomePage() says so, when there are already
@@ -658,8 +699,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoWithFirstRun
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   if (signin::ShouldShowPromoAtStartup(browser()->profile(), true)) {
     EXPECT_EQ(2, tab_strip->count());
-    EXPECT_EQ(signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false),
-              tab_strip->GetWebContentsAt(0)->GetURL());
+    EXPECT_EQ(GetSigninPromoURL(), tab_strip->GetWebContentsAt(0)->GetURL());
     EXPECT_EQ("title1.html",
               tab_strip->GetWebContentsAt(1)->GetURL().ExtractFileName());
   } else {
@@ -671,11 +711,12 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_SyncPromoWithFirstRun
 
 // The welcome page should still be shown if there are more than 2 first run
 // tabs, but the welcome page was explcitly added to the first run tabs.
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
-                       DISABLED_SyncPromoWithFirstRunTabsIncludingWelcomePage) {
+                       SyncPromoWithFirstRunTabsIncludingWelcomePage) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
   browser_creator.AddFirstRunTab(GURL("http://welcome_page"));
 
   // Do a simple non-process-startup browser launch.
@@ -692,8 +733,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   if (signin::ShouldShowPromoAtStartup(browser()->profile(), true)) {
     EXPECT_EQ(3, tab_strip->count());
-    EXPECT_EQ(signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false),
-              tab_strip->GetWebContentsAt(0)->GetURL());
+    EXPECT_EQ(GetSigninPromoURL(), tab_strip->GetWebContentsAt(0)->GetURL());
     EXPECT_EQ("title1.html",
               tab_strip->GetWebContentsAt(1)->GetURL().ExtractFileName());
     EXPECT_EQ(internals::GetWelcomePageURL(),
@@ -708,8 +748,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
 }
 
 #if !defined(OS_CHROMEOS)
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_StartupURLsForTwoProfiles) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, StartupURLsForTwoProfiles) {
 #if defined(OS_WIN) && defined(USE_ASH)
   // Disable this test in Metro+Ash for now (http://crbug.com/262796).
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -793,7 +832,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
   // Simulate a browser restart by creating the profiles in the PRE_ part.
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // Create two profiles.
   base::FilePath dest_path = profile_manager->user_data_dir();
@@ -812,7 +851,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
                             browser()->host_desktop_type()));
   chrome::NewTab(browser1);
   ui_test_utils::NavigateToURL(browser1,
-                               test_server()->GetURL("files/empty.html"));
+                               embedded_test_server()->GetURL("/empty.html"));
   CloseBrowserSynchronously(browser1);
 
   Browser* browser2 = new Browser(
@@ -820,7 +859,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
                             browser()->host_desktop_type()));
   chrome::NewTab(browser2);
   ui_test_utils::NavigateToURL(browser2,
-                               test_server()->GetURL("files/form.html"));
+                               embedded_test_server()->GetURL("/form.html"));
   CloseBrowserSynchronously(browser2);
 
   // Set different startup preferences for the 2 profiles.
@@ -899,8 +938,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   ASSERT_TRUE(new_browser);
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   ASSERT_EQ(1, tab_strip->count());
-  EXPECT_EQ("/files/empty.html",
-            tab_strip->GetWebContentsAt(0)->GetURL().path());
+  EXPECT_EQ("/empty.html", tab_strip->GetWebContentsAt(0)->GetURL().path());
 
   ASSERT_EQ(1u, chrome::GetBrowserCount(profile2,
                                         browser()->host_desktop_type()));
@@ -908,19 +946,18 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   ASSERT_TRUE(new_browser);
   tab_strip = new_browser->tab_strip_model();
   ASSERT_EQ(1, tab_strip->count());
-  EXPECT_EQ("/files/form.html",
-            tab_strip->GetWebContentsAt(0)->GetURL().path());
+  EXPECT_EQ("/form.html", tab_strip->GetWebContentsAt(0)->GetURL().path());
 }
 
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
-                       DISABLED_ProfilesWithoutPagesNotLaunched) {
+                       ProfilesWithoutPagesNotLaunched) {
 #if defined(OS_WIN) && defined(USE_ASH)
   // Disable this test in Metro+Ash for now (http://crbug.com/262796).
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kAshBrowserTests))
     return;
 #endif
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   Profile* default_profile = browser()->profile();
 
@@ -969,7 +1006,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
                             browser()->host_desktop_type()));
   chrome::NewTab(browser_last);
   ui_test_utils::NavigateToURL(browser_last,
-                               test_server()->GetURL("files/empty.html"));
+                               embedded_test_server()->GetURL("/empty.html"));
   CloseBrowserAsynchronously(browser_last);
 
   // Close the main browser.
@@ -1032,15 +1069,13 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   ASSERT_TRUE(new_browser);
   tab_strip = new_browser->tab_strip_model();
   ASSERT_EQ(1, tab_strip->count());
-  EXPECT_EQ("/files/empty.html",
-            tab_strip->GetWebContentsAt(0)->GetURL().path());
+  EXPECT_EQ("/empty.html", tab_strip->GetWebContentsAt(0)->GetURL().path());
 
   // profile_home2 was not launched since it would've only opened the home page.
   ASSERT_EQ(0u, chrome::GetBrowserCount(profile_home2, original_desktop_type));
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_ProfilesLaunchedAfterCrash) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, ProfilesLaunchedAfterCrash) {
 #if defined(OS_WIN) && defined(USE_ASH)
   // Disable this test in Metro+Ash for now (http://crbug.com/262796).
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -1174,6 +1209,42 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_ProfilesLaunchedAfter
 #endif  // !defined(OS_MACOSX) && !defined(GOOGLE_CHROME_BUILD)
 }
 
+#if defined(OS_WIN)
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DefaultBrowserCallback) {
+  bool callback_called = false;
+
+  // Set the default browser callback.
+  StartupBrowserCreator::SetDefaultBrowserCallback(
+      base::Bind(&SetTrue, &callback_called));
+
+  // Set the command line to open the default browser url.
+  base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
+  cmdline.AppendArgNative(StartupBrowserCreator::GetDefaultBrowserUrl());
+
+  // Open url.
+  ProcessCommandLineAlreadyRunningDefaultProfile(cmdline);
+
+  // The url should have been intercepted and the callback invoked.
+  GURL default_browser_url =
+      GURL(StartupBrowserCreator::GetDefaultBrowserUrl());
+  EXPECT_FALSE(
+      TabStripContainsUrl(browser()->tab_strip_model(), default_browser_url));
+  EXPECT_TRUE(callback_called);
+
+  // Clear default browser callback.
+  callback_called = false;
+  StartupBrowserCreator::ClearDefaultBrowserCallback();
+
+  // Open url.
+  ProcessCommandLineAlreadyRunningDefaultProfile(cmdline);
+
+  // The url should not have been intercepted and the callback not invoked.
+  EXPECT_TRUE(
+      TabStripContainsUrl(browser()->tab_strip_model(), default_browser_url));
+  EXPECT_FALSE(callback_called);
+}
+#endif  // defined(OS_WIN)
+
 class SupervisedUserBrowserCreatorTest : public InProcessBrowserTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -1201,8 +1272,9 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserBrowserCreatorTest,
   ASSERT_TRUE(new_browser);
 
   TabStripModel* tab_strip = new_browser->tab_strip_model();
-  // There should be only one tab.
-  EXPECT_EQ(1, tab_strip->count());
+  // There should be only one tab, except on Windows 10. See crbug.com/505029.
+  const int tab_count = IsWindows10OrNewer() ? 2 : 1;
+  EXPECT_EQ(tab_count, tab_strip->count());
 }
 
 #endif  // !defined(OS_CHROMEOS)
@@ -1244,6 +1316,7 @@ void StartupBrowserCreatorFirstRunTest::SetUpInProcessBrowserTestFixture() {
   policy_map_.Set(policy::key::kMetricsReportingEnabled,
                   policy::POLICY_LEVEL_MANDATORY,
                   policy::POLICY_SCOPE_USER,
+                  policy::POLICY_SOURCE_CLOUD,
                   new base::FundamentalValue(false),
                   NULL);
   provider_.UpdateChromePolicy(policy_map_);
@@ -1255,8 +1328,7 @@ void StartupBrowserCreatorFirstRunTest::SetUpInProcessBrowserTestFixture() {
 #endif  // defined(ENABLE_CONFIGURATION_POLICY)
 }
 
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
 // http://crbug.com/314819
 #define MAYBE_SyncPromoForbidden DISABLED_SyncPromoForbidden
 #else
@@ -1304,8 +1376,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   }
 }
 
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
 // http://crbug.com/314819
 #define MAYBE_SyncPromoAllowed DISABLED_SyncPromoAllowed
 #else
@@ -1342,14 +1413,12 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // Verify that the sync promo and the welcome page are shown.
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   ASSERT_EQ(2, tab_strip->count());
-  EXPECT_EQ(signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false),
-            tab_strip->GetWebContentsAt(0)->GetURL());
+  EXPECT_EQ(GetSigninPromoURL(), tab_strip->GetWebContentsAt(0)->GetURL());
   EXPECT_EQ(internals::GetWelcomePageURL(),
             tab_strip->GetWebContentsAt(1)->GetURL());
 }
 
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
 // http://crbug.com/314819
 #define MAYBE_FirstRunTabsPromoAllowed DISABLED_FirstRunTabsPromoAllowed
 #else
@@ -1362,14 +1431,16 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // Simulate the following master_preferences:
   // {
   //  "first_run_tabs" : [
-  //    "files/title1.html"
+  //    "/title1.html"
   //  ],
   //  "sync_promo": {
   //    "show_on_first_run_allowed": true
   //  }
   // }
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kSignInPromoShowOnFirstRunAllowed, true);
 
@@ -1387,14 +1458,12 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // Verify that the first-run tab is shown and the sync promo has been added.
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   ASSERT_EQ(2, tab_strip->count());
-  EXPECT_EQ(signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false),
-            tab_strip->GetWebContentsAt(0)->GetURL());
+  EXPECT_EQ(GetSigninPromoURL(), tab_strip->GetWebContentsAt(0)->GetURL());
   EXPECT_EQ("title1.html",
             tab_strip->GetWebContentsAt(1)->GetURL().ExtractFileName());
 }
 
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
 // http://crbug.com/314819
 #define MAYBE_FirstRunTabsContainSyncPromo \
     DISABLED_FirstRunTabsContainSyncPromo
@@ -1408,18 +1477,18 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // Simulate the following master_preferences:
   // {
   //  "first_run_tabs" : [
-  //    "files/title1.html",
+  //    "/title1.html",
   //    "chrome://signin/?source=0&next_page=chrome%3A%2F%2Fnewtab%2F"
   //  ],
   //  "sync_promo": {
   //    "show_on_first_run_allowed": true
   //  }
   // }
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
   browser_creator.AddFirstRunTab(
-      signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false));
+      embedded_test_server()->GetURL("/title1.html"));
+  browser_creator.AddFirstRunTab(GetSigninPromoURL());
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kSignInPromoShowOnFirstRunAllowed, true);
 
@@ -1440,12 +1509,10 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   ASSERT_EQ(2, tab_strip->count());
   EXPECT_EQ("title1.html",
             tab_strip->GetWebContentsAt(0)->GetURL().ExtractFileName());
-  EXPECT_EQ(signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false),
-            tab_strip->GetWebContentsAt(1)->GetURL());
+  EXPECT_EQ(GetSigninPromoURL(), tab_strip->GetWebContentsAt(1)->GetURL());
 }
 
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
 // http://crbug.com/314819
 #define MAYBE_FirstRunTabsContainNTPSyncPromoAllowed \
     DISABLED_FirstRunTabsContainNTPSyncPromoAllowed
@@ -1461,15 +1528,17 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // {
   //  "first_run_tabs" : [
   //    "new_tab_page",
-  //    "files/title1.html"
+  //    "/title1.html"
   //  ],
   //  "sync_promo": {
   //    "show_on_first_run_allowed": true
   //  }
   // }
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
   browser_creator.AddFirstRunTab(GURL("http://new_tab_page"));
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kSignInPromoShowOnFirstRunAllowed, true);
 
@@ -1488,14 +1557,12 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // been replaced by the sync promo.
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   ASSERT_EQ(2, tab_strip->count());
-  EXPECT_EQ(signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false),
-            tab_strip->GetWebContentsAt(0)->GetURL());
+  EXPECT_EQ(GetSigninPromoURL(), tab_strip->GetWebContentsAt(0)->GetURL());
   EXPECT_EQ("title1.html",
             tab_strip->GetWebContentsAt(1)->GetURL().ExtractFileName());
 }
 
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
 // http://crbug.com/314819
 #define MAYBE_FirstRunTabsContainNTPSyncPromoForbidden \
     DISABLED_FirstRunTabsContainNTPSyncPromoForbidden
@@ -1511,15 +1578,17 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // {
   //  "first_run_tabs" : [
   //    "new_tab_page",
-  //    "files/title1.html"
+  //    "/title1.html"
   //  ],
   //  "sync_promo": {
   //    "show_on_first_run_allowed": false
   //  }
   // }
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
   browser_creator.AddFirstRunTab(GURL("http://new_tab_page"));
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kSignInPromoShowOnFirstRunAllowed, false);
 
@@ -1544,8 +1613,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
             tab_strip->GetWebContentsAt(1)->GetURL().ExtractFileName());
 }
 
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
 // http://crbug.com/314819
 #define MAYBE_FirstRunTabsSyncPromoForbidden \
     DISABLED_FirstRunTabsSyncPromoForbidden
@@ -1559,14 +1627,16 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // Simulate the following master_preferences:
   // {
   //  "first_run_tabs" : [
-  //    "files/title1.html"
+  //    "/title1.html"
   //  ],
   //  "sync_promo": {
   //    "show_on_first_run_allowed": false
   //  }
   // }
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
-  browser_creator.AddFirstRunTab(test_server()->GetURL("files/title1.html"));
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kSignInPromoShowOnFirstRunAllowed, false);
 
@@ -1589,8 +1659,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
 }
 
 #if defined(ENABLE_CONFIGURATION_POLICY)
-// TODO reenable test for Vivaldi
-#if 1 || (defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX))
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
 // http://crbug.com/314819
 #define MAYBE_RestoreOnStartupURLsPolicySpecified \
     DISABLED_RestoreOnStartupURLsPolicySpecified
@@ -1608,25 +1677,28 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   //    "show_on_first_run_allowed": true
   //  }
   // }
+  ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kSignInPromoShowOnFirstRunAllowed, true);
 
   // Set the following user policies:
   // * RestoreOnStartup = RestoreOnStartupIsURLs
-  // * RestoreOnStartupURLs = [ "files/title1.html" ]
+  // * RestoreOnStartupURLs = [ "/title1.html" ]
   policy_map_.Set(
       policy::key::kRestoreOnStartup,
       policy::POLICY_LEVEL_MANDATORY,
       policy::POLICY_SCOPE_USER,
+      policy::POLICY_SOURCE_CLOUD,
       new base::FundamentalValue(SessionStartupPref::kPrefValueURLs),
       NULL);
   base::ListValue startup_urls;
-  startup_urls.Append(
-      new base::StringValue(test_server()->GetURL("files/title1.html").spec()));
+  startup_urls.Append(new base::StringValue(
+      embedded_test_server()->GetURL("/title1.html").spec()));
   policy_map_.Set(policy::key::kRestoreOnStartupURLs,
                   policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                  startup_urls.DeepCopy(), NULL);
+                  policy::POLICY_SOURCE_CLOUD, startup_urls.DeepCopy(),
+                  nullptr);
   provider_.UpdateChromePolicy(policy_map_);
   base::RunLoop().RunUntilIdle();
 

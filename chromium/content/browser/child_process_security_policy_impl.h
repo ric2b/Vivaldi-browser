@@ -12,6 +12,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -60,6 +61,7 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                                const std::string& filesystem_id) override;
   void GrantDeleteFromFileSystem(int child_id,
                                  const std::string& filesystem_id) override;
+  void GrantOrigin(int child_id, const url::Origin& origin) override;
   void GrantScheme(int child_id, const std::string& scheme) override;
   bool CanReadFile(int child_id, const base::FilePath& file) override;
   bool CanCreateReadWriteFile(int child_id,
@@ -74,6 +76,7 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                                const std::string& filesystem_id) override;
   bool HasWebUIBindings(int child_id) override;
   void GrantSendMidiSysExMessage(int child_id) override;
+  bool CanAccessDataForOrigin(int child_id, const GURL& url) override;
 
   // Pseudo schemes are treated differently than other schemes because they
   // cannot be requested like normal URLs.  There is no mechanism for revoking
@@ -125,12 +128,11 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // request the URL.
   bool CanRequestURL(int child_id, const GURL& url);
 
-  // Returns true if the process is permitted to load pages from
-  // the given origin in main frames or subframes.
-  // Only might return false if --site-per-process flag is used.
-  bool CanLoadPage(int child_id,
-                   const GURL& url,
-                   ResourceType resource_type);
+  // Whether the process is allowed to commit a document from the given URL.
+  // This is more restrictive than CanRequestURL, since CanRequestURL allows
+  // requests that might lead to cross-process navigations or external protocol
+  // handlers.
+  bool CanCommitURL(int child_id, const GURL& url);
 
   // Explicit permissions checks for FileSystemURL specified files.
   bool CanReadFileSystemFile(int child_id, const storage::FileSystemURL& url);
@@ -144,12 +146,6 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
 
   // Returns true if the specified child_id has been granted ReadRawCookies.
   bool CanReadRawCookies(int child_id);
-
-  // Returns true if the process is permitted to read and modify the cookies for
-  // the given origin.  Does not affect cookies attached to or set by network
-  // requests.
-  // Only might return false if the --site-per-process flag is used.
-  bool CanAccessCookiesForOrigin(int child_id, const GURL& gurl);
 
   // Sets the process as only permitted to use and see the cookies for the
   // given origin.
@@ -181,7 +177,7 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
 
   // Obtain an instance of ChildProcessSecurityPolicyImpl via GetInstance().
   ChildProcessSecurityPolicyImpl();
-  friend struct DefaultSingletonTraits<ChildProcessSecurityPolicyImpl>;
+  friend struct base::DefaultSingletonTraits<ChildProcessSecurityPolicyImpl>;
 
   // Adds child process during registration.
   void AddChild(int child_id);

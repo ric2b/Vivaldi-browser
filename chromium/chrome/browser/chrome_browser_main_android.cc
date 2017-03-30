@@ -5,6 +5,7 @@
 #include "chrome/browser/chrome_browser_main_android.h"
 
 #include "base/android/build_info.h"
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -12,12 +13,10 @@
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/android/chrome_media_client_android.h"
 #include "chrome/browser/android/seccomp_support_detector.h"
-#include "chrome/browser/google/google_search_counter_android.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_switches.h"
-#include "components/crash/app/breakpad_linux.h"
-#include "components/crash/browser/crash_dump_manager_android.h"
+#include "components/crash/content/app/breakpad_linux.h"
+#include "components/crash/content/browser/crash_dump_manager_android.h"
 #include "components/enhanced_bookmarks/persistent_image_store.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/android/compositor.h"
@@ -82,20 +81,16 @@ int ChromeBrowserMainPartsAndroid::PreCreateThreads() {
 }
 
 void ChromeBrowserMainPartsAndroid::PostProfileInit() {
-  Profile* main_profile = profile();
-  search_counter_.reset(new GoogleSearchCounterAndroid(main_profile));
-
   ChromeBrowserMainParts::PostProfileInit();
 
   // Previously we stored information related to salient images for bookmarks
   // in a local file. We replaced the salient images with favicons. As part
   // of the clean up, the local file needs to be deleted. See crbug.com/499415.
-  base::FilePath bookmark_image_file_path = main_profile->GetPath().Append(
+  base::FilePath bookmark_image_file_path = profile()->GetPath().Append(
       PersistentImageStore::kBookmarkImageStoreDb);
   content::BrowserThread::PostDelayedTask(
       content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&DeleteFileTask,
-                 bookmark_image_file_path),
+      base::Bind(&DeleteFileTask, bookmark_image_file_path),
       base::TimeDelta::FromMinutes(1));
 }
 

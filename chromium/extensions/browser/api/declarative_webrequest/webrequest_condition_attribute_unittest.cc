@@ -4,8 +4,10 @@
 
 #include "extensions/browser/api/declarative_webrequest/webrequest_condition_attribute.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/values.h"
@@ -100,32 +102,32 @@ TEST(WebRequestConditionAttributeTest, ResourceType) {
   scoped_ptr<net::URLRequest> url_request_ok(context.CreateRequest(
       GURL("http://www.example.com"), net::DEFAULT_PRIORITY, NULL));
   content::ResourceRequestInfo::AllocateForTesting(
-      url_request_ok.get(),
-      content::RESOURCE_TYPE_SUB_FRAME,
+      url_request_ok.get(), content::RESOURCE_TYPE_SUB_FRAME,
       NULL,    // context
       -1,      // render_process_id
       -1,      // render_view_id
       -1,      // render_frame_id
       false,   // is_main_frame
       false,   // parent_is_main_frame
-      true,   // allow_download
-      false);  // is_async
+      true,    // allow_download
+      false,   // is_async
+      false);  // is_using_lofi
   EXPECT_TRUE(attribute->IsFulfilled(WebRequestData(url_request_ok.get(),
                                                     ON_BEFORE_REQUEST)));
 
   scoped_ptr<net::URLRequest> url_request_fail(context.CreateRequest(
       GURL("http://www.example.com"), net::DEFAULT_PRIORITY, NULL));
   content::ResourceRequestInfo::AllocateForTesting(
-      url_request_fail.get(),
-      content::RESOURCE_TYPE_MAIN_FRAME,
+      url_request_fail.get(), content::RESOURCE_TYPE_MAIN_FRAME,
       NULL,    // context
       -1,      // render_process_id
       -1,      // render_view_id
       -1,      // render_frame_id
       true,    // is_main_frame
       false,   // parent_is_main_frame
-      true,   // allow_download
-      false);  // is_async
+      true,    // allow_download
+      false,   // is_async
+      false);  // is_using_lofi
   EXPECT_FALSE(attribute->IsFulfilled(WebRequestData(url_request_fail.get(),
                                                      ON_BEFORE_REQUEST)));
 }
@@ -137,10 +139,10 @@ TEST(WebRequestConditionAttributeTest, ContentType) {
   std::string error;
   scoped_refptr<const WebRequestConditionAttribute> result;
 
-  net::test_server::EmbeddedTestServer test_server;
+  net::EmbeddedTestServer test_server;
   test_server.ServeFilesFromDirectory(TestDataPath(
       "chrome/test/data/extensions/api_test/webrequest/declarative"));
-  ASSERT_TRUE(test_server.InitializeAndWaitUntilReady());
+  ASSERT_TRUE(test_server.Start());
 
   net::TestURLRequestContext context;
   net::TestDelegate delegate;
@@ -401,7 +403,7 @@ scoped_ptr<base::DictionaryValue> GetDictionaryFromArray(
       dictionary->SetString(*name, *value);
     }
   }
-  return dictionary.Pass();
+  return dictionary;
 }
 
 // Returns whether the response headers from |url_request| satisfy the match
@@ -525,10 +527,10 @@ TEST(WebRequestConditionAttributeTest, ResponseHeaders) {
   // Necessary for TestURLRequest.
   base::MessageLoopForIO message_loop;
 
-  net::test_server::EmbeddedTestServer test_server;
+  net::EmbeddedTestServer test_server;
   test_server.ServeFilesFromDirectory(TestDataPath(
       "chrome/test/data/extensions/api_test/webrequest/declarative"));
-  ASSERT_TRUE(test_server.InitializeAndWaitUntilReady());
+  ASSERT_TRUE(test_server.Start());
 
   net::TestURLRequestContext context;
   net::TestDelegate delegate;

@@ -4,12 +4,19 @@
 
 // Multiply-included message file, hence no include guard here.
 #include "gpu/command_buffer/common/capabilities.h"
+#include "gpu/command_buffer/common/constants.h"
 #include "gpu/gpu_export.h"
 #include "ipc/ipc_message_utils.h"
 #include "ipc/param_traits_macros.h"
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT GPU_EXPORT
+
+IPC_ENUM_TRAITS_MAX_VALUE(gpu::error::Error, gpu::error::kErrorLast)
+IPC_ENUM_TRAITS_MIN_MAX_VALUE(
+    gpu::CommandBufferNamespace,
+    gpu::CommandBufferNamespace::INVALID,
+    gpu::CommandBufferNamespace::NUM_COMMAND_BUFFER_NAMESPACES - 1)
 
 IPC_STRUCT_TRAITS_BEGIN(gpu::Capabilities::ShaderPrecision)
   IPC_STRUCT_TRAITS_MEMBER(min_range)
@@ -76,6 +83,7 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::Capabilities)
   IPC_STRUCT_TRAITS_MEMBER(uniform_buffer_offset_alignment)
 
   IPC_STRUCT_TRAITS_MEMBER(post_sub_buffer)
+  IPC_STRUCT_TRAITS_MEMBER(commit_overlay_planes)
   IPC_STRUCT_TRAITS_MEMBER(egl_image_external)
   IPC_STRUCT_TRAITS_MEMBER(texture_format_atc)
   IPC_STRUCT_TRAITS_MEMBER(texture_format_bgra8888)
@@ -94,9 +102,12 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::Capabilities)
   IPC_STRUCT_TRAITS_MEMBER(blend_equation_advanced)
   IPC_STRUCT_TRAITS_MEMBER(blend_equation_advanced_coherent)
   IPC_STRUCT_TRAITS_MEMBER(texture_rg)
+  IPC_STRUCT_TRAITS_MEMBER(image_ycbcr_422)
   IPC_STRUCT_TRAITS_MEMBER(render_buffer_format_bgra8888)
   IPC_STRUCT_TRAITS_MEMBER(occlusion_query_boolean)
   IPC_STRUCT_TRAITS_MEMBER(timer_queries)
+  IPC_STRUCT_TRAITS_MEMBER(surfaceless)
+  IPC_STRUCT_TRAITS_MEMBER(flips_vertically)
 
   IPC_STRUCT_TRAITS_MEMBER(major_version)
   IPC_STRUCT_TRAITS_MEMBER(minor_version)

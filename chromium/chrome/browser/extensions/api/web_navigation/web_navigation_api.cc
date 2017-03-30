@@ -6,7 +6,6 @@
 
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 
-#include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api_constants.h"
@@ -27,8 +26,11 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/view_type_utils.h"
 #include "net/base/net_errors.h"
+
+#include "app/vivaldi_apptools.h"
 
 using content::ResourceType;
 
@@ -75,7 +77,7 @@ WebNavigationEventRouter::PendingWebContents::PendingWebContents(
 WebNavigationEventRouter::PendingWebContents::~PendingWebContents() {}
 
 WebNavigationEventRouter::WebNavigationEventRouter(Profile* profile)
-    : profile_(profile) {
+    : profile_(profile), browser_tab_strip_tracker_(this, this, nullptr) {
   CHECK(registrar_.IsEmpty());
   registrar_.Add(this,
                  chrome::NOTIFICATION_RETARGETING,
@@ -87,27 +89,15 @@ WebNavigationEventRouter::WebNavigationEventRouter(Profile* profile)
                  content::NOTIFICATION_WEB_CONTENTS_DESTROYED,
                  content::NotificationService::AllSources());
 
-  BrowserList::AddObserver(this);
-  for (chrome::BrowserIterator it; !it.done(); it.Next())
-    OnBrowserAdded(*it);
+  browser_tab_strip_tracker_.Init(
+      BrowserTabStripTracker::InitWith::ALL_BROWERS);
 }
 
 WebNavigationEventRouter::~WebNavigationEventRouter() {
-  for (chrome::BrowserIterator it; !it.done(); it.Next())
-    OnBrowserRemoved(*it);
-  BrowserList::RemoveObserver(this);
 }
 
-void WebNavigationEventRouter::OnBrowserAdded(Browser* browser) {
-  if (!profile_->IsSameProfile(browser->profile()))
-    return;
-  browser->tab_strip_model()->AddObserver(this);
-}
-
-void WebNavigationEventRouter::OnBrowserRemoved(Browser* browser) {
-  if (!profile_->IsSameProfile(browser->profile()))
-    return;
-  browser->tab_strip_model()->RemoveObserver(this);
+bool WebNavigationEventRouter::ShouldTrackBrowser(Browser* browser) {
+  return profile_->IsSameProfile(browser->profile());
 }
 
 void WebNavigationEventRouter::TabReplacedAt(
@@ -121,7 +111,7 @@ void WebNavigationEventRouter::TabReplacedAt(
     // If you hit this DCHECK(), please add reproduction steps to
     // http://crbug.com/109464.
     // Vivaldi; we do not set WebNavigationTabObserver for Vivaldi.
-    if (!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
+    if (!vivaldi::IsVivaldiRunning())
       DCHECK(GetViewType(old_contents) != VIEW_TYPE_TAB_CONTENTS);
     return;
   }
@@ -322,21 +312,25 @@ void WebNavigationTabObserver::DidCommitProvisionalLoadForFrame(
   if (!navigation_state_.CanSendEvents(render_frame_host))
     return;
 
+  events::HistogramValue histogram_value = events::UNKNOWN;
   std::string event_name;
   if (is_reference_fragment_navigation) {
+    histogram_value = events::WEB_NAVIGATION_ON_REFERENCE_FRAGMENT_UPDATED;
     event_name = web_navigation::OnReferenceFragmentUpdated::kEventName;
   } else if (is_history_state_modification) {
+    histogram_value = events::WEB_NAVIGATION_ON_HISTORY_STATE_UPDATED;
     event_name = web_navigation::OnHistoryStateUpdated::kEventName;
   } else {
     if (navigation_state_.GetIsServerRedirected(render_frame_host)) {
       transition_type = ui::PageTransitionFromInt(
           transition_type | ui::PAGE_TRANSITION_SERVER_REDIRECT);
     }
+    histogram_value = events::WEB_NAVIGATION_ON_COMMITTED;
     event_name = web_navigation::OnCommitted::kEventName;
   }
-  helpers::DispatchOnCommitted(event_name, web_contents(), render_frame_host,
-                               navigation_state_.GetUrl(render_frame_host),
-                               transition_type);
+  helpers::DispatchOnCommitted(
+      histogram_value, event_name, web_contents(), render_frame_host,
+      navigation_state_.GetUrl(render_frame_host), transition_type);
 }
 
 void WebNavigationTabObserver::DidFailProvisionalLoad(
@@ -397,12 +391,16 @@ void WebNavigationTabObserver::DidFinishLoad(
   navigation_state_.SetNavigationCompleted(render_frame_host);
   if (!navigation_state_.CanSendEvents(render_frame_host))
     return;
-  DCHECK(navigation_state_.GetUrl(render_frame_host) == validated_url ||
-         (navigation_state_.GetUrl(render_frame_host) ==
-              GURL(content::kAboutSrcDocURL) &&
-          validated_url == GURL(url::kAboutBlankURL)))
-      << "validated URL is " << validated_url << " but we expected "
-      << navigation_state_.GetUrl(render_frame_host);
+
+  // A new navigation might have started before the old one completed.
+  // Ignore the old navigation completion in that case.
+  // srcdoc iframes will report a url of about:blank, still let it through.
+  if (navigation_state_.GetUrl(render_frame_host) != validated_url &&
+      (navigation_state_.GetUrl(render_frame_host) !=
+           GURL(content::kAboutSrcDocURL) ||
+       validated_url != GURL(url::kAboutBlankURL))) {
+    return;
+  }
 
   // The load might already have finished by the time we finished parsing. For
   // compatibility reasons, we artifically delay the load completed signal until
@@ -499,7 +497,6 @@ bool WebNavigationGetFrameFunction::RunSync() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
   int tab_id = params->details.tab_id;
   int frame_id = params->details.frame_id;
-  int process_id = params->details.process_id;
 
   SetResult(base::Value::CreateNullValue());
 
@@ -523,8 +520,8 @@ bool WebNavigationGetFrameFunction::RunSync() {
       observer->frame_navigation_state();
 
   content::RenderFrameHost* render_frame_host =
-      frame_id == 0 ? web_contents->GetMainFrame()
-                    : content::RenderFrameHost::FromID(process_id, frame_id);
+      ExtensionApiFrameIdMap::Get()->GetRenderFrameHostById(web_contents,
+                                                            frame_id);
   if (!frame_navigation_state.IsValidFrame(render_frame_host))
     return true;
 
@@ -550,7 +547,7 @@ bool WebNavigationGetAllFramesFunction::RunSync() {
   SetResult(base::Value::CreateNullValue());
 
   // Vivaldi; we do not set WebNavigationTabObserver for Vivaldi.
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
+  if (vivaldi::IsVivaldiRunning())
     return true;
 
   content::WebContents* web_contents;

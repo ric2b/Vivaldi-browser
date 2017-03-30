@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_EMULATOR_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_EMULATOR_H_
 
+#include "base/macros.h"
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/common/input/input_event_ack_state.h"
@@ -18,7 +19,7 @@ namespace content {
 // Emulates touch input with mouse and keyboard.
 class CONTENT_EXPORT TouchEmulator : public ui::GestureProviderClient {
  public:
-  explicit TouchEmulator(TouchEmulatorClient* client);
+  TouchEmulator(TouchEmulatorClient* client, float device_scale_factor);
   ~TouchEmulator() override;
 
   void Enable(ui::GestureProviderConfigType config_type);

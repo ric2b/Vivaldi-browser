@@ -8,7 +8,9 @@
 #define CHROME_BROWSER_CHROME_BROWSER_MAIN_WIN_H_
 
 #include "base/files/file_path_watcher.h"
+#include "base/macros.h"
 #include "chrome/browser/chrome_browser_main.h"
+#include "third_party/kasko/kasko_features.h"
 
 class DidRunUpdater;
 
@@ -56,10 +58,11 @@ class ChromeBrowserMainPartsWin : public ChromeBrowserMainParts {
   // functionality so we just ask the users if they want to uninstall Chrome.
   static int HandleIconsCommands(const base::CommandLine& parsed_command_line);
 
-  // Check if there is any machine level Chrome installed on the current
-  // machine. If yes and the current Chrome process is user level, we do not
-  // allow the user level Chrome to run. So we notify the user and uninstall
-  // user level Chrome.
+  // Checks if there is any machine level Chrome installed on the current
+  // machine. If yes and the current Chrome process is user level, uninstalls
+  // the user-level Chrome and susbsequently auto-launches the system-level
+  // Chrome. Returns true if the uninstall was kicked off and this process
+  // should exit.
   static bool CheckMachineLevelInstall();
 
   // Sets the TranslationDelegate which provides localized strings to
@@ -70,7 +73,7 @@ class ChromeBrowserMainPartsWin : public ChromeBrowserMainParts {
 #if defined(GOOGLE_CHROME_BUILD)
   scoped_ptr<DidRunUpdater> did_run_updater_;
 #endif
-#if defined(KASKO)
+#if BUILDFLAG(ENABLE_KASKO)
   // Cleans up Kasko crash reports that exceeded the maximum upload attempts.
   base::FilePathWatcher failed_kasko_crash_report_watcher_;
 #endif

@@ -4,33 +4,48 @@
 
 """Setup for linker tests."""
 
-import os
-import sys
+import logging
 
-from pylib import constants
+from pylib.constants import host_paths
 from pylib.linker import test_case
 from pylib.linker import test_runner
 
-sys.path.insert(0,
-                os.path.join(constants.DIR_SOURCE_ROOT, 'build', 'util', 'lib',
-                             'common'))
-import unittest_util # pylint: disable=F0401
+with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
+  import unittest_util # pylint: disable=import-error
 
-def Setup(args, _devices):
+# ModernLinker requires Android M (API level 23) or later.
+_VERSION_SDK_PROPERTY = 'ro.build.version.sdk'
+_MODERN_LINKER_MINIMUM_SDK_INT = 23
+
+def Setup(args, devices):
   """Creates a list of test cases and a runner factory.
 
   Args:
     args: an argparse.Namespace object.
+    devices: an iterable of available devices.
   Returns:
     A tuple of (TestRunnerFactory, tests).
   """
-  test_cases = [
-      test_case.LinkerLibraryAddressTest,
-      test_case.LinkerSharedRelroTest,
-      test_case.LinkerRandomizationTest]
+  legacy_linker_tests = [
+      test_case.LinkerSharedRelroTest(is_modern_linker=False,
+                                      is_low_memory=False),
+      test_case.LinkerSharedRelroTest(is_modern_linker=False,
+                                      is_low_memory=True),
+  ]
+  modern_linker_tests = [
+      test_case.LinkerSharedRelroTest(is_modern_linker=True),
+  ]
 
-  low_memory_modes = [False, True]
-  all_tests = [t(is_low_memory=m) for t in test_cases for m in low_memory_modes]
+  min_sdk_int = 1 << 31
+  for device in devices:
+    min_sdk_int = min(min_sdk_int, device.build_version_sdk)
+
+  if min_sdk_int >= _MODERN_LINKER_MINIMUM_SDK_INT:
+    all_tests = legacy_linker_tests + modern_linker_tests
+  else:
+    all_tests = legacy_linker_tests
+    logging.warn('Not running LinkerModern tests (requires API %d, found %d)',
+                 _MODERN_LINKER_MINIMUM_SDK_INT, min_sdk_int)
 
   if args.test_filter:
     all_test_names = [test.qualified_name for test in all_tests]

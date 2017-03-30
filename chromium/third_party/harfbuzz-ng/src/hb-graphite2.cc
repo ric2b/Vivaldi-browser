@@ -138,6 +138,9 @@ _hb_graphite2_shaper_face_data_destroy (hb_graphite2_shaper_face_data_t *data)
   free (data);
 }
 
+/*
+ * Since: 0.9.10
+ */
 gr_face *
 hb_graphite2_face_get_gr_face (hb_face_t *face)
 {
@@ -172,6 +175,9 @@ _hb_graphite2_shaper_font_data_destroy (hb_graphite2_shaper_font_data_t *data)
   gr_font_destroy (data);
 }
 
+/*
+ * Since: 0.9.10
+ */
 gr_font *
 hb_graphite2_font_get_gr_font (hb_font_t *font)
 {
@@ -345,6 +351,7 @@ _hb_graphite2_shape (hb_shape_plan_t    *shape_plan,
   }
   buffer->len = glyph_count;
 
+  float yscale = font->y_scale / font->x_scale;
   /* Positioning. */
   if (!HB_DIRECTION_IS_BACKWARD(buffer->props.direction))
   {
@@ -353,9 +360,9 @@ _hb_graphite2_shape (hb_shape_plan_t    *shape_plan,
          is; pPos++, is = gr_slot_next_in_segment (is))
     {
       pPos->x_offset = gr_slot_origin_X (is) - curradvx;
-      pPos->y_offset = gr_slot_origin_Y (is) - curradvy;
+      pPos->y_offset = gr_slot_origin_Y (is) * yscale - curradvy;
       pPos->x_advance = gr_slot_advance_X (is, grface, grfont);
-      pPos->y_advance = gr_slot_advance_Y (is, grface, grfont);
+      pPos->y_advance = gr_slot_advance_Y (is, grface, grfont) * yscale;
       curradvx += pPos->x_advance;
       curradvy += pPos->y_advance;
     }
@@ -381,17 +388,17 @@ _hb_graphite2_shape (hb_shape_plan_t    *shape_plan,
         for (tis = is, tinfo = info; tis && tinfo->cluster == currclus; tis = gr_slot_prev_in_segment (tis), tinfo--)
         {
           clusx += gr_slot_advance_X (tis, grface, grfont);
-          clusy += gr_slot_advance_Y (tis, grface, grfont);
+          clusy += gr_slot_advance_Y (tis, grface, grfont) * yscale;
         }
         curradvx += clusx;
         curradvy += clusy;
       }
       pPos->x_advance = gr_slot_advance_X (is, grface, grfont);
-      pPos->y_advance = gr_slot_advance_Y (is, grface, grfont);
+      pPos->y_advance = gr_slot_advance_Y (is, grface, grfont) * yscale;
       curradvx -= pPos->x_advance;
       curradvy -= pPos->y_advance;
       pPos->x_offset = gr_slot_origin_X (is) - curradvx;
-      pPos->y_offset = gr_slot_origin_Y (is) - curradvy;
+      pPos->y_offset = gr_slot_origin_Y (is) * yscale - curradvy;
     }
     hb_buffer_reverse_clusters (buffer);
   }

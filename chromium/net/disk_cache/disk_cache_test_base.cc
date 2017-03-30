@@ -4,6 +4,8 @@
 
 #include "net/disk_cache/disk_cache_test_base.h"
 
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -54,8 +56,7 @@ void DiskCacheTest::TearDown() {
 
 DiskCacheTestWithCache::TestIterator::TestIterator(
     scoped_ptr<disk_cache::Backend::Iterator> iterator)
-    : iterator_(iterator.Pass()) {
-}
+    : iterator_(std::move(iterator)) {}
 
 DiskCacheTestWithCache::TestIterator::~TestIterator() {}
 
@@ -167,6 +168,12 @@ int DiskCacheTestWithCache::DoomEntriesSince(const base::Time initial_time) {
   return cb.GetResult(rv);
 }
 
+int DiskCacheTestWithCache::CalculateSizeOfAllEntries() {
+  net::TestCompletionCallback cb;
+  int rv = cache_->CalculateSizeOfAllEntries(cb.callback());
+  return cb.GetResult(rv);
+}
+
 scoped_ptr<DiskCacheTestWithCache::TestIterator>
     DiskCacheTestWithCache::CreateIterator() {
   return scoped_ptr<TestIterator>(new TestIterator(cache_->CreateIterator()));
@@ -208,7 +215,8 @@ int DiskCacheTestWithCache::WriteData(disk_cache::Entry* entry, int index,
 }
 
 int DiskCacheTestWithCache::ReadSparseData(disk_cache::Entry* entry,
-                                           int64 offset, net::IOBuffer* buf,
+                                           int64_t offset,
+                                           net::IOBuffer* buf,
                                            int len) {
   net::TestCompletionCallback cb;
   int rv = entry->ReadSparseData(offset, buf, len, cb.callback());
@@ -216,8 +224,9 @@ int DiskCacheTestWithCache::ReadSparseData(disk_cache::Entry* entry,
 }
 
 int DiskCacheTestWithCache::WriteSparseData(disk_cache::Entry* entry,
-                                            int64 offset,
-                                            net::IOBuffer* buf, int len) {
+                                            int64_t offset,
+                                            net::IOBuffer* buf,
+                                            int len) {
   net::TestCompletionCallback cb;
   int rv = entry->WriteSparseData(offset, buf, len, cb.callback());
   return cb.GetResult(rv);
@@ -293,7 +302,8 @@ void DiskCacheTestWithCache::InitDiskCache() {
   CreateBackend(disk_cache::kNoRandom, &cache_thread_);
 }
 
-void DiskCacheTestWithCache::CreateBackend(uint32 flags, base::Thread* thread) {
+void DiskCacheTestWithCache::CreateBackend(uint32_t flags,
+                                           base::Thread* thread) {
   scoped_refptr<base::SingleThreadTaskRunner> runner;
   if (use_current_thread_)
     runner = base::ThreadTaskRunnerHandle::Get();
@@ -308,7 +318,7 @@ void DiskCacheTestWithCache::CreateBackend(uint32 flags, base::Thread* thread) {
     int rv = simple_backend->Init(cb.callback());
     ASSERT_EQ(net::OK, cb.GetResult(rv));
     simple_cache_impl_ = simple_backend.get();
-    cache_ = simple_backend.Pass();
+    cache_ = std::move(simple_backend);
     if (simple_cache_wait_for_index_) {
       net::TestCompletionCallback wait_for_index_cb;
       rv = simple_cache_impl_->index()->ExecuteWhenReady(

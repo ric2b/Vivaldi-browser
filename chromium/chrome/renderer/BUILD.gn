@@ -30,25 +30,24 @@ static_library("renderer") {
   defines = []
 
   deps = [
-    "//base/allocator",
-    "//chrome/common",
-    "//chrome/common:mojo_bindings",
-    "//chrome/common/net",
     "//chrome:resources",
     "//chrome:strings",
+    "//chrome/common",
+    "//chrome/common:mojo_bindings",
     "//components/autofill/content/renderer",
-    "//components/content_settings/content/common",
     "//components/cdm/renderer",
+    "//components/content_settings/content/common",
     "//components/data_reduction_proxy/content/common",
     "//components/data_reduction_proxy/core/common",
+    "//components/dom_distiller/content/renderer",
     "//components/error_page/renderer",
     "//components/guest_view/renderer",
     "//components/network_hints/renderer",
     "//components/omnibox/common",
+    "//components/page_load_metrics/renderer",
     "//components/password_manager/content/renderer",
     "//components/plugins/renderer",
-    "//components/printing/renderer:printing_renderer",
-    "//components/startup_metric_utils",
+    "//components/printing/renderer",
     "//components/translate/content/renderer",
     "//components/translate/core/common",
     "//components/translate/core/language_detection",
@@ -70,10 +69,18 @@ static_library("renderer") {
     "//v8:v8",
   ]
 
+  if (!is_ios) {
+    deps += [
+      "//chrome/common/net",
+      "//components/contextual_search:renderer",
+      "//media",
+    ]
+  }
+
   if (enable_nacl) {
     deps += [
-      "//components/nacl",
-      "//components/nacl:nacl_renderer",
+      "//components/nacl/loader",
+      "//components/nacl/renderer",
     ]
   }
 
@@ -95,9 +102,10 @@ static_library("renderer") {
                     ".",
                     "..")
     if (safe_browsing_mode == 1) {
-      sources += rebase_path(gypi_values.chrome_renderer_safe_browsing_sources,
-                             ".",
-                             "..")
+      sources +=
+          rebase_path(gypi_values.chrome_renderer_full_safe_browsing_sources,
+                      ".",
+                      "..")
       deps += [
         "//chrome/common/safe_browsing:proto",
         "//third_party/smhasher:murmurhash3",
@@ -117,7 +125,6 @@ static_library("renderer") {
       "//media/cast:net",
       "//media/cast:receiver",
       "//media/cast:sender",
-      "//media/cast/logging/proto",
     ]
     if (!enable_webrtc) {
       sources -= [
@@ -141,9 +148,16 @@ static_library("renderer") {
   if (enable_spellcheck) {
     sources +=
         rebase_path(gypi_values.chrome_renderer_spellchecker_sources, ".", "..")
-    deps += [ "//third_party/hunspell" ]
+    if (!is_android) {
+      deps += [ "//third_party/hunspell" ]
+    }
   }
-
+  if (!use_browser_spellchecker) {
+    sources -= [
+      "spellchecker/platform_spelling_engine.cc",
+      "spellchecker/platform_spelling_engine.h",
+    ]
+  }
   if (enable_basic_printing || enable_print_preview) {
     deps += [ "//printing" ]
     sources +=
@@ -155,15 +169,14 @@ static_library("renderer") {
     }
   }
 
-  if (is_mac) {
-    deps += [ "//third_party/mach_override" ]
-  }
   if (is_win) {
     deps += [ "//third_party/wtl" ]
   }
-  if (!is_android) {
-    sources +=
-        rebase_path(gypi_values.chrome_renderer_non_android_sources, ".", "..")
+  if (is_android) {
+    sources -= [
+      "spellchecker/hunspell_engine.cc",
+      "spellchecker/hunspell_engine.h",
+    ]
   }
 }
 
@@ -196,6 +209,13 @@ source_set("test_support") {
     sources += [
       "media/mock_webrtc_logging_message_filter.cc",
       "media/mock_webrtc_logging_message_filter.h",
+    ]
+  }
+
+  if (is_android) {
+    sources -= [
+      "safe_browsing/mock_feature_extractor_clock.cc",
+      "safe_browsing/mock_feature_extractor_clock.h",
     ]
   }
 }

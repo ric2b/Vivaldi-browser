@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/user_manager/user_info.h"
 #include "components/user_manager/user_manager_export.h"
@@ -25,7 +26,7 @@ class USER_MANAGER_EXPORT EmptyUserInfo : public UserInfo {
   base::string16 GetDisplayName() const override;
   base::string16 GetGivenName() const override;
   std::string GetEmail() const override;
-  std::string GetUserID() const override;
+  const AccountId& GetAccountId() const override;
   const gfx::ImageSkia& GetImage() const override;
 
  private:

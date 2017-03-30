@@ -4,9 +4,13 @@
 
 #include "chromeos/disks/disk_mount_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/stl_util.h"
@@ -277,8 +281,8 @@ class DiskMountManagerImpl : public DiskMountManager {
     for (MountPointMap::iterator it = mount_points_.begin();
          it != mount_points_.end();
          ++it) {
-      if (base::StartsWithASCII(it->second.source_path, mount_path,
-                                true /*case sensitive*/)) {
+      if (base::StartsWith(it->second.source_path, mount_path,
+                           base::CompareCase::SENSITIVE)) {
         // TODO(tbarzic): Handle the case where this fails.
         UnmountPath(it->second.mount_path,
                     UNMOUNT_OPTIONS_NONE,
@@ -500,8 +504,8 @@ class DiskMountManagerImpl : public DiskMountManager {
         devices[index],
         base::Bind(&DiskMountManagerImpl::RefreshAfterGetDeviceProperties,
                    weak_ptr_factory_.GetWeakPtr(), devices, index + 1),
-        base::Bind(&DiskMountManagerImpl::RefreshCompleted,
-                   weak_ptr_factory_.GetWeakPtr(), false));
+        base::Bind(&DiskMountManagerImpl::RefreshDeviceAtIndex,
+                   weak_ptr_factory_.GetWeakPtr(), devices, index + 1));
   }
 
   // Part of EnsureMountInfoRefreshed().
@@ -607,7 +611,7 @@ class DiskMountManagerImpl : public DiskMountManager {
          it != system_path_prefixes_.end();
          ++it) {
       const std::string& prefix = *it;
-      if (base::StartsWithASCII(system_path, prefix, true))
+      if (base::StartsWith(system_path, prefix, base::CompareCase::SENSITIVE))
         return prefix;
     }
     return base::EmptyString();
@@ -651,7 +655,7 @@ DiskMountManager::Disk::Disk(const std::string& device_path,
                              const std::string& fs_uuid,
                              const std::string& system_path_prefix,
                              DeviceType device_type,
-                             uint64 total_size_in_bytes,
+                             uint64_t total_size_in_bytes,
                              bool is_parent,
                              bool is_read_only,
                              bool has_media,
@@ -677,8 +681,7 @@ DiskMountManager::Disk::Disk(const std::string& device_path,
       has_media_(has_media),
       on_boot_device_(on_boot_device),
       on_removable_device_(on_removable_device),
-      is_hidden_(is_hidden) {
-}
+      is_hidden_(is_hidden) {}
 
 DiskMountManager::Disk::~Disk() {}
 

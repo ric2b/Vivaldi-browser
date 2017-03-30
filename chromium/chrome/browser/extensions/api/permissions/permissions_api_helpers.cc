@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/permissions/permissions_api_helpers.h"
 
+#include <stddef.h>
+
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/values.h"
@@ -14,10 +16,6 @@
 #include "extensions/common/permissions/permissions_info.h"
 #include "extensions/common/permissions/usb_device_permission.h"
 #include "extensions/common/url_pattern_set.h"
-
-using extensions::APIPermission;
-using extensions::PermissionSet;
-using extensions::PermissionsInfo;
 
 namespace extensions {
 
@@ -39,17 +37,16 @@ const char kUnsupportedPermissionId[] =
 
 }  // namespace
 
-scoped_ptr<Permissions> PackPermissionSet(const PermissionSet* set) {
-  Permissions* permissions(new Permissions());
+scoped_ptr<Permissions> PackPermissionSet(const PermissionSet& set) {
+  scoped_ptr<Permissions> permissions(new Permissions());
 
   permissions->permissions.reset(new std::vector<std::string>());
-  for (APIPermissionSet::const_iterator i = set->apis().begin();
-       i != set->apis().end(); ++i) {
-    scoped_ptr<base::Value> value(i->ToValue());
+  for (const APIPermission* api : set.apis()) {
+    scoped_ptr<base::Value> value(api->ToValue());
     if (!value) {
-      permissions->permissions->push_back(i->name());
+      permissions->permissions->push_back(api->name());
     } else {
-      std::string name(i->name());
+      std::string name(api->name());
       std::string json;
       base::JSONWriter::Write(*value, &json);
       permissions->permissions->push_back(name + kDelimiter + json);
@@ -60,14 +57,13 @@ scoped_ptr<Permissions> PackPermissionSet(const PermissionSet* set) {
   // to apps/extensions via the permissions API.
 
   permissions->origins.reset(new std::vector<std::string>());
-  URLPatternSet hosts = set->explicit_hosts();
-  for (URLPatternSet::const_iterator i = hosts.begin(); i != hosts.end(); ++i)
-    permissions->origins->push_back(i->GetAsString());
+  for (const URLPattern& pattern : set.explicit_hosts())
+    permissions->origins->push_back(pattern.GetAsString());
 
-  return scoped_ptr<Permissions>(permissions);
+  return permissions;
 }
 
-scoped_refptr<PermissionSet> UnpackPermissionSet(
+scoped_ptr<const PermissionSet> UnpackPermissionSet(
     const Permissions& permissions,
     bool allow_file_access,
     std::string* error) {
@@ -87,8 +83,8 @@ scoped_refptr<PermissionSet> UnpackPermissionSet(
         std::string permission_name = it->substr(0, delimiter);
         std::string permission_arg = it->substr(delimiter + 1);
 
-        scoped_ptr<base::Value> permission_json(
-            base::JSONReader::DeprecatedRead(permission_arg));
+        scoped_ptr<base::Value> permission_json =
+            base::JSONReader::Read(permission_arg);
         if (!permission_json.get()) {
           *error = ErrorUtils::FormatErrorMessage(kInvalidParameter, *it);
           return NULL;
@@ -149,7 +145,7 @@ scoped_refptr<PermissionSet> UnpackPermissionSet(
     }
   }
 
-  return scoped_refptr<PermissionSet>(
+  return make_scoped_ptr(
       new PermissionSet(apis, manifest_permissions, origins, URLPatternSet()));
 }
 

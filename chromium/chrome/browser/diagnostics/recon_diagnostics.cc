@@ -4,22 +4,28 @@
 
 #include "chrome/browser/diagnostics/recon_diagnostics.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "build/build_config.h"
 #include "chrome/browser/diagnostics/diagnostics_test.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_version_info.h"
 #include "components/bookmarks/common/bookmark_constants.h"
+#include "components/version_info/version_info.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -39,8 +45,8 @@ namespace diagnostics {
 
 namespace {
 
-const int64 kOneKilobyte = 1024;
-const int64 kOneMegabyte = 1024 * kOneKilobyte;
+const int64_t kOneKilobyte = 1024;
+const int64_t kOneMegabyte = 1024 * kOneKilobyte;
 
 class InstallTypeTest;
 InstallTypeTest* g_install_type = 0;
@@ -111,7 +117,7 @@ class DiskSpaceTest : public DiagnosticsTest {
     base::FilePath data_dir;
     if (!PathService::Get(chrome::DIR_USER_DATA, &data_dir))
       return false;
-    int64 disk_space = base::SysInfo::AmountOfFreeDiskSpace(data_dir);
+    int64_t disk_space = base::SysInfo::AmountOfFreeDiskSpace(data_dir);
     if (disk_space < 0) {
       RecordFailure(DIAG_RECON_UNABLE_TO_QUERY, "Unable to query free space");
       return true;
@@ -171,7 +177,7 @@ class JSONTest : public DiagnosticsTest {
 
   JSONTest(const base::FilePath& path,
            DiagnosticsTestId id,
-           int64 max_file_size,
+           int64_t max_file_size,
            FileImportance importance)
       : DiagnosticsTest(id),
         path_(path),
@@ -191,7 +197,7 @@ class JSONTest : public DiagnosticsTest {
       }
       return true;
     }
-    int64 file_size;
+    int64_t file_size;
     if (!base::GetFileSize(path_, &file_size)) {
       RecordFailure(DIAG_RECON_CANNOT_OBTAIN_FILE_SIZE,
                     "Cannot obtain file size");
@@ -229,7 +235,7 @@ class JSONTest : public DiagnosticsTest {
 
  private:
   base::FilePath path_;
-  int64 max_file_size_;
+  int64_t max_file_size_;
   FileImportance importance_;
   DISALLOW_COPY_AND_ASSIGN(JSONTest);
 };
@@ -270,7 +276,7 @@ struct TestPathInfo {
   bool is_directory;
   bool is_optional;
   bool test_writable;
-  int64 max_size;
+  int64_t max_size;
 };
 
 const TestPathInfo kPathsToTest[] = {
@@ -311,7 +317,7 @@ class PathTest : public DiagnosticsTest {
       return true;
     }
 
-    int64 dir_or_file_size = 0;
+    int64_t dir_or_file_size = 0;
     if (path_info_.is_directory) {
       dir_or_file_size = base::ComputeDirectorySize(dir_or_file);
     } else {
@@ -358,14 +364,12 @@ class VersionTest : public DiagnosticsTest {
   VersionTest() : DiagnosticsTest(DIAGNOSTICS_VERSION_TEST) {}
 
   bool ExecuteImpl(DiagnosticsModel::Observer* observer) override {
-    chrome::VersionInfo version_info;
-    std::string current_version = version_info.Version();
+    std::string current_version = version_info::GetVersionNumber();
     if (current_version.empty()) {
       RecordFailure(DIAG_RECON_EMPTY_VERSION, "Empty Version");
       return true;
     }
-    std::string version_modifier =
-        chrome::VersionInfo::GetVersionStringModifier();
+    std::string version_modifier = chrome::GetChannelString();
     if (!version_modifier.empty())
       current_version += " " + version_modifier;
 #if defined(GOOGLE_CHROME_BUILD)

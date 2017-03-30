@@ -7,7 +7,7 @@
 #include <netinet/in.h>
 #include <resolv.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "net/dns/dns_config_service.h"
@@ -157,7 +157,7 @@ void NetworkChangeNotifierMac::SetInitialConnectionType() {
     base::AutoLock lock(connection_type_lock_);
     connection_type_ = connection_type;
     connection_type_initialized_ = true;
-    initial_connection_type_cv_.Signal();
+    initial_connection_type_cv_.Broadcast();
   }
 }
 
@@ -257,8 +257,13 @@ void NetworkChangeNotifierMac::ReachabilityCallback(
     old_type = notifier_mac->connection_type_;
     notifier_mac->connection_type_ = new_type;
   }
-  if (old_type != new_type)
+  if (old_type != new_type) {
     NotifyObserversOfConnectionTypeChange();
+    double max_bandwidth_mbps =
+        NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+            new_type == CONNECTION_NONE ? SUBTYPE_NONE : SUBTYPE_UNKNOWN);
+    NotifyObserversOfMaxBandwidthChange(max_bandwidth_mbps, new_type);
+  }
 
 #if defined(OS_IOS)
   // On iOS, the SCDynamicStore API does not exist, and we use the reachability

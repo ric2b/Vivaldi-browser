@@ -8,9 +8,10 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
-#include "components/sessions/session_id.h"
+#include "components/sessions/core/session_id.h"
 
 class Browser;
 class GURL;
@@ -42,7 +43,7 @@ class SettingsWindowManager {
   bool IsSettingsBrowser(Browser* browser) const;
 
  private:
-  friend struct DefaultSingletonTraits<SettingsWindowManager>;
+  friend struct base::DefaultSingletonTraits<SettingsWindowManager>;
   typedef std::map<Profile*, SessionID::id_type> ProfileSessionMap;
 
   SettingsWindowManager();

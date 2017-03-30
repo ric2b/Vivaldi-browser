@@ -10,6 +10,7 @@
 #include "ash/ash_export.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/host/transformer_helper.h"
+#include "base/macros.h"
 #include "ui/aura/remote_window_tree_host_win.h"
 
 namespace ash {
@@ -39,10 +40,8 @@ class ASH_EXPORT AshRemoteWindowTreeHostWin
   void UpdateRootWindowSize(const gfx::Size& host_size) override;
 
   // ui::internal::InputMethodDelegate:
-  bool DispatchKeyEventPostIME(const ui::KeyEvent& event) override;
-
-  // ui::EventSource:
-  ui::EventDispatchDetails DeliverEventToProcessor(ui::Event* event) override;
+  ui::EventDispatchDetails DispatchKeyEventPostIME(
+      ui::KeyEvent* event) override;
 
   TransformerHelper transformer_helper_;
 

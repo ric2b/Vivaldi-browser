@@ -2,13 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/scoped_observer.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
+#include "chrome/browser/extensions/extension_action_test_util.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/lazy_background_page_test_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -41,8 +46,8 @@
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
-using extensions::Extension;
-using extensions::ResultCatcher;
+
+namespace extensions {
 
 namespace {
 
@@ -52,12 +57,11 @@ namespace {
 // incognito involves reloading the extension - and the background pages may
 // have already loaded once before then. So we wait until the extension is
 // unloaded before listening to the background page notifications.
-class LoadedIncognitoObserver : public extensions::ExtensionRegistryObserver {
+class LoadedIncognitoObserver : public ExtensionRegistryObserver {
  public:
   explicit LoadedIncognitoObserver(Profile* profile)
       : profile_(profile), extension_registry_observer_(this) {
-    extension_registry_observer_.Add(
-        extensions::ExtensionRegistry::Get(profile_));
+    extension_registry_observer_.Add(ExtensionRegistry::Get(profile_));
   }
 
   void Wait() {
@@ -67,18 +71,16 @@ class LoadedIncognitoObserver : public extensions::ExtensionRegistryObserver {
   }
 
  private:
-  void OnExtensionUnloaded(
-      content::BrowserContext* browser_context,
-      const Extension* extension,
-      extensions::UnloadedExtensionInfo::Reason reason) override {
+  void OnExtensionUnloaded(content::BrowserContext* browser_context,
+                           const Extension* extension,
+                           UnloadedExtensionInfo::Reason reason) override {
     original_complete_.reset(new LazyBackgroundObserver(profile_));
     incognito_complete_.reset(
         new LazyBackgroundObserver(profile_->GetOffTheRecordProfile()));
   }
 
   Profile* profile_;
-  ScopedObserver<extensions::ExtensionRegistry,
-                 extensions::ExtensionRegistryObserver>
+  ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
       extension_registry_observer_;
   scoped_ptr<LazyBackgroundObserver> original_complete_;
   scoped_ptr<LazyBackgroundObserver> incognito_complete_;
@@ -94,8 +96,8 @@ class LazyBackgroundPageApiTest : public ExtensionApiTest {
   void SetUpInProcessBrowserTestFixture() override {
     ExtensionApiTest::SetUpInProcessBrowserTestFixture();
     // Set shorter delays to prevent test timeouts.
-    extensions::ProcessManager::SetEventPageIdleTimeForTesting(1);
-    extensions::ProcessManager::SetEventPageSuspendingTimeForTesting(1);
+    ProcessManager::SetEventPageIdleTimeForTesting(1);
+    ProcessManager::SetEventPageSuspendingTimeForTesting(1);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -121,8 +123,7 @@ class LazyBackgroundPageApiTest : public ExtensionApiTest {
   // Returns true if the lazy background page for the extension with
   // |extension_id| is still running.
   bool IsBackgroundPageAlive(const std::string& extension_id) {
-    extensions::ProcessManager* pm =
-        extensions::ProcessManager::Get(browser()->profile());
+    ProcessManager* pm = ProcessManager::Get(browser()->profile());
     return pm->GetBackgroundHostForExtension(extension_id);
   }
 
@@ -130,8 +131,7 @@ class LazyBackgroundPageApiTest : public ExtensionApiTest {
   DISALLOW_COPY_AND_ASSIGN(LazyBackgroundPageApiTest);
 };
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_BrowserActionCreateTab) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, BrowserActionCreateTab) {
   ASSERT_TRUE(LoadExtensionAndWait("browser_action_create_tab"));
 
   // Lazy Background Page doesn't exist yet.
@@ -152,9 +152,8 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_BrowserActionCreateTa
                 GetURL().spec());
 }
 
-// TODO reenable test for Vivaldi
 IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest,
-                       DISABLED_BrowserActionCreateTabAfterCallback) {
+                       BrowserActionCreateTabAfterCallback) {
   ASSERT_TRUE(LoadExtensionAndWait("browser_action_with_callback"));
 
   // Lazy Background Page doesn't exist yet.
@@ -172,8 +171,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest,
   EXPECT_EQ(num_tabs_before + 1, browser()->tab_strip_model()->count());
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_BroadcastEvent) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, BroadcastEvent) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   const Extension* extension = LoadExtensionAndWait("broadcast_event");
@@ -194,13 +192,12 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_BroadcastEvent) {
 
   // Page action is shown.
   WaitForPageActionVisibilityChangeTo(num_page_actions + 1);
-  EXPECT_EQ(num_page_actions + 1,
-            browser()->window()->GetLocationBar()->
-                GetLocationBarForTesting()->PageActionVisibleCount());
+  EXPECT_EQ(static_cast<size_t>(num_page_actions + 1),
+            extension_action_test_util::GetVisiblePageActionCount(
+                browser()->tab_strip_model()->GetActiveWebContents()));
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_Filters) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, Filters) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   const Extension* extension = LoadExtensionAndWait("filters");
@@ -218,8 +215,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_Filters) {
 
 // Tests that the lazy background page receives the onInstalled event and shuts
 // down.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_OnInstalled) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, OnInstalled) {
   ResultCatcher catcher;
   ASSERT_TRUE(LoadExtensionAndWait("on_installed"));
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
@@ -244,8 +240,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, WaitForDialog) {
   EXPECT_TRUE(IsBackgroundPageAlive(extension->id()));
 
   // Close the dialog. The keep alive count is decremented.
-  extensions::ProcessManager* pm =
-      extensions::ProcessManager::Get(browser()->profile());
+  ProcessManager* pm = ProcessManager::Get(browser()->profile());
   int previous_keep_alive_count = pm->GetLazyKeepaliveCount(extension);
   dialog->CloseModalDialog();
   EXPECT_EQ(previous_keep_alive_count - 1,
@@ -258,8 +253,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, WaitForDialog) {
 
 // Tests that the lazy background page stays alive until all visible views are
 // closed.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_WaitForView) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, WaitForView) {
   LazyBackgroundObserver page_complete;
   ResultCatcher catcher;
   base::FilePath extdir = test_data_dir_.AppendASCII("lazy_background_page").
@@ -288,8 +282,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_WaitForView) {
 
 // Tests that the lazy background page stays alive until all network requests
 // are complete.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_WaitForRequest) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, WaitForRequest) {
   host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(StartEmbeddedTestServer());
 
@@ -302,9 +295,8 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_WaitForRequest) {
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
 
   // Lazy Background Page still exists, because the extension started a request.
-  extensions::ProcessManager* pm =
-      extensions::ProcessManager::Get(browser()->profile());
-  extensions::ExtensionHost* host =
+  ProcessManager* pm = ProcessManager::Get(browser()->profile());
+  ExtensionHost* host =
       pm->GetBackgroundHostForExtension(last_loaded_extension_id());
   ASSERT_TRUE(host);
 
@@ -321,8 +313,9 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_WaitForRequest) {
 
 // Tests that the lazy background page stays alive while a NaCl module exists in
 // its DOM.
-#if !defined(DISABLE_NACL)
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, NaCl) {
+#if !defined(DISABLE_NACL) && !defined(DISABLE_NACL_BROWSERTESTS)
+
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, NaClInBackgroundPage) {
   {
     base::FilePath extdir;
     ASSERT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &extdir));
@@ -353,13 +346,44 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, NaCl) {
   // The Lazy Background Page has been shut down.
   EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
 }
+
+// Tests that the lazy background page shuts down when all visible views with
+// NaCl modules are closed.
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, NaClInView) {
+  // The extension is loaded and should've opened a new tab to an extension
+  // page, and the Lazy Background Page stays alive.
+  {
+    base::FilePath extdir;
+    ASSERT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &extdir));
+    extdir = extdir.AppendASCII("ppapi/tests/extensions/popup/newlib");
+    ResultCatcher catcher;
+    const Extension* extension = LoadExtension(extdir);
+    ASSERT_TRUE(extension);
+    EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
+    EXPECT_EQ(
+        extension->GetResourceURL("popup.html").spec(),
+        browser()->tab_strip_model()->GetActiveWebContents()->GetURL().spec());
+    EXPECT_TRUE(IsBackgroundPageAlive(last_loaded_extension_id()));
+  }
+
+  // Close the new tab.
+  {
+    LazyBackgroundObserver page_complete;
+    browser()->tab_strip_model()->CloseWebContentsAt(
+        browser()->tab_strip_model()->active_index(),
+        TabStripModel::CLOSE_NONE);
+    page_complete.WaitUntilClosed();
+  }
+
+  // The Lazy Background Page has been shut down.
+  EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
+}
 #endif
 
 // Tests that the lazy background page stays alive until all visible views are
 // closed.
 // http://crbug.com/175778; test fails frequently on OS X
-// TODO reenable test for Vivaldi
-#if 1 || defined(OS_MACOSX)
+#if defined(OS_MACOSX)
 #define MAYBE_WaitForNTP DISABLED_WaitForNTP
 #else
 #define MAYBE_WaitForNTP WaitForNTP
@@ -394,8 +418,8 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, MAYBE_WaitForNTP) {
 // See crbug.com/248437
 IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_IncognitoSplitMode) {
   // Open incognito window.
-  Browser* incognito_browser = ui_test_utils::OpenURLOffTheRecord(
-      browser()->profile(), GURL("about:blank"));
+  Browser* incognito_browser =
+      OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
 
   // Load the extension with incognito enabled.
   {
@@ -407,10 +431,8 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_IncognitoSplitMode) {
   }
 
   // Lazy Background Page doesn't exist yet.
-  extensions::ProcessManager* pm =
-      extensions::ProcessManager::Get(browser()->profile());
-  extensions::ProcessManager* pmi =
-      extensions::ProcessManager::Get(incognito_browser->profile());
+  ProcessManager* pm = ProcessManager::Get(browser()->profile());
+  ProcessManager* pmi = ProcessManager::Get(incognito_browser->profile());
   EXPECT_FALSE(pm->GetBackgroundHostForExtension(last_loaded_extension_id()));
   EXPECT_FALSE(pmi->GetBackgroundHostForExtension(last_loaded_extension_id()));
 
@@ -460,8 +482,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_IncognitoSplitMode) {
 
 // Tests that messages from the content script activate the lazy background
 // page, and keep it alive until all channels are closed.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_Messaging) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, Messaging) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(LoadExtensionAndWait("messaging"));
 
@@ -497,8 +518,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, ImpulseAddsCount) {
   ASSERT_TRUE(extension);
 
   // Lazy Background Page doesn't exist yet.
-  extensions::ProcessManager* pm =
-      extensions::ProcessManager::Get(browser()->profile());
+  ProcessManager* pm = ProcessManager::Get(browser()->profile());
   EXPECT_FALSE(pm->GetBackgroundHostForExtension(last_loaded_extension_id()));
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
 
@@ -526,8 +546,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, ImpulseAddsCount) {
 // Tests that the lazy background page receives the unload event when we
 // close it, and that it can execute simple API calls that don't require an
 // asynchronous response.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_OnUnload) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, OnUnload) {
   ASSERT_TRUE(LoadExtensionAndWait("on_unload"));
 
   // Lazy Background Page has been shut down.
@@ -545,8 +564,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, EventDispatchToTab) {
   ResultCatcher catcher;
   catcher.RestrictToBrowserContext(browser()->profile());
 
-  const extensions::Extension* extension =
-      LoadExtensionAndWait("event_dispatch_to_tab");
+  const Extension* extension = LoadExtensionAndWait("event_dispatch_to_tab");
 
   ExtensionTestMessageListener page_ready("ready", true);
   GURL page_url = extension->GetResourceURL("page.html");
@@ -576,8 +594,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, EventDispatchToTab) {
 
 // Tests that the lazy background page updates the chrome://extensions page
 // when it is destroyed.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_UpdateExtensionsPage) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, UpdateExtensionsPage) {
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIExtensionsURL));
 
   ResultCatcher catcher;
@@ -641,3 +658,5 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, OnSuspendUseStorageApi) {
 
 // TODO: background page with timer.
 // TODO: background page that interacts with popup.
+
+}  // namespace extensions

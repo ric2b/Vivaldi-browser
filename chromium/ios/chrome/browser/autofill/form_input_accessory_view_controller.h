@@ -16,6 +16,7 @@ namespace autofill {
 extern NSString* const kFormSuggestionAssistButtonPreviousElement;
 extern NSString* const kFormSuggestionAssistButtonNextElement;
 extern NSString* const kFormSuggestionAssistButtonDone;
+extern CGFloat const kInputAccessoryHeight;
 }  // namespace autofill
 
 @protocol FormInputAccessoryViewProvider;
@@ -67,6 +68,10 @@ typedef void (^AccessoryViewReadyCompletion)(
 // set using |accessoryViewUpdateBlock|.
 - (void)resizeAccessoryView;
 
+// Returns YES if UMA metrics for keyboard accessory button presses should be
+// logged for this provider.
+- (BOOL)getLogKeyboardAccessoryMetrics;
+
 @end
 
 // Creates and manages a custom input accessory view while the user is
@@ -79,6 +84,12 @@ typedef void (^AccessoryViewReadyCompletion)(
 // accessory views.
 - (instancetype)initWithWebState:(web::WebState*)webState
                        providers:(NSArray*)providers;
+
+// Notifies the controller that the owning tab was shown.
+- (void)wasShown;
+
+// Notifies the controller that the owning tab was hidden.
+- (void)wasHidden;
 
 // Hides the default input accessory view and replaces it with one that shows
 // |customView| and form navigation controls.

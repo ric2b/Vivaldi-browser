@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/dom_distiller/core/proto/adaboost.pb.h"
 
@@ -19,6 +20,7 @@ namespace dom_distiller {
 class DistillablePageDetector {
  public:
   static const DistillablePageDetector* GetDefault();
+  static const DistillablePageDetector* GetNewModel();
   explicit DistillablePageDetector(scoped_ptr<AdaBoostProto> proto);
   ~DistillablePageDetector();
 

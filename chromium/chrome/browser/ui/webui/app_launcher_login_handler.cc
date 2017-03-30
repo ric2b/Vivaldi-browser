@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/app_launcher_login_handler.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/bind.h"
@@ -12,6 +14,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
@@ -19,7 +22,6 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_promo.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -27,13 +29,15 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
 #include "chrome/browser/ui/webui/profile_info_watcher.h"
-#include "chrome/browser/web_resource/promo_resource_service.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/web_resource/promo_resource_service.h"
 #include "content/public/browser/host_zoom_map.h"
+#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/page_zoom.h"
@@ -114,8 +118,9 @@ void AppLauncherLoginHandler::HandleShowSyncLoginUI(
   if (!signin::ShouldShowPromo(profile))
     return;
 
-  std::string username =
-      SigninManagerFactory::GetForProfile(profile)->GetAuthenticatedUsername();
+  std::string username = SigninManagerFactory::GetForProfile(profile)
+                             ->GetAuthenticatedAccountInfo()
+                             .email;
   if (!username.empty())
     return;
 
@@ -125,11 +130,11 @@ void AppLauncherLoginHandler::HandleShowSyncLoginUI(
     return;
 
   // The user isn't signed in, show the sign in promo.
-  signin_metrics::Source source =
-      web_contents->GetURL().spec() == chrome::kChromeUIAppsURL ?
-          signin_metrics::SOURCE_APPS_PAGE_LINK :
-          signin_metrics::SOURCE_NTP_LINK;
-  chrome::ShowBrowserSignin(browser, source);
+  signin_metrics::AccessPoint access_point =
+      web_contents->GetURL().spec() == chrome::kChromeUIAppsURL
+          ? signin_metrics::AccessPoint::ACCESS_POINT_APPS_PAGE_LINK
+          : signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK;
+  chrome::ShowBrowserSignin(browser, access_point);
   RecordInHistogram(NTP_SIGN_IN_PROMO_CLICKED);
 }
 
@@ -156,10 +161,15 @@ void AppLauncherLoginHandler::HandleLoginMessageSeen(
 
 void AppLauncherLoginHandler::HandleShowAdvancedLoginUI(
     const base::ListValue* args) {
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
-  if (browser)
-    chrome::ShowBrowserSignin(browser, signin_metrics::SOURCE_NTP_LINK);
+  content::WebContents* web_contents = web_ui()->GetWebContents();
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (!browser)
+    return;
+  signin_metrics::AccessPoint access_point =
+      web_contents->GetURL().spec() == chrome::kChromeUIAppsURL
+          ? signin_metrics::AccessPoint::ACCESS_POINT_APPS_PAGE_LINK
+          : signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK;
+  chrome::ShowBrowserSignin(browser, access_point);
 }
 
 void AppLauncherLoginHandler::UpdateLogin() {
@@ -204,6 +214,12 @@ void AppLauncherLoginHandler::UpdateLogin() {
           l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME));
       sub_header = l10n_util::GetStringFUTF16(
           IDS_SYNC_PROMO_NOT_SIGNED_IN_STATUS_SUB_HEADER, signed_in_link);
+
+      content::RecordAction(
+          web_ui()->GetWebContents()->GetURL().spec() ==
+                  chrome::kChromeUIAppsURL
+              ? base::UserMetricsAction("Signin_Impression_FromAppsPageLink")
+              : base::UserMetricsAction("Signin_Impression_FromNTP"));
       // Record that the user was shown the promo.
       RecordInHistogram(NTP_SIGN_IN_PROMO_VIEWED);
     }

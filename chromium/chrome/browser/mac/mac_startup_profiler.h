@@ -7,6 +7,7 @@
 
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/time/time.h"
 
@@ -42,7 +43,7 @@ class MacStartupProfiler {
   void RecordMetrics();
 
  private:
-  friend struct DefaultSingletonTraits<MacStartupProfiler>;
+  friend struct base::DefaultSingletonTraits<MacStartupProfiler>;
 
   // Returns the name of the histogram for the given location.
   const std::string HistogramName(Location location);
@@ -51,7 +52,7 @@ class MacStartupProfiler {
   void RecordHistogram(Location location, const base::TimeDelta& delta);
 
   // Keeps track of the time at which each initialization phase was reached.
-  std::map<Location, base::Time> profiled_times_;
+  std::map<Location, base::TimeTicks> profiled_ticks_;
 
   // Whether UMA metrics have been recorded. Only record UMA metrics once.
   bool recorded_metrics_;

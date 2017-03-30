@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.device;
 
 import android.content.Context;
+import android.text.TextUtils;
 import android.view.accessibility.AccessibilityManager;
 
 import org.chromium.base.ApplicationStatus;
@@ -12,6 +13,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.components.variations.VariationsAssociatedData;
 import org.chromium.ui.base.DeviceFormFactor;
 
 /**
@@ -19,6 +21,12 @@ import org.chromium.ui.base.DeviceFormFactor;
  * devices.
  */
 public class DeviceClassManager {
+    private static final String DISABLE_AUTO_HIDING_FIELD_TRIAL_NAME = "DisableAutoHidingToolbar";
+    private static final String DISABLE_AUTO_HIDING_TOOLBAR_THRESHOLD_COMMAND =
+            "disable-auto-hiding-toolbar-threshold";
+    private static final String DISABLE_AUTO_HIDING_TOOLBAR_THRESHOLD_PARAM =
+            "disable_auto_hiding_toolbar_threshold";
+
     private static DeviceClassManager sInstance;
 
     // Set of features that can be enabled/disabled
@@ -26,14 +34,13 @@ public class DeviceClassManager {
     private boolean mEnableLayerDecorationCache;
     private boolean mEnableAccessibilityLayout;
     private boolean mEnableAnimations;
-    private boolean mEnableInstantSearchClicks;
     private boolean mEnablePrerendering;
     private boolean mEnableToolbarSwipe;
     private boolean mEnableToolbarSwipeInDocumentMode;
-    private boolean mEnableUndo;
     private boolean mDisableDomainReliability;
 
     private final boolean mEnableFullscreen;
+    private Boolean mDisableAutoHidingToolbar;
 
     private static DeviceClassManager getInstance() {
         if (sInstance == null) {
@@ -55,7 +62,6 @@ public class DeviceClassManager {
             mEnableAnimations = false;
             mEnablePrerendering = false;
             mEnableToolbarSwipe = false;
-            mEnableInstantSearchClicks = false;
             mDisableDomainReliability = true;
         } else {
             mEnableSnapshots = true;
@@ -64,7 +70,6 @@ public class DeviceClassManager {
             mEnableAnimations = true;
             mEnablePrerendering = true;
             mEnableToolbarSwipe = true;
-            mEnableInstantSearchClicks = true;
             mDisableDomainReliability = false;
         }
 
@@ -78,17 +83,12 @@ public class DeviceClassManager {
                 .hasSwitch(ChromeSwitches.ENABLE_ACCESSIBILITY_TAB_SWITCHER);
         mEnableFullscreen =
                 !commandLine.hasSwitch(ChromeSwitches.DISABLE_FULLSCREEN);
-        mEnableUndo = commandLine.hasSwitch(ChromeSwitches.ENABLE_HIGH_END_UI_UNDO);
         mEnableToolbarSwipeInDocumentMode =
                 commandLine.hasSwitch(ChromeSwitches.ENABLE_TOOLBAR_SWIPE_IN_DOCUMENT_MODE);
 
         // Related features.
         if (mEnableAccessibilityLayout) {
             mEnableAnimations = false;
-        }
-
-        if (SysUtils.isLowEndDevice() || mEnableAccessibilityLayout)  {
-            mEnableUndo = true;
         }
     }
 
@@ -145,20 +145,6 @@ public class DeviceClassManager {
     }
 
     /**
-     * @return Whether or not instant search clicks is enabled.
-     */
-    public static boolean enableInstantSearchClicks() {
-        return getInstance().mEnableInstantSearchClicks;
-    }
-
-    /**
-     * @return Whether or not undo is enabled.
-     */
-    public static boolean enableUndo(Context context) {
-        return getInstance().mEnableUndo || isAccessibilityModeEnabled(context);
-    }
-
-    /**
      * @return Whether or not to disable domain reliability.
      */
     public static boolean disableDomainReliability() {
@@ -173,5 +159,34 @@ public class DeviceClassManager {
                 && manager.isTouchExplorationEnabled();
         TraceEvent.end("DeviceClassManager::isAccessibilityModeEnabled");
         return enabled;
+    }
+
+    /**
+     * @param context A {@link Context} instance.
+     * @return Whether auto-hiding the toolbar is disabled.
+     */
+    public static boolean isAutoHidingToolbarDisabled(Context context) {
+        if (getInstance().mDisableAutoHidingToolbar == null) {
+            getInstance().mDisableAutoHidingToolbar = false;
+            String value = CommandLine.getInstance().getSwitchValue(
+                    DISABLE_AUTO_HIDING_TOOLBAR_THRESHOLD_COMMAND);
+            if (TextUtils.isEmpty(value)) {
+                value = VariationsAssociatedData.getVariationParamValue(
+                        DISABLE_AUTO_HIDING_FIELD_TRIAL_NAME,
+                        DISABLE_AUTO_HIDING_TOOLBAR_THRESHOLD_PARAM);
+            }
+            if (!TextUtils.isEmpty(value)) {
+                try {
+                    int threshold = Integer.parseInt(value);
+                    int smallestScreenDp =
+                            context.getResources().getConfiguration().smallestScreenWidthDp;
+                    if (smallestScreenDp >= threshold) {
+                        getInstance().mDisableAutoHidingToolbar = true;
+                    }
+                } catch (NumberFormatException e) {
+                }
+            }
+        }
+        return getInstance().mDisableAutoHidingToolbar;
     }
 }

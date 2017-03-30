@@ -31,6 +31,7 @@ const char kEventExit[] = "webViewInternal.onExit";
 const char kEventExitFullscreen[] = "webViewInternal.onExitFullscreen";
 const char kEventFindReply[] = "webViewInternal.onFindReply";
 const char kEventFrameNameChanged[] = "webViewInternal.onFrameNameChanged";
+const char kEventHeadersReceived[] = "webViewInternal.onHeadersReceived";
 const char kEventLoadAbort[] = "webViewInternal.onLoadAbort";
 const char kEventLoadCommit[] = "webViewInternal.onLoadCommit";
 const char kEventLoadProgress[] = "webViewInternal.onLoadProgress";
@@ -40,13 +41,20 @@ const char kEventLoadStop[] = "webViewInternal.onLoadStop";
 const char kEventMessage[] = "webViewInternal.onMessage";
 const char kEventNewWindow[] = "webViewInternal.onNewWindow";
 const char kEventPermissionRequest[] = "webViewInternal.onPermissionRequest";
+const char kEventResponseStarted[] = "webViewInternal.onResponseStarted";
 const char kEventResponsive[] = "webViewInternal.onResponsive";
 const char kEventSizeChanged[] = "webViewInternal.onSizeChanged";
 const char kEventUnresponsive[] = "webViewInternal.onUnresponsive";
 const char kEventZoomChange[] = "webViewInternal.onZoomChange";
 
-// gisli@vivalid.com:  Event for requesting page info.
-const char kEventRequestPageInfo[] = "webViewInternal.onRequestPageInfo";
+// WebRequest API events.
+const char kEventAuthRequired[] = "webViewInternal.onAuthRequired";
+const char kEventBeforeRedirect[] = "webViewInternal.onBeforeRedirect";
+const char kEventBeforeRequest[] = "webViewInternal.onBeforeRequest";
+const char kEventBeforeSendHeaders[] = "webViewInternal.onBeforeSendHeaders";
+const char kEventCompleted[] = "webViewInternal.onCompleted";
+const char kEventErrorOccurred[] = "webViewInternal.onErrorOccurred";
+const char kEventSendHeaders[] = "webViewInternal.onSendHeaders";
 
 // Event related constants.
 const char kWebViewEventPrefix[] = "webViewInternal.";
@@ -67,9 +75,6 @@ const char kMessageType[] = "messageType";
 const char kName[] = "name";
 const char kNewHeight[] = "newHeight";
 const char kNewURL[] = "newUrl";
-const char kNewSearchName[] = "Name";
-const char kNewSearchUrl[] = "Url";
-const char kClipBoardText[] = "clipBoardText";
 const char kNewWidth[] = "newWidth";
 const char kOldHeight[] = "oldHeight";
 const char kOldURL[] = "oldUrl";
@@ -126,21 +131,15 @@ const unsigned int kMaxOutstandingPermissionRequests = 1024;
 const int kInvalidPermissionRequestID = 0;
 
 // ClearData API constants.
-const uint32 WEB_VIEW_REMOVE_DATA_MASK_APPCACHE = 1 << 0;
-const uint32 WEB_VIEW_REMOVE_DATA_MASK_CACHE = 1 << 1;
-const uint32 WEB_VIEW_REMOVE_DATA_MASK_COOKIES = 1 << 2;
-const uint32 WEB_VIEW_REMOVE_DATA_MASK_FILE_SYSTEMS = 1 << 3;
-const uint32 WEB_VIEW_REMOVE_DATA_MASK_INDEXEDDB = 1 << 4;
-const uint32 WEB_VIEW_REMOVE_DATA_MASK_LOCAL_STORAGE = 1 << 5;
-const uint32 WEB_VIEW_REMOVE_DATA_MASK_WEBSQL = 1 << 6;
+const uint32_t WEB_VIEW_REMOVE_DATA_MASK_APPCACHE = 1 << 0;
+const uint32_t WEB_VIEW_REMOVE_DATA_MASK_CACHE = 1 << 1;
+const uint32_t WEB_VIEW_REMOVE_DATA_MASK_COOKIES = 1 << 2;
+const uint32_t WEB_VIEW_REMOVE_DATA_MASK_FILE_SYSTEMS = 1 << 3;
+const uint32_t WEB_VIEW_REMOVE_DATA_MASK_INDEXEDDB = 1 << 4;
+const uint32_t WEB_VIEW_REMOVE_DATA_MASK_LOCAL_STORAGE = 1 << 5;
+const uint32_t WEB_VIEW_REMOVE_DATA_MASK_WEBSQL = 1 << 6;
 
 // Other.
 const char kWebViewContentScriptManagerKeyName[] =
     "web_view_content_script_manager";
-
-// Vivaldi: Extended progress information
-const char kLoadedBytes[] = "loadedBytes";
-const char kLoadedElements[] = "loadedElements";
-const char kTotalElements[] = "totalElements";
-
 }  // namespace webview

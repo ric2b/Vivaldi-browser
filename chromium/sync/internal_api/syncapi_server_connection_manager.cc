@@ -4,6 +4,8 @@
 
 #include "sync/internal_api/syncapi_server_connection_manager.h"
 
+#include <stdint.h>
+
 #include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
 #include "sync/internal_api/public/http_post_provider_factory.h"
@@ -51,18 +53,18 @@ bool SyncAPIBridgedConnection::Init(const char* path,
   int error_code = 0;
   int response_code = 0;
   if (!http->MakeSynchronousPost(&error_code, &response_code)) {
+    DCHECK_NE(error_code, net::OK);
     DVLOG(1) << "Http POST failed, error returns: " << error_code;
-    response->server_status = HttpResponse::ServerConnectionCodeFromNetError(
-        error_code);
+    response->server_status = HttpResponse::CONNECTION_UNAVAILABLE;
     return false;
   }
 
   // We got a server response, copy over response codes and content.
   response->response_code = response_code;
   response->content_length =
-      static_cast<int64>(http->GetResponseContentLength());
+      static_cast<int64_t>(http->GetResponseContentLength());
   response->payload_length =
-      static_cast<int64>(http->GetResponseContentLength());
+      static_cast<int64_t>(http->GetResponseContentLength());
   if (response->response_code < 400)
     response->server_status = HttpResponse::SERVER_CONNECTION_OK;
   else if (response->response_code == net::HTTP_UNAUTHORIZED)

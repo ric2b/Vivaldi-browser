@@ -8,7 +8,8 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
-import org.chromium.base.JNINamespace;
+import org.chromium.base.ContextUtils;
+import org.chromium.base.annotations.JNINamespace;
 
 /**
  * CronetLibraryLoader loads and initializes native library on main thread.
@@ -26,12 +27,12 @@ class CronetLibraryLoader {
      * any thread, the load and initialization is performed on main thread.
      */
     public static void ensureInitialized(
-            final Context context, final UrlRequestContextConfig config) {
+            final Context context, final CronetEngine.Builder builder) {
         synchronized (sLoadLock) {
             if (sInitTaskPosted) {
                 return;
             }
-            System.loadLibrary(config.libraryName());
+            System.loadLibrary(builder.libraryName());
             if (!Version.CRONET_VERSION.equals(nativeGetCronetVersion())) {
                 throw new RuntimeException(String.format(
                       "Expected Cronet version number %s, "
@@ -39,8 +40,8 @@ class CronetLibraryLoader {
                       Version.CRONET_VERSION,
                       nativeGetCronetVersion()));
             }
-            nativeCronetInitApplicationContext(context.getApplicationContext());
-            // Init native Chromium URLRequestContext on Main UI thread.
+            ContextUtils.initApplicationContext(context.getApplicationContext());
+            // Init native Chromium CronetEngine on Main UI thread.
             Runnable task = new Runnable() {
                 public void run() {
                     initOnMainThread(context);
@@ -75,6 +76,5 @@ class CronetLibraryLoader {
 
     // Native methods are implemented in cronet_loader.cc.
     private static native void nativeCronetInitOnMainThread();
-    private static native void nativeCronetInitApplicationContext(Context appContext);
     private static native String nativeGetCronetVersion();
 }

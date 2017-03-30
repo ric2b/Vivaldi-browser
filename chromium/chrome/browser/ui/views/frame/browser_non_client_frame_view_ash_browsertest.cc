@@ -11,6 +11,7 @@
 #include "ash/shell.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_test.h"
 #include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
+#include "components/signin/core/account_id/account_id.h"
 #endif  // defined(OS_CHROMEOS)
 
 using views::Widget;
@@ -225,14 +227,14 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
 
   EXPECT_FALSE(chrome::MultiUserWindowManager::ShouldShowAvatar(window));
 
-  const std::string current_user =
-      multi_user_util::GetUserIDFromProfile(browser()->profile());
+  const AccountId current_account_id =
+      multi_user_util::GetAccountIdFromProfile(browser()->profile());
   TestMultiUserWindowManager* manager =
-      new TestMultiUserWindowManager(browser(), current_user);
+      new TestMultiUserWindowManager(browser(), current_account_id);
 
   // Teleport the window to another desktop.
-  const std::string user2 = "user2";
-  manager->ShowWindowForUser(window, user2);
+  const AccountId account_id2(AccountId::FromUserEmail("user2"));
+  manager->ShowWindowForUser(window, account_id2);
   EXPECT_TRUE(chrome::MultiUserWindowManager::ShouldShowAvatar(window));
 
   // Avatar should show on the top left corner of the teleported browser window.
@@ -253,14 +255,15 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
                            profiles::kAvatarIconHeight / 2);
   EXPECT_EQ(HTCLIENT, frame_view->NonClientHitTest(avatar_center));
 
-  const std::string current_user =
-      multi_user_util::GetUserIDFromProfile(browser()->profile());
+  const AccountId current_user =
+      multi_user_util::GetAccountIdFromProfile(browser()->profile());
   TestMultiUserWindowManager* manager =
       new TestMultiUserWindowManager(browser(), current_user);
 
   // Teleport the window to another desktop.
-  const std::string user2 = "user2";
-  manager->ShowWindowForUser(browser()->window()->GetNativeWindow(), user2);
+  const AccountId account_id2(AccountId::FromUserEmail("user2"));
+  manager->ShowWindowForUser(browser()->window()->GetNativeWindow(),
+                             account_id2);
   // Clicking on the avatar icon should have same behaviour like clicking on
   // the caption area, i.e., allow the user to drag the browser window around.
   EXPECT_EQ(HTCAPTION, frame_view->NonClientHitTest(avatar_center));

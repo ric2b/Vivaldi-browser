@@ -3,9 +3,9 @@
 #ifndef VIVALDI_BORWSER_MAIN_EXTRA_PARTS_H_
 #define VIVALDI_BORWSER_MAIN_EXTRA_PARTS_H_
 
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
-
-#include "base/basictypes.h"
 
 class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
  public:
@@ -25,9 +25,12 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   void PostEarlyInitializationLinux();
 #endif
 
+  void PreProfileInit() override;
   void PostProfileInit() override;
 
  private:
+  void EnsureBrowserContextKeyedServiceFactoriesBuilt();
+
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraParts);
 };
 

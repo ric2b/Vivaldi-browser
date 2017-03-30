@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_HISTORY_CORE_TEST_HISTORY_BACKEND_DB_BASE_TEST_H_
 #define COMPONENTS_HISTORY_CORE_TEST_HISTORY_BACKEND_DB_BASE_TEST_H_
 
+#include <stdint.h>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -47,11 +49,9 @@ class HistoryBackendDBBaseTest : public HistoryUnitTestBase {
 
   void CreateDBVersion(int version);
 
-  void CreateArchivedDB();
-
   void DeleteBackend();
 
-  bool AddDownload(uint32 id, DownloadState state, base::Time time);
+  bool AddDownload(uint32_t id, DownloadState state, base::Time time);
 
   base::ScopedTempDir temp_dir_;
 

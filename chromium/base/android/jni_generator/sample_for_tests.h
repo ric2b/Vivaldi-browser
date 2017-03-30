@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/android/jni_android.h"
-#include "base/basictypes.h"
 
 namespace base {
 namespace android {
@@ -148,19 +147,25 @@ class CPPClass {
 
   class InnerClass {
    public:
-    jdouble MethodOtherP0(JNIEnv* env, jobject caller);
+    jdouble MethodOtherP0(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& caller);
   };
 
-  void Destroy(JNIEnv* env, jobject caller);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& caller);
 
-  jint Method(JNIEnv* env, jobject caller);
+  jint Method(JNIEnv* env, const base::android::JavaParamRef<jobject>& caller);
 
-  void AddStructB(JNIEnv* env, jobject caller, jobject structb);
+  void AddStructB(JNIEnv* env,
+                  const base::android::JavaParamRef<jobject>& caller,
+                  const base::android::JavaParamRef<jobject>& structb);
 
-  void IterateAndDoSomethingWithStructB(JNIEnv* env, jobject caller);
+  void IterateAndDoSomethingWithStructB(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller);
 
   base::android::ScopedJavaLocalRef<jstring> ReturnAString(
-      JNIEnv* env, jobject caller);
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller);
 
  private:
   std::map<long, std::string> map_;

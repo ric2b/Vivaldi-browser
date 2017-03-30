@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_APP_LIST_SERVICE_COCOA_MAC_H_
 #define CHROME_BROWSER_UI_APP_LIST_APP_LIST_SERVICE_COCOA_MAC_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/app_list/app_list_service_mac.h"
 
 namespace test {
@@ -14,8 +15,10 @@ class AppListServiceMacTestApi;
 class AppListControllerDelegateImpl;
 @class AppListWindowController;
 
+namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
+}  // namespace base
 
 // AppListServiceCocoaMac shows and hides the Cocoa app list on Mac.
 class AppListServiceCocoaMac : public AppListServiceMac {
@@ -40,7 +43,7 @@ class AppListServiceCocoaMac : public AppListServiceMac {
 
  private:
   friend class test::AppListServiceMacTestApi;
-  friend struct DefaultSingletonTraits<AppListServiceCocoaMac>;
+  friend struct base::DefaultSingletonTraits<AppListServiceCocoaMac>;
 
   AppListServiceCocoaMac();
 

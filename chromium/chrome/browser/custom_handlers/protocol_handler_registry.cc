@@ -4,14 +4,17 @@
 
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 
+#include <stddef.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/custom_handlers/register_protocol_handler_infobar_delegate.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "chrome/common/pref_names.h"
@@ -172,7 +175,7 @@ ProtocolHandlerRegistry::JobInterceptorFactory::~JobInterceptorFactory() {
 
 void ProtocolHandlerRegistry::JobInterceptorFactory::Chain(
     scoped_ptr<net::URLRequestJobFactory> job_factory) {
-  job_factory_ = job_factory.Pass();
+  job_factory_ = std::move(job_factory);
 }
 
 net::URLRequestJob*

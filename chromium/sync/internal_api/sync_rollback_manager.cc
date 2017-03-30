@@ -4,6 +4,9 @@
 
 #include "sync/internal_api/sync_rollback_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/read_transaction.h"
@@ -27,7 +30,7 @@ void SyncRollbackManager::Init(InitArgs* args) {
           args->database_location,
           args->internal_components_factory.get(),
           InternalComponentsFactory::STORAGE_ON_DISK,
-          args->unrecoverable_error_handler.Pass(),
+          args->unrecoverable_error_handler,
           args->report_unrecoverable_error_function)) {
     change_delegate_ = args->change_delegate;
 
@@ -43,7 +46,8 @@ void SyncRollbackManager::Init(InitArgs* args) {
 }
 
 void SyncRollbackManager::StartSyncingNormally(
-    const ModelSafeRoutingInfo& routing_info, base::Time last_poll_time){
+    const ModelSafeRoutingInfo& routing_info,
+    base::Time last_poll_time) {
   if (rollback_ready_types_.Empty()) {
     NotifyRollbackDone();
     return;
@@ -86,7 +90,8 @@ void SyncRollbackManager::StartSyncingNormally(
 }
 
 SyncerError SyncRollbackManager::DeleteOnWorkerThread(
-    ModelType type, std::vector<int64> handles) {
+    ModelType type,
+    std::vector<int64_t> handles) {
   CHECK(change_delegate_);
 
   {

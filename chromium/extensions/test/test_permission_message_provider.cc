@@ -12,42 +12,20 @@ TestPermissionMessageProvider::TestPermissionMessageProvider() {
 TestPermissionMessageProvider::~TestPermissionMessageProvider() {
 }
 
-PermissionMessageIDs
-TestPermissionMessageProvider::GetLegacyPermissionMessageIDs(
-    const PermissionSet* permissions,
-    Manifest::Type extension_type) const {
-  return PermissionMessageIDs();
-}
-
-CoalescedPermissionMessages
-TestPermissionMessageProvider::GetCoalescedPermissionMessages(
+PermissionMessages TestPermissionMessageProvider::GetPermissionMessages(
     const PermissionIDSet& permissions) const {
-  return CoalescedPermissionMessages();
-}
-
-std::vector<base::string16>
-TestPermissionMessageProvider::GetLegacyWarningMessages(
-    const PermissionSet* permissions,
-    Manifest::Type extension_type) const {
-  return std::vector<base::string16>();
-}
-
-std::vector<base::string16>
-TestPermissionMessageProvider::GetLegacyWarningMessagesDetails(
-    const PermissionSet* permissions,
-    Manifest::Type extension_type) const {
-  return std::vector<base::string16>();
+  return PermissionMessages();
 }
 
 bool TestPermissionMessageProvider::IsPrivilegeIncrease(
-    const PermissionSet* old_permissions,
-    const PermissionSet* new_permissions,
+    const PermissionSet& old_permissions,
+    const PermissionSet& new_permissions,
     Manifest::Type extension_type) const {
   return false;
 }
 
 PermissionIDSet TestPermissionMessageProvider::GetAllPermissionIDs(
-    const PermissionSet* permissions,
+    const PermissionSet& permissions,
     Manifest::Type extension_type) const {
   return PermissionIDSet();
 }

@@ -35,7 +35,10 @@
 
 #include "content/renderer/history_controller.h"
 
+#include <utility>
+
 #include "content/common/navigation_params.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "third_party/WebKit/public/web/WebFrameLoadType.h"
@@ -50,6 +53,8 @@ namespace content {
 
 HistoryController::HistoryController(RenderViewImpl* render_view)
     : render_view_(render_view) {
+  // We don't use HistoryController in OOPIF enabled modes.
+  DCHECK(!SiteIsolationPolicy::UseSubframeNavigationEntries());
 }
 
 HistoryController::~HistoryController() {
@@ -64,8 +69,8 @@ void HistoryController::GoToEntry(
   HistoryFrameLoadVector same_document_loads;
   HistoryFrameLoadVector different_document_loads;
 
-  set_provisional_entry(target_entry.Pass());
-  navigation_params_ = navigation_params.Pass();
+  set_provisional_entry(std::move(target_entry));
+  navigation_params_ = std::move(navigation_params);
 
   if (current_entry_) {
     RecursiveGoToEntry(

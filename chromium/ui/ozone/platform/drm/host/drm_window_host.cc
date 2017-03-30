@@ -16,6 +16,7 @@
 #include "ui/ozone/platform/drm/host/drm_display_host.h"
 #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
 #include "ui/ozone/platform/drm/host/drm_gpu_platform_support_host.h"
+#include "ui/ozone/platform/drm/host/drm_overlay_candidates_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
@@ -34,6 +35,7 @@ DrmWindowHost::DrmWindowHost(PlatformWindowDelegate* delegate,
       cursor_(cursor),
       window_manager_(window_manager),
       display_manager_(display_manager),
+      overlay_candidates_host_(nullptr),
       bounds_(bounds),
       widget_(window_manager->NextAcceleratedWidget()) {
   window_manager_->AddWindow(widget_, this);
@@ -83,6 +85,9 @@ gfx::Rect DrmWindowHost::GetBounds() {
   return bounds_;
 }
 
+void DrmWindowHost::SetTitle(const base::string16& title) {
+}
+
 void DrmWindowHost::SetCapture() {
   window_manager_->GrabEvents(widget_);
 }
@@ -108,7 +113,7 @@ void DrmWindowHost::SetCursor(PlatformCursor cursor) {
 }
 
 void DrmWindowHost::MoveCursorTo(const gfx::Point& location) {
-  event_factory_->WarpCursorTo(widget_, location);
+  event_factory_->WarpCursorTo(widget_, gfx::PointF(location));
 }
 
 void DrmWindowHost::ConfineCursorToBounds(const gfx::Rect& bounds) {
@@ -117,6 +122,10 @@ void DrmWindowHost::ConfineCursorToBounds(const gfx::Rect& bounds) {
 
   cursor_confined_bounds_ = bounds;
   cursor_->CommitBoundsChange(widget_, bounds_, bounds);
+}
+
+PlatformImeController* DrmWindowHost::GetPlatformImeController() {
+  return nullptr;
 }
 
 bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& ne) {
@@ -153,7 +162,7 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& ne) {
     return display_bounds == bounds_;
   } else if (event->IsLocatedEvent()) {
     LocatedEvent* located_event = static_cast<LocatedEvent*>(event);
-    return bounds_.Contains(gfx::ToFlooredPoint(located_event->location()));
+    return bounds_.Contains(located_event->location());
   }
 
   // TODO(spang): For non-ash builds we would need smarter keyboard focus.
@@ -167,10 +176,10 @@ uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& native_event) {
   if (event->IsLocatedEvent()) {
     // Make the event location relative to this window's origin.
     LocatedEvent* located_event = static_cast<LocatedEvent*>(event);
-    gfx::PointF location = located_event->location();
-    location -= bounds_.OffsetFromOrigin();
-    located_event->set_location(location);
-    located_event->set_root_location(location);
+    gfx::PointF location = located_event->location_f();
+    location -= gfx::Vector2dF(bounds_.OffsetFromOrigin());
+    located_event->set_location_f(location);
+    located_event->set_root_location_f(location);
   }
   DispatchEventFromNativeUiEvent(
       native_event, base::Bind(&PlatformWindowDelegate::DispatchEvent,
@@ -186,11 +195,18 @@ void DrmWindowHost::OnChannelEstablished() {
 void DrmWindowHost::OnChannelDestroyed() {
 }
 
+void DrmWindowHost::SetOverlayCandidatesHost(DrmOverlayCandidatesHost* host) {
+  overlay_candidates_host_ = host;
+}
+
 void DrmWindowHost::SendBoundsChange() {
   // Update the cursor before the window so that the cursor stays within the
   // window bounds when the window size shrinks.
   cursor_->CommitBoundsChange(widget_, bounds_, GetCursorConfinedBounds());
   sender_->Send(new OzoneGpuMsg_WindowBoundsChanged(widget_, bounds_));
+
+  if (overlay_candidates_host_)
+    overlay_candidates_host_->ResetCache();
 }
 
 }  // namespace ui

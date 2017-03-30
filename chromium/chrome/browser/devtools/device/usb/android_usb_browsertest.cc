@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/location.h"
@@ -17,6 +20,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_utils.h"
+#include "device/core/device_client.h"
 #include "device/usb/usb_descriptors.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_handle.h"
@@ -24,6 +28,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::BrowserThread;
+using device::DeviceClient;
 using device::UsbConfigDescriptor;
 using device::UsbDevice;
 using device::UsbDeviceHandle;
@@ -69,8 +74,8 @@ struct BreakingAndroidTraits {
   static const bool kConfigured = true;
 };
 
-const uint32 kMaxPayload = 4096;
-const uint32 kVersion = 0x01000000;
+const uint32_t kMaxPayload = 4096;
+const uint32_t kVersion = 0x01000000;
 
 const char kDeviceManufacturer[] = "Test Manufacturer";
 const char kDeviceModel[] = "Nexus 6";
@@ -166,32 +171,36 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
     NOTIMPLEMENTED();
   }
 
+  void ClearHalt(uint8_t endpoint, const ResultCallback& callback) override {
+    NOTIMPLEMENTED();
+  }
+
   // Async IO. Can be called on any thread.
   void ControlTransfer(UsbEndpointDirection direction,
                        TransferRequestType request_type,
                        TransferRecipient recipient,
-                       uint8 request,
-                       uint16 value,
-                       uint16 index,
+                       uint8_t request,
+                       uint16_t value,
+                       uint16_t index,
                        scoped_refptr<net::IOBuffer> buffer,
                        size_t length,
                        unsigned int timeout,
                        const TransferCallback& callback) override {}
 
-  void BulkTransfer(UsbEndpointDirection direction,
-                    uint8 endpoint,
-                    scoped_refptr<net::IOBuffer> buffer,
-                    size_t length,
-                    unsigned int timeout,
-                    const TransferCallback& callback) override {
+  void GenericTransfer(UsbEndpointDirection direction,
+                       uint8_t endpoint,
+                       scoped_refptr<net::IOBuffer> buffer,
+                       size_t length,
+                       unsigned int timeout,
+                       const TransferCallback& callback) override {
     if (direction == device::USB_DIRECTION_OUTBOUND) {
       if (remaining_body_length_ == 0) {
-        std::vector<uint32> header(6);
+        std::vector<uint32_t> header(6);
         memcpy(&header[0], buffer->data(), length);
         current_message_.reset(
             new AdbMessage(header[0], header[1], header[2], std::string()));
         remaining_body_length_ = header[3];
-        uint32 magic = header[5];
+        uint32_t magic = header[5];
         if ((current_message_->command ^ 0xffffffff) != magic) {
           DCHECK(false) << "Header checksum error";
           return;
@@ -217,6 +226,12 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
     }
   }
 
+  bool FindInterfaceByEndpoint(uint8_t endpoint_address,
+                               uint8_t* interface_number) {
+    NOTIMPLEMENTED();
+    return false;
+  }
+
   template <class D>
   void append(D data) {
     std::copy(reinterpret_cast<char*>(&data),
@@ -225,10 +240,10 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
   }
 
   // Copied from AndroidUsbDevice::Checksum
-  uint32 Checksum(const std::string& data) {
+  uint32_t Checksum(const std::string& data) {
     unsigned char* x = (unsigned char*)data.data();
     int count = data.length();
-    uint32 sum = 0;
+    uint32_t sum = 0;
     while (count-- > 0)
       sum += *x++;
     return sum;
@@ -302,7 +317,7 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
     append(arg0);
     append(arg1);
     bool add_zero = !body.empty() && (command != AdbMessage::kCommandWRTE);
-    append(static_cast<uint32>(body.size() + (add_zero ? 1 : 0)));
+    append(static_cast<uint32_t>(body.size() + (add_zero ? 1 : 0)));
     append(Checksum(body));
     append(command ^ 0xffffffff);
     std::copy(body.begin(), body.end(), std::back_inserter(output_buffer_));
@@ -336,15 +351,8 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
                               query.buffer, query.size));
   }
 
-  void InterruptTransfer(UsbEndpointDirection direction,
-                         uint8 endpoint,
-                         scoped_refptr<net::IOBuffer> buffer,
-                         size_t length,
-                         unsigned int timeout,
-                         const TransferCallback& callback) override {}
-
   void IsochronousTransfer(UsbEndpointDirection direction,
-                           uint8 endpoint,
+                           uint8_t endpoint,
                            scoped_refptr<net::IOBuffer> buffer,
                            size_t length,
                            unsigned int packets,
@@ -367,7 +375,7 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
   };
 
   scoped_refptr<MockUsbDevice<T> > device_;
-  uint32 remaining_body_length_;
+  uint32_t remaining_body_length_;
   scoped_ptr<AdbMessage> current_message_;
   std::vector<char> output_buffer_;
   std::queue<Query> queries_;
@@ -415,12 +423,8 @@ class MockUsbDevice : public UsbDevice {
                                             new MockUsbDeviceHandle<T>(this))));
   }
 
-  const UsbConfigDescriptor* GetConfiguration() override {
+  const UsbConfigDescriptor* GetActiveConfiguration() override {
     return T::kConfigured ? &config_desc_ : nullptr;
-  }
-
-  bool Close(scoped_refptr<UsbDeviceHandle> handle) override {
-    return true;
   }
 
   std::set<int> claimed_interfaces_;
@@ -499,6 +503,18 @@ class MockUsbServiceForCheckingTraits : public MockUsbService {
   int step_;
 };
 
+class TestDeviceClient : public DeviceClient {
+ public:
+  explicit TestDeviceClient(scoped_ptr<UsbService> service)
+      : DeviceClient(), usb_service_(std::move(service)) {}
+  ~TestDeviceClient() override {}
+
+ private:
+  UsbService* GetUsbService() override { return usb_service_.get(); }
+
+  scoped_ptr<UsbService> usb_service_;
+};
+
 class DevToolsAndroidBridgeWarmUp
     : public DevToolsAndroidBridge::DeviceCountListener {
  public:
@@ -520,9 +536,9 @@ class AndroidUsbDiscoveryTest : public InProcessBrowserTest {
   AndroidUsbDiscoveryTest()
       : scheduler_invoked_(0) {
   }
-  void SetUpOnMainThread() override {
-    mock_usb_service_.reset(CreateMockService());
 
+  void SetUpOnMainThread() override {
+    device_client_.reset(new TestDeviceClient(CreateMockService()));
     adb_bridge_ =
         DevToolsAndroidBridge::Factory::GetForProfile(browser()->profile());
     DCHECK(adb_bridge_);
@@ -544,10 +560,12 @@ class AndroidUsbDiscoveryTest : public InProcessBrowserTest {
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, request);
   }
 
-  virtual MockUsbService* CreateMockService() { return new MockUsbService(); }
+  virtual scoped_ptr<MockUsbService> CreateMockService() {
+    return make_scoped_ptr(new MockUsbService());
+  }
 
   scoped_refptr<content::MessageLoopRunner> runner_;
-  scoped_ptr<MockUsbService> mock_usb_service_;
+  scoped_ptr<TestDeviceClient> device_client_;
   DevToolsAndroidBridge* adb_bridge_;
   int scheduler_invoked_;
 };
@@ -565,22 +583,22 @@ class AndroidUsbCountTest : public AndroidUsbDiscoveryTest {
 
 class AndroidUsbTraitsTest : public AndroidUsbDiscoveryTest {
  protected:
-  MockUsbService* CreateMockService() override {
-    return new MockUsbServiceForCheckingTraits();
+  scoped_ptr<MockUsbService> CreateMockService() override {
+    return make_scoped_ptr(new MockUsbServiceForCheckingTraits());
   }
 };
 
 class AndroidBreakingUsbTest : public AndroidUsbDiscoveryTest {
  protected:
-  MockUsbService* CreateMockService() override {
-    return new MockBreakingUsbService();
+  scoped_ptr<MockUsbService> CreateMockService() override {
+    return make_scoped_ptr(new MockBreakingUsbService());
   }
 };
 
 class AndroidNoConfigUsbTest : public AndroidUsbDiscoveryTest {
  protected:
-  MockUsbService* CreateMockService() override {
-    return new MockNoConfigUsbService();
+  scoped_ptr<MockUsbService> CreateMockService() override {
+    return make_scoped_ptr(new MockNoConfigUsbService());
   }
 };
 
@@ -622,7 +640,7 @@ class MockCountListener : public DevToolsAndroidBridge::DeviceCountListener {
     Shutdown();
   }
 
-  void Shutdown() { base::MessageLoop::current()->Quit(); }
+  void Shutdown() { base::MessageLoop::current()->QuitWhenIdle(); }
 
   DevToolsAndroidBridge* adb_bridge_;
   int invoked_;

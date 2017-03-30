@@ -5,7 +5,6 @@
 #include "net/proxy/proxy_config_service_linux.h"
 
 #include <errno.h>
-#include <fcntl.h>
 #if defined(USE_GCONF)
 #include <gconf/gconf-client.h>
 #endif  // defined(USE_GCONF)
@@ -25,6 +24,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/nix/xdg_util.h"
 #include "base/single_thread_task_runner.h"
@@ -208,8 +208,7 @@ class SettingGetterImplGConf : public ProxyConfigServiceLinux::SettingGetter {
         system_proxy_id_(0),
         system_http_proxy_id_(0),
         notify_delegate_(NULL),
-        debounce_timer_(new base::OneShotTimer<SettingGetterImplGConf>()) {
-  }
+        debounce_timer_(new base::OneShotTimer()) {}
 
   ~SettingGetterImplGConf() override {
     // client_ should have been released before now, from
@@ -505,7 +504,7 @@ class SettingGetterImplGConf : public ProxyConfigServiceLinux::SettingGetter {
   guint system_http_proxy_id_;
 
   ProxyConfigServiceLinux::Delegate* notify_delegate_;
-  scoped_ptr<base::OneShotTimer<SettingGetterImplGConf> > debounce_timer_;
+  scoped_ptr<base::OneShotTimer> debounce_timer_;
 
   // Task runner for the thread that we make gconf calls on. It should
   // be the UI thread and all our methods should be called on this
@@ -523,15 +522,14 @@ const char kProxyGConfSchema[] = "org.gnome.system.proxy";
 class SettingGetterImplGSettings
     : public ProxyConfigServiceLinux::SettingGetter {
  public:
-  SettingGetterImplGSettings() :
-    client_(NULL),
-    http_client_(NULL),
-    https_client_(NULL),
-    ftp_client_(NULL),
-    socks_client_(NULL),
-    notify_delegate_(NULL),
-    debounce_timer_(new base::OneShotTimer<SettingGetterImplGSettings>()) {
-  }
+  SettingGetterImplGSettings()
+      : client_(NULL),
+        http_client_(NULL),
+        https_client_(NULL),
+        ftp_client_(NULL),
+        socks_client_(NULL),
+        notify_delegate_(NULL),
+        debounce_timer_(new base::OneShotTimer()) {}
 
   ~SettingGetterImplGSettings() override {
     // client_ should have been released before now, from
@@ -776,7 +774,7 @@ class SettingGetterImplGSettings
   GSettings* ftp_client_;
   GSettings* socks_client_;
   ProxyConfigServiceLinux::Delegate* notify_delegate_;
-  scoped_ptr<base::OneShotTimer<SettingGetterImplGSettings> > debounce_timer_;
+  scoped_ptr<base::OneShotTimer> debounce_timer_;
 
   // Task runner for the thread that we make gsettings calls on. It should
   // be the UI thread and all our methods should be called on this
@@ -862,7 +860,7 @@ class SettingGetterImplKDE : public ProxyConfigServiceLinux::SettingGetter,
   explicit SettingGetterImplKDE(base::Environment* env_var_getter)
       : inotify_fd_(-1),
         notify_delegate_(NULL),
-        debounce_timer_(new base::OneShotTimer<SettingGetterImplKDE>()),
+        debounce_timer_(new base::OneShotTimer()),
         indirect_manual_(false),
         auto_no_pac_(false),
         reversed_bypass_list_(false),
@@ -887,7 +885,8 @@ class SettingGetterImplKDE : public ProxyConfigServiceLinux::SettingGetter,
         // KDE3 always uses .kde for its configuration.
         base::FilePath kde_path = base::FilePath(home).Append(".kde");
         kde_config_dir_ = KDEHomeToConfigPath(kde_path);
-      } else {
+      } else if (base::nix::GetDesktopEnvironment(env_var_getter) ==
+                 base::nix::DESKTOP_ENVIRONMENT_KDE4) {
         // Some distributions patch KDE4 to use .kde4 instead of .kde, so that
         // both can be installed side-by-side. Sadly they don't all do this, and
         // they don't always do this: some distributions have started switching
@@ -919,6 +918,9 @@ class SettingGetterImplKDE : public ProxyConfigServiceLinux::SettingGetter,
         } else {
           kde_config_dir_ = KDEHomeToConfigPath(kde3_path);
         }
+      } else {
+        // KDE 5 migrated to ~/.config for storing kioslaverc.
+        kde_config_dir_ = base::FilePath(home).Append(".config");
       }
     }
   }
@@ -947,9 +949,8 @@ class SettingGetterImplKDE : public ProxyConfigServiceLinux::SettingGetter,
       PLOG(ERROR) << "inotify_init failed";
       return false;
     }
-    int flags = fcntl(inotify_fd_, F_GETFL);
-    if (fcntl(inotify_fd_, F_SETFL, flags | O_NONBLOCK) < 0) {
-      PLOG(ERROR) << "fcntl failed";
+    if (!base::SetNonBlocking(inotify_fd_)) {
+      PLOG(ERROR) << "base::SetNonBlocking failed";
       close(inotify_fd_);
       inotify_fd_ = -1;
       return false;
@@ -1333,7 +1334,7 @@ class SettingGetterImplKDE : public ProxyConfigServiceLinux::SettingGetter,
   int inotify_fd_;
   base::MessagePumpLibevent::FileDescriptorWatcher inotify_watcher_;
   ProxyConfigServiceLinux::Delegate* notify_delegate_;
-  scoped_ptr<base::OneShotTimer<SettingGetterImplKDE> > debounce_timer_;
+  scoped_ptr<base::OneShotTimer> debounce_timer_;
   base::FilePath kde_config_dir_;
   bool indirect_manual_;
   bool auto_no_pac_;
@@ -1553,6 +1554,7 @@ ProxyConfigServiceLinux::Delegate::Delegate(base::Environment* env_var_getter)
       break;
     case base::nix::DESKTOP_ENVIRONMENT_KDE3:
     case base::nix::DESKTOP_ENVIRONMENT_KDE4:
+    case base::nix::DESKTOP_ENVIRONMENT_KDE5:
       setting_getter_.reset(new SettingGetterImplKDE(env_var_getter));
       break;
     case base::nix::DESKTOP_ENVIRONMENT_XFCE:

@@ -5,6 +5,9 @@
 #ifndef EXTENSIONS_COMMON_MANIFEST_TEST_H_
 #define EXTENSIONS_COMMON_MANIFEST_TEST_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
@@ -32,6 +35,8 @@ class ManifestTest : public testing::Test {
     explicit ManifestData(const char* name);
     ManifestData(base::DictionaryValue* manifest, const char* name);
     explicit ManifestData(scoped_ptr<base::DictionaryValue> manifest);
+    explicit ManifestData(scoped_ptr<base::DictionaryValue> manifest,
+                          const char* name);
     // C++98 requires the copy constructor for a type to be visible if you
     // take a const-ref of a temporary for that type.  Since Manifest
     // contains a scoped_ptr, its implicit copy constructor is declared
@@ -130,19 +135,22 @@ class ManifestTest : public testing::Test {
   };
 
   struct Testcase {
-    std::string manifest_filename_;
+    const std::string manifest_filename_;
     std::string expected_error_; // only used for ExpectedError tests
     extensions::Manifest::Location location_;
     int flags_;
 
-    Testcase(std::string manifest_filename, std::string expected_error,
-        extensions::Manifest::Location location, int flags);
+    Testcase(const std::string& manifest_filename,
+             const std::string& expected_error,
+             extensions::Manifest::Location location,
+             int flags);
 
-    Testcase(std::string manifest_filename, std::string expected_error);
+    Testcase(const std::string& manifest_filename,
+             const std::string& expected_error);
 
-    explicit Testcase(std::string manifest_filename);
+    explicit Testcase(const std::string& manifest_filename);
 
-    Testcase(std::string manifest_filename,
+    Testcase(const std::string& manifest_filename,
              extensions::Manifest::Location location,
              int flags);
   };

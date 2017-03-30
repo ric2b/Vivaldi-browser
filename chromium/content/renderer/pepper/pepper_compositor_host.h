@@ -5,7 +5,10 @@
 #ifndef CONTENT_RENDERER_PEPPER_PEPPER_COMPOSITOR_HOST_H_
 #define CONTENT_RENDERER_PEPPER_PEPPER_COMPOSITOR_HOST_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ppapi/host/host_message_context.h"
@@ -20,6 +23,10 @@ namespace cc {
 class Layer;
 class SharedBitmap;
 }  // namespace cc
+
+namespace gpu {
+struct SyncToken;
+}  // namespace gpu
 
 namespace content {
 
@@ -47,10 +54,10 @@ class PepperCompositorHost : public ppapi::host::ResourceHost {
   void ImageReleased(int32_t id,
                      scoped_ptr<base::SharedMemory> shared_memory,
                      scoped_ptr<cc::SharedBitmap> bitmap,
-                     uint32_t sync_point,
+                     const gpu::SyncToken& sync_token,
                      bool is_lost);
   void ResourceReleased(int32_t id,
-                        uint32_t sync_point,
+                        const gpu::SyncToken& sync_token,
                         bool is_lost);
   void SendCommitLayersReplyIfNecessary();
   void UpdateLayer(const scoped_refptr<cc::Layer>& layer,

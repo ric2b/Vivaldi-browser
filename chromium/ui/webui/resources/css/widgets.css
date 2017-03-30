@@ -6,6 +6,8 @@
  * important as there are some rules with equal specificity that rely on order
  * as a tiebreaker. These are marked with OVERRIDE. */
 
+@import url(action_link.css);
+
 /* Default state **************************************************************/
 
 :-webkit-any(button,
@@ -34,11 +36,13 @@ input[type='radio'] {
 select {
   min-height: 2em;
   min-width: 4em;
-<if expr="is_win">
+  padding-top: 1px;
+  padding-bottom: 1px;
+<if expr="is_win or is_macosx">
   /* The following platform-specific rule is necessary to get adjacent
    * buttons, text inputs, and so forth to align on their borders while also
    * aligning on the text's baselines. */
-  padding-bottom: 1px;
+  padding-bottom: 2px;
 </if>
 }
 
@@ -51,8 +55,8 @@ select {
 
 select {
   -webkit-appearance: none;
-  -webkit-padding-end: 20px;
-  -webkit-padding-start: 6px;
+  -webkit-padding-end: 24px;
+  -webkit-padding-start: 10px;
   /* OVERRIDE */
   background-image: url(../images/select.png),
       -webkit-linear-gradient(#ededed, #ededed 38%, #dedede);
@@ -239,34 +243,6 @@ input:disabled:-webkit-any([type='password'],
   /* We use border color because it follows the border radius (unlike outline).
    * This is particularly noticeable on mac. */
   border-color: rgb(77, 144, 254);
-  outline: none;
-}
-
-/* Action links ***************************************************************/
-
-[is='action-link'] {
-  cursor: pointer;
-  display: inline-block;
-  text-decoration: none;
-}
-
-[is='action-link']:hover {
-  text-decoration: underline;
-}
-
-[is='action-link']:active {
-  color: rgb(5, 37, 119);
-  text-decoration: underline;
-}
-
-[is='action-link'][disabled] {
-  color: #999;
-  cursor: default;
-  pointer-events: none;
-  text-decoration: none;
-}
-
-[is='action-link'].no-outline {
   outline: none;
 }
 

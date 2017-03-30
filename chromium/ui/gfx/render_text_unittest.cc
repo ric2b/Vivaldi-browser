@@ -4,21 +4,29 @@
 
 #include "ui/gfx/render_text.h"
 
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/format_macros.h"
 #include "base/i18n/break_iterator.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/break_list.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/font.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/range/range.h"
 #include "ui/gfx/range/range_f.h"
 #include "ui/gfx/render_text_harfbuzz.h"
@@ -41,6 +49,28 @@ using base::WideToUTF16;
 using base::WideToUTF8;
 
 namespace gfx {
+namespace test {
+
+class RenderTextTestApi {
+ public:
+  RenderTextTestApi(RenderText* render_text) : render_text_(render_text) {}
+
+  static SkPaint& GetRendererPaint(internal::SkiaTextRenderer* renderer) {
+    return renderer->paint_;
+  }
+
+  void DrawVisualText(internal::SkiaTextRenderer* renderer) {
+    render_text_->EnsureLayout();
+    render_text_->DrawVisualText(renderer);
+  }
+
+ private:
+  RenderText* render_text_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderTextTestApi);
+};
+
+}  // namespace test
 
 namespace {
 
@@ -96,9 +126,10 @@ void RunMoveCursorLeftRightTest(RenderText* render_text,
 class TestSkiaTextRenderer : public internal::SkiaTextRenderer {
  public:
   struct TextLog {
-    TextLog() : glyph_count(0u) {}
+    TextLog() : glyph_count(0u), color(SK_ColorTRANSPARENT) {}
     PointF origin;
     size_t glyph_count;
+    SkColor color;
   };
 
   struct DecorationLog {
@@ -131,7 +162,7 @@ class TestSkiaTextRenderer : public internal::SkiaTextRenderer {
  private:
   // internal::SkiaTextRenderer:
   void DrawPosText(const SkPoint* pos,
-                   const uint16* glyphs,
+                   const uint16_t* glyphs,
                    size_t glyph_count) override {
     TextLog log_entry;
     log_entry.glyph_count = glyph_count;
@@ -143,6 +174,8 @@ class TestSkiaTextRenderer : public internal::SkiaTextRenderer {
             PointF(SkScalarToFloat(pos[i].x()), SkScalarToFloat(pos[i].y())));
       }
     }
+    log_entry.color =
+        test::RenderTextTestApi::GetRendererPaint(this).getColor();
     text_log_.push_back(log_entry);
     internal::SkiaTextRenderer::DrawPosText(pos, glyphs, glyph_count);
   }
@@ -205,8 +238,7 @@ class TestRectangleBuffer {
 
 }  // namespace
 
-class RenderTextTest : public testing::Test {
-};
+using RenderTextTest = testing::Test;
 
 TEST_F(RenderTextTest, DefaultStyles) {
   // Check the default styles applied to new instances and adjusted text.
@@ -1088,13 +1120,7 @@ TEST_F(RenderTextTest, GraphemePositions) {
   }
 }
 
-// TODO reenable for Linux on Vivaldi
-#if defined(OS_LINUX)
-#define MAYBE_MidGraphemeSelectionBounds DISABLED_MidGraphemeSelectionBounds
-#else
-#define MAYBE_MidGraphemeSelectionBounds MidGraphemeSelectionBounds
-#endif
-TEST_F(RenderTextTest, MAYBE_MidGraphemeSelectionBounds) {
+TEST_F(RenderTextTest, MidGraphemeSelectionBounds) {
 #if defined(OS_WIN)
   // TODO(msw): XP fails due to lack of font support: http://crbug.com/106450
   if (base::win::GetVersion() < base::win::VERSION_VISTA)
@@ -1512,11 +1538,10 @@ TEST_F(RenderTextTest, StringSizeRespectsFontListMetrics) {
   // Check that Arial and Symbol have different font metrics.
   Font arial_font("Arial", 16);
   ASSERT_EQ("arial",
-            base::StringToLowerASCII(arial_font.GetActualFontNameForTesting()));
+            base::ToLowerASCII(arial_font.GetActualFontNameForTesting()));
   Font symbol_font("Symbol", 16);
   ASSERT_EQ("symbol",
-            base::StringToLowerASCII(
-                symbol_font.GetActualFontNameForTesting()));
+            base::ToLowerASCII(symbol_font.GetActualFontNameForTesting()));
   EXPECT_NE(arial_font.GetHeight(), symbol_font.GetHeight());
   EXPECT_NE(arial_font.GetBaseline(), symbol_font.GetBaseline());
   // "a" should be rendered with Arial, not with Symbol.
@@ -1589,13 +1614,7 @@ TEST_F(RenderTextTest, SetFontList) {
   EXPECT_EQ(13, render_text->font_list().GetFontSize());
 }
 
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_StringSizeBoldWidth DISABLED_StringSizeBoldWidth
-#else
-#define MAYBE_StringSizeBoldWidth StringSizeBoldWidth
-#endif
-TEST_F(RenderTextTest, MAYBE_StringSizeBoldWidth) {
+TEST_F(RenderTextTest, StringSizeBoldWidth) {
   scoped_ptr<RenderText> render_text(RenderText::CreateInstance());
   render_text->SetText(UTF8ToUTF16("Hello World"));
 
@@ -2151,7 +2170,7 @@ TEST_F(RenderTextTest, Multiline_NormalWidth) {
     SCOPED_TRACE(base::StringPrintf("kTestStrings[%" PRIuS "]", i));
     render_text.SetText(WideToUTF16(kTestStrings[i].text));
     render_text.EnsureLayout();
-    render_text.DrawVisualTextInternal(&renderer);
+    render_text.DrawVisualText(&renderer);
 
     ASSERT_EQ(2U, render_text.lines_.size());
     ASSERT_EQ(1U, render_text.lines_[0].segments.size());
@@ -2325,8 +2344,9 @@ TEST_F(RenderTextTest, Multiline_HorizontalAlignment) {
       EXPECT_EQ(0, render_text.GetAlignmentOffset(0).x());
       EXPECT_EQ(0, render_text.GetAlignmentOffset(1).x());
     } else {
-      std::vector<base::string16> lines;
-      base::SplitString(base::WideToUTF16(kTestStrings[i].text), '\n', &lines);
+      std::vector<base::string16> lines = base::SplitString(
+          base::WideToUTF16(kTestStrings[i].text),
+          base::string16(1, '\n'), base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       ASSERT_EQ(2u, lines.size());
       int difference = (lines[0].length() - lines[1].length()) * kGlyphSize;
       EXPECT_EQ(render_text.GetAlignmentOffset(0).x() + difference,
@@ -2579,7 +2599,7 @@ TEST_F(RenderTextTest, HarfBuzz_HorizontalPositions) {
       EXPECT_EQ(1U, run_list->logical_to_visual(1));
     }
 
-    render_text.DrawVisualTextInternal(&renderer);
+    render_text.DrawVisualText(&renderer);
 
     std::vector<TestSkiaTextRenderer::TextLog> text_log;
     renderer.GetTextLogAndReset(&text_log);
@@ -2599,7 +2619,7 @@ TEST_F(RenderTextTest, HarfBuzz_HorizontalPositions) {
 // Test TextRunHarfBuzz's cluster finding logic.
 TEST_F(RenderTextTest, HarfBuzz_Clusters) {
   struct {
-    uint32 glyph_to_char[4];
+    uint32_t glyph_to_char[4];
     Range chars[4];
     Range glyphs[4];
     bool is_rtl;
@@ -2687,7 +2707,7 @@ TEST_F(RenderTextTest, HarfBuzz_SubglyphGraphemeCases) {
 // Test the partition of a multi-grapheme cluster into grapheme ranges.
 TEST_F(RenderTextTest, HarfBuzz_SubglyphGraphemePartition) {
   struct {
-    uint32 glyph_to_char[2];
+    uint32_t glyph_to_char[2];
     Range bounds[4];
     bool is_rtl;
   } cases[] = {
@@ -2820,6 +2840,20 @@ TEST_F(RenderTextTest, HarfBuzz_BreakRunsByEmoji) {
   EXPECT_EQ(Range(4, 5), run_list->runs()[3]->range);
 }
 
+TEST_F(RenderTextTest, HarfBuzz_BreakRunsByAscii) {
+  RenderTextHarfBuzz render_text;
+
+  // \xF0\x9F\x90\xB1 (U+1F431) is a cat face. It should be put into a separate
+  // run from the ASCII period character.
+  render_text.SetText(UTF8ToUTF16("\xF0\x9F\x90\xB1."));
+  render_text.EnsureLayout();
+  internal::TextRunList* run_list = render_text.GetRunList();
+  ASSERT_EQ(2U, run_list->size());
+  // U+1F431 is represented as a surrogate pair in UTF16.
+  EXPECT_EQ(Range(0, 2), run_list->runs()[0]->range);
+  EXPECT_EQ(Range(2, 3), run_list->runs()[1]->range);
+}
+
 TEST_F(RenderTextTest, GlyphBounds) {
   const wchar_t* kTestStrings[] = {
       L"asdf 1234 qwer", L"\x0647\x0654", L"\x0645\x0631\x062D\x0628\x0627"
@@ -2843,8 +2877,9 @@ TEST_F(RenderTextTest, HarfBuzz_NonExistentFont) {
   internal::TextRunList* run_list = render_text.GetRunList();
   ASSERT_EQ(1U, run_list->size());
   internal::TextRunHarfBuzz* run = run_list->runs()[0];
-  render_text.ShapeRunWithFont(
-      render_text.text(), "TheFontThatDoesntExist", FontRenderParams(), run);
+  render_text.ShapeRunWithFont(render_text.text(),
+                               Font("TheFontThatDoesntExist", 13),
+                               FontRenderParams(), run);
 }
 
 // Ensure an empty run returns sane values to queries.
@@ -2908,9 +2943,9 @@ TEST_F(RenderTextTest, HarfBuzz_FontListFallback) {
   const std::vector<Font>& fonts = font_list.GetFonts();
   ASSERT_EQ(2u, fonts.size());
   ASSERT_EQ("arial",
-            base::StringToLowerASCII(fonts[0].GetActualFontNameForTesting()));
+            base::ToLowerASCII(fonts[0].GetActualFontNameForTesting()));
   ASSERT_EQ("symbol",
-            base::StringToLowerASCII(fonts[1].GetActualFontNameForTesting()));
+            base::ToLowerASCII(fonts[1].GetActualFontNameForTesting()));
 
   // "⊕" (CIRCLED PLUS) should be rendered with Symbol rather than falling back
   // to some other font that's present on the system.
@@ -2944,7 +2979,7 @@ TEST_F(RenderTextTest, HarfBuzz_UniscribeFallback) {
 }
 #endif  // defined(OS_WIN)
 
-// Ensure that the fallback fonts offered by gfx::GetFallbackFontFamilies() are
+// Ensure that the fallback fonts offered by gfx::GetFallbackFonts() are
 // tried. Note this test assumes the font "Arial" doesn't provide a unicode
 // glyph for a particular character, and that there exists a system fallback
 // font which does.
@@ -3006,8 +3041,8 @@ TEST_F(RenderTextTest, TextDoesntClip) {
 
     render_text->Draw(&canvas);
     ASSERT_LT(string_size.width() + kTestSize, kCanvasSize.width());
-    const uint32* buffer =
-        static_cast<const uint32*>(surface->peekPixels(nullptr, nullptr));
+    const uint32_t* buffer =
+        static_cast<const uint32_t*>(surface->peekPixels(nullptr, nullptr));
     ASSERT_NE(nullptr, buffer);
     TestRectangleBuffer rect_buffer(string, buffer, kCanvasSize.width(),
                                     kCanvasSize.height());
@@ -3082,8 +3117,8 @@ TEST_F(RenderTextTest, TextDoesClip) {
     render_text->set_clip_to_display_rect(true);
     render_text->Draw(&canvas);
     ASSERT_LT(string_size.width() + kTestSize, kCanvasSize.width());
-    const uint32* buffer =
-        static_cast<const uint32*>(surface->peekPixels(nullptr, nullptr));
+    const uint32_t* buffer =
+        static_cast<const uint32_t*>(surface->peekPixels(nullptr, nullptr));
     ASSERT_NE(nullptr, buffer);
     TestRectangleBuffer rect_buffer(string, buffer, kCanvasSize.width(),
                                     kCanvasSize.height());
@@ -3132,5 +3167,43 @@ TEST_F(RenderTextTest, Mac_ElidedText) {
   EXPECT_NE(0, glyph_count);
 }
 #endif
+
+// Ensure color changes are picked up by the RenderText implementation.
+TEST_F(RenderTextTest, ColorChange) {
+  RenderTextHarfBuzz render_text_harfbuzz;
+#if defined(OS_MACOSX)
+  RenderTextMac render_text_mac;
+#endif
+
+  RenderText* backend[] = {
+    &render_text_harfbuzz,
+#if defined(OS_MACOSX)
+    &render_text_mac,
+#endif
+  };
+
+  Canvas canvas;
+  TestSkiaTextRenderer renderer(&canvas);
+
+  for (size_t i = 0; i < arraysize(backend); ++i) {
+    SCOPED_TRACE(testing::Message() << "backend: " << i);
+    test::RenderTextTestApi test_api(backend[i]);
+    backend[i]->SetText(ASCIIToUTF16("x"));
+    test_api.DrawVisualText(&renderer);
+
+    std::vector<TestSkiaTextRenderer::TextLog> text_log;
+
+    renderer.GetTextLogAndReset(&text_log);
+    EXPECT_EQ(1u, text_log.size());
+    EXPECT_EQ(SK_ColorBLACK, text_log[0].color);
+
+    backend[i]->SetColor(SK_ColorRED);
+    test_api.DrawVisualText(&renderer);
+
+    renderer.GetTextLogAndReset(&text_log);
+    EXPECT_EQ(1u, text_log.size());
+    EXPECT_EQ(SK_ColorRED, text_log[0].color);
+  }
+}
 
 }  // namespace gfx

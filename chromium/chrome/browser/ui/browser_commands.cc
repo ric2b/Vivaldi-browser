@@ -8,33 +8,35 @@
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/dom_distiller/tab_utils.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/rlz/rlz.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_service_factory.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
-#include "chrome/browser/sessions/tab_restore_service_delegate.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/signin/signin_header_helper.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/accelerator_utils.h"
+#include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
+#include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_instant_controller.h"
-#include "chrome/browser/ui/browser_tab_restore_service_delegate.h"
+#include "chrome/browser/ui/browser_live_tab_context.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -51,18 +53,21 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/upgrade_detector.h"
-#include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/sessions/core/live_tab_context.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/signin/core/browser/signin_header_helper.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/ui/zoom/page_zoom.h"
 #include "components/ui/zoom/zoom_controller.h"
-#include "components/web_modal/popup_manager.h"
+#include "components/version_info/version_info.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -79,10 +84,6 @@
 #include "content/public/common/user_agent.h"
 #include "net/base/escape.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-
-#if defined(OS_WIN)
-#include "chrome/browser/ui/metro_pin_tab_helper_win.h"
-#endif
 
 #if defined(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/commands/command_service.h"
@@ -104,6 +105,16 @@
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 #endif  // defined(ENABLE_PRINTING)
 
+#if defined(ENABLE_RLZ)
+#include "components/rlz/rlz_tracker.h"
+#endif
+
+#if defined(ENABLE_MEDIA_ROUTER)
+#include "chrome/browser/media/router/media_router_dialog_controller.h"
+#endif
+
+#include "app/vivaldi_constants.h"
+
 namespace {
 const char kOsOverrideForTabletSite[] = "Linux; Android 4.0.3";
 }
@@ -114,7 +125,6 @@ using content::NavigationController;
 using content::NavigationEntry;
 using content::OpenURLParams;
 using content::Referrer;
-using content::SSLStatus;
 using content::WebContents;
 
 namespace chrome {
@@ -180,6 +190,8 @@ WebContents* GetTabAndRevertIfNecessary(Browser* browser,
     case NEW_FOREGROUND_TAB:
     case NEW_BACKGROUND_TAB: {
       WebContents* new_tab = current_tab->Clone();
+      if (disposition == NEW_BACKGROUND_TAB)
+        new_tab->WasHidden();
       browser->tab_strip_model()->AddWebContents(
           new_tab, -1, ui::PAGE_TRANSITION_LINK,
           (disposition == NEW_FOREGROUND_TAB) ?
@@ -214,6 +226,12 @@ void ReloadInternal(Browser* browser,
   new_tab->UserGestureDone();
   if (!new_tab->FocusLocationBarByDefault())
     new_tab->Focus();
+
+  DevToolsWindow* devtools =
+      DevToolsWindow::GetInstanceForInspectedWebContents(new_tab);
+  if (devtools && devtools->ReloadInspectedWebContents(ignore_cache))
+    return;
+
   if (ignore_cache)
     new_tab->GetController().ReloadIgnoringCache(true);
   else
@@ -226,15 +244,13 @@ bool IsShowingWebContentsModalDialog(Browser* browser) {
   if (!web_contents)
     return false;
 
-  // In test code we may not have a popup manager.
-  if (!browser->popup_manager())
-    return false;
-
   // TODO(gbillock): This is currently called in production by the CanPrint
   // method, and may be too restrictive if we allow print preview to overlap.
   // Re-assess how to queue print preview after we know more about popup
   // management policy.
-  return browser->popup_manager()->IsWebModalDialogActive(web_contents);
+  const web_modal::WebContentsModalDialogManager* manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
+  return manager && manager->IsDialogActive();
 }
 
 #if defined(ENABLE_BASIC_PRINTING)
@@ -346,14 +362,22 @@ void NewEmptyWindow(Profile* profile, HostDesktopType desktop_type) {
 Browser* OpenEmptyWindow(Profile* profile, HostDesktopType desktop_type) {
   Browser* browser = new Browser(
       Browser::CreateParams(Browser::TYPE_TABBED, profile, desktop_type));
+
+  // To open a vivaldi window on mac when no browser window is present
+  // we define the startup page url here.
+  if (browser->is_vivaldi()) {
+    AddTabAt(browser, GURL(vivaldi::kVivaldiNewTabURL), -1, true);
+  } else {
   AddTabAt(browser, GURL(), -1, true);
+  }
   browser->window()->Show();
   return browser;
 }
 
 void OpenWindowWithRestoredTabs(Profile* profile,
                                 HostDesktopType host_desktop_type) {
-  TabRestoreService* service = TabRestoreServiceFactory::GetForProfile(profile);
+  sessions::TabRestoreService* service =
+      TabRestoreServiceFactory::GetForProfile(profile);
   if (service)
     service->RestoreMostRecentEntry(NULL, host_desktop_type);
 }
@@ -434,8 +458,8 @@ void Home(Browser* browser, WindowOpenDisposition disposition) {
   if (pref_service) {
     if (google_util::IsGoogleHomePageUrl(
         GURL(pref_service->GetString(prefs::kHomePage)))) {
-      extra_headers = RLZTracker::GetAccessPointHttpHeader(
-          RLZTracker::ChromeHomePage());
+      extra_headers = rlz::RLZTracker::GetAccessPointHttpHeader(
+          rlz::RLZTracker::ChromeHomePage());
     }
   }
 #endif  // defined(ENABLE_RLZ) && !defined(OS_IOS)
@@ -588,11 +612,11 @@ bool CanResetZoom(content::WebContents* contents) {
 
 TabStripModelDelegate::RestoreTabType GetRestoreTabType(
     const Browser* browser) {
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser->profile());
   if (!service || service->entries().empty())
     return TabStripModelDelegate::RESTORE_NONE;
-  if (service->entries().front()->type == TabRestoreService::WINDOW)
+  if (service->entries().front()->type == sessions::TabRestoreService::WINDOW)
     return TabStripModelDelegate::RESTORE_WINDOW;
   return TabStripModelDelegate::RESTORE_TAB;
 }
@@ -793,6 +817,14 @@ bool CanBookmarkAllTabs(const Browser* browser) {
              CanBookmarkCurrentPageInternal(browser, false);
 }
 
+void SaveCreditCard(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  autofill::SaveCardBubbleControllerImpl* controller =
+      autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
+  controller->ReshowBubble();
+}
+
 void Translate(Browser* browser) {
   if (!browser->window()->IsActive())
     return;
@@ -822,14 +854,6 @@ void ManagePasswordsForPage(Browser* browser) {
       !controller->IsAutomaticallyOpeningBubble());
 }
 
-#if defined(OS_WIN)
-void TogglePagePinnedToStartScreen(Browser* browser) {
-  MetroPinTabHelper::FromWebContents(
-      browser->tab_strip_model()->GetActiveWebContents())->
-          TogglePinnedToStartScreen();
-}
-#endif
-
 void SavePage(Browser* browser) {
   content::RecordAction(UserMetricsAction("SavePage"));
   WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
@@ -853,13 +877,14 @@ void ShowFindBar(Browser* browser) {
   browser->GetFindBarController()->Show();
 }
 
-void ShowWebsiteSettings(Browser* browser,
-                         content::WebContents* web_contents,
-                         const GURL& url,
-                         const SSLStatus& ssl) {
+void ShowWebsiteSettings(
+    Browser* browser,
+    content::WebContents* web_contents,
+    const GURL& url,
+    const security_state::SecurityStateModel::SecurityInfo& security_info) {
   browser->window()->ShowWebsiteSettings(
       Profile::FromBrowserContext(web_contents->GetBrowserContext()),
-      web_contents, url, ssl);
+      web_contents, url, security_info);
 }
 
 void Print(Browser* browser) {
@@ -902,6 +927,30 @@ bool CanBasicPrint(Browser* browser) {
       (PrintPreviewShowing(browser) || CanPrint(browser));
 }
 #endif  // ENABLE_BASIC_PRINTING
+
+bool CanRouteMedia(Browser* browser) {
+  Profile* profile = browser->profile();
+  if (profile->IsOffTheRecord() || !media_router::MediaRouterEnabled(profile))
+    return false;
+
+  // Do not allow user to open Media Router dialog when there is already an
+  // active modal dialog. This avoids overlapping dialogs.
+  return !IsShowingWebContentsModalDialog(browser);
+}
+
+void RouteMedia(Browser* browser) {
+#if defined(ENABLE_MEDIA_ROUTER)
+  DCHECK(CanRouteMedia(browser));
+
+  media_router::MediaRouterDialogController* dialog_controller =
+      media_router::MediaRouterDialogController::GetOrCreateForWebContents(
+          browser->tab_strip_model()->GetActiveWebContents());
+  if (!dialog_controller)
+    return;
+
+  dialog_controller->ShowMediaRouterDialog();
+#endif  // defined(ENABLE_MEDIA_ROUTER)
+}
 
 void EmailPageLocation(Browser* browser) {
   content::RecordAction(UserMetricsAction("EmailPageLocation"));
@@ -1046,20 +1095,21 @@ void ToggleBookmarkBar(Browser* browser) {
 }
 
 void ShowAppMenu(Browser* browser) {
-  // We record the user metric for this event in WrenchMenu::RunMenu.
+  // We record the user metric for this event in AppMenu::RunMenu.
   browser->window()->ShowAppMenu();
 }
 
 void ShowAvatarMenu(Browser* browser) {
   browser->window()->ShowAvatarBubbleFromAvatarButton(
-      BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT,
-      signin::ManageAccountsParams());
+      BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT, signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
 }
 
 void ShowFastUserSwitcher(Browser* browser) {
   browser->window()->ShowAvatarBubbleFromAvatarButton(
       BrowserWindow::AVATAR_BUBBLE_MODE_FAST_USER_SWITCH,
-      signin::ManageAccountsParams());
+      signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
 }
 
 void OpenUpdateChromeDialog(Browser* browser) {
@@ -1077,15 +1127,6 @@ void OpenUpdateChromeDialog(Browser* browser) {
     content::RecordAction(UserMetricsAction("UpdateChrome"));
     browser->window()->ShowUpdateChromeDialog();
   }
-}
-
-void ToggleSpeechInput(Browser* browser) {
-  SearchTabHelper* search_tab_helper =
-      SearchTabHelper::FromWebContents(
-          browser->tab_strip_model()->GetActiveWebContents());
-  // |search_tab_helper| can be null in unit tests.
-  if (search_tab_helper)
-    search_tab_helper->ToggleVoiceSearch();
 }
 
 void DistillCurrentPage(Browser* browser) {
@@ -1120,8 +1161,7 @@ void ToggleRequestTabletSite(Browser* browser) {
     entry->SetIsOverridingUserAgent(false);
   } else {
     entry->SetIsOverridingUserAgent(true);
-    chrome::VersionInfo version_info;
-    std::string product = version_info.ProductNameAndVersionForUserAgent();
+    std::string product = version_info::GetProductNameAndVersionForUserAgent();
     current_tab->SetUserAgentOverride(content::BuildUserAgentFromOSAndProduct(
         kOsOverrideForTabletSite, product));
   }
@@ -1137,8 +1177,9 @@ void ToggleFullscreenMode(Browser* browser) {
 
 void ClearCache(Browser* browser) {
   BrowsingDataRemover* remover =
-      BrowsingDataRemover::CreateForUnboundedRange(browser->profile());
-  remover->Remove(BrowsingDataRemover::REMOVE_CACHE,
+      BrowsingDataRemoverFactory::GetForBrowserContext(browser->profile());
+  remover->Remove(BrowsingDataRemover::Unbounded(),
+                  BrowsingDataRemover::REMOVE_CACHE,
                   BrowsingDataHelper::UNPROTECTED_WEB);
   // BrowsingDataRemover takes care of deleting itself when done.
 }

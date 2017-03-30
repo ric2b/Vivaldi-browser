@@ -1,0 +1,41 @@
+// Copyright (c) 2016 Vivaldi. All rights reserved.
+
+#ifndef BROWSER_MENUS_VIVALDI_MENUS_H_
+#define BROWSER_MENUS_VIVALDI_MENUS_H_
+
+#include "base/callback.h"
+#include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
+
+class RenderViewContextMenuViews;
+using ui::SimpleMenuModel;
+using content::ContextMenuParams;
+using content::WebContents;
+
+
+namespace vivaldi {
+typedef base::Callback<void(const GURL&, const GURL&,
+                WindowOpenDisposition disposition,
+                ui::PageTransition transition)> OpenURLCall;
+bool IsVivaldiCommandId(int id);
+void VivaldiAddLinkItems(SimpleMenuModel &menu,
+                const ContextMenuParams &params);
+void VivaldiAddImageItems(SimpleMenuModel &menu,
+                const ContextMenuParams &params);
+void VivaldiAddEditableItems(SimpleMenuModel &menu,
+                const ContextMenuParams &params);
+bool IsVivaldiCommandIdEnabled(const SimpleMenuModel &menu,
+                const ContextMenuParams &params,
+                int id, bool &enabled);
+bool VivaldiExecuteCommand(RenderViewContextMenu *context_menu,
+                const ContextMenuParams &params,
+                WebContents* source_web_contents_,
+                int id,
+                const OpenURLCall& openurl);
+bool VivaldiGetAcceleratorForCommandId(
+    const RenderViewContextMenuViews* view,
+    int command_id,
+    ui::Accelerator* accel);
+
+}
+
+#endif  // BROWSER_MENUS_VIVALDI_MENUS_H_

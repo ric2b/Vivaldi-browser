@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_INFOBARS_INFOBAR_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_INFOBARS_INFOBAR_VIEW_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_container.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -55,8 +55,14 @@ class InfoBarView : public infobars::InfoBar,
   views::Link* CreateLink(const base::string16& text,
                           views::LinkListener* listener) const;
 
-  // Creates a button with an infobar-specific appearance.
+  // Creates a focusable button for use on an infobar. The appearance is
+  // customized for infobars (except in Material mode).
   // NOTE: Subclasses must ignore button presses if we're unowned.
+  static views::Button* CreateTextButton(views::ButtonListener* listener,
+                                         const base::string16& text);
+
+  // Like CreateTextButton, but specifically creates a LabelButton.
+  // TODO(estade): remove this function when MD is default.
   static views::LabelButton* CreateLabelButton(views::ButtonListener* listener,
                                                const base::string16& text);
 

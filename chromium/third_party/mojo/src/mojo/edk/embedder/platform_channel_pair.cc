@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/embedder/platform_channel_pair.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_channel_pair.h"
+
+#include <utility>
 
 #include "base/logging.h"
 
@@ -16,11 +18,11 @@ PlatformChannelPair::~PlatformChannelPair() {
 }
 
 ScopedPlatformHandle PlatformChannelPair::PassServerHandle() {
-  return server_handle_.Pass();
+  return std::move(server_handle_);
 }
 
 ScopedPlatformHandle PlatformChannelPair::PassClientHandle() {
-  return client_handle_.Pass();
+  return std::move(client_handle_);
 }
 
 void PlatformChannelPair::ChildProcessLaunched() {

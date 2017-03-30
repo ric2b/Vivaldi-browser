@@ -12,14 +12,17 @@ This heart beat lets the devices know that they are connected to a host.
 import sys
 import time
 
-from pylib.device import device_utils
+import devil_chromium
+from devil.android import device_utils
 
 PULSE_PERIOD = 20
 
 def main():
+  devil_chromium.Initialize()
+
   while True:
     try:
-      devices = device_utils.DeviceUtils.HealthyDevices()
+      devices = device_utils.DeviceUtils.HealthyDevices(blacklist=None)
       for d in devices:
         d.RunShellCommand(['touch', '/sdcard/host_heartbeat'],
                           check_return=True)

@@ -5,6 +5,8 @@
 #ifndef STORAGE_BROWSER_BLOB_BLOB_DATA_SNAPSHOT_H_
 #define STORAGE_BROWSER_BLOB_BLOB_DATA_SNAPSHOT_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -53,6 +55,7 @@ class STORAGE_EXPORT BlobDataSnapshot : public base::SupportsUserData::Data {
   const std::string uuid_;
   const std::string content_type_;
   const std::string content_disposition_;
+
   // Non-const for constrution in BlobStorageContext
   std::vector<scoped_refptr<BlobDataItem>> items_;
 };

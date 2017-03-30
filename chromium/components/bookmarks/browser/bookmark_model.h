@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_MODEL_H_
 #define COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_MODEL_H_
 
+#include <stddef.h>
 #include <stdint.h>
 #include <map>
 #include <set>
@@ -20,6 +21,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/bookmark_undo_provider.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
@@ -47,6 +49,7 @@ class BookmarkIndex;
 class BookmarkLoadDetails;
 class BookmarkModelObserver;
 class BookmarkStorage;
+class BookmarkUndoDelegate;
 class ScopedGroupBookmarkActions;
 class TestBookmarkClient;
 struct BookmarkMatch;
@@ -61,7 +64,8 @@ struct BookmarkMatch;
 //
 // You should NOT directly create a BookmarkModel, instead go through the
 // BookmarkModelFactory.
-class BookmarkModel : public KeyedService {
+class BookmarkModel : public BookmarkUndoProvider,
+                      public KeyedService {
  public:
   struct URLAndTitle {
     GURL url;
@@ -99,6 +103,9 @@ class BookmarkModel : public KeyedService {
 
   // Returns the 'mobile' node. This is NULL until loaded.
   const BookmarkNode* mobile_node() const { return mobile_node_; }
+
+  // Vivaldi: Returns the 'trash' node. This is NULL until loaded.
+  const BookmarkNode* trash_node() const { return trash_node_; }
 
   bool is_root_node(const BookmarkNode* node) const { return node == &root_; }
 
@@ -344,6 +351,8 @@ class BookmarkModel : public KeyedService {
   // Returns the client used by this BookmarkModel.
   BookmarkClient* client() const { return client_; }
 
+  void SetUndoDelegate(BookmarkUndoDelegate* undo_delegate);
+
  private:
   friend class BookmarkCodecTest;
   friend class BookmarkModelFaviconTest;
@@ -358,6 +367,14 @@ class BookmarkModel : public KeyedService {
       return n1->url() < n2->url();
     }
   };
+
+  // BookmarkUndoProvider:
+  void RestoreRemovedNode(const BookmarkNode* parent,
+                          int index,
+                          scoped_ptr<BookmarkNode> node) override;
+
+  // Notifies the observers for adding every descedent of |node|.
+  void NotifyNodeAddedForAllDescendents(const BookmarkNode* node);
 
   // Implementation of IsBookmarked. Before calling this the caller must obtain
   // a lock on |url_lock_|.
@@ -441,6 +458,8 @@ class BookmarkModel : public KeyedService {
   scoped_ptr<BookmarkLoadDetails> CreateLoadDetails(
       const std::string& accept_languages);
 
+  BookmarkUndoDelegate* undo_delegate() const;
+
   BookmarkClient* const client_;
 
   // Whether the initial set of data has been loaded.
@@ -453,6 +472,7 @@ class BookmarkModel : public KeyedService {
   BookmarkPermanentNode* bookmark_bar_node_;
   BookmarkPermanentNode* other_node_;
   BookmarkPermanentNode* mobile_node_;
+  BookmarkPermanentNode* trash_node_;
 
   // The maximum ID assigned to the bookmark nodes in the model.
   int64_t next_node_id_;
@@ -484,6 +504,9 @@ class BookmarkModel : public KeyedService {
   scoped_ptr<BookmarkExpandedStateTracker> expanded_state_tracker_;
 
   std::set<std::string> non_cloned_keys_;
+
+  BookmarkUndoDelegate* undo_delegate_;
+  scoped_ptr<BookmarkUndoDelegate> empty_undo_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkModel);
 };

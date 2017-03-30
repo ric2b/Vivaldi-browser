@@ -50,7 +50,7 @@ char kTSanDefaultSuppressions[] =
 "race:base/threading/watchdog.cc\n"
 
 // http://crbug.com/157586
-"race:third_party/libvpx/source/libvpx/vp8/decoder/threading.c\n"
+"race:third_party/libvpx_new/source/libvpx/vp8/decoder/threading.c\n"
 
 // http://crbug.com/158718
 "race:third_party/ffmpeg/libavcodec/pthread.c\n"
@@ -62,8 +62,8 @@ char kTSanDefaultSuppressions[] =
 "race:media::ReleaseData\n"
 
 // http://crbug.com/158922
-"race:third_party/libvpx/source/libvpx/vp8/encoder/*\n"
-"race:third_party/libvpx/source/libvpx/vp9/encoder/*\n"
+"race:third_party/libvpx_new/source/libvpx/vp8/encoder/*\n"
+"race:third_party/libvpx_new/source/libvpx/vp9/encoder/*\n"
 
 // http://crbug.com/189177
 "race:thread_manager\n"
@@ -125,15 +125,8 @@ char kTSanDefaultSuppressions[] =
 // http://crbug.com/258935
 "race:base::Thread::StopSoon\n"
 
-// http://crbug.com/268941
-"race:tracked_objects::ThreadData::tls_index_\n"
-
 // http://crbug.com/272095
 "race:base::g_top_manager\n"
-
-// http://crbug.com/273047
-"race:base::*::g_lazy_tls_ptr\n"
-"race:IPC::SyncChannel::ReceivedSyncMsgQueue::lazy_tls_ptr_\n"
 
 // http://crbug.com/280466
 "race:content::WebRtcAudioCapturer::SetCapturerSource\n"
@@ -146,9 +139,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/310851
 "race:net::ProxyResolverV8Tracing::Job::~Job\n"
-
-// http://crbug.com/313726
-"race:CallbackWasCalled\n"
 
 // http://crbug.com/327330
 "race:PrepareTextureMailbox\n"
@@ -166,9 +156,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/329225
 "race:blink::currentTimeFunction\n"
-
-// http://crbug.com/329460
-"race:extensions::InfoMap::AddExtension\n"
 
 // http://crbug.com/333244
 "race:content::"
@@ -198,13 +185,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/345240
 "race:WTF::s_shutdown\n"
-
-// http://crbug.com/345245
-"race:jingle_glue::JingleThreadWrapper::~JingleThreadWrapper\n"
-"race:webrtc::voe::Channel::UpdatePacketDelay\n"
-"race:webrtc::voe::Channel::GetDelayEstimate\n"
-"race:webrtc::VCMCodecDataBase::DeregisterReceiveCodec\n"
-"race:webrtc::GainControlImpl::set_stream_analog_level\n"
 
 // http://crbug.com/345618
 "race:WebCore::AudioDestinationNode::render\n"
@@ -249,11 +229,6 @@ char kTSanDefaultSuppressions[] =
 "race:SkFontConfigInterface::GetSingletonDirectInterface\n"
 "race:FcStrStaticName\n"
 
-// http://crbug.com/372807
-"deadlock:net::X509Certificate::CreateCertificateListFromBytes\n"
-"deadlock:net::X509Certificate::CreateFromBytes\n"
-"deadlock:net::SSLClientSocketNSS::Core::DoHandshakeLoop\n"
-
 // http://crbug.com/374135
 "race:media::AlsaWrapper::PcmWritei\n"
 
@@ -268,9 +243,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/388730
 "race:g_next_user_script_id\n"
-
-// http://crbug.com/389098
-"race:webrtc::voe::TransmitMixer::EnableStereoChannelSwapping\n"
 
 // http://crbug.com/397022
 "deadlock:"
@@ -295,20 +267,31 @@ char kTSanDefaultSuppressions[] =
 // https://crbug.com/448203
 "race:blink::RemoteFrame::detach\n"
 
-// https://crbug.com/454652
-"race:net::NetworkChangeNotifier::SetTestNotificationsOnly\n"
-
+// Lock inversion in third party code, won't fix.
 // https://crbug.com/455638
 "deadlock:dbus::Bus::ShutdownAndBlock\n"
 
 // https://crbug.com/455665
 "race:mojo::common::*::tick_clock\n"
+"race:mojo::common::internal::NowTicks\n"
 
 // https://crbug.com/459429
 "race:randomnessPid\n"
 
 // https://crbug.com/454655
 "race:content::BrowserTestBase::PostTaskToInProcessRendererAndWait\n"
+
+// https://crbug.com/539315
+"race:MojoCreateMessagePipe\n"
+
+// https://crbug.com/569682
+"race:blink::ThreadState::visitStackRoots\n"
+
+// http://crbug.com/571735
+"deadlock:mojo::edk::RawChannel::Init\n"
+
+// http://crbug.com/571735
+"deadlock:mojo::edk::MessagePipeDispatcher::TransportStarted\n"
 
 // End of suppressions.
 ;  // Please keep this semicolon.

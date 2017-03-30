@@ -350,6 +350,15 @@ size_t VideoRendererAlgorithm::EffectiveFramesQueued() const {
   return renderable_frame_count;
 }
 
+int64_t VideoRendererAlgorithm::GetMemoryUsage() const {
+  int64_t allocation_size = 0;
+  for (const auto& ready_frame : frame_queue_) {
+    allocation_size += VideoFrame::AllocationSize(
+        ready_frame.frame->format(), ready_frame.frame->coded_size());
+  }
+  return allocation_size;
+}
+
 void VideoRendererAlgorithm::EnqueueFrame(
     const scoped_refptr<VideoFrame>& frame) {
   DCHECK(frame);
@@ -417,7 +426,7 @@ void VideoRendererAlgorithm::AccountForMissedIntervals(
   }
 
   DCHECK_GT(render_interval_, base::TimeDelta());
-  const int64 render_cycle_count =
+  const int64_t render_cycle_count =
       (deadline_min - last_deadline_max_) / render_interval_;
 
   // In the ideal case this value will be zero.
@@ -475,6 +484,7 @@ void VideoRendererAlgorithm::UpdateFrameStatistics() {
   // Compute |average_frame_duration_|, a moving average of the last few frames;
   // see kMovingAverageSamples for the exact number.
   average_frame_duration_ = frame_duration_calculator_.Average();
+  const base::TimeDelta deviation = frame_duration_calculator_.Deviation();
 
   // Update the frame end time for the last frame based on the average.
   frame_queue_.back().end_time =
@@ -496,7 +506,8 @@ void VideoRendererAlgorithm::UpdateFrameStatistics() {
     return;
 
   const bool cadence_changed = cadence_estimator_.UpdateCadenceEstimate(
-      render_interval_, average_frame_duration_, max_acceptable_drift_);
+      render_interval_, average_frame_duration_, deviation,
+      max_acceptable_drift_);
 
   // No need to update cadence if there's been no change; cadence will be set
   // as frames are added to the queue.

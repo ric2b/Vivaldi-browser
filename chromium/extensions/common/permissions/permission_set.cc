@@ -43,94 +43,71 @@ PermissionSet::PermissionSet(
   InitEffectiveHosts();
 }
 
-// static
-PermissionSet* PermissionSet::CreateDifference(
-    const PermissionSet* set1,
-    const PermissionSet* set2) {
-  scoped_refptr<PermissionSet> empty = new PermissionSet();
-  const PermissionSet* set1_safe = (set1 == NULL) ? empty.get() : set1;
-  const PermissionSet* set2_safe = (set2 == NULL) ? empty.get() : set2;
+PermissionSet::~PermissionSet() {}
 
+// static
+scoped_ptr<const PermissionSet> PermissionSet::CreateDifference(
+    const PermissionSet& set1,
+    const PermissionSet& set2) {
   APIPermissionSet apis;
-  APIPermissionSet::Difference(set1_safe->apis(), set2_safe->apis(), &apis);
+  APIPermissionSet::Difference(set1.apis(), set2.apis(), &apis);
 
   ManifestPermissionSet manifest_permissions;
-  ManifestPermissionSet::Difference(set1_safe->manifest_permissions(),
-                                    set2_safe->manifest_permissions(),
+  ManifestPermissionSet::Difference(set1.manifest_permissions(),
+                                    set2.manifest_permissions(),
                                     &manifest_permissions);
 
-  URLPatternSet explicit_hosts;
-  URLPatternSet::CreateDifference(set1_safe->explicit_hosts(),
-                                  set2_safe->explicit_hosts(),
-                                  &explicit_hosts);
+  URLPatternSet explicit_hosts = URLPatternSet::CreateDifference(
+      set1.explicit_hosts(), set2.explicit_hosts());
 
-  URLPatternSet scriptable_hosts;
-  URLPatternSet::CreateDifference(set1_safe->scriptable_hosts(),
-                                  set2_safe->scriptable_hosts(),
-                                  &scriptable_hosts);
+  URLPatternSet scriptable_hosts = URLPatternSet::CreateDifference(
+      set1.scriptable_hosts(), set2.scriptable_hosts());
 
-  return new PermissionSet(apis, manifest_permissions,
-                           explicit_hosts, scriptable_hosts);
+  return make_scoped_ptr(new PermissionSet(apis, manifest_permissions,
+                                           explicit_hosts, scriptable_hosts));
 }
 
 // static
-PermissionSet* PermissionSet::CreateIntersection(
-    const PermissionSet* set1,
-    const PermissionSet* set2) {
-  scoped_refptr<PermissionSet> empty = new PermissionSet();
-  const PermissionSet* set1_safe = (set1 == NULL) ? empty.get() : set1;
-  const PermissionSet* set2_safe = (set2 == NULL) ? empty.get() : set2;
-
+scoped_ptr<const PermissionSet> PermissionSet::CreateIntersection(
+    const PermissionSet& set1,
+    const PermissionSet& set2) {
   APIPermissionSet apis;
-  APIPermissionSet::Intersection(set1_safe->apis(), set2_safe->apis(), &apis);
+  APIPermissionSet::Intersection(set1.apis(), set2.apis(), &apis);
 
   ManifestPermissionSet manifest_permissions;
-  ManifestPermissionSet::Intersection(set1_safe->manifest_permissions(),
-                                      set2_safe->manifest_permissions(),
+  ManifestPermissionSet::Intersection(set1.manifest_permissions(),
+                                      set2.manifest_permissions(),
                                       &manifest_permissions);
 
-  URLPatternSet explicit_hosts;
-  URLPatternSet::CreateIntersection(set1_safe->explicit_hosts(),
-                                    set2_safe->explicit_hosts(),
-                                    &explicit_hosts);
+  URLPatternSet explicit_hosts = URLPatternSet::CreateSemanticIntersection(
+      set1.explicit_hosts(), set2.explicit_hosts());
+  URLPatternSet scriptable_hosts = URLPatternSet::CreateSemanticIntersection(
+      set1.scriptable_hosts(), set2.scriptable_hosts());
 
-  URLPatternSet scriptable_hosts;
-  URLPatternSet::CreateIntersection(set1_safe->scriptable_hosts(),
-                                    set2_safe->scriptable_hosts(),
-                                    &scriptable_hosts);
-
-  return new PermissionSet(apis, manifest_permissions,
-                           explicit_hosts, scriptable_hosts);
+  return make_scoped_ptr(new PermissionSet(apis, manifest_permissions,
+                                           explicit_hosts, scriptable_hosts));
 }
 
 // static
-PermissionSet* PermissionSet::CreateUnion(
-    const PermissionSet* set1,
-    const PermissionSet* set2) {
-  scoped_refptr<PermissionSet> empty = new PermissionSet();
-  const PermissionSet* set1_safe = (set1 == NULL) ? empty.get() : set1;
-  const PermissionSet* set2_safe = (set2 == NULL) ? empty.get() : set2;
-
+scoped_ptr<const PermissionSet> PermissionSet::CreateUnion(
+    const PermissionSet& set1,
+    const PermissionSet& set2) {
   APIPermissionSet apis;
-  APIPermissionSet::Union(set1_safe->apis(), set2_safe->apis(), &apis);
+  APIPermissionSet::Union(set1.apis(), set2.apis(), &apis);
 
   ManifestPermissionSet manifest_permissions;
-  ManifestPermissionSet::Union(set1_safe->manifest_permissions(),
-                               set2_safe->manifest_permissions(),
+  ManifestPermissionSet::Union(set1.manifest_permissions(),
+                               set2.manifest_permissions(),
                                &manifest_permissions);
 
-  URLPatternSet explicit_hosts;
-  URLPatternSet::CreateUnion(set1_safe->explicit_hosts(),
-                             set2_safe->explicit_hosts(),
-                             &explicit_hosts);
+  URLPatternSet explicit_hosts =
+      URLPatternSet::CreateUnion(set1.explicit_hosts(), set2.explicit_hosts());
 
-  URLPatternSet scriptable_hosts;
-  URLPatternSet::CreateUnion(set1_safe->scriptable_hosts(),
-                             set2_safe->scriptable_hosts(),
-                             &scriptable_hosts);
+  URLPatternSet scriptable_hosts = URLPatternSet::CreateUnion(
+      set1.scriptable_hosts(), set2.scriptable_hosts());
 
-  return new PermissionSet(apis, manifest_permissions,
-                           explicit_hosts, scriptable_hosts);
+  return make_scoped_ptr(new PermissionSet(apis, manifest_permissions,
+                                           explicit_hosts, scriptable_hosts));
 }
 
 bool PermissionSet::operator==(
@@ -143,6 +120,10 @@ bool PermissionSet::operator==(
 
 bool PermissionSet::operator!=(const PermissionSet& rhs) const {
   return !(*this == rhs);
+}
+
+scoped_ptr<const PermissionSet> PermissionSet::Clone() const {
+  return make_scoped_ptr(new PermissionSet(*this));
 }
 
 bool PermissionSet::Contains(const PermissionSet& set) const {
@@ -243,7 +224,13 @@ bool PermissionSet::HasEffectiveFullAccess() const {
   return false;
 }
 
-PermissionSet::~PermissionSet() {}
+PermissionSet::PermissionSet(const PermissionSet& permissions)
+    : apis_(permissions.apis_),
+      manifest_permissions_(permissions.manifest_permissions_),
+      explicit_hosts_(permissions.explicit_hosts_),
+      scriptable_hosts_(permissions.scriptable_hosts_),
+      effective_hosts_(permissions.effective_hosts_),
+      should_warn_all_hosts_(permissions.should_warn_all_hosts_) {}
 
 void PermissionSet::InitImplicitPermissions() {
   // The downloads permission implies the internal version as well.
@@ -256,10 +243,8 @@ void PermissionSet::InitImplicitPermissions() {
 }
 
 void PermissionSet::InitEffectiveHosts() {
-  effective_hosts_.ClearPatterns();
-
-  URLPatternSet::CreateUnion(
-      explicit_hosts(), scriptable_hosts(), &effective_hosts_);
+  effective_hosts_ =
+      URLPatternSet::CreateUnion(explicit_hosts(), scriptable_hosts());
 }
 
 void PermissionSet::InitShouldWarnAllHosts() const {

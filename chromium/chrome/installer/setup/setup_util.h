@@ -10,8 +10,11 @@
 #define CHROME_INSTALLER_SETUP_SETUP_UTIL_H_
 
 #include <windows.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
+#include <vector>
+
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/win/scoped_handle.h"
 #include "chrome/installer/util/browser_distribution.h"
@@ -30,13 +33,6 @@ namespace installer {
 class InstallationState;
 class InstallerState;
 class ProductState;
-
-// Sets a bit in the registry to note that the latest OS upgrade notification
-// has been handled by this user. Returns true if the previous bit was
-// different or absent (i.e., the latest OS update wasn't handled yet), in
-// which case subsequent calls to this method will return false until the next
-// OS upgrade. This call is only valid on system-level installs.
-bool UpdateLastOSUpgradeHandledByActiveSetup(BrowserDistribution* dist);
 
 // Applies a patch file to source file using Courgette. Returns 0 in case of
 // success. In case of errors, it returns kCourgetteErrorOffset + a Courgette
@@ -73,26 +69,7 @@ base::FilePath FindArchiveToPatch(const InstallationState& original_state,
 // given the nature of this function, it is not possible to know if the
 // delete operation itself succeeded.
 bool DeleteFileFromTempProcess(const base::FilePath& path,
-                               uint32 delay_before_delete_ms);
-
-// Returns true and populates |setup_exe| with the path to an existing product
-// installer if one is found that is newer than the currently running installer
-// (|installer_version|).
-bool GetExistingHigherInstaller(const InstallationState& original_state,
-                                bool system_install,
-                                const base::Version& installer_version,
-                                base::FilePath* setup_exe);
-
-// Invokes the pre-existing |setup_exe| to handle the current operation (as
-// dictated by |command_line|). An installerdata file, if specified, is first
-// unconditionally copied into place so that it will be in effect in case the
-// invoked |setup_exe| runs the newly installed product prior to exiting.
-// Returns true if |setup_exe| was launched, false otherwise.
-bool DeferToExistingInstall(const base::FilePath& setup_exe,
-                            const base::CommandLine& command_line,
-                            const InstallerState& installer_state,
-                            const base::FilePath& temp_path,
-                            InstallStatus* install_status);
+                               uint32_t delay_before_delete_ms);
 
 // Returns true if the product |type| will be installed after the current
 // setup.exe instance have carried out installation / uninstallation, at
@@ -130,6 +107,18 @@ bool IsProcessorSupported();
 base::string16 GetRegistrationDataCommandKey(
     const AppRegistrationData& reg_data,
     const wchar_t* name);
+
+// Deletes all values and subkeys of the key |path| under |root|, preserving
+// the keys named in |keys_to_preserve| (each of which must be an ASCII string).
+// The key itself is deleted if no subkeys are preserved.
+void DeleteRegistryKeyPartial(
+    HKEY root,
+    const base::string16& path,
+    const std::vector<base::string16>& keys_to_preserve);
+
+// Converts a product GUID into a SQuished gUID that is used for MSI installer
+// registry entries.
+base::string16 GuidToSquid(const base::string16& guid);
 
 // This class will enable the privilege defined by |privilege_name| on the
 // current process' token. The privilege will be disabled upon the

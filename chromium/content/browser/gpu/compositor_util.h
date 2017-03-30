@@ -17,16 +17,15 @@ namespace content {
 // default).
 CONTENT_EXPORT bool IsPropertyTreeVerificationEnabled();
 
-// Returns true if delegated-renderer is on (via flags, or platform default).
-CONTENT_EXPORT bool IsDelegatedRendererEnabled();
-
-// Returns true if one-copy uploads is on (via flags, or platform default).
-// Only one of one-copy and zero-copy can be enabled at a time.
-CONTENT_EXPORT bool IsOneCopyUploadEnabled();
-
 // Returns true if zero-copy uploads is on (via flags, or platform default).
 // Only one of one-copy and zero-copy can be enabled at a time.
 CONTENT_EXPORT bool IsZeroCopyUploadEnabled();
+
+// Returns true if a partial raster is on (via flags).
+CONTENT_EXPORT bool IsPartialRasterEnabled();
+
+// Returns true if all compositor resources should use GPU memory buffers.
+CONTENT_EXPORT bool IsGpuMemoryBufferCompositorResourcesEnabled();
 
 // Returns true if gpu rasterization is on (via flags) for the renderer.
 CONTENT_EXPORT bool IsGpuRasterizationEnabled();

@@ -4,6 +4,9 @@
 
 #include "chrome/common/safe_browsing/zip_analyzer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 
 #include "base/i18n/streaming_utf8_validator.h"
@@ -92,7 +95,7 @@ void AnalyzeContainedFile(
 void AnalyzeZipFile(base::File zip_file,
                     base::File temp_file,
                     Results* results) {
-  std::set<base::FilePath::StringType> archived_archive_filetypes;
+  std::set<base::FilePath> archived_archive_filenames;
   scoped_refptr<BinaryFeatureExtractor> binary_feature_extractor(
       new BinaryFeatureExtractor());
   zip::ZipReader reader;
@@ -115,7 +118,7 @@ void AnalyzeZipFile(base::File zip_file,
     if (download_protection_util::IsArchiveFile(file)) {
       DVLOG(2) << "Downloaded a zipped archive: " << file.value();
       results->has_archive = true;
-      archived_archive_filetypes.insert(file.FinalExtension());
+      archived_archive_filenames.insert(file.BaseName());
     } else if (download_protection_util::IsSupportedBinaryFile(file)) {
       DVLOG(2) << "Downloaded a zipped executable: " << file.value();
       results->has_executable = true;
@@ -125,8 +128,8 @@ void AnalyzeZipFile(base::File zip_file,
       DVLOG(3) << "Ignoring non-binary file: " << file.value();
     }
   }
-  results->archived_archive_filetypes.assign(archived_archive_filetypes.begin(),
-                                             archived_archive_filetypes.end());
+  results->archived_archive_filenames.assign(archived_archive_filenames.begin(),
+                                             archived_archive_filenames.end());
   results->success = true;
 }
 

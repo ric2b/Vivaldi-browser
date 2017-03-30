@@ -8,8 +8,8 @@
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "components/metrics/metrics_provider.h"
@@ -94,6 +94,8 @@ class PluginMetricsProvider : public metrics::MetricsProvider,
                                   int exit_code) override;
   void BrowserChildProcessInstanceCreated(
       const content::ChildProcessData& data) override;
+  void BrowserChildProcessKilled(const content::ChildProcessData& data,
+                                 int exit_code) override;
 
   PrefService* local_state_;
 

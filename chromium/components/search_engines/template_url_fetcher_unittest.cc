@@ -2,8 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/search_engines/template_url_fetcher.h"
+
+#include <stddef.h>
+#include <string>
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
@@ -11,7 +18,6 @@
 #include "chrome/browser/search_engines/template_url_service_test_util.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/search_engines/template_url.h"
-#include "components/search_engines/template_url_fetcher.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -31,7 +37,7 @@ class TemplateURLFetcherTest : public testing::Test {
     template_url_fetcher_.reset(new TemplateURLFetcher(
         test_util_.model(), profile->GetRequestContext()));
 
-    ASSERT_TRUE(test_server_.InitializeAndWaitUntilReady());
+    ASSERT_TRUE(test_server_.Start());
   }
 
   void TearDown() override {
@@ -70,7 +76,7 @@ class TemplateURLFetcherTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;  // To set up BrowserThreads.
   TemplateURLServiceTestUtil test_util_;
   scoped_ptr<TemplateURLFetcher> template_url_fetcher_;
-  net::test_server::EmbeddedTestServer test_server_;
+  net::EmbeddedTestServer test_server_;
 
   // The last TemplateURL to come from a callback.
   scoped_ptr<TemplateURL> last_callback_template_url_;
@@ -112,13 +118,13 @@ TemplateURLFetcherTest::TemplateURLFetcherTest()
 void TemplateURLFetcherTest::DestroyedCallback() {
   callbacks_destroyed_++;
   if (waiting_for_download_)
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void TemplateURLFetcherTest::ConfirmAddSearchProvider(
     base::ScopedClosureRunner* callback_destruction_notifier,
     scoped_ptr<TemplateURL> template_url) {
-  last_callback_template_url_ = template_url.Pass();
+  last_callback_template_url_ = std::move(template_url);
   add_provider_called_++;
 }
 
@@ -181,6 +187,7 @@ TEST_F(TemplateURLFetcherTest, BasicAutodetectedTest) {
   EXPECT_EQ(ASCIIToUTF16("http://example.com/%s/other_stuff"),
             t_url->url_ref().DisplayURL(
                 test_util()->model()->search_terms_data()));
+  EXPECT_EQ(ASCIIToUTF16("Simple Search"), t_url->short_name());
   EXPECT_TRUE(t_url->safe_for_autoreplace());
 }
 
@@ -322,4 +329,20 @@ TEST_F(TemplateURLFetcherTest, DuplicateDownloadTest) {
   ASSERT_EQ(1, add_provider_called());
   ASSERT_EQ(2, callbacks_destroyed());
   ASSERT_TRUE(last_callback_template_url());
+}
+
+TEST_F(TemplateURLFetcherTest, UnicodeTest) {
+  base::string16 keyword(ASCIIToUTF16("test"));
+
+  test_util()->ChangeModelToLoadState();
+  ASSERT_FALSE(test_util()->model()->GetTemplateURLForKeyword(keyword));
+
+  std::string osdd_file_name("unicode_open_search.xml");
+  StartDownload(keyword, osdd_file_name,
+                TemplateURLFetcher::AUTODETECTED_PROVIDER, true);
+  WaitForDownloadToFinish();
+  const TemplateURL* t_url =
+      test_util()->model()->GetTemplateURLForKeyword(keyword);
+  EXPECT_EQ(base::UTF8ToUTF16("\xd1\x82\xd0\xb5\xd1\x81\xd1\x82"),
+            t_url->short_name());
 }

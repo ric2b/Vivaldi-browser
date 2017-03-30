@@ -6,8 +6,8 @@ package org.chromium.net;
 
 import android.util.Log;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.SuppressFBWarnings;
 
 import java.io.IOException;
@@ -292,13 +292,14 @@ public class ChromiumUrlRequest implements HttpUrlRequest {
      * Uploads a new chunk. Must have called {@link #setChunkedUpload(String)}
      * and {@link #start()}.
      *
-     * @param chunk The data, which will not be modified. It must not be empty
-     *            and its current position must be zero.
+     * @param chunk The data, which will not be modified. Its current position.
+     *            must be zero. The last chunk can be empty, but all other
+     *            chunks must be non-empty.
      * @param isLastChunk Whether this chunk is the last one.
      */
     public void appendChunk(ByteBuffer chunk, boolean isLastChunk)
             throws IOException {
-        if (!chunk.hasRemaining()) {
+        if (!isLastChunk && !chunk.hasRemaining()) {
             throw new IllegalArgumentException(
                     "Attempted to write empty buffer.");
         }
@@ -528,7 +529,7 @@ public class ChromiumUrlRequest implements HttpUrlRequest {
     // Private methods called by native library.
 
     /**
-     * If @CalledByNative method throws an exception, request gets cancelled
+     * If @CalledByNative method throws an exception, request gets canceled
      * and exception could be retrieved from request using getException().
      */
     private void onCalledByNativeException(Exception e) {

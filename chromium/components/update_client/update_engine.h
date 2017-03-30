@@ -53,9 +53,6 @@ class UpdateEngine {
                const NotifyObserversCallback& notify_observers_callback);
   ~UpdateEngine();
 
-  // Returns true is the CRX identified by the given |id| is being updated.
-  bool IsUpdating(const std::string& id) const;
-
   bool GetUpdateState(const std::string& id, CrxUpdateItem* update_state);
 
   void Update(bool is_foreground,
@@ -122,9 +119,6 @@ struct UpdateContext {
 
   // Runs tasks in a blocking thread pool.
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner;
-
-  // Runs tasks in the same single thread.
-  scoped_refptr<base::SingleThreadTaskRunner> single_thread_task_runner;
 
   // Creates instances of UpdateChecker;
   UpdateChecker::Factory update_checker_factory;

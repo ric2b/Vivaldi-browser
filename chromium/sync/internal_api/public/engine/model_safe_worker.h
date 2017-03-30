@@ -21,7 +21,7 @@
 
 namespace base {
 class DictionaryValue;
-}  // namespace
+}  // namespace base
 
 namespace syncer {
 
@@ -93,8 +93,6 @@ class SYNC_EXPORT ModelSafeWorker
   void WillDestroyCurrentMessageLoop() override;
 
  protected:
-  friend class base::RefCountedThreadSafe<ModelSafeWorker>;
-
   explicit ModelSafeWorker(WorkerLoopDestructionObserver* observer);
   ~ModelSafeWorker() override;
 
@@ -115,6 +113,8 @@ class SYNC_EXPORT ModelSafeWorker
   void SetWorkingLoopToCurrent();
 
  private:
+  friend class base::RefCountedThreadSafe<ModelSafeWorker>;
+
   void UnregisterForLoopDestructionAsync(
       base::Callback<void(ModelSafeGroup)> unregister_done_callback);
 
@@ -149,8 +149,8 @@ class SYNC_EXPORT ModelSafeWorker
 typedef std::map<ModelType, ModelSafeGroup> ModelSafeRoutingInfo;
 
 // Caller takes ownership of return value.
-SYNC_EXPORT_PRIVATE scoped_ptr<base::DictionaryValue>
-ModelSafeRoutingInfoToValue(const ModelSafeRoutingInfo& routing_info);
+SYNC_EXPORT scoped_ptr<base::DictionaryValue> ModelSafeRoutingInfoToValue(
+    const ModelSafeRoutingInfo& routing_info);
 
 SYNC_EXPORT std::string ModelSafeRoutingInfoToString(
     const ModelSafeRoutingInfo& routing_info);

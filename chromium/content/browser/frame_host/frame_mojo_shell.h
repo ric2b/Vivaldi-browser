@@ -7,9 +7,9 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/application/public/interfaces/shell.mojom.h"
 #include "mojo/common/weak_binding_set.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/shell/public/interfaces/shell.mojom.h"
 
 namespace content {
 
@@ -30,7 +30,9 @@ class FrameMojoShell : public mojo::Shell {
   void ConnectToApplication(
       mojo::URLRequestPtr application_url,
       mojo::InterfaceRequest<mojo::ServiceProvider> services,
-      mojo::ServiceProviderPtr exposed_services) override;
+      mojo::ServiceProviderPtr exposed_services,
+      mojo::CapabilityFilterPtr filter,
+      const ConnectToApplicationCallback& callback) override;
   void QuitApplication() override;
 
   ServiceRegistryImpl* GetServiceRegistry();

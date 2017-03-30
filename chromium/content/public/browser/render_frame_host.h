@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/console_message_level.h"
 #include "ipc/ipc_listener.h"
@@ -16,6 +17,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace base {
 class Value;
@@ -35,10 +37,33 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns nullptr if the IDs do not correspond to a live RenderFrameHost.
   static RenderFrameHost* FromID(int render_process_id, int render_frame_id);
 
+  // Returns the current RenderFrameHost associated with the frame identified by
+  // the given FrameTreeNode ID, in any WebContents. The frame may change its
+  // current RenderFrameHost over time, so the returned RenderFrameHost can be
+  // different from the RenderFrameHost that returned the ID via
+  // GetFrameTreeNodeId(). See GetFrameTreeNodeId for more details.
+  // Use WebContents::FindFrameByFrameTreeNodeId to find a RenderFrameHost in
+  // a specific WebContents.
+  // Returns nullptr if the frame does not exist.
+  static RenderFrameHost* FromFrameTreeNodeId(int frame_tree_node_id);
+
+#if defined(OS_ANDROID)
+  // Globally allows for injecting JavaScript into the main world. This feature
+  // is present only to support Android WebView and must not be used in other
+  // configurations.
+  static void AllowInjectingJavaScriptForAndroidWebView();
+#endif
+
+  // Returns a RenderFrameHost given its accessibility tree ID.
+  static RenderFrameHost* FromAXTreeID(int ax_tree_id);
+
   ~RenderFrameHost() override {}
 
   // Returns the route id for this frame.
   virtual int GetRoutingID() = 0;
+
+  // Returns the accessibility tree ID for this RenderFrameHost.
+  virtual int GetAXTreeID() = 0;
 
   // Returns the SiteInstance grouping all RenderFrameHosts that have script
   // access to this RenderFrameHost, and must therefore live in the same
@@ -53,6 +78,17 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // current RenderFrameHost.
   virtual RenderFrameHost* GetParent() = 0;
 
+  // Returns the FrameTreeNode ID for this frame. This ID is browser-global and
+  // uniquely identifies a frame that hosts content. The identifier is fixed at
+  // the creation of the frame and stays constant for the lifetime of the frame.
+  // When the frame is removed, the ID is not used again.
+  //
+  // A RenderFrameHost is tied to a process. Due to cross-process navigations,
+  // the RenderFrameHost may have a shorter lifetime than a frame. Consequently,
+  // the same FrameTreeNode ID may refer to a different RenderFrameHost after a
+  // navigation.
+  virtual int GetFrameTreeNodeId() = 0;
+
   // Returns the assigned name of the frame, the name of the iframe tag
   // declaring it. For example, <iframe name="framename">[...]</iframe>. It is
   // quite possible for a frame to have no name, in which case GetFrameName will
@@ -63,7 +99,22 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual bool IsCrossProcessSubframe() = 0;
 
   // Returns the last committed URL of the frame.
+  //
+  // The URL is only accurate if this RenderFrameHost is current in the frame
+  // tree -- i.e., it would be visited by WebContents::ForEachFrame. In
+  // particular, this method may return a misleading value if called from
+  // WebContentsObserver::RenderFrameCreated, since non-current frames can be
+  // passed to that observer method.
   virtual GURL GetLastCommittedURL() = 0;
+
+  // Returns the last committed origin of the frame.
+  //
+  // The origin is only available if this RenderFrameHost is current in the
+  // frame tree -- i.e., it would be visited by WebContents::ForEachFrame. In
+  // particular, this method may CHECK if called from
+  // WebContentsObserver::RenderFrameCreated, since non-current frames can be
+  // passed to that observer method.
+  virtual url::Origin GetLastCommittedOrigin() = 0;
 
   // Returns the associated widget's native view.
   virtual gfx::NativeView GetNativeView() = 0;
@@ -74,17 +125,24 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
 
   // Runs some JavaScript in this frame's context. If a callback is provided, it
   // will be used to return the result, when the result is available.
+  // This API can only be called on chrome:// or chrome-devtools:// URLs.
   typedef base::Callback<void(const base::Value*)> JavaScriptResultCallback;
   virtual void ExecuteJavaScript(const base::string16& javascript) = 0;
   virtual void ExecuteJavaScript(const base::string16& javascript,
                                  const JavaScriptResultCallback& callback) = 0;
+
+  // Runs some JavaScript in an isolated world of top of this frame's context.
   virtual void ExecuteJavaScriptInIsolatedWorld(
       const base::string16& javascript,
       const JavaScriptResultCallback& callback,
       int world_id) = 0;
 
-  // ONLY FOR TESTS: Same as above but adds a fake UserGestureIndicator around
-  // execution. (crbug.com/408426)
+  // ONLY FOR TESTS: Same as above but without restrictions. Optionally, adds a
+  // fake UserGestureIndicator around execution. (crbug.com/408426)
+  virtual void ExecuteJavaScriptForTests(const base::string16& javascript) = 0;
+  virtual void ExecuteJavaScriptForTests(
+      const base::string16& javascript,
+      const JavaScriptResultCallback& callback) = 0;
   virtual void ExecuteJavaScriptWithUserGestureForTests(
       const base::string16& javascript) = 0;
 
@@ -95,8 +153,10 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual void AccessibilityScrollToMakeVisible(
       int acc_obj_id, const gfx::Rect& subfocus) = 0;
   virtual void AccessibilityShowContextMenu(int acc_obj_id) = 0;
-  virtual void AccessibilitySetTextSelection(
-      int acc_obj_id, int start_offset, int end_offset) = 0;
+  virtual void AccessibilitySetSelection(int anchor_object_id,
+                                         int anchor_offset,
+                                         int focus_object_id,
+                                         int focus_offset) = 0;
 
   // This is called when the user has committed to the given find in page
   // request (e.g. by pressing enter or by clicking on the next / previous

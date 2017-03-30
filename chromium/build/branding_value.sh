@@ -33,7 +33,7 @@ case ${BUILD_BRANDING} in
     BRANDING_FILE="${TOP}/chrome/app/theme/chromium/BRANDING"
     ;;
   vivaldi)
-    BRANDING_FILE="${TOP}/chrome/app/theme/vivaldi/BRANDING"
+    BRANDING_FILE="${TOP}/../app/resources/theme/vivaldi/BRANDING"
     ;;
   *)
     echo "error: unknown branding: ${BUILD_BRANDING}" >&2

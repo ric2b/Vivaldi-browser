@@ -7,8 +7,9 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "content/common/content_export.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace base {
 class FilePath;
@@ -126,6 +127,10 @@ class ChildProcessSecurityPolicy {
   virtual void GrantDeleteFromFileSystem(int child_id,
                                          const std::string& filesystem_id) = 0;
 
+  // Grants the child process the capability to access URLs with the provided
+  // origin.
+  virtual void GrantOrigin(int child_id, const url::Origin& origin) = 0;
+
   // Grants the child process the capability to access URLs of the provided
   // scheme.
   virtual void GrantScheme(int child_id, const std::string& scheme) = 0;
@@ -153,6 +158,12 @@ class ChildProcessSecurityPolicy {
 
   // Grants permission to send system exclusive message to any MIDI devices.
   virtual void GrantSendMidiSysExMessage(int child_id) = 0;
+
+  // Returns true if the process is permitted to read and modify the data for
+  // the given origin. This is currently used for cookies and passwords.
+  // Does not affect cookies attached to or set by network requests.
+  // Only might return false if the --site-per-process flag is used.
+  virtual bool CanAccessDataForOrigin(int child_id, const GURL& gurl) = 0;
 };
 
 }  // namespace content

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "content/common/vr_service.mojom.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/platform/modules/vr/WebVR.h"
@@ -20,7 +21,7 @@ class ServiceRegistry;
 class VRDispatcher : NON_EXPORTED_BASE(public blink::WebVRClient) {
  public:
   explicit VRDispatcher(ServiceRegistry* service_registry);
-  ~VRDispatcher();
+  ~VRDispatcher() override;
 
   // blink::WebVRClient implementation.
   void getDevices(blink::WebVRGetDevicesCallback* callback) override;

@@ -2,17 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <vector>
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/process/launch.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/first_run/first_run.h"
+#include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sessions/session_restore.h"
@@ -20,11 +26,11 @@
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/session_service_test_helper.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/host_desktop.h"
@@ -34,8 +40,10 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/sessions/serialized_navigation_entry_test_helper.h"
-#include "components/sessions/session_types.h"
+#include "components/sessions/content/content_live_tab.h"
+#include "components/sessions/core/serialized_navigation_entry_test_helper.h"
+#include "components/sessions/core/session_types.h"
+#include "components/sessions/core/tab_restore_service.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -46,6 +54,7 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "sync/protocol/session_specifics.pb.h"
 #include "ui/base/page_transition_types.h"
 
@@ -197,12 +206,11 @@ class SessionRestoreTest : public InProcessBrowserTest {
   const BrowserList* active_browser_list_;
 };
 
-// Activates the smart restore behaviour in "simple" mode and tracks the loading
-// of tabs.
-class SmartSessionRestoreSimpleTest : public SessionRestoreTest,
+// Activates the smart restore behaviour and tracks the loading of tabs.
+class SmartSessionRestoreTest : public SessionRestoreTest,
                                       public content::NotificationObserver {
  public:
-  SmartSessionRestoreSimpleTest() {}
+  SmartSessionRestoreTest() {}
   void StartObserving(int num_tabs) {
     // Start by clearing everything so it can be reused in the same test.
     web_contents_.clear();
@@ -235,13 +243,8 @@ class SmartSessionRestoreSimpleTest : public SessionRestoreTest,
   }
 
  protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kForceFieldTrials, "IntelligentSessionRestore/TestGroup/");
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kForceFieldTrialParams,
-        "IntelligentSessionRestore.TestGroup:PrioritizeTabs/simple");
-  }
+  static const int kExpectedNumTabs;
+  static const char* const kUrls[];
 
  private:
   content::NotificationRegistrar registrar_;
@@ -250,25 +253,19 @@ class SmartSessionRestoreSimpleTest : public SessionRestoreTest,
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
   int num_tabs_;
 
-  DISALLOW_COPY_AND_ASSIGN(SmartSessionRestoreSimpleTest);
+  DISALLOW_COPY_AND_ASSIGN(SmartSessionRestoreTest);
 };
 
-class SmartSessionRestoreMRUTest : public SmartSessionRestoreSimpleTest {
- public:
-  SmartSessionRestoreMRUTest() {}
-
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kForceFieldTrials, "IntelligentSessionRestore/TestGroup/");
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kForceFieldTrialParams,
-        "IntelligentSessionRestore.TestGroup:PrioritizeTabs/mru");
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SmartSessionRestoreMRUTest);
-};
+// static
+const int SmartSessionRestoreTest::kExpectedNumTabs = 6;
+// static
+const char* const SmartSessionRestoreTest::kUrls[] = {
+    "http://google.com/1",
+    "http://google.com/2",
+    "http://google.com/3",
+    "http://google.com/4",
+    "http://google.com/5",
+    "http://google.com/6"};
 
 // Verifies that restored tabs have a root window. This is important
 // otherwise the wrong information is communicated to the renderer.
@@ -306,17 +303,11 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoredTabsShouldHaveWindow) {
 // Verify that restored tabs have correct disposition. Only one tab should
 // have "visible" visibility state, the rest should not.
 // (http://crbug.com/155365 http://crbug.com/118269)
-// TODO: Re-enable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_RestoredTabsHaveCorrectVisibilityState DISABLED_RestoredTabsHaveCorrectVisibilityState
-#else
-#define MAYBE_RestoredTabsHaveCorrectVisibilityState RestoredTabsHaveCorrectVisibilityState
-#endif
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
-    MAYBE_RestoredTabsHaveCorrectVisibilityState) {
+    RestoredTabsHaveCorrectVisibilityState) {
   // Create tabs.
   GURL test_page(ui_test_utils::GetTestUrl(base::FilePath(),
-      base::FilePath(FILE_PATH_LITERAL("tab-restore-visibilty.html"))));
+      base::FilePath(FILE_PATH_LITERAL("tab-restore-visibility.html"))));
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), test_page, NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
@@ -468,13 +459,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
 }
 #endif  // !OS_CHROMEOS
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_RestoreIndividualTabFromWindow DISABLED_RestoreIndividualTabFromWindow
-#else
-#define MAYBE_RestoreIndividualTabFromWindow RestoreIndividualTabFromWindow
-#endif
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreIndividualTabFromWindow) {
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreIndividualTabFromWindow) {
   GURL url1(ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
       base::FilePath(FILE_PATH_LITERAL("title1.html"))));
@@ -503,7 +488,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreIndividualTabFromWindow)
     observer.Wait();
   }
 
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser()->profile());
   service->ClearEntries();
 
@@ -513,27 +498,32 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreIndividualTabFromWindow)
 
   // Expect a window with three tabs.
   ASSERT_EQ(1U, service->entries().size());
-  ASSERT_EQ(TabRestoreService::WINDOW, service->entries().front()->type);
-  const TabRestoreService::Window* window =
-      static_cast<TabRestoreService::Window*>(service->entries().front());
+  ASSERT_EQ(sessions::TabRestoreService::WINDOW,
+            service->entries().front()->type);
+  const sessions::TabRestoreService::Window* window =
+      static_cast<sessions::TabRestoreService::Window*>(
+          service->entries().front());
   EXPECT_EQ(3U, window->tabs.size());
 
   // Find the SessionID for entry2. Since the session service was destroyed,
   // there is no guarantee that the SessionID for the tab has remained the same.
   base::Time timestamp;
   int http_status_code = 0;
-  for (std::vector<TabRestoreService::Tab>::const_iterator it =
-           window->tabs.begin(); it != window->tabs.end(); ++it) {
-    const TabRestoreService::Tab& tab = *it;
+  for (std::vector<sessions::TabRestoreService::Tab>::const_iterator it =
+           window->tabs.begin();
+       it != window->tabs.end(); ++it) {
+    const sessions::TabRestoreService::Tab& tab = *it;
     // If this tab held url2, then restore this single tab.
     if (tab.navigations[0].virtual_url() == url2) {
       timestamp = tab.navigations[0].timestamp();
       http_status_code = tab.navigations[0].http_status_code();
-      std::vector<content::WebContents*> content =
+      std::vector<sessions::LiveTab*> content =
           service->RestoreEntryById(NULL, tab.id, host_desktop_type, UNKNOWN);
       ASSERT_EQ(1U, content.size());
       ASSERT_TRUE(content[0]);
-      EXPECT_EQ(url2, content[0]->GetURL());
+      EXPECT_EQ(url2, static_cast<sessions::ContentLiveTab*>(content[0])
+                          ->web_contents()
+                          ->GetURL());
       break;
     }
   }
@@ -542,8 +532,10 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreIndividualTabFromWindow)
 
   // Make sure that the restored tab is removed from the service.
   ASSERT_EQ(1U, service->entries().size());
-  ASSERT_EQ(TabRestoreService::WINDOW, service->entries().front()->type);
-  window = static_cast<TabRestoreService::Window*>(service->entries().front());
+  ASSERT_EQ(sessions::TabRestoreService::WINDOW,
+            service->entries().front()->type);
+  window = static_cast<sessions::TabRestoreService::Window*>(
+      service->entries().front());
   EXPECT_EQ(2U, window->tabs.size());
 
   // Make sure that the restored tab was restored with the correct
@@ -558,7 +550,14 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreIndividualTabFromWindow)
   EXPECT_EQ(http_status_code, entry->GetHttpStatusCode());
 }
 
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, WindowWithOneTab) {
+// Flaky on Linux. https://crbug.com/537592.
+#if defined (OS_LINUX)
+#define MAYBE_WindowWithOneTab DISABLED_WindowWithOneTab
+#else
+#define MAYBE_WindowWithOneTab WindowWithOneTab
+#endif
+
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_WindowWithOneTab) {
   GURL url(ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
       base::FilePath(FILE_PATH_LITERAL("title1.html"))));
@@ -566,7 +565,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, WindowWithOneTab) {
   // Add a single tab.
   ui_test_utils::NavigateToURL(browser(), url);
 
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser()->profile());
   service->ClearEntries();
   EXPECT_EQ(0U, service->entries().size());
@@ -578,16 +577,19 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, WindowWithOneTab) {
 
   // Expect the window to be converted to a tab by the TRS.
   EXPECT_EQ(1U, service->entries().size());
-  ASSERT_EQ(TabRestoreService::TAB, service->entries().front()->type);
-  const TabRestoreService::Tab* tab =
-      static_cast<TabRestoreService::Tab*>(service->entries().front());
+  ASSERT_EQ(sessions::TabRestoreService::TAB, service->entries().front()->type);
+  const sessions::TabRestoreService::Tab* tab =
+      static_cast<sessions::TabRestoreService::Tab*>(
+          service->entries().front());
 
   // Restore the tab.
-  std::vector<content::WebContents*> content =
+  std::vector<sessions::LiveTab*> content =
       service->RestoreEntryById(NULL, tab->id, host_desktop_type, UNKNOWN);
   ASSERT_EQ(1U, content.size());
   ASSERT_TRUE(content[0]);
-  EXPECT_EQ(url, content[0]->GetURL());
+  EXPECT_EQ(url, static_cast<sessions::ContentLiveTab*>(content[0])
+                     ->web_contents()
+                     ->GetURL());
 
   // Make sure the restore was successful.
   EXPECT_EQ(0U, service->entries().size());
@@ -896,13 +898,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWebUI) {
             new_tab->GetRenderViewHost()->GetEnabledBindings());
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_RestoreWebUISettings DISABLED_RestoreWebUISettings
-#else
-#define MAYBE_RestoreWebUISettings RestoreWebUISettings
-#endif
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreWebUISettings) {
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWebUISettings) {
   const GURL webui_url("chrome://settings");
   ui_test_utils::NavigateToURL(browser(), webui_url);
   const content::WebContents* old_tab =
@@ -949,9 +945,9 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoresForwardAndBackwardNavs) {
 // This test fails. See http://crbug.com/237497.
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
                        DISABLED_RestoresCrossSiteForwardAndBackwardNavs) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
-  GURL cross_site_url(test_server()->GetURL("files/title2.html"));
+  GURL cross_site_url(embedded_test_server()->GetURL("/title2.html"));
 
   // Visit URLs on different sites.
   ui_test_utils::NavigateToURL(browser(), url1_);
@@ -1357,107 +1353,22 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, SessionStorageAfterTabReplace) {
   EXPECT_EQ(1, new_browser->tab_strip_model()->count());
 }
 
-IN_PROC_BROWSER_TEST_F(SmartSessionRestoreSimpleTest, CorrectLoadingOrder) {
-  ASSERT_EQ(SessionRestore::SMART_RESTORE_MODE_SIMPLE,
-            SessionRestore::GetSmartRestoreMode());
-
-  const int num_tabs = 6;
-
-  // Start observing the loading of tabs, to make sure the order is correct.
-  StartObserving(num_tabs);
-
-  struct TabInfo {
-    GURL url;
-    bool pinned;
-    int expected_load_order;
-  };
-
-  TabInfo tab_info[num_tabs] = {
-      // This will be the foreground tab and will always load first.
-      {GURL("http://google.com/1"), false, 1},
-      {GURL("http://google.com/2"), false, 3},
-      // Internal page, should load last.
-      {GURL(chrome::kChromeUINewTabURL), false, 6},
-      {GURL("http://google.com/4"), false, 4},
-      {GURL("http://google.com/5"), true, 2},  // Pinned, should load second.
-      {GURL("http://google.com/6"), false, 5},
-  };
-
-  // Set up the restore data.
-  std::vector<const sessions::SessionWindow*> session;
-  sessions::SessionWindow window;
-  sessions::SessionTab tab[num_tabs];
-
-  for (int i = 0; i < num_tabs; i++) {
-    SerializedNavigationEntry nav =
-        SerializedNavigationEntryTestHelper::CreateNavigation(
-            tab_info[i].url.spec(), tab_info[i].url.spec().c_str());
-    sync_pb::SessionTab sync_data;
-    sync_data.set_tab_visual_index(0);
-    sync_data.set_current_navigation_index(0);
-    sync_data.add_navigation()->CopyFrom(nav.ToSyncData());
-    sync_data.set_pinned(tab_info[i].pinned);
-    tab[i].SetFromSyncData(sync_data, base::Time::Now());
-    window.tabs.push_back(tab + i);
-  }
-
-  session.push_back(&window);
+IN_PROC_BROWSER_TEST_F(SmartSessionRestoreTest, PRE_CorrectLoadingOrder) {
   Profile* profile = browser()->profile();
-  std::vector<Browser*> browsers = SessionRestore::RestoreForeignSessionWindows(
-      profile, browser()->host_desktop_type(), session.begin(), session.end());
-
-  ASSERT_EQ(1u, browsers.size());
-  ASSERT_TRUE(browsers[0]);
-  ASSERT_EQ(num_tabs, browsers[0]->tab_strip_model()->count());
-
-  WaitForAllTabsToStartLoading();
-
-  ASSERT_EQ(static_cast<size_t>(num_tabs), web_contents().size());
-
-  // Make sure that contents are loaded in the correct order, ie. each tab rank
-  // is higher that its preceding one.
-  std::map<GURL, int> ranks;
-  for (auto t : tab_info)
-    ranks[t.url] = t.expected_load_order;
-  for (size_t i = 1; i < web_contents().size(); i++) {
-    int current_rank = ranks[web_contents()[i]->GetLastCommittedURL()];
-    int previous_rank = ranks[web_contents()[i - 1]->GetLastCommittedURL()];
-    ASSERT_LT(previous_rank, current_rank);
-  }
-
-  // The SessionWindow destructor deletes the tabs, so we have to clear them
-  // here to avoid a crash.
-  window.tabs.clear();
-}
-
-// Disabled due to flaky timeouts; http://crbug.com/504885.
-IN_PROC_BROWSER_TEST_F(SmartSessionRestoreMRUTest,
-                       DISABLED_CorrectLoadingOrder) {
-  const int num_tabs = 6;
-
-  Profile* profile = browser()->profile();
-
-  GURL urls[] = {GURL("http://google.com/1"),
-                 GURL("http://google.com/2"),
-                 GURL("http://google.com/3"),
-                 GURL("http://google.com/4"),
-                 GURL("http://google.com/5"),
-                 GURL("http://google.com/6")};
 
   int activation_order[] = {4, 2, 1, 5, 0, 3};
-  int activation_order2[] = {4, 2, 5, 0, 3, 1};
 
   // Replace the first tab and add the other tabs.
-  ui_test_utils::NavigateToURL(browser(), urls[0]);
-  for (int i = 1; i < num_tabs; i++) {
+  ui_test_utils::NavigateToURL(browser(), GURL(kUrls[0]));
+  for (int i = 1; i < kExpectedNumTabs; i++) {
     ui_test_utils::NavigateToURLWithDisposition(
-        browser(), urls[i], NEW_FOREGROUND_TAB,
+        browser(), GURL(kUrls[i]), NEW_FOREGROUND_TAB,
         ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
   }
 
-  ASSERT_EQ(num_tabs, browser()->tab_strip_model()->count());
+  ASSERT_EQ(kExpectedNumTabs, browser()->tab_strip_model()->count());
 
-  // Activate the tabs one by one following the random activation order.
+  // Activate the tabs one by one following the specified activation order.
   for (auto i : activation_order)
     browser()->tab_strip_model()->ActivateTabAt(i, true);
 
@@ -1465,7 +1376,7 @@ IN_PROC_BROWSER_TEST_F(SmartSessionRestoreMRUTest,
   g_browser_process->AddRefModule();
   CloseBrowserSynchronously(browser());
 
-  StartObserving(num_tabs);
+  StartObserving(kExpectedNumTabs);
 
   // Create a new window, which should trigger session restore.
   ui_test_utils::BrowserAddedObserver window_observer;
@@ -1475,12 +1386,12 @@ IN_PROC_BROWSER_TEST_F(SmartSessionRestoreMRUTest,
   WaitForAllTabsToStartLoading();
   g_browser_process->ReleaseModule();
 
-  ASSERT_EQ(static_cast<size_t>(num_tabs), web_contents().size());
+  ASSERT_EQ(static_cast<size_t>(kExpectedNumTabs), web_contents().size());
   // Test that we have observed the tabs being loaded in the inverse order of
   // their activation (MRU). Also validate that their last active time is in the
   // correct order.
   for (size_t i = 0; i < web_contents().size(); i++) {
-    GURL expected_url = urls[activation_order[num_tabs - i - 1]];
+    GURL expected_url = GURL(kUrls[activation_order[kExpectedNumTabs - i - 1]]);
     ASSERT_EQ(expected_url, web_contents()[i]->GetLastCommittedURL());
     if (i > 0) {
       ASSERT_GT(web_contents()[i - 1]->GetLastActiveTime(),
@@ -1488,33 +1399,41 @@ IN_PROC_BROWSER_TEST_F(SmartSessionRestoreMRUTest,
     }
   }
 
-  // Activate the 2nd tab then close the browser and open it again, to trigger
-  // another session restore. The goal is to ensure that activation time is
-  // persisted between session restores.
-
+  // Activate the 2nd tab before the browser closes. This should be persisted in
+  // the following test.
   new_browser->tab_strip_model()->ActivateTabAt(1, true);
+}
 
-  // Close the browser.
+IN_PROC_BROWSER_TEST_F(SmartSessionRestoreTest, CorrectLoadingOrder) {
+  int activation_order[] = {4, 2, 5, 0, 3, 1};
+  Profile* profile = browser()->profile();
+
+  // Close the browser that gets opened automatically so we can track the order
+  // of loading of the tabs.
   g_browser_process->AddRefModule();
-  CloseBrowserSynchronously(new_browser);
-
-  StartObserving(num_tabs);
+  CloseBrowserSynchronously(browser());
+  // We have an extra tab that is added when the test starts, which gets ignored
+  // later when we test for proper order.
+  StartObserving(kExpectedNumTabs + 1);
 
   // Create a new window, which should trigger session restore.
-  ui_test_utils::BrowserAddedObserver window_observer2;
+  ui_test_utils::BrowserAddedObserver window_observer;
   chrome::NewEmptyWindow(profile, chrome::HOST_DESKTOP_TYPE_NATIVE);
-  Browser* new_browser2 = window_observer2.WaitForSingleNewBrowser();
-  ASSERT_TRUE(new_browser2 != NULL);
+  Browser* new_browser = window_observer.WaitForSingleNewBrowser();
+  ASSERT_TRUE(new_browser != NULL);
   WaitForAllTabsToStartLoading();
   g_browser_process->ReleaseModule();
 
-  ASSERT_EQ(static_cast<size_t>(num_tabs), web_contents().size());
+  ASSERT_EQ(static_cast<size_t>(kExpectedNumTabs + 1), web_contents().size());
 
   // Test that we have observed the tabs being loaded in the inverse order of
   // their activation (MRU). Also validate that their last active time is in the
   // correct order.
-  for (size_t i = 0; i < web_contents().size(); i++) {
-    GURL expected_url = urls[activation_order2[num_tabs - i - 1]];
+  //
+  // Note that we ignore the first tab as it's an empty one that is added
+  // automatically at the start of the test.
+  for (size_t i = 1; i < web_contents().size(); i++) {
+    GURL expected_url = GURL(kUrls[activation_order[kExpectedNumTabs - i]]);
     ASSERT_EQ(expected_url, web_contents()[i]->GetLastCommittedURL());
     if (i > 0) {
       ASSERT_GT(web_contents()[i - 1]->GetLastActiveTime(),

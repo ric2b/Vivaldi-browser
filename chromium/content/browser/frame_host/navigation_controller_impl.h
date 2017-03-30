@@ -5,10 +5,15 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_NAVIGATION_CONTROLLER_IMPL_H_
 #define CONTENT_BROWSER_FRAME_HOST_NAVIGATION_CONTROLLER_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/navigation_controller_delegate.h"
@@ -40,7 +45,7 @@ class CONTENT_EXPORT NavigationControllerImpl
   void SetBrowserContext(BrowserContext* browser_context) override;
   void Restore(int selected_navigation,
                RestoreType type,
-               ScopedVector<NavigationEntry>* entries) override;
+               std::vector<scoped_ptr<NavigationEntry>>* entries) override;
   NavigationEntryImpl* GetActiveEntry() const override;
   NavigationEntryImpl* GetVisibleEntry() const override;
   int GetCurrentEntryIndex() const override;
@@ -72,16 +77,19 @@ class CONTENT_EXPORT NavigationControllerImpl
   const SessionStorageNamespaceMap& GetSessionStorageNamespaceMap()
       const override;
   SessionStorageNamespace* GetDefaultSessionStorageNamespace() override;
-  void SetMaxRestoredPageID(int32 max_id) override;
-  int32 GetMaxRestoredPageID() const override;
+  void SetMaxRestoredPageID(int32_t max_id) override;
+  int32_t GetMaxRestoredPageID() const override;
   bool NeedsReload() const override;
   void SetNeedsReload() override;
   void CancelPendingReload() override;
   void ContinuePendingReload() override;
   bool IsInitialNavigation() const override;
+  bool IsInitialBlankNavigation() const override;
   void Reload(bool check_for_repost) override;
+  void ReloadToRefreshContent(bool check_for_repost) override;
   void ReloadIgnoringCache(bool check_for_repost) override;
   void ReloadOriginalRequestURL(bool check_for_repost) override;
+  void ReloadDisableLoFi(bool check_for_repost) override;
   void NotifyEntryChanged(const NavigationEntry* entry) override;
   void CopyStateFrom(const NavigationController& source) override;
   void CopyStateFromAndPrune(NavigationController* source,
@@ -105,25 +113,18 @@ class CONTENT_EXPORT NavigationControllerImpl
 
   // Return the index of the entry with the corresponding instance and page_id,
   // or -1 if not found.
-  int GetEntryIndexWithPageID(SiteInstance* instance,
-                              int32 page_id) const;
+  int GetEntryIndexWithPageID(SiteInstance* instance, int32_t page_id) const;
 
   // Return the index of the entry with the given unique id, or -1 if not found.
   int GetEntryIndexWithUniqueID(int nav_entry_id) const;
 
   // Return the entry with the corresponding instance and page_id, or null if
   // not found.
-  NavigationEntryImpl* GetEntryWithPageID(
-      SiteInstance* instance,
-      int32 page_id) const;
+  NavigationEntryImpl* GetEntryWithPageID(SiteInstance* instance,
+                                          int32_t page_id) const;
 
   // Return the entry with the given unique id, or null if not found.
   NavigationEntryImpl* GetEntryWithUniqueID(int nav_entry_id) const;
-
-  // Whether the given frame has committed any navigations yet.
-  // This currently only returns true in --site-per-process mode.
-  // TODO(creis): Create FrameNavigationEntries by default so this always works.
-  bool HasCommittedRealLoad(FrameTreeNode* frame_tree_node) const;
 
   NavigationControllerDelegate* delegate() const {
     return delegate_;
@@ -133,7 +134,7 @@ class CONTENT_EXPORT NavigationControllerImpl
 
   // Allow renderer-initiated navigations to create a pending entry when the
   // provisional load starts.
-  void SetPendingEntry(scoped_ptr<NavigationEntryImpl> entry) override;
+  void SetPendingEntry(scoped_ptr<NavigationEntryImpl> entry);
 
   // Handles updating the navigation state after the renderer has navigated.
   // This is used by the WebContentsImpl.
@@ -203,12 +204,10 @@ class CONTENT_EXPORT NavigationControllerImpl
   // Takes a screenshot of the page at the current state.
   void TakeScreenshot();
 
-  // Sets the screenshot manager for this NavigationControllerImpl. The
-  // controller takes ownership of the screenshot manager and destroys it when
-  // a new screenshot-manager is set, or when the controller is destroyed.
-  // Setting a NULL manager recreates the default screenshot manager and uses
-  // that.
-  void SetScreenshotManager(NavigationEntryScreenshotManager* manager);
+  // Sets the screenshot manager for this NavigationControllerImpl. Setting a
+  // NULL manager recreates the default screenshot manager and uses that.
+  void SetScreenshotManager(
+      scoped_ptr<NavigationEntryScreenshotManager> manager);
 
   // Discards only the pending entry. |was_failure| should be set if the pending
   // entry is being discarded because it failed to load.
@@ -357,9 +356,8 @@ class CONTENT_EXPORT NavigationControllerImpl
   // The user browser context associated with this controller.
   BrowserContext* browser_context_;
 
-  // List of NavigationEntry for this tab
-  using NavigationEntries = ScopedVector<NavigationEntryImpl>;
-  NavigationEntries entries_;
+  // List of |NavigationEntry|s for this controller.
+  std::vector<scoped_ptr<NavigationEntryImpl>> entries_;
 
   // An entry we haven't gotten a response for yet.  This will be discarded
   // when we navigate again.  It's used only so we know what the currently
@@ -403,7 +401,7 @@ class CONTENT_EXPORT NavigationControllerImpl
   // The max restored page ID in this controller, if it was restored.  We must
   // store this so that WebContentsImpl can tell any renderer in charge of one
   // of the restored entries to update its max page ID.
-  int32 max_restored_page_id_;
+  int32_t max_restored_page_id_;
 
   // Manages the SSL security UI.
   SSLManager ssl_manager_;

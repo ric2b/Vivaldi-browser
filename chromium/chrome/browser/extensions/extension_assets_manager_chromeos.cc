@@ -4,11 +4,14 @@
 
 #include "chrome/browser/extensions/extension_assets_manager_chromeos.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
@@ -56,7 +59,7 @@ class ExtensionAssetsManagerHelper {
 
   static ExtensionAssetsManagerHelper* GetInstance() {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    return Singleton<ExtensionAssetsManagerHelper>::get();
+    return base::Singleton<ExtensionAssetsManagerHelper>::get();
   }
 
   // Remember that shared install is in progress. Return true if there is no
@@ -94,7 +97,7 @@ class ExtensionAssetsManagerHelper {
   }
 
  private:
-  friend struct DefaultSingletonTraits<ExtensionAssetsManagerHelper>;
+  friend struct base::DefaultSingletonTraits<ExtensionAssetsManagerHelper>;
 
   ExtensionAssetsManagerHelper() {}
   ~ExtensionAssetsManagerHelper() {}
@@ -130,7 +133,7 @@ ExtensionAssetsManagerChromeOS::~ExtensionAssetsManagerChromeOS() {
 
 // static
 ExtensionAssetsManagerChromeOS* ExtensionAssetsManagerChromeOS::GetInstance() {
-  return Singleton<ExtensionAssetsManagerChromeOS>::get();
+  return base::Singleton<ExtensionAssetsManagerChromeOS>::get();
 }
 
 // static
@@ -287,7 +290,8 @@ void ExtensionAssetsManagerChromeOS::CheckSharedExtension(
     return;
   }
 
-  if (user_manager->IsUserNonCryptohomeDataEphemeral(user_id) ||
+  if (user_manager->IsUserNonCryptohomeDataEphemeral(
+          AccountId::FromUserEmail(user_id)) ||
       !user_manager->IsLoggedInAsUserWithGaiaAccount()) {
     // Don't cache anything in shared location for ephemeral user or special
     // user types.
@@ -530,7 +534,8 @@ bool ExtensionAssetsManagerChromeOS::CleanUpExtension(
         NOTREACHED();
         return false;
       }
-      const user_manager::User* user = user_manager->FindUser(user_id);
+      const user_manager::User* user =
+          user_manager->FindUser(AccountId::FromUserEmail(user_id));
       bool not_used = false;
       if (!user) {
         not_used = true;

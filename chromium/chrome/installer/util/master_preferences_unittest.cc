@@ -4,7 +4,10 @@
 //
 // Unit tests for master preferences related methods.
 
+#include <stddef.h>
+
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
@@ -49,33 +52,31 @@ TEST_F(MasterPreferencesTest, NoFileToParse) {
 
 TEST_F(MasterPreferencesTest, ParseDistroParams) {
   const char text[] =
-    "{ \n"
-    "  \"distribution\": { \n"
-    "     \"show_welcome_page\": true,\n"
-    "     \"import_search_engine\": true,\n"
-    "     \"import_history\": true,\n"
-    "     \"import_bookmarks\": true,\n"
-    "     \"import_bookmarks_from_file\": \"c:\\\\foo\",\n"
-    "     \"import_home_page\": true,\n"
-    "     \"welcome_page_on_os_upgrade_enabled\": true,\n"
-    "     \"do_not_create_any_shortcuts\": true,\n"
-    "     \"do_not_create_desktop_shortcut\": true,\n"
-    "     \"do_not_create_quick_launch_shortcut\": true,\n"
-    "     \"do_not_create_taskbar_shortcut\": true,\n"
-    "     \"do_not_launch_chrome\": true,\n"
-    "     \"make_chrome_default\": true,\n"
-    "     \"make_chrome_default_for_user\": true,\n"
-    "     \"system_level\": true,\n"
-    "     \"verbose_logging\": true,\n"
-    "     \"require_eula\": true,\n"
-    "     \"alternate_shortcut_text\": true,\n"
-    "     \"chrome_shortcut_icon_index\": 1,\n"
-    "     \"ping_delay\": 40\n"
-    "  },\n"
-    "  \"blah\": {\n"
-    "     \"import_history\": false\n"
-    "  }\n"
-    "} \n";
+      "{ \n"
+      "  \"distribution\": { \n"
+      "     \"show_welcome_page\": true,\n"
+      "     \"import_search_engine\": true,\n"
+      "     \"import_history\": true,\n"
+      "     \"import_bookmarks\": true,\n"
+      "     \"import_bookmarks_from_file\": \"c:\\\\foo\",\n"
+      "     \"import_home_page\": true,\n"
+      "     \"welcome_page_on_os_upgrade_enabled\": true,\n"
+      "     \"do_not_create_any_shortcuts\": true,\n"
+      "     \"do_not_create_desktop_shortcut\": true,\n"
+      "     \"do_not_create_quick_launch_shortcut\": true,\n"
+      "     \"do_not_create_taskbar_shortcut\": true,\n"
+      "     \"do_not_launch_chrome\": true,\n"
+      "     \"make_chrome_default\": true,\n"
+      "     \"make_chrome_default_for_user\": true,\n"
+      "     \"system_level\": true,\n"
+      "     \"verbose_logging\": true,\n"
+      "     \"require_eula\": true,\n"
+      "     \"ping_delay\": 40\n"
+      "  },\n"
+      "  \"blah\": {\n"
+      "     \"import_history\": false\n"
+      "  }\n"
+      "} \n";
 
   EXPECT_TRUE(base::WriteFile(prefs_file(), text,
                               static_cast<int>(strlen(text))));
@@ -83,25 +84,24 @@ TEST_F(MasterPreferencesTest, ParseDistroParams) {
   EXPECT_TRUE(prefs.read_from_file());
 
   const char* const expected_true[] = {
-    installer::master_preferences::kDistroImportSearchPref,
-    installer::master_preferences::kDistroImportHistoryPref,
-    installer::master_preferences::kDistroImportBookmarksPref,
-    installer::master_preferences::kDistroImportHomePagePref,
-    installer::master_preferences::kDistroWelcomePageOnOSUpgradeEnabled,
-    installer::master_preferences::kDoNotCreateAnyShortcuts,
-    installer::master_preferences::kDoNotCreateDesktopShortcut,
-    installer::master_preferences::kDoNotCreateQuickLaunchShortcut,
-    installer::master_preferences::kDoNotCreateTaskbarShortcut,
-    installer::master_preferences::kDoNotLaunchChrome,
-    installer::master_preferences::kMakeChromeDefault,
-    installer::master_preferences::kMakeChromeDefaultForUser,
-    installer::master_preferences::kSystemLevel,
-    installer::master_preferences::kVerboseLogging,
-    installer::master_preferences::kRequireEula,
-    installer::master_preferences::kAltShortcutText,
+      installer::master_preferences::kDistroImportSearchPref,
+      installer::master_preferences::kDistroImportHistoryPref,
+      installer::master_preferences::kDistroImportBookmarksPref,
+      installer::master_preferences::kDistroImportHomePagePref,
+      installer::master_preferences::kDistroWelcomePageOnOSUpgradeEnabled,
+      installer::master_preferences::kDoNotCreateAnyShortcuts,
+      installer::master_preferences::kDoNotCreateDesktopShortcut,
+      installer::master_preferences::kDoNotCreateQuickLaunchShortcut,
+      installer::master_preferences::kDoNotCreateTaskbarShortcut,
+      installer::master_preferences::kDoNotLaunchChrome,
+      installer::master_preferences::kMakeChromeDefault,
+      installer::master_preferences::kMakeChromeDefaultForUser,
+      installer::master_preferences::kSystemLevel,
+      installer::master_preferences::kVerboseLogging,
+      installer::master_preferences::kRequireEula,
   };
 
-  for (int i = 0; i < arraysize(expected_true); ++i) {
+  for (size_t i = 0; i < arraysize(expected_true); ++i) {
     bool value = false;
     EXPECT_TRUE(prefs.GetBool(expected_true[i], &value));
     EXPECT_TRUE(value) << expected_true[i];
@@ -113,11 +113,6 @@ TEST_F(MasterPreferencesTest, ParseDistroParams) {
       &str_value));
   EXPECT_STREQ("c:\\foo", str_value.c_str());
 
-  int icon_index = 0;
-  EXPECT_TRUE(prefs.GetInt(
-      installer::master_preferences::kChromeShortcutIconIndex,
-      &icon_index));
-  EXPECT_EQ(icon_index, 1);
   int ping_delay = 90;
   EXPECT_TRUE(prefs.GetInt(installer::master_preferences::kDistroPingDelay,
                            &ping_delay));
@@ -133,8 +128,7 @@ TEST_F(MasterPreferencesTest, ParseMissingDistroParams) {
     "     \"import_bookmarks_from_file\": \"\",\n"
     "     \"do_not_create_desktop_shortcut\": true,\n"
     "     \"do_not_create_quick_launch_shortcut\": true,\n"
-    "     \"do_not_launch_chrome\": true,\n"
-    "     \"chrome_shortcut_icon_index\": \"bac\"\n"
+    "     \"do_not_launch_chrome\": true\n"
     "  }\n"
     "} \n";
 
@@ -152,7 +146,7 @@ TEST_F(MasterPreferencesTest, ParseMissingDistroParams) {
   };
 
   bool value = false;
-  for (int i = 0; i < arraysize(expected_bool); ++i) {
+  for (size_t i = 0; i < arraysize(expected_bool); ++i) {
     EXPECT_TRUE(prefs.GetBool(expected_bool[i].name, &value));
     EXPECT_EQ(value, expected_bool[i].expected_value) << expected_bool[i].name;
   }
@@ -165,7 +159,7 @@ TEST_F(MasterPreferencesTest, ParseMissingDistroParams) {
     installer::master_preferences::kMakeChromeDefaultForUser,
   };
 
-  for (int i = 0; i < arraysize(missing_bools); ++i) {
+  for (size_t i = 0; i < arraysize(missing_bools); ++i) {
     EXPECT_FALSE(prefs.GetBool(missing_bools[i], &value)) << missing_bools[i];
   }
 
@@ -173,12 +167,6 @@ TEST_F(MasterPreferencesTest, ParseMissingDistroParams) {
   EXPECT_FALSE(prefs.GetString(
       installer::master_preferences::kDistroImportBookmarksFromFilePref,
       &str_value));
-
-  int icon_index = 0;
-  EXPECT_FALSE(prefs.GetInt(
-      installer::master_preferences::kChromeShortcutIconIndex,
-      &icon_index));
-  EXPECT_EQ(icon_index, 0);
 
   int ping_delay = 90;
   EXPECT_FALSE(prefs.GetInt(
@@ -204,7 +192,7 @@ TEST_F(MasterPreferencesTest, FirstRunTabs) {
   installer::MasterPreferences prefs(prefs_file());
   typedef std::vector<std::string> TabsVector;
   TabsVector tabs = prefs.GetFirstRunTabs();
-  ASSERT_EQ(3, tabs.size());
+  ASSERT_EQ(3u, tabs.size());
   EXPECT_EQ("http://google.com/f1", tabs[0]);
   EXPECT_EQ("https://google.com/f2", tabs[1]);
   EXPECT_EQ("new_tab_page", tabs[2]);
@@ -277,7 +265,7 @@ TEST_F(MasterPreferencesTest, GetInstallPreferencesTest) {
 
   // Now check that prefs got merged correctly.
   bool value = false;
-  for (int i = 0; i < arraysize(expected_bool); ++i) {
+  for (size_t i = 0; i < arraysize(expected_bool); ++i) {
     EXPECT_TRUE(prefs.GetBool(expected_bool[i].name, &value));
     EXPECT_EQ(value, expected_bool[i].expected_value) << expected_bool[i].name;
   }
@@ -294,7 +282,7 @@ TEST_F(MasterPreferencesTest, GetInstallPreferencesTest) {
     { installer::master_preferences::kDoNotLaunchChrome, true },
   };
 
-  for (int i = 0; i < arraysize(expected_bool2); ++i) {
+  for (size_t i = 0; i < arraysize(expected_bool2); ++i) {
     EXPECT_TRUE(prefs2.GetBool(expected_bool2[i].name, &value));
     EXPECT_EQ(value, expected_bool2[i].expected_value)
         << expected_bool2[i].name;
@@ -420,73 +408,4 @@ TEST_F(MasterPreferencesTest, DontEnforceLegacyCreateAllShortcutsNotSpecified) {
     EXPECT_FALSE(do_not_create_desktop_shortcut);
     EXPECT_FALSE(do_not_create_quick_launch_shortcut);
     EXPECT_FALSE(do_not_create_taskbar_shortcut);
-}
-
-TEST_F(MasterPreferencesTest, MigrateOldStartupUrlsPref) {
-  static const char kOldMasterPrefs[] =
-      "{ \n"
-      "  \"distribution\": { \n"
-      "     \"show_welcome_page\": true,\n"
-      "     \"import_search_engine\": true,\n"
-      "     \"import_history\": true,\n"
-      "     \"import_bookmarks\": true\n"
-      "  },\n"
-      "  \"session\": {\n"
-      "     \"urls_to_restore_on_startup\": [\"http://www.google.com\"]\n"
-      "  }\n"
-      "} \n";
-
-  const installer::MasterPreferences prefs(kOldMasterPrefs);
-  const base::DictionaryValue& master_dictionary =
-      prefs.master_dictionary();
-
-  const base::ListValue* old_startup_urls_list = NULL;
-  EXPECT_TRUE(master_dictionary.GetList(prefs::kURLsToRestoreOnStartupOld,
-                                        &old_startup_urls_list));
-  EXPECT_TRUE(old_startup_urls_list != NULL);
-
-  // The MasterPreferences dictionary should also conjure up the new setting
-  // as per EnforceLegacyPreferences.
-  const base::ListValue* new_startup_urls_list = NULL;
-  EXPECT_TRUE(master_dictionary.GetList(prefs::kURLsToRestoreOnStartup,
-                                        &new_startup_urls_list));
-  EXPECT_TRUE(new_startup_urls_list != NULL);
-}
-
-TEST_F(MasterPreferencesTest, DontMigrateOldStartupUrlsPrefWhenNewExists) {
-  static const char kOldAndNewMasterPrefs[] =
-      "{ \n"
-      "  \"distribution\": { \n"
-      "     \"show_welcome_page\": true,\n"
-      "     \"import_search_engine\": true,\n"
-      "     \"import_history\": true,\n"
-      "     \"import_bookmarks\": true\n"
-      "  },\n"
-      "  \"session\": {\n"
-      "     \"urls_to_restore_on_startup\": [\"http://www.google.com\"],\n"
-      "     \"startup_urls\": [\"http://www.example.com\"]\n"
-      "  }\n"
-      "} \n";
-
-  const installer::MasterPreferences prefs(kOldAndNewMasterPrefs);
-  const base::DictionaryValue& master_dictionary =
-      prefs.master_dictionary();
-
-  const base::ListValue* old_startup_urls_list = NULL;
-  EXPECT_TRUE(master_dictionary.GetList(prefs::kURLsToRestoreOnStartupOld,
-                                        &old_startup_urls_list));
-  ASSERT_TRUE(old_startup_urls_list != NULL);
-  std::string url_value;
-  EXPECT_TRUE(old_startup_urls_list->GetString(0, &url_value));
-  EXPECT_EQ("http://www.google.com", url_value);
-
-  // The MasterPreferences dictionary should also conjure up the new setting
-  // as per EnforceLegacyPreferences.
-  const base::ListValue* new_startup_urls_list = NULL;
-  EXPECT_TRUE(master_dictionary.GetList(prefs::kURLsToRestoreOnStartup,
-                                        &new_startup_urls_list));
-  ASSERT_TRUE(new_startup_urls_list != NULL);
-  std::string new_url_value;
-  EXPECT_TRUE(new_startup_urls_list->GetString(0, &new_url_value));
-  EXPECT_EQ("http://www.example.com", new_url_value);
 }

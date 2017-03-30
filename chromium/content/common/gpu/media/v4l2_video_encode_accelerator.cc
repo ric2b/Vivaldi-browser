@@ -5,12 +5,15 @@
 #include <fcntl.h>
 #include <linux/videodev2.h>
 #include <poll.h>
+#include <string.h>
 #include <sys/eventfd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -48,9 +51,11 @@
 namespace content {
 
 struct V4L2VideoEncodeAccelerator::BitstreamBufferRef {
-  BitstreamBufferRef(int32 id, scoped_ptr<base::SharedMemory> shm, size_t size)
-      : id(id), shm(shm.Pass()), size(size) {}
-  const int32 id;
+  BitstreamBufferRef(int32_t id,
+                     scoped_ptr<base::SharedMemory> shm,
+                     size_t size)
+      : id(id), shm(std::move(shm)), size(size) {}
+  const int32_t id;
   const scoped_ptr<base::SharedMemory> shm;
   const size_t size;
 };
@@ -72,7 +77,7 @@ V4L2VideoEncodeAccelerator::V4L2VideoEncodeAccelerator(
     const scoped_refptr<V4L2Device>& device)
     : child_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       output_buffer_byte_size_(0),
-      device_input_format_(media::VideoFrame::UNKNOWN),
+      device_input_format_(media::PIXEL_FORMAT_UNKNOWN),
       input_planes_count_(0),
       output_format_fourcc_(0),
       encoder_state_(kUninitialized),
@@ -99,13 +104,13 @@ V4L2VideoEncodeAccelerator::~V4L2VideoEncodeAccelerator() {
 }
 
 bool V4L2VideoEncodeAccelerator::Initialize(
-    media::VideoFrame::Format input_format,
+    media::VideoPixelFormat input_format,
     const gfx::Size& input_visible_size,
     media::VideoCodecProfile output_profile,
-    uint32 initial_bitrate,
+    uint32_t initial_bitrate,
     Client* client) {
-  DVLOG(3) << __func__ << ": input_format="
-           << media::VideoFrame::FormatToString(input_format)
+  DVLOG(3) << __func__
+           << ": input_format=" << media::VideoPixelFormatToString(input_format)
            << ", input_visible_size=" << input_visible_size.ToString()
            << ", output_profile=" << output_profile
            << ", initial_bitrate=" << initial_bitrate;
@@ -120,13 +125,19 @@ bool V4L2VideoEncodeAccelerator::Initialize(
 
   struct v4l2_capability caps;
   memset(&caps, 0, sizeof(caps));
-  const __u32 kCapsRequired = V4L2_CAP_VIDEO_CAPTURE_MPLANE |
-                              V4L2_CAP_VIDEO_OUTPUT_MPLANE | V4L2_CAP_STREAMING;
+  const __u32 kCapsRequired = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_QUERYCAP, &caps);
   if ((caps.capabilities & kCapsRequired) != kCapsRequired) {
-    LOG(ERROR) << "Initialize(): ioctl() failed: VIDIOC_QUERYCAP: "
-                  "caps check failed: 0x" << std::hex << caps.capabilities;
-    return false;
+    // This cap combination is deprecated, but some older drivers may still be
+    // returning it.
+    const __u32 kCapsRequiredCompat = V4L2_CAP_VIDEO_CAPTURE_MPLANE |
+                                      V4L2_CAP_VIDEO_OUTPUT_MPLANE |
+                                      V4L2_CAP_STREAMING;
+    if ((caps.capabilities & kCapsRequiredCompat) != kCapsRequiredCompat) {
+      LOG(ERROR) << "Initialize(): ioctl() failed: VIDIOC_QUERYCAP: "
+                    "caps check failed: 0x" << std::hex << caps.capabilities;
+      return false;
+    }
   }
 
   if (!SetFormats(input_format, output_profile)) {
@@ -136,7 +147,7 @@ bool V4L2VideoEncodeAccelerator::Initialize(
 
   if (input_format != device_input_format_) {
     DVLOG(1) << "Input format not supported by the HW, will convert to "
-             << media::VideoFrame::FormatToString(device_input_format_);
+             << media::VideoPixelFormatToString(device_input_format_);
 
     scoped_refptr<V4L2Device> device =
         V4L2Device::Create(V4L2Device::kImageProcessor);
@@ -228,7 +239,7 @@ void V4L2VideoEncodeAccelerator::UseOutputBitstreamBuffer(
   }
 
   scoped_ptr<BitstreamBufferRef> buffer_ref(
-      new BitstreamBufferRef(buffer.id(), shm.Pass(), buffer.size()));
+      new BitstreamBufferRef(buffer.id(), std::move(shm), buffer.size()));
   encoder_thread_.message_loop()->PostTask(
       FROM_HERE,
       base::Bind(&V4L2VideoEncodeAccelerator::UseOutputBitstreamBufferTask,
@@ -237,8 +248,8 @@ void V4L2VideoEncodeAccelerator::UseOutputBitstreamBuffer(
 }
 
 void V4L2VideoEncodeAccelerator::RequestEncodingParametersChange(
-    uint32 bitrate,
-    uint32 framerate) {
+    uint32_t bitrate,
+    uint32_t framerate) {
   DVLOG(3) << "RequestEncodingParametersChange(): bitrate=" << bitrate
            << ", framerate=" << framerate;
   DCHECK(child_task_runner_->BelongsToCurrentThread());
@@ -557,13 +568,13 @@ void V4L2VideoEncodeAccelerator::Dequeue() {
     DCHECK_LE(output_size, output_buffer_byte_size_);
     if (output_size > output_buffer_byte_size_)
       output_size = output_buffer_byte_size_;
-    uint8* target_data =
-        reinterpret_cast<uint8*>(output_record.buffer_ref->shm->memory());
+    uint8_t* target_data =
+        reinterpret_cast<uint8_t*>(output_record.buffer_ref->shm->memory());
     if (output_format_fourcc_ == V4L2_PIX_FMT_H264) {
       if (stream_header_size_ == 0) {
         // Assume that the first buffer dequeued is the stream header.
         stream_header_size_ = output_size;
-        stream_header_.reset(new uint8[stream_header_size_]);
+        stream_header_.reset(new uint8_t[stream_header_size_]);
         memcpy(stream_header_.get(), output_data, stream_header_size_);
       }
       if (key_frame &&
@@ -802,8 +813,8 @@ void V4L2VideoEncodeAccelerator::SetErrorState(Error error) {
 }
 
 void V4L2VideoEncodeAccelerator::RequestEncodingParametersChangeTask(
-    uint32 bitrate,
-    uint32 framerate) {
+    uint32_t bitrate,
+    uint32_t framerate) {
   DVLOG(3) << "RequestEncodingParametersChangeTask(): bitrate=" << bitrate
            << ", framerate=" << framerate;
   DCHECK_EQ(encoder_thread_.message_loop(), base::MessageLoop::current());
@@ -870,17 +881,17 @@ bool V4L2VideoEncodeAccelerator::SetOutputFormat(
 }
 
 bool V4L2VideoEncodeAccelerator::NegotiateInputFormat(
-    media::VideoFrame::Format input_format) {
+    media::VideoPixelFormat input_format) {
   DVLOG(3) << "NegotiateInputFormat()";
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK(!input_streamon_);
   DCHECK(!output_streamon_);
 
-  device_input_format_ = media::VideoFrame::UNKNOWN;
+  device_input_format_ = media::PIXEL_FORMAT_UNKNOWN;
   input_planes_count_ = 0;
 
-  uint32 input_format_fourcc =
-      V4L2Device::VideoFrameFormatToV4L2PixFmt(input_format);
+  uint32_t input_format_fourcc =
+      V4L2Device::VideoPixelFormatToV4L2PixFmt(input_format);
   if (!input_format_fourcc) {
     LOG(ERROR) << "Unsupported input format";
     return false;
@@ -901,8 +912,8 @@ bool V4L2VideoEncodeAccelerator::NegotiateInputFormat(
     // Error or format unsupported by device, try to negotiate a fallback.
     input_format_fourcc = device_->PreferredInputFormat();
     input_format =
-        V4L2Device::V4L2PixFmtToVideoFrameFormat(input_format_fourcc);
-    if (input_format == media::VideoFrame::UNKNOWN)
+        V4L2Device::V4L2PixFmtToVideoPixelFormat(input_format_fourcc);
+    if (input_format == media::PIXEL_FORMAT_UNKNOWN)
       return false;
 
     input_planes_count = media::VideoFrame::NumPlanes(input_format);
@@ -929,7 +940,7 @@ bool V4L2VideoEncodeAccelerator::NegotiateInputFormat(
 }
 
 bool V4L2VideoEncodeAccelerator::SetFormats(
-    media::VideoFrame::Format input_format,
+    media::VideoPixelFormat input_format,
     media::VideoCodecProfile output_profile) {
   DVLOG(3) << "SetFormats()";
   DCHECK(child_task_runner_->BelongsToCurrentThread());
@@ -950,6 +961,19 @@ bool V4L2VideoEncodeAccelerator::SetFormats(
   crop.c.width = visible_size_.width();
   crop.c.height = visible_size_.height();
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_S_CROP, &crop);
+
+  // The width and height might be adjusted by driver.
+  // Need to read it back and set to visible_size_.
+  if (device_->Ioctl(VIDIOC_G_CROP, &crop) != 0) {
+    // Some devices haven't supported G_CROP yet, so treat the failure
+    // non-fatal for now.
+    // TODO(kcwu): NOTIFY_ERROR and return false after all devices support it.
+    PLOG(WARNING) << "SetFormats(): ioctl() VIDIOC_G_CROP failed";
+    return true;
+  }
+  visible_size_.SetSize(crop.c.width, crop.c.height);
+  DVLOG(3) << "After adjusted by driver, visible_size_="
+           << visible_size_.ToString();
 
   return true;
 }

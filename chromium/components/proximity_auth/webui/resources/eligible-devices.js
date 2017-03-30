@@ -11,14 +11,20 @@ Polymer({
      * @type {Array<DeviceInfo>}
      * @private
      */
-    eligibleDevices_: Array,
+    eligibleDevices_: {
+      type: Array,
+      value: null,
+    },
 
     /**
      * List of devices that are ineligible to be used as an unlock key.
      * @type {Array<DeviceInfo>}
      * @private
      */
-    ineligibleDevices_: Array,
+    ineligibleDevices_: {
+      type: Array,
+      value: null,
+    },
 
     /**
      * Whether the findEligibleUnlockDevices request is in progress.
@@ -29,7 +35,7 @@ Polymer({
   },
 
   /**
-   * Called when this element is added to the DOM
+   * Called when this element is added to the DOM.
    */
   attached: function() {
     CryptAuthInterface.addObserver(this);
@@ -47,6 +53,8 @@ Polymer({
    */
   activate: function() {
     this.requestInProgress_ = true;
+    this.eligibleDevices_ = null;
+    this.ineligibleDevices_ = null;
     CryptAuthInterface.findEligibleUnlockDevices();
   },
 
@@ -68,5 +76,7 @@ Polymer({
   onCryptAuthError: function(errorMessage) {
     console.error('CryptAuth request failed: ' + errorMessage);
     this.requestInProgress_ = false;
+    this.eligibleDevices_ = null;
+    this.ineligibleDevices_ = null;
   },
 });

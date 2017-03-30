@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/developer_private/show_permissions_dialog_helper.h"
 
+#include <utility>
+
 #include "apps/app_load_service.h"
 #include "apps/saved_files_service.h"
 #include "base/metrics/histogram.h"
@@ -76,29 +78,35 @@ void ShowPermissionsDialogHelper::ShowPermissionsDialog(
         DevicePermissionsManager::Get(profile_)
             ->GetPermissionMessageStrings(extension_id_);
   }
-  prompt_->ReviewPermissions(
-      this, extension, retained_file_paths, retained_device_messages);
+  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt(
+      new ExtensionInstallPrompt::Prompt(
+          ExtensionInstallPrompt::POST_INSTALL_PERMISSIONS_PROMPT));
+  prompt->set_retained_files(retained_file_paths);
+  prompt->set_retained_device_messages(retained_device_messages);
+  // Unretained() is safe because this class manages its own lifetime and
+  // deletes itself in OnInstallPromptDone().
+  prompt_->ShowDialog(
+      base::Bind(&ShowPermissionsDialogHelper::OnInstallPromptDone,
+                 base::Unretained(this)),
+      extension, nullptr, std::move(prompt),
+      ExtensionInstallPrompt::GetDefaultShowDialogCallback());
 }
 
-// This is called when the user clicks "Revoke File Access."
-void ShowPermissionsDialogHelper::InstallUIProceed() {
-  const Extension* extension =
-      ExtensionRegistry::Get(profile_)->GetExtensionById(
-          extension_id_, ExtensionRegistry::EVERYTHING);
+void ShowPermissionsDialogHelper::OnInstallPromptDone(
+    ExtensionInstallPrompt::Result result) {
+  if (result == ExtensionInstallPrompt::Result::ACCEPTED) {
+    // This is true when the user clicks "Revoke File Access."
+    const Extension* extension =
+        ExtensionRegistry::Get(profile_)
+            ->GetExtensionById(extension_id_, ExtensionRegistry::EVERYTHING);
 
-  if (extension)
-    apps::SavedFilesService::Get(profile_)->ClearQueue(extension);
-  apps::AppLoadService::Get(profile_)
-      ->RestartApplicationIfRunning(extension_id_);
+    if (extension)
+      apps::SavedFilesService::Get(profile_)->ClearQueue(extension);
+    apps::AppLoadService::Get(profile_)
+        ->RestartApplicationIfRunning(extension_id_);
+  }
 
   on_complete_.Run();
-
-  delete this;
-}
-
-void ShowPermissionsDialogHelper::InstallUIAbort(bool user_initiated) {
-  on_complete_.Run();
-
   delete this;
 }
 

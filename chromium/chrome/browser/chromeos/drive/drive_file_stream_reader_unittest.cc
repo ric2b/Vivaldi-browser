@@ -4,19 +4,22 @@
 
 #include "chrome/browser/chromeos/drive/drive_file_stream_reader.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
-#include "chrome/browser/chromeos/drive/fake_file_system.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
-#include "chrome/browser/chromeos/drive/local_file_reader.h"
-#include "chrome/browser/chromeos/drive/test_util.h"
-#include "chrome/browser/drive/fake_drive_service.h"
-#include "chrome/browser/drive/test_util.h"
+#include "components/drive/drive_test_util.h"
+#include "components/drive/fake_file_system.h"
+#include "components/drive/file_system_core_util.h"
+#include "components/drive/local_file_reader.h"
+#include "components/drive/service/fake_drive_service.h"
+#include "components/drive/service/test_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "google_apis/drive/drive_api_parser.h"
@@ -72,7 +75,7 @@ TEST_F(LocalReaderProxyTest, Read) {
   ASSERT_EQ(net::OK, callback.WaitForResult());
 
   // Test instance.
-  LocalReaderProxy proxy(file_reader.Pass(), file_content_.size());
+  LocalReaderProxy proxy(std::move(file_reader), file_content_.size());
 
   // Make sure the read content is as same as the file.
   std::string content;
@@ -93,7 +96,7 @@ TEST_F(LocalReaderProxyTest, ReadWithLimit) {
   ASSERT_EQ(net::OK, callback.WaitForResult());
 
   // Test instance.
-  LocalReaderProxy proxy(file_reader.Pass(), expected_content.size());
+  LocalReaderProxy proxy(std::move(file_reader), expected_content.size());
 
   // Make sure the read content is as same as the file.
   std::string content;
@@ -138,7 +141,7 @@ TEST_F(NetworkReaderProxyTest, Read) {
 
     // And when the data is supplied, the callback will be called.
     scoped_ptr<std::string> data(new std::string("abcde"));
-    proxy.OnGetContent(data.Pass());
+    proxy.OnGetContent(std::move(data));
 
     // The returned data should be fit to the buffer size.
     result = callback.GetResult(result);
@@ -152,9 +155,9 @@ TEST_F(NetworkReaderProxyTest, Read) {
 
     // Supply the data before calling Read operation.
     data.reset(new std::string("fg"));
-    proxy.OnGetContent(data.Pass());
+    proxy.OnGetContent(std::move(data));
     data.reset(new std::string("hij"));
-    proxy.OnGetContent(data.Pass());  // Now 10 bytes are supplied.
+    proxy.OnGetContent(std::move(data));  // Now 10 bytes are supplied.
 
     // The data should be concatenated if possible.
     result = proxy.Read(buffer.get(), kBufferSize, callback.callback());
@@ -188,11 +191,11 @@ TEST_F(NetworkReaderProxyTest, ReadWithLimit) {
 
   // And when the data is supplied, the callback will be called.
   scoped_ptr<std::string> data(new std::string("abcde"));
-  proxy.OnGetContent(data.Pass());
+  proxy.OnGetContent(std::move(data));
   data.reset(new std::string("fgh"));
-  proxy.OnGetContent(data.Pass());
+  proxy.OnGetContent(std::move(data));
   data.reset(new std::string("ijklmno"));
-  proxy.OnGetContent(data.Pass());
+  proxy.OnGetContent(std::move(data));
 
   // The returned data should be fit to the buffer size.
   result = callback.GetResult(result);
@@ -206,9 +209,9 @@ TEST_F(NetworkReaderProxyTest, ReadWithLimit) {
 
   // Supply the data before calling Read operation.
   data.reset(new std::string("pqrs"));
-  proxy.OnGetContent(data.Pass());
+  proxy.OnGetContent(std::move(data));
   data.reset(new std::string("tuvwxyz"));
-  proxy.OnGetContent(data.Pass());  // 't' is the 20-th byte.
+  proxy.OnGetContent(std::move(data));  // 't' is the 20-th byte.
 
   // The data should be concatenated if possible.
   result = proxy.Read(buffer.get(), kBufferSize, callback.callback());
@@ -254,7 +257,7 @@ TEST_F(NetworkReaderProxyTest, ErrorWithPendingData) {
 
   // Supply the data before an error.
   scoped_ptr<std::string> data(new std::string("abcde"));
-  proxy.OnGetContent(data.Pass());
+  proxy.OnGetContent(std::move(data));
 
   // Emulate that an error is found.
   proxy.OnCompleted(FILE_ERROR_FAILED);
@@ -390,8 +393,8 @@ TEST_F(DriveFileStreamReaderTest, Read) {
 
 TEST_F(DriveFileStreamReaderTest, ReadRange) {
   // In this test case, we just confirm that the part of file is read.
-  const int64 kRangeOffset = 3;
-  const int64 kRangeLength = 4;
+  const int64_t kRangeOffset = 3;
+  const int64_t kRangeLength = 4;
 
   const base::FilePath kDriveFile =
       util::GetDriveMyDriveRootPath().AppendASCII("File 1.txt");
@@ -426,7 +429,7 @@ TEST_F(DriveFileStreamReaderTest, ReadRange) {
   ASSERT_EQ(net::OK, test_util::ReadAllData(reader.get(), &first_content));
 
   // The length should be equal to range length.
-  EXPECT_EQ(kRangeLength, static_cast<int64>(first_content.size()));
+  EXPECT_EQ(kRangeLength, static_cast<int64_t>(first_content.size()));
 
   // Create second instance and initialize it.
   // In this case, the file should be cached one.
@@ -459,8 +462,8 @@ TEST_F(DriveFileStreamReaderTest, ReadRange) {
 }
 
 TEST_F(DriveFileStreamReaderTest, OutOfRangeError) {
-  const int64 kRangeOffset = 1000000;  // Out of range.
-  const int64 kRangeLength = 4;
+  const int64_t kRangeOffset = 1000000;  // Out of range.
+  const int64_t kRangeLength = 4;
 
   const base::FilePath kDriveFile =
       util::GetDriveMyDriveRootPath().AppendASCII("File 1.txt");

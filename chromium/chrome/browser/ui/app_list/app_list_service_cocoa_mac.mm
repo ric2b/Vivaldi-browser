@@ -15,8 +15,9 @@ AppListServiceCocoaMac::~AppListServiceCocoaMac() {
 
 // static
 AppListServiceCocoaMac* AppListServiceCocoaMac::GetInstance() {
-  return Singleton<AppListServiceCocoaMac,
-                   LeakySingletonTraits<AppListServiceCocoaMac>>::get();
+  return base::Singleton<
+      AppListServiceCocoaMac,
+      base::LeakySingletonTraits<AppListServiceCocoaMac>>::get();
 }
 
 void AppListServiceCocoaMac::ShowForProfile(Profile* requested_profile) {
@@ -35,6 +36,11 @@ AppListControllerDelegate* AppListServiceCocoaMac::GetControllerDelegate() {
 
 void AppListServiceCocoaMac::CreateForProfile(Profile* requested_profile) {
   DCHECK(requested_profile);
+
+  // App list profiles should not be off-the-record.
+  DCHECK(!requested_profile->IsOffTheRecord());
+  DCHECK(!requested_profile->IsGuestSession());
+
   InvalidatePendingProfileLoads();
   if (profile_ && requested_profile->IsSameProfile(profile_))
     return;

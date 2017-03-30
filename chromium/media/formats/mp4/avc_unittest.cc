@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "media/base/decrypt_config.h"
@@ -17,16 +19,15 @@
 namespace media {
 namespace mp4 {
 
-static const uint8 kNALU1[] = { 0x01, 0x02, 0x03 };
-static const uint8 kNALU2[] = { 0x04, 0x05, 0x06, 0x07 };
-static const uint8 kExpected[] = {
-  0x00, 0x00, 0x00, 0x01, 0x01, 0x02, 0x03,
-  0x00, 0x00, 0x00, 0x01, 0x04, 0x05, 0x06, 0x07 };
+static const uint8_t kNALU1[] = {0x01, 0x02, 0x03};
+static const uint8_t kNALU2[] = {0x04, 0x05, 0x06, 0x07};
+static const uint8_t kExpected[] = {0x00, 0x00, 0x00, 0x01, 0x01,
+                                    0x02, 0x03, 0x00, 0x00, 0x00,
+                                    0x01, 0x04, 0x05, 0x06, 0x07};
 
-static const uint8 kExpectedParamSets[] = {
-  0x00, 0x00, 0x00, 0x01, 0x67, 0x12,
-  0x00, 0x00, 0x00, 0x01, 0x67, 0x34,
-  0x00, 0x00, 0x00, 0x01, 0x68, 0x56, 0x78};
+static const uint8_t kExpectedParamSets[] = {
+    0x00, 0x00, 0x00, 0x01, 0x67, 0x12, 0x00, 0x00, 0x00, 0x01,
+    0x67, 0x34, 0x00, 0x00, 0x00, 0x01, 0x68, 0x56, 0x78};
 
 static H264NALU::Type StringToNALUType(const std::string& name) {
   if (name == "P")
@@ -111,7 +112,7 @@ static std::string NALUTypeToString(int type) {
   return "UnsupportedType";
 }
 
-static void WriteStartCodeAndNALUType(std::vector<uint8>* buffer,
+static void WriteStartCodeAndNALUType(std::vector<uint8_t>* buffer,
                                       const std::string& nal_unit_type) {
   buffer->push_back(0x00);
   buffer->push_back(0x00);
@@ -131,7 +132,8 @@ static void WriteStartCodeAndNALUType(std::vector<uint8>* buffer,
 // The output buffer will contain a valid-looking Annex B (it's valid-looking in
 // the sense that it has start codes and correct NALU types, but the actual NALU
 // payload is junk).
-void StringToAnnexB(const std::string& str, std::vector<uint8>* buffer,
+void StringToAnnexB(const std::string& str,
+                    std::vector<uint8_t>* buffer,
                     std::vector<SubsampleEntry>* subsamples) {
   DCHECK(!str.empty());
 
@@ -145,8 +147,8 @@ void StringToAnnexB(const std::string& str, std::vector<uint8>* buffer,
     size_t start = buffer->size();
 
     std::vector<std::string> subsample_nalus = base::SplitString(
-      subsample_specs[i], ",", base::KEEP_WHITESPACE,
-      base::SPLIT_WANT_NONEMPTY);
+        subsample_specs[i], ",", base::KEEP_WHITESPACE,
+        base::SPLIT_WANT_NONEMPTY);
     EXPECT_GT(subsample_nalus.size(), 0u);
     for (size_t j = 0; j < subsample_nalus.size(); ++j) {
       WriteStartCodeAndNALUType(buffer, subsample_nalus[j]);
@@ -174,7 +176,7 @@ void StringToAnnexB(const std::string& str, std::vector<uint8>* buffer,
   }
 }
 
-std::string AnnexBToString(const std::vector<uint8>& buffer,
+std::string AnnexBToString(const std::vector<uint8_t>& buffer,
                            const std::vector<SubsampleEntry>& subsamples) {
   std::stringstream ss;
 
@@ -202,7 +204,7 @@ std::string AnnexBToString(const std::vector<uint8>& buffer,
 
 class AVCConversionTest : public testing::TestWithParam<int> {
  protected:
-  void WriteLength(int length_size, int length, std::vector<uint8>* buf) {
+  void WriteLength(int length_size, int length, std::vector<uint8_t>* buf) {
     DCHECK_GE(length, 0);
     DCHECK_LE(length, 255);
 
@@ -211,7 +213,7 @@ class AVCConversionTest : public testing::TestWithParam<int> {
     buf->push_back(length);
   }
 
-  void MakeInputForLength(int length_size, std::vector<uint8>* buf) {
+  void MakeInputForLength(int length_size, std::vector<uint8_t>* buf) {
     buf->clear();
 
     WriteLength(length_size, sizeof(kNALU1), buf);
@@ -224,10 +226,10 @@ class AVCConversionTest : public testing::TestWithParam<int> {
 };
 
 TEST_P(AVCConversionTest, ParseCorrectly) {
-  std::vector<uint8> buf;
+  std::vector<uint8_t> buf;
   std::vector<SubsampleEntry> subsamples;
   MakeInputForLength(GetParam(), &buf);
-  EXPECT_TRUE(AVC::ConvertFrameToAnnexB(GetParam(), &buf));
+  EXPECT_TRUE(AVC::ConvertFrameToAnnexB(GetParam(), &buf, &subsamples));
   EXPECT_TRUE(AVC::IsValidAnnexB(buf, subsamples));
   EXPECT_EQ(buf.size(), sizeof(kExpected));
   EXPECT_EQ(0, memcmp(kExpected, &buf[0], sizeof(kExpected)));
@@ -236,14 +238,14 @@ TEST_P(AVCConversionTest, ParseCorrectly) {
 
 // Intentionally write NALU sizes that are larger than the buffer.
 TEST_P(AVCConversionTest, NALUSizeTooLarge) {
-  std::vector<uint8> buf;
+  std::vector<uint8_t> buf;
   WriteLength(GetParam(), 10 * sizeof(kNALU1), &buf);
   buf.insert(buf.end(), kNALU1, kNALU1 + sizeof(kNALU1));
-  EXPECT_FALSE(AVC::ConvertFrameToAnnexB(GetParam(), &buf));
+  EXPECT_FALSE(AVC::ConvertFrameToAnnexB(GetParam(), &buf, nullptr));
 }
 
 TEST_P(AVCConversionTest, NALUSizeIsZero) {
-  std::vector<uint8> buf;
+  std::vector<uint8_t> buf;
   WriteLength(GetParam(), 0, &buf);
 
   WriteLength(GetParam(), sizeof(kNALU1), &buf);
@@ -254,26 +256,66 @@ TEST_P(AVCConversionTest, NALUSizeIsZero) {
   WriteLength(GetParam(), sizeof(kNALU2), &buf);
   buf.insert(buf.end(), kNALU2, kNALU2 + sizeof(kNALU2));
 
-  EXPECT_FALSE(AVC::ConvertFrameToAnnexB(GetParam(), &buf));
+  EXPECT_FALSE(AVC::ConvertFrameToAnnexB(GetParam(), &buf, nullptr));
+}
+
+TEST_P(AVCConversionTest, SubsampleSizesUpdatedAfterAnnexBConversion) {
+  std::vector<uint8_t> buf;
+  std::vector<SubsampleEntry> subsamples;
+  SubsampleEntry subsample;
+
+  // Write the first subsample, consisting of only one NALU
+  WriteLength(GetParam(), sizeof(kNALU1), &buf);
+  buf.insert(buf.end(), kNALU1, kNALU1 + sizeof(kNALU1));
+
+  subsample.clear_bytes = GetParam() + sizeof(kNALU1);
+  subsample.cypher_bytes = 0;
+  subsamples.push_back(subsample);
+
+  // Write the second subsample, containing two NALUs
+  WriteLength(GetParam(), sizeof(kNALU1), &buf);
+  buf.insert(buf.end(), kNALU1, kNALU1 + sizeof(kNALU1));
+  WriteLength(GetParam(), sizeof(kNALU2), &buf);
+  buf.insert(buf.end(), kNALU2, kNALU2 + sizeof(kNALU2));
+
+  subsample.clear_bytes = 2*GetParam() + sizeof(kNALU1) + sizeof(kNALU2);
+  subsample.cypher_bytes = 0;
+  subsamples.push_back(subsample);
+
+  // Write the third subsample, containing a single one-byte NALU
+  WriteLength(GetParam(), 1, &buf);
+  buf.push_back(0);
+  subsample.clear_bytes = GetParam() + 1;
+  subsample.cypher_bytes = 0;
+  subsamples.push_back(subsample);
+
+  EXPECT_TRUE(AVC::ConvertFrameToAnnexB(GetParam(), &buf, &subsamples));
+  EXPECT_EQ(subsamples.size(), 3u);
+  EXPECT_EQ(subsamples[0].clear_bytes, 4 + sizeof(kNALU1));
+  EXPECT_EQ(subsamples[0].cypher_bytes, 0u);
+  EXPECT_EQ(subsamples[1].clear_bytes, 8 + sizeof(kNALU1) + sizeof(kNALU2));
+  EXPECT_EQ(subsamples[1].cypher_bytes, 0u);
+  EXPECT_EQ(subsamples[2].clear_bytes, 4 + 1u);
+  EXPECT_EQ(subsamples[2].cypher_bytes, 0u);
 }
 
 TEST_P(AVCConversionTest, ParsePartial) {
-  std::vector<uint8> buf;
+  std::vector<uint8_t> buf;
   MakeInputForLength(GetParam(), &buf);
   buf.pop_back();
-  EXPECT_FALSE(AVC::ConvertFrameToAnnexB(GetParam(), &buf));
+  EXPECT_FALSE(AVC::ConvertFrameToAnnexB(GetParam(), &buf, nullptr));
   // This tests a buffer ending in the middle of a NAL length. For length size
   // of one, this can't happen, so we skip that case.
   if (GetParam() != 1) {
     MakeInputForLength(GetParam(), &buf);
     buf.erase(buf.end() - (sizeof(kNALU2) + 1), buf.end());
-    EXPECT_FALSE(AVC::ConvertFrameToAnnexB(GetParam(), &buf));
+    EXPECT_FALSE(AVC::ConvertFrameToAnnexB(GetParam(), &buf, nullptr));
   }
 }
 
 TEST_P(AVCConversionTest, ParseEmpty) {
-  std::vector<uint8> buf;
-  EXPECT_TRUE(AVC::ConvertFrameToAnnexB(GetParam(), &buf));
+  std::vector<uint8_t> buf;
+  EXPECT_TRUE(AVC::ConvertFrameToAnnexB(GetParam(), &buf, nullptr));
   EXPECT_EQ(0u, buf.size());
 }
 
@@ -293,7 +335,7 @@ TEST_F(AVCConversionTest, ConvertConfigToAnnexB) {
   avc_config.pps_list[0].push_back(0x56);
   avc_config.pps_list[0].push_back(0x78);
 
-  std::vector<uint8> buf;
+  std::vector<uint8_t> buf;
   std::vector<SubsampleEntry> subsamples;
   EXPECT_TRUE(AVC::ConvertConfigToAnnexB(avc_config, &buf));
   EXPECT_EQ(0, memcmp(kExpectedParamSets, &buf[0],
@@ -305,7 +347,7 @@ TEST_F(AVCConversionTest, ConvertConfigToAnnexB) {
 TEST_F(AVCConversionTest, StringConversionFunctions) {
   std::string str =
       "AUD SPS SPSExt SPS PPS SEI SEI R14 I P FILL EOSeq EOStr";
-  std::vector<uint8> buf;
+  std::vector<uint8_t> buf;
   std::vector<SubsampleEntry> subsamples;
   StringToAnnexB(str, &buf, &subsamples);
   EXPECT_TRUE(AVC::IsValidAnnexB(buf, subsamples));
@@ -335,7 +377,7 @@ TEST_F(AVCConversionTest, ValidAnnexBConstructs) {
   };
 
   for (size_t i = 0; i < arraysize(test_cases); ++i) {
-    std::vector<uint8> buf;
+    std::vector<uint8_t> buf;
     std::vector<SubsampleEntry> subsamples;
     StringToAnnexB(test_cases[i], &buf, NULL);
     EXPECT_TRUE(AVC::IsValidAnnexB(buf, subsamples)) << "'" << test_cases[i]
@@ -360,7 +402,7 @@ TEST_F(AVCConversionTest, InvalidAnnexBConstructs) {
   };
 
   for (size_t i = 0; i < arraysize(test_cases); ++i) {
-    std::vector<uint8> buf;
+    std::vector<uint8_t> buf;
     std::vector<SubsampleEntry> subsamples;
     StringToAnnexB(test_cases[i], &buf, NULL);
     EXPECT_FALSE(AVC::IsValidAnnexB(buf, subsamples)) << "'" << test_cases[i]
@@ -401,7 +443,7 @@ TEST_F(AVCConversionTest, InsertParamSetsAnnexB) {
   avc_config.pps_list[0].push_back(0x78);
 
   for (size_t i = 0; i < arraysize(test_cases); ++i) {
-    std::vector<uint8> buf;
+    std::vector<uint8_t> buf;
     std::vector<SubsampleEntry> subsamples;
 
     StringToAnnexB(test_cases[i].input, &buf, &subsamples);

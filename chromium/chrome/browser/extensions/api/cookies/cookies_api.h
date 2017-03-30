@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
@@ -48,6 +49,7 @@ class CookiesEventRouter : public content::NotificationObserver {
 
   // This method dispatches events to the extension message service.
   void DispatchEvent(content::BrowserContext* context,
+                     events::HistogramValue histogram_value,
                      const std::string& event_name,
                      scoped_ptr<base::ListValue> event_args,
                      GURL& cookie_domain);
@@ -80,7 +82,7 @@ class CookiesGetFunction : public ChromeAsyncExtensionFunction {
 
   GURL url_;
   scoped_refptr<net::URLRequestContextGetter> store_browser_context_;
-  scoped_ptr<extensions::api::cookies::Get::Params> parsed_args_;
+  scoped_ptr<api::cookies::Get::Params> parsed_args_;
 };
 
 // Implements the cookies.getAll() extension function.
@@ -103,7 +105,7 @@ class CookiesGetAllFunction : public ChromeAsyncExtensionFunction {
 
   GURL url_;
   scoped_refptr<net::URLRequestContextGetter> store_browser_context_;
-  scoped_ptr<extensions::api::cookies::GetAll::Params> parsed_args_;
+  scoped_ptr<api::cookies::GetAll::Params> parsed_args_;
 };
 
 // Implements the cookies.set() extension function.
@@ -126,7 +128,7 @@ class CookiesSetFunction : public ChromeAsyncExtensionFunction {
   GURL url_;
   bool success_;
   scoped_refptr<net::URLRequestContextGetter> store_browser_context_;
-  scoped_ptr<extensions::api::cookies::Set::Params> parsed_args_;
+  scoped_ptr<api::cookies::Set::Params> parsed_args_;
 };
 
 // Implements the cookies.remove() extension function.
@@ -149,7 +151,7 @@ class CookiesRemoveFunction : public ChromeAsyncExtensionFunction {
 
   GURL url_;
   scoped_refptr<net::URLRequestContextGetter> store_browser_context_;
-  scoped_ptr<extensions::api::cookies::Remove::Params> parsed_args_;
+  scoped_ptr<api::cookies::Remove::Params> parsed_args_;
 };
 
 // Implements the cookies.getAllCookieStores() extension function.
@@ -165,8 +167,7 @@ class CookiesGetAllCookieStoresFunction : public ChromeSyncExtensionFunction {
   bool RunSync() override;
 };
 
-class CookiesAPI : public BrowserContextKeyedAPI,
-                   public extensions::EventRouter::Observer {
+class CookiesAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
  public:
   explicit CookiesAPI(content::BrowserContext* context);
   ~CookiesAPI() override;
@@ -178,7 +179,7 @@ class CookiesAPI : public BrowserContextKeyedAPI,
   static BrowserContextKeyedAPIFactory<CookiesAPI>* GetFactoryInstance();
 
   // EventRouter::Observer implementation.
-  void OnListenerAdded(const extensions::EventListenerInfo& details) override;
+  void OnListenerAdded(const EventListenerInfo& details) override;
 
  private:
   friend class BrowserContextKeyedAPIFactory<CookiesAPI>;

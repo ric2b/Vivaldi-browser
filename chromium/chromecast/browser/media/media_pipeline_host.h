@@ -6,6 +6,7 @@
 #define CHROMECAST_BROWSER_MEDIA_MEDIA_PIPELINE_HOST_H_
 
 #include <map>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -14,13 +15,11 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "chromecast/common/media/cma_ipc_common.h"
-#include "chromecast/media/cma/backend/media_pipeline_device.h"
 #include "chromecast/media/cma/pipeline/load_type.h"
 #include "media/base/pipeline_status.h"
 
 namespace base {
 class SharedMemory;
-class SingleThreadTaskRunner;
 }
 
 namespace media {
@@ -29,22 +28,30 @@ class VideoDecoderConfig;
 }
 
 namespace chromecast {
+class TaskRunnerImpl;
+
 namespace media {
 struct AvPipelineClient;
 class BrowserCdmCast;
 struct MediaPipelineClient;
-class MediaPipelineImpl;
 struct VideoPipelineClient;
+class CodedFrameProvider;
+class MediaPipelineBackend;
+struct MediaPipelineDeviceParams;
+class MediaPipelineImpl;
 
 class MediaPipelineHost {
  public:
+  // Factory method to create a MediaPipelineBackend
+  typedef base::Callback<scoped_ptr<MediaPipelineBackend>(
+      const MediaPipelineDeviceParams&)> CreateBackendCB;
+
   MediaPipelineHost();
   ~MediaPipelineHost();
 
-  void Initialize(
-      LoadType load_type,
-      const MediaPipelineClient& client,
-      const media::CreatePipelineDeviceCB& create_pipeline_device_cb);
+  void Initialize(LoadType load_type,
+                  const MediaPipelineClient& client,
+                  const CreateBackendCB& create_backend_cb);
 
   void SetAvPipe(TrackId track_id,
                  scoped_ptr<base::SharedMemory> shared_mem,
@@ -56,7 +63,7 @@ class MediaPipelineHost {
                        const ::media::PipelineStatusCB& status_cb);
   void VideoInitialize(TrackId track_id,
                        const VideoPipelineClient& client,
-                       const std::vector<::media::VideoDecoderConfig>& configs,
+                       const std::vector< ::media::VideoDecoderConfig>& configs,
                        const ::media::PipelineStatusCB& status_cb);
   void StartPlayingFrom(base::TimeDelta time);
   void Flush(const ::media::PipelineStatusCB& status_cb);
@@ -71,7 +78,11 @@ class MediaPipelineHost {
  private:
   base::ThreadChecker thread_checker_;
 
+  scoped_ptr<TaskRunnerImpl> task_runner_;
   scoped_ptr<MediaPipelineImpl> media_pipeline_;
+
+  scoped_ptr<CodedFrameProvider> audio_frame_provider_;
+  scoped_ptr<CodedFrameProvider> video_frame_provider_;
 
   // The shared memory for a track id must be valid until Stop is invoked on
   // that track id.

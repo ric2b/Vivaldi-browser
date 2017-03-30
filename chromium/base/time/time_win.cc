@@ -38,7 +38,7 @@
 #include <mmsystem.h>
 #include <stdint.h>
 
-#include "base/basictypes.h"
+#include "base/bit_cast.h"
 #include "base/cpu.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -48,29 +48,28 @@ using base::ThreadTicks;
 using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
-using base::TraceTicks;
 
 namespace {
 
 // From MSDN, FILETIME "Contains a 64-bit value representing the number of
 // 100-nanosecond intervals since January 1, 1601 (UTC)."
-int64 FileTimeToMicroseconds(const FILETIME& ft) {
+int64_t FileTimeToMicroseconds(const FILETIME& ft) {
   // Need to bit_cast to fix alignment, then divide by 10 to convert
-  // 100-nanoseconds to milliseconds. This only works on little-endian
+  // 100-nanoseconds to microseconds. This only works on little-endian
   // machines.
-  return bit_cast<int64, FILETIME>(ft) / 10;
+  return bit_cast<int64_t, FILETIME>(ft) / 10;
 }
 
-void MicrosecondsToFileTime(int64 us, FILETIME* ft) {
+void MicrosecondsToFileTime(int64_t us, FILETIME* ft) {
   DCHECK_GE(us, 0LL) << "Time is less than 0, negative values are not "
       "representable in FILETIME";
 
-  // Multiply by 10 to convert milliseconds to 100-nanoseconds. Bit_cast will
+  // Multiply by 10 to convert microseconds to 100-nanoseconds. Bit_cast will
   // handle alignment problems. This only works on little-endian machines.
-  *ft = bit_cast<FILETIME, int64>(us * 10);
+  *ft = bit_cast<FILETIME, int64_t>(us * 10);
 }
 
-int64 CurrentWallclockMicroseconds() {
+int64_t CurrentWallclockMicroseconds() {
   FILETIME ft;
   ::GetSystemTimeAsFileTime(&ft);
   return FileTimeToMicroseconds(ft);
@@ -79,7 +78,7 @@ int64 CurrentWallclockMicroseconds() {
 // Time between resampling the un-granular clock for this API.  60 seconds.
 const int kMaxMillisecondsToAvoidDrift = 60 * Time::kMillisecondsPerSecond;
 
-int64 initial_time = 0;
+int64_t initial_time = 0;
 TimeTicks initial_ticks;
 
 void InitializeClock() {
@@ -100,6 +99,26 @@ uint32_t g_high_res_timer_count = 0;
 base::LazyInstance<base::Lock>::Leaky g_high_res_lock =
     LAZY_INSTANCE_INITIALIZER;
 
+// Returns a pointer to the QueryThreadCycleTime() function from Windows.
+// Can't statically link to it because it is not available on XP.
+using QueryThreadCycleTimePtr = decltype(::QueryThreadCycleTime)*;
+QueryThreadCycleTimePtr GetQueryThreadCycleTimeFunction() {
+  static const QueryThreadCycleTimePtr query_thread_cycle_time_fn =
+      reinterpret_cast<QueryThreadCycleTimePtr>(::GetProcAddress(
+          ::GetModuleHandle(L"kernel32.dll"), "QueryThreadCycleTime"));
+  return query_thread_cycle_time_fn;
+}
+
+// Returns the current value of the performance counter.
+uint64_t QPCNowRaw() {
+  LARGE_INTEGER perf_counter_now = {};
+  // According to the MSDN documentation for QueryPerformanceCounter(), this
+  // will never fail on systems that run XP or later.
+  // https://msdn.microsoft.com/library/windows/desktop/ms644904.aspx
+  ::QueryPerformanceCounter(&perf_counter_now);
+  return perf_counter_now.QuadPart;
+}
+
 }  // namespace
 
 // Time -----------------------------------------------------------------------
@@ -109,7 +128,7 @@ base::LazyInstance<base::Lock>::Leaky g_high_res_lock =
 // number of leap year days between 1601 and 1970: (1970-1601)/4 excluding
 // 1700, 1800, and 1900.
 // static
-const int64 Time::kTimeTToMicrosecondsOffset = INT64_C(11644473600000000);
+const int64_t Time::kTimeTToMicrosecondsOffset = INT64_C(11644473600000000);
 
 // static
 Time Time::Now() {
@@ -151,7 +170,7 @@ Time Time::NowFromSystemTime() {
 
 // static
 Time Time::FromFileTime(FILETIME ft) {
-  if (bit_cast<int64, FILETIME>(ft) == 0)
+  if (bit_cast<int64_t, FILETIME>(ft) == 0)
     return Time();
   if (ft.dwHighDateTime == std::numeric_limits<DWORD>::max() &&
       ft.dwLowDateTime == std::numeric_limits<DWORD>::max())
@@ -161,7 +180,7 @@ Time Time::FromFileTime(FILETIME ft) {
 
 FILETIME Time::ToFileTime() const {
   if (is_null())
-    return bit_cast<FILETIME, int64>(0);
+    return bit_cast<FILETIME, int64_t>(0);
   if (is_max()) {
     FILETIME result;
     result.dwHighDateTime = std::numeric_limits<DWORD>::max();
@@ -313,7 +332,7 @@ DWORD timeGetTimeWrapper() {
 DWORD (*g_tick_function)(void) = &timeGetTimeWrapper;
 
 // Accumulation of time lost due to rollover (in milliseconds).
-int64 g_rollover_ms = 0;
+int64_t g_rollover_ms = 0;
 
 // The last timeGetTime value we saw, to detect rollover.
 DWORD g_last_seen_now = 0;
@@ -380,13 +399,11 @@ TimeDelta RolloverProtectedNow() {
 using NowFunction = TimeDelta (*)(void);
 
 TimeDelta InitialNowFunction();
-TimeDelta InitialSystemTraceNowFunction();
 
-// See "threading notes" in InitializeNowFunctionPointers() for details on how
+// See "threading notes" in InitializeNowFunctionPointer() for details on how
 // concurrent reads/writes to these globals has been made safe.
 NowFunction g_now_function = &InitialNowFunction;
-NowFunction g_system_trace_now_function = &InitialSystemTraceNowFunction;
-int64 g_qpc_ticks_per_second = 0;
+int64_t g_qpc_ticks_per_second = 0;
 
 // As of January 2015, use of <atomic> is forbidden in Chromium code. This is
 // what std::atomic_thread_fence does on Windows on all Intel architectures when
@@ -395,7 +412,7 @@ int64 g_qpc_ticks_per_second = 0;
 
 TimeDelta QPCValueToTimeDelta(LONGLONG qpc_value) {
   // Ensure that the assignment to |g_qpc_ticks_per_second|, made in
-  // InitializeNowFunctionPointers(), has happened by this point.
+  // InitializeNowFunctionPointer(), has happened by this point.
   ATOMIC_THREAD_FENCE(memory_order_acquire);
 
   DCHECK_GT(g_qpc_ticks_per_second, 0);
@@ -408,8 +425,8 @@ TimeDelta QPCValueToTimeDelta(LONGLONG qpc_value) {
   }
   // Otherwise, calculate microseconds in a round about manner to avoid
   // overflow and precision issues.
-  int64 whole_seconds = qpc_value / g_qpc_ticks_per_second;
-  int64 leftover_ticks = qpc_value - (whole_seconds * g_qpc_ticks_per_second);
+  int64_t whole_seconds = qpc_value / g_qpc_ticks_per_second;
+  int64_t leftover_ticks = qpc_value - (whole_seconds * g_qpc_ticks_per_second);
   return TimeDelta::FromMicroseconds(
       (whole_seconds * Time::kMicrosecondsPerSecond) +
       ((leftover_ticks * Time::kMicrosecondsPerSecond) /
@@ -417,9 +434,7 @@ TimeDelta QPCValueToTimeDelta(LONGLONG qpc_value) {
 }
 
 TimeDelta QPCNow() {
-  LARGE_INTEGER now;
-  QueryPerformanceCounter(&now);
-  return QPCValueToTimeDelta(now.QuadPart);
+  return QPCValueToTimeDelta(QPCNowRaw());
 }
 
 bool IsBuggyAthlon(const base::CPU& cpu) {
@@ -427,37 +442,33 @@ bool IsBuggyAthlon(const base::CPU& cpu) {
   return cpu.vendor_name() == "AuthenticAMD" && cpu.family() == 15;
 }
 
-void InitializeNowFunctionPointers() {
+void InitializeNowFunctionPointer() {
   LARGE_INTEGER ticks_per_sec = {};
   if (!QueryPerformanceFrequency(&ticks_per_sec))
     ticks_per_sec.QuadPart = 0;
 
-  // If Windows cannot provide a QPC implementation, both TimeTicks::Now() and
-  // TraceTicks::Now() must use the low-resolution clock.
+  // If Windows cannot provide a QPC implementation, TimeTicks::Now() must use
+  // the low-resolution clock.
   //
   // If the QPC implementation is expensive and/or unreliable, TimeTicks::Now()
-  // will use the low-resolution clock, but TraceTicks::Now() will use the QPC
-  // (in the hope that it is still useful for tracing purposes). A CPU lacking a
-  // non-stop time counter will cause Windows to provide an alternate QPC
-  // implementation that works, but is expensive to use. Certain Athlon CPUs are
-  // known to make the QPC implementation unreliable.
+  // will still use the low-resolution clock. A CPU lacking a non-stop time
+  // counter will cause Windows to provide an alternate QPC implementation that
+  // works, but is expensive to use. Certain Athlon CPUs are known to make the
+  // QPC implementation unreliable.
   //
-  // Otherwise, both Now functions can use the high-resolution QPC clock. As of
-  // 4 January 2015, ~68% of users fall within this category.
+  // Otherwise, Now uses the high-resolution QPC clock. As of 21 August 2015,
+  // ~72% of users fall within this category.
   NowFunction now_function;
-  NowFunction system_trace_now_function;
   base::CPU cpu;
-  if (ticks_per_sec.QuadPart <= 0) {
-    now_function = system_trace_now_function = &RolloverProtectedNow;
-  } else if (!cpu.has_non_stop_time_stamp_counter() || IsBuggyAthlon(cpu)) {
+  if (ticks_per_sec.QuadPart <= 0 ||
+      !cpu.has_non_stop_time_stamp_counter() || IsBuggyAthlon(cpu)) {
     now_function = &RolloverProtectedNow;
-    system_trace_now_function = &QPCNow;
   } else {
-    now_function = system_trace_now_function = &QPCNow;
+    now_function = &QPCNow;
   }
 
   // Threading note 1: In an unlikely race condition, it's possible for two or
-  // more threads to enter InitializeNowFunctionPointers() in parallel. This is
+  // more threads to enter InitializeNowFunctionPointer() in parallel. This is
   // not a problem since all threads should end up writing out the same values
   // to the global variables.
   //
@@ -468,17 +479,11 @@ void InitializeNowFunctionPointers() {
   g_qpc_ticks_per_second = ticks_per_sec.QuadPart;
   ATOMIC_THREAD_FENCE(memory_order_release);
   g_now_function = now_function;
-  g_system_trace_now_function = system_trace_now_function;
 }
 
 TimeDelta InitialNowFunction() {
-  InitializeNowFunctionPointers();
+  InitializeNowFunctionPointer();
   return g_now_function();
-}
-
-TimeDelta InitialSystemTraceNowFunction() {
-  InitializeNowFunctionPointers();
-  return g_system_trace_now_function();
 }
 
 }  // namespace
@@ -502,19 +507,100 @@ TimeTicks TimeTicks::Now() {
 // static
 bool TimeTicks::IsHighResolution() {
   if (g_now_function == &InitialNowFunction)
-    InitializeNowFunctionPointers();
+    InitializeNowFunctionPointer();
   return g_now_function == &QPCNow;
 }
 
 // static
 ThreadTicks ThreadTicks::Now() {
-  NOTREACHED();
-  return ThreadTicks();
+  DCHECK(IsSupported());
+
+  // Get the number of TSC ticks used by the current thread.
+  ULONG64 thread_cycle_time = 0;
+  GetQueryThreadCycleTimeFunction()(::GetCurrentThread(), &thread_cycle_time);
+
+  // Get the frequency of the TSC.
+  double tsc_ticks_per_second = TSCTicksPerSecond();
+  if (tsc_ticks_per_second == 0)
+    return ThreadTicks();
+
+  // Return the CPU time of the current thread.
+  double thread_time_seconds = thread_cycle_time / tsc_ticks_per_second;
+  return ThreadTicks(
+      static_cast<int64_t>(thread_time_seconds * Time::kMicrosecondsPerSecond));
 }
 
 // static
-TraceTicks TraceTicks::Now() {
-  return TraceTicks() + g_system_trace_now_function();
+bool ThreadTicks::IsSupportedWin() {
+  static bool is_supported = GetQueryThreadCycleTimeFunction() &&
+                             base::CPU().has_non_stop_time_stamp_counter() &&
+                             !IsBuggyAthlon(base::CPU());
+  return is_supported;
+}
+
+// static
+void ThreadTicks::WaitUntilInitializedWin() {
+  while (TSCTicksPerSecond() == 0)
+    ::Sleep(10);
+}
+
+double ThreadTicks::TSCTicksPerSecond() {
+  DCHECK(IsSupported());
+
+  // The value returned by QueryPerformanceFrequency() cannot be used as the TSC
+  // frequency, because there is no guarantee that the TSC frequency is equal to
+  // the performance counter frequency.
+
+  // The TSC frequency is cached in a static variable because it takes some time
+  // to compute it.
+  static double tsc_ticks_per_second = 0;
+  if (tsc_ticks_per_second != 0)
+    return tsc_ticks_per_second;
+
+  // Increase the thread priority to reduces the chances of having a context
+  // switch during a reading of the TSC and the performance counter.
+  int previous_priority = ::GetThreadPriority(::GetCurrentThread());
+  ::SetThreadPriority(::GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+
+  // The first time that this function is called, make an initial reading of the
+  // TSC and the performance counter.
+  static const uint64_t tsc_initial = __rdtsc();
+  static const uint64_t perf_counter_initial = QPCNowRaw();
+
+  // Make a another reading of the TSC and the performance counter every time
+  // that this function is called.
+  uint64_t tsc_now = __rdtsc();
+  uint64_t perf_counter_now = QPCNowRaw();
+
+  // Reset the thread priority.
+  ::SetThreadPriority(::GetCurrentThread(), previous_priority);
+
+  // Make sure that at least 50 ms elapsed between the 2 readings. The first
+  // time that this function is called, we don't expect this to be the case.
+  // Note: The longer the elapsed time between the 2 readings is, the more
+  //   accurate the computed TSC frequency will be. The 50 ms value was
+  //   chosen because local benchmarks show that it allows us to get a
+  //   stddev of less than 1 tick/us between multiple runs.
+  // Note: According to the MSDN documentation for QueryPerformanceFrequency(),
+  //   this will never fail on systems that run XP or later.
+  //   https://msdn.microsoft.com/library/windows/desktop/ms644905.aspx
+  LARGE_INTEGER perf_counter_frequency = {};
+  ::QueryPerformanceFrequency(&perf_counter_frequency);
+  DCHECK_GE(perf_counter_now, perf_counter_initial);
+  uint64_t perf_counter_ticks = perf_counter_now - perf_counter_initial;
+  double elapsed_time_seconds =
+      perf_counter_ticks / static_cast<double>(perf_counter_frequency.QuadPart);
+
+  const double kMinimumEvaluationPeriodSeconds = 0.05;
+  if (elapsed_time_seconds < kMinimumEvaluationPeriodSeconds)
+    return 0;
+
+  // Compute the frequency of the TSC.
+  DCHECK_GE(tsc_now, tsc_initial);
+  uint64_t tsc_ticks = tsc_now - tsc_initial;
+  tsc_ticks_per_second = tsc_ticks / elapsed_time_seconds;
+
+  return tsc_ticks_per_second;
 }
 
 // static

@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_SIGNIN_CHROME_SIGNIN_CLIENT_H_
 #define CHROME_BROWSER_SIGNIN_CHROME_SIGNIN_CLIENT_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
@@ -37,14 +38,8 @@ class ChromeSigninClient
   void Shutdown() override;
   void DoFinalInit() override;
 
-  // Utility methods.
+  // Utility method.
   static bool ProfileAllowsSigninCookies(Profile* profile);
-  static bool SettingsAllowSigninCookies(
-      content_settings::CookieSettings* cookie_settings);
-
-  // If |for_ephemeral| is true, special kind of device ID for ephemeral users
-  // is generated.
-  static std::string GenerateSigninScopedDeviceID(bool for_ephemeral);
 
   // SigninClient implementation.
   PrefService* GetPrefs() override;
@@ -82,8 +77,6 @@ class ChromeSigninClient
   void PostSignedIn(const std::string& account_id,
                     const std::string& username,
                     const std::string& password) override;
-  bool UpdateAccountInfo(
-      AccountTrackerService::AccountInfo* out_account_info) override;
 
   // SigninErrorController::Observer implementation.
   void OnErrorChanged() override;

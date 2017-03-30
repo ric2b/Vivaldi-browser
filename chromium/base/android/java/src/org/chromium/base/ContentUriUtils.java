@@ -11,6 +11,8 @@ import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
+import org.chromium.base.annotations.CalledByNative;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 
@@ -20,6 +22,9 @@ import java.io.FileNotFoundException;
 public abstract class ContentUriUtils {
     private static final String TAG = "ContentUriUtils";
     private static FileProviderUtil sFileProviderUtil;
+
+    // Guards access to sFileProviderUtil.
+    private static final Object sLock = new Object();
 
     /**
      * Provides functionality to translate a file into a content URI for use
@@ -38,13 +43,16 @@ public abstract class ContentUriUtils {
     private ContentUriUtils() {}
 
     public static void setFileProviderUtil(FileProviderUtil util) {
-        sFileProviderUtil = util;
+        synchronized (sLock) {
+            sFileProviderUtil = util;
+        }
     }
 
     public static Uri getContentUriFromFile(Context context, File file) {
-        ThreadUtils.assertOnUiThread();
-        if (sFileProviderUtil != null) {
-            return sFileProviderUtil.getContentUriFromFile(context, file);
+        synchronized (sLock) {
+            if (sFileProviderUtil != null) {
+                return sFileProviderUtil.getContentUriFromFile(context, file);
+            }
         }
         return null;
     }
@@ -55,7 +63,7 @@ public abstract class ContentUriUtils {
      *
      * @param context {@link Context} in interest
      * @param uriString the content URI to open
-     * @return file desciptor upon sucess, or -1 otherwise.
+     * @return file desciptor upon success, or -1 otherwise.
      */
     @CalledByNative
     public static int openContentUriForRead(Context context, String uriString) {

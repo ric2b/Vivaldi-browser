@@ -4,7 +4,11 @@
 
 #include "chrome/browser/extensions/api/desktop_capture/desktop_capture_base.h"
 
+#include <tuple>
+#include <utility>
+
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/media/desktop_media_list_ash.h"
 #include "chrome/browser/media/desktop_streams_registry.h"
@@ -122,8 +126,8 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
       scoped_ptr<webrtc::WindowCapturer> window_capturer(
           show_windows ? webrtc::WindowCapturer::Create(options) : NULL);
 
-      media_list.reset(new NativeDesktopMediaList(
-          screen_capturer.Pass(), window_capturer.Pass()));
+      media_list.reset(new NativeDesktopMediaList(std::move(screen_capturer),
+                                                  std::move(window_capturer)));
     }
 
     // DesktopMediaPicker is implemented only for Windows, OSX and
@@ -139,13 +143,9 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
       &DesktopCaptureChooseDesktopMediaFunctionBase::OnPickerDialogResults,
       this);
 
-  picker_->Show(web_contents,
-                parent_window,
-                parent_window,
-                base::UTF8ToUTF16(extension()->name()),
-                target_name,
-                media_list.Pass(),
-                callback);
+  picker_->Show(web_contents, parent_window, parent_window,
+                base::UTF8ToUTF16(extension()->name()), target_name,
+                std::move(media_list), callback);
   origin_ = origin;
   return true;
 }
@@ -187,11 +187,8 @@ DesktopCaptureRequestsRegistry::RequestId::RequestId(int process_id,
 
 bool DesktopCaptureRequestsRegistry::RequestId::operator<(
     const RequestId& other) const {
-  if (process_id != other.process_id) {
-    return process_id < other.process_id;
-  } else {
-    return request_id < other.request_id;
-  }
+  return std::tie(process_id, request_id) <
+         std::tie(other.process_id, other.request_id);
 }
 
 DesktopCaptureCancelChooseDesktopMediaFunctionBase::
@@ -214,7 +211,7 @@ DesktopCaptureRequestsRegistry::~DesktopCaptureRequestsRegistry() {}
 
 // static
 DesktopCaptureRequestsRegistry* DesktopCaptureRequestsRegistry::GetInstance() {
-  return Singleton<DesktopCaptureRequestsRegistry>::get();
+  return base::Singleton<DesktopCaptureRequestsRegistry>::get();
 }
 
 void DesktopCaptureRequestsRegistry::AddRequest(

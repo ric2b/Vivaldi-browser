@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/external_provider_impl.h"
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/scoped_path_override.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -13,11 +14,10 @@
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
+#include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -25,9 +25,12 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync_driver/pref_names.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
@@ -192,7 +195,7 @@ TEST_F(ExternalProviderImplChromeOSTest, PriorityCompleted) {
   service_->CheckForExternalUpdates();
 
   // Priority sync completed.
-  PrefServiceSyncable::FromProfile(profile_.get())
+  PrefServiceSyncableFromProfile(profile_.get())
       ->GetSyncableService(syncer::PRIORITY_PREFERENCES)
       ->MergeDataAndStartSyncing(syncer::PRIORITY_PREFERENCES,
                                  syncer::SyncDataList(),

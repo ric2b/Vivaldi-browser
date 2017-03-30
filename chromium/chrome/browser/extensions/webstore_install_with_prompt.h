@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_WEBSTORE_INSTALL_WITH_PROMPT_H_
 #define CHROME_BROWSER_EXTENSIONS_WEBSTORE_INSTALL_WITH_PROMPT_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/extensions/webstore_standalone_installer.h"
 #include "chrome/browser/ui/native_window_tracker.h"
@@ -55,7 +55,7 @@ class WebstoreInstallWithPrompt : public WebstoreStandaloneInstaller {
   bool ShouldShowPostInstallUI() const override;
   bool ShouldShowAppInstalledBubble() const override;
   content::WebContents* GetWebContents() const override;
-  scoped_refptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
+  scoped_ptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
       const override;
   scoped_ptr<ExtensionInstallPrompt> CreateInstallUI() override;
   bool CheckInlineInstallPermitted(const base::DictionaryValue& webstore_data,

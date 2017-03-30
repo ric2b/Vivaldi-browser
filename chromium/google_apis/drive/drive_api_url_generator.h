@@ -5,8 +5,11 @@
 #ifndef GOOGLE_APIS_DRIVE_DRIVE_API_URL_GENERATOR_H_
 #define GOOGLE_APIS_DRIVE_DRIVE_API_URL_GENERATOR_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "url/gurl.h"
 
 namespace google_apis {
@@ -17,7 +20,9 @@ class DriveApiUrlGenerator {
  public:
   // |base_url| is the path to the target drive api server.
   // Note that this is an injecting point for a testing server.
-  DriveApiUrlGenerator(const GURL& base_url, const GURL& base_download_url);
+  DriveApiUrlGenerator(const GURL& base_url,
+                       const GURL& base_download_url,
+                       const GURL& base_thumbnail_url);
   ~DriveApiUrlGenerator();
 
   // The base URL for communicating with the production drive api server.
@@ -25,6 +30,9 @@ class DriveApiUrlGenerator {
 
   // The base URL for the file download server for production.
   static const char kBaseDownloadUrlForProduction[];
+
+  // The base URL for the thumbnail download server for production.
+  static const char kBaseThumbnailUrlForProduction[];
 
   // Returns a URL to invoke "About: get" method.
   GURL GetAboutGetUrl() const;
@@ -47,7 +55,7 @@ class DriveApiUrlGenerator {
                             const std::string& app_id) const;
 
   // Returns a URL to create a resource.
-  GURL GetFilesInsertUrl() const;
+  GURL GetFilesInsertUrl(const std::string& visibility) const;
 
   // Returns a URL to patch file metadata.
   GURL GetFilesPatchUrl(const std::string& file_id,
@@ -55,7 +63,8 @@ class DriveApiUrlGenerator {
                         bool update_viewed_date) const;
 
   // Returns a URL to copy a resource specified by |file_id|.
-  GURL GetFilesCopyUrl(const std::string& file_id) const;
+  GURL GetFilesCopyUrl(const std::string& file_id,
+                       const std::string& visibility) const;
 
   // Returns a URL to fetch file list.
   GURL GetFilesListUrl(int max_results,
@@ -72,7 +81,7 @@ class DriveApiUrlGenerator {
   GURL GetChangesListUrl(bool include_deleted,
                          int max_results,
                          const std::string& page_token,
-                         int64 start_change_id) const;
+                         int64_t start_change_id) const;
 
   // Returns a URL to add a resource to a directory with |folder_id|.
   GURL GetChildrenInsertUrl(const std::string& folder_id) const;
@@ -120,6 +129,7 @@ class DriveApiUrlGenerator {
  private:
   const GURL base_url_;
   const GURL base_download_url_;
+  const GURL base_thumbnail_url_;
 
   // This class is copyable hence no DISALLOW_COPY_AND_ASSIGN here.
 };

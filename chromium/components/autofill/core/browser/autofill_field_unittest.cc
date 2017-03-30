@@ -4,38 +4,124 @@
 
 #include "components/autofill/core/browser/autofill_field.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/country_names.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/common/autofill_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::ASCIIToUTF16;
+using base::StringToInt;
 using base::UTF8ToUTF16;
 
 namespace autofill {
 namespace {
-// TODO: Vivaldi reneable for Mac when locale loading is fixed for tests
-#if defined(OS_MACOSX)
-#define MAYBE_LOCALE(test_name) DISABLED_##test_name
-#else
-#define MAYBE_LOCALE(test_name) test_name
-#endif
+
+const std::vector<const char*> NotNumericMonthsContentsNoPlaceholder()
+{
+  const std::vector<const char*> result = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  return result;
+}
+
+const std::vector<const char*> NotNumericMonthsContentsWithPlaceholder()
+{
+  const std::vector<const char*> result = {
+    "Select a Month",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"};
+  return result;
+}
 
 // Returns a FormFieldData object corresponding to a <select> field populated
-// with the given |options|.
-FormFieldData GenerateSelectFieldWithOptions(const char* const* options,
-                                             size_t options_size) {
-  std::vector<base::string16> options16(options_size);
-  for (size_t i = 0; i < options_size; ++i)
-    options16[i] = UTF8ToUTF16(options[i]);
+// with the given |values| and |contents|.
+FormFieldData GenerateSelectFieldWithOptions(
+    const std::vector<const char*>& values,
+    const std::vector<const char*>& contents,
+    size_t select_size) {
+  std::vector<base::string16> values16(select_size);
+  for (size_t i = 0; i < select_size; ++i)
+    values16[i] = UTF8ToUTF16(values[i]);
+
+  std::vector<base::string16> contents16(select_size);
+  for (size_t i = 0; i < select_size; ++i)
+    contents16[i] = UTF8ToUTF16(contents[i]);
 
   FormFieldData form_field;
   form_field.form_control_type = "select-one";
-  form_field.option_values = options16;
-  form_field.option_contents = options16;
+  form_field.option_values = values16;
+  form_field.option_contents = contents16;
   return form_field;
+}
+
+// Returns a FormFieldData object corresponding to a <select> field populated
+// with the given |values|.
+FormFieldData GenerateSelectFieldWithOptions(
+    const std::vector<const char*>& values,
+    size_t select_size) {
+  return GenerateSelectFieldWithOptions(values, values, select_size);
+}
+
+// Returns the index of |value| in |values|.
+void GetIndexOfValue(const std::vector<base::string16>& values,
+                     const base::string16& value,
+                     size_t* index) {
+  for (size_t i = 0; i < values.size(); ++i) {
+    if (values[i] == value) {
+      *index = i;
+      return;
+    }
+  }
+  ASSERT_TRUE(false) << "Passing invalid arguments to GetIndexOfValue";
+}
+
+// Creates the select field from the specified |values| and |contents| and tests
+// filling with 3 different values.
+void TestFillingExpirationMonth(const std::vector<const char*>& values,
+                                const std::vector<const char*>& contents,
+                                size_t select_size) {
+  // Create the select field.
+  AutofillField field(
+      GenerateSelectFieldWithOptions(values, contents, select_size),
+      base::string16());
+  field.set_heuristic_type(CREDIT_CARD_EXP_MONTH);
+
+  size_t content_index = 0;
+
+  // Try with a leading zero.
+  AutofillField::FillFormField(field, ASCIIToUTF16("03"), "en-US", "en-US",
+                               &field);
+  GetIndexOfValue(field.option_values, field.value, &content_index);
+  EXPECT_EQ(ASCIIToUTF16("Mar"), field.option_contents[content_index]);
+
+  // Try without a leading zero.
+  AutofillField::FillFormField(field, ASCIIToUTF16("4"), "en-US", "en-US",
+                               &field);
+  GetIndexOfValue(field.option_values, field.value, &content_index);
+  EXPECT_EQ(ASCIIToUTF16("Apr"), field.option_contents[content_index]);
+
+  // Try a two-digit month.
+  AutofillField::FillFormField(field, ASCIIToUTF16("11"), "en-US", "en-US",
+                               &field);
+  GetIndexOfValue(field.option_values, field.value, &content_index);
+  EXPECT_EQ(ASCIIToUTF16("Nov"), field.option_contents[content_index]);
 }
 
 struct TestCase {
@@ -53,7 +139,12 @@ size_t GetNumberOffset(size_t index, const TestCase& test) {
   return result;
 }
 
-TEST(AutofillFieldTest, Type) {
+class AutofillFieldTest : public testing::Test {
+ public:
+  AutofillFieldTest() { CountryNames::SetLocaleString("en-US"); }
+};
+
+TEST_F(AutofillFieldTest, Type) {
   AutofillField field;
   ASSERT_EQ(NO_SERVER_DATA, field.server_type());
   ASSERT_EQ(UNKNOWN_TYPE, field.heuristic_type());
@@ -77,7 +168,7 @@ TEST(AutofillFieldTest, Type) {
   EXPECT_EQ(NAME, field.Type().group());
 }
 
-TEST(AutofillFieldTest, IsEmpty) {
+TEST_F(AutofillFieldTest, IsEmpty) {
   AutofillField field;
   ASSERT_EQ(base::string16(), field.value);
 
@@ -89,7 +180,7 @@ TEST(AutofillFieldTest, IsEmpty) {
   EXPECT_FALSE(field.IsEmpty());
 }
 
-TEST(AutofillFieldTest, FieldSignature) {
+TEST_F(AutofillFieldTest, FieldSignature) {
   AutofillField field;
   ASSERT_EQ(base::string16(), field.name);
   ASSERT_EQ(std::string(), field.form_control_type);
@@ -114,7 +205,7 @@ TEST(AutofillFieldTest, FieldSignature) {
   EXPECT_EQ("502192749", field.FieldSignature());
 }
 
-TEST(AutofillFieldTest, IsFieldFillable) {
+TEST_F(AutofillFieldTest, IsFieldFillable) {
   AutofillField field;
   ASSERT_EQ(UNKNOWN_TYPE, field.Type().GetStorableType());
 
@@ -135,43 +226,98 @@ TEST(AutofillFieldTest, IsFieldFillable) {
   field.set_server_type(NAME_LAST);
   EXPECT_TRUE(field.IsFieldFillable());
 
-  // Field has autocomplete="off" set. Chrome ignores the attribute.
+  // Field has autocomplete="off" set. Since autofill was able to make a
+  // prediction, it is still considered a fillable field.
   field.should_autocomplete = false;
   EXPECT_TRUE(field.IsFieldFillable());
 }
 
-TEST(AutofillFieldTest, FillPhoneNumber) {
+// Verify that non credit card related fields with the autocomplete attribute
+// set to off don't get filled on desktop.
+TEST_F(AutofillFieldTest, FillFormField_AutocompleteOff_AddressField) {
   AutofillField field;
-  field.SetHtmlType(HTML_TYPE_TEL_LOCAL_PREFIX, HtmlFieldMode());
+  field.should_autocomplete = false;
 
-  // Fill with a non-phone number; should fill normally.
-  AutofillField::FillFormField(
-      field, ASCIIToUTF16("Oh hai"), "en-US", "en-US", &field);
-  EXPECT_EQ(ASCIIToUTF16("Oh hai"), field.value);
+  // Non credit card related field.
+  AutofillField::FillFormField(field, ASCIIToUTF16("Test"), "en-US", "en-US",
+                               &field);
 
-  // Fill with a phone number; should fill just the prefix.
-  AutofillField::FillFormField(
-      field, ASCIIToUTF16("5551234"), "en-US", "en-US", &field);
-  EXPECT_EQ(ASCIIToUTF16("555"), field.value);
-
-  // Now reset the type, and set a max-length instead.
-  field.SetHtmlType(HTML_TYPE_UNKNOWN, HtmlFieldMode());
-  field.set_heuristic_type(PHONE_HOME_NUMBER);
-  field.max_length = 4;
-
-  // Fill with a phone-number; should fill just the suffix.
-  AutofillField::FillFormField(
-      field, ASCIIToUTF16("5551234"), "en-US", "en-US", &field);
-  EXPECT_EQ(ASCIIToUTF16("1234"), field.value);
+  // Verifiy that the field is filled on mobile but not on desktop.
+  if (IsDesktopPlatform()) {
+    EXPECT_EQ(base::string16(), field.value);
+  } else {
+    EXPECT_EQ(ASCIIToUTF16("Test"), field.value);
+  }
 }
 
-TEST(AutofillFieldTest, FillSelectControlByValue) {
-  const char* const kOptions[] = {
-    "Eenie", "Meenie", "Miney", "Mo",
+// Verify that credit card related fields with the autocomplete attribute
+// set to off get filled.
+TEST_F(AutofillFieldTest, FillFormField_AutocompleteOff_CreditCardField) {
+  AutofillField field;
+  field.should_autocomplete = false;
+
+  // Credit card related field.
+  field.set_heuristic_type(CREDIT_CARD_NUMBER);
+  AutofillField::FillFormField(field, ASCIIToUTF16("4111111111111111"), "en-US",
+                               "en-US", &field);
+
+  // Verify that the field is filled.
+  EXPECT_EQ(ASCIIToUTF16("4111111111111111"), field.value);
+}
+
+// TODO(crbug.com/581514): Add support for filling only the prefix/suffix for
+// phone numbers with 10 or 11 digits.
+TEST_F(AutofillFieldTest, FillPhoneNumber) {
+  typedef struct {
+    HtmlFieldType field_type;
+    size_t field_max_length;
+    std::string value_to_fill;
+    std::string expected_value;
+
+  } TestCase;
+
+  TestCase test_cases[] = {
+      // Filling a phone type field with text should fill the text as is.
+      {HTML_TYPE_TEL, /* default value */ 0, "Oh hai", "Oh hai"},
+      // Filling a prefix type field with a phone number of 7 digits should just
+      // fill the prefix.
+      {HTML_TYPE_TEL_LOCAL_PREFIX, /* default value */ 0, "5551234", "555"},
+      // Filling a suffix type field with a phone number of 7 digits should just
+      // fill the suffix.
+      {HTML_TYPE_TEL_LOCAL_SUFFIX, /* default value */ 0, "5551234", "1234"},
+      // Filling a phone type field with a max length of 3 with a phone number
+      // of
+      // 7 digits should fill only the prefix.
+      {HTML_TYPE_TEL, 3, "5551234", "555"},
+      // Filling a phone type field with a max length of 4 with a phone number
+      // of
+      // 7 digits should fill only the suffix.
+      {HTML_TYPE_TEL, 4, "5551234", "1234"},
+      // Filling a phone type field with a max length of 10 with a phone number
+      // including the country code should fill the phone number without the
+      // country code.
+      {HTML_TYPE_TEL, 10, "15141254578", "5141254578"},
+      // Filling a phone type field with a max length of 5 with a phone number
+      // should fill with the last 5 digits of that phone number.
+      {HTML_TYPE_TEL, 5, "5141254578", "54578"}};
+
+  for (TestCase test_case : test_cases) {
+    AutofillField field;
+    field.SetHtmlType(test_case.field_type, HtmlFieldMode());
+    field.max_length = test_case.field_max_length;
+
+    AutofillField::FillFormField(field, ASCIIToUTF16(test_case.value_to_fill),
+                                 "en-US", "en-US", &field);
+    EXPECT_EQ(ASCIIToUTF16(test_case.expected_value), field.value);
+  }
+}
+
+TEST_F(AutofillFieldTest, FillSelectControlByValue) {
+  std::vector<const char*> kOptions = {
+      "Eenie", "Meenie", "Miney", "Mo",
   };
-  AutofillField field(
-      GenerateSelectFieldWithOptions(kOptions, arraysize(kOptions)),
-      base::string16());
+  AutofillField field(GenerateSelectFieldWithOptions(kOptions, kOptions.size()),
+                      base::string16());
 
   // Set semantically empty contents for each option, so that only the values
   // can be used for matching.
@@ -183,13 +329,12 @@ TEST(AutofillFieldTest, FillSelectControlByValue) {
   EXPECT_EQ(ASCIIToUTF16("Meenie"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlByContents) {
-  const char* const kOptions[] = {
-    "Eenie", "Meenie", "Miney", "Mo",
+TEST_F(AutofillFieldTest, FillSelectControlByContents) {
+  std::vector<const char*> kOptions = {
+      "Eenie", "Meenie", "Miney", "Mo",
   };
-  AutofillField field(
-      GenerateSelectFieldWithOptions(kOptions, arraysize(kOptions)),
-      base::string16());
+  AutofillField field(GenerateSelectFieldWithOptions(kOptions, kOptions.size()),
+                      base::string16());
 
   // Set semantically empty values for each option, so that only the contents
   // can be used for matching.
@@ -201,12 +346,10 @@ TEST(AutofillFieldTest, FillSelectControlByContents) {
   EXPECT_EQ(ASCIIToUTF16("2"), field.value);  // Corresponds to "Miney".
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithFullCountryNames) {
-  const char* const kCountries[] = {
-    "Albania", "Canada"
-  };
+TEST_F(AutofillFieldTest, FillSelectControlWithFullCountryNames) {
+  std::vector<const char*> kCountries = {"Albania", "Canada"};
   AutofillField field(
-      GenerateSelectFieldWithOptions(kCountries, arraysize(kCountries)),
+      GenerateSelectFieldWithOptions(kCountries, kCountries.size()),
       base::string16());
   field.set_heuristic_type(ADDRESS_HOME_COUNTRY);
 
@@ -215,12 +358,10 @@ TEST(AutofillFieldTest, FillSelectControlWithFullCountryNames) {
   EXPECT_EQ(ASCIIToUTF16("Canada"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithAbbreviatedCountryNames) {
-  const char* const kCountries[] = {
-    "AL", "CA"
-  };
+TEST_F(AutofillFieldTest, FillSelectControlWithAbbreviatedCountryNames) {
+  std::vector<const char*> kCountries = {"AL", "CA"};
   AutofillField field(
-      GenerateSelectFieldWithOptions(kCountries, arraysize(kCountries)),
+      GenerateSelectFieldWithOptions(kCountries, kCountries.size()),
       base::string16());
   field.set_heuristic_type(ADDRESS_HOME_COUNTRY);
 
@@ -229,13 +370,10 @@ TEST(AutofillFieldTest, FillSelectControlWithAbbreviatedCountryNames) {
   EXPECT_EQ(ASCIIToUTF16("CA"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithFullStateNames) {
-  const char* const kStates[] = {
-    "Alabama", "California"
-  };
-  AutofillField field(
-      GenerateSelectFieldWithOptions(kStates, arraysize(kStates)),
-      base::string16());
+TEST_F(AutofillFieldTest, FillSelectControlWithFullStateNames) {
+  std::vector<const char*> kStates = {"Alabama", "California"};
+  AutofillField field(GenerateSelectFieldWithOptions(kStates, kStates.size()),
+                      base::string16());
   field.set_heuristic_type(ADDRESS_HOME_STATE);
 
   AutofillField::FillFormField(
@@ -243,13 +381,10 @@ TEST(AutofillFieldTest, FillSelectControlWithFullStateNames) {
   EXPECT_EQ(ASCIIToUTF16("California"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithAbbreviateStateNames) {
-  const char* const kStates[] = {
-    "AL", "CA"
-  };
-  AutofillField field(
-      GenerateSelectFieldWithOptions(kStates, arraysize(kStates)),
-      base::string16());
+TEST_F(AutofillFieldTest, FillSelectControlWithAbbreviateStateNames) {
+  std::vector<const char*> kStates = {"AL", "CA"};
+  AutofillField field(GenerateSelectFieldWithOptions(kStates, kStates.size()),
+                      base::string16());
   field.set_heuristic_type(ADDRESS_HOME_STATE);
 
   AutofillField::FillFormField(
@@ -257,14 +392,13 @@ TEST(AutofillFieldTest, FillSelectControlWithAbbreviateStateNames) {
   EXPECT_EQ(ASCIIToUTF16("CA"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithInexactFullStateNames) {
+TEST_F(AutofillFieldTest, FillSelectControlWithInexactFullStateNames) {
   {
-    const char* const kStates[] = {
-      "SC - South Carolina", "CA - California", "NC - North Carolina",
+    std::vector<const char*> kStates = {
+        "SC - South Carolina", "CA - California", "NC - North Carolina",
     };
-    AutofillField field(
-        GenerateSelectFieldWithOptions(kStates, arraysize(kStates)),
-        base::string16());
+    AutofillField field(GenerateSelectFieldWithOptions(kStates, kStates.size()),
+                        base::string16());
     field.set_heuristic_type(ADDRESS_HOME_STATE);
 
     AutofillField::FillFormField(
@@ -274,12 +408,11 @@ TEST(AutofillFieldTest, FillSelectControlWithInexactFullStateNames) {
 
   // Don't accidentally match "Virginia" to "West Virginia".
   {
-    const char* const kStates[] = {
-      "WV - West Virginia", "VA - Virginia", "NV - North Virginia",
+    std::vector<const char*> kStates = {
+        "WV - West Virginia", "VA - Virginia", "NV - North Virginia",
     };
-    AutofillField field(
-        GenerateSelectFieldWithOptions(kStates, arraysize(kStates)),
-        base::string16());
+    AutofillField field(GenerateSelectFieldWithOptions(kStates, kStates.size()),
+                        base::string16());
     field.set_heuristic_type(ADDRESS_HOME_STATE);
 
     AutofillField::FillFormField(
@@ -291,12 +424,11 @@ TEST(AutofillFieldTest, FillSelectControlWithInexactFullStateNames) {
   // would fail this test. It's here to document behavior rather than enforce
   // it.
   {
-    const char* const kStates[] = {
-      "WV - West Virginia", "TX - Texas",
+    std::vector<const char*> kStates = {
+        "WV - West Virginia", "TX - Texas",
     };
-    AutofillField field(
-        GenerateSelectFieldWithOptions(kStates, arraysize(kStates)),
-        base::string16());
+    AutofillField field(GenerateSelectFieldWithOptions(kStates, kStates.size()),
+                        base::string16());
     field.set_heuristic_type(ADDRESS_HOME_STATE);
 
     AutofillField::FillFormField(
@@ -308,12 +440,11 @@ TEST(AutofillFieldTest, FillSelectControlWithInexactFullStateNames) {
   // match isn't required). Also tests that matches work for states with
   // whitespace in the middle.
   {
-    const char* const kStates[] = {
-      "California.", "North Carolina.",
+    std::vector<const char*> kStates = {
+        "California.", "North Carolina.",
     };
-    AutofillField field(
-        GenerateSelectFieldWithOptions(kStates, arraysize(kStates)),
-        base::string16());
+    AutofillField field(GenerateSelectFieldWithOptions(kStates, kStates.size()),
+                        base::string16());
     field.set_heuristic_type(ADDRESS_HOME_STATE);
 
     AutofillField::FillFormField(
@@ -322,14 +453,13 @@ TEST(AutofillFieldTest, FillSelectControlWithInexactFullStateNames) {
   }
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithInexactAbbreviations) {
+TEST_F(AutofillFieldTest, FillSelectControlWithInexactAbbreviations) {
   {
-    const char* const kStates[] = {
-      "NC - North Carolina", "CA - California",
+    std::vector<const char*> kStates = {
+        "NC - North Carolina", "CA - California",
     };
-    AutofillField field(
-        GenerateSelectFieldWithOptions(kStates, arraysize(kStates)),
-        base::string16());
+    AutofillField field(GenerateSelectFieldWithOptions(kStates, kStates.size()),
+                        base::string16());
     field.set_heuristic_type(ADDRESS_HOME_STATE);
 
     AutofillField::FillFormField(
@@ -338,11 +468,11 @@ TEST(AutofillFieldTest, FillSelectControlWithInexactAbbreviations) {
   }
 
   {
-    const char* const kNotStates[] = {
-      "NCNCA", "SCNCA",
+    std::vector<const char*> kNotStates = {
+        "NCNCA", "SCNCA",
     };
     AutofillField field(
-        GenerateSelectFieldWithOptions(kNotStates, arraysize(kNotStates)),
+        GenerateSelectFieldWithOptions(kNotStates, kNotStates.size()),
         base::string16());
     field.set_heuristic_type(ADDRESS_HOME_STATE);
 
@@ -352,40 +482,50 @@ TEST(AutofillFieldTest, FillSelectControlWithInexactAbbreviations) {
   }
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithNumericMonth) {
-  const char* const kMonthsNumeric[] = {
-    "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12",
-  };
-  AutofillField field(
-      GenerateSelectFieldWithOptions(kMonthsNumeric, arraysize(kMonthsNumeric)),
-      base::string16());
-  field.set_heuristic_type(CREDIT_CARD_EXP_MONTH);
+TEST_F(AutofillFieldTest, FillSelectControlWithExpirationMonth) {
+  typedef struct {
+    std::vector<const char*> select_values;
+    std::vector<const char*> select_contents;
+  } TestCase;
 
-  // Try with a leading zero.
-  AutofillField::FillFormField(
-      field, ASCIIToUTF16("03"), "en-US", "en-US", &field);
-  EXPECT_EQ(ASCIIToUTF16("03"), field.value);
+  TestCase test_cases[] = {
+      // Values start at 1.
+      {{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"},
+       NotNumericMonthsContentsNoPlaceholder()},
+      // Values start at 0.
+      {{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"},
+       NotNumericMonthsContentsNoPlaceholder()},
+      // Values start at 00.
+      {{"00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"},
+       NotNumericMonthsContentsNoPlaceholder()},
+      // Values start at 0 and the first content is a placeholder.
+      {{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"},
+       NotNumericMonthsContentsWithPlaceholder()},
+      // Values start at 1 and the first content is a placeholder.
+      {{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"},
+       NotNumericMonthsContentsWithPlaceholder()},
+      // Values start at 01 and the first content is a placeholder.
+      {{"01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12",
+        "13"},
+       NotNumericMonthsContentsWithPlaceholder()}};
 
-  // Try without a leading zero.
-  AutofillField::FillFormField(
-      field, ASCIIToUTF16("4"), "en-US", "en-US", &field);
-  EXPECT_EQ(ASCIIToUTF16("04"), field.value);
+  for (TestCase test_case : test_cases) {
+    ASSERT_EQ(test_case.select_values.size(), test_case.select_contents.size());
 
-  // Try a two-digit month.
-  AutofillField::FillFormField(
-      field, ASCIIToUTF16("11"), "en-US", "en-US", &field);
-  EXPECT_EQ(ASCIIToUTF16("11"), field.value);
+    TestFillingExpirationMonth(test_case.select_values,
+                               test_case.select_contents,
+                               test_case.select_values.size());
+  }
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithAbbreviatedMonthName) {
-  const char* const kMonthsAbbreviated[] = {
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+TEST_F(AutofillFieldTest, FillSelectControlWithAbbreviatedMonthName) {
+  std::vector<const char*> kMonthsAbbreviated = {
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   };
-  AutofillField field(
-      GenerateSelectFieldWithOptions(
-          kMonthsAbbreviated, arraysize(kMonthsAbbreviated)),
-      base::string16());
+  AutofillField field(GenerateSelectFieldWithOptions(kMonthsAbbreviated,
+                                                     kMonthsAbbreviated.size()),
+                      base::string16());
   field.set_heuristic_type(CREDIT_CARD_EXP_MONTH);
 
   AutofillField::FillFormField(
@@ -393,13 +533,13 @@ TEST(AutofillFieldTest, FillSelectControlWithAbbreviatedMonthName) {
   EXPECT_EQ(ASCIIToUTF16("Apr"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithFullMonthName) {
-  const char* const kMonthsFull[] = {
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
+TEST_F(AutofillFieldTest, FillSelectControlWithFullMonthName) {
+  std::vector<const char*> kMonthsFull = {
+      "January", "February", "March",     "April",   "May",      "June",
+      "July",    "August",   "September", "October", "November", "December",
   };
   AutofillField field(
-      GenerateSelectFieldWithOptions(kMonthsFull, arraysize(kMonthsFull)),
+      GenerateSelectFieldWithOptions(kMonthsFull, kMonthsFull.size()),
       base::string16());
   field.set_heuristic_type(CREDIT_CARD_EXP_MONTH);
 
@@ -408,12 +548,11 @@ TEST(AutofillFieldTest, FillSelectControlWithFullMonthName) {
   EXPECT_EQ(ASCIIToUTF16("April"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithFrenchMonthName) {
-  const char* const kMonthsFrench[] = {
-    "JANV", "FÉVR.", "MARS", "décembre"
-  };
+TEST_F(AutofillFieldTest, FillSelectControlWithFrenchMonthName) {
+  std::vector<const char*> kMonthsFrench = {"JANV", "FÉVR.", "MARS",
+                                            "décembre"};
   AutofillField field(
-      GenerateSelectFieldWithOptions(kMonthsFrench, arraysize(kMonthsFrench)),
+      GenerateSelectFieldWithOptions(kMonthsFrench, kMonthsFrench.size()),
       base::string16());
   field.set_heuristic_type(CREDIT_CARD_EXP_MONTH);
 
@@ -430,12 +569,12 @@ TEST(AutofillFieldTest, FillSelectControlWithFrenchMonthName) {
   EXPECT_EQ(UTF8ToUTF16("décembre"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithNumericMonthSansLeadingZero) {
-  const char* const kMonthsNumeric[] = {
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+TEST_F(AutofillFieldTest, FillSelectControlWithNumericMonthSansLeadingZero) {
+  std::vector<const char*> kMonthsNumeric = {
+      "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
   };
   AutofillField field(
-      GenerateSelectFieldWithOptions(kMonthsNumeric, arraysize(kMonthsNumeric)),
+      GenerateSelectFieldWithOptions(kMonthsNumeric, kMonthsNumeric.size()),
       base::string16());
   field.set_heuristic_type(CREDIT_CARD_EXP_MONTH);
 
@@ -444,11 +583,10 @@ TEST(AutofillFieldTest, FillSelectControlWithNumericMonthSansLeadingZero) {
   EXPECT_EQ(ASCIIToUTF16("4"), field.value);
 }
 
-TEST(AutofillFieldTest, FillSelectControlWithTwoDigitCreditCardYear) {
-  const char* const kYears[] = {
-    "12", "13", "14", "15", "16", "17", "18", "19"
-  };
-  AutofillField field(GenerateSelectFieldWithOptions(kYears, arraysize(kYears)),
+TEST_F(AutofillFieldTest, FillSelectControlWithTwoDigitCreditCardYear) {
+  std::vector<const char*> kYears = {"12", "13", "14", "15",
+                                     "16", "17", "18", "19"};
+  AutofillField field(GenerateSelectFieldWithOptions(kYears, kYears.size()),
                       base::string16());
   field.set_heuristic_type(CREDIT_CARD_EXP_2_DIGIT_YEAR);
 
@@ -457,13 +595,11 @@ TEST(AutofillFieldTest, FillSelectControlWithTwoDigitCreditCardYear) {
   EXPECT_EQ(ASCIIToUTF16("17"), field.value);
 }
 
-TEST(AutofillFieldTest, MAYBE_LOCALE(FillSelectControlWithCreditCardType)) {
-  const char* const kCreditCardTypes[] = {
-    "Visa", "Master Card", "AmEx", "discover"
-  };
+TEST_F(AutofillFieldTest, FillSelectControlWithCreditCardType) {
+  std::vector<const char*> kCreditCardTypes = {"Visa", "Master Card", "AmEx",
+                                               "discover"};
   AutofillField field(
-      GenerateSelectFieldWithOptions(
-          kCreditCardTypes, arraysize(kCreditCardTypes)),
+      GenerateSelectFieldWithOptions(kCreditCardTypes, kCreditCardTypes.size()),
       base::string16());
   field.set_heuristic_type(CREDIT_CARD_TYPE);
 
@@ -488,7 +624,7 @@ TEST(AutofillFieldTest, MAYBE_LOCALE(FillSelectControlWithCreditCardType)) {
   EXPECT_EQ(ASCIIToUTF16("discover"), field.value);
 }
 
-TEST(AutofillFieldTest, FillMonthControl) {
+TEST_F(AutofillFieldTest, FillMonthControl) {
   AutofillField field;
   field.form_control_type = "month";
 
@@ -508,7 +644,7 @@ TEST(AutofillFieldTest, FillMonthControl) {
   EXPECT_EQ(ASCIIToUTF16("2018-04"), field.value);
 }
 
-TEST(AutofillFieldTest, FillStreetAddressTextArea) {
+TEST_F(AutofillFieldTest, FillStreetAddressTextArea) {
   AutofillField field;
   field.form_control_type = "textarea";
 
@@ -523,7 +659,7 @@ TEST(AutofillFieldTest, FillStreetAddressTextArea) {
   EXPECT_EQ(ja_value, field.value);
 }
 
-TEST(AutofillFieldTest, MAYBE_LOCALE(FillStreetAddressTextField)) {
+TEST_F(AutofillFieldTest, FillStreetAddressTextField) {
   AutofillField field;
   field.form_control_type = "text";
   field.set_server_type(ADDRESS_HOME_STREET_ADDRESS);
@@ -542,7 +678,7 @@ TEST(AutofillFieldTest, MAYBE_LOCALE(FillStreetAddressTextField)) {
   EXPECT_EQ(UTF8ToUTF16("桜丘町26-1セルリアンタワー6階"), field.value);
 }
 
-TEST(AutofillFieldTest, FillCreditCardNumberWithoutSplits) {
+TEST_F(AutofillFieldTest, FillCreditCardNumberWithoutSplits) {
   // Case 1: card number without any spilt.
   AutofillField cc_number_full;
   cc_number_full.set_heuristic_type(CREDIT_CARD_NUMBER);
@@ -557,7 +693,7 @@ TEST(AutofillFieldTest, FillCreditCardNumberWithoutSplits) {
   EXPECT_EQ(0U, cc_number_full.credit_card_number_offset());
 }
 
-TEST(AutofillFieldTest, FillCreditCardNumberWithEqualSizeSplits) {
+TEST_F(AutofillFieldTest, FillCreditCardNumberWithEqualSizeSplits) {
   // Case 2: card number broken up into four equal groups, of length 4.
   TestCase test;
   test.card_number_ = "5187654321098765";
@@ -600,7 +736,7 @@ TEST(AutofillFieldTest, FillCreditCardNumberWithEqualSizeSplits) {
   EXPECT_EQ(ASCIIToUTF16(test.card_number_), cc_number_full.value);
 }
 
-TEST(AutofillFieldTest, FillCreditCardNumberWithUnequalSizeSplits) {
+TEST_F(AutofillFieldTest, FillCreditCardNumberWithUnequalSizeSplits) {
   // Case 3: card with 15 digits number, broken up into three unequal groups, of
   // lengths 4, 6, and 5.
   TestCase test;
@@ -646,15 +782,13 @@ TEST(AutofillFieldTest, FillCreditCardNumberWithUnequalSizeSplits) {
   EXPECT_EQ(ASCIIToUTF16(test.card_number_), cc_number_full.value);
 }
 
-TEST(AutofillFieldTest, FindValueInSelectControl) {
+TEST_F(AutofillFieldTest, FindValueInSelectControl) {
   const size_t kBadIndex = 1000;
 
   {
-    const char* const kCountries[] = {
-      "Albania", "Canada"
-    };
+    std::vector<const char*> kCountries = {"Albania", "Canada"};
     FormFieldData field(
-        GenerateSelectFieldWithOptions(kCountries, arraysize(kCountries)));
+        GenerateSelectFieldWithOptions(kCountries, kCountries.size()));
     size_t index = kBadIndex;
     bool ret = AutofillField::FindValueInSelectControl(
         field, ASCIIToUTF16("Canada"), &index);
@@ -675,11 +809,11 @@ TEST(AutofillFieldTest, FindValueInSelectControl) {
   }
 
   {
-    const char* const kProvinces[] = {
-      "ALBERTA", "QUÉBEC", "NOVA SCOTIA",
+    std::vector<const char*> kProvinces = {
+        "ALBERTA", "QUÉBEC", "NOVA SCOTIA",
     };
     FormFieldData field(
-        GenerateSelectFieldWithOptions(kProvinces, arraysize(kProvinces)));
+        GenerateSelectFieldWithOptions(kProvinces, kProvinces.size()));
     size_t index = kBadIndex;
     bool ret = AutofillField::FindValueInSelectControl(
         field, ASCIIToUTF16("alberta"), &index);

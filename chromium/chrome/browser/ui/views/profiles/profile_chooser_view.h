@@ -5,14 +5,18 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_CHOOSER_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_CHOOSER_VIEW_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <vector>
 
+#include "base/macros.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/avatar_menu_observer.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
+#include "components/signin/core/browser/signin_header_helper.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 #include "ui/views/bubble/bubble_delegate.h"
@@ -57,6 +61,7 @@ class ProfileChooserView : public content::WebContentsDelegate,
       profiles::BubbleViewMode view_mode,
       profiles::TutorialMode tutorial_mode,
       const signin::ManageAccountsParams& manage_accounts_params,
+      signin_metrics::AccessPoint access_point,
       views::View* anchor_view,
       views::BubbleBorder::Arrow arrow,
       views::BubbleBorder::BubbleAlignment border_alignment,
@@ -76,13 +81,16 @@ class ProfileChooserView : public content::WebContentsDelegate,
                      Browser* browser,
                      profiles::BubbleViewMode view_mode,
                      profiles::TutorialMode tutorial_mode,
-                     signin::GAIAServiceType service_type);
+                     signin::GAIAServiceType service_type,
+                     signin_metrics::AccessPoint access_point);
   ~ProfileChooserView() override;
 
   // views::BubbleDelegateView:
   void Init() override;
+  void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
   void WindowClosing() override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+  views::View* GetInitiallyFocusedView() override;
 
   // content::WebContentsDelegate:
   bool HandleContextMenu(const content::ContextMenuParams& params) override;
@@ -94,7 +102,8 @@ class ProfileChooserView : public content::WebContentsDelegate,
   void LinkClicked(views::Link* sender, int event_flags) override;
 
   // views::StyledLabelListener:
-  void StyledLabelLinkClicked(const gfx::Range& range,
+  void StyledLabelLinkClicked(views::StyledLabel* label,
+                              const gfx::Range& range,
                               int event_flags) override;
 
   // views::TextfieldController:
@@ -120,6 +129,7 @@ class ProfileChooserView : public content::WebContentsDelegate,
   // Shows the bubble with the |view_to_display|.
   void ShowView(profiles::BubbleViewMode view_to_display,
                 AvatarMenu* avatar_menu);
+  void ShowViewFromMode(profiles::BubbleViewMode mode);
 
   // Creates the profile chooser view.
   views::View* CreateProfileChooserView(AvatarMenu* avatar_menu);
@@ -266,6 +276,9 @@ class ProfileChooserView : public content::WebContentsDelegate,
 
   // The GAIA service type provided in the response header.
   signin::GAIAServiceType gaia_service_type_;
+
+  // The current access point of sign in.
+  const signin_metrics::AccessPoint access_point_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileChooserView);
 };

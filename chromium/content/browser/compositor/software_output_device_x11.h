@@ -7,6 +7,7 @@
 
 #include <X11/Xlib.h>
 
+#include "base/macros.h"
 #include "cc/output/software_output_device.h"
 #include "ui/gfx/x/x11_types.h"
 
@@ -22,7 +23,7 @@ class SoftwareOutputDeviceX11 : public cc::SoftwareOutputDevice {
 
   ~SoftwareOutputDeviceX11() override;
 
-  void EndPaint(cc::SoftwareFrameData* frame_data) override;
+  void EndPaint() override;
 
  private:
   ui::Compositor* compositor_;

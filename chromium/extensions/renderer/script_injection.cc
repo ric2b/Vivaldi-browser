@@ -5,8 +5,10 @@
 #include "extensions/renderer/script_injection.h"
 
 #include <map>
+#include <utility>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
@@ -15,6 +17,7 @@
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/host_id.h"
 #include "extensions/renderer/dom_activity_logger.h"
+#include "extensions/renderer/extension_frame_helper.h"
 #include "extensions/renderer/extension_groups.h"
 #include "extensions/renderer/extensions_renderer_client.h"
 #include "extensions/renderer/script_injection_callback.h"
@@ -34,10 +37,10 @@ using IsolatedWorldMap = std::map<std::string, int>;
 base::LazyInstance<IsolatedWorldMap> g_isolated_worlds =
     LAZY_INSTANCE_INITIALIZER;
 
-const int64 kInvalidRequestId = -1;
+const int64_t kInvalidRequestId = -1;
 
 // The id of the next pending injection.
-int64 g_next_pending_id = 0;
+int64_t g_next_pending_id = 0;
 
 // Gets the isolated world ID to use for the given |injection_host|
 // in the given |frame|. If no isolated world has been created for that
@@ -77,6 +80,25 @@ int GetIsolatedWorldIdForInstance(const InjectionHost* injection_host,
 
 }  // namespace
 
+// Watches for the deletion of a RenderFrame, after which is_valid will return
+// false.
+class ScriptInjection::FrameWatcher : public content::RenderFrameObserver {
+ public:
+  FrameWatcher(content::RenderFrame* render_frame,
+               ScriptInjection* injection)
+      : content::RenderFrameObserver(render_frame),
+        injection_(injection) {}
+  ~FrameWatcher() override {}
+
+ private:
+  void FrameDetached() override { injection_->invalidate_render_frame(); }
+  void OnDestruct() override { injection_->invalidate_render_frame(); }
+
+  ScriptInjection* injection_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameWatcher);
+};
+
 // static
 std::string ScriptInjection::GetHostIdForIsolatedWorld(int isolated_world_id) {
   const IsolatedWorldMap& isolated_worlds = g_isolated_worlds.Get();
@@ -93,27 +115,25 @@ void ScriptInjection::RemoveIsolatedWorld(const std::string& host_id) {
   g_isolated_worlds.Get().erase(host_id);
 }
 
-ScriptInjection::ScriptInjection(
-    scoped_ptr<ScriptInjector> injector,
-    content::RenderFrame* render_frame,
-    scoped_ptr<const InjectionHost> injection_host,
-    UserScript::RunLocation run_location,
-    int tab_id)
-    : injector_(injector.Pass()),
+ScriptInjection::ScriptInjection(scoped_ptr<ScriptInjector> injector,
+                                 content::RenderFrame* render_frame,
+                                 scoped_ptr<const InjectionHost> injection_host,
+                                 UserScript::RunLocation run_location)
+    : injector_(std::move(injector)),
       render_frame_(render_frame),
-      injection_host_(injection_host.Pass()),
+      injection_host_(std::move(injection_host)),
       run_location_(run_location),
-      tab_id_(tab_id),
       request_id_(kInvalidRequestId),
       complete_(false),
       did_inject_js_(false),
+      frame_watcher_(new FrameWatcher(render_frame, this)),
       weak_ptr_factory_(this) {
   CHECK(injection_host_.get());
 }
 
 ScriptInjection::~ScriptInjection() {
   if (!complete_)
-    injector_->OnWillNotInject(ScriptInjector::WONT_INJECT);
+    NotifyWillNotInject(ScriptInjector::WONT_INJECT);
 }
 
 ScriptInjection::InjectionResult ScriptInjection::TryToInject(
@@ -135,20 +155,13 @@ ScriptInjection::InjectionResult ScriptInjection::TryToInject(
 
   blink::WebLocalFrame* web_frame = render_frame_->GetWebFrame();
   switch (injector_->CanExecuteOnFrame(
-      injection_host_.get(), web_frame, tab_id_)) {
+      injection_host_.get(), web_frame,
+      ExtensionFrameHelper::Get(render_frame_)->tab_id())) {
     case PermissionsData::ACCESS_DENIED:
       NotifyWillNotInject(ScriptInjector::NOT_ALLOWED);
       return INJECTION_FINISHED;  // We're done.
     case PermissionsData::ACCESS_WITHHELD:
-      // Note: we don't consider ACCESS_WITHHELD for child frames because there
-      // is nowhere to surface a request for a child frame.
-      // TODO(devlin): We should ask for permission somehow. crbug.com/491402.
-      if (web_frame->parent()) {
-        NotifyWillNotInject(ScriptInjector::NOT_ALLOWED);
-        return INJECTION_FINISHED;
-      }
-
-      SendInjectionMessage(true /* request permission */);
+      RequestPermissionFromBrowser();
       return INJECTION_WAITING;  // Wait around for permission.
     case PermissionsData::ACCESS_ALLOWED:
       InjectionResult result = Inject(scripts_run_info);
@@ -177,10 +190,10 @@ void ScriptInjection::OnHostRemoved() {
   injection_host_.reset(nullptr);
 }
 
-void ScriptInjection::SendInjectionMessage(bool request_permission) {
+void ScriptInjection::RequestPermissionFromBrowser() {
   // If we are just notifying the browser of the injection, then send an
   // invalid request (which is treated like a notification).
-  request_id_ = request_permission ? g_next_pending_id++ : kInvalidRequestId;
+  request_id_ = g_next_pending_id++;
   render_frame_->Send(new ExtensionHostMsg_RequestScriptInjectionPermission(
       render_frame_->GetRoutingID(),
       host_id().id(),
@@ -191,7 +204,7 @@ void ScriptInjection::SendInjectionMessage(bool request_permission) {
 void ScriptInjection::NotifyWillNotInject(
     ScriptInjector::InjectFailureReason reason) {
   complete_ = true;
-  injector_->OnWillNotInject(reason);
+  injector_->OnWillNotInject(reason, render_frame_);
 }
 
 ScriptInjection::InjectionResult ScriptInjection::Inject(
@@ -199,9 +212,6 @@ ScriptInjection::InjectionResult ScriptInjection::Inject(
   DCHECK(injection_host_);
   DCHECK(scripts_run_info);
   DCHECK(!complete_);
-
-  if (injection_host_->ShouldNotifyBrowserOfInjection())
-    SendInjectionMessage(false /* don't request permission */);
 
   bool should_inject_js = injector_->ShouldInjectJs(run_location_);
   bool should_inject_css = injector_->ShouldInjectCss(run_location_);
@@ -216,10 +226,12 @@ ScriptInjection::InjectionResult ScriptInjection::Inject(
 
   injector_->GetRunInfo(scripts_run_info, run_location_);
 
-  if (complete_)
-    injector_->OnInjectionComplete(execution_result_.Pass(), run_location_);
-  else
+  if (complete_) {
+    injector_->OnInjectionComplete(std::move(execution_result_), run_location_,
+                                   render_frame_);
+  } else {
     ++scripts_run_info->num_blocking_js;
+  }
 
   return complete_ ? INJECTION_FINISHED : INJECTION_BLOCKED;
 }
@@ -291,7 +303,8 @@ void ScriptInjection::OnJsInjectionCompleted(
   // If |async_completion_callback_| is set, it means the script finished
   // asynchronously, and we should run it.
   if (!async_completion_callback_.is_null()) {
-    injector_->OnInjectionComplete(execution_result_.Pass(), run_location_);
+    injector_->OnInjectionComplete(std::move(execution_result_), run_location_,
+                                   render_frame_);
     // Warning: this object can be destroyed after this line!
     async_completion_callback_.Run(this);
   }

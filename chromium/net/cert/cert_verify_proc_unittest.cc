@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "crypto/sha2.h"
@@ -46,21 +47,18 @@ unsigned char paypal_null_fingerprint[] = {
   0x1f, 0xe8, 0x1b, 0xd6, 0xab, 0x7b, 0xe8, 0xd7
 };
 
-// Mock CertVerifyProc that will set |verify_result->is_issued_by_known_root|
-// for all certificates that are Verified.
-class WellKnownCaCertVerifyProc : public CertVerifyProc {
+// Mock CertVerifyProc that sets the CertVerifyResult to a given value for
+// all certificates that are Verify()'d
+class MockCertVerifyProc : public CertVerifyProc {
  public:
-  // Initialize a CertVerifyProc that will set
-  // |verify_result->is_issued_by_known_root| to |is_well_known|.
-  explicit WellKnownCaCertVerifyProc(bool is_well_known)
-      : is_well_known_(is_well_known) {}
-
+  explicit MockCertVerifyProc(const CertVerifyResult& result)
+      : result_(result) {}
   // CertVerifyProc implementation:
   bool SupportsAdditionalTrustAnchors() const override { return false; }
   bool SupportsOCSPStapling() const override { return false; }
 
  protected:
-  ~WellKnownCaCertVerifyProc() override {}
+  ~MockCertVerifyProc() override {}
 
  private:
   int VerifyInternal(X509Certificate* cert,
@@ -71,12 +69,12 @@ class WellKnownCaCertVerifyProc : public CertVerifyProc {
                      const CertificateList& additional_trust_anchors,
                      CertVerifyResult* verify_result) override;
 
-  const bool is_well_known_;
+  const CertVerifyResult result_;
 
-  DISALLOW_COPY_AND_ASSIGN(WellKnownCaCertVerifyProc);
+  DISALLOW_COPY_AND_ASSIGN(MockCertVerifyProc);
 };
 
-int WellKnownCaCertVerifyProc::VerifyInternal(
+int MockCertVerifyProc::VerifyInternal(
     X509Certificate* cert,
     const std::string& hostname,
     const std::string& ocsp_response,
@@ -84,7 +82,8 @@ int WellKnownCaCertVerifyProc::VerifyInternal(
     CRLSet* crl_set,
     const CertificateList& additional_trust_anchors,
     CertVerifyResult* verify_result) {
-  verify_result->is_issued_by_known_root = is_well_known_;
+  *verify_result = result_;
+  verify_result->verified_cert = cert;
   return OK;
 }
 
@@ -168,8 +167,7 @@ TEST_F(CertVerifyProcTest, DISABLED_WithoutRevocationChecking) {
 // expired, http://crbug.com/502818
 #define MAYBE_EVVerification DISABLED_EVVerification
 #endif
-// tomas@vivaldi.com - disabled test (VB-7474)
-TEST_F(CertVerifyProcTest, DISABLED_EVVerification) {
+TEST_F(CertVerifyProcTest, MAYBE_EVVerification) {
   CertificateList certs = CreateCertificateListFromFile(
       GetTestCertsDirectory(),
       "comodo.chain.pem",
@@ -581,6 +579,11 @@ TEST_F(CertVerifyProcTest, NameConstraintsOk) {
                      &verify_result);
   EXPECT_EQ(OK, error);
   EXPECT_EQ(0U, verify_result.cert_status);
+
+  error = Verify(leaf.get(), "foo.test2.example.com", flags, NULL,
+                 empty_cert_list_, &verify_result);
+  EXPECT_EQ(OK, error);
+  EXPECT_EQ(0U, verify_result.cert_status);
 }
 
 TEST_F(CertVerifyProcTest, NameConstraintsFailure) {
@@ -842,18 +845,100 @@ TEST_F(CertVerifyProcTest, IntranetHostsRejected) {
   int error = 0;
 
   // Intranet names for public CAs should be flagged:
-  verify_proc_ = new WellKnownCaCertVerifyProc(true);
+  CertVerifyResult dummy_result;
+  dummy_result.is_issued_by_known_root = true;
+  verify_proc_ = new MockCertVerifyProc(dummy_result);
   error =
       Verify(cert.get(), "intranet", 0, NULL, empty_cert_list_, &verify_result);
   EXPECT_EQ(OK, error);
   EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_NON_UNIQUE_NAME);
 
   // However, if the CA is not well known, these should not be flagged:
-  verify_proc_ = new WellKnownCaCertVerifyProc(false);
+  dummy_result.Reset();
+  dummy_result.is_issued_by_known_root = false;
+  verify_proc_ = new MockCertVerifyProc(dummy_result);
   error =
       Verify(cert.get(), "intranet", 0, NULL, empty_cert_list_, &verify_result);
   EXPECT_EQ(OK, error);
   EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_NON_UNIQUE_NAME);
+}
+
+// Test that a SHA-1 certificate from a publicly trusted CA issued after
+// 1 January 2016 is rejected, but those issued before that date, or with
+// SHA-1 in the intermediate, is not rejected.
+TEST_F(CertVerifyProcTest, VerifyRejectsSHA1AfterDeprecation) {
+  CertVerifyResult dummy_result;
+  CertVerifyResult verify_result;
+  int error = 0;
+  scoped_refptr<X509Certificate> cert;
+
+  // Publicly trusted SHA-1 leaf certificates issued before 1 January 2016
+  // are accepted.
+  verify_result.Reset();
+  dummy_result.Reset();
+  dummy_result.is_issued_by_known_root = true;
+  dummy_result.has_sha1 = true;
+  dummy_result.has_sha1_leaf = true;
+  verify_proc_ = new MockCertVerifyProc(dummy_result);
+  cert = CreateCertificateChainFromFile(GetTestCertsDirectory(),
+                                        "sha1_dec_2015.pem",
+                                        X509Certificate::FORMAT_AUTO);
+  ASSERT_TRUE(cert);
+  error = Verify(cert.get(), "127.0.0.1", 0, NULL, empty_cert_list_,
+                 &verify_result);
+  EXPECT_EQ(OK, error);
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_SHA1_SIGNATURE_PRESENT);
+
+  // Publicly trusted SHA-1 leaf certificates issued on/after 1 January 2016
+  // are rejected.
+  verify_result.Reset();
+  dummy_result.Reset();
+  dummy_result.is_issued_by_known_root = true;
+  dummy_result.has_sha1 = true;
+  dummy_result.has_sha1_leaf = true;
+  verify_proc_ = new MockCertVerifyProc(dummy_result);
+  cert = CreateCertificateChainFromFile(GetTestCertsDirectory(),
+                                        "sha1_jan_2016.pem",
+                                        X509Certificate::FORMAT_AUTO);
+  ASSERT_TRUE(cert);
+  error = Verify(cert.get(), "127.0.0.1", 0, NULL, empty_cert_list_,
+                 &verify_result);
+  EXPECT_EQ(ERR_CERT_WEAK_SIGNATURE_ALGORITHM, error);
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_WEAK_SIGNATURE_ALGORITHM);
+
+  // Enterprise issued SHA-1 leaf certificates issued on/after 1 January 2016
+  // remain accepted until SHA-1 is disabled.
+  verify_result.Reset();
+  dummy_result.Reset();
+  dummy_result.is_issued_by_known_root = false;
+  dummy_result.has_sha1 = true;
+  dummy_result.has_sha1_leaf = true;
+  verify_proc_ = new MockCertVerifyProc(dummy_result);
+  cert = CreateCertificateChainFromFile(GetTestCertsDirectory(),
+                                        "sha1_jan_2016.pem",
+                                        X509Certificate::FORMAT_AUTO);
+  ASSERT_TRUE(cert);
+  error = Verify(cert.get(), "127.0.0.1", 0, NULL, empty_cert_list_,
+                 &verify_result);
+  EXPECT_EQ(OK, error);
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_SHA1_SIGNATURE_PRESENT);
+
+  // Publicly trusted SHA-1 intermediates issued on/after 1 January 2016 are,
+  // unfortunately, accepted. This can arise due to OS path building quirks.
+  verify_result.Reset();
+  dummy_result.Reset();
+  dummy_result.is_issued_by_known_root = true;
+  dummy_result.has_sha1 = true;
+  dummy_result.has_sha1_leaf = false;
+  verify_proc_ = new MockCertVerifyProc(dummy_result);
+  cert = CreateCertificateChainFromFile(GetTestCertsDirectory(),
+                                        "sha1_jan_2016.pem",
+                                        X509Certificate::FORMAT_AUTO);
+  ASSERT_TRUE(cert);
+  error = Verify(cert.get(), "127.0.0.1", 0, NULL, empty_cert_list_,
+                 &verify_result);
+  EXPECT_EQ(OK, error);
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_SHA1_SIGNATURE_PRESENT);
 }
 
 // Test that the certificate returned in CertVerifyResult is able to reorder
@@ -1042,129 +1127,6 @@ TEST_F(CertVerifyProcTest, IsIssuedByKnownRootIgnoresTestRoots) {
   EXPECT_FALSE(verify_result.is_issued_by_known_root);
 }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-// Tests that, on OS X, issues with a cross-certified Baltimore CyberTrust
-// Root can be successfully worked around once Apple completes removing the
-// older GTE CyberTrust Root from its trusted root store.
-//
-// The issue is caused by servers supplying the cross-certified intermediate
-// (necessary for certain mobile platforms), which OS X does not recognize
-// as already existing within its trust store.
-TEST_F(CertVerifyProcTest, CybertrustGTERoot) {
-  CertificateList certs = CreateCertificateListFromFile(
-      GetTestCertsDirectory(),
-      "cybertrust_omniroot_chain.pem",
-      X509Certificate::FORMAT_PEM_CERT_SEQUENCE);
-  ASSERT_EQ(2U, certs.size());
-
-  X509Certificate::OSCertHandles intermediates;
-  intermediates.push_back(certs[1]->os_cert_handle());
-
-  scoped_refptr<X509Certificate> cybertrust_basic =
-      X509Certificate::CreateFromHandle(certs[0]->os_cert_handle(),
-                                        intermediates);
-  ASSERT_TRUE(cybertrust_basic.get());
-
-  scoped_refptr<X509Certificate> baltimore_root =
-      ImportCertFromFile(GetTestCertsDirectory(),
-                         "cybertrust_baltimore_root.pem");
-  ASSERT_TRUE(baltimore_root.get());
-
-  ScopedTestRoot scoped_root(baltimore_root.get());
-
-  // Ensure that ONLY the Baltimore CyberTrust Root is trusted. This
-  // simulates Keychain removing support for the GTE CyberTrust Root.
-  TestRootCerts::GetInstance()->SetAllowSystemTrust(false);
-  base::ScopedClosureRunner reset_system_trust(
-      base::Bind(&TestRootCerts::SetAllowSystemTrust,
-                 base::Unretained(TestRootCerts::GetInstance()),
-                 true));
-
-  // First, make sure a simple certificate chain from
-  //   EE -> Public SureServer SV -> Baltimore CyberTrust
-  // works. Only the first two certificates are included in the chain.
-  int flags = 0;
-  CertVerifyResult verify_result;
-  int error = Verify(cybertrust_basic.get(),
-                     "cacert.omniroot.com",
-                     flags,
-                     NULL,
-                     empty_cert_list_,
-                     &verify_result);
-  EXPECT_EQ(OK, error);
-  EXPECT_EQ(CERT_STATUS_SHA1_SIGNATURE_PRESENT, verify_result.cert_status);
-
-  // Attempt to verify with the first known cross-certified intermediate
-  // provided.
-  scoped_refptr<X509Certificate> baltimore_intermediate_1 =
-      ImportCertFromFile(GetTestCertsDirectory(),
-                         "cybertrust_baltimore_cross_certified_1.pem");
-  ASSERT_TRUE(baltimore_intermediate_1.get());
-
-  X509Certificate::OSCertHandles intermediate_chain_1 =
-      cybertrust_basic->GetIntermediateCertificates();
-  intermediate_chain_1.push_back(baltimore_intermediate_1->os_cert_handle());
-
-  scoped_refptr<X509Certificate> baltimore_chain_1 =
-      X509Certificate::CreateFromHandle(cybertrust_basic->os_cert_handle(),
-                                        intermediate_chain_1);
-  error = Verify(baltimore_chain_1.get(),
-                 "cacert.omniroot.com",
-                 flags,
-                 NULL,
-                 empty_cert_list_,
-                 &verify_result);
-  EXPECT_EQ(OK, error);
-  EXPECT_EQ(CERT_STATUS_SHA1_SIGNATURE_PRESENT, verify_result.cert_status);
-
-  // Attempt to verify with the second known cross-certified intermediate
-  // provided.
-  scoped_refptr<X509Certificate> baltimore_intermediate_2 =
-      ImportCertFromFile(GetTestCertsDirectory(),
-                         "cybertrust_baltimore_cross_certified_2.pem");
-  ASSERT_TRUE(baltimore_intermediate_2.get());
-
-  X509Certificate::OSCertHandles intermediate_chain_2 =
-      cybertrust_basic->GetIntermediateCertificates();
-  intermediate_chain_2.push_back(baltimore_intermediate_2->os_cert_handle());
-
-  scoped_refptr<X509Certificate> baltimore_chain_2 =
-      X509Certificate::CreateFromHandle(cybertrust_basic->os_cert_handle(),
-                                        intermediate_chain_2);
-  error = Verify(baltimore_chain_2.get(),
-                 "cacert.omniroot.com",
-                 flags,
-                 NULL,
-                 empty_cert_list_,
-                 &verify_result);
-  EXPECT_EQ(OK, error);
-  EXPECT_EQ(CERT_STATUS_SHA1_SIGNATURE_PRESENT, verify_result.cert_status);
-
-  // Attempt to verify when both a cross-certified intermediate AND
-  // the legacy GTE root are provided.
-  scoped_refptr<X509Certificate> cybertrust_root =
-      ImportCertFromFile(GetTestCertsDirectory(),
-                         "cybertrust_gte_root.pem");
-  ASSERT_TRUE(cybertrust_root.get());
-
-  intermediate_chain_2.push_back(cybertrust_root->os_cert_handle());
-  scoped_refptr<X509Certificate> baltimore_chain_with_root =
-      X509Certificate::CreateFromHandle(cybertrust_basic->os_cert_handle(),
-                                        intermediate_chain_2);
-  error = Verify(baltimore_chain_with_root.get(),
-                 "cacert.omniroot.com",
-                 flags,
-                 NULL,
-                 empty_cert_list_,
-                 &verify_result);
-  EXPECT_EQ(OK, error);
-  EXPECT_EQ(CERT_STATUS_SHA1_SIGNATURE_PRESENT, verify_result.cert_status);
-
-  TestRootCerts::GetInstance()->Clear();
-  EXPECT_TRUE(TestRootCerts::GetInstance()->IsEmpty());
-}
-#endif
-
 #if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_WIN) || \
     defined(OS_MACOSX)
 // Test that CRLSets are effective in making a certificate appear to be
@@ -1281,7 +1243,8 @@ enum ExpectedAlgorithms {
   EXPECT_MD2 = 1 << 0,
   EXPECT_MD4 = 1 << 1,
   EXPECT_MD5 = 1 << 2,
-  EXPECT_SHA1 = 1 << 3
+  EXPECT_SHA1 = 1 << 3,
+  EXPECT_SHA1_LEAF = 1 << 4,
 };
 
 struct WeakDigestTestData {
@@ -1349,6 +1312,8 @@ TEST_P(CertVerifyProcWeakDigestTest, Verify) {
   EXPECT_EQ(!!(data.expected_algorithms & EXPECT_MD4), verify_result.has_md4);
   EXPECT_EQ(!!(data.expected_algorithms & EXPECT_MD5), verify_result.has_md5);
   EXPECT_EQ(!!(data.expected_algorithms & EXPECT_SHA1), verify_result.has_sha1);
+  EXPECT_EQ(!!(data.expected_algorithms & EXPECT_SHA1_LEAF),
+            verify_result.has_sha1_leaf);
 
   EXPECT_FALSE(verify_result.is_issued_by_additional_trust_anchor);
 
@@ -1394,33 +1359,39 @@ TEST_P(CertVerifyProcWeakDigestTest, Verify) {
 
 // The signature algorithm of the root CA should not matter.
 const WeakDigestTestData kVerifyRootCATestData[] = {
-  { "weak_digest_md5_root.pem", "weak_digest_sha1_intermediate.pem",
-    "weak_digest_sha1_ee.pem", EXPECT_SHA1 },
+    {"weak_digest_md5_root.pem", "weak_digest_sha1_intermediate.pem",
+     "weak_digest_sha1_ee.pem", EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 #if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-  // MD4 is not supported by OS X / NSS
-  { "weak_digest_md4_root.pem", "weak_digest_sha1_intermediate.pem",
-    "weak_digest_sha1_ee.pem", EXPECT_SHA1 },
+    // MD4 is not supported by OS X / NSS
+    {"weak_digest_md4_root.pem", "weak_digest_sha1_intermediate.pem",
+     "weak_digest_sha1_ee.pem", EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 #endif
-  { "weak_digest_md2_root.pem", "weak_digest_sha1_intermediate.pem",
-    "weak_digest_sha1_ee.pem", EXPECT_SHA1 },
+    {"weak_digest_md2_root.pem", "weak_digest_sha1_intermediate.pem",
+     "weak_digest_sha1_ee.pem", EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 };
-INSTANTIATE_TEST_CASE_P(VerifyRoot, CertVerifyProcWeakDigestTest,
+#if defined(OS_ANDROID)
+#define MAYBE_VerifyRoot DISABLED_VerifyRoot
+#else
+#define MAYBE_VerifyRoot VerifyRoot
+#endif
+INSTANTIATE_TEST_CASE_P(MAYBE_VerifyRoot,
+                        CertVerifyProcWeakDigestTest,
                         testing::ValuesIn(kVerifyRootCATestData));
 
 // The signature algorithm of intermediates should be properly detected.
 const WeakDigestTestData kVerifyIntermediateCATestData[] = {
-  { "weak_digest_sha1_root.pem", "weak_digest_md5_intermediate.pem",
-    "weak_digest_sha1_ee.pem", EXPECT_MD5 | EXPECT_SHA1 },
+    {"weak_digest_sha1_root.pem", "weak_digest_md5_intermediate.pem",
+     "weak_digest_sha1_ee.pem", EXPECT_MD5 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 #if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-  // MD4 is not supported by OS X / NSS
-  { "weak_digest_sha1_root.pem", "weak_digest_md4_intermediate.pem",
-    "weak_digest_sha1_ee.pem", EXPECT_MD4 | EXPECT_SHA1 },
+    // MD4 is not supported by OS X / NSS
+    {"weak_digest_sha1_root.pem", "weak_digest_md4_intermediate.pem",
+     "weak_digest_sha1_ee.pem", EXPECT_MD4 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 #endif
-  { "weak_digest_sha1_root.pem", "weak_digest_md2_intermediate.pem",
-    "weak_digest_sha1_ee.pem", EXPECT_MD2 | EXPECT_SHA1 },
+    {"weak_digest_sha1_root.pem", "weak_digest_md2_intermediate.pem",
+     "weak_digest_sha1_ee.pem", EXPECT_MD2 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 };
 // Disabled on NSS - MD4 is not supported, and MD2 and MD5 are disabled.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_ANDROID)
 #define MAYBE_VerifyIntermediate DISABLED_VerifyIntermediate
 #else
 #define MAYBE_VerifyIntermediate VerifyIntermediate
@@ -1445,7 +1416,7 @@ const WeakDigestTestData kVerifyEndEntityTestData[] = {
 // Disabled on NSS - NSS caches chains/signatures in such a way that cannot
 // be cleared until NSS is cleanly shutdown, which is not presently supported
 // in Chromium.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_ANDROID)
 #define MAYBE_VerifyEndEntity DISABLED_VerifyEndEntity
 #else
 #define MAYBE_VerifyEndEntity VerifyEndEntity
@@ -1456,19 +1427,19 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(MAYBE_VerifyEndEntity,
 
 // Incomplete chains should still report the status of the intermediate.
 const WeakDigestTestData kVerifyIncompleteIntermediateTestData[] = {
-  { NULL, "weak_digest_md5_intermediate.pem", "weak_digest_sha1_ee.pem",
-    EXPECT_MD5 | EXPECT_SHA1 },
+    {NULL, "weak_digest_md5_intermediate.pem", "weak_digest_sha1_ee.pem",
+     EXPECT_MD5 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 #if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-  // MD4 is not supported by OS X / NSS
-  { NULL, "weak_digest_md4_intermediate.pem", "weak_digest_sha1_ee.pem",
-    EXPECT_MD4 | EXPECT_SHA1 },
+    // MD4 is not supported by OS X / NSS
+    {NULL, "weak_digest_md4_intermediate.pem", "weak_digest_sha1_ee.pem",
+     EXPECT_MD4 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 #endif
-  { NULL, "weak_digest_md2_intermediate.pem", "weak_digest_sha1_ee.pem",
-    EXPECT_MD2 | EXPECT_SHA1 },
+    {NULL, "weak_digest_md2_intermediate.pem", "weak_digest_sha1_ee.pem",
+     EXPECT_MD2 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 };
 // Disabled on NSS - libpkix does not return constructed chains on error,
 // preventing us from detecting/inspecting the verified chain.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_ANDROID)
 #define MAYBE_VerifyIncompleteIntermediate \
     DISABLED_VerifyIncompleteIntermediate
 #else
@@ -1493,7 +1464,7 @@ const WeakDigestTestData kVerifyIncompleteEETestData[] = {
 };
 // Disabled on NSS - libpkix does not return constructed chains on error,
 // preventing us from detecting/inspecting the verified chain.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_ANDROID)
 #define MAYBE_VerifyIncompleteEndEntity DISABLED_VerifyIncompleteEndEntity
 #else
 #define MAYBE_VerifyIncompleteEndEntity VerifyIncompleteEndEntity
@@ -1518,7 +1489,7 @@ const WeakDigestTestData kVerifyMixedTestData[] = {
 };
 // NSS does not support MD4 and does not enable MD2 by default, making all
 // permutations invalid.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_ANDROID)
 #define MAYBE_VerifyMixed DISABLED_VerifyMixed
 #else
 #define MAYBE_VerifyMixed VerifyMixed

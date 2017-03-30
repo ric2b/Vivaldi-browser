@@ -5,6 +5,7 @@
 #include "net/dns/dns_socket_pool.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "net/base/address_list.h"
@@ -86,7 +87,7 @@ scoped_ptr<DatagramClientSocket> DnsSocketPool::CreateConnectedSocket(
     LOG(WARNING) << "Failed to create socket.";
   }
 
-  return socket.Pass();
+  return socket;
 }
 
 class NullDnsSocketPool : public DnsSocketPool {

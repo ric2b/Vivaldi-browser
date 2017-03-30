@@ -5,12 +5,15 @@
 #ifndef CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_ACTIONS_BAR_UNITTEST_H_
 #define CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_ACTIONS_BAR_UNITTEST_H_
 
+#include <stddef.h>
+
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/extensions/extension_action_test_util.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "extensions/common/feature_switch.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 
 class ExtensionAction;
 class ToolbarActionsBar;
@@ -28,7 +31,9 @@ class Extension;
 // TODO(devlin): Since this *does* use the real platform containers, in theory,
 // we can move all the BrowserActionsBarBrowserTests to be unittests. See about
 // doing this.
-class ToolbarActionsBarUnitTest : public BrowserWithTestWindowTest {
+class ToolbarActionsBarUnitTest :
+    public BrowserWithTestWindowTest,
+    public testing::WithParamInterface<ui::MaterialDesignController::Mode> {
  public:
   ToolbarActionsBarUnitTest();
   ~ToolbarActionsBarUnitTest() override;
@@ -75,9 +80,7 @@ class ToolbarActionsBarUnitTest : public BrowserWithTestWindowTest {
   ToolbarActionsBar* overflow_bar() {
     return overflow_browser_action_test_util_->GetToolbarActionsBar();
   }
-  extensions::ExtensionToolbarModel* toolbar_model() {
-    return toolbar_model_;
-  }
+  ToolbarActionsModel* toolbar_model() { return toolbar_model_; }
   BrowserActionTestUtil* browser_action_test_util() {
     return browser_action_test_util_.get();
   }
@@ -86,8 +89,8 @@ class ToolbarActionsBarUnitTest : public BrowserWithTestWindowTest {
   }
 
  private:
-  // The associated ExtensionToolbarModel (owned by the keyed service setup).
-  extensions::ExtensionToolbarModel* toolbar_model_;
+  // The associated ToolbarActionsModel (owned by the keyed service setup).
+  ToolbarActionsModel* toolbar_model_;
 
   // A BrowserActionTestUtil object constructed with the associated
   // ToolbarActionsBar.

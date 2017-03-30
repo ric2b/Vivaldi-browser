@@ -5,8 +5,12 @@
 #ifndef MEDIA_CAST_NET_RTP_RTP_PARSER_H_
 #define MEDIA_CAST_NET_RTP_RTP_PARSER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "media/cast/net/cast_transport_defines.h"
-#include "media/cast/net/rtp/rtp_receiver_defines.h"
+#include "media/cast/net/rtp/rtp_defines.h"
 
 namespace media {
 namespace cast {
@@ -16,7 +20,7 @@ namespace cast {
 // throughout the media/cast library.
 class RtpParser {
  public:
-  RtpParser(uint32 expected_sender_ssrc, uint8 expected_payload_type);
+  RtpParser(uint32_t expected_sender_ssrc, uint8_t expected_payload_type);
 
   virtual ~RtpParser();
 
@@ -27,17 +31,22 @@ class RtpParser {
   // payload data.  Returns false if the data appears to be invalid, is not from
   // the expected sender (as identified by the SSRC field), or is not the
   // expected payload type.
-  bool ParsePacket(const uint8* packet,
+  bool ParsePacket(const uint8_t* packet,
                    size_t length,
                    RtpCastHeader* rtp_header,
-                   const uint8** payload_data,
+                   const uint8_t** payload_data,
                    size_t* payload_size);
 
-  static bool ParseSsrc(const uint8* packet, size_t length, uint32* ssrc);
+  static bool ParseSsrc(const uint8_t* packet, size_t length, uint32_t* ssrc);
 
  private:
-  const uint32 expected_sender_ssrc_;
-  const uint8 expected_payload_type_;
+  const uint32_t expected_sender_ssrc_;
+  const uint8_t expected_payload_type_;
+
+  // Tracks recently-parsed RTP timestamps so that it can expand the truncated
+  // values found in packets.
+  RtpTimeTicks last_parsed_rtp_timestamp_;
+
   FrameIdWrapHelper frame_id_wrap_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(RtpParser);

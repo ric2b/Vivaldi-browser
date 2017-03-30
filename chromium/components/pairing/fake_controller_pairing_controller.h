@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_PAIRING_FAKE_CONTROLLER_PAIRING_CONTROLLER_H_
 #define COMPONENTS_PAIRING_FAKE_CONTROLLER_PAIRING_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <utility>
 
@@ -73,6 +75,7 @@ class FakeControllerPairingController
   void RepeatDiscovery() override;
   std::string GetConfirmationCode() override;
   void SetConfirmationCodeIsCorrect(bool correct) override;
+  void SetHostNetwork(const std::string& onc_spec) override;
   void SetHostConfiguration(bool accepted_eula,
                             const std::string& lang,
                             const std::string& timezone,

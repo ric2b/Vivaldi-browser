@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.sync.ui;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.app.Fragment;
@@ -16,9 +15,10 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Browser;
+import android.support.v7.app.AlertDialog;
+import android.text.SpannableString;
 import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
-import android.util.Log;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -28,36 +28,31 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.TextView.OnEditorActionListener;
 
+import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.sync.internal_api.pub.PassphraseType;
+import org.chromium.sync.PassphraseType;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
 
 /**
- * Dialog to ask to user to enter their sync password.
+ * Dialog to ask to user to enter their sync passphrase.
  */
 public class PassphraseDialogFragment extends DialogFragment implements OnClickListener {
 
-    private static final String TAG = "PassphraseDialogFragment";
+    private static final String TAG = "Sync_UI";
 
     /**
      * A listener for passphrase events.
-     *
-     * Move back to package scope once PassphraseActivity is upstream.
      */
-    public interface Listener {
+    interface Listener {
         /**
          * @return whether passphrase was valid.
          */
-        public boolean onPassphraseEntered(String password, boolean isGaia, boolean isUpdate);
-
-        public void onPassphraseCanceled(boolean isGaia, boolean isUpdate);
+        boolean onPassphraseEntered(String passphrase);
+        void onPassphraseCanceled();
     }
-
-    static final String ARG_IS_GAIA = "is_gaia";
-    static final String ARG_IS_UPDATE = "is_update";
 
     private static final int PASSPHRASE_DIALOG_OK = 0;
     private static final int PASSPHRASE_DIALOG_ERROR = 1;
@@ -68,16 +63,12 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
     /**
      * Create a new instanceof of {@link PassphraseDialogFragment} and set its arguments.
      */
-    public static PassphraseDialogFragment newInstance(
-            Fragment target, boolean isGaia, boolean isUpdate) {
+    public static PassphraseDialogFragment newInstance(Fragment target) {
+        assert ProfileSyncService.get() != null;
         PassphraseDialogFragment dialog = new PassphraseDialogFragment();
         if (target != null) {
             dialog.setTargetFragment(target, -1);
         }
-        Bundle args = new Bundle();
-        args.putBoolean(PassphraseDialogFragment.ARG_IS_GAIA, isGaia);
-        args.putBoolean(PassphraseDialogFragment.ARG_IS_UPDATE, isUpdate);
-        dialog.setArguments(args);
         return dialog;
     }
 
@@ -94,55 +85,14 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
         View v = inflater.inflate(R.layout.sync_enter_passphrase, null);
 
         TextView promptText = (TextView) v.findViewById(R.id.prompt_text);
-        final EditText passphrase = (EditText) v.findViewById(R.id.passphrase);
-        final Context context = passphrase.getContext();
+        promptText.setText(getPromptText());
+
         TextView resetText = (TextView) v.findViewById(R.id.reset_text);
-        ProfileSyncService profileSyncService = ProfileSyncService.get(context);
-        String accountName = profileSyncService.getCurrentSignedInAccountText() + "\n\n";
-        resetText.setText(SpanApplier.applySpans(
-                context.getString(R.string.sync_passphrase_reset_instructions),
-                new SpanInfo("<link>", "</link>", new ClickableSpan() {
-                    @Override
-                    public void onClick(View view) {
-                        recordPassphraseDialogDismissal(PASSPHRASE_DIALOG_RESET_LINK);
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(
-                                context.getText(R.string.sync_dashboard_url).toString()));
-                        intent.putExtra(Browser.EXTRA_APPLICATION_ID,
-                                context.getPackageName());
-                        intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
-                        intent.setPackage(context.getPackageName());
-                        context.startActivity(intent);
-                        Activity activity = getActivity();
-                        if (activity != null) activity.finish();
-                    }
-                })));
+        resetText.setText(getResetText());
         resetText.setMovementMethod(LinkMovementMethod.getInstance());
         resetText.setVisibility(View.VISIBLE);
-        PassphraseType passphraseType = profileSyncService.getPassphraseType();
-        if (profileSyncService.hasExplicitPassphraseTime()) {
-            switch (passphraseType) {
-                case FROZEN_IMPLICIT_PASSPHRASE:
-                    promptText.setText(accountName + profileSyncService
-                            .getSyncEnterGooglePassphraseBodyWithDateText());
-                    break;
-                case CUSTOM_PASSPHRASE:
-                    promptText.setText(accountName + profileSyncService
-                            .getSyncEnterCustomPassphraseBodyWithDateText());
-                    break;
-                case IMPLICIT_PASSPHRASE: // Falling through intentionally.
-                case KEYSTORE_PASSPHRASE: // Falling through intentionally.
-                default:
-                    Log.w(TAG, "Found incorrect passphrase type "
-                            + passphraseType
-                            + ". Falling back to default string.");
-                    promptText.setText(accountName
-                            + profileSyncService.getSyncEnterCustomPassphraseBodyText());
-                    break;
-            }
-        } else {
-            promptText.setText(accountName
-                    + profileSyncService.getSyncEnterCustomPassphraseBodyText());
-        }
+
+        EditText passphrase = (EditText) v.findViewById(R.id.passphrase);
         passphrase.setHint(R.string.sync_enter_custom_passphrase_hint);
         passphrase.setOnEditorActionListener(new OnEditorActionListener() {
             @Override
@@ -154,7 +104,7 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
             }
         });
 
-        final AlertDialog d = new AlertDialog.Builder(getActivity())
+        final AlertDialog d = new AlertDialog.Builder(getActivity(), R.style.AlertDialogTheme)
                 .setView(v)
                 .setPositiveButton(R.string.ok, new Dialog.OnClickListener() {
                     @Override
@@ -167,6 +117,7 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
                 .setNegativeButton(R.string.cancel, this)
                 .setTitle(R.string.sign_in_google_account)
                 .create();
+        d.getDelegate().setHandleNativeActionModesEnabled(false);
         d.setOnShowListener(new DialogInterface.OnShowListener() {
             @Override
             public void onShow(DialogInterface dialog) {
@@ -189,6 +140,48 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
         }
     }
 
+    private String getPromptText() {
+        ProfileSyncService pss = ProfileSyncService.get();
+        String accountName = pss.getCurrentSignedInAccountText() + "\n\n";
+        PassphraseType passphraseType = pss.getPassphraseType();
+        if (pss.hasExplicitPassphraseTime()) {
+            switch (passphraseType) {
+                case FROZEN_IMPLICIT_PASSPHRASE:
+                    return accountName + pss.getSyncEnterGooglePassphraseBodyWithDateText();
+                case CUSTOM_PASSPHRASE:
+                    return accountName + pss.getSyncEnterCustomPassphraseBodyWithDateText();
+                case IMPLICIT_PASSPHRASE: // Falling through intentionally.
+                case KEYSTORE_PASSPHRASE: // Falling through intentionally.
+                default:
+                    Log.w(TAG, "Found incorrect passphrase type " + passphraseType
+                                    + ". Falling back to default string.");
+                    return accountName + pss.getSyncEnterCustomPassphraseBodyText();
+            }
+        }
+        return accountName + pss.getSyncEnterCustomPassphraseBodyText();
+    }
+
+    private SpannableString getResetText() {
+        final Context context = getActivity();
+        return SpanApplier.applySpans(
+                context.getString(R.string.sync_passphrase_reset_instructions),
+                new SpanInfo("<link>", "</link>", new ClickableSpan() {
+                    @Override
+                    public void onClick(View view) {
+                        recordPassphraseDialogDismissal(PASSPHRASE_DIALOG_RESET_LINK);
+                        Uri syncDashboardUrl = Uri.parse(
+                                context.getText(R.string.sync_dashboard_url).toString());
+                        Intent intent = new Intent(Intent.ACTION_VIEW, syncDashboardUrl);
+                        intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
+                        intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
+                        intent.setPackage(context.getPackageName());
+                        context.startActivity(intent);
+                        Activity activity = getActivity();
+                        if (activity != null) activity.finish();
+                    }
+                }));
+    }
+
     /**
       * @return whether the incorrect passphrase text is currently visible.
       */
@@ -203,14 +196,11 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
     }
 
     private void handleCancel() {
-        boolean isUpdate = getArguments().getBoolean(ARG_IS_UPDATE);
-        boolean isGaia = getArguments().getBoolean(ARG_IS_GAIA);
-
         int cancelReason = isIncorrectPassphraseVisible()
                 ? PASSPHRASE_DIALOG_ERROR
                 : PASSPHRASE_DIALOG_CANCEL;
         recordPassphraseDialogDismissal(cancelReason);
-        getListener().onPassphraseCanceled(isGaia, isUpdate);
+        getListener().onPassphraseCanceled();
     }
 
     private void handleOk() {
@@ -220,12 +210,11 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
         EditText passphraseEditText = (EditText) getDialog().findViewById(R.id.passphrase);
         String passphrase = passphraseEditText.getText().toString();
 
-        boolean isUpdate = getArguments().getBoolean(ARG_IS_UPDATE);
-        boolean isGaia = getArguments().getBoolean(ARG_IS_GAIA);
-        boolean success =
-                getListener().onPassphraseEntered(passphrase, isGaia, isUpdate);
+        boolean success = getListener().onPassphraseEntered(passphrase);
         if (success) {
             recordPassphraseDialogDismissal(PASSPHRASE_DIALOG_OK);
+        } else {
+            invalidPassphrase();
         }
     }
 
@@ -238,9 +227,9 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
     }
 
     /**
-     * Notify this fragment that the password the user entered is incorrect.
+     * Notify this fragment that the passphrase the user entered is incorrect.
      */
-    public void invalidPassphrase() {
+    private void invalidPassphrase() {
         TextView verifying = (TextView) getDialog().findViewById(R.id.verifying);
         verifying.setText(R.string.sync_passphrase_incorrect);
     }

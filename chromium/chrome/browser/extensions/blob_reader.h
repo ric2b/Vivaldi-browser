@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_BLOB_READER_H_
 #define CHROME_BROWSER_EXTENSIONS_BLOB_READER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/io_buffer.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -26,15 +29,14 @@ class BlobReader : public net::URLFetcherDelegate {
   // is the total size of the Blob, and may be larger than |blob_data->size()|.
   // |blob_total_size| is -1 if it cannot be determined.
   typedef base::Callback<void(scoped_ptr<std::string> blob_data,
-                              int64 blob_total_size)>
-      BlobReadCallback;
+                              int64_t blob_total_size)> BlobReadCallback;
 
   BlobReader(Profile* profile,
              const std::string& blob_uuid,
              BlobReadCallback callback);
   ~BlobReader() override;
 
-  void SetByteRange(int64 offset, int64 length);
+  void SetByteRange(int64_t offset, int64_t length);
 
   void Start();
 

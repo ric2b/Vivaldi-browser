@@ -4,6 +4,8 @@
 
 #include "ash/system/locale/locale_notification_controller.h"
 
+#include <utility>
+
 #include "ash/shell.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/system_tray_notifier.h"
@@ -100,19 +102,17 @@ void LocaleNotificationController::OnLocaleChanged(
 
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   scoped_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
-      kLocaleChangeNotificationId,
-      base::string16()  /* title */,
-      l10n_util::GetStringFUTF16(
-          IDS_ASH_STATUS_TRAY_LOCALE_CHANGE_MESSAGE, from, to),
+      message_center::NOTIFICATION_TYPE_SIMPLE, kLocaleChangeNotificationId,
+      base::string16() /* title */,
+      l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_LOCALE_CHANGE_MESSAGE,
+                                 from, to),
       bundle.GetImageNamed(IDR_AURA_UBER_TRAY_LOCALE),
-      base::string16()  /* display_source */,
-      message_center::NotifierId(
-          message_center::NotifierId::SYSTEM_COMPONENT,
-          system_notifier::kNotifierLocale),
-      optional,
-      new LocaleNotificationDelegate(delegate)));
-  message_center::MessageCenter::Get()->AddNotification(notification.Pass());
+      base::string16() /* display_source */, GURL(),
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 system_notifier::kNotifierLocale),
+      optional, new LocaleNotificationDelegate(delegate)));
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
 }
 
 }  // namespace ash

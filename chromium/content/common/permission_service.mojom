@@ -10,8 +10,12 @@ enum PermissionName {
   GEOLOCATION,
   NOTIFICATIONS,
   PUSH_NOTIFICATIONS,
+  MIDI,
   MIDI_SYSEX,
   PROTECTED_MEDIA_IDENTIFIER,
+  DURABLE_STORAGE,
+  AUDIO_CAPTURE,
+  VIDEO_CAPTURE,
 };
 
 // The Permission service provides permission handling capabilities by exposing
@@ -22,6 +26,8 @@ interface PermissionService {
     => (PermissionStatus status);
   RequestPermission(PermissionName permission, string origin, bool user_gesture)
     => (PermissionStatus status);
+  RequestPermissions(array<PermissionName> permission, string origin, bool user_gesture)
+    => (array<PermissionStatus> statuses);
   RevokePermission(PermissionName permission, string origin)
     => (PermissionStatus status);
 

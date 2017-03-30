@@ -4,12 +4,14 @@
 
 #include "components/url_matcher/regex_set_matcher.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "components/url_matcher/substring_set_matcher.h"
-#include "third_party/re2/re2/filtered_re2.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/filtered_re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace url_matcher {
 
@@ -47,8 +49,7 @@ bool RegexSetMatcher::Match(const std::string& text,
 
   // FilteredRE2 expects lowercase for prefiltering, but we still
   // match case-sensitively.
-  std::vector<RE2ID> atoms(FindSubstringMatches(
-      base::StringToLowerASCII(text)));
+  std::vector<RE2ID> atoms(FindSubstringMatches(base::ToLowerASCII(text)));
 
   std::vector<RE2ID> re2_ids;
   filtered_re2_->AllMatches(text, atoms, &re2_ids);

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_SERVICES_GCM_GCM_PROFILE_SERVICE_FACTORY_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/gcm_driver/system_encryptor.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
@@ -22,7 +23,7 @@ class GCMProfileServiceFactory : public BrowserContextKeyedServiceFactory {
   static GCMProfileServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<GCMProfileServiceFactory>;
+  friend struct base::DefaultSingletonTraits<GCMProfileServiceFactory>;
 
   GCMProfileServiceFactory();
   ~GCMProfileServiceFactory() override;

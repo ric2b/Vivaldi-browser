@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_PASSWORDS_PRIVATE_PASSWORDS_PRIVATE_DELEGATE_FACTORY_H_
 #define CHROME_BROWSER_EXTENSIONS_API_PASSWORDS_PRIVATE_PASSWORDS_PRIVATE_DELEGATE_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -20,12 +21,13 @@ class PasswordsPrivateDelegateFactory
     : public BrowserContextKeyedServiceFactory {
  public:
   static PasswordsPrivateDelegate* GetForBrowserContext(
-      content::BrowserContext* browser_context);
+      content::BrowserContext* browser_context,
+      bool create);
 
   static PasswordsPrivateDelegateFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<PasswordsPrivateDelegateFactory>;
+  friend struct base::DefaultSingletonTraits<PasswordsPrivateDelegateFactory>;
 
   PasswordsPrivateDelegateFactory();
   ~PasswordsPrivateDelegateFactory() override;

@@ -25,7 +25,6 @@ bool MenuEventDispatcher::CanDispatchEvent(const ui::PlatformEvent& event) {
 }
 
 uint32_t MenuEventDispatcher::DispatchEvent(const ui::PlatformEvent& event) {
-  bool should_quit = false;
   bool should_perform_default = true;
   bool should_process_event = true;
 
@@ -44,35 +43,27 @@ uint32_t MenuEventDispatcher::DispatchEvent(const ui::PlatformEvent& event) {
       should_process_event = false;
   }
 
-  if (menu_controller_->exit_type() == MenuController::EXIT_ALL ||
-      menu_controller_->exit_type() == MenuController::EXIT_DESTROYED) {
-    should_quit = true;
-  } else if (ui_event && should_process_event) {
+  if (menu_controller_->exit_type() != MenuController::EXIT_ALL &&
+      menu_controller_->exit_type() != MenuController::EXIT_DESTROYED &&
+      ui_event && should_process_event) {
     switch (ui_event->type()) {
       case ui::ET_KEY_PRESSED: {
+        should_perform_default = false;
+
         ui::KeyEvent* key_event = static_cast<ui::KeyEvent*>(ui_event.get());
-        if (!menu_controller_->OnKeyDown(key_event->key_code())) {
-          should_quit = true;
-          should_perform_default = false;
+        menu_controller_->OnKeyDown(key_event->key_code());
+        if (menu_controller_->exit_type() != MenuController::EXIT_NONE)
           break;
-        }
 
         // Do not check mnemonics if the Alt or Ctrl modifiers are pressed.
         int flags = key_event->flags();
         if ((flags & (ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)) == 0) {
-          char c = ui::GetCharacterFromKeyCode(key_event->key_code(), flags);
-          if (menu_controller_->SelectByChar(c)) {
-            should_quit = true;
-            should_perform_default = false;
-            break;
-          }
+          char c = ui::DomCodeToUsLayoutCharacter(key_event->code(), flags);
+          menu_controller_->SelectByChar(c);
         }
-        should_quit = false;
-        should_perform_default = false;
         break;
       }
       case ui::ET_KEY_RELEASED:
-        should_quit = false;
         should_perform_default = false;
         break;
       case ui::ET_TOUCH_RELEASED:
@@ -88,8 +79,7 @@ uint32_t MenuEventDispatcher::DispatchEvent(const ui::PlatformEvent& event) {
     }
   }
 
-  if (should_quit || menu_controller_->exit_type() != MenuController::EXIT_NONE)
-    menu_controller_->TerminateNestedMessageLoop();
+  menu_controller_->TerminateNestedMessageLoopIfNecessary();
 
   return should_perform_default ? ui::POST_DISPATCH_PERFORM_DEFAULT
                                 : ui::POST_DISPATCH_NONE;

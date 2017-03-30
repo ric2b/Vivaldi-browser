@@ -6,7 +6,7 @@
 #define CC_TEST_FAKE_LAYER_TREE_HOST_H_
 
 #include "cc/debug/micro_benchmark_controller.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/test_shared_bitmap_manager.h"
@@ -26,10 +26,17 @@ class FakeLayerTreeHost : public LayerTreeHost {
       FakeLayerTreeHostClient* client,
       TestTaskGraphRunner* task_graph_runner,
       const LayerTreeSettings& settings);
+  static scoped_ptr<FakeLayerTreeHost> Create(
+      FakeLayerTreeHostClient* client,
+      TestTaskGraphRunner* task_graph_runner,
+      const LayerTreeSettings& settings,
+      CompositorMode mode);
 
   ~FakeLayerTreeHost() override;
 
+  const RendererCapabilities& GetRendererCapabilities() const override;
   void SetNeedsCommit() override;
+  void SetNeedsUpdateLayers() override {}
   void SetNeedsFullTreeSync() override {}
 
   using LayerTreeHost::SetRootLayer;
@@ -45,6 +52,8 @@ class FakeLayerTreeHost : public LayerTreeHost {
   using LayerTreeHost::SetOutputSurfaceLostForTesting;
   using LayerTreeHost::InitializeSingleThreaded;
   using LayerTreeHost::InitializeForTesting;
+  using LayerTreeHost::RecordGpuRasterizationHistogram;
+
   void UpdateLayers() { LayerTreeHost::UpdateLayers(); }
 
   MicroBenchmarkController* GetMicroBenchmarkController() {
@@ -53,16 +62,25 @@ class FakeLayerTreeHost : public LayerTreeHost {
 
   bool needs_commit() { return needs_commit_; }
 
+  void set_renderer_capabilities(const RendererCapabilities& capabilities) {
+    renderer_capabilities_set = true;
+    renderer_capabilities = capabilities;
+  }
+
  protected:
   FakeLayerTreeHost(FakeLayerTreeHostClient* client,
-                    LayerTreeHost::InitParams* params);
+                    LayerTreeHost::InitParams* params,
+                    CompositorMode mode);
 
  private:
-  FakeImplProxy proxy_;
+  FakeImplTaskRunnerProvider task_runner_provider_;
   FakeLayerTreeHostClient* client_;
   TestSharedBitmapManager manager_;
   FakeLayerTreeHostImpl host_impl_;
   bool needs_commit_;
+
+  bool renderer_capabilities_set;
+  RendererCapabilities renderer_capabilities;
 };
 
 }  // namespace cc

@@ -19,7 +19,7 @@ class ResumableTCPSocket;
 }
 
 namespace extensions {
-namespace core_api {
+namespace api {
 
 // Dispatch events related to "sockets.tcp" sockets from callback on native
 // socket instances. There is one instance per profile.
@@ -77,7 +77,7 @@ class TCPServerSocketEventDispatcher
   // Called when socket accepts a new connection.
   static void AcceptCallback(const AcceptParams& params,
                              int result_code,
-                             net::TCPClientSocket* socket);
+                             scoped_ptr<net::TCPClientSocket> socket);
 
   // Post an extension event from |thread_id| to UI thread
   static void PostEvent(const AcceptParams& params, scoped_ptr<Event> event);
@@ -94,7 +94,7 @@ class TCPServerSocketEventDispatcher
   scoped_refptr<ClientSocketData> client_sockets_;
 };
 
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_SOCKETS_TCP_SERVER_TCP_SERVER_SOCKET_EVENT_DISPATCHER_H_

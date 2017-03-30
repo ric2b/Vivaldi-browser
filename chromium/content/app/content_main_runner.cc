@@ -4,16 +4,23 @@
 
 #include "content/public/app/content_main_runner.h"
 
+#include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
+#include <string>
+#include <utility>
 
+#include "base/allocator/allocator_check.h"
 #include "base/allocator/allocator_extension.h"
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
+#include "base/debug/stack_trace.h"
 #include "base/files/file_path.h"
 #include "base/i18n/icu_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/metrics/statistics_recorder.h"
@@ -27,14 +34,16 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
-#include "components/tracing/startup_tracing.h"
+#include "build/build_config.h"
+#include "components/tracing/trace_config_file.h"
+#include "components/tracing/trace_to_console.h"
+#include "components/tracing/tracing_switches.h"
 #include "content/browser/browser_main.h"
 #include "content/common/set_process_title.h"
 #include "content/common/url_schemes.h"
 #include "content/gpu/in_process_gpu_thread.h"
 #include "content/public/app/content_main.h"
 #include "content/public/app/content_main_delegate.h"
-#include "content/public/app/startup_helper_win.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
@@ -44,7 +53,6 @@
 #include "content/public/common/sandbox_init.h"
 #include "content/renderer/in_process_renderer_thread.h"
 #include "content/utility/in_process_utility_thread.h"
-#include "crypto/nss_util.h"
 #include "ipc/ipc_descriptors.h"
 #include "ipc/ipc_switches.h"
 #include "media/base/media.h"
@@ -58,10 +66,6 @@
 
 #if defined(USE_TCMALLOC)
 #include "third_party/tcmalloc/chromium/src/gperftools/malloc_extension.h"
-#if defined(TYPE_PROFILING)
-#include "base/allocator/type_profiler.h"
-#include "base/allocator/type_profiler_tcmalloc.h"
-#endif
 #endif
 
 #if !defined(OS_IOS)
@@ -78,8 +82,8 @@
 #include <malloc.h>
 #include <cstring>
 
-#include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event_etw_export_win.h"
+#include "base/win/process_startup_helper.h"
 #include "ui/base/win/atl_module.h"
 #include "ui/gfx/win/dpi.h"
 #elif defined(OS_MACOSX)
@@ -87,9 +91,7 @@
 #if !defined(OS_IOS)
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "content/app/mac/mac_init.h"
-#include "content/browser/browser_io_surface_manager_mac.h"
 #include "content/browser/mach_broker_mac.h"
-#include "content/child/child_io_surface_manager_mac.h"
 #include "content/common/sandbox_init_mac.h"
 #endif  // !OS_IOS
 #endif  // OS_WIN
@@ -101,7 +103,6 @@
 #include "content/public/common/content_descriptors.h"
 
 #if !defined(OS_MACOSX)
-#include "content/public/common/content_descriptors.h"
 #include "content/public/common/zygote_fork_delegate_linux.h"
 #endif
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)
@@ -109,6 +110,10 @@
 #endif
 
 #endif  // OS_POSIX
+
+#if defined(USE_NSS_CERTS)
+#include "crypto/nss_util.h"
+#endif
 
 #if !defined(OS_MACOSX) && defined(USE_TCMALLOC)
 extern "C" {
@@ -156,8 +161,8 @@ void SetupSignalHandlers() {
   // Sanitise our signal handling state. Signals that were ignored by our
   // parent will also be ignored by us. We also inherit our parent's sigmask.
   sigset_t empty_signal_set;
-  CHECK(0 == sigemptyset(&empty_signal_set));
-  CHECK(0 == sigprocmask(SIG_SETMASK, &empty_signal_set, NULL));
+  CHECK_EQ(0, sigemptyset(&empty_signal_set));
+  CHECK_EQ(0, sigprocmask(SIG_SETMASK, &empty_signal_set, NULL));
 
   struct sigaction sigact;
   memset(&sigact, 0, sizeof(sigact));
@@ -166,11 +171,11 @@ void SetupSignalHandlers() {
       {SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGABRT, SIGFPE, SIGSEGV,
        SIGALRM, SIGTERM, SIGCHLD, SIGBUS, SIGTRAP};  // SIGPIPE is set below.
   for (unsigned i = 0; i < arraysize(signals_to_reset); i++) {
-    CHECK(0 == sigaction(signals_to_reset[i], &sigact, NULL));
+    CHECK_EQ(0, sigaction(signals_to_reset[i], &sigact, NULL));
   }
 
   // Always ignore SIGPIPE.  We check the return value of write().
-  CHECK(signal(SIGPIPE, SIG_IGN) != SIG_ERR);
+  CHECK_NE(SIG_ERR, signal(SIGPIPE, SIG_IGN));
 }
 
 #endif  // OS_POSIX && !OS_IOS
@@ -195,24 +200,17 @@ void CommonSubprocessInit(const std::string& process_type) {
   // surface UI -- but it's likely they get this wrong too so why not.
   setlocale(LC_NUMERIC, "C");
 #endif
-}
 
-// Only needed on Windows for creating stats tables.
+#if !defined(OFFICIAL_BUILD)
+  // Print stack traces to stderr when crashes occur. This opens up security
+  // holes so it should never be enabled for official builds.
+  base::debug::EnableInProcessStackDumping();
 #if defined(OS_WIN)
-static base::ProcessId GetBrowserPid(const base::CommandLine& command_line) {
-  base::ProcessId browser_pid = base::GetCurrentProcId();
-  if (command_line.HasSwitch(switches::kProcessChannelID)) {
-    std::string channel_name =
-        command_line.GetSwitchValueASCII(switches::kProcessChannelID);
-
-    int browser_pid_int;
-    base::StringToInt(channel_name, &browser_pid_int);
-    browser_pid = static_cast<base::ProcessId>(browser_pid_int);
-    DCHECK_NE(browser_pid_int, 0);
-  }
-  return browser_pid;
-}
+  base::RouteStdioToConsole(false);
+  LoadLibraryA("dbghelp.dll");
 #endif
+#endif
+}
 
 class ContentClientInitializer {
  public:
@@ -287,7 +285,7 @@ int RunZygote(const MainFunctionParams& main_function_params,
   }
 
   // This function call can return multiple times, once per fork().
-  if (!ZygoteMain(main_function_params, zygote_fork_delegates.Pass()))
+  if (!ZygoteMain(main_function_params, std::move(zygote_fork_delegates)))
     return 1;
 
   if (delegate) delegate->ZygoteForked();
@@ -420,23 +418,8 @@ class ContentMainRunnerImpl : public ContentMainRunner {
   }
 
 #if defined(USE_TCMALLOC)
-  static bool GetAllocatorWasteSizeThunk(size_t* size) {
-    size_t heap_size, allocated_bytes, unmapped_bytes;
-    MallocExtension* ext = MallocExtension::instance();
-    if (ext->GetNumericProperty("generic.heap_size", &heap_size) &&
-        ext->GetNumericProperty("generic.current_allocated_bytes",
-                                &allocated_bytes) &&
-        ext->GetNumericProperty("tcmalloc.pageheap_unmapped_bytes",
-                                &unmapped_bytes)) {
-      *size = heap_size - allocated_bytes - unmapped_bytes;
-      return true;
-    }
-    DCHECK(false);
-    return false;
-  }
-
-  static void GetStatsThunk(char* buffer, int buffer_length) {
-    MallocExtension::instance()->GetStats(buffer, buffer_length);
+  static bool GetNumericPropertyThunk(const char* name, size_t* value) {
+    return MallocExtension::instance()->GetNumericProperty(name, value);
   }
 
   static void ReleaseFreeMemoryThunk() {
@@ -449,7 +432,7 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 
     base::EnableTerminationOnOutOfMemory();
 #if defined(OS_WIN)
-    RegisterInvalidParamHandler();
+    base::win::RegisterInvalidParamHandler();
     ui::win::CreateATLModuleIfNeeded();
 
     sandbox_info_ = *params.sandbox_info;
@@ -459,7 +442,7 @@ class ContentMainRunnerImpl : public ContentMainRunner {
     // See note at the initialization of ExitManager, below; basically,
     // only Android builds have the ctor/dtor handlers set up to use
     // TRACE_EVENT right away.
-    TRACE_EVENT0("startup", "ContentMainRunnerImpl::Initialize");
+    TRACE_EVENT0("startup,benchmark", "ContentMainRunnerImpl::Initialize");
 #endif  // OS_ANDROID
 
     // NOTE(willchan): One might ask why these TCMalloc-related calls are done
@@ -469,20 +452,11 @@ class ContentMainRunnerImpl : public ContentMainRunner {
     // implement this EnableTerminationOnOutOfMemory() function.  Whateverz.
     // This works for now.
 #if !defined(OS_MACOSX) && defined(USE_TCMALLOC)
-
-#if defined(TYPE_PROFILING)
-    base::type_profiler::InterceptFunctions::SetFunctions(
-        base::type_profiler::NewInterceptForTCMalloc,
-        base::type_profiler::DeleteInterceptForTCMalloc);
-#endif
-
     // For tcmalloc, we need to tell it to behave like new.
     tc_set_new_mode(1);
 
     // On windows, we've already set these thunks up in _heap_init()
-    base::allocator::SetGetAllocatorWasteSizeFunction(
-        GetAllocatorWasteSizeThunk);
-    base::allocator::SetGetStatsFunction(GetStatsThunk);
+    base::allocator::SetGetNumericPropertyFunction(GetNumericPropertyThunk);
     base::allocator::SetReleaseFreeMemoryFunction(ReleaseFreeMemoryThunk);
 
     // Provide optional hook for monitoring allocation quantities on a
@@ -580,7 +554,7 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 #if !defined(OS_IOS)
     SetProcessTitleFromCommandLine(argv);
 #endif
-#endif // !OS_ANDROID
+#endif  // !OS_ANDROID
 
     int exit_code = 0;
     if (delegate_ && delegate_->BasicStartupComplete(&exit_code))
@@ -599,18 +573,13 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 #endif
 
 #if defined(OS_WIN)
-    bool init_device_scale_factor = true;
     if (command_line.HasSwitch(switches::kDeviceScaleFactor)) {
       std::string scale_factor_string = command_line.GetSwitchValueASCII(
           switches::kDeviceScaleFactor);
       double scale_factor = 0;
-      if (base::StringToDouble(scale_factor_string, &scale_factor)) {
-        init_device_scale_factor = false;
-        gfx::InitDeviceScaleFactor(scale_factor);
-      }
+      if (base::StringToDouble(scale_factor_string, &scale_factor))
+        gfx::SetDefaultDeviceScaleFactor(scale_factor);
     }
-    if (init_device_scale_factor)
-      gfx::InitDeviceScaleFactor(gfx::GetDPIScale());
 #endif
 
     if (!GetContentClient())
@@ -620,11 +589,13 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 #if defined(OS_WIN)
     // Route stdio to parent console (if any) or create one.
     if (command_line.HasSwitch(switches::kEnableLogging))
-      base::RouteStdioToConsole();
+      base::RouteStdioToConsole(true);
 #endif
 
+#if !defined(OS_ANDROID)
     // Enable startup tracing asap to avoid early TRACE_EVENT calls being
-    // ignored.
+    // ignored. For Android, startup tracing is enabled in an even earlier place
+    // content/app/android/library_loader_hooks.cc.
     if (command_line.HasSwitch(switches::kTraceStartup)) {
       base::trace_event::TraceConfig trace_config(
           command_line.GetSwitchValueASCII(switches::kTraceStartup),
@@ -632,11 +603,25 @@ class ContentMainRunnerImpl : public ContentMainRunner {
       base::trace_event::TraceLog::GetInstance()->SetEnabled(
           trace_config,
           base::trace_event::TraceLog::RECORDING_MODE);
-    } else if (process_type != switches::kZygoteProcess) {
-      // There is no need to schedule stopping tracing in this case. Telemetry
-      // will stop tracing on demand later.
-      tracing::EnableStartupTracingIfConfigFileExists();
+    } else if (command_line.HasSwitch(switches::kTraceToConsole)) {
+      base::trace_event::TraceConfig trace_config =
+          tracing::GetConfigForTraceToConsole();
+      LOG(ERROR) << "Start " << switches::kTraceToConsole
+                 << " with CategoryFilter '"
+                 << trace_config.ToCategoryFilterString() << "'.";
+      base::trace_event::TraceLog::GetInstance()->SetEnabled(
+          trace_config,
+          base::trace_event::TraceLog::RECORDING_MODE);
+    } else if (process_type != switches::kZygoteProcess &&
+               process_type != switches::kRendererProcess) {
+      if (tracing::TraceConfigFile::GetInstance()->IsEnabled()) {
+        // This checks kTraceConfigFile switch.
+        base::trace_event::TraceLog::GetInstance()->SetEnabled(
+            tracing::TraceConfigFile::GetInstance()->GetTraceConfig(),
+            base::trace_event::TraceLog::RECORDING_MODE);
+      }
     }
+#endif  // !OS_ANDROID
 
 #if defined(OS_WIN)
     // Enable exporting of events to ETW if requested on the command line.
@@ -648,8 +633,8 @@ class ContentMainRunnerImpl : public ContentMainRunner {
     // Android tracing started at the beginning of the method.
     // Other OSes have to wait till we get here in order for all the memory
     // management setup to be completed.
-    TRACE_EVENT0("startup", "ContentMainRunnerImpl::Initialize");
-#endif // !OS_ANDROID
+    TRACE_EVENT0("startup,benchmark", "ContentMainRunnerImpl::Initialize");
+#endif  // !OS_ANDROID
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
     // We need to allocate the IO Ports before the Sandbox is initialized or
@@ -666,21 +651,15 @@ class ContentMainRunnerImpl : public ContentMainRunner {
         (!delegate_ || delegate_->ShouldSendMachPort(process_type))) {
       MachBroker::ChildSendTaskPortToParent();
     }
-
-    if (!command_line.HasSwitch(switches::kSingleProcess) &&
-        !process_type.empty() && (process_type == switches::kRendererProcess ||
-                                  process_type == switches::kGpuProcess)) {
-      base::mac::ScopedMachSendRight service_port =
-          BrowserIOSurfaceManager::LookupServicePort(getppid());
-      if (service_port.is_valid()) {
-        ChildIOSurfaceManager::GetInstance()->set_service_port(
-            service_port.release());
-        IOSurfaceManager::SetInstance(ChildIOSurfaceManager::GetInstance());
-      }
-    }
 #elif defined(OS_WIN)
-    SetupCRT(command_line);
+    base::win::SetupCRT(command_line);
 #endif
+
+    // If we are on a platform where the default allocator is overridden (shim
+    // layer on windows, tcmalloc on Linux Desktop) smoke-tests that the
+    // overriding logic is working correctly. If not causes a hard crash, as its
+    // unexpected absence has security implications.
+    CHECK(base::allocator::IsAllocatorInitialized());
 
 #if defined(OS_POSIX)
     if (!process_type.empty()) {

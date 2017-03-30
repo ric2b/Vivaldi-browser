@@ -7,19 +7,6 @@
     '<@(schema_files)',
   ],
   'variables': {
-    'vivaldi_schema_files': [
-      'autoupdate.json',
-      'browser_action_utilities.json',
-      'editcommand.json',
-      'import_data.json',
-      'notes.json',
-      'savedpasswords.json',
-      'settings.json',
-      'show_menu.json',
-      'thumbnails.json',
-      'uizoom.json',
-      'vivaldi_utilities.json',
-    ],
     'main_schema_files': [
       'accessibility_features.json',
       'accessibility_private.json',
@@ -29,6 +16,7 @@
       'automation.idl',
       'automation_internal.idl',
       'autotest_private.idl',
+      'bluetooth_low_energy.idl',
       'bookmark_manager_private.json',
       'bookmarks.json',
       'braille_display_private.idl',
@@ -43,6 +31,7 @@
       'copresence.idl',
       'copresence_private.idl',
       'cryptotoken_private.idl',
+      'dashboard_private.json',
       'data_reduction_proxy.json',
       'debugger.json',
       'desktop_capture.json',
@@ -55,7 +44,6 @@
       'feedback_private.idl',
       'file_system.idl',
       'font_settings.json',
-      'gcd_private.idl',
       'gcm.json',
       'hangouts_private.idl',
       'history.json',
@@ -66,10 +54,10 @@
       'image_writer_private.idl',
       'inline_install_private.idl',
       'instance_id.json',
+      'language_settings_private.idl',
       'launcher_page.idl',
       'location.idl',
       'manifest_types.json',
-      'mdns.idl',
       'media_galleries.idl',
       'metrics_private.json',
       'notification_provider.idl',
@@ -79,7 +67,7 @@
       'passwords_private.idl',
       'permissions.json',
       'preferences_private.json',
-      'reading_list_private.json',
+      'resources_private.idl',
       'screenlock_private.idl',
       'search_engines_private.idl',
       'sessions.json',
@@ -93,10 +81,6 @@
       'tabs.json',
       'types.json',
       'web_navigation.json',
-
-      # vivaldi
-      'mousegestures.json',
-
       # Despite the name, this API does not rely on any
       # WebRTC-specific bits and as such does not belong in
       # the enable_webrtc==0 section below.
@@ -106,10 +90,9 @@
       'webstore_private.json',
       'webstore_widget_private.idl',
       'windows.json',
-      '<@(vivaldi_schema_files)',
     ],
     'main_schema_include_rules': [
-      'extensions/common/api:extensions::core_api::%(namespace)s',
+      'extensions/common/api:extensions::api::%(namespace)s',
     ],
     'main_non_compiled_schema_files': [
       'browsing_data.json',
@@ -122,7 +105,11 @@
 
     # ChromeOS-specific schemas.
     'chromeos_schema_files': [
+      'cast_devices_private.idl',
+      'certificate_provider.idl',
+      'certificate_provider_internal.idl',
       'echo_private.json',
+      'enterprise_device_attributes.idl',
       'enterprise_platform_keys.idl',
       'enterprise_platform_keys_internal.idl',
       'enterprise_platform_keys_private.json',
@@ -133,6 +120,7 @@
       'file_system_provider_internal.idl',
       'first_run_private.json',
       'input_ime.json',
+      'input_method_private.json',
       'launcher_search_provider.idl',
       'log_private.idl',
       'platform_keys.idl',
@@ -147,11 +135,21 @@
       'media_player_private.json',
     ],
 
+    'service_discovery_schema_files': [
+      'gcd_private.idl',
+      'mdns.idl',
+    ],
+
     'webrtc_schema_files': [
       'cast_streaming_receiver_session.idl',
       'cast_streaming_rtp_stream.idl',
       'cast_streaming_session.idl',
       'cast_streaming_udp_transport.idl',
+    ],
+
+    # Input IME schema.
+    'input_ime_schema_file': [
+      'input_ime.json',
     ],
 
     'non_compiled_schema_files': [
@@ -178,6 +176,19 @@
         'non_compiled_schema_files': [
           '<@(chromeos_non_compiled_schema_files)',
         ],
+      }, { # chromeos==0
+        'conditions': [
+          ['OS=="linux" or OS=="win"', {
+            'schema_files': [
+              '<@(input_ime_schema_file)',
+            ],
+          }],
+        ],
+      }],
+      ['enable_service_discovery==1', {
+        'schema_files': [
+          '<@(service_discovery_schema_files)',
+        ],
       }],
       ['enable_webrtc==1', {
         'schema_files': [
@@ -187,6 +198,7 @@
     ],
     'cc_dir': 'chrome/common/extensions/api',
     'root_namespace': 'extensions::api::%(namespace)s',
+    'bundle_name': 'Chrome',
     'impl_dir_': 'chrome/browser/extensions/api',
   },
 }

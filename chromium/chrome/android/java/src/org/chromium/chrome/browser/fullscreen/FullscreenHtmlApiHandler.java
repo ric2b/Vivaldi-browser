@@ -8,9 +8,7 @@ import static android.view.View.SYSTEM_UI_FLAG_FULLSCREEN;
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
 import static android.view.View.SYSTEM_UI_FLAG_LOW_PROFILE;
 
-import android.content.res.Resources;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.view.Gravity;
@@ -20,11 +18,11 @@ import android.view.Window;
 import android.view.WindowManager;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.FullscreenInfo;
-import org.chromium.chrome.browser.widget.TextBubble;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content.browser.ContentViewCore;
+import org.chromium.ui.widget.Toast;
 
 import java.lang.ref.WeakReference;
 
@@ -32,14 +30,9 @@ import java.lang.ref.WeakReference;
  * Handles updating the UI based on requests to the HTML Fullscreen API.
  */
 public class FullscreenHtmlApiHandler {
-    private static final int MSG_ID_HIDE_NOTIFICATION_BUBBLE = 1;
-    private static final int MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS = 2;
-    private static final int MSG_ID_CLEAR_LAYOUT_FULLSCREEN_FLAG = 3;
+    private static final int MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS = 1;
+    private static final int MSG_ID_CLEAR_LAYOUT_FULLSCREEN_FLAG = 2;
 
-    private static final int MAX_NOTIFICATION_DIMENSION_DP = 600;
-
-    private static final long NOTIFICATION_INITIAL_SHOW_DURATION_MS = 3500;
-    private static final long NOTIFICATION_SHOW_DURATION_MS = 2500;
     // The time we allow the Android notification bar to be shown when it is requested temporarily
     // by the Android system (this value is additive on top of the show duration imposed by
     // Android).
@@ -48,16 +41,9 @@ public class FullscreenHtmlApiHandler {
     // the SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN flag.
     private static final long CLEAR_LAYOUT_FULLSCREEN_DELAY_MS = 20;
 
-    private static final int NOTIFICATION_BUBBLE_ALPHA = 252; // 255 * 0.99
-
-    private static final String TAG = "FullscreenHtmlApiHandler";
-
-    private static boolean sFullscreenNotificationShown;
-
     private final Window mWindow;
     private final Handler mHandler;
     private final FullscreenHtmlApiDelegate mDelegate;
-    private final int mNotificationMaxDimension;
 
     // We still need this since we are setting fullscreen UI state on the contentviewcore's
     // container view, and a tab can have null content view core, i.e., if you navigate
@@ -66,7 +52,10 @@ public class FullscreenHtmlApiHandler {
     private Tab mTabInFullscreen;
     private boolean mIsPersistentMode;
 
-    private TextBubble mNotificationBubble;
+    // Toast at the top of the screen that is shown when user enters fullscreen for the
+    // first time.
+    private Toast mNotificationToast;
+
     private OnLayoutChangeListener mFullscreenOnLayoutChangeListener;
     private FullscreenInfoBarDelegate mFullscreenInfoBarDelegate;
 
@@ -74,16 +63,6 @@ public class FullscreenHtmlApiHandler {
      * Delegate that allows embedders to react to fullscreen API requests.
      */
     public interface FullscreenHtmlApiDelegate {
-        /**
-         * @return The Y offset to be applied to the fullscreen notification.
-         */
-        int getNotificationOffsetY();
-
-        /**
-         * @return The view that the fullscreen notification will be pinned to.
-         */
-        View getNotificationAnchorView();
-
         /**
          * Notifies the delegate that entering fullscreen has been requested and allows them
          * to hide their controls.
@@ -108,10 +87,10 @@ public class FullscreenHtmlApiHandler {
         void onFullscreenExited(Tab tab);
 
         /**
-         * @return Whether the notification bubble should be shown. For fullscreen video in
-         *         overlay mode, the notification bubble should be disabled.
+         * @return Whether the notification toast should be shown. For fullscreen video in
+         *         overlay mode, the notification toast should be disabled.
          */
-        boolean shouldShowNotificationBubble();
+        boolean shouldShowNotificationToast();
     }
 
     // This static inner class holds a WeakReference to the outer object, to avoid triggering the
@@ -130,9 +109,6 @@ public class FullscreenHtmlApiHandler {
             FullscreenHtmlApiHandler fullscreenHtmlApiHandler = mFullscreenHtmlApiHandler.get();
             if (fullscreenHtmlApiHandler == null) return;
             switch (msg.what) {
-                case MSG_ID_HIDE_NOTIFICATION_BUBBLE:
-                    fullscreenHtmlApiHandler.hideNotificationBubble();
-                    break;
                 case MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS: {
                     assert fullscreenHtmlApiHandler.getPersistentFullscreenMode() :
                         "Calling after we exited fullscreen";
@@ -147,6 +123,7 @@ public class FullscreenHtmlApiHandler {
                     }
                     systemUiVisibility |= SYSTEM_UI_FLAG_FULLSCREEN;
                     systemUiVisibility |= SYSTEM_UI_FLAG_LOW_PROFILE;
+                    systemUiVisibility |= getExtraFullscreenUIFlags();
                     contentView.setSystemUiVisibility(systemUiVisibility);
 
                     // Trigger a update to clear the SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN flag
@@ -201,9 +178,6 @@ public class FullscreenHtmlApiHandler {
         mWindow = window;
         mDelegate = delegate;
         mHandler = new FullscreenHandler(this);
-        Resources resources = mWindow.getContext().getResources();
-        float density = resources.getDisplayMetrics().density;
-        mNotificationMaxDimension = (int) (density * MAX_NOTIFICATION_DIMENSION_DP);
     }
 
     /**
@@ -242,7 +216,7 @@ public class FullscreenHtmlApiHandler {
 
     private void exitFullscreen(final ContentViewCore contentViewCore, final Tab tab) {
         final View contentView = contentViewCore.getContainerView();
-        hideNotificationBubble();
+        hideNotificationToast();
         mHandler.removeMessages(MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS);
         mHandler.removeMessages(MSG_ID_CLEAR_LAYOUT_FULLSCREEN_FLAG);
 
@@ -297,10 +271,10 @@ public class FullscreenHtmlApiHandler {
             if ((systemUiVisibility & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
                     == SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) {
                 systemUiVisibility |= SYSTEM_UI_FLAG_FULLSCREEN;
+                systemUiVisibility |= getExtraFullscreenUIFlags();
             } else {
                 systemUiVisibility |= SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
             }
-            systemUiVisibility |= getExtraFullscreenUIFlags();
         } else {
             mWindow.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             mWindow.clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
@@ -323,9 +297,8 @@ public class FullscreenHtmlApiHandler {
                 }
 
                 if ((bottom - top) <= (oldBottom - oldTop)) return;
-                if (mDelegate.shouldShowNotificationBubble()) {
-                    showNotificationBubble(mWindow.getContext().getResources().getString(
-                            R.string.fullscreen_api_notification));
+                if (mDelegate.shouldShowNotificationToast()) {
+                    showNotificationToast();
                 }
                 contentView.removeOnLayoutChangeListener(this);
             }
@@ -334,7 +307,7 @@ public class FullscreenHtmlApiHandler {
         contentView.setSystemUiVisibility(systemUiVisibility);
         mContentViewCoreInFullscreen = contentViewCore;
         mTabInFullscreen = tab;
-        FullscreenInfo fullscreenInfo = new FullscreenInfo(tab.getUrl(), null);
+        FullscreenInfo fullscreenInfo = new FullscreenInfo(tab.getUrl(), null, tab.isIncognito());
         ContentSetting fullscreenPermission = fullscreenInfo.getContentSetting();
         if (fullscreenPermission != ContentSetting.ALLOW) {
             mFullscreenInfoBarDelegate = FullscreenInfoBarDelegate.create(this, tab);
@@ -342,57 +315,26 @@ public class FullscreenHtmlApiHandler {
     }
 
     /**
-     * Creates (if necessary) and returns a notification bubble.
+     * Create and show the fullscreen notification toast.
      */
-    private TextBubble getOrCreateNotificationBubble() {
-        if (mNotificationBubble == null) {
-            Bundle b = new Bundle();
-            b.putBoolean(TextBubble.BACKGROUND_INTRINSIC_PADDING, true);
-            b.putBoolean(TextBubble.CENTER, true);
-            b.putBoolean(TextBubble.UP_DOWN, true);
-            b.putInt(TextBubble.TEXT_STYLE_ID, android.R.style.TextAppearance_DeviceDefault_Medium);
-            b.putInt(TextBubble.ANIM_STYLE_ID, R.style.FullscreenNotificationBubble);
-            mNotificationBubble = new TextBubble(mWindow.getContext(), b);
-            mNotificationBubble.getBubbleTextView().setGravity(Gravity.CENTER_HORIZONTAL);
-            mNotificationBubble.getBubbleTextView().setTextColor(
-                    mWindow.getContext().getResources().getColor(R.color.default_text_color));
-            mNotificationBubble.getBackground().setAlpha(NOTIFICATION_BUBBLE_ALPHA);
-            mNotificationBubble.setTouchable(false);
+    private void showNotificationToast() {
+        if (mNotificationToast == null) {
+            int resId = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)
+                    ? R.string.immersive_fullscreen_api_notification
+                    : R.string.fullscreen_api_notification;
+            mNotificationToast = Toast.makeText(
+                    mWindow.getContext(), resId, Toast.LENGTH_LONG);
+            mNotificationToast.setGravity(Gravity.TOP | Gravity.CENTER, 0, 0);
         }
-        return mNotificationBubble;
-    }
-
-    private void showNotificationBubble(String text) {
-        getOrCreateNotificationBubble().showTextBubble(text, mDelegate.getNotificationAnchorView(),
-                mNotificationMaxDimension, mNotificationMaxDimension);
-        updateBubblePosition();
-
-        mHandler.removeMessages(MSG_ID_HIDE_NOTIFICATION_BUBBLE);
-
-        long showDuration = NOTIFICATION_INITIAL_SHOW_DURATION_MS;
-        if (sFullscreenNotificationShown) {
-            showDuration = NOTIFICATION_SHOW_DURATION_MS;
-        }
-        sFullscreenNotificationShown = true;
-
-        mHandler.sendEmptyMessageDelayed(MSG_ID_HIDE_NOTIFICATION_BUBBLE, showDuration);
+        mNotificationToast.show();
     }
 
     /**
-     * Updates the position of the notification bubble based on the current offset.
+     * Hides the notification toast.
      */
-    public void updateBubblePosition() {
-        if (mNotificationBubble != null && mNotificationBubble.isShowing()) {
-            mNotificationBubble.setOffsetY(mDelegate.getNotificationOffsetY());
-        }
-    }
-
-    /**
-     * Hides the notification bubble.
-     */
-    public void hideNotificationBubble() {
-        if (mNotificationBubble != null && mNotificationBubble.isShowing()) {
-            mNotificationBubble.dismiss();
+    public void hideNotificationToast() {
+        if (mNotificationToast != null) {
+            mNotificationToast.cancel();
         }
     }
 
@@ -414,7 +356,7 @@ public class FullscreenHtmlApiHandler {
      * @see android.app.Activity#onWindowFocusChanged(boolean)
      */
     public void onWindowFocusChanged(boolean hasWindowFocus) {
-        if (!hasWindowFocus) hideNotificationBubble();
+        if (!hasWindowFocus) hideNotificationToast();
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2) return;
 
         mHandler.removeMessages(MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS);
@@ -428,7 +370,7 @@ public class FullscreenHtmlApiHandler {
      * Helper method to return extra fullscreen UI flags for Kitkat devices.
      * @return fullscreen flags to be applied to system UI visibility.
      */
-    private int getExtraFullscreenUIFlags() {
+    private static int getExtraFullscreenUIFlags() {
         int flags = 0;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             flags |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;

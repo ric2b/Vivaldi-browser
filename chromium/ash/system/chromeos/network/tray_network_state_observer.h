@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chromeos/network/network_state_handler_observer.h"
 
@@ -53,7 +54,7 @@ class TrayNetworkStateObserver : public chromeos::NetworkStateHandlerObserver {
   int update_frequency_;
 
   // Timer used to limit the frequency of NetworkStateChanged updates.
-  base::OneShotTimer<TrayNetworkStateObserver> timer_;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayNetworkStateObserver);
 };

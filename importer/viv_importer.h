@@ -16,7 +16,7 @@ struct PasswordForm;
 }
 
 namespace viv_importer {
-void DetectOperaProfiles(std::vector<importer::SourceProfile*>* profiles);
+void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles);
 }
 
 class ImportedNoteEntry;
@@ -27,7 +27,7 @@ class OperaImporter : public Importer
   OperaImporter(const importer::ImportConfig &import_config);
 
   void StartImport(const importer::SourceProfile& source_profile,
-                           uint16 items,
+                           uint16_t items,
                            ImporterBridge* bridge) override;
 
  private:
@@ -58,12 +58,12 @@ class OperaImporter : public Importer
   base::FilePath::StringType wandfilename_;
   base::FilePath::StringType masterpassword_filename_;
 
-  uint32 wand_version_;
-  bool master_password_required;
+  uint32_t wand_version_;
+  bool master_password_required_;
 
-  base::string16 master_password;
+  base::string16 master_password_;
 
-  std::string master_password_block;
+  std::string master_password_block_;
 
   /*
   struct favicon_item {

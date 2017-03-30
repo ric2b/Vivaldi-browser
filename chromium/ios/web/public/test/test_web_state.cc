@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "ios/web/public/test/test_web_state.h"
 
 namespace web {
@@ -68,7 +70,15 @@ void TestWebState::SetContentIsHTML(bool content_is_html) {
   content_is_html_ = content_is_html;
 }
 
+const base::string16& TestWebState::GetTitle() const {
+  return title_;
+}
+
 bool TestWebState::IsLoading() const {
+  return false;
+}
+
+bool TestWebState::IsBeingDestroyed() const {
   return false;
 }
 
@@ -90,6 +100,11 @@ int TestWebState::DownloadImage(const GURL& url,
                                 bool bypass_cache,
                                 const ImageDownloadCallback& callback) {
   return 0;
+}
+
+base::WeakPtr<WebState> TestWebState::AsWeakPtr() {
+  NOTREACHED();
+  return base::WeakPtr<WebState>();
 }
 
 }  // namespace web

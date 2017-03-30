@@ -9,6 +9,8 @@
 #include "base/mac/scoped_nsobject.h"
 #import "base/mac/scoped_sending_event.h"
 #include "base/message_loop/message_loop.h"
+#include "content/browser/frame_host/frame_tree.h"
+#include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_mac.h"
@@ -32,10 +34,12 @@ PopupMenuHelper::PopupMenuHelper(RenderFrameHost* render_frame_host)
       popup_was_hidden_(false) {
   notification_registrar_.Add(
       this, NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
-      Source<RenderWidgetHost>(render_frame_host->GetRenderViewHost()));
+      Source<RenderWidgetHost>(
+          render_frame_host->GetRenderViewHost()->GetWidget()));
   notification_registrar_.Add(
       this, NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      Source<RenderWidgetHost>(render_frame_host->GetRenderViewHost()));
+      Source<RenderWidgetHost>(
+          render_frame_host->GetRenderViewHost()->GetWidget()));
 }
 
 void PopupMenuHelper::ShowPopupMenu(
@@ -117,14 +121,18 @@ void PopupMenuHelper::DontShowPopupMenuForTesting() {
 
 RenderWidgetHostViewMac* PopupMenuHelper::GetRenderWidgetHostView() const {
   return static_cast<RenderWidgetHostViewMac*>(
-      render_frame_host_->GetRenderViewHost()->GetView());
+      render_frame_host_->frame_tree_node()
+          ->frame_tree()
+          ->root()
+          ->current_frame_host()
+          ->GetView());
 }
 
 void PopupMenuHelper::Observe(int type,
                               const NotificationSource& source,
                               const NotificationDetails& details) {
   DCHECK_EQ(Source<RenderWidgetHost>(source).ptr(),
-            render_frame_host_->GetRenderViewHost());
+            render_frame_host_->GetRenderViewHost()->GetWidget());
   switch (type) {
     case NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED: {
       render_frame_host_ = NULL;

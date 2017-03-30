@@ -7,6 +7,7 @@
 
 #include "chrome/browser/banners/app_banner_manager.h"
 
+#include "base/macros.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 namespace banners {
@@ -20,8 +21,7 @@ class AppBannerManagerDesktop
 
  protected:
   AppBannerDataFetcher* CreateAppBannerDataFetcher(
-      base::WeakPtr<AppBannerDataFetcher::Delegate> weak_delegate,
-      const int ideal_icon_size) override;
+      base::WeakPtr<AppBannerDataFetcher::Delegate> weak_delegate) override;
 
  private:
   explicit AppBannerManagerDesktop(content::WebContents* web_contents);

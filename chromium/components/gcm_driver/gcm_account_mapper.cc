@@ -4,6 +4,8 @@
 
 #include "components/gcm_driver/gcm_account_mapper.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/time/clock.h"
@@ -149,7 +151,7 @@ void GCMAccountMapper::ShutdownHandler() {
 }
 
 void GCMAccountMapper::OnMessage(const std::string& app_id,
-                                 const GCMClient::IncomingMessage& message) {
+                                 const IncomingMessage& message) {
   DCHECK_EQ(app_id, kGCMAccountMapperAppId);
   // TODO(fgorski): Report Send to Gaia ID failures using UMA.
 
@@ -158,8 +160,7 @@ void GCMAccountMapper::OnMessage(const std::string& app_id,
     return;
   }
 
-  GCMClient::MessageData::const_iterator it =
-      message.data.find(kGCMSendToGaiaIdAppIdKey);
+  MessageData::const_iterator it = message.data.find(kGCMSendToGaiaIdAppIdKey);
   if (it == message.data.end()) {
     DVLOG(1) << "Send to Gaia ID failure: Embedded app ID missing.";
     return;
@@ -172,7 +173,7 @@ void GCMAccountMapper::OnMessage(const std::string& app_id,
   }
 
   // Ensuring the message does not carry the embedded app ID.
-  GCMClient::IncomingMessage new_message = message;
+  IncomingMessage new_message = message;
   new_message.data.erase(new_message.data.find(kGCMSendToGaiaIdAppIdKey));
   dispatch_message_callback_.Run(embedded_app_id, new_message);
 }
@@ -279,7 +280,7 @@ void GCMAccountMapper::SendRemoveMappingMessage(
 
 void GCMAccountMapper::CreateAndSendMessage(
     const AccountMapping& account_mapping) {
-  GCMClient::OutgoingMessage outgoing_message;
+  OutgoingMessage outgoing_message;
   outgoing_message.id = GenerateMessageID();
   outgoing_message.data[kRegistrationIdMessgaeKey] = registration_id_;
   outgoing_message.data[kAccountMessageKey] = account_mapping.email;
@@ -386,7 +387,7 @@ GCMAccountMapper::FindMappingByMessageId(const std::string& message_id) {
 }
 
 void GCMAccountMapper::SetClockForTesting(scoped_ptr<base::Clock> clock) {
-  clock_ = clock.Pass();
+  clock_ = std::move(clock);
 }
 
 }  // namespace gcm

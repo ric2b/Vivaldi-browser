@@ -5,8 +5,11 @@
 #include "media/midi/midi_manager_mac.h"
 
 #include <CoreMIDI/MIDIServices.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -46,8 +49,8 @@ class FakeMidiManagerClient : public MidiManagerClient {
     info_ = info;
     wait_for_port_ = false;
   }
-  void SetInputPortState(uint32 port_index, MidiPortState state) override {}
-  void SetOutputPortState(uint32 port_index, MidiPortState state) override {}
+  void SetInputPortState(uint32_t port_index, MidiPortState state) override {}
+  void SetOutputPortState(uint32_t port_index, MidiPortState state) override {}
 
   void CompleteStartSession(Result result) override {
     base::AutoLock lock(lock_);
@@ -58,9 +61,12 @@ class FakeMidiManagerClient : public MidiManagerClient {
     wait_for_result_ = false;
   }
 
-  void ReceiveMidiData(uint32 port_index, const uint8* data, size_t size,
+  void ReceiveMidiData(uint32_t port_index,
+                       const uint8_t* data,
+                       size_t size,
                        double timestamp) override {}
   void AccumulateMidiBytesSent(size_t size) override {}
+  void Detach() override {}
 
   bool GetWaitForResult() {
     base::AutoLock lock(lock_);
@@ -105,6 +111,11 @@ class MidiManagerMacTest : public ::testing::Test {
   MidiManagerMacTest()
       : manager_(new MidiManagerMac),
         message_loop_(new base::MessageLoop) {}
+  ~MidiManagerMacTest() override {
+    manager_->Shutdown();
+    base::RunLoop run_loop;
+    run_loop.RunUntilIdle();
+  }
 
  protected:
   void StartSession(MidiManagerClient* client) {

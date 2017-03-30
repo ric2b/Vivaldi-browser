@@ -5,20 +5,21 @@
 #ifndef NET_SSL_SSL_PRIVATE_KEY_H_
 #define NET_SSL_SSL_PRIVATE_KEY_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
 #include "net/base/net_errors.h"
 
 namespace net {
 
 // An interface for a private key for use with SSL client authentication.
-class SSLPrivateKey {
+class SSLPrivateKey : public base::RefCountedThreadSafe<SSLPrivateKey> {
  public:
   using SignCallback = base::Callback<void(Error, const std::vector<uint8_t>&)>;
 
@@ -36,7 +37,6 @@ class SSLPrivateKey {
   };
 
   SSLPrivateKey() {}
-  virtual ~SSLPrivateKey() {}
 
   // Returns whether the key is an RSA key or an ECDSA key. Although the signing
   // interface is type-agnositic and type tags in interfaces are discouraged,
@@ -46,8 +46,8 @@ class SSLPrivateKey {
   // BoringSSL.
   virtual Type GetType() = 0;
 
-  // Returns true if the key supports signing hashes of type |hash|.
-  virtual bool SupportsHash(Hash hash) = 0;
+  // Returns the digests that are supported by the key in decreasing preference.
+  virtual std::vector<SSLPrivateKey::Hash> GetDigestPreferences() = 0;
 
   // Returns the maximum size of a signature, in bytes. For an RSA key, this
   // must be the size of the modulus.
@@ -62,7 +62,11 @@ class SSLPrivateKey {
                           const base::StringPiece& input,
                           const SignCallback& callback) = 0;
 
+ protected:
+  virtual ~SSLPrivateKey() {}
+
  private:
+  friend class base::RefCountedThreadSafe<SSLPrivateKey>;
   DISALLOW_COPY_AND_ASSIGN(SSLPrivateKey);
 };
 

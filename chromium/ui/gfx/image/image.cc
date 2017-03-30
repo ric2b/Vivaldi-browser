@@ -6,8 +6,11 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_png_rep.h"
@@ -508,7 +511,7 @@ const ImageSkia* Image::ToImageSkia() const {
     }
     CHECK(scoped_rep);
     rep = scoped_rep.get();
-    AddRepresentation(scoped_rep.Pass());
+    AddRepresentation(std::move(scoped_rep));
   }
   return rep->AsImageRepSkia()->image();
 }
@@ -539,7 +542,7 @@ UIImage* Image::ToUIImage() const {
     }
     CHECK(scoped_rep);
     rep = scoped_rep.get();
-    AddRepresentation(scoped_rep.Pass());
+    AddRepresentation(std::move(scoped_rep));
   }
   return rep->AsImageRepCocoaTouch()->image();
 }
@@ -573,7 +576,7 @@ NSImage* Image::ToNSImage() const {
     }
     CHECK(scoped_rep);
     rep = scoped_rep.get();
-    AddRepresentation(scoped_rep.Pass());
+    AddRepresentation(std::move(scoped_rep));
   }
   return rep->AsImageRepCocoa()->image();
 }
@@ -743,13 +746,13 @@ internal::ImageRep* Image::GetRepresentation(
     CHECK(!must_exist);
     return NULL;
   }
-  return it->second;
+  return it->second.get();
 }
 
 void Image::AddRepresentation(scoped_ptr<internal::ImageRep> rep) const {
   CHECK(storage_.get());
   RepresentationType type = rep->type();
-  storage_->representations().insert(type, rep.Pass());
+  storage_->representations().insert(std::make_pair(type, std::move(rep)));
 }
 
 }  // namespace gfx

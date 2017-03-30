@@ -4,6 +4,8 @@
 
 #include "ui/events/latency_info.h"
 
+#include <stddef.h>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ui {
@@ -21,7 +23,7 @@ TEST(LatencyInfoTest, AddTwoSeparateEvent) {
                                      base::TimeTicks::FromInternalValue(1000),
                                      2);
 
-  EXPECT_EQ(info.latency_components.size(), 2u);
+  EXPECT_EQ(info.latency_components().size(), 2u);
   LatencyInfo::LatencyComponent component;
   EXPECT_FALSE(
       info.FindLatency(INPUT_EVENT_LATENCY_UI_COMPONENT, 0, &component));
@@ -52,7 +54,7 @@ TEST(LatencyInfoTest, AddTwoSameEvent) {
                                      base::TimeTicks::FromInternalValue(200),
                                      3);
 
-  EXPECT_EQ(info.latency_components.size(), 1u);
+  EXPECT_EQ(info.latency_components().size(), 1u);
   LatencyInfo::LatencyComponent component;
   EXPECT_FALSE(
       info.FindLatency(INPUT_EVENT_LATENCY_UI_COMPONENT, 0, &component));
@@ -65,17 +67,16 @@ TEST(LatencyInfoTest, AddTwoSameEvent) {
   EXPECT_EQ(component.event_time.ToInternalValue(), (100 * 2 + 200 * 3) / 5);
 }
 
-TEST(LatencyInfoTest, ClearEvents) {
+TEST(LatencyInfoTest, AddCoalescedEventTimestamp) {
   LatencyInfo info;
-  info.AddLatencyNumberWithTimestamp(INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
-                                     0,
-                                     30,
-                                     base::TimeTicks::FromInternalValue(100),
-                                     2);
-
-  EXPECT_EQ(info.latency_components.size(), 1u);
-  info.Clear();
-  EXPECT_EQ(info.latency_components.size(), 0u);
+  ASSERT_EQ(0u, info.coalesced_events_size());
+  for (size_t i = 0; i < LatencyInfo::kMaxCoalescedEventTimestamps; i++)
+    EXPECT_TRUE(info.AddCoalescedEventTimestamp(i * 10.0));
+  EXPECT_FALSE(info.AddCoalescedEventTimestamp(99.0));
+  EXPECT_EQ(LatencyInfo::kMaxCoalescedEventTimestamps,
+            info.coalesced_events_size());
+  for (size_t i = 0; i < info.coalesced_events_size(); i++)
+    EXPECT_EQ(i * 10.0, info.timestamps_of_coalesced_events()[i]);
 }
 
 }  // namespace ui

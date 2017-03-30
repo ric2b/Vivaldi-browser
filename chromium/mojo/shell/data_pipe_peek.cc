@@ -4,7 +4,10 @@
 
 #include "mojo/shell/data_pipe_peek.h"
 
+#include <stddef.h>
 #include <stdint.h>
+
+#include <algorithm>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -41,7 +44,7 @@ class PeekSleeper {
 
     MojoTimeTicks sleep_time =
         (deadline_ == 0) ? kMaxSleepMicros
-                         : std::min<int64>(deadline_ - now, kMaxSleepMicros);
+                         : std::min<int64_t>(deadline_ - now, kMaxSleepMicros);
     base::PlatformThread::Sleep(base::TimeDelta::FromMicroseconds(sleep_time));
     return true;
   }

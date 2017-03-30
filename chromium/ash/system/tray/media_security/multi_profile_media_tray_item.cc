@@ -46,12 +46,9 @@ class MultiProfileMediaTrayView : public TrayItemView,
     SessionStateDelegate* session_state_delegate =
         Shell::GetInstance()->session_state_delegate();
     // The user at 0 is the current desktop user.
-    for (MultiProfileIndex index = 1;
-         index < session_state_delegate->NumberOfLoggedInUsers();
-         ++index) {
-      content::BrowserContext* context =
-          session_state_delegate->GetBrowserContextByIndex(index);
-      if (media_delegate->GetMediaCaptureState(context) != MEDIA_CAPTURE_NONE) {
+    for (UserIndex index = 1;
+         index < session_state_delegate->NumberOfLoggedInUsers(); ++index) {
+      if (media_delegate->GetMediaCaptureState(index) != MEDIA_CAPTURE_NONE) {
         SetVisible(true);
         return;
       }

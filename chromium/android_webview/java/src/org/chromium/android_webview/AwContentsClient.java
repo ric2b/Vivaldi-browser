@@ -27,9 +27,6 @@ import android.webkit.WebChromeClient;
 import org.chromium.android_webview.permission.AwPermissionRequest;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.SuppressFBWarnings;
-import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.SelectActionMode;
-import org.chromium.content.browser.SelectActionModeCallback.ActionHandler;
 
 import java.security.Principal;
 import java.util.HashMap;
@@ -44,7 +41,7 @@ import java.util.HashMap;
  * i.e.: all methods in this class should either be final, or abstract.
  */
 public abstract class AwContentsClient {
-    private static final String TAG = "cr.AwContentsClient";
+    private static final String TAG = "AwContentsClient";
     private final AwContentsClientCallbackHelper mCallbackHelper;
 
     // Last background color reported from the renderer. Holds the sentinal value INVALID_COLOR
@@ -102,6 +99,8 @@ public abstract class AwContentsClient {
         public boolean isMainFrame;
         // Was a gesture associated with the request? Don't trust can easily be spoofed.
         public boolean hasUserGesture;
+        // Was it a result of a server-side redirect?
+        public boolean isRedirect;
         // Method used (GET/POST/OPTIONS)
         public String method;
         // Headers that would have been sent to server.
@@ -132,7 +131,7 @@ public abstract class AwContentsClient {
 
     public abstract boolean shouldOverrideKeyEvent(KeyEvent event);
 
-    public abstract boolean shouldOverrideUrlLoading(String url);
+    public abstract boolean shouldOverrideUrlLoading(AwWebResourceRequest request);
 
     public abstract void onLoadResource(String url);
 
@@ -157,10 +156,25 @@ public abstract class AwContentsClient {
     public abstract void onDownloadStart(String url, String userAgent, String contentDisposition,
             String mimeType, long contentLength);
 
-    public static boolean sendBrowsingIntent(Context context, String url, boolean hasUserGesture,
+    public final boolean shouldIgnoreNavigation(Context context, String url, boolean isMainFrame,
+            boolean hasUserGesture, boolean isRedirect) {
+        if (hasWebViewClient()) {
+            AwWebResourceRequest request = new AwWebResourceRequest();
+            request.url = url;
+            request.isMainFrame = isMainFrame;
+            request.hasUserGesture = hasUserGesture;
+            request.isRedirect = isRedirect;
+            request.method = "GET";  // Only GET requests can be overridden.
+            return shouldOverrideUrlLoading(request);
+        } else {
+            return sendBrowsingIntent(context, url, hasUserGesture, isRedirect);
+        }
+    }
+
+    private static boolean sendBrowsingIntent(Context context, String url, boolean hasUserGesture,
             boolean isRedirect) {
         if (!hasUserGesture && !isRedirect) {
-            Log.w(TAG, "Denied starting an intent without a user gesture, URI " + url);
+            Log.w(TAG, "Denied starting an intent without a user gesture, URI %s", url);
             return true;
         }
         Intent intent;
@@ -168,7 +182,7 @@ public abstract class AwContentsClient {
         try {
             intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
         } catch (Exception ex) {
-            Log.w(TAG, "Bad URI " + url, ex);
+            Log.w(TAG, "Bad URI %s", url, ex);
             return false;
         }
         // Sanitize the Intent, ensuring web pages can not bypass browser
@@ -184,14 +198,11 @@ public abstract class AwContentsClient {
         // Pass the package name as application ID so that the intent from the
         // same application can be opened in the same tab.
         intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
-        if (ContentViewCore.activityFromContext(context) == null) {
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        }
 
         try {
             context.startActivity(intent);
         } catch (ActivityNotFoundException ex) {
-            Log.w(TAG, "No application can handle " + url);
+            Log.w(TAG, "No application can handle %s", url);
             return false;
         }
 
@@ -373,12 +384,7 @@ public abstract class AwContentsClient {
      */
     public abstract void onNewPicture(Picture picture);
 
-    public abstract SelectActionMode startActionMode(
-            View view, ActionHandler actionHandler, boolean floating);
-
-    public abstract boolean supportsFloatingActionMode();
-
-    public void updateTitle(String title, boolean forceNotification) {
+    public final void updateTitle(String title, boolean forceNotification) {
         if (!forceNotification && TextUtils.equals(mTitle, title)) return;
         mTitle = title;
         mCallbackHelper.postOnReceivedTitle(mTitle);

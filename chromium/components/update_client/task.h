@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_UPDATE_CLIENT_TASK_H_
 #define COMPONENTS_UPDATE_CLIENT_TASK_H_
 
+#include <string>
+#include <vector>
+
 #include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/update_client/update_client.h"
@@ -22,6 +25,14 @@ class Task {
   virtual ~Task() {}
 
   virtual void Run() = 0;
+
+  // Does a best effort attempt to make a task release its resources and stop
+  // soon. It is possible that a running task may complete even if this
+  // method is called.
+  virtual void Cancel() = 0;
+
+  // Returns the ids corresponding to the CRXs associated with this update task.
+  virtual std::vector<std::string> GetIds() const = 0;
 };
 
 }  // namespace update_client

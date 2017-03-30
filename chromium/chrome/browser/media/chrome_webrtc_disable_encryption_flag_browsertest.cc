@@ -3,9 +3,12 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/webrtc_browsertest_base.h"
 #include "chrome/browser/media/webrtc_browsertest_common.h"
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/common/channel_info.h"
+#include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -13,18 +16,16 @@
 static const char kMainWebrtcTestHtmlPage[] =
     "/webrtc/webrtc_jsep01_test.html";
 
-using chrome::VersionInfo;
-
 // This tests the --disable-webrtc-encryption command line flag. Disabling
 // encryption should only be possible on certain channels.
 
 // NOTE: The test case for each channel will only be exercised when the browser
 // is actually built for that channel. This is not ideal. One can test manually
-// by e.g. faking the channel returned in VersionInfo::GetChannel(). It's
-// likely good to have the test anyway, even though a failure might not be
-// detected until a branch has been promoted to another channel. The unit
-// test for ChromeContentBrowserClient::MaybeCopyDisableWebRtcEncryptionSwitch
-// tests for all channels however.
+// by e.g. faking the channel returned in chrome::GetChannel(). It's likely good
+// to have the test anyway, even though a failure might not be detected until a
+// branch has been promoted to another channel. The unit test for
+// ChromeContentBrowserClient::MaybeCopyDisableWebRtcEncryptionSwitch tests for
+// all channels however.
 // TODO(grunell): Test the different channel cases for any build.
 class WebRtcDisableEncryptionFlagBrowserTest : public WebRtcTestBase {
  public:
@@ -53,7 +54,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcDisableEncryptionFlagBrowserTest,
   if (!OnWinXp())
     return;  // Flaky timeout on a webrtc Win XP bot. http://crbug.com/368163.
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   content::WebContents* left_tab =
       OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
@@ -72,14 +73,14 @@ IN_PROC_BROWSER_TEST_F(WebRtcDisableEncryptionFlagBrowserTest,
   WaitForVideoToPlay(right_tab);
 
   bool should_detect_encryption = true;
-  VersionInfo::Channel channel = VersionInfo::GetChannel();
-  if (channel == VersionInfo::CHANNEL_UNKNOWN ||
-      channel == VersionInfo::CHANNEL_CANARY ||
-      channel == VersionInfo::CHANNEL_DEV) {
+  version_info::Channel channel = chrome::GetChannel();
+  if (channel == version_info::Channel::UNKNOWN ||
+      channel == version_info::Channel::CANARY ||
+      channel == version_info::Channel::DEV) {
     should_detect_encryption = false;
   }
 #if defined(OS_ANDROID)
-  if (channel == VersionInfo::CHANNEL_BETA)
+  if (channel == version_info::Channel::BETA)
     should_detect_encryption = false;
 #endif
 

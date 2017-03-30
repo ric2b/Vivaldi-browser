@@ -5,12 +5,15 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_USERS_WALLPAPER_WALLPAPER_MANAGER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_USERS_WALLPAPER_WALLPAPER_MANAGER_H_
 
+#include <stddef.h>
+
 #include <deque>
 #include <string>
 #include <vector>
 
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -26,14 +29,14 @@
 #include "components/wallpaper/wallpaper_manager_base.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace chromeos {
 
-class WallpaperManager :
-    public wallpaper::WallpaperManagerBase,
-    public user_manager::UserManager::UserSessionStateObserver {
+class WallpaperManager
+    : public wallpaper::WallpaperManagerBase,
+      public content::NotificationObserver,
+      public user_manager::UserManager::UserSessionStateObserver {
  public:
   class PendingWallpaper;
 
@@ -70,19 +73,19 @@ class WallpaperManager :
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // Removes all |user_id| related wallpaper info and saved wallpapers.
-  void RemoveUserWallpaperInfo(const std::string& user_id) override;
+  // Removes all |account_id| related wallpaper info and saved wallpapers.
+  void RemoveUserWallpaperInfo(const AccountId& account_id) override;
 
   // Called when the policy-set wallpaper has been fetched.  Initiates decoding
   // of the JPEG |data| with a callback to SetPolicyControlledWallpaper().
   void OnPolicyFetched(const std::string& policy,
-                       const std::string& user_id,
+                       const AccountId& account_id,
                        scoped_ptr<std::string> data) override;
 
   // Saves custom wallpaper to file, post task to generate thumbnail and updates
   // local state preferences. If |update_wallpaper| is false, don't change
   // wallpaper but only update cache.
-  void SetCustomWallpaper(const std::string& user_id,
+  void SetCustomWallpaper(const AccountId& account_id,
                           const std::string& user_id_hash,
                           const std::string& file,
                           wallpaper::WallpaperLayout layout,
@@ -91,32 +94,36 @@ class WallpaperManager :
                           bool update_wallpaper) override;
 
   // Sets wallpaper to default wallpaper (asynchronously with zero delay).
-  void SetDefaultWallpaperNow(const std::string& user_id) override;
+  void SetDefaultWallpaperNow(const AccountId& account_id) override;
 
   // Sets wallpaper to default wallpaper (asynchronously with default delay).
-  void SetDefaultWallpaperDelayed(const std::string& user_id) override;
+  void SetDefaultWallpaperDelayed(const AccountId& account_id) override;
 
   // Sets wallpaper to default.
   void DoSetDefaultWallpaper(
-      const std::string& user_id,
+      const AccountId& account_id,
       wallpaper::MovableOnDestroyCallbackHolder on_finish) override;
 
-  // Sets selected wallpaper information for |user_id| and saves it to Local
+  // Sets selected wallpaper information for |account_id| and saves it to Local
   // State if |is_persistent| is true.
-  void SetUserWallpaperInfo(const std::string& user_id,
+  void SetUserWallpaperInfo(const AccountId& account_id,
                             const wallpaper::WallpaperInfo& info,
                             bool is_persistent) override;
 
   // Creates new PendingWallpaper request (or updates currently pending).
-  void ScheduleSetUserWallpaper(const std::string& user_id,
+  void ScheduleSetUserWallpaper(const AccountId& account_id,
                                 bool delayed) override;
 
   // Sets wallpaper to |image| (asynchronously with zero delay). If
   // |update_wallpaper| is false, skip change wallpaper but only update cache.
-  void SetWallpaperFromImageSkia(const std::string& user_id,
+  void SetWallpaperFromImageSkia(const AccountId& account_id,
                                  const gfx::ImageSkia& image,
                                  wallpaper::WallpaperLayout layout,
                                  bool update_wallpaper) override;
+
+  // Updates current wallpaper. It may switch the size of wallpaper based on the
+  // current display's resolution. (asynchronously with zero delay)
+  void UpdateWallpaper(bool clear_cache) override;
 
   // Returns queue size.
   size_t GetPendingListSizeForTesting() const override;
@@ -134,22 +141,34 @@ class WallpaperManager :
 
   // Returns modifiable PendingWallpaper.
   // Returns pending_inactive_ or creates new PendingWallpaper if necessary.
-  PendingWallpaper* GetPendingWallpaper(const std::string& user_id,
+  PendingWallpaper* GetPendingWallpaper(const AccountId& account_id,
                                         bool delayed);
 
   // This is called by PendingWallpaper when load is finished.
   void RemovePendingWallpaperFromList(PendingWallpaper* pending);
 
+  // Set wallpaper to |user_image| controlled by policy.  (Takes a UserImage
+  // because that's the callback interface provided by UserImageLoader.)
+  void SetPolicyControlledWallpaper(const AccountId& account_id,
+                                    const user_manager::UserImage& user_image);
+
+  // Calls SetCustomWallpaper() with |user_id_hash| received from cryptohome.
+  void SetCustomWallpaperOnSanitizedUsername(const AccountId& account_id,
+                                             const gfx::ImageSkia& image,
+                                             bool update_wallpaper,
+                                             bool cryptohome_success,
+                                             const std::string& user_id_hash);
+
   // WallpaperManagerBase overrides:
   void InitializeRegisteredDeviceWallpaper() override;
-  bool GetUserWallpaperInfo(const std::string& user_id,
+  bool GetUserWallpaperInfo(const AccountId& account_id,
                             wallpaper::WallpaperInfo* info) const override;
-  void OnWallpaperDecoded(const std::string& user_id,
+  void OnWallpaperDecoded(const AccountId& account_id,
                           wallpaper::WallpaperLayout layout,
                           bool update_wallpaper,
                           wallpaper::MovableOnDestroyCallbackHolder on_finish,
                           const user_manager::UserImage& user_image) override;
-  void StartLoad(const std::string& user_id,
+  void StartLoad(const AccountId& account_id,
                  const wallpaper::WallpaperInfo& info,
                  bool update_wallpaper,
                  const base::FilePath& wallpaper_path,
@@ -164,6 +183,8 @@ class WallpaperManager :
       scoped_ptr<bool> success,
       scoped_ptr<gfx::ImageSkia> small_wallpaper_image,
       scoped_ptr<gfx::ImageSkia> large_wallpaper_image) override;
+  void SetDefaultWallpaperPathsFromCommandLine(
+      base::CommandLine* command_line) override;
   void OnDefaultWallpaperDecoded(
       const base::FilePath& path,
       const wallpaper::WallpaperLayout layout,
@@ -196,6 +217,8 @@ class WallpaperManager :
   // All pending will be finally deleted on destroy.
   typedef std::vector<scoped_refptr<PendingWallpaper> > PendingList;
   PendingList loading_;
+
+  content::NotificationRegistrar registrar_;
 
   base::WeakPtrFactory<WallpaperManager> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(WallpaperManager);

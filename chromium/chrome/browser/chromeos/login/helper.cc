@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
@@ -15,9 +16,11 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
+#include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
+#include "chromeos/network/network_util.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -128,8 +131,38 @@ base::string16 NetworkStateHelper::GetCurrentNetworkName() const {
   return base::string16();
 }
 
-void NetworkStateHelper::CreateNetworkFromOnc(
-    const std::string& onc_spec) const {
+void NetworkStateHelper::GetConnectedWifiNetwork(std::string* out_onc_spec) {
+  const NetworkState* network_state =
+      NetworkHandler::Get()->network_state_handler()->ConnectedNetworkByType(
+          NetworkTypePattern::WiFi());
+
+  if (!network_state)
+    return;
+
+  scoped_ptr<base::DictionaryValue> current_onc =
+      network_util::TranslateNetworkStateToONC(network_state);
+  std::string security;
+  current_onc->GetString(
+      onc::network_config::WifiProperty(onc::wifi::kSecurity), &security);
+  if (security != onc::wifi::kSecurityNone)
+    return;
+
+  const std::string hex_ssid = network_state->GetHexSsid();
+
+  scoped_ptr<base::DictionaryValue> copied_onc(new base::DictionaryValue());
+  copied_onc->Set(onc::toplevel_config::kType,
+                  new base::StringValue(onc::network_type::kWiFi));
+  copied_onc->Set(onc::network_config::WifiProperty(onc::wifi::kHexSSID),
+                  new base::StringValue(hex_ssid));
+  copied_onc->Set(onc::network_config::WifiProperty(onc::wifi::kSecurity),
+                  new base::StringValue(security));
+  base::JSONWriter::Write(*copied_onc.get(), out_onc_spec);
+}
+
+void NetworkStateHelper::CreateAndConnectNetworkFromOnc(
+    const std::string& onc_spec,
+    const base::Closure& success_callback,
+    const base::Closure& error_callback) const {
   std::string error;
   scoped_ptr<base::Value> root = base::JSONReader::ReadAndReturnError(
       onc_spec, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
@@ -137,27 +170,18 @@ void NetworkStateHelper::CreateNetworkFromOnc(
   base::DictionaryValue* toplevel_onc = nullptr;
   if (!root || !root->GetAsDictionary(&toplevel_onc)) {
     LOG(ERROR) << "Invalid JSON Dictionary: " << error;
+    error_callback.Run();
     return;
   }
 
-  NetworkHandler::Get()->managed_network_configuration_handler()->
-      CreateConfiguration(
+  NetworkHandler::Get()
+      ->managed_network_configuration_handler()
+      ->CreateConfiguration(
           "", *toplevel_onc,
           base::Bind(&NetworkStateHelper::OnCreateConfiguration,
-                     base::Unretained(this)),
-          base::Bind(&NetworkStateHelper::OnCreateConfigurationFailed,
-                     base::Unretained(this)));
-}
-
-void NetworkStateHelper::OnCreateConfiguration(
-    const std::string& service_path) const {
-  // Do Nothing.
-}
-
-void NetworkStateHelper::OnCreateConfigurationFailed(
-    const std::string& error_name,
-    scoped_ptr<base::DictionaryValue> error_data) const {
-  LOG(ERROR) << "Failed to create network configuration: " << error_name;
+                     base::Unretained(this), success_callback, error_callback),
+          base::Bind(&NetworkStateHelper::OnCreateOrConnectNetworkFailed,
+                     base::Unretained(this), error_callback));
 }
 
 bool NetworkStateHelper::IsConnected() const {
@@ -172,6 +196,26 @@ bool NetworkStateHelper::IsConnecting() const {
       chromeos::NetworkHandler::Get()->network_state_handler();
   return nsh->ConnectingNetworkByType(
       chromeos::NetworkTypePattern::Default()) != nullptr;
+}
+
+void NetworkStateHelper::OnCreateConfiguration(
+    const base::Closure& success_callback,
+    const base::Closure& error_callback,
+    const std::string& service_path) const {
+  // Connect to the network.
+  NetworkHandler::Get()->network_connection_handler()->ConnectToNetwork(
+      service_path, success_callback,
+      base::Bind(&NetworkStateHelper::OnCreateOrConnectNetworkFailed,
+                 base::Unretained(this), error_callback),
+      false);
+}
+
+void NetworkStateHelper::OnCreateOrConnectNetworkFailed(
+    const base::Closure& error_callback,
+    const std::string& error_name,
+    scoped_ptr<base::DictionaryValue> error_data) const {
+  LOG(ERROR) << "Failed to create or connect to network: " << error_name;
+  error_callback.Run();
 }
 
 content::StoragePartition* GetSigninPartition() {

@@ -6,12 +6,14 @@
 
 #include <errno.h>
 #include <sched.h>
+#include <stddef.h>
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/threading/platform_thread_internal_posix.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 
 #if !defined(OS_NACL)
 #include <pthread.h>
@@ -38,12 +40,11 @@ const ThreadPriorityToNiceValuePair kThreadPriorityToNiceValueMap[4] = {
     {ThreadPriority::REALTIME_AUDIO, -10},
 };
 
-bool SetThreadPriorityForPlatform(PlatformThreadHandle handle,
-                                  ThreadPriority priority) {
+bool SetCurrentThreadPriorityForPlatform(ThreadPriority priority) {
 #if !defined(OS_NACL)
   ThreadPriority current_priority;
   if (priority != ThreadPriority::REALTIME_AUDIO &&
-      GetThreadPriorityForPlatform(handle, &current_priority) &&
+      GetCurrentThreadPriorityForPlatform(&current_priority) &&
       current_priority == ThreadPriority::REALTIME_AUDIO) {
     // If the pthread's round-robin scheduler is already enabled, and the new
     // priority will use setpriority() instead, the pthread scheduler should be
@@ -51,8 +52,6 @@ bool SetThreadPriorityForPlatform(PlatformThreadHandle handle,
     pthread_setschedparam(pthread_self(), SCHED_OTHER, &kResetPrio);
     return false;
   }
-  // TODO(gab): Assess the correctness of using |pthread_self()| below instead
-  // of |handle|. http://crbug.com/468793.
   return priority == ThreadPriority::REALTIME_AUDIO  &&
          pthread_setschedparam(pthread_self(), SCHED_RR, &kRealTimePrio) == 0;
 #else
@@ -60,13 +59,10 @@ bool SetThreadPriorityForPlatform(PlatformThreadHandle handle,
 #endif
 }
 
-bool GetThreadPriorityForPlatform(PlatformThreadHandle handle,
-                                  ThreadPriority* priority) {
+bool GetCurrentThreadPriorityForPlatform(ThreadPriority* priority) {
 #if !defined(OS_NACL)
   int maybe_sched_rr = 0;
   struct sched_param maybe_realtime_prio = {0};
-  // TODO(gab): Assess the correctness of using |pthread_self()| below instead
-  // of |handle|. http://crbug.com/468793.
   if (pthread_getschedparam(pthread_self(), &maybe_sched_rr,
                             &maybe_realtime_prio) == 0 &&
       maybe_sched_rr == SCHED_RR &&

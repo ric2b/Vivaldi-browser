@@ -4,6 +4,7 @@
 
 #include "extensions/renderer/api_test_base.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/run_loop.h"
@@ -12,11 +13,11 @@
 #include "extensions/renderer/process_info_native_handler.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/system/core.h"
 #include "third_party/mojo/src/mojo/edk/js/core.h"
 #include "third_party/mojo/src/mojo/edk/js/handle.h"
 #include "third_party/mojo/src/mojo/edk/js/support.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/core.h"
 
 namespace extensions {
 namespace {
@@ -89,7 +90,7 @@ mojo::Handle TestServiceProvider::ConnectToService(
            base::Callback<void(mojo::ScopedMessagePipeHandle)> >::iterator it =
       service_factories_.find(service_name);
   if (it != service_factories_.end())
-    it->second.Run(pipe.handle0.Pass());
+    it->second.Run(std::move(pipe.handle0));
   return pipe.handle1.release();
 }
 
@@ -140,17 +141,18 @@ void ApiTestEnvironment::RegisterModules() {
                           "unit_test_environment_specific_bindings.js");
 
   env()->OverrideNativeHandler("activityLogger",
-                               "exports.LogAPICall = function() {};");
+                               "exports.$set('LogAPICall', function() {});");
   env()->OverrideNativeHandler(
       "apiDefinitions",
-      "exports.GetExtensionAPIDefinitionsForTest = function() { return [] };");
+      "exports.$set('GetExtensionAPIDefinitionsForTest',"
+                    "function() { return [] });");
   env()->OverrideNativeHandler(
       "event_natives",
-      "exports.AttachEvent = function() {};"
-      "exports.DetachEvent = function() {};"
-      "exports.AttachFilteredEvent = function() {};"
-      "exports.AttachFilteredEvent = function() {};"
-      "exports.MatchAgainstEventFilter = function() { return [] };");
+      "exports.$set('AttachEvent', function() {});"
+      "exports.$set('DetachEvent', function() {});"
+      "exports.$set('AttachFilteredEvent', function() {});"
+      "exports.$set('AttachFilteredEvent', function() {});"
+      "exports.$set('MatchAgainstEventFilter', function() { return [] });");
 
   gin::ModuleRegistry::From(env()->context()->v8_context())
       ->AddBuiltinModule(env()->isolate(),

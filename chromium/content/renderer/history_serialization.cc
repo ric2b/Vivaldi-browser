@@ -4,6 +4,8 @@
 
 #include "content/renderer/history_serialization.h"
 
+#include <stddef.h>
+
 #include "content/common/page_state_serialization.h"
 #include "content/public/common/page_state.h"
 #include "content/renderer/history_entry.h"
@@ -90,7 +92,7 @@ void GenerateFrameStateFromItem(const WebHistoryItem& item,
   if (!item.stateObject().isNull())
     state->state_object = item.stateObject().toString();
   state->scroll_restoration_type = item.scrollRestorationType();
-  state->pinch_viewport_scroll_offset = item.pinchViewportScrollOffset();
+  state->visual_viewport_scroll_offset = item.visualViewportScrollOffset();
   state->scroll_offset = item.scrollOffset();
   state->item_sequence_number = item.itemSequenceNumber();
   state->document_sequence_number =
@@ -142,7 +144,7 @@ void RecursivelyGenerateHistoryItem(const ExplodedFrameState& state,
   }
   item.setDocumentState(state.document_state);
   item.setScrollRestorationType(state.scroll_restoration_type);
-  item.setPinchViewportScrollOffset(state.pinch_viewport_scroll_offset);
+  item.setVisualViewportScrollOffset(state.visual_viewport_scroll_offset);
   item.setScrollOffset(state.scroll_offset);
   item.setPageScaleFactor(state.page_scale_factor);
 
@@ -204,7 +206,7 @@ scoped_ptr<HistoryEntry> PageStateToHistoryEntry(const PageState& page_state) {
   scoped_ptr<HistoryEntry> entry(new HistoryEntry());
   RecursivelyGenerateHistoryItem(state.top, entry->root_history_node());
 
-  return entry.Pass();
+  return entry;
 }
 
 }  // namespace content

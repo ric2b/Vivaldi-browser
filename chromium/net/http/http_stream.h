@@ -11,9 +11,12 @@
 #ifndef NET_HTTP_HTTP_STREAM_H_
 #define NET_HTTP_HTTP_STREAM_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/completion_callback.h"
+#include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
 #include "net/base/upload_progress.h"
@@ -26,6 +29,7 @@ class HttpRequestHeaders;
 struct HttpRequestInfo;
 class HttpResponseInfo;
 class IOBuffer;
+class IPEndPoint;
 struct LoadTimingInfo;
 class SSLCertRequestInfo;
 class SSLInfo;
@@ -89,37 +93,37 @@ class NET_EXPORT_PRIVATE HttpStream {
   // In the case of HTTP, where we re-use the byte-stream (e.g. the connection)
   // this means we need to close the connection; in the case of SPDY, where the
   // underlying stream is never reused, it has no effect.
-  // TODO(mbelshe): We should figure out how to fold the not_reusable flag
-  //                into the stream implementation itself so that the caller
-  //                does not need to pass it at all.  We might also be able to
-  //                eliminate the SetConnectionReused() below.
+  // TODO(mmenke): We should fold the |not_reusable| flag into the stream
+  //               implementation itself so that the caller does not need to
+  //               pass it at all.  Ideally we'd be able to remove
+  //               CanReuseConnection() and IsResponseBodyComplete().
+  // TODO(mmenke): We should try and merge Drain() into this method as well.
   virtual void Close(bool not_reusable) = 0;
 
   // Indicates if the response body has been completely read.
   virtual bool IsResponseBodyComplete() const = 0;
-
-  // Indicates that the end of the response is detectable. This means that
-  // the response headers indicate either chunked encoding or content length.
-  // If neither is sent, the server must close the connection for us to detect
-  // the end of the response.
-  // TODO(rch): Rename this method, so that it is clear why it exists
-  // particularly as it applies to QUIC and SPDY for which the end of the
-  // response is always findable.
-  virtual bool CanFindEndOfResponse() const = 0;
 
   // A stream exists on top of a connection.  If the connection has been used
   // to successfully exchange data in the past, error handling for the
   // stream is done differently.  This method returns true if the underlying
   // connection is reused or has been connected and idle for some time.
   virtual bool IsConnectionReused() const = 0;
+  // TODO(mmenke): We should fold this into RenewStreamForAuth(), and make that
+  //    method drain the stream as well, if needed (And return asynchronously).
   virtual void SetConnectionReused() = 0;
 
-  // Checks whether the current state of the underlying connection
-  // allows it to be reused.
-  virtual bool IsConnectionReusable() const = 0;
+  // Checks whether the underlying connection can be reused.  The stream's
+  // connection can be reused if the response headers allow for it, the socket
+  // is still connected, and the stream exclusively owns the underlying
+  // connection.  SPDY and QUIC streams don't own their own connections, so
+  // always return false.
+  virtual bool CanReuseConnection() const = 0;
 
   // Get the total number of bytes received from network for this stream.
-  virtual int64 GetTotalReceivedBytes() const = 0;
+  virtual int64_t GetTotalReceivedBytes() const = 0;
+
+  // Get the total number of bytes sent over the network for this stream.
+  virtual int64_t GetTotalSentBytes() const = 0;
 
   // Populates the connection establishment part of |load_timing_info|, and
   // socket ID.  |load_timing_info| must have all null times when called.
@@ -142,15 +146,21 @@ class NET_EXPORT_PRIVATE HttpStream {
   // behavior is undefined.
   virtual void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) = 0;
 
-  // HACK(willchan): Really, we should move the HttpResponseDrainer logic into
-  // the HttpStream implementation. This is just a quick hack.
-  virtual bool IsSpdyHttpStream() const = 0;
+  // Gets the remote endpoint of the socket that the HTTP stream is using, if
+  // any. Returns true and fills in |endpoint| if it is available; returns false
+  // and does not modify |endpoint| if it is unavailable.
+  virtual bool GetRemoteEndpoint(IPEndPoint* endpoint) = 0;
 
   // In the case of an HTTP error or redirect, flush the response body (usually
   // a simple error or "this page has moved") so that we can re-use the
   // underlying connection. This stream is responsible for deleting itself when
   // draining is complete.
   virtual void Drain(HttpNetworkSession* session) = 0;
+
+  // Get the network error details this stream is encountering.
+  // Fills in |details| if it is available; leaves |details| unchanged if it
+  // is unavailable.
+  virtual void PopulateNetErrorDetails(NetErrorDetails* details) = 0;
 
   // Called when the priority of the parent transaction changes.
   virtual void SetPriority(RequestPriority priority) = 0;

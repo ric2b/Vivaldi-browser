@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "media/audio/audio_parameters.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -16,6 +18,9 @@ TEST(AudioParameters, Constructor_Default) {
   ChannelLayout expected_channel_layout = CHANNEL_LAYOUT_NONE;
   int expected_rate = 0;
   int expected_samples = 0;
+  AudioParameters::PlatformEffectsMask expected_effects =
+      AudioParameters::NO_EFFECTS;
+  std::vector<Point> expected_mic_positions;
 
   AudioParameters params;
 
@@ -25,6 +30,8 @@ TEST(AudioParameters, Constructor_Default) {
   EXPECT_EQ(expected_channel_layout, params.channel_layout());
   EXPECT_EQ(expected_rate, params.sample_rate());
   EXPECT_EQ(expected_samples, params.frames_per_buffer());
+  EXPECT_EQ(expected_effects, params.effects());
+  EXPECT_EQ(expected_mic_positions, params.mic_positions());
 }
 
 TEST(AudioParameters, Constructor_ParameterValues) {
@@ -194,7 +201,8 @@ TEST(AudioParameters, Compare) {
 
   for (size_t i = 0; i < arraysize(values); ++i) {
     for (size_t j = 0; j < arraysize(values); ++j) {
-      SCOPED_TRACE("i=" + base::IntToString(i) + " j=" + base::IntToString(j));
+      SCOPED_TRACE("i=" + base::SizeTToString(i) + " j=" +
+                   base::SizeTToString(j));
       EXPECT_EQ(i < j, values[i] < values[j]);
     }
 
@@ -205,20 +213,11 @@ TEST(AudioParameters, Compare) {
 
 TEST(AudioParameters, Constructor_ValidChannelCounts) {
   int expected_channels = 8;
-  ChannelLayout expected_layout = CHANNEL_LAYOUT_5_1;
+  ChannelLayout expected_layout = CHANNEL_LAYOUT_DISCRETE;
 
   AudioParameters params(AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                         expected_layout, expected_channels, 44100, 16, 880,
-                         AudioParameters::NO_EFFECTS);
-
-  EXPECT_EQ(expected_channels, params.channels());
-  EXPECT_EQ(expected_layout, params.channel_layout());
-  EXPECT_FALSE(params.IsValid());
-
-  expected_layout = CHANNEL_LAYOUT_DISCRETE;
-  params.Reset(AudioParameters::AUDIO_PCM_LOW_LATENCY, expected_layout,
-               expected_channels, 44100, 16, 880);
-
+                         expected_layout, 44100, 16, 880);
+  params.set_channels_for_discrete(expected_channels);
   EXPECT_EQ(expected_channels, params.channels());
   EXPECT_EQ(expected_layout, params.channel_layout());
   EXPECT_TRUE(params.IsValid());

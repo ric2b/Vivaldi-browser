@@ -4,9 +4,12 @@
 
 #include "content/shell/browser/shell_devtools_frontend.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -156,8 +159,10 @@ ShellDevToolsFrontend::~ShellDevToolsFrontend() {
 void ShellDevToolsFrontend::RenderViewCreated(
     RenderViewHost* render_view_host) {
   if (!frontend_host_) {
-    frontend_host_.reset(
-        DevToolsFrontendHost::Create(web_contents()->GetMainFrame(), this));
+    frontend_host_.reset(DevToolsFrontendHost::Create(
+        web_contents()->GetMainFrame(),
+        base::Bind(&ShellDevToolsFrontend::HandleMessageFromDevToolsFrontend,
+                   base::Unretained(this))));
   }
 }
 
@@ -189,12 +194,14 @@ void ShellDevToolsFrontend::HandleMessageFromDevToolsFrontend(
   dict->GetInteger("id", &request_id);
   dict->GetList("params", &params);
 
-  std::string browser_message;
-  if (method == "sendMessageToBrowser" && params &&
-      params->GetSize() == 1 && params->GetString(0, &browser_message)) {
-    agent_host_->DispatchProtocolMessage(browser_message);
+  if (method == "dispatchProtocolMessage" && params && params->GetSize() == 1) {
+    std::string protocol_message;
+    if (!params->GetString(0, &protocol_message))
+      return;
+    if (agent_host_)
+      agent_host_->DispatchProtocolMessage(protocol_message);
   } else if (method == "loadCompleted") {
-    web_contents()->GetMainFrame()->ExecuteJavaScript(
+    web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(
         base::ASCIIToUTF16("DevToolsAPI.setUseSoftMenu(true);"));
   } else if (method == "loadNetworkResource" && params->GetSize() == 3) {
     // TODO(pfeldman): handle some of the embedder messages in content.
@@ -241,6 +248,9 @@ void ShellDevToolsFrontend::HandleMessageFromDevToolsFrontend(
     if (!params->GetString(0, &name))
       return;
     preferences_.RemoveWithoutPathExpansion(name, nullptr);
+  } else if (method == "requestFileSystems") {
+    web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(
+        base::ASCIIToUTF16("DevToolsAPI.fileSystemsLoaded([]);"));
   } else {
     return;
   }
@@ -249,19 +259,13 @@ void ShellDevToolsFrontend::HandleMessageFromDevToolsFrontend(
     SendMessageAck(request_id, nullptr);
 }
 
-void ShellDevToolsFrontend::HandleMessageFromDevToolsFrontendToBackend(
-    const std::string& message) {
-  if (agent_host_)
-    agent_host_->DispatchProtocolMessage(message);
-}
-
 void ShellDevToolsFrontend::DispatchProtocolMessage(
     DevToolsAgentHost* agent_host, const std::string& message) {
 
   if (message.length() < kMaxMessageChunkSize) {
     base::string16 javascript = base::UTF8ToUTF16(
         "DevToolsAPI.dispatchMessage(" + message + ");");
-    web_contents()->GetMainFrame()->ExecuteJavaScript(javascript);
+    web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(javascript);
     return;
   }
 
@@ -272,7 +276,7 @@ void ShellDevToolsFrontend::DispatchProtocolMessage(
         base::StringValue(message.substr(pos, kMaxMessageChunkSize)), &param);
     std::string code = "DevToolsAPI.dispatchMessageChunk(" + param + ");";
     base::string16 javascript = base::UTF8ToUTF16(code);
-    web_contents()->GetMainFrame()->ExecuteJavaScript(javascript);
+    web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(javascript);
   }
 }
 
@@ -320,7 +324,7 @@ void ShellDevToolsFrontend::CallClientFunction(
     }
   }
   javascript.append(");");
-  web_contents()->GetMainFrame()->ExecuteJavaScript(
+  web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(
       base::UTF8ToUTF16(javascript));
 }
 

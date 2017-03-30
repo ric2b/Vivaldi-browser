@@ -10,11 +10,9 @@
 namespace content {
 
 PushDispatcher::PushDispatcher(ThreadSafeSender* thread_safe_sender)
-    : WorkerThreadMessageFilter(thread_safe_sender), next_request_id_(0) {
-}
+    : WorkerThreadMessageFilter(thread_safe_sender), next_request_id_(0) {}
 
-PushDispatcher::~PushDispatcher() {
-}
+PushDispatcher::~PushDispatcher() {}
 
 int PushDispatcher::GenerateRequestId(int thread_id) {
   base::AutoLock lock(request_id_map_lock_);
@@ -29,8 +27,8 @@ bool PushDispatcher::ShouldHandleMessage(const IPC::Message& msg) const {
   // RenderFrameObserver.
   return msg.type() == PushMessagingMsg_SubscribeFromWorkerSuccess::ID ||
          msg.type() == PushMessagingMsg_SubscribeFromWorkerError::ID ||
-         msg.type() == PushMessagingMsg_GetRegistrationSuccess::ID ||
-         msg.type() == PushMessagingMsg_GetRegistrationError::ID ||
+         msg.type() == PushMessagingMsg_GetSubscriptionSuccess::ID ||
+         msg.type() == PushMessagingMsg_GetSubscriptionError::ID ||
          msg.type() == PushMessagingMsg_GetPermissionStatusSuccess::ID ||
          msg.type() == PushMessagingMsg_GetPermissionStatusError::ID ||
          msg.type() == PushMessagingMsg_UnsubscribeSuccess::ID ||
@@ -38,8 +36,9 @@ bool PushDispatcher::ShouldHandleMessage(const IPC::Message& msg) const {
 }
 
 void PushDispatcher::OnFilteredMessageReceived(const IPC::Message& msg) {
-  bool handled = PushProvider::ThreadSpecificInstance(
-                     thread_safe_sender(), this)->OnMessageReceived(msg);
+  bool handled =
+      PushProvider::ThreadSpecificInstance(thread_safe_sender(), this)
+          ->OnMessageReceived(msg);
   DCHECK(handled);
 }
 

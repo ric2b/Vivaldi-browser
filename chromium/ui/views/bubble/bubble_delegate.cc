@@ -4,6 +4,7 @@
 
 #include "ui/views/bubble/bubble_delegate.h"
 
+#include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_utils.h"
@@ -51,25 +52,10 @@ Widget* CreateBubbleWidget(BubbleDelegateView* bubble) {
 const char BubbleDelegateView::kViewClassName[] = "BubbleDelegateView";
 
 BubbleDelegateView::BubbleDelegateView()
-    : close_on_esc_(true),
-      close_on_deactivate_(true),
-      anchor_view_storage_id_(ViewStorage::GetInstance()->CreateStorageID()),
-      anchor_widget_(NULL),
-      arrow_(BubbleBorder::TOP_LEFT),
-      shadow_(BubbleBorder::SMALL_SHADOW),
-      color_explicitly_set_(false),
-      margins_(kDefaultMargin, kDefaultMargin, kDefaultMargin, kDefaultMargin),
-      accept_events_(true),
-      border_accepts_events_(true),
-      adjust_if_offscreen_(true),
-      parent_window_(NULL) {
-  AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
-  UpdateColorsFromTheme(GetNativeTheme());
-}
+    : BubbleDelegateView(nullptr, BubbleBorder::TOP_LEFT) {}
 
-BubbleDelegateView::BubbleDelegateView(
-    View* anchor_view,
-    BubbleBorder::Arrow arrow)
+BubbleDelegateView::BubbleDelegateView(View* anchor_view,
+                                       BubbleBorder::Arrow arrow)
     : close_on_esc_(true),
       close_on_deactivate_(true),
       anchor_view_storage_id_(ViewStorage::GetInstance()->CreateStorageID()),
@@ -81,8 +67,10 @@ BubbleDelegateView::BubbleDelegateView(
       accept_events_(true),
       border_accepts_events_(true),
       adjust_if_offscreen_(true),
-      parent_window_(NULL) {
-  SetAnchorView(anchor_view);
+      parent_window_(NULL),
+      close_reason_(CloseReason::UNKNOWN) {
+  if (anchor_view)
+    SetAnchorView(anchor_view);
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
   UpdateColorsFromTheme(GetNativeTheme());
 }
@@ -106,8 +94,9 @@ Widget* BubbleDelegateView::CreateBubble(BubbleDelegateView* bubble_delegate) {
   // the parent frame and let DWM handle compositing.  If not, then we don't
   // want to allow the bubble to extend the frame because it will be clipped.
   bubble_delegate->set_adjust_if_offscreen(ui::win::IsAeroGlassEnabled());
-#elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#elif (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX)
   // Linux clips bubble windows that extend outside their parent window bounds.
+  // Mac never adjusts.
   bubble_delegate->set_adjust_if_offscreen(false);
 #endif
 
@@ -150,6 +139,14 @@ const char* BubbleDelegateView::GetClassName() const {
   return kViewClassName;
 }
 
+void BubbleDelegateView::OnWidgetClosing(Widget* widget) {
+  DCHECK(GetBubbleFrameView());
+  if (widget == GetWidget() && close_reason_ == CloseReason::UNKNOWN &&
+      GetBubbleFrameView()->close_button_clicked()) {
+    close_reason_ = CloseReason::CLOSE_BUTTON;
+  }
+}
+
 void BubbleDelegateView::OnWidgetDestroying(Widget* widget) {
   if (anchor_widget() == widget)
     SetAnchorView(NULL);
@@ -174,8 +171,11 @@ void BubbleDelegateView::OnWidgetVisibilityChanged(Widget* widget,
 
 void BubbleDelegateView::OnWidgetActivationChanged(Widget* widget,
                                                    bool active) {
-  if (close_on_deactivate() && widget == GetWidget() && !active)
+  if (close_on_deactivate() && widget == GetWidget() && !active) {
+    if (close_reason_ == CloseReason::UNKNOWN)
+      close_reason_ = CloseReason::DEACTIVATION;
     GetWidget()->Close();
+  }
 }
 
 void BubbleDelegateView::OnWidgetBoundsChanged(Widget* widget,
@@ -220,6 +220,7 @@ bool BubbleDelegateView::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   if (!close_on_esc() || accelerator.key_code() != ui::VKEY_ESCAPE)
     return false;
+  close_reason_ = CloseReason::ESCAPE;
   GetWidget()->Close();
   return true;
 }
@@ -292,7 +293,7 @@ const gfx::FontList& BubbleDelegateView::GetTitleFontList() const {
 
 void BubbleDelegateView::UpdateColorsFromTheme(const ui::NativeTheme* theme) {
   if (!color_explicitly_set_)
-    color_ = theme->GetSystemColor(ui::NativeTheme::kColorId_DialogBackground);
+    color_ = theme->GetSystemColor(ui::NativeTheme::kColorId_BubbleBackground);
   set_background(Background::CreateSolidBackground(color()));
   BubbleFrameView* frame_view = GetBubbleFrameView();
   if (frame_view)

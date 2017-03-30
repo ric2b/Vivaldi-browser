@@ -24,7 +24,7 @@ var hostSession_ = null;
 var lastShareWasCancelled_ = false;
 
 /**
- * @type {remoting.LogToServer} Logging instance for IT2Me host connection
+ * @type {remoting.SessionLogger} Logging instance for IT2Me host connection
  *     status.
  */
 var it2meLogger = null;
@@ -36,14 +36,9 @@ var it2meLogger = null;
  * to install them if necessary.
  */
 remoting.tryShare = function() {
-  ensureIT2MeLogger_().then(tryShareWithLogger_);
-};
-
-function tryShareWithLogger_() {
-  it2meLogger.setSessionId();
-  it2meLogger.logClientSessionStateChange(
-      remoting.ClientSession.State.INITIALIZING,
-      remoting.Error.none());
+  it2meLogger = createLogger_();
+  it2meLogger.logSessionStateChange(
+      remoting.ChromotingEvent.SessionState.STARTED);
 
   /** @type {remoting.It2MeHostFacade} */
   var hostFacade = new remoting.It2MeHostFacade();
@@ -76,15 +71,38 @@ function tryShareWithLogger_() {
 };
 
 /**
+ * Returns the info of the local It2Me host.
+ *
+ * @param {remoting.It2MeHostFacade} hostFacade
+ * @return {remoting.Host}
+ */
+function getHostInfo(hostFacade) {
+  var hostInfo = new remoting.Host('it2me');
+  var systemInfo = remoting.getSystemInfo();
+  hostInfo.hostVersion = hostFacade.getHostVersion();
+  hostInfo.hostOsVersion = systemInfo.osVersion;
+  if (systemInfo.osName === remoting.Os.WINDOWS) {
+    hostInfo.hostOs = remoting.ChromotingEvent.Os.WINDOWS;
+  } else if (systemInfo.osName === remoting.Os.LINUX) {
+    hostInfo.hostOs = remoting.ChromotingEvent.Os.LINUX;
+  } else if (systemInfo.osName === remoting.Os.MAC) {
+    hostInfo.hostOs = remoting.ChromotingEvent.Os.MAC;
+  } else if (systemInfo.osName === remoting.Os.CHROMEOS) {
+    hostInfo.hostOs = remoting.ChromotingEvent.Os.CHROMEOS;
+  }
+  return hostInfo;
+}
+
+/**
  * @param {remoting.It2MeHostFacade} hostFacade An initialized It2MeHostFacade.
  */
 remoting.startHostUsingFacade_ = function(hostFacade) {
   console.log('Attempting to share...');
-  setHostVersion_()
-      .then(remoting.identity.getToken.bind(remoting.identity))
-      .then(remoting.tryShareWithToken_.bind(null, hostFacade),
-            remoting.Error.handler(showShareError_));
-}
+  it2meLogger.setHost(getHostInfo(hostFacade));
+  remoting.identity.getToken().then(
+    remoting.tryShareWithToken_.bind(null, hostFacade),
+    remoting.Error.handler(showShareError_));
+};
 
 /**
  * @param {remoting.It2MeHostFacade} hostFacade An initialized
@@ -96,9 +114,8 @@ remoting.tryShareWithToken_ = function(hostFacade, token) {
   lastShareWasCancelled_ = false;
   onNatTraversalPolicyChanged_(true);  // Hide warning by default.
   remoting.setMode(remoting.AppMode.HOST_WAITING_FOR_CODE);
-  it2meLogger.logClientSessionStateChange(
-      remoting.ClientSession.State.CONNECTING,
-      remoting.Error.none());
+  it2meLogger.logSessionStateChange(
+      remoting.ChromotingEvent.SessionState.CONNECTING);
   document.getElementById('cancel-share-button').disabled = false;
   disableTimeoutCountdown_();
 
@@ -211,17 +228,15 @@ function logDebugInfo_(msg) {
 function showShareError_(error) {
   if (error.hasTag(remoting.Error.Tag.CANCELLED)) {
     remoting.setMode(remoting.AppMode.HOME);
-    it2meLogger.logClientSessionStateChange(
-        remoting.ClientSession.State.CONNECTION_CANCELED,
-        remoting.Error.none());
+    it2meLogger.logSessionStateChange(
+        remoting.ChromotingEvent.SessionState.CONNECTION_CANCELED);
   } else {
     var errorDiv = document.getElementById('host-plugin-error');
     l10n.localizeElementFromTag(errorDiv, error.getTag());
     console.error('Sharing error: ' + error.toString());
     remoting.setMode(remoting.AppMode.HOST_SHARE_FAILED);
-    it2meLogger.logClientSessionStateChange(
-        remoting.ClientSession.State.FAILED,
-        error);
+    it2meLogger.logSessionStateChange(
+        remoting.ChromotingEvent.SessionState.CONNECTION_FAILED, error);
   }
 
   cleanUp();
@@ -252,9 +267,8 @@ remoting.cancelShare = function() {
   remoting.lastShareWasCancelled = true;
   try {
     hostSession_.disconnect();
-    it2meLogger.logClientSessionStateChange(
-        remoting.ClientSession.State.CONNECTION_CANCELED,
-        remoting.Error.none());
+    it2meLogger.logSessionStateChange(
+        remoting.ChromotingEvent.SessionState.CONNECTION_CANCELED);
   } catch (/** @type {*} */ error) {
     console.error('Error disconnecting: ' + error +
                   '. The host probably crashed.');
@@ -364,44 +378,17 @@ function onNatTraversalPolicyChanged_(enabled) {
 }
 
 /**
- * Create an IT2Me LogToServer instance if one does not already exist.
+ * Create an IT2Me SessionLogger instance.
  *
- * @return {Promise} Promise that resolves when the host version (if available),
- *     has been set on the logger instance.
+ * @return {remoting.SessionLogger}
  */
-function ensureIT2MeLogger_() {
-  if (it2meLogger) {
-    return Promise.resolve();
-  }
-
-  var xmppConnection = new remoting.XmppConnection();
-  var tokenPromise = remoting.identity.getToken();
-  var emailPromise = remoting.identity.getEmail();
-  tokenPromise.then(function(/** string */ token) {
-    emailPromise.then(function(/** string */ email) {
-      xmppConnection.connect(remoting.settings.XMPP_SERVER, email, token);
-    });
-  });
-
-  var bufferedSignalStrategy =
-      new remoting.BufferedSignalStrategy(xmppConnection);
-  it2meLogger = new remoting.LogToServer(bufferedSignalStrategy, true);
-  it2meLogger.setLogEntryMode(remoting.ChromotingEvent.Mode.IT2ME);
-
-  return setHostVersion_();
-};
-
-/**
- * @return {Promise} Promise that resolves when the host version (if available),
- *     has been set on the logger instance.
- */
-function setHostVersion_() {
-  return remoting.hostController.getLocalHostVersion().then(
-      function(/** string */ version) {
-        it2meLogger.setHostVersion(version);
-      }).catch(
-        base.doNothing
-      );
-};
+function createLogger_() {
+  // Create a new logger for each session to refresh the session id.
+  var logger = new remoting.SessionLogger(
+      remoting.ChromotingEvent.Role.HOST,
+      remoting.TelemetryEventWriter.Client.write);
+  logger.setLogEntryMode(remoting.ChromotingEvent.Mode.IT2ME);
+  return logger;
+}
 
 })();

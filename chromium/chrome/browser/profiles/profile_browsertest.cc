@@ -4,6 +4,8 @@
 
 #include "chrome/browser/profiles/profile.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -17,6 +19,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/net/url_request_mock_util.h"
@@ -26,11 +29,11 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/browser/startup_task_runner_service.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_utils.h"
 #include "net/base/net_errors.h"
@@ -109,8 +112,7 @@ void CreatePrefsFileInDirectory(const base::FilePath& directory_path) {
 void CheckChromeVersion(Profile *profile, bool is_new) {
   std::string created_by_version;
   if (is_new) {
-    chrome::VersionInfo version_info;
-    created_by_version = version_info.Version();
+    created_by_version = version_info::GetVersionNumber();
   } else {
     created_by_version = "1.0.0.0";
   }
@@ -176,7 +178,7 @@ class ProfileBrowserTest : public InProcessBrowserTest {
     // Store the Profile's IO task runner so we can wind it down.
     profile_io_task_runner_ = profile->GetIOTaskRunner();
 
-    return profile.Pass();
+    return profile;
   }
 
   void FlushIoTaskRunnerAndSpinThreads() {
@@ -533,36 +535,20 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
 
 // The following tests make sure that it's safe to destroy an incognito profile
 // while one of the its URLRequestContextGetters is in use by a URLFetcher.
-//tomas@vivaldi.com: disabled browser_tests for mac (VB-7468)
-#if defined(OS_MACOSX)
-#define MAYBE_URLFetcherUsingMainContextDuringIncognitoTeardown \
-DISABLED_URLFetcherUsingMainContextDuringIncognitoTeardown
-#else
-#define MAYBE_URLFetcherUsingMainContextDuringIncognitoTeardown \
-URLFetcherUsingMainContextDuringIncognitoTeardown
-#endif
+
 IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
-                      MAYBE_URLFetcherUsingMainContextDuringIncognitoTeardown) {
+                       URLFetcherUsingMainContextDuringIncognitoTeardown) {
   Browser* incognito_browser =
-      ui_test_utils::OpenURLOffTheRecord(browser()->profile(),
-                                         GURL("about:blank"));
+      OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
   RunURLFetcherActiveDuringIncognitoTeardownTest(
       incognito_browser, incognito_browser->profile()->GetRequestContext());
 }
 
-//tomas@vivaldi.com: disabled browser_tests for mac (VB-7468)
-#if defined(OS_MACOSX)
-#define MAYBE_URLFetcherUsingExtensionContextDuringIncognitoTeardown \
-DISABLED_URLFetcherUsingExtensionContextDuringIncognitoTeardown
-#else
-#define MAYBE_URLFetcherUsingExtensionContextDuringIncognitoTeardown \
-URLFetcherUsingExtensionContextDuringIncognitoTeardown
-#endif
 IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
-                MAYBE_URLFetcherUsingExtensionContextDuringIncognitoTeardown) {
+                       URLFetcherUsingExtensionContextDuringIncognitoTeardown) {
   Browser* incognito_browser =
-      ui_test_utils::OpenURLOffTheRecord(browser()->profile(),
-                                         GURL("about:blank"));
+      OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
+
   RunURLFetcherActiveDuringIncognitoTeardownTest(
       incognito_browser,
       incognito_browser->profile()->GetRequestContextForExtensions());

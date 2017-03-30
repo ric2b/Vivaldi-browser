@@ -5,6 +5,7 @@
 #include "sandbox/linux/suid/client/setuid_sandbox_host.h"
 
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -18,6 +19,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
@@ -130,7 +132,7 @@ base::FilePath SetuidSandboxHost::GetSandboxBinaryPath() {
 
   // In user-managed builds, including development builds, an environment
   // variable is required to enable the sandbox. See
-  // http://code.google.com/p/chromium/wiki/LinuxSUIDSandboxDevelopment
+  // https://chromium.googlesource.com/chromium/src/+/master/docs/linux_suid_sandbox_development.md
   struct stat st;
   if (sandbox_binary.empty() && stat(base::kProcSelfExe, &st) == 0 &&
       st.st_uid == getuid()) {
@@ -149,8 +151,9 @@ void SetuidSandboxHost::PrependWrapper(base::CommandLine* cmd_line) {
   if (sandbox_binary.empty() || stat(sandbox_binary.c_str(), &st) != 0) {
     LOG(FATAL) << "The SUID sandbox helper binary is missing: "
                << sandbox_binary << " Aborting now. See "
-                                    "https://code.google.com/p/chromium/wiki/"
-                                    "LinuxSUIDSandboxDevelopment.";
+                                    "https://chromium.googlesource.com/"
+                                    "chromium/src/+/master/docs/"
+                                    "linux_suid_sandbox_development.md.";
   }
 
   if (access(sandbox_binary.c_str(), X_OK) != 0 || (st.st_uid != 0) ||

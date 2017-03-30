@@ -12,6 +12,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.content.browser.test.util.UiUtils;
@@ -75,11 +76,11 @@ public class FeedbackCollectorTest extends ChromeActivityTestCaseBase<ChromeActi
         }
 
         @Override
-        public void onGotBitmap(@Nullable final Bitmap bitmap, final boolean success) {
+        public void onGotBitmap(@Nullable final Bitmap bitmap) {
             ThreadUtils.runOnUiThreadBlocking(new Runnable() {
                 @Override
                 public void run() {
-                    TestFeedbackCollector.super.onGotBitmap(bitmap, success);
+                    TestFeedbackCollector.super.onGotBitmap(bitmap);
                 }
             });
         }
@@ -220,6 +221,8 @@ public class FeedbackCollectorTest extends ChromeActivityTestCaseBase<ChromeActi
         assertEquals("some description", mCollector.getDescription());
         assertEquals("bar", bundle.getString("foo"));
         assertEquals(bitmap, mCollector.getScreenshot());
+        assertEquals("false",
+                bundle.getString(DataReductionProxySettings.DATA_REDUCTION_PROXY_ENABLED_KEY));
     }
 
     @SmallTest
@@ -242,7 +245,7 @@ public class FeedbackCollectorTest extends ChromeActivityTestCaseBase<ChromeActi
         mCollector.setDescription("some description");
         mCollector.add("foo", "bar");
         Bitmap bitmap = createBitmap();
-        mCollector.onGotBitmap(bitmap, true);
+        mCollector.onGotBitmap(bitmap);
 
         // Wait until the callback has been called.
         assertTrue("Failed to acquire semaphore.", semaphore.tryAcquire(1, TimeUnit.SECONDS));
@@ -275,7 +278,7 @@ public class FeedbackCollectorTest extends ChromeActivityTestCaseBase<ChromeActi
         mTestConnectivityTask.setFeedbackData(feedbackData);
         assertFalse("Result should not be ready after connectivity data.", hasResult.get());
         Bitmap bitmap = createBitmap();
-        mCollector.onGotBitmap(bitmap, true);
+        mCollector.onGotBitmap(bitmap);
 
         // This timeout task should trigger the callback.
         mCollector.setTimedOut(true);
@@ -317,7 +320,7 @@ public class FeedbackCollectorTest extends ChromeActivityTestCaseBase<ChromeActi
 
         // Trigger callback by finishing taking the screenshot.
         Bitmap bitmap = createBitmap();
-        mCollector.onGotBitmap(bitmap, true);
+        mCollector.onGotBitmap(bitmap);
 
         // Wait until the callback has been called.
         assertTrue("Failed to acquire semaphore.", semaphore.tryAcquire(1, TimeUnit.SECONDS));

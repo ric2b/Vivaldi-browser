@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/synchronization/lock.h"
@@ -51,7 +52,7 @@ class ContentSettingsStore
 
   // //////////////////////////////////////////////////////////////////////////
 
-  content_settings::RuleIterator* GetRuleIterator(
+  scoped_ptr<content_settings::RuleIterator> GetRuleIterator(
       ContentSettingsType type,
       const content_settings::ResourceIdentifier& identifier,
       bool incognito) const;

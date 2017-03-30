@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//mojo/public/mojo_application.gni")
-import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("bindings") {
   sources = [
@@ -22,7 +22,7 @@ mojo_native_application("pingable_app") {
 
   deps = [
     ":bindings",
-    "//mojo/application/public/cpp",
-    "//third_party/mojo/src/mojo/public/cpp/bindings:callback",
+    "//mojo/public/cpp/bindings:callback",
+    "//mojo/shell/public/cpp",
   ]
 }

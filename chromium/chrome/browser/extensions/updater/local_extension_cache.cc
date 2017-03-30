@@ -30,7 +30,7 @@ const char LocalExtensionCache::kCacheReadyFlagFileName[] = ".initialized";
 
 LocalExtensionCache::LocalExtensionCache(
     const base::FilePath& cache_dir,
-    uint64 max_cache_size,
+    uint64_t max_cache_size,
     const base::TimeDelta& max_cache_age,
     const scoped_refptr<base::SequencedTaskRunner>& backend_task_runner)
     : cache_dir_(cache_dir),
@@ -40,8 +40,7 @@ LocalExtensionCache::LocalExtensionCache(
       state_(kUninitialized),
       cache_status_polling_delay_(
           base::TimeDelta::FromMilliseconds(kCacheStatusPollingDelayMs)),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 LocalExtensionCache::~LocalExtensionCache() {
   if (state_ == kReady)
@@ -75,7 +74,7 @@ LocalExtensionCache::CacheMap::iterator LocalExtensionCache::FindExtension(
     const std::string& expected_hash) {
   CacheHit hit = cache.equal_range(id);
   CacheMap::iterator empty_hash = cache.end();
-  std::string hash = base::StringToLowerASCII(expected_hash);
+  std::string hash = base::ToLowerASCII(expected_hash);
   for (CacheMap::iterator it = hit.first; it != hit.second; ++it) {
     if (expected_hash.empty() || it->second.expected_hash == hash) {
       return it;
@@ -213,7 +212,7 @@ bool LocalExtensionCache::RemoveExtension(const std::string& id,
   return true;
 }
 
-bool LocalExtensionCache::GetStatistics(uint64* cache_size,
+bool LocalExtensionCache::GetStatistics(uint64_t* cache_size,
                                         size_t* extensions_count) {
   if (state_ != kReady)
     return false;
@@ -421,7 +420,7 @@ void LocalExtensionCache::BackendCheckCacheContentsInternal(
     std::string version;
     std::string expected_hash;
     if (base::EndsWith(basename, kCRXFileExtension,
-                       false /* case-sensitive */)) {
+                       base::CompareCase::INSENSITIVE_ASCII)) {
       size_t n = basename.find('-');
       if (n != std::string::npos && n + 1 < basename.size() - 4) {
         id = basename.substr(0, n);
@@ -437,7 +436,7 @@ void LocalExtensionCache::BackendCheckCacheContentsInternal(
     }
 
     // Enforce a lower-case id.
-    id = base::StringToLowerASCII(id);
+    id = base::ToLowerASCII(id);
     if (!crx_file::id_util::IdIsValid(id)) {
       LOG(ERROR) << "Bad extension id in cache: " << id;
       id.clear();
@@ -486,7 +485,7 @@ std::string LocalExtensionCache::ExtensionFileName(
     const std::string& expected_hash) {
   std::string filename = id + "-" + version;
   if (!expected_hash.empty())
-    filename += "-" + base::StringToLowerASCII(expected_hash);
+    filename += "-" + base::ToLowerASCII(expected_hash);
   filename += kCRXFileExtension;
   return filename;
 }
@@ -609,14 +608,13 @@ LocalExtensionCache::CacheItemInfo::CacheItemInfo(
     const std::string& version,
     const std::string& expected_hash,
     const base::Time& last_used,
-    uint64 size,
+    uint64_t size,
     const base::FilePath& file_path)
     : version(version),
-      expected_hash(base::StringToLowerASCII(expected_hash)),
+      expected_hash(base::ToLowerASCII(expected_hash)),
       last_used(last_used),
       size(size),
-      file_path(file_path) {
-}
+      file_path(file_path) {}
 
 LocalExtensionCache::CacheItemInfo::~CacheItemInfo() {
 }

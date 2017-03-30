@@ -4,6 +4,8 @@
 
 #include "components/proximity_auth/bluetooth_throttler_impl.h"
 
+#include <utility>
+
 #include "base/stl_util.h"
 #include "base/time/tick_clock.h"
 #include "components/proximity_auth/connection.h"
@@ -18,8 +20,7 @@ const int kCooldownTimeSecs = 7;
 
 BluetoothThrottlerImpl::BluetoothThrottlerImpl(
     scoped_ptr<base::TickClock> clock)
-    : clock_(clock.Pass()) {
-}
+    : clock_(std::move(clock)) {}
 
 BluetoothThrottlerImpl::~BluetoothThrottlerImpl() {
   for (Connection* connection : connections_) {
@@ -55,8 +56,7 @@ void BluetoothThrottlerImpl::OnConnectionStatusChanged(
     Connection::Status old_status,
     Connection::Status new_status) {
   DCHECK(ContainsKey(connections_, connection));
-  if (old_status == Connection::CONNECTED &&
-      new_status == Connection::DISCONNECTED) {
+  if (new_status == Connection::DISCONNECTED) {
     last_disconnect_time_ = clock_->NowTicks();
     connection->RemoveObserver(this);
     connections_.erase(connection);

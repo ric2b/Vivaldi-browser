@@ -5,12 +5,20 @@
 #ifndef NET_DNS_DNS_QUERY_H_
 #define NET_DNS_DNS_QUERY_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
 
 namespace net {
+
+namespace dns_protocol {
+struct Header;
+}
 
 class IOBufferWithSize;
 
@@ -20,16 +28,16 @@ class NET_EXPORT_PRIVATE DnsQuery {
  public:
   // Constructs a query message from |qname| which *MUST* be in a valid
   // DNS name format, and |qtype|. The qclass is set to IN.
-  DnsQuery(uint16 id, const base::StringPiece& qname, uint16 qtype);
+  DnsQuery(uint16_t id, const base::StringPiece& qname, uint16_t qtype);
   ~DnsQuery();
 
   // Clones |this| verbatim, with ID field of the header set to |id|.
-  DnsQuery* CloneWithNewId(uint16 id) const;
+  scoped_ptr<DnsQuery> CloneWithNewId(uint16_t id) const;
 
   // DnsQuery field accessors.
-  uint16 id() const;
+  uint16_t id() const;
   base::StringPiece qname() const;
-  uint16 qtype() const;
+  uint16_t qtype() const;
 
   // Returns the Question section of the query.  Used when matching the
   // response.
@@ -38,10 +46,19 @@ class NET_EXPORT_PRIVATE DnsQuery {
   // IOBuffer accessor to be used for writing out the query.
   IOBufferWithSize* io_buffer() const { return io_buffer_.get(); }
 
-  void set_flags(uint16 flags);
+  void set_flags(uint16_t flags);
 
  private:
-  DnsQuery(const DnsQuery& orig, uint16 id);
+  DnsQuery(const DnsQuery& orig, uint16_t id);
+
+  // Convenience for header access.
+  dns_protocol::Header* header();
+
+  // Returns the size of the question section.
+  size_t question_size() const {
+    // QNAME + QTYPE + QCLASS
+    return qname_size_ + sizeof(uint16_t) + sizeof(uint16_t);
+  }
 
   // Size of the DNS name (*NOT* hostname) we are trying to resolve; used
   // to calculate offsets.

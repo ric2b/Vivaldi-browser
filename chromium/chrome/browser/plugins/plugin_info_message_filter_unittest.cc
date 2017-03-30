@@ -10,11 +10,14 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/plugin_service_filter.h"
 #include "content/public/browser/render_process_host.h"
@@ -210,7 +213,8 @@ TEST_F(PluginInfoMessageFilterTest, FindEnabledPlugin) {
 }
 
 TEST_F(PluginInfoMessageFilterTest, GetPluginContentSetting) {
-  HostContentSettingsMap* map = profile()->GetHostContentSettingsMap();
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile());
 
   // Block plugins by default.
   map->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
@@ -256,7 +260,8 @@ TEST_F(PluginInfoMessageFilterTest, GetPluginContentSetting) {
                              true, false);
 
   // Block plugins via policy.
-  TestingPrefServiceSyncable* prefs = profile()->GetTestingPrefService();
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile()->GetTestingPrefService();
   prefs->SetManagedPref(prefs::kManagedDefaultPluginsSetting,
                         new base::FundamentalValue(CONTENT_SETTING_BLOCK));
 

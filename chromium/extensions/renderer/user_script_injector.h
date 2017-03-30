@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/scoped_observer.h"
 #include "extensions/common/user_script.h"
@@ -53,8 +54,10 @@ class UserScriptInjector : public ScriptInjector,
   void GetRunInfo(ScriptsRunInfo* scripts_run_info,
                   UserScript::RunLocation run_location) const override;
   void OnInjectionComplete(scoped_ptr<base::Value> execution_result,
-                           UserScript::RunLocation run_location) override;
-  void OnWillNotInject(InjectFailureReason reason) override;
+                           UserScript::RunLocation run_location,
+                           content::RenderFrame* render_frame) override;
+  void OnWillNotInject(InjectFailureReason reason,
+                       content::RenderFrame* render_frame) override;
 
   // The associated user script. Owned by the UserScriptInjector that created
   // this object.

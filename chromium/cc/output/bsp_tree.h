@@ -5,11 +5,12 @@
 #ifndef CC_OUTPUT_BSP_TREE_H_
 #define CC_OUTPUT_BSP_TREE_H_
 
+#include <stddef.h>
+
+#include <deque>
 #include <vector>
 
 #include "base/memory/scoped_ptr.h"
-#include "cc/base/scoped_ptr_deque.h"
-#include "cc/base/scoped_ptr_vector.h"
 #include "cc/output/bsp_compare_result.h"
 #include "cc/quads/draw_polygon.h"
 
@@ -19,8 +20,8 @@ struct BspNode {
   // This represents the splitting plane.
   scoped_ptr<DrawPolygon> node_data;
   // This represents any coplanar geometry we found while building the BSP.
-  ScopedPtrVector<DrawPolygon> coplanars_front;
-  ScopedPtrVector<DrawPolygon> coplanars_back;
+  std::vector<scoped_ptr<DrawPolygon>> coplanars_front;
+  std::vector<scoped_ptr<DrawPolygon>> coplanars_back;
 
   scoped_ptr<BspNode> back_child;
   scoped_ptr<BspNode> front_child;
@@ -31,7 +32,7 @@ struct BspNode {
 
 class CC_EXPORT BspTree {
  public:
-  explicit BspTree(ScopedPtrDeque<DrawPolygon>* list);
+  explicit BspTree(std::deque<scoped_ptr<DrawPolygon>>* list);
   scoped_ptr<BspNode>& root() { return root_; }
 
   template <typename ActionHandlerType>
@@ -46,8 +47,8 @@ class CC_EXPORT BspTree {
  private:
   scoped_ptr<BspNode> root_;
 
-  void FromList(ScopedPtrVector<DrawPolygon>* list);
-  void BuildTree(BspNode* node, ScopedPtrDeque<DrawPolygon>* data);
+  void FromList(std::vector<scoped_ptr<DrawPolygon>>* list);
+  void BuildTree(BspNode* node, std::deque<scoped_ptr<DrawPolygon>>* data);
 
   template <typename ActionHandlerType>
   void WalkInOrderAction(ActionHandlerType* action_handler,
@@ -61,17 +62,17 @@ class CC_EXPORT BspTree {
       const BspNode* node,
       const BspNode* first_child,
       const BspNode* second_child,
-      const ScopedPtrVector<DrawPolygon>& first_coplanars,
-      const ScopedPtrVector<DrawPolygon>& second_coplanars) const {
+      const std::vector<scoped_ptr<DrawPolygon>>& first_coplanars,
+      const std::vector<scoped_ptr<DrawPolygon>>& second_coplanars) const {
     if (first_child) {
       WalkInOrderRecursion(action_handler, first_child);
     }
     for (size_t i = 0; i < first_coplanars.size(); i++) {
-      WalkInOrderAction(action_handler, first_coplanars[i]);
+      WalkInOrderAction(action_handler, first_coplanars[i].get());
     }
     WalkInOrderAction(action_handler, node->node_data.get());
     for (size_t i = 0; i < second_coplanars.size(); i++) {
-      WalkInOrderAction(action_handler, second_coplanars[i]);
+      WalkInOrderAction(action_handler, second_coplanars[i].get());
     }
     if (second_child) {
       WalkInOrderRecursion(action_handler, second_child);

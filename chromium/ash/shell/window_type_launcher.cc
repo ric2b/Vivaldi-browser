@@ -4,6 +4,9 @@
 
 #include "ash/shell/window_type_launcher.h"
 
+#include <utility>
+
+#include "ash/content/shell_content_state.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf_widget.h"
@@ -311,25 +314,24 @@ void WindowTypeLauncher::ButtonPressed(views::Button* sender,
   } else if (sender == show_web_notification_) {
     scoped_ptr<message_center::Notification> notification;
     notification.reset(new message_center::Notification(
-        message_center::NOTIFICATION_TYPE_SIMPLE,
-        "id0",
+        message_center::NOTIFICATION_TYPE_SIMPLE, "id0",
         base::ASCIIToUTF16("Test Shell Web Notification"),
-        base::ASCIIToUTF16("Notification message body."),
-        gfx::Image(),
-        base::ASCIIToUTF16("www.testshell.org"),
-        message_center::NotifierId(
-            message_center::NotifierId::APPLICATION, "test-id"),
-        message_center::RichNotificationData(),
-        NULL /* delegate */));
+        base::ASCIIToUTF16("Notification message body."), gfx::Image(),
+        base::ASCIIToUTF16("www.testshell.org"), GURL(),
+        message_center::NotifierId(message_center::NotifierId::APPLICATION,
+                                   "test-id"),
+        message_center::RichNotificationData(), NULL /* delegate */));
 
-    ash::Shell::GetPrimaryRootWindowController()->shelf()->status_area_widget()
-        ->web_notification_tray()->message_center()
-        ->AddNotification(notification.Pass());
+    ash::Shell::GetPrimaryRootWindowController()
+        ->shelf()
+        ->status_area_widget()
+        ->web_notification_tray()
+        ->message_center()
+        ->AddNotification(std::move(notification));
   } else if (sender == examples_button_) {
     views::examples::ShowExamplesWindowWithContent(
         views::examples::DO_NOTHING_ON_CLOSE,
-        Shell::GetInstance()->delegate()->GetActiveBrowserContext(),
-        NULL);
+        ShellContentState::GetInstance()->GetActiveBrowserContext(), NULL);
   }
 }
 

@@ -16,8 +16,11 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache_factory.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
+#include "grit/theme_resources.h"
 #include "net/url_request/url_request.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -65,8 +68,9 @@ void ProcessResourceOnUIThread(int resource_id,
 
 ThemeSource::ThemeSource(Profile* profile)
     : profile_(profile->GetOriginalProfile()) {
+  // NB: it's important that this is |profile| and not |profile_|.
   NTPResourceCache::WindowType win_type = NTPResourceCache::GetWindowType(
-      profile_, NULL);
+      profile, NULL);
   css_bytes_ =
       NTPResourceCacheFactory::GetForProfile(profile)->GetNewTabCSS(win_type);
 }
@@ -100,8 +104,40 @@ void ThemeSource::StartDataRequest(
     return;
   }
 
-
-  int resource_id = ResourcesUtil::GetThemeResourceId(uncached_path);
+  int resource_id = -1;
+  if (uncached_path == "current-channel-logo") {
+    switch (chrome::GetChannel()) {
+#if defined(GOOGLE_CHROME_BUILD)
+      case version_info::Channel::CANARY:
+        resource_id = IDR_PRODUCT_LOGO_32_CANARY;
+        break;
+      case version_info::Channel::DEV:
+        resource_id = IDR_PRODUCT_LOGO_32_DEV;
+        break;
+      case version_info::Channel::BETA:
+        resource_id = IDR_PRODUCT_LOGO_32_BETA;
+        break;
+      case version_info::Channel::STABLE:
+        resource_id = IDR_PRODUCT_LOGO_32;
+        break;
+#elif defined(VIVALDI_BUILD)
+      default:
+        resource_id = IDR_PRODUCT_LOGO_32;
+        break;
+#else
+      case version_info::Channel::CANARY:
+      case version_info::Channel::DEV:
+      case version_info::Channel::BETA:
+      case version_info::Channel::STABLE:
+        NOTREACHED();
+#endif
+      case version_info::Channel::UNKNOWN:
+        resource_id = IDR_PRODUCT_LOGO_32;
+        break;
+    }
+  } else {
+    resource_id = ResourcesUtil::GetThemeResourceId(uncached_path);
+  }
   if (resource_id != -1) {
     if (GetMimeType(path) == "image/png")
       SendThemeImage(callback, resource_id, scale_factor);
@@ -110,7 +146,12 @@ void ThemeSource::StartDataRequest(
     return;
   }
 
-  // We don't have any data to send back.
+  // We don't have any data to send back. This shouldn't happen normally, as
+  // chrome://theme/ data source is used only by chrome WebUI pages and
+  // component extensions. We don't want to crash in Release build though, as
+  // it is possible that a user has entered an unexisting chrome://theme URL
+  // into the address bar.
+  NOTREACHED() << path << " not found.";
   callback.Run(NULL);
 }
 
@@ -169,11 +210,11 @@ void ThemeSource::SendThemeBitmap(
       ui::GetSupportedScaleFactor(scale_factor);
   if (BrowserThemePack::IsPersistentImageID(resource_id)) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    ui::ThemeProvider* tp = ThemeServiceFactory::GetForProfile(profile_);
-    DCHECK(tp);
+    const ui::ThemeProvider& tp =
+        ThemeService::GetThemeProviderForProfile(profile_);
 
     scoped_refptr<base::RefCountedMemory> image_data(
-        tp->GetRawData(resource_id, resource_scale_factor));
+        tp.GetRawData(resource_id, resource_scale_factor));
     callback.Run(image_data.get());
   } else {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -203,10 +244,9 @@ void ThemeSource::SendThemeImage(
   scoped_refptr<base::RefCountedBytes> data(new base::RefCountedBytes());
   if (BrowserThemePack::IsPersistentImageID(resource_id)) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    ui::ThemeProvider* tp = ThemeServiceFactory::GetForProfile(profile_);
-    DCHECK(tp);
-
-    ProcessImageOnUIThread(*tp->GetImageSkiaNamed(resource_id), scale_factor,
+    const ui::ThemeProvider& tp =
+        ThemeService::GetThemeProviderForProfile(profile_);
+    ProcessImageOnUIThread(*tp.GetImageSkiaNamed(resource_id), scale_factor,
                            data);
     callback.Run(data.get());
   } else {

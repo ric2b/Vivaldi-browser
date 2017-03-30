@@ -5,6 +5,9 @@
 #ifndef NET_TOOLS_QUIC_TEST_TOOLS_SIMPLE_CLIENT_H_
 #define NET_TOOLS_QUIC_TEST_TOOLS_SIMPLE_CLIENT_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -25,14 +28,14 @@ class SimpleClient {
   // server, possibly with multiple send operations.  Returns 'size' on success
   // and -1 on error.  Callers should assume that any return value other than
   // 'size' indicates failure.
-  virtual ssize_t Send(const void *buffer, size_t size) = 0;
+  virtual ssize_t Send(const void* buffer, size_t size) = 0;
 
   // Serialize and send an HTTP request.
   virtual ssize_t SendMessage(const HTTPMessage& message) = 0;
 
   // Clears any outstanding state, sends 'size' bytes from 'buffer' and waits
   // for a response or an error.
-  virtual ssize_t SendAndWaitForResponse(const void *buffer, size_t size) = 0;
+  virtual ssize_t SendAndWaitForResponse(const void* buffer, size_t size) = 0;
 
   // Clears any outstanding state and sends a simple GET of 'uri' to the
   // server.
@@ -86,11 +89,13 @@ class SimpleClient {
   // if the given address has port 0.
   virtual void Bind(IPEndPoint* local_address) = 0;
 
+  virtual void MigrateSocket(const IPAddressNumber& new_host) = 0;
+
   // Returns the local socket address of the client fd. Call only when
   // connected.
-  // To get the local IPAdress, use LocalSocketAddress().host().
-  // To get the local port, use LocalSocketAddress.port().
-  virtual IPEndPoint LocalSocketAddress() const = 0;
+  // To get the local IPAdress, use local_address().host().
+  // To get the local port, use local_address.port().
+  virtual IPEndPoint local_address() const = 0;
 
   // Returns the serialized message that would be sent by any of the HTTPMessage
   // functions above.
@@ -113,7 +118,7 @@ class SimpleClient {
   virtual bool response_complete() const = 0;
 
   // Returns the number of bytes read from the server during this request.
-  virtual int64 response_size() const = 0;
+  virtual int64_t response_size() const = 0;
 
   // Returns the number of header bytes received during this request, if
   // meaningful for the protocol.
@@ -121,7 +126,7 @@ class SimpleClient {
 
   // Returns the number of body bytes received during this request, if
   // meaningful for the protocol.
-  virtual int64 response_body_size() const;
+  virtual int64_t response_body_size() const;
 
   // Returns the response body, if there was one. If there was no response, or
   // if buffer_body() is false, returns an empty string.

@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <cmath>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/video_frame_pool.h"
 #include "media/base/wall_clock_time_source.h"
 #include "media/filters/video_renderer_algorithm.h"
@@ -75,7 +80,7 @@ class VideoRendererAlgorithmTest : public testing::Test {
 
   scoped_refptr<VideoFrame> CreateFrame(base::TimeDelta timestamp) {
     const gfx::Size natural_size(8, 8);
-    return frame_pool_.CreateFrame(VideoFrame::YV12, natural_size,
+    return frame_pool_.CreateFrame(PIXEL_FORMAT_YV12, natural_size,
                                    gfx::Rect(natural_size), natural_size,
                                    timestamp);
   }
@@ -102,9 +107,28 @@ class VideoRendererAlgorithmTest : public testing::Test {
     return algorithm_.cadence_estimator_.has_cadence();
   }
 
-  bool IsUsingFractionalCadence() const {
-    return is_using_cadence() &&
-           !algorithm_.cadence_estimator_.GetCadenceForFrame(1);
+  bool IsCadenceBelowOne() const {
+    if (!is_using_cadence())
+      return false;
+
+    size_t size = algorithm_.cadence_estimator_.cadence_size_for_testing();
+    for (size_t i = 0; i < size; ++i) {
+      if (!algorithm_.cadence_estimator_.GetCadenceForFrame(i))
+        return true;
+    }
+
+    return false;
+  }
+
+  double CadenceValue() const {
+    int num_render_intervals = 0;
+    size_t size = algorithm_.cadence_estimator_.cadence_size_for_testing();
+    for (size_t i = 0; i < size; ++i) {
+      num_render_intervals +=
+          algorithm_.cadence_estimator_.GetCadenceForFrame(i);
+    }
+
+    return (num_render_intervals + 0.0) / size;
   }
 
   size_t frames_queued() const { return algorithm_.frame_queue_.size(); }
@@ -222,16 +246,15 @@ class VideoRendererAlgorithmTest : public testing::Test {
         ASSERT_NEAR(GetUsableFrameCount(deadline_max),
                     algorithm_.EffectiveFramesQueued(),
                     fresh_algorithm ? 0 : 1);
-      } else if (is_using_cadence() && !IsUsingFractionalCadence()) {
+      } else if (is_using_cadence() && !IsCadenceBelowOne()) {
         // If there was no glitch in the last render, the two queue sizes should
         // be off by exactly one frame; i.e., the current frame doesn't count.
         if (!last_render_had_glitch() && fresh_algorithm)
           ASSERT_EQ(frames_queued() - 1, algorithm_.EffectiveFramesQueued());
-      } else if (IsUsingFractionalCadence()) {
+      } else if (IsCadenceBelowOne()) {
         // The frame estimate should be off by at most one frame.
         const size_t estimated_frames_queued =
-            frames_queued() /
-            algorithm_.cadence_estimator_.cadence_size_for_testing();
+            std::floor(frames_queued() * CadenceValue());
         ASSERT_NEAR(algorithm_.EffectiveFramesQueued(), estimated_frames_queued,
                     1);
       }
@@ -551,6 +574,7 @@ TEST_F(VideoRendererAlgorithmTest, EffectiveFramesQueuedWithoutCadence) {
   algorithm_.EnqueueFrame(CreateFrame(tg.interval(3)));
   EXPECT_EQ(4u, algorithm_.EffectiveFramesQueued());
   EXPECT_EQ(4u, frames_queued());
+  EXPECT_EQ(384, algorithm_.GetMemoryUsage());
 
   // Issue a render call that should drop the first two frames and mark the 3rd
   // as consumed.
@@ -563,6 +587,7 @@ TEST_F(VideoRendererAlgorithmTest, EffectiveFramesQueuedWithoutCadence) {
   EXPECT_EQ(tg.interval(2), frame->timestamp());
   EXPECT_EQ(1u, algorithm_.EffectiveFramesQueued());
   EXPECT_EQ(2u, frames_queued());
+  EXPECT_EQ(192, algorithm_.GetMemoryUsage());
 
   // Rendering one more frame should return 0 effective frames queued.
   frame = RenderAndStep(&tg, &frames_dropped);
@@ -572,6 +597,7 @@ TEST_F(VideoRendererAlgorithmTest, EffectiveFramesQueuedWithoutCadence) {
   EXPECT_EQ(tg.interval(3), frame->timestamp());
   EXPECT_EQ(0u, algorithm_.EffectiveFramesQueued());
   EXPECT_EQ(1u, frames_queued());
+  EXPECT_EQ(96, algorithm_.GetMemoryUsage());
 }
 
 // The maximum acceptable drift should be updated once we have two frames.
@@ -1013,10 +1039,10 @@ TEST_F(VideoRendererAlgorithmTest, FilmCadence) {
 TEST_F(VideoRendererAlgorithmTest, CadenceCalculations) {
   ASSERT_EQ("[3:2]", GetCadence(24, 60));
   ASSERT_EQ("[3:2]", GetCadence(NTSC(24), 60));
-  ASSERT_EQ("[]", GetCadence(25, 60));
+  ASSERT_EQ("[2:3:2:3:2]", GetCadence(25, 60));
   ASSERT_EQ("[2]", GetCadence(NTSC(30), 60));
   ASSERT_EQ("[2]", GetCadence(30, 60));
-  ASSERT_EQ("[]", GetCadence(50, 60));
+  ASSERT_EQ("[1:1:2:1:1]", GetCadence(50, 60));
   ASSERT_EQ("[1]", GetCadence(NTSC(60), 60));
   ASSERT_EQ("[1:0]", GetCadence(120, 60));
 
@@ -1025,12 +1051,12 @@ TEST_F(VideoRendererAlgorithmTest, CadenceCalculations) {
   ASSERT_EQ("[]", GetCadence(24, 50));
   ASSERT_EQ("[2]", GetCadence(NTSC(25), 50));
   ASSERT_EQ("[2]", GetCadence(25, 50));
-  ASSERT_EQ("[]", GetCadence(NTSC(30), 50));
-  ASSERT_EQ("[]", GetCadence(30, 50));
+  ASSERT_EQ("[2:1:2]", GetCadence(NTSC(30), 50));
+  ASSERT_EQ("[2:1:2]", GetCadence(30, 50));
   ASSERT_EQ("[]", GetCadence(NTSC(60), 50));
   ASSERT_EQ("[]", GetCadence(60, 50));
 
-  ASSERT_EQ("[]", GetCadence(25, NTSC(60)));
+  ASSERT_EQ("[2:3:2:3:2]", GetCadence(25, NTSC(60)));
   ASSERT_EQ("[1:0]", GetCadence(120, NTSC(60)));
   ASSERT_EQ("[60]", GetCadence(1, NTSC(60)));
 }
@@ -1117,7 +1143,8 @@ TEST_F(VideoRendererAlgorithmTest, RemoveExpiredFramesCadence) {
   EXPECT_EQ(0u, algorithm_.EffectiveFramesQueued());
 }
 
-TEST_F(VideoRendererAlgorithmTest, CadenceBasedTest) {
+// TODO(crbug.com/570032): Test disabled for being flaky.
+TEST_F(VideoRendererAlgorithmTest, DISABLED_CadenceBasedTest) {
   // Common display rates.
   const double kDisplayRates[] = {
       NTSC(24),
@@ -1158,13 +1185,13 @@ TEST_F(VideoRendererAlgorithmTest, CadenceBasedTest) {
 }
 
 // Rotate through various playback rates and ensure algorithm adapts correctly.
-TEST_F(VideoRendererAlgorithmTest, VariableFrameRateCadence) {
+TEST_F(VideoRendererAlgorithmTest, VariablePlaybackRateCadence) {
   TickGenerator frame_tg(base::TimeTicks(), NTSC(30));
   TickGenerator display_tg(tick_clock_->NowTicks(), 60);
 
-  const double kTestRates[] = {1.0, 2, 0.215, 0.5, 1.0};
-  const bool kTestRateHasCadence[arraysize(kTestRates)] = {
-      true, true, false, true, true};
+  const double kTestRates[] = {1.0, 2, 0.215, 0.5, 1.0, 3.15};
+  const bool kTestRateHasCadence[arraysize(kTestRates)] = {true, true, true,
+                                                           true, true, false};
 
   for (size_t i = 0; i < arraysize(kTestRates); ++i) {
     const double playback_rate = kTestRates[i];
@@ -1217,6 +1244,51 @@ TEST_F(VideoRendererAlgorithmTest, UglyTimestampsHaveCadence) {
     if (cadence_detected)
       ASSERT_TRUE(is_using_cadence());
   }
+}
+
+// Ensures media with variable frame rate should not be applied with Cadence.
+TEST_F(VideoRendererAlgorithmTest, VariableFrameRateNoCadence) {
+  TickGenerator display_tg(tick_clock_->NowTicks(), 60);
+  time_source_.StartTicking();
+
+  const int kBadTimestampsMs[] = {200,  200,  200,  200,  200,  1000,
+                                  1000, 1000, 1000, 200,  200,  200,
+                                  200,  200,  1000, 1000, 1000, 1000};
+
+  // Run throught ~10 seconds worth of frames.
+  bool cadence_detected = false;
+  bool cadence_turned_off = false;
+  base::TimeDelta timestamp;
+  for (size_t i = 0; i < arraysize(kBadTimestampsMs);) {
+    while (algorithm_.EffectiveFramesQueued() < 3) {
+      algorithm_.EnqueueFrame(CreateFrame(timestamp));
+      timestamp += base::TimeDelta::FromMilliseconds(
+          kBadTimestampsMs[i % arraysize(kBadTimestampsMs)]);
+      ++i;
+    }
+
+    size_t frames_dropped = 0;
+    RenderAndStep(&display_tg, &frames_dropped);
+    ASSERT_EQ(0u, frames_dropped);
+
+    // Cadence would be detected during the first second, and then
+    // it should be off due to variable FPS detection, and then for this
+    // sample, it should never be on.
+    if (is_using_cadence())
+      cadence_detected = true;
+
+    if (cadence_detected) {
+      if (!is_using_cadence())
+        cadence_turned_off = true;
+    }
+
+    if (cadence_turned_off) {
+      ASSERT_FALSE(is_using_cadence());
+    }
+  }
+
+  // Make sure Cadence is turned off somewhen, not always on.
+  ASSERT_TRUE(cadence_turned_off);
 }
 
 TEST_F(VideoRendererAlgorithmTest, EnqueueFrames) {

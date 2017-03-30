@@ -31,7 +31,7 @@ namespace ios {
 
 // static
 FakeSyncServiceFactory* FakeSyncServiceFactory::GetInstance() {
-  return Singleton<FakeSyncServiceFactory>::get();
+  return base::Singleton<FakeSyncServiceFactory>::get();
 }
 
 // static
@@ -40,6 +40,15 @@ sync_driver::FakeSyncService* FakeSyncServiceFactory::GetForBrowserState(
   return static_cast<KeyedFakeSyncService*>(
              FakeSyncServiceFactory::GetInstance()->GetServiceForBrowserState(
                  browser_state, true))->fake_sync_service();
+}
+
+// static
+sync_driver::FakeSyncService*
+FakeSyncServiceFactory::GetForBrowserStateIfExists(
+    ios::ChromeBrowserState* browser_state) {
+  return static_cast<KeyedFakeSyncService*>(
+             FakeSyncServiceFactory::GetInstance()->GetServiceForBrowserState(
+                 browser_state, false))->fake_sync_service();
 }
 
 FakeSyncServiceFactory::FakeSyncServiceFactory()

@@ -5,9 +5,10 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_USERS_CHROME_USER_MANAGER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_USERS_CHROME_USER_MANAGER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_runner.h"
+#include "chrome/browser/chromeos/login/users/affiliation.h"
 #include "chrome/browser/chromeos/login/users/user_manager_interface.h"
 #include "components/user_manager/user_manager_base.h"
 
@@ -17,8 +18,7 @@ namespace chromeos {
 class ChromeUserManager : public user_manager::UserManagerBase,
                           public UserManagerInterface {
  public:
-  ChromeUserManager(scoped_refptr<base::TaskRunner> task_runner,
-                    scoped_refptr<base::TaskRunner> blocking_task_runner);
+  explicit ChromeUserManager(scoped_refptr<base::TaskRunner> task_runner);
   ~ChromeUserManager() override;
 
   // Returns current ChromeUserManager or NULL if instance hasn't been
@@ -29,6 +29,16 @@ class ChromeUserManager : public user_manager::UserManagerBase,
   // supervised users.
   static user_manager::UserList GetUsersAllowedAsSupervisedUserManagers(
       const user_manager::UserList& user_list);
+
+  // Sets affiliation status for the user |user_id| judging by
+  // |user_affiliation_ids| and device affiliation IDs.
+  virtual void SetUserAffiliation(
+      const std::string& user_email,
+      const AffiliationIDSet& user_affiliation_ids) = 0;
+
+  // Return whether the given user should be reported (see
+  // policy::DeviceStatusCollector).
+  virtual bool ShouldReportUser(const std::string& user_id) const = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeUserManager);
 };

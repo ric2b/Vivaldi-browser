@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_SEARCH_COMMON_WEBSERVICE_CACHE_FACTORY_H_
 #define CHROME_BROWSER_UI_APP_LIST_SEARCH_COMMON_WEBSERVICE_CACHE_FACTORY_H_
 
+#include "base/macros.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
+namespace base {
 template<typename T> struct DefaultSingletonTraits;
+}
 
 namespace content {
 class BrowserContext;
@@ -28,7 +31,7 @@ class WebserviceCacheFactory : public BrowserContextKeyedServiceFactory {
       content::BrowserContext* context);
 
  private:
-  friend struct DefaultSingletonTraits<WebserviceCacheFactory>;
+  friend struct base::DefaultSingletonTraits<WebserviceCacheFactory>;
 
   WebserviceCacheFactory();
   ~WebserviceCacheFactory() override;

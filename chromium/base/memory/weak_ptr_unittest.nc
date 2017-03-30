@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// This is a "No Compile Test" suite.
+// http://dev.chromium.org/developers/testing/no-compile-tests
+
 #include "base/memory/weak_ptr.h"
 
 namespace base {
@@ -112,14 +115,14 @@ void WontCompile() {
   WeakPtr<Unrelated> ptr = AsWeakPtr<Unrelated>(&f);
 }
 
-#elif defined(NCTEST_COMPLETELY_UNRELATED_HELPER)  // [r"fatal error: static_assert failed \"AsWeakPtr_argument_inherits_from_SupportsWeakPtr\""]
+#elif defined(NCTEST_COMPLETELY_UNRELATED_HELPER)  // [r"fatal error: static_assert failed \"AsWeakPtr argument must inherit from SupportsWeakPtr\""]
 
 void WontCompile() {
   Unrelated f;
   WeakPtr<Unrelated> ptr = AsWeakPtr(&f);
 }
 
-#elif defined(NCTEST_DERIVED_COMPLETELY_UNRELATED_HELPER)  // [r"fatal error: static_assert failed \"AsWeakPtr_argument_inherits_from_SupportsWeakPtr\""]
+#elif defined(NCTEST_DERIVED_COMPLETELY_UNRELATED_HELPER)  // [r"fatal error: static_assert failed \"AsWeakPtr argument must inherit from SupportsWeakPtr\""]
 
 void WontCompile() {
   DerivedUnrelated f;

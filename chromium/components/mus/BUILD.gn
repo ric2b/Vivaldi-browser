@@ -1,0 +1,97 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("//mojo/public/mojo_application.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+
+  source_set("mus") {
+    sources = [
+      "android_loader.cc",
+      "android_loader.h",
+    ]
+
+    deps = [
+      ":lib",
+      "public/interfaces",
+      "//mojo/public/cpp/bindings",
+      "//mojo/services/tracing/public/interfaces",
+      "//mojo/shell",
+      "//mojo/shell/public/cpp:sources",
+    ]
+  }
+} else {
+  mojo_native_application("mus") {
+    sources = [
+      "main.cc",
+    ]
+
+    deps = [
+      ":lib",
+      "//mojo/shell/public/cpp:sources",
+    ]
+
+    if (is_win) {
+      deps += [ ":copy_gl_libraries" ]
+    }
+  }
+}
+
+if (is_win) {
+  copy("copy_gl_libraries") {
+    deps = [
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+    ]
+
+    sources = [
+      "$root_shlib_dir/libEGL.dll",
+      "$root_shlib_dir/libGLESv2.dll",
+    ]
+
+    outputs = [
+      "$root_out_dir/mus/{{source_file_part}}",
+    ]
+  }
+}
+
+source_set("lib") {
+  sources = [
+    "mus_app.cc",
+    "mus_app.h",
+  ]
+
+  deps = [
+    "//base",
+    "//cc",
+    "//cc/surfaces",
+    "//components/mus/common",
+    "//components/mus/gles2",
+    "//components/mus/public/interfaces",
+    "//components/mus/surfaces",
+    "//components/mus/ws:lib",
+    "//mojo/common:common_base",
+    "//mojo/services/tracing/public/cpp",
+    "//mojo/shell/public/cpp",
+    "//ui/events",
+    "//ui/gl:gl",
+    "//ui/platform_window:platform_impls",
+    "//ui/platform_window:platform_window",
+  ]
+
+  if (use_x11) {
+    public_configs = [ "//build/config/linux:x11" ]
+    public_deps = [
+      "//ui/events/platform/x11",
+    ]
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone:ozone" ]
+  }
+}

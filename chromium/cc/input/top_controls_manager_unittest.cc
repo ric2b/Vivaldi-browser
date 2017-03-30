@@ -12,7 +12,7 @@
 #include "base/time/time.h"
 #include "cc/input/top_controls_manager_client.h"
 #include "cc/layers/layer_impl.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -28,7 +28,9 @@ class MockTopControlsManagerClient : public TopControlsManagerClient {
   MockTopControlsManagerClient(float top_controls_height,
                                float top_controls_show_threshold,
                                float top_controls_hide_threshold)
-      : host_impl_(&proxy_, &shared_bitmap_manager_, &task_graph_runner_),
+      : host_impl_(&task_runner_provider_,
+                   &shared_bitmap_manager_,
+                   &task_graph_runner_),
         redraw_needed_(false),
         update_draw_properties_needed_(false),
         top_controls_shown_ratio_(1.f),
@@ -81,7 +83,7 @@ class MockTopControlsManagerClient : public TopControlsManagerClient {
   void SetTopControlsHeight(float height) { top_controls_height_ = height; }
 
  private:
-  FakeImplProxy proxy_;
+  FakeImplTaskRunnerProvider task_runner_provider_;
   TestSharedBitmapManager shared_bitmap_manager_;
   TestTaskGraphRunner task_graph_runner_;
   FakeLayerTreeHostImpl host_impl_;
@@ -156,17 +158,17 @@ TEST(TopControlsManagerTest, PartialShownHideAnimation) {
   EXPECT_FLOAT_EQ(15.f, manager->ContentTopOffset());
   manager->ScrollEnd();
 
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 
   base::TimeTicks time = base::TimeTicks::Now();
   float previous;
-  while (manager->animation()) {
+  while (manager->has_animation()) {
     previous = manager->TopControlsShownRatio();
     time = base::TimeDelta::FromMicroseconds(100) + time;
     manager->Animate(time);
     EXPECT_LT(manager->TopControlsShownRatio(), previous);
   }
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(-100.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(0.f, manager->ContentTopOffset());
 }
@@ -186,17 +188,17 @@ TEST(TopControlsManagerTest, PartialShownShowAnimation) {
   EXPECT_FLOAT_EQ(70.f, manager->ContentTopOffset());
   manager->ScrollEnd();
 
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 
   base::TimeTicks time = base::TimeTicks::Now();
   float previous;
-  while (manager->animation()) {
+  while (manager->has_animation()) {
     previous = manager->TopControlsShownRatio();
     time = base::TimeDelta::FromMicroseconds(100) + time;
     manager->Animate(time);
     EXPECT_GT(manager->TopControlsShownRatio(), previous);
   }
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(0.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(100.f, manager->ContentTopOffset());
 }
@@ -212,17 +214,17 @@ TEST(TopControlsManagerTest, PartialHiddenWithAmbiguousThresholdShows) {
   EXPECT_FLOAT_EQ(80.f, manager->ContentTopOffset());
 
   manager->ScrollEnd();
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 
   base::TimeTicks time = base::TimeTicks::Now();
   float previous;
-  while (manager->animation()) {
+  while (manager->has_animation()) {
     previous = manager->TopControlsShownRatio();
     time = base::TimeDelta::FromMicroseconds(100) + time;
     manager->Animate(time);
     EXPECT_GT(manager->TopControlsShownRatio(), previous);
   }
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(0.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(100.f, manager->ContentTopOffset());
 }
@@ -238,17 +240,17 @@ TEST(TopControlsManagerTest, PartialHiddenWithAmbiguousThresholdHides) {
   EXPECT_FLOAT_EQ(70.f, manager->ContentTopOffset());
 
   manager->ScrollEnd();
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 
   base::TimeTicks time = base::TimeTicks::Now();
   float previous;
-  while (manager->animation()) {
+  while (manager->has_animation()) {
     previous = manager->TopControlsShownRatio();
     time = base::TimeDelta::FromMicroseconds(100) + time;
     manager->Animate(time);
     EXPECT_LT(manager->TopControlsShownRatio(), previous);
   }
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(-100.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(0.f, manager->ContentTopOffset());
 }
@@ -268,17 +270,17 @@ TEST(TopControlsManagerTest, PartialShownWithAmbiguousThresholdHides) {
   EXPECT_FLOAT_EQ(20.f, manager->ContentTopOffset());
 
   manager->ScrollEnd();
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 
   base::TimeTicks time = base::TimeTicks::Now();
   float previous;
-  while (manager->animation()) {
+  while (manager->has_animation()) {
     previous = manager->TopControlsShownRatio();
     time = base::TimeDelta::FromMicroseconds(100) + time;
     manager->Animate(time);
     EXPECT_LT(manager->TopControlsShownRatio(), previous);
   }
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(-100.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(0.f, manager->ContentTopOffset());
 }
@@ -298,17 +300,17 @@ TEST(TopControlsManagerTest, PartialShownWithAmbiguousThresholdShows) {
   EXPECT_FLOAT_EQ(30.f, manager->ContentTopOffset());
 
   manager->ScrollEnd();
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 
   base::TimeTicks time = base::TimeTicks::Now();
   float previous;
-  while (manager->animation()) {
+  while (manager->has_animation()) {
     previous = manager->TopControlsShownRatio();
     time = base::TimeDelta::FromMicroseconds(100) + time;
     manager->Animate(time);
     EXPECT_GT(manager->TopControlsShownRatio(), previous);
   }
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(0.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(100.f, manager->ContentTopOffset());
 }
@@ -339,11 +341,10 @@ TEST(TopControlsManagerTest, PinchIgnoresScroll) {
   EXPECT_FLOAT_EQ(15.f, manager->ContentTopOffset());
   manager->ScrollEnd();
 
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 }
 
-// TODO: reenable for Vivaldi
-TEST(TopControlsManagerTest, DISABLED_PinchBeginStartsAnimationIfNecessary) {
+TEST(TopControlsManagerTest, PinchBeginStartsAnimationIfNecessary) {
   MockTopControlsManagerClient client(100.f, 0.5f, 0.5f);
   TopControlsManager* manager = client.manager();
 
@@ -352,47 +353,47 @@ TEST(TopControlsManagerTest, DISABLED_PinchBeginStartsAnimationIfNecessary) {
   EXPECT_FLOAT_EQ(-100.f, manager->ControlsTopOffset());
 
   manager->PinchBegin();
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
 
   manager->PinchEnd();
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
 
   manager->ScrollBy(gfx::Vector2dF(0.f, -15.f));
   EXPECT_FLOAT_EQ(-85.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(15.f, manager->ContentTopOffset());
 
   manager->PinchBegin();
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 
   base::TimeTicks time = base::TimeTicks::Now();
   float previous;
-  while (manager->animation()) {
+  while (manager->has_animation()) {
     previous = manager->TopControlsShownRatio();
     time = base::TimeDelta::FromMicroseconds(100) + time;
     manager->Animate(time);
     EXPECT_LT(manager->TopControlsShownRatio(), previous);
   }
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
 
   manager->PinchEnd();
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
 
   manager->ScrollBy(gfx::Vector2dF(0.f, -55.f));
   EXPECT_FLOAT_EQ(-45.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(55.f, manager->ContentTopOffset());
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
 
   manager->ScrollEnd();
-  EXPECT_TRUE(manager->animation());
+  EXPECT_TRUE(manager->has_animation());
 
   time = base::TimeTicks::Now();
-  while (manager->animation()) {
+  while (manager->has_animation()) {
     previous = manager->TopControlsShownRatio();
     time = base::TimeDelta::FromMicroseconds(100) + time;
     manager->Animate(time);
     EXPECT_GT(manager->TopControlsShownRatio(), previous);
   }
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(0.f, manager->ControlsTopOffset());
 }
 
@@ -403,12 +404,12 @@ TEST(TopControlsManagerTest, HeightChangeMaintainsFullyVisibleControls) {
   EXPECT_FLOAT_EQ(0.f, manager->ControlsTopOffset());
 
   client.SetTopControlsHeight(100.f);
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(100.f, manager->TopControlsHeight());
   EXPECT_FLOAT_EQ(0, manager->ControlsTopOffset());
 
   client.SetTopControlsHeight(50.f);
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(50.f, manager->TopControlsHeight());
   EXPECT_FLOAT_EQ(0.f, manager->ControlsTopOffset());
 }
@@ -422,12 +423,12 @@ TEST(TopControlsManagerTest, GrowingHeightKeepsTopControlsHidden) {
   EXPECT_EQ(0.f, manager->ContentTopOffset());
 
   client.SetTopControlsHeight(50.f);
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_EQ(-50.f, manager->ControlsTopOffset());
   EXPECT_EQ(0.f, manager->ContentTopOffset());
 
   client.SetTopControlsHeight(100.f);
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_EQ(-100.f, manager->ControlsTopOffset());
   EXPECT_EQ(0.f, manager->ContentTopOffset());
 }
@@ -443,12 +444,12 @@ TEST(TopControlsManagerTest, ShrinkingHeightKeepsTopControlsHidden) {
   manager->ScrollEnd();
 
   client.SetTopControlsHeight(50.f);
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(-50.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(0.f, manager->ContentTopOffset());
 
   client.SetTopControlsHeight(0.f);
-  EXPECT_FALSE(manager->animation());
+  EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(0.f, manager->ControlsTopOffset());
   EXPECT_FLOAT_EQ(0.f, manager->ContentTopOffset());
 }

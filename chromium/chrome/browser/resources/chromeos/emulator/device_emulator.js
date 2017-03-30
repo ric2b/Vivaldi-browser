@@ -5,117 +5,39 @@
 cr.define('device_emulator', function() {
   'use strict';
 
-  /**
-   * Updates the UI with the battery status.
-   * @param {number} percent Battery percentage (out of 100).
-   */
-  function setBatteryInfo(percent) {
-    var slider = $('battery-percent-slider');
-    var text = $('battery-percent-text');
-
-    slider.valueAsNumber = percent;
-    text.valueAsNumber = percent;
-  }
-
-  /**
-   * Event listener fired when the battery percent slider is moved and the mouse
-   * is released. Updates the Chrome OS UI.
-   * @param {Event} event Contains information about the event which was fired.
-   */
-  function onBatterySliderChange(event) {
-    var slider = event.target;
-    chrome.send('updateBatteryInfo', [slider.valueAsNumer]);
-  }
-
-  /**
-   * Event listener fired when the battery percent slider is moved. Updates
-   * the battery slider's associated text input.
-   * @param {Event} event Contains information about the event which was fired.
-   */
-  function onBatterySliderInput(event) {
-    var slider = event.target;
-    var text = $('battery-percent-text');
-
-    text.value = slider.value;
-  }
-
-  /**
-   * Event listener fired when a percentage is entered in the battery
-   * percentage text input. Updates the slider and ChromeOS UI.
-   * @param {Event} event Contains information about the event which was fired.
-   */
-  function onBatteryTextInput(event) {
-    var text = event.target;
-    var slider = $('battery-percent-slider');
-    var percent = text.valueAsNumber;
-
-    if (isNaN(percent)) {
-      percent = 0;
-      text.valueAsNumber = 0;
-    }
-
-    slider.value = percent;
-
-    chrome.send('updateBatteryInfo', [percent]);
-  }
+  var audioSettings = $('audio-settings');
+  var batterySettings = $('battery-settings');
+  var bluetoothSettings = $('bluetooth-settings');
 
   function initialize() {
-    chrome.send('requestBatteryInfo');
+    audioSettings.initialize();
+    batterySettings.initialize();
+    bluetoothSettings.initialize();
 
-    wireEvents();
-    initializeControls();
+    var toggles = document.getElementsByClassName('menu-item-toggle');
+    for (var i = 0; i < toggles.length; ++i) {
+        toggles[i].addEventListener('click', handleDrawerItemClick);
+    }
   }
 
   /**
-   * Initializes any form controls as necessary.
+   * Shows/hides a sidebar elements designated content.
+   * The content is identified by the |data-content-id| attribute of the
+   * sidebar element. This value is the ID of the HTML element to be toggled.
+   * @param {Event} e Contains information about the event which was fired.
    */
-  function initializeControls() {
-    // Initialize the Power Source select box
-    var select = $('power-source-select');
-    var disconnectedOptionValue = loadTimeData.getString('disconnected');
-    var usbPowerOptionValue = loadTimeData.getString('usbPower');
-    var acPowerOptionValue = loadTimeData.getString('acPower');
-
-    select.appendChild(createOptionForSelect(acPowerOptionValue,
-        'AC Power (Main/Line Power Connected)'));
-    select.appendChild(createOptionForSelect(usbPowerOptionValue,
-        'USB Power'));
-    select.appendChild(createOptionForSelect(disconnectedOptionValue,
-        'Disconnected (No external power source)'));
-
-    select.value = disconnectedOptionValue;
-  }
-
-  /**
-   * A helper function to create and return an <option> node
-   * to be added to a select box.
-   * @param {string} value Will be the <option>'s value attribute.
-   * @param {string} text Will be the <option>'s innerHTML attribute.
-   */
-  function createOptionForSelect(value, text) {
-    var opt = document.createElement('option');
-    opt.value = value;
-    opt.innerHTML = text;
-
-    return opt;
-  }
-
-  /**
-   * Sets up all event listeners for the page.
-   */
-  function wireEvents() {
-    var slider = $('battery-percent-slider');
-    var text = $('battery-percent-text');
-
-    slider.addEventListener('change', onBatterySliderChange);
-    slider.addEventListener('input', onBatterySliderInput);
-    text.addEventListener('input', onBatteryTextInput);
+  function handleDrawerItemClick(e) {
+    var contentId = e.target.dataset.contentId;
+    var card = $(contentId);
+    card.hidden = !card.hidden;
   }
 
   // Return an object with all of the exports.
   return {
     initialize: initialize,
-    setBatteryInfo: setBatteryInfo,
+    audioSettings: audioSettings,
+    batterySettings: batterySettings,
+    bluetoothSettings: bluetoothSettings,
   };
 });
 

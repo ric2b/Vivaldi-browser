@@ -11,11 +11,13 @@ if (is_android) {
   java_library_path = "$target_out_dir/java_library.dex.jar"
 
   mojo_android_application("resource_provider") {
-    input_so = "$root_out_dir/lib.stripped/libresource_provider_lib.so"
+    input_so =
+        "$root_shlib_dir/${shlib_prefix}resource_provider_lib$shlib_extension"
     input_dex_jar = java_library_path
     deps = [
       ":java_library",
       ":resource_provider_lib",
+      "//mojo/shell/public/cpp",
     ]
   }
 
@@ -29,9 +31,12 @@ if (is_android) {
       ":jni_headers",
       ":lib",
       "//base",
+      "//build/config/sanitizers:deps",
       "//components/resource_provider/public/interfaces",
       "//mojo/environment:chromium",
-      "//third_party/mojo/src/mojo/public/c/system:for_shared_library",
+      "//mojo/platform_handle:for_shared_library",
+      "//mojo/public/c/system:for_shared_library",
+      "//mojo/shell/public/cpp",
       "//url",
     ]
   }
@@ -69,6 +74,7 @@ if (is_android) {
       "//base",
       "//components/resource_provider/public/interfaces",
       "//mojo/environment:chromium",
+      "//mojo/shell/public/cpp",
       "//url",
     ]
   }
@@ -87,9 +93,10 @@ source_set("lib") {
   deps = [
     "//base",
     "//components/resource_provider/public/interfaces",
-    "//mojo/application/public/cpp",
     "//mojo/common:common_base",
     "//mojo/platform_handle",
+    "//mojo/services/tracing/public/cpp",
+    "//mojo/shell/public/cpp",
     "//url",
   ]
 }
@@ -105,6 +112,7 @@ test("resource_provider_unittests") {
     "//base/test:test_config",
     "//components/resource_provider/public/interfaces",
     "//mojo/environment:chromium",
+    "//mojo/platform_handle:for_shared_library",
     "//testing/gtest",
     "//third_party/mojo/src/mojo/edk/test:run_all_unittests",
     "//url",
@@ -129,9 +137,11 @@ mojo_native_application("apptests") {
     "//base/test:test_config",
     "//components/resource_provider/public/cpp",
     "//components/resource_provider/public/interfaces",
-    "//mojo/application/public/cpp:test_support",
-    "//mojo/platform_handle",
+    "//mojo/common",
+    "//mojo/shell/public/cpp:test_support",
   ]
 
-  data_deps = [ ":resource_provider" ]
+  data_deps = [
+    ":resource_provider",
+  ]
 }

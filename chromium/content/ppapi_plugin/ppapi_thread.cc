@@ -4,10 +4,13 @@
 
 #include "content/ppapi_plugin/ppapi_thread.h"
 
+#include <stddef.h>
+
 #include <limits>
 
 #include "base/command_line.h"
 #include "base/cpu.h"
+#include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -19,6 +22,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/child/browser_font_resource_trusted.h"
 #include "content/child/child_discardable_shared_memory_manager.h"
 #include "content/child/child_process.h"
@@ -50,6 +55,7 @@
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "content/common/font_warmup_win.h"
 #include "sandbox/win/src/sandbox.h"
 #elif defined(OS_MACOSX)
 #include "content/common/sandbox_init_mac.h"
@@ -112,7 +118,7 @@ PpapiThread::PpapiThread(const base::CommandLine& command_line, bool is_broker)
       command_line.GetSwitchValueASCII(switches::kPpapiFlashArgs));
 
   blink_platform_impl_.reset(new PpapiBlinkPlatformImpl);
-  blink::initialize(blink_platform_impl_.get());
+  blink::initializeWithoutV8(blink_platform_impl_.get());
 
   if (!is_broker_) {
     scoped_refptr<ppapi::proxy::PluginMessageFilter> plugin_filter(
@@ -140,7 +146,7 @@ void PpapiThread::Shutdown() {
   if (plugin_entry_points_.shutdown_module)
     plugin_entry_points_.shutdown_module();
   blink_platform_impl_->Shutdown();
-  blink::shutdown();
+  blink::shutdownWithoutV8();
 }
 
 bool PpapiThread::Send(IPC::Message* msg) {
@@ -167,7 +173,7 @@ bool PpapiThread::OnControlMessageReceived(const IPC::Message& msg) {
   return handled;
 }
 
-void PpapiThread::OnChannelConnected(int32 peer_pid) {
+void PpapiThread::OnChannelConnected(int32_t peer_pid) {
   ChildThreadImpl::OnChannelConnected(peer_pid);
 #if defined(OS_WIN)
   if (is_broker_)
@@ -205,7 +211,10 @@ base::SharedMemoryHandle PpapiThread::ShareSharedMemoryHandleWithRemote(
 #if defined(OS_WIN)
   if (peer_handle_.IsValid()) {
     DCHECK(is_broker_);
-    return IPC::GetFileHandleForProcess(handle, peer_handle_.Get(), false);
+    IPC::PlatformFileForTransit platform_file = IPC::GetFileHandleForProcess(
+        handle.GetHandle(), peer_handle_.Get(), false);
+    base::ProcessId pid = base::GetProcId(peer_handle_.Get());
+    return base::SharedMemoryHandle(platform_file, pid);
   }
 #endif
 
@@ -256,13 +265,14 @@ PP_Resource PpapiThread::CreateBrowserFont(
         connection, instance, desc, prefs))->GetReference();
 }
 
-uint32 PpapiThread::Register(ppapi::proxy::PluginDispatcher* plugin_dispatcher) {
+uint32_t PpapiThread::Register(
+    ppapi::proxy::PluginDispatcher* plugin_dispatcher) {
   if (!plugin_dispatcher ||
-      plugin_dispatchers_.size() >= std::numeric_limits<uint32>::max()) {
+      plugin_dispatchers_.size() >= std::numeric_limits<uint32_t>::max()) {
     return 0;
   }
 
-  uint32 id = 0;
+  uint32_t id = 0;
   do {
     // Although it is unlikely, make sure that we won't cause any trouble when
     // the counter overflows.
@@ -273,7 +283,7 @@ uint32 PpapiThread::Register(ppapi::proxy::PluginDispatcher* plugin_dispatcher) 
   return id;
 }
 
-void PpapiThread::Unregister(uint32 plugin_dispatcher_id) {
+void PpapiThread::Unregister(uint32_t plugin_dispatcher_id) {
   plugin_dispatchers_.erase(plugin_dispatcher_id);
 }
 
@@ -307,7 +317,16 @@ void PpapiThread::OnLoadPlugin(const base::FilePath& path,
   if (plugin_entry_points_.initialize_module == NULL) {
     // Load the plugin from the specified library.
     base::NativeLibraryLoadError error;
-    library.Reset(base::LoadNativeLibrary(path, &error));
+    base::TimeDelta load_time;
+    {
+      TRACE_EVENT1("ppapi", "PpapiThread::LoadPlugin", "path",
+                   path.MaybeAsASCII());
+
+      base::TimeTicks start = base::TimeTicks::Now();
+      library.Reset(base::LoadNativeLibrary(path, &error));
+      load_time = base::TimeTicks::Now() - start;
+    }
+
     if (!library.is_valid()) {
       LOG(ERROR) << "Failed to load Pepper module from " << path.value()
                  << " (error: " << error.ToString() << ")";
@@ -320,6 +339,9 @@ void PpapiThread::OnLoadPlugin(const base::FilePath& path,
       ReportLoadErrorCode(path, error);
       return;
     }
+
+    // Only report load time for success loads.
+    ReportLoadTime(path, load_time);
 
     // Get the GetInterface function (required).
     plugin_entry_points_.get_interface =
@@ -476,7 +498,13 @@ void PpapiThread::OnSetNetworkState(bool online) {
 
 void PpapiThread::OnCrash() {
   // Intentionally crash upon the request of the browser.
-  volatile int* null_pointer = NULL;
+  //
+  // Linker's ICF feature may merge this function with other functions with the
+  // same definition and it may confuse the crash report processing system.
+  static int static_variable_to_make_this_function_unique = 0;
+  base::debug::Alias(&static_variable_to_make_this_function_unique);
+
+  volatile int* null_pointer = nullptr;
   *null_pointer = 0;
 }
 
@@ -551,17 +579,21 @@ void PpapiThread::SavePluginName(const base::FilePath& path) {
   }
 }
 
+static std::string GetHistogramName(bool is_broker,
+                                    const std::string& metric_name,
+                                    const base::FilePath& path) {
+  return std::string("Plugin.Ppapi") + (is_broker ? "Broker" : "Plugin") +
+         metric_name + "_" + path.BaseName().MaybeAsASCII();
+}
+
 void PpapiThread::ReportLoadResult(const base::FilePath& path,
                                    LoadResult result) {
   DCHECK_LT(result, LOAD_RESULT_MAX);
-  std::string histogram_name = std::string("Plugin.Ppapi") +
-                               (is_broker_ ? "Broker" : "Plugin") +
-                               "LoadResult_" + path.BaseName().MaybeAsASCII();
 
   // Note: This leaks memory, which is expected behavior.
   base::HistogramBase* histogram =
       base::LinearHistogram::FactoryGet(
-          histogram_name,
+          GetHistogramName(is_broker_, "LoadResult", path),
           1,
           LOAD_RESULT_MAX,
           LOAD_RESULT_MAX + 1,
@@ -573,17 +605,28 @@ void PpapiThread::ReportLoadResult(const base::FilePath& path,
 void PpapiThread::ReportLoadErrorCode(
     const base::FilePath& path,
     const base::NativeLibraryLoadError& error) {
+// Only report load error code on Windows because that's the only platform that
+// has a numerical error value.
 #if defined(OS_WIN)
-  // Only report load error code on Windows because that's the only platform
-  // that has a numerical error value.
-  std::string histogram_name =
-      std::string("Plugin.Ppapi") + (is_broker_ ? "Broker" : "Plugin") +
-      "LoadErrorCode_" + path.BaseName().MaybeAsASCII();
-
   // For sparse histograms, we can use the macro, as it does not incorporate a
   // static.
-  UMA_HISTOGRAM_SPARSE_SLOWLY(histogram_name, error.code);
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
+      GetHistogramName(is_broker_, "LoadErrorCode", path), error.code);
 #endif
+}
+
+void PpapiThread::ReportLoadTime(const base::FilePath& path,
+                                 const base::TimeDelta load_time) {
+  // Note: This leaks memory, which is expected behavior.
+  base::HistogramBase* histogram =
+      base::Histogram::FactoryTimeGet(
+          GetHistogramName(is_broker_, "LoadTime", path),
+          base::TimeDelta::FromMilliseconds(1),
+          base::TimeDelta::FromSeconds(10),
+          50,
+          base::HistogramBase::kUmaTargetedHistogramFlag);
+
+  histogram->AddTime(load_time);
 }
 
 }  // namespace content

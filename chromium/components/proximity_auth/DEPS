@@ -1,10 +1,11 @@
 include_rules = [
+  "+components/signin/core/account_id/account_id.h",
   "+device/bluetooth",
   "+net",
 ]
 
 specific_include_rules = {
-  "screenlock_bridge\.*": [
+  "screenlock_bridge\.*|unlock_manager\.*": [
     "+chromeos",
   ],
 }

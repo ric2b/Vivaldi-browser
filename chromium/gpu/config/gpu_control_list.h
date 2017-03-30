@@ -5,13 +5,14 @@
 #ifndef GPU_CONFIG_GPU_CONTROL_LIST_H_
 #define GPU_CONFIG_GPU_CONTROL_LIST_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
-#include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
@@ -58,7 +59,7 @@ class GPU_EXPORT GpuControlList {
   // Collects the active entries from the last MakeDecision() call.
   // If disabled set to true, return entries that are disabled; otherwise,
   // return enabled entries.
-  void GetDecisionEntries(std::vector<uint32>* entry_ids,
+  void GetDecisionEntries(std::vector<uint32_t>* entry_ids,
                           bool disabled) const;
 
   // Collects all disabled extensions.
@@ -77,7 +78,7 @@ class GPU_EXPORT GpuControlList {
       base::ListValue* problem_list, const std::string& tag) const;
 
   // Return the largest entry id.  This is used for histogramming.
-  uint32 max_entry_id() const;
+  uint32_t max_entry_id() const;
 
   // Returns the version of the control list.
   std::string version() const;
@@ -275,7 +276,7 @@ class GPU_EXPORT GpuControlList {
     OsType GetOsType() const;
 
     // Returns the entry's unique id.  0 is reserved.
-    uint32 id() const;
+    uint32_t id() const;
 
     // Returns whether the entry is disabled.
     bool disabled() const;
@@ -331,7 +332,7 @@ class GPU_EXPORT GpuControlList {
     GpuControlListEntry();
     ~GpuControlListEntry();
 
-    bool SetId(uint32 id);
+    bool SetId(uint32_t id);
 
     void SetDisabled(bool disabled);
 
@@ -400,6 +401,7 @@ class GPU_EXPORT GpuControlList {
                          const std::string& int_string2);
 
     void SetDirectRenderingInfo(bool value);
+    void SetInProcessGPUInfo(bool value);
 
     bool SetFeatures(const std::vector<std::string>& features,
                      const FeatureMap& feature_map,
@@ -428,15 +430,15 @@ class GPU_EXPORT GpuControlList {
     // See GLType declaration.
     static GLType GetDefaultGLType();
 
-    uint32 id_;
+    uint32_t id_;
     bool disabled_;
     std::string description_;
     std::vector<int> cr_bugs_;
     std::vector<int> webkit_bugs_;
     std::vector<std::string> disabled_extensions_;
     scoped_ptr<OsInfo> os_info_;
-    uint32 vendor_id_;
-    std::vector<uint32> device_id_list_;
+    uint32_t vendor_id_;
+    std::vector<uint32_t> device_id_list_;
     MultiGpuStyle multi_gpu_style_;
     MultiGpuCategory multi_gpu_category_;
     GLType gl_type_;
@@ -456,6 +458,7 @@ class GPU_EXPORT GpuControlList {
     scoped_ptr<VersionInfo> machine_model_version_info_;
     scoped_ptr<IntInfo> gpu_count_info_;
     scoped_ptr<BoolInfo> direct_rendering_info_;
+    scoped_ptr<BoolInfo> in_process_gpu_info_;
     std::set<int> features_;
     std::vector<ScopedGpuControlListEntry> exceptions_;
   };
@@ -477,7 +480,7 @@ class GPU_EXPORT GpuControlList {
   // used later by GetDecisionEntries().
   std::vector<ScopedGpuControlListEntry> active_entries_;
 
-  uint32 max_entry_id_;
+  uint32_t max_entry_id_;
 
   bool needs_more_info_;
 

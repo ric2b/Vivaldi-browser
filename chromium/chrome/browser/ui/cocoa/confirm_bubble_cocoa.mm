@@ -4,6 +4,8 @@
 
 #import "chrome/browser/ui/cocoa/confirm_bubble_cocoa.h"
 
+#include <utility>
+
 #include "base/strings/string16.h"
 #include "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/confirm_bubble_controller.h"
@@ -28,9 +30,6 @@ const float kBubbleWindowEdge = 0.7f;
 // Vertical spacing between a label and some control.
 const int kLabelToControlVerticalSpacing = 8;
 
-// Horizontal spacing between controls that are logically related.
-const int kRelatedControlHorizontalSpacing = 8;
-
 // Vertical spacing between controls that are logically related.
 const int kRelatedControlVerticalSpacing = 8;
 
@@ -54,7 +53,7 @@ void ShowConfirmBubble(gfx::NativeWindow window,
   ConfirmBubbleController* controller =
       [[ConfirmBubbleController alloc] initWithParent:anchor_view
                                                origin:origin.ToCGPoint()
-                                                model:model.Pass()];
+                                                model:std::move(model)];
   [anchor_view addSubview:[controller view]
                positioned:NSWindowAbove
                relativeTo:nil];
@@ -217,7 +216,7 @@ void ShowConfirmBubble(gfx::NativeWindow window,
     base::scoped_nsobject<NSAttributedString> whiteSpace(
         [[NSAttributedString alloc] initWithString:@" "]);
     [attributedMessage.get() appendAttributedString:whiteSpace.get()];
-    [attributes setObject:[NSString string]
+    [attributes setObject:[controller_ linkURL]
                    forKey:NSLinkAttributeName];
     base::scoped_nsobject<NSAttributedString> attributedLink(
         [[NSAttributedString alloc] initWithString:linkText
@@ -238,16 +237,6 @@ void ShowConfirmBubble(gfx::NativeWindow window,
   left = kButtonHEdgeMargin;
   right = NSWidth(frameRect);
   bottom += height + kLabelToControlVerticalSpacing;
-  height = 0;
-  NSImage* iconImage = [controller_ icon];
-  if (iconImage) {
-    icon_.reset([[NSImageView alloc] initWithFrame:NSMakeRect(
-        left, bottom, [iconImage size].width, [iconImage size].height)]);
-    [icon_.get() setImage:iconImage];
-    [self addSubview:icon_.get()];
-    left += NSWidth([icon_.get() frame]) + kRelatedControlHorizontalSpacing;
-    height = std::max(height, NSHeight([icon_.get() frame]));
-  }
   titleLabel_.reset([[NSTextView alloc]
       initWithFrame:NSMakeRect(left, bottom, right - left, 0)]);
   [titleLabel_.get() setString:[controller_ title]];
@@ -258,7 +247,7 @@ void ShowConfirmBubble(gfx::NativeWindow window,
   [titleLabel_.get() setDrawsBackground:NO];
   [titleLabel_.get() sizeToFit];
   [self addSubview:titleLabel_.get()];
-  height = std::max(height, NSHeight([titleLabel_.get() frame]));
+  height = NSHeight([titleLabel_.get() frame]);
 
   // Adjust the frame rectangle of this bubble so we can show all controls.
   NSRect parentRect = [parent_ frame];

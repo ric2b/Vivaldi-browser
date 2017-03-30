@@ -7,9 +7,10 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "media/audio/audio_device_name.h"
 #include "media/audio/audio_logging.h"
 #include "media/audio/audio_parameters.h"
@@ -26,6 +27,11 @@ class AudioOutputStream;
 
 // Manages all audio resources.  Provides some convenience functions that avoid
 // the need to provide iterators over the existing streams.
+//
+// Except on OSX, a hang monitor for the audio thread is always created. When a
+// thread hang is detected, it is reported to UMA.  Optionally, if called prior,
+// EnableCrashKeyLoggingForAudioThreadHangs() will cause a non-crash dump to be
+// logged on Windows (this allows us to report driver hangs to Microsoft).
 class MEDIA_EXPORT AudioManager {
  public:
   virtual ~AudioManager();
@@ -55,11 +61,21 @@ class MEDIA_EXPORT AudioManager {
   // Similar to Create() except uses a FakeAudioLogFactory for testing.
   static AudioManager* CreateForTesting();
 
-  // Enables the hang monitor for the AudioManager once it's created.  Must be
-  // called before the AudioManager is created.  CreateWithHangTimer() requires
-  // either switches::kEnableAudioHangMonitor to be present or this to have been
-  // called previously to start the hang monitor.  Does nothing on OSX.
-  static void EnableHangMonitor();
+  // Enables non-crash dumps when audio thread hangs are detected.
+  // TODO(dalecurtis): There are no callers to this function at present. A list
+  // of bad drivers has been given to Microsoft. This should be re-enabled in
+  // the future if Microsoft is able to triage third party drivers.
+  // See http://crbug.com/422522
+  static void EnableCrashKeyLoggingForAudioThreadHangs();
+
+#if defined(OS_LINUX)
+  // Sets the name of the audio source as seen by external apps. Only actually
+  // used with PulseAudio as of this writing.
+  static void SetGlobalAppName(const std::string& app_name);
+
+  // Returns the app name or an empty string if it is not set.
+  static const std::string& GetGlobalAppName();
+#endif
 
   // Should only be used for testing. Resets a previously-set
   // AudioManagerFactory. The instance of AudioManager is not affected.
@@ -69,6 +85,13 @@ class MEDIA_EXPORT AudioManager {
   // created. This is a utility method for the code outside of media directory,
   // like src/chrome.
   static AudioManager* Get();
+
+  // Returns the localized name of the generic "default" device.
+  static std::string GetDefaultDeviceName();
+
+  // Returns the localized name of the generic default communications device.
+  // This device is not supported on all platforms.
+  static std::string GetCommunicationsDeviceName();
 
   // Returns true if the OS reports existence of audio devices. This does not
   // guarantee that the existing devices support all formats and sample rates.
@@ -205,11 +228,6 @@ class MEDIA_EXPORT AudioManager {
   // instances of the given component.  See AudioLogFactory for more details.
   virtual scoped_ptr<AudioLog> CreateAudioLog(
       AudioLogFactory::AudioComponent component) = 0;
-
-  // Informs the audio manager that the system has support for a keyboard mic.
-  // This information will be passed on in the return value of
-  // GetInputStreamParameters as an effect. Only supported on ChromeOS.
-  virtual void SetHasKeyboardMic() = 0;
 
  protected:
   AudioManager();

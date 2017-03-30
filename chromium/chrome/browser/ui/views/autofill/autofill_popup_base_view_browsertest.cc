@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/autofill/autofill_popup_base_view.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -51,9 +52,8 @@ class AutofillPopupBaseViewTest : public InProcessBrowserTest {
     EXPECT_CALL(mock_delegate_, ViewDestroyed());
 
     view_ = new AutofillPopupBaseView(
-        &mock_delegate_,
-        views::Widget::GetWidgetForNativeWindow(
-            browser()->window()->GetNativeWindow())->GetFocusManager());
+        &mock_delegate_, views::Widget::GetWidgetForNativeWindow(
+                             browser()->window()->GetNativeWindow()));
   }
 
   void ShowView() {

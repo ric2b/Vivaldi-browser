@@ -65,10 +65,7 @@ test.util.sync.changeValue = function(contentWindow, query, newValue) {
  * @param {string} newName Name to be newly assigned.
  */
 test.util.sync.changeName = function(contentWindow, newName) {
-  var fullResCanvas = contentWindow.document.querySelector(
-      '.gallery[mode="slide"] .content canvas.fullres');
-
-  var nameBox = contentWindow.document.querySelector('.namebox');
+  var nameBox = contentWindow.document.querySelector('.filename-spacer input');
   nameBox.focus();
   nameBox.value = newName;
   nameBox.blur();

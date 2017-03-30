@@ -7,9 +7,13 @@
 
 #include "ui/events/blink/blink_event_util.h"
 
+#include <stddef.h>
+
+#include <algorithm>
 #include <cmath>
 
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/gesture_detection/gesture_event_data.h"
@@ -39,12 +43,15 @@ WebInputEvent::Type ToWebInputEventType(MotionEvent::Action action) {
       return WebInputEvent::TouchStart;
     case MotionEvent::ACTION_POINTER_UP:
       return WebInputEvent::TouchEnd;
+    case MotionEvent::ACTION_NONE:
+      NOTREACHED();
+      return WebInputEvent::Undefined;
   }
   NOTREACHED() << "Invalid MotionEvent::Action.";
   return WebInputEvent::Undefined;
 }
 
-// Note that |is_action_pointer| is meaningful only in the context of
+// Note that the action index is meaningful only in the context of
 // |ACTION_POINTER_UP| and |ACTION_POINTER_DOWN|; other actions map directly to
 // WebTouchPoint::State.
 WebTouchPoint::State ToWebTouchPointState(const MotionEvent& event,
@@ -66,15 +73,38 @@ WebTouchPoint::State ToWebTouchPointState(const MotionEvent& event,
       return static_cast<int>(pointer_index) == event.GetActionIndex()
                  ? WebTouchPoint::StateReleased
                  : WebTouchPoint::StateStationary;
+    case MotionEvent::ACTION_NONE:
+      NOTREACHED();
+      return WebTouchPoint::StateUndefined;
   }
   NOTREACHED() << "Invalid MotionEvent::Action.";
   return WebTouchPoint::StateUndefined;
+}
+
+WebTouchPoint::PointerType ToWebTouchPointPointerType(const MotionEvent& event,
+                                                      size_t pointer_index) {
+  switch (event.GetToolType(pointer_index)) {
+    case MotionEvent::TOOL_TYPE_UNKNOWN:
+      return WebTouchPoint::PointerType::Unknown;
+    case MotionEvent::TOOL_TYPE_FINGER:
+      return WebTouchPoint::PointerType::Touch;
+    case MotionEvent::TOOL_TYPE_STYLUS:
+      return WebTouchPoint::PointerType::Pen;
+    case MotionEvent::TOOL_TYPE_MOUSE:
+      return WebTouchPoint::PointerType::Mouse;
+    case MotionEvent::TOOL_TYPE_ERASER:
+      return WebTouchPoint::PointerType::Unknown;
+  }
+  NOTREACHED() << "Invalid MotionEvent::ToolType = "
+               << event.GetToolType(pointer_index);
+  return WebTouchPoint::PointerType::Unknown;
 }
 
 WebTouchPoint CreateWebTouchPoint(const MotionEvent& event,
                                   size_t pointer_index) {
   WebTouchPoint touch;
   touch.id = event.GetPointerId(pointer_index);
+  touch.pointerType = ToWebTouchPointPointerType(event, pointer_index);
   touch.state = ToWebTouchPointState(event, pointer_index);
   touch.position.x = event.GetX(pointer_index);
   touch.position.y = event.GetY(pointer_index);
@@ -96,32 +126,24 @@ WebTouchPoint CreateWebTouchPoint(const MotionEvent& event,
   float major_radius = event.GetTouchMajor(pointer_index) / 2.f;
   float minor_radius = event.GetTouchMinor(pointer_index) / 2.f;
 
-  DCHECK_LE(minor_radius, major_radius);
-  DCHECK_IMPLIES(major_radius, minor_radius);
-
-  float orientation_deg = event.GetOrientation(pointer_index) * 180.f / M_PI;
+  float orientation_rad = event.GetOrientation(pointer_index);
+  float orientation_deg = orientation_rad * 180.f / M_PI;
   DCHECK_GE(major_radius, 0);
   DCHECK_GE(minor_radius, 0);
   DCHECK_GE(major_radius, minor_radius);
-  if (event.GetToolType(pointer_index) == MotionEvent::TOOL_TYPE_STYLUS) {
-    // Orientation lies in [-180, 180] for a stylus. Normalise to [-90, 90).
-    // Allow a small bound tolerance to account for floating point conversion.
-    // TODO(e_hakkinen): crbug.com/493728: Pass also unaltered orientation
-    //                   to touch in order not to lose quadrant information.
-    DCHECK_GT(orientation_deg, -180.01f);
-    DCHECK_LT(orientation_deg, 180.01f);
-    if (orientation_deg >= 90.f)
-      orientation_deg -= 180.f;
-    else if (orientation_deg < -90.f)
-      orientation_deg += 180.f;
-  } else {
-    // Orientation lies in [-90, 90] for a touch. Normalise to [-90, 90).
-    // Allow a small bound tolerance to account for floating point conversion.
-    DCHECK_GT(orientation_deg, -90.01f);
-    DCHECK_LT(orientation_deg, 90.01f);
-    if (orientation_deg >= 90.f)
-      orientation_deg -= 180.f;
-  }
+  // Orientation lies in [-180, 180] for a stylus, and [-90, 90] for other
+  // touchscreen inputs. There are exceptions on Android when a device is
+  // rotated, yielding touch orientations in the range of [-180, 180].
+  // Regardless, normalise to [-90, 90), allowing a small tolerance to account
+  // for floating point conversion.
+  // TODO(e_hakkinen): Also pass unaltered stylus orientation, avoiding loss of
+  // quadrant information, see crbug.com/493728.
+  DCHECK_GT(orientation_deg, -180.01f);
+  DCHECK_LT(orientation_deg, 180.01f);
+  if (orientation_deg >= 90.f)
+    orientation_deg -= 180.f;
+  else if (orientation_deg < -90.f)
+    orientation_deg += 180.f;
   if (orientation_deg >= 0) {
     // The case orientation_deg == 0 is handled here on purpose: although the
     // 'else' block is equivalent in this case, we want to pass the 0 value
@@ -137,6 +159,18 @@ WebTouchPoint CreateWebTouchPoint(const MotionEvent& event,
   }
 
   touch.force = event.GetPressure(pointer_index);
+
+  if (event.GetToolType(pointer_index) == MotionEvent::TOOL_TYPE_STYLUS) {
+    // A stylus points to a direction specified by orientation and tilts to
+    // the opposite direction. Coordinate system is left-handed.
+    float tilt_rad = event.GetTilt(pointer_index);
+    float r = sin(tilt_rad);
+    float z = cos(tilt_rad);
+    touch.tiltX = lround(atan2(sin(-orientation_rad) * r, z) * 180.f / M_PI);
+    touch.tiltY = lround(atan2(cos(-orientation_rad) * r, z) * 180.f / M_PI);
+  } else {
+    touch.tiltX = touch.tiltY = 0;
+  }
 
   return touch;
 }
@@ -181,18 +215,34 @@ int EventFlagsToWebEventModifiers(int flags) {
   if (flags & EF_ALT_DOWN)
     modifiers |= blink::WebInputEvent::AltKey;
   if (flags & EF_COMMAND_DOWN)
+#if defined(OS_WIN)
+    // Evaluate whether OSKey should be set for other platforms.
+    // Since this value was never set on Windows before as the meta
+    // key; we don't break backwards compatiblity exposing it as the
+    // true OS key. However this is not the case for Linux; see
+    // http://crbug.com/539979
+    modifiers |= blink::WebInputEvent::OSKey;
+#else
     modifiers |= blink::WebInputEvent::MetaKey;
-
+#endif
+  if (flags & EF_ALTGR_DOWN)
+    modifiers |= blink::WebInputEvent::AltGrKey;
+  if (flags & EF_NUM_LOCK_ON)
+    modifiers |= blink::WebInputEvent::NumLockOn;
+  if (flags & EF_CAPS_LOCK_ON)
+    modifiers |= blink::WebInputEvent::CapsLockOn;
+  if (flags & EF_SCROLL_LOCK_ON)
+    modifiers |= blink::WebInputEvent::ScrollLockOn;
   if (flags & EF_LEFT_MOUSE_BUTTON)
     modifiers |= blink::WebInputEvent::LeftButtonDown;
   if (flags & EF_MIDDLE_MOUSE_BUTTON)
     modifiers |= blink::WebInputEvent::MiddleButtonDown;
   if (flags & EF_RIGHT_MOUSE_BUTTON)
     modifiers |= blink::WebInputEvent::RightButtonDown;
-  if (flags & EF_CAPS_LOCK_DOWN)
-    modifiers |= blink::WebInputEvent::CapsLockOn;
   if (flags & EF_IS_REPEAT)
     modifiers |= blink::WebInputEvent::IsAutoRepeat;
+  if (flags & EF_TOUCH_ACCESSIBILITY)
+    modifiers |= blink::WebInputEvent::IsTouchAccessibility;
 
   return modifiers;
 }

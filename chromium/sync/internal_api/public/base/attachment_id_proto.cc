@@ -4,6 +4,11 @@
 
 #include "sync/internal_api/public/base/attachment_id_proto.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <string>
+
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -13,7 +18,7 @@ namespace syncer {
 sync_pb::AttachmentIdProto CreateAttachmentIdProto(size_t size,
                                                    uint32_t crc32c) {
   sync_pb::AttachmentIdProto proto;
-  std::string guid = base::StringToLowerASCII(base::GenerateGUID());
+  std::string guid = base::ToLowerASCII(base::GenerateGUID());
   DCHECK(!guid.empty());
   // Requirements are that this id must be a unique RFC4122 UUID, formatted in
   // lower case.

@@ -5,7 +5,8 @@
 #ifndef CHROME_BROWSER_DEVTOOLS_DEVTOOLS_TOGGLE_ACTION_H_
 #define CHROME_BROWSER_DEVTOOLS_DEVTOOLS_TOGGLE_ACTION_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 
@@ -14,6 +15,7 @@ struct DevToolsToggleAction {
   enum Type {
     kShow,
     kShowConsole,
+    kShowSecurityPanel,
     kInspect,
     kToggle,
     kReveal,
@@ -37,6 +39,7 @@ struct DevToolsToggleAction {
 
   static DevToolsToggleAction Show();
   static DevToolsToggleAction ShowConsole();
+  static DevToolsToggleAction ShowSecurityPanel();
   static DevToolsToggleAction Inspect();
   static DevToolsToggleAction Toggle();
   static DevToolsToggleAction Reveal(const base::string16& url,

@@ -4,6 +4,7 @@
 
 #include "content/public/common/renderer_preferences.h"
 
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/font_render_params.h"
 
@@ -17,6 +18,7 @@ RendererPreferences::RendererPreferences()
       use_bitmaps(false),
       should_show_images(true),
       should_ask_plugin_content(false),
+      should_enable_plugin_content(true),
       subpixel_rendering(gfx::FontRenderParams::SUBPIXEL_RENDERING_NONE),
       use_subpixel_positioning(false),
       focus_ring_color(SkColorSetARGB(255, 229, 151, 0)),
@@ -27,13 +29,11 @@ RendererPreferences::RendererPreferences()
       active_selection_fg_color(SK_ColorWHITE),
       inactive_selection_bg_color(SkColorSetRGB(200, 200, 200)),
       inactive_selection_fg_color(SkColorSetRGB(50, 50, 50)),
-      browser_handles_non_local_top_level_requests(false),
       browser_handles_all_top_level_requests(false),
       caret_blink_interval(0.5),
       use_custom_colors(true),
       enable_referrers(true),
       enable_do_not_track(false),
-      enable_webrtc_multiple_routes(true),
       default_zoom_level(0),
       report_frame_name_changes(false),
       tap_multiple_targets_strategy(TAP_MULTIPLE_TARGETS_STRATEGY_POPUP),
@@ -52,7 +52,8 @@ RendererPreferences::RendererPreferences()
       arrow_bitmap_height_vertical_scroll_bar_in_dips(0),
       arrow_bitmap_width_horizontal_scroll_bar_in_dips(0)
 #endif
-      , serve_resources_only_from_cache(false)
+      , default_font_size(0),
+      serve_resources_only_from_cache(false)
 {}
 
 RendererPreferences::~RendererPreferences() { }

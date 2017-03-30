@@ -17,6 +17,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.test.util.MockAccountManager;
@@ -202,6 +203,7 @@ public class FeatureUtilitiesTest extends InstrumentationTestCase {
         assertFalse(RecognizesSpeechUncached);
     }
 
+    @DisabledTest // Flaked on the try bot: http://crbug.com/543160
     @SmallTest
     @Feature({"FeatureUtilities", "GoogleAccounts"})
     public void testHasGoogleAccountCorrectlyDetected() {
@@ -221,6 +223,7 @@ public class FeatureUtilitiesTest extends InstrumentationTestCase {
         assertTrue(hasAuthenticator);
     }
 
+    @DisabledTest // Flaked on the try bot: http://crbug.com/543160
     @SmallTest
     @Feature({"FeatureUtilities", "GoogleAccounts"})
     public void testHasNoGoogleAccountCorrectlyDetected() {

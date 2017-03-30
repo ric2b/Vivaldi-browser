@@ -9,7 +9,6 @@
 
 #include <algorithm>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -17,7 +16,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
-
 
 namespace net {
 
@@ -41,40 +39,6 @@ static size_t FindStringEnd(const std::string& line, size_t start, char delim) {
 
 
 // HttpUtil -------------------------------------------------------------------
-
-// static
-size_t HttpUtil::FindDelimiter(const std::string& line,
-                               size_t search_start,
-                               char delimiter) {
-  do {
-    // search_start points to the spot from which we should start looking
-    // for the delimiter.
-    const char delim_str[] = { delimiter, '"', '\'', '\0' };
-    size_t cur_delim_pos = line.find_first_of(delim_str, search_start);
-    if (cur_delim_pos == std::string::npos)
-      return line.length();
-
-    char ch = line[cur_delim_pos];
-    if (ch == delimiter) {
-      // Found delimiter
-      return cur_delim_pos;
-    }
-
-    // We hit the start of a quoted string.  Look for its end.
-    search_start = FindStringEnd(line, cur_delim_pos, ch);
-    if (search_start == line.length())
-      return search_start;
-
-    ++search_start;
-
-    // search_start now points to the first char after the end of the
-    // string, so just go back to the top of the loop and look for
-    // |delimiter| again.
-  } while (true);
-
-  NOTREACHED();
-  return line.length();
-}
 
 // static
 void HttpUtil::ParseContentType(const std::string& content_type_str,
@@ -118,14 +82,15 @@ void HttpUtil::ParseContentType(const std::string& content_type_str,
       DCHECK(param_value_begin <= tokenizer.token_end());
       TrimLWS(&param_value_begin, &param_value_end);
 
-      if (base::LowerCaseEqualsASCII(param_name_begin, param_name_end,
-                                     "charset")) {
+      if (base::LowerCaseEqualsASCII(
+              base::StringPiece(param_name_begin, param_name_end), "charset")) {
         // TODO(abarth): Refactor this function to consistently use iterators.
         charset_val = param_value_begin - begin;
         charset_end = param_value_end - begin;
         type_has_charset = true;
-      } else if (base::LowerCaseEqualsASCII(param_name_begin, param_name_end,
-                                            "boundary")) {
+      } else if (base::LowerCaseEqualsASCII(
+                     base::StringPiece(param_name_begin, param_name_end),
+                     "boundary")) {
         if (boundary)
           boundary->assign(param_value_begin, param_value_end);
       }
@@ -162,16 +127,17 @@ void HttpUtil::ParseContentType(const std::string& content_type_str,
       content_type_str.find_first_of('/') != std::string::npos) {
     // Common case here is that mime_type is empty
     bool eq = !mime_type->empty() &&
-              base::LowerCaseEqualsASCII(begin + type_val, begin + type_end,
-                                         mime_type->data());
+              base::LowerCaseEqualsASCII(
+                  base::StringPiece(begin + type_val, begin + type_end),
+                  mime_type->data());
     if (!eq) {
-      mime_type->assign(begin + type_val, begin + type_end);
-      base::StringToLowerASCII(mime_type);
+      *mime_type = base::ToLowerASCII(
+          base::StringPiece(begin + type_val, begin + type_end));
     }
     if ((!eq && *had_charset) || type_has_charset) {
       *had_charset = true;
-      charset->assign(begin + charset_val, begin + charset_end);
-      base::StringToLowerASCII(charset);
+      *charset = base::ToLowerASCII(
+          base::StringPiece(begin + charset_val, begin + charset_end));
     }
   }
 }
@@ -220,7 +186,8 @@ bool HttpUtil::ParseRangeHeader(const std::string& ranges_specifier,
 
   TrimLWS(&bytes_unit_begin, &bytes_unit_end);
   // "bytes" unit identifier is not found.
-  if (!base::LowerCaseEqualsASCII(bytes_unit_begin, bytes_unit_end, "bytes"))
+  if (!base::LowerCaseEqualsASCII(
+          base::StringPiece(bytes_unit_begin, bytes_unit_end), "bytes"))
     return false;
 
   ValuesIterator byte_range_set_iterator(byte_range_set_begin,
@@ -241,7 +208,7 @@ bool HttpUtil::ParseRangeHeader(const std::string& ranges_specifier,
     HttpByteRange range;
     // Try to obtain first-byte-pos.
     if (!first_byte_pos.empty()) {
-      int64 first_byte_position = -1;
+      int64_t first_byte_position = -1;
       if (!base::StringToInt64(first_byte_pos, &first_byte_position))
         return false;
       range.set_first_byte_position(first_byte_position);
@@ -256,7 +223,7 @@ bool HttpUtil::ParseRangeHeader(const std::string& ranges_specifier,
 
     // We have last-byte-pos or suffix-byte-range-spec in this case.
     if (!last_byte_pos.empty()) {
-      int64 last_byte_position;
+      int64_t last_byte_position;
       if (!base::StringToInt64(last_byte_pos, &last_byte_position))
         return false;
       if (range.HasFirstBytePosition())
@@ -352,7 +319,7 @@ const char* const kForbiddenHeaderFields[] = {
 
 // static
 bool HttpUtil::IsSafeHeader(const std::string& name) {
-  std::string lower_name(base::StringToLowerASCII(name));
+  std::string lower_name(base::ToLowerASCII(name));
   if (base::StartsWith(lower_name, "proxy-", base::CompareCase::SENSITIVE) ||
       base::StartsWith(lower_name, "sec-", base::CompareCase::SENSITIVE))
     return false;
@@ -377,6 +344,24 @@ bool HttpUtil::IsValidHeaderValue(const std::string& value) {
 }
 
 // static
+bool HttpUtil::IsValidHeaderValueRFC7230(const base::StringPiece& value) {
+  // This empty string is a valid header-value.
+  if (value.empty())
+    return true;
+
+  // Check leading/trailing whitespaces.
+  if (IsLWS(value[0]) || IsLWS(value[value.size() - 1]))
+    return false;
+
+  // Check each octet is |field-vchar|, |SP| or |HTAB|.
+  for (unsigned char c : value) {
+    if (c == 0x7F || (c < 0x20 && c != '\t'))
+      return false;
+  }
+  return true;
+}
+
+// static
 std::string HttpUtil::StripHeaders(const std::string& headers,
                                    const char* const headers_to_remove[],
                                    size_t headers_to_remove_len) {
@@ -386,8 +371,9 @@ std::string HttpUtil::StripHeaders(const std::string& headers,
   while (it.GetNext()) {
     bool should_remove = false;
     for (size_t i = 0; i < headers_to_remove_len; ++i) {
-      if (base::LowerCaseEqualsASCII(it.name_begin(), it.name_end(),
-                                     headers_to_remove[i])) {
+      if (base::LowerCaseEqualsASCII(
+              base::StringPiece(it.name_begin(), it.name_end()),
+              headers_to_remove[i])) {
         should_remove = true;
         break;
       }
@@ -422,7 +408,7 @@ bool HttpUtil::IsNonCoalescingHeader(std::string::const_iterator name_begin,
     "strict-transport-security"
   };
   for (size_t i = 0; i < arraysize(kNonCoalescingHeaders); ++i) {
-    if (base::LowerCaseEqualsASCII(name_begin, name_end,
+    if (base::LowerCaseEqualsASCII(base::StringPiece(name_begin, name_end),
                                    kNonCoalescingHeaders[i]))
       return true;
   }
@@ -537,7 +523,8 @@ int HttpUtil::LocateStartOfStatusLine(const char* buf, int buf_len) {
   if (buf_len >= http_len) {
     int i_max = std::min(buf_len - http_len, slop);
     for (int i = 0; i <= i_max; ++i) {
-      if (base::LowerCaseEqualsASCII(buf + i, buf + i + http_len, "http"))
+      if (base::LowerCaseEqualsASCII(base::StringPiece(buf + i, http_len),
+                                     "http"))
         return i;
     }
   }
@@ -753,7 +740,7 @@ bool HttpUtil::HasStrongValidators(HttpVersion version,
     std::string::const_iterator i = etag_header.begin();
     std::string::const_iterator j = etag_header.begin() + slash;
     TrimLWS(&i, &j);
-    if (!base::LowerCaseEqualsASCII(i, j, "w"))
+    if (!base::LowerCaseEqualsASCII(base::StringPiece(i, j), "w"))
       return true;
   }
 
@@ -850,11 +837,12 @@ bool HttpUtil::HeadersIterator::GetNext() {
 
 bool HttpUtil::HeadersIterator::AdvanceTo(const char* name) {
   DCHECK(name != NULL);
-  DCHECK_EQ(0, base::StringToLowerASCII<std::string>(name).compare(name))
+  DCHECK_EQ(0, base::ToLowerASCII(name).compare(name))
       << "the header name must be in all lower case";
 
   while (GetNext()) {
-    if (base::LowerCaseEqualsASCII(name_begin_, name_end_, name)) {
+    if (base::LowerCaseEqualsASCII(base::StringPiece(name_begin_, name_end_),
+                                   name)) {
       return true;
     }
   }
@@ -889,15 +877,22 @@ bool HttpUtil::ValuesIterator::GetNext() {
 HttpUtil::NameValuePairsIterator::NameValuePairsIterator(
     std::string::const_iterator begin,
     std::string::const_iterator end,
-    char delimiter)
+    char delimiter,
+    OptionalValues optional_values)
     : props_(begin, end, delimiter),
       valid_(true),
       name_begin_(end),
       name_end_(end),
       value_begin_(end),
       value_end_(end),
-      value_is_quoted_(false) {
-}
+      value_is_quoted_(false),
+      values_optional_(optional_values == VALUES_OPTIONAL) {}
+
+HttpUtil::NameValuePairsIterator::NameValuePairsIterator(
+    std::string::const_iterator begin,
+    std::string::const_iterator end,
+    char delimiter)
+    : NameValuePairsIterator(begin, end, delimiter, VALUES_NOT_OPTIONAL) {}
 
 HttpUtil::NameValuePairsIterator::~NameValuePairsIterator() {}
 
@@ -907,7 +902,7 @@ HttpUtil::NameValuePairsIterator::~NameValuePairsIterator() {}
 //   name='\'value\''
 //   name=value
 //   name = value
-//   name=
+//   name (if values_optional_ is true)
 // Due to buggy implementations found in some embedded devices, we also
 // accept values with missing close quotemark (http://crbug.com/39836):
 //   name="value
@@ -922,28 +917,34 @@ bool HttpUtil::NameValuePairsIterator::GetNext() {
 
   // Scan for the equals sign.
   std::string::const_iterator equals = std::find(value_begin_, value_end_, '=');
-  if (equals == value_end_ || equals == value_begin_)
-    return valid_ = false;  // Malformed, no equals sign
+  if (equals == value_begin_)
+    return valid_ = false;  // Malformed, no name
+  if (equals == value_end_ && !values_optional_)
+    return valid_ = false;  // Malformed, no equals sign and values are required
 
-  // Verify that the equals sign we found wasn't inside of quote marks.
-  for (std::string::const_iterator it = value_begin_; it != equals; ++it) {
-    if (HttpUtil::IsQuote(*it))
-      return valid_ = false;  // Malformed, quote appears before equals sign
+  // If an equals sign was found, verify that it wasn't inside of quote marks.
+  if (equals != value_end_) {
+    for (std::string::const_iterator it = value_begin_; it != equals; ++it) {
+      if (HttpUtil::IsQuote(*it))
+        return valid_ = false;  // Malformed, quote appears before equals sign
+    }
   }
 
   name_begin_ = value_begin_;
   name_end_ = equals;
-  value_begin_ = equals + 1;
+  value_begin_ = (equals == value_end_) ? value_end_ : equals + 1;
 
   TrimLWS(&name_begin_, &name_end_);
   TrimLWS(&value_begin_, &value_end_);
   value_is_quoted_ = false;
   unquoted_value_.clear();
 
-  if (value_begin_ == value_end_)
-    return valid_ = false;  // Malformed, value is empty
+  if (equals != value_end_ && value_begin_ == value_end_) {
+    // Malformed; value is empty
+    return valid_ = false;
+  }
 
-  if (HttpUtil::IsQuote(*value_begin_)) {
+  if (value_begin_ != value_end_ && HttpUtil::IsQuote(*value_begin_)) {
     // Trim surrounding quotemarks off the value
     if (*value_begin_ != *(value_end_ - 1) || value_begin_ + 1 == value_end_) {
       // NOTE: This is not as graceful as it sounds:

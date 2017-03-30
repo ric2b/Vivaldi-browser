@@ -4,14 +4,18 @@
 
 #include "chrome/browser/ui/cocoa/renderer_context_menu/render_view_context_menu_mac.h"
 
+#include <utility>
+
 #include "base/compiler_specific.h"
 #import "base/mac/scoped_sending_event.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/tracked_objects.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -86,7 +90,7 @@ RenderViewContextMenuMac::RenderViewContextMenuMac(
       bidi_submenu_model_(this),
       parent_view_(parent_view) {
   scoped_ptr<ToolkitDelegate> delegate(new ToolkitDelegateMac(this));
-  set_toolkit_delegate(delegate.Pass());
+  set_toolkit_delegate(std::move(delegate));
 }
 
 RenderViewContextMenuMac::~RenderViewContextMenuMac() {
@@ -145,7 +149,7 @@ void RenderViewContextMenuMac::Show() {
 
 void RenderViewContextMenuMac::ExecuteCommand(int command_id, int event_flags) {
   switch (command_id) {
-    case IDC_CONTENT_CONTEXT_LOOK_UP_IN_DICTIONARY:
+    case IDC_CONTENT_CONTEXT_LOOK_UP:
       LookUpInDictionary();
       break;
 
@@ -168,8 +172,9 @@ void RenderViewContextMenuMac::ExecuteCommand(int command_id, int event_flags) {
       blink::WebTextDirection dir = blink::WebTextDirectionLeftToRight;
       if (command_id == IDC_WRITING_DIRECTION_RTL)
         dir = blink::WebTextDirectionRightToLeft;
-      view_host->UpdateTextDirection(dir);
-      view_host->NotifyTextDirection();
+      view_host->GetWidget()->UpdateTextDirection(dir);
+      view_host->GetWidget()->NotifyTextDirection();
+      RenderViewContextMenu::RecordUsedItem(command_id);
       break;
     }
 
@@ -198,7 +203,7 @@ bool RenderViewContextMenuMac::IsCommandIdChecked(int command_id) const {
 
 bool RenderViewContextMenuMac::IsCommandIdEnabled(int command_id) const {
   switch (command_id) {
-    case IDC_CONTENT_CONTEXT_LOOK_UP_IN_DICTIONARY:
+    case IDC_CONTENT_CONTEXT_LOOK_UP:
       // This is OK because the menu is not shown when it isn't
       // appropriate.
       return true;
@@ -209,7 +214,8 @@ bool RenderViewContextMenuMac::IsCommandIdEnabled(int command_id) const {
       return true;
 
     case IDC_CONTENT_CONTEXT_SPEECH_STOP_SPEAKING: {
-      content::RenderWidgetHostView* view = GetRenderViewHost()->GetView();
+      content::RenderWidgetHostView* view =
+          GetRenderViewHost()->GetWidget()->GetView();
       return view && view->IsSpeaking();
     }
 
@@ -242,27 +248,48 @@ void RenderViewContextMenuMac::AppendPlatformEditableItems() {
 }
 
 void RenderViewContextMenuMac::InitToolkitMenu() {
-  bool has_selection = !params_.selection_text.empty();
+  if (params_.selection_text.empty())
+    return;
 
-  if (has_selection) {
-    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-    menu_model_.AddItemWithStringId(
-        IDC_CONTENT_CONTEXT_LOOK_UP_IN_DICTIONARY,
-        IDS_CONTENT_CONTEXT_LOOK_UP_IN_DICTIONARY);
-
-    content::RenderWidgetHostView* view = GetRenderViewHost()->GetView();
-    if (view && view->SupportsSpeech()) {
-      speech_submenu_model_.AddItemWithStringId(
-          IDC_CONTENT_CONTEXT_SPEECH_START_SPEAKING,
-          IDS_SPEECH_START_SPEAKING_MAC);
-      speech_submenu_model_.AddItemWithStringId(
-          IDC_CONTENT_CONTEXT_SPEECH_STOP_SPEAKING,
-          IDS_SPEECH_STOP_SPEAKING_MAC);
-      menu_model_.AddSubMenu(
-          IDC_CONTENT_CONTEXT_SPEECH_MENU,
-          l10n_util::GetStringUTF16(IDS_SPEECH_MAC),
-          &speech_submenu_model_);
+  if (params_.link_url.is_empty()) {
+    // In case the user has selected a word that triggers spelling suggestions,
+    // show the dictionary lookup under the group that contains the command to
+    // “Add to Dictionary.”
+    int index = menu_model_.GetIndexOfCommandId(
+        IDC_SPELLCHECK_ADD_TO_DICTIONARY);
+    if (index < 0) {
+      index = 0;
+    } else {
+      while (menu_model_.GetTypeAt(index) != ui::MenuModel::TYPE_SEPARATOR) {
+        index++;
+      }
+      index += 1; // Place it below the separator.
     }
+
+    base::string16 printable_selection_text = PrintableSelectionText();
+    EscapeAmpersands(&printable_selection_text);
+    menu_model_.InsertItemAt(
+        index++,
+        IDC_CONTENT_CONTEXT_LOOK_UP,
+        l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_LOOK_UP,
+                                   printable_selection_text));
+    menu_model_.InsertSeparatorAt(index++, ui::NORMAL_SEPARATOR);
+  }
+
+  content::RenderWidgetHostView* view =
+      GetRenderViewHost()->GetWidget()->GetView();
+  if (view && view->SupportsSpeech()) {
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    speech_submenu_model_.AddItemWithStringId(
+        IDC_CONTENT_CONTEXT_SPEECH_START_SPEAKING,
+        IDS_SPEECH_START_SPEAKING_MAC);
+    speech_submenu_model_.AddItemWithStringId(
+        IDC_CONTENT_CONTEXT_SPEECH_STOP_SPEAKING,
+        IDS_SPEECH_STOP_SPEAKING_MAC);
+    menu_model_.AddSubMenu(
+        IDC_CONTENT_CONTEXT_SPEECH_MENU,
+        l10n_util::GetStringUTF16(IDS_SPEECH_MAC),
+        &speech_submenu_model_);
   }
 }
 
@@ -302,19 +329,22 @@ void RenderViewContextMenuMac::AppendBidiSubMenu() {
 }
 
 void RenderViewContextMenuMac::LookUpInDictionary() {
-  content::RenderWidgetHostView* view = GetRenderViewHost()->GetView();
+  content::RenderWidgetHostView* view =
+      GetRenderViewHost()->GetWidget()->GetView();
   if (view)
     view->ShowDefinitionForSelection();
 }
 
 void RenderViewContextMenuMac::StartSpeaking() {
-  content::RenderWidgetHostView* view = GetRenderViewHost()->GetView();
+  content::RenderWidgetHostView* view =
+      GetRenderViewHost()->GetWidget()->GetView();
   if (view)
     view->SpeakSelection();
 }
 
 void RenderViewContextMenuMac::StopSpeaking() {
-  content::RenderWidgetHostView* view = GetRenderViewHost()->GetView();
+  content::RenderWidgetHostView* view =
+      GetRenderViewHost()->GetWidget()->GetView();
   if (view)
     view->StopSpeaking();
 }

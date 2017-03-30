@@ -10,8 +10,6 @@ import android.app.SearchManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -26,12 +24,14 @@ import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
+import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
+import org.chromium.chrome.browser.externalnav.IntentWithGesturesHandler;
 import org.chromium.chrome.browser.omnibox.AutocompleteController;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
 
 import java.util.ArrayList;
@@ -43,7 +43,7 @@ import java.util.Locale;
  * Handles all browser-related Intents.
  */
 public class IntentHandler {
-    private static final String TAG = "cr.IntentHandler";
+    private static final String TAG = "IntentHandler";
 
     /**
      * Document mode: If true, Chrome is launched into the same Task.
@@ -69,9 +69,9 @@ public class IntentHandler {
     public static final String EXTRA_STARTED_BY = "com.android.chrome.started_by";
 
     /**
-     * A pointer to a native web contents object to associate with the given tab.
+     * Tab ID to use when creating a new Tab.
      */
-    public static final String EXTRA_WEB_CONTENTS = "com.android.chrome.web_contents";
+    public static final String EXTRA_TAB_ID = "com.android.chrome.tab_id";
 
     /**
      * The tab id of the parent tab, if any.
@@ -107,7 +107,7 @@ public class IntentHandler {
     /**
      * The scheme for referrer coming from an application.
      */
-    private static final String ANDROID_APP_REFERRER_SCHEME = "android-app://";
+    public static final String ANDROID_APP_REFERRER_SCHEME = "android-app";
 
     /**
      * A referrer id used for Chrome to Chrome referrer passing.
@@ -217,7 +217,7 @@ public class IntentHandler {
          */
         void processUrlViewIntent(String url, String referer, String headers,
                 TabOpenType tabOpenType, String externalAppId, int tabIdToBringToFront,
-                Intent intent);
+                boolean hasUserGesture, Intent intent);
 
         void processWebSearchIntent(String query);
     }
@@ -284,12 +284,12 @@ public class IntentHandler {
      * Intent.
      *
      * @return Whether the Intent was successfully handled.
-     * TODO(mariakhomenko): make package protected after ChromeTabbedActivity is upstreamed.
      */
-    public boolean onNewIntent(Context context, Intent intent) {
+    boolean onNewIntent(Context context, Intent intent) {
         assert intentHasValidUrl(intent);
         String url = getUrlFromIntent(intent);
-
+        boolean hasUserGesture =
+                IntentWithGesturesHandler.getInstance().getUserGestureAndClear(intent);
         TabOpenType tabOpenType = getTabOpenType(intent);
         int tabIdToBringToFront = IntentUtils.safeGetIntExtra(
                 intent, TabOpenType.BRING_TAB_TO_FRONT.name(), Tab.INVALID_TAB_ID);
@@ -304,7 +304,7 @@ public class IntentHandler {
         // TODO(joth): Presumably this should check the action too.
         mDelegate.processUrlViewIntent(url, referrerUrl, extraHeaders, tabOpenType,
                 IntentUtils.safeGetStringExtra(intent, Browser.EXTRA_APPLICATION_ID),
-                tabIdToBringToFront, intent);
+                tabIdToBringToFront, hasUserGesture, intent);
         recordExternalIntentSourceUMA(intent);
         return true;
     }
@@ -392,8 +392,18 @@ public class IntentHandler {
      * apps to specify.
      */
     private static boolean isValidReferrerHeader(String referrer) {
-        return referrer != null && referrer.toLowerCase(Locale.US).startsWith(
-                ANDROID_APP_REFERRER_SCHEME);
+        return referrer != null
+                && referrer.toLowerCase(Locale.US).startsWith(ANDROID_APP_REFERRER_SCHEME + "://");
+    }
+
+    /**
+     * Constructs a valid referrer using the given authority.
+     * @param authority The authority to use.
+     * @return Referrer with default policy that uses the valid android app scheme.
+     */
+    public static Referrer constructValidReferrerForAuthority(String authority) {
+        return new Referrer(new Uri.Builder().scheme(ANDROID_APP_REFERRER_SCHEME)
+                .authority(authority).build().toString(), Referrer.REFERRER_POLICY_DEFAULT);
     }
 
     /**
@@ -432,7 +442,7 @@ public class IntentHandler {
         return url;
     }
 
-    boolean handleWebSearchIntent(Intent intent) {
+    public boolean handleWebSearchIntent(Intent intent) {
         if (intent == null) return false;
 
         String query = null;
@@ -506,30 +516,17 @@ public class IntentHandler {
      * a trusted source.
      */
     public static void addTrustedIntentExtras(Intent intent, Context context) {
-        if (willChromeHandleIntent(intent, context)) {
+        if (ExternalNavigationDelegateImpl.willChromeHandleIntent(context, intent, true)) {
             // The PendingIntent functions as an authentication token --- it could only have come
             // from us. Stash it in the real Intent as an extra. shouldIgnoreIntent will retrieve it
             // and check it with isIntentChromeInternal.
             intent.putExtra(TRUSTED_APPLICATION_CODE_EXTRA,
                     getAuthenticationToken(context.getApplicationContext()));
-
             // It is crucial that we never leak the authentication token to other packages, because
             // then the other package could be used to impersonate us/do things as us. Therefore,
             // scope the real Intent to our package.
             intent.setPackage(context.getApplicationContext().getPackageName());
         }
-    }
-
-    /**
-     * Determine if Chrome is the default or only handler for a given intent. If
-     * true, Chrome will handle the intent when started.
-     * TODO(nileshagrawal): There is a similar method in UrlResolver.java, consider extracting
-     * the code to a common place.
-     */
-    private static boolean willChromeHandleIntent(Intent i, Context context) {
-        ResolveInfo info =
-                context.getPackageManager().resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY);
-        return info != null && info.activityInfo.packageName.equals(context.getPackageName());
     }
 
     /**
@@ -726,7 +723,7 @@ public class IntentHandler {
      */
     private TabOpenType getTabOpenType(Intent intent) {
         if (IntentUtils.safeGetBooleanExtra(
-                    intent, BookmarkUtils.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, false)) {
+                    intent, ShortcutHelper.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, false)) {
             return TabOpenType.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB;
         }
 
@@ -871,22 +868,5 @@ public class IntentHandler {
             return sPendingReferrer.second;
         }
         return null;
-    }
-
-    /**
-     * Retrieves a WebContents that has been parceled into the Intent.  If the WebContents was
-     * created in a different process, it is dropped on the floor.
-     * @return WebContents if one exists in the Intent AND it was created in the same process.
-     *         null otherwise.
-     */
-    public static WebContents getWebContentsFromIntent(Intent intent) {
-        WebContents deliveredContents = null;
-        if (intent != null) {
-            // The Intent may have been fired with a pre-created WebContents in it.
-            intent.setExtrasClassLoader(WebContents.class.getClassLoader());
-            deliveredContents = IntentUtils.safeGetParcelableExtra(intent, EXTRA_WEB_CONTENTS);
-            intent.setExtrasClassLoader(null);
-        }
-        return deliveredContents;
     }
 }

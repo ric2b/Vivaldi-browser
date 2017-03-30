@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_MEDIA_GALLERIES_MEDIA_GALLERIES_SCAN_RESULT_CONTROLLER_H_
 #define CHROME_BROWSER_MEDIA_GALLERIES_MEDIA_GALLERIES_SCAN_RESULT_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/media_galleries/media_galleries_dialog_controller.h"
@@ -102,7 +105,7 @@ class MediaGalleriesScanResultController
   void OnPreferenceUpdate(const std::string& extension_id);
 
   // Used to keep the dialog in sync with attached and detached devices.
-  void OnRemovableDeviceUpdate(const std::string device_id);
+  void OnRemovableDeviceUpdate(const std::string& device_id);
 
   Profile* GetProfile() const;
 

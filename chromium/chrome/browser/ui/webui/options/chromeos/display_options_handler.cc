@@ -4,13 +4,15 @@
 
 #include "chrome/browser/ui/webui/options/chromeos/display_options_handler.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "ash/ash_switches.h"
-#include "ash/display/display_configurator_animation.h"
-#include "ash/display/display_controller.h"
+#include "ash/display/display_animator.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/resolution_notification_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "ash/shell.h"
 #include "base/bind.h"
@@ -39,7 +41,7 @@ DisplayManager* GetDisplayManager() {
   return ash::Shell::GetInstance()->display_manager();
 }
 
-int64 GetDisplayId(const base::ListValue* args) {
+int64_t GetDisplayId(const base::ListValue* args) {
   // Assumes the display ID is specified as the first argument.
   std::string id_value;
   if (!args->GetString(0, &id_value)) {
@@ -47,7 +49,7 @@ int64 GetDisplayId(const base::ListValue* args) {
     return gfx::Display::kInvalidDisplayID;
   }
 
-  int64 display_id = gfx::Display::kInvalidDisplayID;
+  int64_t display_id = gfx::Display::kInvalidDisplayID;
   if (!base::StringToInt64(id_value, &display_id)) {
     LOG(ERROR) << "Invalid display id: " << id_value;
     return gfx::Display::kInvalidDisplayID;
@@ -123,9 +125,10 @@ bool ConvertValueToDisplayMode(const base::DictionaryValue* dict,
   return true;
 }
 
-base::DictionaryValue* ConvertDisplayModeToValue(int64 display_id,
+base::DictionaryValue* ConvertDisplayModeToValue(int64_t display_id,
                                                  const ash::DisplayMode& mode) {
-  bool is_internal = gfx::Display::InternalDisplayId() == display_id;
+  bool is_internal = gfx::Display::HasInternalDisplay() &&
+                     gfx::Display::InternalDisplayId() == display_id;
   base::DictionaryValue* result = new base::DictionaryValue();
   gfx::Size size_dip = mode.GetSizeInDIP(is_internal);
   result->SetInteger("width", size_dip.width());
@@ -149,12 +152,12 @@ base::DictionaryValue* ConvertDisplayModeToValue(int64 display_id,
 DisplayOptionsHandler::DisplayOptionsHandler() {
   // ash::Shell doesn't exist in Athena.
   // See: http://crbug.com/416961
-  ash::Shell::GetInstance()->display_controller()->AddObserver(this);
+  ash::Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
 }
 
 DisplayOptionsHandler::~DisplayOptionsHandler() {
   // ash::Shell doesn't exist in Athena.
-  ash::Shell::GetInstance()->display_controller()->RemoveObserver(this);
+  ash::Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
 }
 
 void DisplayOptionsHandler::GetLocalizedValues(
@@ -176,10 +179,10 @@ void DisplayOptionsHandler::GetLocalizedValues(
       "selectedDisplayTitleOverscan", l10n_util::GetStringUTF16(
           IDS_OPTIONS_SETTINGS_DISPLAY_OPTIONS_OVERSCAN));
 
-  localized_strings->SetString("startMirroring", l10n_util::GetStringUTF16(
-      IDS_OPTIONS_SETTINGS_DISPLAY_OPTIONS_START_MIRRORING));
-  localized_strings->SetString("stopMirroring", l10n_util::GetStringUTF16(
-      IDS_OPTIONS_SETTINGS_DISPLAY_OPTIONS_STOP_MIRRORING));
+  localized_strings->SetString("extendedMode", l10n_util::GetStringUTF16(
+      IDS_OPTIONS_SETTINGS_DISPLAY_OPTIONS_EXTENDED_MODE_LABEL));
+  localized_strings->SetString("mirroringMode", l10n_util::GetStringUTF16(
+      IDS_OPTIONS_SETTINGS_DISPLAY_OPTIONS_MIRRORING_MODE_LABEL));
   localized_strings->SetString("mirroringDisplay", l10n_util::GetStringUTF16(
       IDS_OPTIONS_SETTINGS_DISPLAY_OPTIONS_MIRRORING_DISPLAY_NAME));
   localized_strings->SetString("setPrimary", l10n_util::GetStringUTF16(
@@ -260,9 +263,8 @@ void DisplayOptionsHandler::SendAllDisplayInfo() {
   DisplayManager* display_manager = GetDisplayManager();
 
   std::vector<gfx::Display> displays;
-  for (size_t i = 0; i < display_manager->GetNumDisplays(); ++i) {
+  for (size_t i = 0; i < display_manager->GetNumDisplays(); ++i)
     displays.push_back(display_manager->GetDisplayAt(i));
-  }
   SendDisplayInfo(displays);
 }
 
@@ -274,7 +276,7 @@ void DisplayOptionsHandler::SendDisplayInfo(
       (display_manager->IsInUnifiedMode() ? DisplayManager::UNIFIED :
        DisplayManager::EXTENDED));
 
-  int64 primary_id = ash::Shell::GetScreen()->GetPrimaryDisplay().id();
+  int64_t primary_id = ash::Shell::GetScreen()->GetPrimaryDisplay().id();
   base::ListValue js_displays;
   for (const gfx::Display& display : displays) {
     const ash::DisplayInfo& display_info =
@@ -331,7 +333,7 @@ void DisplayOptionsHandler::SendDisplayInfo(
 
 void DisplayOptionsHandler::UpdateDisplaySettingsEnabled() {
   bool enabled = GetDisplayManager()->num_connected_displays() <= 2;
-  bool show_unified_desktop = ash::switches::UnifiedDesktopEnabled();
+  bool show_unified_desktop = GetDisplayManager()->unified_desktop_enabled();
 
   web_ui()->CallJavascriptFunction(
       "options.BrowserOptions.enableDisplaySettings",
@@ -348,8 +350,7 @@ void DisplayOptionsHandler::OnFadeOutForDisplayLayoutFinished(
     int position, int offset) {
   SetCurrentDisplayLayout(
       ash::DisplayLayout::FromInts(position, offset));
-  ash::Shell::GetInstance()->display_configurator_animation()->
-      StartFadeInAnimation();
+  ash::Shell::GetInstance()->display_animator()->StartFadeInAnimation();
 }
 
 void DisplayOptionsHandler::HandleDisplayInfo(
@@ -363,22 +364,20 @@ void DisplayOptionsHandler::HandleMirroring(const base::ListValue* args) {
       base::UserMetricsAction("Options_DisplayToggleMirroring"));
   bool is_mirroring = false;
   args->GetBoolean(0, &is_mirroring);
-  ash::Shell::GetInstance()->display_configurator_animation()->
-      StartFadeOutAnimation(base::Bind(
-          &DisplayOptionsHandler::OnFadeOutForMirroringFinished,
-          base::Unretained(this),
-          is_mirroring));
+  ash::Shell::GetInstance()->display_animator()->StartFadeOutAnimation(
+      base::Bind(&DisplayOptionsHandler::OnFadeOutForMirroringFinished,
+                 base::Unretained(this), is_mirroring));
 }
 
 void DisplayOptionsHandler::HandleSetPrimary(const base::ListValue* args) {
   DCHECK(!args->empty());
-  int64 display_id = GetDisplayId(args);
+  int64_t display_id = GetDisplayId(args);
   if (display_id == gfx::Display::kInvalidDisplayID)
     return;
 
   content::RecordAction(base::UserMetricsAction("Options_DisplaySetPrimary"));
-  ash::Shell::GetInstance()->display_controller()->
-      SetPrimaryDisplayId(display_id);
+  ash::Shell::GetInstance()->window_tree_host_manager()->SetPrimaryDisplayId(
+      display_id);
 }
 
 void DisplayOptionsHandler::HandleDisplayLayout(const base::ListValue* args) {
@@ -392,18 +391,16 @@ void DisplayOptionsHandler::HandleDisplayLayout(const base::ListValue* args) {
   DCHECK_LE(ash::DisplayLayout::TOP, layout);
   DCHECK_GE(ash::DisplayLayout::LEFT, layout);
   content::RecordAction(base::UserMetricsAction("Options_DisplayRearrange"));
-  ash::Shell::GetInstance()->display_configurator_animation()->
-      StartFadeOutAnimation(base::Bind(
-          &DisplayOptionsHandler::OnFadeOutForDisplayLayoutFinished,
-          base::Unretained(this),
-          static_cast<int>(layout),
-          static_cast<int>(offset)));
+  ash::Shell::GetInstance()->display_animator()->StartFadeOutAnimation(
+      base::Bind(&DisplayOptionsHandler::OnFadeOutForDisplayLayoutFinished,
+                 base::Unretained(this), static_cast<int>(layout),
+                 static_cast<int>(offset)));
 }
 
 void DisplayOptionsHandler::HandleSetDisplayMode(const base::ListValue* args) {
   DCHECK(!args->empty());
 
-  int64 display_id = GetDisplayId(args);
+  int64_t display_id = GetDisplayId(args);
   if (display_id == gfx::Display::kInvalidDisplayID)
     return;
 
@@ -422,7 +419,8 @@ void DisplayOptionsHandler::HandleSetDisplayMode(const base::ListValue* args) {
   ash::DisplayManager* display_manager = GetDisplayManager();
   ash::DisplayMode current_mode =
       display_manager->GetActiveModeForDisplayId(display_id);
-  if (display_manager->SetDisplayMode(display_id, mode)) {
+  if (display_manager->SetDisplayMode(display_id, mode) &&
+      !gfx::Display::IsInternalDisplayId(display_id)) {
     ash::Shell::GetInstance()->resolution_notification_controller()->
         PrepareNotification(
             display_id, current_mode, mode, base::Bind(&StoreDisplayPrefs));
@@ -432,7 +430,7 @@ void DisplayOptionsHandler::HandleSetDisplayMode(const base::ListValue* args) {
 void DisplayOptionsHandler::HandleSetOrientation(const base::ListValue* args) {
   DCHECK(!args->empty());
 
-  int64 display_id = GetDisplayId(args);
+  int64_t display_id = GetDisplayId(args);
   if (display_id == gfx::Display::kInvalidDisplayID)
     return;
 
@@ -459,7 +457,7 @@ void DisplayOptionsHandler::HandleSetOrientation(const base::ListValue* args) {
 
 void DisplayOptionsHandler::HandleSetColorProfile(const base::ListValue* args) {
   DCHECK(!args->empty());
-  int64 display_id = GetDisplayId(args);
+  int64_t display_id = GetDisplayId(args);
   if (display_id == gfx::Display::kInvalidDisplayID)
     return;
 
@@ -488,10 +486,10 @@ void DisplayOptionsHandler::HandleSetColorProfile(const base::ListValue* args) {
 
 void DisplayOptionsHandler::HandleSetUnifiedDesktopEnabled(
     const base::ListValue* args) {
-  DCHECK(ash::switches::UnifiedDesktopEnabled());
+  DCHECK(GetDisplayManager()->unified_desktop_enabled());
   bool enable = false;
   if (args->GetBoolean(0, &enable)) {
-    GetDisplayManager()->SetDefaultMultiDisplayMode(
+    GetDisplayManager()->SetDefaultMultiDisplayModeForCurrentDisplays(
         enable ? DisplayManager::UNIFIED : DisplayManager::EXTENDED);
     GetDisplayManager()->ReconfigureDisplays();
   }

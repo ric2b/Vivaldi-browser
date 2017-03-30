@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/search_engines/template_url_table_model.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
@@ -267,7 +270,7 @@ void TemplateURLTableModel::Add(int index,
   template_url_service_->Add(turl);
   scoped_ptr<ModelEntry> entry(new ModelEntry(this, turl));
   template_url_service_->AddObserver(this);
-  AddEntry(index, entry.Pass());
+  AddEntry(index, std::move(entry));
 }
 
 void TemplateURLTableModel::ModifyTemplateURL(int index,
@@ -316,7 +319,7 @@ int TemplateURLTableModel::MoveToMainGroup(int index) {
 
   scoped_ptr<ModelEntry> current_entry(RemoveEntry(index));
   const int new_index = last_search_engine_index_++;
-  AddEntry(new_index, current_entry.Pass());
+  AddEntry(new_index, std::move(current_entry));
   return new_index;
 }
 
@@ -380,7 +383,7 @@ TemplateURLTableModel::RemoveEntry(int index) {
     --last_other_engine_index_;
   if (observer_)
     observer_->OnItemsRemoved(index, 1);
-  return entry.Pass();
+  return entry;
 }
 
 void TemplateURLTableModel::AddEntry(int index, scoped_ptr<ModelEntry> entry) {

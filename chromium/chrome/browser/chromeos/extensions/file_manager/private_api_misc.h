@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_base.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
@@ -68,16 +69,16 @@ class FileManagerPrivateSetPreferencesFunction
 
 // Implements the chrome.fileManagerPrivate.zipSelection method.
 // Creates a zip file for the selected files.
-class FileManagerPrivateZipSelectionFunction
+class FileManagerPrivateInternalZipSelectionFunction
     : public LoggedAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.zipSelection",
-                             FILEMANAGERPRIVATE_ZIPSELECTION)
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.zipSelection",
+                             FILEMANAGERPRIVATEINTERNAL_ZIPSELECTION)
 
-  FileManagerPrivateZipSelectionFunction();
+  FileManagerPrivateInternalZipSelectionFunction();
 
  protected:
-  ~FileManagerPrivateZipSelectionFunction() override;
+  ~FileManagerPrivateInternalZipSelectionFunction() override;
 
   // AsyncExtensionFunction overrides.
   bool RunAsync() override;
@@ -148,16 +149,16 @@ class FileManagerPrivateOpenInspectorFunction
 };
 
 // Implements the chrome.fileManagerPrivate.getMimeType method.
-class FileManagerPrivateGetMimeTypeFunction
+class FileManagerPrivateInternalGetMimeTypeFunction
     : public LoggedAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.getMimeType",
-                             FILEMANAGERPRIVATE_GETMIMETYPE)
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.getMimeType",
+                             FILEMANAGERPRIVATEINTERNAL_GETMIMETYPE)
 
-  FileManagerPrivateGetMimeTypeFunction();
+  FileManagerPrivateInternalGetMimeTypeFunction();
 
  protected:
-  ~FileManagerPrivateGetMimeTypeFunction() override;
+  ~FileManagerPrivateInternalGetMimeTypeFunction() override;
 
   // AsyncExtensionFunction overrides.
   bool RunAsync() override;
@@ -230,15 +231,15 @@ class FileManagerPrivateConfigureVolumeFunction
   DISALLOW_COPY_AND_ASSIGN(FileManagerPrivateConfigureVolumeFunction);
 };
 
-// Implements the chrome.fileManagerPrivate.getEntryActions method.
-class FileManagerPrivateGetEntryActionsFunction
+// Implements the chrome.fileManagerPrivate.getCustomActions method.
+class FileManagerPrivateInternalGetCustomActionsFunction
     : public UIThreadExtensionFunction {
  public:
-  FileManagerPrivateGetEntryActionsFunction();
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.getEntryActions",
-                             FILEMANAGERPRIVATE_GETENTRYACTIONS)
+  FileManagerPrivateInternalGetCustomActionsFunction();
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.getCustomActions",
+                             FILEMANAGERPRIVATEINTERNAL_GETCUSTOMACTIONS)
  protected:
-  ~FileManagerPrivateGetEntryActionsFunction() override {}
+  ~FileManagerPrivateInternalGetCustomActionsFunction() override {}
 
  private:
   ResponseAction Run() override;
@@ -246,25 +247,26 @@ class FileManagerPrivateGetEntryActionsFunction
                    base::File::Error result);
 
   const ChromeExtensionFunctionDetails chrome_details_;
-  DISALLOW_COPY_AND_ASSIGN(FileManagerPrivateGetEntryActionsFunction);
+  DISALLOW_COPY_AND_ASSIGN(FileManagerPrivateInternalGetCustomActionsFunction);
 };
 
-// Implements the chrome.fileManagerPrivate.executeEntryAction method.
-class FileManagerPrivateExecuteEntryActionFunction
+// Implements the chrome.fileManagerPrivate.executeCustomAction method.
+class FileManagerPrivateInternalExecuteCustomActionFunction
     : public UIThreadExtensionFunction {
  public:
-  FileManagerPrivateExecuteEntryActionFunction();
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.executeEntryAction",
-                             FILEMANAGERPRIVATE_EXECUTEENTRYACTION)
+  FileManagerPrivateInternalExecuteCustomActionFunction();
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.executeCustomAction",
+                             FILEMANAGERPRIVATEINTERNAL_EXECUTECUSTOMACTION)
  protected:
-  ~FileManagerPrivateExecuteEntryActionFunction() override {}
+  ~FileManagerPrivateInternalExecuteCustomActionFunction() override {}
 
  private:
   ResponseAction Run() override;
   void OnCompleted(base::File::Error result);
 
   const ChromeExtensionFunctionDetails chrome_details_;
-  DISALLOW_COPY_AND_ASSIGN(FileManagerPrivateExecuteEntryActionFunction);
+  DISALLOW_COPY_AND_ASSIGN(
+      FileManagerPrivateInternalExecuteCustomActionFunction);
 };
 
 }  // namespace extensions

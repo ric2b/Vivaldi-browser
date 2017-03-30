@@ -7,6 +7,12 @@
 namespace content {
 
 const double Manifest::Icon::kDefaultDensity = 1;
+// We need to provide a value here which is out of the range of a 32-bit integer
+// since otherwise we would not be able to check whether a theme color was valid
+// or not. The simplest way to do this is to simply add one to the maximum
+// possible 32-bit integer.
+const int64_t Manifest::kInvalidOrMissingColor =
+    static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1;
 const size_t Manifest::kMaxIPCStringLength = 4 * 1024;
 
 Manifest::Icon::Icon()
@@ -23,9 +29,11 @@ Manifest::RelatedApplication::~RelatedApplication() {
 }
 
 Manifest::Manifest()
-    : display(DISPLAY_MODE_UNSPECIFIED),
+    : display(blink::WebDisplayModeUndefined),
       orientation(blink::WebScreenOrientationLockDefault),
-      prefer_related_applications(false) {
+      prefer_related_applications(false),
+      theme_color(Manifest::kInvalidOrMissingColor),
+      background_color(Manifest::kInvalidOrMissingColor) {
 }
 
 Manifest::~Manifest() {
@@ -35,11 +43,13 @@ bool Manifest::IsEmpty() const {
   return name.is_null() &&
          short_name.is_null() &&
          start_url.is_empty() &&
-         display == DISPLAY_MODE_UNSPECIFIED &&
+         display == blink::WebDisplayModeUndefined &&
          orientation == blink::WebScreenOrientationLockDefault &&
          icons.empty() &&
          related_applications.empty() &&
          !prefer_related_applications &&
+         theme_color == Manifest::kInvalidOrMissingColor &&
+         background_color == Manifest::kInvalidOrMissingColor &&
          gcm_sender_id.is_null();
 }
 

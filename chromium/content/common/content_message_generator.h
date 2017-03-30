@@ -6,6 +6,7 @@
 
 #include "content/common/child_process_messages.h"
 
+#include "build/build_config.h"
 #include "content/common/accessibility_messages.h"
 #include "content/common/appcache_messages.h"
 #include "content/common/bluetooth/bluetooth_messages.h"
@@ -42,6 +43,7 @@
 #include "content/common/media/video_capture_messages.h"
 #include "content/common/media/webrtc_identity_messages.h"
 #include "content/common/memory_benchmark_messages.h"
+#include "content/common/memory_messages.h"
 #include "content/common/message_port_messages.h"
 #include "content/common/mime_registry_messages.h"
 #include "content/common/mojo/mojo_messages.h"
@@ -51,6 +53,7 @@
 #include "content/common/power_monitor_messages.h"
 #include "content/common/push_messaging_messages.h"
 #include "content/common/quota_messages.h"
+#include "content/common/render_process_messages.h"
 #include "content/common/resource_messages.h"
 #include "content/common/screen_orientation_messages.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
@@ -67,8 +70,15 @@
 #endif
 
 #if defined(OS_ANDROID)
+#include "content/common/android/sync_compositor_messages.h"
 #include "content/common/gin_java_bridge_messages.h"
+#include "content/common/media/media_player_messages_android.h"
+#include "content/common/media/media_session_messages_android.h"
 #endif  // defined(OS_ANDROID)
+
+#if defined(OS_WIN)
+#include "content/common/dwrite_font_proxy_messages.h"
+#endif  // defined(OS_WIN)
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "content/common/media/media_pipeline_messages.h"

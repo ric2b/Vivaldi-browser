@@ -4,6 +4,9 @@
 
 #include "gpu/config/gpu_info_collector.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/android/build_info.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -34,8 +37,8 @@ std::pair<std::string, size_t> GetVersionFromString(
     sub_string = version_string.substr(begin, end - begin);
   else
     sub_string = version_string.substr(begin);
-  std::vector<std::string> pieces;
-  base::SplitString(sub_string, '.', &pieces);
+  std::vector<std::string> pieces = base::SplitString(
+      sub_string, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (pieces.size() >= 2)
     return std::make_pair(pieces[0] + "." + pieces[1], end);
   else
@@ -216,8 +219,10 @@ gpu::CollectInfoResult CollectDriverInfo(gpu::GPUInfo* gpu_info) {
         reinterpret_cast<GLint*>(&gpu_info->gl_reset_notification_strategy));
   }
 
-  std::string glsl_version_string =
-      reinterpret_cast<const char*>(glGetStringFn(GL_SHADING_LANGUAGE_VERSION));
+  std::string glsl_version_string;
+  if (const char* glsl_version_cstring = reinterpret_cast<const char*>(
+          glGetStringFn(GL_SHADING_LANGUAGE_VERSION)))
+    glsl_version_string = glsl_version_cstring;
 
   std::string glsl_version = GetVersionFromString(glsl_version_string).first;
   gpu_info->pixel_shader_version = glsl_version;
@@ -250,7 +255,7 @@ CollectInfoResult CollectContextGraphicsInfo(GPUInfo* gpu_info) {
   return CollectBasicGraphicsInfo(gpu_info);
 }
 
-CollectInfoResult CollectGpuID(uint32* vendor_id, uint32* device_id) {
+CollectInfoResult CollectGpuID(uint32_t* vendor_id, uint32_t* device_id) {
   DCHECK(vendor_id && device_id);
   *vendor_id = 0;
   *device_id = 0;

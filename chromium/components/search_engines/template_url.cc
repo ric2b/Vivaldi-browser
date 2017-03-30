@@ -7,28 +7,28 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
 #include "base/i18n/icu_string_conversions.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "components/search_engines/search_terms_data.h"
+#include "components/url_formatter/url_formatter.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
 #include "net/base/mime_util.h"
-#include "net/base/net_util.h"
 #include "ui/base/device_form_factor.h"
 #include "url/gurl.h"
 
@@ -147,9 +147,7 @@ TemplateURLRef::SearchTermsArgs::SearchTermsArgs(
       input_type(metrics::OmniboxInputType::INVALID),
       accepted_suggestion(NO_SUGGESTIONS_AVAILABLE),
       cursor_position(base::string16::npos),
-      enable_omnibox_start_margin(false),
       page_classification(metrics::OmniboxEventProto::INVALID_SPEC),
-      bookmark_bar_pinned(false),
       append_extra_query_params(false),
       force_instant_results(false),
       from_app_list(false),
@@ -278,12 +276,9 @@ bool TemplateURLRef::EncodeFormData(const PostParams& post_params,
     return false;
 
   const char kUploadDataMIMEType[] = "multipart/form-data; boundary=";
-  const char kMultipartBoundary[] = "----+*+----%016" PRIx64 "----+*+----";
   // Each name/value pair is stored in a body part which is preceded by a
-  // boundary delimiter line. Uses random number generator here to create
-  // a unique boundary delimiter for form data encoding.
-  std::string boundary = base::StringPrintf(kMultipartBoundary,
-                                            base::RandUint64());
+  // boundary delimiter line.
+  std::string boundary = net::GenerateMimeMultipartBoundary();
   // Sets the content MIME type.
   post_content->first = kUploadDataMIMEType;
   post_content->first += boundary;
@@ -337,7 +332,7 @@ std::string TemplateURLRef::ReplaceSearchTerms(
     return url;
 
   GURL::Replacements replacements;
-  std::string query_str = JoinString(query_params, "&");
+  std::string query_str = base::JoinString(query_params, "&");
   replacements.SetQueryStr(query_str);
   return gurl.ReplaceComponents(replacements).possibly_invalid_spec();
 }
@@ -570,8 +565,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
     replacements->push_back(Replacement(GOOGLE_BASE_URL, start));
   } else if (parameter == "google:baseSuggestURL") {
     replacements->push_back(Replacement(GOOGLE_BASE_SUGGEST_URL, start));
-  } else if (parameter == "google:bookmarkBarPinned") {
-    replacements->push_back(Replacement(GOOGLE_BOOKMARK_BAR_PINNED, start));
   } else if (parameter == "google:currentPageUrl") {
     replacements->push_back(Replacement(GOOGLE_CURRENT_PAGE_URL, start));
   } else if (parameter == "google:cursorPosition") {
@@ -601,10 +594,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
                                         start));
   } else if (parameter == "google:instantExtendedEnabledKey") {
     url->insert(start, google_util::kInstantExtendedAPIParam);
-  } else if (parameter == "google:ntpIsThemedParameter") {
-    replacements->push_back(Replacement(GOOGLE_NTP_IS_THEMED, start));
-  } else if (parameter == "google:omniboxStartMarginParameter") {
-    replacements->push_back(Replacement(GOOGLE_OMNIBOX_START_MARGIN, start));
   } else if (parameter == "google:contextualSearchVersion") {
     replacements->push_back(
         Replacement(GOOGLE_CONTEXTUAL_SEARCH_VERSION, start));
@@ -646,13 +635,13 @@ bool TemplateURLRef::ParseParameter(size_t start,
   } else if (parameter == "yandex:searchPath") {
     switch (ui::GetDeviceFormFactor()) {
       case ui::DEVICE_FORM_FACTOR_DESKTOP:
-        url->insert(start, "yandsearch");
+        url->insert(start, "search/");
         break;
       case ui::DEVICE_FORM_FACTOR_PHONE:
-        url->insert(start, "touchsearch");
+        url->insert(start, "search/touch/");
         break;
       case ui::DEVICE_FORM_FACTOR_TABLET:
-        url->insert(start, "padsearch");
+        url->insert(start, "search/pad/");
         break;
     }
   } else if (parameter == "inputEncoding") {
@@ -711,15 +700,12 @@ std::string TemplateURLRef::ParseURL(const std::string& url,
   // Handles the post parameters.
   const std::string& post_params_string = GetPostParamsString();
   if (!post_params_string.empty()) {
-    typedef std::vector<std::string> Strings;
-    Strings param_list;
-    base::SplitString(post_params_string, ',', &param_list);
-
-    for (Strings::const_iterator iterator = param_list.begin();
-         iterator != param_list.end(); ++iterator) {
-      Strings parts;
+    for (const base::StringPiece& cur : base::SplitStringPiece(
+             post_params_string, ",",
+             base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
       // The '=' delimiter is required and the name must be not empty.
-      base::SplitString(*iterator, '=', &parts);
+      std::vector<std::string> parts = base::SplitString(
+          cur, "=", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       if ((parts.size() != 2U) || parts[0].empty())
         return std::string();
 
@@ -906,17 +892,6 @@ std::string TemplateURLRef::HandleReplacements(
             &url);
         break;
 
-      case GOOGLE_BOOKMARK_BAR_PINNED:
-        if (search_terms_data.IsShowingSearchTermsOnSearchResultsPages()) {
-          // Log whether the bookmark bar is pinned when the user is seeing
-          // InstantExtended on the SRP.
-          DCHECK(!i->is_post_param);
-          HandleReplacement(
-              "bmbp", search_terms_args.bookmark_bar_pinned ? "1" : "0", *i,
-              &url);
-        }
-        break;
-
       case GOOGLE_CURRENT_PAGE_URL:
         DCHECK(!i->is_post_param);
         if (!search_terms_args.current_page_url.empty()) {
@@ -961,23 +936,6 @@ std::string TemplateURLRef::HandleReplacements(
                           &url);
         break;
 
-      case GOOGLE_NTP_IS_THEMED:
-        DCHECK(!i->is_post_param);
-        HandleReplacement(
-            std::string(), search_terms_data.NTPIsThemedParam(), *i, &url);
-        break;
-
-      case GOOGLE_OMNIBOX_START_MARGIN:
-        DCHECK(!i->is_post_param);
-        if (search_terms_args.enable_omnibox_start_margin) {
-          int omnibox_start_margin = search_terms_data.OmniboxStartMargin();
-          if (omnibox_start_margin >= 0) {
-            HandleReplacement("es_sm", base::IntToString(omnibox_start_margin),
-                              *i, &url);
-          }
-        }
-        break;
-
       case GOOGLE_CONTEXTUAL_SEARCH_VERSION:
         if (search_terms_args.contextual_search_params.version >= 0) {
           HandleReplacement(
@@ -997,13 +955,13 @@ std::string TemplateURLRef::HandleReplacements(
             search_terms_args.contextual_search_params;
 
         if (params.start != std::string::npos) {
-          context_data.append("ctxs_start=" + base::IntToString(
-              params.start) + "&");
+          context_data.append("ctxs_start=" +
+                              base::SizeTToString(params.start) + "&");
         }
 
         if (params.end != std::string::npos) {
-          context_data.append("ctxs_end=" + base::IntToString(
-              params.end) + "&");
+          context_data.append("ctxs_end=" +
+                              base::SizeTToString(params.end) + "&");
         }
 
         if (!params.selection.empty())
@@ -1210,14 +1168,20 @@ TemplateURL::~TemplateURL() {
 }
 
 // static
-base::string16 TemplateURL::GenerateKeyword(const GURL& url) {
+base::string16 TemplateURL::GenerateKeyword(
+    const GURL& url,
+    const std::string& accept_languages) {
   DCHECK(url.is_valid());
   // Strip "www." off the front of the keyword; otherwise the keyword won't work
   // properly.  See http://code.google.com/p/chromium/issues/detail?id=6984 .
+  // |url|'s hostname may be IDN-encoded. Before generating |keyword| from it,
+  // convert to Unicode using the user's accept-languages, so it won't look like
+  // a confusing punycode string.
+  base::string16 keyword = url_formatter::StripWWW(
+      url_formatter::IDNToUnicode(url.host(), accept_languages));
   // Special case: if the host was exactly "www." (not sure this can happen but
   // perhaps with some weird intranet and custom DNS server?), ensure we at
   // least don't return the empty string.
-  base::string16 keyword(net::StripWWWFromHost(url));
   return keyword.empty() ? base::ASCIIToUTF16("www") : keyword;
 }
 
@@ -1485,7 +1449,8 @@ void TemplateURL::ResetKeywordIfNecessary(
     DCHECK(GetType() != OMNIBOX_API_EXTENSION);
     GURL url(GenerateSearchURL(search_terms_data));
     if (url.is_valid())
-      data_.SetKeyword(GenerateKeyword(url));
+      data_.SetKeyword(
+          GenerateKeyword(url, search_terms_data.GetAcceptLanguages()));
   }
 }
 

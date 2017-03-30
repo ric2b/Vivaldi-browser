@@ -9,8 +9,8 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -25,7 +25,7 @@ namespace content {
 // MediaStreams are used by WebKit to open media devices such as Video Capture
 // and Audio input devices.
 // It's the complement of MediaStreamDispatcherHost (owned by
-// BrowserRenderProcessHost).
+// RenderProcessHostImpl).
 class CONTENT_EXPORT MediaStreamDispatcher
     : public RenderFrameObserver,
       public base::SupportsWeakPtr<MediaStreamDispatcher> {
@@ -39,7 +39,7 @@ class CONTENT_EXPORT MediaStreamDispatcher
   virtual void GenerateStream(
       int request_id,
       const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
-      const StreamOptions& components,
+      const StreamControls& controls,
       const GURL& security_origin);
 
   // Cancel the request for a new media stream to be created.
@@ -86,11 +86,6 @@ class CONTENT_EXPORT MediaStreamDispatcher
   // Returns an audio session_id given a label and an index.
   virtual int audio_session_id(const std::string& label, int index);
 
-  // Returns true if an audio input stream is currently active that was opened
-  // with audio ducking enabled.  This is information is used when playing out
-  // audio so that rendered audio can be excluded from the ducking operation.
-  bool IsAudioDuckingActive() const;
-
  protected:
   int GetNextIpcIdForTest() { return next_ipc_id_; }
 
@@ -98,7 +93,6 @@ class CONTENT_EXPORT MediaStreamDispatcher
   FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest, BasicVideoDevice);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest, TestFailure);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest, CancelGenerateStream);
-  FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest, CheckDuckingState);
 
   struct Request;
 

@@ -10,6 +10,7 @@
 
 #include <KHR/khrplatform.h>
 
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -18,6 +19,7 @@
 #include "base/macros.h"
 #include "gpu/command_buffer/common/bitfield_helpers.h"
 #include "gpu/command_buffer/common/cmd_buffer_common.h"
+#include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/gles2_cmd_ids.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 
@@ -50,7 +52,10 @@ namespace gpu {
 namespace gles2 {
 
 // Command buffer is GPU_COMMAND_BUFFER_ENTRY_ALIGNMENT byte aligned.
-#pragma pack(push, GPU_COMMAND_BUFFER_ENTRY_ALIGNMENT)
+#pragma pack(push, 4)
+static_assert(GPU_COMMAND_BUFFER_ENTRY_ALIGNMENT == 4,
+              "pragma pack alignment must be equal to "
+              "GPU_COMMAND_BUFFER_ENTRY_ALIGNMENT");
 
 namespace id_namespaces {
 
@@ -70,12 +75,15 @@ enum IdNamespaces {
   kNumIdNamespaces
 };
 
+enum RangeIdNamespaces { kPaths, kNumRangeIdNamespaces };
+
 // These numbers must not change
 static_assert(kBuffers == 0, "kBuffers should equal 0");
 static_assert(kFramebuffers == 1, "kFramebuffers should equal 1");
 static_assert(kProgramsAndShaders == 2, "kProgramsAndShaders should equal 2");
 static_assert(kRenderbuffers == 3, "kRenderbuffers should equal 3");
 static_assert(kTextures == 4, "kTextures should equal 4");
+static_assert(kPaths == 0, "kPaths should equal 0");
 
 }  // namespace id_namespaces
 
@@ -178,6 +186,7 @@ struct TransformFeedbackVaryingInfo {
 
 // The format of the bucket filled out by GetTransformFeedbackVaryingsCHROMIUM
 struct TransformFeedbackVaryingsHeader {
+  uint32_t transform_feedback_buffer_mode;
   uint32_t num_transform_feedback_varyings;
   // TransformFeedbackVaryingInfo varyings[num_transform_feedback_varyings];
 };
@@ -227,6 +236,29 @@ struct AsyncUploadSync {
 
   base::subtle::Atomic32 async_upload_token;
 };
+
+struct DisjointValueSync {
+  void Reset() {
+    base::subtle::Release_Store(&disjoint_count, 0);
+  }
+
+  void SetDisjointCount(uint32_t token) {
+    DCHECK_NE(token, 0u);
+    base::subtle::Release_Store(&disjoint_count, token);
+  }
+
+  uint32_t GetDisjointCount() {
+    return base::subtle::Acquire_Load(&disjoint_count);
+  }
+
+  base::subtle::Atomic32 disjoint_count;
+};
+
+static_assert(sizeof(QuerySync) == 12, "size of QuerySync should be 12");
+static_assert(offsetof(QuerySync, process_count) == 0,
+              "offset of QuerySync.process_count should be 0");
+static_assert(offsetof(QuerySync, result) == 4,
+              "offset of QuerySync.result should be 4");
 
 static_assert(sizeof(ProgramInput) == 20, "size of ProgramInput should be 20");
 static_assert(offsetof(ProgramInput, type) == 0,
@@ -286,7 +318,7 @@ struct GenMailboxCHROMIUM {
   typedef GenMailboxCHROMIUM ValueType;
   static const CommandId kCmdId = kGenMailboxCHROMIUM;
   static const cmd::ArgFlags kArgFlags = cmd::kFixed;
-  static const uint8 cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
   CommandHeader header;
 };
 
@@ -294,7 +326,7 @@ struct InsertSyncPointCHROMIUM {
   typedef InsertSyncPointCHROMIUM ValueType;
   static const CommandId kCmdId = kInsertSyncPointCHROMIUM;
   static const cmd::ArgFlags kArgFlags = cmd::kFixed;
-  static const uint8 cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
   CommandHeader header;
 };
 
@@ -302,7 +334,7 @@ struct CreateAndConsumeTextureCHROMIUMImmediate {
   typedef CreateAndConsumeTextureCHROMIUMImmediate ValueType;
   static const CommandId kCmdId = kCreateAndConsumeTextureCHROMIUMImmediate;
   static const cmd::ArgFlags kArgFlags = cmd::kAtLeastN;
-  static const uint8 cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(1);
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(1);
 
   static uint32_t ComputeDataSize() {
     return static_cast<uint32_t>(sizeof(GLbyte) * 64);  // NOLINT

@@ -2,13 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "gpu/command_buffer/client/program_info_manager.h"
 
 namespace {
 
-template<typename T> static T LocalGetAs(
-    const std::vector<int8>& data, uint32 offset, size_t size) {
-  const int8* p = &data[0] + offset;
+template <typename T>
+static T LocalGetAs(const std::vector<int8_t>& data,
+                    uint32_t offset,
+                    size_t size) {
+  const int8_t* p = &data[0] + offset;
   if (offset + size > data.size()) {
     NOTREACHED();
     return NULL;
@@ -84,6 +89,7 @@ ProgramInfoManager::Program::Program()
       active_uniform_block_max_name_length_(0),
       cached_es3_transform_feedback_varyings_(false),
       transform_feedback_varying_max_length_(0),
+      transform_feedback_buffer_mode_(0),
       cached_es3_uniformsiv_(false) {
 }
 
@@ -121,25 +127,20 @@ ProgramInfoManager::Program::GetUniformBlock(GLuint index) const {
 
 GLint ProgramInfoManager::Program::GetUniformLocation(
     const std::string& name) const {
-  bool getting_array_location = false;
-  size_t open_pos = std::string::npos;
-  int index = 0;
-  if (!GLES2Util::ParseUniformName(
-      name, &open_pos, &index, &getting_array_location)) {
-    return -1;
-  }
+  GLSLArrayName parsed_name(name);
+
   for (GLuint ii = 0; ii < uniform_infos_.size(); ++ii) {
     const UniformInfo& info = uniform_infos_[ii];
     if (info.name == name ||
         (info.is_array &&
          info.name.compare(0, info.name.size() - 3, name) == 0)) {
       return info.element_locations[0];
-    } else if (getting_array_location && info.is_array) {
+    } else if (parsed_name.IsArrayName() && info.is_array) {
       // Look for an array specification.
-      size_t open_pos_2 = info.name.find_last_of('[');
-      if (open_pos_2 == open_pos &&
-          name.compare(0, open_pos, info.name, 0, open_pos) == 0) {
-        if (index >= 0 && index < info.size) {
+      size_t open_pos = info.name.find_last_of('[');
+      if (info.name.compare(0, open_pos, parsed_name.base_name()) == 0) {
+        int index = parsed_name.element_index();
+        if (index < info.size) {
           return info.element_locations[index];
         }
       }
@@ -162,6 +163,19 @@ GLuint ProgramInfoManager::Program::GetUniformIndex(
     }
   }
   return GL_INVALID_INDEX;
+}
+
+GLint ProgramInfoManager::Program::GetFragDataIndex(
+    const std::string& name) const {
+  auto iter = frag_data_indices_.find(name);
+  if (iter == frag_data_indices_.end())
+    return -1;
+  return iter->second;
+}
+
+void ProgramInfoManager::Program::CacheFragDataIndex(const std::string& name,
+                                                     GLint index) {
+  frag_data_indices_[name] = index;
 }
 
 GLint ProgramInfoManager::Program::GetFragDataLocation(
@@ -207,6 +221,9 @@ bool ProgramInfoManager::Program::GetProgramiv(
       return true;
     case GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH:
       *params = static_cast<GLint>(transform_feedback_varying_max_length_);
+      return true;
+    case GL_TRANSFORM_FEEDBACK_BUFFER_MODE:
+      *params = static_cast<GLint>(transform_feedback_buffer_mode_);
       return true;
     default:
       NOTREACHED();
@@ -317,7 +334,7 @@ bool ProgramInfoManager::Program::GetUniformsiv(
   return false;
 }
 
-void ProgramInfoManager::Program::UpdateES2(const std::vector<int8>& result) {
+void ProgramInfoManager::Program::UpdateES2(const std::vector<int8_t>& result) {
   if (cached_es2_) {
     return;
   }
@@ -340,9 +357,9 @@ void ProgramInfoManager::Program::UpdateES2(const std::vector<int8>& result) {
       result, sizeof(*header),
       sizeof(ProgramInput) * (header->num_attribs + header->num_uniforms));
   const ProgramInput* input = inputs;
-  for (uint32 ii = 0; ii < header->num_attribs; ++ii) {
-    const int32* location = LocalGetAs<const int32*>(
-        result, input->location_offset, sizeof(int32));
+  for (uint32_t ii = 0; ii < header->num_attribs; ++ii) {
+    const int32_t* location = LocalGetAs<const int32_t*>(
+        result, input->location_offset, sizeof(int32_t));
     const char* name_buf = LocalGetAs<const char*>(
         result, input->name_offset, input->name_length);
     std::string name(name_buf, input->name_length);
@@ -352,28 +369,28 @@ void ProgramInfoManager::Program::UpdateES2(const std::vector<int8>& result) {
         static_cast<GLsizei>(name.size() + 1), max_attrib_name_length_);
     ++input;
   }
-  for (uint32 ii = 0; ii < header->num_uniforms; ++ii) {
-    const int32* locations = LocalGetAs<const int32*>(
-        result, input->location_offset, sizeof(int32) * input->size);
+  for (uint32_t ii = 0; ii < header->num_uniforms; ++ii) {
+    const int32_t* locations = LocalGetAs<const int32_t*>(
+        result, input->location_offset, sizeof(int32_t) * input->size);
     const char* name_buf = LocalGetAs<const char*>(
         result, input->name_offset, input->name_length);
     std::string name(name_buf, input->name_length);
     UniformInfo info(input->size, input->type, name);
     max_uniform_name_length_ = std::max(
         static_cast<GLsizei>(name.size() + 1), max_uniform_name_length_);
-    for (int32 jj = 0; jj < input->size; ++jj) {
+    for (int32_t jj = 0; jj < input->size; ++jj) {
       info.element_locations.push_back(locations[jj]);
     }
     uniform_infos_.push_back(info);
     ++input;
   }
   DCHECK_EQ(header->num_attribs + header->num_uniforms,
-            static_cast<uint32>(input - inputs));
+            static_cast<uint32_t>(input - inputs));
   cached_es2_ = true;
 }
 
 void ProgramInfoManager::Program::UpdateES3UniformBlocks(
-    const std::vector<int8>& result) {
+    const std::vector<int8_t>& result) {
   if (cached_es3_uniform_blocks_) {
     return;
   }
@@ -444,7 +461,7 @@ void ProgramInfoManager::Program::UpdateES3UniformBlocks(
 }
 
 void ProgramInfoManager::Program::UpdateES3Uniformsiv(
-    const std::vector<int8>& result) {
+    const std::vector<int8_t>& result) {
   if (cached_es3_uniformsiv_) {
     return;
   }
@@ -486,7 +503,7 @@ void ProgramInfoManager::Program::UpdateES3Uniformsiv(
 }
 
 void ProgramInfoManager::Program::UpdateES3TransformFeedbackVaryings(
-    const std::vector<int8>& result) {
+    const std::vector<int8_t>& result) {
   if (cached_es3_transform_feedback_varyings_) {
     return;
   }
@@ -494,6 +511,7 @@ void ProgramInfoManager::Program::UpdateES3TransformFeedbackVaryings(
     // This should only happen on a lost context.
     return;
   }
+  DCHECK_EQ(0u, transform_feedback_buffer_mode_);
   DCHECK_EQ(0u, transform_feedback_varyings_.size());
   DCHECK_EQ(0u, transform_feedback_varying_max_length_);
 
@@ -512,6 +530,7 @@ void ProgramInfoManager::Program::UpdateES3TransformFeedbackVaryings(
     return;
   }
   transform_feedback_varyings_.resize(header->num_transform_feedback_varyings);
+  transform_feedback_buffer_mode_ = header->transform_feedback_buffer_mode;
 
   uint32_t entry_size = sizeof(TransformFeedbackVaryingInfo) *
       header->num_transform_feedback_varyings;
@@ -582,7 +601,7 @@ ProgramInfoManager::Program* ProgramInfoManager::GetProgramInfo(
   if (info->IsCached(type))
     return info;
 
-  std::vector<int8> result;
+  std::vector<int8_t> result;
   switch (type) {
     case kES2:
       {
@@ -610,6 +629,7 @@ ProgramInfoManager::Program* ProgramInfoManager::GetProgramInfo(
         gl->GetTransformFeedbackVaryingsCHROMIUMHelper(program, &result);
       }
       info->UpdateES3TransformFeedbackVaryings(result);
+      break;
     case kES3Uniformsiv:
       {
         base::AutoUnlock unlock(lock_);
@@ -618,6 +638,7 @@ ProgramInfoManager::Program* ProgramInfoManager::GetProgramInfo(
         gl->GetUniformsES3CHROMIUMHelper(program, &result);
       }
       info->UpdateES3Uniformsiv(result);
+      break;
     default:
       NOTREACHED();
       return NULL;
@@ -655,6 +676,7 @@ bool ProgramInfoManager::GetProgramiv(
     case GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH:
       type = kES3UniformBlocks;
       break;
+    case GL_TRANSFORM_FEEDBACK_BUFFER_MODE:
     case GL_TRANSFORM_FEEDBACK_VARYINGS:
     case GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH:
       type = kES3TransformFeedbackVaryings;
@@ -688,11 +710,13 @@ bool ProgramInfoManager::GetActiveUniformsiv(
       type = kES3Uniformsiv;
       break;
     default:
-      return false;
+      break;
   }
-  Program* info = GetProgramInfo(gl, program, type);
-  if (info) {
-    return info->GetUniformsiv(count, indices, pname, params);
+  if (type != kNone) {
+    Program* info = GetProgramInfo(gl, program, type);
+    if (info) {
+      return info->GetUniformsiv(count, indices, pname, params);
+    }
   }
   return gl->GetActiveUniformsivHelper(program, count, indices, pname, params);
 }
@@ -719,6 +743,31 @@ GLint ProgramInfoManager::GetUniformLocation(
     }
   }
   return gl->GetUniformLocationHelper(program, name);
+}
+
+GLint ProgramInfoManager::GetFragDataIndex(GLES2Implementation* gl,
+                                           GLuint program,
+                                           const char* name) {
+  // TODO(zmo): make FragData indexes part of the ProgramInfo that are
+  // fetched from the service side.  See crbug.com/452104.
+  {
+    base::AutoLock auto_lock(lock_);
+    Program* info = GetProgramInfo(gl, program, kNone);
+    if (info) {
+      GLint possible_index = info->GetFragDataIndex(name);
+      if (possible_index != -1)
+        return possible_index;
+    }
+  }
+  GLint index = gl->GetFragDataIndexEXTHelper(program, name);
+  if (index != -1) {
+    base::AutoLock auto_lock(lock_);
+    Program* info = GetProgramInfo(gl, program, kNone);
+    if (info) {
+      info->CacheFragDataIndex(name, index);
+    }
+  }
+  return index;
 }
 
 GLint ProgramInfoManager::GetFragDataLocation(

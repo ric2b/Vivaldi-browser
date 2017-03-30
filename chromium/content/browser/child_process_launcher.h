@@ -5,13 +5,14 @@
 #ifndef CONTENT_BROWSER_CHILD_PROCESS_LAUNCHER_H_
 #define CONTENT_BROWSER_CHILD_PROCESS_LAUNCHER_H_
 
-#include "base/basictypes.h"
 #include "base/files/scoped_file.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/threading/non_thread_safe.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -106,6 +107,15 @@ class CONTENT_EXPORT ChildProcessLauncher : public base::NonThreadSafe {
               base::ScopedFD ipcfd,
 #endif
               base::Process process);
+
+#if defined(MOJO_SHELL_CLIENT)
+  // When this process is run from an external Mojo shell, this function will
+  // create a channel and pass one end to the spawned process and register the
+  // other end with the external shell, allowing the spawned process to bind an
+  // Application request from the shell.
+  void CreateMojoShellChannel(base::CommandLine* command_line,
+                              int child_process_id);
+#endif
 
   Client* client_;
   BrowserThread::ID client_thread_id_;

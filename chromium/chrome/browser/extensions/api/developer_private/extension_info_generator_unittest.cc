@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/developer_private/extension_info_generator.h"
 #include "chrome/browser/extensions/api/developer_private/inspectable_views_finder.h"
 #include "chrome/browser/extensions/error_console/error_console.h"
@@ -36,10 +40,8 @@ const char kAllHostsPermission[] = "*://*/*";
 scoped_ptr<base::DictionaryValue> DeserializeJSONTestData(
     const base::FilePath& path,
     std::string *error) {
-  base::Value* value = nullptr;
   JSONFileValueDeserializer deserializer(path);
-  value = deserializer.Deserialize(nullptr, error);
-  return make_scoped_ptr(static_cast<base::DictionaryValue*>(value));
+  return base::DictionaryValue::From(deserializer.Deserialize(nullptr, error));
 }
 
 }  // namespace
@@ -82,19 +84,20 @@ class ExtensionInfoGeneratorUnitTest : public ExtensionServiceTestBase {
 
   const scoped_refptr<const Extension> CreateExtension(
       const std::string& name,
-      ListBuilder& permissions) {
+      ListBuilder permissions) {
     const std::string kId = crx_file::id_util::GenerateId(name);
     scoped_refptr<const Extension> extension =
-        ExtensionBuilder().SetManifest(
-                               DictionaryBuilder()
-                                   .Set("name", name)
-                                   .Set("description", "an extension")
-                                   .Set("manifest_version", 2)
-                                   .Set("version", "1.0.0")
-                                   .Set("permissions", permissions))
-                          .SetLocation(Manifest::INTERNAL)
-                          .SetID(kId)
-                          .Build();
+        ExtensionBuilder()
+            .SetManifest(
+                std::move(DictionaryBuilder()
+                              .Set("name", name)
+                              .Set("description", "an extension")
+                              .Set("manifest_version", 2)
+                              .Set("version", "1.0.0")
+                              .Set("permissions", std::move(permissions))))
+            .SetLocation(Manifest::INTERNAL)
+            .SetID(kId)
+            .Build();
 
     ExtensionRegistry::Get(profile())->AddEnabled(extension);
     PermissionsUpdater(profile()).InitializePermissions(extension.get());
@@ -179,19 +182,21 @@ TEST_F(ExtensionInfoGeneratorUnitTest, BasicInfoTest) {
   const char kVersion[] = "1.0.0.1";
   std::string id = crx_file::id_util::GenerateId("alpha");
   scoped_ptr<base::DictionaryValue> manifest =
-      DictionaryBuilder().Set("name", kName)
-                         .Set("version", kVersion)
-                         .Set("manifest_version", 2)
-                         .Set("description", "an extension")
-                         .Set("permissions",
-                              ListBuilder().Append("file://*/*")).Build();
+      DictionaryBuilder()
+          .Set("name", kName)
+          .Set("version", kVersion)
+          .Set("manifest_version", 2)
+          .Set("description", "an extension")
+          .Set("permissions", std::move(ListBuilder().Append("file://*/*")))
+          .Build();
   scoped_ptr<base::DictionaryValue> manifest_copy(manifest->DeepCopy());
   scoped_refptr<const Extension> extension =
-      ExtensionBuilder().SetManifest(manifest.Pass())
-                        .SetLocation(Manifest::UNPACKED)
-                        .SetPath(data_dir())
-                        .SetID(id)
-                        .Build();
+      ExtensionBuilder()
+          .SetManifest(std::move(manifest))
+          .SetLocation(Manifest::UNPACKED)
+          .SetPath(data_dir())
+          .SetID(id)
+          .Build();
   service()->AddExtension(extension.get());
   ErrorConsole* error_console = ErrorConsole::Get(profile());
   error_console->ReportError(
@@ -267,10 +272,11 @@ TEST_F(ExtensionInfoGeneratorUnitTest, BasicInfoTest) {
   manifest_copy->SetString("update_url",
                            "https://clients2.google.com/service/update2/crx");
   id = crx_file::id_util::GenerateId("beta");
-  extension = ExtensionBuilder().SetManifest(manifest_copy.Pass())
-                                .SetLocation(Manifest::EXTERNAL_PREF)
-                                .SetID(id)
-                                .Build();
+  extension = ExtensionBuilder()
+                  .SetManifest(std::move(manifest_copy))
+                  .SetLocation(Manifest::EXTERNAL_PREF)
+                  .SetID(id)
+                  .Build();
   service()->AddExtension(extension.get());
   info = GenerateExtensionInfo(extension->id());
   EXPECT_EQ(developer::LOCATION_THIRD_PARTY, info->location);
@@ -289,10 +295,10 @@ TEST_F(ExtensionInfoGeneratorUnitTest, GenerateExtensionsJSONData) {
   InspectableViewsFinder::ViewList views;
   views.push_back(InspectableViewsFinder::ConstructView(
       GURL("chrome-extension://behllobkkfkfnphdnhnkndlbkcpglgmj/bar.html"),
-      42, 88, false, VIEW_TYPE_TAB_CONTENTS));
+      42, 88, true, false, VIEW_TYPE_TAB_CONTENTS));
   views.push_back(InspectableViewsFinder::ConstructView(
       GURL("chrome-extension://behllobkkfkfnphdnhnkndlbkcpglgmj/dog.html"),
-      0, 0, false, VIEW_TYPE_TAB_CONTENTS));
+      0, 0, false, true, VIEW_TYPE_TAB_CONTENTS));
 
   base::FilePath expected_outputs_path =
       data_dir().AppendASCII("api_test")
@@ -347,9 +353,9 @@ TEST_F(ExtensionInfoGeneratorUnitTest, ExtensionInfoRunOnAllUrls) {
           FeatureSwitch::scripts_require_action(), true));
   // Two extensions - one with all urls, one without.
   scoped_refptr<const Extension> all_urls_extension = CreateExtension(
-      "all_urls", ListBuilder().Append(kAllHostsPermission).Pass());
+      "all_urls", std::move(ListBuilder().Append(kAllHostsPermission)));
   scoped_refptr<const Extension> no_urls_extension =
-      CreateExtension("no urls", ListBuilder().Pass());
+      CreateExtension("no urls", ListBuilder());
 
   scoped_ptr<developer::ExtensionInfo> info =
       GenerateExtensionInfo(all_urls_extension->id());
@@ -394,7 +400,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest, ExtensionInfoRunOnAllUrls) {
 
   // Load another extension with all urls (so permissions get re-init'd).
   all_urls_extension = CreateExtension(
-      "all_urls_II", ListBuilder().Append(kAllHostsPermission).Pass());
+      "all_urls_II", std::move(ListBuilder().Append(kAllHostsPermission)));
 
   // Even though the extension has all_urls permission, the checkbox shouldn't
   // show up without the switch.

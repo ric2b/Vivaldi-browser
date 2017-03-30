@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -156,11 +157,9 @@ void AffiliatedInvalidationServiceProviderImpl::Observe(
   }
   const user_manager::User* user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-  if (!user ||
-      g_browser_process->platform_part()->browser_policy_connector_chromeos()->
-          GetUserAffiliation(user->email()) != USER_AFFILIATION_MANAGED) {
-    // If the Profile belongs to a user who is not affiliated with the device's
-    // enrollment domain, ignore it.
+  if (!user || !user->IsAffiliated()) {
+    // If the Profile belongs to a user who is not affiliated on the device,
+    // ignore it.
     return;
   }
 

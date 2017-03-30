@@ -4,6 +4,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "components/gcm_driver/gcm_driver.h"
@@ -176,7 +177,7 @@ GCMInvalidationBridge::CreateDelegate() {
   DCHECK(CalledOnValidThread());
   scoped_ptr<syncer::GCMNetworkChannelDelegate> core(new Core(
       weak_factory_.GetWeakPtr(), base::ThreadTaskRunnerHandle::Get()));
-  return core.Pass();
+  return core;
 }
 
 void GCMInvalidationBridge::CoreInitializationDone(
@@ -214,7 +215,7 @@ void GCMInvalidationBridge::OnGetTokenSuccess(
     const std::string& access_token,
     const base::Time& expiration_time) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(access_token_request_, request);
+  DCHECK_EQ(access_token_request_.get(), request);
   core_thread_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&GCMInvalidationBridge::Core::RequestTokenFinished,
@@ -230,7 +231,7 @@ void GCMInvalidationBridge::OnGetTokenFailure(
     const OAuth2TokenService::Request* request,
     const GoogleServiceAuthError& error) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(access_token_request_, request);
+  DCHECK_EQ(access_token_request_.get(), request);
   core_thread_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&GCMInvalidationBridge::Core::RequestTokenFinished,
@@ -318,10 +319,9 @@ void GCMInvalidationBridge::ShutdownHandler() {
   // Nothing to do.
 }
 
-void GCMInvalidationBridge::OnMessage(
-    const std::string& app_id,
-    const gcm::GCMClient::IncomingMessage& message) {
-  gcm::GCMClient::MessageData::const_iterator it;
+void GCMInvalidationBridge::OnMessage(const std::string& app_id,
+                                      const gcm::IncomingMessage& message) {
+  gcm::MessageData::const_iterator it;
   std::string content;
   std::string echo_token;
   it = message.data.find(kContentKey);

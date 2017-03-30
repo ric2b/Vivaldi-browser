@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This class defines tests that implementations of TaskRunner should
-// pass in order to be conformant.  Here's how you use it to test your
-// implementation.
+// This file defines tests that implementations of TaskRunner should
+// pass in order to be conformant, as well as test cases for optional behavior.
+// Here's how you use it to test your implementation.
 //
 // Say your class is called MyTaskRunner.  Then you need to define a
 // class called MyTaskRunnerTestDelegate in my_task_runner_unittest.cc
@@ -43,6 +43,13 @@
 //       MyTaskRunner, TaskRunnerTest, MyTaskRunnerTestDelegate);
 //
 // Easy!
+//
+// The optional test harnesses TaskRunnerAffinityTest can be
+// instanciated in the same way, using the same delegate:
+//
+//   INSTANTIATE_TYPED_TEST_CASE_P(
+//       MyTaskRunner, TaskRunnerAffinityTest, MyTaskRunnerTestDelegate);
+
 
 #ifndef BASE_TEST_TASK_RUNNER_TEST_TEMPLATE_H_
 #define BASE_TEST_TASK_RUNNER_TEST_TEMPLATE_H_
@@ -50,10 +57,10 @@
 #include <cstddef>
 #include <map>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/condition_variable.h"
@@ -160,6 +167,10 @@ TYPED_TEST_P(TaskRunnerTest, Delayed) {
             this->task_tracker_->GetTaskRunCounts());
 }
 
+// The TaskRunnerTest test case verifies behaviour that is expected from a
+// task runner in order to be conformant.
+REGISTER_TYPED_TEST_CASE_P(TaskRunnerTest, Basic, Delayed);
+
 namespace internal {
 
 // Calls RunsTasksOnCurrentThread() on |task_runner| and expects it to
@@ -170,11 +181,16 @@ void ExpectRunsTasksOnCurrentThread(
 
 }  // namespace internal
 
+template <typename TaskRunnerTestDelegate>
+class TaskRunnerAffinityTest : public TaskRunnerTest<TaskRunnerTestDelegate> {};
+
+TYPED_TEST_CASE_P(TaskRunnerAffinityTest);
+
 // Post a bunch of tasks to the task runner as well as to a separate
 // thread, each checking the value of RunsTasksOnCurrentThread(),
 // which should return true for the tasks posted on the task runner
 // and false for the tasks posted on the separate thread.
-TYPED_TEST_P(TaskRunnerTest, RunsTasksOnCurrentThread) {
+TYPED_TEST_P(TaskRunnerAffinityTest, RunsTasksOnCurrentThread) {
   std::map<int, int> expected_task_run_counts;
 
   Thread thread("Non-task-runner thread");
@@ -209,8 +225,9 @@ TYPED_TEST_P(TaskRunnerTest, RunsTasksOnCurrentThread) {
             this->task_tracker_->GetTaskRunCounts());
 }
 
-REGISTER_TYPED_TEST_CASE_P(
-    TaskRunnerTest, Basic, Delayed, RunsTasksOnCurrentThread);
+// TaskRunnerAffinityTest tests that the TaskRunner implementation
+// can determine if tasks will never be run on a specific thread.
+REGISTER_TYPED_TEST_CASE_P(TaskRunnerAffinityTest, RunsTasksOnCurrentThread);
 
 }  // namespace base
 

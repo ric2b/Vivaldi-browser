@@ -58,6 +58,10 @@
   return type_ == kCocoaCookieDetailsTypeTreeServiceWorker;
 }
 
+- (BOOL)shouldShowCacheStorageTreeDetailsView {
+  return type_ == kCocoaCookieDetailsTypeTreeCacheStorage;
+}
+
 - (NSString*)name {
   return name_.get();
 }
@@ -247,13 +251,13 @@
   if ((self = [super init])) {
     type_ = kCocoaCookieDetailsTypeTreeIndexedDB;
     canEditExpiration_ = NO;
-    domain_.reset([base::SysUTF8ToNSString(
-        indexedDBInfo->origin_.spec()) retain]);
+    domain_.reset(
+        [base::SysUTF8ToNSString(indexedDBInfo->origin.spec()) retain]);
     fileSize_.reset([base::SysUTF16ToNSString(
-        ui::FormatBytes(indexedDBInfo->size_)) retain]);
+        ui::FormatBytes(indexedDBInfo->size)) retain]);
     lastModified_.reset([base::SysUTF16ToNSString(
-        base::TimeFormatFriendlyDateAndTime(
-            indexedDBInfo->last_modified_)) retain]);
+        base::TimeFormatFriendlyDateAndTime(indexedDBInfo->last_modified))
+        retain]);
   }
   return self;
 }
@@ -280,6 +284,22 @@
   return self;
 }
 
+- (id)initWithCacheStorageUsageInfo:
+    (const content::CacheStorageUsageInfo*)cacheStorageInfo {
+  if ((self = [super init])) {
+    type_ = kCocoaCookieDetailsTypeTreeCacheStorage;
+    canEditExpiration_ = NO;
+    domain_.reset(
+        [base::SysUTF8ToNSString(cacheStorageInfo->origin.spec()) retain]);
+    fileSize_.reset([base::SysUTF16ToNSString(
+        ui::FormatBytes(cacheStorageInfo->total_size_bytes)) retain]);
+    lastModified_.reset([base::SysUTF16ToNSString(
+        base::TimeFormatFriendlyDateAndTime(cacheStorageInfo->last_modified))
+        retain]);
+  }
+  return self;
+}
+
 + (CocoaCookieDetails*)createFromCookieTreeNode:(CookieTreeNode*)treeNode {
   CookieTreeNode::DetailedInfo info = treeNode->GetDetailedInfo();
   CookieTreeNode::DetailedInfo::NodeType nodeType = info.node_type;
@@ -302,6 +322,9 @@
     case CookieTreeNode::DetailedInfo::TYPE_SERVICE_WORKER:
       return [[[CocoaCookieDetails alloc]
           initWithServiceWorkerUsageInfo:info.service_worker_info] autorelease];
+    case CookieTreeNode::DetailedInfo::TYPE_CACHE_STORAGE:
+      return [[[CocoaCookieDetails alloc]
+          initWithCacheStorageUsageInfo:info.cache_storage_info] autorelease];
     default:
       return [[[CocoaCookieDetails alloc] initAsFolder] autorelease];
   }

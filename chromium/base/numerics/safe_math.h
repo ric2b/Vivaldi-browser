@@ -5,6 +5,8 @@
 #ifndef BASE_NUMERICS_SAFE_MATH_H_
 #define BASE_NUMERICS_SAFE_MATH_H_
 
+#include <stddef.h>
+
 #include "base/numerics/safe_math_impl.h"
 
 namespace base {
@@ -36,9 +38,8 @@ namespace internal {
 //     CheckedNumeric<int> checked_int = untrusted_input_value;
 //     int x = checked_int.ValueOrDefault(0) | kFlagValues;
 // Comparison:
-//   CheckedNumeric<size_t> checked_size;
-//   CheckedNumeric<int> checked_size = untrusted_input_value;
-//   checked_size = checked_size + HEADER LENGTH;
+//   CheckedNumeric<size_t> checked_size = untrusted_input_value;
+//   checked_size += HEADER LENGTH;
 //   if (checked_size.IsValid() && checked_size.ValueOrDie() < buffer_size)
 //     Do stuff...
 template <typename T>
@@ -145,6 +146,14 @@ class CheckedNumeric {
     return CheckedNumeric<T>(value, validity);
   }
 
+  // This function is available only for integral types. It returns an unsigned
+  // integer of the same width as the source type, containing the absolute value
+  // of the source, and properly handling signed min.
+  CheckedNumeric<typename UnsignedOrFloatForSize<T>::type> UnsignedAbs() const {
+    return CheckedNumeric<typename UnsignedOrFloatForSize<T>::type>(
+        CheckedUnsignedAbs(state_.value()), state_.validity());
+  }
+
   CheckedNumeric& operator++() {
     *this += 1;
     return *this;
@@ -173,21 +182,31 @@ class CheckedNumeric {
   template <typename Src>
   static CheckedNumeric<T> cast(
       Src u,
-      typename enable_if<std::numeric_limits<Src>::is_specialized, int>::type =
-          0) {
+      typename std::enable_if<std::numeric_limits<Src>::is_specialized,
+                              int>::type = 0) {
     return u;
   }
 
   template <typename Src>
   static CheckedNumeric<T> cast(
       const CheckedNumeric<Src>& u,
-      typename enable_if<!is_same<Src, T>::value, int>::type = 0) {
+      typename std::enable_if<!is_same<Src, T>::value, int>::type = 0) {
     return u;
   }
 
   static const CheckedNumeric<T>& cast(const CheckedNumeric<T>& u) { return u; }
 
  private:
+  template <typename NumericType>
+  struct UnderlyingType {
+    using type = NumericType;
+  };
+
+  template <typename NumericType>
+  struct UnderlyingType<CheckedNumeric<NumericType>> {
+    using type = NumericType;
+  };
+
   CheckedNumericState<T> state_;
 };
 
@@ -224,7 +243,8 @@ class CheckedNumeric {
   template <typename T>                                                       \
   template <typename Src>                                                     \
   CheckedNumeric<T>& CheckedNumeric<T>::operator COMPOUND_OP(Src rhs) {       \
-    *this = CheckedNumeric<T>::cast(*this) OP CheckedNumeric<Src>::cast(rhs); \
+    *this = CheckedNumeric<T>::cast(*this)                                    \
+        OP CheckedNumeric<typename UnderlyingType<Src>::type>::cast(rhs);     \
     return *this;                                                             \
   }                                                                           \
   /* Binary arithmetic operator for CheckedNumeric of different type. */      \

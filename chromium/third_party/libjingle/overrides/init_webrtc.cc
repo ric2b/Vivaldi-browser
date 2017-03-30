@@ -8,15 +8,13 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/native_library.h"
 #include "base/path_service.h"
 #include "base/trace_event/trace_event.h"
-#include "third_party/webrtc/overrides/webrtc/base/basictypes.h"
-#include "third_party/webrtc/overrides/webrtc/base/logging.h"
-#include "third_party/webrtc/system_wrappers/interface/cpu_info.h"
-#include "third_party/webrtc/system_wrappers/interface/event_tracer.h"
+#include "third_party/webrtc/base/event_tracer.h"
+#include "third_party/webrtc/system_wrappers/include/cpu_info.h"
+#include "third_party/webrtc_overrides/webrtc/base/logging.h"
 
 const unsigned char* GetCategoryGroupEnabled(const char* category_group) {
   return TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(category_group);
@@ -37,13 +35,6 @@ void AddTraceEvent(char phase,
 }
 
 namespace webrtc {
-// Define webrtc::field_trial::FindFullName to provide webrtc with a field trial
-// implementation.
-namespace field_trial {
-std::string FindFullName(const std::string& trial_name) {
-  return base::FieldTrialList::FindFullName(trial_name);
-}
-}  // namespace field_trial
 
 // Define webrtc::metrics functions to provide webrtc with implementations.
 namespace metrics {

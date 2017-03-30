@@ -34,6 +34,7 @@ class StateStore : public base::SupportsWeakPtr<StateStore>,
   // If |deferred_load| is true, we won't load the database until the first
   // page has been loaded.
   StateStore(content::BrowserContext* context,
+             const std::string& uma_client_name,
              const base::FilePath& db_path,
              bool deferred_load);
   // This variant is useful for testing (using a mock ValueStore).
@@ -91,11 +92,13 @@ class StateStore : public base::SupportsWeakPtr<StateStore>,
   void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
                                   const Extension* extension,
                                   bool is_update,
-                                  bool from_ephemeral,
                                   const std::string& old_name) override;
 
   // Path to our database, on disk. Empty during testing.
   base::FilePath db_path_;
+
+  // Database client name used for UMA logging by database backend.
+  const std::string uma_client_name_;
 
   // The store that holds our key/values.
   ValueStoreFrontend store_;

@@ -5,6 +5,9 @@
 #ifndef UI_OZONE_PLATFORM_DRM_GPU_DRM_BUFFER_H_
 #define UI_OZONE_PLATFORM_DRM_GPU_DRM_BUFFER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "skia/ext/refptr.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -32,8 +35,10 @@ class OZONE_EXPORT DrmBuffer : public ScanoutBuffer {
 
   // ScanoutBuffer:
   uint32_t GetFramebufferId() const override;
+  uint32_t GetFramebufferPixelFormat() const override;
   uint32_t GetHandle() const override;
   gfx::Size GetSize() const override;
+  bool RequiresGlFinish() const override;
 
  protected:
   ~DrmBuffer() override;
@@ -56,23 +61,13 @@ class OZONE_EXPORT DrmBuffer : public ScanoutBuffer {
   // registered with the CRTC.
   uint32_t framebuffer_ = 0;
 
+  // Pixel format of |framebuffer_|
+  uint32_t fb_pixel_format_ = 0;
+
   // Wrapper around the native pixel memory.
   skia::RefPtr<SkSurface> surface_;
 
   DISALLOW_COPY_AND_ASSIGN(DrmBuffer);
-};
-
-class OZONE_EXPORT DrmBufferGenerator : public ScanoutBufferGenerator {
- public:
-  DrmBufferGenerator();
-  ~DrmBufferGenerator() override;
-
-  // ScanoutBufferGenerator:
-  scoped_refptr<ScanoutBuffer> Create(const scoped_refptr<DrmDevice>& drm,
-                                      const gfx::Size& size) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DrmBufferGenerator);
 };
 
 }  // namespace ui

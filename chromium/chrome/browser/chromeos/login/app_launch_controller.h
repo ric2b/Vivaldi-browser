@@ -5,10 +5,12 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_APP_LAUNCH_CONTROLLER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_APP_LAUNCH_CONTROLLER_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_profile_loader.h"
@@ -128,14 +130,14 @@ class AppLaunchController
   bool launcher_ready_;
 
   // A timer to ensure the app splash is shown for a minimum amount of time.
-  base::OneShotTimer<AppLaunchController> splash_wait_timer_;
+  base::OneShotTimer splash_wait_timer_;
 
-  base::OneShotTimer<AppLaunchController> network_wait_timer_;
+  base::OneShotTimer network_wait_timer_;
   bool waiting_for_network_;
   bool network_wait_timedout_;
   bool showing_network_dialog_;
   bool network_config_requested_;
-  int64 launch_splash_start_time_;
+  int64_t launch_splash_start_time_;
 
   static bool skip_splash_wait_;
   static int network_wait_time_;

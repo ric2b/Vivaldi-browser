@@ -10,6 +10,7 @@
 #include "base/location.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
+#include "base/process/process_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
@@ -17,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/private_working_set_snapshot.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -32,6 +34,7 @@
 #include "chrome/browser/task_manager/tab_contents_information.h"
 #include "chrome/browser/task_manager/web_contents_resource_provider.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -306,7 +309,7 @@ int TaskManagerModel::GetNaClDebugStubPort(int index) const {
   return values.nacl_debug_stub_port;
 }
 
-int64 TaskManagerModel::GetNetworkUsage(int index) const {
+int64_t TaskManagerModel::GetNetworkUsage(int index) const {
   return GetNetworkUsage(GetResource(index));
 }
 
@@ -430,7 +433,7 @@ base::string16 TaskManagerModel::GetResourceNaClDebugStubPort(int index) const {
 }
 
 base::string16 TaskManagerModel::GetResourceNetworkUsage(int index) const {
-  int64 net_usage = GetNetworkUsage(index);
+  int64_t net_usage = GetNetworkUsage(index);
   if (net_usage == -1)
     return l10n_util::GetStringUTF16(IDS_TASK_MANAGER_NA_CELL_TEXT);
   if (net_usage == 0)
@@ -480,14 +483,14 @@ base::string16 TaskManagerModel::GetResourceGDIHandles(int index) const {
   size_t current, peak;
   GetGDIHandles(index, &current, &peak);
   return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_HANDLES_CELL_TEXT,
-      base::IntToString16(current), base::IntToString16(peak));
+      base::SizeTToString16(current), base::SizeTToString16(peak));
 }
 
 base::string16 TaskManagerModel::GetResourceUSERHandles(int index) const {
   size_t current, peak;
   GetUSERHandles(index, &current, &peak);
   return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_HANDLES_CELL_TEXT,
-      base::IntToString16(current), base::IntToString16(peak));
+      base::SizeTToString16(current), base::SizeTToString16(peak));
 }
 
 base::string16 TaskManagerModel::GetResourceWebCoreImageCacheSize(
@@ -1249,8 +1252,8 @@ void TaskManagerModel::NotifyVideoMemoryUsageStats(
 }
 
 void TaskManagerModel::NotifyBytesRead(const net::URLRequest& request,
-                                       int byte_count) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+                                       int64_t byte_count) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!is_updating_byte_count_)
     return;
 
@@ -1282,7 +1285,7 @@ void TaskManagerModel::NotifyBytesRead(const net::URLRequest& request,
 
 // This is called on the UI thread.
 void TaskManagerModel::NotifyDataReady() {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   for (size_t i = 0; i < on_data_ready_callbacks_.size(); ++i) {
     if (!on_data_ready_callbacks_[i].is_null())
         on_data_ready_callbacks_[i].Run();
@@ -1329,7 +1332,7 @@ void TaskManagerModel::RefreshVideoMemoryUsageStats() {
   content::GpuDataManager::GetInstance()->RequestVideoMemoryUsageStatsUpdate();
 }
 
-int64 TaskManagerModel::GetNetworkUsageForResource(Resource* resource) const {
+int64_t TaskManagerModel::GetNetworkUsageForResource(Resource* resource) const {
   // Returns default of 0 if no network usage.
   return per_resource_cache_[resource].network_usage;
 }
@@ -1380,7 +1383,7 @@ void TaskManagerModel::BytesRead(BytesReadParam param) {
 
 void TaskManagerModel::MultipleBytesRead(
     const std::vector<BytesReadParam>* params) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   for (std::vector<BytesReadParam>::const_iterator it = params->begin();
        it != params->end(); ++it) {
     BytesRead(*it);
@@ -1388,7 +1391,7 @@ void TaskManagerModel::MultipleBytesRead(
 }
 
 void TaskManagerModel::NotifyMultipleBytesRead() {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!bytes_read_buffer_.empty());
 
   std::vector<BytesReadParam>* bytes_read_buffer =
@@ -1401,12 +1404,12 @@ void TaskManagerModel::NotifyMultipleBytesRead() {
 }
 
 void TaskManagerModel::SetUpdatingByteCount(bool is_updating) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   is_updating_byte_count_ = is_updating;
 }
 
-int64 TaskManagerModel::GetNetworkUsage(Resource* resource) const {
-  int64 net_usage = GetNetworkUsageForResource(resource);
+int64_t TaskManagerModel::GetNetworkUsage(Resource* resource) const {
+  int64_t net_usage = GetNetworkUsageForResource(resource);
   if (net_usage == 0 && !resource->SupportNetworkUsage())
     return -1;
   return net_usage;
@@ -1424,7 +1427,7 @@ int TaskManagerModel::GetIdleWakeupsPerSecond(Resource* resource) const {
   return values.idle_wakeups;
 }
 
-base::string16 TaskManagerModel::GetMemCellText(int64 number) const {
+base::string16 TaskManagerModel::GetMemCellText(int64_t number) const {
 #if !defined(OS_MACOSX)
   base::string16 str = base::FormatNumber(number / 1024);
 
@@ -1500,6 +1503,7 @@ Resource* TaskManagerModel::GetResource(int index) const {
 // static
 void TaskManager::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kTaskManagerWindowPlacement);
+  registry->RegisterDictionaryPref(prefs::kTaskManagerColumnVisibility);
 }
 
 bool TaskManager::IsBrowserProcess(int index) const {
@@ -1547,7 +1551,7 @@ void TaskManager::ModelChanged() {
 
 // static
 TaskManager* TaskManager::GetInstance() {
-  return Singleton<TaskManager>::get();
+  return base::Singleton<TaskManager>::get();
 }
 
 void TaskManager::OpenAboutMemory(chrome::HostDesktopType desktop_type) {

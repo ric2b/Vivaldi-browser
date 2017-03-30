@@ -13,16 +13,14 @@
 namespace net {
 
 const char kAlternateProtocolHeader[] = "Alternate-Protocol";
+const char kAlternativeServiceHeader[] = "Alt-Svc";
 
 namespace {
 
 // The order of these strings much match the order of the enum definition
 // for AlternateProtocol.
 const char* const kAlternateProtocolStrings[] = {
-    "npn-spdy/2",
-    "npn-spdy/3",
     "npn-spdy/3.1",
-    "npn-h2-14",  // HTTP/2 draft-14. Called SPDY4 internally.
     "npn-h2",
     "quic"};
 
@@ -50,10 +48,7 @@ bool IsAlternateProtocolValid(AlternateProtocol protocol) {
 
 const char* AlternateProtocolToString(AlternateProtocol protocol) {
   switch (protocol) {
-    case DEPRECATED_NPN_SPDY_2:
-    case NPN_SPDY_3:
     case NPN_SPDY_3_1:
-    case NPN_HTTP_2_14:
     case NPN_HTTP_2:
     case QUIC:
       DCHECK(IsAlternateProtocolValid(protocol));
@@ -78,14 +73,8 @@ AlternateProtocol AlternateProtocolFromString(const std::string& str) {
 
 AlternateProtocol AlternateProtocolFromNextProto(NextProto next_proto) {
   switch (next_proto) {
-    case kProtoDeprecatedSPDY2:
-      return DEPRECATED_NPN_SPDY_2;
-    case kProtoSPDY3:
-      return NPN_SPDY_3;
     case kProtoSPDY31:
       return NPN_SPDY_3_1;
-    case kProtoHTTP2_14:
-      return NPN_HTTP_2_14;
     case kProtoHTTP2:
       return NPN_HTTP_2;
     case kProtoQUIC1SPDY3:
@@ -106,14 +95,21 @@ std::string AlternativeService::ToString() const {
 }
 
 std::string AlternativeServiceInfo::ToString() const {
-  return base::StringPrintf("%s, p=%f", alternative_service.ToString().c_str(),
-                            probability);
+  base::Time::Exploded exploded;
+  expiration.LocalExplode(&exploded);
+  return base::StringPrintf("%s, p=%f, expires %04d-%02d-%02d %02d:%02d:%02d",
+                            alternative_service.ToString().c_str(), probability,
+                            exploded.year, exploded.month,
+                            exploded.day_of_month, exploded.hour,
+                            exploded.minute, exploded.second);
 }
 
 // static
 void HttpServerProperties::ForceHTTP11(SSLConfig* ssl_config) {
-  ssl_config->next_protos.clear();
-  ssl_config->next_protos.push_back(kProtoHTTP11);
+  ssl_config->alpn_protos.clear();
+  ssl_config->alpn_protos.push_back(kProtoHTTP11);
+  ssl_config->npn_protos.clear();
+  ssl_config->npn_protos.push_back(kProtoHTTP11);
 }
 
 }  // namespace net

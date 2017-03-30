@@ -8,23 +8,39 @@
     # be a separate shared library since one symbol is implemented higher up in
     # the sessions_content/ios layer.
     'sessions_core_sources': [
-      'sessions/base_session_service.cc',
-      'sessions/base_session_service.h',
-      'sessions/base_session_service_commands.cc',
-      'sessions/base_session_service_commands.h',
+      'sessions/core/base_session_service.cc',
+      'sessions/core/base_session_service.h',
+      'sessions/core/base_session_service_commands.cc',
+      'sessions/core/base_session_service_commands.h',
+      'sessions/core/base_session_service_delegate.h',
+      'sessions/core/live_tab.cc',
+      'sessions/core/live_tab.h',
+      'sessions/core/live_tab_context.cc',
+      'sessions/core/live_tab_context.h',
+      'sessions/core/persistent_tab_restore_service.cc',
+      'sessions/core/persistent_tab_restore_service.h',
       'sessions/core/serialized_navigation_driver.h',
-      'sessions/serialized_navigation_entry.cc',
-      'sessions/serialized_navigation_entry.h',
-      'sessions/session_backend.cc',
-      'sessions/session_backend.h',
-      'sessions/session_command.cc',
-      'sessions/session_command.h',
-      'sessions/session_id.cc',
-      'sessions/session_id.h',
-      'sessions/session_service_commands.cc',
-      'sessions/session_service_commands.h',
-      'sessions/session_types.cc',
-      'sessions/session_types.h',
+      'sessions/core/serialized_navigation_entry.cc',
+      'sessions/core/serialized_navigation_entry.h',
+      'sessions/core/session_backend.cc',
+      'sessions/core/session_backend.h',
+      'sessions/core/session_command.cc',
+      'sessions/core/session_command.h',
+      'sessions/core/session_constants.cc',
+      'sessions/core/session_constants.h',
+      'sessions/core/session_id.cc',
+      'sessions/core/session_id.h',
+      'sessions/core/session_service_commands.cc',
+      'sessions/core/session_service_commands.h',
+      'sessions/core/session_types.cc',
+      'sessions/core/session_types.h',
+      'sessions/core/tab_restore_service.cc',
+      'sessions/core/tab_restore_service.h',
+      'sessions/core/tab_restore_service_client.cc',
+      'sessions/core/tab_restore_service_client.h',
+      'sessions/core/tab_restore_service_helper.cc',
+      'sessions/core/tab_restore_service_helper.h',
+      'sessions/core/tab_restore_service_observer.h',
     ],
   },
   'targets': [
@@ -42,14 +58,14 @@
       ],
       'sources': [
         # Note: sources list duplicated in GN build.
-        'sessions/serialized_navigation_entry_test_helper.cc',
-        'sessions/serialized_navigation_entry_test_helper.h',
+        'sessions/core/serialized_navigation_entry_test_helper.cc',
+        'sessions/core/serialized_navigation_entry_test_helper.h',
       ],
       'conditions': [
         ['OS!="ios" and OS!="android"', {
           'sources': [
-            'sessions/base_session_service_test_helper.cc',
-            'sessions/base_session_service_test_helper.h',
+            'sessions/core/base_session_service_test_helper.cc',
+            'sessions/core/base_session_service_test_helper.h',
            ],
         }],
       ],
@@ -74,6 +90,8 @@
             '../ui/base/ui_base.gyp:ui_base',
             '../ui/gfx/gfx.gyp:gfx_geometry',
             '../url/url.gyp:url_lib',
+            'keyed_service_core',
+            'variations',
           ],
           'include_dirs': [
             '..',
@@ -85,16 +103,32 @@
             # Note: sources list duplicated in GN build.
             '<@(sessions_core_sources)',
 
+            'sessions/content/content_live_tab.cc',
+            'sessions/content/content_live_tab.h',
+            'sessions/content/content_platform_specific_tab_data.cc',
+            'sessions/content/content_platform_specific_tab_data.h',
             'sessions/content/content_serialized_navigation_builder.cc',
             'sessions/content/content_serialized_navigation_builder.h',
             'sessions/content/content_serialized_navigation_driver.cc',
             'sessions/content/content_serialized_navigation_driver.h',
           ],
-        },
-      ],
+          'conditions': [
+            ['OS=="android"', {
+             'sources': [
+               'sessions/core/in_memory_tab_restore_service.cc',
+               'sessions/core/in_memory_tab_restore_service.h',
+              ],
+              'sources!': [
+               'sessions/core/persistent_tab_restore_service.cc',
+              ],
+            },
+          ],
+        ],
+      }],
     }, {  # OS==ios
       'targets': [
         {
+          # GN version: //components/sessions
           'target_name': 'sessions_ios',
           'type': 'static_library',
           'dependencies': [
@@ -105,6 +139,8 @@
             '../ui/base/ui_base.gyp:ui_base',
             '../ui/gfx/gfx.gyp:gfx_geometry',
             '../url/url.gyp:url_lib',
+            'keyed_service_core',
+            'variations',
           ],
           'include_dirs': [
             '..',
@@ -115,6 +151,8 @@
           'sources': [
             '<@(sessions_core_sources)',
 
+            'sessions/ios/ios_live_tab.cc',
+            'sessions/ios/ios_live_tab.h',
             'sessions/ios/ios_serialized_navigation_builder.cc',
             'sessions/ios/ios_serialized_navigation_builder.h',
             'sessions/ios/ios_serialized_navigation_driver.cc',

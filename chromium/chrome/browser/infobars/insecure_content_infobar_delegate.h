@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_INFOBARS_INSECURE_CONTENT_INFOBAR_DELEGATE_H_
 #define CHROME_BROWSER_INFOBARS_INSECURE_CONTENT_INFOBAR_DELEGATE_H_
 
+#include "base/macros.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 
 class InfoBarService;
@@ -30,6 +31,7 @@ class InsecureContentInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~InsecureContentInfoBarDelegate() override;
 
   // ConfirmInfoBarDelegate:
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   void InfoBarDismissed() override;
   InsecureContentInfoBarDelegate* AsInsecureContentInfoBarDelegate() override;
   base::string16 GetMessageText() const override;
@@ -37,7 +39,7 @@ class InsecureContentInfoBarDelegate : public ConfirmInfoBarDelegate {
   bool Accept() override;
   bool Cancel() override;
   base::string16 GetLinkText() const override;
-  bool LinkClicked(WindowOpenDisposition disposition) override;
+  GURL GetLinkURL() const override;
 
   DISALLOW_COPY_AND_ASSIGN(InsecureContentInfoBarDelegate);
 };

@@ -5,6 +5,7 @@
 #ifndef CC_BLINK_WEB_COMPOSITOR_ANIMATION_PLAYER_IMPL_H_
 #define CC_BLINK_WEB_COMPOSITOR_ANIMATION_PLAYER_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/blink/cc_blink_export.h"
@@ -22,19 +23,20 @@ class WebCompositorAnimationPlayerImpl
     : public blink::WebCompositorAnimationPlayer {
  public:
   CC_BLINK_EXPORT WebCompositorAnimationPlayerImpl();
-  virtual ~WebCompositorAnimationPlayerImpl();
+  ~WebCompositorAnimationPlayerImpl() override;
 
   CC_BLINK_EXPORT cc::AnimationPlayer* animation_player() const;
 
   // blink::WebCompositorAnimationPlayer implementation
-  virtual void setAnimationDelegate(
-      blink::WebCompositorAnimationDelegate* delegate);
-  virtual void attachLayer(blink::WebLayer* web_layer);
-  virtual void detachLayer();
-  virtual bool isLayerAttached() const;
-  virtual void addAnimation(blink::WebCompositorAnimation* animation);
-  virtual void removeAnimation(int animation_id);
-  virtual void pauseAnimation(int animation_id, double time_offset);
+  void setAnimationDelegate(
+      blink::WebCompositorAnimationDelegate* delegate) override;
+  void attachLayer(blink::WebLayer* web_layer) override;
+  void detachLayer() override;
+  bool isLayerAttached() const override;
+  void addAnimation(blink::WebCompositorAnimation* animation) override;
+  void removeAnimation(int animation_id) override;
+  void pauseAnimation(int animation_id, double time_offset) override;
+  void abortAnimation(int animation_id) override;
 
  private:
   scoped_refptr<cc::AnimationPlayer> animation_player_;

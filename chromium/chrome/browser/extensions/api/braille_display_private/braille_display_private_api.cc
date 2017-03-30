@@ -4,7 +4,10 @@
 
 #include "chrome/browser/extensions/api/braille_display_private/braille_display_private_api.h"
 
+#include <utility>
+
 #include "base/lazy_instance.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -63,18 +66,20 @@ BrailleDisplayPrivateAPI::GetFactoryInstance() {
 void BrailleDisplayPrivateAPI::OnBrailleDisplayStateChanged(
     const DisplayState& display_state) {
   scoped_ptr<Event> event(
-      new Event(events::UNKNOWN, OnDisplayStateChanged::kEventName,
+      new Event(events::BRAILLE_DISPLAY_PRIVATE_ON_DISPLAY_STATE_CHANGED,
+                OnDisplayStateChanged::kEventName,
                 OnDisplayStateChanged::Create(display_state)));
-  event_delegate_->BroadcastEvent(event.Pass());
+  event_delegate_->BroadcastEvent(std::move(event));
 }
 
 void BrailleDisplayPrivateAPI::OnBrailleKeyEvent(const KeyEvent& key_event) {
   // Key events only go to extensions of the active profile.
   if (!IsProfileActive())
     return;
-  scoped_ptr<Event> event(new Event(events::UNKNOWN, OnKeyEvent::kEventName,
-                                    OnKeyEvent::Create(key_event)));
-  event_delegate_->BroadcastEvent(event.Pass());
+  scoped_ptr<Event> event(
+      new Event(events::BRAILLE_DISPLAY_PRIVATE_ON_KEY_EVENT,
+                OnKeyEvent::kEventName, OnKeyEvent::Create(key_event)));
+  event_delegate_->BroadcastEvent(std::move(event));
 }
 
 bool BrailleDisplayPrivateAPI::IsProfileActive() {
@@ -98,7 +103,7 @@ bool BrailleDisplayPrivateAPI::IsProfileActive() {
 
 void BrailleDisplayPrivateAPI::SetEventDelegateForTest(
     scoped_ptr<EventDelegate> delegate) {
-  event_delegate_ = delegate.Pass();
+  event_delegate_ = std::move(delegate);
 }
 
 void BrailleDisplayPrivateAPI::OnListenerAdded(
@@ -131,7 +136,7 @@ BrailleDisplayPrivateAPI::DefaultEventDelegate::~DefaultEventDelegate() {
 
 void BrailleDisplayPrivateAPI::DefaultEventDelegate::BroadcastEvent(
     scoped_ptr<Event> event) {
-  EventRouter::Get(profile_)->BroadcastEvent(event.Pass());
+  EventRouter::Get(profile_)->BroadcastEvent(std::move(event));
 }
 
 bool BrailleDisplayPrivateAPI::DefaultEventDelegate::HasListener() {

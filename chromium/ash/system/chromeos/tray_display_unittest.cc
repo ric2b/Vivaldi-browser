@@ -8,6 +8,7 @@
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
+#include "ash/system/chromeos/devicetype_utils.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
@@ -45,7 +46,7 @@ base::string16 GetTooltipText(const base::string16& headline,
         IDS_ASH_STATUS_TRAY_DISPLAY_SINGLE_DISPLAY,
         name2, base::UTF8ToUTF16(data2)));
   }
-  return JoinString(lines, '\n');
+  return base::JoinString(lines, base::ASCIIToUTF16("\n"));
 }
 
 base::string16 GetMirroredTooltipText(const base::string16& headline,
@@ -314,9 +315,7 @@ TEST_F(TrayDisplayTest, InternalDisplayResized) {
   CheckAccessibleName();
 
   // Unified mode
-  test::DisplayManagerTestApi::EnableUnifiedDesktopForTest();
-  display_manager->SetDefaultMultiDisplayMode(DisplayManager::UNIFIED);
-  display_manager->SetMultiDisplayMode(DisplayManager::UNIFIED);
+  display_manager->SetUnifiedDesktopEnabled(true);
   UpdateDisplay("300x200,400x500");
   // Update the cache variables as the primary root window changed.
   GetTray()->ShowDefaultView(BUBBLE_USE_EXISTING);
@@ -547,7 +546,8 @@ TEST_F(TrayDisplayTest, DisplayNotifications) {
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_DOCKED),
             GetDisplayNotificationText());
   EXPECT_EQ(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_DOCKED_DESCRIPTION),
+      ash::SubstituteChromeOSDeviceType(
+        IDS_ASH_STATUS_TRAY_DISPLAY_DOCKED_DESCRIPTION),
       GetDisplayNotificationAdditionalText());
 }
 

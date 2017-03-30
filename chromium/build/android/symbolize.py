@@ -10,17 +10,16 @@ Sample usage:
   adb logcat chromium:V | symbolize.py
 """
 
-import os
 import re
 import sys
 
-from pylib import constants
+from pylib.constants import host_paths
 
 # Uses symbol.py from third_party/android_platform, not python's.
-sys.path.insert(0,
-                os.path.join(constants.DIR_SOURCE_ROOT,
-                            'third_party/android_platform/development/scripts'))
-import symbol
+with host_paths.SysPath(
+    host_paths.ANDROID_PLATFORM_DEVELOPMENT_SCRIPTS_PATH,
+    position=0):
+  import symbol
 
 # Sample output from base/debug/stack_trace_android.cc
 #00 0x693cd34f /path/to/some/libfoo.so+0x0007434f
@@ -55,6 +54,7 @@ class Symbolizer(object):
       # incorrect lookups when running this script on long-lived instances
       # (e.g., adb logcat) when doing incremental development. Consider clearing
       # the cache when modification timestamp of libraries change.
+      # pylint: disable=no-member
       sym = symbol.SymbolInformation(lib, addr, False)[0][0]
 
       if not sym:

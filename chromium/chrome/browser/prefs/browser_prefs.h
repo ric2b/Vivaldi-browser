@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_PREFS_BROWSER_PREFS_H_
 #define CHROME_BROWSER_PREFS_BROWSER_PREFS_H_
 
+#include "build/build_config.h"
+
 class PrefRegistrySimple;
 class PrefService;
 class Profile;
@@ -24,9 +26,6 @@ void RegisterScreenshotPrefs(PrefRegistrySimple* registry);
 // Profile.
 void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
-//Vivaldi addition: Register Vivaldi-spesific prefs
-void RegisterVivaldiPrefs(user_prefs::PrefRegistrySyncable* registry);
-
 #if defined(OS_CHROMEOS)
 // Register all prefs that will be used via a PrefService attached to the login
 // Profile.
@@ -44,10 +43,6 @@ void MigrateObsoleteBrowserPrefs(Profile* profile, PrefService* local_state);
 // should never go away (even if it becomes an empty call for some time) as it
 // should remain *the* place to drop deprecated profile prefs at.
 void MigrateObsoleteProfilePrefs(Profile* profile);
-
-// Migrates zoom level prefs in |profile|'s pref store to a per-StoragePartition
-// set of prefs.
-void MigrateProfileZoomLevelPrefs(Profile* profile);
 
 }  // namespace chrome
 

@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_COMPONENTS_NATIVE_APP_WINDOW_NATIVE_APP_WINDOW_VIEWS_H_
 #define EXTENSIONS_COMPONENTS_NATIVE_APP_WINDOW_NATIVE_APP_WINDOW_VIEWS_H_
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -117,6 +118,7 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
   void HandleKeyboardCode(ui::KeyboardCode code) override;
 
   // WidgetObserver implementation.
+  void OnWidgetDestroying(views::Widget* widget) override;
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
 
@@ -142,7 +144,6 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
       const std::vector<extensions::DraggableRegion>& regions) override;
   SkRegion* GetDraggableRegion() override;
   void UpdateShape(scoped_ptr<SkRegion> region) override;
-  void SetInterceptAllKeys(bool want_all_keys) override;
   void HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
   bool IsFrameless() const override;
@@ -152,7 +153,6 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
   gfx::Insets GetFrameInsets() const override;
   void HideWithApp() override;
   void ShowWithApp() override;
-  void UpdateShelfMenu() override;
   gfx::Size GetContentMinimumSize() const override;
   gfx::Size GetContentMaximumSize() const override;
   void SetContentSizeConstraints(const gfx::Size& min_size,

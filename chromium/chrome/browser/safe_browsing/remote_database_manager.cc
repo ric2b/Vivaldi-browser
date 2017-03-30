@@ -6,11 +6,25 @@
 
 #include <vector>
 
+#include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_api_handler.h"
+#include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
+
+namespace {
+
+// Android field trial for controlling types_to_check.
+const char kAndroidFieldExperiment[] = "SafeBrowsingAndroid";
+const char kAndroidTypesToCheckParam[] = "types_to_check";
+
+}  // namespace
+
+namespace safe_browsing {
 
 //
 // RemoteSafeBrowsingDatabaseManager::ClientRequest methods
@@ -66,6 +80,8 @@ void RemoteSafeBrowsingDatabaseManager::ClientRequest::OnRequestDone(
   DVLOG(1) << "OnRequestDone took " << timer_.Elapsed().InMilliseconds()
            << " ms for client " << client_ << " and URL " << url_;
   client_->OnCheckBrowseUrlResult(url_, matched_threat_type, metadata);
+  UMA_HISTOGRAM_TIMES("SB2.RemoteCall.Elapsed", timer_.Elapsed());
+  // CancelCheck() will delete *this.
   db_manager_->CancelCheck(client_);
 }
 
@@ -73,14 +89,68 @@ void RemoteSafeBrowsingDatabaseManager::ClientRequest::OnRequestDone(
 // RemoteSafeBrowsingDatabaseManager methods
 //
 
-// TODO(nparker): Add tests for this class once implemented.
+// TODO(nparker): Add more tests for this class
 RemoteSafeBrowsingDatabaseManager::RemoteSafeBrowsingDatabaseManager()
     : enabled_(false) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // Decide which resource types to check. These two are the minimum.
+  resource_types_to_check_.insert(content::RESOURCE_TYPE_MAIN_FRAME);
+  resource_types_to_check_.insert(content::RESOURCE_TYPE_SUB_FRAME);
+
+  // The param is expected to be a comma-separated list of ints
+  // corresponding to the enum types.  We're keeping this finch
+  // control around so we can add back types if they later become dangerous.
+  const std::string ints_str = variations::GetVariationParamValue(
+      kAndroidFieldExperiment, kAndroidTypesToCheckParam);
+  if (ints_str.empty()) {
+    // By default, we check all types except a few.
+    static_assert(content::RESOURCE_TYPE_LAST_TYPE ==
+                      content::RESOURCE_TYPE_PLUGIN_RESOURCE + 1,
+                  "Decide if new resource type should be skipped on mobile.");
+    for (int t_int = 0; t_int < content::RESOURCE_TYPE_LAST_TYPE; t_int++) {
+      content::ResourceType t = static_cast<content::ResourceType>(t_int);
+      switch (t) {
+        case content::RESOURCE_TYPE_STYLESHEET:
+        case content::RESOURCE_TYPE_IMAGE:
+        case content::RESOURCE_TYPE_FONT_RESOURCE:
+        case content::RESOURCE_TYPE_FAVICON:
+          break;
+        default:
+          resource_types_to_check_.insert(t);
+      }
+    }
+  } else {
+    // Use the finch param.
+    for (const std::string& val_str : base::SplitString(
+             ints_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+      int i;
+      if (base::StringToInt(val_str, &i) && i >= 0 &&
+          i < content::RESOURCE_TYPE_LAST_TYPE) {
+        resource_types_to_check_.insert(static_cast<content::ResourceType>(i));
+      }
+    }
+  }
 }
 
 RemoteSafeBrowsingDatabaseManager::~RemoteSafeBrowsingDatabaseManager() {
   DCHECK(!enabled_);
+}
+
+bool RemoteSafeBrowsingDatabaseManager::IsSupported() const {
+  return SafeBrowsingApiHandler::GetInstance() != nullptr;
+}
+
+safe_browsing::ThreatSource RemoteSafeBrowsingDatabaseManager::GetThreatSource()
+    const {
+  return safe_browsing::ThreatSource::REMOTE;
+}
+
+bool RemoteSafeBrowsingDatabaseManager::ChecksAreAlwaysAsync() const {
+  return true;
+}
+
+bool RemoteSafeBrowsingDatabaseManager::CanCheckResourceType(
+    content::ResourceType resource_type) const {
+  return resource_types_to_check_.count(resource_type) > 0;
 }
 
 bool RemoteSafeBrowsingDatabaseManager::CanCheckUrl(const GURL& url) const {
@@ -152,7 +222,9 @@ bool RemoteSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
   if (!enabled_)
     return true;
 
-  if (!CanCheckUrl(url))
+  bool can_check_url = CanCheckUrl(url);
+  UMA_HISTOGRAM_BOOLEAN("SB2.RemoteCall.CanCheckUrl", can_check_url);
+  if (!can_check_url)
     return true;  // Safe, continue right away.
 
   scoped_ptr<ClientRequest> req(new ClientRequest(client, this, url));
@@ -160,13 +232,15 @@ bool RemoteSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
 
   DVLOG(1) << "Checking for client " << client << " and URL " << url;
   SafeBrowsingApiHandler* api_handler = SafeBrowsingApiHandler::GetInstance();
-  // If your build hits this at run time, then you should have either no built
-  // with safe_browsing=3, or set a SafeBrowingApiHandler singleton at startup.
+  // This shouldn't happen since SafeBrowsingResourceThrottle checks
+  // IsSupported() ealier.
   DCHECK(api_handler) << "SafeBrowsingApiHandler was never constructed";
   api_handler->StartURLCheck(
       base::Bind(&ClientRequest::OnRequestDoneWeak, req->GetWeakPtr()), url,
       threat_types);
 
+  UMA_HISTOGRAM_COUNTS_10000("SB2.RemoteCall.ChecksPending",
+                             current_requests_.size());
   current_requests_.push_back(req.release());
 
   // Defer the resource load.
@@ -208,3 +282,4 @@ void RemoteSafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
   enabled_ = false;
 }
 
+}  // namespace safe_browsing

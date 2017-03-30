@@ -4,8 +4,11 @@
 
 #include "components/omnibox/browser/history_url_provider.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
@@ -33,7 +36,7 @@
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -127,7 +130,7 @@ struct TestURLInfo {
   {"http://pandora.com/", "Pandora", 2, 2, 80},
   // This entry is explicitly added more recently than
   // history::kLowQualityMatchAgeLimitInDays.
-  // {"http://p/", "p", 0, 0, 80},
+  // {"http://pa/", "pa", 0, 0, 80},
 
   // For intranet based tests.
   {"http://intra/one", "Intranet", 2, 2, 80},
@@ -140,6 +143,9 @@ struct TestURLInfo {
   {"http://x.com/one", "Internet", 2, 2, 80},
   {"http://x.com/two", "Internet two", 1, 1, 80},
   {"http://x.com/three", "Internet three", 2, 2, 80},
+
+  // For punycode tests.
+  {"http://puny.xn--1lq90ic7f1rc.cn/", "Punycode", 2, 2, 5 },
 
   // For experimental HUP scoring test.
   {"http://7.com/1a", "One", 8, 4, 4},
@@ -248,7 +254,7 @@ class HistoryURLProviderTestNoSearchProvider : public HistoryURLProviderTest {
 
 void HistoryURLProviderTest::OnProviderUpdate(bool updated_matches) {
   if (autocomplete_->done())
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 bool HistoryURLProviderTest::SetUpImpl(bool no_db) {
@@ -295,7 +301,7 @@ void HistoryURLProviderTest::FillData() {
   }
 
   history_service_->AddPageWithDetails(
-      GURL("http://p/"), base::UTF8ToUTF16("p"), 0, 0,
+      GURL("http://pa/"), base::UTF8ToUTF16("pa"), 0, 0,
       Time::Now() -
       TimeDelta::FromDays(history::kLowQualityMatchAgeLimitInDays - 1),
       false, history::SOURCE_BROWSED);
@@ -638,7 +644,7 @@ TEST_F(HistoryURLProviderTest, EmptyVisits) {
   profile_->BlockUntilHistoryProcessesPendingRequests();
 
   AutocompleteInput input(
-      ASCIIToUTF16("p"), base::string16::npos, std::string(), GURL(),
+      ASCIIToUTF16("pa"), base::string16::npos, std::string(), GURL(),
       metrics::OmniboxEventProto::INVALID_SPEC, false, false, true, true, false,
       ChromeAutocompleteSchemeClassifier(profile_.get()));
   autocomplete_->Start(input, false);
@@ -728,7 +734,7 @@ TEST_F(HistoryURLProviderTest, IntranetURLsWithPaths) {
       RunTest(ASCIIToUTF16(test_cases[i].input), std::string(), false, NULL, 0);
     } else {
       const UrlAndLegalDefault output[] = {
-          {url_fixer::FixupURL(test_cases[i].input, std::string()).spec(),
+          {url_formatter::FixupURL(test_cases[i].input, std::string()).spec(),
            true}};
       ASSERT_NO_FATAL_FAILURE(RunTest(ASCIIToUTF16(test_cases[i].input),
                               std::string(), false, output, arraysize(output)));
@@ -753,7 +759,8 @@ TEST_F(HistoryURLProviderTest, IntranetURLCompletion) {
                                   expected1, arraysize(expected1)));
   EXPECT_LE(1410, matches_[0].relevance);
   EXPECT_LT(matches_[0].relevance, 1420);
-  EXPECT_EQ(matches_[0].relevance - 1, matches_[1].relevance);
+  // It uses the default scoring.
+  EXPECT_EQ(matches_[1].relevance, 1203);
 
   const UrlAndLegalDefault expected2[] = {
     { "http://moo/b", true },
@@ -833,6 +840,55 @@ TEST_F(HistoryURLProviderTest, DoesNotProvideMatchesOnFocus) {
       ChromeAutocompleteSchemeClassifier(profile_.get()));
   autocomplete_->Start(input, false);
   EXPECT_TRUE(autocomplete_->matches().empty());
+}
+
+TEST_F(HistoryURLProviderTest, DoesNotInlinePunycodeMatches) {
+  // A URL that matches due to a match in the punycode URL are allowed to be the
+  // default match if the URL doesn't get rendered as international characters
+  // in the given locale.
+  const UrlAndLegalDefault expected_true[] = {
+    { "http://puny.xn--1lq90ic7f1rc.cn/", true },
+  };
+  UrlAndLegalDefault expected_false[] = {
+    { "http://puny.xn--1lq90ic7f1rc.cn/", false },
+  };
+  RunTest(ASCIIToUTF16("pun"), std::string(), false, expected_true,
+          arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny."), std::string(), false, expected_true,
+          arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny.x"), std::string(), false, expected_true,
+          arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny.xn"), std::string(), false, expected_true,
+          arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny.xn--"), std::string(), false, expected_true,
+          arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny.xn--1l"), std::string(), false, expected_true,
+          arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny.xn--1lq90ic7f1rc"), std::string(), false,
+          expected_true, arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny.xn--1lq90ic7f1rc."), std::string(), false,
+          expected_true, arraysize(expected_true));
+  // Set the language so the punycode part of the URL is rendered as
+  // international characters.  Then this match should not be allowed to be
+  // the default match if the inline autocomplete text starts in the middle
+  // of the international characters.
+  profile_->GetPrefs()->SetString(prefs::kAcceptLanguages, "zh-CN");
+  RunTest(ASCIIToUTF16("pun"), std::string(), false, expected_true,
+          arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny."), std::string(), false, expected_true,
+          arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny.x"), std::string(), false, expected_false,
+          arraysize(expected_false));
+  RunTest(ASCIIToUTF16("puny.xn"), std::string(), false, expected_false,
+          arraysize(expected_false));
+  RunTest(ASCIIToUTF16("puny.xn--"), std::string(), false, expected_false,
+          arraysize(expected_false));
+  RunTest(ASCIIToUTF16("puny.xn--1l"), std::string(), false, expected_false,
+          arraysize(expected_false));
+  RunTest(ASCIIToUTF16("puny.xn--1lq90ic7f1rc"), std::string(), false,
+          expected_true, arraysize(expected_true));
+  RunTest(ASCIIToUTF16("puny.xn--1lq90ic7f1rc."), std::string(), false,
+          expected_true, arraysize(expected_true));
 }
 
 TEST_F(HistoryURLProviderTest, CullSearchResults) {
@@ -1042,22 +1098,15 @@ TEST_F(HistoryURLProviderTest, HUPScoringExperiment) {
       if (test_cases[i].matches[max_matches].url == NULL)
         break;
       output[max_matches].url =
-          url_fixer::FixupURL(test_cases[i].matches[max_matches].url,
-                              std::string()).spec();
+          url_formatter::FixupURL(test_cases[i].matches[max_matches].url,
+                                  std::string())
+              .spec();
       output[max_matches].allowed_to_be_default_match = true;
     }
     autocomplete_->scoring_params_ = test_cases[i].scoring_params;
 
-    // Test the control (scoring disabled).
-    autocomplete_->scoring_params_.experimental_scoring_enabled = false;
-    ASSERT_NO_FATAL_FAILURE(RunTest(ASCIIToUTF16(test_cases[i].input),
-                                    std::string(), false, output, max_matches));
-    for (int j = 0; j < max_matches; ++j) {
-      EXPECT_EQ(test_cases[i].matches[j].control_relevance,
-                matches_[j].relevance);
-    }
-
-    // Test the experiment (scoring enabled).
+    // Test the experiment (scoring enabled). When scoring is disabled, it uses
+    // the default experimental scoring.
     autocomplete_->scoring_params_.experimental_scoring_enabled = true;
     ASSERT_NO_FATAL_FAILURE(RunTest(ASCIIToUTF16(test_cases[i].input),
                                     std::string(), false, output, max_matches));

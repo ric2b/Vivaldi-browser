@@ -6,9 +6,12 @@
 #define NET_HTTP_HTTP_STREAM_FACTORY_IMPL_REQUEST_H_
 
 #include <set>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/http/http_stream_factory_impl.h"
 #include "net/log/net_log.h"
+#include "net/net_features.h"
 #include "net/socket/connection_attempts.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/spdy/spdy_session_key.h"
@@ -17,18 +20,27 @@
 
 namespace net {
 
+class BidirectionalStreamJob;
 class ClientSocketHandle;
 class HttpStream;
 class SpdySession;
 
 class HttpStreamFactoryImpl::Request : public HttpStreamRequest {
  public:
+  // Indicates which type of stream is requested.
+  enum StreamType {
+    BIDIRECTIONAL_STREAM_SPDY_JOB,
+    HTTP_STREAM,
+  };
+
   Request(const GURL& url,
           HttpStreamFactoryImpl* factory,
           HttpStreamRequest::Delegate* delegate,
           WebSocketHandshakeStreamBase::CreateHelper*
               websocket_handshake_stream_create_helper,
-          const BoundNetLog& net_log);
+          const BoundNetLog& net_log,
+          StreamType stream_type);
+
   ~Request() override;
 
   // The GURL from the HttpRequestInfo the started the Request.
@@ -57,10 +69,18 @@ class HttpStreamFactoryImpl::Request : public HttpStreamRequest {
   void RemoveRequestFromSpdySessionRequestMap();
 
   // Called by an attached Job if it sets up a SpdySession.
-  void OnNewSpdySessionReady(Job* job,
-                             scoped_ptr<HttpStream> stream,
-                             const base::WeakPtr<SpdySession>& spdy_session,
-                             bool direct);
+  // |stream| is null when |for_bidirectional| is true.
+  // |bidirectional_stream_spdy_job| is null when |for_bidirectional| is false.
+  void OnNewSpdySessionReady(
+      Job* job,
+      scoped_ptr<HttpStream> stream,
+#if BUILDFLAG(ENABLE_BIDIRECTIONAL_STREAM)
+      scoped_ptr<BidirectionalStreamJob> bidirectional_stream_spdy_job,
+#else
+      void* unused,
+#endif
+      const base::WeakPtr<SpdySession>& spdy_session,
+      bool direct);
 
   // Called by an attached Job to record connection attempts made by the socket
   // layer for this stream request.
@@ -78,6 +98,11 @@ class HttpStreamFactoryImpl::Request : public HttpStreamRequest {
                      const SSLConfig& used_ssl_config,
                      const ProxyInfo& used_proxy_info,
                      HttpStream* stream);
+  void OnBidirectionalStreamJobReady(Job* job,
+                                     const SSLConfig& used_ssl_config,
+                                     const ProxyInfo& used_proxy_info,
+                                     BidirectionalStreamJob* stream);
+
   void OnWebSocketHandshakeStreamReady(Job* job,
                                        const SSLConfig& used_ssl_config,
                                        const ProxyInfo& used_proxy_info,
@@ -114,6 +139,7 @@ class HttpStreamFactoryImpl::Request : public HttpStreamRequest {
   NextProto protocol_negotiated() const override;
   bool using_spdy() const override;
   const ConnectionAttempts& connection_attempts() const override;
+  bool for_bidirectional() const { return for_bidirectional_; }
 
  private:
   // Used to bind |job| to the request and orphan all other jobs in |jobs_|.
@@ -147,6 +173,7 @@ class HttpStreamFactoryImpl::Request : public HttpStreamRequest {
   bool using_spdy_;
   ConnectionAttempts connection_attempts_;
 
+  const bool for_bidirectional_;
   DISALLOW_COPY_AND_ASSIGN(Request);
 };
 

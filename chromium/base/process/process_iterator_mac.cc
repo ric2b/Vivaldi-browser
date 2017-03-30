@@ -5,11 +5,13 @@
 #include "base/process/process_iterator.h"
 
 #include <errno.h>
+#include <stddef.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 
@@ -22,7 +24,8 @@ ProcessIterator::ProcessIterator(const ProcessFilter* filter)
   // but trying to find where we were in a constantly changing list is basically
   // impossible.
 
-  int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_UID, geteuid() };
+  int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_UID,
+                static_cast<int>(geteuid()) };
 
   // Since more processes could start between when we get the size and when
   // we get the list, we do a loop to keep trying until we get it.

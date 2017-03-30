@@ -150,6 +150,7 @@ public class AndroidSyncSettingsTest extends InstrumentationTestCase {
         assertEquals(1, mSyncContentResolverDelegate.mSetIsSyncableCalls);
         assertEquals(1, mSyncContentResolverDelegate.mRemovePeriodicSyncCalls);
         AndroidSyncSettings.updateAccount(mContext, null);
+        mAccountManager.waitForGetAccountsTask();
         // mAccount was set to be not syncable.
         assertEquals(2, mSyncContentResolverDelegate.mSetIsSyncableCalls);
         assertEquals(1, mSyncContentResolverDelegate.mRemovePeriodicSyncCalls);
@@ -353,6 +354,7 @@ public class AndroidSyncSettingsTest extends InstrumentationTestCase {
     public void testIsSyncableOnSigninAndNotOnSignout() throws InterruptedException {
         assertTrue(mSyncContentResolverDelegate.getIsSyncable(mAccount, mAuthority) == 1);
         AndroidSyncSettings.updateAccount(mContext, null);
+        mAccountManager.waitForGetAccountsTask();
         assertTrue(mSyncContentResolverDelegate.getIsSyncable(mAccount, mAuthority) == 0);
         AndroidSyncSettings.updateAccount(mContext, mAccount);
         assertTrue(mSyncContentResolverDelegate.getIsSyncable(mAccount, mAuthority) == 1);

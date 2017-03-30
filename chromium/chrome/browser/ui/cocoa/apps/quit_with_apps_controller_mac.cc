@@ -25,6 +25,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/common/content_switches.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/extension_registry.h"
@@ -67,7 +68,6 @@ QuitWithAppsController::QuitWithAppsController()
 
   notification_.reset(new Notification(
       message_center::NOTIFICATION_TYPE_SIMPLE,
-      GURL(kQuitWithAppsOriginUrl),
       l10n_util::GetStringUTF16(IDS_QUIT_WITH_APPS_TITLE),
       l10n_util::GetStringUTF16(IDS_QUIT_WITH_APPS_EXPLANATION),
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(
@@ -75,9 +75,7 @@ QuitWithAppsController::QuitWithAppsController()
       message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
                                  kQuitWithAppsNotificationID),
       l10n_util::GetStringUTF16(IDS_QUIT_WITH_APPS_NOTIFICATION_DISPLAY_SOURCE),
-      tag,
-      rich_notification_data,
-      this));
+      GURL(kQuitWithAppsOriginUrl), tag, rich_notification_data, this));
 }
 
 QuitWithAppsController::~QuitWithAppsController() {}

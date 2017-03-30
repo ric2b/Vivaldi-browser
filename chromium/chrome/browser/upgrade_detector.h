@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UPGRADE_DETECTOR_H_
 #define CHROME_BROWSER_UPGRADE_DETECTOR_H_
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "ui/base/idle/idle.h"
@@ -70,7 +72,7 @@ class UpgradeDetector {
 
   // Retrieves the right icon ID based on the degree of severity (see
   // UpgradeNotificationAnnoyanceLevel, each level has an an accompanying icon
-  // to go with it) to display within the wrench menu.
+  // to go with it) to display within the app menu.
   int GetIconResourceID();
 
   UpgradeNotificationAnnoyanceLevel upgrade_notification_stage() const {
@@ -132,7 +134,7 @@ class UpgradeDetector {
   }
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(WrenchMenuModelTest, Basics);
+  FRIEND_TEST_ALL_PREFIXES(AppMenuModelTest, Basics);
 
   // Initiates an Idle check. See IdleCallback below.
   void CheckIdle();
@@ -163,7 +165,7 @@ class UpgradeDetector {
   // A timer to check to see if we've been idle for long enough to show the
   // critical warning. Should only be set if |upgrade_available_| is
   // UPGRADE_AVAILABLE_CRITICAL.
-  base::RepeatingTimer<UpgradeDetector> idle_check_timer_;
+  base::RepeatingTimer idle_check_timer_;
 
   // The stage at which the annoyance level for upgrade notifications is at.
   UpgradeNotificationAnnoyanceLevel upgrade_notification_stage_;

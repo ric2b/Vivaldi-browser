@@ -57,7 +57,7 @@ long g_renderer_library_load_time_ms = 0;
 
 static void RegisterChromiumAndroidLinkerRendererHistogram(
     JNIEnv* env,
-    jobject jcaller,
+    const JavaParamRef<jobject>& jcaller,
     jboolean requested_shared_relro,
     jboolean load_at_fixed_address_failed,
     jlong library_load_time_ms) {
@@ -88,7 +88,7 @@ void RecordChromiumAndroidLinkerRendererHistogram() {
 
 static void RecordChromiumAndroidLinkerBrowserHistogram(
     JNIEnv* env,
-    jobject jcaller,
+    const JavaParamRef<jobject>& jcaller,
     jboolean is_using_browser_shared_relros,
     jboolean load_at_fixed_address_failed,
     jint library_load_from_apk_status,
@@ -120,13 +120,15 @@ void SetLibraryLoadedHook(LibraryLoadedHook* func) {
   g_registration_callback = func;
 }
 
-static void InitCommandLine(JNIEnv* env,
-                            jobject jcaller,
-                            jobjectArray init_command_line) {
+static void InitCommandLine(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller,
+    const JavaParamRef<jobjectArray>& init_command_line) {
   InitNativeCommandLineFromJavaArray(env, init_command_line);
 }
 
-static jboolean LibraryLoaded(JNIEnv* env, jobject jcaller) {
+static jboolean LibraryLoaded(JNIEnv* env,
+                              const JavaParamRef<jobject>& jcaller) {
   if (g_registration_callback == NULL) {
     return true;
   }
@@ -140,8 +142,16 @@ void LibraryLoaderExitHook() {
   }
 }
 
-static jboolean ForkAndPrefetchNativeLibrary(JNIEnv* env, jclass clazz) {
+static jboolean ForkAndPrefetchNativeLibrary(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
   return NativeLibraryPrefetcher::ForkAndPrefetchNativeLibrary();
+}
+
+static jint PercentageOfResidentNativeLibraryCode(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  return NativeLibraryPrefetcher::PercentageOfResidentNativeLibraryCode();
 }
 
 bool RegisterLibraryLoaderEntryHook(JNIEnv* env) {
@@ -152,8 +162,10 @@ void SetVersionNumber(const char* version_number) {
   g_library_version_number = strdup(version_number);
 }
 
-jstring GetVersionNumber(JNIEnv* env, jobject jcaller) {
-  return ConvertUTF8ToJavaString(env, g_library_version_number).Release();
+ScopedJavaLocalRef<jstring> GetVersionNumber(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller) {
+  return ConvertUTF8ToJavaString(env, g_library_version_number);
 }
 
 LibraryProcessType GetLibraryProcessType(JNIEnv* env) {

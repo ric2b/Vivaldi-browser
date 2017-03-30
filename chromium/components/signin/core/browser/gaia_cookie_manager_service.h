@@ -7,6 +7,7 @@
 
 #include <deque>
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "components/signin/core/browser/signin_client.h"
@@ -141,12 +142,12 @@ class GaiaCookieManagerService : public KeyedService,
     void GetCheckConnectionInfoCompleted(bool succeeded);
 
     GaiaCookieManagerService* helper_;
-    base::OneShotTimer<ExternalCcResultFetcher> timer_;
+    base::OneShotTimer timer_;
     URLToTokenAndFetcher fetchers_;
     ResultMap results_;
     base::Time m_external_cc_result_start_time_;
 
-    base::OneShotTimer<ExternalCcResultFetcher> gaia_auth_fetcher_timer_;
+    base::OneShotTimer gaia_auth_fetcher_timer_;
 
     DISALLOW_COPY_AND_ASSIGN(ExternalCcResultFetcher);
   };
@@ -168,6 +169,15 @@ class GaiaCookieManagerService : public KeyedService,
   // cached accounts. If the accounts are not up to date, a ListAccounts fetch
   // is sent GAIA and Observer::OnGaiaAccountsInCookieUpdated will be called.
   bool ListAccounts(std::vector<gaia::ListedAccount>* accounts);
+
+  // Triggers a ListAccounts fetch. This is public so that callers that know
+  // that a check which GAIA should be done can force it.
+  void TriggerListAccounts();
+
+  // Forces the processing of OnCookieChanged. This is public so that callers
+  // that know the GAIA APISID cookie might have changed can inform the
+  // service. Virtual for testing.
+  virtual void ForceOnCookieChangedProcessing();
 
   // Add or remove observers of this helper.
   void AddObserver(Observer* observer);
@@ -193,8 +203,13 @@ class GaiaCookieManagerService : public KeyedService,
     return &external_cc_result_fetcher_;
   }
 
-  void set_list_accounts_fetched_once_for_testing(bool fetched) {
-    list_accounts_fetched_once_ = fetched;
+  void set_list_accounts_stale_for_testing(bool stale) {
+    list_accounts_stale_ = stale;
+  }
+
+  // Returns a non-NULL pointer to its instance of net::BackoffEntry
+  const net::BackoffEntry* GetBackoffEntry() {
+    return &fetcher_backoff_;
   }
 
  private:
@@ -246,9 +261,7 @@ class GaiaCookieManagerService : public KeyedService,
   // If the GaiaAuthFetcher or URLFetcher fails, retry with exponential backoff
   // and network delay.
   net::BackoffEntry fetcher_backoff_;
-  // We can safely depend on the SigninClient here because there is an explicit
-  // dependency, as noted in the GaiaCookieManagerServiceFactory.
-  base::OneShotTimer<SigninClient> fetcher_timer_;
+  base::OneShotTimer fetcher_timer_;
   int fetcher_retries_;
 
   // The last fetched ubertoken, for use in MergeSession retries.
@@ -278,7 +291,7 @@ class GaiaCookieManagerService : public KeyedService,
 
   std::vector<gaia::ListedAccount> listed_accounts_;
 
-  bool list_accounts_fetched_once_;
+  bool list_accounts_stale_;
 
   DISALLOW_COPY_AND_ASSIGN(GaiaCookieManagerService);
 };

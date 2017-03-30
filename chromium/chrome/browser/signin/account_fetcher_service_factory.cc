@@ -9,7 +9,6 @@
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/account_fetcher_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 
@@ -33,17 +32,17 @@ AccountFetcherService* AccountFetcherServiceFactory::GetForProfile(
 
 // static
 AccountFetcherServiceFactory* AccountFetcherServiceFactory::GetInstance() {
-  return Singleton<AccountFetcherServiceFactory>::get();
+  return base::Singleton<AccountFetcherServiceFactory>::get();
 }
 
 void AccountFetcherServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterInt64Pref(AccountFetcherService::kLastUpdatePref, 0);
+  AccountFetcherService::RegisterPrefs(registry);
 }
 
 KeyedService* AccountFetcherServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Profile* profile = static_cast<Profile*>(context);
+  Profile* profile = Profile::FromBrowserContext(context);
   AccountFetcherService* service = new AccountFetcherService();
   service->Initialize(ChromeSigninClientFactory::GetForProfile(profile),
                       ProfileOAuth2TokenServiceFactory::GetForProfile(profile),

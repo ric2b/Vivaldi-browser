@@ -4,6 +4,8 @@
 
 #include "components/plugins/renderer/webview_plugin.h"
 
+#include <stddef.h>
+
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -17,6 +19,7 @@
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
@@ -26,6 +29,7 @@ using blink::WebCanvas;
 using blink::WebCursorInfo;
 using blink::WebDragData;
 using blink::WebDragOperationsMask;
+using blink::WebFrameWidget;
 using blink::WebImage;
 using blink::WebInputEvent;
 using blink::WebLocalFrame;
@@ -43,32 +47,41 @@ using blink::WebVector;
 using blink::WebView;
 using content::WebPreferences;
 
-WebViewPlugin::WebViewPlugin(WebViewPlugin::Delegate* delegate,
+WebViewPlugin::WebViewPlugin(content::RenderView* render_view,
+                             WebViewPlugin::Delegate* delegate,
                              const WebPreferences& preferences)
-    : delegate_(delegate),
-      container_(NULL),
+    : content::RenderViewObserver(render_view),
+      delegate_(delegate),
+      container_(nullptr),
       web_view_(WebView::create(this)),
       finished_loading_(false),
       focused_(false) {
   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
   // consistent view of our preferences.
   content::RenderView::ApplyWebPreferences(preferences, web_view_);
-  web_frame_ = WebLocalFrame::create(blink::WebTreeScopeType::Document, this);
+  WebLocalFrame* web_local_frame =
+      WebLocalFrame::create(blink::WebTreeScopeType::Document, this);
+  web_frame_ = web_local_frame;
   web_view_->setMainFrame(web_frame_);
+  // TODO(dcheng): The main frame widget currently has a special case.
+  // Eliminate this once WebView is no longer a WebWidget.
+  web_frame_widget_ = WebFrameWidget::create(this, web_view_, web_local_frame);
 }
 
 // static
-WebViewPlugin* WebViewPlugin::Create(WebViewPlugin::Delegate* delegate,
+WebViewPlugin* WebViewPlugin::Create(content::RenderView* render_view,
+                                     WebViewPlugin::Delegate* delegate,
                                      const WebPreferences& preferences,
                                      const std::string& html_data,
                                      const GURL& url) {
   DCHECK(url.is_valid()) << "Blink requires the WebView to have a valid URL.";
-  WebViewPlugin* plugin = new WebViewPlugin(delegate, preferences);
+  WebViewPlugin* plugin = new WebViewPlugin(render_view, delegate, preferences);
   plugin->web_view()->mainFrame()->loadHTMLString(html_data, url);
   return plugin;
 }
 
 WebViewPlugin::~WebViewPlugin() {
+  web_frame_widget_->close();
   web_view_->close();
   web_frame_->close();
 }
@@ -118,8 +131,8 @@ bool WebViewPlugin::initialize(WebPluginContainer* container) {
     // scheduleAnimation, but due to timers controlling widget update,
     // scheduleAnimation may be invoked before this initialize call (which
     // comes through the widget update process). It doesn't hurt to mark
-    // for layout again, and it does help us in the race-condition situation.
-    container_->setNeedsLayout();
+    // for animation again, and it does help us in the race-condition situation.
+    container_->scheduleAnimation();
 
     old_title_ = container_->element().getAttribute("title");
 
@@ -134,9 +147,10 @@ bool WebViewPlugin::initialize(WebPluginContainer* container) {
 void WebViewPlugin::destroy() {
   if (delegate_) {
     delegate_->PluginDestroyed();
-    delegate_ = NULL;
+    delegate_ = nullptr;
   }
-  container_ = NULL;
+  container_ = nullptr;
+  content::RenderViewObserver::Observe(nullptr);
   base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
 }
 
@@ -147,8 +161,8 @@ v8::Local<v8::Object> WebViewPlugin::v8ScriptableObject(v8::Isolate* isolate) {
   return delegate_->GetV8ScriptableObject(isolate);
 }
 
-void WebViewPlugin::layoutIfNeeded() {
-  web_view_->layout();
+void WebViewPlugin::updateAllLifecyclePhases() {
+  web_view_->updateAllLifecyclePhases();
 }
 
 void WebViewPlugin::paint(WebCanvas* canvas, const WebRect& rect) {
@@ -194,17 +208,18 @@ void WebViewPlugin::updateFocus(bool focused, blink::WebFocusType focus_type) {
 
 bool WebViewPlugin::acceptsInputEvents() { return true; }
 
-bool WebViewPlugin::handleInputEvent(const WebInputEvent& event,
-                                     WebCursorInfo& cursor) {
+blink::WebInputEventResult WebViewPlugin::handleInputEvent(
+    const WebInputEvent& event,
+    WebCursorInfo& cursor) {
   // For tap events, don't handle them. They will be converted to
   // mouse events later and passed to here.
   if (event.type == WebInputEvent::GestureTap)
-    return false;
+    return blink::WebInputEventResult::NotHandled;
 
   // For LongPress events we return false, since otherwise the context menu will
   // be suppressed. https://crbug.com/482842
   if (event.type == WebInputEvent::GestureLongPress)
-    return false;
+    return blink::WebInputEventResult::NotHandled;
 
   if (event.type == WebInputEvent::ContextMenu) {
     if (delegate_) {
@@ -212,10 +227,10 @@ bool WebViewPlugin::handleInputEvent(const WebInputEvent& event,
           reinterpret_cast<const WebMouseEvent&>(event);
       delegate_->ShowContextMenu(mouse_event);
     }
-    return true;
+    return blink::WebInputEventResult::HandledSuppressed;
   }
   current_cursor_ = cursor;
-  bool handled = web_view_->handleInputEvent(event);
+  blink::WebInputEventResult handled = web_view_->handleInputEvent(event);
   cursor = current_cursor_;
 
   return handled;
@@ -268,7 +283,7 @@ void WebViewPlugin::didInvalidateRect(const WebRect& rect) {
 
 void WebViewPlugin::didUpdateLayoutSize(const WebSize&) {
   if (container_)
-    container_->setNeedsLayout();
+    container_->scheduleAnimation();
 }
 
 void WebViewPlugin::didChangeCursor(const WebCursorInfo& cursor) {
@@ -276,8 +291,15 @@ void WebViewPlugin::didChangeCursor(const WebCursorInfo& cursor) {
 }
 
 void WebViewPlugin::scheduleAnimation() {
-  if (container_)
-    container_->setNeedsLayout();
+  // Resizes must be self-contained: any lifecycle updating must
+  // be triggerd from within the WebView or this WebViewPlugin.
+  // This is because this WebViewPlugin is contained in another
+  // Web View which may be in the middle of updating its lifecycle,
+  // but after layout is done, and it is illegal to dirty earlier
+  // lifecycle stages during later ones.
+  if (container_) {
+    container_->scheduleAnimation();
+  }
 }
 
 void WebViewPlugin::didClearWindowObject(WebLocalFrame* frame) {
@@ -300,4 +322,16 @@ void WebViewPlugin::didReceiveResponse(WebLocalFrame* frame,
                                        unsigned identifier,
                                        const WebURLResponse& response) {
   WebFrameClient::didReceiveResponse(frame, identifier, response);
+}
+
+void WebViewPlugin::OnDestruct() {
+  // By default RenderViewObservers are destroyed along with the RenderView.
+  // WebViewPlugin has a custom destruction mechanism, so we disable this.
+}
+
+void WebViewPlugin::OnZoomLevelChanged() {
+  if (container_) {
+    web_view_->setZoomLevel(
+      blink::WebView::zoomFactorToZoomLevel(container_->pageZoomFactor()));
+  }
 }

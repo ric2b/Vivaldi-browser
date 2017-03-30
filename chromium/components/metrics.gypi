@@ -15,7 +15,7 @@
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
         '../base/base.gyp:base_prefs',
-        '../third_party/zlib/zlib.gyp:zlib',
+        '../third_party/zlib/google/zip.gyp:compression_utils',
         'component_metrics_proto',
         'variations',
       ],
@@ -31,17 +31,20 @@
         'metrics/client_info.h',
         'metrics/cloned_install_detector.cc',
         'metrics/cloned_install_detector.h',
-        'metrics/compression_utils.cc',
-        'metrics/compression_utils.h',
         'metrics/daily_event.cc',
         'metrics/daily_event.h',
+        'metrics/drive_metrics_provider.cc',
+        'metrics/drive_metrics_provider.h',
+        'metrics/drive_metrics_provider_android.cc',
+        'metrics/drive_metrics_provider_ios.mm',
+        'metrics/drive_metrics_provider_linux.cc',
+        'metrics/drive_metrics_provider_mac.mm',
+        'metrics/drive_metrics_provider_win.cc',
         'metrics/histogram_encoder.cc',
         'metrics/histogram_encoder.h',
         'metrics/machine_id_provider.h',
         'metrics/machine_id_provider_stub.cc',
         'metrics/machine_id_provider_win.cc',
-        'metrics/metrics_hashes.cc',
-        'metrics/metrics_hashes.h',
         'metrics/metrics_log.cc',
         'metrics/metrics_log.h',
         'metrics/metrics_log_manager.cc',
@@ -66,6 +69,11 @@
         'metrics/metrics_switches.h',
         'metrics/persisted_logs.cc',
         'metrics/persisted_logs.h',
+        'metrics/stability_metrics_helper.cc',
+        'metrics/stability_metrics_helper.h',
+        'metrics/system_memory_stats_recorder.h',
+        'metrics/system_memory_stats_recorder_linux.cc',
+        'metrics/system_memory_stats_recorder_win.cc',
         'metrics/url_constants.cc',
         'metrics/url_constants.h',
       ],
@@ -75,30 +83,22 @@
             'metrics_serialization',
           ],
         }],
+        ['OS == "mac"', {
+          'link_settings': {
+            'libraries': [
+              # The below are all needed for drive_metrics_provider_mac.mm.
+              '$(SDKROOT)/System/Library/Frameworks/CoreFoundation.framework',
+              '$(SDKROOT)/System/Library/Frameworks/DiskArbitration.framework',
+              '$(SDKROOT)/System/Library/Frameworks/Foundation.framework',
+              '$(SDKROOT)/System/Library/Frameworks/IOKit.framework',
+            ],
+          },
+        }],
         ['OS=="win"', {
           'sources!': [
             'metrics/machine_id_provider_stub.cc',
           ],
         }],
-      ],
-    },
-    {
-      # GN version: //components/metrics:gpu
-      'target_name': 'metrics_gpu',
-      'type': 'static_library',
-      'include_dirs': [
-        '..',
-      ],
-      'dependencies': [
-        '../base/base.gyp:base',
-        '../content/content.gyp:content_browser',
-        '../ui/gfx/gfx.gyp:gfx',
-        'component_metrics_proto',
-        'metrics',
-      ],
-      'sources': [
-        'metrics/gpu/gpu_metrics_provider.cc',
-        'metrics/gpu/gpu_metrics_provider.h',
       ],
     },
     {
@@ -113,13 +113,17 @@
         '../net/net.gyp:net',
         '../url/url.gyp:url_lib',
         'component_metrics_proto',
+        'data_use_measurement_core',
         'metrics',
+        'version_info',
       ],
       'sources': [
         'metrics/net/net_metrics_log_uploader.cc',
         'metrics/net/net_metrics_log_uploader.h',
         'metrics/net/network_metrics_provider.cc',
         'metrics/net/network_metrics_provider.h',
+        'metrics/net/version_utils.cc',
+        'metrics/net/version_utils.h',
         'metrics/net/wifi_access_point_info_provider.cc',
         'metrics/net/wifi_access_point_info_provider.h',
         'metrics/net/wifi_access_point_info_provider_chromeos.cc',
@@ -127,29 +131,20 @@
       ],
     },
     {
-      # GN version: //components/metrics:profiler
-      'target_name': 'metrics_profiler',
+      # GN version: //components/metrics:ui
+      'target_name': 'metrics_ui',
       'type': 'static_library',
       'include_dirs': [
         '..',
       ],
       'dependencies': [
-        '../content/content.gyp:content_browser',
-        '../content/content.gyp:content_common',
-        'component_metrics_proto',
+        '../base/base.gyp:base',
+        '../ui/gfx/gfx.gyp:gfx',
         'metrics',
-        'variations',
-      ],
-      'export_dependent_settings': [
-        'component_metrics_proto',
       ],
       'sources': [
-        'metrics/profiler/profiler_metrics_provider.cc',
-        'metrics/profiler/profiler_metrics_provider.h',
-        'metrics/profiler/tracking_synchronizer.cc',
-        'metrics/profiler/tracking_synchronizer.h',
-        'metrics/profiler/tracking_synchronizer_observer.cc',
-        'metrics/profiler/tracking_synchronizer_observer.h',
+        'metrics/ui/screen_info_metrics_provider.cc',
+        'metrics/ui/screen_info_metrics_provider.h',
       ],
     },
     {
@@ -201,6 +196,31 @@
         'metrics/test_metrics_service_client.h',
       ],
     },
+    {
+      # GN version: //components/metrics:profiler
+      'target_name': 'metrics_profiler',
+      'type': 'static_library',
+      'include_dirs': [
+        '..',
+      ],
+      'dependencies': [
+        'component_metrics_proto',
+        'metrics',
+        'variations',
+      ],
+      'export_dependent_settings': [
+        'component_metrics_proto',
+      ],
+      'sources': [
+        'metrics/profiler/profiler_metrics_provider.cc',
+        'metrics/profiler/profiler_metrics_provider.h',
+        'metrics/profiler/tracking_synchronizer.cc',
+        'metrics/profiler/tracking_synchronizer.h',
+        'metrics/profiler/tracking_synchronizer_delegate.h',
+        'metrics/profiler/tracking_synchronizer_observer.cc',
+        'metrics/profiler/tracking_synchronizer_observer.h',
+      ],
+    },
   ],
   'conditions': [
     ['OS=="linux"', {
@@ -216,6 +236,93 @@
           ],
           'dependencies': [
             '../base/base.gyp:base',
+          ],
+        },
+      ],
+    }],
+    ['chromeos==1', {
+      'targets': [
+        {
+          # GN version: //components/metrics:leak_detector
+          'target_name': 'metrics_leak_detector',
+          'type': 'static_library',
+          'dependencies': [
+            '../base/base.gyp:base',
+          ],
+          'sources': [
+            'metrics/leak_detector/call_stack_manager.cc',
+            'metrics/leak_detector/call_stack_manager.h',
+            'metrics/leak_detector/call_stack_table.cc',
+            'metrics/leak_detector/call_stack_table.h',
+            'metrics/leak_detector/custom_allocator.cc',
+            'metrics/leak_detector/custom_allocator.h',
+            'metrics/leak_detector/leak_analyzer.cc',
+            'metrics/leak_detector/leak_analyzer.h',
+            'metrics/leak_detector/leak_detector_impl.cc',
+            'metrics/leak_detector/leak_detector_impl.h',
+            'metrics/leak_detector/leak_detector_value_type.cc',
+            'metrics/leak_detector/leak_detector_value_type.h',
+            'metrics/leak_detector/ranked_list.cc',
+            'metrics/leak_detector/ranked_list.h',
+          ],
+        },
+      ],
+    }],
+    ['OS!="ios"', {
+      'targets': [
+        {
+          # GN version: //components/metrics:gpu
+          'target_name': 'metrics_gpu',
+          'type': 'static_library',
+          'include_dirs': [
+            '..',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../content/content.gyp:content_browser',
+            'component_metrics_proto',
+            'metrics',
+          ],
+          'sources': [
+            'metrics/gpu/gpu_metrics_provider.cc',
+            'metrics/gpu/gpu_metrics_provider.h',
+          ],
+        },
+        {
+          # GN version: //components/metrics:profiler_content
+          'target_name': 'metrics_profiler_content',
+          'type': 'static_library',
+          'include_dirs': [
+            '..',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../content/content.gyp:content_browser',
+            '../content/content.gyp:content_common',
+            'metrics_profiler',
+          ],
+          'sources': [
+            'metrics/profiler/content/content_tracking_synchronizer_delegate.cc',
+            'metrics/profiler/content/content_tracking_synchronizer_delegate.h',
+          ],
+        },
+      ],
+    }, {  # OS==ios
+      'targets': [
+        {
+          # GN version: //components/metrics:profiler_ios
+          'target_name': 'metrics_profiler_ios',
+          'type': 'static_library',
+          'include_dirs': [
+            '..',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base',
+            'metrics_profiler',
+          ],
+          'sources': [
+            'metrics/profiler/ios/ios_tracking_synchronizer_delegate.cc',
+            'metrics/profiler/ios/ios_tracking_synchronizer_delegate.h',
           ],
         },
       ],

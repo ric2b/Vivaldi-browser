@@ -7,7 +7,6 @@
 #include "ash/shelf/shelf_model.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "chrome/browser/extensions/webstore_install_with_prompt.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item_v2app.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
@@ -49,14 +48,6 @@ gfx::Image GetAppListIcon(AppWindow* app_window) {
                                     kAppListIconSize,
                                     kAppListIconSize);
   return gfx::Image(gfx::ImageSkia::CreateFrom1xBitmap(bmp));
-}
-
-// Returns true if the app window is visible on screen, i.e. not hidden or
-// minimized.
-bool IsAppWindowVisible(AppWindow* app_window) {
-  return app_window &&
-         !app_window->is_hidden() &&
-         !app_window->GetBaseWindow()->IsMinimized();
 }
 
 // Functor for std::find_if used in AppLauncherItemController.
@@ -161,38 +152,6 @@ void AppWindowLauncherItemController::ActivateIndexedApp(size_t index) {
   ShowAndActivateOrMinimize(*it);
 }
 
-void AppWindowLauncherItemController::InstallApp() {
-  // Find a visible window in order to position the install dialog. If there is
-  // no visible window, the dialog will be centered on the screen.
-  AppWindow* parent_window = NULL;
-  if (IsAppWindowVisible(last_active_app_window_)) {
-    parent_window = last_active_app_window_;
-  } else {
-    for (AppWindowList::iterator iter = app_windows_.begin();
-         iter != app_windows_.end(); ++iter) {
-      if (IsAppWindowVisible(*iter)) {
-        parent_window = *iter;
-        break;
-      }
-    }
-  }
-
-  scoped_refptr<extensions::WebstoreInstallWithPrompt> installer;
-  if (parent_window) {
-    installer = new extensions::WebstoreInstallWithPrompt(
-        app_id(),
-        launcher_controller()->profile(),
-        parent_window->GetNativeWindow(),
-        extensions::WebstoreInstallWithPrompt::Callback());
-  } else {
-    installer = new extensions::WebstoreInstallWithPrompt(
-        app_id(),
-        launcher_controller()->profile(),
-        extensions::WebstoreInstallWithPrompt::Callback());
-  }
-  installer->BeginInstall();
-}
-
 ChromeLauncherAppMenuItems AppWindowLauncherItemController::GetApplicationList(
     int event_flags) {
   ChromeLauncherAppMenuItems items;
@@ -221,7 +180,7 @@ ChromeLauncherAppMenuItems AppWindowLauncherItemController::GetApplicationList(
         index == 0 /* has_leading_separator */));
     ++index;
   }
-  return items.Pass();
+  return items;
 }
 
 ash::ShelfItemDelegate::PerformedAction
@@ -286,7 +245,11 @@ ash::ShelfMenuModel* AppWindowLauncherItemController::CreateApplicationMenu(
 bool AppWindowLauncherItemController::IsDraggable() {
   if (type() == TYPE_APP_PANEL)
     return true;
-  return launcher_controller()->CanPin() ? true : false;
+  return CanPin();
+}
+
+bool AppWindowLauncherItemController::CanPin() const {
+  return launcher_controller()->CanPin(app_id());
 }
 
 bool AppWindowLauncherItemController::ShouldShowTooltip() {

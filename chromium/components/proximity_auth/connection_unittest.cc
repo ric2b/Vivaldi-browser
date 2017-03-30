@@ -4,6 +4,7 @@
 
 #include "components/proximity_auth/connection.h"
 
+#include "base/macros.h"
 #include "components/proximity_auth/connection_observer.h"
 #include "components/proximity_auth/remote_device.h"
 #include "components/proximity_auth/wire_message.h"
@@ -76,7 +77,7 @@ class MockConnectionObserver : public ConnectionObserver {
 // Unlike WireMessage, offers a public constructor.
 class TestWireMessage : public WireMessage {
  public:
-  TestWireMessage() : WireMessage(std::string(), std::string()) {}
+  TestWireMessage() : WireMessage(std::string()) {}
   ~TestWireMessage() override {}
 
  private:

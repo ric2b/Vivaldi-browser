@@ -111,6 +111,7 @@
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
@@ -122,6 +123,15 @@
 #if defined(OS_WIN)
 #define FILE_PATH_USES_DRIVE_LETTERS
 #define FILE_PATH_USES_WIN_SEPARATORS
+#endif  // OS_WIN
+
+// To print path names portably use PRIsFP (based on PRIuS and friends from
+// C99 and format_macros.h) like this:
+// base::StringPrintf("Path is %" PRIsFP ".\n", path.value().c_str());
+#if defined(OS_POSIX)
+#define PRIsFP "s"
+#elif defined(OS_WIN)
+#define PRIsFP "ls"
 #endif  // OS_WIN
 
 namespace base {

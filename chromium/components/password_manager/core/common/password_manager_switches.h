@@ -16,15 +16,11 @@ extern const char kAllowAutofillSyncCredential[];
 extern const char kDisableAffiliationBasedMatching[];
 extern const char kDisableDropSyncCredential[];
 extern const char kDisableManagerForSyncSignin[];
-extern const char kDisablePasswordLink[];
 extern const char kDisallowAutofillSyncCredential[];
 extern const char kDisallowAutofillSyncCredentialForReauth[];
 extern const char kEnableAffiliationBasedMatching[];
-extern const char kEnableAutomaticPasswordSaving[];
 extern const char kEnableDropSyncCredential[];
 extern const char kEnableManagerForSyncSignin[];
-extern const char kEnablePasswordLink[];
-extern const char kEnablePasswordForceSaving[];
 
 }  // namespace switches
 

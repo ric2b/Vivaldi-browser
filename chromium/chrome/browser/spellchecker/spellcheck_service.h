@@ -5,14 +5,18 @@
 #ifndef CHROME_BROWSER_SPELLCHECKER_SPELLCHECK_SERVICE_H_
 #define CHROME_BROWSER_SPELLCHECKER_SPELLCHECK_SERVICE_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
+#include "build/build_config.h"
 #include "chrome/browser/spellchecker/spellcheck_custom_dictionary.h"
 #include "chrome/browser/spellchecker/spellcheck_hunspell_dictionary.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -95,8 +99,8 @@ class SpellcheckService : public KeyedService,
   // Returns the instance of the custom dictionary.
   SpellcheckCustomDictionary* GetCustomDictionary();
 
-  // Returns the instance of the Hunspell dictionary.
-  SpellcheckHunspellDictionary* GetHunspellDictionary();
+  // Returns the instance of the vector of Hunspell dictionaries.
+  const ScopedVector<SpellcheckHunspellDictionary>& GetHunspellDictionaries();
 
   // Returns the instance of the spelling service feedback sender.
   spellcheck::FeedbackSender* GetFeedbackSender();
@@ -110,7 +114,7 @@ class SpellcheckService : public KeyedService,
 
   // Unload a dictionary. The path is given to identify the dictionary.
   // Return value is true if successful.
-  bool UnloadExternalDictionary(std::string path);
+  bool UnloadExternalDictionary(const std::string& /* path */);
 
   // NotificationProfile implementation.
   void Observe(int type,
@@ -123,10 +127,12 @@ class SpellcheckService : public KeyedService,
       const SpellcheckCustomDictionary::Change& dictionary_change) override;
 
   // SpellcheckHunspellDictionary::Observer implementation.
-  void OnHunspellDictionaryInitialized() override;
-  void OnHunspellDictionaryDownloadBegin() override;
-  void OnHunspellDictionaryDownloadSuccess() override;
-  void OnHunspellDictionaryDownloadFailure() override;
+  void OnHunspellDictionaryInitialized(const std::string& language) override;
+  void OnHunspellDictionaryDownloadBegin(const std::string& language) override;
+  void OnHunspellDictionaryDownloadSuccess(
+      const std::string& language) override;
+  void OnHunspellDictionaryDownloadFailure(
+      const std::string& language) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SpellcheckServiceBrowserTest, DeleteCorruptedBDICT);
@@ -139,10 +145,6 @@ class SpellcheckService : public KeyedService,
 
   // Pass all renderers some basic initialization information.
   void InitForAllRenderers();
-
-  // Reacts to a change in user preferences on whether auto-spell-correct should
-  // be enabled.
-  void OnEnableAutoSpellCorrectChanged();
 
   // Reacts to a change in user preference on which languages should be used for
   // spellchecking.
@@ -165,7 +167,7 @@ class SpellcheckService : public KeyedService,
 
   scoped_ptr<SpellcheckCustomDictionary> custom_dictionary_;
 
-  scoped_ptr<SpellcheckHunspellDictionary> hunspell_dictionary_;
+  ScopedVector<SpellcheckHunspellDictionary> hunspell_dictionaries_;
 
   scoped_ptr<spellcheck::FeedbackSender> feedback_sender_;
 

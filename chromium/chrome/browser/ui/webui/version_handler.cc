@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/version_handler.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/metrics/field_trial.h"
@@ -13,10 +15,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/variations/active_field_trials.h"
+#include "components/version_ui/version_handler_helper.h"
+#include "components/version_ui/version_ui_constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_constants.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -30,20 +35,16 @@ void GetFilePaths(const base::FilePath& profile_path,
 
   base::FilePath executable_path = base::MakeAbsoluteFilePath(
       base::CommandLine::ForCurrentProcess()->GetProgram());
-  if (!executable_path.empty()) {
+  if (!executable_path.empty())
     *exec_path_out = executable_path.LossyDisplayName();
-  } else {
-    *exec_path_out =
-        l10n_util::GetStringUTF16(IDS_ABOUT_VERSION_PATH_NOTFOUND);
-  }
+  else
+    *exec_path_out = l10n_util::GetStringUTF16(IDS_VERSION_UI_PATH_NOTFOUND);
 
   base::FilePath profile_path_copy(base::MakeAbsoluteFilePath(profile_path));
-  if (!profile_path.empty() && !profile_path_copy.empty()) {
+  if (!profile_path.empty() && !profile_path_copy.empty())
     *profile_path_out = profile_path.LossyDisplayName();
-  } else {
-    *profile_path_out =
-        l10n_util::GetStringUTF16(IDS_ABOUT_VERSION_PATH_NOTFOUND);
-  }
+  else
+    *profile_path_out = l10n_util::GetStringUTF16(IDS_VERSION_UI_PATH_NOTFOUND);
 }
 
 }  // namespace
@@ -57,9 +58,9 @@ VersionHandler::~VersionHandler() {
 
 void VersionHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "requestVersionInfo",
+      version_ui::kRequestVersionInfo,
       base::Bind(&VersionHandler::HandleRequestVersionInfo,
-      base::Unretained(this)));
+                 base::Unretained(this)));
 }
 
 void VersionHandler::HandleRequestVersionInfo(const base::ListValue* args) {
@@ -86,33 +87,8 @@ void VersionHandler::HandleRequestVersionInfo(const base::ListValue* args) {
                      base::Owned(profile_path_buffer)));
 
   // Respond with the variations info immediately.
-  std::vector<std::string> variations;
-#if !defined(NDEBUG)
-  base::FieldTrial::ActiveGroups active_groups;
-  base::FieldTrialList::GetActiveFieldTrialGroups(&active_groups);
-
-  const unsigned char kNonBreakingHyphenUTF8[] = { 0xE2, 0x80, 0x91, '\0' };
-  const std::string kNonBreakingHyphenUTF8String(
-      reinterpret_cast<const char*>(kNonBreakingHyphenUTF8));
-  for (size_t i = 0; i < active_groups.size(); ++i) {
-    std::string line = active_groups[i].trial_name + ":" +
-                       active_groups[i].group_name;
-    base::ReplaceChars(line, "-", kNonBreakingHyphenUTF8String, &line);
-    variations.push_back(line);
-  }
-#else
-  // In release mode, display the hashes only.
-  variations::GetFieldTrialActiveGroupIdsAsStrings(&variations);
-#endif
-
-  base::ListValue variations_list;
-  for (std::vector<std::string>::const_iterator it = variations.begin();
-      it != variations.end(); ++it) {
-    variations_list.Append(new base::StringValue(*it));
-  }
-
-  // In release mode, this will return an empty list to clear the section.
-  web_ui()->CallJavascriptFunction("returnVariationInfo", variations_list);
+  web_ui()->CallJavascriptFunction(version_ui::kReturnVariationInfo,
+                                   *version_ui::GetVariationsList());
 }
 
 void VersionHandler::OnGotFilePaths(base::string16* executable_path_data,
@@ -121,7 +97,8 @@ void VersionHandler::OnGotFilePaths(base::string16* executable_path_data,
 
   base::StringValue exec_path(*executable_path_data);
   base::StringValue profile_path(*profile_path_data);
-  web_ui()->CallJavascriptFunction("returnFilePaths", exec_path, profile_path);
+  web_ui()->CallJavascriptFunction(version_ui::kReturnFilePaths, exec_path,
+                                   profile_path);
 }
 
 #if defined(ENABLE_PLUGINS)
@@ -145,6 +122,6 @@ void VersionHandler::OnGotPlugins(
   }
 
   base::StringValue arg(flash_version);
-  web_ui()->CallJavascriptFunction("returnFlashVersion", arg);
+  web_ui()->CallJavascriptFunction(version_ui::kReturnFlashVersion, arg);
 }
 #endif  // defined(ENABLE_PLUGINS)

@@ -18,13 +18,12 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_registry_simple.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
-#include "base/strings/utf_string_conversions.h"
+#include "base/thread_task_runner_handle.h"
+#include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/win/registry.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/safe_browsing/srt_fetcher_win.h"
 #include "chrome/browser/safe_browsing/srt_field_trial_win.h"
 #include "components/component_updater/component_updater_paths.h"
@@ -32,7 +31,6 @@
 #include "components/component_updater/default_component_installer.h"
 #include "components/component_updater/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/rappor/rappor_service.h"
 #include "components/update_client/update_client.h"
 #include "components/update_client/utils.h"
 #include "content/public/browser/browser_thread.h"
@@ -61,20 +59,11 @@ const uint8_t kSha256Hash[] = {0x6a, 0xc6, 0x0e, 0xe8, 0xf3, 0x97, 0xc0, 0xd6,
 const base::FilePath::CharType kSwReporterExeName[] =
     FILE_PATH_LITERAL("software_reporter_tool.exe");
 
-// Where to fetch the reporter's list of found uws in the registry.
-const wchar_t kSoftwareRemovalToolRegistryKey[] =
-    L"Software\\Google\\Software Removal Tool";
+// SRT registry keys and value names.
 const wchar_t kCleanerSuffixRegistryKey[] = L"Cleaner";
-const wchar_t kEndTimeValueName[] = L"EndTime";
 const wchar_t kExitCodeValueName[] = L"ExitCode";
-const wchar_t kFoundUwsValueName[] = L"FoundUws";
-const wchar_t kStartTimeValueName[] = L"StartTime";
 const wchar_t kUploadResultsValueName[] = L"UploadResults";
 const wchar_t kVersionValueName[] = L"Version";
-
-const char kFoundUwsMetricName[] = "SoftwareReporter.FoundUwS";
-const char kFoundUwsReadErrorMetricName[] =
-    "SoftwareReporter.FoundUwSReadError";
 
 void SRTHasCompleted(SRTCompleted value) {
   UMA_HISTOGRAM_ENUMERATION("SoftwareReporter.Cleaner.HasCompleted", value,
@@ -139,40 +128,6 @@ void ReportUploadsWithUma(const base::string16& upload_results) {
   UMA_HISTOGRAM_BOOLEAN("SoftwareReporter.LastUploadResult", last_result);
 }
 
-// Reports UwS found by the software reporter tool via UMA and RAPPOR.
-void ReportFoundUwS() {
-  base::win::RegKey reporter_key(HKEY_CURRENT_USER,
-                                 kSoftwareRemovalToolRegistryKey,
-                                 KEY_QUERY_VALUE | KEY_SET_VALUE);
-  std::vector<base::string16> found_uws_strings;
-  if (reporter_key.Valid() &&
-      reporter_key.ReadValues(kFoundUwsValueName, &found_uws_strings) ==
-          ERROR_SUCCESS) {
-    rappor::RapporService* rappor_service = g_browser_process->rappor_service();
-
-    bool parse_error = false;
-    for (const base::string16& uws_string : found_uws_strings) {
-      // All UwS ids are expected to be integers.
-      uint32_t uws_id = 0;
-      if (base::StringToUint(uws_string, &uws_id)) {
-        UMA_HISTOGRAM_SPARSE_SLOWLY(kFoundUwsMetricName, uws_id);
-        if (rappor_service) {
-          rappor_service->RecordSample(kFoundUwsMetricName,
-                                       rappor::COARSE_RAPPOR_TYPE,
-                                       base::UTF16ToUTF8(uws_string));
-        }
-      } else {
-        parse_error = true;
-      }
-    }
-
-    // Clean up the old value.
-    reporter_key.DeleteValue(kFoundUwsValueName);
-
-    UMA_HISTOGRAM_BOOLEAN(kFoundUwsReadErrorMetricName, parse_error);
-  }
-}
-
 class SwReporterInstallerTraits : public ComponentInstallerTraits {
  public:
   SwReporterInstallerTraits() {}
@@ -197,7 +152,9 @@ class SwReporterInstallerTraits : public ComponentInstallerTraits {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     ReportVersionWithUma(version);
     safe_browsing::RunSwReporter(install_dir.Append(kSwReporterExeName),
-                                 version.GetString());
+                                 version.GetString(),
+                                 base::ThreadTaskRunnerHandle::Get(),
+                                 base::WorkerPool::GetTaskRunner(true));
   }
 
   base::FilePath GetBaseDirectory() const override { return install_dir(); }
@@ -231,21 +188,18 @@ class SwReporterInstallerTraits : public ComponentInstallerTraits {
 }  // namespace
 
 void RegisterSwReporterComponent(ComponentUpdateService* cus) {
-  // The Sw reporter doesn't need to run if the user isn't reporting metrics and
-  // isn't in the SRTPrompt field trial "On" group.
-  if (!ChromeMetricsServiceAccessor::IsMetricsReportingEnabled() &&
-      !safe_browsing::IsInSRTPromptFieldTrialGroups()) {
+  if (!safe_browsing::IsSwReporterEnabled())
     return;
-  }
 
   // Check if we have information from Cleaner and record UMA statistics.
-  base::string16 cleaner_key_name(kSoftwareRemovalToolRegistryKey);
+  base::string16 cleaner_key_name(
+      safe_browsing::kSoftwareRemovalToolRegistryKey);
   cleaner_key_name.append(1, L'\\').append(kCleanerSuffixRegistryKey);
   base::win::RegKey cleaner_key(
       HKEY_CURRENT_USER, cleaner_key_name.c_str(), KEY_ALL_ACCESS);
   // Cleaner is assumed to have run if we have a start time.
   if (cleaner_key.Valid()) {
-    if (cleaner_key.HasValue(kStartTimeValueName)) {
+    if (cleaner_key.HasValue(safe_browsing::kStartTimeValueName)) {
       // Get version number.
       if (cleaner_key.HasValue(kVersionValueName)) {
         DWORD version;
@@ -256,15 +210,17 @@ void RegisterSwReporterComponent(ComponentUpdateService* cus) {
       }
       // Get start & end time. If we don't have an end time, we can assume the
       // cleaner has not completed.
-      int64 start_time_value;
-      cleaner_key.ReadInt64(kStartTimeValueName, &start_time_value);
+      int64_t start_time_value;
+      cleaner_key.ReadInt64(safe_browsing::kStartTimeValueName,
+                            &start_time_value);
 
-      bool completed = cleaner_key.HasValue(kEndTimeValueName);
+      bool completed = cleaner_key.HasValue(safe_browsing::kEndTimeValueName);
       SRTHasCompleted(completed ? SRT_COMPLETED_YES : SRT_COMPLETED_NOT_YET);
       if (completed) {
-        int64 end_time_value;
-        cleaner_key.ReadInt64(kEndTimeValueName, &end_time_value);
-        cleaner_key.DeleteValue(kEndTimeValueName);
+        int64_t end_time_value;
+        cleaner_key.ReadInt64(safe_browsing::kEndTimeValueName,
+                              &end_time_value);
+        cleaner_key.DeleteValue(safe_browsing::kEndTimeValueName);
         base::TimeDelta run_time(
             base::Time::FromInternalValue(end_time_value) -
             base::Time::FromInternalValue(start_time_value));
@@ -279,7 +235,7 @@ void RegisterSwReporterComponent(ComponentUpdateService* cus) {
                                     exit_code);
         cleaner_key.DeleteValue(kExitCodeValueName);
       }
-      cleaner_key.DeleteValue(kStartTimeValueName);
+      cleaner_key.DeleteValue(safe_browsing::kStartTimeValueName);
 
       if (exit_code == safe_browsing::kSwReporterPostRebootCleanupNeeded ||
           exit_code ==
@@ -291,7 +247,7 @@ void RegisterSwReporterComponent(ComponentUpdateService* cus) {
         DCHECK_GT(elapsed.InMilliseconds(), 0);
         UMA_HISTOGRAM_BOOLEAN(
             "SoftwareReporter.Cleaner.HasRebooted",
-            static_cast<uint64>(elapsed.InMilliseconds()) > ::GetTickCount());
+            static_cast<uint64_t>(elapsed.InMilliseconds()) > ::GetTickCount());
       }
 
       if (cleaner_key.HasValue(kUploadResultsValueName)) {
@@ -300,13 +256,12 @@ void RegisterSwReporterComponent(ComponentUpdateService* cus) {
         ReportUploadsWithUma(upload_results);
       }
     } else {
-      if (cleaner_key.HasValue(kEndTimeValueName)) {
+      if (cleaner_key.HasValue(safe_browsing::kEndTimeValueName)) {
         SRTHasCompleted(SRT_COMPLETED_LATER);
-        cleaner_key.DeleteValue(kEndTimeValueName);
+        cleaner_key.DeleteValue(safe_browsing::kEndTimeValueName);
       }
     }
   }
-  ReportFoundUwS();
 
   // Install the component.
   scoped_ptr<ComponentInstallerTraits> traits(new SwReporterInstallerTraits());
@@ -319,6 +274,7 @@ void RegisterSwReporterComponent(ComponentUpdateService* cus) {
 void RegisterPrefsForSwReporter(PrefRegistrySimple* registry) {
   registry->RegisterInt64Pref(prefs::kSwReporterLastTimeTriggered, 0);
   registry->RegisterIntegerPref(prefs::kSwReporterLastExitCode, -1);
+  registry->RegisterBooleanPref(prefs::kSwReporterPendingPrompt, false);
 }
 
 void RegisterProfilePrefsForSwReporter(

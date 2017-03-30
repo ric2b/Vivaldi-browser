@@ -1,5 +1,5 @@
 {
-  'TOOLS': ['newlib', 'glibc', 'bionic', 'pnacl', 'linux', 'mac', 'clang-newlib'],
+  'TOOLS': ['clang-newlib', 'glibc', 'pnacl', 'linux', 'mac'],
   'SEARCH': [
     '.',
     'pepper',
@@ -37,9 +37,9 @@
         "kernel_intercept.cc",
         "kernel_object.cc",
         "kernel_proxy.cc",
-        "kernel_wrap_bionic.cc",
         "kernel_wrap_dummy.cc",
         "kernel_wrap_glibc.cc",
+        "kernel_wrap_irt_ext.c",
         "kernel_wrap_newlib.cc",
         "kernel_wrap_win.cc",
         "log.c",
@@ -62,6 +62,8 @@
         "socket/tcp_node.cc",
         "socket/udp_event_emitter.cc",
         "socket/udp_node.cc",
+        "socket/unix_event_emitter.cc",
+        "socket/unix_node.cc",
         "stream/stream_event_emitter.cc",
         "stream/stream_fs.cc",
         "stream/stream_node.cc",
@@ -170,6 +172,7 @@
         "ioctl.h",
         "jsfs/js_fs.h",
         "jsfs/js_fs_node.h",
+        "nacl_abi_types.h",
         "kernel_handle.h",
         "kernel_intercept.h",
         "kernel_object.h",
@@ -208,6 +211,8 @@
         "socket/tcp_node.h",
         "socket/udp_event_emitter.h",
         "socket/udp_node.h",
+        "socket/unix_event_emitter.h",
+        "socket/unix_node.h",
         "stream/stream_event_emitter.h",
         "stream/stream_fs.h",
         "stream/stream_node.h",
@@ -235,6 +240,14 @@
         "utime.h",
       ],
       'DEST': 'include/newlib',
+    },
+    {
+      'FILES': [
+        "bits/ioctls.h",
+        "rpc/netdb.h",
+        "sys/mount.h",
+      ],
+      'DEST': 'include/glibc',
     },
     {
       'FILES': [

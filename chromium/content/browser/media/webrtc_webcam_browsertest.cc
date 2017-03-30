@@ -4,6 +4,7 @@
 
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -47,7 +48,7 @@ class WebRtcWebcamBrowserTest: public ContentBrowserTest {
   ~WebRtcWebcamBrowserTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ASSERT_TRUE(command_line->HasSwitch(switches::kUseFakeUIForMediaStream));
+    command_line->AppendSwitch(switches::kUseFakeUIForMediaStream);
 
     // The content_browsertests run with this flag by default, and this test is
     // the only current exception to that rule, so just remove the flag
@@ -71,7 +72,7 @@ class WebRtcWebcamBrowserTest: public ContentBrowserTest {
 // want here since the bot runs tests sequentially on the device.
 IN_PROC_BROWSER_TEST_F(WebRtcWebcamBrowserTest,
                        MANUAL_CanAcquireVgaOnRealWebcam) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(
       "/media/getusermedia-real-webcam.html"));
   NavigateToURL(shell(), url);

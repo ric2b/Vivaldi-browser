@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -153,7 +154,7 @@ WebDataServiceFactory::GetPasswordWebDataForProfile(
 
 // static
 WebDataServiceFactory* WebDataServiceFactory::GetInstance() {
-  return Singleton<WebDataServiceFactory>::get();
+  return base::Singleton<WebDataServiceFactory>::get();
 }
 
 content::BrowserContext* WebDataServiceFactory::GetBrowserContextToUse(

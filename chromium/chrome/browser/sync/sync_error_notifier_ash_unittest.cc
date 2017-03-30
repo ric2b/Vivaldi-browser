@@ -4,19 +4,24 @@
 
 #include "chrome/browser/sync/sync_error_notifier_ash.h"
 
+#include <stddef.h>
+
 #include "ash/test/ash_test_base.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
-#include "chrome/browser/sync/profile_sync_service_mock.h"
-#include "chrome/browser/sync/sync_error_controller.h"
+#include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/browser_sync/browser/profile_sync_service_mock.h"
+#include "components/sync_driver/sync_error_controller.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/message_center/notification.h"
@@ -93,14 +98,7 @@ class SyncErrorNotifierTest : public AshTestBase  {
   ~SyncErrorNotifierTest() override {}
 
   void SetUp() override {
-    profile_manager_.reset(
-        new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
-    ASSERT_TRUE(profile_manager_->SetUp());
-
-    profile_ = profile_manager_->CreateTestingProfile(kTestAccountId);
-
-    TestingBrowserProcess::GetGlobal();
-    AshTestBase::SetUp();
+    DCHECK(TestingBrowserProcess::GetGlobal());
 
     // Set up a desktop screen for Windows to hold native widgets, used when
     // adding desktop widgets (i.e., message center notifications).
@@ -110,7 +108,16 @@ class SyncErrorNotifierTest : public AshTestBase  {
     gfx::Screen::SetScreenTypeDelegate(&screen_type_delegate_);
 #endif
 
-    service_.reset(new NiceMock<ProfileSyncServiceMock>(profile_));
+    AshTestBase::SetUp();
+
+    profile_manager_.reset(
+        new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
+    ASSERT_TRUE(profile_manager_->SetUp());
+
+    profile_ = profile_manager_->CreateTestingProfile(kTestAccountId);
+
+    service_.reset(new ProfileSyncServiceMock(
+        CreateProfileSyncServiceParamsForTest(profile_)));
 
     FakeLoginUIService* login_ui_service = static_cast<FakeLoginUIService*>(
         LoginUIServiceFactory::GetInstance()->SetTestingFactoryAndUse(
@@ -127,14 +134,16 @@ class SyncErrorNotifierTest : public AshTestBase  {
   void TearDown() override {
     error_notifier_->Shutdown();
     service_.reset();
+    profile_manager_.reset();
+
+    AshTestBase::TearDown();
+
 #if defined(OS_WIN)
     gfx::Screen::SetScreenInstance(gfx::SCREEN_TYPE_NATIVE, nullptr);
     gfx::Screen::SetScreenTypeDelegate(nullptr);
     test_screen_.reset();
 #endif
-    profile_manager_.reset();
 
-    AshTestBase::TearDown();
   }
 
  protected:
@@ -173,15 +182,16 @@ class SyncErrorNotifierTest : public AshTestBase  {
   scoped_ptr<TestingProfileManager> profile_manager_;
   scoped_ptr<SyncErrorController> error_controller_;
   scoped_ptr<SyncErrorNotifier> error_notifier_;
-  scoped_ptr<NiceMock<ProfileSyncServiceMock> > service_;
+  scoped_ptr<ProfileSyncServiceMock> service_;
   TestingProfile* profile_;
   FakeLoginUI login_ui_;
   NotificationUIManager* notification_ui_manager_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SyncErrorNotifierTest);
 };
 
-} // namespace
+}  // namespace
 
 // Test that SyncErrorNotifier shows an notification if a passphrase is
 // required.

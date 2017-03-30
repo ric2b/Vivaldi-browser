@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
+#include "base/thread_task_runner_handle.h"
 #include "chrome/browser/android/thumbnail/thumbnail.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -45,7 +48,8 @@ Thumbnail::Thumbnail(TabId tab_id,
       ui_resource_id_(0),
       retrieved_(false),
       ui_resource_provider_(ui_resource_provider),
-      thumbnail_delegate_(thumbnail_delegate) {
+      thumbnail_delegate_(thumbnail_delegate),
+      weak_factory_(this) {
 }
 
 Thumbnail::~Thumbnail() {
@@ -57,7 +61,7 @@ void Thumbnail::SetBitmap(const SkBitmap& bitmap) {
   retrieved_ = false;
   ClearUIResourceId();
   scaled_content_size_ =
-      gfx::ScaleSize(gfx::Size(bitmap.width(), bitmap.height()), 1.f / scale_);
+      gfx::ScaleSize(gfx::SizeF(bitmap.width(), bitmap.height()), 1.f / scale_);
   scaled_data_size_ = scaled_content_size_;
   bitmap_ = cc::UIResourceBitmap(bitmap);
 }
@@ -70,8 +74,8 @@ void Thumbnail::SetCompressedBitmap(skia::RefPtr<SkPixelRef> compressed_bitmap,
   ClearUIResourceId();
   gfx::Size data_size(compressed_bitmap->info().width(),
                       compressed_bitmap->info().height());
-  scaled_content_size_ = gfx::ScaleSize(content_size, 1.f / scale_);
-  scaled_data_size_ = gfx::ScaleSize(data_size, 1.f / scale_);
+  scaled_content_size_ = gfx::ScaleSize(gfx::SizeF(content_size), 1.f / scale_);
+  scaled_data_size_ = gfx::ScaleSize(gfx::SizeF(data_size), 1.f / scale_);
   bitmap_ = cc::UIResourceBitmap(compressed_bitmap, data_size);
 }
 
@@ -83,8 +87,15 @@ void Thumbnail::CreateUIResource() {
 
 cc::UIResourceBitmap Thumbnail::GetBitmap(cc::UIResourceId uid,
                                           bool resource_lost) {
-  if (retrieved_)
+  if (retrieved_) {
+    // InvalidateCachedThumbnail() causes |this| to be deleted, so
+    // don't delete the resource while LayerTeeHost calls into |this|
+    // to avoid reentry there.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(&Thumbnail::DoInvalidate, weak_factory_.GetWeakPtr()));
     return bitmap_;
+  }
 
   retrieved_ = true;
 
@@ -94,8 +105,7 @@ cc::UIResourceBitmap Thumbnail::GetBitmap(cc::UIResourceId uid,
   return old_bitmap;
 }
 
-void Thumbnail::UIResourceIsInvalid() {
-  ui_resource_id_ = 0;
+void Thumbnail::DoInvalidate() {
   if (thumbnail_delegate_)
     thumbnail_delegate_->InvalidateCachedThumbnail(this);
 }

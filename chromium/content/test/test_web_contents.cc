@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/command_line.h"
 #include "content/browser/browser_url_handler_impl.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
@@ -19,7 +18,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/test/test_render_view_host.h"
@@ -55,13 +54,31 @@ TestRenderViewHost* TestWebContents::GetRenderViewHost() const {
 }
 
 TestRenderFrameHost* TestWebContents::GetPendingMainFrame() const {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     return static_cast<TestRenderFrameHost*>(
         GetRenderManager()->speculative_render_frame_host_.get());
   }
   return static_cast<TestRenderFrameHost*>(
       GetRenderManager()->pending_frame_host());
+}
+
+void TestWebContents::StartNavigation(const GURL& url) {
+  GetController().LoadURL(url, Referrer(), ui::PAGE_TRANSITION_LINK,
+                          std::string());
+  GURL loaded_url(url);
+  bool reverse_on_redirect = false;
+  BrowserURLHandlerImpl::GetInstance()->RewriteURLIfNecessary(
+      &loaded_url, GetBrowserContext(), &reverse_on_redirect);
+
+  // This will simulate receiving the DidStartProvisionalLoad IPC from the
+  // renderer.
+  if (!IsBrowserSideNavigationEnabled()) {
+    if (GetMainFrame()->is_waiting_for_beforeunload_ack())
+      GetMainFrame()->SendBeforeUnloadACK(true);
+    TestRenderFrameHost* rfh =
+        GetPendingMainFrame() ? GetPendingMainFrame() : GetMainFrame();
+    rfh->SimulateNavigationStart(url);
+  }
 }
 
 int TestWebContents::DownloadImage(const GURL& url,
@@ -96,6 +113,13 @@ void TestWebContents::TestDidNavigateWithReferrer(
     const GURL& url,
     const Referrer& referrer,
     ui::PageTransition transition) {
+  TestRenderFrameHost* rfh =
+      static_cast<TestRenderFrameHost*>(render_frame_host);
+  rfh->InitializeRenderFrameIfNeeded();
+
+  if (!rfh->is_loading())
+    rfh->SimulateNavigationStart(url);
+
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
 
   params.page_id = page_id;
@@ -113,11 +137,9 @@ void TestWebContents::TestDidNavigateWithReferrer(
   params.was_within_same_page = false;
   params.is_post = false;
   params.page_state = PageState::CreateFromURL(url);
+  params.contents_mime_type = std::string("text/html");
 
-  TestRenderFrameHost* rfh =
-      static_cast<TestRenderFrameHost*>(render_frame_host);
-  rfh->InitializeRenderFrameIfNeeded();
-  rfh->frame_tree_node()->navigator()->DidNavigate(rfh, params);
+  rfh->SendNavigateWithParams(&params);
 }
 
 const std::string& TestWebContents::GetSaveFrameHeaders() {
@@ -125,8 +147,7 @@ const std::string& TestWebContents::GetSaveFrameHeaders() {
 }
 
 bool TestWebContents::CrossProcessNavigationPending() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     return GetRenderManager()->speculative_render_frame_host_ &&
            static_cast<TestRenderFrameHost*>(
                GetRenderManager()->speculative_render_frame_host_.get())
@@ -139,8 +160,7 @@ bool TestWebContents::CreateRenderViewForRenderManager(
     RenderViewHost* render_view_host,
     int opener_frame_routing_id,
     int proxy_routing_id,
-    const FrameReplicationState& replicated_frame_state,
-    bool for_main_frame) {
+    const FrameReplicationState& replicated_frame_state) {
   UpdateMaxPageIDIfNecessary(render_view_host);
   // This will go to a TestRenderViewHost.
   static_cast<RenderViewHostImpl*>(render_view_host)
@@ -157,13 +177,12 @@ WebContents* TestWebContents::Clone() {
 }
 
 void TestWebContents::NavigateAndCommit(const GURL& url) {
-  GetController().LoadURL(
-      url, Referrer(), ui::PAGE_TRANSITION_LINK, std::string());
+  GetController().LoadURL(url, Referrer(), ui::PAGE_TRANSITION_LINK,
+                          std::string());
   GURL loaded_url(url);
   bool reverse_on_redirect = false;
   BrowserURLHandlerImpl::GetInstance()->RewriteURLIfNecessary(
       &loaded_url, GetBrowserContext(), &reverse_on_redirect);
-
   // LoadURL created a navigation entry, now simulate the RenderView sending
   // a notification that it actually navigated.
   CommitPendingNavigation();
@@ -192,9 +211,7 @@ void TestWebContents::CommitPendingNavigation() {
   // Note that for some synchronous navigations (about:blank, javascript
   // urls, etc.) there will be no NavigationRequest, and no simulation of the
   // network stack is required.
-  bool browser_side_navigation =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation);
+  bool browser_side_navigation = IsBrowserSideNavigationEnabled();
   if (!browser_side_navigation ||
       GetMainFrame()->frame_tree_node()->navigation_request()) {
     GetMainFrame()->PrepareForCommit();
@@ -204,9 +221,9 @@ void TestWebContents::CommitPendingNavigation() {
   TestRenderFrameHost* rfh = GetPendingMainFrame();
   if (!rfh)
     rfh = old_rfh;
-  CHECK_IMPLIES(browser_side_navigation, rfh->is_loading());
-  CHECK_IMPLIES(browser_side_navigation,
-                !rfh->frame_tree_node()->navigation_request());
+  CHECK(!browser_side_navigation || rfh->is_loading());
+  CHECK(!browser_side_navigation ||
+        !rfh->frame_tree_node()->navigation_request());
 
   int page_id = entry->GetPageID();
   if (page_id == -1) {
@@ -278,21 +295,19 @@ void TestWebContents::TestDidFailLoadWithError(
 }
 
 void TestWebContents::CreateNewWindow(
-    int render_process_id,
-    int route_id,
-    int main_frame_route_id,
+    SiteInstance* source_site_instance,
+    int32_t route_id,
+    int32_t main_frame_route_id,
+    int32_t main_frame_widget_route_id,
     const ViewHostMsg_CreateWindow_Params& params,
-    SessionStorageNamespace* session_storage_namespace) {
-}
+    SessionStorageNamespace* session_storage_namespace) {}
 
-void TestWebContents::CreateNewWidget(int render_process_id,
-                                      int route_id,
-                                      blink::WebPopupType popup_type) {
-}
+void TestWebContents::CreateNewWidget(int32_t render_process_id,
+                                      int32_t route_id,
+                                      blink::WebPopupType popup_type) {}
 
-void TestWebContents::CreateNewFullscreenWidget(int render_process_id,
-                                                int route_id) {
-}
+void TestWebContents::CreateNewFullscreenWidget(int32_t render_process_id,
+                                                int32_t route_id) {}
 
 void TestWebContents::ShowCreatedWindow(int route_id,
                                         WindowOpenDisposition disposition,

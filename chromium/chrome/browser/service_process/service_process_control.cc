@@ -4,6 +4,8 @@
 
 #include "chrome/browser/service_process/service_process_control.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -18,6 +20,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/upgrade_detector.h"
@@ -56,7 +59,7 @@ void ServiceProcessControl::ConnectInternal() {
 }
 
 void ServiceProcessControl::SetChannel(scoped_ptr<IPC::ChannelProxy> channel) {
-  channel_ = channel.Pass();
+  channel_ = std::move(channel);
 }
 
 void ServiceProcessControl::RunConnectDoneTasks() {
@@ -117,7 +120,7 @@ void ServiceProcessControl::Launch(const base::Closure& success_task,
 
   scoped_ptr<base::CommandLine> cmd_line(CreateServiceProcessCommandLine());
   // And then start the process asynchronously.
-  launcher_ = new Launcher(cmd_line.Pass());
+  launcher_ = new Launcher(std::move(cmd_line));
   launcher_->Run(base::Bind(&ServiceProcessControl::OnProcessLaunched,
                             base::Unretained(this)));
 }
@@ -159,7 +162,7 @@ bool ServiceProcessControl::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void ServiceProcessControl::OnChannelConnected(int32 peer_pid) {
+void ServiceProcessControl::OnChannelConnected(int32_t peer_pid) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   UMA_HISTOGRAM_ENUMERATION("CloudPrint.ServiceEvents",
@@ -317,15 +320,12 @@ bool ServiceProcessControl::Shutdown() {
 
 // static
 ServiceProcessControl* ServiceProcessControl::GetInstance() {
-  return Singleton<ServiceProcessControl>::get();
+  return base::Singleton<ServiceProcessControl>::get();
 }
 
 ServiceProcessControl::Launcher::Launcher(
     scoped_ptr<base::CommandLine> cmd_line)
-    : cmd_line_(cmd_line.Pass()),
-      launched_(false),
-      retry_count_(0) {
-}
+    : cmd_line_(std::move(cmd_line)), launched_(false), retry_count_(0) {}
 
 // Execute the command line to start the process asynchronously.
 // After the command is executed, |task| is called with the process handle on
@@ -351,7 +351,7 @@ void ServiceProcessControl::Launcher::Notify() {
 void ServiceProcessControl::Launcher::DoDetectLaunched() {
   DCHECK(!notify_task_.is_null());
 
-  const uint32 kMaxLaunchDetectRetries = 10;
+  const uint32_t kMaxLaunchDetectRetries = 10;
   launched_ = CheckServiceProcessReady();
 
   int exit_code = 0;

@@ -5,13 +5,14 @@
 #ifndef EXTENSIONS_BROWSER_API_WEB_VIEW_WEB_VIEW_INTERNAL_API_H_
 #define EXTENSIONS_BROWSER_API_WEB_VIEW_WEB_VIEW_INTERNAL_API_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "extensions/browser/api/capture_web_contents_function.h"
 #include "extensions/browser/api/execute_code_function.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/guest_view/web_view/web_ui/web_ui_url_fetcher.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "chrome/browser/thumbnails/thumbnail_service.h"
-#include "chrome/browser/thumbnails/thumbnailing_context.h"
 
 // WARNING: WebViewInternal could be loaded in an unblessed context, thus any
 // new APIs must extend WebViewInternalExtensionFunction or
@@ -446,188 +447,17 @@ class WebViewInternalClearDataFunction
   // WebViewInternalExtensionFunction implementation.
   bool RunAsyncSafe(WebViewGuest* guest) override;
 
-  uint32 GetRemovalMask();
+  uint32_t GetRemovalMask();
   void ClearDataDone();
 
   // Removal start time.
   base::Time remove_since_;
   // Removal mask, corresponds to StoragePartition::RemoveDataMask enum.
-  uint32 remove_mask_;
+  uint32_t remove_mask_;
   // Tracks any data related or parse errors.
   bool bad_message_;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewInternalClearDataFunction);
-};
-
-// add Vivaldi customizations below
-
-class WebViewInternalSetVisibleFunction
-    : public WebViewInternalExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewInternal.setVisible",
-                             WEBVIEWINTERNAL_SETVISIBLE);
-
-  WebViewInternalSetVisibleFunction();
-
- protected:
-  ~WebViewInternalSetVisibleFunction() override;
-
- private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-  DISALLOW_COPY_AND_ASSIGN(WebViewInternalSetVisibleFunction);
-};
-
-class WebViewInternalGetThumbnailFunction
-    : public WebViewInternalExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewInternal.getThumbnail",
-                             WEBVIEWINTERNAL_GETTHUMBNAIL);
-
-  WebViewInternalGetThumbnailFunction();
-
- protected:
-  // The default quality setting used when encoding jpegs.
-  static const int kDefaultQuality;
-
-  ~WebViewInternalGetThumbnailFunction() override;
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-  virtual void SendResultFromBitmap(const SkBitmap& screen_capture);
-  bool EncodeBitmap(const SkBitmap& screen_capture,
-                    std::vector<unsigned char>& data,
-                    std::string& mime_type);
-
-  // The format (JPEG vs PNG) of the resulting image.  Set in RunImpl().
-  core_api::extension_types::ImageFormat image_format_;
-
-  // Quality setting to use when encoding jpegs.  Set in RunImpl().
-  int image_quality_;
-  double scale_;
-  int height_;
-  int width_;
-
-  // Additionally store the it under the current url key.
-  bool store_as_current_url_ = false;
-
- private:
-  // Callback for the RWH::CopyFromBackingStore call.
-  void CopyFromBackingStoreComplete(const SkBitmap& bitmap,
-                                    content::ReadbackResponse response);
-
-  void SendInternalError();
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewInternalGetThumbnailFunction);
-};
-
-class WebViewInternalGetThumbnailFromServiceFunction
-    : public WebViewInternalGetThumbnailFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewInternal.getThumbnailFromService",
-                             WEBVIEWINTERNAL_GETTHUMBNAILFROMSERVICE);
-
-  WebViewInternalGetThumbnailFromServiceFunction();
-
- protected:
-  ~WebViewInternalGetThumbnailFromServiceFunction() override;
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-  void SendResultFromBitmap(const SkBitmap& screen_capture) override;
-
-  GURL url_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WebViewInternalGetThumbnailFromServiceFunction);
-};
-
-class WebViewInternalAddToThumbnailServiceFunction
-    : public WebViewInternalGetThumbnailFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewInternal.addToThumbnailService",
-                             WEBVIEWINTERNAL_ADDTOTHUMBNAILSERVICE);
-
-  WebViewInternalAddToThumbnailServiceFunction();
-
- protected:
-  ~WebViewInternalAddToThumbnailServiceFunction() override;
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-  void SendResultFromBitmap(const SkBitmap& screen_capture) override;
-  void SetPageThumbnailOnUIThread(
-      bool send_result,
-      scoped_refptr<thumbnails::ThumbnailService> thumbnail_service,
-      scoped_refptr<thumbnails::ThumbnailingContext> context,
-      const gfx::Image& thumbnail);
-
-  std::string key_;
-  GURL url_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WebViewInternalAddToThumbnailServiceFunction);
-};
-
-class WebViewInternalShowPageInfoFunction
-    : public WebViewInternalExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewInternal.showPageInfo",
-                             WEBVIEWINTERNAL_SHOWPAGEINFO);
-
-  WebViewInternalShowPageInfoFunction();
-
- protected:
-  ~WebViewInternalShowPageInfoFunction() override;
-
- private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewInternalShowPageInfoFunction);
-};
-
-class WebViewInternalSetIsFullscreenFunction
-    : public WebViewInternalExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewInternal.setIsFullscreen",
-                             WEBVIEWINTERNAL_SETISFULLSCREEN);
-
-  WebViewInternalSetIsFullscreenFunction();
-
- protected:
-  ~WebViewInternalSetIsFullscreenFunction() override;
-
- private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewInternalSetIsFullscreenFunction);
-};
-
-class WebViewInternalSetShowImagesFunction
-    : public WebViewInternalExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewInternal.setShowImages",
-                             WEBVIEWINTERNAL_SETSHOWIMAGES);
-
-  WebViewInternalSetShowImagesFunction();
-
- protected:
-  ~WebViewInternalSetShowImagesFunction() override;
-
- private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewInternalSetShowImagesFunction);
-};
-
-class WebViewInternalGetPageHistoryFunction
-    : public WebViewInternalExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewInternal.getPageHistory",
-                             WEBVIEWINTERNAL_GETPAGEHISTORY);
-
-  WebViewInternalGetPageHistoryFunction();
-
- protected:
-  ~WebViewInternalGetPageHistoryFunction() override;
-
- private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewInternalGetPageHistoryFunction);
 };
 
 }  // namespace extensions

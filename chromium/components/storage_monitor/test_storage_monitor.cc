@@ -4,13 +4,16 @@
 
 #include "components/storage_monitor/test_storage_monitor.h"
 
+#include <utility>
+
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "components/storage_monitor/storage_info.h"
 
 #if defined(OS_LINUX)
 #include "components/storage_monitor/test_media_transfer_protocol_manager_linux.h"
-#include "device/media_transfer_protocol/media_transfer_protocol_manager.h"
+#include "device/media_transfer_protocol/media_transfer_protocol_manager.h"  // nogncheck
 #endif
 
 namespace storage_monitor {
@@ -34,7 +37,7 @@ TestStorageMonitor* TestStorageMonitor::CreateAndInstall() {
   monitor->MarkInitialized();
 
   if (StorageMonitor::GetInstance() == NULL) {
-    StorageMonitor::SetStorageMonitorForTesting(pass_monitor.Pass());
+    StorageMonitor::SetStorageMonitorForTesting(std::move(pass_monitor));
     return monitor;
   }
 
@@ -48,7 +51,7 @@ TestStorageMonitor* TestStorageMonitor::CreateForBrowserTests() {
   monitor->MarkInitialized();
 
   scoped_ptr<StorageMonitor> pass_monitor(monitor);
-  StorageMonitor::SetStorageMonitorForTesting(pass_monitor.Pass());
+  StorageMonitor::SetStorageMonitorForTesting(std::move(pass_monitor));
 
   return monitor;
 }

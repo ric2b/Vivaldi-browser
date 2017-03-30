@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/common/web_application_info.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -69,9 +70,10 @@ class BookmarkAppHelper : public content::NotificationObserver {
       const std::vector<BitmapAndSource>& bitmaps,
       const std::set<int>& sizes);
 
-  // Adds a square container icon of |output_size| pixels to |bitmaps| by
-  // drawing the given |letter| into a rounded background of |color|.
-  // Does nothing if an icon of |output_size| already exists in |bitmaps|.
+  // Adds a square container icon of |output_size| and 2 * |output_size| pixels
+  // to |bitmaps| by drawing the given |letter| into a rounded background of
+  // |color|. For each size, if an icon of the requested size already exists in
+  // |bitmaps|, nothing will happen.
   static void GenerateIcon(std::map<int, BitmapAndSource>* bitmaps,
                            int output_size,
                            SkColor color,
@@ -153,10 +155,15 @@ class BookmarkAppHelper : public content::NotificationObserver {
   scoped_refptr<extensions::CrxInstaller> crx_installer_;
 
   content::NotificationRegistrar registrar_;
+
+  // With fast tab unloading enabled, shutting down can cause BookmarkAppHelper
+  // to be destroyed before the bookmark creation bubble. Use weak pointers to
+  // prevent a heap-use-after free in this instance (https://crbug.com/534994).
+  base::WeakPtrFactory<BookmarkAppHelper> weak_factory_;
 };
 
 // Creates or updates a bookmark app from the given |web_app_info|. Icons will
-// not be downloaded so only supplied icon data will be used.
+// be downloaded from the icon URLs provided in |web_app_info|.
 void CreateOrUpdateBookmarkApp(ExtensionService* service,
                                WebApplicationInfo* web_app_info);
 

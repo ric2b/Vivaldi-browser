@@ -8,13 +8,10 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "cc/base/switches.h"
-#include "cc/trees/layer_tree_settings.h"
+#include "cc/layers/layer_settings.h"
 #include "content/public/browser/android/compositor.h"
-#include "content/public/browser/render_process_host.h"
-#include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "ui/base/ui_base_switches.h"
@@ -33,23 +30,7 @@ void SetContentCommandLineFlags(bool single_process,
   base::CommandLine* parsed_command_line =
       base::CommandLine::ForCurrentProcess();
 
-  int command_line_renderer_limit = -1;
-  if (parsed_command_line->HasSwitch(switches::kRendererProcessLimit)) {
-    std::string limit = parsed_command_line->GetSwitchValueASCII(
-        switches::kRendererProcessLimit);
-    int value;
-    if (base::StringToInt(limit, &value)) {
-      command_line_renderer_limit = std::max(0, value);
-    }
-  }
-
-  if (command_line_renderer_limit > 0) {
-    int limit = std::min(command_line_renderer_limit,
-                         static_cast<int>(kMaxRendererProcessCount));
-    RenderProcessHost::SetMaxRendererProcessCount(limit);
-  }
-
-  if (single_process || command_line_renderer_limit == 0) {
+  if (single_process) {
     // Need to ensure the command line flag is consistent as a lot of chrome
     // internal code checks this directly, but it wouldn't normally get set when
     // we are implementing an embedded WebView.
@@ -59,13 +40,11 @@ void SetContentCommandLineFlags(bool single_process,
   parsed_command_line->AppendSwitch(cc::switches::kEnableBeginFrameScheduling);
 
   parsed_command_line->AppendSwitch(switches::kEnablePinch);
-  parsed_command_line->AppendSwitch(switches::kEnableOverlayFullscreenVideo);
   parsed_command_line->AppendSwitch(switches::kEnableOverlayScrollbar);
   parsed_command_line->AppendSwitch(switches::kValidateInputEventStream);
 
-  // TODO(jdduke): Use the proper SDK version when available, crbug.com/466749.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() >
-      base::android::SDK_VERSION_LOLLIPOP_MR1) {
+  if (base::android::BuildInfo::GetInstance()->sdk_int() >=
+      base::android::SDK_VERSION_MARSHMALLOW) {
     parsed_command_line->AppendSwitch(switches::kEnableLongpressDragSelection);
     parsed_command_line->AppendSwitchASCII(
         switches::kTouchTextSelectionStrategy, "direction");
@@ -81,7 +60,6 @@ void SetContentCommandLineFlags(bool single_process,
   if (base::SysInfo::IsLowEndDevice())
     parsed_command_line->AppendSwitch(switches::kInProcessGPU);
 
-  parsed_command_line->AppendSwitch(switches::kEnableViewportMeta);
   parsed_command_line->AppendSwitch(
       switches::kMainFrameResizesAreOrientationChanges);
 
@@ -90,8 +68,6 @@ void SetContentCommandLineFlags(bool single_process,
       cc::switches::kDisableCompositedAntialiasing);
 
   parsed_command_line->AppendSwitch(switches::kUIPrioritizeInGpuProcess);
-
-  parsed_command_line->AppendSwitch(switches::kEnableDelegatedRenderer);
 
   if (!plugin_descriptor.empty()) {
     parsed_command_line->AppendSwitchNative(
@@ -104,11 +80,13 @@ void SetContentCommandLineFlags(bool single_process,
         switches::kProfilerTiming, switches::kProfilerTimingDisabledValue);
   }
 
+#if !defined(USE_AURA)
   cc::LayerSettings layer_settings;
-  if (parsed_command_line->HasSwitch(
-          switches::kEnableAndroidCompositorAnimationTimelines))
-    layer_settings.use_compositor_animation_timelines = true;
+  layer_settings.use_compositor_animation_timelines =
+      !parsed_command_line->HasSwitch(
+          switches::kDisableAndroidCompositorAnimationTimelines);
   Compositor::SetLayerSettings(layer_settings);
+#endif
 }
 
 }  // namespace content

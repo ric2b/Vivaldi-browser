@@ -7,16 +7,13 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/native_widget_types.h"
-
-namespace gfx {
-class GLImage;
-}
 
 namespace gpu {
 class ImageFactory;
@@ -26,34 +23,33 @@ namespace content {
 
 class CONTENT_EXPORT GpuMemoryBufferFactory {
  public:
-  struct Configuration {
-    gfx::GpuMemoryBuffer::Format format;
-    gfx::GpuMemoryBuffer::Usage usage;
-  };
-
   virtual ~GpuMemoryBufferFactory() {}
 
-  // Gets system supported GPU memory buffer factory types. Preferred type at
-  // the front of vector.
-  static void GetSupportedTypes(std::vector<gfx::GpuMemoryBufferType>* types);
+  // Returns the native GPU memory buffer factory type. Returns EMPTY_BUFFER
+  // type if native buffers are not supported.
+  static gfx::GpuMemoryBufferType GetNativeType();
 
-  // Creates a new factory instance for |type|.
-  static scoped_ptr<GpuMemoryBufferFactory> Create(
-      gfx::GpuMemoryBufferType type);
-
-  // Gets supported format/usage configurations.
-  virtual void GetSupportedGpuMemoryBufferConfigurations(
-      std::vector<Configuration>* configurations) = 0;
+  // Creates a new factory instance for native GPU memory buffers.
+  static scoped_ptr<GpuMemoryBufferFactory> CreateNativeType();
 
   // Creates a new GPU memory buffer instance. A valid handle is returned on
   // success. It can be called on any thread.
   virtual gfx::GpuMemoryBufferHandle CreateGpuMemoryBuffer(
       gfx::GpuMemoryBufferId id,
       const gfx::Size& size,
-      gfx::GpuMemoryBuffer::Format format,
-      gfx::GpuMemoryBuffer::Usage usage,
+      gfx::BufferFormat format,
+      gfx::BufferUsage usage,
       int client_id,
       gfx::PluginWindowHandle surface_handle) = 0;
+
+  // Creates a new GPU memory buffer instance from an existing handle. A valid
+  // handle is returned on success. It can be called on any thread.
+  virtual gfx::GpuMemoryBufferHandle CreateGpuMemoryBufferFromHandle(
+      const gfx::GpuMemoryBufferHandle& handle,
+      gfx::GpuMemoryBufferId id,
+      const gfx::Size& size,
+      gfx::BufferFormat format,
+      int client_id) = 0;
 
   // Destroys GPU memory buffer identified by |id|.
   // It can be called on any thread.

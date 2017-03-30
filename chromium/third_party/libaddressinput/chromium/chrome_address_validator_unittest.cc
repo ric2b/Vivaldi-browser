@@ -4,10 +4,12 @@
 
 #include "third_party/libaddressinput/chromium/chrome_address_validator.h"
 
-#include <cstddef>
+#include <stddef.h>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -738,12 +740,11 @@ class FailingAddressValidatorTest : public testing::Test, LoadRulesListener {
   class TestAddressValidator : public AddressValidator {
    public:
     // Takes ownership of |source| and |storage|.
-    TestAddressValidator(
-        scoped_ptr< ::i18n::addressinput::Source> source,
-        scoped_ptr< ::i18n::addressinput::Storage> storage,
-        LoadRulesListener* load_rules_listener)
-        : AddressValidator(source.Pass(),
-                           storage.Pass(),
+    TestAddressValidator(scoped_ptr<::i18n::addressinput::Source> source,
+                         scoped_ptr<::i18n::addressinput::Storage> storage,
+                         LoadRulesListener* load_rules_listener)
+        : AddressValidator(std::move(source),
+                           std::move(storage),
                            load_rules_listener) {}
 
     virtual ~TestAddressValidator() {}

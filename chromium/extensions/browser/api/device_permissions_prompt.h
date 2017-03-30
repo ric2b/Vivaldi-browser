@@ -5,12 +5,15 @@
 #ifndef EXTENSIONS_BROWSER_DEVICE_PERMISSIONS_PROMPT_H_
 #define EXTENSIONS_BROWSER_DEVICE_PERMISSIONS_PROMPT_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 
 namespace content {
@@ -106,7 +109,7 @@ class DevicePermissionsPrompt {
 
     // Subclasses may fill this with a particular subclass of DeviceInfo and may
     // assume that only that instances of that type are stored here.
-    ScopedVector<DeviceInfo> devices_;
+    std::vector<scoped_ptr<DeviceInfo>> devices_;
 
    private:
     friend class base::RefCounted<Prompt>;
@@ -133,6 +136,13 @@ class DevicePermissionsPrompt {
                         bool multiple,
                         const std::vector<device::HidDeviceFilter>& filters,
                         const HidDevicesCallback& callback);
+
+  static scoped_refptr<Prompt> CreateHidPromptForTest(
+      const Extension* extension,
+      bool multiple);
+  static scoped_refptr<Prompt> CreateUsbPromptForTest(
+      const Extension* extension,
+      bool multiple);
 
  protected:
   virtual void ShowDialog() = 0;

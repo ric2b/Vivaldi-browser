@@ -4,11 +4,17 @@
 
 #include "remoting/host/desktop_session_proxy.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/compiler_specific.h"
 #include "base/logging.h"
-#include "base/process/process_handle.h"
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
+#include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_message_macros.h"
 #include "remoting/base/capabilities.h"
@@ -54,12 +60,6 @@ class DesktopSessionProxy::IpcSharedBufferCore
         size_(size) {
     if (!shared_memory_.Map(size)) {
       LOG(ERROR) << "Failed to map a shared buffer: id=" << id
-#if defined(OS_WIN)
-                 << ", handle=" << handle
-#else
-                 << ", handle.fd="
-                 << base::SharedMemory::GetFdFromSharedMemoryHandle(handle)
-#endif
                  << ", size=" << size;
     }
   }
@@ -67,14 +67,6 @@ class DesktopSessionProxy::IpcSharedBufferCore
   int id() { return id_; }
   size_t size() { return size_; }
   void* memory() { return shared_memory_.memory(); }
-  webrtc::SharedMemory::Handle handle() {
-#if defined(OS_WIN)
-    return shared_memory_.handle();
-#else
-    return base::SharedMemory::GetFdFromSharedMemoryHandle(
-        shared_memory_.handle());
-#endif
-  }
 
  private:
   virtual ~IpcSharedBufferCore() {}
@@ -90,10 +82,8 @@ class DesktopSessionProxy::IpcSharedBufferCore
 class DesktopSessionProxy::IpcSharedBuffer : public webrtc::SharedMemory {
  public:
   IpcSharedBuffer(scoped_refptr<IpcSharedBufferCore> core)
-      : SharedMemory(core->memory(), core->size(),
-                     core->handle(), core->id()),
-        core_(core) {
-  }
+      : SharedMemory(core->memory(), core->size(), 0, core->id()),
+        core_(core) {}
 
  private:
   scoped_refptr<IpcSharedBufferCore> core_;
@@ -211,7 +201,7 @@ bool DesktopSessionProxy::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void DesktopSessionProxy::OnChannelConnected(int32 peer_pid) {
+void DesktopSessionProxy::OnChannelConnected(int32_t peer_pid) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   VLOG(1) << "IPC: network <- desktop (" << peer_pid << ")";
@@ -235,7 +225,7 @@ bool DesktopSessionProxy::AttachToDesktop(
   if (!client_session_control_.get())
     return false;
 
-  desktop_process_ = desktop_process.Pass();
+  desktop_process_ = std::move(desktop_process);
 
 #if defined(OS_WIN)
   // On Windows: |desktop_process| is a valid handle, but |desktop_pipe| needs
@@ -265,8 +255,7 @@ bool DesktopSessionProxy::AttachToDesktop(
 
   // Connect to the desktop process.
   desktop_channel_ = IPC::ChannelProxy::Create(desktop_channel_handle,
-                                               IPC::Channel::MODE_CLIENT,
-                                               this,
+                                               IPC::Channel::MODE_CLIENT, this,
                                                io_task_runner_.get());
 
   // Pass ID of the client (which is authenticated at this point) to the desktop
@@ -332,12 +321,12 @@ void DesktopSessionProxy::SetMouseCursorMonitor(
   mouse_cursor_monitor_ = mouse_cursor_monitor;
 }
 
-void DesktopSessionProxy::DisconnectSession() {
+void DesktopSessionProxy::DisconnectSession(protocol::ErrorCode error) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   // Disconnect the client session if it hasn't been disconnected yet.
   if (client_session_control_.get())
-    client_session_control_->DisconnectSession();
+    client_session_control_->DisconnectSession(error);
 }
 
 void DesktopSessionProxy::InjectClipboardEvent(
@@ -410,7 +399,7 @@ void DesktopSessionProxy::StartInputInjector(
     scoped_ptr<protocol::ClipboardStub> client_clipboard) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  client_clipboard_ = client_clipboard.Pass();
+  client_clipboard_ = std::move(client_clipboard);
 }
 
 void DesktopSessionProxy::SetScreenResolution(
@@ -481,13 +470,12 @@ void DesktopSessionProxy::OnAudioPacket(const std::string& serialized_packet) {
 
 void DesktopSessionProxy::OnCreateSharedBuffer(
     int id,
-    IPC::PlatformFileForTransit handle,
-    uint32 size) {
+    base::SharedMemoryHandle handle,
+    uint32_t size) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  base::SharedMemoryHandle shm_handle = base::SharedMemoryHandle(handle);
   scoped_refptr<IpcSharedBufferCore> shared_buffer =
-      new IpcSharedBufferCore(id, shm_handle, desktop_process_.Handle(), size);
+      new IpcSharedBufferCore(id, handle, desktop_process_.Handle(), size);
 
   if (shared_buffer->memory() != nullptr &&
       !shared_buffers_.insert(std::make_pair(id, shared_buffer)).second) {
@@ -524,7 +512,7 @@ void DesktopSessionProxy::OnCaptureCompleted(
   }
 
   --pending_capture_frame_requests_;
-  PostCaptureCompleted(frame.Pass());
+  PostCaptureCompleted(std::move(frame));
 }
 
 void DesktopSessionProxy::OnMouseCursor(

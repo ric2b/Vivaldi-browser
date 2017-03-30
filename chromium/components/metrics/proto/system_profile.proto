@@ -112,10 +112,14 @@ message SystemProfileProto {
     // (Logged only on Windows.)
     optional int64 dll_base = 3;
 
-    // The Chrome OS device hardware class ID is a unique string associated with
-    // each Chrome OS device product revision generally assigned at hardware
-    // qualification time.  The hardware class effectively identifies the
-    // configured system components such as CPU, WiFi adapter, etc.
+    // The hardware_class describes the current machine model, e.g. "MacPro1,1"
+    // on Mac, or "Nexus 5" on Android. Only implemented on OS X, Android, and
+    // Chrome OS.
+    //
+    // For Chrome OS, the device hardware class ID is a unique string associated
+    // with each Chrome OS device product revision generally assigned at
+    // hardware qualification time. The hardware class effectively identifies
+    // the configured system components such as CPU, WiFi adapter, etc.
     //
     // An example of such a hardware class is "IEC MARIO PONY 6101".  An
     // internal database associates this hardware class with the qualified
@@ -281,7 +285,8 @@ message SystemProfileProto {
     // Set to true if connection_type changed during the lifetime of the log.
     optional bool connection_type_is_ambiguous = 1;
 
-    // See net::NetworkChangeNotifier::ConnectionType.
+    // Derived from net::NetworkChangeNotifier::ConnectionType translated
+    // through NetworkMetricsProvider::GetConnectionType.
     enum ConnectionType {
       CONNECTION_UNKNOWN = 0;
       CONNECTION_ETHERNET = 1;
@@ -290,6 +295,7 @@ message SystemProfileProto {
       CONNECTION_3G = 4;
       CONNECTION_4G = 5;
       CONNECTION_BLUETOOTH = 6;
+      CONNECTION_NONE = 7;
     }
     // The connection type according to NetworkChangeNotifier.
     optional ConnectionType connection_type = 2;
@@ -429,7 +435,7 @@ message SystemProfileProto {
   // Figures that can be used to generate application stability metrics.
   // All values are counts of events since the last time that these
   // values were reported.
-  // Next tag: 24
+  // Next tag: 26
   message Stability {
     // Total amount of time that the program was running, in seconds,
     // since the last time a log was recorded, as measured using a client-side
@@ -447,15 +453,17 @@ message SystemProfileProto {
     // This field was added for M-35.
     optional int64 uptime_sec = 23;
 
-    // Page loads along with renderer crashes and hangs, since page load count
-    // roughly corresponds to usage.
+    // Page loads along with renderer crashes, hangs and failed launches, since
+    // page load count roughly corresponds to usage.
     optional int32 page_load_count = 2;
     optional int32 renderer_crash_count = 3;
     optional int32 renderer_hang_count = 4;
+    optional int32 renderer_failed_launch_count = 24;
 
-    // Number of renderer crashes that were for extensions. These crashes are
-    // not counted in renderer_crash_count.
+    // Number of renderer crashes and failed launches that were for extensions.
+    // These are not counted in the renderer counts above.
     optional int32 extension_renderer_crash_count = 5;
+    optional int32 extension_renderer_failed_launch_count = 25;
 
     // Number of non-renderer child process crashes.
     optional int32 child_process_crash_count = 6;
@@ -597,6 +605,7 @@ message SystemProfileProto {
 
     // Audio capabilities of the device.
     // Ref: http://en.wikipedia.org/wiki/Extended_display_identification_data
+    // Next tag: 7
     message AudioDescription {
       // Audio format
       enum AudioFormat {
@@ -630,6 +639,14 @@ message SystemProfileProto {
 
       // Bit depth (e.g. 16, 20, 24, etc.).
       optional int32 bit_depth = 5;
+
+      // Output mode: analog vs digital.
+      enum OutputMode {
+        ANALOG = 0;
+        DIGITAL = 1;
+      }
+      optional OutputMode output_mode = 6;
+
     }
     repeated AudioDescription audio_description = 9;
 

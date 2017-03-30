@@ -6,6 +6,7 @@
 
 #include <limits>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -83,6 +84,17 @@ void RtcDataChannelHandler::Observer::OnStateChange() {
       channel_->state()));
 }
 
+void RtcDataChannelHandler::Observer::OnBufferedAmountChange(
+    uint64_t previous_amount) {
+  // Optimization: Only post a task if the change is a decrease, because the web
+  // interface does not perform any action when there is an increase.
+  if (previous_amount > channel_->buffered_amount()) {
+    main_thread_->PostTask(FROM_HERE, base::Bind(
+        &RtcDataChannelHandler::Observer::OnBufferedAmountDecreaseImpl, this,
+        previous_amount));
+  }
+}
+
 void RtcDataChannelHandler::Observer::OnMessage(
     const webrtc::DataBuffer& buffer) {
   // TODO(tommi): Figure out a way to transfer ownership of the buffer without
@@ -100,11 +112,18 @@ void RtcDataChannelHandler::Observer::OnStateChangeImpl(
     handler_->OnStateChange(state);
 }
 
+void RtcDataChannelHandler::Observer::OnBufferedAmountDecreaseImpl(
+    unsigned previous_amount) {
+  DCHECK(main_thread_->BelongsToCurrentThread());
+  if (handler_)
+    handler_->OnBufferedAmountDecrease(previous_amount);
+}
+
 void RtcDataChannelHandler::Observer::OnMessageImpl(
     scoped_ptr<webrtc::DataBuffer> buffer) {
   DCHECK(main_thread_->BelongsToCurrentThread());
   if (handler_)
-    handler_->OnMessage(buffer.Pass());
+    handler_->OnMessage(std::move(buffer));
 }
 
 RtcDataChannelHandler::RtcDataChannelHandler(
@@ -234,7 +253,7 @@ unsigned long RtcDataChannelHandler::bufferedAmount() {
 
 bool RtcDataChannelHandler::sendStringData(const blink::WebString& data) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  std::string utf8_buffer = base::UTF16ToUTF8(data);
+  std::string utf8_buffer = base::UTF16ToUTF8(base::StringPiece16(data));
   rtc::Buffer buffer(utf8_buffer.c_str(), utf8_buffer.length());
   webrtc::DataBuffer data_buffer(buffer, false);
   RecordMessageSent(data_buffer.size());
@@ -281,6 +300,20 @@ void RtcDataChannelHandler::OnStateChange(
     IncrementCounter(CHANNEL_OPENED);
 
   webkit_client_->didChangeReadyState(convertReadyState(state));
+}
+
+void RtcDataChannelHandler::OnBufferedAmountDecrease(
+    unsigned previous_amount) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DVLOG(1) << "OnBufferedAmountDecrease " << previous_amount;
+
+  if (!webkit_client_) {
+    // If this happens, the web application will not get notified of changes.
+    NOTREACHED() << "WebRTCDataChannelHandlerClient not set.";
+    return;
+  }
+
+  webkit_client_->didDecreaseBufferedAmount(previous_amount);
 }
 
 void RtcDataChannelHandler::OnMessage(scoped_ptr<webrtc::DataBuffer> buffer) {

@@ -58,28 +58,24 @@ void SignInScreenController::OnSigninScreenReady() {
   }
 }
 
-void SignInScreenController::RemoveUser(const std::string& user_id) {
-  user_manager::UserManager::Get()->RemoveUser(user_id, this);
+void SignInScreenController::RemoveUser(const AccountId& account_id) {
+  user_manager::UserManager::Get()->RemoveUser(account_id, this);
 }
 
-void SignInScreenController::OnBeforeUserRemoved(const std::string& username) {
-  user_selection_screen_->OnBeforeUserRemoved(username);
+void SignInScreenController::OnBeforeUserRemoved(const AccountId& account_id) {
+  user_selection_screen_->OnBeforeUserRemoved(account_id);
 }
 
-void SignInScreenController::OnUserRemoved(const std::string& username) {
-  user_selection_screen_->OnUserRemoved(username);
+void SignInScreenController::OnUserRemoved(const AccountId& account_id) {
+  user_selection_screen_->OnUserRemoved(account_id);
 }
 
 void SignInScreenController::SendUserList() {
   user_selection_screen_->HandleGetUsers();
 }
 
-const user_manager::UserList& SignInScreenController::GetUsers() {
-  return user_selection_screen_->GetUsers();
-}
-
-void SignInScreenController::CheckUserStatus(const std::string& user_id) {
-  user_selection_screen_->CheckUserStatus(user_id);
+void SignInScreenController::CheckUserStatus(const AccountId& account_id) {
+  user_selection_screen_->CheckUserStatus(account_id);
 }
 
 void SignInScreenController::SetWebUIHandler(

@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/param.h>
@@ -30,10 +32,10 @@
 #include <AvailabilityMacros.h>
 #endif
 
-#include "base/basictypes.h"
 #include "base/debug/debugger.h"
 #include "base/debug/proc_maps_linux.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/numerics/safe_conversions.h"
@@ -281,6 +283,16 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
   }
   PrintToStderr("\n");
 
+#if defined(CFI_ENFORCEMENT)
+  if (signal == SIGILL && info->si_code == ILL_ILLOPN) {
+    PrintToStderr(
+        "CFI: Most likely a control flow integrity violation; for more "
+        "information see:\n");
+    PrintToStderr(
+        "https://www.chromium.org/developers/testing/control-flow-integrity\n");
+  }
+#endif
+
   debug::StackTrace().Print();
 
 #if defined(OS_LINUX)
@@ -334,7 +346,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
     { " trp: ", context->uc_mcontext.gregs[REG_TRAPNO] },
     { " msk: ", context->uc_mcontext.gregs[REG_OLDMASK] },
     { " cr2: ", context->uc_mcontext.gregs[REG_CR2] },
-#endif
+#endif  // ARCH_CPU_32_BITS
   };
 
 #if ARCH_CPU_32_BITS
@@ -353,49 +365,20 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
       PrintToStderr("\n");
   }
   PrintToStderr("\n");
-#endif
-#elif defined(OS_MACOSX)
-  // TODO(shess): Port to 64-bit, and ARM architecture (32 and 64-bit).
-#if ARCH_CPU_X86_FAMILY && ARCH_CPU_32_BITS
-  ucontext_t* context = reinterpret_cast<ucontext_t*>(void_context);
-  size_t len;
+#endif  // ARCH_CPU_X86_FAMILY
+#endif  // defined(OS_LINUX)
 
-  // NOTE: Even |snprintf()| is not on the approved list for signal
-  // handlers, but buffered I/O is definitely not on the list due to
-  // potential for |malloc()|.
-  len = static_cast<size_t>(
-      snprintf(buf, sizeof(buf),
-               "ax: %x, bx: %x, cx: %x, dx: %x\n",
-               context->uc_mcontext->__ss.__eax,
-               context->uc_mcontext->__ss.__ebx,
-               context->uc_mcontext->__ss.__ecx,
-               context->uc_mcontext->__ss.__edx));
-  write(STDERR_FILENO, buf, std::min(len, sizeof(buf) - 1));
+  PrintToStderr("[end of stack trace]\n");
 
-  len = static_cast<size_t>(
-      snprintf(buf, sizeof(buf),
-               "di: %x, si: %x, bp: %x, sp: %x, ss: %x, flags: %x\n",
-               context->uc_mcontext->__ss.__edi,
-               context->uc_mcontext->__ss.__esi,
-               context->uc_mcontext->__ss.__ebp,
-               context->uc_mcontext->__ss.__esp,
-               context->uc_mcontext->__ss.__ss,
-               context->uc_mcontext->__ss.__eflags));
-  write(STDERR_FILENO, buf, std::min(len, sizeof(buf) - 1));
-
-  len = static_cast<size_t>(
-      snprintf(buf, sizeof(buf),
-               "ip: %x, cs: %x, ds: %x, es: %x, fs: %x, gs: %x\n",
-               context->uc_mcontext->__ss.__eip,
-               context->uc_mcontext->__ss.__cs,
-               context->uc_mcontext->__ss.__ds,
-               context->uc_mcontext->__ss.__es,
-               context->uc_mcontext->__ss.__fs,
-               context->uc_mcontext->__ss.__gs));
-  write(STDERR_FILENO, buf, std::min(len, sizeof(buf) - 1));
-#endif  // ARCH_CPU_32_BITS
-#endif  // defined(OS_MACOSX)
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  if (::signal(signal, SIG_DFL) == SIG_ERR)
+    _exit(1);
+#else
+  // Non-Mac OSes should probably reraise the signal as well, but the Linux
+  // sandbox tests break on CrOS devices.
+  // https://code.google.com/p/chromium/issues/detail?id=551681
   _exit(1);
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 }
 
 class PrintBacktraceOutputHandler : public BacktraceOutputHandler {
@@ -492,14 +475,14 @@ class SandboxSymbolizeHelper {
   }
 
   // Returns a O_RDONLY file descriptor for |file_path| if it was opened
-  // sucessfully during the initialization.  The file is repositioned at
+  // successfully during the initialization.  The file is repositioned at
   // offset 0.
   // IMPORTANT: This function must be async-signal-safe because it can be
   // called from a signal handler (symbolizing stack frames for a crash).
   int GetFileDescriptor(const char* file_path) {
     int fd = -1;
 
-#if !defined(NDEBUG)
+#if !defined(OFFICIAL_BUILD)
     if (file_path) {
       // The assumption here is that iterating over std::map<std::string, int>
       // using a const_iterator does not allocate dynamic memory, hense it is
@@ -520,7 +503,7 @@ class SandboxSymbolizeHelper {
         fd = -1;
       }
     }
-#endif  // !defined(NDEBUG)
+#endif  // !defined(OFFICIAL_BUILD)
 
     return fd;
   }
@@ -606,11 +589,9 @@ class SandboxSymbolizeHelper {
   // Opens all object files and caches their file descriptors.
   void OpenSymbolFiles() {
     // Pre-opening and caching the file descriptors of all loaded modules is
-    // not considered safe for retail builds.  Hence it is only done in debug
-    // builds.  For more details, take a look at: http://crbug.com/341966
-    // Enabling this to release mode would require approval from the security
-    // team.
-#if !defined(NDEBUG)
+    // not safe for production builds.  Hence it is only done in non-official
+    // builds.  For more details, take a look at: http://crbug.com/341966.
+#if !defined(OFFICIAL_BUILD)
     // Open the object files for all read-only executable regions and cache
     // their file descriptors.
     std::vector<MappedMemoryRegion>::const_iterator it;
@@ -642,7 +623,7 @@ class SandboxSymbolizeHelper {
         }
       }
     }
-#endif  // !defined(NDEBUG)
+#endif  // !defined(OFFICIAL_BUILD)
   }
 
   // Initializes and installs the symbolization callback.
@@ -664,7 +645,7 @@ class SandboxSymbolizeHelper {
 
   // Closes all file descriptors owned by this instance.
   void CloseObjectFiles() {
-#if !defined(NDEBUG)
+#if !defined(OFFICIAL_BUILD)
     std::map<std::string, int>::iterator it;
     for (it = modules_.begin(); it != modules_.end(); ++it) {
       int ret = IGNORE_EINTR(close(it->second));
@@ -672,19 +653,18 @@ class SandboxSymbolizeHelper {
       it->second = -1;
     }
     modules_.clear();
-#endif  // !defined(NDEBUG)
+#endif  // !defined(OFFICIAL_BUILD)
   }
 
   // Set to true upon successful initialization.
   bool is_initialized_;
 
-#if !defined(NDEBUG)
+#if !defined(OFFICIAL_BUILD)
   // Mapping from file name to file descriptor.  Includes file descriptors
   // for all successfully opened object files and the file descriptor for
-  // /proc/self/maps.  This code is not safe for release builds so
-  // this is only done for DEBUG builds.
+  // /proc/self/maps.  This code is not safe for production builds.
   std::map<std::string, int> modules_;
-#endif  // !defined(NDEBUG)
+#endif  // !defined(OFFICIAL_BUILD)
 
   // Cache for the process memory regions.  Produced by parsing the contents
   // of /proc/self/maps cache.
@@ -694,15 +674,11 @@ class SandboxSymbolizeHelper {
 };
 #endif  // USE_SYMBOLIZE
 
-bool EnableInProcessStackDumpingForSandbox() {
+bool EnableInProcessStackDumping() {
 #if defined(USE_SYMBOLIZE)
   SandboxSymbolizeHelper::GetInstance();
 #endif  // USE_SYMBOLIZE
 
-  return EnableInProcessStackDumping();
-}
-
-bool EnableInProcessStackDumping() {
   // When running in an application, our code typically expects SIGPIPE
   // to be ignored.  Therefore, when testing that same code, it should run
   // with SIGPIPE ignored as well.
@@ -767,7 +743,7 @@ void StackTrace::OutputToStream(std::ostream* os) const {
 namespace internal {
 
 // NOTE: code from sandbox/linux/seccomp-bpf/demo.cc.
-char *itoa_r(intptr_t i, char *buf, size_t sz, int base, size_t padding) {
+char* itoa_r(intptr_t i, char* buf, size_t sz, int base, size_t padding) {
   // Make sure we can write at least one NUL byte.
   size_t n = 1;
   if (n > sz)
@@ -778,7 +754,7 @@ char *itoa_r(intptr_t i, char *buf, size_t sz, int base, size_t padding) {
     return NULL;
   }
 
-  char *start = buf;
+  char* start = buf;
 
   uintptr_t j = i;
 
@@ -797,7 +773,7 @@ char *itoa_r(intptr_t i, char *buf, size_t sz, int base, size_t padding) {
 
   // Loop until we have converted the entire number. Output at least one
   // character (i.e. '0').
-  char *ptr = start;
+  char* ptr = start;
   do {
     // Make sure there is still enough space left in our output buffer.
     if (++n > sz) {

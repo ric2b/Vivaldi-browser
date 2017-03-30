@@ -47,12 +47,22 @@ remoting.MockClientPlugin = function() {
 
   /** @private */
   this.onConnectDeferred_ = new base.Deferred();
+
+  /** @private */
+  this.onDisposedDeferred_ = new base.Deferred();
+
+  /**
+   * @private {?function(remoting.MockClientPlugin,
+   *                     remoting.ClientSession.State)}
+   */
+  this.mock$onPluginStatusChanged_ = null;
 };
 
 remoting.MockClientPlugin.prototype.dispose = function() {
   this.container_.removeChild(this.element_);
   this.element_ = null;
   this.connectionStatusUpdateHandler_ = null;
+  this.onDisposedDeferred_.resolve();
 };
 
 remoting.MockClientPlugin.prototype.extensions = function() {
@@ -67,11 +77,13 @@ remoting.MockClientPlugin.prototype.element = function() {
   return this.element_;
 };
 
-remoting.MockClientPlugin.prototype.initialize = function(onDone) {
-  var that = this;
-  Promise.resolve().then(function() {
-    onDone(that.mock$initializationResult);
-  });
+remoting.MockClientPlugin.prototype.initialize = function() {
+  if (this.mock$initializationResult) {
+    return Promise.resolve();
+  } else {
+    return Promise.reject(
+        new remoting.Error(remoting.Error.Tag.MISSING_PLUGIN));
+  }
 };
 
 
@@ -159,6 +171,15 @@ remoting.MockClientPlugin.prototype.mock$onConnect = function() {
 };
 
 /**
+ * @return {Promise} Returns a promise that will resolve when the plugin is
+ *     disposed.
+ */
+remoting.MockClientPlugin.prototype.mock$onDisposed = function() {
+  this.onDisposedDeferred_ = new base.Deferred();
+  return this.onDisposedDeferred_.promise();
+};
+
+/**
  * @param {remoting.ClientSession.State} status
  * @param {remoting.ClientSession.ConnectionError=} opt_error
  */
@@ -169,14 +190,17 @@ remoting.MockClientPlugin.prototype.mock$setConnectionStatus = function(
   var PluginError = remoting.ClientSession.ConnectionError;
   var error = opt_error ? opt_error : PluginError.NONE;
   this.connectionEventHandler_.onConnectionStatusUpdate(status, error);
+  if (this.mock$onPluginStatusChanged_) {
+    this.mock$onPluginStatusChanged_(this, status);
+  }
 };
 
 /**
- * @param {remoting.MockClientPlugin.AuthMethod} authMethod
+ * @param {remoting.ChromotingEvent.AuthMethod} authMethod
  * @return {Promise}
  */
 remoting.MockClientPlugin.prototype.mock$authenticate = function(authMethod) {
-  var AuthMethod = remoting.MockClientPlugin.AuthMethod;
+  var AuthMethod = remoting.ChromotingEvent.AuthMethod;
   var deferred = new base.Deferred();
 
   var that = this;
@@ -194,14 +218,24 @@ remoting.MockClientPlugin.prototype.mock$authenticate = function(authMethod) {
         deferred.resolve();
       });
       break;
-    case AuthMethod.PAIRING:
+    case AuthMethod.PINLESS:
+      this.credentials_.getPairingInfo();
       deferred.resolve();
   }
   return deferred.promise();
 };
 
 /**
- * @param {remoting.MockClientPlugin.AuthMethod} authMethod
+ * @param {?function(remoting.MockClientPlugin, remoting.ClientSession.State)}
+ *    callback
+ */
+remoting.MockClientPlugin.prototype.mock$setPluginStatusChanged =
+    function(callback) {
+  this.mock$onPluginStatusChanged_ = callback;
+};
+
+/**
+ * @param {remoting.ChromotingEvent.AuthMethod} authMethod
  */
 remoting.MockClientPlugin.prototype.mock$useDefaultBehavior =
     function(authMethod) {
@@ -211,7 +245,27 @@ remoting.MockClientPlugin.prototype.mock$useDefaultBehavior =
     that.mock$setConnectionStatus(State.CONNECTING);
     return that.mock$authenticate(authMethod);
   }).then(function() {
+    that.mock$setConnectionStatus(State.AUTHENTICATED);
+  }).then(function() {
     that.mock$setConnectionStatus(State.CONNECTED);
+  });
+};
+
+/**
+ * @param {remoting.ClientSession.ConnectionError} error
+ * @param {remoting.ChromotingEvent.AuthMethod=} opt_authMethod
+ */
+remoting.MockClientPlugin.prototype.mock$returnErrorOnConnect =
+    function(error, opt_authMethod){
+  var that = this;
+  var State = remoting.ClientSession.State;
+  this.mock$onConnect().then(function() {
+    that.mock$setConnectionStatus(State.CONNECTING);
+    var authMethod = opt_authMethod ? opt_authMethod :
+                                      remoting.ChromotingEvent.AuthMethod.PIN;
+    return that.mock$authenticate(authMethod);
+  }).then(function() {
+    that.mock$setConnectionStatus(State.FAILED, error);
   });
 };
 
@@ -220,16 +274,62 @@ remoting.MockClientPlugin.prototype.mock$useDefaultBehavior =
  * @implements {remoting.ClientPluginFactory}
  */
 remoting.MockClientPluginFactory = function() {
-  /** @private */
-  this.plugin_ = new remoting.MockClientPlugin();
+  /** @private {?remoting.MockClientPlugin} */
+  this.plugin_ = null;
+
+  /**
+   * @private {?function(remoting.MockClientPlugin)}
+   */
+  this.onPluginCreated_ = null;
+
+  /**
+   * @private {?function(remoting.MockClientPlugin,
+   *                     remoting.ClientSession.State)}
+   */
+  this.onPluginStatusChanged_ = null;
 };
 
 remoting.MockClientPluginFactory.prototype.createPlugin =
     function(container, capabilities) {
+  this.plugin_ = new remoting.MockClientPlugin();
   this.plugin_.mock$setContainer(container);
   this.plugin_.mock$capabilities = capabilities;
+
+  // Notify the listeners on plugin creation.
+  if (Boolean(this.onPluginCreated_)) {
+    this.onPluginCreated_(this.plugin_);
+  } else {
+    this.plugin_.mock$useDefaultBehavior(
+        remoting.ChromotingEvent.AuthMethod.PIN);
+  }
+
+  // Listens for plugin status changed.
+  if (this.onPluginStatusChanged_) {
+    this.plugin_.mock$setPluginStatusChanged(this.onPluginStatusChanged_);
+  }
   return this.plugin_;
 };
+
+/**
+ * Register a callback to configure the plugin before it returning to the
+ * caller.
+ *
+ * @param {function(remoting.MockClientPlugin)} callback
+ */
+remoting.MockClientPluginFactory.prototype.mock$setPluginCreated =
+    function(callback) {
+  this.onPluginCreated_ = callback;
+};
+
+/**
+ * @param {?function(remoting.MockClientPlugin, remoting.ClientSession.State)}
+ *    callback
+ */
+remoting.MockClientPluginFactory.prototype.mock$setPluginStatusChanged =
+    function(callback) {
+  this.onPluginStatusChanged_ = callback;
+};
+
 
 /** @return {remoting.MockClientPlugin} */
 remoting.MockClientPluginFactory.prototype.plugin = function() {
@@ -271,6 +371,11 @@ remoting.MockConnection = function() {
   remoting.settings = new remoting.Settings();
 };
 
+/** @return {remoting.MockClientPluginFactory} */
+remoting.MockConnection.prototype.pluginFactory = function() {
+  return this.pluginFactory_;
+};
+
 /** @return {remoting.MockClientPlugin} */
 remoting.MockConnection.prototype.plugin = function() {
   return this.pluginFactory_.plugin();
@@ -289,11 +394,3 @@ remoting.MockConnection.prototype.restore = function() {
 };
 
 })();
-
-/** @enum {string} */
-remoting.MockClientPlugin.AuthMethod = {
-  ACCESS_CODE: 'accessCode',
-  PIN: 'pin',
-  THIRD_PARTY: 'thirdParty',
-  PAIRING: 'pairing'
-};

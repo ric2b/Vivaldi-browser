@@ -17,6 +17,13 @@ AppBannerClient::AppBannerClient(content::RenderFrame* render_frame)
 AppBannerClient::~AppBannerClient() {
 }
 
+void AppBannerClient::OnDestruct() {
+  // The RenderFrameImpl destructor calls RenderFrameObserver::OnDestruct, which
+  // deletes this object. However, RenderFrameImpl also holds a scoped pointer
+  // to AppBannerClient. Override OnDestruct to be a no-op to stop a double call
+  // to the destructor and a renderer crash.
+}
+
 bool AppBannerClient::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(AppBannerClient, message)
@@ -46,11 +53,8 @@ void AppBannerClient::ResolveEvent(
   if (!callbacks)
     return;
 
-  scoped_ptr<blink::WebAppBannerPromptResult> result(
-      new blink::WebAppBannerPromptResult(
-        blink::WebString::fromUTF8(platform),
-        outcome));
-  callbacks->onSuccess(result.release());
+  callbacks->onSuccess(blink::WebAppBannerPromptResult(
+      blink::WebString::fromUTF8(platform), outcome));
   banner_callbacks_.Remove(request_id);
 }
 

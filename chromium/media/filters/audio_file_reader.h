@@ -5,7 +5,7 @@
 #ifndef MEDIA_FILTERS_AUDIO_FILE_READER_H_
 #define MEDIA_FILTERS_AUDIO_FILE_READER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/media_export.h"
 #include "media/filters/ffmpeg_glue.h"
@@ -94,7 +94,6 @@ class MEDIA_EXPORT AudioFileReader {
   // AVSampleFormat initially requested; not Chrome's SampleFormat.
   int av_sample_format_;
 
-  bool use_ipc_audio_decoder_;
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   scoped_ptr<IPCAudioDecoder> ipc_audio_decoder_;
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS

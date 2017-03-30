@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
 #include "net/proxy/proxy_server.h"
 #include "url/gurl.h"
@@ -43,6 +44,33 @@ bool IsIncludedInHoldbackFieldTrial();
 // a promotion for the data reduction proxy on Android One devices.
 bool IsIncludedInAndroidOnePromoFieldTrial(const char* build_fingerprint);
 
+// Returns the name of the Lo-Fi field trial.
+std::string GetLoFiFieldTrialName();
+
+// Returns the name of the Lo-Fi field trial that configures LoFi flags when it
+// is force enabled through flags.
+std::string GetLoFiFlagFieldTrialName();
+
+// Returns true if this client is part of the "Enabled" or "Enabled_Preview"
+// group of the Lo-Fi field trial, both of which mean Lo-Fi should be enabled.
+bool IsIncludedInLoFiEnabledFieldTrial();
+
+// Returns true if this client is part of the "Control" group of the Lo-Fi field
+// trial.
+bool IsIncludedInLoFiControlFieldTrial();
+
+// Returns true if this client is part of the "Preview" group of the Lo-Fi field
+// trial.
+bool IsIncludedInLoFiPreviewFieldTrial();
+
+// Returns true if this client is part of the tamper detection experiment.
+bool IsIncludedInTamperDetectionExperiment();
+
+// Returns true if this client has any of the values to enable Lo-Fi mode for
+// the "data-reduction-proxy-lo-fi" command line switch. This includes the
+// "always-on", "cellular-only", and "slow-connections-only" values.
+bool IsLoFiOnViaFlags();
+
 // Returns true if this client has the command line switch to enable Lo-Fi
 // mode always on.
 bool IsLoFiAlwaysOnViaFlags();
@@ -51,9 +79,18 @@ bool IsLoFiAlwaysOnViaFlags();
 // mode only on cellular connections.
 bool IsLoFiCellularOnlyViaFlags();
 
+// Returns true if this client has the command line switch to enable Lo-Fi
+// mode only on slow connections.
+bool IsLoFiSlowConnectionsOnlyViaFlags();
+
 // Returns true if this client has the command line switch to disable Lo-Fi
 // mode.
 bool IsLoFiDisabledViaFlags();
+
+// Returns true if this client has the command line switch to enable Lo-Fi
+// previews. This means a preview should be requested instead of placeholders
+// whenever Lo-Fi mode is on.
+bool AreLoFiPreviewsEnabledViaFlags();
 
 // Returns true if this client has the command line switch to show
 // interstitials for data reduction proxy bypasses.
@@ -63,14 +100,14 @@ bool WarnIfNoDataReductionProxy();
 // proxy server as quic://proxy.googlezip.net.
 bool IsIncludedInQuicFieldTrial();
 
-// Returns the name of the Lo-Fi field trial.
-std::string GetLoFiFieldTrialName();
+// Returns true if dev rollout is enabled on this client either through command
+// line switch or as a part of field trial.
+bool IsDevRolloutEnabled();
 
 std::string GetQuicFieldTrialName();
 
-// Returns true if this client is part of a field trial that allows Data Saver
-// to be used on VPN.
-bool IsIncludedInUseDataSaverOnVPNFieldTrial();
+// Returns the name of the client config field trial.
+std::string GetClientConfigFieldTrialName();
 
 // Returns true if the Data Reduction Proxy config client should be used.
 bool IsConfigClientEnabled();
@@ -95,9 +132,16 @@ int GetFieldTrialParameterAsInteger(const std::string& group,
                                     int default_value,
                                     int min_value);
 
-}  // namespace params
+// Returns true if the list of Data Reduction Proxies to use for HTTP requests
+// has been overridden on the command line, and if so, returns the override
+// proxy list in |override_proxies_for_http|.
+bool GetOverrideProxiesForHttpFromCommandLine(
+    std::vector<net::ProxyServer>* override_proxies_for_http);
 
-class ClientConfig;
+// Returns the name of the server side experiment field trial.
+std::string GetServerExperimentsFieldTrialName();
+
+}  // namespace params
 
 // Contains information about a given proxy server. |proxies_for_http| and
 // |proxies_for_https| contain the configured data reduction proxy servers.
@@ -148,10 +192,6 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
   // If true, uses QUIC instead of SPDY to connect to proxies that use TLS.
   void EnableQuic(bool enable);
 
-  // Populates |response| with the Data Reduction Proxy server configuration.
-  // Virtual for mocking.
-  virtual void PopulateConfigResponse(ClientConfig* config) const;
-
   // Overrides of |DataReductionProxyConfigValues|
   bool UsingHTTPTunnel(const net::HostPortPair& proxy_server) const override;
 
@@ -169,6 +209,13 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
 
   bool holdback() const override;
 
+  bool quic_enabled() const { return quic_enabled_; }
+
+  // Returns the corresponding string from preprocessor constants if defined,
+  // and an empty string otherwise.
+  virtual std::string GetDefaultDevOrigin() const;
+  virtual std::string GetDefaultDevFallbackOrigin() const;
+
  protected:
   // Test constructor that optionally won't call Init();
   DataReductionProxyParams(int flags,
@@ -185,8 +232,6 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
 
   // Returns the corresponding string from preprocessor constants if defined,
   // and an empty string otherwise.
-  virtual std::string GetDefaultDevOrigin() const;
-  virtual std::string GetDefaultDevFallbackOrigin() const;
   virtual std::string GetDefaultOrigin() const;
   virtual std::string GetDefaultFallbackOrigin() const;
   virtual std::string GetDefaultSSLOrigin() const;
@@ -212,6 +257,9 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
   std::string override_quic_origin_;
 
   bool configured_on_command_line_;
+
+  bool use_override_proxies_for_http_;
+  std::vector<net::ProxyServer> override_proxies_for_http_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyParams);
 };

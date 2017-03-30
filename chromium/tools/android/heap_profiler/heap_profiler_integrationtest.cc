@@ -4,13 +4,13 @@
 
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <map>
 
-#include "base/compiler_specific.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/android/heap_profiler/heap_profiler.h"
 

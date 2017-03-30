@@ -5,6 +5,8 @@
 #ifndef CC_TEST_SOLID_COLOR_CONTENT_LAYER_CLIENT_H_
 #define CC_TEST_SOLID_COLOR_CONTENT_LAYER_CLIENT_H_
 
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
 #include "cc/layers/content_layer_client.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -13,19 +15,20 @@ namespace cc {
 
 class SolidColorContentLayerClient : public ContentLayerClient {
  public:
-  explicit SolidColorContentLayerClient(SkColor color) : color_(color) {}
+  explicit SolidColorContentLayerClient(SkColor color, gfx::Size size)
+      : color_(color), size_(size) {}
+
+  gfx::Rect PaintableRegion() override;
 
   // ContentLayerClient implementation.
-  void PaintContents(SkCanvas* canvas,
-                     const gfx::Rect& rect,
-                     PaintingControlSetting painting_control) override;
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      const gfx::Rect& clip,
       PaintingControlSetting painting_control) override;
   bool FillsBoundsCompletely() const override;
+  size_t GetApproximateUnsharedMemoryUsage() const override;
 
  private:
   SkColor color_;
+  gfx::Size size_;
 };
 
 }  // namespace cc

@@ -8,6 +8,7 @@
 
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_split.h"
@@ -29,7 +30,7 @@ void QueryFontsFromRegistry(std::map<std::string, std::string>* map) {
   base::win::RegistryValueIterator it(HKEY_LOCAL_MACHINE, kFonts);
   for (; it.Valid(); ++it) {
     const std::string filename =
-        base::StringToLowerASCII(base::WideToUTF8(it.Value()));
+        base::ToLowerASCII(base::WideToUTF8(it.Value()));
     (*map)[filename] = base::WideToUTF8(it.Name());
   }
 }
@@ -44,7 +45,7 @@ void GetFontNamesFromFilename(const std::string& filename,
     QueryFontsFromRegistry(font_map);
 
   std::map<std::string, std::string>::const_iterator it =
-      font_map->find(base::StringToLowerASCII(filename));
+      font_map->find(base::ToLowerASCII(filename));
   if (it == font_map->end())
     return;
 
@@ -113,7 +114,7 @@ class CachedFontLinkSettings {
   const std::vector<Font>* GetLinkedFonts(const Font& font);
 
  private:
-  friend struct DefaultSingletonTraits<CachedFontLinkSettings>;
+  friend struct base::DefaultSingletonTraits<CachedFontLinkSettings>;
 
   CachedFontLinkSettings();
   virtual ~CachedFontLinkSettings();
@@ -129,8 +130,9 @@ class CachedFontLinkSettings {
 
 // static
 CachedFontLinkSettings* CachedFontLinkSettings::GetInstance() {
-  return Singleton<CachedFontLinkSettings,
-                   LeakySingletonTraits<CachedFontLinkSettings> >::get();
+  return base::Singleton<
+      CachedFontLinkSettings,
+      base::LeakySingletonTraits<CachedFontLinkSettings>>::get();
 }
 
 const std::vector<Font>* CachedFontLinkSettings::GetLinkedFonts(
@@ -180,8 +182,8 @@ namespace internal {
 void ParseFontLinkEntry(const std::string& entry,
                         std::string* filename,
                         std::string* font_name) {
-  std::vector<std::string> parts;
-  base::SplitString(entry, ',', &parts);
+  std::vector<std::string> parts = base::SplitString(
+      entry, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   filename->clear();
   font_name->clear();
   if (parts.size() > 0)
@@ -199,13 +201,14 @@ void ParseFontFamilyString(const std::string& family,
   // followed optionally by the font family name and a pair of integer scaling
   // factors.
   // TODO(asvitkine): Should we support these scaling factors?
-  base::SplitString(family, '&', font_names);
+  *font_names = base::SplitString(
+      family, "&", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (!font_names->empty()) {
     const size_t index = font_names->back().find('(');
     if (index != std::string::npos) {
       font_names->back().resize(index);
-      base::TrimWhitespace(font_names->back(), base::TRIM_TRAILING,
-                           &font_names->back());
+      base::TrimWhitespaceASCII(font_names->back(), base::TRIM_TRAILING,
+                                &font_names->back());
     }
   }
 }
@@ -267,14 +270,15 @@ const std::vector<Font>* LinkedFontsIterator::GetLinkedFonts() const {
 
 }  // namespace internal
 
-std::vector<std::string> GetFallbackFontFamilies(
-    const std::string& font_family) {
+std::vector<Font> GetFallbackFonts(const Font& font) {
+  std::string font_family = font.GetFontName();
+
   // LinkedFontsIterator doesn't care about the font size, so we always pass 10.
   internal::LinkedFontsIterator linked_fonts(Font(font_family, 10));
-  std::vector<std::string> fallback_fonts;
+  std::vector<Font> fallback_fonts;
   Font current;
   while (linked_fonts.NextFont(&current))
-    fallback_fonts.push_back(current.GetFontName());
+    fallback_fonts.push_back(current);
   return fallback_fonts;
 }
 

@@ -2,22 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(KASKO)
 
 #include "chrome/app/kasko_client.h"
 
+#if BUILDFLAG(ENABLE_KASKO)
+
 #include <windows.h>
+#include <stddef.h>
 
 #include <string>
 #include <vector>
 
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/process/process_handle.h"
-#include "breakpad/src/client/windows/common/ipc_protocol.h"
 #include "chrome/app/chrome_watcher_client_win.h"
 #include "chrome/chrome_watcher/chrome_watcher_main_api.h"
 #include "chrome/common/chrome_constants.h"
-#include "components/crash/app/crash_keys_win.h"
+#include "components/crash/content/app/crashpad.h"
 #include "syzygy/kasko/api/client.h"
 
 namespace {
@@ -25,30 +27,14 @@ namespace {
 ChromeWatcherClient* g_chrome_watcher_client = nullptr;
 kasko::api::MinidumpType g_minidump_type = kasko::api::SMALL_DUMP_TYPE;
 
+base::LazyInstance<std::vector<kasko::api::CrashKey>>::Leaky
+    g_kasko_crash_keys = LAZY_INSTANCE_INITIALIZER;
+
 void GetKaskoCrashKeys(const kasko::api::CrashKey** crash_keys,
                        size_t* crash_key_count) {
-  static_assert(
-      sizeof(kasko::api::CrashKey) == sizeof(google_breakpad::CustomInfoEntry),
-      "CrashKey and CustomInfoEntry structs are not compatible.");
-  static_assert(offsetof(kasko::api::CrashKey, name) ==
-                    offsetof(google_breakpad::CustomInfoEntry, name),
-                "CrashKey and CustomInfoEntry structs are not compatible.");
-  static_assert(offsetof(kasko::api::CrashKey, value) ==
-                    offsetof(google_breakpad::CustomInfoEntry, value),
-                "CrashKey and CustomInfoEntry structs are not compatible.");
-  static_assert(
-      sizeof(reinterpret_cast<kasko::api::CrashKey*>(0)->name) ==
-          sizeof(reinterpret_cast<google_breakpad::CustomInfoEntry*>(0)->name),
-      "CrashKey and CustomInfoEntry structs are not compatible.");
-  static_assert(
-      sizeof(reinterpret_cast<kasko::api::CrashKey*>(0)->value) ==
-          sizeof(reinterpret_cast<google_breakpad::CustomInfoEntry*>(0)->value),
-      "CrashKey and CustomInfoEntry structs are not compatible.");
-
-  *crash_key_count =
-      breakpad::CrashKeysWin::keeper()->custom_info_entries().size();
-  *crash_keys = reinterpret_cast<const kasko::api::CrashKey*>(
-      breakpad::CrashKeysWin::keeper()->custom_info_entries().data());
+  crash_reporter::GetCrashKeysForKasko(g_kasko_crash_keys.Pointer());
+  *crash_key_count = g_kasko_crash_keys.Pointer()->size();
+  *crash_keys = g_kasko_crash_keys.Pointer()->data();
 }
 
 }  // namespace
@@ -61,6 +47,14 @@ KaskoClient::KaskoClient(ChromeWatcherClient* chrome_watcher_client,
 
   kasko::api::InitializeClient(
       GetKaskoEndpoint(base::GetCurrentProcId()).c_str());
+
+  // Register the crash keys so that they will be available whether a crash
+  // report is triggered directly by the browser process or requested by the
+  // Chrome Watcher process.
+  size_t crash_key_count = 0;
+  const kasko::api::CrashKey* crash_keys = nullptr;
+  GetKaskoCrashKeys(&crash_keys, &crash_key_count);
+  kasko::api::RegisterCrashKeys(crash_keys, crash_key_count);
 }
 
 KaskoClient::~KaskoClient() {
@@ -101,15 +95,19 @@ extern "C" void __declspec(dllexport)
   }
 
   // The Breakpad integration hooks TerminateProcess. Sidestep it to avoid a
-  // secondary report.
-
+  // secondary report. Crashpad, on the other hand, does not hook
+  // TerminateProcess so it can be safely invoked.
+  // TODO(chrisha): When Breakpad is completely ripped out make this Crashpad
+  // specific.
   using TerminateProcessWithoutDumpProc = void(__cdecl*)();
   TerminateProcessWithoutDumpProc terminate_process_without_dump =
       reinterpret_cast<TerminateProcessWithoutDumpProc>(::GetProcAddress(
           ::GetModuleHandle(chrome::kBrowserProcessExecutableName),
           "TerminateProcessWithoutDump"));
-  CHECK(terminate_process_without_dump);
-  terminate_process_without_dump();
+  if (terminate_process_without_dump)
+    terminate_process_without_dump();
+  else
+    ::TerminateProcess(::GetCurrentProcess(), 0);
 }
 
 extern "C" void __declspec(dllexport) ReportCrashWithProtobuf(
@@ -118,4 +116,4 @@ extern "C" void __declspec(dllexport) ReportCrashWithProtobuf(
                                          nullptr, nullptr);
 }
 
-#endif  // defined(KASKO)
+#endif  // BUILDFLAG(ENABLE_KASKO)

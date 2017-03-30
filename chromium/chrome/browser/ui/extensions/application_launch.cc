@@ -7,10 +7,13 @@
 #include <string>
 
 #include "apps/launcher.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/per_app_settings_service.h"
 #include "chrome/browser/apps/per_app_settings_service_factory.h"
+#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -19,6 +22,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
@@ -203,9 +207,12 @@ WebContents* OpenApplicationWindow(const AppLaunchParams& params,
                                                                extension);
 
   Browser* browser = new Browser(browser_params);
+  ui::PageTransition transition =
+      (extension ? ui::PAGE_TRANSITION_AUTO_BOOKMARK
+                 : ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
 
-  WebContents* web_contents = chrome::AddSelectedTabWithURL(
-      browser, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+  WebContents* web_contents =
+      chrome::AddSelectedTabWithURL(browser, url, transition);
   web_contents->GetMutableRendererPrefs()->can_accept_load_drops = false;
   web_contents->GetRenderViewHost()->SyncRendererPrefs();
 
@@ -250,8 +257,8 @@ WebContents* OpenApplicationTab(const AppLaunchParams& launch_params,
   if (launch_type == extensions::LAUNCH_TYPE_PINNED)
     add_type |= TabStripModel::ADD_PINNED;
 
-  chrome::NavigateParams params(browser, url,
-                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+  ui::PageTransition transition = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+  chrome::NavigateParams params(browser, url, transition);
   params.tabstrip_add_types = add_type;
   params.disposition = disposition;
 
@@ -265,7 +272,7 @@ WebContents* OpenApplicationTab(const AppLaunchParams& launch_params,
         url, content::Referrer::SanitizeForRequest(
                  url, content::Referrer(existing_tab->GetURL(),
                                         blink::WebReferrerPolicyDefault)),
-        disposition, ui::PAGE_TRANSITION_LINK, false));
+        disposition, transition, false));
     // Reset existing_tab as OpenURL() may have clobbered it.
     existing_tab = browser->tab_strip_model()->GetActiveWebContents();
     if (params.tabstrip_add_types & TabStripModel::ADD_PINNED) {
@@ -334,17 +341,23 @@ WebContents* OpenEnabledApplication(const AppLaunchParams& params) {
                             params.container,
                             extensions::NUM_LAUNCH_CONTAINERS);
 
+  GURL url = UrlForExtension(extension, params.override_url);
   if (extension->from_bookmark()) {
     UMA_HISTOGRAM_ENUMERATION("Extensions.BookmarkAppLaunchContainer",
                               params.container,
                               extensions::NUM_LAUNCH_CONTAINERS);
+
+    // Record the launch time in the site engagement service. A recent bookmark
+    // app launch will provide an engagement boost to the origin.
+    SiteEngagementService* service = SiteEngagementService::Get(profile);
+    if (service)
+      service->SetLastShortcutLaunchTime(url);
   }
 
   // Record v1 app launch. Platform app launch is recorded when dispatching
   // the onLaunched event.
   prefs->SetLastLaunchTime(extension->id(), base::Time::Now());
 
-  GURL url = UrlForExtension(extension, params.override_url);
   switch (params.container) {
     case extensions::LAUNCH_CONTAINER_NONE: {
       NOTREACHED();

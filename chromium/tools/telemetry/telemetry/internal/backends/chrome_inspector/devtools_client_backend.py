@@ -4,28 +4,63 @@
 
 import logging
 import re
+import socket
 import sys
 
 from telemetry.core import exceptions
-from telemetry.core.platform.tracing_agent import chrome_tracing_agent
 from telemetry import decorators
+from telemetry.internal.backends import browser_backend
 from telemetry.internal.backends.chrome_inspector import devtools_http
 from telemetry.internal.backends.chrome_inspector import inspector_backend
+from telemetry.internal.backends.chrome_inspector import inspector_websocket
+from telemetry.internal.backends.chrome_inspector import memory_backend
 from telemetry.internal.backends.chrome_inspector import tracing_backend
+from telemetry.internal.backends.chrome_inspector import websocket
+from telemetry.internal.platform.tracing_agent import chrome_tracing_agent
+from telemetry.internal.platform.tracing_agent import (
+    chrome_tracing_devtools_manager)
 from telemetry.timeline import trace_data as trace_data_module
+
+
+BROWSER_INSPECTOR_WEBSOCKET_URL = 'ws://127.0.0.1:%i/devtools/browser'
 
 
 class TabNotFoundError(exceptions.Error):
   pass
 
 
-def IsDevToolsAgentAvailable(port):
+def IsDevToolsAgentAvailable(port, app_backend):
   """Returns True if a DevTools agent is available on the given port."""
+  if (isinstance(app_backend, browser_backend.BrowserBackend) and
+      app_backend.supports_tracing):
+    inspector_websocket_instance = inspector_websocket.InspectorWebsocket()
+    try:
+      if not _IsInspectorWebsocketAvailable(inspector_websocket_instance, port):
+        return False
+    finally:
+      inspector_websocket_instance.Disconnect()
+
   devtools_http_instance = devtools_http.DevToolsHttp(port)
   try:
-    return _IsDevToolsAgentAvailable(devtools_http.DevToolsHttp(port))
+    return _IsDevToolsAgentAvailable(devtools_http_instance)
   finally:
     devtools_http_instance.Disconnect()
+
+
+def _IsInspectorWebsocketAvailable(inspector_websocket_instance, port):
+  try:
+    inspector_websocket_instance.Connect(BROWSER_INSPECTOR_WEBSOCKET_URL % port)
+  except websocket.WebSocketException:
+    return False
+  except socket.error:
+    return False
+  except Exception as e:
+    sys.stderr.write('Unidentified exception while checking if wesocket is'
+                     'available on port %i. Exception message: %s\n' %
+                     (port, e.message))
+    return False
+  else:
+    return True
 
 
 # TODO(nednguyen): Find a more reliable way to check whether the devtool agent
@@ -61,26 +96,98 @@ class DevToolsClientBackend(object):
     self._devtools_port = devtools_port
     self._remote_devtools_port = remote_devtools_port
     self._devtools_http = devtools_http.DevToolsHttp(devtools_port)
+    self._browser_inspector_websocket = None
     self._tracing_backend = None
+    self._memory_backend = None
     self._app_backend = app_backend
     self._devtools_context_map_backend = _DevToolsContextMapBackend(
         self._app_backend, self)
 
-    chrome_tracing_agent.ChromeTracingAgent.RegisterDevToolsClient(
-      self, self._app_backend.platform_backend)
+    if not self.supports_tracing:
+      return
+    chrome_tracing_devtools_manager.RegisterDevToolsClient(
+        self, self._app_backend.platform_backend)
+
+    # Telemetry has started Chrome tracing if there is trace config, so start
+    # tracing on this newly created devtools client if needed.
+    trace_config = (self._app_backend.platform_backend
+                    .tracing_controller_backend.GetChromeTraceConfig())
+    if not trace_config:
+      self._CreateTracingBackendIfNeeded(is_tracing_running=False)
+      return
+
+    if self.support_startup_tracing:
+      self._CreateTracingBackendIfNeeded(is_tracing_running=True)
+      return
+
+    self._CreateTracingBackendIfNeeded(is_tracing_running=False)
+    self.StartChromeTracing(
+        trace_config=trace_config,
+        custom_categories=trace_config.tracing_category_filter.filter_string)
 
   @property
   def remote_port(self):
     return self._remote_devtools_port
 
+  @property
+  def supports_tracing(self):
+    if not isinstance(self._app_backend, browser_backend.BrowserBackend):
+      return False
+    return self._app_backend.supports_tracing
+
+  @property
+  def supports_overriding_memory_pressure_notifications(self):
+    if not isinstance(self._app_backend, browser_backend.BrowserBackend):
+      return False
+    return self._app_backend.supports_overriding_memory_pressure_notifications
+
+
+  @property
+  def is_tracing_running(self):
+    if not self.supports_tracing:
+      return False
+    if not self._tracing_backend:
+      return False
+    return self._tracing_backend.is_tracing_running
+
+  @property
+  def support_startup_tracing(self):
+    # Startup tracing with --trace-config-file flag was not supported until
+    # Chromium branch number 2512 (see crrev.com/1309243004 and
+    # crrev.com/1353583002).
+    if not chrome_tracing_agent.ChromeTracingAgent.IsStartupTracingSupported(
+        self._app_backend.platform_backend):
+      return False
+    # TODO(zhenw): Remove this once stable Chrome and reference browser have
+    # passed 2512.
+    return self.GetChromeBranchNumber() >= 2512
+
   def IsAlive(self):
     """Whether the DevTools server is available and connectable."""
-    return _IsDevToolsAgentAvailable(self._devtools_http)
+    return (self._devtools_http and
+        _IsDevToolsAgentAvailable(self._devtools_http))
 
   def Close(self):
     if self._tracing_backend:
       self._tracing_backend.Close()
       self._tracing_backend = None
+    if self._memory_backend:
+      self._memory_backend.Close()
+      self._memory_backend = None
+
+    if self._devtools_context_map_backend:
+      self._devtools_context_map_backend.Clear()
+
+    # Close the browser inspector socket last (in case the backend needs to
+    # interact with it before closing).
+    if self._browser_inspector_websocket:
+      self._browser_inspector_websocket.Disconnect()
+      self._browser_inspector_websocket = None
+
+    assert self._devtools_http
+    self._devtools_http.Disconnect()
+    self._devtools_http = None
+
 
   @decorators.Cache
   def GetChromeBranchNumber(self):
@@ -106,13 +213,26 @@ class DevToolsClientBackend(object):
   def _ListInspectableContexts(self):
     return self._devtools_http.RequestJson('')
 
-  def CreateNewTab(self, timeout):
+  def RequestNewTab(self, timeout):
     """Creates a new tab.
+
+    Returns:
+      A JSON string as returned by DevTools. Example:
+      {
+        "description": "",
+        "devtoolsFrontendUrl":
+            "/devtools/inspector.html?ws=host:port/devtools/page/id-string",
+        "id": "id-string",
+        "title": "Page Title",
+        "type": "page",
+        "url": "url",
+        "webSocketDebuggerUrl": "ws://host:port/devtools/page/id-string"
+      }
 
     Raises:
       devtools_http.DevToolsClientConnectionError
     """
-    self._devtools_http.Request('new', timeout=timeout)
+    return self._devtools_http.Request('new', timeout=timeout)
 
   def CloseTab(self, tab_id, timeout):
     """Closes the tab with the given id.
@@ -170,49 +290,121 @@ class DevToolsClientBackend(object):
     self._devtools_context_map_backend._Update(contexts)
     return self._devtools_context_map_backend
 
-  def _CreateTracingBackendIfNeeded(self):
+  def _CreateTracingBackendIfNeeded(self, is_tracing_running=False):
+    assert self.supports_tracing
     if not self._tracing_backend:
+      self._CreateAndConnectBrowserInspectorWebsocketIfNeeded()
       self._tracing_backend = tracing_backend.TracingBackend(
-          self._devtools_port)
+          self._browser_inspector_websocket, is_tracing_running)
+
+  def _CreateMemoryBackendIfNeeded(self):
+    assert self.supports_overriding_memory_pressure_notifications
+    if not self._memory_backend:
+      self._CreateAndConnectBrowserInspectorWebsocketIfNeeded()
+      self._memory_backend = memory_backend.MemoryBackend(
+          self._browser_inspector_websocket)
+
+  def _CreateAndConnectBrowserInspectorWebsocketIfNeeded(self):
+    if not self._browser_inspector_websocket:
+      self._browser_inspector_websocket = (
+          inspector_websocket.InspectorWebsocket())
+      self._browser_inspector_websocket.Connect(
+          BROWSER_INSPECTOR_WEBSOCKET_URL % self._devtools_port)
 
   def IsChromeTracingSupported(self):
+    if not self.supports_tracing:
+      return False
     self._CreateTracingBackendIfNeeded()
     return self._tracing_backend.IsTracingSupported()
 
   def StartChromeTracing(
-      self, trace_options, custom_categories=None, timeout=10):
+      self, trace_config, custom_categories=None, timeout=10):
     """
     Args:
-        trace_options: An tracing_options.TracingOptions instance.
+        trace_config: An tracing_config.TracingConfig instance.
         custom_categories: An optional string containing a list of
                          comma separated categories that will be traced
                          instead of the default category set.  Example: use
                          "webkit,cc,disabled-by-default-cc.debug" to trace only
                          those three event categories.
     """
-    assert trace_options and trace_options.enable_chrome_trace
+    assert trace_config and trace_config.enable_chrome_trace
     self._CreateTracingBackendIfNeeded()
     return self._tracing_backend.StartTracing(
-        trace_options, custom_categories, timeout)
+        trace_config, custom_categories, timeout)
 
   def StopChromeTracing(self, trace_data_builder, timeout=30):
-    context_map = self.GetUpdatedInspectableContexts()
-    for context in context_map.contexts:
-      if context['type'] not in ['iframe', 'page', 'webview']:
-        continue
-      context_id = context['id']
-      backend = context_map.GetInspectorBackend(context_id)
-      success = backend.EvaluateJavaScript(
-          "console.time('" + backend.id + "');" +
-          "console.timeEnd('" + backend.id + "');" +
-          "console.time.toString().indexOf('[native code]') != -1;")
-      if not success:
-        raise Exception('Page stomped on console.time')
-      trace_data_builder.AddEventsTo(
-          trace_data_module.TAB_ID_PART, [backend.id])
+    assert self.is_tracing_running
+    try:
+      context_map = self.GetUpdatedInspectableContexts()
+      for context in context_map.contexts:
+        if context['type'] not in ['iframe', 'page', 'webview']:
+          continue
+        context_id = context['id']
+        backend = context_map.GetInspectorBackend(context_id)
+        success = backend.EvaluateJavaScript(
+            "console.time('" + backend.id + "');" +
+            "console.timeEnd('" + backend.id + "');" +
+            "console.time.toString().indexOf('[native code]') != -1;")
+        if not success:
+          raise Exception('Page stomped on console.time')
+        trace_data_builder.AddEventsTo(
+            trace_data_module.TAB_ID_PART, [backend.id])
+    finally:
+      self._tracing_backend.StopTracing(trace_data_builder, timeout)
 
-    assert self._tracing_backend
-    return self._tracing_backend.StopTracing(trace_data_builder, timeout)
+  def DumpMemory(self, timeout=30):
+    """Dumps memory.
+
+    Returns:
+      GUID of the generated dump if successful, None otherwise.
+
+    Raises:
+      TracingTimeoutException: If more than |timeout| seconds has passed
+      since the last time any data is received.
+      TracingUnrecoverableException: If there is a websocket error.
+      TracingUnexpectedResponseException: If the response contains an error
+      or does not contain the expected result.
+    """
+    self._CreateTracingBackendIfNeeded()
+    return self._tracing_backend.DumpMemory(timeout)
+
+  def SetMemoryPressureNotificationsSuppressed(self, suppressed, timeout=30):
+    """Enable/disable suppressing memory pressure notifications.
+
+    Args:
+      suppressed: If true, memory pressure notifications will be suppressed.
+      timeout: The timeout in seconds.
+
+    Raises:
+      MemoryTimeoutException: If more than |timeout| seconds has passed
+      since the last time any data is received.
+      MemoryUnrecoverableException: If there is a websocket error.
+      MemoryUnexpectedResponseException: If the response contains an error
+      or does not contain the expected result.
+    """
+    self._CreateMemoryBackendIfNeeded()
+    return self._memory_backend.SetMemoryPressureNotificationsSuppressed(
+        suppressed, timeout)
+
+  def SimulateMemoryPressureNotification(self, pressure_level, timeout=30):
+    """Simulate a memory pressure notification.
+
+    Args:
+      pressure level: The memory pressure level of the notification ('moderate'
+      or 'critical').
+      timeout: The timeout in seconds.
+
+    Raises:
+      MemoryTimeoutException: If more than |timeout| seconds has passed
+      since the last time any data is received.
+      MemoryUnrecoverableException: If there is a websocket error.
+      MemoryUnexpectedResponseException: If the response contains an error
+      or does not contain the expected result.
+    """
+    self._CreateMemoryBackendIfNeeded()
+    return self._memory_backend.SimulateMemoryPressureNotification(
+        pressure_level, timeout)
 
 
 class _DevToolsContextMapBackend(object):
@@ -275,3 +467,9 @@ class _DevToolsContextMapBackend(object):
           continue
       valid_contexts.append(context)
     self._contexts = valid_contexts
+
+  def Clear(self):
+    for backend in self._inspector_backends_dict.values():
+      backend.Disconnect()
+    self._inspector_backends_dict = {}
+    self._contexts = None

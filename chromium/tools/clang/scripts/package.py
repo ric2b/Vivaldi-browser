@@ -58,12 +58,14 @@ def PrintTarProgress(tarinfo):
 
 
 def main():
-  parser = argparse.ArgumentParser(description='build and package clang')
-  parser.add_argument('--gcc-toolchain',
-                      help="the prefix for the GCC version used for building. "
-                           "For /opt/foo/bin/gcc, pass "
-                           "'--gcc-toolchain '/opt/foo'")
+  if sys.platform == 'win32':
+    try:
+      subprocess.check_output(['grep', '--help'], shell=True)
+    except subprocess.CalledProcessError:
+      print 'Add gnuwin32 to your PATH, then try again.'
+      return 1
 
+  parser = argparse.ArgumentParser(description='build and package clang')
   args = parser.parse_args()
 
   with open('buildlog.txt', 'w') as log:
@@ -102,10 +104,7 @@ def main():
     shutil.rmtree(LLVM_BUILD_DIR, ignore_errors=True)
 
     build_cmd = [sys.executable, os.path.join(THIS_DIR, 'update.py'),
-                 '--bootstrap', '--force-local-build', '--run-tests',
-                 '--no-stdin-hack']
-    if args.gcc_toolchain is not None:
-      build_cmd.extend(['--gcc-toolchain', args.gcc_toolchain])
+                 '--bootstrap', '--force-local-build', '--run-tests']
     TeeCmd(build_cmd, log)
 
   stamp = open(STAMP_FILE).read().rstrip()
@@ -118,11 +117,13 @@ def main():
   exe_ext = '.exe' if sys.platform == 'win32' else ''
   want = ['bin/llvm-symbolizer' + exe_ext,
           'lib/clang/*/asan_blacklist.txt',
+          'lib/clang/*/cfi_blacklist.txt',
           # Copy built-in headers (lib/clang/3.x.y/include).
           'lib/clang/*/include/*',
           ]
   if sys.platform == 'win32':
     want.append('bin/clang-cl.exe')
+    want.append('bin/lld-link.exe')
   else:
     so_ext = 'dylib' if sys.platform == 'darwin' else 'so'
     want.extend(['bin/clang',
@@ -138,6 +139,8 @@ def main():
                  'lib/clang/*/lib/darwin/*profile_osx*',
                  ])
   elif sys.platform.startswith('linux'):
+    # Copy the stdlibc++.so.6 we linked Clang against so it can run.
+    want.append('lib/libstdc++.so.6')
     # Copy only
     # lib/clang/*/lib/linux/libclang_rt.{[atm]san,san,ubsan,profile}-*.a ,
     # but not dfsan.
@@ -152,9 +155,6 @@ def main():
                  'lib/clang/*/lib/windows/clang_rt.asan*.lib',
                  'lib/clang/*/include_sanitizer/*',
                  ])
-  if args.gcc_toolchain is not None:
-    # Copy the stdlibc++.so.6 we linked Clang against so it can run.
-    want.append('lib/libstdc++.so.6')
 
   for root, dirs, files in os.walk(LLVM_RELEASE_DIR):
     # root: third_party/llvm-build/Release+Asserts/lib/..., rel_root: lib/...
@@ -171,13 +171,6 @@ def main():
       shutil.copy(src, dest)
       # Strip libraries.
       if sys.platform == 'darwin' and f.endswith('.dylib'):
-        # Fix LC_ID_DYLIB for the ASan dynamic libraries to be relative to
-        # @executable_path.
-        # TODO(glider): this is transitional. We'll need to fix the dylib
-        # name either in our build system, or in Clang. See also
-        # http://crbug.com/344836.
-        subprocess.call(['install_name_tool', '-id',
-                         '@executable_path/' + os.path.basename(dest), dest])
         subprocess.call(['strip', '-x', dest])
       elif (sys.platform.startswith('linux') and
             os.path.splitext(f)[1] in ['.so', '.a']):

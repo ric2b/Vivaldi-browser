@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <utility>
 
+#include "build/build_config.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/common/chrome_switches.h"
@@ -43,16 +45,15 @@ class ActivityLogApiTest : public ExtensionApiTest {
     response->set_code(net::HTTP_OK);
     response->set_content("<html><head><title>ActivityLogTest</title>"
                           "</head><body>Hello World</body></html>");
-    return response.Pass();
+    return std::move(response);
   }
 
  private:
   base::CommandLine saved_cmdline_;
 };
 
-// TODO(vivaldi) Reenable mac for Vivaldi
-#if (defined(OS_WIN) && !defined(NDEBUG)) || defined(OS_MACOSX)
-// TODO(pmarch): fix flakiness on win debug - crbug.com/299393
+#if defined(OS_WIN)
+// TODO(pmarch): fix flakiness on win debug - http://crbug.com/299393
 #define MAYBE_TriggerEvent DISABLED_TriggerEvent
 #else
 #define MAYBE_TriggerEvent TriggerEvent

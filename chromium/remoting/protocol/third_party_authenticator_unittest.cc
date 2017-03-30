@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/macros.h"
 #include "net/base/net_errors.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/protocol/authenticator_test_base.h"
@@ -100,11 +103,11 @@ class ThirdPartyAuthenticatorTest : public AuthenticatorTestBase {
     scoped_ptr<TokenValidator> token_validator(new FakeTokenValidator());
     token_validator_ = static_cast<FakeTokenValidator*>(token_validator.get());
     host_.reset(new ThirdPartyHostAuthenticator(
-        host_cert_, key_pair_, token_validator.Pass()));
+        host_cert_, key_pair_, std::move(token_validator)));
     scoped_ptr<ThirdPartyClientAuthenticator::TokenFetcher>
         token_fetcher(new FakeTokenFetcher());
     token_fetcher_ = static_cast<FakeTokenFetcher*>(token_fetcher.get());
-    client_.reset(new ThirdPartyClientAuthenticator(token_fetcher.Pass()));
+    client_.reset(new ThirdPartyClientAuthenticator(std::move(token_fetcher)));
   }
 
   FakeTokenFetcher* token_fetcher_;

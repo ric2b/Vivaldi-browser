@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/scoped_observer.h"
 #include "base/supports_user_data.h"
@@ -120,8 +120,6 @@ class AutofillProfileSyncableService
   FRIEND_TEST_ALL_PREFIXES(AutofillProfileSyncableServiceTest,
                            UpdateField);
   FRIEND_TEST_ALL_PREFIXES(AutofillProfileSyncableServiceTest,
-                           UpdateMultivaluedField);
-  FRIEND_TEST_ALL_PREFIXES(AutofillProfileSyncableServiceTest,
                            MergeProfile);
 
   // The map of the guid to profiles owned by the |profiles_| vector.
@@ -131,8 +129,7 @@ class AutofillProfileSyncableService
   // |specifics|.
   static bool OverwriteProfileWithServerData(
       const sync_pb::AutofillProfileSpecifics& specifics,
-      AutofillProfile* profile,
-      const std::string& app_locale);
+      AutofillProfile* profile);
 
   // Writes |profile| data into supplied |profile_specifics|.
   static void WriteAutofillProfile(const AutofillProfile& profile,
@@ -163,11 +160,6 @@ class AutofillProfileSyncableService
   static bool UpdateField(ServerFieldType field_type,
                           const std::string& new_value,
                           AutofillProfile* autofill_profile);
-  // The same as |UpdateField|, but for multi-valued fields.
-  static bool UpdateMultivaluedField(
-      ServerFieldType field_type,
-      const ::google::protobuf::RepeatedPtrField<std::string>& new_value,
-      AutofillProfile* autofill_profile);
 
   // Calls merge_into->OverwriteWithOrAddTo() and then checks if the
   // |merge_into| has extra data. Returns true if |merge_from| needs updating to

@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/apps/app_window_registry_util.h"
@@ -35,8 +36,9 @@ void TerminateIfNoAppWindows() {
 class AppShimHandlerRegistry : public content::NotificationObserver {
  public:
   static AppShimHandlerRegistry* GetInstance() {
-    return Singleton<AppShimHandlerRegistry,
-                     LeakySingletonTraits<AppShimHandlerRegistry> >::get();
+    return base::Singleton<
+        AppShimHandlerRegistry,
+        base::LeakySingletonTraits<AppShimHandlerRegistry>>::get();
   }
 
   AppShimHandler* GetForAppMode(const std::string& app_mode_id) const {
@@ -74,7 +76,7 @@ class AppShimHandlerRegistry : public content::NotificationObserver {
   }
 
  private:
-  friend struct DefaultSingletonTraits<AppShimHandlerRegistry>;
+  friend struct base::DefaultSingletonTraits<AppShimHandlerRegistry>;
   typedef std::map<std::string, AppShimHandler*> HandlerMap;
 
   AppShimHandlerRegistry()

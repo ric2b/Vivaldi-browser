@@ -6,13 +6,14 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <utility>
 
 #include "base/auto_reset.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/debug/leak_annotations.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -97,7 +98,7 @@ class V8ExternalStringFromScriptData
       : script_data_(script_data) {}
 
   const uint16_t* data() const override {
-    return reinterpret_cast<const uint16*>(script_data_->utf16().data());
+    return reinterpret_cast<const uint16_t*>(script_data_->utf16().data());
   }
 
   size_t length() const override { return script_data_->utf16().size(); }
@@ -372,8 +373,16 @@ class SharedIsolateFactory {
         gin::V8Initializer::LoadV8Natives();
 #endif
 
+        // The performance of the proxy resolver is limited by DNS resolution,
+        // and not V8, so tune down V8 to use as little memory as possible.
+        static const char kOptimizeForSize[] = "--optimize_for_size";
+        v8::V8::SetFlagsFromString(kOptimizeForSize, strlen(kOptimizeForSize));
+        static const char kNoOpt[] = "--noopt";
+        v8::V8::SetFlagsFromString(kNoOpt, strlen(kNoOpt));
+
         gin::IsolateHolder::Initialize(
             gin::IsolateHolder::kNonStrictMode,
+            gin::IsolateHolder::kStableV8Extras,
             gin::ArrayBufferAllocator::SharedInstance());
 
         has_initialized_v8_ = true;
@@ -825,7 +834,7 @@ class ProxyResolverV8::Context {
 // ProxyResolverV8 ------------------------------------------------------------
 
 ProxyResolverV8::ProxyResolverV8(scoped_ptr<Context> context)
-    : context_(context.Pass()) {
+    : context_(std::move(context)) {
   DCHECK(context_);
 }
 
@@ -853,7 +862,7 @@ int ProxyResolverV8::Create(
       new Context(g_isolate_factory.Get().GetSharedIsolate()));
   int rv = context->InitV8(script_data, js_bindings);
   if (rv == OK)
-    resolver->reset(new ProxyResolverV8(context.Pass()));
+    resolver->reset(new ProxyResolverV8(std::move(context)));
   return rv;
 }
 

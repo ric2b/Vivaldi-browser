@@ -1,0 +1,50 @@
+{%- import "struct_macros.tmpl" as struct_macros %}
+size_t GetSerializedSize_(const {{struct.name}}Ptr& input) {
+  if (!input)
+    return 0;
+  {{struct_macros.get_serialized_size(struct, "input->%s")}}
+  return size;
+}
+
+void Serialize_({{struct.name}}Ptr input, mojo::internal::Buffer* buf,
+                internal::{{struct.name}}_Data** output) {
+  if (input) {
+    {{struct_macros.serialize(struct, struct.name ~ " struct", "input->%s", "result", "buf")|indent(2)}}
+    *output = result;
+  } else {
+    *output = nullptr;
+  }
+}
+
+bool Deserialize_(internal::{{struct.name}}_Data* input,
+                  {{struct.name}}Ptr* output,
+                  mojo::internal::SerializationContext* context) {
+  bool success = true;
+  if (input) {
+    {{struct.name}}Ptr result({{struct.name}}::New());
+    {{struct_macros.deserialize(struct, "input", "result->%s", "context", "success")|indent(2)}}
+    *output = std::move(result);
+  } else {
+    output->reset();
+  }
+  return success;
+}
+
+{%- if not variant %}
+
+{{struct.name}}_Reader::{{struct.name}}_Reader(
+    internal::{{struct.name}}_Data*  data,
+    mojo::internal::SerializationContext* context)
+    : data_(data), context_(context) { }
+
+{%- for pf in struct.packed.packed_fields_in_ordinal_order %}
+{%-   set name = pf.field.name -%}
+{%-   set kind = pf.field.kind -%}
+{%-   if kind|is_struct_kind %}
+{{kind|get_name_for_kind}}_Reader {{struct.name}}_Reader::{{name}}() const {
+  return {{kind|get_name_for_kind}}_Reader(data_->{{name}}.ptr, context_);
+}
+{%-   endif %}
+{%- endfor %}
+
+{%- endif %}

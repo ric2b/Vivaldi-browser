@@ -26,7 +26,6 @@ namespace importer {
 void ShowImportLockDialog(gfx::NativeWindow parent,
                           const base::Callback<void(bool)>& callback,
                           base::string16 importer_locktext) {
-
   ImportLockDialogView::Show(parent, callback, importer_locktext);
   content::RecordAction(UserMetricsAction("ImportLockDialogView_Shown"));
 }

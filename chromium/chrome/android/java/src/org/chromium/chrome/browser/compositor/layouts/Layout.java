@@ -17,7 +17,6 @@ import android.view.animation.Interpolator;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Animatable;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Animation;
@@ -30,6 +29,7 @@ import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
@@ -398,7 +398,7 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
 
         // 5. TODO(dtrainor): Notify the overlay objects.
         for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).onSizeChanged(width, height, visibleViewport.top);
+            mSceneOverlays.get(i).onSizeChanged(width, height, visibleViewport.top, orientation);
         }
     }
 
@@ -460,7 +460,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      *                           selection occurs.
      */
     public void startHiding(int nextTabId, boolean hintAtTabSelection) {
-        getLayoutTab(nextTabId);
         mUpdateHost.startHiding(nextTabId, hintAtTabSelection);
         mIsHiding = true;
         mNextTabId = nextTabId;
@@ -816,6 +815,15 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     }
 
     /**
+     * Called when the TabModelSelector has been initialized with an accurate tab count.
+     */
+    public void onTabStateInitialized() {
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            mSceneOverlays.get(i).tabStateInitialized();
+        }
+    }
+
+    /**
      * Called when the current tabModel switched (e.g. standard -> incognito).
      *
      * @param incognito True if the new model is incognito.
@@ -1159,6 +1167,27 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
         }
 
         return content;
+    }
+
+    /**
+     * @return Whether or not to force the top controls Android view to hide.
+     */
+    public boolean forceHideTopControlsAndroidView() {
+        return false;
+    }
+
+    /**
+     * @return The toolbar brightness.
+     */
+    public float getToolbarBrightness() {
+        return 1.0f;
+    }
+
+    /**
+     * @return Whether the tabstrip's event filter is enabled.
+     */
+    public boolean isTabStripEventFilterEnabled() {
+        return true;
     }
 
     /**

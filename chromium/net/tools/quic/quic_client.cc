@@ -12,17 +12,16 @@
 #include <unistd.h>
 
 #include "base/logging.h"
-#include "net/base/net_util.h"
+#include "base/run_loop.h"
+#include "net/base/sockaddr_storage.h"
 #include "net/quic/crypto/quic_random.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_data_reader.h"
+#include "net/quic/quic_flags.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_server_id.h"
-#include "net/tools/balsa/balsa_headers.h"
-#include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_epoll_connection_helper.h"
 #include "net/tools/quic/quic_socket_utils.h"
-#include "net/tools/quic/quic_spdy_client_stream.h"
 #include "net/tools/quic/spdy_balsa_utils.h"
 
 #ifndef SO_RXQ_OVFL
@@ -37,66 +36,72 @@ namespace tools {
 
 const int kEpollFlags = EPOLLIN | EPOLLOUT | EPOLLET;
 
+void QuicClient::ClientQuicDataToResend::Resend() {
+  client_->SendRequest(*headers_, body_, fin_);
+  delete headers_;
+  headers_ = nullptr;
+}
+
 QuicClient::QuicClient(IPEndPoint server_address,
                        const QuicServerId& server_id,
                        const QuicVersionVector& supported_versions,
-                       EpollServer* epoll_server)
-    : server_address_(server_address),
-      server_id_(server_id),
-      local_port_(0),
-      epoll_server_(epoll_server),
-      fd_(-1),
-      helper_(CreateQuicConnectionHelper()),
-      initialized_(false),
-      packets_dropped_(0),
-      overflow_supported_(false),
-      supported_versions_(supported_versions),
-      store_response_(false),
-      latest_response_code_(-1) {
-}
+                       EpollServer* epoll_server,
+                       ProofVerifier* proof_verifier)
+    : QuicClient(server_address,
+                 server_id,
+                 supported_versions,
+                 QuicConfig(),
+                 epoll_server,
+                 proof_verifier) {}
 
 QuicClient::QuicClient(IPEndPoint server_address,
                        const QuicServerId& server_id,
                        const QuicVersionVector& supported_versions,
                        const QuicConfig& config,
-                       EpollServer* epoll_server)
-    : server_address_(server_address),
-      server_id_(server_id),
-      config_(config),
+                       EpollServer* epoll_server,
+                       ProofVerifier* proof_verifier)
+    : QuicClientBase(server_id,
+                     supported_versions,
+                     config,
+                     new QuicEpollConnectionHelper(epoll_server),
+                     proof_verifier),
+      server_address_(server_address),
       local_port_(0),
       epoll_server_(epoll_server),
       fd_(-1),
-      helper_(CreateQuicConnectionHelper()),
       initialized_(false),
       packets_dropped_(0),
       overflow_supported_(false),
-      supported_versions_(supported_versions),
       store_response_(false),
-      latest_response_code_(-1) {
-}
+      latest_response_code_(-1) {}
 
 QuicClient::~QuicClient() {
   if (connected()) {
-    session()->connection()->SendConnectionClose(QUIC_PEER_GOING_AWAY);
+    session()->connection()->SendConnectionCloseWithDetails(
+        QUIC_PEER_GOING_AWAY, "Client being torn down");
   }
+
+  STLDeleteElements(&data_to_resend_on_connect_);
+  STLDeleteElements(&data_sent_before_handshake_);
 
   CleanUpUDPSocketImpl();
 }
 
 bool QuicClient::Initialize() {
-  DCHECK(!initialized_);
+  QuicClientBase::Initialize();
 
   // If an initial flow control window has not explicitly been set, then use the
   // same values that Chrome uses.
-  const uint32 kSessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
-  const uint32 kStreamMaxRecvWindowSize = 6 * 1024 * 1024;    //  6 MB
-  if (config_.GetInitialStreamFlowControlWindowToSend() ==
+  const uint32_t kSessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
+  const uint32_t kStreamMaxRecvWindowSize = 6 * 1024 * 1024;    //  6 MB
+  if (config()->GetInitialStreamFlowControlWindowToSend() ==
       kMinimumFlowControlSendWindow) {
-    config_.SetInitialStreamFlowControlWindowToSend(kStreamMaxRecvWindowSize);
+    config()->SetInitialStreamFlowControlWindowToSend(kStreamMaxRecvWindowSize);
   }
-  if (config_.GetInitialSessionFlowControlWindowToSend() ==
+  if (config()->GetInitialSessionFlowControlWindowToSend() ==
       kMinimumFlowControlSendWindow) {
-    config_.SetInitialSessionFlowControlWindowToSend(kSessionMaxRecvWindowSize);
+    config()->SetInitialSessionFlowControlWindowToSend(
+        kSessionMaxRecvWindowSize);
   }
 
   epoll_server_->set_timeout_in_us(50 * 1000);
@@ -110,17 +115,16 @@ bool QuicClient::Initialize() {
   return true;
 }
 
-QuicClient::DummyPacketWriterFactory::DummyPacketWriterFactory(
-    QuicPacketWriter* writer)
-    : writer_(writer) {}
+QuicClient::QuicDataToResend::QuicDataToResend(BalsaHeaders* headers,
+                                               StringPiece body,
+                                               bool fin)
+    : headers_(headers), body_(body), fin_(fin) {}
 
-QuicClient::DummyPacketWriterFactory::~DummyPacketWriterFactory() {}
-
-QuicPacketWriter* QuicClient::DummyPacketWriterFactory::Create(
-    QuicConnection* /*connection*/) const {
-  return writer_;
+QuicClient::QuicDataToResend::~QuicDataToResend() {
+  if (headers_) {
+    delete headers_;
+  }
 }
-
 
 bool QuicClient::CreateUDPSocket() {
   int address_family = server_address_.GetSockAddrFamily();
@@ -169,10 +173,9 @@ bool QuicClient::CreateUDPSocket() {
   sockaddr_storage raw_addr;
   socklen_t raw_addr_len = sizeof(raw_addr);
   CHECK(client_address_.ToSockAddr(reinterpret_cast<sockaddr*>(&raw_addr),
-                           &raw_addr_len));
-  rc = bind(fd_,
-            reinterpret_cast<const sockaddr*>(&raw_addr),
-            sizeof(raw_addr));
+                                   &raw_addr_len));
+  rc =
+      bind(fd_, reinterpret_cast<const sockaddr*>(&raw_addr), sizeof(raw_addr));
   if (rc < 0) {
     LOG(ERROR) << "Bind failed: " << strerror(errno);
     return false;
@@ -188,19 +191,38 @@ bool QuicClient::CreateUDPSocket() {
 }
 
 bool QuicClient::Connect() {
-  StartConnect();
-  while (EncryptionBeingEstablished()) {
-    WaitForEvents();
+  // Attempt multiple connects until the maximum number of client hellos have
+  // been sent.
+  while (!connected() &&
+         GetNumSentClientHellos() <= QuicCryptoClientStream::kMaxClientHellos) {
+    StartConnect();
+    while (EncryptionBeingEstablished()) {
+      WaitForEvents();
+    }
+    if (FLAGS_enable_quic_stateless_reject_support && connected() &&
+        !data_to_resend_on_connect_.empty()) {
+      // A connection has been established and there was previously queued data
+      // to resend.  Resend it and empty the queue.
+      for (QuicDataToResend* data : data_to_resend_on_connect_) {
+        data->Resend();
+      }
+      STLDeleteElements(&data_to_resend_on_connect_);
+    }
+    if (session() != nullptr &&
+        session()->error() != QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT) {
+      // We've successfully created a session but we're not connected, and there
+      // is no stateless reject to recover from.  Give up trying.
+      break;
+    }
   }
-  return session_->connection()->connected();
-}
-
-QuicClientSession* QuicClient::CreateQuicClientSession(
-    const QuicConfig& config,
-    QuicConnection* connection,
-    const QuicServerId& server_id,
-    QuicCryptoClientConfig* crypto_config) {
-  return new QuicClientSession(config, connection, server_id_, &crypto_config_);
+  if (!connected() &&
+      GetNumSentClientHellos() > QuicCryptoClientStream::kMaxClientHellos &&
+      session() != nullptr &&
+      session()->error() == QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT) {
+    // The overall connection failed due too many stateless rejects.
+    set_connection_error(QUIC_CRYPTO_TOO_MANY_REJECTS);
+  }
+  return session()->connection()->connected();
 }
 
 void QuicClient::StartConnect() {
@@ -209,36 +231,41 @@ void QuicClient::StartConnect() {
 
   QuicPacketWriter* writer = CreateQuicPacketWriter();
 
-  DummyPacketWriterFactory factory(writer);
-
-  session_.reset(CreateQuicClientSession(
-      config_,
-      new QuicConnection(GenerateConnectionId(), server_address_, helper_.get(),
-                         factory,
-                         /* owns_writer= */ false, Perspective::IS_CLIENT,
-                         server_id_.is_https(), supported_versions_),
-      server_id_, &crypto_config_));
-
-  // Reset |writer_| after |session_| so that the old writer outlives the old
-  // session.
-  if (writer_.get() != writer) {
-    writer_.reset(writer);
+  if (connected_or_attempting_connect()) {
+    // Before we destroy the last session and create a new one, gather its stats
+    // and update the stats for the overall connection.
+    UpdateStats();
+    if (session()->error() == QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT) {
+      // If the last error was due to a stateless reject, queue up the data to
+      // be resent on the next successful connection.
+      // TODO(jokulik): I'm a little bit concerned about ordering here.  Maybe
+      // we should just maintain one queue?
+      DCHECK(data_to_resend_on_connect_.empty());
+      data_to_resend_on_connect_.swap(data_sent_before_handshake_);
+    }
   }
-  session_->Initialize();
-  session_->CryptoConnect();
-}
 
-bool QuicClient::EncryptionBeingEstablished() {
-  return !session_->IsEncryptionEstablished() &&
-      session_->connection()->connected();
+  CreateQuicClientSession(new QuicConnection(
+      GetNextConnectionId(), server_address_, helper(), writer,
+      /* owns_writer= */ false, Perspective::IS_CLIENT, supported_versions()));
+
+  // Reset |writer_| after |session()| so that the old writer outlives the old
+  // session.
+  set_writer(writer);
+  session()->Initialize();
+  session()->CryptoConnect();
+  set_connected_or_attempting_connect(true);
 }
 
 void QuicClient::Disconnect() {
   DCHECK(initialized_);
 
   if (connected()) {
-    session()->connection()->SendConnectionClose(QUIC_PEER_GOING_AWAY);
+    session()->connection()->SendConnectionCloseWithDetails(
+        QUIC_PEER_GOING_AWAY, "Client disconnecting");
   }
+  STLDeleteElements(&data_to_resend_on_connect_);
+  STLDeleteElements(&data_sent_before_handshake_);
 
   CleanUpUDPSocket();
 
@@ -266,18 +293,40 @@ void QuicClient::SendRequest(const BalsaHeaders& headers,
     LOG(DFATAL) << "stream creation failed!";
     return;
   }
-  stream->SendRequest(
-      SpdyBalsaUtils::RequestHeadersToSpdyHeaders(headers, stream->version()),
-      body, fin);
   stream->set_visitor(this);
+  stream->SendRequest(SpdyBalsaUtils::RequestHeadersToSpdyHeaders(headers),
+                      body, fin);
+  if (FLAGS_enable_quic_stateless_reject_support) {
+    // Record this in case we need to resend.
+    auto new_headers = new BalsaHeaders;
+    new_headers->CopyFrom(headers);
+    auto data_to_resend =
+        new ClientQuicDataToResend(new_headers, body, fin, this);
+    MaybeAddQuicDataToResend(data_to_resend);
+  }
 }
 
-void QuicClient::SendRequestAndWaitForResponse(
-    const BalsaHeaders& headers,
-    StringPiece body,
-    bool fin) {
+void QuicClient::MaybeAddQuicDataToResend(QuicDataToResend* data_to_resend) {
+  DCHECK(FLAGS_enable_quic_stateless_reject_support);
+  if (session()->IsCryptoHandshakeConfirmed()) {
+    // The handshake is confirmed.  No need to continue saving requests to
+    // resend.
+    STLDeleteElements(&data_sent_before_handshake_);
+    delete data_to_resend;
+    return;
+  }
+
+  // The handshake is not confirmed.  Push the data onto the queue of data to
+  // resend if statelessly rejected.
+  data_sent_before_handshake_.push_back(data_to_resend);
+}
+
+void QuicClient::SendRequestAndWaitForResponse(const BalsaHeaders& headers,
+                                               StringPiece body,
+                                               bool fin) {
   SendRequest(headers, body, fin);
-  while (WaitForEvents()) {}
+  while (WaitForEvents()) {
+  }
 }
 
 void QuicClient::SendRequestsAndWaitForResponse(
@@ -287,30 +336,7 @@ void QuicClient::SendRequestsAndWaitForResponse(
     headers.SetRequestFirstlineFromStringPieces("GET", url_list[i], "HTTP/1.1");
     SendRequest(headers, "", true);
   }
-  while (WaitForEvents()) {}
-}
-
-QuicSpdyClientStream* QuicClient::CreateReliableClientStream() {
-  if (!connected()) {
-    return nullptr;
-  }
-
-  return session_->CreateOutgoingDynamicStream();
-}
-
-void QuicClient::WaitForStreamToClose(QuicStreamId id) {
-  DCHECK(connected());
-
-  while (connected() && !session_->IsClosedStream(id)) {
-    WaitForEvents();
-  }
-}
-
-void QuicClient::WaitForCryptoHandshakeConfirmed() {
-  DCHECK(connected());
-
-  while (connected() && !session_->IsCryptoHandshakeConfirmed()) {
-    WaitForEvents();
+  while (WaitForEvents()) {
   }
 }
 
@@ -318,7 +344,40 @@ bool QuicClient::WaitForEvents() {
   DCHECK(connected());
 
   epoll_server_->WaitForEventsAndExecuteCallbacks();
-  return session_->num_active_requests() != 0;
+  base::RunLoop().RunUntilIdle();
+
+  DCHECK(session() != nullptr);
+  if (!connected() &&
+      session()->error() == QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT) {
+    DCHECK(FLAGS_enable_quic_stateless_reject_support);
+    DVLOG(1) << "Detected stateless reject while waiting for events.  "
+             << "Attempting to reconnect.";
+    Connect();
+  }
+
+  return session()->num_active_requests() != 0;
+}
+
+bool QuicClient::MigrateSocket(const IPAddressNumber& new_host) {
+  if (!connected()) {
+    return false;
+  }
+
+  CleanUpUDPSocket();
+
+  bind_to_address_ = new_host;
+  if (!CreateUDPSocket()) {
+    return false;
+  }
+
+  epoll_server_->RegisterFD(fd_, this, kEpollFlags);
+  session()->connection()->SetSelfAddress(client_address_);
+
+  QuicPacketWriter* writer = CreateQuicPacketWriter();
+  set_writer(writer);
+  session()->connection()->SetQuicPacketWriter(writer, false);
+
+  return true;
 }
 
 void QuicClient::OnEvent(int fd, EpollEvent* event) {
@@ -329,24 +388,25 @@ void QuicClient::OnEvent(int fd, EpollEvent* event) {
     }
   }
   if (connected() && (event->in_events & EPOLLOUT)) {
-    writer_->SetWritable();
-    session_->connection()->OnCanWrite();
+    writer()->SetWritable();
+    session()->connection()->OnCanWrite();
   }
   if (event->in_events & EPOLLERR) {
     DVLOG(1) << "Epollerr";
   }
 }
 
-void QuicClient::OnClose(QuicDataStream* stream) {
+void QuicClient::OnClose(QuicSpdyStream* stream) {
+  DCHECK(stream != nullptr);
   QuicSpdyClientStream* client_stream =
       static_cast<QuicSpdyClientStream*>(stream);
   BalsaHeaders headers;
   SpdyBalsaUtils::SpdyHeadersToResponseHeaders(client_stream->headers(),
-                                               &headers, stream->version());
+                                               &headers);
 
   if (response_listener_.get() != nullptr) {
-    response_listener_->OnCompleteResponse(
-        stream->id(), headers, client_stream->data());
+    response_listener_->OnCompleteResponse(stream->id(), headers,
+                                           client_stream->data());
   }
 
   // Store response headers and body.
@@ -354,16 +414,8 @@ void QuicClient::OnClose(QuicDataStream* stream) {
     latest_response_code_ = headers.parsed_response_code();
     headers.DumpHeadersToString(&latest_response_headers_);
     latest_response_body_ = client_stream->data();
+    latest_response_trailers_ = client_stream->trailers().DebugString();
   }
-}
-
-bool QuicClient::connected() const {
-  return session_.get() && session_->connection() &&
-      session_->connection()->connected();
-}
-
-bool QuicClient::goaway_received() const {
-  return session_ != nullptr && session_->goaway_received();
 }
 
 size_t QuicClient::latest_response_code() const {
@@ -381,12 +433,9 @@ const string& QuicClient::latest_response_body() const {
   return latest_response_body_;
 }
 
-QuicConnectionId QuicClient::GenerateConnectionId() {
-  return QuicRandom::GetInstance()->RandUint64();
-}
-
-QuicEpollConnectionHelper* QuicClient::CreateQuicConnectionHelper() {
-  return new QuicEpollConnectionHelper(epoll_server_);
+const string& QuicClient::latest_response_trailers() const {
+  LOG_IF(DFATAL, !store_response_) << "Response not stored!";
+  return latest_response_trailers_;
 }
 
 QuicPacketWriter* QuicClient::CreateQuicPacketWriter() {
@@ -420,8 +469,8 @@ bool QuicClient::ReadAndProcessPacket() {
   QuicEncryptedPacket packet(buf, bytes_read, false);
 
   IPEndPoint client_address(client_ip, client_address_.port());
-  session_->connection()->ProcessUdpPacket(
-      client_address, server_address, packet);
+  session()->connection()->ProcessUdpPacket(client_address, server_address,
+                                            packet);
   return true;
 }
 

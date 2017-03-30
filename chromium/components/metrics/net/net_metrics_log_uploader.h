@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -33,7 +34,7 @@ class NetMetricsLogUploader : public MetricsLogUploader,
   ~NetMetricsLogUploader() override;
 
   // MetricsLogUploader:
-  bool UploadLog(const std::string& compressed_log_data,
+  void UploadLog(const std::string& compressed_log_data,
                  const std::string& log_hash) override;
 
  private:

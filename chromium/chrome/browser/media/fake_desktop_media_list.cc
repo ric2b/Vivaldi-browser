@@ -4,6 +4,7 @@
 
 #include "chrome/browser/media/fake_desktop_media_list.h"
 
+#include "base/strings/string_number_conversions.h"
 #include "chrome/browser/media/desktop_media_list_observer.h"
 #include "ui/gfx/skia_util.h"
 
@@ -46,7 +47,7 @@ void FakeDesktopMediaList::SetUpdatePeriod(base::TimeDelta period) {}
 void FakeDesktopMediaList::SetThumbnailSize(const gfx::Size& thumbnail_size) {}
 
 void FakeDesktopMediaList::SetViewDialogWindowId(
-    content::DesktopMediaID::Id dialog_id) {}
+    content::DesktopMediaID dialog_id) {}
 
 void FakeDesktopMediaList::StartUpdating(DesktopMediaListObserver* observer) {
   observer_ = observer;

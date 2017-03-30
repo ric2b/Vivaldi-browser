@@ -4,88 +4,41 @@
 
 package org.chromium.base.test;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.test.AndroidTestRunner;
 import android.test.InstrumentationTestRunner;
-import android.util.Log;
+import android.text.TextUtils;
 
 import junit.framework.TestCase;
 import junit.framework.TestResult;
 
+import org.chromium.base.Log;
+import org.chromium.base.SysUtils;
+import org.chromium.base.multidex.ChromiumMultiDexInstaller;
+import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIfSkipCheck;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.SkipCheck;
 import org.chromium.test.reporter.TestStatusListener;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.lang.reflect.Method;
 
 // TODO(jbudorick): Add support for on-device handling of timeouts.
 /**
  *  An Instrumentation test runner that checks SDK level for tests with specific requirements.
  */
 public class BaseInstrumentationTestRunner extends InstrumentationTestRunner {
+    private static final String TAG = "base_test";
 
-    private static final String TAG = "BaseInstrumentationTestRunner";
-
-    /**
-     * An interface for classes that check whether a test case should be skipped.
-     */
-    public interface SkipCheck {
-        /**
-         * Checks whether the given test case should be skipped.
-         *
-         * @param testCase The test case to check.
-         * @return Whether the test case should be skipped.
-         */
-        public boolean shouldSkip(TestCase testCase);
-    }
-
-    /**
-     * A test result that can skip tests.
-     */
-    public class SkippingTestResult extends TestResult {
-
-        private final List<SkipCheck> mSkipChecks;
-
-        /**
-         * Creates an instance of SkippingTestResult.
-         */
-        public SkippingTestResult() {
-            mSkipChecks = new ArrayList<SkipCheck>();
-        }
-
-        /**
-         * Adds a check for whether a test should run.
-         *
-         * @param skipCheck The check to add.
-         */
-        public void addSkipCheck(SkipCheck skipCheck) {
-            mSkipChecks.add(skipCheck);
-        }
-
-        private boolean shouldSkip(final TestCase test) {
-            for (SkipCheck s : mSkipChecks) {
-                if (s.shouldSkip(test)) return true;
-            }
-            return false;
-        }
-
-        @Override
-        protected void run(final TestCase test) {
-            if (shouldSkip(test)) {
-                startTest(test);
-
-                Bundle skipResult = new Bundle();
-                skipResult.putString("class", test.getClass().getName());
-                skipResult.putString("test", test.getName());
-                skipResult.putBoolean("test_skipped", true);
-                sendStatus(0, skipResult);
-
-                endTest(test);
-            } else {
-                super.run(test);
-            }
-        }
+    @Override
+    public void onCreate(Bundle arguments) {
+        ChromiumMultiDexInstaller.install(getTargetContext());
+        super.onCreate(arguments);
     }
 
     @Override
@@ -93,8 +46,8 @@ public class BaseInstrumentationTestRunner extends InstrumentationTestRunner {
         AndroidTestRunner runner = new AndroidTestRunner() {
             @Override
             protected TestResult createTestResult() {
-                SkippingTestResult r = new SkippingTestResult();
-                addSkipChecks(r);
+                BaseTestResult r = new BaseTestResult(BaseInstrumentationTestRunner.this);
+                addTestHooks(r);
                 return r;
             }
         };
@@ -103,19 +56,72 @@ public class BaseInstrumentationTestRunner extends InstrumentationTestRunner {
     }
 
     /**
-     * Adds the desired SkipChecks to result. Subclasses can add additional SkipChecks.
+     * Override this method to register hooks and checks to be run for each test. Make sure to call
+     * the base implementation if you do so.
+     *
+     * @see BaseTestResult#addSkipCheck(BaseTestResult.SkipCheck)
+     * @see BaseTestResult#addPreTestHook(BaseTestResult.PreTestHook)
      */
-    protected void addSkipChecks(SkippingTestResult result) {
+    protected void addTestHooks(BaseTestResult result) {
         result.addSkipCheck(new MinAndroidSdkLevelSkipCheck());
+        result.addSkipCheck(new RestrictionSkipCheck());
+        result.addSkipCheck(new DisableIfSkipCheck());
+
+        result.addPreTestHook(CommandLineFlags.getRegistrationHook());
+    }
+
+
+    /**
+     * Checks if any restrictions exist and skip the test if it meets those restrictions.
+     */
+    public class RestrictionSkipCheck extends SkipCheck {
+        @Override
+        public boolean shouldSkip(TestCase testCase) {
+            Method method = getTestMethod(testCase);
+            if (method == null) return true;
+
+            Restriction restrictions = method.getAnnotation(Restriction.class);
+            if (restrictions != null) {
+                for (String restriction : restrictions.value()) {
+                    if (restrictionApplies(restriction)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        protected boolean restrictionApplies(String restriction) {
+            if (TextUtils.equals(restriction, Restriction.RESTRICTION_TYPE_LOW_END_DEVICE)
+                    && !SysUtils.isLowEndDevice()) {
+                return true;
+            }
+            if (TextUtils.equals(restriction, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+                    && SysUtils.isLowEndDevice()) {
+                return true;
+            }
+            if (TextUtils.equals(restriction, Restriction.RESTRICTION_TYPE_INTERNET)
+                    && !isNetworkAvailable()) {
+                return true;
+            }
+            return false;
+        }
+
+        private boolean isNetworkAvailable() {
+            final ConnectivityManager connectivityManager = (ConnectivityManager)
+                    getTargetContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            final NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+            return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+        }
     }
 
     /**
      * Checks the device's SDK level against any specified minimum requirement.
      */
-    public static class MinAndroidSdkLevelSkipCheck implements SkipCheck {
+    public static class MinAndroidSdkLevelSkipCheck extends SkipCheck {
 
         /**
-         * If {@link org.chromium.base.test.util.MinAndroidSdkLevel} is present, checks its value
+         * If {@link MinAndroidSdkLevel} is present, checks its value
          * against the device's SDK level.
          *
          * @param testCase The test to check.
@@ -136,5 +142,4 @@ public class BaseInstrumentationTestRunner extends InstrumentationTestRunner {
             return false;
         }
     }
-
 }

@@ -4,6 +4,8 @@
 
 #include "components/gcm_driver/gcm_stats_recorder_impl.h"
 
+#include <stdint.h>
+
 #include <deque>
 #include <string>
 #include <vector>
@@ -15,7 +17,7 @@ namespace gcm {
 
 namespace {
 
-static uint64 kAndroidId = 4U;
+static uint64_t kAndroidId = 4U;
 static const char kCheckinStatus[] = "URL_FETCHING_FAILED";
 static const char kHost[] = "www.example.com";
 static const char kAppId[] = "app id 1";
@@ -29,7 +31,7 @@ static const gcm::MCSClient::MessageSendStatus kMessageSendStatus =
 static const int kByteSize = 99;
 static const int kTTL = 7;
 static const int kRetries = 3;
-static const int64 kDelay = 15000;
+static const int64_t kDelay = 15000;
 static const ConnectionFactory::ConnectionResetReason kReason =
     ConnectionFactory::NETWORK_CHANGE;
 static const int kNetworkError = 1;
@@ -350,7 +352,7 @@ GCMStatsRecorderImplTest::~GCMStatsRecorderImplTest() {}
 
 void GCMStatsRecorderImplTest::SetUp(){
   source_ = "s1,s2";
-  recorder_.SetRecording(true);
+  recorder_.set_is_recording(true);
 }
 
 TEST_F(GCMStatsRecorderImplTest, StartStopRecordingTest) {
@@ -359,7 +361,7 @@ TEST_F(GCMStatsRecorderImplTest, StartStopRecordingTest) {
   VerifyRecordedSendingCount(1);
   VerifyDataSentToWire("1st call");
 
-  recorder_.SetRecording(false);
+  recorder_.set_is_recording(false);
   EXPECT_FALSE(recorder_.is_recording());
   recorder_.Clear();
   VerifyAllActivityQueueEmpty("all cleared");

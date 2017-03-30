@@ -4,8 +4,10 @@
 
 #include "google_apis/drive/drive_api_parser.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/json/json_value_converter.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -17,7 +19,7 @@ namespace google_apis {
 
 namespace {
 
-const int64 kUnsetFileSize = -1;
+const int64_t kUnsetFileSize = -1;
 
 bool CreateFileResourceFromValue(const base::Value* value,
                                  scoped_ptr<FileResource>* file) {
@@ -220,21 +222,20 @@ scoped_ptr<AboutResource> AboutResource::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid About resource JSON!";
     return scoped_ptr<AboutResource>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 // static
 void AboutResource::RegisterJSONConverter(
     base::JSONValueConverter<AboutResource>* converter) {
-  converter->RegisterCustomField<int64>(kLargestChangeId,
-                                        &AboutResource::largest_change_id_,
-                                        &base::StringToInt64);
-  converter->RegisterCustomField<int64>(kQuotaBytesTotal,
-                                        &AboutResource::quota_bytes_total_,
-                                        &base::StringToInt64);
-  converter->RegisterCustomField<int64>(
-      kQuotaBytesUsedAggregate,
-      &AboutResource::quota_bytes_used_aggregate_,
+  converter->RegisterCustomField<int64_t>(kLargestChangeId,
+                                          &AboutResource::largest_change_id_,
+                                          &base::StringToInt64);
+  converter->RegisterCustomField<int64_t>(kQuotaBytesTotal,
+                                          &AboutResource::quota_bytes_total_,
+                                          &base::StringToInt64);
+  converter->RegisterCustomField<int64_t>(
+      kQuotaBytesUsedAggregate, &AboutResource::quota_bytes_used_aggregate_,
       &base::StringToInt64);
   converter->RegisterStringField(kRootFolderId,
                                  &AboutResource::root_folder_id_);
@@ -276,7 +277,7 @@ scoped_ptr<DriveAppIcon> DriveAppIcon::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid DriveAppIcon JSON!";
     return scoped_ptr<DriveAppIcon>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool DriveAppIcon::Parse(const base::Value& value) {
@@ -341,7 +342,7 @@ scoped_ptr<AppResource> AppResource::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid AppResource JSON!";
     return scoped_ptr<AppResource>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool AppResource::Parse(const base::Value& value) {
@@ -375,7 +376,7 @@ scoped_ptr<AppList> AppList::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid AppList JSON!";
     return scoped_ptr<AppList>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool AppList::Parse(const base::Value& value) {
@@ -412,7 +413,7 @@ ParentReference::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid ParentRefernce JSON!";
     return scoped_ptr<ParentReference>();
   }
-  return reference.Pass();
+  return reference;
 }
 
 bool ParentReference::Parse(const base::Value& value) {
@@ -459,9 +460,8 @@ void FileResource::RegisterJSONConverter(
       &util::GetTimeFromString);
   converter->RegisterBoolField(kShared, &FileResource::shared_);
   converter->RegisterStringField(kMd5Checksum, &FileResource::md5_checksum_);
-  converter->RegisterCustomField<int64>(kFileSize,
-                                        &FileResource::file_size_,
-                                        &base::StringToInt64);
+  converter->RegisterCustomField<int64_t>(kFileSize, &FileResource::file_size_,
+                                          &base::StringToInt64);
   converter->RegisterCustomField<GURL>(kAlternateLink,
                                        &FileResource::alternate_link_,
                                        GetGURLFromString);
@@ -485,7 +485,7 @@ scoped_ptr<FileResource> FileResource::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid FileResource JSON!";
     return scoped_ptr<FileResource>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool FileResource::IsDirectory() const {
@@ -536,7 +536,7 @@ scoped_ptr<FileList> FileList::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid FileList JSON!";
     return scoped_ptr<FileList>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool FileList::Parse(const base::Value& value) {
@@ -558,9 +558,8 @@ ChangeResource::~ChangeResource() {}
 // static
 void ChangeResource::RegisterJSONConverter(
     base::JSONValueConverter<ChangeResource>* converter) {
-  converter->RegisterCustomField<int64>(kId,
-                                        &ChangeResource::change_id_,
-                                        &base::StringToInt64);
+  converter->RegisterCustomField<int64_t>(kId, &ChangeResource::change_id_,
+                                          &base::StringToInt64);
   converter->RegisterStringField(kFileId, &ChangeResource::file_id_);
   converter->RegisterBoolField(kDeleted, &ChangeResource::deleted_);
   converter->RegisterCustomValueField(kFile, &ChangeResource::file_,
@@ -578,7 +577,7 @@ ChangeResource::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid ChangeResource JSON!";
     return scoped_ptr<ChangeResource>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool ChangeResource::Parse(const base::Value& value) {
@@ -603,9 +602,8 @@ void ChangeList::RegisterJSONConverter(
   converter->RegisterCustomField<GURL>(kNextLink,
                                        &ChangeList::next_link_,
                                        GetGURLFromString);
-  converter->RegisterCustomField<int64>(kLargestChangeId,
-                                        &ChangeList::largest_change_id_,
-                                        &base::StringToInt64);
+  converter->RegisterCustomField<int64_t>(
+      kLargestChangeId, &ChangeList::largest_change_id_, &base::StringToInt64);
   converter->RegisterRepeatedMessage<ChangeResource>(kItems,
                                                      &ChangeList::items_);
 }
@@ -622,7 +620,7 @@ scoped_ptr<ChangeList> ChangeList::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid ChangeList JSON!";
     return scoped_ptr<ChangeList>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool ChangeList::Parse(const base::Value& value) {
@@ -655,7 +653,7 @@ scoped_ptr<FileLabels> FileLabels::CreateFrom(const base::Value& value) {
     LOG(ERROR) << "Unable to create: Invalid FileLabels JSON!";
     return scoped_ptr<FileLabels>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool FileLabels::Parse(const base::Value& value) {
@@ -696,7 +694,7 @@ scoped_ptr<ImageMediaMetadata> ImageMediaMetadata::CreateFrom(
     LOG(ERROR) << "Unable to create: Invalid ImageMediaMetadata JSON!";
     return scoped_ptr<ImageMediaMetadata>();
   }
-  return resource.Pass();
+  return resource;
 }
 
 bool ImageMediaMetadata::Parse(const base::Value& value) {

@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/test/base/chrome_unit_test_suite.h"
@@ -23,17 +24,10 @@ namespace {
 // View subclass that allows you to specify the preferred size.
 class TestView : public views::View {
  public:
-  TestView() {}
-
-  void SetPreferredSize(const gfx::Size& size) {
-    preferred_size_ = size;
-    PreferredSizeChanged();
-  }
+  explicit TestView(ViewEventTestBase* harness) : harness_(harness) {}
 
   gfx::Size GetPreferredSize() const override {
-    if (!preferred_size_.IsEmpty())
-      return preferred_size_;
-    return View::GetPreferredSize();
+    return harness_->GetPreferredSize();
   }
 
   void Layout() override {
@@ -42,7 +36,7 @@ class TestView : public views::View {
   }
 
  private:
-  gfx::Size preferred_size_;
+  ViewEventTestBase* harness_;
 
   DISALLOW_COPY_AND_ASSIGN(TestView);
 };
@@ -100,6 +94,10 @@ void ViewEventTestBase::TearDown() {
   ui::ShutdownInputMethodForTesting();
 }
 
+gfx::Size ViewEventTestBase::GetPreferredSize() const {
+  return gfx::Size();
+}
+
 bool ViewEventTestBase::CanResize() const {
   return true;
 }
@@ -108,8 +106,7 @@ views::View* ViewEventTestBase::GetContentsView() {
   if (!content_view_) {
     // Wrap the real view (as returned by CreateContentsView) in a View so
     // that we can customize the preferred size.
-    TestView* test_view = new TestView();
-    test_view->SetPreferredSize(GetPreferredSize());
+    TestView* test_view = new TestView(this);
     test_view->AddChildView(CreateContentsView());
     content_view_ = test_view;
   }
@@ -141,10 +138,6 @@ void ViewEventTestBase::StartMessageLoopAndRunTest() {
       FROM_HERE, base::Bind(&ViewEventTestBase::DoTestOnMessageLoop, this));
 
   content::RunThisRunLoop(&run_loop_);
-}
-
-gfx::Size ViewEventTestBase::GetPreferredSize() const {
-  return gfx::Size();
 }
 
 void ViewEventTestBase::ScheduleMouseMoveInBackground(int x, int y) {

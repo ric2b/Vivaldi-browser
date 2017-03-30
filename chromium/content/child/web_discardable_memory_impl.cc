@@ -4,8 +4,12 @@
 
 #include "content/child/web_discardable_memory_impl.h"
 
+#include <utility>
+
 #include "base/memory/discardable_memory.h"
 #include "base/memory/discardable_memory_allocator.h"
+#include "content/child/web_process_memory_dump_impl.h"
+#include "third_party/WebKit/public/platform/WebString.h"
 
 namespace content {
 
@@ -31,9 +35,16 @@ void* WebDiscardableMemoryImpl::data() {
   return discardable_->data();
 }
 
+blink::WebMemoryAllocatorDump*
+WebDiscardableMemoryImpl::createMemoryAllocatorDump(
+    const blink::WebString& name,
+    blink::WebProcessMemoryDump* wpmd) const {
+  return static_cast<content::WebProcessMemoryDumpImpl*>(wpmd)
+      ->CreateDiscardableMemoryAllocatorDump(name.utf8(), discardable_.get());
+}
+
 WebDiscardableMemoryImpl::WebDiscardableMemoryImpl(
     scoped_ptr<base::DiscardableMemory> memory)
-    : discardable_(memory.Pass()) {
-}
+    : discardable_(std::move(memory)) {}
 
 }  // namespace content

@@ -5,7 +5,6 @@
 #ifndef CONTENT_BROWSER_LOADER_NAVIGATION_URL_LOADER_IMPL_CORE_H_
 #define CONTENT_BROWSER_LOADER_NAVIGATION_URL_LOADER_IMPL_CORE_H_
 
-#include "base/basictypes.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -23,6 +22,7 @@ class NavigationResourceHandler;
 class ResourceContext;
 class ResourceHandler;
 class ResourceRequestBody;
+class ServiceWorkerNavigationHandleCore;
 class StreamHandle;
 struct ResourceResponse;
 
@@ -40,7 +40,7 @@ class NavigationURLLoaderImplCore {
 
   // Starts the request.
   void Start(ResourceContext* resource_context,
-             int frame_tree_node_id,
+             ServiceWorkerNavigationHandleCore* service_worker_handle_core,
              scoped_ptr<NavigationRequestInfo> request_info);
 
   // Follows the current pending redirect.

@@ -8,23 +8,18 @@
 This script DOES NOT run tests. run_gpu_test does that.
 """
 
-import os
-import subprocess
 import sys
 
+from gpu_tests import path_util
+import gpu_project_config
+
+path_util.AddDirToPathIfNeeded(path_util.GetChromiumSrcDir(), 'tools',
+                               'telemetry')
+
+from telemetry.testing import unittest_runner
+
+def main():
+  return unittest_runner.Run(gpu_project_config.CONFIG, no_browser=True)
 
 if __name__ == '__main__':
-  gpu_test_dir = os.path.dirname(os.path.realpath(__file__))
-  telemetry_dir = os.path.realpath(
-    os.path.join(gpu_test_dir, '..', '..', '..', 'tools', 'telemetry'))
-
-  env = os.environ.copy()
-  if 'PYTHONPATH' in env:
-    env['PYTHONPATH'] = env['PYTHONPATH'] + os.pathsep + telemetry_dir
-  else:
-    env['PYTHONPATH'] = telemetry_dir
-
-  path_to_run_tests = os.path.join(telemetry_dir, 'telemetry', 'testing',
-                                   'run_tests.py')
-  argv = ['--top-level-dir', gpu_test_dir] + sys.argv[1:]
-  sys.exit(subprocess.call([sys.executable, path_to_run_tests] + argv, env=env))
+  sys.exit(main())

@@ -17,19 +17,20 @@
 #ifndef COMPONENTS_NETWORK_HINTS_RENDERER_RENDERER_PRECONNECT_H_
 #define COMPONENTS_NETWORK_HINTS_RENDERER_RENDERER_PRECONNECT_H_
 
+#include "base/macros.h"
 #include "url/gurl.h"
 
 namespace network_hints {
 
 // An internal interface to the network_hints component for efficiently sending
-// DNS prefetch requests to the net stack.
+// preconnect requests to the net stack.
 class RendererPreconnect {
  public:
   RendererPreconnect();
   ~RendererPreconnect();
 
   // Submit a preconnect request for a single connection.
-  void Preconnect(const GURL &url);
+  void Preconnect(const GURL& url, bool allow_credentials);
 
  private:
 

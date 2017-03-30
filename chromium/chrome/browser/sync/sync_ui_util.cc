@@ -4,17 +4,19 @@
 
 #include "chrome/browser/sync/sync_ui_util.h"
 
+#include <stdint.h>
+
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -25,9 +27,11 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "grit/components_strings.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/sessions/sync_session_snapshot.h"
 #include "sync/protocol/proto_enum_conversions.h"
@@ -35,6 +39,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #endif  // defined(OS_CHROMEOS)
 
@@ -56,14 +61,14 @@ bool IsChromeDashboardEnabled() {
 base::string16 GetSyncedStateStatusLabel(ProfileSyncService* service,
                                          const SigninManagerBase& signin,
                                          StatusLabelStyle style) {
-  std::string user_display_name = signin.GetAuthenticatedUsername();
+  std::string user_display_name = signin.GetAuthenticatedAccountInfo().email;
 
 #if defined(OS_CHROMEOS)
   if (user_manager::UserManager::IsInitialized()) {
     // On CrOS user email is sanitized and then passed to the signin manager.
     // Original email (containing dots) is stored as "display email".
     user_display_name = user_manager::UserManager::Get()->GetUserDisplayEmail(
-        user_display_name);
+        AccountId::FromUserEmail(user_display_name));
   }
 #endif  // defined(OS_CHROMEOS)
 
@@ -141,7 +146,8 @@ void GetStatusForActionableError(
 // TODO(akalin): Write unit tests for these three functions below.
 
 // status_label and link_label must either be both NULL or both non-NULL.
-MessageType GetStatusInfo(ProfileSyncService* service,
+MessageType GetStatusInfo(Profile* profile,
+                          ProfileSyncService* service,
                           const SigninManagerBase& signin,
                           StatusLabelStyle style,
                           base::string16* status_label,
@@ -180,12 +186,11 @@ MessageType GetStatusInfo(ProfileSyncService* service,
     if (service) {
       // Since there is no auth in progress, check for an auth error first.
       AuthError auth_error =
-          SigninErrorControllerFactory::GetForProfile(service->profile())->
-              auth_error();
+          SigninErrorControllerFactory::GetForProfile(profile)->auth_error();
       if (auth_error.state() != AuthError::NONE) {
         if (status_label && link_label)
-          signin_ui_util::GetStatusLabelsForAuthError(
-              service->profile(), signin, status_label, link_label);
+          signin_ui_util::GetStatusLabelsForAuthError(profile, signin,
+                                                      status_label, link_label);
         return SYNC_ERROR;
       }
 
@@ -238,13 +243,12 @@ MessageType GetStatusInfo(ProfileSyncService* service,
   } else {
     // Either show auth error information with a link to re-login, auth in prog,
     // or provide a link to continue with setup.
-    if (service->FirstSetupInProgress()) {
+    if (service->IsFirstSetupInProgress()) {
       result_type = PRE_SYNCED;
       ProfileSyncService::Status status;
       service->QueryDetailedSyncStatus(&status);
       AuthError auth_error =
-          SigninErrorControllerFactory::GetForProfile(service->profile())->
-              auth_error();
+          SigninErrorControllerFactory::GetForProfile(profile)->auth_error();
       if (status_label) {
         status_label->assign(
             l10n_util::GetStringUTF16(IDS_SYNC_NTP_SETUP_IN_PROGRESS));
@@ -258,8 +262,8 @@ MessageType GetStatusInfo(ProfileSyncService* service,
                  auth_error.state() != AuthError::TWO_FACTOR) {
         if (status_label && link_label) {
           status_label->clear();
-          signin_ui_util::GetStatusLabelsForAuthError(
-              service->profile(), signin, status_label, link_label);
+          signin_ui_util::GetStatusLabelsForAuthError(profile, signin,
+                                                      status_label, link_label);
         }
         result_type = SYNC_ERROR;
       }
@@ -280,7 +284,7 @@ MessageType GetStatusInfo(ProfileSyncService* service,
       if (status_label) {
         base::string16 label = l10n_util::GetStringFUTF16(
             IDS_SIGNED_IN_WITH_SYNC_SUPPRESSED,
-            base::UTF8ToUTF16(signin.GetAuthenticatedUsername()));
+            base::UTF8ToUTF16(signin.GetAuthenticatedAccountInfo().email));
         status_label->assign(label);
         result_type = PRE_SYNCED;
       }
@@ -291,7 +295,8 @@ MessageType GetStatusInfo(ProfileSyncService* service,
 
 // Returns the status info for use on the new tab page, where we want slightly
 // different information than in the settings panel.
-MessageType GetStatusInfoForNewTabPage(ProfileSyncService* service,
+MessageType GetStatusInfoForNewTabPage(Profile* profile,
+                                       ProfileSyncService* service,
                                        const SigninManagerBase& signin,
                                        base::string16* status_label,
                                        base::string16* link_label) {
@@ -324,30 +329,33 @@ MessageType GetStatusInfoForNewTabPage(ProfileSyncService* service,
   }
 
   // Fallback to default.
-  return GetStatusInfo(service, signin, WITH_HTML, status_label, link_label);
+  return GetStatusInfo(profile, service, signin, WITH_HTML, status_label,
+                       link_label);
 }
 
 }  // namespace
 
-MessageType GetStatusLabels(ProfileSyncService* service,
+MessageType GetStatusLabels(Profile* profile,
+                            ProfileSyncService* service,
                             const SigninManagerBase& signin,
                             StatusLabelStyle style,
                             base::string16* status_label,
                             base::string16* link_label) {
   DCHECK(status_label);
   DCHECK(link_label);
-  return sync_ui_util::GetStatusInfo(
-      service, signin, style, status_label, link_label);
+  return sync_ui_util::GetStatusInfo(profile, service, signin, style,
+                                     status_label, link_label);
 }
 
-MessageType GetStatusLabelsForNewTabPage(ProfileSyncService* service,
+MessageType GetStatusLabelsForNewTabPage(Profile* profile,
+                                         ProfileSyncService* service,
                                          const SigninManagerBase& signin,
                                          base::string16* status_label,
                                          base::string16* link_label) {
   DCHECK(status_label);
   DCHECK(link_label);
-  return sync_ui_util::GetStatusInfoForNewTabPage(
-      service, signin, status_label, link_label);
+  return sync_ui_util::GetStatusInfoForNewTabPage(profile, service, signin,
+                                                  status_label, link_label);
 }
 
 #if !defined(OS_CHROMEOS)
@@ -381,12 +389,14 @@ void GetStatusLabelsForSyncGlobalError(const ProfileSyncService* service,
 }
 #endif
 
-MessageType GetStatus(
-    ProfileSyncService* service, const SigninManagerBase& signin) {
-  return sync_ui_util::GetStatusInfo(service, signin, WITH_HTML, NULL, NULL);
+MessageType GetStatus(Profile* profile,
+                      ProfileSyncService* service,
+                      const SigninManagerBase& signin) {
+  return sync_ui_util::GetStatusInfo(profile, service, signin, WITH_HTML,
+                                     nullptr, nullptr);
 }
 
-base::string16 ConstructTime(int64 time_in_int) {
+base::string16 ConstructTime(int64_t time_in_int) {
   base::Time time = base::Time::FromInternalValue(time_in_int);
 
   // If time is null the format function returns a time in 1969.

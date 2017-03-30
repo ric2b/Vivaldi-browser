@@ -2,62 +2,71 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-ANIMATION_INTERVAL = 50;
+(function() {
 
-Polymer({
-  is: 'viewer-zoom-toolbar',
+  var FIT_TO_PAGE = 0;
+  var FIT_TO_WIDTH = 1;
 
-  properties: {
-   /**
-     * The default zoom percentage.
+  Polymer({
+    is: 'viewer-zoom-toolbar',
+
+    properties: {
+      visible_: {
+        type: Boolean,
+        value: true
+      }
+    },
+
+    isVisible: function() {
+      return this.visible_;
+    },
+
+    /**
+     * Change button tooltips to match any changes to loadTimeData.
      */
-    zoomValue: {
-      type: Number,
-      value: 100
-    }
-  },
+    updateTooltips: function() {
+      this.$['fit-button'].tooltips = [
+          loadTimeData.getString('tooltipFitToPage'),
+          loadTimeData.getString('tooltipFitToWidth')
+      ];
+      this.$['zoom-in-button'].tooltips =
+          [loadTimeData.getString('tooltipZoomIn')];
+      this.$['zoom-out-button'].tooltips =
+          [loadTimeData.getString('tooltipZoomOut')];
+    },
 
-  get visible() {
-    return this.visible_;
-  },
+    fitToggle: function() {
+      if (this.$['fit-button'].activeIndex == FIT_TO_WIDTH)
+        this.fire('fit-to-width');
+      else
+        this.fire('fit-to-page');
+    },
 
-  ready: function() {
-    this.visible_ = true;
-  },
+    zoomIn: function() {
+      this.fire('zoom-in');
+    },
 
-  fitToPage: function() {
-    this.fire('fit-to-page');
-  },
+    zoomOut: function() {
+      this.fire('zoom-out');
+    },
 
-  fitToWidth: function() {
-    this.fire('fit-to-width');
-  },
+    show: function() {
+      if (!this.visible_) {
+        this.visible_ = true;
+        this.$['fit-button'].show();
+        this.$['zoom-in-button'].show();
+        this.$['zoom-out-button'].show();
+      }
+    },
 
-  zoomIn: function() {
-    this.fire('zoom-in');
-  },
+    hide: function() {
+      if (this.visible_) {
+        this.visible_ = false;
+        this.$['fit-button'].hide();
+        this.$['zoom-in-button'].hide();
+        this.$['zoom-out-button'].hide();
+      }
+    },
+  });
 
-  zoomOut: function() {
-    this.fire('zoom-out');
-  },
-
-  show: function() {
-    if (!this.visible) {
-      this.visible_ = true;
-      this.$['fit-to-width-button'].show();
-      this.$['fit-to-page-button'].show();
-      this.$['zoom-in-button'].show();
-      this.$['zoom-out-button'].show();
-    }
-  },
-
-  hide: function() {
-    if (this.visible) {
-      this.visible_ = false;
-      this.$['fit-to-page-button'].hide();
-      this.$['fit-to-width-button'].hide();
-      this.$['zoom-in-button'].hide();
-      this.$['zoom-out-button'].hide();
-    }
-  },
-});
+})();

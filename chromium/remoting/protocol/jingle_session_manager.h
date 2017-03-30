@@ -5,27 +5,17 @@
 #ifndef REMOTING_PROTOCOL_JINGLE_SESSION_MANAGER_H_
 #define REMOTING_PROTOCOL_JINGLE_SESSION_MANAGER_H_
 
-#include <list>
 #include <map>
 #include <string>
 
-#include "base/memory/ref_counted.h"
-#include "net/cert/x509_certificate.h"
+#include "base/macros.h"
 #include "remoting/protocol/jingle_messages.h"
 #include "remoting/protocol/session_manager.h"
 #include "remoting/signaling/signal_strategy.h"
 
-namespace pp {
-class Instance;
-}  // namespace pp
-
 namespace buzz {
 class XmlElement;
 }  // namespace buzz
-
-namespace rtc {
-class SocketAddress;
-}  // namespace rtc
 
 namespace remoting {
 
@@ -43,33 +33,27 @@ class TransportFactory;
 class JingleSessionManager : public SessionManager,
                              public SignalStrategy::Listener {
  public:
-  explicit JingleSessionManager(scoped_ptr<TransportFactory> transport_factory);
+  explicit JingleSessionManager(SignalStrategy* signal_strategy);
   ~JingleSessionManager() override;
 
   // SessionManager interface.
-  void Init(SignalStrategy* signal_strategy,
-            SessionManager::Listener* listener) override;
+  void AcceptIncoming(
+      const IncomingSessionCallback& incoming_session_callback) override;
+  void set_protocol_config(scoped_ptr<CandidateSessionConfig> config) override;
   scoped_ptr<Session> Connect(
       const std::string& host_jid,
-      scoped_ptr<Authenticator> authenticator,
-      scoped_ptr<CandidateSessionConfig> config) override;
-  void Close() override;
+      scoped_ptr<Authenticator> authenticator) override;
   void set_authenticator_factory(
       scoped_ptr<AuthenticatorFactory> authenticator_factory) override;
+
+ private:
+  friend class JingleSession;
 
   // SignalStrategy::Listener interface.
   void OnSignalStrategyStateChange(SignalStrategy::State state) override;
   bool OnSignalStrategyIncomingStanza(const buzz::XmlElement* stanza) override;
 
- private:
-  friend class JingleSession;
-
   typedef std::map<std::string, JingleSession*> SessionsMap;
-
-  void OnJingleInfo(
-      const std::string& relay_token,
-      const std::vector<std::string>& relay_hosts,
-      const std::vector<rtc::SocketAddress>& stun_hosts);
 
   IqSender* iq_sender() { return iq_sender_.get(); }
   void SendReply(const buzz::XmlElement* original_stanza,
@@ -78,15 +62,12 @@ class JingleSessionManager : public SessionManager,
   // Called by JingleSession when it is being destroyed.
   void SessionDestroyed(JingleSession* session);
 
-  scoped_ptr<TransportFactory> transport_factory_;
-  bool fetch_stun_relay_config_;
+  SignalStrategy* signal_strategy_ = nullptr;
+  IncomingSessionCallback incoming_session_callback_;
+  scoped_ptr<CandidateSessionConfig> protocol_config_;
 
-  SignalStrategy* signal_strategy_;
   scoped_ptr<AuthenticatorFactory> authenticator_factory_;
   scoped_ptr<IqSender> iq_sender_;
-  SessionManager::Listener* listener_;
-
-  bool ready_;
 
   SessionsMap sessions_;
 

@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_TEST_UTILS_H_
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_TEST_UTILS_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/macros.h"
@@ -20,6 +22,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings_test_utils.h"
+#include "components/data_reduction_proxy/core/browser/data_store.h"
 #include "net/base/backoff_entry.h"
 #include "net/log/test_net_log.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -104,6 +107,8 @@ class TestDataReductionProxyConfigServiceClient
 
   ~TestDataReductionProxyConfigServiceClient() override;
 
+  using DataReductionProxyConfigServiceClient::OnIPAddressChanged;
+
   void SetNow(const base::Time& time);
 
   void SetCustomReleaseTime(const base::TimeTicks& release_time);
@@ -147,11 +152,10 @@ class TestDataReductionProxyConfigServiceClient
 class MockDataReductionProxyService : public DataReductionProxyService {
  public:
   MockDataReductionProxyService(
-      scoped_ptr<DataReductionProxyCompressionStats> compression_stats,
       DataReductionProxySettings* settings,
       PrefService* prefs,
       net::URLRequestContextGetter* request_context,
-      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
   ~MockDataReductionProxyService() override;
 
   MOCK_METHOD2(SetProxyPrefs, void(bool enabled, bool at_startup));
@@ -163,7 +167,7 @@ class MockDataReductionProxyService : public DataReductionProxyService {
 class TestDataReductionProxyIOData : public DataReductionProxyIOData {
  public:
   TestDataReductionProxyIOData(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       scoped_ptr<DataReductionProxyConfig> config,
       scoped_ptr<DataReductionProxyEventCreator> event_creator,
       scoped_ptr<DataReductionProxyRequestOptions> request_options,
@@ -197,6 +201,27 @@ class TestDataReductionProxyIOData : public DataReductionProxyIOData {
  private:
   // Allowed SetDataReductionProxyService to be re-entrant.
   bool service_set_;
+};
+
+// Test version of |DataStore|. Uses an in memory hash map to store data.
+class TestDataStore : public data_reduction_proxy::DataStore {
+ public:
+  TestDataStore();
+
+  ~TestDataStore() override;
+
+  void InitializeOnDBThread() override {}
+
+  DataStore::Status Get(const std::string& key, std::string* value) override;
+
+  DataStore::Status Put(const std::map<std::string, std::string>& map) override;
+
+  DataStore::Status Delete(const std::string& key) override;
+
+  std::map<std::string, std::string>* map() { return &map_; }
+
+ private:
+  std::map<std::string, std::string> map_;
 };
 
 // Builds a test version of the Data Reduction Proxy stack for use in tests.
@@ -279,6 +304,16 @@ class DataReductionProxyTestContext {
 
   virtual ~DataReductionProxyTestContext();
 
+  // Returns the name of the preference used to enable the Data Reduction
+  // Proxy.
+  const char* GetDataReductionProxyEnabledPrefName() const;
+
+  // Registers, sets, and gets the preference used to enable the Data Reduction
+  // Proxy, respectively.
+  void RegisterDataReductionProxyEnabledPref();
+  void SetDataReductionProxyEnabled(bool enabled);
+  bool IsDataReductionProxyEnabled() const;
+
   // Waits while executing all tasks on the current SingleThreadTaskRunner.
   void RunUntilIdle();
 
@@ -286,11 +321,16 @@ class DataReductionProxyTestContext {
   // built with SkipSettingsInitialization.
   void InitSettings();
 
+  // Destroys the |DataReductionProxySettings| object and waits until objects on
+  // the DB task runner are destroyed.
+  void DestroySettings();
+
   // Creates a |DataReductionProxyService| object, or a
   // |MockDataReductionProxyService| if built with
   // WithMockDataReductionProxyService. Can only be called if built with
   // SkipSettingsInitialization.
-  scoped_ptr<DataReductionProxyService> CreateDataReductionProxyService();
+  scoped_ptr<DataReductionProxyService> CreateDataReductionProxyService(
+      DataReductionProxySettings* settings);
 
   // This creates a |DataReductionProxyNetworkDelegate| and
   // |DataReductionProxyInterceptor|, using them in the |net::URLRequestContext|
@@ -410,7 +450,7 @@ class DataReductionProxyTestContext {
   };
 
   DataReductionProxyTestContext(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       scoped_ptr<TestingPrefServiceSimple> simple_pref_service,
       scoped_ptr<net::TestNetLog> net_log,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
@@ -424,8 +464,8 @@ class DataReductionProxyTestContext {
 
   void InitSettingsWithoutCheck();
 
-  scoped_ptr<DataReductionProxyService>
-      CreateDataReductionProxyServiceInternal();
+  scoped_ptr<DataReductionProxyService> CreateDataReductionProxyServiceInternal(
+      DataReductionProxySettings* settings);
 
   unsigned int test_context_flags_;
 

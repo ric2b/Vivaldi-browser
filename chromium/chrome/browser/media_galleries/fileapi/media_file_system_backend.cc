@@ -5,6 +5,7 @@
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -16,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/media_galleries/fileapi/device_media_async_file_util.h"
@@ -23,6 +25,7 @@
 #include "chrome/browser/media_galleries/fileapi/media_path_filter.h"
 #include "chrome/browser/media_galleries/fileapi/native_media_file_util.h"
 #include "chrome/browser/media_galleries/media_file_system_registry.h"
+#include "chrome/browser/media_galleries/media_galleries_histograms.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -59,30 +62,33 @@ namespace {
 const char kMediaGalleryMountPrefix[] = "media_galleries-";
 
 void OnPreferencesInit(
-    const content::RenderViewHost* rvh,
+    const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     const extensions::Extension* extension,
     MediaGalleryPrefId pref_id,
     const base::Callback<void(base::File::Error result)>& callback) {
+  content::WebContents* contents = web_contents_getter.Run();
+  if (!contents) {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::Bind(callback, base::File::FILE_ERROR_FAILED));
+    return;
+  }
   MediaFileSystemRegistry* registry =
       g_browser_process->media_file_system_registry();
-  registry->RegisterMediaFileSystemForExtension(
-      content::WebContents::FromRenderViewHost(rvh), extension, pref_id,
-      callback);
+  registry->RegisterMediaFileSystemForExtension(contents, extension, pref_id,
+                                                callback);
 }
 
 void AttemptAutoMountOnUIThread(
-    int32 process_id,
-    int32 routing_id,
+    const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     const std::string& storage_domain,
     const std::string& mount_point,
     const base::Callback<void(base::File::Error result)>& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  content::RenderViewHost* rvh =
-      content::RenderViewHost::FromID(process_id, routing_id);
-  if (rvh) {
+  content::WebContents* web_contents = web_contents_getter.Run();
+  if (web_contents) {
     Profile* profile =
-        Profile::FromBrowserContext(rvh->GetProcess()->GetBrowserContext());
+        Profile::FromBrowserContext(web_contents->GetBrowserContext());
 
     ExtensionService* extension_service =
         extensions::ExtensionSystem::Get(profile)->extension_service();
@@ -102,8 +108,11 @@ void AttemptAutoMountOnUIThread(
       MediaGalleriesPreferences* preferences =
           g_browser_process->media_file_system_registry()->GetPreferences(
               profile);
-      preferences->EnsureInitialized(
-          base::Bind(&OnPreferencesInit, rvh, extension, pref_id, callback));
+      // Pass the WebContentsGetter to the closure to prevent a use-after-free
+      // in the case that the web_contents is destroyed before the closure runs.
+      preferences->EnsureInitialized(base::Bind(&OnPreferencesInit,
+                                                web_contents_getter, extension,
+                                                pref_id, callback));
       return;
     }
   }
@@ -134,11 +143,14 @@ MediaFileSystemBackend::MediaFileSystemBackend(
 #if defined(OS_WIN) || defined(OS_MACOSX)
       ,
       picasa_file_util_(new picasa::PicasaFileUtil(media_path_filter_.get())),
-      itunes_file_util_(new itunes::ITunesFileUtil(media_path_filter_.get()))
+      itunes_file_util_(new itunes::ITunesFileUtil(media_path_filter_.get())),
+      picasa_file_util_used_(false),
+      itunes_file_util_used_(false)
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 #if defined(OS_MACOSX)
       ,
-      iphoto_file_util_(new iphoto::IPhotoFileUtil(media_path_filter_.get()))
+      iphoto_file_util_(new iphoto::IPhotoFileUtil(media_path_filter_.get())),
+      iphoto_file_util_used_(false)
 #endif  // defined(OS_MACOSX)
 {
 }
@@ -209,11 +221,10 @@ bool MediaFileSystemBackend::AttemptAutoMountForURLRequest(
     return false;
 
   content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&AttemptAutoMountOnUIThread, request_info->GetChildID(),
-                 request_info->GetRouteID(), storage_domain, mount_point,
-                 callback));
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(&AttemptAutoMountOnUIThread,
+                 request_info->GetWebContentsGetterForRequest(), storage_domain,
+                 mount_point, callback));
   return true;
 }
 
@@ -252,6 +263,8 @@ void MediaFileSystemBackend::ResolveURL(
 
 storage::AsyncFileUtil* MediaFileSystemBackend::GetAsyncFileUtil(
     storage::FileSystemType type) {
+  // We count file system usages here, because we want to count (per session)
+  // when the file system is actually used for I/O, rather than merely present.
   switch (type) {
     case storage::kFileSystemTypeNativeMedia:
       return native_media_file_util_.get();
@@ -259,12 +272,24 @@ storage::AsyncFileUtil* MediaFileSystemBackend::GetAsyncFileUtil(
       return device_media_async_file_util_.get();
 #if defined(OS_WIN) || defined(OS_MACOSX)
     case storage::kFileSystemTypeItunes:
+      if (!itunes_file_util_used_) {
+        media_galleries::UsageCount(media_galleries::ITUNES_FILE_SYSTEM_USED);
+        itunes_file_util_used_ = true;
+      }
       return itunes_file_util_.get();
     case storage::kFileSystemTypePicasa:
+      if (!picasa_file_util_used_) {
+        media_galleries::UsageCount(media_galleries::PICASA_FILE_SYSTEM_USED);
+        picasa_file_util_used_ = true;
+      }
       return picasa_file_util_.get();
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 #if defined(OS_MACOSX)
     case storage::kFileSystemTypeIphoto:
+      if (!iphoto_file_util_used_) {
+        media_galleries::UsageCount(media_galleries::IPHOTO_FILE_SYSTEM_USED);
+        iphoto_file_util_used_ = true;
+      }
       return iphoto_file_util_.get();
 #endif  // defined(OS_MACOSX)
     default:
@@ -307,8 +332,8 @@ storage::FileSystemOperation* MediaFileSystemBackend::CreateFileSystemOperation(
   scoped_ptr<storage::FileSystemOperationContext> operation_context(
       new storage::FileSystemOperationContext(context,
                                               media_task_runner_.get()));
-  return storage::FileSystemOperation::Create(
-      url, context, operation_context.Pass());
+  return storage::FileSystemOperation::Create(url, context,
+                                              std::move(operation_context));
 }
 
 bool MediaFileSystemBackend::SupportsStreaming(
@@ -334,8 +359,8 @@ bool MediaFileSystemBackend::HasInplaceCopyImplementation(
 scoped_ptr<storage::FileStreamReader>
 MediaFileSystemBackend::CreateFileStreamReader(
     const FileSystemURL& url,
-    int64 offset,
-    int64 max_bytes_to_read,
+    int64_t offset,
+    int64_t max_bytes_to_read,
     const base::Time& expected_modification_time,
     FileSystemContext* context) const {
   if (url.type() == storage::kFileSystemTypeDeviceMedia) {
@@ -344,7 +369,7 @@ MediaFileSystemBackend::CreateFileStreamReader(
         device_media_async_file_util_->GetFileStreamReader(
             url, offset, expected_modification_time, context);
     DCHECK(reader);
-    return reader.Pass();
+    return reader;
   }
 
   return scoped_ptr<storage::FileStreamReader>(
@@ -358,7 +383,7 @@ MediaFileSystemBackend::CreateFileStreamReader(
 scoped_ptr<storage::FileStreamWriter>
 MediaFileSystemBackend::CreateFileStreamWriter(
     const FileSystemURL& url,
-    int64 offset,
+    int64_t offset,
     FileSystemContext* context) const {
   return scoped_ptr<storage::FileStreamWriter>(
       storage::FileStreamWriter::CreateForLocalFile(

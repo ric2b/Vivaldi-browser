@@ -5,6 +5,7 @@
 #include "components/omnibox/browser/shortcuts_provider.h"
 
 #include <math.h>
+#include <stddef.h>
 
 #include <algorithm>
 #include <functional>
@@ -12,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
@@ -848,9 +850,9 @@ TEST_F(ShortcutsProviderTest, Extension) {
   // Claim the extension has been unloaded.
   scoped_refptr<const extensions::Extension> extension =
       extensions::ExtensionBuilder()
-          .SetManifest(extensions::DictionaryBuilder()
-              .Set("name", "Echo")
-              .Set("version", "1.0"))
+          .SetManifest(std::move(extensions::DictionaryBuilder()
+                                     .Set("name", "Echo")
+                                     .Set("version", "1.0")))
           .SetID("cedabbhfglmiikkmdgcpjdkocfcmbkee")
           .Build();
   extensions::UnloadedExtensionInfo details(

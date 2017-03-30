@@ -4,6 +4,9 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_mutable_config_values.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "net/base/net_util.h"
@@ -27,12 +30,10 @@ TestDataReductionProxyConfig::TestDataReductionProxyConfig(
     DataReductionProxyEventCreator* event_creator)
     : TestDataReductionProxyConfig(
           make_scoped_ptr(new TestDataReductionProxyParams(params_flags,
-                                                           params_definitions))
-              .Pass(),
+                                                           params_definitions)),
           net_log,
           configurator,
-          event_creator) {
-}
+          event_creator) {}
 
 TestDataReductionProxyConfig::TestDataReductionProxyConfig(
     scoped_ptr<DataReductionProxyConfigValues> config_values,
@@ -40,10 +41,9 @@ TestDataReductionProxyConfig::TestDataReductionProxyConfig(
     DataReductionProxyConfigurator* configurator,
     DataReductionProxyEventCreator* event_creator)
     : DataReductionProxyConfig(net_log,
-                               config_values.Pass(),
+                               std::move(config_values),
                                configurator,
                                event_creator),
-      auto_lofi_enabled_group_(false),
       network_quality_prohibitively_slow_(false) {
   network_interfaces_.reset(new net::NetworkInterfaceList());
 }
@@ -68,15 +68,11 @@ void TestDataReductionProxyConfig::EnableQuic(bool enable) {
 }
 
 void TestDataReductionProxyConfig::ResetParamFlagsForTest(int flags) {
-  config_values_ =
-      make_scoped_ptr(
-          new TestDataReductionProxyParams(
-              flags,
-              TestDataReductionProxyParams::HAS_EVERYTHING &
-                  ~TestDataReductionProxyParams::HAS_SSL_ORIGIN &
-                  ~TestDataReductionProxyParams::HAS_DEV_ORIGIN &
-                  ~TestDataReductionProxyParams::HAS_DEV_FALLBACK_ORIGIN))
-          .Pass();
+  config_values_ = make_scoped_ptr(new TestDataReductionProxyParams(
+      flags, TestDataReductionProxyParams::HAS_EVERYTHING &
+                 ~TestDataReductionProxyParams::HAS_SSL_ORIGIN &
+                 ~TestDataReductionProxyParams::HAS_DEV_ORIGIN &
+                 ~TestDataReductionProxyParams::HAS_DEV_FALLBACK_ORIGIN));
 }
 
 TestDataReductionProxyParams* TestDataReductionProxyConfig::test_params() {
@@ -95,16 +91,7 @@ void TestDataReductionProxyConfig::SetStateForTest(
 }
 
 void TestDataReductionProxyConfig::ResetLoFiStatusForTest() {
-  lofi_status_ = LoFiStatus::LOFI_STATUS_TEMPORARILY_OFF;
-}
-
-bool TestDataReductionProxyConfig::IsIncludedInLoFiEnabledFieldTrial() const {
-  return auto_lofi_enabled_group_;
-}
-
-void TestDataReductionProxyConfig::SetIncludedInLoFiEnabledFieldTrial(
-    bool auto_lofi_enabled_group) {
-  auto_lofi_enabled_group_ = auto_lofi_enabled_group;
+  lofi_off_ = false;
 }
 
 void TestDataReductionProxyConfig::SetNetworkProhibitivelySlow(
@@ -117,26 +104,22 @@ MockDataReductionProxyConfig::MockDataReductionProxyConfig(
     net::NetLog* net_log,
     DataReductionProxyConfigurator* configurator,
     DataReductionProxyEventCreator* event_creator)
-    : TestDataReductionProxyConfig(config_values.Pass(),
+    : TestDataReductionProxyConfig(std::move(config_values),
                                    net_log,
                                    configurator,
-                                   event_creator) {
-}
+                                   event_creator) {}
 
 MockDataReductionProxyConfig::~MockDataReductionProxyConfig() {
 }
 
-void MockDataReductionProxyConfig::UpdateConfigurator(bool enabled,
-                                                      bool secure_proxy_allowed,
-                                                      bool at_startup) {
-  EXPECT_CALL(*this, LogProxyState(enabled, secure_proxy_allowed, at_startup))
-      .Times(1);
-  DataReductionProxyConfig::UpdateConfigurator(enabled, secure_proxy_allowed,
-                                               at_startup);
+void MockDataReductionProxyConfig::UpdateConfigurator(
+    bool enabled,
+    bool secure_proxy_allowed) {
+  DataReductionProxyConfig::UpdateConfigurator(enabled, secure_proxy_allowed);
 }
 
 void MockDataReductionProxyConfig::ResetLoFiStatusForTest() {
-  lofi_status_ = LoFiStatus::LOFI_STATUS_TEMPORARILY_OFF;
+  lofi_off_ = false;
 }
 
 }  // namespace data_reduction_proxy

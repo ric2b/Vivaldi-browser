@@ -13,7 +13,7 @@
  * @constructor
  * @struct
  */
-Gallery.Item = function(
+function GalleryItem(
     entry, locationInfo, metadataItem, thumbnailMetadataItem, original) {
   /**
    * @private {!FileEntry}
@@ -71,67 +71,74 @@ Gallery.Item = function(
 /**
  * @return {!FileEntry} Image entry.
  */
-Gallery.Item.prototype.getEntry = function() { return this.entry_; };
+GalleryItem.prototype.getEntry = function() { return this.entry_; };
 
 /**
  * @return {!EntryLocation} Entry location information.
  */
-Gallery.Item.prototype.getLocationInfo = function() {
+GalleryItem.prototype.getLocationInfo = function() {
   return this.locationInfo_;
 };
 
 /**
  * @return {MetadataItem} Metadata.
  */
-Gallery.Item.prototype.getMetadataItem = function() {
+GalleryItem.prototype.getMetadataItem = function() {
   return this.metadataItem_;
 };
 
 /**
  * @param {!MetadataItem} metadata
  */
-Gallery.Item.prototype.setMetadataItem = function(metadata) {
+GalleryItem.prototype.setMetadataItem = function(metadata) {
   this.metadataItem_ = metadata;
 };
 
 /**
  * @return {ThumbnailMetadataItem} Thumbnail metadata item.
  */
-Gallery.Item.prototype.getThumbnailMetadataItem = function() {
+GalleryItem.prototype.getThumbnailMetadataItem = function() {
   return this.thumbnailMetadataItem_;
 };
 
 /**
  * @param {!ThumbnailMetadataItem} item Thumbnail metadata item.
  */
-Gallery.Item.prototype.setThumbnailMetadataItem = function(item) {
+GalleryItem.prototype.setThumbnailMetadataItem = function(item) {
   this.thumbnailMetadataItem_ = item;
 };
 
 /**
  * @return {string} File name.
  */
-Gallery.Item.prototype.getFileName = function() {
+GalleryItem.prototype.getFileName = function() {
   return this.entry_.name;
 };
 
 /**
  * @return {boolean} True if this image has not been created in this session.
  */
-Gallery.Item.prototype.isOriginal = function() { return this.original_; };
+GalleryItem.prototype.isOriginal = function() { return this.original_; };
+
+/**
+ * Sets an item as original.
+ */
+GalleryItem.prototype.setAsOriginal = function() {
+  this.original_ = true;
+};
 
 /**
  * Obtains the last accessed date.
  * @return {number} Last accessed date.
  */
-Gallery.Item.prototype.getLastAccessedDate = function() {
+GalleryItem.prototype.getLastAccessedDate = function() {
   return this.lastAccessed_;
 };
 
 /**
  * Updates the last accessed date.
  */
-Gallery.Item.prototype.touch = function() {
+GalleryItem.prototype.touch = function() {
   this.lastAccessed_ = Date.now();
 };
 
@@ -140,23 +147,23 @@ Gallery.Item.prototype.touch = function() {
  * @type {string} Suffix for a edited copy file name.
  * @const
  */
-Gallery.Item.COPY_SIGNATURE = ' - Edited';
+GalleryItem.COPY_SIGNATURE = ' - Edited';
 
 /**
  * Regular expression to match '... - Edited'.
  * @type {!RegExp}
  * @const
  */
-Gallery.Item.REGEXP_COPY_0 =
-    new RegExp('^(.+)' + Gallery.Item.COPY_SIGNATURE + '$');
+GalleryItem.REGEXP_COPY_0 =
+    new RegExp('^(.+)' + GalleryItem.COPY_SIGNATURE + '$');
 
 /**
  * Regular expression to match '... - Edited (N)'.
  * @type {!RegExp}
  * @const
  */
-Gallery.Item.REGEXP_COPY_N =
-    new RegExp('^(.+)' + Gallery.Item.COPY_SIGNATURE + ' \\((\\d+)\\)$');
+GalleryItem.REGEXP_COPY_N =
+    new RegExp('^(.+)' + GalleryItem.COPY_SIGNATURE + ' \\((\\d+)\\)$');
 
 /**
  * Creates a name for an edited copy of the file.
@@ -166,7 +173,7 @@ Gallery.Item.REGEXP_COPY_N =
  * @param {function(string)} callback Callback.
  * @private
  */
-Gallery.Item.prototype.createCopyName_ = function(
+GalleryItem.prototype.createCopyName_ = function(
     dirEntry, newMimeType, callback) {
   var name = this.getFileName();
 
@@ -189,16 +196,16 @@ Gallery.Item.prototype.createCopyName_ = function(
 
     // If the file name contains the copy signature add/advance the sequential
     // number.
-    var matchN = Gallery.Item.REGEXP_COPY_N.exec(baseName);
-    var match0 = Gallery.Item.REGEXP_COPY_0.exec(baseName);
+    var matchN = GalleryItem.REGEXP_COPY_N.exec(baseName);
+    var match0 = GalleryItem.REGEXP_COPY_0.exec(baseName);
     if (matchN && matchN[1] && matchN[2]) {
       var copyNumber = parseInt(matchN[2], 10) + 1;
-      baseName = matchN[1] + Gallery.Item.COPY_SIGNATURE +
+      baseName = matchN[1] + GalleryItem.COPY_SIGNATURE +
           ' (' + copyNumber + ')';
     } else if (match0 && match0[1]) {
-      baseName = match0[1] + Gallery.Item.COPY_SIGNATURE + ' (1)';
+      baseName = match0[1] + GalleryItem.COPY_SIGNATURE + ' (1)';
     } else {
-      baseName += Gallery.Item.COPY_SIGNATURE;
+      baseName += GalleryItem.COPY_SIGNATURE;
     }
 
     dirEntry.getFile(baseName + ext, {create: false, exclusive: false},
@@ -210,148 +217,200 @@ Gallery.Item.prototype.createCopyName_ = function(
 };
 
 /**
+ * Returns true if the original format is writable format of Gallery.
+ * @return {boolean} True if the original format is writable format.
+ */
+GalleryItem.prototype.isWritableFormat = function() {
+  var type = FileType.getType(this.entry_);
+  return type.type === 'image' &&
+      (type.subtype === 'JPEG' || type.subtype === 'PNG');
+};
+
+/**
+ * Returns true if the entry of item is writable.
+ * @param {!VolumeManagerWrapper} volumeManager Volume manager.
+ * @return {boolean} True if the entry of item is writable.
+ */
+GalleryItem.prototype.isWritableFile = function(volumeManager) {
+  return this.isWritableFormat() &&
+      !this.locationInfo_.isReadOnly &&
+      !GalleryUtil.isOnMTPVolume(this.entry_, volumeManager);
+};
+
+/**
+ * Returns mime type for saving an edit of this item.
+ * @return {string} Mime type.
+ * @private
+ */
+GalleryItem.prototype.getNewMimeType_ = function() {
+  return this.getFileName().match(/\.jpe?g$/i) || FileType.isRaw(this.entry_) ?
+      'image/jpeg' : 'image/png';
+};
+
+/**
+ * Return copy name of this item.
+ * @param {!DirectoryEntry} dirEntry Parent directory entry of copied item.
+ * @return {!Promise<string>} A promise which will be fulfilled with copy name.
+ */
+GalleryItem.prototype.getCopyName = function(dirEntry) {
+  return new Promise(this.createCopyName_.bind(
+      this, dirEntry, this.getNewMimeType_()));
+};
+
+/**
  * Writes the new item content to either the existing or a new file.
  *
  * @param {!VolumeManagerWrapper} volumeManager Volume manager instance.
  * @param {!MetadataModel} metadataModel
- * @param {DirectoryEntry} fallbackDir Fallback directory in case the current
+ * @param {!DirectoryEntry} fallbackDir Fallback directory in case the current
  *     directory is read only.
- * @param {boolean} overwrite Whether to overwrite the image to the item or not.
  * @param {!HTMLCanvasElement} canvas Source canvas.
+ * @param {boolean} overwrite Set true to overwrite original if it's possible.
  * @param {function(boolean)} callback Callback accepting true for success.
  */
-Gallery.Item.prototype.saveToFile = function(
-    volumeManager, metadataModel, fallbackDir, overwrite, canvas, callback) {
+GalleryItem.prototype.saveToFile = function(
+    volumeManager, metadataModel, fallbackDir, canvas, overwrite, callback) {
   ImageUtil.metrics.startInterval(ImageUtil.getMetricName('SaveTime'));
+  var saveResultRecorded = false;
 
-  var name = this.getFileName();
-  var newMimeType = name.match(/\.jpe?g$/i) || FileType.isRaw(this.entry_) ?
-      'image/jpeg' : 'image/png';
+  Promise.all([this.getEntryToWrite_(overwrite, fallbackDir, volumeManager),
+      this.getBlobForSave_(canvas, metadataModel)]).then(function(results) {
+    // Write content to the entry.
+    var fileEntry = results[0];
+    var blob = results[1];
 
-  var onSuccess = function(entry) {
-    var locationInfo = volumeManager.getLocationInfo(entry);
-    if (!locationInfo) {
-      // Reuse old location info if it fails to obtain location info.
-      locationInfo = this.locationInfo_;
-    }
-    ImageUtil.metrics.recordEnum(ImageUtil.getMetricName('SaveResult'), 1, 2);
-    ImageUtil.metrics.recordInterval(ImageUtil.getMetricName('SaveTime'));
-
-    this.entry_ = entry;
-    this.locationInfo_ = locationInfo;
-
-    // Updates the metadata.
-    metadataModel.notifyEntriesChanged([this.entry_]);
-    Promise.all([
-      metadataModel.get([entry], Gallery.PREFETCH_PROPERTY_NAMES),
-      new ThumbnailModel(metadataModel).get([entry])
-    ]).then(function(metadataLists) {
-      this.metadataItem_ = metadataLists[0][0];
-      this.thumbnailMetadataItem_ = metadataLists[1][0];
-      callback(true);
-    }.bind(this), function() {
-      callback(false);
-    });
-  }.bind(this);
-
-  var onError = function(error) {
-    console.error('Error saving from gallery', name, error);
-    ImageUtil.metrics.recordEnum(ImageUtil.getMetricName('SaveResult'), 0, 2);
-    if (callback)
-      callback(false);
-  };
-
-  var doSave = function(newFile, fileEntry) {
-    var blob;
-    var fileWriter;
-
-    metadataModel.get(
-        [fileEntry],
-        ['mediaMimeType', 'contentMimeType', 'ifd', 'exifLittleEndian']
-    ).then(function(metadataItems) {
-      // Create the blob of new image.
-      var metadataItem = metadataItems[0];
-      metadataItem.modificationTime = new Date();
-      metadataItem.mediaMimeType = newMimeType;
-      var metadataEncoder = ImageEncoder.encodeMetadata(
-          metadataItem, canvas, /* quality for thumbnail*/ 0.8);
-      // Contrary to what one might think 1.0 is not a good default. Opening
-      // and saving an typical photo taken with consumer camera increases
-      // its file size by 50-100%. Experiments show that 0.9 is much better.
-      // It shrinks some photos a bit, keeps others about the same size, but
-      // does not visibly lower the quality.
-      blob = ImageEncoder.getBlob(canvas, metadataEncoder, 0.9);
-    }.bind(this)).then(function() {
-      // Create writer.
-      return new Promise(function(fullfill, reject) {
-        fileEntry.createWriter(fullfill, reject);
-      });
-    }).then(function(writer) {
-      fileWriter = writer;
-
-      // Truncates the file to 0 byte if it overwrites.
-      return new Promise(function(fulfill, reject) {
-        if (!newFile) {
+    // Create writer.
+    return new Promise(function(resolve, reject) {
+      fileEntry.createWriter(resolve, reject);
+    }).then(function(fileWriter) {
+      // Truncates the file to 0 byte if it overwrites existing file.
+      return new Promise(function(resolve, reject) {
+        if (util.isSameEntry(fileEntry, this.entry_)) {
           fileWriter.onerror = reject;
-          fileWriter.onwriteend = fulfill;
+          fileWriter.onwriteend = resolve;
           fileWriter.truncate(0);
         } else {
-          fulfill(null);
+          resolve(null);
         }
-      });
-    }).then(function() {
-      // Writes the blob of new image.
-      return new Promise(function(fulfill, reject) {
-        fileWriter.onerror = reject;
-        fileWriter.onwriteend = fulfill;
-        fileWriter.write(blob);
-      });
-    }).then(onSuccess.bind(null, fileEntry))
-    .catch(function(error) {
-      onError(error);
-      if (fileWriter) {
+      }.bind(this)).then(function() {
+        // Writes the blob of new image.
+        return new Promise(function(resolve, reject) {
+          fileWriter.onerror = reject;
+          fileWriter.onwriteend = resolve;
+          fileWriter.write(blob);
+        });
+      }).catch(function(error) {
         // Disable all callbacks on the first error.
         fileWriter.onerror = null;
         fileWriter.onwriteend = null;
+
+        return Promise.reject(error);
+      });
+    }.bind(this)).then(function() {
+      var locationInfo = volumeManager.getLocationInfo(fileEntry);
+      if (!locationInfo) {
+        // Reuse old location info if it fails to obtain location info.
+        locationInfo = this.locationInfo_;
       }
-    });
-  }.bind(this);
 
-  var getFile = function(dir, newFile) {
-    dir.getFile(name, {create: newFile, exclusive: newFile},
-        function(fileEntry) {
-          doSave(newFile, fileEntry);
-        }.bind(this), onError);
-  }.bind(this);
+      ImageUtil.metrics.recordEnum(ImageUtil.getMetricName('SaveResult'), 1, 2);
+      saveResultRecorded = true;
+      ImageUtil.metrics.recordInterval(ImageUtil.getMetricName('SaveTime'));
 
-  var checkExistence = function(dir) {
-    dir.getFile(name, {create: false, exclusive: false},
-        getFile.bind(null, dir, false /* existing file */),
-        getFile.bind(null, dir, true /* create new file */));
-  };
+      this.entry_ = fileEntry;
+      this.locationInfo_ = locationInfo;
 
-  var saveToDir = function(dir) {
-    if (overwrite &&
-        !this.locationInfo_.isReadOnly &&
-        !FileType.isRaw(this.entry_)) {
-      checkExistence(dir);
+      // Updates the metadata.
+      metadataModel.notifyEntriesChanged([this.entry_]);
+      Promise.all([
+        metadataModel.get([this.entry_], Gallery.PREFETCH_PROPERTY_NAMES),
+        new ThumbnailModel(metadataModel).get([this.entry_])
+      ]).then(function(metadataLists) {
+        this.metadataItem_ = metadataLists[0][0];
+        this.thumbnailMetadataItem_ = metadataLists[1][0];
+        callback(true);
+      }.bind(this), function() {
+        callback(false);
+      });
+    }.bind(this));
+  }.bind(this)).catch(function(error) {
+    console.error('Error saving from gallery', this.entry_.name, error);
+
+    if (!saveResultRecorded)
+      ImageUtil.metrics.recordEnum(ImageUtil.getMetricName('SaveResult'), 0, 2);
+
+    callback(false);
+  }.bind(this));
+};
+
+/**
+ * Returns file entry to write.
+ * @param {boolean} overwrite True to overwrite original file.
+ * @param {!DirectoryEntry} fallbackDirectory Directory to fallback if current
+ *     directory is not writable.
+ * @param {!VolumeManagerWrapper} volumeManager
+ * @return {!Promise<!FileEntry>}
+ * @private
+ */
+GalleryItem.prototype.getEntryToWrite_ = function(
+    overwrite, fallbackDirectory, volumeManager) {
+  return new Promise(function(resolve, reject) {
+    // Since in-place editing is not supported on MTP volume, Gallery.app
+    // handles MTP volume as read only volume.
+    if (this.locationInfo_.isReadOnly ||
+        GalleryUtil.isOnMTPVolume(this.entry_, volumeManager)) {
+      resolve(fallbackDirectory);
     } else {
-      this.createCopyName_(dir, newMimeType, function(copyName) {
-        this.original_ = false;
-        name = copyName;
-        checkExistence(dir);
-      }.bind(this));
+      this.entry_.getParent(resolve, reject);
     }
-  }.bind(this);
+  }.bind(this)).then(function(directory) {
+    return new Promise(function(resolve) {
+      // Find file name.
+      if (overwrite &&
+          !this.locationInfo_.isReadOnly &&
+          this.isWritableFormat()) {
+        resolve(this.getFileName());
+        return;
+      }
 
-  // Since in-place editing is not supported on MTP volume, Gallery.app handles
-  // MTP volume as read only volume.
-  if (this.locationInfo_.isReadOnly ||
-      GalleryUtil.isOnMTPVolume(this.entry_, volumeManager)) {
-    saveToDir(fallbackDir);
-  } else {
-    this.entry_.getParent(saveToDir, onError);
-  }
+      this.createCopyName_(
+          directory, this.getNewMimeType_(), function(copyName) {
+        this.original_ = false;
+        resolve(copyName);
+      }.bind(this));
+    }.bind(this)).then(function(name) {
+      // Get File entry and return.
+      return new Promise(directory.getFile.bind(
+          directory, name, { create: true, exclusive: false }));
+    });
+  }.bind(this));
+};
+
+/**
+ * Returns blob to be saved.
+ * @param {!HTMLCanvasElement} canvas
+ * @param {!MetadataModel} metadataModel
+ * @return {!Promise<!Blob>}
+ * @private
+ */
+GalleryItem.prototype.getBlobForSave_ = function(canvas, metadataModel) {
+  return metadataModel.get(
+      [this.entry_],
+      ['mediaMimeType', 'contentMimeType', 'ifd', 'exifLittleEndian']
+      ).then(function(metadataItems) {
+    // Create the blob of new image.
+    var metadataItem = metadataItems[0];
+    metadataItem.modificationTime = new Date();
+    metadataItem.mediaMimeType = this.getNewMimeType_();
+    var metadataEncoder = ImageEncoder.encodeMetadata(
+        metadataItem, canvas, /* quality for thumbnail*/ 0.8);
+    // Contrary to what one might think 1.0 is not a good default. Opening
+    // and saving an typical photo taken with consumer camera increases
+    // its file size by 50-100%. Experiments show that 0.9 is much better.
+    // It shrinks some photos a bit, keeps others about the same size, but
+    // does not visibly lower the quality.
+    return ImageEncoder.getBlob(canvas, metadataEncoder, 0.9);
+  }.bind(this));
 };
 
 /**
@@ -361,7 +420,7 @@ Gallery.Item.prototype.saveToFile = function(
  * @return {!Promise} Promise fulfilled with when renaming completes, or
  *     rejected with the error message.
  */
-Gallery.Item.prototype.rename = function(displayName) {
+GalleryItem.prototype.rename = function(displayName) {
   var newFileName = this.entry_.name.replace(
       ImageUtil.getDisplayNameFromName(this.entry_.name), displayName);
 

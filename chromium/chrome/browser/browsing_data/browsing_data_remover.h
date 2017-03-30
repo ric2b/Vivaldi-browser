@@ -5,24 +5,37 @@
 #ifndef CHROME_BROWSER_BROWSING_DATA_BROWSING_DATA_REMOVER_H_
 #define CHROME_BROWSER_BROWSING_DATA_BROWSING_DATA_REMOVER_H_
 
+#include <stdint.h>
+
 #include <set>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_member.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/synchronization/waitable_event_watcher.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
-#include "chrome/browser/pepper_flash_settings_manager.h"
+#include "build/build_config.h"
+#include "chrome/common/features.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "components/search_engines/template_url_service.h"
+#include "storage/common/quota/quota_types.h"
+#include "url/gurl.h"
+#include "url/origin.h"
+
+#if defined(ENABLE_PLUGINS)
+#include "chrome/browser/pepper_flash_settings_manager.h"
+#endif
+
 #if defined(OS_CHROMEOS)
 #include "chromeos/dbus/dbus_method_call_status.h"
 #endif
-#include "storage/common/quota/quota_types.h"
-#include "url/gurl.h"
 
+class BrowsingDataRemoverFactory;
 class IOThread;
 class Profile;
 
@@ -31,6 +44,7 @@ class Predictor;
 }
 
 namespace content {
+class BrowserContext;
 class PluginDataRemover;
 class StoragePartition;
 }
@@ -41,12 +55,11 @@ class URLRequestContextGetter;
 
 // BrowsingDataRemover is responsible for removing data related to browsing:
 // visits in url database, downloads, cookies ...
-
-class BrowsingDataRemover
+class BrowsingDataRemover : public KeyedService
 #if defined(ENABLE_PLUGINS)
-    : public PepperFlashSettingsManager::Client
+                            , public PepperFlashSettingsManager::Client
 #endif
-    {
+{
  public:
   // Time period ranges available when doing browsing data removals.
   enum TimePeriod {
@@ -65,7 +78,8 @@ class BrowsingDataRemover
     REMOVE_DOWNLOADS = 1 << 3,
     REMOVE_FILE_SYSTEMS = 1 << 4,
     REMOVE_FORM_DATA = 1 << 5,
-    // In addition to visits, REMOVE_HISTORY removes keywords and last session.
+    // In addition to visits, REMOVE_HISTORY removes keywords, last session and
+    // passwords UI statistics.
     REMOVE_HISTORY = 1 << 6,
     REMOVE_INDEXEDDB = 1 << 7,
     REMOVE_LOCAL_STORAGE = 1 << 8,
@@ -80,21 +94,32 @@ class BrowsingDataRemover
     // from deleting history or downloads.
     REMOVE_NOCHECKS = 1 << 16,
     REMOVE_WEBRTC_IDENTITY = 1 << 17,
+    REMOVE_CACHE_STORAGE = 1 << 18,
+#if BUILDFLAG(ANDROID_JAVA_UI)
+    REMOVE_WEBAPP_DATA = 1 << 19,
+    REMOVE_OFFLINE_PAGE_DATA = 1 << 20,
+#endif
     // The following flag is used only in tests. In normal usage, hosted app
     // data is controlled by the REMOVE_COOKIES flag, applied to the
     // protected-web origin.
     REMOVE_HOSTED_APP_DATA_TESTONLY = 1 << 31,
 
     // "Site data" includes cookies, appcache, file systems, indexedDBs, local
-    // storage, webSQL, service workers, and plugin data.
+    // storage, webSQL, service workers, cache storage, plugin data, web app
+    // data (on Android) and statistics about passwords.
     REMOVE_SITE_DATA = REMOVE_APPCACHE | REMOVE_COOKIES | REMOVE_FILE_SYSTEMS |
                        REMOVE_INDEXEDDB |
                        REMOVE_LOCAL_STORAGE |
                        REMOVE_PLUGIN_DATA |
                        REMOVE_SERVICE_WORKERS |
+                       REMOVE_CACHE_STORAGE |
                        REMOVE_WEBSQL |
                        REMOVE_CHANNEL_IDS |
                        REMOVE_SITE_USAGE_DATA |
+#if BUILDFLAG(ANDROID_JAVA_UI)
+                       REMOVE_WEBAPP_DATA |
+                       REMOVE_OFFLINE_PAGE_DATA |
+#endif
                        REMOVE_WEBRTC_IDENTITY,
 
     // Includes all the available remove options. Meant to be used by clients
@@ -110,6 +135,16 @@ class BrowsingDataRemover
     // is scheduled to be deleted, and all possible data should be wiped from
     // disk as soon as possible.
     REMOVE_WIPE_PROFILE = REMOVE_ALL | REMOVE_NOCHECKS,
+  };
+
+  // A helper enum to report the deletion of cookies and/or cache. Do not
+  // reorder the entries, as this enum is passed to UMA.
+  enum CookieOrCacheDeletionChoice {
+    NEITHER_COOKIES_NOR_CACHE,
+    ONLY_COOKIES,
+    ONLY_CACHE,
+    BOTH_COOKIES_AND_CACHE,
+    MAX_CHOICE_VALUE
   };
 
   // When BrowsingDataRemover successfully removes data, a notification of type
@@ -132,6 +167,13 @@ class BrowsingDataRemover
     // The origin type mask (see BrowsingDataHelper::OriginTypeMask for
     // details).
     int origin_type_mask;
+  };
+
+  struct TimeRange {
+    TimeRange(base::Time begin, base::Time end) : begin(begin), end(end) {}
+
+    base::Time begin;
+    base::Time end;
   };
 
   // Observer is notified when the removal is done. Done means keywords have
@@ -164,33 +206,20 @@ class BrowsingDataRemover
     virtual ~CompletionInhibitor() {}
   };
 
-  // Creates a BrowsingDataRemover object that removes data regardless of the
-  // time it was last modified. Returns a raw pointer, as BrowsingDataRemover
-  // retains ownership of itself, and deletes itself once finished.
-  static BrowsingDataRemover* CreateForUnboundedRange(Profile* profile);
+  static TimeRange Unbounded();
 
-  // Creates a BrowsingDataRemover object bound on both sides by a time. Returns
-  // a raw pointer, as BrowsingDataRemover retains ownership of itself, and
-  // deletes itself once finished.
-  static BrowsingDataRemover* CreateForRange(Profile* profile,
-                                             base::Time delete_begin,
-                                             base::Time delete_end);
-
-  // Creates a BrowsingDataRemover bound to a specific period of time (as
-  // defined via a TimePeriod). Returns a raw pointer, as BrowsingDataRemover
-  // retains ownership of itself, and deletes itself once finished.
-  static BrowsingDataRemover* CreateForPeriod(Profile* profile,
-                                              TimePeriod period);
+  static TimeRange Period(TimePeriod period);
 
   // Calculate the begin time for the deletion range specified by |time_period|.
   static base::Time CalculateBeginDeleteTime(TimePeriod time_period);
 
   // Is the BrowsingDataRemover currently in the process of removing data?
-  static bool is_removing() { return is_removing_; }
+  bool is_removing() { return is_removing_; }
 
   // Sets a CompletionInhibitor, which will be notified each time an instance is
   // about to complete a browsing data removal process, and will be able to
   // artificially delay the completion.
+  // TODO(crbug.com/483528): Make this non-static.
   static void set_completion_inhibitor_for_testing(
       CompletionInhibitor* inhibitor) {
     completion_inhibitor_ = inhibitor;
@@ -199,18 +228,19 @@ class BrowsingDataRemover
   // Add a callback to the list of callbacks to be called during a browsing data
   // removal event. Returns a subscription object that can be used to
   // un-register the callback.
+  // TODO(crbug.com/483528): Make this non-static and merge it with the Observer
+  // interface.
   static CallbackSubscription RegisterOnBrowsingDataRemovedCallback(
       const Callback& callback);
 
   // Removes the specified items related to browsing for all origins that match
   // the provided |origin_type_mask| (see BrowsingDataHelper::OriginTypeMask).
-  void Remove(int remove_mask, int origin_type_mask);
+  void Remove(const TimeRange& time_range,
+              int remove_mask,
+              int origin_type_mask);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
-
-  // Called when history deletion is done.
-  void OnHistoryDeletionDone();
 
   // Used for testing.
   void OverrideStoragePartitionForTesting(
@@ -229,39 +259,29 @@ class BrowsingDataRemover
   // TODO(mkwst): See http://crbug.com/113621
   friend class BrowsingDataRemoverTest;
 
+  friend class BrowsingDataRemoverFactory;
+
+  // Use BrowsingDataRemoverFactory::GetForBrowserContext to get an instance of
+  // this class.
+  BrowsingDataRemover(content::BrowserContext* browser_context);
+  ~BrowsingDataRemover() override;
+
+  void Shutdown() override;
+
   // Setter for |is_removing_|; DCHECKs that we can only start removing if we're
   // not already removing, and vice-versa.
-  static void set_removing(bool is_removing);
-
-  // Creates a BrowsingDataRemover to remove browser data from the specified
-  // profile in the specified time range. Use Remove to initiate the removal.
-  BrowsingDataRemover(Profile* profile,
-                      base::Time delete_begin,
-                      base::Time delete_end);
-
-  // BrowsingDataRemover deletes itself (using DeleteHelper) and is not supposed
-  // to be deleted by other objects so make destructor private and DeleteHelper
-  // a friend.
-  friend class base::DeleteHelper<BrowsingDataRemover>;
-
-  // When plugins aren't enabled, there is no base class, so adding an override
-  // specifier would result in a compile error.
-#if defined(ENABLE_PLUGINS)
-  ~BrowsingDataRemover() override;
-#else
-  ~BrowsingDataRemover();
-#endif
+  void SetRemoving(bool is_removing);
 
   // Callback for when TemplateURLService has finished loading. Clears the data,
-  // clears the respective waiting flag, and invokes NotifyAndDeleteIfDone.
+  // clears the respective waiting flag, and invokes NotifyIfDone.
   void OnKeywordsLoaded();
 
-  // Called when plugin data has been cleared. Invokes NotifyAndDeleteIfDone.
+#if defined(ENABLE_PLUGINS)
+  // Called when plugin data has been cleared. Invokes NotifyIfDone.
   void OnWaitableEventSignaled(base::WaitableEvent* waitable_event);
 
-#if defined(ENABLE_PLUGINS)
   // PepperFlashSettingsManager::Client implementation.
-  void OnDeauthorizeContentLicensesCompleted(uint32 request_id,
+  void OnDeauthorizeContentLicensesCompleted(uint32_t request_id,
                                              bool success) override;
 #endif
 
@@ -271,85 +291,65 @@ class BrowsingDataRemover
 #endif
 
   // Removes the specified items related to browsing for a specific host. If the
-  // provided |origin| is empty, data is removed for all origins. The
+  // provided |remove_url| is empty, data is removed for all origins. The
   // |origin_type_mask| parameter defines the set of origins from which data
   // should be removed (protected, unprotected, or both).
-  void RemoveImpl(int remove_mask,
-                  const GURL& origin,
+  // TODO(mkwst): The current implementation relies on unique (empty) origins to
+  // signal removal of all origins. Reconsider this behavior if/when we build
+  // a "forget this site" feature.
+  void RemoveImpl(const TimeRange& time_range,
+                  int remove_mask,
+                  const GURL& remove_url,
                   int origin_type_mask);
 
-  // Notifies observers and deletes this object.
-  void NotifyAndDelete();
+  // Notifies observers and transitions to the idle state.
+  void Notify();
 
-  // Checks if we are all done, and if so, calls NotifyAndDelete().
-  void NotifyAndDeleteIfDone();
+  // Checks if we are all done, and if so, calls Notify().
+  void NotifyIfDone();
+
+  // Called when history deletion is done.
+  void OnHistoryDeletionDone();
 
   // Callback for when the hostname resolution cache has been cleared.
-  // Clears the respective waiting flag and invokes NotifyAndDeleteIfDone.
+  // Clears the respective waiting flag and invokes NotifyIfDone.
   void OnClearedHostnameResolutionCache();
-
-  // Invoked on the IO thread to clear the hostname resolution cache.
-  void ClearHostnameResolutionCacheOnIOThread(IOThread* io_thread);
 
   // Callback for when speculative data in the network Predictor has been
   // cleared. Clears the respective waiting flag and invokes
-  // NotifyAndDeleteIfDone.
+  // NotifyIfDone.
   void OnClearedNetworkPredictor();
 
-  // Invoked on the IO thread to clear speculative data related to hostname
-  // pre-resolution from the network Predictor.
-  void ClearNetworkPredictorOnIOThread(
-      chrome_browser_net::Predictor* predictor);
-
   // Callback for when network related data in ProfileIOData has been cleared.
-  // Clears the respective waiting flag and invokes NotifyAndDeleteIfDone.
+  // Clears the respective waiting flag and invokes NotifyIfDone.
   void OnClearedNetworkingHistory();
 
   // Callback for when the cache has been deleted. Invokes
-  // NotifyAndDeleteIfDone.
+  // NotifyIfDone.
   void ClearedCache();
 #if !defined(DISABLE_NACL)
   // Callback for when the NaCl cache has been deleted. Invokes
-  // NotifyAndDeleteIfDone.
+  // NotifyIfDone.
   void ClearedNaClCache();
 
-  // Invokes the ClearedNaClCache on the UI thread.
-  void ClearedNaClCacheOnIOThread();
-
-  // Invoked on the IO thread to delete the NaCl cache.
-  void ClearNaClCacheOnIOThread();
-
   // Callback for when the PNaCl translation cache has been deleted. Invokes
-  // NotifyAndDeleteIfDone.
+  // NotifyIfDone.
   void ClearedPnaclCache();
 
-  // Invokes ClearedPnaclCacheOn on the UI thread.
-  void ClearedPnaclCacheOnIOThread();
-
-  // Invoked on the IO thread to delete entries in the PNaCl translation cache.
-  void ClearPnaclCacheOnIOThread(base::Time begin, base::Time end);
 #endif
 
   // Callback for when passwords for the requested time range have been cleared.
   void OnClearedPasswords();
 
-  // Callback for when Cookies has been deleted. Invokes NotifyAndDeleteIfDone.
-  void OnClearedCookies(int num_deleted);
+  // Callback for when passwords stats for the requested time range have been
+  // cleared.
+  void OnClearedPasswordsStats();
 
-  // Invoked on the IO thread to delete cookies.
-  void ClearCookiesOnIOThread(net::URLRequestContextGetter* rq_context);
-
-  // Invoked on the IO thread to delete channel IDs.
-  void ClearChannelIDsOnIOThread(
-      net::URLRequestContextGetter* rq_context);
-
-  // Callback on IO Thread when channel IDs have been deleted. Clears SSL
-  // connection pool and posts to UI thread to run OnClearedChannelIDs.
-  void OnClearedChannelIDsOnIOThread(
-      net::URLRequestContextGetter* rq_context);
+  // Callback for when cookies have been deleted. Invokes NotifyIfDone.
+  void OnClearedCookies();
 
   // Callback for when channel IDs have been deleted. Invokes
-  // NotifyAndDeleteIfDone.
+  // NotifyIfDone.
   void OnClearedChannelIDs();
 
   // Callback from the above method.
@@ -367,9 +367,15 @@ class BrowsingDataRemover
   void OnClearedWebRtcLogs();
 #endif
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   // Callback on UI thread when the precache history has been cleared.
   void OnClearedPrecacheHistory();
+
+  // Callback on UI thread when the webapp data has been cleared.
+  void OnClearedWebappData();
+
+  // Callback on UI thread when the offline page data has been cleared.
+  void OnClearedOfflinePageData();
 #endif
 
   void OnClearedDomainReliabilityMonitor();
@@ -381,13 +387,13 @@ class BrowsingDataRemover
   Profile* profile_;
 
   // Start time to delete from.
-  const base::Time delete_begin_;
+  base::Time delete_begin_;
 
   // End time to delete to.
   base::Time delete_end_;
 
   // True if Remove has been invoked.
-  static bool is_removing_;
+  bool is_removing_;
 
   // If non-NULL, the |completion_inhibitor_| is notified each time an instance
   // is about to complete a browsing data removal process, and has the ability
@@ -407,45 +413,45 @@ class BrowsingDataRemover
   scoped_ptr<PepperFlashSettingsManager> pepper_flash_settings_manager_;
 #endif
 
-  uint32 deauthorize_content_licenses_request_id_;
+  uint32_t deauthorize_content_licenses_request_id_ = 0;
   // True if we're waiting for various data to be deleted.
   // These may only be accessed from UI thread in order to avoid races!
-  bool waiting_for_clear_autofill_origin_urls_;
-  bool waiting_for_clear_cache_;
-  bool waiting_for_clear_channel_ids_;
-  bool waiting_for_clear_content_licenses_;
+  bool waiting_for_clear_autofill_origin_urls_ = false;
+  bool waiting_for_clear_cache_ = false;
+  bool waiting_for_clear_channel_ids_ = false;
+  bool waiting_for_clear_content_licenses_ = false;
   // Non-zero if waiting for cookies to be cleared.
-  int waiting_for_clear_cookies_count_;
-  bool waiting_for_clear_domain_reliability_monitor_;
-  bool waiting_for_clear_form_;
-  bool waiting_for_clear_history_;
-  bool waiting_for_clear_hostname_resolution_cache_;
-  bool waiting_for_clear_keyword_data_;
-  bool waiting_for_clear_nacl_cache_;
-  bool waiting_for_clear_network_predictor_;
-  bool waiting_for_clear_networking_history_;
-  bool waiting_for_clear_passwords_;
-  bool waiting_for_clear_platform_keys_;
-  bool waiting_for_clear_plugin_data_;
-  bool waiting_for_clear_pnacl_cache_;
-#if defined(OS_ANDROID)
-  bool waiting_for_clear_precache_history_;
+  int waiting_for_clear_cookies_count_ = 0;
+  bool waiting_for_clear_domain_reliability_monitor_ = false;
+  bool waiting_for_clear_form_ = false;
+  bool waiting_for_clear_history_ = false;
+  bool waiting_for_clear_hostname_resolution_cache_ = false;
+  bool waiting_for_clear_keyword_data_ = false;
+  bool waiting_for_clear_nacl_cache_ = false;
+  bool waiting_for_clear_network_predictor_ = false;
+  bool waiting_for_clear_networking_history_ = false;
+  bool waiting_for_clear_passwords_ = false;
+  bool waiting_for_clear_passwords_stats_ = false;
+  bool waiting_for_clear_platform_keys_ = false;
+  bool waiting_for_clear_plugin_data_ = false;
+  bool waiting_for_clear_pnacl_cache_ = false;
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  bool waiting_for_clear_precache_history_ = false;
+  bool waiting_for_clear_webapp_data_ = false;
+  bool waiting_for_clear_offline_page_data_ = false;
 #endif
-  bool waiting_for_clear_storage_partition_data_;
+  bool waiting_for_clear_storage_partition_data_ = false;
 #if defined(ENABLE_WEBRTC)
-  bool waiting_for_clear_webrtc_logs_;
+  bool waiting_for_clear_webrtc_logs_ = false;
 #endif
 
   // The removal mask for the current removal operation.
-  int remove_mask_;
-
-  // The origin for the current removal operation.
-  GURL remove_origin_;
+  int remove_mask_ = 0;
 
   // From which types of origins should we remove data?
-  int origin_type_mask_;
+  int origin_type_mask_ = 0;
 
-  base::ObserverList<Observer> observer_list_;
+  base::ObserverList<Observer, true> observer_list_;
 
   // Used if we need to clear history.
   base::CancelableTaskTracker history_task_tracker_;
@@ -453,7 +459,9 @@ class BrowsingDataRemover
   scoped_ptr<TemplateURLService::Subscription> template_url_sub_;
 
   // We do not own this.
-  content::StoragePartition* storage_partition_for_testing_;
+  content::StoragePartition* storage_partition_for_testing_ = nullptr;
+
+  base::WeakPtrFactory<BrowsingDataRemover> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowsingDataRemover);
 };

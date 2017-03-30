@@ -66,6 +66,13 @@ cr.define('options', function() {
    */
   var ENABLE_TRANSLATE = 'translate.enabled';
 
+  /**
+   * The preference is a boolean that activates/deactivates IME menu on shelf.
+   * @type {string}
+   * @const
+   */
+  var ACTIVATE_IME_MENU_PREF = 'settings.language.ime_menu_activated';
+
   /////////////////////////////////////////////////////////////////////////////
   // LanguageOptions class:
 
@@ -138,7 +145,7 @@ cr.define('options', function() {
     /**
      * The dictionary of currently selected spellcheck dictionary languages,
      * like {"en-US": true, "sl-SI": true}.
-     * @type {Object}
+     * @type {!Object}
      * @private
      */
     spellCheckLanguages_: {},
@@ -157,6 +164,15 @@ cr.define('options', function() {
      * @private
      */
     enableTranslate_: false,
+
+    /**
+     * Returns true if the enable-multilingual-spellchecker flag is set.
+     * @return {boolean}
+     * @private
+     */
+    isMultilingualSpellcheckerEnabled_: function() {
+      return loadTimeData.getBoolean('enableMultilingualSpellChecker');
+    },
 
     /** @override */
     initializePage: function() {
@@ -191,8 +207,8 @@ cr.define('options', function() {
           this.handleSpellCheckDictionariesPrefChange_.bind(this));
       Preferences.getInstance().addEventListener(ENABLE_TRANSLATE,
           this.handleEnableTranslatePrefChange_.bind(this));
-      this.translateSupportedLanguages_ =
-          loadTimeData.getValue('translateSupportedLanguages');
+      this.translateSupportedLanguages_ = /** @type {Array} */(
+          loadTimeData.getValue('translateSupportedLanguages'));
 
       // Set up add button.
       var onclick = function(e) {
@@ -213,11 +229,12 @@ cr.define('options', function() {
 
       if (!cr.isMac) {
         // Set up the button for editing custom spelling dictionary.
-        $('edit-dictionary-button').onclick = function(e) {
+        $('edit-custom-dictionary-button').onclick = function(e) {
           PageManager.showPageByName('editDictionary');
         };
         $('dictionary-download-retry-button').onclick = function(e) {
-          chrome.send('retryDictionaryDownload');
+          chrome.send('retryDictionaryDownload',
+                      [e.currentTarget.languageCode]);
         };
       }
 
@@ -225,22 +242,19 @@ cr.define('options', function() {
       $('add-language-overlay-ok-button').addEventListener(
           'click', this.handleAddLanguageOkButtonClick_.bind(this));
 
-      if (!cr.isChromeOS) {
-        // Show experimental features if enabled.
-        if (loadTimeData.getBoolean('enableSpellingAutoCorrect'))
-          $('auto-spell-correction-option').hidden = false;
-
+      if (!(cr.isMac || cr.isChromeOS)) {
         // Handle spell check enable/disable.
-        if (!cr.isMac) {
+        if (!this.isMultilingualSpellcheckerEnabled_()) {
           Preferences.getInstance().addEventListener(
-              ENABLE_SPELL_CHECK_PREF,
-              this.updateEnableSpellCheck_.bind(this));
+              ENABLE_SPELL_CHECK_PREF, this.updateEnableSpellCheck_.bind(this));
         }
+        $('enable-spellcheck-container').hidden =
+            this.isMultilingualSpellcheckerEnabled_();
       }
 
       // Handle clicks on "Use this language for spell checking" button.
       if (!cr.isMac) {
-        if (loadTimeData.getBoolean('enableMultilingualSpellChecker')) {
+        if (this.isMultilingualSpellcheckerEnabled_()) {
           $('spellcheck-language-checkbox').addEventListener(
               'change',
               this.handleSpellCheckLanguageCheckboxClick_.bind(this));
@@ -263,7 +277,18 @@ cr.define('options', function() {
       // Public session users cannot change the locale.
       if (cr.isChromeOS && UIAccountTweaks.loggedInAsPublicAccount())
         $('language-options-ui-language-section').hidden = true;
-          PageManager.closeOverlay.bind(PageManager);
+
+      // IME menu (CrOS only).
+      if (cr.isChromeOS) {
+        // Show the 'activate-ime-menu' checkbox if the flag is tured on.
+        if (loadTimeData.getBoolean('enableLanguageOptionsImeMenu'))
+          $('language-options-ime-menu-template').hidden = false;
+
+        // Listen to check on 'activate-ime-menu' checkbox.
+        var checkboxImeMenu = $('activate-ime-menu');
+        checkboxImeMenu.addEventListener('click',
+            this.handleActivateImeMenuCheckboxClick_.bind(this));
+      }
     },
 
     /**
@@ -277,10 +302,12 @@ cr.define('options', function() {
       // change the visibility in handleLanguageOptionsListChange_() based
       // on the selected language. Note that we only have less than 100
       // input methods, so creating DOM nodes at once here should be ok.
-      this.appendInputMethodElement_(loadTimeData.getValue('inputMethodList'));
-      this.appendComponentExtensionIme_(
-          loadTimeData.getValue('componentExtensionImeList'));
-      this.appendInputMethodElement_(loadTimeData.getValue('extensionImeList'));
+      this.appendInputMethodElement_(/** @type {!Array} */(
+          loadTimeData.getValue('inputMethodList')));
+      this.appendComponentExtensionIme_(/** @type {!Array} */(
+          loadTimeData.getValue('componentExtensionImeList')));
+      this.appendInputMethodElement_(/** @type {!Array} */(
+          loadTimeData.getValue('extensionImeList')));
 
       // Listen to pref change once the input method list is initialized.
       Preferences.getInstance().addEventListener(
@@ -604,7 +631,8 @@ cr.define('options', function() {
     },
 
     /**
-     * Updates the spell check language button.
+     * Updates the spell check language button/checkbox, dictionary download
+     * dialog, and the "Enable spell checking" checkbox.
      * @param {string} languageCode Language code (ex. "fr").
      * @private
      */
@@ -646,7 +674,7 @@ cr.define('options', function() {
       var isLanguageDownloaded =
           !(languageCode in this.spellcheckDictionaryDownloadStatus_);
 
-      if (loadTimeData.getBoolean('enableMultilingualSpellChecker')) {
+      if (this.isMultilingualSpellcheckerEnabled_()) {
         spellCheckLanguageCheckbox.languageCode = languageCode;
         spellCheckLanguageCheckbox.checked = isUsedForSpellchecking;
         spellCheckLanguageCheckboxContainer.hidden = false;
@@ -672,8 +700,18 @@ cr.define('options', function() {
               [spellCheckLanguageSection, dictionaryDownloadFailed], 1);
           if (this.spellcheckDictionaryDownloadFailures_ > 1)
             dictionaryDownloadFailHelp.hidden = false;
+          $('dictionary-download-retry-button').languageCode = languageCode;
           break;
       }
+
+      var areNoLanguagesSelected =
+          Object.keys(this.spellCheckLanguages_).length == 0;
+      var usesSystemSpellchecker = !$('enable-spellcheck-container');
+      var isSpellcheckingEnabled = usesSystemSpellchecker ||
+          this.isMultilingualSpellcheckerEnabled_() ||
+          $('enable-spellcheck').checked;
+      $('edit-custom-dictionary-button').hidden =
+          areNoLanguagesSelected || !isSpellcheckingEnabled;
     },
 
     /**
@@ -938,11 +976,13 @@ cr.define('options', function() {
      * @private
      */
     updateEnableSpellCheck_: function(e) {
-       var value = !$('enable-spellcheck').checked;
-       $('spellcheck-language-button').disabled = value;
-       if (!cr.isMac)
-         $('edit-dictionary-button').hidden = value;
-     },
+      var value = !$('enable-spellcheck').checked;
+      var languageControl = $(this.isMultilingualSpellcheckerEnabled_() ?
+          'spellcheck-language-checkbox' : 'spellcheck-language-button');
+      languageControl.disabled = value;
+      if (!cr.isMac)
+        $('edit-custom-dictionary-button').hidden = value;
+    },
 
     /**
      * Handles translateBlockedLanguagesPref change.
@@ -1396,6 +1436,19 @@ cr.define('options', function() {
       }
 
       return main;
+    },
+
+    /**
+     * Handles activate-ime-menu checkbox's click event.
+     * @param {Event} e Click event.
+     * @private
+     */
+    handleActivateImeMenuCheckboxClick_: function(e) {
+      if (cr.isChromeOS) {
+        var checkbox = e.target;
+        Preferences.setBooleanPref(ACTIVATE_IME_MENU_PREF,
+                                   checkbox.checked, true);
+      }
     },
   };
 

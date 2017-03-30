@@ -4,6 +4,8 @@
 
 #include "chrome/service/service_utility_process_host.h"
 
+#include <stdint.h>
+
 #include <queue>
 
 #include "base/bind.h"
@@ -13,20 +15,28 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/process/launch.h"
 #include "base/task_runner_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/chrome_utility_printing_messages.h"
 #include "content/public/common/child_process_host.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandbox_init.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "ipc/ipc_switches.h"
 #include "printing/emf_win.h"
-#include "sandbox/win/src/sandbox_policy_base.h"
+#include "sandbox/win/src/sandbox_policy.h"
+#include "sandbox/win/src/sandbox_types.h"
 #include "ui/base/ui_base_switches.h"
+
+#if defined(OS_WIN)
+#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
+#endif  // defined(OS_WIN)
 
 namespace {
 
@@ -60,10 +70,11 @@ class ServiceSandboxedProcessLauncherDelegate
  public:
   ServiceSandboxedProcessLauncherDelegate() {}
 
-  void PreSpawnTarget(sandbox::TargetPolicy* policy, bool* success) override {
-    // Service process may run as windows service and it fails to create a
-    // window station.
-    policy->SetAlternateDesktop(false);
+  bool PreSpawnTarget(sandbox::TargetPolicy* policy) override {
+    // Ignore result of SetAlternateDesktop. Service process may run as windows
+    // service and it fails to create a window station.
+    base::IgnoreResult(policy->SetAlternateDesktop(false));
+    return true;
   }
 
  private:
@@ -217,6 +228,11 @@ bool ServiceUtilityProcessHost::StartProcess(bool no_sandbox) {
   cmd_line.AppendSwitchASCII(switches::kProcessType, switches::kUtilityProcess);
   cmd_line.AppendSwitchASCII(switches::kProcessChannelID, channel_id);
   cmd_line.AppendSwitch(switches::kLang);
+
+#if defined(OS_WIN)
+  if (startup_metric_utils::GetPreReadOptions().use_prefetch_argument)
+    cmd_line.AppendArg(switches::kPrefetchArgumentOther);
+#endif  // defined(OS_WIN)
 
   if (Launch(&cmd_line, no_sandbox)) {
     ReportUmaEvent(SERVICE_UTILITY_STARTED);
@@ -401,7 +417,7 @@ void ServiceUtilityProcessHost::OnGetPrinterSemanticCapsAndDefaultsFailed(
 bool ServiceUtilityProcessHost::Client::MetafileAvailable(float scale_factor,
                                                           base::File file) {
   file.Seek(base::File::FROM_BEGIN, 0);
-  int64 size = file.GetLength();
+  int64_t size = file.GetLength();
   if (size <= 0) {
     OnRenderPDFPagesToMetafileDone(false);
     return false;

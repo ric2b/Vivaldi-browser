@@ -4,9 +4,14 @@
 
 // MSVC++ requires this to get M_PI.
 #define _USE_MATH_DEFINES
-#include <math.h>
 
 #include "remoting/codec/audio_encoder_opus.h"
+
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
 
 #include "base/logging.h"
 #include "remoting/codec/audio_decoder_opus.h"
@@ -51,11 +56,10 @@ class OpusAudioEncoderTest : public testing::Test {
   // defines frequency of the signal. |channel| is used to calculate phase shift
   // of the signal, so that different signals are generated for left and right
   // channels.
-  static int16 GetSampleValue(
-      AudioPacket::SamplingRate rate,
-      double frequency_hz,
-      double pos,
-      int channel) {
+  static int16_t GetSampleValue(AudioPacket::SamplingRate rate,
+                                double frequency_hz,
+                                double pos,
+                                int channel) {
     double angle = pos * 2 * M_PI * frequency_hz / rate +
         kChannelPhaseShift * channel;
     return static_cast<int>(sin(angle) * kMaxSampleValue + 0.5);
@@ -68,7 +72,7 @@ class OpusAudioEncoderTest : public testing::Test {
       AudioPacket::SamplingRate rate,
       double frequency_hz,
       int pos) {
-    std::vector<int16> data(samples * kChannels);
+    std::vector<int16_t> data(samples * kChannels);
     for (int i = 0; i < samples; ++i) {
       data[i * kChannels] = GetSampleValue(rate, frequency_hz, i + pos, 0);
       data[i * kChannels + 1] = GetSampleValue(rate, frequency_hz, i + pos, 1);
@@ -76,22 +80,22 @@ class OpusAudioEncoderTest : public testing::Test {
 
     scoped_ptr<AudioPacket> packet(new AudioPacket());
     packet->add_data(reinterpret_cast<char*>(&(data[0])),
-                     samples * kChannels * sizeof(int16));
+                     samples * kChannels * sizeof(int16_t));
     packet->set_encoding(AudioPacket::ENCODING_RAW);
     packet->set_sampling_rate(rate);
     packet->set_bytes_per_sample(AudioPacket::BYTES_PER_SAMPLE_2);
     packet->set_channels(AudioPacket::CHANNELS_STEREO);
-    return packet.Pass();
+    return packet;
   }
 
   // Decoded data is normally shifted in phase relative to the original signal.
   // This function returns the approximate shift in samples by finding the first
   // point when signal goes from negative to positive.
-  double EstimateSignalShift(const std::vector<int16>& received_data) {
+  double EstimateSignalShift(const std::vector<int16_t>& received_data) {
     for (size_t i = kSkippedFirstSamples;
          i < received_data.size() / kChannels - 1; i++) {
-      int16 this_sample = received_data[i * kChannels];
-      int16 next_sample = received_data[(i + 1) * kChannels];
+      int16_t this_sample = received_data[i * kChannels];
+      int16_t next_sample = received_data[(i + 1) * kChannels];
       if (this_sample < 0 && next_sample > 0) {
         return
             i + static_cast<double>(-this_sample) / (next_sample - this_sample);
@@ -106,7 +110,7 @@ class OpusAudioEncoderTest : public testing::Test {
   void ValidateReceivedData(int samples,
                             AudioPacket::SamplingRate rate,
                             double frequency_hz,
-                            const std::vector<int16>& received_data) {
+                            const std::vector<int16_t>& received_data) {
     double shift = EstimateSignalShift(received_data);
     double diff_sqare_sum = 0;
     for (size_t i = kSkippedFirstSamples;
@@ -132,22 +136,23 @@ class OpusAudioEncoderTest : public testing::Test {
     encoder_.reset(new AudioEncoderOpus());
     decoder_.reset(new AudioDecoderOpus());
 
-    std::vector<int16> received_data;
+    std::vector<int16_t> received_data;
     int pos = 0;
     for (; pos < kTotalTestSamples; pos += packet_size) {
         scoped_ptr<AudioPacket> source_packet =
             CreatePacket(packet_size, rate, frequency_hz, pos);
         scoped_ptr<AudioPacket> encoded =
-            encoder_->Encode(source_packet.Pass());
+            encoder_->Encode(std::move(source_packet));
         if (encoded.get()) {
-          scoped_ptr<AudioPacket> decoded = decoder_->Decode(encoded.Pass());
+          scoped_ptr<AudioPacket> decoded =
+              decoder_->Decode(std::move(encoded));
           EXPECT_EQ(kDefaultSamplingRate, decoded->sampling_rate());
           for (int i = 0; i < decoded->data_size(); ++i) {
-            const int16* data =
-                reinterpret_cast<const int16*>(decoded->data(i).data());
+            const int16_t* data =
+                reinterpret_cast<const int16_t*>(decoded->data(i).data());
             received_data.insert(
                 received_data.end(), data,
-                data + decoded->data(i).size() / sizeof(int16));
+                data + decoded->data(i).size() / sizeof(int16_t));
           }
         }
     }

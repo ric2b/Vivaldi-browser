@@ -8,9 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
@@ -68,14 +67,14 @@ class DeviceOAuth2TokenServiceDelegate
   void OnOAuthError() override;
   void OnNetworkError(int response_code) override;
 
- private:
-  friend class DeviceOAuth2TokenService;
-  friend class DeviceOAuth2TokenServiceTest;
-
   class ValidationStatusDelegate {
    public:
     virtual void OnValidationCompleted(GoogleServiceAuthError::State error) {}
   };
+
+ private:
+  friend class DeviceOAuth2TokenService;
+  friend class DeviceOAuth2TokenServiceTest;
 
   // Describes the operational state of this object.
   enum State {

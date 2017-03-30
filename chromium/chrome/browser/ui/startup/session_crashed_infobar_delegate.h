@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_STARTUP_SESSION_CRASHED_INFOBAR_DELEGATE_H_
 #define CHROME_BROWSER_UI_STARTUP_SESSION_CRASHED_INFOBAR_DELEGATE_H_
 
+#include "base/macros.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 
 class Browser;
@@ -22,7 +23,9 @@ class SessionCrashedInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~SessionCrashedInfoBarDelegate() override;
 
   // ConfirmInfoBarDelegate:
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
+  gfx::VectorIconId GetVectorIconId() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/notifications/notification_conversion_helper.h"
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_test_util.h"
@@ -57,19 +58,14 @@ class NotificationConversionHelperTest : public testing::Test {
     gfx::Image icon = gfx::Image::CreateFrom1xBitmap(bitmap);
 
     scoped_ptr<Notification> notification(new Notification(
-        type,
-        GURL(),
-        base::UTF8ToUTF16("Title"),
-        base::UTF8ToUTF16("This is a message."),
-        icon,
+        type, base::UTF8ToUTF16("Title"),
+        base::UTF8ToUTF16("This is a message."), icon,
         message_center::NotifierId(message_center::NotifierId::APPLICATION,
                                    "Notifier 1"),
-        base::UTF8ToUTF16("Notifier's Name"),
-        "id1",
-        optional_fields,
+        base::UTF8ToUTF16("Notifier's Name"), GURL(), "id1", optional_fields,
         delegate));
 
-    return notification.Pass();
+    return notification;
   }
 
  private:

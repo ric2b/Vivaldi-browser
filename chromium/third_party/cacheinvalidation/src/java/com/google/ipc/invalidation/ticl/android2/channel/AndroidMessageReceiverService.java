@@ -89,14 +89,6 @@ public class AndroidMessageReceiverService extends MultiplexingGcmListener.Abstr
 
   @Override
   protected void onRegistered(String registrationId) {
-    if(!AndroidChannelPreferences.getRegistrationId(this).isEmpty()) {
-      logger.warning("Ignoring GCM registration: %s. GCM already registered with id: %s",
-          registrationId, AndroidChannelPreferences.getRegistrationId(this));
-      return;
-    }
-    logger.info("Setting GCM registration id: %s", registrationId);
-    AndroidChannelPreferences.setRegistrationId(this, registrationId);
-
     // Inform the sender service that the registration id has changed. If the sender service
     // had buffered a message because no registration id was previously available, this intent
     // will cause it to send that message.
@@ -115,7 +107,6 @@ public class AndroidMessageReceiverService extends MultiplexingGcmListener.Abstr
 
   @Override
   protected void onUnregistered(String registrationId) {
-    logger.info("Ignoring unregistration event for registrationId: %s.", registrationId);
     // Nothing to do.
   }
 

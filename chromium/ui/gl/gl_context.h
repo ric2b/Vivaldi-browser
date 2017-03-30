@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/synchronization/cancellation_flag.h"
@@ -42,9 +42,6 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
   virtual bool Initialize(
       GLSurface* compatible_surface, GpuPreference gpu_preference) = 0;
 
-  // Destroys the GL context.
-  virtual void Destroy() = 0;
-
   // Makes the GL context and a surface current on the current thread.
   virtual bool MakeCurrent(GLSurface* surface) = 0;
 
@@ -76,11 +73,6 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
 
   // Returns space separated list of extensions. The context must be current.
   virtual std::string GetExtensions();
-
-  // Returns in bytes the total amount of GPU memory for the GPU which this
-  // context is currently rendering on. Returns false if no extension exists
-  // to get the exact amount of GPU memory.
-  virtual bool GetTotalGpuMemory(size_t* bytes);
 
   // Indicate that it is safe to force this context to switch GPUs, since
   // transitioning can cause corruption and hangs (OS X only).

@@ -6,10 +6,7 @@ import logging
 import pipes
 import sys
 
-from telemetry.core import util
-
-util.AddDirToPythonPath(util.GetChromiumSrcDir(), 'build', 'android')
-from pylib.device import device_errors  # pylint: disable=F0401
+from devil.android import device_errors  # pylint: disable=import-error
 
 
 def _QuoteIfNeeded(arg):
@@ -80,7 +77,8 @@ class _AndroidCommandLineBackend(object):
       # --host-resolver-rules borks people's browsers if something goes wrong
       # with Telemetry.
       self._saved_command_line_file_contents = self._ReadFile()
-      if '--host-resolver-rules' in self._saved_command_line_file_contents:
+      if (self._saved_command_line_file_contents and
+          '--host-resolver-rules' in self._saved_command_line_file_contents):
         self._saved_command_line_file_contents = None
     except device_errors.CommandFailedError:
       self._saved_command_line_file_contents = None
@@ -100,7 +98,10 @@ class _AndroidCommandLineBackend(object):
       self._WriteFile(self._saved_command_line_file_contents)
 
   def _ReadFile(self):
-    return self._device.ReadFile(self.command_line_file, as_root=True)
+    if self._device.PathExists(self.command_line_file):
+      return self._device.ReadFile(self.command_line_file, as_root=True)
+    else:
+      return None
 
   def _WriteFile(self, contents):
     self._device.WriteFile(self.command_line_file, contents, as_root=True)

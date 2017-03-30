@@ -99,15 +99,7 @@ function urlRequestEvents(id) {
 /**
  * Tests the filters, both in terms of filtering correctly and UI.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsEventsViewFilter ' +
-    'DISABLED_netInternalsEventsViewFilter');
-GEN('#else');
-GEN('#define MAYBE_netInternalsEventsViewFilter ' +
-    'netInternalsEventsViewFilter');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsEventsViewFilter', function () {
+TEST_F('NetInternalsTest', 'netInternalsEventsViewFilter', function() {
   // Sets the filter and checks the results.
   // @param {string} filter Filter to use.
   // @param {Array<boolean>} matches Ordered list of whether or not each source

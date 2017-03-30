@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/options/create_profile_handler.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/metrics/histogram.h"
@@ -12,14 +14,15 @@
 #include "base/value_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profiles_state.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/webui/options/options_handlers_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -86,11 +89,16 @@ void CreateProfileHandler::CreateProfile(const base::ListValue* args) {
   profile_creation_start_time_ = base::TimeTicks::Now();
 
   base::string16 name;
-  base::string16 icon;
+  std::string icon_url;
   bool create_shortcut = false;
-  if (args->GetString(0, &name) && args->GetString(1, &icon)) {
+  if (args->GetString(0, &name) && args->GetString(1, &icon_url)) {
+    DCHECK(base::IsStringASCII(icon_url));
     base::TrimWhitespace(name, base::TRIM_ALL, &name);
     CHECK(!name.empty());
+#ifndef NDEBUG
+    size_t icon_index;
+    DCHECK(profiles::IsDefaultAvatarIconUrl(icon_url, &icon_index));
+#endif
     args->GetBoolean(2, &create_shortcut);
   }
   std::string supervised_user_id;
@@ -102,7 +110,7 @@ void CreateProfileHandler::CreateProfile(const base::ListValue* args) {
   ProfileMetrics::LogProfileAddNewUser(ProfileMetrics::ADD_NEW_USER_DIALOG);
 
   profile_path_being_created_ = ProfileManager::CreateMultiProfileAsync(
-      name, icon,
+      name, icon_url,
       base::Bind(&CreateProfileHandler::OnProfileCreated,
                  weak_ptr_factory_.GetWeakPtr(),
                  create_shortcut,
@@ -250,7 +258,7 @@ base::string16 CreateProfileHandler::GetProfileCreationErrorMessageLocal()
 #if defined(ENABLE_SUPERVISED_USERS)
   // Local errors can occur during supervised profile import.
   if (profile_creation_type_ == SUPERVISED_PROFILE_IMPORT)
-    message_id = IDS_SUPERVISED_USER_IMPORT_LOCAL_ERROR;
+    message_id = IDS_LEGACY_SUPERVISED_USER_IMPORT_LOCAL_ERROR;
 #endif
   return l10n_util::GetStringUTF16(message_id);
 }
@@ -260,7 +268,7 @@ base::string16 CreateProfileHandler::GetProfileCreationErrorMessageRemote()
     const {
   return l10n_util::GetStringUTF16(
       profile_creation_type_ == SUPERVISED_PROFILE_IMPORT ?
-          IDS_SUPERVISED_USER_IMPORT_REMOTE_ERROR :
+          IDS_LEGACY_SUPERVISED_USER_IMPORT_REMOTE_ERROR :
           IDS_PROFILES_CREATE_REMOTE_ERROR);
 }
 
@@ -268,7 +276,7 @@ base::string16 CreateProfileHandler::GetProfileCreationErrorMessageSignin()
     const {
   return l10n_util::GetStringUTF16(
       profile_creation_type_ == SUPERVISED_PROFILE_IMPORT ?
-          IDS_SUPERVISED_USER_IMPORT_SIGN_IN_ERROR :
+          IDS_LEGACY_SUPERVISED_USER_IMPORT_SIGN_IN_ERROR :
           IDS_PROFILES_CREATE_SIGN_IN_ERROR);
 }
 #endif

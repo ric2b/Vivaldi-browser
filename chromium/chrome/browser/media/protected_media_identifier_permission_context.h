@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_MEDIA_PROTECTED_MEDIA_IDENTIFIER_PERMISSION_CONTEXT_H_
 #define CHROME_BROWSER_MEDIA_PROTECTED_MEDIA_IDENTIFIER_PERMISSION_CONTEXT_H_
 
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/permissions/permission_context_base.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 
@@ -38,13 +40,14 @@ class ProtectedMediaIdentifierPermissionContext
  public:
   explicit ProtectedMediaIdentifierPermissionContext(Profile* profile);
 
-  // In addition to the base class flow checks that it is only code from
-  // valid iframes. It also adds special logic when called through an extension.
+  // PermissionContextBase implementation.
+#if defined(OS_CHROMEOS)
   void RequestPermission(content::WebContents* web_contents,
                          const PermissionRequestID& id,
                          const GURL& requesting_origin,
                          bool user_gesture,
                          const BrowserPermissionCallback& callback) override;
+#endif  // defined(OS_CHROMEOS)
   ContentSetting GetPermissionStatus(
       const GURL& requesting_origin,
       const GURL& embedding_origin) const override;

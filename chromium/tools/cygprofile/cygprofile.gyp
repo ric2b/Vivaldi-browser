@@ -5,6 +5,7 @@
 {
   'targets': [
     {
+      # GN: //tools/cygprofile
       'target_name': 'cygprofile',
       'type': 'static_library',
       'include_dirs': [ '../..', ],
@@ -21,6 +22,7 @@
       ],
     },
     {
+      # GN: //tools/cygprofile:cygprofile_unittests
       'target_name': 'cygprofile_unittests',
       'type': 'executable',
       'include_dirs': [ '../..', ],
@@ -28,6 +30,8 @@
         'cygprofile_unittest.cc',
       ],
       'cflags!': [ '-finstrument-functions' ],
+      # TODO(lizeb,pasko): Fix the underlying problem (crbug/485542)
+      'ldflags': [ '-Wl,--no-fatal-warnings' ],
       'dependencies': [
         'cygprofile',
         '../../base/base.gyp:base',

@@ -9,12 +9,13 @@
 #include "base/pickle.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 
 namespace bookmarks {
 
-const char* BookmarkNodeData::kClipboardFormatString =
+const char BookmarkNodeData::kClipboardFormatString[] =
     "chromium/x-bookmark-entries";
 
 BookmarkNodeData::Element::Element() : is_url(false), id_(0) {

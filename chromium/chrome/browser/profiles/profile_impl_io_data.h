@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_PROFILES_PROFILE_IMPL_IO_DATA_H_
 #define CHROME_BROWSER_PROFILES_PROFILE_IMPL_IO_DATA_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/prefs/pref_store.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
@@ -32,6 +32,7 @@ class DomainReliabilityMonitor;
 namespace net {
 class CookieCryptoDelegate;
 class FtpTransactionFactory;
+class HttpNetworkSession;
 class HttpServerProperties;
 class HttpServerPropertiesManager;
 class HttpTransactionFactory;
@@ -75,7 +76,6 @@ class ProfileImplIOData : public ProfileIOData {
     scoped_refptr<ChromeURLRequestContextGetter> CreateMainRequestContextGetter(
         content::ProtocolHandlerMap* protocol_handlers,
         content::URLRequestInterceptorScopedVector request_interceptors,
-        PrefService* local_state,
         IOThread* io_thread) const;
     scoped_refptr<ChromeURLRequestContextGetter>
         CreateIsolatedAppRequestContextGetter(
@@ -98,8 +98,8 @@ class ProfileImplIOData : public ProfileIOData {
             const base::FilePath& partition_path,
             bool in_memory) const;
 
-    // Returns the DevToolsNetworkController attached to ProfileIOData.
-    DevToolsNetworkController* GetDevToolsNetworkController() const;
+    // Returns the DevToolsNetworkControllerHandle attached to ProfileIOData.
+    DevToolsNetworkControllerHandle* GetDevToolsNetworkControllerHandle() const;
 
     // Deletes all network related data since |time|. It deletes transport
     // security state since |time| and also deletes HttpServerProperties data.
@@ -215,6 +215,7 @@ class ProfileImplIOData : public ProfileIOData {
 
   mutable scoped_refptr<JsonPrefStore> network_json_store_;
 
+  mutable scoped_ptr<net::HttpNetworkSession> http_network_session_;
   mutable scoped_ptr<net::HttpTransactionFactory> main_http_factory_;
   mutable scoped_ptr<net::FtpTransactionFactory> ftp_factory_;
 

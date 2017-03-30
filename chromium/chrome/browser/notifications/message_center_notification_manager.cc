@@ -4,15 +4,14 @@
 
 #include "chrome/browser/notifications/message_center_notification_manager.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/notification_provider/notification_provider_api.h"
-#include "chrome/browser/notifications/desktop_notification_service.h"
-#include "chrome/browser/notifications/desktop_notification_service_factory.h"
 #include "chrome/browser/notifications/extension_welcome_notification.h"
 #include "chrome/browser/notifications/extension_welcome_notification_factory.h"
 #include "chrome/browser/notifications/fullscreen_notification_blocker.h"
@@ -23,7 +22,6 @@
 #include "chrome/browser/notifications/screen_lock_notification_blocker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/notification_provider.h"
-#include "chrome/common/pref_names.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_registry.h"
@@ -45,44 +43,36 @@
 #include "ash/system/web_notification/web_notification_tray.h"
 #endif
 
-#if defined(OS_WIN)
-// The first-run balloon will be shown |kFirstRunIdleDelaySeconds| after all
-// popups go away and the user has notifications in the message center.
-const int kFirstRunIdleDelaySeconds = 1;
+// Mac does support native notifications and defines this method
+// in notification_ui_manager_mac.mm
+#if !defined(OS_MACOSX)
+// static
+NotificationUIManager*
+NotificationUIManager::CreateNativeNotificationManager() {
+  return nullptr;
+}
 #endif
 
 MessageCenterNotificationManager::MessageCenterNotificationManager(
     message_center::MessageCenter* message_center,
-    PrefService* local_state,
     scoped_ptr<message_center::NotifierSettingsProvider> settings_provider)
     : message_center_(message_center),
-#if defined(OS_WIN)
-      first_run_idle_timeout_(
-          base::TimeDelta::FromSeconds(kFirstRunIdleDelaySeconds)),
-#endif
-      settings_provider_(settings_provider.Pass()),
+      settings_provider_(std::move(settings_provider)),
       system_observer_(this),
       stats_collector_(message_center),
-      google_now_stats_collector_(message_center)
-#if defined(OS_WIN)
-      ,
-      weak_factory_(this)
-#endif
-{
-#if defined(OS_WIN)
-  first_run_pref_.Init(prefs::kMessageCenterShowedFirstRunBalloon, local_state);
-#endif
-
+      google_now_stats_collector_(message_center) {
   message_center_->AddObserver(this);
   message_center_->SetNotifierSettingsProvider(settings_provider_.get());
 
 #if defined(OS_CHROMEOS)
-  blockers_.push_back(
-      new LoginStateNotificationBlockerChromeOS(message_center));
+  blockers_.push_back(make_scoped_ptr(
+      new LoginStateNotificationBlockerChromeOS(message_center)));
 #else
-  blockers_.push_back(new ScreenLockNotificationBlocker(message_center));
+  blockers_.push_back(make_scoped_ptr(
+      new ScreenLockNotificationBlocker(message_center)));
 #endif
-  blockers_.push_back(new FullscreenNotificationBlocker(message_center));
+  blockers_.push_back(make_scoped_ptr(
+      new FullscreenNotificationBlocker(message_center)));
 
 #if defined(OS_WIN) || defined(OS_MACOSX) \
   || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
@@ -99,14 +89,6 @@ MessageCenterNotificationManager::~MessageCenterNotificationManager() {
   STLDeleteContainerPairSecondPointers(profile_notifications_.begin(),
                                        profile_notifications_.end());
   profile_notifications_.clear();
-}
-
-void MessageCenterNotificationManager::RegisterPrefs(
-    PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kMessageCenterShowedFirstRunBalloon,
-                                false);
-  registry->RegisterBooleanPref(prefs::kMessageCenterShowIcon, true);
-  registry->RegisterBooleanPref(prefs::kMessageCenterForcedOnTaskbar, false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -307,29 +289,18 @@ void MessageCenterNotificationManager::OnNotificationRemoved(
   NotificationMap::const_iterator iter = profile_notifications_.find(id);
   if (iter != profile_notifications_.end())
     RemoveProfileNotification(iter->second);
-
-#if defined(OS_WIN)
-  CheckFirstRunTimer();
-#endif
 }
 
 void MessageCenterNotificationManager::OnCenterVisibilityChanged(
     message_center::Visibility visibility) {
-#if defined(OS_WIN)
-  if (visibility == message_center::VISIBILITY_TRANSIENT)
-    CheckFirstRunTimer();
-#endif
 }
 
 void MessageCenterNotificationManager::OnNotificationUpdated(
     const std::string& id) {
-#if defined(OS_WIN)
-  CheckFirstRunTimer();
-#endif
 }
 
 void MessageCenterNotificationManager::EnsureMessageCenterClosed() {
-  if (tray_.get())
+  if (tray_.get() && tray_->GetMessageCenterTray())
     tray_->GetMessageCenterTray()->HideMessageCenterBubble();
 
 #if defined(USE_ASH)

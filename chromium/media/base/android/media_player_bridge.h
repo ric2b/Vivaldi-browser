@@ -6,11 +6,13 @@
 #define MEDIA_BASE_ANDROID_MEDIA_PLAYER_BRIDGE_H_
 
 #include <jni.h>
+#include <stdint.h>
 #include <map>
 #include <string>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -41,15 +43,16 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   // |manager| to track unused resources and free them when needed.
   // MediaPlayerBridge also forwards Android MediaPlayer callbacks to
   // the |manager| when needed.
-  MediaPlayerBridge(int player_id,
-                    const GURL& url,
-                    const GURL& first_party_for_cookies,
-                    const std::string& user_agent,
-                    bool hide_url_log,
-                    MediaPlayerManager* manager,
-                    const RequestMediaResourcesCB& request_media_resources_cb,
-                    const GURL& frame_url,
-                    bool allow_credentials);
+  MediaPlayerBridge(
+      int player_id,
+      const GURL& url,
+      const GURL& first_party_for_cookies,
+      const std::string& user_agent,
+      bool hide_url_log,
+      MediaPlayerManager* manager,
+      const OnDecoderResourcesReleasedCB& on_decoder_resources_released_cb,
+      const GURL& frame_url,
+      bool allow_credentials);
   ~MediaPlayerBridge() override;
 
   // Initialize this object and extract the metadata from the media.
@@ -62,6 +65,8 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   void SeekTo(base::TimeDelta timestamp) override;
   void Release() override;
   void SetVolume(double volume) override;
+  bool HasVideo() const override;
+  bool HasAudio() const override;
   int GetVideoWidth() override;
   int GetVideoHeight() override;
   base::TimeDelta GetCurrentTime() override;
@@ -74,7 +79,10 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   GURL GetUrl() override;
   GURL GetFirstPartyForCookies() override;
 
-  void OnDidSetDataUriDataSource(JNIEnv* env, jobject obj, jboolean success);
+  void OnDidSetDataUriDataSource(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean success);
 
  protected:
   void SetDuration(base::TimeDelta time);
@@ -99,13 +107,17 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   virtual base::android::ScopedJavaLocalRef<jobject> GetAllowedOperations();
 
  private:
+  friend class MediaPlayerBridgeTest;
+
   // Set the data source for the media player.
   void SetDataSource(const std::string& url);
 
   // Functions that implements media player control.
   void StartInternal();
   void PauseInternal();
-  void SeekInternal(base::TimeDelta time);
+
+  // Returns true if the Java MediaPlayerBridge's seekTo method is called
+  bool SeekInternal(base::TimeDelta current_time, base::TimeDelta time);
 
   // Called when |time_update_timer_| fires.
   void OnTimeUpdateTimerFired();
@@ -130,8 +142,10 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
 
   // Returns true if a MediaUrlInterceptor registered by the embedder has
   // intercepted the url.
-  bool InterceptMediaUrl(
-      const std::string& url, int* fd, int64* offset, int64* size);
+  bool InterceptMediaUrl(const std::string& url,
+                         int* fd,
+                         int64_t* offset,
+                         int64_t* size);
 
   // Whether the player is prepared for playback.
   bool prepared_;
@@ -170,10 +184,15 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   // Cookies for |url_|.
   std::string cookies_;
 
+  // The surface object currently owned by the player.
+  gfx::ScopedJavaSurface surface_;
+
   // Java MediaPlayerBridge instance.
   base::android::ScopedJavaGlobalRef<jobject> j_media_player_bridge_;
 
-  base::RepeatingTimer<MediaPlayerBridge> time_update_timer_;
+  base::RepeatingTimer time_update_timer_;
+
+  base::TimeDelta last_time_update_timestamp_;
 
   // Volume of playback.
   double volume_;

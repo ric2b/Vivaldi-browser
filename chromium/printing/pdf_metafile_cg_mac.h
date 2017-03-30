@@ -7,10 +7,10 @@
 
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
-#include "base/gtest_prod_util.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "printing/metafile.h"
 
@@ -33,7 +33,7 @@ class PRINTING_EXPORT PdfMetafileCg : public Metafile {
 
   // Metafile methods.
   bool Init() override;
-  bool InitFromData(const void* src_buffer, uint32 src_buffer_size) override;
+  bool InitFromData(const void* src_buffer, uint32_t src_buffer_size) override;
 
   // Not implemented on mac.
   bool StartPage(const gfx::Size& page_size,
@@ -42,8 +42,8 @@ class PRINTING_EXPORT PdfMetafileCg : public Metafile {
   bool FinishPage() override;
   bool FinishDocument() override;
 
-  uint32 GetDataSize() const override;
-  bool GetData(void* dst_buffer, uint32 dst_buffer_size) const override;
+  uint32_t GetDataSize() const override;
+  bool GetData(void* dst_buffer, uint32_t dst_buffer_size) const override;
 
   gfx::Rect GetPageBounds(unsigned int page_number) const override;
   unsigned int GetPageCount() const override;

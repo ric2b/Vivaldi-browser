@@ -11,6 +11,7 @@
 #error Should only be built with USE_SYSTEM_PROPRIETARY_CODECS
 #endif
 
+#include "media/base/audio_decoder_config.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -32,7 +33,7 @@ MEDIA_EXPORT bool IsPlatformMediaPipelineAvailable(
 
 // Returns true iff the system is able to decode audio streams using system
 // libraries.
-bool IsPlatformAudioDecoderAvailable();
+bool IsPlatformAudioDecoderAvailable(AudioCodec codec);
 
 // Returns true iff the system is able to decode video streams using system
 // libraries.

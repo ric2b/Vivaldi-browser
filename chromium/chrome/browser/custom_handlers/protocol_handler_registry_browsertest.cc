@@ -7,6 +7,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
@@ -17,6 +18,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 
 using content::WebContents;
@@ -112,8 +114,8 @@ IN_PROC_BROWSER_TEST_F(RegisterProtocolHandlerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(RegisterProtocolHandlerBrowserTest, CustomHandler) {
-  ASSERT_TRUE(test_server()->Start());
-  GURL handler_url = test_server()->GetURL("files/custom_handler_foo.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL handler_url = embedded_test_server()->GetURL("/custom_handler_foo.html");
   AddProtocolHandler("foo", handler_url);
 
   ui_test_utils::NavigateToURL(browser(), GURL("foo:test"));

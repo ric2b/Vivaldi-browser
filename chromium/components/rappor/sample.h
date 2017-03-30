@@ -5,10 +5,12 @@
 #ifndef COMPONENTS_RAPPOR_SAMPLE_H_
 #define COMPONENTS_RAPPOR_SAMPLE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/macros.h"
 #include "components/rappor/rappor_parameters.h"
 
@@ -24,28 +26,30 @@ class TestSamplerFactory;
 // same Rappor report, enabling analysis of correlations between those fields.
 class Sample {
  public:
-  ~Sample();
+  virtual ~Sample();
 
   // Sets a string value field in this sample.
-  void SetStringField(const std::string& field_name, const std::string& value);
+  virtual void SetStringField(const std::string& field_name,
+                              const std::string& value);
 
   // Sets a group of boolean flags as a field in this sample.
   // |flags| should be a set of boolean flags stored in the lowest |num_flags|
   // bits of |flags|.
-  void SetFlagsField(const std::string& field_name,
-                     uint64_t flags,
-                     size_t num_flags);
+  virtual void SetFlagsField(const std::string& field_name,
+                             uint64_t flags,
+                             size_t num_flags);
 
   // Generate randomized reports and store them in |reports|.
-  void ExportMetrics(const std::string& secret,
-                     const std::string& metric_name,
-                     RapporReports* reports) const;
+  virtual void ExportMetrics(const std::string& secret,
+                             const std::string& metric_name,
+                             RapporReports* reports) const;
 
   const RapporParameters& parameters() { return parameters_; }
 
  private:
   friend class TestSamplerFactory;
   friend class RapporService;
+  friend class TestSample;
 
   // Constructs a sample.  Instead of calling this directly, call
   // RapporService::MakeSampleObj to create a sample.

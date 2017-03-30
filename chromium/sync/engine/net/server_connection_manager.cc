@@ -5,6 +5,7 @@
 #include "sync/engine/net/server_connection_manager.h"
 
 #include <errno.h>
+#include <stdint.h>
 
 #include <ostream>
 #include <string>
@@ -54,23 +55,6 @@ const char* HttpResponse::GetServerConnectionCodeString(
 
 #undef ENUM_CASE
 
-// TODO(clamy): check if all errors are in the right category.
-HttpResponse::ServerConnectionCode
-HttpResponse::ServerConnectionCodeFromNetError(int error_code) {
-  switch (error_code) {
-    case net::ERR_ABORTED:
-    case net::ERR_SOCKET_NOT_CONNECTED:
-    case net::ERR_NETWORK_CHANGED:
-    case net::ERR_CONNECTION_FAILED:
-    case net::ERR_NAME_NOT_RESOLVED:
-    case net::ERR_INTERNET_DISCONNECTED:
-    case net::ERR_NETWORK_ACCESS_DENIED:
-    case net::ERR_NETWORK_IO_SUSPENDED:
-      return CONNECTION_UNAVAILABLE;
-  }
-  return IO_ERROR;
-}
-
 ServerConnectionManager::Connection::Connection(
     ServerConnectionManager* scm) : scm_(scm) {
 }
@@ -90,8 +74,8 @@ bool ServerConnectionManager::Connection::ReadBufferResponse(
   if (require_response && (1 > response->content_length))
     return false;
 
-  const int64 bytes_read = ReadResponse(buffer_out,
-      static_cast<int>(response->content_length));
+  const int64_t bytes_read =
+      ReadResponse(buffer_out, static_cast<int>(response->content_length));
   if (bytes_read != response->content_length) {
     response->server_status = HttpResponse::IO_ERROR;
     return false;
@@ -102,8 +86,8 @@ bool ServerConnectionManager::Connection::ReadBufferResponse(
 bool ServerConnectionManager::Connection::ReadDownloadResponse(
     HttpResponse* response,
     string* buffer_out) {
-  const int64 bytes_read = ReadResponse(buffer_out,
-      static_cast<int>(response->content_length));
+  const int64_t bytes_read =
+      ReadResponse(buffer_out, static_cast<int>(response->content_length));
 
   if (bytes_read != response->content_length) {
     LOG(ERROR) << "Mismatched content lengths, server claimed " <<
@@ -161,17 +145,6 @@ int ServerConnectionManager::Connection::ReadResponse(string* out_buffer,
   CHECK(length <= bytes_read);
   out_buffer->assign(buffer_);
   return bytes_read;
-}
-
-ScopedServerStatusWatcher::ScopedServerStatusWatcher(
-    ServerConnectionManager* conn_mgr, HttpResponse* response)
-    : conn_mgr_(conn_mgr),
-      response_(response) {
-  response->server_status = conn_mgr->server_status_;
-}
-
-ScopedServerStatusWatcher::~ScopedServerStatusWatcher() {
-  conn_mgr_->SetServerStatus(response_->server_status);
 }
 
 ServerConnectionManager::ServerConnectionManager(
@@ -273,18 +246,19 @@ void ServerConnectionManager::NotifyStatusChanged() {
 }
 
 bool ServerConnectionManager::PostBufferWithCachedAuth(
-    PostBufferParams* params, ScopedServerStatusWatcher* watcher) {
+    PostBufferParams* params) {
   DCHECK(thread_checker_.CalledOnValidThread());
   string path =
       MakeSyncServerPath(proto_sync_path(), MakeSyncQueryString(client_id_));
-  return PostBufferToPath(params, path, auth_token(), watcher);
+  bool result = PostBufferToPath(params, path, auth_token());
+  SetServerStatus(params->response.server_status);
+  return result;
 }
 
 bool ServerConnectionManager::PostBufferToPath(PostBufferParams* params,
-    const string& path, const string& auth_token,
-    ScopedServerStatusWatcher* watcher) {
+                                               const string& path,
+                                               const string& auth_token) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(watcher != NULL);
 
   // TODO(pavely): crbug.com/273096. Check for "credentials_lost" is added as
   // workaround for M29 blocker to avoid sending RPC to sync with known invalid
@@ -364,8 +338,7 @@ void ServerConnectionManager::RemoveListener(
   listeners_.RemoveObserver(listener);
 }
 
-ServerConnectionManager::Connection* ServerConnectionManager::MakeConnection()
-{
+ServerConnectionManager::Connection* ServerConnectionManager::MakeConnection() {
   return NULL;  // For testing.
 }
 

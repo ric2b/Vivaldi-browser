@@ -10,6 +10,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "extensions/browser/extension_prefs_factory.h"
+#include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extensions_browser_client.h"
 
@@ -22,7 +23,7 @@ ExtensionSyncService* ExtensionSyncServiceFactory::GetForBrowserContext(
 
 // static
 ExtensionSyncServiceFactory* ExtensionSyncServiceFactory::GetInstance() {
-  return Singleton<ExtensionSyncServiceFactory>::get();
+  return base::Singleton<ExtensionSyncServiceFactory>::get();
 }
 
 ExtensionSyncServiceFactory::ExtensionSyncServiceFactory()
@@ -30,6 +31,7 @@ ExtensionSyncServiceFactory::ExtensionSyncServiceFactory()
         "ExtensionSyncService",
         BrowserContextDependencyManager::GetInstance()) {
   DependsOn(extensions::ExtensionPrefsFactory::GetInstance());
+  DependsOn(extensions::ExtensionRegistryFactory::GetInstance());
   DependsOn(extensions::ExtensionSystemFactory::GetInstance());
 }
 
@@ -37,11 +39,7 @@ ExtensionSyncServiceFactory::~ExtensionSyncServiceFactory() {}
 
 KeyedService* ExtensionSyncServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Profile* profile = Profile::FromBrowserContext(context);
-  return new ExtensionSyncService(
-      profile,
-      extensions::ExtensionPrefsFactory::GetForBrowserContext(context),
-      extensions::ExtensionSystem::Get(profile)->extension_service());
+  return new ExtensionSyncService(Profile::FromBrowserContext(context));
 }
 
 content::BrowserContext* ExtensionSyncServiceFactory::GetBrowserContextToUse(

@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <iterator>
 #include <map>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/sys_byteorder.h"
 #include "net/base/address_list.h"
 #include "net/base/test_completion_callback.h"
@@ -45,7 +47,7 @@ class SOCKS5ClientSocketTest : public PlatformTest {
   void SetUp() override;
 
  protected:
-  const uint16 kNwPort;
+  const uint16_t kNwPort;
   TestNetLog net_log_;
   scoped_ptr<SOCKS5ClientSocket> user_sock_;
   AddressList address_list_;
@@ -107,7 +109,7 @@ scoped_ptr<SOCKS5ClientSocket> SOCKS5ClientSocketTest::BuildMockSocket(
   // non-owning pointer to it.
   connection->SetSocket(scoped_ptr<StreamSocket>(tcp_sock_));
   return scoped_ptr<SOCKS5ClientSocket>(new SOCKS5ClientSocket(
-      connection.Pass(),
+      std::move(connection),
       HostResolver::RequestInfo(HostPortPair(hostname, port))));
 }
 
@@ -194,7 +196,7 @@ TEST_F(SOCKS5ClientSocketTest, ConnectAndDisconnectTwice) {
   };
 
   std::string request(kSOCKS5DomainRequest, arraysize(kSOCKS5DomainRequest));
-  request.push_back(hostname.size());
+  request.push_back(static_cast<char>(hostname.size()));
   request.append(hostname);
   request.append(reinterpret_cast<const char*>(&kNwPort), sizeof(kNwPort));
 

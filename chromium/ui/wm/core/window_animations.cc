@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
@@ -95,11 +96,8 @@ class HidingWindowAnimationObserverBase : public aura::WindowObserver {
       DCHECK(iter != window_->parent()->children().end());
       aura::Window* topmost_transient_child = NULL;
       for (++iter; iter != window_->parent()->children().end(); ++iter) {
-        if (std::find(transient_children.begin(),
-                      transient_children.end(),
-                      *iter) != transient_children.end()) {
+        if (ContainsValue(transient_children, *iter))
           topmost_transient_child = *iter;
-        }
       }
       if (topmost_transient_child) {
         window_->parent()->layer()->StackAbove(
@@ -228,7 +226,7 @@ gfx::Rect GetLayerWorldBoundsAfterTransform(ui::Layer* layer,
   gfx::Transform in_world = transform;
   GetTransformRelativeToRoot(layer, &in_world);
 
-  gfx::RectF transformed = layer->bounds();
+  gfx::RectF transformed = gfx::RectF(layer->bounds());
   in_world.TransformRect(&transformed);
 
   return gfx::ToEnclosingRect(transformed);
@@ -460,8 +458,8 @@ void AddLayerAnimationsForRotate(aura::Window* window, bool show) {
           scale.release()));
 
   scoped_ptr<ui::InterpolatedTransform> translation(
-      new ui::InterpolatedTranslation(gfx::Point(), gfx::Point(
-          0, kWindowAnimation_Rotate_TranslateY)));
+      new ui::InterpolatedTranslation(
+          gfx::PointF(), gfx::PointF(0, kWindowAnimation_Rotate_TranslateY)));
 
   scoped_ptr<ui::InterpolatedTransform> rotation(
       new ui::InterpolatedAxisAngleRotation(

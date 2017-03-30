@@ -14,6 +14,7 @@
 // #define USE_SOURCE_FILES_DIRECTLY
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/tracked_objects.h"
@@ -58,7 +59,7 @@ class ProfilerWebUIDataSource : public content::URLDataSource {
   }
 
   std::string GetMimeType(const std::string& path) const override {
-    if (base::EndsWith(path, ".js", false))
+    if (base::EndsWith(path, ".js", base::CompareCase::INSENSITIVE_ASCII))
       return "application/javascript";
     return "text/html";
   }

@@ -1,8 +1,10 @@
 include_rules = [
-  "+components/view_manager/public",
-  "+mojo/application",
+  "+components/mus/public",
+  "+components/url_formatter",
+  "+mojo/shell",
   "+mojo/common",
   "+mojo/converters",
-  "+third_party/mojo/src/mojo/public",
+  "+mojo/public",
+  "+mojo/services/tracing/public/cpp",
   "+ui",
 ]

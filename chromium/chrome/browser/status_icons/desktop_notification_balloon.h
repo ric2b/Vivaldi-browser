@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_STATUS_ICONS_DESKTOP_NOTIFICATION_BALLOON_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 
@@ -14,6 +15,10 @@ class Profile;
 
 namespace gfx {
 class ImageSkia;
+}
+
+namespace message_center {
+struct NotifierId;
 }
 
 // Provides the notification balloon functionality by using desktop
@@ -25,7 +30,8 @@ class DesktopNotificationBalloon {
 
   void DisplayBalloon(const gfx::ImageSkia& icon,
                       const base::string16& title,
-                      const base::string16& contents);
+                      const base::string16& contents,
+                      const message_center::NotifierId& notifier_id);
 
  private:
   std::string notification_id_;

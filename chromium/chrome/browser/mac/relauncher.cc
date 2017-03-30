@@ -8,6 +8,7 @@
 #include <AvailabilityMacros.h>
 #include <crt_externs.h>
 #include <dlfcn.h>
+#include <stddef.h>
 #include <string.h>
 #include <sys/event.h>
 #include <sys/time.h>
@@ -17,7 +18,6 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
@@ -36,8 +36,6 @@
 #include "content/public/common/main_function_params.h"
 
 namespace mac_relauncher {
-
-const char* const kRelauncherDMGDeviceArg = "--dmg-device=";
 
 namespace {
 
@@ -298,6 +296,8 @@ int RelauncherMain(const content::MainFunctionParams& main_parameters) {
   bool seen_relaunch_executable = false;
   std::string relaunch_executable;
   const std::string relauncher_arg_separator(kRelauncherArgSeparator);
+  const std::string relauncher_dmg_device_arg =
+      base::StringPrintf("--%s=", switches::kRelauncherProcessDMGDevice);
   for (int argv_index = 2; argv_index < argc; ++argv_index) {
     const std::string arg(argv[argv_index]);
 
@@ -311,9 +311,11 @@ int RelauncherMain(const content::MainFunctionParams& main_parameters) {
         in_relaunch_args = true;
       } else if (arg == kRelauncherBackgroundArg) {
         background = true;
-      } else if (arg.compare(0, strlen(kRelauncherDMGDeviceArg),
-                             kRelauncherDMGDeviceArg) == 0) {
-        dmg_bsd_device_name.assign(arg.substr(strlen(kRelauncherDMGDeviceArg)));
+      } else if (arg.compare(0,
+                             relauncher_dmg_device_arg.size(),
+                             relauncher_dmg_device_arg) == 0) {
+        dmg_bsd_device_name.assign(
+            arg.substr(relauncher_dmg_device_arg.size()));
       }
     } else {
       if (!seen_relaunch_executable) {

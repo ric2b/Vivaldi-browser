@@ -4,11 +4,14 @@
 
 #include "chrome/browser/ui/webui/options/chromeos/core_chromeos_options_handler.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -27,6 +30,7 @@
 #include "chrome/browser/ui/webui/options/chromeos/accounts_options_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/user_metrics.h"
@@ -45,7 +49,7 @@ const char* kNonPrivilegedSettings[] = {
 
 // List of settings that should only be changeable by the primary user.
 const char* kPrimaryUserSettings[] = {
-  prefs::kWakeOnWifiSsid,
+    prefs::kWakeOnWifiDarkConnect,
 };
 
 // Returns true if |pref| can be controlled (e.g. by policy or owner).
@@ -70,7 +74,9 @@ base::DictionaryValue* CreateUserInfo(const std::string& username,
   user_dict->SetString("name", display_email);
   user_dict->SetString("email", display_name);
 
-  bool is_owner = user_manager::UserManager::Get()->GetOwnerEmail() == username;
+  const bool is_owner =
+      user_manager::UserManager::Get()->GetOwnerAccountId().GetUserEmail() ==
+      username;
   user_dict->SetBoolean("owner", is_owner);
   return user_dict;
 }
@@ -88,7 +94,8 @@ base::Value* CreateUsersWhitelist(const base::Value *pref_value) {
     std::string email;
     if ((*i)->GetAsString(&email)) {
       // Translate email to the display email.
-      std::string display_email = user_manager->GetUserDisplayEmail(email);
+      const std::string display_email =
+          user_manager->GetUserDisplayEmail(AccountId::FromUserEmail(email));
       // TODO(ivankr): fetch display name for existing users.
       user_list->Append(CreateUserInfo(email, display_email, std::string()));
     }
@@ -140,7 +147,7 @@ void CoreChromeOSOptionsHandler::InitializeHandler() {
     profile_prefs = profile->GetPrefs();
     ObservePref(prefs::kOpenNetworkConfiguration);
   }
-  ObservePref(prefs::kProxy);
+  ObservePref(proxy_config::prefs::kProxy);
   ObservePref(prefs::kDeviceOpenNetworkConfiguration);
   proxy_config_service_.SetPrefs(profile_prefs,
                                  g_browser_process->local_state());
@@ -181,8 +188,9 @@ base::Value* CoreChromeOSOptionsHandler::FetchPref(
 
   Profile* profile = Profile::FromWebUI(web_ui());
   if (!CrosSettings::IsCrosSettings(pref_name)) {
-    std::string controlling_pref =
-        pref_name == prefs::kUseSharedProxies ? prefs::kProxy : std::string();
+    std::string controlling_pref = pref_name == prefs::kUseSharedProxies
+                                       ? proxy_config::prefs::kProxy
+                                       : std::string();
     base::Value* value = CreateValueForPref(pref_name, controlling_pref);
     if (!IsSettingShared(pref_name) || !IsSecondaryUser(profile))
       return value;
@@ -359,10 +367,12 @@ void CoreChromeOSOptionsHandler::GetLocalizedValues(
     // Managed machines have no "owner".
     localized_strings->SetString("controlledSettingOwner", base::string16());
   } else {
-    localized_strings->SetString("controlledSettingOwner",
+    localized_strings->SetString(
+        "controlledSettingOwner",
         l10n_util::GetStringFUTF16(
             IDS_OPTIONS_CONTROLLED_SETTING_OWNER,
-            base::ASCIIToUTF16(user_manager->GetOwnerEmail())));
+            base::ASCIIToUTF16(
+                user_manager->GetOwnerAccountId().GetUserEmail())));
   }
 }
 
@@ -384,14 +394,14 @@ void CoreChromeOSOptionsHandler::OnPreferenceChanged(
   // preferences change.
   if (pref_name == prefs::kOpenNetworkConfiguration ||
       pref_name == prefs::kDeviceOpenNetworkConfiguration ||
-      pref_name == prefs::kProxy) {
+      pref_name == proxy_config::prefs::kProxy) {
     NotifyProxyPrefsChanged();
     return;
   }
   if (pref_name == prefs::kUseSharedProxies) {
     // kProxy controls kUseSharedProxies and decides if it's managed by
     // policy/extension.
-    NotifyPrefChanged(prefs::kUseSharedProxies, prefs::kProxy);
+    NotifyPrefChanged(prefs::kUseSharedProxies, proxy_config::prefs::kProxy);
     return;
   }
   ::options::CoreOptionsHandler::OnPreferenceChanged(service, pref_name);
@@ -403,7 +413,7 @@ void CoreChromeOSOptionsHandler::NotifySettingsChanged(
   scoped_ptr<base::Value> value(FetchPref(setting_name));
   if (!value.get())
     NOTREACHED();
-  DispatchPrefChangeNotification(setting_name, value.Pass());
+  DispatchPrefChangeNotification(setting_name, std::move(value));
 }
 
 void CoreChromeOSOptionsHandler::NotifyProxyPrefsChanged() {
@@ -414,7 +424,7 @@ void CoreChromeOSOptionsHandler::NotifyProxyPrefsChanged() {
         proxy_config_service_, kProxySettings[i], &value);
     DCHECK(value);
     scoped_ptr<base::Value> ptr(value);
-    DispatchPrefChangeNotification(kProxySettings[i], ptr.Pass());
+    DispatchPrefChangeNotification(kProxySettings[i], std::move(ptr));
   }
 }
 

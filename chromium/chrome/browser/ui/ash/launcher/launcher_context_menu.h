@@ -7,9 +7,10 @@
 
 #include "ash/shelf/shelf_alignment_menu.h"
 #include "ash/shelf/shelf_item_types.h"
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "ui/base/models/simple_menu_model.h"
 
 class ChromeLauncherController;
@@ -57,7 +58,6 @@ class LauncherContextMenu : public ui::SimpleMenuModel,
   base::string16 GetLabelForCommandId(int command_id) const override;
   bool IsCommandIdChecked(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
-  bool IsCommandIdVisible(int command_id) const override;
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) override;
   void ExecuteCommand(int command_id, int event_flags) override;
@@ -77,7 +77,6 @@ class LauncherContextMenu : public ui::SimpleMenuModel,
     MENU_OPEN_NEW,
     MENU_CLOSE,
     MENU_PIN,
-    MENU_INSTALL,
     LAUNCH_TYPE_PINNED_TAB,
     LAUNCH_TYPE_REGULAR_TAB,
     LAUNCH_TYPE_FULLSCREEN,

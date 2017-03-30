@@ -4,6 +4,10 @@
 
 #include "ipc/ipc_sync_channel.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
@@ -96,7 +100,7 @@ class SyncChannel::ReceivedSyncMsgQueue :
 
   void DispatchMessages(SyncContext* dispatching_context) {
     bool first_time = true;
-    uint32 expected_version = 0;
+    uint32_t expected_version = 0;
     SyncMessageQueue::iterator it;
     while (true) {
       Message* message = NULL;
@@ -204,7 +208,7 @@ class SyncChannel::ReceivedSyncMsgQueue :
 
   typedef std::list<QueuedMessage> SyncMessageQueue;
   SyncMessageQueue message_queue_;
-  uint32 message_queue_version_;  // Used to signal DispatchMessages to rescan
+  uint32_t message_queue_version_;  // Used to signal DispatchMessages to rescan
 
   std::vector<QueuedMessage> received_replies_;
 
@@ -305,15 +309,13 @@ bool SyncChannel::SyncContext::TryToUnblockListener(const Message* msg) {
     return false;
   }
 
-  // TODO(bauerb): Remove logging once investigation of http://crbug.com/141055
-  // has finished.
   if (!msg->is_reply_error()) {
     bool send_result = deserializers_.back().deserializer->
         SerializeOutputParameters(*msg);
     deserializers_.back().send_result = send_result;
-    VLOG_IF(1, !send_result) << "Couldn't deserialize reply message";
+    DVLOG_IF(1, !send_result) << "Couldn't deserialize reply message";
   } else {
-    VLOG(1) << "Received error reply";
+    DVLOG(1) << "Received error reply";
   }
   deserializers_.back().done_event->Signal();
 
@@ -370,7 +372,7 @@ void SyncChannel::SyncContext::OnChannelClosed() {
 void SyncChannel::SyncContext::OnSendTimeout(int message_id) {
   base::AutoLock auto_lock(deserializers_lock_);
   PendingSyncMessageQueue::iterator iter;
-  VLOG(1) << "Send timeout";
+  DVLOG(1) << "Send timeout";
   for (iter = deserializers_.begin(); iter != deserializers_.end(); iter++) {
     if (iter->id == message_id) {
       iter->done_event->Signal();
@@ -382,8 +384,7 @@ void SyncChannel::SyncContext::OnSendTimeout(int message_id) {
 void SyncChannel::SyncContext::CancelPendingSends() {
   base::AutoLock auto_lock(deserializers_lock_);
   PendingSyncMessageQueue::iterator iter;
-  // TODO(bauerb): Remove once http://crbug/141055 is fixed.
-  VLOG(1) << "Canceling pending sends";
+  DVLOG(1) << "Canceling pending sends";
   for (iter = deserializers_.begin(); iter != deserializers_.end(); iter++)
     iter->done_event->Signal();
 }
@@ -412,12 +413,11 @@ scoped_ptr<SyncChannel> SyncChannel::Create(
     Listener* listener,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
     bool create_pipe_now,
-    base::WaitableEvent* shutdown_event,
-    AttachmentBroker* broker) {
+    base::WaitableEvent* shutdown_event) {
   scoped_ptr<SyncChannel> channel =
       Create(listener, ipc_task_runner, shutdown_event);
-  channel->Init(channel_handle, mode, create_pipe_now, broker);
-  return channel.Pass();
+  channel->Init(channel_handle, mode, create_pipe_now);
+  return channel;
 }
 
 // static
@@ -429,8 +429,8 @@ scoped_ptr<SyncChannel> SyncChannel::Create(
     base::WaitableEvent* shutdown_event) {
   scoped_ptr<SyncChannel> channel =
       Create(listener, ipc_task_runner, shutdown_event);
-  channel->Init(factory.Pass(), create_pipe_now);
-  return channel.Pass();
+  channel->Init(std::move(factory), create_pipe_now);
+  return channel;
 }
 
 // static
@@ -460,6 +460,16 @@ void SyncChannel::SetRestrictDispatchChannelGroup(int group) {
   sync_context()->set_restrict_dispatch_group(group);
 }
 
+scoped_refptr<SyncMessageFilter> SyncChannel::CreateSyncMessageFilter() {
+  scoped_refptr<SyncMessageFilter> filter = new SyncMessageFilter(
+      sync_context()->shutdown_event(),
+      sync_context()->IsChannelSendThreadSafe());
+  AddFilter(filter.get());
+  if (!did_init())
+    pre_init_sync_message_filters_.push_back(filter);
+  return filter;
+}
+
 bool SyncChannel::Send(Message* message) {
 #ifdef IPC_MESSAGE_LOG_ENABLED
   std::string name;
@@ -478,7 +488,7 @@ bool SyncChannel::Send(Message* message) {
   // *this* might get deleted in WaitForReply.
   scoped_refptr<SyncContext> context(sync_context());
   if (context->shutdown_event()->IsSignaled()) {
-    VLOG(1) << "shutdown event is signaled";
+    DVLOG(1) << "shutdown event is signaled";
     delete message;
     return false;
   }
@@ -582,6 +592,14 @@ void SyncChannel::StartWatching() {
                   base::Unretained(this));
   dispatch_watcher_.StartWatching(sync_context()->GetDispatchEvent(),
                                   dispatch_watcher_callback_);
+}
+
+void SyncChannel::OnChannelInit() {
+  for (const auto& filter : pre_init_sync_message_filters_) {
+    filter->set_is_channel_send_thread_safe(
+        context()->IsChannelSendThreadSafe());
+  }
+  pre_init_sync_message_filters_.clear();
 }
 
 }  // namespace IPC

@@ -6,6 +6,8 @@
 #error This test requires brlapi.
 #endif
 
+#include <stddef.h>
+
 #include <deque>
 
 #include "base/bind.h"
@@ -285,7 +287,7 @@ class BrailleDisplayPrivateAPIUserTest : public BrailleDisplayPrivateApiTest {
   MockEventDelegate* SetMockEventDelegate(BrailleDisplayPrivateAPI* api) {
     MockEventDelegate* delegate = new MockEventDelegate();
     api->SetEventDelegateForTest(
-        scoped_ptr<BrailleDisplayPrivateAPI::EventDelegate>(delegate).Pass());
+        scoped_ptr<BrailleDisplayPrivateAPI::EventDelegate>(delegate));
     return delegate;
   }
 
@@ -321,7 +323,7 @@ IN_PROC_BROWSER_TEST_F(BrailleDisplayPrivateAPIUserTest,
   scoped_ptr<ScreenLockerTester> tester(ScreenLocker::GetTester());
   // Log in.
   user_manager::UserManager::Get()->UserLoggedIn(
-      kTestUserName, kTestUserName, true);
+      AccountId::FromUserEmail(kTestUserName), kTestUserName, true);
   user_manager::UserManager::Get()->SessionStarted();
   Profile* profile = ProfileManager::GetActiveUserProfile();
   ASSERT_FALSE(

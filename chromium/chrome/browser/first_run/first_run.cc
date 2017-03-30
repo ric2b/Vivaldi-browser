@@ -5,12 +5,14 @@
 #include "chrome/browser/first_run/first_run.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
@@ -75,7 +77,7 @@ namespace {
 // A bitfield formed from values in AutoImportState to record the state of
 // AutoImport. This is used in testing to verify import startup actions that
 // occur before an observer can be registered in the test.
-uint16 g_auto_import_state = first_run::AUTO_IMPORT_NONE;
+uint16_t g_auto_import_state = first_run::AUTO_IMPORT_NONE;
 
 // Flags for functions of similar name.
 bool g_should_show_welcome_page = false;
@@ -236,7 +238,7 @@ void SetImportItem(PrefService* user_prefs,
 void ImportFromSourceProfile(ExternalProcessImporterHost* importer_host,
                              const importer::SourceProfile& source_profile,
                              Profile* target_profile,
-                             uint16 items_to_import) {
+                             uint16_t items_to_import) {
   ImportEndedObserver observer;
   importer_host->set_observer(&observer);
   importer_host->StartImportSettings(source_profile,
@@ -280,15 +282,18 @@ void ImportSettings(Profile* profile,
                     int items_to_import) {
   const importer::SourceProfile& source_profile =
       importer_list->GetSourceProfileAt(0);
+  // If no items to import then skip entirely.
+  if (!items_to_import)
+    return;
 
   // Ensure that importers aren't requested to import items that they do not
   // support. If there is no overlap, skip.
   items_to_import &= source_profile.services_supported;
-  if (items_to_import == 0)
-    return;
+  if (items_to_import) {
+    ImportFromSourceProfile(importer_host, source_profile, profile,
+                            items_to_import);
+  }
 
-  ImportFromSourceProfile(importer_host, source_profile, profile,
-                          items_to_import);
   g_auto_import_state |= first_run::AUTO_IMPORT_PROFILE_IMPORTED;
 }
 
@@ -542,15 +547,6 @@ void SetupMasterPrefsFromInstallPrefs(
   }
 
   if (install_prefs.GetBool(
-          installer::master_preferences::kDistroImportNotes,
-          &value)) {
-    if (value)
-      out_prefs->do_import_items |= importer::NOTES;
-    else
-      out_prefs->dont_import_items |= importer::NOTES;
-  }
-
-  if (install_prefs.GetBool(
           installer::master_preferences::kMakeChromeDefaultForUser,
           &value) && value) {
     out_prefs->make_chrome_default_for_user = true;
@@ -616,7 +612,7 @@ MasterPrefs::MasterPrefs()
       do_import_items(0),
       dont_import_items(0),
       make_chrome_default_for_user(false),
-      suppress_first_run_default_browser_prompt(true),
+      suppress_first_run_default_browser_prompt(false),
       welcome_page_on_os_upgrade_enabled(true) {
 }
 
@@ -794,18 +790,6 @@ void AutoImport(
                   dont_import_items,
                   importer::FAVORITES,
                   &items);
-	SetImportItem(user_prefs,
-                  prefs::kImportNotes,
-                  import_items,
-                  dont_import_items,
-				  importer::NOTES,
-                  &items);
-    SetImportItem(user_prefs,
-                  prefs::kImportNotes,
-                  import_items,
-                  dont_import_items,
-                  importer::NOTES,
-                  &items);
 
     // Deletes itself.
     ExternalProcessImporterHost* importer_host =
@@ -817,7 +801,7 @@ void AutoImport(
     importer::LogImporterUseToMetrics(
         "AutoImport", importer_list->GetSourceProfileAt(0).importer_type);
 
-    ImportSettings(profile, importer_host, importer_list.Pass(), items);
+    ImportSettings(profile, importer_host, std::move(importer_list), items);
   }
 
   if (!import_bookmarks_path.empty()) {
@@ -850,7 +834,7 @@ void DoPostImportTasks(Profile* profile, bool make_chrome_default_for_user) {
   internal::DoPostImportPlatformSpecificTasks(profile);
 }
 
-uint16 auto_import_state() {
+uint16_t auto_import_state() {
   return g_auto_import_state;
 }
 

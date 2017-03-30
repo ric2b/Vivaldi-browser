@@ -5,11 +5,12 @@
 #ifndef NET_PROXY_PROXY_RESOLVER_FACTORY_MOJO_H_
 #define NET_PROXY_PROXY_RESOLVER_FACTORY_MOJO_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/completion_callback.h"
 #include "net/proxy/proxy_resolver_factory.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
 
 namespace net {
 class HostResolver;

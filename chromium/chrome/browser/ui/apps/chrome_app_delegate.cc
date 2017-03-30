@@ -4,13 +4,16 @@
 
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/scoped_keep_alive.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
-#include "chrome/browser/favicon/favicon_helper.h"
+#include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
 #include "chrome/browser/platform_util.h"
@@ -18,6 +21,7 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
@@ -32,7 +36,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "extensions/common/constants.h"
-#include "base/command_line.h"
 
 #if defined(USE_ASH)
 #include "ash/shelf/shelf_constants.h"
@@ -46,6 +49,8 @@
 #include "chrome/browser/printing/print_view_manager_basic.h"
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 #endif  // defined(ENABLE_PRINTING)
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -83,7 +88,7 @@ class OpenURLFromTabBasedOnBrowserDefault
  public:
   OpenURLFromTabBasedOnBrowserDefault(scoped_ptr<content::WebContents> source,
                                       const content::OpenURLParams& params)
-      : source_(source.Pass()), params_(params) {}
+      : source_(std::move(source)), params_(params) {}
 
   // Opens a URL when called with the result of if this is the default system
   // browser or not.
@@ -123,7 +128,7 @@ void ChromeAppDelegate::RelinquishKeepAliveAfterTimeout(
   // ChromeAppDelegate which also resets the ScopedKeepAlive. To avoid this,
   // move the ScopedKeepAlive out to here and let it fall out of scope.
   if (chrome_app_delegate.get() && chrome_app_delegate->is_hidden_)
-    scoped_ptr<ScopedKeepAlive>(chrome_app_delegate->keep_alive_.Pass());
+    scoped_ptr<ScopedKeepAlive>(std::move(chrome_app_delegate->keep_alive_));
 }
 
 class ChromeAppDelegate::NewWindowContentsDelegate
@@ -154,7 +159,7 @@ ChromeAppDelegate::NewWindowContentsDelegate::OpenURLFromTab(
     scoped_refptr<ShellIntegration::DefaultWebClientWorker>
         check_if_default_browser_worker =
             new ShellIntegration::DefaultBrowserWorker(
-                new OpenURLFromTabBasedOnBrowserDefault(owned_source.Pass(),
+                new OpenURLFromTabBasedOnBrowserDefault(std::move(owned_source),
                                                         params));
     // Object lifetime notes: The OpenURLFromTabBasedOnBrowserDefault is owned
     // by check_if_default_browser_worker. StartCheckIsDefault() takes lifetime
@@ -168,7 +173,7 @@ ChromeAppDelegate::NewWindowContentsDelegate::OpenURLFromTab(
 ChromeAppDelegate::ChromeAppDelegate(scoped_ptr<ScopedKeepAlive> keep_alive)
     : has_been_shown_(false),
       is_hidden_(true),
-      keep_alive_(keep_alive.Pass()),
+      keep_alive_(std::move(keep_alive)),
       new_window_contents_delegate_(new NewWindowContentsDelegate()),
       weak_factory_(this) {
   registrar_.Add(this,
@@ -206,7 +211,7 @@ void ChromeAppDelegate::InitWebContents(content::WebContents* web_contents) {
 
 void ChromeAppDelegate::RenderViewCreated(
     content::RenderViewHost* render_view_host) {
-  bool isVivaldi = base::CommandLine::ForCurrentProcess()->IsRunningVivaldi();
+  bool isVivaldi = vivaldi::IsVivaldiRunning();
   if (!isVivaldi && !chrome::IsRunningInForcedAppMode()) {
     // Due to a bug in the way apps reacted to default zoom changes, some apps
     // can incorrectly have host level zoom settings. These aren't wanted as
@@ -306,6 +311,8 @@ int ChromeAppDelegate::PreferredIconSize() {
 void ChromeAppDelegate::SetWebContentsBlocked(
     content::WebContents* web_contents,
     bool blocked) {
+  if (!blocked)
+    web_contents->Focus();
   // RenderViewHost may be NULL during shutdown.
   content::RenderViewHost* host = web_contents->GetRenderViewHost();
   if (host) {

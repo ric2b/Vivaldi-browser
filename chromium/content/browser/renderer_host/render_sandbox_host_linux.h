@@ -8,12 +8,15 @@
 #include <string>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/simple_thread.h"
 #include "content/browser/renderer_host/sandbox_ipc_linux.h"
 #include "content/common/content_export.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 namespace content {
 
@@ -33,7 +36,7 @@ class CONTENT_EXPORT RenderSandboxHostLinux {
   void Init();
 
  private:
-  friend struct DefaultSingletonTraits<RenderSandboxHostLinux>;
+  friend struct base::DefaultSingletonTraits<RenderSandboxHostLinux>;
   // This object must be constructed on the main thread.
   RenderSandboxHostLinux();
   ~RenderSandboxHostLinux();

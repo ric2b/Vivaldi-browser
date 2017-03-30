@@ -4,10 +4,13 @@
 
 #include "chromecast/renderer/media/media_pipeline_proxy.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "chromecast/common/media/cma_messages.h"
 #include "chromecast/media/cma/base/coded_frame_provider.h"
@@ -80,8 +83,7 @@ void MediaPipelineProxyInternal::Shutdown() {
       CmaMessageFilterProxy::MediaDelegate());
 }
 
-void MediaPipelineProxyInternal::SetClient(
-    const MediaPipelineClient& client) {
+void MediaPipelineProxyInternal::SetClient(const MediaPipelineClient& client) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!client.error_cb.is_null());
   DCHECK(!client.buffering_state_cb.is_null());
@@ -185,8 +187,7 @@ MediaPipelineProxy::~MediaPipelineProxy() {
       FROM_HERE, base::Bind(&MediaChannelProxy::Close, media_channel_proxy_));
 }
 
-void MediaPipelineProxy::SetClient(
-    const MediaPipelineClient& client) {
+void MediaPipelineProxy::SetClient(const MediaPipelineClient& client) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_IO_THREAD(SetClient, client);
 }
@@ -196,11 +197,11 @@ void MediaPipelineProxy::SetCdm(int cdm_id) {
   FORWARD_ON_IO_THREAD(SetCdm, render_frame_id_, cdm_id);
 }
 
-AudioPipeline* MediaPipelineProxy::GetAudioPipeline() const {
+AudioPipelineProxy* MediaPipelineProxy::GetAudioPipeline() const {
   return audio_pipeline_.get();
 }
 
-VideoPipeline* MediaPipelineProxy::GetVideoPipeline() const {
+VideoPipelineProxy* MediaPipelineProxy::GetVideoPipeline() const {
   return video_pipeline_.get();
 }
 
@@ -210,7 +211,7 @@ void MediaPipelineProxy::InitializeAudio(
     const ::media::PipelineStatusCB& status_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   has_audio_ = true;
-  audio_pipeline_->Initialize(config, frame_provider.Pass(), status_cb);
+  audio_pipeline_->Initialize(config, std::move(frame_provider), status_cb);
 }
 
 void MediaPipelineProxy::InitializeVideo(
@@ -219,7 +220,7 @@ void MediaPipelineProxy::InitializeVideo(
     const ::media::PipelineStatusCB& status_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   has_video_ = true;
-  video_pipeline_->Initialize(configs, frame_provider.Pass(), status_cb);
+  video_pipeline_->Initialize(configs, std::move(frame_provider), status_cb);
 }
 
 void MediaPipelineProxy::StartPlayingFrom(base::TimeDelta time) {

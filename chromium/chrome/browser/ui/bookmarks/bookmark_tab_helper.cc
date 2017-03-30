@@ -4,17 +4,18 @@
 
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/defaults.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper_delegate.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/sad_tab.h"
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
-#include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 
@@ -41,7 +42,7 @@ bool IsInstantNTP(content::WebContents* web_contents) {
       web_contents->GetController().GetLastCommittedEntry();
   if (!entry)
     entry = web_contents->GetController().GetVisibleEntry();
-  return chrome::NavEntryIsInstantNTP(web_contents, entry);
+  return search::NavEntryIsInstantNTP(web_contents, entry);
 }
 
 }  // namespace
@@ -144,5 +145,16 @@ void BookmarkTabHelper::DidNavigateMainFrame(
 void BookmarkTabHelper::DidStartNavigationToPendingEntry(
     const GURL& /*url*/,
     content::NavigationController::ReloadType /*reload_type*/) {
+  UpdateStarredStateForCurrentURL();
+}
+
+void BookmarkTabHelper::DidAttachInterstitialPage() {
+  // Interstitials are not necessarily starred just because the page that
+  // created them is, so star state has to track interstitial attach/detach if
+  // necessary.
+  UpdateStarredStateForCurrentURL();
+}
+
+void BookmarkTabHelper::DidDetachInterstitialPage() {
   UpdateStarredStateForCurrentURL();
 }

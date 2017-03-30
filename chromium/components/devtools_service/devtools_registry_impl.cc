@@ -4,6 +4,8 @@
 
 #include "components/devtools_service/devtools_registry_impl.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "components/devtools_service/devtools_agent_host.h"
 
@@ -25,7 +27,7 @@ DevToolsRegistryImpl::~DevToolsRegistryImpl() {
 
 void DevToolsRegistryImpl::BindToRegistryRequest(
     mojo::InterfaceRequest<DevToolsRegistry> request) {
-  bindings_.AddBinding(this, request.Pass());
+  bindings_.AddBinding(this, std::move(request));
 }
 
 DevToolsAgentHost* DevToolsRegistryImpl::GetAgentById(const std::string& id) {
@@ -36,13 +38,14 @@ DevToolsAgentHost* DevToolsRegistryImpl::GetAgentById(const std::string& id) {
   return iter->second.get();
 }
 
-void DevToolsRegistryImpl::RegisterAgent(DevToolsAgentPtr agent) {
-  linked_ptr<DevToolsAgentHost> agent_host(new DevToolsAgentHost(agent.Pass()));
-  std::string id = agent_host->id();
+void DevToolsRegistryImpl::RegisterAgent(const mojo::String& id,
+                                         DevToolsAgentPtr agent) {
+  linked_ptr<DevToolsAgentHost> agent_host(
+      new DevToolsAgentHost(id, std::move(agent)));
   agent_host->set_agent_connection_error_handler(
       [this, id]() { OnAgentConnectionError(id); });
 
-  agents_[agent_host->id()] = agent_host;
+  agents_[id] = agent_host;
 }
 
 void DevToolsRegistryImpl::OnAgentConnectionError(const std::string& id) {

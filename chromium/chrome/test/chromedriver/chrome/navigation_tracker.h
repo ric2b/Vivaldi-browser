@@ -8,8 +8,8 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/test/chromedriver/chrome/devtools_event_listener.h"
 #include "chrome/test/chromedriver/chrome/status.h"
@@ -43,13 +43,16 @@ class NavigationTracker : public DevToolsEventListener {
   // may be empty to signify the main frame.
   Status IsPendingNavigation(const std::string& frame_id, bool* is_pending);
 
+  void set_timed_out(bool timed_out);
+
   // Overridden from DevToolsEventListener:
   Status OnConnected(DevToolsClient* client) override;
   Status OnEvent(DevToolsClient* client,
                  const std::string& method,
                  const base::DictionaryValue& params) override;
   Status OnCommandSuccess(DevToolsClient* client,
-                          const std::string& method) override;
+                          const std::string& method,
+                          const base::DictionaryValue& result) override;
 
  private:
   DevToolsClient* client_;
@@ -57,8 +60,14 @@ class NavigationTracker : public DevToolsEventListener {
   const BrowserInfo* browser_info_;
   std::set<std::string> pending_frame_set_;
   std::set<std::string> scheduled_frame_set_;
+  std::set<int> execution_context_set_;
+  std::string dummy_frame_id_;
+  int dummy_execution_context_id_;
+  bool load_event_fired_;
+  bool timed_out_;
 
   void ResetLoadingState(LoadingState loading_state);
+  bool IsExpectingFrameLoadingEvents();
 
   DISALLOW_COPY_AND_ASSIGN(NavigationTracker);
 };

@@ -5,6 +5,8 @@
 #ifndef IOS_WEB_NAVIGATION_NAVIGATION_MANAGER_DELEGATE_H_
 #define IOS_WEB_NAVIGATION_NAVIGATION_MANAGER_DELEGATE_H_
 
+#include <stddef.h>
+
 namespace web {
 
 struct LoadCommittedDetails;
@@ -20,6 +22,12 @@ class NavigationManagerDelegate {
   // TODO(stuartmorgan): Remove this once more navigation logic moves to
   // NavigationManagerImpl.
   virtual void NavigateToPendingEntry() = 0;
+
+  // Informs the delegate that committed navigation items have been pruned.
+  virtual void OnNavigationItemsPruned(size_t pruned_item_count) = 0;
+
+  // Informs the delegate that a navigation item has been changed.
+  virtual void OnNavigationItemChanged() = 0;
 
   // Informs the delegate that a navigation item has been commited.
   virtual void OnNavigationItemCommitted(

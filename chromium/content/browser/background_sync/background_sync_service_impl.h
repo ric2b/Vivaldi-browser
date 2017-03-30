@@ -5,12 +5,15 @@
 #ifndef CONTENT_BROWSER_BACKGROUND_SYNC_BACKGROUND_SYNC_SERVICE_IMPL_H_
 #define CONTENT_BROWSER_BACKGROUND_SYNC_BACKGROUND_SYNC_SERVICE_IMPL_H_
 
-#include <vector>
+#include <stdint.h>
 
+#include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_vector.h"
 #include "content/browser/background_sync/background_sync_manager.h"
 #include "content/common/background_sync_service.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
 
@@ -19,8 +22,8 @@ class BackgroundSyncContextImpl;
 class CONTENT_EXPORT BackgroundSyncServiceImpl
     : public NON_EXPORTED_BASE(BackgroundSyncService) {
  public:
-  static void Create(
-      const scoped_refptr<BackgroundSyncContextImpl>& background_sync_context,
+  BackgroundSyncServiceImpl(
+      BackgroundSyncContextImpl* background_sync_context,
       mojo::InterfaceRequest<BackgroundSyncService> request);
 
   ~BackgroundSyncServiceImpl() override;
@@ -28,21 +31,12 @@ class CONTENT_EXPORT BackgroundSyncServiceImpl
  private:
   friend class BackgroundSyncServiceImplTest;
 
-  static void CreateOnIOThread(
-      const scoped_refptr<BackgroundSyncContextImpl>& background_sync_context,
-      mojo::InterfaceRequest<BackgroundSyncService> request);
-
-  explicit BackgroundSyncServiceImpl(
-      const scoped_refptr<BackgroundSyncContextImpl>& background_sync_context,
-      mojo::InterfaceRequest<BackgroundSyncService> request);
-
   // BackgroundSyncService methods:
   void Register(content::SyncRegistrationPtr options,
                 int64_t sw_registration_id,
+                bool requested_from_service_worker,
                 const RegisterCallback& callback) override;
-  void Unregister(BackgroundSyncPeriodicity periodicity,
-                  int64_t id,
-                  const mojo::String& tag,
+  void Unregister(BackgroundSyncRegistrationHandle::HandleId handle_id,
                   int64_t sw_registration_id,
                   const UnregisterCallback& callback) override;
   void GetRegistration(BackgroundSyncPeriodicity periodicity,
@@ -56,19 +50,39 @@ class CONTENT_EXPORT BackgroundSyncServiceImpl
       BackgroundSyncPeriodicity periodicity,
       int64_t sw_registration_id,
       const GetPermissionStatusCallback& callback) override;
+  void DuplicateRegistrationHandle(
+      BackgroundSyncRegistrationHandle::HandleId handle_id,
+      const DuplicateRegistrationHandleCallback& callback) override;
+  void ReleaseRegistration(
+      BackgroundSyncRegistrationHandle::HandleId handle_id) override;
+  void NotifyWhenFinished(BackgroundSyncRegistrationHandle::HandleId handle_id,
+                          const NotifyWhenFinishedCallback& callback) override;
 
   void OnRegisterResult(const RegisterCallback& callback,
-                        BackgroundSyncManager::ErrorType error,
-                        const BackgroundSyncRegistration& result);
+                        BackgroundSyncStatus status,
+                        scoped_ptr<BackgroundSyncRegistrationHandle> result);
   void OnUnregisterResult(const UnregisterCallback& callback,
-                          BackgroundSyncManager::ErrorType error);
+                          BackgroundSyncStatus status);
   void OnGetRegistrationsResult(
       const GetRegistrationsCallback& callback,
-      BackgroundSyncManager::ErrorType error,
-      const std::vector<BackgroundSyncRegistration>& result);
+      BackgroundSyncStatus status,
+      scoped_ptr<ScopedVector<BackgroundSyncRegistrationHandle>> result);
+  void OnNotifyWhenFinishedResult(const NotifyWhenFinishedCallback& callback,
+                                  BackgroundSyncStatus status,
+                                  BackgroundSyncState sync_state);
 
-  scoped_refptr<BackgroundSyncContextImpl> background_sync_context_;
-  mojo::StrongBinding<BackgroundSyncService> binding_;
+  // Called when an error is detected on binding_.
+  void OnConnectionError();
+
+  // background_sync_context_ owns this.
+  BackgroundSyncContextImpl* background_sync_context_;
+
+  mojo::Binding<BackgroundSyncService> binding_;
+
+  // The registrations that the client might reference.
+  IDMap<BackgroundSyncRegistrationHandle,
+        IDMapOwnPointer,
+        BackgroundSyncRegistrationHandle::HandleId> active_handles_;
 
   base::WeakPtrFactory<BackgroundSyncServiceImpl> weak_ptr_factory_;
 

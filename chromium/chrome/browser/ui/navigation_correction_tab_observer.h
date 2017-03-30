@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_NAVIGATION_CORRECTION_TAB_OBSERVER_H_
 #define CHROME_BROWSER_UI_NAVIGATION_CORRECTION_TAB_OBSERVER_H_
 
+#include "base/macros.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "components/google/core/browser/google_url_tracker.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -30,7 +31,7 @@ class NavigationCorrectionTabObserver
   friend class content::WebContentsUserData<NavigationCorrectionTabObserver>;
 
   // content::WebContentsObserver overrides:
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
+  void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
 
   // Internal helpers ----------------------------------------------------------
 
@@ -45,7 +46,8 @@ class NavigationCorrectionTabObserver
   void OnEnabledChanged();
 
   // Updates the renderer's navigation correction service configuration.
-  void UpdateNavigationCorrectionInfo(content::RenderViewHost* rvh);
+  void UpdateNavigationCorrectionInfo(
+      content::RenderFrameHost* render_frame_host);
 
   Profile* profile_;
   PrefChangeRegistrar pref_change_registrar_;

@@ -8,6 +8,7 @@
 #include <bitset>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/message_loop/message_pump_libevent.h"
 #include "ui/events/devices/input_device.h"
 #include "ui/events/event.h"
@@ -31,7 +32,6 @@ class EVENTS_OZONE_EVDEV_EXPORT EventConverterEvdevImpl
   EventConverterEvdevImpl(int fd,
                           base::FilePath path,
                           int id,
-                          InputDeviceType type,
                           const EventDeviceInfo& info,
                           CursorDelegateEvdev* cursor,
                           DeviceEventDispatcherEvdev* dispatcher);

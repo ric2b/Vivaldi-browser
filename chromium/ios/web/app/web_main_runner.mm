@@ -8,8 +8,10 @@
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "ios/web/app/web_main_loop.h"
+#include "ios/web/public/url_schemes.h"
 #include "ios/web/public/web_client.h"
 #include "ui/base/ui_base_paths.h"
 
@@ -36,15 +38,11 @@ class WebMainRunnerImpl : public WebMainRunner {
     is_initialized_ = true;
     delegate_ = params.delegate;
 
-    // TODO(rohitrao): Chrome for iOS initializes this in main(), because it's
-    // needed for breakpad.  Are we really going to require that all embedders
-    // initialize an AtExitManager in main()?
-    exit_manager_.reset(new base::AtExitManager);
+    if (params.register_exit_manager) {
+      exit_manager_.reset(new base::AtExitManager);
+    }
 
-    // There is no way to pass commandline flags to process on iOS, so the
-    // CommandLine is always initialized empty.  Embedders can add switches in
-    // |BasicStartupComplete|.
-    base::CommandLine::Init(0, nullptr);
+    base::CommandLine::Init(params.argc, params.argv);
     if (delegate_) {
       delegate_->BasicStartupComplete();
     }
@@ -55,12 +53,7 @@ class WebMainRunnerImpl : public WebMainRunner {
     if (!GetWebClient())
       SetWebClient(&empty_web_client_);
 
-#if defined(USE_NSS)
-    crypto::EarlySetupForNSSInit();
-#endif
-
-    // TODO(rohitrao): Desktop calls content::RegisterContentSchemes(true) here.
-    // Do we need similar scheme registration on iOS?
+    RegisterWebSchemes(true);
     ui::RegisterPathProvider();
 
     CHECK(base::i18n::InitializeICU());

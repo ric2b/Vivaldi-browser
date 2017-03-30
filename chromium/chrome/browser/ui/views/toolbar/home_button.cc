@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/toolbar/home_button.h"
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -136,12 +137,8 @@ void HomePageUndoBubble::WindowClosing() {
 
 // HomeButton -----------------------------------------------------------
 
-HomeButton::HomeButton(
-    views::ButtonListener* listener,
-    Browser* browser)
-    : ToolbarButton(listener, NULL),
-      browser_(browser) {
-}
+HomeButton::HomeButton(views::ButtonListener* listener, Browser* browser)
+    : ToolbarButton(browser->profile(), listener, nullptr), browser_(browser) {}
 
 HomeButton::~HomeButton() {
 }
@@ -152,7 +149,7 @@ const char* HomeButton::GetClassName() const {
 
 bool HomeButton::GetDropFormats(
     int* formats,
-    std::set<OSExchangeData::CustomFormat>* custom_formats) {
+    std::set<ui::Clipboard::FormatType>* format_types) {
   *formats = ui::OSExchangeData::URL;
   return true;
 }

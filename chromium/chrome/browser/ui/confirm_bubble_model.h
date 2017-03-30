@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_UI_CONFIRM_BUBBLE_MODEL_H_
 #define CHROME_BROWSER_UI_CONFIRM_BUBBLE_MODEL_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
+#include "url/gurl.h"
 
 namespace gfx {
 class Image;
@@ -32,11 +33,6 @@ class ConfirmBubbleModel {
   virtual base::string16 GetTitle() const = 0;
   virtual base::string16 GetMessageText() const = 0;
 
-  // Returns an icon for the bubble. This image should be owned by the
-  // ResourceBundle and callers should not take ownership of it. Must not return
-  // NULL.
-  virtual gfx::Image* GetIcon() const = 0;
-
   // Return the buttons to be shown for this bubble menu. This function returns
   // a combination of BubbleButton values, e.g. when we show both an OK button
   // and a cancel button, it should return (BUTTON_OK | BUTTON_CANCEL). (This is
@@ -54,10 +50,13 @@ class ConfirmBubbleModel {
   virtual void Cancel();
 
   // Returns the text of the link to be displayed, if any. Otherwise returns
-  // and empty string.
+  // an empty string.
   virtual base::string16 GetLinkText() const;
 
-  // Called when the Link is clicked.
+  // Returns the URL of the link to be displayed.
+  virtual GURL GetLinkURL() const;
+
+  // Called when the link is clicked.
   virtual void LinkClicked();
 
  private:

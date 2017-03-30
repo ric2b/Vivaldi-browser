@@ -5,11 +5,13 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
@@ -19,6 +21,27 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_text_utils.h"
 
+// Set PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL if this platform has
+// a platform-specific subclass of BrowserAccessibility and
+// BrowserAccessibilityManager.
+#undef PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL
+
+#if defined(OS_WIN)
+#define PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL 1
+#endif
+
+#if defined(OS_MACOSX)
+#define PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL 1
+#endif
+
+#if defined(OS_ANDROID) && !defined(USE_AURA)
+#define PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL 1
+#endif
+
+#if defined(OS_LINUX) && defined(USE_X11) && !defined(OS_CHROMEOS)
+#define PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL 1
+#endif
+
 #if defined(OS_MACOSX) && __OBJC__
 @class BrowserAccessibilityCocoa;
 #endif
@@ -27,6 +50,8 @@ namespace content {
 class BrowserAccessibilityManager;
 #if defined(OS_WIN)
 class BrowserAccessibilityWin;
+#elif defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_X11)
+class BrowserAccessibilityAuraLinux;
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,7 +90,10 @@ class CONTENT_EXPORT BrowserAccessibility {
   virtual void OnLocationChanged() {}
 
   // Return true if this object is equal to or a descendant of |ancestor|.
-  bool IsDescendantOf(BrowserAccessibility* ancestor);
+  bool IsDescendantOf(const BrowserAccessibility* ancestor) const;
+
+  // Returns true if this object is used only for representing text.
+  bool IsTextOnlyObject() const;
 
   // Returns true if this is a leaf node on this platform, meaning any
   // children should not be exposed to this platform's native accessibility
@@ -77,24 +105,24 @@ class CONTENT_EXPORT BrowserAccessibility {
 
   // Returns the number of children of this object, or 0 if PlatformIsLeaf()
   // returns true.
-  uint32 PlatformChildCount() const;
+  uint32_t PlatformChildCount() const;
 
   // Return a pointer to the child at the given index, or NULL for an
   // invalid index. Returns NULL if PlatformIsLeaf() returns true.
-  BrowserAccessibility* PlatformGetChild(uint32 child_index) const;
+  BrowserAccessibility* PlatformGetChild(uint32_t child_index) const;
 
   // Returns true if an ancestor of this node (not including itself) is a
   // leaf node, meaning that this node is not actually exposed to the
   // platform.
   bool PlatformIsChildOfLeaf() const;
 
-  // Return the previous sibling of this object, or NULL if it's the first
-  // child of its parent.
-  BrowserAccessibility* GetPreviousSibling();
+  BrowserAccessibility* GetPreviousSibling() const;
+  BrowserAccessibility* GetNextSibling() const;
 
-  // Return the next sibling of this object, or NULL if it's the last child
-  // of its parent.
-  BrowserAccessibility* GetNextSibling();
+  // Returns nullptr if there are no children.
+  BrowserAccessibility* PlatformDeepestFirstChild() const;
+  // Returns nullptr if there are no children.
+  BrowserAccessibility* PlatformDeepestLastChild() const;
 
   // Returns the bounds of this object in coordinates relative to the
   // top-left corner of the overall web area.
@@ -111,6 +139,10 @@ class CONTENT_EXPORT BrowserAccessibility {
   // Same as GetLocalBoundsForRange, in screen coordinates. Only valid when
   // the role is WebAXRoleStaticText.
   gfx::Rect GetGlobalBoundsForRange(int start, int len) const;
+
+  // This is to handle the cases such as ARIA textbox, where the value should
+  // be calculated from the object's inner text.
+  base::string16 GetValue() const;
 
   // Searches in the given text and from the given offset until the start of
   // the next or previous word is found and returns its position.
@@ -158,17 +190,18 @@ class CONTENT_EXPORT BrowserAccessibility {
   // reflect the accessibility tree that should be exposed on each platform.
   // Use PlatformChildCount and PlatformGetChild to implement platform
   // accessibility APIs.
-  uint32 InternalChildCount() const;
-  BrowserAccessibility* InternalGetChild(uint32 child_index) const;
+  uint32_t InternalChildCount() const;
+  BrowserAccessibility* InternalGetChild(uint32_t child_index) const;
+  BrowserAccessibility* InternalGetParent() const;
 
   BrowserAccessibility* GetParent() const;
-  int32 GetIndexInParent() const;
+  int32_t GetIndexInParent() const;
 
-  int32 GetId() const;
+  int32_t GetId() const;
   const ui::AXNodeData& GetData() const;
   gfx::Rect GetLocation() const;
-  int32 GetRole() const;
-  int32 GetState() const;
+  int32_t GetRole() const;
+  int32_t GetState() const;
 
   typedef base::StringPairs HtmlAttributes;
   const HtmlAttributes& GetHtmlAttributes() const;
@@ -179,9 +212,14 @@ class CONTENT_EXPORT BrowserAccessibility {
   virtual bool IsNative() const;
 
 #if defined(OS_MACOSX) && __OBJC__
+  const BrowserAccessibilityCocoa* ToBrowserAccessibilityCocoa() const;
   BrowserAccessibilityCocoa* ToBrowserAccessibilityCocoa();
 #elif defined(OS_WIN)
+  const BrowserAccessibilityWin* ToBrowserAccessibilityWin() const;
   BrowserAccessibilityWin* ToBrowserAccessibilityWin();
+#elif defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_X11)
+  const BrowserAccessibilityAuraLinux* ToBrowserAccessibilityAuraLinux() const;
+  BrowserAccessibilityAuraLinux* ToBrowserAccessibilityAuraLinux();
 #endif
 
   // Accessing accessibility attributes:
@@ -223,10 +261,10 @@ class CONTENT_EXPORT BrowserAccessibility {
       ui::AXStringAttribute attribute) const;
 
   bool HasIntListAttribute(ui::AXIntListAttribute attribute) const;
-  const std::vector<int32>& GetIntListAttribute(
+  const std::vector<int32_t>& GetIntListAttribute(
       ui::AXIntListAttribute attribute) const;
   bool GetIntListAttribute(ui::AXIntListAttribute attribute,
-                           std::vector<int32>* value) const;
+                           std::vector<int32_t>* value) const;
 
   // Retrieve the value of a html attribute from the attribute map and
   // returns true if found.
@@ -249,20 +287,28 @@ class CONTENT_EXPORT BrowserAccessibility {
                        bool* is_defined,
                        bool* is_mixed) const;
 
+  virtual base::string16 GetText() const;
+
   // Returns true if the bit corresponding to the given state enum is 1.
   bool HasState(ui::AXState state_enum) const;
 
   // Returns true if this node is an cell or an table header.
   bool IsCellOrTableHeaderRole() const;
 
-  // Returns true if this node is an editable text field of any kind.
-  bool IsEditableText() const;
+  // Returns true if the caret is active on this object.
+  bool HasCaret() const;
 
   // True if this is a web area, and its grandparent is a presentational iframe.
   bool IsWebAreaForPresentationalIframe() const;
 
-  // Is any control, like a button, text field, etc.
   bool IsControl() const;
+  bool IsSimpleTextControl() const;
+  // Indicates if this object is at the root of a rich edit text control.
+  bool IsRichTextControl() const;
+
+  // If an object is focusable but has no accessible name, use this
+  // to compute a name from its descendants.
+  std::string ComputeAccessibleNameFromDescendants();
 
  protected:
   BrowserAccessibility();
@@ -274,14 +320,11 @@ class CONTENT_EXPORT BrowserAccessibility {
   ui::AXNode* node_;
 
  private:
-  // Return the sum of the lengths of all static text descendants,
-  // including this object if it's static text.
-  int GetStaticTextLenRecursive() const;
-
-  // Similar to GetParent(), but includes nodes that are the host of a
-  // subtree rather than skipping over them - because they contain important
-  // bounds offsets.
-  BrowserAccessibility* GetParentForBoundsCalculation() const;
+  // |GetInnerText| recursively includes all the text from descendants such as
+  // text found in any embedded object. In contrast, |GetText| might include a
+  // special character in the place of every embedded object instead of its
+  // text, depending on the platform.
+  base::string16 GetInnerText() const;
 
   // If a bounding rectangle is empty, compute it based on the union of its
   // children, since most accessibility APIs don't like elements with no

@@ -5,11 +5,14 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_GPU_SCHEDULER_H_
 #define GPU_COMMAND_BUFFER_SERVICE_GPU_SCHEDULER_H_
 
+#include <stdint.h>
+
 #include <queue>
 
 #include "base/atomic_ref_count.h"
 #include "base/atomicops.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -65,16 +68,18 @@ class GPU_EXPORT GpuScheduler
   }
 
   // Sets whether commands should be processed by this scheduler. Setting to
-  // false unschedules. Setting to true reschedules. Whether or not the
-  // scheduler is currently scheduled is "reference counted". Every call with
-  // false must eventually be paired by a call with true.
-  void SetScheduled(bool is_scheduled);
+  // false unschedules. Setting to true reschedules.
+  void SetScheduled(bool scheduled);
 
-  // Returns whether the scheduler is currently able to process more commands.
-  bool IsScheduled();
+  bool scheduled() const { return scheduled_; }
 
-  // Returns whether the scheduler needs to be polled again in the future.
-  bool HasMoreWork();
+  // Returns whether the scheduler needs to be polled again in the future to
+  // process pending queries.
+  bool HasPendingQueries() const;
+
+  // Process pending queries and return. HasPendingQueries() can be used to
+  // determine if there's more pending queries after this has been called.
+  void ProcessPendingQueries();
 
   typedef base::Callback<void(bool /* scheduled */)> SchedulingChangedCallback;
 
@@ -83,27 +88,28 @@ class GPU_EXPORT GpuScheduler
   void SetSchedulingChangedCallback(const SchedulingChangedCallback& callback);
 
   // Implementation of CommandBufferEngine.
-  scoped_refptr<Buffer> GetSharedMemoryBuffer(int32 shm_id) override;
-  void set_token(int32 token) override;
-  bool SetGetBuffer(int32 transfer_buffer_id) override;
-  bool SetGetOffset(int32 offset) override;
-  int32 GetGetOffset() override;
+  scoped_refptr<Buffer> GetSharedMemoryBuffer(int32_t shm_id) override;
+  void set_token(int32_t token) override;
+  bool SetGetBuffer(int32_t transfer_buffer_id) override;
+  bool SetGetOffset(int32_t offset) override;
+  int32_t GetGetOffset() override;
 
   void SetCommandProcessedCallback(const base::Closure& callback);
 
-  bool HasMoreIdleWork();
+  // Returns whether the scheduler needs to be polled again in the future to
+  // process idle work.
+  bool HasMoreIdleWork() const;
+
+  // Perform some idle work and return. HasMoreIdleWork() can be used to
+  // determine if there's more idle work do be done after this has been called.
   void PerformIdleWork();
 
   CommandParser* parser() const {
     return parser_.get();
   }
 
-  bool IsPreempted();
-
  private:
-  // Artificially reschedule if the scheduler is still unscheduled after a
-  // timeout.
-  void RescheduleTimeOut();
+  bool IsPreempted();
 
   // The GpuScheduler holds a weak reference to the CommandBuffer. The
   // CommandBuffer owns the GpuScheduler and holds a strong reference to it
@@ -123,12 +129,8 @@ class GPU_EXPORT GpuScheduler
   // This should be an argument to the constructor.
   scoped_ptr<CommandParser> parser_;
 
-  // Greater than zero if this is waiting to be rescheduled before continuing.
-  int unscheduled_count_;
-
-  // The number of times this scheduler has been artificially rescheduled on
-  // account of a timeout.
-  int rescheduled_count_;
+  // Whether the scheduler is currently able to process more commands.
+  bool scheduled_;
 
   SchedulingChangedCallback scheduling_changed_callback_;
   base::Closure descheduled_callback_;
@@ -137,10 +139,6 @@ class GPU_EXPORT GpuScheduler
   // If non-NULL and |preemption_flag_->IsSet()|, exit PutChanged early.
   scoped_refptr<PreemptionFlag> preemption_flag_;
   bool was_preempted_;
-
-  // A factory for outstanding rescheduling tasks that is invalidated whenever
-  // the scheduler is rescheduled.
-  base::WeakPtrFactory<GpuScheduler> reschedule_task_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuScheduler);
 };

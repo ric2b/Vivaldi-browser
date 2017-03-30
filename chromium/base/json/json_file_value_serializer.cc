@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 
 using base::FilePath;
 
@@ -100,8 +101,9 @@ const char* JSONFileValueDeserializer::GetErrorMessageForCode(int error_code) {
   }
 }
 
-base::Value* JSONFileValueDeserializer::Deserialize(int* error_code,
-                                                    std::string* error_str) {
+scoped_ptr<base::Value> JSONFileValueDeserializer::Deserialize(
+    int* error_code,
+    std::string* error_str) {
   std::string json_string;
   int error = ReadFileToString(&json_string);
   if (error != JSON_NO_ERROR) {

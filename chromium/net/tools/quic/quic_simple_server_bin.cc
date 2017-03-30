@@ -8,20 +8,27 @@
 #include <iostream>
 
 #include "base/at_exit.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/base/ip_endpoint.h"
+#include "net/quic/crypto/proof_source_chromium.h"
 #include "net/quic/quic_protocol.h"
 #include "net/tools/quic/quic_in_memory_cache.h"
 #include "net/tools/quic/quic_simple_server.h"
 
 // The port the quic server will listen on.
-int32 FLAGS_port = 6121;
+int32_t FLAGS_port = 6121;
 
-int main(int argc, char *argv[]) {
+net::ProofSource* CreateProofSource(const base::FilePath& cert_path,
+                                    const base::FilePath& key_path) {
+  net::ProofSourceChromium* proof_source = new net::ProofSourceChromium();
+  CHECK(proof_source->Initialize(cert_path, key_path, base::FilePath()));
+  return proof_source;
+}
+
+int main(int argc, char* argv[]) {
   base::AtExitManager exit_manager;
   base::MessageLoopForIO message_loop;
 
@@ -40,7 +47,9 @@ int main(int argc, char *argv[]) {
         "-h, --help                  show this help message and exit\n"
         "--port=<port>               specify the port to listen on\n"
         "--quic_in_memory_cache_dir  directory containing response data\n"
-        "                            to load\n";
+        "                            to load\n"
+        "--certificate_file=<file>   path to the certificate chain\n"
+        "--key_file=<file>           path to the pkcs8 private key\n";
     std::cout << help_str;
     exit(0);
   }
@@ -57,11 +66,24 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (!line->HasSwitch("certificate_file")) {
+    LOG(ERROR) << "missing --certificate_file";
+    return 1;
+  }
+
+  if (!line->HasSwitch("key_file")) {
+    LOG(ERROR) << "missing --key_file";
+    return 1;
+  }
+
   net::IPAddressNumber ip;
   CHECK(net::ParseIPLiteralToNumber("::", &ip));
 
   net::QuicConfig config;
-  net::tools::QuicSimpleServer server(config, net::QuicSupportedVersions());
+  net::tools::QuicSimpleServer server(
+      CreateProofSource(line->GetSwitchValuePath("certificate_file"),
+                        line->GetSwitchValuePath("key_file")),
+      config, net::QuicSupportedVersions());
   server.SetStrikeRegisterNoStartupPeriod();
 
   int rc = server.Listen(net::IPEndPoint(ip, FLAGS_port));

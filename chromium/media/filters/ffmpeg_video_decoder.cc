@@ -4,6 +4,9 @@
 
 #include "media/filters/ffmpeg_video_decoder.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 
@@ -18,6 +21,7 @@
 #include "media/base/limits.h"
 #include "media/base/media_switches.h"
 #include "media/base/pipeline.h"
+#include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "media/ffmpeg/ffmpeg_common.h"
@@ -60,21 +64,21 @@ static int GetVideoBufferImpl(struct AVCodecContext* s,
   return decoder->GetVideoBuffer(s, frame, flags);
 }
 
-static void ReleaseVideoBufferImpl(void* opaque, uint8* data) {
+static void ReleaseVideoBufferImpl(void* opaque, uint8_t* data) {
   scoped_refptr<VideoFrame> video_frame;
   video_frame.swap(reinterpret_cast<VideoFrame**>(&opaque));
 }
 
-static size_t RoundUp(size_t value, size_t alignment) {
-  // Check that |alignment| is a power of 2.
-  DCHECK((alignment + (alignment - 1)) == (alignment | (alignment - 1)));
-  return ((value + (alignment - 1)) & ~(alignment - 1));
+// static
+bool FFmpegVideoDecoder::IsCodecSupported(VideoCodec codec) {
+  FFmpegGlue::InitializeFFmpeg();
+  return avcodec_find_decoder(VideoCodecToCodecID(codec)) != nullptr;
 }
 
-FFmpegVideoDecoder::FFmpegVideoDecoder(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : task_runner_(task_runner), state_(kUninitialized),
-      decode_nalus_(false) {}
+FFmpegVideoDecoder::FFmpegVideoDecoder()
+    : state_(kUninitialized), decode_nalus_(false) {
+  thread_checker_.DetachFromThread();
+}
 
 int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
                                        AVFrame* frame,
@@ -84,13 +88,13 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   // whereas |codec_context| contains the current threads's
   // updated width/height/pix_fmt, which can change for adaptive
   // content.
-  const VideoFrame::Format format =
-      PixelFormatToVideoFormat(codec_context->pix_fmt);
+  const VideoPixelFormat format =
+      AVPixelFormatToVideoPixelFormat(codec_context->pix_fmt);
 
-  if (format == VideoFrame::UNKNOWN)
+  if (format == PIXEL_FORMAT_UNKNOWN)
     return AVERROR(EINVAL);
-  DCHECK(format == VideoFrame::YV12 || format == VideoFrame::YV16 ||
-         format == VideoFrame::YV24);
+  DCHECK(format == PIXEL_FORMAT_YV12 || format == PIXEL_FORMAT_YV16 ||
+         format == PIXEL_FORMAT_YV24);
 
   gfx::Size size(codec_context->width, codec_context->height);
   const int ret = av_image_check_size(size.width(), size.height(), 0, NULL);
@@ -112,30 +116,30 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   //
   // When lowres is non-zero, dimensions should be divided by 2^(lowres), but
   // since we don't use this, just DCHECK that it's zero.
-  //
-  // Always round up to a multiple of two to match VideoFrame restrictions on
-  // frame alignment.
   DCHECK_EQ(codec_context->lowres, 0);
-  gfx::Size coded_size(
-      RoundUp(std::max(size.width(), codec_context->coded_width), 2),
-      RoundUp(std::max(size.height(), codec_context->coded_height), 2));
+  gfx::Size coded_size(std::max(size.width(), codec_context->coded_width),
+                       std::max(size.height(), codec_context->coded_height));
 
   if (!VideoFrame::IsValidConfig(format, VideoFrame::STORAGE_UNKNOWN,
                                  coded_size, gfx::Rect(size), natural_size)) {
     return AVERROR(EINVAL);
   }
 
+  // FFmpeg expects the initialize allocation to be zero-initialized.  Failure
+  // to do so can lead to unitialized value usage.  See http://crbug.com/390941
   scoped_refptr<VideoFrame> video_frame = frame_pool_.CreateFrame(
       format, coded_size, gfx::Rect(size), natural_size, kNoTimestamp());
-  if (codec_context->color_range == AVCOL_RANGE_JPEG)
-    video_frame->metadata()->SetInteger(VideoFrameMetadata::COLOR_SPACE,
-                                        VideoFrame::COLOR_SPACE_JPEG);
-  else if (codec_context->colorspace == AVCOL_SPC_BT709) {
-    video_frame->metadata()->SetInteger(VideoFrameMetadata::COLOR_SPACE,
-                                        VideoFrame::COLOR_SPACE_HD_REC709);
-  }
 
-  for (int i = 0; i < 3; i++) {
+  // Prefer the color space from the codec context. If it's not specified (or is
+  // set to an unsupported value), fall back on the value from the config.
+  ColorSpace color_space = AVColorSpaceToColorSpace(codec_context->colorspace,
+                                                    codec_context->color_range);
+  if (color_space == COLOR_SPACE_UNSPECIFIED)
+    color_space = config_.color_space();
+  video_frame->metadata()->SetInteger(VideoFrameMetadata::COLOR_SPACE,
+                                      color_space);
+
+  for (size_t i = 0; i < VideoFrame::NumPlanes(video_frame->format()); i++) {
     frame->data[i] = video_frame->data(i);
     frame->linesize[i] = video_frame->stride(i);
   }
@@ -164,18 +168,26 @@ std::string FFmpegVideoDecoder::GetDisplayName() const {
 
 void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                     bool low_delay,
+                                    const SetCdmReadyCB& /* set_cdm_ready_cb */,
                                     const InitCB& init_cb,
                                     const OutputCB& output_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  DCHECK(!config.is_encrypted());
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(config.IsValidConfig());
   DCHECK(!output_cb.is_null());
 
-  FFmpegGlue::InitializeFFmpeg();
-
-  config_ = config;
   InitCB bound_init_cb = BindToCurrentLoop(init_cb);
 
-  if (!config.IsValidConfig() || !ConfigureDecoder(low_delay)) {
+  if (config.is_encrypted()) {
+    bound_init_cb.Run(false);
+    return;
+  }
+
+  FFmpegGlue::InitializeFFmpeg();
+  config_ = config;
+
+  // TODO(xhwang): Only set |config_| after we successfully configure the
+  // decoder.
+  if (!ConfigureDecoder(low_delay)) {
     bound_init_cb.Run(false);
     return;
   }
@@ -189,7 +201,7 @@ void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
 void FFmpegVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
                                 const DecodeCB& decode_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(buffer.get());
   DCHECK(!decode_cb.is_null());
   CHECK_NE(state_, kUninitialized);
@@ -249,15 +261,16 @@ void FFmpegVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
 }
 
 void FFmpegVideoDecoder::Reset(const base::Closure& closure) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(thread_checker_.CalledOnValidThread());
 
   avcodec_flush_buffers(codec_context_.get());
   state_ = kNormal;
-  task_runner_->PostTask(FROM_HERE, closure);
+  // PostTask() to avoid calling |closure| inmediately.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, closure);
 }
 
 FFmpegVideoDecoder::~FFmpegVideoDecoder() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(thread_checker_.CalledOnValidThread());
 
   if (state_ != kUninitialized)
     ReleaseFFmpegResources();
@@ -276,7 +289,7 @@ bool FFmpegVideoDecoder::FFmpegDecode(
     packet.data = NULL;
     packet.size = 0;
   } else {
-    packet.data = const_cast<uint8*>(buffer->data());
+    packet.data = const_cast<uint8_t*>(buffer->data());
     packet.size = buffer->data_size();
 
     // Let FFmpeg handle presentation timestamp reordering.
@@ -335,6 +348,9 @@ void FFmpegVideoDecoder::ReleaseFFmpegResources() {
 }
 
 bool FFmpegVideoDecoder::ConfigureDecoder(bool low_delay) {
+  DCHECK(config_.IsValidConfig());
+  DCHECK(!config_.is_encrypted());
+
   // Release existing decoder resources if necessary.
   ReleaseFFmpegResources();
 

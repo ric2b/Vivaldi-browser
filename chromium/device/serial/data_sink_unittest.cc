@@ -2,16 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
 #include "device/serial/data_sender.h"
 #include "device/serial/data_sink_receiver.h"
 #include "device/serial/data_stream.mojom.h"
+#include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "mojo/public/cpp/environment/async_waiter.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_ptr.h"
-#include "third_party/mojo/src/mojo/public/cpp/environment/async_waiter.h"
 
 namespace device {
 
@@ -43,7 +48,8 @@ class DataSinkTest : public testing::Test {
         base::Bind(&DataSinkTest::OnDataToRead, base::Unretained(this)),
         base::Bind(&DataSinkTest::OnCancel, base::Unretained(this)),
         base::Bind(&DataSinkTest::OnError, base::Unretained(this)));
-    sender_.reset(new DataSender(sink_handle.Pass(), kBufferSize, kFatalError));
+    sender_.reset(
+        new DataSender(std::move(sink_handle), kBufferSize, kFatalError));
   }
 
   void TearDown() override {
@@ -154,7 +160,7 @@ class DataSinkTest : public testing::Test {
   }
 
   void OnDataToRead(scoped_ptr<ReadOnlyBuffer> buffer) {
-    read_buffer_ = buffer.Pass();
+    read_buffer_ = std::move(buffer);
     read_buffer_contents_ =
         std::string(read_buffer_->GetData(), read_buffer_->GetSize());
     EventReceived(EVENT_READ_BUFFER_READY);

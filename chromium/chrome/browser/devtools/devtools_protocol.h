@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/values.h"
 
@@ -15,10 +14,10 @@
 class DevToolsProtocol {
  public:
   // Caller maintains ownership of |command|. |*params| is owned by |command|.
-  static bool ParseCommand(const base::DictionaryValue* command,
+  static bool ParseCommand(base::DictionaryValue* command,
                            int* command_id,
                            std::string* method,
-                           const base::DictionaryValue** params);
+                           base::DictionaryValue** params);
 
   static bool ParseNotification(const std::string& json,
                                 std::string* method,

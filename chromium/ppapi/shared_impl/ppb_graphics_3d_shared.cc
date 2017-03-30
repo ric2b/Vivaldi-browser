@@ -48,13 +48,14 @@ int32_t PPB_Graphics3D_Shared::ResizeBuffers(int32_t width, int32_t height) {
   if ((width < 0) || (height < 0))
     return PP_ERROR_BADARGUMENT;
 
-  gles2_impl()->ResizeCHROMIUM(width, height, 1.f);
+  gles2_impl()->ResizeCHROMIUM(width, height, 1.f, true);
   // TODO(alokp): Check if resize succeeded and return appropriate error code.
   return PP_OK;
 }
 
 int32_t PPB_Graphics3D_Shared::SwapBuffers(
-    scoped_refptr<TrackedCallback> callback) {
+    scoped_refptr<TrackedCallback> callback,
+    const gpu::SyncToken& sync_token) {
   if (HasPendingSwap()) {
     Log(PP_LOGLEVEL_ERROR,
         "PPB_Graphics3D.SwapBuffers: Plugin attempted swap "
@@ -64,7 +65,7 @@ int32_t PPB_Graphics3D_Shared::SwapBuffers(
   }
 
   swap_callback_ = callback;
-  return DoSwapBuffers();
+  return DoSwapBuffers(sync_token);
 }
 
 int32_t PPB_Graphics3D_Shared::GetAttribMaxValue(int32_t attribute,
@@ -90,6 +91,10 @@ void PPB_Graphics3D_Shared::UnmapTexSubImage2DCHROMIUM(const void* mem) {
   gles2_impl_->UnmapTexSubImage2DCHROMIUM(mem);
 }
 
+gpu::gles2::GLES2Interface* PPB_Graphics3D_Shared::gles2_interface() {
+  return gles2_impl_.get();
+}
+
 void PPB_Graphics3D_Shared::SwapBuffersACK(int32_t pp_error) {
   DCHECK(HasPendingSwap());
   swap_callback_->Run(pp_error);
@@ -100,8 +105,8 @@ bool PPB_Graphics3D_Shared::HasPendingSwap() const {
 }
 
 bool PPB_Graphics3D_Shared::CreateGLES2Impl(
-    int32 command_buffer_size,
-    int32 transfer_buffer_size,
+    int32_t command_buffer_size,
+    int32_t transfer_buffer_size,
     gpu::gles2::GLES2Implementation* share_gles2) {
   gpu::CommandBuffer* command_buffer = GetCommandBuffer();
   DCHECK(command_buffer);
@@ -113,8 +118,8 @@ bool PPB_Graphics3D_Shared::CreateGLES2Impl(
 
   // Create a transfer buffer used to copy resources between the renderer
   // process and the GPU process.
-  const int32 kMinTransferBufferSize = 256 * 1024;
-  const int32 kMaxTransferBufferSize = 16 * 1024 * 1024;
+  const int32_t kMinTransferBufferSize = 256 * 1024;
+  const int32_t kMaxTransferBufferSize = 16 * 1024 * 1024;
   transfer_buffer_.reset(new gpu::TransferBuffer(gles2_helper_.get()));
 
   const bool bind_creates_resources = true;
@@ -139,7 +144,7 @@ bool PPB_Graphics3D_Shared::CreateGLES2Impl(
     return false;
   }
 
-  gles2_impl_->PushGroupMarkerEXT(0, "PPAPIContext");
+  gles2_impl_->TraceBeginCHROMIUM("gpu_toplevel", "PPAPIContext");
 
   return true;
 }

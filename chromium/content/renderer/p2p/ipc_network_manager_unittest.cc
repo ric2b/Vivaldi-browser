@@ -8,6 +8,7 @@
 #include "net/base/ip_address_number.h"
 #include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
+#include "net/base/network_interfaces.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -29,9 +30,10 @@ class MockP2PSocketDispatcher : public NetworkListManager {
 
 // 2 IPv6 addresses with only last digit different.
 static const char kIPv6PublicAddrString1[] =
-    "2401:fa00:4:1000:be30:5bff:fee5:c3";
+    "2401:fa00:4:1000:be30:5b30:50e5:c3";
 static const char kIPv6PublicAddrString2[] =
-    "2401:fa00:4:1000:be30:5bff:fee5:c4";
+    "2401:fa00:4:1000:be30:5b30:50e5:c4";
+static const char kIPv4MappedAddrString[] = "::ffff:38.32.0.0";
 
 class IpcNetworkManagerTest : public testing::Test {
  public:
@@ -50,7 +52,7 @@ class IpcNetworkManagerTest : public testing::Test {
 // IpcNetworkManager in addition to MergeNetworkList.
 // TODO(guoweis): disable this test case for now until fix for webrtc
 // issue 19249005 integrated into chromium
-TEST_F(IpcNetworkManagerTest, DISABLED_TestMergeNetworkList) {
+TEST_F(IpcNetworkManagerTest, TestMergeNetworkList) {
   net::NetworkInterfaceList list;
   net::IPAddressNumber ip_number;
   std::vector<rtc::Network*> networks;
@@ -77,7 +79,8 @@ TEST_F(IpcNetworkManagerTest, DISABLED_TestMergeNetworkList) {
                             64,
                             net::IP_ADDRESS_ATTRIBUTE_NONE));
 
-  network_manager_->OnNetworkListChanged(list);
+  network_manager_->OnNetworkListChanged(list, net::IPAddressNumber(),
+                                         net::IPAddressNumber());
   network_manager_->GetNetworks(&networks);
   EXPECT_EQ(1uL, networks.size());
   EXPECT_EQ(2uL, networks[0]->GetIPs().size());
@@ -94,7 +97,13 @@ TEST_F(IpcNetworkManagerTest, DISABLED_TestMergeNetworkList) {
                             48,
                             net::IP_ADDRESS_ATTRIBUTE_NONE));
 
-  network_manager_->OnNetworkListChanged(list);
+  // Push an unknown address as the default address.
+  EXPECT_TRUE(net::ParseIPLiteralToNumber(kIPv4MappedAddrString, &ip_number));
+  network_manager_->OnNetworkListChanged(list, net::IPAddressNumber(),
+                                         ip_number);
+
+  // The unknown default address should be ignored.
+  EXPECT_FALSE(network_manager_->GetDefaultLocalAddress(AF_INET6, &ip_address));
 
   network_manager_->GetNetworks(&networks);
 

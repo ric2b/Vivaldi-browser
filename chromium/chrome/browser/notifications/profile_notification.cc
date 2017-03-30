@@ -5,7 +5,9 @@
 #include "chrome/browser/notifications/profile_notification.h"
 
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
+#include "components/signin/core/account_id/account_id.h"
 
 // static
 std::string ProfileNotification::GetProfileNotificationId(
@@ -30,7 +32,8 @@ ProfileNotification::ProfileNotification(Profile* profile,
           notification) {
   DCHECK(profile);
 #if defined(OS_CHROMEOS)
-  notification_.set_profile_id(multi_user_util::GetUserIDFromProfile(profile));
+  notification_.set_profile_id(
+      multi_user_util::GetAccountIdFromProfile(profile).GetUserEmail());
 #endif
 }
 

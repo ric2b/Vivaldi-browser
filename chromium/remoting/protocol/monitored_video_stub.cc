@@ -4,11 +4,11 @@
 
 #include "remoting/protocol/monitored_video_stub.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
-#include "remoting/codec/video_decoder.h"
-#include "remoting/codec/video_decoder_verbatim.h"
-#include "remoting/codec/video_decoder_vpx.h"
+#include "remoting/proto/video.pb.h"
 
 namespace remoting {
 namespace protocol {
@@ -37,7 +37,7 @@ void MonitoredVideoStub::ProcessVideoPacket(scoped_ptr<VideoPacket> packet,
 
   NotifyChannelState(true);
 
-  video_stub_->ProcessVideoPacket(packet.Pass(), done);
+  video_stub_->ProcessVideoPacket(std::move(packet), done);
 }
 
 void MonitoredVideoStub::OnConnectivityCheckTimeout() {

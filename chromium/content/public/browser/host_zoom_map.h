@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "content/common/content_export.h"
@@ -165,7 +164,7 @@ class HostZoomMap {
 
   // Get/Set the default zoom level for pages that don't override it.
   virtual double GetDefaultZoomLevel() const = 0;
-  virtual void SetDefaultZoomLevel(double level) = 0;;
+  virtual void SetDefaultZoomLevel(double level) = 0;
 
   typedef base::Callback<void(const ZoomLevelChange&)> ZoomLevelChangedCallback;
   typedef base::CallbackList<void(const ZoomLevelChange&)>::Subscription

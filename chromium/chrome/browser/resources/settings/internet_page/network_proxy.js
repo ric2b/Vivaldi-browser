@@ -9,16 +9,17 @@
 Polymer({
   is: 'network-proxy',
 
+  behaviors: [CrPolicyNetworkBehavior],
+
   properties: {
     /**
-     * The current state containing the IP Config properties to display and
-     * modify.
-     * @type {?CrOnc.NetworkStateProperties}
+     * The network properties dictionary containing the proxy properties to
+     * display and modify.
+     * @type {!CrOnc.NetworkProperties|undefined}
      */
-    networkState: {
+    networkProperties: {
       type: Object,
-      value: null,
-      observer: 'networkStateChanged_'
+      observer: 'networkPropertiesChanged_'
     },
 
     /**
@@ -39,7 +40,7 @@ Polymer({
     },
 
     /**
-     * The Web Proxy Auto Discovery URL extracted from networkState.
+     * The Web Proxy Auto Discovery URL extracted from networkProperties.
      */
     WPAD: {
       type: String,
@@ -91,47 +92,60 @@ Polymer({
   /**
    * Saved Manual properties so that switching to another type does not loose
    * any set properties while the UI is open.
-   * @type {?CrOnc.ManualProxySettings}
+   * @type {!CrOnc.ManualProxySettings|undefined}
    */
-  savedManual_: null,
+  savedManual_: undefined,
 
   /**
    * Saved ExcludeDomains properties so that switching to a non-Manual type does
    * not loose any set exclusions while the UI is open.
-   * @type {?Array<string>}
+   * @type {!Array<string>|undefined}
    */
-  savedExcludeDomains_: null,
+  savedExcludeDomains_: undefined,
 
   /**
-   * Polymer networkState changed method.
+   * Polymer networkProperties changed method.
    */
-  networkStateChanged_: function() {
-    console.debug('NetworkProxy.networkStateChanged_');
-    if (!this.networkState)
+  networkPropertiesChanged_: function() {
+    if (!this.networkProperties)
       return;
 
-    var defaultProxy = this.createDefaultProxySettings_();
-    var proxy = this.networkState.ProxySettings || {};
-
-    // Ensure that all proxy settings object properties are specified.
-    proxy.ExcludeDomains = proxy.ExcludeDomains || this.savedExcludeDomains_ ||
-                           defaultProxy.ExcludeDomains;
-    proxy.Manual = proxy.Manual || this.savedManual_ || {};
-    proxy.Manual.HTTPProxy =
-        proxy.Manual.HTTPProxy || defaultProxy.Manual.HTTPProxy;
-    proxy.Manual.SecureHTTPProxy =
-        proxy.Manual.SecureHTTPProxy || defaultProxy.Manual.SecureHTTPProxy;
-    proxy.Manual.FTPProxy =
-        proxy.Manual.FTPProxy || defaultProxy.Manual.FTPProxy;
-    proxy.Manual.SOCKS = proxy.Manual.SOCKS || defaultProxy.Manual.SOCKS;
-    proxy.PAC = proxy.PAC || defaultProxy.PAC;
-    proxy.Type = proxy.Type || defaultProxy.Type;
+    /** @type {!CrOnc.ProxySettings} */
+    var proxy = this.createDefaultProxySettings_();
+    /** @type {!chrome.networkingPrivate.ManagedProxySettings|undefined} */
+    var proxySettings = this.networkProperties.ProxySettings;
+    if (proxySettings) {
+      proxy.Type = /** @type {!CrOnc.ProxySettingsType} */(
+          CrOnc.getActiveValue(proxySettings.Type));
+      if (proxySettings.Manual) {
+        proxy.Manual.HTTPProxy = /** @type {!CrOnc.ProxyLocation|undefined} */(
+            CrOnc.getSimpleActiveProperties(proxySettings.Manual.HTTPProxy));
+        proxy.Manual.SecureHTTPProxy =
+            /** @type {!CrOnc.ProxyLocation|undefined} */(
+                CrOnc.getSimpleActiveProperties(
+                    proxySettings.Manual.SecureHTTPProxy));
+        proxy.Manual.FTPProxy = /** @type {!CrOnc.ProxyLocation|undefined} */(
+            CrOnc.getSimpleActiveProperties(proxySettings.Manual.FTPProxy));
+        proxy.Manual.SOCKS = /** @type {!CrOnc.ProxyLocation|undefined} */(
+            CrOnc.getSimpleActiveProperties(proxySettings.Manual.SOCKS));
+      }
+      if (proxySettings.ExcludeDomains) {
+        proxy.ExcludeDomains = /** @type {!Array<string>|undefined} */(
+            CrOnc.getActiveValue(proxySettings.ExcludeDomains));
+      }
+      proxy.PAC = /** @type {string|undefined} */(
+          CrOnc.getActiveValue(proxySettings.PAC));
+    }
+    // Use saved ExcludeDomanains and Manual if not defined.
+    proxy.ExcludeDomains = proxy.ExcludeDomains || this.savedExcludeDomains_;
+    proxy.Manual = proxy.Manual || this.savedManual_;
 
     this.set('proxy', proxy);
     this.$.selectType.value = proxy.Type;
 
     // Set the Web Proxy Auto Discovery URL.
-    var ipv4 = CrOnc.getIPConfigForType(this.networkState, CrOnc.IPType.IPV4);
+    var ipv4 =
+        CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV4);
     this.WPAD = (ipv4 && ipv4.WebProxyAutoDiscoveryUrl) || '';
   },
 
@@ -143,10 +157,10 @@ Polymer({
       Type: CrOnc.ProxySettingsType.DIRECT,
       ExcludeDomains: [],
       Manual: {
-        HTTPProxy: { Host: '', Port: 80 },
-        SecureHTTPProxy: { Host: '', Port: 80 },
-        FTPProxy: { Host: '', Port: 80 },
-        SOCKS: { Host: '', Port: 1080 }
+        HTTPProxy: {Host: '', Port: 80},
+        SecureHTTPProxy: {Host: '', Port: 80},
+        FTPProxy: {Host: '', Port: 80},
+        SOCKS: {Host: '', Port: 1080}
       },
       PAC: ''
     };
@@ -156,13 +170,13 @@ Polymer({
    * Polymer useSameProxy changed method.
    */
   useSameProxyChanged_: function() {
-    this.sendProxyChanged_();
+    this.sendProxyChange_();
   },
 
   /**
-   * Called when the proxy is changed in the UI.
+   * Called when the proxy changes in the UI.
    */
-  sendProxyChanged_: function() {
+  sendProxyChange_: function() {
     if (this.proxy.Type == CrOnc.ProxySettingsType.MANUAL) {
       if (this.useSameProxy) {
         var defaultProxy = this.proxy.Manual.HTTPProxy;
@@ -174,7 +188,7 @@ Polymer({
       this.savedManual_ = this.proxy.Manual;
       this.savedExcludeDomains_ = this.proxy.ExcludeDomains;
     }
-    this.fire('changed', {
+    this.fire('proxy-change', {
       field: 'ProxySettings',
       value: this.proxy
     });
@@ -182,28 +196,25 @@ Polymer({
 
   /**
    * Event triggered when the selected proxy type changes.
-   * @param {Event} event The select node changed event.
+   * @param {Event} event The select node change event.
    * @private
    */
   onTypeChange_: function(event) {
     var type = this.proxyTypes_[event.target.selectedIndex];
-    console.debug('Proxy type changed: ' + type);
     this.set('proxy.Type', type);
     if (type != CrOnc.ProxySettingsType.MANUAL ||
         this.savedManual_) {
-      this.sendProxyChanged_();
+      this.sendProxyChange_();
     }
   },
 
   /**
    * Event triggered when a proxy value changes.
-   * @param {Event} event The proxy value changed event.
+   * @param {Event} event The proxy value change event.
    * @private
    */
-  onProxyInputChanged_: function(event) {
-    console.debug('Proxy input changed');
-    console.debug(this.proxy);
-    this.sendProxyChanged_();
+  onProxyInputChange_: function(event) {
+    this.sendProxyChange_();
   },
 
   /**
@@ -211,24 +222,23 @@ Polymer({
    * @param {Event} event The add proxy exclusion event.
    * @private
    */
-  onAddProxyExclusion_: function(event) {
+  onAddProxyExclusionTap_: function(event) {
     var value = this.$.proxyExclusion.value;
     if (!value)
       return;
     this.push('proxy.ExcludeDomains', value);
     // Clear input.
     this.$.proxyExclusion.value = '';
-    this.sendProxyChanged_();
+    this.sendProxyChange_();
   },
 
   /**
-   * Event triggered when the proxy exclusion list has changed.
-   * @param {Event} event The remove proxy exclusions changed event.
+   * Event triggered when the proxy exclusion list changes.
+   * @param {Event} event The remove proxy exclusions change event.
    * @private
    */
-  onProxyExclusionsChanged_: function(event) {
-    console.debug('onRemoveProxyExclusion');
-    this.sendProxyChanged_();
+  onProxyExclusionsChange_: function(event) {
+    this.sendProxyChange_();
   },
 
   /**
@@ -245,6 +255,21 @@ Polymer({
     if (proxyType == CrOnc.ProxySettingsType.WPAD)
       return 'Web proxy autodiscovery';
     return 'Direct Internet connection';
+  },
+
+  /**
+   * @param {boolean} editable
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @param {string} key
+   * @return {boolean} Whether the property is editable.
+   * @private
+   */
+  isPropertyEditable_: function(editable, networkProperties, key) {
+    if (!editable)
+      return false;
+    var property = /** @type {!CrOnc.ManagedProperty|undefined} */(
+        this.get(key, networkProperties));
+    return !this.isNetworkPolicyEnforced(property);
   },
 
   /**

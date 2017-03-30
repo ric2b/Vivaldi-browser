@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 //
 
+#include <vector>
+
+#include "base/base64.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -12,6 +14,7 @@
 #include "chrome/browser/safe_browsing/chunk.pb.h"
 #include "chrome/browser/safe_browsing/protocol_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
+#include "components/safe_browsing_db/safebrowsing.pb.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
@@ -35,14 +38,10 @@ const char kBackupNetworkUrlPrefix[] = "https://alt3-prefix.com/foo";
 const char kClient[] = "unittest";
 const char kAppVer[] = "1.0";
 const char kAdditionalQuery[] = "additional_query";
+const char kUrlSuffix[] = "&ext=0";
 
-#if defined(OS_ANDROID)
-const char kDefaultPhishList[] = "goog-mobilephish-shavar";
-const char kDefaultMalwareList[] = "goog-mobilemalware-shavar";
-#else
 const char kDefaultPhishList[] = "goog-phish-shavar";
 const char kDefaultMalwareList[] = "goog-malware-shavar";
-#endif
 
 // Add-prefix chunk with single prefix.
 const char kRawChunkPayload1[] = {
@@ -68,6 +67,8 @@ const std::string kChunkPayload2(kRawChunkPayload2, sizeof(kRawChunkPayload2));
 
 }  // namespace
 
+namespace safe_browsing {
+
 class SafeBrowsingProtocolManagerTest : public testing::Test {
  protected:
   std::string key_param_;
@@ -90,16 +91,13 @@ class SafeBrowsingProtocolManagerTest : public testing::Test {
     config.backup_http_error_url_prefix = kBackupHttpUrlPrefix;
     config.backup_network_error_url_prefix = kBackupNetworkUrlPrefix;
     config.version = kAppVer;
-#if defined(OS_ANDROID)
-    config.disable_connection_check = true;
-#endif
     return scoped_ptr<SafeBrowsingProtocolManager>(
         SafeBrowsingProtocolManager::Create(delegate, NULL, config));
   }
 
-  void ValidateUpdateFetcherRequest(
-      const net::TestURLFetcher* url_fetcher,
-      const std::string& expected_prefix) {
+  void ValidateUpdateFetcherRequest(const net::TestURLFetcher* url_fetcher,
+                                    const std::string& expected_prefix,
+                                    const std::string& expected_suffix) {
     ASSERT_TRUE(url_fetcher);
     EXPECT_EQ(net::LOAD_DISABLE_CACHE, url_fetcher->GetLoadFlags());
 
@@ -108,12 +106,13 @@ class SafeBrowsingProtocolManagerTest : public testing::Test {
                                                   kDefaultMalwareList));
     EXPECT_EQ(expected_lists, url_fetcher->upload_data());
     EXPECT_EQ(GURL(expected_prefix + "/downloads?client=unittest&appver=1.0"
-                   "&pver=3.0" + key_param_),
+                                     "&pver=3.0" +
+                   key_param_ + expected_suffix),
               url_fetcher->GetOriginalURL());
   }
 
   void ValidateUpdateFetcherRequest(const net::TestURLFetcher* url_fetcher) {
-    ValidateUpdateFetcherRequest(url_fetcher, kUrlPrefix);
+    ValidateUpdateFetcherRequest(url_fetcher, kUrlPrefix, kUrlSuffix);
   }
 
   void ValidateRedirectFetcherRequest(const net::TestURLFetcher* url_fetcher,
@@ -184,26 +183,23 @@ TEST_F(SafeBrowsingProtocolManagerTest, TestChunkStrings) {
   phish.subs = "16,32,64-96";
   EXPECT_EQ(base::StringPrintf("%s;a:1,4,6,8-20,99:s:16,32,64-96\n",
                                kDefaultPhishList),
-            safe_browsing::FormatList(phish));
+            FormatList(phish));
 
   // Add chunks only.
   phish.subs = "";
-  EXPECT_EQ(base::StringPrintf("%s;a:1,4,6,8-20,99\n",
-                               kDefaultPhishList),
-            safe_browsing::FormatList(phish));
+  EXPECT_EQ(base::StringPrintf("%s;a:1,4,6,8-20,99\n", kDefaultPhishList),
+            FormatList(phish));
 
   // Sub chunks only.
   phish.adds = "";
   phish.subs = "16,32,64-96";
-  EXPECT_EQ(base::StringPrintf("%s;s:16,32,64-96\n",
-                               kDefaultPhishList),
-            safe_browsing::FormatList(phish));
+  EXPECT_EQ(base::StringPrintf("%s;s:16,32,64-96\n", kDefaultPhishList),
+            FormatList(phish));
 
   // No chunks of either type.
   phish.adds = "";
   phish.subs = "";
-  EXPECT_EQ(base::StringPrintf("%s;\n", kDefaultPhishList),
-            safe_browsing::FormatList(phish));
+  EXPECT_EQ(base::StringPrintf("%s;\n", kDefaultPhishList), FormatList(phish));
 }
 
 TEST_F(SafeBrowsingProtocolManagerTest, TestGetHashBackOffTimes) {
@@ -258,28 +254,286 @@ TEST_F(SafeBrowsingProtocolManagerTest, TestGetHashBackOffTimes) {
   EXPECT_TRUE(pm->next_gethash_time_== now + TimeDelta::FromMinutes(480));
 }
 
+TEST_F(SafeBrowsingProtocolManagerTest, TestGetV4HashBackOffTimes) {
+  scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
+
+  // No errors or back off time yet.
+  EXPECT_EQ(0U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(1U, pm->gethash_v4_back_off_mult_);
+  Time now = Time::Now();
+  EXPECT_TRUE(pm->next_gethash_v4_time_ < now);
+
+  // 1 error.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(1U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(1U, pm->gethash_v4_back_off_mult_);
+  EXPECT_LE(now + TimeDelta::FromMinutes(15), pm->next_gethash_v4_time_);
+  EXPECT_GE(now + TimeDelta::FromMinutes(30), pm->next_gethash_v4_time_);
+
+  // 2 errors.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(2U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(2U, pm->gethash_v4_back_off_mult_);
+  EXPECT_LE(now + TimeDelta::FromMinutes(30), pm->next_gethash_v4_time_);
+  EXPECT_GE(now + TimeDelta::FromMinutes(60), pm->next_gethash_v4_time_);
+
+  // 3 errors.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(3U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(4U, pm->gethash_v4_back_off_mult_);
+  EXPECT_LE(now + TimeDelta::FromMinutes(60), pm->next_gethash_v4_time_);
+  EXPECT_GE(now + TimeDelta::FromMinutes(120), pm->next_gethash_v4_time_);
+
+  // 4 errors.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(4U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(8U, pm->gethash_v4_back_off_mult_);
+  EXPECT_LE(now + TimeDelta::FromMinutes(120), pm->next_gethash_v4_time_);
+  EXPECT_GE(now + TimeDelta::FromMinutes(240), pm->next_gethash_v4_time_);
+
+  // 5 errors.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(5U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(16U, pm->gethash_v4_back_off_mult_);
+  EXPECT_LE(now + TimeDelta::FromMinutes(240), pm->next_gethash_v4_time_);
+  EXPECT_GE(now + TimeDelta::FromMinutes(480), pm->next_gethash_v4_time_);
+
+  // 6 errors.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(6U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(32U, pm->gethash_v4_back_off_mult_);
+  EXPECT_LE(now + TimeDelta::FromMinutes(480), pm->next_gethash_v4_time_);
+  EXPECT_GE(now + TimeDelta::FromMinutes(960), pm->next_gethash_v4_time_);
+
+  // 7 errors.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(7U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(64U, pm->gethash_v4_back_off_mult_);
+  EXPECT_LE(now + TimeDelta::FromMinutes(960), pm->next_gethash_v4_time_);
+  EXPECT_GE(now + TimeDelta::FromMinutes(1920), pm->next_gethash_v4_time_);
+
+  // 8 errors, reached max backoff.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(8U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(128U, pm->gethash_v4_back_off_mult_);
+  EXPECT_EQ(now + TimeDelta::FromHours(24), pm->next_gethash_v4_time_);
+
+  // 9 errors, reached max backoff and multiplier capped.
+  pm->HandleGetHashV4Error(now);
+  EXPECT_EQ(9U, pm->gethash_v4_error_count_);
+  EXPECT_EQ(128U, pm->gethash_v4_back_off_mult_);
+  EXPECT_EQ(now + TimeDelta::FromHours(24), pm->next_gethash_v4_time_);
+}
+
 TEST_F(SafeBrowsingProtocolManagerTest, TestGetHashUrl) {
   scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
 
-  EXPECT_EQ("https://prefix.com/foo/gethash?client=unittest&appver=1.0&"
-            "pver=3.0" + key_param_, pm->GetHashUrl().spec());
+  EXPECT_EQ(
+      "https://prefix.com/foo/gethash?client=unittest&appver=1.0&"
+      "pver=3.0" +
+          key_param_ + "&ext=0",
+      pm->GetHashUrl(false).spec());
 
   pm->set_additional_query(kAdditionalQuery);
-  EXPECT_EQ("https://prefix.com/foo/gethash?client=unittest&appver=1.0&"
-            "pver=3.0" + key_param_ + "&additional_query",
-            pm->GetHashUrl().spec());
+  EXPECT_EQ(
+      "https://prefix.com/foo/gethash?client=unittest&appver=1.0&"
+      "pver=3.0" +
+          key_param_ + "&additional_query&ext=1",
+      pm->GetHashUrl(true).spec());
+}
+
+TEST_F(SafeBrowsingProtocolManagerTest, TestGetV4HashUrl) {
+  scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
+
+  EXPECT_EQ(
+      "https://safebrowsing.googleapis.com/v4/encodedFullHashes/request_base64?"
+      "alt=proto&client_id=unittest&client_version=1.0" + key_param_,
+      pm->GetV4HashUrl("request_base64").spec());
+
+  // Additional query has no effect.
+  pm->set_additional_query(kAdditionalQuery);
+  EXPECT_EQ(
+      "https://safebrowsing.googleapis.com/v4/encodedFullHashes/request_base64?"
+      "alt=proto&client_id=unittest&client_version=1.0" + key_param_,
+      pm->GetV4HashUrl("request_base64").spec());
+}
+
+TEST_F(SafeBrowsingProtocolManagerTest, TestGetV4HashRequest) {
+  scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
+
+  FindFullHashesRequest req;
+  ThreatInfo* info = req.mutable_threat_info();
+  info->add_threat_types(API_ABUSE);
+  info->add_platform_types(CHROME_PLATFORM);
+  info->add_threat_entry_types(URL_EXPRESSION);
+
+  SBPrefix one = 1u;
+  SBPrefix two = 2u;
+  SBPrefix three = 3u;
+  std::string hash(reinterpret_cast<const char*>(&one), sizeof(SBPrefix));
+  info->add_threat_entries()->set_hash(hash);
+  hash.clear();
+  hash.append(reinterpret_cast<const char*>(&two), sizeof(SBPrefix));
+  info->add_threat_entries()->set_hash(hash);
+  hash.clear();
+  hash.append(reinterpret_cast<const char*>(&three), sizeof(SBPrefix));
+  info->add_threat_entries()->set_hash(hash);
+
+  // Serialize and Base64 encode.
+  std::string req_data, req_base64;
+  req.SerializeToString(&req_data);
+  base::Base64Encode(req_data, &req_base64);
+
+  std::vector<PlatformType> platform;
+  platform.push_back(CHROME_PLATFORM);
+  std::vector<SBPrefix> prefixes;
+  prefixes.push_back(one);
+  prefixes.push_back(two);
+  prefixes.push_back(three);
+  EXPECT_EQ(
+      req_base64,
+      pm->GetV4HashRequest(prefixes, platform, API_ABUSE));
+}
+
+TEST_F(SafeBrowsingProtocolManagerTest, TestParseV4HashResponse) {
+  scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
+
+  FindFullHashesResponse res;
+  res.mutable_negative_cache_duration()->set_seconds(600);
+  res.mutable_minimum_wait_duration()->set_seconds(400);
+  ThreatMatch* m = res.add_matches();
+  m->set_threat_type(API_ABUSE);
+  m->set_platform_type(CHROME_PLATFORM);
+  m->set_threat_entry_type(URL_EXPRESSION);
+  m->mutable_cache_duration()->set_seconds(300);
+  m->mutable_threat()->set_hash(SBFullHashToString(
+      SBFullHashForString("Everything's shiny, Cap'n.")));
+  ThreatEntryMetadata::MetadataEntry* e =
+      m->mutable_threat_entry_metadata()->add_entries();
+  e->set_key("permission");
+  e->set_value("NOTIFICATIONS");
+
+  // Serialize.
+  std::string res_data;
+  res.SerializeToString(&res_data);
+
+  Time now = Time::Now();
+  std::vector<SBFullHashResult> full_hashes;
+  base::TimeDelta cache_lifetime;
+  pm->ParseV4HashResponse(res_data, &full_hashes, &cache_lifetime);
+
+  EXPECT_EQ(base::TimeDelta::FromSeconds(600), cache_lifetime);
+  EXPECT_EQ(1ul, full_hashes.size());
+  EXPECT_TRUE(SBFullHashEqual(
+      SBFullHashForString("Everything's shiny, Cap'n."), full_hashes[0].hash));
+  EXPECT_EQ("NOTIFICATIONS,", full_hashes[0].metadata);
+  EXPECT_EQ(base::TimeDelta::FromSeconds(300), full_hashes[0].cache_duration);
+  EXPECT_LE(now + base::TimeDelta::FromSeconds(400), pm->next_gethash_v4_time_);
+}
+
+// Adds an entry with an ignored ThreatEntryType.
+TEST_F(SafeBrowsingProtocolManagerTest,
+    TestParseV4HashResponseWrongThreatEntryType) {
+  scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
+
+  FindFullHashesResponse res;
+  res.mutable_negative_cache_duration()->set_seconds(600);
+  res.add_matches()->set_threat_entry_type(BINARY_DIGEST);
+
+  // Serialize.
+  std::string res_data;
+  res.SerializeToString(&res_data);
+
+  std::vector<SBFullHashResult> full_hashes;
+  base::TimeDelta cache_lifetime;
+  pm->ParseV4HashResponse(res_data, &full_hashes, &cache_lifetime);
+
+  EXPECT_EQ(base::TimeDelta::FromSeconds(600), cache_lifetime);
+  // THere should be no hash results.
+  EXPECT_EQ(0ul, full_hashes.size());
+}
+
+// Adds an entry with an SOCIAL_ENGINEERING threat type.
+TEST_F(SafeBrowsingProtocolManagerTest,
+    TestParseV4HashResponseSocialEngineeringThreatType) {
+  scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
+
+  FindFullHashesResponse res;
+  res.mutable_negative_cache_duration()->set_seconds(600);
+  ThreatMatch* m = res.add_matches();
+  m->set_threat_type(SOCIAL_ENGINEERING);
+  m->set_platform_type(CHROME_PLATFORM);
+  m->set_threat_entry_type(URL_EXPRESSION);
+  m->mutable_threat()->set_hash(
+      SBFullHashToString(SBFullHashForString("Not to fret.")));
+  ThreatEntryMetadata::MetadataEntry* e =
+      m->mutable_threat_entry_metadata()->add_entries();
+  e->set_key("permission");
+  e->set_value("IGNORED");
+
+  // Serialize.
+  std::string res_data;
+  res.SerializeToString(&res_data);
+
+  std::vector<SBFullHashResult> full_hashes;
+  base::TimeDelta cache_lifetime;
+  pm->ParseV4HashResponse(res_data, &full_hashes, &cache_lifetime);
+
+  EXPECT_EQ(base::TimeDelta::FromSeconds(600), cache_lifetime);
+  EXPECT_EQ(0ul, full_hashes.size());
+}
+
+// Adds metadata with a key value that is not "permission".
+TEST_F(SafeBrowsingProtocolManagerTest,
+    TestParseV4HashResponseNonPermissionMetadata) {
+  scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
+
+  FindFullHashesResponse res;
+  res.mutable_negative_cache_duration()->set_seconds(600);
+  ThreatMatch* m = res.add_matches();
+  m->set_threat_type(API_ABUSE);
+  m->set_platform_type(CHROME_PLATFORM);
+  m->set_threat_entry_type(URL_EXPRESSION);
+  m->mutable_threat()->set_hash(
+      SBFullHashToString(SBFullHashForString("Not to fret.")));
+  ThreatEntryMetadata::MetadataEntry* e =
+      m->mutable_threat_entry_metadata()->add_entries();
+  e->set_key("notpermission");
+  e->set_value("NOTGEOLOCATION");
+
+  // Serialize.
+  std::string res_data;
+  res.SerializeToString(&res_data);
+
+  std::vector<SBFullHashResult> full_hashes;
+  base::TimeDelta cache_lifetime;
+  pm->ParseV4HashResponse(res_data, &full_hashes, &cache_lifetime);
+
+  EXPECT_EQ(base::TimeDelta::FromSeconds(600), cache_lifetime);
+  EXPECT_EQ(1ul, full_hashes.size());
+
+  EXPECT_TRUE(SBFullHashEqual(
+      SBFullHashForString("Not to fret."), full_hashes[0].hash));
+  // Metadata should be empty.
+  EXPECT_EQ("", full_hashes[0].metadata);
+  EXPECT_EQ(base::TimeDelta::FromSeconds(0), full_hashes[0].cache_duration);
 }
 
 TEST_F(SafeBrowsingProtocolManagerTest, TestUpdateUrl) {
   scoped_ptr<SafeBrowsingProtocolManager> pm(CreateProtocolManager(NULL));
 
-  EXPECT_EQ("https://prefix.com/foo/downloads?client=unittest&appver=1.0&"
-            "pver=3.0" + key_param_, pm->UpdateUrl().spec());
+  EXPECT_EQ(
+      "https://prefix.com/foo/downloads?client=unittest&appver=1.0&"
+      "pver=3.0" +
+          key_param_ + "&ext=1",
+      pm->UpdateUrl(true).spec());
 
   pm->set_additional_query(kAdditionalQuery);
-  EXPECT_EQ("https://prefix.com/foo/downloads?client=unittest&appver=1.0&"
-            "pver=3.0" + key_param_ + "&additional_query",
-            pm->UpdateUrl().spec());
+  EXPECT_EQ(
+      "https://prefix.com/foo/downloads?client=unittest&appver=1.0&"
+      "pver=3.0" +
+          key_param_ + "&additional_query&ext=0",
+      pm->UpdateUrl(false).spec());
 }
 
 TEST_F(SafeBrowsingProtocolManagerTest, TestNextChunkUrl) {
@@ -325,11 +579,12 @@ class MockProtocolDelegate : public SafeBrowsingProtocolManagerDelegate {
   // gmock does not work with scoped_ptr<> at this time.  Add a local method to
   // mock, then call that from an override.  Beware of object ownership when
   // making changes here.
-  MOCK_METHOD3(AddChunksRaw, void(const std::string& lists,
-                                  const ScopedVector<SBChunkData>& chunks,
-                                  AddChunksCallback));
+  MOCK_METHOD3(AddChunksRaw,
+               void(const std::string& lists,
+                    const std::vector<scoped_ptr<SBChunkData>>& chunks,
+                    AddChunksCallback));
   void AddChunks(const std::string& list,
-                 scoped_ptr<ScopedVector<SBChunkData>> chunks,
+                 scoped_ptr<std::vector<scoped_ptr<SBChunkData>>> chunks,
                  AddChunksCallback callback) override {
     AddChunksRaw(list, *chunks, callback);
   }
@@ -350,7 +605,7 @@ void InvokeGetChunksCallback(
     const std::vector<SBListChunkRanges>& ranges,
     bool database_error,
     SafeBrowsingProtocolManagerDelegate::GetChunksCallback callback) {
-  callback.Run(ranges, database_error);
+  callback.Run(ranges, database_error, false);
 }
 
 // |HandleAddChunks| deletes the chunks and asynchronously invokes
@@ -359,7 +614,7 @@ void InvokeGetChunksCallback(
 // SafeBrowsingProtocolManagerDelegate contract.
 void HandleAddChunks(
     const std::string& unused_list,
-    const ScopedVector<SBChunkData>& chunks,
+    const std::vector<scoped_ptr<SBChunkData>>& chunks,
     SafeBrowsingProtocolManagerDelegate::AddChunksCallback callback) {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner(
       base::ThreadTaskRunnerHandle::Get());
@@ -404,7 +659,7 @@ TEST_F(SafeBrowsingProtocolManagerTest, ExistingDatabase) {
   net::TestURLFetcherFactory url_fetcher_factory;
 
   std::vector<SBListChunkRanges> ranges;
-  SBListChunkRanges range_phish(safe_browsing_util::kPhishingList);
+  SBListChunkRanges range_phish(kPhishingList);
   range_phish.adds = "adds_phish";
   range_phish.subs = "subs_phish";
   ranges.push_back(range_phish);
@@ -439,7 +694,8 @@ TEST_F(SafeBrowsingProtocolManagerTest, ExistingDatabase) {
                                kDefaultPhishList, kDefaultMalwareList),
             url_fetcher->upload_data());
   EXPECT_EQ(GURL("https://prefix.com/foo/downloads?client=unittest&appver=1.0"
-                 "&pver=3.0" + key_param_),
+                 "&pver=3.0" +
+                 key_param_ + "&ext=0"),
             url_fetcher->GetOriginalURL());
 
   url_fetcher->set_status(net::URLRequestStatus());
@@ -484,8 +740,7 @@ TEST_F(SafeBrowsingProtocolManagerTest, UpdateResponseBadBodyBackupSuccess) {
   // There should now be a backup request.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher,
-                               kBackupHttpUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupHttpUrlPrefix, "");
 
   // Respond to the backup successfully.
   backup_url_fetcher->set_status(net::URLRequestStatus());
@@ -532,7 +787,7 @@ TEST_F(SafeBrowsingProtocolManagerTest, UpdateResponseHttpErrorBackupError) {
   // There should now be a backup request.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupHttpUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupHttpUrlPrefix, "");
 
   // Respond to the backup unsuccessfully.
   backup_url_fetcher->set_status(net::URLRequestStatus());
@@ -579,8 +834,7 @@ TEST_F(SafeBrowsingProtocolManagerTest, UpdateResponseHttpErrorBackupSuccess) {
   // There should now be a backup request.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher,
-                               kBackupHttpUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupHttpUrlPrefix, "");
 
   // Respond to the backup successfully.
   backup_url_fetcher->set_status(net::URLRequestStatus());
@@ -627,7 +881,7 @@ TEST_F(SafeBrowsingProtocolManagerTest, UpdateResponseHttpErrorBackupTimeout) {
   // There should now be a backup request.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupHttpUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupHttpUrlPrefix, "");
 
   // Either one or two calls to RunPendingTasks are needed here. The first run
   // of RunPendingTasks will run the canceled timeout task associated with
@@ -677,8 +931,7 @@ TEST_F(SafeBrowsingProtocolManagerTest,
   // There should be a backup URLFetcher now.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher,
-                               kBackupConnectUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupConnectUrlPrefix, "");
 
   // Respond to the backup unsuccessfully.
   backup_url_fetcher->set_status(net::URLRequestStatus());
@@ -725,8 +978,7 @@ TEST_F(SafeBrowsingProtocolManagerTest,
   // There should be a backup URLFetcher now.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher,
-                               kBackupConnectUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupConnectUrlPrefix, "");
 
   // Respond to the backup unsuccessfully.
   backup_url_fetcher->set_status(net::URLRequestStatus());
@@ -773,8 +1025,7 @@ TEST_F(SafeBrowsingProtocolManagerTest,
   // There should be a backup URLFetcher now.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher,
-                               kBackupNetworkUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupNetworkUrlPrefix, "");
 
   // Respond to the backup unsuccessfully.
   backup_url_fetcher->set_status(net::URLRequestStatus());
@@ -822,8 +1073,7 @@ TEST_F(SafeBrowsingProtocolManagerTest,
   // There should be a backup URLFetcher now.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher,
-                               kBackupNetworkUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupNetworkUrlPrefix, "");
 
   // Respond to the backup unsuccessfully.
   backup_url_fetcher->set_status(net::URLRequestStatus());
@@ -867,8 +1117,7 @@ TEST_F(SafeBrowsingProtocolManagerTest, UpdateResponseTimeoutBackupSuccess) {
   // There should be a backup URLFetcher now.
   net::TestURLFetcher* backup_url_fetcher =
       url_fetcher_factory.GetFetcherByID(1);
-  ValidateUpdateFetcherRequest(backup_url_fetcher,
-                               kBackupConnectUrlPrefix);
+  ValidateUpdateFetcherRequest(backup_url_fetcher, kBackupConnectUrlPrefix, "");
 
   // Respond to the backup unsuccessfully.
   backup_url_fetcher->set_status(net::URLRequestStatus());
@@ -1133,3 +1382,5 @@ TEST_F(SafeBrowsingProtocolManagerTest, MultipleRedirectResponsesWithChunks) {
 
   EXPECT_TRUE(pm->IsUpdateScheduled());
 }
+
+}  // namespace safe_browsing

@@ -709,9 +709,6 @@ cr.define('login', function() {
       this.addEventListener('click', this.handleClickOnPod_.bind(this));
       this.addEventListener('mousedown', this.handlePodMouseDown_.bind(this));
 
-      this.reauthWarningElement.addEventListener('click',
-                                                 this.activate.bind(this));
-
       this.actionBoxAreaElement.addEventListener('mousedown',
                                                  stopEventPropagation);
       this.actionBoxAreaElement.addEventListener('click',
@@ -954,23 +951,6 @@ cr.define('login', function() {
     },
 
     /**
-     * Gets action box menu, remove user warning text div.
-     * @type {!HTMLInputElement}
-     */
-    get actionBoxRemoveUserWarningTextElement() {
-      return this.querySelector('.action-box-remove-user-warning-text');
-    },
-
-    /**
-     * Gets action box menu, remove legacy supervised user warning text div.
-     * @type {!HTMLInputElement}
-     */
-    get actionBoxRemoveLegacySupervisedUserWarningTextElement() {
-      return this.querySelector(
-          '.action-box-remove-legacy-supervised-user-warning-text');
-    },
-
-    /**
      * Gets action box menu, remove user command item div.
      * @type {!HTMLInputElement}
      */
@@ -993,6 +973,23 @@ cr.define('login', function() {
      */
     get customIconElement() {
       return this.querySelector('.custom-icon-container');
+    },
+
+    /**
+     * Gets the elements used for statistics display.
+     * @type {Object.<string, !HTMLDivElement>}
+     */
+    get statsMapElements() {
+      return {
+          'BrowsingHistory':
+              this.querySelector('.action-box-remove-user-warning-history'),
+          'Passwords':
+              this.querySelector('.action-box-remove-user-warning-passwords'),
+          'Bookmarks':
+              this.querySelector('.action-box-remove-user-warning-bookmarks'),
+          'Settings':
+              this.querySelector('.action-box-remove-user-warning-settings')
+      }
     },
 
     /**
@@ -1048,6 +1045,7 @@ cr.define('login', function() {
         this.setUserPodIconType('child');
       } else if (this.user_.legacySupervisedUser && !this.user_.isDesktopUser) {
         this.setUserPodIconType('legacySupervised');
+        this.classList.add('legacy-supervised');
       } else if (this.multiProfilesPolicyApplied) {
         // Mark user pod as not focusable which in addition to the grayed out
         // filter makes it look in disabled state.
@@ -1407,6 +1405,25 @@ cr.define('login', function() {
     },
 
     /**
+     * Move the action box menu up if needed.
+     */
+    moveActionMenuUpIfNeeded_: function() {
+      // Skip checking (computationally expensive) if already moved up.
+      if (this.actionBoxMenu.classList.contains('menu-moved-up'))
+        return;
+
+      // Move up the menu if it overlaps shelf.
+      var maxHeight = cr.ui.LoginUITools.getMaxHeightBeforeShelfOverlapping(
+          this.actionBoxMenu, true);
+      var actualHeight = parseInt(
+          window.getComputedStyle(this.actionBoxMenu).height);
+      if (maxHeight < actualHeight) {
+        this.actionBoxMenu.classList.add('menu-moved-up');
+        this.actionBoxAreaElement.classList.add('menu-moved-up');
+      }
+    },
+
+    /**
      * Shows remove user warning. Used for legacy supervised users on CrOS, and
      * for all users on desktop.
      */
@@ -1415,16 +1432,138 @@ cr.define('login', function() {
       this.actionBoxRemoveUserWarningElement.hidden = false;
       this.actionBoxRemoveUserWarningButtonElement.focus();
 
-      // Move up the menu if it overlaps shelf.
-      var maxHeight = cr.ui.LoginUITools.getMaxHeightBeforeShelfOverlapping(
-          this.actionBoxMenu);
-      var actualHeight = parseInt(
-          window.getComputedStyle(this.actionBoxMenu).height);
-      if (maxHeight < actualHeight) {
-        this.actionBoxMenu.classList.add('menu-moved-up');
-        this.actionBoxAreaElement.classList.add('menu-moved-up');
+      // Show extra statistics information for desktop users
+      var message;
+      if (this.user.isLegacySupervisedUser) {
+        this.moveActionMenuUpIfNeeded_();
+      } else {
+        this.RemoveWarningDialogSetMessage_(true, false);
+        // set a global handler for the callback
+        window.updateRemoveWarningDialog =
+            this.updateRemoveWarningDialog_.bind(this);
+        chrome.send('removeUserWarningLoadStats', [this.user.profilePath]);
       }
       chrome.send('logRemoveUserWarningShown');
+    },
+
+    /**
+     * Refresh the statistics in the remove user warning dialog.
+     * @param {string} profilePath The filepath of the URL (must be verified).
+     * @param {Object} profileStats Statistics associated with profileURL.
+     */
+    updateRemoveWarningDialog_: function(profilePath, profileStats) {
+      if (profilePath !== this.user.profilePath)
+        return;
+
+      var stats_elements = this.statsMapElements;
+      // Update individual statistics
+      var hasErrors = false;
+      for (var key in profileStats) {
+        if (stats_elements.hasOwnProperty(key)) {
+          if (profileStats[key].success) {
+            this.user.statistics[key] = profileStats[key];
+          } else if (!this.user.statistics[key].success) {
+            hasErrors = true;
+            stats_elements[key].textContent = '';
+          }
+        }
+      }
+
+      this.RemoveWarningDialogSetMessage_(false, hasErrors);
+    },
+
+    /**
+     * Set the new message in the dialog.
+     * @param {boolean} Whether this is the first output, that requires setting
+     * a in-progress message.
+     * @param {boolean} Whether any actual query to the statistics have failed.
+     * Should be true only if there is an error and the corresponding statistic
+     * is also unavailable in ProfileInfoCache.
+     */
+    RemoveWarningDialogSetMessage_: function(isInitial, hasErrors) {
+      var stats_elements = this.statsMapElements;
+      var total_count = 0;
+      var num_stats_loaded = 0;
+      for (var key in stats_elements) {
+        if (this.user.statistics[key].success) {
+          var count = this.user.statistics[key].count;
+          stats_elements[key].textContent = count;
+          total_count += count;
+          num_stats_loaded++;
+        }
+      }
+
+      // this.classList is used for selecting the appropriate dialog.
+      if (total_count)
+        this.classList.remove('has-no-stats');
+
+      var is_synced_user = this.user.emailAddress !== "";
+      // Write total number if all statistics are loaded.
+      if (num_stats_loaded === Object.keys(stats_elements).length) {
+        if (!total_count) {
+          this.classList.add('has-no-stats');
+          var message = loadTimeData.getString(
+              is_synced_user ? 'removeUserWarningTextSyncNoStats' :
+                               'removeUserWarningTextNonSyncNoStats');
+          this.updateRemoveWarningDialogSetMessage_(this.user.profilePath,
+                                                    message);
+        } else {
+          window.updateRemoveWarningDialogSetMessage =
+              this.updateRemoveWarningDialogSetMessage_.bind(this);
+          chrome.send('getRemoveWarningDialogMessage',[{
+              profilePath: this.user.profilePath,
+              isSyncedUser: is_synced_user,
+              hasErrors: hasErrors,
+              totalCount: total_count
+          }]);
+        }
+      } else if (isInitial) {
+        if (!this.user.isProfileLoaded) {
+          message = loadTimeData.getString(
+              is_synced_user ? 'removeUserWarningTextSyncNoStats' :
+                               'removeUserWarningTextNonSyncNoStats');
+          this.updateRemoveWarningDialogSetMessage_(this.user.profilePath,
+                                                    message);
+        } else {
+          message = loadTimeData.getString(
+              is_synced_user ? 'removeUserWarningTextSyncCalculating' :
+                               'removeUserWarningTextNonSyncCalculating');
+          substitute = loadTimeData.getString(
+              'removeUserWarningTextCalculating');
+          this.updateRemoveWarningDialogSetMessage_(this.user.profilePath,
+                                                    message, substitute);
+        }
+      }
+    },
+
+    /**
+     * Refresh the message in the remove user warning dialog.
+     * @param {string} profilePath The filepath of the URL (must be verified).
+     * @param {string} message The message to be written.
+     * @param {number|string=} count The number or string to replace $1 in
+     * |message|. Can be omitted if $1 is not present in |message|.
+     */
+    updateRemoveWarningDialogSetMessage_: function(profilePath, message,
+                                                   count) {
+      if (profilePath !== this.user.profilePath)
+        return;
+      // Add localized messages where $1 will be replaced with
+      // <span class="total-count"></span>.
+      var element = this.querySelector('.action-box-remove-user-warning-text');
+      element.textContent = '';
+
+      messageParts = message.split('$1');
+      var numParts = messageParts.length;
+      for (var j = 0; j < numParts; j++) {
+        element.appendChild(document.createTextNode(messageParts[j]));
+        if (j < numParts - 1) {
+          var elementToAdd = document.createElement('span');
+          elementToAdd.classList.add('total-count');
+          elementToAdd.textContent = count;
+          element.appendChild(elementToAdd);
+        }
+      }
+      this.moveActionMenuUpIfNeeded_();
     },
 
     /**
@@ -1930,6 +2069,18 @@ cr.define('login', function() {
     __proto__: UserPod.prototype,
 
     /** @override */
+    initialize: function() {
+      if (this.user.needsSignin) {
+        if (this.user.hasLocalCreds) {
+          this.user.initialAuthType = AUTH_TYPE.OFFLINE_PASSWORD;
+        } else {
+          this.user.initialAuthType = AUTH_TYPE.ONLINE_SIGN_IN;
+        }
+      }
+      UserPod.prototype.initialize.call(this);
+    },
+
+    /** @override */
     get mainInput() {
       if (this.user.needsSignin)
         return this.passwordElement;
@@ -1946,17 +2097,17 @@ cr.define('login', function() {
       var isLockedUser = this.user.needsSignin;
       var isLegacySupervisedUser = this.user.legacySupervisedUser;
       var isChildUser = this.user.childUser;
+      var isSyncedUser = this.user.emailAddress !== "";
+      var isProfileLoaded = this.user.isProfileLoaded;
       this.classList.toggle('locked', isLockedUser);
       this.classList.toggle('legacy-supervised', isLegacySupervisedUser);
       this.classList.toggle('child', isChildUser);
+      this.classList.toggle('synced', isSyncedUser);
+      this.classList.toggle('has-no-stats',
+          !isProfileLoaded && !this.user.statistics.length);
 
       if (this.isAuthTypeUserClick)
         this.passwordLabelElement.textContent = this.authValue;
-
-      this.actionBoxRemoveUserWarningTextElement.hidden =
-          isLegacySupervisedUser;
-      this.actionBoxRemoveLegacySupervisedUserWarningTextElement.hidden =
-          !isLegacySupervisedUser;
 
       this.passwordElement.setAttribute('aria-label', loadTimeData.getStringF(
         'passwordFieldAccessibleName', this.user_.emailAddress));
@@ -1965,18 +2116,10 @@ cr.define('login', function() {
     },
 
     /** @override */
-    focusInput: function() {
-      // Move tabIndex from the whole pod to the main input.
-      this.tabIndex = -1;
-      this.mainInput.tabIndex = UserPodTabOrder.POD_INPUT;
-      this.mainInput.focus();
-    },
-
-    /** @override */
     activate: function(e) {
       if (!this.user.needsSignin) {
         Oobe.launchUser(this.user.profilePath);
-      } else if (!this.passwordElement.value) {
+      } else if (this.user.hasLocalCreds && !this.passwordElement.value) {
         return false;
       } else {
         chrome.send('authenticatedLaunchUser',
@@ -1996,10 +2139,13 @@ cr.define('login', function() {
       Oobe.clearErrors();
       this.parentNode.lastFocusedPod_ = this;
 
-      // If this is an unlocked pod, then open a browser window. Otherwise
-      // just activate the pod and show the password field.
-      if (!this.user.needsSignin && !this.isActionBoxMenuActive)
+      // If this is a locked pod and there are local credentials, show the
+      // password field.  Otherwise call activate() which will open up a browser
+      // window or show the reauth dialog, as needed.
+      if (!(this.user.needsSignin && this.user.hasLocalCreds) &&
+          !this.isActionBoxMenuActive) {
         this.activate(e);
+      }
 
       if (this.isAuthTypeUserClick)
         chrome.send('attemptUnlock', [this.user.emailAddress]);
@@ -2269,14 +2415,14 @@ cr.define('login', function() {
     /**
      * Runs app with a given id from the list of loaded apps.
      * @param {!string} app_id of an app to run.
-     * @param {boolean=} opt_diagnostic_mode Whether to run the app in
+     * @param {boolean=} opt_diagnosticMode Whether to run the app in
      *     diagnostic mode. Default is false.
      */
-    findAndRunAppForTesting: function(app_id, opt_diagnostic_mode) {
+    findAndRunAppForTesting: function(app_id, opt_diagnosticMode) {
       var app = this.getPodWithAppId_(app_id);
       if (app) {
         var activationEvent = cr.doc.createEvent('MouseEvents');
-        var ctrlKey = opt_diagnostic_mode;
+        var ctrlKey = opt_diagnosticMode;
         activationEvent.initMouseEvent('click', true, true, null,
             0, 0, 0, 0, 0, ctrlKey, false, false, false, 0, null);
         app.dispatchEvent(activationEvent);
@@ -2405,7 +2551,7 @@ cr.define('login', function() {
                 SIGNIN_UI_STATE.GAIA_SIGNIN &&
             emptyPodRow &&
             this.pods.length > 0) {
-          login.GaiaSigninScreen.updateCancelButtonState();
+          login.GaiaSigninScreen.updateControlsState();
         }
       }
     },
@@ -2741,19 +2887,19 @@ cr.define('login', function() {
      * @param {UserPod=} podToFocus User pod to focus (undefined clears focus).
      * @param {boolean=} opt_force If true, forces focus update even when
      *     podToFocus is already focused.
+     * @param {boolean=} opt_skipInputFocus If true, don't focus on the input
+     *     box of user pod.
      */
-    focusPod: function(podToFocus, opt_force) {
+    focusPod: function(podToFocus, opt_force, opt_skipInputFocus) {
       if (this.isFocused(podToFocus) && !opt_force) {
         // Calling focusPod w/o podToFocus means reset.
         if (!podToFocus)
           Oobe.clearErrors();
-        this.keyboardActivated_ = false;
         return;
       }
 
       // Make sure there's only one focusPod operation happening at a time.
       if (this.insideFocusPod_) {
-        this.keyboardActivated_ = false;
         return;
       }
       this.insideFocusPod_ = true;
@@ -2786,9 +2932,13 @@ cr.define('login', function() {
         podToFocus.classList.add('focused');
         if (!podToFocus.multiProfilesPolicyApplied) {
           podToFocus.classList.toggle('signing-in', false);
-          podToFocus.focusInput();
+          if (!opt_skipInputFocus)
+            podToFocus.focusInput();
         } else {
           podToFocus.userTypeBubbleElement.classList.add('bubble-shown');
+          // Note it is not necessary to skip this focus request when
+          // |opt_skipInputFocus| is true. When |multiProfilesPolicyApplied|
+          // is false, it doesn't focus on the password input box by default.
           podToFocus.focus();
         }
 
@@ -2800,7 +2950,6 @@ cr.define('login', function() {
         this.scrollFocusedPodIntoView();
       }
       this.insideFocusPod_ = false;
-      this.keyboardActivated_ = false;
     },
 
     /**
@@ -2965,7 +3114,7 @@ cr.define('login', function() {
     handleMouseMove_: function(e) {
       if (this.disabled)
         return;
-      if (e.webkitMovementX == 0 && e.webkitMovementY == 0)
+      if (e.movementX == 0 && e.movementY == 0)
         return;
 
       // Defocus (thus hide) action box, if it is focused on a user pod
@@ -3009,9 +3158,19 @@ cr.define('login', function() {
       var pod = findAncestorByClass(e.target, 'pod');
       if (pod && pod.parentNode == this) {
         // Focus on a control of a pod but not on the action area button.
-        if (!pod.classList.contains('focused') &&
-            !e.target.classList.contains('action-box-button')) {
-          this.focusPod(pod);
+        if (!pod.classList.contains('focused')) {
+          if (e.target.classList.contains('action-box-area') ||
+              e.target.classList.contains('remove-warning-button')) {
+            // focusPod usually moves focus on the password input box which
+            // triggers virtual keyboard to show up. But the focus may move to a
+            // non text input element shortly by e.target.focus. Hence, a
+            // virtual keyboard flicking might be observed. We need to manually
+            // prevent focus on password input box to avoid virtual keyboard
+            // flicking in this case. See crbug.com/396016 for details.
+            this.focusPod(pod, false, true /* opt_skipInputFocus */);
+          } else {
+            this.focusPod(pod);
+          }
           pod.userTypeBubbleElement.classList.remove('bubble-shown');
           e.target.focus();
         }
@@ -3043,7 +3202,6 @@ cr.define('login', function() {
       switch (e.keyIdentifier) {
         case 'Left':
           if (!editing) {
-            this.keyboardActivated_ = true;
             if (this.focusedPod_ && this.focusedPod_.previousElementSibling)
               this.focusPod(this.focusedPod_.previousElementSibling);
             else
@@ -3054,7 +3212,6 @@ cr.define('login', function() {
           break;
         case 'Right':
           if (!editing) {
-            this.keyboardActivated_ = true;
             if (this.focusedPod_ && this.focusedPod_.nextElementSibling)
               this.focusPod(this.focusedPod_.nextElementSibling);
             else

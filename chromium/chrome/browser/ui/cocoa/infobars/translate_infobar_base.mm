@@ -4,6 +4,10 @@
 
 #import "chrome/browser/ui/cocoa/infobars/translate_infobar_base.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -30,7 +34,7 @@ using InfoBarUtilities::AddMenuItem;
 
 scoped_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
     scoped_ptr<translate::TranslateInfoBarDelegate> delegate) const {
-  scoped_ptr<InfoBarCocoa> infobar(new InfoBarCocoa(delegate.Pass()));
+  scoped_ptr<InfoBarCocoa> infobar(new InfoBarCocoa(std::move(delegate)));
   base::scoped_nsobject<TranslateInfoBarControllerBase> infobar_controller;
   switch (infobar->delegate()->AsTranslateInfoBarDelegate()->translate_step()) {
     case translate::TRANSLATE_STEP_BEFORE_TRANSLATE:
@@ -50,7 +54,7 @@ scoped_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
       NOTREACHED();
   }
   infobar->set_controller(infobar_controller);
-  return infobar.Pass();
+  return std::move(infobar);
 }
 
 @implementation TranslateInfoBarControllerBase (FrameChangeObserver)
@@ -84,10 +88,13 @@ scoped_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
 - (void)updateState;
 
 // Called when the source or target language selection changes in a menu.
+// |newLanguageCode| is the ISO language of the newly selected item.
 // |newLanguageIdx| is the index of the newly selected item in the appropriate
 // menu.
-- (void)sourceLanguageModified:(NSInteger)newLanguageIdx;
-- (void)targetLanguageModified:(NSInteger)newLanguageIdx;
+- (void)sourceLanguageModified:(NSString*)newLanguageCode
+             withLanguageIndex:(NSInteger)newLanguageIdx;
+- (void)targetLanguageModified:(NSString*)newLanguageCode
+             withLanguageIndex:(NSInteger)newLanguageIdx;
 
 // Completely rebuild "from" and "to" language menus from the data model.
 - (void)populateLanguageMenus;
@@ -122,12 +129,12 @@ scoped_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
   translateMessageButton_.reset([[NSButton alloc] init]);
 }
 
-- (void)sourceLanguageModified:(NSInteger)newLanguageIdx {
-  size_t newLanguageIdxSizeT = static_cast<size_t>(newLanguageIdx);
-  DCHECK_NE(translate::TranslateInfoBarDelegate::kNoIndex, newLanguageIdxSizeT);
-  if (newLanguageIdxSizeT == [self delegate]->original_language_index())
+- (void)sourceLanguageModified:(NSString*)newLanguageCode
+             withLanguageIndex:(NSInteger)newLanguageIdx {
+  std::string newLanguageCodeS = base::SysNSStringToUTF8(newLanguageCode);
+  if (newLanguageCodeS.compare([self delegate]->original_language_code()) == 0)
     return;
-  [self delegate]->UpdateOriginalLanguageIndex(newLanguageIdxSizeT);
+  [self delegate]->UpdateOriginalLanguage(newLanguageCodeS);
   if ([self delegate]->translate_step() ==
       translate::TRANSLATE_STEP_AFTER_TRANSLATE)
     [self delegate]->Translate();
@@ -136,12 +143,12 @@ scoped_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
   [fromLanguagePopUp_ selectItemAtIndex:newMenuIdx];
 }
 
-- (void)targetLanguageModified:(NSInteger)newLanguageIdx {
-  size_t newLanguageIdxSizeT = static_cast<size_t>(newLanguageIdx);
-  DCHECK_NE(translate::TranslateInfoBarDelegate::kNoIndex, newLanguageIdxSizeT);
-  if (newLanguageIdxSizeT == [self delegate]->target_language_index())
+- (void)targetLanguageModified:(NSString*)newLanguageCode
+             withLanguageIndex:(NSInteger)newLanguageIdx {
+  std::string newLanguageCodeS = base::SysNSStringToUTF8(newLanguageCode);
+  if (newLanguageCodeS.compare([self delegate]->target_language_code()) == 0)
     return;
-  [self delegate]->UpdateTargetLanguageIndex(newLanguageIdxSizeT);
+  [self delegate]->UpdateTargetLanguage(newLanguageCodeS);
   if ([self delegate]->translate_step() ==
       translate::TRANSLATE_STEP_AFTER_TRANSLATE)
     [self delegate]->Translate();
@@ -233,13 +240,11 @@ scoped_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
   NSMenu* optionsMenu = [optionsPopUp_ menu];
   [optionsMenu setAutoenablesItems:NO];
   for (int i = 0; i < optionsMenuModel_->GetItemCount(); ++i) {
-    AddMenuItem(optionsMenu,
-                self,
-                @selector(optionsMenuChanged:),
+    AddMenuItem(optionsMenu, self, @selector(optionsMenuChanged:),
                 base::SysUTF16ToNSString(optionsMenuModel_->GetLabelAt(i)),
                 optionsMenuModel_->GetCommandIdAt(i),
                 optionsMenuModel_->IsEnabledAt(i),
-                optionsMenuModel_->IsItemCheckedAt(i));
+                optionsMenuModel_->IsItemCheckedAt(i), nil);
   }
 }
 
@@ -252,31 +257,33 @@ scoped_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
   [originalLanguageMenu setAutoenablesItems:NO];
   NSMenu* targetLanguageMenu = [toLanguagePopUp_ menu];
   [targetLanguageMenu setAutoenablesItems:NO];
+  size_t source_index = translate::TranslateInfoBarDelegate::kNoIndex;
+  size_t target_index = translate::TranslateInfoBarDelegate::kNoIndex;
   for (size_t i = 0; i < [self delegate]->num_languages(); ++i) {
     NSString* title =
         base::SysUTF16ToNSString([self delegate]->language_name_at(i));
-    AddMenuItem(originalLanguageMenu,
-                self,
-                @selector(languageMenuChanged:),
-                title,
-                IDC_TRANSLATE_ORIGINAL_LANGUAGE_BASE + i,
-                i != [self delegate]->target_language_index(),
-                i == [self delegate]->original_language_index());
-    AddMenuItem(targetLanguageMenu,
-                self,
-                @selector(languageMenuChanged:),
-                title,
-                IDC_TRANSLATE_TARGET_LANGUAGE_BASE + i,
-                i != [self delegate]->original_language_index(),
-                i == [self delegate]->target_language_index());
+    std::string language_code = [self delegate]->language_code_at(i);
+    if (language_code == [self delegate]->original_language_code()) {
+      source_index = i;
+    }
+    if (language_code == [self delegate]->target_language_code()) {
+      target_index = i;
+    }
+    AddMenuItem(originalLanguageMenu, self, @selector(languageMenuChanged:),
+                title, IDC_TRANSLATE_ORIGINAL_LANGUAGE_BASE + i,
+                language_code != [self delegate]->target_language_code(),
+                language_code == [self delegate]->original_language_code(),
+                base::SysUTF8ToNSString(language_code));
+    AddMenuItem(targetLanguageMenu, self, @selector(languageMenuChanged:),
+                title, IDC_TRANSLATE_TARGET_LANGUAGE_BASE + i,
+                language_code != [self delegate]->original_language_code(),
+                language_code == [self delegate]->target_language_code(),
+                base::SysUTF8ToNSString(language_code));
   }
-  if ([self delegate]->original_language_index() !=
-      translate::TranslateInfoBarDelegate::kNoIndex) {
-    [fromLanguagePopUp_
-        selectItemAtIndex:([self delegate]->original_language_index())];
+  if (source_index != translate::TranslateInfoBarDelegate::kNoIndex) {
+    [fromLanguagePopUp_ selectItemAtIndex:(source_index)];
   }
-  [toLanguagePopUp_
-      selectItemAtIndex:([self delegate]->target_language_index())];
+  [toLanguagePopUp_ selectItemAtIndex:(target_index)];
 }
 
 - (void)addAdditionalControls {
@@ -436,13 +443,14 @@ scoped_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
     return;
   if ([item respondsToSelector:@selector(tag)]) {
     int cmd = [item tag];
+    NSString* language_code = [item representedObject];
     if (cmd >= IDC_TRANSLATE_TARGET_LANGUAGE_BASE) {
       cmd -= IDC_TRANSLATE_TARGET_LANGUAGE_BASE;
-      [self targetLanguageModified:cmd];
+      [self targetLanguageModified:language_code withLanguageIndex:cmd];
       return;
     } else if (cmd >= IDC_TRANSLATE_ORIGINAL_LANGUAGE_BASE) {
       cmd -= IDC_TRANSLATE_ORIGINAL_LANGUAGE_BASE;
-      [self sourceLanguageModified:cmd];
+      [self sourceLanguageModified:language_code withLanguageIndex:cmd];
       return;
     }
   }

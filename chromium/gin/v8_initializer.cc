@@ -4,7 +4,9 @@
 
 #include "gin/v8_initializer.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/debug/alias.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -53,8 +55,19 @@ base::PlatformFile g_snapshot_pf = kInvalidPlatformFile;
 base::MemoryMappedFile::Region g_natives_region;
 base::MemoryMappedFile::Region g_snapshot_region;
 
+#if defined(OS_ANDROID)
+#ifdef __LP64__
+const char kNativesFileName[] = "natives_blob_64.bin";
+const char kSnapshotFileName[] = "snapshot_blob_64.bin";
+#else
+const char kNativesFileName[] = "natives_blob_32.bin";
+const char kSnapshotFileName[] = "snapshot_blob_32.bin";
+#endif // __LP64__
+
+#else  // defined(OS_ANDROID)
 const char kNativesFileName[] = "natives_blob.bin";
 const char kSnapshotFileName[] = "snapshot_blob.bin";
+#endif  // defined(OS_ANDROID)
 
 void GetV8FilePath(const char* file_name, base::FilePath* path_out) {
 #if !defined(OS_MACOSX)
@@ -275,8 +288,8 @@ void V8Initializer::LoadV8Natives() {
 
 // static
 void V8Initializer::LoadV8SnapshotFromFD(base::PlatformFile snapshot_pf,
-                                         int64 snapshot_offset,
-                                         int64 snapshot_size) {
+                                         int64_t snapshot_offset,
+                                         int64_t snapshot_size) {
   if (g_mapped_snapshot)
     return;
 
@@ -297,14 +310,18 @@ void V8Initializer::LoadV8SnapshotFromFD(base::PlatformFile snapshot_pf,
   if (!VerifyV8StartupFile(&g_mapped_snapshot, g_snapshot_fingerprint))
     result = V8_LOAD_FAILED_VERIFY;
 #endif  // V8_VERIFY_EXTERNAL_STARTUP_DATA
+  if (result == V8_LOAD_SUCCESS) {
+    g_snapshot_pf = snapshot_pf;
+    g_snapshot_region = snapshot_region;
+  }
   UMA_HISTOGRAM_ENUMERATION("V8.Initializer.LoadV8Snapshot.Result", result,
                             V8_LOAD_MAX_VALUE);
 }
 
 // static
 void V8Initializer::LoadV8NativesFromFD(base::PlatformFile natives_pf,
-                                        int64 natives_offset,
-                                        int64 natives_size) {
+                                        int64_t natives_offset,
+                                        int64_t natives_size) {
   if (g_mapped_natives)
     return;
 
@@ -325,6 +342,8 @@ void V8Initializer::LoadV8NativesFromFD(base::PlatformFile natives_pf,
     LOG(FATAL) << "Couldn't verify contents of v8 natives data file";
   }
 #endif  // V8_VERIFY_EXTERNAL_STARTUP_DATA
+  g_natives_pf = natives_pf;
+  g_natives_region = natives_region;
 }
 
 // static
@@ -345,16 +364,21 @@ base::PlatformFile V8Initializer::GetOpenSnapshotFileForChildProcesses(
 #endif  // defined(V8_USE_EXTERNAL_STARTUP_DATA)
 
 // static
-void V8Initializer::Initialize(gin::IsolateHolder::ScriptMode mode) {
+void V8Initializer::Initialize(IsolateHolder::ScriptMode mode,
+                               IsolateHolder::V8ExtrasMode v8_extras_mode) {
   static bool v8_is_initialized = false;
   if (v8_is_initialized)
     return;
 
   v8::V8::InitializePlatform(V8Platform::Get());
 
-  if (gin::IsolateHolder::kStrictMode == mode) {
+  if (IsolateHolder::kStrictMode == mode) {
     static const char use_strict[] = "--use_strict";
     v8::V8::SetFlagsFromString(use_strict, sizeof(use_strict) - 1);
+  }
+  if (IsolateHolder::kStableAndExperimentalV8Extras == v8_extras_mode) {
+    static const char flag[] = "--experimental_extras";
+    v8::V8::SetFlagsFromString(flag, sizeof(flag) - 1);
   }
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)

@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/app_list/app_list_service_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -102,7 +105,7 @@ class ProfileStoreImpl : public ProfileStore {
                    weak_factory_.GetWeakPtr(),
                    callback),
         base::string16(),
-        base::string16(),
+        std::string(),
         std::string());
   }
 
@@ -166,7 +169,7 @@ void RecordAppListDiscoverability(PrefService* local_state,
   if (browser_shutdown::IsTryingToQuit())
     return;
 
-  int64 enable_time_value = local_state->GetInt64(prefs::kAppListEnableTime);
+  int64_t enable_time_value = local_state->GetInt64(prefs::kAppListEnableTime);
   if (enable_time_value == 0)
     return;  // Already recorded or never enabled.
 
@@ -278,7 +281,7 @@ AppListServiceImpl::AppListServiceImpl()
 AppListServiceImpl::AppListServiceImpl(const base::CommandLine& command_line,
                                        PrefService* local_state,
                                        scoped_ptr<ProfileStore> profile_store)
-    : profile_store_(profile_store.Pass()),
+    : profile_store_(std::move(profile_store)),
       command_line_(command_line),
       local_state_(local_state),
       profile_loader_(new ProfileLoader(profile_store_.get())),
@@ -372,7 +375,7 @@ void AppListServiceImpl::ShowForVoiceSearch(
     Profile* profile,
     const scoped_refptr<content::SpeechRecognitionSessionPreamble>& preamble) {
   ShowForProfile(profile);
-  view_delegate_->ToggleSpeechRecognitionForHotword(preamble);
+  view_delegate_->StartSpeechRecognitionForHotword(preamble);
 }
 
 void AppListServiceImpl::ShowForAppInstall(Profile* profile,

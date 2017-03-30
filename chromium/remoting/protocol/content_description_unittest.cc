@@ -5,6 +5,7 @@
 #include "remoting/protocol/content_description.h"
 
 #include <string>
+#include <utility>
 
 #include "base/logging.h"
 #include "remoting/protocol/authenticator.h"
@@ -19,11 +20,11 @@ TEST(ContentDescriptionTest, FormatAndParse) {
   scoped_ptr<CandidateSessionConfig> config =
       CandidateSessionConfig::CreateDefault();
   ContentDescription description(
-      config.Pass(), Authenticator::CreateEmptyAuthenticatorMessage());
+      std::move(config), Authenticator::CreateEmptyAuthenticatorMessage());
   scoped_ptr<buzz::XmlElement> xml(description.ToXml());
   LOG(ERROR) << xml->Str();
   scoped_ptr<ContentDescription> parsed(
-      ContentDescription::ParseXml(xml.get()));
+      ContentDescription::ParseXml(xml.get(), false));
   ASSERT_TRUE(parsed.get());
   EXPECT_TRUE(description.config()->control_configs() ==
               parsed->config()->control_configs());
@@ -40,6 +41,7 @@ TEST(ContentDescriptionTest, FormatAndParse) {
 TEST(ContentDescriptionTest, ParseUnknown) {
   std::string kTestDescription =
       "<description xmlns=\"google:remoting\">"
+      "  <standard-ice/>"
       "  <control transport=\"stream\" version=\"2\"/>"
       "  <event transport=\"stream\" version=\"2\"/>"
       "  <event transport=\"new_awesome_transport\" version=\"3\"/>"
@@ -48,7 +50,7 @@ TEST(ContentDescriptionTest, ParseUnknown) {
       "</description>";
   scoped_ptr<buzz::XmlElement> xml(buzz::XmlElement::ForStr(kTestDescription));
   scoped_ptr<ContentDescription> parsed(
-      ContentDescription::ParseXml(xml.get()));
+      ContentDescription::ParseXml(xml.get(), false));
   ASSERT_TRUE(parsed.get());
   EXPECT_EQ(1U, parsed->config()->event_configs().size());
   EXPECT_TRUE(parsed->config()->event_configs().front() ==
@@ -62,6 +64,7 @@ TEST(ContentDescriptionTest, ParseUnknown) {
 TEST(ContentDescriptionTest, NoneTransport) {
   std::string kTestDescription =
       "<description xmlns=\"google:remoting\">"
+      "  <standard-ice/>"
       "  <control transport=\"stream\" version=\"2\"/>"
       "  <event transport=\"stream\" version=\"2\"/>"
       "  <event transport=\"stream\" version=\"2\"/>"
@@ -71,7 +74,7 @@ TEST(ContentDescriptionTest, NoneTransport) {
       "</description>";
   scoped_ptr<buzz::XmlElement> xml(buzz::XmlElement::ForStr(kTestDescription));
   scoped_ptr<ContentDescription> parsed(
-      ContentDescription::ParseXml(xml.get()));
+      ContentDescription::ParseXml(xml.get(), false));
   ASSERT_TRUE(parsed.get());
   EXPECT_EQ(1U, parsed->config()->audio_configs().size());
   EXPECT_TRUE(parsed->config()->audio_configs().front() == ChannelConfig());
@@ -82,6 +85,7 @@ TEST(ContentDescriptionTest, NoneTransport) {
 TEST(ContentDescriptionTest, NoneTransportWithCodec) {
   std::string kTestDescription =
       "<description xmlns=\"google:remoting\">"
+      "  <standard-ice/>"
       "  <control transport=\"stream\" version=\"2\"/>"
       "  <event transport=\"stream\" version=\"2\"/>"
       "  <event transport=\"stream\" version=\"2\"/>"
@@ -91,7 +95,7 @@ TEST(ContentDescriptionTest, NoneTransportWithCodec) {
       "</description>";
   scoped_ptr<buzz::XmlElement> xml(buzz::XmlElement::ForStr(kTestDescription));
   scoped_ptr<ContentDescription> parsed(
-      ContentDescription::ParseXml(xml.get()));
+      ContentDescription::ParseXml(xml.get(), false));
   ASSERT_TRUE(parsed.get());
   EXPECT_EQ(1U, parsed->config()->audio_configs().size());
   EXPECT_TRUE(parsed->config()->audio_configs().front() == ChannelConfig());

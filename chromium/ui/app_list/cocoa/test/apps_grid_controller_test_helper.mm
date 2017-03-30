@@ -41,13 +41,13 @@ void AppsGridControllerTestHelper::SimulateKeyAction(SEL c) {
 }
 
 void AppsGridControllerTestHelper::SimulateMouseEnterItemAt(size_t index) {
-  [[apps_grid_controller_ itemAtIndex:index] mouseEntered:
-      cocoa_test_event_utils::EnterExitEventWithType(NSMouseEntered)];
+  [[apps_grid_controller_ itemAtIndex:index]
+      mouseEntered:cocoa_test_event_utils::EnterEvent()];
 }
 
 void AppsGridControllerTestHelper::SimulateMouseExitItemAt(size_t index) {
-  [[apps_grid_controller_ itemAtIndex:index] mouseExited:
-      cocoa_test_event_utils::EnterExitEventWithType(NSMouseExited)];
+  [[apps_grid_controller_ itemAtIndex:index]
+      mouseExited:cocoa_test_event_utils::ExitEvent()];
 }
 
 std::string AppsGridControllerTestHelper::GetViewContent() const {
@@ -90,13 +90,14 @@ size_t AppsGridControllerTestHelper::GetPageIndexForItem(int item_id) const {
 }
 
 void AppsGridControllerTestHelper::DelayForCollectionView() {
-  message_loop_.PostDelayedTask(FROM_HERE, base::MessageLoop::QuitClosure(),
+  message_loop_.PostDelayedTask(FROM_HERE,
+                                base::MessageLoop::QuitWhenIdleClosure(),
                                 base::TimeDelta::FromMilliseconds(100));
   message_loop_.Run();
 }
 
 void AppsGridControllerTestHelper::SinkEvents() {
-  message_loop_.PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+  message_loop_.PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   message_loop_.Run();
 }
 

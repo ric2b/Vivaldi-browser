@@ -22,9 +22,6 @@ namespace {
 const char kJabberNamespace[] = "jabber:client";
 const char kJingleNamespace[] = "urn:xmpp:jingle:1";
 
-// Namespace for transport messages for legacy GICE.
-const char kGiceTransportNamespace[] = "http://www.google.com/transport/p2p";
-
 // Namespace for transport messages when using standard ICE.
 const char kIceTransportNamespace[] = "google:remoting:ice";
 
@@ -46,12 +43,14 @@ const NameMapElement<JingleMessage::Reason> kReasons[] = {
   { JingleMessage::SUCCESS, "success" },
   { JingleMessage::DECLINE, "decline" },
   { JingleMessage::CANCEL, "cancel" },
+  { JingleMessage::EXPIRED, "expired" },
   { JingleMessage::GENERAL_ERROR, "general-error" },
+  { JingleMessage::FAILED_APPLICATION, "failed-application" },
   { JingleMessage::INCOMPATIBLE_PARAMETERS, "incompatible-parameters" },
 };
 
 bool ParseIceCredentials(const buzz::XmlElement* element,
-                         JingleMessage::IceCredentials* credentials) {
+                         IceTransportInfo::IceCredentials* credentials) {
   DCHECK(element->Name() == QName(kIceTransportNamespace, "credentials"));
 
   const std::string& channel = element->Attr(QName(kEmptyNamespace, "channel"));
@@ -72,7 +71,7 @@ bool ParseIceCredentials(const buzz::XmlElement* element,
 }
 
 bool ParseIceCandidate(const buzz::XmlElement* element,
-                       JingleMessage::NamedCandidate* candidate) {
+                       IceTransportInfo::NamedCandidate* candidate) {
   DCHECK(element->Name() == QName(kIceTransportNamespace, "candidate"));
 
   const std::string& name = element->Attr(QName(kEmptyNamespace, "name"));
@@ -111,101 +110,8 @@ bool ParseIceCandidate(const buzz::XmlElement* element,
   return true;
 }
 
-bool ParseIceTransportInfo(
-    const buzz::XmlElement* element,
-    std::list<JingleMessage::IceCredentials>* ice_credentials,
-    std::list<JingleMessage::NamedCandidate>* candidates) {
-  DCHECK(element->Name() == QName(kIceTransportNamespace, "transport"));
-
-  ice_credentials->clear();
-  candidates->clear();
-
-  QName qn_credentials(kIceTransportNamespace, "credentials");
-  for (const XmlElement* credentials_tag = element->FirstNamed(qn_credentials);
-       credentials_tag;
-       credentials_tag = credentials_tag->NextNamed(qn_credentials)) {
-    JingleMessage::IceCredentials credentials;
-    if (!ParseIceCredentials(credentials_tag, &credentials))
-      return false;
-    ice_credentials->push_back(credentials);
-  }
-
-  QName qn_candidate(kIceTransportNamespace, "candidate");
-  for (const XmlElement* candidate_tag = element->FirstNamed(qn_candidate);
-       candidate_tag; candidate_tag = candidate_tag->NextNamed(qn_candidate)) {
-    JingleMessage::NamedCandidate candidate;
-    if (!ParseIceCandidate(candidate_tag, &candidate))
-      return false;
-    candidates->push_back(candidate);
-  }
-
-  return true;
-}
-
-bool ParseGiceCandidate(const buzz::XmlElement* element,
-                        JingleMessage::NamedCandidate* candidate) {
-  DCHECK(element->Name() == QName(kGiceTransportNamespace, "candidate"));
-
-  const std::string& name = element->Attr(QName(kEmptyNamespace, "name"));
-  const std::string& address = element->Attr(QName(kEmptyNamespace, "address"));
-  const std::string& port_str = element->Attr(QName(kEmptyNamespace, "port"));
-  const std::string& type = element->Attr(QName(kEmptyNamespace, "type"));
-  const std::string& protocol =
-      element->Attr(QName(kEmptyNamespace, "protocol"));
-  const std::string& username =
-      element->Attr(QName(kEmptyNamespace, "username"));
-  const std::string& password =
-      element->Attr(QName(kEmptyNamespace, "password"));
-  const std::string& preference_str =
-      element->Attr(QName(kEmptyNamespace, "preference"));
-  const std::string& generation_str =
-      element->Attr(QName(kEmptyNamespace, "generation"));
-
-  int port;
-  double preference;
-  int generation;
-  if (name.empty() || address.empty() || !base::StringToInt(port_str, &port) ||
-      port < kPortMin || port > kPortMax || type.empty() || protocol.empty() ||
-      username.empty() || password.empty() ||
-      !base::StringToDouble(preference_str, &preference) ||
-      !base::StringToInt(generation_str, &generation)) {
-    return false;
-  }
-
-  candidate->name = name;
-
-  candidate->candidate.set_address(rtc::SocketAddress(address, port));
-  candidate->candidate.set_type(type);
-  candidate->candidate.set_protocol(protocol);
-  candidate->candidate.set_username(username);
-  candidate->candidate.set_password(password);
-  candidate->candidate.set_preference(static_cast<float>(preference));
-  candidate->candidate.set_generation(generation);
-
-  return true;
-}
-
-bool ParseGiceTransportInfo(
-    const buzz::XmlElement* element,
-    std::list<JingleMessage::NamedCandidate>* candidates) {
-  DCHECK(element->Name() == QName(kGiceTransportNamespace, "transport"));
-
-  candidates->clear();
-
-  QName qn_candidate(kGiceTransportNamespace, "candidate");
-  for (const XmlElement* candidate_tag = element->FirstNamed(qn_candidate);
-       candidate_tag; candidate_tag = candidate_tag->NextNamed(qn_candidate)) {
-    JingleMessage::NamedCandidate candidate;
-    if (!ParseGiceCandidate(candidate_tag, &candidate))
-      return false;
-    candidates->push_back(candidate);
-  }
-
-  return true;
-}
-
 XmlElement* FormatIceCredentials(
-    const JingleMessage::IceCredentials& credentials) {
+    const IceTransportInfo::IceCredentials& credentials) {
   XmlElement* result =
       new XmlElement(QName(kIceTransportNamespace, "credentials"));
   result->SetAttr(QName(kEmptyNamespace, "channel"), credentials.channel);
@@ -214,7 +120,8 @@ XmlElement* FormatIceCredentials(
   return result;
 }
 
-XmlElement* FormatIceCandidate(const JingleMessage::NamedCandidate& candidate) {
+XmlElement* FormatIceCandidate(
+    const IceTransportInfo::NamedCandidate& candidate) {
   XmlElement* result =
       new XmlElement(QName(kIceTransportNamespace, "candidate"));
   result->SetAttr(QName(kEmptyNamespace, "name"), candidate.name);
@@ -223,50 +130,27 @@ XmlElement* FormatIceCandidate(const JingleMessage::NamedCandidate& candidate) {
   result->SetAttr(QName(kEmptyNamespace, "address"),
                   candidate.candidate.address().ipaddr().ToString());
   result->SetAttr(QName(kEmptyNamespace, "port"),
-                  base::IntToString(candidate.candidate.address().port()));
+                  base::UintToString(candidate.candidate.address().port()));
   result->SetAttr(QName(kEmptyNamespace, "type"), candidate.candidate.type());
   result->SetAttr(QName(kEmptyNamespace, "protocol"),
                   candidate.candidate.protocol());
   result->SetAttr(QName(kEmptyNamespace, "priority"),
-                  base::DoubleToString(candidate.candidate.priority()));
+                  base::UintToString(candidate.candidate.priority()));
   result->SetAttr(QName(kEmptyNamespace, "generation"),
-                  base::IntToString(candidate.candidate.generation()));
-  return result;
-}
-
-XmlElement* FormatGiceCandidate(
-    const JingleMessage::NamedCandidate& candidate) {
-  XmlElement* result =
-      new XmlElement(QName(kGiceTransportNamespace, "candidate"));
-  result->SetAttr(QName(kEmptyNamespace, "name"), candidate.name);
-  result->SetAttr(QName(kEmptyNamespace, "address"),
-                  candidate.candidate.address().ipaddr().ToString());
-  result->SetAttr(QName(kEmptyNamespace, "port"),
-                  base::IntToString(candidate.candidate.address().port()));
-  result->SetAttr(QName(kEmptyNamespace, "type"), candidate.candidate.type());
-  result->SetAttr(QName(kEmptyNamespace, "protocol"),
-                  candidate.candidate.protocol());
-  result->SetAttr(QName(kEmptyNamespace, "username"),
-                  candidate.candidate.username());
-  result->SetAttr(QName(kEmptyNamespace, "password"),
-                  candidate.candidate.password());
-  result->SetAttr(QName(kEmptyNamespace, "preference"),
-                  base::DoubleToString(candidate.candidate.preference()));
-  result->SetAttr(QName(kEmptyNamespace, "generation"),
-                  base::IntToString(candidate.candidate.generation()));
+                  base::UintToString(candidate.candidate.generation()));
   return result;
 }
 
 }  // namespace
 
-JingleMessage::NamedCandidate::NamedCandidate(
+IceTransportInfo::NamedCandidate::NamedCandidate(
     const std::string& name,
     const cricket::Candidate& candidate)
     : name(name),
       candidate(candidate) {
 }
 
-JingleMessage::IceCredentials::IceCredentials(std::string channel,
+IceTransportInfo::IceCredentials::IceCredentials(std::string channel,
                                               std::string ufrag,
                                               std::string password)
     : channel(channel), ufrag(ufrag), password(password) {
@@ -284,17 +168,14 @@ std::string JingleMessage::GetActionName(ActionType action) {
   return ValueToName(kActionTypes, action);
 }
 
-JingleMessage::JingleMessage() {
-}
+JingleMessage::JingleMessage() {}
 
 JingleMessage::JingleMessage(const std::string& to,
                              ActionType action,
                              const std::string& sid)
-    : to(to), action(action), sid(sid) {
-}
+    : to(to), action(action), sid(sid) {}
 
-JingleMessage::~JingleMessage() {
-}
+JingleMessage::~JingleMessage() {}
 
 bool JingleMessage::ParseXml(const buzz::XmlElement* stanza,
                              std::string* error) {
@@ -368,6 +249,12 @@ bool JingleMessage::ParseXml(const buzz::XmlElement* stanza,
     return false;
   }
 
+  const XmlElement* webrtc_transport_tag = content_tag->FirstNamed(
+      QName("google:remoting:webrtc", "transport"));
+  if (webrtc_transport_tag) {
+    transport_info.reset(new buzz::XmlElement(*webrtc_transport_tag));
+  }
+
   description.reset(nullptr);
   if (action == SESSION_INITIATE || action == SESSION_ACCEPT) {
     const XmlElement* description_tag = content_tag->FirstNamed(
@@ -377,33 +264,19 @@ bool JingleMessage::ParseXml(const buzz::XmlElement* stanza,
       return false;
     }
 
-    description = ContentDescription::ParseXml(description_tag);
+    description = ContentDescription::ParseXml(description_tag,
+                                               webrtc_transport_tag != nullptr);
     if (!description.get()) {
       *error = "Failed to parse content description";
       return false;
     }
   }
 
-  const XmlElement* ice_transport_tag = content_tag->FirstNamed(
-      QName(kIceTransportNamespace, "transport"));
-  const XmlElement* gice_transport_tag = content_tag->FirstNamed(
-      QName(kGiceTransportNamespace, "transport"));
-  if (ice_transport_tag && gice_transport_tag) {
-    *error = "ICE and GICE transport information is found in the same message";
-    return false;
-  } else if (ice_transport_tag) {
-    standard_ice = true;
-    if (!ParseIceTransportInfo(ice_transport_tag, &ice_credentials,
-                               &candidates)) {
-      *error = "Failed to parse transport info";
-      return false;
-    }
-  } else if (gice_transport_tag) {
-    standard_ice = false;
-    ice_credentials.clear();
-    if (!ParseGiceTransportInfo(gice_transport_tag, &candidates)) {
-      *error = "Failed to parse transport info";
-      return false;
+  if (!webrtc_transport_tag) {
+    const XmlElement* ice_transport_tag = content_tag->FirstNamed(
+        QName(kIceTransportNamespace, "transport"));
+    if (ice_transport_tag) {
+      transport_info.reset(new buzz::XmlElement(*ice_transport_tag));
     }
   }
 
@@ -433,7 +306,7 @@ scoped_ptr<buzz::XmlElement> JingleMessage::ToXml() const {
   if (action == SESSION_INFO) {
     if (info.get())
       jingle_tag->AddElement(new XmlElement(*info.get()));
-    return root.Pass();
+    return root;
   }
 
   if (action == SESSION_INITIATE)
@@ -462,31 +335,11 @@ scoped_ptr<buzz::XmlElement> JingleMessage::ToXml() const {
     if (description.get())
       content_tag->AddElement(description->ToXml());
 
-    if (standard_ice) {
-      XmlElement* transport_tag =
-          new XmlElement(QName(kIceTransportNamespace, "transport"), true);
-      content_tag->AddElement(transport_tag);
-      for (std::list<IceCredentials>::const_iterator it =
-               ice_credentials.begin();
-           it != ice_credentials.end(); ++it) {
-        transport_tag->AddElement(FormatIceCredentials(*it));
-      }
-      for (std::list<NamedCandidate>::const_iterator it = candidates.begin();
-           it != candidates.end(); ++it) {
-        transport_tag->AddElement(FormatIceCandidate(*it));
-      }
-    } else {
-      XmlElement* transport_tag =
-          new XmlElement(QName(kGiceTransportNamespace, "transport"), true);
-      content_tag->AddElement(transport_tag);
-      for (std::list<NamedCandidate>::const_iterator it = candidates.begin();
-           it != candidates.end(); ++it) {
-        transport_tag->AddElement(FormatGiceCandidate(*it));
-      }
-    }
+    if (transport_info)
+      content_tag->AddElement(new XmlElement(*transport_info));
   }
 
-  return root.Pass();
+  return root;
 }
 
 JingleMessageReply::JingleMessageReply()
@@ -519,7 +372,7 @@ scoped_ptr<buzz::XmlElement> JingleMessageReply::ToXml(
 
   if (type == REPLY_RESULT) {
     iq->SetAttr(QName(kEmptyNamespace, "type"), "result");
-    return iq.Pass();
+    return iq;
   }
 
   DCHECK_EQ(type, REPLY_ERROR);
@@ -587,7 +440,52 @@ scoped_ptr<buzz::XmlElement> JingleMessageReply::ToXml(
     error->AddElement(text_elem);
   }
 
-  return iq.Pass();
+  return iq;
+}
+
+IceTransportInfo::IceTransportInfo() {}
+IceTransportInfo::~IceTransportInfo() {}
+
+bool IceTransportInfo::ParseXml(
+    const buzz::XmlElement* element) {
+  if (element->Name() != QName(kIceTransportNamespace, "transport"))
+    return false;
+
+  ice_credentials.clear();
+  candidates.clear();
+
+  QName qn_credentials(kIceTransportNamespace, "credentials");
+  for (const XmlElement* credentials_tag = element->FirstNamed(qn_credentials);
+       credentials_tag;
+       credentials_tag = credentials_tag->NextNamed(qn_credentials)) {
+    IceTransportInfo::IceCredentials credentials;
+    if (!ParseIceCredentials(credentials_tag, &credentials))
+      return false;
+    ice_credentials.push_back(credentials);
+  }
+
+  QName qn_candidate(kIceTransportNamespace, "candidate");
+  for (const XmlElement* candidate_tag = element->FirstNamed(qn_candidate);
+       candidate_tag; candidate_tag = candidate_tag->NextNamed(qn_candidate)) {
+    IceTransportInfo::NamedCandidate candidate;
+    if (!ParseIceCandidate(candidate_tag, &candidate))
+      return false;
+    candidates.push_back(candidate);
+  }
+
+  return true;
+}
+
+scoped_ptr<buzz::XmlElement> IceTransportInfo::ToXml() const {
+  scoped_ptr<buzz::XmlElement> result(
+      new XmlElement(QName(kIceTransportNamespace, "transport"), true));
+  for (const IceCredentials& credentials : ice_credentials) {
+    result->AddElement(FormatIceCredentials(credentials));
+  }
+  for (const NamedCandidate& candidate : candidates) {
+    result->AddElement(FormatIceCandidate(candidate));
+  }
+  return result;
 }
 
 }  // namespace protocol

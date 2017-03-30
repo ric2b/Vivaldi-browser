@@ -10,7 +10,6 @@
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_user_login_flow.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
-#include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/supervised/supervised_user_authentication.h"
 #include "chrome/browser/chromeos/login/supervised/supervised_user_constants.h"
 #include "chrome/browser/chromeos/login/supervised/supervised_user_login_flow.h"
@@ -20,15 +19,13 @@
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "components/signin/core/account_id/account_id.h"
 
 namespace chromeos {
 
 ChromeLoginPerformer::ChromeLoginPerformer(Delegate* delegate)
-    : LoginPerformer(base::ThreadTaskRunnerHandle::Get(),
-                     delegate,
-                     StartupUtils::IsWebviewSigninEnabled()),
-      weak_factory_(this) {
-}
+    : LoginPerformer(base::ThreadTaskRunnerHandle::Get(), delegate),
+      weak_factory_(this) {}
 
 ChromeLoginPerformer::~ChromeLoginPerformer() {
 }
@@ -87,13 +84,13 @@ void ChromeLoginPerformer::DidRunTrustedCheck(const base::Closure& callback) {
   }
 }
 
-bool ChromeLoginPerformer::IsUserWhitelisted(const std::string& user_id,
+bool ChromeLoginPerformer::IsUserWhitelisted(const AccountId& account_id,
                                              bool* wildcard_match) {
-  return CrosSettings::IsWhitelisted(user_id, wildcard_match);
+  return CrosSettings::IsWhitelisted(account_id.GetUserEmail(), wildcard_match);
 }
 
 void ChromeLoginPerformer::RunOnlineWhitelistCheck(
-    const std::string& user_id,
+    const AccountId& account_id,
     bool wildcard_match,
     const std::string& refresh_token,
     const base::Closure& success_callback,
@@ -102,7 +99,7 @@ void ChromeLoginPerformer::RunOnlineWhitelistCheck(
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   if (connector->IsEnterpriseManaged() && wildcard_match &&
-      !connector->IsNonEnterpriseUser(user_id)) {
+      !connector->IsNonEnterpriseUser(account_id.GetUserEmail())) {
     wildcard_login_checker_.reset(new policy::WildcardLoginChecker());
     if (refresh_token.empty()) {
       wildcard_login_checker_->StartWithSigninContext(
@@ -134,7 +131,8 @@ bool ChromeLoginPerformer::UseExtendedAuthenticatorForSupervisedUser(
     const UserContext& user_context) {
   SupervisedUserAuthentication* authentication =
       ChromeUserManager::Get()->GetSupervisedUserManager()->GetAuthentication();
-  return authentication->GetPasswordSchema(user_context.GetUserID()) ==
+  return authentication->GetPasswordSchema(
+             user_context.GetAccountId().GetUserEmail()) ==
          SupervisedUserAuthentication::SCHEMA_SALT_HASHED;
 }
 
@@ -145,24 +143,27 @@ UserContext ChromeLoginPerformer::TransformSupervisedKey(
   return authentication->TransformKey(context);
 }
 
-void ChromeLoginPerformer::SetupSupervisedUserFlow(const std::string& user_id) {
-  SupervisedUserLoginFlow* new_flow = new SupervisedUserLoginFlow(user_id);
-  new_flow->SetHost(ChromeUserManager::Get()->GetUserFlow(user_id)->host());
-  ChromeUserManager::Get()->SetUserFlow(user_id, new_flow);
+void ChromeLoginPerformer::SetupSupervisedUserFlow(
+    const AccountId& account_id) {
+  SupervisedUserLoginFlow* new_flow = new SupervisedUserLoginFlow(account_id);
+  new_flow->SetHost(ChromeUserManager::Get()->GetUserFlow(account_id)->host());
+  ChromeUserManager::Get()->SetUserFlow(account_id, new_flow);
 }
 
-void ChromeLoginPerformer::SetupEasyUnlockUserFlow(const std::string& user_id) {
-  ChromeUserManager::Get()->SetUserFlow(user_id,
-                                        new EasyUnlockUserLoginFlow(user_id));
+void ChromeLoginPerformer::SetupEasyUnlockUserFlow(
+    const AccountId& account_id) {
+  ChromeUserManager::Get()->SetUserFlow(
+      account_id, new EasyUnlockUserLoginFlow(account_id));
 }
 
-bool ChromeLoginPerformer::CheckPolicyForUser(const std::string& user_id) {
+bool ChromeLoginPerformer::CheckPolicyForUser(const AccountId& account_id) {
   // Login is not allowed if policy could not be loaded for the account.
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   policy::DeviceLocalAccountPolicyService* policy_service =
       connector->GetDeviceLocalAccountPolicyService();
-  return policy_service && policy_service->IsPolicyAvailableForUser(user_id);
+  return policy_service &&
+         policy_service->IsPolicyAvailableForUser(account_id.GetUserEmail());
 }
 ////////////////////////////////////////////////////////////////////////////////
 // ChromeLoginPerformer, private:

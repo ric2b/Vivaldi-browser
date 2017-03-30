@@ -5,8 +5,10 @@
 #include "ui/views/controls/textfield/textfield.h"
 
 #include <string>
+#include <utility>
 
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/cursor/cursor.h"
@@ -17,6 +19,7 @@
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/canvas_painter.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
@@ -562,7 +565,7 @@ void Textfield::ExecuteCommand(int command_id) {
 }
 
 void Textfield::SetFocusPainter(scoped_ptr<Painter> focus_painter) {
-  focus_painter_ = focus_painter.Pass();
+  focus_painter_ = std::move(focus_painter);
 }
 
 bool Textfield::HasTextBeingDragged() {
@@ -856,22 +859,21 @@ bool Textfield::SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) {
 
 bool Textfield::GetDropFormats(
     int* formats,
-    std::set<OSExchangeData::CustomFormat>* custom_formats) {
+    std::set<ui::Clipboard::FormatType>* format_types) {
   if (!enabled() || read_only())
     return false;
   // TODO(msw): Can we support URL, FILENAME, etc.?
   *formats = ui::OSExchangeData::STRING;
   if (controller_)
-    controller_->AppendDropFormats(formats, custom_formats);
+    controller_->AppendDropFormats(formats, format_types);
   return true;
 }
 
 bool Textfield::CanDrop(const OSExchangeData& data) {
   int formats;
-  std::set<OSExchangeData::CustomFormat> custom_formats;
-  GetDropFormats(&formats, &custom_formats);
-  return enabled() && !read_only() &&
-      data.HasAnyFormat(formats, custom_formats);
+  std::set<ui::Clipboard::FormatType> format_types;
+  GetDropFormats(&formats, &format_types);
+  return enabled() && !read_only() && data.HasAnyFormat(formats, format_types);
 }
 
 int Textfield::OnDragUpdated(const ui::DropTargetEvent& event) {
@@ -950,6 +952,8 @@ void Textfield::GetAccessibleState(ui::AXViewState* state) {
   state->name = accessible_name_;
   if (read_only())
     state->AddStateFlag(ui::AX_STATE_READ_ONLY);
+  else
+    state->AddStateFlag(ui::AX_STATE_EDITABLE);
   if (text_input_type_ == ui::TEXT_INPUT_TYPE_PASSWORD) {
     state->AddStateFlag(ui::AX_STATE_PROTECTED);
     state->value = base::string16(text().size(), '*');
@@ -1155,8 +1159,8 @@ void Textfield::GetSelectionEndPoints(ui::SelectionBound* anchor,
   gfx::Rect r1 = render_text->GetCursorBounds(start_sel, true);
   gfx::Rect r2 = render_text->GetCursorBounds(sel, true);
 
-  anchor->SetEdge(r1.origin(), r1.bottom_left());
-  focus->SetEdge(r2.origin(), r2.bottom_left());
+  anchor->SetEdge(gfx::PointF(r1.origin()), gfx::PointF(r1.bottom_left()));
+  focus->SetEdge(gfx::PointF(r2.origin()), gfx::PointF(r2.bottom_left()));
 
   // Determine the SelectionBound's type for focus and anchor.
   // TODO(mfomitchev): Ideally we should have different logical directions for
@@ -1448,18 +1452,15 @@ void Textfield::InsertText(const base::string16& new_text) {
   OnAfterUserAction();
 }
 
-void Textfield::InsertChar(base::char16 ch, int flags) {
-  const int kControlModifierMask = ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
-                                   ui::EF_COMMAND_DOWN | ui::EF_ALTGR_DOWN |
-                                   ui::EF_MOD3_DOWN;
-
+void Textfield::InsertChar(const ui::KeyEvent& event) {
   // Filter out all control characters, including tab and new line characters,
-  // and all characters with Alt modifier. But allow characters with the AltGr
-  // modifier. On Windows AltGr is represented by Alt+Ctrl, and on Linux it's a
-  // different flag that we don't care about.
-  const bool should_insert_char =
-      ((ch >= 0x20 && ch < 0x7F) || ch > 0x9F) &&
-      (flags & kControlModifierMask) != ui::EF_ALT_DOWN;
+  // and all characters with Alt modifier (and Search on ChromeOS). But allow
+  // characters with the AltGr modifier. On Windows AltGr is represented by
+  // Alt+Ctrl or Right Alt, and on Linux it's a different flag that we don't
+  // care about.
+  const base::char16 ch = event.GetCharacter();
+  const bool should_insert_char = ((ch >= 0x20 && ch < 0x7F) || ch > 0x9F) &&
+                                  !ui::IsSystemKeyModifier(event.flags());
   if (GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE || !should_insert_char)
     return;
 
@@ -1497,7 +1498,7 @@ gfx::Rect Textfield::GetCaretBounds() const {
   return rect;
 }
 
-bool Textfield::GetCompositionCharacterBounds(uint32 index,
+bool Textfield::GetCompositionCharacterBounds(uint32_t index,
                                               gfx::Rect* rect) const {
   DCHECK(rect);
   if (!HasCompositionText())

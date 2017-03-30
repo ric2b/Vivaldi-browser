@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_COCOA_HANDOFF_ACTIVE_URL_OBSERVER_H_
 #define CHROME_BROWSER_UI_COCOA_HANDOFF_ACTIVE_URL_OBSERVER_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -37,24 +38,14 @@ class HandoffActiveURLObserver : public chrome::BrowserListObserver,
                         content::WebContents* new_contents,
                         int index,
                         int reason) override;
-  void TabStripModelDeleted() override;
 
   // content::WebContentsObserver
   void DidNavigateMainFrame(
       const content::LoadCommittedDetails& details,
       const content::FrameNavigateParams& params) override;
-  void WebContentsDestroyed() override;
 
-  // This method ensures that the instance is registered as an observer of the
-  // correct TabStripModel and WebContents for |active_browser_|.
-  void UpdateObservations();
-
-  // Makes this object start observing the TabStripModel, if it is not already
-  // doing so. This method is idempotent.
-  void StartObservingTabStripModel(TabStripModel* tab_strip_model);
-
-  // Makes this object stop observing the TabStripModel.
-  void StopObservingTabStripModel();
+  // Updates the active browser.
+  void SetActiveBrowser(Browser* active_browser);
 
   // Makes this object start observing the WebContents, if it is not already
   // doing so. This method is idempotent.
@@ -68,10 +59,6 @@ class HandoffActiveURLObserver : public chrome::BrowserListObserver,
 
   // Instances of this class should be owned by their |delegate_|.
   HandoffActiveURLObserverDelegate* delegate_;
-
-  // When this pointer is not nullptr, this object is registered as an observer
-  // of the TabStripModel.
-  TabStripModel* active_tab_strip_model_;
 
   // This pointer is always up to date, and points to the most recently
   // activated browser, or nullptr if no browsers exist.

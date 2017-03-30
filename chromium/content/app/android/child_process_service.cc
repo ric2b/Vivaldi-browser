@@ -11,6 +11,7 @@
 #include "base/android/library_loader/library_loader_hooks.h"
 #include "base/android/memory_pressure_listener_android.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/posix/global_descriptors.h"
 #include "content/child/child_thread_impl.h"
 #include "content/common/android/surface_texture_manager.h"
@@ -38,7 +39,7 @@ class SurfaceTextureManagerImpl : public SurfaceTextureManager,
   // |service| is the instance of
   // org.chromium.content.app.ChildProcessService.
   explicit SurfaceTextureManagerImpl(
-      const base::android::ScopedJavaLocalRef<jobject>& service)
+      const base::android::JavaRef<jobject>& service)
       : service_(service) {
     SurfaceTexturePeer::InitInstance(this);
     GpuSurfaceLookup::InitInstance(this);
@@ -122,6 +123,14 @@ class SurfaceTextureManagerImpl : public SurfaceTextureManager,
     return native_window;
   }
 
+  // Overridden from GpuSurfaceLookup:
+  gfx::ScopedJavaSurface AcquireJavaSurface(int surface_id) override {
+    JNIEnv* env = base::android::AttachCurrentThread();
+    return gfx::ScopedJavaSurface(
+        content::Java_ChildProcessService_getViewSurface(env, service_.obj(),
+                                                         surface_id));
+  }
+
  private:
   // The instance of org.chromium.content.app.ChildProcessService.
   base::android::ScopedJavaGlobalRef<jobject> service_;
@@ -132,13 +141,9 @@ class SurfaceTextureManagerImpl : public SurfaceTextureManager,
 // Chrome actually uses the renderer code path for all of its child
 // processes such as renderers, plugins, etc.
 void InternalInitChildProcess(JNIEnv* env,
-                              jclass clazz,
-                              jobject context,
-                              jobject service_in,
+                              const JavaParamRef<jobject>& service,
                               jint cpu_count,
                               jlong cpu_features) {
-  base::android::ScopedJavaLocalRef<jobject> service(env, service_in);
-
   // Set the CPU properties.
   android_setCpu(cpu_count, cpu_features);
   SurfaceTextureManager::SetInstance(new SurfaceTextureManagerImpl(service));
@@ -149,7 +154,7 @@ void InternalInitChildProcess(JNIEnv* env,
 }  // namespace <anonymous>
 
 void RegisterGlobalFileDescriptor(JNIEnv* env,
-                                  jclass clazz,
+                                  const JavaParamRef<jclass>& clazz,
                                   jint id,
                                   jint fd,
                                   jlong offset,
@@ -159,16 +164,14 @@ void RegisterGlobalFileDescriptor(JNIEnv* env,
 }
 
 void InitChildProcess(JNIEnv* env,
-                      jclass clazz,
-                      jobject context,
-                      jobject service,
+                      const JavaParamRef<jclass>& clazz,
+                      const JavaParamRef<jobject>& service,
                       jint cpu_count,
                       jlong cpu_features) {
-  InternalInitChildProcess(env, clazz, context, service, cpu_count,
-                           cpu_features);
+  InternalInitChildProcess(env, service, cpu_count, cpu_features);
 }
 
-void ExitChildProcess(JNIEnv* env, jclass clazz) {
+void ExitChildProcess(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   VLOG(0) << "ChildProcessService: Exiting child process.";
   base::android::LibraryLoaderExitHook();
   _exit(0);
@@ -178,7 +181,7 @@ bool RegisterChildProcessService(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
-void ShutdownMainThread(JNIEnv* env, jobject obj) {
+void ShutdownMainThread(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   ChildThreadImpl::ShutdownThread();
 }
 

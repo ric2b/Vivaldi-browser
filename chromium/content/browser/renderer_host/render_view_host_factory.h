@@ -5,7 +5,9 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_RENDER_VIEW_HOST_FACTORY_H_
 #define CONTENT_BROWSER_RENDERER_HOST_RENDER_VIEW_HOST_FACTORY_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -24,14 +26,13 @@ class RenderViewHostFactory {
   // Creates a RenderViewHost using the currently registered factory, or the
   // default one if no factory is registered. Ownership of the returned
   // pointer will be passed to the caller.
-  static RenderViewHost* Create(
-      SiteInstance* instance,
-      RenderViewHostDelegate* delegate,
-      RenderWidgetHostDelegate* widget_delegate,
-      int routing_id,
-      int main_frame_routing_id,
-      bool swapped_out,
-      bool hidden);
+  static RenderViewHost* Create(SiteInstance* instance,
+                                RenderViewHostDelegate* delegate,
+                                RenderWidgetHostDelegate* widget_delegate,
+                                int32_t routing_id,
+                                int32_t main_frame_routing_id,
+                                bool swapped_out,
+                                bool hidden);
 
   // Returns true if there is currently a globally-registered factory.
   static bool has_factory() {
@@ -48,8 +49,8 @@ class RenderViewHostFactory {
       SiteInstance* instance,
       RenderViewHostDelegate* delegate,
       RenderWidgetHostDelegate* widget_delegate,
-      int routing_id,
-      int main_frame_routing_id,
+      int32_t routing_id,
+      int32_t main_frame_routing_id,
       bool swapped_out) = 0;
 
   // Registers your factory to be called when new RenderViewHosts are created.

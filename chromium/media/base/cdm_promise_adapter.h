@@ -5,10 +5,12 @@
 #ifndef MEDIA_BASE_CDM_PROMISE_ADAPTER_H_
 #define MEDIA_BASE_CDM_PROMISE_ADAPTER_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/threading/thread_checker.h"
 #include "media/base/cdm_promise.h"
 #include "media/base/media_export.h"
 
@@ -34,7 +36,7 @@ class MEDIA_EXPORT CdmPromiseAdapter {
   // |system_code| and |error_message|.
   void RejectPromise(uint32_t promise_id,
                      MediaKeys::Exception exception_code,
-                     uint32 system_code,
+                     uint32_t system_code,
                      const std::string& error_message);
 
   // Rejects and clears all |promises_|.
@@ -51,6 +53,7 @@ class MEDIA_EXPORT CdmPromiseAdapter {
   uint32_t next_promise_id_;
   PromiseMap promises_;
 
+  base::ThreadChecker thread_checker_;
   DISALLOW_COPY_AND_ASSIGN(CdmPromiseAdapter);
 };
 

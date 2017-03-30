@@ -5,6 +5,7 @@
 #include "components/copresence/copresence_manager_impl.h"
 
 #include <map>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -50,10 +51,10 @@ bool SupportedTokenMedium(const TokenObservation& token) {
 
 CopresenceManagerImpl::CopresenceManagerImpl(CopresenceDelegate* delegate)
     : delegate_(delegate),
-      whispernet_init_callback_(base::Bind(
-          &CopresenceManagerImpl::WhispernetInitComplete,
-          // This callback gets cancelled when we are destroyed.
-          base::Unretained(this))),
+      whispernet_init_callback_(
+          base::Bind(&CopresenceManagerImpl::WhispernetInitComplete,
+                     // This callback gets cancelled when we are destroyed.
+                     base::Unretained(this))),
       init_failed_(false),
       state_(new CopresenceStateImpl),
       directive_handler_(new DirectiveHandlerImpl(
@@ -61,8 +62,8 @@ CopresenceManagerImpl::CopresenceManagerImpl(CopresenceDelegate* delegate)
           // will be destructed before the CopresenceState instance.
           base::Bind(&CopresenceStateImpl::UpdateDirectives,
                      base::Unretained(state_.get())))),
-      poll_timer_(new base::RepeatingTimer<CopresenceManagerImpl>),
-      audio_check_timer_(new base::RepeatingTimer<CopresenceManagerImpl>),
+      poll_timer_(new base::RepeatingTimer),
+      audio_check_timer_(new base::RepeatingTimer),
       queued_messages_by_token_(
           base::TimeDelta::FromSeconds(kQueuedMessageTimeout),
           kMaxQueuedMessages) {
@@ -115,8 +116,8 @@ void CopresenceManagerImpl::ExecuteReportRequest(
 
   // We'll need to modify the ReportRequest, so we make our own copy to send.
   scoped_ptr<ReportRequest> request_copy(new ReportRequest(request));
-  rpc_handler_->SendReportRequest(
-      request_copy.Pass(), app_id, auth_token, callback);
+  rpc_handler_->SendReportRequest(std::move(request_copy), app_id, auth_token,
+                                  callback);
 }
 
 

@@ -5,6 +5,9 @@
 #ifndef UI_EVENTS_PLATFORM_X11_X11_EVENT_SOURCE_H_
 #define UI_EVENTS_PLATFORM_X11_X11_EVENT_SOURCE_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/events_export.h"
 #include "ui/events/platform/platform_event_source.h"
@@ -47,6 +50,11 @@ class EVENTS_EXPORT X11EventSource : public PlatformEventSource {
   XDisplay* display() { return display_; }
 
  private:
+  // Extracts cookie data from |xevent| if it's of GenericType, and dispatches
+  // the event. This function also frees up the cookie data after dispatch is
+  // complete.
+  uint32_t ExtractCookieDataDispatchEvent(XEvent* xevent);
+
   // PlatformEventSource:
   uint32_t DispatchEvent(XEvent* xevent) override;
   void StopCurrentEventStream() override;

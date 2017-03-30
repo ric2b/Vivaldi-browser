@@ -4,11 +4,14 @@
 
 #include "ui/aura/test/test_screen.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/ime/input_method.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/native_widget_types.h"
@@ -33,17 +36,15 @@ TestScreen* TestScreen::Create(const gfx::Size& size) {
   return new TestScreen(gfx::Rect(size.IsEmpty() ? kDefaultSize : size));
 }
 
-// static
-TestScreen* TestScreen::CreateFullscreen() {
-  return new TestScreen(gfx::Rect(WindowTreeHost::GetNativeScreenSize()));
-}
-
 TestScreen::~TestScreen() {
 }
 
 WindowTreeHost* TestScreen::CreateHostForPrimaryDisplay() {
   DCHECK(!host_);
   host_ = WindowTreeHost::Create(gfx::Rect(display_.GetSizeInPixel()));
+  // Some tests don't correctly manage window focus/activation states.
+  // Makes sure InputMethod is default focused so that IME basics can work.
+  host_->GetInputMethod()->OnFocus();
   host_->window()->AddObserver(this);
   host_->InitHost();
   return host_;
@@ -71,7 +72,7 @@ void TestScreen::SetUIScale(float ui_scale) {
   ui_scale_ = ui_scale;
   gfx::Rect bounds_in_pixel(display_.GetSizeInPixel());
   gfx::Rect new_bounds = gfx::ToNearestRect(
-      gfx::ScaleRect(bounds_in_pixel, 1.0f / ui_scale));
+      gfx::ScaleRect(gfx::RectF(bounds_in_pixel), 1.0f / ui_scale));
   display_.SetScaleAndBounds(display_.device_scale_factor(), new_bounds);
   host_->SetRootTransform(GetRotationTransform() * GetUIScaleTransform());
 }
@@ -112,8 +113,8 @@ gfx::Transform TestScreen::GetUIScaleTransform() const {
 void TestScreen::OnWindowBoundsChanged(
     Window* window, const gfx::Rect& old_bounds, const gfx::Rect& new_bounds) {
   DCHECK_EQ(host_->window(), window);
-  display_.SetSize(gfx::ToFlooredSize(
-      gfx::ScaleSize(new_bounds.size(), display_.device_scale_factor())));
+  display_.SetSize(gfx::ScaleToFlooredSize(new_bounds.size(),
+                                           display_.device_scale_factor()));
 }
 
 void TestScreen::OnWindowDestroying(Window* window) {
@@ -130,6 +131,8 @@ gfx::NativeWindow TestScreen::GetWindowUnderCursor() {
 }
 
 gfx::NativeWindow TestScreen::GetWindowAtScreenPoint(const gfx::Point& point) {
+  if (!host_ || !host_->window())
+    return nullptr;
   return host_->window()->GetTopWindowContainingPoint(point);
 }
 
@@ -167,7 +170,7 @@ void TestScreen::RemoveObserver(gfx::DisplayObserver* observer) {
 TestScreen::TestScreen(const gfx::Rect& screen_bounds)
     : host_(NULL),
       ui_scale_(1.0f) {
-  static int64 synthesized_display_id = 2000;
+  static int64_t synthesized_display_id = 2000;
   display_.set_id(synthesized_display_id++);
   display_.SetScaleAndBounds(1.0f, screen_bounds);
 }

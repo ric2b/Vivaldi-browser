@@ -9,7 +9,7 @@
 
 #include "base/rand_util.h"
 #include "base/sys_byteorder.h"
-#include "net/spdy/hpack_constants.h"
+#include "net/spdy/hpack/hpack_constants.h"
 
 namespace net {
 
@@ -72,9 +72,9 @@ void HpackFuzzUtil::InitializeGeneratorContext(GeneratorContext* context) {
 }
 
 // static
-map<string, string> HpackFuzzUtil::NextGeneratedHeaderSet(
+SpdyHeaderBlock HpackFuzzUtil::NextGeneratedHeaderSet(
     GeneratorContext* context) {
-  map<string, string> headers;
+  SpdyHeaderBlock headers;
 
   size_t header_count = 1 + SampleExponential(kHeaderCountMean,
                                               kHeaderCountMax);
@@ -117,12 +117,13 @@ bool HpackFuzzUtil::NextHeaderBlock(Input* input,
   // ClusterFuzz may truncate input files if the fuzzer ran out of allocated
   // disk space. Be tolerant of these.
   CHECK_LE(input->offset, input->input.size());
-  if (input->remaining() < sizeof(uint32)) {
+  if (input->remaining() < sizeof(uint32_t)) {
     return false;
   }
 
-  size_t length = ntohl(*reinterpret_cast<const uint32*>(input->ptr()));
-  input->offset += sizeof(uint32);
+  size_t length =
+      base::NetToHost32(*reinterpret_cast<const uint32_t*>(input->ptr()));
+  input->offset += sizeof(uint32_t);
 
   if (input->remaining() < length) {
     return false;
@@ -134,15 +135,15 @@ bool HpackFuzzUtil::NextHeaderBlock(Input* input,
 
 // static
 string HpackFuzzUtil::HeaderBlockPrefix(size_t block_size) {
-  uint32 length = htonl(block_size);
-  return string(reinterpret_cast<char*>(&length), sizeof(uint32));
+  uint32_t length = base::HostToNet32(static_cast<uint32_t>(block_size));
+  return string(reinterpret_cast<char*>(&length), sizeof(uint32_t));
 }
 
 // static
 void HpackFuzzUtil::InitializeFuzzerContext(FuzzerContext* context) {
-  context->first_stage.reset(new HpackDecoder(ObtainHpackHuffmanTable()));
+  context->first_stage.reset(new HpackDecoder());
   context->second_stage.reset(new HpackEncoder(ObtainHpackHuffmanTable()));
-  context->third_stage.reset(new HpackDecoder(ObtainHpackHuffmanTable()));
+  context->third_stage.reset(new HpackDecoder());
 }
 
 // static
@@ -150,10 +151,10 @@ bool HpackFuzzUtil::RunHeaderBlockThroughFuzzerStages(FuzzerContext* context,
                                                       StringPiece input_block) {
   // First stage: Decode the input header block. This may fail on invalid input.
   if (!context->first_stage->HandleControlFrameHeadersData(
-      1, input_block.data(), input_block.size())) {
+          input_block.data(), input_block.size())) {
     return false;
   }
-  if (!context->first_stage->HandleControlFrameHeadersComplete(1)) {
+  if (!context->first_stage->HandleControlFrameHeadersComplete(nullptr)) {
     return false;
   }
   // Second stage: Re-encode the decoded header block. This must succeed.
@@ -165,24 +166,25 @@ bool HpackFuzzUtil::RunHeaderBlockThroughFuzzerStages(FuzzerContext* context,
   // don't require it. It's possible for the stage-two encoder to produce an
   // output which violates decoder size tolerances.
   if (!context->third_stage->HandleControlFrameHeadersData(
-          1, second_stage_out.data(), second_stage_out.length())) {
+          second_stage_out.data(), second_stage_out.length())) {
     return false;
   }
-  if (!context->third_stage->HandleControlFrameHeadersComplete(1)) {
+  if (!context->third_stage->HandleControlFrameHeadersComplete(nullptr)) {
     return false;
   }
   return true;
 }
 
 // static
-void HpackFuzzUtil::FlipBits(uint8* buffer, size_t buffer_length,
+void HpackFuzzUtil::FlipBits(uint8_t* buffer,
+                             size_t buffer_length,
                              size_t flip_per_thousand) {
-  uint64 buffer_bit_length = buffer_length * 8u;
-  uint64 bits_to_flip = flip_per_thousand * (1 + buffer_bit_length / 1024);
+  uint64_t buffer_bit_length = buffer_length * 8u;
+  uint64_t bits_to_flip = flip_per_thousand * (1 + buffer_bit_length / 1024);
 
   // Iteratively identify & flip offsets in the buffer bit-sequence.
-  for (uint64 i = 0; i != bits_to_flip; ++i) {
-    uint64 bit_offset = base::RandUint64() % buffer_bit_length;
+  for (uint64_t i = 0; i != bits_to_flip; ++i) {
+    uint64_t bit_offset = base::RandUint64() % buffer_bit_length;
     buffer[bit_offset / 8u] ^= (1 << (bit_offset % 8u));
   }
 }

@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_PRERENDER_PRERENDER_CONTENTS_H_
 #define CHROME_BROWSER_PRERENDER_PRERENDER_CONTENTS_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -158,7 +160,6 @@ class PrerenderContents : public content::NotificationObserver,
   PrerenderManager* prerender_manager() { return prerender_manager_; }
 
   base::string16 title() const { return title_; }
-  int32 page_id() const { return page_id_; }
   const GURL& prerender_url() const { return prerender_url_; }
   const content::Referrer& referrer() const { return referrer_; }
   bool has_stopped_loading() const { return has_stopped_loading_; }
@@ -264,7 +265,7 @@ class PrerenderContents : public content::NotificationObserver,
       const base::WeakPtr<PrerenderResourceThrottle>& throttle);
 
   // Increments the number of bytes fetched over the network for this prerender.
-  void AddNetworkBytes(int64 bytes);
+  void AddNetworkBytes(int64_t bytes);
 
  protected:
   PrerenderContents(PrerenderManager* prerender_manager,
@@ -316,7 +317,7 @@ class PrerenderContents : public content::NotificationObserver,
   // The session storage namespace id for use in matching. We must save it
   // rather than get it from the RenderViewHost since in the control group
   // we won't have a RenderViewHost.
-  int64 session_storage_namespace_id_;
+  int64_t session_storage_namespace_id_;
 
  private:
   class WebContentsDelegateImpl;
@@ -350,7 +351,6 @@ class PrerenderContents : public content::NotificationObserver,
   // own the contained RenderViewHost when the prerendered page is shown
   // in a WebContents.
   base::string16 title_;
-  int32 page_id_;
   GURL url_;
   content::NotificationRegistrar notification_registrar_;
 
@@ -402,7 +402,7 @@ class PrerenderContents : public content::NotificationObserver,
 
   // A running tally of the number of bytes this prerender has caused to be
   // transferred over the network for resources.  Updated with AddNetworkBytes.
-  int64 network_bytes_;
+  int64_t network_bytes_;
 
   DISALLOW_COPY_AND_ASSIGN(PrerenderContents);
 };

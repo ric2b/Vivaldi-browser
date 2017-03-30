@@ -4,57 +4,28 @@
 
 /**
  * @fileoverview
- * 'cr-settings-search-page' is the settings page containing search settings.
+ * 'settings-search-page' is the settings page containing search settings.
  *
  * Example:
  *
  *    <iron-animated-pages>
- *      <cr-settings-search-page prefs="{{prefs}}"></cr-settings-search-page>
+ *      <settings-search-page prefs="{{prefs}}"></settings-search-page>
  *      ... other pages ...
  *    </iron-animated-pages>
  *
  * @group Chrome Settings Elements
- * @element cr-settings-search-page
+ * @element settings-search-page
  */
 Polymer({
-  is: 'cr-settings-search-page',
+  is: 'settings-search-page',
 
   properties: {
     /**
-     * Route for the page.
+     * The current active route.
      */
-    route: String,
-
-    /**
-     * Whether the page is a subpage.
-     */
-    subpage: {
-      type: Boolean,
-      value: false,
-    },
-
-    /**
-     * ID of the page.
-     */
-    PAGE_ID: {
-      type: String,
-      value: 'search',
-    },
-
-    /**
-     * Title for the page header and navigation menu.
-     */
-    pageTitle: {
-      type: String,
-      value: function() { return loadTimeData.getString('searchPageTitle'); },
-    },
-
-    /**
-     * Name of the 'iron-icon' to be shown in the settings-page-header.
-     */
-    icon: {
-      type: Boolean,
-      value: 'search',
+    currentRoute: {
+      type: Object,
+      notify: true,
     },
 
     /**
@@ -108,7 +79,7 @@ Polymer({
   },
 
   /** @private */
-  manageSearchEngines_: function() {
-    MoreRouting.navigateTo('search-engines');
+  onSearchEnginesTap_: function() {
+    this.$.pages.setSubpageChain(['search-engines']);
   },
 });

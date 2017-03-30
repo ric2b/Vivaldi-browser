@@ -5,6 +5,7 @@
 #include "content/browser/loader/cross_site_resource_handler.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -16,6 +17,8 @@
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/site_instance_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_request_id.h"
@@ -71,13 +74,12 @@ void OnCrossSiteResponseHelper(const CrossSiteResponseParams& params) {
       // We should only swap processes for subframes in --site-per-process mode.
       // CrossSiteResourceHandler is not installed on subframe requests in
       // default Chrome.
-      CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSitePerProcess));
+      CHECK(SiteIsolationPolicy::AreCrossProcessFramesPossible());
     }
     rfh->OnCrossSiteResponse(
-        params.global_request_id, cross_site_transferring_request.Pass(),
-        params.transfer_url_chain, params.referrer,
-        params.page_transition, params.should_replace_current_entry);
+        params.global_request_id, std::move(cross_site_transferring_request),
+        params.transfer_url_chain, params.referrer, params.page_transition,
+        params.should_replace_current_entry);
   } else if (leak_requests_for_testing_ && cross_site_transferring_request) {
     // Some unit tests expect requests to be leaked in this case, so they can
     // pass them along manually.
@@ -86,25 +88,23 @@ void OnCrossSiteResponseHelper(const CrossSiteResponseParams& params) {
 }
 
 // Returns whether a transfer is needed by doing a check on the UI thread.
-bool CheckNavigationPolicyOnUI(GURL url, int process_id, int render_frame_id) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kSitePerProcess));
+CrossSiteResourceHandler::NavigationDecision
+CheckNavigationPolicyOnUI(GURL real_url, int process_id, int render_frame_id) {
+  CHECK(SiteIsolationPolicy::AreCrossProcessFramesPossible());
   RenderFrameHostImpl* rfh =
       RenderFrameHostImpl::FromID(process_id, render_frame_id);
+
+  // Without a valid RFH against which to check, we must cancel the request,
+  // to prevent the resource at |url| from being delivered to a potentially
+  // unsuitable renderer process.
   if (!rfh)
-    return false;
+    return CrossSiteResourceHandler::NavigationDecision::CANCEL_REQUEST;
 
-  // A transfer is not needed if the current SiteInstance doesn't yet have a
-  // site.  This is the case for tests that use NavigateToURL.
-  if (!rfh->GetSiteInstance()->HasSite())
-    return false;
-
-  // TODO(nasko): This check is very simplistic and is used temporarily only
-  // for --site-per-process. It should be updated to match the check performed
-  // by RenderFrameHostManager::UpdateStateForNavigate.
-  return !SiteInstance::IsSameWebSite(
-      rfh->GetSiteInstance()->GetBrowserContext(),
-      rfh->GetSiteInstance()->GetSiteURL(), url);
+  RenderFrameHostManager* manager = rfh->frame_tree_node()->render_manager();
+  if (manager->IsRendererTransferNeededForNavigation(rfh, real_url))
+    return CrossSiteResourceHandler::NavigationDecision::TRANSFER_REQUIRED;
+  else
+    return CrossSiteResourceHandler::NavigationDecision::USE_EXISTING_RENDERER;
 }
 
 }  // namespace
@@ -112,13 +112,12 @@ bool CheckNavigationPolicyOnUI(GURL url, int process_id, int render_frame_id) {
 CrossSiteResourceHandler::CrossSiteResourceHandler(
     scoped_ptr<ResourceHandler> next_handler,
     net::URLRequest* request)
-    : LayeredResourceHandler(request, next_handler.Pass()),
+    : LayeredResourceHandler(request, std::move(next_handler)),
       has_started_response_(false),
       in_cross_site_transition_(false),
       completed_during_transition_(false),
       did_defer_(false),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 CrossSiteResourceHandler::~CrossSiteResourceHandler() {
   // Cleanup back-pointer stored on the request info.
@@ -163,12 +162,12 @@ bool CrossSiteResourceHandler::OnNormalResponseStarted(
 
   ResourceRequestInfoImpl* info = GetRequestInfo();
 
-  // We only need to pause the response if a transfer to a different process is
-  // required.  Other cross-process navigations can proceed immediately, since
-  // we run the unload handler at commit time.
-  // Note that a process swap may no longer be necessary if we transferred back
-  // into the original process due to a redirect.
-  bool should_transfer =
+  // The content embedder can decide that a transfer to a different process is
+  // required for this URL.  If so, pause the response now.  Other cross process
+  // navigations can proceed immediately, since we run the unload handler at
+  // commit time.  Note that a process swap may no longer be necessary if we
+  // transferred back into the original process due to a redirect.
+  bool definitely_transfer =
       GetContentClient()->browser()->ShouldSwapProcessesForRedirect(
           info->GetContext(), request()->original_url(), request()->url());
 
@@ -196,40 +195,49 @@ bool CrossSiteResourceHandler::OnNormalResponseStarted(
                                             ask_for_target);
   }
 
-  // When the --site-per-process flag is passed, we transfer processes for
-  // cross-site navigations. This is skipped if a transfer is already required
-  // or for WebUI processes for now, since pages like the NTP host multiple
-  // cross-site WebUI iframes.
-  if (!should_transfer &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSitePerProcess) &&
+  if (definitely_transfer) {
+    // Now that we know a transfer is needed and we have something to commit, we
+    // pause to let the UI thread set up the transfer.
+    StartCrossSiteTransition(response);
+
+    // Defer loading until after the new renderer process has issued a
+    // corresponding request.
+    *defer = true;
+    OnDidDefer();
+    return true;
+  }
+
+  // In the site-per-process model, we may also decide (independently from the
+  // content embedder's ShouldSwapProcessesForRedirect decision above) that a
+  // process transfer is needed.  For that we need to consult the navigation
+  // policy on the UI thread, so pause the response.  Process transfers are
+  // skipped for WebUI processes for now, since e.g. chrome://settings has
+  // multiple "cross-site" chrome:// frames, and that doesn't yet work cross-
+  // process.
+  if (SiteIsolationPolicy::AreCrossProcessFramesPossible() &&
       !ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
           info->GetChildID())) {
     return DeferForNavigationPolicyCheck(info, response, defer);
   }
 
-  if (!should_transfer)
-    return next_handler_->OnResponseStarted(response,
-                                            defer,
-                                            open_when_done,
-                                            ask_for_target);
-
-  // Now that we know a transfer is needed and we have something to commit, we
-  // pause to let the UI thread set up the transfer.
-  StartCrossSiteTransition(response);
-
-  // Defer loading until after the new renderer process has issued a
-  // corresponding request.
-  *defer = true;
-  OnDidDefer();
-  return true;
+  // No deferral needed. Pass the response through.
+  return next_handler_->OnResponseStarted(response, defer,
+                                          open_when_done,
+                                          ask_for_target);
 }
 
-void CrossSiteResourceHandler::ResumeOrTransfer(bool is_transfer) {
-  if (is_transfer) {
-    StartCrossSiteTransition(response_.get());
-  } else {
-    ResumeResponse();
+void CrossSiteResourceHandler::ResumeOrTransfer(NavigationDecision decision) {
+  switch (decision) {
+    case NavigationDecision::CANCEL_REQUEST:
+      // TODO(nick): What kind of cleanup do we need here?
+      controller()->Cancel();
+      break;
+    case NavigationDecision::USE_EXISTING_RENDERER:
+      ResumeResponse();
+      break;
+    case NavigationDecision::TRANSFER_REQUIRED:
+      StartCrossSiteTransition(response_.get());
+      break;
   }
 }
 

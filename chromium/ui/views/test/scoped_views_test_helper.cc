@@ -4,9 +4,12 @@
 
 #include "ui/views/test/scoped_views_test_helper.h"
 
+#include <utility>
+
 #include "base/message_loop/message_loop.h"
 #include "ui/base/ime/input_method_initializer.h"
 #include "ui/compositor/test/context_factories_for_test.h"
+#include "ui/views/test/platform_test_helper.h"
 #include "ui/views/test/test_views_delegate.h"
 #include "ui/views/test/views_test_helper.h"
 
@@ -18,7 +21,8 @@ ScopedViewsTestHelper::ScopedViewsTestHelper()
 
 ScopedViewsTestHelper::ScopedViewsTestHelper(
     scoped_ptr<TestViewsDelegate> views_delegate)
-    : views_delegate_(views_delegate.Pass()) {
+    : views_delegate_(std::move(views_delegate)),
+      platform_test_helper_(PlatformTestHelper::Create()) {
   // The ContextFactory must exist before any Compositors are created.
   bool enable_pixel_output = false;
   ui::ContextFactory* context_factory =
@@ -39,6 +43,8 @@ ScopedViewsTestHelper::~ScopedViewsTestHelper() {
 
   ui::TerminateContextFactoryForTests();
   views_delegate_.reset();
+
+  platform_test_helper_.reset();
 }
 
 gfx::NativeWindow ScopedViewsTestHelper::GetContext() {

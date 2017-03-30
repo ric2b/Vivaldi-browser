@@ -5,7 +5,7 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//chrome/version.gni")  # TODO layering violation
-import("//media/cdm/ppapi/cdm_adapter.gni")
+import("//media/cdm/ppapi/ppapi_cdm_adapter.gni")
 import("//third_party/widevine/cdm/widevine.gni")
 
 widevine_arch = current_cpu
@@ -87,6 +87,7 @@ if (widevine_cdm_binary_files != []) {
     deps = [
       ":version_h",
       "//base",
+      "//build/config/sanitizers:deps",
     ]
 
     if (is_mac) {
@@ -113,6 +114,7 @@ if ((is_chrome_branded || enable_widevine) && enable_pepper_cdms) {
   # Produce and compile the .rc file.
   process_version("widevinecdmadapter_resources") {
     visibility = [ ":*" ]
+    template_file = chrome_version_rc_template
     sources = [
       "BRANDING",
       "widevinecdmadapter.ver",
@@ -120,18 +122,18 @@ if ((is_chrome_branded || enable_widevine) && enable_pepper_cdms) {
     output = "$target_gen_dir/widevinecdmadapter_version.rc"
   }
 
-  cdm_adapter("widevinecdmadapter") {
+  ppapi_cdm_adapter("widevinecdmadapter") {
+    defines = []
     deps = [
-      ":widevinecdmadapter_resources",
-      ":widevinecdm",
       ":version_h",
+      ":widevinecdm",
+      ":widevinecdmadapter_resources",
       "//ppapi/cpp",
     ]
 
     if (is_linux) {
       ldflags =
           [ rebase_path("$root_out_dir/libwidevinecdm.so", root_build_dir) ]
-      libs = [ "rt" ]
     } else if (is_win) {
       ldflags =
           [ rebase_path("$root_out_dir/widevinecdm.dll.lib", root_build_dir) ]
@@ -152,7 +154,7 @@ source_set("widevine_test_license_server") {
   if (is_chrome_branded && is_linux) {
     deps = [
       # TODO(jrummell)
-      # This target should be removed and targets should have datadeps on this target:
+      # This target should be removed and targets should have data_deps on this target:
       #"//third_party/widevine/test/license_server/license_server.gyp:test_license_server"
     ]
   }

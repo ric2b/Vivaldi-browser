@@ -4,7 +4,12 @@
 
 #include "chrome/browser/media/native_desktop_media_list.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -133,8 +138,8 @@ ACTION_P2(CheckListSize, model, expected_list_size) {
 }
 
 ACTION_P(QuitMessageLoop, message_loop) {
-  message_loop->task_runner()->PostTask(FROM_HERE,
-                                        base::MessageLoop::QuitClosure());
+  message_loop->task_runner()->PostTask(
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
 class DesktopMediaListTest : public testing::Test {

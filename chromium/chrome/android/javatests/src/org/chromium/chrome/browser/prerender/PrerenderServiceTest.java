@@ -11,6 +11,7 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseActivityInstrumentationTestCase;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -24,8 +25,6 @@ import org.chromium.chrome.test.util.TestHttpServerClient;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TouchCommon;
-
-import java.util.concurrent.Callable;
 
 /**
  * A test suite for the ChromeBowserPrerenderService. This makes sure the service initializes the
@@ -60,6 +59,7 @@ public class PrerenderServiceTest extends
      * @throws InterruptedException
      */
     @SmallTest
+    @DisabledTest
     @Feature({"PrerenderService"})
     public void testBindingAndInitializing() throws InterruptedException {
         if (SysUtils.isLowEndDevice()) return;
@@ -77,6 +77,7 @@ public class PrerenderServiceTest extends
      * @Feature({"PrerenderService"})
      * @SmallTest
      */
+    @DisabledTest
     public void testPrerenderingSameUrl() throws InterruptedException {
         if (SysUtils.isLowEndDevice()) return;
         ensureBindingAndInitializingUI();
@@ -91,6 +92,7 @@ public class PrerenderServiceTest extends
      * @throws InterruptedException
      */
     @SmallTest
+    @DisabledTest
     @Feature({"PrerenderService"})
     public void testPrerenderingDifferentUrl() throws InterruptedException {
         if (SysUtils.isLowEndDevice()) return;
@@ -105,6 +107,7 @@ public class PrerenderServiceTest extends
      * @throws Exception
      */
     @SmallTest
+    @DisabledTest
     @Feature({"PrerenderService"})
     public void testPrerenderingRedirectUrl() throws Exception {
         if (SysUtils.isLowEndDevice()) return;
@@ -116,17 +119,6 @@ public class PrerenderServiceTest extends
     private void ensureBindingAndInitializingUI() {
         assertNotNull(getActivity());
         // TODO(yusufo): Add a check for native library loaded notification being received.
-
-        // TODO(dtrainor): Reenable this once ChromeNotificationCenter can handle non-Activity
-        // contexts.
-        /*
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return WarmupManager.getInstance().hasBuiltViewHierarchy();
-            }
-        }));
-        */
     }
 
     private void ensurePrerendering(final String url) throws InterruptedException {
@@ -144,15 +136,9 @@ public class PrerenderServiceTest extends
     private void loadChromeWithUrl(final String url) throws InterruptedException {
         assertNotNull(getActivity());
         ThreadUtils.runOnUiThreadBlocking(new Runnable(){
+            @Override
             public void run() {
                 ((EditText) getActivity().findViewById(R.id.url_to_load)).setText(url);
-            }
-        });
-        // TODO(dtrainor): Make this assertTrue once ChromeNotificationCenter can handle
-        // non-Activity contexts.
-        ThreadUtils.runOnUiThreadBlocking(new Runnable(){
-            public void run() {
-                assertFalse(WarmupManager.getInstance().hasBuiltViewHierarchy());
             }
         });
         final ChromeActivity chromeActivity = ActivityUtils.waitForActivity(
@@ -165,21 +151,17 @@ public class PrerenderServiceTest extends
                                         R.id.load_button));
                             }
                         });
-        ThreadUtils.runOnUiThreadBlocking(new Runnable(){
-            public void run() {
-                assertFalse(WarmupManager.getInstance().hasBuiltViewHierarchy());
-            }
-        });
         // TODO(yusufo): We should be using the NotificationCenter for checking the page loading.
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return chromeActivity.getActivityTab() != null
                         && chromeActivity.getActivityTab().isLoadingAndRenderingDone();
             }
-        }));
+        });
         assertTrue(chromeActivity.getActivityTab().getUrl().equals(url));
-        ThreadUtils.runOnUiThreadBlocking(new Runnable(){
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
             public void run() {
                 assertFalse(WarmupManager.getInstance().hasAnyPrerenderedUrl());
             }
@@ -187,18 +169,11 @@ public class PrerenderServiceTest extends
     }
 
     private void assertServiceHasPrerenderedUrl(final String url) throws InterruptedException {
-        final Callable<Boolean> callable = new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return WarmupManager.getInstance().hasPrerenderedUrl(url);
-            }
-        };
-
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return ThreadUtils.runOnUiThreadBlockingNoException(callable);
+                return WarmupManager.getInstance().hasPrerenderedUrl(url);
             }
-        }));
+        });
     }
 }

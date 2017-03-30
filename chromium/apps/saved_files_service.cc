@@ -4,11 +4,12 @@
 
 #include "apps/saved_files_service.h"
 
+#include <stdint.h>
 #include <algorithm>
 #include <map>
+#include <utility>
 
 #include "apps/saved_files_service_factory.h"
-#include "base/basictypes.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/value_conversions.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -17,7 +18,6 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
-#include "extensions/browser/extension_util.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permission_set.h"
@@ -47,7 +47,7 @@ const char kFileEntryIsDirectory[] = "is_directory";
 const char kFileEntrySequenceNumber[] = "sequence_number";
 
 const size_t kMaxSavedFileEntries = 500;
-const int kMaxSequenceNumber = kint32max;
+const int kMaxSequenceNumber = INT32_MAX;
 
 // These might be different to the constant values in tests.
 size_t g_max_saved_file_entries = kMaxSavedFileEntries;
@@ -261,8 +261,7 @@ const SavedFileEntry* SavedFilesService::GetFileEntry(
 
 void SavedFilesService::ClearQueueIfNoRetainPermission(
     const Extension* extension) {
-  if (extensions::util::IsEphemeralApp(extension->id(), profile_) ||
-      !extension->permissions_data()->active_permissions()->HasAPIPermission(
+  if (!extension->permissions_data()->active_permissions().HasAPIPermission(
           APIPermission::kFileSystemRetainEntries)) {
     ClearQueue(extension);
   }
@@ -275,10 +274,9 @@ void SavedFilesService::ClearQueue(const extensions::Extension* extension) {
 
 SavedFilesService::SavedFiles* SavedFilesService::Get(
     const std::string& extension_id) const {
-  base::ScopedPtrMap<std::string, scoped_ptr<SavedFiles>>::const_iterator it =
-      extension_id_to_saved_files_.find(extension_id);
+  auto it = extension_id_to_saved_files_.find(extension_id);
   if (it != extension_id_to_saved_files_.end())
-    return it->second;
+    return it->second.get();
 
   return NULL;
 }
@@ -292,7 +290,8 @@ SavedFilesService::SavedFiles* SavedFilesService::GetOrInsert(
   scoped_ptr<SavedFiles> scoped_saved_files(
       new SavedFiles(profile_, extension_id));
   saved_files = scoped_saved_files.get();
-  extension_id_to_saved_files_.insert(extension_id, scoped_saved_files.Pass());
+  extension_id_to_saved_files_.insert(
+      std::make_pair(extension_id, std::move(scoped_saved_files)));
   return saved_files;
 }
 
@@ -424,7 +423,7 @@ void SavedFilesService::SavedFiles::LoadSavedFileEntriesFromPreferences() {
     const std::string& id = file_entry->id;
     saved_file_lru_.insert(
         std::make_pair(file_entry->sequence_number, file_entry.get()));
-    registered_file_entries_.add(id, file_entry.Pass());
+    registered_file_entries_.add(id, std::move(file_entry));
   }
 }
 

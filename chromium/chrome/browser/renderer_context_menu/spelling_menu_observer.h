@@ -5,9 +5,13 @@
 #ifndef CHROME_BROWSER_RENDERER_CONTEXT_MENU_SPELLING_MENU_OBSERVER_H_
 #define CHROME_BROWSER_RENDERER_CONTEXT_MENU_SPELLING_MENU_OBSERVER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_member.h"
 #include "base/strings/string16.h"
@@ -59,8 +63,8 @@ class SpellingMenuObserver : public RenderViewContextMenuObserver {
       const std::vector<SpellCheckResult>& results);
 
  private:
-  // The callback function for base::RepeatingTimer<SpellingMenuClient>. This
-  // function updates the "loading..." animation in the context-menu item.
+  // The callback function for base::RepeatingTimer. This function updates the
+  // "loading..." animation in the context-menu item.
   void OnAnimationTimerExpired();
 
   // The interface to add a context-menu item and update it. This class uses
@@ -90,7 +94,7 @@ class SpellingMenuObserver : public RenderViewContextMenuObserver {
 
   // The hash identifier for the misspelled word. Used for collecting user
   // feedback to spellcheck suggestions.
-  uint32 misspelling_hash_;
+  uint32_t misspelling_hash_;
 
   // The string representing the result of this call. This string is a
   // suggestion when this call finished successfully. Otherwise it is error
@@ -104,7 +108,7 @@ class SpellingMenuObserver : public RenderViewContextMenuObserver {
   scoped_ptr<SpellingServiceClient> client_;
 
   // A timer used for loading animation.
-  base::RepeatingTimer<SpellingMenuObserver> animation_timer_;
+  base::RepeatingTimer animation_timer_;
 
   // Flag indicating whether online spelling correction service is enabled. When
   // this variable is true and we right-click a misspelled word, we send a

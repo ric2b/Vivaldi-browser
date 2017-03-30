@@ -16,6 +16,7 @@
 
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "ui/gfx/geometry/insets.h"
 
 namespace gfx {
@@ -242,6 +243,13 @@ std::string Rect::ToString() const {
   return base::StringPrintf("%s %s",
                             origin().ToString().c_str(),
                             size().ToString().c_str());
+}
+
+bool Rect::ApproximatelyEqual(const Rect& rect, int tolerance) const {
+  return std::abs(x() - rect.x()) <= tolerance &&
+         std::abs(y() - rect.y()) <= tolerance &&
+         std::abs(right() - rect.right()) <= tolerance &&
+         std::abs(bottom() - rect.bottom()) <= tolerance;
 }
 
 Rect operator+(const Rect& lhs, const Vector2d& rhs) {

@@ -69,7 +69,7 @@ class ManagePasswordsDecorationTest : public CocoaTest {
 
 TEST_F(ManagePasswordsDecorationTest, ExecutesManagePasswordsCommandOnClick) {
   EXPECT_TRUE(decoration()->AcceptsMousePress());
-  EXPECT_FALSE(decoration()->OnMousePressed(NSRect(), NSPoint()));
+  EXPECT_TRUE(decoration()->OnMousePressed(NSRect(), NSPoint()));
   EXPECT_EQ(IDC_MANAGE_PASSWORDS_FOR_PAGE, commandDelegate()->id());
 }
 
@@ -139,23 +139,6 @@ INSTANTIATE_TEST_CASE_P(
     ManagerActiveOnPageAndEnabled,
     ManagePasswordsDecorationStateTest,
     ::testing::ValuesIn(managerActiveOnPageAndEnabledTests));
-
-ManagePasswordsTestCase managerActiveOnPageAndBlacklistedTests[] = {
-    {.state = password_manager::ui::BLACKLIST_STATE,
-     .active = true,
-     .visible = true,
-     .image = IDR_SAVE_PASSWORD_DISABLED_ACTIVE,
-     .toolTip = IDS_PASSWORD_MANAGER_TOOLTIP_MANAGE},
-    {.state = password_manager::ui::BLACKLIST_STATE,
-     .active = false,
-     .visible = true,
-     .image = IDR_SAVE_PASSWORD_DISABLED_INACTIVE,
-     .toolTip = IDS_PASSWORD_MANAGER_TOOLTIP_MANAGE}};
-
-INSTANTIATE_TEST_CASE_P(
-    ManagerActiveOnPageAndBlacklisted,
-    ManagePasswordsDecorationStateTest,
-    ::testing::ValuesIn(managerActiveOnPageAndBlacklistedTests));
 
 ManagePasswordsTestCase managerActiveOnPageAndPendingTests[] = {
     {.state = password_manager::ui::PENDING_PASSWORD_STATE,

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/threading/non_thread_safe.h"
@@ -74,10 +74,9 @@ struct NET_EXPORT_PRIVATE DnsConfig {
 
   void CopyIgnoreHosts(const DnsConfig& src);
 
-  // Returns a Value representation of |this|.  Caller takes ownership of the
-  // returned Value.  For performance reasons, the Value only contains the
-  // number of hosts rather than the full list.
-  base::Value* ToValue() const;
+  // Returns a Value representation of |this|. For performance reasons, the
+  // Value only contains the number of hosts rather than the full list.
+  scoped_ptr<base::Value> ToValue() const;
 
   bool IsValid() const {
     return !nameservers.empty();
@@ -157,7 +156,7 @@ class NET_EXPORT_PRIVATE DnsConfigService
     DNS_CONFIG_WATCH_MAX,
   };
 
- // Immediately attempts to read the current configuration.
+  // Immediately attempts to read the current configuration.
   virtual void ReadNow() = 0;
   // Registers system watchers. Returns true iff succeeds.
   virtual bool StartWatching() = 0;
@@ -204,7 +203,7 @@ class NET_EXPORT_PRIVATE DnsConfigService
   base::TimeTicks last_sent_empty_time_;
 
   // Started in Invalidate*, cleared in On*Read.
-  base::OneShotTimer<DnsConfigService> timer_;
+  base::OneShotTimer timer_;
 
   NameServerClassifier classifier_;
 

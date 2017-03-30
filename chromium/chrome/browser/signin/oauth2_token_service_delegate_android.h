@@ -10,9 +10,12 @@
 #include <string>
 
 #include "base/android/jni_weak_ref.h"
+#include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
+#include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_token_service_delegate.h"
@@ -35,16 +38,13 @@ class OAuth2TokenServiceDelegateAndroid : public OAuth2TokenServiceDelegate {
   static OAuth2TokenServiceDelegateAndroid* Create();
 
   // Returns a reference to the Java instance of this service.
-  static jobject GetForProfile(JNIEnv* env,
-                               jclass clazz,
-                               jobject j_profile_android);
+  static base::android::ScopedJavaLocalRef<jobject>
+  GetForProfile(JNIEnv* env, jclass clazz, jobject j_profile_android);
 
   // Called by the TestingProfile class to disable account validation in
   // tests.  This prevents the token service from trying to look up system
   // accounts which requires special permission.
   static void set_is_testing_profile() { is_testing_profile_ = true; }
-
-  void Initialize();
 
   // OAuth2TokenServiceDelegate overrides:
   bool RefreshTokenIsAvailable(const std::string& account_id) const override;
@@ -53,43 +53,51 @@ class OAuth2TokenServiceDelegateAndroid : public OAuth2TokenServiceDelegate {
                        const GoogleServiceAuthError& error) override;
   std::vector<std::string> GetAccounts() override;
 
-  // Lists account at the OS level.
-  std::vector<std::string> GetSystemAccounts();
+  // Lists account names at the OS level.
+  std::vector<std::string> GetSystemAccountNames();
 
-  void ValidateAccounts(JNIEnv* env,
-                        jobject obj,
-                        jstring current_account,
-                        jboolean force_notifications);
+  void ValidateAccounts(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& current_account,
+      jboolean force_notifications);
 
   // Takes a the signed in sync account as well as all the other
   // android account ids and check the token status of each.  If
   // |force_notifications| is true, TokenAvailable notifications will
   // be sent anyway, even if the account was already known.
-  void ValidateAccounts(const std::string& signed_in_account,
+  void ValidateAccounts(const std::string& signed_in_account_id,
                         bool force_notifications);
 
   // Triggers a notification to all observers of the OAuth2TokenService that a
   // refresh token is now available. This may cause observers to retry
   // operations that require authentication.
-  virtual void FireRefreshTokenAvailableFromJava(JNIEnv* env,
-                                                 jobject obj,
-                                                 const jstring account_name);
+  virtual void FireRefreshTokenAvailableFromJava(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& account_name);
   // Triggers a notification to all observers of the OAuth2TokenService that a
   // refresh token is now available.
-  virtual void FireRefreshTokenRevokedFromJava(JNIEnv* env,
-                                               jobject obj,
-                                               const jstring account_name);
+  virtual void FireRefreshTokenRevokedFromJava(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& account_name);
   // Triggers a notification to all observers of the OAuth2TokenService that all
   // refresh tokens have now been loaded.
-  virtual void FireRefreshTokensLoadedFromJava(JNIEnv* env, jobject obj);
+  virtual void FireRefreshTokensLoadedFromJava(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   // Overridden from OAuth2TokenService to complete signout of all
   // OA2TService aware accounts.
   void RevokeAllCredentials() override;
 
+  void LoadCredentials(const std::string& primary_account_id) override;
+
  protected:
   friend class ProfileOAuth2TokenServiceFactory;
-  OAuth2TokenServiceDelegateAndroid();
+  OAuth2TokenServiceDelegateAndroid(
+      AccountTrackerService* account_tracker_service);
   ~OAuth2TokenServiceDelegateAndroid() override;
 
   OAuth2AccessTokenFetcher* CreateAccessTokenFetcher(
@@ -112,27 +120,40 @@ class OAuth2TokenServiceDelegateAndroid : public OAuth2TokenServiceDelegate {
   void FireRefreshTokensLoaded() override;
 
  private:
+  std::string MapAccountIdToAccountName(const std::string& account_id) const;
+  std::string MapAccountNameToAccountId(const std::string& account_name) const;
+
   struct ErrorInfo {
     ErrorInfo();
     explicit ErrorInfo(const GoogleServiceAuthError& error);
     GoogleServiceAuthError error;
   };
 
-  // Return whether |signed_in_account| is valid and we have access
-  // to all the tokens in |curr_account_ids|. If |force_notifications| is true,
+  enum RefreshTokenLoadStatus {
+    RT_LOAD_NOT_START,
+    RT_WAIT_FOR_VALIDATION,
+    RT_HAS_BEEN_VALIDATED,
+    RT_LOADED
+  };
+
+  // Return whether |signed_in_id| is valid and we have access
+  // to all the tokens in |curr_ids|. If |force_notifications| is true,
   // TokenAvailable notifications will be sent anyway, even if the account was
   // already known.
-  bool ValidateAccounts(const std::string& signed_in_account,
-                        const std::vector<std::string>& prev_account_ids,
-                        const std::vector<std::string>& curr_account_ids,
-                        std::vector<std::string>& refreshed_ids,
-                        std::vector<std::string>& revoked_ids,
+  bool ValidateAccounts(const std::string& signed_in_id,
+                        const std::vector<std::string>& prev_ids,
+                        const std::vector<std::string>& curr_ids,
+                        std::vector<std::string>* refreshed_ids,
+                        std::vector<std::string>* revoked_ids,
                         bool force_notifications);
 
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;
 
   // Maps account_id to the last error for that account.
   std::map<std::string, ErrorInfo> errors_;
+
+  AccountTrackerService* account_tracker_service_;
+  RefreshTokenLoadStatus fire_refresh_token_loaded_;
 
   static bool is_testing_profile_;
 

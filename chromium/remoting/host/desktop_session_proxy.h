@@ -5,11 +5,14 @@
 #ifndef REMOTING_HOST_DESKTOP_SESSION_PROXY_H_
 #define REMOTING_HOST_DESKTOP_SESSION_PROXY_H_
 
+#include <stdint.h>
+
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/shared_memory_handle.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/sequenced_task_runner_helpers.h"
@@ -20,6 +23,7 @@
 #include "remoting/host/screen_resolution.h"
 #include "remoting/proto/event.pb.h"
 #include "remoting/protocol/clipboard_stub.h"
+#include "remoting/protocol/errors.h"
 #include "third_party/webrtc/modules/desktop_capture/screen_capturer.h"
 
 namespace base {
@@ -89,7 +93,7 @@ class DesktopSessionProxy
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
-  void OnChannelConnected(int32 peer_pid) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
 
   // Connects to the desktop session agent.
@@ -101,7 +105,7 @@ class DesktopSessionProxy
   void DetachFromDesktop();
 
   // Disconnects the client session that owns |this|.
-  void DisconnectSession();
+  void DisconnectSession(protocol::ErrorCode error);
 
   // Stores |audio_capturer| to be used to post captured audio packets. Called
   // on the |audio_capture_task_runner_| thread.
@@ -150,8 +154,8 @@ class DesktopSessionProxy
 
   // Registers a new shared buffer created by the desktop process.
   void OnCreateSharedBuffer(int id,
-                            IPC::PlatformFileForTransit handle,
-                            uint32 size);
+                            base::SharedMemoryHandle handle,
+                            uint32_t size);
 
   // Drops a cached reference to the shared buffer.
   void OnReleaseSharedBuffer(int id);

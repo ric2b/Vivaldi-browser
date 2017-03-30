@@ -4,9 +4,12 @@
 
 #include "components/omnibox/browser/search_provider.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
@@ -23,12 +26,12 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/google/core/browser/google_switches.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
@@ -527,14 +530,14 @@ void SearchProviderTest::CheckMatches(const std::string& description,
   SCOPED_TRACE(description);
   // Ensure that the returned matches equal the expectations.
   for (; i < matches.size(); ++i) {
-    SCOPED_TRACE(" Case # " + base::IntToString(i));
+    SCOPED_TRACE(" Case # " + base::SizeTToString(i));
     EXPECT_EQ(ASCIIToUTF16(expected_matches[i].contents), matches[i].contents);
     EXPECT_EQ(expected_matches[i].allowed_to_be_default_match,
               matches[i].allowed_to_be_default_match);
   }
   // Ensure that no expected matches are missing.
   for (; i < num_expected_matches; ++i) {
-    SCOPED_TRACE(" Case # " + base::IntToString(i));
+    SCOPED_TRACE(" Case # " + base::SizeTToString(i));
     EXPECT_EQ(kNotApplicable, expected_matches[i].contents);
   }
 }
@@ -2066,7 +2069,7 @@ TEST_F(SearchProviderTest, KeywordFetcherSuggestRelevance) {
     }
     // Ensure that no expected matches are missing.
     for (; j < arraysize(cases[i].matches); ++j) {
-      SCOPED_TRACE(" Case # " + base::IntToString(i));
+      SCOPED_TRACE(" Case # " + base::SizeTToString(i));
       EXPECT_EQ(kNotApplicable, cases[i].matches[j].contents);
     }
   }
@@ -2286,6 +2289,47 @@ TEST_F(SearchProviderTest, DontInlineAutocompleteAsynchronously) {
     RunTillProviderDone();
     CheckMatches(description, arraysize(cases[i].second_async_matches),
                  cases[i].second_async_matches, provider_->matches());
+  }
+}
+
+TEST_F(SearchProviderTest, DontCacheCalculatorSuggestions) {
+  // This test sends two separate queries and checks that at each stage of
+  // processing (receiving first asynchronous response, handling new keystroke
+  // synchronously) we have the expected matches.  The new keystroke should
+  // immediately invalidate old calculator suggestions.
+  struct {
+    const std::string json;
+    const ExpectedMatch async_matches[4];
+    const ExpectedMatch sync_matches[4];
+  } cases[] = {
+    { "[\"1+2\",[\"3\", \"1+2+3+4+5\"],[],[],"
+       "{\"google:verbatimrelevance\":1300,"
+        "\"google:suggesttype\":[\"CALCULATOR\", \"QUERY\"],"
+        "\"google:suggestrelevance\":[1200, 900]}]",
+      { { "1+2", true }, { "3", false }, { "1+2+3+4+5", false },
+        kEmptyExpectedMatch },
+      { { "1+23", true }, { "1+2+3+4+5", false }, kEmptyExpectedMatch,
+        kEmptyExpectedMatch } },
+  };
+
+  for (size_t i = 0; i < arraysize(cases); ++i) {
+    // First, send the query "1+2" and receive the JSON response |first_json|.
+    ClearAllResults();
+    QueryForInputAndWaitForFetcherResponses(
+        ASCIIToUTF16("1+2"), false, cases[i].json, std::string());
+
+    // Verify that the matches after the asynchronous results are as expected.
+    std::string description = "first asynchronous response for input with "
+        "json=" + cases[i].json;
+    CheckMatches(description, arraysize(cases[i].async_matches),
+                 cases[i].async_matches, provider_->matches());
+
+    // Then, send the query "1+23" and check the synchronous matches.
+    description = "synchronous response after the first keystroke after input "
+        "with json=" + cases[i].json;
+    QueryForInput(ASCIIToUTF16("1+23"), false, false);
+    CheckMatches(description, arraysize(cases[i].sync_matches),
+                 cases[i].sync_matches, provider_->matches());
   }
 }
 
@@ -2848,7 +2892,7 @@ TEST_F(SearchProviderTest, ParseEntitySuggestion) {
     // Ensure that the returned matches equal the expectations.
     for (; j < matches.size(); ++j) {
       const Match& match = cases[i].matches[j];
-      SCOPED_TRACE(" and match index: " + base::IntToString(j));
+      SCOPED_TRACE(" and match index: " + base::SizeTToString(j));
       EXPECT_EQ(match.contents,
                 base::UTF16ToUTF8(matches[j].contents));
       EXPECT_EQ(match.description,
@@ -2861,7 +2905,7 @@ TEST_F(SearchProviderTest, ParseEntitySuggestion) {
     }
     // Ensure that no expected matches are missing.
     for (; j < arraysize(cases[i].matches); ++j) {
-      SCOPED_TRACE(" and match index: " + base::IntToString(j));
+      SCOPED_TRACE(" and match index: " + base::SizeTToString(j));
       EXPECT_EQ(cases[i].matches[j].contents, kNotApplicable);
       EXPECT_EQ(cases[i].matches[j].description, kNotApplicable);
       EXPECT_EQ(cases[i].matches[j].query_params, kNotApplicable);
@@ -3068,18 +3112,18 @@ TEST_F(SearchProviderTest, XSSIGuardedJSONParsing_ValidResponses) {
     ASSERT_FALSE(matches.empty());
     EXPECT_GE(matches[0].relevance, 1300);
 
-    SCOPED_TRACE("for case: " + base::IntToString(i));
+    SCOPED_TRACE("for case: " + base::SizeTToString(i));
     ASSERT_LE(matches.size(), arraysize(cases[i].matches));
     size_t j = 0;
     // Ensure that the returned matches equal the expectations.
     for (; j < matches.size(); ++j) {
-      SCOPED_TRACE("and match: " + base::IntToString(j));
+      SCOPED_TRACE("and match: " + base::SizeTToString(j));
       EXPECT_EQ(cases[i].matches[j].contents,
                 base::UTF16ToUTF8(matches[j].contents));
       EXPECT_EQ(cases[i].matches[j].type, matches[j].type);
     }
     for (; j < arraysize(cases[i].matches); ++j) {
-      SCOPED_TRACE("and match: " + base::IntToString(j));
+      SCOPED_TRACE("and match: " + base::SizeTToString(j));
       EXPECT_EQ(cases[i].matches[j].contents, kNotApplicable);
       EXPECT_EQ(cases[i].matches[j].type, AutocompleteMatchType::NUM_TYPES);
     }
@@ -3176,32 +3220,12 @@ TEST_F(SearchProviderTest, ParseDeletionUrl) {
 
        for (size_t j = 0; j < matches.size(); ++j) {
          const Match& match = cases[i].matches[j];
-         SCOPED_TRACE(" and match index: " + base::IntToString(j));
+         SCOPED_TRACE(" and match index: " + base::SizeTToString(j));
          EXPECT_EQ(match.contents, base::UTF16ToUTF8(matches[j].contents));
          EXPECT_EQ(match.deletion_url, matches[j].GetAdditionalInfo(
              "deletion_url"));
        }
      }
-}
-
-TEST_F(SearchProviderTest, ReflectsBookmarkBarState) {
-  profile_.GetPrefs()->SetBoolean(bookmarks::prefs::kShowBookmarkBar, false);
-  base::string16 term = term1_.substr(0, term1_.length() - 1);
-  QueryForInput(term, true, false);
-  ASSERT_FALSE(provider_->matches().empty());
-  EXPECT_EQ(AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED,
-            provider_->matches()[0].type);
-  ASSERT_TRUE(provider_->matches()[0].search_terms_args != NULL);
-  EXPECT_FALSE(provider_->matches()[0].search_terms_args->bookmark_bar_pinned);
-
-  profile_.GetPrefs()->SetBoolean(bookmarks::prefs::kShowBookmarkBar, true);
-  term = term1_.substr(0, term1_.length() - 1);
-  QueryForInput(term, true, false);
-  ASSERT_FALSE(provider_->matches().empty());
-  EXPECT_EQ(AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED,
-            provider_->matches()[0].type);
-  ASSERT_TRUE(provider_->matches()[0].search_terms_args != NULL);
-  EXPECT_TRUE(provider_->matches()[0].search_terms_args->bookmark_bar_pinned);
 }
 
 TEST_F(SearchProviderTest, CanSendURL) {

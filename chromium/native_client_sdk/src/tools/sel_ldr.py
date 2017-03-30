@@ -33,12 +33,11 @@ Log.verbose = False
 
 
 def FindQemu():
+  path = os.environ.get('PATH', '').split(os.pathsep)
   qemu_locations = [os.path.join(SCRIPT_DIR, 'qemu_arm'),
                     os.path.join(SCRIPT_DIR, 'qemu-arm')]
-  qemu_locations += [os.path.join(path, 'qemu_arm')
-                     for path in os.environ["PATH"].split(os.pathsep)]
-  qemu_locations += [os.path.join(path, 'qemu-arm')
-                     for path in os.environ["PATH"].split(os.pathsep)]
+  qemu_locations += [os.path.join(p, 'qemu_arm') for p in path]
+  qemu_locations += [os.path.join(p, 'qemu-arm') for p in path]
   # See if qemu is in any of these locations.
   qemu_bin = None
   for loc in qemu_locations:
@@ -60,8 +59,10 @@ def main(argv):
   parser.add_argument('-p', '--passthrough-environment', action='store_true',
                       help='Pass environment of host through to nexe')
   parser.add_argument('--debug-libs', action='store_true',
-                      help='For dynamic executables, reference debug '
-                           'libraries rather then release')
+                      help='Legacy option, do not use')
+  parser.add_argument('--config', default='Release',
+                      help='Use a particular library configuration (normally '
+                           'Debug or Release)')
   parser.add_argument('executable', help='executable (.nexe) to run')
   parser.add_argument('args', nargs='*', help='argument to pass to exectuable')
   parser.add_argument('--library-path',
@@ -87,12 +88,12 @@ def main(argv):
   if not os.path.isfile(options.executable):
     raise Error('not a file: %s' % options.executable)
 
-  arch, dynamic = create_nmf.ParseElfHeader(options.executable)
+  elf_arch, dynamic = create_nmf.ParseElfHeader(options.executable)
 
-  if arch == 'arm' and osname != 'linux':
+  if elf_arch == 'arm' and osname != 'linux':
     raise Error('Cannot run ARM executables under sel_ldr on ' + osname)
 
-  arch_suffix = arch.replace('-', '_')
+  arch_suffix = elf_arch.replace('-', '_')
 
   sel_ldr = os.path.join(SCRIPT_DIR, 'sel_ldr_%s' % arch_suffix)
   irt = os.path.join(SCRIPT_DIR, 'irt_core_%s.nexe' % arch_suffix)
@@ -111,7 +112,18 @@ def main(argv):
     cmd.append('--r_debug=0xXXXXXXXXXXXXXXXX')
     cmd.append('--reserved_at_zero=0xXXXXXXXXXXXXXXXX')
 
-  cmd += ['-a', '-B', irt]
+  # This script is provided mostly as way to run binaries during testing, not
+  # to run untrusted code in a production environment.  As such we want it be
+  # as invisible as possible.  So we pass -q (quiet) to disable most of output
+  # of sel_ldr itself, and -a (disable ACL) to enable local filesystem access.
+  cmd += ['-q', '-a', '-B', irt]
+
+  # Set the default NACLVERBOSITY level LOG_ERROR (-3).  This can still be
+  # overridden in the environment if debug information is desired.  However
+  # in most cases we don't want the application stdout/stderr polluted with
+  # sel_ldr logging.
+  if 'NACLVERBOSITY' not in os.environ and not options.verbose:
+    os.environ['NACLVERBOSITY'] = "-3"
 
   if options.debug:
     cmd.append('-g')
@@ -122,10 +134,7 @@ def main(argv):
   if options.passthrough_environment:
     cmd.append('-p')
 
-  if not options.verbose:
-    cmd += ['-l', os.devnull]
-
-  if arch == 'arm':
+  if elf_arch == 'arm':
     # Use the QEMU arm emulator if available.
     qemu_bin = FindQemu()
     if not qemu_bin:
@@ -141,29 +150,62 @@ def main(argv):
 
   if dynamic:
     if options.debug_libs:
-      sdk_lib_dir = os.path.join(NACL_SDK_ROOT, 'lib',
-                                 'glibc_%s' % arch_suffix, 'Debug')
+      sys.stderr.write('warning: --debug-libs is deprecated (use --config).\n')
+      options.config = 'Debug'
+
+    sdk_lib_dir = os.path.join(NACL_SDK_ROOT, 'lib',
+                               'glibc_%s' % arch_suffix, options.config)
+
+    if elf_arch == 'x86-64':
+      lib_subdir = 'lib'
+      tcarch = 'x86'
+      tcsubarch = 'x86_64'
+      usr_arch = 'x86_64'
+    elif elf_arch == 'arm':
+      lib_subdir = 'lib'
+      tcarch = 'arm'
+      tcsubarch = 'arm'
+      usr_arch = 'arm'
+    elif elf_arch == 'x86-32':
+      lib_subdir = 'lib32'
+      tcarch = 'x86'
+      tcsubarch = 'x86_64'
+      usr_arch = 'i686'
     else:
-      sdk_lib_dir = os.path.join(NACL_SDK_ROOT, 'lib',
-                                 'glibc_%s' % arch_suffix, 'Release')
-    toolchain = '%s_x86_glibc' % osname
+      raise Error("Unknown arch: %s" % elf_arch)
+
+    toolchain = '%s_%s_glibc' % (osname, tcarch)
     toolchain_dir = os.path.join(NACL_SDK_ROOT, 'toolchain', toolchain)
-    lib_dir = os.path.join(toolchain_dir, 'x86_64-nacl')
-    if arch == 'x86-64':
-      lib_dir = os.path.join(lib_dir, 'lib')
-      usr_lib_dir = os.path.join(toolchain_dir, 'x86_64-nacl', 'usr', 'lib')
-    else:
-      lib_dir = os.path.join(lib_dir, 'lib32')
-      usr_lib_dir = os.path.join(toolchain_dir, 'i686-nacl', 'usr', 'lib')
-    ldso = os.path.join(lib_dir, 'runnable-ld.so')
-    cmd.append(ldso)
-    Log('LD.SO = %s' % ldso)
+    interp_prefix = os.path.join(toolchain_dir, tcsubarch + '-nacl')
+    lib_dir = os.path.join(interp_prefix, lib_subdir)
+    usr_lib_dir = os.path.join(toolchain_dir, usr_arch + '-nacl', 'usr', 'lib')
+
     libpath = [usr_lib_dir, sdk_lib_dir, lib_dir]
+
+    if options.config not in ['Debug', 'Release']:
+      config_fallback = 'Release'
+      if 'Debug' in options.config:
+        config_fallback = 'Debug'
+      libpath.append(os.path.join(NACL_SDK_ROOT, 'lib',
+                     'glibc_%s' % arch_suffix, config_fallback))
+
     if options.library_path:
       libpath.extend([os.path.abspath(p) for p
                       in options.library_path.split(':')])
-    cmd.append('--library-path')
-    cmd.append(':'.join(libpath))
+    libpath = ':'.join(libpath)
+    if elf_arch == 'arm':
+      ldso = os.path.join(SCRIPT_DIR, 'elf_loader_arm.nexe')
+      cmd.append('-E')
+      cmd.append('LD_LIBRARY_PATH=%s' % libpath)
+      cmd.append(ldso)
+      cmd.append('--interp-prefix')
+      cmd.append(interp_prefix)
+    else:
+      ldso = os.path.join(lib_dir, 'runnable-ld.so')
+      cmd.append(ldso)
+      cmd.append('--library-path')
+      cmd.append(libpath)
+    Log('dynamic loader = %s' % ldso)
 
 
   # Append arguments for the executable itself.

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_ANDROID_DOCUMENT_DOCUMENT_WEB_CONTENTS_DELEGATE_H_
 #define CHROME_BROWSER_ANDROID_DOCUMENT_DOCUMENT_WEB_CONTENTS_DELEGATE_H_
 
+#include <stdint.h>
+
 #include "components/web_contents_delegate_android/web_contents_delegate_android.h"
 
 // Stub WebContentsDelegateAndroid that is meant to be a temporary substitute
@@ -21,7 +23,10 @@ class DocumentWebContentsDelegate
   ~DocumentWebContentsDelegate() override;
 
   // Attaches this delegate to the given WebContents.
-  void AttachContents(JNIEnv* env, jobject obj, jobject jweb_contents);
+  void AttachContents(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& jweb_contents);
 
   // Registers the JNI calls.
   static bool Register(JNIEnv* env);
@@ -36,8 +41,9 @@ class DocumentWebContentsDelegate
   void CloseContents(content::WebContents* source) override;
   bool ShouldCreateWebContents(
       content::WebContents* web_contents,
-      int route_id,
-      int main_frame_route_id,
+      int32_t route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
       WindowContainerType window_container_type,
       const std::string& frame_name,
       const GURL& target_url,

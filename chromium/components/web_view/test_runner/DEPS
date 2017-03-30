@@ -1,0 +1,10 @@
+include_rules = [
+  "+components/html_viewer/public",
+  "+components/mus/public",
+  "+components/test_runner",
+  "+components/web_view/public",
+  "+mojo/shell/public",
+  "+mojo/public",
+  "+mojo/runner",
+  "+ui/gfx",
+]

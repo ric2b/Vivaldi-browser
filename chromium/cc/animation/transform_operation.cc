@@ -41,7 +41,7 @@ static bool ShareSameAxis(const TransformOperation* from,
   if (IsOperationIdentity(from) && IsOperationIdentity(to))
     return false;
 
-  if (!from && !IsOperationIdentity(to)) {
+  if (IsOperationIdentity(from) && !IsOperationIdentity(to)) {
     *axis_x = to->rotate.axis.x;
     *axis_y = to->rotate.axis.y;
     *axis_z = to->rotate.axis.z;
@@ -49,7 +49,7 @@ static bool ShareSameAxis(const TransformOperation* from,
     return true;
   }
 
-  if (!IsOperationIdentity(from) && !to) {
+  if (!IsOperationIdentity(from) && IsOperationIdentity(to)) {
     *axis_x = from->rotate.axis.x;
     *axis_y = from->rotate.axis.y;
     *axis_z = from->rotate.axis.z;
@@ -157,8 +157,8 @@ bool TransformOperation::BlendTransformOperations(
     SkMScalar from_y = IsOperationIdentity(from) ? 0 : from->skew.y;
     SkMScalar to_x = IsOperationIdentity(to) ? 0 : to->skew.x;
     SkMScalar to_y = IsOperationIdentity(to) ? 0 : to->skew.y;
-    result->SkewX(BlendSkMScalars(from_x, to_x, progress));
-    result->SkewY(BlendSkMScalars(from_y, to_y, progress));
+    result->Skew(BlendSkMScalars(from_x, to_x, progress),
+                 BlendSkMScalars(from_y, to_y, progress));
     break;
   }
   case TransformOperation::TRANSFORM_OPERATION_PERSPECTIVE: {

@@ -7,8 +7,8 @@
 
 #include "ash/shelf/shelf_item_delegate.h"
 #include "ash/shelf/shelf_item_types.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 
 namespace ash {
 namespace shell {
@@ -28,6 +28,7 @@ class WindowWatcherShelfItemDelegate : public ShelfItemDelegate {
   ui::MenuModel* CreateContextMenu(aura::Window* root_window) override;
   ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
   bool IsDraggable() override;
+  bool CanPin() const override;
   bool ShouldShowTooltip() override;
   void Close() override;
 

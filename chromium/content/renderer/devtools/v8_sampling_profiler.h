@@ -5,9 +5,10 @@
 #ifndef CONTENT_RENDERER_DEVTOOLS_V8_SAMPLING_PROFILER_H_
 #define CONTENT_RENDERER_DEVTOOLS_V8_SAMPLING_PROFILER_H_
 
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/trace_event/trace_event_impl.h"
+#include "base/trace_event/trace_log.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -21,7 +22,7 @@ class CONTENT_EXPORT V8SamplingProfiler final
     : public base::trace_event::TraceLog::EnabledStateObserver {
  public:
   explicit V8SamplingProfiler(bool underTest = false);
-  ~V8SamplingProfiler();
+  ~V8SamplingProfiler() override;
 
   // Implementation of TraceLog::EnabledStateObserver
   void OnTraceLogEnabled() override;

@@ -5,7 +5,9 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_SOFTWARE_BROWSER_COMPOSITOR_OUTPUT_SURFACE_H_
 #define CONTENT_BROWSER_COMPOSITOR_SOFTWARE_BROWSER_COMPOSITOR_OUTPUT_SURFACE_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/common/content_export.h"
 
@@ -30,9 +32,11 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
 
  private:
   void SwapBuffers(cc::CompositorFrame* frame) override;
+  void OnGpuSwapBuffersCompleted(
+      const std::vector<ui::LatencyInfo>& latency_info,
+      gfx::SwapResult result) override;
 
 #if defined(OS_MACOSX)
-  void OnSurfaceDisplayed() override;
   void SetSurfaceSuspendedForRecycle(bool suspended) override;
   bool SurfaceShouldNotShowFramesAfterSuspendForRecycle() const override;
 #endif

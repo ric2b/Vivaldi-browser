@@ -23,9 +23,9 @@ using content::BrowserThread;
 using device::BluetoothAdapter;
 using device::BluetoothDevice;
 
-namespace bluetooth = extensions::core_api::bluetooth;
-namespace GetDevice = extensions::core_api::bluetooth::GetDevice;
-namespace GetDevices = extensions::core_api::bluetooth::GetDevices;
+namespace bluetooth = extensions::api::bluetooth;
+namespace GetDevice = extensions::api::bluetooth::GetDevice;
+namespace GetDevices = extensions::api::bluetooth::GetDevices;
 
 namespace {
 
@@ -96,7 +96,7 @@ void BluetoothAPI::OnListenerRemoved(const EventListenerInfo& details) {
     event_router()->OnListenerRemoved();
 }
 
-namespace core_api {
+namespace api {
 
 BluetoothGetAdapterStateFunction::~BluetoothGetAdapterStateFunction() {}
 
@@ -170,11 +170,11 @@ void BluetoothStartDiscoveryFunction::OnErrorCallback() {
 
 bool BluetoothStartDiscoveryFunction::DoWork(
     scoped_refptr<BluetoothAdapter> adapter) {
-  GetEventRouter(browser_context())->StartDiscoverySession(
-      adapter.get(),
-      extension_id(),
-      base::Bind(&BluetoothStartDiscoveryFunction::OnSuccessCallback, this),
-      base::Bind(&BluetoothStartDiscoveryFunction::OnErrorCallback, this));
+  GetEventRouter(browser_context())
+      ->StartDiscoverySession(
+          adapter.get(), GetExtensionId(),
+          base::Bind(&BluetoothStartDiscoveryFunction::OnSuccessCallback, this),
+          base::Bind(&BluetoothStartDiscoveryFunction::OnErrorCallback, this));
 
   return true;
 }
@@ -190,14 +190,14 @@ void BluetoothStopDiscoveryFunction::OnErrorCallback() {
 
 bool BluetoothStopDiscoveryFunction::DoWork(
     scoped_refptr<BluetoothAdapter> adapter) {
-  GetEventRouter(browser_context())->StopDiscoverySession(
-      adapter.get(),
-      extension_id(),
-      base::Bind(&BluetoothStopDiscoveryFunction::OnSuccessCallback, this),
-      base::Bind(&BluetoothStopDiscoveryFunction::OnErrorCallback, this));
+  GetEventRouter(browser_context())
+      ->StopDiscoverySession(
+          adapter.get(), GetExtensionId(),
+          base::Bind(&BluetoothStopDiscoveryFunction::OnSuccessCallback, this),
+          base::Bind(&BluetoothStopDiscoveryFunction::OnErrorCallback, this));
 
   return true;
 }
 
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions

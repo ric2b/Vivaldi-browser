@@ -12,8 +12,12 @@
 #include <pk11pub.h>  // PK11_FindKeyByAnyCert
 #include <seccomon.h>  // SECItem
 #include <sechash.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
 #include "base/logging.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/third_party/mozilla_security_manager/nsNSSCertHelper.h"
 #include "chrome/third_party/mozilla_security_manager/nsNSSCertificate.h"
@@ -125,7 +129,7 @@ string GetVersion(X509Certificate::OSCertHandle cert_handle) {
   unsigned long version = 0;
   if (cert_handle->version.len == 0 ||
       SEC_ASN1DecodeInteger(&cert_handle->version, &version) == SECSuccess) {
-    return base::UintToString(version + 1);
+    return base::Uint64ToString(base::strict_cast<uint64_t>(version + 1));
   }
   return std::string();
 }

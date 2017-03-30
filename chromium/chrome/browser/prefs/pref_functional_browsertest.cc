@@ -6,7 +6,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
+#include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -16,9 +16,16 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/content_settings/core/browser/website_settings_info.h"
+#include "components/content_settings/core/browser/website_settings_registry.h"
+#include "components/content_settings/core/common/content_settings_types.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 using content::BrowserContext;
 using content::DownloadManager;
@@ -42,7 +49,7 @@ class PrefsFunctionalTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestDownloadDirPref) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   base::ScopedTempDir new_download_dir;
   ASSERT_TRUE(new_download_dir.CreateUniqueTempDir());
 
@@ -57,8 +64,7 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestDownloadDirPref) {
   scoped_ptr<content::DownloadTestObserver> downloads_observer(
       CreateWaiter(browser(), 1));
   ui_test_utils::NavigateToURL(
-      browser(),
-      test_server()->GetURL("files/downloads/a_zip_file.zip"));
+      browser(), embedded_test_server()->GetURL("/downloads/a_zip_file.zip"));
   // Waits for the download to complete.
   downloads_observer->WaitForFinished();
   EXPECT_TRUE(base::PathExists(downloaded_pkg));
@@ -66,11 +72,10 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestDownloadDirPref) {
 
 // Verify image content settings show or hide images.
 IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestImageContentSettings) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   ui_test_utils::NavigateToURL(
-      browser(),
-      test_server()->GetURL("files/settings/image_page.html"));
+      browser(), embedded_test_server()->GetURL("/settings/image_page.html"));
 
   bool result = false;
   std::string script =
@@ -87,14 +92,14 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestImageContentSettings) {
       &result));
   EXPECT_TRUE(result);
 
-  base::DictionaryValue value;
-  value.SetInteger("images", 2);
-  browser()->profile()->GetPrefs()->Set(prefs::kDefaultContentSettings,
-                                        value);
+  browser()->profile()->GetPrefs()->SetInteger(
+      content_settings::WebsiteSettingsRegistry::GetInstance()
+          ->Get(CONTENT_SETTINGS_TYPE_IMAGES)
+          ->default_value_pref_name(),
+      CONTENT_SETTING_BLOCK);
 
   ui_test_utils::NavigateToURL(
-      browser(),
-      test_server()->GetURL("files/settings/image_page.html"));
+      browser(), embedded_test_server()->GetURL("/settings/image_page.html"));
 
   result = false;
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
@@ -106,20 +111,18 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestImageContentSettings) {
 
 // Verify that enabling/disabling Javascript in prefs works.
 IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestJavascriptEnableDisable) {
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   EXPECT_TRUE(browser()->profile()->GetPrefs()->GetBoolean(
       prefs::kWebKitJavascriptEnabled));
   ui_test_utils::NavigateToURL(
-      browser(),
-      test_server()->GetURL("files/javaScriptTitle.html"));
+      browser(), embedded_test_server()->GetURL("/javaScriptTitle.html"));
   EXPECT_EQ(base::ASCIIToUTF16("Title from script javascript enabled"),
             browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
   browser()->profile()->GetPrefs()->SetBoolean(prefs::kWebKitJavascriptEnabled,
                                                false);
   ui_test_utils::NavigateToURL(
-      browser(),
-      test_server()->GetURL("files/javaScriptTitle.html"));
+      browser(), embedded_test_server()->GetURL("/javaScriptTitle.html"));
   EXPECT_EQ(base::ASCIIToUTF16("This is html title"),
             browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
 }
@@ -141,8 +144,8 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest,
 
 // Verify images are not blocked in incognito mode.
 IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestImagesNotBlockedInIncognito) {
-  ASSERT_TRUE(test_server()->Start());
-  GURL url = test_server()->GetURL("files/settings/image_page.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL("/settings/image_page.html");
   Browser* incognito_browser = CreateIncognitoBrowser();
   ui_test_utils::NavigateToURL(incognito_browser, url);
 
@@ -200,8 +203,14 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestHomepagePrefs) {
 IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, PRE_TestPrivacySecurityPrefs) {
   PrefService* prefs = browser()->profile()->GetPrefs();
 
-  EXPECT_TRUE(prefs->GetBoolean(prefs::kNetworkPredictionEnabled));
-  prefs->SetBoolean(prefs::kNetworkPredictionEnabled, false);
+  static_assert(chrome_browser_net::NETWORK_PREDICTION_DEFAULT !=
+                    chrome_browser_net::NETWORK_PREDICTION_NEVER,
+                "PrefsFunctionalTest.TestPrivacySecurityPrefs relies on "
+                "predictive network actions being enabled by default.");
+  EXPECT_EQ(chrome_browser_net::NETWORK_PREDICTION_DEFAULT,
+            prefs->GetInteger(prefs::kNetworkPredictionOptions));
+  prefs->SetInteger(prefs::kNetworkPredictionOptions,
+                    chrome_browser_net::NETWORK_PREDICTION_NEVER);
 
   EXPECT_TRUE(prefs->GetBoolean(prefs::kSafeBrowsingEnabled));
   prefs->SetBoolean(prefs::kSafeBrowsingEnabled, false);
@@ -217,7 +226,8 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, PRE_TestPrivacySecurityPrefs) {
 IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestPrivacySecurityPrefs) {
   PrefService* prefs = browser()->profile()->GetPrefs();
 
-  EXPECT_FALSE(prefs->GetBoolean(prefs::kNetworkPredictionEnabled));
+  EXPECT_EQ(chrome_browser_net::NETWORK_PREDICTION_NEVER,
+            prefs->GetInteger(prefs::kNetworkPredictionOptions));
   EXPECT_FALSE(prefs->GetBoolean(prefs::kSafeBrowsingEnabled));
   EXPECT_FALSE(prefs->GetBoolean(prefs::kAlternateErrorPagesEnabled));
   EXPECT_FALSE(prefs->GetBoolean(prefs::kSearchSuggestEnabled));
@@ -227,4 +237,3 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestPrivacySecurityPrefs) {
 IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestHaveLocalStatePrefs) {
   EXPECT_TRUE(g_browser_process->local_state()->GetPreferenceValues().get());
 }
-

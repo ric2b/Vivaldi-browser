@@ -5,9 +5,12 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_SHARED_RENDERER_STATE_H_
 #define ANDROID_WEBVIEW_BROWSER_SHARED_RENDERER_STATE_H_
 
+#include <map>
+
 #include "android_webview/browser/gl_view_renderer_manager.h"
 #include "android_webview/browser/parent_compositor_draw_constraints.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -45,10 +48,12 @@ class SharedRendererState {
   void InitializeHardwareDrawIfNeededOnUI();
   void ReleaseHardwareDrawIfNeededOnUI();
   ParentCompositorDrawConstraints GetParentDrawConstraintsOnUI() const;
-  void SwapReturnedResourcesOnUI(cc::ReturnedResourceArray* resources);
+  void SwapReturnedResourcesOnUI(
+      std::map<unsigned int, cc::ReturnedResourceArray>* returned_resource_map);
   bool ReturnedResourcesEmptyOnUI() const;
   scoped_ptr<ChildFrame> PassUncommittedFrameOnUI();
   void DeleteHardwareRendererOnUI();
+  bool HasFrameOnUI() const;
 
   // RT thread methods.
   gfx::Vector2d GetScrollOffsetOnRT();
@@ -56,7 +61,8 @@ class SharedRendererState {
   void DrawGL(AwDrawGLInfo* draw_info);
   void PostExternalDrawConstraintsToChildCompositorOnRT(
       const ParentCompositorDrawConstraints& parent_draw_constraints);
-  void InsertReturnedResourcesOnRT(const cc::ReturnedResourceArray& resources);
+  void InsertReturnedResourcesOnRT(const cc::ReturnedResourceArray& resources,
+                                   unsigned int compositor_id);
 
  private:
   friend class internal::RequestDrawGLTracker;
@@ -95,11 +101,13 @@ class SharedRendererState {
 
   // Accessed by both UI and RT thread.
   mutable base::Lock lock_;
+  bool hardware_renderer_has_frame_;
   gfx::Vector2d scroll_offset_;
   scoped_ptr<ChildFrame> child_frame_;
   bool inside_hardware_release_;
   ParentCompositorDrawConstraints parent_draw_constraints_;
-  cc::ReturnedResourceArray returned_resources_;
+  // A map from compositor's ID to the resources that belong to the compositor.
+  std::map<unsigned int, cc::ReturnedResourceArray> returned_resources_map_;
   base::Closure request_draw_gl_closure_;
 
   base::WeakPtrFactory<SharedRendererState> weak_factory_on_ui_thread_;

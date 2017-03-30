@@ -16,19 +16,19 @@
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/sync/about_sync_util.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/quiesce_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/webui/signin/login_ui_test_utils.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/invalidation/impl/p2p_invalidation_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
-#include "components/sync_driver/data_type_controller.h"
+#include "components/sync_driver/about_sync_util.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "sync/internal_api/public/base/progress_marker_map.h"
 #include "sync/internal_api/public/util/sync_string_conversions.h"
@@ -58,7 +58,7 @@ class BackendInitializeChecker : public SingleClientStatusChangeChecker {
   bool IsExitConditionSatisfied() override {
     if (service()->backend_mode() != ProfileSyncService::SYNC)
       return false;
-    if (service()->backend_initialized())
+    if (service()->IsBackendInitialized())
       return true;
     // Backend initialization is blocked by an auth error.
     if (HasAuthError(service()))
@@ -133,7 +133,7 @@ void ProfileSyncServiceHarness::SetCredentials(const std::string& username,
 }
 
 bool ProfileSyncServiceHarness::SetupSync() {
-  bool result = SetupSync(syncer::ModelTypeSet::All());
+  bool result = SetupSync(syncer::UserSelectableTypes());
   if (result == false) {
     std::string status = GetServiceStatus();
     LOG(ERROR) << profile_debug_name_
@@ -146,8 +146,8 @@ bool ProfileSyncServiceHarness::SetupSync() {
 
 bool ProfileSyncServiceHarness::SetupSync(
     syncer::ModelTypeSet synced_datatypes) {
-  DCHECK(!profile_->IsSupervised())
-      << "SetupSync should not be used for supervised users.";
+  DCHECK(!profile_->IsLegacySupervised())
+      << "SetupSync should not be used for legacy supervised users.";
 
   // Initialize the sync client's profile sync service object.
   if (service() == NULL) {
@@ -189,8 +189,7 @@ bool ProfileSyncServiceHarness::SetupSync(
 
   // Choose the datatypes to be synced. If all datatypes are to be synced,
   // set sync_everything to true; otherwise, set it to false.
-  bool sync_everything =
-      synced_datatypes.Equals(syncer::ModelTypeSet::All());
+  bool sync_everything = synced_datatypes.Equals(syncer::UserSelectableTypes());
   service()->OnUserChoseDatatypes(sync_everything, synced_datatypes);
 
   // Notify ProfileSyncService that we are done with configuration.
@@ -255,7 +254,7 @@ bool ProfileSyncServiceHarness::AwaitBackendInitialization() {
     return false;
   }
 
-  if (!service()->backend_initialized()) {
+  if (!service()->IsBackendInitialized()) {
     LOG(ERROR) << "Service backend not initialized.";
     return false;
   }
@@ -305,7 +304,7 @@ std::string ProfileSyncServiceHarness::GenerateFakeOAuth2RefreshTokenString() {
 }
 
 bool ProfileSyncServiceHarness::IsSyncDisabled() const {
-  return !service()->setup_in_progress() &&
+  return !service()->IsSetupInProgress() &&
          !service()->HasSyncSetupCompleted();
 }
 
@@ -345,6 +344,7 @@ bool ProfileSyncServiceHarness::EnableSyncForDatatype(
   }
 
   synced_datatypes.Put(syncer::ModelTypeFromInt(datatype));
+  synced_datatypes.RetainAll(syncer::UserSelectableTypes());
   service()->OnUserChoseDatatypes(false, synced_datatypes);
   if (AwaitSyncSetupCompletion()) {
     DVLOG(1) << "EnableSyncForDatatype(): Enabled sync for datatype "
@@ -470,7 +470,8 @@ bool ProfileSyncServiceHarness::IsTypePreferred(syncer::ModelType type) {
 
 std::string ProfileSyncServiceHarness::GetServiceStatus() {
   scoped_ptr<base::DictionaryValue> value(
-      sync_ui_util::ConstructAboutInformation(service()));
+      sync_driver::sync_ui_util::ConstructAboutInformation(
+          service(), service()->signin(), chrome::GetChannel()));
   std::string service_status;
   base::JSONWriter::WriteWithOptions(
       *value, base::JSONWriter::OPTIONS_PRETTY_PRINT, &service_status);

@@ -5,6 +5,7 @@
 #include "chrome/browser/profiles/profile_shortcut_manager_win.h"
 
 #include <shlobj.h>  // For SHChangeNotify().
+#include <stddef.h>
 
 #include <string>
 #include <vector>
@@ -13,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
@@ -71,7 +73,10 @@ const int kMaxProfileShortcutFileNameLength = 64;
 const int kShortcutIconSize = 48;
 const int kProfileAvatarBadgeSize = kShortcutIconSize / 2;
 
-const int kCurrentProfileIconVersion = 3;
+// Incrementing this number will cause profile icons to be regenerated on
+// profile startup (it should be incremented whenever the product/avatar icons
+// change, etc).
+const int kCurrentProfileIconVersion = 4;
 
 // 2x sized profile avatar icons. Mirrors |kDefaultAvatarIconResources| in
 // profile_info_cache.cc.
@@ -171,29 +176,38 @@ base::FilePath CreateOrUpdateShortcutIconForProfile(
     return base::FilePath();
   }
 
-  scoped_ptr<SkBitmap> app_icon_bitmap(GetAppIconForSize(kShortcutIconSize));
-  if (!app_icon_bitmap)
+  scoped_ptr<gfx::ImageFamily> family = GetAppIconImageFamily();
+  if (!family)
+    return base::FilePath();
+
+  // TODO(mgiuca): A better approach would be to badge each image in the
+  // ImageFamily (scaling the badge to the correct size), and then re-export the
+  // family (as opposed to making a family with just 48 and 256, then scaling
+  // those images to about a dozen different sizes).
+  SkBitmap app_icon_bitmap =
+      family->CreateExact(kShortcutIconSize, kShortcutIconSize).AsBitmap();
+  if (app_icon_bitmap.isNull())
     return base::FilePath();
 
   gfx::ImageFamily badged_bitmaps;
   if (!avatar_bitmap_1x.empty()) {
     badged_bitmaps.Add(gfx::Image::CreateFrom1xBitmap(
-        BadgeIcon(*app_icon_bitmap, avatar_bitmap_1x, 1)));
+        BadgeIcon(app_icon_bitmap, avatar_bitmap_1x, 1)));
   }
 
-  scoped_ptr<SkBitmap> large_app_icon_bitmap(
-      GetAppIconForSize(IconUtil::kLargeIconSize));
-  if (large_app_icon_bitmap && !avatar_bitmap_2x.empty()) {
+  SkBitmap large_app_icon_bitmap =
+      family->CreateExact(IconUtil::kLargeIconSize, IconUtil::kLargeIconSize)
+          .AsBitmap();
+  if (!large_app_icon_bitmap.isNull() && !avatar_bitmap_2x.empty()) {
     badged_bitmaps.Add(gfx::Image::CreateFrom1xBitmap(
-        BadgeIcon(*large_app_icon_bitmap, avatar_bitmap_2x, 2)));
+        BadgeIcon(large_app_icon_bitmap, avatar_bitmap_2x, 2)));
   }
 
   // If we have no badged bitmaps, we should just use the default chrome icon.
   if (badged_bitmaps.empty()) {
-    badged_bitmaps.Add(gfx::Image::CreateFrom1xBitmap(*app_icon_bitmap));
-    if (large_app_icon_bitmap) {
-      badged_bitmaps.Add(
-          gfx::Image::CreateFrom1xBitmap(*large_app_icon_bitmap));
+    badged_bitmaps.Add(gfx::Image::CreateFrom1xBitmap(app_icon_bitmap));
+    if (!large_app_icon_bitmap.isNull()) {
+      badged_bitmaps.Add(gfx::Image::CreateFrom1xBitmap(large_app_icon_bitmap));
     }
   }
   // Finally, write the .ico file containing this new bitmap.
@@ -518,7 +532,7 @@ void DeleteDesktopShortcuts(const base::FilePath& profile_path,
     // latter causes non-profile taskbar shortcuts to be removed since it
     // doesn't consider the command-line of the shortcuts it deletes.
     // TODO(huangs): Refactor with ShellUtil::RemoveShortcuts().
-    base::win::TaskbarUnpinShortcutLink(shortcuts[i]);
+    base::win::UnpinShortcutFromTaskbar(shortcuts[i]);
     base::DeleteFile(shortcuts[i], false);
     // Notify the shell that the shortcut was deleted to ensure desktop refresh.
     SHChangeNotify(SHCNE_DELETE, SHCNF_PATH, shortcuts[i].value().c_str(),

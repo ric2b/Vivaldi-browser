@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_EVENTS_SYSTEM_KEY_EVENT_LISTENER_H_
 #define CHROME_BROWSER_CHROMEOS_EVENTS_SYSTEM_KEY_EVENT_LISTENER_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "ui/events/platform/platform_event_observer.h"
 
@@ -24,7 +25,7 @@ class SystemKeyEventListener : public ui::PlatformEventObserver {
  private:
   // Defines the delete on exit Singleton traits we like.  Best to have this
   // and const/dest private as recommended for Singletons.
-  friend struct DefaultSingletonTraits<SystemKeyEventListener>;
+  friend struct base::DefaultSingletonTraits<SystemKeyEventListener>;
   friend class SystemKeyEventListenerTest;
 
   SystemKeyEventListener();

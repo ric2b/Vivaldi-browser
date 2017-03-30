@@ -4,7 +4,8 @@
 
 package org.chromium.content_public.browser;
 
-import org.chromium.base.JNINamespace;
+import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.content_public.browser.navigation_controller.LoadURLType;
 import org.chromium.content_public.browser.navigation_controller.UserAgentOverrideOption;
@@ -35,9 +36,12 @@ public class LoadUrlParams {
     byte[] mPostData;
     String mBaseUrlForDataUrl;
     String mVirtualUrlForDataUrl;
+    String mDataUrlAsString;
     boolean mCanLoadLocalResources;
     boolean mIsRendererInitiated;
+    boolean mShouldReplaceCurrentEntry;
     long mIntentReceivedTimestamp;
+    boolean mHasUserGesture;
 
     /**
      * Creates an instance with default page transition type.
@@ -63,6 +67,7 @@ public class LoadUrlParams {
         mPostData = null;
         mBaseUrlForDataUrl = null;
         mVirtualUrlForDataUrl = null;
+        mDataUrlAsString = null;
     }
 
     /**
@@ -86,6 +91,15 @@ public class LoadUrlParams {
      */
     public static LoadUrlParams createLoadDataParams(
             String data, String mimeType, boolean isBase64Encoded, String charset) {
+        LoadUrlParams params = new LoadUrlParams(
+                buildDataUri(data, mimeType, isBase64Encoded, charset));
+        params.setLoadType(LoadURLType.DATA);
+        params.setTransitionType(PageTransition.TYPED);
+        return params;
+    }
+
+    private static String buildDataUri(
+            String data, String mimeType, boolean isBase64Encoded, String charset) {
         StringBuilder dataUrl = new StringBuilder("data:");
         dataUrl.append(mimeType);
         if (charset != null && !charset.isEmpty()) {
@@ -96,11 +110,7 @@ public class LoadUrlParams {
         }
         dataUrl.append(",");
         dataUrl.append(data);
-
-        LoadUrlParams params = new LoadUrlParams(dataUrl.toString());
-        params.setLoadType(LoadURLType.DATA);
-        params.setTransitionType(PageTransition.TYPED);
-        return params;
+        return dataUrl.toString();
     }
 
     /**
@@ -141,15 +151,19 @@ public class LoadUrlParams {
     public static LoadUrlParams createLoadDataParamsWithBaseUrl(
             String data, String mimeType, boolean isBase64Encoded,
             String baseUrl, String historyUrl, String charset) {
-        LoadUrlParams params = createLoadDataParams(data, mimeType, isBase64Encoded, charset);
+        LoadUrlParams params;
         // For WebView compatibility, when the base URL has the 'data:'
         // scheme, we treat it as a regular data URL load and skip setting
         // baseUrl and historyUrl.
         // TODO(joth): we should just append baseURL and historyURL here, and move the
         // WebView specific transform up to a wrapper factory function in android_webview/.
         if (baseUrl == null || !baseUrl.toLowerCase(Locale.US).startsWith("data:")) {
+            params = createLoadDataParams("", mimeType, isBase64Encoded, charset);
             params.setBaseUrlForDataUrl(baseUrl != null ? baseUrl : "about:blank");
             params.setVirtualUrlForDataUrl(historyUrl != null ? historyUrl : "about:blank");
+            params.setDataUrlAsString(buildDataUri(data, mimeType, isBase64Encoded, charset));
+        } else {
+            params = createLoadDataParams(data, mimeType, isBase64Encoded, charset);
         }
         return params;
     }
@@ -159,6 +173,7 @@ public class LoadUrlParams {
      * @param url URL of the load.
      * @param postData Post data of the load. Can be null.
      */
+    @VisibleForTesting
     public static LoadUrlParams createLoadHttpPostParams(
             String url, byte[] postData) {
         LoadUrlParams params = new LoadUrlParams(url);
@@ -357,6 +372,24 @@ public class LoadUrlParams {
     }
 
     /**
+     * Get the data for data load. This is then passed to the renderer as
+     * a string, not as a GURL object to circumvent GURL size restriction.
+     * @return The data url.
+     */
+    public String getDataUrlAsString() {
+        return mDataUrlAsString;
+    }
+
+    /**
+     * Set the data for data load. This is then passed to the renderer as
+     * a string, not as a GURL object to circumvent GURL size restriction.
+     * @param url The data url.
+     */
+    public void setDataUrlAsString(String url) {
+        mDataUrlAsString = url;
+    }
+
+    /**
      * Set whether the load should be able to access local resources. This
      * defaults to false.
      */
@@ -391,6 +424,26 @@ public class LoadUrlParams {
     }
 
     /**
+     * @param shouldReplaceCurrentEntry Whether this navigation should replace
+     * the current navigation entry.
+     *
+     * Don't use this. This is a temporary hack that will be removed.
+     * TODO(lizeb): Remove this and {@link getShouldReplaceCurrentEntry} once
+     * crbug.com/521729 is fixed.
+     */
+    public void setShouldReplaceCurrentEntry(boolean shouldReplaceCurrentEntry) {
+        mShouldReplaceCurrentEntry = shouldReplaceCurrentEntry;
+    }
+
+    /**
+     * @return Whether this navigation should replace the current navigation
+     * entry.
+     */
+    public boolean getShouldReplaceCurrentEntry() {
+        return mShouldReplaceCurrentEntry;
+    }
+
+    /**
      * @param intentReceivedTimestamp the timestamp at which Chrome received the intent that
      *                                triggered this URL load, as returned by System.currentMillis.
      */
@@ -403,6 +456,22 @@ public class LoadUrlParams {
      */
     public long getIntentReceivedTimestamp() {
         return mIntentReceivedTimestamp;
+    }
+
+    /**
+     * Set whether the load is initiated by a user gesture.
+     *
+     * @param hasUserGesture True if load is initiated by user gesture, or false otherwise.
+     */
+    public void setHasUserGesture(boolean hasUserGesture) {
+        mHasUserGesture = hasUserGesture;
+    }
+
+    /**
+     * @return Whether or not this load was initiated with a user gesture.
+     */
+    public boolean getHasUserGesture() {
+        return mHasUserGesture;
     }
 
     public boolean isBaseUrlDataScheme() {

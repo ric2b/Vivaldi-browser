@@ -11,7 +11,7 @@
 #include "ash/shelf/shelf_types.h"
 #include "ash/shell_observer.h"
 #include "ash/system/user/login_status.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -54,7 +54,6 @@ class DesktopBackgroundWidgetController;
 class DockedWindowLayoutManager;
 class PanelLayoutManager;
 class RootWindowLayoutManager;
-class ScreenDimmer;
 class ShelfLayoutManager;
 class ShelfWidget;
 class StackingController;
@@ -74,7 +73,7 @@ class AshTouchExplorationManager;
 // This class maintains the per root window state for ash. This class
 // owns the root window and other dependent objects that should be
 // deleted upon the deletion of the root window. This object is
-// indirectly owned and deleted by |DisplayController|.
+// indirectly owned and deleted by |WindowTreeHostManager|.
 // The RootWindowController for particular root window is stored in
 // its property (RootWindowSettings) and can be obtained using
 // |GetRootWindowController(aura::WindowEventDispatcher*)| function.
@@ -120,8 +119,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   AlwaysOnTopController* always_on_top_controller() {
     return always_on_top_controller_.get();
   }
-
-  ScreenDimmer* screen_dimmer() { return screen_dimmer_.get(); }
 
   // Access the shelf associated with this root window controller,
   // NULL if no such shelf exists.
@@ -296,7 +293,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   scoped_ptr<AshTouchExplorationManager> touch_exploration_manager_;
 #endif
 
-  scoped_ptr<ScreenDimmer> screen_dimmer_;
   scoped_ptr<WorkspaceController> workspace_controller_;
   scoped_ptr<AlwaysOnTopController> always_on_top_controller_;
 

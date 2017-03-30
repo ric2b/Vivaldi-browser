@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from gpu_test_expectations import GpuTestExpectations
+from gpu_tests.gpu_test_expectations import GpuTestExpectations
 
 # See the GpuTestExpectations class for documentation.
 
@@ -11,10 +11,15 @@ class PixelExpectations(GpuTestExpectations):
     # Sample Usage:
     # self.Fail('Pixel.Canvas2DRedBox',
     #     ['mac', 'amd', ('nvidia', 0x1234)], bug=123)
-    self.Fail('Pixel.Canvas2DRedBox',
-               [ 'linux', ('nvidia', 0x104a)], bug=511580)
-    self.Fail('Pixel.CSS3DBlueBox',
-               [ 'linux', ('nvidia', 0x104a)], bug=511580)
-    self.Fail('Pixel.WebGLGreenTriangle',
-               [ 'linux', ('nvidia', 0x104a)], bug=511580)
-    pass
+
+    self.Fail('Pixel.ScissorTestWithPreserveDrawingBuffer',
+        ['android'], bug=521588)
+
+    self.Fail('Pixel.ScissorTestWithPreserveDrawingBufferES3',
+              ['mac'], bug=540039)
+    self.Fail('Pixel.WebGLGreenTriangleES3',
+              ['mac', ('intel', 0x116)], bug=540531)
+
+    # TODO(ccameron): Remove suppression after rebaseline.
+    self.Fail('Pixel.CSS3DBlueBox', ['mac'], bug=533690)
+    self.Fail('Pixel.CSS3DBlueBoxES3', ['mac'], bug=533690)

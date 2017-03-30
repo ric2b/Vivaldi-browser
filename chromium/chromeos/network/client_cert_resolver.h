@@ -9,12 +9,11 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "chromeos/cert_loader.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/network/client_cert_util.h"
@@ -23,6 +22,7 @@
 #include "chromeos/network/network_state_handler_observer.h"
 
 namespace base {
+class Clock;
 class TaskRunner;
 }
 
@@ -74,10 +74,16 @@ class CHROMEOS_EXPORT ClientCertResolver : public NetworkStateHandlerObserver,
   // |Observer|.
   bool IsAnyResolveTaskRunning() const;
 
+  // Sets the clock for testing. This clock is used when checking the
+  // certificates for expiration.
+  void SetClockForTesting(base::Clock* clock);
+
   // Returns true and sets the Shill properties that have to be configured in
   // |shill_properties| if the certificate pattern |pattern| could be resolved.
   // Returns false otherwise and sets empty Shill properties to clear the
   // certificate configuration.
+  // Note that it uses the global clock when checking the certificates for
+  // expiration.
   static bool ResolveCertificatePatternSync(
       const client_cert::ConfigType client_cert_type,
       const CertificatePattern& pattern,
@@ -86,6 +92,7 @@ class CHROMEOS_EXPORT ClientCertResolver : public NetworkStateHandlerObserver,
  private:
   // NetworkStateHandlerObserver overrides
   void NetworkListChanged() override;
+  void NetworkConnectionStateChanged(const NetworkState* network) override;
 
   // CertLoader::Observer overrides
   void OnCertificatesLoaded(const net::CertificateList& cert_list,
@@ -110,7 +117,12 @@ class CHROMEOS_EXPORT ClientCertResolver : public NetworkStateHandlerObserver,
   // Trigger a ResolveRequestCompleted event on all observers.
   void NotifyResolveRequestCompleted();
 
-  base::ObserverList<Observer> observers_;
+  // Returns Time::Now() unless a mock clock has been installed with
+  // SetClockForTesting, in which case the time according to that clock is used
+  // instead.
+  base::Time Now() const;
+
+  base::ObserverList<Observer, true> observers_;
 
   // The set of networks that were checked/resolved in previous passes. These
   // networks are skipped in the NetworkListChanged notification.
@@ -134,6 +146,9 @@ class CHROMEOS_EXPORT ClientCertResolver : public NetworkStateHandlerObserver,
 
   // TaskRunner for slow tasks.
   scoped_refptr<base::TaskRunner> slow_task_runner_for_test_;
+
+  // Can be set for testing.
+  base::Clock* testing_clock_;
 
   base::WeakPtrFactory<ClientCertResolver> weak_ptr_factory_;
 

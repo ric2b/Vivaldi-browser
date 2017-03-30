@@ -6,9 +6,9 @@ package org.chromium.android_webview.permission;
 
 import android.net.Uri;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content.common.CleanupReference;
 
 /**
@@ -17,8 +17,8 @@ import org.chromium.content.common.CleanupReference;
  */
 @JNINamespace("android_webview")
 public class AwPermissionRequest {
-    private Uri mOrigin;
-    private long mResources;
+    private final Uri mOrigin;
+    private final long mResources;
     private boolean mProcessed;
 
     // AwPermissionRequest native instance.

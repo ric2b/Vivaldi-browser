@@ -4,8 +4,12 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/supervised_user/supervised_user_site_list.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -38,7 +42,7 @@ TEST_F(SupervisedUserURLFilterTest, Basic) {
   std::vector<std::string> list;
   // Allow domain and all subdomains, for any filtered scheme.
   list.push_back("google.com");
-  filter_->SetFromPatterns(list);
+  filter_->SetFromPatternsForTesting(list);
   run_loop_.Run();
 
   EXPECT_TRUE(IsURLWhitelisted("http://google.com"));
@@ -64,7 +68,7 @@ TEST_F(SupervisedUserURLFilterTest, Inactive) {
 
   std::vector<std::string> list;
   list.push_back("google.com");
-  filter_->SetFromPatterns(list);
+  filter_->SetFromPatternsForTesting(list);
   run_loop_.Run();
 
   // If the filter is inactive, every URL should be whitelisted.
@@ -78,7 +82,7 @@ TEST_F(SupervisedUserURLFilterTest, Scheme) {
   list.push_back("http://secure.com");
   list.push_back("ftp://secure.com");
   list.push_back("ws://secure.com");
-  filter_->SetFromPatterns(list);
+  filter_->SetFromPatternsForTesting(list);
   run_loop_.Run();
 
   EXPECT_TRUE(IsURLWhitelisted("http://secure.com"));
@@ -96,7 +100,7 @@ TEST_F(SupervisedUserURLFilterTest, Path) {
   std::vector<std::string> list;
   // Filter only a certain path prefix.
   list.push_back("path.to/ruin");
-  filter_->SetFromPatterns(list);
+  filter_->SetFromPatternsForTesting(list);
   run_loop_.Run();
 
   EXPECT_TRUE(IsURLWhitelisted("http://path.to/ruin"));
@@ -111,7 +115,7 @@ TEST_F(SupervisedUserURLFilterTest, PathAndScheme) {
   std::vector<std::string> list;
   // Filter only a certain path prefix and scheme.
   list.push_back("https://s.aaa.com/path");
-  filter_->SetFromPatterns(list);
+  filter_->SetFromPatternsForTesting(list);
   run_loop_.Run();
 
   EXPECT_TRUE(IsURLWhitelisted("https://s.aaa.com/path"));
@@ -127,7 +131,7 @@ TEST_F(SupervisedUserURLFilterTest, Host) {
   std::vector<std::string> list;
   // Filter only a certain hostname, without subdomains.
   list.push_back(".www.example.com");
-  filter_->SetFromPatterns(list);
+  filter_->SetFromPatternsForTesting(list);
   run_loop_.Run();
 
   EXPECT_TRUE(IsURLWhitelisted("http://www.example.com"));
@@ -139,7 +143,7 @@ TEST_F(SupervisedUserURLFilterTest, IPAddress) {
   std::vector<std::string> list;
   // Filter an ip address.
   list.push_back("123.123.123.123");
-  filter_->SetFromPatterns(list);
+  filter_->SetFromPatternsForTesting(list);
   run_loop_.Run();
 
   EXPECT_TRUE(IsURLWhitelisted("http://123.123.123.123/"));
@@ -339,4 +343,112 @@ TEST_F(SupervisedUserURLFilterTest, Patterns) {
   EXPECT_FALSE(IsURLWhitelisted("http://accounts.google.com/bar/"));
   EXPECT_FALSE(IsURLWhitelisted("http://www.google.co.uk/blurp/"));
   EXPECT_TRUE(IsURLWhitelisted("http://mail.google.com/moose/"));
+}
+
+TEST_F(SupervisedUserURLFilterTest, WhitelistsPatterns) {
+  std::vector<std::string> patterns1;
+  patterns1.push_back("google.com");
+  patterns1.push_back("example.com");
+
+  std::vector<std::string> patterns2;
+  patterns2.push_back("secure.com");
+  patterns2.push_back("example.com");
+
+  const std::string id1 = "ID1";
+  const std::string id2 = "ID2";
+  const base::string16 title1 = base::ASCIIToUTF16("Title 1");
+  const base::string16 title2 = base::ASCIIToUTF16("Title 2");
+  const std::vector<std::string> hostname_hashes;
+  const GURL entry_point("https://entry.com");
+
+  scoped_refptr<SupervisedUserSiteList> site_list1 =
+      make_scoped_refptr(new SupervisedUserSiteList(
+          id1, title1, entry_point, patterns1, hostname_hashes));
+  scoped_refptr<SupervisedUserSiteList> site_list2 =
+      make_scoped_refptr(new SupervisedUserSiteList(
+          id2, title2, entry_point, patterns2, hostname_hashes));
+
+  std::vector<scoped_refptr<SupervisedUserSiteList>> site_lists;
+  site_lists.push_back(site_list1);
+  site_lists.push_back(site_list2);
+
+  filter_->SetFromSiteListsForTesting(site_lists);
+  filter_->SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  run_loop_.Run();
+
+  std::map<std::string, base::string16> expected_whitelists;
+  expected_whitelists[id1] = title1;
+  expected_whitelists[id2] = title2;
+
+  std::map<std::string, base::string16> actual_whitelists =
+      filter_->GetMatchingWhitelistTitles(GURL("https://example.com"));
+  ASSERT_EQ(expected_whitelists, actual_whitelists);
+
+  expected_whitelists.erase(id2);
+
+  actual_whitelists =
+      filter_->GetMatchingWhitelistTitles(GURL("https://google.com"));
+  ASSERT_EQ(expected_whitelists, actual_whitelists);
+}
+
+TEST_F(SupervisedUserURLFilterTest, WhitelistsHostnameHashes) {
+  std::vector<std::string> patterns1;
+  patterns1.push_back("google.com");
+  patterns1.push_back("example.com");
+
+  std::vector<std::string> patterns2;
+  patterns2.push_back("secure.com");
+  patterns2.push_back("example.com");
+
+  std::vector<std::string> patterns3;
+
+  std::vector<std::string> hostname_hashes1;
+  std::vector<std::string> hostname_hashes2;
+  std::vector<std::string> hostname_hashes3;
+  // example.com
+  hostname_hashes3.push_back("0caaf24ab1a0c33440c06afe99df986365b0781f");
+  // secure.com
+  hostname_hashes3.push_back("529597fa818be828ffc7b59763fb2b185f419fc5");
+
+  const std::string id1 = "ID1";
+  const std::string id2 = "ID2";
+  const std::string id3 = "ID3";
+  const base::string16 title1 = base::ASCIIToUTF16("Title 1");
+  const base::string16 title2 = base::ASCIIToUTF16("Title 2");
+  const base::string16 title3 = base::ASCIIToUTF16("Title 3");
+  const GURL entry_point("htttps://entry.com");
+
+  scoped_refptr<SupervisedUserSiteList> site_list1 =
+      make_scoped_refptr(new SupervisedUserSiteList(
+          id1, title1, entry_point, patterns1, hostname_hashes1));
+  scoped_refptr<SupervisedUserSiteList> site_list2 =
+      make_scoped_refptr(new SupervisedUserSiteList(
+          id2, title2, entry_point, patterns2, hostname_hashes2));
+  scoped_refptr<SupervisedUserSiteList> site_list3 =
+      make_scoped_refptr(new SupervisedUserSiteList(
+          id3, title3, entry_point, patterns3, hostname_hashes3));
+
+  std::vector<scoped_refptr<SupervisedUserSiteList>> site_lists;
+  site_lists.push_back(site_list1);
+  site_lists.push_back(site_list2);
+  site_lists.push_back(site_list3);
+
+  filter_->SetFromSiteListsForTesting(site_lists);
+  filter_->SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  run_loop_.Run();
+
+  std::map<std::string, base::string16> expected_whitelists;
+  expected_whitelists[id1] = title1;
+  expected_whitelists[id2] = title2;
+  expected_whitelists[id3] = title3;
+
+  std::map<std::string, base::string16> actual_whitelists =
+      filter_->GetMatchingWhitelistTitles(GURL("http://example.com"));
+  ASSERT_EQ(expected_whitelists, actual_whitelists);
+
+  expected_whitelists.erase(id1);
+
+  actual_whitelists =
+      filter_->GetMatchingWhitelistTitles(GURL("https://secure.com"));
+  ASSERT_EQ(expected_whitelists, actual_whitelists);
 }

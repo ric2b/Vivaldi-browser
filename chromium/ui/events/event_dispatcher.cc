@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/macros.h"
 #include "ui/events/event_target.h"
 #include "ui/events/event_targeter.h"
 
@@ -132,9 +133,10 @@ void EventDispatcher::ProcessEvent(EventTarget* target, Event* event) {
   // ER_HANDLED set), that means that the event should still be processed at
   // this layer, however it should not be processed in the next layer of
   // abstraction.
-  if (delegate_ && delegate_->CanDispatchToTarget(target)) {
+  if (delegate_ && delegate_->CanDispatchToTarget(target) &&
+      target->target_handler()) {
     dispatch_helper.set_phase(EP_TARGET);
-    DispatchEvent(target, event);
+    DispatchEvent(target->target_handler(), event);
     if (event->handled())
       return;
   }

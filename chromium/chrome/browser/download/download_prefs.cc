@@ -4,6 +4,8 @@
 
 #include "chrome/browser/download/download_prefs.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -12,12 +14,14 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_extensions.h"
 #include "chrome/browser/download/download_service.h"
@@ -159,10 +163,10 @@ DownloadPrefs::DownloadPrefs(Profile* profile) : profile_(profile) {
   // download completion in this pref.
   std::string extensions_to_open =
       prefs->GetString(prefs::kDownloadExtensionsToOpen);
-  std::vector<std::string> extensions;
-  base::SplitString(extensions_to_open, ':', &extensions);
 
-  for (const auto& extension_string : extensions) {
+  for (const auto& extension_string : base::SplitString(
+           extensions_to_open, ":",
+           base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
 #if defined(OS_POSIX)
     base::FilePath::StringType extension = extension_string;
 #elif defined(OS_WIN)

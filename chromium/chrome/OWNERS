@@ -3,7 +3,6 @@
 
 # Reviewers:
 jochen@chromium.org
-jhawkins@chromium.org
 sky@chromium.org
 thakis@chromium.org
 thestig@chromium.org
@@ -17,7 +16,6 @@ per-file *.isolate=tandrii@chromium.org
 per-file *.isolate=vadimsh@chromium.org
 
 # Android OWNERS from chrome/android/OWNERS
-per-file chrome_android*.gypi=aruslan@chromium.org
 per-file chrome_android*.gypi=bauerb@chromium.org
 per-file chrome_android*.gypi=dtrainor@chromium.org
 per-file chrome_android*.gypi=miguelg@chromium.org
@@ -28,7 +26,6 @@ per-file chrome_android*.gypi=yfriedman@chromium.org
 # Chrome OS OWNERS from chrome/browser/chromeos/OWNERS
 per-file chrome_browser_chromeos.gypi=achuith@chromium.org
 per-file chrome_browser_chromeos.gypi=derat@chromium.org
-per-file chrome_browser_chromeos.gypi=dpolukhin@chromium.org
 per-file chrome_browser_chromeos.gypi=nkostylev@chromium.org
 per-file chrome_browser_chromeos.gypi=oshima@chromium.org
 per-file chrome_browser_chromeos.gypi=satorux@chromium.org

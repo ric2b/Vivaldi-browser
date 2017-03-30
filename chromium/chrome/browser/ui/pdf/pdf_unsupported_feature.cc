@@ -5,8 +5,10 @@
 #include "chrome/browser/ui/pdf/pdf_unsupported_feature.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
@@ -30,12 +32,12 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/renderer_preferences.h"
 #include "grit/browser_resources.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/jstemplate_builder.h"
 
 #if defined(OS_WIN)
-#include "base/win/metro.h"
 #include "chrome/browser/ui/pdf/adobe_reader_info_win.h"
 #endif
 
@@ -272,9 +274,6 @@ base::string16 PDFUnsupportedFeaturePromptClient::GetMessageText() const {
 }
 
 base::string16 PDFUnsupportedFeaturePromptClient::GetAcceptButtonText() const {
-  if (base::win::IsMetroProcess())
-    return l10n_util::GetStringUTF16(IDS_PDF_BUBBLE_METRO_MODE_LINK);
-
   return l10n_util::GetStringUTF16(
       reader_info_.is_installed ? IDS_PDF_BUBBLE_OPEN_IN_READER_LINK
                                 : IDS_PDF_BUBBLE_INSTALL_READER_LINK);
@@ -290,11 +289,6 @@ bool PDFUnsupportedFeaturePromptClient::ShouldExpire(
 }
 
 void PDFUnsupportedFeaturePromptClient::Accept() {
-  if (base::win::IsMetroProcess()) {
-    chrome::AttemptRestartToDesktopMode();
-    return;
-  }
-
   if (!reader_info_.is_installed) {
     content::RecordAction(UserMetricsAction("PDF_InstallReaderInfoBarOK"));
     OpenReaderUpdateURL(web_contents_);

@@ -4,6 +4,8 @@
 
 #include "tools/gn/value_extractors.h"
 
+#include <stddef.h>
+
 #include "tools/gn/build_settings.h"
 #include "tools/gn/err.h"
 #include "tools/gn/label.h"
@@ -67,6 +69,27 @@ struct RelativeFileConverter {
   bool operator()(const Value& v, SourceFile* out, Err* err) const {
     *out = current_dir.ResolveRelativeFile(v, err,
                                            build_settings->root_path_utf8());
+    return !err->has_error();
+  }
+  const BuildSettings* build_settings;
+  const SourceDir& current_dir;
+};
+
+struct LibFileConverter {
+  LibFileConverter(const BuildSettings* build_settings_in,
+                   const SourceDir& current_dir_in)
+      : build_settings(build_settings_in),
+        current_dir(current_dir_in) {
+  }
+  bool operator()(const Value& v, LibFile* out, Err* err) const {
+    if (!v.VerifyTypeIs(Value::STRING, err))
+      return false;
+    if (v.string_value().find('/') == std::string::npos) {
+      *out = LibFile(v.string_value());
+    } else {
+      *out = LibFile(current_dir.ResolveRelativeFile(
+          v, err, build_settings->root_path_utf8()));
+    }
     return !err->has_error();
   }
   const BuildSettings* build_settings;
@@ -145,6 +168,15 @@ bool ExtractListOfRelativeFiles(const BuildSettings* build_settings,
                                 Err* err) {
   return ListValueExtractor(value, files, err,
                             RelativeFileConverter(build_settings, current_dir));
+}
+
+bool ExtractListOfLibs(const BuildSettings* build_settings,
+                       const Value& value,
+                       const SourceDir& current_dir,
+                       std::vector<LibFile>* libs,
+                       Err* err) {
+  return ListValueExtractor(value, libs, err,
+                            LibFileConverter(build_settings, current_dir));
 }
 
 bool ExtractListOfRelativeDirs(const BuildSettings* build_settings,

@@ -22,12 +22,12 @@
 #include "url/url_constants.h"
 
 #if defined(ENABLE_EXTENSIONS)
-#include "chrome/common/extensions/chrome_extension_messages.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/renderer/dispatcher.h"
+#include "extensions/renderer/renderer_extension_registry.h"
 #endif
 
 using blink::WebContentSettingCallbacks;
@@ -43,75 +43,52 @@ using content::NavigationState;
 
 namespace {
 
+// This enum is histogrammed, so do not add, reorder, or remove values.
 enum {
   INSECURE_CONTENT_DISPLAY = 0,
-  INSECURE_CONTENT_DISPLAY_HOST_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_WWW_GOOGLE,
+  INSECURE_CONTENT_DISPLAY_HOST_GOOGLE,      // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_WWW_GOOGLE,  // deprecated
   INSECURE_CONTENT_DISPLAY_HTML,
   INSECURE_CONTENT_RUN,
-  INSECURE_CONTENT_RUN_HOST_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_WWW_GOOGLE,
-  INSECURE_CONTENT_RUN_TARGET_YOUTUBE,
+  INSECURE_CONTENT_RUN_HOST_GOOGLE,      // deprecated
+  INSECURE_CONTENT_RUN_HOST_WWW_GOOGLE,  // deprecated
+  INSECURE_CONTENT_RUN_TARGET_YOUTUBE,   // deprecated
   INSECURE_CONTENT_RUN_JS,
   INSECURE_CONTENT_RUN_CSS,
   INSECURE_CONTENT_RUN_SWF,
-  INSECURE_CONTENT_DISPLAY_HOST_YOUTUBE,
-  INSECURE_CONTENT_RUN_HOST_YOUTUBE,
-  INSECURE_CONTENT_RUN_HOST_GOOGLEUSERCONTENT,
-  INSECURE_CONTENT_DISPLAY_HOST_MAIL_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_MAIL_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_PLUS_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_PLUS_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_DOCS_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_DOCS_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_SITES_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_SITES_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_PICASAWEB_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_PICASAWEB_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_READER,
-  INSECURE_CONTENT_RUN_HOST_GOOGLE_READER,
-  INSECURE_CONTENT_DISPLAY_HOST_CODE_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_CODE_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_GROUPS_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_GROUPS_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_MAPS_GOOGLE,
-  INSECURE_CONTENT_RUN_HOST_MAPS_GOOGLE,
-  INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_SUPPORT,
-  INSECURE_CONTENT_RUN_HOST_GOOGLE_SUPPORT,
-  INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_INTL,
-  INSECURE_CONTENT_RUN_HOST_GOOGLE_INTL,
+  INSECURE_CONTENT_DISPLAY_HOST_YOUTUBE,           // deprecated
+  INSECURE_CONTENT_RUN_HOST_YOUTUBE,               // deprecated
+  INSECURE_CONTENT_RUN_HOST_GOOGLEUSERCONTENT,     // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_MAIL_GOOGLE,       // deprecated
+  INSECURE_CONTENT_RUN_HOST_MAIL_GOOGLE,           // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_PLUS_GOOGLE,       // deprecated
+  INSECURE_CONTENT_RUN_HOST_PLUS_GOOGLE,           // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_DOCS_GOOGLE,       // deprecated
+  INSECURE_CONTENT_RUN_HOST_DOCS_GOOGLE,           // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_SITES_GOOGLE,      // deprecated
+  INSECURE_CONTENT_RUN_HOST_SITES_GOOGLE,          // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_PICASAWEB_GOOGLE,  // deprecated
+  INSECURE_CONTENT_RUN_HOST_PICASAWEB_GOOGLE,      // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_READER,     // deprecated
+  INSECURE_CONTENT_RUN_HOST_GOOGLE_READER,         // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_CODE_GOOGLE,       // deprecated
+  INSECURE_CONTENT_RUN_HOST_CODE_GOOGLE,           // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_GROUPS_GOOGLE,     // deprecated
+  INSECURE_CONTENT_RUN_HOST_GROUPS_GOOGLE,         // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_MAPS_GOOGLE,       // deprecated
+  INSECURE_CONTENT_RUN_HOST_MAPS_GOOGLE,           // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_SUPPORT,    // deprecated
+  INSECURE_CONTENT_RUN_HOST_GOOGLE_SUPPORT,        // deprecated
+  INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_INTL,       // deprecated
+  INSECURE_CONTENT_RUN_HOST_GOOGLE_INTL,           // deprecated
   INSECURE_CONTENT_NUM_EVENTS
 };
 
 // Constants for UMA statistic collection.
-static const char kWWWDotGoogleDotCom[] = "www.google.com";
-static const char kMailDotGoogleDotCom[] = "mail.google.com";
-static const char kPlusDotGoogleDotCom[] = "plus.google.com";
-static const char kDocsDotGoogleDotCom[] = "docs.google.com";
-static const char kSitesDotGoogleDotCom[] = "sites.google.com";
-static const char kPicasawebDotGoogleDotCom[] = "picasaweb.google.com";
-static const char kCodeDotGoogleDotCom[] = "code.google.com";
-static const char kGroupsDotGoogleDotCom[] = "groups.google.com";
-static const char kMapsDotGoogleDotCom[] = "maps.google.com";
-static const char kWWWDotYoutubeDotCom[] = "www.youtube.com";
-static const char kDotGoogleUserContentDotCom[] = ".googleusercontent.com";
-static const char kGoogleReaderPathPrefix[] = "/reader/";
-static const char kGoogleSupportPathPrefix[] = "/support/";
-static const char kGoogleIntlPathPrefix[] = "/intl/";
 static const char kDotJS[] = ".js";
 static const char kDotCSS[] = ".css";
 static const char kDotSWF[] = ".swf";
 static const char kDotHTML[] = ".html";
-
-// Constants for mixed-content blocking.
-static const char kGoogleDotCom[] = "google.com";
-
-static bool IsHostInDomain(const std::string& host, const std::string& domain) {
-  return (base::EndsWith(host, domain, base::CompareCase::INSENSITIVE_ASCII) &&
-          (host.length() == domain.length() ||
-           (host.length() > domain.length() &&
-            host[host.length() - domain.length() - 1] == '.')));
-}
 
 GURL GetOriginOrURL(const WebFrame* frame) {
   WebString top_origin = frame->top()->securityOrigin().toString();
@@ -215,8 +192,9 @@ void ContentSettingsObserver::DidBlockContentType(
     ContentSettingsType settings_type,
     const base::string16& details) {
   // Send multiple ContentBlocked messages if details are provided.
-  if (!content_blocked_[settings_type] || !details.empty()) {
-    content_blocked_[settings_type] = true;
+  bool& blocked = content_blocked_[settings_type];
+  if (!blocked || !details.empty()) {
+    blocked = true;
     Send(new ChromeViewHostMsg_ContentBlocked(routing_id(), settings_type,
                                               details));
   }
@@ -431,10 +409,10 @@ bool ContentSettingsObserver::allowStorage(bool local) {
 bool ContentSettingsObserver::allowReadFromClipboard(bool default_value) {
   bool allowed = default_value;
 #if defined(ENABLE_EXTENSIONS)
-  extensions::ScriptContext* calling_context =
-      extension_dispatcher_->script_context_set().GetCalling();
-  if (calling_context) {
-    allowed |= calling_context->HasAPIPermission(
+  extensions::ScriptContext* current_context =
+      extension_dispatcher_->script_context_set().GetCurrent();
+  if (current_context) {
+    allowed |= current_context->HasAPIPermission(
         extensions::APIPermission::kClipboardRead);
   }
 #endif
@@ -446,14 +424,14 @@ bool ContentSettingsObserver::allowWriteToClipboard(bool default_value) {
 #if defined(ENABLE_EXTENSIONS)
   // All blessed extension pages could historically write to the clipboard, so
   // preserve that for compatibility.
-  extensions::ScriptContext* calling_context =
-      extension_dispatcher_->script_context_set().GetCalling();
-  if (calling_context) {
-    if (calling_context->effective_context_type() ==
+  extensions::ScriptContext* current_context =
+      extension_dispatcher_->script_context_set().GetCurrent();
+  if (current_context) {
+    if (current_context->effective_context_type() ==
         extensions::Feature::BLESSED_EXTENSION_CONTEXT) {
       allowed = true;
     } else {
-      allowed |= calling_context->HasAPIPermission(
+      allowed |= current_context->HasAPIPermission(
           extensions::APIPermission::kClipboardWrite);
     }
   }
@@ -472,48 +450,8 @@ static void SendInsecureContentSignal(int signal) {
 
 bool ContentSettingsObserver::allowDisplayingInsecureContent(
     bool allowed_per_settings,
-    const blink::WebSecurityOrigin& origin,
     const blink::WebURL& resource_url) {
   SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY);
-
-  std::string origin_host(origin.host().utf8());
-  WebFrame* frame = render_frame()->GetWebFrame();
-  GURL frame_gurl(frame->document().url());
-  if (IsHostInDomain(origin_host, kGoogleDotCom)) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_GOOGLE);
-    if (base::StartsWith(frame_gurl.path(), kGoogleSupportPathPrefix,
-                         base::CompareCase::INSENSITIVE_ASCII)) {
-      SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_SUPPORT);
-    } else if (base::StartsWith(frame_gurl.path(), kGoogleIntlPathPrefix,
-                                base::CompareCase::INSENSITIVE_ASCII)) {
-      SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_INTL);
-    }
-  }
-
-  if (origin_host == kWWWDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_WWW_GOOGLE);
-    if (base::StartsWith(frame_gurl.path(), kGoogleReaderPathPrefix,
-                         base::CompareCase::INSENSITIVE_ASCII))
-      SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_GOOGLE_READER);
-  } else if (origin_host == kMailDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_MAIL_GOOGLE);
-  } else if (origin_host == kPlusDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_PLUS_GOOGLE);
-  } else if (origin_host == kDocsDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_DOCS_GOOGLE);
-  } else if (origin_host == kSitesDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_SITES_GOOGLE);
-  } else if (origin_host == kPicasawebDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_PICASAWEB_GOOGLE);
-  } else if (origin_host == kCodeDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_CODE_GOOGLE);
-  } else if (origin_host == kGroupsDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_GROUPS_GOOGLE);
-  } else if (origin_host == kMapsDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_MAPS_GOOGLE);
-  } else if (origin_host == kWWWDotYoutubeDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_DISPLAY_HOST_YOUTUBE);
-  }
 
   GURL resource_gurl(resource_url);
   if (base::EndsWith(resource_gurl.path(), kDotHTML,
@@ -532,55 +470,7 @@ bool ContentSettingsObserver::allowRunningInsecureContent(
     bool allowed_per_settings,
     const blink::WebSecurityOrigin& origin,
     const blink::WebURL& resource_url) {
-  std::string origin_host(origin.host().utf8());
-  WebFrame* frame = render_frame()->GetWebFrame();
-  GURL frame_gurl(frame->document().url());
-  DCHECK_EQ(frame_gurl.host(), origin_host);
-
-  bool is_google = IsHostInDomain(origin_host, kGoogleDotCom);
-  if (is_google) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_GOOGLE);
-    if (base::StartsWith(frame_gurl.path(), kGoogleSupportPathPrefix,
-                         base::CompareCase::INSENSITIVE_ASCII)) {
-      SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_GOOGLE_SUPPORT);
-    } else if (base::StartsWith(frame_gurl.path(), kGoogleIntlPathPrefix,
-                                base::CompareCase::INSENSITIVE_ASCII)) {
-      SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_GOOGLE_INTL);
-    }
-  }
-
-  if (origin_host == kWWWDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_WWW_GOOGLE);
-    if (base::StartsWith(frame_gurl.path(), kGoogleReaderPathPrefix,
-                         base::CompareCase::INSENSITIVE_ASCII))
-      SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_GOOGLE_READER);
-  } else if (origin_host == kMailDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_MAIL_GOOGLE);
-  } else if (origin_host == kPlusDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_PLUS_GOOGLE);
-  } else if (origin_host == kDocsDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_DOCS_GOOGLE);
-  } else if (origin_host == kSitesDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_SITES_GOOGLE);
-  } else if (origin_host == kPicasawebDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_PICASAWEB_GOOGLE);
-  } else if (origin_host == kCodeDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_CODE_GOOGLE);
-  } else if (origin_host == kGroupsDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_GROUPS_GOOGLE);
-  } else if (origin_host == kMapsDotGoogleDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_MAPS_GOOGLE);
-  } else if (origin_host == kWWWDotYoutubeDotCom) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_YOUTUBE);
-  } else if (base::EndsWith(origin_host, kDotGoogleUserContentDotCom,
-                            base::CompareCase::INSENSITIVE_ASCII)) {
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_HOST_GOOGLEUSERCONTENT);
-  }
-
   GURL resource_gurl(resource_url);
-  if (resource_gurl.host() == kWWWDotYoutubeDotCom)
-    SendInsecureContentSignal(INSECURE_CONTENT_RUN_TARGET_YOUTUBE);
-
   if (base::EndsWith(resource_gurl.path(), kDotJS,
                      base::CompareCase::INSENSITIVE_ASCII))
     SendInsecureContentSignal(INSECURE_CONTENT_RUN_JS);
@@ -597,6 +487,13 @@ bool ContentSettingsObserver::allowRunningInsecureContent(
   }
 
   return true;
+}
+
+void ContentSettingsObserver::didUseKeygen() {
+  WebFrame* frame = render_frame()->GetWebFrame();
+  Send(new ChromeViewHostMsg_DidUseKeygen(
+      routing_id(),
+      GURL(frame->securityOrigin().toString())));
 }
 
 void ContentSettingsObserver::didNotAllowPlugins() {
@@ -657,8 +554,7 @@ void ContentSettingsObserver::OnRequestFileSystemAccessAsyncResponse(
 }
 
 void ContentSettingsObserver::ClearBlockedContentSettings() {
-  for (size_t i = 0; i < arraysize(content_blocked_); ++i)
-    content_blocked_[i] = false;
+  content_blocked_.clear();
   cached_storage_permissions_.clear();
   cached_script_permissions_.clear();
 }
@@ -677,14 +573,15 @@ bool ContentSettingsObserver::IsPlatformApp() {
 #if defined(ENABLE_EXTENSIONS)
 const extensions::Extension* ContentSettingsObserver::GetExtension(
     const WebSecurityOrigin& origin) const {
-  if (!base::EqualsASCII(origin.protocol(), extensions::kExtensionScheme))
+  if (!base::EqualsASCII(base::StringPiece16(origin.protocol()),
+                         extensions::kExtensionScheme))
     return NULL;
 
   const std::string extension_id = origin.host().utf8().data();
   if (!extension_dispatcher_->IsExtensionActive(extension_id))
     return NULL;
 
-  return extension_dispatcher_->extensions()->GetByID(extension_id);
+  return extensions::RendererExtensionRegistry::Get()->GetByID(extension_id);
 }
 #endif
 
@@ -711,14 +608,15 @@ bool ContentSettingsObserver::IsWhitelistedForContentSettings(
   if (origin.isUnique())
     return false;  // Uninitialized document?
 
-  if (base::EqualsASCII(origin.protocol(), content::kChromeUIScheme))
+  base::string16 protocol = origin.protocol();
+  if (base::EqualsASCII(protocol, content::kChromeUIScheme))
     return true;  // Browser UI elements should still work.
 
-  if (base::EqualsASCII(origin.protocol(), content::kChromeDevToolsScheme))
+  if (base::EqualsASCII(protocol, content::kChromeDevToolsScheme))
     return true;  // DevTools UI elements should still work.
 
 #if defined(ENABLE_EXTENSIONS)
-  if (base::EqualsASCII(origin.protocol(), extensions::kExtensionScheme))
+  if (base::EqualsASCII(protocol, extensions::kExtensionScheme))
     return true;
 #endif
 
@@ -729,7 +627,7 @@ bool ContentSettingsObserver::IsWhitelistedForContentSettings(
 
   // If the scheme is file:, an empty file name indicates a directory listing,
   // which requires JavaScript to function properly.
-  if (base::EqualsASCII(origin.protocol(), url::kFileScheme)) {
+  if (base::EqualsASCII(protocol, url::kFileScheme)) {
     return document_url.SchemeIs(url::kFileScheme) &&
            document_url.ExtractFileName().empty();
   }

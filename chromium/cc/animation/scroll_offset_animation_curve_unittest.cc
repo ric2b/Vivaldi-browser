@@ -9,15 +9,17 @@
 #include "cc/test/geometry_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+const double kConstantDuration = 9.0;
+const double kDurationDivisor = 60.0;
+
 namespace cc {
 namespace {
 
-TEST(ScrollOffsetAnimationCurveTest, Duration) {
+TEST(ScrollOffsetAnimationCurveTest, DeltaBasedDuration) {
   gfx::ScrollOffset target_value(100.f, 200.f);
   scoped_ptr<ScrollOffsetAnimationCurve> curve(
-      ScrollOffsetAnimationCurve::Create(
-          target_value,
-          EaseInOutTimingFunction::Create().Pass()));
+      ScrollOffsetAnimationCurve::Create(target_value,
+                                         EaseInOutTimingFunction::Create()));
 
   curve->SetInitialValue(target_value);
   EXPECT_DOUBLE_EQ(0.0, curve->Duration().InSecondsF());
@@ -59,9 +61,8 @@ TEST(ScrollOffsetAnimationCurveTest, GetValue) {
   gfx::ScrollOffset initial_value(2.f, 40.f);
   gfx::ScrollOffset target_value(10.f, 20.f);
   scoped_ptr<ScrollOffsetAnimationCurve> curve(
-      ScrollOffsetAnimationCurve::Create(
-          target_value,
-          EaseInOutTimingFunction::Create().Pass()));
+      ScrollOffsetAnimationCurve::Create(target_value,
+                                         EaseInOutTimingFunction::Create()));
   curve->SetInitialValue(initial_value);
 
   base::TimeDelta duration = curve->Duration();
@@ -93,13 +94,12 @@ TEST(ScrollOffsetAnimationCurveTest, Clone) {
   gfx::ScrollOffset initial_value(2.f, 40.f);
   gfx::ScrollOffset target_value(10.f, 20.f);
   scoped_ptr<ScrollOffsetAnimationCurve> curve(
-      ScrollOffsetAnimationCurve::Create(
-          target_value,
-          EaseInOutTimingFunction::Create().Pass()));
+      ScrollOffsetAnimationCurve::Create(target_value,
+                                         EaseInOutTimingFunction::Create()));
   curve->SetInitialValue(initial_value);
   base::TimeDelta duration = curve->Duration();
 
-  scoped_ptr<AnimationCurve> clone(curve->Clone().Pass());
+  scoped_ptr<AnimationCurve> clone(curve->Clone());
 
   EXPECT_EQ(AnimationCurve::SCROLL_OFFSET, clone->Type());
   EXPECT_EQ(duration, clone->Duration());
@@ -130,51 +130,69 @@ TEST(ScrollOffsetAnimationCurveTest, Clone) {
 TEST(ScrollOffsetAnimationCurveTest, UpdateTarget) {
   gfx::ScrollOffset initial_value(0.f, 0.f);
   gfx::ScrollOffset target_value(0.f, 3600.f);
+  double duration = kConstantDuration / kDurationDivisor;
   scoped_ptr<ScrollOffsetAnimationCurve> curve(
       ScrollOffsetAnimationCurve::Create(
-          target_value, EaseInOutTimingFunction::Create().Pass()));
+          target_value, EaseInOutTimingFunction::Create(),
+          ScrollOffsetAnimationCurve::DurationBehavior::CONSTANT));
   curve->SetInitialValue(initial_value);
-  EXPECT_EQ(1.0, curve->Duration().InSecondsF());
-  EXPECT_EQ(1800.0, curve->GetValue(base::TimeDelta::FromSecondsD(0.5)).y());
-  EXPECT_EQ(3600.0, curve->GetValue(base::TimeDelta::FromSecondsD(1.0)).y());
+  EXPECT_NEAR(duration, curve->Duration().InSecondsF(), 0.0002f);
+  EXPECT_NEAR(
+      1800.0,
+      curve->GetValue(base::TimeDelta::FromSecondsD(duration / 2.0)).y(),
+      0.0002f);
+  EXPECT_NEAR(3600.0,
+              curve->GetValue(base::TimeDelta::FromSecondsD(duration)).y(),
+              0.0002f);
 
-  curve->UpdateTarget(0.5, gfx::ScrollOffset(0.0, 9900.0));
+  curve->UpdateTarget(duration / 2, gfx::ScrollOffset(0.0, 9900.0));
 
-  EXPECT_EQ(2.0, curve->Duration().InSecondsF());
-  EXPECT_EQ(1800.0, curve->GetValue(base::TimeDelta::FromSecondsD(0.5)).y());
-  EXPECT_NEAR(5566.49, curve->GetValue(base::TimeDelta::FromSecondsD(1.0)).y(),
-              0.01);
-  EXPECT_EQ(9900.0, curve->GetValue(base::TimeDelta::FromSecondsD(2.0)).y());
+  EXPECT_NEAR(duration * 1.5, curve->Duration().InSecondsF(), 0.0002f);
+  EXPECT_NEAR(
+      1800.0,
+      curve->GetValue(base::TimeDelta::FromSecondsD(duration / 2.0)).y(),
+      0.0002f);
+  EXPECT_NEAR(6827.6,
+              curve->GetValue(base::TimeDelta::FromSecondsD(duration)).y(),
+              0.1f);
+  EXPECT_NEAR(
+      9900.0,
+      curve->GetValue(base::TimeDelta::FromSecondsD(duration * 1.5)).y(),
+      0.0002f);
 
-  curve->UpdateTarget(1.0, gfx::ScrollOffset(0.0, 7200.0));
+  curve->UpdateTarget(duration, gfx::ScrollOffset(0.0, 7200.0));
 
-  EXPECT_NEAR(1.674, curve->Duration().InSecondsF(), 0.01);
-  EXPECT_NEAR(5566.49, curve->GetValue(base::TimeDelta::FromSecondsD(1.0)).y(),
-              0.01);
-  EXPECT_EQ(7200.0, curve->GetValue(base::TimeDelta::FromSecondsD(1.674)).y());
+  // A closer target at high velocity reduces the duration.
+  EXPECT_NEAR(duration * 1.0794, curve->Duration().InSecondsF(), 0.0002f);
+  EXPECT_NEAR(6827.6,
+              curve->GetValue(base::TimeDelta::FromSecondsD(duration)).y(),
+              0.1f);
+  EXPECT_NEAR(
+      7200.0,
+      curve->GetValue(base::TimeDelta::FromSecondsD(duration * 1.08)).y(),
+      0.0002f);
 }
 
-TEST(ScrollOffsetAnimationCurveTest, UpdateTargetWithLargeVelocity) {
-  gfx::ScrollOffset initial_value(0.f, 0.f);
-  gfx::ScrollOffset target_value(0.f, 900.f);
+TEST(ScrollOffsetAnimationCurveTest, InverseDeltaDuration) {
   scoped_ptr<ScrollOffsetAnimationCurve> curve(
       ScrollOffsetAnimationCurve::Create(
-          target_value, EaseInOutTimingFunction::Create().Pass()));
-  curve->SetInitialValue(initial_value);
-  EXPECT_EQ(0.5, curve->Duration().InSecondsF());
+          gfx::ScrollOffset(0.f, 100.f), EaseInOutTimingFunction::Create(),
+          ScrollOffsetAnimationCurve::DurationBehavior::INVERSE_DELTA));
 
-  EXPECT_EQ(450.0, curve->GetValue(base::TimeDelta::FromSecondsD(0.25)).y());
+  curve->SetInitialValue(gfx::ScrollOffset());
+  double smallDeltaDuration = curve->Duration().InSecondsF();
 
-  // This leads to a new computed velocity larger than 5000.
-  curve->UpdateTarget(0.25, gfx::ScrollOffset(0.0, 450.0001));
+  curve->UpdateTarget(0.f, gfx::ScrollOffset(0.f, 300.f));
+  double mediumDeltaDuration = curve->Duration().InSecondsF();
 
-  EXPECT_NEAR(0.25015, curve->Duration().InSecondsF(), 0.0001);
-  EXPECT_NEAR(450.0,
-              curve->GetValue(base::TimeDelta::FromSecondsD(0.22501)).y(),
-              0.001);
-  EXPECT_NEAR(450.0,
-              curve->GetValue(base::TimeDelta::FromSecondsD(0.225015)).y(),
-              0.001);
+  curve->UpdateTarget(0.f, gfx::ScrollOffset(0.f, 500.f));
+  double largeDeltaDuration = curve->Duration().InSecondsF();
+
+  EXPECT_GT(smallDeltaDuration, mediumDeltaDuration);
+  EXPECT_GT(mediumDeltaDuration, largeDeltaDuration);
+
+  curve->UpdateTarget(0.f, gfx::ScrollOffset(0.f, 5000.f));
+  EXPECT_EQ(largeDeltaDuration, curve->Duration().InSecondsF());
 }
 
 }  // namespace

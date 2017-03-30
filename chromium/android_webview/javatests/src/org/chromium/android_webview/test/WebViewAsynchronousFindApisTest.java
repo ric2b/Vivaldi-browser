@@ -4,17 +4,13 @@
 
 package org.chromium.android_webview.test;
 
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 
 /**
  * Tests the asynchronous find-in-page APIs in WebView.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class WebViewAsynchronousFindApisTest extends WebViewFindApisTestBase {
 
     @SmallTest
@@ -30,16 +26,12 @@ public class WebViewAsynchronousFindApisTest extends WebViewFindApisTestBase {
         assertEquals(4, findAllAsyncOnUiThread("chuck"));
     }
 
-    /*
     @SmallTest
     @Feature({"AndroidWebView", "FindInPage"})
-    crbug.com/311495
-    */
-    @DisabledTest
     public void testFindAllDoubleNext() throws Throwable {
         assertEquals(4, findAllAsyncOnUiThread("wood"));
         assertEquals(4, findAllAsyncOnUiThread("wood"));
-        assertEquals(1, findNextOnUiThread(true));
+        assertEquals(2, findNextOnUiThread(true));
     }
 
     @SmallTest
@@ -115,17 +107,13 @@ public class WebViewAsynchronousFindApisTest extends WebViewFindApisTestBase {
         clearMatchesOnUiThread();
     }
 
-    /*
     @SmallTest
     @Feature({"AndroidWebView", "FindInPage"})
-    crbug.com/311495
-    */
-    @DisabledTest
     public void testClearFindNext() throws Throwable {
         assertEquals(4, findAllAsyncOnUiThread("wood"));
         clearMatchesOnUiThread();
         assertEquals(4, findAllAsyncOnUiThread("wood"));
-        assertEquals(1, findNextOnUiThread(true));
+        assertEquals(2, findNextOnUiThread(true));
     }
 
     @SmallTest

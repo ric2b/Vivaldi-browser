@@ -7,17 +7,17 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -67,7 +67,7 @@ bool RunServerAcceptLoop(const std::string& welcome_message,
       failed = true;
       continue;
     }
-    server_delegate->OnClientConnected(client_socket.Pass());
+    server_delegate->OnClientConnected(std::move(client_socket));
   }
   return !failed;
 }
@@ -120,7 +120,7 @@ scoped_ptr<Socket> ConnectToUnixDomainSocket(
       LOG(ERROR) << "Unexpected message read from daemon: " << buf;
       break;
     }
-    return socket.Pass();
+    return socket;
   }
   return scoped_ptr<Socket>();
 }

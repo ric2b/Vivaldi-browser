@@ -43,7 +43,7 @@ cr.define('cr.ui', function() {
 
       this.menu_ = menu;
       menu.classList.remove('hide-delayed');
-      menu.hidden = false;
+      menu.show({x: e.screenX, y: e.screenY});
       menu.contextElement = e.currentTarget;
 
       // When the menu is shown we steal a lot of events.
@@ -80,7 +80,7 @@ cr.define('cr.ui', function() {
         menu.classList.add('hide-delayed');
       else
         menu.classList.remove('hide-delayed');
-      menu.hidden = true;
+      menu.hide();
       var originalContextElement = menu.contextElement;
       menu.contextElement = null;
       this.showingEvents_.removeAll();
@@ -152,8 +152,13 @@ cr.define('cr.ui', function() {
 
       switch (e.type) {
         case 'mousedown':
-          if (!this.menu.contains(e.target))
+          if (!this.menu.contains(e.target)) {
             this.hideMenu();
+            if(e.button == 0 /* Left click */) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }
           else
             e.preventDefault();
           break;

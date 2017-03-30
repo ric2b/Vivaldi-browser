@@ -5,9 +5,10 @@
 #ifndef DEVICE_USB_USB_IDS_H_
 #define DEVICE_USB_USB_IDS_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 namespace device {
 

@@ -9,7 +9,7 @@
 #include <map>
 
 #include "base/callback.h"
-#include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/browsing_data/browsing_data_service_worker_helper.h"
 
 class Profile;
@@ -36,15 +36,13 @@ class MockBrowsingDataServiceWorkerHelper
   bool AllDeleted();
 
   // BrowsingDataServiceWorkerHelper.
-  void StartFetching(const base::Callback<void(
-      const std::list<content::ServiceWorkerUsageInfo>&)>& callback) override;
+  void StartFetching(const FetchCallback& callback) override;
   void DeleteServiceWorkers(const GURL& origin) override;
 
  private:
   ~MockBrowsingDataServiceWorkerHelper() override;
 
-  base::Callback<void(const std::list<content::ServiceWorkerUsageInfo>&)>
-      callback_;
+  FetchCallback callback_;
   std::map<GURL, bool> origins_;
   std::list<content::ServiceWorkerUsageInfo> response_;
 

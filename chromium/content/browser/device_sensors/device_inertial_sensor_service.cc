@@ -15,6 +15,7 @@ DeviceInertialSensorService::DeviceInertialSensorService()
     : num_light_readers_(0),
       num_motion_readers_(0),
       num_orientation_readers_(0),
+      num_orientation_absolute_readers_(0),
       is_shutdown_(false) {
 }
 
@@ -22,8 +23,9 @@ DeviceInertialSensorService::~DeviceInertialSensorService() {
 }
 
 DeviceInertialSensorService* DeviceInertialSensorService::GetInstance() {
-  return Singleton<DeviceInertialSensorService,
-                   LeakySingletonTraits<DeviceInertialSensorService> >::get();
+  return base::Singleton<
+      DeviceInertialSensorService,
+      base::LeakySingletonTraits<DeviceInertialSensorService>>::get();
 }
 
 void DeviceInertialSensorService::AddConsumer(ConsumerType consumer_type) {
@@ -60,6 +62,10 @@ bool DeviceInertialSensorService::ChangeNumberConsumers(
       num_orientation_readers_ += delta;
       DCHECK_GE(num_orientation_readers_ , 0);
       return true;
+    case CONSUMER_TYPE_ORIENTATION_ABSOLUTE:
+      num_orientation_absolute_readers_ += delta;
+      DCHECK_GE(num_orientation_absolute_readers_ , 0);
+      return true;
     case CONSUMER_TYPE_LIGHT:
       num_light_readers_ += delta;
       DCHECK_GE(num_light_readers_, 0);
@@ -77,6 +83,8 @@ int DeviceInertialSensorService::GetNumberConsumers(
       return num_motion_readers_;
     case CONSUMER_TYPE_ORIENTATION:
       return num_orientation_readers_;
+    case CONSUMER_TYPE_ORIENTATION_ABSOLUTE:
+      return num_orientation_absolute_readers_;
     case CONSUMER_TYPE_LIGHT:
       return num_light_readers_;
     default:

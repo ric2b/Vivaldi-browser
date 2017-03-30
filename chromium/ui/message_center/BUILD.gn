@@ -9,26 +9,33 @@ import("//testing/test.gni")
 component("message_center") {
   deps = [
     "//base",
-    "//base:i18n",
-    "//base/third_party/dynamic_annotations",
-    "//skia",
-    "//ui/accessibility",
     "//ui/base",
-    "//ui/events",
-    "//ui/gfx",
-    "//ui/gfx/geometry",
-    "//ui/native_theme",
-    "//ui/resources",
-    "//ui/strings",
     "//url",
   ]
-
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   defines = [ "MESSAGE_CENTER_IMPLEMENTATION" ]
 
   if (enable_notifications && !is_android) {
+    deps += [
+      "//base:i18n",
+      "//base/third_party/dynamic_annotations",
+      "//components/url_formatter",
+      "//skia",
+      "//ui/accessibility",
+      "//ui/events",
+      "//ui/gfx",
+      "//ui/gfx/geometry",
+      "//ui/native_theme",
+      "//ui/resources",
+      "//ui/strings",
+    ]
+
+    configs += [
+      "//build/config:precompiled_headers",
+
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      "//build/config/compiler:no_size_t_to_int_warning",
+    ]
     sources = [
       "cocoa/notification_controller.h",
       "cocoa/notification_controller.mm",
@@ -38,16 +45,6 @@ component("message_center") {
       "cocoa/popup_collection.mm",
       "cocoa/popup_controller.h",
       "cocoa/popup_controller.mm",
-      "cocoa/settings_controller.h",
-      "cocoa/settings_controller.mm",
-      "cocoa/settings_entry_view.h",
-      "cocoa/settings_entry_view.mm",
-      "cocoa/status_item_view.h",
-      "cocoa/status_item_view.mm",
-      "cocoa/tray_controller.h",
-      "cocoa/tray_controller.mm",
-      "cocoa/tray_view_controller.h",
-      "cocoa/tray_view_controller.mm",
       "message_center.cc",
       "message_center.h",
       "message_center_export.h",
@@ -74,6 +71,8 @@ component("message_center") {
       "notification_types.h",
       "notifier_settings.cc",
       "notifier_settings.h",
+      "popup_timer.cc",
+      "popup_timer.h",
     ]
 
     if (is_win) {
@@ -104,6 +103,8 @@ component("message_center") {
         "views/message_view_context_menu_controller.h",
         "views/notification_button.cc",
         "views/notification_button.h",
+        "views/notification_progress_bar.cc",
+        "views/notification_progress_bar.h",
         "views/notification_view.cc",
         "views/notification_view.h",
         "views/notifier_settings_view.cc",
@@ -118,9 +119,9 @@ component("message_center") {
         "views/toast_contents_view.h",
       ]
       deps += [
+        "//ui/compositor",
         "//ui/events",
         "//ui/views",
-        "//ui/compositor",
       ]
     }
 
@@ -154,27 +155,29 @@ component("message_center") {
   }
 }
 
-static_library("test_support") {
+source_set("test_support") {
   testonly = true
-  sources = [
-    "fake_message_center.cc",
-    "fake_message_center.h",
-    "fake_message_center_tray_delegate.cc",
-    "fake_message_center_tray_delegate.h",
-    "fake_notifier_settings_provider.cc",
-    "fake_notifier_settings_provider.h",
-  ]
+
+  if (enable_notifications && !is_android) {
+    sources = [
+      "fake_message_center.cc",
+      "fake_message_center.h",
+      "fake_message_center_tray_delegate.cc",
+      "fake_message_center_tray_delegate.h",
+      "fake_notifier_settings_provider.cc",
+      "fake_notifier_settings_provider.h",
+    ]
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//skia",
+      "//ui/gfx",
+      "//ui/gfx/geometry",
+    ]
+  }
 
   public_deps = [
     ":message_center",
-  ]
-
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//skia",
-    "//ui/gfx",
-    "//ui/gfx/geometry",
   ]
 }
 
@@ -196,6 +199,7 @@ test("message_center_unittests") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gl",
+    "//ui/gl:test_support",
     "//ui/resources",
     "//ui/resources:ui_test_pak",
     "//url",
@@ -206,10 +210,6 @@ test("message_center_unittests") {
       "cocoa/notification_controller_unittest.mm",
       "cocoa/popup_collection_unittest.mm",
       "cocoa/popup_controller_unittest.mm",
-      "cocoa/settings_controller_unittest.mm",
-      "cocoa/status_item_view_unittest.mm",
-      "cocoa/tray_controller_unittest.mm",
-      "cocoa/tray_view_controller_unittest.mm",
       "message_center_impl_unittest.cc",
       "message_center_tray_unittest.cc",
       "notification_delegate_unittest.cc",

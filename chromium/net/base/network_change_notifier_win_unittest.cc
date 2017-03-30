@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_change_notifier_factory.h"
@@ -60,7 +61,7 @@ class TestIPAddressObserver : public NetworkChangeNotifier::IPAddressObserver {
 };
 
 bool ExitMessageLoopAndReturnFalse() {
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
   return false;
 }
 
@@ -164,9 +165,10 @@ class NetworkChangeNotifierWinTest : public testing::Test {
     EXPECT_FALSE(network_change_notifier_.is_watching());
     EXPECT_LT(0, network_change_notifier_.sequential_failures());
 
-    EXPECT_CALL(test_ip_address_observer_, OnIPAddressChanged()).Times(1)
-        .WillOnce(
-            Invoke(base::MessageLoop::current(), &base::MessageLoop::Quit));
+    EXPECT_CALL(test_ip_address_observer_, OnIPAddressChanged())
+        .Times(1)
+        .WillOnce(Invoke(base::MessageLoop::current(),
+                         &base::MessageLoop::QuitWhenIdle));
     EXPECT_CALL(network_change_notifier_, WatchForAddressChangeInternal())
         .Times(1).WillOnce(Return(true));
 

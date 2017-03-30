@@ -5,9 +5,12 @@
 #include "remoting/host/linux/audio_pipe_reader.h"
 
 #include <fcntl.h>
+#include <stddef.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <utility>
 
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
@@ -115,7 +118,7 @@ void AudioPipeReader::TryOpenPipe() {
   file_descriptor_watcher_.StopWatchingFileDescriptor();
   timer_.Stop();
 
-  pipe_ = new_pipe.Pass();
+  pipe_ = std::move(new_pipe);
 
   if (pipe_.IsValid()) {
     // Get buffer size for the pipe.
@@ -147,9 +150,10 @@ void AudioPipeReader::DoCapture() {
   // Calculate how much we need read from the pipe. Pulseaudio doesn't control
   // how much data it writes to the pipe, so we need to pace the stream.
   base::TimeDelta stream_position = base::TimeTicks::Now() - started_time_;
-  int64 stream_position_bytes = stream_position.InMilliseconds() *
-      kSampleBytesPerSecond / base::Time::kMillisecondsPerSecond;
-  int64 bytes_to_read = stream_position_bytes - last_capture_position_;
+  int64_t stream_position_bytes = stream_position.InMilliseconds() *
+                                  kSampleBytesPerSecond /
+                                  base::Time::kMillisecondsPerSecond;
+  int64_t bytes_to_read = stream_position_bytes - last_capture_position_;
 
   std::string data = left_over_bytes_;
   size_t pos = data.size();

@@ -2,14 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/media_galleries/fileapi/picasa_file_util.h"
+
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
@@ -21,7 +28,6 @@
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
 #include "chrome/browser/media_galleries/fileapi/media_path_filter.h"
 #include "chrome/browser/media_galleries/fileapi/picasa_data_provider.h"
-#include "chrome/browser/media_galleries/fileapi/picasa_file_util.h"
 #include "chrome/browser/media_galleries/imported_media_gallery_registry.h"
 #include "chrome/common/media_galleries/picasa_types.h"
 #include "chrome/common/media_galleries/pmp_constants.h"
@@ -97,7 +103,7 @@ class TestFolder {
     base::Time variant_epoch = base::Time::FromLocalExploded(
         picasa::kPmpVariantTimeEpoch);
 
-    int64 microseconds_since_epoch =
+    int64_t microseconds_since_epoch =
         (folder_info_.timestamp - variant_epoch).InMicroseconds();
 
     return static_cast<double>(microseconds_since_epoch) /
@@ -247,11 +253,8 @@ class PicasaFileUtilTest : public testing::Test {
         base::ThreadTaskRunnerHandle::Get().get(),
         base::ThreadTaskRunnerHandle::Get().get(),
         storage::ExternalMountPoints::CreateRefCounted().get(),
-        storage_policy.get(),
-        NULL,
-        additional_providers.Pass(),
-        std::vector<storage::URLRequestAutoMountHandler>(),
-        profile_dir_.path(),
+        storage_policy.get(), NULL, std::move(additional_providers),
+        std::vector<storage::URLRequestAutoMountHandler>(), profile_dir_.path(),
         content::CreateAllowFileAccessOptions());
   }
 
@@ -302,12 +305,6 @@ class PicasaFileUtilTest : public testing::Test {
 
     for (size_t i = 0; i < contents.size(); ++i) {
       EXPECT_TRUE(contents[i].is_directory);
-
-      // Because the timestamp is written out as a floating point Microsoft
-      // variant time, we only expect it to be accurate to within a second.
-      base::TimeDelta delta = test_folders[i]->folder_info().timestamp -
-                              contents[i].last_modified_time;
-      EXPECT_LT(delta, base::TimeDelta::FromSeconds(1));
 
       FileSystemOperation::FileEntryList folder_contents;
       FileSystemURL folder_url = CreateURL(
@@ -441,7 +438,6 @@ TEST_F(PicasaFileUtilTest, NameDeduplication) {
   for (size_t i = 0; i < contents.size(); ++i) {
     EXPECT_EQ(expected_names[i],
               base::FilePath(contents[i].name).AsUTF8Unsafe());
-    EXPECT_EQ(test_folders[i]->timestamp(), contents[i].last_modified_time);
     EXPECT_TRUE(contents[i].is_directory);
   }
 }
@@ -460,9 +456,6 @@ TEST_F(PicasaFileUtilTest, RootFolders) {
 
   EXPECT_TRUE(contents.front().is_directory);
   EXPECT_TRUE(contents.back().is_directory);
-
-  EXPECT_EQ(0, contents.front().size);
-  EXPECT_EQ(0, contents.back().size);
 
   EXPECT_EQ(FILE_PATH_LITERAL("albums"), contents.front().name);
   EXPECT_EQ(FILE_PATH_LITERAL("folders"), contents.back().name);

@@ -14,9 +14,9 @@
 #include "ash/system/user/login_status.h"
 #include "ash/wm/cursor_manager_chromeos.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -40,6 +40,10 @@ namespace client {
 class ActivationClient;
 class FocusClient;
 }
+}
+
+namespace base {
+class SequencedWorkerPool;
 }
 
 namespace gfx {
@@ -81,10 +85,10 @@ class AutoclickController;
 class BluetoothNotificationController;
 class CaptureController;
 class DesktopBackgroundController;
+class DisplayAnimator;
 class DisplayChangeObserver;
 class DisplayColorManager;
-class DisplayConfiguratorAnimation;
-class DisplayController;
+class WindowTreeHostManager;
 class DisplayErrorObserver;
 class DisplayManager;
 class DragDropController;
@@ -374,8 +378,8 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return window_selector_controller_.get();
   }
   FocusCycler* focus_cycler() { return focus_cycler_.get(); }
-  DisplayController* display_controller() {
-    return display_controller_.get();
+  WindowTreeHostManager* window_tree_host_manager() {
+    return window_tree_host_manager_.get();
   }
 #if defined(OS_CHROMEOS)
   PowerEventObserver* power_event_observer() {
@@ -442,6 +446,10 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return shelf_item_delegate_manager_.get();
   }
 
+  base::SequencedWorkerPool* blocking_pool() {
+    return blocking_pool_;
+  }
+
   // Force the shelf to query for it's current visibility state.
   void UpdateShelfVisibility();
 
@@ -458,9 +466,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   void SetShelfAlignment(ShelfAlignment alignment,
                          aura::Window* root_window);
   ShelfAlignment GetShelfAlignment(const aura::Window* root_window);
-
-  // Dims or undims the screen.
-  void SetDimming(bool should_dim);
 
   // Notifies |observers_| when entering or exiting fullscreen mode in
   // |root_window|.
@@ -514,13 +519,11 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   }
 
 #if defined(OS_CHROMEOS)
-  // TODO(oshima): Move these objects to DisplayController.
+  // TODO(oshima): Move these objects to WindowTreeHostManager.
   ui::DisplayConfigurator* display_configurator() {
     return display_configurator_.get();
   }
-  DisplayConfiguratorAnimation* display_configurator_animation() {
-    return display_configurator_animation_.get();
-  }
+  DisplayAnimator* display_animator() { return display_animator_.get(); }
   DisplayErrorObserver* display_error_observer() {
     return display_error_observer_.get();
   }
@@ -591,7 +594,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   typedef std::pair<aura::Window*, gfx::Rect> WindowAndBoundsPair;
 
   // Takes ownership of |delegate|.
-  explicit Shell(ShellDelegate* delegate);
+  Shell(ShellDelegate* delegate, base::SequencedWorkerPool* blocking_pool);
   ~Shell() override;
 
   void Init(const ShellInitParams& init_params);
@@ -610,7 +613,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   EventTarget* GetParentTarget() override;
   scoped_ptr<ui::EventTargetIterator> GetChildIterator() const override;
   ui::EventTargeter* GetEventTargeter() override;
-  void OnEvent(ui::Event* event) override;
 
   // Overridden from aura::client::ActivationChangeObserver:
   void OnWindowActivated(
@@ -671,7 +673,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   scoped_ptr<WindowCycleController> window_cycle_controller_;
   scoped_ptr<WindowSelectorController> window_selector_controller_;
   scoped_ptr<FocusCycler> focus_cycler_;
-  scoped_ptr<DisplayController> display_controller_;
+  scoped_ptr<WindowTreeHostManager> window_tree_host_manager_;
   scoped_ptr<HighContrastController> high_contrast_controller_;
   scoped_ptr<MagnificationController> magnification_controller_;
   scoped_ptr<PartialMagnificationController> partial_magnification_controller_;
@@ -722,7 +724,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Controls video output device state.
   scoped_ptr<ui::DisplayConfigurator> display_configurator_;
   scoped_ptr<DisplayColorManager> display_color_manager_;
-  scoped_ptr<DisplayConfiguratorAnimation> display_configurator_animation_;
+  scoped_ptr<DisplayAnimator> display_animator_;
   scoped_ptr<DisplayErrorObserver> display_error_observer_;
   scoped_ptr<ProjectingObserver> projecting_observer_;
 
@@ -761,6 +763,8 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   // Injected content::GPUDataManager support.
   scoped_ptr<GPUSupport> gpu_support_;
+
+  base::SequencedWorkerPool* blocking_pool_;
 
   DISALLOW_COPY_AND_ASSIGN(Shell);
 };

@@ -4,6 +4,8 @@
 
 #include "extensions/renderer/runtime_custom_bindings.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
@@ -65,7 +67,7 @@ void RuntimeCustomBindings::OpenChannelToExtension(
     info.source_id = extension->id();
 
   info.target_id = *v8::String::Utf8Value(args[0]);
-  info.source_url = context()->GetURL();
+  info.source_url = context()->url();
   std::string channel_name = *v8::String::Utf8Value(args[1]);
   bool include_tls_channel_id =
       args.Length() > 2 ? args[2]->BooleanValue() : false;
@@ -83,8 +85,7 @@ void RuntimeCustomBindings::OpenChannelToNativeApp(
       FeatureProvider::GetPermissionFeatures()
           ->GetFeature("nativeMessaging")
           ->IsAvailableToContext(context()->extension(),
-                                 context()->context_type(),
-                                 context()->GetURL());
+                                 context()->context_type(), context()->url());
   if (!availability.is_available())
     return;
 
@@ -125,8 +126,8 @@ void RuntimeCustomBindings::GetExtensionViews(
   // all views for the current extension.
   int browser_window_id = args[0]->Int32Value();
 
-  std::string view_type_string = *v8::String::Utf8Value(args[1]);
-  base::StringToUpperASCII(&view_type_string);
+  std::string view_type_string =
+      base::ToUpperASCII(*v8::String::Utf8Value(args[1]));
   // |view_type| == VIEW_TYPE_INVALID means getting any type of
   // views.
   ViewType view_type = VIEW_TYPE_INVALID;

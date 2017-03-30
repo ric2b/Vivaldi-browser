@@ -4,6 +4,8 @@
 
 #include "content/ppapi_plugin/ppapi_blink_platform_impl.h"
 
+#include <stdint.h>
+
 #include <map>
 
 #include "base/logging.h"
@@ -41,16 +43,16 @@ class PpapiBlinkPlatformImpl::SandboxSupport : public WebSandboxSupport {
   virtual ~SandboxSupport() {}
 
 #if defined(OS_MACOSX)
-  virtual bool loadFont(NSFont* srcFont, CGFontRef* out, uint32_t* fontID);
+  bool loadFont(NSFont* srcFont, CGFontRef* out, uint32_t* fontID) override;
 #elif defined(OS_POSIX)
   SandboxSupport();
-  virtual void getFallbackFontForCharacter(
+  void getFallbackFontForCharacter(
       WebUChar32 character,
       const char* preferred_locale,
-      blink::WebFallbackFont* fallbackFont);
-  virtual void getRenderStyleForStrike(const char* family,
-                                       int sizeAndStyle,
-                                       blink::WebFontRenderStyle* out);
+      blink::WebFallbackFont* fallbackFont) override;
+  void getRenderStyleForStrike(const char* family,
+                               int sizeAndStyle,
+                               blink::WebFontRenderStyle* out) override;
 
  private:
   // WebKit likes to ask us for the correct font family to use for a set of
@@ -130,6 +132,10 @@ void PpapiBlinkPlatformImpl::Shutdown() {
   // need to clear that map now, just before blink::shutdown() is called.
   sandbox_support_.reset();
 #endif
+}
+
+blink::WebThread* PpapiBlinkPlatformImpl::currentThread() {
+  return BlinkPlatformImpl::currentThread();
 }
 
 blink::WebClipboard* PpapiBlinkPlatformImpl::clipboard() {

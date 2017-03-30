@@ -8,7 +8,7 @@
 #include <jni.h>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 
@@ -34,16 +34,18 @@ class WebsiteSettingsPopupAndroid : public WebsiteSettingsUI {
                               jobject java_website_settings,
                               content::WebContents* web_contents);
   ~WebsiteSettingsPopupAndroid() override;
-  void Destroy(JNIEnv* env, jobject obj);
-  void OnPermissionSettingChanged(JNIEnv* env,
-                                  jobject obj,
-                                  jint type,
-                                  jint setting);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void OnPermissionSettingChanged(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint type,
+      jint setting);
 
   // WebsiteSettingsUI implementations.
   void SetCookieInfo(const CookieInfoList& cookie_info_list) override;
   void SetPermissionInfo(
-      const PermissionInfoList& permission_info_list) override;
+      const PermissionInfoList& permission_info_list,
+      const ChosenObjectInfoList& chosen_object_info_list) override;
   void SetIdentityInfo(const IdentityInfo& identity_info) override;
   void SetSelectedTab(WebsiteSettingsUI::TabId tab_id) override;
 

@@ -5,9 +5,11 @@
 #ifndef ANDROID_WEBVIEW_LIB_AW_CONTENT_BROWSER_CLIENT_H_
 #define ANDROID_WEBVIEW_LIB_AW_CONTENT_BROWSER_CLIENT_H_
 
+#include <stddef.h>
+
 #include "android_webview/browser/aw_web_preferences_populater.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/browser/content_browser_client.h"
 
@@ -48,6 +50,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       bool in_memory,
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors) override;
+  bool IsHandledURL(const GURL& url) override;
   std::string GetCanonicalEncodingNameByAliasName(
       const std::string& alias_name) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
@@ -70,7 +73,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                       content::ResourceContext* context,
                       int render_process_id,
                       int render_frame_id,
-                      net::CookieOptions* options) override;
+                      const net::CookieOptions& options) override;
   bool AllowWorkerDatabase(
       const GURL& url,
       const base::string16& name,
@@ -90,8 +93,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const std::vector<std::pair<int, int>>& render_frames) override;
   content::QuotaPermissionContext* CreateQuotaPermissionContext() override;
   void AllowCertificateError(
-      int render_process_id,
-      int render_frame_id,
+      content::WebContents* web_contents,
       int cert_error,
       const net::SSLInfo& ssl_info,
       const GURL& request_url,
@@ -134,8 +136,15 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const GURL& url,
       bool private_api,
       const content::SocketPermissionRequest* params) override;
+  void GetAdditionalMappedFilesForChildProcess(
+      const base::CommandLine& command_line,
+      int child_process_id,
+      content::FileDescriptorInfo* mappings,
+      std::map<int, base::MemoryMappedFile::Region>* regions) override;
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
                            content::WebPreferences* web_prefs) override;
+  ScopedVector<content::NavigationThrottle> CreateThrottlesForNavigation(
+      content::NavigationHandle* navigation_handle) override;
 #if defined(VIDEO_HOLE)
   content::ExternalVideoSurfaceContainer*
   OverrideCreateExternalVideoSurfaceContainer(

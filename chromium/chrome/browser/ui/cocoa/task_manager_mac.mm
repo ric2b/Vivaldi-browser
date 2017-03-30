@@ -4,10 +4,13 @@
 
 #include "chrome/browser/ui/cocoa/task_manager_mac.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <vector>
 
 #include "base/mac/bundle_locations.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -127,6 +130,7 @@ class SortHelper {
              prefService:g_browser_process->local_state()
                     path:prefs::kTaskManagerWindowPlacement]);
     }
+    [[self window] setExcludedFromWindowsMenu:YES];
     [self showWindow:self];
   }
   return self;
@@ -337,8 +341,52 @@ class SortHelper {
   DCHECK(column);
   NSInteger oldState = [item state];
   NSInteger newState = oldState == NSOnState ? NSOffState : NSOnState;
+
+  // If hiding the column, make sure at least one column will remain visible.
+  if (newState == NSOffState) {
+    // Find the first column that will be visible after hiding |column|.
+    NSTableColumn* firstRemainingVisibleColumn = nil;
+
+    for (NSTableColumn* nextColumn in [tableView_ tableColumns]) {
+      if (nextColumn != column && ![nextColumn isHidden]) {
+        firstRemainingVisibleColumn = nextColumn;
+        break;
+      }
+    }
+
+    // If no column will be visible, abort the toggle. This will basically cause
+    // the toggle operation to silently fail. The other way to ensure at least
+    // one visible column is to disable the menu item corresponding to the last
+    // remaining visible column. That would place the menu in a weird state to
+    // the user, where there's one item somewhere that's grayed out with no
+    // clear explanation of why. It will be rare for a user to try hiding all
+    // columns, but we still want to guard against it. If they are really intent
+    // on hiding the last visible column (perhaps they plan to choose another
+    // one after that to be visible), odds are they will try making another
+    // column visible and then hiding the one column that would not hide.
+    if (firstRemainingVisibleColumn == nil) {
+      return;
+    }
+
+    // If |column| is being used to sort the table (i.e. it's the primary sort
+    // column), make the first remaining visible column the new primary sort
+    // column.
+    int primarySortColumnId = [[currentSortDescriptor_.get() key] intValue];
+    DCHECK(primarySortColumnId);
+    int columnId = [[column identifier] intValue];
+
+    if (primarySortColumnId == columnId) {
+      NSSortDescriptor* newSortDescriptor =
+          [firstRemainingVisibleColumn sortDescriptorPrototype];
+      [tableView_ setSortDescriptors:
+          [NSArray arrayWithObject:newSortDescriptor]];
+    }
+  }
+
+  // Make the change.
   [column setHidden:newState == NSOffState];
   [item setState:newState];
+
   [tableView_ sizeToFit];
   [tableView_ setNeedsDisplay];
 }
@@ -447,10 +495,12 @@ class SortHelper {
 - (void)           tableView:(NSTableView*)tableView
     sortDescriptorsDidChange:(NSArray*)oldDescriptors {
   NSArray* newDescriptors = [tableView sortDescriptors];
-  if ([newDescriptors count] < 1)
-    return;
+  if ([newDescriptors count] < 1) {
+    currentSortDescriptor_.reset(nil);
+  } else {
+    currentSortDescriptor_.reset([[newDescriptors objectAtIndex:0] retain]);
+  }
 
-  currentSortDescriptor_.reset([[newDescriptors objectAtIndex:0] retain]);
   [self reloadData];  // Sorts.
 }
 

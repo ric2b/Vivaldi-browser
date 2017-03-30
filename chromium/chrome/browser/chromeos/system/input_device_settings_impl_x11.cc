@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/kill.h"
@@ -22,6 +23,11 @@
 #include "base/task_runner.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "content/public/browser/browser_thread.h"
+#include "ui/events/base_event_utils.h"
+#include "ui/events/devices/x11/device_data_manager_x11.h"
+#include "ui/events/devices/x11/device_list_cache_x11.h"
+#include "ui/events/devices/x11/touch_factory_x11.h"
+#include "ui/gfx/x/x11_types.h"
 
 namespace chromeos {
 namespace system {
@@ -34,6 +40,9 @@ InputDeviceSettings* g_test_instance = nullptr;
 const char kDeviceTypeTouchpad[] = "touchpad";
 const char kDeviceTypeMouse[] = "mouse";
 const char kInputControl[] = "/opt/google/input/inputcontrol";
+
+// The name of the xinput device corresponding to the internal touchpad.
+const char kInternalTouchpadName[] = "Elan Touchpad";
 
 typedef base::RefCountedData<bool> RefCountedBool;
 
@@ -160,6 +169,8 @@ class InputDeviceSettingsImplX11 : public InputDeviceSettings {
   void SetPrimaryButtonRight(bool right) override;
   void ReapplyTouchpadSettings() override;
   void ReapplyMouseSettings() override;
+  void SetInternalTouchpadEnabled(bool enabled) override;
+  void SetTouchscreensEnabled(bool enabled) override;
 
   // Generate arguments for the inputcontrol script.
   //
@@ -224,7 +235,7 @@ void InputDeviceSettingsImplX11::SetTapDragging(bool enabled) {
 
 void InputDeviceSettingsImplX11::MouseExists(
     const DeviceExistsCallback& callback) {
-  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DeviceExists(kDeviceTypeMouse, callback);
 }
 
@@ -259,6 +270,33 @@ void InputDeviceSettingsImplX11::ReapplyMouseSettings() {
   MouseSettings settings = current_mouse_settings_;
   current_mouse_settings_ = MouseSettings();
   UpdateMouseSettings(settings);
+}
+
+void InputDeviceSettingsImplX11::SetInternalTouchpadEnabled(bool enabled) {
+  ui::DeviceDataManagerX11* device_data_manager =
+      ui::DeviceDataManagerX11::GetInstance();
+  if (!device_data_manager->IsXInput2Available())
+    return;
+
+  const XIDeviceList& xi_dev_list =
+      ui::DeviceListCacheX11::GetInstance()->GetXI2DeviceList(
+          gfx::GetXDisplay());
+  for (int i = 0; i < xi_dev_list.count; ++i) {
+    std::string device_name(xi_dev_list[i].name);
+    base::TrimWhitespaceASCII(device_name, base::TRIM_TRAILING, &device_name);
+    if (device_name == kInternalTouchpadName) {
+      if (enabled)
+        device_data_manager->EnableDevice(xi_dev_list[i].deviceid);
+      else
+        device_data_manager->DisableDevice(xi_dev_list[i].deviceid);
+
+      return;
+    }
+  }
+}
+
+void InputDeviceSettingsImplX11::SetTouchscreensEnabled(bool enabled) {
+  ui::TouchFactory::GetInstance()->SetTouchscreensEnabled(enabled);
 }
 
 void InputDeviceSettingsImplX11::GenerateTouchpadArguments(

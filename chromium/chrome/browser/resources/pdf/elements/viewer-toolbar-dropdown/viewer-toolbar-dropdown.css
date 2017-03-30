@@ -4,11 +4,21 @@
 
 :host {
   display: inline-block;
-  text-align: left;
+  text-align: start;
 }
 
 #container {
   position: absolute;
+  /* Controls the position of the dropdown relative to the right of the screen.
+   * Default is aligned with the right of the toolbar buttons.
+   * TODO(tsergeant): Change the layout of the dropdown so this is not required.
+   */
+  right: var(--viewer-toolbar-dropdown-right-distance, 36px);
+}
+
+:host-context([dir=rtl]) #container {
+  left: var(--viewer-toolbar-dropdown-right-distance, 36px);
+  right: auto;
 }
 
 paper-material {
@@ -30,20 +40,21 @@ paper-material {
   display: inline-block;
 }
 
-#icon.open {
+:host([dropdown-open]) #icon {
   background-color: rgb(25, 27, 29);
   border-radius: 4px;
 }
 
 #arrow {
-  margin-left: -18px;
-  padding-right: 4px;
+  -webkit-margin-start: -12px;
+  -webkit-padding-end: 4px;
 }
 
 h1 {
   border-bottom: 1px solid rgb(219, 219, 219);
   color: rgb(33, 33, 33);
+  font-size: 77.8%;
+  font-weight: 500;
   margin: 0;
-  padding: 16px;
-  @apply(--paper-font-title);
+  padding: 14px 28px;
 }

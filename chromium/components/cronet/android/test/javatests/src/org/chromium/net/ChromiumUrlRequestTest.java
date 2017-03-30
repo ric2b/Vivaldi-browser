@@ -7,7 +7,6 @@ package org.chromium.net;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.SmallTest;
 
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.test.FailurePhase;
 
@@ -20,17 +19,17 @@ import java.util.concurrent.Executors;
 /**
  * Tests making requests using {@link ChromiumUrlRequest}.
  */
+@SuppressWarnings("deprecation")
 public class ChromiumUrlRequestTest extends CronetTestBase {
-    private CronetTestActivity mActivity;
+    private CronetTestFramework mTestFramework;
     private TestHttpUrlRequestListener mListener;
     private HttpUrlRequest mRequest;
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        mActivity = launchCronetTestApp();
-        assertTrue(NativeTestServer.startNativeTestServer(
-                getInstrumentation().getTargetContext()));
+        mTestFramework = startCronetTestFrameworkForLegacyApi(null);
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
         MockUrlRequestJobFactory.setUp();
     }
 
@@ -45,11 +44,8 @@ public class ChromiumUrlRequestTest extends CronetTestBase {
             String url, boolean disableRedirects) {
         HashMap<String, String> headers = new HashMap<String, String>();
         mListener = new TestHttpUrlRequestListener();
-        mRequest = mActivity.mRequestFactory.createRequest(
-                url,
-                HttpUrlRequest.REQUEST_PRIORITY_MEDIUM,
-                headers,
-                mListener);
+        mRequest = mTestFramework.mRequestFactory.createRequest(
+                url, HttpUrlRequest.REQUEST_PRIORITY_MEDIUM, headers, mListener);
         if (disableRedirects) {
             mRequest.disableRedirects();
         }
@@ -240,10 +236,8 @@ public class ChromiumUrlRequestTest extends CronetTestBase {
 
             // Create request.
             final HttpUrlRequest request =
-                    mActivity.mRequestFactory.createRequest(
-                            NativeTestServer.getSuccessURL(),
-                            HttpUrlRequest.REQUEST_PRIORITY_LOW, headers,
-                            channel, listener);
+                    mTestFramework.mRequestFactory.createRequest(NativeTestServer.getSuccessURL(),
+                            HttpUrlRequest.REQUEST_PRIORITY_LOW, headers, channel, listener);
             request.start();
             listener.blockForStart();
             Runnable cancelTask = new Runnable() {
@@ -261,7 +255,6 @@ public class ChromiumUrlRequestTest extends CronetTestBase {
         }
     }
 
-    @SuppressFBWarnings("DLS_DEAD_LOCAL_STORE")
     @SmallTest
     @Feature({"Cronet"})
     public void testNoWriteAfterSyncCancel() throws Exception {
@@ -270,17 +263,13 @@ public class ChromiumUrlRequestTest extends CronetTestBase {
         TestHttpUrlRequestListener listener = new TestHttpUrlRequestListener();
 
         String data = "MyBigFunkyData";
-        int dataLength = data.length();
         int repeatCount = 10000;
         String mockUrl = MockUrlRequestJobFactory.getMockUrlForData(data,
                 repeatCount);
 
         // Create request.
-        final HttpUrlRequest request =
-                mActivity.mRequestFactory.createRequest(
-                        mockUrl,
-                        HttpUrlRequest.REQUEST_PRIORITY_LOW, headers,
-                        channel, listener);
+        final HttpUrlRequest request = mTestFramework.mRequestFactory.createRequest(
+                mockUrl, HttpUrlRequest.REQUEST_PRIORITY_LOW, headers, channel, listener);
         // Channel will cancel the request from the network thread during the
         // first write.
         channel.setRequestToCancelOnWrite(request);

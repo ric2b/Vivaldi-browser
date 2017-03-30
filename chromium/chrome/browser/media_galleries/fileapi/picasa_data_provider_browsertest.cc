@@ -2,18 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/media_galleries/fileapi/picasa_data_provider.h"
+
+#include <utility>
 #include <vector>
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
-#include "chrome/browser/media_galleries/fileapi/picasa_data_provider.h"
 #include "chrome/common/media_galleries/picasa_test_util.h"
 #include "chrome/common/media_galleries/picasa_types.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -155,7 +158,7 @@ class TestPicasaDataProvider : public PicasaDataProvider {
  private:
   void OnTempDirWatchStarted(
       scoped_ptr<base::FilePathWatcher> temp_dir_watcher) override {
-    PicasaDataProvider::OnTempDirWatchStarted(temp_dir_watcher.Pass());
+    PicasaDataProvider::OnTempDirWatchStarted(std::move(temp_dir_watcher));
 
     file_watch_request_returned_ = true;
     for (std::vector<ReadyCallback>::const_iterator it =

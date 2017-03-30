@@ -4,6 +4,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/test/base/chrome_render_view_test.h"
@@ -122,7 +123,7 @@ TEST_F(AutofillRendererTest, SendForms) {
 
   // Dynamically create a new form. A new message should be sent for it, but
   // not for the previous form.
-  ExecuteJavaScript(
+  ExecuteJavaScriptForTests(
       "var newForm=document.createElement('form');"
       "newForm.id='new_testform';"
       "newForm.action='http://google.com';"
@@ -220,7 +221,7 @@ TEST_F(AutofillRendererTest, DynamicallyAddedUnownedFormElements) {
 
   render_thread_->sink().ClearMessages();
 
-  ExecuteJavaScript("AddFields()");
+  ExecuteJavaScriptForTests("AddFields()");
   msg_loop_.RunUntilIdle();
 
   message = render_thread_->sink().GetFirstMessageMatching(

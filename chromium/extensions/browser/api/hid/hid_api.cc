@@ -4,10 +4,11 @@
 
 #include "extensions/browser/api/hid/hid_api.h"
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/stl_util.h"
 #include "device/core/device_client.h"
 #include "device/hid/hid_connection.h"
 #include "device/hid/hid_device_filter.h"
@@ -19,7 +20,7 @@
 #include "extensions/common/api/hid.h"
 #include "net/base/io_buffer.h"
 
-namespace hid = extensions::core_api::hid;
+namespace hid = extensions::api::hid;
 
 using device::HidConnection;
 using device::HidDeviceFilter;
@@ -66,7 +67,7 @@ HidGetDevicesFunction::HidGetDevicesFunction() {}
 HidGetDevicesFunction::~HidGetDevicesFunction() {}
 
 ExtensionFunction::ResponseAction HidGetDevicesFunction::Run() {
-  scoped_ptr<core_api::hid::GetDevices::Params> parameters =
+  scoped_ptr<api::hid::GetDevices::Params> parameters =
       hid::GetDevices::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
@@ -107,7 +108,7 @@ HidGetUserSelectedDevicesFunction::~HidGetUserSelectedDevicesFunction() {
 }
 
 ExtensionFunction::ResponseAction HidGetUserSelectedDevicesFunction::Run() {
-  scoped_ptr<core_api::hid::GetUserSelectedDevices::Params> parameters =
+  scoped_ptr<api::hid::GetUserSelectedDevices::Params> parameters =
       hid::GetUserSelectedDevices::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
@@ -142,7 +143,7 @@ void HidGetUserSelectedDevicesFunction::OnDevicesChosen(
     const std::vector<scoped_refptr<HidDeviceInfo>>& devices) {
   HidDeviceManager* device_manager = HidDeviceManager::Get(browser_context());
   CHECK(device_manager);
-  Respond(OneArgument(device_manager->GetApiDevicesFromList(devices).Pass()));
+  Respond(OneArgument(device_manager->GetApiDevicesFromList(devices)));
 }
 
 HidConnectFunction::HidConnectFunction() : connection_manager_(nullptr) {
@@ -151,7 +152,7 @@ HidConnectFunction::HidConnectFunction() : connection_manager_(nullptr) {
 HidConnectFunction::~HidConnectFunction() {}
 
 ExtensionFunction::ResponseAction HidConnectFunction::Run() {
-  scoped_ptr<core_api::hid::Connect::Params> parameters =
+  scoped_ptr<api::hid::Connect::Params> parameters =
       hid::Connect::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
@@ -199,7 +200,7 @@ HidDisconnectFunction::HidDisconnectFunction() {}
 HidDisconnectFunction::~HidDisconnectFunction() {}
 
 ExtensionFunction::ResponseAction HidDisconnectFunction::Run() {
-  scoped_ptr<core_api::hid::Disconnect::Params> parameters =
+  scoped_ptr<api::hid::Disconnect::Params> parameters =
       hid::Disconnect::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
@@ -346,7 +347,7 @@ void HidSendFeatureReportFunction::StartWork(HidConnection* connection) {
   scoped_refptr<net::IOBufferWithSize> buffer(
       new net::IOBufferWithSize(parameters_->data.size() + 1));
   buffer->data()[0] = static_cast<uint8_t>(parameters_->report_id);
-  memcpy(buffer->data() + 1, vector_as_array(&parameters_->data),
+  memcpy(buffer->data() + 1, parameters_->data.data(),
          parameters_->data.size());
   connection->SendFeatureReport(
       buffer, buffer->size(),

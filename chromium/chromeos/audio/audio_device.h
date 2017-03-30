@@ -5,11 +5,12 @@
 #ifndef CHROMEOS_AUDIO_AUDIO_DEVICE_H_
 #define CHROMEOS_AUDIO_AUDIO_DEVICE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/audio_node.h"
 
@@ -41,18 +42,33 @@ struct CHROMEOS_EXPORT AudioDevice {
   static std::string GetTypeString(chromeos::AudioDeviceType type);
   static chromeos::AudioDeviceType GetAudioType(const std::string& node_type);
 
+  // Indicates that an input or output audio device is for simple usage like
+  // playback or recording for user. In contrast, audio device such as
+  // loopback, always on keyword recognition (AOKR), and keyboard mic are
+  // not for simple usage.
+  bool is_for_simple_usage() const {
+    return (type == AUDIO_TYPE_HEADPHONE ||
+            type == AUDIO_TYPE_INTERNAL_MIC ||
+            type == AUDIO_TYPE_MIC ||
+            type == AUDIO_TYPE_USB ||
+            type == AUDIO_TYPE_BLUETOOTH ||
+            type == AUDIO_TYPE_HDMI ||
+            type == AUDIO_TYPE_INTERNAL_SPEAKER);
+  }
+
   bool is_input;
-  uint64 id;
+  uint64_t id;
   std::string display_name;
   std::string device_name;
+  std::string mic_positions;
   AudioDeviceType type;
-  uint8 priority;
+  uint8_t priority;
   bool active;
-  uint64 plugged_time;
+  uint64_t plugged_time;
 };
 
 typedef std::vector<AudioDevice> AudioDeviceList;
-typedef std::map<uint64, AudioDevice> AudioDeviceMap;
+typedef std::map<uint64_t, AudioDevice> AudioDeviceMap;
 
 struct AudioDeviceCompare {
   // Rules used to discern which device is higher,

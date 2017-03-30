@@ -8,13 +8,13 @@
 #include <string>
 
 #include "base/strings/string16.h"
+#include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/ozone/layout/events_ozone_layout_export.h"
 
 namespace ui {
 
 enum class DomCode;
-enum class DomKey;
 
 // A KeyboardLayoutEngine provides a platform-independent interface to
 // key mapping. Key mapping provides a meaning (DomKey and character,
@@ -52,23 +52,19 @@ class EVENTS_OZONE_LAYOUT_EXPORT KeyboardLayoutEngine {
   // the function must not use their initial values.
   //
   // Returns true if it can determine the DOM meaning (i.e. ui::DomKey and
-  // character) and the corresponding legacy KeyboardCode from the given
+  // character) and the corresponding (non-located) KeyboardCode from the given
   // physical state (ui::DomCode and ui::EventFlags), OR if it can determine
   // that there is no meaning in the current layout (e.g. the key is unbound).
-  // In the latter case, the function sets *dom_key to UNIDENTIFIED, *character
-  // to 0, and *key_code to VKEY_UNKNOWN.
+  // In the latter case, the function sets *dom_key to UNIDENTIFIED and
+  // *key_code to VKEY_UNKNOWN.
   //
   // Returns false if it cannot determine the meaning (and cannot determine
   // that there is none); in this case it does not set any of the output
   // parameters.
-  //
-  // TODO(kpschoedel): remove the platform_keycode output. crbug.com/442757
   virtual bool Lookup(DomCode dom_code,
                       int event_flags,
                       DomKey* dom_key,
-                      base::char16* character,
-                      KeyboardCode* key_code,
-                      uint32* platform_keycode) const = 0;
+                      KeyboardCode* key_code) const = 0;
 };
 
 }  // namespace ui

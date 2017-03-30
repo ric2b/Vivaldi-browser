@@ -2,19 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_DATA_PIPE_IMPL_H_
-#define MOJO_EDK_SYSTEM_DATA_PIPE_IMPL_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_DATA_PIPE_IMPL_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_DATA_PIPE_IMPL_H_
 
 #include <stdint.h>
 
-#include "mojo/edk/embedder/platform_handle_vector.h"
-#include "mojo/edk/system/data_pipe.h"
-#include "mojo/edk/system/handle_signals_state.h"
-#include "mojo/edk/system/memory.h"
-#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/macros.h"
 #include "mojo/public/c/system/types.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_handle_vector.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/handle_signals_state.h"
+#include "third_party/mojo/src/mojo/edk/system/memory.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace mojo {
 namespace system {
@@ -41,8 +41,7 @@ class MOJO_SYSTEM_IMPL_EXPORT DataPipeImpl {
                                        uint32_t min_num_bytes_to_write) = 0;
   virtual MojoResult ProducerBeginWriteData(
       UserPointer<void*> buffer,
-      UserPointer<uint32_t> buffer_num_bytes,
-      uint32_t min_num_bytes_to_write) = 0;
+      UserPointer<uint32_t> buffer_num_bytes) = 0;
   virtual MojoResult ProducerEndWriteData(uint32_t num_bytes_written) = 0;
   // Note: A producer should not be writable during a two-phase write.
   virtual HandleSignalsState ProducerGetHandleSignalsState() const = 0;
@@ -69,8 +68,7 @@ class MOJO_SYSTEM_IMPL_EXPORT DataPipeImpl {
   virtual MojoResult ConsumerQueryData(UserPointer<uint32_t> num_bytes) = 0;
   virtual MojoResult ConsumerBeginReadData(
       UserPointer<const void*> buffer,
-      UserPointer<uint32_t> buffer_num_bytes,
-      uint32_t min_num_bytes_to_read) = 0;
+      UserPointer<uint32_t> buffer_num_bytes) = 0;
   virtual MojoResult ConsumerEndReadData(uint32_t num_bytes_read) = 0;
   // Note: A consumer should not be writable during a two-phase read.
   virtual HandleSignalsState ConsumerGetHandleSignalsState() const = 0;
@@ -142,9 +140,9 @@ struct MOJO_ALIGNAS(8) SerializedDataPipeProducerDispatcher {
   // However, the deserializer must revalidate (as with everything received).
   MojoCreateDataPipeOptions validated_options;
   // Number of bytes already enqueued to the consumer. Set to
-  // |static_cast<size_t>(-1)| if the consumer is already closed, in which case
-  // this will *not* be followed by a serialized |ChannelEndpoint|.
-  size_t consumer_num_bytes;
+  // |static_cast<uint32_t>(-1)| if the consumer is already closed, in which
+  // case this will *not* be followed by a serialized |ChannelEndpoint|.
+  uint32_t consumer_num_bytes;
 };
 
 // Serialized form of a consumer dispatcher. This will actually be followed by a
@@ -158,4 +156,4 @@ struct MOJO_ALIGNAS(8) SerializedDataPipeConsumerDispatcher {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_DATA_PIPE_IMPL_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_DATA_PIPE_IMPL_H_

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "chrome/browser/download/all_download_item_notifier.h"
@@ -383,6 +384,7 @@ class ExtensionDownloadsEventRouter
 
  private:
   void DispatchEvent(
+      events::HistogramValue histogram_value,
       const std::string& event_name,
       bool include_incognito,
       const extensions::Event::WillDispatchCallback& will_dispatch_callback,

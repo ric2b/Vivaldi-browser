@@ -4,6 +4,8 @@
 
 #include "net/url_request/url_fetcher_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/sequenced_task_runner.h"
 #include "net/base/upload_data_stream.h"
@@ -33,8 +35,8 @@ void URLFetcherImpl::SetUploadData(const std::string& upload_content_type,
 void URLFetcherImpl::SetUploadFilePath(
     const std::string& upload_content_type,
     const base::FilePath& file_path,
-    uint64 range_offset,
-    uint64 range_length,
+    uint64_t range_offset,
+    uint64_t range_length,
     scoped_refptr<base::TaskRunner> file_task_runner) {
   core_->SetUploadFilePath(upload_content_type,
                            file_path,
@@ -90,9 +92,8 @@ void URLFetcherImpl::SetRequestContext(
   core_->SetRequestContext(request_context_getter);
 }
 
-void URLFetcherImpl::SetFirstPartyForCookies(
-    const GURL& first_party_for_cookies) {
-  core_->SetFirstPartyForCookies(first_party_for_cookies);
+void URLFetcherImpl::SetInitiatorURL(const GURL& initiator) {
+  core_->SetInitiatorURL(initiator);
 }
 
 void URLFetcherImpl::SetURLRequestUserData(
@@ -139,7 +140,7 @@ void URLFetcherImpl::SaveResponseToTemporaryFile(
 
 void URLFetcherImpl::SaveResponseWithWriter(
     scoped_ptr<URLFetcherResponseWriter> response_writer) {
-  core_->SaveResponseWithWriter(response_writer.Pass());
+  core_->SaveResponseWithWriter(std::move(response_writer));
 }
 
 HttpResponseHeaders* URLFetcherImpl::GetResponseHeaders() const {
@@ -152,6 +153,18 @@ HostPortPair URLFetcherImpl::GetSocketAddress() const {
 
 bool URLFetcherImpl::WasFetchedViaProxy() const {
   return core_->WasFetchedViaProxy();
+}
+
+bool URLFetcherImpl::WasCached() const {
+  return core_->WasCached();
+}
+
+int64_t URLFetcherImpl::GetReceivedResponseContentLength() const {
+  return core_->GetReceivedResponseContentLength();
+}
+
+int64_t URLFetcherImpl::GetTotalReceivedBytes() const {
+  return core_->GetTotalReceivedBytes();
 }
 
 void URLFetcherImpl::Start() {

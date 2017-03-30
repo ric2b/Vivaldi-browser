@@ -49,7 +49,7 @@ const char kNoteProtectedNonVirtualDtor[] =
     "[chromium-style] Protected non-virtual destructor declared here";
 
 bool TypeHasNonTrivialDtor(const Type* type) {
-  if (const CXXRecordDecl* cxx_r = type->getPointeeCXXRecordDecl())
+  if (const CXXRecordDecl* cxx_r = type->getAsCXXRecordDecl())
     return !cxx_r->hasTrivialDestructor();
 
   return false;
@@ -563,9 +563,9 @@ void FindBadConstructsConsumer::CountType(const Type* type,
       // Simplifying; the whole class isn't trivial if the dtor is, but
       // we use this as a signal about complexity.
       if (TypeHasNonTrivialDtor(type))
-        (*trivial_member)++;
-      else
         (*non_trivial_member)++;
+      else
+        (*trivial_member)++;
       break;
     }
     case Type::TemplateSpecialization: {
@@ -606,8 +606,8 @@ void FindBadConstructsConsumer::CountType(const Type* type,
       break;
     }
     default: {
-      // Stupid assumption: anything we see that isn't the above is one of
-      // the 20 integer types.
+      // Stupid assumption: anything we see that isn't the above is a POD
+      // or reference type.
       (*trivial_member)++;
       break;
     }
@@ -619,6 +619,7 @@ void FindBadConstructsConsumer::CountType(const Type* type,
 // a type that is.
 // If there are issues, update |loc| with the SourceLocation of the issue
 // and returns appropriately, or returns None if there are no issues.
+// static
 FindBadConstructsConsumer::RefcountIssue
 FindBadConstructsConsumer::CheckRecordForRefcountIssue(
     const CXXRecordDecl* record,
@@ -640,13 +641,10 @@ FindBadConstructsConsumer::CheckRecordForRefcountIssue(
 
 // Returns true if |base| specifies one of the Chromium reference counted
 // classes (base::RefCounted / base::RefCountedThreadSafe).
-bool FindBadConstructsConsumer::IsRefCountedCallback(
+bool FindBadConstructsConsumer::IsRefCounted(
     const CXXBaseSpecifier* base,
-    CXXBasePath& path,
-    void* user_data) {
-  FindBadConstructsConsumer* self =
-      static_cast<FindBadConstructsConsumer*>(user_data);
-
+    CXXBasePath& path) {
+  FindBadConstructsConsumer* self = this;
   const TemplateSpecializationType* base_type =
       dyn_cast<TemplateSpecializationType>(
           UnwrapType(base->getType().getTypePtr()));
@@ -674,6 +672,7 @@ bool FindBadConstructsConsumer::IsRefCountedCallback(
 
 // Returns true if |base| specifies a class that has a public destructor,
 // either explicitly or implicitly.
+// static
 bool FindBadConstructsConsumer::HasPublicDtorCallback(
     const CXXBaseSpecifier* base,
     CXXBasePath& path,
@@ -731,9 +730,11 @@ void FindBadConstructsConsumer::CheckRefCountedDtors(
 
   // Determine if the current type is even ref-counted.
   CXXBasePaths refcounted_path;
-  if (!record->lookupInBases(&FindBadConstructsConsumer::IsRefCountedCallback,
-                             this,
-                             refcounted_path)) {
+  if (!record->lookupInBases(
+          [this](const CXXBaseSpecifier* base, CXXBasePath& path) {
+            return IsRefCounted(base, path);
+          },
+          refcounted_path)) {
     return;  // Class does not derive from a ref-counted base class.
   }
 
@@ -783,9 +784,12 @@ void FindBadConstructsConsumer::CheckRefCountedDtors(
   // Find all public destructors. This will record the class hierarchy
   // that leads to the public destructor in |dtor_paths|.
   CXXBasePaths dtor_paths;
-  if (!record->lookupInBases(&FindBadConstructsConsumer::HasPublicDtorCallback,
-                             this,
-                             dtor_paths)) {
+  if (!record->lookupInBases(
+          [](const CXXBaseSpecifier* base, CXXBasePath& path) {
+            // TODO(thakis): Inline HasPublicDtorCallback() after clang roll.
+            return HasPublicDtorCallback(base, path, nullptr);
+          },
+          dtor_paths)) {
     return;
   }
 

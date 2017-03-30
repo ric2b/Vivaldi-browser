@@ -5,12 +5,12 @@
 // Regression tests for FFmpeg.  Test files can be found in the internal media
 // test data directory:
 //
-//    svn://svn.chromium.org/chrome-internal/trunk/data/media/
+//    https://chrome-internal.googlesource.com/chrome/data/media
 //
 // Simply add the custom_dep below to your gclient and sync:
 //
 //    "src/media/test/data/internal":
-//        "svn://svn.chromium.org/chrome-internal/trunk/data/media"
+//        "https://chrome-internal.googlesource.com/chrome/data/media"
 //
 // Many of the files here do not cause issues outside of tooling, so you'll need
 // to run this test under ASAN, TSAN, and Valgrind to ensure that all issues are
@@ -87,7 +87,10 @@ FFMPEG_TEST_CASE(Cr110849,
                  "security/110849.mkv",
                  DEMUXER_ERROR_COULD_NOT_OPEN,
                  DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
-FFMPEG_TEST_CASE(Cr112384, "security/112384.webm", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr112384,
+                 "security/112384.webm",
+                 DEMUXER_ERROR_COULD_NOT_PARSE,
+                 DEMUXER_ERROR_COULD_NOT_PARSE);
 FFMPEG_TEST_CASE(Cr112976, "security/112976.ogg", PIPELINE_OK, PIPELINE_OK);
 FFMPEG_TEST_CASE(Cr116927,
                  "security/116927.ogv",
@@ -126,7 +129,10 @@ FFMPEG_TEST_CASE(Cr242786, "security/242786.webm", PIPELINE_OK, PIPELINE_OK);
 // Test for out-of-bounds access with slightly corrupt file (detection logic
 // thinks it's a MONO file, but actually contains STEREO audio).
 FFMPEG_TEST_CASE(Cr275590, "security/275590.m4a", PIPELINE_OK, PIPELINE_OK);
-FFMPEG_TEST_CASE(Cr444522, "security/444522.mp4", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr444522,
+                 "security/444522.mp4",
+                 DEMUXER_ERROR_COULD_NOT_OPEN,
+                 DEMUXER_ERROR_COULD_NOT_OPEN);
 FFMPEG_TEST_CASE(Cr444539,
                  "security/444539.m4a",
                  DEMUXER_ERROR_COULD_NOT_OPEN,
@@ -135,10 +141,22 @@ FFMPEG_TEST_CASE(Cr444546,
                  "security/444546.mp4",
                  DEMUXER_ERROR_COULD_NOT_OPEN,
                  DEMUXER_ERROR_COULD_NOT_OPEN);
+FFMPEG_TEST_CASE(Cr447860,
+                 "security/447860.webm",
+                 PIPELINE_OK,
+                 PIPELINE_OK);
 FFMPEG_TEST_CASE(Cr449958,
                  "security/449958.webm",
                  PIPELINE_OK,
                  PIPELINE_ERROR_DECODE);
+FFMPEG_TEST_CASE(Cr536601,
+                 "security/536601.m4a",
+                 PIPELINE_OK,
+                 PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr532967,
+                 "security/532967.webm",
+                 PIPELINE_OK,
+                 PIPELINE_OK);
 
 // General MP4 test cases.
 FFMPEG_TEST_CASE(MP4_0,
@@ -318,6 +336,7 @@ FLAKY_FFMPEG_TEST_CASE(WEBM_3, "security/out.webm.139771.2965");
 FLAKY_FFMPEG_TEST_CASE(MP4_10, "security/null1.m4a");
 FLAKY_FFMPEG_TEST_CASE(Cr112670, "security/112670.mp4");
 
+// Uses ASSERTs to prevent sharded tests from hanging on failure.
 TEST_P(FFmpegRegressionTest, BasicPlayback) {
   if (GetParam().init_status == PIPELINE_OK) {
     ASSERT_EQ(PIPELINE_OK, Start(GetParam().filename, kClockless));

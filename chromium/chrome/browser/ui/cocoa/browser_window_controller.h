@@ -15,9 +15,9 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_controller.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bubble_controller.h"
-#import "chrome/browser/ui/cocoa/browser_command_executor.h"
 #import "chrome/browser/ui/cocoa/exclusive_access_bubble_window_controller.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_controller.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_window_controller.h"
@@ -29,10 +29,11 @@
 #include "ui/gfx/geometry/rect.h"
 
 @class AvatarBaseController;
+class BookmarkBubbleObserverCocoa;
 class Browser;
 class BrowserWindow;
 class BrowserWindowCocoa;
-@class BrowserWindowEnterFullscreenTransition;
+@class BrowserWindowFullscreenTransition;
 @class DevToolsController;
 @class DownloadShelfController;
 class ExtensionKeybindingRegistryCocoa;
@@ -58,12 +59,10 @@ namespace extensions {
 class Command;
 }
 
-@interface BrowserWindowController :
-  TabWindowController<NSUserInterfaceValidations,
-                      BookmarkBarControllerDelegate,
-                      BrowserCommandExecutor,
-                      ViewResizer,
-                      TabStripControllerDelegate> {
+@interface BrowserWindowController
+    : TabWindowController<BookmarkBarControllerDelegate,
+                          ViewResizer,
+                          TabStripControllerDelegate> {
  @private
   // The ordering of these members is important as it determines the order in
   // which they are destroyed. |browser_| needs to be destroyed last as most of
@@ -84,8 +83,8 @@ class Command;
   base::scoped_nsobject<PresentationModeController> presentationModeController_;
   base::scoped_nsobject<ExclusiveAccessBubbleWindowController>
       exclusiveAccessBubbleWindowController_;
-  base::scoped_nsobject<BrowserWindowEnterFullscreenTransition>
-      enterFullscreenTransition_;
+  base::scoped_nsobject<BrowserWindowFullscreenTransition>
+      fullscreenTransition_;
 
   // Strong. StatusBubble is a special case of a strong reference that
   // we don't wrap in a scoped_ptr because it is acting the same
@@ -93,6 +92,7 @@ class Command;
   // be shut down before our destructors are called.
   StatusBubbleMac* statusBubble_;
 
+  scoped_ptr<BookmarkBubbleObserverCocoa> bookmarkBubbleObserver_;
   BookmarkBubbleController* bookmarkBubbleController_;  // Weak.
   BOOL initializing_;  // YES while we are currently in initWithBrowser:
   BOOL ownsBrowser_;  // Only ever NO when testing
@@ -134,6 +134,11 @@ class Command;
   // AppKit fullscreen mode.
   BOOL enteringAppKitFullscreen_;
 
+  // True between |-windowWillExitFullScreen:| and |-windowDidExitFullScreen:|
+  // to indicate that the window is in the process of transitioning out of
+  // AppKit fullscreen mode.
+  BOOL exitingAppKitFullscreen_;
+
   // True between |enterImmersiveFullscreen| and |-windowDidEnterFullScreen:|
   // to indicate that the window is in the process of transitioning into
   // AppKit fullscreen mode.
@@ -148,6 +153,14 @@ class Command;
   // property indicates whether the window is being fullscreened on the
   // primary screen.
   BOOL enteringAppKitFullscreenOnPrimaryScreen_;
+
+  // This flag is set to true when |customWindowsToEnterFullScreenForWindow:|
+  // and |customWindowsToExitFullScreenForWindow:| are called and did not
+  // return nil.
+  BOOL isUsingCustomAnimation_;
+
+  // True if the toolbar needs to be hidden in fullscreen.
+  BOOL shouldHideFullscreenToolbar_;
 
   // The size of the original (non-fullscreen) window.  This is saved just
   // before entering fullscreen mode and is only valid when |-isFullscreen|
@@ -168,6 +181,11 @@ class Command;
   // in visible state when the following is |YES|.
   BOOL barVisibilityUpdatesEnabled_;
 
+  // If this ivar is set to YES, layoutSubviews calls will be ignored. This is
+  // used in fullscreen transition to prevent spurious resize messages from
+  // being sent to the renderer, which causes the transition to be janky.
+  BOOL blockLayoutSubviews_;
+
   // When going fullscreen for a tab, we need to store the URL and the
   // fullscreen type, since we can't show the bubble until
   // -windowDidEnterFullScreen: gets called.
@@ -177,9 +195,6 @@ class Command;
   // The Extension Command Registry used to determine which keyboard events to
   // handle.
   scoped_ptr<ExtensionKeybindingRegistryCocoa> extension_keybinding_registry_;
-
-  // Whether the root view of the window is layer backed.
-  BOOL windowViewWantsLayer_;
 }
 
 // A convenience class method which gets the |BrowserWindowController| for a
@@ -315,11 +330,6 @@ class Command;
 // The user changed the theme.
 - (void)userChangedTheme;
 
-// Executes the command in the context of the current browser.
-// |command| is an integer value containing one of the constants defined in the
-// "chrome/app/chrome_command_ids.h" file.
-- (void)executeCommand:(int)command;
-
 // Consults the Command Registry to see if this |event| needs to be handled as
 // an extension command and returns YES if so (NO otherwise).
 // Only extensions with the given |priority| are considered.
@@ -346,7 +356,7 @@ class Command;
 - (void)updateDevToolsForContents:(content::WebContents*)contents;
 
 // Gets the current theme provider.
-- (ui::ThemeProvider*)themeProvider;
+- (const ui::ThemeProvider*)themeProvider;
 
 // Gets the window style.
 - (ThemedWindowStyle)themedWindowStyle;
@@ -362,6 +372,9 @@ class Command;
 // coordinates.
 - (NSPoint)bookmarkBubblePoint;
 
+// Called by BookmarkBubbleObserverCocoa when the bubble is closed.
+- (void)bookmarkBubbleClosed;
+
 // Called when the Add Search Engine dialog is closed.
 - (void)sheetDidEnd:(NSWindow*)sheet
          returnCode:(NSInteger)code
@@ -370,6 +383,13 @@ class Command;
 // Executes the command registered by the extension that has the given id.
 - (void)executeExtensionCommand:(const std::string&)extension_id
                         command:(const extensions::Command&)command;
+
+// To set whether the window has a tab playing audio or muted audio playing.
+- (void)setMediaState:(TabMediaState)mediaState;
+
+// Returns current media state, determined by the media state of tabs, set by
+// UpdateMediaState.
+- (TabMediaState)mediaState;
 
 @end  // @interface BrowserWindowController
 
@@ -429,12 +449,14 @@ class Command;
 // invoked causes all fullscreen modes to exit.
 //
 // ----------------------------------------------------------------------------
-// There are 2 "styles" of omnibox sliding.
+// There are 3 "styles" of omnibox sliding.
 // + OMNIBOX_TABS_PRESENT: Both the omnibox and the tabstrip are present.
 // Moving the cursor to the top causes the menubar to appear, and everything
 // else to slide down.
 // + OMNIBOX_TABS_HIDDEN: Both tabstrip and omnibox are hidden. Moving cursor
 // to top shows tabstrip, omnibox, and menu bar.
+// + OMNIBOX_TABS_NONE: Both tabstrip and omnibox are hidden. Moving cursor
+// to top causes the menubar to appear, but not the tabstrip and omnibox.
 //
 // The omnibox sliding styles are used in conjunction with the fullscreen APIs.
 // There is exactly 1 sliding style active at a time. The sliding is mangaged
@@ -513,6 +535,11 @@ class Command;
 - (void)updateFullscreenExitBubbleURL:(const GURL&)url
                            bubbleType:(ExclusiveAccessBubbleType)bubbleType;
 
+// Toggles and updates the toolbar's visibility in fullscreen mode. This
+// function toggles between the sliding styles: OMNIBOX_TABS_PRESENT and
+// OMNIBOX_TABS_HIDDEN.
+- (void)setFullscreenToolbarHidden:(BOOL)isHidden;
+
 // Returns YES if the browser window is in or entering any fullscreen mode.
 - (BOOL)isInAnyFullscreenMode;
 
@@ -538,6 +565,9 @@ class Command;
 // Whether the system is in the very specific fullscreen mode: Presentation
 // Mode.
 - (BOOL)inPresentationMode;
+
+// Whether if the toolbar should be hidden in fullscreen.
+- (BOOL)shouldHideFullscreenToolbar;
 
 // Resizes the fullscreen window to fit the screen it's currently on.  Called by
 // the PresentationModeController when there is a change in monitor placement or
@@ -607,6 +637,15 @@ class Command;
 // Gets the rect, in window base coordinates, that the omnibox popup should be
 // positioned relative to.
 - (NSRect)omniboxPopupAnchorRect;
+
+// Returns the flag |blockLayoutSubviews_|.
+- (BOOL)isLayoutSubviewsBlocked;
+
+// Returns the active tab contents controller's |blockFullscreenResize_| flag.
+- (BOOL)isActiveTabContentsControllerResizeBlocked;
+
+// Returns the presentation mode controller.
+- (PresentationModeController*)presentationModeController;
 
 @end  // @interface BrowserWindowController (TestingAPI)
 

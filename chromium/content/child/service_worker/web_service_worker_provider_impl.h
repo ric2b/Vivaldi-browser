@@ -6,8 +6,9 @@
 #define CONTENT_CHILD_SERVICE_WORKER_WEB_SERVICE_WORKER_PROVIDER_IMPL_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "third_party/WebKit/public/platform/WebServiceWorkerProvider.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 
 namespace blink {
 class WebURL;
@@ -27,18 +28,21 @@ class WebServiceWorkerProviderImpl
  public:
   WebServiceWorkerProviderImpl(ThreadSafeSender* thread_safe_sender,
                                ServiceWorkerProviderContext* context);
-  virtual ~WebServiceWorkerProviderImpl();
+  ~WebServiceWorkerProviderImpl() override;
 
-  virtual void setClient(blink::WebServiceWorkerProviderClient* client);
+  void setClient(blink::WebServiceWorkerProviderClient* client) override;
 
-  virtual void registerServiceWorker(const blink::WebURL& pattern,
-                                     const blink::WebURL& script_url,
-                                     WebServiceWorkerRegistrationCallbacks*);
-  virtual void getRegistration(const blink::WebURL& document_url,
-                               WebServiceWorkerGetRegistrationCallbacks*);
-  virtual void getRegistrations(WebServiceWorkerGetRegistrationsCallbacks*);
-  virtual void getRegistrationForReady(
-      WebServiceWorkerGetRegistrationForReadyCallbacks*);
+  void registerServiceWorker(const blink::WebURL& pattern,
+                             const blink::WebURL& script_url,
+                             WebServiceWorkerRegistrationCallbacks*) override;
+  void getRegistration(const blink::WebURL& document_url,
+                       WebServiceWorkerGetRegistrationCallbacks*) override;
+  void getRegistrations(WebServiceWorkerGetRegistrationsCallbacks*) override;
+  void getRegistrationForReady(
+      WebServiceWorkerGetRegistrationForReadyCallbacks*) override;
+  bool validateScopeAndScriptURL(const blink::WebURL& pattern,
+                                 const blink::WebURL& script_url,
+                                 blink::WebString* error_message) override;
 
   int provider_id() const;
 

@@ -4,6 +4,7 @@
 
 #include "components/service_tab_launcher/browser/android/service_tab_launcher.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_string.h"
 #include "base/callback.h"
 #include "content/public/browser/browser_context.h"
@@ -17,7 +18,10 @@ using base::android::GetApplicationContext;
 
 // Called by Java when the WebContents instance for a request Id is available.
 void OnWebContentsForRequestAvailable(
-    JNIEnv* env, jclass clazz, jint request_id, jobject android_web_contents) {
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    jint request_id,
+    const JavaParamRef<jobject>& android_web_contents) {
   service_tab_launcher::ServiceTabLauncher::GetInstance()->OnTabLaunched(
       request_id,
       content::WebContents::FromJavaWebContents(android_web_contents));
@@ -27,7 +31,7 @@ namespace service_tab_launcher {
 
 // static
 ServiceTabLauncher* ServiceTabLauncher::GetInstance() {
-  return Singleton<ServiceTabLauncher>::get();
+  return base::Singleton<ServiceTabLauncher>::get();
 }
 
 ServiceTabLauncher::ServiceTabLauncher() {

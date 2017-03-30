@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
@@ -19,21 +20,24 @@
 #include "media/base/media_switches.h"
 
 namespace media {
+namespace {
 
-static const int kStreamCloseDelaySeconds = 5;
+const int kStreamCloseDelaySeconds = 5;
 
 // Default maximum number of output streams that can be open simultaneously
 // for all platforms.
-static const int kDefaultMaxOutputStreams = 16;
+const int kDefaultMaxOutputStreams = 16;
 
 // Default maximum number of input streams that can be open simultaneously
 // for all platforms.
-static const int kDefaultMaxInputStreams = 16;
+const int kDefaultMaxInputStreams = 16;
 
-static const int kMaxInputChannels = 3;
+const int kMaxInputChannels = 3;
 
-const char AudioManagerBase::kDefaultDeviceName[] = "Default";
+}  // namespace
+
 const char AudioManagerBase::kDefaultDeviceId[] = "default";
+const char AudioManagerBase::kCommunicationsDeviceId[] = "communications";
 const char AudioManagerBase::kLoopbackInputDeviceId[] = "loopback";
 
 struct AudioManagerBase::DispatcherParams {
@@ -72,6 +76,10 @@ class AudioManagerBase::CompareByParams {
  private:
   const DispatcherParams* dispatcher_;
 };
+
+static bool IsDefaultDeviceId(const std::string& device_id) {
+  return device_id.empty() || device_id == AudioManagerBase::kDefaultDeviceId;
+}
 
 AudioManagerBase::AudioManagerBase(AudioLogFactory* audio_log_factory)
     : max_num_output_streams_(kDefaultMaxOutputStreams),
@@ -159,7 +167,7 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStream(
   AudioOutputStream* stream;
   switch (params.format()) {
     case AudioParameters::AUDIO_PCM_LINEAR:
-      DCHECK(device_id.empty())
+      DCHECK(IsDefaultDeviceId(device_id))
           << "AUDIO_PCM_LINEAR supports only the default device.";
       stream = MakeLinearOutputStream(params);
       break;
@@ -238,8 +246,8 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStreamProxy(
   // "default" or via the specific id.
   // NOTE: Implementations that don't yet support opening non-default output
   // devices may return an empty string from GetDefaultOutputDeviceID().
-  std::string output_device_id = device_id.empty() ?
-      GetDefaultOutputDeviceID() : device_id;
+  std::string output_device_id =
+      IsDefaultDeviceId(device_id) ? GetDefaultOutputDeviceID() : device_id;
 
   // If we're not using AudioOutputResampler our output parameters are the same
   // as our input parameters.
@@ -261,10 +269,11 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStreamProxy(
                  << output_params.frames_per_buffer();
 
       // Tell the AudioManager to create a fake output device.
-      output_params = AudioParameters(
-          AudioParameters::AUDIO_FAKE, params.channel_layout(),
-          params.sample_rate(), params.bits_per_sample(),
-          params.frames_per_buffer());
+      output_params = params;
+      output_params.set_format(AudioParameters::AUDIO_FAKE);
+    } else if (params.effects() != output_params.effects()) {
+      // Turn off effects that weren't requested.
+      output_params.set_effects(params.effects() & output_params.effects());
     }
   }
 
@@ -404,10 +413,6 @@ int AudioManagerBase::GetUserBufferSize() {
 scoped_ptr<AudioLog> AudioManagerBase::CreateAudioLog(
     AudioLogFactory::AudioComponent component) {
   return audio_log_factory_->CreateAudioLog(component);
-}
-
-void AudioManagerBase::SetHasKeyboardMic() {
-  NOTREACHED();
 }
 
 }  // namespace media

@@ -76,6 +76,7 @@ class TestHostClient : public MutatorHostClient {
   bool IsLayerInTree(int layer_id, LayerTreeType tree_type) const override;
 
   void SetMutatorsNeedCommit() override;
+  void SetMutatorsNeedRebuildPropertyTrees() override;
 
   void SetLayerFilterMutated(int layer_id,
                              LayerTreeType tree_type,
@@ -93,6 +94,11 @@ class TestHostClient : public MutatorHostClient {
       int layer_id,
       LayerTreeType tree_type,
       const gfx::ScrollOffset& scroll_offset) override;
+
+  void LayerTransformIsPotentiallyAnimatingChanged(int layer_id,
+                                                   LayerTreeType tree_type,
+                                                   bool is_animating) override {
+  }
 
   void ScrollOffsetAnimationFinished() override {}
   gfx::ScrollOffset GetScrollOffsetForAnimation(int layer_id) const override;
@@ -122,10 +128,6 @@ class TestHostClient : public MutatorHostClient {
                                       LayerTreeType tree_type,
                                       int transform_x,
                                       int transform_y) const;
-  void ExpectScrollOffsetPropertyMutated(
-      int layer_id,
-      LayerTreeType tree_type,
-      const gfx::ScrollOffset& scroll_offset) const;
 
   TestLayer* FindTestLayer(int layer_id, LayerTreeType tree_type) const;
 
@@ -149,6 +151,9 @@ class TestAnimationDelegate : public AnimationDelegate {
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
                                Animation::TargetProperty target_property,
                                int group) override;
+  void NotifyAnimationAborted(base::TimeTicks monotonic_time,
+                              Animation::TargetProperty target_property,
+                              int group) override {}
   bool started_;
   bool finished_;
 };
@@ -160,6 +165,7 @@ class AnimationTimelinesTest : public testing::Test {
 
  protected:
   void SetUp() override;
+  void TearDown() override;
 
   void GetImplTimelineAndPlayerByID();
 
@@ -171,6 +177,8 @@ class AnimationTimelinesTest : public testing::Test {
   AnimationPlayer* GetPlayerForLayerId(int layer_id);
   AnimationPlayer* GetImplPlayerForLayerId(int layer_id);
 
+  int NextTestLayerId();
+
   TestHostClient client_;
   TestHostClient client_impl_;
 
@@ -179,7 +187,9 @@ class AnimationTimelinesTest : public testing::Test {
 
   const int timeline_id_;
   const int player_id_;
-  const int layer_id_;
+  int layer_id_;
+
+  int next_test_layer_id_;
 
   scoped_refptr<AnimationTimeline> timeline_;
   scoped_refptr<AnimationPlayer> player_;

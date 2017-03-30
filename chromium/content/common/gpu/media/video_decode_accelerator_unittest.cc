@@ -15,17 +15,14 @@
 //   infrastructure.
 
 #include <fcntl.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <algorithm>
 #include <deque>
 #include <map>
-
-// Include gtest.h out of order because <X11/X.h> #define's Bool & None, which
-// gtest uses as struct names (inside a namespace).  This means that
-// #include'ing gtest after anything that pulls in X.h fails to compile.
-// This is http://code.google.com/p/googletest/issues/detail?id=371
-#include "testing/gtest/include/gtest/gtest.h"
+#include <utility>
 
 #include "base/at_exit.h"
 #include "base/bind.h"
@@ -34,6 +31,7 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/process/process_handle.h"
 #include "base/stl_util.h"
@@ -47,17 +45,19 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "content/common/gpu/media/fake_video_decode_accelerator.h"
 #include "content/common/gpu/media/rendering_helper.h"
 #include "content/common/gpu/media/video_accelerator_unittest_helpers.h"
 #include "content/public/common/content_switches.h"
 #include "media/filters/h264_parser.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gl/gl_image.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "content/common/gpu/media/dxva_video_decode_accelerator.h"
+#include "content/common/gpu/media/dxva_video_decode_accelerator_win.h"
 #elif defined(OS_CHROMEOS)
 #if defined(USE_V4L2_CODEC)
 #include "content/common/gpu/media/v4l2_device.h"
@@ -143,6 +143,9 @@ const int kMaxFramesToDelayReuse = 64;
 const base::TimeDelta kReuseDelay = base::TimeDelta::FromSeconds(1);
 // Simulate WebRTC and call VDA::Decode 30 times per second.
 const int kWebRtcDecodeCallsPerSecond = 30;
+// Simulate an adjustment to a larger number of pictures to make sure the
+// decoder supports an upwards adjustment.
+const int kExtraPictureBuffers = 2;
 
 struct TestVideoFile {
   explicit TestVideoFile(base::FilePath::StringType file_name)
@@ -180,25 +183,25 @@ void ReadGoldenThumbnailMD5s(const TestVideoFile* video_file,
   filepath = filepath.AddExtension(FILE_PATH_LITERAL(".md5"));
   std::string all_md5s;
   base::ReadFileToString(filepath, &all_md5s);
-  base::SplitString(all_md5s, '\n', md5_strings);
+  *md5_strings = base::SplitString(
+      all_md5s, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   // Check these are legitimate MD5s.
-  for (std::vector<std::string>::iterator md5_string = md5_strings->begin();
-      md5_string != md5_strings->end(); ++md5_string) {
+  for (const std::string& md5_string : *md5_strings) {
       // Ignore the empty string added by SplitString
-      if (!md5_string->length())
+      if (!md5_string.length())
         continue;
       // Ignore comments
-      if (md5_string->at(0) == '#')
+      if (md5_string.at(0) == '#')
         continue;
 
-      CHECK_EQ(static_cast<int>(md5_string->length()),
-               kMD5StringLength) << *md5_string;
-      bool hex_only = std::count_if(md5_string->begin(),
-                                    md5_string->end(), isxdigit) ==
+      LOG_ASSERT(static_cast<int>(md5_string.length()) ==
+               kMD5StringLength) << md5_string;
+      bool hex_only = std::count_if(md5_string.begin(),
+                                    md5_string.end(), isxdigit) ==
                                     kMD5StringLength;
-      CHECK(hex_only) << *md5_string;
+      LOG_ASSERT(hex_only) << md5_string;
   }
-  CHECK_GE(md5_strings->size(), 1U) << "  MD5 checksum file ("
+  LOG_ASSERT(md5_strings->size() >= 1U) << "  MD5 checksum file ("
                                     << filepath.MaybeAsASCII()
                                     << ") missing or empty.";
 }
@@ -268,16 +271,16 @@ class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
 // A helper class used to manage the lifetime of a Texture.
 class TextureRef : public base::RefCounted<TextureRef> {
  public:
-  TextureRef(uint32 texture_id, const base::Closure& no_longer_needed_cb)
+  TextureRef(uint32_t texture_id, const base::Closure& no_longer_needed_cb)
       : texture_id_(texture_id), no_longer_needed_cb_(no_longer_needed_cb) {}
 
-  int32 texture_id() const { return texture_id_; }
+  int32_t texture_id() const { return texture_id_; }
 
  private:
   friend class base::RefCounted<TextureRef>;
   ~TextureRef();
 
-  uint32 texture_id_;
+  uint32_t texture_id_;
   base::Closure no_longer_needed_cb_;
 };
 
@@ -330,13 +333,13 @@ class GLRenderingVDAClient
 
   // VideoDecodeAccelerator::Client implementation.
   // The heart of the Client.
-  void ProvidePictureBuffers(uint32 requested_num_of_buffers,
+  void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
                              const gfx::Size& dimensions,
-                             uint32 texture_target) override;
-  void DismissPictureBuffer(int32 picture_buffer_id) override;
+                             uint32_t texture_target) override;
+  void DismissPictureBuffer(int32_t picture_buffer_id) override;
   void PictureReady(const media::Picture& picture) override;
   // Simple state changes.
-  void NotifyEndOfBitstreamBuffer(int32 bitstream_buffer_id) override;
+  void NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) override;
   void NotifyFlushDone() override;
   void NotifyResetDone() override;
   void NotifyError(VideoDecodeAccelerator::Error error) override;
@@ -354,7 +357,7 @@ class GLRenderingVDAClient
   bool decoder_deleted() { return !decoder_.get(); }
 
  private:
-  typedef std::map<int32, scoped_refptr<TextureRef>> TextureRefMap;
+  typedef std::map<int32_t, scoped_refptr<TextureRef>> TextureRefMap;
 
   scoped_ptr<media::VideoDecodeAccelerator> CreateFakeVDA();
   scoped_ptr<media::VideoDecodeAccelerator> CreateDXVAVDA();
@@ -362,13 +365,13 @@ class GLRenderingVDAClient
   scoped_ptr<media::VideoDecodeAccelerator> CreateV4L2SliceVDA();
   scoped_ptr<media::VideoDecodeAccelerator> CreateVaapiVDA();
 
-  void BindImage(uint32 client_texture_id,
-                 uint32 texture_target,
-                 scoped_refptr<gfx::GLImage> image);
+  void BindImage(uint32_t client_texture_id,
+                 uint32_t texture_target,
+                 scoped_refptr<gl::GLImage> image);
 
   void SetState(ClientState new_state);
   void FinishInitialization();
-  void ReturnPicture(int32 picture_buffer_id);
+  void ReturnPicture(int32_t picture_buffer_id);
 
   // Delete the associated decoder helper.
   void DeleteDecoder();
@@ -435,7 +438,7 @@ class GLRenderingVDAClient
   // CS_RESET_State.
   TextureRefMap pending_textures_;
 
-  int32 next_picture_buffer_id_;
+  int32_t next_picture_buffer_id_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(GLRenderingVDAClient);
 };
@@ -481,11 +484,11 @@ GLRenderingVDAClient::GLRenderingVDAClient(
       decode_calls_per_second_(decode_calls_per_second),
       render_as_thumbnails_(render_as_thumbnails),
       next_picture_buffer_id_(1) {
-  CHECK_GT(num_in_flight_decodes, 0);
-  CHECK_GT(num_play_throughs, 0);
+  LOG_ASSERT(num_in_flight_decodes > 0);
+  LOG_ASSERT(num_play_throughs > 0);
   // |num_in_flight_decodes_| is unsupported if |decode_calls_per_second_| > 0.
   if (decode_calls_per_second_ > 0)
-    CHECK_EQ(1, num_in_flight_decodes_);
+    LOG_ASSERT(1 == num_in_flight_decodes_);
 
   // Default to H264 baseline if no profile provided.
   profile_ = (profile != media::VIDEO_CODEC_PROFILE_UNKNOWN
@@ -495,7 +498,7 @@ GLRenderingVDAClient::GLRenderingVDAClient(
 
 GLRenderingVDAClient::~GLRenderingVDAClient() {
   DeleteDecoder();  // Clean up in case of expected error.
-  CHECK(decoder_deleted());
+  LOG_ASSERT(decoder_deleted());
   SetState(CS_DESTROYED);
 }
 
@@ -510,7 +513,7 @@ GLRenderingVDAClient::CreateFakeVDA() {
         frame_size_,
         base::Bind(&DoNothingReturnTrue)));
   }
-  return decoder.Pass();
+  return decoder;
 }
 
 scoped_ptr<media::VideoDecodeAccelerator>
@@ -523,7 +526,7 @@ GLRenderingVDAClient::CreateDXVAVDA() {
             base::Bind(&DoNothingReturnTrue),
             rendering_helper_->GetGLContext().get()));
 #endif
-  return decoder.Pass();
+  return decoder;
 }
 
 scoped_ptr<media::VideoDecodeAccelerator>
@@ -540,7 +543,7 @@ GLRenderingVDAClient::CreateV4L2VDA() {
         base::ThreadTaskRunnerHandle::Get()));
   }
 #endif
-  return decoder.Pass();
+  return decoder;
 }
 
 scoped_ptr<media::VideoDecodeAccelerator>
@@ -557,7 +560,7 @@ GLRenderingVDAClient::CreateV4L2SliceVDA() {
         base::ThreadTaskRunnerHandle::Get()));
   }
 #endif
-  return decoder.Pass();
+  return decoder;
 }
 
 scoped_ptr<media::VideoDecodeAccelerator>
@@ -568,17 +571,16 @@ GLRenderingVDAClient::CreateVaapiVDA() {
       base::Bind(&DoNothingReturnTrue),
       base::Bind(&GLRenderingVDAClient::BindImage, base::Unretained(this))));
 #endif
-  return decoder.Pass();
+  return decoder;
 }
 
-void GLRenderingVDAClient::BindImage(uint32 client_texture_id,
-                                     uint32 texture_target,
-                                     scoped_refptr<gfx::GLImage> image) {
-}
+void GLRenderingVDAClient::BindImage(uint32_t client_texture_id,
+                                     uint32_t texture_target,
+                                     scoped_refptr<gl::GLImage> image) {}
 
 void GLRenderingVDAClient::CreateAndStartDecoder() {
-  CHECK(decoder_deleted());
-  CHECK(!decoder_.get());
+  LOG_ASSERT(decoder_deleted());
+  LOG_ASSERT(!decoder_.get());
 
   VideoDecodeAccelerator::Client* client = this;
 
@@ -593,7 +595,7 @@ void GLRenderingVDAClient::CreateAndStartDecoder() {
   for (size_t i = 0; i < arraysize(decoders); ++i) {
     if (!decoders[i])
       continue;
-    decoder_ = decoders[i].Pass();
+    decoder_ = std::move(decoders[i]);
     weak_decoder_factory_.reset(
         new base::WeakPtrFactory<VideoDecodeAccelerator>(decoder_.get()));
     if (decoder_->Initialize(profile_, client)) {
@@ -604,27 +606,29 @@ void GLRenderingVDAClient::CreateAndStartDecoder() {
   }
   // Decoders are all initialize failed.
   LOG(ERROR) << "VideoDecodeAccelerator::Initialize() failed";
-  CHECK(false);
+  LOG_ASSERT(false);
 }
 
 void GLRenderingVDAClient::ProvidePictureBuffers(
-    uint32 requested_num_of_buffers,
+    uint32_t requested_num_of_buffers,
     const gfx::Size& dimensions,
-    uint32 texture_target) {
+    uint32_t texture_target) {
   if (decoder_deleted())
     return;
   std::vector<media::PictureBuffer> buffers;
 
+  requested_num_of_buffers += kExtraPictureBuffers;
+
   texture_target_ = texture_target;
-  for (uint32 i = 0; i < requested_num_of_buffers; ++i) {
-    uint32 texture_id;
+  for (uint32_t i = 0; i < requested_num_of_buffers; ++i) {
+    uint32_t texture_id;
     base::WaitableEvent done(false, false);
     rendering_helper_->CreateTexture(
         texture_target_, &texture_id, dimensions, &done);
     done.Wait();
 
-    int32 picture_buffer_id = next_picture_buffer_id_++;
-    CHECK(active_textures_
+    int32_t picture_buffer_id = next_picture_buffer_id_++;
+    LOG_ASSERT(active_textures_
               .insert(std::make_pair(
                   picture_buffer_id,
                   new TextureRef(texture_id,
@@ -639,13 +643,13 @@ void GLRenderingVDAClient::ProvidePictureBuffers(
   decoder_->AssignPictureBuffers(buffers);
 }
 
-void GLRenderingVDAClient::DismissPictureBuffer(int32 picture_buffer_id) {
-  CHECK_EQ(1U, active_textures_.erase(picture_buffer_id));
+void GLRenderingVDAClient::DismissPictureBuffer(int32_t picture_buffer_id) {
+  LOG_ASSERT(1U == active_textures_.erase(picture_buffer_id));
 }
 
 void GLRenderingVDAClient::PictureReady(const media::Picture& picture) {
   // We shouldn't be getting pictures delivered after Reset has completed.
-  CHECK_LT(state_, CS_RESET);
+  LOG_ASSERT(state_ < CS_RESET);
 
   if (decoder_deleted())
     return;
@@ -661,7 +665,7 @@ void GLRenderingVDAClient::PictureReady(const media::Picture& picture) {
   decode_time_.push_back(now - it->second);
   decode_start_time_.erase(it);
 
-  CHECK_LE(picture.bitstream_buffer_id(), next_bitstream_buffer_id_);
+  LOG_ASSERT(picture.bitstream_buffer_id() <= next_bitstream_buffer_id_);
   ++num_decoded_frames_;
 
   // Mid-stream reset applies only to the last play-through per constructor
@@ -693,10 +697,10 @@ void GLRenderingVDAClient::PictureReady(const media::Picture& picture) {
   }
 }
 
-void GLRenderingVDAClient::ReturnPicture(int32 picture_buffer_id) {
+void GLRenderingVDAClient::ReturnPicture(int32_t picture_buffer_id) {
   if (decoder_deleted())
     return;
-  CHECK_EQ(1U, pending_textures_.erase(picture_buffer_id));
+  LOG_ASSERT(1U == pending_textures_.erase(picture_buffer_id));
 
   if (pending_textures_.empty() && state_ == CS_RESETTING) {
     SetState(CS_RESET);
@@ -717,15 +721,26 @@ void GLRenderingVDAClient::ReturnPicture(int32 picture_buffer_id) {
 }
 
 void GLRenderingVDAClient::NotifyEndOfBitstreamBuffer(
-    int32 bitstream_buffer_id) {
+    int32_t bitstream_buffer_id) {
   // TODO(fischman): this test currently relies on this notification to make
   // forward progress during a Reset().  But the VDA::Reset() API doesn't
   // guarantee this, so stop relying on it (and remove the notifications from
   // VaapiVideoDecodeAccelerator::FinishReset()).
   ++num_done_bitstream_buffers_;
   --outstanding_decodes_;
-  if (decode_calls_per_second_ == 0)
+
+  // Flush decoder after all BitstreamBuffers are processed.
+  if (encoded_data_next_pos_to_decode_ == encoded_data_.size()) {
+    // TODO(owenlin): We should not have to check the number of
+    // |outstanding_decodes_|. |decoder_| should be able to accept Flush()
+    // before it's done with outstanding decodes. (crbug.com/528183)
+    if (outstanding_decodes_ == 0) {
+      decoder_->Flush();
+      SetState(CS_FLUSHING);
+    }
+  } else if (decode_calls_per_second_ == 0) {
     DecodeNextFragment();
+  }
 }
 
 void GLRenderingVDAClient::NotifyFlushDone() {
@@ -797,7 +812,7 @@ void GLRenderingVDAClient::SetState(ClientState new_state) {
   note_->Notify(new_state);
   state_ = new_state;
   if (!remaining_play_throughs_ && new_state == delete_decoder_state_) {
-    CHECK(!decoder_deleted());
+    LOG_ASSERT(!decoder_deleted());
     DeleteDecoder();
   }
 }
@@ -866,7 +881,7 @@ void GLRenderingVDAClient::GetBytesForNextNALU(
   *end_pos = start_pos;
   if (*end_pos + 4 > encoded_data_.size())
     return;
-  CHECK(LookingAtNAL(encoded_data_, start_pos));
+  LOG_ASSERT(LookingAtNAL(encoded_data_, start_pos));
   *end_pos += 4;
   while (*end_pos + 4 <= encoded_data_.size() &&
          !LookingAtNAL(encoded_data_, *end_pos)) {
@@ -883,7 +898,7 @@ std::string GLRenderingVDAClient::GetBytesForNextFrame(
   if (start_pos == 0)
     start_pos = 32;  // Skip IVF header.
   *end_pos = start_pos;
-  uint32 frame_size = *reinterpret_cast<uint32*>(&encoded_data_[*end_pos]);
+  uint32_t frame_size = *reinterpret_cast<uint32_t*>(&encoded_data_[*end_pos]);
   *end_pos += 12;  // Skip frame header.
   bytes.append(encoded_data_.substr(*end_pos, frame_size));
   *end_pos += frame_size;
@@ -891,7 +906,8 @@ std::string GLRenderingVDAClient::GetBytesForNextFrame(
   return bytes;
 }
 
-static bool FragmentHasConfigInfo(const uint8* data, size_t size,
+static bool FragmentHasConfigInfo(const uint8_t* data,
+                                  size_t size,
                                   media::VideoCodecProfile profile) {
   if (profile >= media::H264PROFILE_MIN &&
       profile <= media::H264PROFILE_MAX) {
@@ -917,13 +933,8 @@ static bool FragmentHasConfigInfo(const uint8* data, size_t size,
 void GLRenderingVDAClient::DecodeNextFragment() {
   if (decoder_deleted())
     return;
-  if (encoded_data_next_pos_to_decode_ == encoded_data_.size()) {
-    if (outstanding_decodes_ == 0) {
-      decoder_->Flush();
-      SetState(CS_FLUSHING);
-    }
+  if (encoded_data_next_pos_to_decode_ == encoded_data_.size())
     return;
-  }
   size_t end_pos;
   std::string next_fragment_bytes;
   if (encoded_data_next_pos_to_decode_ == 0) {
@@ -940,9 +951,8 @@ void GLRenderingVDAClient::DecodeNextFragment() {
   bool reset_here = false;
   if (reset_after_frame_num_ == RESET_AFTER_FIRST_CONFIG_INFO) {
     reset_here = FragmentHasConfigInfo(
-        reinterpret_cast<const uint8*>(next_fragment_bytes.data()),
-        next_fragment_size,
-        profile_);
+        reinterpret_cast<const uint8_t*>(next_fragment_bytes.data()),
+        next_fragment_size, profile_);
     if (reset_here)
       reset_after_frame_num_ = END_OF_STREAM_RESET;
   }
@@ -950,10 +960,12 @@ void GLRenderingVDAClient::DecodeNextFragment() {
   // Populate the shared memory buffer w/ the fragment, duplicate its handle,
   // and hand it off to the decoder.
   base::SharedMemory shm;
-  CHECK(shm.CreateAndMapAnonymous(next_fragment_size));
+  LOG_ASSERT(shm.CreateAndMapAnonymous(next_fragment_size));
   memcpy(shm.memory(), next_fragment_bytes.data(), next_fragment_size);
   base::SharedMemoryHandle dup_handle;
-  CHECK(shm.ShareToProcess(base::GetCurrentProcessHandle(), &dup_handle));
+  bool result = shm.ShareToProcess(base::GetCurrentProcessHandle(),
+      &dup_handle);
+  LOG_ASSERT(result);
   media::BitstreamBuffer bitstream_buffer(
       next_bitstream_buffer_id_, dup_handle, next_fragment_size);
   decode_start_time_[next_bitstream_buffer_id_] = base::TimeTicks::Now();
@@ -1061,35 +1073,37 @@ void VideoDecodeAcceleratorTest::TearDown() {
 void VideoDecodeAcceleratorTest::ParseAndReadTestVideoData(
     base::FilePath::StringType data,
     std::vector<TestVideoFile*>* test_video_files) {
-  std::vector<base::FilePath::StringType> entries;
-  base::SplitString(data, ';', &entries);
-  CHECK_GE(entries.size(), 1U) << data;
+  std::vector<base::FilePath::StringType> entries = base::SplitString(
+      data, base::FilePath::StringType(1, ';'),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  LOG_ASSERT(entries.size() >= 1U) << data;
   for (size_t index = 0; index < entries.size(); ++index) {
-    std::vector<base::FilePath::StringType> fields;
-    base::SplitString(entries[index], ':', &fields);
-    CHECK_GE(fields.size(), 1U) << entries[index];
-    CHECK_LE(fields.size(), 8U) << entries[index];
+    std::vector<base::FilePath::StringType> fields = base::SplitString(
+        entries[index], base::FilePath::StringType(1, ':'),
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    LOG_ASSERT(fields.size() >= 1U) << entries[index];
+    LOG_ASSERT(fields.size() <= 8U) << entries[index];
     TestVideoFile* video_file = new TestVideoFile(fields[0]);
     if (!fields[1].empty())
-      CHECK(base::StringToInt(fields[1], &video_file->width));
+      LOG_ASSERT(base::StringToInt(fields[1], &video_file->width));
     if (!fields[2].empty())
-      CHECK(base::StringToInt(fields[2], &video_file->height));
+      LOG_ASSERT(base::StringToInt(fields[2], &video_file->height));
     if (!fields[3].empty())
-      CHECK(base::StringToInt(fields[3], &video_file->num_frames));
+      LOG_ASSERT(base::StringToInt(fields[3], &video_file->num_frames));
     if (!fields[4].empty())
-      CHECK(base::StringToInt(fields[4], &video_file->num_fragments));
+      LOG_ASSERT(base::StringToInt(fields[4], &video_file->num_fragments));
     if (!fields[5].empty())
-      CHECK(base::StringToInt(fields[5], &video_file->min_fps_render));
+      LOG_ASSERT(base::StringToInt(fields[5], &video_file->min_fps_render));
     if (!fields[6].empty())
-      CHECK(base::StringToInt(fields[6], &video_file->min_fps_no_render));
+      LOG_ASSERT(base::StringToInt(fields[6], &video_file->min_fps_no_render));
     int profile = -1;
     if (!fields[7].empty())
-      CHECK(base::StringToInt(fields[7], &profile));
+      LOG_ASSERT(base::StringToInt(fields[7], &profile));
     video_file->profile = static_cast<media::VideoCodecProfile>(profile);
 
     // Read in the video data.
     base::FilePath filepath(video_file->file_name);
-    CHECK(base::ReadFileToString(filepath, &video_file->data_str))
+    LOG_ASSERT(base::ReadFileToString(filepath, &video_file->data_str))
         << "test_video_file: " << filepath.MaybeAsASCII();
 
     test_video_files->push_back(video_file);
@@ -1244,7 +1258,7 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
   helper_params.render_as_thumbnails = render_as_thumbnails;
   if (render_as_thumbnails) {
     // Only one decoder is supported with thumbnail rendering
-    CHECK_EQ(num_concurrent_decoders, 1U);
+    LOG_ASSERT(num_concurrent_decoders == 1U);
     helper_params.thumbnails_page_size = kThumbnailsPageSize;
     helper_params.thumbnail_size = kThumbnailSize;
   }
@@ -1570,7 +1584,7 @@ int main(int argc, char **argv) {
   // Needed to enable DVLOG through --vmodule.
   logging::LoggingSettings settings;
   settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
-  CHECK(logging::InitLogging(settings));
+  LOG_ASSERT(logging::InitLogging(settings));
 
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   DCHECK(cmd_line);
@@ -1591,12 +1605,12 @@ int main(int argc, char **argv) {
       // On Windows, CommandLine::StringType is wstring. We need to convert
       // it to std::string first
       std::string input(it->second.begin(), it->second.end());
-      CHECK(base::StringToDouble(input, &content::g_rendering_fps));
+      LOG_ASSERT(base::StringToDouble(input, &content::g_rendering_fps));
       continue;
     }
     if (it->first == "rendering_warm_up") {
       std::string input(it->second.begin(), it->second.end());
-      CHECK(base::StringToInt(input, &content::g_rendering_warm_up));
+      LOG_ASSERT(base::StringToInt(input, &content::g_rendering_warm_up));
       continue;
     }
     // TODO(owenlin): Remove this flag once it is not used in autotest.
@@ -1607,7 +1621,7 @@ int main(int argc, char **argv) {
 
     if (it->first == "num_play_throughs") {
       std::string input(it->second.begin(), it->second.end());
-      CHECK(base::StringToInt(input, &content::g_num_play_throughs));
+      LOG_ASSERT(base::StringToInt(input, &content::g_num_play_throughs));
       continue;
     }
     if (it->first == "fake_decoder") {

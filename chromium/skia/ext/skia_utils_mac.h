@@ -10,6 +10,7 @@
 
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkPixmap.h"
 
 struct SkIRect;
 struct SkPoint;
@@ -34,19 +35,7 @@ class NSImageRep;
 class NSColor;
 #endif
 
-namespace gfx {
-
-// Converts a Skia point to a CoreGraphics CGPoint.
-// Both use same in-memory format.
-inline const CGPoint& SkPointToCGPoint(const SkPoint& point) {
-  return reinterpret_cast<const CGPoint&>(point);
-}
-
-// Converts a CoreGraphics point to a Skia CGPoint.
-// Both use same in-memory format.
-inline const SkPoint& CGPointToSkPoint(const CGPoint& point) {
-  return reinterpret_cast<const SkPoint&>(point);
-}
+namespace skia {
 
 // Matrix converters.
 SK_API CGAffineTransform SkMatrixToCGAffineTransform(const SkMatrix& matrix);
@@ -129,12 +118,13 @@ class SK_API SkiaBitLocker {
   bool userClipRectSpecified_;
 
   CGContextRef cgContext_;
-  SkBitmap bitmap_;
+  // offscreen_ is only valid if useDeviceBits_ is false
+  SkBitmap offscreen_;
   SkIPoint bitmapOffset_;
   SkScalar bitmapScaleFactor_;
 
-  // True if we are drawing to |canvas_|'s SkBaseDevice's bits directly through
-  // |bitmap_|. Otherwise, the bits in |bitmap_| are our allocation and need to
+  // True if we are drawing to |canvas_|'s backing store directly.
+  // Otherwise, the bits in |bitmap_| are our allocation and need to
   // be copied over to |canvas_|.
   bool useDeviceBits_;
 
@@ -146,6 +136,6 @@ class SK_API SkiaBitLocker {
 };
 
 
-}  // namespace gfx
+}  // namespace skia
 
 #endif  // SKIA_EXT_SKIA_UTILS_MAC_H_

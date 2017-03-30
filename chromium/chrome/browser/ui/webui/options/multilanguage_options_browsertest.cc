@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -36,12 +37,6 @@ void MultilanguageOptionsBrowserTest::SetUpOnMainThread() {
   SetDictionariesPref(dictionaries);
   browser()->profile()->GetPrefs()->SetString(prefs::kSpellCheckDictionary,
                                               std::string());
-}
-
-void MultilanguageOptionsBrowserTest::SetUpCommandLine(
-    base::CommandLine* command_line) {
-  WebUIBrowserTest::SetUpCommandLine(command_line);
-  command_line->AppendSwitch(switches::kEnableMultilingualSpellChecker);
 }
 
 void MultilanguageOptionsBrowserTest::SetDictionariesPref(

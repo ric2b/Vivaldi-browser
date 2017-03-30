@@ -5,6 +5,10 @@
 #ifndef MEDIA_FORMATS_COMMON_STREAM_PARSER_TEST_BASE_H_
 #define MEDIA_FORMATS_COMMON_STREAM_PARSER_TEST_BASE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/stream_parser.h"
@@ -41,7 +45,7 @@ class StreamParserTestBase {
 
   // Similar to ParseFile() except parses the given |data| in a single append of
   // size |length|.
-  std::string ParseData(const uint8* data, size_t length);
+  std::string ParseData(const uint8_t* data, size_t length);
 
   // The last AudioDecoderConfig handed to OnNewConfig().
   const AudioDecoderConfig& last_audio_config() const {
@@ -49,7 +53,9 @@ class StreamParserTestBase {
   }
 
  private:
-  bool AppendDataInPieces(const uint8* data, size_t length, size_t piece_size);
+  bool AppendDataInPieces(const uint8_t* data,
+                          size_t length,
+                          size_t piece_size);
   void OnInitDone(const StreamParser::InitParameters& params);
   bool OnNewConfig(const AudioDecoderConfig& audio_config,
                    const VideoDecoderConfig& video_config,
@@ -57,7 +63,7 @@ class StreamParserTestBase {
   bool OnNewBuffers(const StreamParser::BufferQueue& audio_buffers,
                     const StreamParser::BufferQueue& video_buffers,
                     const StreamParser::TextBufferQueueMap& text_map);
-  void OnKeyNeeded(EmeInitDataType type, const std::vector<uint8>& init_data);
+  void OnKeyNeeded(EmeInitDataType type, const std::vector<uint8_t>& init_data);
   void OnNewSegment();
   void OnEndOfSegment();
 

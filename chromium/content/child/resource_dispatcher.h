@@ -7,10 +7,14 @@
 #ifndef CONTENT_CHILD_RESOURCE_DISPATCHER_H_
 #define CONTENT_CHILD_RESOURCE_DISPATCHER_H_
 
+#include <stdint.h>
+
 #include <deque>
+#include <map>
 #include <string>
 
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
@@ -39,6 +43,7 @@ namespace content {
 class RequestPeer;
 class ResourceDispatcherDelegate;
 class ResourceRequestBody;
+class ResourceSchedulingFilter;
 class ThreadedDataProvider;
 struct ResourceResponseInfo;
 struct RequestInfo;
@@ -129,13 +134,14 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     main_thread_task_runner_ = main_thread_task_runner;
   }
 
+  void SetResourceSchedulingFilter(
+      scoped_refptr<ResourceSchedulingFilter> resource_scheduling_filter);
+
  private:
   friend class ResourceDispatcherTest;
 
   typedef std::deque<IPC::Message*> MessageQueue;
   struct PendingRequestInfo {
-    PendingRequestInfo();
-
     PendingRequestInfo(RequestPeer* peer,
                        ResourceType resource_type,
                        int origin_pid,
@@ -146,14 +152,14 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     ~PendingRequestInfo();
 
     RequestPeer* peer;
-    ThreadedDataProvider* threaded_data_provider;
+    ThreadedDataProvider* threaded_data_provider = nullptr;
     ResourceType resource_type;
     // The PID of the original process which issued this request. This gets
     // non-zero only for a request proxied by another renderer, particularly
     // requests from plugins.
     int origin_pid;
     MessageQueue deferred_message_queue;
-    bool is_deferred;
+    bool is_deferred = false;
     // Original requested url.
     GURL url;
     // The security origin of the frame that initiates this request.
@@ -161,26 +167,29 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     // The url of the latest response even in case of redirection.
     GURL response_url;
     bool download_to_file;
-    linked_ptr<IPC::Message> pending_redirect_message;
+    scoped_ptr<IPC::Message> pending_redirect_message;
     base::TimeTicks request_start;
     base::TimeTicks response_start;
     base::TimeTicks completion_time;
     linked_ptr<base::SharedMemory> buffer;
     scoped_refptr<SharedMemoryReceivedDataFactory> received_data_factory;
-    linked_ptr<SiteIsolationResponseMetaData> site_isolation_metadata;
+    scoped_ptr<SiteIsolationResponseMetaData> site_isolation_metadata;
     int buffer_size;
+
+    // Debugging for https://code.google.com/p/chromium/issues/detail?id=527588.
+    int data_offset = -1;
   };
-  typedef base::hash_map<int, PendingRequestInfo> PendingRequestList;
+  using PendingRequestMap = std::map<int, scoped_ptr<PendingRequestInfo>>;
 
   // Helper to lookup the info based on the request_id.
   // May return NULL if the request as been canceled from the client side.
   PendingRequestInfo* GetPendingRequestInfo(int request_id);
 
   // Follows redirect, if any, for the given request.
-  void FollowPendingRedirect(int request_id, PendingRequestInfo& request_info);
+  void FollowPendingRedirect(int request_id, PendingRequestInfo* request_info);
 
   // Message response handlers, called by the message handler for this process.
-  void OnUploadProgress(int request_id, int64 position, int64 size);
+  void OnUploadProgress(int request_id, int64_t position, int64_t size);
   void OnReceivedResponse(int request_id, const ResourceResponseHead&);
   void OnReceivedCachedMetadata(int request_id, const std::vector<char>& data);
   void OnReceivedRedirect(int request_id,
@@ -190,6 +199,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
                        base::SharedMemoryHandle shm_handle,
                        int shm_size,
                        base::ProcessId renderer_pid);
+  void OnReceivedDataDebug(int request_id, int data_offset);
   void OnReceivedData(int request_id,
                       int data_offset,
                       int data_length,
@@ -203,7 +213,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   void DispatchMessage(const IPC::Message& message);
 
   // Dispatch any deferred messages for the given request, provided it is not
-  // again in the deferred state.
+  // again in the deferred state. This method may mutate |pending_requests_|.
   void FlushDeferredMessages(int request_id);
 
   void ToResourceResponseInfo(const PendingRequestInfo& request_info,
@@ -241,7 +251,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   IPC::Sender* message_sender_;
 
   // All pending requests issued to the host
-  PendingRequestList pending_requests_;
+  PendingRequestMap pending_requests_;
 
   ResourceDispatcherDelegate* delegate_;
 
@@ -249,6 +259,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   base::TimeTicks io_timestamp_;
 
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
+  scoped_refptr<ResourceSchedulingFilter> resource_scheduling_filter_;
 
   base::WeakPtrFactory<ResourceDispatcher> weak_factory_;
 

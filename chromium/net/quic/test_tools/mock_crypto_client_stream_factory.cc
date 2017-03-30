@@ -5,7 +5,7 @@
 #include "net/quic/test_tools/mock_crypto_client_stream_factory.h"
 
 #include "base/lazy_instance.h"
-#include "net/quic/quic_client_session.h"
+#include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_crypto_client_stream.h"
 #include "net/quic/quic_server_id.h"
 
@@ -13,18 +13,17 @@ using std::string;
 
 namespace net {
 
-MockCryptoClientStreamFactory::~MockCryptoClientStreamFactory() {
-}
+MockCryptoClientStreamFactory::~MockCryptoClientStreamFactory() {}
 
 MockCryptoClientStreamFactory::MockCryptoClientStreamFactory()
     : handshake_mode_(MockCryptoClientStream::CONFIRM_HANDSHAKE),
-      last_stream_(nullptr) {
-}
+      last_stream_(nullptr) {}
 
 QuicCryptoClientStream*
 MockCryptoClientStreamFactory::CreateQuicCryptoClientStream(
     const QuicServerId& server_id,
-    QuicClientSession* session,
+    QuicChromiumClientSession* session,
+    scoped_ptr<ProofVerifyContext> /*proof_verify_context*/,
     QuicCryptoClientConfig* crypto_config) {
   const ProofVerifyDetails* proof_verify_details = nullptr;
   if (!proof_verify_details_queue_.empty()) {

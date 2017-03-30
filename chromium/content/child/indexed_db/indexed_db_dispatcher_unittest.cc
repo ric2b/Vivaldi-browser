@@ -2,11 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/child/indexed_db/indexed_db_dispatcher.h"
+#include "content/child/indexed_db/mock_webidbcallbacks.h"
 #include "content/child/indexed_db/webidbcursor_impl.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/indexed_db/indexed_db_key.h"
@@ -16,35 +21,20 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebBlobInfo.h"
 #include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBCallbacks.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
 
 using blink::WebBlobInfo;
 using blink::WebData;
-using blink::WebIDBCallbacks;
 using blink::WebIDBCursor;
-using blink::WebIDBDatabase;
-using blink::WebIDBDatabaseError;
 using blink::WebIDBKey;
-using blink::WebIDBValue;
 using blink::WebVector;
+using testing::_;
+using testing::Invoke;
+using testing::StrictMock;
+using testing::WithArgs;
 
 namespace content {
 namespace {
-
-class MockCallbacks : public WebIDBCallbacks {
- public:
-  MockCallbacks() : error_seen_(false) {}
-
-  virtual void onError(const WebIDBDatabaseError&) { error_seen_ = true; }
-
-  bool error_seen() const { return error_seen_; }
-
- private:
-  bool error_seen_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockCallbacks);
-};
 
 class MockDispatcher : public IndexedDBDispatcher {
  public:
@@ -60,22 +50,27 @@ class MockDispatcher : public IndexedDBDispatcher {
   DISALLOW_COPY_AND_ASSIGN(MockDispatcher);
 };
 
+class MockSyncMessageFilter : public IPC::SyncMessageFilter {
+ public:
+  MockSyncMessageFilter()
+      : SyncMessageFilter(nullptr, false /* is_channel_send_thread_safe */) {}
+
+ private:
+  ~MockSyncMessageFilter() override {}
+};
+
 }  // namespace
 
 class IndexedDBDispatcherTest : public testing::Test {
  public:
   IndexedDBDispatcherTest()
-      : task_runner_(base::ThreadTaskRunnerHandle::Get()),
-        sync_message_filter_(new IPC::SyncMessageFilter(NULL)),
-        thread_safe_sender_(new ThreadSafeSender(task_runner_.get(),
-                                                 sync_message_filter_.get())) {}
+      : thread_safe_sender_(new ThreadSafeSender(
+            base::ThreadTaskRunnerHandle::Get(), new MockSyncMessageFilter)) {}
 
   void TearDown() override { blink::WebHeap::collectAllGarbageForTesting(); }
 
  protected:
   base::MessageLoop message_loop_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
 
  private:
@@ -83,15 +78,22 @@ class IndexedDBDispatcherTest : public testing::Test {
 };
 
 TEST_F(IndexedDBDispatcherTest, ValueSizeTest) {
-  const std::vector<char> data(kMaxIDBValueSizeInBytes + 1);
+  // For testing use a much smaller maximum size to prevent allocating >100 MB
+  // of memory, which crashes on memory-constrained systems.
+  const size_t kMaxValueSizeForTesting = 10 * 1024 * 1024;  // 10 MB
+
+  const std::vector<char> data(kMaxValueSizeForTesting + 1);
   const WebData value(&data.front(), data.size());
   const WebVector<WebBlobInfo> web_blob_info;
-  const int32 ipc_dummy_id = -1;
-  const int64 transaction_id = 1;
-  const int64 object_store_id = 2;
+  const int32_t ipc_dummy_id = -1;
+  const int64_t transaction_id = 1;
+  const int64_t object_store_id = 2;
 
-  MockCallbacks callbacks;
+  StrictMock<MockWebIDBCallbacks> callbacks;
+  EXPECT_CALL(callbacks, onError(_)).Times(1);
+
   IndexedDBDispatcher dispatcher(thread_safe_sender_.get());
+  dispatcher.max_put_value_size_ = kMaxValueSizeForTesting;
   IndexedDBKey key(0, blink::WebIDBKeyTypeNumber);
   dispatcher.RequestIDBDatabasePut(ipc_dummy_id,
                                    transaction_id,
@@ -103,25 +105,29 @@ TEST_F(IndexedDBDispatcherTest, ValueSizeTest) {
                                    &callbacks,
                                    WebVector<long long>(),
                                    WebVector<WebVector<WebIDBKey> >());
-
-  EXPECT_TRUE(callbacks.error_seen());
 }
 
 TEST_F(IndexedDBDispatcherTest, KeyAndValueSizeTest) {
+  // For testing use a much smaller maximum size to prevent allocating >100 MB
+  // of memory, which crashes on memory-constrained systems.
+  const size_t kMaxValueSizeForTesting = 10 * 1024 * 1024;  // 10 MB
   const size_t kKeySize = 1024 * 1024;
 
-  const std::vector<char> data(kMaxIDBValueSizeInBytes - kKeySize);
+  const std::vector<char> data(kMaxValueSizeForTesting - kKeySize);
   const WebData value(&data.front(), data.size());
   const WebVector<WebBlobInfo> web_blob_info;
   const IndexedDBKey key(
       base::string16(kKeySize / sizeof(base::string16::value_type), 'x'));
 
-  const int32 ipc_dummy_id = -1;
-  const int64 transaction_id = 1;
-  const int64 object_store_id = 2;
+  const int32_t ipc_dummy_id = -1;
+  const int64_t transaction_id = 1;
+  const int64_t object_store_id = 2;
 
-  MockCallbacks callbacks;
+  StrictMock<MockWebIDBCallbacks> callbacks;
+  EXPECT_CALL(callbacks, onError(_)).Times(1);
+
   IndexedDBDispatcher dispatcher(thread_safe_sender_.get());
+  dispatcher.max_put_value_size_ = kMaxValueSizeForTesting;
   dispatcher.RequestIDBDatabasePut(ipc_dummy_id,
                                    transaction_id,
                                    object_store_id,
@@ -132,39 +138,13 @@ TEST_F(IndexedDBDispatcherTest, KeyAndValueSizeTest) {
                                    &callbacks,
                                    WebVector<long long>(),
                                    WebVector<WebVector<WebIDBKey> >());
-
-  EXPECT_TRUE(callbacks.error_seen());
 }
 
-namespace {
-
-class CursorCallbacks : public WebIDBCallbacks {
- public:
-  explicit CursorCallbacks(scoped_ptr<WebIDBCursor>* cursor)
-      : cursor_(cursor) {}
-
-  void onSuccess(const WebIDBValue&) override {}
-  void onSuccess(WebIDBCursor* cursor,
-                 const WebIDBKey& key,
-                 const WebIDBKey& primaryKey,
-                 const WebData& value,
-                 const WebVector<WebBlobInfo>&) override {
-    cursor_->reset(cursor);
-  }
-
- private:
-  scoped_ptr<WebIDBCursor>* cursor_;
-
-  DISALLOW_COPY_AND_ASSIGN(CursorCallbacks);
-};
-
-}  // namespace
-
 TEST_F(IndexedDBDispatcherTest, CursorTransactionId) {
-  const int32 ipc_database_id = -1;
-  const int64 transaction_id = 1234;
-  const int64 object_store_id = 2;
-  const int32 index_id = 3;
+  const int32_t ipc_database_id = -1;
+  const int64_t transaction_id = 1234;
+  const int64_t object_store_id = 2;
+  const int32_t index_id = 3;
   const blink::WebIDBCursorDirection direction =
       blink::WebIDBCursorDirectionNext;
   const bool key_only = false;
@@ -176,22 +156,27 @@ TEST_F(IndexedDBDispatcherTest, CursorTransactionId) {
     scoped_ptr<WebIDBCursor> cursor;
     EXPECT_EQ(0UL, dispatcher.cursor_transaction_ids_.size());
 
+    auto callbacks = new StrictMock<MockWebIDBCallbacks>();
+    // Reference first param (cursor) to keep it alive.
+    // TODO(cmumford): Cleanup (and below) once std::addressof() is allowed.
+    ON_CALL(*callbacks, onSuccess(testing::A<WebIDBCursor*>(), _, _, _))
+        .WillByDefault(WithArgs<0>(Invoke(&cursor.operator=(nullptr),
+                                          &scoped_ptr<WebIDBCursor>::reset)));
+    EXPECT_CALL(*callbacks, onSuccess(testing::A<WebIDBCursor*>(), _, _, _))
+        .Times(1);
+
     // Make a cursor request. This should record the transaction id.
-    dispatcher.RequestIDBDatabaseOpenCursor(ipc_database_id,
-                                            transaction_id,
-                                            object_store_id,
-                                            index_id,
-                                            IndexedDBKeyRange(),
-                                            direction,
-                                            key_only,
-                                            blink::WebIDBTaskTypeNormal,
-                                            new CursorCallbacks(&cursor));
+    dispatcher.RequestIDBDatabaseOpenCursor(
+        ipc_database_id, transaction_id, object_store_id, index_id,
+        IndexedDBKeyRange(), direction, key_only, blink::WebIDBTaskTypeNormal,
+        callbacks);
 
     // Verify that the transaction id was captured.
     EXPECT_EQ(1UL, dispatcher.cursor_transaction_ids_.size());
     EXPECT_FALSE(cursor.get());
 
-    int32 ipc_callbacks_id = dispatcher.cursor_transaction_ids_.begin()->first;
+    int32_t ipc_callbacks_id =
+        dispatcher.cursor_transaction_ids_.begin()->first;
 
     IndexedDBMsg_CallbacksSuccessIDBCursor_Params params;
     params.ipc_thread_id = dispatcher.CurrentWorkerId();
@@ -214,25 +199,23 @@ TEST_F(IndexedDBDispatcherTest, CursorTransactionId) {
 
   // Second case: null cursor (no data in range)
   {
-    scoped_ptr<WebIDBCursor> cursor;
     EXPECT_EQ(0UL, dispatcher.cursor_transaction_ids_.size());
 
+    auto callbacks = new StrictMock<MockWebIDBCallbacks>();
+    EXPECT_CALL(*callbacks, onSuccess(testing::A<const blink::WebIDBValue&>()))
+        .Times(1);
+
     // Make a cursor request. This should record the transaction id.
-    dispatcher.RequestIDBDatabaseOpenCursor(ipc_database_id,
-                                            transaction_id,
-                                            object_store_id,
-                                            index_id,
-                                            IndexedDBKeyRange(),
-                                            direction,
-                                            key_only,
-                                            blink::WebIDBTaskTypeNormal,
-                                            new CursorCallbacks(&cursor));
+    dispatcher.RequestIDBDatabaseOpenCursor(
+        ipc_database_id, transaction_id, object_store_id, index_id,
+        IndexedDBKeyRange(), direction, key_only, blink::WebIDBTaskTypeNormal,
+        callbacks);
 
     // Verify that the transaction id was captured.
     EXPECT_EQ(1UL, dispatcher.cursor_transaction_ids_.size());
-    EXPECT_FALSE(cursor.get());
 
-    int32 ipc_callbacks_id = dispatcher.cursor_transaction_ids_.begin()->first;
+    int32_t ipc_callbacks_id =
+        dispatcher.cursor_transaction_ids_.begin()->first;
 
     // Now simululate a "null cursor" response.
     IndexedDBMsg_CallbacksSuccessValue_Params params;
@@ -242,7 +225,6 @@ TEST_F(IndexedDBDispatcherTest, CursorTransactionId) {
 
     // Ensure the map result was deleted.
     EXPECT_EQ(0UL, dispatcher.cursor_transaction_ids_.size());
-    EXPECT_FALSE(cursor.get());
   }
 }
 
@@ -250,8 +232,8 @@ namespace {
 
 class MockCursor : public WebIDBCursorImpl {
  public:
-  MockCursor(int32 ipc_cursor_id,
-             int64 transaction_id,
+  MockCursor(int32_t ipc_cursor_id,
+             int64_t transaction_id,
              ThreadSafeSender* thread_safe_sender)
       : WebIDBCursorImpl(ipc_cursor_id, transaction_id, thread_safe_sender),
         reset_count_(0) {}
@@ -273,9 +255,9 @@ TEST_F(IndexedDBDispatcherTest, CursorReset) {
   scoped_ptr<WebIDBCursor> cursor;
   MockDispatcher dispatcher(thread_safe_sender_.get());
 
-  const int32 ipc_database_id = 0;
-  const int32 object_store_id = 0;
-  const int32 index_id = 0;
+  const int32_t ipc_database_id = 0;
+  const int32_t object_store_id = 0;
+  const int32_t index_id = 0;
   const bool key_only = false;
   const int cursor1_ipc_id = 1;
   const int cursor2_ipc_id = 2;
@@ -301,45 +283,33 @@ TEST_F(IndexedDBDispatcherTest, CursorReset) {
   EXPECT_EQ(0, cursor2->reset_count());
 
   // Other transaction:
-  dispatcher.RequestIDBDatabaseGet(ipc_database_id,
-                                   other_transaction_id,
-                                   object_store_id,
-                                   index_id,
-                                   IndexedDBKeyRange(),
-                                   key_only,
-                                   new MockCallbacks());
+  dispatcher.RequestIDBDatabaseGet(
+      ipc_database_id, other_transaction_id, object_store_id, index_id,
+      IndexedDBKeyRange(), key_only, new StrictMock<MockWebIDBCallbacks>());
 
   EXPECT_EQ(0, cursor1->reset_count());
   EXPECT_EQ(0, cursor2->reset_count());
 
   // Same transaction:
-  dispatcher.RequestIDBDatabaseGet(ipc_database_id,
-                                   cursor1_transaction_id,
-                                   object_store_id,
-                                   index_id,
-                                   IndexedDBKeyRange(),
-                                   key_only,
-                                   new MockCallbacks());
+  dispatcher.RequestIDBDatabaseGet(
+      ipc_database_id, cursor1_transaction_id, object_store_id, index_id,
+      IndexedDBKeyRange(), key_only, new StrictMock<MockWebIDBCallbacks>());
 
   EXPECT_EQ(1, cursor1->reset_count());
   EXPECT_EQ(0, cursor2->reset_count());
 
   // Same transaction and same cursor:
-  dispatcher.RequestIDBCursorContinue(IndexedDBKey(),
-                                      IndexedDBKey(),
-                                      new MockCallbacks(),
-                                      cursor1_ipc_id,
-                                      cursor1_transaction_id);
+  dispatcher.RequestIDBCursorContinue(IndexedDBKey(), IndexedDBKey(),
+                                      new StrictMock<MockWebIDBCallbacks>(),
+                                      cursor1_ipc_id, cursor1_transaction_id);
 
   EXPECT_EQ(1, cursor1->reset_count());
   EXPECT_EQ(0, cursor2->reset_count());
 
   // Same transaction and different cursor:
-  dispatcher.RequestIDBCursorContinue(IndexedDBKey(),
-                                      IndexedDBKey(),
-                                      new MockCallbacks(),
-                                      other_cursor_ipc_id,
-                                      cursor1_transaction_id);
+  dispatcher.RequestIDBCursorContinue(
+      IndexedDBKey(), IndexedDBKey(), new StrictMock<MockWebIDBCallbacks>(),
+      other_cursor_ipc_id, cursor1_transaction_id);
 
   EXPECT_EQ(2, cursor1->reset_count());
   EXPECT_EQ(0, cursor2->reset_count());

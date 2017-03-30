@@ -5,6 +5,7 @@
 #include "ui/views/accessibility/native_view_accessibility.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -13,12 +14,12 @@
 
 namespace views {
 
-#if !defined(OS_WIN) && !(defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if !defined(PLATFORM_HAS_NATIVE_VIEW_ACCESSIBILITY_IMPL)
 // static
 NativeViewAccessibility* NativeViewAccessibility::Create(View* view) {
   return new NativeViewAccessibility(view);
 }
-#endif
+#endif  // !defined(PLATFORM_HAS_NATIVE_VIEW_ACCESSIBILITY_IMPL)
 
 NativeViewAccessibility::NativeViewAccessibility(View* view)
     : view_(view),
@@ -203,8 +204,10 @@ bool NativeViewAccessibility::SetStringValue(const base::string16& new_value) {
 }
 
 void NativeViewAccessibility::OnWidgetDestroying(Widget* widget) {
-  if (parent_widget_ == widget)
+  if (parent_widget_ == widget) {
+    parent_widget_->RemoveObserver(this);
     parent_widget_ = nullptr;
+  }
 }
 
 void NativeViewAccessibility::SetParentWidget(Widget* parent_widget) {

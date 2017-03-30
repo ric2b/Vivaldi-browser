@@ -6,14 +6,13 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string16.h"
-#include "grit/keyboard_resources.h"
-#include "grit/keyboard_resources_map.h"
+#include "media/audio/audio_manager.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
@@ -24,9 +23,8 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_controller_proxy.h"
 #include "ui/keyboard/keyboard_switches.h"
-#include "url/gurl.h"
+#include "ui/keyboard/keyboard_ui.h"
 
 namespace {
 
@@ -36,7 +34,7 @@ const char kKeyUp[] = "keyup";
 void SendProcessKeyEvent(ui::EventType type,
                          aura::WindowTreeHost* host) {
   ui::KeyEvent event(type, ui::VKEY_PROCESSKEY, ui::DomCode::NONE,
-                     ui::EF_IS_SYNTHESIZED, ui::DomKey::PROCESS, 0,
+                     ui::EF_IS_SYNTHESIZED, ui::DomKey::PROCESS,
                      ui::EventTimeForNow());
   ui::EventDispatchDetails details =
       host->event_processor()->OnEventFromSource(&event);
@@ -48,9 +46,12 @@ base::LazyInstance<base::Time> g_keyboard_load_time_start =
 
 bool g_accessibility_keyboard_enabled = false;
 
-base::LazyInstance<GURL> g_override_content_url = LAZY_INSTANCE_INITIALIZER;
+bool g_hotrod_keyboard_enabled = false;
 
 bool g_touch_keyboard_enabled = false;
+
+keyboard::KeyboardState g_requested_keyboard_state =
+    keyboard::KEYBOARD_STATE_AUTO;
 
 keyboard::KeyboardOverscrolOverride g_keyboard_overscroll_override =
     keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_NONE;
@@ -79,12 +80,28 @@ bool GetAccessibilityKeyboardEnabled() {
   return g_accessibility_keyboard_enabled;
 }
 
+void SetHotrodKeyboardEnabled(bool enabled) {
+  g_hotrod_keyboard_enabled = enabled;
+}
+
+bool GetHotrodKeyboardEnabled() {
+  return g_hotrod_keyboard_enabled;
+}
+
 void SetTouchKeyboardEnabled(bool enabled) {
   g_touch_keyboard_enabled = enabled;
 }
 
 bool GetTouchKeyboardEnabled() {
   return g_touch_keyboard_enabled;
+}
+
+void SetRequestedKeyboardState(KeyboardState state) {
+  g_requested_keyboard_state = state;
+}
+
+KeyboardState GetKeyboardRequestedState() {
+  return g_requested_keyboard_state;
 }
 
 std::string GetKeyboardLayout() {
@@ -100,11 +117,19 @@ bool IsKeyboardEnabled() {
   // Policy strictly disables showing a virtual keyboard.
   if (g_keyboard_show_override == keyboard::KEYBOARD_SHOW_OVERRIDE_DISABLED)
     return false;
-  // Check if any of the flags are enabled.
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kEnableVirtualKeyboard) ||
-         g_touch_keyboard_enabled ||
-         (g_keyboard_show_override == keyboard::KEYBOARD_SHOW_OVERRIDE_ENABLED);
+  // Policy strictly enables the keyboard.
+  if (g_keyboard_show_override == keyboard::KEYBOARD_SHOW_OVERRIDE_ENABLED)
+    return true;
+  // Run-time flag to enable keyboard has been included.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableVirtualKeyboard))
+    return true;
+  // Requested state from the application layer.
+  if (g_requested_keyboard_state == keyboard::KEYBOARD_STATE_DISABLED)
+    return false;
+  // Check if any of the other flags are enabled.
+  return g_touch_keyboard_enabled ||
+         g_requested_keyboard_state == keyboard::KEYBOARD_STATE_ENABLED;
 }
 
 bool IsKeyboardOverscrollEnabled() {
@@ -139,14 +164,8 @@ void SetKeyboardShowOverride(KeyboardShowOverride override) {
 }
 
 bool IsInputViewEnabled() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableInputView))
-    return true;
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableInputView))
-    return false;
-  // Default value if no command line flags specified.
-  return true;
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableInputView);
 }
 
 bool IsExperimentalInputViewEnabled() {
@@ -155,41 +174,28 @@ bool IsExperimentalInputViewEnabled() {
 }
 
 bool IsFloatingVirtualKeyboardEnabled() {
-  std::string floating_virtual_keyboard_switch =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kFloatingVirtualKeyboard);
-  return floating_virtual_keyboard_switch ==
-      switches::kFloatingVirtualKeyboardEnabled;
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableFloatingVirtualKeyboard);
 }
 
 bool IsGestureTypingEnabled() {
-  std::string keyboard_switch =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kGestureTyping);
-  return keyboard_switch == switches::kGestureTypingEnabled;
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableGestureTyping);
 }
 
 bool IsGestureEditingEnabled() {
-  std::string keyboard_switch =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kGestureEditing);
-  return keyboard_switch == switches::kGestureEditingEnabled;
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableGestureEditing);
 }
 
 bool IsSmartDeployEnabled() {
-  std::string keyboard_switch =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kSmartVirtualKeyboard);
-  return keyboard_switch != switches::kSmartVirtualKeyboardDisabled;
-}
-
-bool IsMaterialDesignEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableNewMDInputView);
+      switches::kDisableSmartVirtualKeyboard);
 }
 
 bool IsVoiceInputEnabled() {
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+  return media::AudioManager::Get()->HasAudioInputDevices() &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kDisableVoiceInput);
 }
 
@@ -198,7 +204,7 @@ bool InsertText(const base::string16& text) {
   if (!controller)
     return false;
 
-  ui::InputMethod* input_method = controller->proxy()->GetInputMethod();
+  ui::InputMethod* input_method = controller->ui()->GetInputMethod();
   if (!input_method)
     return false;
 
@@ -236,17 +242,16 @@ bool MoveCursor(int swipe_direction,
   if (domcodex != ui::DomCode::NONE) {
     ui::KeyboardCode codex = ui::VKEY_UNKNOWN;
     ui::DomKey domkeyx = ui::DomKey::NONE;
-    base::char16 cx;
-    ignore_result(DomCodeToUsLayoutMeaning(domcodex, ui::EF_NONE, &domkeyx,
-                                           &cx, &codex));
+    ignore_result(DomCodeToUsLayoutDomKey(domcodex, ui::EF_NONE, &domkeyx,
+                                          &codex));
     ui::KeyEvent press_event(ui::ET_KEY_PRESSED, codex, domcodex,
-                             modifier_flags, domkeyx, cx,
+                             modifier_flags, domkeyx,
                              ui::EventTimeForNow());
     ui::EventDispatchDetails details =
         host->event_processor()->OnEventFromSource(&press_event);
     CHECK(!details.dispatcher_destroyed);
     ui::KeyEvent release_event(ui::ET_KEY_RELEASED, codex, domcodex,
-                               modifier_flags, domkeyx, cx,
+                               modifier_flags, domkeyx,
                                ui::EventTimeForNow());
     details = host->event_processor()->OnEventFromSource(&release_event);
     CHECK(!details.dispatcher_destroyed);
@@ -256,17 +261,16 @@ bool MoveCursor(int swipe_direction,
   if (domcodey != ui::DomCode::NONE) {
     ui::KeyboardCode codey = ui::VKEY_UNKNOWN;
     ui::DomKey domkeyy = ui::DomKey::NONE;
-    base::char16 cy;
-    ignore_result(DomCodeToUsLayoutMeaning(domcodey, ui::EF_NONE, &domkeyy,
-                                           &cy, &codey));
+    ignore_result(DomCodeToUsLayoutDomKey(domcodey, ui::EF_NONE, &domkeyy,
+                                          &codey));
     ui::KeyEvent press_event(ui::ET_KEY_PRESSED, codey, domcodey,
-                             modifier_flags, domkeyy, cy,
+                             modifier_flags, domkeyy,
                              ui::EventTimeForNow());
     ui::EventDispatchDetails details =
         host->event_processor()->OnEventFromSource(&press_event);
     CHECK(!details.dispatcher_destroyed);
     ui::KeyEvent release_event(ui::ET_KEY_RELEASED, codey, domcodey,
-                               modifier_flags, domkeyy, cy,
+                               modifier_flags, domkeyy,
                                ui::EventTimeForNow());
     details = host->event_processor()->OnEventFromSource(&release_event);
     CHECK(!details.dispatcher_destroyed);
@@ -301,7 +305,9 @@ bool SendKeyEvent(const std::string type,
       ui::TextInputClient* tic = input_method->GetTextInputClient();
 
       SendProcessKeyEvent(ui::ET_KEY_PRESSED, host);
-      tic->InsertChar(static_cast<uint16>(key_value), ui::EF_NONE);
+
+      ui::KeyEvent char_event(key_value, code, ui::EF_NONE);
+      tic->InsertChar(char_event);
       SendProcessKeyEvent(ui::ET_KEY_RELEASED, host);
     }
   } else {
@@ -320,9 +326,7 @@ bool SendKeyEvent(const std::string type,
       }
     }
 
-    ui::DomCode dom_code = ui::DomCode::NONE;
-    if (!key_name.empty())
-      dom_code = ui::KeycodeConverter::CodeStringToDomCode(key_name.c_str());
+    ui::DomCode dom_code = ui::KeycodeConverter::CodeStringToDomCode(key_name);
     if (dom_code == ui::DomCode::NONE)
       dom_code = ui::UsLayoutKeyboardCodeToDomCode(code);
     CHECK(dom_code != ui::DomCode::NONE);
@@ -332,7 +336,7 @@ bool SendKeyEvent(const std::string type,
         dom_code,
         modifiers);
     if (input_method) {
-      input_method->DispatchKeyEvent(event);
+      input_method->DispatchKeyEvent(&event);
     } else {
       ui::EventDispatchDetails details =
           host->event_processor()->OnEventFromSource(&event);
@@ -365,89 +369,6 @@ void MarkKeyboardLoadFinished() {
         base::Time::Now() - g_keyboard_load_time_start.Get());
     logged = true;
   }
-}
-
-const GritResourceMap* GetKeyboardExtensionResources(size_t* size) {
-  // This looks a lot like the contents of a resource map; however it is
-  // necessary to have a custom path for the extension path, so the resource
-  // map cannot be used directly.
-  static const GritResourceMap kKeyboardResources[] = {
-      {"keyboard/locales/en.js", IDR_KEYBOARD_LOCALES_EN},
-      {"keyboard/config/m-emoji.js", IDR_KEYBOARD_CONFIG_EMOJI},
-      {"keyboard/config/m-hwt.js", IDR_KEYBOARD_CONFIG_HWT},
-      {"keyboard/config/us.js", IDR_KEYBOARD_CONFIG_US},
-      {"keyboard/emoji.css", IDR_KEYBOARD_CSS_EMOJI},
-      {"keyboard/images/backspace.png", IDR_KEYBOARD_IMAGES_BACKSPACE},
-      {"keyboard/images/car.png", IDR_KEYBOARD_IMAGES_CAR},
-      {"keyboard/images/check.png", IDR_KEYBOARD_IMAGES_CHECK},
-      {"keyboard/images/compact.png", IDR_KEYBOARD_IMAGES_COMPACT},
-      {"keyboard/images/down.png", IDR_KEYBOARD_IMAGES_DOWN},
-      {"keyboard/images/emoji.png", IDR_KEYBOARD_IMAGES_EMOJI},
-      {"keyboard/images/emoji_cat_items.png", IDR_KEYBOARD_IMAGES_CAT},
-      {"keyboard/images/emoticon.png", IDR_KEYBOARD_IMAGES_EMOTICON},
-      {"keyboard/images/enter.png", IDR_KEYBOARD_IMAGES_RETURN},
-      {"keyboard/images/error.png", IDR_KEYBOARD_IMAGES_ERROR},
-      {"keyboard/images/favorit.png", IDR_KEYBOARD_IMAGES_FAVORITE},
-      {"keyboard/images/flower.png", IDR_KEYBOARD_IMAGES_FLOWER},
-      {"keyboard/images/globe.png", IDR_KEYBOARD_IMAGES_GLOBE},
-      {"keyboard/images/hide.png", IDR_KEYBOARD_IMAGES_HIDE_KEYBOARD},
-      {"keyboard/images/keyboard.svg", IDR_KEYBOARD_IMAGES_KEYBOARD},
-      {"keyboard/images/left.png", IDR_KEYBOARD_IMAGES_LEFT},
-      {"keyboard/images/penci.png", IDR_KEYBOARD_IMAGES_PENCIL},
-      {"keyboard/images/recent.png", IDR_KEYBOARD_IMAGES_RECENT},
-      {"keyboard/images/regular_size.png", IDR_KEYBOARD_IMAGES_FULLSIZE},
-      {"keyboard/images/menu.png", IDR_KEYBOARD_IMAGES_MENU},
-      {"keyboard/images/pencil.png", IDR_KEYBOARD_IMAGES_PENCIL},
-      {"keyboard/images/right.png", IDR_KEYBOARD_IMAGES_RIGHT},
-      {"keyboard/images/search.png", IDR_KEYBOARD_IMAGES_SEARCH},
-      {"keyboard/images/setting.png", IDR_KEYBOARD_IMAGES_SETTINGS},
-      {"keyboard/images/shift.png", IDR_KEYBOARD_IMAGES_SHIFT},
-      {"keyboard/images/space.png", IDR_KEYBOARD_IMAGES_SPACE},
-      {"keyboard/images/tab.png", IDR_KEYBOARD_IMAGES_TAB},
-      {"keyboard/images/triangle.png", IDR_KEYBOARD_IMAGES_TRIANGLE},
-      {"keyboard/images/up.png", IDR_KEYBOARD_IMAGES_UP},
-      {"keyboard/index.html", IDR_KEYBOARD_INDEX},
-      {"keyboard/inputview_adapter.js", IDR_KEYBOARD_INPUTVIEW_ADAPTER},
-      {"keyboard/inputview.css", IDR_KEYBOARD_INPUTVIEW_CSS},
-      {"keyboard/inputview.js", IDR_KEYBOARD_INPUTVIEW_JS},
-      {"keyboard/inputview_layouts/101kbd.js", IDR_KEYBOARD_LAYOUTS_101},
-      {"keyboard/inputview_layouts/compactkbd-qwerty.js",
-       IDR_KEYBOARD_LAYOUTS_COMPACT_QWERTY},
-      {"keyboard/inputview_layouts/compactkbd-numberpad.js",
-       IDR_KEYBOARD_LAYOUTS_COMPACT_NUMBERPAD},
-      {"keyboard/inputview_layouts/emoji.js", IDR_KEYBOARD_LAYOUTS_EMOJI},
-      {"keyboard/inputview_layouts/handwriting.js", IDR_KEYBOARD_LAYOUTS_HWT},
-      {"keyboard/inputview_layouts/m-101kbd.js",
-       IDR_KEYBOARD_LAYOUTS_MATERIAL_101},
-      {"keyboard/inputview_layouts/m-compactkbd-qwerty.js",
-       IDR_KEYBOARD_LAYOUTS_MATERIAL_COMPACT_QWERTY},
-      {"keyboard/inputview_layouts/m-compactkbd-numberpad.js",
-       IDR_KEYBOARD_LAYOUTS_MATERIAL_COMPACT_NUMBERPAD},
-      {"keyboard/inputview_layouts/m-emoji.js",
-       IDR_KEYBOARD_LAYOUTS_MATERIAL_EMOJI},
-      {"keyboard/inputview_layouts/m-handwriting.js",
-       IDR_KEYBOARD_LAYOUTS_MATERIAL_HWT},
-      {"keyboard/manifest.json", IDR_KEYBOARD_MANIFEST},
-      {"keyboard/sounds/keypress-delete.wav",
-       IDR_KEYBOARD_SOUNDS_KEYPRESS_DELETE},
-      {"keyboard/sounds/keypress-return.wav",
-       IDR_KEYBOARD_SOUNDS_KEYPRESS_RETURN},
-      {"keyboard/sounds/keypress-spacebar.wav",
-       IDR_KEYBOARD_SOUNDS_KEYPRESS_SPACEBAR},
-      {"keyboard/sounds/keypress-standard.wav",
-       IDR_KEYBOARD_SOUNDS_KEYPRESS_STANDARD},
-  };
-  static const size_t kKeyboardResourcesSize = arraysize(kKeyboardResources);
-  *size = kKeyboardResourcesSize;
-  return kKeyboardResources;
-}
-
-void SetOverrideContentUrl(const GURL& url) {
-  g_override_content_url.Get() = url;
-}
-
-const GURL& GetOverrideContentUrl() {
-  return g_override_content_url.Get();
 }
 
 void LogKeyboardControlEvent(KeyboardControlEvent event) {

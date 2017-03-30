@@ -6,12 +6,22 @@
 #include "base/test/launcher/unit_test_launcher.h"
 #include "chrome/test/base/chrome_unit_test_suite.h"
 #include "content/public/test/unittest_test_suite.h"
-#include "third_party/mojo/src/mojo/edk/embedder/test_embedder.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
+
+#if defined(VIVALDI_BUILD)
+#include "extraparts/vivaldi_unit_test_suite.h"
+#endif
 
 int main(int argc, char **argv) {
-  content::UnitTestTestSuite test_suite(new ChromeUnitTestSuite(argc, argv));
+  content::UnitTestTestSuite test_suite(
+#if defined(VIVALDI_BUILD)
+        new VivaldiChromeUnitTestSuite(argc, argv)
+#else
+        new ChromeUnitTestSuite(argc, argv)
+#endif
+        );
 
-  mojo::embedder::test::InitWithSimplePlatformSupport();
+  mojo::embedder::Init();
   return base::LaunchUnitTests(
       argc, argv, base::Bind(&content::UnitTestTestSuite::Run,
                              base::Unretained(&test_suite)));

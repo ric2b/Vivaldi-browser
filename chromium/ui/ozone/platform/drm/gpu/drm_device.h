@@ -5,6 +5,7 @@
 #ifndef UI_OZONE_PLATFORM_DRM_GPU_DRM_DEVICE_H_
 #define UI_OZONE_PLATFORM_DRM_GPU_DRM_DEVICE_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <vector>
@@ -14,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/overlay_transform.h"
@@ -45,14 +45,14 @@ class OZONE_EXPORT DrmDevice : public base::RefCountedThreadSafe<DrmDevice> {
                               unsigned int /* seconds */,
                               unsigned int /* useconds */)> PageFlipCallback;
 
-  DrmDevice(const base::FilePath& device_path, base::File file);
+  DrmDevice(const base::FilePath& device_path,
+            base::File file,
+            bool is_primary_device);
+
+  bool is_primary_device() const { return is_primary_device_; }
 
   // Open device.
   virtual bool Initialize(bool use_atomic);
-
-  // |task_runner| will be used to asynchronously page flip.
-  virtual void InitializeTaskRunner(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
 
   // Get the CRTC state. This is generally used to save state before using the
   // CRTC. When the user finishes using the CRTC, the user should restore the
@@ -78,15 +78,16 @@ class OZONE_EXPORT DrmDevice : public base::RefCountedThreadSafe<DrmDevice> {
   // Returns the connector properties for |connector_id|.
   virtual ScopedDrmConnectorPtr GetConnector(uint32_t connector_id);
 
-  // Register a buffer with the CRTC. On successful registration, the CRTC will
-  // assign a framebuffer ID to |framebuffer|.
-  virtual bool AddFramebuffer(uint32_t width,
-                              uint32_t height,
-                              uint8_t depth,
-                              uint8_t bpp,
-                              uint32_t stride,
-                              uint32_t handle,
-                              uint32_t* framebuffer);
+  // Register any format buffer with the CRTC. On successful registration, the
+  // CRTC will assign a framebuffer ID to |framebuffer|.
+  virtual bool AddFramebuffer2(uint32_t width,
+                               uint32_t height,
+                               uint32_t format,
+                               uint32_t handles[4],
+                               uint32_t strides[4],
+                               uint32_t offsets[4],
+                               uint32_t* framebuffer,
+                               uint32_t flags);
 
   // Deregister the given |framebuffer|.
   virtual bool RemoveFramebuffer(uint32_t framebuffer);
@@ -100,7 +101,6 @@ class OZONE_EXPORT DrmDevice : public base::RefCountedThreadSafe<DrmDevice> {
   // queued on |fd_|.
   virtual bool PageFlip(uint32_t crtc_id,
                         uint32_t framebuffer,
-                        bool is_sync,
                         const PageFlipCallback& callback);
 
   // Schedule an overlay to be show during the page flip for CRTC |crtc_id|.
@@ -156,10 +156,9 @@ class OZONE_EXPORT DrmDevice : public base::RefCountedThreadSafe<DrmDevice> {
 
   virtual bool CloseBufferHandle(uint32_t handle);
 
-  virtual bool CommitProperties(drmModePropertySet* properties,
+  virtual bool CommitProperties(drmModeAtomicReq* properties,
                                 uint32_t flags,
-                                bool is_sync,
-                                bool test_only,
+                                uint32_t crtc_count,
                                 const PageFlipCallback& callback);
 
   // Set the gamma ramp for |crtc_id| to reflect the ramps in |lut|.
@@ -189,19 +188,18 @@ class OZONE_EXPORT DrmDevice : public base::RefCountedThreadSafe<DrmDevice> {
   class IOWatcher;
   class PageFlipManager;
 
-  // Path to DRM device.
+  // Path to the DRM device (in sysfs).
   const base::FilePath device_path_;
 
   // DRM device.
   base::File file_;
 
-  // Helper thread to perform IO listener operations.
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_ptr<PageFlipManager> page_flip_manager_;
 
   // Watcher for |fd_| listening for page flip events.
-  scoped_refptr<IOWatcher> watcher_;
+  scoped_ptr<IOWatcher> watcher_;
 
-  scoped_refptr<PageFlipManager> page_flip_manager_;
+  bool is_primary_device_;
 
   DISALLOW_COPY_AND_ASSIGN(DrmDevice);
 };

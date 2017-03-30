@@ -4,6 +4,8 @@
 
 #include "components/sync_driver/ui_data_type_controller.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/scoped_ptr.h"
@@ -12,8 +14,8 @@
 #include "base/tracked_objects.h"
 #include "components/sync_driver/data_type_controller_mock.h"
 #include "components/sync_driver/fake_generic_change_processor.h"
+#include "components/sync_driver/fake_sync_client.h"
 #include "sync/api/fake_syncable_service.h"
-#include "sync/internal_api/public/attachments/attachment_service_impl.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -30,15 +32,22 @@ namespace {
 // intelligent default values for the methods queried in the dependent services
 // (e.g. those queried in StartModels).
 class SyncUIDataTypeControllerTest : public testing::Test,
-                                     public SyncApiComponentFactory {
+                                     public FakeSyncClient {
  public:
   SyncUIDataTypeControllerTest()
       : type_(syncer::PREFERENCES),
         change_processor_(NULL) {}
 
+  // FakeSyncClient overrides.
+  base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
+     syncer::ModelType type) override {
+    return syncable_service_.AsWeakPtr();
+  }
+
   void SetUp() override {
-    preference_dtc_ = new UIDataTypeController(
-        base::ThreadTaskRunnerHandle::Get(), base::Closure(), type_, this);
+    preference_dtc_ =
+        new UIDataTypeController(base::ThreadTaskRunnerHandle::Get(),
+                                 base::Closure(), type_, this);
     SetStartExpectations();
   }
 
@@ -49,28 +58,14 @@ class SyncUIDataTypeControllerTest : public testing::Test,
     PumpLoop();
   }
 
-  base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
-      syncer::ModelType type) override {
-    return syncable_service_.AsWeakPtr();
-  }
-
-  scoped_ptr<syncer::AttachmentService> CreateAttachmentService(
-      scoped_ptr<syncer::AttachmentStoreForSync> attachment_store,
-      const syncer::UserShare& user_share,
-      const std::string& store_birthday,
-      syncer::ModelType model_type,
-      syncer::AttachmentService::Delegate* delegate) override {
-    return syncer::AttachmentServiceImpl::CreateForTest();
-  }
-
  protected:
   void SetStartExpectations() {
     scoped_ptr<FakeGenericChangeProcessor> p(
         new FakeGenericChangeProcessor(type_, this));
     change_processor_ = p.get();
     scoped_ptr<GenericChangeProcessorFactory> f(
-        new FakeGenericChangeProcessorFactory(p.Pass()));
-    preference_dtc_->SetGenericChangeProcessorFactoryForTest(f.Pass());
+        new FakeGenericChangeProcessorFactory(std::move(p)));
+    preference_dtc_->SetGenericChangeProcessorFactoryForTest(std::move(f));
     EXPECT_CALL(model_load_callback_, Run(_, _));
   }
 

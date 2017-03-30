@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/quic_protocol.h"
@@ -27,10 +26,10 @@ const int kCubeScale = 40;  // 1024*1024^3 (first 1024 is from 0.100^3)
                             // where 0.100 is 100 ms which is the scaling
                             // round trip time.
 const int kCubeCongestionWindowScale = 410;
-const uint64 kCubeFactor = (UINT64_C(1) << kCubeScale) /
-    kCubeCongestionWindowScale;
+const uint64_t kCubeFactor =
+    (UINT64_C(1) << kCubeScale) / kCubeCongestionWindowScale;
 
-const uint32 kDefaultNumConnections = 2;
+const uint32_t kDefaultNumConnections = 2;
 const float kBeta = 0.7f;  // Default Cubic backoff factor.
 // Additional backoff factor when loss occurs in the concave part of the Cubic
 // curve. This additional backoff factor is expected to give up bandwidth to
@@ -43,6 +42,7 @@ Cubic::Cubic(const QuicClock* clock)
     : clock_(clock),
       num_connections_(kDefaultNumConnections),
       epoch_(QuicTime::Zero()),
+      app_limited_start_time_(QuicTime::Zero()),
       last_update_time_(QuicTime::Zero()) {
   Reset();
 }
@@ -69,6 +69,7 @@ float Cubic::Beta() const {
 
 void Cubic::Reset() {
   epoch_ = QuicTime::Zero();  // Reset time.
+  app_limited_start_time_ = QuicTime::Zero();
   last_update_time_ = QuicTime::Zero();  // Reset time.
   last_congestion_window_ = 0;
   last_max_congestion_window_ = 0;
@@ -77,6 +78,21 @@ void Cubic::Reset() {
   origin_point_congestion_window_ = 0;
   time_to_origin_point_ = 0;
   last_target_congestion_window_ = 0;
+}
+
+void Cubic::OnApplicationLimited() {
+  if (FLAGS_shift_quic_cubic_epoch_when_app_limited) {
+    // When sender is not using the available congestion window, Cubic's epoch
+    // should not continue growing. Record the time when sender goes into an
+    // app-limited period here, to compensate later when cwnd growth happens.
+    if (app_limited_start_time_ == QuicTime::Zero()) {
+      app_limited_start_time_ = clock_->ApproximateNow();
+    }
+  } else {
+    // When sender is not using the available congestion window, Cubic's epoch
+    // should not continue growing. Reset the epoch when in such a period.
+    epoch_ = QuicTime::Zero();
+  }
 }
 
 QuicPacketCount Cubic::CongestionWindowAfterPacketLoss(
@@ -110,8 +126,7 @@ QuicPacketCount Cubic::CongestionWindowAfterAck(
 
   if (!epoch_.IsInitialized()) {
     // First ACK after a loss event.
-    DVLOG(1) << "Start of epoch";
-    epoch_ = current_time;  // Start of epoch.
+    epoch_ = current_time;     // Start of epoch.
     acked_packets_count_ = 1;  // Reset count.
     // Reset estimated_tcp_congestion_window_ to be in sync with cubic.
     estimated_tcp_congestion_window_ = current_congestion_window;
@@ -119,22 +134,34 @@ QuicPacketCount Cubic::CongestionWindowAfterAck(
       time_to_origin_point_ = 0;
       origin_point_congestion_window_ = current_congestion_window;
     } else {
-      time_to_origin_point_ =
-          static_cast<uint32>(cbrt(kCubeFactor * (last_max_congestion_window_ -
-                                                  current_congestion_window)));
+      time_to_origin_point_ = static_cast<uint32_t>(
+          cbrt(kCubeFactor *
+               (last_max_congestion_window_ - current_congestion_window)));
       origin_point_congestion_window_ = last_max_congestion_window_;
     }
+  } else {
+    // If sender was app-limited, then freeze congestion window growth during
+    // app-limited period. Continue growth now by shifting the epoch-start
+    // through the app-limited period.
+    if (FLAGS_shift_quic_cubic_epoch_when_app_limited &&
+        app_limited_start_time_ != QuicTime::Zero()) {
+      QuicTime::Delta shift = current_time.Subtract(app_limited_start_time_);
+      DVLOG(1) << "Shifting epoch for quiescence by " << shift.ToMicroseconds();
+      epoch_ = epoch_.Add(shift);
+      app_limited_start_time_ = QuicTime::Zero();
+    }
   }
+
   // Change the time unit from microseconds to 2^10 fractions per second. Take
   // the round trip time in account. This is done to allow us to use shift as a
   // divide operator.
-  int64 elapsed_time =
+  int64_t elapsed_time =
       (current_time.Add(delay_min).Subtract(epoch_).ToMicroseconds() << 10) /
       kNumMicrosPerSecond;
 
-  int64 offset = time_to_origin_point_ - elapsed_time;
-  QuicPacketCount delta_congestion_window = (kCubeCongestionWindowScale
-      * offset * offset * offset) >> kCubeScale;
+  int64_t offset = time_to_origin_point_ - elapsed_time;
+  QuicPacketCount delta_congestion_window =
+      (kCubeCongestionWindowScale * offset * offset * offset) >> kCubeScale;
 
   QuicPacketCount target_congestion_window =
       origin_point_congestion_window_ - delta_congestion_window;
@@ -163,7 +190,7 @@ QuicPacketCount Cubic::CongestionWindowAfterAck(
     target_congestion_window = estimated_tcp_congestion_window_;
   }
 
-  DVLOG(1) << "Target congestion_window: " << target_congestion_window;
+  DVLOG(1) << "Final target congestion_window: " << target_congestion_window;
   return target_congestion_window;
 }
 

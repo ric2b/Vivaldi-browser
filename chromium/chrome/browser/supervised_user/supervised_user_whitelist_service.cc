@@ -4,6 +4,8 @@
 
 #include "chrome/browser/supervised_user/supervised_user_whitelist_service.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/command_line.h"
@@ -67,30 +69,8 @@ void SupervisedUserWhitelistService::Init() {
                  weak_ptr_factory_.GetWeakPtr()));
 
   // Register whitelists specified on the command line.
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-  std::string command_line_whitelists = command_line->GetSwitchValueASCII(
-      switches::kInstallSupervisedUserWhitelists);
-  std::vector<std::string> split_whitelists;
-  base::SplitString(command_line_whitelists, ',', &split_whitelists);
-  for (const std::string& whitelist : split_whitelists) {
-    std::string id;
-    std::string name;
-    size_t separator = whitelist.find(':');
-    if (separator != std::string::npos) {
-      id = whitelist.substr(0, separator);
-      name = whitelist.substr(separator + 1);
-    } else {
-      id = whitelist;
-    }
-
-    // Skip whitelists that were already registered.
-    if (registered_whitelists_.count(id) > 0u)
-      continue;
-
-    bool new_installation = true;
-    RegisterWhitelist(id, name, new_installation);
-  }
+  for (const auto& whitelist : GetWhitelistsFromCommandLine())
+    RegisterWhitelist(whitelist.first, whitelist.second, FROM_COMMAND_LINE);
 }
 
 void SupervisedUserWhitelistService::AddSiteListsChangedCallback(
@@ -102,12 +82,42 @@ void SupervisedUserWhitelistService::AddSiteListsChangedCallback(
   callback.Run(whitelists);
 }
 
+// static
+std::map<std::string, std::string>
+SupervisedUserWhitelistService::GetWhitelistsFromCommandLine() {
+  std::map<std::string, std::string> whitelists;
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  std::string command_line_whitelists = command_line->GetSwitchValueASCII(
+      switches::kInstallSupervisedUserWhitelists);
+  std::vector<base::StringPiece> string_pieces =
+      base::SplitStringPiece(command_line_whitelists, ",",
+                             base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  for (const base::StringPiece& whitelist : string_pieces) {
+    std::string id;
+    std::string name;
+    size_t separator = whitelist.find(':');
+    if (separator != base::StringPiece::npos) {
+      whitelist.substr(0, separator).CopyToString(&id);
+      whitelist.substr(separator + 1).CopyToString(&name);
+    } else {
+      whitelist.CopyToString(&id);
+    }
+
+    const bool result = whitelists.insert(std::make_pair(id, name)).second;
+    DCHECK(result);
+  }
+
+  return whitelists;
+}
+
 void SupervisedUserWhitelistService::LoadWhitelistForTesting(
     const std::string& id,
+    const base::string16& title,
     const base::FilePath& path) {
   bool result = registered_whitelists_.insert(id).second;
   DCHECK(result);
-  OnWhitelistReady(id, path);
+  OnWhitelistReady(id, title, path);
 }
 
 void SupervisedUserWhitelistService::UnloadWhitelist(const std::string& id) {
@@ -269,8 +279,7 @@ void SupervisedUserWhitelistService::AddNewWhitelist(
     const sync_pb::ManagedUserWhitelistSpecifics& whitelist) {
   base::RecordAction(base::UserMetricsAction("ManagedUsers_Whitelist_Added"));
 
-  bool new_installation = true;
-  RegisterWhitelist(whitelist.id(), whitelist.name(), new_installation);
+  RegisterWhitelist(whitelist.id(), whitelist.name(), FROM_SYNC);
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
   SetWhitelistProperties(dict.get(), whitelist);
   pref_dict->SetWithoutPathExpansion(whitelist.id(), dict.release());
@@ -294,11 +303,16 @@ void SupervisedUserWhitelistService::RemoveWhitelist(
 
 void SupervisedUserWhitelistService::RegisterWhitelist(const std::string& id,
                                                        const std::string& name,
-                                                       bool new_installation) {
+                                                       WhitelistSource source) {
   bool result = registered_whitelists_.insert(id).second;
   DCHECK(result);
 
-  installer_->RegisterWhitelist(client_id_, id, name);
+  // Using an empty client ID for whitelists installed from the command line
+  // causes the installer to not persist the installation, so the whitelist will
+  // be removed the next time the browser is started without the command line
+  // flag.
+  installer_->RegisterWhitelist(
+      source == FROM_COMMAND_LINE ? std::string() : client_id_, id, name);
 }
 
 void SupervisedUserWhitelistService::GetLoadedWhitelists(
@@ -317,6 +331,7 @@ void SupervisedUserWhitelistService::NotifyWhitelistsChanged() {
 
 void SupervisedUserWhitelistService::OnWhitelistReady(
     const std::string& id,
+    const base::string16& title,
     const base::FilePath& whitelist_path) {
   // If we did not register the whitelist or it has been unregistered in the
   // mean time, ignore it.
@@ -324,7 +339,7 @@ void SupervisedUserWhitelistService::OnWhitelistReady(
     return;
 
   SupervisedUserSiteList::Load(
-      whitelist_path,
+      id, title, whitelist_path,
       base::Bind(&SupervisedUserWhitelistService::OnWhitelistLoaded,
                  weak_ptr_factory_.GetWeakPtr(), id, base::TimeTicks::Now()));
 }

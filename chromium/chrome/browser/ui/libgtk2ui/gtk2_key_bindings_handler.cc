@@ -6,11 +6,13 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <X11/Xlib.h>
+#include <stddef.h>
 #include <X11/XKBlib.h>
 
 #include <string>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/ui/libgtk2ui/gtk2_util.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -32,7 +34,7 @@ Gtk2KeyBindingsHandler::Gtk2KeyBindingsHandler()
     : fake_window_(gtk_offscreen_window_new()),
       handler_(CreateNewHandler()),
       has_xkb_(false) {
-  gtk_container_add(GTK_CONTAINER(fake_window_), handler_.get());
+  gtk_container_add(GTK_CONTAINER(fake_window_), handler_);
 
   int opcode, event, error;
   int major = XkbMajorVersion;
@@ -42,7 +44,7 @@ Gtk2KeyBindingsHandler::Gtk2KeyBindingsHandler()
 }
 
 Gtk2KeyBindingsHandler::~Gtk2KeyBindingsHandler() {
-  handler_.Destroy();
+  gtk_widget_destroy(handler_);
   gtk_widget_destroy(fake_window_);
 }
 
@@ -61,7 +63,14 @@ bool Gtk2KeyBindingsHandler::MatchEvent(
   edit_commands_.clear();
   // If this key event matches a predefined key binding, corresponding signal
   // will be emitted.
-  gtk_bindings_activate_event(GTK_OBJECT(handler_.get()), &gdk_event);
+
+  gtk_bindings_activate_event(
+#if GDK_MAJOR_VERSION >= 3
+      G_OBJECT(handler_),
+#else
+      GTK_OBJECT(handler_),
+#endif
+      &gdk_event);
 
   bool matched = !edit_commands_.empty();
   if (edit_commands)
@@ -123,7 +132,7 @@ void Gtk2KeyBindingsHandler::BuildGdkEventKeyFromXEvent(
     gdk_event->group = 0;
   }
 
-  gdk_event->keyval = GDK_VoidSymbol;
+  gdk_event->keyval = GDK_KEY_VoidSymbol;
   gdk_keymap_translate_keyboard_state(
       keymap,
       gdk_event->hardware_keycode,

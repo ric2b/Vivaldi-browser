@@ -5,18 +5,25 @@
 #ifndef CHROME_BROWSER_TASK_MANAGEMENT_TASK_MANAGER_OBSERVER_H_
 #define CHROME_BROWSER_TASK_MANAGEMENT_TASK_MANAGER_OBSERVER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 namespace task_management {
 
-typedef int64 TaskId;
+class TaskManagerInterface;
+
+typedef int64_t TaskId;
 typedef std::vector<TaskId> TaskIdList;
 
 // Defines a list of types of resources that an observer needs to be refreshed
 // on every task manager refresh cycle.
 enum RefreshType {
+  REFRESH_TYPE_NONE              = 0,
   REFRESH_TYPE_CPU               = 1,
   REFRESH_TYPE_MEMORY            = 1 << 1,
   REFRESH_TYPE_GPU_MEMORY        = 1 << 2,
@@ -27,6 +34,16 @@ enum RefreshType {
   REFRESH_TYPE_NACL              = 1 << 7,
   REFRESH_TYPE_IDLE_WAKEUPS      = 1 << 8,
   REFRESH_TYPE_HANDLES           = 1 << 9,
+
+  // Whether an observer is interested in knowing if a process is foregrounded
+  // or backgrounded.
+  REFRESH_TYPE_PRIORITY          = 1 << 10,
+
+#if defined(OS_LINUX)
+  // For observers interested in getting the number of open file descriptors of
+  // processes.
+  REFRESH_TYPE_FD_COUNT          = 1 << 11,
+#endif  // defined(OS_LINUX)
 };
 
 // Defines the interface for observers of the task manager.
@@ -47,7 +64,7 @@ class TaskManagerObserver {
   // 4- Upon the removal of the observer from the task manager, the task manager
   // will update its refresh time and the calculated resources to be the minimum
   // required value of all the remaining observers.
-  TaskManagerObserver(base::TimeDelta refresh_time, int64 resources_flags);
+  TaskManagerObserver(base::TimeDelta refresh_time, int64_t resources_flags);
   virtual ~TaskManagerObserver();
 
   // Notifies the observer that a chrome task with |id| has started and the task
@@ -62,23 +79,41 @@ class TaskManagerObserver {
   virtual void OnTaskToBeRemoved(TaskId id) = 0;
 
   // Notifies the observer that the task manager has just finished a refresh
-  // cycle to calculate the resources usage of all tasks.
+  // cycle to calculate the resources usage of all tasks whose IDs are given in
+  // |task_ids|. |task_ids| will be sorted such that the task representing the
+  // browser process is at the top of the list and the rest of the IDs will be
+  // sorted by the process IDs on which the tasks are running, then by the task
+  // IDs themselves.
   virtual void OnTasksRefreshed(const TaskIdList& task_ids) = 0;
 
   const base::TimeDelta& desired_refresh_time() const {
     return desired_refresh_time_;
   }
 
-  int64 desired_resources_flags() const { return desired_resources_flags_; }
+  int64_t desired_resources_flags() const { return desired_resources_flags_; }
+
+ protected:
+  TaskManagerInterface* observed_task_manager() const {
+    return observed_task_manager_;
+  }
+
+  // Add or Remove a refresh |type|.
+  void AddRefreshType(RefreshType type);
+  void RemoveRefreshType(RefreshType type);
 
  private:
+  friend class TaskManagerInterface;
+
+  // The currently observed task Manager.
+  TaskManagerInterface* observed_task_manager_;
+
   // The minimum update time of the task manager that this observer needs to
   // do its job.
   base::TimeDelta desired_refresh_time_;
 
   // The flags that contain the resources that this observer needs to be
   // calculated on each refresh.
-  int64 desired_resources_flags_;
+  int64_t desired_resources_flags_;
 
   DISALLOW_COPY_AND_ASSIGN(TaskManagerObserver);
 };

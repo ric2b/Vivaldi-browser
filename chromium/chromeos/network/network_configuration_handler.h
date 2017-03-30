@@ -10,9 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -206,7 +205,7 @@ class CHROMEOS_EXPORT NetworkConfigurationHandler
   // Map of in-progress deleter instances. Owned by this class.
   std::map<std::string, ProfileEntryDeleter*> profile_entry_deleters_;
 
-  base::ObserverList<NetworkConfigurationObserver> observers_;
+  base::ObserverList<NetworkConfigurationObserver, true> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkConfigurationHandler);
 };

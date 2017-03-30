@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/toolbar/toolbar_model.h"
+#include "components/toolbar/toolbar_model.h"
+
+#include <stddef.h>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/search/search.h"
@@ -13,15 +17,17 @@
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/toolbar/toolbar_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/google/core/browser/google_switches.h"
+#include "components/search/search.h"
+#include "components/toolbar/toolbar_model.h"
 #include "components/variations/entropy_provider.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/common/content_constants.h"
 #include "content/public/common/ssl_status.h"
 #include "content/public/common/url_constants.h"
-
+#include "ui/gfx/text_elider.h"
 
 // Test data ------------------------------------------------------------------
 
@@ -152,6 +158,7 @@ class ToolbarModelTest : public BrowserWithTestWindowTest {
                             const base::string16& expected_text,
                             bool would_perform_search_term_replacement,
                             bool should_display_url);
+  void NavigateAndCheckElided(const GURL& https_url);
 
  private:
   scoped_ptr<base::FieldTrialList> field_trial_list_;
@@ -223,6 +230,27 @@ void ToolbarModelTest::NavigateAndCheckText(
   toolbar_model->set_input_in_progress(false);
 }
 
+void ToolbarModelTest::NavigateAndCheckElided(const GURL& url) {
+  // Check while loading.
+  content::NavigationController* controller =
+      &browser()->tab_strip_model()->GetWebContentsAt(0)->GetController();
+  controller->LoadURL(url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
+                      std::string());
+  ToolbarModel* toolbar_model = browser()->toolbar_model();
+  const base::string16 toolbar_text_before(toolbar_model->GetText());
+  EXPECT_LT(toolbar_text_before.size(), url.spec().size());
+  EXPECT_TRUE(base::EndsWith(toolbar_text_before,
+                             base::string16(gfx::kEllipsisUTF16),
+                             base::CompareCase::SENSITIVE));
+  // Check after commit.
+  CommitPendingLoad(controller);
+  const base::string16 toolbar_text_after(toolbar_model->GetText());
+  EXPECT_LT(toolbar_text_after.size(), url.spec().size());
+  EXPECT_TRUE(base::EndsWith(toolbar_text_after,
+                             base::string16(gfx::kEllipsisUTF16),
+                             base::CompareCase::SENSITIVE));
+}
+
 class PopupToolbarModelTest : public ToolbarModelTest {
  public:
   PopupToolbarModelTest();
@@ -248,7 +276,7 @@ TEST_F(ToolbarModelTest, ShouldDisplayURL_QueryExtraction) {
   AddTab(browser(), GURL(url::kAboutBlankURL));
 
   // Before we enable instant extended, query extraction is disabled.
-  EXPECT_FALSE(chrome::IsQueryExtractionEnabled())
+  EXPECT_FALSE(search::IsQueryExtractionEnabled())
       << "This test expects query extraction to be disabled.";
   for (size_t i = 0; i < arraysize(test_items); ++i) {
     const TestItem& test_item = test_items[i];
@@ -257,8 +285,8 @@ TEST_F(ToolbarModelTest, ShouldDisplayURL_QueryExtraction) {
                          false, test_item.should_display_url);
   }
 
-  chrome::EnableQueryExtractionForTesting();
-  EXPECT_TRUE(chrome::IsQueryExtractionEnabled());
+  search::EnableQueryExtractionForTesting();
+  EXPECT_TRUE(search::IsQueryExtractionEnabled());
   EXPECT_TRUE(browser()->toolbar_model()->url_replacement_enabled());
   for (size_t i = 0; i < arraysize(test_items); ++i) {
     const TestItem& test_item = test_items[i];
@@ -280,7 +308,7 @@ TEST_F(ToolbarModelTest, ShouldDisplayURL_QueryExtraction) {
 
  // Verify that search terms are extracted while the page is loading.
 TEST_F(ToolbarModelTest, SearchTermsWhileLoading) {
-  chrome::EnableQueryExtractionForTesting();
+  search::EnableQueryExtractionForTesting();
   AddTab(browser(), GURL(url::kAboutBlankURL));
 
   // While loading, we should be willing to extract search terms.
@@ -306,7 +334,7 @@ TEST_F(ToolbarModelTest, SearchTermsWhileLoading) {
 // search terms from URLs that start with that base URL even when they're not
 // secure.
 TEST_F(ToolbarModelTest, GoogleBaseURL) {
-  chrome::EnableQueryExtractionForTesting();
+  search::EnableQueryExtractionForTesting();
   AddTab(browser(), GURL(url::kAboutBlankURL));
 
   // If the Google base URL wasn't specified on the command line, then if it's
@@ -327,12 +355,20 @@ TEST_F(ToolbarModelTest, GoogleBaseURL) {
       base::ASCIIToUTF16("tractor supply"), true, true);
 }
 
+TEST_F(ToolbarModelTest, ShouldElideLongURLs) {
+  AddTab(browser(), GURL(url::kAboutBlankURL));
+  const std::string long_text(content::kMaxURLDisplayChars + 1024, '0');
+  NavigateAndCheckElided(
+      GURL(std::string("https://www.foo.com/?") + long_text));
+  NavigateAndCheckElided(GURL(std::string("data:abc") + long_text));
+}
+
 // Test that URL display in a popup respects the query extraction flag.
 TEST_F(PopupToolbarModelTest, ShouldDisplayURL) {
   AddTab(browser(), GURL(url::kAboutBlankURL));
 
   // Check with query extraction disabled.
-  EXPECT_FALSE(chrome::IsQueryExtractionEnabled());
+  EXPECT_FALSE(search::IsQueryExtractionEnabled());
   for (size_t i = 0; i < arraysize(test_items); ++i) {
     const TestItem& test_item = test_items[i];
     NavigateAndCheckText(test_item.url,
@@ -341,8 +377,8 @@ TEST_F(PopupToolbarModelTest, ShouldDisplayURL) {
   }
 
   // With query extraction enabled, search term replacement should be performed.
-  chrome::EnableQueryExtractionForTesting();
-  EXPECT_TRUE(chrome::IsQueryExtractionEnabled());
+  search::EnableQueryExtractionForTesting();
+  EXPECT_TRUE(search::IsQueryExtractionEnabled());
   EXPECT_TRUE(browser()->toolbar_model()->url_replacement_enabled());
   for (size_t i = 0; i < arraysize(test_items); ++i) {
     const TestItem& test_item = test_items[i];

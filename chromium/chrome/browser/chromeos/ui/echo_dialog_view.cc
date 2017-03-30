@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/ui/echo_dialog_view.h"
 
+#include <stddef.h>
+
 #include "chrome/browser/chromeos/ui/echo_dialog_listener.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -151,7 +153,8 @@ bool EchoDialogView::ShouldShowWindowIcon() const {
   return false;
 }
 
-void EchoDialogView::StyledLabelLinkClicked(const gfx::Range& range,
+void EchoDialogView::StyledLabelLinkClicked(views::StyledLabel* label,
+                                            const gfx::Range& range,
                                             int event_flags) {
   if (!listener_)
     return;

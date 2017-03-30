@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// NOT DEAD CODE!
+// This code isn't dead, even if it isn't currently being used. Please refer to:
+// https://www.chromium.org/developers/how-tos/compact-language-detector-cld-data-source-configuration
+
 #ifndef COMPONENTS_TRANSLATE_CONTENT_BROWSER_DATA_FILE_BROWSER_CLD_DATA_PROVIDER_H_
 #define COMPONENTS_TRANSLATE_CONTENT_BROWSER_DATA_FILE_BROWSER_CLD_DATA_PROVIDER_H_
+
+#include <stdint.h>
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -30,8 +36,8 @@ class DataFileBrowserCldDataProvider : public BrowserCldDataProvider {
 
  private:
   void SendCldDataResponseInternal(const base::File*,
-                                   const uint64,
-                                   const uint64);
+                                   const uint64_t,
+                                   const uint64_t);
   static void OnCldDataRequestInternal();
 
   content::WebContents* web_contents_;

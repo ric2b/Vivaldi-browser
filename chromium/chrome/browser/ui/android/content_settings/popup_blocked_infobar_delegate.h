@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_ANDROID_CONTENT_SETTINGS_POPUP_BLOCKED_INFOBAR_DELEGATE_H_
 #define CHROME_BROWSER_UI_ANDROID_CONTENT_SETTINGS_POPUP_BLOCKED_INFOBAR_DELEGATE_H_
 
+#include "base/macros.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "url/gurl.h"
 
@@ -28,7 +29,8 @@ class PopupBlockedInfoBarDelegate : public ConfirmInfoBarDelegate {
                               HostContentSettingsMap* map);
 
   // ConfirmInfoBarDelegate:
-  int GetIconID() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
   PopupBlockedInfoBarDelegate* AsPopupBlockedInfoBarDelegate() override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;

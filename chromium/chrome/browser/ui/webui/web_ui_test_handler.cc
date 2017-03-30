@@ -37,7 +37,8 @@ void WebUITestHandler::PreloadJavaScript(const base::string16& js_text,
 }
 
 void WebUITestHandler::RunJavaScript(const base::string16& js_text) {
-  web_ui()->GetWebContents()->GetMainFrame()->ExecuteJavaScript(js_text);
+  web_ui()->GetWebContents()->GetMainFrame()->ExecuteJavaScriptForTests(
+      js_text);
 }
 
 bool WebUITestHandler::RunJavaScriptTestWithResult(
@@ -45,9 +46,9 @@ bool WebUITestHandler::RunJavaScriptTestWithResult(
   test_succeeded_ = false;
   run_test_succeeded_ = false;
   content::RenderFrameHost* frame = web_ui()->GetWebContents()->GetMainFrame();
-  frame->ExecuteJavaScript(js_text,
-                           base::Bind(&WebUITestHandler::JavaScriptComplete,
-                                      base::Unretained(this)));
+  frame->ExecuteJavaScriptForTests(
+      js_text, base::Bind(&WebUITestHandler::JavaScriptComplete,
+                          base::Unretained(this)));
   return WaitForResult();
 }
 
@@ -60,7 +61,7 @@ void WebUITestHandler::HandleTestResult(const base::ListValue* test_result) {
   // Quit the message loop if |is_waiting_| so waiting process can get result or
   // error. To ensure this gets done, do this before ASSERT* calls.
   if (is_waiting_)
-    base::MessageLoopForUI::current()->Quit();
+    base::MessageLoopForUI::current()->QuitWhenIdle();
 
   SCOPED_TRACE("WebUITestHandler::HandleTestResult");
 
@@ -72,7 +73,7 @@ void WebUITestHandler::HandleTestResult(const base::ListValue* test_result) {
   if (!test_succeeded_) {
     std::string message;
     ASSERT_TRUE(test_result->GetString(1, &message));
-    LOG(ERROR) << message << ".\n";
+    LOG(ERROR) << message;
   }
 }
 
@@ -80,7 +81,7 @@ void WebUITestHandler::JavaScriptComplete(const base::Value* result) {
   // Quit the message loop if |is_waiting_| so waiting process can get result or
   // error. To ensure this gets done, do this before ASSERT* calls.
   if (is_waiting_)
-    base::MessageLoopForUI::current()->Quit();
+    base::MessageLoopForUI::current()->QuitWhenIdle();
 
   SCOPED_TRACE("WebUITestHandler::JavaScriptComplete");
 

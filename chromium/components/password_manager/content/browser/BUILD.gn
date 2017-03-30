@@ -2,8 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-static_library("browser") {
+source_set("browser") {
   sources = [
+    "bad_message.cc",
+    "bad_message.h",
     "content_password_manager_driver.cc",
     "content_password_manager_driver.h",
     "content_password_manager_driver_factory.cc",
@@ -14,16 +16,36 @@ static_library("browser") {
     "password_manager_internals_service_factory.h",
   ]
 
-  deps = [
+  public_deps = [
     "//base",
+    "//base:prefs",
     "//components/autofill/content/browser",
     "//components/autofill/content/common",
     "//components/autofill/core/common",
     "//components/keyed_service/content",
+    "//components/password_manager/content/common",
     "//components/password_manager/core/browser",
+    "//components/password_manager/core/common",
     "//content/public/browser",
     "//content/public/common",
     "//ipc",
     "//net",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "content_password_manager_driver_unittest.cc",
+    "credential_manager_dispatcher_unittest.cc",
+  ]
+  deps = [
+    ":browser",
+    "//base:prefs_test_support",
+    "//components/autofill/core/browser:test_support",
+    "//components/password_manager/core/browser:test_support",
+    "//content/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
 }

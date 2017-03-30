@@ -6,9 +6,11 @@
 #define MOJO_CONVERTERS_GEOMETRY_GEOMETRY_TYPE_CONVERTERS_H_
 
 #include "mojo/converters/geometry/mojo_geometry_export.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/mojo/geometry/geometry.mojom.h"
 
@@ -66,6 +68,33 @@ struct MOJO_GEOMETRY_EXPORT TypeConverter<Rect, gfx::Rect> {
 template <>
 struct MOJO_GEOMETRY_EXPORT TypeConverter<gfx::Rect, Rect> {
   static gfx::Rect Convert(const Rect& input);
+};
+
+template <>
+struct MOJO_GEOMETRY_EXPORT TypeConverter<Size, gfx::Size> {
+  static Size Convert(const gfx::Size& input);
+};
+template <>
+struct MOJO_GEOMETRY_EXPORT TypeConverter<gfx::Size, Size> {
+  static gfx::Size Convert(const Size& input);
+};
+
+template <>
+struct MOJO_GEOMETRY_EXPORT TypeConverter<Insets, gfx::Insets> {
+  static Insets Convert(const gfx::Insets& input);
+};
+template <>
+struct MOJO_GEOMETRY_EXPORT TypeConverter<gfx::Insets, Insets> {
+  static gfx::Insets Convert(const Insets& input);
+};
+
+template <>
+struct MOJO_GEOMETRY_EXPORT TypeConverter<InsetsPtr, gfx::Insets> {
+  static InsetsPtr Convert(const gfx::Insets& input);
+};
+template <>
+struct MOJO_GEOMETRY_EXPORT TypeConverter<gfx::Insets, InsetsPtr> {
+  static gfx::Insets Convert(const InsetsPtr& input);
 };
 
 }  // namespace mojo

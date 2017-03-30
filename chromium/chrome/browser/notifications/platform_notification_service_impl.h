@@ -11,15 +11,21 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/notifications/notification.h"
+#include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/platform_notification_service.h"
 #include "content/public/common/persistent_notification_status.h"
 
 class NotificationDelegate;
 class NotificationUIManager;
-class Profile;
+
+namespace content {
+class BrowserContext;
+}
 
 namespace gcm {
 class PushMessagingBrowserTest;
@@ -30,9 +36,26 @@ class PushMessagingBrowserTest;
 class PlatformNotificationServiceImpl
     : public content::PlatformNotificationService {
  public:
+  // Things you can do to a notification.
+  enum NotificationOperation {
+    NOTIFICATION_CLICK,
+    NOTIFICATION_CLOSE,
+    NOTIFICATION_SETTINGS
+  };
+
   // Returns the active instance of the service in the browser process. Safe to
   // be called from any thread.
   static PlatformNotificationServiceImpl* GetInstance();
+
+  // Load the profile corresponding to |profile_id| and perform the
+  // |operation| on the given notification once it has been loaded.
+  void ProcessPersistentNotificationOperation(
+      NotificationOperation operation,
+      const std::string& profile_id,
+      bool incognito,
+      const GURL& origin,
+      int64_t persistent_notification_id,
+      int action_index);
 
   // To be called when a persistent notification has been clicked on. The
   // Service Worker associated with the registration will be started if
@@ -40,7 +63,8 @@ class PlatformNotificationServiceImpl
   void OnPersistentNotificationClick(
       content::BrowserContext* browser_context,
       int64_t persistent_notification_id,
-      const GURL& origin) const;
+      const GURL& origin,
+      int action_index);
 
   // To be called when a persistent notification has been closed. The data
   // associated with the notification has to be pruned from the database in this
@@ -49,11 +73,15 @@ class PlatformNotificationServiceImpl
   void OnPersistentNotificationClose(
       content::BrowserContext* browser_context,
       int64_t persistent_notification_id,
-      const GURL& origin) const;
+      const GURL& origin,
+      bool by_user) const;
 
   // Returns the Notification UI Manager through which notifications can be
   // displayed to the user. Can be overridden for testing.
   NotificationUIManager* GetNotificationUIManager() const;
+
+  // Open the Notification settings screen when clicking the right button.
+  void OpenNotificationSettings(content::BrowserContext* browser_context);
 
   // content::PlatformNotificationService implementation.
   blink::WebNotificationPermission CheckPermissionOnUIThread(
@@ -85,14 +113,14 @@ class PlatformNotificationServiceImpl
       std::set<std::string>* displayed_notifications) override;
 
  private:
-  friend struct DefaultSingletonTraits<PlatformNotificationServiceImpl>;
+  friend struct base::DefaultSingletonTraits<PlatformNotificationServiceImpl>;
   friend class PlatformNotificationServiceBrowserTest;
   friend class PlatformNotificationServiceTest;
   friend class PushMessagingBrowserTest;
-  FRIEND_TEST_ALL_PREFIXES(
-      PlatformNotificationServiceTest, DisplayNameForOrigin);
   FRIEND_TEST_ALL_PREFIXES(PlatformNotificationServiceTest,
-                           TestWebOriginDisplayName);
+                           CreateNotificationFromData);
+  FRIEND_TEST_ALL_PREFIXES(PlatformNotificationServiceTest,
+                           DisplayNameForContextMessage);
 
   PlatformNotificationServiceImpl();
   ~PlatformNotificationServiceImpl() override;
@@ -111,18 +139,13 @@ class PlatformNotificationServiceImpl
   // used by tests. Tests are responsible for cleaning up after themselves.
   void SetNotificationUIManagerForTesting(NotificationUIManager* manager);
 
-  // Returns a display name for an origin, to be used in permission infobar or
-  // on the frame of the notification toast. Different from the origin itself
-  // when dealing with extensions.
-  base::string16 DisplayNameForOrigin(Profile* profile,
-                                      const GURL& origin) const;
+  // Returns a display name for an origin, to be used in the context message
+  base::string16 DisplayNameForContextMessage(Profile* profile,
+                                              const GURL& origin) const;
 
-  // Translates a URL into a slightly more readable version that may omit
-  // the port and scheme for common cases.
-  // TODO(dewittj): Remove this when the proper function is implemented in a
-  // chrome/browser/ui library function.  See crbug.com/402698.
-  static base::string16 WebOriginDisplayName(const GURL& origin,
-                                             const std::string& languages);
+  // Platforms that display native notification interact with them through this
+  // object.
+  scoped_ptr<NotificationUIManager> native_notification_ui_manager_;
 
   // Weak reference. Ownership maintains with the test.
   NotificationUIManager* notification_ui_manager_for_tests_;

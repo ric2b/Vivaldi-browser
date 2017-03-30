@@ -11,9 +11,11 @@
       'variables': {
         'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/ash/strings',
       },
+      'dependencies': [ '<(VIVALDI)/app/vivaldi_resources.gyp:ash_strings' ],
       'actions': [
         {
           'action_name': 'generate_ash_strings',
+          'disabled': 1,
           'variables': {
             'grit_grd_file': 'ash_strings.grd',
           },

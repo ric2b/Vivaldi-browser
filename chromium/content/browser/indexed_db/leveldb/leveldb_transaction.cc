@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/time/time.h"
+#include "content/browser/indexed_db/indexed_db_tracing.h"
 #include "content/browser/indexed_db/leveldb/leveldb_database.h"
 #include "content/browser/indexed_db/leveldb/leveldb_write_batch.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
@@ -88,6 +89,7 @@ leveldb::Status LevelDBTransaction::Get(const StringPiece& key,
 
 leveldb::Status LevelDBTransaction::Commit() {
   DCHECK(!finished_);
+  IDB_TRACE("LevelDBTransaction::Commit");
 
   if (data_.empty()) {
     finished_ = true;
@@ -97,16 +99,21 @@ leveldb::Status LevelDBTransaction::Commit() {
   base::TimeTicks begin_time = base::TimeTicks::Now();
   scoped_ptr<LevelDBWriteBatch> write_batch = LevelDBWriteBatch::Create();
 
-  for (const auto& iterator : data_) {
-    if (!iterator.second->deleted)
-      write_batch->Put(iterator.first, iterator.second->value);
+  auto it = data_.begin();
+  while (it != data_.end()) {
+    if (!it->second->deleted)
+      write_batch->Put(it->first, it->second->value);
     else
-      write_batch->Remove(iterator.first);
+      write_batch->Remove(it->first);
+
+    delete it->second;
+    data_.erase(it++);
   }
+
+  DCHECK(data_.empty());
 
   leveldb::Status s = db_->Write(*write_batch);
   if (s.ok()) {
-    Clear();
     finished_ = true;
     UMA_HISTOGRAM_TIMES("WebCore.IndexedDB.LevelDB.Transaction.CommitTime",
                          base::TimeTicks::Now() - begin_time);
@@ -482,6 +489,7 @@ void LevelDBDirectTransaction::Remove(const StringPiece& key) {
 
 leveldb::Status LevelDBDirectTransaction::Commit() {
   DCHECK(!finished_);
+  IDB_TRACE("LevelDBDirectTransaction::Commit");
 
   leveldb::Status s = db_->Write(*write_batch_);
   if (s.ok()) {

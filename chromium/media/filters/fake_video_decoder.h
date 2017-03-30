@@ -5,11 +5,14 @@
 #ifndef MEDIA_FILTERS_FAKE_VIDEO_DECODER_H_
 #define MEDIA_FILTERS_FAKE_VIDEO_DECODER_H_
 
+#include <stddef.h>
+
 #include <list>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/callback_holder.h"
@@ -44,6 +47,7 @@ class FakeVideoDecoder : public VideoDecoder {
   std::string GetDisplayName() const override;
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
+                  const SetCdmReadyCB& set_cdm_ready_cb,
                   const InitCB& init_cb,
                   const OutputCB& output_cb) override;
   void Decode(const scoped_refptr<DecoderBuffer>& buffer,

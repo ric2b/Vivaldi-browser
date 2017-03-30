@@ -9,47 +9,31 @@
 namespace base {
 namespace allocator {
 
-bool GetAllocatorWasteSize(size_t* size) {
-  thunks::GetAllocatorWasteSizeFunction get_allocator_waste_size_function =
-      thunks::GetGetAllocatorWasteSizeFunction();
-  return get_allocator_waste_size_function != NULL &&
-         get_allocator_waste_size_function(size);
-}
-
-void GetStats(char* buffer, int buffer_length) {
-  DCHECK_GT(buffer_length, 0);
-  thunks::GetStatsFunction get_stats_function = thunks::GetGetStatsFunction();
-  if (get_stats_function)
-    get_stats_function(buffer, buffer_length);
-  else
-    buffer[0] = '\0';
+namespace {
+ReleaseFreeMemoryFunction g_release_free_memory_function = nullptr;
+GetNumericPropertyFunction g_get_numeric_property_function = nullptr;
 }
 
 void ReleaseFreeMemory() {
-  thunks::ReleaseFreeMemoryFunction release_free_memory_function =
-      thunks::GetReleaseFreeMemoryFunction();
-  if (release_free_memory_function)
-    release_free_memory_function();
+  if (g_release_free_memory_function)
+    g_release_free_memory_function();
 }
 
-void SetGetAllocatorWasteSizeFunction(
-    thunks::GetAllocatorWasteSizeFunction get_allocator_waste_size_function) {
-  DCHECK_EQ(thunks::GetGetAllocatorWasteSizeFunction(),
-            reinterpret_cast<thunks::GetAllocatorWasteSizeFunction>(NULL));
-  thunks::SetGetAllocatorWasteSizeFunction(get_allocator_waste_size_function);
-}
-
-void SetGetStatsFunction(thunks::GetStatsFunction get_stats_function) {
-  DCHECK_EQ(thunks::GetGetStatsFunction(),
-            reinterpret_cast<thunks::GetStatsFunction>(NULL));
-  thunks::SetGetStatsFunction(get_stats_function);
+bool GetNumericProperty(const char* name, size_t* value) {
+  return g_get_numeric_property_function &&
+         g_get_numeric_property_function(name, value);
 }
 
 void SetReleaseFreeMemoryFunction(
-    thunks::ReleaseFreeMemoryFunction release_free_memory_function) {
-  DCHECK_EQ(thunks::GetReleaseFreeMemoryFunction(),
-            reinterpret_cast<thunks::ReleaseFreeMemoryFunction>(NULL));
-  thunks::SetReleaseFreeMemoryFunction(release_free_memory_function);
+    ReleaseFreeMemoryFunction release_free_memory_function) {
+  DCHECK(!g_release_free_memory_function);
+  g_release_free_memory_function = release_free_memory_function;
+}
+
+void SetGetNumericPropertyFunction(
+    GetNumericPropertyFunction get_numeric_property_function) {
+  DCHECK(!g_get_numeric_property_function);
+  g_get_numeric_property_function = get_numeric_property_function;
 }
 
 }  // namespace allocator

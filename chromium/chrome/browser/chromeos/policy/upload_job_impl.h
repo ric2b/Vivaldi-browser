@@ -8,7 +8,6 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -35,7 +34,7 @@ class UploadJobImpl : public UploadJob,
    public:
     virtual ~MimeBoundaryGenerator();
 
-    virtual std::string GenerateBoundary(size_t length) const = 0;
+    virtual std::string GenerateBoundary() const = 0;
 
    private:
     DISALLOW_ASSIGN(MimeBoundaryGenerator);
@@ -47,8 +46,7 @@ class UploadJobImpl : public UploadJob,
    public:
     ~RandomMimeBoundaryGenerator() override;
 
-    std::string GenerateBoundary(
-        size_t length) const override;  // MimeBoundaryGenerator
+    std::string GenerateBoundary() const override;  // MimeBoundaryGenerator
   };
 
   UploadJobImpl(const GURL& upload_url,

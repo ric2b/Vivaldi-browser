@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_DECLARATIVE_USER_SCRIPT_MANAGER_FACTORY_H_
 #define EXTENSIONS_BROWSER_DECLARATIVE_USER_SCRIPT_MANAGER_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -20,7 +21,8 @@ class DeclarativeUserScriptManagerFactory
   static DeclarativeUserScriptManagerFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<DeclarativeUserScriptManagerFactory>;
+  friend struct base::DefaultSingletonTraits<
+      DeclarativeUserScriptManagerFactory>;
 
   DeclarativeUserScriptManagerFactory();
   ~DeclarativeUserScriptManagerFactory() override;

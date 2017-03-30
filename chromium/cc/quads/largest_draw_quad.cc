@@ -4,9 +4,10 @@
 
 #include "cc/quads/largest_draw_quad.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
-#include "cc/quads/checkerboard_draw_quad.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/io_surface_draw_quad.h"
 #include "cc/quads/picture_draw_quad.h"
@@ -33,9 +34,6 @@ size_t LargestDrawQuadSize() {
 
   // Use compile assert to make sure largest is actually larger than all other
   // type of draw quads.
-  static_assert(sizeof(CheckerboardDrawQuad) <= kLargestDrawQuadSize,
-                "Largest Draw Quad size needs update. CheckerboardDrawQuad is "
-                "currently largest.");
   static_assert(sizeof(DebugBorderDrawQuad) <= kLargestDrawQuadSize,
                 "Largest Draw Quad size needs update. DebugBorderDrawQuad is "
                 "currently largest.");

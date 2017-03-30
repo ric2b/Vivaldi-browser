@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_FAVICON_IOS_WEB_FAVICON_DRIVER_H_
 #define COMPONENTS_FAVICON_IOS_WEB_FAVICON_DRIVER_H_
 
+#include "base/macros.h"
 #include "components/favicon/core/favicon_driver_impl.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #include "ios/web/public/web_state/web_state_user_data.h"
@@ -29,18 +30,18 @@ class WebFaviconDriver : public web::WebStateObserver,
                                 bookmarks::BookmarkModel* bookmark_model);
 
   // FaviconDriver implementation.
+  void FetchFavicon(const GURL& url) override;
   gfx::Image GetFavicon() const override;
   bool FaviconIsValid() const override;
   int StartDownload(const GURL& url, int max_bitmap_size) override;
   bool IsOffTheRecord() override;
   GURL GetActiveURL() override;
-  base::string16 GetActiveTitle() override;
-  bool GetActiveFaviconValidity() override;
-  void SetActiveFaviconValidity(bool valid) override;
-  GURL GetActiveFaviconURL() override;
-  void SetActiveFaviconURL(const GURL& url) override;
-  gfx::Image GetActiveFaviconImage() override;
-  void SetActiveFaviconImage(const gfx::Image& image) override;
+  void OnFaviconUpdated(
+      const GURL& page_url,
+      FaviconDriverObserver::NotificationIconType notification_icon_type,
+      const GURL& icon_url,
+      bool icon_url_changed,
+      const gfx::Image& image) override;
 
  private:
   friend class web::WebStateUserData<WebFaviconDriver>;
@@ -55,8 +56,8 @@ class WebFaviconDriver : public web::WebStateObserver,
   void FaviconUrlUpdated(
       const std::vector<web::FaviconURL>& candidates) override;
 
-  // Returns the active navigation entry's favicon.
-  web::FaviconStatus& GetFaviconStatus();
+  // The URL passed to FetchFavicon().
+  GURL fetch_favicon_url_;
 
   DISALLOW_COPY_AND_ASSIGN(WebFaviconDriver);
 };

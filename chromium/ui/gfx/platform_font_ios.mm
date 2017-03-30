@@ -8,7 +8,6 @@
 
 #include <cmath>
 
-#include "base/basictypes.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/gfx/font.h"
@@ -47,19 +46,19 @@ Font PlatformFontIOS::DeriveFont(int size_delta, int style) const {
   return Font(new PlatformFontIOS(font_name_, font_size_ + size_delta, style));
 }
 
-int PlatformFontIOS::GetHeight() const {
+int PlatformFontIOS::GetHeight() {
   return height_;
 }
 
-int PlatformFontIOS::GetBaseline() const {
+int PlatformFontIOS::GetBaseline() {
   return ascent_;
 }
 
-int PlatformFontIOS::GetCapHeight() const {
+int PlatformFontIOS::GetCapHeight() {
   return cap_height_;
 }
 
-int PlatformFontIOS::GetExpectedTextWidth(int length) const {
+int PlatformFontIOS::GetExpectedTextWidth(int length) {
   return length * average_width_;
 }
 
@@ -67,7 +66,7 @@ int PlatformFontIOS::GetStyle() const {
   return style_;
 }
 
-std::string PlatformFontIOS::GetFontName() const {
+const std::string& PlatformFontIOS::GetFontName() const {
   return font_name_;
 }
 

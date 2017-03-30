@@ -272,28 +272,35 @@ chrome.syncFileSystem.onFileStatusChanged.addListener(function(detail) {
   WallpaperUtil.enabledSyncThemesCallback(function(syncEnabled) {
     if (!syncEnabled)
       return;
-    if (detail.status == 'synced' &&
-        detail.direction == 'remote_to_local') {
-      if (detail.action == 'added') {
-        Constants.WallpaperLocalStorage.get(
-            Constants.AccessLocalWallpaperInfoKey,
-            function(items) {
-              var localData = items[Constants.AccessLocalWallpaperInfoKey];
-              if (localData && localData.url == detail.fileEntry.name &&
-                  localData.source == Constants.WallpaperSourceEnum.Custom) {
-                WallpaperUtil.setCustomWallpaperFromSyncFS(localData.url,
-                                                           localData.layout);
-              } else if (localData.url !=
-                         detail.fileEntry.name.replace(
-                             Constants.CustomWallpaperThumbnailSuffix, '')) {
-                WallpaperUtil.storeWallpaperFromSyncFSToLocalFS(
-                    detail.fileEntry);
-              }
-           });
-      } else if (detail.action == 'deleted') {
-        var fileName = detail.fileEntry.name.replace(
-            Constants.CustomWallpaperThumbnailSuffix, '');
-        WallpaperUtil.deleteWallpaperFromLocalFS(fileName);
+    if (detail.status == 'synced') {
+      if (detail.direction == 'remote_to_local') {
+        if (detail.action == 'added') {
+          Constants.WallpaperLocalStorage.get(
+              Constants.AccessLocalWallpaperInfoKey,
+              function(items) {
+                var localData = items[Constants.AccessLocalWallpaperInfoKey];
+                if (localData && localData.url == detail.fileEntry.name &&
+                    localData.source == Constants.WallpaperSourceEnum.Custom) {
+                  WallpaperUtil.setCustomWallpaperFromSyncFS(localData.url,
+                                                             localData.layout);
+                } else if (!localData || localData.url !=
+                           detail.fileEntry.name.replace(
+                               Constants.CustomWallpaperThumbnailSuffix, '')) {
+                  // localData might be null on a powerwashed device.
+                  WallpaperUtil.storeWallpaperFromSyncFSToLocalFS(
+                      detail.fileEntry);
+                }
+             });
+        } else if (detail.action == 'deleted') {
+          var fileName = detail.fileEntry.name.replace(
+              Constants.CustomWallpaperThumbnailSuffix, '');
+          WallpaperUtil.deleteWallpaperFromLocalFS(fileName);
+        }
+      } else {  // detail.direction == 'local_to_remote'
+        if (detail.action == 'deleted') {
+          WallpaperUtil.deleteWallpaperFromSyncFS(detail.fileEntry.name);
+          WallpaperUtil.deleteWallpaperFromLocalFS(detail.fileEntry.name);
+        }
       }
     }
   });
@@ -310,6 +317,16 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
           SurpriseWallpaper.getInstance().next();
         } else {
           SurpriseWallpaper.getInstance().disable();
+        }
+      }
+
+      if (changes[Constants.AccessLocalWallpaperInfoKey]) {
+        // If the old wallpaper is a third party wallpaper we should remove it
+        // from the local & sync file system to free space.
+        var oldInfo = changes[Constants.AccessLocalWallpaperInfoKey].oldValue;
+        if (oldInfo.url.indexOf(Constants.ThirdPartyWallpaperPrefix) != -1) {
+          WallpaperUtil.deleteWallpaperFromLocalFS(oldInfo.url);
+          WallpaperUtil.deleteWallpaperFromSyncFS(oldInfo.url);
         }
       }
 
@@ -361,6 +378,15 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
                               Constants.WallpaperSourceEnum.Default) {
                     chrome.wallpaperPrivate.resetWallpaper();
                   }
+
+                  // If the old wallpaper is a third party wallpaper we should
+                  // remove it from the local & sync file system to free space.
+                  if (localInfo && localInfo.url.indexOf(
+                      Constants.ThirdPartyWallpaperPrefix) != -1) {
+                    WallpaperUtil.deleteWallpaperFromLocalFS(localInfo.url);
+                    WallpaperUtil.deleteWallpaperFromSyncFS(localInfo.url);
+                  }
+
                   WallpaperUtil.saveToLocalStorage(
                       Constants.AccessLocalWallpaperInfoKey, syncInfo);
                 }
@@ -387,11 +413,21 @@ chrome.alarms.onAlarm.addListener(function() {
   SurpriseWallpaper.getInstance().next();
 });
 
-chrome.wallpaperPrivate.onWallpaperChangedBy3rdParty.addListener(function() {
+chrome.wallpaperPrivate.onWallpaperChangedBy3rdParty.addListener(function(
+    wallpaper, thumbnail, layout) {
   WallpaperUtil.saveToLocalStorage(
       Constants.AccessLocalSurpriseMeEnabledKey, false, function() {
     WallpaperUtil.saveToSyncStorage(Constants.AccessSyncSurpriseMeEnabledKey,
                                     false);
   });
   SurpriseWallpaper.getInstance().disable();
+
+  // Make third party wallpaper syncable through different devices.
+  // TODO(xdai): also sync the third party app name.
+  var filename = Constants.ThirdPartyWallpaperPrefix + new Date().getTime();
+  var thumbnailFilename = filename + Constants.CustomWallpaperThumbnailSuffix;
+  WallpaperUtil.storeWallpaperToSyncFS(filename, wallpaper);
+  WallpaperUtil.storeWallpaperToSyncFS(thumbnailFilename, thumbnail);
+  WallpaperUtil.saveWallpaperInfo(filename, layout,
+                                  Constants.WallpaperSourceEnum.Custom);
 });

@@ -39,20 +39,20 @@ void ChromeBrowserOperations::ReadOptions(
     std::set<base::string16>* options) const {
   DCHECK(options);
 
-if (uninstall_command.HasSwitch(switches::kMultiInstall))
-options->insert(kOptionMultiInstall);
+  if (uninstall_command.HasSwitch(switches::kMultiInstall))
+    options->insert(kOptionMultiInstall);
 }
 
 void ChromeBrowserOperations::AddKeyFiles(
-  const std::set<base::string16>& options,
-  std::vector<base::FilePath>* key_files) const {
+    const std::set<base::string16>& options,
+    std::vector<base::FilePath>* key_files) const {
   DCHECK(key_files);
   key_files->push_back(base::FilePath(installer::kChromeDll));
 }
 
 void ChromeBrowserOperations::AddComDllList(
-  const std::set<base::string16>& options,
-  std::vector<base::FilePath>* com_dll_list) const {
+    const std::set<base::string16>& options,
+    std::vector<base::FilePath>* com_dll_list) const {
 }
 
 void ChromeBrowserOperations::AppendProductFlags(
@@ -77,15 +77,15 @@ void ChromeBrowserOperations::AppendRenameFlags(
 
   // Add --multi-install if it isn't already there.
   if (options.find(kOptionMultiInstall) != options.end() &&
-    !cmd_line->HasSwitch(switches::kMultiInstall)) {
+      !cmd_line->HasSwitch(switches::kMultiInstall)) {
     cmd_line->AppendSwitch(switches::kMultiInstall);
   }
 }
 
 bool ChromeBrowserOperations::SetChannelFlags(
-  const std::set<base::string16>& options,
-  bool set,
-  ChannelInfo* channel_info) const {
+    const std::set<base::string16>& options,
+    bool set,
+    ChannelInfo* channel_info) const {
 #if defined(GOOGLE_CHROME_BUILD)
   DCHECK(channel_info);
   bool chrome_changed = channel_info->SetChrome(set);
@@ -99,7 +99,7 @@ bool ChromeBrowserOperations::SetChannelFlags(
 }
 
 bool ChromeBrowserOperations::ShouldCreateUninstallEntry(
-  const std::set<base::string16>& options) const {
+    const std::set<base::string16>& options) const {
   return true;
 }
 
@@ -107,34 +107,24 @@ bool ChromeBrowserOperations::ShouldCreateUninstallEntry(
 // uninitialized members. Tries to assign:
 // - target: |chrome_exe|.
 // - icon: from |chrome_exe|.
-// - icon_index: |dist|'s icon index (possibly overridden by
-//       khromeShortcutIconIndex in master_preferences)
+// - icon_index: |dist|'s icon index
 // - app_id: the browser model id for the current install.
 // - description: |dist|'s description.
 void ChromeBrowserOperations::AddDefaultShortcutProperties(
-  BrowserDistribution* dist,
-  const base::FilePath& target_exe,
-  ShellUtil::ShortcutProperties* properties) const {
+      BrowserDistribution* dist,
+      const base::FilePath& target_exe,
+      ShellUtil::ShortcutProperties* properties) const {
   if (!properties->has_target())
     properties->set_target(target_exe);
 
   if (!properties->has_icon()) {
-    int icon_index =
-      dist->GetIconIndex(BrowserDistribution::SHORTCUT_CHROME);
-    base::FilePath prefs_path(target_exe.DirName().AppendASCII(
-      installer::kDefaultMasterPrefs));
-    if (base::PathExists(prefs_path)) {
-      installer::MasterPreferences prefs(prefs_path);
-      prefs.GetInt(installer::master_preferences::kChromeShortcutIconIndex,
-        &icon_index);
-    }
-    properties->set_icon(target_exe, icon_index);
+    properties->set_icon(
+        target_exe, dist->GetIconIndex(BrowserDistribution::SHORTCUT_CHROME));
   }
 
   if (!properties->has_app_id()) {
-    bool is_per_user_install = InstallUtil::IsPerUserInstall(target_exe);
-    properties->set_app_id(
-      ShellUtil::GetBrowserModelId(dist, is_per_user_install));
+    properties->set_app_id(ShellUtil::GetBrowserModelId(
+        dist, InstallUtil::IsPerUserInstall(target_exe)));
   }
 
   if (!properties->has_description())

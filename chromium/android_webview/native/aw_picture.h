@@ -9,6 +9,7 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "skia/ext/refptr.h"
@@ -23,10 +24,12 @@ class AwPicture {
   ~AwPicture();
 
   // Methods called from Java.
-  void Destroy(JNIEnv* env, jobject obj);
-  jint GetWidth(JNIEnv* env, jobject obj);
-  jint GetHeight(JNIEnv* env, jobject obj);
-  void Draw(JNIEnv* env, jobject obj, jobject canvas);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  jint GetWidth(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  jint GetHeight(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void Draw(JNIEnv* env,
+            const base::android::JavaParamRef<jobject>& obj,
+            const base::android::JavaParamRef<jobject>& canvas);
 
  private:
   skia::RefPtr<SkPicture> picture_;

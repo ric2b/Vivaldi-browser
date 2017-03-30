@@ -4,10 +4,13 @@
 
 #include "media/base/audio_splicer.h"
 
+#include <stdint.h>
 #include <cstdlib>
 #include <deque>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_decoder_config.h"
@@ -53,7 +56,7 @@ scoped_ptr<AudioBus> CreateAudioBufferWrapper(
     wrapper->SetChannelData(
         ch, reinterpret_cast<float*>(buffer->channel_data()[ch]));
   }
-  return wrapper.Pass();
+  return wrapper;
 }
 
 }  // namespace
@@ -70,7 +73,7 @@ class AudioStreamSanitizer {
 
   // Similar to Reset(), but initializes the timestamp helper with the given
   // parameters.
-  void ResetTimestampState(int64 frame_count, base::TimeDelta base_timestamp);
+  void ResetTimestampState(int64_t frame_count, base::TimeDelta base_timestamp);
 
   // Adds a new buffer full of samples or end of stream buffer to the splicer.
   // Returns true if the buffer was accepted. False is returned if an error
@@ -99,7 +102,7 @@ class AudioStreamSanitizer {
   void AddOutputBuffer(const scoped_refptr<AudioBuffer>& buffer);
 
   AudioTimestampHelper output_timestamp_helper_;
-  bool received_end_of_stream_;
+  bool received_end_of_stream_ = false;
 
   typedef std::deque<scoped_refptr<AudioBuffer> > BufferQueue;
   BufferQueue output_buffers_;
@@ -108,7 +111,7 @@ class AudioStreamSanitizer {
 
   // To prevent log spam, counts the number of audio gap or overlaps warned in
   // logs.
-  int num_warning_logs_;
+  int num_warning_logs_ = 0;
 
   DISALLOW_ASSIGN(AudioStreamSanitizer);
 };
@@ -116,11 +119,7 @@ class AudioStreamSanitizer {
 AudioStreamSanitizer::AudioStreamSanitizer(
     int samples_per_second,
     const scoped_refptr<MediaLog>& media_log)
-    : output_timestamp_helper_(samples_per_second),
-      received_end_of_stream_(false),
-      media_log_(media_log),
-      num_warning_logs_(0) {
-}
+    : output_timestamp_helper_(samples_per_second), media_log_(media_log) {}
 
 AudioStreamSanitizer::~AudioStreamSanitizer() {}
 
@@ -128,7 +127,7 @@ void AudioStreamSanitizer::Reset() {
   ResetTimestampState(0, kNoTimestamp());
 }
 
-void AudioStreamSanitizer::ResetTimestampState(int64 frame_count,
+void AudioStreamSanitizer::ResetTimestampState(int64_t frame_count,
                                                base::TimeDelta base_timestamp) {
   output_buffers_.clear();
   received_end_of_stream_ = false;
@@ -353,7 +352,9 @@ bool AudioSplicer::AddInput(const scoped_refptr<AudioBuffer>& input) {
   // may not actually have a splice.  Here we check if any frames exist before
   // the splice.  In this case, just transfer all data to the output sanitizer.
   const int frames_before_splice =
-      output_ts_helper.GetFramesToTarget(splice_timestamp_);
+      output_ts_helper.base_timestamp() == kNoTimestamp()
+          ? 0
+          : output_ts_helper.GetFramesToTarget(splice_timestamp_);
   if (frames_before_splice < 0 ||
       pre_splice_sanitizer_->GetFrameCount() <= frames_before_splice) {
     CHECK(pre_splice_sanitizer_->DrainInto(output_sanitizer_.get()));
@@ -379,7 +380,7 @@ bool AudioSplicer::AddInput(const scoped_refptr<AudioBuffer>& input) {
 
   // Crossfade the pre splice and post splice sections and transfer all relevant
   // buffers into |output_sanitizer_|.
-  CrossfadePostSplice(pre_splice.Pass(), crossfade_buffer);
+  CrossfadePostSplice(std::move(pre_splice), crossfade_buffer);
 
   // Clear the splice timestamp so new splices can be accepted.
   reset_splice_timestamps();
@@ -496,7 +497,7 @@ scoped_ptr<AudioBus> AudioSplicer::ExtractCrossfadeFromPreSplice(
   pre_splice_sanitizer_->Reset();
   DCHECK_EQ(output_bus->frames(), frames_read);
   DCHECK_EQ(output_ts_helper.GetFramesToTarget(splice_timestamp_), 0);
-  return output_bus.Pass();
+  return output_bus;
 }
 
 void AudioSplicer::CrossfadePostSplice(

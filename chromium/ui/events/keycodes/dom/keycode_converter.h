@@ -5,8 +5,12 @@
 #ifndef UI_EVENTS_KEYCODES_DOM4_KEYCODE_CONVERTER_H_
 #define UI_EVENTS_KEYCODES_DOM4_KEYCODE_CONVERTER_H_
 
+#include <stddef.h>
 #include <stdint.h>
-#include "base/basictypes.h"
+#include <string>
+
+#include "base/macros.h"
+#include "ui/events/keycodes/dom/dom_key.h"
 
 // For reference, the W3C UI Event spec is located at:
 // http://www.w3.org/TR/uievents/
@@ -14,7 +18,6 @@
 namespace ui {
 
 enum class DomCode;
-enum class DomKey;
 
 enum class DomKeyLocation { STANDARD, LEFT, RIGHT, NUMPAD };
 
@@ -52,21 +55,27 @@ class KeycodeConverter {
   static int DomCodeToNativeKeycode(DomCode code);
 
   // Convert a UI Events |code| string value into a DomCode.
-  static DomCode CodeStringToDomCode(const char* code);
+  static DomCode CodeStringToDomCode(const std::string& code);
 
   // Convert a DomCode into a UI Events |code| string value.
   static const char* DomCodeToCodeString(DomCode dom_code);
 
   // Return the DomKeyLocation of a DomCode. The DomKeyLocation distinguishes
-  // keys with the same meaning, and therefore the same DomKey or KeyboardCode
-  // (VKEY), and corresponds to the DOM UI Events |KeyboardEvent.location|.
+  // keys with the same meaning, and therefore the same DomKey or non-located
+  // KeyboardCode (VKEY), and corresponds to the DOM UI Events
+  // |KeyboardEvent.location|.
   static DomKeyLocation DomCodeToLocation(DomCode dom_code);
 
   // Convert a UI Events |key| string value into a DomKey.
-  static DomKey KeyStringToDomKey(const char* key);
+  // Accepts a character string containing either
+  // - a key name from http://www.w3.org/TR/DOM-Level-3-Events-key/, or
+  // - a single Unicode character (represented in UTF-8).
+  // Returns DomKey::NONE for other inputs, including |nullptr|.
+  static DomKey KeyStringToDomKey(const std::string& key);
 
   // Convert a DomKey into a UI Events |key| string value.
-  static const char* DomKeyToKeyString(DomKey dom_key);
+  // For an invalid DomKey, returns an empty string.
+  static std::string DomKeyToKeyString(DomKey dom_key);
 
   // Returns true if the DomKey is a modifier.
   static bool IsDomKeyForModifier(DomKey dom_key);
@@ -91,7 +100,7 @@ class KeycodeConverter {
   static uint32_t DomCodeToUsbKeycode(DomCode dom_code);
 
   // Convert a DOM3 Event |code| string into a USB keycode value.
-  static uint32_t CodeToUsbKeycode(const char* code);
+  static uint32_t CodeToUsbKeycode(const std::string& code);
 
   // Static methods to support testing.
   static size_t NumKeycodeMapEntriesForTest();

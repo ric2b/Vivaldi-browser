@@ -10,6 +10,8 @@
 #include "net/quic/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
+#include "net/quic/test_tools/quic_connection_peer.h"
+#include "net/quic/test_tools/quic_packet_creator_peer.h"
 #include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/tools/quic/quic_spdy_client_stream.h"
@@ -20,7 +22,10 @@ using net::test::ConstructMisFramedEncryptedPacket;
 using net::test::CryptoTestUtils;
 using net::test::DefaultQuicConfig;
 using net::test::MockConnection;
+using net::test::MockConnectionHelper;
 using net::test::PacketSavingConnection;
+using net::test::QuicConnectionPeer;
+using net::test::QuicPacketCreatorPeer;
 using net::test::QuicSpdySessionPeer;
 using net::test::SupportedVersions;
 using net::test::TestPeerIPAddress;
@@ -36,43 +41,95 @@ namespace tools {
 namespace test {
 namespace {
 
-const char kServerHostname[] = "www.example.org";
-const uint16 kPort = 80;
+const char kServerHostname[] = "test.example.com";
+const uint16_t kPort = 80;
 
 class ToolsQuicClientSessionTest
     : public ::testing::TestWithParam<QuicVersion> {
  protected:
   ToolsQuicClientSessionTest()
-      : connection_(new PacketSavingConnection(Perspective::IS_CLIENT,
-                                               SupportedVersions(GetParam()))) {
-    session_.reset(new QuicClientSession(
-        DefaultQuicConfig(), connection_,
-        QuicServerId(kServerHostname, kPort, false, PRIVACY_MODE_DISABLED),
-        &crypto_config_));
-    session_->Initialize();
+      : crypto_config_(CryptoTestUtils::ProofVerifierForTesting()) {
+    Initialize();
     // Advance the time, because timers do not like uninitialized times.
     connection_->AdvanceTime(QuicTime::Delta::FromSeconds(1));
   }
 
-  void CompleteCryptoHandshake() {
-    session_->CryptoConnect();
-    CryptoTestUtils::HandshakeWithFakeServer(
-        connection_, session_->GetCryptoStream());
+  void Initialize() {
+    session_.reset();
+    connection_ = new PacketSavingConnection(&helper_, Perspective::IS_CLIENT,
+                                             SupportedVersions(GetParam()));
+    session_.reset(new QuicClientSession(
+        DefaultQuicConfig(), connection_,
+        QuicServerId(kServerHostname, kPort, PRIVACY_MODE_DISABLED),
+        &crypto_config_));
+    session_->Initialize();
   }
 
+  void CompleteCryptoHandshake() {
+    session_->CryptoConnect();
+    QuicCryptoClientStream* stream =
+        static_cast<QuicCryptoClientStream*>(session_->GetCryptoStream());
+    CryptoTestUtils::FakeServerOptions options;
+    CryptoTestUtils::HandshakeWithFakeServer(&helper_, connection_, stream,
+                                             options);
+  }
+
+  QuicCryptoClientConfig crypto_config_;
+  MockConnectionHelper helper_;
   PacketSavingConnection* connection_;
   scoped_ptr<QuicClientSession> session_;
-  QuicCryptoClientConfig crypto_config_;
 };
 
-INSTANTIATE_TEST_CASE_P(Tests, ToolsQuicClientSessionTest,
+INSTANTIATE_TEST_CASE_P(Tests,
+                        ToolsQuicClientSessionTest,
                         ::testing::ValuesIn(QuicSupportedVersions()));
 
 TEST_P(ToolsQuicClientSessionTest, CryptoConnect) {
   CompleteCryptoHandshake();
 }
 
-TEST_P(ToolsQuicClientSessionTest, MaxNumStreams) {
+TEST_P(ToolsQuicClientSessionTest, NoEncryptionAfterInitialEncryption) {
+  ValueRestore<bool> old_flag(&FLAGS_quic_block_unencrypted_writes, true);
+  // Complete a handshake in order to prime the crypto config for 0-RTT.
+  CompleteCryptoHandshake();
+
+  // Now create a second session using the same crypto config.
+  Initialize();
+
+  // Starting the handshake should move immediately to encryption
+  // established and will allow streams to be created.
+  session_->CryptoConnect();
+  EXPECT_TRUE(session_->IsEncryptionEstablished());
+  QuicSpdyClientStream* stream =
+      session_->CreateOutgoingDynamicStream(kDefaultPriority);
+  DCHECK_NE(kCryptoStreamId, stream->id());
+  EXPECT_TRUE(stream != nullptr);
+
+  // Process an "inchoate" REJ from the server which will cause
+  // an inchoate CHLO to be sent and will leave the encryption level
+  // at NONE.
+  CryptoHandshakeMessage rej;
+  CryptoTestUtils::FillInDummyReject(&rej, /* stateless */ false);
+  EXPECT_TRUE(session_->IsEncryptionEstablished());
+  session_->GetCryptoStream()->OnHandshakeMessage(rej);
+  EXPECT_FALSE(session_->IsEncryptionEstablished());
+  EXPECT_EQ(ENCRYPTION_NONE,
+            QuicPacketCreatorPeer::GetEncryptionLevel(
+                QuicConnectionPeer::GetPacketCreator(connection_)));
+  // Verify that no new streams may be created.
+  EXPECT_TRUE(session_->CreateOutgoingDynamicStream(kDefaultPriority) ==
+              nullptr);
+  // Verify that no data may be send on existing streams.
+  char data[] = "hello world";
+  struct iovec iov = {data, arraysize(data)};
+  QuicIOVector iovector(&iov, 1, iov.iov_len);
+  QuicConsumedData consumed = session_->WritevData(
+      stream->id(), iovector, 0, false, MAY_FEC_PROTECT, nullptr);
+  EXPECT_FALSE(consumed.fin_consumed);
+  EXPECT_EQ(0u, consumed.bytes_consumed);
+}
+
+TEST_P(ToolsQuicClientSessionTest, MaxNumStreamsWithNoFinOrRst) {
   EXPECT_CALL(*connection_, SendRstStream(_, _, _)).Times(AnyNumber());
 
   session_->config()->SetMaxStreamsPerConnection(1, 1);
@@ -80,13 +137,41 @@ TEST_P(ToolsQuicClientSessionTest, MaxNumStreams) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
 
-  QuicSpdyClientStream* stream = session_->CreateOutgoingDynamicStream();
+  QuicSpdyClientStream* stream =
+      session_->CreateOutgoingDynamicStream(kDefaultPriority);
   ASSERT_TRUE(stream);
-  EXPECT_FALSE(session_->CreateOutgoingDynamicStream());
+  EXPECT_FALSE(session_->CreateOutgoingDynamicStream(kDefaultPriority));
 
-  // Close a stream and ensure I can now open a new one.
+  // Close the stream, but without having received a FIN or a RST_STREAM
+  // and check that a new one can not be created.
   session_->CloseStream(stream->id());
-  stream = session_->CreateOutgoingDynamicStream();
+  EXPECT_EQ(1u, session_->GetNumOpenOutgoingStreams());
+
+  stream = session_->CreateOutgoingDynamicStream(kDefaultPriority);
+  EXPECT_FALSE(stream);
+}
+
+TEST_P(ToolsQuicClientSessionTest, MaxNumStreamsWithRst) {
+  EXPECT_CALL(*connection_, SendRstStream(_, _, _)).Times(AnyNumber());
+
+  session_->config()->SetMaxStreamsPerConnection(1, 1);
+
+  // Initialize crypto before the client session will create a stream.
+  CompleteCryptoHandshake();
+
+  QuicSpdyClientStream* stream =
+      session_->CreateOutgoingDynamicStream(kDefaultPriority);
+  ASSERT_TRUE(stream);
+  EXPECT_FALSE(session_->CreateOutgoingDynamicStream(kDefaultPriority));
+
+  // Close the stream and receive an RST frame to remove the unfinished stream
+  session_->CloseStream(stream->id());
+  session_->OnRstStream(QuicRstStreamFrame(
+      stream->id(), AdjustErrorForVersion(QUIC_RST_ACKNOWLEDGEMENT, GetParam()),
+      0));
+  // Check that a new one can be created.
+  EXPECT_EQ(0u, session_->GetNumOpenOutgoingStreams());
+  stream = session_->CreateOutgoingDynamicStream(kDefaultPriority);
   EXPECT_TRUE(stream);
 }
 
@@ -95,8 +180,9 @@ TEST_P(ToolsQuicClientSessionTest, GoAwayReceived) {
 
   // After receiving a GoAway, I should no longer be able to create outgoing
   // streams.
-  session_->OnGoAway(QuicGoAwayFrame(QUIC_PEER_GOING_AWAY, 1u, "Going away."));
-  EXPECT_EQ(nullptr, session_->CreateOutgoingDynamicStream());
+  session_->connection()->OnGoAwayFrame(
+      QuicGoAwayFrame(QUIC_PEER_GOING_AWAY, 1u, "Going away."));
+  EXPECT_EQ(nullptr, session_->CreateOutgoingDynamicStream(kDefaultPriority));
 }
 
 TEST_P(ToolsQuicClientSessionTest, SetFecProtectionFromConfig) {
@@ -112,9 +198,11 @@ TEST_P(ToolsQuicClientSessionTest, SetFecProtectionFromConfig) {
 
   // Verify that headers stream is always protected and data streams are
   // optionally protected.
-  EXPECT_EQ(FEC_PROTECT_ALWAYS, QuicSpdySessionPeer::GetHeadersStream(
-                                    session_.get())->fec_policy());
-  QuicSpdyClientStream* stream = session_->CreateOutgoingDynamicStream();
+  EXPECT_EQ(
+      FEC_PROTECT_ALWAYS,
+      QuicSpdySessionPeer::GetHeadersStream(session_.get())->fec_policy());
+  QuicSpdyClientStream* stream =
+      session_->CreateOutgoingDynamicStream(kDefaultPriority);
   ASSERT_TRUE(stream);
   EXPECT_EQ(FEC_PROTECT_OPTIONAL, stream->fec_policy());
 }
@@ -129,7 +217,7 @@ TEST_P(ToolsQuicClientSessionTest, InvalidPacketReceived) {
   IPEndPoint client_address(TestPeerIPAddress(), kTestPort);
 
   EXPECT_CALL(*connection_, ProcessUdpPacket(server_address, client_address, _))
-      .WillRepeatedly(Invoke(implicit_cast<MockConnection*>(connection_),
+      .WillRepeatedly(Invoke(static_cast<MockConnection*>(connection_),
                              &MockConnection::ReallyProcessUdpPacket));
   EXPECT_CALL(*connection_, OnCanWrite()).Times(AnyNumber());
   EXPECT_CALL(*connection_, OnError(_)).Times(1);
@@ -166,7 +254,7 @@ TEST_P(ToolsQuicClientSessionTest, InvalidFramedPacketReceived) {
   IPEndPoint client_address(TestPeerIPAddress(), kTestPort);
 
   EXPECT_CALL(*connection_, ProcessUdpPacket(server_address, client_address, _))
-      .WillRepeatedly(Invoke(implicit_cast<MockConnection*>(connection_),
+      .WillRepeatedly(Invoke(static_cast<MockConnection*>(connection_),
                              &MockConnection::ReallyProcessUdpPacket));
   EXPECT_CALL(*connection_, OnError(_)).Times(1);
 
@@ -174,7 +262,7 @@ TEST_P(ToolsQuicClientSessionTest, InvalidFramedPacketReceived) {
   QuicConnectionId connection_id = session_->connection()->connection_id();
   scoped_ptr<QuicEncryptedPacket> packet(ConstructMisFramedEncryptedPacket(
       connection_id, false, false, 100, "data", PACKET_8BYTE_CONNECTION_ID,
-      PACKET_6BYTE_SEQUENCE_NUMBER, nullptr));
+      PACKET_6BYTE_PACKET_NUMBER, nullptr));
   EXPECT_CALL(*connection_, SendConnectionCloseWithDetails(_, _)).Times(1);
   session_->connection()->ProcessUdpPacket(client_address, server_address,
                                            *packet);

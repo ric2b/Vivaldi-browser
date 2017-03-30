@@ -5,13 +5,15 @@
 #ifndef CHROME_BROWSER_SESSIONS_SESSION_SERVICE_TEST_HELPER_H_
 #define CHROME_BROWSER_SESSIONS_SESSION_SERVICE_TEST_HELPER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "components/sessions/session_id.h"
+#include "components/sessions/core/session_id.h"
 
 class SessionService;
 

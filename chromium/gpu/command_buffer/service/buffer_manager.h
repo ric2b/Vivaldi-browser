@@ -5,10 +5,13 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_BUFFER_MANAGER_H_
 #define GPU_COMMAND_BUFFER_SERVICE_BUFFER_MANAGER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/common/buffer.h"
@@ -164,7 +167,7 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
 
   // A copy of the data in the buffer. This data is only kept if the target
   // is backed_ = true.
-  scoped_ptr<int8[]> shadow_;
+  scoped_ptr<int8_t[]> shadow_;
 
   // Size of buffer.
   GLsizeiptr size_;
@@ -202,10 +205,10 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
 //
 // NOTE: To support shared resources an instance of this class will need to be
 // shared by multiple GLES2Decoders.
-class GPU_EXPORT BufferManager {
+class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
  public:
   BufferManager(MemoryTracker* memory_tracker, FeatureInfo* feature_info);
-  ~BufferManager();
+  ~BufferManager() override;
 
   // Must call before destruction.
   void Destroy(bool have_context);
@@ -234,6 +237,11 @@ class GPU_EXPORT BufferManager {
     ContextState* context_state, GLenum target, GLsizeiptr size,
     const GLvoid * data, GLenum usage);
 
+  // Validates a glGetBufferParameteri64v, and then calls GetBufferParameteri64v
+  // if validation was successful.
+  void ValidateAndDoGetBufferParameteri64v(
+    ContextState* context_state, GLenum target, GLenum pname, GLint64* params);
+
   // Validates a glGetBufferParameteriv, and then calls GetBufferParameteriv if
   // validation was successful.
   void ValidateAndDoGetBufferParameteriv(
@@ -251,7 +259,7 @@ class GPU_EXPORT BufferManager {
   }
 
   size_t mem_represented() const {
-    return memory_tracker_->GetMemRepresented();
+    return memory_type_tracker_->GetMemRepresented();
   }
 
   // Tells for a given usage if this would be a client side array.
@@ -262,6 +270,10 @@ class GPU_EXPORT BufferManager {
   bool UseNonZeroSizeForClientSideArrayBuffer();
 
   Buffer* GetBufferInfoForTarget(ContextState* state, GLenum target) const;
+
+  // base::trace_event::MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
 
  private:
   friend class Buffer;
@@ -296,7 +308,8 @@ class GPU_EXPORT BufferManager {
   void SetInfo(Buffer* buffer, GLenum target, GLsizeiptr size, GLenum usage,
                const GLvoid* data);
 
-  scoped_ptr<MemoryTypeTracker> memory_tracker_;
+  scoped_ptr<MemoryTypeTracker> memory_type_tracker_;
+  MemoryTracker* memory_tracker_;
   scoped_refptr<FeatureInfo> feature_info_;
 
   // Info for each buffer in the system.

@@ -4,17 +4,18 @@
 
 #include "content/browser/web_contents/web_contents_view_aura.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
+#include "build/build_config.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigation_entry_screenshot_manager.h"
@@ -26,6 +27,7 @@
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
@@ -35,6 +37,7 @@
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -42,6 +45,10 @@
 #include "ui/events/event_switches.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
 
 namespace {
 
@@ -174,7 +181,7 @@ class NavigationWatcher : public WebContentsObserver {
       NavigationController::ReloadType reload_type) override {
     navigated_ = true;
     if (should_quit_loop_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   bool navigated_;
@@ -249,8 +256,12 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
   // size to the root window.  Returns after the navigation to the url is
   // complete.
   void StartTestWithPage(const std::string& url) {
-    ASSERT_TRUE(test_server()->Start());
-    GURL test_url(test_server()->GetURL(url));
+    ASSERT_TRUE(embedded_test_server()->Start());
+    GURL test_url;
+    if (url == "about:blank")
+      test_url = GURL(url);
+    else
+      test_url = GURL(embedded_test_server()->GetURL(url));
     NavigateToURL(shell(), test_url);
 
     WebContentsImpl* web_contents =
@@ -258,7 +269,7 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
     NavigationControllerImpl* controller = &web_contents->GetController();
 
     screenshot_manager_ = new ScreenshotTracker(controller);
-    controller->SetScreenshotManager(screenshot_manager_);
+    controller->SetScreenshotManager(make_scoped_ptr(screenshot_manager_));
 
     frame_watcher_ = new FrameWatcher();
     GetRenderWidgetHost()->GetProcess()->AddFilter(frame_watcher_.get());
@@ -270,8 +281,7 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
   }
 
   void TestOverscrollNavigation(bool touch_handler) {
-    ASSERT_NO_FATAL_FAILURE(
-        StartTestWithPage("files/overscroll_navigation.html"));
+    ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
     WebContentsImpl* web_contents =
         static_cast<WebContentsImpl*>(shell()->web_contents());
     NavigationController& controller = web_contents->GetController();
@@ -396,7 +406,7 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
 
   RenderWidgetHostViewBase* GetRenderWidgetHostView() const {
     return static_cast<RenderWidgetHostViewBase*>(
-        GetRenderViewHost()->GetView());
+        GetRenderViewHost()->GetWidget()->GetView());
   }
 
   InputEventMessageFilterWaitsForAcks* filter() {
@@ -466,8 +476,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 #endif
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                        MAYBE_QuickOverscrollDirectionChange) {
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   RenderFrameHost* main_frame = web_contents->GetMainFrame();
@@ -490,17 +499,18 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
   gfx::Rect bounds = content->GetBoundsInRootWindow();
 
   base::TimeDelta timestamp = ui::EventTimeForNow();
-  ui::TouchEvent press(ui::ET_TOUCH_PRESSED,
-      gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
-      0, timestamp);
+  ui::TouchEvent press(
+      ui::ET_TOUCH_PRESSED,
+      gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5), 0,
+      timestamp);
   ui::EventDispatchDetails details = dispatcher->OnEventFromSource(&press);
   ASSERT_FALSE(details.dispatcher_destroyed);
   EXPECT_EQ(1, GetCurrentIndex());
 
   timestamp += base::TimeDelta::FromMilliseconds(10);
   ui::TouchEvent move1(ui::ET_TOUCH_MOVED,
-      gfx::Point(bounds.right() - 10, bounds.y() + 5),
-      0, timestamp);
+                       gfx::Point(bounds.right() - 10, bounds.y() + 5), 0,
+                       timestamp);
   details = dispatcher->OnEventFromSource(&move1);
   ASSERT_FALSE(details.dispatcher_destroyed);
   EXPECT_EQ(1, GetCurrentIndex());
@@ -510,9 +520,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 
   for (int x = bounds.right() - 10; x >= bounds.x() + 10; x-= 10) {
     timestamp += base::TimeDelta::FromMilliseconds(10);
-    ui::TouchEvent inc(ui::ET_TOUCH_MOVED,
-        gfx::Point(x, bounds.y() + 5),
-        0, timestamp);
+    ui::TouchEvent inc(ui::ET_TOUCH_MOVED, gfx::Point(x, bounds.y() + 5), 0,
+                       timestamp);
     details = dispatcher->OnEventFromSource(&inc);
     ASSERT_FALSE(details.dispatcher_destroyed);
     EXPECT_EQ(1, GetCurrentIndex());
@@ -520,9 +529,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 
   for (int x = bounds.x() + 10; x <= bounds.width() - 10; x+= 10) {
     timestamp += base::TimeDelta::FromMilliseconds(10);
-    ui::TouchEvent inc(ui::ET_TOUCH_MOVED,
-        gfx::Point(x, bounds.y() + 5),
-        0, timestamp);
+    ui::TouchEvent inc(ui::ET_TOUCH_MOVED, gfx::Point(x, bounds.y() + 5), 0,
+                       timestamp);
     details = dispatcher->OnEventFromSource(&inc);
     ASSERT_FALSE(details.dispatcher_destroyed);
     EXPECT_EQ(1, GetCurrentIndex());
@@ -530,9 +538,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 
   for (int x = bounds.width() - 10; x >= bounds.x() + 10; x-= 10) {
     timestamp += base::TimeDelta::FromMilliseconds(10);
-    ui::TouchEvent inc(ui::ET_TOUCH_MOVED,
-        gfx::Point(x, bounds.y() + 5),
-        0, timestamp);
+    ui::TouchEvent inc(ui::ET_TOUCH_MOVED, gfx::Point(x, bounds.y() + 5), 0,
+                       timestamp);
     details = dispatcher->OnEventFromSource(&inc);
     ASSERT_FALSE(details.dispatcher_destroyed);
     EXPECT_EQ(1, GetCurrentIndex());
@@ -564,8 +571,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, MAYBE_OverscrollScreenshot) {
   }
 #endif
 
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   RenderFrameHost* main_frame = web_contents->GetMainFrame();
@@ -654,13 +660,10 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, MAYBE_OverscrollScreenshot) {
 // RenderViewHost to be swapped out.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                        MAYBE_ScreenshotForSwappedOutRenderViews) {
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
   // Create a new server with a different site.
-  net::SpawnedTestServer https_server(
-      net::SpawnedTestServer::TYPE_HTTPS,
-      net::SpawnedTestServer::kLocalhost,
-      base::FilePath(FILE_PATH_LITERAL("content/test/data")));
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.ServeFilesFromSourceDirectory("content/test/data");
   ASSERT_TRUE(https_server.Start());
 
   WebContentsImpl* web_contents =
@@ -671,14 +674,13 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
     GURL url;
     int transition;
   } navigations[] = {
-    { https_server.GetURL("files/title1.html"),
-      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR },
-    { test_server()->GetURL("files/title2.html"),
-      ui::PAGE_TRANSITION_AUTO_BOOKMARK },
-    { https_server.GetURL("files/title3.html"),
-      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR },
-    { GURL(), 0 }
-  };
+      {https_server.GetURL("/title1.html"),
+       ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR},
+      {embedded_test_server()->GetURL("/title2.html"),
+       ui::PAGE_TRANSITION_AUTO_BOOKMARK},
+      {https_server.GetURL("/title3.html"),
+       ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR},
+      {GURL(), 0}};
 
   screenshot_manager()->Reset();
   for (int i = 0; !navigations[i].url.is_empty(); ++i) {
@@ -723,8 +725,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 // Tests that navigations resulting from reloads, history.replaceState,
 // and history.pushState do not capture screenshots.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, ReplaceStateReloadPushState) {
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   RenderFrameHost* main_frame = web_contents->GetMainFrame();
@@ -762,8 +763,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, ReplaceStateReloadPushState) {
 //               better.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                        DISABLED_ContentWindowReparent) {
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
 
   scoped_ptr<aura::Window> window(new aura::Window(NULL));
   window->Init(ui::LAYER_NOT_DRAWN);
@@ -786,8 +786,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, ContentWindowClose) {
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
 
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
@@ -819,8 +818,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, ContentWindowClose) {
 
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                        MAYBE_RepeatedQuickOverscrollGestures) {
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
 
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
@@ -874,7 +872,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 
 // Verify that hiding a parent of the renderer will hide the content too.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, HideContentOnParenHide) {
-  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("files/title1.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/title1.html"));
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   aura::Window* content = web_contents->GetNativeView()->parent();
@@ -888,8 +886,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, HideContentOnParenHide) {
 // Ensure that SnapToPhysicalPixelBoundary() is called on WebContentsView parent
 // change. This is a regression test for http://crbug.com/388908.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, WebContentsViewReparent) {
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
 
   scoped_ptr<aura::Window> window(new aura::Window(NULL));
   window->Init(ui::LAYER_NOT_DRAWN);
@@ -919,8 +916,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, WebContentsViewReparent) {
 // a non-scrollable area, except during gesture-nav.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                        MAYBE_OverscrollNavigationTouchThrottling) {
-  ASSERT_NO_FATAL_FAILURE(
-      StartTestWithPage("files/overscroll_navigation.html"));
+  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
 
   AddInputEventMessageFilter();
 
@@ -1035,11 +1031,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, MAYBE_VerticalOverscroll) {
     int kXStep = bounds.width() / 10;
     gfx::Point location(bounds.right() - kXStep, bounds.y() + 5);
     base::TimeDelta timestamp = ui::EventTimeForNow();
-    ui::TouchEvent press(
-        ui::ET_TOUCH_PRESSED,
-        location,
-        0,
-        timestamp);
+    ui::TouchEvent press(ui::ET_TOUCH_PRESSED, location, 0, timestamp);
     ui::EventDispatchDetails details = dispatcher->OnEventFromSource(&press);
     ASSERT_FALSE(details.dispatcher_destroyed);
     WaitAFrame();
@@ -1071,11 +1063,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, MAYBE_VerticalOverscroll) {
     int kYStep = bounds.height() / 10;
     gfx::Point location(bounds.x() + 10, bounds.y() + kYStep);
     base::TimeDelta timestamp = ui::EventTimeForNow();
-    ui::TouchEvent press(
-        ui::ET_TOUCH_PRESSED,
-        location,
-        0,
-        timestamp);
+    ui::TouchEvent press(ui::ET_TOUCH_PRESSED, location, 0, timestamp);
     ui::EventDispatchDetails details = dispatcher->OnEventFromSource(&press);
     ASSERT_FALSE(details.dispatcher_destroyed);
     WaitAFrame();
@@ -1109,11 +1097,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, MAYBE_VerticalOverscroll) {
     int kYStep = bounds.height() / 10;
     gfx::Point location = bounds.origin() + gfx::Vector2d(0, kYStep);
     base::TimeDelta timestamp = ui::EventTimeForNow();
-    ui::TouchEvent press(
-        ui::ET_TOUCH_PRESSED,
-        location,
-        0,
-        timestamp);
+    ui::TouchEvent press(ui::ET_TOUCH_PRESSED, location, 0, timestamp);
     ui::EventDispatchDetails details = dispatcher->OnEventFromSource(&press);
     ASSERT_FALSE(details.dispatcher_destroyed);
     WaitAFrame();

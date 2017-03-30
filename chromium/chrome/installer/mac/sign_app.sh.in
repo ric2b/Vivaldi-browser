@@ -48,8 +48,6 @@ browser_app="${app_path}"
 framework="${versioned_dir}/@MAC_PRODUCT_NAME@ Framework.framework"
 crashpad_handler="${framework}/Helpers/crashpad_handler"
 helper_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper.app"
-helper_eh_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper EH.app"
-helper_np_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper NP.app"
 sparkle_framework="${browser_app}/Contents/Frameworks/Sparkle.framework"
 
 requirement_string="\
@@ -57,9 +55,12 @@ designated => \
 (identifier \"com.vivaldi.Vivaldi\" or identifier \"com.vivaldi.Vivaldi.canary\") \
 "
 
-codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}" \
-    "${browser_app}" -r="${requirement_string}"
-    # --resource-rules "${browser_app_rules}" 
+enforcement_flags="restrict"
+
+codesign --sign "${codesign_id}" --keychain "${codesign_keychain}" \
+    "${browser_app}" \
+    -r="${requirement_string}" --options "${enforcement_flags}"
+    #--resource-rules "${browser_app_rules}" \
 
 # Show the signature.
 codesign --display -r- -vvvvvv "${browser_app}"
@@ -72,8 +73,6 @@ codesign --display -r- -vvvvvv "${browser_app}"
 codesign --verify --deep -vvvvvv "${crashpad_handler}"
 codesign --verify -vvvvvv "${framework}"
 codesign --verify --deep -vvvvvv "${helper_app}"
-codesign --verify --deep -vvvvvv "${helper_eh_app}"
-codesign --verify --deep -vvvvvv "${helper_np_app}"
 codesign --verify --deep -vvvvvv "${sparkle_framework}"
 codesign --verify --deep --no-strict -vvvvvv "${browser_app}"
 

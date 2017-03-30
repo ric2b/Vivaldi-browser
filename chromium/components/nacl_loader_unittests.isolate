@@ -8,10 +8,6 @@
         'command': [
           '<(PRODUCT_DIR)/nacl_loader_unittests<(EXECUTABLE_SUFFIX)',
         ],
-        'files': [
-          '<(PRODUCT_DIR)/nacl_loader_unittests<(EXECUTABLE_SUFFIX)',
-        ],
-        'read_only': 1,
       },
     }],
   ],

@@ -14,10 +14,11 @@
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace {
@@ -26,31 +27,29 @@ const char kChannelsFileName[] = "Channels";
 
 std::string GetChannelMarkForThisExecutable() {
   std::string product_channel_name;
-  chrome::VersionInfo::Channel product_channel(
-      chrome::VersionInfo::GetChannel());
+  version_info::Channel product_channel(chrome::GetChannel());
   switch (product_channel) {
-    case chrome::VersionInfo::CHANNEL_UNKNOWN: {
+    case version_info::Channel::UNKNOWN: {
       // Add the channel mark even for Chromium builds (which do not have
       // channel) to better handle possibility of users using Chromium builds
       // with their Google Chrome profiles. Include version string modifier
       // as additional piece of information for debugging (it can't make
       // a meaningful difference for the code since unknown does not match any
       // real channel name).
-      std::string version_string_modifier(
-          chrome::VersionInfo::GetVersionStringModifier());
+      std::string version_string_modifier(chrome::GetChannelString());
       product_channel_name = "unknown (" + version_string_modifier + ")";
       break;
     }
-    case chrome::VersionInfo::CHANNEL_CANARY:
+    case version_info::Channel::CANARY:
       product_channel_name = "canary";
       break;
-    case chrome::VersionInfo::CHANNEL_DEV:
+    case version_info::Channel::DEV:
       product_channel_name = "dev";
       break;
-    case chrome::VersionInfo::CHANNEL_BETA:
+    case version_info::Channel::BETA:
       product_channel_name = "beta";
       break;
-    case chrome::VersionInfo::CHANNEL_STABLE:
+    case version_info::Channel::STABLE:
       product_channel_name = "stable";
       break;
     // Rely on -Wswitch compiler warning to detect unhandled enum values.
@@ -68,8 +67,10 @@ bool DoAddChannelMarkToUserDataDir(const base::FilePath& user_data_dir) {
   // and legitimate that it doesn't exist, e.g. for new profile or for profile
   // existing before channel marks have been introduced.
   std::string channels_contents;
-  if (base::ReadFileToString(channels_path, &channels_contents))
-    base::SplitString(channels_contents, '\n', &user_data_dir_channels);
+  if (base::ReadFileToString(channels_path, &channels_contents)) {
+    base::SplitString(channels_contents, "\n",
+                      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  }
 
   if (std::find(user_data_dir_channels.begin(),
                 user_data_dir_channels.end(),
@@ -81,7 +82,7 @@ bool DoAddChannelMarkToUserDataDir(const base::FilePath& user_data_dir) {
   user_data_dir_channels.push_back(product_channel_name);
   return base::ImportantFileWriter::WriteFileAtomically(
       channels_path,
-      JoinString(user_data_dir_channels, "\n"));
+      base::JoinString(user_data_dir_channels, "\n"));
 }
 
 }  // namespace
@@ -126,8 +127,8 @@ int MigrateUserDataDir() {
     return chrome::RESULT_CODE_SXS_MIGRATION_FAILED;
   }
 
-  std::vector<std::string> user_data_dir_channels;
-  base::SplitString(channels_contents, '\n', &user_data_dir_channels);
+  std::vector<std::string> user_data_dir_channels = base::SplitString(
+      channels_contents, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   if (user_data_dir_channels.size() != 1) {
     LOG(WARNING) << "User data dir migration is only possible when the profile "

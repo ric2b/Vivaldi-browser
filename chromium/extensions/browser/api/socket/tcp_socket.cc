@@ -45,34 +45,35 @@ ApiResourceManager<ResumableTCPServerSocket>::GetFactoryInstance() {
 TCPSocket::TCPSocket(const std::string& owner_extension_id)
     : Socket(owner_extension_id), socket_mode_(UNKNOWN) {}
 
-TCPSocket::TCPSocket(net::TCPClientSocket* tcp_client_socket,
+TCPSocket::TCPSocket(scoped_ptr<net::TCPClientSocket> tcp_client_socket,
                      const std::string& owner_extension_id,
                      bool is_connected)
     : Socket(owner_extension_id),
-      socket_(tcp_client_socket),
+      socket_(std::move(tcp_client_socket)),
       socket_mode_(CLIENT) {
   this->is_connected_ = is_connected;
 }
 
-TCPSocket::TCPSocket(net::TCPServerSocket* tcp_server_socket,
+TCPSocket::TCPSocket(scoped_ptr<net::TCPServerSocket> tcp_server_socket,
                      const std::string& owner_extension_id)
     : Socket(owner_extension_id),
-      server_socket_(tcp_server_socket),
+      server_socket_(std::move(tcp_server_socket)),
       socket_mode_(SERVER) {}
 
 // static
 TCPSocket* TCPSocket::CreateSocketForTesting(
-    net::TCPClientSocket* tcp_client_socket,
+    scoped_ptr<net::TCPClientSocket> tcp_client_socket,
     const std::string& owner_extension_id,
     bool is_connected) {
-  return new TCPSocket(tcp_client_socket, owner_extension_id, is_connected);
+  return new TCPSocket(std::move(tcp_client_socket), owner_extension_id,
+                       is_connected);
 }
 
 // static
 TCPSocket* TCPSocket::CreateServerSocketForTesting(
-    net::TCPServerSocket* tcp_server_socket,
+    scoped_ptr<net::TCPServerSocket> tcp_server_socket,
     const std::string& owner_extension_id) {
-  return new TCPSocket(tcp_server_socket, owner_extension_id);
+  return new TCPSocket(std::move(tcp_server_socket), owner_extension_id);
 }
 
 TCPSocket::~TCPSocket() { Disconnect(); }
@@ -85,6 +86,12 @@ void TCPSocket::Connect(const net::AddressList& address,
     callback.Run(net::ERR_CONNECTION_FAILED);
     return;
   }
+
+  if (is_connected_) {
+    callback.Run(net::ERR_SOCKET_IS_CONNECTED);
+    return;
+  }
+
   DCHECK(!server_socket_.get());
   socket_mode_ = CLIENT;
   connect_callback_ = callback;
@@ -117,7 +124,7 @@ void TCPSocket::Disconnect() {
   accept_socket_.reset(NULL);
 }
 
-int TCPSocket::Bind(const std::string& address, uint16 port) {
+int TCPSocket::Bind(const std::string& address, uint16_t port) {
   return net::ERR_FAILED;
 }
 
@@ -129,7 +136,9 @@ void TCPSocket::Read(int count, const ReadCompletionCallback& callback) {
     return;
   }
 
-  if (!read_callback_.is_null()) {
+  if (!read_callback_.is_null() || !connect_callback_.is_null()) {
+    // It's illegal to read a net::TCPSocket while a pending Connect or Read is
+    // already in progress.
     callback.Run(net::ERR_IO_PENDING, NULL);
     return;
   }
@@ -139,7 +148,7 @@ void TCPSocket::Read(int count, const ReadCompletionCallback& callback) {
     return;
   }
 
-  if (!socket_.get() || !IsConnected()) {
+  if (!socket_.get() || !is_connected_) {
     callback.Run(net::ERR_SOCKET_NOT_CONNECTED, NULL);
     return;
   }
@@ -181,7 +190,7 @@ bool TCPSocket::SetNoDelay(bool no_delay) {
 }
 
 int TCPSocket::Listen(const std::string& address,
-                      uint16 port,
+                      uint16_t port,
                       int backlog,
                       std::string* error_msg) {
   if (socket_mode_ == CLIENT) {
@@ -196,8 +205,10 @@ int TCPSocket::Listen(const std::string& address,
   }
 
   int result = server_socket_->ListenWithAddressAndPort(address, port, backlog);
-  if (result)
+  if (result) {
+    server_socket_.reset();
     *error_msg = kSocketListenError;
+  }
   return result;
 }
 
@@ -274,8 +285,12 @@ void TCPSocket::OnConnectComplete(int result) {
   DCHECK(!connect_callback_.is_null());
   DCHECK(!is_connected_);
   is_connected_ = result == net::OK;
-  connect_callback_.Run(result);
+
+  // The completion callback may re-enter TCPSocket, e.g. to Read(); therefore
+  // we reset |connect_callback_| before calling it.
+  CompletionCallback connect_callback = connect_callback_;
   connect_callback_.Reset();
+  connect_callback.Run(result);
 }
 
 void TCPSocket::OnReadComplete(scoped_refptr<net::IOBuffer> io_buffer,
@@ -288,8 +303,9 @@ void TCPSocket::OnReadComplete(scoped_refptr<net::IOBuffer> io_buffer,
 void TCPSocket::OnAccept(int result) {
   DCHECK(!accept_callback_.is_null());
   if (result == net::OK && accept_socket_.get()) {
-    accept_callback_.Run(
-        result, static_cast<net::TCPClientSocket*>(accept_socket_.release()));
+    accept_callback_.Run(result,
+                         make_scoped_ptr(static_cast<net::TCPClientSocket*>(
+                             accept_socket_.release())));
   } else {
     accept_callback_.Run(result, NULL);
   }
@@ -332,10 +348,11 @@ ResumableTCPSocket::ResumableTCPSocket(const std::string& owner_extension_id)
       buffer_size_(0),
       paused_(false) {}
 
-ResumableTCPSocket::ResumableTCPSocket(net::TCPClientSocket* tcp_client_socket,
-                                       const std::string& owner_extension_id,
-                                       bool is_connected)
-    : TCPSocket(tcp_client_socket, owner_extension_id, is_connected),
+ResumableTCPSocket::ResumableTCPSocket(
+    scoped_ptr<net::TCPClientSocket> tcp_client_socket,
+    const std::string& owner_extension_id,
+    bool is_connected)
+    : TCPSocket(std::move(tcp_client_socket), owner_extension_id, is_connected),
       persistent_(false),
       buffer_size_(0),
       paused_(false) {}

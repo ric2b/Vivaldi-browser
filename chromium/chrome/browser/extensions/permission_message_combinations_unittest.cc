@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/values_test_util.h"
 #include "chrome/browser/extensions/test_extension_environment.h"
@@ -368,6 +369,7 @@ TEST_F(PermissionMessageCombinationsUnittest, TabsHistorySessionsCoalescing) {
       "}");
   ASSERT_TRUE(CheckManifestProducesPermissions(
       "Read and change your browsing history"));
+
   CreateAndInstall(
       "{"
       "  'permissions': ["
@@ -1124,7 +1126,7 @@ TEST_F(PermissionMessageCombinationsUnittest, PermissionMessageCombos) {
       "}");
 
   ASSERT_TRUE(CheckManifestProducesPermissions(
-      "Access your serial devices", "Store data in your Vivaldi Drive account",
+      "Access your serial devices", "Store data in your Google Drive account",
       "Read and change your accessibility settings"));
 
 }

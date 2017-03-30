@@ -5,12 +5,14 @@
 #ifndef SYNC_ENGINE_SYNCER_H_
 #define SYNC_ENGINE_SYNCER_H_
 
+#include <stdint.h>
+
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "sync/base/sync_export.h"
 #include "sync/engine/conflict_resolver.h"
@@ -34,11 +36,11 @@ class GetUpdatesProcessor;
 // A Syncer instance expects to run on a dedicated thread.  Calls to SyncShare()
 // may take an unbounded amount of time because it may block on network I/O, on
 // lock contention, or on tasks posted to other threads.
-class SYNC_EXPORT_PRIVATE Syncer {
+class SYNC_EXPORT Syncer {
  public:
-  typedef std::vector<int64> UnsyncedMetaHandles;
+  typedef std::vector<int64_t> UnsyncedMetaHandles;
 
-  Syncer(CancelationSignal* cancelation_signal);
+  explicit Syncer(CancelationSignal* cancelation_signal);
   virtual ~Syncer();
 
   // Whether an early exist was requested due to a cancelation signal.
@@ -77,6 +79,11 @@ class SYNC_EXPORT_PRIVATE Syncer {
   // otherwise.
   virtual bool PollSyncShare(ModelTypeSet request_types,
                              sessions::SyncSession* session);
+
+  // Posts a ClearServerData command.
+  // Returns: false if an error occurred and retries should backoff, true
+  // otherwise.
+  virtual bool PostClearServerData(sessions::SyncSession* session);
 
  private:
   friend class SyncerTest;

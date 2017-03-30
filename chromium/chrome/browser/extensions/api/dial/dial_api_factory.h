@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_DIAL_DIAL_API_FACTORY_H_
 #define CHROME_BROWSER_EXTENSIONS_API_DIAL_DIAL_API_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/refcounted_browser_context_keyed_service_factory.h"
 
@@ -20,7 +21,7 @@ class DialAPIFactory : public RefcountedBrowserContextKeyedServiceFactory {
   static DialAPIFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<DialAPIFactory>;
+  friend struct base::DefaultSingletonTraits<DialAPIFactory>;
 
   DialAPIFactory();
   ~DialAPIFactory() override;

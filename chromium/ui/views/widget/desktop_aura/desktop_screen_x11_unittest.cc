@@ -4,6 +4,9 @@
 
 #include "ui/views/widget/desktop_aura/desktop_screen_x11.h"
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
@@ -48,8 +51,8 @@ class TestDesktopNativeWidgetAura : public views::DesktopNativeWidgetAura {
 
 namespace views {
 
-const int64 kFirstDisplay = 5321829;
-const int64 kSecondDisplay = 928310;
+const int64_t kFirstDisplay = 5321829;
+const int64_t kSecondDisplay = 928310;
 
 class DesktopScreenX11Test : public views::ViewsTestBase,
                              public gfx::DisplayObserver {
@@ -205,6 +208,8 @@ TEST_F(DesktopScreenX11Test, GetDisplayNearestPoint) {
                                   gfx::Rect(640, 0, 1024, 768)));
   NotifyDisplaysChanged(displays);
 
+  EXPECT_EQ(kFirstDisplay,
+            screen()->GetDisplayNearestPoint(gfx::Point(630, 10)).id());
   EXPECT_EQ(kSecondDisplay,
             screen()->GetDisplayNearestPoint(gfx::Point(650, 10)).id());
   EXPECT_EQ(kFirstDisplay,

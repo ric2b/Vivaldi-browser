@@ -4,16 +4,24 @@
 
 import("//build/config/allocator.gni")
 import("//build/config/chrome_build.gni")
+import("//build/config/chromecast_build.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
+import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
-import("//build/module_args/v8.gni")
+import("//build/toolchain/goma.gni")
 
 declare_args() {
-  # When set, turns off the (normally-on) iterator debugging and related stuff
-  # that is normally turned on for Debug builds. These are generally useful for
-  # catching bugs but in some cases may cause conflicts or excessive slowness.
-  disable_iterator_debugging = false
+  # When set (the default) enables C++ iterator debugging in debug builds.
+  # Iterator debugging is always off in release builds (technically, this flag
+  # affects the "debug" config, which is always available but applied by
+  # default only in debug builds).
+  #
+  # Iterator debugging is generally useful for catching bugs. But it can
+  # introduce extra locking to check the state of an iterator against the state
+  # of the current object. For iterator- and thread-heavy code, this can
+  # significantly slow execution.
+  enable_iterator_debugging = true
 
   # Set to true to not store any build metadata, e.g. ifdef out all __DATE__
   # and __TIME__. Set to 0 to reenable the use of these macros in the code
@@ -28,9 +36,6 @@ declare_args() {
 
   # Set to true to enable dcheck in Release builds.
   dcheck_always_on = false
-
-  # Set to true to compile with the OpenGL ES 2.0 conformance tests.
-  internal_gles2_conform_tests = false
 }
 
 # TODO(brettw) Most of these should be removed. Instead of global feature
@@ -42,11 +47,10 @@ declare_args() {
 # For now we define these globally to match the current GYP build.
 config("feature_flags") {
   # TODO(brettw) this probably needs to be parameterized.
-  defines = [ "V8_DEPRECATION_WARNINGS" ]  # Don't use deprecated V8 APIs anywhere.
-
-  if (cld_version > 0) {
-    defines += [ "CLD_VERSION=$cld_version" ]
-  }
+  defines = [
+    "V8_DEPRECATION_WARNINGS",  # Don't use deprecated V8 APIs anywhere.
+    "CLD_VERSION=$cld_version",
+  ]
   if (enable_mdns) {
     defines += [ "ENABLE_MDNS=1" ]
   }
@@ -64,6 +68,9 @@ config("feature_flags") {
   if (enable_plugins) {
     defines += [ "ENABLE_PLUGINS=1" ]
   }
+  if (enable_pdf) {
+    defines += [ "ENABLE_PDF=1" ]
+  }
   if (enable_basic_printing || enable_print_preview) {
     # Convenience define for ENABLE_BASIC_PRINTING || ENABLE_PRINT_PREVIEW.
     defines += [ "ENABLE_PRINTING=1" ]
@@ -80,8 +87,8 @@ config("feature_flags") {
   if (enable_spellcheck) {
     defines += [ "ENABLE_SPELLCHECK=1" ]
   }
-  if (use_platform_spellchecker) {
-    defines += [ "USE_PLATFORM_SPELLCHECKER=1" ]
+  if (use_browser_spellchecker) {
+    defines += [ "USE_BROWSER_SPELLCHECKER=1" ]
   }
   if (dont_embed_build_metadata) {
     defines += [ "DONT_EMBED_BUILD_METADATA" ]
@@ -161,11 +168,11 @@ config("feature_flags") {
   if (is_msan) {
     defines += [ "MEMORY_SANITIZER" ]
   }
+  if (is_ubsan || is_ubsan_vptr) {
+    defines += [ "UNDEFINED_SANITIZER" ]
+  }
   if (enable_webrtc) {
     defines += [ "ENABLE_WEBRTC=1" ]
-  }
-  if (disable_ftp_support) {
-    defines += [ "DISABLE_FTP_SUPPORT=1" ]
   }
   if (!enable_nacl) {
     defines += [ "DISABLE_NACL" ]
@@ -209,17 +216,8 @@ config("feature_flags") {
   if (enable_autofill_dialog) {
     defines += [ "ENABLE_AUTOFILL_DIALOG=1" ]
   }
-  if (enable_wifi_bootstrapping) {
-    defines += [ "ENABLE_WIFI_BOOTSTRAPPING=1" ]
-  }
   if (enable_image_loader_extension) {
     defines += [ "IMAGE_LOADER_EXTENSION=1" ]
-  }
-  if (enable_remoting) {
-    defines += [ "ENABLE_REMOTING=1" ]
-  }
-  if (enable_google_now) {
-    defines += [ "ENABLE_GOOGLE_NOW=1" ]
   }
   if (enable_one_click_signin) {
     defines += [ "ENABLE_ONE_CLICK_SIGNIN" ]
@@ -230,20 +228,20 @@ config("feature_flags") {
   if (enable_topchrome_md) {
     defines += [ "ENABLE_TOPCHROME_MD=1" ]
   }
+  if (enable_wayland_server) {
+    defines += [ "ENABLE_WAYLAND_SERVER=1" ]
+  }
+  if (enable_wifi_display) {
+    defines += [ "ENABLE_WIFI_DISPLAY=1" ]
+  }
   if (proprietary_codecs) {
     defines += [ "USE_PROPRIETARY_CODECS" ]
   }
   if (enable_hangout_services_extension) {
     defines += [ "ENABLE_HANGOUT_SERVICES_EXTENSION=1" ]
   }
-  if (v8_use_external_startup_data) {
-    defines += [ "V8_USE_EXTERNAL_STARTUP_DATA" ]
-  }
   if (enable_background) {
     defines += [ "ENABLE_BACKGROUND=1" ]
-  }
-  if (enable_pre_sync_backup) {
-    defines += [ "ENABLE_PRE_SYNC_BACKUP" ]
   }
   if (enable_video_hole) {
     defines += [ "VIDEO_HOLE=1" ]
@@ -252,14 +250,8 @@ config("feature_flags") {
     defines += [ "FULL_SAFE_BROWSING" ]
     defines += [ "SAFE_BROWSING_CSD" ]
     defines += [ "SAFE_BROWSING_DB_LOCAL" ]
-    defines += [ "SAFE_BROWSING_SERVICE" ]
   } else if (safe_browsing_mode == 2) {
-    defines += [ "MOBILE_SAFE_BROWSING" ]
-    defines += [ "SAFE_BROWSING_SERVICE" ]
-  } else if (safe_browsing_mode == 3) {
-    defines += [ "MOBILE_SAFE_BROWSING" ]
     defines += [ "SAFE_BROWSING_DB_REMOTE" ]
-    defines += [ "SAFE_BROWSING_SERVICE" ]
   }
   if (is_official_build) {
     defines += [ "OFFICIAL_BUILD" ]
@@ -274,6 +266,16 @@ config("feature_flags") {
   }
   if (enable_webvr) {
     defines += [ "ENABLE_WEBVR" ]
+  }
+  if (is_syzyasan) {
+    defines += [
+      "SYZYASAN",
+      "MEMORY_TOOL_REPLACES_ALLOCATOR",
+      "MEMORY_SANITIZER_INITIAL_SIZE",
+    ]
+  }
+  if (!fieldtrial_testing_like_official_build && !is_chrome_branded) {
+    defines += [ "FIELDTRIAL_TESTING_ENABLED" ]
   }
 }
 
@@ -291,13 +293,12 @@ config("debug") {
   }
 
   if (is_win) {
-    if (disable_iterator_debugging) {
-      # Iterator debugging is enabled by the compiler on debug builds, and we
-      # have to tell it to turn it off.
+    if (!enable_iterator_debugging) {
+      # Iterator debugging is enabled by default by the compiler on debug
+      # builds, and we have to tell it to turn it off.
       defines += [ "_HAS_ITERATOR_DEBUGGING=0" ]
     }
-  } else if (is_linux && !is_android && current_cpu == "x64" &&
-             !disable_iterator_debugging) {
+  } else if (is_linux && current_cpu == "x64" && enable_iterator_debugging) {
     # Enable libstdc++ debugging facilities to help catch problems early, see
     # http://crbug.com/65151 .
     # TODO(phajdan.jr): Should we enable this for all of POSIX?
@@ -365,15 +366,7 @@ config("default_libs") {
       # target that needs it.
     ]
   } else if (is_android) {
-    # Android uses -nostdlib so we need to add even libc here.
     libs = [
-      # TODO(brettw) write a version of this, hopefully we can express this
-      # without forking out to GCC just to get the library name. The android
-      # toolchain directory should probably be extracted into a .gni file that
-      # this file and the android toolchain .gn file can share.
-      #   # Manually link the libgcc.a that the cross compiler uses.
-      #   '<!(<(android_toolchain)/*-gcc -print-libgcc-file-name)',
-      "c",
       "dl",
       "m",
     ]
@@ -385,34 +378,82 @@ config("default_libs") {
       "CoreFoundation.framework",
       "Foundation.framework",
       "IOKit.framework",
+      "OpenGL.framework",
       "Security.framework",
     ]
   } else if (is_ios) {
+    # The libraries listed here will be specified for both the target and the
+    # host. Only the common ones should be listed here.
     libs = [
       "CoreFoundation.framework",
       "CoreGraphics.framework",
       "CoreText.framework",
       "Foundation.framework",
-      "UIKit.framework",
     ]
   } else if (is_linux) {
-    libs = [ "dl" ]
+    libs = [
+      "dl",
+      "rt",
+    ]
+  }
+}
+
+# Executable configs -----------------------------------------------------------
+
+# Windows linker setup for EXEs and DLLs.
+if (is_win) {
+  _windows_linker_configs = [
+    "//build/config/win:sdk_link",
+    "//build/config/win:common_linker_setup",
+  ]
+}
+
+# This config defines the configs applied to all executables.
+config("executable_config") {
+  configs = []
+
+  if (is_win) {
+    configs += _windows_linker_configs
+  } else if (is_mac) {
+    configs += [
+      "//build/config/mac:mac_dynamic_flags",
+      "//build/config/mac:mac_executable_flags",
+    ]
+  } else if (is_linux || is_android) {
+    configs += [ "//build/config/gcc:executable_ldconfig" ]
+    if (is_android) {
+      configs += [ "//build/config/android:executable_config" ]
+    } else if (is_chromecast) {
+      configs += [ "//build/config/chromecast:executable_config" ]
+    }
+  }
+}
+
+# Shared library configs -------------------------------------------------------
+
+# This config defines the configs applied to all shared libraries.
+config("shared_library_config") {
+  configs = []
+
+  if (is_win) {
+    configs += _windows_linker_configs
+  } else if (is_mac) {
+    configs += [ "//build/config/mac:mac_dynamic_flags" ]
+  } else if (is_chromecast) {
+    configs += [ "//build/config/chromecast:shared_library_config" ]
   }
 }
 
 # Add this config to your target to enable precompiled headers.
 #
-# On Windows, precompiled headers are done on a per-target basis. If you have
-# just a couple of files, the time it takes to precompile (~2 seconds) can
-# actually be longer than the time saved. On a Z620, a 100 file target compiles
-# about 2 seconds faster with precompiled headers, with greater savings for
-# larger targets.
+# Precompiled headers are done on a per-target basis. If you have just a couple
+# of files, the time it takes to precompile (~2 seconds) can actually be longer
+# than the time saved. On a Z620, a 100 file target compiles about 2 seconds
+# faster with precompiled headers, with greater savings for larger targets.
 #
 # Recommend precompiled headers for targets with more than 50 .cc files.
 config("precompiled_headers") {
-  # TODO(brettw) enable this when GN support in the binary has been rolled.
-  #if (is_win) {
-  if (false) {
+  if (is_win && !is_official_build && !use_goma) {
     # This is a string rather than a file GN knows about. It has to match
     # exactly what's in the /FI flag below, and what might appear in the source
     # code in quotes for an #include directive.
@@ -425,5 +466,19 @@ config("precompiled_headers") {
 
     # Force include the header.
     cflags = [ "/FI$precompiled_header" ]
+
+    # Disable warning for "this file was empty after preprocessing". This
+    # error is generated only in C mode for ANSI compatibility. It conflicts
+    # with precompiled headers since the source file that's "compiled" for
+    # making the precompiled header is empty.
+    #
+    # This error doesn't happen every time. In VS2013, it seems if the .pch
+    # file doesn't exist, no error will be generated (probably MS tested this
+    # case but forgot the other one?). To reproduce this error, do a build,
+    # then delete the precompile.c.obj file, then build again.
+    cflags_c = [ "/wd4206" ]
+  } else if (is_mac && !is_official_build && !use_goma) {
+    precompiled_header = "build/precompile.h"
+    precompiled_source = "//build/precompile.h"
   }
 }

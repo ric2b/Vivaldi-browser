@@ -31,13 +31,13 @@ def _CommonChecks(input_api, output_api):
   webui = path.join(cwd, 'ui', 'webui')
 
   affected_files = (f.AbsoluteLocalPath() for f in input_api.AffectedFiles())
-  would_affect_tests = (
+
+  would_affect_tests = [
       path.join(cwd, 'PRESUBMIT.py'),
       path.join(cwd, 'test_presubmit.py'),
-      path.join(cwd, 'web_dev_style', 'css_checker.py'),
-      path.join(cwd, 'web_dev_style', 'html_checker.py'),
-      path.join(cwd, 'web_dev_style', 'js_checker.py'),
-  )
+  ]
+  would_affect_tests += input_api.glob(path.join(cwd, 'web_dev_style', '*.py'))
+
   if any(f for f in affected_files if f in would_affect_tests):
     tests = [path.join(cwd, 'test_presubmit.py')]
     results.extend(
@@ -55,7 +55,9 @@ def _CommonChecks(input_api, output_api):
     def _html_css_js_resource(p):
       return p.endswith(('.html', '.css', '.js')) and p.startswith(search_dirs)
 
-    BLACKLIST = ['chrome/browser/resources/pdf/index.html',
+    BLACKLIST = ['chrome/browser/resources/md_downloads/crisper.js',
+                 'chrome/browser/resources/md_downloads/vulcanized.html',
+                 'chrome/browser/resources/pdf/index.html',
                  'chrome/browser/resources/pdf/index.js']
     def is_resource(maybe_resource):
       return (maybe_resource.LocalPath() not in BLACKLIST and

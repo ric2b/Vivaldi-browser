@@ -144,17 +144,22 @@ enum ServerFieldType {
   USERNAME = 86,
   USERNAME_AND_EMAIL_ADDRESS = 87,
 
+  // Field types related to new password fields on change password forms.
+  NEW_PASSWORD = 88,
+  PROBABLY_NEW_PASSWORD = 89,
+  NOT_NEW_PASSWORD = 90,
+
   // No new types can be added without a corresponding change to the Autofill
   // server.
 
-  MAX_VALID_FIELD_TYPE = 88,
+  MAX_VALID_FIELD_TYPE = 91,
 };
 
 // The list of all HTML autocomplete field type hints supported by Chrome.
 // See [ http://is.gd/whatwg_autocomplete ] for the full list of specced hints.
 enum HtmlFieldType {
   // Default type.
-  HTML_TYPE_UNKNOWN,
+  HTML_TYPE_UNSPECIFIED,
 
   // Name types.
   HTML_TYPE_NAME,
@@ -176,7 +181,7 @@ enum HtmlFieldType {
   HTML_TYPE_COUNTRY_CODE,    // The ISO 3166-1-alpha-2 country code.
   HTML_TYPE_COUNTRY_NAME,    // The localized country name.
   HTML_TYPE_POSTAL_CODE,
-  HTML_TYPE_FULL_ADDRESS,    // The complete address, formatted for display.
+  HTML_TYPE_FULL_ADDRESS,  // The complete address, formatted for display.
 
   // Credit card types.
   HTML_TYPE_CREDIT_CARD_NAME,
@@ -212,6 +217,9 @@ enum HtmlFieldType {
   HTML_TYPE_CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR,
   HTML_TYPE_CREDIT_CARD_EXP_2_DIGIT_YEAR,
   HTML_TYPE_CREDIT_CARD_EXP_4_DIGIT_YEAR,
+
+  // Non standard autcomplete types.
+  HTML_TYPE_UNRECOGNIZED,
 };
 
 // The list of all HTML autocomplete field mode hints supported by Chrome.

@@ -4,6 +4,9 @@
 
 #include "net/socket/client_socket_pool_manager_impl.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/values.h"
 #include "net/http/http_network_session.h"
@@ -42,7 +45,7 @@ ClientSocketPoolManagerImpl::ClientSocketPoolManagerImpl(
     ChannelIDService* channel_id_service,
     TransportSecurityState* transport_security_state,
     CTVerifier* cert_transparency_verifier,
-    CertPolicyEnforcer* cert_policy_enforcer,
+    CTPolicyEnforcer* ct_policy_enforcer,
     const std::string& ssl_session_cache_shard,
     SSLConfigService* ssl_config_service,
     HttpNetworkSession::SocketPoolType pool_type)
@@ -53,7 +56,7 @@ ClientSocketPoolManagerImpl::ClientSocketPoolManagerImpl(
       channel_id_service_(channel_id_service),
       transport_security_state_(transport_security_state),
       cert_transparency_verifier_(cert_transparency_verifier),
-      cert_policy_enforcer_(cert_policy_enforcer),
+      ct_policy_enforcer_(ct_policy_enforcer),
       ssl_session_cache_shard_(ssl_session_cache_shard),
       ssl_config_service_(ssl_config_service),
       pool_type_(pool_type),
@@ -76,7 +79,7 @@ ClientSocketPoolManagerImpl::ClientSocketPoolManagerImpl(
                                                channel_id_service,
                                                transport_security_state,
                                                cert_transparency_verifier,
-                                               cert_policy_enforcer,
+                                               ct_policy_enforcer,
                                                ssl_session_cache_shard,
                                                socket_factory,
                                                transport_socket_pool_.get(),
@@ -208,14 +211,17 @@ SOCKSClientSocketPool* ClientSocketPoolManagerImpl::GetSocketPoolForSOCKSProxy(
   }
 
   DCHECK(!ContainsKey(transport_socket_pools_for_socks_proxies_, socks_proxy));
+  int sockets_per_proxy_server = max_sockets_per_proxy_server(pool_type_);
+  int sockets_per_group = std::min(sockets_per_proxy_server,
+                                   max_sockets_per_group(pool_type_));
 
   std::pair<TransportSocketPoolMap::iterator, bool> tcp_ret =
       transport_socket_pools_for_socks_proxies_.insert(
           std::make_pair(
               socks_proxy,
               new TransportClientSocketPool(
-                  max_sockets_per_proxy_server(pool_type_),
-                  max_sockets_per_group(pool_type_),
+                  sockets_per_proxy_server,
+                  sockets_per_group,
                   host_resolver_,
                   socket_factory_,
                   net_log_)));
@@ -224,8 +230,8 @@ SOCKSClientSocketPool* ClientSocketPoolManagerImpl::GetSocketPoolForSOCKSProxy(
   std::pair<SOCKSSocketPoolMap::iterator, bool> ret =
       socks_socket_pools_.insert(
           std::make_pair(socks_proxy, new SOCKSClientSocketPool(
-              max_sockets_per_proxy_server(pool_type_),
-              max_sockets_per_group(pool_type_),
+              sockets_per_proxy_server,
+              sockets_per_group,
               host_resolver_,
               tcp_ret.first->second,
               net_log_)));
@@ -249,13 +255,17 @@ ClientSocketPoolManagerImpl::GetSocketPoolForHTTPProxy(
   DCHECK(!ContainsKey(transport_socket_pools_for_https_proxies_, http_proxy));
   DCHECK(!ContainsKey(ssl_socket_pools_for_https_proxies_, http_proxy));
 
+  int sockets_per_proxy_server = max_sockets_per_proxy_server(pool_type_);
+  int sockets_per_group = std::min(sockets_per_proxy_server,
+                                   max_sockets_per_group(pool_type_));
+
   std::pair<TransportSocketPoolMap::iterator, bool> tcp_http_ret =
       transport_socket_pools_for_http_proxies_.insert(
           std::make_pair(
               http_proxy,
               new TransportClientSocketPool(
-                  max_sockets_per_proxy_server(pool_type_),
-                  max_sockets_per_group(pool_type_),
+                  sockets_per_proxy_server,
+                  sockets_per_group,
                   host_resolver_,
                   socket_factory_,
                   net_log_)));
@@ -266,8 +276,8 @@ ClientSocketPoolManagerImpl::GetSocketPoolForHTTPProxy(
           std::make_pair(
               http_proxy,
               new TransportClientSocketPool(
-                  max_sockets_per_proxy_server(pool_type_),
-                  max_sockets_per_group(pool_type_),
+                  sockets_per_proxy_server,
+                  sockets_per_group,
                   host_resolver_,
                   socket_factory_,
                   net_log_)));
@@ -275,15 +285,15 @@ ClientSocketPoolManagerImpl::GetSocketPoolForHTTPProxy(
 
   std::pair<SSLSocketPoolMap::iterator, bool> ssl_https_ret =
       ssl_socket_pools_for_https_proxies_.insert(std::make_pair(
-          http_proxy, new SSLClientSocketPool(
-                          max_sockets_per_proxy_server(pool_type_),
-                          max_sockets_per_group(pool_type_), cert_verifier_,
-                          channel_id_service_, transport_security_state_,
-                          cert_transparency_verifier_, cert_policy_enforcer_,
-                          ssl_session_cache_shard_, socket_factory_,
-                          tcp_https_ret.first->second /* https proxy */,
-                          NULL /* no socks proxy */, NULL /* no http proxy */,
-                          ssl_config_service_.get(), net_log_)));
+          http_proxy,
+          new SSLClientSocketPool(
+              sockets_per_proxy_server, sockets_per_group, cert_verifier_,
+              channel_id_service_, transport_security_state_,
+              cert_transparency_verifier_, ct_policy_enforcer_,
+              ssl_session_cache_shard_, socket_factory_,
+              tcp_https_ret.first->second /* https proxy */,
+              NULL /* no socks proxy */, NULL /* no http proxy */,
+              ssl_config_service_.get(), net_log_)));
   DCHECK(tcp_https_ret.second);
 
   std::pair<HTTPProxySocketPoolMap::iterator, bool> ret =
@@ -291,8 +301,8 @@ ClientSocketPoolManagerImpl::GetSocketPoolForHTTPProxy(
           std::make_pair(
               http_proxy,
               new HttpProxyClientSocketPool(
-                  max_sockets_per_proxy_server(pool_type_),
-                  max_sockets_per_group(pool_type_),
+                  sockets_per_proxy_server,
+                  sockets_per_group,
                   tcp_http_ret.first->second,
                   ssl_https_ret.first->second,
                   net_log_)));
@@ -307,11 +317,15 @@ SSLClientSocketPool* ClientSocketPoolManagerImpl::GetSocketPoolForSSLWithProxy(
   if (it != ssl_socket_pools_for_proxies_.end())
     return it->second;
 
+  int sockets_per_proxy_server = max_sockets_per_proxy_server(pool_type_);
+  int sockets_per_group = std::min(sockets_per_proxy_server,
+                                   max_sockets_per_group(pool_type_));
+
   SSLClientSocketPool* new_pool = new SSLClientSocketPool(
-      max_sockets_per_proxy_server(pool_type_),
-      max_sockets_per_group(pool_type_), cert_verifier_, channel_id_service_,
-      transport_security_state_, cert_transparency_verifier_,
-      cert_policy_enforcer_, ssl_session_cache_shard_, socket_factory_,
+      sockets_per_proxy_server, sockets_per_group, cert_verifier_,
+      channel_id_service_, transport_security_state_,
+      cert_transparency_verifier_, ct_policy_enforcer_,
+      ssl_session_cache_shard_, socket_factory_,
       NULL, /* no tcp pool, we always go through a proxy */
       GetSocketPoolForSOCKSProxy(proxy_server),
       GetSocketPoolForHTTPProxy(proxy_server), ssl_config_service_.get(),
@@ -345,7 +359,7 @@ scoped_ptr<base::Value> ClientSocketPoolManagerImpl::SocketPoolInfoToValue()
   // socket pools in |http_proxy_socket_pools_| and |socks_socket_pools_|.
   AddSocketPoolsToList(list.get(), ssl_socket_pools_for_proxies_,
                        "ssl_socket_pool_for_proxies", false);
-  return list.Pass();
+  return std::move(list);
 }
 
 void ClientSocketPoolManagerImpl::OnCertAdded(const X509Certificate* cert) {

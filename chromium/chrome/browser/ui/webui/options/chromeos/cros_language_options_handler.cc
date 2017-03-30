@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/options/chromeos/cros_language_options_handler.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/strings/stringprintf.h"
@@ -30,6 +32,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_url_handlers.h"
+#include "grit/components_strings.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -82,6 +85,12 @@ void CrosLanguageOptionsHandler::GetLocalizedValues(
   localized_strings->SetString("noInputMethods",
       l10n_util::GetStringUTF16(
           IDS_OPTIONS_SETTINGS_LANGUAGES_NO_INPUT_METHODS));
+  localized_strings->SetString("activateImeMenu",
+      l10n_util::GetStringUTF16(
+          IDS_OPTIONS_SETTINGS_LANGUAGES_ACTIVATE_IME_MENU));
+  localized_strings->SetString("activateImeMenuDesc",
+      l10n_util::GetStringUTF16(
+          IDS_OPTIONS_SETTINGS_LANGUAGES_ACTIVATE_IME_MENU_DESCRIPTION));
 
   // GetSupportedInputMethods() never returns NULL.
   localized_strings->Set("languageList", GetAcceptLanguageList().release());
@@ -178,10 +187,6 @@ base::ListValue*
     ime_ids_list->Append(dictionary.release());
   }
   return ime_ids_list.release();
-}
-
-base::string16 CrosLanguageOptionsHandler::GetProductName() {
-  return l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_OS_NAME);
 }
 
 void CrosLanguageOptionsHandler::SetApplicationLocale(

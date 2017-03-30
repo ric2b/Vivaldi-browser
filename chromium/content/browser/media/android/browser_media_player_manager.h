@@ -5,16 +5,16 @@
 #ifndef CONTENT_BROWSER_MEDIA_ANDROID_BROWSER_MEDIA_PLAYER_MANAGER_H_
 #define CONTENT_BROWSER_MEDIA_ANDROID_BROWSER_MEDIA_PLAYER_MANAGER_H_
 
-#include "base/basictypes.h"
+#include <map>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
 #include "content/browser/android/content_video_view.h"
 #include "content/browser/media/android/media_session_observer.h"
 #include "content/common/content_export.h"
-#include "content/common/media/media_player_messages_enums_android.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "ipc/ipc_message.h"
 #include "media/base/android/media_player_android.h"
 #include "media/base/android/media_player_manager.h"
@@ -30,9 +30,10 @@ struct MediaPlayerHostMsg_Initialize_Params;
 
 namespace content {
 class BrowserDemuxerAndroid;
-class ContentViewCoreImpl;
+#if !defined(USE_AURA)
+class ContentViewCore;
+#endif
 class ExternalVideoSurfaceContainer;
-class MediaPlayersObserver;
 class RenderFrameHost;
 class WebContents;
 
@@ -46,8 +47,7 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
       public MediaSessionObserver {
  public:
   // Permits embedders to provide an extended version of the class.
-  typedef BrowserMediaPlayerManager* (*Factory)(RenderFrameHost*,
-                                                MediaPlayersObserver*);
+  typedef BrowserMediaPlayerManager* (*Factory)(RenderFrameHost*);
   static void RegisterFactory(Factory factory);
 
   // Permits embedders to handle custom urls.
@@ -62,11 +62,11 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
                              int player_id);
 
   // Returns a new instance using the registered factory if available.
-  static BrowserMediaPlayerManager* Create(
-      RenderFrameHost* rfh,
-      MediaPlayersObserver* audio_monitor);
+  static BrowserMediaPlayerManager* Create(RenderFrameHost* rfh);
 
+#if !defined(USE_AURA)
   ContentViewCore* GetContentViewCore() const;
+#endif
 
   ~BrowserMediaPlayerManager() override;
 
@@ -97,15 +97,14 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
                       const base::TimeDelta& current_time) override;
   void OnError(int player_id, int error) override;
   void OnVideoSizeChanged(int player_id, int width, int height) override;
-  void OnAudibleStateChanged(
-      int player_id, bool is_audible_now) override;
   void OnWaitingForDecryptionKey(int player_id) override;
 
   media::MediaResourceGetter* GetMediaResourceGetter() override;
   media::MediaUrlInterceptor* GetMediaUrlInterceptor() override;
   media::MediaPlayerAndroid* GetFullscreenPlayer() override;
   media::MediaPlayerAndroid* GetPlayer(int player_id) override;
-  bool RequestPlay(int player_id) override;
+  bool RequestPlay(int player_id, base::TimeDelta duration,
+                   bool has_audio) override;
 #if defined(VIDEO_HOLE)
   void AttachExternalVideoSurface(int player_id, jobject surface);
   void DetachExternalVideoSurface(int player_id);
@@ -125,11 +124,13 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
   virtual void OnPause(int player_id, bool is_media_related_action);
   virtual void OnSetVolume(int player_id, double volume);
   virtual void OnSetPoster(int player_id, const GURL& poster);
-  virtual void OnReleaseResources(int player_id);
+  virtual void OnSuspendAndReleaseResources(int player_id);
   virtual void OnDestroyPlayer(int player_id);
   virtual void OnRequestRemotePlayback(int player_id);
   virtual void OnRequestRemotePlaybackControl(int player_id);
+  virtual bool IsPlayingRemotely(int player_id);
   virtual void ReleaseFullscreenPlayer(media::MediaPlayerAndroid* player);
+
 #if defined(VIDEO_HOLE)
   void OnNotifyExternalSurface(
       int player_id, bool is_request, const gfx::RectF& rect);
@@ -137,8 +138,7 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
 
  protected:
   // Clients must use Create() or subclass constructor.
-  BrowserMediaPlayerManager(RenderFrameHost* render_frame_host,
-                            MediaPlayersObserver* audio_monitor);
+  explicit BrowserMediaPlayerManager(RenderFrameHost* render_frame_host);
 
   WebContents* web_contents() const { return web_contents_; }
 
@@ -146,7 +146,10 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
   void AddPlayer(media::MediaPlayerAndroid* player);
 
   // Removes the player with the specified id.
-  void RemovePlayer(int player_id);
+  void DestroyPlayer(int player_id);
+
+  // Release resources associated to a player.
+  virtual void ReleaseResources(int player_id);
 
   // Replaces a player with the specified id with a given MediaPlayerAndroid
   // object. This will also return the original MediaPlayerAndroid object that
@@ -154,6 +157,21 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
   scoped_ptr<media::MediaPlayerAndroid> SwapPlayer(
       int player_id,
       media::MediaPlayerAndroid* player);
+
+  // Called to request decoder resources. Returns true if the request is
+  // permitted, or false otherwise. The manager object maintains a list
+  // of active MediaPlayerAndroid objects and releases the inactive resources
+  // when needed. If |temporary| is true, the request is short lived
+  // and it will not be cleaned up when handling other requests.
+  // On the contrary, requests with false |temporary| value are subject to
+  // clean up if their players are idle.
+  virtual bool RequestDecoderResources(int player_id, bool temporary);
+
+  // MediaPlayerAndroid must call this to inform the manager that it has
+  // released the decoder resources. This can be triggered by the
+  // ReleasePlayer() call below, or when meta data is extracted, or when player
+  // is stuck in an error.
+  virtual void OnDecoderResourcesReleased(int player_id);
 
   int RoutingID();
 
@@ -167,30 +185,32 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
       bool hide_url_log,
       BrowserDemuxerAndroid* demuxer);
 
-  // MediaPlayerAndroid must call this before it is going to decode
-  // media streams. This helps the manager object maintain an array
-  // of active MediaPlayerAndroid objects and release the resources
-  // when needed. Currently we only count video resources as they are
-  // constrained by hardware and memory limits.
-  virtual void OnMediaResourcesRequested(int player_id);
-
-  // Called when a player releases all decoding resources.
-  void ReleaseMediaResources(int player_id);
-
-  // Releases the player. However, don't remove it from |players_|.
+  // Instructs |player| to release its java player. This will not remove the
+  // player from |players_|.
   void ReleasePlayer(media::MediaPlayerAndroid* player);
+
+  // Called when user approves media playback after being throttled.
+  void OnPlaybackPermissionGranted(int player_id, bool granted);
+
+  // Helper method to start playback.
+  void StartInternal(int player_id);
 
 #if defined(VIDEO_HOLE)
   void ReleasePlayerOfExternalVideoSurfaceIfNeeded(int future_player);
   void OnRequestExternalSurface(int player_id, const gfx::RectF& rect);
+  void ReleaseExternalSurface(int player_id);
 #endif  // defined(VIDEO_HOLE)
 
   RenderFrameHost* const render_frame_host_;
 
-  MediaPlayersObserver* audio_monitor_;
-
   // An array of managed players.
   ScopedVector<media::MediaPlayerAndroid> players_;
+
+  typedef std::map<int, bool> ActivePlayerMap;
+  // Players that have requested decoding resources. Even though resource is
+  // requested, a player may be in a paused or error state and the manager
+  // will release its resources later.
+  ActivePlayerMap active_players_;
 
   // The fullscreen video view object or NULL if video is not played in
   // fullscreen.

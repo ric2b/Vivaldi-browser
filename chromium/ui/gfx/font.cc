@@ -5,6 +5,7 @@
 #include "ui/gfx/font.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "ui/gfx/platform_font.h"
 
 namespace gfx {
@@ -64,7 +65,7 @@ int Font::GetStyle() const {
   return platform_font_->GetStyle();
 }
 
-std::string Font::GetFontName() const {
+const std::string& Font::GetFontName() const {
   return platform_font_->GetFontName();
 }
 

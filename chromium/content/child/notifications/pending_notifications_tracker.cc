@@ -9,7 +9,6 @@
 #include "base/thread_task_runner_handle.h"
 #include "content/child/notifications/notification_image_loader.h"
 #include "content/child/notifications/notification_manager.h"
-#include "third_party/WebKit/public/platform/WebSerializedOrigin.h"
 #include "third_party/WebKit/public/platform/modules/notifications/WebNotificationData.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -20,8 +19,7 @@ struct PendingNotificationsTracker::PendingNotification {
   PendingNotification(
       const scoped_refptr<NotificationImageLoader>& image_loader,
       const NotificationResourcesFetchedCallback& callback)
-      : image_loader(image_loader),
-        callback(callback) {}
+      : image_loader(image_loader), callback(callback) {}
 
   scoped_refptr<NotificationImageLoader> image_loader;
   NotificationResourcesFetchedCallback callback;
@@ -29,8 +27,7 @@ struct PendingNotificationsTracker::PendingNotification {
 
 PendingNotificationsTracker::PendingNotificationsTracker(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
-    : main_thread_task_runner_(main_thread_task_runner),
-      weak_factory_(this) {}
+    : main_thread_task_runner_(main_thread_task_runner), weak_factory_(this) {}
 
 PendingNotificationsTracker::~PendingNotificationsTracker() {}
 
@@ -39,12 +36,10 @@ void PendingNotificationsTracker::FetchPageNotificationResources(
     blink::WebNotificationDelegate* delegate,
     const NotificationResourcesFetchedCallback& callback) {
   delegate_to_pending_id_map_[delegate] = FetchNotificationResources(
-      notification_data,
-      callback,
+      notification_data, callback,
       new NotificationImageLoader(
-          base::Bind(
-              &PendingNotificationsTracker::DidFetchPageNotification,
-              weak_factory_.GetWeakPtr(), delegate),
+          base::Bind(&PendingNotificationsTracker::DidFetchPageNotification,
+                     weak_factory_.GetWeakPtr(), delegate),
           base::ThreadTaskRunnerHandle::Get()));
 }
 
@@ -52,8 +47,7 @@ void PendingNotificationsTracker::FetchPersistentNotificationResources(
     const blink::WebNotificationData& notification_data,
     const NotificationResourcesFetchedCallback& callback) {
   FetchNotificationResources(
-      notification_data,
-      callback,
+      notification_data, callback,
       new NotificationImageLoader(
           base::Bind(
               &PendingNotificationsTracker::DidFetchPersistentNotification,
@@ -106,9 +100,9 @@ int PendingNotificationsTracker::FetchNotificationResources(
       new PendingNotification(image_loader, callback));
 
   main_thread_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&NotificationImageLoader::StartOnMainThread,
-                            image_loader, notification_id,
-                            GURL(notification_data.icon.spec())));
+      FROM_HERE,
+      base::Bind(&NotificationImageLoader::StartOnMainThread, image_loader,
+                 notification_id, GURL(notification_data.icon)));
 
   return notification_id;
 }

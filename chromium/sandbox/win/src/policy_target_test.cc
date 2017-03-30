@@ -14,6 +14,10 @@
 #include "sandbox/win/tests/common/controller.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_WIN)
+#include "base/win/win_util.h"
+#endif
+
 namespace sandbox {
 
 #define BINDNTDLL(name) \
@@ -256,9 +260,10 @@ TEST(PolicyTargetTest, DesktopPolicy) {
   if (result == SBOX_ALL_OK)
     target.Set(temp_process_info);
 
-  EXPECT_EQ(1, ::ResumeThread(target.thread_handle()));
+  EXPECT_EQ(1u, ::ResumeThread(target.thread_handle()));
 
-  EXPECT_EQ(WAIT_TIMEOUT, ::WaitForSingleObject(target.process_handle(), 2000));
+  EXPECT_EQ(static_cast<DWORD>(WAIT_TIMEOUT),
+            ::WaitForSingleObject(target.process_handle(), 2000));
 
   EXPECT_NE(::GetThreadDesktop(target.thread_id()),
             ::GetThreadDesktop(::GetCurrentThreadId()));
@@ -319,9 +324,10 @@ TEST(PolicyTargetTest, WinstaPolicy) {
   if (result == SBOX_ALL_OK)
     target.Set(temp_process_info);
 
-  EXPECT_EQ(1, ::ResumeThread(target.thread_handle()));
+  EXPECT_EQ(1u, ::ResumeThread(target.thread_handle()));
 
-  EXPECT_EQ(WAIT_TIMEOUT, ::WaitForSingleObject(target.process_handle(), 2000));
+  EXPECT_EQ(static_cast<DWORD>(WAIT_TIMEOUT),
+            ::WaitForSingleObject(target.process_handle(), 2000));
 
   EXPECT_NE(::GetThreadDesktop(target.thread_id()),
             ::GetThreadDesktop(::GetCurrentThreadId()));
@@ -376,14 +382,13 @@ TEST(PolicyTargetTest, ShareHandleTest) {
   GetModuleFileNameW(NULL, prog_name, MAX_PATH);
 
   TargetPolicy* policy = broker->CreatePolicy();
-  void* shared_handle = policy->AddHandleToShare(
-      read_only_view.handle());
+  void* shared_handle =
+      policy->AddHandleToShare(read_only_view.handle().GetHandle());
 
   base::string16 arguments(L"\"");
   arguments += prog_name;
   arguments += L"\" -child 0 shared_memory_handle ";
-  arguments += base::UintToString16(
-      reinterpret_cast<unsigned int>(shared_handle));
+  arguments += base::UintToString16(base::win::HandleToUint32(shared_handle));
 
   // Launch the app.
   ResultCode result = SBOX_ALL_OK;
@@ -399,9 +404,9 @@ TEST(PolicyTargetTest, ShareHandleTest) {
   if (result == SBOX_ALL_OK)
     target.Set(temp_process_info);
 
-  EXPECT_EQ(1, ::ResumeThread(target.thread_handle()));
+  EXPECT_EQ(1u, ::ResumeThread(target.thread_handle()));
 
-  EXPECT_EQ(WAIT_TIMEOUT,
+  EXPECT_EQ(static_cast<DWORD>(WAIT_TIMEOUT),
             ::WaitForSingleObject(target.process_handle(), 2000));
 
   EXPECT_TRUE(::TerminateProcess(target.process_handle(), 0));

@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "cc/surfaces/display.h"
+
+#include <utility>
+
 #include "base/test/null_task_runner.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/output/delegated_frame_data.h"
 #include "cc/quads/render_pass.h"
 #include "cc/resources/shared_bitmap_manager.h"
-#include "cc/surfaces/display.h"
 #include "cc/surfaces/display_client.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_factory.h"
@@ -26,44 +29,69 @@ using testing::AnyNumber;
 namespace cc {
 namespace {
 
-class EmptySurfaceFactoryClient : public SurfaceFactoryClient {
+class FakeSurfaceFactoryClient : public SurfaceFactoryClient {
  public:
+  FakeSurfaceFactoryClient() : begin_frame_source_(nullptr) {}
+
   void ReturnResources(const ReturnedResourceArray& resources) override {}
+
+  void SetBeginFrameSource(SurfaceId surface_id,
+                           BeginFrameSource* begin_frame_source) override {
+    begin_frame_source_ = begin_frame_source;
+  }
+
+  BeginFrameSource* begin_frame_source() { return begin_frame_source_; }
+
+ private:
+  BeginFrameSource* begin_frame_source_;
+};
+
+class TestSoftwareOutputDevice : public SoftwareOutputDevice {
+ public:
+  TestSoftwareOutputDevice() {}
+
+  gfx::Rect damage_rect() const { return damage_rect_; }
+  gfx::Size viewport_pixel_size() const { return viewport_pixel_size_; }
 };
 
 class DisplayTest : public testing::Test {
  public:
   DisplayTest()
-      : factory_(&manager_, &empty_client_),
+      : factory_(&manager_, &surface_factory_client_),
+        software_output_device_(nullptr),
         task_runner_(new base::NullTaskRunner) {}
 
  protected:
   void SetUpContext(scoped_ptr<TestWebGraphicsContext3D> context) {
     if (context) {
       output_surface_ = FakeOutputSurface::Create3d(
-          TestContextProvider::Create(context.Pass()));
+          TestContextProvider::Create(std::move(context)));
     } else {
-      output_surface_ = FakeOutputSurface::CreateSoftware(
-          make_scoped_ptr(new SoftwareOutputDevice));
+      scoped_ptr<TestSoftwareOutputDevice> output_device(
+          new TestSoftwareOutputDevice);
+      software_output_device_ = output_device.get();
+      output_surface_ =
+          FakeOutputSurface::CreateSoftware(std::move(output_device));
     }
     shared_bitmap_manager_.reset(new TestSharedBitmapManager);
     output_surface_ptr_ = output_surface_.get();
   }
 
-  void SubmitFrame(RenderPassList* pass_list, SurfaceId surface_id) {
+  void SubmitCompositorFrame(RenderPassList* pass_list, SurfaceId surface_id) {
     scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     pass_list->swap(frame_data->render_pass_list);
 
     scoped_ptr<CompositorFrame> frame(new CompositorFrame);
-    frame->delegated_frame_data = frame_data.Pass();
+    frame->delegated_frame_data = std::move(frame_data);
 
-    factory_.SubmitFrame(surface_id, frame.Pass(),
-                         SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(surface_id, std::move(frame),
+                                   SurfaceFactory::DrawCallback());
   }
 
   SurfaceManager manager_;
-  EmptySurfaceFactoryClient empty_client_;
+  FakeSurfaceFactoryClient surface_factory_client_;
   SurfaceFactory factory_;
+  TestSoftwareOutputDevice* software_output_device_;
   scoped_ptr<FakeOutputSurface> output_surface_;
   FakeOutputSurface* output_surface_ptr_;
   FakeBeginFrameSource fake_begin_frame_source_;
@@ -89,13 +117,18 @@ class TestDisplayScheduler : public DisplayScheduler {
                        base::NullTaskRunner* task_runner)
       : DisplayScheduler(client, begin_frame_source, task_runner, 1),
         damaged(false),
-        entire_display_damaged(false),
-        swapped(false) {}
+        display_resized_(false),
+        has_new_root_surface(false),
+        swapped(false) {
+    begin_frame_source_for_children_.reset(new FakeBeginFrameSource);
+  }
 
   ~TestDisplayScheduler() override {}
 
-  void EntireDisplayDamaged(SurfaceId root_surface_id) override {
-    entire_display_damaged = true;
+  void DisplayResized() override { display_resized_ = true; }
+
+  void SetNewRootSurface(SurfaceId root_surface_id) override {
+    has_new_root_surface = true;
   }
 
   void SurfaceDamaged(SurfaceId surface_id) override {
@@ -107,16 +140,41 @@ class TestDisplayScheduler : public DisplayScheduler {
 
   void ResetDamageForTest() {
     damaged = false;
-    entire_display_damaged = false;
+    display_resized_ = false;
+    has_new_root_surface = false;
   }
 
   bool damaged;
-  bool entire_display_damaged;
+  bool display_resized_;
+  bool has_new_root_surface;
   bool swapped;
 };
 
 void CopyCallback(bool* called, scoped_ptr<CopyOutputResult> result) {
   *called = true;
+}
+
+// Verify Display responds to SurfaceAggregatorClient methods properly.
+TEST_F(DisplayTest, DisplayAsSurfaceAggregatorClient) {
+  SetUpContext(nullptr);
+  TestDisplayClient client;
+  RendererSettings settings;
+  Display display(&client, &manager_, shared_bitmap_manager_.get(), nullptr,
+                  settings);
+
+  TestDisplayScheduler scheduler(&display, &fake_begin_frame_source_,
+                                 task_runner_.get());
+  display.Initialize(std::move(output_surface_), &scheduler);
+
+  SurfaceId surface_id(6);
+  factory_.Create(surface_id);
+  Surface* surface = manager_.GetSurfaceForId(surface_id);
+
+  EXPECT_EQ(nullptr, surface_factory_client_.begin_frame_source());
+  display.AddSurface(surface);
+  EXPECT_NE(nullptr, surface_factory_client_.begin_frame_source());
+  display.RemoveSurface(surface);
+  EXPECT_EQ(nullptr, surface_factory_client_.begin_frame_source());
 }
 
 // Check that frame is damaged and swapped only under correct conditions.
@@ -131,19 +189,21 @@ TEST_F(DisplayTest, DisplayDamaged) {
 
   TestDisplayScheduler scheduler(&display, &fake_begin_frame_source_,
                                  task_runner_.get());
-  display.Initialize(output_surface_.Pass(), &scheduler);
+  display.Initialize(std::move(output_surface_), &scheduler);
 
   SurfaceId surface_id(7u);
   EXPECT_FALSE(scheduler.damaged);
-  EXPECT_FALSE(scheduler.entire_display_damaged);
+  EXPECT_FALSE(scheduler.has_new_root_surface);
   display.SetSurfaceId(surface_id, 1.f);
   EXPECT_FALSE(scheduler.damaged);
-  EXPECT_TRUE(scheduler.entire_display_damaged);
+  EXPECT_FALSE(scheduler.display_resized_);
+  EXPECT_TRUE(scheduler.has_new_root_surface);
 
   scheduler.ResetDamageForTest();
   display.Resize(gfx::Size(100, 100));
   EXPECT_FALSE(scheduler.damaged);
-  EXPECT_TRUE(scheduler.entire_display_damaged);
+  EXPECT_TRUE(scheduler.display_resized_);
+  EXPECT_FALSE(scheduler.has_new_root_surface);
 
   factory_.Create(surface_id);
 
@@ -153,24 +213,22 @@ TEST_F(DisplayTest, DisplayDamaged) {
   pass->output_rect = gfx::Rect(0, 0, 100, 100);
   pass->damage_rect = gfx::Rect(10, 10, 1, 1);
   pass->id = RenderPassId(1, 1);
-  pass_list.push_back(pass.Pass());
+  pass_list.push_back(std::move(pass));
 
   scheduler.ResetDamageForTest();
-  SubmitFrame(&pass_list, surface_id);
+  SubmitCompositorFrame(&pass_list, surface_id);
   EXPECT_TRUE(scheduler.damaged);
-  EXPECT_FALSE(scheduler.entire_display_damaged);
+  EXPECT_FALSE(scheduler.display_resized_);
+  EXPECT_FALSE(scheduler.has_new_root_surface);
 
   EXPECT_FALSE(scheduler.swapped);
   EXPECT_EQ(0u, output_surface_ptr_->num_sent_frames());
   display.DrawAndSwap();
   EXPECT_TRUE(scheduler.swapped);
   EXPECT_EQ(1u, output_surface_ptr_->num_sent_frames());
-  SoftwareFrameData* software_data =
-      output_surface_ptr_->last_sent_frame().software_frame_data.get();
-  ASSERT_NE(nullptr, software_data);
-  EXPECT_EQ(gfx::Size(100, 100).ToString(), software_data->size.ToString());
-  EXPECT_EQ(gfx::Rect(0, 0, 100, 100).ToString(),
-            software_data->damage_rect.ToString());
+  EXPECT_EQ(gfx::Size(100, 100),
+            software_output_device_->viewport_pixel_size());
+  EXPECT_EQ(gfx::Rect(0, 0, 100, 100), software_output_device_->damage_rect());
 
   {
     // Only damaged portion should be swapped.
@@ -179,22 +237,20 @@ TEST_F(DisplayTest, DisplayDamaged) {
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
     pass->id = RenderPassId(1, 1);
 
-    pass_list.push_back(pass.Pass());
+    pass_list.push_back(std::move(pass));
     scheduler.ResetDamageForTest();
-    SubmitFrame(&pass_list, surface_id);
+    SubmitCompositorFrame(&pass_list, surface_id);
     EXPECT_TRUE(scheduler.damaged);
-    EXPECT_FALSE(scheduler.entire_display_damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
 
     scheduler.swapped = false;
     display.DrawAndSwap();
     EXPECT_TRUE(scheduler.swapped);
     EXPECT_EQ(2u, output_surface_ptr_->num_sent_frames());
-    software_data =
-        output_surface_ptr_->last_sent_frame().software_frame_data.get();
-    ASSERT_NE(nullptr, software_data);
-    EXPECT_EQ(gfx::Size(100, 100).ToString(), software_data->size.ToString());
-    EXPECT_EQ(gfx::Rect(10, 10, 1, 1).ToString(),
-              software_data->damage_rect.ToString());
+    EXPECT_EQ(gfx::Size(100, 100),
+              software_output_device_->viewport_pixel_size());
+    EXPECT_EQ(gfx::Rect(10, 10, 1, 1), software_output_device_->damage_rect());
   }
 
   {
@@ -204,11 +260,12 @@ TEST_F(DisplayTest, DisplayDamaged) {
     pass->damage_rect = gfx::Rect(10, 10, 0, 0);
     pass->id = RenderPassId(1, 1);
 
-    pass_list.push_back(pass.Pass());
+    pass_list.push_back(std::move(pass));
     scheduler.ResetDamageForTest();
-    SubmitFrame(&pass_list, surface_id);
+    SubmitCompositorFrame(&pass_list, surface_id);
     EXPECT_TRUE(scheduler.damaged);
-    EXPECT_FALSE(scheduler.entire_display_damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
 
     scheduler.swapped = false;
     display.DrawAndSwap();
@@ -223,16 +280,39 @@ TEST_F(DisplayTest, DisplayDamaged) {
     pass->damage_rect = gfx::Rect(10, 10, 10, 10);
     pass->id = RenderPassId(1, 1);
 
-    pass_list.push_back(pass.Pass());
+    pass_list.push_back(std::move(pass));
     scheduler.ResetDamageForTest();
-    SubmitFrame(&pass_list, surface_id);
+    SubmitCompositorFrame(&pass_list, surface_id);
     EXPECT_TRUE(scheduler.damaged);
-    EXPECT_FALSE(scheduler.entire_display_damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
 
     scheduler.swapped = false;
     display.DrawAndSwap();
     EXPECT_TRUE(scheduler.swapped);
     EXPECT_EQ(2u, output_surface_ptr_->num_sent_frames());
+  }
+
+  {
+    // Previous frame wasn't swapped, so next swap should have full damage.
+    pass = RenderPass::Create();
+    pass->output_rect = gfx::Rect(0, 0, 100, 100);
+    pass->damage_rect = gfx::Rect(10, 10, 0, 0);
+    pass->id = RenderPassId(1, 1);
+
+    pass_list.push_back(std::move(pass));
+    scheduler.ResetDamageForTest();
+    SubmitCompositorFrame(&pass_list, surface_id);
+    EXPECT_TRUE(scheduler.damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
+
+    scheduler.swapped = false;
+    display.DrawAndSwap();
+    EXPECT_TRUE(scheduler.swapped);
+    EXPECT_EQ(3u, output_surface_ptr_->num_sent_frames());
+    EXPECT_EQ(gfx::Rect(0, 0, 100, 100),
+              software_output_device_->damage_rect());
   }
 
   {
@@ -245,16 +325,17 @@ TEST_F(DisplayTest, DisplayDamaged) {
         base::Bind(&CopyCallback, &copy_called)));
     pass->id = RenderPassId(1, 1);
 
-    pass_list.push_back(pass.Pass());
+    pass_list.push_back(std::move(pass));
     scheduler.ResetDamageForTest();
-    SubmitFrame(&pass_list, surface_id);
+    SubmitCompositorFrame(&pass_list, surface_id);
     EXPECT_TRUE(scheduler.damaged);
-    EXPECT_FALSE(scheduler.entire_display_damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
 
     scheduler.swapped = false;
     display.DrawAndSwap();
     EXPECT_TRUE(scheduler.swapped);
-    EXPECT_EQ(3u, output_surface_ptr_->num_sent_frames());
+    EXPECT_EQ(4u, output_surface_ptr_->num_sent_frames());
     EXPECT_TRUE(copy_called);
   }
 
@@ -265,24 +346,25 @@ TEST_F(DisplayTest, DisplayDamaged) {
     pass->damage_rect = gfx::Rect(10, 10, 0, 0);
     pass->id = RenderPassId(1, 1);
 
-    pass_list.push_back(pass.Pass());
+    pass_list.push_back(std::move(pass));
     scheduler.ResetDamageForTest();
     scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     pass_list.swap(frame_data->render_pass_list);
 
     scoped_ptr<CompositorFrame> frame(new CompositorFrame);
-    frame->delegated_frame_data = frame_data.Pass();
+    frame->delegated_frame_data = std::move(frame_data);
     frame->metadata.latency_info.push_back(ui::LatencyInfo());
 
-    factory_.SubmitFrame(surface_id, frame.Pass(),
-                         SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(surface_id, std::move(frame),
+                                   SurfaceFactory::DrawCallback());
     EXPECT_TRUE(scheduler.damaged);
-    EXPECT_FALSE(scheduler.entire_display_damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
 
     scheduler.swapped = false;
     display.DrawAndSwap();
     EXPECT_TRUE(scheduler.swapped);
-    EXPECT_EQ(4u, output_surface_ptr_->num_sent_frames());
+    EXPECT_EQ(5u, output_surface_ptr_->num_sent_frames());
   }
 
   // Resize should cause a swap if no frame was swapped at the previous size.
@@ -290,30 +372,55 @@ TEST_F(DisplayTest, DisplayDamaged) {
     scheduler.swapped = false;
     display.Resize(gfx::Size(200, 200));
     EXPECT_FALSE(scheduler.swapped);
-    EXPECT_EQ(4u, output_surface_ptr_->num_sent_frames());
+    EXPECT_EQ(5u, output_surface_ptr_->num_sent_frames());
 
     pass = RenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 200, 200);
     pass->damage_rect = gfx::Rect(10, 10, 10, 10);
     pass->id = RenderPassId(1, 1);
 
-    pass_list.push_back(pass.Pass());
+    pass_list.push_back(std::move(pass));
     scheduler.ResetDamageForTest();
     scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     pass_list.swap(frame_data->render_pass_list);
 
     scoped_ptr<CompositorFrame> frame(new CompositorFrame);
-    frame->delegated_frame_data = frame_data.Pass();
+    frame->delegated_frame_data = std::move(frame_data);
 
-    factory_.SubmitFrame(surface_id, frame.Pass(),
-                         SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(surface_id, std::move(frame),
+                                   SurfaceFactory::DrawCallback());
     EXPECT_TRUE(scheduler.damaged);
-    EXPECT_FALSE(scheduler.entire_display_damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
 
     scheduler.swapped = false;
     display.Resize(gfx::Size(100, 100));
     EXPECT_TRUE(scheduler.swapped);
-    EXPECT_EQ(5u, output_surface_ptr_->num_sent_frames());
+    EXPECT_EQ(6u, output_surface_ptr_->num_sent_frames());
+  }
+
+  {
+    // Surface that's damaged completely should be resized and swapped.
+    pass = RenderPass::Create();
+    pass->output_rect = gfx::Rect(0, 0, 99, 99);
+    pass->damage_rect = gfx::Rect(0, 0, 99, 99);
+    pass->id = RenderPassId(1, 1);
+
+    pass_list.push_back(std::move(pass));
+    scheduler.ResetDamageForTest();
+    SubmitCompositorFrame(&pass_list, surface_id);
+    EXPECT_TRUE(scheduler.damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
+
+    scheduler.swapped = false;
+    display.DrawAndSwap();
+    EXPECT_TRUE(scheduler.swapped);
+    EXPECT_EQ(7u, output_surface_ptr_->num_sent_frames());
+    EXPECT_EQ(gfx::Size(100, 100),
+              software_output_device_->viewport_pixel_size());
+    EXPECT_EQ(gfx::Rect(0, 0, 100, 100),
+              software_output_device_->damage_rect());
   }
 
   factory_.Destroy(surface_id);
@@ -327,7 +434,7 @@ class MockedContext : public TestWebGraphicsContext3D {
 TEST_F(DisplayTest, Finish) {
   scoped_ptr<MockedContext> context(new MockedContext());
   MockedContext* context_ptr = context.get();
-  SetUpContext(context.Pass());
+  SetUpContext(std::move(context));
 
   EXPECT_CALL(*context_ptr, shallowFinishCHROMIUM()).Times(0);
   TestDisplayClient client;
@@ -339,7 +446,7 @@ TEST_F(DisplayTest, Finish) {
 
   TestDisplayScheduler scheduler(&display, &fake_begin_frame_source_,
                                  task_runner_.get());
-  display.Initialize(output_surface_.Pass(), &scheduler);
+  display.Initialize(std::move(output_surface_), &scheduler);
 
   SurfaceId surface_id(7u);
   display.SetSurfaceId(surface_id, 1.f);
@@ -353,9 +460,9 @@ TEST_F(DisplayTest, Finish) {
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
     pass->id = RenderPassId(1, 1);
-    pass_list.push_back(pass.Pass());
+    pass_list.push_back(std::move(pass));
 
-    SubmitFrame(&pass_list, surface_id);
+    SubmitCompositorFrame(&pass_list, surface_id);
   }
 
   display.DrawAndSwap();
@@ -379,9 +486,9 @@ TEST_F(DisplayTest, Finish) {
     pass->output_rect = gfx::Rect(0, 0, 200, 200);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
     pass->id = RenderPassId(1, 1);
-    pass_list.push_back(pass.Pass());
+    pass_list.push_back(std::move(pass));
 
-    SubmitFrame(&pass_list, surface_id);
+    SubmitCompositorFrame(&pass_list, surface_id);
   }
 
   display.DrawAndSwap();

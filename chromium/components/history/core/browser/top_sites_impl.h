@@ -5,15 +5,17 @@
 #ifndef COMPONENTS_HISTORY_CORE_BROWSER_TOP_SITES_IMPL_H_
 #define COMPONENTS_HISTORY_CORE_BROWSER_TOP_SITES_IMPL_H_
 
+#include <stddef.h>
+
 #include <list>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/scoped_observer.h"
 #include "base/synchronization/lock.h"
@@ -251,6 +253,10 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
                      const URLRows& deleted_rows,
                      const std::set<GURL>& favicon_urls) override;
 
+  // Vivaldi:: Rebuilds the database, removing on free/deleted pages.
+  void Vacuum();
+  void VacuumOnDBThread();
+
   // Ensures that non thread-safe methods are called on the correct thread.
   base::ThreadChecker thread_checker_;
 
@@ -272,7 +278,7 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
 
   // Timer that asks history for the top sites. This is used to make sure our
   // data stays in sync with history.
-  base::OneShotTimer<TopSitesImpl> timer_;
+  base::OneShotTimer timer_;
 
   // The time we started |timer_| at. Only valid if |timer_| is running.
   base::TimeTicks timer_start_time_;

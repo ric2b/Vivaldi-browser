@@ -108,10 +108,8 @@
         'window_tree_host_mac.h',
         'window_tree_host_mac.mm',
         'window_tree_host_observer.h',
-        'window_tree_host_ozone.cc',
-        'window_tree_host_ozone.h',
-        'window_tree_host_win.cc',
-        'window_tree_host_win.h',
+        'window_tree_host_platform.cc',
+        'window_tree_host_platform.h',
         'window_tree_host_x11.cc',
         'window_tree_host_x11.h',
       ],
@@ -140,6 +138,17 @@
           'dependencies': [
             '../ozone/ozone.gyp:ozone',
             '../ozone/ozone.gyp:ozone_base',
+          ],
+        }],
+        ['OS!="win" and OS!="android" and use_ozone==0', {
+          'sources!': [
+            'window_tree_host_platform.cc',
+            'window_tree_host_platform.h',
+          ],
+        }],
+        ['OS=="android"', {
+          'dependencies': [
+            '../platform_window/android/android_window.gyp:android_window',
           ],
         }],
       ],
@@ -201,72 +210,72 @@
       # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
       'msvs_disabled_warnings': [ 4267, ],
     },
-    #{
-    #  'target_name': 'aura_demo',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../../base/base.gyp:base',
-    #    '../../base/base.gyp:base_i18n',
-    #    '../../skia/skia.gyp:skia',
-    #    '../../third_party/icu/icu.gyp:icui18n',
-    #    '../../third_party/icu/icu.gyp:icuuc',
-    #    '../base/ui_base.gyp:ui_base',
-    #    '../compositor/compositor.gyp:compositor',
-    #    '../compositor/compositor.gyp:compositor_test_support',
-    #    '../events/events.gyp:events',
-    #    '../gfx/gfx.gyp:gfx',
-    #    '../gfx/gfx.gyp:gfx_geometry',
-    #    'aura',
-    #    'aura_test_support',
-    #  ],
-    #  'include_dirs': [
-    #    '..',
-    #  ],
-    #  'sources': [
-    #    'demo/demo_main.cc',
-    #  ],
-    #  'conditions': [
-    #    ['use_x11==1', {
-    #      'dependencies': [
-    #        '../gfx/x/gfx_x11.gyp:gfx_x11',
-    #      ],
-    #    }],
-    #  ]
-    #},
-    #{
-    #  'target_name': 'aura_bench',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    '../../base/base.gyp:base',
-    #    '../../base/base.gyp:base_i18n',
-    #    '../../cc/cc.gyp:cc',
-    #    '../../gpu/gpu.gyp:gles2_implementation',
-    #    '../../skia/skia.gyp:skia',
-    #    '../../third_party/icu/icu.gyp:icui18n',
-    #    '../../third_party/icu/icu.gyp:icuuc',
-    #    '../base/ui_base.gyp:ui_base',
-    #    '../compositor/compositor.gyp:compositor',
-    #    '../compositor/compositor.gyp:compositor_test_support',
-    #    '../events/events.gyp:events',
-    #    '../gfx/gfx.gyp:gfx',
-    #    '../gfx/gfx.gyp:gfx_geometry',
-    #    'aura',
-    #    'aura_test_support',
-    #  ],
-    #  'include_dirs': [
-    #    '..',
-    #  ],
-    #  'sources': [
-    #    'bench/bench_main.cc',
-    #  ],
-    #  'conditions': [
-    #    ['use_x11==1', {
-    #      'dependencies': [
-    #        '../gfx/x/gfx_x11.gyp:gfx_x11',
-    #      ],
-    #    }],
-    #  ]
-    #},
+    {
+      'target_name': 'aura_demo',
+      'type': 'executable',
+      'dependencies': [
+        '../../base/base.gyp:base',
+        '../../base/base.gyp:base_i18n',
+        '../../skia/skia.gyp:skia',
+        '../../third_party/icu/icu.gyp:icui18n',
+        '../../third_party/icu/icu.gyp:icuuc',
+        '../base/ui_base.gyp:ui_base',
+        '../compositor/compositor.gyp:compositor',
+        '../compositor/compositor.gyp:compositor_test_support',
+        '../events/events.gyp:events',
+        '../gfx/gfx.gyp:gfx',
+        '../gfx/gfx.gyp:gfx_geometry',
+        'aura',
+        'aura_test_support',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'sources': [
+        'demo/demo_main.cc',
+      ],
+      'conditions': [
+        ['use_x11==1', {
+          'dependencies': [
+            '../gfx/x/gfx_x11.gyp:gfx_x11',
+          ],
+        }],
+      ]
+    },
+    {
+      'target_name': 'aura_bench',
+      'type': 'executable',
+      'dependencies': [
+        '../../base/base.gyp:base',
+        '../../base/base.gyp:base_i18n',
+        '../../cc/cc.gyp:cc',
+        '../../gpu/gpu.gyp:gles2_implementation',
+        '../../skia/skia.gyp:skia',
+        '../../third_party/icu/icu.gyp:icui18n',
+        '../../third_party/icu/icu.gyp:icuuc',
+        '../base/ui_base.gyp:ui_base',
+        '../compositor/compositor.gyp:compositor',
+        '../compositor/compositor.gyp:compositor_test_support',
+        '../events/events.gyp:events',
+        '../gfx/gfx.gyp:gfx',
+        '../gfx/gfx.gyp:gfx_geometry',
+        'aura',
+        'aura_test_support',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'sources': [
+        'bench/bench_main.cc',
+      ],
+      'conditions': [
+        ['use_x11==1', {
+          'dependencies': [
+            '../gfx/x/gfx_x11.gyp:gfx_x11',
+          ],
+        }],
+      ]
+    },
     {
       'target_name': 'aura_unittests',
       'type': 'executable',
@@ -328,6 +337,13 @@
           ],
           'sources': [
             'aura_unittests.isolate',
+          ],
+          'conditions': [
+            ['use_x11 == 1', {
+              'dependencies': [
+                '../../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
+              ],
+            }],
           ],
         },
       ],

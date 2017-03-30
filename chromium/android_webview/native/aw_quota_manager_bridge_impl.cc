@@ -50,8 +50,8 @@ class GetOriginsTask : public base::RefCountedThreadSafe<GetOriginsTask> {
 
   void OnUsageAndQuotaObtained(const GURL& origin,
                                storage::QuotaStatusCode status_code,
-                               int64 usage,
-                               int64 quota);
+                               int64_t usage,
+                               int64_t quota);
 
   void CheckDone();
   void DoneOnUIThread();
@@ -60,8 +60,8 @@ class GetOriginsTask : public base::RefCountedThreadSafe<GetOriginsTask> {
   scoped_refptr<QuotaManager> quota_manager_;
 
   std::vector<std::string> origin_;
-  std::vector<int64> usage_;
-  std::vector<int64> quota_;
+  std::vector<int64_t> usage_;
+  std::vector<int64_t> quota_;
 
   size_t num_callbacks_to_wait_;
   size_t num_callbacks_received_;
@@ -112,8 +112,8 @@ void GetOriginsTask::OnOriginsObtained(const std::set<GURL>& origins,
 void GetOriginsTask::OnUsageAndQuotaObtained(
     const GURL& origin,
     storage::QuotaStatusCode status_code,
-    int64 usage,
-    int64 quota) {
+    int64_t usage,
+    int64_t quota) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (status_code == storage::kQuotaStatusOk) {
     origin_.push_back(origin.spec());
@@ -155,7 +155,8 @@ void RunOnUIThread(const base::Closure& task) {
 
 
 // static
-jlong GetDefaultNativeAwQuotaManagerBridge(JNIEnv* env, jclass clazz) {
+jlong GetDefaultNativeAwQuotaManagerBridge(JNIEnv* env,
+                                           const JavaParamRef<jclass>& clazz) {
   AwBrowserContext* browser_context =
       AwContentBrowserClient::GetAwBrowserContext();
 
@@ -179,7 +180,8 @@ AwQuotaManagerBridgeImpl::AwQuotaManagerBridgeImpl(
 
 AwQuotaManagerBridgeImpl::~AwQuotaManagerBridgeImpl() {}
 
-void AwQuotaManagerBridgeImpl::Init(JNIEnv* env, jobject object) {
+void AwQuotaManagerBridgeImpl::Init(JNIEnv* env,
+                                    const JavaParamRef<jobject>& object) {
   java_ref_ = JavaObjectWeakGlobalRef(env, object);
 }
 
@@ -201,7 +203,9 @@ QuotaManager* AwQuotaManagerBridgeImpl::GetQuotaManager() const {
   return quota_manager;
 }
 
-void AwQuotaManagerBridgeImpl::DeleteAllData(JNIEnv* env, jobject object) {
+void AwQuotaManagerBridgeImpl::DeleteAllData(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& object) {
   RunOnUIThread(base::Bind(&AwQuotaManagerBridgeImpl::DeleteAllDataOnUiThread,
                            this));
 }
@@ -221,7 +225,9 @@ void AwQuotaManagerBridgeImpl::DeleteAllDataOnUiThread() {
 }
 
 void AwQuotaManagerBridgeImpl::DeleteOrigin(
-    JNIEnv* env, jobject object, jstring origin) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>& object,
+    const JavaParamRef<jstring>& origin) {
   base::string16 origin_string(
       base::android::ConvertJavaStringToUTF16(env, origin));
   RunOnUIThread(base::Bind(&AwQuotaManagerBridgeImpl::DeleteOriginOnUiThread,
@@ -245,8 +251,9 @@ void AwQuotaManagerBridgeImpl::DeleteOriginOnUiThread(
       base::Bind(&base::DoNothing));
 }
 
-void AwQuotaManagerBridgeImpl::GetOrigins(
-    JNIEnv* env, jobject object, jint callback_id) {
+void AwQuotaManagerBridgeImpl::GetOrigins(JNIEnv* env,
+                                          const JavaParamRef<jobject>& object,
+                                          jint callback_id) {
   RunOnUIThread(base::Bind(&AwQuotaManagerBridgeImpl::GetOriginsOnUiThread,
                            this,
                            callback_id));
@@ -266,8 +273,8 @@ void AwQuotaManagerBridgeImpl::GetOriginsOnUiThread(jint callback_id) {
 void AwQuotaManagerBridgeImpl::GetOriginsCallbackImpl(
     int jcallback_id,
     const std::vector<std::string>& origin,
-    const std::vector<int64>& usage,
-    const std::vector<int64>& quota) {
+    const std::vector<int64_t>& usage,
+    const std::vector<int64_t>& quota) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
@@ -288,8 +295,8 @@ namespace {
 void OnUsageAndQuotaObtained(
     const AwQuotaManagerBridgeImpl::QuotaUsageCallback& ui_callback,
     storage::QuotaStatusCode status_code,
-    int64 usage,
-    int64 quota) {
+    int64_t usage,
+    int64_t quota) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (status_code != storage::kQuotaStatusOk) {
     usage = 0;
@@ -304,8 +311,9 @@ void OnUsageAndQuotaObtained(
 } // namespace
 
 void AwQuotaManagerBridgeImpl::GetUsageAndQuotaForOrigin(
-    JNIEnv* env, jobject object,
-    jstring origin,
+    JNIEnv* env,
+    const JavaParamRef<jobject>& object,
+    const JavaParamRef<jstring>& origin,
     jint callback_id,
     bool is_quota) {
   base::string16 origin_string(
@@ -339,8 +347,10 @@ void AwQuotaManagerBridgeImpl::GetUsageAndQuotaForOriginOnUiThread(
                  base::Bind(&OnUsageAndQuotaObtained, ui_callback)));
 }
 
-void AwQuotaManagerBridgeImpl::QuotaUsageCallbackImpl(
-    int jcallback_id, bool is_quota, int64 usage, int64 quota) {
+void AwQuotaManagerBridgeImpl::QuotaUsageCallbackImpl(int jcallback_id,
+                                                      bool is_quota,
+                                                      int64_t usage,
+                                                      int64_t quota) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);

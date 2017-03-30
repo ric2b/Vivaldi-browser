@@ -5,6 +5,8 @@
 #ifndef NET_CERT_X509_UTIL_NSS_H_
 #define NET_CERT_X509_UTIL_NSS_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -47,7 +49,7 @@ void GetSubjectAltName(CERTCertificate* cert_handle,
 // |format|. Returns an empty collection on failure.
 X509Certificate::OSCertHandles CreateOSCertHandlesFromBytes(
     const char* data,
-    int length,
+    size_t length,
     X509Certificate::Format format);
 
 // Reads a single certificate from |pickle_iter| and returns a platform-specific

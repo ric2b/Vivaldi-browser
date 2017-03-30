@@ -37,8 +37,8 @@ class NET_EXPORT ProxyConfig {
  public:
   // ProxyRules describes the "manual" proxy settings.
   // TODO(eroman): Turn this into a class.
-  // TODO(marq): Update the enum names; "TYPE_SINGLE_PROXY" really means
-  //             the same set of proxies are used for all requests.
+  // TODO(crbug.com/546383): Update the enum names; "TYPE_SINGLE_PROXY" really
+  // means the same set of proxies are used for all requests.
   struct NET_EXPORT ProxyRules {
     enum Type {
       TYPE_NO_RULES,
@@ -174,9 +174,8 @@ class NET_EXPORT ProxyConfig {
 
   void ClearAutomaticSettings();
 
-  // Creates a Value dump of this configuration. The caller is responsible for
-  // deleting the returned value.
-  base::DictionaryValue* ToValue() const;
+  // Creates a Value dump of this configuration.
+  scoped_ptr<base::DictionaryValue> ToValue() const;
 
   ProxyRules& proxy_rules() {
     return proxy_rules_;

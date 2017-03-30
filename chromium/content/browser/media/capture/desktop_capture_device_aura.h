@@ -7,11 +7,12 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/desktop_media_id.h"
-#include "media/capture/screen_capture_device_core.h"
-#include "media/video/capture/video_capture_device.h"
+#include "media/capture/content/screen_capture_device_core.h"
+#include "media/capture/video/video_capture_device.h"
 
 namespace aura {
 class Window;
@@ -23,8 +24,10 @@ namespace content {
 class CONTENT_EXPORT DesktopCaptureDeviceAura
     : public media::VideoCaptureDevice {
  public:
-  // Creates a VideoCaptureDevice for the Aura desktop.
-  static media::VideoCaptureDevice* Create(const DesktopMediaID& source);
+  // Creates a VideoCaptureDevice for the Aura desktop.  If |source| does not
+  // reference a registered aura window, returns nullptr instead.
+  static scoped_ptr<media::VideoCaptureDevice> Create(
+      const DesktopMediaID& source);
 
   ~DesktopCaptureDeviceAura() override;
 
@@ -34,7 +37,7 @@ class CONTENT_EXPORT DesktopCaptureDeviceAura
   void StopAndDeAllocate() override;
 
  private:
-  DesktopCaptureDeviceAura(const DesktopMediaID& source);
+  explicit DesktopCaptureDeviceAura(const DesktopMediaID& source);
 
   scoped_ptr<media::ScreenCaptureDeviceCore> core_;
 

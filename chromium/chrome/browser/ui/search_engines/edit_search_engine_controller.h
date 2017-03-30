@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -33,6 +34,16 @@ class EditSearchEngineControllerDelegate {
 // for the Edit Search Engine dialog.
 class EditSearchEngineController {
  public:
+  // An enum to match the AddSearchProvider UMA enum. Values should not be
+  // changed; new ones must be added at the bottom.
+  enum EditSearchEngineActions {
+    ADD_SEARCH_PROVIDER_CALLED = 0,
+    CONFIRMATION_DIALOG_SHOWN = 1,
+    CONFIRMATION_DIALOG_CONFIRMED = 2,
+    CONFIRMATION_DIALOG_CANCELLED = 3,
+    NUM_EDIT_SEARCH_ENGINE_ACTIONS
+  };
+
   // The |template_url| and/or |edit_keyword_delegate| may be NULL.
   EditSearchEngineController(
       TemplateURL* template_url,

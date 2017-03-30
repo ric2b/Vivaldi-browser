@@ -4,8 +4,11 @@
 
 #include "device/serial/serial_connection_factory.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "device/serial/serial_connection.h"
 #include "device/serial/serial_io_handler.h"
 
@@ -53,7 +56,7 @@ class SerialConnectionFactory::ConnectTask
   mojo::InterfaceRequest<serial::Connection> connection_request_;
   mojo::InterfaceRequest<serial::DataSink> sink_;
   mojo::InterfaceRequest<serial::DataSource> source_;
-  mojo::InterfacePtr<serial::DataSourceClient> source_client_;
+  mojo::InterfacePtrInfo<serial::DataSourceClient> source_client_;
   scoped_refptr<SerialIoHandler> io_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(ConnectTask);
@@ -73,9 +76,9 @@ void SerialConnectionFactory::CreateConnection(
     mojo::InterfaceRequest<serial::DataSink> sink,
     mojo::InterfaceRequest<serial::DataSource> source,
     mojo::InterfacePtr<serial::DataSourceClient> source_client) {
-  scoped_refptr<ConnectTask> task(
-      new ConnectTask(this, path, options.Pass(), connection_request.Pass(),
-                      sink.Pass(), source.Pass(), source_client.Pass()));
+  scoped_refptr<ConnectTask> task(new ConnectTask(
+      this, path, std::move(options), std::move(connection_request),
+      std::move(sink), std::move(source), std::move(source_client)));
   task->Run();
 }
 
@@ -92,11 +95,11 @@ SerialConnectionFactory::ConnectTask::ConnectTask(
     mojo::InterfacePtr<serial::DataSourceClient> source_client)
     : factory_(factory),
       path_(path),
-      options_(options.Pass()),
-      connection_request_(connection_request.Pass()),
-      sink_(sink.Pass()),
-      source_(source.Pass()),
-      source_client_(source_client.Pass()) {
+      options_(std::move(options)),
+      connection_request_(std::move(connection_request)),
+      sink_(std::move(sink)),
+      source_(std::move(source)),
+      source_client_(source_client.PassInterface()) {
   if (!options_) {
     options_ = serial::ConnectionOptions::New();
   }
@@ -125,8 +128,9 @@ void SerialConnectionFactory::ConnectTask::OnConnected(bool success) {
     return;
   }
 
-  new SerialConnection(io_handler_, sink_.Pass(), source_.Pass(),
-                       source_client_.Pass(), connection_request_.Pass());
+  new SerialConnection(io_handler_, std::move(sink_), std::move(source_),
+                       mojo::MakeProxy(std::move(source_client_)),
+                       std::move(connection_request_));
 }
 
 }  // namespace device

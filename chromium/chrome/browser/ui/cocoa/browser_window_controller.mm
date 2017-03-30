@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <numeric>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/mac/bundle_locations.h"
@@ -15,10 +16,8 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"  // IDC_*
-#import "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client_factory.h"
+#include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
@@ -32,17 +31,19 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
-#include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_instant_controller.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #import "chrome/browser/ui/cocoa/background_gradient_view.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_controller.h"
+#import "chrome/browser/ui/cocoa/bookmarks/bookmark_bubble_observer_cocoa.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_editor_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_cocoa.h"
+#import "chrome/browser/ui/cocoa/browser_window_command_handler.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller_private.h"
 #import "chrome/browser/ui/cocoa/browser_window_layout.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
@@ -74,29 +75,32 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
-#include "chrome/browser/ui/toolbar/encoding_menu_controller.h"
 #include "chrome/browser/ui/translate/translate_bubble_model_impl.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/command.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
-#include "components/web_modal/popup_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
-#include "ui/gfx/mac/scoped_ns_disable_screen_updates.h"
+#import "ui/gfx/mac/coordinate_conversion.h"
+#include "ui/gfx/mac/scoped_cocoa_disable_screen_updates.h"
+#include "ui/gfx/screen.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -183,6 +187,17 @@ using content::Referrer;
 using content::RenderWidgetHostView;
 using content::WebContents;
 
+namespace {
+
+void SetUpBrowserWindowCommandHandler(NSWindow* window) {
+  // Make the window handle browser window commands.
+  [base::mac::ObjCCastStrict<ChromeEventProcessingWindow>(window)
+      setCommandHandler:[[[BrowserWindowCommandHandler alloc] init]
+                            autorelease]];
+}
+
+}  // namespace
+
 @interface NSWindow (NSPrivateApis)
 // Note: These functions are private, use -[NSObject respondsToSelector:]
 // before calling them.
@@ -226,6 +241,8 @@ using content::WebContents;
     browser_.reset(browser);
     ownsBrowser_ = ownIt;
     NSWindow* window = [self window];
+    SetUpBrowserWindowCommandHandler(window);
+
     // Make the content view for the window have a layer. This will make all
     // sub-views have layers. This is necessary to ensure correct layer
     // ordering of all child views and their layers.
@@ -321,7 +338,8 @@ using content::WebContents;
     toolbarController_.reset([[ToolbarController alloc]
         initWithCommands:browser->command_controller()->command_updater()
                  profile:browser->profile()
-                 browser:browser]);
+                 browser:browser
+          resizeDelegate:self]);
     [toolbarController_ setHasToolbar:[self hasToolbar]
                        hasLocationBar:[self hasLocationBar]];
 
@@ -369,12 +387,12 @@ using content::WebContents;
 
     [self layoutSubviews];
 
-    // For a popup window, |desiredContentRect| contains the desired height of
-    // the content, not of the whole window.  Now that all the views are laid
-    // out, measure the current content area size and grow if needed.  The
-    // window has not been placed onscreen yet, so this extra resize will not
-    // cause visible jank.
-    if (browser_->is_type_popup()) {
+    // For non-trusted, non-app popup windows, |desiredContentRect| contains the
+    // desired height of the content, not of the whole window.  Now that all the
+    // views are laid out, measure the current content area size and grow if
+    // needed. The window has not been placed onscreen yet, so this extra resize
+    // will not cause visible jank.
+    if (chrome::SavedBoundsAreContentBounds(browser_.get())) {
       CGFloat deltaH = desiredContentRect.height() -
                        NSHeight([[self tabContentArea] frame]);
       // Do not shrink the window, as that may break minimum size invariants.
@@ -416,6 +434,12 @@ using content::WebContents;
             extensions::ExtensionKeybindingRegistry::ALL_EXTENSIONS,
             windowShim_.get()));
 
+    PrefService* prefs = browser_->profile()->GetPrefs();
+    shouldHideFullscreenToolbar_ =
+        prefs->GetBoolean(prefs::kHideFullscreenToolbar);
+
+    blockLayoutSubviews_ = NO;
+
     // We are done initializing now.
     initializing_ = NO;
   }
@@ -450,6 +474,7 @@ using content::WebContents;
   [downloadShelfController_ browserWillBeDestroyed];
   [bookmarkBarController_ browserWillBeDestroyed];
   [avatarButtonController_ browserWillBeDestroyed];
+  [bookmarkBubbleController_ browserWillBeDestroyed];
 
   [super dealloc];
 }
@@ -560,7 +585,7 @@ using content::WebContents;
 // going away) will again call to close the window when it's finally ready.
 - (BOOL)windowShouldClose:(id)sender {
   // Disable updates while closing all tabs to avoid flickering.
-  gfx::ScopedNSDisableScreenUpdates disabler;
+  gfx::ScopedCocoaDisableScreenUpdates disabler;
   // Give beforeunload handlers the chance to cancel the close before we hide
   // the window below.
   if (!browser_->ShouldCloseWindow())
@@ -599,12 +624,15 @@ using content::WebContents;
 
 // Called right after our window became the main window.
 - (void)windowDidBecomeMain:(NSNotification*)notification {
-  if (chrome::GetLastActiveBrowser() != browser_) {
+  if (chrome::GetLastActiveBrowser() != browser_.get()) {
     BrowserList::SetLastActive(browser_.get());
-    [self saveWindowPositionIfNeeded];
   }
+  // Always saveWindowPositionIfNeeded when becoming main, not just
+  // when |browser_| is not the last active browser. See crbug.com/536280 .
+  [self saveWindowPositionIfNeeded];
 
-  [[[self window] contentView] cr_recursivelyInvokeBlock:^(id view) {
+  NSView* rootView = [[[self window] contentView] superview];
+  [rootView cr_recursivelyInvokeBlock:^(id view) {
       if ([view conformsToProtocol:@protocol(ThemedWindowDrawing)])
         [view windowDidChangeActive];
   }];
@@ -614,7 +642,8 @@ using content::WebContents;
 }
 
 - (void)windowDidResignMain:(NSNotification*)notification {
-  [[[self window] contentView] cr_recursivelyInvokeBlock:^(id view) {
+  NSView* rootView = [[[self window] contentView] superview];
+  [rootView cr_recursivelyInvokeBlock:^(id view) {
       if ([view conformsToProtocol:@protocol(ThemedWindowDrawing)])
         [view windowDidChangeActive];
   }];
@@ -683,6 +712,10 @@ using content::WebContents;
 
 // Called when we have been unminimized.
 - (void)windowDidDeminiaturize:(NSNotification *)notification {
+  // Make sure the window's show_state (which is now ui::SHOW_STATE_NORMAL)
+  // gets saved.
+  [self saveWindowPositionIfNeeded];
+
   // Let the selected RenderWidgetHostView know, so that it can tell plugins.
   if (WebContents* contents = [self webContents]) {
     if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
@@ -953,7 +986,7 @@ using content::WebContents;
   // window is getting shorter, the toolbar will move up within the window.
   // Soon after, a call to layoutSubviews corrects its position. Passing NO to
   // setFrame:display: should keep the toolbarView's intermediate position
-  // hidden, as should the prior call to NSDisableScreenUpdates(). For some
+  // hidden, as should the prior call to disable screen updates. For some
   // reason, neither prevents the toolbarView's intermediate position from
   // becoming visible. Its subsequent appearance in its correct location causes
   // the flicker. It may be that the Appkit assumes that updating the window
@@ -1018,7 +1051,7 @@ using content::WebContents;
     return;
 
   // Disable screen updates to prevent flickering.
-  gfx::ScopedNSDisableScreenUpdates disabler;
+  gfx::ScopedCocoaDisableScreenUpdates disabler;
 
   // Grow or shrink the window by the amount of the height change.  We adjust
   // the window height only in two cases:
@@ -1053,218 +1086,11 @@ using content::WebContents;
     // Send new resize rect to foreground tab.
     if (WebContents* contents = [self webContents]) {
       if (content::RenderViewHost* rvh = contents->GetRenderViewHost()) {
-        rvh->ResizeRectChanged(windowShim_->GetRootWindowResizerRect());
+        rvh->GetWidget()->ResizeRectChanged(
+            windowShim_->GetRootWindowResizerRect());
       }
     }
   }
-}
-
-// Update a toggle state for an NSMenuItem if modified.
-// Take care to ensure |item| looks like a NSMenuItem.
-// Called by validateUserInterfaceItem:.
-- (void)updateToggleStateWithTag:(NSInteger)tag forItem:(id)item {
-  if (![item respondsToSelector:@selector(state)] ||
-      ![item respondsToSelector:@selector(setState:)])
-    return;
-
-  // On Windows this logic happens in bookmark_bar_view.cc.  On the
-  // Mac we're a lot more MVC happy so we've moved it into a
-  // controller.  To be clear, this simply updates the menu item; it
-  // does not display the bookmark bar itself.
-  if (tag == IDC_SHOW_BOOKMARK_BAR) {
-    bool toggled = windowShim_->IsBookmarkBarVisible();
-    NSInteger oldState = [(NSMenuItem*)item state];
-    NSInteger newState = toggled ? NSOnState : NSOffState;
-    if (oldState != newState)
-      [item setState:newState];
-  }
-
-  // Update the checked/Unchecked state of items in the encoding menu.
-  // On Windows, this logic is part of |EncodingMenuModel| in
-  // browser/ui/views/toolbar_view.h.
-  EncodingMenuController encoding_controller;
-  if (encoding_controller.DoesCommandBelongToEncodingMenu(tag)) {
-    DCHECK(browser_.get());
-    Profile* profile = browser_->profile();
-    DCHECK(profile);
-    WebContents* current_tab =
-        browser_->tab_strip_model()->GetActiveWebContents();
-    if (!current_tab)
-      return;
-
-    const std::string encoding = current_tab->GetEncoding();
-
-    bool toggled = encoding_controller.IsItemChecked(profile, encoding, tag);
-    NSInteger oldState = [(NSMenuItem*)item state];
-    NSInteger newState = toggled ? NSOnState : NSOffState;
-    if (oldState != newState)
-      [item setState:newState];
-  }
-}
-
-// Called to validate menu and toolbar items when this window is key. All the
-// items we care about have been set with the |-commandDispatch:| or
-// |-commandDispatchUsingKeyModifiers:| actions and a target of FirstResponder
-// in IB. If it's not one of those, let it continue up the responder chain to be
-// handled elsewhere. We pull out the tag as the cross-platform constant to
-// differentiate and dispatch the various commands.
-// NOTE: we might have to handle state for app-wide menu items,
-// although we could cheat and directly ask the app controller if our
-// command_updater doesn't support the command. This may or may not be an issue,
-// too early to tell.
-- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
-  SEL action = [item action];
-  BOOL enable = NO;
-  if (action == @selector(commandDispatch:) ||
-      action == @selector(commandDispatchUsingKeyModifiers:)) {
-    NSInteger tag = [item tag];
-    if (chrome::SupportsCommand(browser_.get(), tag)) {
-      // Generate return value (enabled state)
-      enable = chrome::IsCommandEnabled(browser_.get(), tag);
-      switch (tag) {
-        case IDC_CLOSE_TAB:
-          // Disable "close tab" if the receiving window is not tabbed.
-          // We simply check whether the item has a keyboard shortcut set here;
-          // app_controller_mac.mm actually determines whether the item should
-          // be enabled.
-          if (NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item))
-            enable &= !![[menuItem keyEquivalent] length];
-          break;
-        case IDC_FULLSCREEN: {
-          if (NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item)) {
-            NSString* menuTitle = l10n_util::GetNSString(
-                [self isInAppKitFullscreen] && ![self inPresentationMode]
-                    ? IDS_EXIT_FULLSCREEN_MAC
-                    : IDS_ENTER_FULLSCREEN_MAC);
-            [menuItem setTitle:menuTitle];
-
-            if (!chrome::mac::SupportsSystemFullscreen())
-              [menuItem setHidden:YES];
-          }
-          break;
-        }
-        case IDC_PRESENTATION_MODE: {
-          if (NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item)) {
-            NSString* menuTitle = l10n_util::GetNSString(
-                [self inPresentationMode] ? IDS_EXIT_PRESENTATION_MAC :
-                                            IDS_ENTER_PRESENTATION_MAC);
-            [menuItem setTitle:menuTitle];
-          }
-          break;
-        }
-        case IDC_SHOW_SIGNIN: {
-          Profile* original_profile =
-              browser_->profile()->GetOriginalProfile();
-          [AppController updateSigninItem:item
-                               shouldShow:enable
-                           currentProfile:original_profile];
-          break;
-        }
-        case IDC_BOOKMARK_PAGE: {
-          // Extensions have the ability to hide the bookmark page menu item.
-          // This only affects the bookmark page menu item under the main menu.
-          // The bookmark page menu item under the wrench menu has its
-          // visibility controlled by WrenchMenuModel.
-          bool shouldHide =
-              chrome::ShouldRemoveBookmarkThisPageUI(browser_->profile());
-          NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item);
-          [menuItem setHidden:shouldHide];
-          break;
-        }
-        case IDC_BOOKMARK_ALL_TABS: {
-          // Extensions have the ability to hide the bookmark all tabs menu
-          // item.  This only affects the bookmark page menu item under the main
-          // menu.  The bookmark page menu item under the wrench menu has its
-          // visibility controlled by WrenchMenuModel.
-          bool shouldHide =
-              chrome::ShouldRemoveBookmarkOpenPagesUI(browser_->profile());
-          NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item);
-          [menuItem setHidden:shouldHide];
-          break;
-        }
-        default:
-          // Special handling for the contents of the Text Encoding submenu. On
-          // Mac OS, instead of enabling/disabling the top-level menu item, we
-          // enable/disable the submenu's contents (per Apple's HIG).
-          EncodingMenuController encoding_controller;
-          if (encoding_controller.DoesCommandBelongToEncodingMenu(tag)) {
-            enable &= chrome::IsCommandEnabled(browser_.get(),
-                                               IDC_ENCODING_MENU) ? YES : NO;
-          }
-      }
-
-      // If the item is toggleable, find its toggle state and
-      // try to update it.  This is a little awkward, but the alternative is
-      // to check after a commandDispatch, which seems worse.
-      [self updateToggleStateWithTag:tag forItem:item];
-    }
-  }
-  return enable;
-}
-
-// Called when the user picks a menu or toolbar item when this window is key.
-// Calls through to the browser object to execute the command. This assumes that
-// the command is supported and doesn't check, otherwise it would have been
-// disabled in the UI in validateUserInterfaceItem:.
-- (void)commandDispatch:(id)sender {
-  DCHECK(sender);
-  // Identify the actual BWC to which the command should be dispatched. It might
-  // belong to a background window, yet this controller gets it because it is
-  // the foreground window's controller and thus in the responder chain. Some
-  // senders don't have this problem (for example, menus only operate on the
-  // foreground window), so this is only an issue for senders that are part of
-  // windows.
-  BrowserWindowController* targetController = self;
-  if ([sender respondsToSelector:@selector(window)])
-    targetController = [[sender window] windowController];
-  DCHECK([targetController isKindOfClass:[BrowserWindowController class]]);
-  DCHECK(targetController->browser_.get());
-  chrome::ExecuteCommand(targetController->browser_.get(), [sender tag]);
-}
-
-// Same as |-commandDispatch:|, but executes commands using a disposition
-// determined by the key flags. If the window is in the background and the
-// command key is down, ignore the command key, but process any other modifiers.
-- (void)commandDispatchUsingKeyModifiers:(id)sender {
-  DCHECK(sender);
-
-  if (![sender isEnabled]) {
-    // This code is reachable e.g. if the user mashes the back button, queuing
-    // up a bunch of events before the button's enabled state is updated:
-    // http://crbug.com/63254
-    return;
-  }
-
-  // See comment above for why we do this.
-  BrowserWindowController* targetController = self;
-  if ([sender respondsToSelector:@selector(window)])
-    targetController = [[sender window] windowController];
-  DCHECK([targetController isKindOfClass:[BrowserWindowController class]]);
-  DCHECK(targetController->browser_.get());
-
-  NSInteger command = [sender tag];
-  NSUInteger modifierFlags = [[NSApp currentEvent] modifierFlags];
-  if ((command == IDC_RELOAD) &&
-      (modifierFlags & (NSShiftKeyMask | NSControlKeyMask))) {
-    command = IDC_RELOAD_IGNORING_CACHE;
-    // Mask off Shift and Control so they don't affect the disposition below.
-    modifierFlags &= ~(NSShiftKeyMask | NSControlKeyMask);
-  }
-  if (![[sender window] isMainWindow]) {
-    // Remove the command key from the flags, it means "keep the window in
-    // the background" in this case.
-    modifierFlags &= ~NSCommandKeyMask;
-  }
-  chrome::ExecuteCommandWithDisposition(
-      targetController->browser_.get(), command,
-      ui::WindowOpenDispositionFromNSEventWithFlags(
-          [NSApp currentEvent], modifierFlags));
-}
-
-// Called when another part of the internal codebase needs to execute a
-// command.
-- (void)executeCommand:(int)command {
-  chrome::ExecuteCommand(browser_.get(), command);
 }
 
 - (BOOL)handledByExtensionCommand:(NSEvent*)event
@@ -1309,7 +1135,7 @@ using content::WebContents;
   if (newContents) {
     manager = PermissionBubbleManager::FromWebContents(newContents);
     if (manager)
-      manager->DisplayPendingRequests(browser_.get());
+      manager->DisplayPendingRequests();
   }
 }
 
@@ -1463,7 +1289,7 @@ using content::WebContents;
   DCHECK_GT([tabViews count], 0U);
 
   // Disable screen updates so that this appears as a single visual change.
-  gfx::ScopedNSDisableScreenUpdates disabler;
+  gfx::ScopedCocoaDisableScreenUpdates disabler;
 
   // Set the window size. Need to do this before we detach the tab so it's
   // still in the window. We have to flip the coordinates as that's what
@@ -1590,8 +1416,7 @@ using content::WebContents;
 }
 
 - (BOOL)shouldUseNewAvatarButton {
-  return switches::IsNewAvatarMenu() &&
-      profiles::IsRegularOrGuestSession(browser_.get());
+  return profiles::IsRegularOrGuestSession(browser_.get());
 }
 
 - (BOOL)isBookmarkBarVisible {
@@ -1638,8 +1463,10 @@ using content::WebContents;
 }
 
 - (NSWindow*)createFullscreenWindow {
-  return [[[FullscreenWindow alloc] initForScreen:[[self window] screen]]
-           autorelease];
+  NSWindow* window = [[[FullscreenWindow alloc]
+      initForScreen:[[self window] screen]] autorelease];
+  SetUpBrowserWindowCommandHandler(window);
+  return window;
 }
 
 - (NSInteger)numberOfTabs {
@@ -1675,8 +1502,9 @@ using content::WebContents;
   if (!contents)
     return NO;
 
-  return !web_modal::PopupManager::FromWebContents(contents)->
-      IsWebModalDialogActive(contents);
+  const web_modal::WebContentsModalDialogManager* manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(contents);
+  return !manager || !manager->IsDialogActive();
 }
 
 // TabStripControllerDelegate protocol.
@@ -1735,8 +1563,8 @@ using content::WebContents;
   }];
 }
 
-- (ui::ThemeProvider*)themeProvider {
-  return ThemeServiceFactory::GetForProfile(browser_->profile());
+- (const ui::ThemeProvider*)themeProvider {
+  return &ThemeService::GetThemeProviderForProfile(browser_->profile());
 }
 
 - (ThemedWindowStyle)themedWindowStyle {
@@ -1769,36 +1597,39 @@ using content::WebContents;
 // Show the bookmark bubble (e.g. user just clicked on the STAR).
 - (void)showBookmarkBubbleForURL:(const GURL&)url
                alreadyBookmarked:(BOOL)alreadyMarked {
-  if (!bookmarkBubbleController_) {
+  if (bookmarkBubbleObserver_.get())
+    return;
+
+  bookmarkBubbleObserver_.reset(new BookmarkBubbleObserverCocoa(self));
+
+  if (chrome::ToolkitViewsDialogsEnabled()) {
+    chrome::ShowBookmarkBubbleViewsAtPoint(
+        gfx::ScreenPointFromNSPoint(
+            [[self window] convertBaseToScreen:[self bookmarkBubblePoint]]),
+        [[self window] contentView], bookmarkBubbleObserver_.get(),
+        browser_.get(), url, alreadyMarked);
+  } else {
     BookmarkModel* model =
         BookmarkModelFactory::GetForProfile(browser_->profile());
-    ChromeBookmarkClient* client =
-        ChromeBookmarkClientFactory::GetForProfile(browser_->profile());
+    bookmarks::ManagedBookmarkService* managed =
+        ManagedBookmarkServiceFactory::GetForProfile(browser_->profile());
     const BookmarkNode* node = model->GetMostRecentlyAddedUserNodeForURL(url);
-    bookmarkBubbleController_ =
-        [[BookmarkBubbleController alloc] initWithParentWindow:[self window]
-                                                        client:client
-                                                         model:model
-                                                          node:node
-                                             alreadyBookmarked:alreadyMarked];
+    bookmarkBubbleController_ = [[BookmarkBubbleController alloc]
+        initWithParentWindow:[self window]
+              bubbleObserver:bookmarkBubbleObserver_.get()
+                     managed:managed
+                       model:model
+                        node:node
+           alreadyBookmarked:alreadyMarked];
     [bookmarkBubbleController_ showWindow:self];
-    NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
-    [center addObserver:self
-               selector:@selector(bookmarkBubbleWindowWillClose:)
-                   name:NSWindowWillCloseNotification
-                 object:[bookmarkBubbleController_ window]];
   }
+  DCHECK(bookmarkBubbleObserver_);
 }
 
-// Nil out the weak bookmark bubble controller reference.
-- (void)bookmarkBubbleWindowWillClose:(NSNotification*)notification {
-  DCHECK_EQ([notification object], [bookmarkBubbleController_ window]);
-
-  NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
-  [center removeObserver:self
-                    name:NSWindowWillCloseNotification
-                  object:[bookmarkBubbleController_ window]];
+- (void)bookmarkBubbleClosed {
+  // Nil out the weak bookmark bubble controller reference.
   bookmarkBubbleController_ = nil;
+  bookmarkBubbleObserver_.reset();
 }
 
 // Handle the editBookmarkNode: action sent from bookmark bubble controllers.
@@ -1850,11 +1681,11 @@ using content::WebContents;
           sourceLanguage,
           targetLanguage));
   scoped_ptr<TranslateBubbleModel> model(
-      new TranslateBubbleModelImpl(step, uiDelegate.Pass()));
-  translateBubbleController_ = [[TranslateBubbleController alloc]
-                                 initWithParentWindow:self
-                                                model:model.Pass()
-                                          webContents:contents];
+      new TranslateBubbleModelImpl(step, std::move(uiDelegate)));
+  translateBubbleController_ =
+      [[TranslateBubbleController alloc] initWithParentWindow:self
+                                                        model:std::move(model)
+                                                  webContents:contents];
   [translateBubbleController_ showWindow:nil];
 
   NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
@@ -2078,10 +1909,23 @@ willAnimateFromState:(BookmarkBar::State)oldState
   return [[toolbarView superview] convertRect:anchorRect toView:nil];
 }
 
+- (BOOL)isLayoutSubviewsBlocked {
+  return blockLayoutSubviews_;
+}
+
+- (BOOL)isActiveTabContentsControllerResizeBlocked {
+  return
+      [[tabStripController_ activeTabContentsController] blockFullscreenResize];
+}
+
 - (void)sheetDidEnd:(NSWindow*)sheet
          returnCode:(NSInteger)code
             context:(void*)context {
   [sheet orderOut:self];
+}
+
+- (PresentationModeController*)presentationModeController {
+  return presentationModeController_.get();
 }
 
 - (void)executeExtensionCommand:(const std::string&)extension_id
@@ -2091,6 +1935,15 @@ willAnimateFromState:(BookmarkBar::State)oldState
   DCHECK(!command.global());
   extension_keybinding_registry_->ExecuteCommand(extension_id,
                                                  command.accelerator());
+}
+
+- (void)setMediaState:(TabMediaState)mediaState {
+  static_cast<BrowserWindowCocoa*>([self browserWindow])
+      ->UpdateMediaState(mediaState);
+}
+
+- (TabMediaState)mediaState {
+  return static_cast<BrowserWindowCocoa*>([self browserWindow])->media_state();
 }
 
 @end  // @implementation BrowserWindowController
@@ -2133,6 +1986,16 @@ willAnimateFromState:(BookmarkBar::State)oldState
   [self showFullscreenExitBubbleIfNecessary];
 }
 
+- (void)setFullscreenToolbarHidden:(BOOL)shouldHide {
+  if (shouldHideFullscreenToolbar_ == shouldHide)
+    return;
+
+  [presentationModeController_ setToolbarFraction:0.0];
+  shouldHideFullscreenToolbar_ = shouldHide;
+  if ([self isInAppKitFullscreen])
+    [self updateFullscreenWithToolbar:!shouldHideFullscreenToolbar_];
+}
+
 - (BOOL)isInAnyFullscreenMode {
   return [self isInImmersiveFullscreen] || [self isInAppKitFullscreen];
 }
@@ -2142,9 +2005,10 @@ willAnimateFromState:(BookmarkBar::State)oldState
 }
 
 - (BOOL)isInAppKitFullscreen {
-  return ([[self window] styleMask] & NSFullScreenWindowMask) ==
-             NSFullScreenWindowMask ||
-         enteringAppKitFullscreen_;
+  return !exitingAppKitFullscreen_ &&
+         (([[self window] styleMask] & NSFullScreenWindowMask) ==
+              NSFullScreenWindowMask ||
+          enteringAppKitFullscreen_);
 }
 
 - (void)enterExtensionFullscreenForURL:(const GURL&)url
@@ -2162,7 +2026,20 @@ willAnimateFromState:(BookmarkBar::State)oldState
 
 - (void)enterWebContentFullscreenForURL:(const GURL&)url
                              bubbleType:(ExclusiveAccessBubbleType)bubbleType {
-  [self enterImmersiveFullscreen];
+  // HTML5 Fullscreen should only use AppKit fullscreen in 10.10+.
+  // However, if the user is using multiple monitors and turned off
+  // "Separate Space in Each Display", use Immersive Fullscreen so
+  // that the other monitors won't blank out.
+  gfx::Screen* screen = gfx::Screen::GetScreenFor([[self window] contentView]);
+  BOOL hasMultipleMonitors = screen && screen->GetNumDisplays() > 1;
+  if (chrome::mac::SupportsSystemFullscreen() &&
+      base::mac::IsOSYosemiteOrLater() &&
+      !(hasMultipleMonitors && ![NSScreen screensHaveSeparateSpaces])) {
+    [self enterAppKitFullscreen];
+  } else {
+    [self enterImmersiveFullscreen];
+  }
+
   if (!url.is_empty())
     [self updateFullscreenExitBubbleURL:url bubbleType:bubbleType];
 }
@@ -2181,6 +2058,10 @@ willAnimateFromState:(BookmarkBar::State)oldState
          [presentationModeController_ inPresentationMode] &&
          presentationModeController_.get().slidingStyle ==
              fullscreen_mac::OMNIBOX_TABS_HIDDEN;
+}
+
+- (BOOL)shouldHideFullscreenToolbar {
+  return shouldHideFullscreenToolbar_;
 }
 
 - (void)resizeFullscreenWindow {

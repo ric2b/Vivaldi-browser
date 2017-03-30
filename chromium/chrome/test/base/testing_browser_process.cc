@@ -73,6 +73,7 @@ TestingBrowserProcess::TestingBrowserProcess()
       local_state_(nullptr),
       io_thread_(nullptr),
       system_request_context_(nullptr),
+      rappor_service_(nullptr),
       platform_part_(new TestingBrowserProcessPlatformPart()) {
 #if defined(ENABLE_EXTENSIONS)
   extensions_browser_client_.reset(
@@ -85,7 +86,7 @@ TestingBrowserProcess::TestingBrowserProcess()
 TestingBrowserProcess::~TestingBrowserProcess() {
   EXPECT_FALSE(local_state_);
 #if defined(ENABLE_CONFIGURATION_POLICY)
-  SetBrowserPolicyConnector(nullptr);
+  ShutdownBrowserPolicyConnector();
 #endif
 #if defined(ENABLE_EXTENSIONS)
   extensions::ExtensionsBrowserClient::Set(nullptr);
@@ -102,7 +103,8 @@ void TestingBrowserProcess::ResourceDispatcherHostCreated() {
 void TestingBrowserProcess::EndSession() {
 }
 
-MetricsServicesManager* TestingBrowserProcess::GetMetricsServicesManager() {
+metrics_services_manager::MetricsServicesManager*
+TestingBrowserProcess::GetMetricsServicesManager() {
   return nullptr;
 }
 
@@ -111,7 +113,7 @@ metrics::MetricsService* TestingBrowserProcess::metrics_service() {
 }
 
 rappor::RapporService* TestingBrowserProcess::rappor_service() {
-  return nullptr;
+  return rappor_service_;
 }
 
 IOThread* TestingBrowserProcess::io_thread() {
@@ -148,20 +150,23 @@ PrefService* TestingBrowserProcess::local_state() {
   return local_state_;
 }
 
-chrome_variations::VariationsService*
-    TestingBrowserProcess::variations_service() {
+variations::VariationsService* TestingBrowserProcess::variations_service() {
   return nullptr;
 }
 
-PromoResourceService* TestingBrowserProcess::promo_resource_service() {
+web_resource::PromoResourceService*
+TestingBrowserProcess::promo_resource_service() {
   return nullptr;
 }
 
 policy::BrowserPolicyConnector*
     TestingBrowserProcess::browser_policy_connector() {
 #if defined(ENABLE_CONFIGURATION_POLICY)
-  if (!browser_policy_connector_)
+  if (!browser_policy_connector_) {
+    EXPECT_FALSE(created_browser_policy_connector_);
+    created_browser_policy_connector_ = true;
     browser_policy_connector_ = platform_part_->CreateBrowserPolicyConnector();
+  }
   return browser_policy_connector_.get();
 #else
   return nullptr;
@@ -206,7 +211,8 @@ StatusTray* TestingBrowserProcess::status_tray() {
   return nullptr;
 }
 
-SafeBrowsingService* TestingBrowserProcess::safe_browsing_service() {
+safe_browsing::SafeBrowsingService*
+TestingBrowserProcess::safe_browsing_service() {
 #if defined(OS_IOS)
   NOTIMPLEMENTED();
   return nullptr;
@@ -255,8 +261,7 @@ IntranetRedirectDetector* TestingBrowserProcess::intranet_redirect_detector() {
 void TestingBrowserProcess::CreateDevToolsHttpProtocolHandler(
     chrome::HostDesktopType host_desktop_type,
     const std::string& ip,
-    uint16 port) {
-}
+    uint16_t port) {}
 
 unsigned int TestingBrowserProcess::AddRefModule() {
   return ++module_ref_count_;
@@ -326,7 +331,7 @@ DownloadRequestLimiter* TestingBrowserProcess::download_request_limiter() {
   return nullptr;
 }
 
-ChromeNetLog* TestingBrowserProcess::net_log() {
+net_log::ChromeNetLog* TestingBrowserProcess::net_log() {
   return nullptr;
 }
 
@@ -385,7 +390,7 @@ gcm::GCMDriver* TestingBrowserProcess::gcm_driver() {
   return nullptr;
 }
 
-memory::OomPriorityManager* TestingBrowserProcess::GetOomPriorityManager() {
+memory::TabManager* TestingBrowserProcess::GetTabManager() {
   return nullptr;
 }
 
@@ -419,7 +424,8 @@ void TestingBrowserProcess::SetLocalState(PrefService* local_state) {
     notification_ui_manager_.reset();
 #endif
 #if defined(ENABLE_CONFIGURATION_POLICY)
-    SetBrowserPolicyConnector(nullptr);
+    ShutdownBrowserPolicyConnector();
+    created_browser_policy_connector_ = false;
 #endif
   }
   local_state_ = local_state;
@@ -429,25 +435,28 @@ void TestingBrowserProcess::SetIOThread(IOThread* io_thread) {
   io_thread_ = io_thread;
 }
 
-void TestingBrowserProcess::SetBrowserPolicyConnector(
-    policy::BrowserPolicyConnector* connector) {
+void TestingBrowserProcess::ShutdownBrowserPolicyConnector() {
 #if defined(ENABLE_CONFIGURATION_POLICY)
-  if (browser_policy_connector_) {
+  if (browser_policy_connector_)
     browser_policy_connector_->Shutdown();
-  }
-  browser_policy_connector_.reset(connector);
+  browser_policy_connector_.reset();
 #else
   CHECK(false);
 #endif
 }
 
 void TestingBrowserProcess::SetSafeBrowsingService(
-    SafeBrowsingService* sb_service) {
+    safe_browsing::SafeBrowsingService* sb_service) {
 #if defined(OS_IOS)
   NOTIMPLEMENTED();
 #else
   sb_service_ = sb_service;
 #endif
+}
+
+void TestingBrowserProcess::SetRapporService(
+    rappor::RapporService* rappor_service) {
+  rappor_service_ = rappor_service;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

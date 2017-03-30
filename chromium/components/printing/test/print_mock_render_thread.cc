@@ -4,9 +4,12 @@
 
 #include "components/printing/test/print_mock_render_thread.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/printing/test/mock_printer.h"
 #include "ipc/ipc_sync_message.h"
 #include "printing/page_range.h"
@@ -55,10 +58,12 @@ bool PrintMockRenderThread::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPrintedPagesCount,
                         OnDidGetPrintedPagesCount)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrintPage, OnDidPrintPage)
+#if defined(ENABLE_PRINT_PREVIEW)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPreviewPageCount,
                         OnDidGetPreviewPageCount)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPreviewPage, OnDidPreviewPage)
     IPC_MESSAGE_HANDLER(PrintHostMsg_CheckForCancel, OnCheckForCancel)
+#endif
 #if defined(OS_WIN)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DuplicateSection, OnDuplicateSection)
 #endif
@@ -94,6 +99,7 @@ void PrintMockRenderThread::OnDidPrintPage(
   printer_->PrintPage(params);
 }
 
+#if defined(ENABLE_PRINT_PREVIEW)
 void PrintMockRenderThread::OnDidGetPreviewPageCount(
     const PrintHostMsg_DidGetPreviewPageCount_Params& params) {
   print_preview_pages_remaining_ = params.page_count;
@@ -105,12 +111,13 @@ void PrintMockRenderThread::OnDidPreviewPage(
   print_preview_pages_remaining_--;
 }
 
-void PrintMockRenderThread::OnCheckForCancel(int32 preview_ui_id,
+void PrintMockRenderThread::OnCheckForCancel(int32_t preview_ui_id,
                                              int preview_request_id,
                                              bool* cancel) {
   *cancel =
       (print_preview_pages_remaining_ == print_preview_cancel_page_number_);
 }
+#endif  // defined(ENABLE_PRINT_PREVIEW)
 
 void PrintMockRenderThread::OnUpdatePrintSettings(
     int document_cookie,

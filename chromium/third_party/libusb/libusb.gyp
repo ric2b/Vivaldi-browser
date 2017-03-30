@@ -23,6 +23,12 @@
         'src/libusb/version.h',
         'src/libusb/version_nano.h',
       ],
+      'variables': {
+        'clang_warning_flags': [
+          # guid_eq in windows_usb.c is unused.
+          '-Wno-unused-function',
+        ],
+      },
       'include_dirs': [
         'src',
         'src/libusb',
@@ -60,6 +66,11 @@
             'OS_LINUX=1',
             '_GNU_SOURCE=1',
           ],
+        }],
+        ['chromeos==1', {
+          'defines': [
+            'USBI_TIMERFD_AVAILABLE',
+          ]
         }],
         ['use_udev==1', {
           'sources': [

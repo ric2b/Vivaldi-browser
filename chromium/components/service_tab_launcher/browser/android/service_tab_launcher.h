@@ -8,6 +8,7 @@
 #include "base/android/jni_android.h"
 #include "base/callback_forward.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 
 namespace content {
@@ -44,7 +45,7 @@ class ServiceTabLauncher {
   static bool RegisterServiceTabLauncher(JNIEnv* env);
 
  private:
-  friend struct DefaultSingletonTraits<ServiceTabLauncher>;
+  friend struct base::DefaultSingletonTraits<ServiceTabLauncher>;
 
   ServiceTabLauncher();
   ~ServiceTabLauncher();

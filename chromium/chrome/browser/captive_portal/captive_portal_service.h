@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_CAPTIVE_PORTAL_CAPTIVE_PORTAL_SERVICE_H_
 #define CHROME_BROWSER_CAPTIVE_PORTAL_CAPTIVE_PORTAL_SERVICE_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_member.h"
 #include "base/threading/non_thread_safe.h"
@@ -190,7 +190,7 @@ class CaptivePortalService : public KeyedService, public base::NonThreadSafe {
   // the Link Doctor.
   BooleanPrefMember resolve_errors_with_web_service_;
 
-  base::OneShotTimer<CaptivePortalService> check_captive_portal_timer_;
+  base::OneShotTimer check_captive_portal_timer_;
 
   static TestingState testing_state_;
 

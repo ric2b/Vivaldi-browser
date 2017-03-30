@@ -39,7 +39,6 @@
       <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_BMM_TREE_JS" file="bookmark_manager/js/bmm/bookmark_tree.js" type="BINDATA" />
       <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_DND_JS" file="bookmark_manager/js/dnd.js" type="BINDATA" />
       <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_BMM_JS" file="bookmark_manager/js/bmm.js" type="BINDATA" />
-      <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_CSS_JS" file="bookmark_manager/css/bmm.css.js" type="BINDATA" />
       <!-- Gaia auth extension -->
       <include name="IDR_GAIA_AUTH_MAIN" file="gaia_auth/main.html" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_GAIA_AUTH_MAIN_JS" file="gaia_auth/main.js" type="BINDATA" />
@@ -102,8 +101,10 @@
       </if>
       <if expr="not is_android">
         <include name="IDR_FEEDBACK_DEFAULT_HTML" file="feedback/html/default.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_FEEDBACK_SYSINFO_HTML" file="feedback/html/sys_info.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_FEEDBACK_EVENT_HANDLER_JS" file="feedback/js/event_handler.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_FEEDBACK_FEEDBACK_JS" file="feedback/js/feedback.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_FEEDBACK_SYSINFO_JS" file="feedback/js/sys_info.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_FEEDBACK_TAKE_SCREENSHOT_JS" file="feedback/js/take_screenshot.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_FEEDBACK_TOPBAR_HANDLER_JS" file="feedback/js/topbar_handlers.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_FEEDBACK_FEEDBACK_CSS" file="feedback/css/feedback.css" type="BINDATA" />
@@ -144,30 +145,15 @@
         <include name="IDR_FIRST_RUN_DIALOG_ICON_128" file="chromeos/first_run/app/icon/128.png" type="BINDATA" />
         <include name="IDR_FIRST_RUN_DIALOG_ICON_256" file="chromeos/first_run/app/icon/256.png" type="BINDATA" />
       </if>
-      <if expr="chromeos">
-        <!-- Network status. -->
-        <include name="IDR_NETWORK_CONFIGURATION_STATUS_HTML" file="chromeos/network_configuration/status.html" allowexternalscript="true" type="BINDATA" />
-        <include name="IDR_NETWORK_CONFIGURATION_STATUS_CSS" file="chromeos/network_configuration/css/status.css" type="BINDATA" />
-        <include name="IDR_NETWORK_CONFIGURATION_NETWORK_STATUS_JS" file="chromeos/network_configuration/js/network_status.js" type="BINDATA" />
-        <include name="IDR_NETWORK_CONFIGURATION_MAIN_STATUS_JS" file="chromeos/network_configuration/js/main_status.js" type="BINDATA" />
-        <!-- Network configuration. -->
-        <include name="IDR_NETWORK_CONFIGURATION_CONFIG_HTML" file="chromeos/network_configuration/config.html" allowexternalscript="true" type="BINDATA" />
-        <include name="IDR_NETWORK_CONFIGURATION_CONFIG_CSS" file="chromeos/network_configuration/css/config.css" type="BINDATA" />
-        <include name="IDR_NETWORK_CONFIGURATION_NETWORK_CONFIG_JS" file="chromeos/network_configuration/js/network_config.js" type="BINDATA" />
-        <include name="IDR_NETWORK_CONFIGURATION_MAIN_CONFIG_JS" file="chromeos/network_configuration/js/main_config.js" type="BINDATA" />
-      </if>
       <if expr="enable_settings_app">
         <include name="IDR_SETTINGS_APP_JS" file="settings_app/settings_app.js" type="BINDATA" />
       </if>
       <if expr="enable_plugins">
         <include name="IDR_PDF_INDEX_CSS" file="pdf/index.css" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_PDF_INDEX_HTML" file="pdf/index.html" allowexternalscript="true" type="BINDATA" />
-        <include name="IDR_PDF_INDEX_MATERIAL_CSS" file="pdf/index-material.css" allowexternalscript="true" type="BINDATA" />
-        <include name="IDR_PDF_INDEX_MATERIAL_HTML" file="pdf/index-material.html" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_PDF_MAIN_JS" file="pdf/main.js" type="BINDATA" />
         <include name="IDR_PDF_PDF_JS" file="pdf/pdf.js" type="BINDATA" />
-        <include name="IDR_PDF_SETTINGS_JS" file="pdf/settings.js" type="BINDATA" />
-        <include name="IDR_PDF_UI_MANAGER_JS" file="pdf/ui_manager.js" type="BINDATA" />
+        <include name="IDR_PDF_UI_MANAGER_JS" file="pdf/toolbar_manager.js" type="BINDATA" />
         <include name="IDR_PDF_VIEWPORT_JS" file="pdf/viewport.js" type="BINDATA" />
         <include name="IDR_PDF_OPEN_PDF_PARAMS_PARSER_JS" file="pdf/open_pdf_params_parser.js" type="BINDATA" />
         <include name="IDR_PDF_NAVIGATOR_JS" file="pdf/navigator.js" type="BINDATA" />
@@ -177,41 +163,26 @@
         <include name="IDR_PDF_BROWSER_API_JS" file="pdf/browser_api.js" type="BINDATA" />
         <include name="IDR_PDF_CONTENT_SCRIPT_JS" file="pdf/content_script.js" type="BINDATA" />
 
+        <include name="IDR_PDF_SHARED_ICON_STYLE_CSS" file="pdf/elements/shared-icon-style.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_BOOKMARK_CSS" file="pdf/elements/viewer-bookmark/viewer-bookmark.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_BOOKMARK_HTML" file="pdf/elements/viewer-bookmark/viewer-bookmark.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_BOOKMARK_JS" file="pdf/elements/viewer-bookmark/viewer-bookmark.js" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_BOOKMARKS_CONTENT_HTML" file="pdf/elements/viewer-bookmarks-content/viewer-bookmarks-content.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_BOOKMARKS_CONTENT_JS" file="pdf/elements/viewer-bookmarks-content/viewer-bookmarks-content.js" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_BUTTON_CSS" file="pdf/elements/viewer-button/viewer-button.css" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_BUTTON_HTML" file="pdf/elements/viewer-button/viewer-button.html" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_BUTTON_JS" file="pdf/elements/viewer-button/viewer-button.js" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_ERROR_SCREEN_CSS" file="pdf/elements/viewer-error-screen/viewer-error-screen.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_ERROR_SCREEN_HTML" file="pdf/elements/viewer-error-screen/viewer-error-screen.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_ERROR_SCREEN_JS" file="pdf/elements/viewer-error-screen/viewer-error-screen.js" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_ERROR_SCREEN_LEGACY_CSS" file="pdf/elements/viewer-error-screen-legacy/viewer-error-screen-legacy.css" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_ERROR_SCREEN_LEGACY_HTML" file="pdf/elements/viewer-error-screen-legacy/viewer-error-screen-legacy.html" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_ERROR_SCREEN_LEGACY_JS" file="pdf/elements/viewer-error-screen-legacy/viewer-error-screen-legacy.js" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PAGE_INDICATOR_CSS" file="pdf/elements/viewer-page-indicator/viewer-page-indicator.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PAGE_INDICATOR_HTML" file="pdf/elements/viewer-page-indicator/viewer-page-indicator.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PAGE_INDICATOR_JS" file="pdf/elements/viewer-page-indicator/viewer-page-indicator.js" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PAGE_SELECTOR_CSS" file="pdf/elements/viewer-page-selector/viewer-page-selector.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PAGE_SELECTOR_HTML" file="pdf/elements/viewer-page-selector/viewer-page-selector.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PAGE_SELECTOR_JS" file="pdf/elements/viewer-page-selector/viewer-page-selector.js" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_PASSWORD_SCREEN_CSS" file="pdf/elements/viewer-password-screen/viewer-password-screen.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PASSWORD_SCREEN_HTML" file="pdf/elements/viewer-password-screen/viewer-password-screen.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PASSWORD_SCREEN_JS" file="pdf/elements/viewer-password-screen/viewer-password-screen.js" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_PASSWORD_SCREEN_LEGACY_CSS" file="pdf/elements/viewer-password-screen-legacy/viewer-password-screen-legacy.css" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_PASSWORD_SCREEN_LEGACY_HTML" file="pdf/elements/viewer-password-screen-legacy/viewer-password-screen-legacy.html" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_PASSWORD_SCREEN_LEGACY_JS" file="pdf/elements/viewer-password-screen-legacy/viewer-password-screen-legacy.js" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PDF_TOOLBAR_CSS" file="pdf/elements/viewer-pdf-toolbar/viewer-pdf-toolbar.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PDF_TOOLBAR_HTML" file="pdf/elements/viewer-pdf-toolbar/viewer-pdf-toolbar.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_PDF_TOOLBAR_JS" file="pdf/elements/viewer-pdf-toolbar/viewer-pdf-toolbar.js" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_PROGRESS_BAR_CSS" file="pdf/elements/viewer-progress-bar/viewer-progress-bar.css" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_PROGRESS_BAR_HTML" file="pdf/elements/viewer-progress-bar/viewer-progress-bar.html" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_PROGRESS_BAR_JS" file="pdf/elements/viewer-progress-bar/viewer-progress-bar.js" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_TOOLBAR_CSS" file="pdf/elements/viewer-toolbar/viewer-toolbar.css" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_TOOLBAR_HTML" file="pdf/elements/viewer-toolbar/viewer-toolbar.html" type="BINDATA" />
-        <include name="IDR_PDF_VIEWER_TOOLBAR_JS" file="pdf/elements/viewer-toolbar/viewer-toolbar.js" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_TOOLBAR_DROPDOWN_CSS" file="pdf/elements/viewer-toolbar-dropdown/viewer-toolbar-dropdown.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_TOOLBAR_DROPDOWN_HTML" file="pdf/elements/viewer-toolbar-dropdown/viewer-toolbar-dropdown.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_TOOLBAR_DROPDOWN_JS" file="pdf/elements/viewer-toolbar-dropdown/viewer-toolbar-dropdown.js" type="BINDATA" />
@@ -221,20 +192,6 @@
         <include name="IDR_PDF_VIEWER_ZOOM_SELECTOR_CSS" file="pdf/elements/viewer-zoom-toolbar/viewer-zoom-toolbar.css" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_ZOOM_SELECTOR_HTML" file="pdf/elements/viewer-zoom-toolbar/viewer-zoom-toolbar.html" type="BINDATA" />
         <include name="IDR_PDF_VIEWER_ZOOM_SELECTOR_JS" file="pdf/elements/viewer-zoom-toolbar/viewer-zoom-toolbar.js" type="BINDATA" />
-
-        <!-- Button images. -->
-        <include name="IDR_PDF_BUTTON_LOW_1" file="pdf/elements/viewer-button/img/lowDPI/button_fit_page.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_LOW_2" file="pdf/elements/viewer-button/img/lowDPI/button_fit_width.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_LOW_3" file="pdf/elements/viewer-button/img/lowDPI/button_zoom_out.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_LOW_4" file="pdf/elements/viewer-button/img/lowDPI/button_zoom_in.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_LOW_5" file="pdf/elements/viewer-button/img/lowDPI/button_save.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_LOW_6" file="pdf/elements/viewer-button/img/lowDPI/button_print.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_HIGH_1" file="pdf/elements/viewer-button/img/hiDPI/button_fit_page.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_HIGH_2" file="pdf/elements/viewer-button/img/hiDPI/button_fit_width.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_HIGH_3" file="pdf/elements/viewer-button/img/hiDPI/button_zoom_out.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_HIGH_4" file="pdf/elements/viewer-button/img/hiDPI/button_zoom_in.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_HIGH_5" file="pdf/elements/viewer-button/img/hiDPI/button_save.png" type="BINDATA" />
-        <include name="IDR_PDF_BUTTON_HIGH_6" file="pdf/elements/viewer-button/img/hiDPI/button_print.png" type="BINDATA" />
       </if>
       <include name="IDR_CRYPTOTOKEN_UTIL_JS" file="cryptotoken/util.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_B64_JS" file="cryptotoken/b64.js" type="BINDATA" />
@@ -242,6 +199,7 @@
       <include name="IDR_CRYPTOTOKEN_COUNTDOWN_JS" file="cryptotoken/countdown.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_COUNTDOWNTIMER_JS" file="cryptotoken/countdowntimer.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_SHA256_JS" file="cryptotoken/sha256.js" type="BINDATA" />
+      <include name="IDR_CRYPTOTOKEN_TIMER_JS" file="cryptotoken/timer.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_HIDGNUBBYDEVICE_JS" file="cryptotoken/hidgnubbydevice.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_USBGNUBBYDEVICE_JS" file="cryptotoken/usbgnubbydevice.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_GNUBBIES_JS" file="cryptotoken/gnubbies.js" type="BINDATA" />
@@ -276,7 +234,9 @@
       <include name="IDR_CRYPTOTOKEN_GOOGLECORPINDIVIDUALATTEST_JS" file="cryptotoken/googlecorpindividualattest.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_APPROVEDORIGINS_JS" file="cryptotoken/approvedorigins.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_WEBREQUESTSENDER_JS" file="cryptotoken/webrequestsender.js" type="BINDATA" />
+      <include name="IDR_CRYPTOTOKEN_WINDOW_TIMER_JS" file="cryptotoken/window-timer.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_WATCHDOG_JS" file="cryptotoken/watchdog.js" type="BINDATA" />
+      <include name="IDR_CRYPTOTOKEN_LOGGING_JS" file="cryptotoken/logging.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_CRYPTOTOKENAPPROVEDORIGIN_JS" file="cryptotoken/cryptotokenapprovedorigins.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_CRYPTOTOKENORIGINCHECK_JS" file="cryptotoken/cryptotokenorigincheck.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_CRYPTOTOKENBACKGROUND_JS" file="cryptotoken/cryptotokenbackground.js" type="BINDATA" />

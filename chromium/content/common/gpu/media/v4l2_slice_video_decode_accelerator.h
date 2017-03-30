@@ -6,9 +6,12 @@
 #define CONTENT_COMMON_GPU_MEDIA_V4L2_SLICE_VIDEO_DECODE_ACCELERATOR_H_
 
 #include <linux/videodev2.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <queue>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -42,12 +45,11 @@ class CONTENT_EXPORT V4L2SliceVideoDecodeAccelerator
   ~V4L2SliceVideoDecodeAccelerator() override;
 
   // media::VideoDecodeAccelerator implementation.
-  bool Initialize(media::VideoCodecProfile profile,
-                  VideoDecodeAccelerator::Client* client) override;
+  bool Initialize(const Config& config, Client* client) override;
   void Decode(const media::BitstreamBuffer& bitstream_buffer) override;
   void AssignPictureBuffers(
       const std::vector<media::PictureBuffer>& buffers) override;
-  void ReusePictureBuffer(int32 picture_buffer_id) override;
+  void ReusePictureBuffer(int32_t picture_buffer_id) override;
   void Flush() override;
   void Reset() override;
   void Destroy() override;
@@ -63,7 +65,7 @@ class CONTENT_EXPORT V4L2SliceVideoDecodeAccelerator
   // Record for input buffers.
   struct InputRecord {
     InputRecord();
-    int32 input_id;
+    int32_t input_id;
     void* address;
     size_t length;
     size_t bytes_used;
@@ -75,7 +77,7 @@ class CONTENT_EXPORT V4L2SliceVideoDecodeAccelerator
     OutputRecord();
     bool at_device;
     bool at_client;
-    int32 picture_id;
+    int32_t picture_id;
     EGLImageKHR egl_image;
     EGLSyncKHR egl_sync;
     bool cleared;
@@ -87,6 +89,9 @@ class CONTENT_EXPORT V4L2SliceVideoDecodeAccelerator
   // Input bitstream buffer size for up to 4k streams.
   const size_t kInputBufferMaxSizeFor4k = 4 * kInputBufferMaxSizeFor1080p;
   const size_t kNumInputBuffers = 16;
+
+  // Input format V4L2 fourccs this class supports.
+  static const uint32_t supported_input_fourccs_[];
 
   //
   // Below methods are used by accelerator implementations.
@@ -150,7 +155,7 @@ class CONTENT_EXPORT V4L2SliceVideoDecodeAccelerator
 
   // Dismiss all |picture_buffer_ids| via Client::DismissPictureBuffer()
   // and signal |done| after finishing.
-  void DismissPictures(std::vector<int32> picture_buffer_ids,
+  void DismissPictures(std::vector<int32_t> picture_buffer_ids,
                        base::WaitableEvent* done);
 
   // Task to finish initialization on decoder_thread_.
@@ -251,7 +256,7 @@ class CONTENT_EXPORT V4L2SliceVideoDecodeAccelerator
 
   // Auto-destruction reference for EGLSync (for message-passing).
   struct EGLSyncKHRRef;
-  void ReusePictureBufferTask(int32 picture_buffer_id,
+  void ReusePictureBufferTask(int32_t picture_buffer_id,
                               scoped_ptr<EGLSyncKHRRef> egl_sync_ref);
 
   // Called to actually send |dec_surface| to the client, after it is decoded
@@ -361,7 +366,7 @@ class CONTENT_EXPORT V4L2SliceVideoDecodeAccelerator
 
   // Surfaces sent to client to keep references to them while displayed.
   using V4L2DecodeSurfaceByPictureBufferId =
-      std::map<int32, scoped_refptr<V4L2DecodeSurface>>;
+      std::map<int32_t, scoped_refptr<V4L2DecodeSurface>>;
   V4L2DecodeSurfaceByPictureBufferId surfaces_at_display_;
 
   // Record for decoded pictures that can be sent to PictureReady.

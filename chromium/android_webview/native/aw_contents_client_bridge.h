@@ -56,15 +56,25 @@ class AwContentsClientBridge : public AwContentsClientBridgeBase {
       override;
   bool ShouldOverrideUrlLoading(const base::string16& url,
                                 bool has_user_gesture,
-                                bool is_redirect) override;
+                                bool is_redirect,
+                                bool is_main_frame) override;
 
   // Methods called from Java.
-  void ProceedSslError(JNIEnv* env, jobject obj, jboolean proceed, jint id);
-  void ProvideClientCertificateResponse(JNIEnv* env, jobject object,
-      jint request_id, jobjectArray encoded_chain_ref,
-      jobject private_key_ref);
-  void ConfirmJsResult(JNIEnv*, jobject, int id, jstring prompt);
-  void CancelJsResult(JNIEnv*, jobject, int id);
+  void ProceedSslError(JNIEnv* env,
+                       const base::android::JavaRef<jobject>& obj,
+                       jboolean proceed,
+                       jint id);
+  void ProvideClientCertificateResponse(
+      JNIEnv* env,
+      const base::android::JavaRef<jobject>& object,
+      jint request_id,
+      const base::android::JavaRef<jobjectArray>& encoded_chain_ref,
+      const base::android::JavaRef<jobject>& private_key_ref);
+  void ConfirmJsResult(JNIEnv*,
+                       const base::android::JavaRef<jobject>&,
+                       int id,
+                       const base::android::JavaRef<jstring>& prompt);
+  void CancelJsResult(JNIEnv*, const base::android::JavaRef<jobject>&, int id);
 
  private:
   void HandleErrorInClientCertificateResponse(int id);

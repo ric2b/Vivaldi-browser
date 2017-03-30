@@ -7,7 +7,7 @@
 
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_base_factory.h"
@@ -62,7 +62,8 @@ class UserCloudPolicyManagerFactoryChromeOS
       scoped_refptr<base::SequencedTaskRunner> background_task_runner);
 
  private:
-  friend struct DefaultSingletonTraits<UserCloudPolicyManagerFactoryChromeOS>;
+  friend struct base::DefaultSingletonTraits<
+      UserCloudPolicyManagerFactoryChromeOS>;
 
   UserCloudPolicyManagerFactoryChromeOS();
   ~UserCloudPolicyManagerFactoryChromeOS() override;

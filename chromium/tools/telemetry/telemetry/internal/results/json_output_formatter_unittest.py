@@ -14,6 +14,7 @@ from telemetry.internal.results import json_output_formatter
 from telemetry.internal.results import page_test_results
 from telemetry import page as page_module
 from telemetry.timeline import trace_data
+from telemetry.value import improvement_direction
 from telemetry.value import scalar
 from telemetry.value import trace
 
@@ -46,7 +47,8 @@ class JsonOutputFormatterTest(unittest.TestCase):
     self._output.truncate(0)
 
     results.WillRunPage(self._story_set[0])
-    v0 = scalar.ScalarValue(results.current_page, 'foo', 'seconds', 3)
+    v0 = scalar.ScalarValue(results.current_page, 'foo', 'seconds', 3,
+                            improvement_direction=improvement_direction.DOWN)
     results.AddValue(v0)
     results.DidRunPage(self._story_set[0])
 
@@ -59,12 +61,14 @@ class JsonOutputFormatterTest(unittest.TestCase):
         self._formatter.benchmark_metadata)
 
     self.assertEquals(d['format_version'], '0.2')
-    self.assertEquals(d['benchmark_name'], 'benchmark_name')
+    self.assertEquals(d['next_version'], '0.3')
+    self.assertEquals(d['benchmark_metadata']['name'], 'benchmark_name')
 
   def testAsDictWithOnePage(self):
     results = page_test_results.PageTestResults()
     results.WillRunPage(self._story_set[0])
-    v0 = scalar.ScalarValue(results.current_page, 'foo', 'seconds', 3)
+    v0 = scalar.ScalarValue(results.current_page, 'foo', 'seconds', 3,
+                            improvement_direction=improvement_direction.DOWN)
     results.AddValue(v0)
     results.DidRunPage(self._story_set[0])
 
@@ -102,12 +106,14 @@ class JsonOutputFormatterTest(unittest.TestCase):
   def testAsDictWithTwoPages(self):
     results = page_test_results.PageTestResults()
     results.WillRunPage(self._story_set[0])
-    v0 = scalar.ScalarValue(results.current_page, 'foo', 'seconds', 3)
+    v0 = scalar.ScalarValue(results.current_page, 'foo', 'seconds', 3,
+                            improvement_direction=improvement_direction.DOWN)
     results.AddValue(v0)
     results.DidRunPage(self._story_set[0])
 
     results.WillRunPage(self._story_set[1])
-    v1 = scalar.ScalarValue(results.current_page, 'bar', 'seconds', 4)
+    v1 = scalar.ScalarValue(results.current_page, 'bar', 'seconds', 4,
+                            improvement_direction=improvement_direction.DOWN)
     results.AddValue(v1)
     results.DidRunPage(self._story_set[1])
 
@@ -121,7 +127,8 @@ class JsonOutputFormatterTest(unittest.TestCase):
 
   def testAsDictWithSummaryValueOnly(self):
     results = page_test_results.PageTestResults()
-    v = scalar.ScalarValue(None, 'baz', 'seconds', 5)
+    v = scalar.ScalarValue(None, 'baz', 'seconds', 5,
+                           improvement_direction=improvement_direction.DOWN)
     results.AddSummaryValue(v)
 
     d = json_output_formatter.ResultsAsDict(results,

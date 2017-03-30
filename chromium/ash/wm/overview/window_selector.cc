@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <functional>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "ash/accessibility_delegate.h"
@@ -287,7 +288,7 @@ void WindowSelector::Init(const WindowList& windows) {
     if (grid->empty())
       continue;
     num_items_ += grid->size();
-    grid_list_.push_back(grid.Pass());
+    grid_list_.push_back(std::move(grid));
   }
 
   {
@@ -482,6 +483,7 @@ void WindowSelector::OnDisplayRemoved(const gfx::Display& display) {
 void WindowSelector::OnDisplayMetricsChanged(const gfx::Display& display,
                                              uint32_t metrics) {
   PositionWindows(/* animate */ false);
+  RepositionTextFilterOnDisplayMetricsChange();
 }
 
 void WindowSelector::OnWindowAdded(aura::Window* new_window) {
@@ -585,6 +587,23 @@ void WindowSelector::PositionWindows(bool animate) {
       iter != grid_list_.end(); iter++) {
     (*iter)->PositionWindows(animate);
   }
+}
+
+void WindowSelector::RepositionTextFilterOnDisplayMetricsChange() {
+  aura::Window* root_window = Shell::GetPrimaryRootWindow();
+  gfx::Rect rect(
+      root_window->bounds().width() / 2 * (1 - kTextFilterScreenProportion),
+      kTextFilterDistanceFromTop,
+      root_window->bounds().width() * kTextFilterScreenProportion,
+      kTextFilterHeight);
+
+  text_filter_widget_->SetBounds(rect);
+
+  gfx::Transform transform;
+  transform.Translate(0, text_filter_string_length_ == 0
+                             ? -WindowSelector::kTextFilterBottomEdge
+                             : 0);
+  text_filter_widget_->GetNativeWindow()->SetTransform(transform);
 }
 
 void WindowSelector::ResetFocusRestoreWindow(bool focus) {

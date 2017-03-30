@@ -3,10 +3,12 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/active_script_controller.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/extension_action.h"
@@ -69,17 +71,18 @@ class LocationBarControllerUnitTest : public ChromeRenderViewHostTestHarness {
                                 const std::string& name) {
     DictionaryBuilder manifest;
     manifest.Set("name", name)
-            .Set("version", "1.0.0")
-            .Set("manifest_version", 2)
-            .Set("permissions", ListBuilder().Append("tabs"));
+        .Set("version", "1.0.0")
+        .Set("manifest_version", 2)
+        .Set("permissions", std::move(ListBuilder().Append("tabs")));
     if (has_page_actions) {
-      manifest.Set("page_action", DictionaryBuilder()
-              .Set("default_title", "Hello"));
+      manifest.Set("page_action", std::move(DictionaryBuilder().Set(
+                                      "default_title", "Hello")));
     }
     scoped_refptr<const Extension> extension =
-        ExtensionBuilder().SetManifest(manifest.Pass())
-                          .SetID(crx_file::id_util::GenerateId(name))
-                          .Build();
+        ExtensionBuilder()
+            .SetManifest(std::move(manifest))
+            .SetID(crx_file::id_util::GenerateId(name))
+            .Build();
     extension_service_->AddExtension(extension.get());
     return extension.get();
   }

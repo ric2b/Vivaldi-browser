@@ -5,10 +5,12 @@
 #ifndef CONTENT_CHILD_NPAPI_NP_CHANNEL_BASE_H_
 #define CONTENT_CHILD_NPAPI_NP_CHANNEL_BASE_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
@@ -19,10 +21,6 @@
 
 namespace base {
 class SingleThreadTaskRunner;
-}
-
-namespace IPC {
-class AttachmentBroker;
 }
 
 namespace content {
@@ -109,8 +107,7 @@ class NPChannelBase : public IPC::Listener,
       ChannelFactory factory,
       base::SingleThreadTaskRunner* ipc_task_runner,
       bool create_pipe_now,
-      base::WaitableEvent* shutdown_event,
-      IPC::AttachmentBroker* broker);
+      base::WaitableEvent* shutdown_event);
 
   // Sends a message to all instances.
   static void Broadcast(IPC::Message* message);
@@ -125,7 +122,7 @@ class NPChannelBase : public IPC::Listener,
 
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& msg) override;
-  void OnChannelConnected(int32 peer_pid) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
 
   void set_send_unblocking_only_during_unblock_dispatch() {
@@ -134,8 +131,7 @@ class NPChannelBase : public IPC::Listener,
 
   virtual bool Init(base::SingleThreadTaskRunner* ipc_task_runner,
                     bool create_pipe_now,
-                    base::WaitableEvent* shutdown_event,
-                    IPC::AttachmentBroker* broker);
+                    base::WaitableEvent* shutdown_event);
 
   scoped_ptr<IPC::SyncChannel> channel_;
   IPC::ChannelHandle channel_handle_;

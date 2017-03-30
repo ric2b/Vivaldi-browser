@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vivaldi context menu specific strings (included from vivaldi_native_strings.grd). -->
+<grit-part>
+    <message name="IDS_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE" desc="The name of the Add as Search Engine command in the content area context menu">
+        Add as search en&amp;gine...
+    </message>
+</grit-part>

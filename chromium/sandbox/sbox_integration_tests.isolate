@@ -12,15 +12,21 @@
         'command': [
           '<(PRODUCT_DIR)/sbox_integration_tests.exe',
         ],
-        'files': [
-          '<(PRODUCT_DIR)/sbox_integration_tests.exe',
-        ],
       },
     }],
     ['OS=="win" and target_arch=="ia32"', {
       'variables': {
         'files': [
           '<(PRODUCT_DIR)/wow_helper.exe',
+        ],
+      },
+    }],
+    # These PDBs are needed in order to get reasonable stack traces if
+    # an assertion fires or a crash occurs. Add more as necessary.
+    ['OS=="win" and (fastbuild==0 or fastbuild==1)', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/sbox_integration_tests.exe.pdb',
         ],
       },
     }],

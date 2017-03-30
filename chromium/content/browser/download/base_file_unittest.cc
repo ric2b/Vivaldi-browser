@@ -4,13 +4,19 @@
 
 #include "content/browser/download/base_file.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_file_util.h"
+#include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "crypto/secure_hash.h"
@@ -61,7 +67,7 @@ class BaseFileTest : public testing::Test {
   void TearDown() override {
     EXPECT_FALSE(base_file_->in_progress());
     if (!expected_error_) {
-      EXPECT_EQ(static_cast<int64>(expected_data_.size()),
+      EXPECT_EQ(static_cast<int64_t>(expected_data_.size()),
                 base_file_->bytes_so_far());
     }
 
@@ -126,7 +132,7 @@ class BaseFileTest : public testing::Test {
     if (base_file_->in_progress()) {
       expected_data_ += data;
       if (expected_error_ == DOWNLOAD_INTERRUPT_REASON_NONE) {
-        EXPECT_EQ(static_cast<int64>(expected_data_.size()),
+        EXPECT_EQ(static_cast<int64_t>(expected_data_.size()),
                   base_file_->bytes_so_far());
       }
     }
@@ -181,7 +187,7 @@ class BaseFileTest : public testing::Test {
     duplicate_file.Detach();
   }
 
-  int64 CurrentSpeedAtTime(base::TimeTicks current_time) {
+  int64_t CurrentSpeedAtTime(base::TimeTicks current_time) {
     EXPECT_TRUE(base_file_.get());
     return base_file_->CurrentSpeedAtTime(current_time);
   }
@@ -538,14 +544,8 @@ TEST_F(BaseFileTest, WriteWithError) {
   // Pass a file handle which was opened without the WRITE flag.
   // This should result in an error when writing.
   base::File file(path, base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_READ);
-  base_file_.reset(new BaseFile(path,
-                                GURL(),
-                                GURL(),
-                                0,
-                                false,
-                                std::string(),
-                                file.Pass(),
-                                net::BoundNetLog()));
+  base_file_.reset(new BaseFile(path, GURL(), GURL(), 0, false, std::string(),
+                                std::move(file), net::BoundNetLog()));
   ASSERT_TRUE(InitializeFile());
 #if defined(OS_WIN)
   set_expected_error(DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED);

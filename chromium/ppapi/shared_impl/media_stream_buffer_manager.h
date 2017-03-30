@@ -5,10 +5,13 @@
 #ifndef PPAPI_SHARED_IMPL_MEDIA_STREAM_BUFFER_MANAGER_H_
 #define PPAPI_SHARED_IMPL_MEDIA_STREAM_BUFFER_MANAGER_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "ppapi/shared_impl/ppapi_shared_export.h"
@@ -69,6 +72,9 @@ class PPAPI_SHARED_EXPORT MediaStreamBufferManager {
 
   // Puts a buffer into |buffer_queue_|.
   void EnqueueBuffer(int32_t index);
+
+  // Queries whether a buffer will be returned by DequeueBuffer().
+  bool HasAvailableBuffer();
 
   // Gets the buffer address for the given buffer index.
   MediaStreamBuffer* GetBufferPointer(int32_t index);

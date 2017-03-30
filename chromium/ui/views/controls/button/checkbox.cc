@@ -4,6 +4,10 @@
 
 #include "ui/views/controls/button/checkbox.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -20,12 +24,10 @@ Checkbox::Checkbox(const base::string16& label)
     : LabelButton(NULL, label),
       checked_(false) {
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  scoped_ptr<LabelButtonBorder> button_border(new LabelButtonBorder(style()));
-  button_border->SetPainter(false, STATE_HOVERED, NULL);
-  button_border->SetPainter(false, STATE_PRESSED, NULL);
+  scoped_ptr<LabelButtonBorder> button_border(new LabelButtonBorder());
   // Inset the trailing side by a couple pixels for the focus border.
   button_border->set_insets(gfx::Insets(0, 0, 0, 2));
-  SetBorder(button_border.Pass());
+  SetBorder(std::move(button_border));
   SetFocusable(true);
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();

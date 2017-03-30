@@ -18,7 +18,12 @@ def main_run(args):
 
   test_args = ['--retry-limit', '3']
   if 'android' == args.properties.get('target_platform'):
-    test_args += ['--browser', 'android-chrome-shell', '--device', 'android']
+    test_args += [
+        '--browser', 'android-chromium',
+        '--device', 'android',
+        '--android-blacklist-file',
+        os.path.join(args.paths['checkout'], 'out', 'bad_devices.json'),
+    ]
   else:
     test_args += ['--browser', args.build_config_fs.lower()]
 
@@ -47,7 +52,7 @@ def main_run(args):
 
 def main_compile_targets(args):
   if 'android' == args.properties.get('target_platform'):
-    json.dump(['chrome_shell_apk'], args.output)
+    json.dump(['chrome_public_apk'], args.output)
   else:
     json.dump(['chrome'], args.output)
 

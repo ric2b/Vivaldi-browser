@@ -9,11 +9,13 @@ import android.content.res.Resources;
 import android.view.View;
 import android.view.ViewGroup.MarginLayoutParams;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.NativePage;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkDelegate.EnhancedBookmarkStateChangeListener;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -25,7 +27,9 @@ public class EnhancedBookmarkPage implements NativePage, EnhancedBookmarkStateCh
     private final Tab mTab;
     private final String mTitle;
     private final int mBackgroundColor;
-    private final EnhancedBookmarkManager mManager;
+    private final int mThemeColor;
+    private EnhancedBookmarkManager mManager;
+    private String mCurrentUrl;
 
     /**
      * Create a new instance of an enhanced bookmark page.
@@ -42,8 +46,11 @@ public class EnhancedBookmarkPage implements NativePage, EnhancedBookmarkStateCh
     private EnhancedBookmarkPage(Activity activity, Tab tab) {
         mActivity = activity;
         mTab = tab;
-        mTitle = activity.getString(R.string.bookmarks);
-        mBackgroundColor = activity.getResources().getColor(R.color.default_primary_color);
+        mTitle = activity.getString(OfflinePageUtils.getStringId(R.string.bookmarks));
+        mBackgroundColor = ApiCompatibilityUtils.getColor(activity.getResources(),
+                R.color.default_primary_color);
+        mThemeColor = ApiCompatibilityUtils.getColor(
+                activity.getResources(), R.color.default_primary_color);
 
         mManager = new EnhancedBookmarkManager(mActivity);
         Resources res = mActivity.getResources();
@@ -84,17 +91,25 @@ public class EnhancedBookmarkPage implements NativePage, EnhancedBookmarkStateCh
     }
 
     @Override
+    public int getThemeColor() {
+        return mThemeColor;
+    }
+
+    @Override
     public void updateForUrl(String url) {
+        mCurrentUrl = url;
         mManager.updateForUrl(url);
     }
 
     @Override
     public void destroy() {
         mManager.destroy();
+        mManager = null;
     }
 
     @Override
     public void onBookmarkUIStateChange(String url) {
+        if (url.equals(mCurrentUrl)) return;
         mTab.loadUrl(new LoadUrlParams(url));
     }
 }

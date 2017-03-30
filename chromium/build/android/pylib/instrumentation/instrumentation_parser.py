@@ -15,7 +15,7 @@ STATUS_CODE_FAILURE = -2
 RESULT_CODE_OK = -1
 RESULT_CODE_CANCELED = 0
 
-_INSTR_LINE_RE = re.compile('^\s*INSTRUMENTATION_([A-Z_]+): (.*)$')
+_INSTR_LINE_RE = re.compile(r'^\s*INSTRUMENTATION_([A-Z_]+): (.*)$')
 
 
 class InstrumentationParser(object):
@@ -38,7 +38,7 @@ class InstrumentationParser(object):
 
     Args:
       stream: a sequence of lines as produced by the raw output of an
-        instrumentation test (e.g. by |am instrument -r| or |uiautomator|).
+        instrumentation test (e.g. by |am instrument -r|).
     """
     self._stream = stream
     self._code = None

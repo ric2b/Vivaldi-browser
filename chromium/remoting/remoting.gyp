@@ -121,12 +121,12 @@
       'variables': {
         'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)',
         'sources': [
-          'base/resources_unittest.cc',
           'host/continue_window_mac.mm',
           'host/disconnect_window_mac.mm',
           'host/installer/mac/uninstaller/remoting_uninstaller-InfoPlist.strings.jinja2',
           'host/it2me/it2me_confirmation_dialog_chromeos.cc',
           'host/mac/me2me_preference_pane-InfoPlist.strings.jinja2',
+          'host/resources_unittest.cc',
           'host/win/core.rc.jinja2',
           'host/win/host_messages.mc.jinja2',
           'host/win/version.rc.jinja2',
@@ -199,7 +199,7 @@
         '../media/media.gyp:media',
         '../media/media.gyp:shared_memory_support',
         '../net/net.gyp:net',
-        '../third_party/libvpx/libvpx.gyp:libvpx',
+        '../third_party/libvpx_new/libvpx.gyp:libvpx_new',
         '../third_party/libyuv/libyuv.gyp:libyuv',
         '../third_party/opus/opus.gyp:opus',
         '../third_party/protobuf/protobuf.gyp:protobuf_lite',
@@ -234,10 +234,10 @@
         '../base/base.gyp:base',
         '../crypto/crypto.gyp:crypto',
         '../jingle/jingle.gyp:jingle_glue',
-        '../jingle/jingle.gyp:notifier',
         '../net/net.gyp:net',
         '../third_party/expat/expat.gyp:expat',
         '../third_party/libjingle/libjingle.gyp:libjingle',
+        '../third_party/libyuv/libyuv.gyp:libyuv',
         'remoting_base',
       ],
       'export_dependent_settings': [
@@ -245,6 +245,16 @@
       ],
       'sources': [
         '<@(remoting_protocol_sources)',
+        '<@(remoting_protocol_nonnacl_sources)',
+        '<@(remoting_signaling_sources)',
+      ],
+      'conditions': [
+        ['enable_webrtc==1', {
+          'dependencies': [
+            '../third_party/libjingle/libjingle.gyp:libjingle_webrtc',
+            '../third_party/libjingle/libjingle.gyp:libpeerconnection',
+          ],
+        }],
       ],
     },  # end of target 'remoting_protocol'
   ],  # end of targets

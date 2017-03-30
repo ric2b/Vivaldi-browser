@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// NOT DEAD CODE!
+// This code isn't dead, even if it isn't currently being used. Please refer to:
+// https://www.chromium.org/developers/how-tos/compact-language-detector-cld-data-source-configuration
+
 #ifndef COMPONENTS_TRANSLATE_CONTENT_RENDERER_RENDERER_CLD_DATA_PROVIDER_FACTORY_H_
 #define COMPONENTS_TRANSLATE_CONTENT_RENDERER_RENDERER_CLD_DATA_PROVIDER_FACTORY_H_
 
@@ -10,7 +14,7 @@
 #include "components/translate/content/renderer/renderer_cld_data_provider.h"
 
 namespace content {
-class RenderViewObserver;
+class RenderFrameObserver;
 }
 
 namespace translate {
@@ -32,7 +36,7 @@ class RendererCldDataProviderFactory {
   // Every invocation creates a new provider; the caller is responsible for
   // deleting the object when it is no longer needed.
   virtual scoped_ptr<RendererCldDataProvider> CreateRendererCldDataProvider(
-      content::RenderViewObserver* render_view_observer);
+      content::RenderFrameObserver* render_frame_observer);
 
   // Returns true if and only if the current instance for this process is not
   // NULL.

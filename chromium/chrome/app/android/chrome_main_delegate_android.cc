@@ -5,22 +5,31 @@
 #include "chrome/app/android/chrome_main_delegate_android.h"
 
 #include "base/android/jni_android.h"
+#include "base/base_paths_android.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/logging.h"
+#include "base/path_service.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/android/chrome_startup_flags.h"
 #include "chrome/browser/android/metrics/uma_utils.h"
 #include "chrome/browser/android/metrics/uma_utils.h"
 #include "chrome/browser/media/android/remote/remote_media_player_manager.h"
-#include "components/startup_metric_utils/startup_metric_utils.h"
+#include "components/policy/core/browser/android/android_combined_policy_provider.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "content/browser/media/android/browser_media_player_manager.h"
 #include "content/public/browser/browser_main_runner.h"
+
+#if defined(SAFE_BROWSING_DB_REMOTE)
+#include "chrome/browser/safe_browsing/safe_browsing_api_handler.h"
+using safe_browsing::SafeBrowsingApiHandler;
+#endif
 
 namespace {
 
 content::BrowserMediaPlayerManager* CreateRemoteMediaPlayerManager(
-    content::RenderFrameHost* render_frame_host,
-    content::MediaPlayersObserver* audio_monitor) {
-  return new remote_media::RemoteMediaPlayerManager(render_frame_host,
-                                                    audio_monitor);
+    content::RenderFrameHost* render_frame_host) {
+  return new remote_media::RemoteMediaPlayerManager(render_frame_host);
 }
 
 } // namespace
@@ -33,6 +42,21 @@ ChromeMainDelegateAndroid::ChromeMainDelegateAndroid() {
 
 ChromeMainDelegateAndroid::~ChromeMainDelegateAndroid() {
 }
+
+bool ChromeMainDelegateAndroid::BasicStartupComplete(int* exit_code) {
+#if defined(SAFE_BROWSING_DB_REMOTE)
+  safe_browsing_api_handler_.reset(CreateSafeBrowsingApiHandler());
+  SafeBrowsingApiHandler::SetInstance(safe_browsing_api_handler_.get());
+#endif
+
+  policy::android::AndroidCombinedPolicyProvider::SetShouldWaitForPolicy(true);
+  SetChromeSpecificCommandLineFlags();
+  content::BrowserMediaPlayerManager::RegisterFactory(
+      &CreateRemoteMediaPlayerManager);
+
+  return ChromeMainDelegate::BasicStartupComplete(exit_code);
+}
+
 void ChromeMainDelegateAndroid::SandboxInitialized(
     const std::string& process_type) {
   ChromeMainDelegate::SandboxInitialized(process_type);
@@ -43,6 +67,27 @@ int ChromeMainDelegateAndroid::RunProcess(
     const content::MainFunctionParams& main_function_params) {
   TRACE_EVENT0("startup", "ChromeMainDelegateAndroid::RunProcess")
   if (process_type.empty()) {
+    // By default, Android creates the directory accessible by others.
+    // We'd like to tighten security and make it accessible only by
+    // the browser process.
+    base::FilePath data_path;
+    bool ok = PathService::Get(base::DIR_ANDROID_APP_DATA, &data_path);
+    if (ok) {
+      int permissions;
+      ok = base::GetPosixFilePermissions(data_path, &permissions);
+      if (ok) {
+        permissions &= base::FILE_PERMISSION_USER_MASK;
+      } else {
+        permissions = base::FILE_PERMISSION_READ_BY_USER |
+                      base::FILE_PERMISSION_WRITE_BY_USER |
+                      base::FILE_PERMISSION_EXECUTE_BY_USER;
+      }
+
+      ok = base::SetPosixFilePermissions(data_path, permissions);
+    }
+    if (!ok)
+      LOG(ERROR) << "Failed to set permission of " << data_path.value();
+
     // Because the browser process can be started asynchronously as a series of
     // UI thread tasks a second request to start it can come in while the
     // first request is still being processed. Chrome must keep the same
@@ -50,8 +95,8 @@ int ChromeMainDelegateAndroid::RunProcess(
     // Also only record the start time the first time round, since this is the
     // start time of the application, and will be same for all requests.
     if (!browser_runner_.get()) {
-      base::Time startTime = chrome::android::GetMainEntryPointTime();
-      startup_metric_utils::RecordSavedMainEntryPointTime(startTime);
+      base::Time time = chrome::android::GetMainEntryPointTime();
+      startup_metric_utils::RecordMainEntryPointTime(time);
       browser_runner_.reset(content::BrowserMainRunner::Create());
     }
     return browser_runner_->Initialize(main_function_params);
@@ -60,11 +105,16 @@ int ChromeMainDelegateAndroid::RunProcess(
   return ChromeMainDelegate::RunProcess(process_type, main_function_params);
 }
 
-bool ChromeMainDelegateAndroid::BasicStartupComplete(int* exit_code) {
-  SetChromeSpecificCommandLineFlags();
-
-  content::BrowserMediaPlayerManager::RegisterFactory(
-      &CreateRemoteMediaPlayerManager);
-
-  return ChromeMainDelegate::BasicStartupComplete(exit_code);
+void ChromeMainDelegateAndroid::ProcessExiting(
+    const std::string& process_type) {
+#if defined(SAFE_BROWSING_DB_REMOTE)
+  SafeBrowsingApiHandler::SetInstance(nullptr);
+#endif
 }
+
+#if defined(SAFE_BROWSING_DB_REMOTE)
+SafeBrowsingApiHandler*
+ChromeMainDelegateAndroid::CreateSafeBrowsingApiHandler() {
+  return nullptr;
+}
+#endif

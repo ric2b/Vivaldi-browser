@@ -4,9 +4,12 @@
 
 #include "extensions/common/manifest_handlers/background_info.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -133,7 +136,7 @@ bool BackgroundInfo::LoadBackgroundScripts(const Extension* extension,
     std::string script;
     if (!background_scripts->GetString(i, &script)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          errors::kInvalidBackgroundScript, base::IntToString(i));
+          errors::kInvalidBackgroundScript, base::SizeTToString(i));
       return false;
     }
     background_scripts_.push_back(script);

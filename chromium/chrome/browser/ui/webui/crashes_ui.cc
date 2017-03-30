@@ -4,27 +4,34 @@
 
 #include "chrome/browser/ui/webui/crashes_ui.h"
 
-#include <vector>
+#include <stddef.h>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/i18n/time_formatting.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/crash_upload_list.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/google_chrome_strings.h"
+#include "components/crash/core/browser/crashes_ui_util.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
 #include "grit/browser_resources.h"
-#include "grit/theme_resources.h"
+#include "grit/components_chromium_strings.h"
+#include "grit/components_google_chrome_strings.h"
+#include "grit/components_resources.h"
+#include "grit/components_scaled_resources.h"
+#include "grit/components_strings.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_CHROMEOS)
@@ -41,23 +48,17 @@ content::WebUIDataSource* CreateCrashesUIHTMLSource() {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUICrashesHost);
 
-  source->AddLocalizedString("shortProductName", IDS_SHORT_PRODUCT_NAME);
-  source->AddLocalizedString("crashesTitle", IDS_CRASHES_TITLE);
-  source->AddLocalizedString("crashCountFormat",
-                             IDS_CRASHES_CRASH_COUNT_BANNER_FORMAT);
-  source->AddLocalizedString("crashHeaderFormat",
-                             IDS_CRASHES_CRASH_HEADER_FORMAT);
-  source->AddLocalizedString("crashTimeFormat", IDS_CRASHES_CRASH_TIME_FORMAT);
-  source->AddLocalizedString("bugLinkText", IDS_CRASHES_BUG_LINK_LABEL);
-  source->AddLocalizedString("noCrashesMessage",
-                             IDS_CRASHES_NO_CRASHES_MESSAGE);
-  source->AddLocalizedString("disabledHeader", IDS_CRASHES_DISABLED_HEADER);
-  source->AddLocalizedString("disabledMessage", IDS_CRASHES_DISABLED_MESSAGE);
-  source->AddLocalizedString("uploadCrashesLinkText",
-                             IDS_CRASHES_UPLOAD_MESSAGE);
+  for (size_t i = 0; i < crash::kCrashesUILocalizedStringsCount; ++i) {
+    source->AddLocalizedString(
+        crash::kCrashesUILocalizedStrings[i].name,
+        crash::kCrashesUILocalizedStrings[i].resource_id);
+  }
+
+  source->AddLocalizedString(crash::kCrashesUIShortProductName,
+                             IDS_SHORT_PRODUCT_NAME);
   source->SetJsonPath("strings.js");
-  source->AddResourcePath("crashes.js", IDR_CRASHES_JS);
-  source->SetDefaultResource(IDR_CRASHES_HTML);
+  source->AddResourcePath(crash::kCrashesUICrashesJS, IDR_CRASH_CRASHES_JS);
+  source->SetDefaultResource(IDR_CRASH_CRASHES_HTML);
   return source;
 }
 
@@ -101,7 +102,7 @@ class CrashesDOMHandler : public WebUIMessageHandler,
 
 CrashesDOMHandler::CrashesDOMHandler()
     : list_available_(false), first_load_(true) {
-  upload_list_ = CrashUploadList::Create(this);
+  upload_list_ = CreateCrashUploadList(this);
 }
 
 CrashesDOMHandler::~CrashesDOMHandler() {
@@ -110,12 +111,14 @@ CrashesDOMHandler::~CrashesDOMHandler() {
 
 void CrashesDOMHandler::RegisterMessages() {
   upload_list_->LoadUploadListAsynchronously();
-  web_ui()->RegisterMessageCallback("requestCrashList",
+  web_ui()->RegisterMessageCallback(
+      crash::kCrashesUIRequestCrashList,
       base::Bind(&CrashesDOMHandler::HandleRequestCrashes,
                  base::Unretained(this)));
 
 #if defined(OS_CHROMEOS)
-  web_ui()->RegisterMessageCallback("requestCrashUpload",
+  web_ui()->RegisterMessageCallback(
+      crash::kCrashesUIRequestCrashUpload,
       base::Bind(&CrashesDOMHandler::HandleRequestUploads,
                  base::Unretained(this)));
 #endif
@@ -150,37 +153,23 @@ void CrashesDOMHandler::OnUploadListAvailable() {
 
 void CrashesDOMHandler::UpdateUI() {
   bool crash_reporting_enabled =
-      ChromeMetricsServiceAccessor::IsCrashReportingEnabled();
-  base::ListValue crash_list;
-  bool system_crash_reporter = false;
+      ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
 
+  bool system_crash_reporter = false;
 #if defined(OS_CHROMEOS)
   // Chrome OS has a system crash reporter.
   system_crash_reporter = true;
 #endif
 
-  if (crash_reporting_enabled) {
-    std::vector<CrashUploadList::UploadInfo> crashes;
-    upload_list_->GetUploads(50, &crashes);
-
-    for (std::vector<CrashUploadList::UploadInfo>::iterator i = crashes.begin();
-         i != crashes.end(); ++i) {
-      base::DictionaryValue* crash = new base::DictionaryValue();
-      crash->SetString("id", i->id);
-      crash->SetString("time", base::TimeFormatFriendlyDateAndTime(i->time));
-      crash->SetString("local_id", i->local_id);
-      crash_list.Append(crash);
-    }
-  }
+  base::ListValue crash_list;
+  if (crash_reporting_enabled)
+    crash::UploadListToValue(upload_list_.get(), &crash_list);
 
   base::FundamentalValue enabled(crash_reporting_enabled);
   base::FundamentalValue dynamic_backend(system_crash_reporter);
-
-  const chrome::VersionInfo version_info;
-  base::StringValue version(version_info.Version());
-
-  web_ui()->CallJavascriptFunction("updateCrashList", enabled, dynamic_backend,
-                                   crash_list, version);
+  base::StringValue version(version_info::GetVersionNumber());
+  web_ui()->CallJavascriptFunction(crash::kCrashesUIUpdateCrashList, enabled,
+                                   dynamic_backend, crash_list, version);
 }
 
 }  // namespace
@@ -202,6 +191,6 @@ CrashesUI::CrashesUI(content::WebUI* web_ui) : WebUIController(web_ui) {
 // static
 base::RefCountedMemory* CrashesUI::GetFaviconResourceBytes(
       ui::ScaleFactor scale_factor) {
-  return ResourceBundle::GetSharedInstance().
-      LoadDataResourceBytesForScale(IDR_SAD_FAVICON, scale_factor);
+  return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
+      IDR_CRASH_SAD_FAVICON, scale_factor);
 }

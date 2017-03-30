@@ -6,6 +6,7 @@
 
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind_helpers.h"
@@ -84,7 +85,7 @@ void IPhotoFileUtil::GetFileInfoOnTaskRunnerThread(
   // |data_provider| may be NULL if the file system was revoked before this
   // operation had a chance to run.
   if (!data_provider) {
-    GetFileInfoWithFreshDataProvider(context.Pass(), url, callback, false);
+    GetFileInfoWithFreshDataProvider(std::move(context), url, callback, false);
   } else {
     data_provider->RefreshData(
         base::Bind(&IPhotoFileUtil::GetFileInfoWithFreshDataProvider,
@@ -101,7 +102,8 @@ void IPhotoFileUtil::ReadDirectoryOnTaskRunnerThread(
   // |data_provider| may be NULL if the file system was revoked before this
   // operation had a chance to run.
   if (!data_provider) {
-    ReadDirectoryWithFreshDataProvider(context.Pass(), url, callback, false);
+    ReadDirectoryWithFreshDataProvider(std::move(context), url, callback,
+                                       false);
   } else {
     data_provider->RefreshData(
         base::Bind(&IPhotoFileUtil::ReadDirectoryWithFreshDataProvider,
@@ -118,7 +120,7 @@ void IPhotoFileUtil::CreateSnapshotFileOnTaskRunnerThread(
   // |data_provider| may be NULL if the file system was revoked before this
   // operation had a chance to run.
   if (!data_provider) {
-    CreateSnapshotFileWithFreshDataProvider(context.Pass(), url, callback,
+    CreateSnapshotFileWithFreshDataProvider(std::move(context), url, callback,
                                             false);
   } else {
     data_provider->RefreshData(
@@ -142,7 +144,7 @@ void IPhotoFileUtil::GetFileInfoWithFreshDataProvider(
     }
     return;
   }
-  NativeMediaFileUtil::GetFileInfoOnTaskRunnerThread(context.Pass(), url,
+  NativeMediaFileUtil::GetFileInfoOnTaskRunnerThread(std::move(context), url,
                                                      callback);
 }
 
@@ -160,7 +162,7 @@ void IPhotoFileUtil::ReadDirectoryWithFreshDataProvider(
     }
     return;
   }
-  NativeMediaFileUtil::ReadDirectoryOnTaskRunnerThread(context.Pass(), url,
+  NativeMediaFileUtil::ReadDirectoryOnTaskRunnerThread(std::move(context), url,
                                                        callback);
 }
 
@@ -182,8 +184,8 @@ void IPhotoFileUtil::CreateSnapshotFileWithFreshDataProvider(
     }
     return;
   }
-  NativeMediaFileUtil::CreateSnapshotFileOnTaskRunnerThread(context.Pass(), url,
-                                                            callback);
+  NativeMediaFileUtil::CreateSnapshotFileOnTaskRunnerThread(std::move(context),
+                                                            url, callback);
 }
 
 // Begin actual implementation.
@@ -246,9 +248,8 @@ base::File::Error IPhotoFileUtil::ReadDirectorySync(
 
   // Root directory. Child is the /Albums dir.
   if (components.size() == 0) {
-    file_list->push_back(DirectoryEntry(kIPhotoAlbumsDir,
-                                        DirectoryEntry::DIRECTORY,
-                                        0, base::Time()));
+    file_list->push_back(
+        DirectoryEntry(kIPhotoAlbumsDir, DirectoryEntry::DIRECTORY));
     return base::File::FILE_OK;
   }
 
@@ -259,8 +260,7 @@ base::File::Error IPhotoFileUtil::ReadDirectorySync(
           GetDataProvider()->GetAlbumNames();
       for (std::vector<std::string>::const_iterator it = albums.begin();
            it != albums.end(); it++) {
-        file_list->push_back(DirectoryEntry(*it, DirectoryEntry::DIRECTORY,
-                                            0, base::Time()));
+        file_list->push_back(DirectoryEntry(*it, DirectoryEntry::DIRECTORY));
       }
       return base::File::FILE_OK;
     } else if (components.size() == 2) {
@@ -271,9 +271,8 @@ base::File::Error IPhotoFileUtil::ReadDirectorySync(
 
       // Album dirs contain all photos in them.
       if (GetDataProvider()->HasOriginals(components[1])) {
-        file_list->push_back(DirectoryEntry(kIPhotoOriginalsDir,
-                                            DirectoryEntry::DIRECTORY,
-                                            0, base::Time()));
+        file_list->push_back(
+            DirectoryEntry(kIPhotoOriginalsDir, DirectoryEntry::DIRECTORY));
       }
       std::map<std::string, base::FilePath> locations =
           GetDataProvider()->GetAlbumContents(components[1]);
@@ -283,8 +282,7 @@ base::File::Error IPhotoFileUtil::ReadDirectorySync(
         base::File::Info info;
         if (!base::GetFileInfo(it->second, &info))
           return base::File::FILE_ERROR_IO;
-        file_list->push_back(DirectoryEntry(it->first, DirectoryEntry::FILE,
-                                            info.size, info.last_modified));
+        file_list->push_back(DirectoryEntry(it->first, DirectoryEntry::FILE));
       }
       return base::File::FILE_OK;
     } else if (components.size() == 3 &&
@@ -298,8 +296,7 @@ base::File::Error IPhotoFileUtil::ReadDirectorySync(
         base::File::Info info;
         if (!base::GetFileInfo(it->second, &info))
           return base::File::FILE_ERROR_IO;
-        file_list->push_back(DirectoryEntry(it->first, DirectoryEntry::FILE,
-                                            info.size, info.last_modified));
+        file_list->push_back(DirectoryEntry(it->first, DirectoryEntry::FILE));
       }
       return base::File::FILE_OK;
     }

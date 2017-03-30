@@ -6,18 +6,24 @@ package org.chromium.chrome.browser.sync;
 
 import android.content.Context;
 
+import com.google.protobuf.nano.InvalidProtocolBufferNanoException;
 import com.google.protobuf.nano.MessageNano;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.sync.internal_api.pub.base.ModelType;
 import org.chromium.sync.protocol.EntitySpecifics;
+import org.chromium.sync.protocol.SyncEntity;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Assists in Java interaction the native Sync FakeServer.
  */
 public class FakeServerHelper {
+    private static final String TAG = "FakeServerHelper";
+
     // Lazily-instantiated singleton FakeServerHelper.
     private static FakeServerHelper sFakeServerHelper;
 
@@ -60,7 +66,7 @@ public class FakeServerHelper {
                 FakeServerHelper fakeServerHelper = FakeServerHelper.get();
                 long nativeFakeServer = fakeServerHelper.createFakeServer();
                 long resources = fakeServerHelper.createNetworkResources(nativeFakeServer);
-                ProfileSyncService.get(context).overrideNetworkResourcesForTest(resources);
+                ProfileSyncService.get().overrideNetworkResourcesForTest(resources);
 
                 return nativeFakeServer;
             }
@@ -140,7 +146,7 @@ public class FakeServerHelper {
      *
      * @return whether the number of specified entities exist
      */
-    public boolean verifyEntityCountByTypeAndName(final int count, final ModelType modelType,
+    public boolean verifyEntityCountByTypeAndName(final int count, final int modelType,
             final String name) {
         checkFakeServerInitialized(
                 "useFakeServer must be called before data verification.");
@@ -148,11 +154,18 @@ public class FakeServerHelper {
             @Override
             public Boolean call() {
                 return nativeVerifyEntityCountByTypeAndName(mNativeFakeServerHelperAndroid,
-                        sNativeFakeServer, count, modelType.toString(), name);
+                        sNativeFakeServer, count, modelType, name);
             }
         });
     }
 
+    /**
+     * Verifies whether the sessions on the fake Sync server match the given set of urls.
+     *
+     * @param urls the set of urls to check against; order does not matter.
+     *
+     * @return whether the sessions on the server match the given urls.
+     */
     public boolean verifySessions(final String[] urls) {
         checkFakeServerInitialized(
                 "useFakeServer must be called before data verification.");
@@ -161,6 +174,32 @@ public class FakeServerHelper {
             public Boolean call() {
                 return nativeVerifySessions(mNativeFakeServerHelperAndroid, sNativeFakeServer,
                         urls);
+            }
+        });
+    }
+
+    /**
+     * Returns all the SyncEntities on the fake server with the given modelType.
+     *
+     * @param modelType the type of entities to return.
+     *
+     * @return a list of all the SyncEntity protos for that type.
+     */
+    public List<SyncEntity> getSyncEntitiesByModelType(final int modelType)
+            throws ExecutionException {
+        checkFakeServerInitialized("useFakeServer must be called before getting sync entities.");
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<List<SyncEntity>>() {
+            @Override
+            public List<SyncEntity> call() throws InvalidProtocolBufferNanoException {
+                byte[][] serializedEntities = nativeGetSyncEntitiesByModelType(
+                        mNativeFakeServerHelperAndroid, sNativeFakeServer, modelType);
+                List<SyncEntity> entities = new ArrayList<SyncEntity>(serializedEntities.length);
+                for (int i = 0; i < serializedEntities.length; i++) {
+                    SyncEntity entity = new SyncEntity();
+                    MessageNano.mergeFrom(entity, serializedEntities[i]);
+                    entities.add(entity);
+                }
+                return entities;
             }
         });
     }
@@ -322,6 +361,19 @@ public class FakeServerHelper {
         });
     }
 
+    /**
+     * Clear the server data (perform dashboard stop and clear).
+     */
+    public void clearServerData() {
+        checkFakeServerInitialized("useFakeServer must be called before clearing data");
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                nativeClearServerData(mNativeFakeServerHelperAndroid, sNativeFakeServer);
+            }
+        });
+    }
+
     private static void checkFakeServerInitialized(String failureMessage) {
         if (sNativeFakeServer == 0L) {
             throw new IllegalStateException(failureMessage);
@@ -336,10 +388,12 @@ public class FakeServerHelper {
     private native void nativeDeleteFakeServer(
             long nativeFakeServerHelperAndroid, long nativeFakeServer);
     private native boolean nativeVerifyEntityCountByTypeAndName(
-            long nativeFakeServerHelperAndroid, long nativeFakeServer, int count, String modelType,
+            long nativeFakeServerHelperAndroid, long nativeFakeServer, int count, int modelType,
             String name);
     private native boolean nativeVerifySessions(
             long nativeFakeServerHelperAndroid, long nativeFakeServer, String[] urlArray);
+    private native byte[][] nativeGetSyncEntitiesByModelType(
+            long nativeFakeServerHelperAndroid, long nativeFakeServer, int modelType);
     private native void nativeInjectUniqueClientEntity(
             long nativeFakeServerHelperAndroid, long nativeFakeServer, String name,
             byte[] serializedEntitySpecifics);
@@ -358,4 +412,6 @@ public class FakeServerHelper {
             long nativeFakeServerHelperAndroid, long nativeFakeServer);
     private native void nativeDeleteEntity(
             long nativeFakeServerHelperAndroid, long nativeFakeServer, String id);
+    private native void nativeClearServerData(
+            long nativeFakeServerHelperAndroid, long nativeFakeServer);
 }

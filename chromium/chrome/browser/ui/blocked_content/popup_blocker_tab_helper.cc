@@ -5,11 +5,14 @@
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
 
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/blocked_content/blocked_window_params.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/features.h"
 #include "chrome/common/render_messages.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/navigation_controller.h"
@@ -20,7 +23,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "third_party/WebKit/public/web/WebWindowFeatures.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #endif
 
@@ -87,7 +90,7 @@ bool PopupBlockerTabHelper::MaybeBlockPopup(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 
   if (creator.is_valid() &&
-      profile->GetHostContentSettingsMap()->GetContentSetting(
+      HostContentSettingsMapFactory::GetForProfile(profile)->GetContentSetting(
           creator, creator, CONTENT_SETTINGS_TYPE_POPUPS, std::string()) ==
           CONTENT_SETTING_ALLOW) {
     return false;
@@ -112,13 +115,13 @@ void PopupBlockerTabHelper::AddBlockedPopup(const BlockedWindowParams& params) {
   }
 }
 
-void PopupBlockerTabHelper::ShowBlockedPopup(int32 id) {
+void PopupBlockerTabHelper::ShowBlockedPopup(int32_t id) {
   BlockedRequest* popup = blocked_popups_.Lookup(id);
   if (!popup)
     return;
   // We set user_gesture to true here, so the new popup gets correctly focused.
   popup->params.user_gesture = true;
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   TabModelList::HandlePopupNavigation(&popup->params);
 #else
   chrome::Navigate(&popup->params);

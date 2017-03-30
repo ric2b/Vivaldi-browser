@@ -7,6 +7,7 @@
 
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
+#include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "ios/web/public/web_state/page_display_state.h"
 #include "ui/base/page_transition_types.h"
@@ -27,10 +28,8 @@ struct SSLStatus;
 // A NavigationItem is a data structure that captures all the information
 // required to recreate a browsing state. It represents one point in the
 // chain of navigation managed by a NavigationManager.
-class NavigationItem {
+class NavigationItem : public base::SupportsUserData {
  public:
-  virtual ~NavigationItem() {}
-
   // Creates a new NavigationItem.
   static scoped_ptr<NavigationItem> Create();
 
@@ -68,12 +67,6 @@ class NavigationItem {
   // the user.
   virtual void SetTitle(const base::string16& title) = 0;
   virtual const base::string16& GetTitle() const = 0;
-
-  // Describes the current page that the tab represents. This is the ID that the
-  // renderer generated for the page and is how we can tell new versus
-  // renavigations.
-  virtual void SetPageID(int page_id) = 0;
-  virtual int32 GetPageID() const = 0;
 
   // Stores the NavigationItem's last recorded scroll offset and zoom scale.
   virtual void SetPageDisplayState(const PageDisplayState& page_state) = 0;

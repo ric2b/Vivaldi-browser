@@ -15,9 +15,10 @@ namespace syncer {
 
 class SyncManagerFactoryForProfileSyncTest : public syncer::SyncManagerFactory {
  public:
-  SyncManagerFactoryForProfileSyncTest(base::Closure init_callback);
+  explicit SyncManagerFactoryForProfileSyncTest(base::Closure init_callback);
   ~SyncManagerFactoryForProfileSyncTest() override;
-  scoped_ptr<syncer::SyncManager> CreateSyncManager(std::string name) override;
+  scoped_ptr<syncer::SyncManager> CreateSyncManager(
+      const std::string& name) override;
 
  private:
   base::Closure init_callback_;

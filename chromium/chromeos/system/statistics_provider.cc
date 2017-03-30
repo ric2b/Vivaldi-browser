@@ -8,8 +8,10 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/json/json_file_value_serializer.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,6 +21,7 @@
 #include "base/task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chromeos/app_mode/kiosk_oem_manifest_parser.h"
 #include "chromeos/chromeos_constants.h"
 #include "chromeos/chromeos_paths.h"
@@ -58,12 +61,83 @@ const char kVpdFile[] = "/var/log/vpd_2.0.txt";
 const char kVpdEq[] = "=";
 const char kVpdDelim[] = "\n";
 
+// File to get regional data from.
+const char kCrosRegions[] = "/usr/share/misc/cros-regions.json";
+
 // Timeout that we should wait for statistics to get loaded
 const int kTimeoutSecs = 3;
 
 // The location of OEM manifest file used to trigger OOBE flow for kiosk mode.
 const base::CommandLine::CharType kOemManifestFilePath[] =
     FILE_PATH_LITERAL("/usr/share/oem/oobe/manifest.json");
+
+// Items in region dictionary.
+const char kKeyboardsPath[] = "keyboards";
+const char kLocalesPath[] = "locales";
+const char kTimeZonesPath[] = "time_zones";
+
+// Gets ListValue from given |dictionary| by given |key| and (unless |result| is
+// nullptr) sets |result| to a string with all list values joined by ','.
+// Returns true on success.
+bool JoinListValuesToString(const base::DictionaryValue* dictionary,
+                            const std::string key,
+                            std::string* result) {
+  const base::ListValue* list = nullptr;
+  if (!dictionary->GetListWithoutPathExpansion(key, &list))
+    return false;
+
+  std::string buffer;
+  bool first = true;
+  for (const base::Value* v : *list) {
+    std::string value;
+    if (!v->GetAsString(&value))
+      return false;
+
+    if (first)
+      first = false;
+    else
+      buffer += ',';
+
+    buffer += value;
+  }
+  if (result != nullptr)
+    *result = buffer;
+  return true;
+}
+
+// Gets ListValue from given |dictionary| by given |key| and (unless |result| is
+// nullptr) sets |result| to the first value as string.  Returns true on
+// success.
+bool GetFirstListValueAsString(const base::DictionaryValue* dictionary,
+                               const std::string key,
+                               std::string* result) {
+  const base::ListValue* list = nullptr;
+  if (!dictionary->GetListWithoutPathExpansion(key, &list))
+    return false;
+
+  std::string value;
+  if (!list->GetString(0, &value))
+    return false;
+  if (result != nullptr)
+    *result = value;
+  return true;
+}
+
+bool GetKeyboardLayoutFromRegionalData(const base::DictionaryValue* region_dict,
+                                       std::string* result) {
+  return JoinListValuesToString(region_dict, kKeyboardsPath, result);
+}
+
+bool GetInitialTimezoneFromRegionalData(
+    const base::DictionaryValue* region_dict,
+    std::string* result) {
+  return GetFirstListValueAsString(region_dict, kTimeZonesPath, result);
+}
+
+bool GetInitialLocaleFromRegionalData(const base::DictionaryValue* region_dict,
+                                      std::string* result) {
+  return JoinListValuesToString(region_dict, kLocalesPath, result);
+}
 
 }  // namespace
 
@@ -84,6 +158,10 @@ const char kRlzBrandCodeKey[] = "rlz_brand_code";
 const char kWriteProtectSwitchBootKey[] = "wpsw_boot";
 const char kWriteProtectSwitchBootValueOff[] = "0";
 const char kWriteProtectSwitchBootValueOn[] = "1";
+const char kRegionKey[] = "region";
+const char kInitialLocaleKey[] = "initial_locale";
+const char kInitialTimezoneKey[] = "initial_timezone";
+const char kKeyboardLayoutKey[] = "keyboard_layout";
 
 // OEM specific statistics. Must be prefixed with "oem_".
 const char kOemCanExitEnterpriseEnrollmentKey[] = "oem_can_exit_enrollment";
@@ -104,16 +182,16 @@ class StatisticsProviderImpl : public StatisticsProvider {
       bool load_oem_manifest) override;
   bool GetMachineStatistic(const std::string& name,
                            std::string* result) override;
-  bool HasMachineStatistic(const std::string& name) override;
   bool GetMachineFlag(const std::string& name, bool* result) override;
-  bool HasMachineFlag(const std::string& name) override;
   void Shutdown() override;
 
   static StatisticsProviderImpl* GetInstance();
 
  protected:
   typedef std::map<std::string, bool> MachineFlags;
-  friend struct DefaultSingletonTraits<StatisticsProviderImpl>;
+  typedef bool (*RegionDataExtractor)(const base::DictionaryValue*,
+                                      std::string*);
+  friend struct base::DefaultSingletonTraits<StatisticsProviderImpl>;
 
   StatisticsProviderImpl();
   ~StatisticsProviderImpl() override;
@@ -128,6 +206,20 @@ class StatisticsProviderImpl : public StatisticsProvider {
   // Loads the OEM statistics off of disk. Runs on the file thread.
   void LoadOemManifestFromFile(const base::FilePath& file);
 
+  // Loads regional data off of disk. Runs on the file thread.
+  void LoadRegionsFile(const base::FilePath& filename);
+
+  // Extracts known data from regional_data_;
+  // Returns true on success;
+  bool GetRegionalInformation(const std::string& name,
+                              std::string* result) const;
+
+  // Returns current region dictionary or NULL if not found.
+  const base::DictionaryValue* GetRegionDictionary() const;
+
+  // Returns extractor from regional_data_extractors_ or nullptr.
+  RegionDataExtractor GetRegionalDataExtractor(const std::string& name) const;
+
   bool load_statistics_started_;
   NameValuePairsParser::NameValueMap machine_info_;
   MachineFlags machine_flags_;
@@ -135,6 +227,9 @@ class StatisticsProviderImpl : public StatisticsProvider {
   // |on_statistics_loaded_| protects |machine_info_| and |machine_flags_|.
   base::WaitableEvent on_statistics_loaded_;
   bool oem_manifest_loaded_;
+  std::string region_;
+  scoped_ptr<base::Value> regional_data_;
+  base::hash_map<std::string, RegionDataExtractor> regional_data_extractors_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StatisticsProviderImpl);
@@ -153,14 +248,53 @@ bool StatisticsProviderImpl::WaitForStatisticsLoaded() {
 
   base::TimeDelta dtime = base::Time::Now() - start_time;
   if (on_statistics_loaded_.IsSignaled()) {
-    LOG(ERROR) << "Statistics loaded after waiting "
-               << dtime.InMilliseconds() << "ms. ";
+    LOG(WARNING) << "Statistics loaded after waiting "
+                 << dtime.InMilliseconds() << "ms.";
     return true;
   }
 
   LOG(ERROR) << "Statistics not loaded after waiting "
-             << dtime.InMilliseconds() << "ms. ";
+             << dtime.InMilliseconds() << "ms.";
   return false;
+}
+
+const base::DictionaryValue* StatisticsProviderImpl::GetRegionDictionary()
+    const {
+  const base::DictionaryValue* full_dict = nullptr;
+  if (!regional_data_->GetAsDictionary(&full_dict))
+    return nullptr;
+
+  const base::DictionaryValue* region_dict = nullptr;
+  if (!full_dict->GetDictionaryWithoutPathExpansion(region_, &region_dict))
+    return nullptr;
+
+  return region_dict;
+}
+
+StatisticsProviderImpl::RegionDataExtractor
+StatisticsProviderImpl::GetRegionalDataExtractor(
+    const std::string& name) const {
+  const auto it = regional_data_extractors_.find(name);
+  if (it == regional_data_extractors_.end())
+    return nullptr;
+
+  return it->second;
+}
+
+bool StatisticsProviderImpl::GetRegionalInformation(const std::string& name,
+                                                    std::string* result) const {
+  if (region_.empty() || !regional_data_.get())
+    return false;
+
+  const RegionDataExtractor extractor = GetRegionalDataExtractor(name);
+  if (!extractor)
+    return false;
+
+  const base::DictionaryValue* region_dict = GetRegionDictionary();
+  if (!region_dict)
+    return false;
+
+  return extractor(region_dict, result);
 }
 
 bool StatisticsProviderImpl::GetMachineStatistic(const std::string& name,
@@ -171,21 +305,41 @@ bool StatisticsProviderImpl::GetMachineStatistic(const std::string& name,
     return false;
   }
 
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  std::string cros_regions_mode;
+  if (command_line->HasSwitch(chromeos::switches::kCrosRegionsMode)) {
+    cros_regions_mode =
+        command_line->GetSwitchValueASCII(chromeos::switches::kCrosRegionsMode);
+  }
+
+  // These two modes override existing machine statistics keys.
+  // By default (cros_regions_mode is empty), the same keys are emulated if
+  // they do not exist in machine statistics.
+  if (cros_regions_mode == chromeos::switches::kCrosRegionsModeOverride ||
+      cros_regions_mode == chromeos::switches::kCrosRegionsModeHide) {
+    if (GetRegionalInformation(name, result))
+      return true;
+  }
+
+  if (cros_regions_mode == chromeos::switches::kCrosRegionsModeHide &&
+      GetRegionalDataExtractor(name)) {
+    return false;
+  }
+
   NameValuePairsParser::NameValueMap::iterator iter = machine_info_.find(name);
   if (iter == machine_info_.end()) {
-    if (base::SysInfo::IsRunningOnChromeOS() &&
+    if (GetRegionalInformation(name, result))
+      return true;
+    if (result != nullptr &&
+        base::SysInfo::IsRunningOnChromeOS() &&
         (oem_manifest_loaded_ || !HasOemPrefix(name))) {
       LOG(WARNING) << "Requested statistic not found: " << name;
     }
     return false;
   }
-  *result = iter->second;
+  if (result != nullptr)
+    *result = iter->second;
   return true;
-}
-
-bool StatisticsProviderImpl::HasMachineStatistic(const std::string& name) {
-  std::string result;
-  return GetMachineStatistic(name, &result);
 }
 
 bool StatisticsProviderImpl::GetMachineFlag(const std::string& name,
@@ -198,19 +352,16 @@ bool StatisticsProviderImpl::GetMachineFlag(const std::string& name,
 
   MachineFlags::const_iterator iter = machine_flags_.find(name);
   if (iter == machine_flags_.end()) {
-    if (base::SysInfo::IsRunningOnChromeOS() &&
+    if (result != nullptr &&
+        base::SysInfo::IsRunningOnChromeOS() &&
         (oem_manifest_loaded_ || !HasOemPrefix(name))) {
       LOG(WARNING) << "Requested machine flag not found: " << name;
     }
     return false;
   }
-  *result = iter->second;
+  if (result != nullptr)
+    *result = iter->second;
   return true;
-}
-
-bool StatisticsProviderImpl::HasMachineFlag(const std::string& name) {
-  bool result = false;
-  return GetMachineFlag(name, &result);
 }
 
 void StatisticsProviderImpl::Shutdown() {
@@ -222,6 +373,12 @@ StatisticsProviderImpl::StatisticsProviderImpl()
       on_statistics_loaded_(true  /* manual_reset */,
                             false /* initially_signaled */),
       oem_manifest_loaded_(false) {
+  regional_data_extractors_[kInitialLocaleKey] =
+      &GetInitialLocaleFromRegionalData;
+  regional_data_extractors_[kKeyboardLayoutKey] =
+      &GetKeyboardLayoutFromRegionalData;
+  regional_data_extractors_[kInitialTimezoneKey] =
+      &GetInitialTimezoneFromRegionalData;
 }
 
 StatisticsProviderImpl::~StatisticsProviderImpl() {
@@ -312,9 +469,50 @@ void StatisticsProviderImpl::LoadMachineStatistics(bool load_oem_manifest) {
     }
   }
 
+  LoadRegionsFile(base::FilePath(kCrosRegions));
+
+  // Set region
+  const auto region_iter = machine_info_.find(kRegionKey);
+  if (region_iter != machine_info_.end())
+    region_ = region_iter->second;
+  else
+    region_ = std::string();
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(chromeos::switches::kCrosRegion)) {
+    region_ =
+        command_line->GetSwitchValueASCII(chromeos::switches::kCrosRegion);
+    machine_info_[kRegionKey] = region_;
+    LOG(WARNING) << "CrOS region set to '" << region_ << "'";
+  }
+
+  if (regional_data_.get() && !region_.empty() && !GetRegionDictionary())
+    LOG(ERROR) << "Bad reginal data: '" << region_ << "' << not found.";
+
   // Finished loading the statistics.
   on_statistics_loaded_.Signal();
   VLOG(1) << "Finished loading statistics.";
+}
+
+void StatisticsProviderImpl::LoadRegionsFile(const base::FilePath& filename) {
+  JSONFileValueDeserializer regions_file(filename);
+  int regions_error_code = 0;
+  std::string regions_error_message;
+  regional_data_ =
+      regions_file.Deserialize(&regions_error_code, &regions_error_message);
+  if (!regional_data_.get()) {
+    if (base::SysInfo::IsRunningOnChromeOS())
+      LOG(ERROR) << "Failed to load regions file '" << filename.value()
+                 << "': error='" << regions_error_message << "'";
+
+    return;
+  }
+  const base::DictionaryValue* full_dict = nullptr;
+  if (!regional_data_->GetAsDictionary(&full_dict)) {
+    LOG(ERROR) << "Bad regions file '" << filename.value()
+               << "': not a dictionary.";
+    regional_data_.reset();
+  }
 }
 
 void StatisticsProviderImpl::LoadOemManifestFromFile(
@@ -342,8 +540,13 @@ void StatisticsProviderImpl::LoadOemManifestFromFile(
 }
 
 StatisticsProviderImpl* StatisticsProviderImpl::GetInstance() {
-  return Singleton<StatisticsProviderImpl,
-                   DefaultSingletonTraits<StatisticsProviderImpl> >::get();
+  return base::Singleton<
+      StatisticsProviderImpl,
+      base::DefaultSingletonTraits<StatisticsProviderImpl>>::get();
+}
+
+bool StatisticsProvider::HasMachineStatistic(const std::string& name) {
+  return GetMachineStatistic(name, nullptr);
 }
 
 static StatisticsProvider* g_test_statistics_provider = NULL;

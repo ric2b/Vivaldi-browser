@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "chrome/browser/sync_file_system/logger.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -18,7 +19,8 @@ void LogSampleEvents() {
   util::Log(logging::LOG_ERROR, FROM_HERE, "Error test message");
 }
 
-bool ContainsString(std::string contains_string, EventLogger::Event event) {
+bool ContainsString(const std::string& contains_string,
+                    EventLogger::Event event) {
   return event.what.find(contains_string) != std::string::npos;
 }
 

@@ -4,7 +4,10 @@
 
 #include "remoting/host/mouse_shape_pump.h"
 
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -137,8 +140,8 @@ TEST_F(MouseShapePumpTest, FirstCursor) {
       .RetiresOnSaturation();
 
   // Start the pump.
-  pump_.reset(new MouseShapePump(capture_task_runner_, cursor_monitor.Pass(),
-                                 &client_stub_));
+  pump_.reset(new MouseShapePump(capture_task_runner_,
+                                 std::move(cursor_monitor), &client_stub_));
 
   run_loop.Run();
 }

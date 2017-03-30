@@ -8,7 +8,7 @@
 namespace content {
 
 // If you change this enum you also need to update
-// http://cs/file:chrome/histograms.xml
+// tools/metrics/histograms/histograms.xml
 enum CauseForGpuLaunch {
   // Start enum from 2 to keep the same values for the histogram.
   CAUSE_FOR_GPU_LAUNCH_GPUDATAMANAGER_REQUESTCOMPLETEGPUINFOIFNEEDED = 2,
@@ -22,6 +22,8 @@ enum CauseForGpuLaunch {
   CAUSE_FOR_GPU_LAUNCH_PEPPERVIDEOENCODERACCELERATOR_INITIALIZE,
   CAUSE_FOR_GPU_LAUNCH_GPU_MEMORY_BUFFER_ALLOCATE,
   CAUSE_FOR_GPU_LAUNCH_JPEGDECODEACCELERATOR_INITIALIZE,
+  CAUSE_FOR_GPU_LAUNCH_MOJO_SETUP,
+  CAUSE_FOR_GPU_LAUNCH_ARCVIDEOACCELERATOR,
   CAUSE_FOR_GPU_LAUNCH_PLATFORM_MEDIA_PIPELINE,
 
   // All new values should be inserted above this point so that
@@ -30,6 +32,5 @@ enum CauseForGpuLaunch {
 };
 
 }  // namespace content
-
 
 #endif  // CONTENT_COMMON_GPU_GPU_PROCESS_LAUNCH_CAUSES_H_

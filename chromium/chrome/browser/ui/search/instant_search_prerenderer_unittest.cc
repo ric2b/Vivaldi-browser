@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/search/instant_search_prerenderer.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/prerender/prerender_handle.h"
 #include "chrome/browser/prerender/prerender_manager.h"
@@ -193,7 +196,7 @@ class InstantSearchPrerendererTest : public InstantUnitTestBase {
     return GetInstantSearchPrerenderer()->prerender_contents();
   }
 
-  bool MessageWasSent(uint32 id) {
+  bool MessageWasSent(uint32_t id) {
     content::MockRenderProcessHost* process =
         static_cast<content::MockRenderProcessHost*>(
             prerender_contents()->GetRenderViewHost()->GetProcess());
@@ -224,17 +227,17 @@ TEST_F(InstantSearchPrerendererTest, GetSearchTermsFromPrerenderedPage) {
   GURL url(GetPrerenderURL());
   EXPECT_EQ(GURL("https://www.google.com/instant?ion=1&foo=foo#foo=foo&strk"),
             url);
-  EXPECT_EQ(base::UTF16ToASCII(prerenderer->get_last_query()),
-            base::UTF16ToASCII(
-                chrome::ExtractSearchTermsFromURL(profile(), url)));
+  EXPECT_EQ(
+      base::UTF16ToASCII(prerenderer->get_last_query()),
+      base::UTF16ToASCII(search::ExtractSearchTermsFromURL(profile(), url)));
 
   // Assume the prerendered page prefetched search results for the query
   // "flowers".
   SetLastQuery(ASCIIToUTF16("flowers"));
   EXPECT_EQ("flowers", base::UTF16ToASCII(prerenderer->get_last_query()));
-  EXPECT_EQ(base::UTF16ToASCII(prerenderer->get_last_query()),
-            base::UTF16ToASCII(
-                chrome::ExtractSearchTermsFromURL(profile(), url)));
+  EXPECT_EQ(
+      base::UTF16ToASCII(prerenderer->get_last_query()),
+      base::UTF16ToASCII(search::ExtractSearchTermsFromURL(profile(), url)));
 }
 
 TEST_F(InstantSearchPrerendererTest, PrefetchSearchResults) {
@@ -347,9 +350,10 @@ TEST_F(InstantSearchPrerendererTest, PrerenderingAllowed) {
   // used only when the underlying page doesn't support Instant.
   NavigateAndCommitActiveTab(GURL("https://www.google.com/alt#quux=foo&strk"));
   active_tab = GetActiveWebContents();
-  EXPECT_FALSE(chrome::ExtractSearchTermsFromURL(profile(),
-                                                 active_tab->GetURL()).empty());
-  EXPECT_FALSE(chrome::ShouldPrefetchSearchResultsOnSRP());
+  EXPECT_FALSE(
+      search::ExtractSearchTermsFromURL(profile(), active_tab->GetURL())
+          .empty());
+  EXPECT_FALSE(search::ShouldPrefetchSearchResultsOnSRP());
   EXPECT_FALSE(prerenderer->IsAllowed(search_type_match, active_tab));
 }
 

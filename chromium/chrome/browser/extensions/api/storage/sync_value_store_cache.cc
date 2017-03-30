@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/storage/sync_value_store_cache.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
@@ -27,10 +29,9 @@ namespace {
 // extensions/common/api/storage.json.
 SettingsStorageQuotaEnforcer::Limits GetSyncQuotaLimits() {
   SettingsStorageQuotaEnforcer::Limits limits = {
-    static_cast<size_t>(core_api::storage::sync::QUOTA_BYTES),
-    static_cast<size_t>(core_api::storage::sync::QUOTA_BYTES_PER_ITEM),
-    static_cast<size_t>(core_api::storage::sync::MAX_ITEMS)
-  };
+      static_cast<size_t>(api::storage::sync::QUOTA_BYTES),
+      static_cast<size_t>(api::storage::sync::QUOTA_BYTES_PER_ITEM),
+      static_cast<size_t>(api::storage::sync::MAX_ITEMS)};
   return limits;
 }
 

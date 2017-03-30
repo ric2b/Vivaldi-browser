@@ -25,10 +25,11 @@ class CONTENT_EXPORT LayeredResourceHandler : public ResourceHandler {
 
   // ResourceHandler implementation:
   void SetController(ResourceController* controller) override;
-  bool OnUploadProgress(uint64 position, uint64 size) override;
   bool OnRequestRedirected(const net::RedirectInfo& redirect_info,
                            ResourceResponse* response,
                            bool* defer) override;
+  bool OnResponseStarted(ResourceResponse* response,
+                         bool* defer) override;
   bool OnResponseStarted(ResourceResponse* response,
                          bool* defer,
                          bool open_when_done,

@@ -11,7 +11,6 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/mac/scoped_audio_queue_ref.h"
@@ -39,7 +38,7 @@ class CoreAudioDemuxerStream : public DemuxerStream {
 
   void Stop();
   void Abort();
-  void ReadCompleted(uint8* read_data, int size);
+  void ReadCompleted(uint8_t* read_data, int size);
 
   bool Seek(base::TimeDelta time);
 

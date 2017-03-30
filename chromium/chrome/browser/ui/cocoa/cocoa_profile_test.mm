@@ -9,7 +9,6 @@
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -19,6 +18,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 
 CocoaProfileTest::CocoaProfileTest()
@@ -57,7 +57,7 @@ void CocoaProfileTest::SetUp() {
   ASSERT_TRUE(profile_manager_.SetUp());
 
   profile_ = profile_manager_.CreateTestingProfile(
-      "Person 1", scoped_ptr<PrefServiceSyncable>(),
+      "Person 1", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
       base::UTF8ToUTF16("Person 1"), 0, std::string(),
       testing_factories_);
   ASSERT_TRUE(profile_);

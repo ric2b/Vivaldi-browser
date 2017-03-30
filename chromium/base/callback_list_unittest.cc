@@ -4,9 +4,11 @@
 
 #include "base/callback_list.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -37,7 +39,7 @@ class Remover {
   }
   void SetSubscriptionToRemove(
       scoped_ptr<CallbackList<void(void)>::Subscription> sub) {
-    removal_subscription_ = sub.Pass();
+    removal_subscription_ = std::move(sub);
   }
 
   int total() const { return total_; }
@@ -96,6 +98,19 @@ class Summer {
  private:
   int value_;
   DISALLOW_COPY_AND_ASSIGN(Summer);
+};
+
+class Counter {
+ public:
+  Counter() : value_(0) {}
+
+  void Increment() { value_++; }
+
+  int value() const { return value_; }
+
+ private:
+  int value_;
+  DISALLOW_COPY_AND_ASSIGN(Counter);
 };
 
 // Sanity check that we can instantiate a CallbackList for each arity.
@@ -234,9 +249,9 @@ TEST(CallbackListTest, RemoveCallbacksDuringIteration) {
       cb_reg.Add(Bind(&Listener::IncrementTotal, Unretained(&b)));
 
   // |remover_1| will remove itself.
-  remover_1.SetSubscriptionToRemove(remover_1_sub.Pass());
+  remover_1.SetSubscriptionToRemove(std::move(remover_1_sub));
   // |remover_2| will remove a.
-  remover_2.SetSubscriptionToRemove(a_subscription.Pass());
+  remover_2.SetSubscriptionToRemove(std::move(a_subscription));
 
   cb_reg.Notify();
 
@@ -285,6 +300,38 @@ TEST(CallbackListTest, EmptyList) {
   CallbackList<void(void)> cb_reg;
 
   cb_reg.Notify();
+}
+
+TEST(CallbackList, RemovalCallback) {
+  Counter remove_count;
+  CallbackList<void(void)> cb_reg;
+  cb_reg.set_removal_callback(
+      Bind(&Counter::Increment, Unretained(&remove_count)));
+
+  scoped_ptr<CallbackList<void(void)>::Subscription> subscription =
+      cb_reg.Add(Bind(&DoNothing));
+
+  // Removing a subscription outside of iteration signals the callback.
+  EXPECT_EQ(0, remove_count.value());
+  subscription.reset();
+  EXPECT_EQ(1, remove_count.value());
+
+  // Configure two subscriptions to remove themselves.
+  Remover remover_1, remover_2;
+  scoped_ptr<CallbackList<void(void)>::Subscription> remover_1_sub =
+      cb_reg.Add(Bind(&Remover::IncrementTotalAndRemove,
+          Unretained(&remover_1)));
+  scoped_ptr<CallbackList<void(void)>::Subscription> remover_2_sub =
+      cb_reg.Add(Bind(&Remover::IncrementTotalAndRemove,
+          Unretained(&remover_2)));
+  remover_1.SetSubscriptionToRemove(std::move(remover_1_sub));
+  remover_2.SetSubscriptionToRemove(std::move(remover_2_sub));
+
+  // The callback should be signaled exactly once.
+  EXPECT_EQ(1, remove_count.value());
+  cb_reg.Notify();
+  EXPECT_EQ(2, remove_count.value());
+  EXPECT_TRUE(cb_reg.empty());
 }
 
 }  // namespace

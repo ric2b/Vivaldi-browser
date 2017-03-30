@@ -39,10 +39,13 @@ const base::FilePath::CharType kCookieFilename[] = FILE_PATH_LITERAL("Cookies");
 class CookieCryptor : public CookieCryptoDelegate {
  public:
   CookieCryptor();
+  bool ShouldEncrypt() override;
   bool EncryptString(const std::string& plaintext,
                      std::string* ciphertext) override;
   bool DecryptString(const std::string& ciphertext,
                      std::string* plaintext) override;
+
+  bool should_encrypt_;
 
  private:
   scoped_ptr<crypto::SymmetricKey> key_;
@@ -50,7 +53,8 @@ class CookieCryptor : public CookieCryptoDelegate {
 };
 
 CookieCryptor::CookieCryptor()
-    : key_(
+    : should_encrypt_(true),
+      key_(
           crypto::SymmetricKey::DeriveKeyFromPassword(crypto::SymmetricKey::AES,
                                                       "password",
                                                       "saltiest",
@@ -58,6 +62,10 @@ CookieCryptor::CookieCryptor()
                                                       256)) {
   std::string iv("the iv: 16 bytes");
   encryptor_.Init(key_.get(), crypto::Encryptor::CBC, iv);
+}
+
+bool CookieCryptor::ShouldEncrypt() {
+  return should_encrypt_;
 }
 
 bool CookieCryptor::EncryptString(const std::string& plaintext,
@@ -127,9 +135,7 @@ class SQLitePersistentCookieStoreTest : public testing::Test {
     pool_owner_.reset(new base::SequencedWorkerPoolOwner(3, "Background Pool"));
   }
 
-  void CreateAndLoad(bool crypt_cookies,
-                     bool restore_old_session_cookies,
-                     CanonicalCookieVector* cookies) {
+  void Create(bool crypt_cookies, bool restore_old_session_cookies) {
     if (crypt_cookies)
       cookie_crypto_delegate_.reset(new CookieCryptor());
 
@@ -137,6 +143,12 @@ class SQLitePersistentCookieStoreTest : public testing::Test {
         temp_dir_.path().Append(kCookieFilename), client_task_runner(),
         background_task_runner(), restore_old_session_cookies,
         cookie_crypto_delegate_.get());
+  }
+
+  void CreateAndLoad(bool crypt_cookies,
+                     bool restore_old_session_cookies,
+                     CanonicalCookieVector* cookies) {
+    Create(crypt_cookies, restore_old_session_cookies);
     Load(cookies);
   }
 
@@ -184,7 +196,6 @@ class SQLitePersistentCookieStoreTest : public testing::Test {
 
   void TearDown() override {
     DestroyStore();
-    pool_owner_->pool()->Shutdown();
   }
 
  protected:
@@ -195,7 +206,7 @@ class SQLitePersistentCookieStoreTest : public testing::Test {
   CanonicalCookieVector cookies_;
   base::ScopedTempDir temp_dir_;
   scoped_refptr<SQLitePersistentCookieStore> store_;
-  scoped_ptr<CookieCryptoDelegate> cookie_crypto_delegate_;
+  scoped_ptr<CookieCryptor> cookie_crypto_delegate_;
 };
 
 TEST_F(SQLitePersistentCookieStoreTest, TestInvalidMetaTableRecovery) {
@@ -408,7 +419,7 @@ TEST_F(SQLitePersistentCookieStoreTest, TestFlush) {
   base::FilePath path = temp_dir_.path().Append(kCookieFilename);
   base::File::Info info;
   ASSERT_TRUE(base::GetFileInfo(path, &info));
-  int64 base_size = info.size;
+  int64_t base_size = info.size;
 
   // Write some large cookies, so the DB will have to expand by several KB.
   for (char c = 'a'; c < 'z'; ++c) {
@@ -658,6 +669,87 @@ TEST_F(SQLitePersistentCookieStoreTest, UpdateToEncryption) {
   EXPECT_NE(0U, contents.length());
   EXPECT_EQ(contents.find("encrypted_value123XYZ"), std::string::npos);
   EXPECT_EQ(contents.find("something456ABC"), std::string::npos);
+}
+
+TEST_F(SQLitePersistentCookieStoreTest, UpdateFromEncryption) {
+  CanonicalCookieVector cookies;
+
+  // Create unencrypted cookie store and write something to it.
+  InitializeStore(true, false);
+  AddCookie("name", "value123XYZ", "foo.bar", "/", base::Time::Now());
+  DestroyStore();
+
+  // Verify that "value" is not visible in the file.
+  std::string contents = ReadRawDBContents();
+  EXPECT_NE(0U, contents.length());
+  EXPECT_EQ(contents.find("value123XYZ"), std::string::npos);
+
+  // Create encrypted cookie store and ensure old cookie still reads.
+  STLDeleteElements(&cookies_);
+  EXPECT_EQ(0U, cookies_.size());
+  CreateAndLoad(true, false, &cookies);
+  EXPECT_EQ(1U, cookies_.size());
+  EXPECT_EQ("name", cookies_[0]->Name());
+  EXPECT_EQ("value123XYZ", cookies_[0]->Value());
+
+  // Make sure we can update existing cookie and it writes unencrypted.
+  cookie_crypto_delegate_->should_encrypt_ = false;
+  store_->DeleteCookie(*(cookies_[0]));
+  AddCookie("name", "plaintext_value123XYZ", "foo.bar", "/", base::Time::Now());
+  AddCookie("other", "something456ABC", "foo.bar", "/",
+            base::Time::Now() + base::TimeDelta::FromInternalValue(10));
+  DestroyStore();
+  STLDeleteElements(&cookies_);
+  CreateAndLoad(true, false, &cookies);
+  EXPECT_EQ(2U, cookies_.size());
+  CanonicalCookie* cookie_name = nullptr;
+  CanonicalCookie* cookie_other = nullptr;
+  if (cookies_[0]->Name() == "name") {
+    cookie_name = cookies_[0];
+    cookie_other = cookies_[1];
+  } else {
+    cookie_name = cookies_[1];
+    cookie_other = cookies_[0];
+  }
+  EXPECT_EQ("plaintext_value123XYZ", cookie_name->Value());
+  EXPECT_EQ("something456ABC", cookie_other->Value());
+  DestroyStore();
+  STLDeleteElements(&cookies_);
+
+  // Verify that "value" is now visible in the file.
+  contents = ReadRawDBContents();
+  EXPECT_NE(0U, contents.length());
+  EXPECT_NE(contents.find("value123XYZ"), std::string::npos);
+}
+
+namespace {
+void WasCalledWithNoCookies(bool* was_called_with_no_cookies,
+                            const std::vector<CanonicalCookie*>& cookies) {
+  *was_called_with_no_cookies = cookies.empty();
+}
+}
+
+TEST_F(SQLitePersistentCookieStoreTest, EmptyLoadAfterClose) {
+  // Create unencrypted cookie store and write something to it.
+  InitializeStore(false, false);
+  AddCookie("name", "value123XYZ", "foo.bar", "/", base::Time::Now());
+  DestroyStore();
+
+  // Create the cookie store, but immediately close it.
+  Create(false, false);
+  store_->Close(base::Closure());
+
+  // Expect any attempt to call Load() to synchronously respond with an empty
+  // vector of cookies after we've Close()d the database.
+  bool was_called_with_no_cookies = false;
+  store_->Load(base::Bind(WasCalledWithNoCookies, &was_called_with_no_cookies));
+  EXPECT_TRUE(was_called_with_no_cookies);
+
+  // Same with trying to load a specific cookie.
+  was_called_with_no_cookies = false;
+  store_->LoadCookiesForKey("foo.bar", base::Bind(WasCalledWithNoCookies,
+                                                  &was_called_with_no_cookies));
+  EXPECT_TRUE(was_called_with_no_cookies);
 }
 
 }  // namespace net

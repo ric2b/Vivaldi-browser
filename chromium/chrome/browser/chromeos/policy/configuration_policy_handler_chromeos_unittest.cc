@@ -6,6 +6,7 @@
 
 #include "base/callback.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_value_map.h"
 #include "base/values.h"
@@ -14,6 +15,7 @@
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema.h"
 #include "policy/policy_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -61,6 +63,7 @@ TEST_F(ScreenMagnifierPolicyHandlerTest, Disabled) {
   policy_.Set(key::kScreenMagnifierType,
               POLICY_LEVEL_MANDATORY,
               POLICY_SCOPE_USER,
+              POLICY_SOURCE_CLOUD,
               new base::FundamentalValue(0),
               NULL);
   handler_.ApplyPolicySettings(policy_, &prefs_);
@@ -81,6 +84,7 @@ TEST_F(ScreenMagnifierPolicyHandlerTest, Enabled) {
   policy_.Set(key::kScreenMagnifierType,
               POLICY_LEVEL_MANDATORY,
               POLICY_SCOPE_USER,
+              POLICY_SOURCE_CLOUD,
               new base::FundamentalValue(1),
               NULL);
   handler_.ApplyPolicySettings(policy_, &prefs_);
@@ -109,6 +113,7 @@ TEST(ExternalDataPolicyHandlerTest, WrongType) {
   policy_map.Set(key::kUserAvatarImage,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(false),
                  NULL);
   PolicyErrorMap errors;
@@ -124,6 +129,7 @@ TEST(ExternalDataPolicyHandlerTest, MissingURL) {
   policy_map.Set(key::kUserAvatarImage,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  dict.release(),
                  NULL);
   PolicyErrorMap errors;
@@ -140,6 +146,7 @@ TEST(ExternalDataPolicyHandlerTest, InvalidURL) {
   policy_map.Set(key::kUserAvatarImage,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  dict.release(),
                  NULL);
   PolicyErrorMap errors;
@@ -155,6 +162,7 @@ TEST(ExternalDataPolicyHandlerTest, MissingHash) {
   policy_map.Set(key::kUserAvatarImage,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  dict.release(),
                  NULL);
   PolicyErrorMap errors;
@@ -171,6 +179,7 @@ TEST(ExternalDataPolicyHandlerTest, InvalidHash) {
   policy_map.Set(key::kUserAvatarImage,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  dict.release(),
                  NULL);
   PolicyErrorMap errors;
@@ -189,6 +198,7 @@ TEST(ExternalDataPolicyHandlerTest, Valid) {
   policy_map.Set(key::kUserAvatarImage,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  dict.release(),
                  NULL);
   PolicyErrorMap errors;
@@ -249,6 +259,7 @@ TEST(NetworkConfigurationPolicyHandlerTest, ValidONC) {
   policy_map.Set(key::kOpenNetworkConfiguration,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue(kTestONC),
                  NULL);
   scoped_ptr<NetworkConfigurationPolicyHandler> handler(
@@ -263,6 +274,7 @@ TEST(NetworkConfigurationPolicyHandlerTest, WrongType) {
   policy_map.Set(key::kOpenNetworkConfiguration,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(false),
                  NULL);
   scoped_ptr<NetworkConfigurationPolicyHandler> handler(
@@ -278,6 +290,7 @@ TEST(NetworkConfigurationPolicyHandlerTest, JSONParseError) {
   policy_map.Set(key::kOpenNetworkConfiguration,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue(kTestONC),
                  NULL);
   scoped_ptr<NetworkConfigurationPolicyHandler> handler(
@@ -306,6 +319,7 @@ TEST(NetworkConfigurationPolicyHandlerTest, Sanitization) {
   policy_map.Set(key::kOpenNetworkConfiguration,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::StringValue(kTestONC),
                  NULL);
   scoped_ptr<NetworkConfigurationPolicyHandler> handler(
@@ -330,9 +344,10 @@ TEST(PinnedLauncherAppsPolicyHandler, PrefTranslation) {
   PinnedLauncherAppsPolicyHandler handler;
 
   policy_map.Set(key::kPinnedLauncherApps, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, list.DeepCopy(), NULL);
+                 POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, list.DeepCopy(),
+                 nullptr);
   handler.ApplyPolicySettings(policy_map, &prefs);
-  EXPECT_TRUE(prefs.GetValue(prefs::kPinnedLauncherApps, &value));
+  EXPECT_TRUE(prefs.GetValue(prefs::kPolicyPinnedLauncherApps, &value));
   EXPECT_TRUE(base::Value::Equals(&expected_pinned_apps, value));
 
   base::StringValue entry1("abcdefghijklmnopabcdefghijklmnop");
@@ -341,10 +356,11 @@ TEST(PinnedLauncherAppsPolicyHandler, PrefTranslation) {
   expected_pinned_apps.Append(entry1_dict);
   list.Append(entry1.DeepCopy());
   policy_map.Set(key::kPinnedLauncherApps, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, list.DeepCopy(), NULL);
+                 POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, list.DeepCopy(),
+                 nullptr);
   prefs.Clear();
   handler.ApplyPolicySettings(policy_map, &prefs);
-  EXPECT_TRUE(prefs.GetValue(prefs::kPinnedLauncherApps, &value));
+  EXPECT_TRUE(prefs.GetValue(prefs::kPolicyPinnedLauncherApps, &value));
   EXPECT_TRUE(base::Value::Equals(&expected_pinned_apps, value));
 }
 
@@ -358,10 +374,12 @@ TEST_F(LoginScreenPowerManagementPolicyHandlerTest, Empty) {
 
 TEST_F(LoginScreenPowerManagementPolicyHandlerTest, ValidPolicy) {
   PolicyMap policy_map;
-  policy_map.Set(key::kDeviceLoginScreenPowerManagement, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, base::JSONReader::DeprecatedRead(
-                                        kLoginScreenPowerManagementPolicy),
-                 NULL);
+  policy_map.Set(
+      key::kDeviceLoginScreenPowerManagement, POLICY_LEVEL_MANDATORY,
+      POLICY_SCOPE_USER,
+      POLICY_SOURCE_CLOUD,
+      base::JSONReader::Read(kLoginScreenPowerManagementPolicy).release(),
+      NULL);
   LoginScreenPowerManagementPolicyHandler handler(chrome_schema_);
   PolicyErrorMap errors;
   EXPECT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
@@ -373,6 +391,7 @@ TEST_F(LoginScreenPowerManagementPolicyHandlerTest, WrongType) {
   policy_map.Set(key::kDeviceLoginScreenPowerManagement,
                  POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
                  new base::FundamentalValue(false),
                  NULL);
   LoginScreenPowerManagementPolicyHandler handler(chrome_schema_);

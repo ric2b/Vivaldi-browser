@@ -12,20 +12,6 @@
 
 namespace cc {
 
-namespace {
-
-class IsDonePredicate {
- public:
-  typedef const MicroBenchmarkImpl* argument_type;
-  typedef bool result_type;
-
-  result_type operator()(argument_type benchmark) const {
-    return benchmark->IsDone();
-  }
-};
-
-}  // namespace
-
 MicroBenchmarkControllerImpl::MicroBenchmarkControllerImpl(
     LayerTreeHostImpl* host)
     : host_(host) {
@@ -36,15 +22,13 @@ MicroBenchmarkControllerImpl::~MicroBenchmarkControllerImpl() {}
 
 void MicroBenchmarkControllerImpl::ScheduleRun(
     scoped_ptr<MicroBenchmarkImpl> benchmark) {
-  benchmarks_.push_back(benchmark.Pass());
+  benchmarks_.push_back(std::move(benchmark));
 }
 
 void MicroBenchmarkControllerImpl::DidCompleteCommit() {
-  for (ScopedPtrVector<MicroBenchmarkImpl>::iterator it = benchmarks_.begin();
-       it != benchmarks_.end();
-       ++it) {
-    DCHECK(!(*it)->IsDone());
-    (*it)->DidCompleteCommit(host_);
+  for (const auto& benchmark : benchmarks_) {
+    DCHECK(!benchmark->IsDone());
+    benchmark->DidCompleteCommit(host_);
   }
 
   CleanUpFinishedBenchmarks();
@@ -52,7 +36,10 @@ void MicroBenchmarkControllerImpl::DidCompleteCommit() {
 
 void MicroBenchmarkControllerImpl::CleanUpFinishedBenchmarks() {
   benchmarks_.erase(
-      benchmarks_.partition(std::not1(IsDonePredicate())),
+      std::remove_if(benchmarks_.begin(), benchmarks_.end(),
+                     [](const scoped_ptr<MicroBenchmarkImpl>& benchmark) {
+                       return benchmark->IsDone();
+                     }),
       benchmarks_.end());
 }
 

@@ -14,8 +14,9 @@ extern "C" {
 #include <keyhi.h>
 #include <pk11pub.h>
 #include <secmod.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "crypto/nss_util.h"
@@ -25,38 +26,10 @@ extern "C" {
 
 namespace {
 
-PK11SlotInfo* GetTempKeySlot() {
-  return PK11_GetInternalSlot();
-}
-
-class EllipticCurveSupportChecker {
- public:
-  EllipticCurveSupportChecker() {
-    // NOTE: we can do this check here only because we use the NSS internal
-    // slot.  If we support other slots in the future, checking whether they
-    // support ECDSA may block NSS, and the value may also change as devices are
-    // inserted/removed, so we would need to re-check on every use.
-    crypto::EnsureNSSInit();
-    crypto::ScopedPK11Slot slot(GetTempKeySlot());
-    supported_ = PK11_DoesMechanism(slot.get(), CKM_EC_KEY_PAIR_GEN) &&
-        PK11_DoesMechanism(slot.get(), CKM_ECDSA);
-  }
-
-  bool Supported() {
-    return supported_;
-  }
-
- private:
-  bool supported_;
-};
-
-static base::LazyInstance<EllipticCurveSupportChecker>::Leaky
-    g_elliptic_curve_supported = LAZY_INSTANCE_INITIALIZER;
-
 // Copied from rsa_private_key_nss.cc.
 static bool ReadAttribute(SECKEYPrivateKey* key,
                           CK_ATTRIBUTE_TYPE type,
-                          std::vector<uint8>* output) {
+                          std::vector<uint8_t>* output) {
   SECItem item;
   SECStatus rv;
   rv = PK11_ReadRawAttribute(PK11_TypePrivKey, key, type, &item);
@@ -82,15 +55,10 @@ ECPrivateKey::~ECPrivateKey() {
 }
 
 // static
-bool ECPrivateKey::IsSupported() {
-  return g_elliptic_curve_supported.Get().Supported();
-}
-
-// static
 ECPrivateKey* ECPrivateKey::Create() {
   EnsureNSSInit();
 
-  ScopedPK11Slot slot(GetTempKeySlot());
+  ScopedPK11Slot slot(PK11_GetInternalSlot());
   if (!slot)
     return nullptr;
 
@@ -136,11 +104,11 @@ ECPrivateKey* ECPrivateKey::Create() {
 // static
 ECPrivateKey* ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
     const std::string& password,
-    const std::vector<uint8>& encrypted_private_key_info,
-    const std::vector<uint8>& subject_public_key_info) {
+    const std::vector<uint8_t>& encrypted_private_key_info,
+    const std::vector<uint8_t>& subject_public_key_info) {
   EnsureNSSInit();
 
-  ScopedPK11Slot slot(GetTempKeySlot());
+  ScopedPK11Slot slot(PK11_GetInternalSlot());
   if (!slot)
     return nullptr;
 
@@ -183,7 +151,7 @@ ECPrivateKey* ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
 bool ECPrivateKey::ImportFromEncryptedPrivateKeyInfo(
     PK11SlotInfo* slot,
     const std::string& password,
-    const uint8* encrypted_private_key_info,
+    const uint8_t* encrypted_private_key_info,
     size_t encrypted_private_key_info_len,
     CERTSubjectPublicKeyInfo* decoded_spki,
     bool permanent,
@@ -271,10 +239,9 @@ ECPrivateKey* ECPrivateKey::Copy() const {
   return copy.release();
 }
 
-bool ECPrivateKey::ExportEncryptedPrivateKey(
-    const std::string& password,
-    int iterations,
-    std::vector<uint8>* output) {
+bool ECPrivateKey::ExportEncryptedPrivateKey(const std::string& password,
+                                             int iterations,
+                                             std::vector<uint8_t>* output) {
   // We export as an EncryptedPrivateKeyInfo bundle instead of a plain PKCS #8
   // PrivateKeyInfo because PK11_ImportDERPrivateKeyInfoAndReturnKey doesn't
   // support EC keys.
@@ -316,7 +283,7 @@ bool ECPrivateKey::ExportEncryptedPrivateKey(
   return true;
 }
 
-bool ECPrivateKey::ExportPublicKey(std::vector<uint8>* output) {
+bool ECPrivateKey::ExportPublicKey(std::vector<uint8_t>* output) {
   ScopedSECItem der_pubkey(
       SECKEY_EncodeDERSubjectPublicKeyInfo(public_key_));
   if (!der_pubkey.get()) {
@@ -344,11 +311,11 @@ bool ECPrivateKey::ExportRawPublicKey(std::string* output) {
   return true;
 }
 
-bool ECPrivateKey::ExportValue(std::vector<uint8>* output) {
+bool ECPrivateKey::ExportValue(std::vector<uint8_t>* output) {
   return ReadAttribute(key_, CKA_VALUE, output);
 }
 
-bool ECPrivateKey::ExportECParams(std::vector<uint8>* output) {
+bool ECPrivateKey::ExportECParams(std::vector<uint8_t>* output) {
   return ReadAttribute(key_, CKA_EC_PARAMS, output);
 }
 

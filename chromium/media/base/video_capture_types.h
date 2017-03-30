@@ -5,10 +5,13 @@
 #ifndef MEDIA_BASE_VIDEO_CAPTURE_TYPES_H_
 #define MEDIA_BASE_VIDEO_CAPTURE_TYPES_H_
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "build/build_config.h"
 #include "media/base/media_export.h"
+#include "media/base/video_types.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -17,31 +20,12 @@ namespace media {
 // shared with device manager.
 typedef int VideoCaptureSessionId;
 
-// Color formats from camera. This list is sorted in order of preference.
-// TODO(mcasas): Consider if this list can be merged with media::Format.
-// TODO(mcasas): http://crbug.com/504160 Consider making this an enum class.
-enum VideoPixelFormat {
-  PIXEL_FORMAT_I420,
-  PIXEL_FORMAT_YV12,
-  PIXEL_FORMAT_NV12,
-  PIXEL_FORMAT_NV21,
-  PIXEL_FORMAT_UYVY,
-  PIXEL_FORMAT_YUY2,
-  PIXEL_FORMAT_RGB24,
-  PIXEL_FORMAT_RGB32,
-  PIXEL_FORMAT_ARGB,
-  PIXEL_FORMAT_MJPEG,
-  PIXEL_FORMAT_UNKNOWN,  // Color format not set.
-  PIXEL_FORMAT_MAX = PIXEL_FORMAT_UNKNOWN,
-};
-
 // Storage type for the pixels. In principle, all combinations of Storage and
 // Format are possible, though some are very typical, such as texture + ARGB,
 // and others are only available if the platform allows it e.g. GpuMemoryBuffer.
 // TODO(mcasas): http://crbug.com/504160 Consider making this an enum class.
 enum VideoPixelStorage {
   PIXEL_STORAGE_CPU,
-  PIXEL_STORAGE_TEXTURE,
   PIXEL_STORAGE_GPUMEMORYBUFFER,
   PIXEL_STORAGE_MAX = PIXEL_STORAGE_GPUMEMORYBUFFER,
 };
@@ -69,6 +53,25 @@ enum ResolutionChangePolicy {
   RESOLUTION_POLICY_LAST = RESOLUTION_POLICY_ANY_WITHIN_LIMIT,
 };
 
+// Potential values of the googPowerLineFrequency optional constraint passed to
+// getUserMedia. Note that the numeric values are currently significant, and are
+// used to map enum values to corresponding frequency values.
+// TODO(ajose): http://crbug.com/525167 Consider making this a class.
+enum class PowerLineFrequency {
+  FREQUENCY_DEFAULT = 0,
+  FREQUENCY_50HZ = 50,
+  FREQUENCY_60HZ = 60,
+  FREQUENCY_MAX = FREQUENCY_60HZ
+};
+
+// Assert that the int:frequency mapping is correct.
+static_assert(static_cast<int>(PowerLineFrequency::FREQUENCY_DEFAULT) == 0,
+              "static_cast<int>(FREQUENCY_DEFAULT) must equal 0.");
+static_assert(static_cast<int>(PowerLineFrequency::FREQUENCY_50HZ) == 50,
+              "static_cast<int>(FREQUENCY_DEFAULT) must equal 50.");
+static_assert(static_cast<int>(PowerLineFrequency::FREQUENCY_60HZ) == 60,
+              "static_cast<int>(FREQUENCY_DEFAULT) must equal 60.");
+
 // Some drivers use rational time per frame instead of float frame rate, this
 // constant k is used to convert between both: A fps -> [k/k*A] seconds/frame.
 const int kFrameRatePrecision = 10000;
@@ -88,8 +91,12 @@ struct MEDIA_EXPORT VideoCaptureFormat {
                      VideoPixelStorage pixel_storage);
 
   static std::string ToString(const VideoCaptureFormat& format);
-  static std::string PixelFormatToString(VideoPixelFormat format);
   static std::string PixelStorageToString(VideoPixelStorage storage);
+
+  // Compares the priority of the pixel formats. Returns true if |lhs| is the
+  // preferred pixel format in comparison with |rhs|. Returns false otherwise.
+  static bool ComparePixelFormatPreference(const VideoPixelFormat& lhs,
+                                           const VideoPixelFormat& rhs);
 
   // Returns the required buffer size to hold an image of a given
   // VideoCaptureFormat with no padding and tightly packed.
@@ -120,10 +127,14 @@ typedef std::vector<VideoCaptureFormat> VideoCaptureFormats;
 struct MEDIA_EXPORT VideoCaptureParams {
   VideoCaptureParams();
 
+  // Returns true if requested_format.IsValid() and all other values are within
+  // their expected ranges.
+  bool IsValid() const;
+
   bool operator==(const VideoCaptureParams& other) const {
     return requested_format == other.requested_format &&
-           use_gpu_memory_buffers == other.use_gpu_memory_buffers &&
-           resolution_change_policy == other.resolution_change_policy;
+           resolution_change_policy == other.resolution_change_policy &&
+           power_line_frequency == other.power_line_frequency;
   }
 
   // Requests a resolution and format at which the capture will occur.
@@ -132,8 +143,8 @@ struct MEDIA_EXPORT VideoCaptureParams {
   // Policy for resolution change.
   ResolutionChangePolicy resolution_change_policy;
 
-  // Indication to the Driver to try to use GpuMemoryBuffers.
-  bool use_gpu_memory_buffers;
+  // User-specified power line frequency.
+  PowerLineFrequency power_line_frequency;
 };
 
 }  // namespace media

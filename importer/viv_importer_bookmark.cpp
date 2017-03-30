@@ -22,9 +22,9 @@
 #include "grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_resources.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_importer.h"
-
 #include "importer/viv_opera_reader.h"
 
 class OperaBookmarkReader : public OperaAdrFileReader {

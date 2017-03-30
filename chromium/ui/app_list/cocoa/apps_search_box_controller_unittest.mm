@@ -5,6 +5,7 @@
 #import "ui/app_list/cocoa/apps_search_box_controller.h"
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "testing/gtest_mac.h"
@@ -105,9 +106,11 @@ class AppsSearchBoxControllerTest : public ui::CocoaTest {
   }
 
   void SimulateKeyAction(SEL c) {
+    base::scoped_nsobject<NSTextView> stub_field_editor(
+        [[NSTextView alloc] initWithFrame:NSZeroRect]);
     NSControl* control = [apps_search_box_controller_ searchTextField];
     [apps_search_box_controller_ control:control
-                                textView:nil
+                                textView:stub_field_editor.get()
                      doCommandBySelector:c];
   }
 

@@ -5,6 +5,9 @@
 #ifndef CONTENT_RENDERER_MEDIA_ANDROID_STREAM_TEXTURE_FACTORY_IMPL_H_
 #define CONTENT_RENDERER_MEDIA_ANDROID_STREAM_TEXTURE_FACTORY_IMPL_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "content/renderer/media/android/stream_texture_factory.h"
 
 namespace cc {
@@ -19,22 +22,22 @@ class GLES2Interface;
 
 namespace content {
 
+class ContextProviderCommandBuffer;
 class GpuChannelHost;
 
 class StreamTextureFactoryImpl : public StreamTextureFactory {
  public:
   static scoped_refptr<StreamTextureFactoryImpl> Create(
-      const scoped_refptr<cc::ContextProvider>& context_provider,
-      GpuChannelHost* channel,
-      int frame_id);
+      const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
+      GpuChannelHost* channel);
 
   // StreamTextureFactory implementation.
   StreamTextureProxy* CreateProxy() override;
-  void EstablishPeer(int32 stream_id, int player_id) override;
+  void EstablishPeer(int32_t stream_id, int player_id, int frame_id) override;
   unsigned CreateStreamTexture(unsigned texture_target,
                                unsigned* texture_id,
                                gpu::Mailbox* texture_mailbox) override;
-  void SetStreamTextureSize(int32 texture_id, const gfx::Size& size) override;
+  void SetStreamTextureSize(int32_t texture_id, const gfx::Size& size) override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   void AddObserver(StreamTextureFactoryContextObserver* obs) override;
   void RemoveObserver(StreamTextureFactoryContextObserver* obs) override;
@@ -42,14 +45,12 @@ class StreamTextureFactoryImpl : public StreamTextureFactory {
  private:
   friend class base::RefCounted<StreamTextureFactoryImpl>;
   StreamTextureFactoryImpl(
-      const scoped_refptr<cc::ContextProvider>& context_provider,
-      GpuChannelHost* channel,
-      int frame_id);
+      const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
+      GpuChannelHost* channel);
   ~StreamTextureFactoryImpl() override;
 
-  scoped_refptr<cc::ContextProvider> context_provider_;
+  scoped_refptr<content::ContextProviderCommandBuffer> context_provider_;
   scoped_refptr<GpuChannelHost> channel_;
-  int frame_id_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(StreamTextureFactoryImpl);
 };

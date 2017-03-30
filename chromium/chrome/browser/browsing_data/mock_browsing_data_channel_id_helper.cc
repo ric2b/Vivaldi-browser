@@ -4,7 +4,10 @@
 
 #include "chrome/browser/browsing_data/mock_browsing_data_channel_id_helper.h"
 
+#include <utility>
+
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 MockBrowsingDataChannelIDHelper::MockBrowsingDataChannelIDHelper()
@@ -23,42 +26,37 @@ void MockBrowsingDataChannelIDHelper::StartFetching(
 void MockBrowsingDataChannelIDHelper::DeleteChannelID(
     const std::string& server_id) {
   ASSERT_FALSE(callback_.is_null());
-  ASSERT_TRUE(channel_ids_.find(server_id) != channel_ids_.end());
+  ASSERT_TRUE(ContainsKey(channel_ids_, server_id));
   channel_ids_[server_id] = false;
 }
 
 void MockBrowsingDataChannelIDHelper::AddChannelIDSample(
     const std::string& server_id) {
-  ASSERT_TRUE(channel_ids_.find(server_id) == channel_ids_.end());
+  ASSERT_FALSE(ContainsKey(channel_ids_, server_id));
   scoped_ptr<crypto::ECPrivateKey> key(crypto::ECPrivateKey::Create());
   channel_id_list_.push_back(
-      net::ChannelIDStore::ChannelID(server_id, base::Time(), key.Pass()));
+      net::ChannelIDStore::ChannelID(server_id, base::Time(), std::move(key)));
   channel_ids_[server_id] = true;
 }
 
 void MockBrowsingDataChannelIDHelper::Notify() {
   net::ChannelIDStore::ChannelIDList channel_id_list;
-  for (net::ChannelIDStore::ChannelIDList::iterator i =
-       channel_id_list_.begin();
-       i != channel_id_list_.end(); ++i) {
-    if (channel_ids_[i->server_identifier()])
-      channel_id_list.push_back(*i);
+  for (const auto& channel_id : channel_id_list_) {
+    if (channel_ids_.at(channel_id.server_identifier()))
+      channel_id_list.push_back(channel_id);
   }
   callback_.Run(channel_id_list);
 }
 
 void MockBrowsingDataChannelIDHelper::Reset() {
-  for (std::map<const std::string, bool>::iterator i =
-       channel_ids_.begin();
-       i != channel_ids_.end(); ++i)
-    i->second = true;
+  for (auto& pair : channel_ids_)
+    pair.second = true;
 }
 
 bool MockBrowsingDataChannelIDHelper::AllDeleted() {
-  for (std::map<const std::string, bool>::const_iterator i =
-       channel_ids_.begin();
-       i != channel_ids_.end(); ++i)
-    if (i->second)
+  for (const auto& pair : channel_ids_) {
+    if (pair.second)
       return false;
+  }
   return true;
 }

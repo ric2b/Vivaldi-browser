@@ -7,11 +7,11 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/common/pref_names.h"
@@ -24,22 +24,21 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "policy/proto/device_management_backend.pb.h"
 
+namespace em = enterprise_management;
+
 namespace policy {
 
 namespace {
 
-enterprise_management::DeviceRegisterRequest::Type GetRegistrationType() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kFakeCloudPolicyType))
-    return enterprise_management::DeviceRegisterRequest::BROWSER;
 #if defined(OS_IOS)
-  return enterprise_management::DeviceRegisterRequest::IOS_BROWSER;
+const em::DeviceRegisterRequest::Type kCloudPolicyRegistrationType =
+    em::DeviceRegisterRequest::IOS_BROWSER;
 #elif defined(OS_ANDROID)
-  return enterprise_management::DeviceRegisterRequest::ANDROID_BROWSER;
+const em::DeviceRegisterRequest::Type kCloudPolicyRegistrationType =
+    em::DeviceRegisterRequest::ANDROID_BROWSER;
 #else
 #error "This file can be built only on OS_IOS or OS_ANDROID."
 #endif
-}
 
 }  // namespace
 
@@ -71,8 +70,9 @@ UserPolicySigninService::~UserPolicySigninService() {}
 
 void UserPolicySigninService::RegisterForPolicy(
     const std::string& username,
+    const std::string& account_id,
     const PolicyRegistrationCallback& callback) {
-  RegisterForPolicyInternal(username, "", callback);
+  RegisterForPolicyInternal(username, account_id, "", callback);
 }
 
 #if !defined(OS_ANDROID)
@@ -80,7 +80,7 @@ void UserPolicySigninService::RegisterForPolicyWithAccessToken(
     const std::string& username,
     const std::string& access_token,
     const PolicyRegistrationCallback& callback) {
-  RegisterForPolicyInternal(username, access_token, callback);
+  RegisterForPolicyInternal(username, "", access_token, callback);
 }
 
 // static
@@ -91,6 +91,7 @@ std::vector<std::string> UserPolicySigninService::GetScopes() {
 
 void UserPolicySigninService::RegisterForPolicyInternal(
     const std::string& username,
+    const std::string& account_id,
     const std::string& access_token,
     const PolicyRegistrationCallback& callback) {
   // Create a new CloudPolicyClient for fetching the DMToken.
@@ -107,15 +108,13 @@ void UserPolicySigninService::RegisterForPolicyInternal(
   // alive for the length of the registration process.
   registration_helper_.reset(new CloudPolicyClientRegistrationHelper(
       policy_client.get(),
-      GetRegistrationType()));
+      kCloudPolicyRegistrationType));
 
   if (access_token.empty()) {
     registration_helper_->StartRegistration(
-        oauth2_token_service_,
-        username,
+        oauth2_token_service_, account_id,
         base::Bind(&UserPolicySigninService::CallPolicyRegistrationCallback,
-                   base::Unretained(this),
-                   base::Passed(&policy_client),
+                   base::Unretained(this), base::Passed(&policy_client),
                    callback));
   } else {
 #if defined(OS_ANDROID)
@@ -203,10 +202,10 @@ void UserPolicySigninService::RegisterCloudPolicyService() {
 
   registration_helper_.reset(new CloudPolicyClientRegistrationHelper(
       policy_manager()->core()->client(),
-      GetRegistrationType()));
+      kCloudPolicyRegistrationType));
   registration_helper_->StartRegistration(
       oauth2_token_service_,
-      signin_manager()->GetAuthenticatedUsername(),
+      signin_manager()->GetAuthenticatedAccountId(),
       base::Bind(&UserPolicySigninService::OnRegistrationDone,
                  base::Unretained(this)));
 }

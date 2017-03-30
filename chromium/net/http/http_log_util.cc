@@ -4,9 +4,11 @@
 
 #include "net/http/http_log_util.h"
 
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/http/http_auth_challenge_tokenizer.h"
+#include "net/http/http_auth_scheme.h"
 #include "net/http/http_util.h"
 
 namespace net {
@@ -19,14 +21,14 @@ bool ShouldRedactChallenge(HttpAuthChallengeTokenizer* challenge) {
   if (challenge->challenge_text().find(',') != std::string::npos)
     return false;
 
-  std::string scheme = base::StringToLowerASCII(challenge->scheme());
+  std::string scheme = base::ToLowerASCII(challenge->scheme());
   // Invalid input.
   if (scheme.empty())
     return false;
 
   // Ignore Basic and Digest authentication challenges, as they contain
   // public information.
-  if (scheme == "basic" || scheme == "digest")
+  if (scheme == kBasicAuthScheme || scheme == kDigestAuthScheme)
     return false;
 
   return true;
@@ -42,18 +44,18 @@ std::string ElideHeaderValueForNetLog(NetLogCaptureMode capture_mode,
 
   if (redact_begin == redact_end &&
       !capture_mode.include_cookies_and_credentials()) {
-    // Note: this logic should be kept in sync with stripCookiesAndLoginInfo in
+    // Note: this logic should be kept in sync with stripCookieOrLoginInfo in
     // chrome/browser/resources/net_internals/log_view_painter.js.
 
-    if (!base::strcasecmp(header.c_str(), "set-cookie") ||
-        !base::strcasecmp(header.c_str(), "set-cookie2") ||
-        !base::strcasecmp(header.c_str(), "cookie") ||
-        !base::strcasecmp(header.c_str(), "authorization") ||
-        !base::strcasecmp(header.c_str(), "proxy-authorization")) {
+    if (base::EqualsCaseInsensitiveASCII(header, "set-cookie") ||
+        base::EqualsCaseInsensitiveASCII(header, "set-cookie2") ||
+        base::EqualsCaseInsensitiveASCII(header, "cookie") ||
+        base::EqualsCaseInsensitiveASCII(header, "authorization") ||
+        base::EqualsCaseInsensitiveASCII(header, "proxy-authorization")) {
       redact_begin = value.begin();
       redact_end = value.end();
-    } else if (!base::strcasecmp(header.c_str(), "www-authenticate") ||
-               !base::strcasecmp(header.c_str(), "proxy-authenticate")) {
+    } else if (base::EqualsCaseInsensitiveASCII(header, "www-authenticate") ||
+               base::EqualsCaseInsensitiveASCII(header, "proxy-authenticate")) {
       // Look for authentication information from data received from the server
       // in multi-round Negotiate authentication.
       HttpAuthChallengeTokenizer challenge(value.begin(), value.end());
@@ -71,6 +73,18 @@ std::string ElideHeaderValueForNetLog(NetLogCaptureMode capture_mode,
       base::StringPrintf("[%ld bytes were stripped]",
                          static_cast<long>(redact_end - redact_begin)) +
       std::string(redact_end, value.end());
+}
+
+std::string ElideGoAwayDebugDataForNetLog(NetLogCaptureMode capture_mode,
+                                          base::StringPiece debug_data) {
+  // Note: this logic should be kept in sync with stripGoAwayDebugData in
+  // chrome/browser/resources/net_internals/log_view_painter.js.
+  if (capture_mode.include_cookies_and_credentials()) {
+    return debug_data.as_string();
+  }
+
+  return std::string("[") + base::SizeTToString(debug_data.size()) +
+         std::string(" bytes were stripped]");
 }
 
 }  // namespace net

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
@@ -14,7 +15,8 @@ namespace {
 
 class TestBrowserAccessibilityManager : public BrowserAccessibilityManager {
  public:
-  TestBrowserAccessibilityManager(const ui::AXTreeUpdate& initial_tree)
+  TestBrowserAccessibilityManager(
+      const ui::AXTreeUpdate& initial_tree)
       : BrowserAccessibilityManager(initial_tree,
                                     nullptr,
                                     new BrowserAccessibilityFactory()) {}
@@ -22,10 +24,16 @@ class TestBrowserAccessibilityManager : public BrowserAccessibilityManager {
 
 }  // namespace
 
-class OneShotAccessibilityTreeSearchTest : public testing::Test {
+// These tests prevent other tests from being run. crbug.com/514632
+#if defined(ANDROID) && defined(ADDRESS_SANITIZER)
+#define MAYBE_OneShotAccessibilityTreeSearchTest DISABLED_OneShotAccessibilityTreeSearchTets
+#else
+#define MAYBE_OneShotAccessibilityTreeSearchTest OneShotAccessibilityTreeSearchTest
+#endif
+class MAYBE_OneShotAccessibilityTreeSearchTest : public testing::Test {
  public:
-  OneShotAccessibilityTreeSearchTest() {}
-  ~OneShotAccessibilityTreeSearchTest() override {}
+  MAYBE_OneShotAccessibilityTreeSearchTest() {}
+  ~MAYBE_OneShotAccessibilityTreeSearchTest() override {}
 
  protected:
   void SetUp() override;
@@ -33,10 +41,10 @@ class OneShotAccessibilityTreeSearchTest : public testing::Test {
   scoped_ptr<BrowserAccessibilityManager> tree_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(OneShotAccessibilityTreeSearchTest);
+  DISALLOW_COPY_AND_ASSIGN(MAYBE_OneShotAccessibilityTreeSearchTest);
 };
 
-void OneShotAccessibilityTreeSearchTest::SetUp() {
+void MAYBE_OneShotAccessibilityTreeSearchTest::SetUp() {
   ui::AXNodeData root;
   root.id = 1;
   root.SetName("Document");
@@ -81,21 +89,21 @@ void OneShotAccessibilityTreeSearchTest::SetUp() {
       MakeAXTreeUpdate(root, heading, list, list_item_1, list_item_2, footer)));
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, GetAll) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, GetAll) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   ASSERT_EQ(6U, search.CountMatches());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, ForwardsWithStartNode) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, ForwardsWithStartNode) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.SetStartNode(tree_->GetFromID(4));
   ASSERT_EQ(2U, search.CountMatches());
   EXPECT_EQ(5, search.GetMatchAtIndex(0)->GetId());
   EXPECT_EQ(6, search.GetMatchAtIndex(1)->GetId());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, BackwardsWithStartNode) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, BackwardsWithStartNode) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.SetStartNode(tree_->GetFromID(4));
   search.SetDirection(OneShotAccessibilityTreeSearch::BACKWARDS);
   ASSERT_EQ(3U, search.CountMatches());
@@ -104,20 +112,28 @@ TEST_F(OneShotAccessibilityTreeSearchTest, BackwardsWithStartNode) {
   EXPECT_EQ(1, search.GetMatchAtIndex(2)->GetId());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, ResultLimitZero) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest,
+       ForwardsWithStartNodeAndScope) {
+  OneShotAccessibilityTreeSearch search(tree_->GetFromID(4));
+  search.SetStartNode(tree_->GetFromID(5));
+  ASSERT_EQ(1U, search.CountMatches());
+  EXPECT_EQ(6, search.GetMatchAtIndex(0)->GetId());
+}
+
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, ResultLimitZero) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.SetResultLimit(0);
   ASSERT_EQ(0U, search.CountMatches());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, ResultLimitFive) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, ResultLimitFive) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.SetResultLimit(5);
   ASSERT_EQ(5U, search.CountMatches());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, DescendantsOnly) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, DescendantsOnlyOfRoot) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.SetStartNode(tree_->GetFromID(1));
   search.SetImmediateDescendantsOnly(true);
   ASSERT_EQ(3U, search.CountMatches());
@@ -126,8 +142,43 @@ TEST_F(OneShotAccessibilityTreeSearchTest, DescendantsOnly) {
   EXPECT_EQ(6, search.GetMatchAtIndex(2)->GetId());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, VisibleOnly) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, DescendantsOnlyOfNode) {
+  OneShotAccessibilityTreeSearch search(tree_->GetFromID(3));
+  search.SetImmediateDescendantsOnly(true);
+  ASSERT_EQ(2U, search.CountMatches());
+  EXPECT_EQ(4, search.GetMatchAtIndex(0)->GetId());
+  EXPECT_EQ(5, search.GetMatchAtIndex(1)->GetId());
+}
+
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest,
+       DescendantsOnlyOfNodeWithStartNode) {
+  OneShotAccessibilityTreeSearch search(tree_->GetFromID(3));
+  search.SetStartNode(tree_->GetFromID(4));
+  search.SetImmediateDescendantsOnly(true);
+  ASSERT_EQ(1U, search.CountMatches());
+  EXPECT_EQ(5, search.GetMatchAtIndex(0)->GetId());
+}
+
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest,
+       DescendantsOnlyOfNodeWithStartNode2) {
+  OneShotAccessibilityTreeSearch search(tree_->GetFromID(3));
+  search.SetStartNode(tree_->GetFromID(5));
+  search.SetImmediateDescendantsOnly(true);
+  ASSERT_EQ(0U, search.CountMatches());
+}
+
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest,
+       DescendantsOnlyOfNodeWithStartNodeBackwards) {
+  OneShotAccessibilityTreeSearch search(tree_->GetFromID(3));
+  search.SetStartNode(tree_->GetFromID(5));
+  search.SetImmediateDescendantsOnly(true);
+  search.SetDirection(OneShotAccessibilityTreeSearch::BACKWARDS);
+  ASSERT_EQ(1U, search.CountMatches());
+  EXPECT_EQ(4, search.GetMatchAtIndex(0)->GetId());
+}
+
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, VisibleOnly) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.SetVisibleOnly(true);
   ASSERT_EQ(5U, search.CountMatches());
   EXPECT_EQ(1, search.GetMatchAtIndex(0)->GetId());
@@ -137,15 +188,15 @@ TEST_F(OneShotAccessibilityTreeSearchTest, VisibleOnly) {
   EXPECT_EQ(5, search.GetMatchAtIndex(4)->GetId());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, CaseInsensitiveStringMatch) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, CaseInsensitiveStringMatch) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.SetSearchText("eCEptiCOn");
   ASSERT_EQ(1U, search.CountMatches());
   EXPECT_EQ(5, search.GetMatchAtIndex(0)->GetId());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, OnePredicate) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, OnePredicate) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.AddPredicate([](BrowserAccessibility* start,
                          BrowserAccessibility* current) {
     return current->GetRole() == ui::AX_ROLE_LIST_ITEM;
@@ -155,8 +206,8 @@ TEST_F(OneShotAccessibilityTreeSearchTest, OnePredicate) {
   EXPECT_EQ(5, search.GetMatchAtIndex(1)->GetId());
 }
 
-TEST_F(OneShotAccessibilityTreeSearchTest, TwoPredicates) {
-  OneShotAccessibilityTreeSearch search(tree_.get());
+TEST_F(MAYBE_OneShotAccessibilityTreeSearchTest, TwoPredicates) {
+  OneShotAccessibilityTreeSearch search(tree_->GetRoot());
   search.AddPredicate([](BrowserAccessibility* start,
                          BrowserAccessibility* current) {
     return (current->GetRole() == ui::AX_ROLE_LIST ||

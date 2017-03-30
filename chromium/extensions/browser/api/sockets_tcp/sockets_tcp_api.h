@@ -5,6 +5,10 @@
 #ifndef EXTENSIONS_BROWSER_API_SOCKETS_TCP_SOCKETS_TCP_API_H_
 #define EXTENSIONS_BROWSER_API_SOCKETS_TCP_SOCKETS_TCP_API_H_
 
+#include <stddef.h>
+
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "extensions/browser/api/socket/socket_api.h"
 #include "extensions/common/api/sockets_tcp.h"
 
@@ -14,7 +18,7 @@ class TLSSocket;
 }
 
 namespace extensions {
-namespace core_api {
+namespace api {
 
 class TCPSocketEventDispatcher;
 
@@ -262,7 +266,7 @@ class SocketsTcpSecureFunction : public TCPSocketAsyncApiFunction {
   DISALLOW_COPY_AND_ASSIGN(SocketsTcpSecureFunction);
 };
 
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_SOCKETS_TCP_SOCKETS_TCP_API_H_

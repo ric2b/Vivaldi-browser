@@ -4,6 +4,8 @@
 
 #include "ppapi/tests/testing_instance.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <cstring>
 #include <iomanip>
@@ -324,6 +326,11 @@ class Module : public pp::Module {
 
 namespace pp {
 
+#if defined(WIN32)
+__declspec(dllexport)
+#else
+__attribute__((visibility("default")))
+#endif
 Module* CreateModule() {
   return new ::Module();
 }

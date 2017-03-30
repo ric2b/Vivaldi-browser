@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -34,13 +35,23 @@ class MediaStreamDevicesController : public PermissionBubbleRequest {
   // Registers the prefs backing the audio and video policies.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
-  // Public methods to be called by MediaStreamInfoBarDelegate;
+  bool IsAllowedForAudio() const;
+  bool IsAllowedForVideo() const;
   bool IsAskingForAudio() const;
   bool IsAskingForVideo() const;
   const std::string& GetSecurityOriginSpec() const;
 
+  // Forces the permissions to be denied (without being persisted) regardless
+  // of what the previous state was.  If the user had previously allowed the
+  // site video or audio access, this ignores that and informs the site it was
+  // denied.
+  //
+  // This differs from PermissionGranted/PermissionDenied as they only operate
+  // on the permissions if they are in the ASK state.
+  void ForcePermissionDeniedTemporarily();
+
   // PermissionBubbleRequest:
-  int GetIconID() const override;
+  int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
   bool HasUserGesture() const override;
@@ -114,6 +125,8 @@ class MediaStreamDevicesController : public PermissionBubbleRequest {
   // audio/video devices was granted or not.
   content::MediaResponseCallback callback_;
 
+  // Whether the permissions granted or denied by the user should be persisted.
+  bool persist_permission_changes_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamDevicesController);
 };

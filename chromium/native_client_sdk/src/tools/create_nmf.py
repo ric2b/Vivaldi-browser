@@ -36,12 +36,11 @@ import quote
 ARCH_LOCATION = {
     'x86-32': 'lib32',
     'x86-64': 'lib64',
-    'arm': 'lib',
+    'arm': 'libarm',
 }
 
 
 # These constants are used within nmf files.
-RUNNABLE_LD = 'runnable-ld.so'  # Name of the dynamic loader
 MAIN_NEXE = 'main.nexe'  # Name of entry point for execution
 PROGRAM_KEY = 'program'  # Key of the program section in an nmf file
 URL_KEY = 'url'  # Key of the url field for a particular file in an nmf file
@@ -140,6 +139,11 @@ def ParseElfHeader(path):
 class Error(Exception):
   """Local Error class for this file."""
   pass
+
+
+def IsLoader(filename):
+  return (filename.endswith(get_shared_deps.LOADER_X86) or
+      filename.endswith(get_shared_deps.LOADER_ARM))
 
 
 class ArchFile(object):
@@ -295,7 +299,7 @@ class NmfUtils(object):
         prefix = arch_to_main_dir[arch_file.arch]
         url = os.path.basename(arch_file.path)
 
-      if arch_file.name.endswith('.nexe'):
+      if arch_file.name.endswith('.nexe') and not IsLoader(arch_file.name):
         prefix = posixpath.join(prefix, self.nexe_prefix)
       elif self.no_arch_prefix:
         prefix = posixpath.join(prefix, self.lib_prefix)
@@ -367,36 +371,41 @@ class NmfUtils(object):
 
     needed = self.GetNeeded()
 
-    runnable = any(n.endswith(RUNNABLE_LD) for n in needed)
-
     extra_files_kv = [(key, ArchFile(name=key,
                                      arch=arch,
                                      path=url,
                                      url=url))
                       for key, arch, url in self.extra_files]
 
-    for need, archinfo in needed.items() + extra_files_kv:
+    manifest_items = needed.items() + extra_files_kv
+
+    # Add dynamic loader to the program section.
+    for need, archinfo in manifest_items:
+      if IsLoader(need):
+        urlinfo = { URL_KEY: archinfo.url }
+        manifest[PROGRAM_KEY][archinfo.arch] = urlinfo
+
+    for need, archinfo in manifest_items:
       urlinfo = { URL_KEY: archinfo.url }
       name = archinfo.name
+      arch = archinfo.arch
 
-      # If starting with runnable-ld.so, make that the main executable.
-      if runnable:
-        if need.endswith(RUNNABLE_LD):
-          manifest[PROGRAM_KEY][archinfo.arch] = urlinfo
-          continue
+      if IsLoader(need):
+        continue
 
       if need in self.main_files:
         if need.endswith(".nexe"):
           # Place it under program if we aren't using the runnable-ld.so.
-          if not runnable:
-            manifest[PROGRAM_KEY][archinfo.arch] = urlinfo
+          program = manifest[PROGRAM_KEY]
+          if arch not in program:
+            program[arch] = urlinfo
             continue
           # Otherwise, treat it like another another file named main.nexe.
           name = MAIN_NEXE
 
       name = self.remap.get(name, name)
       fileinfo = manifest[FILES_KEY].get(name, {})
-      fileinfo[archinfo.arch] = urlinfo
+      fileinfo[arch] = urlinfo
       manifest[FILES_KEY][name] = fileinfo
     self.manifest = manifest
 
@@ -498,10 +507,10 @@ def FindObjdumpExecutable():
 
 
 def GetDefaultLibPath(config):
-  """Derive default library path to use when searching for shared
-  objects.  This currently include the toolchain library folders
-  as well as the top level SDK lib folder and the naclports lib
-  folder.  We include both 32-bit and 64-bit library paths.
+  """Derive default library path.
+
+  This path is used when searching for shared objects.  This currently includes
+  the toolchain library folders and the top level SDK lib folder.
   """
   sdk_root = GetSDKRoot()
 
@@ -510,15 +519,15 @@ def GetDefaultLibPath(config):
     # Core toolchain libraries
     'toolchain/%s_x86_glibc/x86_64-nacl/lib' % osname,
     'toolchain/%s_x86_glibc/x86_64-nacl/lib32' % osname,
-    # naclports installed libraries
+    'toolchain/%s_arm_glibc/arm-nacl/lib' % osname,
+    # user installed libraries (used by webports)
     'toolchain/%s_x86_glibc/x86_64-nacl/usr/lib' % osname,
     'toolchain/%s_x86_glibc/i686-nacl/usr/lib' % osname,
+    'toolchain/%s_arm_glibc/arm-nacl/usr/lib' % osname,
     # SDK bundle libraries
     'lib/glibc_x86_32/%s' % config,
     'lib/glibc_x86_64/%s' % config,
-    # naclports bundle libraries
-    'ports/lib/glibc_x86_32/%s' % config,
-    'ports/lib/glibc_x86_64/%s' % config,
+    'lib/glibc_arm/%s' % config,
   ]
 
   # In some cases (e.g. ASAN, TSAN, STANDALONE) the name of the configuration
@@ -533,19 +542,15 @@ def GetDefaultLibPath(config):
     libpath += [
       'lib/glibc_x86_32/%s' % config_fallback,
       'lib/glibc_x86_64/%s' % config_fallback,
+      'lib/glibc_arm/%s' % config_fallback,
       'ports/lib/glibc_x86_32/%s' % config_fallback,
       'ports/lib/glibc_x86_64/%s' % config_fallback,
+      'ports/lib/glibc_arm/%s' % config_fallback,
     ]
 
-  bionic_dir = 'toolchain/%s_arm_bionic' % osname
-  if os.path.isdir(os.path.join(sdk_root, bionic_dir)):
-    libpath += [
-      '%s/arm-nacl/lib' % bionic_dir,
-      '%s/arm-nacl/usr/lib' % bionic_dir,
-      'lib/bionic_arm/%s' % config,
-    ]
   libpath = [os.path.normpath(p) for p in libpath]
   libpath = [os.path.join(sdk_root, p) for p in libpath]
+  libpath.append(os.path.join(sdk_root, 'tools'))
   return libpath
 
 
@@ -564,7 +569,7 @@ def main(args):
                       help='Legacy option, do not use')
   parser.add_argument('--config', default='Release',
                       help='Use a particular library configuration (normally '
-                           'Debug or Release')
+                           'Debug or Release)')
   parser.add_argument('-L', '--library-path', dest='lib_path',
                       action='append', default=[],
                       help='Add DIRECTORY to library search path',
@@ -626,8 +631,7 @@ def main(args):
   if options.debug_libs:
     sys.stderr.write('warning: --debug-libs is deprecated (use --config).\n')
     # Implement legacy behavior
-    if not options.config:
-      options.config = 'Debug'
+    options.config = 'Debug'
 
   canonicalized = ParseExtraFiles(options.extra_files, sys.stderr)
   if canonicalized is None:

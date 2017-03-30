@@ -4,16 +4,13 @@
 
 #include "chrome/browser/ui/browser.h"
 
+#include "base/macros.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/web_contents_tester.h"
-
-// Both tests below require a tab strip, so skip the file entirely on platforms
-// without one.
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
 
 using content::SiteInstance;
 using content::WebContents;
@@ -172,5 +169,3 @@ TEST_F(BrowserBookmarkBarTest, StateOnActiveTabChanged) {
   EXPECT_EQ(BookmarkBar::SHOW, browser()->bookmark_bar_state());
   EXPECT_EQ(BookmarkBar::SHOW, window_bookmark_bar_state());
 }
-
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)

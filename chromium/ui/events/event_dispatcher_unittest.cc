@@ -4,6 +4,7 @@
 
 #include "ui/events/event_dispatcher.h"
 
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/events/event_dispatcher.h"
@@ -15,9 +16,12 @@ namespace ui {
 
 namespace {
 
-class TestTarget : public EventTarget {
+class TestTarget : public EventTarget,
+                   public EventHandler {
  public:
-  TestTarget() : parent_(NULL), valid_(true) {}
+  TestTarget() : parent_(NULL), valid_(true) {
+    SetTargetHandler(this);
+  }
   ~TestTarget() override {}
 
   void set_parent(TestTarget* parent) { parent_ = parent; }
@@ -110,18 +114,7 @@ class TestEventHandler : public EventHandler {
   DISALLOW_COPY_AND_ASSIGN(TestEventHandler);
 };
 
-class NonCancelableEvent : public Event {
- public:
-  NonCancelableEvent()
-      : Event(ui::ET_CANCEL_MODE, ui::EventTimeForNow(), 0) {
-    set_cancelable(false);
-  }
-
-  ~NonCancelableEvent() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NonCancelableEvent);
-};
+typedef CancelModeEvent NonCancelableEvent;
 
 // Destroys the dispatcher-delegate when it receives any event.
 class EventHandlerDestroyDispatcherDelegate : public TestEventHandler {

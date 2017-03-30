@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "tools/gn/ninja_binary_target_writer.h"
+
 #include <sstream>
+#include <utility>
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "tools/gn/ninja_binary_target_writer.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
@@ -15,7 +17,6 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
   Err err;
 
   setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
-  setup.settings()->set_target_os(Settings::WIN);
 
   Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
   target.set_output_type(Target::SOURCE_SET);
@@ -152,7 +153,6 @@ TEST(NinjaBinaryTargetWriter, ProductExtensionAndInputDeps) {
   Err err;
 
   setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
-  setup.settings()->set_target_os(Settings::LINUX);
 
   // An action for our library to depend on.
   Target action(setup.settings(), Label(SourceDir("//foo/"), "action"));
@@ -203,12 +203,48 @@ TEST(NinjaBinaryTargetWriter, ProductExtensionAndInputDeps) {
   EXPECT_EQ(expected, out_str);
 }
 
+// Tests libs are applied.
+TEST(NinjaBinaryTargetWriter, LibsAndLibDirs) {
+  TestWithScope setup;
+  Err err;
+
+  setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
+
+  // A shared library w/ libs and lib_dirs.
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "shlib"));
+  target.set_output_type(Target::SHARED_LIBRARY);
+  target.config_values().libs().push_back(LibFile(SourceFile("//foo/lib1.a")));
+  target.config_values().libs().push_back(LibFile("foo"));
+  target.config_values().lib_dirs().push_back(SourceDir("//foo/bar/"));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = libshlib\n"
+      "\n"
+      "\n"
+      "build ./libshlib.so: solink | ../../foo/lib1.a\n"
+      "  ldflags = -L../../foo/bar\n"
+      "  libs = ../../foo/lib1.a -lfoo\n"
+      "  output_extension = .so\n";
+
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str);
+}
+
 TEST(NinjaBinaryTargetWriter, EmptyProductExtension) {
   TestWithScope setup;
   Err err;
 
   setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
-  setup.settings()->set_target_os(Settings::LINUX);
 
   // This test is the same as ProductExtension, except that
   // we call set_output_extension("") and ensure that we still get the default.
@@ -250,7 +286,6 @@ TEST(NinjaBinaryTargetWriter, EmptyProductExtension) {
 TEST(NinjaBinaryTargetWriter, SourceSetDataDeps) {
   TestWithScope setup;
   setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
-  setup.settings()->set_target_os(Settings::LINUX);
 
   Err err;
 
@@ -332,7 +367,6 @@ TEST(NinjaBinaryTargetWriter, SourceSetDataDeps) {
 TEST(NinjaBinaryTargetWriter, SharedLibraryModuleDefinitionFile) {
   TestWithScope setup;
   setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
-  setup.settings()->set_target_os(Settings::WIN);
 
   Target shared_lib(setup.settings(), Label(SourceDir("//foo/"), "bar"));
   shared_lib.set_output_type(Target::SHARED_LIBRARY);
@@ -365,6 +399,72 @@ TEST(NinjaBinaryTargetWriter, SharedLibraryModuleDefinitionFile) {
   EXPECT_EQ(expected, out.str());
 }
 
+TEST(NinjaBinaryTargetWriter, LoadableModule) {
+  TestWithScope setup;
+  setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
+
+  Target loadable_module(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  loadable_module.set_output_type(Target::LOADABLE_MODULE);
+  loadable_module.visibility().SetPublic();
+  loadable_module.SetToolchain(setup.toolchain());
+  loadable_module.sources().push_back(SourceFile("//foo/sources.cc"));
+
+  Err err;
+  ASSERT_TRUE(loadable_module.OnResolved(&err)) << err.message();
+
+  std::ostringstream out;
+  NinjaBinaryTargetWriter writer(&loadable_module, out);
+  writer.Run();
+
+  const char loadable_expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = libbar\n"
+      "\n"
+      "build obj/foo/libbar.sources.o: cxx ../../foo/sources.cc\n"
+      "\n"
+      "build ./libbar.so: solink_module obj/foo/libbar.sources.o\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  output_extension = .so\n";
+  EXPECT_EQ(loadable_expected, out.str());
+
+  // Final target.
+  Target exe(setup.settings(), Label(SourceDir("//foo/"), "exe"));
+  exe.set_output_type(Target::EXECUTABLE);
+  exe.public_deps().push_back(LabelTargetPair(&loadable_module));
+  exe.SetToolchain(setup.toolchain());
+  exe.sources().push_back(SourceFile("//foo/final.cc"));
+  ASSERT_TRUE(exe.OnResolved(&err)) << err.message();
+
+  std::ostringstream final_out;
+  NinjaBinaryTargetWriter final_writer(&exe, final_out);
+  final_writer.Run();
+
+  // The final output depends on the loadable module so should have an
+  // order-only dependency on the loadable modules's output file.
+  const char final_expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = exe\n"
+      "\n"
+      "build obj/foo/exe.final.o: cxx ../../foo/final.cc\n"
+      "\n"
+      "build ./exe: link obj/foo/exe.final.o || ./libbar.so\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  output_extension = \n";
+  EXPECT_EQ(final_expected, final_out.str());
+}
+
 TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
   Err err;
 
@@ -375,6 +475,8 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
   Settings pch_settings(setup.build_settings(), "withpch/");
   Toolchain pch_toolchain(&pch_settings,
                           Label(SourceDir("//toolchain/"), "withpch"));
+  pch_settings.set_toolchain_label(pch_toolchain.label());
+  pch_settings.set_default_toolchain_label(setup.toolchain()->label());
 
   // Declare a C++ compiler that supports PCH.
   scoped_ptr<Tool> cxx_tool(new Tool);
@@ -385,7 +487,18 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
   cxx_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
   cxx_tool->set_precompiled_header_type(Tool::PCH_MSVC);
-  pch_toolchain.SetTool(Toolchain::TYPE_CXX, cxx_tool.Pass());
+  pch_toolchain.SetTool(Toolchain::TYPE_CXX, std::move(cxx_tool));
+
+  // Add a C compiler as well.
+  scoped_ptr<Tool> cc_tool(new Tool);
+  TestWithScope::SetCommandForTool(
+      "cc {{source}} {{cflags}} {{cflags_c}} {{defines}} {{include_dirs}} "
+      "-o {{output}}",
+      cc_tool.get());
+  cc_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
+  cc_tool->set_precompiled_header_type(Tool::PCH_MSVC);
+  pch_toolchain.SetTool(Toolchain::TYPE_CC, std::move(cc_tool));
   pch_toolchain.ToolchainSetupComplete();
 
   // This target doesn't specify precompiled headers.
@@ -395,6 +508,8 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
     no_pch_target.set_output_type(Target::SOURCE_SET);
     no_pch_target.visibility().SetPublic();
     no_pch_target.sources().push_back(SourceFile("//foo/input1.cc"));
+    no_pch_target.sources().push_back(SourceFile("//foo/input2.c"));
+    no_pch_target.config_values().cflags_c().push_back("-std=c99");
     no_pch_target.SetToolchain(&pch_toolchain);
     ASSERT_TRUE(no_pch_target.OnResolved(&err));
 
@@ -406,14 +521,18 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
         "defines =\n"
         "include_dirs =\n"
         "cflags =\n"
+        "cflags_c = -std=c99\n"
         "cflags_cc =\n"
         "target_output_name = no_pch_target\n"
         "\n"
         "build withpch/obj/foo/no_pch_target.input1.o: "
-               "cxx ../../foo/input1.cc\n"
+               "withpch_cxx ../../foo/input1.cc\n"
+        "build withpch/obj/foo/no_pch_target.input2.o: "
+               "withpch_cc ../../foo/input2.c\n"
         "\n"
         "build withpch/obj/foo/no_pch_target.stamp: "
-               "stamp withpch/obj/foo/no_pch_target.input1.o\n";
+               "withpch_stamp withpch/obj/foo/no_pch_target.input1.o "
+               "withpch/obj/foo/no_pch_target.input2.o\n";
     EXPECT_EQ(no_pch_expected, out.str());
   }
 
@@ -427,6 +546,7 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
     pch_target.set_output_type(Target::SOURCE_SET);
     pch_target.visibility().SetPublic();
     pch_target.sources().push_back(SourceFile("//foo/input1.cc"));
+    pch_target.sources().push_back(SourceFile("//foo/input2.c"));
     pch_target.SetToolchain(&pch_toolchain);
     ASSERT_TRUE(pch_target.OnResolved(&err));
 
@@ -438,26 +558,163 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
         "defines =\n"
         "include_dirs =\n"
         "cflags =\n"
-        // There should only be one .pch file created, for C++ files.
+        // It should output language-specific pch files.
+        "cflags_c = /Fpwithpch/obj/foo/pch_target_c.pch "
+                    "/Yubuild/precompile.h\n"
         "cflags_cc = /Fpwithpch/obj/foo/pch_target_cc.pch "
                      "/Yubuild/precompile.h\n"
         "target_output_name = pch_target\n"
         "\n"
-        // Compile the precompiled source file with /Yc.
+        // Compile the precompiled source files with /Yc.
+        "build withpch/obj/build/pch_target.precompile.c.o: "
+               "withpch_cc ../../build/precompile.cc\n"
+        "  cflags_c = ${cflags_c} /Ycbuild/precompile.h\n"
+        "\n"
         "build withpch/obj/build/pch_target.precompile.cc.o: "
-               "cxx ../../build/precompile.cc\n"
+               "withpch_cxx ../../build/precompile.cc\n"
         "  cflags_cc = ${cflags_cc} /Ycbuild/precompile.h\n"
         "\n"
         "build withpch/obj/foo/pch_target.input1.o: "
-               "cxx ../../foo/input1.cc | "
+               "withpch_cxx ../../foo/input1.cc | "
                // Explicit dependency on the PCH build step.
                "withpch/obj/build/pch_target.precompile.cc.o\n"
+        "build withpch/obj/foo/pch_target.input2.o: "
+               "withpch_cc ../../foo/input2.c | "
+               // Explicit dependency on the PCH build step.
+               "withpch/obj/build/pch_target.precompile.c.o\n"
         "\n"
-        "build withpch/obj/foo/pch_target.stamp: "
-               "stamp withpch/obj/foo/pch_target.input1.o "
-               // The precompiled object file was added to the outputs.
+        "build withpch/obj/foo/pch_target.stamp: withpch_stamp "
+               "withpch/obj/foo/pch_target.input1.o "
+               "withpch/obj/foo/pch_target.input2.o "
+               // The precompiled object files were added to the outputs.
+               "withpch/obj/build/pch_target.precompile.c.o "
                "withpch/obj/build/pch_target.precompile.cc.o\n";
     EXPECT_EQ(pch_win_expected, out.str());
+  }
+}
+
+TEST(NinjaBinaryTargetWriter, GCCPrecompiledHeaders) {
+  Err err;
+
+  // This setup's toolchain does not have precompiled headers defined.
+  TestWithScope setup;
+
+  // A precompiled header toolchain.
+  Settings pch_settings(setup.build_settings(), "withpch/");
+  Toolchain pch_toolchain(&pch_settings,
+                          Label(SourceDir("//toolchain/"), "withpch"));
+  pch_settings.set_toolchain_label(pch_toolchain.label());
+  pch_settings.set_default_toolchain_label(setup.toolchain()->label());
+
+  // Declare a C++ compiler that supports PCH.
+  scoped_ptr<Tool> cxx_tool(new Tool);
+  TestWithScope::SetCommandForTool(
+      "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} "
+      "-o {{output}}",
+      cxx_tool.get());
+  cxx_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
+  cxx_tool->set_precompiled_header_type(Tool::PCH_GCC);
+  pch_toolchain.SetTool(Toolchain::TYPE_CXX, std::move(cxx_tool));
+  pch_toolchain.ToolchainSetupComplete();
+
+  // Add a C compiler as well.
+  scoped_ptr<Tool> cc_tool(new Tool);
+  TestWithScope::SetCommandForTool(
+      "cc {{source}} {{cflags}} {{cflags_c}} {{defines}} {{include_dirs}} "
+      "-o {{output}}",
+      cc_tool.get());
+  cc_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
+  cc_tool->set_precompiled_header_type(Tool::PCH_GCC);
+  pch_toolchain.SetTool(Toolchain::TYPE_CC, std::move(cc_tool));
+  pch_toolchain.ToolchainSetupComplete();
+
+  // This target doesn't specify precompiled headers.
+  {
+    Target no_pch_target(&pch_settings,
+                         Label(SourceDir("//foo/"), "no_pch_target"));
+    no_pch_target.set_output_type(Target::SOURCE_SET);
+    no_pch_target.visibility().SetPublic();
+    no_pch_target.sources().push_back(SourceFile("//foo/input1.cc"));
+    no_pch_target.sources().push_back(SourceFile("//foo/input2.c"));
+    no_pch_target.config_values().cflags_c().push_back("-std=c99");
+    no_pch_target.SetToolchain(&pch_toolchain);
+    ASSERT_TRUE(no_pch_target.OnResolved(&err));
+
+    std::ostringstream out;
+    NinjaBinaryTargetWriter writer(&no_pch_target, out);
+    writer.Run();
+
+    const char no_pch_expected[] =
+        "defines =\n"
+        "include_dirs =\n"
+        "cflags =\n"
+        "cflags_c = -std=c99\n"
+        "cflags_cc =\n"
+        "target_output_name = no_pch_target\n"
+        "\n"
+        "build withpch/obj/foo/no_pch_target.input1.o: "
+               "withpch_cxx ../../foo/input1.cc\n"
+        "build withpch/obj/foo/no_pch_target.input2.o: "
+               "withpch_cc ../../foo/input2.c\n"
+        "\n"
+        "build withpch/obj/foo/no_pch_target.stamp: "
+               "withpch_stamp withpch/obj/foo/no_pch_target.input1.o "
+               "withpch/obj/foo/no_pch_target.input2.o\n";
+    EXPECT_EQ(no_pch_expected, out.str());
+  }
+
+  // This target specifies PCH.
+  {
+    Target pch_target(&pch_settings,
+                      Label(SourceDir("//foo/"), "pch_target"));
+    pch_target.config_values().set_precompiled_header("build/precompile.h");
+    pch_target.config_values().set_precompiled_source(
+        SourceFile("//build/precompile.h"));
+    pch_target.config_values().cflags_c().push_back("-std=c99");
+    pch_target.set_output_type(Target::SOURCE_SET);
+    pch_target.visibility().SetPublic();
+    pch_target.sources().push_back(SourceFile("//foo/input1.cc"));
+    pch_target.sources().push_back(SourceFile("//foo/input2.c"));
+    pch_target.SetToolchain(&pch_toolchain);
+    ASSERT_TRUE(pch_target.OnResolved(&err));
+
+    std::ostringstream out;
+    NinjaBinaryTargetWriter writer(&pch_target, out);
+    writer.Run();
+
+    const char pch_gcc_expected[] =
+        "defines =\n"
+        "include_dirs =\n"
+        "cflags =\n"
+        "cflags_c = -std=c99 "
+                    "-include withpch/obj/build/pch_target.precompile.h-c\n"
+        "cflags_cc = -include withpch/obj/build/pch_target.precompile.h-cc\n"
+        "target_output_name = pch_target\n"
+        "\n"
+        // Compile the precompiled sources with -x <lang>.
+        "build withpch/obj/build/pch_target.precompile.h-c.gch: "
+               "withpch_cc ../../build/precompile.h\n"
+        "  cflags_c = -std=c99 -x c-header\n"
+        "\n"
+        "build withpch/obj/build/pch_target.precompile.h-cc.gch: "
+               "withpch_cxx ../../build/precompile.h\n"
+        "  cflags_cc = -x c++-header\n"
+        "\n"
+        "build withpch/obj/foo/pch_target.input1.o: "
+               "withpch_cxx ../../foo/input1.cc | "
+               // Explicit dependency on the PCH build step.
+               "withpch/obj/build/pch_target.precompile.h-cc.gch\n"
+        "build withpch/obj/foo/pch_target.input2.o: "
+               "withpch_cc ../../foo/input2.c | "
+               // Explicit dependency on the PCH build step.
+               "withpch/obj/build/pch_target.precompile.h-c.gch\n"
+        "\n"
+        "build withpch/obj/foo/pch_target.stamp: "
+               "withpch_stamp withpch/obj/foo/pch_target.input1.o "
+               "withpch/obj/foo/pch_target.input2.o\n";
+    EXPECT_EQ(pch_gcc_expected, out.str());
   }
 }
 

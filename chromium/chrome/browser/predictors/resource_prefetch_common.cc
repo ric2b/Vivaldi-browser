@@ -5,6 +5,7 @@
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 
 #include <stdlib.h>
+#include <tuple>
 
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
@@ -34,17 +35,15 @@ const char kSpeculativePrefetchingTrialName[] =
  * The function below extracts the value corresponding to a key provided from
  * the SpeculativeResourcePrefetching field trial.
  */
-string GetFiledTrialSpecValue(string key) {
-  vector<string> elements;
-  base::SplitString(
-      FieldTrialList::FindFullName(kSpeculativePrefetchingTrialName),
-      ':',
-      &elements);
-  for (int i = 0; i < static_cast<int>(elements.size()); i++) {
-    vector<string> key_value;
-    base::SplitString(elements[i], '=', &key_value);
+std::string GetFiledTrialSpecValue(string key) {
+  std::string trial_name =
+      FieldTrialList::FindFullName(kSpeculativePrefetchingTrialName);
+  for (const base::StringPiece& element : base::SplitStringPiece(
+           trial_name, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    std::vector<base::StringPiece> key_value = base::SplitStringPiece(
+        element, "=", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     if (key_value.size() == 2 && key_value[0] == key)
-      return key_value[1];
+      return key_value[1].as_string();
   }
   return string();
 }
@@ -175,12 +174,8 @@ bool NavigationID::is_valid() const {
 
 bool NavigationID::operator<(const NavigationID& rhs) const {
   DCHECK(is_valid() && rhs.is_valid());
-  if (render_process_id != rhs.render_process_id)
-    return render_process_id < rhs.render_process_id;
-  else if (render_frame_id != rhs.render_frame_id)
-    return render_frame_id < rhs.render_frame_id;
-  else
-    return main_frame_url < rhs.main_frame_url;
+  return std::tie(render_process_id, render_frame_id, main_frame_url) <
+    std::tie(rhs.render_process_id, rhs.render_frame_id, rhs.main_frame_url);
 }
 
 bool NavigationID::operator==(const NavigationID& rhs) const {
@@ -232,7 +227,8 @@ bool ResourcePrefetchPredictorConfig::IsURLPrefetchingEnabled(
     Profile* profile) const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!profile || !profile->GetPrefs() ||
-      !chrome_browser_net::CanPrefetchAndPrerenderUI(profile->GetPrefs())) {
+      chrome_browser_net::CanPrefetchAndPrerenderUI(profile->GetPrefs()) !=
+      chrome_browser_net::NetworkPredictionStatus::ENABLED) {
     return false;
   }
   return (mode & URL_PREFETCHING) > 0;
@@ -242,7 +238,8 @@ bool ResourcePrefetchPredictorConfig::IsHostPrefetchingEnabled(
     Profile* profile) const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!profile || !profile->GetPrefs() ||
-      !chrome_browser_net::CanPrefetchAndPrerenderUI(profile->GetPrefs())) {
+      chrome_browser_net::CanPrefetchAndPrerenderUI(profile->GetPrefs()) !=
+      chrome_browser_net::NetworkPredictionStatus::ENABLED) {
     return false;
   }
   return (mode & HOST_PRFETCHING) > 0;

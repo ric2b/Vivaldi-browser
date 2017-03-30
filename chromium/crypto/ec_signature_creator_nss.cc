@@ -9,6 +9,8 @@
 #include <secerr.h>
 #include <sechash.h>
 #if defined(OS_POSIX)
+#include <stddef.h>
+#include <stdint.h>
 #include <unistd.h>
 #endif
 
@@ -24,8 +26,7 @@ namespace {
 SECStatus SignData(SECItem* result,
                    SECItem* input,
                    SECKEYPrivateKey* key,
-                   HASH_HashType hash_type,
-                   size_t* out_signature_len) {
+                   HASH_HashType hash_type) {
   if (key->keyType != ecKey) {
     DLOG(FATAL) << "Should be using an EC key.";
     PORT_SetError(SEC_ERROR_INVALID_ARGS);
@@ -33,7 +34,7 @@ SECStatus SignData(SECItem* result,
   }
 
   // Hash the input.
-  std::vector<uint8> hash_data(HASH_ResultLen(hash_type));
+  std::vector<uint8_t> hash_data(HASH_ResultLen(hash_type));
   SECStatus rv = HASH_HashBuf(
       hash_type, &hash_data[0], input->data, input->len);
   if (rv != SECSuccess)
@@ -43,14 +44,12 @@ SECStatus SignData(SECItem* result,
 
   // Compute signature of hash.
   int signature_len = PK11_SignatureLen(key);
-  std::vector<uint8> signature_data(signature_len);
+  std::vector<uint8_t> signature_data(signature_len);
   SECItem sig = {siBuffer, &signature_data[0],
                  static_cast<unsigned int>(signature_len)};
   rv = PK11_Sign(key, &sig, &hash);
   if (rv != SECSuccess)
     return rv;
-
-  *out_signature_len = sig.len;
 
   // DER encode the signature.
   return DSAU_EncodeDerSigWithLen(result, &sig, sig.len);
@@ -59,16 +58,15 @@ SECStatus SignData(SECItem* result,
 }  // namespace
 
 ECSignatureCreatorImpl::ECSignatureCreatorImpl(ECPrivateKey* key)
-    : key_(key),
-      signature_len_(0) {
+    : key_(key) {
   EnsureNSSInit();
 }
 
 ECSignatureCreatorImpl::~ECSignatureCreatorImpl() {}
 
-bool ECSignatureCreatorImpl::Sign(const uint8* data,
+bool ECSignatureCreatorImpl::Sign(const uint8_t* data,
                                   int data_len,
-                                  std::vector<uint8>* signature) {
+                                  std::vector<uint8_t>* signature) {
   // Data to be signed
   SECItem secret;
   secret.type = siBuffer;
@@ -83,7 +81,7 @@ bool ECSignatureCreatorImpl::Sign(const uint8* data,
 
   // Sign the secret data and save it to |result|.
   SECStatus rv =
-      SignData(&result, &secret, key_->key(), HASH_AlgSHA256, &signature_len_);
+      SignData(&result, &secret, key_->key(), HASH_AlgSHA256);
   if (rv != SECSuccess) {
     DLOG(ERROR) << "DerSignData: " << PORT_GetError();
     return false;
@@ -96,14 +94,18 @@ bool ECSignatureCreatorImpl::Sign(const uint8* data,
 }
 
 bool ECSignatureCreatorImpl::DecodeSignature(
-    const std::vector<uint8>& der_sig,
-    std::vector<uint8>* out_raw_sig) {
+    const std::vector<uint8_t>& der_sig,
+    std::vector<uint8_t>* out_raw_sig) {
   SECItem der_sig_item;
   der_sig_item.type = siBuffer;
   der_sig_item.len = der_sig.size();
-  der_sig_item.data = const_cast<uint8*>(&der_sig[0]);
+  der_sig_item.data = const_cast<uint8_t*>(&der_sig[0]);
 
-  SECItem* raw_sig = DSAU_DecodeDerSigToLen(&der_sig_item, signature_len_);
+  size_t signature_len = SECKEY_SignatureLen(key_->public_key());
+  if (signature_len == 0)
+    return false;
+
+  SECItem* raw_sig = DSAU_DecodeDerSigToLen(&der_sig_item, signature_len);
   if (!raw_sig)
     return false;
   out_raw_sig->assign(raw_sig->data, raw_sig->data + raw_sig->len);

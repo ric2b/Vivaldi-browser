@@ -21,23 +21,19 @@ class SingleThreadIdleTaskRunner;
 
 class SCHEDULER_EXPORT WebThreadBase : public blink::WebThread {
  public:
-  virtual ~WebThreadBase();
+  ~WebThreadBase() override;
 
   // blink::WebThread implementation.
-  virtual bool isCurrentThread() const;
-  virtual blink::PlatformThreadId threadId() const = 0;
+  bool isCurrentThread() const override;
+  blink::PlatformThreadId threadId() const override = 0;
 
-  virtual void postTask(const blink::WebTraceLocation& location, Task* task);
-  virtual void postDelayedTask(const blink::WebTraceLocation& location,
-                               Task* task,
-                               long long delay_ms);
   virtual void postIdleTask(const blink::WebTraceLocation& location,
                             IdleTask* idle_task);
   virtual void postIdleTaskAfterWakeup(const blink::WebTraceLocation& location,
                                        IdleTask* idle_task);
 
-  virtual void addTaskObserver(TaskObserver* observer);
-  virtual void removeTaskObserver(TaskObserver* observer);
+  void addTaskObserver(TaskObserver* observer) override;
+  void removeTaskObserver(TaskObserver* observer) override;
 
   // Returns the base::Bind-compatible task runner for posting tasks to this
   // thread. Can be called from any thread.
@@ -57,7 +53,6 @@ class SCHEDULER_EXPORT WebThreadBase : public blink::WebThread {
   virtual void RemoveTaskObserverInternal(
       base::MessageLoop::TaskObserver* observer);
 
-  static void RunWebThreadTask(scoped_ptr<blink::WebThread::Task> task);
   static void RunWebThreadIdleTask(
       scoped_ptr<blink::WebThread::IdleTask> idle_task,
       base::TimeTicks deadline);

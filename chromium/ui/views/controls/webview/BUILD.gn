@@ -6,7 +6,7 @@ component("webview") {
   sources = [
     "unhandled_keyboard_event_handler.cc",
     "unhandled_keyboard_event_handler.h",
-    "unhandled_keyboard_event_handler_linux.cc",
+    "unhandled_keyboard_event_handler_mac.mm",
     "unhandled_keyboard_event_handler_win.cc",
     "web_dialog_view.cc",
     "web_dialog_view.h",
@@ -34,11 +34,14 @@ component("webview") {
   public_deps = [
     "//base",
     "//content/public/browser",
-    "//ui/aura",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/views",
   ]
+
+  if (is_linux || is_android) {
+    sources += [ "unhandled_keyboard_event_handler_default.cc" ]
+  }
 }
 
 source_set("test_support") {

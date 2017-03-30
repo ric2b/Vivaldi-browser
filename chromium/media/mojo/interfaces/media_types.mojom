@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-module mojo;
+module media.interfaces;
 
 import "ui/mojo/geometry/geometry.mojom";
 
@@ -29,10 +29,11 @@ enum AudioCodec {
   PCM_S16BE = 10,
   PCM_S24BE = 11,
   Opus = 12,
-  // EAC3 = 13,
+  EAC3 = 13,
   PCM_ALAW = 14,
   ALAC = 15,
-  MAX = ALAC,
+  AC3 = 16,
+  MAX = AC3,
 };
 
 // See media/base/channel_layout.h for descriptions.
@@ -86,22 +87,39 @@ enum SampleFormat {
   PlanarS16,
   PlanarF32,
   PlanarS32,
-  Max = PlanarS32,
+  S24,
+  Max = S24,
 };
 
-// See media/base/video_frame.h for descriptions.
-// Kept in sync with media::VideoFrame::Format via static_asserts.
+// See media/base/video_types.h for descriptions.
+// Kept in sync with media::VideoPixelFormat via static_asserts.
 enum VideoFormat {
   UNKNOWN = 0,
-  YV12,
   I420,
+  YV12,
   YV16,
   YV12A,
   YV24,
   NV12,
+  NV21,
+  UYVY,
+  YUY2,
   ARGB,
   XRGB,
-  FORMAT_MAX = XRGB,
+  RGB24,
+  RGB32,
+  MJPEG,
+  MT21,
+  FORMAT_MAX = MT21,
+};
+
+// Kept in sync with media::ColorSpace via static_asserts.
+enum ColorSpace {
+  UNSPECIFIED = 0,
+  JPEG = 1,
+  HD_REC709 = 2,
+  SD_REC601 = 3,
+  MAX = SD_REC601,
 };
 
 // See media/base/video_decoder_config.h for descriptions.
@@ -115,7 +133,8 @@ enum VideoCodec {
   Theora,
   VP8,
   VP9,
-  Max = VP9,
+  HEVC,
+  Max = HEVC,
 };
 
 // See media/base/video_decoder_config.h for descriptions.
@@ -164,9 +183,10 @@ struct VideoDecoderConfig {
   VideoCodec codec;
   VideoCodecProfile profile;
   VideoFormat format;
-  Size coded_size;
-  Rect visible_rect;
-  Size natural_size;
+  ColorSpace color_space;
+  mojo.Size coded_size;
+  mojo.Rect visible_rect;
+  mojo.Size natural_size;
   array<uint8>? extra_data;
   bool is_encrypted;
 };
@@ -187,8 +207,7 @@ struct DecryptConfig {
 };
 
 // This defines a mojo transport format for media::DecoderBuffer.
-struct MediaDecoderBuffer {
-  // See media/base/buffers.h for details.
+struct DecoderBuffer {
   int64 timestamp_usec;
   int64 duration_usec;
 
@@ -213,4 +232,59 @@ struct MediaDecoderBuffer {
 
   // Indicates this buffer is part of a splice around |splice_timestamp_usec|.
   int64 splice_timestamp_usec;
+};
+
+// This defines a mojo transport format for media::AudioBuffer.
+struct AudioBuffer {
+  // Format of the audio.
+  SampleFormat sample_format;
+
+  // How the channels are laid out.
+  ChannelLayout channel_layout;
+
+  // Number of channels.
+  int32 channel_count;
+
+  // Sample rate of the buffer.
+  int32 sample_rate;
+
+  // Number of frames in the buffer.
+  int32 frame_count;
+
+  // True if end of stream.
+  bool end_of_stream;
+
+  // Timestamp in microseconds of the first frame.
+  int64 timestamp_usec;
+
+  // Channel data. Will be null for EOS buffers.
+  array<uint8>? data;
+};
+
+// This defines a mojo transport format for media::VideoFrame.
+// TODO(jrummell): Support shared memory based VideoFrame to avoid copying
+// the data multiple times.
+struct VideoFrame {
+  // Format of the frame.
+  VideoFormat format;
+
+  // Width and height of the video frame, in pixels.
+  mojo.Size coded_size;
+
+  // Visible size of the frame.
+  mojo.Rect visible_rect;
+
+  // Natural size of the frame.
+  mojo.Size natural_size;
+
+  // True if end of stream.
+  bool end_of_stream;
+
+  // Timestamp in microseconds of the associated frame.
+  int64 timestamp_usec;
+
+  // Frame data for each plane. Will be null for EOS buffers.
+  array<uint8>? y_data;
+  array<uint8>? u_data;
+  array<uint8>? v_data;
 };

@@ -6,6 +6,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/synchronization/lock.h"
 #include "media/base/container_names.h"
@@ -27,9 +28,9 @@ static int AVIOReadOperation(void* opaque, uint8_t* buf, int buf_size) {
   return result;
 }
 
-static int64 AVIOSeekOperation(void* opaque, int64 offset, int whence) {
+static int64_t AVIOSeekOperation(void* opaque, int64_t offset, int whence) {
   FFmpegURLProtocol* protocol = reinterpret_cast<FFmpegURLProtocol*>(opaque);
-  int64 new_offset = AVERROR(EIO);
+  int64_t new_offset = AVERROR(EIO);
   switch (whence) {
     case SEEK_SET:
       if (protocol->SetPosition(offset))
@@ -37,7 +38,7 @@ static int64 AVIOSeekOperation(void* opaque, int64 offset, int whence) {
       break;
 
     case SEEK_CUR:
-      int64 pos;
+      int64_t pos;
       if (!protocol->GetPosition(&pos))
         break;
       if (protocol->SetPosition(pos + offset))
@@ -45,7 +46,7 @@ static int64 AVIOSeekOperation(void* opaque, int64 offset, int whence) {
       break;
 
     case SEEK_END:
-      int64 size;
+      int64_t size;
       if (!protocol->GetSize(&size))
         break;
       if (protocol->SetPosition(size + offset))
@@ -80,7 +81,7 @@ static int LockManagerOperation(void** lock, enum AVLockOp op) {
 
     case AV_LOCK_DESTROY:
       delete static_cast<base::Lock*>(*lock);
-      *lock = NULL;
+      *lock = nullptr;
       return 0;
   }
   return 1;
@@ -132,7 +133,7 @@ FFmpegGlue::FFmpegGlue(FFmpegURLProtocol* protocol)
   format_context_ = avformat_alloc_context();
   avio_context_.reset(avio_alloc_context(
       static_cast<unsigned char*>(av_malloc(kBufferSize)), kBufferSize, 0,
-      protocol, &AVIOReadOperation, NULL, &AVIOSeekOperation));
+      protocol, &AVIOReadOperation, nullptr, &AVIOSeekOperation));
 
   // Ensure FFmpeg only tries to seek on resources we know to be seekable.
   avio_context_->seekable =
@@ -145,11 +146,15 @@ FFmpegGlue::FFmpegGlue(FFmpegURLProtocol* protocol)
   // will set the AVFMT_FLAG_CUSTOM_IO flag for us, but do so here to ensure an
   // early error state doesn't cause FFmpeg to free our resources in error.
   format_context_->flags |= AVFMT_FLAG_CUSTOM_IO;
+
+  // Enable fast, but inaccurate seeks for MP3.
+  format_context_->flags |= AVFMT_FLAG_FAST_SEEK;
+
   format_context_->pb = avio_context_.get();
 }
 
 bool FFmpegGlue::OpenContext() {
-  DCHECK(!open_called_) << "OpenContext() should't be called twice.";
+  DCHECK(!open_called_) << "OpenContext() shouldn't be called twice.";
 
   // If avformat_open_input() is called we have to take a slightly different
   // destruction path to avoid double frees.
@@ -157,9 +162,9 @@ bool FFmpegGlue::OpenContext() {
 
   // Attempt to recognize the container by looking at the first few bytes of the
   // stream. The stream position is left unchanged.
-  scoped_ptr<std::vector<uint8> > buffer(new std::vector<uint8>(8192));
+  scoped_ptr<std::vector<uint8_t>> buffer(new std::vector<uint8_t>(8192));
 
-  int64 pos = AVIOSeekOperation(avio_context_.get()->opaque, 0, SEEK_CUR);
+  int64_t pos = AVIOSeekOperation(avio_context_.get()->opaque, 0, SEEK_CUR);
   AVIOSeekOperation(avio_context_.get()->opaque, 0, SEEK_SET);
   int numRead = AVIOReadOperation(
       avio_context_.get()->opaque, buffer.get()->data(), buffer.get()->size());
@@ -171,15 +176,15 @@ bool FFmpegGlue::OpenContext() {
     UMA_HISTOGRAM_SPARSE_SLOWLY("Media.DetectedContainer", container);
   }
 
-  // By passing NULL for the filename (second parameter) we are telling FFmpeg
-  // to use the AVIO context we setup from the AVFormatContext structure.
-  return avformat_open_input(&format_context_, NULL, NULL, NULL) == 0;
+  // By passing nullptr for the filename (second parameter) we are telling
+  // FFmpeg to use the AVIO context we setup from the AVFormatContext structure.
+  return avformat_open_input(&format_context_, nullptr, nullptr, nullptr) == 0;
 }
 
 FFmpegGlue::~FFmpegGlue() {
   // In the event of avformat_open_input() failure, FFmpeg may sometimes free
   // our AVFormatContext behind the scenes, but leave the buffer alive.  It will
-  // helpfully set |format_context_| to NULL in this case.
+  // helpfully set |format_context_| to nullptr in this case.
   if (!format_context_) {
     av_free(avio_context_->buffer);
     return;

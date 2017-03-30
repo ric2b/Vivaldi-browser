@@ -9,11 +9,11 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/android/chrome_http_auth_handler.h"
-#include "chrome/browser/ui/android/window_android_helper.h"
-#include "chrome/browser/ui/login/login_prompt.h"
+#include "chrome/browser/ui/android/view_android_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/auth.h"
+#include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 
 using content::BrowserThread;
@@ -28,8 +28,9 @@ class LoginHandlerAndroid : public LoginHandler {
 
   // LoginHandler methods:
 
-  void OnAutofillDataAvailable(const base::string16& username,
-                               const base::string16& password) override {
+  void OnAutofillDataAvailableInternal(
+      const base::string16& username,
+      const base::string16& password) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK(chrome_http_auth_handler_.get() != NULL);
     chrome_http_auth_handler_->OnAutofillDataAvailable(
@@ -37,26 +38,33 @@ class LoginHandlerAndroid : public LoginHandler {
   }
   void OnLoginModelDestroying() override {}
 
-  void BuildViewForPasswordManager(password_manager::PasswordManager* manager,
-                                   const base::string16& explanation) override {
+  void BuildViewImpl(const base::string16& authority,
+                     const base::string16& explanation,
+                     LoginModelData* login_model_data) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
     // Get pointer to TabAndroid
     content::WebContents* web_contents = GetWebContentsForLogin();
     CHECK(web_contents);
-    WindowAndroidHelper* window_helper = WindowAndroidHelper::FromWebContents(
+    ViewAndroidHelper* view_helper = ViewAndroidHelper::FromWebContents(
         web_contents);
 
     // Notify WindowAndroid that HTTP authentication is required.
-    if (window_helper->GetWindowAndroid()) {
-      chrome_http_auth_handler_.reset(new ChromeHttpAuthHandler(explanation));
+    if (view_helper->GetViewAndroid()
+        && view_helper->GetViewAndroid()->GetWindowAndroid()) {
+      chrome_http_auth_handler_.reset(
+          new ChromeHttpAuthHandler(authority, explanation));
       chrome_http_auth_handler_->Init();
       chrome_http_auth_handler_->SetObserver(this);
       chrome_http_auth_handler_->ShowDialog(
-          window_helper->GetWindowAndroid()->GetJavaObject().obj());
+          view_helper->GetViewAndroid()
+          ->GetWindowAndroid()->GetJavaObject().obj());
 
-      // Register to receive a callback to OnAutofillDataAvailable().
-      SetModel(manager);
+      if (login_model_data)
+        SetModel(*login_model_data);
+      else
+        ResetModel();
+
       NotifyAuthNeeded();
     } else {
       CancelAuth();

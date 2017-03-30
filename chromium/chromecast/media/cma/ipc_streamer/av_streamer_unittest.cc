@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
 #include <list>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
-#include "chromecast/media/cma/base/decoder_buffer_base.h"
 #include "chromecast/media/cma/ipc/media_memory_chunk.h"
 #include "chromecast/media/cma/ipc/media_message_fifo.h"
 #include "chromecast/media/cma/ipc_streamer/av_streamer_proxy.h"
@@ -20,6 +22,7 @@
 #include "chromecast/media/cma/test/frame_generator_for_test.h"
 #include "chromecast/media/cma/test/mock_frame_consumer.h"
 #include "chromecast/media/cma/test/mock_frame_provider.h"
+#include "chromecast/public/media/cast_decoder_buffer.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/video_decoder_config.h"
@@ -70,7 +73,7 @@ class AvStreamerTest : public testing::Test {
   void OnTestTimeout();
 
  protected:
-  scoped_ptr<uint64[]> fifo_mem_;
+  scoped_ptr<uint64_t[]> fifo_mem_;
 
   scoped_ptr<AvStreamerProxy> av_buffer_proxy_;
   scoped_ptr<CodedFrameProviderHost> coded_frame_provider_host_;
@@ -119,11 +122,11 @@ void AvStreamerTest::Configure(
 
   scoped_ptr<MockFrameProvider> frame_provider(new MockFrameProvider());
   frame_provider->Configure(provider_delayed_pattern,
-                            frame_generator_provider.Pass());
+                            std::move(frame_generator_provider));
   frame_provider->SetDelayFlush(delay_flush);
 
   size_t fifo_size_div_8 = 512;
-  fifo_mem_.reset(new uint64[fifo_size_div_8]);
+  fifo_mem_.reset(new uint64_t[fifo_size_div_8]);
   scoped_ptr<MediaMessageFifo> producer_fifo(
       new MediaMessageFifo(
           scoped_ptr<MediaMemoryChunk>(
@@ -143,17 +146,15 @@ void AvStreamerTest::Configure(
       new AvStreamerProxy());
   av_buffer_proxy_->SetCodedFrameProvider(
       scoped_ptr<CodedFrameProvider>(frame_provider.release()));
-  av_buffer_proxy_->SetMediaMessageFifo(producer_fifo.Pass());
+  av_buffer_proxy_->SetMediaMessageFifo(std::move(producer_fifo));
 
   coded_frame_provider_host_.reset(
-      new CodedFrameProviderHost(consumer_fifo.Pass()));
+      new CodedFrameProviderHost(std::move(consumer_fifo)));
 
   frame_consumer_.reset(
       new MockFrameConsumer(coded_frame_provider_host_.get()));
-  frame_consumer_->Configure(
-      consumer_delayed_pattern,
-      false,
-      frame_generator_consumer.Pass());
+  frame_consumer_->Configure(consumer_delayed_pattern, false,
+                             std::move(frame_generator_consumer));
 
   stop_and_flush_cb_count_ = 0;
 }

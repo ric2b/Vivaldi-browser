@@ -4,17 +4,21 @@
 
 #include "mojo/runner/android/android_handler.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/scoped_native_library.h"
 #include "jni/AndroidHandler_jni.h"
-#include "mojo/application/public/cpp/application_impl.h"
 #include "mojo/common/data_pipe_utils.h"
 #include "mojo/public/c/system/main.h"
 #include "mojo/runner/android/run_android_application_function.h"
-#include "mojo/runner/native_application_support.h"
+#include "mojo/runner/host/native_application_support.h"
+#include "mojo/shell/public/cpp/application_impl.h"
 #include "mojo/util/filename_util.h"
 #include "url/gurl.h"
 
@@ -36,17 +40,14 @@ namespace {
 void RunAndroidApplication(JNIEnv* env,
                            jobject j_context,
                            const base::FilePath& app_path,
-                           jint j_handle,
-                           bool is_cached_app) {
+                           jint j_handle) {
   InterfaceRequest<Application> application_request =
       MakeRequest<Application>(MakeScopedHandle(MessagePipeHandle(j_handle)));
 
   // Load the library, so that we can set the application context there if
   // needed.
   // TODO(vtl): We'd use a ScopedNativeLibrary, but it doesn't have .get()!
-  base::NativeLibrary app_library = LoadNativeApplication(
-      app_path, is_cached_app ? shell::NativeApplicationCleanup::DONT_DELETE
-                              : shell::NativeApplicationCleanup::DELETE);
+  base::NativeLibrary app_library = LoadNativeApplication(app_path);
   if (!app_library)
     return;
 
@@ -67,7 +68,7 @@ void RunAndroidApplication(JNIEnv* env,
   }
 
   // Run the application.
-  RunNativeApplication(app_library, application_request.Pass());
+  RunNativeApplication(app_library, std::move(application_request));
   // TODO(vtl): See note about unloading and thread-local destructors above
   // declaration of |LoadNativeApplication()|.
   base::UnloadNativeLibrary(app_library);
@@ -159,7 +160,7 @@ void AndroidHandler::RunApplication(
   base::FilePath archive_path(
       ConvertJavaStringToUTF8(env, j_archive_path.obj()));
 
-  common::BlockingCopyToFile(response->body.Pass(), archive_path);
+  common::BlockingCopyToFile(std::move(response->body), archive_path);
   Java_AndroidHandler_bootstrap(
       env, GetApplicationContext(), j_archive_path.obj(),
       application_request.PassMessagePipe().release().value(),

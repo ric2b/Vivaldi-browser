@@ -5,9 +5,9 @@
 #ifndef TOOLS_GN_BUILDER_H_
 #define TOOLS_GN_BUILDER_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "tools/gn/builder_record.h"
 #include "tools/gn/label.h"
@@ -58,6 +58,7 @@ class Builder : public base::RefCountedThreadSafe<Builder> {
   virtual ~Builder();
 
   bool TargetDefined(BuilderRecord* record, Err* err);
+  bool ConfigDefined(BuilderRecord* record, Err* err);
   bool ToolchainDefined(BuilderRecord* record, Err* err);
 
   // Returns the record associated with the given label. This function checks
@@ -117,7 +118,6 @@ class Builder : public base::RefCountedThreadSafe<Builder> {
   // if anything isn't found or if the type doesn't match.
   bool ResolveDeps(LabelTargetVector* deps, Err* err);
   bool ResolveConfigs(UniqueVector<LabelConfigPair>* configs, Err* err);
-  bool ResolveForwardDependentConfigs(Target* target, Err* err);
   bool ResolveToolchain(Target* target, Err* err);
 
   // Given a list of unresolved records, tries to find any circular

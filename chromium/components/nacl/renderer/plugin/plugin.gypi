@@ -13,10 +13,7 @@
       'pnacl_resources.cc',
       'pnacl_translate_thread.cc',
       'ppapi_entrypoints.cc',
-      'sel_ldr_launcher_chrome.cc',
       'service_runtime.cc',
-      'srpc_client.cc',
-      'srpc_params.cc',
       'temporary_file.cc',
       'utility.cc',
     ],
@@ -32,9 +29,6 @@
       ['OS=="linux"', {
         'cflags': [
           '-Wno-long-long',
-        ],
-        'cflags!': [
-          '-Wno-unused-parameter', # be a bit stricter to match NaCl flags.
         ],
         'conditions': [
           ['asan!=1 and msan!=1 and ubsan_vptr!=1', {

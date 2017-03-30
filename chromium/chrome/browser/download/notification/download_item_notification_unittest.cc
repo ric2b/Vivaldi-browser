@@ -4,6 +4,10 @@
 
 #include "chrome/browser/download/notification/download_item_notification.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
@@ -35,6 +39,26 @@ const base::FilePath::CharType kDownloadItemTargetPathString[] =
 
 namespace test {
 
+class MockMessageCenter : public message_center::FakeMessageCenter {
+ public:
+  MockMessageCenter() {}
+  ~MockMessageCenter() override {}
+
+  void AddVisibleNotification(message_center::Notification* notification) {
+    visible_notifications_.insert(notification);
+  }
+
+  const message_center::NotificationList::Notifications&
+      GetVisibleNotifications() override {
+    return visible_notifications_;
+  }
+
+ private:
+  message_center::NotificationList::Notifications visible_notifications_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockMessageCenter);
+};
+
 class DownloadItemNotificationTest : public testing::Test {
  public:
   DownloadItemNotificationTest()
@@ -51,11 +75,15 @@ class DownloadItemNotificationTest : public testing::Test {
     profile_ = profile_manager_->CreateTestingProfile("test-user");
 
     scoped_ptr<NotificationUIManager> ui_manager(new StubNotificationUIManager);
-    TestingBrowserProcess::GetGlobal()->
-        SetNotificationUIManager(ui_manager.Pass());
+    TestingBrowserProcess::GetGlobal()->SetNotificationUIManager(
+        std::move(ui_manager));
 
     download_notification_manager_.reset(
         new DownloadNotificationManagerForProfile(profile_, nullptr));
+
+    message_center_.reset(new MockMessageCenter());
+    download_notification_manager_->OverrideMessageCenterForTest(
+        message_center_.get());
 
     base::FilePath download_item_target_path(kDownloadItemTargetPathString);
     download_item_.reset(new NiceMock<content::MockDownloadItem>());
@@ -70,6 +98,8 @@ class DownloadItemNotificationTest : public testing::Test {
     ON_CALL(*download_item_, GetDangerType())
         .WillByDefault(Return(content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
     ON_CALL(*download_item_, IsDone()).WillByDefault(Return(false));
+    ON_CALL(*download_item_, GetURL()).WillByDefault(ReturnRefOfCopy(
+        GURL("http://www.example.com/download.bin")));
     ON_CALL(*download_item_, GetBrowserContext())
         .WillByDefault(Return(profile_));
   }
@@ -126,13 +156,15 @@ class DownloadItemNotificationTest : public testing::Test {
   }
 
   bool ShownAsPopUp() {
-    return !download_item_notification_->notification_->shown_as_popup();
+    return !notification()->shown_as_popup();
   }
 
   void CreateDownloadItemNotification() {
     download_notification_manager_->OnNewDownloadReady(download_item_.get());
     download_item_notification_ =
         download_notification_manager_->items_[download_item_.get()];
+    message_center_->AddVisibleNotification(
+        download_item_notification_->notification_.get());
   }
 
   base::MessageLoopForUI message_loop_;
@@ -144,6 +176,7 @@ class DownloadItemNotificationTest : public testing::Test {
   scoped_ptr<NiceMock<content::MockDownloadItem>> download_item_;
   scoped_ptr<DownloadNotificationManagerForProfile>
       download_notification_manager_;
+  scoped_ptr<MockMessageCenter> message_center_;
   DownloadItemNotification* download_item_notification_;
 };
 
@@ -246,6 +279,26 @@ TEST_F(DownloadItemNotificationTest, OpenWhenComplete) {
 
   // DownloadItem::OpenDownload must not be called since the file opens
   // automatically due to the open-when-complete flag.
+}
+
+TEST_F(DownloadItemNotificationTest, DisablePopup) {
+  CreateDownloadItemNotification();
+  download_item_->NotifyObserversDownloadOpened();
+
+  EXPECT_EQ(message_center::DEFAULT_PRIORITY, notification()->priority());
+
+  download_item_notification_->DisablePopup();
+  // Priority is low.
+  EXPECT_EQ(message_center::LOW_PRIORITY, notification()->priority());
+
+  // Downloading is completed.
+  EXPECT_CALL(*download_item_, GetState())
+      .WillRepeatedly(Return(content::DownloadItem::COMPLETE));
+  EXPECT_CALL(*download_item_, IsDone()).WillRepeatedly(Return(true));
+  download_item_->NotifyObserversDownloadUpdated();
+
+  // Priority is updated back to normal.
+  EXPECT_EQ(message_center::DEFAULT_PRIORITY, notification()->priority());
 }
 
 }  // namespace test

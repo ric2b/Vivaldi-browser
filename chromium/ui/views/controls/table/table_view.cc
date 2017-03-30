@@ -4,7 +4,10 @@
 
 #include "ui/views/controls/table/table_view.h"
 
+#include <stddef.h>
+
 #include <map>
+#include <utility>
 
 #include "base/auto_reset.h"
 #include "base/i18n/rtl.h"
@@ -130,6 +133,7 @@ TableView::TableView(ui::TableModel* model,
       header_(NULL),
       table_type_(table_type),
       single_selection_(single_selection),
+      select_on_remove_(true),
       table_view_observer_(NULL),
       row_height_(font_list_.GetHeight() + kTextVerticalPadding * 2),
       last_parent_width_(0),
@@ -175,7 +179,7 @@ View* TableView::CreateParentIfNecessary() {
 
 void TableView::SetRowBackgroundPainter(
     scoped_ptr<TableViewRowBackgroundPainter> painter) {
-  row_background_painter_ = painter.Pass();
+  row_background_painter_ = std::move(painter);
 }
 
 void TableView::SetGrouper(TableGrouper* grouper) {
@@ -448,7 +452,7 @@ void TableView::GetAccessibleState(ui::AXViewState* state) {
         name_parts.push_back(value);
       }
     }
-    state->name = JoinString(name_parts, base::ASCIIToUTF16(", "));
+    state->name = base::JoinString(name_parts, base::ASCIIToUTF16(", "));
   }
 }
 
@@ -482,7 +486,7 @@ void TableView::OnItemsRemoved(int start, int length) {
   // If the selection was empty and is no longer empty select the same visual
   // index.
   if (selection_model_.empty() && previously_selected_view_index != -1 &&
-      RowCount()) {
+      RowCount() && select_on_remove_) {
     selection_model_.SetSelectedIndex(
         ViewToModel(std::min(RowCount() - 1, previously_selected_view_index)));
   }
@@ -541,7 +545,7 @@ void TableView::OnPaint(gfx::Canvas* canvas) {
                                                   GetRowBounds(i),
                                                   canvas);
     }
-    if (selection_model_.active() == i && HasFocus())
+    if (selection_model_.active() == model_index && HasFocus())
       canvas->DrawFocusRect(GetRowBounds(i));
     for (int j = region.min_column; j < region.max_column; ++j) {
       const gfx::Rect cell_bounds(GetCellBounds(i, j));

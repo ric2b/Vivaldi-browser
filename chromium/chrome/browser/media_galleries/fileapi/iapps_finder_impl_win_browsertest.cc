@@ -8,6 +8,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -61,7 +62,7 @@ class ITunesFinderWinTest : public InProcessBrowserTest {
     base::FilePath pref_dir =
         app_data_dir().AppendASCII("Apple Computer").AppendASCII("iTunes");
     ASSERT_TRUE(base::CreateDirectory(pref_dir));
-    ASSERT_EQ(data.size(),
+    ASSERT_EQ(static_cast<int>(data.size()),
               base::WriteFile(pref_dir.AppendASCII("iTunesPrefs.xml"),
                               data.data(), data.size()));
   }

@@ -6,6 +6,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace gfx {
@@ -15,23 +16,30 @@ namespace {
 // The height of the primary display, which OSX defines as the monitor with the
 // menubar. This is always at index 0.
 CGFloat PrimaryDisplayHeight() {
-  return NSMaxY([[[NSScreen screens] objectAtIndex:0] frame]);
+  return NSMaxY([[[NSScreen screens] firstObject] frame]);
 }
 
 }  // namespace
 
-NSRect ScreenRectToNSRect(const gfx::Rect& rect) {
+NSRect ScreenRectToNSRect(const Rect& rect) {
   return NSMakeRect(rect.x(),
                     PrimaryDisplayHeight() - rect.y() - rect.height(),
                     rect.width(),
                     rect.height());
 }
 
-gfx::Rect ScreenRectFromNSRect(const NSRect& rect) {
-  return gfx::Rect(rect.origin.x,
-                   PrimaryDisplayHeight() - rect.origin.y - rect.size.height,
-                   rect.size.width,
-                   rect.size.height);
+Rect ScreenRectFromNSRect(const NSRect& rect) {
+  return Rect(rect.origin.x,
+              PrimaryDisplayHeight() - rect.origin.y - rect.size.height,
+              rect.size.width, rect.size.height);
+}
+
+NSPoint ScreenPointToNSPoint(const Point& point) {
+  return NSMakePoint(point.x(), PrimaryDisplayHeight() - point.y());
+}
+
+Point ScreenPointFromNSPoint(const NSPoint& point) {
+  return Point(point.x, PrimaryDisplayHeight() - point.y);
 }
 
 }  // namespace gfx

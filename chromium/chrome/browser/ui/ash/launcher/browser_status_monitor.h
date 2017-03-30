@@ -5,15 +5,19 @@
 #ifndef CHROME_BROWSER_UI_ASH_LAUNCHER_BROWSER_STATUS_MONITOR_H_
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_BROWSER_STATUS_MONITOR_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
 #include "ash/shelf/scoped_observer_with_duplicated_sources.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/browser_list_observer.h"
+#include "chrome/browser/ui/browser_tab_strip_tracker.h"
+#include "chrome/browser/ui/browser_tab_strip_tracker_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/gfx/display_observer.h"
@@ -34,6 +38,7 @@ class Browser;
 // active tab changes.
 class BrowserStatusMonitor : public aura::client::ActivationChangeObserver,
                              public aura::WindowObserver,
+                             public BrowserTabStripTrackerDelegate,
                              public chrome::BrowserListObserver,
                              public gfx::DisplayObserver,
                              public TabStripModelObserver {
@@ -63,6 +68,9 @@ class BrowserStatusMonitor : public aura::client::ActivationChangeObserver,
 
   // aura::WindowObserver overrides:
   void OnWindowDestroyed(aura::Window* window) override;
+
+  // BrowserTabStripTrackerDelegate overrides:
+  bool ShouldTrackBrowser(Browser* browser) override;
 
   // chrome::BrowserListObserver overrides:
   void OnBrowserAdded(Browser* browser) override;
@@ -140,6 +148,8 @@ class BrowserStatusMonitor : public aura::client::ActivationChangeObserver,
   BrowserToAppIDMap browser_to_app_id_map_;
   WebContentsToObserverMap webcontents_to_observer_map_;
   scoped_ptr<SettingsWindowObserver> settings_window_observer_;
+
+  BrowserTabStripTracker browser_tab_strip_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserStatusMonitor);
 };

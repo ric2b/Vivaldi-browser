@@ -41,25 +41,20 @@ scoped_ptr<ExtensionReenabler> ExtensionReenabler::PromptForReenable(
 #endif  // DCHECK_IS_ON()
 
   return make_scoped_ptr(new ExtensionReenabler(
-      extension,
-      browser_context,
-      referrer_url,
-      callback,
-      make_scoped_ptr(new ExtensionInstallPrompt(web_contents))));
+      extension, browser_context, referrer_url, callback, web_contents,
+      ExtensionInstallPrompt::GetDefaultShowDialogCallback()));
 }
 
 // static
 scoped_ptr<ExtensionReenabler>
-ExtensionReenabler::PromptForReenableWithPromptForTest(
+ExtensionReenabler::PromptForReenableWithCallbackForTest(
     const scoped_refptr<const Extension>& extension,
     content::BrowserContext* browser_context,
     const Callback& callback,
-    scoped_ptr<ExtensionInstallPrompt> install_prompt) {
-  return make_scoped_ptr(new ExtensionReenabler(extension,
-                                                browser_context,
-                                                GURL(),
-                                                callback,
-                                                install_prompt.Pass()));
+    const ExtensionInstallPrompt::ShowDialogCallback& show_dialog_callback) {
+  return make_scoped_ptr(new ExtensionReenabler(extension, browser_context,
+                                                GURL(), callback, nullptr,
+                                                show_dialog_callback));
 }
 
 ExtensionReenabler::ExtensionReenabler(
@@ -67,16 +62,20 @@ ExtensionReenabler::ExtensionReenabler(
     content::BrowserContext* browser_context,
     const GURL& referrer_url,
     const Callback& callback,
-    scoped_ptr<ExtensionInstallPrompt> install_prompt)
+    content::WebContents* web_contents,
+    const ExtensionInstallPrompt::ShowDialogCallback& show_dialog_callback)
     : extension_(extension),
       browser_context_(browser_context),
       referrer_url_(referrer_url),
       callback_(callback),
-      install_prompt_(install_prompt.Pass()),
+      show_dialog_callback_(show_dialog_callback),
       finished_(false),
-      registry_observer_(this) {
+      registry_observer_(this),
+      weak_factory_(this) {
   DCHECK(extension_.get());
   registry_observer_.Add(ExtensionRegistry::Get(browser_context_));
+
+  install_prompt_.reset(new ExtensionInstallPrompt(web_contents));
 
   // If we have a non-empty referrer, then we have to validate that it's a valid
   // url for the extension.
@@ -88,30 +87,50 @@ ExtensionReenabler::ExtensionReenabler(
         extension->id()));
     webstore_data_fetcher_->Start();
   } else {
-    install_prompt_->ConfirmReEnable(this, extension.get());
+    ExtensionInstallPrompt::PromptType type =
+        ExtensionInstallPrompt::GetReEnablePromptTypeForExtension(
+            browser_context, extension.get());
+    install_prompt_->ShowDialog(
+        base::Bind(&ExtensionReenabler::OnInstallPromptDone,
+                   weak_factory_.GetWeakPtr()),
+        extension.get(), nullptr,
+        make_scoped_ptr(new ExtensionInstallPrompt::Prompt(type)),
+        show_dialog_callback_);
   }
 }
 
-void ExtensionReenabler::InstallUIProceed() {
-  // Stop observing - we don't want to see our own enablement.
-  registry_observer_.RemoveAll();
+void ExtensionReenabler::OnInstallPromptDone(
+    ExtensionInstallPrompt::Result install_result) {
+  ReenableResult result = ABORTED;
+  switch (install_result) {
+    case ExtensionInstallPrompt::Result::ACCEPTED: {
+      // Stop observing - we don't want to see our own enablement.
+      registry_observer_.RemoveAll();
 
-  ExtensionService* extension_service =
-      ExtensionSystem::Get(browser_context_)->extension_service();
-  if (extension_service->browser_terminating()) {
-    Finish(ABORTED);
-  } else {
-    extension_service->GrantPermissionsAndEnableExtension(extension_.get());
-    // The re-enable could have failed if the extension is disallowed by
-    // policy.
-    bool enabled = ExtensionRegistry::Get(browser_context_)->
-        enabled_extensions().GetByID(extension_->id()) != nullptr;
-    Finish(enabled ? REENABLE_SUCCESS : NOT_ALLOWED);
+      ExtensionService* extension_service =
+          ExtensionSystem::Get(browser_context_)->extension_service();
+      if (extension_service->browser_terminating()) {
+        result = ABORTED;
+      } else {
+        extension_service->GrantPermissionsAndEnableExtension(extension_.get());
+        // The re-enable could have failed if the extension is disallowed by
+        // policy.
+        bool enabled = ExtensionRegistry::Get(browser_context_)
+                           ->enabled_extensions()
+                           .GetByID(extension_->id()) != nullptr;
+        result = enabled ? REENABLE_SUCCESS : NOT_ALLOWED;
+      }
+      break;
+    }
+    case ExtensionInstallPrompt::Result::USER_CANCELED:
+      result = USER_CANCELED;
+      break;
+    case ExtensionInstallPrompt::Result::ABORTED:
+      result = ABORTED;
+      break;
   }
-}
 
-void ExtensionReenabler::InstallUIAbort(bool user_initiated) {
-  Finish(user_initiated ? USER_CANCELED : ABORTED);
+  Finish(result);
 }
 
 void ExtensionReenabler::OnExtensionLoaded(
@@ -144,7 +163,15 @@ void ExtensionReenabler::OnWebstoreResponseParseSuccess(
                                                      &error)) {
     Finish(NOT_ALLOWED);
   } else {
-    install_prompt_->ConfirmReEnable(this, extension_.get());
+    ExtensionInstallPrompt::PromptType type =
+        ExtensionInstallPrompt::GetReEnablePromptTypeForExtension(
+            browser_context_, extension_.get());
+    install_prompt_->ShowDialog(
+        base::Bind(&ExtensionReenabler::OnInstallPromptDone,
+                   weak_factory_.GetWeakPtr()),
+        extension_.get(), nullptr,
+        make_scoped_ptr(new ExtensionInstallPrompt::Prompt(type)),
+        show_dialog_callback_);
   }
 }
 

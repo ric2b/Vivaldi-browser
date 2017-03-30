@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/speech/tts_controller.h"
@@ -75,7 +76,7 @@ class TtsControllerImpl : public TtsController {
   int GetMatchingVoice(const Utterance* utterance,
                        std::vector<VoiceData>& voices);
 
-  friend struct DefaultSingletonTraits<TtsControllerImpl>;
+  friend struct base::DefaultSingletonTraits<TtsControllerImpl>;
 
   // The current utterance being spoken.
   Utterance* current_utterance_;

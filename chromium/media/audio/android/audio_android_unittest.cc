@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/android/build_info.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
@@ -35,24 +37,25 @@ using ::testing::NotNull;
 using ::testing::Return;
 
 namespace media {
+namespace {
 
 ACTION_P3(CheckCountAndPostQuitTask, count, limit, loop) {
   if (++*count >= limit) {
-    loop->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+    loop->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   }
 }
 
-static const char kSpeechFile_16b_s_48k[] = "speech_16b_stereo_48kHz.raw";
-static const char kSpeechFile_16b_m_48k[] = "speech_16b_mono_48kHz.raw";
-static const char kSpeechFile_16b_s_44k[] = "speech_16b_stereo_44kHz.raw";
-static const char kSpeechFile_16b_m_44k[] = "speech_16b_mono_44kHz.raw";
+const char kSpeechFile_16b_s_48k[] = "speech_16b_stereo_48kHz.raw";
+const char kSpeechFile_16b_m_48k[] = "speech_16b_mono_48kHz.raw";
+const char kSpeechFile_16b_s_44k[] = "speech_16b_stereo_44kHz.raw";
+const char kSpeechFile_16b_m_44k[] = "speech_16b_mono_44kHz.raw";
 
-static const float kCallbackTestTimeMs = 2000.0;
-static const int kBitsPerSample = 16;
-static const int kBytesPerSample = kBitsPerSample / 8;
+const float kCallbackTestTimeMs = 2000.0;
+const int kBitsPerSample = 16;
+const int kBytesPerSample = kBitsPerSample / 8;
 
 // Converts AudioParameters::Format enumerator to readable string.
-static std::string FormatToString(AudioParameters::Format format) {
+std::string FormatToString(AudioParameters::Format format) {
   switch (format) {
     case AudioParameters::AUDIO_PCM_LINEAR:
       return std::string("AUDIO_PCM_LINEAR");
@@ -67,7 +70,7 @@ static std::string FormatToString(AudioParameters::Format format) {
 
 // Converts ChannelLayout enumerator to readable string. Does not include
 // multi-channel cases since these layouts are not supported on Android.
-static std::string LayoutToString(ChannelLayout channel_layout) {
+std::string LayoutToString(ChannelLayout channel_layout) {
   switch (channel_layout) {
     case CHANNEL_LAYOUT_NONE:
       return std::string("CHANNEL_LAYOUT_NONE");
@@ -81,7 +84,7 @@ static std::string LayoutToString(ChannelLayout channel_layout) {
   }
 }
 
-static double ExpectedTimeBetweenCallbacks(AudioParameters params) {
+double ExpectedTimeBetweenCallbacks(AudioParameters params) {
   return (base::TimeDelta::FromMicroseconds(
               params.frames_per_buffer() * base::Time::kMicrosecondsPerSecond /
               static_cast<double>(params.sample_rate()))).InMillisecondsF();
@@ -89,7 +92,7 @@ static double ExpectedTimeBetweenCallbacks(AudioParameters params) {
 
 // Helper method which verifies that the device list starts with a valid
 // default device name followed by non-default device names.
-static void CheckDeviceNames(const AudioDeviceNames& device_names) {
+void CheckDeviceNames(const AudioDeviceNames& device_names) {
   DVLOG(2) << "Got " << device_names.size() << " audio devices.";
   if (device_names.empty()) {
     // Log a warning so we can see the status on the build bots.  No need to
@@ -102,8 +105,7 @@ static void CheckDeviceNames(const AudioDeviceNames& device_names) {
   AudioDeviceNames::const_iterator it = device_names.begin();
 
   // The first device in the list should always be the default device.
-  EXPECT_EQ(std::string(AudioManagerBase::kDefaultDeviceName),
-            it->device_name);
+  EXPECT_EQ(AudioManager::GetDefaultDeviceName(), it->device_name);
   EXPECT_EQ(std::string(AudioManagerBase::kDefaultDeviceId), it->unique_id);
   ++it;
 
@@ -114,19 +116,21 @@ static void CheckDeviceNames(const AudioDeviceNames& device_names) {
     EXPECT_FALSE(it->unique_id.empty());
     DVLOG(2) << "Device ID(" << it->unique_id
              << "), label: " << it->device_name;
-    EXPECT_NE(std::string(AudioManagerBase::kDefaultDeviceName),
-              it->device_name);
-    EXPECT_NE(std::string(AudioManagerBase::kDefaultDeviceId),
-              it->unique_id);
+    EXPECT_NE(AudioManager::GetDefaultDeviceName(), it->device_name);
+    EXPECT_NE(std::string(AudioManagerBase::kDefaultDeviceId), it->unique_id);
     ++it;
   }
 }
 
 // We clear the data bus to ensure that the test does not cause noise.
-static int RealOnMoreData(AudioBus* dest, uint32 total_bytes_delay) {
+int RealOnMoreData(AudioBus* dest,
+                   uint32_t total_bytes_delay,
+                   uint32_t frames_skipped) {
   dest->Zero();
   return dest->frames();
 }
+
+}  // namespace
 
 std::ostream& operator<<(std::ostream& os, const AudioParameters& params) {
   using namespace std;
@@ -151,7 +155,7 @@ class MockAudioInputCallback : public AudioInputStream::AudioInputCallback {
   MOCK_METHOD4(OnData,
                void(AudioInputStream* stream,
                     const AudioBus* src,
-                    uint32 hardware_delay_bytes,
+                    uint32_t hardware_delay_bytes,
                     double volume));
   MOCK_METHOD1(OnError, void(AudioInputStream* stream));
 };
@@ -177,7 +181,9 @@ class FileAudioSource : public AudioOutputStream::AudioSourceCallback {
 
   // Use samples read from a data file and fill up the audio buffer
   // provided to us in the callback.
-  int OnMoreData(AudioBus* audio_bus, uint32 total_bytes_delay) override {
+  int OnMoreData(AudioBus* audio_bus,
+                 uint32_t total_bytes_delay,
+                 uint32_t frames_skipped) override {
     bool stop_playing = false;
     int max_size =
         audio_bus->frames() * audio_bus->channels() * kBytesPerSample;
@@ -244,7 +250,7 @@ class FileAudioSink : public AudioInputStream::AudioInputCallback {
   ~FileAudioSink() override {
     int bytes_written = 0;
     while (bytes_written < buffer_->forward_capacity()) {
-      const uint8* chunk;
+      const uint8_t* chunk;
       int chunk_size;
 
       // Stop writing if no more data is available.
@@ -263,10 +269,10 @@ class FileAudioSink : public AudioInputStream::AudioInputCallback {
   // AudioInputStream::AudioInputCallback implementation.
   void OnData(AudioInputStream* stream,
               const AudioBus* src,
-              uint32 hardware_delay_bytes,
+              uint32_t hardware_delay_bytes,
               double volume) override {
     const int num_samples = src->frames() * src->channels();
-    scoped_ptr<int16> interleaved(new int16[num_samples]);
+    scoped_ptr<int16_t> interleaved(new int16_t[num_samples]);
     const int bytes_per_sample = sizeof(*interleaved);
     src->ToInterleaved(src->frames(), bytes_per_sample, interleaved.get());
 
@@ -274,7 +280,7 @@ class FileAudioSink : public AudioInputStream::AudioInputCallback {
     // fwrite() calls in the audio callback. The complete buffer will be
     // written to file in the destructor.
     const int size = bytes_per_sample * num_samples;
-    if (!buffer_->Append((const uint8*)interleaved.get(), size))
+    if (!buffer_->Append((const uint8_t*)interleaved.get(), size))
       event_->Signal();
   }
 
@@ -303,7 +309,7 @@ class FullDuplexAudioSinkSource
     // Start with a reasonably small FIFO size. It will be increased
     // dynamically during the test if required.
     fifo_.reset(new media::SeekableBuffer(0, 2 * params.GetBytesPerBuffer()));
-    buffer_.reset(new uint8[params_.GetBytesPerBuffer()]);
+    buffer_.reset(new uint8_t[params_.GetBytesPerBuffer()]);
   }
 
   ~FullDuplexAudioSinkSource() override {}
@@ -311,14 +317,14 @@ class FullDuplexAudioSinkSource
   // AudioInputStream::AudioInputCallback implementation
   void OnData(AudioInputStream* stream,
               const AudioBus* src,
-              uint32 hardware_delay_bytes,
+              uint32_t hardware_delay_bytes,
               double volume) override {
     const base::TimeTicks now_time = base::TimeTicks::Now();
     const int diff = (now_time - previous_time_).InMilliseconds();
 
     EXPECT_EQ(params_.bits_per_sample(), 16);
     const int num_samples = src->frames() * src->channels();
-    scoped_ptr<int16> interleaved(new int16[num_samples]);
+    scoped_ptr<int16_t> interleaved(new int16_t[num_samples]);
     const int bytes_per_sample = sizeof(*interleaved);
     src->ToInterleaved(src->frames(), bytes_per_sample, interleaved.get());
     const int size = bytes_per_sample * num_samples;
@@ -343,7 +349,7 @@ class FullDuplexAudioSinkSource
 
     // Append new data to the FIFO and extend the size if the max capacity
     // was exceeded. Flush the FIFO when extended just in case.
-    if (!fifo_->Append((const uint8*)interleaved.get(), size)) {
+    if (!fifo_->Append((const uint8_t*)interleaved.get(), size)) {
       fifo_->set_forward_capacity(2 * fifo_->forward_capacity());
       fifo_->Clear();
     }
@@ -352,7 +358,9 @@ class FullDuplexAudioSinkSource
   void OnError(AudioInputStream* stream) override {}
 
   // AudioOutputStream::AudioSourceCallback implementation
-  int OnMoreData(AudioBus* dest, uint32 total_bytes_delay) override {
+  int OnMoreData(AudioBus* dest,
+                 uint32_t total_bytes_delay,
+                 uint32_t frames_skipped) override {
     const int size_in_bytes =
         (params_.bits_per_sample() / 8) * dest->frames() * dest->channels();
     EXPECT_EQ(size_in_bytes, params_.GetBytesPerBuffer());
@@ -396,7 +404,7 @@ class FullDuplexAudioSinkSource
   base::TimeTicks previous_time_;
   base::Lock lock_;
   scoped_ptr<media::SeekableBuffer> fifo_;
-  scoped_ptr<uint8[]> buffer_;
+  scoped_ptr<uint8_t[]> buffer_;
   bool started_;
 
   DISALLOW_COPY_AND_ASSIGN(FullDuplexAudioSinkSource);
@@ -491,11 +499,11 @@ class AudioAndroidOutputTest : public testing::Test {
     int count = 0;
     MockAudioSourceCallback source;
 
-    EXPECT_CALL(source, OnMoreData(NotNull(), _))
+    EXPECT_CALL(source, OnMoreData(NotNull(), _, 0))
         .Times(AtLeast(num_callbacks))
         .WillRepeatedly(
-             DoAll(CheckCountAndPostQuitTask(&count, num_callbacks, loop()),
-                   Invoke(RealOnMoreData)));
+            DoAll(CheckCountAndPostQuitTask(&count, num_callbacks, loop()),
+                  Invoke(RealOnMoreData)));
     EXPECT_CALL(source, OnError(audio_output_stream_)).Times(0);
 
     OpenAndStartAudioOutputStreamOnAudioThread(&source);
@@ -589,16 +597,11 @@ class AudioAndroidInputTest : public AudioAndroidOutputTest,
   AudioParameters GetInputStreamParameters() {
     GetDefaultInputStreamParametersOnAudioThread();
 
+    AudioParameters params = audio_input_parameters();
     // Override the platform effects setting to use the AudioRecord or OpenSLES
     // path as requested.
-    int effects = GetParam() ? AudioParameters::ECHO_CANCELLER :
-                               AudioParameters::NO_EFFECTS;
-    AudioParameters params(audio_input_parameters().format(),
-                           audio_input_parameters().channel_layout(),
-                           audio_input_parameters().sample_rate(),
-                           audio_input_parameters().bits_per_sample(),
-                           audio_input_parameters().frames_per_buffer(),
-                           effects);
+    params.set_effects(GetParam() ? AudioParameters::ECHO_CANCELLER
+                                  : AudioParameters::NO_EFFECTS);
     return params;
   }
 
@@ -786,7 +789,7 @@ TEST_F(AudioAndroidOutputTest, OpenAndCloseOutputStream) {
 
 // Start input streaming using default input parameters and ensure that the
 // callback sequence is sane.
-TEST_P(AudioAndroidInputTest, DISABLED_StartInputStreamCallbacks) {
+TEST_P(AudioAndroidInputTest, StartInputStreamCallbacks) {
   AudioParameters native_params = GetInputStreamParameters();
   StartInputStreamCallbacks(native_params);
 }
@@ -794,15 +797,9 @@ TEST_P(AudioAndroidInputTest, DISABLED_StartInputStreamCallbacks) {
 // Start input streaming using non default input parameters and ensure that the
 // callback sequence is sane. The only change we make in this test is to select
 // a 10ms buffer size instead of the default size.
-TEST_P(AudioAndroidInputTest,
-       DISABLED_StartInputStreamCallbacksNonDefaultParameters) {
-  AudioParameters native_params = GetInputStreamParameters();
-  AudioParameters params(native_params.format(),
-                         native_params.channel_layout(),
-                         native_params.sample_rate(),
-                         native_params.bits_per_sample(),
-                         native_params.sample_rate() / 100,
-                         native_params.effects());
+TEST_P(AudioAndroidInputTest, StartInputStreamCallbacksNonDefaultParameters) {
+  AudioParameters params = GetInputStreamParameters();
+  params.set_frames_per_buffer(params.sample_rate() / 100);
   StartInputStreamCallbacks(params);
 }
 
@@ -906,7 +903,7 @@ TEST_P(AudioAndroidInputTest, DISABLED_RunDuplexInputStreamWithFileAsSink) {
   FileAudioSink sink(&event, in_params, file_name);
   MockAudioSourceCallback source;
 
-  EXPECT_CALL(source, OnMoreData(NotNull(), _))
+  EXPECT_CALL(source, OnMoreData(NotNull(), _, 0))
       .WillRepeatedly(Invoke(RealOnMoreData));
   EXPECT_CALL(source, OnError(audio_output_stream_)).Times(0);
 
@@ -933,14 +930,8 @@ TEST_P(AudioAndroidInputTest,
   // parameters by selecting 10ms as buffer size. This will also ensure that
   // the output stream will be a mono stream since mono is default for input
   // audio on Android.
-  AudioParameters io_params(default_input_params.format(),
-                            default_input_params.channel_layout(),
-                            ChannelLayoutToChannelCount(
-                                default_input_params.channel_layout()),
-                            default_input_params.sample_rate(),
-                            default_input_params.bits_per_sample(),
-                            default_input_params.sample_rate() / 100,
-                            default_input_params.effects());
+  AudioParameters io_params = default_input_params;
+  default_input_params.set_frames_per_buffer(io_params.sample_rate() / 100);
   DVLOG(1) << io_params;
 
   // Create input and output streams using the common audio parameters.

@@ -4,17 +4,16 @@
 
 #include "dbus/string_util.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_util.h"
 
 namespace dbus {
 
+// This implementation is based upon D-Bus Specification Version 0.19.
 bool IsValidObjectPath(const std::string& value) {
-  // This implementation is based upon D-Bus Specification Version 0.19.
-
-  const bool kCaseSensitive = true;
-
   // A valid object path begins with '/'.
-  if (!base::StartsWithASCII(value, "/", kCaseSensitive))
+  if (!base::StartsWith(value, "/", base::CompareCase::SENSITIVE))
     return false;
 
   // Elements are pieces delimited by '/'. For instance, "org", "chromium",
@@ -39,7 +38,8 @@ bool IsValidObjectPath(const std::string& value) {
   }
 
   // A trailing '/' character is not allowed unless the path is the root path.
-  if (value.size() > 1 && base::EndsWith(value, "/", kCaseSensitive))
+  if (value.size() > 1 &&
+      base::EndsWith(value, "/", base::CompareCase::SENSITIVE))
     return false;
 
   return true;

@@ -2,15 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "data_file_renderer_cld_data_provider.h"
+// NOT DEAD CODE!
+// This code isn't dead, even if it isn't currently being used. Please refer to:
+// https://www.chromium.org/developers/how-tos/compact-language-detector-cld-data-source-configuration
 
-#include "base/basictypes.h"
+#include "components/translate/content/renderer/data_file_renderer_cld_data_provider.h"
+
+#include <utility>
+
 #include "base/files/file.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "components/translate/content/common/data_file_cld_data_provider_messages.h"
-#include "content/public/renderer/render_view_observer.h"
+#include "content/public/renderer/render_frame_observer.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
@@ -32,8 +37,8 @@ base::LazyInstance<CLDMmapWrapper>::Leaky g_cld_mmap =
 namespace translate {
 
 DataFileRendererCldDataProvider::DataFileRendererCldDataProvider(
-    content::RenderViewObserver* render_view_observer)
-    : render_view_observer_(render_view_observer) {
+    content::RenderFrameObserver* render_frame_observer)
+    : render_frame_observer_(render_frame_observer) {
 }
 
 DataFileRendererCldDataProvider::~DataFileRendererCldDataProvider() {
@@ -43,7 +48,7 @@ bool DataFileRendererCldDataProvider::OnMessageReceived(
     const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(DataFileRendererCldDataProvider, message)
-  IPC_MESSAGE_HANDLER(ChromeViewMsg_CldDataFileAvailable, OnCldDataAvailable)
+  IPC_MESSAGE_HANDLER(ChromeFrameMsg_CldDataFileAvailable, OnCldDataAvailable)
   IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -51,8 +56,8 @@ bool DataFileRendererCldDataProvider::OnMessageReceived(
 
 void DataFileRendererCldDataProvider::SendCldDataRequest() {
   // Else, send the IPC message to the browser process requesting the data...
-  render_view_observer_->Send(new ChromeViewHostMsg_NeedCldDataFile(
-      render_view_observer_->routing_id()));
+  render_frame_observer_->Send(new ChromeFrameHostMsg_NeedCldDataFile(
+      render_frame_observer_->routing_id()));
 }
 
 bool DataFileRendererCldDataProvider::IsCldDataAvailable() {
@@ -68,16 +73,16 @@ void DataFileRendererCldDataProvider::SetCldAvailableCallback(
 
 void DataFileRendererCldDataProvider::OnCldDataAvailable(
     const IPC::PlatformFileForTransit ipc_file_handle,
-    const uint64 data_offset,
-    const uint64 data_length) {
+    const uint64_t data_offset,
+    const uint64_t data_length) {
   LoadCldData(IPC::PlatformFileForTransitToFile(ipc_file_handle),
               data_offset,
               data_length);
 }
 
 void DataFileRendererCldDataProvider::LoadCldData(base::File file,
-                                                  const uint64 data_offset,
-                                                  const uint64 data_length) {
+                                                  const uint64_t data_offset,
+                                                  const uint64_t data_length) {
   // Terminate immediately if data is already loaded.
   if (IsCldDataAvailable())
     return;
@@ -89,7 +94,7 @@ void DataFileRendererCldDataProvider::LoadCldData(base::File file,
 
   // mmap the file
   g_cld_mmap.Get().value = new base::MemoryMappedFile();
-  bool initialized = g_cld_mmap.Get().value->Initialize(file.Pass());
+  bool initialized = g_cld_mmap.Get().value->Initialize(std::move(file));
   if (!initialized) {
     LOG(ERROR) << "mmap initialization failed";
     delete g_cld_mmap.Get().value;
@@ -98,7 +103,7 @@ void DataFileRendererCldDataProvider::LoadCldData(base::File file,
   }
 
   // Sanity checks
-  uint64 max_int32 = std::numeric_limits<int32>::max();
+  uint64_t max_int32 = std::numeric_limits<int32_t>::max();
   if (data_length + data_offset > g_cld_mmap.Get().value->length() ||
       data_length > max_int32) {  // max signed 32 bit integer
     LOG(ERROR) << "Illegal mmap config: data_offset=" << data_offset
@@ -110,7 +115,7 @@ void DataFileRendererCldDataProvider::LoadCldData(base::File file,
   }
 
   // Initialize the CLD subsystem... and it's all done!
-  const uint8* data_ptr = g_cld_mmap.Get().value->data() + data_offset;
+  const uint8_t* data_ptr = g_cld_mmap.Get().value->data() + data_offset;
   CLD2::loadDataFromRawAddress(data_ptr, data_length);
   DCHECK(CLD2::isDataLoaded()) << "Failed to load CLD data from mmap";
   if (!cld_available_callback_.is_null()) {

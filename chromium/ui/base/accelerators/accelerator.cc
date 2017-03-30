@@ -4,21 +4,26 @@
 
 #include "ui/base/accelerators/accelerator.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#endif
+#include <stdint.h>
 
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
 #include "ui/strings/grit/ui_strings.h"
 
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
+
 #if !defined(OS_WIN) && (defined(USE_AURA) || defined(OS_MACOSX))
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace ui {
 
@@ -46,8 +51,8 @@ Accelerator::Accelerator(KeyboardCode keycode, int modifiers)
 Accelerator::Accelerator(const KeyEvent& key_event)
     : key_code_(key_event.key_code()),
       type_(key_event.type()),
-      modifiers_(key_event.flags() & kEventFlagsMask),
-      is_repeat_(key_event.IsRepeat()) {
+      modifiers_(MaskOutKeyEventFlags(key_event.flags())),
+      is_repeat_(key_event.is_repeat()) {
 }
 
 Accelerator::Accelerator(const Accelerator& accelerator) {
@@ -60,6 +65,11 @@ Accelerator::Accelerator(const Accelerator& accelerator) {
 }
 
 Accelerator::~Accelerator() {
+}
+
+// static
+int Accelerator::MaskOutKeyEventFlags(int flags) {
+  return flags & kEventFlagsMask;
 }
 
 Accelerator& Accelerator::operator=(const Accelerator& accelerator) {
@@ -212,13 +222,23 @@ base::string16 Accelerator::GetShortcutText() const {
       key = LOWORD(::MapVirtualKeyW(key_code_, MAPVK_VK_TO_CHAR));
     shortcut += key;
 #elif defined(USE_AURA) || defined(OS_MACOSX)
-    const uint16 c = GetCharacterFromKeyCode(key_code_, false);
+    const uint16_t c = DomCodeToUsLayoutCharacter(
+        UsLayoutKeyboardCodeToDomCode(key_code_), false);
     if (c != 0)
       shortcut +=
           static_cast<base::string16::value_type>(base::ToUpperASCII(c));
 #endif
   } else {
     shortcut = l10n_util::GetStringUTF16(string_id);
+  }
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // We want to display all function keys. They do not have to be translated.
+    if (key_code_ >= ui::VKEY_F1 && key_code_ <= ui::VKEY_F24) {
+      char buf[4];
+      base::snprintf(buf, 4, "F%d", key_code_ - ui::VKEY_F1 + 1);
+      base::UTF8ToUTF16(buf, strlen(buf), &shortcut);
+    }
   }
 
   // Checking whether the character used for the accelerator is alphanumeric.
@@ -233,6 +253,15 @@ base::string16 Accelerator::GetShortcutText() const {
     shortcut_rtl.assign(shortcut);
   }
 
+  if (vivaldi::IsVivaldiRunning()) {
+    // We allow all modifier combinations.
+    if (IsShiftDown())
+      shortcut = l10n_util::GetStringFUTF16(IDS_APP_SHIFT_MODIFIER, shortcut);
+    if (IsAltDown())
+      shortcut = l10n_util::GetStringFUTF16(IDS_APP_ALT_MODIFIER, shortcut);
+    if (IsCtrlDown())
+      shortcut = l10n_util::GetStringFUTF16(IDS_APP_CONTROL_MODIFIER, shortcut);
+  } else  {
   if (IsShiftDown())
     shortcut = l10n_util::GetStringFUTF16(IDS_APP_SHIFT_MODIFIER, shortcut);
 
@@ -243,6 +272,7 @@ base::string16 Accelerator::GetShortcutText() const {
     shortcut = l10n_util::GetStringFUTF16(IDS_APP_CONTROL_MODIFIER, shortcut);
   else if (IsAltDown())
     shortcut = l10n_util::GetStringFUTF16(IDS_APP_ALT_MODIFIER, shortcut);
+  }
 
   if (IsCmdDown()) {
 #if defined(OS_MACOSX)

@@ -5,7 +5,7 @@
 #include "media/base/stream_parser_buffer.h"
 
 #include "base/logging.h"
-#include "media/base/buffers.h"
+#include "media/base/timestamp_constants.h"
 
 namespace media {
 
@@ -46,7 +46,10 @@ scoped_refptr<StreamParserBuffer> StreamParserBuffer::CreateEOSBuffer() {
 }
 
 scoped_refptr<StreamParserBuffer> StreamParserBuffer::CopyFrom(
-    const uint8* data, int data_size, bool is_key_frame, Type type,
+    const uint8_t* data,
+    int data_size,
+    bool is_key_frame,
+    Type type,
     TrackId track_id) {
   return make_scoped_refptr(
       new StreamParserBuffer(data, data_size, NULL, 0, is_key_frame, type,
@@ -54,9 +57,13 @@ scoped_refptr<StreamParserBuffer> StreamParserBuffer::CopyFrom(
 }
 
 scoped_refptr<StreamParserBuffer> StreamParserBuffer::CopyFrom(
-    const uint8* data, int data_size,
-    const uint8* side_data, int side_data_size,
-    bool is_key_frame, Type type, TrackId track_id) {
+    const uint8_t* data,
+    int data_size,
+    const uint8_t* side_data,
+    int side_data_size,
+    bool is_key_frame,
+    Type type,
+    TrackId track_id) {
   return make_scoped_refptr(
       new StreamParserBuffer(data, data_size, side_data, side_data_size,
                              is_key_frame, type, track_id));
@@ -74,9 +81,9 @@ void StreamParserBuffer::SetDecodeTimestamp(DecodeTimestamp timestamp) {
     preroll_buffer_->SetDecodeTimestamp(timestamp);
 }
 
-StreamParserBuffer::StreamParserBuffer(const uint8* data,
+StreamParserBuffer::StreamParserBuffer(const uint8_t* data,
                                        int data_size,
-                                       const uint8* side_data,
+                                       const uint8_t* side_data,
                                        int side_data_size,
                                        bool is_key_frame,
                                        Type type,
@@ -114,6 +121,24 @@ int StreamParserBuffer::GetSpliceBufferConfigId(size_t index) const {
   return index < splice_buffers().size()
       ? splice_buffers_[index]->GetConfigId()
       : GetConfigId();
+}
+
+const char* StreamParserBuffer::GetTypeName() const {
+  switch (type()) {
+    case DemuxerStream::AUDIO:
+      return "audio";
+    case DemuxerStream::VIDEO:
+      return "video";
+    case DemuxerStream::TEXT:
+      return "text";
+    case DemuxerStream::UNKNOWN:
+      return "unknown";
+    case DemuxerStream::NUM_TYPES:
+      // Fall-through to NOTREACHED().
+      break;
+  }
+  NOTREACHED();
+  return "";
 }
 
 void StreamParserBuffer::ConvertToSpliceBuffer(

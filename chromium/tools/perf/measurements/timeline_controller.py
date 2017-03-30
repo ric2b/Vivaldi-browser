@@ -5,8 +5,7 @@
 from telemetry.page import action_runner
 from telemetry.page import page_test
 from telemetry.timeline.model import TimelineModel
-from telemetry.timeline import tracing_category_filter
-from telemetry.timeline import tracing_options
+from telemetry.timeline import tracing_config
 from telemetry.value import trace
 from telemetry.web_perf import smooth_gesture_util
 from telemetry.web_perf import timeline_interaction_record as tir_module
@@ -34,13 +33,12 @@ class TimelineController(object):
     self._renderer_process = None
     if not tab.browser.platform.tracing_controller.IsChromeTracingSupported():
       raise Exception('Not supported')
-    category_filter = tracing_category_filter.TracingCategoryFilter(
-        filter_string=self.trace_categories)
+    config = tracing_config.TracingConfig()
+    config.tracing_category_filter.AddFilterString(self.trace_categories)
     for delay in page.GetSyntheticDelayCategories():
-      category_filter.AddSyntheticDelay(delay)
-    options = tracing_options.TracingOptions()
-    options.enable_chrome_trace = True
-    tab.browser.platform.tracing_controller.Start(options, category_filter)
+      config.tracing_category_filter.AddSyntheticDelay(delay)
+    config.enable_chrome_trace = True
+    tab.browser.platform.tracing_controller.StartTracing(config)
 
   def Start(self, tab):
     # Start the smooth marker for all actions.
@@ -55,7 +53,7 @@ class TimelineController(object):
     if self._enable_auto_issuing_record:
       self._interaction.End()
     # Stop tracing.
-    timeline_data = tab.browser.platform.tracing_controller.Stop()
+    timeline_data = tab.browser.platform.tracing_controller.StopTracing()
     results.AddValue(trace.TraceValue(
         results.current_page, timeline_data))
     self._model = TimelineModel(timeline_data)
@@ -89,9 +87,9 @@ class TimelineController(object):
       raise page_test.Failure('No interaction record was created.')
 
 
-  def CleanUp(self, tab):
-    if tab.browser.platform.tracing_controller.is_tracing_running:
-      tab.browser.platform.tracing_controller.Stop()
+  def CleanUp(self, platform):
+    if platform.tracing_controller.is_tracing_running:
+      platform.tracing_controller.StopTracing()
 
   @property
   def model(self):

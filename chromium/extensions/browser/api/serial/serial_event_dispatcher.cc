@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/serial/serial_event_dispatcher.h"
 
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "extensions/browser/api/serial/serial_connection.h"
 #include "extensions/browser/event_router.h"
@@ -11,14 +13,19 @@
 
 namespace extensions {
 
-namespace core_api {
+namespace api {
 
 namespace {
 
 bool ShouldPauseOnReceiveError(serial::ReceiveError error) {
   return error == serial::RECEIVE_ERROR_DEVICE_LOST ||
          error == serial::RECEIVE_ERROR_SYSTEM_ERROR ||
-         error == serial::RECEIVE_ERROR_DISCONNECTED;
+         error == serial::RECEIVE_ERROR_DISCONNECTED ||
+         error == serial::RECEIVE_ERROR_BREAK ||
+         error == serial::RECEIVE_ERROR_FRAME_ERROR ||
+         error == serial::RECEIVE_ERROR_OVERRUN ||
+         error == serial::RECEIVE_ERROR_BUFFER_OVERFLOW ||
+         error == serial::RECEIVE_ERROR_PARITY_ERROR;
 }
 
 }  // namespace
@@ -99,9 +106,9 @@ void SerialEventDispatcher::ReceiveCallback(const ReceiveParams& params,
     receive_info.data = data;
     scoped_ptr<base::ListValue> args = serial::OnReceive::Create(receive_info);
     scoped_ptr<extensions::Event> event(
-        new extensions::Event(extensions::events::UNKNOWN,
-                              serial::OnReceive::kEventName, args.Pass()));
-    PostEvent(params, event.Pass());
+        new extensions::Event(extensions::events::SERIAL_ON_RECEIVE,
+                              serial::OnReceive::kEventName, std::move(args)));
+    PostEvent(params, std::move(event));
   }
 
   if (error != serial::RECEIVE_ERROR_NONE) {
@@ -110,10 +117,10 @@ void SerialEventDispatcher::ReceiveCallback(const ReceiveParams& params,
     error_info.error = error;
     scoped_ptr<base::ListValue> args =
         serial::OnReceiveError::Create(error_info);
-    scoped_ptr<extensions::Event> event(
-        new extensions::Event(extensions::events::UNKNOWN,
-                              serial::OnReceiveError::kEventName, args.Pass()));
-    PostEvent(params, event.Pass());
+    scoped_ptr<extensions::Event> event(new extensions::Event(
+        extensions::events::SERIAL_ON_RECEIVE_ERROR,
+        serial::OnReceiveError::kEventName, std::move(args)));
+    PostEvent(params, std::move(event));
     if (ShouldPauseOnReceiveError(error)) {
       SerialConnection* connection =
           params.connections->Get(params.extension_id, params.connection_id);
@@ -132,12 +139,10 @@ void SerialEventDispatcher::PostEvent(const ReceiveParams& params,
                                       scoped_ptr<extensions::Event> event) {
   DCHECK_CURRENTLY_ON(params.thread_id);
 
-  BrowserThread::PostTask(BrowserThread::UI,
-                          FROM_HERE,
-                          base::Bind(&DispatchEvent,
-                                     params.browser_context_id,
-                                     params.extension_id,
-                                     base::Passed(event.Pass())));
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&DispatchEvent, params.browser_context_id, params.extension_id,
+                 base::Passed(std::move(event))));
 }
 
 // static
@@ -153,9 +158,9 @@ void SerialEventDispatcher::DispatchEvent(void* browser_context_id,
 
   EventRouter* router = EventRouter::Get(context);
   if (router)
-    router->DispatchEventToExtension(extension_id, event.Pass());
+    router->DispatchEventToExtension(extension_id, std::move(event));
 }
 
-}  // namespace core_api
+}  // namespace api
 
 }  // namespace extensions

@@ -5,20 +5,24 @@
 #ifndef IPC_IPC_CHANNEL_MOJO_H_
 #define IPC_IPC_CHANNEL_MOJO_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_factory.h"
 #include "ipc/ipc_export.h"
 #include "ipc/mojo/ipc_message_pipe_reader.h"
 #include "ipc/mojo/ipc_mojo_bootstrap.h"
 #include "ipc/mojo/scoped_ipc_support.h"
+#include "mojo/public/cpp/system/core.h"
 #include "third_party/mojo/src/mojo/edk/embedder/channel_info_forward.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/core.h"
 
 namespace IPC {
 
@@ -61,34 +65,22 @@ class IPC_MOJO_EXPORT ChannelMojo
   static bool ShouldBeUsed();
 
   // Create ChannelMojo. A bootstrap channel is created as well.
-  // |broker| must outlive the newly created channel.
   static scoped_ptr<ChannelMojo> Create(
       scoped_refptr<base::TaskRunner> io_runner,
       const ChannelHandle& channel_handle,
       Mode mode,
-      Listener* listener,
-      AttachmentBroker* broker);
+      Listener* listener);
 
   // Create a factory object for ChannelMojo.
   // The factory is used to create Mojo-based ChannelProxy family.
   // |host| must not be null.
-  // TODO(erikchen): Remove default parameter for |broker|. It exists only to
-  // make the upcoming refactor decomposable into smaller CLs.
-  // http://crbug.com/493414.
-  // |broker| must outlive the factory and all channels it creates.
   static scoped_ptr<ChannelFactory> CreateServerFactory(
       scoped_refptr<base::TaskRunner> io_runner,
-      const ChannelHandle& channel_handle,
-      AttachmentBroker* broker = nullptr);
+      const ChannelHandle& channel_handle);
 
-  // TODO(erikchen): Remove default parameter for |broker|. It exists only to
-  // make the upcoming refactor decomposable into smaller CLs.
-  // http://crbug.com/493414.
-  // |broker| must outlive the factory and all channels it creates.
   static scoped_ptr<ChannelFactory> CreateClientFactory(
       scoped_refptr<base::TaskRunner> io_runner,
-      const ChannelHandle& channel_handle,
-      AttachmentBroker* broker = nullptr);
+      const ChannelHandle& channel_handle);
 
   ~ChannelMojo() override;
 
@@ -126,8 +118,7 @@ class IPC_MOJO_EXPORT ChannelMojo
   ChannelMojo(scoped_refptr<base::TaskRunner> io_runner,
               const ChannelHandle& channel_handle,
               Mode mode,
-              Listener* listener,
-              AttachmentBroker* broker);
+              Listener* listener);
 
   void CreateMessagingPipe(mojo::embedder::ScopedPlatformHandle handle,
                            const CreateMessagingPipeCallback& callback);

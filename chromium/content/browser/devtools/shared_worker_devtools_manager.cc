@@ -13,7 +13,7 @@ namespace content {
 // static
 SharedWorkerDevToolsManager* SharedWorkerDevToolsManager::GetInstance() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return Singleton<SharedWorkerDevToolsManager>::get();
+  return base::Singleton<SharedWorkerDevToolsManager>::get();
 }
 
 DevToolsAgentHostImpl*
@@ -51,7 +51,7 @@ bool SharedWorkerDevToolsManager::WorkerCreated(
   agent_host->WorkerRestarted(id);
   workers_.erase(it);
   workers_[id] = agent_host;
-  return true;
+  return agent_host->IsAttached();
 }
 
 void SharedWorkerDevToolsManager::WorkerReadyForInspection(
@@ -60,7 +60,8 @@ void SharedWorkerDevToolsManager::WorkerReadyForInspection(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const WorkerId id(worker_process_id, worker_route_id);
   AgentHostMap::iterator it = workers_.find(id);
-  DCHECK(it != workers_.end());
+  if (it == workers_.end())
+    return;
   it->second->WorkerReadyForInspection();
 }
 
@@ -70,7 +71,8 @@ void SharedWorkerDevToolsManager::WorkerDestroyed(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const WorkerId id(worker_process_id, worker_route_id);
   AgentHostMap::iterator it = workers_.find(id);
-  DCHECK(it != workers_.end());
+  if (it == workers_.end())
+    return;
   scoped_refptr<SharedWorkerDevToolsAgentHost> agent_host(it->second);
   agent_host->WorkerDestroyed();
 }

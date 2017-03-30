@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/signin/signin_promo.h"
@@ -57,20 +58,6 @@ void LoadGaiaAuthExtension(BrowserContext* context) {
 
 void UnloadGaiaAuthExtension(BrowserContext* context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  content::StoragePartition* partition =
-      content::BrowserContext::GetStoragePartitionForSite(
-          context, signin::GetSigninPartitionURL());
-  if (partition) {
-    partition->ClearData(
-        content::StoragePartition::REMOVE_DATA_MASK_ALL,
-        content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
-        GURL(),
-        content::StoragePartition::OriginMatcherFunction(),
-        base::Time(),
-        base::Time::Max(),
-        base::Bind(&base::DoNothing));
-  }
   GetComponentLoader(context)->Remove(extensions::kGaiaAuthExtensionId);
 }
 

@@ -14,8 +14,9 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -64,6 +65,15 @@ class SearchProvider : public BaseSearchProvider,
   // Answers prefetch handling - register displayed answers. Takes the top
   // match for Autocomplete and registers the contained answer data, if any.
   void RegisterDisplayedAnswers(const AutocompleteResult& result);
+
+  // Calculates the relevance score for the keyword verbatim result (if the
+  // input matches one of the profile's keywords).  If
+  // |allow_exact_keyword_match| is false, the relevance for complete
+  // keywords that support replacements is degraded.
+  static int CalculateRelevanceForKeywordVerbatim(
+      metrics::OmniboxInputType::Type type,
+      bool allow_exact_keyword_match,
+      bool prefer_keyword);
 
   // AutocompleteProvider:
   void ResetSession() override;
@@ -140,12 +150,6 @@ class SearchProvider : public BaseSearchProvider,
   class CompareScoredResults;
 
   typedef std::vector<history::KeywordSearchTermVisit> HistoryResults;
-
-  // Calculates the relevance score for the keyword verbatim result (if the
-  // input matches one of the profile's keyword).
-  static int CalculateRelevanceForKeywordVerbatim(
-      metrics::OmniboxInputType::Type type,
-      bool prefer_keyword);
 
   // A helper function for UpdateAllOldResults().
   static void UpdateOldResults(bool minimal_changes,
@@ -378,7 +382,7 @@ class SearchProvider : public BaseSearchProvider,
 
   // A timer to start a query to the suggest server after the user has stopped
   // typing for long enough.
-  base::OneShotTimer<SearchProvider> timer_;
+  base::OneShotTimer timer_;
 
   // The time at which we sent a query to the suggest server.
   base::TimeTicks time_suggest_request_sent_;

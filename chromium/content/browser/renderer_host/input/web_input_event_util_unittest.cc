@@ -7,9 +7,12 @@
 #define _USE_MATH_DEFINES
 #endif
 
+#include <stddef.h>
+
 #include <cmath>
 
 #include "content/browser/renderer_host/input/web_input_event_util.h"
+#include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/input/web_input_event_traits.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/blink/blink_event_util.h"
@@ -28,6 +31,10 @@ using ui::MotionEventGeneric;
 namespace content {
 
 TEST(WebInputEventUtilTest, MotionEventConversion) {
+
+  const MotionEvent::ToolType tool_types[] = {MotionEvent::TOOL_TYPE_FINGER,
+                                              MotionEvent::TOOL_TYPE_STYLUS,
+                                              MotionEvent::TOOL_TYPE_MOUSE};
   ui::PointerProperties pointer(5, 10, 40);
   pointer.id = 15;
   pointer.raw_x = 20;
@@ -35,34 +42,45 @@ TEST(WebInputEventUtilTest, MotionEventConversion) {
   pointer.pressure = 30;
   pointer.touch_minor = 35;
   pointer.orientation = static_cast<float>(-M_PI / 2);
-  MotionEventGeneric event(
-      MotionEvent::ACTION_DOWN, base::TimeTicks::Now(), pointer);
-  event.set_flags(ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  event.set_unique_event_id(123456U);
+  pointer.tilt = static_cast<float>(-M_PI / 3);
+  for (MotionEvent::ToolType tool_type : tool_types) {
+    pointer.tool_type = tool_type;
+    MotionEventGeneric event(
+        MotionEvent::ACTION_DOWN, base::TimeTicks::Now(), pointer);
+    event.set_flags(ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
+    event.set_unique_event_id(123456U);
 
-  WebTouchEvent expected_event;
-  expected_event.type = WebInputEvent::TouchStart;
-  expected_event.touchesLength = 1;
-  expected_event.timeStampSeconds =
-      (event.GetEventTime() - base::TimeTicks()).InSecondsF();
-  expected_event.modifiers = WebInputEvent::ShiftKey | WebInputEvent::AltKey;
-  WebTouchPoint expected_pointer;
-  expected_pointer.id = pointer.id;
-  expected_pointer.state = WebTouchPoint::StatePressed;
-  expected_pointer.position = blink::WebFloatPoint(pointer.x, pointer.y);
-  expected_pointer.screenPosition =
-      blink::WebFloatPoint(pointer.raw_x, pointer.raw_y);
-  expected_pointer.radiusX = pointer.touch_major / 2.f;
-  expected_pointer.radiusY = pointer.touch_minor / 2.f;
-  expected_pointer.rotationAngle = 0.f;
-  expected_pointer.force = pointer.pressure;
-  expected_event.touches[0] = expected_pointer;
-  expected_event.uniqueTouchEventId = 123456U;
+    WebTouchEvent expected_event;
+    expected_event.type = WebInputEvent::TouchStart;
+    expected_event.touchesLength = 1;
+    expected_event.timeStampSeconds =
+        (event.GetEventTime() - base::TimeTicks()).InSecondsF();
+    expected_event.modifiers = WebInputEvent::ShiftKey | WebInputEvent::AltKey;
+    WebTouchPoint expected_pointer;
+    expected_pointer.id = pointer.id;
+    expected_pointer.state = WebTouchPoint::StatePressed;
+    expected_pointer.position = blink::WebFloatPoint(pointer.x, pointer.y);
+    expected_pointer.screenPosition =
+        blink::WebFloatPoint(pointer.raw_x, pointer.raw_y);
+    expected_pointer.radiusX = pointer.touch_major / 2.f;
+    expected_pointer.radiusY = pointer.touch_minor / 2.f;
+    expected_pointer.rotationAngle = 0.f;
+    expected_pointer.force = pointer.pressure;
+    if (tool_type == MotionEvent::TOOL_TYPE_STYLUS) {
+      expected_pointer.tiltX = -60;
+      expected_pointer.tiltY = 0;
+    } else {
+      expected_pointer.tiltX = 0;
+      expected_pointer.tiltY = 0;
+    }
+    expected_event.touches[0] = expected_pointer;
+    expected_event.uniqueTouchEventId = 123456U;
 
-  WebTouchEvent actual_event =
-      ui::CreateWebTouchEventFromMotionEvent(event, false);
-  EXPECT_EQ(WebInputEventTraits::ToString(expected_event),
-            WebInputEventTraits::ToString(actual_event));
+    WebTouchEvent actual_event =
+        ui::CreateWebTouchEventFromMotionEvent(event, false);
+    EXPECT_EQ(WebInputEventTraits::ToString(expected_event),
+              WebInputEventTraits::ToString(actual_event));
+  }
 }
 
 TEST(WebInputEventUtilTest, ScrollUpdateConversion) {
@@ -105,6 +123,14 @@ TEST(WebInputEventUtilTest, ScrollUpdateConversion) {
   EXPECT_EQ(delta.x(), web_event.data.scrollUpdate.deltaX);
   EXPECT_EQ(delta.y(), web_event.data.scrollUpdate.deltaY);
   EXPECT_TRUE(web_event.data.scrollUpdate.previousUpdateInSequencePrevented);
+}
+
+TEST(WebInputEventUtilTest, NoScalingWith1DSF) {
+  auto event =
+      SyntheticWebMouseEventBuilder::Build(blink::WebInputEvent::MouseMove,
+                                           10, 10, 0);
+  EXPECT_FALSE(ConvertWebInputEventToViewport(event, 1.f));
+  EXPECT_TRUE(ConvertWebInputEventToViewport(event, 2.f));
 }
 
 }  // namespace content

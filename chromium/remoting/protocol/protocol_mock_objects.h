@@ -5,10 +5,13 @@
 #ifndef REMOTING_PROTOCOL_PROTOCOL_MOCK_OBJECTS_H_
 #define REMOTING_PROTOCOL_PROTOCOL_MOCK_OBJECTS_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/values.h"
 #include "net/base/ip_endpoint.h"
@@ -30,44 +33,6 @@
 namespace remoting {
 namespace protocol {
 
-class MockConnectionToClient : public ConnectionToClient {
- public:
-  MockConnectionToClient(Session* session, HostStub* host_stub);
-  ~MockConnectionToClient() override;
-
-  MOCK_METHOD1(Init, void(Session* session));
-  MOCK_METHOD0(video_stub, VideoStub*());
-  MOCK_METHOD0(client_stub, ClientStub*());
-  MOCK_METHOD0(session, Session*());
-  MOCK_METHOD0(Disconnect, void());
-
-  void set_clipboard_stub(ClipboardStub* clipboard_stub) override {
-    clipboard_stub_ = clipboard_stub;
-  }
-  void set_host_stub(HostStub* host_stub) override { host_stub_ = host_stub; }
-  void set_input_stub(InputStub* input_stub) override {
-    input_stub_ = input_stub;
-  }
-
-  void set_video_feedback_stub(
-      VideoFeedbackStub* video_feedback_stub) override {
-    video_feedback_stub_ = video_feedback_stub;
-  }
-
-  ClipboardStub* clipboard_stub() { return clipboard_stub_; }
-  HostStub* host_stub() { return host_stub_; }
-  InputStub* input_stub() { return input_stub_; }
-  VideoFeedbackStub* video_feedback_stub() { return video_feedback_stub_; }
-
- private:
-  ClipboardStub* clipboard_stub_;
-  HostStub* host_stub_;
-  InputStub* input_stub_;
-  VideoFeedbackStub* video_feedback_stub_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockConnectionToClient);
-};
-
 class MockConnectionToClientEventHandler
     : public ConnectionToClient::EventHandler {
  public:
@@ -81,8 +46,9 @@ class MockConnectionToClientEventHandler
                void(ConnectionToClient* connection));
   MOCK_METHOD2(OnConnectionClosed,
                void(ConnectionToClient* connection, ErrorCode error));
-  MOCK_METHOD2(OnEventTimestamp,
-               void(ConnectionToClient* connection, int64 timestamp));
+  MOCK_METHOD1(OnCreateVideoEncoder, void(scoped_ptr<VideoEncoder>* encoder));
+  MOCK_METHOD2(OnInputEventReceived,
+               void(ConnectionToClient* connection, int64_t timestamp));
   MOCK_METHOD3(OnRouteChange,
                void(ConnectionToClient* connection,
                     const std::string& channel_name,
@@ -202,22 +168,10 @@ class MockSession : public Session {
 
   MOCK_METHOD1(SetEventHandler, void(Session::EventHandler* event_handler));
   MOCK_METHOD0(error, ErrorCode());
-  MOCK_METHOD0(GetTransportChannelFactory, StreamChannelFactory*());
-  MOCK_METHOD0(GetMultiplexedChannelFactory, StreamChannelFactory*());
+  MOCK_METHOD1(SetTransport, void(Transport*));
   MOCK_METHOD0(jid, const std::string&());
-  MOCK_METHOD0(candidate_config, const CandidateSessionConfig*());
   MOCK_METHOD0(config, const SessionConfig&());
-  MOCK_METHOD1(set_config_ptr, void(const SessionConfig* config));
-  void set_config(scoped_ptr<SessionConfig> config) override {
-    set_config_ptr(config.get());
-  }
-  MOCK_METHOD0(initiator_token, const std::string&());
-  MOCK_METHOD1(set_initiator_token, void(const std::string& initiator_token));
-  MOCK_METHOD0(receiver_token, const std::string&());
-  MOCK_METHOD1(set_receiver_token, void(const std::string& receiver_token));
-  MOCK_METHOD1(set_shared_secret, void(const std::string& secret));
-  MOCK_METHOD0(shared_secret, const std::string&());
-  MOCK_METHOD0(Close, void());
+  MOCK_METHOD1(Close, void(ErrorCode error));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockSession);
@@ -228,20 +182,19 @@ class MockSessionManager : public SessionManager {
   MockSessionManager();
   ~MockSessionManager() override;
 
-  MOCK_METHOD2(Init, void(SignalStrategy*, Listener*));
-  MOCK_METHOD3(ConnectPtr,
+  MOCK_METHOD1(AcceptIncoming, void(const IncomingSessionCallback&));
+  void set_protocol_config(scoped_ptr<CandidateSessionConfig> config) override {
+  }
+  MOCK_METHOD2(ConnectPtr,
                Session*(const std::string& host_jid,
-                        Authenticator* authenticator,
-                        CandidateSessionConfig* config));
+                        Authenticator* authenticator));
   MOCK_METHOD0(Close, void());
   MOCK_METHOD1(set_authenticator_factory_ptr,
                void(AuthenticatorFactory* factory));
   scoped_ptr<Session> Connect(
       const std::string& host_jid,
-      scoped_ptr<Authenticator> authenticator,
-      scoped_ptr<CandidateSessionConfig> config) override {
-    return make_scoped_ptr(
-        ConnectPtr(host_jid, authenticator.get(), config.get()));
+      scoped_ptr<Authenticator> authenticator) override {
+    return make_scoped_ptr(ConnectPtr(host_jid, authenticator.get()));
   }
   void set_authenticator_factory(
       scoped_ptr<AuthenticatorFactory> authenticator_factory) override {

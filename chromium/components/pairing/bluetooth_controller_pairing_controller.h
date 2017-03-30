@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROMEOS_PAIRING_BLUETOOTH_CONTROLLER_PAIRING_FLOW_H_
-#define CHROMEOS_PAIRING_BLUETOOTH_CONTROLLER_PAIRING_FLOW_H_
+#ifndef COMPONENTS_PAIRING_BLUETOOTH_CONTROLLER_PAIRING_CONTROLLER_H_
+#define COMPONENTS_PAIRING_BLUETOOTH_CONTROLLER_PAIRING_CONTROLLER_H_
+
+#include <stdint.h>
 
 #include <set>
 
@@ -66,6 +68,7 @@ class BluetoothControllerPairingController
   void RepeatDiscovery() override;
   std::string GetConfirmationCode() override;
   void SetConfirmationCodeIsCorrect(bool correct) override;
+  void SetHostNetwork(const std::string& onc_spec) override;
   void SetHostConfiguration(bool accepted_eula,
                             const std::string& lang,
                             const std::string& timezone,
@@ -96,9 +99,11 @@ class BluetoothControllerPairingController
   void RequestPasskey(device::BluetoothDevice* device) override;
   void DisplayPinCode(device::BluetoothDevice* device,
                       const std::string& pincode) override;
-  void DisplayPasskey(device::BluetoothDevice* device, uint32 passkey) override;
-  void KeysEntered(device::BluetoothDevice* device, uint32 entered) override;
-  void ConfirmPasskey(device::BluetoothDevice* device, uint32 passkey) override;
+  void DisplayPasskey(device::BluetoothDevice* device,
+                      uint32_t passkey) override;
+  void KeysEntered(device::BluetoothDevice* device, uint32_t entered) override;
+  void ConfirmPasskey(device::BluetoothDevice* device,
+                      uint32_t passkey) override;
   void AuthorizePairing(device::BluetoothDevice* device) override;
 
   Stage current_stage_;
@@ -121,4 +126,4 @@ class BluetoothControllerPairingController
 
 }  // namespace pairing_chromeos
 
-#endif  // CHROMEOS_PAIRING_BLUETOOTH_CONTROLLER_PAIRING_FLOW_H_
+#endif  // COMPONENTS_PAIRING_BLUETOOTH_CONTROLLER_PAIRING_CONTROLLER_H_

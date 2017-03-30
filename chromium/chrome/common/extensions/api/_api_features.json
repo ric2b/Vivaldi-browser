@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,50 +19,6 @@
 // hashes back to ids.
 
 {
-  "importData": {
-   "vivaldi": true,
-    "dependencies": ["permission:importData" ],
-    "contexts": [ "blessed_extension" ]
-  },
-  "editcommand": {
-    "dependencies": ["permission:editcommand"],
-    "contexts": ["blessed_extension"]
-  },
-   "uizoom": {
-    "dependencies": ["permission:uizoom"],
-    "contexts": ["blessed_extension"]
-  },
-  "notes": {
-    "dependencies": [ "permission:notes" ],
-    "contexts": [ "blessed_extension" ]
-  },
-  "autoUpdate": {
-    "dependencies": ["permission:autoUpdate"],
-    "contexts": ["blessed_extension"]
-  },
-  "savedpasswords": {
-    "dependencies": ["permission:savedpasswords"],
-    "contexts": ["blessed_extension"]
-  },
-  "showMenu": {
-    "vivaldi": true,
-    "dependencies": ["permission:showMenu"],
-    "contexts": ["blessed_extension"]
-  },
-  "settings": {
-    "dependencies": [ "permission:settings" ],
-    "contexts": [ "blessed_extension" ]
-  },
-  "thumbnails": {
-    "vivaldi": true,
-    "dependencies": ["permission:thumbnails"],
-    "contexts": ["blessed_extension"]
-  },
-  "utilities": {
-    "vivaldi": true,
-    "dependencies": ["permission:utilities"],
-    "contexts": ["blessed_extension"]
-  },
   "accessibilityFeatures": [{
     "dependencies": ["permission:accessibilityFeatures.modify"],
     "contexts": ["blessed_extension"]
@@ -100,10 +56,6 @@
     "matches": ["<all_urls>"]
   },
   "app.getDetails": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
-    "matches": []
-  },
-  "app.getDetailsForFrame": {
     "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
     "matches": []
   },
@@ -165,7 +117,8 @@
     "whitelist": [
       "D5736E4B5CF695CB93A2FB57E4FDC6E5AFAB6FE2", // http://crbug.com/312900
       "D57DE394F36DC1C3220E7604C575D29C51A6C495", // http://crbug.com/319444
-      "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9"  // http://crbug.com/371562
+      "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9", // http://crbug.com/371562
+      "mpognobbkildjkofajifpdfhcoklimli"          // Vivaldi
     ]
   },
   "bookmarks.import": {
@@ -207,7 +160,8 @@
       // so are safe, and can be removed when the whitelist on that
       // capability is lifted. See crbug.com/436489 for context.
       "A4577D8C2AF4CF26F40CBCA83FFA4251D6F6C8F8",  // http://crbug.com/497301
-      "A8208CCC87F8261AFAEB6B85D5E8D47372DDEA6B"   // http://crbug.com/497301
+      "A8208CCC87F8261AFAEB6B85D5E8D47372DDEA6B",  // http://crbug.com/497301
+      "EFCF5358672FEE04789FD2EC3638A67ADEDB6C8C"   // http://crbug.com/514696
     ],
     "contexts": ["blessed_extension"]
   }],
@@ -218,6 +172,11 @@
   "cast.channel": {
     "dependencies": ["permission:cast"],
     "contexts": ["blessed_extension"]
+  },
+  "cast.devicesPrivate": {
+    "dependencies": ["permission:cast"],
+    "contexts": ["blessed_extension"],
+    "platforms": ["chromeos"]
   },
   "cast.streaming.rtpStream": {
     "dependencies": ["permission:cast.streaming"],
@@ -233,6 +192,15 @@
   },
   "cast.streaming.udpTransport": {
     "dependencies": ["permission:cast.streaming"],
+    "contexts": ["blessed_extension"]
+  },
+  "certificateProvider": {
+    "dependencies": ["permission:certificateProvider"],
+    "contexts": ["blessed_extension"]
+  },
+  "certificateProviderInternal": {
+    "internal": true,
+    "dependencies": ["permission:certificateProvider"],
     "contexts": ["blessed_extension"]
   },
   "chromeosInfoPrivate": {
@@ -294,6 +262,17 @@
     "dependencies": ["permission:cryptotokenPrivate"],
     "contexts": ["blessed_extension"]
   },
+  "dashboardPrivate": [{
+    "channel": "stable",
+    "contexts": ["blessed_web_page", "web_page"],
+    "matches": ["https://chrome.google.com/*"]
+  }, {
+    "channel": "stable",
+    "contexts": ["blessed_extension"],
+    "whitelist": [
+      "B44D08FD98F1523ED5837D78D0A606EA9D6206E5"  // Web Store
+    ]
+  }],
   "dataReductionProxy": {
     "dependencies": ["permission:dataReductionProxy"],
     "contexts": ["blessed_extension"]
@@ -318,7 +297,7 @@
       "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // Google Cast Beta
       "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // Google Cast Stable
       "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/457908
-      "EF2AB692559EA97C3BBDEA018A8C45F92457BD4E"   // http://crbug.com/457908
+      "226CF815E39A363090A1E547D53063472B8279FA"   // http://crbug.com/574889
     ],
     "contexts": ["blessed_extension"]
   }],
@@ -371,6 +350,10 @@
     "dependencies": ["permission:echoPrivate"],
     "contexts": ["blessed_extension"]
   },
+  "enterprise.deviceAttributes": {
+    "dependencies": ["permission:enterprise.deviceAttributes"],
+    "contexts": ["blessed_extension"]
+  },
   "enterprise.platformKeys": {
     "dependencies": ["permission:enterprise.platformKeys"],
     "contexts": ["blessed_extension"]
@@ -396,11 +379,21 @@
     "dependencies": ["permission:experimental", "manifest:devtools_page"],
     "contexts": ["blessed_extension"]
   },
-  "extension": {
-    "channel": "stable",
-    "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
-    "contexts": ["blessed_extension"]
-  },
+  "extension": [{
+      "channel": "stable",
+      "extension_types": ["extension", "legacy_packaged_app"],
+      "contexts": ["blessed_extension"],
+      "default_parent": true
+    },
+    {
+      "channel": "stable",
+      "extension_types": ["platform_app"],
+      "contexts": ["blessed_extension"],
+      "whitelist": [
+        "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      ]
+    }
+  ],
   "extension.getURL": {
     "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
   },
@@ -431,10 +424,6 @@
   },
   "extension.sendRequest": {
     "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
-  },
-  "extensionActionUtils": {
-    "dependencies": [ "permission:extensionActionUtils" ],
-    "contexts": [ "blessed_extension" ]
   },
   "extensionOptionsInternal": [{
     "internal": true,
@@ -513,13 +502,14 @@
     "channel": "stable",
     "contexts": ["blessed_extension"],
     "whitelist": [
-      // http://crbug.com/309737
-      "nckgahadagoaajjgafhacjanaoiihapd",
-      "ljclpkphhpbpinifbeabbhlfddcpfdde",
-      "ppleadejekpmccmnpjdimmlfljlkdfej",
-      "eggnbpckecmjlblplehfpjjdhhidfdoj",
-      "jfjjdfefebklmdbmenmlehlopoocnoeh",
-      "knipolnnllmklapflnccelgolnpehhpl"
+      // http://crbug.com/309737.
+      // Keep this list in sync with extensions_misc::kHangoutsExtensionIds.
+      "nckgahadagoaajjgafhacjanaoiihapd",  // Hangouts Production.
+      "ljclpkphhpbpinifbeabbhlfddcpfdde",  // Hangouts Debug.
+      "ppleadejekpmccmnpjdimmlfljlkdfej",  // Hangouts Alpha.
+      "eggnbpckecmjlblplehfpjjdhhidfdoj",  // Hangouts Beta.
+      "jfjjdfefebklmdbmenmlehlopoocnoeh",  // Hangouts Packaged App Debug.
+      "knipolnnllmklapflnccelgolnpehhpl"   // Hangouts Packaged App Prod.
     ]
   },
   "history": {
@@ -565,10 +555,21 @@
     "contexts": ["blessed_extension"]
   },
   "instanceID": {
-    "channel": "dev",
     "dependencies": ["permission:gcm"],
     "contexts": ["blessed_extension"]
   },
+  "languageSettingsPrivate": [{
+    "dependencies": ["permission:languageSettingsPrivate"],
+    "contexts": ["blessed_extension"]
+  }, {
+    "channel": "stable",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://md-settings/*",
+      "chrome://settings/*",
+      "chrome://settings-frame/*"
+    ]
+  }],
   "launcherPage": {
     "dependencies": ["manifest:launcher_page"],
     "contexts": ["blessed_extension"]
@@ -604,10 +605,18 @@
     "dependencies": ["permission:mediaPlayerPrivate"],
     "contexts": ["blessed_extension"]
   },
-  "metricsPrivate": {
+  "metricsPrivate": [{
     "dependencies": ["permission:metricsPrivate"],
     "contexts": ["blessed_extension"]
-  },
+  }, {
+    "channel": "trunk",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://md-settings/*",
+      "chrome://settings/*",
+      "chrome://settings-frame/*"
+    ]
+  }],
   "mdns": {
     "dependencies": ["permission:mdns"],
     "contexts": ["blessed_extension"]
@@ -697,10 +706,16 @@
     "extension_types": ["platform_app"],
     "contexts": ["blessed_extension"]
   },
-  "readingListPrivate": {
-    "dependencies": ["permission:readingListPrivate"],
+  "resourcesPrivate": [{
+    "dependencies": ["permission:resourcesPrivate"],
     "contexts": ["blessed_extension"]
-  },
+  }, {
+    "channel": "stable",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://print/*"
+    ]
+  }],
   "rtcPrivate": {
     "dependencies": ["permission:rtcPrivate"],
     "contexts": ["blessed_extension"]

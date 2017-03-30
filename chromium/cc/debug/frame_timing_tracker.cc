@@ -4,6 +4,8 @@
 
 #include "cc/debug/frame_timing_tracker.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 
@@ -44,12 +46,9 @@ scoped_ptr<FrameTimingTracker> FrameTimingTracker::Create(
 FrameTimingTracker::FrameTimingTracker(LayerTreeHostImpl* layer_tree_host_impl)
     : layer_tree_host_impl_(layer_tree_host_impl),
       post_events_notifier_(
-          layer_tree_host_impl_->proxy()->HasImplThread()
-              ? layer_tree_host_impl_->proxy()->ImplThreadTaskRunner()
-              : layer_tree_host_impl_->proxy()->MainThreadTaskRunner(),
+          layer_tree_host_impl_->GetTaskRunner(),
           base::Bind(&FrameTimingTracker::PostEvents, base::Unretained(this)),
-          base::TimeDelta::FromMilliseconds(kSendTimingIntervalMS)) {
-}
+          base::TimeDelta::FromMilliseconds(kSendTimingIntervalMS)) {}
 
 FrameTimingTracker::~FrameTimingTracker() {
 }
@@ -94,7 +93,7 @@ FrameTimingTracker::GroupCompositeCountsByRectId() {
           return lhs.timestamp < rhs.timestamp;
         });
   }
-  return composite_events_.Pass();
+  return std::move(composite_events_);
 }
 
 scoped_ptr<FrameTimingTracker::MainFrameTimingSet>
@@ -108,7 +107,7 @@ FrameTimingTracker::GroupMainFrameCountsByRectId() {
           return lhs.timestamp < rhs.timestamp;
         });
   }
-  return main_frame_events_.Pass();
+  return std::move(main_frame_events_);
 }
 
 void FrameTimingTracker::PostEvents() {

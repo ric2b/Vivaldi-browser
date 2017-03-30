@@ -5,11 +5,12 @@
 #include "chrome/browser/chromeos/system/automatic_reboot_manager.h"
 
 #include <fcntl.h>
+#include <stddef.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -150,7 +151,7 @@ AutomaticRebootManager::SystemEventTimes::SystemEventTimes(
 
 AutomaticRebootManager::AutomaticRebootManager(
     scoped_ptr<base::TickClock> clock)
-    : clock_(clock.Pass()),
+    : clock_(std::move(clock)),
       have_boot_time_(false),
       have_update_reboot_needed_time_(false),
       reboot_reason_(AutomaticRebootManagerObserver::REBOOT_REASON_UNKNOWN),
@@ -178,8 +179,7 @@ AutomaticRebootManager::AutomaticRebootManager(
       ui::UserActivityDetector::Get()->AddObserver(this);
     notification_registrar_.Add(this, chrome::NOTIFICATION_LOGIN_USER_CHANGED,
         content::NotificationService::AllSources());
-    login_screen_idle_timer_.reset(
-        new base::OneShotTimer<AutomaticRebootManager>);
+    login_screen_idle_timer_.reset(new base::OneShotTimer);
     OnUserActivity(NULL);
   }
 
@@ -252,8 +252,7 @@ void AutomaticRebootManager::OnUserActivity(const ui::Event* event) {
   // Destroying and re-creating the timer ensures that Start() posts a fresh
   // task with a delay of exactly |kLoginManagerIdleTimeoutMs|, ensuring that
   // the timer fires predictably in tests.
-  login_screen_idle_timer_.reset(
-      new base::OneShotTimer<AutomaticRebootManager>);
+  login_screen_idle_timer_.reset(new base::OneShotTimer);
   login_screen_idle_timer_->Start(
       FROM_HERE,
       base::TimeDelta::FromMilliseconds(kLoginManagerIdleTimeoutMs),
@@ -363,7 +362,7 @@ void AutomaticRebootManager::Reschedule() {
   // Set up a timer for the start of the grace period. If the grace period
   // started in the past, the timer is still used with its delay set to zero.
   if (!grace_start_timer_)
-    grace_start_timer_.reset(new base::OneShotTimer<AutomaticRebootManager>);
+    grace_start_timer_.reset(new base::OneShotTimer);
   grace_start_timer_->Start(FROM_HERE,
                             std::max(grace_start_time - now, kZeroTimeDelta),
                             base::Bind(&AutomaticRebootManager::RequestReboot,
@@ -374,7 +373,7 @@ void AutomaticRebootManager::Reschedule() {
   // Set up a timer for the end of the grace period. If the grace period ended
   // in the past, the timer is still used with its delay set to zero.
   if (!grace_end_timer_)
-    grace_end_timer_.reset(new base::OneShotTimer<AutomaticRebootManager>);
+    grace_end_timer_.reset(new base::OneShotTimer);
   grace_end_timer_->Start(FROM_HERE,
                           std::max(grace_end_time - now, kZeroTimeDelta),
                           base::Bind(&AutomaticRebootManager::Reboot,

@@ -2,10 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//extensions/extensions.gni")
-import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 
 # GYP version: extensions/extensions.gyp:extensions_common_constants
 source_set("common_constants") {
@@ -34,13 +33,19 @@ if (enable_extensions) {
                           ".",
                           "//extensions")
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+    configs += [
+      "//build/config:precompiled_headers",
 
-    deps = [
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      "//build/config/compiler:no_size_t_to_int_warning",
+    ]
+
+    public_deps = [
       ":common_constants",
       ":mojo",
+    ]
 
+    deps = [
       # TODO(benwells): figure out what to do with the api target and
       # api resources compiled into the chrome resource bundle.
       # http://crbug.com/162530
@@ -51,11 +56,12 @@ if (enable_extensions) {
       "//crypto",
       "//device/bluetooth",
       "//device/usb",
+      "//extensions:extensions_resources",
       "//extensions/common/api",
       "//extensions/strings",
-      "//extensions:extensions_resources",
       "//ipc",
       "//net",
+      "//third_party/boringssl",
       "//third_party/icu",
       "//third_party/libxml",
       "//third_party/re2",
@@ -65,17 +71,13 @@ if (enable_extensions) {
       "//url",
     ]
 
-    if (use_openssl) {
-      sources +=
-          rebase_path(extensions_gypi_values.extensions_common_sources_openssl,
-                      ".",
-                      "//extensions")
-      deps += [ "//third_party/boringssl" ]
-    } else {
-      sources += rebase_path(
-              extensions_gypi_values.extensions_common_sources_nonopenssl,
-              ".",
-              "//extensions")
+    if (is_android) {
+      deps -= [ "//device/usb" ]
+      sources -= [
+        "api/printer_provider/usb_printer_manifest_data.cc",
+        "api/printer_provider/usb_printer_manifest_data.h",
+        "api/printer_provider/usb_printer_manifest_handler.cc",
+      ]
     }
 
     if (enable_nacl) {

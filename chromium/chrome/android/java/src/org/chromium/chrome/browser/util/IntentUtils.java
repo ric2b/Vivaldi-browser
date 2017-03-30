@@ -8,15 +8,15 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Parcel;
 import android.os.Parcelable;
+import android.support.v4.app.BundleCompat;
 
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +25,9 @@ import java.util.List;
  */
 public class IntentUtils {
     private static final String TAG = "IntentUtils";
+
+    /** See {@link #isIntentTooLarge(Intent)}. */
+    private static final int MAX_INTENT_SIZE_THRESHOLD = 750000;
 
     /**
      * Retrieves a list of components that would handle the given intent.
@@ -63,6 +66,19 @@ public class IntentUtils {
         } catch (Throwable t) {
             // Catches un-parceling exceptions.
             Log.e(TAG, "getIntExtra failed on intent " + intent);
+            return defaultValue;
+        }
+    }
+
+    /**
+     * Just like {@link Bundle#getInt(String, int)} but doesn't throw exceptions.
+     */
+    public static int safeGetInt(Bundle bundle, String name, int defaultValue) {
+        try {
+            return bundle.getInt(name, defaultValue);
+        } catch (Throwable t) {
+            // Catches un-parceling exceptions.
+            Log.e(TAG, "getInt failed on bundle " + bundle);
             return defaultValue;
         }
     }
@@ -115,6 +131,19 @@ public class IntentUtils {
         } catch (Throwable t) {
             // Catches un-parceling exceptions.
             Log.e(TAG, "getBundleExtra failed on intent " + intent);
+            return null;
+        }
+    }
+
+    /**
+     * Just like {@link Bundle#getBundle(String)} but doesn't throw exceptions.
+     */
+    public static Bundle safeGetBundle(Bundle bundle, String name) {
+        try {
+            return bundle.getBundle(name);
+        } catch (Throwable t) {
+            // Catches un-parceling exceptions.
+            Log.e(TAG, "getBundle failed on bundle " + bundle);
             return null;
         }
     }
@@ -173,6 +202,33 @@ public class IntentUtils {
     }
 
     /**
+     * Just like {@link Intent#getByteArrayExtra(String)} but doesn't throw exceptions.
+     */
+    public static byte[] safeGetByteArrayExtra(Intent intent, String name) {
+        try {
+            return intent.getByteArrayExtra(name);
+        } catch (Throwable t) {
+            // Catches un-parceling exceptions.
+            Log.e(TAG, "getByteArrayExtra failed on intent " + intent);
+            return null;
+        }
+    }
+
+    /**
+     * Just like {@link BundleCompat#getBinder()}, but doesn't throw exceptions.
+     */
+    public static IBinder safeGetBinder(Bundle bundle, String name) {
+        if (bundle == null) return null;
+        try {
+            return BundleCompat.getBinder(bundle, name);
+        } catch (Throwable t) {
+            // Catches un-parceling exceptions.
+            Log.e(TAG, "getBinder failed on bundle " + bundle);
+            return null;
+        }
+    }
+
+    /**
      * @return a Binder from an Intent, or null.
      *
      * Creates a temporary copy of the extra Bundle, which is required as
@@ -180,29 +236,14 @@ public class IntentUtils {
      */
     public static IBinder safeGetBinderExtra(Intent intent, String name) {
         if (!intent.hasExtra(name)) return null;
-        try {
-            Bundle extras = intent.getExtras();
-            // Bundle#getBinder() is public starting at API level 18, but exists
-            // in previous SDKs as a hidden method named "getIBinder" (which
-            // still exists as of L MR1 but is hidden and deprecated).
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-                return extras.getBinder(name);
-            } else {
-                Method getBinderMethod = Bundle.class.getMethod("getIBinder", String.class);
-                return (IBinder) getBinderMethod.invoke(extras, name);
-            }
-        } catch (Throwable t) {
-            // Catches un-parceling exceptions.
-            Log.e(TAG, "getBinder failed on intent " + intent);
-            return null;
-        }
+        Bundle extras = intent.getExtras();
+        return safeGetBinder(extras, name);
     }
 
     /**
      * Inserts a {@link Binder} value into an Intent as an extra.
      *
-     * This is the same as {@link Bundle#putBinder()}, but works below API level
-     * 18.
+     * Uses {@link BundleCompat#putBinder()}, but doesn't throw exceptions.
      *
      * @param intent Intent to put the binder into.
      * @param name Key.
@@ -213,20 +254,35 @@ public class IntentUtils {
         if (intent == null) return;
         Bundle bundle = new Bundle();
         try {
-            // Bundle#putBinder() is public starting at API level 18, but exists
-            // in previous SDKs as a hidden method named "putIBinder" (which
-            // still exists as of L MR1 but is hidden and deprecated).
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-                bundle.putBinder(name, binder);
-            } else {
-                Method putBinderMethod =
-                        Bundle.class.getMethod("putIBinder", String.class, IBinder.class);
-                putBinderMethod.invoke(bundle, name, binder);
-            }
+            BundleCompat.putBinder(bundle, name, binder);
         } catch (Throwable t) {
             // Catches parceling exceptions.
             Log.e(TAG, "putBinder failed on bundle " + bundle);
         }
         intent.putExtras(bundle);
+    }
+
+    /**
+     * Returns how large the Intent will be in Parcel form, which is helpful for gauging whether
+     * Android will deliver the Intent instead of throwing a TransactionTooLargeException.
+     *
+     * @param intent Intent to get the size of.
+     * @return Number of bytes required to parcel the Intent.
+     */
+    public static int getParceledIntentSize(Intent intent) {
+        Parcel parcel = Parcel.obtain();
+        intent.writeToParcel(parcel, 0);
+        return parcel.dataSize();
+    }
+
+    /**
+     * Determines if an Intent's size is bigger than a reasonable threshold.  Having too many large
+     * transactions in flight simultaneously (including Intents) causes Android to throw a
+     * {@link TransactionTooLargeException}.  According to that class, the limit across all
+     * transactions combined is one megabyte.  Best practice is to keep each individual Intent well
+     * under the limit to avoid this situation.
+     */
+    public static boolean isIntentTooLarge(Intent intent) {
+        return getParceledIntentSize(intent) > MAX_INTENT_SIZE_THRESHOLD;
     }
 }

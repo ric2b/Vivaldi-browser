@@ -22,6 +22,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/rappor/rappor_service.h"
 #include "components/search_engines/search_engines_pref_names.h"
@@ -32,8 +33,8 @@
 #include "components/search_engines/template_url_service_client.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/search_engines/util.h"
-#include "components/url_fixer/url_fixer.h"
-#include "net/base/net_util.h"
+#include "components/url_formatter/url_fixer.h"
+#include "components/url_formatter/url_formatter.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "sync/api/sync_change.h"
 #include "sync/api/sync_error_factory.h"
@@ -149,8 +150,42 @@ void LogDuplicatesHistogram(
   UMA_HISTOGRAM_COUNTS_100("Search.SearchEngineDuplicateCounts", num_dupes);
 }
 
-}  // namespace
+// Returns the length of the registry portion of a hostname.  For example,
+// www.google.co.uk will return 5 (the length of co.uk).
+size_t GetRegistryLength(const base::string16& host) {
+  return net::registry_controlled_domains::GetRegistryLength(
+      base::UTF16ToUTF8(host),
+      net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
+      net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
+}
 
+// Returns the domain name (including registry) of a hostname.  For example,
+// www.google.co.uk will return google.co.uk.
+base::string16 GetDomainAndRegistry(const base::string16& host) {
+  return base::UTF8ToUTF16(
+      net::registry_controlled_domains::GetDomainAndRegistry(
+          base::UTF16ToUTF8(host),
+          net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES));
+}
+
+// Returns the length of the important part of the |keyword|, assumed to be
+// associated with the TemplateURL.  For instance, for the keyword
+// google.co.uk, this can return 6 (the length of "google").
+size_t GetMeaningfulKeywordLength(const base::string16& keyword,
+                                  const TemplateURL* turl) {
+  if (OmniboxFieldTrial::KeywordRequiresRegistry())
+    return keyword.length();
+  const size_t registry_length = GetRegistryLength(keyword);
+  if (registry_length == std::string::npos)
+    return keyword.length();
+  DCHECK_LT(registry_length, keyword.length());
+  // The meaningful keyword length is the length of any portion before the
+  // registry ("co.uk") and its preceding dot.
+  return keyword.length() - (registry_length ? (registry_length + 1) : 0);
+
+}
+
+}  // namespace
 
 // TemplateURLService::LessWithPrefix -----------------------------------------
 
@@ -168,9 +203,10 @@ class TemplateURLService::LessWithPrefix {
   // Unfortunately the calling convention is not "prefix and element" but
   // rather "two elements", so we pass the prefix as a fake "element" which has
   // a NULL KeywordDataElement pointer.
-  bool operator()(const KeywordToTemplateMap::value_type& elem1,
-                  const KeywordToTemplateMap::value_type& elem2) const {
-    return (elem1.second == NULL) ?
+  bool operator()(
+      const KeywordToTURLAndMeaningfulLength::value_type& elem1,
+      const KeywordToTURLAndMeaningfulLength::value_type& elem2) const {
+    return (elem1.second.first == NULL) ?
         (elem2.first.compare(0, elem1.first.length(), elem1.first) > 0) :
         (elem1.first < elem2.first);
   }
@@ -188,15 +224,16 @@ TemplateURLService::TemplateURLService(
     rappor::RapporService* rappor_service,
     const base::Closure& dsp_change_callback)
     : prefs_(prefs),
-      search_terms_data_(search_terms_data.Pass()),
+      search_terms_data_(std::move(search_terms_data)),
       web_data_service_(web_data_service),
-      client_(client.Pass()),
+      client_(std::move(client)),
       google_url_tracker_(google_url_tracker),
       rappor_service_(rappor_service),
       dsp_change_callback_(dsp_change_callback),
       provider_map_(new SearchHostToURLsMap),
       loaded_(false),
       load_failed_(false),
+      disable_load_(false),
       load_handle_(0),
       default_search_provider_(NULL),
       next_id_(kInvalidTemplateURLID + 1),
@@ -222,6 +259,7 @@ TemplateURLService::TemplateURLService(const Initializer* initializers,
       provider_map_(new SearchHostToURLsMap),
       loaded_(false),
       load_failed_(false),
+      disable_load_(false),
       load_handle_(0),
       default_search_provider_(NULL),
       next_id_(kInvalidTemplateURLID + 1),
@@ -311,7 +349,7 @@ base::string16 TemplateURLService::CleanUserInputKeyword(
   }
 
   // Remove leading "www.".
-  result = net::StripWWW(result);
+  result = url_formatter::StripWWW(result);
 
   // Remove trailing "/".
   return (result.length() > 0 && result[result.length() - 1] == '/') ?
@@ -344,44 +382,29 @@ bool TemplateURLService::CanAddAutogeneratedKeyword(
       CanAddAutogeneratedKeywordForHost(url.host());
 }
 
-void TemplateURLService::FindMatchingKeywords(
+void TemplateURLService::AddMatchingKeywords(
     const base::string16& prefix,
-    bool support_replacement_only,
-    TemplateURLVector* matches) {
-  // Sanity check args.
-  if (prefix.empty())
-    return;
-  DCHECK(matches != NULL);
-  DCHECK(matches->empty());  // The code for exact matches assumes this.
+    bool supports_replacement_only,
+    TURLsAndMeaningfulLengths* matches) {
+  AddMatchingKeywordsHelper(
+      keyword_to_turl_and_length_, prefix, supports_replacement_only, matches);
+}
 
-  // Required for VS2010: http://connect.microsoft.com/VisualStudio/feedback/details/520043/error-converting-from-null-to-a-pointer-type-in-std-pair
-  TemplateURL* const kNullTemplateURL = NULL;
-
-  // Find matching keyword range.  Searches the element map for keywords
-  // beginning with |prefix| and stores the endpoints of the resulting set in
-  // |match_range|.
-  const std::pair<KeywordToTemplateMap::const_iterator,
-                  KeywordToTemplateMap::const_iterator> match_range(
-      std::equal_range(
-          keyword_to_template_map_.begin(), keyword_to_template_map_.end(),
-          KeywordToTemplateMap::value_type(prefix, kNullTemplateURL),
-          LessWithPrefix()));
-
-  // Return vector of matching keywords.
-  for (KeywordToTemplateMap::const_iterator i(match_range.first);
-       i != match_range.second; ++i) {
-    if (!support_replacement_only ||
-        i->second->url_ref().SupportsReplacement(search_terms_data()))
-      matches->push_back(i->second);
-  }
+void TemplateURLService::AddMatchingDomainKeywords(
+    const base::string16& prefix,
+    bool supports_replacement_only,
+    TURLsAndMeaningfulLengths* matches) {
+  AddMatchingKeywordsHelper(
+      keyword_domain_to_turl_and_length_, prefix, supports_replacement_only,
+      matches);
 }
 
 TemplateURL* TemplateURLService::GetTemplateURLForKeyword(
     const base::string16& keyword) {
-  KeywordToTemplateMap::const_iterator elem(
-      keyword_to_template_map_.find(keyword));
-  if (elem != keyword_to_template_map_.end())
-    return elem->second;
+  KeywordToTURLAndMeaningfulLength::const_iterator elem(
+      keyword_to_turl_and_length_.find(keyword));
+  if (elem != keyword_to_turl_and_length_.end())
+    return elem->second.first;
   return (!loaded_ &&
       initial_default_search_provider_.get() &&
       (initial_default_search_provider_->keyword() == keyword)) ?
@@ -390,8 +413,8 @@ TemplateURL* TemplateURLService::GetTemplateURLForKeyword(
 
 TemplateURL* TemplateURLService::GetTemplateURLForGUID(
     const std::string& sync_guid) {
-  GUIDToTemplateMap::const_iterator elem(guid_to_template_map_.find(sync_guid));
-  if (elem != guid_to_template_map_.end())
+  GUIDToTURL::const_iterator elem(guid_to_turl_.find(sync_guid));
+  if (elem != guid_to_turl_.end())
     return elem->second;
   return (!loaded_ &&
       initial_default_search_provider_.get() &&
@@ -527,7 +550,7 @@ void TemplateURLService::RegisterOmniboxKeyword(
   scoped_ptr<TemplateURL::AssociatedExtensionInfo> info(
       new TemplateURL::AssociatedExtensionInfo(
           TemplateURL::OMNIBOX_API_EXTENSION, extension_id));
-  AddExtensionControlledTURL(url, info.Pass());
+  AddExtensionControlledTURL(url, std::move(info));
 }
 
 TemplateURLService::TemplateURLVector TemplateURLService::GetTemplateURLs() {
@@ -684,7 +707,7 @@ void TemplateURLService::RemoveObserver(TemplateURLServiceObserver* observer) {
 }
 
 void TemplateURLService::Load() {
-  if (loaded_ || load_handle_)
+  if (loaded_ || load_handle_ || disable_load_)
     return;
 
   if (web_data_service_.get())
@@ -1035,8 +1058,8 @@ syncer::SyncMergeResult TemplateURLService::MergeDataAndStartSyncing(
     return merge_result;
   }
 
-  sync_processor_ = sync_processor.Pass();
-  sync_error_factory_ = sync_error_factory.Pass();
+  sync_processor_ = std::move(sync_processor);
+  sync_error_factory_ = std::move(sync_error_factory);
 
   // We do a lot of calls to Add/Remove/ResetTemplateURL here, so ensure we
   // don't step on our own toes.
@@ -1197,7 +1220,8 @@ syncer::SyncData TemplateURLService::CreateSyncDataFromTemplateURL(
   se_specifics->set_safe_for_autoreplace(turl.safe_for_autoreplace());
   se_specifics->set_originating_url(turl.originating_url().spec());
   se_specifics->set_date_created(turl.date_created().ToInternalValue());
-  se_specifics->set_input_encodings(JoinString(turl.input_encodings(), ';'));
+  se_specifics->set_input_encodings(
+      base::JoinString(turl.input_encodings(), ";"));
   se_specifics->set_show_in_default_list(turl.show_in_default_list());
   se_specifics->set_suggestions_url(turl.suggestions_url());
   se_specifics->set_prepopulate_id(turl.prepopulate_id());
@@ -1280,7 +1304,9 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
   data.favicon_url = GURL(specifics.favicon_url());
   data.show_in_default_list = specifics.show_in_default_list();
   data.safe_for_autoreplace = specifics.safe_for_autoreplace();
-  base::SplitString(specifics.input_encodings(), ';', &data.input_encodings);
+  data.input_encodings = base::SplitString(
+      specifics.input_encodings(), ";",
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   // If the server data has duplicate encodings, we'll want to push an update
   // below to correct it.  Note that we also fix this in
   // GetSearchProvidersUsingKeywordResult(), since otherwise we'd never correct
@@ -1336,7 +1362,7 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
     }
   }
 
-  return turl.Pass();
+  return turl;
 }
 
 // static
@@ -1410,8 +1436,8 @@ void TemplateURLService::Init(const Initializer* initializers,
 
 void TemplateURLService::RemoveFromMaps(TemplateURL* template_url) {
   const base::string16& keyword = template_url->keyword();
-  DCHECK_NE(0U, keyword_to_template_map_.count(keyword));
-  if (keyword_to_template_map_[keyword] == template_url) {
+  DCHECK_NE(0U, keyword_to_turl_and_length_.count(keyword));
+  if (keyword_to_turl_and_length_[keyword].first == template_url) {
     // We need to check whether the keyword can now be provided by another
     // TemplateURL.  See the comments in AddToMaps() for more information on
     // extension keywords and how they can coexist with non-extension keywords.
@@ -1431,17 +1457,20 @@ void TemplateURLService::RemoveFromMaps(TemplateURL* template_url) {
             (turl->id() > best_fallback->id()))))
         best_fallback = turl;
     }
-    if (best_fallback)
-      keyword_to_template_map_[keyword] = best_fallback;
-    else
-      keyword_to_template_map_.erase(keyword);
+    RemoveFromDomainMap(template_url);
+    if (best_fallback) {
+      AddToMap(best_fallback);
+      AddToDomainMap(best_fallback);
+    } else {
+      keyword_to_turl_and_length_.erase(keyword);
+    }
   }
 
   if (template_url->GetType() == TemplateURL::OMNIBOX_API_EXTENSION)
     return;
 
   if (!template_url->sync_guid().empty())
-    guid_to_template_map_.erase(template_url->sync_guid());
+    guid_to_turl_.erase(template_url->sync_guid());
   // |provider_map_| is only initialized after loading has completed.
   if (loaded_) {
     provider_map_->Remove(template_url);
@@ -1452,12 +1481,13 @@ void TemplateURLService::AddToMaps(TemplateURL* template_url) {
   bool template_url_is_omnibox_api =
       template_url->GetType() == TemplateURL::OMNIBOX_API_EXTENSION;
   const base::string16& keyword = template_url->keyword();
-  KeywordToTemplateMap::const_iterator i =
-      keyword_to_template_map_.find(keyword);
-  if (i == keyword_to_template_map_.end()) {
-    keyword_to_template_map_[keyword] = template_url;
+  KeywordToTURLAndMeaningfulLength::const_iterator i =
+      keyword_to_turl_and_length_.find(keyword);
+  if (i == keyword_to_turl_and_length_.end()) {
+    AddToMap(template_url);
+    AddToDomainMap(template_url);
   } else {
-    const TemplateURL* existing_url = i->second;
+    const TemplateURL* existing_url = i->second.first;
     // We should only have overlapping keywords when at least one comes from
     // an extension.  In that case, the ranking order is:
     //   Manually-modified keywords > extension keywords > replaceable keywords
@@ -1466,18 +1496,55 @@ void TemplateURLService::AddToMaps(TemplateURL* template_url) {
         existing_url->GetType() == TemplateURL::OMNIBOX_API_EXTENSION;
     DCHECK(existing_url_is_omnibox_api || template_url_is_omnibox_api);
     if (existing_url_is_omnibox_api ?
-        !CanReplace(template_url) : CanReplace(existing_url))
-      keyword_to_template_map_[keyword] = template_url;
+        !CanReplace(template_url) : CanReplace(existing_url)) {
+      RemoveFromDomainMap(existing_url);
+      AddToMap(template_url);
+      AddToDomainMap(template_url);
+    }
   }
 
   if (template_url_is_omnibox_api)
     return;
 
   if (!template_url->sync_guid().empty())
-    guid_to_template_map_[template_url->sync_guid()] = template_url;
+    guid_to_turl_[template_url->sync_guid()] = template_url;
   // |provider_map_| is only initialized after loading has completed.
   if (loaded_)
     provider_map_->Add(template_url, search_terms_data());
+}
+
+void TemplateURLService::RemoveFromDomainMap(const TemplateURL* template_url) {
+  const base::string16 domain = GetDomainAndRegistry(template_url->keyword());
+  if (domain.empty())
+    return;
+
+  const auto match_range(
+      keyword_domain_to_turl_and_length_.equal_range(domain));
+  for (auto it(match_range.first); it != match_range.second; ) {
+    if (it->second.first == template_url)
+      it = keyword_domain_to_turl_and_length_.erase(it);
+    else
+      ++it;
+  }
+}
+
+void TemplateURLService::AddToDomainMap(TemplateURL* template_url) {
+  const base::string16 domain = GetDomainAndRegistry(template_url->keyword());
+  // Only bother adding an entry to the domain map if its key in the domain
+  // map would be different from the key in the regular map.
+  if (domain != template_url->keyword()) {
+    keyword_domain_to_turl_and_length_.insert(std::make_pair(
+        domain,
+        TURLAndMeaningfulLength(
+            template_url, GetMeaningfulKeywordLength(domain, template_url))));
+  }
+}
+
+void TemplateURLService::AddToMap(TemplateURL* template_url) {
+  const base::string16& keyword = template_url->keyword();
+  keyword_to_turl_and_length_[keyword] =
+      TURLAndMeaningfulLength(
+          template_url, GetMeaningfulKeywordLength(keyword, template_url));
 }
 
 // Helper for partition() call in next function.
@@ -1590,9 +1657,10 @@ bool TemplateURLService::UpdateNoNotify(TemplateURL* existing_turl,
   DCHECK_NE(TemplateURL::OMNIBOX_API_EXTENSION, existing_turl->GetType());
 
   base::string16 old_keyword(existing_turl->keyword());
-  keyword_to_template_map_.erase(old_keyword);
+  keyword_to_turl_and_length_.erase(old_keyword);
+  RemoveFromDomainMap(existing_turl);
   if (!existing_turl->sync_guid().empty())
-    guid_to_template_map_.erase(existing_turl->sync_guid());
+    guid_to_turl_.erase(existing_turl->sync_guid());
 
   // |provider_map_| is only initialized after loading has completed.
   if (loaded_)
@@ -1607,10 +1675,11 @@ bool TemplateURLService::UpdateNoNotify(TemplateURL* existing_turl,
   }
 
   const base::string16& keyword = existing_turl->keyword();
-  KeywordToTemplateMap::const_iterator i =
-      keyword_to_template_map_.find(keyword);
-  if (i == keyword_to_template_map_.end()) {
-    keyword_to_template_map_[keyword] = existing_turl;
+  KeywordToTURLAndMeaningfulLength::const_iterator i =
+      keyword_to_turl_and_length_.find(keyword);
+  if (i == keyword_to_turl_and_length_.end()) {
+    AddToMap(existing_turl);
+    AddToDomainMap(existing_turl);
   } else {
     // We can theoretically reach here in two cases:
     //   * There is an existing extension keyword and sync brings in a rename of
@@ -1620,21 +1689,24 @@ bool TemplateURLService::UpdateNoNotify(TemplateURL* existing_turl,
     //     at load time causes it to conflict with an existing keyword.  In this
     //     case we delete the existing keyword if it's replaceable, or else undo
     //     the change in keyword for |existing_turl|.
-    TemplateURL* existing_keyword_turl = i->second;
+    TemplateURL* existing_keyword_turl = i->second.first;
     if (existing_keyword_turl->GetType() != TemplateURL::NORMAL) {
-      if (!CanReplace(existing_turl))
-        keyword_to_template_map_[keyword] = existing_turl;
+      if (!CanReplace(existing_turl)) {
+        AddToMap(existing_turl);
+        AddToDomainMap(existing_turl);
+      }
     } else {
       if (CanReplace(existing_keyword_turl)) {
         RemoveNoNotify(existing_keyword_turl);
       } else {
         existing_turl->data_.SetKeyword(old_keyword);
-        keyword_to_template_map_[old_keyword] = existing_turl;
+        AddToMap(existing_turl);
+        AddToDomainMap(existing_turl);
       }
     }
   }
   if (!existing_turl->sync_guid().empty())
-    guid_to_template_map_[existing_turl->sync_guid()] = existing_turl;
+    guid_to_turl_[existing_turl->sync_guid()] = existing_turl;
 
   if (web_data_service_.get())
     web_data_service_->UpdateKeyword(existing_turl->data());
@@ -1722,8 +1794,8 @@ void TemplateURLService::AddTabToSearchVisit(const TemplateURL& t_url) {
   if (!client_)
     return;
 
-  GURL url(
-      url_fixer::FixupURL(base::UTF16ToUTF8(t_url.keyword()), std::string()));
+  GURL url(url_formatter::FixupURL(base::UTF16ToUTF8(t_url.keyword()),
+                                   std::string()));
   if (!url.is_valid())
     return;
 
@@ -1751,18 +1823,18 @@ void TemplateURLService::GoogleBaseURLChanged() {
     if (t_url->HasGoogleBaseURLs(search_terms_data())) {
       TemplateURL updated_turl(t_url->data());
       updated_turl.ResetKeywordIfNecessary(search_terms_data(), false);
-      KeywordToTemplateMap::const_iterator existing_entry =
-          keyword_to_template_map_.find(updated_turl.keyword());
-      if ((existing_entry != keyword_to_template_map_.end()) &&
-          (existing_entry->second != t_url)) {
+      KeywordToTURLAndMeaningfulLength::const_iterator existing_entry =
+          keyword_to_turl_and_length_.find(updated_turl.keyword());
+      if ((existing_entry != keyword_to_turl_and_length_.end()) &&
+          (existing_entry->second.first != t_url)) {
         // The new autogenerated keyword conflicts with another TemplateURL.
         // Overwrite it if it's replaceable; otherwise, leave |t_url| using its
         // current keyword.  (This will not prevent |t_url| from auto-updating
         // the keyword in the future if the conflicting TemplateURL disappears.)
         // Note that we must still update |t_url| in this case, or the
         // |provider_map_| will not be updated correctly.
-        if (CanReplace(existing_entry->second))
-          RemoveNoNotify(existing_entry->second);
+        if (CanReplace(existing_entry->second.first))
+          RemoveNoNotify(existing_entry->second.first);
         else
           updated_turl.data_.SetKeyword(t_url->keyword());
       }
@@ -1961,7 +2033,7 @@ bool TemplateURLService::AddNoNotify(TemplateURL* template_url,
       web_data_service_->AddKeyword(template_url->data());
 
     // Inform sync of the addition. Note that this will assign a GUID to
-    // template_url and add it to the guid_to_template_map_.
+    // template_url and add it to the guid_to_turl_.
     ProcessTemplateURLChange(FROM_HERE,
                              template_url,
                              syncer::SyncChange::ACTION_ADD);
@@ -2106,7 +2178,8 @@ base::string16 TemplateURLService::UniquifyKeyword(const TemplateURL& turl,
     GURL gurl(turl.url());
     if (gurl.is_valid() &&
         (turl.GetType() != TemplateURL::OMNIBOX_API_EXTENSION)) {
-      base::string16 keyword_candidate = TemplateURL::GenerateKeyword(gurl);
+      base::string16 keyword_candidate = TemplateURL::GenerateKeyword(
+          gurl, search_terms_data().GetAcceptLanguages());
       if (!GetTemplateURLForKeyword(keyword_candidate))
         return keyword_candidate;
     }
@@ -2274,6 +2347,35 @@ void TemplateURLService::OnSyncedDefaultSearchProviderGUIDChanged() {
   TemplateURL* turl = GetTemplateURLForGUID(new_guid);
   if (turl)
     default_search_manager_.SetUserSelectedDefaultSearchEngine(turl->data());
+}
+
+template <typename Container>
+void TemplateURLService::AddMatchingKeywordsHelper(
+    const Container& keyword_to_turl_and_length,
+    const base::string16& prefix,
+    bool supports_replacement_only,
+    TURLsAndMeaningfulLengths* matches) {
+  // Sanity check args.
+  if (prefix.empty())
+    return;
+  DCHECK(matches);
+
+  // Find matching keyword range.  Searches the element map for keywords
+  // beginning with |prefix| and stores the endpoints of the resulting set in
+  // |match_range|.
+  const auto match_range(std::equal_range(
+      keyword_to_turl_and_length.begin(), keyword_to_turl_and_length.end(),
+      typename Container::value_type(prefix,
+                                     TURLAndMeaningfulLength(nullptr, 0)),
+      LessWithPrefix()));
+
+  // Add to vector of matching keywords.
+  for (typename Container::const_iterator i(match_range.first);
+    i != match_range.second; ++i) {
+    if (!supports_replacement_only ||
+        i->second.first->url_ref().SupportsReplacement(search_terms_data()))
+      matches->push_back(i->second);
+  }
 }
 
 TemplateURL* TemplateURLService::FindPrepopulatedTemplateURL(

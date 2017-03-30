@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/cast/net/cast_transport_defines.h"
 #include "media/cast/net/rtp/framer.h"
@@ -24,7 +27,7 @@ class FramerTest : public ::testing::Test {
 
   ~FramerTest() override {}
 
-  std::vector<uint8> payload_;
+  std::vector<uint8_t> payload_;
   RtpCastHeader rtp_header_;
   MockRtpPayloadFeedback mock_rtp_payload_feedback_;
   Framer framer_;

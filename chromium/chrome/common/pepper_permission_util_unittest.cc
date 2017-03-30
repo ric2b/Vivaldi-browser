@@ -6,9 +6,11 @@
 
 #include <set>
 #include <string>
+#include <utility>
 
 #include "chrome/common/extensions/features/feature_channel.h"
 #include "components/crx_file/id_util.h"
+#include "components/version_info/version_info.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,12 +31,12 @@ scoped_refptr<Extension> CreateExtensionImportingModule(
           .Set("name", "Has Dependent Modules")
           .Set("version", "1.0")
           .Set("manifest_version", 2)
-          .Set("import",
-               ListBuilder().Append(DictionaryBuilder().Set("id", import_id)))
+          .Set("import", std::move(ListBuilder().Append(std::move(
+                             DictionaryBuilder().Set("id", import_id)))))
           .Build();
 
   return ExtensionBuilder()
-      .SetManifest(manifest.Pass())
+      .SetManifest(std::move(manifest))
       .AddFlags(Extension::FROM_WEBSTORE)
       .SetID(id)
       .Build();
@@ -43,7 +45,7 @@ scoped_refptr<Extension> CreateExtensionImportingModule(
 }  // namespace
 
 TEST(PepperPermissionUtilTest, ExtensionWhitelisting) {
-  ScopedCurrentChannel current_channel(chrome::VersionInfo::CHANNEL_UNKNOWN);
+  ScopedCurrentChannel current_channel(version_info::Channel::UNKNOWN);
   ExtensionSet extensions;
   std::string whitelisted_id =
       crx_file::id_util::GenerateId("whitelisted_extension");
@@ -54,7 +56,7 @@ TEST(PepperPermissionUtilTest, ExtensionWhitelisting) {
           .Set("manifest_version", 2)
           .Build();
   scoped_refptr<Extension> ext = ExtensionBuilder()
-                                     .SetManifest(manifest.Pass())
+                                     .SetManifest(std::move(manifest))
                                      .SetID(whitelisted_id)
                                      .Build();
   extensions.Insert(ext);
@@ -79,7 +81,7 @@ TEST(PepperPermissionUtilTest, ExtensionWhitelisting) {
 }
 
 TEST(PepperPermissionUtilTest, SharedModuleWhitelisting) {
-  ScopedCurrentChannel current_channel(chrome::VersionInfo::CHANNEL_UNKNOWN);
+  ScopedCurrentChannel current_channel(version_info::Channel::UNKNOWN);
   ExtensionSet extensions;
   std::string whitelisted_id = crx_file::id_util::GenerateId("extension_id");
   std::string bad_id = crx_file::id_util::GenerateId("bad_id");
@@ -90,14 +92,16 @@ TEST(PepperPermissionUtilTest, SharedModuleWhitelisting) {
           .Set("version", "1.0")
           .Set("manifest_version", 2)
           .Set("export",
-               DictionaryBuilder()
-                   .Set("resources", ListBuilder().Append("*"))
-                   // Add the extension to the whitelist.  This
-                   // restricts import to |whitelisted_id| only.
-                   .Set("whitelist", ListBuilder().Append(whitelisted_id)))
+               std::move(
+                   DictionaryBuilder()
+                       .Set("resources", std::move(ListBuilder().Append("*")))
+                       // Add the extension to the whitelist.  This
+                       // restricts import to |whitelisted_id| only.
+                       .Set("whitelist",
+                            std::move(ListBuilder().Append(whitelisted_id)))))
           .Build();
   scoped_refptr<Extension> shared_module =
-      ExtensionBuilder().SetManifest(shared_module_manifest.Pass()).Build();
+      ExtensionBuilder().SetManifest(std::move(shared_module_manifest)).Build();
 
   scoped_refptr<Extension> ext =
       CreateExtensionImportingModule(shared_module->id(), whitelisted_id);

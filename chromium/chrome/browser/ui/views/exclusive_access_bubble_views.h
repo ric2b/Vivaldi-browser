@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_EXCLUSIVE_ACCESS_BUBBLE_VIEWS_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble.h"
 #include "content/public/browser/notification_observer.h"
@@ -64,7 +65,7 @@ class ExclusiveAccessBubbleViews : public ExclusiveAccessBubble,
   // Returns the root view containing |browser_view_|.
   views::View* GetBrowserRootView() const;
 
-  // FullScreenExitBubble overrides:
+  // ExclusiveAccessBubble overrides:
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationEnded(const gfx::Animation* animation) override;
   gfx::Rect GetPopupRect(bool ignore_animation_state) const override;

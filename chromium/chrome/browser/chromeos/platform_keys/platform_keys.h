@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_PLATFORM_KEYS_PLATFORM_KEYS_H_
 #define CHROME_BROWSER_CHROMEOS_PLATFORM_KEYS_PLATFORM_KEYS_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -119,6 +121,13 @@ void SelectClientCertificates(
 // key in |certificate|.
 std::string GetSubjectPublicKeyInfo(
     const scoped_refptr<net::X509Certificate>& certificate);
+
+// Intersects the two certificate lists |certs1| and |certs2| and passes the
+// intersection to |callback|. The intersction preserves the order of |certs1|.
+void IntersectCertificates(
+    const net::CertificateList& certs1,
+    const net::CertificateList& certs2,
+    const base::Callback<void(scoped_ptr<net::CertificateList>)>& callback);
 
 // Obtains information about the public key in |certificate|.
 // If |certificate| contains an RSA key, sets |key_size_bits| to the modulus

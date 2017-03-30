@@ -5,13 +5,16 @@
 #ifndef NET_HTTP_HTTP_NETWORK_TRANSACTION_H_
 #define NET_HTTP_HTTP_NETWORK_TRANSACTION_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
+#include "net/base/net_error_details.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_request_headers.h"
@@ -27,6 +30,7 @@
 
 namespace net {
 
+class BidirectionalStreamJob;
 class ClientSocketHandle;
 class HttpAuthController;
 class HttpNetworkSession;
@@ -35,6 +39,7 @@ class HttpStreamRequest;
 class IOBuffer;
 class ProxyInfo;
 class SpdySession;
+class SSLPrivateKey;
 struct HttpRequestInfo;
 
 class NET_EXPORT_PRIVATE HttpNetworkTransaction
@@ -52,6 +57,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
             const BoundNetLog& net_log) override;
   int RestartIgnoringLastError(const CompletionCallback& callback) override;
   int RestartWithCertificate(X509Certificate* client_cert,
+                             SSLPrivateKey* client_private_key,
                              const CompletionCallback& callback) override;
   int RestartWithAuth(const AuthCredentials& credentials,
                       const CompletionCallback& callback) override;
@@ -62,13 +68,16 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
            const CompletionCallback& callback) override;
   void StopCaching() override;
   bool GetFullRequestHeaders(HttpRequestHeaders* headers) const override;
-  int64 GetTotalReceivedBytes() const override;
+  int64_t GetTotalReceivedBytes() const override;
+  int64_t GetTotalSentBytes() const override;
   void DoneReading() override;
   const HttpResponseInfo* GetResponseInfo() const override;
   LoadState GetLoadState() const override;
   UploadProgress GetUploadProgress() const override;
   void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) const override;
   void SetPriority(RequestPriority priority) override;
   void SetWebSocketHandshakeStreamCreateHelper(
       WebSocketHandshakeStreamBase::CreateHelper* create_helper) override;
@@ -82,6 +91,10 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   void OnStreamReady(const SSLConfig& used_ssl_config,
                      const ProxyInfo& used_proxy_info,
                      HttpStream* stream) override;
+  void OnBidirectionalStreamJobReady(
+      const SSLConfig& used_ssl_config,
+      const ProxyInfo& used_proxy_info,
+      BidirectionalStreamJob* stream_job) override;
   void OnWebSocketHandshakeStreamReady(
       const SSLConfig& used_ssl_config,
       const ProxyInfo& used_proxy_info,
@@ -103,6 +116,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
                                   const ProxyInfo& used_proxy_info,
                                   HttpStream* stream) override;
 
+  void OnQuicBroken() override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
 
  private:
@@ -110,6 +124,8 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
 
   FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest,
                            ResetStateForRestart);
+  FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest, EnableNPN);
+  FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest, DisableNPN);
   FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,
                            WindowUpdateReceived);
   FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,
@@ -238,6 +254,10 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // to be maintained for multi-round auth.
   void ResetStateForAuthRestart();
 
+  // Caches network error details from the stream if available
+  // and resets the stream.
+  void CacheNetErrorDetailsAndResetStream();
+
   // Records metrics relating to SSL fallbacks.
   void RecordSSLFallbackMetrics(int result);
 
@@ -319,8 +339,13 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   scoped_refptr<IOBuffer> read_buf_;
   int read_buf_len_;
 
-  // Total number of bytes received on streams for this transaction.
-  int64 total_received_bytes_;
+  // Total number of bytes received on all destroyed HttpStreams for this
+  // transaction.
+  int64_t total_received_bytes_;
+
+  // Total number of bytes sent on all destroyed HttpStreams for this
+  // transaction.
+  int64_t total_sent_bytes_;
 
   // When the transaction started / finished sending the request, including
   // the body, if present.
@@ -343,7 +368,9 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   BeforeProxyHeadersSentCallback before_proxy_headers_sent_callback_;
 
   ConnectionAttempts connection_attempts_;
-
+  IPEndPoint remote_endpoint_;
+  // Network error details for this transaction.
+  NetErrorDetails net_error_details_;
   DISALLOW_COPY_AND_ASSIGN(HttpNetworkTransaction);
 };
 

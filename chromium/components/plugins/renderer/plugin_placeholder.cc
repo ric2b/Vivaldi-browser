@@ -11,7 +11,7 @@
 #include "gin/object_template_builder.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace plugins {
 
@@ -27,14 +27,14 @@ PluginPlaceholderBase::PluginPlaceholderBase(
     : content::RenderFrameObserver(render_frame),
       frame_(frame),
       plugin_params_(params),
-      plugin_(WebViewPlugin::Create(this,
+      plugin_(WebViewPlugin::Create(render_frame->GetRenderView(),
+                                    this,
                                     render_frame
                                         ? render_frame->GetWebkitPreferences()
                                         : content::WebPreferences(),
                                     html_data,
                                     GURL(kPluginPlaceholderDataURL))),
-      hidden_(false) {
-}
+      hidden_(false) {}
 
 PluginPlaceholderBase::~PluginPlaceholderBase() {
 }
@@ -78,17 +78,18 @@ void PluginPlaceholderBase::HidePlugin() {
   if (element.hasAttribute("width") && element.hasAttribute("height")) {
     std::string width_str("width:[\\s]*");
     width_str += element.getAttribute("width").utf8().data();
-    if (base::EndsWith(width_str, "px", false)) {
+    if (base::EndsWith(width_str, "px", base::CompareCase::INSENSITIVE_ASCII)) {
       width_str = width_str.substr(0, width_str.length() - 2);
     }
-    base::TrimWhitespace(width_str, base::TRIM_TRAILING, &width_str);
+    base::TrimWhitespaceASCII(width_str, base::TRIM_TRAILING, &width_str);
     width_str += "[\\s]*px";
     std::string height_str("height:[\\s]*");
     height_str += element.getAttribute("height").utf8().data();
-    if (base::EndsWith(height_str, "px", false)) {
+    if (base::EndsWith(height_str, "px",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
       height_str = height_str.substr(0, height_str.length() - 2);
     }
-    base::TrimWhitespace(height_str, base::TRIM_TRAILING, &height_str);
+    base::TrimWhitespaceASCII(height_str, base::TRIM_TRAILING, &height_str);
     height_str += "[\\s]*px";
     blink::WebNode parent = element;
     while (!parent.parentNode().isNull()) {

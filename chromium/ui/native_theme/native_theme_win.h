@@ -16,8 +16,8 @@
 #include <windows.h>
 #include <uxtheme.h>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/sys_color_change_listener.h"
@@ -114,15 +114,21 @@ class NATIVE_THEME_EXPORT NativeThemeWin : public NativeTheme,
              const ExtraParams& extra) const override;
   SkColor GetSystemColor(ColorId color_id) const override;
 
- private:
+ protected:
   NativeThemeWin();
   ~NativeThemeWin() override;
 
+ private:
   // gfx::SysColorChangeListener implementation:
   void OnSysColorChange() override;
 
   // Update the locally cached set of system colors.
   void UpdateSystemColors();
+
+  // Painting functions that paint to SkCanvas.
+  void PaintMenuSeparator(SkCanvas* canvas, const gfx::Rect& rect) const;
+  void PaintMenuGutter(SkCanvas* canvas, const gfx::Rect& rect) const;
+  void PaintMenuBackground(SkCanvas* canvas, const gfx::Rect& rect) const;
 
   // Paint directly to canvas' HDC.
   void PaintDirect(SkCanvas* canvas,

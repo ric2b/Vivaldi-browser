@@ -3,64 +3,148 @@
 // found in the LICENSE file.
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/values.h"
+#include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
-#import "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/cocoa/cocoa_profile_test.h"
+#include "chrome/browser/ui/browser_window.h"
+#import "chrome/browser/ui/cocoa/cocoa_profile_test.h"
 #import "chrome/browser/ui/cocoa/extensions/extension_installed_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
+#include "chrome/browser/ui/extensions/extension_installed_bubble.h"
+#include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/crx_file/id_util.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/common/value_builder.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
 #include "ui/gfx/codec/png_codec.h"
 
 using extensions::Extension;
-
-// ExtensionInstalledBubbleController with removePageActionPreview overridden
-// to a no-op, because pageActions are not yet hooked up in the test browser.
-@interface ExtensionInstalledBubbleControllerForTest :
-    ExtensionInstalledBubbleController {
-}
-
-// Do nothing, because browser window is not set up with page actions
-// for unit testing.
-- (void)removePageActionPreview;
-
-@end
-
-@implementation ExtensionInstalledBubbleControllerForTest
-
-- (void)removePageActionPreview { }
-
-@end
-
-namespace keys = extensions::manifest_keys;
+using extensions::DictionaryBuilder;
 
 class ExtensionInstalledBubbleControllerTest : public CocoaProfileTest {
+ protected:
+  ExtensionInstalledBubbleControllerTest() {}
+  ~ExtensionInstalledBubbleControllerTest() override {}
 
- public:
+  enum ExtensionType {
+    BROWSER_ACTION,
+    PAGE_ACTION,
+    APP,
+  };
+
   void SetUp() override {
     CocoaProfileTest::SetUp();
     ASSERT_TRUE(browser());
     window_ = browser()->window()->GetNativeWindow();
     icon_ = LoadTestIcon();
     base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-    extension_service_ = static_cast<extensions::TestExtensionSystem*>(
+    extensionService_ = static_cast<extensions::TestExtensionSystem*>(
         extensions::ExtensionSystem::Get(profile()))->CreateExtensionService(
             &command_line, base::FilePath(), false);
   }
 
+  // Adds a WebContents to the tab strip.
+  void AddWebContents() {
+    content::SiteInstance* instance = content::SiteInstance::Create(profile());
+    content::WebContents* web_contents = content::WebContents::Create(
+        content::WebContents::CreateParams(profile(), instance));
+    browser()->tab_strip_model()->AppendWebContents(web_contents, true);
+  }
+
+  // Create a simple extension of the given |type| and manifest |location|, and
+  // optionally with an associated keybinding.
+  void CreateExtension(ExtensionType type,
+                       bool has_keybinding,
+                       extensions::Manifest::Location location) {
+    DictionaryBuilder manifest;
+    manifest.Set("version", "1.0");
+    manifest.Set("name", "extension");
+    manifest.Set("manifest_version", 2);
+    switch (type) {
+      case PAGE_ACTION:
+        manifest.Set("page_action", DictionaryBuilder());
+        break;
+      case BROWSER_ACTION:
+        manifest.Set("browser_action", DictionaryBuilder());
+        break;
+      case APP:
+        manifest.Set("app",
+                     std::move(DictionaryBuilder().Set(
+                         "launch", std::move(DictionaryBuilder().Set(
+                                       "web_url", "http://www.example.com")))));
+        break;
+    }
+
+    if (has_keybinding) {
+      DictionaryBuilder command;
+      command.Set(type == PAGE_ACTION ? "_execute_page_action"
+                                      : "_execute_browser_action",
+                  std::move(DictionaryBuilder().Set(
+                      "suggested_key",
+                      std::move(DictionaryBuilder()
+                                    .Set("mac", "MacCtrl+Shift+E")
+                                    .Set("default", "Ctrl+Shift+E")))));
+      manifest.Set("commands", std::move(command));
+    }
+
+    extension_ = extensions::ExtensionBuilder()
+                     .SetManifest(std::move(manifest))
+                     .SetID(crx_file::id_util::GenerateId("foo"))
+                     .SetLocation(location)
+                     .Build();
+    extensionService_->AddExtension(extension_.get());
+    if (has_keybinding) {
+      // Slight hack: manually notify the command service of the extension since
+      // it doesn't go through the normal installation flow.
+      extensions::CommandService::Get(profile())->UpdateKeybindingsForTest(
+          extension_.get());
+    }
+  }
+  void CreateExtension(ExtensionType type, bool has_keybinding) {
+    CreateExtension(type, has_keybinding, extensions::Manifest::INTERNAL);
+  }
+
+  // Create and return an ExtensionInstalledBubbleController and instruct it to
+  // show itself.
+  ExtensionInstalledBubbleController* CreateController() {
+    extensionBubble_.reset(
+        new ExtensionInstalledBubble(extension_.get(), browser(), icon_));
+    extensionBubble_->Initialize();
+    ExtensionInstalledBubbleController* controller =
+        [[ExtensionInstalledBubbleController alloc]
+            initWithParentWindow:window_
+                 extensionBubble:extensionBubble_.get()];
+
+    // Bring up the window and disable close animation.
+    [controller showWindow:nil];
+    NSWindow* bubbleWindow = [controller window];
+    CHECK([bubbleWindow isKindOfClass:[InfoBubbleWindow class]]);
+    [static_cast<InfoBubbleWindow*>(bubbleWindow)
+        setAllowedAnimations:info_bubble::kAnimateNone];
+
+    return controller;
+  }
+
+  NSWindow* window() { return window_; }
+
+ private:
   // Load test icon from extension test directory.
   SkBitmap LoadTestIcon() {
     base::FilePath path;
@@ -77,193 +161,182 @@ class ExtensionInstalledBubbleControllerTest : public CocoaProfileTest {
     return bitmap;
   }
 
-  // Create a skeletal framework of either page action or browser action
-  // type.  This extension only needs to have a type and a name to initialize
-  // the ExtensionInstalledBubble for unit testing.
-  scoped_refptr<Extension> CreateExtension(
-        extension_installed_bubble::ExtensionType type) {
-    base::FilePath path;
-    PathService::Get(chrome::DIR_TEST_DATA, &path);
-    path = path.AppendASCII("extensions").AppendASCII("dummy");
-
-    base::DictionaryValue extension_input_value;
-    extension_input_value.SetString(keys::kVersion, "1.0.0.0");
-    if (type == extension_installed_bubble::kPageAction) {
-      extension_input_value.SetString(keys::kName, "page action extension");
-      base::DictionaryValue* action = new base::DictionaryValue;
-      action->SetString(keys::kPageActionId, "ExtensionActionId");
-      action->SetString(keys::kPageActionDefaultTitle, "ExtensionActionTitle");
-      action->SetString(keys::kPageActionDefaultIcon, "image1.png");
-      extension_input_value.Set(keys::kPageAction, action);
-    } else if (type == extension_installed_bubble::kBrowserAction) {
-      extension_input_value.SetString(keys::kName, "browser action extension");
-      base::DictionaryValue* browser_action = new base::DictionaryValue;
-      // An empty dictionary is enough to create a Browser Action.
-      extension_input_value.Set(keys::kBrowserAction, browser_action);
-    } else if (type == extension_installed_bubble::kApp) {
-      extension_input_value.SetString(keys::kName, "test app");
-      extension_input_value.SetString(keys::kLaunchWebURL,
-                                      "http://www.example.com");
-    }
-
-    std::string error;
-    scoped_refptr<Extension> extension =
-        Extension::Create(path, extensions::Manifest::INVALID_LOCATION,
-                          extension_input_value, Extension::NO_FLAGS, &error);
-    extension_service_->AddExtension(extension.get());
-    return extension;
-  }
-
   // Required to initialize the extension installed bubble.
   NSWindow* window_;  // weak, owned by CocoaProfileTest.
 
-  ExtensionService* extension_service_;
+  // The associated ExtensionService, owned by the ExtensionSystem.
+  ExtensionService* extensionService_;
 
   // Skeleton extension to be tested; reinitialized for each test.
   scoped_refptr<Extension> extension_;
 
+  // The bubble that tests are run on.
+  scoped_ptr<ExtensionInstalledBubble> extensionBubble_;
+
   // The icon_ to be loaded into the bubble window.
   SkBitmap icon_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionInstalledBubbleControllerTest);
 };
 
-// Confirm that window sizes are set correctly for a page action extension.
-TEST_F(ExtensionInstalledBubbleControllerTest, PageActionTest) {
-  extension_ = CreateExtension(extension_installed_bubble::kPageAction);
-  ExtensionInstalledBubbleControllerForTest* controller =
-      [[ExtensionInstalledBubbleControllerForTest alloc]
-          initWithParentWindow:window_
-                     extension:extension_.get()
-                        bundle:NULL
-                       browser:browser()
-                          icon:icon_];
-  EXPECT_TRUE(controller);
-
-  // Initialize window without having to calculate tabstrip locations.
-  [controller initializeWindow];
-  EXPECT_TRUE([controller window]);
-
-  int height = [controller calculateWindowHeight];
-  // Height should equal the vertical padding + height of all messages.
-  int correctHeight = 2 * extension_installed_bubble::kOuterVerticalMargin +
-      2 * extension_installed_bubble::kInnerVerticalMargin +
-      NSHeight([controller headingFrame]) +
-      NSHeight([controller frameOfHowToUse]) +
-      NSHeight([controller frameOfHowToManage]);
-  if ([controller showSyncPromo]) {
-    correctHeight += NSHeight([controller frameOfSigninPromo]) +
-                     extension_installed_bubble::kInnerVerticalMargin;
+// We don't want to just test the bounds of these frames, because that results
+// in a change detector test (and just duplicates the logic in the class).
+// Instead, we do a few sanity checks.
+void SanityCheckFrames(NSRect frames[], size_t size) {
+  for (size_t i = 0; i < size; ++i) {
+    // Check 1: Non-hidden views should have a non-empty frame.
+    EXPECT_FALSE(NSIsEmptyRect(frames[i])) <<
+        "Frame at index " << i << " is empty";
+    // Check 2: No frames should overlap.
+    for (size_t j = 0; j < i; ++j) {
+      EXPECT_FALSE(NSIntersectsRect(frames[i], frames[j])) <<
+          "Frame at index " << i << " intersects frame at index " << j;
+    }
   }
-  EXPECT_EQ(height, correctHeight);
-  [controller setMessageFrames:height];
+}
 
-  NSRect msg1Frame = [controller headingFrame];
-  NSRect msg2Frame = [controller frameOfHowToUse];
-  NSRect msg3Frame = [controller frameOfHowToManage];
-  NSRect msg4Frame = [controller frameOfSigninPromo];
+// Test the basic layout of the bubble for an extension that is from the store.
+TEST_F(ExtensionInstalledBubbleControllerTest,
+       BubbleLayoutFromStoreNoKeybinding) {
+  CreateExtension(BROWSER_ACTION, false);
+  ExtensionInstalledBubbleController* controller = CreateController();
+  ASSERT_TRUE(controller);
 
-  int next_y = extension_installed_bubble::kOuterVerticalMargin;
-  if ([controller showSyncPromo]) {
-    // Bottom message should be kOuterVerticalMargin pixels above window edge.
-    EXPECT_EQ(next_y, NSMinY(msg4Frame));
-    next_y = NSMinY(msg4Frame) + NSHeight(msg4Frame) +
-            extension_installed_bubble::kInnerVerticalMargin;
-  }
+  // The extension bubble should have the "how to use", "how to manage", and
+  // "sign in promo" areas. Since it doesn't have an associated keybinding, it
+  // shouldn't have the "manage shortcut" view.
+  EXPECT_FALSE([[controller howToUse] isHidden]);
+  EXPECT_FALSE([[controller howToManage] isHidden]);
+  EXPECT_FALSE([[controller promoContainer] isHidden]);
+  EXPECT_TRUE([[controller manageShortcutLink] isHidden]);
 
-  // HowToManage frame should be kInnerVerticalMargin pixels above sync promo,
-  // unless sync promo is hidden, then kOuterVerticalMargin pixels above.
-  EXPECT_EQ(next_y, NSMinY(msg3Frame));
+  NSRect headingFrame = [[controller heading] frame];
+  NSRect closeFrame = [[controller closeButton] frame];
+  NSRect howToUseFrame = [[controller howToUse] frame];
+  NSRect howToManageFrame = [[controller howToManage] frame];
+  NSRect syncPromoFrame = [[controller promoContainer] frame];
+  NSRect iconFrame = [[controller iconImage] frame];
 
-  // Page action message should be kInnerVerticalMargin pixels above bottom msg.
-  EXPECT_EQ(NSMinY(msg3Frame) + NSHeight(msg3Frame) +
-                extension_installed_bubble::kInnerVerticalMargin,
-            NSMinY(msg2Frame));
+  NSRect frames[] = {headingFrame, closeFrame, howToUseFrame, howToManageFrame,
+                     syncPromoFrame, iconFrame};
+  SanityCheckFrames(frames, arraysize(frames));
 
-  // Top message should be kInnerVerticalMargin pixels above Page action msg.
-  EXPECT_EQ(NSMinY(msg2Frame) + NSHeight(msg2Frame) +
-                extension_installed_bubble::kInnerVerticalMargin,
-            NSMinY(msg1Frame));
+  // Check the overall layout of the bubble; it should be:
+  // |------| | Heading        |
+  // | icon | | How to Use     |
+  // |------| | How to Manage  |
+  // |-------------------------|
+  // |       Sync Promo        |
+  // |-------------------------|
+  EXPECT_GT(NSMinY(headingFrame), NSMinY(howToUseFrame));
+  EXPECT_GT(NSMinY(howToUseFrame), NSMinY(howToManageFrame));
+  EXPECT_GT(NSMinY(howToManageFrame), NSMinY(syncPromoFrame));
+  EXPECT_GT(NSMinY(iconFrame), NSMinY(syncPromoFrame));
+  EXPECT_GT(NSMinY(iconFrame), 0);
+  EXPECT_EQ(NSMinY(syncPromoFrame), 0);
 
-  [controller setPageActionPreviewShowing:NO];
   [controller close];
 }
 
-TEST_F(ExtensionInstalledBubbleControllerTest, BrowserActionTest) {
-  extension_ = CreateExtension(extension_installed_bubble::kBrowserAction);
-  ExtensionInstalledBubbleControllerForTest* controller =
-      [[ExtensionInstalledBubbleControllerForTest alloc]
-          initWithParentWindow:window_
-                     extension:extension_.get()
-                        bundle:NULL
-                       browser:browser()
-                          icon:icon_];
-  EXPECT_TRUE(controller);
+// Test the layout of a bubble for an extension that is from the store with an
+// associated keybinding.
+TEST_F(ExtensionInstalledBubbleControllerTest,
+       BubbleLayoutFromStoreWithKeybinding) {
+  CreateExtension(BROWSER_ACTION, true);
+  ExtensionInstalledBubbleController* controller = CreateController();
+  ASSERT_TRUE(controller);
 
-  // Initialize window without having to calculate tabstrip locations.
-  [controller initializeWindow];
-  EXPECT_TRUE([controller window]);
+  // Since the extension has a keybinding, the "how to manage" section is
+  // hidden. The other fields are present.
+  EXPECT_FALSE([[controller howToUse] isHidden]);
+  EXPECT_TRUE([[controller howToManage] isHidden]);
+  EXPECT_FALSE([[controller manageShortcutLink] isHidden]);
+  EXPECT_FALSE([[controller promoContainer] isHidden]);
 
-  int height = [controller calculateWindowHeight];
-  // Height should equal the vertical padding + height of all messages.
-  int correctHeight = 2 * extension_installed_bubble::kOuterVerticalMargin +
-      2 * extension_installed_bubble::kInnerVerticalMargin +
-      NSHeight([controller headingFrame]) +
-      NSHeight([controller frameOfHowToUse]) +
-      NSHeight([controller frameOfHowToManage]);
-  if ([controller showSyncPromo]) {
-    correctHeight += NSHeight([controller frameOfSigninPromo]) +
-                     extension_installed_bubble::kInnerVerticalMargin;
-  }
-  EXPECT_EQ(height, correctHeight);
-  [controller setMessageFrames:height];
+  NSRect headingFrame = [[controller heading] frame];
+  NSRect closeFrame = [[controller closeButton] frame];
+  NSRect howToUseFrame = [[controller howToUse] frame];
+  NSRect manageShortcutFrame = [[controller manageShortcutLink] frame];
+  NSRect syncPromoFrame = [[controller promoContainer] frame];
+  NSRect iconFrame = [[controller iconImage] frame];
 
-  NSRect msg1Frame = [controller headingFrame];
-  NSRect msg2Frame = [controller frameOfHowToUse];
-  NSRect msg3Frame = [controller frameOfHowToManage];
-  NSRect msg4Frame = [controller frameOfSigninPromo];
+  NSRect frames[] = {headingFrame, closeFrame, howToUseFrame,
+                     manageShortcutFrame, syncPromoFrame, iconFrame};
+  SanityCheckFrames(frames, arraysize(frames));
 
-  int next_y = extension_installed_bubble::kOuterVerticalMargin;
-  if ([controller showSyncPromo]) {
-    // Bottom message should be kOuterVerticalMargin pixels above window edge.
-    EXPECT_EQ(next_y, NSMinY(msg4Frame));
-    next_y = NSMinY(msg4Frame) + NSHeight(msg4Frame) +
-            extension_installed_bubble::kInnerVerticalMargin;
-  }
-
-  // HowToManage frame should be kInnerVerticalMargin pixels above sync promo,
-  // unless sync promo is hidden, then kOuterVerticalMargin pixels above.
-  EXPECT_EQ(next_y, NSMinY(msg3Frame));
-
-  // Browser action message should be kInnerVerticalMargin pixels above bottom
-  // msg.
-  EXPECT_EQ(NSMinY(msg3Frame) + NSHeight(msg3Frame) +
-                extension_installed_bubble::kInnerVerticalMargin,
-            NSMinY(msg2Frame));
-
-  // Top message should be kInnerVerticalMargin pixels above Browser action msg.
-  EXPECT_EQ(NSMinY(msg2Frame) + NSHeight(msg2Frame) +
-                extension_installed_bubble::kInnerVerticalMargin,
-            NSMinY(msg1Frame));
+  // Layout should be:
+  // |------| | Heading         |
+  // | icon | | How to Use      |
+  // |------| | Manage shortcut |
+  // |--------------------------|
+  // |       Sync Promo         |
+  // |--------------------------|
+  EXPECT_GT(NSMinY(headingFrame), NSMinY(howToUseFrame));
+  EXPECT_GT(NSMinY(howToUseFrame), NSMinY(manageShortcutFrame));
+  EXPECT_GT(NSMinY(manageShortcutFrame), NSMinY(syncPromoFrame));
+  EXPECT_GT(NSMinY(iconFrame), NSMinY(syncPromoFrame));
+  EXPECT_GT(NSMinY(iconFrame), 0);
+  EXPECT_EQ(NSMinY(syncPromoFrame), 0);
 
   [controller close];
+}
+
+// Test the layout of a bubble for an unpacked extension (which is not syncable)
+// and verify that the page action preview is enabled.
+TEST_F(ExtensionInstalledBubbleControllerTest, BubbleLayoutPageActionUnpacked) {
+  // Page actions need a web contents (for the location bar to not break).
+  AddWebContents();
+
+  LocationBarTesting* locationBar =
+      browser()->window()->GetLocationBar()->GetLocationBarForTesting();
+  // To start, there should be no visible page actions.
+  EXPECT_EQ(0, locationBar->PageActionVisibleCount());
+
+  CreateExtension(PAGE_ACTION, true, extensions::Manifest::UNPACKED);
+  ExtensionInstalledBubbleController* controller = CreateController();
+  ASSERT_TRUE(controller);
+
+  // The extension has a keybinding (so the "how to manage" view is hidden) and
+  // is an unpacked extension (so the "sign in promo" view is also hidden).
+  EXPECT_FALSE([[controller howToUse] isHidden]);
+  EXPECT_TRUE([[controller howToManage] isHidden]);
+  EXPECT_TRUE([[controller promoContainer] isHidden]);
+  EXPECT_FALSE([[controller manageShortcutLink] isHidden]);
+
+  NSRect headingFrame = [[controller heading] frame];
+  NSRect closeFrame = [[controller closeButton] frame];
+  NSRect howToUseFrame = [[controller howToUse] frame];
+  NSRect howToManageFrame = [[controller howToManage] frame];
+  NSRect iconFrame = [[controller iconImage] frame];
+
+  NSRect frames[] = {headingFrame, closeFrame, howToUseFrame, howToManageFrame,
+                     iconFrame};
+  SanityCheckFrames(frames, arraysize(frames));
+
+  // Layout should be:
+  // |------| | Heading         |
+  // | icon | | How to Use      |
+  // |------| | Manage shortcut |
+  EXPECT_FALSE(NSIntersectsRect(howToUseFrame, howToManageFrame));
+  EXPECT_GT(NSMinY(headingFrame), NSMinY(howToManageFrame));
+  EXPECT_GT(NSMinY(howToUseFrame), NSMinY(howToManageFrame));
+  EXPECT_GT(NSMinY(iconFrame), 0);
+
+  // The page action preview should be visible.
+  EXPECT_TRUE([controller pageActionPreviewShowing]);
+  EXPECT_EQ(1, locationBar->PageActionVisibleCount());
+
+  [controller close];
+  // The page action preview should have ended.
+  EXPECT_EQ(0, locationBar->PageActionVisibleCount());
 }
 
 TEST_F(ExtensionInstalledBubbleControllerTest, ParentClose) {
-  extension_ = CreateExtension(extension_installed_bubble::kBrowserAction);
-  ExtensionInstalledBubbleControllerForTest* controller =
-      [[ExtensionInstalledBubbleControllerForTest alloc]
-          initWithParentWindow:window_
-                     extension:extension_.get()
-                        bundle:NULL
-                       browser:browser()
-                          icon:icon_];
+  CreateExtension(BROWSER_ACTION, false);
+  ExtensionInstalledBubbleController* controller = CreateController();
   EXPECT_TRUE(controller);
 
-  // Bring up the window and disable close animation.
-  [controller showWindow:nil];
   NSWindow* bubbleWindow = [controller window];
-  ASSERT_TRUE([bubbleWindow isKindOfClass:[InfoBubbleWindow class]]);
-  [static_cast<InfoBubbleWindow*>(bubbleWindow)
-      setAllowedAnimations:info_bubble::kAnimateNone];
 
   // Observe whether the bubble window closes.
   NSString* notification = NSWindowWillCloseNotification;
@@ -274,7 +347,7 @@ TEST_F(ExtensionInstalledBubbleControllerTest, ParentClose) {
 
   // The bubble window goes from visible to not-visible.
   EXPECT_TRUE([bubbleWindow isVisible]);
-  [window_ close];
+  [window() close];
   EXPECT_FALSE([bubbleWindow isVisible]);
 
   [[NSNotificationCenter defaultCenter] removeObserver:observer];
@@ -284,19 +357,11 @@ TEST_F(ExtensionInstalledBubbleControllerTest, ParentClose) {
 }
 
 TEST_F(ExtensionInstalledBubbleControllerTest, AppTest) {
-  extension_ = CreateExtension(extension_installed_bubble::kApp);
-  ExtensionInstalledBubbleControllerForTest* controller =
-      [[ExtensionInstalledBubbleControllerForTest alloc]
-          initWithParentWindow:window_
-                     extension:extension_.get()
-                        bundle:NULL
-                       browser:browser()
-                          icon:icon_];
+  CreateExtension(APP, false);
+  ExtensionInstalledBubbleController* controller = CreateController();
   EXPECT_TRUE(controller);
-  [controller initializeWindow];
-  EXPECT_TRUE([controller window]);
 
-  int height = [controller calculateWindowHeight];
+  int height = NSHeight([[controller window] frame]);
 
   // Make sure there is always enough room for the icon and margin.
   int minHeight = extension_installed_bubble::kIconSize +
@@ -308,4 +373,3 @@ TEST_F(ExtensionInstalledBubbleControllerTest, AppTest) {
 
   [controller close];
 }
-

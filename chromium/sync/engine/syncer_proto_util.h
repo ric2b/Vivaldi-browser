@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/base/model_type.h"
@@ -38,14 +39,14 @@ class Entry;
 }
 
 // Returns the types to migrate from the data in |response|.
-SYNC_EXPORT_PRIVATE ModelTypeSet GetTypesToMigrate(
-    const sync_pb::ClientToServerResponse& response);
+SYNC_EXPORT ModelTypeSet
+GetTypesToMigrate(const sync_pb::ClientToServerResponse& response);
 
 // Builds a SyncProtocolError from the data in |error|.
-SYNC_EXPORT_PRIVATE SyncProtocolError ConvertErrorPBToLocalType(
+SYNC_EXPORT SyncProtocolError ConvertErrorPBToSyncProtocolError(
     const sync_pb::ClientToServerResponse_Error& error);
 
-class SYNC_EXPORT_PRIVATE SyncerProtoUtil {
+class SYNC_EXPORT SyncerProtoUtil {
  public:
   // Posts the given message and fills the buffer with the returned value.
   // Returns true on success.  Also handles store birthday verification: will
@@ -58,7 +59,13 @@ class SYNC_EXPORT_PRIVATE SyncerProtoUtil {
       sessions::SyncSession* session,
       ModelTypeSet* partial_failure_data_types);
 
+  // Specifies where entity's position should be updated from the data in
+  // GetUpdates message.
   static bool ShouldMaintainPosition(const sync_pb::SyncEntity& sync_entity);
+
+  // Specifies where entity's parent ID should be updated from the data in
+  // GetUpdates message.
+  static bool ShouldMaintainHierarchy(const sync_pb::SyncEntity& sync_entity);
 
   // Extract the name field from a sync entity.
   static const std::string& NameFromSyncEntity(
@@ -104,6 +111,14 @@ class SYNC_EXPORT_PRIVATE SyncerProtoUtil {
 
   // Helper functions for PostClientToServerMessage.
 
+  // Analyzes error fields and store birthday in response message, compares
+  // store birthday with value in directory and returns corresponding
+  // SyncProtocolError. If needed updates store birthday in directory.
+  // This function makes it easier to test error handling.
+  static SyncProtocolError GetProtocolErrorFromResponse(
+      const sync_pb::ClientToServerResponse& response,
+      syncable::Directory* dir);
+
   // Verifies the store birthday, alerting/resetting as appropriate if there's a
   // mismatch. Return false if the syncer should be stuck.
   static bool VerifyResponseBirthday(
@@ -127,8 +142,6 @@ class SYNC_EXPORT_PRIVATE SyncerProtoUtil {
   friend class SyncerProtoUtilTest;
   FRIEND_TEST_ALL_PREFIXES(SyncerProtoUtilTest, AddRequestBirthday);
   FRIEND_TEST_ALL_PREFIXES(SyncerProtoUtilTest, PostAndProcessHeaders);
-  FRIEND_TEST_ALL_PREFIXES(SyncerProtoUtilTest, VerifyDisabledByAdmin);
-  FRIEND_TEST_ALL_PREFIXES(SyncerProtoUtilTest, VerifyResponseBirthday);
   FRIEND_TEST_ALL_PREFIXES(SyncerProtoUtilTest, HandleThrottlingNoDatatypes);
   FRIEND_TEST_ALL_PREFIXES(SyncerProtoUtilTest, HandleThrottlingWithDatatypes);
 

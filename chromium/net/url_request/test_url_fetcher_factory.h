@@ -12,10 +12,10 @@
 #include <string>
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -94,8 +94,8 @@ class TestURLFetcher : public URLFetcher {
   void SetUploadFilePath(
       const std::string& upload_content_type,
       const base::FilePath& file_path,
-      uint64 range_offset,
-      uint64 range_length,
+      uint64_t range_offset,
+      uint64_t range_length,
       scoped_refptr<base::TaskRunner> file_task_runner) override;
   void SetUploadStreamFactory(
       const std::string& upload_content_type,
@@ -114,7 +114,7 @@ class TestURLFetcher : public URLFetcher {
   void AddExtraRequestHeader(const std::string& header_line) override;
   void SetRequestContext(
       URLRequestContextGetter* request_context_getter) override;
-  void SetFirstPartyForCookies(const GURL& first_party_for_cookies) override;
+  void SetInitiatorURL(const GURL& initiator) override;
   void SetURLRequestUserData(
       const void* key,
       const CreateDataCallback& create_data_callback) override;
@@ -134,6 +134,12 @@ class TestURLFetcher : public URLFetcher {
   HttpResponseHeaders* GetResponseHeaders() const override;
   HostPortPair GetSocketAddress() const override;
   bool WasFetchedViaProxy() const override;
+  bool WasCached() const override;
+  // Only valid when the response was set via SetResponseString().
+  int64_t GetReceivedResponseContentLength() const override;
+  // Only valid when the response was set via SetResponseString(), or
+  // set_was_cached(true) was called.
+  int64_t GetTotalReceivedBytes() const override;
   void Start() override;
 
   // URL we were created with. Because of how we're using URLFetcher GetURL()
@@ -183,6 +189,7 @@ class TestURLFetcher : public URLFetcher {
   }
   void set_cookies(const ResponseCookies& c) { fake_cookies_ = c; }
   void set_was_fetched_via_proxy(bool flag);
+  void set_was_cached(bool flag);
   void set_response_headers(scoped_refptr<HttpResponseHeaders> headers);
   void set_backoff_delay(base::TimeDelta backoff_delay);
   void SetDelegateForTests(DelegateForTests* delegate_for_tests);
@@ -222,7 +229,10 @@ class TestURLFetcher : public URLFetcher {
   ResponseDestinationType fake_response_destination_;
   std::string fake_response_string_;
   base::FilePath fake_response_file_path_;
+  bool write_response_file_;
   bool fake_was_fetched_via_proxy_;
+  bool fake_was_cached_;
+  int64_t fake_response_bytes_;
   scoped_refptr<HttpResponseHeaders> fake_response_headers_;
   HttpRequestHeaders fake_extra_request_headers_;
   int fake_max_retries_;

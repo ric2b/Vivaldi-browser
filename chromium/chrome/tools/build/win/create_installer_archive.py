@@ -78,7 +78,7 @@ def BuildVersion(build_dir, vivaldi_version=None, vivaldi_build_version= None):
   return '%s.%s.%s.%s' % (major, minor, build, patch)
 
 
-def CompressUsingLZMA(build_dir, compressed_file, input_file):
+def CompressUsingLZMA(build_dir, compressed_file, input_file, verbose):
   lzma_exec = GetLZMAExec(build_dir)
   cmd = [lzma_exec,
          'a', '-t7z',
@@ -106,7 +106,7 @@ def CompressUsingLZMA(build_dir, compressed_file, input_file):
     
   if os.path.exists(compressed_file):
     os.remove(compressed_file)
-  RunSystemCommand(cmd, retry_fun = retry)
+  RunSystemCommand(cmd, verbose, retry_fun = retry)
 
 
 def CopyAllFilesToStagingDir(config, distribution, staging_dir, build_dir,
@@ -196,7 +196,7 @@ def GenerateDiffPatch(options, orig_file, new_file, patch_file):
   else:
     exe_file = os.path.join(options.build_dir, BSDIFF_EXEC)
     cmd = [exe_file, orig_file, new_file, patch_file,]
-  RunSystemCommand(cmd)
+  RunSystemCommand(cmd, options.verbose)
 
 def GetLZMAExec(build_dir):
   lzma_exec = os.path.join(build_dir, "..", "..", "chromium", "third_party",
@@ -215,7 +215,7 @@ def GetPrevVersion(build_dir, temp_dir, last_chrome_installer, output_name):
          '-o"%s"' % temp_dir,
          prev_archive_file,
          'Chrome-bin/*/vivaldi.dll',]
-  RunSystemCommand(cmd)
+  RunSystemCommand(cmd, options.verbose)
   dll_path = glob.glob(os.path.join(temp_dir, 'Chrome-bin', '*', 'vivaldi.dll'))
   return os.path.split(os.path.split(dll_path[0])[0])[1]
 
@@ -246,20 +246,24 @@ def Readconfig(input_file, current_version):
   config.read(input_file)
   return config
 
-def RunSystemCommand(cmd, retry_fun=None, **kw):
-  print 'Running', cmd
-  exit_code = subprocess.call(cmd, **kw)
-  if (exit_code != 0):
-    print retry_fun, callable(retry_fun)
-    if retry_fun and callable(retry_fun):
-      newcmd = retry_fun(exit_code)
-      if newcmd:
-        print 'Retrying command', newcmd
-        exit_code = subprocess.call(cmd, **kw)
-        print "Retry exit code:", exit_code
-        
-    raise Exception("Error while running cmd: %s, exit_code: %s" %
-                    (cmd, exit_code))
+def RunSystemCommand(cmd, verbose, retry_fun=None, **kw):
+  """Runs |cmd|, prints the |cmd| and its output if |verbose|; otherwise
+  captures its output and only emits it on failure.
+  """
+  if verbose:
+    print 'Running', cmd
+
+  try:
+    # Run |cmd|, redirecting stderr to stdout in order for captured errors to be
+    # inline with corresponding stdout.
+    output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, **kw)
+    if verbose:
+      print output
+  except subprocess.CalledProcessError as e:
+    raise Exception("Error while running cmd: %s\n"
+                    "Exit code: %s\n"
+                    "Command output:\n%s" %
+                    (e.cmd, e.returncode, e.output))
 
 def CreateArchiveFile(options, staging_dir, current_version, prev_version):
   """Creates a new installer archive file after deleting any existing old file.
@@ -315,10 +319,10 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
   # There doesnt seem to be any way in 7za.exe to override existing file so
   # we always delete before creating a new one.
   if not os.path.exists(archive_file):
-    RunSystemCommand(cmd)
+    RunSystemCommand(cmd, options.verbose)
   elif options.skip_rebuild_archive != "true":
     os.remove(archive_file)
-    RunSystemCommand(cmd)
+    RunSystemCommand(cmd, options.verbose)
 
   # Do not compress the archive in developer (component) builds.
   if options.component_build == '1':
@@ -349,7 +353,8 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
   compressed_archive_file_path = os.path.join(options.output_dir,
                                               compressed_archive_file)
   try:
-    CompressUsingLZMA(options.build_dir, compressed_archive_file_path, orig_file)
+    CompressUsingLZMA(options.build_dir, compressed_archive_file_path, orig_file,
+                      options.verbose)
   except LZMA_OOM:
     return os.path.basename(orig_file)
     
@@ -375,7 +380,8 @@ def PrepareSetupExec(options, current_version, prev_version):
                  '_from_' + prev_version + COMPRESSED_FILE_EXT
     setup_file_path = os.path.join(options.build_dir, setup_file)
     SignTarget(setup_file_path)
-    CompressUsingLZMA(options.build_dir, setup_file_path, patch_file)
+    CompressUsingLZMA(options.build_dir, setup_file_path, patch_file,
+                      options.verbose)
   else:
     SignTarget(os.path.join(options.build_dir, SETUP_EXEC))
     cmd = ['makecab.exe',
@@ -383,8 +389,7 @@ def PrepareSetupExec(options, current_version, prev_version):
            '/V1',
            '/L', options.output_dir,
            os.path.join(options.build_dir, SETUP_EXEC),]
-    # Send useless makecab progress on stdout to the bitbucket.
-    RunSystemCommand(cmd, stdout=open(os.devnull, "w"))
+    RunSystemCommand(cmd, options.verbose)
     setup_file = SETUP_EXEC[:-1] + "_"
 
   return setup_file
@@ -709,6 +714,9 @@ def _ParseOptions():
       help='Specify the target architecture for installer - this is used '
            'to determine which CRT runtime files to pull and package '
            'with the installer archive {x86|x64}.')
+  parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
+                    default=False)
+  #Vivaldi specific options
   parser.add_option('--sign-executables', action='store_true',
       help='Whether to sign the executables being archived first')
   parser.add_option('--vivaldi-version', action="store_true")
@@ -737,5 +745,7 @@ def _ParseOptions():
 
 
 if '__main__' == __name__:
-  print sys.argv
-  sys.exit(main(_ParseOptions()))
+  options = _ParseOptions()
+  if options.verbose:
+    print sys.argv
+  sys.exit(main(options))

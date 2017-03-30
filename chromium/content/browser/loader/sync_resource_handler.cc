@@ -41,10 +41,6 @@ SyncResourceHandler::~SyncResourceHandler() {
   }
 }
 
-bool SyncResourceHandler::OnUploadProgress(uint64 position, uint64 size) {
-  return true;
-}
-
 bool SyncResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* response,
@@ -71,9 +67,7 @@ bool SyncResourceHandler::OnRequestRedirected(
 
 bool SyncResourceHandler::OnResponseStarted(
     ResourceResponse* response,
-    bool* defer,
-    bool open_when_done,
-    bool ask_for_target) {
+    bool* defer) {
   const ResourceRequestInfoImpl* info = GetRequestInfo();
   if (!info->filter())
     return false;

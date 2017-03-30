@@ -5,20 +5,22 @@
 #ifndef CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_PERMISSION_CONTEXT_FACTORY_H_
 #define CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_PERMISSION_CONTEXT_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
-#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "chrome/browser/permissions/permission_context_factory_base.h"
 
 class NotificationPermissionContext;
 class Profile;
 
 class NotificationPermissionContextFactory
-    : public BrowserContextKeyedServiceFactory {
+    : public PermissionContextFactoryBase {
  public:
   static NotificationPermissionContext* GetForProfile(Profile* profile);
   static NotificationPermissionContextFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<NotificationPermissionContextFactory>;
+  friend struct base::DefaultSingletonTraits<
+      NotificationPermissionContextFactory>;
 
   NotificationPermissionContextFactory();
   ~NotificationPermissionContextFactory() override;
@@ -26,8 +28,6 @@ class NotificationPermissionContextFactory
   // BrowserContextKeyedBaseFactory implementation.
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* profile) const override;
-  content::BrowserContext* GetBrowserContextToUse(
-      content::BrowserContext* context) const override;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationPermissionContextFactory);
 };

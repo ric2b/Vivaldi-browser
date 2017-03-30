@@ -5,11 +5,13 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_AUTOFILL_AUTOFILL_POPUP_BASE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_AUTOFILL_AUTOFILL_POPUP_BASE_VIEW_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view_delegate.h"
 #include "ui/views/focus/widget_focus_manager.h"
 #include "ui/views/widget/widget_delegate.h"
+#include "ui/views/widget/widget_observer.h"
 
 namespace content {
 class WebContents;
@@ -19,16 +21,13 @@ namespace gfx {
 class Point;
 }
 
-namespace views {
-class FocusManager;
-}
-
 namespace autofill {
 
 // Class that deals with the event handling for Autofill-style popups. This
 // class should only be instantiated by sub-classes.
 class AutofillPopupBaseView : public views::WidgetDelegateView,
-                              public views::WidgetFocusChangeListener {
+                              public views::WidgetFocusChangeListener,
+                              public views::WidgetObserver {
  public:
   static const SkColor kBorderColor;
   static const SkColor kHoveredBackgroundColor;
@@ -39,7 +38,7 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
 
  protected:
   explicit AutofillPopupBaseView(AutofillPopupViewDelegate* delegate,
-                                 views::FocusManager* focus_manager);
+                                 views::Widget* parent_widget);
   ~AutofillPopupBaseView() override;
 
   // Show this popup. Idempotent.
@@ -67,7 +66,11 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
   // views::WidgetFocusChangeListener implementation.
   void OnNativeFocusChanged(gfx::NativeView focused_now) override;
 
-  // Stop observing accelerators and focus changes.
+  // views::WidgetObserver implementation.
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override;
+
+  // Stop observing the widget.
   void RemoveObserver();
 
   void SetSelection(const gfx::Point& point);
@@ -84,8 +87,8 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
   // Controller for this popup. Weak reference.
   AutofillPopupViewDelegate* delegate_;
 
-  // The focus manager that |this| observes. Weak reference.
-  views::FocusManager* focus_manager_;
+  // The widget of the window that triggered this popup. Weak reference.
+  views::Widget* parent_widget_;
 
   // The time when the popup was shown.
   base::Time show_time_;

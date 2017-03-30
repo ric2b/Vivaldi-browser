@@ -8,11 +8,11 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
@@ -75,14 +75,14 @@ class EnterpriseInstallAttributes {
                   const LockResultCallback& callback);
 
   // Checks whether this is an enterprise device.
-  bool IsEnterpriseDevice();
+  bool IsEnterpriseDevice() const;
 
   // Checks whether this is a consumer kiosk enabled device.
   bool IsConsumerKioskDeviceWithAutoLaunch();
 
   // Gets the domain this device belongs to or an empty string if the device is
   // not an enterprise device.
-  std::string GetDomain();
+  std::string GetDomain() const;
 
   // Gets the user that registered the device. Returns an empty string if the
   // device is not an enterprise device.

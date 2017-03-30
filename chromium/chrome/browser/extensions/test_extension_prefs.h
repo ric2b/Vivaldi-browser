@@ -8,17 +8,22 @@
 #include <string>
 
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "chrome/test/base/testing_profile.h"
 #include "extensions/common/manifest.h"
 
 class ExtensionPrefValueMap;
 class PrefService;
-class PrefServiceSyncable;
 
 namespace base {
 class DictionaryValue;
 class SequencedTaskRunner;
+}
+
+namespace syncable_prefs {
+class PrefServiceSyncable;
 }
 
 namespace user_prefs {
@@ -26,6 +31,7 @@ class PrefRegistrySyncable;
 }
 
 namespace extensions {
+class ChromeAppSorting;
 class Extension;
 class ExtensionPrefs;
 
@@ -37,10 +43,8 @@ class TestExtensionPrefs {
       const scoped_refptr<base::SequencedTaskRunner>& task_runner);
   virtual ~TestExtensionPrefs();
 
-  ExtensionPrefs* prefs() { return prefs_.get(); }
-  const ExtensionPrefs& const_prefs() const {
-      return *prefs_.get();
-  }
+  ExtensionPrefs* prefs();
+
   PrefService* pref_service();
   const scoped_refptr<user_prefs::PrefRegistrySyncable>& pref_registry();
   void ResetPrefRegistry();
@@ -87,17 +91,19 @@ class TestExtensionPrefs {
   // active after calling RecreateExtensionPrefs(). Defaults to false.
   void set_extensions_disabled(bool extensions_disabled);
 
+  ChromeAppSorting* app_sorting();
+
  protected:
   base::ScopedTempDir temp_dir_;
   base::FilePath preferences_file_;
   base::FilePath extensions_dir_;
   scoped_refptr<user_prefs::PrefRegistrySyncable> pref_registry_;
-  scoped_ptr<PrefServiceSyncable> pref_service_;
-  scoped_ptr<ExtensionPrefs> prefs_;
+  scoped_ptr<syncable_prefs::PrefServiceSyncable> pref_service_;
   scoped_ptr<ExtensionPrefValueMap> extension_pref_value_map_;
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
  private:
+  TestingProfile profile_;
   bool extensions_disabled_;
   DISALLOW_COPY_AND_ASSIGN(TestExtensionPrefs);
 };

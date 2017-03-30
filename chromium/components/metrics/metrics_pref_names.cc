@@ -43,6 +43,11 @@ const char kMetricsOngoingLogs[] =
 // client id and low entropy source should be reset.
 const char kMetricsResetIds[] = "user_experience_metrics.reset_metrics_ids";
 
+// Boolean that specifies whether or not crash reporting and metrics reporting
+// are sent over the network for analysis.
+const char kMetricsReportingEnabled[] =
+    "user_experience_metrics.reporting_enabled";
+
 // Date/time when the user opted in to UMA and generated the client id for the
 // very first time (local machine time, stored as a 64-bit time_t value).
 const char kMetricsReportingEnabledTimestamp[] =
@@ -58,6 +63,12 @@ const char kStabilityBreakpadRegistrationSuccess[] =
 // Number of times the browser has failed to register crash reporting.
 const char kStabilityBreakpadRegistrationFail[] =
     "user_experience_metrics.stability.breakpad_registration_fail";
+
+// Total number of child process crashes (other than renderer / extension
+// renderer ones, and plugin children, which are counted separately) since the
+// last report.
+const char kStabilityChildProcessCrashCount[] =
+    "user_experience_metrics.stability.child_process_crash_count";
 
 // Number of times the application exited uncleanly since the last report.
 const char kStabilityCrashCount[] =
@@ -79,6 +90,15 @@ const char kStabilityExecutionPhase[] =
 const char kStabilityExitedCleanly[] =
     "user_experience_metrics.stability.exited_cleanly";
 
+// Number of times an extension renderer process crashed since the last report.
+const char kStabilityExtensionRendererCrashCount[] =
+    "user_experience_metrics.stability.extension_renderer_crash_count";
+
+// Number of times an extension renderer process failed to launch since the last
+// report.
+const char kStabilityExtensionRendererFailedLaunchCount[] =
+    "user_experience_metrics.stability.extension_renderer_failed_launch_count";
+
 // Number of times the session end did not complete.
 const char kStabilityIncompleteSessionEndCount[] =
     "user_experience_metrics.stability.incomplete_session_end_count";
@@ -95,6 +115,23 @@ const char kStabilityLaunchCount[] =
 // Time when the app was last launched, in seconds since the epoch.
 const char kStabilityLaunchTimeSec[] =
     "user_experience_metrics.stability.launch_time_sec";
+
+// Number of times a page load event occurred since the last report.
+const char kStabilityPageLoadCount[] =
+    "user_experience_metrics.stability.page_load_count";
+
+// Number of times a renderer process crashed since the last report.
+const char kStabilityRendererCrashCount[] =
+    "user_experience_metrics.stability.renderer_crash_count";
+
+// Number of times a renderer process failed to launch since the last report.
+const char kStabilityRendererFailedLaunchCount[] =
+    "user_experience_metrics.stability.renderer_failed_launch_count";
+
+// Number of times the renderer has become non-responsive since the last
+// report.
+const char kStabilityRendererHangCount[] =
+    "user_experience_metrics.stability.renderer_hang_count";
 
 // Base64 encoded serialized UMA system profile proto from the previous session.
 const char kStabilitySavedSystemProfile[] =
@@ -123,6 +160,8 @@ const char kStabilityStatsVersion[] =
 // a chrome installation. They are (optionally) sent up to the uninstall
 // survey in the event of uninstallation.
 const char kUninstallLaunchCount[] = "uninstall_metrics.launch_count";
+const char kUninstallMetricsPageLoadCount[] =
+    "uninstall_metrics.page_load_count";
 const char kUninstallMetricsUptimeSec[] = "uninstall_metrics.uptime_sec";
 
 }  // namespace prefs

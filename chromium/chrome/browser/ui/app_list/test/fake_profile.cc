@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/ui/app_list/test/fake_profile.h"
 
 FakeProfile::FakeProfile(const std::string& name)
@@ -84,6 +85,10 @@ content::PermissionManager* FakeProfile::GetPermissionManager() {
   return nullptr;
 }
 
+content::BackgroundSyncController* FakeProfile::GetBackgroundSyncController() {
+  return nullptr;
+}
+
 scoped_refptr<base::SequencedTaskRunner>
 FakeProfile::GetIOTaskRunner() {
   return scoped_refptr<base::SequencedTaskRunner>();
@@ -103,15 +108,15 @@ Profile* FakeProfile::GetOriginalProfile() {
   return this;
 }
 
-bool FakeProfile::IsSupervised() {
+bool FakeProfile::IsSupervised() const {
   return false;
 }
 
-bool FakeProfile::IsChild() {
+bool FakeProfile::IsChild() const {
   return false;
 }
 
-bool FakeProfile::IsLegacySupervised() {
+bool FakeProfile::IsLegacySupervised() const {
   return false;
 }
 
@@ -140,10 +145,6 @@ net::URLRequestContextGetter* FakeProfile::GetRequestContextForExtensions() {
 }
 
 net::SSLConfigService* FakeProfile::GetSSLConfigService() {
-  return nullptr;
-}
-
-HostContentSettingsMap* FakeProfile::GetHostContentSettingsMap() {
   return nullptr;
 }
 
@@ -191,7 +192,8 @@ chrome_browser_net::Predictor* FakeProfile::GetNetworkPredictor() {
   return nullptr;
 }
 
-DevToolsNetworkController* FakeProfile::GetDevToolsNetworkController() {
+DevToolsNetworkControllerHandle*
+FakeProfile::GetDevToolsNetworkControllerHandle() {
   return nullptr;
 }
 

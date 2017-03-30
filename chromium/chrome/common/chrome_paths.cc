@@ -13,14 +13,15 @@
 #include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
-#include "chrome/common/widevine_cdm_constants.h"
-#include "ui/base/ui_base_paths.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/path_utils.h"
 #include "base/base_paths_android.h"
+// ui/base must only be used on Android. See BUILD.gn for dependency info.
+#include "ui/base/ui_base_paths.h"  // nogncheck
 #endif
 
 #if defined(OS_MACOSX)
@@ -60,6 +61,11 @@ const base::FilePath::CharType kFilepathSinglePrefExtensions[] =
 #else
     FILE_PATH_LITERAL("/usr/share/chromium/extensions");
 #endif  // defined(GOOGLE_CHROME_BUILD)
+
+// The path to the hint file that tells the pepper plugin loader
+// where it can find the latest component updated flash.
+const base::FilePath::CharType kComponentUpdatedFlashHint[] =
+    FILE_PATH_LITERAL("latest-component-updated-flash");
 #endif  // defined(OS_LINUX)
 
 static base::LazyInstance<base::FilePath>
@@ -202,10 +208,12 @@ bool PathProvider(int key, base::FilePath* result) {
       // directory.  This avoids the problem of having to re-initialize the
       // exception handler after parsing command line options, which may
       // override the location of the app's profile directory.
+      // TODO(scottmg): Consider supporting --user-data-dir. See
+      // https://crbug.com/565446.
       if (!GetDefaultUserDataDirectory(&cur))
         return false;
 #endif
-#if defined(OS_MACOSX)
+#if defined(OS_MACOSX) || defined(OS_WIN)
       cur = cur.Append(FILE_PATH_LITERAL("Crashpad"));
 #else
       cur = cur.Append(FILE_PATH_LITERAL("Crash Reports"));
@@ -359,7 +367,7 @@ bool PathProvider(int key, base::FilePath* result) {
     case chrome::DIR_COMPONENT_WIDEVINE_CDM:
       if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
-      cur = cur.Append(kWidevineCdmBaseDirectory);
+      cur = cur.Append(FILE_PATH_LITERAL("WidevineCDM"));
       break;
 #endif  // defined(WIDEVINE_CDM_IS_COMPONENT)
     // TODO(xhwang): FILE_WIDEVINE_CDM_ADAPTER has different meanings.
@@ -413,11 +421,18 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = cur.Append(FILE_PATH_LITERAL("custom_wallpapers"));
       break;
 #endif
-#if defined(OS_LINUX) && defined(ENABLE_SUPERVISED_USERS)
+#if defined(ENABLE_SUPERVISED_USERS)
+#if defined(OS_LINUX)
     case chrome::DIR_SUPERVISED_USERS_DEFAULT_APPS:
       if (!PathService::Get(chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("managed_users"));
+      break;
+#endif
+    case chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS:
+      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+        return false;
+      cur = cur.Append(FILE_PATH_LITERAL("SupervisedUserInstalledWhitelists"));
       break;
 #endif
     // The following are only valid in the development environment, and
@@ -490,7 +505,8 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
     }
 #endif
-#if defined(OS_CHROMEOS) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_CHROMEOS) || (defined(OS_LINUX) && defined(CHROMIUM_BUILD)) || \
+    (defined(OS_MACOSX) && !defined(OS_IOS))
     case chrome::DIR_USER_EXTERNAL_EXTENSIONS: {
       if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
@@ -567,6 +583,15 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = cur.Append(kGCMStoreDirname);
       break;
 #endif  // !defined(OS_ANDROID)
+#if defined(OS_LINUX)
+    case chrome::FILE_COMPONENT_FLASH_HINT:
+      if (!PathService::Get(chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN,
+                            &cur)) {
+        return false;
+      }
+      cur = cur.Append(kComponentUpdatedFlashHint);
+      break;
+#endif  // defined(OS_LINUX)
 
     default:
       return false;

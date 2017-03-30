@@ -4,8 +4,10 @@
 
 #include "chrome/browser/ui/views/frame/browser_view.h"
 
+#include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/frame/browser_view_layout.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
@@ -93,10 +95,8 @@ TEST_F(BrowserViewTest, BrowserViewLayout) {
   EXPECT_EQ(expected_tabstrip_origin.x(), tabstrip->x());
   EXPECT_EQ(expected_tabstrip_origin.y(), tabstrip->y());
   EXPECT_EQ(0, toolbar->x());
-  EXPECT_EQ(
-      tabstrip->bounds().bottom() -
-          BrowserViewLayout::kToolbarTabStripVerticalOverlap,
-      toolbar->y());
+  const int overlap = GetLayoutConstant(TABSTRIP_TOOLBAR_OVERLAP);
+  EXPECT_EQ(tabstrip->bounds().bottom() - overlap, toolbar->y());
   EXPECT_EQ(0, contents_container->x());
   EXPECT_EQ(toolbar->bounds().bottom(), contents_container->y());
   EXPECT_EQ(top_container->bounds().bottom(), contents_container->y());
@@ -133,9 +133,7 @@ TEST_F(BrowserViewTest, BrowserViewLayout) {
   // Bookmark bar layout on NTP.
   EXPECT_EQ(0, bookmark_bar->x());
   EXPECT_EQ(
-      tabstrip->bounds().bottom() +
-          toolbar->height() -
-          BrowserViewLayout::kToolbarTabStripVerticalOverlap -
+      tabstrip->bounds().bottom() + toolbar->height() - overlap -
           views::NonClientFrameView::kClientEdgeThickness,
       bookmark_bar->y());
   EXPECT_EQ(toolbar->bounds().bottom(), contents_container->y());
@@ -196,7 +194,7 @@ TEST_F(BrowserViewHostedAppTest, Layout) {
 
   // The position of the bottom of the header (the bar with the window
   // controls) in the coordinates of BrowserView.
-  int bottom_of_header = browser_view()->frame()->GetTopInset() -
+  int bottom_of_header = browser_view()->frame()->GetTopInset(false) -
       header_offset.y();
 
   // The web contents should be flush with the bottom of the header.
@@ -204,6 +202,6 @@ TEST_F(BrowserViewHostedAppTest, Layout) {
 
   // The find bar should overlap the 1px header/web-contents separator at the
   // bottom of the header.
-  EXPECT_EQ(browser_view()->frame()->GetTopInset() - 1,
-            browser_view()->GetFindBarBoundingBox().y());
+  EXPECT_LT(browser_view()->GetFindBarBoundingBox().y(),
+            browser_view()->frame()->GetTopInset(false));
 }

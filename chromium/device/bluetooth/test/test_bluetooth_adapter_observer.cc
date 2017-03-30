@@ -33,11 +33,13 @@ void TestBluetoothAdapterObserver::Reset() {
   last_discovering_ = false;
   device_added_count_ = 0;
   device_changed_count_ = 0;
+  device_address_changed_count_ = 0;
   device_removed_count_ = 0;
   last_device_ = NULL;
   last_device_address_.clear();
   gatt_service_added_count_ = 0;
   gatt_service_removed_count_ = 0;
+  gatt_services_discovered_count_ = 0;
   gatt_service_changed_count_ = 0;
   gatt_discovery_complete_count_ = 0;
   gatt_characteristic_added_count_ = 0;
@@ -113,6 +115,17 @@ void TestBluetoothAdapterObserver::DeviceChanged(BluetoothAdapter* adapter,
   QuitMessageLoop();
 }
 
+void TestBluetoothAdapterObserver::DeviceAddressChanged(
+    device::BluetoothAdapter* adapter,
+    device::BluetoothDevice* device,
+    const std::string& old_address) {
+  ++device_address_changed_count_;
+  last_device_ = device;
+  last_device_address_ = device->GetAddress();
+
+  QuitMessageLoop();
+}
+
 void TestBluetoothAdapterObserver::DeviceRemoved(BluetoothAdapter* adapter,
                                                  BluetoothDevice* device) {
   EXPECT_EQ(adapter_.get(), adapter);
@@ -159,6 +172,18 @@ void TestBluetoothAdapterObserver::GattServiceRemoved(
 
   // The device should return NULL for this service.
   EXPECT_FALSE(device->GetGattService(last_gatt_service_id_));
+
+  QuitMessageLoop();
+}
+
+void TestBluetoothAdapterObserver::GattServicesDiscovered(
+    BluetoothAdapter* adapter,
+    BluetoothDevice* device) {
+  ASSERT_EQ(adapter_.get(), adapter);
+
+  ++gatt_services_discovered_count_;
+  last_device_ = device;
+  last_device_address_ = device->GetAddress();
 
   QuitMessageLoop();
 }
@@ -252,7 +277,7 @@ void TestBluetoothAdapterObserver::GattDescriptorRemoved(
 void TestBluetoothAdapterObserver::GattCharacteristicValueChanged(
     BluetoothAdapter* adapter,
     BluetoothGattCharacteristic* characteristic,
-    const std::vector<uint8>& value) {
+    const std::vector<uint8_t>& value) {
   ASSERT_EQ(adapter_.get(), adapter);
 
   ++gatt_characteristic_value_changed_count_;
@@ -271,7 +296,7 @@ void TestBluetoothAdapterObserver::GattCharacteristicValueChanged(
 void TestBluetoothAdapterObserver::GattDescriptorValueChanged(
     BluetoothAdapter* adapter,
     BluetoothGattDescriptor* descriptor,
-    const std::vector<uint8>& value) {
+    const std::vector<uint8_t>& value) {
   ASSERT_EQ(adapter_.get(), adapter);
 
   ++gatt_descriptor_value_changed_count_;
@@ -290,7 +315,7 @@ void TestBluetoothAdapterObserver::GattDescriptorValueChanged(
 void TestBluetoothAdapterObserver::QuitMessageLoop() {
   if (base::MessageLoop::current() &&
       base::MessageLoop::current()->is_running())
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 }  // namespace device

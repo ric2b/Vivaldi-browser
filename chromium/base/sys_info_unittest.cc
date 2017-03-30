@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/sys_info.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -43,9 +46,9 @@ TEST_F(SysInfoTest, AmountOfFreeDiskSpace) {
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
 TEST_F(SysInfoTest, OperatingSystemVersionNumbers) {
-  int32 os_major_version = -1;
-  int32 os_minor_version = -1;
-  int32 os_bugfix_version = -1;
+  int32_t os_major_version = -1;
+  int32_t os_minor_version = -1;
+  int32_t os_bugfix_version = -1;
   base::SysInfo::OperatingSystemVersionNumbers(&os_major_version,
                                                &os_minor_version,
                                                &os_bugfix_version);
@@ -56,13 +59,13 @@ TEST_F(SysInfoTest, OperatingSystemVersionNumbers) {
 #endif
 
 TEST_F(SysInfoTest, Uptime) {
-  int64 up_time_1 = base::SysInfo::Uptime();
+  base::TimeDelta up_time_1 = base::SysInfo::Uptime();
   // UpTime() is implemented internally using TimeTicks::Now(), which documents
   // system resolution as being 1-15ms. Sleep a little longer than that.
   base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(20));
-  int64 up_time_2 = base::SysInfo::Uptime();
-  EXPECT_GT(up_time_1, 0);
-  EXPECT_GT(up_time_2, up_time_1);
+  base::TimeDelta up_time_2 = base::SysInfo::Uptime();
+  EXPECT_GT(up_time_1.InMicroseconds(), 0);
+  EXPECT_GT(up_time_2.InMicroseconds(), up_time_1.InMicroseconds());
 }
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -75,9 +78,9 @@ TEST_F(SysInfoTest, HardwareModelName) {
 #if defined(OS_CHROMEOS)
 
 TEST_F(SysInfoTest, GoogleChromeOSVersionNumbers) {
-  int32 os_major_version = -1;
-  int32 os_minor_version = -1;
-  int32 os_bugfix_version = -1;
+  int32_t os_major_version = -1;
+  int32_t os_minor_version = -1;
+  int32_t os_bugfix_version = -1;
   const char kLsbRelease[] =
       "FOO=1234123.34.5\n"
       "CHROMEOS_RELEASE_VERSION=1.2.3.4\n";
@@ -91,9 +94,9 @@ TEST_F(SysInfoTest, GoogleChromeOSVersionNumbers) {
 }
 
 TEST_F(SysInfoTest, GoogleChromeOSVersionNumbersFirst) {
-  int32 os_major_version = -1;
-  int32 os_minor_version = -1;
-  int32 os_bugfix_version = -1;
+  int32_t os_major_version = -1;
+  int32_t os_minor_version = -1;
+  int32_t os_bugfix_version = -1;
   const char kLsbRelease[] =
       "CHROMEOS_RELEASE_VERSION=1.2.3.4\n"
       "FOO=1234123.34.5\n";
@@ -107,9 +110,9 @@ TEST_F(SysInfoTest, GoogleChromeOSVersionNumbersFirst) {
 }
 
 TEST_F(SysInfoTest, GoogleChromeOSNoVersionNumbers) {
-  int32 os_major_version = -1;
-  int32 os_minor_version = -1;
-  int32 os_bugfix_version = -1;
+  int32_t os_major_version = -1;
+  int32_t os_minor_version = -1;
+  int32_t os_bugfix_version = -1;
   const char kLsbRelease[] = "FOO=1234123.34.5\n";
   base::SysInfo::SetChromeOSVersionInfoForTest(kLsbRelease, base::Time());
   base::SysInfo::OperatingSystemVersionNumbers(&os_major_version,

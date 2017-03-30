@@ -98,9 +98,16 @@ FileGrid.decorate = function(
       new AsyncUtil.RateLimiter(self.relayoutImmediately_.bind(self));
 
   var style = window.getComputedStyle(self);
-  /** @private {number} */
-  self.paddingLeft_ = parseFloat(style.paddingLeft);
-  /** @private {number} */
+  /**
+   * @private {number}
+   * @const
+   */
+  self.paddingStart_ = parseFloat(
+      isRTL() ? style.paddingRight : style.paddingLeft);
+  /**
+   * @private {number}
+   * @const
+   */
   self.paddingTop_ = parseFloat(style.paddingTop);
 };
 
@@ -144,16 +151,23 @@ FileGrid.prototype.onThumbnailLoaded_ = function(event) {
     if (box) {
       var mimeType = this.metadataModel_.getCache(
           [entry], ['contentMimeType'])[0].contentMimeType;
-      FileGrid.setThumbnailImage_(
-          assertInstanceof(box, HTMLDivElement),
-          entry,
-          event.dataUrl,
-          event.width,
-          event.height,
-          /* should animate */ true,
-          mimeType);
+      if (!event.dataUrl) {
+        FileGrid.clearThumbnailImage_(
+            assertInstanceof(box, HTMLDivElement));
+        FileGrid.setGenericThumbnail_(
+            assertInstanceof(box, HTMLDivElement), entry);
+      } else {
+        FileGrid.setThumbnailImage_(
+            assertInstanceof(box, HTMLDivElement),
+            entry,
+            assert(event.dataUrl),
+            assert(event.width),
+            assert(event.height),
+            /* should animate */ true,
+            mimeType);
+      }
     }
-    listItem.classList.toggle('thumbnail-loaded', true);
+    listItem.classList.toggle('thumbnail-loaded', !!event.dataUrl);
   }
 };
 
@@ -298,7 +312,7 @@ FileGrid.prototype.getFirstItemInRow = function(row) {
 FileGrid.prototype.scrollIndexIntoView = function(index) {
   var dataModel = this.dataModel;
   if (!dataModel || index < 0 || index >= dataModel.length)
-    return false;
+    return;
 
   var itemHeight = index < this.dataModel.getFolderCount() ?
       this.getFolderItemHeight_() : this.getFileItemHeight_();
@@ -315,27 +329,24 @@ FileGrid.prototype.scrollIndexIntoView = function(index) {
   // Function to adjust the tops of viewport and row.
   var scrollToAdjustTop = function() {
       self.scrollTop = top;
-      return true;
   };
   // Function to adjust the bottoms of viewport and row.
   var scrollToAdjustBottom = function() {
       self.scrollTop = top + itemHeight - availableHeight;
-      return true;
   };
 
   // Check if the entire of given indexed row can be shown in the viewport.
   if (itemHeight <= availableHeight) {
     if (top < scrollTop)
-      return scrollToAdjustTop();
-    if (scrollTop + availableHeight < top + itemHeight)
-      return scrollToAdjustBottom();
+      scrollToAdjustTop();
+    else if (scrollTop + availableHeight < top + itemHeight)
+      scrollToAdjustBottom();
   } else {
     if (scrollTop < top)
-      return scrollToAdjustTop();
-    if (top + itemHeight < scrollTop + availableHeight)
-      return scrollToAdjustBottom();
+      scrollToAdjustTop();
+    else if (top + itemHeight < scrollTop + availableHeight)
+      scrollToAdjustBottom();
   }
-  return false;
 };
 
 /**
@@ -578,14 +589,15 @@ FileGrid.prototype.decorateThumbnailBox_ = function(li, entry) {
   }
 
   if (entry.isDirectory) {
-    box.setAttribute('generic-thumbnail', 'folder');
+    FileGrid.setGenericThumbnail_(box, entry);
     return;
   }
 
-  // Set thumbnail if it's already in cache.
-  if (this.listThumbnailLoader_ &&
-      this.listThumbnailLoader_.getThumbnailFromCache(entry)) {
-    var thumbnailData = this.listThumbnailLoader_.getThumbnailFromCache(entry);
+  // Set thumbnail if it's already in cache, and the thumbnail data is not
+  // empty.
+  var thumbnailData = this.listThumbnailLoader_ ?
+      this.listThumbnailLoader_.getThumbnailFromCache(entry) : null;
+  if (thumbnailData && thumbnailData.dataUrl) {
     var mimeType = this.metadataModel_.getCache(
         [entry], ['contentMimeType'])[0].contentMimeType;
     FileGrid.setThumbnailImage_(
@@ -598,8 +610,7 @@ FileGrid.prototype.decorateThumbnailBox_ = function(li, entry) {
         mimeType);
     li.classList.toggle('thumbnail-loaded', true);
   } else {
-    var mediaType = FileType.getMediaType(entry);
-    box.setAttribute('generic-thumbnail', mediaType);
+    FileGrid.setGenericThumbnail_(box, entry);
     li.classList.toggle('thumbnail-loaded', false);
   }
   var mimeType = this.metadataModel_.getCache(
@@ -648,11 +659,11 @@ FileGrid.prototype.onSplice_ = function() {
 /**
  * Sets thumbnail image to the box.
  * @param {!HTMLDivElement} box A div element to hold thumbnails.
- * @param {Entry!} entry An entry of the thumbnail.
+ * @param {!Entry} entry An entry of the thumbnail.
  * @param {string} dataUrl Data url of thumbnail.
  * @param {number} width Width of thumbnail.
  * @param {number} height Height of thumbnail.
- * @param {boolean} shouldAnimate Whether the thumbanil is shown with animation
+ * @param {boolean} shouldAnimate Whether the thumbnail is shown with animation
  *     or not.
  * @param {string=} opt_mimeType Optional mime type for the image.
  * @private
@@ -685,6 +696,34 @@ FileGrid.setThumbnailImage_ = function(
   if (shouldAnimate)
     thumbnail.classList.add('animate');
   box.appendChild(thumbnail);
+};
+
+/**
+ * Clears thumbnail image from the box.
+ * @param {!HTMLDivElement} box A div element to hold thumbnails.
+ * @private
+ */
+FileGrid.clearThumbnailImage_ = function(box) {
+  var oldThumbnails = box.querySelectorAll('.thumbnail');
+  for (var i = 0; i < oldThumbnails.length; i++) {
+    box.removeChild(oldThumbnails[i]);
+  }
+  return;
+};
+
+/**
+ * Sets a generic thumbnail on the box.
+ * @param {!HTMLDivElement} box A div element to hold thumbnails.
+ * @param {!Entry} entry An entry of the thumbnail.
+ * @private
+ */
+FileGrid.setGenericThumbnail_ = function(box, entry) {
+  if (entry.isDirectory) {
+    box.setAttribute('generic-thumbnail', 'folder');
+  } else {
+    var mediaType = FileType.getMediaType(entry);
+    box.setAttribute('generic-thumbnail', mediaType);
+  }
 };
 
 /**
@@ -833,15 +872,16 @@ FileGrid.prototype.getHitColumnIndex_ = function(x, reverse) {
  */
 FileGrid.prototype.getHitElements = function(x, y, opt_width, opt_height) {
   var currentSelection = [];
-  var left = Math.max(0, x - this.paddingLeft_);
+  var startXWithPadding = isRTL() ? this.clientWidth - (x + opt_width) : x;
+  var startX = Math.max(0, startXWithPadding - this.paddingStart_);
+  var endX = startX + (opt_width ? opt_width - 1 : 0);
   var top = Math.max(0, y - this.paddingTop_);
-  var right = left + (opt_width ? opt_width - 1 : 0);
   var bottom = top + (opt_height ? opt_height - 1 : 0);
 
   var firstRow = this.getHitRowIndex_(top, false);
   var lastRow = this.getHitRowIndex_(bottom, true);
-  var firstColumn = this.getHitColumnIndex_(left, false);
-  var lastColumn = this.getHitColumnIndex_(right, true);
+  var firstColumn = this.getHitColumnIndex_(startX, false);
+  var lastColumn = this.getHitColumnIndex_(endX, true);
 
   for (var row = firstRow; row <= lastRow; row++) {
     for (var col = firstColumn; col <= lastColumn; col++) {
@@ -861,7 +901,6 @@ FileGrid.prototype.getHitElements = function(x, y, opt_width, opt_height) {
  * @constructor
  * @extends {cr.ui.GridSelectionController}
  * @struct
- * @suppress {checkStructDictInheritance}
  */
 function FileGridSelectionController(selectionModel, grid) {
   cr.ui.GridSelectionController.call(this, selectionModel, grid);

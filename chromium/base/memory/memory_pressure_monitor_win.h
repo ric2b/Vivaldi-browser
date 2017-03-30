@@ -6,6 +6,7 @@
 #define BASE_MEMORY_MEMORY_PRESSURE_MONITOR_WIN_H_
 
 #include "base/base_export.h"
+#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/weak_ptr.h"
@@ -117,7 +118,7 @@ class BASE_EXPORT MemoryPressureMonitor : public base::MemoryPressureMonitor {
   int critical_threshold_mb_;
 
   // A periodic timer to check for memory pressure changes.
-  base::RepeatingTimer<MemoryPressureMonitor> timer_;
+  base::RepeatingTimer timer_;
 
   // The current memory pressure.
   MemoryPressureLevel current_memory_pressure_level_;

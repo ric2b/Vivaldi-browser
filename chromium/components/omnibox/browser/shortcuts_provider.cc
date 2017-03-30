@@ -4,6 +4,8 @@
 
 #include "components/omnibox/browser/shortcuts_provider.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -20,6 +22,7 @@
 #include "base/time/time.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/metrics/proto/omnibox_input_type.pb.h"
+#include "components/omnibox/browser/autocomplete_i18n.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
@@ -27,7 +30,7 @@
 #include "components/omnibox/browser/history_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/url_prefix.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "url/third_party/mozilla/url_parse.h"
 
 namespace {
@@ -75,7 +78,7 @@ void ShortcutsProvider::Start(const AutocompleteInput& input,
   if (input.text().length() < 6) {
     base::TimeTicks end_time = base::TimeTicks::Now();
     std::string name = "ShortcutsProvider.QueryIndexTime." +
-                       base::IntToString(input.text().size());
+                       base::SizeTToString(input.text().size());
     base::HistogramBase* counter = base::Histogram::FactoryGet(
         name, 1, 1000, 50, base::Histogram::kUmaTargetedHistogramFlag);
     counter->Add(static_cast<int>((end_time - start_time).InMilliseconds()));
@@ -218,9 +221,11 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
   // input of "foo.c" to autocomplete to "foo.com" for a fill_into_edit of
   // "http://foo.com".
   if (AutocompleteMatch::IsSearchType(match.type)) {
-    if (base::StartsWith(base::i18n::ToLower(match.fill_into_edit),
-                         base::i18n::ToLower(input.text()),
-                         base::CompareCase::SENSITIVE)) {
+    if (match.fill_into_edit.size() >= input.text().size() &&
+        std::equal(match.fill_into_edit.begin(),
+                   match.fill_into_edit.begin() + input.text().size(),
+                   input.text().begin(),
+                   SimpleCaseInsensitiveCompareUCS2())) {
       match.inline_autocompletion =
           match.fill_into_edit.substr(input.text().length());
       match.allowed_to_be_default_match =

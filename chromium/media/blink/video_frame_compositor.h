@@ -5,15 +5,18 @@
 #ifndef MEDIA_BLINK_VIDEO_FRAME_COMPOSITOR_H_
 #define MEDIA_BLINK_VIDEO_FRAME_COMPOSITOR_H_
 
+#include <utility>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/time/tick_clock.h"
 #include "base/timer/timer.h"
 #include "cc/layers/video_frame_provider.h"
-#include "media/base/media_export.h"
 #include "media/base/video_renderer_sink.h"
+#include "media/blink/media_blink_export.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -44,7 +47,7 @@ class VideoFrame;
 //
 // VideoFrameCompositor must live on the same thread as the compositor, though
 // it may be constructed on any thread.
-class MEDIA_EXPORT VideoFrameCompositor
+class MEDIA_BLINK_EXPORT VideoFrameCompositor
     : public VideoRendererSink,
       NON_EXPORTED_BASE(public cc::VideoFrameProvider) {
  public:
@@ -102,8 +105,14 @@ class MEDIA_EXPORT VideoFrameCompositor
   // the frequency of canvas or WebGL paints requested via JavaScript.
   scoped_refptr<VideoFrame> GetCurrentFrameAndUpdateIfStale();
 
+  // Returns the timestamp of the current (possibly stale) frame, or
+  // base::TimeDelta() if there is no current frame. This method may be called
+  // from the media thread as long as the VFC is stopped. (Assuming that
+  // PaintFrameUsingOldRenderingPath() is not also called while stopped.)
+  base::TimeDelta GetCurrentFrameTimestamp() const;
+
   void set_tick_clock_for_testing(scoped_ptr<base::TickClock> tick_clock) {
-    tick_clock_ = tick_clock.Pass();
+    tick_clock_ = std::move(tick_clock);
   }
 
   void clear_current_frame_for_testing() { current_frame_ = nullptr; }
@@ -155,7 +164,6 @@ class MEDIA_EXPORT VideoFrameCompositor
 
   // These values are only set and read on the compositor thread.
   cc::VideoFrameProvider::Client* client_;
-  scoped_refptr<VideoFrame> current_frame_;
   bool rendering_;
   bool rendered_last_frame_;
   bool is_background_rendering_;
@@ -163,8 +171,12 @@ class MEDIA_EXPORT VideoFrameCompositor
   base::TimeDelta last_interval_;
   base::TimeTicks last_background_render_;
 
+  // These values are set on the compositor thread, but also read on the media
+  // thread when the VFC is stopped.
+  scoped_refptr<VideoFrame> current_frame_;
+
   // These values are updated and read from the media and compositor threads.
-  base::Lock lock_;
+  base::Lock callback_lock_;
   VideoRendererSink::RenderCallback* callback_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoFrameCompositor);

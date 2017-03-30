@@ -4,11 +4,13 @@
 
 #include "remoting/signaling/xmpp_signal_strategy.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
@@ -191,6 +193,7 @@ void XmppSignalStrategy::Core::Disconnect() {
     writer_.reset();
     socket_.reset();
     tls_state_ = TlsState::NOT_REQUESTED;
+    read_pending_ = false;
 
     FOR_EACH_OBSERVER(Listener, listeners_,
                       OnSignalStrategyStateChange(DISCONNECTED));
@@ -234,13 +237,15 @@ bool XmppSignalStrategy::Core::SendStanza(scoped_ptr<buzz::XmlElement> stanza) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!stream_parser_) {
-    VLOG(0) << "Dropping signalling message because XMPP "
-               "connection has been terminated.";
+    VLOG(0) << "Dropping signalling message because XMPP is not connected.";
     return false;
   }
 
   SendMessage(stanza->Str());
-  return true;
+
+  // Return false if the SendMessage() call above resulted in the SignalStrategy
+  // being disconnected.
+  return stream_parser_ != nullptr;
 }
 
 void XmppSignalStrategy::Core::SetAuthInfo(const std::string& username,
@@ -282,16 +287,16 @@ void XmppSignalStrategy::Core::StartTls() {
 
   scoped_ptr<net::ClientSocketHandle> socket_handle(
       new net::ClientSocketHandle());
-  socket_handle->SetSocket(socket_.Pass());
+  socket_handle->SetSocket(std::move(socket_));
 
-  cert_verifier_.reset(net::CertVerifier::CreateDefault());
+  cert_verifier_ = net::CertVerifier::CreateDefault();
   transport_security_state_.reset(new net::TransportSecurityState());
   net::SSLClientSocketContext context;
   context.cert_verifier = cert_verifier_.get();
   context.transport_security_state = transport_security_state_.get();
 
   socket_ = socket_factory_->CreateSSLClientSocket(
-      socket_handle.Pass(),
+      std::move(socket_handle),
       net::HostPortPair(xmpp_server_config_.host, kDefaultHttpsPort),
       net::SSLConfig(), context);
 
@@ -307,7 +312,7 @@ void XmppSignalStrategy::Core::OnHandshakeDone(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   jid_ = jid;
-  stream_parser_ = parser.Pass();
+  stream_parser_ = std::move(parser);
   stream_parser_->SetCallbacks(
       base::Bind(&Core::OnStanza, base::Unretained(this)),
       base::Bind(&Core::OnParserError, base::Unretained(this)));
@@ -362,9 +367,8 @@ void XmppSignalStrategy::Core::OnSocketConnected(int result) {
     return;
   }
 
-  writer_.reset(new BufferedSocketWriter());
-  writer_->Init(socket_.get(), base::Bind(&Core::OnNetworkError,
-                                          base::Unretained(this)));
+  writer_ = BufferedSocketWriter::CreateForSocket(
+      socket_.get(), base::Bind(&Core::OnNetworkError, base::Unretained(this)));
 
   XmppLoginHandler::TlsMode tls_mode;
   if (xmpp_server_config_.use_tls) {
@@ -406,9 +410,8 @@ void XmppSignalStrategy::Core::OnTlsConnected(int result) {
     return;
   }
 
-  writer_.reset(new BufferedSocketWriter());
-  writer_->Init(socket_.get(), base::Bind(&Core::OnNetworkError,
-                                          base::Unretained(this)));
+  writer_ = BufferedSocketWriter::CreateForSocket(
+      socket_.get(), base::Bind(&Core::OnNetworkError, base::Unretained(this)));
 
   login_handler_->OnTlsStarted();
 
@@ -521,7 +524,7 @@ void XmppSignalStrategy::RemoveListener(Listener* listener) {
   core_->RemoveListener(listener);
 }
 bool XmppSignalStrategy::SendStanza(scoped_ptr<buzz::XmlElement> stanza) {
-  return core_->SendStanza(stanza.Pass());
+  return core_->SendStanza(std::move(stanza));
 }
 
 std::string XmppSignalStrategy::GetNextId() {

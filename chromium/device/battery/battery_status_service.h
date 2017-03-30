@@ -6,6 +6,7 @@
 #define DEVICE_BATTERY_BATTERY_STATUS_SERVICE_H_
 
 #include "base/callback_list.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "device/battery/battery_export.h"
@@ -45,7 +46,7 @@ class DEVICE_BATTERY_EXPORT BatteryStatusService {
   const BatteryUpdateCallback& GetUpdateCallbackForTesting() const;
 
  private:
-  friend struct DefaultSingletonTraits<BatteryStatusService>;
+  friend struct base::DefaultSingletonTraits<BatteryStatusService>;
   friend class BatteryStatusServiceTest;
 
   BatteryStatusService();

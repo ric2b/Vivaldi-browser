@@ -4,6 +4,9 @@
 
 #include "google_apis/drive/base_requests.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -58,7 +61,7 @@ class FakeMultipartUploadRequest : public MultipartUploadRequestBase {
       base::SequencedTaskRunner* blocking_task_runner,
       const std::string& metadata_json,
       const std::string& content_type,
-      int64 content_length,
+      int64_t content_length,
       const base::FilePath& local_file_path,
       const FileResourceCallback& callback,
       const google_apis::ProgressCallback& progress_callback,
@@ -115,7 +118,7 @@ class BaseRequestsTest : public testing::Test {
                                     message_loop_.task_runner(),
                                     std::string() /* custom user agent */));
 
-    ASSERT_TRUE(test_server_.InitializeAndWaitUntilReady());
+    ASSERT_TRUE(test_server_.Start());
     test_server_.RegisterRequestHandler(
         base::Bind(&BaseRequestsTest::HandleRequest, base::Unretained(this)));
   }
@@ -127,13 +130,13 @@ class BaseRequestsTest : public testing::Test {
     response->set_code(response_code_);
     response->set_content(response_body_);
     response->set_content_type("application/json");
-    return response.Pass();
+    return std::move(response);
   }
 
   base::MessageLoopForIO message_loop_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
   scoped_ptr<RequestSender> sender_;
-  net::test_server::EmbeddedTestServer test_server_;
+  net::EmbeddedTestServer test_server_;
 
   net::HttpStatusCode response_code_;
   std::string response_body_;
@@ -193,7 +196,7 @@ TEST_F(MultipartUploadRequestBaseTest, Basic) {
   DriveApiErrorCode error = DRIVE_OTHER_ERROR;
   base::RunLoop run_loop;
   const base::FilePath source_path =
-      google_apis::test_util::GetTestFilePath("chromeos/file_manager/text.txt");
+      google_apis::test_util::GetTestFilePath("drive/text.txt");
   std::string upload_content_type;
   std::string upload_content_data;
   FakeMultipartUploadRequest* const multipart_request =

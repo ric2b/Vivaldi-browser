@@ -24,11 +24,13 @@ import com.google.android.apps.chrome.appwidget.bookmarks.BookmarkThumbnailWidge
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeBrowserProvider.BookmarkNode;
 import org.chromium.chrome.browser.ChromeBrowserProviderClient;
 import org.chromium.chrome.browser.bookmark.BookmarkColumns;
+import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.sync.AndroidSyncSettings;
 
@@ -106,12 +108,15 @@ public class BookmarkThumbnailWidgetService extends RemoteViewsService {
             // Required to be applied here redundantly to prevent crashes in the cases where the
             // package data is deleted or the Chrome application forced to stop.
             try {
-                mContext.startBrowserProcessesAndLoadLibrariesSync(true);
+                ChromeBrowserInitializer.getInstance(mContext).handleSynchronousStartup();
             } catch (ProcessInitException e) {
                 Log.e(TAG, "Failed to start browser process.", e);
                 // Since the library failed to initialize nothing in the application
                 // can work, so kill the whole application not just the activity
                 System.exit(-1);
+            }
+            if (isWidgetNewlyCreated()) {
+                RecordUserAction.record("BookmarkNavigatorWidgetAdded");
             }
             mUpdateListener = new BookmarkWidgetUpdateListener(mContext, this);
         }
@@ -161,6 +166,16 @@ public class BookmarkThumbnailWidgetService extends RemoteViewsService {
                         .setClass(mContext, BookmarkWidgetProxy.class)
                         .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, mWidgetId)
                         .putExtra(BookmarkColumns.ID, folderId));
+        }
+
+        /**
+         * This method relies on the fact that STATE_CURRENT_FOLDER pref is not yet
+         * set when onCreate is called for a newly created widget.
+         */
+        private boolean isWidgetNewlyCreated() {
+            long currentFolder = mPreferences.getLong(STATE_CURRENT_FOLDER,
+                    ChromeBrowserProviderClient.INVALID_BOOKMARK_ID);
+            return currentFolder == ChromeBrowserProviderClient.INVALID_BOOKMARK_ID;
         }
 
         // Performs the required checks to trigger an update of the widget after changing the sync
@@ -247,7 +262,7 @@ public class BookmarkThumbnailWidgetService extends RemoteViewsService {
             }
 
             // Use the Mobile Bookmarks folder by default.
-            if (folderId < 0 || folderId == ChromeBrowserProviderClient.INVALID_BOOKMARK_ID) {
+            if (folderId < 0) {
                 folderId = ChromeBrowserProviderClient.getMobileBookmarksFolderId(mContext);
                 if (folderId == ChromeBrowserProviderClient.INVALID_BOOKMARK_ID) return null;
             }

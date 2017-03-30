@@ -5,16 +5,22 @@
 #ifndef CHROME_BROWSER_PROFILES_PROFILE_INFO_CACHE_H_
 #define CHROME_BROWSER_PROFILES_PROFILE_INFO_CACHE_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_info_cache_observer.h"
 #include "chrome/browser/profiles/profile_info_interface.h"
 
@@ -33,7 +39,10 @@ class ProfileAvatarDownloader;
 // This class saves various information about profiles to local preferences.
 // This cache can be used to display a list of profiles without having to
 // actually load the profiles from disk.
+// The ProfileInfoInterface is being deprecated. Prefer using the
+// ProfileAttributesStorage and avoid using the Get*AtIndex family of functions.
 class ProfileInfoCache : public ProfileInfoInterface,
+                         public ProfileAttributesStorage,
                          public base::SupportsWeakPtr<ProfileInfoCache> {
  public:
   ProfileInfoCache(PrefService* prefs, const base::FilePath& user_data_dir);
@@ -44,18 +53,22 @@ class ProfileInfoCache : public ProfileInfoInterface,
   // supervised user is in the process of being registered with the server. Use
   // SetIsOmittedProfileAtIndex() to clear the flag when the profile is ready to
   // be shown in the menu.
+  // Deprecated. Use AddProfile instead.
   void AddProfileToCache(const base::FilePath& profile_path,
                          const base::string16& name,
                          const std::string& gaia_id,
                          const base::string16& user_name,
                          size_t icon_index,
                          const std::string& supervised_user_id);
+  // Deprecated. Use RemoveProfile instead.
   void DeleteProfileFromCache(const base::FilePath& profile_path);
 
   // ProfileInfoInterface:
   size_t GetNumberOfProfiles() const override;
   // Don't cache this value and reuse, because resorting the menu could cause
   // the item being referred to to change out from under you.
+  // Deprecated. Prefer using the ProfileAttributesStorage interface instead of
+  // directly referring to this implementation.
   size_t GetIndexOfProfileWithPath(
       const base::FilePath& profile_path) const override;
   base::string16 GetNameOfProfileAtIndex(size_t index) const override;
@@ -63,7 +76,7 @@ class ProfileInfoCache : public ProfileInfoInterface,
   base::FilePath GetPathOfProfileAtIndex(size_t index) const override;
   base::Time GetProfileActiveTimeAtIndex(size_t index) const override;
   base::string16 GetUserNameOfProfileAtIndex(size_t index) const override;
-  const gfx::Image& GetAvatarIconOfProfileAtIndex(size_t index) override;
+  const gfx::Image& GetAvatarIconOfProfileAtIndex(size_t index) const override;
   std::string GetLocalAuthCredentialsOfProfileAtIndex(
       size_t index) const override;
   std::string GetPasswordChangeDetectionTokenAtIndex(
@@ -93,6 +106,16 @@ class ProfileInfoCache : public ProfileInfoInterface,
   bool ProfileIsAuthErrorAtIndex(size_t index) const;
 
   size_t GetAvatarIconIndexOfProfileAtIndex(size_t index) const;
+
+  // Statistics
+  bool HasStatsBrowsingHistoryOfProfileAtIndex(size_t index) const;
+  int GetStatsBrowsingHistoryOfProfileAtIndex(size_t index) const;
+  bool HasStatsPasswordsOfProfileAtIndex(size_t index) const;
+  int GetStatsPasswordsOfProfileAtIndex(size_t index) const;
+  bool HasStatsBookmarksOfProfileAtIndex(size_t index) const;
+  int GetStatsBookmarksOfProfileAtIndex(size_t index) const;
+  bool HasStatsSettingsOfProfileAtIndex(size_t index) const;
+  int GetStatsSettingsOfProfileAtIndex(size_t index) const;
 
   void SetProfileActiveTimeAtIndex(size_t index);
   // Warning: This will re-sort profiles and thus may change indices!
@@ -135,6 +158,12 @@ class ProfileInfoCache : public ProfileInfoInterface,
   // set of default icons.
   size_t ChooseAvatarIconIndexForNewProfile() const;
 
+  // Statistics
+  void SetStatsBrowsingHistoryOfProfileAtIndex(size_t index, int value);
+  void SetStatsPasswordsOfProfileAtIndex(size_t index, int value);
+  void SetStatsBookmarksOfProfileAtIndex(size_t index, int value);
+  void SetStatsSettingsOfProfileAtIndex(size_t index, int value);
+
   const base::FilePath& GetUserDataDir() const;
 
   // Register cache related preferences in Local State.
@@ -160,6 +189,21 @@ class ProfileInfoCache : public ProfileInfoInterface,
       bool disable_avatar_download_for_testing) {
     disable_avatar_download_for_testing_ = disable_avatar_download_for_testing;
   }
+
+  // ProfileAttributesStorage:
+  void AddProfile(const base::FilePath& profile_path,
+                  const base::string16& name,
+                  const std::string& gaia_id,
+                  const base::string16& user_name,
+                  size_t icon_index,
+                  const std::string& supervised_user_id) override;
+  void RemoveProfile(const base::FilePath& profile_path) override;
+  // Returns a vector containing one attributes entry per known profile. They
+  // are not sorted in any particular order.
+  std::vector<ProfileAttributesEntry*> GetAllProfilesAttributes() override;
+  bool GetProfileAttributesWithPath(
+      const base::FilePath& path,
+      ProfileAttributesEntry** entry) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ProfileInfoCacheTest, DownloadHighResAvatarTest);
@@ -220,6 +264,8 @@ class ProfileInfoCache : public ProfileInfoInterface,
 
   PrefService* prefs_;
   std::vector<std::string> sorted_keys_;
+  base::ScopedPtrHashMap<base::FilePath, scoped_ptr<ProfileAttributesEntry> >
+      profile_attributes_entries_;
   base::FilePath user_data_dir_;
 
   mutable base::ObserverList<ProfileInfoCacheObserver> observer_list_;

@@ -327,7 +327,6 @@ const CGFloat kSupervisedUserSpacing = 26.0;
   // Add the limited user icon on the left side of the information TextView.
   base::scoped_nsobject<NSImageView> iconView(
       [[NSImageView alloc] initWithFrame:NSMakeRect(5, 0, 16, 16)]);
-  [iconView setImage:menu_->GetSupervisedUserIcon().ToNSImage()];
   [container addSubview:iconView];
 
   NSString* info =
@@ -481,6 +480,7 @@ const CGFloat kSupervisedUserSpacing = 26.0;
           menuController:(AvatarMenuBubbleController*)controller {
   if ((self = [super initWithNibName:@"AvatarMenuItem"
                               bundle:base::mac::FrameworkBundle()])) {
+    propertyReleaser_.Init(self, [AvatarMenuItemController class]);
     menuIndex_ = menuIndex;
     controller_ = controller;
     [self loadView];

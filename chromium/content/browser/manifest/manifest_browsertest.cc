@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -32,9 +36,9 @@ class MockWebContentsDelegate : public WebContentsDelegate {
   }
 
   bool AddMessageToConsole(WebContents* source,
-                           int32 level,
+                           int32_t level,
                            const base::string16& message,
-                           int32 line_no,
+                           int32_t line_no,
                            const base::string16& source_id) override;
 
  private:
@@ -46,13 +50,10 @@ class ManifestBrowserTest : public ContentBrowserTest  {
  protected:
   friend MockWebContentsDelegate;
 
-  ManifestBrowserTest()
-      : console_error_count_(0) {
-    cors_embedded_test_server_.reset(new net::test_server::EmbeddedTestServer);
-    base::FilePath test_data_dir;
-    CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
-    cors_embedded_test_server_->ServeFilesFromDirectory(
-        test_data_dir.AppendASCII("content/test/data/"));
+  ManifestBrowserTest() : console_error_count_(0), has_manifest_(false) {
+    cors_embedded_test_server_.reset(new net::EmbeddedTestServer);
+    cors_embedded_test_server_->ServeFilesFromSourceDirectory(
+        "content/test/data");
   }
 
   ~ManifestBrowserTest() override {}
@@ -75,13 +76,31 @@ class ManifestBrowserTest : public ContentBrowserTest  {
     message_loop_runner_->Run();
   }
 
+  void HasManifestAndWait() {
+    shell()->web_contents()->HasManifest(
+        base::Bind(&ManifestBrowserTest::OnHasManifest,
+                   base::Unretained(this)));
+
+    message_loop_runner_ = new MessageLoopRunner();
+    message_loop_runner_->Run();
+  }
+
   void OnGetManifest(const Manifest& manifest) {
     manifest_ = manifest;
     message_loop_runner_->Quit();
   }
 
+  void OnHasManifest(bool has_manifest) {
+    has_manifest_ = has_manifest;
+    message_loop_runner_->Quit();
+  }
+
   const Manifest& manifest() const {
     return manifest_;
+  }
+
+  bool has_manifest() const {
+    return has_manifest_;
   }
 
   unsigned int console_error_count() const {
@@ -92,16 +111,17 @@ class ManifestBrowserTest : public ContentBrowserTest  {
     console_error_count_++;
   }
 
-  net::test_server::EmbeddedTestServer* cors_embedded_test_server() const {
+  net::EmbeddedTestServer* cors_embedded_test_server() const {
     return cors_embedded_test_server_.get();
   }
 
  private:
   scoped_refptr<MessageLoopRunner> message_loop_runner_;
   scoped_ptr<MockWebContentsDelegate> mock_web_contents_delegate_;
-  scoped_ptr<net::test_server::EmbeddedTestServer> cors_embedded_test_server_;
+  scoped_ptr<net::EmbeddedTestServer> cors_embedded_test_server_;
   Manifest manifest_;
   int console_error_count_;
+  bool has_manifest_;
 
   DISALLOW_COPY_AND_ASSIGN(ManifestBrowserTest);
 };
@@ -110,9 +130,9 @@ class ManifestBrowserTest : public ContentBrowserTest  {
 // to know about |test_|.
 bool MockWebContentsDelegate::AddMessageToConsole(
     WebContents* source,
-    int32 level,
+    int32_t level,
     const base::string16& message,
-    int32 line_no,
+    int32_t line_no,
     const base::string16& source_id) {
   DCHECK(source == web_contents_);
 
@@ -132,11 +152,14 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, NoManifest) {
 
   GetManifestAndWait();
   EXPECT_TRUE(manifest().IsEmpty());
+
+  HasManifestAndWait();
+  EXPECT_FALSE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 }
 
 // If a page manifest points to a 404 URL, requesting the manifest should return
-// the empty manifest.
+// the empty manifest. However, HasManifest will return true.
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, 404Manifest) {
   GURL test_url = GetTestUrl("manifest", "404-manifest.html");
 
@@ -146,6 +169,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, 404Manifest) {
 
   GetManifestAndWait();
   EXPECT_TRUE(manifest().IsEmpty());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 }
 
@@ -160,6 +186,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, EmptyManifest) {
 
   GetManifestAndWait();
   EXPECT_TRUE(manifest().IsEmpty());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 }
 
@@ -174,6 +203,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, ParseErrorManifest) {
 
   GetManifestAndWait();
   EXPECT_TRUE(manifest().IsEmpty());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(1u, console_error_count());
 }
 
@@ -188,6 +220,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, DummyManifest) {
 
   GetManifestAndWait();
   EXPECT_FALSE(manifest().IsEmpty());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 }
 
@@ -203,6 +238,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, DynamicManifest) {
   {
     GetManifestAndWait();
     EXPECT_TRUE(manifest().IsEmpty());
+
+    HasManifestAndWait();
+    EXPECT_FALSE(has_manifest());
   }
 
   {
@@ -213,6 +251,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, DynamicManifest) {
 
     GetManifestAndWait();
     EXPECT_FALSE(manifest().IsEmpty());
+
+    HasManifestAndWait();
+    EXPECT_TRUE(has_manifest());
   }
 
   {
@@ -223,6 +264,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, DynamicManifest) {
 
     GetManifestAndWait();
     EXPECT_TRUE(manifest().IsEmpty());
+
+    HasManifestAndWait();
+    EXPECT_TRUE(has_manifest());
   }
 
   EXPECT_EQ(0u, console_error_count());
@@ -232,8 +276,8 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, DynamicManifest) {
 // rules and requesting the manifest should return an empty manifest (unless the
 // response contains CORS headers).
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, CORSManifest) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
-  ASSERT_TRUE(cors_embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(cors_embedded_test_server()->Start());
   ASSERT_NE(embedded_test_server()->port(),
             cors_embedded_test_server()->port());
 
@@ -252,6 +296,8 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, CORSManifest) {
   GetManifestAndWait();
   EXPECT_TRUE(manifest().IsEmpty());
 
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 
   // The purpose of this second load is to make sure the first load is fully
@@ -270,8 +316,8 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, CORSManifest) {
 // If a page's manifest lives in a different origin, it should be accessible if
 // it has valid access controls headers.
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, CORSManifestWithAcessControls) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
-  ASSERT_TRUE(cors_embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(cors_embedded_test_server()->Start());
   ASSERT_NE(embedded_test_server()->port(),
             cors_embedded_test_server()->port());
 
@@ -290,18 +336,19 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, CORSManifestWithAcessControls) {
   GetManifestAndWait();
   EXPECT_FALSE(manifest().IsEmpty());
 
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 }
 
 // If a page's manifest is in an insecure origin while the page is in a secure
 // origin, requesting the manifest should return the empty manifest.
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, MixedContentManifest) {
-  scoped_ptr<net::SpawnedTestServer> https_server(new net::SpawnedTestServer(
-      net::SpawnedTestServer::TYPE_HTTPS,
-      net::BaseTestServer::SSLOptions(net::BaseTestServer::SSLOptions::CERT_OK),
-      base::FilePath(FILE_PATH_LITERAL("content/test/data"))));
+  scoped_ptr<net::EmbeddedTestServer> https_server(
+      new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
+  https_server->ServeFilesFromSourceDirectory("content/test/data");
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server->Start());
 
   GURL test_url =
@@ -319,6 +366,8 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, MixedContentManifest) {
   GetManifestAndWait();
   EXPECT_TRUE(manifest().IsEmpty());
 
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 }
 
@@ -334,12 +383,15 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, ParsingErrorsManifest) {
   GetManifestAndWait();
   EXPECT_TRUE(manifest().IsEmpty());
   EXPECT_EQ(6u, console_error_count());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
 }
 
 // If a page has a manifest and the page is navigated to a page without a
 // manifest, the page's manifest should be updated.
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, Navigation) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   {
     GURL test_url =
         embedded_test_server()->GetURL("/manifest/dummy-manifest.html");
@@ -350,6 +402,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, Navigation) {
 
     GetManifestAndWait();
     EXPECT_FALSE(manifest().IsEmpty());
+
+    HasManifestAndWait();
+    EXPECT_TRUE(has_manifest());
     EXPECT_EQ(0u, console_error_count());
   }
 
@@ -364,13 +419,16 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, Navigation) {
     GetManifestAndWait();
     EXPECT_TRUE(manifest().IsEmpty());
     EXPECT_EQ(0u, console_error_count());
+
+    HasManifestAndWait();
+    EXPECT_FALSE(has_manifest());
   }
 }
 
 // If a page has a manifest and the page is navigated using pushState (ie. same
 // page), it should keep its manifest state.
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, PushStateNavigation) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL test_url =
       embedded_test_server()->GetURL("/manifest/dummy-manifest.html");
 
@@ -390,13 +448,16 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, PushStateNavigation) {
 
   GetManifestAndWait();
   EXPECT_FALSE(manifest().IsEmpty());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 }
 
 // If a page has a manifest and is navigated using an anchor (ie. same page), it
 // should keep its manifest state.
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, AnchorNavigation) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL test_url =
       embedded_test_server()->GetURL("/manifest/dummy-manifest.html");
 
@@ -418,6 +479,10 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, AnchorNavigation) {
   GetManifestAndWait();
   EXPECT_FALSE(manifest().IsEmpty());
   EXPECT_EQ(0u, console_error_count());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
+  EXPECT_EQ(0u, console_error_count());
 }
 
 namespace {
@@ -433,7 +498,7 @@ scoped_ptr<net::test_server::HttpResponse> CustomHandleRequestForCookies(
         "<html><head>"
         "<link rel=manifest crossorigin='use-credentials' href=/manifest.json>"
         "</head></html>");
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   const auto& iter = request.headers.find("Cookie");
@@ -447,7 +512,7 @@ scoped_ptr<net::test_server::HttpResponse> CustomHandleRequestForCookies(
   http_response->set_content(
       base::StringPrintf("{\"name\": \"%s\"}", iter->second.c_str()));
 
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 }  // anonymous namespace
@@ -455,12 +520,12 @@ scoped_ptr<net::test_server::HttpResponse> CustomHandleRequestForCookies(
 // This tests that when fetching a Manifest with 'use-credentials' set, the
 // cookies associated with it are passed along the request.
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, UseCredentialsSendCookies) {
-  scoped_ptr<net::test_server::EmbeddedTestServer> custom_embedded_test_server(
-      new net::test_server::EmbeddedTestServer());
+  scoped_ptr<net::EmbeddedTestServer> custom_embedded_test_server(
+      new net::EmbeddedTestServer());
   custom_embedded_test_server->RegisterRequestHandler(
       base::Bind(&CustomHandleRequestForCookies));
 
-  ASSERT_TRUE(custom_embedded_test_server->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(custom_embedded_test_server->Start());
 
   ASSERT_TRUE(SetCookie(shell()->web_contents()->GetBrowserContext(),
                         custom_embedded_test_server->base_url(),
@@ -472,6 +537,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, UseCredentialsSendCookies) {
 
   GetManifestAndWait();
   EXPECT_FALSE(manifest().IsEmpty());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 
   // The custom embedded test server will fill the name field with the cookie
@@ -490,7 +558,7 @@ scoped_ptr<net::test_server::HttpResponse> CustomHandleRequestForNoCookies(
     http_response->set_content_type("text/html");
     http_response->set_content(
         "<html><head><link rel=manifest href=/manifest.json></head></html>");
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   const auto& iter = request.headers.find("Cookie");
@@ -503,7 +571,7 @@ scoped_ptr<net::test_server::HttpResponse> CustomHandleRequestForNoCookies(
   http_response->set_content_type("application/json");
   http_response->set_content("{\"name\": \"no cookies\"}");
 
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 }  // anonymous namespace
@@ -511,12 +579,12 @@ scoped_ptr<net::test_server::HttpResponse> CustomHandleRequestForNoCookies(
 // This tests that when fetching a Manifest without 'use-credentials' set, the
 // cookies associated with it are not passed along the request.
 IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, NoUseCredentialsNoCookies) {
-  scoped_ptr<net::test_server::EmbeddedTestServer> custom_embedded_test_server(
-      new net::test_server::EmbeddedTestServer());
+  scoped_ptr<net::EmbeddedTestServer> custom_embedded_test_server(
+      new net::EmbeddedTestServer());
   custom_embedded_test_server->RegisterRequestHandler(
       base::Bind(&CustomHandleRequestForNoCookies));
 
-  ASSERT_TRUE(custom_embedded_test_server->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(custom_embedded_test_server->Start());
 
   ASSERT_TRUE(SetCookie(shell()->web_contents()->GetBrowserContext(),
                         custom_embedded_test_server->base_url(),
@@ -528,6 +596,9 @@ IN_PROC_BROWSER_TEST_F(ManifestBrowserTest, NoUseCredentialsNoCookies) {
 
   GetManifestAndWait();
   EXPECT_FALSE(manifest().IsEmpty());
+
+  HasManifestAndWait();
+  EXPECT_TRUE(has_manifest());
   EXPECT_EQ(0u, console_error_count());
 
   // The custom embedded test server will fill set the name to 'no cookies' if

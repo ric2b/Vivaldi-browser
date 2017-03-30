@@ -8,6 +8,7 @@ found in the LICENSE file.
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" id="theme-color">
   <title>$1</title>
   <!-- Placeholder for CSS. -->
   $2
@@ -29,62 +30,13 @@ found in the LICENSE file.
         <div id="content"><noscript>$5</noscript></div>
       </article>
       <div id="loadingIndicator" class="visible">
-        <div id="loader">
-          <div class="circle initial">
-            <span class="mask">
-              <span class="mover"></span>
-            </span>
-          </div>
-
-          <div class="circle red">
-            <span class="mask first">
-              <span class="base"></span>
-              <span class="mover"></span>
-            </span>
-            <span class="mask second">
-              <span class="base"></span>
-              <span class="mover"></span>
-            </span>
-          </div>
-
-          <div class="circle yellow">
-            <span class="mask first">
-              <span class="base"></span>
-              <span class="mover"></span>
-            </span>
-            <span class="mask second">
-              <span class="base"></span>
-              <span class="mover"></span>
-            </span>
-          </div>
-
-          <div class="circle green">
-            <span class="mask first">
-              <span class="base"></span>
-              <span class="mover"></span>
-            </span>
-            <span class="mask second">
-              <span class="base"></span>
-              <span class="mover"></span>
-            </span>
-          </div>
-
-          <div class="circle blue">
-            <span class="mask first">
-              <span class="base"></span>
-              <span class="mover"></span>
-            </span>
-            <span class="mask second">
-              <span class="base"></span>
-              <span class="mover"></span>
-            </span>
-          </div>
-        </div>
+        <!-- SVG material loading spinner. -->
+        $6
       </div>
     </div>
-    <a href="$6" id="closeReaderView">$7</a>
+    <a data-original-url="$7" id="closeReaderView">$8</a>
   </div>
-  <div id="feedbackContainer" class="footerFeedback">
+  <div id="feedbackContainer" class="footerFeedback hidden">
     <div class="feedbackContent">
       <div id="feedbackQuestion"></div>
       <div class="feedbackButtonWrap">
@@ -95,6 +47,4 @@ found in the LICENSE file.
     <div class="clear"></div>
   </div>
 </body>
-<!-- Placeholder for JavaScript. -->
-$8
 </html>

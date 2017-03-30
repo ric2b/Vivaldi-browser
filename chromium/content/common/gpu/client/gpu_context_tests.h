@@ -10,6 +10,7 @@
 #include "base/run_loop.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
+#include "gpu/command_buffer/common/sync_token.h"
 
 namespace {
 
@@ -22,9 +23,9 @@ class SignalTest : public ContextTestBase {
   }
 
   // These tests should time out if the callback doesn't get called.
-  void TestSignalSyncPoint(unsigned sync_point) {
+  void TestSignalSyncToken(const gpu::SyncToken& sync_token) {
     base::RunLoop run_loop;
-    context_support_->SignalSyncPoint(sync_point, run_loop.QuitClosure());
+    context_support_->SignalSyncToken(sync_token, run_loop.QuitClosure());
     run_loop.Run();
   }
 
@@ -39,20 +40,40 @@ class SignalTest : public ContextTestBase {
   }
 };
 
-CONTEXT_TEST_F(SignalTest, BasicSignalSyncPointTest) {
+CONTEXT_TEST_F(SignalTest, BasicSignalSyncTokenTest) {
   if (!context_)
     return;
 
-  TestSignalSyncPoint(context_->insertSyncPoint());
+  const blink::WGC3Duint64 fence_sync = context_->insertFenceSyncCHROMIUM();
+  context_->shallowFlushCHROMIUM();
+
+  gpu::SyncToken sync_token;
+  ASSERT_TRUE(context_->genSyncTokenCHROMIUM(fence_sync, sync_token.GetData()));
+
+  TestSignalSyncToken(sync_token);
 };
 
-CONTEXT_TEST_F(SignalTest, InvalidSignalSyncPointTest) {
+CONTEXT_TEST_F(SignalTest, EmptySignalSyncTokenTest) {
   if (!context_)
     return;
 
   // Signalling something that doesn't exist should run the callback
   // immediately.
-  TestSignalSyncPoint(1297824234);
+  gpu::SyncToken sync_token;
+  TestSignalSyncToken(sync_token);
+};
+
+CONTEXT_TEST_F(SignalTest, InvalidSignalSyncTokenTest) {
+  if (!context_)
+    return;
+
+  // Signalling something that doesn't exist should run the callback
+  // immediately.
+  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO,
+                            0,
+                            1297824234,
+                            9123743439);
+  TestSignalSyncToken(sync_token);
 };
 
 CONTEXT_TEST_F(SignalTest, BasicSignalQueryTest) {

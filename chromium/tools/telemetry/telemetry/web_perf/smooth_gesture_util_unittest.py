@@ -10,8 +10,7 @@ from telemetry.page import page_test
 from telemetry.testing import page_test_test_case
 from telemetry.timeline import async_slice
 from telemetry.timeline import model as model_module
-from telemetry.timeline import tracing_category_filter
-from telemetry.timeline import tracing_options
+from telemetry.timeline import tracing_config
 from telemetry.web_perf import smooth_gesture_util as sg_util
 from telemetry.web_perf import timeline_interaction_record as tir_module
 
@@ -111,9 +110,8 @@ class ScrollingPage(page_module.Page):
 
 
 class SmoothGestureTest(page_test_test_case.PageTestTestCase):
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   @decorators.Disabled('mac',       # crbug.com/450171
+                       'win',       # crbug.com/570955
                        'chromeos')  # crbug.com/483212
   def testSmoothGestureAdjusted(self):
     ps = self.CreateEmptyPageSet()
@@ -126,15 +124,16 @@ class SmoothGestureTest(page_test_test_case.PageTestTestCase):
         # pylint: disable=bad-super-call
         super(ScrollingGestureTestMeasurement, self).__init__()
 
-      def WillNavigateToPage(self, _page, tab):
-        options = tracing_options.TracingOptions()
-        options.enable_chrome_trace = True
-        tab.browser.platform.tracing_controller.Start(
-          options, tracing_category_filter.TracingCategoryFilter())
+      def WillNavigateToPage(self, page, tab):
+        del page  # unused
+        config = tracing_config.TracingConfig()
+        config.enable_chrome_trace = True
+        tab.browser.platform.tracing_controller.StartTracing(config)
 
-      def ValidateAndMeasurePage(self, _page, tab, _results):
+      def ValidateAndMeasurePage(self, page, tab, results):
+        del page, results  # unused
         models.append(model_module.TimelineModel(
-          tab.browser.platform.tracing_controller.Stop()))
+          tab.browser.platform.tracing_controller.StopTracing()))
         tab_ids.append(tab.id)
 
     self.RunMeasurement(ScrollingGestureTestMeasurement(), ps)

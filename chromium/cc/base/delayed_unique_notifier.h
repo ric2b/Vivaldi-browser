@@ -6,6 +6,7 @@
 #define CC_BASE_DELAYED_UNIQUE_NOTIFIER_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/base/cc_export.h"
 
@@ -44,6 +45,8 @@ class CC_EXPORT DelayedUniqueNotifier {
 
   // Returns true if a notification is currently scheduled to run.
   bool HasPendingNotification() const;
+
+  base::TimeDelta delay() const { return delay_; }
 
  protected:
   // Virtual for testing.

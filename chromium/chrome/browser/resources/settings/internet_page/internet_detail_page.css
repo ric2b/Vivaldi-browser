@@ -2,42 +2,52 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-#outerDiv {
-  -webkit-margin-end: 40px;
+.section {
+  margin-bottom: 5px;
 }
 
-#networkIcon {
+iron-collapse {
+  margin: 10px;
+}
+
+cr-network-icon {
   height: 32px;
   width: 32px;
 }
 
-#networkName {
+cr-policy-network-indicator {
   -webkit-margin-start: 10px;
-  font-size: 20px;
-  font-weight: bold;
 }
 
+#networkName,
 #networkState {
   -webkit-margin-start: 10px;
   font-size: 20px;
 }
 
-#networkState.connected {
+#networkName {
+  font-weight: bold;
+}
+
+#networkState[connected] {
   color: green;
 }
 
-#infoDiv {
-  margin: 10px 0 0 45px;
+#outerDiv {
+  margin: 10px 20px;
 }
 
-#infoDiv cr-checkbox {
-  margin-bottom: 10px;
+#ipAddressLabel {
+  -webkit-margin-end: 10px;
+  font-weight: bold;
+}
+
+#preferButton {
+  -webkit-margin-end: 8px;
+  -webkit-margin-start: -3px;
+  padding: 0
 }
 
 #proxyDiv {
   max-width: 500px;
-}
-
-cr-collapse {
-  margin: 10px;
 }

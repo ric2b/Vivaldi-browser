@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/metrics_private/metrics_private_api.h"
 
+#include <limits.h>
+
 #include <algorithm>
 
 #include "base/metrics/field_trial.h"
@@ -41,7 +43,7 @@ const size_t kMaxBuckets = 10000; // We don't ever want more than these many
 
 bool MetricsPrivateGetIsCrashReportingEnabledFunction::RunSync() {
   SetResult(new base::FundamentalValue(
-      ChromeMetricsServiceAccessor::IsCrashReportingEnabled()));
+      ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()));
   return true;
 }
 

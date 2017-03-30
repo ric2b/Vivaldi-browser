@@ -4,6 +4,8 @@
 
 #include "remoting/codec/video_encoder_vpx.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/sys_info.h"
@@ -16,8 +18,8 @@
 
 extern "C" {
 #define VPX_CODEC_DISABLE_COMPAT 1
-#include "third_party/libvpx/source/libvpx/vpx/vpx_encoder.h"
-#include "third_party/libvpx/source/libvpx/vpx/vp8cx.h"
+#include "third_party/libvpx_new/source/libvpx/vpx/vp8cx.h"
+#include "third_party/libvpx_new/source/libvpx/vpx/vpx_encoder.h"
 }
 
 namespace remoting {
@@ -149,7 +151,7 @@ void SetVp9CodecOptions(vpx_codec_ctx_t* codec, bool lossless_encode) {
 void FreeImageIfMismatched(bool use_i444,
                            const webrtc::DesktopSize& size,
                            scoped_ptr<vpx_image_t>* out_image,
-                           scoped_ptr<uint8[]>* out_image_buffer) {
+                           scoped_ptr<uint8_t[]>* out_image_buffer) {
   if (*out_image) {
     const vpx_img_fmt_t desired_fmt =
         use_i444 ? VPX_IMG_FMT_I444 : VPX_IMG_FMT_I420;
@@ -164,7 +166,7 @@ void FreeImageIfMismatched(bool use_i444,
 void CreateImage(bool use_i444,
                  const webrtc::DesktopSize& size,
                  scoped_ptr<vpx_image_t>* out_image,
-                 scoped_ptr<uint8[]>* out_image_buffer) {
+                 scoped_ptr<uint8_t[]>* out_image_buffer) {
   DCHECK(!size.is_empty());
   DCHECK(!*out_image_buffer);
   DCHECK(!*out_image);
@@ -207,7 +209,7 @@ void CreateImage(bool use_i444,
 
   // Allocate a YUV buffer large enough for the aligned data & padding.
   const int buffer_size = y_stride * y_rows + 2*uv_stride * uv_rows;
-  scoped_ptr<uint8[]> image_buffer(new uint8[buffer_size]);
+  scoped_ptr<uint8_t[]> image_buffer(new uint8_t[buffer_size]);
 
   // Reset image value to 128 so we just need to fill in the y plane.
   memset(image_buffer.get(), 128, buffer_size);
@@ -222,8 +224,8 @@ void CreateImage(bool use_i444,
   image->stride[1] = uv_stride;
   image->stride[2] = uv_stride;
 
-  *out_image = image.Pass();
-  *out_image_buffer = image_buffer.Pass();
+  *out_image = std::move(image);
+  *out_image_buffer = std::move(image_buffer);
 }
 
 } // namespace
@@ -270,8 +272,6 @@ scoped_ptr<VideoPacket> VideoEncoderVpx::Encode(
   if (frame.updated_region().is_empty() && !encode_unchanged_frame_)
     return nullptr;
 
-  base::TimeTicks encode_start_time = base::TimeTicks::Now();
-
   // Create or reconfigure the codec to match the size of |frame|.
   if (!codec_ ||
       (image_ &&
@@ -296,7 +296,7 @@ scoped_ptr<VideoPacket> VideoEncoderVpx::Encode(
   }
 
   // Do the actual encoding.
-  int timestamp = (encode_start_time - timestamp_base_).InMilliseconds();
+  int timestamp = (base::TimeTicks::Now() - timestamp_base_).InMilliseconds();
   vpx_codec_err_t ret = vpx_codec_encode(
       codec_.get(), image_.get(), timestamp, 1, 0, VPX_DL_REALTIME);
   DCHECK_EQ(ret, VPX_CODEC_OK)
@@ -316,7 +316,7 @@ scoped_ptr<VideoPacket> VideoEncoderVpx::Encode(
   }
 
   // Read the encoded data.
-  vpx_codec_iter_t iter = NULL;
+  vpx_codec_iter_t iter = nullptr;
   bool got_data = false;
 
   // TODO(hclam): Make sure we get exactly one frame from the packet.
@@ -341,11 +341,7 @@ scoped_ptr<VideoPacket> VideoEncoderVpx::Encode(
     }
   }
 
-  // Note the time taken to encode the pixel data.
-  packet->set_encode_time_ms(
-      (base::TimeTicks::Now() - encode_start_time).InMillisecondsRoundedUp());
-
-  return packet.Pass();
+  return packet;
 }
 
 VideoEncoderVpx::VideoEncoderVpx(bool use_vp9)
@@ -366,7 +362,7 @@ void VideoEncoderVpx::Configure(const webrtc::DesktopSize& size) {
       (size.width() + kMacroBlockSize - 1) / kMacroBlockSize,
       (size.height() + kMacroBlockSize - 1) / kMacroBlockSize);
   active_map_.reset(
-      new uint8[active_map_size_.width() * active_map_size_.height()]);
+      new uint8_t[active_map_size_.width() * active_map_size_.height()]);
 
   // TODO(wez): Remove this hack once VPX can handle frame size reconfiguration.
   // See https://code.google.com/p/webm/issues/detail?id=912.
@@ -453,14 +449,14 @@ void VideoEncoderVpx::PrepareImage(const webrtc::DesktopFrame& frame,
   }
 
   // Convert the updated region to YUV ready for encoding.
-  const uint8* rgb_data = frame.data();
+  const uint8_t* rgb_data = frame.data();
   const int rgb_stride = frame.stride();
   const int y_stride = image_->stride[0];
   DCHECK_EQ(image_->stride[1], image_->stride[2]);
   const int uv_stride = image_->stride[1];
-  uint8* y_data = image_->planes[0];
-  uint8* u_data = image_->planes[1];
-  uint8* v_data = image_->planes[2];
+  uint8_t* y_data = image_->planes[0];
+  uint8_t* u_data = image_->planes[1];
+  uint8_t* v_data = image_->planes[2];
 
   switch (image_->fmt) {
     case VPX_IMG_FMT_I444:
@@ -515,7 +511,7 @@ void VideoEncoderVpx::SetActiveMapFromRegion(
     DCHECK_LT(right, active_map_size_.width());
     DCHECK_LT(bottom, active_map_size_.height());
 
-    uint8* map = active_map_.get() + top * active_map_size_.width();
+    uint8_t* map = active_map_.get() + top * active_map_size_.width();
     for (int y = top; y <= bottom; ++y) {
       for (int x = left; x <= right; ++x)
         map[x] = 1;
@@ -526,7 +522,7 @@ void VideoEncoderVpx::SetActiveMapFromRegion(
 
 void VideoEncoderVpx::UpdateRegionFromActiveMap(
     webrtc::DesktopRegion* updated_region) {
-  const uint8* map = active_map_.get();
+  const uint8_t* map = active_map_.get();
   for (int y = 0; y < active_map_size_.height(); ++y) {
     for (int x0 = 0; x0 < active_map_size_.width();) {
       int x1 = x0;

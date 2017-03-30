@@ -5,8 +5,11 @@
 #ifndef SYNC_INTERNAL_API_SYNC_BACKUP_MANAGER_H_
 #define SYNC_INTERNAL_API_SYNC_BACKUP_MANAGER_H_
 
+#include <stdint.h>
+
 #include <set>
 
+#include "base/macros.h"
 #include "sync/internal_api/sync_rollback_manager_base.h"
 #include "url/gurl.h"
 
@@ -15,7 +18,7 @@ namespace syncer {
 // SyncBackupManager runs before user signs in to sync to back up user's data
 // before sync starts. The data that's backed up can be used to restore user's
 // settings to pre-sync state.
-class SYNC_EXPORT_PRIVATE SyncBackupManager : public SyncRollbackManagerBase {
+class SYNC_EXPORT SyncBackupManager : public SyncRollbackManagerBase {
  public:
   SyncBackupManager();
   ~SyncBackupManager() override;
@@ -38,6 +41,7 @@ class SYNC_EXPORT_PRIVATE SyncBackupManager : public SyncRollbackManagerBase {
   bool HasDirectoryTypeDebugInfoObserver(
       syncer::TypeDebugInfoObserver* observer) override;
   void RequestEmitDebugInfo() override;
+  void ClearServerData(const ClearServerDataCallback& callback) override;
 
  private:
   // Replaces local IDs with server IDs and clear unsynced bit of modified
@@ -51,7 +55,7 @@ class SYNC_EXPORT_PRIVATE SyncBackupManager : public SyncRollbackManagerBase {
   void HideSyncPreference(ModelType pref_type);
 
   // Handles of unsynced entries caused by local model changes.
-  std::set<int64> unsynced_;
+  std::set<int64_t> unsynced_;
 
   // True if NormalizeEntries() is being called.
   bool in_normalization_;

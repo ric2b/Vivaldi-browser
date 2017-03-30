@@ -19,6 +19,13 @@
 
 namespace cc {
 
+namespace {
+// This is a fudge factor we subtract from the deadline to account
+// for message latency and kernel scheduling variability.
+const base::TimeDelta kDeadlineFudgeFactor =
+    base::TimeDelta::FromMicroseconds(1000);
+}
+
 scoped_ptr<Scheduler> Scheduler::Create(
     SchedulerClient* client,
     const SchedulerSettings& settings,
@@ -35,8 +42,8 @@ scoped_ptr<Scheduler> Scheduler::Create(
       BackToBackBeginFrameSource::Create(task_runner);
   return make_scoped_ptr(new Scheduler(
       client, settings, layer_tree_host_id, task_runner, external_frame_source,
-      synthetic_frame_source.Pass(), unthrottled_frame_source.Pass(),
-      compositor_timing_history.Pass()));
+      std::move(synthetic_frame_source), std::move(unthrottled_frame_source),
+      std::move(compositor_timing_history)));
 }
 
 Scheduler::Scheduler(
@@ -53,11 +60,11 @@ Scheduler::Scheduler(
       layer_tree_host_id_(layer_tree_host_id),
       task_runner_(task_runner),
       external_frame_source_(external_frame_source),
-      synthetic_frame_source_(synthetic_frame_source.Pass()),
-      unthrottled_frame_source_(unthrottled_frame_source.Pass()),
+      synthetic_frame_source_(std::move(synthetic_frame_source)),
+      unthrottled_frame_source_(std::move(unthrottled_frame_source)),
       frame_source_(BeginFrameSourceMultiplexer::Create()),
       throttle_frame_production_(false),
-      compositor_timing_history_(compositor_timing_history.Pass()),
+      compositor_timing_history_(std::move(compositor_timing_history)),
       begin_impl_frame_deadline_mode_(
           SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_NONE),
       begin_impl_frame_tracker_(BEGINFRAMETRACKER_FROM_HERE),
@@ -68,10 +75,8 @@ Scheduler::Scheduler(
   TRACE_EVENT1("cc", "Scheduler::Scheduler", "settings", settings_.AsValue());
   DCHECK(client_);
   DCHECK(!state_machine_.BeginFrameNeeded());
-  DCHECK_IMPLIES(settings_.use_external_begin_frame_source,
-                 external_frame_source_);
-  DCHECK_IMPLIES(!settings_.use_external_begin_frame_source,
-                 synthetic_frame_source_);
+  DCHECK(!settings_.use_external_begin_frame_source || external_frame_source_);
+  DCHECK(settings_.use_external_begin_frame_source || synthetic_frame_source_);
   DCHECK(unthrottled_frame_source_);
 
   begin_retro_frame_closure_ =
@@ -124,11 +129,6 @@ void Scheduler::SetEstimatedParentDrawTime(base::TimeDelta draw_time) {
   estimated_parent_draw_time_ = draw_time;
 }
 
-void Scheduler::SetCanStart() {
-  state_machine_.SetCanStart();
-  ProcessScheduledActions();
-}
-
 void Scheduler::SetVisible(bool visible) {
   state_machine_.SetVisible(visible);
   UpdateCompositorTimingHistoryRecordingEnabled();
@@ -162,18 +162,18 @@ void Scheduler::SetThrottleFrameProduction(bool throttle) {
   ProcessScheduledActions();
 }
 
-void Scheduler::SetNeedsCommit() {
-  state_machine_.SetNeedsCommit();
+void Scheduler::SetNeedsBeginMainFrame() {
+  state_machine_.SetNeedsBeginMainFrame();
+  ProcessScheduledActions();
+}
+
+void Scheduler::SetNeedsOneBeginImplFrame() {
+  state_machine_.SetNeedsOneBeginImplFrame();
   ProcessScheduledActions();
 }
 
 void Scheduler::SetNeedsRedraw() {
   state_machine_.SetNeedsRedraw();
-  ProcessScheduledActions();
-}
-
-void Scheduler::SetNeedsAnimate() {
-  state_machine_.SetNeedsAnimate();
   ProcessScheduledActions();
 }
 
@@ -183,16 +183,8 @@ void Scheduler::SetNeedsPrepareTiles() {
   ProcessScheduledActions();
 }
 
-void Scheduler::SetWaitForReadyToDraw() {
-  state_machine_.SetWaitForReadyToDraw();
-  ProcessScheduledActions();
-}
-
-void Scheduler::SetMaxSwapsPending(int max) {
-  state_machine_.SetMaxSwapsPending(max);
-}
-
 void Scheduler::DidSwapBuffers() {
+  compositor_timing_history_->DidSwapBuffers();
   state_machine_.DidSwapBuffers();
 
   // There is no need to call ProcessScheduledActions here because
@@ -204,12 +196,16 @@ void Scheduler::DidSwapBuffers() {
 
 void Scheduler::DidSwapBuffersComplete() {
   DCHECK_GT(state_machine_.pending_swaps(), 0) << AsValue()->ToString();
+  compositor_timing_history_->DidSwapBuffersComplete();
   state_machine_.DidSwapBuffersComplete();
   ProcessScheduledActions();
 }
 
-void Scheduler::SetImplLatencyTakesPriority(bool impl_latency_takes_priority) {
-  state_machine_.SetImplLatencyTakesPriority(impl_latency_takes_priority);
+void Scheduler::SetTreePrioritiesAndScrollState(
+    TreePriority tree_priority,
+    ScrollHandlerState scroll_handler_state) {
+  state_machine_.SetTreePrioritiesAndScrollState(tree_priority,
+                                                 scroll_handler_state);
   ProcessScheduledActions();
 }
 
@@ -253,18 +249,30 @@ void Scheduler::DidCreateAndInitializeOutputSurface() {
   TRACE_EVENT0("cc", "Scheduler::DidCreateAndInitializeOutputSurface");
   DCHECK(!frame_source_->NeedsBeginFrames());
   DCHECK(begin_impl_frame_deadline_task_.IsCancelled());
+  compositor_timing_history_->DidSwapBuffersReset();
   state_machine_.DidCreateAndInitializeOutputSurface();
   UpdateCompositorTimingHistoryRecordingEnabled();
   ProcessScheduledActions();
 }
 
-void Scheduler::NotifyBeginMainFrameStarted() {
+void Scheduler::NotifyBeginMainFrameStarted(
+    base::TimeTicks main_thread_start_time) {
   TRACE_EVENT0("cc", "Scheduler::NotifyBeginMainFrameStarted");
   state_machine_.NotifyBeginMainFrameStarted();
+  compositor_timing_history_->BeginMainFrameStarted(main_thread_start_time);
 }
 
 base::TimeTicks Scheduler::LastBeginImplFrameTime() {
   return begin_impl_frame_tracker_.Current().frame_time;
+}
+
+void Scheduler::BeginImplFrameNotExpectedSoon() {
+  compositor_timing_history_->BeginImplFrameNotExpectedSoon();
+
+  // Tying this to SendBeginMainFrameNotExpectedSoon will have some
+  // false negatives, but we want to avoid running long idle tasks when
+  // we are actually active.
+  client_->SendBeginMainFrameNotExpectedSoon();
 }
 
 void Scheduler::SetupNextBeginFrameIfNeeded() {
@@ -280,13 +288,22 @@ void Scheduler::SetupNextBeginFrameIfNeeded() {
                SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE) {
       // Call SetNeedsBeginFrames(false) in between frames only.
       frame_source_->SetNeedsBeginFrames(false);
-      client_->SendBeginMainFrameNotExpectedSoon();
+      BeginImplFrameNotExpectedSoon();
       devtools_instrumentation::NeedsBeginFrameChanged(layer_tree_host_id_,
                                                        false);
     }
   }
 
   PostBeginRetroFrameIfNeeded();
+}
+
+void Scheduler::OnBeginFrameSourcePausedChanged(bool paused) {
+  if (state_machine_.begin_frame_source_paused() == paused)
+    return;
+  TRACE_EVENT_INSTANT1("cc", "Scheduler::SetBeginFrameSourcePaused",
+                       TRACE_EVENT_SCOPE_THREAD, "paused", paused);
+  state_machine_.SetBeginFrameSourcePaused(paused);
+  ProcessScheduledActions();
 }
 
 // BeginFrame is the mechanism that tells us that now is a good time to start
@@ -304,7 +321,6 @@ bool Scheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
   // TODO(brianderson): Adjust deadline in the DisplayScheduler.
   BeginFrameArgs adjusted_args(args);
   adjusted_args.deadline -= EstimatedParentDrawTime();
-  adjusted_args.on_critical_path = !ImplLatencyTakesPriority();
 
   // Deliver BeginFrames to children.
   // TODO(brianderson): Move this responsibility to the DisplayScheduler.
@@ -362,17 +378,19 @@ void Scheduler::SetVideoNeedsBeginFrames(bool video_needs_begin_frames) {
   ProcessScheduledActions();
 }
 
-void Scheduler::OnDrawForOutputSurface() {
+void Scheduler::OnDrawForOutputSurface(bool resourceless_software_draw) {
   DCHECK(settings_.using_synchronous_renderer_compositor);
   DCHECK_EQ(state_machine_.begin_impl_frame_state(),
             SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE);
   DCHECK(!BeginImplFrameDeadlinePending());
 
+  state_machine_.SetResourcelessSoftareDraw(resourceless_software_draw);
   state_machine_.OnBeginImplFrameDeadline();
   ProcessScheduledActions();
 
   state_machine_.OnBeginImplFrameIdle();
   ProcessScheduledActions();
+  state_machine_.SetResourcelessSoftareDraw(false);
 }
 
 // BeginRetroFrame is called for BeginFrames that we've deferred because
@@ -450,21 +468,53 @@ void Scheduler::PostBeginRetroFrameIfNeeded() {
 
 void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
   bool main_thread_is_in_high_latency_mode =
-      state_machine_.MainThreadIsInHighLatencyMode();
+      state_machine_.main_thread_missed_last_deadline();
   TRACE_EVENT2("cc,benchmark", "Scheduler::BeginImplFrame", "args",
-               args.AsValue(), "main_thread_is_high_latency",
+               args.AsValue(), "main_thread_missed_last_deadline",
                main_thread_is_in_high_latency_mode);
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler"),
                  "MainThreadLatency", main_thread_is_in_high_latency_mode);
 
   BeginFrameArgs adjusted_args = args;
   adjusted_args.deadline -= compositor_timing_history_->DrawDurationEstimate();
+  adjusted_args.deadline -= kDeadlineFudgeFactor;
 
-  if (ShouldRecoverMainLatency(adjusted_args)) {
+  base::TimeDelta bmf_start_to_activate =
+      compositor_timing_history_
+          ->BeginMainFrameStartToCommitDurationEstimate() +
+      compositor_timing_history_->CommitToReadyToActivateDurationEstimate() +
+      compositor_timing_history_->ActivateDurationEstimate();
+
+  base::TimeDelta bmf_to_activate_estimate_critical =
+      bmf_start_to_activate +
+      compositor_timing_history_->BeginMainFrameQueueDurationCriticalEstimate();
+
+  state_machine_.SetCriticalBeginMainFrameToActivateIsFast(
+      bmf_to_activate_estimate_critical < args.interval);
+
+  // Update the BeginMainFrame args now that we know whether the main
+  // thread will be on the critical path or not.
+  begin_main_frame_args_ = adjusted_args;
+  begin_main_frame_args_.on_critical_path = !ImplLatencyTakesPriority();
+
+  base::TimeDelta bmf_to_activate_estimate = bmf_to_activate_estimate_critical;
+  if (!begin_main_frame_args_.on_critical_path) {
+    bmf_to_activate_estimate =
+        bmf_start_to_activate +
+        compositor_timing_history_
+            ->BeginMainFrameQueueDurationNotCriticalEstimate();
+  }
+
+  bool can_activate_before_deadline =
+      CanBeginMainFrameAndActivateBeforeDeadline(adjusted_args,
+                                                 bmf_to_activate_estimate);
+
+  if (ShouldRecoverMainLatency(adjusted_args, can_activate_before_deadline)) {
     TRACE_EVENT_INSTANT0("cc", "SkipBeginMainFrameToReduceLatency",
                          TRACE_EVENT_SCOPE_THREAD);
     state_machine_.SetSkipNextBeginMainFrameToReduceLatency();
-  } else if (ShouldRecoverImplLatency(adjusted_args)) {
+  } else if (ShouldRecoverImplLatency(adjusted_args,
+                                      can_activate_before_deadline)) {
     TRACE_EVENT_INSTANT0("cc", "SkipBeginImplFrameToReduceLatency",
                          TRACE_EVENT_SCOPE_THREAD);
     frame_source_->DidFinishFrame(begin_retro_frame_args_.size());
@@ -481,7 +531,16 @@ void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
 void Scheduler::BeginImplFrameSynchronous(const BeginFrameArgs& args) {
   TRACE_EVENT1("cc,benchmark", "Scheduler::BeginImplFrame", "args",
                args.AsValue());
+
+  // The main thread currently can't commit before we draw with the
+  // synchronous compositor, so never consider the BeginMainFrame fast.
+  state_machine_.SetCriticalBeginMainFrameToActivateIsFast(false);
+  begin_main_frame_args_ = args;
+  begin_main_frame_args_.on_critical_path = !ImplLatencyTakesPriority();
+
   BeginImplFrame(args);
+  compositor_timing_history_->WillFinishImplFrame(
+      state_machine_.needs_redraw());
   FinishImplFrame();
 }
 
@@ -506,6 +565,8 @@ void Scheduler::BeginImplFrame(const BeginFrameArgs& args) {
   begin_impl_frame_tracker_.Start(args);
   state_machine_.OnBeginImplFrame();
   devtools_instrumentation::DidBeginFrame(layer_tree_host_id_);
+  compositor_timing_history_->WillBeginImplFrame(
+      state_machine_.NewActiveTreeLikely());
   client_->WillBeginImplFrame(begin_impl_frame_tracker_.Current());
 
   ProcessScheduledActions();
@@ -591,22 +652,31 @@ void Scheduler::OnBeginImplFrameDeadline() {
   tracked_objects::ScopedTracker tracking_profile1(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "461509 Scheduler::OnBeginImplFrameDeadline1"));
+  compositor_timing_history_->WillFinishImplFrame(
+      state_machine_.needs_redraw());
   state_machine_.OnBeginImplFrameDeadline();
   ProcessScheduledActions();
   FinishImplFrame();
 }
 
 void Scheduler::DrawAndSwapIfPossible() {
+  bool drawing_with_new_active_tree =
+      state_machine_.active_tree_needs_first_draw();
   compositor_timing_history_->WillDraw();
+  state_machine_.WillDraw();
   DrawResult result = client_->ScheduledActionDrawAndSwapIfPossible();
-  state_machine_.DidDrawIfPossibleCompleted(result);
-  compositor_timing_history_->DidDraw();
+  state_machine_.DidDraw(result);
+  compositor_timing_history_->DidDraw(drawing_with_new_active_tree);
 }
 
 void Scheduler::DrawAndSwapForced() {
+  bool drawing_with_new_active_tree =
+      state_machine_.active_tree_needs_first_draw();
   compositor_timing_history_->WillDraw();
-  client_->ScheduledActionDrawAndSwapForced();
-  compositor_timing_history_->DidDraw();
+  state_machine_.WillDraw();
+  DrawResult result = client_->ScheduledActionDrawAndSwapForced();
+  state_machine_.DidDraw(result);
+  compositor_timing_history_->DidDraw(drawing_with_new_active_tree);
 }
 
 void Scheduler::SetDeferCommits(bool defer_commits) {
@@ -632,18 +702,17 @@ void Scheduler::ProcessScheduledActions() {
                  "SchedulerStateMachine",
                  "state",
                  AsValue());
-    state_machine_.UpdateState(action);
     base::AutoReset<SchedulerStateMachine::Action>
         mark_inside_action(&inside_action_, action);
     switch (action) {
       case SchedulerStateMachine::ACTION_NONE:
         break;
-      case SchedulerStateMachine::ACTION_ANIMATE:
-        client_->ScheduledActionAnimate();
-        break;
       case SchedulerStateMachine::ACTION_SEND_BEGIN_MAIN_FRAME:
-        compositor_timing_history_->WillBeginMainFrame();
-        client_->ScheduledActionSendBeginMainFrame();
+        compositor_timing_history_->WillBeginMainFrame(
+            begin_main_frame_args_.on_critical_path);
+        state_machine_.WillSendBeginMainFrame();
+        // TODO(brianderson): Pass begin_main_frame_args_ directly to client.
+        client_->ScheduledActionSendBeginMainFrame(begin_main_frame_args_);
         break;
       case SchedulerStateMachine::ACTION_COMMIT: {
         // TODO(robliao): Remove ScopedTracker below once crbug.com/461509 is
@@ -651,11 +720,14 @@ void Scheduler::ProcessScheduledActions() {
         tracked_objects::ScopedTracker tracking_profile4(
             FROM_HERE_WITH_EXPLICIT_FUNCTION(
                 "461509 Scheduler::ProcessScheduledActions4"));
+        bool commit_has_no_updates = false;
+        state_machine_.WillCommit(commit_has_no_updates);
         client_->ScheduledActionCommit();
         break;
       }
       case SchedulerStateMachine::ACTION_ACTIVATE_SYNC_TREE:
         compositor_timing_history_->WillActivate();
+        state_machine_.WillActivate();
         client_->ScheduledActionActivateSyncTree();
         compositor_timing_history_->DidActivate();
         break;
@@ -671,17 +743,22 @@ void Scheduler::ProcessScheduledActions() {
       case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_FORCED:
         DrawAndSwapForced();
         break;
-      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_ABORT:
+      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_ABORT: {
         // No action is actually performed, but this allows the state machine to
-        // advance out of its waiting to draw state without actually drawing.
+        // drain the pipeline without actually drawing.
+        state_machine_.AbortDrawAndSwap();
         break;
+      }
       case SchedulerStateMachine::ACTION_BEGIN_OUTPUT_SURFACE_CREATION:
+        state_machine_.WillBeginOutputSurfaceCreation();
         client_->ScheduledActionBeginOutputSurfaceCreation();
         break;
       case SchedulerStateMachine::ACTION_PREPARE_TILES:
+        state_machine_.WillPrepareTiles();
         client_->ScheduledActionPrepareTiles();
         break;
       case SchedulerStateMachine::ACTION_INVALIDATE_OUTPUT_SURFACE: {
+        state_machine_.WillInvalidateOutputSurface();
         client_->ScheduledActionInvalidateOutputSurface();
         break;
       }
@@ -719,6 +796,13 @@ void Scheduler::AsValueInto(base::trace_event::TracedValue* state) const {
   }
 
   state->BeginDictionary("scheduler_state");
+  state->SetBoolean("external_frame_source_", !!external_frame_source_);
+  state->SetBoolean("throttle_frame_production_", throttle_frame_production_);
+  state->SetDouble("authoritative_vsync_interval_ms",
+                   authoritative_vsync_interval_.InMillisecondsF());
+  state->SetDouble(
+      "last_vsync_timebase_ms",
+      (last_vsync_timebase_ - base::TimeTicks()).InMillisecondsF());
   state->SetDouble("estimated_parent_draw_time_ms",
                    estimated_parent_draw_time_.InMillisecondsF());
   state->SetBoolean("last_set_needs_begin_frame_",
@@ -751,22 +835,33 @@ void Scheduler::UpdateCompositorTimingHistoryRecordingEnabled() {
       state_machine_.HasInitializedOutputSurface() && state_machine_.visible());
 }
 
-bool Scheduler::ShouldRecoverMainLatency(const BeginFrameArgs& args) const {
+bool Scheduler::ShouldRecoverMainLatency(
+    const BeginFrameArgs& args,
+    bool can_activate_before_deadline) const {
   DCHECK(!settings_.using_synchronous_renderer_compositor);
 
-  if (!state_machine_.MainThreadIsInHighLatencyMode())
+  // The main thread is in a low latency mode and there's no need to recover.
+  if (!state_machine_.main_thread_missed_last_deadline())
     return false;
 
   // When prioritizing impl thread latency, we currently put the
   // main thread in a high latency mode. Don't try to fight it.
-  if (state_machine_.impl_latency_takes_priority())
+  if (state_machine_.ImplLatencyTakesPriority())
     return false;
 
-  return CanCommitAndActivateBeforeDeadline(args);
+  return can_activate_before_deadline;
 }
 
-bool Scheduler::ShouldRecoverImplLatency(const BeginFrameArgs& args) const {
+bool Scheduler::ShouldRecoverImplLatency(
+    const BeginFrameArgs& args,
+    bool can_activate_before_deadline) const {
   DCHECK(!settings_.using_synchronous_renderer_compositor);
+
+  // Disable impl thread latency recovery when using the unthrottled
+  // begin frame source since we will always get a BeginFrame before
+  // the swap ack and our heuristics below will not work.
+  if (!throttle_frame_production_)
+    return false;
 
   // If we are swap throttled at the BeginFrame, that means the impl thread is
   // very likely in a high latency mode.
@@ -779,7 +874,7 @@ bool Scheduler::ShouldRecoverImplLatency(const BeginFrameArgs& args) const {
 
   // When prioritizing impl thread latency, the deadline doesn't wait
   // for the main thread.
-  if (state_machine_.impl_latency_takes_priority())
+  if (state_machine_.ImplLatencyTakesPriority())
     return can_draw_before_deadline;
 
   // If we only have impl-side updates, the deadline doesn't wait for
@@ -791,27 +886,25 @@ bool Scheduler::ShouldRecoverImplLatency(const BeginFrameArgs& args) const {
   // to the impl thread. In this case, only try to also recover impl thread
   // latency if both the main and impl threads can run serially before the
   // deadline.
-  return CanCommitAndActivateBeforeDeadline(args);
+  return can_activate_before_deadline;
 }
 
-bool Scheduler::CanCommitAndActivateBeforeDeadline(
-    const BeginFrameArgs& args) const {
+bool Scheduler::CanBeginMainFrameAndActivateBeforeDeadline(
+    const BeginFrameArgs& args,
+    base::TimeDelta bmf_to_activate_estimate) const {
   // Check if the main thread computation and commit can be finished before the
   // impl thread's deadline.
   base::TimeTicks estimated_draw_time =
-      args.frame_time +
-      compositor_timing_history_->BeginMainFrameToCommitDurationEstimate() +
-      compositor_timing_history_->CommitToReadyToActivateDurationEstimate() +
-      compositor_timing_history_->ActivateDurationEstimate();
+      args.frame_time + bmf_to_activate_estimate;
 
   return estimated_draw_time < args.deadline;
 }
 
 bool Scheduler::IsBeginMainFrameSentOrStarted() const {
-  return (state_machine_.commit_state() ==
-              SchedulerStateMachine::COMMIT_STATE_BEGIN_MAIN_FRAME_SENT ||
-          state_machine_.commit_state() ==
-              SchedulerStateMachine::COMMIT_STATE_BEGIN_MAIN_FRAME_STARTED);
+  return (state_machine_.begin_main_frame_state() ==
+              SchedulerStateMachine::BEGIN_MAIN_FRAME_STATE_SENT ||
+          state_machine_.begin_main_frame_state() ==
+              SchedulerStateMachine::BEGIN_MAIN_FRAME_STATE_STARTED);
 }
 
 }  // namespace cc

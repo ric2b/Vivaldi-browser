@@ -5,12 +5,13 @@
 #ifndef NET_BASE_HASH_VALUE_H_
 #define NET_BASE_HASH_VALUE_H_
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "net/base/net_export.h"
@@ -32,13 +33,12 @@ struct NET_EXPORT SHA256HashValue {
 enum HashValueTag {
   HASH_VALUE_SHA1,
   HASH_VALUE_SHA256,
-
-  // This must always be last.
-  HASH_VALUE_TAGS_COUNT
 };
 
 class NET_EXPORT HashValue {
  public:
+  explicit HashValue(const SHA1HashValue& hash);
+  explicit HashValue(const SHA256HashValue& hash);
   explicit HashValue(HashValueTag tag) : tag(tag) {}
   HashValue() : tag(HASH_VALUE_SHA1) {}
 
@@ -113,12 +113,11 @@ class HashValuesEqual {
   const HashValue& fingerprint_;
 };
 
-
-// IsSHA1HashInSortedArray returns true iff |hash| is in |array|, a sorted
-// array of SHA1 hashes.
-bool IsSHA1HashInSortedArray(const SHA1HashValue& hash,
-                             const uint8_t* array,
-                             size_t array_byte_len);
+// IsSHA256HashInSortedArray returns true iff |hash| is in |array|, a sorted
+// array of SHA256 hashes.
+bool IsSHA256HashInSortedArray(const SHA256HashValue& hash,
+                               const uint8_t* array,
+                               size_t array_byte_len);
 
 }  // namespace net
 

@@ -4,6 +4,8 @@
 
 #include "ui/gfx/transform_util.h"
 
+#include <stddef.h>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -141,19 +143,19 @@ TEST(TransformUtilTest, SnapCompositeTransform) {
 
   Point3F point;
 
-  point = Point3F(viewport.origin());
+  point = Point3F(PointF(viewport.origin()));
   result.TransformPoint(&point);
   EXPECT_EQ(Point3F(31.f, 20.f, 10.f), point) << "Transformed origin";
 
-  point = Point3F(viewport.top_right());
+  point = Point3F(PointF(viewport.top_right()));
   result.TransformPoint(&point);
   EXPECT_EQ(Point3F(31.f, 1940.f, 10.f), point) << "Transformed top-right";
 
-  point = Point3F(viewport.bottom_left());
+  point = Point3F(PointF(viewport.bottom_left()));
   result.TransformPoint(&point);
   EXPECT_EQ(Point3F(-3569.f, 20.f, 10.f), point) << "Transformed bottom-left";
 
-  point = Point3F(viewport.bottom_right());
+  point = Point3F(PointF(viewport.bottom_right()));
   result.TransformPoint(&point);
   EXPECT_EQ(Point3F(-3569.f, 1940.f, 10.f), point)
       << "Transformed bottom-right";
@@ -170,7 +172,7 @@ TEST(TransformUtilTest, NoSnapSkewedCompositeTransform) {
                     SkDoubleToMScalar(2.0));
   transform.Translate3d(SkDoubleToMScalar(30.5), SkDoubleToMScalar(20.0),
                         SkDoubleToMScalar(10.1));
-  transform.SkewX(20.0);
+  transform.Skew(20.0, 0.0);
   Rect viewport(1920, 1200);
   bool snapped = SnapTransform(&result, transform, viewport);
   EXPECT_FALSE(snapped) << "Skewed viewport should not snap.";

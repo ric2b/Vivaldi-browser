@@ -33,6 +33,15 @@ void ToolkitDelegateViews::Init(ui::SimpleMenuModel* menu_model) {
       views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU));
 }
 
+views::MenuItemView* ToolkitDelegateViews::VivaldiInit(
+    ui::SimpleMenuModel* menu_model) {
+  Init(menu_model);
+  // Middle mouse button allows opening bookmarks in background.
+  menu_adapter_->set_triggerable_event_flags(
+      menu_adapter_->triggerable_event_flags() | ui::EF_MIDDLE_MOUSE_BUTTON);
+  return menu_view_;
+}
+
 void ToolkitDelegateViews::Cancel() {
   DCHECK(menu_runner_.get());
   menu_runner_->Cancel();

@@ -1,4 +1,6 @@
 include_rules = [
+  "+components/test_runner",
+  "+components/url_formatter",
   "+content/public/common",
   "+grit/components_strings.h",
   "+net",

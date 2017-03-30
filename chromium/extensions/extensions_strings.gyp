@@ -8,12 +8,16 @@
       # GN version: //extensions:strings
       'target_name': 'extensions_strings',
       'type': 'none',
+      'dependencies': [
+        '<(VIVALDI)/app/vivaldi_resources.gyp:extension_strings',
+      ],
       'variables': {
         'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/extensions/strings',
       },
       'actions': [
         {
           'action_name': 'generate_extensions_strings',
+          'disabled': 1,
           'variables': {
             'grit_grd_file': 'extensions_strings.grd',
           },

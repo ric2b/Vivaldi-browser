@@ -4,38 +4,39 @@
 
 #include "net/websockets/websocket_test_util.h"
 
+#include <stddef.h>
 #include <algorithm>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
-#include "base/memory/scoped_vector.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/proxy/proxy_service.h"
 #include "net/socket/socket_test_util.h"
+#include "url/origin.h"
 
 namespace net {
 
 namespace {
-const uint64 kA =
-    (static_cast<uint64>(0x5851f42d) << 32) + static_cast<uint64>(0x4c957f2d);
-const uint64 kC = 12345;
-const uint64 kM = static_cast<uint64>(1) << 48;
+
+const uint64_t kA = (static_cast<uint64_t>(0x5851f42d) << 32) +
+                    static_cast<uint64_t>(0x4c957f2d);
+const uint64_t kC = 12345;
+const uint64_t kM = static_cast<uint64_t>(1) << 48;
 
 }  // namespace
 
-LinearCongruentialGenerator::LinearCongruentialGenerator(uint32 seed)
+LinearCongruentialGenerator::LinearCongruentialGenerator(uint32_t seed)
     : current_(seed) {}
 
-uint32 LinearCongruentialGenerator::Generate() {
-  uint64 result = current_;
+uint32_t LinearCongruentialGenerator::Generate() {
+  uint64_t result = current_;
   current_ = (current_ * kA + kC) % kM;
-  return static_cast<uint32>(result >> 16);
+  return static_cast<uint32_t>(result >> 16);
 }
 
 std::string WebSocketStandardRequest(const std::string& path,
                                      const std::string& host,
-                                     const std::string& origin,
+                                     const url::Origin& origin,
                                      const std::string& extra_headers) {
   return WebSocketStandardRequestWithCookies(path, host, origin, std::string(),
                                              extra_headers);
@@ -44,7 +45,7 @@ std::string WebSocketStandardRequest(const std::string& path,
 std::string WebSocketStandardRequestWithCookies(
     const std::string& path,
     const std::string& host,
-    const std::string& origin,
+    const url::Origin& origin,
     const std::string& cookies,
     const std::string& extra_headers) {
   // Unrelated changes in net/http may change the order and default-values of
@@ -66,7 +67,7 @@ std::string WebSocketStandardRequestWithCookies(
       "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
       "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n"
       "%s\r\n",
-      path.c_str(), host.c_str(), origin.c_str(), cookies.c_str(),
+      path.c_str(), host.c_str(), origin.Serialize().c_str(), cookies.c_str(),
       extra_headers.c_str());
 }
 
@@ -85,8 +86,8 @@ struct WebSocketMockClientSocketFactoryMaker::Detail {
   std::string return_to_read;
   std::vector<MockRead> reads;
   MockWrite write;
-  ScopedVector<SequencedSocketData> socket_data_vector;
-  ScopedVector<SSLSocketDataProvider> ssl_socket_data_vector;
+  std::vector<scoped_ptr<SequencedSocketData>> socket_data_vector;
+  std::vector<scoped_ptr<SSLSocketDataProvider>> ssl_socket_data_vector;
   MockClientSocketFactory factory;
 };
 
@@ -124,23 +125,22 @@ void WebSocketMockClientSocketFactoryMaker::SetExpectations(
                           kHttpStreamParserBufferSize),
                  sequence++));
   }
-  scoped_ptr<SequencedSocketData> socket_data(
-      new SequencedSocketData(vector_as_array(&detail_->reads),
-                              detail_->reads.size(), &detail_->write, 1));
+  scoped_ptr<SequencedSocketData> socket_data(new SequencedSocketData(
+      detail_->reads.data(), detail_->reads.size(), &detail_->write, 1));
   socket_data->set_connect_data(MockConnect(SYNCHRONOUS, OK));
-  AddRawExpectations(socket_data.Pass());
+  AddRawExpectations(std::move(socket_data));
 }
 
 void WebSocketMockClientSocketFactoryMaker::AddRawExpectations(
     scoped_ptr<SequencedSocketData> socket_data) {
   detail_->factory.AddSocketDataProvider(socket_data.get());
-  detail_->socket_data_vector.push_back(socket_data.Pass());
+  detail_->socket_data_vector.push_back(std::move(socket_data));
 }
 
 void WebSocketMockClientSocketFactoryMaker::AddSSLSocketDataProvider(
     scoped_ptr<SSLSocketDataProvider> ssl_socket_data) {
   detail_->factory.AddSSLSocketDataProvider(ssl_socket_data.get());
-  detail_->ssl_socket_data_vector.push_back(ssl_socket_data.Pass());
+  detail_->ssl_socket_data_vector.push_back(std::move(ssl_socket_data));
 }
 
 WebSocketTestURLRequestContextHost::WebSocketTestURLRequestContextHost()
@@ -152,18 +152,18 @@ WebSocketTestURLRequestContextHost::~WebSocketTestURLRequestContextHost() {}
 
 void WebSocketTestURLRequestContextHost::AddRawExpectations(
     scoped_ptr<SequencedSocketData> socket_data) {
-  maker_.AddRawExpectations(socket_data.Pass());
+  maker_.AddRawExpectations(std::move(socket_data));
 }
 
 void WebSocketTestURLRequestContextHost::AddSSLSocketDataProvider(
     scoped_ptr<SSLSocketDataProvider> ssl_socket_data) {
-  maker_.AddSSLSocketDataProvider(ssl_socket_data.Pass());
+  maker_.AddSSLSocketDataProvider(std::move(ssl_socket_data));
 }
 
 void WebSocketTestURLRequestContextHost::SetProxyConfig(
     const std::string& proxy_rules) {
   DCHECK(!url_request_context_initialized_);
-  proxy_service_.reset(ProxyService::CreateFixed(proxy_rules));
+  proxy_service_ = ProxyService::CreateFixed(proxy_rules);
   url_request_context_.set_proxy_service(proxy_service_.get());
 }
 

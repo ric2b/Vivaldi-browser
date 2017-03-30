@@ -4,6 +4,8 @@
 
 #include "net/http/failing_http_transaction_factory.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
@@ -11,6 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "net/base/load_timing_info.h"
+#include "net/base/net_error_details.h"
 #include "net/base/upload_progress.h"
 #include "net/http/http_response_info.h"
 #include "net/socket/connection_attempts.h"
@@ -21,6 +24,7 @@ class AuthCredentials;
 class BoundNetLog;
 class HttpRequestHeaders;
 class IOBuffer;
+class SSLPrivateKey;
 class X509Certificate;
 
 namespace {
@@ -39,6 +43,7 @@ class FailingHttpTransaction : public HttpTransaction {
             const BoundNetLog& net_log) override;
   int RestartIgnoringLastError(const CompletionCallback& callback) override;
   int RestartWithCertificate(X509Certificate* client_cert,
+                             SSLPrivateKey* client_private_key,
                              const CompletionCallback& callback) override;
   int RestartWithAuth(const AuthCredentials& credentials,
                       const CompletionCallback& callback) override;
@@ -48,13 +53,16 @@ class FailingHttpTransaction : public HttpTransaction {
            const CompletionCallback& callback) override;
   void StopCaching() override;
   bool GetFullRequestHeaders(HttpRequestHeaders* headers) const override;
-  int64 GetTotalReceivedBytes() const override;
+  int64_t GetTotalReceivedBytes() const override;
+  int64_t GetTotalSentBytes() const override;
   void DoneReading() override;
   const HttpResponseInfo* GetResponseInfo() const override;
   LoadState GetLoadState() const override;
   UploadProgress GetUploadProgress() const override;
   void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) const override;
   void SetPriority(RequestPriority priority) override;
   void SetWebSocketHandshakeStreamCreateHelper(
       WebSocketHandshakeStreamBase::CreateHelper* create_helper) override;
@@ -91,7 +99,8 @@ int FailingHttpTransaction::RestartIgnoringLastError(
 
 int FailingHttpTransaction::RestartWithCertificate(
     X509Certificate* client_cert,
-    const CompletionCallback& callback)  {
+    SSLPrivateKey* client_private_key,
+    const CompletionCallback& callback) {
   return ERR_FAILED;
 }
 
@@ -118,7 +127,11 @@ bool FailingHttpTransaction::GetFullRequestHeaders(
   return false;
 }
 
-int64 FailingHttpTransaction::GetTotalReceivedBytes() const  {
+int64_t FailingHttpTransaction::GetTotalReceivedBytes() const {
+  return 0;
+}
+
+int64_t FailingHttpTransaction::GetTotalSentBytes() const {
   return 0;
 }
 
@@ -145,6 +158,15 @@ void FailingHttpTransaction::SetQuicServerInfo(
 bool FailingHttpTransaction::GetLoadTimingInfo(
     LoadTimingInfo* load_timing_info) const  {
   return false;
+}
+
+bool FailingHttpTransaction::GetRemoteEndpoint(IPEndPoint* endpoint) const {
+  return false;
+}
+
+void FailingHttpTransaction::PopulateNetErrorDetails(
+    NetErrorDetails* /*details*/) const {
+  return;
 }
 
 void FailingHttpTransaction::SetPriority(RequestPriority priority)  {}
@@ -199,4 +221,3 @@ HttpNetworkSession* FailingHttpTransactionFactory::GetSession() {
 }
 
 }  // namespace net
-

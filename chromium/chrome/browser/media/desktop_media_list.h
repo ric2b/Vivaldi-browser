@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_MEDIA_DESKTOP_MEDIA_LIST_H_
 #define CHROME_BROWSER_MEDIA_DESKTOP_MEDIA_LIST_H_
 
-#include "base/basictypes.h"
+#include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "content/public/browser/desktop_media_id.h"
 #include "ui/gfx/image/image_skia.h"
@@ -44,7 +44,7 @@ class DesktopMediaList {
 
   // Sets ID of the hosting desktop picker dialog. The window with this ID will
   // be filtered out from the list of sources.
-  virtual void SetViewDialogWindowId(content::DesktopMediaID::Id dialog_id) = 0;
+  virtual void SetViewDialogWindowId(content::DesktopMediaID dialog_id) = 0;
 
   // Starts updating the model. The model is initially empty, so OnSourceAdded()
   // notifications will be generated for each existing source as it is

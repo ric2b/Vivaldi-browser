@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -46,7 +48,7 @@ class Listener : public WebSocketListener {
     EXPECT_EQ(messages_[0], message);
     messages_.erase(messages_.begin());
     if (messages_.empty())
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void OnClose() override { EXPECT_TRUE(false); }
@@ -95,7 +97,7 @@ class WebSocketTest : public testing::Test {
                                          base::TimeDelta::FromSeconds(10));
     run_loop.Run();
     if (error == net::OK)
-      return sock.Pass();
+      return sock;
     return scoped_ptr<WebSocket>();
   }
 

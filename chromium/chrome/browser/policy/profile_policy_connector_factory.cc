@@ -4,8 +4,11 @@
 
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -31,7 +34,7 @@ namespace policy {
 
 // static
 ProfilePolicyConnectorFactory* ProfilePolicyConnectorFactory::GetInstance() {
-  return Singleton<ProfilePolicyConnectorFactory>::get();
+  return base::Singleton<ProfilePolicyConnectorFactory>::get();
 }
 
 // static
@@ -100,10 +103,10 @@ ProfilePolicyConnectorFactory::CreateForBrowserContextInternal(
     bool force_immediate_load) {
   DCHECK(connectors_.find(context) == connectors_.end());
 
+#if defined(ENABLE_CONFIGURATION_POLICY)
   SchemaRegistry* schema_registry = nullptr;
   CloudPolicyManager* user_cloud_policy_manager = nullptr;
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   schema_registry =
       SchemaRegistryServiceFactory::GetForContext(context)->registry();
 
@@ -136,14 +139,14 @@ ProfilePolicyConnectorFactory::CreateForBrowserContextInternal(
     providers.push_back(test_providers_.front());
     test_providers_.pop_front();
     scoped_ptr<PolicyService> service(new PolicyServiceImpl(providers));
-    connector->InitForTesting(service.Pass());
+    connector->InitForTesting(std::move(service));
   }
 #else
   connector->Init(nullptr, nullptr);
 #endif
 
   connectors_[context] = connector.get();
-  return connector.Pass();
+  return connector;
 }
 
 void ProfilePolicyConnectorFactory::BrowserContextShutdown(

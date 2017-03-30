@@ -41,10 +41,6 @@ chrome.runtime.onMessageExternal.addListener(
           requestInfo['guestProcessId'] = sender.guestProcessId;
         }
 
-        if (sender.guestRenderFrameRoutingId) {
-          requestInfo['guestRenderFrameId'] = sender.guestRenderFrameRoutingId;
-        }
-
         var method = message['method'];
         var origin = getHost(sender.url);
         if (method == 'cpu.getInfo') {
@@ -83,11 +79,36 @@ chrome.runtime.onMessageExternal.addListener(
               requestInfo, origin, logId, doSendResponse);
           return true;
         } else if (method == 'logging.stopAndUpload') {
-          stopAllRtpDump(requestInfo, origin, function() {
-            chrome.webrtcLoggingPrivate.stop(requestInfo, origin, function() {
-              chrome.webrtcLoggingPrivate.upload(
-                  requestInfo, origin, doSendResponse);
-            });
+          stopAllRtpDump(requestInfo, origin,
+                         function(rtpDumpValue, rtpDumpErrorString) {
+            if (chrome.extension.lastError !== undefined) {
+              // Stopping RTP dump failed, try to stop logging but don't try
+              // to upload since that will fail.
+              chrome.webrtcLoggingPrivate.stop(
+                  requestInfo, origin, function(stopValue, stopErrorString) {
+                if (chrome.extension.lastError !== undefined) {
+                  // Stopping logging also failed, report the error for logging.
+                  doSendResponse(stopValue, stopErrorString);
+                } else {
+                  // Stopping logging succeeded, report the error for RTP dump.
+                  doSendResponse(rtpDumpValue, rtpDumpErrorString);
+                }
+              });
+            } else {
+              // Stopping RTP dump succeeded.
+              chrome.webrtcLoggingPrivate.stop(
+                  requestInfo, origin, function(stopValue, stopErrorString) {
+                if (chrome.extension.lastError !== undefined) {
+                  // Stopping logging failed, report error and don't try to
+                  // upload since that will fail.
+                  doSendResponse(stopValue, stopErrorString);
+                } else {
+                  // Stopping logging succeeded.
+                  chrome.webrtcLoggingPrivate.upload(
+                      requestInfo, origin, doSendResponse);
+                }
+              });
+            }
           });
           return true;
         } else if (method == 'logging.store') {
@@ -141,6 +162,15 @@ chrome.runtime.onMessageExternal.addListener(
           var outgoing = message['outgoing'] || false;
           chrome.webrtcLoggingPrivate.stopRtpDump(
               requestInfo, origin, incoming, outgoing, doSendResponse);
+          return true;
+        } else if (method == 'logging.startAudioDebugRecordings') {
+          var seconds = message['seconds'] || 0;
+          chrome.webrtcLoggingPrivate.startAudioDebugRecordings(
+              requestInfo, origin, seconds, doSendResponse);
+          return true;
+        } else if (method == 'logging.stopAudioDebugRecordings') {
+          chrome.webrtcLoggingPrivate.stopAudioDebugRecordings(
+              requestInfo, origin, doSendResponse);
           return true;
         }
         throw new Error('Unknown method: ' + method);

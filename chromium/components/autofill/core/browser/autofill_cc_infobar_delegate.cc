@@ -5,7 +5,7 @@
 #include "components/autofill/core/browser/autofill_cc_infobar_delegate.h"
 
 #include "base/logging.h"
-#include "components/autofill/core/browser/autofill_client.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -14,33 +14,56 @@
 #include "grit/components_scaled_resources.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "url/gurl.h"
 
 namespace autofill {
 
 // static
-void AutofillCCInfoBarDelegate::Create(
+void AutofillCCInfoBarDelegate::CreateForLocalSave(
     infobars::InfoBarManager* infobar_manager,
-    AutofillClient* autofill_client,
     const base::Closure& save_card_callback) {
   infobar_manager->AddInfoBar(
       infobar_manager->CreateConfirmInfoBar(scoped_ptr<ConfirmInfoBarDelegate>(
-          new AutofillCCInfoBarDelegate(autofill_client, save_card_callback))));
+          new AutofillCCInfoBarDelegate(false, save_card_callback))));
 }
 
-AutofillCCInfoBarDelegate::AutofillCCInfoBarDelegate(
-    AutofillClient* autofill_client,
-    const base::Closure& save_card_callback)
-    : ConfirmInfoBarDelegate(),
-      autofill_client_(autofill_client),
-      save_card_callback_(save_card_callback),
-      had_user_interaction_(false) {
-  AutofillMetrics::LogCreditCardInfoBarMetric(AutofillMetrics::INFOBAR_SHOWN);
+// static
+void AutofillCCInfoBarDelegate::CreateForUpload(
+    infobars::InfoBarManager* infobar_manager,
+    const base::Closure& save_card_callback) {
+  infobar_manager->AddInfoBar(
+      infobar_manager->CreateConfirmInfoBar(scoped_ptr<ConfirmInfoBarDelegate>(
+          new AutofillCCInfoBarDelegate(true, save_card_callback))));
 }
 
 AutofillCCInfoBarDelegate::~AutofillCCInfoBarDelegate() {
   if (!had_user_interaction_)
     LogUserAction(AutofillMetrics::INFOBAR_IGNORED);
+}
+
+int AutofillCCInfoBarDelegate::GetIconId() const {
+  return IDR_INFOBAR_AUTOFILL_CC;
+}
+
+base::string16 AutofillCCInfoBarDelegate::GetMessageText() const {
+  return l10n_util::GetStringUTF16(
+      upload_ ? IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD
+              : IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_LOCAL);
+}
+
+base::string16 AutofillCCInfoBarDelegate::GetLinkText() const {
+  return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
+}
+
+AutofillCCInfoBarDelegate::AutofillCCInfoBarDelegate(
+    bool upload,
+    const base::Closure& save_card_callback)
+    : ConfirmInfoBarDelegate(),
+      upload_(upload),
+      save_card_callback_(save_card_callback),
+      had_user_interaction_(false) {
+  AutofillMetrics::LogCreditCardInfoBarMetric(AutofillMetrics::INFOBAR_SHOWN);
 }
 
 void AutofillCCInfoBarDelegate::LogUserAction(
@@ -51,13 +74,22 @@ void AutofillCCInfoBarDelegate::LogUserAction(
   had_user_interaction_ = true;
 }
 
+infobars::InfoBarDelegate::InfoBarIdentifier
+AutofillCCInfoBarDelegate::GetIdentifier() const {
+  return AUTOFILL_CC_INFOBAR_DELEGATE;
+}
+
 infobars::InfoBarDelegate::Type
 AutofillCCInfoBarDelegate::GetInfoBarType() const {
   return PAGE_ACTION_TYPE;
 }
 
-int AutofillCCInfoBarDelegate::GetIconID() const {
-  return IDR_INFOBAR_AUTOFILL_CC;
+gfx::VectorIconId AutofillCCInfoBarDelegate::GetVectorIconId() const {
+#if !defined(OS_MACOSX) && !defined(OS_IOS) && !defined(OS_ANDROID)
+  return gfx::VectorIconId::AUTOFILL;
+#else
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
+#endif
 }
 
 bool AutofillCCInfoBarDelegate::ShouldExpire(
@@ -72,14 +104,11 @@ void AutofillCCInfoBarDelegate::InfoBarDismissed() {
   LogUserAction(AutofillMetrics::INFOBAR_DENIED);
 }
 
-base::string16 AutofillCCInfoBarDelegate::GetMessageText() const {
-  return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_INFOBAR_TEXT);
-}
-
 base::string16 AutofillCCInfoBarDelegate::GetButtonLabel(
     InfoBarButton button) const {
-  return l10n_util::GetStringUTF16((button == BUTTON_OK) ?
-      IDS_AUTOFILL_CC_INFOBAR_ACCEPT : IDS_AUTOFILL_CC_INFOBAR_DENY);
+  return l10n_util::GetStringUTF16(button == BUTTON_OK
+                                       ? IDS_AUTOFILL_SAVE_CARD_PROMPT_ACCEPT
+                                       : IDS_AUTOFILL_SAVE_CARD_PROMPT_DENY);
 }
 
 bool AutofillCCInfoBarDelegate::Accept() {
@@ -94,16 +123,8 @@ bool AutofillCCInfoBarDelegate::Cancel() {
   return true;
 }
 
-base::string16 AutofillCCInfoBarDelegate::GetLinkText() const {
-  return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
-}
-
-bool AutofillCCInfoBarDelegate::LinkClicked(WindowOpenDisposition disposition) {
-  autofill_client_->LinkClicked(
-      GURL(autofill::kHelpURL),
-      (disposition == CURRENT_TAB) ? NEW_FOREGROUND_TAB : disposition);
-
-  return false;
+GURL AutofillCCInfoBarDelegate::GetLinkURL() const {
+  return GURL(kHelpURL);
 }
 
 }  // namespace autofill

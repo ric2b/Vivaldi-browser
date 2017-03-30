@@ -5,6 +5,10 @@
 #ifndef COMPONENTS_GUEST_VIEW_BROWSER_TEST_GUEST_VIEW_MANAGER_H_
 #define COMPONENTS_GUEST_VIEW_BROWSER_TEST_GUEST_VIEW_MANAGER_H_
 
+#include <stddef.h>
+
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
@@ -25,6 +29,8 @@ class TestGuestViewManager : public GuestViewManager {
   void WaitForLastGuestDeleted();
 
   content::WebContents* WaitForSingleGuestCreated();
+  content::WebContents* WaitForNextGuestCreated();
+  void WaitForNumGuestsCreated(size_t count);
 
   void WaitForSingleViewGarbageCollected();
 
@@ -56,7 +62,7 @@ class TestGuestViewManager : public GuestViewManager {
 
   // Returns the number of guests that have been created since the creation of
   // this GuestViewManager.
-  int num_guests_created() const { return num_guests_created_; }
+  size_t num_guests_created() const { return num_guests_created_; }
 
   // Returns the number of GuestViews that have been garbage collected in
   // JavaScript since the creation of this GuestViewManager.
@@ -67,6 +73,11 @@ class TestGuestViewManager : public GuestViewManager {
   // Returns the last guest instance ID removed from the manager.
   int last_instance_id_removed() const { return last_instance_id_removed_; }
 
+  // Returns the list of guests WebContentses that were created by this
+  // manager.
+  void GetGuestWebContentsList(
+      std::vector<content::WebContents*>* guest_web_contents_list);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(GuestViewManagerTest, AddRemove);
 
@@ -74,11 +85,9 @@ class TestGuestViewManager : public GuestViewManager {
   void AddGuest(int guest_instance_id,
                 content::WebContents* guest_web_contents) override;
   void RemoveGuest(int guest_instance_id) override;
-  void EmbedderWillBeDestroyed(int embedder_process_id) override;
+  void EmbedderProcessDestroyed(int embedder_process_id) override;
   void ViewGarbageCollected(int embedder_process_id,
                             int view_instance_id) override;
-
-  void WaitForGuestCreated();
 
   void WaitForViewGarbageCollected();
 
@@ -86,12 +95,15 @@ class TestGuestViewManager : public GuestViewManager {
   using GuestViewManager::removed_instance_ids_;
 
   int num_embedder_processes_destroyed_;
-  int num_guests_created_;
+  size_t num_guests_created_;
+  size_t expected_num_guests_created_;
   int num_views_garbage_collected_;
+  bool waiting_for_guests_created_;
 
   std::vector<linked_ptr<content::WebContentsDestroyedWatcher>>
       guest_web_contents_watchers_;
   scoped_refptr<content::MessageLoopRunner> created_message_loop_runner_;
+  scoped_refptr<content::MessageLoopRunner> num_created_message_loop_runner_;
   scoped_refptr<content::MessageLoopRunner> gc_message_loop_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(TestGuestViewManager);

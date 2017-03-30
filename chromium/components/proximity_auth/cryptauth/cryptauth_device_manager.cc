@@ -4,10 +4,13 @@
 
 #include "components/proximity_auth/cryptauth/cryptauth_device_manager.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/base64url.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
-#include "components/proximity_auth/cryptauth/base64url.h"
 #include "components/proximity_auth/cryptauth/cryptauth_client.h"
 #include "components/proximity_auth/cryptauth/pref_names.h"
 #include "components/proximity_auth/cryptauth/sync_scheduler_impl.h"
@@ -42,15 +45,21 @@ scoped_ptr<base::DictionaryValue> UnlockKeyToDictionary(
   // We store the device information in Base64Url form because dictionary values
   // must be valid UTF8 strings.
   std::string public_key_b64, device_name_b64, bluetooth_address_b64;
-  Base64UrlEncode(device.public_key(), &public_key_b64);
-  Base64UrlEncode(device.friendly_device_name(), &device_name_b64);
-  Base64UrlEncode(device.bluetooth_address(), &bluetooth_address_b64);
+  base::Base64UrlEncode(device.public_key(),
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        &public_key_b64);
+  base::Base64UrlEncode(device.friendly_device_name(),
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        &device_name_b64);
+  base::Base64UrlEncode(device.bluetooth_address(),
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        &bluetooth_address_b64);
 
   dictionary->SetString(kExternalDeviceKeyPublicKey, public_key_b64);
   dictionary->SetString(kExternalDeviceKeyDeviceName, device_name_b64);
   dictionary->SetString(kExternalDeviceKeyBluetoothAddress,
                         bluetooth_address_b64);
-  return dictionary.Pass();
+  return dictionary;
 }
 
 // Converts an unlock key dictionary stored in user prefs to an
@@ -69,9 +78,15 @@ bool DictionaryToUnlockKey(const base::DictionaryValue& dictionary,
   // We store the device information in Base64Url form because dictionary values
   // must be valid UTF8 strings.
   std::string public_key, device_name, bluetooth_address;
-  if (!Base64UrlDecode(public_key_b64, &public_key) ||
-      !Base64UrlDecode(device_name_b64, &device_name) ||
-      !Base64UrlDecode(bluetooth_address_b64, &bluetooth_address)) {
+  if (!base::Base64UrlDecode(public_key_b64,
+                             base::Base64UrlDecodePolicy::REQUIRE_PADDING,
+                             &public_key) ||
+      !base::Base64UrlDecode(device_name_b64,
+                             base::Base64UrlDecodePolicy::REQUIRE_PADDING,
+                             &device_name) ||
+      !base::Base64UrlDecode(bluetooth_address_b64,
+                             base::Base64UrlDecodePolicy::REQUIRE_PADDING,
+                             &bluetooth_address)) {
     return false;
   }
 
@@ -88,14 +103,18 @@ bool DictionaryToUnlockKey(const base::DictionaryValue& dictionary,
 CryptAuthDeviceManager::CryptAuthDeviceManager(
     scoped_ptr<base::Clock> clock,
     scoped_ptr<CryptAuthClientFactory> client_factory,
+    CryptAuthGCMManager* gcm_manager,
     PrefService* pref_service)
-    : clock_(clock.Pass()),
-      client_factory_(client_factory.Pass()),
+    : clock_(std::move(clock)),
+      client_factory_(std::move(client_factory)),
+      gcm_manager_(gcm_manager),
       pref_service_(pref_service),
       weak_ptr_factory_(this) {
+  UpdateUnlockKeysFromPrefs();
 }
 
 CryptAuthDeviceManager::~CryptAuthDeviceManager() {
+  gcm_manager_->RemoveObserver(this);
 }
 
 // static
@@ -110,7 +129,7 @@ void CryptAuthDeviceManager::RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 void CryptAuthDeviceManager::Start() {
-  UpdateUnlockKeysFromPrefs();
+  gcm_manager_->AddObserver(this);
 
   base::Time last_successful_sync = GetLastSyncTime();
   base::TimeDelta elapsed_time_since_last_sync =
@@ -166,10 +185,13 @@ void CryptAuthDeviceManager::OnGetMyDevicesSuccess(
     const cryptauth::GetMyDevicesResponse& response) {
   // Update the unlock keys stored in the user's prefs.
   scoped_ptr<base::ListValue> unlock_keys_pref(new base::ListValue());
+  scoped_ptr<base::ListValue> devices_as_list(new base::ListValue());
   for (const auto& device : response.devices()) {
+    devices_as_list->Append(UnlockKeyToDictionary(device));
     if (device.unlock_key())
       unlock_keys_pref->Append(UnlockKeyToDictionary(device));
   }
+  PA_LOG(INFO) << "Devices Synced:\n" << *devices_as_list;
 
   bool unlock_keys_changed = !unlock_keys_pref->Equals(
       pref_service_->GetList(prefs::kCryptAuthDeviceSyncUnlockKeys));
@@ -216,6 +238,10 @@ scoped_ptr<SyncScheduler> CryptAuthDeviceManager::CreateSyncScheduler() {
       kDeviceSyncMaxJitterRatio, "CryptAuth DeviceSync"));
 }
 
+void CryptAuthDeviceManager::OnResyncMessage() {
+  ForceSyncNow(cryptauth::INVOCATION_REASON_SERVER_INITIATED);
+}
+
 void CryptAuthDeviceManager::UpdateUnlockKeysFromPrefs() {
   const base::ListValue* unlock_key_list =
       pref_service_->GetList(prefs::kCryptAuthDeviceSyncUnlockKeys);
@@ -241,7 +267,7 @@ void CryptAuthDeviceManager::OnSyncRequested(
     scoped_ptr<SyncScheduler::SyncRequest> sync_request) {
   FOR_EACH_OBSERVER(Observer, observers_, OnSyncStarted());
 
-  sync_request_ = sync_request.Pass();
+  sync_request_ = std::move(sync_request);
   cryptauth_client_ = client_factory_->CreateInstance();
 
   cryptauth::InvocationReason invocation_reason =
@@ -249,6 +275,12 @@ void CryptAuthDeviceManager::OnSyncRequested(
 
   int reason_stored_in_prefs =
       pref_service_->GetInteger(prefs::kCryptAuthDeviceSyncReason);
+
+  // If the sync attempt is not forced, it is acceptable for CryptAuth to return
+  // a cached copy of the user's devices, rather taking a database hit for the
+  // freshest data.
+  bool is_sync_speculative =
+      reason_stored_in_prefs != cryptauth::INVOCATION_REASON_UNKNOWN;
 
   if (cryptauth::InvocationReason_IsValid(reason_stored_in_prefs) &&
       reason_stored_in_prefs != cryptauth::INVOCATION_REASON_UNKNOWN) {
@@ -264,6 +296,7 @@ void CryptAuthDeviceManager::OnSyncRequested(
 
   cryptauth::GetMyDevicesRequest request;
   request.set_invocation_reason(invocation_reason);
+  request.set_allow_stale_read(is_sync_speculative);
   cryptauth_client_->GetMyDevices(
       request, base::Bind(&CryptAuthDeviceManager::OnGetMyDevicesSuccess,
                           weak_ptr_factory_.GetWeakPtr()),

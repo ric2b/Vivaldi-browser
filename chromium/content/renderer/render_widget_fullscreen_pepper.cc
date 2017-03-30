@@ -8,14 +8,15 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "content/common/gpu/client/gpu_channel_host.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/content_switches.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/render_thread_impl.h"
-#include "gpu/command_buffer/client/gles2_implementation.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
@@ -31,6 +32,7 @@ using blink::WebCompositionUnderline;
 using blink::WebCursorInfo;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
+using blink::WebInputEventResult;
 using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
 using blink::WebPoint;
@@ -141,15 +143,11 @@ class PepperWidget : public WebWidget {
   virtual ~PepperWidget() {}
 
   // WebWidget API
-  virtual void close() {
-    delete this;
-  }
+  void close() override { delete this; }
 
-  virtual WebSize size() {
-    return size_;
-  }
+  WebSize size() override { return size_; }
 
-  virtual void resize(const WebSize& size) {
+  void resize(const WebSize& size) override {
     if (!widget_->plugin())
       return;
 
@@ -160,13 +158,11 @@ class PepperWidget : public WebWidget {
     widget_->Invalidate();
   }
 
-  virtual void themeChanged() {
-    NOTIMPLEMENTED();
-  }
+  void themeChanged() override { NOTIMPLEMENTED(); }
 
-  virtual bool handleInputEvent(const WebInputEvent& event) {
+  WebInputEventResult handleInputEvent(const WebInputEvent& event) override {
     if (!widget_->plugin())
-      return false;
+      return WebInputEventResult::NotHandled;
 
     // This cursor info is ignored, we always set the cursor directly from
     // RenderWidgetFullscreenPepper::DidChangeCursor.
@@ -214,7 +210,8 @@ class PepperWidget : public WebWidget {
           break;
         }
       }
-      return result;
+      return result ? WebInputEventResult::HandledApplication
+                    : WebInputEventResult::NotHandled;
     }
 
     bool result = widget_->plugin()->HandleInputEvent(event, &cursor);
@@ -249,7 +246,8 @@ class PepperWidget : public WebWidget {
         widget_->plugin()->HandleInputEvent(context_menu_event, &cursor);
       }
     }
-    return result;
+    return result ? WebInputEventResult::HandledApplication
+                  : WebInputEventResult::NotHandled;
   }
 
  private:
@@ -263,30 +261,30 @@ class PepperWidget : public WebWidget {
 
 // static
 RenderWidgetFullscreenPepper* RenderWidgetFullscreenPepper::Create(
-    int32 opener_id,
+    int32_t opener_id,
     CompositorDependencies* compositor_deps,
     PepperPluginInstanceImpl* plugin,
     const GURL& active_url,
     const blink::WebScreenInfo& screen_info) {
   DCHECK_NE(MSG_ROUTING_NONE, opener_id);
   scoped_refptr<RenderWidgetFullscreenPepper> widget(
-      new RenderWidgetFullscreenPepper(plugin, active_url, screen_info));
-  widget->Init(opener_id, compositor_deps);
+      new RenderWidgetFullscreenPepper(compositor_deps, plugin, active_url,
+                                       screen_info));
+  widget->Init(opener_id);
   widget->AddRef();
   return widget.get();
 }
 
 RenderWidgetFullscreenPepper::RenderWidgetFullscreenPepper(
+    CompositorDependencies* compositor_deps,
     PepperPluginInstanceImpl* plugin,
     const GURL& active_url,
     const blink::WebScreenInfo& screen_info)
-    : RenderWidgetFullscreen(screen_info),
+    : RenderWidgetFullscreen(compositor_deps, screen_info),
       active_url_(active_url),
       plugin_(plugin),
       layer_(NULL),
-      mouse_lock_dispatcher_(new FullscreenMouseLockDispatcher(
-          this)) {
-}
+      mouse_lock_dispatcher_(new FullscreenMouseLockDispatcher(this)) {}
 
 RenderWidgetFullscreenPepper::~RenderWidgetFullscreenPepper() {
 }

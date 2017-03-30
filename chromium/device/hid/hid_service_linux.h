@@ -8,6 +8,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "device/hid/hid_device_info.h"
 #include "device/hid/hid_service.h"
 
@@ -22,6 +23,7 @@ class HidConnection;
 class HidServiceLinux : public HidService {
  public:
   HidServiceLinux(scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner);
+  ~HidServiceLinux() override;
 
   void Connect(const HidDeviceId& device_id,
                const ConnectCallback& callback) override;
@@ -29,13 +31,6 @@ class HidServiceLinux : public HidService {
  private:
   struct ConnectParams;
   class FileThreadHelper;
-
-  ~HidServiceLinux() override;
-
-  // Constructs this services helper object that lives on the FILE thread.
-  static void StartHelper(
-      base::WeakPtr<HidServiceLinux> weak_ptr,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // These functions implement the process of locating, requesting access to and
   // opening a device. Because this operation crosses multiple threads these
@@ -57,7 +52,7 @@ class HidServiceLinux : public HidService {
 
   // The helper lives on the FILE thread and holds a weak reference back to the
   // service that owns it.
-  scoped_ptr<FileThreadHelper> helper_;
+  FileThreadHelper* helper_;
   base::WeakPtrFactory<HidServiceLinux> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(HidServiceLinux);

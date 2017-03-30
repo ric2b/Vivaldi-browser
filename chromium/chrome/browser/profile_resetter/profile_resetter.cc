@@ -4,12 +4,19 @@
 
 #include "chrome/browser/profile_resetter/profile_resetter.h"
 
+#include <stddef.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/synchronization/cancellation_flag.h"
+#include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
+#include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/google/google_url_tracker_factory.h"
 #include "chrome/browser/profile_resetter/brandcoded_default_settings.h"
@@ -20,7 +27,11 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/browser_distribution.h"
+#include "components/content_settings/core/browser/content_settings_info.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/browser/website_settings_info.h"
+#include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/google/core/browser/google_url_tracker.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
@@ -64,7 +75,7 @@ ProfileResetter::ProfileResetter(Profile* profile)
     : profile_(profile),
       template_url_service_(TemplateURLServiceFactory::GetForProfile(profile_)),
       pending_reset_flags_(0),
-      cookies_remover_(NULL),
+      cookies_remover_(nullptr),
       weak_ptr_factory_(this) {
   DCHECK(CalledOnValidThread());
   DCHECK(profile_);
@@ -78,7 +89,6 @@ ProfileResetter::~ProfileResetter() {
 void ProfileResetter::Reset(
     ProfileResetter::ResettableFlags resettable_flags,
     scoped_ptr<BrandcodedDefaultSettings> master_settings,
-    bool accepted_send_feedback,
     const base::Closure& callback) {
   DCHECK(CalledOnValidThread());
   DCHECK(master_settings);
@@ -215,17 +225,20 @@ void ProfileResetter::ResetHomepage() {
 
 void ProfileResetter::ResetContentSettings() {
   DCHECK(CalledOnValidThread());
-  PrefService* prefs = profile_->GetPrefs();
-  HostContentSettingsMap* map = profile_->GetHostContentSettingsMap();
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
 
-  for (int type = 0; type < CONTENT_SETTINGS_NUM_TYPES; ++type) {
-    map->ClearSettingsForOneType(static_cast<ContentSettingsType>(type));
-    if (HostContentSettingsMap::IsSettingAllowedForType(
-            prefs,
-            CONTENT_SETTING_DEFAULT,
-            static_cast<ContentSettingsType>(type)))
-      map->SetDefaultContentSetting(static_cast<ContentSettingsType>(type),
-                                    CONTENT_SETTING_DEFAULT);
+  for (const content_settings::WebsiteSettingsInfo* info :
+       *content_settings::WebsiteSettingsRegistry::GetInstance()) {
+    map->ClearSettingsForOneType(info->type());
+  }
+
+  // TODO(raymes): The default value isn't really used for website settings
+  // right now, but if it were we should probably reset that here too.
+  for (const content_settings::ContentSettingsInfo* info :
+       *content_settings::ContentSettingsRegistry::GetInstance()) {
+    map->SetDefaultContentSetting(info->website_settings_info()->type(),
+                                  CONTENT_SETTING_DEFAULT);
   }
   MarkAsDone(CONTENT_SETTINGS);
 }
@@ -234,16 +247,18 @@ void ProfileResetter::ResetCookiesAndSiteData() {
   DCHECK(CalledOnValidThread());
   DCHECK(!cookies_remover_);
 
-  cookies_remover_ = BrowsingDataRemover::CreateForUnboundedRange(profile_);
+  cookies_remover_ = BrowsingDataRemoverFactory::GetForBrowserContext(profile_);
   cookies_remover_->AddObserver(this);
   int remove_mask = BrowsingDataRemover::REMOVE_SITE_DATA |
                     BrowsingDataRemover::REMOVE_CACHE;
   PrefService* prefs = profile_->GetPrefs();
   DCHECK(prefs);
+
   // Don't try to clear LSO data if it's not supported.
   if (!prefs->GetBoolean(prefs::kClearPluginLSODataEnabled))
     remove_mask &= ~BrowsingDataRemover::REMOVE_PLUGIN_DATA;
-  cookies_remover_->Remove(remove_mask, BrowsingDataHelper::UNPROTECTED_WEB);
+  cookies_remover_->Remove(BrowsingDataRemover::Unbounded(), remove_mask,
+                           BrowsingDataHelper::UNPROTECTED_WEB);
 }
 
 void ProfileResetter::ResetExtensions() {
@@ -275,7 +290,6 @@ void ProfileResetter::ResetStartupPages() {
   else
     prefs->ClearPref(prefs::kRestoreOnStartup);
 
-  prefs->SetBoolean(prefs::kRestoreOnStartupMigrated, true);
   MarkAsDone(STARTUP_PAGES);
 }
 
@@ -320,7 +334,8 @@ void ProfileResetter::OnTemplateURLServiceLoaded() {
 }
 
 void ProfileResetter::OnBrowsingDataRemoverDone() {
-  cookies_remover_ = NULL;
+  cookies_remover_->RemoveObserver(this);
+  cookies_remover_ = nullptr;
   MarkAsDone(COOKIES_AND_SITE_DATA);
 }
 

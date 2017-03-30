@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -26,8 +27,7 @@ typedef InProcessBrowserTest StartupBrowserCreatorTest;
 // And BrowserWindow::IsActive() always returns false in tests on MAC.
 // And this test is useless without that functionality.
 #if !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, DISABLED_LastUsedProfileActivated) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, LastUsedProfileActivated) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 
   // Create 4 profiles, they will be scheduled for destruction when the last

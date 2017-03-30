@@ -4,10 +4,13 @@
 
 #include "content/browser/webui/content_web_ui_controller_factory.h"
 
+#include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_ui.h"
+#include "content/browser/appcache/appcache_internals_ui.h"
 #include "content/browser/gpu/gpu_internals_ui.h"
 #include "content/browser/indexed_db/indexed_db_internals_ui.h"
 #include "content/browser/media/media_internals_ui.h"
+#include "content/browser/net/network_errors_listing_ui.h"
 #include "content/browser/service_worker/service_worker_internals_ui.h"
 #include "content/browser/tracing/tracing_ui.h"
 #include "content/public/browser/storage_partition.h"
@@ -34,7 +37,9 @@ WebUI::TypeID ContentWebUIControllerFactory::GetWebUIType(
       url.host() == kChromeUIIndexedDBInternalsHost ||
       url.host() == kChromeUIMediaInternalsHost ||
       url.host() == kChromeUIServiceWorkerInternalsHost ||
-      url.host() == kChromeUIAccessibilityHost) {
+      url.host() == kChromeUIAccessibilityHost ||
+      url.host() == kChromeUIAppCacheInternalsHost ||
+      url.host() == kChromeUINetworkErrorsListingHost) {
     return const_cast<ContentWebUIControllerFactory*>(this);
   }
   return WebUI::kNoWebUI;
@@ -55,6 +60,8 @@ WebUIController* ContentWebUIControllerFactory::CreateWebUIControllerForURL(
   if (!url.SchemeIs(kChromeUIScheme))
     return nullptr;
 
+  if (url.host() == kChromeUIAppCacheInternalsHost)
+    return new AppCacheInternalsUI(web_ui);
   if (url.host() == kChromeUIGpuHost)
     return new GpuInternalsUI(web_ui);
   if (url.host() == kChromeUIIndexedDBInternalsHost)
@@ -65,6 +72,8 @@ WebUIController* ContentWebUIControllerFactory::CreateWebUIControllerForURL(
     return new AccessibilityUI(web_ui);
   if (url.host() == kChromeUIServiceWorkerInternalsHost)
     return new ServiceWorkerInternalsUI(web_ui);
+  if (url.host() == kChromeUINetworkErrorsListingHost)
+    return new NetworkErrorsListingUI(web_ui);
 #if !defined(OS_ANDROID)
   if (url.host() == kChromeUITracingHost)
     return new TracingUI(web_ui);
@@ -80,7 +89,7 @@ WebUIController* ContentWebUIControllerFactory::CreateWebUIControllerForURL(
 
 // static
 ContentWebUIControllerFactory* ContentWebUIControllerFactory::GetInstance() {
-  return Singleton<ContentWebUIControllerFactory>::get();
+  return base::Singleton<ContentWebUIControllerFactory>::get();
 }
 
 ContentWebUIControllerFactory::ContentWebUIControllerFactory() {

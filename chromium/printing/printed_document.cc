@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -29,7 +30,6 @@
 #include "printing/printed_page.h"
 #include "printing/printed_pages_source.h"
 #include "printing/units.h"
-#include "skia/ext/platform_device.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/text_elider.h"
 
@@ -119,8 +119,8 @@ void PrintedDocument::SetPage(int page_number,
                               const gfx::Rect& page_rect) {
   // Notice the page_number + 1, the reason is that this is the value that will
   // be shown. Users dislike 0-based counting.
-  scoped_refptr<PrintedPage> page(
-      new PrintedPage(page_number + 1, metafile.Pass(), paper_size, page_rect));
+  scoped_refptr<PrintedPage> page(new PrintedPage(
+      page_number + 1, std::move(metafile), paper_size, page_rect));
 #if defined(OS_WIN)
   page->set_shrink_factor(shrink);
 #endif  // OS_WIN

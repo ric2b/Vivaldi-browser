@@ -8,8 +8,8 @@
 #include <string>
 
 #include "ash/cast_config_delegate.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/values.h"
 
 namespace chromeos {
@@ -18,17 +18,18 @@ namespace chromeos {
 class CastConfigDelegateChromeos : public ash::CastConfigDelegate {
  public:
   CastConfigDelegateChromeos();
-
- private:
   ~CastConfigDelegateChromeos() override;
 
+ private:
   // CastConfigDelegate:
   bool HasCastExtension() const override;
-  void GetReceiversAndActivities(
-      const ReceiversAndActivitesCallback& callback) override;
+  void RequestDeviceRefresh() override;
   void CastToReceiver(const std::string& receiver_id) override;
-  void StopCasting() override;
+  void StopCasting(const std::string& activity_id) override;
+  bool HasOptions() const override;
   void LaunchCastOptions() override;
+  void AddObserver(ash::CastConfigDelegate::Observer* observer) override;
+  void RemoveObserver(ash::CastConfigDelegate::Observer* observer) override;
 
   DISALLOW_COPY_AND_ASSIGN(CastConfigDelegateChromeos);
 };

@@ -4,11 +4,14 @@
 
 #include "chrome/browser/ui/webui/options/chromeos/keyboard_handler.h"
 
+#include <stddef.h>
+
 #include "ash/new_window_delegate.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/values.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
@@ -35,6 +38,8 @@ const struct ModifierKeysSelectItem {
     chromeos::input_method::kCapsLockKey },
   { IDS_OPTIONS_SETTINGS_LANGUAGES_KEY_ESCAPE,
     chromeos::input_method::kEscapeKey },
+  { IDS_OPTIONS_SETTINGS_LANGUAGES_KEY_BACKSPACE,
+    chromeos::input_method::kBackspaceKey },
 };
 
 const char* kDataValuesNames[] = {
@@ -128,10 +133,12 @@ void KeyboardHandler::GetLocalizedValues(
       const input_method::ModifierKey value =
           kModifierKeysSelectItems[j].value;
       const int message_id = kModifierKeysSelectItems[j].message_id;
-      // Only the seach key can be remapped to the caps lock key.
+      // Only the seach/caps-lock key can be remapped to the
+      // caps-lock/backspace key.
       if (kDataValuesNames[i] != std::string("remapSearchKeyToValue") &&
           kDataValuesNames[i] != std::string("remapCapsLockKeyToValue") &&
-          value == input_method::kCapsLockKey) {
+          (value == input_method::kCapsLockKey ||
+           value == input_method::kBackspaceKey)) {
         continue;
       }
       base::ListValue* option = new base::ListValue();

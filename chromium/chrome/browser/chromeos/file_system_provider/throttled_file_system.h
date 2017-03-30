@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FILE_SYSTEM_PROVIDER_THROTTLED_FILE_SYSTEM_H_
 #define CHROME_BROWSER_CHROMEOS_FILE_SYSTEM_PROVIDER_THROTTLED_FILE_SYSTEM_H_
 
-#include <set>
-#include <string>
+#include <stdint.h>
 
+#include <string>
+#include <vector>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -49,10 +52,10 @@ class ThrottledFileSystem : public ProvidedFileSystemInterface {
   AbortCallback GetMetadata(const base::FilePath& entry_path,
                             MetadataFieldMask fields,
                             const GetMetadataCallback& callback) override;
-  AbortCallback GetActions(const base::FilePath& entry_path,
+  AbortCallback GetActions(const std::vector<base::FilePath>& entry_paths,
                            const GetActionsCallback& callback) override;
   AbortCallback ExecuteAction(
-      const base::FilePath& entry_path,
+      const std::vector<base::FilePath>& entry_paths,
       const std::string& action_id,
       const storage::AsyncFileUtil::StatusCallback& callback) override;
   AbortCallback ReadDirectory(
@@ -66,7 +69,7 @@ class ThrottledFileSystem : public ProvidedFileSystemInterface {
       const storage::AsyncFileUtil::StatusCallback& callback) override;
   AbortCallback ReadFile(int file_handle,
                          net::IOBuffer* buffer,
-                         int64 offset,
+                         int64_t offset,
                          int length,
                          const ReadChunkReceivedCallback& callback) override;
   AbortCallback CreateDirectory(
@@ -90,12 +93,12 @@ class ThrottledFileSystem : public ProvidedFileSystemInterface {
       const storage::AsyncFileUtil::StatusCallback& callback) override;
   AbortCallback Truncate(
       const base::FilePath& file_path,
-      int64 length,
+      int64_t length,
       const storage::AsyncFileUtil::StatusCallback& callback) override;
   AbortCallback WriteFile(
       int file_handle,
       net::IOBuffer* buffer,
-      int64 offset,
+      int64_t offset,
       int length,
       const storage::AsyncFileUtil::StatusCallback& callback) override;
   AbortCallback AddWatcher(

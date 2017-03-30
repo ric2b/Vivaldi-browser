@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/renderer_host/overscroll_controller_delegate.h"
@@ -24,6 +25,7 @@ class Window;
 
 namespace ui {
 class DropTargetEvent;
+class TouchSelectionController;
 }
 
 namespace content {
@@ -32,7 +34,7 @@ class OverscrollNavigationOverlay;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewAura;
 class ShadowLayerDelegate;
-class TouchEditableImplAura;
+class TouchSelectionControllerClientAura;
 class WebContentsViewDelegate;
 class WebContentsImpl;
 class WebDragDestDelegate;
@@ -47,9 +49,6 @@ class WebContentsViewAura
  public:
   WebContentsViewAura(WebContentsImpl* web_contents,
                       WebContentsViewDelegate* delegate);
-
-  CONTENT_EXPORT void SetTouchEditableForTest(
-      TouchEditableImplAura* touch_editable);
 
  private:
   class WindowObserver;
@@ -71,9 +70,10 @@ class WebContentsViewAura
   // animates in, or the content window animates out).
   void CompleteOverscrollNavigation(OverscrollMode mode);
 
-  void AttachTouchEditableToRenderView();
-
   void OverscrollUpdateForWebContentsDelegate(float delta_y);
+
+  ui::TouchSelectionController* GetSelectionController() const;
+  TouchSelectionControllerClientAura* GetSelectionControllerClient() const;
 
   // Overridden from WebContentsView:
   gfx::NativeView GetNativeView() const override;
@@ -194,7 +194,6 @@ class WebContentsViewAura
   // navigation triggered by the overscroll gesture.
   scoped_ptr<OverscrollNavigationOverlay> navigation_overlay_;
 
-  scoped_ptr<TouchEditableImplAura> touch_editable_;
   scoped_ptr<GestureNavSimple> gesture_nav_simple_;
 
   // On Windows we can run into problems if resources get released within the

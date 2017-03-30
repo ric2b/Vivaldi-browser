@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_BROWSER_APP_WINDOW_APP_WINDOW_GEOMETRY_CACHE_H_
 #define EXTENSIONS_BROWSER_APP_WINDOW_APP_WINDOW_GEOMETRY_CACHE_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <string>
@@ -42,7 +44,7 @@ class AppWindowGeometryCache : public KeyedService,
     static Factory* GetInstance();
 
    private:
-    friend struct DefaultSingletonTraits<Factory>;
+    friend struct base::DefaultSingletonTraits<Factory>;
 
     Factory();
     ~Factory() override;
@@ -140,7 +142,7 @@ class AppWindowGeometryCache : public KeyedService,
   std::set<std::string> unsynced_extensions_;
 
   // The timer used to save the data.
-  base::OneShotTimer<AppWindowGeometryCache> sync_timer_;
+  base::OneShotTimer sync_timer_;
 
   // The timeout value we'll use for |sync_timer_|.
   base::TimeDelta sync_delay_;

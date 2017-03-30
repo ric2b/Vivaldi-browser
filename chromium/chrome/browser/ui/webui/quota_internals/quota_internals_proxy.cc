@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/trace_event/trace_event.h"
 #include "chrome/browser/ui/webui/quota_internals/quota_internals_handler.h"
 #include "chrome/browser/ui/webui/quota_internals/quota_internals_types.h"
 #include "net/base/net_util.h"
@@ -30,11 +31,15 @@ void QuotaInternalsProxy::RequestInfo(
         base::Bind(&QuotaInternalsProxy::RequestInfo, this, quota_manager));
     return;
   }
-
   quota_manager_ = quota_manager;
-  quota_manager_->GetAvailableSpace(
-      base::Bind(&QuotaInternalsProxy::DidGetAvailableSpace,
-                 weak_factory_.GetWeakPtr()));
+  {
+    // crbug.com/349708
+    TRACE_EVENT0("io", "QuotaInternalsProxy::RequestInfo");
+
+    quota_manager_->GetAvailableSpace(
+        base::Bind(&QuotaInternalsProxy::DidGetAvailableSpace,
+                   weak_factory_.GetWeakPtr()));
+  }
 
   quota_manager_->GetTemporaryGlobalQuota(
       base::Bind(&QuotaInternalsProxy::DidGetGlobalQuota,
@@ -88,7 +93,7 @@ QuotaInternalsProxy::~QuotaInternalsProxy() {}
     handler_->func(arg);                                      \
   }
 
-RELAY_TO_HANDLER(ReportAvailableSpace, int64)
+RELAY_TO_HANDLER(ReportAvailableSpace, int64_t)
 RELAY_TO_HANDLER(ReportGlobalInfo, const GlobalStorageInfo&)
 RELAY_TO_HANDLER(ReportPerHostInfo, const std::vector<PerHostStorageInfo>&)
 RELAY_TO_HANDLER(ReportPerOriginInfo, const std::vector<PerOriginStorageInfo>&)
@@ -97,14 +102,17 @@ RELAY_TO_HANDLER(ReportStatistics, const Statistics&)
 #undef RELAY_TO_HANDLER
 
 void QuotaInternalsProxy::DidGetAvailableSpace(storage::QuotaStatusCode status,
-                                               int64 space) {
+                                               int64_t space) {
+  // crbug.com/349708
+  TRACE_EVENT0("io", "QuotaInternalsProxy::DidGetAvailableSpace");
+
   if (status == storage::kQuotaStatusOk)
     ReportAvailableSpace(space);
 }
 
 void QuotaInternalsProxy::DidGetGlobalQuota(storage::StorageType type,
                                             storage::QuotaStatusCode status,
-                                            int64 quota) {
+                                            int64_t quota) {
   if (status == storage::kQuotaStatusOk) {
     GlobalStorageInfo info(type);
     info.set_quota(quota);
@@ -113,8 +121,8 @@ void QuotaInternalsProxy::DidGetGlobalQuota(storage::StorageType type,
 }
 
 void QuotaInternalsProxy::DidGetGlobalUsage(storage::StorageType type,
-                                            int64 usage,
-                                            int64 unlimited_usage) {
+                                            int64_t usage,
+                                            int64_t unlimited_usage) {
   GlobalStorageInfo info(type);
   info.set_usage(usage);
   info.set_unlimited_usage(unlimited_usage);
@@ -157,7 +165,7 @@ void QuotaInternalsProxy::DidDumpOriginInfoTable(
 
 void QuotaInternalsProxy::DidGetHostUsage(const std::string& host,
                                           storage::StorageType type,
-                                          int64 usage) {
+                                          int64_t usage) {
   DCHECK(type == storage::kStorageTypeTemporary ||
          type == storage::kStorageTypePersistent ||
          type == storage::kStorageTypeSyncable);

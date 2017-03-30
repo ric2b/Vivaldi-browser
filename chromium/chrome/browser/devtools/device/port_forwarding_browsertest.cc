@@ -20,12 +20,13 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace {
-const char kPortForwardingTestPage[] =
-    "files/devtools/port_forwarding/main.html";
+const char kPortForwardingTestPage[] = "/devtools/port_forwarding/main.html";
 
 const int kDefaultDebuggingPort = 9223;
 const int kAlternativeDebuggingPort = 9224;
@@ -62,7 +63,7 @@ class PortForwardingTest: public InProcessBrowserTest {
       if (status.empty() && skip_empty_devices_)
         return;
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::MessageLoop::QuitClosure());
+          FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     }
 
     void set_skip_empty_devices(bool skip_empty_devices) {
@@ -87,8 +88,8 @@ IN_PROC_BROWSER_TEST_F(PortForwardingTest,
   DevToolsAndroidBridge::Factory::GetForProfile(profile)->
       set_device_providers_for_test(device_providers);
 
-  ASSERT_TRUE(test_server()->Start());
-  GURL original_url = test_server()->GetURL(kPortForwardingTestPage);
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL original_url = embedded_test_server()->GetURL(kPortForwardingTestPage);
 
   std::string forwarding_port("8000");
   GURL forwarding_url(original_url.scheme() + "://" +
@@ -146,8 +147,7 @@ class PortForwardingDisconnectTest : public PortForwardingTest {
   }
 };
 
-// TODO: reenable for Vivaldi
-IN_PROC_BROWSER_TEST_F(PortForwardingDisconnectTest, DISABLED_DisconnectOnRelease) {
+IN_PROC_BROWSER_TEST_F(PortForwardingDisconnectTest, DisconnectOnRelease) {
   Profile* profile = browser()->profile();
 
   AndroidDeviceManager::DeviceProviders device_providers;
@@ -159,8 +159,8 @@ IN_PROC_BROWSER_TEST_F(PortForwardingDisconnectTest, DISABLED_DisconnectOnReleas
   DevToolsAndroidBridge::Factory::GetForProfile(profile)->
       set_device_providers_for_test(device_providers);
 
-  ASSERT_TRUE(test_server()->Start());
-  GURL original_url = test_server()->GetURL(kPortForwardingTestPage);
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL original_url = embedded_test_server()->GetURL(kPortForwardingTestPage);
 
   std::string forwarding_port("8000");
   GURL forwarding_url(original_url.scheme() + "://" +
@@ -179,9 +179,8 @@ IN_PROC_BROWSER_TEST_F(PortForwardingDisconnectTest, DISABLED_DisconnectOnReleas
 
   self_provider->set_release_callback_for_test(
       base::Bind(&base::MessageLoop::PostTask,
-                 base::Unretained(base::MessageLoop::current()),
-                 FROM_HERE,
-                 base::MessageLoop::QuitClosure()));
+                 base::Unretained(base::MessageLoop::current()), FROM_HERE,
+                 base::MessageLoop::QuitWhenIdleClosure()));
   wait_for_port_forwarding.reset();
   content::RunMessageLoop();
 }

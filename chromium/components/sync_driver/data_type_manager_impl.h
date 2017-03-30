@@ -11,9 +11,9 @@
 #include <queue>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/sync_driver/backend_data_type_configurer.h"
@@ -39,7 +39,6 @@ class DataTypeManagerImpl : public DataTypeManager,
                             public ModelAssociationManagerDelegate {
  public:
   DataTypeManagerImpl(
-      const base::Closure& unrecoverable_error_method,
       const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
           debug_info_listener,
       const DataTypeController::TypeMap* controllers,
@@ -222,7 +221,8 @@ class DataTypeManagerImpl : public DataTypeManager,
   // Association and time stats of data type configuration.
   std::vector<syncer::DataTypeConfigurationStats> configuration_stats_;
 
-  base::Closure unrecoverable_error_method_;
+  // True iff we are in the process of catching up datatypes.
+  bool catch_up_in_progress_;
 
   base::WeakPtrFactory<DataTypeManagerImpl> weak_ptr_factory_;
 

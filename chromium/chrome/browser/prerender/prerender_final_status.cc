@@ -4,6 +4,7 @@
 
 #include "chrome/browser/prerender/prerender_final_status.h"
 
+#include "base/macros.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 
 namespace prerender {
@@ -63,6 +64,8 @@ const char* kFinalStatusNames[] = {
   "Cookie Conflict",
   "Non-Empty Browsing Instance",
   "Navigation Intercepted",
+  "Prerendering Disabled",
+  "Cellular Network",
   "Max",
 };
 static_assert(arraysize(kFinalStatusNames) == FINAL_STATUS_MAX + 1,

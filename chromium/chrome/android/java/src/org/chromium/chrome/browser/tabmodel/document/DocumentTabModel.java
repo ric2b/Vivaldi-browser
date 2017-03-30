@@ -9,8 +9,8 @@ import android.content.Intent;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.TabState;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 
 /**
@@ -23,7 +23,6 @@ public interface DocumentTabModel extends TabModel {
     public static final class Entry {
         public final int tabId;
         public boolean canGoBack;
-        public boolean isCoveredByChildActivity;
         public String initialUrl;
         public String currentUrl;
         public boolean isTabStateReady;
@@ -145,12 +144,6 @@ public interface DocumentTabModel extends TabModel {
      * @return Whether or not the given tab ID may be retargeted.
      */
     boolean isRetargetable(int tabId);
-
-    /**
-     * Check if a tab may be covered by child activity in the same task.
-     * @return Whether or not the given tab is covered by child activity.
-     */
-    boolean isCoveredByChildActivity(int tabId);
 
     /**
      * Closes the Tab at a particular index.

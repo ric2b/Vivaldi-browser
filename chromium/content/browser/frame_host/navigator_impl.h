@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_FRAME_HOST_NAVIGATOR_IMPL_H_
 
 #include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
@@ -36,8 +37,10 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
   // Navigator implementation.
   NavigatorDelegate* GetDelegate() override;
   NavigationController* GetController() override;
-  void DidStartProvisionalLoad(RenderFrameHostImpl* render_frame_host,
-                               const GURL& url) override;
+  void DidStartProvisionalLoad(
+      RenderFrameHostImpl* render_frame_host,
+      const GURL& url,
+      const base::TimeTicks& navigation_start) override;
   void DidFailProvisionalLoadWithError(
       RenderFrameHostImpl* render_frame_host,
       const FrameHostMsg_DidFailProvisionalLoadWithError_Params& params)
@@ -47,13 +50,15 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                             int error_code,
                             const base::string16& error_description,
                             bool was_ignored_by_handler) override;
-  void DidNavigate(RenderFrameHostImpl* render_frame_host,
-                   const FrameHostMsg_DidCommitProvisionalLoad_Params&
-                       input_params) override;
+  void DidNavigate(
+      RenderFrameHostImpl* render_frame_host,
+      const FrameHostMsg_DidCommitProvisionalLoad_Params& params) override;
   bool NavigateToPendingEntry(FrameTreeNode* frame_tree_node,
                               const FrameNavigationEntry& frame_entry,
                               NavigationController::ReloadType reload_type,
                               bool is_same_document_history_load) override;
+  bool NavigateNewChildFrame(RenderFrameHostImpl* render_frame_host,
+                             const std::string& unique_name) override;
   void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
                       const GURL& url,
                       SiteInstance* source_site_instance,
@@ -63,14 +68,11 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                       bool user_gesture) override;
   void RequestTransferURL(RenderFrameHostImpl* render_frame_host,
                           const GURL& url,
-                          SiteInstance* source_site_instance,
                           const std::vector<GURL>& redirect_chain,
                           const Referrer& referrer,
                           ui::PageTransition page_transition,
-                          WindowOpenDisposition disposition,
                           const GlobalRequestID& transferred_global_request_id,
-                          bool should_replace_current_entry,
-                          bool user_gesture) override;
+                          bool should_replace_current_entry) override;
   void OnBeforeUnloadACK(FrameTreeNode* frame_tree_node, bool proceed) override;
   void OnBeginNavigation(FrameTreeNode* frame_tree_node,
                          const CommonNavigationParams& common_params,
@@ -96,13 +98,15 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
   friend class NavigatorTestWithBrowserSideNavigation;
   ~NavigatorImpl() override;
 
-  // Navigates to the given entry, which must be the pending entry.  Private
-  // because all callers should use NavigateToPendingEntry.
+  // Navigates to the given entry, which might be the pending entry (if
+  // |is_pending_entry| is true).  Private because all callers should use either
+  // NavigateToPendingEntry or NavigateToNewChildFrame.
   bool NavigateToEntry(FrameTreeNode* frame_tree_node,
                        const FrameNavigationEntry& frame_entry,
                        const NavigationEntryImpl& entry,
                        NavigationController::ReloadType reload_type,
-                       bool is_same_document_history_load);
+                       bool is_same_document_history_load,
+                       bool is_pending_entry);
 
   bool ShouldAssignSiteForURL(const GURL& url);
 

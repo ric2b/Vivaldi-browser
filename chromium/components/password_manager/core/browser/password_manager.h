@@ -9,10 +9,12 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/stl_util.h"
+#include "build/build_config.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/password_manager/core/browser/login_model.h"
@@ -61,15 +63,24 @@ class PasswordManager : public LoginModel {
 
   // Called by a PasswordFormManager when it decides a form can be autofilled
   // on the page.
-  virtual void Autofill(password_manager::PasswordManagerDriver* driver,
-                        const autofill::PasswordForm& form_for_autofill,
-                        const autofill::PasswordFormMap& best_matches,
-                        const autofill::PasswordForm& preferred_match,
-                        bool wait_for_username) const;
+  void Autofill(password_manager::PasswordManagerDriver* driver,
+                const autofill::PasswordForm& form_for_autofill,
+                const autofill::PasswordFormMap& best_matches,
+                const autofill::PasswordForm& preferred_match,
+                bool wait_for_username) const;
+
+  // Called by a PasswordFormManager when it decides a HTTP auth dialog can be
+  // autofilled.
+  void AutofillHttpAuth(const autofill::PasswordFormMap& best_matches,
+                        const autofill::PasswordForm& preferred_match) const;
 
   // LoginModel implementation.
-  void AddObserver(LoginModelObserver* observer) override;
+  void AddObserverAndDeliverCredentials(
+      LoginModelObserver* observer,
+      const autofill::PasswordForm& observed_form) override;
   void RemoveObserver(LoginModelObserver* observer) override;
+
+  void GenerationAvailableForForm(const autofill::PasswordForm& form);
 
   // Update the state of generation for this form.
   void SetHasGeneratedPasswordForForm(
@@ -118,6 +129,10 @@ class PasswordManager : public LoginModel {
       password_manager::PasswordManagerDriver* driver,
       const std::vector<autofill::FormStructure*>& forms);
 
+  // Causes all |pending_login_managers_| to query the password store again.
+  // Results in updating the fill information on the page.
+  void UpdateFormManagers();
+
   PasswordManagerClient* client() { return client_; }
 
  private:
@@ -154,15 +169,22 @@ class PasswordManager : public LoginModel {
   // |provisional_save_manager_|.
   bool ShouldPromptUserToSavePassword() const;
 
-  // Called when we already decided that login was correct and we want to save
-  // password.
-  void AskUserOrSavePassword();
+  // Called when the login was deemed successful. It handles the special case
+  // when the provisionally saved password is a sync credential, and otherwise
+  // asks the user about saving the password or saves it directly, as
+  // appropriate.
+  void OnLoginSuccessful();
 
   // Checks for every from in |forms| whether |pending_login_managers_| already
   // contain a manager for that form. If not, adds a manager for each such form.
   void CreatePendingLoginManagers(
       password_manager::PasswordManagerDriver* driver,
       const std::vector<autofill::PasswordForm>& forms);
+
+  // Returns the best match in |pending_login_managers_| for |form|. May return
+  // nullptr if no match exists.
+  PasswordFormManager* GetMatchingPendingManager(
+      const autofill::PasswordForm& form);
 
   // Note about how a PasswordFormManager can transition from
   // pending_login_managers_ to provisional_save_manager_ and the infobar.

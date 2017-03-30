@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/json/json_file_value_serializer.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "content/public/browser/notification_service.h"
@@ -14,6 +15,7 @@
 #include "content/public/test/test_browser_thread.h"
 #include "extensions/browser/extensions_test.h"
 #include "extensions/browser/image_loader.h"
+#include "extensions/browser/test_image_loader.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_paths.h"
 #include "extensions/common/manifest.h"
@@ -65,55 +67,6 @@ class MockImageSkiaSource : public gfx::ImageSkiaSource {
   gfx::ImageSkia image_;
 };
 
-// Helper class for synchronously loading extension image resource.
-class TestImageLoader {
- public:
-  explicit TestImageLoader(const Extension* extension)
-      : extension_(extension),
-        waiting_(false),
-        image_loaded_(false) {
-  }
-  virtual ~TestImageLoader() {}
-
-  void OnImageLoaded(const gfx::Image& image) {
-    image_ = image;
-    image_loaded_ = true;
-    if (waiting_)
-      base::MessageLoop::current()->Quit();
-  }
-
-  SkBitmap LoadBitmap(const std::string& path,
-                      int size) {
-    image_loaded_ = false;
-
-    image_loader_.LoadImageAsync(
-        extension_, extension_->GetResource(path), gfx::Size(size, size),
-        base::Bind(&TestImageLoader::OnImageLoaded,
-                   base::Unretained(this)));
-
-    // If |image_| still hasn't been loaded (i.e. it is being loaded
-    // asynchronously), wait for it.
-    if (!image_loaded_) {
-      waiting_ = true;
-      base::MessageLoop::current()->Run();
-      waiting_ = false;
-    }
-
-    EXPECT_TRUE(image_loaded_);
-
-    return image_.IsEmpty() ? SkBitmap() : *image_.ToSkBitmap();
-  }
-
- private:
-  const Extension* extension_;
-  bool waiting_;
-  bool image_loaded_;
-  gfx::Image image_;
-  ImageLoader image_loader_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestImageLoader);
-};
-
 class ExtensionIconImageTest : public ExtensionsTest,
                                public IconImage::Observer {
  public:
@@ -152,9 +105,8 @@ class ExtensionIconImageTest : public ExtensionsTest,
     std::string error;
     JSONFileValueDeserializer deserializer(
         test_file.AppendASCII("manifest.json"));
-    scoped_ptr<base::DictionaryValue> valid_value(
-        static_cast<base::DictionaryValue*>(
-            deserializer.Deserialize(&error_code, &error)));
+    scoped_ptr<base::DictionaryValue> valid_value = base::DictionaryValue::From(
+        deserializer.Deserialize(&error_code, &error));
     EXPECT_EQ(0, error_code) << error;
     if (error_code != 0)
       return NULL;
@@ -177,20 +129,11 @@ class ExtensionIconImageTest : public ExtensionsTest,
   void OnExtensionIconImageChanged(IconImage* image) override {
     image_loaded_count_++;
     if (quit_in_image_loaded_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   gfx::ImageSkia GetDefaultIcon() {
     return gfx::ImageSkia(gfx::ImageSkiaRep(gfx::Size(16, 16), 1.0f));
-  }
-
-  // Loads an image to be used in test from the extension.
-  // The image will be loaded from the relative path |path|.
-  SkBitmap GetTestBitmap(const Extension* extension,
-                         const std::string& path,
-                         int size) {
-    TestImageLoader image_loader(extension);
-    return image_loader.LoadBitmap(path, size);
   }
 
  private:
@@ -220,13 +163,14 @@ TEST_F(ExtensionIconImageTest, Basic) {
 
   // Load images we expect to find as representations in icon_image, so we
   // can later use them to validate icon_image.
-  SkBitmap bitmap_16 = GetTestBitmap(extension.get(), "16.png", 16);
+  SkBitmap bitmap_16 =
+      TestImageLoader::LoadAndGetExtensionBitmap(extension.get(), "16.png", 16);
   ASSERT_FALSE(bitmap_16.empty());
 
   // There is no image of size 32 defined in the extension manifest, so we
   // should expect manifest image of size 48 resized to size 32.
   SkBitmap bitmap_48_resized_to_32 =
-      GetTestBitmap(extension.get(), "48.png", 32);
+      TestImageLoader::LoadAndGetExtensionBitmap(extension.get(), "48.png", 32);
   ASSERT_FALSE(bitmap_48_resized_to_32.empty());
 
   IconImage image(browser_context(),
@@ -293,7 +237,8 @@ TEST_F(ExtensionIconImageTest, FallbackToSmallerWhenNoBigger) {
 
   // Load images we expect to find as representations in icon_image, so we
   // can later use them to validate icon_image.
-  SkBitmap bitmap_48 = GetTestBitmap(extension.get(), "48.png", 48);
+  SkBitmap bitmap_48 =
+      TestImageLoader::LoadAndGetExtensionBitmap(extension.get(), "48.png", 48);
   ASSERT_FALSE(bitmap_48.empty());
 
   IconImage image(browser_context(),
@@ -330,7 +275,8 @@ TEST_F(ExtensionIconImageTest, FallbackToBigger) {
 
   // Load images we expect to find as representations in icon_image, so we
   // can later use them to validate icon_image.
-  SkBitmap bitmap_24 = GetTestBitmap(extension.get(), "24.png", 24);
+  SkBitmap bitmap_24 =
+      TestImageLoader::LoadAndGetExtensionBitmap(extension.get(), "24.png", 24);
   ASSERT_FALSE(bitmap_24.empty());
 
   IconImage image(browser_context(),
@@ -522,7 +468,8 @@ TEST_F(ExtensionIconImageTest, IconImageDestruction) {
 
   // Load images we expect to find as representations in icon_image, so we
   // can later use them to validate icon_image.
-  SkBitmap bitmap_16 = GetTestBitmap(extension.get(), "16.png", 16);
+  SkBitmap bitmap_16 =
+      TestImageLoader::LoadAndGetExtensionBitmap(extension.get(), "16.png", 16);
   ASSERT_FALSE(bitmap_16.empty());
 
   scoped_ptr<IconImage> image(

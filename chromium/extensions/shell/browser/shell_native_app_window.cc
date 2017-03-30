@@ -136,10 +136,6 @@ void ShellNativeAppWindow::UpdateShape(scoped_ptr<SkRegion> region) {
   NOTIMPLEMENTED();
 }
 
-void ShellNativeAppWindow::SetInterceptAllKeys(bool want_all_keys) {
-  NOTIMPLEMENTED();
-}
-
 void ShellNativeAppWindow::HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) {
   // No special handling. The WebContents will handle it.
@@ -172,10 +168,6 @@ void ShellNativeAppWindow::ShowWithApp() {
 
 void ShellNativeAppWindow::HideWithApp() {
   NOTIMPLEMENTED();
-}
-
-void ShellNativeAppWindow::UpdateShelfMenu() {
-  // app_shell has no shelf, dock, or system-tray to update.
 }
 
 gfx::Size ShellNativeAppWindow::GetContentMinimumSize() const {

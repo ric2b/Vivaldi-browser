@@ -4,6 +4,8 @@
 
 #include "gin/modules/file_module_provider.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
@@ -20,8 +22,8 @@ void AttempToLoadModule(const base::WeakPtr<Runner>& runner,
   if (!runner)
     return;
 
-  std::vector<std::string> components;
-  base::SplitString(id, '/', &components);
+  std::vector<std::string> components = base::SplitString(
+      id, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   base::FilePath path;
   for (size_t i = 0; i < components.size(); ++i) {

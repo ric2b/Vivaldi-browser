@@ -5,7 +5,9 @@
 #ifndef PPAPI_SHARED_IMPL_GRAPHICS_3D_IMPL_H_
 #define PPAPI_SHARED_IMPL_GRAPHICS_3D_IMPL_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ppapi/c/pp_completion_callback.h"
 #include "ppapi/shared_impl/ppapi_shared_export.h"
@@ -20,6 +22,7 @@ class TransferBuffer;
 namespace gles2 {
 class GLES2CmdHelper;
 class GLES2Implementation;
+class GLES2Interface;
 }  // namespace gles2
 }  // namespace gpu.
 
@@ -37,7 +40,8 @@ class PPAPI_SHARED_EXPORT PPB_Graphics3D_Shared
   int32_t SetAttribs(const int32_t attrib_list[]) override;
   int32_t GetError() override;
   int32_t ResizeBuffers(int32_t width, int32_t height) override;
-  int32_t SwapBuffers(scoped_refptr<TrackedCallback> callback) override;
+  int32_t SwapBuffers(scoped_refptr<TrackedCallback> callback,
+                      const gpu::SyncToken& sync_token) override;
   int32_t GetAttribMaxValue(int32_t attribute, int32_t* value) override;
 
   void* MapTexSubImage2DCHROMIUM(GLenum target,
@@ -52,6 +56,7 @@ class PPAPI_SHARED_EXPORT PPB_Graphics3D_Shared
   void UnmapTexSubImage2DCHROMIUM(const void* mem) override;
 
   gpu::gles2::GLES2Implementation* gles2_impl() { return gles2_impl_.get(); }
+  gpu::gles2::GLES2Interface* gles2_interface();
 
   // Sends swap-buffers notification to the plugin.
   void SwapBuffersACK(int32_t pp_error);
@@ -63,11 +68,11 @@ class PPAPI_SHARED_EXPORT PPB_Graphics3D_Shared
 
   virtual gpu::CommandBuffer* GetCommandBuffer() = 0;
   virtual gpu::GpuControl* GetGpuControl() = 0;
-  virtual int32 DoSwapBuffers() = 0;
+  virtual int32_t DoSwapBuffers(const gpu::SyncToken& sync_token) = 0;
 
   bool HasPendingSwap() const;
-  bool CreateGLES2Impl(int32 command_buffer_size,
-                       int32 transfer_buffer_size,
+  bool CreateGLES2Impl(int32_t command_buffer_size,
+                       int32_t transfer_buffer_size,
                        gpu::gles2::GLES2Implementation* share_gles2);
   void DestroyGLES2Impl();
 

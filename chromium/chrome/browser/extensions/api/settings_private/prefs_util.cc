@@ -2,30 +2,54 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/json/json_reader.h"
-#include "base/prefs/pref_service.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/settings_private/prefs_util.h"
+
+#include "base/prefs/pref_service.h"
+#include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/url_formatter/url_fixer.h"
+#include "extensions/browser/extension_pref_value_map.h"
+#include "extensions/browser/extension_pref_value_map_factory.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/common/extension.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
+#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chromeos/settings/cros_settings_names.h"
 #endif
+
+namespace {
+
+#if defined(OS_CHROMEOS)
+bool IsPrivilegedCrosSetting(const std::string& pref_name) {
+  if (!chromeos::CrosSettings::IsCrosSettings(pref_name))
+    return false;
+  // kSystemTimezone should be changeable by all users.
+  if (pref_name == chromeos::kSystemTimezone)
+    return false;
+  // All other Cros settings are considered privileged and are either policy
+  // controlled or owner controlled.
+  return true;
+}
+#endif
+
+}  // namespace
 
 namespace extensions {
 
 namespace settings_private = api::settings_private;
 
-PrefsUtil::PrefsUtil(Profile* profile) : profile_(profile) {
-}
+PrefsUtil::PrefsUtil(Profile* profile) : profile_(profile) {}
 
-PrefsUtil::~PrefsUtil() {
-}
+PrefsUtil::~PrefsUtil() {}
 
 #if defined(OS_CHROMEOS)
 using CrosSettings = chromeos::CrosSettings;
@@ -38,6 +62,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   s_whitelist = new PrefsUtil::TypedPrefMap();
   (*s_whitelist)["alternate_error_pages.enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["autofill.enabled"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["bookmark_bar.show_on_all_tabs"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["browser.show_home_button"] =
@@ -49,16 +75,104 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)["enable_do_not_track"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["homepage"] = settings_private::PrefType::PREF_TYPE_URL;
+  (*s_whitelist)["homepage_is_newtabpage"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["intl.app_locale"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)["net.network_prediction_options"] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.password_manager_enabled"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["safebrowsing.enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["safebrowsing.extended_reporting_enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["search.suggest_enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["session.restore_on_startup"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["session.startup_urls"] =
+      settings_private::PrefType::PREF_TYPE_LIST;
+  (*s_whitelist)["spellcheck.dictionaries"] =
+      settings_private::PrefType::PREF_TYPE_LIST;
   (*s_whitelist)["spellcheck.use_spelling_service"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["translate.enabled"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["translate_blocked_languages"] =
+      settings_private::PrefType::PREF_TYPE_LIST;
+
+  // Clear browsing data settings.
+  (*s_whitelist)["browser.clear_data.browsing_history"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.clear_data.download_history"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.clear_data.cache"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.clear_data.cookies"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.clear_data.passwords"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.clear_data.form_data"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.clear_data.hosted_apps_data"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.clear_data.content_licenses"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.clear_data.time_period"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.cookies"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.fullscreen"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.geolocation"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.images"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.javascript"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.media_stream_camera"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.media_stream_mic"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.notifications"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.default_content_setting_values.popups"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["profile.content_settings.exceptions.cookies"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)["profile.content_settings.exceptions.fullscreen"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)["profile.content_settings.exceptions.geolocation"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)["profile.content_settings.exceptions.images"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)["profile.content_settings.exceptions.javascript"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)["profile.content_settings.exceptions.media_stream_camera"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)["profile.content_settings.exceptions.media_stream_mic"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)["profile.content_settings.exceptions.notifications"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)["profile.content_settings.exceptions.popups"] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+
+  // Web content settings.
+  (*s_whitelist)["webkit.webprefs.default_font_size"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["webkit.webprefs.minimum_font_size"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["webkit.webprefs.fonts.fixed.Zyyy"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)["webkit.webprefs.fonts.sansserif.Zyyy"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)["webkit.webprefs.fonts.serif.Zyyy"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)["webkit.webprefs.fonts.standard.Zyyy"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)["intl.charset_default"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
 
 #if defined(OS_CHROMEOS)
   (*s_whitelist)["cros.accounts.allowBWSI"] =
@@ -91,177 +205,231 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.clock.use_24hour_clock"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.language.preferred_languages"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)["settings.touchpad.enable_tap_dragging"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["cros.metrics.reportingEnabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["cros.device.attestation_for_content_protection_enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.internet.wake_on_wifi_ssid"] =
+  (*s_whitelist)["settings.internet.wake_on_wifi_darkconnect"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+#else
+  (*s_whitelist)["intl.accept_languages"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
 #endif
 
   return *s_whitelist;
 }
 
-api::settings_private::PrefType PrefsUtil::GetType(const std::string& name,
-                                                   base::Value::Type type) {
+settings_private::PrefType PrefsUtil::GetType(const std::string& name,
+                                              base::Value::Type type) {
   switch (type) {
     case base::Value::Type::TYPE_BOOLEAN:
-      return api::settings_private::PrefType::PREF_TYPE_BOOLEAN;
+      return settings_private::PrefType::PREF_TYPE_BOOLEAN;
     case base::Value::Type::TYPE_INTEGER:
     case base::Value::Type::TYPE_DOUBLE:
-      return api::settings_private::PrefType::PREF_TYPE_NUMBER;
+      return settings_private::PrefType::PREF_TYPE_NUMBER;
     case base::Value::Type::TYPE_STRING:
-      return IsPrefTypeURL(name)
-                 ? api::settings_private::PrefType::PREF_TYPE_URL
-                 : api::settings_private::PrefType::PREF_TYPE_STRING;
+      return IsPrefTypeURL(name) ? settings_private::PrefType::PREF_TYPE_URL
+                                 : settings_private::PrefType::PREF_TYPE_STRING;
     case base::Value::Type::TYPE_LIST:
-      return api::settings_private::PrefType::PREF_TYPE_LIST;
+      return settings_private::PrefType::PREF_TYPE_LIST;
+    case base::Value::Type::TYPE_DICTIONARY:
+      return settings_private::PrefType::PREF_TYPE_DICTIONARY;
     default:
-      return api::settings_private::PrefType::PREF_TYPE_NONE;
+      return settings_private::PrefType::PREF_TYPE_NONE;
   }
 }
 
-scoped_ptr<api::settings_private::PrefObject> PrefsUtil::GetCrosSettingsPref(
+scoped_ptr<settings_private::PrefObject> PrefsUtil::GetCrosSettingsPref(
     const std::string& name) {
-  scoped_ptr<api::settings_private::PrefObject> pref_object(
-      new api::settings_private::PrefObject());
+  scoped_ptr<settings_private::PrefObject> pref_object(
+      new settings_private::PrefObject());
 
 #if defined(OS_CHROMEOS)
   const base::Value* value = CrosSettings::Get()->GetPref(name);
+  DCHECK(value);
   pref_object->key = name;
   pref_object->type = GetType(name, value->GetType());
   pref_object->value.reset(value->DeepCopy());
 #endif
 
-  return pref_object.Pass();
+  return pref_object;
 }
 
-scoped_ptr<api::settings_private::PrefObject> PrefsUtil::GetPref(
+scoped_ptr<settings_private::PrefObject> PrefsUtil::GetPref(
     const std::string& name) {
-  scoped_ptr<api::settings_private::PrefObject> pref_object(
-      new api::settings_private::PrefObject());
-
-  if (IsCrosSetting(name))
-    return GetCrosSettingsPref(name);
-
-  PrefService* pref_service = FindServiceForPref(name);
-  const PrefService::Preference* pref = pref_service->FindPreference(name);
-  if (!pref)
-    return pref_object.Pass();
-
-  pref_object->key = pref->name();
-  pref_object->type = GetType(name, pref->GetType());
-  pref_object->value.reset(pref->GetValue()->DeepCopy());
-
-  if (pref->IsManaged()) {
-    if (pref->IsManagedByCustodian()) {
-      pref_object->policy_source =
-          api::settings_private::PolicySource::POLICY_SOURCE_DEVICE;
-    } else {
-      pref_object->policy_source =
-          api::settings_private::PolicySource::POLICY_SOURCE_USER;
-    }
-    pref_object->policy_enforcement =
-        pref->IsRecommended() ? api::settings_private::PolicyEnforcement::
-                                    POLICY_ENFORCEMENT_RECOMMENDED
-                              : api::settings_private::PolicyEnforcement::
-                                    POLICY_ENFORCEMENT_ENFORCED;
-  } else if (!IsPrefUserModifiable(name)) {
-    pref_object->policy_source =
-        api::settings_private::PolicySource::POLICY_SOURCE_USER;
-    pref_object->policy_enforcement =
-        api::settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
+  const PrefService::Preference* pref = nullptr;
+  scoped_ptr<settings_private::PrefObject> pref_object;
+  if (IsCrosSetting(name)) {
+    pref_object = GetCrosSettingsPref(name);
+  } else {
+    PrefService* pref_service = FindServiceForPref(name);
+    pref = pref_service->FindPreference(name);
+    if (!pref)
+      return nullptr;
+    pref_object.reset(new settings_private::PrefObject());
+    pref_object->key = pref->name();
+    pref_object->type = GetType(name, pref->GetType());
+    pref_object->value.reset(pref->GetValue()->DeepCopy());
   }
 
-  return pref_object.Pass();
+#if defined(OS_CHROMEOS)
+  if (IsPrefPrimaryUserControlled(name)) {
+    pref_object->policy_source =
+        settings_private::PolicySource::POLICY_SOURCE_PRIMARY_USER;
+    pref_object->policy_enforcement =
+        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
+    pref_object->policy_source_name.reset(new std::string(
+        user_manager::UserManager::Get()->GetPrimaryUser()->email()));
+    return pref_object;
+  }
+  if (IsPrefEnterpriseManaged(name)) {
+    // Enterprise managed prefs are treated the same as device policy restricted
+    // prefs in the UI.
+    pref_object->policy_source =
+        settings_private::PolicySource::POLICY_SOURCE_DEVICE_POLICY;
+    pref_object->policy_enforcement =
+        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
+    return pref_object;
+  }
+#endif
+
+  if (pref && pref->IsManaged()) {
+    pref_object->policy_source =
+        settings_private::PolicySource::POLICY_SOURCE_USER_POLICY;
+    pref_object->policy_enforcement =
+        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
+    return pref_object;
+  }
+  if (pref && pref->IsRecommended()) {
+    pref_object->policy_source =
+        settings_private::PolicySource::POLICY_SOURCE_USER_POLICY;
+    pref_object->policy_enforcement =
+        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_RECOMMENDED;
+    pref_object->recommended_value.reset(
+        pref->GetRecommendedValue()->DeepCopy());
+    return pref_object;
+  }
+
+#if defined(OS_CHROMEOS)
+  if (IsPrefOwnerControlled(name)) {
+    // Check for owner controlled after managed checks because if there is a
+    // device policy there is no "owner". (In the unlikely case that both
+    // situations apply, either badge is potentially relevant, so the order
+    // is somewhat arbitrary).
+    pref_object->policy_source =
+        settings_private::PolicySource::POLICY_SOURCE_OWNER;
+    pref_object->policy_enforcement =
+        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
+    pref_object->policy_source_name.reset(new std::string(
+        user_manager::UserManager::Get()->GetOwnerAccountId().GetUserEmail()));
+    return pref_object;
+  }
+#endif
+
+  if (pref && pref->IsExtensionControlled()) {
+    std::string extension_id =
+        ExtensionPrefValueMapFactory::GetForBrowserContext(profile_)
+            ->GetExtensionControllingPref(pref->name());
+    const Extension* extension = ExtensionRegistry::Get(profile_)->
+        GetExtensionById(extension_id, ExtensionRegistry::ENABLED);
+    if (extension) {
+      pref_object->policy_source =
+          settings_private::PolicySource::POLICY_SOURCE_EXTENSION;
+      pref_object->policy_enforcement =
+          settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
+      pref_object->extension_id.reset(new std::string(extension_id));
+      pref_object->policy_source_name.reset(new std::string(extension->name()));
+      return pref_object;
+    }
+  }
+  if (pref && (!pref->IsUserModifiable() || IsPrefSupervisorControlled(name))) {
+    // TODO(stevenjb): Investigate whether either of these should be badged.
+    pref_object->read_only.reset(new bool(true));
+    return pref_object;
+  }
+
+  return pref_object;
 }
 
-bool PrefsUtil::SetPref(const std::string& pref_name,
-                        const base::Value* value) {
+PrefsUtil::SetPrefResult PrefsUtil::SetPref(const std::string& pref_name,
+                                            const base::Value* value) {
   if (IsCrosSetting(pref_name))
     return SetCrosSettingsPref(pref_name, value);
 
   PrefService* pref_service = FindServiceForPref(pref_name);
 
   if (!IsPrefUserModifiable(pref_name))
-    return false;
+    return PREF_NOT_MODIFIABLE;
 
-  const PrefService::Preference* pref =
-      pref_service->FindPreference(pref_name.c_str());
+  const PrefService::Preference* pref = pref_service->FindPreference(pref_name);
   if (!pref)
-    return false;
+    return PREF_NOT_FOUND;
 
   DCHECK_EQ(pref->GetType(), value->GetType());
 
-  scoped_ptr<base::Value> temp_value;
-
   switch (pref->GetType()) {
+    case base::Value::TYPE_BOOLEAN:
+    case base::Value::TYPE_DOUBLE:
+    case base::Value::TYPE_LIST:
+    case base::Value::TYPE_DICTIONARY:
+      pref_service->Set(pref_name, *value);
+      break;
     case base::Value::TYPE_INTEGER: {
       // In JS all numbers are doubles.
       double double_value;
       if (!value->GetAsDouble(&double_value))
-        return false;
+        return PREF_TYPE_MISMATCH;
 
-      int int_value = static_cast<int>(double_value);
-      temp_value.reset(new base::FundamentalValue(int_value));
-      value = temp_value.get();
+      pref_service->SetInteger(pref_name, static_cast<int>(double_value));
       break;
     }
     case base::Value::TYPE_STRING: {
-      std::string original;
-      if (!value->GetAsString(&original))
-        return false;
+      std::string string_value;
+      if (!value->GetAsString(&string_value))
+        return PREF_TYPE_MISMATCH;
 
       if (IsPrefTypeURL(pref_name)) {
-        GURL fixed = url_fixer::FixupURL(original, std::string());
-        temp_value.reset(new base::StringValue(fixed.spec()));
-        value = temp_value.get();
+        GURL fixed = url_formatter::FixupURL(string_value, std::string());
+        if (fixed.is_valid())
+          string_value = fixed.spec();
+        else
+          string_value = std::string();
       }
+
+      pref_service->SetString(pref_name, string_value);
       break;
     }
-    case base::Value::TYPE_LIST: {
-      // In case we have a List pref we got a JSON string.
-      std::string json_string;
-      if (!value->GetAsString(&json_string))
-        return false;
-
-      temp_value.reset(base::JSONReader::DeprecatedRead(json_string));
-      value = temp_value.get();
-      if (!value->IsType(base::Value::TYPE_LIST))
-        return false;
-
-      break;
-    }
-    case base::Value::TYPE_BOOLEAN:
-    case base::Value::TYPE_DOUBLE:
-      break;
     default:
-      return false;
+      return PREF_TYPE_UNSUPPORTED;
   }
 
   // TODO(orenb): Process setting metrics here and in the CrOS setting method
   // too (like "ProcessUserMetric" in CoreOptionsHandler).
-  pref_service->Set(pref_name.c_str(), *value);
-  return true;
+  return SUCCESS;
 }
 
-bool PrefsUtil::SetCrosSettingsPref(const std::string& pref_name,
-                                    const base::Value* value) {
+PrefsUtil::SetPrefResult PrefsUtil::SetCrosSettingsPref(
+    const std::string& pref_name, const base::Value* value) {
 #if defined(OS_CHROMEOS)
   chromeos::OwnerSettingsServiceChromeOS* service =
       chromeos::OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(
           profile_);
 
-  // Returns false if not the owner, for settings requiring owner.
-  if (service && service->HandlesSetting(pref_name))
-    return service->Set(pref_name, *value);
+  // Check if setting requires owner.
+  if (service && service->HandlesSetting(pref_name)) {
+    if (service->Set(pref_name, *value))
+      return SUCCESS;
+    return PREF_NOT_MODIFIABLE;
+  }
 
-  chromeos::CrosSettings::Get()->Set(pref_name, *value);
-  return true;
+  CrosSettings::Get()->Set(pref_name, *value);
+  return SUCCESS;
 #else
-  return false;
+  return PREF_NOT_FOUND;
 #endif
 }
 
@@ -277,7 +445,7 @@ bool PrefsUtil::AppendToListCrosSetting(const std::string& pref_name,
     return service->AppendToList(pref_name, value);
   }
 
-  chromeos::CrosSettings::Get()->AppendToList(pref_name, &value);
+  CrosSettings::Get()->AppendToList(pref_name, &value);
   return true;
 #else
   return false;
@@ -296,7 +464,7 @@ bool PrefsUtil::RemoveFromListCrosSetting(const std::string& pref_name,
     return service->RemoveFromList(pref_name, value);
   }
 
-  chromeos::CrosSettings::Get()->RemoveFromList(pref_name, &value);
+  CrosSettings::Get()->RemoveFromList(pref_name, &value);
   return true;
 #else
   return false;
@@ -315,19 +483,50 @@ bool PrefsUtil::IsPrefTypeURL(const std::string& pref_name) {
   return pref_type == settings_private::PrefType::PREF_TYPE_URL;
 }
 
-bool PrefsUtil::IsPrefUserModifiable(const std::string& pref_name) {
+#if defined(OS_CHROMEOS)
+bool PrefsUtil::IsPrefEnterpriseManaged(const std::string& pref_name) {
+  if (IsPrivilegedCrosSetting(pref_name)) {
+    policy::BrowserPolicyConnectorChromeOS* connector =
+        g_browser_process->platform_part()->browser_policy_connector_chromeos();
+    if (connector->IsEnterpriseManaged())
+      return true;
+  }
+  return false;
+}
+
+bool PrefsUtil::IsPrefOwnerControlled(const std::string& pref_name) {
+  if (IsPrivilegedCrosSetting(pref_name)) {
+    if (!chromeos::ProfileHelper::IsOwnerProfile(profile_))
+      return true;
+  }
+  return false;
+}
+
+bool PrefsUtil::IsPrefPrimaryUserControlled(const std::string& pref_name) {
+  if (pref_name == prefs::kWakeOnWifiDarkConnect) {
+    user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+    const user_manager::User* user =
+        chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
+    if (user && user->email() != user_manager->GetPrimaryUser()->email())
+      return true;
+  }
+  return false;
+}
+#endif
+
+bool PrefsUtil::IsPrefSupervisorControlled(const std::string& pref_name) {
   if (pref_name != prefs::kBrowserGuestModeEnabled &&
       pref_name != prefs::kBrowserAddPersonEnabled) {
-    return true;
+    return false;
   }
+  return profile_->IsSupervised();
+}
 
+bool PrefsUtil::IsPrefUserModifiable(const std::string& pref_name) {
   PrefService* pref_service = profile_->GetPrefs();
   const PrefService::Preference* pref =
       pref_service->FindPreference(pref_name.c_str());
-  if (!pref || !pref->IsUserModifiable() || profile_->IsSupervised())
-    return false;
-
-  return true;
+  return pref && pref->IsUserModifiable();
 }
 
 PrefService* PrefsUtil::FindServiceForPref(const std::string& pref_name) {
@@ -338,7 +537,7 @@ PrefService* PrefsUtil::FindServiceForPref(const std::string& pref_name) {
   // Elsewhere the proxy settings are stored in local state.
   // See http://crbug.com/157147
 
-  if (pref_name == prefs::kProxy) {
+  if (pref_name == proxy_config::prefs::kProxy) {
 #if defined(OS_CHROMEOS)
     return user_prefs;
 #else

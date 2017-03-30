@@ -11,12 +11,15 @@
 #include "base/values.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager_factory.h"
+#include "components/proximity_auth/logging/logging.h"
+#include "components/signin/core/account_id/account_id.h"
 
 namespace chromeos {
 
 namespace {
 
 const char kKeyBluetoothAddress[] = "bluetoothAddress";
+const char kKeyBluetoothType[] = "bluetoothType";
 const char kKeyPermitRecord[] = "permitRecord";
 const char kKeyPermitId[] = "permitRecord.id";
 const char kKeyPermitPermitId[] = "permitRecord.permitId";
@@ -52,9 +55,9 @@ void EasyUnlockKeyManager::RefreshKeys(const UserContext& user_context,
 
   EasyUnlockTpmKeyManager* tpm_key_manager =
       EasyUnlockTpmKeyManagerFactory::GetInstance()->GetForUser(
-          user_context.GetUserID());
+          user_context.GetAccountId().GetUserEmail());
   if (!tpm_key_manager) {
-    LOG(ERROR) << "No TPM key manager.";
+    PA_LOG(ERROR) << "No TPM key manager.";
     callback.Run(false);
     return;
   }
@@ -81,9 +84,9 @@ void EasyUnlockKeyManager::RefreshKeysWithTpmKeyPresent(
     const RefreshKeysCallback& callback) {
   EasyUnlockTpmKeyManager* tpm_key_manager =
       EasyUnlockTpmKeyManagerFactory::GetInstance()->GetForUser(
-          user_context.GetUserID());
-  std::string tpm_public_key =
-      tpm_key_manager->GetPublicTpmKey(user_context.GetUserID());
+          user_context.GetAccountId().GetUserEmail());
+  const std::string tpm_public_key =
+      tpm_key_manager->GetPublicTpmKey(user_context.GetAccountId());
 
   EasyUnlockDeviceKeyDataList devices;
   if (!RemoteDeviceListToDeviceDataList(*remote_devices, &devices))
@@ -107,10 +110,11 @@ void EasyUnlockKeyManager::GetDeviceDataList(
 
 // static
 void EasyUnlockKeyManager::DeviceDataToRemoteDeviceDictionary(
-    const std::string& user_id,
+    const AccountId& account_id,
     const EasyUnlockDeviceKeyData& data,
     base::DictionaryValue* dict) {
   dict->SetString(kKeyBluetoothAddress, data.bluetooth_address);
+  dict->SetInteger(kKeyBluetoothType, static_cast<int>(data.bluetooth_type));
   dict->SetString(kKeyPsk, data.psk);
   scoped_ptr<base::DictionaryValue> permit_record(new base::DictionaryValue);
   dict->Set(kKeyPermitRecord, permit_record.release());
@@ -119,7 +123,7 @@ void EasyUnlockKeyManager::DeviceDataToRemoteDeviceDictionary(
   dict->SetString(kKeyPermitType, kPermitTypeLicence);
   dict->SetString(kKeyPermitPermitId,
                   base::StringPrintf(kPermitPermitIdFormat,
-                                     user_id.c_str()));
+                                     account_id.GetUserEmail().c_str()));
 }
 
 // static
@@ -136,6 +140,19 @@ bool EasyUnlockKeyManager::RemoteDeviceDictionaryToDeviceData(
     return false;
   }
 
+  // TODO(tengs): Move this conditional up once we can be certain that the
+  // dictionary will contain the Bluetooth type key.
+  int bluetooth_type_as_int;
+  if (dict.GetInteger(kKeyBluetoothType, &bluetooth_type_as_int)) {
+    if (bluetooth_type_as_int >= EasyUnlockDeviceKeyData::NUM_BLUETOOTH_TYPES) {
+      PA_LOG(ERROR) << "Invalid Bluetooth type: " << bluetooth_type_as_int;
+    } else {
+      data->bluetooth_type =
+          static_cast<EasyUnlockDeviceKeyData::BluetoothType>(
+              bluetooth_type_as_int);
+    }
+  }
+
   data->bluetooth_address.swap(bluetooth_address);
   data->public_key.swap(public_key);
   data->psk.swap(psk);
@@ -144,14 +161,14 @@ bool EasyUnlockKeyManager::RemoteDeviceDictionaryToDeviceData(
 
 // static
 void EasyUnlockKeyManager::DeviceDataListToRemoteDeviceList(
-    const std::string& user_id,
+    const AccountId& account_id,
     const EasyUnlockDeviceKeyDataList& data_list,
     base::ListValue* device_list) {
   device_list->Clear();
   for (size_t i = 0; i < data_list.size(); ++i) {
     scoped_ptr<base::DictionaryValue> device_dict(new base::DictionaryValue);
-    DeviceDataToRemoteDeviceDictionary(
-        user_id, data_list[i], device_dict.get());
+    DeviceDataToRemoteDeviceDictionary(account_id, data_list[i],
+                                       device_dict.get());
     device_list->Append(device_dict.release());
   }
 }

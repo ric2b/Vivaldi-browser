@@ -5,6 +5,7 @@
 #ifndef DEVICE_BLUETOOTH_BLUETOOTH_SOCKET_THREAD_H_
 #define DEVICE_BLUETOOTH_BLUETOOTH_SOCKET_THREAD_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -17,7 +18,7 @@ class Thread;
 
 namespace device {
 
-// Thread abstraction used by |BluetoothSocketChromeOS| and |BluetoothSocketWin|
+// Thread abstraction used by |BluetoothSocketBlueZ| and |BluetoothSocketWin|
 // to perform IO operations on the underlying platform sockets. An instance of
 // this class can be shared by many active sockets.
 class DEVICE_BLUETOOTH_EXPORT BluetoothSocketThread

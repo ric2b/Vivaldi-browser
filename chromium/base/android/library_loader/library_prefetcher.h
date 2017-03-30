@@ -12,6 +12,7 @@
 
 #include "base/debug/proc_maps_linux.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 
 namespace base {
 namespace android {
@@ -30,6 +31,9 @@ class BASE_EXPORT NativeLibraryPrefetcher {
   // process pre-fetching these ranges and wait()s for it.
   // Returns true for success.
   static bool ForkAndPrefetchNativeLibrary();
+  // Returns the percentage of the native library code currently resident in
+  // memory, or -1 in case of error.
+  static int PercentageOfResidentNativeLibraryCode();
 
  private:
   using AddressRange = std::pair<uintptr_t, uintptr_t>;
@@ -42,6 +46,10 @@ class BASE_EXPORT NativeLibraryPrefetcher {
   // Finds the ranges matching the native library in /proc/self/maps.
   // Returns true for success.
   static bool FindRanges(std::vector<AddressRange>* ranges);
+
+  // Returns the percentage of the given address ranges currently resident in
+  // memory, or -1 in case of error.
+  static int PercentageOfResidentCode(const std::vector<AddressRange>& ranges);
 
   FRIEND_TEST_ALL_PREFIXES(NativeLibraryPrefetcherTest,
                            TestIsGoodToPrefetchNoRange);
@@ -57,6 +65,10 @@ class BASE_EXPORT NativeLibraryPrefetcher {
                            TestFilterLibchromeRangesOnlyIfPossibleNoLibchrome);
   FRIEND_TEST_ALL_PREFIXES(NativeLibraryPrefetcherTest,
                            TestFilterLibchromeRangesOnlyIfPossibleHasLibchrome);
+  FRIEND_TEST_ALL_PREFIXES(NativeLibraryPrefetcherTest,
+                           TestPercentageOfResidentCode);
+  FRIEND_TEST_ALL_PREFIXES(NativeLibraryPrefetcherTest,
+                           TestPercentageOfResidentCodeTwoRegions);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(NativeLibraryPrefetcher);
 };

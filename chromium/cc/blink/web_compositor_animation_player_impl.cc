@@ -29,6 +29,11 @@ WebCompositorAnimationPlayerImpl::animation_player() const {
 
 void WebCompositorAnimationPlayerImpl::setAnimationDelegate(
     blink::WebCompositorAnimationDelegate* delegate) {
+  if (!delegate) {
+    animation_delegate_adapter_.reset();
+    animation_player_->set_layer_animation_delegate(nullptr);
+    return;
+  }
   animation_delegate_adapter_.reset(
       new WebToCCAnimationDelegateAdapter(delegate));
   animation_player_->set_layer_animation_delegate(
@@ -61,6 +66,10 @@ void WebCompositorAnimationPlayerImpl::removeAnimation(int animation_id) {
 void WebCompositorAnimationPlayerImpl::pauseAnimation(int animation_id,
                                                       double time_offset) {
   animation_player_->PauseAnimation(animation_id, time_offset);
+}
+
+void WebCompositorAnimationPlayerImpl::abortAnimation(int animation_id) {
+  animation_player_->AbortAnimation(animation_id);
 }
 
 }  // namespace cc_blink

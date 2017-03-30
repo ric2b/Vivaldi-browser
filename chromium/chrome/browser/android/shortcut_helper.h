@@ -7,67 +7,63 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
-#include "base/basictypes.h"
-#include "chrome/browser/android/shortcut_data_fetcher.h"
+#include "base/macros.h"
 #include "chrome/browser/android/shortcut_info.h"
-#include "content/public/common/manifest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
 class WebContents;
 }  // namespace content
 
-namespace IPC {
-class Message;
-}
-
-class GURL;
-
 // ShortcutHelper is the C++ counterpart of org.chromium.chrome.browser's
-// ShortcutHelper in Java. The object is owned by the Java object. It is created
-// from there via a JNI (Initialize) call and MUST BE DESTROYED via Destroy().
-class ShortcutHelper : public ShortcutDataFetcher::Observer {
+// ShortcutHelper in Java.
+class ShortcutHelper {
  public:
-  ShortcutHelper(JNIEnv* env,
-                 jobject obj,
-                 content::WebContents* web_contents);
-
-  // Called by the Java counterpart to destroy its native half.
-  void Destroy(JNIEnv* env, jobject obj);
-
   // Registers JNI hooks.
   static bool RegisterShortcutHelper(JNIEnv* env);
-
-  // Adds a shortcut to the current URL to the Android home screen.
-  void AddShortcut(JNIEnv* env, jobject obj, jstring title);
 
   // Adds a shortcut to the launcher using a SkBitmap.
   // Must be called on the IO thread.
   static void AddShortcutInBackgroundWithSkBitmap(const ShortcutInfo& info,
+                                                  const std::string& webapp_id,
                                                   const SkBitmap& icon_bitmap);
 
-  // ShortcutDataFetcher::Observer
-  void OnTitleAvailable(const base::string16& title) override;
-  void OnDataAvailable(const ShortcutInfo& info, const SkBitmap& icon) override;
-  SkBitmap FinalizeLauncherIcon(const SkBitmap& icon, const GURL& url) override;
+  // Returns the ideal size for an icon representing a web app.
+  static int GetIdealHomescreenIconSizeInDp();
+
+  // Returns the minimum size for an icon representing a web app.
+  static int GetMinimumHomescreenIconSizeInDp();
+
+  // Returns the ideal size for an image displayed on a web app's splash
+  // screen.
+  static int GetIdealSplashImageSizeInDp();
+
+  // Returns the minimum size for an image displayed on a web app's splash
+  // screen.
+  static int GetMinimumSplashImageSizeInDp();
+
+  // Fetches the splash screen image and stores it inside the WebappDataStorage
+  // of the webapp.
+  static void FetchSplashScreenImage(content::WebContents* web_contents,
+                                     const GURL& image_url,
+                                     const int ideal_splash_image_size_in_dp,
+                                     const int minimum_splash_image_size_in_dp,
+                                     const std::string& webapp_id);
+
+  // Stores the data of the webapp which is not placed inside the shortcut.
+  static void StoreWebappData(const std::string& webapp_id,
+                              const SkBitmap& splash_image);
+
+  // Modify the given icon to matche the launcher requirements, then returns the
+  // new icon. It might generate an entirely new icon, in which case,
+  // |is_generated| will be set to |true|.
+  static SkBitmap FinalizeLauncherIcon(const SkBitmap& icon,
+                                       const GURL& url,
+                                       bool* is_generated);
 
  private:
-  virtual ~ShortcutHelper();
-
-  // Called only when the ShortcutDataFetcher has retrieved all of the
-  // data needed to add the shortcut.
-  void AddShortcut(const ShortcutInfo& info, const SkBitmap& icon);
-
-  void RecordAddToHomescreen();
-
-  // Points to the Java object.
-  base::android::ScopedJavaGlobalRef<jobject> java_ref_;
-
-  // Whether the user has requested that a shortcut be added while a fetch was
-  // in progress.
-  bool add_shortcut_pending_;
-
-  // Fetches data required to add a shortcut.
-  scoped_refptr<ShortcutDataFetcher> data_fetcher_;
+  ShortcutHelper() = delete;
+  ~ShortcutHelper() = delete;
 
   DISALLOW_COPY_AND_ASSIGN(ShortcutHelper);
 };

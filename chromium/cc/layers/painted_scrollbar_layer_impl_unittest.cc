@@ -4,7 +4,10 @@
 
 #include "cc/layers/painted_scrollbar_layer_impl.h"
 
+#include <stddef.h>
+
 #include "cc/quads/draw_quad.h"
+#include "cc/quads/texture_draw_quad.h"
 #include "cc/test/layer_test_common.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -16,6 +19,7 @@ TEST(PaintedScrollbarLayerImplTest, Occlusion) {
   float scale = 2.f;
   gfx::Size scaled_layer_size(20, 2000);
   gfx::Size viewport_size(1000, 1000);
+  float thumb_opacity = 0.2f;
 
   LayerTestCommon::LayerImplTest impl;
 
@@ -46,10 +50,11 @@ TEST(PaintedScrollbarLayerImplTest, Occlusion) {
   scrollbar_layer_impl->SetThumbLength(500);
   scrollbar_layer_impl->SetTrackLength(layer_size.height());
   scrollbar_layer_impl->SetCurrentPos(100.f / 4);
-  scrollbar_layer_impl->SetMaximum(100);
-  scrollbar_layer_impl->SetVisibleToTotalLengthRatio(1.f / 2);
+  scrollbar_layer_impl->SetClipLayerLength(100.f);
+  scrollbar_layer_impl->SetScrollLayerLength(200.f);
   scrollbar_layer_impl->set_track_ui_resource_id(track_uid);
   scrollbar_layer_impl->set_thumb_ui_resource_id(thumb_uid);
+  scrollbar_layer_impl->set_thumb_opacity(thumb_opacity);
 
   impl.CalcDrawProps(viewport_size);
 
@@ -71,8 +76,16 @@ TEST(PaintedScrollbarLayerImplTest, Occlusion) {
     // Note: this is also testing that the thumb and track are both
     // scaled by the internal contents scale.  It's not occlusion-related
     // but is easy to verify here.
-    const DrawQuad* thumb_quad = impl.quad_list().ElementAt(0);
-    const DrawQuad* track_quad = impl.quad_list().ElementAt(1);
+    const DrawQuad* thumb_draw_quad = impl.quad_list().ElementAt(0);
+    const DrawQuad* track_draw_quad = impl.quad_list().ElementAt(1);
+
+    EXPECT_EQ(DrawQuad::TEXTURE_CONTENT, thumb_draw_quad->material);
+    EXPECT_EQ(DrawQuad::TEXTURE_CONTENT, track_draw_quad->material);
+
+    const TextureDrawQuad* thumb_quad =
+        TextureDrawQuad::MaterialCast(thumb_draw_quad);
+    const TextureDrawQuad* track_quad =
+        TextureDrawQuad::MaterialCast(track_draw_quad);
 
     gfx::Rect scaled_thumb_rect = gfx::ScaleToEnclosingRect(thumb_rect, scale);
     EXPECT_EQ(track_quad->rect.ToString(),
@@ -84,6 +97,12 @@ TEST(PaintedScrollbarLayerImplTest, Occlusion) {
     EXPECT_EQ(thumb_quad->rect.ToString(), scaled_thumb_rect.ToString());
     EXPECT_EQ(thumb_quad->visible_rect.ToString(),
               scaled_thumb_rect.ToString());
+    EXPECT_EQ(thumb_quad->visible_rect.ToString(),
+              scaled_thumb_rect.ToString());
+    for (size_t i = 0; i < 4; ++i) {
+      EXPECT_EQ(thumb_opacity, thumb_quad->vertex_opacity[i]);
+      EXPECT_EQ(1.f, track_quad->vertex_opacity[i]);
+    }
   }
 
   {

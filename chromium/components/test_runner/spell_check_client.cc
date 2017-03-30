@@ -4,6 +4,9 @@
 
 #include "components/test_runner/spell_check_client.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "components/test_runner/mock_grammar_check.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "components/test_runner/web_test_proxy.h"
@@ -138,15 +141,6 @@ void SpellCheckClient::FinishLastTextCheck() {
   last_requested_text_checking_completion_ = 0;
 
   web_test_proxy_->PostSpellCheckEvent(blink::WebString("FinishLastTextCheck"));
-}
-
-blink::WebString SpellCheckClient::autoCorrectWord(
-    const blink::WebString& word) {
-  // Returns an empty string as Mac WebKit ('WebKitSupport/WebEditorClient.mm')
-  // does. (If this function returns a non-empty string, WebKit replaces the
-  // given misspelled string with the result one. This process executes some
-  // editor commands and causes layout-test failures.)
-  return blink::WebString();
 }
 
 }  // namespace test_runner

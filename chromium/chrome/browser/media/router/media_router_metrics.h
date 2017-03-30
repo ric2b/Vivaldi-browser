@@ -1,0 +1,90 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_METRICS_H_
+#define CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_METRICS_H_
+
+#include "base/time/time.h"
+
+namespace media_router {
+
+// NOTE: Do not renumber enums as that would confuse interpretation of
+// previously logged data. When making changes, also update the enum list
+// in tools/metrics/histograms/histograms.xml to keep it in sync.
+
+// Where the user clicked to open the Media Router dialog.
+enum class MediaRouterDialogOpenOrigin {
+  TOOLBAR = 0,
+  OVERFLOW_MENU = 1,
+  CONTEXTUAL_MENU = 2,
+  PAGE = 3,
+
+  // NOTE: Add entries only immediately above this line.
+  TOTAL_COUNT = 4
+};
+
+// Why the Media Route Provider process was woken up.
+enum class MediaRouteProviderWakeReason {
+  CREATE_ROUTE = 0,
+  JOIN_ROUTE = 1,
+  TERMINATE_ROUTE = 2,
+  SEND_SESSION_MESSAGE = 3,
+  SEND_SESSION_BINARY_MESSAGE = 4,
+  DETACH_ROUTE = 5,
+  START_OBSERVING_MEDIA_SINKS = 6,
+  STOP_OBSERVING_MEDIA_SINKS = 7,
+  START_OBSERVING_MEDIA_ROUTES = 8,
+  STOP_OBSERVING_MEDIA_ROUTES = 9,
+  LISTEN_FOR_ROUTE_MESSAGES = 10,
+  STOP_LISTENING_FOR_ROUTE_MESSAGES = 11,
+  CONNECTION_ERROR = 12,
+  REGISTER_MEDIA_ROUTE_PROVIDER = 13,
+  CONNECT_ROUTE_BY_ROUTE_ID = 14,
+
+  // NOTE: Add entries only immediately above this line.
+  TOTAL_COUNT = 15
+};
+
+// The possible actions a user can take while interacting with the Media Router
+// dialog.
+enum class MediaRouterUserAction {
+  CHANGE_MODE = 0,
+  START_LOCAL = 1,
+  STOP_LOCAL = 2,
+  CLOSE = 3,
+  STATUS_REMOTE = 4,
+
+  // Note: Add entries only immediately above this line.
+  TOTAL_COUNT = 5
+};
+
+class MediaRouterMetrics {
+ public:
+  // Records where the user clicked to open the Media Router dialog.
+  static void RecordMediaRouterDialogOrigin(
+      MediaRouterDialogOpenOrigin origin);
+
+  // Records why the media route provider extension was woken up.
+  static void RecordMediaRouteProviderWakeReason(
+      MediaRouteProviderWakeReason reason);
+
+  // Records the duration it takes for the Media Router dialog to open and
+  // finish painting after a user clicks to open the dialog.
+  static void RecordMediaRouterDialogPaint(
+      const base::TimeDelta delta);
+
+  // Records the duration it takes for the Media Router dialog to load its
+  // initial data after a user clicks to open the dialog.
+  static void RecordMediaRouterDialogLoaded(
+      const base::TimeDelta delta);
+
+  // Records the first action the user took after the Media Router dialog
+  // opened.
+  static void RecordMediaRouterInitialUserAction(
+      MediaRouterUserAction action);
+};
+
+}  // namespace media_router
+
+#endif  // CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_METRICS_H_

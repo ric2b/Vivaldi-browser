@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "ipc/ipc_sender.h"
 #include "remoting/host/audio_capturer.h"
 #include "remoting/host/chromoting_messages.h"
@@ -199,7 +200,7 @@ void IpcDesktopEnvironmentFactory::OnDesktopSessionAgentAttached(
   ActiveConnectionsList::iterator i = active_connections_.find(terminal_id);
   if (i != active_connections_.end()) {
     i->second->DetachFromDesktop();
-    i->second->AttachToDesktop(desktop_process.Pass(), desktop_pipe);
+    i->second->AttachToDesktop(std::move(desktop_process), desktop_pipe);
   } else {
 #if defined(OS_POSIX)
     DCHECK(desktop_pipe.auto_close);
@@ -222,7 +223,7 @@ void IpcDesktopEnvironmentFactory::OnTerminalDisconnected(int terminal_id) {
     active_connections_.erase(i);
 
     // Disconnect the client session.
-    desktop_session_proxy->DisconnectSession();
+    desktop_session_proxy->DisconnectSession(protocol::OK);
   }
 }
 

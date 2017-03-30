@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_BACKEND_H_
 #define COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_BACKEND_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <utility>
@@ -14,12 +17,14 @@
 #include "base/containers/mru_cache.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
 #include "base/supports_user_data.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "build/build_config.h"
 #include "components/favicon_base/favicon_usage_data.h"
 #include "components/history/core/browser/expire_history_backend.h"
 #include "components/history/core/browser/history_backend_notifier.h"
@@ -210,7 +215,19 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   //
   // As a side effect, caches the list of top hosts for the purposes of
   // generating internal metrics.
-  TopHostsList TopHosts(int num_hosts) const;
+  TopHostsList TopHosts(size_t num_hosts) const;
+
+  // Gets the counts of URLs that belong to |origins| in the history database.
+  // Origins that are not in the history database will be in the map with a
+  // count of 0.
+  // Returns an empty map if db_ is not initialized.
+  OriginCountMap GetCountsForOrigins(const std::set<GURL>& origins) const;
+
+  // Returns, for the given URL, a 0-based index into the list produced by
+  // TopHosts(), corresponding to that URL's host. If TopHosts() has not
+  // previously been run, or the host is not in the top kMaxTopHosts, returns
+  // kMaxTopHosts.
+  int HostRankIfAvailable(const GURL& url) const;
 
   // Navigation ----------------------------------------------------------------
 
@@ -272,6 +289,15 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
                          bool debug,
                          FilteredURLList* result);
 
+  // Statistics ----------------------------------------------------------------
+
+  // Gets the number of URLs as seen in chrome://history within the time range
+  // [|begin_time|, |end_time|). Each URL is counted only once per day. For
+  // determination of the date, timestamps are converted to dates using local
+  // time.
+  HistoryCountResult GetHistoryCount(const base::Time& begin_time,
+                                     const base::Time& end_time);
+
   // Favicon -------------------------------------------------------------------
 
   void GetFavicons(
@@ -322,11 +348,11 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Downloads -----------------------------------------------------------------
 
-  uint32 GetNextDownloadId();
+  uint32_t GetNextDownloadId();
   void QueryDownloads(std::vector<DownloadRow>* rows);
   void UpdateDownload(const DownloadRow& data);
   bool CreateDownload(const DownloadRow& history_info);
-  void RemoveDownloads(const std::set<uint32>& ids);
+  void RemoveDownloads(const std::set<uint32_t>& ids);
 
   // Keyword search terms ------------------------------------------------------
 
@@ -545,7 +571,9 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, TopHosts_OnlyLast30Days);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, TopHosts_MaxNumHosts);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, TopHosts_IgnoreUnusualURLs);
+  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, HostRankIfAvailable);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, RecordTopHostsMetrics);
+  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, GetCountsForOrigins);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, UpdateVisitDuration);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, ExpireHistoryForTimes);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, DeleteFTSIndexDatabases);
@@ -554,7 +582,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   friend class ::TestingProfile;
 
   // Computes the name of the specified database on disk.
-  base::FilePath GetArchivedFileName() const;
   base::FilePath GetThumbnailFileName() const;
 
   // Returns the name of the Favicons database. This is the new name

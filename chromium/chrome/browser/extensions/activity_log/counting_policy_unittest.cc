@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/activity_log/counting_policy.h"
+
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/cancelable_callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -14,8 +20,8 @@
 #include "base/test/simple_test_clock.h"
 #include "base/test/test_timeouts.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
-#include "chrome/browser/extensions/activity_log/counting_policy.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/common/chrome_constants.h"
@@ -69,10 +75,8 @@ class CountingPolicyTest : public testing::Test {
   // Wait for the task queue for the specified thread to empty.
   void WaitOnThread(const BrowserThread::ID& thread) {
     BrowserThread::PostTaskAndReply(
-        thread,
-        FROM_HERE,
-        base::Bind(&base::DoNothing),
-        base::MessageLoop::current()->QuitClosure());
+        thread, FROM_HERE, base::Bind(&base::DoNothing),
+        base::MessageLoop::current()->QuitWhenIdleClosure());
     base::MessageLoop::current()->Run();
   }
 
@@ -102,15 +106,9 @@ class CountingPolicyTest : public testing::Test {
     // checker function when results are available.  This will happen on the
     // database thread.
     policy->ReadFilteredData(
-        extension_id,
-        type,
-        api_name,
-        page_url,
-        arg_url,
-        day,
-        base::Bind(&CountingPolicyTest::CheckWrapper,
-                   checker,
-                   base::MessageLoop::current()->QuitClosure()));
+        extension_id, type, api_name, page_url, arg_url, day,
+        base::Bind(&CountingPolicyTest::CheckWrapper, checker,
+                   base::MessageLoop::current()->QuitWhenIdleClosure()));
 
     // Set up a timeout for receiving results; if we haven't received anything
     // when the timeout triggers then assume that the test is broken.
@@ -155,7 +153,7 @@ class CountingPolicyTest : public testing::Test {
       const base::Callback<void(scoped_ptr<Action::ActionVector>)>& checker,
       const base::Closure& done,
       scoped_ptr<Action::ActionVector> results) {
-    checker.Run(results.Pass());
+    checker.Run(std::move(results));
     done.Run();
   }
 
@@ -413,9 +411,8 @@ class CountingPolicyTest : public testing::Test {
   // deletion.
   void CheckRemoveActions(
       ActivityLogDatabasePolicy* policy,
-      const std::vector<int64>& action_ids,
+      const std::vector<int64_t>& action_ids,
       const base::Callback<void(scoped_ptr<Action::ActionVector>)>& checker) {
-
     // Use a mock clock to ensure that events are not recorded on the wrong day
     // when the test is run close to local midnight.
     base::SimpleTestClock* mock_clock = new base::SimpleTestClock();
@@ -543,10 +540,10 @@ TEST_F(CountingPolicyTest, Construct) {
   policy->Init();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
   scoped_ptr<base::ListValue> args(new base::ListValue());
@@ -554,7 +551,7 @@ TEST_F(CountingPolicyTest, Construct) {
                                             base::Time::Now(),
                                             Action::ACTION_API_CALL,
                                             "tabs.testMethod");
-  action->set_args(args.Pass());
+  action->set_args(std::move(args));
   policy->ProcessAction(action);
   policy->Close();
 }
@@ -564,10 +561,10 @@ TEST_F(CountingPolicyTest, LogWithStrippedArguments) {
   policy->Init();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
 
@@ -578,7 +575,7 @@ TEST_F(CountingPolicyTest, LogWithStrippedArguments) {
                                             base::Time::Now(),
                                             Action::ACTION_API_CALL,
                                             "extension.connect");
-  action->set_args(args.Pass());
+  action->set_args(std::move(args));
 
   policy->ProcessAction(action);
   CheckReadData(policy,
@@ -710,10 +707,10 @@ TEST_F(CountingPolicyTest, LogAndFetchFilteredActions) {
   policy->Init();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                       .Set("name", "Test extension")
-                       .Set("version", "1.0.0")
-                       .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Test extension")
+                                     .Set("version", "1.0.0")
+                                     .Set("manifest_version", 2)))
           .Build();
   extension_service_->AddExtension(extension.get());
   GURL gurl("http://www.google.com");
@@ -1381,7 +1378,7 @@ TEST_F(CountingPolicyTest, RemoveActions) {
   ActivityLogDatabasePolicy* policy = new CountingPolicy(profile_.get());
   policy->Init();
 
-  std::vector<int64> action_ids;
+  std::vector<int64_t> action_ids;
 
   CheckRemoveActions(
       policy, action_ids, base::Bind(&CountingPolicyTest::NoActionsDeleted));

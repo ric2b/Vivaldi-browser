@@ -21,7 +21,7 @@ class ChromiumImporter : public Importer
 
    // Importer
    void StartImport(const importer::SourceProfile& source_profile,
-    uint16 items,
+    uint16_t items,
     ImporterBridge* bridge) override;
 
 

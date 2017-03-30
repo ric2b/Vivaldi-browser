@@ -8,44 +8,16 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
-#include "cc/base/scoped_ptr_vector.h"
 
 namespace cc {
 class Layer;
 class LayerImpl;
 
 typedef std::vector<scoped_refptr<Layer>> LayerList;
-
-typedef ScopedPtrVector<LayerImpl> OwnedLayerImplList;
+typedef std::vector<scoped_ptr<LayerImpl>> OwnedLayerImplList;
 typedef std::vector<LayerImpl*> LayerImplList;
-
-class CC_EXPORT RenderSurfaceLayerList {
- public:
-  RenderSurfaceLayerList();
-  ~RenderSurfaceLayerList();
-
-  Layer* at(size_t i) const;
-  void pop_back();
-  void push_back(const scoped_refptr<Layer>& layer);
-  Layer* back();
-  size_t size() const;
-  bool empty() const { return size() == 0u; }
-  scoped_refptr<Layer>& operator[](size_t i);
-  const scoped_refptr<Layer>& operator[](size_t i) const;
-  LayerList::iterator begin();
-  LayerList::iterator end();
-  LayerList::const_iterator begin() const;
-  LayerList::const_iterator end() const;
-  void clear();
-  LayerList& AsLayerList() { return list_; }
-  const LayerList& AsLayerList() const { return list_; }
-
- private:
-  LayerList list_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderSurfaceLayerList);
-};
 
 }  // namespace cc
 

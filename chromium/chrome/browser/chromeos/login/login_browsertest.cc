@@ -5,8 +5,6 @@
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray.h"
 #include "base/command_line.h"
-#include "base/json/json_file_value_serializer.h"
-#include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
@@ -19,17 +17,14 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/tracing.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
-#include "content/public/browser/render_frame_host.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_system.h"
@@ -40,78 +35,58 @@ using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Return;
 
+namespace chromeos {
 namespace {
 
 const char kGaiaId[] = "12345";
 const char kTestUser[] = "test-user@gmail.com";
 const char kPassword[] = "password";
 
-void FilterFrameByName(std::set<content::RenderFrameHost*>* frame_set,
-                       const std::string& frame_name,
-                       content::RenderFrameHost* frame) {
-  if (frame->GetFrameName() == frame_name)
-    frame_set->insert(frame);
-}
-
 class LoginUserTest : public InProcessBrowserTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(
-        chromeos::switches::kLoginUser, "TestUser@gmail.com");
-    command_line->AppendSwitchASCII(chromeos::switches::kLoginProfile,
-                                    "hash");
+    command_line->AppendSwitchASCII(switches::kLoginUser, "TestUser@gmail.com");
+    command_line->AppendSwitchASCII(switches::kLoginProfile, "hash");
   }
 };
 
 class LoginGuestTest : public InProcessBrowserTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(chromeos::switches::kGuestSession);
+    command_line->AppendSwitch(switches::kGuestSession);
     command_line->AppendSwitch(::switches::kIncognito);
-    command_line->AppendSwitchASCII(chromeos::switches::kLoginProfile,
-                                    "hash");
-    command_line->AppendSwitchASCII(chromeos::switches::kLoginUser,
-                                    chromeos::login::kGuestUserName);
+    command_line->AppendSwitchASCII(switches::kLoginProfile, "hash");
+    command_line->AppendSwitchASCII(switches::kLoginUser,
+                                    login::GuestAccountId().GetUserEmail());
   }
 };
 
 class LoginCursorTest : public InProcessBrowserTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(chromeos::switches::kLoginManager);
+    command_line->AppendSwitch(switches::kLoginManager);
   }
 };
 
 class LoginSigninTest : public InProcessBrowserTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(chromeos::switches::kLoginManager);
-    command_line->AppendSwitch(chromeos::switches::kForceLoginManagerInTests);
+    command_line->AppendSwitch(switches::kLoginManager);
+    command_line->AppendSwitch(switches::kForceLoginManagerInTests);
   }
 
   void SetUpOnMainThread() override {
+    LoginDisplayHostImpl::DisableRestrictiveProxyCheckForTest();
+
     ASSERT_TRUE(tracing::BeginTracingWithWatch(
         "ui", "ui", "ShowLoginWebUI", 1));
   }
 };
 
-class LoginTest : public chromeos::LoginManagerTest {
+class LoginTest : public LoginManagerTest {
  public:
   LoginTest() : LoginManagerTest(true) {}
   ~LoginTest() override {}
-
-  content::RenderFrameHost* GetNamedFrame(const std::string& frame_name) {
-    std::set<content::RenderFrameHost*> frame_set;
-    web_contents()->ForEachFrame(
-        base::Bind(&FilterFrameByName, &frame_set, frame_name));
-    return frame_set.empty() ? NULL : *frame_set.begin();
-  }
-
-  void ExecuteJsInGaiaAuthFrame(const std::string& js) {
-    content::RenderFrameHost* frame = GetNamedFrame("signin-frame");
-    ASSERT_TRUE(frame);
-    ASSERT_TRUE(content::ExecuteScript(frame, js));
-  }
 
   void StartGaiaAuthOffline() {
     content::DOMMessageQueue message_queue;
@@ -131,22 +106,6 @@ class LoginTest : public chromeos::LoginManagerTest {
     do {
       ASSERT_TRUE(message_queue.WaitForMessage(&message));
     } while (message != "\"offlineLoaded\"");
-  }
-
-  void SubmitOldGaiaAuthOfflineForm(const std::string& user_email,
-                                    const std::string& password) {
-    // Note the input elements must match gaia_auth/offline.html.
-    JSExpect("document.querySelector('#offline-gaia').hidden");
-    JSExpect("!document.querySelector('#signin-frame').hidden");
-    std::string js =
-        "(function(){"
-          "document.getElementsByName('email')[0].value = '$Email';"
-          "document.getElementsByName('password')[0].value = '$Password';"
-          "document.getElementById('submit-button').click();"
-        "})();";
-    base::ReplaceSubstringsAfterOffset(&js, 0, "$Email", user_email);
-    base::ReplaceSubstringsAfterOffset(&js, 0, "$Password", password);
-    ExecuteJsInGaiaAuthFrame(js);
   }
 
   void SubmitGaiaAuthOfflineForm(const std::string& user_email,
@@ -196,43 +155,16 @@ class LoginTest : public chromeos::LoginManagerTest {
 
   void PrepareOfflineLogin() {
     bool show_user;
-    ASSERT_TRUE(chromeos::CrosSettings::Get()->GetBoolean(
-        chromeos::kAccountsPrefShowUserNamesOnSignIn, &show_user));
+    ASSERT_TRUE(CrosSettings::Get()->GetBoolean(
+        kAccountsPrefShowUserNamesOnSignIn, &show_user));
     ASSERT_FALSE(show_user);
 
     StartGaiaAuthOffline();
 
-    chromeos::UserContext user_context(kTestUser);
+    UserContext user_context(AccountId::FromUserEmail(kTestUser));
     user_context.SetGaiaID(kGaiaId);
-    user_context.SetKey(chromeos::Key(kPassword));
+    user_context.SetKey(Key(kPassword));
     SetExpectedCredentials(user_context);
-  }
-};
-
-class LoginOfflineTest : public LoginTest {
- public:
-  LoginOfflineTest() {}
-  ~LoginOfflineTest() override {}
-
-  bool SetUpUserDataDirectory() override {
-    base::FilePath user_data_dir;
-    CHECK(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
-    base::FilePath local_state_path =
-        user_data_dir.Append(chrome::kLocalStateFilename);
-    base::DictionaryValue local_state_dict;
-
-    // Set webview disabled flag only when local state file does not exist.
-    // Otherwise, we break PRE tests that leave state in it.
-    if (!base::PathExists(local_state_path)) {
-      // TODO(rsorokin): Fix offline test for webview signin.
-      // http://crbug.com/475569
-      local_state_dict.SetBoolean(prefs::kWebviewSigninDisabled, true);
-
-      CHECK(JSONFileValueSerializer(local_state_path)
-                .Serialize(local_state_dict));
-    }
-
-    return LoginTest::SetUpUserDataDirectory();
   }
 };
 
@@ -244,6 +176,8 @@ void TestSystemTrayIsVisible() {
   EXPECT_TRUE(tray->visible());
   EXPECT_TRUE(primary_win->bounds().Contains(tray->GetBoundsInScreen()));
 }
+
+}  // namespace
 
 // After a chrome crash, the session manager will restart chrome with
 // the -login-user flag indicating that the user is already logged in.
@@ -285,7 +219,7 @@ IN_PROC_BROWSER_TEST_F(LoginGuestTest, CursorShown) {
 // Verifies the cursor is hidden at startup on login screen.
 IN_PROC_BROWSER_TEST_F(LoginCursorTest, CursorHidden) {
   // Login screen needs to be shown explicitly when running test.
-  chromeos::ShowLoginWizard(chromeos::WizardController::kLoginScreenName);
+  ShowLoginWizard(WizardController::kLoginScreenName);
 
   // Cursor should be hidden at startup
   EXPECT_FALSE(ash::Shell::GetInstance()->cursor_manager()->IsCursorVisible());
@@ -295,7 +229,7 @@ IN_PROC_BROWSER_TEST_F(LoginCursorTest, CursorHidden) {
   EXPECT_TRUE(ash::Shell::GetInstance()->cursor_manager()->IsCursorVisible());
 
   base::MessageLoop::current()->DeleteSoon(
-      FROM_HERE, chromeos::LoginDisplayHostImpl::default_host());
+      FROM_HERE, LoginDisplayHostImpl::default_host());
 
   TestSystemTrayIsVisible();
 }
@@ -308,29 +242,11 @@ IN_PROC_BROWSER_TEST_F(LoginSigninTest, WebUIVisible) {
   ASSERT_TRUE(tracing::EndTracing(&json_events));
 }
 
-IN_PROC_BROWSER_TEST_F(LoginOfflineTest, PRE_OldGaiaAuthOffline) {
-  RegisterUser(kTestUser);
-  chromeos::StartupUtils::MarkOobeCompleted();
-  chromeos::CrosSettings::Get()->SetBoolean(
-      chromeos::kAccountsPrefShowUserNamesOnSignIn, false);
-}
-
-IN_PROC_BROWSER_TEST_F(LoginOfflineTest, OldGaiaAuthOffline) {
-  PrepareOfflineLogin();
-  content::WindowedNotificationObserver session_start_waiter(
-      chrome::NOTIFICATION_SESSION_STARTED,
-      content::NotificationService::AllSources());
-  SubmitOldGaiaAuthOfflineForm(kTestUser, kPassword);
-  session_start_waiter.Wait();
-
-  TestSystemTrayIsVisible();
-}
 
 IN_PROC_BROWSER_TEST_F(LoginTest, PRE_GaiaAuthOffline) {
   RegisterUser(kTestUser);
-  chromeos::StartupUtils::MarkOobeCompleted();
-  chromeos::CrosSettings::Get()->SetBoolean(
-      chromeos::kAccountsPrefShowUserNamesOnSignIn, false);
+  StartupUtils::MarkOobeCompleted();
+  CrosSettings::Get()->SetBoolean(kAccountsPrefShowUserNamesOnSignIn, false);
 }
 
 IN_PROC_BROWSER_TEST_F(LoginTest, GaiaAuthOffline) {
@@ -344,4 +260,4 @@ IN_PROC_BROWSER_TEST_F(LoginTest, GaiaAuthOffline) {
   TestSystemTrayIsVisible();
 }
 
-}  // namespace
+}  // namespace chromeos

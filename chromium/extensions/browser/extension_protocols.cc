@@ -4,16 +4,21 @@
 
 #include "extensions/browser/extension_protocols.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
 
+#include "app/vivaldi_apptools.h"
 #include "base/base64.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
@@ -143,7 +148,7 @@ void ReadResourceFilePathAndLastModifiedTime(
   base::Time dir_creation_time = GetFileCreationTime(directory);
   UMA_HISTOGRAM_TIMES("Extensions.ResourceDirectoryTimestampQueryLatency",
                       query_timer.Elapsed());
-  int64 delta_seconds = (*last_modified_time - dir_creation_time).InSeconds();
+  int64_t delta_seconds = (*last_modified_time - dir_creation_time).InSeconds();
   if (delta_seconds >= 0) {
     UMA_HISTOGRAM_CUSTOM_COUNTS("Extensions.ResourceLastModifiedDelta",
                                 delta_seconds,
@@ -195,6 +200,10 @@ class URLRequestExtensionJob : public net::URLRequestFileJob {
     *info = response_info_;
   }
 
+  // This always returns 200 because a URLRequestExtensionJob will only get
+  // created in MaybeCreateJob() if the file exists.
+  int GetResponseCode() const override { return 200; }
+
   void Start() override {
     request_timer_.reset(new base::ElapsedTimer());
     base::FilePath* read_file_path = new base::FilePath;
@@ -228,7 +237,7 @@ class URLRequestExtensionJob : public net::URLRequestFileJob {
     URLRequestFileJob::SetExtraRequestHeaders(headers);
   }
 
-  void OnSeekComplete(int64 result) override {
+  void OnSeekComplete(int64_t result) override {
     DCHECK_EQ(seek_position_, 0);
     seek_position_ = result;
     // TODO(asargent) - we'll need to add proper support for range headers.
@@ -277,7 +286,7 @@ class URLRequestExtensionJob : public net::URLRequestFileJob {
   scoped_ptr<base::ElapsedTimer> request_timer_;
 
   // The position we seeked to in the file.
-  int64 seek_position_;
+  int64_t seek_position_;
 
   // The number of bytes of content we read from the file.
   int bytes_read_;
@@ -327,7 +336,7 @@ bool AllowExtensionResourceLoad(net::URLRequest* request,
     return true;
   }
 
-  if (extension && extension->id() != "mpognobbkildjkofajifpdfhcoklimli" &&
+  if (extension && !vivaldi::IsVivaldiApp(extension->id()) &&
       is_incognito && !ExtensionCanLoadInIncognito(
                           info, request->url().host(), extension_info_map)) {
     return false;
@@ -554,10 +563,11 @@ net::HttpResponseHeaders* BuildHttpHeaders(
   return new net::HttpResponseHeaders(raw_headers);
 }
 
-net::URLRequestJobFactory::ProtocolHandler* CreateExtensionProtocolHandler(
-    bool is_incognito,
-    extensions::InfoMap* extension_info_map) {
-  return new ExtensionProtocolHandler(is_incognito, extension_info_map);
+scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
+CreateExtensionProtocolHandler(bool is_incognito,
+                               extensions::InfoMap* extension_info_map) {
+  return make_scoped_ptr(
+      new ExtensionProtocolHandler(is_incognito, extension_info_map));
 }
 
 }  // namespace extensions

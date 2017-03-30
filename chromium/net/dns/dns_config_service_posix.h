@@ -13,6 +13,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
 #include "net/dns/dns_config_service.h"
@@ -48,6 +49,7 @@ class NET_EXPORT_PRIVATE DnsConfigServicePosix : public DnsConfigService {
 #endif
 
   void SetDnsConfigForTesting(const DnsConfig* dns_config);
+  void SetHostsFilePathForTesting(const base::FilePath::CharType* file_path);
 
  protected:
   // DnsConfigService:
@@ -55,7 +57,6 @@ class NET_EXPORT_PRIVATE DnsConfigServicePosix : public DnsConfigService {
   bool StartWatching() override;
 
  private:
-  friend class DnsConfigServicePosixTest;
   class Watcher;
   class ConfigReader;
   class HostsReader;

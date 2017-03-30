@@ -5,7 +5,6 @@
 #include "content/browser/dom_storage/dom_storage_message_filter.h"
 
 #include "base/auto_reset.h"
-#include "base/command_line.h"
 #include "base/bind.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -89,7 +88,7 @@ bool DOMStorageMessageFilter::OnMessageReceived(const IPC::Message& message) {
 }
 
 void DOMStorageMessageFilter::OnOpenStorageArea(int connection_id,
-                                                int64 namespace_id,
+                                                int64_t namespace_id,
                                                 const GURL& origin) {
   DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::IO));
   if (!host_->OpenStorageArea(connection_id, namespace_id, origin)) {

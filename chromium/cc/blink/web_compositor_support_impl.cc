@@ -17,11 +17,11 @@
 #include "cc/blink/web_float_animation_curve_impl.h"
 #include "cc/blink/web_image_layer_impl.h"
 #include "cc/blink/web_layer_impl.h"
-#include "cc/blink/web_nine_patch_layer_impl.h"
 #include "cc/blink/web_scroll_offset_animation_curve_impl.h"
 #include "cc/blink/web_scrollbar_layer_impl.h"
 #include "cc/blink/web_transform_animation_curve_impl.h"
 #include "cc/blink/web_transform_operations_impl.h"
+#include "cc/layers/layer.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/software_output_device.h"
 
@@ -38,7 +38,6 @@ using blink::WebFilterAnimationCurve;
 using blink::WebFilterOperations;
 using blink::WebFloatAnimationCurve;
 using blink::WebImageLayer;
-using blink::WebNinePatchLayer;
 using blink::WebLayer;
 using blink::WebScrollbar;
 using blink::WebScrollbarLayer;
@@ -60,6 +59,10 @@ WebLayer* WebCompositorSupportImpl::createLayer() {
   return new WebLayerImpl();
 }
 
+WebLayer* WebCompositorSupportImpl::createLayerFromCCLayer(cc::Layer* layer) {
+  return new WebLayerImpl(layer);
+}
+
 WebContentLayer* WebCompositorSupportImpl::createContentLayer(
     WebContentLayerClient* client) {
   return new WebContentLayerImpl(client);
@@ -72,10 +75,6 @@ WebExternalTextureLayer* WebCompositorSupportImpl::createExternalTextureLayer(
 
 blink::WebImageLayer* WebCompositorSupportImpl::createImageLayer() {
   return new WebImageLayerImpl();
-}
-
-blink::WebNinePatchLayer* WebCompositorSupportImpl::createNinePatchLayer() {
-  return new WebNinePatchLayerImpl();
 }
 
 WebScrollbarLayer* WebCompositorSupportImpl::createScrollbarLayer(
@@ -116,8 +115,10 @@ WebFloatAnimationCurve* WebCompositorSupportImpl::createFloatAnimationCurve() {
 WebScrollOffsetAnimationCurve*
 WebCompositorSupportImpl::createScrollOffsetAnimationCurve(
     blink::WebFloatPoint target_value,
-    blink::WebCompositorAnimationCurve::TimingFunctionType timing_function) {
-  return new WebScrollOffsetAnimationCurveImpl(target_value, timing_function);
+    WebCompositorAnimationCurve::TimingFunctionType timing_function,
+    WebScrollOffsetAnimationCurve::ScrollDurationBehavior duration_behavior) {
+  return new WebScrollOffsetAnimationCurveImpl(target_value, timing_function,
+                                               duration_behavior);
 }
 
 WebTransformAnimationCurve*
@@ -131,10 +132,6 @@ WebTransformOperations* WebCompositorSupportImpl::createTransformOperations() {
 
 WebFilterOperations* WebCompositorSupportImpl::createFilterOperations() {
   return new WebFilterOperationsImpl();
-}
-
-WebDisplayItemList* WebCompositorSupportImpl::createDisplayItemList() {
-  return new WebDisplayItemListImpl();
 }
 
 WebCompositorAnimationPlayer*

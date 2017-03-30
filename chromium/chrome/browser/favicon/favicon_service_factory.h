@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_FAVICON_FAVICON_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_FAVICON_FAVICON_SERVICE_FACTORY_H_
 
+#include "base/macros.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/service_access_type.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 class Profile;
 
@@ -33,7 +36,7 @@ class FaviconServiceFactory : public BrowserContextKeyedServiceFactory {
   static TestingFactoryFunction GetDefaultFactory();
 
  private:
-  friend struct DefaultSingletonTraits<FaviconServiceFactory>;
+  friend struct base::DefaultSingletonTraits<FaviconServiceFactory>;
 
   FaviconServiceFactory();
   ~FaviconServiceFactory() override;

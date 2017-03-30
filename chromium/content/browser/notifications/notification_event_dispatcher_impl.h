@@ -5,6 +5,9 @@
 #ifndef CONTENT_BROWSER_NOTIFICATIONS_NOTIFICATION_EVENT_DISPATCHER_IMPL_H_
 #define CONTENT_BROWSER_NOTIFICATIONS_NOTIFICATION_EVENT_DISPATCHER_IMPL_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/notification_event_dispatcher.h"
 
@@ -21,6 +24,7 @@ class NotificationEventDispatcherImpl : public NotificationEventDispatcher {
       BrowserContext* browser_context,
       int64_t persistent_notification_id,
       const GURL& origin,
+      int action_index,
       const NotificationClickDispatchCompleteCallback&
           dispatch_complete_callback) override;
 
@@ -28,7 +32,7 @@ class NotificationEventDispatcherImpl : public NotificationEventDispatcher {
   NotificationEventDispatcherImpl();
   ~NotificationEventDispatcherImpl() override;
 
-  friend struct DefaultSingletonTraits<NotificationEventDispatcherImpl>;
+  friend struct base::DefaultSingletonTraits<NotificationEventDispatcherImpl>;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationEventDispatcherImpl);
 };

@@ -11,6 +11,7 @@ extern "C" {
 }
 #endif
 #include <fcntl.h>
+#include <stddef.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -73,7 +74,7 @@ class MyChannelDescriptorListener : public MyChannelDescriptorListenerBase {
   }
 
   void OnChannelError() override {
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
  protected:
@@ -96,7 +97,7 @@ class MyChannelDescriptorListener : public MyChannelDescriptorListenerBase {
 
     ++num_fds_received_;
     if (num_fds_received_ == kNumFDsToSend * kNumMessages)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
  private:
@@ -137,7 +138,12 @@ class IPCSendFdsTest : public IPCTestBase {
   }
 };
 
-TEST_F(IPCSendFdsTest, DescriptorTest) {
+#if defined(OS_ANDROID)
+#define MAYBE_DescriptorTest DISABLED_DescriptorTest
+#else
+#define MAYBE_DescriptorTest DescriptorTest
+#endif
+TEST_F(IPCSendFdsTest, MAYBE_DescriptorTest) {
   Init("SendFdsClient");
   RunServer();
 }
@@ -149,7 +155,7 @@ int SendFdsClientCommon(const std::string& test_client_name,
 
   // Set up IPC channel.
   scoped_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
-      IPCTestBase::GetChannelName(test_client_name), &listener, nullptr));
+      IPCTestBase::GetChannelName(test_client_name), &listener));
   CHECK(channel->Connect());
 
   // Run message loop.
@@ -244,10 +250,10 @@ class PipeChannelHelper {
 
   void Init() {
     IPC::ChannelHandle in_handle("IN");
-    in = IPC::Channel::CreateServer(in_handle, &null_listener_, nullptr);
+    in = IPC::Channel::CreateServer(in_handle, &null_listener_);
     IPC::ChannelHandle out_handle(
         "OUT", base::FileDescriptor(in->TakeClientFileDescriptor()));
-    out = IPC::Channel::CreateClient(out_handle, &cb_listener_, nullptr);
+    out = IPC::Channel::CreateClient(out_handle, &cb_listener_);
     // PostTask the connect calls to make sure the callbacks happens
     // on the right threads.
     in_thread_->task_runner()->PostTask(

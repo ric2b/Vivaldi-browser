@@ -4,10 +4,13 @@
 
 #include "extensions/browser/extension_function_dispatcher.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -69,7 +72,7 @@ void NotifyApiFunctionCalled(const std::string& extension_id,
   ApiActivityMonitor* monitor =
       ExtensionsBrowserClient::Get()->GetApiActivityMonitor(browser_context);
   if (monitor)
-    monitor->OnApiFunctionCalled(extension_id, api_name, args.Pass());
+    monitor->OnApiFunctionCalled(extension_id, api_name, std::move(args));
 }
 
 // Separate copy of ExtensionAPI used for IO thread extension functions. We need
@@ -220,11 +223,6 @@ ExtensionFunctionDispatcher::Delegate::GetVisibleWebContents() const {
   return GetAssociatedWebContents();
 }
 
-void ExtensionFunctionDispatcher::GetAllFunctionNames(
-    std::vector<std::string>* names) {
-  ExtensionFunctionRegistry::GetInstance()->GetAllNames(names);
-}
-
 bool ExtensionFunctionDispatcher::OverrideFunction(
     const std::string& name, ExtensionFunctionFactory factory) {
   return ExtensionFunctionRegistry::GetInstance()->OverrideFunction(name,
@@ -287,9 +285,7 @@ void ExtensionFunctionDispatcher::DispatchOnIOThread(
                                               base::TimeTicks::Now());
   if (violation_error.empty()) {
     scoped_ptr<base::ListValue> args(params.arguments.DeepCopy());
-    NotifyApiFunctionCalled(extension->id(),
-                            params.name,
-                            args.Pass(),
+    NotifyApiFunctionCalled(extension->id(), params.name, std::move(args),
                             static_cast<content::BrowserContext*>(profile_id));
     UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.FunctionCalls",
                                 function->histogram_value());
@@ -400,8 +396,8 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
 
     // See crbug.com/39178.
     ExtensionsBrowserClient::Get()->PermitExternalProtocolHandler();
-    NotifyApiFunctionCalled(
-        extension->id(), params.name, args.Pass(), browser_context_);
+    NotifyApiFunctionCalled(extension->id(), params.name, std::move(args),
+                            browser_context_);
     UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.FunctionCalls",
                                 function->histogram_value());
     tracked_objects::ScopedProfile scoped_profile(

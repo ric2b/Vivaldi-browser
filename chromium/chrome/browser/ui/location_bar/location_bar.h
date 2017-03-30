@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_UI_LOCATION_BAR_LOCATION_BAR_H_
 #define CHROME_BROWSER_UI_LOCATION_BAR_LOCATION_BAR_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
@@ -55,6 +58,9 @@ class LocationBar {
   // Updates the password icon and pops up a bubble from the icon if needed.
   virtual void UpdateManagePasswordsIconAndBubble() = 0;
 
+  // Updates the visibility and toggled state of the save credit card icon.
+  virtual void UpdateSaveCreditCardIcon() = 0;
+
   // Updates the state of the page actions.
   virtual void UpdatePageActions() = 0;
 
@@ -73,11 +79,6 @@ class LocationBar {
 
   // Updates the state of the button to open a PDF in Adobe Reader.
   virtual void UpdateOpenPDFInReaderPrompt() = 0;
-
-  // Updates the generated credit card view. This view serves as an anchor for
-  // the generated credit card bubble, which can show on successful generation
-  // of a new credit card number.
-  virtual void UpdateGeneratedCreditCardView() = 0;
 
   // Saves the state of the location bar to the specified WebContents, so that
   // it can be restored later. (Done when switching tabs).

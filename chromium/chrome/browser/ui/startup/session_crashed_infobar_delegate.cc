@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/startup/session_crashed_infobar_delegate.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
@@ -19,7 +20,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
-
+#include "ui/gfx/vector_icons_public.h"
 
 // static
 void SessionCrashedInfoBarDelegate::Create(Browser* browser) {
@@ -55,8 +56,21 @@ SessionCrashedInfoBarDelegate::~SessionCrashedInfoBarDelegate() {
   }
 }
 
-int SessionCrashedInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::InfoBarIdentifier
+SessionCrashedInfoBarDelegate::GetIdentifier() const {
+  return SESSION_CRASHED_INFOBAR_DELEGATE;
+}
+
+int SessionCrashedInfoBarDelegate::GetIconId() const {
   return IDR_INFOBAR_RESTORE_SESSION;
+}
+
+gfx::VectorIconId SessionCrashedInfoBarDelegate::GetVectorIconId() const {
+#if defined(OS_MACOSX)
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
+#else
+  return gfx::VectorIconId::SAD_TAB;
+#endif
 }
 
 base::string16 SessionCrashedInfoBarDelegate::GetMessageText() const {

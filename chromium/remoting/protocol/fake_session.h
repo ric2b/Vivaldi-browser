@@ -9,52 +9,57 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "remoting/protocol/fake_stream_socket.h"
 #include "remoting/protocol/session.h"
+#include "remoting/protocol/transport.h"
 
 namespace remoting {
 namespace protocol {
 
 extern const char kTestJid[];
 
-// FakeSession is a dummy protocol::Session that uses FakeStreamSocket for all
-// channels.
+class FakeAuthenticator;
+
 class FakeSession : public Session {
  public:
   FakeSession();
   ~FakeSession() override;
 
+  void SimulateConnection(FakeSession* peer);
+
   EventHandler* event_handler() { return event_handler_; }
-
   void set_error(ErrorCode error) { error_ = error; }
-
   bool is_closed() const { return closed_; }
-
-  FakeStreamChannelFactory& fake_channel_factory() { return channel_factory_; }
 
   // Session interface.
   void SetEventHandler(EventHandler* event_handler) override;
   ErrorCode error() override;
   const std::string& jid() override;
-  const CandidateSessionConfig* candidate_config() override;
   const SessionConfig& config() override;
-  void set_config(scoped_ptr<SessionConfig> config) override;
-  StreamChannelFactory* GetTransportChannelFactory() override;
-  StreamChannelFactory* GetMultiplexedChannelFactory() override;
-  void Close() override;
+  void SetTransport(Transport* transport) override;
+  void Close(ErrorCode error) override;
 
- public:
-  EventHandler* event_handler_;
-  scoped_ptr<const CandidateSessionConfig> candidate_config_;
+ private:
+  // Callback provided to the |transport_|.
+  void SendTransportInfo(scoped_ptr<buzz::XmlElement> transport_info);
+
+  EventHandler* event_handler_ = nullptr;
   scoped_ptr<SessionConfig> config_;
-
-  FakeStreamChannelFactory channel_factory_;
 
   std::string jid_;
 
-  ErrorCode error_;
-  bool closed_;
+  scoped_ptr<FakeAuthenticator> authenticator_;
+  Transport* transport_;
+
+  ErrorCode error_ = OK;
+  bool closed_ = false;
+
+  base::WeakPtr<FakeSession> peer_;
+
+  base::WeakPtrFactory<FakeSession> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeSession);
 };

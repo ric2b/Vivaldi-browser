@@ -4,20 +4,30 @@
 
 #include "extensions/renderer/dispatcher.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
+#include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/grit/content_resources.h"
 #include "content/public/child/v8_value_converter.h"
+#include "content/public/common/browser_plugin_guest_mode.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
@@ -28,6 +38,7 @@
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/feature_switch.h"
+#include "extensions/common/features/behavior_feature.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/manifest.h"
@@ -43,7 +54,6 @@
 #include "extensions/common/view_type.h"
 #include "extensions/renderer/api_activity_logger.h"
 #include "extensions/renderer/api_definitions_natives.h"
-#include "extensions/renderer/app_runtime_custom_bindings.h"
 #include "extensions/renderer/app_window_custom_bindings.h"
 #include "extensions/renderer/binding_generating_native_handler.h"
 #include "extensions/renderer/blob_native_handler.h"
@@ -51,6 +61,7 @@
 #include "extensions/renderer/context_menus_custom_bindings.h"
 #include "extensions/renderer/css_native_handler.h"
 #include "extensions/renderer/dispatcher_delegate.h"
+#include "extensions/renderer/display_source_custom_bindings.h"
 #include "extensions/renderer/document_custom_bindings.h"
 #include "extensions/renderer/dom_activity_logger.h"
 #include "extensions/renderer/event_bindings.h"
@@ -68,6 +79,7 @@
 #include "extensions/renderer/print_native_handler.h"
 #include "extensions/renderer/process_info_native_handler.h"
 #include "extensions/renderer/render_frame_observer_natives.h"
+#include "extensions/renderer/renderer_extension_registry.h"
 #include "extensions/renderer/request_sender.h"
 #include "extensions/renderer/runtime_custom_bindings.h"
 #include "extensions/renderer/safe_builtins.h"
@@ -77,11 +89,18 @@
 #include "extensions/renderer/script_injection_manager.h"
 #include "extensions/renderer/send_request_natives.h"
 #include "extensions/renderer/set_icon_natives.h"
+#include "extensions/renderer/static_v8_external_one_byte_string_resource.h"
 #include "extensions/renderer/test_features_native_handler.h"
+#include "extensions/renderer/test_native_handler.h"
 #include "extensions/renderer/user_gestures_native_handler.h"
 #include "extensions/renderer/utils_native_handler.h"
 #include "extensions/renderer/v8_context_native_handler.h"
+#include "extensions/renderer/v8_helpers.h"
+#include "extensions/renderer/wake_event_page.h"
+#include "extensions/renderer/worker_script_context_set.h"
+#include "extensions/vivaldi_script_dispatcher.h"
 #include "grit/extensions_renderer_resources.h"
+#include "mojo/public/js/constants.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebCustomElement.h"
@@ -93,7 +112,6 @@
 #include "third_party/WebKit/public/web/WebScopedUserGesture.h"
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
 #include "third_party/WebKit/public/web/WebView.h"
-#include "third_party/mojo/src/mojo/public/js/constants.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "v8/include/v8.h"
@@ -112,11 +130,15 @@ namespace extensions {
 
 namespace {
 
-static const int64 kInitialExtensionIdleHandlerDelayMs = 5 * 1000;
-static const int64 kMaxExtensionIdleHandlerDelayMs = 5 * 60 * 1000;
+static const int64_t kInitialExtensionIdleHandlerDelayMs = 5 * 1000;
+static const int64_t kMaxExtensionIdleHandlerDelayMs = 5 * 60 * 1000;
 static const char kEventDispatchFunction[] = "dispatchEvent";
 static const char kOnSuspendEvent[] = "runtime.onSuspend";
 static const char kOnSuspendCanceledEvent[] = "runtime.onSuspendCanceled";
+
+void CrashOnException(const v8::TryCatch& trycatch) {
+  NOTREACHED();
+};
 
 // Returns the global value for "chrome" from |context|. If one doesn't exist
 // creates a new object for it.
@@ -195,6 +217,10 @@ class ChromeNativeHandler : public ObjectBackedNativeHandler {
   }
 };
 
+base::LazyInstance<WorkerScriptContextSet> g_worker_script_context_set =
+    LAZY_INSTANCE_INITIALIZER;
+
+
 // This handles the "vivaldi." root API object in script contexts.
 class VivaldiNativeHandler : public ObjectBackedNativeHandler {
  public:
@@ -212,6 +238,8 @@ class VivaldiNativeHandler : public ObjectBackedNativeHandler {
 
 }  // namespace
 
+// Note that we can't use Blink public APIs in the constructor becase Blink
+// is not initialized at the point we create Dispatcher.
 Dispatcher::Dispatcher(DispatcherDelegate* delegate)
     : delegate_(delegate),
       content_watcher_(new ContentWatcher()),
@@ -231,16 +259,14 @@ Dispatcher::Dispatcher(DispatcherDelegate* delegate)
         kInitialExtensionIdleHandlerDelayMs);
   }
 
-  RenderThread::Get()->RegisterExtension(SafeBuiltins::CreateV8Extension());
-
-  script_context_set_.reset(
-      new ScriptContextSet(&extensions_, &active_extension_ids_));
-  user_script_set_manager_.reset(new UserScriptSetManager(&extensions_));
+  script_context_set_.reset(new ScriptContextSet(&active_extension_ids_));
+  user_script_set_manager_.reset(new UserScriptSetManager());
   script_injection_manager_.reset(
-      new ScriptInjectionManager(&extensions_, user_script_set_manager_.get()));
+      new ScriptInjectionManager(user_script_set_manager_.get()));
   user_script_set_manager_observer_.Add(user_script_set_manager_.get());
   request_sender_.reset(new RequestSender(this));
   PopulateSourceMap();
+  WakeEventPage::Get()->Init(RenderThread::Get());
 }
 
 Dispatcher::~Dispatcher() {
@@ -254,7 +280,7 @@ bool Dispatcher::IsExtensionActive(const std::string& extension_id) const {
   bool is_active =
       active_extension_ids_.find(extension_id) != active_extension_ids_.end();
   if (is_active)
-    CHECK(extensions_.Contains(extension_id));
+    CHECK(RendererExtensionRegistry::Get()->Contains(extension_id));
   return is_active;
 }
 
@@ -276,7 +302,7 @@ void Dispatcher::DidCreateScriptContext(
   {
     scoped_ptr<ModuleSystem> module_system(
         new ModuleSystem(context, &source_map_));
-    context->set_module_system(module_system.Pass());
+    context->set_module_system(std::move(module_system));
   }
   ModuleSystem* module_system = context->module_system();
 
@@ -332,9 +358,105 @@ void Dispatcher::DidCreateScriptContext(
     case Feature::WEBUI_CONTEXT:
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_WebUI", elapsed);
       break;
+    case Feature::SERVICE_WORKER_CONTEXT:
+      // Handled in DidInitializeServiceWorkerContextOnWorkerThread().
+      NOTREACHED();
+      break;
   }
 
   VLOG(1) << "Num tracked contexts: " << script_context_set_->size();
+}
+
+// static
+void Dispatcher::DidInitializeServiceWorkerContextOnWorkerThread(
+    v8::Local<v8::Context> v8_context,
+    const GURL& url) {
+  const base::TimeTicks start_time = base::TimeTicks::Now();
+
+  if (!url.SchemeIs(kExtensionScheme) &&
+      !url.SchemeIs(kExtensionResourceScheme)) {
+    // Early-out if this isn't a chrome-extension:// or resource scheme,
+    // because looking up the extension registry is unnecessary if it's not.
+    // Checking this will also skip over hosted apps, which is the desired
+    // behavior - hosted app service workers are not our concern.
+    return;
+  }
+
+  const Extension* extension =
+      RendererExtensionRegistry::Get()->GetExtensionOrAppByURL(url);
+
+  if (!extension) {
+    // TODO(kalman): This is no good. Instead we need to either:
+    //
+    // - Hold onto the v8::Context and create the ScriptContext and install
+    //   our bindings when this extension is loaded.
+    // - Deal with there being an extension ID (url.host()) but no
+    //   extension associated with it, then document that getBackgroundClient
+    //   may fail if the extension hasn't loaded yet.
+    //
+    // The former is safer, but is unfriendly to caching (e.g. session restore).
+    // It seems to contradict the service worker idiom.
+    //
+    // The latter is friendly to caching, but running extension code without an
+    // installed extension makes me nervous, and means that we won't be able to
+    // expose arbitrary (i.e. capability-checked) extension APIs to service
+    // workers. We will probably need to relax some assertions - we just need
+    // to find them.
+    //
+    // Perhaps this could be solved with our own event on the service worker
+    // saying that an extension is ready, and documenting that extension APIs
+    // won't work before that event has fired?
+    return;
+  }
+
+  ScriptContext* context = new ScriptContext(
+      v8_context, nullptr, extension, Feature::SERVICE_WORKER_CONTEXT,
+      extension, Feature::SERVICE_WORKER_CONTEXT);
+  context->set_url(url);
+
+  g_worker_script_context_set.Get().Insert(make_scoped_ptr(context));
+
+  v8::Isolate* isolate = context->isolate();
+
+  // Fetch the source code for service_worker_bindings.js.
+  base::StringPiece script_resource =
+      ResourceBundle::GetSharedInstance().GetRawDataResource(
+          IDR_SERVICE_WORKER_BINDINGS_JS);
+  v8::Local<v8::String> script = v8::String::NewExternal(
+      isolate, new StaticV8ExternalOneByteStringResource(script_resource));
+
+  // Run service_worker.js to get the main function.
+  v8::Local<v8::Function> main_function;
+  {
+    v8::Local<v8::Value> result = context->RunScript(
+        v8_helpers::ToV8StringUnsafe(isolate, "service_worker"), script,
+        base::Bind(&CrashOnException));
+    CHECK(result->IsFunction());
+    main_function = result.As<v8::Function>();
+  }
+
+  // Expose CHECK/DCHECK/NOTREACHED to the main function with a
+  // LoggingNativeHandler. Admire the neat base::Bind trick to both Invalidate
+  // and delete the native handler.
+  LoggingNativeHandler* logging = new LoggingNativeHandler(context);
+  context->AddInvalidationObserver(
+      base::Bind(&NativeHandler::Invalidate, base::Owned(logging)));
+
+  // Execute the main function with its dependencies passed in as arguments.
+  v8::Local<v8::Value> args[] = {
+      // The extension's background URL.
+      v8_helpers::ToV8StringUnsafe(
+          isolate, BackgroundInfo::GetBackgroundURL(extension).spec()),
+      // The wake-event-page native function.
+      WakeEventPage::Get()->GetForContext(context),
+      // The logging module.
+      logging->NewInstance(),
+  };
+  context->CallFunction(main_function, arraysize(args), args);
+
+  const base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
+  UMA_HISTOGRAM_TIMES(
+      "Extensions.DidInitializeServiceWorkerContextOnWorkerThread", elapsed);
 }
 
 void Dispatcher::WillReleaseScriptContext(
@@ -345,13 +467,23 @@ void Dispatcher::WillReleaseScriptContext(
   if (!context)
     return;
 
-  context->DispatchOnUnloadEvent();
   // TODO(kalman): Make |request_sender| use |context->AddInvalidationObserver|.
   // In fact |request_sender_| should really be owned by ScriptContext.
   request_sender_->InvalidateSource(context);
 
   script_context_set_->Remove(context);
   VLOG(1) << "Num tracked contexts: " << script_context_set_->size();
+}
+
+// static
+void Dispatcher::WillDestroyServiceWorkerContextOnWorkerThread(
+    v8::Local<v8::Context> v8_context,
+    const GURL& url) {
+  if (url.SchemeIs(kExtensionScheme) ||
+      url.SchemeIs(kExtensionResourceScheme)) {
+    // See comment in DidInitializeServiceWorkerContextOnWorkerThread.
+    g_worker_script_context_set.Get().Remove(v8_context, url);
+  }
 }
 
 void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
@@ -362,7 +494,8 @@ void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
       frame, frame->document().url(), true /* match_about_blank */);
 
   const Extension* extension =
-      extensions_.GetExtensionOrAppByURL(effective_document_url);
+      RendererExtensionRegistry::Get()->GetExtensionOrAppByURL(
+          effective_document_url);
 
   if (extension &&
       (extension->is_extension() || extension->is_platform_app())) {
@@ -444,7 +577,8 @@ void Dispatcher::InvokeModuleSystemMethod(content::RenderFrame* render_frame,
 
   // Tell the browser process when an event has been dispatched with a lazy
   // background page active.
-  const Extension* extension = extensions_.GetByID(extension_id);
+  const Extension* extension =
+      RendererExtensionRegistry::Get()->GetByID(extension_id);
   if (extension && BackgroundInfo::HasLazyBackgroundPage(extension) &&
       module_name == kEventBindings &&
       function_name == kEventDispatchFunction) {
@@ -502,8 +636,7 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
   resources.push_back(std::make_pair("guestViewEvents",
                                      IDR_GUEST_VIEW_EVENTS_JS));
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kSitePerProcess)) {
+  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
     resources.push_back(std::make_pair("guestViewIframe",
                                        IDR_GUEST_VIEW_IFRAME_JS));
     resources.push_back(std::make_pair("guestViewIframeContainer",
@@ -519,14 +652,12 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
   resources.push_back(std::make_pair(kSchemaUtils, IDR_SCHEMA_UTILS_JS));
   resources.push_back(std::make_pair("sendRequest", IDR_SEND_REQUEST_JS));
   resources.push_back(std::make_pair("setIcon", IDR_SET_ICON_JS));
-  resources.push_back(std::make_pair("surfaceWorker", IDR_SURFACE_VIEW_JS));
   resources.push_back(std::make_pair("test", IDR_TEST_CUSTOM_BINDINGS_JS));
   resources.push_back(
       std::make_pair("test_environment_specific_bindings",
                      IDR_BROWSER_TEST_ENVIRONMENT_SPECIFIC_BINDINGS_JS));
   resources.push_back(std::make_pair("uncaught_exception_handler",
                                      IDR_UNCAUGHT_EXCEPTION_HANDLER_JS));
-  resources.push_back(std::make_pair("unload_event", IDR_UNLOAD_EVENT_JS));
   resources.push_back(std::make_pair("utils", IDR_UTILS_JS));
   resources.push_back(std::make_pair("webRequest",
                                      IDR_WEB_REQUEST_CUSTOM_BINDINGS_JS));
@@ -547,8 +678,7 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
   resources.push_back(std::make_pair("webViewEvents", IDR_WEB_VIEW_EVENTS_JS));
   resources.push_back(std::make_pair("webViewInternal",
                                      IDR_WEB_VIEW_INTERNAL_CUSTOM_BINDINGS_JS));
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kSitePerProcess)) {
+  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
     resources.push_back(std::make_pair("webViewIframe",
                                        IDR_WEB_VIEW_IFRAME_JS));
   }
@@ -591,6 +721,9 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
   resources.push_back(
       std::make_pair("declarativeWebRequest",
                      IDR_DECLARATIVE_WEBREQUEST_CUSTOM_BINDINGS_JS));
+  resources.push_back(
+      std::make_pair("displaySource",
+                     IDR_DISPLAY_SOURCE_CUSTOM_BINDINGS_JS));
   resources.push_back(
       std::make_pair("contextMenus", IDR_CONTEXT_MENUS_CUSTOM_BINDINGS_JS));
   resources.push_back(
@@ -641,6 +774,8 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
       std::make_pair("media_router_bindings", IDR_MEDIA_ROUTER_BINDINGS_JS));
 #endif  // defined(ENABLE_MEDIA_ROUTER)
 
+  vivaldi::VivaldiAddScriptResources(resources);
+
   return resources;
 }
 
@@ -667,6 +802,9 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
   module_system->RegisterNativeHandler(
       "test_features",
       scoped_ptr<NativeHandler>(new TestFeaturesNativeHandler(context)));
+  module_system->RegisterNativeHandler(
+      "test_native_handler",
+      scoped_ptr<NativeHandler>(new TestNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "user_gestures",
       scoped_ptr<NativeHandler>(new UserGesturesNativeHandler(context)));
@@ -705,9 +843,6 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
       scoped_ptr<NativeHandler>(new FileSystemNatives(context)));
 
   // Custom bindings.
-  module_system->RegisterNativeHandler(
-      "app_runtime",
-      scoped_ptr<NativeHandler>(new AppRuntimeCustomBindings(context)));
   // |dispatcher| is null in unit tests.
   const ScriptContextSet* script_context_set = dispatcher ?
       &dispatcher->script_context_set() : nullptr;
@@ -737,10 +872,9 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
       scoped_ptr<NativeHandler>(new IdGeneratorCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "runtime", scoped_ptr<NativeHandler>(new RuntimeCustomBindings(context)));
-}
-
-void Dispatcher::LoadExtensionForTest(const Extension* extension) {
-  CHECK(extensions_.Insert(extension));
+  module_system->RegisterNativeHandler(
+      "display_source",
+      scoped_ptr<NativeHandler>(new DisplaySourceCustomBindings(context)));
 }
 
 bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
@@ -754,10 +888,11 @@ bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
   IPC_MESSAGE_HANDLER(ExtensionMsg_Loaded, OnLoaded)
   IPC_MESSAGE_HANDLER(ExtensionMsg_MessageInvoke, OnMessageInvoke)
   IPC_MESSAGE_HANDLER(ExtensionMsg_SetChannel, OnSetChannel)
-  IPC_MESSAGE_HANDLER(ExtensionMsg_SetFunctionNames, OnSetFunctionNames)
   IPC_MESSAGE_HANDLER(ExtensionMsg_SetScriptingWhitelist,
                       OnSetScriptingWhitelist)
   IPC_MESSAGE_HANDLER(ExtensionMsg_SetSystemFont, OnSetSystemFont)
+  IPC_MESSAGE_HANDLER(ExtensionMsg_SetWebViewPartitionID,
+                      OnSetWebViewPartitionID)
   IPC_MESSAGE_HANDLER(ExtensionMsg_ShouldSuspend, OnShouldSuspend)
   IPC_MESSAGE_HANDLER(ExtensionMsg_Suspend, OnSuspend)
   IPC_MESSAGE_HANDLER(ExtensionMsg_TransferBlobs, OnTransferBlobs)
@@ -778,10 +913,44 @@ bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
 }
 
 void Dispatcher::WebKitInitialized() {
+  RenderThread::Get()->RegisterExtension(SafeBuiltins::CreateV8Extension());
+
+  // WebSecurityPolicy whitelists. They should be registered for both
+  // chrome-extension: and chrome-extension-resource.
+  using RegisterFunction = void (*)(const WebString&);
+  RegisterFunction register_functions[] = {
+      // Treat as secure because communication with them is entirely in the
+      // browser, so there is no danger of manipulation or eavesdropping on
+      // communication with them by third parties.
+      WebSecurityPolicy::registerURLSchemeAsSecure,
+      // As far as Blink is concerned, they should be allowed to receive CORS
+      // requests. At the Extensions layer, requests will actually be blocked
+      // unless overridden by the web_accessible_resources manifest key.
+      // TODO(kalman): See what happens with a service worker.
+      WebSecurityPolicy::registerURLSchemeAsCORSEnabled,
+      // Resources should bypass Content Security Policy checks when included in
+      // protected resources. TODO(kalman): What are "protected resources"?
+      WebSecurityPolicy::registerURLSchemeAsBypassingContentSecurityPolicy,
+      // Extension resources are HTTP-like and safe to expose to the fetch API.
+      // The rules for the fetch API are consistent with XHR.
+      WebSecurityPolicy::registerURLSchemeAsSupportingFetchAPI,
+      // Extension resources, when loaded as the top-level document, should
+      // bypass Blink's strict first-party origin checks.
+      WebSecurityPolicy::registerURLSchemeAsFirstPartyWhenTopLevel,
+  };
+
+  WebString extension_scheme(base::ASCIIToUTF16(kExtensionScheme));
+  WebString extension_resource_scheme(base::ASCIIToUTF16(
+      kExtensionResourceScheme));
+  for (RegisterFunction func : register_functions) {
+    func(extension_scheme);
+    func(extension_resource_scheme);
+  }
+
   // For extensions, we want to ensure we call the IdleHandler every so often,
   // even if the extension keeps up activity.
   if (set_idle_notifications_) {
-    forced_idle_timer_.reset(new base::RepeatingTimer<content::RenderThread>);
+    forced_idle_timer_.reset(new base::RepeatingTimer);
     forced_idle_timer_->Start(
         FROM_HERE,
         base::TimeDelta::FromMilliseconds(kMaxExtensionIdleHandlerDelayMs),
@@ -792,7 +961,8 @@ void Dispatcher::WebKitInitialized() {
   // Initialize host permissions for any extensions that were activated before
   // WebKit was initialized.
   for (const std::string& extension_id : active_extension_ids_) {
-    const Extension* extension = extensions_.GetByID(extension_id);
+    const Extension* extension =
+        RendererExtensionRegistry::Get()->GetByID(extension_id);
     CHECK(extension);
     InitOriginPermissions(extension);
   }
@@ -807,7 +977,7 @@ void Dispatcher::IdleNotification() {
     // Dampen the forced delay as well if the extension stays idle for long
     // periods of time. (forced_idle_timer_ can be NULL after
     // OnRenderProcessShutdown has been called.)
-    int64 forced_delay_ms =
+    int64_t forced_delay_ms =
         std::max(RenderThread::Get()->GetIdleNotificationDelayInMs(),
                  kMaxExtensionIdleHandlerDelayMs);
     forced_idle_timer_->Stop();
@@ -826,7 +996,8 @@ void Dispatcher::OnRenderProcessShutdown() {
 }
 
 void Dispatcher::OnActivateExtension(const std::string& extension_id) {
-  const Extension* extension = extensions_.GetByID(extension_id);
+  const Extension* extension =
+      RendererExtensionRegistry::Get()->GetByID(extension_id);
   if (!extension) {
     // Extension was activated but was never loaded. This probably means that
     // the renderer failed to load it (or the browser failed to tell us when it
@@ -916,6 +1087,8 @@ void Dispatcher::OnLoaded(
       continue;
     }
 
+    RendererExtensionRegistry* extension_registry =
+        RendererExtensionRegistry::Get();
     // TODO(kalman): This test is deliberately not a CHECK (though I wish it
     // could be) and uses extension->id() not params.id:
     // 1. For some reason params.id can be empty. I've only seen it with
@@ -925,8 +1098,8 @@ void Dispatcher::OnLoaded(
     //    Dispatcher is attached to a RenderThread. Presumably there is a
     //    mismatch there. In theory one would think it's possible for the
     //    browser to figure this out itself - but again, cost/benefit.
-    if (!extensions_.Contains(extension->id()))
-      extensions_.Insert(extension);
+    if (!extension_registry->Contains(extension->id()))
+      extension_registry->Insert(extension);
   }
 
   // Update the available bindings for all contexts. These may have changed if
@@ -948,12 +1121,6 @@ void Dispatcher::OnSetChannel(int channel) {
   delegate_->SetChannel(channel);
 }
 
-void Dispatcher::OnSetFunctionNames(const std::vector<std::string>& names) {
-  function_names_.clear();
-  for (size_t i = 0; i < names.size(); ++i)
-    function_names_.insert(names[i]);
-}
-
 void Dispatcher::OnSetScriptingWhitelist(
     const ExtensionsClient::ScriptingWhitelist& extension_ids) {
   ExtensionsClient::Get()->SetScriptingWhitelist(extension_ids);
@@ -965,8 +1132,14 @@ void Dispatcher::OnSetSystemFont(const std::string& font_family,
   system_font_size_ = font_size;
 }
 
+void Dispatcher::OnSetWebViewPartitionID(const std::string& partition_id) {
+  // |webview_partition_id_| cannot be changed once set.
+  CHECK(webview_partition_id_.empty() || webview_partition_id_ == partition_id);
+  webview_partition_id_ = partition_id;
+}
+
 void Dispatcher::OnShouldSuspend(const std::string& extension_id,
-                                 uint64 sequence_id) {
+                                 uint64_t sequence_id) {
   RenderThread::Get()->Send(
       new ExtensionHostMsg_ShouldSuspendAck(extension_id, sequence_id));
 }
@@ -988,7 +1161,7 @@ void Dispatcher::OnTransferBlobs(const std::vector<std::string>& blob_uuids) {
 void Dispatcher::OnUnloaded(const std::string& id) {
   // See comment in OnLoaded for why it would be nice, but perhaps incorrect,
   // to CHECK here rather than guarding.
-  if (!extensions_.Remove(id))
+  if (!RendererExtensionRegistry::Get()->Remove(id))
     return;
 
   active_extension_ids_.erase(id);
@@ -1024,13 +1197,14 @@ void Dispatcher::OnUnloaded(const std::string& id) {
 
 void Dispatcher::OnUpdatePermissions(
     const ExtensionMsg_UpdatePermissions_Params& params) {
-  const Extension* extension = extensions_.GetByID(params.extension_id);
+  const Extension* extension =
+      RendererExtensionRegistry::Get()->GetByID(params.extension_id);
   if (!extension)
     return;
 
-  scoped_refptr<const PermissionSet> active =
+  scoped_ptr<const PermissionSet> active =
       params.active_permissions.ToPermissionSet();
-  scoped_refptr<const PermissionSet> withheld =
+  scoped_ptr<const PermissionSet> withheld =
       params.withheld_permissions.ToPermissionSet();
 
   if (is_webkit_initialized_) {
@@ -1040,7 +1214,8 @@ void Dispatcher::OnUpdatePermissions(
         active->effective_hosts());
   }
 
-  extension->permissions_data()->SetPermissions(active, withheld);
+  extension->permissions_data()->SetPermissions(std::move(active),
+                                                std::move(withheld));
   UpdateBindings(extension->id());
 }
 
@@ -1049,7 +1224,8 @@ void Dispatcher::OnUpdateTabSpecificPermissions(const GURL& visible_url,
                                                 const URLPatternSet& new_hosts,
                                                 bool update_origin_whitelist,
                                                 int tab_id) {
-  const Extension* extension = extensions_.GetByID(extension_id);
+  const Extension* extension =
+      RendererExtensionRegistry::Get()->GetByID(extension_id);
   if (!extension)
     return;
 
@@ -1057,10 +1233,9 @@ void Dispatcher::OnUpdateTabSpecificPermissions(const GURL& visible_url,
       extension->permissions_data()->GetEffectiveHostPermissions();
   extension->permissions_data()->UpdateTabSpecificPermissions(
       tab_id,
-      new extensions::PermissionSet(extensions::APIPermissionSet(),
-                                    extensions::ManifestPermissionSet(),
-                                    new_hosts,
-                                    extensions::URLPatternSet()));
+      extensions::PermissionSet(extensions::APIPermissionSet(),
+                                extensions::ManifestPermissionSet(), new_hosts,
+                                extensions::URLPatternSet()));
 
   if (is_webkit_initialized_ && update_origin_whitelist) {
     UpdateOriginPermissions(
@@ -1075,7 +1250,7 @@ void Dispatcher::OnClearTabSpecificPermissions(
     bool update_origin_whitelist,
     int tab_id) {
   for (const std::string& id : extension_ids) {
-    const Extension* extension = extensions_.GetByID(id);
+    const Extension* extension = RendererExtensionRegistry::Get()->GetByID(id);
     if (extension) {
       URLPatternSet old_effective =
           extension->permissions_data()->GetEffectiveHostPermissions();
@@ -1166,9 +1341,6 @@ void Dispatcher::EnableCustomElementWhiteList() {
       "extensionviewbrowserplugin");
   blink::WebCustomElement::addEmbedderCustomElementName("webview");
   blink::WebCustomElement::addEmbedderCustomElementName("webviewbrowserplugin");
-  blink::WebCustomElement::addEmbedderCustomElementName("surfaceview");
-  blink::WebCustomElement::addEmbedderCustomElementName(
-      "surfaceviewbrowserplugin");
 }
 
 void Dispatcher::UpdateBindings(const std::string& extension_id) {
@@ -1187,12 +1359,15 @@ void Dispatcher::UpdateBindingsForContext(ScriptContext* context) {
     case Feature::UNSPECIFIED_CONTEXT:
     case Feature::WEB_PAGE_CONTEXT:
     case Feature::BLESSED_WEB_PAGE_CONTEXT:
-      // Web page context; it's too expensive to run the full bindings code.
-      // Hard-code that the app and webstore APIs are available...
+      // Hard-code registration of any APIs that are exposed to webpage-like
+      // contexts, because it's too expensive to run the full bindings code.
+      // All of the same permission checks will still apply.
       if (context->GetAvailability("app").is_available())
         RegisterBinding("app", context);
       if (context->GetAvailability("webstore").is_available())
         RegisterBinding("webstore", context);
+      if (context->GetAvailability("dashboardPrivate").is_available())
+        RegisterBinding("dashboardPrivate", context);
       if (IsRuntimeAvailableToContext(context))
         RegisterBinding("runtime", context);
       UpdateContentCapabilities(context);
@@ -1208,10 +1383,7 @@ void Dispatcher::UpdateBindingsForContext(ScriptContext* context) {
           FeatureProvider::GetAPIFeatures();
       const std::vector<std::string>& apis =
           api_feature_provider->GetAllFeatureNames();
-      for (std::vector<std::string>::const_iterator it = apis.begin();
-           it != apis.end();
-           ++it) {
-        const std::string& api_name = *it;
+      for (const std::string& api_name : apis) {
         Feature* feature = api_feature_provider->GetFeature(api_name);
         DCHECK(feature);
 
@@ -1237,6 +1409,10 @@ void Dispatcher::UpdateBindingsForContext(ScriptContext* context) {
       }
       break;
     }
+    case Feature::SERVICE_WORKER_CONTEXT:
+      // Handled in DidInitializeServiceWorkerContextOnWorkerThread().
+      NOTREACHED();
+      break;
   }
 }
 
@@ -1312,14 +1488,11 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
 }
 
 bool Dispatcher::IsRuntimeAvailableToContext(ScriptContext* context) {
-  if (extensions::FeatureSwitch::surface_worker()->IsEnabled() &&
-      context->GetAvailability("surfaceWorkerInternal").is_available()) {
-    return true;
-  }
-  for (const auto& extension : extensions_) {
+  for (const auto& extension :
+       *RendererExtensionRegistry::Get()->GetMainThreadExtensionSet()) {
     ExternallyConnectableInfo* info = static_cast<ExternallyConnectableInfo*>(
         extension->GetManifestData(manifest_keys::kExternallyConnectable));
-    if (info && info->matches.MatchesURL(context->GetURL()))
+    if (info && info->matches.MatchesURL(context->url()))
       return true;
   }
   return false;
@@ -1327,16 +1500,17 @@ bool Dispatcher::IsRuntimeAvailableToContext(ScriptContext* context) {
 
 void Dispatcher::UpdateContentCapabilities(ScriptContext* context) {
   APIPermissionSet permissions;
-  for (const auto& extension : extensions_) {
+  for (const auto& extension :
+       *RendererExtensionRegistry::Get()->GetMainThreadExtensionSet()) {
     const ContentCapabilitiesInfo& info =
         ContentCapabilitiesInfo::Get(extension.get());
-    if (info.url_patterns.MatchesURL(context->GetURL())) {
+    if (info.url_patterns.MatchesURL(context->url())) {
       APIPermissionSet new_permissions;
       APIPermissionSet::Union(permissions, info.permissions, &new_permissions);
       permissions = new_permissions;
     }
   }
-  context->SetContentCapabilities(permissions);
+  context->set_content_capabilities(permissions);
 }
 
 void Dispatcher::PopulateSourceMap() {
@@ -1354,7 +1528,8 @@ bool Dispatcher::IsWithinPlatformApp() {
   for (std::set<std::string>::iterator iter = active_extension_ids_.begin();
        iter != active_extension_ids_.end();
        ++iter) {
-    const Extension* extension = extensions_.GetByID(*iter);
+    const Extension* extension =
+        RendererExtensionRegistry::Get()->GetByID(*iter);
     if (extension && extension->is_platform_app())
       return true;
   }
@@ -1386,8 +1561,8 @@ v8::Local<v8::Object> Dispatcher::GetOrCreateBindObjectIfAvailable(
     const std::string& api_name,
     std::string* bind_name,
     ScriptContext* context) {
-  std::vector<std::string> split;
-  base::SplitString(api_name, '.', &split);
+  std::vector<std::string> split = base::SplitString(
+      api_name, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   v8::Local<v8::Object> bind_object;
 
@@ -1462,20 +1637,13 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
     module_system->Require("extensionViewAttributes");
   }
 
-  // Require SurfaceView.
-  if (extensions::FeatureSwitch::surface_worker()->IsEnabled() &&
-      context->GetAvailability("surfaceWorkerInternal").is_available()) {
-    module_system->Require("surfaceWorker");
-  }
-
   // Require WebView.
   if (context->GetAvailability("webViewInternal").is_available()) {
     module_system->Require("webView");
     module_system->Require("webViewApiMethods");
     module_system->Require("webViewAttributes");
 
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            ::switches::kSitePerProcess)) {
+    if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
       module_system->Require("webViewIframe");
     }
   }
@@ -1487,6 +1655,8 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   if (context_type == Feature::BLESSED_EXTENSION_CONTEXT) {
     module_system->Require("guestViewDeny");
   }
+
+  vivaldi::VivaldiAddRequiredModules(context, module_system);
 }
 
 }  // namespace extensions

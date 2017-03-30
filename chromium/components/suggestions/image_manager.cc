@@ -4,6 +4,8 @@
 
 #include "components/suggestions/image_manager.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/task_runner_util.h"
@@ -13,6 +15,12 @@
 using leveldb_proto::ProtoDatabase;
 
 namespace {
+
+// Statistics are logged to UMA with this string as part of histogram name. They
+// can all be found under LevelDB.*.ImageManager. Changing this needs to
+// synchronize with histograms.xml, AND will also become incompatible with older
+// browsers still reporting the previous values.
+const char kDatabaseUMAClientName[] = "ImageManager";
 
 scoped_ptr<SkBitmap> DecodeImage(
     scoped_refptr<base::RefCountedMemory> encoded_data) {
@@ -31,14 +39,15 @@ ImageManager::ImageManager(
     scoped_ptr<ProtoDatabase<ImageData>> database,
     const base::FilePath& database_dir,
     scoped_refptr<base::TaskRunner> background_task_runner)
-    : image_fetcher_(image_fetcher.Pass()),
-      database_(database.Pass()),
+    : image_fetcher_(std::move(image_fetcher)),
+      database_(std::move(database)),
       background_task_runner_(background_task_runner),
       database_ready_(false),
       weak_ptr_factory_(this) {
   image_fetcher_->SetImageFetcherDelegate(this);
-  database_->Init(database_dir, base::Bind(&ImageManager::OnDatabaseInit,
-                                           weak_ptr_factory_.GetWeakPtr()));
+  database_->Init(kDatabaseUMAClientName, database_dir,
+                  base::Bind(&ImageManager::OnDatabaseInit,
+                             weak_ptr_factory_.GetWeakPtr()));
 }
 
 ImageManager::~ImageManager() {}
@@ -55,6 +64,11 @@ void ImageManager::Initialize(const SuggestionsProfile& suggestions) {
       image_url_map_[GURL(suggestion.url())] = GURL(suggestion.thumbnail());
     }
   }
+}
+
+void ImageManager::AddImageURL(const GURL& url, const GURL& image_url) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  image_url_map_[url] = image_url;
 }
 
 void ImageManager::GetImageForURL(
@@ -169,7 +183,8 @@ void ImageManager::SaveImage(const GURL& url, const SkBitmap& bitmap) {
   scoped_ptr<std::vector<std::string>> keys_to_remove(
       new std::vector<std::string>());
   entries_to_save->push_back(std::make_pair(data.url(), data));
-  database_->UpdateEntries(entries_to_save.Pass(), keys_to_remove.Pass(),
+  database_->UpdateEntries(std::move(entries_to_save),
+                           std::move(keys_to_remove),
                            base::Bind(&ImageManager::OnDatabaseSave,
                                       weak_ptr_factory_.GetWeakPtr()));
 }
@@ -195,7 +210,7 @@ void ImageManager::OnDatabaseLoad(bool success,
   }
   database_ready_ = true;
 
-  LoadEntriesInCache(entries.Pass());
+  LoadEntriesInCache(std::move(entries));
   ServePendingCacheRequests();
 }
 

@@ -9,8 +9,8 @@
 
 namespace media {
 
-WebMVideoClient::WebMVideoClient(const LogCB& log_cb)
-    : log_cb_(log_cb) {
+WebMVideoClient::WebMVideoClient(const scoped_refptr<MediaLog>& media_log)
+    : media_log_(media_log) {
   Reset();
 }
 
@@ -31,8 +31,10 @@ void WebMVideoClient::Reset() {
 }
 
 bool WebMVideoClient::InitializeConfig(
-    const std::string& codec_id, const std::vector<uint8>& codec_private,
-    bool is_encrypted, VideoDecoderConfig* config) {
+    const std::string& codec_id,
+    const std::vector<uint8_t>& codec_private,
+    bool is_encrypted,
+    VideoDecoderConfig* config) {
   DCHECK(config);
 
   VideoCodec video_codec = kUnknownVideoCodec;
@@ -44,12 +46,12 @@ bool WebMVideoClient::InitializeConfig(
     video_codec = kCodecVP9;
     profile = VP9PROFILE_ANY;
   } else {
-    MEDIA_LOG(ERROR, log_cb_) << "Unsupported video codec_id " << codec_id;
+    MEDIA_LOG(ERROR, media_log_) << "Unsupported video codec_id " << codec_id;
     return false;
   }
 
-  VideoFrame::Format format =
-      (alpha_mode_ == 1) ? VideoFrame::YV12A : VideoFrame::YV12;
+  VideoPixelFormat format =
+      (alpha_mode_ == 1) ? PIXEL_FORMAT_YV12A : PIXEL_FORMAT_YV12;
 
   if (pixel_width_ <= 0 || pixel_height_ <= 0)
     return false;
@@ -83,27 +85,20 @@ bool WebMVideoClient::InitializeConfig(
     if (display_width_ <= 0 || display_height_ <= 0)
       return false;
   } else {
-    MEDIA_LOG(ERROR, log_cb_) << "Unsupported display unit type "
-                              << display_unit_;
+    MEDIA_LOG(ERROR, media_log_) << "Unsupported display unit type "
+                                 << display_unit_;
     return false;
   }
   gfx::Size natural_size = gfx::Size(display_width_, display_height_);
-  const uint8* extra_data = NULL;
-  size_t extra_data_size = 0;
-  if (codec_private.size() > 0) {
-    extra_data = &codec_private[0];
-    extra_data_size = codec_private.size();
-  }
 
-  config->Initialize(video_codec, profile, format,
-                     VideoFrame::COLOR_SPACE_UNSPECIFIED, coded_size,
-                     visible_rect, natural_size, extra_data, extra_data_size,
-                     is_encrypted, true);
+  config->Initialize(video_codec, profile, format, COLOR_SPACE_HD_REC709,
+                     coded_size, visible_rect, natural_size, codec_private,
+                     is_encrypted);
   return config->IsValidConfig();
 }
 
-bool WebMVideoClient::OnUInt(int id, int64 val) {
-  int64* dst = NULL;
+bool WebMVideoClient::OnUInt(int id, int64_t val) {
+  int64_t* dst = NULL;
 
   switch (id) {
     case kWebMIdPixelWidth:
@@ -141,9 +136,9 @@ bool WebMVideoClient::OnUInt(int id, int64 val) {
   }
 
   if (*dst != -1) {
-    MEDIA_LOG(ERROR, log_cb_) << "Multiple values for id " << std::hex << id
-                              << " specified (" << *dst << " and " << val
-                              << ")";
+    MEDIA_LOG(ERROR, media_log_) << "Multiple values for id " << std::hex << id
+                                 << " specified (" << *dst << " and " << val
+                                 << ")";
     return false;
   }
 
@@ -151,7 +146,7 @@ bool WebMVideoClient::OnUInt(int id, int64 val) {
   return true;
 }
 
-bool WebMVideoClient::OnBinary(int id, const uint8* data, int size) {
+bool WebMVideoClient::OnBinary(int id, const uint8_t* data, int size) {
   // Accept binary fields we don't care about for now.
   return true;
 }

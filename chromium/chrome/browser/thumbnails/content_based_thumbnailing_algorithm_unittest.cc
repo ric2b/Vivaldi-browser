@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/thumbnails/content_based_thumbnailing_algorithm.h"
 #include "chrome/browser/thumbnails/simple_thumbnail_crop.h"
@@ -137,8 +138,7 @@ TEST_F(ContentBasedThumbnailingAlgorithmTest, CreateRetargetedThumbnail) {
 
   // The image consists of vertical non-overlapping stripes 150 pixels wide.
   canvas.FillRect(gfx::Rect(200, 200, 800, 400), SkColorSetRGB(255, 255, 255));
-  SkBitmap source =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap source = skia::ReadPixels(canvas.sk_canvas());
 
   ConsumerCallbackCatcher catcher;
   const gfx::Size thumbnail_size(432, 284);

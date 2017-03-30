@@ -15,7 +15,7 @@ bool IsPlatformMediaPipelineAvailable(PlatformMediaCheckType /* check_type */) {
   return base::mac::IsOSMavericksOrLater();
 }
 
-bool IsPlatformAudioDecoderAvailable() {
+bool IsPlatformAudioDecoderAvailable(AudioCodec /* codec */) {
   return true;
 }
 

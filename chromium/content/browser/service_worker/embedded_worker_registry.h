@@ -9,7 +9,8 @@
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -69,9 +70,10 @@ class CONTENT_EXPORT EmbeddedWorkerRegistry
   // Called back from EmbeddedWorker in the child process, relayed via
   // ServiceWorkerDispatcherHost.
   void OnWorkerReadyForInspection(int process_id, int embedded_worker_id);
-  void OnWorkerScriptLoaded(int process_id,
-                            int thread_id,
-                            int embedded_worker_id);
+  void OnWorkerScriptLoaded(int process_id, int embedded_worker_id);
+  void OnWorkerThreadStarted(int process_id,
+                             int thread_id,
+                             int embedded_worker_id);
   void OnWorkerScriptLoadFailed(int process_id, int embedded_worker_id);
   void OnWorkerScriptEvaluated(int process_id,
                                int embedded_worker_id,
@@ -108,6 +110,9 @@ class CONTENT_EXPORT EmbeddedWorkerRegistry
  private:
   friend class base::RefCounted<EmbeddedWorkerRegistry>;
   friend class EmbeddedWorkerInstance;
+  friend class EmbeddedWorkerInstanceTest;
+  FRIEND_TEST_ALL_PREFIXES(EmbeddedWorkerInstanceTest,
+                           RemoveWorkerInSharedProcess);
 
   typedef std::map<int, EmbeddedWorkerInstance*> WorkerInstanceMap;
   typedef std::map<int, IPC::Sender*> ProcessToSenderMap;
@@ -122,8 +127,12 @@ class CONTENT_EXPORT EmbeddedWorkerRegistry
   ServiceWorkerStatusCode Send(int process_id, IPC::Message* message);
 
   // RemoveWorker is called when EmbeddedWorkerInstance is destructed.
-  // |process_id| could be invalid (i.e. -1) if it's not running.
+  // |process_id| could be invalid (i.e. ChildProcessHost::kInvalidUniqueID)
+  // if it's not running.
   void RemoveWorker(int process_id, int embedded_worker_id);
+
+  EmbeddedWorkerInstance* GetWorkerForMessage(int process_id,
+                                              int embedded_worker_id);
 
   base::WeakPtr<ServiceWorkerContextCore> context_;
 

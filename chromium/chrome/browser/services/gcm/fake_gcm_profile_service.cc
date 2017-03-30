@@ -4,9 +4,12 @@
 
 #include "chrome/browser/services/gcm/fake_gcm_profile_service.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/format_macros.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -35,14 +38,19 @@ class CustomFakeGCMDriver : public FakeGCMDriver {
                       const std::string& message_id,
                       GCMClient::Result result);
 
+  void OnDispatchMessage(const std::string& app_id,
+                         const IncomingMessage& message);
+
  protected:
   // FakeGCMDriver overrides:
   void RegisterImpl(const std::string& app_id,
                     const std::vector<std::string>& sender_ids) override;
   void UnregisterImpl(const std::string& app_id) override;
+  void UnregisterWithSenderIdImpl(const std::string& app_id,
+                                  const std::string& sender_id) override;
   void SendImpl(const std::string& app_id,
                 const std::string& receiver_id,
-                const GCMClient::OutgoingMessage& message) override;
+                const OutgoingMessage& message) override;
 
  private:
   FakeGCMProfileService* service_;
@@ -51,7 +59,8 @@ class CustomFakeGCMDriver : public FakeGCMDriver {
 };
 
 CustomFakeGCMDriver::CustomFakeGCMDriver(FakeGCMProfileService* service)
-    : service_(service) {
+    : FakeGCMDriver(base::ThreadTaskRunnerHandle::Get()),
+      service_(service) {
 }
 
 CustomFakeGCMDriver::~CustomFakeGCMDriver() {
@@ -71,9 +80,13 @@ void CustomFakeGCMDriver::UnregisterImpl(const std::string& app_id) {
                             base::Unretained(service_), app_id));
 }
 
+void CustomFakeGCMDriver::UnregisterWithSenderIdImpl(
+    const std::string& app_id,
+    const std::string& sender_id) {}
+
 void CustomFakeGCMDriver::SendImpl(const std::string& app_id,
                                    const std::string& receiver_id,
-                                   const GCMClient::OutgoingMessage& message) {
+                                   const OutgoingMessage& message) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&FakeGCMProfileService::SendFinished,
@@ -86,14 +99,21 @@ void CustomFakeGCMDriver::OnRegisterFinished(
     GCMClient::Result result) {
   RegisterFinished(app_id, registration_id, result);
 }
+
 void CustomFakeGCMDriver::OnUnregisterFinished(const std::string& app_id,
                                                GCMClient::Result result) {
   UnregisterFinished(app_id, result);
 }
+
 void CustomFakeGCMDriver::OnSendFinished(const std::string& app_id,
                                          const std::string& message_id,
                                          GCMClient::Result result) {
   SendFinished(app_id, message_id, result);
+}
+
+void CustomFakeGCMDriver::OnDispatchMessage(const std::string& app_id,
+                                            const IncomingMessage& message) {
+  DispatchMessage(app_id, message);
 }
 
 }  // namespace
@@ -104,7 +124,7 @@ scoped_ptr<KeyedService> FakeGCMProfileService::Build(
   Profile* profile = static_cast<Profile*>(context);
   scoped_ptr<FakeGCMProfileService> service(new FakeGCMProfileService(profile));
   service->SetDriverForTesting(new CustomFakeGCMDriver(service.get()));
-  return service.Pass();
+  return std::move(service);
 }
 
 FakeGCMProfileService::FakeGCMProfileService(Profile* profile)
@@ -151,10 +171,9 @@ void FakeGCMProfileService::UnregisterFinished(const std::string& app_id) {
     unregister_callback_.Run(app_id);
 }
 
-void FakeGCMProfileService::SendFinished(
-    const std::string& app_id,
-    const std::string& receiver_id,
-    const GCMClient::OutgoingMessage& message) {
+void FakeGCMProfileService::SendFinished(const std::string& app_id,
+                                         const std::string& receiver_id,
+                                         const OutgoingMessage& message) {
   if (collect_) {
     last_sent_message_ = message;
     last_receiver_id_ = receiver_id;
@@ -173,6 +192,13 @@ void FakeGCMProfileService::AddExpectedUnregisterResponse(
 void FakeGCMProfileService::SetUnregisterCallback(
     const UnregisterCallback& callback) {
   unregister_callback_ = callback;
+}
+
+void FakeGCMProfileService::DispatchMessage(const std::string& app_id,
+                                            const IncomingMessage& message) {
+  CustomFakeGCMDriver* custom_driver =
+      static_cast<CustomFakeGCMDriver*>(driver());
+  custom_driver->OnDispatchMessage(app_id, message);
 }
 
 }  // namespace gcm

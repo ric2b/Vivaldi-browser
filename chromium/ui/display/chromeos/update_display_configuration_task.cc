@@ -48,6 +48,11 @@ void UpdateDisplayConfigurationTask::OnDisplaysUpdated(
     const std::vector<DisplaySnapshot*>& displays) {
   cached_displays_ = displays;
 
+  // Add virtual displays after retrieving the physical displays from the NDD.
+  cached_displays_.insert(cached_displays_.end(),
+                          virtual_display_snapshots_.begin(),
+                          virtual_display_snapshots_.end());
+
   if (cached_displays_.size() > 1 && background_color_argb_)
     delegate_->SetBackgroundColor(background_color_argb_);
 
@@ -176,36 +181,34 @@ bool UpdateDisplayConfigurationTask::ShouldConfigure() const {
 
 MultipleDisplayState UpdateDisplayConfigurationTask::ChooseDisplayState()
     const {
+  int num_displays = cached_displays_.size();
   int num_on_displays =
-      GetDisplayPower(cached_displays_, new_power_state_, NULL);
-  switch (cached_displays_.size()) {
-    case 0:
-      return MULTIPLE_DISPLAY_STATE_HEADLESS;
-    case 1:
-      return MULTIPLE_DISPLAY_STATE_SINGLE;
-    default: {
-      if (num_on_displays == 1) {
-        // If only one display is currently turned on, return the "single"
-        // state so that its native mode will be used.
-        return MULTIPLE_DISPLAY_STATE_SINGLE;
-      }
-      if (num_on_displays >= 3) {
-        return MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED;
-      } else if (cached_displays_.size() == 2) {
-        if (!layout_manager_->GetStateController())
-          return MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
-        // With either both displays on or both displays off, use one of the
-        // dual modes.
-        std::vector<int64_t> display_ids;
-        for (size_t i = 0; i < cached_displays_.size(); ++i)
-          display_ids.push_back(cached_displays_[i]->display_id());
+      GetDisplayPower(cached_displays_, new_power_state_, nullptr);
 
-        return layout_manager_->GetStateController()->GetStateForDisplayIds(
-            display_ids);
-      }
-      NOTREACHED();
-    }
+  if (num_displays == 0)
+    return MULTIPLE_DISPLAY_STATE_HEADLESS;
+
+  if (num_displays == 1 || num_on_displays == 1) {
+    // If only one display is currently turned on, return the "single" state
+    // so that its native mode will be used.
+    return MULTIPLE_DISPLAY_STATE_SINGLE;
   }
+
+  if (num_displays == 2 || num_on_displays == 2) {
+    // Try to use the saved configuration; otherwise, default to extended.
+    DisplayConfigurator::StateController* state_controller =
+        layout_manager_->GetStateController();
+
+    if (!state_controller)
+      return MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
+    return state_controller->GetStateForDisplayIds(cached_displays_);
+  }
+
+  if (num_on_displays >= 3) {
+    // 3+ displays are always extended
+    return MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED;
+  }
+
   return MULTIPLE_DISPLAY_STATE_INVALID;
 }
 

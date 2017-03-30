@@ -6,14 +6,16 @@
 
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/toolbar/wrench_menu_model.h"
+#include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "grit/components_strings.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/models/simple_menu_model.h"
 
@@ -23,6 +25,7 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "ui/base/l10n/l10n_util.h"
 #endif
@@ -169,10 +172,11 @@ void SystemMenuModelBuilder::AppendTeleportMenu(ui::SimpleMenuModel* model) {
   // is not owned by anyone, we don't show the menu addition.
   chrome::MultiUserWindowManager* manager =
       chrome::MultiUserWindowManager::GetInstance();
-  const std::string user_id =
-      multi_user_util::GetUserIDFromProfile(browser()->profile());
+  const AccountId account_id =
+      multi_user_util::GetAccountIdFromProfile(browser()->profile());
   aura::Window* window = browser()->window()->GetNativeWindow();
-  if (user_id.empty() || !window || manager->GetWindowOwner(window).empty())
+  if (!account_id.is_valid() || !window ||
+      !manager->GetWindowOwner(window).is_valid())
     return;
 
   model->AddSeparator(ui::NORMAL_SEPARATOR);

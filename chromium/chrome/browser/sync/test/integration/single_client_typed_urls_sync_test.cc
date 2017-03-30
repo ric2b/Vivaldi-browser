@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 #include "chrome/browser/sessions/session_service.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/typed_urls_helper.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/history/core/browser/history_types.h"
 
 using sync_integration_test_util::AwaitCommitActivityCompletion;

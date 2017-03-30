@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -62,9 +64,7 @@ TEST_F(BrowserCommandsTest, TabNavigationAccelerators) {
 }
 
 // Tests IDC_DUPLICATE_TAB.
-// tomas@vivaldi.com: disabled because changes to webcontents make this crash
-// VB-7147
-TEST_F(BrowserCommandsTest, DISABLED_DuplicateTab) {
+TEST_F(BrowserCommandsTest, DuplicateTab) {
   GURL url1("http://foo/1");
   GURL url2("http://foo/2");
   GURL url3("http://foo/3");
@@ -105,9 +105,7 @@ TEST_F(BrowserCommandsTest, DISABLED_DuplicateTab) {
 }
 
 // Tests IDC_VIEW_SOURCE (See http://crbug.com/138140).
-// tomas@vivaldi.com: disabled because changes to webcontents make this crash
-// VB-7147
-TEST_F(BrowserCommandsTest, DISABLED_ViewSource) {
+TEST_F(BrowserCommandsTest, ViewSource) {
   GURL url1("http://foo/1");
   GURL url2("http://foo/2");
 
@@ -164,9 +162,7 @@ TEST_F(BrowserCommandsTest, BookmarkCurrentPage) {
 }
 
 // Tests back/forward in new tab (Control + Back/Forward button in the UI).
-// tomas@vivaldi.com: disabled because changes to webcontents make this crash
-// VB-7147
-TEST_F(BrowserCommandsTest, DISABLED_BackForwardInNewTab) {
+TEST_F(BrowserCommandsTest, BackForwardInNewTab) {
   GURL url1("http://foo/1");
   GURL url2("http://foo/2");
 

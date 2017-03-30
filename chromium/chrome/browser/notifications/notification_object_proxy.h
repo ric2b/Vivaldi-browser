@@ -7,10 +7,12 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/notifications/notification_delegate.h"
 
 namespace content {
+class BrowserContext;
 class DesktopNotificationDelegate;
 }
 
@@ -23,21 +25,28 @@ class NotificationObjectProxy : public NotificationDelegate {
   // Creates a Proxy object with the necessary callback information. The Proxy
   // will take ownership of |delegate|.
   NotificationObjectProxy(
+      content::BrowserContext* browser_context,
       scoped_ptr<content::DesktopNotificationDelegate> delegate);
 
   // NotificationDelegate implementation.
   void Display() override;
   void Close(bool by_user) override;
   void Click() override;
+  void ButtonClick(int button_index) override;
+  void SettingsClick() override;
+  bool ShouldDisplaySettingsButton() override;
   std::string id() const override;
 
  protected:
   ~NotificationObjectProxy() override;
 
  private:
+  content::BrowserContext* browser_context_;
   scoped_ptr<content::DesktopNotificationDelegate> delegate_;
   bool displayed_;
   std::string id_;
+
+  DISALLOW_COPY_AND_ASSIGN(NotificationObjectProxy);
 };
 
 #endif  // CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_OBJECT_PROXY_H_

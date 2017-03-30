@@ -20,7 +20,7 @@
 #include "content/renderer/pepper/plugin_module.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
-#include "gpu/command_buffer/client/gles2_implementation.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "ppapi/c/ppp_graphics_3d.h"
 #include "ppapi/thunk/enter.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -41,8 +41,8 @@ namespace content {
 
 namespace {
 
-const int32 kCommandBufferSize = 1024 * 1024;
-const int32 kTransferBufferSize = 1024 * 1024;
+const int32_t kCommandBufferSize = 1024 * 1024;
+const int32_t kTransferBufferSize = 1024 * 1024;
 
 }  // namespace
 
@@ -50,21 +50,10 @@ PPB_Graphics3D_Impl::PPB_Graphics3D_Impl(PP_Instance instance)
     : PPB_Graphics3D_Shared(instance),
       bound_to_instance_(false),
       commit_pending_(false),
-      sync_point_(0),
       has_alpha_(false),
-      command_buffer_(NULL),
       weak_ptr_factory_(this) {}
 
-PPB_Graphics3D_Impl::~PPB_Graphics3D_Impl() {
-  DestroyGLES2Impl();
-  if (command_buffer_) {
-    DCHECK(channel_.get());
-    channel_->DestroyCommandBuffer(command_buffer_);
-    command_buffer_ = NULL;
-  }
-
-  channel_ = NULL;
-}
+PPB_Graphics3D_Impl::~PPB_Graphics3D_Impl() {}
 
 // static
 PP_Resource PPB_Graphics3D_Impl::Create(PP_Instance instance,
@@ -90,7 +79,8 @@ PP_Resource PPB_Graphics3D_Impl::CreateRaw(
     PP_Resource share_context,
     const int32_t* attrib_list,
     gpu::Capabilities* capabilities,
-    base::SharedMemoryHandle* shared_state_handle) {
+    base::SharedMemoryHandle* shared_state_handle,
+    uint64_t* command_buffer_id) {
   PPB_Graphics3D_API* share_api = NULL;
   if (share_context) {
     EnterResourceNoLock<PPB_Graphics3D_API> enter(share_context, true);
@@ -101,7 +91,7 @@ PP_Resource PPB_Graphics3D_Impl::CreateRaw(
   scoped_refptr<PPB_Graphics3D_Impl> graphics_3d(
       new PPB_Graphics3D_Impl(instance));
   if (!graphics_3d->InitRaw(share_api, attrib_list, capabilities,
-                            shared_state_handle))
+                            shared_state_handle, command_buffer_id))
     return 0;
   return graphics_3d->GetReference();
 }
@@ -153,6 +143,10 @@ void PPB_Graphics3D_Impl::RetireSyncPoint(uint32_t sync_point) {
   return command_buffer_->RetireSyncPoint(sync_point);
 }
 
+void PPB_Graphics3D_Impl::EnsureWorkVisible() {
+  command_buffer_->EnsureWorkVisible();
+}
+
 bool PPB_Graphics3D_Impl::BindToInstance(bool bind) {
   bound_to_instance_ = bind;
   return true;
@@ -167,30 +161,36 @@ void PPB_Graphics3D_Impl::ViewInitiatedPaint() {
     SwapBuffersACK(PP_OK);
 }
 
-int PPB_Graphics3D_Impl::GetCommandBufferRouteId() {
+CommandBufferProxyImpl* PPB_Graphics3D_Impl::GetCommandBufferProxy() {
   DCHECK(command_buffer_);
-  return command_buffer_->GetRouteID();
+  return command_buffer_.get();
 }
 
 gpu::CommandBuffer* PPB_Graphics3D_Impl::GetCommandBuffer() {
-  return command_buffer_;
+  return command_buffer_.get();
 }
 
 gpu::GpuControl* PPB_Graphics3D_Impl::GetGpuControl() {
-  return command_buffer_;
+  return command_buffer_.get();
 }
 
-int32 PPB_Graphics3D_Impl::DoSwapBuffers() {
+int32_t PPB_Graphics3D_Impl::DoSwapBuffers(const gpu::SyncToken& sync_token) {
   DCHECK(command_buffer_);
+  if (sync_token.HasData())
+    sync_token_ = sync_token;
+
   // We do not have a GLES2 implementation when using an OOP proxy.
   // The plugin-side proxy is responsible for adding the SwapBuffers command
   // to the command buffer in that case.
-  if (gles2_impl())
-    gles2_impl()->SwapBuffers();
+  if (gpu::gles2::GLES2Interface* gl = gles2_interface()) {
+    // A valid sync token would indicate a swap buffer already happened somehow.
+    DCHECK(!sync_token.HasData());
 
-  // Since the backing texture has been updated, a new sync point should be
-  // inserted.
-  sync_point_ = command_buffer_->InsertSyncPoint();
+    gl->SwapBuffers();
+    const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
+    gl->OrderingBarrierCHROMIUM();
+    gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token_.GetData());
+  }
 
   if (bound_to_instance_) {
     // If we are bound to the instance, we need to ask the compositor
@@ -204,8 +204,8 @@ int32 PPB_Graphics3D_Impl::DoSwapBuffers() {
     commit_pending_ = true;
   } else {
     // Wait for the command to complete on the GPU to allow for throttling.
-    command_buffer_->SignalSyncPoint(
-        sync_point_,
+    command_buffer_->SignalSyncToken(
+        sync_token_,
         base::Bind(&PPB_Graphics3D_Impl::OnSwapBuffers,
                    weak_ptr_factory_.GetWeakPtr()));
   }
@@ -215,7 +215,7 @@ int32 PPB_Graphics3D_Impl::DoSwapBuffers() {
 
 bool PPB_Graphics3D_Impl::Init(PPB_Graphics3D_API* share_context,
                                const int32_t* attrib_list) {
-  if (!InitRaw(share_context, attrib_list, NULL, NULL))
+  if (!InitRaw(share_context, attrib_list, NULL, NULL, NULL))
     return false;
 
   gpu::gles2::GLES2Implementation* share_gles2 = NULL;
@@ -231,15 +231,19 @@ bool PPB_Graphics3D_Impl::InitRaw(
     PPB_Graphics3D_API* share_context,
     const int32_t* attrib_list,
     gpu::Capabilities* capabilities,
-    base::SharedMemoryHandle* shared_state_handle) {
+    base::SharedMemoryHandle* shared_state_handle,
+    uint64_t* command_buffer_id) {
   PepperPluginInstanceImpl* plugin_instance =
       HostGlobals::Get()->GetInstance(pp_instance());
   if (!plugin_instance)
     return false;
 
-  const WebPreferences& prefs =
-      static_cast<RenderViewImpl*>(plugin_instance->GetRenderView())
-          ->webkit_preferences();
+  RenderView* render_view = plugin_instance->GetRenderView();
+  if (!render_view)
+    return false;
+
+  const WebPreferences& prefs = render_view->GetWebkitPreferences();
+
   // 3D access might be disabled or blacklisted.
   if (!prefs.pepper_3d_enabled)
     return false;
@@ -259,7 +263,7 @@ bool PPB_Graphics3D_Impl::InitRaw(
     return false;
 
   gfx::Size surface_size;
-  std::vector<int32> attribs;
+  std::vector<int32_t> attribs;
   gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
   // TODO(alokp): Change GpuChannelHost::CreateOffscreenCommandBuffer()
   // interface to accept width and height in the attrib_list so that
@@ -296,11 +300,13 @@ bool PPB_Graphics3D_Impl::InitRaw(
   if (share_context) {
     PPB_Graphics3D_Impl* share_graphics =
         static_cast<PPB_Graphics3D_Impl*>(share_context);
-    share_buffer = share_graphics->command_buffer_;
+    share_buffer = share_graphics->GetCommandBufferProxy();
   }
 
   command_buffer_ = channel_->CreateOffscreenCommandBuffer(
-      surface_size, share_buffer, attribs, GURL::EmptyGURL(), gpu_preference);
+      surface_size, share_buffer, GpuChannelHost::kDefaultStreamId,
+      GpuChannelHost::kDefaultStreamPriority, attribs, GURL::EmptyGURL(),
+      gpu_preference);
   if (!command_buffer_)
     return false;
   if (!command_buffer_->Initialize())
@@ -309,10 +315,11 @@ bool PPB_Graphics3D_Impl::InitRaw(
     *shared_state_handle = command_buffer_->GetSharedStateHandle();
   if (capabilities)
     *capabilities = command_buffer_->GetCapabilities();
+  if (command_buffer_id)
+    *command_buffer_id = command_buffer_->GetCommandBufferID();
   mailbox_ = gpu::Mailbox::Generate();
   if (!command_buffer_->ProduceFrontBuffer(mailbox_))
     return false;
-  sync_point_ = command_buffer_->InsertSyncPoint();
 
   command_buffer_->SetContextLostCallback(base::Bind(
       &PPB_Graphics3D_Impl::OnContextLost, weak_ptr_factory_.GetWeakPtr()));

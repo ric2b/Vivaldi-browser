@@ -14,10 +14,12 @@
 namespace media {
 
 struct ScopedAudioQueueRefTraits {
-  static void Retain(AudioQueueRef /* queue */) {
+  static AudioQueueRef Retain(AudioQueueRef queue) {
     NOTREACHED() << "Only compatible with ASSUME policy";
+    return queue;
   }
   static void Release(AudioQueueRef queue) { AudioQueueDispose(queue, true); }
+  static AudioQueueRef InvalidValue() { return nullptr; }
 };
 
 using ScopedAudioQueueRef =

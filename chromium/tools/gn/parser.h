@@ -5,11 +5,13 @@
 #ifndef TOOLS_GN_PARSER_H_
 #define TOOLS_GN_PARSER_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "tools/gn/err.h"
 #include "tools/gn/parse_tree.h"

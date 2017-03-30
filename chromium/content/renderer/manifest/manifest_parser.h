@@ -5,6 +5,9 @@
 #ifndef CONTENT_RENDERER_MANIFEST_MANIFEST_PARSER_H_
 #define CONTENT_RENDERER_MANIFEST_MANIFEST_PARSER_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
@@ -23,6 +26,16 @@ namespace content {
 // http://w3c.github.io/manifest/#dfn-steps-for-processing-a-manifest
 class CONTENT_EXPORT ManifestParser {
  public:
+  class ErrorInfo {
+   public:
+    ErrorInfo(const std::string& error_msg, int error_line, int error_column)
+        : error_msg(error_msg),
+          error_line(error_line),
+          error_column(error_column) {}
+    const std::string error_msg;
+    const int error_line;
+    const int error_column;
+  };
   ManifestParser(const base::StringPiece& data,
                  const GURL& manifest_url,
                  const GURL& document_url);
@@ -33,7 +46,7 @@ class CONTENT_EXPORT ManifestParser {
   void Parse();
 
   const Manifest& manifest() const;
-  const std::vector<std::string>& errors() const;
+  const std::vector<scoped_ptr<ErrorInfo>>& errors() const;
   bool failed() const;
 
  private:
@@ -56,6 +69,13 @@ class CONTENT_EXPORT ManifestParser {
   base::NullableString16 ParseString(const base::DictionaryValue& dictionary,
                                      const std::string& key,
                                      TrimType trim);
+
+  // Helper function to parse colors present on a given |dictionary| in a given
+  // field identified by its |key|.
+  // Returns the parsed color as an int64_t if any,
+  // Manifest::kInvalidOrMissingColor if the parsing failed.
+  int64_t ParseColor(const base::DictionaryValue& dictionary,
+                     const std::string& key);
 
   // Helper function to parse URLs present on a given |dictionary| in a given
   // field identified by its |key|. The URL is first parsed as a string then
@@ -83,9 +103,9 @@ class CONTENT_EXPORT ManifestParser {
 
   // Parses the 'display' field of the manifest, as defined in:
   // http://w3c.github.io/manifest/#dfn-steps-for-processing-the-display-member
-  // Returns the parsed DisplayMode if any, DISPLAY_MODE_UNSPECIFIED if the
+  // Returns the parsed DisplayMode if any, WebDisplayModeUndefined if the
   // parsing failed.
-  Manifest::DisplayMode ParseDisplay(const base::DictionaryValue& dictionary);
+  blink::WebDisplayMode ParseDisplay(const base::DictionaryValue& dictionary);
 
   // Parses the 'orientation' field of the manifest, as defined in:
   // http://w3c.github.io/manifest/#dfn-steps-for-processing-the-orientation-member
@@ -155,11 +175,27 @@ class CONTENT_EXPORT ManifestParser {
   // returns true iff the field could be parsed as the boolean true.
   bool ParsePreferRelatedApplications(const base::DictionaryValue& dictionary);
 
+  // Parses the 'theme_color' field of the manifest, as defined in:
+  // http://w3c.github.io/manifest/#dfn-steps-for-processing-the-theme_color-member
+  // Returns the parsed theme color if any,
+  // Manifest::kInvalidOrMissingColor if the parsing failed.
+  int64_t ParseThemeColor(const base::DictionaryValue& dictionary);
+
+  // Parses the 'background_color' field of the manifest, as defined in:
+  // http://w3c.github.io/manifest/#dfn-steps-for-processing-the-background_color-member
+  // Returns the parsed background color if any,
+  // Manifest::kInvalidOrMissingColor if the parsing failed.
+  int64_t ParseBackgroundColor(const base::DictionaryValue& dictionary);
+
   // Parses the 'gcm_sender_id' field of the manifest.
   // This is a proprietary extension of the Web Manifest specification.
   // Returns the parsed string if any, a null string if the parsing failed.
   base::NullableString16 ParseGCMSenderID(
       const base::DictionaryValue& dictionary);
+
+  void AddErrorInfo(const std::string& error_msg,
+                    int error_line = 0,
+                    int error_column = 0);
 
   const base::StringPiece& data_;
   GURL manifest_url_;
@@ -167,7 +203,7 @@ class CONTENT_EXPORT ManifestParser {
 
   bool failed_;
   Manifest manifest_;
-  std::vector<std::string> errors_;
+  std::vector<scoped_ptr<ErrorInfo>> errors_;
 
   DISALLOW_COPY_AND_ASSIGN(ManifestParser);
 };

@@ -5,9 +5,9 @@
 #ifndef CHROMEOS_GEOLOCATION_SIMPLE_GEOLOCATION_REQUEST_H_
 #define CHROMEOS_GEOLOCATION_SIMPLE_GEOLOCATION_REQUEST_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -103,10 +103,10 @@ class SimpleGeolocationRequest : private net::URLFetcherDelegate {
   const base::TimeDelta timeout_;
 
   // Pending retry.
-  base::OneShotTimer<SimpleGeolocationRequest> request_scheduled_;
+  base::OneShotTimer request_scheduled_;
 
   // Stop request on timeout.
-  base::OneShotTimer<SimpleGeolocationRequest> timeout_timer_;
+  base::OneShotTimer timeout_timer_;
 
   // Number of retry attempts.
   unsigned retries_;

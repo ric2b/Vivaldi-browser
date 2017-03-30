@@ -13,6 +13,7 @@ import android.view.KeyEvent;
 import junit.framework.Assert;
 
 import org.chromium.base.BaseChromiumApplication.WindowFocusChangedListener;
+import org.chromium.base.test.shadows.ShadowMultiDex;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,10 +26,12 @@ import org.robolectric.util.ActivityController;
 
 /** Unit tests for {@link BaseChromiumApplication}. */
 @RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
-        shadows = {BaseChromiumApplicationTest.TrackingShadowActivity.class})
+@Config(manifest = Config.NONE,
+        application = BaseChromiumApplication.class,
+        shadows = {BaseChromiumApplicationTest.TrackingShadowActivity.class, ShadowMultiDex.class})
 public class BaseChromiumApplicationTest {
 
+    /** Shadow that tracks calls to onWindowFocusChanged and dispatchKeyEvent. */
     @Implements(Activity.class)
     public static class TrackingShadowActivity extends ShadowActivity {
         private int mWindowFocusCalls;
@@ -64,31 +67,5 @@ public class BaseChromiumApplicationTest {
         verify(mock).onWindowFocusChanged(controller.get(), true);
         // Also ensure that the original activity is forwarded the notification.
         Assert.assertEquals(1, shadow.mWindowFocusCalls);
-    }
-
-    @Test
-    public void testDispatchKeyEvent() throws Exception {
-        ActivityController<Activity> controller =
-                Robolectric.buildActivity(Activity.class).create().start().visible();
-        TrackingShadowActivity shadow =
-                (TrackingShadowActivity) Robolectric.shadowOf(controller.get());
-
-        final KeyEvent menuKey = new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MENU);
-
-        // Ensure that key events are forwarded.
-        Assert.assertFalse(controller.get().getWindow().getCallback().dispatchKeyEvent(menuKey));
-        // This gets called twice - once to see if the activity is swallowing it, and again to
-        // dispatch it.
-        Assert.assertEquals(2, shadow.mDispatchKeyEventCalls);
-
-        // Ensure that our activity can swallow the event.
-        shadow.mReturnValueForKeyDispatch = true;
-        Assert.assertTrue(controller.get().getWindow().getCallback().dispatchKeyEvent(menuKey));
-        Assert.assertEquals(3, shadow.mDispatchKeyEventCalls);
-
-        // A non-enter key only dispatches once.
-        Assert.assertTrue(controller.get().getWindow().getCallback().dispatchKeyEvent(
-                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE)));
-        Assert.assertEquals(4, shadow.mDispatchKeyEventCalls);
     }
 }

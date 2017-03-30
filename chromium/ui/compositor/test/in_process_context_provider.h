@@ -5,6 +5,8 @@
 #ifndef UI_COMPOSITOR_TEST_IN_PROCESS_CONTEXT_PROVIDER_H_
 #define UI_COMPOSITOR_TEST_IN_PROCESS_CONTEXT_PROVIDER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/macros.h"
@@ -30,28 +32,17 @@ class InProcessContextProvider : public cc::ContextProvider {
       const gpu::gles2::ContextCreationAttribHelper& attribs,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       gpu::ImageFactory* image_factory,
-      bool lose_context_when_out_of_memory,
       gfx::AcceleratedWidget window,
       const std::string& debug_name);
 
   // Uses default attributes for creating an offscreen context.
   static scoped_refptr<InProcessContextProvider> CreateOffscreen(
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      gpu::ImageFactory* image_factory,
-      bool lose_context_when_out_of_memory);
-
- private:
-  InProcessContextProvider(
-      const gpu::gles2::ContextCreationAttribHelper& attribs,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      gpu::ImageFactory* image_factory,
-      bool lose_context_when_out_of_memory,
-      gfx::AcceleratedWidget window,
-      const std::string& debug_name);
-  ~InProcessContextProvider() override;
+      gpu::ImageFactory* image_factory);
 
   // cc::ContextProvider:
   bool BindToCurrentThread() override;
+  void DetachFromThread() override;
   Capabilities ContextCapabilities() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   gpu::ContextSupport* ContextSupport() override;
@@ -59,14 +50,18 @@ class InProcessContextProvider : public cc::ContextProvider {
   void InvalidateGrContext(uint32_t state) override;
   void SetupLock() override;
   base::Lock* GetLock() override;
-  void VerifyContexts() override;
   void DeleteCachedResources() override;
-  bool DestroyedOnMainThread() override;
   void SetLostContextCallback(
       const LostContextCallback& lost_context_callback) override;
-  void SetMemoryPolicyChangedCallback(
-      const MemoryPolicyChangedCallback& memory_policy_changed_callback)
-      override;
+
+ private:
+  InProcessContextProvider(
+      const gpu::gles2::ContextCreationAttribHelper& attribs,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      gpu::ImageFactory* image_factory,
+      gfx::AcceleratedWidget window,
+      const std::string& debug_name);
+  ~InProcessContextProvider() override;
 
   void OnLostContext();
 
@@ -79,15 +74,11 @@ class InProcessContextProvider : public cc::ContextProvider {
   gpu::gles2::ContextCreationAttribHelper attribs_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   gpu::ImageFactory* image_factory_;
-  bool lose_context_when_out_of_memory_;
   gfx::AcceleratedWidget window_;
   std::string debug_name_;
   cc::ContextProvider::Capabilities capabilities_;
 
   LostContextCallback lost_context_callback_;
-
-  base::Lock destroyed_lock_;
-  bool destroyed_;
 
   base::Lock context_lock_;
 

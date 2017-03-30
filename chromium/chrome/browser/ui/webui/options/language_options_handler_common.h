@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_OPTIONS_LANGUAGE_OPTIONS_HANDLER_COMMON_H_
 #define CHROME_BROWSER_UI_WEBUI_OPTIONS_LANGUAGE_OPTIONS_HANDLER_COMMON_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/spellchecker/spellcheck_hunspell_dictionary.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
@@ -33,10 +34,12 @@ class LanguageOptionsHandlerCommon
   void RegisterMessages() override;
 
   // SpellcheckHunspellDictionary::Observer implementation.
-  void OnHunspellDictionaryInitialized() override;
-  void OnHunspellDictionaryDownloadBegin() override;
-  void OnHunspellDictionaryDownloadSuccess() override;
-  void OnHunspellDictionaryDownloadFailure() override;
+  void OnHunspellDictionaryInitialized(const std::string& language) override;
+  void OnHunspellDictionaryDownloadBegin(const std::string& language) override;
+  void OnHunspellDictionaryDownloadSuccess(
+      const std::string& language) override;
+  void OnHunspellDictionaryDownloadFailure(
+      const std::string& language) override;
 
   // The following static methods are public for ease of testing.
 
@@ -57,9 +60,6 @@ class LanguageOptionsHandlerCommon
   static base::DictionaryValue* GetSpellCheckLanguageCodeSet();
 
  private:
-  // Returns the name of the product (ex. "Chrome" or "Chrome OS").
-  virtual base::string16 GetProductName() = 0;
-
   // Sets the application locale.
   virtual void SetApplicationLocale(const std::string& language_code) = 0;
 
@@ -75,20 +75,16 @@ class LanguageOptionsHandlerCommon
   void SpellCheckLanguageChangeCallback(const base::ListValue* args);
 
   // Called when the user clicks "Retry" button for a spellcheck dictionary that
-  // has failed to download.
+  // has failed to download. |args| will contain the language code as a string
+  // (ex. "fr").
   void RetrySpellcheckDictionaryDownload(const base::ListValue* args);
 
   // Called when the user saves the language list preferences.
   void UpdateLanguageListCallback(const base::ListValue* args);
 
-  // Updates the hunspell dictionary that is used for spellchecking.
-  void RefreshHunspellDictionary();
-
-  // Returns the hunspell dictionary that is used for spellchecking. Never null.
-  base::WeakPtr<SpellcheckHunspellDictionary>& GetHunspellDictionary();
-
-  // The hunspell dictionary that is used for spellchecking. Might be null.
-  base::WeakPtr<SpellcheckHunspellDictionary> hunspell_dictionary_;
+  // Returns a pointer to the browser SpellcheckService. Can be null if the
+  // service has already shut down.
+  SpellcheckService* GetSpellcheckService();
 
   DISALLOW_COPY_AND_ASSIGN(LanguageOptionsHandlerCommon);
 };

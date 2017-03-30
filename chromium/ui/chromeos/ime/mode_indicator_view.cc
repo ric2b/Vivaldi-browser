@@ -5,6 +5,7 @@
 #include "ui/chromeos/ime/mode_indicator_view.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/screen.h"
 #include "ui/views/bubble/bubble_delegate.h"
@@ -32,7 +33,7 @@ class ModeIndicatorFrameView : public views::BubbleFrameView {
 
  private:
   // views::BubbleFrameView overrides:
-  gfx::Rect GetAvailableScreenBounds(const gfx::Rect& rect) override {
+  gfx::Rect GetAvailableScreenBounds(const gfx::Rect& rect) const override {
     return gfx::Screen::GetNativeScreen()->GetDisplayNearestPoint(
         rect.CenterPoint()).bounds();
   }

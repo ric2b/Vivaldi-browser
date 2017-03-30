@@ -5,17 +5,18 @@
 #ifndef CONTENT_RENDERER_PEPPER_PEPPER_GRAPHICS_2D_HOST_H_
 #define CONTENT_RENDERER_PEPPER_PEPPER_GRAPHICS_2D_HOST_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "ppapi/c/ppb_graphics_2d.h"
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/host/resource_host.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -27,6 +28,10 @@ class TextureMailbox;
 
 namespace gfx {
 class Rect;
+}
+
+namespace gpu {
+struct SyncToken;
 }
 
 namespace ppapi {
@@ -108,8 +113,7 @@ class CONTENT_EXPORT PepperGraphics2DHost
                           const PP_Point& amount);
   int32_t OnHostMsgReplaceContents(ppapi::host::HostMessageContext* context,
                                    const ppapi::HostResource& image_data);
-  int32_t OnHostMsgFlush(ppapi::host::HostMessageContext* context,
-                         const std::vector<ui::LatencyInfo>& latency_info);
+  int32_t OnHostMsgFlush(ppapi::host::HostMessageContext* context);
   int32_t OnHostMsgSetScale(ppapi::host::HostMessageContext* context,
                             float scale);
   int32_t OnHostMsgReadImageData(ppapi::host::HostMessageContext* context,
@@ -161,7 +165,7 @@ class CONTENT_EXPORT PepperGraphics2DHost
 
   void ReleaseCallback(scoped_ptr<cc::SharedBitmap> bitmap,
                        const gfx::Size& bitmap_size,
-                       uint32 sync_point,
+                       const gpu::SyncToken& sync_token,
                        bool lost_resource);
 
   RendererPpapiHost* renderer_ppapi_host_;

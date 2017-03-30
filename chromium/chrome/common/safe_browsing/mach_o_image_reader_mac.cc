@@ -75,6 +75,13 @@ MachOImageReader::LoadCommand::LoadCommand() {}
 
 MachOImageReader::LoadCommand::~LoadCommand() {}
 
+// static
+bool MachOImageReader::IsMachOMagicValue(uint32_t magic) {
+  return magic == FAT_MAGIC   || magic == FAT_CIGAM    ||
+         magic == MH_MAGIC    || magic == MH_CIGAM     ||
+         magic == MH_MAGIC_64 || magic == MH_CIGAM_64;
+}
+
 MachOImageReader::MachOImageReader()
     : data_(),
       is_fat_(false),
@@ -161,6 +168,14 @@ bool MachOImageReader::Initialize(const uint8_t* image, size_t image_size) {
 
     uint32_t cmdsize = do_swap ? OSSwapInt32(command->cmdsize())
                                : command->cmdsize();
+    // If the load_command's reported size is smaller than the size of the base
+    // struct, do not try to copy additional data (or resize to be smaller
+    // than the base struct). This may not be valid Mach-O.
+    if (cmdsize < load_command_size) {
+      offset += load_command_size;
+      continue;
+    }
+
     command->data.resize(cmdsize);
     if (!data_->CopyDataAt(offset, cmdsize, &command->data[0])) {
       return false;

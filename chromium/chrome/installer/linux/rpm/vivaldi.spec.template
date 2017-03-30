@@ -112,14 +112,6 @@ exit 0
 
 @@include@@../common/rpm.include
 
-@@include@@../common/symlinks.include
-
-remove_nss_symlinks
-add_nss_symlinks
-
-remove_udev_symlinks
-add_udev_symlinks
-
 DEFAULTS_FILE="/etc/default/@@PACKAGE@@"
 if [ ! -e "$DEFAULTS_FILE" ]; then
   echo 'repo_add_once="true"' > "$DEFAULTS_FILE"
@@ -190,14 +182,10 @@ fi
 
 @@include@@../common/rpm.include
 
-@@include@@../common/symlinks.include
-
 # Only remove menu items and symlinks on uninstall. When upgrading,
 # old_pkg's %preun runs after new_pkg's %post.
 if [ "$mode" = "uninstall" ]; then
 @@include@@../common/prerm.include
-  remove_nss_symlinks
-  remove_udev_symlinks
 
   %{_sbindir}/update-alternatives --remove vivaldi \
     /usr/bin/@@USR_BIN_SYMLINK_NAME@@

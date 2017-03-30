@@ -4,6 +4,10 @@
 
 #include "net/quic/quic_http_utils.h"
 
+#include <stdint.h>
+
+#include <limits>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -25,8 +29,8 @@ TEST(QuicHttpUtilsTest, ConvertQuicPriorityToRequestPriority) {
   EXPECT_EQ(IDLE, ConvertQuicPriorityToRequestPriority(4));
   // These are invalid values, but we should still handle them
   // gracefully. TODO(rtenneti): should we test for all possible values of
-  // uint32?
-  for (int i = 5; i < kuint8max; ++i) {
+  // uint32_t?
+  for (int i = 5; i < std::numeric_limits<uint8_t>::max(); ++i) {
     EXPECT_EQ(IDLE, ConvertQuicPriorityToRequestPriority(i));
   }
 }

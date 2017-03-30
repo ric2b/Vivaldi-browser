@@ -10,6 +10,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/ppapi_test_utils.h"
@@ -53,6 +54,8 @@ void PPAPITestBase::SetUpCommandLine(base::CommandLine* command_line) {
 
   // Allow manual garbage collection.
   command_line->AppendSwitchASCII(switches::kJavaScriptFlags, "--expose_gc");
+
+  command_line->AppendSwitch(switches::kUseFakeUIForMediaStream);
 }
 
 GURL PPAPITestBase::GetTestFileUrl(const std::string& test_case) {

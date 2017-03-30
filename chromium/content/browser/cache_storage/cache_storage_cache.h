@@ -5,11 +5,14 @@
 #ifndef CONTENT_BROWSER_CACHE_STORAGE_CACHE_STORAGE_CACHE_H_
 #define CONTENT_BROWSER_CACHE_STORAGE_CACHE_STORAGE_CACHE_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/cache_storage/cache_storage_types.h"
@@ -46,6 +49,11 @@ class CONTENT_EXPORT CacheStorageCache
       base::Callback<void(CacheStorageError,
                           scoped_ptr<ServiceWorkerResponse>,
                           scoped_ptr<storage::BlobDataHandle>)>;
+  using Responses = std::vector<ServiceWorkerResponse>;
+  using BlobDataHandles = std::vector<storage::BlobDataHandle>;
+  using ResponsesCallback = base::Callback<void(CacheStorageError,
+                                                scoped_ptr<Responses>,
+                                                scoped_ptr<BlobDataHandles>)>;
   using Requests = std::vector<ServiceWorkerFetchRequest>;
   using RequestsCallback =
       base::Callback<void(CacheStorageError, scoped_ptr<Requests>)>;
@@ -65,6 +73,10 @@ class CONTENT_EXPORT CacheStorageCache
   // Returns ERROR_TYPE_NOT_FOUND if not found.
   void Match(scoped_ptr<ServiceWorkerFetchRequest> request,
              const ResponseCallback& callback);
+
+  // Returns CACHE_STORAGE_OK and all responses in this cache. If there are no
+  // responses, returns CACHE_STORAGE_OK and an empty vector.
+  void MatchAll(const ResponsesCallback& callback);
 
   // Runs given batch operations. This corresponds to the Batch Cache Operations
   // algorithm in the spec.
@@ -96,7 +108,9 @@ class CONTENT_EXPORT CacheStorageCache
 
   // The size of the cache contents in memory. Returns 0 if the cache backend is
   // not a memory cache backend.
-  int64 MemoryBackedSize() const;
+  int64_t MemoryBackedSize() const;
+
+  base::FilePath path() const { return path_; }
 
   base::WeakPtr<CacheStorageCache> AsWeakPtr();
 
@@ -104,6 +118,8 @@ class CONTENT_EXPORT CacheStorageCache
   friend class base::RefCounted<CacheStorageCache>;
   friend class TestCacheStorageCache;
 
+  struct OpenAllEntriesContext;
+  struct MatchAllContext;
   struct KeysContext;
   struct PutContext;
 
@@ -119,6 +135,9 @@ class CONTENT_EXPORT CacheStorageCache
   using ScopedBackendPtr = scoped_ptr<disk_cache::Backend>;
   using BlobToDiskCacheIDMap =
       IDMap<CacheStorageBlobToDiskCache, IDMapOwnPointer>;
+  using OpenAllEntriesCallback =
+      base::Callback<void(scoped_ptr<OpenAllEntriesContext>,
+                          CacheStorageError)>;
 
   CacheStorageCache(
       const GURL& origin,
@@ -129,6 +148,15 @@ class CONTENT_EXPORT CacheStorageCache
 
   // Async operations in progress will cancel and not run their callbacks.
   virtual ~CacheStorageCache();
+
+  // Returns true if the backend is ready to operate.
+  bool LazyInitialize();
+
+  // Returns all entries in this cache.
+  void OpenAllEntries(const OpenAllEntriesCallback& callback);
+  void DidOpenNextEntry(scoped_ptr<OpenAllEntriesContext> entries_context,
+                        const OpenAllEntriesCallback& callback,
+                        int rv);
 
   // Match callbacks
   void MatchImpl(scoped_ptr<ServiceWorkerFetchRequest> request,
@@ -141,6 +169,18 @@ class CONTENT_EXPORT CacheStorageCache
                             const ResponseCallback& callback,
                             disk_cache::ScopedEntryPtr entry,
                             scoped_ptr<CacheMetadata> headers);
+
+  // MatchAll callbacks
+  void MatchAllImpl(const ResponsesCallback& callback);
+  void MatchAllDidOpenAllEntries(
+      const ResponsesCallback& callback,
+      scoped_ptr<OpenAllEntriesContext> entries_context,
+      CacheStorageError error);
+  void MatchAllProcessNextEntry(scoped_ptr<MatchAllContext> context,
+                                const Entries::iterator& iter);
+  void MatchAllDidReadMetadata(scoped_ptr<MatchAllContext> context,
+                               const Entries::iterator& iter,
+                               scoped_ptr<CacheMetadata> metadata);
 
   // Puts the request and response object in the cache. The response body (if
   // present) is stored in the cache, but not the request body. Returns OK on
@@ -176,7 +216,9 @@ class CONTENT_EXPORT CacheStorageCache
 
   // Keys callbacks.
   void KeysImpl(const RequestsCallback& callback);
-  void KeysDidOpenNextEntry(scoped_ptr<KeysContext> keys_context, int rv);
+  void KeysDidOpenAllEntries(const RequestsCallback& callback,
+                             scoped_ptr<OpenAllEntriesContext> entries_context,
+                             CacheStorageError error);
   void KeysProcessNextEntry(scoped_ptr<KeysContext> keys_context,
                             const Entries::iterator& iter);
   void KeysDidReadMetadata(scoped_ptr<KeysContext> keys_context,
@@ -203,9 +245,19 @@ class CONTENT_EXPORT CacheStorageCache
       CacheStorageError error,
       scoped_ptr<ServiceWorkerResponse> response,
       scoped_ptr<storage::BlobDataHandle> blob_data_handle);
+  void PendingResponsesCallback(const ResponsesCallback& callback,
+                                CacheStorageError error,
+                                scoped_ptr<Responses> responses,
+                                scoped_ptr<BlobDataHandles> blob_data_handles);
   void PendingRequestsCallback(const RequestsCallback& callback,
                                CacheStorageError error,
                                scoped_ptr<Requests> requests);
+
+  void PopulateResponseMetadata(const CacheMetadata& metadata,
+                                ServiceWorkerResponse* response);
+  scoped_ptr<storage::BlobDataHandle> PopulateResponseBody(
+      disk_cache::ScopedEntryPtr entry,
+      ServiceWorkerResponse* response);
 
   // Be sure to check |backend_state_| before use.
   scoped_ptr<disk_cache::Backend> backend_;

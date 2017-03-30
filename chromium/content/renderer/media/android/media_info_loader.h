@@ -5,9 +5,12 @@
 #ifndef CONTENT_RENDERER_MEDIA_ANDROID_MEDIA_INFO_LOADER_H_
 #define CONTENT_RENDERER_MEDIA_ANDROID_MEDIA_INFO_LOADER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -59,7 +62,7 @@ class CONTENT_EXPORT MediaInfoLoader : private blink::WebURLLoaderClient {
       const GURL& url,
       blink::WebMediaPlayer::CORSMode cors_mode,
       const ReadyCB& ready_cb);
-  virtual ~MediaInfoLoader();
+  ~MediaInfoLoader() override;
 
   // Start loading media info.
   void Start(blink::WebFrame* frame);
@@ -76,36 +79,29 @@ class CONTENT_EXPORT MediaInfoLoader : private blink::WebURLLoaderClient {
   friend class MediaInfoLoaderTest;
 
   // blink::WebURLLoaderClient implementation.
-  virtual void willSendRequest(
+  void willFollowRedirect(
       blink::WebURLLoader* loader,
       blink::WebURLRequest& newRequest,
-      const blink::WebURLResponse& redirectResponse);
-  virtual void didSendData(
-      blink::WebURLLoader* loader,
-      unsigned long long bytesSent,
-      unsigned long long totalBytesToBeSent);
-  virtual void didReceiveResponse(
-      blink::WebURLLoader* loader,
-      const blink::WebURLResponse& response);
-  virtual void didDownloadData(
-      blink::WebURLLoader* loader,
-      int data_length,
-      int encodedDataLength);
-  virtual void didReceiveData(
-      blink::WebURLLoader* loader,
-      const char* data,
-      int data_length,
-      int encoded_data_length);
-  virtual void didReceiveCachedMetadata(
-      blink::WebURLLoader* loader,
-      const char* data, int dataLength);
-  virtual void didFinishLoading(
-      blink::WebURLLoader* loader,
-      double finishTime,
-      int64_t total_encoded_data_length);
-  virtual void didFail(
-      blink::WebURLLoader* loader,
-      const blink::WebURLError&);
+      const blink::WebURLResponse& redirectResponse) override;
+  void didSendData(blink::WebURLLoader* loader,
+                   unsigned long long bytesSent,
+                   unsigned long long totalBytesToBeSent) override;
+  void didReceiveResponse(blink::WebURLLoader* loader,
+                          const blink::WebURLResponse& response) override;
+  void didDownloadData(blink::WebURLLoader* loader,
+                       int data_length,
+                       int encodedDataLength) override;
+  void didReceiveData(blink::WebURLLoader* loader,
+                      const char* data,
+                      int data_length,
+                      int encoded_data_length) override;
+  void didReceiveCachedMetadata(blink::WebURLLoader* loader,
+                                const char* data,
+                                int dataLength) override;
+  void didFinishLoading(blink::WebURLLoader* loader,
+                        double finishTime,
+                        int64_t total_encoded_data_length) override;
+  void didFail(blink::WebURLLoader* loader, const blink::WebURLError&) override;
 
   void DidBecomeReady(Status status);
 

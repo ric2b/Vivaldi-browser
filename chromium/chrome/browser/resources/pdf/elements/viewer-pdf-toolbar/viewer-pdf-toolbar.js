@@ -78,15 +78,14 @@
     },
 
     _onAnimationFinished: function() {
-      if (!this.opened)
-        this.style.visibility = 'hidden';
+      this.style.transform = this.opened ? 'none' : 'translateY(-100%)';
     },
 
     loadProgressChanged: function() {
       if (this.loadProgress >= 100) {
-        this.$.title.classList.toggle('invisible', false);
         this.$.pageselector.classList.toggle('invisible', false);
         this.$.buttons.classList.toggle('invisible', false);
+        this.$.progress.style.opacity = 0;
       }
     },
 
@@ -98,7 +97,6 @@
     show: function() {
       if (!this.opened) {
         this.toggleVisibility();
-        this.style.visibility = 'initial';
       }
     },
 
@@ -113,22 +111,27 @@
     },
 
     shouldKeepOpen: function() {
-      return this.$.bookmarks.dropdownOpen || this.loadProgress < 100;
+      return this.$.bookmarks.dropdownOpen || this.loadProgress < 100 ||
+          this.$.pageselector.isActive();
+    },
+
+    hideDropdowns: function() {
+      if (this.$.bookmarks.dropdownOpen) {
+        this.$.bookmarks.toggleDropdown();
+        return true;
+      }
+      return false;
     },
 
     setDropdownLowerBound: function(lowerBound) {
       this.$.bookmarks.lowerBound = lowerBound;
     },
 
-    rotateLeft: function() {
-      this.fire('rotate-left');
-    },
-
     rotateRight: function() {
       this.fire('rotate-right');
     },
 
-    save: function() {
+    download: function() {
       this.fire('save');
     },
 

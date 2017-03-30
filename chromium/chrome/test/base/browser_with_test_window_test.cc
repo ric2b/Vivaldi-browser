@@ -8,11 +8,12 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/render_messages.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -20,22 +21,15 @@
 #include "content/public/test/test_renderer_host.h"
 #include "ui/base/page_transition_types.h"
 
-#if defined(USE_AURA)
-#include "ui/aura/test/aura_test_helper.h"
-#include "ui/compositor/compositor.h"
-#include "ui/compositor/test/context_factories_for_test.h"
-#include "ui/wm/core/default_activation_client.h"
-#endif
-
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/ash_test_views_delegate.h"
+#elif defined(TOOLKIT_VIEWS)
+#include "ui/views/test/scoped_views_test_helper.h"
 #endif
 
 #if defined(TOOLKIT_VIEWS)
 #include "chrome/browser/ui/views/chrome_constrained_window_views_client.h"
 #include "components/constrained_window/constrained_window_views.h"
-#include "ui/views/test/test_views_delegate.h"
 #endif
 
 using content::NavigationController;
@@ -66,29 +60,16 @@ void BrowserWithTestWindowTest::SetUp() {
 #if defined(OS_CHROMEOS)
   // TODO(jamescook): Windows Ash support. This will require refactoring
   // AshTestHelper and AuraTestHelper so they can be used at the same time,
-  // perhaps by AshTestHelper owning an AuraTestHelper. Also, need to cleanup
-  // CreateViewsDelegate() below when cleanup done.
+  // perhaps by AshTestHelper owning an AuraTestHelper.
   ash_test_helper_.reset(new ash::test::AshTestHelper(
       base::MessageLoopForUI::current()));
   ash_test_helper_->SetUp(true);
-#elif defined(USE_AURA)
-  // The ContextFactory must exist before any Compositors are created.
-  bool enable_pixel_output = false;
-  ui::ContextFactory* context_factory =
-      ui::InitializeContextFactoryForTests(enable_pixel_output);
-
-  aura_test_helper_.reset(new aura::test::AuraTestHelper(
-      base::MessageLoopForUI::current()));
-  aura_test_helper_->SetUp(context_factory);
-  new wm::DefaultActivationClient(aura_test_helper_->root_window());
-#endif  // USE_AURA
-
+#elif defined(TOOLKIT_VIEWS)
+  views_test_helper_.reset(new views::ScopedViewsTestHelper());
+#endif
 #if defined(TOOLKIT_VIEWS)
-#if !defined(OS_CHROMEOS)
-  views_delegate_.reset(CreateViewsDelegate());
-#endif // !OS_CHROMEOS
   SetConstrainedWindowViewsClient(CreateChromeConstrainedWindowViewsClient());
-#endif  // TOOLKIT_VIEWS
+#endif
 
   // Subclasses can provide their own Profile.
   profile_ = CreateProfile();
@@ -110,23 +91,32 @@ void BrowserWithTestWindowTest::TearDown() {
   // audio service) depend on test stubs that the helpers below will remove.
   DestroyBrowserAndProfile();
 
+#if defined(TOOLKIT_VIEWS)
+  constrained_window::SetConstrainedWindowViewsClient(nullptr);
+#endif
+
 #if defined(OS_CHROMEOS)
   ash_test_helper_->TearDown();
-#elif defined(USE_AURA)
-  aura_test_helper_->TearDown();
-  ui::TerminateContextFactoryForTests();
+#elif defined(TOOLKIT_VIEWS)
+  views_test_helper_.reset();
 #endif
+
   testing::Test::TearDown();
 
   // A Task is leaked if we don't destroy everything, then run the message
   // loop.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::MessageLoop::QuitClosure());
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   base::MessageLoop::current()->Run();
+}
 
-#if defined(TOOLKIT_VIEWS)
-  constrained_window::SetConstrainedWindowViewsClient(nullptr);
-  views_delegate_.reset(NULL);
+gfx::NativeWindow BrowserWithTestWindowTest::GetContext() {
+#if defined(OS_CHROMEOS)
+  return ash_test_helper_->CurrentContext();
+#elif defined(TOOLKIT_VIEWS)
+  return views_test_helper_->GetContext();
+#else
+  return nullptr;
 #endif
 }
 
@@ -255,13 +245,3 @@ Browser* BrowserWithTestWindowTest::CreateBrowser(
   params.window = browser_window;
   return new Browser(params);
 }
-
-#if !defined(OS_CHROMEOS) && defined(TOOLKIT_VIEWS)
-views::ViewsDelegate* BrowserWithTestWindowTest::CreateViewsDelegate() {
-#if defined(USE_ASH)
-  return new ash::test::AshTestViewsDelegate;
-#else
-  return new views::TestViewsDelegate;
-#endif
-}
-#endif

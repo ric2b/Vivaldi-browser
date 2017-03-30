@@ -5,9 +5,12 @@
 #ifndef BASE_TRACE_EVENT_TRACE_EVENT_MEMORY_OVERHEAD_H_
 #define BASE_TRACE_EVENT_TRACE_EVENT_MEMORY_OVERHEAD_H_
 
+#include <stddef.h>
+
 #include "base/base_export.h"
 #include "base/containers/hash_tables.h"
 #include "base/containers/small_map.h"
+#include "base/macros.h"
 
 namespace base {
 
@@ -42,6 +45,9 @@ class BASE_EXPORT TraceEventMemoryOverhead {
   // Call this after all the Add* methods above to account the memory used by
   // this TraceEventMemoryOverhead instance itself.
   void AddSelf();
+
+  // Retrieves the count, that is, the count of Add*(|object_type|, ...) calls.
+  size_t GetCount(const char* object_type) const;
 
   // Adds up and merges all the values from |other| to this instance.
   void Update(const TraceEventMemoryOverhead& other);

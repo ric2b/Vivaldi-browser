@@ -5,12 +5,16 @@
 #ifndef NET_TEST_SPAWNED_TEST_SERVER_BASE_TEST_SERVER_H_
 #define NET_TEST_SPAWNED_TEST_SERVER_BASE_TEST_SERVER_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/host_port_pair.h"
 #include "net/ssl/ssl_client_cert_type.h"
@@ -25,6 +29,7 @@ namespace net {
 
 class AddressList;
 class ScopedPortException;
+class X509Certificate;
 
 // The base class of Test server implementation.
 class BaseTestServer {
@@ -65,6 +70,10 @@ class BaseTestServer {
       // Causes the testserver to use a hostname that is a domain
       // instead of an IP.
       CERT_COMMON_NAME_IS_DOMAIN,
+
+      // A certificate with invalid notBefore and notAfter times. Windows'
+      // certificate library will not parse this certificate.
+      CERT_BAD_VALIDITY,
     };
 
     // OCSPStatus enumerates the types of OCSP response that the testserver
@@ -150,7 +159,7 @@ class BaseTestServer {
 
     // If not zero, |cert_serial| will be the serial number of the
     // auto-generated leaf certificate when |server_certificate==CERT_AUTO|.
-    uint64 cert_serial;
+    uint64_t cert_serial;
 
     // True if a CertificateRequest should be sent to the client during
     // handshaking.
@@ -212,11 +221,22 @@ class BaseTestServer {
     // stapled OCSP response.
     bool ocsp_server_unavailable;
 
-    // Whether to enable NPN support.
-    bool enable_npn;
+    // List of protocols to advertise in NPN extension.  NPN is not supported if
+    // list is empty.  Note that regardless of what protocol is negotiated, the
+    // test server will continue to speak HTTP/1.1.
+    std::vector<std::string> npn_protocols;
 
     // Whether to send a fatal alert immediately after completing the handshake.
     bool alert_after_handshake;
+
+    // If true, disables channel ID on the server.
+    bool disable_channel_id;
+
+    // If true, disables extended master secret tls extension.
+    bool disable_extended_master_secret;
+
+    // List of token binding params that the server supports and will negotiate.
+    std::vector<int> supported_token_binding_params;
   };
 
   // Pass as the 'host' parameter during construction to server on 127.0.0.1
@@ -271,16 +291,19 @@ class BaseTestServer {
   // the duration of tests.
   bool LoadTestRootCert() const WARN_UNUSED_RESULT;
 
+  // Returns the certificate that the server is using.
+  scoped_refptr<X509Certificate> GetCertificate() const;
+
  protected:
   virtual ~BaseTestServer();
   Type type() const { return type_; }
 
   // Gets port currently assigned to host_port_pair_ without checking
   // whether it's available (server started) or not.
-  uint16 GetPort();
+  uint16_t GetPort();
 
   // Sets |port| as the actual port used by Python based test server.
-  void SetPort(uint16 port);
+  void SetPort(uint16_t port);
 
   // Set up internal status when the server is started.
   bool SetupWhenServerStarted() WARN_UNUSED_RESULT;

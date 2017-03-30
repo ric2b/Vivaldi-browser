@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -11,6 +13,7 @@
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_test_impl.h"
 #include "chrome/browser/extensions/api/networking_private/networking_private_credentials_getter.h"
+#include "chrome/browser/extensions/api/networking_private/networking_private_ui_delegate_chromeos.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome_client.h"
@@ -85,6 +88,8 @@ const char kCellular1ServicePath[] = "stub_cellular1";
 // Stub Verify* methods implementation to satisfy expectations of
 // networking_private_apitest.
 class CryptoVerifyStub : public NetworkingPrivateDelegate::VerifyDelegate {
+ private:
+  // VerifyDelegate
   void VerifyDestination(const VerificationProperties& verification_properties,
                          const BoolCallback& success_callback,
                          const FailureCallback& failure_callback) override {
@@ -107,6 +112,24 @@ class CryptoVerifyStub : public NetworkingPrivateDelegate::VerifyDelegate {
     success_callback.Run("encrypted_data");
   }
 };
+
+class UIDelegateStub : public NetworkingPrivateDelegate::UIDelegate {
+ public:
+  static int s_show_account_details_called_;
+
+ private:
+  // UIDelegate
+  void ShowAccountDetails(const std::string& guid) const override {
+    ++s_show_account_details_called_;
+  }
+  bool HandleConnectFailed(const std::string& guid,
+                           const std::string error) const override {
+    return false;
+  }
+};
+
+// static
+int UIDelegateStub::s_show_account_details_called_ = 0;
 
 class TestListener : public content::NotificationObserver {
  public:
@@ -192,7 +215,9 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
   }
 
   void SetupCellular() {
-    // Add a Cellular Device and set a couple of properties.
+    UIDelegateStub::s_show_account_details_called_ = 0;
+
+    // Add a Cellular GSM Device.
     device_test_->AddDevice(kCellularDevicePath, shill::kTypeCellular,
                             "stub_cellular_device1");
     device_test_->SetDeviceProperty(kCellularDevicePath,
@@ -200,12 +225,18 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
                                     base::StringValue("Cellular1_Carrier"));
     base::DictionaryValue home_provider;
     home_provider.SetString("name", "Cellular1_Provider");
+    home_provider.SetString("code", "000000");
     home_provider.SetString("country", "us");
     device_test_->SetDeviceProperty(
         kCellularDevicePath, shill::kHomeProviderProperty, home_provider);
+    device_test_->SetDeviceProperty(
+        kCellularDevicePath, shill::kTechnologyFamilyProperty,
+        base::StringValue(shill::kNetworkTechnologyGsm));
+    device_test_->SetSimLocked(kCellularDevicePath, false);
+
+    // Add the Cellular Service.
     AddService(kCellular1ServicePath, "cellular1", shill::kTypeCellular,
                shill::kStateIdle);
-    // Note: These properties will show up in a "Cellular" object in ONC.
     service_test_->SetServiceProperty(kCellular1ServicePath,
                                       shill::kAutoConnectProperty,
                                       base::FundamentalValue(true));
@@ -218,6 +249,7 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
     service_test_->SetServiceProperty(
         kCellular1ServicePath, shill::kRoamingStateProperty,
         base::StringValue(shill::kRoamingStateHome));
+
     profile_test_->AddService(kUser1ProfilePath, kCellular1ServicePath);
     content::RunAllPendingInMessageLoop();
   }
@@ -233,13 +265,17 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
   static scoped_ptr<KeyedService> CreateNetworkingPrivateServiceClient(
       content::BrowserContext* context) {
     scoped_ptr<CryptoVerifyStub> crypto_verify(new CryptoVerifyStub);
-    return make_scoped_ptr(
-        new NetworkingPrivateChromeOS(context, crypto_verify.Pass()));
+    scoped_ptr<NetworkingPrivateDelegate> result(
+        new NetworkingPrivateChromeOS(context, std::move(crypto_verify)));
+    scoped_ptr<NetworkingPrivateDelegate::UIDelegate> ui_delegate(
+        new UIDelegateStub);
+    result->set_ui_delegate(std::move(ui_delegate));
+    return std::move(result);
   }
 
   void SetUpOnMainThread() override {
     detector_ = new NetworkPortalDetectorTestImpl();
-    NetworkPortalDetector::InitializeForTesting(detector_);
+    chromeos::network_portal_detector::InitializeForTesting(detector_);
 
     ExtensionApiTest::SetUpOnMainThread();
     content::RunAllPendingInMessageLoop();
@@ -406,6 +442,17 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, StartDisconnect) {
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, StartActivate) {
   SetupCellular();
   EXPECT_TRUE(RunNetworkingSubtest("startActivate")) << message_;
+  EXPECT_EQ(1, UIDelegateStub::s_show_account_details_called_);
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, StartActivateSprint) {
+  SetupCellular();
+  // Set the carrier to Sprint.
+  device_test_->SetDeviceProperty(kCellularDevicePath,
+                                  shill::kCarrierProperty,
+                                  base::StringValue(shill::kCarrierSprint));
+  EXPECT_TRUE(RunNetworkingSubtest("startActivateSprint")) << message_;
+  EXPECT_EQ(0, UIDelegateStub::s_show_account_details_called_);
 }
 
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
@@ -542,6 +589,7 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetManagedProperties) {
   policy::PolicyMap policy;
   policy.Set(policy::key::kOpenNetworkConfiguration,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD,
              new base::StringValue(user_policy_blob), nullptr);
   provider_.UpdateChromePolicy(policy);
 
@@ -636,6 +684,25 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
       base::Bind(&NetworkPortalDetectorTestImpl::NotifyObserversForTesting,
                  base::Unretained(detector())));
   EXPECT_TRUE(RunNetworkingSubtest("captivePortalNotification")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, UnlockCellularSim) {
+  SetupCellular();
+  // Lock the SIM
+  device_test_->SetSimLocked(kCellularDevicePath, true);
+  EXPECT_TRUE(RunNetworkingSubtest("unlockCellularSim")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, SetCellularSimState) {
+  SetupCellular();
+  EXPECT_TRUE(RunNetworkingSubtest("setCellularSimState")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, CellularSimPuk) {
+  SetupCellular();
+  // Lock the SIM
+  device_test_->SetSimLocked(kCellularDevicePath, true);
+  EXPECT_TRUE(RunNetworkingSubtest("cellularSimPuk")) << message_;
 }
 
 }  // namespace

@@ -2,17 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/process/process.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -255,7 +259,6 @@ IN_PROC_BROWSER_TEST_F(ChromePluginTest, InstalledPlugins) {
 #if !defined(VIVALDI_BUILD)
     "Shockwave Flash",
     "Native Client",
-    "Chrome Remote Desktop Viewer",
 #endif
   };
 

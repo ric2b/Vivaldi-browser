@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 
 namespace password_manager {
@@ -10,42 +11,23 @@ bool PasswordManagerClient::IsAutomaticPasswordSavingEnabled() const {
   return false;
 }
 
-bool PasswordManagerClient::IsPasswordManagementEnabledForCurrentPage() const {
+bool PasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage() const {
   return true;
 }
 
-bool PasswordManagerClient::IsSavingEnabledForCurrentPage() const {
+bool PasswordManagerClient::IsFillingEnabledForCurrentPage() const {
   return true;
-}
-
-void PasswordManagerClient::AutofillResultsComputed() {
 }
 
 void PasswordManagerClient::ForceSavePassword() {
 }
 
 void PasswordManagerClient::PasswordWasAutofilled(
-    const autofill::PasswordFormMap& best_matches) const {
-}
-
-void PasswordManagerClient::PasswordAutofillWasBlocked(
-    const autofill::PasswordFormMap& best_matches) const {
-}
+    const autofill::PasswordFormMap& best_matches,
+    const GURL& origin) const {}
 
 PasswordSyncState PasswordManagerClient::GetPasswordSyncState() const {
   return NOT_SYNCING_PASSWORDS;
-}
-
-void PasswordManagerClient::OnLogRouterAvailabilityChanged(
-    bool router_can_be_used) {
-}
-
-void PasswordManagerClient::LogSavePasswordProgress(
-    const std::string& text) const {
-}
-
-bool PasswordManagerClient::IsLoggingActive() const {
-  return false;
 }
 
 bool PasswordManagerClient::WasLastNavigationHTTPError() const {
@@ -76,8 +58,13 @@ bool PasswordManagerClient::IsOffTheRecord() const {
   return false;
 }
 
-PasswordManager* PasswordManagerClient::GetPasswordManager() {
+const PasswordManager* PasswordManagerClient::GetPasswordManager() const {
   return nullptr;
+}
+
+PasswordManager* PasswordManagerClient::GetPasswordManager() {
+  return const_cast<PasswordManager*>(
+      static_cast<const PasswordManagerClient*>(this)->GetPasswordManager());
 }
 
 autofill::AutofillManager*
@@ -87,6 +74,14 @@ PasswordManagerClient::GetAutofillManagerForMainFrame() {
 
 const GURL& PasswordManagerClient::GetMainFrameURL() const {
   return GURL::EmptyGURL();
+}
+
+bool PasswordManagerClient::IsUpdatePasswordUIEnabled() const {
+  return false;
+}
+
+const LogManager* PasswordManagerClient::GetLogManager() const {
+  return nullptr;
 }
 
 }  // namespace password_manager

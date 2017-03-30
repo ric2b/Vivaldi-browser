@@ -4,6 +4,8 @@
 
 #include "components/enhanced_bookmarks/bookmark_server_cluster_service.h"
 
+#include <stddef.h>
+
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/scoped_ptr.h"
@@ -338,7 +340,7 @@ scoped_ptr<base::DictionaryValue> BookmarkServerClusterService::Serialize(
   data->Set(kPrefServiceDataKey, all_clusters.release());
   data->SetString(kAuthIdKey, auth_id);
 
-  return data.Pass();
+  return data;
 }
 
 // static

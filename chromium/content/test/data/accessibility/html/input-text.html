@@ -1,12 +1,19 @@
 <!--
 @MAC-ALLOW:AXRole*
 @MAC-ALLOW:AXPlaceholder*
-@WIN-ALLOW:text-input-type*
+@WIN-ALLOW:caret_offset*
+@WIN-ALLOW:ia2_hypertext=*
 @WIN-ALLOW:IA2_STATE*
+@WIN-ALLOW:n_selections*
+@WIN-ALLOW:selection_start*
+@WIN-ALLOW:selection_end*
+@WIN-ALLOW:text-input-type*
+@WIN-ALLOW:value*
+@WIN-DENY:value='file://*'
 -->
 <!DOCTYPE html>
 <html>
   <body>
-    <input type="text" placeholder="Name">
+    <input type="text" placeholder="Name" autofocus>
   </body>
 </html>

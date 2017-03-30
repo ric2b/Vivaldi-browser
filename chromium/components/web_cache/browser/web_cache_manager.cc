@@ -4,6 +4,8 @@
 
 #include "components/web_cache/browser/web_cache_manager.h"
 
+#include <string.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
@@ -56,7 +58,7 @@ int GetDefaultCacheSize() {
 
 // static
 WebCacheManager* WebCacheManager::GetInstance() {
-  return Singleton<WebCacheManager>::get();
+  return base::Singleton<WebCacheManager>::get();
 }
 
 WebCacheManager::WebCacheManager()

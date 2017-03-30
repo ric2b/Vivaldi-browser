@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/quic/crypto/crypto_handshake.h"
 #include "net/quic/crypto/crypto_protocol.h"
@@ -26,16 +27,13 @@ namespace {
 class MockQuicCryptoStream : public QuicCryptoStream {
  public:
   explicit MockQuicCryptoStream(QuicSession* session)
-      : QuicCryptoStream(session) {
-  }
+      : QuicCryptoStream(session) {}
 
   void OnHandshakeMessage(const CryptoHandshakeMessage& message) override {
     messages_.push_back(message);
   }
 
-  vector<CryptoHandshakeMessage>* messages() {
-    return &messages_;
-  }
+  vector<CryptoHandshakeMessage>* messages() { return &messages_; }
 
  private:
   vector<CryptoHandshakeMessage> messages_;
@@ -46,7 +44,7 @@ class MockQuicCryptoStream : public QuicCryptoStream {
 class QuicCryptoStreamTest : public ::testing::Test {
  public:
   QuicCryptoStreamTest()
-      : connection_(new MockConnection(Perspective::IS_CLIENT)),
+      : connection_(new MockConnection(&helper_, Perspective::IS_CLIENT)),
         session_(connection_),
         stream_(&session_) {
     message_.set_tag(kSHLO);
@@ -61,6 +59,7 @@ class QuicCryptoStreamTest : public ::testing::Test {
   }
 
  protected:
+  MockConnectionHelper helper_;
   MockConnection* connection_;
   MockQuicSpdySession session_;
   MockQuicCryptoStream stream_;
@@ -77,9 +76,9 @@ TEST_F(QuicCryptoStreamTest, NotInitiallyConected) {
 }
 
 TEST_F(QuicCryptoStreamTest, ProcessRawData) {
-  EXPECT_EQ(message_data_->length(),
-            stream_.ProcessRawData(message_data_->data(),
-                                   message_data_->length()));
+  stream_.OnStreamFrame(QuicStreamFrame(kCryptoStreamId, /*fin=*/false,
+                                        /*offset=*/0,
+                                        message_data_->AsStringPiece()));
   ASSERT_EQ(1u, stream_.messages()->size());
   const CryptoHandshakeMessage& message = (*stream_.messages())[0];
   EXPECT_EQ(kSHLO, message.tag());
@@ -90,15 +89,16 @@ TEST_F(QuicCryptoStreamTest, ProcessRawData) {
 
 TEST_F(QuicCryptoStreamTest, ProcessBadData) {
   string bad(message_data_->data(), message_data_->length());
-  const int kFirstTagIndex = sizeof(uint32) +  // message tag
-                             sizeof(uint16) +  // number of tag-value pairs
-                             sizeof(uint16);   // padding
+  const int kFirstTagIndex = sizeof(uint32_t) +  // message tag
+                             sizeof(uint16_t) +  // number of tag-value pairs
+                             sizeof(uint16_t);   // padding
   EXPECT_EQ(1, bad[kFirstTagIndex]);
   bad[kFirstTagIndex] = 0x7F;  // out of order tag
 
-  EXPECT_CALL(*connection_,
-              SendConnectionClose(QUIC_CRYPTO_TAGS_OUT_OF_ORDER));
-  EXPECT_EQ(0u, stream_.ProcessRawData(bad.data(), bad.length()));
+  EXPECT_CALL(*connection_, SendConnectionCloseWithDetails(
+                                QUIC_CRYPTO_TAGS_OUT_OF_ORDER, testing::_));
+  stream_.OnStreamFrame(
+      QuicStreamFrame(kCryptoStreamId, /*fin=*/false, /*offset=*/0, bad));
 }
 
 TEST_F(QuicCryptoStreamTest, NoConnectionLevelFlowControl) {

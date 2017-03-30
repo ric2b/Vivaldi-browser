@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
@@ -35,21 +37,21 @@ class BrowsingDataDatabaseHelperTest : public InProcessBrowserTest {
             ->GetDatabaseTracker();
     base::string16 db_name = base::ASCIIToUTF16("db");
     base::string16 description = base::ASCIIToUTF16("db_description");
-    int64 size;
+    int64_t size;
     db_tracker->DatabaseOpened(kTestIdentifier1, db_name, description,
                                1, &size);
     db_tracker->DatabaseClosed(kTestIdentifier1, db_name);
     base::FilePath db_path1 =
         db_tracker->GetFullDBFilePath(kTestIdentifier1, db_name);
     base::CreateDirectory(db_path1.DirName());
-    ASSERT_EQ(0, base::WriteFile(db_path1, NULL, 0));
+    ASSERT_EQ(0, base::WriteFile(db_path1, nullptr, 0));
     db_tracker->DatabaseOpened(kTestIdentifierExtension, db_name, description,
                                1, &size);
     db_tracker->DatabaseClosed(kTestIdentifierExtension, db_name);
     base::FilePath db_path2 =
         db_tracker->GetFullDBFilePath(kTestIdentifierExtension, db_name);
     base::CreateDirectory(db_path2.DirName());
-    ASSERT_EQ(0, base::WriteFile(db_path2, NULL, 0));
+    ASSERT_EQ(0, base::WriteFile(db_path2, nullptr, 0));
     std::vector<storage::OriginInfo> origins;
     db_tracker->GetAllOriginsInfo(&origins);
     ASSERT_EQ(2U, origins.size());
@@ -72,7 +74,7 @@ class StopTestOnCallback {
     ASSERT_EQ(1UL, database_info_list.size());
     EXPECT_EQ(std::string(kTestIdentifier1),
               database_info_list.begin()->identifier.ToString());
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
  private:

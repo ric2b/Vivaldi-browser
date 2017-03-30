@@ -11,7 +11,7 @@
 #include <windows.h>
 #endif
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "content/common/content_export.h"
 #include "content/public/common/main_function_params.h"
 
@@ -38,8 +38,8 @@ class CONTENT_EXPORT RendererMainPlatformDelegate {
   bool EnableSandbox();
 
  private:
-  const MainFunctionParams& parameters_;
 #if defined(OS_WIN)
+  const MainFunctionParams& parameters_;
   HMODULE sandbox_test_module_;
 #elif defined(OS_MACOSX)
   NSBundle* sandbox_tests_bundle_;

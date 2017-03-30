@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/ffmpeg_aac_bitstream_converter.h"
 #include "media/filters/ffmpeg_demuxer.h"
@@ -23,14 +27,14 @@ class FFmpegAACBitstreamConverterTest : public testing::Test {
 
     // Set up reasonable aac context
     memset(&test_context_, 0, sizeof(AVCodecContext));
-    test_context_.codec_id = CODEC_ID_AAC;
+    test_context_.codec_id = AV_CODEC_ID_AAC;
     test_context_.profile = FF_PROFILE_AAC_MAIN;
     test_context_.channels = 2;
     test_context_.extradata = context_header_;
     test_context_.extradata_size = sizeof(context_header_);
   }
 
-  void CreatePacket(AVPacket* packet, const uint8* data, uint32 data_size) {
+  void CreatePacket(AVPacket* packet, const uint8_t* data, uint32_t data_size) {
     // Create new packet sized of |data_size| from |data|.
     EXPECT_EQ(av_new_packet(packet, data_size), 0);
     memcpy(packet->data, data, data_size);
@@ -40,7 +44,7 @@ class FFmpegAACBitstreamConverterTest : public testing::Test {
   AVCodecContext test_context_;
 
  private:
-  uint8 context_header_[2];
+  uint8_t context_header_[2];
 
   DISALLOW_COPY_AND_ASSIGN(FFmpegAACBitstreamConverterTest);
 };
@@ -48,7 +52,7 @@ class FFmpegAACBitstreamConverterTest : public testing::Test {
 TEST_F(FFmpegAACBitstreamConverterTest, Conversion_Success) {
   FFmpegAACBitstreamConverter converter(&test_context_);
 
-  uint8 dummy_packet[1000];
+  uint8_t dummy_packet[1000];
   // Fill dummy packet with junk data. aac converter doesn't look into packet
   // data, just header, so can fill with whatever we want for test.
   for(size_t i = 0; i < sizeof(dummy_packet); i++) {
@@ -81,7 +85,7 @@ TEST_F(FFmpegAACBitstreamConverterTest, Conversion_FailureNullParams) {
   dummy_context.extradata_size = 0;
   FFmpegAACBitstreamConverter converter(&dummy_context);
 
-  uint8 dummy_packet[1000] = {0};
+  uint8_t dummy_packet[1000] = {0};
 
   // Try out the actual conversion with NULL parameter.
   EXPECT_FALSE(converter.ConvertPacket(NULL));
@@ -97,7 +101,7 @@ TEST_F(FFmpegAACBitstreamConverterTest, Conversion_FailureNullParams) {
 TEST_F(FFmpegAACBitstreamConverterTest, Conversion_AudioProfileType) {
   FFmpegAACBitstreamConverter converter(&test_context_);
 
-  uint8 dummy_packet[1000] = {0};
+  uint8_t dummy_packet[1000] = {0};
 
   ScopedAVPacket test_packet(new AVPacket());
   CreatePacket(test_packet.get(), dummy_packet,
@@ -136,7 +140,7 @@ TEST_F(FFmpegAACBitstreamConverterTest, Conversion_AudioProfileType) {
 TEST_F(FFmpegAACBitstreamConverterTest, Conversion_MultipleLength) {
   FFmpegAACBitstreamConverter converter(&test_context_);
 
-  uint8 dummy_packet[1000];
+  uint8_t dummy_packet[1000];
 
   ScopedAVPacket test_packet(new AVPacket());
   CreatePacket(test_packet.get(), dummy_packet,

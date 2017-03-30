@@ -17,11 +17,12 @@ void InitJavaExceptionReporter() {
   Java_JavaExceptionReporter_installHandler(env);
 }
 
-void ReportJavaException(JNIEnv* env, jclass jcaller, jobject e) {
-  jthrowable java_throwable = static_cast<jthrowable>(e);
+void ReportJavaException(JNIEnv* env,
+                         const JavaParamRef<jclass>& jcaller,
+                         const JavaParamRef<jthrowable>& e) {
   // Set the exception_string in BuildInfo so that breakpad can read it.
   base::android::BuildInfo::GetInstance()->SetJavaExceptionInfo(
-      base::android::GetJavaExceptionInfo(env, java_throwable));
+      base::android::GetJavaExceptionInfo(env, e));
   base::debug::DumpWithoutCrashing();
   base::android::BuildInfo::GetInstance()->ClearJavaExceptionInfo();
 }

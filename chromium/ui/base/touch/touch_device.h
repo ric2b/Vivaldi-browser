@@ -5,6 +5,7 @@
 #ifndef UI_BASE_TOUCH_TOUCH_DEVICE_H_
 #define UI_BASE_TOUCH_TOUCH_DEVICE_H_
 
+#include "build/build_config.h"
 #include "ui/base/ui_base_export.h"
 
 #if defined(OS_ANDROID)
@@ -16,8 +17,13 @@
 
 namespace ui {
 
-// Returns true if a touch device is available.
-UI_BASE_EXPORT bool IsTouchDevicePresent();
+enum class TouchScreensAvailability {
+  NONE,      // No touch screens are present.
+  ENABLED,   // Touch screens are present and enabled.
+  DISABLED,  // Touch screens are present and disabled.
+};
+
+UI_BASE_EXPORT TouchScreensAvailability GetTouchScreensAvailability();
 
 // Returns the maximum number of simultaneous touch contacts supported
 // by the device. In the case of devices with multiple digitizers (e.g.

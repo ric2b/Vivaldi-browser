@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/message_reader.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -12,9 +14,9 @@
 #include "base/single_thread_task_runner.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
-#include "net/socket/socket.h"
 #include "remoting/base/compound_buffer.h"
 #include "remoting/proto/internal.pb.h"
+#include "remoting/protocol/p2p_stream_socket.h"
 
 namespace remoting {
 namespace protocol {
@@ -39,7 +41,7 @@ void MessageReader::SetMessageReceivedCallback(
 }
 
 void MessageReader::StartReading(
-    net::Socket* socket,
+    P2PStreamSocket* socket,
     const ReadFailedCallback& read_failed_callback) {
   DCHECK(CalledOnValidThread());
   DCHECK(socket);
@@ -126,7 +128,7 @@ void MessageReader::OnDataReceived(net::IOBuffer* data, int data_size) {
 void MessageReader::RunCallback(scoped_ptr<CompoundBuffer> message) {
   if (!message_received_callback_.is_null()){
     message_received_callback_.Run(
-        message.Pass(),
+        std::move(message),
         base::Bind(&MessageReader::OnMessageDone, weak_factory_.GetWeakPtr()));
   }
 }

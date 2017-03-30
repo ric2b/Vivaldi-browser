@@ -4,9 +4,12 @@
 
 #include "chrome/browser/extensions/test_extension_prefs.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/json_pref_store.h"
@@ -16,15 +19,20 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chrome/browser/prefs/pref_service_mock_factory.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
+#include "chrome/browser/extensions/chrome_app_sorting.h"
+#include "chrome/browser/extensions/test_extension_system.h"
+#include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/crx_file/id_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_mock_factory.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_pref_store.h"
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_prefs_factory.h"
+#include "extensions/browser/extension_system.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
@@ -74,6 +82,10 @@ TestExtensionPrefs::TestExtensionPrefs(
 TestExtensionPrefs::~TestExtensionPrefs() {
 }
 
+ExtensionPrefs* TestExtensionPrefs::prefs() {
+  return ExtensionPrefs::Get(&profile_);
+}
+
 PrefService* TestExtensionPrefs::pref_service() {
   return pref_service_.get();
 }
@@ -106,22 +118,27 @@ void TestExtensionPrefs::RecreateExtensionPrefs() {
   }
 
   extension_pref_value_map_.reset(new ExtensionPrefValueMap);
-  PrefServiceMockFactory factory;
+  syncable_prefs::PrefServiceMockFactory factory;
   factory.SetUserPrefsFile(preferences_file_, task_runner_.get());
   factory.set_extension_prefs(
       new ExtensionPrefStore(extension_pref_value_map_.get(), false));
-  pref_service_ = factory.CreateSyncable(pref_registry_.get()).Pass();
-
-  prefs_.reset(ExtensionPrefs::Create(
+  pref_service_ = factory.CreateSyncable(pref_registry_.get());
+  scoped_ptr<ExtensionPrefs> prefs(ExtensionPrefs::Create(
+      &profile_,
       pref_service_.get(),
       temp_dir_.path(),
       extension_pref_value_map_.get(),
-      ExtensionsBrowserClient::Get()->CreateAppSorting().Pass(),
       extensions_disabled_,
       std::vector<ExtensionPrefsObserver*>(),
       // Guarantee that no two extensions get the same installation time
       // stamp and we can reliably assert the installation order in the tests.
       scoped_ptr<ExtensionPrefs::TimeProvider>(new IncrementalTimeProvider())));
+  ExtensionPrefsFactory::GetInstance()->SetInstanceForTesting(&profile_,
+                                                              std::move(prefs));
+  // Hack: After recreating ExtensionPrefs, the AppSorting also needs to be
+  // recreated. (ExtensionPrefs is never recreated in non-test code.)
+  static_cast<TestExtensionSystem*>(ExtensionSystem::Get(&profile_))
+      ->RecreateAppSorting();
 }
 
 scoped_refptr<Extension> TestExtensionPrefs::AddExtension(
@@ -163,10 +180,10 @@ scoped_refptr<Extension> TestExtensionPrefs::AddExtensionWithManifestAndFlags(
     return NULL;
 
   EXPECT_TRUE(crx_file::id_util::IdIsValid(extension->id()));
-  prefs_->OnExtensionInstalled(extension.get(),
-                               Extension::ENABLED,
-                               syncer::StringOrdinal::CreateInitialOrdinal(),
-                               std::string());
+  prefs()->OnExtensionInstalled(extension.get(),
+                                Extension::ENABLED,
+                                syncer::StringOrdinal::CreateInitialOrdinal(),
+                                std::string());
   return extension;
 }
 
@@ -177,19 +194,25 @@ std::string TestExtensionPrefs::AddExtensionAndReturnId(
 }
 
 void TestExtensionPrefs::AddExtension(Extension* extension) {
-  prefs_->OnExtensionInstalled(extension,
-                               Extension::ENABLED,
-                               syncer::StringOrdinal::CreateInitialOrdinal(),
-                               std::string());
+  prefs()->OnExtensionInstalled(extension,
+                                Extension::ENABLED,
+                                syncer::StringOrdinal::CreateInitialOrdinal(),
+                                std::string());
 }
 
 PrefService* TestExtensionPrefs::CreateIncognitoPrefService() const {
-  return pref_service_->CreateIncognitoPrefService(
+  return CreateIncognitoPrefServiceSyncable(
+      pref_service_.get(),
       new ExtensionPrefStore(extension_pref_value_map_.get(), true));
 }
 
 void TestExtensionPrefs::set_extensions_disabled(bool extensions_disabled) {
   extensions_disabled_ = extensions_disabled;
+}
+
+ChromeAppSorting* TestExtensionPrefs::app_sorting() {
+  return static_cast<ChromeAppSorting*>(
+      ExtensionSystem::Get(&profile_)->app_sorting());
 }
 
 }  // namespace extensions

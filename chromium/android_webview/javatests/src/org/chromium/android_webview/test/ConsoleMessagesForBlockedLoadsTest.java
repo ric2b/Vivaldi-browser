@@ -4,16 +4,15 @@
 
 package org.chromium.android_webview.test;
 
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Pair;
 import android.webkit.ConsoleMessage;
+import android.webkit.WebSettings;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.net.test.util.TestWebServer;
 
 import java.util.ArrayList;
@@ -23,7 +22,6 @@ import java.util.List;
  * Verify that content loading blocks initiated by renderer can be detected
  * by the embedder via WebChromeClient.onConsoleMessage.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class ConsoleMessagesForBlockedLoadsTest extends AwTestBase {
 
     private TestAwContentsClient mContentsClient;
@@ -86,7 +84,7 @@ public class ConsoleMessagesForBlockedLoadsTest extends AwTestBase {
         startWebServer();
         TestWebServer httpsServer = null;
         AwSettings settings = getAwSettingsOnUiThread(mAwContents);
-        settings.setMixedContentMode(AwSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         try {
             httpsServer = TestWebServer.startSsl();
             final String imageUrl = mWebServer.setResponseBase64(

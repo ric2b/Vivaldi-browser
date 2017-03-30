@@ -5,10 +5,14 @@
 #ifndef CONTENT_BROWSER_APPCACHE_APPCACHE_DISPATCHER_HOST_H_
 #define CONTENT_BROWSER_APPCACHE_APPCACHE_DISPATCHER_HOST_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "content/browser/appcache/appcache_backend_impl.h"
 #include "content/browser/appcache/appcache_frontend_proxy.h"
@@ -19,15 +23,15 @@ class ChromeAppCacheService;
 
 // Handles appcache related messages sent to the main browser process from
 // its child processes. There is a distinct host for each child process.
-// Messages are handled on the IO thread. The BrowserRenderProcessHost and
-// WorkerProcessHost create an instance and delegates calls to it.
+// Messages are handled on the IO thread. The RenderProcessHostImpl creates
+// an instance and delegates calls to it.
 class AppCacheDispatcherHost : public BrowserMessageFilter {
  public:
   AppCacheDispatcherHost(ChromeAppCacheService* appcache_service,
                          int process_id);
 
   // BrowserIOMessageFilter implementation
-  void OnChannelConnected(int32 peer_pid) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   bool OnMessageReceived(const IPC::Message& message) override;
 
  protected:
@@ -38,14 +42,16 @@ class AppCacheDispatcherHost : public BrowserMessageFilter {
   void OnRegisterHost(int host_id);
   void OnUnregisterHost(int host_id);
   void OnSetSpawningHostId(int host_id, int spawning_host_id);
-  void OnSelectCache(int host_id, const GURL& document_url,
-                     int64 cache_document_was_loaded_from,
+  void OnSelectCache(int host_id,
+                     const GURL& document_url,
+                     int64_t cache_document_was_loaded_from,
                      const GURL& opt_manifest_url);
   void OnSelectCacheForWorker(int host_id, int parent_process_id,
                               int parent_host_id);
-  void OnSelectCacheForSharedWorker(int host_id, int64 appcache_id);
-  void OnMarkAsForeignEntry(int host_id, const GURL& document_url,
-                            int64 cache_document_was_loaded_from);
+  void OnSelectCacheForSharedWorker(int host_id, int64_t appcache_id);
+  void OnMarkAsForeignEntry(int host_id,
+                            const GURL& document_url,
+                            int64_t cache_document_was_loaded_from);
   void OnGetStatus(int host_id, IPC::Message* reply_msg);
   void OnStartUpdate(int host_id, IPC::Message* reply_msg);
   void OnSwapCache(int host_id, IPC::Message* reply_msg);
@@ -68,6 +74,8 @@ class AppCacheDispatcherHost : public BrowserMessageFilter {
 
   // The corresponding ChildProcessHost object's id().
   int process_id_;
+
+  base::WeakPtrFactory<AppCacheDispatcherHost> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheDispatcherHost);
 };

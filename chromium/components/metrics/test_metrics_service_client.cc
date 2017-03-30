@@ -21,6 +21,10 @@ TestMetricsServiceClient::TestMetricsServiceClient()
 TestMetricsServiceClient::~TestMetricsServiceClient() {
 }
 
+metrics::MetricsService* TestMetricsServiceClient::GetMetricsService() {
+  return nullptr;
+}
+
 void TestMetricsServiceClient::SetMetricsClientId(
     const std::string& client_id) {
   client_id_ = client_id;
@@ -57,12 +61,12 @@ std::string TestMetricsServiceClient::GetVersionString() {
 void TestMetricsServiceClient::OnLogUploadComplete() {
 }
 
-void TestMetricsServiceClient::StartGatheringMetrics(
+void TestMetricsServiceClient::InitializeSystemProfileMetrics(
     const base::Closure& done_callback) {
   done_callback.Run();
 }
 
-void TestMetricsServiceClient::CollectFinalMetrics(
+void TestMetricsServiceClient::CollectFinalMetricsForLog(
     const base::Closure& done_callback) {
   done_callback.Run();
 }

@@ -4,7 +4,9 @@
 
 #include "sandbox/linux/syscall_broker/broker_host.h"
 
+#include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -12,6 +14,7 @@
 #include <unistd.h>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/files/scoped_file.h"
@@ -162,8 +165,7 @@ bool HandleRemoteCommand(const BrokerPolicy& policy,
 
 BrokerHost::BrokerHost(const BrokerPolicy& broker_policy,
                        BrokerChannel::EndPoint ipc_channel)
-    : broker_policy_(broker_policy), ipc_channel_(ipc_channel.Pass()) {
-}
+    : broker_policy_(broker_policy), ipc_channel_(std::move(ipc_channel)) {}
 
 BrokerHost::~BrokerHost() {
 }
@@ -173,7 +175,7 @@ BrokerHost::~BrokerHost() {
 // that we will then close.
 // A request should start with an int that will be used as the command type.
 BrokerHost::RequestStatus BrokerHost::HandleRequest() const {
-  ScopedVector<base::ScopedFD> fds;
+  std::vector<base::ScopedFD> fds;
   char buf[kMaxMessageLength];
   errno = 0;
   const ssize_t msg_len = base::UnixDomainSocket::RecvMsg(
@@ -186,13 +188,12 @@ BrokerHost::RequestStatus BrokerHost::HandleRequest() const {
 
   // The client should send exactly one file descriptor, on which we
   // will write the reply.
-  // TODO(mdempsky): ScopedVector doesn't have 'at()', only 'operator[]'.
-  if (msg_len < 0 || fds.size() != 1 || fds[0]->get() < 0) {
+  if (msg_len < 0 || fds.size() != 1 || fds[0].get() < 0) {
     PLOG(ERROR) << "Error reading message from the client";
     return RequestStatus::FAILURE;
   }
 
-  base::ScopedFD temporary_ipc(fds[0]->Pass());
+  base::ScopedFD temporary_ipc(std::move(fds[0]));
 
   base::Pickle pickle(buf, msg_len);
   base::PickleIterator iter(pickle);

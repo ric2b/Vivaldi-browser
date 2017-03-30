@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/autofill/core/browser/autofill_client.h"
@@ -27,7 +28,6 @@ class WebContents;
 namespace autofill {
 
 class AutofillDialogController;
-class AutofillKeystoneBridgeWrapper;
 class AutofillPopupControllerImpl;
 class CreditCardScannerController;
 struct FormData;
@@ -48,14 +48,22 @@ class ChromeAutofillClient
   PersonalDataManager* GetPersonalDataManager() override;
   scoped_refptr<AutofillWebDataService> GetDatabase() override;
   PrefService* GetPrefs() override;
+  sync_driver::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporService* GetRapporService() override;
   void HideRequestAutocompleteDialog() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         base::WeakPtr<CardUnmaskDelegate> delegate) override;
-  void OnUnmaskVerificationResult(GetRealPanResult result) override;
-  void ConfirmSaveCreditCard(const base::Closure& save_card_callback) override;
+  void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
+  void ConfirmSaveCreditCardLocally(const CreditCard& card,
+                                    const base::Closure& callback) override;
+  void ConfirmSaveCreditCardToCloud(
+      const CreditCard& card,
+      scoped_ptr<base::DictionaryValue> legal_message,
+      const base::Closure& callback) override;
+  void LoadRiskData(
+      const base::Callback<void(const std::string&)>& callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(const CreditCardScanCallback& callback) override;
   void ShowRequestAutocompleteDialog(
@@ -78,7 +86,6 @@ class ChromeAutofillClient
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
   void OnFirstUserGestureObserved() override;
-  void LinkClicked(const GURL& url, WindowOpenDisposition disposition) override;
   bool IsContextSecure(const GURL& form_origin) override;
 
   // content::WebContentsObserver implementation.
@@ -104,15 +111,6 @@ class ChromeAutofillClient
   }
 
  private:
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // Creates |bridge_wrapper_|, which is responsible for dealing with Keystone
-  // notifications.
-  void RegisterForKeystoneNotifications();
-
-  // Deletes |bridge_wrapper_|.
-  void UnregisterFromKeystoneNotifications();
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
-
   explicit ChromeAutofillClient(content::WebContents* web_contents);
   friend class content::WebContentsUserData<ChromeAutofillClient>;
 
@@ -120,21 +118,10 @@ class ChromeAutofillClient
   base::WeakPtr<AutofillPopupControllerImpl> popup_controller_;
   CardUnmaskPromptControllerImpl unmask_controller_;
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // Listens to Keystone notifications and passes relevant ones on to the
-  // PersonalDataManager.
-  //
-  // The class of this member must remain a forward declaration, even in the
-  // .cc implementation file, since the class is defined in a Mac-only
-  // implementation file. This means that the pointer cannot be wrapped in a
-  // scoped_ptr.
-  AutofillKeystoneBridgeWrapper* bridge_wrapper_;
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
-
   // The last render frame that called requestAutocomplete.
   content::RenderFrameHost* last_rfh_to_rac_;
 
-  // The identity provider, used for Wallet integration.
+  // The identity provider, used for Payments integration.
   scoped_ptr<IdentityProvider> identity_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeAutofillClient);

@@ -4,14 +4,18 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.net.Uri;
 import android.view.Menu;
 import android.view.MenuItem;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.Tab;
-import org.chromium.chrome.browser.appmenu.ChromeAppMenuPropertiesDelegate;
+import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
+import org.chromium.chrome.browser.tab.Tab;
 
 import java.util.HashMap;
 import java.util.List;
@@ -20,17 +24,20 @@ import java.util.Map;
 /**
  * App menu properties delegate for {@link CustomTabActivity}.
  */
-public class CustomTabAppMenuPropertiesDelegate extends ChromeAppMenuPropertiesDelegate {
+public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegate {
+    private static final String SAMPLE_URL = "https://www.google.com";
     private boolean mIsCustomEntryAdded;
+    private boolean mShowShare;
     private List<String> mMenuEntries;
     private Map<MenuItem, Integer> mItemToIndexMap = new HashMap<MenuItem, Integer>();
     /**
      * Creates an {@link CustomTabAppMenuPropertiesDelegate} instance.
      */
-    public CustomTabAppMenuPropertiesDelegate(ChromeActivity activity,
-            List<String> menuEntries) {
+    public CustomTabAppMenuPropertiesDelegate(ChromeActivity activity, List<String> menuEntries,
+            boolean showShare) {
         super(activity);
         mMenuEntries = menuEntries;
+        mShowShare = showShare;
     }
 
     @Override
@@ -44,9 +51,19 @@ public class CustomTabAppMenuPropertiesDelegate extends ChromeAppMenuPropertiesD
             mReloadMenuItem.setIcon(R.drawable.btn_reload_stop);
             loadingStateChanged(currentTab.isLoading());
 
-            MenuItem openInChromeItem = menu.findItem(R.id.open_in_chrome_id);
-            openInChromeItem.setTitle(mActivity.getString(R.string.menu_open_in_product,
-                    mActivity.getString(R.string.app_name)));
+            MenuItem shareItem = menu.findItem(R.id.share_menu_id);
+            shareItem.setVisible(mShowShare);
+            shareItem.setEnabled(mShowShare);
+
+            MenuItem openInChromeItem = menu.findItem(R.id.open_in_browser_id);
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(SAMPLE_URL));
+            PackageManager pm = mActivity.getPackageManager();
+            ResolveInfo info = pm.resolveActivity(intent, 0);
+            String menuItemTitle = info != null && info.match != 0
+                    ? mActivity.getString(
+                            R.string.menu_open_in_product, info.loadLabel(pm).toString())
+                    : mActivity.getString(R.string.menu_open_in_product_default);
+            openInChromeItem.setTitle(menuItemTitle);
 
             // Add custom menu items. Make sure they are only added once.
             if (!mIsCustomEntryAdded) {

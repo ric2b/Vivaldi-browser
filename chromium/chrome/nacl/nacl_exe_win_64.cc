@@ -6,14 +6,14 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "chrome/app/chrome_crash_reporter_client.h"
-#include "components/crash/app/breakpad_win.h"
+#include "components/crash/content/app/breakpad_win.h"
 #include "components/nacl/loader/nacl_helper_win_64.h"
 #include "content/public/common/content_switches.h"
 
 namespace {
 
-base::LazyInstance<chrome::ChromeCrashReporterClient>::Leaky
-    g_chrome_crash_client = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<ChromeCrashReporterClient>::Leaky g_chrome_crash_client =
+    LAZY_INSTANCE_INITIALIZER;
 
 } // namespace
 

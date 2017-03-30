@@ -6,6 +6,8 @@
 
 #include "jni/FeatureUtilities_jni.h"
 
+#include "sql/connection.h"
+
 namespace {
 bool document_mode_enabled = false;
 bool custom_tab_visible = false;
@@ -27,22 +29,21 @@ CustomTabsVisibilityHistogram GetCustomTabsVisibleValue() {
 } // namespace android
 } // namespace chrome
 
-
 static void SetDocumentModeEnabled(JNIEnv* env,
-                                   jclass clazz,
+                                   const JavaParamRef<jclass>& clazz,
                                    jboolean enabled) {
   document_mode_enabled = enabled;
 }
 
 static void SetCustomTabVisible(JNIEnv* env,
-                                jclass clazz,
+                                const JavaParamRef<jclass>& clazz,
                                 jboolean visible) {
   custom_tab_visible = visible;
 }
 
-static jboolean GetCustomTabVisible(JNIEnv* env,
-                                jclass clazz) {
-  return custom_tab_visible;
+static void SetSqlMmapDisabledByDefault(JNIEnv* env,
+                                     const JavaParamRef<jclass>& clazz) {
+  sql::Connection::set_mmap_disabled_by_default();
 }
 
 bool RegisterFeatureUtilities(JNIEnv* env) {

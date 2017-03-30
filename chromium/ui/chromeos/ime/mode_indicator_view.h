@@ -5,6 +5,7 @@
 #ifndef UI_CHROMEOS_IME_MODE_INDICATOR_VIEW_H_
 #define UI_CHROMEOS_IME_MODE_INDICATOR_VIEW_H_
 
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/timer/timer.h"
 #include "ui/chromeos/ui_chromeos_export.h"
@@ -45,7 +46,7 @@ class UI_CHROMEOS_EXPORT ModeIndicatorView : public views::BubbleDelegateView {
  private:
   gfx::Rect cursor_bounds_;
   views::Label* label_view_;
-  base::OneShotTimer<views::Widget> timer_;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ModeIndicatorView);
 };

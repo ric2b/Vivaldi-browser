@@ -4,6 +4,8 @@
 
 #include "chrome/service/cloud_print/cloud_print_connector.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
@@ -360,8 +362,7 @@ void CloudPrintConnector::ReportUserMessage(const std::string& message_id,
                                             const std::string& failure_msg) {
   // This is a fire and forget type of function.
   // Result of this request will be ignored.
-  std::string mime_boundary;
-  CreateMimeBoundaryForUpload(&mime_boundary);
+  std::string mime_boundary = net::GenerateMimeMultipartBoundary();
   GURL url = GetUrlForUserMessage(settings_.server_url(), message_id);
   std::string post_data;
   net::AddMultipartValueForUpload(kMessageTextValue, failure_msg, mime_boundary,
@@ -420,8 +421,8 @@ void CloudPrintConnector::InitJobHandlerForPrinter(
       if (tags_list->GetString(index, &tag) &&
           base::StartsWith(tag, kCloudPrintServiceTagsHashTagName,
                            base::CompareCase::INSENSITIVE_ASCII)) {
-        std::vector<std::string> tag_parts;
-        base::SplitStringDontTrim(tag, '=', &tag_parts);
+        std::vector<std::string> tag_parts = base::SplitString(
+            tag, "=", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
         DCHECK_EQ(tag_parts.size(), 2U);
         if (tag_parts.size() == 2)
           printer_info_cloud.tags_hash = tag_parts[1];
@@ -607,8 +608,7 @@ void CloudPrintConnector::OnReceivePrinterCaps(
   const printing::PrinterBasicInfo& info = pending_tasks_.front().printer_info;
   DCHECK(IsSamePrinter(info.printer_name, printer_name));
 
-  std::string mime_boundary;
-  CreateMimeBoundaryForUpload(&mime_boundary);
+  std::string mime_boundary = net::GenerateMimeMultipartBoundary();
   std::string post_data;
 
   net::AddMultipartValueForUpload(kProxyIdValue,
@@ -653,7 +653,7 @@ void CloudPrintConnector::OnReceivePrinterCaps(
 
 bool CloudPrintConnector::IsSamePrinter(const std::string& name1,
                                         const std::string& name2) const {
-  return (0 == base::strcasecmp(name1.c_str(), name2.c_str()));
+  return base::EqualsCaseInsensitiveASCII(name1, name2);
 }
 
 }  // namespace cloud_print

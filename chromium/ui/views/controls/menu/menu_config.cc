@@ -4,11 +4,12 @@
 
 #include "ui/views/controls/menu/menu_config.h"
 
-#include "build/build_config.h"
+#include "base/macros.h"
+#include "ui/views/controls/menu/menu_image_util.h"
 
 namespace views {
 
-MenuConfig::MenuConfig(const ui::NativeTheme* theme)
+MenuConfig::MenuConfig()
     : arrow_color(SK_ColorBLACK),
       menu_vertical_border_size(3),
       menu_horizontal_border_size(0),
@@ -21,11 +22,9 @@ MenuConfig::MenuConfig(const ui::NativeTheme* theme)
       label_to_arrow_padding(10),
       arrow_to_edge_padding(5),
       icon_to_label_padding(10),
-      gutter_to_label(5),
-      check_width(16),
-      check_height(16),
-      radio_width(16),
-      arrow_width(9),
+      check_width(kMenuCheckSize),
+      check_height(kMenuCheckSize),
+      arrow_width(kSubmenuArrowSize),
       separator_height(11),
       separator_upper_height(3),
       separator_lower_height(4),
@@ -38,12 +37,20 @@ MenuConfig::MenuConfig(const ui::NativeTheme* theme)
       always_use_icon_to_label_padding(false),
       align_arrow_and_shortcut(false),
       offset_context_menus(false),
-      native_theme(theme),
+      use_outer_border(true),
+      icons_in_label(false),
+      check_selected_combobox_item(false),
       show_delay(400),
       corner_radius(0) {
-  Init(theme);
+  Init();
 }
 
 MenuConfig::~MenuConfig() {}
+
+// static
+const MenuConfig& MenuConfig::instance() {
+  CR_DEFINE_STATIC_LOCAL(MenuConfig, instance, ());
+  return instance;
+}
 
 }  // namespace views

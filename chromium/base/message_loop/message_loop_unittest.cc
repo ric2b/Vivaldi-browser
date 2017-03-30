@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_test.h"
@@ -19,6 +23,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
@@ -119,7 +124,7 @@ void RunTest_PostDelayedTask_SharedTimer_SubPump() {
       Bind(&RecordRunTimeFunc, &run_time, &num_tasks),
       TimeDelta::FromSeconds(1000));
 
-  // This slightly delayed task should run from within SubPumpFunc).
+  // This slightly delayed task should run from within SubPumpFunc.
   loop.PostDelayedTask(
       FROM_HERE,
       Bind(&PostQuitMessage, 0),
@@ -336,7 +341,7 @@ void RunTest_RecursiveDenial2(MessageLoop::Type message_loop_type) {
   WaitForSingleObject(event.Get(), INFINITE);
   MessageLoop::current()->Run();
 
-  ASSERT_EQ(order.Size(), 17);
+  ASSERT_EQ(17u, order.Size());
   EXPECT_EQ(order.Get(0), TaskItem(RECURSIVE, 1, true));
   EXPECT_EQ(order.Get(1), TaskItem(RECURSIVE, 1, false));
   EXPECT_EQ(order.Get(2), TaskItem(MESSAGEBOX, 2, true));
@@ -380,7 +385,7 @@ void RunTest_RecursiveSupport2(MessageLoop::Type message_loop_type) {
   WaitForSingleObject(event.Get(), INFINITE);
   MessageLoop::current()->Run();
 
-  ASSERT_EQ(order.Size(), 18);
+  ASSERT_EQ(18u, order.Size());
   EXPECT_EQ(order.Get(0), TaskItem(RECURSIVE, 1, true));
   EXPECT_EQ(order.Get(1), TaskItem(RECURSIVE, 1, false));
   EXPECT_EQ(order.Get(2), TaskItem(MESSAGEBOX, 2, true));
@@ -522,7 +527,7 @@ void TestIOHandler::Init() {
 
   DWORD read;
   EXPECT_FALSE(ReadFile(file_.Get(), buffer_, size(), &read, context()));
-  EXPECT_EQ(ERROR_IO_PENDING, GetLastError());
+  EXPECT_EQ(static_cast<DWORD>(ERROR_IO_PENDING), GetLastError());
   if (wait_)
     WaitForIO();
 }
@@ -600,7 +605,7 @@ void RunTest_WaitForIO() {
   TestIOHandler handler2(kPipeName2, callback2_called.Get(), true);
   thread_loop->PostTask(FROM_HERE, Bind(&TestIOHandler::Init,
                                               Unretained(&handler1)));
-  // TODO(ajwong): Do we really need such long Sleeps in ths function?
+  // TODO(ajwong): Do we really need such long Sleeps in this function?
   // Make sure the thread runs and sleeps for lack of work.
   TimeDelta delay = TimeDelta::FromMilliseconds(100);
   PlatformThread::Sleep(delay);
@@ -615,8 +620,9 @@ void RunTest_WaitForIO() {
   DWORD written;
   EXPECT_TRUE(WriteFile(server1.Get(), buffer, sizeof(buffer), &written, NULL));
   PlatformThread::Sleep(2 * delay);
-  EXPECT_EQ(WAIT_TIMEOUT, WaitForSingleObject(callback1_called.Get(), 0)) <<
-      "handler1 has not been called";
+  EXPECT_EQ(static_cast<DWORD>(WAIT_TIMEOUT),
+            WaitForSingleObject(callback1_called.Get(), 0))
+      << "handler1 has not been called";
 
   EXPECT_TRUE(WriteFile(server2.Get(), buffer, sizeof(buffer), &written, NULL));
 
@@ -645,7 +651,7 @@ TEST(MessageLoopTest, PostDelayedTask_SharedTimer_SubPump) {
   RunTest_PostDelayedTask_SharedTimer_SubPump();
 }
 
-// This test occasionally hangs http://crbug.com/44567
+// This test occasionally hangs. See http://crbug.com/44567.
 TEST(MessageLoopTest, DISABLED_RecursiveDenial2) {
   RunTest_RecursiveDenial2(MessageLoop::TYPE_DEFAULT);
   RunTest_RecursiveDenial2(MessageLoop::TYPE_UI);
@@ -653,7 +659,7 @@ TEST(MessageLoopTest, DISABLED_RecursiveDenial2) {
 }
 
 TEST(MessageLoopTest, RecursiveSupport2) {
-  // This test requires a UI loop
+  // This test requires a UI loop.
   RunTest_RecursiveSupport2(MessageLoop::TYPE_UI);
 }
 #endif  // defined(OS_WIN)
@@ -907,8 +913,9 @@ TEST(MessageLoopTest, ThreadMainTaskRunner) {
       &Foo::Test1ConstRef, foo.get(), a));
 
   // Post quit task;
-  MessageLoop::current()->PostTask(FROM_HERE, Bind(
-      &MessageLoop::Quit, Unretained(MessageLoop::current())));
+  MessageLoop::current()->PostTask(
+      FROM_HERE,
+      Bind(&MessageLoop::QuitWhenIdle, Unretained(MessageLoop::current())));
 
   // Now kick things off
   MessageLoop::current()->Run();
@@ -983,7 +990,7 @@ LRESULT CALLBACK TestWndProcThunk(HWND hwnd, UINT message,
         break;
     }
     EXPECT_TRUE(did_run);
-    MessageLoop::current()->Quit();
+    MessageLoop::current()->QuitWhenIdle();
     break;
   }
   return 0;
@@ -1032,6 +1039,17 @@ TEST(MessageLoopTest, OriginalRunnerWorks) {
                             Bind(&Foo::Test1ConstRef, foo.get(), "a"));
   loop.RunUntilIdle();
   EXPECT_EQ(1, foo->test_count());
+}
+
+TEST(MessageLoopTest, DeleteUnboundLoop) {
+  // It should be possible to delete an unbound message loop on a thread which
+  // already has another active loop. This happens when thread creation fails.
+  MessageLoop loop;
+  scoped_ptr<MessageLoop> unbound_loop(MessageLoop::CreateUnbound(
+      MessageLoop::TYPE_DEFAULT, MessageLoop::MessagePumpFactoryCallback()));
+  unbound_loop.reset();
+  EXPECT_EQ(&loop, MessageLoop::current());
+  EXPECT_EQ(loop.task_runner(), ThreadTaskRunnerHandle::Get());
 }
 
 }  // namespace base

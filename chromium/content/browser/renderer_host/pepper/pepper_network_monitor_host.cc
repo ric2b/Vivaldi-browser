@@ -4,6 +4,8 @@
 
 #include "content/browser/renderer_host/pepper/pepper_network_monitor_host.h"
 
+#include <stddef.h>
+
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_impl.h"
@@ -34,7 +36,7 @@ bool CanUseNetworkMonitor(bool external_plugin,
 scoped_ptr<net::NetworkInterfaceList> GetNetworkList() {
   scoped_ptr<net::NetworkInterfaceList> list(new net::NetworkInterfaceList());
   net::GetNetworkList(list.get(), net::INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES);
-  return list.Pass();
+  return list;
 }
 
 }  // namespace

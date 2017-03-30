@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -53,6 +54,43 @@ public class LogcatExtractionCallable implements Callable<Boolean> {
     @VisibleForTesting
     protected static final String URL_ELISION = "HTTP://WEBADDRESS.ELIDED";
 
+    private static final String GOOD_IRI_CHAR =
+            "a-zA-Z0-9\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF";
+
+    private static final Pattern IP_ADDRESS = Pattern.compile(
+            "((25[0-5]|2[0-4][0-9]|[0-1][0-9]{2}|[1-9][0-9]|[1-9])\\.(25[0-5]|2[0-4]"
+            + "[0-9]|[0-1][0-9]{2}|[1-9][0-9]|[1-9]|0)\\.(25[0-5]|2[0-4][0-9]|[0-1]"
+            + "[0-9]{2}|[1-9][0-9]|[1-9]|0)\\.(25[0-5]|2[0-4][0-9]|[0-1][0-9]{2}"
+            + "|[1-9][0-9]|[0-9]))");
+
+    private static final String IRI =
+            "[" + GOOD_IRI_CHAR + "]([" + GOOD_IRI_CHAR + "\\-]{0,61}["
+            + GOOD_IRI_CHAR + "]){0,1}";
+
+    private static final String GOOD_GTLD_CHAR =
+            "a-zA-Z\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF";
+    private static final String GTLD = "[" + GOOD_GTLD_CHAR + "]{2,63}";
+    private static final String HOST_NAME = "(" + IRI + "\\.)+" + GTLD;
+
+    private static final Pattern DOMAIN_NAME =
+            Pattern.compile("(" + HOST_NAME + "|" + IP_ADDRESS + ")");
+
+    private static final Pattern WEB_URL = Pattern.compile(
+            "(?:\\b|^)((?:(http|https|Http|Https|rtsp|Rtsp):"
+            + "\\/\\/(?:(?:[a-zA-Z0-9\\$\\-\\_\\.\\+\\!\\*\\'\\(\\)"
+            + "\\,\\;\\?\\&\\=]|(?:\\%[a-fA-F0-9]{2})){1,64}(?:\\:(?:[a-zA-Z0-9\\$\\-\\_"
+            + "\\.\\+\\!\\*\\'\\(\\)\\,\\;\\?\\&\\=]|(?:\\%[a-fA-F0-9]{2})){1,25})?\\@)?)?"
+            + "(?:" + DOMAIN_NAME + ")"
+            + "(?:\\:\\d{1,5})?)"
+            + "(\\/(?:(?:[" + GOOD_IRI_CHAR + "\\;\\/\\?\\:\\@\\&\\=\\#\\~"
+            + "\\-\\.\\+\\!\\*\\'\\(\\)\\,\\_])|(?:\\%[a-fA-F0-9]{2}))*)?"
+            + "(?:\\b|$)");
+
+    @VisibleForTesting
+    protected static final String BEGIN_MICRODUMP = "-----BEGIN BREAKPAD MICRODUMP-----";
+    @VisibleForTesting
+    protected static final String END_MICRODUMP = "-----END BREAKPAD MICRODUMP-----";
+
     @VisibleForTesting
     protected static final String IP_ELISION = "1.2.3.4";
 
@@ -72,6 +110,25 @@ public class LogcatExtractionCallable implements Callable<Boolean> {
             Pattern.compile("\\[\\w*:CONSOLE.*\\].*");
 
     private static final Pattern MINIDUMP_EXTENSION = Pattern.compile("\\.dmp");
+
+    private static final String[] CHROME_NAMESPACE = new String[] {
+            "org.chromium.", "com.google."
+    };
+
+    private static final String[] SYSTEM_NAMESPACE = new String[] {
+            "android.accessibilityservice", "android.accounts", "android.animation",
+            "android.annotation", "android.app", "android.appwidget", "android.bluetooth",
+            "android.content", "android.database", "android.databinding", "android.drm",
+            "android.gesture", "android.graphics", "android.hardware",
+            "android.inputmethodservice", "android.location", "android.media", "android.mtp",
+            "android.net", "android.nfc", "android.opengl", "android.os", "android.preference",
+            "android.print", "android.printservice", "android.provider", "android.renderscript",
+            "android.sax", "android.security", "android.service", "android.speech",
+            "android.support", "android.system", "android.telecom", "android.telephony",
+            "android.test", "android.text", "android.transition", "android.util", "android.view",
+            "android.webkit", "android.widget", "com.android.", "dalvik.", "java.", "javax.",
+            "org.apache.", "org.json.", "org.w3c.dom.", "org.xml.", "org.xmlpull."
+    };
 
     private final Context mContext;
     private final String[] mMinidumpFilenames;
@@ -102,7 +159,10 @@ public class LogcatExtractionCallable implements Callable<Boolean> {
             int len = mMinidumpFilenames.length;
             CrashFileManager fileManager = new CrashFileManager(mContext.getCacheDir());
             for (int i = 0; i < len; i++) {
-                proccessMinidump(logcatFile, mMinidumpFilenames[i], fileManager, i == len - 1);
+                // Output crash dump file path to logcat so non-browser crashes appear too.
+                Log.i(TAG, "Output crash dump:");
+                Log.i(TAG, fileManager.getCrashFile(mMinidumpFilenames[i]).getAbsolutePath());
+                processMinidump(logcatFile, mMinidumpFilenames[i], fileManager, i == len - 1);
             }
             return true;
         } catch (IOException | InterruptedException e) {
@@ -111,7 +171,7 @@ public class LogcatExtractionCallable implements Callable<Boolean> {
         }
     }
 
-    private void proccessMinidump(File logcatFile, String name,
+    private void processMinidump(File logcatFile, String name,
             CrashFileManager manager, boolean isLast) throws IOException {
         String toPath = MINIDUMP_EXTENSION.matcher(name).replaceAll(LOGCAT_EXTENSION);
         File toFile = manager.createNewTempFile(toPath);
@@ -168,25 +228,22 @@ public class LogcatExtractionCallable implements Callable<Boolean> {
         }
     }
 
-    private static List<String> getLogcat() throws IOException, InterruptedException {
-        LinkedList<String> rawLogcat = new LinkedList<String>();
-        String logLn = null;
+    @VisibleForTesting
+    protected List<String> getLogcat() throws IOException, InterruptedException {
+        return getLogcatInternal();
+    }
+
+    private static List<String> getLogcatInternal() throws IOException, InterruptedException {
+        List<String> rawLogcat = null;
         Integer exitValue = null;
         // In the absence of the android.permission.READ_LOGS permission the
         // the logcat call will just hang.
         Process p = Runtime.getRuntime().exec("logcat -d");
-        BufferedReader bReader = null;
+        BufferedReader reader = null;
         try {
-            bReader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
             while (exitValue == null) {
-                while ((logLn = bReader.readLine()) != null) {
-                    // Add each new string to the end of the queue.
-                    rawLogcat.add(logLn);
-                    if (rawLogcat.size() > LOGCAT_SIZE) {
-                        // Remove the head of the queue when it gets too large.
-                        rawLogcat.remove();
-                    }
-                }
+                rawLogcat = extractLogcatFromReader(reader, LOGCAT_SIZE);
                 try {
                     exitValue = p.exitValue();
                 } catch (IllegalThreadStateException itse) {
@@ -200,10 +257,52 @@ public class LogcatExtractionCallable implements Callable<Boolean> {
             }
             return rawLogcat;
         } finally {
-            if (bReader != null) {
-                bReader.close();
+            if (reader != null) {
+                reader.close();
             }
         }
+    }
+
+    /**
+     * Extract microdump-free logcat for more informative crash reports
+     *
+     * @param reader A buffered reader from which lines of initial logcat is read.
+     * @param maxLines The maximum number of lines logcat extracts from minidump.
+     *
+     * @return Logcat up to specified length as a list of strings.
+     * @throws IOException if the buffered reader encounters an I/O error.
+     */
+    @VisibleForTesting
+    protected static List<String> extractLogcatFromReader(
+            BufferedReader reader, int maxLines) throws IOException {
+        return extractLogcatFromReaderInternal(reader, maxLines);
+    }
+
+    private static List<String> extractLogcatFromReaderInternal(
+            BufferedReader reader, int maxLines) throws IOException {
+        boolean inMicrodump = false;
+        List<String> rawLogcat = new LinkedList<>();
+        String logLn;
+        while ((logLn = reader.readLine()) != null && rawLogcat.size() < maxLines) {
+            if (logLn.contains(BEGIN_MICRODUMP)) {
+                // If the log contains two begin markers without an end marker
+                // in between, we ignore the second begin marker.
+                inMicrodump = true;
+            } else if (logLn.contains(END_MICRODUMP)) {
+                if (!inMicrodump) {
+                    // If we have been extracting microdump the whole time,
+                    // start over with a clean logcat.
+                    rawLogcat.clear();
+                } else {
+                    inMicrodump = false;
+                }
+            } else {
+                if (!inMicrodump) {
+                    rawLogcat.add(logLn);
+                }
+            }
+        }
+        return rawLogcat;
     }
 
     private File writeLogcat(List<String> elidedLogcat) throws IOException {
@@ -258,7 +357,39 @@ public class LogcatExtractionCallable implements Callable<Boolean> {
      */
     @VisibleForTesting
     protected static String elideUrl(String original) {
-        return Patterns.WEB_URL.matcher(original).replaceAll(URL_ELISION);
+        StringBuffer buffer = new StringBuffer(original);
+        Matcher matcher = WEB_URL.matcher(buffer);
+        int start = 0;
+        while (matcher.find(start)) {
+            start = matcher.start();
+            int end = matcher.end();
+            String url = buffer.substring(start, end);
+            if (!likelyToBeChromeNamespace(url) && !likelyToBeSystemNamespace(url)) {
+                buffer.replace(start, end, URL_ELISION);
+                end = start + URL_ELISION.length();
+                matcher = WEB_URL.matcher(buffer);
+            }
+            start = end;
+        }
+        return buffer.toString();
+    }
+
+    public static boolean likelyToBeChromeNamespace(String url) {
+        for (String ns : CHROME_NAMESPACE) {
+            if (url.startsWith(ns)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean likelyToBeSystemNamespace(String url) {
+        for (String ns : SYSTEM_NAMESPACE) {
+            if (url.startsWith(ns)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

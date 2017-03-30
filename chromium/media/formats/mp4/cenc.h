@@ -5,9 +5,11 @@
 #ifndef MEDIA_FORMATS_MP4_CENC_H_
 #define MEDIA_FORMATS_MP4_CENC_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "media/base/decrypt_config.h"
 
 namespace media {
@@ -16,7 +18,7 @@ namespace mp4 {
 class BufferReader;
 
 struct FrameCENCInfo {
-  uint8 iv[16];
+  uint8_t iv[16];
   std::vector<SubsampleEntry> subsamples;
 
   FrameCENCInfo();

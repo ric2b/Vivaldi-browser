@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "cache_storage_blob_to_disk_cache.h"
+#include "content/browser/cache_storage/cache_storage_blob_to_disk_cache.h"
+
+#include <utility>
 
 #include "base/logging.h"
 #include "net/base/io_buffer.h"
@@ -34,20 +36,24 @@ void CacheStorageBlobToDiskCache::StreamBlobToCache(
     scoped_ptr<storage::BlobDataHandle> blob_data_handle,
     const EntryAndBoolCallback& callback) {
   DCHECK(entry);
-  DCHECK(request_context_getter->GetURLRequestContext());
   DCHECK_LE(0, disk_cache_body_index);
   DCHECK(blob_data_handle);
   DCHECK(!blob_request_);
 
+  if (!request_context_getter->GetURLRequestContext()) {
+    callback.Run(std::move(entry), false /* success */);
+    return;
+  }
+
   disk_cache_body_index_ = disk_cache_body_index;
 
-  entry_ = entry.Pass();
+  entry_ = std::move(entry);
   callback_ = callback;
   request_context_getter_ = request_context_getter;
 
   blob_request_ = storage::BlobProtocolHandler::CreateBlobRequest(
-      blob_data_handle.Pass(), request_context_getter->GetURLRequestContext(),
-      this);
+      std::move(blob_data_handle),
+      request_context_getter->GetURLRequestContext(), this);
   request_context_getter_->AddObserver(this);
   blob_request_->Start();
 }
@@ -140,7 +146,7 @@ void CacheStorageBlobToDiskCache::RunCallbackAndRemoveObserver(bool success) {
 
   request_context_getter_->RemoveObserver(this);
   blob_request_.reset();
-  callback_.Run(entry_.Pass(), success);
+  callback_.Run(std::move(entry_), success);
 }
 
 }  // namespace content

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "third_party/libjingle/source/talk/media/webrtc/webrtcvideoencoderfactory.h"
@@ -24,7 +25,7 @@ class CONTENT_EXPORT RTCVideoEncoderFactory
     : NON_EXPORTED_BASE(public cricket::WebRtcVideoEncoderFactory) {
  public:
   explicit RTCVideoEncoderFactory(
-      const scoped_refptr<media::GpuVideoAcceleratorFactories>& gpu_factories);
+      media::GpuVideoAcceleratorFactories* gpu_factories);
   ~RTCVideoEncoderFactory() override;
 
   // cricket::WebRtcVideoEncoderFactory implementation.
@@ -34,7 +35,7 @@ class CONTENT_EXPORT RTCVideoEncoderFactory
   void DestroyVideoEncoder(webrtc::VideoEncoder* encoder) override;
 
  private:
-  const scoped_refptr<media::GpuVideoAcceleratorFactories> gpu_factories_;
+  media::GpuVideoAcceleratorFactories* gpu_factories_;
 
   // List of supported cricket::WebRtcVideoEncoderFactory::VideoCodec.
   std::vector<VideoCodec> codecs_;

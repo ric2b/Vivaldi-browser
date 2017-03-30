@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/extension_toolbar_model.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
@@ -102,7 +103,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, TestOpenPopup) {
             ui::PAGE_TRANSITION_TYPED, false)));
     // Hide all the buttons to test that it opens even when the browser action
     // is in the overflow bucket.
-    extensions::ExtensionToolbarModel::Get(profile())->SetVisibleIconCount(0);
+    ToolbarActionsModel::Get(profile())->SetVisibleIconCount(0);
     frame_observer.Wait();
   }
 
@@ -151,8 +152,16 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, TestOpenPopupIncognito) {
 // Tests that an extension can open a popup in the last active incognito window
 // even from a background page with a non-incognito profile.
 // (crbug.com/448853)
+#if defined(OS_WIN)
+// Fails on XP: http://crbug.com/515717
+#define MAYBE_TestOpenPopupIncognitoFromBackground \
+  DISABLED_TestOpenPopupIncognitoFromBackground
+#else
+#define MAYBE_TestOpenPopupIncognitoFromBackground \
+  TestOpenPopupIncognitoFromBackground
+#endif
 IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
-                       TestOpenPopupIncognitoFromBackground) {
+                       MAYBE_TestOpenPopupIncognitoFromBackground) {
   if (!ShouldRunPopupTest())
     return;
 
@@ -164,7 +173,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
   listener.set_extension_id(extension->id());
 
   Browser* incognito_browser =
-      ui_test_utils::OpenURLOffTheRecord(profile(), GURL("chrome://newtab/"));
+      OpenURLOffTheRecord(profile(), GURL("chrome://newtab/"));
   listener.WaitUntilSatisfied();
   EXPECT_EQ(std::string("opened"), listener.message());
   EXPECT_TRUE(BrowserActionTestUtil(incognito_browser).HasPopup());

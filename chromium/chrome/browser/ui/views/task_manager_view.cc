@@ -4,10 +4,14 @@
 
 #include "chrome/browser/task_manager/task_manager.h"
 
+#include <stddef.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
@@ -15,6 +19,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/views/browser_dialogs.h"
+#include "chrome/browser/ui/views/new_task_manager_view.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -37,7 +43,6 @@
 #include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
-#include "base/command_line.h"
 
 #if defined(USE_ASH)
 #include "ash/shelf/shelf_util.h"
@@ -50,6 +55,8 @@
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -461,11 +468,10 @@ void TaskManagerView::Show(Browser* browser) {
       browser ? browser->window()->GetNativeWindow() : NULL;
 #if defined(USE_ASH)
   if (!window){
-    if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
-    {
+    if (vivaldi::IsVivaldiRunning()) {
       window = NULL; // ash::wm::GetActiveWindow();
-    }else{
-      window = ash::wm::GetActiveWindow();
+    } else {
+    window = ash::wm::GetActiveWindow();
     }
   }
 #endif
@@ -641,7 +647,7 @@ bool TaskManagerView::GetSavedAlwaysOnTopState(bool* always_on_top) const {
     return false;
 
   const base::DictionaryValue* dictionary =
-      g_browser_process->local_state()->GetDictionary(GetWindowName().c_str());
+      g_browser_process->local_state()->GetDictionary(GetWindowName());
   return dictionary &&
       dictionary->GetBoolean("always_on_top", always_on_top) && always_on_top;
 }
@@ -652,10 +658,20 @@ namespace chrome {
 
 // Declared in browser_dialogs.h so others don't need to depend on our header.
 void ShowTaskManager(Browser* browser) {
+  if (switches::NewTaskManagerEnabled()) {
+    task_management::NewTaskManagerView::Show(browser);
+    return;
+  }
+
   TaskManagerView::Show(browser);
 }
 
 void HideTaskManager() {
+  if (switches::NewTaskManagerEnabled()) {
+    task_management::NewTaskManagerView::Hide();
+    return;
+  }
+
   TaskManagerView::Hide();
 }
 

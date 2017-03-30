@@ -4,12 +4,13 @@
 
 #include "chrome/browser/ui/views/accessibility/invert_bubble_view.h"
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/toolbar/wrench_toolbar_button.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/page_navigator.h"
@@ -159,7 +160,7 @@ namespace chrome {
 void MaybeShowInvertBubbleView(BrowserView* browser_view) {
   Browser* browser = browser_view->browser();
   PrefService* pref_service = browser->profile()->GetPrefs();
-  views::View* anchor = browser_view->toolbar()->app_menu();
+  views::View* anchor = browser_view->toolbar()->app_menu_button();
   if (color_utils::IsInvertedColorScheme() && anchor && anchor->GetWidget() &&
       !pref_service->GetBoolean(prefs::kInvertNotificationShown)) {
     pref_service->SetBoolean(prefs::kInvertNotificationShown, true);

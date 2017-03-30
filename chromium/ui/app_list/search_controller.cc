@@ -5,6 +5,7 @@
 #include "ui/app_list/search_controller.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -75,6 +76,11 @@ void SearchController::Stop() {
 }
 
 void SearchController::OpenResult(SearchResult* result, int event_flags) {
+  // This can happen in certain circumstances due to races. See
+  // https://crbug.com/534772
+  if (!result)
+    return;
+
   // Count AppList.Search here because it is composed of search + action.
   base::RecordAction(base::UserMetricsAction("AppList_Search"));
 
@@ -124,7 +130,7 @@ void SearchController::AddProvider(size_t group_id,
       &SearchController::OnResultsChanged,
       base::Unretained(this)));
   mixer_->AddProviderToGroup(group_id, provider.get());
-  providers_.push_back(provider.Pass());
+  providers_.push_back(std::move(provider));
 }
 
 void SearchController::OnResultsChanged() {

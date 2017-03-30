@@ -4,10 +4,13 @@
 
 #include "cc/output/shader.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
+#include "cc/output/static_geometry_binding.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
@@ -25,7 +28,7 @@ std::string StripLambda(const char(&shader)[size]) {
 // Shaders are passed in with lambda syntax, which tricks clang-format into
 // handling them correctly. StipLambda removes this.
 #define SHADER0(Src) StripLambda(#Src)
-#define VERTEX_SHADER(Head, Body) SetVertexTexCoordPrecision(Head + Body)
+#define VERTEX_SHADER(Head, Body) SetVertexShaderDefines(Head + Body)
 #define FRAGMENT_SHADER(Head, Body) \
   SetFragmentTexCoordPrecision(     \
       precision,                    \
@@ -76,13 +79,16 @@ static std::string SetFragmentTexCoordPrecision(
   return shader_string;
 }
 
-static std::string SetVertexTexCoordPrecision(
-    const std::string& shader_string) {
+static std::string SetVertexShaderDefines(const std::string& shader_string) {
   // We unconditionally use highp in the vertex shader since
   // we are unlikely to be vertex shader bound when drawing large quads.
   // Also, some vertex shaders mutate the texture coordinate in such a
   // way that the effective precision might be lower than expected.
-  return "#define TexCoordPrecision highp\n" + shader_string;
+  return base::StringPrintf(
+             "#define TexCoordPrecision highp\n"
+             "#define NUM_STATIC_QUADS %d\n",
+             StaticGeometryBinding::NUM_QUADS) +
+         shader_string;
 }
 
 TexCoordPrecision TexCoordPrecisionRequired(GLES2Interface* context,
@@ -340,9 +346,9 @@ std::string VertexShaderPosTexTransform::GetShaderHead() {
     attribute vec4 a_position;
     attribute TexCoordPrecision vec2 a_texCoord;
     attribute float a_index;
-    uniform mat4 matrix[8];
-    uniform TexCoordPrecision vec4 texTransform[8];
-    uniform float opacity[32];
+    uniform mat4 matrix[NUM_STATIC_QUADS];
+    uniform TexCoordPrecision vec4 texTransform[NUM_STATIC_QUADS];
+    uniform float opacity[NUM_STATIC_QUADS * 4];
     varying TexCoordPrecision vec2 v_texCoord;
     varying float v_alpha;
   });
@@ -772,7 +778,7 @@ FragmentTexBlendMode::FragmentTexBlendMode()
 }
 
 std::string FragmentTexBlendMode::SetBlendModeFunctions(
-    std::string shader_string) const {
+    const std::string& shader_string) const {
   if (shader_string.find("ApplyBlendMode") == std::string::npos)
     return shader_string;
 
@@ -2100,15 +2106,8 @@ void FragmentShaderYUVAVideo::Init(GLES2Interface* context,
                                    unsigned program,
                                    int* base_uniform_index) {
   static const char* uniforms[] = {
-      "y_texture",
-      "u_texture",
-      "v_texture",
-      "a_texture",
-      "alpha",
-      "cc_matrix",
-      "yuv_adj",
-      "ya_clamp_rect",
-      "uv_clamp_rect",
+      "y_texture",  "u_texture", "v_texture",     "a_texture",     "alpha",
+      "yuv_matrix", "yuv_adj",   "ya_clamp_rect", "uv_clamp_rect",
   };
   int locations[arraysize(uniforms)];
 
@@ -2249,66 +2248,6 @@ std::string FragmentShaderColorAA::GetShaderBody() {
       vec2 d2 = min(d4.xz, d4.yw);
       float aa = clamp(gl_FragCoord.w * min(d2.x, d2.y), 0.0, 1.0);
       gl_FragColor = color * aa;
-    }
-  });
-}
-
-FragmentShaderCheckerboard::FragmentShaderCheckerboard()
-    : alpha_location_(-1),
-      tex_transform_location_(-1),
-      frequency_location_(-1) {
-}
-
-void FragmentShaderCheckerboard::Init(GLES2Interface* context,
-                                      unsigned program,
-                                      int* base_uniform_index) {
-  static const char* uniforms[] = {
-      "alpha", "texTransform", "frequency", "color",
-  };
-  int locations[arraysize(uniforms)];
-
-  GetProgramUniformLocations(context,
-                             program,
-                             arraysize(uniforms),
-                             uniforms,
-                             locations,
-                             base_uniform_index);
-  alpha_location_ = locations[0];
-  tex_transform_location_ = locations[1];
-  frequency_location_ = locations[2];
-  color_location_ = locations[3];
-}
-
-std::string FragmentShaderCheckerboard::GetShaderString(
-    TexCoordPrecision precision,
-    SamplerType sampler) const {
-  return FRAGMENT_SHADER(GetShaderHead(), GetShaderBody());
-}
-
-std::string FragmentShaderCheckerboard::GetShaderHead() {
-  return SHADER0([]() {
-    precision mediump float;
-    precision mediump int;
-    varying vec2 v_texCoord;
-    uniform float alpha;
-    uniform float frequency;
-    uniform vec4 texTransform;
-    uniform vec4 color;
-  });
-}
-
-std::string FragmentShaderCheckerboard::GetShaderBody() {
-  // Shader based on Example 13-17 of "OpenGL ES 2.0 Programming Guide"
-  // by Munshi, Ginsburg, Shreiner.
-  return SHADER0([]() {
-    void main() {
-      vec4 color1 = vec4(1.0, 1.0, 1.0, 1.0);
-      vec4 color2 = color;
-      vec2 texCoord =
-          clamp(v_texCoord, 0.0, 1.0) * texTransform.zw + texTransform.xy;
-      vec2 coord = mod(floor(texCoord * frequency * 2.0), 2.0);
-      float picker = abs(coord.x - coord.y);  // NOLINT
-      gl_FragColor = mix(color1, color2, picker) * alpha;
     }
   });
 }

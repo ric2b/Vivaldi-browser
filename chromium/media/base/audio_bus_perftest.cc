@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/time/time.h"
 #include "media/base/audio_bus.h"
 #include "media/base/fake_audio_render_callback.h"
@@ -43,11 +45,11 @@ void RunInterleaveBench(AudioBus* bus, const std::string& trace_name) {
 TEST(AudioBusPerfTest, Interleave) {
   scoped_ptr<AudioBus> bus = AudioBus::Create(2, 48000 * 120);
   FakeAudioRenderCallback callback(0.2);
-  callback.Render(bus.get(), 0);
+  callback.Render(bus.get(), 0, 0);
 
-  RunInterleaveBench<int8>(bus.get(), "int8");
-  RunInterleaveBench<int16>(bus.get(), "int16");
-  RunInterleaveBench<int32>(bus.get(), "int32");
+  RunInterleaveBench<int8_t>(bus.get(), "int8_t");
+  RunInterleaveBench<int16_t>(bus.get(), "int16_t");
+  RunInterleaveBench<int32_t>(bus.get(), "int32_t");
 }
 
 } // namespace media

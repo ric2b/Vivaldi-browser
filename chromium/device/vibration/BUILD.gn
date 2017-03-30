@@ -3,12 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
-
-if (is_android) {
-  import("//build/config/android/config.gni")
-  import("//build/config/android/rules.gni")  # For generate_jni().
-}
+import("//mojo/public/tools/bindings/mojom.gni")
 
 component("vibration") {
   output_name = "device_vibration"
@@ -16,6 +11,7 @@ component("vibration") {
   sources = [
     "vibration_export.h",
     "vibration_manager_impl.h",
+    "vibration_manager_impl_default.cc",
   ]
 
   defines = [ "DEVICE_VIBRATION_IMPLEMENTATION" ]
@@ -25,20 +21,12 @@ component("vibration") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//mojo/environment:chromium",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//mojo/public/cpp/bindings",
     "//third_party/mojo/src/mojo/edk/system",
   ]
 
   if (is_android) {
-    sources += [
-      "android/vibration_jni_registrar.cc",
-      "android/vibration_jni_registrar.h",
-      "vibration_manager_impl_android.cc",
-      "vibration_manager_impl_android.h",
-    ]
-    deps += [ ":vibration_jni_headers" ]
-  } else {
-    sources += [ "vibration_manager_impl_default.cc" ]
+    sources -= [ "vibration_manager_impl_default.cc" ]
   }
 }
 
@@ -46,13 +34,4 @@ mojom("mojo_bindings") {
   sources = [
     "vibration_manager.mojom",
   ]
-}
-
-if (is_android) {
-  generate_jni("vibration_jni_headers") {
-    sources = [
-      "android/java/src/org/chromium/device/vibration/VibrationProvider.java",
-    ]
-    jni_package = "vibration"
-  }
 }

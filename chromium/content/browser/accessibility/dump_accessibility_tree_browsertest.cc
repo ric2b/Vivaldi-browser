@@ -12,7 +12,9 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_tree_formatter.h"
+#include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/dump_accessibility_browsertest_base.h"
@@ -87,13 +89,15 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   }
 
   std::vector<std::string> Dump() override {
+    scoped_ptr<AccessibilityTreeFormatter> formatter(
+        CreateAccessibilityTreeFormatter());
+    formatter->SetFilters(filters_);
+    base::string16 actual_contents_utf16;
     WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
         shell()->web_contents());
-    AccessibilityTreeFormatter formatter(
-        web_contents->GetRootBrowserAccessibilityManager()->GetRoot());
-    formatter.SetFilters(filters_);
-    base::string16 actual_contents_utf16;
-    formatter.FormatAccessibilityTree(&actual_contents_utf16);
+    formatter->FormatAccessibilityTree(
+        web_contents->GetRootBrowserAccessibilityManager()->GetRoot(),
+        &actual_contents_utf16);
     std::string actual_contents = base::UTF16ToUTF8(actual_contents_utf16);
     return base::SplitString(
         actual_contents, "\n",
@@ -177,31 +181,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaButton) {
   RunAriaTest(FILE_PATH_LITERAL("aria-button.html"));
 }
 
-#if defined(OS_MACOSX)
-#define MAYBE_AccessibilityAriaCheckBox DISABLED_AccessibilityAriaCheckBox
-#define MAYBE_AccessibilityAriaChecked DISABLED_AccessibilityAriaChecked
-#define MAYBE_AccessibilityAriaLabel DISABLED_AccessibilityAriaLabel
-#define MAYBE_AccessibilityInputCheckBox DISABLED_AccessibilityInputCheckBox
-#define MAYBE_AccessibilityInputDate DISABLED_AccessibilityInputDate
-#define MAYBE_AccessibilityInputDateTimeLocal \
-DISABLED_AccessibilityInputDateTimeLocal
-#define MAYBE_AccessibilityInputTime DISABLED_AccessibilityInputTime
-#else
-#define MAYBE_AccessibilityAriaCheckBox AccessibilityAriaCheckBox
-#define MAYBE_AccessibilityAriaChecked AccessibilityAriaChecked
-#define MAYBE_AccessibilityAriaLabel AccessibilityAriaLabel
-#define MAYBE_AccessibilityInputCheckBox AccessibilityInputCheckBox
-#define MAYBE_AccessibilityInputDate AccessibilityInputDate
-#define MAYBE_AccessibilityInputDateTimeLocal AccessibilityInputDateTimeLocal
-#define MAYBE_AccessibilityInputTime AccessibilityInputTime
-#endif
-// tomas@vivaldi.com: VB-8398
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, MAYBE_AccessibilityAriaCheckBox) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaCheckBox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-checkbox.html"));
 }
 
-// tomas@vivaldi.com: VB-8398
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, MAYBE_AccessibilityAriaChecked) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaChecked) {
   RunAriaTest(FILE_PATH_LITERAL("aria-checked.html"));
 }
 
@@ -309,8 +293,7 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaInvalid) {
   RunAriaTest(FILE_PATH_LITERAL("aria-invalid.html"));
 }
 
-// tomas@vivaldi: VB-8398
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, MAYBE_AccessibilityAriaLabel) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaLabel) {
   RunAriaTest(FILE_PATH_LITERAL("aria-label.html"));
 }
 
@@ -506,8 +489,13 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaSearch) {
   RunAriaTest(FILE_PATH_LITERAL("aria-search.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaSearchBox) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaSearchbox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-searchbox.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+    AccessibilityAriaSearchboxWithSelection) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-searchbox-with-selection.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaSelected) {
@@ -537,7 +525,7 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       AccessibilityAriaSpinButton) {
+                       DISABLED_AccessibilityAriaSpinButton) {
   RunAriaTest(FILE_PATH_LITERAL("aria-spinbutton.html"));
 }
 
@@ -565,6 +553,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaTextbox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-textbox.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+    AccessibilityAriaTextboxWithSelection) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-textbox-with-selection.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaTimer) {
   RunAriaTest(FILE_PATH_LITERAL("aria-timer.html"));
 }
@@ -590,11 +583,13 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaTreeGrid) {
   RunAriaTest(FILE_PATH_LITERAL("aria-treegrid.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaValueMin) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+    DISABLED_AccessibilityAriaValueMin) {
   RunAriaTest(FILE_PATH_LITERAL("aria-valuemin.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaValueMax) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+    DISABLED_AccessibilityAriaValueMax) {
   RunAriaTest(FILE_PATH_LITERAL("aria-valuemax.html"));
 }
 
@@ -715,8 +710,9 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityDt) {
   RunHtmlTest(FILE_PATH_LITERAL("dt.html"));
 }
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
 // Flaky failures: http://crbug.com/445929.
+// Mac failures: http://crbug.com/571712.
 #define MAYBE_AccessibilityContenteditableDescendants \
     DISABLED_AccessibilityContenteditableDescendants
 #else
@@ -724,11 +720,53 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityDt) {
     AccessibilityContenteditableDescendants
 #endif
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityContenteditableDescendants) {
+                       MAYBE_AccessibilityContenteditableDescendants) {
   RunHtmlTest(FILE_PATH_LITERAL("contenteditable-descendants.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityEm) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityElementClassIdSrcAttr) {
+  RunHtmlTest(FILE_PATH_LITERAL("element-class-id-src-attr.html"));
+}
+
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
+// Flaky failures: http://crbug.com/445929.
+// Mac failures: http://crbug.com/571712.
+#define MAYBE_AccessibilityContenteditableDescendantsWithSelection \
+    DISABLED_AccessibilityContenteditableDescendantsWithSelection
+#else
+#define MAYBE_AccessibilityContenteditableDescendantsWithSelection \
+    AccessibilityContenteditableDescendantsWithSelection
+#endif
+IN_PROC_BROWSER_TEST_F(
+    DumpAccessibilityTreeTest,
+    MAYBE_AccessibilityContenteditableDescendantsWithSelection) {
+  RunHtmlTest(FILE_PATH_LITERAL(
+      "contenteditable-descendants-with-selection.html"));
+}
+
+#if defined(OS_ANDROID)
+// Flaky failures: http://crbug.com/445929.
+#define MAYBE_AccessibilityContenteditableWithEmbeddedContenteditables \
+    DISABLED_AccessibilityContenteditableWithEmbeddedContenteditables
+#else
+#define MAYBE_AccessibilityContenteditableWithEmbeddedContenteditables \
+    AccessibilityContenteditableWithEmbeddedContenteditables
+#endif
+IN_PROC_BROWSER_TEST_F(
+    DumpAccessibilityTreeTest,
+    MAYBE_AccessibilityContenteditableWithEmbeddedContenteditables) {
+  RunHtmlTest(
+      FILE_PATH_LITERAL("contenteditable-with-embedded-contenteditables.html"));
+}
+
+#if defined(OS_ANDROID)
+// Flaky failures: http://crbug.com/515053.
+#define MAYBE_AccessibilityEm DISABLED_AccessibilityEm
+#else
+#define MAYBE_AccessibilityEm AccessibilityEm
+#endif
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, MAYBE_AccessibilityEm) {
   RunHtmlTest(FILE_PATH_LITERAL("em.html"));
 }
 
@@ -812,8 +850,7 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("input-button-in-menu.html"));
 }
 
-// tomas@vivaldi.com: VB-8398
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, MAYBE_AccessibilityInputCheckBox) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputCheckBox) {
   RunHtmlTest(FILE_PATH_LITERAL("input-checkbox.html"));
 }
 
@@ -826,8 +863,7 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputColor) {
   RunHtmlTest(FILE_PATH_LITERAL("input-color.html"));
 }
 
-// tomas@vivaldi.com: VB-8398
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, MAYBE_AccessibilityInputDate) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputDate) {
   RunHtmlTest(FILE_PATH_LITERAL("input-date.html"));
 }
 
@@ -835,16 +871,13 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputDateTime) {
   RunHtmlTest(FILE_PATH_LITERAL("input-datetime.html"));
 }
 
-// tomas@vivaldi.com: VB-8398
+// Fails on OS X 10.9 and higher <https://crbug.com/430622>.
+#if !defined(OS_MACOSX)
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityInputDateTimeLocal) {
-#if defined(OS_MACOSX)
-  // Fails on OS X 10.9 <https://crbug.com/430622>.
-  if (base::mac::IsOSMavericks())
-    return;
-#endif
+                       AccessibilityInputDateTimeLocal) {
   RunHtmlTest(FILE_PATH_LITERAL("input-datetime-local.html"));
 }
+#endif
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputEmail) {
   RunHtmlTest(FILE_PATH_LITERAL("input-email.html"));
@@ -921,7 +954,9 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputTel) {
   RunHtmlTest(FILE_PATH_LITERAL("input-tel.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputText) {
+// Fails on Android GN bot, see crbug.com/569542.
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       MAYBE(AccessibilityInputText)) {
   RunHtmlTest(FILE_PATH_LITERAL("input-text.html"));
 }
 
@@ -934,8 +969,17 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputTextValue) {
   RunHtmlTest(FILE_PATH_LITERAL("input-text-value.html"));
 }
 
-// tomas@vivaldi.com: VB-8398
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, MAYBE_AccessibilityInputTime) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityInputTextValueChanged) {
+  RunHtmlTest(FILE_PATH_LITERAL("input-text-value-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+    AccessibilityInputTextWithSelection) {
+  RunHtmlTest(FILE_PATH_LITERAL("input-text-with-selection.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputTime) {
   RunHtmlTest(FILE_PATH_LITERAL("input-time.html"));
 }
 
@@ -1169,8 +1213,15 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityTableSpans) {
   RunHtmlTest(FILE_PATH_LITERAL("table-spans.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityTextArea) {
+
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityTextarea) {
   RunHtmlTest(FILE_PATH_LITERAL("textarea.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+    AccessibilityTextareaWithSelection) {
+  RunHtmlTest(FILE_PATH_LITERAL("textarea-with-selection.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityTime) {

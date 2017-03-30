@@ -4,10 +4,14 @@
 
 #include "extensions/browser/api/device_permissions_prompt.h"
 
+#include <utility>
+
 #include "base/bind.h"
+#include "base/i18n/message_formatter.h"
 #include "base/scoped_observer.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "device/core/device_client.h"
 #include "device/hid/hid_device_filter.h"
 #include "device/hid/hid_device_info.h"
@@ -36,6 +40,11 @@ using device::UsbService;
 namespace extensions {
 
 namespace {
+
+void NoopHidCallback(const std::vector<scoped_refptr<device::HidDeviceInfo>>&) {
+}
+
+void NoopUsbCallback(const std::vector<scoped_refptr<device::UsbDevice>>&) {}
 
 class UsbDeviceInfo : public DevicePermissionsPrompt::Prompt::DeviceInfo {
  public:
@@ -91,19 +100,18 @@ class UsbDevicePermissionsPrompt : public DevicePermissionsPrompt::Prompt,
   }
 
   base::string16 GetHeading() const override {
-    return l10n_util::GetStringUTF16(
-        multiple() ? IDS_USB_DEVICE_PERMISSIONS_PROMPT_TITLE_MULTIPLE
-                   : IDS_USB_DEVICE_PERMISSIONS_PROMPT_TITLE_SINGLE);
+    return l10n_util::GetSingleOrMultipleStringUTF16(
+        IDS_USB_DEVICE_PERMISSIONS_PROMPT_TITLE, multiple());
   }
 
   void Dismissed() override {
     DevicePermissionsManager* permissions_manager =
         DevicePermissionsManager::Get(browser_context());
     std::vector<scoped_refptr<UsbDevice>> devices;
-    for (const DeviceInfo* device : devices_) {
+    for (const auto& device : devices_) {
       if (device->granted()) {
         const UsbDeviceInfo* usb_device =
-            static_cast<const UsbDeviceInfo*>(device);
+            static_cast<const UsbDeviceInfo*>(device.get());
         devices.push_back(usb_device->device());
         if (permissions_manager) {
           permissions_manager->AllowUsbDevice(extension()->id(),
@@ -130,7 +138,8 @@ class UsbDevicePermissionsPrompt : public DevicePermissionsPrompt::Prompt,
 
   void OnDeviceRemoved(scoped_refptr<UsbDevice> device) override {
     for (auto it = devices_.begin(); it != devices_.end(); ++it) {
-      const UsbDeviceInfo* entry = static_cast<const UsbDeviceInfo*>(*it);
+      const UsbDeviceInfo* entry =
+          static_cast<const UsbDeviceInfo*>((*it).get());
       if (entry->device() == device) {
         devices_.erase(it);
         if (observer()) {
@@ -206,19 +215,18 @@ class HidDevicePermissionsPrompt : public DevicePermissionsPrompt::Prompt,
   }
 
   base::string16 GetHeading() const override {
-    return l10n_util::GetStringUTF16(
-        multiple() ? IDS_HID_DEVICE_PERMISSIONS_PROMPT_TITLE_MULTIPLE
-                   : IDS_HID_DEVICE_PERMISSIONS_PROMPT_TITLE_SINGLE);
+    return l10n_util::GetSingleOrMultipleStringUTF16(
+        IDS_HID_DEVICE_PERMISSIONS_PROMPT_TITLE, multiple());
   }
 
   void Dismissed() override {
     DevicePermissionsManager* permissions_manager =
         DevicePermissionsManager::Get(browser_context());
     std::vector<scoped_refptr<device::HidDeviceInfo>> devices;
-    for (const DeviceInfo* device : devices_) {
+    for (const auto& device : devices_) {
       if (device->granted()) {
         const HidDeviceInfo* hid_device =
-            static_cast<const HidDeviceInfo*>(device);
+            static_cast<const HidDeviceInfo*>(device.get());
         devices.push_back(hid_device->device());
         if (permissions_manager) {
           permissions_manager->AllowHidDevice(extension()->id(),
@@ -247,14 +255,15 @@ class HidDevicePermissionsPrompt : public DevicePermissionsPrompt::Prompt,
           base::Bind(&HidDevicePermissionsPrompt::AddCheckedDevice, this,
                      base::Passed(&device_info)));
 #else
-      AddCheckedDevice(device_info.Pass(), true);
+      AddCheckedDevice(std::move(device_info), true);
 #endif  // defined(OS_CHROMEOS)
     }
   }
 
   void OnDeviceRemoved(scoped_refptr<device::HidDeviceInfo> device) override {
     for (auto it = devices_.begin(); it != devices_.end(); ++it) {
-      const HidDeviceInfo* entry = static_cast<const HidDeviceInfo*>(*it);
+      const HidDeviceInfo* entry =
+          static_cast<const HidDeviceInfo*>((*it).get());
       if (entry->device() == device) {
         devices_.erase(it);
         if (observer()) {
@@ -308,10 +317,9 @@ void DevicePermissionsPrompt::Prompt::SetObserver(Observer* observer) {
 }
 
 base::string16 DevicePermissionsPrompt::Prompt::GetPromptMessage() const {
-  return l10n_util::GetStringFUTF16(multiple_
-                                        ? IDS_DEVICE_PERMISSIONS_PROMPT_MULTIPLE
-                                        : IDS_DEVICE_PERMISSIONS_PROMPT_SINGLE,
-                                    base::UTF8ToUTF16(extension_->name()));
+  return base::i18n::MessageFormatter::FormatWithNumberedArgs(
+      l10n_util::GetStringUTF16(IDS_DEVICE_PERMISSIONS_PROMPT),
+      multiple_ ? "multiple" : "single", extension_->name());
 }
 
 base::string16 DevicePermissionsPrompt::Prompt::GetDeviceName(
@@ -338,7 +346,7 @@ void DevicePermissionsPrompt::Prompt::AddCheckedDevice(
     scoped_ptr<DeviceInfo> device,
     bool allowed) {
   if (allowed) {
-    devices_.push_back(device.Pass());
+    devices_.push_back(std::move(device));
     if (observer_) {
       observer_->OnDevicesChanged();
     }
@@ -373,6 +381,24 @@ void DevicePermissionsPrompt::AskForHidDevices(
   prompt_ = new HidDevicePermissionsPrompt(extension, context, multiple,
                                            filters, callback);
   ShowDialog();
+}
+
+// static
+scoped_refptr<DevicePermissionsPrompt::Prompt>
+DevicePermissionsPrompt::CreateHidPromptForTest(const Extension* extension,
+                                                bool multiple) {
+  return make_scoped_refptr(new HidDevicePermissionsPrompt(
+      extension, nullptr, multiple, std::vector<HidDeviceFilter>(),
+      base::Bind(&NoopHidCallback)));
+}
+
+// static
+scoped_refptr<DevicePermissionsPrompt::Prompt>
+DevicePermissionsPrompt::CreateUsbPromptForTest(const Extension* extension,
+                                                bool multiple) {
+  return make_scoped_refptr(new UsbDevicePermissionsPrompt(
+      extension, nullptr, multiple, std::vector<UsbDeviceFilter>(),
+      base::Bind(&NoopUsbCallback)));
 }
 
 }  // namespace extensions

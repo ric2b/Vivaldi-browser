@@ -66,6 +66,18 @@ void VideoCaptureHost::OnBufferCreated(VideoCaptureControllerID controller_id,
   Send(new VideoCaptureMsg_NewBuffer(controller_id, handle, length, buffer_id));
 }
 
+void VideoCaptureHost::OnBufferCreated2(
+    VideoCaptureControllerID controller_id,
+    const std::vector<gfx::GpuMemoryBufferHandle>& handles,
+    const gfx::Size& size,
+    int buffer_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (entries_.find(controller_id) == entries_.end())
+    return;
+
+  Send(new VideoCaptureMsg_NewBuffer2(controller_id, handles, size, buffer_id));
+}
+
 void VideoCaptureHost::OnBufferDestroyed(VideoCaptureControllerID controller_id,
                                          int buffer_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -93,11 +105,6 @@ void VideoCaptureHost::OnBufferReady(
   params.storage_type = video_frame->storage_type();
   params.coded_size = video_frame->coded_size();
   params.visible_rect = video_frame->visible_rect();
-  if (video_frame->HasTextures()) {
-    DCHECK_EQ(media::VideoFrame::NumPlanes(video_frame->format()), 1u)
-        << "Multiplanar textures not supported";
-    params.mailbox_holder = video_frame->mailbox_holder(0);
-  }
 
   Send(new VideoCaptureMsg_BufferReady(params));
 }
@@ -258,7 +265,7 @@ void VideoCaptureHost::OnResumeCapture(
 void VideoCaptureHost::OnRendererFinishedWithBuffer(
     int device_id,
     int buffer_id,
-    uint32 sync_point,
+    const gpu::SyncToken& sync_token,
     double consumer_resource_utilization) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -267,10 +274,7 @@ void VideoCaptureHost::OnRendererFinishedWithBuffer(
   if (it != entries_.end()) {
     const base::WeakPtr<VideoCaptureController>& controller = it->second;
     if (controller) {
-      controller->ReturnBuffer(controller_id,
-                               this,
-                               buffer_id,
-                               sync_point,
+      controller->ReturnBuffer(controller_id, this, buffer_id, sync_token,
                                consumer_resource_utilization);
     }
   }

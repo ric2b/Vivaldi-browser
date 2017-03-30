@@ -4,6 +4,9 @@
 
 #include "content/child/ftp_directory_listing_response_delegate.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/i18n/icu_encoding_detection.h"
@@ -14,9 +17,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "content/child/weburlresponse_extradata_impl.h"
+#include "net/base/directory_listing.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/ftp/ftp_directory_listing_parser.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLLoaderClient.h"
@@ -99,7 +102,7 @@ void FtpDirectoryListingResponseDelegate::OnCompletedRequest() {
       continue;
 
     bool is_directory = (entry.type == FtpDirectoryListingEntry::DIRECTORY);
-    int64 size = entry.size;
+    int64_t size = entry.size;
     if (entry.type != FtpDirectoryListingEntry::FILE)
       size = 0;
     SendDataToClient(net::GetDirectoryListingEntry(

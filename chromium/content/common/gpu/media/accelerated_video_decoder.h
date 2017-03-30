@@ -5,6 +5,9 @@
 #ifndef CONTENT_COMMON_GPU_MEDIA_ACCELERATED_VIDEO_DECODER_H_
 #define CONTENT_COMMON_GPU_MEDIA_ACCELERATED_VIDEO_DECODER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "content/common/content_export.h"
 #include "ui/gfx/geometry/size.h"
@@ -50,7 +53,7 @@ class CONTENT_EXPORT AcceleratedVideoDecoder {
 
   // Return dimensions/required number of output surfaces that client should
   // be ready to provide for the decoder to function properly.
-  // To be used after Decode() returns kNeedNewSurfaces.
+  // To be used after Decode() returns kAllocateNewSurfaces.
   virtual gfx::Size GetPicSize() const = 0;
   virtual size_t GetRequiredNumOfPictures() const = 0;
 

@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <queue>
 #include <string>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
@@ -80,7 +83,6 @@ class TestingCloudPolicyClientForRemoteCommands : public CloudPolicyClient {
       : CloudPolicyClient(std::string(), /* machine_id */
                           std::string(), /* machine_model */
                           std::string(), /* verification_key_hash */
-                          USER_AFFILIATION_NONE,
                           nullptr,
                           nullptr),
         server_(server) {
@@ -145,7 +147,7 @@ class TestingCloudPolicyClientForRemoteCommands : public CloudPolicyClient {
       const RemoteCommandCallback& callback,
       const FetchCallExpectation& fetch_call_expectation) {
     const std::vector<em::RemoteCommand> fetched_commands =
-        server_->FetchCommands(last_command_id.Pass(), command_results);
+        server_->FetchCommands(std::move(last_command_id), command_results);
 
     EXPECT_EQ(fetch_call_expectation.expected_command_results,
               command_results.size());
@@ -245,7 +247,7 @@ class RemoteCommandsServiceTest : public testing::Test {
 
   void SetUp() override {
     server_.reset(new TestingRemoteCommandsServer());
-    server_->SetClock(task_runner_->GetMockTickClock().Pass());
+    server_->SetClock(task_runner_->GetMockTickClock());
     cloud_policy_client_.reset(
         new TestingCloudPolicyClientForRemoteCommands(server_.get()));
   }
@@ -257,8 +259,8 @@ class RemoteCommandsServiceTest : public testing::Test {
   }
 
   void StartService(scoped_ptr<RemoteCommandsFactory> factory) {
-    remote_commands_service_.reset(
-        new RemoteCommandsService(factory.Pass(), cloud_policy_client_.get()));
+    remote_commands_service_.reset(new RemoteCommandsService(
+        std::move(factory), cloud_policy_client_.get()));
     remote_commands_service_->SetClockForTesting(
         task_runner_->GetMockTickClock());
   }
@@ -287,7 +289,7 @@ TEST_F(RemoteCommandsServiceTest, NoCommands) {
       new MockTestRemoteCommandFactory());
   EXPECT_CALL(*factory, BuildTestCommand()).Times(0);
 
-  StartService(factory.Pass());
+  StartService(std::move(factory));
 
   // A fetch requst should get nothing from server.
   cloud_policy_client_->ExpectFetchCommands(0u, 0u, base::Closure());
@@ -313,7 +315,7 @@ TEST_F(RemoteCommandsServiceTest, ExistingCommand) {
     // Start the service, run until the command is fetched.
     cloud_policy_client_->ExpectFetchCommands(0u, 1u,
                                               scoped_runner.QuitClosure());
-    StartService(factory.Pass());
+    StartService(std::move(factory));
     EXPECT_TRUE(remote_commands_service_->FetchRemoteCommands());
 
     scoped_runner.Run();
@@ -333,7 +335,7 @@ TEST_F(RemoteCommandsServiceTest, NewCommand) {
       new MockTestRemoteCommandFactory());
   EXPECT_CALL(*factory, BuildTestCommand()).Times(1);
 
-  StartService(factory.Pass());
+  StartService(std::move(factory));
 
   // Set up expectations on fetch commands calls. The first request will fetch
   // one command, and the second will fetch none but provide result for the
@@ -358,7 +360,7 @@ TEST_F(RemoteCommandsServiceTest, NewCommandFollwingFetch) {
       new MockTestRemoteCommandFactory());
   EXPECT_CALL(*factory, BuildTestCommand()).Times(1);
 
-  StartService(factory.Pass());
+  StartService(std::move(factory));
 
   {
     ScopedMockTimeTaskRunner::ScopedRunner scoped_runner(task_runner_);

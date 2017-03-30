@@ -1,0 +1,137 @@
+/*
+ * Copyright (C) 2012 Google Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in the documentation and/or other materials provided with the
+ *    distribution.
+ * 3. Neither the name of Google Inc. nor the names of its contributors
+ *    may be used to endorse or promote products derived from this
+ *    software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+// https://w3c.github.io/webrtc-pc/#state-definitions
+
+enum RTCSignalingState {
+    "stable",
+    "have-local-offer",
+    "have-remote-offer",
+    "have-local-pranswer",
+    "have-remote-pranswer",
+    "closed"
+};
+
+enum RTCIceGatheringState {
+    "new",
+    "gathering",
+    "complete"
+};
+
+enum RTCIceConnectionState {
+    "new",
+    "checking",
+    "connected",
+    "completed",
+    "failed",
+    "disconnected",
+    "closed"
+};
+
+// https://w3c.github.io/webrtc-pc/#interface-definition
+
+// TODO(guidou): Many types are of the wrong type in this interface:
+//  * Dictionary -> specific dictionary types like RTCConfiguration
+//  * RTCErrorCallback -> RTCPeerConnectionErrorCallback
+//  * VoidCallback -> VoidFunction
+[
+    GarbageCollected,
+    ActiveDOMObject,
+    // TODO(guidou): There should only be one constructor argument, and it
+    // should be optional.
+    Constructor(Dictionary rtcConfiguration, optional Dictionary mediaConstraints),
+    ConstructorCallWith=ExecutionContext,
+    NoInterfaceObject,
+    RaisesException=Constructor,
+] interface RTCPeerConnection : EventTarget {
+    // Promise<RTCSessionDescription> createOffer(optional RTCOfferOptions options);
+    // Promise<RTCSessionDescription> createAnswer(optional RTCAnswerOptions options);
+    // Promise<void> setLocalDescription(RTCSessionDescription description);
+    readonly attribute RTCSessionDescription? localDescription;
+    // readonly attribute RTCSessionDescription? currentLocalDescription;
+    // readonly attribute RTCSessionDescription? pendingLocalDescription;
+    // Promise<void> setRemoteDescription(RTCSessionDescription description);
+    readonly attribute RTCSessionDescription? remoteDescription;
+    // readonly attribute RTCSessionDescription? currentRemoteDescription;
+    // readonly attribute RTCSessionDescription? pendingRemoteDescription;
+    // TODO(guidou): addIceCandidate() should return a Promise.
+    [RaisesException] void addIceCandidate(RTCIceCandidate candidate);
+    readonly attribute RTCSignalingState signalingState;
+    readonly attribute RTCIceGatheringState iceGatheringState;
+    readonly attribute RTCIceConnectionState iceConnectionState;
+    // readonly attribute boolean? canTrickleIceCandidates;
+    // RTCConfiguration getConfiguration();
+    // void setConfiguration(RTCConfiguration configuration);
+    // TODO(guidou): close() should never throw an exception.
+    [RaisesException] void close();
+    attribute EventHandler onnegotiationneeded;
+    attribute EventHandler onicecandidate;
+    attribute EventHandler onsignalingstatechange;
+    attribute EventHandler oniceconnectionstatechange;
+    // attribute EventHandler onicegatheringstatechange;
+
+    // https://w3c.github.io/webrtc-pc/#legacy-interface-extensions
+    // TODO(guidou): The failureCallback argument should be non-optional.
+    [CallWith=ExecutionContext, RaisesException] void createOffer(RTCSessionDescriptionCallback successCallback, [Default=Undefined] optional RTCErrorCallback failureCallback, optional Dictionary rtcOfferOptions);
+    // TODO(guidou): None of the arguments should be optional.
+    [CallWith=ExecutionContext, RaisesException] void setLocalDescription(RTCSessionDescription description, [Default=Undefined] optional VoidCallback successCallback, [Default=Undefined] optional RTCErrorCallback failureCallback);
+    // TODO(guidou): The failureCallback argument should be non-optional, and
+    // there should be no mediaConstraints argument.
+    [CallWith=ExecutionContext, RaisesException] void createAnswer(RTCSessionDescriptionCallback successCallback, [Default=Undefined] optional RTCErrorCallback failureCallback, optional Dictionary mediaConstraints);
+    // TODO(guidou): The successCallback and failureCallback arguments should be
+    // non-optional.
+    [CallWith=ExecutionContext, RaisesException] void setRemoteDescription(RTCSessionDescription description, [Default=Undefined] optional VoidCallback successCallback, [Default=Undefined] optional RTCErrorCallback failureCallback);
+    [RaisesException] void addIceCandidate(RTCIceCandidate candidate, VoidCallback successCallback, RTCErrorCallback failureCallback);
+    // TODO(guidou): The selector argument should the first (nullable,
+    // non-optional) argument, and there should be a third failureCallback
+    // argument.
+    [CallWith=ExecutionContext, LegacyInterfaceTypeChecking] void getStats(RTCStatsCallback successCallback, [Default=Undefined] optional MediaStreamTrack selector);
+
+    // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api
+    // TODO(guidou): The label argument should have [TreatNullAs=EmptyString]
+    // and be non-nullable.
+    [RaisesException] RTCDataChannel createDataChannel([TreatUndefinedAs=NullString] DOMString? label, optional Dictionary options);
+    attribute EventHandler ondatachannel;
+
+    // Non-standard or removed from the spec:
+    [RaisesException] void updateIce(optional Dictionary configuration, optional Dictionary mediaConstraints);
+    sequence<MediaStream> getLocalStreams();
+    sequence<MediaStream> getRemoteStreams();
+    MediaStream getStreamById(DOMString streamId);
+    [RaisesException] void addStream(MediaStream? stream, optional Dictionary mediaConstraints);
+    [RaisesException] void removeStream(MediaStream? stream);
+    [RaisesException] RTCDTMFSender createDTMFSender(MediaStreamTrack track);
+    attribute EventHandler onaddstream;
+    attribute EventHandler onremovestream;
+
+    // Certificate management
+    // http://w3c.github.io/webrtc-pc/#sec.cert-mgmt
+    [RaisesException, CallWith=ScriptState] static Promise<RTCCertificate> generateCertificate(AlgorithmIdentifier keygenAlgorithm);
+};

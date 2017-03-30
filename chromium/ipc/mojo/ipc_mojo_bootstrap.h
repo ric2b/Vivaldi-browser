@@ -5,15 +5,17 @@
 #ifndef IPC_MOJO_IPC_MOJO_BOOTSTRAP_H_
 #define IPC_MOJO_IPC_MOJO_BOOTSTRAP_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process_handle.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_listener.h"
 #include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
 
 namespace IPC {
-
-class AttachmentBroker;
 
 // MojoBootstrap establishes a bootstrap pipe between two processes in
 // Chrome. It creates a native IPC::Channel first, then sends one
@@ -29,8 +31,8 @@ class IPC_MOJO_EXPORT MojoBootstrap : public Listener {
  public:
   class Delegate {
    public:
-    virtual void OnPipeAvailable(
-        mojo::embedder::ScopedPlatformHandle handle) = 0;
+    virtual void OnPipeAvailable(mojo::embedder::ScopedPlatformHandle handle,
+                                 int32_t peer_pid) = 0;
     virtual void OnBootstrapError() = 0;
   };
 
@@ -39,8 +41,7 @@ class IPC_MOJO_EXPORT MojoBootstrap : public Listener {
   // mode as |mode|. The result is notified to passed |delegate|.
   static scoped_ptr<MojoBootstrap> Create(ChannelHandle handle,
                                           Channel::Mode mode,
-                                          Delegate* delegate,
-                                          AttachmentBroker* broker);
+                                          Delegate* delegate);
 
   MojoBootstrap();
   ~MojoBootstrap() override;

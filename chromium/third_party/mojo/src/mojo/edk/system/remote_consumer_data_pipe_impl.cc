@@ -2,20 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/remote_consumer_data_pipe_impl.h"
+#include "third_party/mojo/src/mojo/edk/system/remote_consumer_data_pipe_impl.h"
 
 #include <string.h>
-
 #include <algorithm>
+#include <limits>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/edk/system/channel.h"
-#include "mojo/edk/system/channel_endpoint.h"
-#include "mojo/edk/system/configuration.h"
-#include "mojo/edk/system/data_pipe.h"
-#include "mojo/edk/system/message_in_transit.h"
-#include "mojo/edk/system/remote_data_pipe_ack.h"
+#include "third_party/mojo/src/mojo/edk/system/channel.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/configuration.h"
+#include "third_party/mojo/src/mojo/edk/system/data_pipe.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit.h"
+#include "third_party/mojo/src/mojo/edk/system/remote_data_pipe_ack.h"
 
 namespace mojo {
 namespace system {
@@ -68,10 +69,14 @@ bool ValidateIncomingMessage(size_t element_num_bytes,
 
 RemoteConsumerDataPipeImpl::RemoteConsumerDataPipeImpl(
     ChannelEndpoint* channel_endpoint,
-    size_t consumer_num_bytes)
+    size_t consumer_num_bytes,
+    scoped_ptr<char, base::AlignedFreeDeleter> buffer,
+    size_t start_index)
     : channel_endpoint_(channel_endpoint),
-      consumer_num_bytes_(consumer_num_bytes) {
-  // Note: |buffer_| is lazily allocated.
+      consumer_num_bytes_(consumer_num_bytes),
+      buffer_(std::move(buffer)),
+      start_index_(start_index) {
+  // Note: |buffer_| may be null (in which case it'll be lazily allocated).
 }
 
 RemoteConsumerDataPipeImpl::~RemoteConsumerDataPipeImpl() {
@@ -152,7 +157,7 @@ MojoResult RemoteConsumerDataPipeImpl::ProducerWriteData(
         MessageInTransit::Type::ENDPOINT_CLIENT,
         MessageInTransit::Subtype::ENDPOINT_CLIENT_DATA,
         static_cast<uint32_t>(message_num_bytes), elements.At(offset)));
-    if (!channel_endpoint_->EnqueueMessage(message.Pass())) {
+    if (!channel_endpoint_->EnqueueMessage(std::move(message))) {
       Disconnect();
       break;
     }
@@ -172,8 +177,7 @@ MojoResult RemoteConsumerDataPipeImpl::ProducerWriteData(
 
 MojoResult RemoteConsumerDataPipeImpl::ProducerBeginWriteData(
     UserPointer<void*> buffer,
-    UserPointer<uint32_t> buffer_num_bytes,
-    uint32_t min_num_bytes_to_write) {
+    UserPointer<uint32_t> buffer_num_bytes) {
   DCHECK(consumer_open());
   DCHECK(channel_endpoint_);
 
@@ -181,17 +185,12 @@ MojoResult RemoteConsumerDataPipeImpl::ProducerBeginWriteData(
   DCHECK_EQ(consumer_num_bytes_ % element_num_bytes(), 0u);
 
   size_t max_num_bytes_to_write = capacity_num_bytes() - consumer_num_bytes_;
-  if (min_num_bytes_to_write > max_num_bytes_to_write) {
-    // Don't return "should wait" since you can't wait for a specified amount
-    // of data.
-    return MOJO_RESULT_OUT_OF_RANGE;
-  }
-
   // Don't go into a two-phase write if there's no room.
   if (max_num_bytes_to_write == 0)
     return MOJO_RESULT_SHOULD_WAIT;
 
   EnsureBuffer();
+  start_index_ = 0;  // We always have the full buffer.
   buffer.Put(buffer_.get());
   buffer_num_bytes.Put(static_cast<uint32_t>(max_num_bytes_to_write));
   set_producer_two_phase_max_num_bytes_written(
@@ -201,12 +200,12 @@ MojoResult RemoteConsumerDataPipeImpl::ProducerBeginWriteData(
 
 MojoResult RemoteConsumerDataPipeImpl::ProducerEndWriteData(
     uint32_t num_bytes_written) {
+  DCHECK(buffer_);
   DCHECK_LE(num_bytes_written, producer_two_phase_max_num_bytes_written());
   DCHECK_EQ(num_bytes_written % element_num_bytes(), 0u);
   DCHECK_LE(num_bytes_written, capacity_num_bytes() - consumer_num_bytes_);
 
   if (!consumer_open()) {
-    DCHECK(buffer_);
     set_producer_two_phase_max_num_bytes_written(0);
     DestroyBuffer();
     return MOJO_RESULT_OK;
@@ -227,11 +226,12 @@ MojoResult RemoteConsumerDataPipeImpl::ProducerEndWriteData(
   while (offset < num_bytes_written) {
     size_t message_num_bytes =
         std::min(max_message_num_bytes, num_bytes_written - offset);
-    scoped_ptr<MessageInTransit> message(new MessageInTransit(
-        MessageInTransit::Type::ENDPOINT_CLIENT,
-        MessageInTransit::Subtype::ENDPOINT_CLIENT_DATA,
-        static_cast<uint32_t>(message_num_bytes), buffer_.get() + offset));
-    if (!channel_endpoint_->EnqueueMessage(message.Pass())) {
+    scoped_ptr<MessageInTransit> message(
+        new MessageInTransit(MessageInTransit::Type::ENDPOINT_CLIENT,
+                             MessageInTransit::Subtype::ENDPOINT_CLIENT_DATA,
+                             static_cast<uint32_t>(message_num_bytes),
+                             buffer_.get() + start_index_ + offset));
+    if (!channel_endpoint_->EnqueueMessage(std::move(message))) {
       set_producer_two_phase_max_num_bytes_written(0);
       Disconnect();
       return MOJO_RESULT_OK;
@@ -285,7 +285,7 @@ bool RemoteConsumerDataPipeImpl::ProducerEndSerialize(
 
   if (!consumer_open()) {
     // Case 1: The consumer is closed.
-    s->consumer_num_bytes = static_cast<size_t>(-1);
+    s->consumer_num_bytes = static_cast<uint32_t>(-1);
     *actual_size = sizeof(SerializedDataPipeProducerDispatcher);
     return true;
   }
@@ -293,7 +293,8 @@ bool RemoteConsumerDataPipeImpl::ProducerEndSerialize(
   // Case 2: The consumer isn't closed. We pass |channel_endpoint| back to the
   // |Channel|. There's no reason for us to continue to exist afterwards.
 
-  s->consumer_num_bytes = consumer_num_bytes_;
+  DCHECK(consumer_num_bytes_ < std::numeric_limits<uint32_t>::max());
+  s->consumer_num_bytes = static_cast<uint32_t>(consumer_num_bytes_);
   // Note: We don't use |port|.
   scoped_refptr<ChannelEndpoint> channel_endpoint;
   channel_endpoint.swap(channel_endpoint_);
@@ -336,8 +337,7 @@ MojoResult RemoteConsumerDataPipeImpl::ConsumerQueryData(
 
 MojoResult RemoteConsumerDataPipeImpl::ConsumerBeginReadData(
     UserPointer<const void*> /*buffer*/,
-    UserPointer<uint32_t> /*buffer_num_bytes*/,
-    uint32_t /*min_num_bytes_to_read*/) {
+    UserPointer<uint32_t> /*buffer_num_bytes*/) {
   NOTREACHED();
   return MOJO_RESULT_INTERNAL;
 }

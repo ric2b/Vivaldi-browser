@@ -7,9 +7,11 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,6 +21,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/plugin_service.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
@@ -69,7 +72,7 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
  protected:
   void CheckContentSettingsSet() {
     HostContentSettingsMap* map =
-        profile_->GetHostContentSettingsMap();
+        HostContentSettingsMapFactory::GetForProfile(profile_);
     content_settings::CookieSettings* cookie_settings =
         CookieSettingsFactory::GetForProfile(profile_).get();
 
@@ -123,6 +126,16 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     EXPECT_EQ(CONTENT_SETTING_ASK,
               map->GetContentSetting(example_url,
                                      example_url,
+                                     CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                                     std::string()));
+    EXPECT_EQ(CONTENT_SETTING_ASK,
+              map->GetContentSetting(example_url,
+                                     example_url,
+                                     CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+                                     std::string()));
+    EXPECT_EQ(CONTENT_SETTING_ASK,
+              map->GetContentSetting(example_url,
+                                     example_url,
                                      CONTENT_SETTINGS_TYPE_PPAPI_BROKER,
                                      std::string()));
     EXPECT_EQ(CONTENT_SETTING_ASK,
@@ -161,6 +174,12 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
             url, url, CONTENT_SETTINGS_TYPE_MOUSELOCK, std::string()));
     EXPECT_EQ(CONTENT_SETTING_BLOCK,
         map->GetContentSetting(
+            url, url, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string()));
+    EXPECT_EQ(CONTENT_SETTING_BLOCK,
+        map->GetContentSetting(
+            url, url, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string()));
+    EXPECT_EQ(CONTENT_SETTING_BLOCK,
+        map->GetContentSetting(
             url, url, CONTENT_SETTINGS_TYPE_PPAPI_BROKER, std::string()));
     EXPECT_EQ(CONTENT_SETTING_BLOCK,
         map->GetContentSetting(
@@ -170,7 +189,7 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
 
   void CheckContentSettingsDefault() {
     HostContentSettingsMap* map =
-        profile_->GetHostContentSettingsMap();
+        HostContentSettingsMapFactory::GetForProfile(profile_);
     content_settings::CookieSettings* cookie_settings =
         CookieSettingsFactory::GetForProfile(profile_).get();
 
@@ -185,7 +204,7 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     EXPECT_EQ(CONTENT_SETTING_ALLOW,
               map->GetContentSetting(
                   url, url, CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string()));
-    EXPECT_EQ(CONTENT_SETTING_ALLOW,
+    EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
               map->GetContentSetting(
                   url, url, CONTENT_SETTINGS_TYPE_PLUGINS, std::string()));
     EXPECT_EQ(CONTENT_SETTING_BLOCK,
@@ -204,6 +223,12 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     EXPECT_EQ(CONTENT_SETTING_ASK,
         map->GetContentSetting(
             url, url, CONTENT_SETTINGS_TYPE_MOUSELOCK, std::string()));
+    EXPECT_EQ(CONTENT_SETTING_ASK,
+        map->GetContentSetting(
+            url, url, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string()));
+    EXPECT_EQ(CONTENT_SETTING_ASK,
+        map->GetContentSetting(
+            url, url, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string()));
     EXPECT_EQ(CONTENT_SETTING_ASK,
         map->GetContentSetting(
             url, url, CONTENT_SETTINGS_TYPE_PPAPI_BROKER, std::string()));
@@ -272,6 +297,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
 
   EXPECT_TRUE(RunExtensionTest("content_settings/getresourceidentifiers"))
       << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
+                       UnsupportedDefaultSettings) {
+  const char kExtensionPath[] = "content_settings/unsupporteddefaultsettings";
+  EXPECT_TRUE(RunExtensionSubtest(kExtensionPath, "test.html")) << message_;
 }
 
 }  // namespace extensions

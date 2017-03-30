@@ -12,8 +12,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -182,9 +182,7 @@ class ExtensionDownloader : public net::URLFetcherDelegate,
                         Manifest::Type extension_type,
                         const GURL& extension_update_url,
                         const std::string& update_url_data,
-                        int request_id,
-                        bool force_update,
-                        const std::string& install_source_override);
+                        int request_id);
 
   // Adds all recorded stats taken so far to histogram counts.
   void ReportStats() const;

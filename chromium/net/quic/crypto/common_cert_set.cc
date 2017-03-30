@@ -4,8 +4,8 @@
 
 #include "net/quic/crypto/common_cert_set.h"
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "net/quic/quic_utils.h"
 
@@ -15,6 +15,10 @@ namespace net {
 
 namespace common_cert_set_1 {
 #include "net/quic/crypto/common_cert_set_1.c"
+}
+
+namespace common_cert_set_2 {
+#include "net/quic/crypto/common_cert_set_2.c"
 }
 
 namespace {
@@ -28,20 +32,22 @@ struct CertSet {
   // of each certificate.
   const size_t* lens;
   // hash contains the 64-bit, FNV-1a hash of this set.
-  uint64 hash;
+  uint64_t hash;
 };
 
 const CertSet kSets[] = {
-  {
-    common_cert_set_1::kNumCerts,
-    common_cert_set_1::kCerts,
-    common_cert_set_1::kLens,
-    common_cert_set_1::kHash,
-  },
+    {
+        common_cert_set_1::kNumCerts, common_cert_set_1::kCerts,
+        common_cert_set_1::kLens, common_cert_set_1::kHash,
+    },
+    {
+        common_cert_set_2::kNumCerts, common_cert_set_2::kCerts,
+        common_cert_set_2::kLens, common_cert_set_2::kHash,
+    },
 };
 
-const uint64 kSetHashes[] = {
-  common_cert_set_1::kHash,
+const uint64_t kSetHashes[] = {
+    common_cert_set_1::kHash, common_cert_set_2::kHash,
 };
 
 // Compare returns a value less than, equal to or greater than zero if |a| is
@@ -71,10 +77,10 @@ class CommonCertSetsQUIC : public CommonCertSets {
   // CommonCertSets interface.
   StringPiece GetCommonHashes() const override {
     return StringPiece(reinterpret_cast<const char*>(kSetHashes),
-                       sizeof(uint64) * arraysize(kSetHashes));
+                       sizeof(uint64_t) * arraysize(kSetHashes));
   }
 
-  StringPiece GetCert(uint64 hash, uint32 index) const override {
+  StringPiece GetCert(uint64_t hash, uint32_t index) const override {
     for (size_t i = 0; i < arraysize(kSets); i++) {
       if (kSets[i].hash == hash) {
         if (index < kSets[i].num_certs) {
@@ -91,16 +97,16 @@ class CommonCertSetsQUIC : public CommonCertSets {
 
   bool MatchCert(StringPiece cert,
                  StringPiece common_set_hashes,
-                 uint64* out_hash,
-                 uint32* out_index) const override {
-    if (common_set_hashes.size() % sizeof(uint64) != 0) {
+                 uint64_t* out_hash,
+                 uint32_t* out_index) const override {
+    if (common_set_hashes.size() % sizeof(uint64_t) != 0) {
       return false;
     }
 
-    for (size_t i = 0; i < common_set_hashes.size() / sizeof(uint64); i++) {
-      uint64 hash;
-      memcpy(&hash, common_set_hashes.data() + i * sizeof(uint64),
-             sizeof(uint64));
+    for (size_t i = 0; i < common_set_hashes.size() / sizeof(uint64_t); i++) {
+      uint64_t hash;
+      memcpy(&hash, common_set_hashes.data() + i * sizeof(uint64_t),
+             sizeof(uint64_t));
 
       for (size_t j = 0; j < arraysize(kSets); j++) {
         if (kSets[j].hash != hash) {
@@ -137,14 +143,14 @@ class CommonCertSetsQUIC : public CommonCertSets {
   }
 
   static CommonCertSetsQUIC* GetInstance() {
-    return Singleton<CommonCertSetsQUIC>::get();
+    return base::Singleton<CommonCertSetsQUIC>::get();
   }
 
  private:
   CommonCertSetsQUIC() {}
   ~CommonCertSetsQUIC() override {}
 
-  friend struct DefaultSingletonTraits<CommonCertSetsQUIC>;
+  friend struct base::DefaultSingletonTraits<CommonCertSetsQUIC>;
   DISALLOW_COPY_AND_ASSIGN(CommonCertSetsQUIC);
 };
 

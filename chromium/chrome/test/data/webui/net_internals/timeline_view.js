@@ -289,15 +289,7 @@ TEST_F('NetInternalsTest', 'netInternalsTimelineViewRange', function() {
 /**
  * Tests using the scroll bar.
  */
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_netInternalsTimelineViewScrollbar ' +
-    'DISABLED_netInternalsTimelineViewScrollbar');
-GEN('#else');
-GEN('#define MAYBE_netInternalsTimelineViewScrollbar ' +
-    'netInternalsTimelineViewScrollbar');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('NetInternalsTest', 'MAYBE_netInternalsTimelineViewScrollbar', function() {
+TEST_F('NetInternalsTest', 'netInternalsTimelineViewScrollbar', function() {
   // The range we want the graph to have.
   var expectedGraphRange = canvas().width;
 

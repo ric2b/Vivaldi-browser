@@ -5,9 +5,12 @@
 #ifndef UI_GL_GL_SURFACE_GLX_H_
 #define UI_GL_GL_SURFACE_GLX_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
@@ -44,8 +47,6 @@ class GL_EXPORT GLSurfaceGLX : public GLSurface {
  protected:
   ~GLSurfaceGLX() override;
 
-  static void* GetConfig(gfx::AcceleratedWidget window);
-
  private:
   DISALLOW_COPY_AND_ASSIGN(GLSurfaceGLX);
 };
@@ -59,7 +60,9 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX,
   // Implement GLSurfaceGLX.
   bool Initialize() override;
   void Destroy() override;
-  bool Resize(const gfx::Size& size) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   bool IsOffscreen() override;
   gfx::SwapResult SwapBuffers() override;
   gfx::Size GetSize() override;
@@ -74,7 +77,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX,
 
  private:
   // The handle for the drawable to make current or swap.
-  gfx::AcceleratedWidget GetDrawableHandle() const;
+  GLXDrawable GetDrawableHandle() const;
 
   // PlatformEventDispatcher implementation
   bool CanDispatchEvent(const ui::PlatformEvent& event) override;
@@ -86,7 +89,10 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX,
   // Child window, used to control resizes so that they're in-order with GL.
   gfx::AcceleratedWidget window_;
 
-  void* config_;
+  // GLXDrawable for the window.
+  GLXWindow glx_window_;
+
+  GLXFBConfig config_;
   gfx::Size size_;
 
   scoped_ptr<VSyncProvider> vsync_provider_;
@@ -113,9 +119,12 @@ class GL_EXPORT UnmappedNativeViewGLSurfaceGLX : public GLSurfaceGLX {
 
  private:
   gfx::Size size_;
-  void* config_;
+  GLXFBConfig config_;
   // Unmapped dummy window, used to provide a compatible surface.
   gfx::AcceleratedWidget window_;
+
+  // GLXDrawable for the window.
+  GLXWindow glx_window_;
 
   DISALLOW_COPY_AND_ASSIGN(UnmappedNativeViewGLSurfaceGLX);
 };

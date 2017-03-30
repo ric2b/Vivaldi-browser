@@ -11,8 +11,8 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/values.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/extensions/features/feature_channel.h"
+#include "components/version_info/version_info.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest.h"
@@ -23,7 +23,7 @@ namespace extensions {
 class StorageSchemaManifestHandlerTest : public testing::Test {
  public:
   StorageSchemaManifestHandlerTest()
-      : scoped_channel_(chrome::VersionInfo::CHANNEL_DEV) {}
+      : scoped_channel_(version_info::Channel::DEV) {}
 
   ~StorageSchemaManifestHandlerTest() override {}
 

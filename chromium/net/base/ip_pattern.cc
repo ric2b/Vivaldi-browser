@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -54,9 +55,7 @@ bool IPPattern::ComponentPattern::Match(uint32_t value) const {
 
 IPPattern::IPPattern() : is_ipv4_(true) {}
 
-IPPattern::~IPPattern() {
-  STLDeleteElements(&component_patterns_);
-}
+IPPattern::~IPPattern() {}
 
 bool IPPattern::Match(const IPAddressNumber& address) const {
   if (ip_mask_.empty())
@@ -134,7 +133,7 @@ bool IPPattern::ParsePattern(const std::string& ip_pattern) {
       return false;
     }
     ip_mask_.push_back(false);
-    component_patterns_.push_back(component_pattern.release());
+    component_patterns_.push_back(std::move(component_pattern));
   }
   return true;
 }

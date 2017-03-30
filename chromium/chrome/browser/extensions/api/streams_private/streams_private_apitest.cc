@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
@@ -43,7 +46,6 @@ using extensions::ResultCatcher;
 using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;
 using net::test_server::HttpResponse;
-using net::test_server::EmbeddedTestServer;
 using testing::_;
 
 namespace streams_private = extensions::api::streams_private;
@@ -60,7 +62,7 @@ scoped_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
   if (request.relative_url == "/doc_path.doc") {
     response->set_code(net::HTTP_OK);
     response->set_content_type("application/msword");
-    return response.Pass();
+    return std::move(response);
   }
 
   // For relative path "/spreadsheet_path.xls", return success response with
@@ -71,7 +73,7 @@ scoped_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
     // Test that multiple headers with the same name are merged.
     response->AddCustomHeader("Test-Header", "part1");
     response->AddCustomHeader("Test-Header", "part2");
-    return response.Pass();
+    return std::move(response);
   }
 
   // For relative path "/text_path_attch.txt", return success response with
@@ -83,7 +85,7 @@ scoped_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
     response->set_content_type("text/plain");
     response->AddCustomHeader("Content-Disposition",
                               "attachment; filename=test_path.txt");
-    return response.Pass();
+    return std::move(response);
   }
 
   // For relative path "/test_path_attch.txt", return success response with
@@ -92,7 +94,7 @@ scoped_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
     response->set_code(net::HTTP_OK);
     response->set_content("txt content");
     response->set_content_type("text/plain");
-    return response.Pass();
+    return std::move(response);
   }
 
   // A random HTML file to navigate to.
@@ -100,7 +102,7 @@ scoped_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
     response->set_code(net::HTTP_OK);
     response->set_content("html content");
     response->set_content_type("text/html");
-    return response.Pass();
+    return std::move(response);
   }
 
   // RTF files for testing chrome.streamsPrivate.abort().
@@ -108,19 +110,19 @@ scoped_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
       request.relative_url == "/no_abort.rtf") {
     response->set_code(net::HTTP_OK);
     response->set_content_type("application/rtf");
-    return response.Pass();
+    return std::move(response);
   }
 
   // Respond to /favicon.ico for navigating to the page.
   if (request.relative_url == "/favicon.ico") {
     response->set_code(net::HTTP_NOT_FOUND);
-    return response.Pass();
+    return std::move(response);
   }
 
   // No other requests should be handled in the tests.
   EXPECT_TRUE(false) << "NOTREACHED!";
   response->set_code(net::HTTP_NOT_FOUND);
-  return response.Pass();
+  return std::move(response);
 }
 
 // Tests to verify that resources are correctly intercepted by
@@ -136,8 +138,8 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
 
   void SetUpOnMainThread() override {
     // Init test server.
-    test_server_.reset(new EmbeddedTestServer);
-    ASSERT_TRUE(test_server_->InitializeAndWaitUntilReady());
+    test_server_.reset(new net::EmbeddedTestServer);
+    ASSERT_TRUE(test_server_->Start());
     test_server_->RegisterRequestHandler(base::Bind(&HandleRequest));
 
     ExtensionApiTest::SetUpOnMainThread();
@@ -180,13 +182,13 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
     info.tab_id = 10;
     info.expected_content_size = 20;
 
-    scoped_ptr<Event> event(
-        new Event(extensions::events::UNKNOWN,
-                  streams_private::OnExecuteMimeTypeHandler::kEventName,
-                  streams_private::OnExecuteMimeTypeHandler::Create(info)));
+    scoped_ptr<Event> event(new Event(
+        extensions::events::STREAMS_PRIVATE_ON_EXECUTE_MIME_TYPE_HANDLER,
+        streams_private::OnExecuteMimeTypeHandler::kEventName,
+        streams_private::OnExecuteMimeTypeHandler::Create(info)));
 
     extensions::EventRouter::Get(browser()->profile())
-        ->DispatchEventToExtension(test_extension_id_, event.Pass());
+        ->DispatchEventToExtension(test_extension_id_, std::move(event));
   }
 
   // Loads the test extension and set's up its file_browser_handler to handle
@@ -235,7 +237,7 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
  protected:
   std::string test_extension_id_;
   // The HTTP server used in the tests.
-  scoped_ptr<EmbeddedTestServer> test_server_;
+  scoped_ptr<net::EmbeddedTestServer> test_server_;
   base::ScopedTempDir downloads_dir_;
 };
 
@@ -411,7 +413,7 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, DirectDownload) {
   params->set_file_path(target_path);
 
   // Start download of the URL with a path "/text_path.txt" on the test server.
-  download_manager->DownloadUrl(params.Pass());
+  download_manager->DownloadUrl(std::move(params));
 
   // Wait for the download to start.
   download_observer->WaitForFinished();

@@ -4,9 +4,12 @@
 
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 
-#include "base/basictypes.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
@@ -16,9 +19,9 @@ using ui::KeycodeConverter;
 namespace {
 
 #if defined(OS_WIN)
-const size_t kExpectedMappedKeyCount = 138;
-#elif defined(OS_LINUX)
-const size_t kExpectedMappedKeyCount = 168;
+const size_t kExpectedMappedKeyCount = 157;
+#elif defined(OS_LINUX) || defined(OS_ANDROID)
+const size_t kExpectedMappedKeyCount = 178;
 #elif defined(OS_MACOSX)
 const size_t kExpectedMappedKeyCount = 118;
 #else
@@ -56,13 +59,11 @@ TEST(UsbKeycodeMap, Basic) {
         ui::KeycodeConverter::UsbKeycodeToNativeKeycode(entry->usb_keycode));
 
     // Verify DomCodeToNativeKeycode works correctly.
-    ui::DomCode dom_code =
-        ui::KeycodeConverter::CodeStringToDomCode(entry->code);
-    if (entry->code) {
+    if (entry->code && *entry->code) {
+      ui::DomCode dom_code =
+          ui::KeycodeConverter::CodeStringToDomCode(entry->code);
       EXPECT_EQ(entry->native_keycode,
                 ui::KeycodeConverter::DomCodeToNativeKeycode(dom_code));
-    } else {
-      EXPECT_EQ(ui::DomCode::NONE, dom_code);
     }
 
     // Verify that the USB or native codes aren't duplicated.
@@ -108,8 +109,6 @@ TEST(UsbKeycodeMap, UsBackslashIsNonUsHash) {
 
 TEST(KeycodeConverter, DomCode) {
   // Test invalid and unknown arguments to CodeStringToDomCode()
-  EXPECT_EQ(ui::DomCode::NONE,
-            ui::KeycodeConverter::CodeStringToDomCode(nullptr));
   EXPECT_EQ(ui::DomCode::NONE, ui::KeycodeConverter::CodeStringToDomCode("-"));
   EXPECT_EQ(ui::DomCode::NONE, ui::KeycodeConverter::CodeStringToDomCode(""));
   // Round-trip test DOM Level 3 .code strings.
@@ -119,30 +118,76 @@ TEST(KeycodeConverter, DomCode) {
   for (size_t i = 0; i < numEntries; ++i) {
     SCOPED_TRACE(i);
     const ui::KeycodeMapEntry* entry = &keycode_map[i];
-    ui::DomCode code = ui::KeycodeConverter::CodeStringToDomCode(entry->code);
     if (entry->code) {
+      ui::DomCode code = ui::KeycodeConverter::CodeStringToDomCode(entry->code);
       EXPECT_STREQ(entry->code,
                    ui::KeycodeConverter::DomCodeToCodeString(code));
-    } else {
-      EXPECT_EQ(static_cast<int>(ui::DomCode::NONE),
-                static_cast<int>(code));
     }
   }
 }
 
 TEST(KeycodeConverter, DomKey) {
-  // Test invalid and unknown arguments to KeyStringToDomKey()
-  EXPECT_EQ(ui::DomKey::NONE, ui::KeycodeConverter::KeyStringToDomKey(nullptr));
-  EXPECT_EQ(ui::DomKey::NONE, ui::KeycodeConverter::KeyStringToDomKey("-"));
-  // Round-trip test DOM Level 3 .key strings.
+  const struct {
+    ui::DomKey::Base key;
+    bool is_character;
+    bool is_dead;
+    bool test_to_string;
+    const char* const string;
+  } test_cases[] = {
+      // Invalid arguments to KeyStringToDomKey().
+      {ui::DomKey::NONE, false, false, true, ""},
+      {ui::DomKey::NONE, false, false, false, "?!?"},
+      {ui::DomKey::NONE, false, false, false, "\x61\xCC\x81"},
+      // Some single Unicode characters.
+      {ui::DomKey::Constant<'-'>::Character, true, false, true, "-"},
+      {ui::DomKey::Constant<'A'>::Character, true, false, true, "A"},
+      {ui::DomKey::Constant<0xE1>::Character, true, false, true, "\xC3\xA1"},
+      {ui::DomKey::Constant<0x1F648>::Character, true, false, true,
+       "\xF0\x9F\x99\x88"},
+      // Unicode-equivalent named values.
+      {ui::DomKey::BACKSPACE, true, false, true, "Backspace"},
+      {ui::DomKey::TAB, true, false, true, "Tab"},
+      {ui::DomKey::ENTER, true, false, true, "Enter"},
+      {ui::DomKey::ESCAPE, true, false, true, "Escape"},
+      {ui::DomKey::DEL, true, false, true, "Delete"},
+      {ui::DomKey::BACKSPACE, true, false, false, "\b"},
+      {ui::DomKey::TAB, true, false, false, "\t"},
+      {ui::DomKey::ENTER, true, false, false, "\r"},
+      {ui::DomKey::ESCAPE, true, false, false, "\x1B"},
+      {ui::DomKey::DEL, true, false, false, "\x7F"},
+      {ui::DomKey::Constant<'\b'>::Character, true, false, true, "Backspace"},
+      {ui::DomKey::Constant<'\t'>::Character, true, false, true, "Tab"},
+      {ui::DomKey::Constant<'\r'>::Character, true, false, true, "Enter"},
+      {ui::DomKey::Constant<0x1B>::Character, true, false, true, "Escape"},
+      {ui::DomKey::Constant<0x7F>::Character, true, false, true, "Delete"},
+      // 'Dead' key.
+      {ui::DomKey::Constant<0xFFFF>::Dead, false, true, true, "Dead"},
+      // Sample non-Unicode key names.
+      {ui::DomKey::SHIFT, false, false, true, "Shift"},
+      {ui::DomKey::F16, false, false, true, "F16"},
+      {ui::DomKey::ZOOM_IN, false, false, true, "ZoomIn"},
+      {ui::DomKey::UNIDENTIFIED, false, false, true, "Unidentified"},
+  };
+  for (const auto& test : test_cases) {
+    // Check KeyStringToDomKey().
+    ui::DomKey key = ui::KeycodeConverter::KeyStringToDomKey(test.string);
+    EXPECT_EQ(test.is_character, key.IsCharacter());
+    EXPECT_EQ(test.is_dead, key.IsDeadKey());
+    EXPECT_EQ(test.key, key);
+    // Check |DomKeyToKeyString()|.
+    if (test.test_to_string) {
+      std::string s(ui::KeycodeConverter::DomKeyToKeyString(test.key));
+      EXPECT_STREQ(test.string, s.c_str());
+    }
+  }
+  // Round-trip test all UI Events KeyboardEvent.key strings.
   const char* s = nullptr;
   for (size_t i = 0;
-       (s = ui::KeycodeConverter::DomKeyStringForTest(i)) != nullptr;
-       ++i) {
+       (s = ui::KeycodeConverter::DomKeyStringForTest(i)) != nullptr; ++i) {
     SCOPED_TRACE(i);
     ui::DomKey key = ui::KeycodeConverter::KeyStringToDomKey(s);
     if (s) {
-      EXPECT_STREQ(s, ui::KeycodeConverter::DomKeyToKeyString(key));
+      EXPECT_STREQ(s, ui::KeycodeConverter::DomKeyToKeyString(key).c_str());
     } else {
       EXPECT_EQ(ui::DomKey::NONE, key);
     }

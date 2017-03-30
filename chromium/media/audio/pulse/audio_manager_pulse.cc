@@ -113,7 +113,7 @@ void AudioManagerPulse::GetAudioDeviceNames(
   // Prepend the default device if the list is not empty.
   if (!device_names->empty()) {
     device_names->push_front(
-        AudioDeviceName(AudioManagerBase::kDefaultDeviceName,
+        AudioDeviceName(AudioManager::GetDefaultDeviceName(),
                         AudioManagerBase::kDefaultDeviceId));
   }
 }
@@ -135,9 +135,9 @@ AudioParameters AudioManagerPulse::GetInputStreamParameters(
       user_buffer_size : kDefaultInputBufferSize;
 
   // TODO(xians): add support for querying native channel layout for pulse.
-  return AudioParameters(
-      AudioParameters::AUDIO_PCM_LOW_LATENCY, CHANNEL_LAYOUT_STEREO,
-      GetNativeSampleRate(), 16, buffer_size);
+  return AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                         CHANNEL_LAYOUT_STEREO, GetNativeSampleRate(), 16,
+                         buffer_size);
 }
 
 AudioOutputStream* AudioManagerPulse::MakeLinearOutputStream(
@@ -189,9 +189,8 @@ AudioParameters AudioManagerPulse::GetPreferredOutputStreamParameters(
   if (user_buffer_size)
     buffer_size = user_buffer_size;
 
-  return AudioParameters(
-      AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
-      sample_rate, bits_per_sample, buffer_size, AudioParameters::NO_EFFECTS);
+  return AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
+                         sample_rate, bits_per_sample, buffer_size);
 }
 
 AudioOutputStream* AudioManagerPulse::MakeOutputStream(
@@ -255,7 +254,7 @@ bool AudioManagerPulse::Init() {
   pa_context_set_state_callback(input_context_, &pulse::ContextStateCallback,
                                 input_mainloop_);
   if (pa_context_connect(input_context_, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL)) {
-    VLOG(0) << "Failed to connect to the context.  Error: "
+    VLOG(1) << "Failed to connect to the context.  Error: "
             << pa_strerror(pa_context_errno(input_context_));
     return false;
   }

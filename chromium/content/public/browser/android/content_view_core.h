@@ -13,6 +13,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/readback_types.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
+#include "ui/android/view_android.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace cc {
@@ -24,17 +25,17 @@ class Rect;
 }
 
 namespace ui {
-class ViewAndroid;
 class WindowAndroid;
 }
 
 namespace content {
+
 class WebContents;
 
 // Native side of the ContentViewCore.java, which is the primary way of
 // communicating with the native Chromium code on Android.  This is a
 // public interface used by native code outside of the content module.
-class CONTENT_EXPORT ContentViewCore {
+class CONTENT_EXPORT ContentViewCore : public ui::ViewAndroid {
  public:
   // Returns the existing ContentViewCore for |web_contents|, or nullptr.
   static ContentViewCore* FromWebContents(WebContents* web_contents);
@@ -44,10 +45,8 @@ class CONTENT_EXPORT ContentViewCore {
 
   // May return null reference.
   virtual base::android::ScopedJavaLocalRef<jobject> GetJavaObject() = 0;
-  virtual ui::ViewAndroid* GetViewAndroid() const = 0;
-  virtual ui::WindowAndroid* GetWindowAndroid() const = 0;
   virtual const scoped_refptr<cc::Layer>& GetLayer() const = 0;
-  virtual void ShowPastePopup(int x, int y) = 0;
+  virtual bool ShowPastePopup(int x, int y) = 0;
 
   // Request a scaled content readback. The result is passed through the
   // callback. The boolean parameter indicates whether the readback was a
@@ -56,7 +55,7 @@ class CONTENT_EXPORT ContentViewCore {
       float scale,
       SkColorType color_type,
       const gfx::Rect& src_rect,
-      ReadbackRequestCallback& result_callback) = 0;
+      const ReadbackRequestCallback& result_callback) = 0;
   virtual float GetDpiScale() const = 0;
   virtual void PauseOrResumeGeolocation(bool should_pause) = 0;
 
@@ -68,7 +67,7 @@ class CONTENT_EXPORT ContentViewCore {
                                 int end_offset)>& callback) = 0;
 
  protected:
-  virtual ~ContentViewCore() {};
+ ~ContentViewCore() override {}
 };
 
 };  // namespace content

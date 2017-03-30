@@ -9,7 +9,6 @@
 #include "ui/message_center/views/message_center_view.h"
 #include "ui/message_center/views/message_list_view.h"
 #include "ui/message_center/views/message_view.h"
-#include "ui/views/animation/bounds_animator.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/layout/box_layout.h"
@@ -29,6 +28,8 @@ MessageListView::MessageListView(MessageCenterView* message_center_view,
       has_deferred_task_(false),
       clear_all_started_(false),
       top_down_(top_down),
+      animator_(this),
+      quit_message_loop_after_animation_for_test_(false),
       weak_ptr_factory_(this) {
   views::BoxLayout* layout =
       new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 1);
@@ -47,15 +48,15 @@ MessageListView::MessageListView(MessageCenterView* message_center_view,
       kMarginBetweenItems - shadow_insets.left(),                  /* left */
       top_down ? kMarginBetweenItems - shadow_insets.bottom() : 0, /* bottom */
       kMarginBetweenItems - shadow_insets.right() /* right */));
+  animator_.AddObserver(this);
 }
 
 MessageListView::~MessageListView() {
-  if (animator_.get())
-    animator_->RemoveObserver(this);
+  animator_.RemoveObserver(this);
 }
 
 void MessageListView::Layout() {
-  if (animator_.get() && animator_->IsAnimating())
+  if (animator_.IsAnimating())
     return;
 
   gfx::Rect child_area = GetContentsBounds();
@@ -104,8 +105,7 @@ void MessageListView::RemoveNotification(MessageView* view) {
     if (view->layer()) {
       deleting_views_.insert(view);
     } else {
-      if (animator_.get())
-        animator_->StopAnimatingView(view);
+      animator_.StopAnimatingView(view);
       delete view;
     }
     DoUpdateIfPossible();
@@ -117,8 +117,7 @@ void MessageListView::UpdateNotification(MessageView* view,
   int index = GetIndexOf(view);
   DCHECK_LE(0, index);  // GetIndexOf is negative if not a child.
 
-  if (animator_.get())
-    animator_->StopAnimatingView(view);
+  animator_.StopAnimatingView(view);
   if (deleting_views_.find(view) != deleting_views_.end())
     deleting_views_.erase(view);
   if (deleted_when_done_.find(view) != deleted_when_done_.end())
@@ -128,15 +127,10 @@ void MessageListView::UpdateNotification(MessageView* view,
 }
 
 gfx::Size MessageListView::GetPreferredSize() const {
-  int width = 0;
-  for (int i = 0; i < child_count(); i++) {
-    const views::View* child = child_at(i);
-    if (IsValidChild(child))
-      width = std::max(width, child->GetPreferredSize().width());
-  }
-
-  return gfx::Size(width + GetInsets().width(),
-                   GetHeightForWidth(width + GetInsets().width()));
+  // Just returns the current size. All size change must be done in
+  // |DoUpdateIfPossible()| with animation , because we don't want to change
+  // the size in unexpected timing.
+  return size();
 }
 
 int MessageListView::GetHeightForWidth(int width) const {
@@ -176,7 +170,7 @@ void MessageListView::ReorderChildLayers(ui::Layer* parent_layer) {
 }
 
 void MessageListView::SetRepositionTarget(const gfx::Rect& target) {
-  reposition_top_ = target.y();
+  reposition_top_ = std::max(target.y(), 0);
   fixed_height_ = GetHeightForWidth(width());
 }
 
@@ -184,14 +178,13 @@ void MessageListView::ResetRepositionSession() {
   // Don't call DoUpdateIfPossible(), but let Layout() do the task without
   // animation. Reset will cause the change of the bubble size itself, and
   // animation from the old location will look weird.
-  if (reposition_top_ >= 0 && animator_.get()) {
+  if (reposition_top_ >= 0) {
     has_deferred_task_ = false;
     // cancel cause OnBoundsAnimatorDone which deletes |deleted_when_done_|.
-    animator_->Cancel();
+    animator_.Cancel();
     STLDeleteContainerPointers(deleting_views_.begin(), deleting_views_.end());
     deleting_views_.clear();
     adding_views_.clear();
-    animator_.reset();
   }
 
   reposition_top_ = -1;
@@ -213,7 +206,7 @@ void MessageListView::ClearAllNotifications(
 
 void MessageListView::OnBoundsAnimatorProgressed(
     views::BoundsAnimator* animator) {
-  DCHECK_EQ(animator_.get(), animator);
+  DCHECK_EQ(&animator_, animator);
   for (std::set<views::View*>::iterator iter = deleted_when_done_.begin();
        iter != deleted_when_done_.end(); ++iter) {
     const gfx::SlideAnimation* animation = animator->GetAnimationForView(*iter);
@@ -239,6 +232,9 @@ void MessageListView::OnBoundsAnimatorDone(views::BoundsAnimator* animator) {
 
   if (GetWidget())
     GetWidget()->SynthesizeMouseMoveEvent();
+
+  if (quit_message_loop_after_animation_for_test_)
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
 bool MessageListView::IsValidChild(const views::View* child) const {
@@ -254,20 +250,18 @@ void MessageListView::DoUpdateIfPossible() {
   if (child_area.IsEmpty())
     return;
 
-  if (animator_.get() && animator_->IsAnimating()) {
+  if (animator_.IsAnimating()) {
     has_deferred_task_ = true;
     return;
-  }
-
-  if (!animator_.get()) {
-    animator_.reset(new views::BoundsAnimator(this));
-    animator_->AddObserver(this);
   }
 
   if (!clearing_all_views_.empty()) {
     AnimateClearingOneNotification();
     return;
   }
+
+  int new_height = GetHeightForWidth(child_area.width() + GetInsets().width());
+  SetSize(gfx::Size(child_area.width() + GetInsets().width(), new_height));
 
   if (top_down_ ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -278,79 +272,162 @@ void MessageListView::DoUpdateIfPossible() {
 
   adding_views_.clear();
   deleting_views_.clear();
+
+  if (!animator_.IsAnimating() && GetWidget())
+    GetWidget()->SynthesizeMouseMoveEvent();
 }
 
 void MessageListView::AnimateNotificationsBelowTarget() {
-  int last_index = -1;
-  for (int i = 0; i < child_count(); ++i) {
-    views::View* child = child_at(i);
-    if (!IsValidChild(child)) {
-      AnimateChild(child, child->y(), child->height());
-    } else if (reposition_top_ < 0 || child->y() > reposition_top_) {
-      // Find first notification below target (or all notifications if no
-      // target).
-      last_index = i;
-      break;
+  int target_index = -1;
+  int padding = kMarginBetweenItems - MessageView::GetShadowInsets().bottom();
+  gfx::Rect child_area = GetContentsBounds();
+  if (reposition_top_ >= 0) {
+    for (int i = 0; i < child_count(); ++i) {
+      views::View* child = child_at(i);
+      if (child->y() >= reposition_top_) {
+        // Find the target.
+        target_index = i;
+        break;
+      }
     }
   }
-  if (last_index > 0) {
-    int between_items =
-        kMarginBetweenItems - MessageView::GetShadowInsets().bottom();
-    int top = (reposition_top_ > 0) ? reposition_top_ : GetInsets().top();
-
-    for (int i = last_index; i < child_count(); ++i) {
-      // Animate notifications below target upwards.
-      views::View* child = child_at(i);
-      if (AnimateChild(child, top, child->height()))
-        top += child->height() + between_items;
+  int top;
+  if (target_index != -1) {
+    // Layout the target.
+    int y = reposition_top_;
+    views::View* target = child_at(target_index);
+    int target_height = target->GetHeightForWidth(child_area.width());
+    if (AnimateChild(target, y - target_height, target_height,
+                     false /* animate_on_move */)) {
+      y -= target_height + padding;
     }
+
+    // Layout the items above the target.
+    for (int i = target_index - 1; i >= 0; --i) {
+      views::View* child = child_at(i);
+      int height = child->GetHeightForWidth(child_area.width());
+      if (AnimateChild(child, y - height, height, false /* animate_on_move */))
+        y -= height + padding;
+    }
+
+    top = reposition_top_ + target_height + padding;
+  } else {
+    target_index = -1;
+    top = GetInsets().top();
+  }
+
+  // Layout the items below the target (or all items if target is unavailable).
+  for (int i = target_index + 1; i < child_count(); ++i) {
+    views::View* child = child_at(i);
+    int height = child->GetHeightForWidth(child_area.width());
+    if (AnimateChild(child, top, height, true /* animate_on_move */))
+      top += height + padding;
   }
 }
 
 void MessageListView::AnimateNotificationsAboveTarget() {
-  int last_index = -1;
-  for (int i = child_count() - 1; i >= 0; --i) {
-    views::View* child = child_at(i);
-    if (!IsValidChild(child)) {
-      AnimateChild(child, child->y(), child->height());
-    } else if (reposition_top_ < 0 || child->y() < reposition_top_) {
-      // Find first notification above target (or all notifications if no
-      // target).
-      last_index = i;
-      break;
+  int target_index = -1;
+  int padding = kMarginBetweenItems - MessageView::GetShadowInsets().bottom();
+  gfx::Rect child_area = GetContentsBounds();
+  if (reposition_top_ >= 0) {
+    // Find the target item.
+    for (int i = 0; i < child_count(); ++i) {
+      views::View* child = child_at(i);
+      if (child->y() >= reposition_top_ &&
+          deleting_views_.find(child) == deleting_views_.end()) {
+        // Find the target.
+        target_index = i;
+        break;
+      }
+    }
+    // If no items are below |reposition_top_|, use the last item as the target.
+    if (target_index == -1) {
+      target_index = child_count() - 1;
+      for (; target_index != -1; target_index--) {
+        views::View* target_view = child_at(target_index);
+        if (deleting_views_.find(target_view) == deleting_views_.end())
+          break;
+      }
     }
   }
-  if (last_index >= 0) {
-    int between_items =
-        kMarginBetweenItems - MessageView::GetShadowInsets().bottom();
-    int bottom = (reposition_top_ > 0)
-                     ? reposition_top_ + child_at(last_index)->height()
-                     : GetHeightForWidth(width()) - GetInsets().bottom();
-    for (int i = last_index; i >= 0; --i) {
-      // Animate notifications above target downwards.
+  if (target_index != -1) {
+    // Cache for the heights of items, since calculating height is heavy
+    // operation and the heights shouldn't be changed in this block.
+    std::map<views::View*, int> height_cache;
+
+    // Calculate the vertical length between the top of message list and the top
+    // of target. This is to shrink or expand the height of the message list
+    // when the notifications above the target is changed.
+    int vertical_gap_to_target_from_top = GetInsets().height();
+    for (int i = 0; i < target_index; i++) {
       views::View* child = child_at(i);
-      if (AnimateChild(child, bottom - child->height(), child->height()))
-        bottom -= child->height() + between_items;
+      int height = child->GetHeightForWidth(child_area.width());
+      height_cache[child] = height;
+      if (deleting_views_.find(child) == deleting_views_.end())
+        vertical_gap_to_target_from_top += height + padding;
     }
+
+    // If the calculated length is changed from |repositon_top_|, it means that
+    // some of items above the targe are updated and their height are changed.
+    // Adjust the vertical length above the target.
+    if (reposition_top_ != vertical_gap_to_target_from_top) {
+      fixed_height_ -= reposition_top_ - vertical_gap_to_target_from_top;
+      reposition_top_ = vertical_gap_to_target_from_top;
+    }
+
+    // Match the top with |reposition_top_|.
+    int y = reposition_top_;
+    // Layout the target and the items below the target.
+    for (int i = target_index; i < child_count(); i++) {
+      views::View* child = child_at(i);
+      int height = child->GetHeightForWidth(child_area.width());
+      if (AnimateChild(child, y, height, false /* animate_on_move */))
+        y += height + padding;
+    }
+
+    // Layout the items above the target.
+    y = GetInsets().top();
+    for (int i = 0; i < target_index; i++) {
+      views::View* child = child_at(i);
+      DCHECK(height_cache.find(child) != height_cache.end());
+      int height = height_cache[child];
+      if (AnimateChild(child, y, height, true /* animate_on_move */))
+        y += height + padding;
+    }
+
+    DCHECK_EQ(y, reposition_top_);
+  } else {
+    // Layout all the items.
+    int y = GetInsets().top();
+    for (int i = 0; i < child_count(); ++i) {
+      views::View* child = child_at(i);
+      int height = child->GetHeightForWidth(child_area.width());
+      if (AnimateChild(child, y, height, true))
+        y += height + padding;
+    }
+    fixed_height_ = y - padding + GetInsets().bottom();
   }
 }
 
-bool MessageListView::AnimateChild(views::View* child, int top, int height) {
+bool MessageListView::AnimateChild(views::View* child,
+                                   int top,
+                                   int height,
+                                   bool animate_on_move) {
   gfx::Rect child_area = GetContentsBounds();
   if (adding_views_.find(child) != adding_views_.end()) {
     child->SetBounds(child_area.right(), top, child_area.width(), height);
-    animator_->AnimateViewTo(
+    animator_.AnimateViewTo(
         child, gfx::Rect(child_area.x(), top, child_area.width(), height));
   } else if (deleting_views_.find(child) != deleting_views_.end()) {
     DCHECK(child->layer());
     // No moves, but animate to fade-out.
-    animator_->AnimateViewTo(child, child->bounds());
+    animator_.AnimateViewTo(child, child->bounds());
     deleted_when_done_.insert(child);
     return false;
   } else {
     gfx::Rect target(child_area.x(), top, child_area.width(), height);
-    if (child->bounds().origin() != target.origin())
-      animator_->AnimateViewTo(child, target);
+    if (child->bounds().origin() != target.origin() && animate_on_move)
+      animator_.AnimateViewTo(child, target);
     else
       child->SetBoundsRect(target);
   }
@@ -368,7 +445,7 @@ void MessageListView::AnimateClearingOneNotification() {
   // Slide from left to right.
   gfx::Rect new_bounds = child->bounds();
   new_bounds.set_x(new_bounds.right() + kMarginBetweenItems);
-  animator_->AnimateViewTo(child, new_bounds);
+  animator_.AnimateViewTo(child, new_bounds);
 
   // Schedule to start sliding out next notification after a short delay.
   if (!clearing_all_views_.empty()) {
@@ -378,6 +455,10 @@ void MessageListView::AnimateClearingOneNotification() {
         base::TimeDelta::FromMilliseconds(
             kAnimateClearingNextNotificationDelayMS));
   }
+}
+
+void MessageListView::SetRepositionTargetForTest(const gfx::Rect& target_rect) {
+  SetRepositionTarget(target_rect);
 }
 
 }  // namespace message_center

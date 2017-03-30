@@ -49,6 +49,10 @@ bool FindBadConstructsAction::ParseArgs(const CompilerInstance& instance,
     if (args[i] == "check-base-classes") {
       // TODO(rsleevi): Remove this once http://crbug.com/123295 is fixed.
       options_.check_base_classes = true;
+    } else if (args[i] == "enforce-in-pdf") {
+      options_.enforce_in_pdf = true;
+    } else if (args[i] == "enforce-in-thirdparty-webkit") {
+      options_.enforce_in_thirdparty_webkit = true;
     } else if (args[i] == "check-enum-last-value") {
       // TODO(tsepez): Enable this by default once http://crbug.com/356815
       // and http://crbug.com/356816 are fixed.
@@ -57,8 +61,8 @@ bool FindBadConstructsAction::ParseArgs(const CompilerInstance& instance,
       options_.with_ast_visitor = true;
     } else if (args[i] == "check-templates") {
       options_.check_templates = true;
-    } else if (args[i] == "warn-only") {
-      options_.warn_only = true;
+    } else if (args[i] == "follow-macro-expansion") {
+      options_.follow_macro_expansion = true;
     } else {
       parsed = false;
       llvm::errs() << "Unknown clang plugin argument: " << args[i] << "\n";

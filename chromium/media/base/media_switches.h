@@ -14,12 +14,19 @@ namespace switches {
 
 MEDIA_EXPORT extern const char kAudioBufferSize[];
 
-MEDIA_EXPORT extern const char kDisableNewVideoRenderer[];
-
 MEDIA_EXPORT extern const char kVideoThreads[];
 
+MEDIA_EXPORT extern const char kEnableMediaSuspend[];
+MEDIA_EXPORT extern const char kDisableMediaSuspend[];
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+MEDIA_EXPORT extern const char kEnablePlatformAcceleratedVideoDecoding[];
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+
 #if defined(OS_ANDROID)
+MEDIA_EXPORT extern const char kDisableMediaThreadForMediaPlayback[];
 MEDIA_EXPORT extern const char kEnableMediaThreadForMediaPlayback[];
+MEDIA_EXPORT extern const char kEnableUnifiedMediaPipeline[];
 #endif
 
 #if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
@@ -47,8 +54,6 @@ MEDIA_EXPORT extern const char kWaveOutBuffers[];
 MEDIA_EXPORT extern const char kUseCras[];
 #endif
 
-MEDIA_EXPORT extern const char kEnableAudioHangMonitor[];
-
 MEDIA_EXPORT extern const char kUseFakeDeviceForMediaStream[];
 MEDIA_EXPORT extern const char kUseFileForFakeVideoCapture[];
 MEDIA_EXPORT extern const char kUseFileForFakeAudioCapture[];
@@ -58,6 +63,10 @@ MEDIA_EXPORT extern const char kEnableInbandTextTracks[];
 MEDIA_EXPORT extern const char kRequireAudioHardwareForTesting[];
 
 MEDIA_EXPORT extern const char kVideoUnderflowThresholdMs[];
+
+MEDIA_EXPORT extern const char kDisableRTCSmoothnessAlgorithm[];
+
+MEDIA_EXPORT extern const char kUseNewMediaCache[];
 
 }  // namespace switches
 

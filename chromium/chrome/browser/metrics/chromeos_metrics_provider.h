@@ -5,8 +5,11 @@
 #ifndef CHROME_BROWSER_METRICS_CHROMEOS_METRICS_PROVIDER_H_
 #define CHROME_BROWSER_METRICS_CHROMEOS_METRICS_PROVIDER_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/metrics/perf_provider_chromeos.h"
+#include "chrome/browser/metrics/perf/perf_provider_chromeos.h"
 #include "components/metrics/metrics_provider.h"
 
 namespace device {
@@ -23,6 +26,16 @@ class PrefService;
 // Performs ChromeOS specific metrics logging.
 class ChromeOSMetricsProvider : public metrics::MetricsProvider {
  public:
+  // Possible device enrollment status for a Chrome OS device.
+  // Used by UMA histogram, so entries shouldn't be reordered or removed.
+  enum EnrollmentStatus {
+    NON_MANAGED,
+    UNUSED,  // Formerly MANAGED_EDU, see crbug.com/462770.
+    MANAGED,
+    ERROR_GETTING_ENROLLMENT_STATUS,
+    ENROLLMENT_STATUS_MAX,
+  };
+
   ChromeOSMetricsProvider();
   ~ChromeOSMetricsProvider() override;
 
@@ -30,6 +43,9 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
 
   // Records a crash.
   static void LogCrash(const std::string& crash_type);
+
+  // Returns Enterprise Enrollment status.
+  static EnrollmentStatus GetEnrollmentStatus();
 
   // Loads hardware class information. When this task is complete, |callback|
   // is run.
@@ -75,7 +91,7 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
   // The user count at the time that a log was last initialized. Contains a
   // valid value only if |registered_user_count_at_log_initialization_| is
   // true.
-  uint64 user_count_at_log_initialization_;
+  uint64_t user_count_at_log_initialization_;
 
   // Hardware class (e.g., hardware qualification ID). This class identifies
   // the configured system components such as CPU, WiFi adapter, etc.

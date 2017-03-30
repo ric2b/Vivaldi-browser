@@ -4,10 +4,13 @@
 
 #include "base/threading/worker_pool_posix.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/platform_thread.h"
@@ -33,7 +36,8 @@ class WorkerPoolImpl {
   ~WorkerPoolImpl();
 
   void PostTask(const tracked_objects::Location& from_here,
-                const base::Closure& task, bool task_is_slow);
+                const base::Closure& task,
+                bool task_is_slow);
 
  private:
   scoped_refptr<base::PosixDynamicThreadPool> pool_;
@@ -41,15 +45,15 @@ class WorkerPoolImpl {
 
 WorkerPoolImpl::WorkerPoolImpl()
     : pool_(new base::PosixDynamicThreadPool("WorkerPool",
-                                             kIdleSecondsBeforeExit)) {
-}
+                                             kIdleSecondsBeforeExit)) {}
 
 WorkerPoolImpl::~WorkerPoolImpl() {
   pool_->Terminate();
 }
 
 void WorkerPoolImpl::PostTask(const tracked_objects::Location& from_here,
-                              const base::Closure& task, bool task_is_slow) {
+                              const base::Closure& task,
+                              bool task_is_slow) {
   pool_->PostTask(from_here, task);
 }
 
@@ -60,8 +64,7 @@ class WorkerThread : public PlatformThread::Delegate {
  public:
   WorkerThread(const std::string& name_prefix,
                base::PosixDynamicThreadPool* pool)
-      : name_prefix_(name_prefix),
-        pool_(pool) {}
+      : name_prefix_(name_prefix), pool_(pool) {}
 
   void ThreadMain() override;
 
@@ -74,8 +77,8 @@ class WorkerThread : public PlatformThread::Delegate {
 
 void WorkerThread::ThreadMain() {
   g_worker_pool_running_on_this_thread.Get().Set(true);
-  const std::string name = base::StringPrintf(
-      "%s/%d", name_prefix_.c_str(), PlatformThread::CurrentId());
+  const std::string name = base::StringPrintf("%s/%d", name_prefix_.c_str(),
+                                              PlatformThread::CurrentId());
   // Note |name.c_str()| must remain valid for for the whole life of the thread.
   PlatformThread::SetName(name);
 
@@ -104,7 +107,8 @@ void WorkerThread::ThreadMain() {
 
 // static
 bool WorkerPool::PostTask(const tracked_objects::Location& from_here,
-                          const base::Closure& task, bool task_is_slow) {
+                          const base::Closure& task,
+                          bool task_is_slow) {
   g_lazy_worker_pool.Pointer()->PostTask(from_here, task, task_is_slow);
   return true;
 }
@@ -145,8 +149,8 @@ void PosixDynamicThreadPool::PostTask(
 
 void PosixDynamicThreadPool::AddTask(PendingTask* pending_task) {
   AutoLock locked(lock_);
-  DCHECK(!terminated_) <<
-      "This thread pool is already terminated.  Do not post new tasks.";
+  DCHECK(!terminated_)
+      << "This thread pool is already terminated.  Do not post new tasks.";
 
   pending_tasks_.push(*pending_task);
   pending_task->task.Reset();
@@ -157,8 +161,7 @@ void PosixDynamicThreadPool::AddTask(PendingTask* pending_task) {
   } else {
     // The new PlatformThread will take ownership of the WorkerThread object,
     // which will delete itself on exit.
-    WorkerThread* worker =
-        new WorkerThread(name_prefix_, this);
+    WorkerThread* worker = new WorkerThread(name_prefix_, this);
     PlatformThread::CreateNonJoinable(0, worker);
   }
 }

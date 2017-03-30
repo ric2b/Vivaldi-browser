@@ -8,9 +8,6 @@ namespace installer {
 
 namespace switches {
 
-// Whether to set Chrome to launch at computer startup.
-const char kAutoLaunchChrome[] = "auto-launch-chrome";
-
 // Install Chrome.
 // Currently this is only required when used in combination with kMultiInstall.
 const char kChrome[] = "chrome";
@@ -195,6 +192,7 @@ const char kVivaldiInstallDir[] = "vivaldi-install-dir";
 const char kVivaldiStandalone[] = "vivaldi-standalone";
 const char kVivaldiForceLaunch[] = "vivaldi-force-launch";
 const char kVivaldiUpdate[] = "vivaldi-update";
+const char kVivaldiCrashLogging[] = "vivaldi-crash-logging";
 
 }  // namespace switches
 
@@ -226,12 +224,10 @@ const wchar_t kChromeFrameHelperDll[] = L"chrome_frame_helper.dll";
 const wchar_t kChromeFrameHelperExe[] = L"chrome_frame_helper.exe";
 const wchar_t kChromeFrameHelperWndClass[] = L"ChromeFrameHelperWindowClass";
 const wchar_t kChromeLauncherExe[] = L"chrome_launcher.exe";
-const wchar_t kChromeMetroDll[] = L"metro_driver.dll";
 const wchar_t kChromeNewExe[] = L"new_vivaldi.exe";
 const wchar_t kChromeOldExe[] = L"old_vivaldi.exe";
 const wchar_t kCmdOnOsUpgrade[] = L"on-os-upgrade";
 const wchar_t kCmdQuickEnableCf[] = L"quick-enable-cf";
-const wchar_t kDelegateExecuteExe[] = L"delegate_execute.exe";
 const wchar_t kEULASentinelFile[] = L"EULA Accepted";
 const wchar_t kGoogleChromeInstallSubDir1[] = L"Google";
 const wchar_t kGoogleChromeInstallSubDir2[] = L"Chrome";

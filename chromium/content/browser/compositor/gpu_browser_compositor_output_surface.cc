@@ -4,6 +4,9 @@
 
 #include "content/browser/compositor/gpu_browser_compositor_output_surface.h"
 
+#include <utility>
+
+#include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface_client.h"
 #include "content/browser/compositor/browser_compositor_overlay_candidate_validator.h"
@@ -17,18 +20,20 @@ namespace content {
 
 GpuBrowserCompositorOutputSurface::GpuBrowserCompositorOutputSurface(
     const scoped_refptr<ContextProviderCommandBuffer>& context,
+    const scoped_refptr<ContextProviderCommandBuffer>& worker_context,
     const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
     scoped_ptr<BrowserCompositorOverlayCandidateValidator>
         overlay_candidate_validator)
     : BrowserCompositorOutputSurface(context,
+                                     worker_context,
                                      vsync_manager,
-                                     overlay_candidate_validator.Pass()),
+                                     std::move(overlay_candidate_validator)),
 #if defined(OS_MACOSX)
       should_show_frames_state_(SHOULD_SHOW_FRAMES),
 #endif
-      swap_buffers_completion_callback_(
-          base::Bind(&GpuBrowserCompositorOutputSurface::OnSwapBuffersCompleted,
-                     base::Unretained(this))),
+      swap_buffers_completion_callback_(base::Bind(
+          &GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted,
+          base::Unretained(this))),
       update_vsync_parameters_callback_(base::Bind(
           &BrowserCompositorOutputSurface::OnUpdateVSyncParametersFromGpu,
           base::Unretained(this))) {
@@ -56,6 +61,10 @@ bool GpuBrowserCompositorOutputSurface::BindToClient(
       swap_buffers_completion_callback_.callback());
   GetCommandBufferProxy()->SetUpdateVSyncParametersCallback(
       update_vsync_parameters_callback_.callback());
+  if (capabilities_.uses_default_gl_framebuffer) {
+    capabilities_.flipped_output_surface =
+        context_provider()->ContextCapabilities().gpu.flips_vertically;
+  }
   return true;
 }
 
@@ -104,24 +113,14 @@ void GpuBrowserCompositorOutputSurface::SwapBuffers(
 #endif
 }
 
-void GpuBrowserCompositorOutputSurface::OnSwapBuffersCompleted(
+void GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
     const std::vector<ui::LatencyInfo>& latency_info,
     gfx::SwapResult result) {
-#if defined(OS_MACOSX)
-  // On Mac, delay acknowledging the swap to the output surface client until
-  // it has been drawn, see OnSurfaceDisplayed();
-  NOTREACHED();
-#else
   RenderWidgetHostImpl::CompositorFrameDrawn(latency_info);
   OnSwapBuffersComplete();
-#endif
 }
 
 #if defined(OS_MACOSX)
-void GpuBrowserCompositorOutputSurface::OnSurfaceDisplayed() {
-  cc::OutputSurface::OnSwapBuffersComplete();
-}
-
 void GpuBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
     bool suspended) {
   if (suspended) {

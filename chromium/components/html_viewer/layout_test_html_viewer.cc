@@ -4,9 +4,13 @@
 
 #include "components/html_viewer/layout_test_html_viewer.h"
 
+#include <utility>
+
 #include "components/html_viewer/global_state.h"
 #include "components/html_viewer/layout_test_content_handler_impl.h"
 #include "components/test_runner/web_test_interfaces.h"
+#include "components/web_view/test_runner/public/interfaces/layout_test_runner.mojom.h"
+#include "v8/include/v8.h"
 
 namespace html_viewer {
 
@@ -22,15 +26,28 @@ void LayoutTestHTMLViewer::Initialize(mojo::ApplicationImpl* app) {
   test_interfaces_.reset(new test_runner::WebTestInterfaces);
   test_interfaces_->ResetAll();
   test_delegate_.set_test_interfaces(test_interfaces_.get());
+  test_delegate_.set_completion_callback(
+      base::Bind(&LayoutTestHTMLViewer::TestFinished, base::Unretained(this)));
   test_interfaces_->SetDelegate(&test_delegate_);
+
+  // Always expose GC to layout tests.
+  std::string flags("--expose-gc");
+  v8::V8::SetFlagsFromString(flags.c_str(), static_cast<int>(flags.size()));
+}
+
+void LayoutTestHTMLViewer::TestFinished() {
+  test_interfaces_->ResetAll();
+
+  web_view::LayoutTestRunnerPtr test_runner_ptr;
+  app()->ConnectToService("mojo:web_view_test_runner", &test_runner_ptr);
+  test_runner_ptr->TestFinished();
 }
 
 void LayoutTestHTMLViewer::Create(
     mojo::ApplicationConnection* connection,
     mojo::InterfaceRequest<mojo::ContentHandler> request) {
-  new LayoutTestContentHandlerImpl(global_state(), app(), request.Pass(),
-                                   test_interfaces_.get(),
-                                   &test_delegate_);
+  new LayoutTestContentHandlerImpl(global_state(), app(), std::move(request),
+                                   test_interfaces_.get(), &test_delegate_);
 }
 
 }  // namespace html_viewer

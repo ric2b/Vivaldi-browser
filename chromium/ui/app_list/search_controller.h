@@ -5,7 +5,9 @@
 #ifndef UI_APP_LIST_SEARCH_CONTROLLER_H_
 #define UI_APP_LIST_SEARCH_CONTROLLER_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/timer/timer.h"
@@ -63,7 +65,7 @@ class APP_LIST_EXPORT SearchController {
 
   bool is_voice_query_;
 
-  base::OneShotTimer<SearchController> stop_timer_;
+  base::OneShotTimer stop_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchController);
 };

@@ -4,7 +4,10 @@
 
 #include "ui/gl/gl_surface.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/trace_event/trace_event.h"
@@ -13,6 +16,7 @@
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface_egl.h"
+#include "ui/gl/gl_surface_egl_x11.h"
 #include "ui/gl/gl_surface_glx.h"
 #include "ui/gl/gl_surface_osmesa.h"
 #include "ui/gl/gl_surface_stub.h"
@@ -30,7 +34,9 @@ class NativeViewGLSurfaceOSMesa : public GLSurfaceOSMesa {
   // Implement a subset of GLSurface.
   bool Initialize() override;
   void Destroy() override;
-  bool Resize(const gfx::Size& new_size) override;
+  bool Resize(const gfx::Size& new_size,
+              float scale_factor,
+              bool alpha) override;
   bool IsOffscreen() override;
   gfx::SwapResult SwapBuffers() override;
   bool SupportsPostSubBuffer() override;
@@ -136,8 +142,10 @@ void NativeViewGLSurfaceOSMesa::Destroy() {
   XSync(xdisplay_, False);
 }
 
-bool NativeViewGLSurfaceOSMesa::Resize(const gfx::Size& new_size) {
-  if (!GLSurfaceOSMesa::Resize(new_size))
+bool NativeViewGLSurfaceOSMesa::Resize(const gfx::Size& new_size,
+                                       float scale_factor,
+                                       bool alpha) {
+  if (!GLSurfaceOSMesa::Resize(new_size, scale_factor, alpha))
     return false;
 
   XWindowAttributes attributes;
@@ -195,13 +203,9 @@ gfx::SwapResult NativeViewGLSurfaceOSMesa::SwapBuffers() {
   }
 
   // Copy the frame into the pixmap.
-  gfx::PutARGBImage(xdisplay_,
-                    attributes.visual,
-                    attributes.depth,
-                    pixmap_,
+  gfx::PutARGBImage(xdisplay_, attributes.visual, attributes.depth, pixmap_,
                     pixmap_graphics_context_,
-                    static_cast<const uint8*>(GetHandle()),
-                    size.width(),
+                    static_cast<const uint8_t*>(GetHandle()), size.width(),
                     size.height());
 
   // Copy the pixmap to the window.
@@ -239,20 +243,10 @@ gfx::SwapResult NativeViewGLSurfaceOSMesa::PostSubBuffer(int x,
   }
 
   // Copy the frame into the pixmap.
-  gfx::PutARGBImage(xdisplay_,
-                    attributes.visual,
-                    attributes.depth,
-                    pixmap_,
+  gfx::PutARGBImage(xdisplay_, attributes.visual, attributes.depth, pixmap_,
                     pixmap_graphics_context_,
-                    static_cast<const uint8*>(GetHandle()),
-                    size.width(),
-                    size.height(),
-                    x,
-                    y,
-                    x,
-                    y,
-                    width,
-                    height);
+                    static_cast<const uint8_t*>(GetHandle()), size.width(),
+                    size.height(), x, y, x, y, width, height);
 
   // Copy the pixmap to the window.
   XCopyArea(xdisplay_,
@@ -294,7 +288,7 @@ scoped_refptr<GLSurface> GLSurface::CreateViewGLSurface(
     }
     case kGLImplementationEGLGLES2: {
       DCHECK(window != gfx::kNullAcceleratedWidget);
-      scoped_refptr<GLSurface> surface(new NativeViewGLSurfaceEGL(window));
+      scoped_refptr<GLSurface> surface(new NativeViewGLSurfaceEGLX11(window));
       if (!surface->Initialize())
         return NULL;
 

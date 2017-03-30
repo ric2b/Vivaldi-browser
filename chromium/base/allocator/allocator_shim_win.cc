@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <limits.h>
 #include <malloc.h>
 #include <new.h>
 #include <windows.h>
-
-#include "base/basictypes.h"
+#include <stddef.h>
 
 // This shim make it possible to perform additional checks on allocations
 // before passing them to the Heap functions.
@@ -25,6 +25,12 @@ extern "C" {
 // heapinit.c
 void* _crtheap = reinterpret_cast<void*>(1);
 }
+
+namespace base {
+namespace allocator {
+bool g_is_win_shim_layer_initialized = false;
+}  // namespace allocator
+}  // namespace base
 
 namespace {
 
@@ -172,6 +178,9 @@ void* malloc(size_t size) {
   return ptr;
 }
 
+// Symbol to allow weak linkage to win_heap_malloc from memory_win.cc.
+void* (*malloc_unchecked)(size_t) = &win_heap_malloc;
+
 // free.c
 void free(void* p) {
   win_heap_free(p);
@@ -208,6 +217,7 @@ intptr_t _get_heap_handle() {
 
 // heapinit.c
 int _heap_init() {
+  base::allocator::g_is_win_shim_layer_initialized = true;
   return win_heap_init() ? 1 : 0;
 }
 

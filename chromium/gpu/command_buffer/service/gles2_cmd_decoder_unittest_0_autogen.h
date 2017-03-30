@@ -22,13 +22,19 @@ void GLES2DecoderTestBase::SetupInitCapabilitiesExpectations(bool es3_capable) {
   ExpectEnableDisable(GL_SAMPLE_COVERAGE, false);
   ExpectEnableDisable(GL_SCISSOR_TEST, false);
   ExpectEnableDisable(GL_STENCIL_TEST, false);
+  if (group_->feature_info()->feature_flags().ext_multisample_compatibility) {
+    ExpectEnableDisable(GL_MULTISAMPLE_EXT, true);
+  }
+  if (group_->feature_info()->feature_flags().ext_multisample_compatibility) {
+    ExpectEnableDisable(GL_SAMPLE_ALPHA_TO_ONE_EXT, false);
+  }
   if (es3_capable) {
     ExpectEnableDisable(GL_RASTERIZER_DISCARD, false);
     ExpectEnableDisable(GL_PRIMITIVE_RESTART_FIXED_INDEX, false);
   }
 }
 
-void GLES2DecoderTestBase::SetupInitStateExpectations() {
+void GLES2DecoderTestBase::SetupInitStateExpectations(bool es3_capable) {
   EXPECT_CALL(*gl_, BlendColor(0.0f, 0.0f, 0.0f, 0.0f))
       .Times(1)
       .RetiresOnSaturation();
@@ -46,6 +52,13 @@ void GLES2DecoderTestBase::SetupInitStateExpectations() {
   EXPECT_CALL(*gl_, ColorMask(true, true, true, true))
       .Times(1)
       .RetiresOnSaturation();
+  if (group_->feature_info()
+          ->feature_flags()
+          .chromium_framebuffer_mixed_samples) {
+    EXPECT_CALL(*gl_, CoverageModulationNV(GL_NONE))
+        .Times(1)
+        .RetiresOnSaturation();
+  }
   EXPECT_CALL(*gl_, CullFace(GL_BACK)).Times(1).RetiresOnSaturation();
   EXPECT_CALL(*gl_, DepthFunc(GL_LESS)).Times(1).RetiresOnSaturation();
   EXPECT_CALL(*gl_, DepthMask(true)).Times(1).RetiresOnSaturation();
@@ -68,6 +81,11 @@ void GLES2DecoderTestBase::SetupInitStateExpectations() {
   }
   if (group_->feature_info()->feature_flags().chromium_path_rendering) {
     EXPECT_CALL(*gl_, MatrixLoadfEXT(GL_PATH_PROJECTION_CHROMIUM, _))
+        .Times(1)
+        .RetiresOnSaturation();
+  }
+  if (group_->feature_info()->feature_flags().chromium_path_rendering) {
+    EXPECT_CALL(*gl_, PathStencilFuncNV(GL_ALWAYS, 0, 0xFFFFFFFFU))
         .Times(1)
         .RetiresOnSaturation();
   }
@@ -105,5 +123,6 @@ void GLES2DecoderTestBase::SetupInitStateExpectations() {
               Viewport(kViewportX, kViewportY, kViewportWidth, kViewportHeight))
       .Times(1)
       .RetiresOnSaturation();
+  SetupInitStateManualExpectations(es3_capable);
 }
 #endif  // GPU_COMMAND_BUFFER_SERVICE_GLES2_CMD_DECODER_UNITTEST_0_AUTOGEN_H_

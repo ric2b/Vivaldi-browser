@@ -4,28 +4,14 @@
 
 #include "mojo/runner/switches.h"
 
-#include "base/basictypes.h"
-
 namespace switches {
-
-// Used just for debugging to make it easier to attach debuggers. The actual app
-// path that is used is sent over IPC.
-const char kApp[] = "app";
-
-// Used internally by the main process to indicate that a new process should be
-// a child process. Not for user use.
-const char kChildProcess[] = "child-process";
 
 // Comma separated list like:
 // text/html,mojo:html_viewer,application/bravo,https://abarth.com/bravo
 const char kContentHandlers[] = "content-handlers";
 
-// Force dynamically loaded apps / services to be loaded irrespective of cache
-// instructions.
-const char kDisableCache[] = "disable-cache";
-
 // In multiprocess mode, force these apps to be loaded in the main process.
-// Comma-separate list of URLs. Example:
+// This is a comma-separated list of URLs. Example:
 // --force-in-process=mojo:native_viewport_service,mojo:network_service
 const char kForceInProcess[] = "force-in-process";
 
@@ -36,18 +22,18 @@ const char kHelp[] = "help";
 // Can be used multiple times.
 const char kMapOrigin[] = "map-origin";
 
-// Map mojo: URLs to a shared library of similar name at this origin. See
-// url_resolver.cc for details.
-const char kOrigin[] = "origin";
-
-// Starts tracing when the shell starts up, saving a trace file on disk after 5
-// seconds or when the shell exits.
-const char kTraceStartup[] = "trace-startup";
-
-// Specifies a set of mappings to apply when resolving urls. The value is a set
-// of ',' separated mappings, where each mapping consists of a pair of urls
-// giving the to/from url to map. For example, 'a=b,c=d' contains two mappings,
+// Specifies a set of mappings to apply when resolving URLs. The value is a set
+// of comma-separated mappings, where each mapping consists of a pair of URLs
+// giving the to/from URLs to map. For example, 'a=b,c=d' contains two mappings,
 // the first maps 'a' to 'b' and the second 'c' to 'd'.
 const char kURLMappings[] = "url-mappings";
+
+// When this is set, we create a temporary user data dir for the process, and
+// add a flag so kUserDataDir points to it.
+const char kUseTemporaryUserDataDir[] = "use-temporary-user-data-dir";
+
+// Specifies the user data directory. This is the one directory which stores
+// all persistent data.
+const char kUserDataDir[] = "user-data-dir";
 
 }  // namespace switches

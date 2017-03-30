@@ -15,6 +15,7 @@ import android.view.Window;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -38,7 +39,9 @@ import java.util.Stack;
 public class SnackbarManager implements OnClickListener, OnGlobalLayoutListener {
 
     /**
-     * Interface that shows the ability to provide a unified snackbar manager.
+     * Interface that shows the ability to provide a snackbar manager. Activities implementing this
+     * interface must call {@link SnackbarManager#onStart()} and {@link SnackbarManager#onStop()} in
+     * corresponding lifecycle events.
      */
     public interface SnackbarManageable {
         /**
@@ -92,10 +95,11 @@ public class SnackbarManager implements OnClickListener, OnGlobalLayoutListener 
     private final Handler mUIThreadHandler;
     private Stack<Snackbar> mStack = new Stack<Snackbar>();
     private SnackbarPopupWindow mPopup;
+    private boolean mActivityInForeground;
     private final Runnable mHideRunnable = new Runnable() {
         @Override
         public void run() {
-            dismissSnackbar(true);
+            dismissAllSnackbars(true);
         }
     };
 
@@ -113,10 +117,33 @@ public class SnackbarManager implements OnClickListener, OnGlobalLayoutListener 
     }
 
     /**
+     * Notifies the snackbar manager that the activity is running in foreground now.
+     */
+    public void onStart() {
+        mActivityInForeground = true;
+    }
+
+    /**
+     * Notifies the snackbar manager that the activity has been pushed to background.
+     */
+    public void onStop() {
+        dismissAllSnackbars(false);
+        mActivityInForeground = false;
+    }
+
+    /**
      * Shows a snackbar at the bottom of the screen, or above the keyboard if the keyboard is
-     * visible.
+     * visible. If the currently displayed snackbar is forcing display, the new snackbar is added as
+     * the next to be displayed on the stack.
      */
     public void showSnackbar(Snackbar snackbar) {
+        if (!mActivityInForeground) return;
+
+        if (mPopup != null && !mStack.empty() && mStack.peek().getForceDisplay()) {
+            mStack.add(mStack.size() - 1, snackbar);
+            return;
+        }
+
         int durationMs = snackbar.getDuration();
         if (durationMs == 0) {
             durationMs = DeviceClassManager.isAccessibilityModeEnabled(mDecor.getContext())
@@ -139,12 +166,20 @@ public class SnackbarManager implements OnClickListener, OnGlobalLayoutListener 
     }
 
     /**
-     * Dismisses snackbar, clears out all entries in stack and prevents future remove callbacks from
-     * happening. This method also unregisters this class from global layout notifications.
+     * Warning: Calling this method might cause cascading destroy loop, because you might trigger
+     * callbacks for other {@link SnackbarController}. This method is only meant to be used during
+     * {@link ChromeActivity}'s destruction routine. For other purposes, use
+     * {@link #dismissSnackbars(SnackbarController)} instead.
+     * <p>
+     * Dismisses all snackbars in stack. This will call
+     * {@link SnackbarController#onDismissNoAction(Object)} for every closing snackbar.
+     *
      * @param isTimeout Whether dismissal was triggered by timeout.
      */
-    public void dismissSnackbar(boolean isTimeout) {
+    public void dismissAllSnackbars(boolean isTimeout) {
         mUIThreadHandler.removeCallbacks(mHideRunnable);
+
+        if (!mActivityInForeground) return;
 
         if (mPopup != null) {
             mPopup.dismiss();
@@ -160,16 +195,21 @@ public class SnackbarManager implements OnClickListener, OnGlobalLayoutListener 
                 controllers.add(snackbar.getController());
             }
             snackbar.getController().onDismissNoAction(snackbar.getActionData());
+
+            if (isTimeout && !mStack.isEmpty() && mStack.peek().getForceDisplay()) {
+                showSnackbar(mStack.pop());
+                return;
+            }
         }
         mDecor.getViewTreeObserver().removeOnGlobalLayoutListener(this);
     }
 
     /**
-     * Removes all snackbars that have a certain controller.
+     * Dismisses snackbars that are associated with the given {@link SnackbarController}.
      *
      * @param controller Only snackbars with this controller will be removed.
      */
-    public void removeMatchingSnackbars(SnackbarController controller) {
+    public void dismissSnackbars(SnackbarController controller) {
         boolean isFound = false;
         Snackbar[] snackbars = new Snackbar[mStack.size()];
         mStack.toArray(snackbars);
@@ -185,12 +225,12 @@ public class SnackbarManager implements OnClickListener, OnGlobalLayoutListener 
     }
 
     /**
-     * Removes all snackbars that have a certain controller and action data.
+     * Dismisses snackbars that have a certain controller and action data.
      *
      * @param controller Only snackbars with this controller will be removed.
      * @param actionData Only snackbars whose action data is equal to actionData will be removed.
      */
-    public void removeMatchingSnackbars(SnackbarController controller, Object actionData) {
+    public void dismissSnackbars(SnackbarController controller, Object actionData) {
         boolean isFound = false;
         for (Snackbar snackbar : mStack) {
             if (snackbar.getActionData() != null && snackbar.getActionData().equals(actionData)
@@ -209,7 +249,7 @@ public class SnackbarManager implements OnClickListener, OnGlobalLayoutListener 
         controller.onDismissForEachType(false);
 
         if (mStack.isEmpty()) {
-            dismissSnackbar(false);
+            dismissAllSnackbars(false);
         } else {
             // Refresh the snackbar to let it show top of stack and have full timeout.
             showSnackbar(mStack.pop());
@@ -229,7 +269,7 @@ public class SnackbarManager implements OnClickListener, OnGlobalLayoutListener 
         if (!mStack.isEmpty()) {
             showSnackbar(mStack.pop());
         } else {
-            dismissSnackbar(false);
+            dismissAllSnackbars(false);
         }
     }
 

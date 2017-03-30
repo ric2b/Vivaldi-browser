@@ -41,7 +41,7 @@ class AdbClientSocketTest : public InProcessBrowserTest,
       const DevToolsAndroidBridge::RemoteDevices& devices) override {
     devices_ = devices;
     android_bridge_->RemoveDeviceListListener(this);
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void CheckDevices() {
@@ -134,21 +134,24 @@ class AdbClientSocketTest : public InProcessBrowserTest,
   DevToolsAndroidBridge::RemoteDevices devices_;
 };
 
-IN_PROC_BROWSER_TEST_F(AdbClientSocketTest, TestFlushWithoutSize) {
+// Flaky due to failure to bind a hardcoded port. crbug.com/566057
+IN_PROC_BROWSER_TEST_F(AdbClientSocketTest, DISABLED_TestFlushWithoutSize) {
   StartMockAdbServer(FlushWithoutSize);
   StartTest();
   CheckDevices();
   StopMockAdbServer();
 }
 
-IN_PROC_BROWSER_TEST_F(AdbClientSocketTest, TestFlushWithSize) {
+// Flaky due to failure to bind a hardcoded port. crbug.com/566057
+IN_PROC_BROWSER_TEST_F(AdbClientSocketTest, DISABLED_TestFlushWithSize) {
   StartMockAdbServer(FlushWithSize);
   StartTest();
   CheckDevices();
   StopMockAdbServer();
 }
 
-IN_PROC_BROWSER_TEST_F(AdbClientSocketTest, TestFlushWithData) {
+// Flaky due to failure to bind a hardcoded port. crbug.com/566057
+IN_PROC_BROWSER_TEST_F(AdbClientSocketTest, DISABLED_TestFlushWithData) {
   StartMockAdbServer(FlushWithData);
   StartTest();
   CheckDevices();

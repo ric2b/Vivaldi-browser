@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_DOMAIN_RELIABILITY_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_DOMAIN_RELIABILITY_SERVICE_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -27,7 +28,7 @@ class DomainReliabilityServiceFactory
   static DomainReliabilityServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<DomainReliabilityServiceFactory>;
+  friend struct base::DefaultSingletonTraits<DomainReliabilityServiceFactory>;
 
   DomainReliabilityServiceFactory();
   ~DomainReliabilityServiceFactory() override;

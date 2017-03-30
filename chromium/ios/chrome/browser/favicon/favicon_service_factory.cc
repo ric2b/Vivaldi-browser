@@ -34,7 +34,7 @@ favicon::FaviconService* FaviconServiceFactory::GetForBrowserState(
 
 // static
 FaviconServiceFactory* FaviconServiceFactory::GetInstance() {
-  return Singleton<FaviconServiceFactory>::get();
+  return base::Singleton<FaviconServiceFactory>::get();
 }
 
 FaviconServiceFactory::FaviconServiceFactory()
@@ -52,13 +52,9 @@ scoped_ptr<KeyedService> FaviconServiceFactory::BuildServiceInstanceFor(
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
   return make_scoped_ptr(new favicon::FaviconService(
-      make_scoped_ptr(new FaviconClientImpl),
+      make_scoped_ptr(new FaviconClientImpl(browser_state)),
       ios::HistoryServiceFactory::GetForBrowserState(
           browser_state, ServiceAccessType::EXPLICIT_ACCESS)));
-}
-
-bool FaviconServiceFactory::ServiceIsNULLWhileTesting() const {
-  return true;
 }
 
 }  // namespace ios

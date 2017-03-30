@@ -7,7 +7,9 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/content_export.h"
@@ -30,7 +32,7 @@ class WebContentsViewGuest : public WebContentsView,
   WebContentsViewGuest(WebContentsImpl* web_contents,
                        BrowserPluginGuest* guest,
                        scoped_ptr<WebContentsView> platform_view,
-                       RenderViewHostDelegateView* platform_view_delegate_view);
+                       RenderViewHostDelegateView** delegate_view);
   ~WebContentsViewGuest() override;
 
   WebContents* web_contents();

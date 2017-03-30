@@ -4,6 +4,10 @@
 
 #include "components/password_manager/core/browser/password_manager.h"
 
+#include <stddef.h>
+#include <map>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
@@ -11,6 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/form_data_predictions.h"
@@ -18,11 +23,13 @@
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/keychain_migration_status_mac.h"
+#include "components/password_manager/core/browser/log_manager.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/password_manager/core/common/password_manager_switches.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -90,26 +97,35 @@ bool IsSignupForm(const PasswordForm& form) {
   return !form.new_password_element.empty() && form.password_element.empty();
 }
 
+// Tries to convert the |server_field_type| to a PasswordFormFieldPredictionType
+// stored in |type|. Returns true if the conversion was made.
 bool ServerTypeToPrediction(autofill::ServerFieldType server_field_type,
                             autofill::PasswordFormFieldPredictionType* type) {
   switch (server_field_type) {
     case autofill::USERNAME:
     case autofill::USERNAME_AND_EMAIL_ADDRESS:
       *type = autofill::PREDICTION_USERNAME;
-      break;
+      return true;
 
     case autofill::PASSWORD:
       *type = autofill::PREDICTION_CURRENT_PASSWORD;
-      break;
+      return true;
 
     case autofill::ACCOUNT_CREATION_PASSWORD:
       *type = autofill::PREDICTION_NEW_PASSWORD;
-      break;
+      return true;
 
     default:
       return false;
   }
-  return true;
+}
+
+// Returns true if the |field_type| is known to be possibly
+// misinterpreted as a password by the Password Manager.
+bool IsPredictedTypeNotPasswordPrediction(
+    autofill::ServerFieldType field_type) {
+  return field_type == autofill::CREDIT_CARD_NUMBER ||
+         field_type == autofill::CREDIT_CARD_VERIFICATION_CODE;
 }
 
 bool PreferredRealmIsFromAndroid(
@@ -139,6 +155,9 @@ void PasswordManager::RegisterProfilePrefs(
       prefs::kPasswordManagerSavingEnabled,
       true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kCredentialsEnableService, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
   registry->RegisterBooleanPref(prefs::kPasswordManagerAutoSignin, true);
   registry->RegisterBooleanPref(prefs::kPasswordManagerAllowShowPasswords,
                                 true);
@@ -166,47 +185,25 @@ PasswordManager::~PasswordManager() {
   FOR_EACH_OBSERVER(LoginModelObserver, observers_, OnLoginModelDestroying());
 }
 
+void PasswordManager::GenerationAvailableForForm(const PasswordForm& form) {
+  DCHECK(client_->IsSavingAndFillingEnabledForCurrentPage());
+
+  PasswordFormManager* form_manager = GetMatchingPendingManager(form);
+  if (form_manager) {
+    form_manager->MarkGenerationAvailable();
+    return;
+  }
+}
+
 void PasswordManager::SetHasGeneratedPasswordForForm(
     password_manager::PasswordManagerDriver* driver,
     const PasswordForm& form,
     bool password_is_generated) {
-  DCHECK(client_->IsSavingEnabledForCurrentPage());
+  DCHECK(client_->IsSavingAndFillingEnabledForCurrentPage());
 
-  ScopedVector<PasswordFormManager>::iterator matched_manager_it =
-      pending_login_managers_.end();
-  PasswordFormManager::MatchResultMask current_match_result =
-      PasswordFormManager::RESULT_NO_MATCH;
-
-  for (ScopedVector<PasswordFormManager>::iterator iter =
-           pending_login_managers_.begin();
-       iter != pending_login_managers_.end(); ++iter) {
-    PasswordFormManager::MatchResultMask result = (*iter)->DoesManage(form);
-
-    if (result == PasswordFormManager::RESULT_NO_MATCH)
-      continue;
-
-    if (result == PasswordFormManager::RESULT_COMPLETE_MATCH) {
-      // If we find a manager that exactly matches the submitted form including
-      // the action URL, exit the loop.
-      matched_manager_it = iter;
-      break;
-    } else if (result == (PasswordFormManager::RESULT_COMPLETE_MATCH &
-                          ~PasswordFormManager::RESULT_ACTION_MATCH) &&
-               result > current_match_result) {
-      // If the current manager matches the submitted form excluding the action
-      // URL, remember it as a candidate and continue searching for an exact
-      // match. See http://crbug.com/27246 for an example where actions can
-      // change.
-      matched_manager_it = iter;
-      current_match_result = result;
-    } else if (result > current_match_result) {
-      matched_manager_it = iter;
-      current_match_result = result;
-    }
-  }
-
-  if (matched_manager_it != pending_login_managers_.end()) {
-    (*matched_manager_it)->set_has_generated_password(password_is_generated);
+  PasswordFormManager* form_manager = GetMatchingPendingManager(form);
+  if (form_manager) {
+    form_manager->set_has_generated_password(password_is_generated);
     return;
   }
 
@@ -227,17 +224,19 @@ void PasswordManager::SetHasGeneratedPasswordForForm(
 }
 
 void PasswordManager::ProvisionallySavePassword(const PasswordForm& form) {
-  bool is_saving_enabled = client_->IsSavingEnabledForCurrentPage();
+  bool is_saving_and_filling_enabled =
+      client_->IsSavingAndFillingEnabledForCurrentPage();
 
   scoped_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (client_->IsLoggingActive()) {
-    logger.reset(new BrowserSavePasswordProgressLogger(client_));
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
     logger->LogMessage(Logger::STRING_PROVISIONALLY_SAVE_PASSWORD_METHOD);
     logger->LogPasswordForm(Logger::STRING_PROVISIONALLY_SAVE_PASSWORD_FORM,
                             form);
   }
 
-  if (!is_saving_enabled) {
+  if (!is_saving_and_filling_enabled) {
     RecordFailure(SAVING_DISABLED, form.origin, logger.get());
     return;
   }
@@ -318,21 +317,6 @@ void PasswordManager::ProvisionallySavePassword(const PasswordForm& form) {
     return;
   }
 
-  // Bail if we're missing any of the necessary form components.
-  if (!manager->HasValidPasswordForm()) {
-    RecordFailure(INVALID_FORM, form.origin, logger.get());
-    return;
-  }
-
-  // Don't save credentials for the syncing account. See crbug.com/365832 for
-  // background.
-  if (ShouldDropSyncCredential() &&
-      client_->IsSyncAccountCredential(base::UTF16ToUTF8(form.username_value),
-                                       form.signon_realm)) {
-    RecordFailure(SYNC_CREDENTIAL, form.origin, logger.get());
-    return;
-  }
-
   PasswordForm provisionally_saved_form(form);
   provisionally_saved_form.ssl_valid =
       form.origin.SchemeIsCryptographic() &&
@@ -358,6 +342,13 @@ void PasswordManager::ProvisionallySavePassword(const PasswordForm& form) {
   // post-submit navigation concludes, we compare the landing URL against the
   // cached and report the difference through UMA.
   main_frame_url_ = client_->GetMainFrameURL();
+}
+
+void PasswordManager::UpdateFormManagers() {
+  for (PasswordFormManager* form_manager : pending_login_managers_) {
+    form_manager->FetchDataFromPasswordStore(
+        client_->GetAuthorizationPromptPolicy(form_manager->observed_form()));
+  }
 }
 
 void PasswordManager::RecordFailure(ProvisionalSaveFailure failure,
@@ -412,8 +403,19 @@ void PasswordManager::AddSubmissionCallback(
   submission_callbacks_.push_back(callback);
 }
 
-void PasswordManager::AddObserver(LoginModelObserver* observer) {
+void PasswordManager::AddObserverAndDeliverCredentials(
+    LoginModelObserver* observer,
+    const PasswordForm& observed_form) {
   observers_.AddObserver(observer);
+
+  observer->set_signon_realm(observed_form.signon_realm);
+  // TODO(vabr): Even though the observers do the realm check, this mechanism
+  // will still result in every observer being notified about every form. We
+  // could perhaps do better by registering an observer call-back instead.
+
+  std::vector<PasswordForm> observed_forms;
+  observed_forms.push_back(observed_form);
+  OnPasswordFormsParsed(nullptr, observed_forms);
 }
 
 void PasswordManager::RemoveObserver(LoginModelObserver* observer) {
@@ -442,7 +444,8 @@ void PasswordManager::OnPasswordFormForceSaveRequested(
   // mark the form as force saved, and recreate the pending login managers,
   // because the password store might have changed.
   ProvisionallySavePassword(password_form);
-  AskUserOrSavePassword();
+  if (provisional_save_manager_)
+    OnLoginSuccessful();
 }
 
 void PasswordManager::OnPasswordFormsParsed(
@@ -455,13 +458,13 @@ void PasswordManager::CreatePendingLoginManagers(
     password_manager::PasswordManagerDriver* driver,
     const std::vector<PasswordForm>& forms) {
   scoped_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (client_->IsLoggingActive()) {
-    logger.reset(new BrowserSavePasswordProgressLogger(client_));
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
     logger->LogMessage(Logger::STRING_CREATE_LOGIN_MANAGERS_METHOD);
   }
 
-  if (client_->DidLastPageLoadEncounterSSLErrors() ||
-      !client_->IsPasswordManagementEnabledForCurrentPage())
+  if (!client_->IsFillingEnabledForCurrentPage())
     return;
 
   if (logger) {
@@ -477,7 +480,8 @@ void PasswordManager::CreatePendingLoginManagers(
        iter != forms.end(); ++iter) {
     // Don't involve the password manager if this form corresponds to
     // SpdyProxy authentication, as indicated by the realm.
-    if (base::EndsWith(iter->signon_realm, kSpdyProxyRealm, true))
+    if (base::EndsWith(iter->signon_realm, kSpdyProxyRealm,
+                       base::CompareCase::SENSITIVE))
       continue;
     bool old_manager_found = false;
     for (const auto& old_manager : old_login_managers) {
@@ -486,7 +490,7 @@ void PasswordManager::CreatePendingLoginManagers(
         continue;
       }
       old_manager_found = true;
-      if (old_manager->HasCompletedMatching())
+      if (driver)
         old_manager->ProcessFrame(driver->AsWeakPtr());
       break;
     }
@@ -509,13 +513,15 @@ void PasswordManager::CreatePendingLoginManagers(
       logger->LogFormSignatures(Logger::STRING_ADDING_SIGNATURE, *iter);
     bool ssl_valid = iter->origin.SchemeIsCryptographic();
     PasswordFormManager* manager = new PasswordFormManager(
-        this, client_, driver->AsWeakPtr(), *iter, ssl_valid);
+        this, client_,
+        (driver ? driver->AsWeakPtr() : base::WeakPtr<PasswordManagerDriver>()),
+        *iter, ssl_valid);
     pending_login_managers_.push_back(manager);
 
     PasswordStore::AuthorizationPromptPolicy prompt_policy =
         client_->GetAuthorizationPromptPolicy(*iter);
 
-    manager->FetchMatchingLoginsFromPasswordStore(prompt_policy);
+    manager->FetchDataFromPasswordStore(prompt_policy);
   }
 
   if (logger) {
@@ -526,12 +532,13 @@ void PasswordManager::CreatePendingLoginManagers(
 
 bool PasswordManager::CanProvisionalManagerSave() {
   scoped_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (client_->IsLoggingActive()) {
-    logger.reset(new BrowserSavePasswordProgressLogger(client_));
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
     logger->LogMessage(Logger::STRING_CAN_PROVISIONAL_MANAGER_SAVE_METHOD);
   }
 
-  if (!provisional_save_manager_.get()) {
+  if (!provisional_save_manager_) {
     if (logger) {
       logger->LogMessage(Logger::STRING_NO_PROVISIONAL_SAVE_MANAGER);
     }
@@ -547,22 +554,17 @@ bool PasswordManager::CanProvisionalManagerSave() {
     provisional_save_manager_.reset();
     return false;
   }
-
-  // Also get out of here if the user told us to 'never remember' passwords for
-  // this form.
-  if (provisional_save_manager_->IsBlacklisted()) {
-    RecordFailure(FORM_BLACKLISTED,
-                  provisional_save_manager_->observed_form().origin,
-                  logger.get());
-    provisional_save_manager_.reset();
-    return false;
-  }
   return true;
 }
 
 bool PasswordManager::ShouldPromptUserToSavePassword() const {
   return !client_->IsAutomaticPasswordSavingEnabled() &&
-         provisional_save_manager_->IsNewLogin() &&
+         (provisional_save_manager_->IsNewLogin() ||
+          provisional_save_manager_
+              ->is_possible_change_password_form_without_username() ||
+          provisional_save_manager_->retry_password_form_password_update() ||
+          (provisional_save_manager_->password_overridden() &&
+           client_->IsUpdatePasswordUIEnabled())) &&
          !provisional_save_manager_->has_generated_password() &&
          !provisional_save_manager_->IsPendingCredentialsPublicSuffixMatch();
 }
@@ -573,22 +575,21 @@ void PasswordManager::OnPasswordFormsRendered(
     bool did_stop_loading) {
   CreatePendingLoginManagers(driver, visible_forms);
   scoped_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (client_->IsLoggingActive()) {
-    logger.reset(new BrowserSavePasswordProgressLogger(client_));
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
     logger->LogMessage(Logger::STRING_ON_PASSWORD_FORMS_RENDERED_METHOD);
   }
 
   if (!CanProvisionalManagerSave())
     return;
 
-  DCHECK(client_->IsSavingEnabledForCurrentPage());
-
   // If the server throws an internal error, access denied page, page not
   // found etc. after a login attempt, we do not save the credentials.
   if (client_->WasLastNavigationHTTPError()) {
     if (logger)
       logger->LogMessage(Logger::STRING_DECISION_DROP);
-    provisional_save_manager_->SubmitFailed();
+    provisional_save_manager_->LogSubmitFailed();
     provisional_save_manager_.reset();
     return;
   }
@@ -607,9 +608,6 @@ void PasswordManager::OnPasswordFormsRendered(
   if (did_stop_loading) {
     if (provisional_save_manager_->pending_credentials().scheme ==
         PasswordForm::SCHEME_HTML) {
-      // Generated passwords should always be saved.
-      if (provisional_save_manager_->has_generated_password())
-        all_visible_forms_.clear();
       for (size_t i = 0; i < all_visible_forms_.size(); ++i) {
         // TODO(vabr): The similarity check is just action equality up to
         // HTTP<->HTTPS substitution for now. If it becomes more complex, it may
@@ -619,16 +617,20 @@ void PasswordManager::OnPasswordFormsRendered(
             URLsEqualUpToHttpHttpsSubstitution(
                 provisional_save_manager_->pending_credentials().action,
                 all_visible_forms_[i].action)) {
-          if (logger) {
-            logger->LogPasswordForm(Logger::STRING_PASSWORD_FORM_REAPPEARED,
-                                    visible_forms[i]);
-            logger->LogMessage(Logger::STRING_DECISION_DROP);
+          provisional_save_manager_->LogSubmitFailed();
+          // Generated passwords should always be saved, but we do want to
+          // record that the submission normally would have failed for UMA.
+          if (!provisional_save_manager_->has_generated_password()) {
+            if (logger) {
+              logger->LogPasswordForm(Logger::STRING_PASSWORD_FORM_REAPPEARED,
+                                      all_visible_forms_[i]);
+              logger->LogMessage(Logger::STRING_DECISION_DROP);
+            }
+            provisional_save_manager_.reset();
+            // Clear all_visible_forms_ once we found the match.
+            all_visible_forms_.clear();
+            return;
           }
-          provisional_save_manager_->SubmitFailed();
-          provisional_save_manager_.reset();
-          // Clear all_visible_forms_ once we found the match.
-          all_visible_forms_.clear();
-          return;
         }
       }
     } else {
@@ -643,7 +645,7 @@ void PasswordManager::OnPasswordFormsRendered(
     // automatically save the login data. We prompt when the user hasn't
     // already given consent, either through previously accepting the infobar
     // or by having the browser generate the password.
-    AskUserOrSavePassword();
+    OnLoginSuccessful();
   }
 }
 
@@ -651,8 +653,9 @@ void PasswordManager::OnInPageNavigation(
     password_manager::PasswordManagerDriver* driver,
     const PasswordForm& password_form) {
   scoped_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (client_->IsLoggingActive()) {
-    logger.reset(new BrowserSavePasswordProgressLogger(client_));
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
     logger->LogMessage(Logger::STRING_ON_IN_PAGE_NAVIGATION);
   }
 
@@ -661,16 +664,29 @@ void PasswordManager::OnInPageNavigation(
   if (!CanProvisionalManagerSave())
     return;
 
-  AskUserOrSavePassword();
+  OnLoginSuccessful();
 }
 
-void PasswordManager::AskUserOrSavePassword() {
+void PasswordManager::OnLoginSuccessful() {
   scoped_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (client_->IsLoggingActive()) {
-    logger.reset(new BrowserSavePasswordProgressLogger(client_));
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
     logger->LogMessage(Logger::STRING_ON_ASK_USER_OR_SAVE_PASSWORD);
   }
-  provisional_save_manager_->SubmitPassed();
+
+  if (ShouldDropSyncCredential() &&
+      !client_->GetStoreResultFilter()->ShouldSave(
+          provisional_save_manager_->pending_credentials())) {
+    provisional_save_manager_->WipeStoreCopyIfOutdated();
+    RecordFailure(SYNC_CREDENTIAL,
+                  provisional_save_manager_->observed_form().origin,
+                  logger.get());
+    provisional_save_manager_.reset();
+    return;
+  }
+
+  provisional_save_manager_->LogSubmitPassed();
 
   RecordWhetherTargetDomainDiffers(main_frame_url_, client_->GetMainFrameURL());
 
@@ -681,9 +697,16 @@ void PasswordManager::AskUserOrSavePassword() {
                           empty_password);
     if (logger)
       logger->LogMessage(Logger::STRING_DECISION_ASK);
-    if (client_->PromptUserToSavePassword(
-            provisional_save_manager_.Pass(),
-            CredentialSourceType::CREDENTIAL_SOURCE_PASSWORD_MANAGER)) {
+    bool update_password =
+        (!provisional_save_manager_->best_matches().empty() &&
+         provisional_save_manager_
+             ->is_possible_change_password_form_without_username()) ||
+        provisional_save_manager_->password_overridden() ||
+        provisional_save_manager_->retry_password_form_password_update();
+    if (client_->PromptUserToSaveOrUpdatePassword(
+            std::move(provisional_save_manager_),
+            CredentialSourceType::CREDENTIAL_SOURCE_PASSWORD_MANAGER,
+            update_password)) {
       if (logger)
         logger->LogMessage(Logger::STRING_SHOW_PASSWORD_PROMPT);
     }
@@ -693,7 +716,7 @@ void PasswordManager::AskUserOrSavePassword() {
     provisional_save_manager_->Save();
 
     if (provisional_save_manager_->has_generated_password()) {
-      client_->AutomaticPasswordSave(provisional_save_manager_.Pass());
+      client_->AutomaticPasswordSave(std::move(provisional_save_manager_));
     } else {
       provisional_save_manager_.reset();
     }
@@ -709,46 +732,50 @@ void PasswordManager::Autofill(password_manager::PasswordManagerDriver* driver,
                                const PasswordFormMap& best_matches,
                                const PasswordForm& preferred_match,
                                bool wait_for_username) const {
+  DCHECK_EQ(PasswordForm::SCHEME_HTML, preferred_match.scheme);
+
   scoped_ptr<BrowserSavePasswordProgressLogger> logger;
-  if (client_->IsLoggingActive()) {
-    logger.reset(new BrowserSavePasswordProgressLogger(client_));
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
     logger->LogMessage(Logger::STRING_PASSWORDMANAGER_AUTOFILL);
   }
-  switch (form_for_autofill.scheme) {
-    case PasswordForm::SCHEME_HTML: {
-      // Note the check above is required because the observers_ for a non-HTML
-      // schemed password form may have been freed, so we need to distinguish.
-      autofill::PasswordFormFillData fill_data;
-      InitPasswordFormFillData(form_for_autofill,
-                               best_matches,
-                               &preferred_match,
-                               wait_for_username,
-                               OtherPossibleUsernamesEnabled(),
-                               &fill_data);
-      if (logger)
-        logger->LogBoolean(Logger::STRING_WAIT_FOR_USERNAME, wait_for_username);
-      UMA_HISTOGRAM_BOOLEAN(
-          "PasswordManager.FillSuggestionsIncludeAndroidAppCredentials",
-          ContainsAndroidCredentials(fill_data));
-      metrics_util::LogFilledCredentialIsFromAndroidApp(
-          PreferredRealmIsFromAndroid(fill_data));
-      driver->FillPasswordForm(fill_data);
-      break;
-    }
-    default:
-      if (logger) {
-        logger->LogBoolean(Logger::STRING_LOGINMODELOBSERVER_PRESENT,
-                           observers_.might_have_observers());
-      }
-      FOR_EACH_OBSERVER(
-          LoginModelObserver,
-          observers_,
-          OnAutofillDataAvailable(preferred_match.username_value,
-                                  preferred_match.password_value));
-      break;
+
+  autofill::PasswordFormFillData fill_data;
+  InitPasswordFormFillData(form_for_autofill, best_matches, &preferred_match,
+                           wait_for_username, OtherPossibleUsernamesEnabled(),
+                           &fill_data);
+  if (logger)
+    logger->LogBoolean(Logger::STRING_WAIT_FOR_USERNAME, wait_for_username);
+  UMA_HISTOGRAM_BOOLEAN(
+      "PasswordManager.FillSuggestionsIncludeAndroidAppCredentials",
+      ContainsAndroidCredentials(fill_data));
+  metrics_util::LogFilledCredentialIsFromAndroidApp(
+      PreferredRealmIsFromAndroid(fill_data));
+  driver->FillPasswordForm(fill_data);
+
+  client_->PasswordWasAutofilled(best_matches, form_for_autofill.origin);
+}
+
+void PasswordManager::AutofillHttpAuth(
+    const PasswordFormMap& best_matches,
+    const PasswordForm& preferred_match) const {
+  DCHECK_NE(PasswordForm::SCHEME_HTML, preferred_match.scheme);
+
+  scoped_ptr<BrowserSavePasswordProgressLogger> logger;
+  if (password_manager_util::IsLoggingActive(client_)) {
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
+    logger->LogMessage(Logger::STRING_PASSWORDMANAGER_AUTOFILLHTTPAUTH);
+    logger->LogBoolean(Logger::STRING_LOGINMODELOBSERVER_PRESENT,
+                       observers_.might_have_observers());
   }
 
-  client_->PasswordWasAutofilled(best_matches);
+  FOR_EACH_OBSERVER(LoginModelObserver, observers_,
+                    OnAutofillDataAvailable(preferred_match));
+  DCHECK(!best_matches.empty());
+  client_->PasswordWasAutofilled(best_matches,
+                                 best_matches.begin()->second->origin);
 }
 
 void PasswordManager::ProcessAutofillPredictions(
@@ -762,13 +789,59 @@ void PasswordManager::ProcessAutofillPredictions(
              form->begin();
          field != form->end(); ++field) {
       autofill::PasswordFormFieldPredictionType prediction_type;
-      if (ServerTypeToPrediction((*field)->server_type(), &prediction_type))
-        predictions[form->ToFormData()][prediction_type] = *(*field);
+      if (ServerTypeToPrediction((*field)->server_type(), &prediction_type)) {
+        predictions[form->ToFormData()][*(*field)] = prediction_type;
+      }
+      // Certain fields are annotated by the browsers as "not passwords" i.e.
+      // they should not be treated as passwords by the Password Manager.
+      if ((*field)->form_control_type == "password" &&
+          IsPredictedTypeNotPasswordPrediction(
+              (*field)->Type().GetStorableType())) {
+        predictions[form->ToFormData()][*(*field)] =
+            autofill::PREDICTION_NOT_PASSWORD;
+      }
     }
   }
   if (predictions.empty())
     return;
   driver->AutofillDataReceived(predictions);
+}
+
+PasswordFormManager* PasswordManager::GetMatchingPendingManager(
+    const PasswordForm& form) {
+  auto matched_manager_it = pending_login_managers_.end();
+  PasswordFormManager::MatchResultMask current_match_result =
+      PasswordFormManager::RESULT_NO_MATCH;
+
+  for (auto iter = pending_login_managers_.begin();
+       iter != pending_login_managers_.end(); ++iter) {
+    PasswordFormManager::MatchResultMask result = (*iter)->DoesManage(form);
+
+    if (result == PasswordFormManager::RESULT_NO_MATCH)
+      continue;
+
+    if (result == PasswordFormManager::RESULT_COMPLETE_MATCH) {
+      // If we find a manager that exactly matches the submitted form including
+      // the action URL, exit the loop.
+      matched_manager_it = iter;
+      break;
+    } else if (result == (PasswordFormManager::RESULT_COMPLETE_MATCH &
+                          ~PasswordFormManager::RESULT_ACTION_MATCH) &&
+               result > current_match_result) {
+      // If the current manager matches the submitted form excluding the action
+      // URL, remember it as a candidate and continue searching for an exact
+      // match. See http://crbug.com/27246 for an example where actions can
+      // change.
+      matched_manager_it = iter;
+      current_match_result = result;
+    } else if (result > current_match_result) {
+      matched_manager_it = iter;
+      current_match_result = result;
+    }
+  }
+  if (matched_manager_it != pending_login_managers_.end())
+    return *matched_manager_it;
+  return nullptr;
 }
 
 }  // namespace password_manager

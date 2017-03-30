@@ -5,6 +5,9 @@
 #ifndef CONTENT_PUBLIC_BROWSER_BROWSER_CONTEXT_H_
 #define CONTENT_PUBLIC_BROWSER_BROWSER_CONTEXT_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
 #include "base/memory/scoped_ptr.h"
@@ -34,6 +37,7 @@ class SpecialStoragePolicy;
 
 namespace content {
 
+class BackgroundSyncController;
 class BlobHandle;
 class BrowserPluginGuestManager;
 class DownloadManager;
@@ -103,7 +107,7 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   static void DeliverPushMessage(
       BrowserContext* browser_context,
       const GURL& origin,
-      int64 service_worker_registration_id,
+      int64_t service_worker_registration_id,
       const std::string& data,
       const base::Callback<void(PushDeliveryStatus)>& callback);
 
@@ -119,6 +123,9 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // Tells the HTML5 objects on this context to persist their session state
   // across the next restart.
   static void SaveSessionState(BrowserContext* browser_context);
+
+  static void SetDownloadManagerForTesting(BrowserContext* browser_context,
+                                           DownloadManager* download_manager);
 
   ~BrowserContext() override;
 
@@ -186,6 +193,10 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // Returns the PermissionManager associated with that context if any, nullptr
   // otherwise.
   virtual PermissionManager* GetPermissionManager() = 0;
+
+  // Returns the BackgroundSyncController associated with that context if any,
+  // nullptr otherwise.
+  virtual BackgroundSyncController* GetBackgroundSyncController() = 0;
 };
 
 }  // namespace content

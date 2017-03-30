@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_GUEST_VIEW_WEB_VIEW_WEB_VIWE_PERMISSION_HELPER_DELEGATE_H_
 #define EXTENSIONS_BROWSER_GUEST_VIEW_WEB_VIEW_WEB_VIWE_PERMISSION_HELPER_DELEGATE_H_
 
+#include "base/macros.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/media_stream_request.h"
@@ -23,8 +24,13 @@ class WebViewPermissionHelperDelegate : public content::WebContentsObserver {
   virtual void CanDownload(
       const GURL& url,
       const std::string& request_method,
+      const base::Callback<void(bool)>& callback);
+
+  virtual void CanDownload(
+      const GURL& url,
+      const std::string& request_method,
       const content::DownloadInformation& info,
-      const base::Callback<void(const content::DownloadItemAction&)>& callback) {}
+      const base::Callback<void(const content::DownloadItemAction&)>& callback);
 
   virtual void RequestPointerLockPermission(
       bool user_gesture,
@@ -39,6 +45,14 @@ class WebViewPermissionHelperDelegate : public content::WebContentsObserver {
       const base::Callback<void(bool)>& callback) {}
 
   virtual void CancelGeolocationPermissionRequest(int bridge_id) {}
+
+  virtual void RequestNotificationPermission(
+      int bridge_id,
+      const GURL& requesting_frame,
+      bool user_gesture,
+      const base::Callback<void(bool)>& callback) {}
+
+  virtual void CancelNotificationPermissionRequest(int bridge_id) {}
 
   virtual void RequestFileSystemPermission(
       const GURL& url,

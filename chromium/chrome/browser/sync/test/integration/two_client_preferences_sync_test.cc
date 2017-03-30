@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
+#include "base/guid.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
+#include "base/strings/stringprintf.h"
 #include "chrome/browser/sync/test/integration/preferences_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
@@ -30,6 +35,19 @@ class TwoClientPreferencesSyncTest : public SyncTest {
  private:
   DISALLOW_COPY_AND_ASSIGN(TwoClientPreferencesSyncTest);
 };
+
+IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest, E2E_ONLY(Sanity)) {
+  DisableVerifier();
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  ASSERT_TRUE(AwaitStringPrefMatches(prefs::kHomePage));
+  const std::string new_home_page = base::StringPrintf(
+      "https://example.com/%s", base::GenerateGUID().c_str());
+  ChangeStringPref(0, prefs::kHomePage, new_home_page);
+  ASSERT_TRUE(AwaitStringPrefMatches(prefs::kHomePage));
+  for (int i = 0; i < num_clients(); ++i) {
+    ASSERT_EQ(new_home_page, GetPrefs(i)->GetString(prefs::kHomePage));
+  }
+}
 
 IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest, BooleanPref) {
   ASSERT_TRUE(SetupSync());
@@ -94,34 +112,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest, ComplexPrefs) {
   ChangeListPref(0, prefs::kURLsToRestoreOnStartup, urls);
   ASSERT_TRUE(AwaitIntegerPrefMatches(prefs::kRestoreOnStartup));
   ASSERT_TRUE(AwaitListPrefMatches(prefs::kURLsToRestoreOnStartup));
-}
-
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
-                       kAutofillAuxiliaryProfilesEnabled) {
-  ASSERT_TRUE(SetupSync());
-  DisableVerifier();
-
-  ASSERT_TRUE(AwaitStringPrefMatches(prefs::kHomePage));
-  ASSERT_TRUE(AwaitBooleanPrefMatches(
-      autofill::prefs::kAutofillAuxiliaryProfilesEnabled));
-
-  // This pref may be syncable.
-  ChangeBooleanPref(0, autofill::prefs::kAutofillAuxiliaryProfilesEnabled);
-
-  // This pref is always syncable.
-  ChangeStringPref(0, prefs::kHomePage, "http://news.google.com");
-
-  // Wait for the syncable pref to propagate.
-  ASSERT_TRUE(AwaitStringPrefMatches(prefs::kHomePage));
-
-  // kAutofillAuxiliaryProfilesEnabled is only synced on Mac and Android.
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
-  ASSERT_TRUE(
-      BooleanPrefMatches(autofill::prefs::kAutofillAuxiliaryProfilesEnabled));
-#else
-  ASSERT_FALSE(
-      BooleanPrefMatches(autofill::prefs::kAutofillAuxiliaryProfilesEnabled));
-#endif  // defined(OS_MACOSX) || defined(OS_ANDROID)
 }
 
 IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,

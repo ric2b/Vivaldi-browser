@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 
 namespace content {
@@ -55,7 +56,7 @@ class HistogramController {
       const std::vector<std::string>& pickled_histograms);
 
  private:
-  friend struct DefaultSingletonTraits<HistogramController>;
+  friend struct base::DefaultSingletonTraits<HistogramController>;
 
   // Contact PLUGIN and GPU child processes and get their histogram data.
   // TODO(rtenneti): Enable getting histogram data for other processes like

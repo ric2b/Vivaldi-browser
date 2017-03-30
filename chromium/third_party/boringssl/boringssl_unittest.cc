@@ -141,6 +141,10 @@ TEST(BoringSSL, AEADs) {
   }
 }
 
+TEST(BoringSSL, AES) {
+  TestSimple("aes_test");
+}
+
 TEST(BoringSSL, Base64) {
   TestSimple("base64_test");
 }
@@ -196,6 +200,19 @@ TEST(BoringSSL, ECDSA) {
   TestSimple("ecdsa_test");
 }
 
+TEST(BoringSSL, ED25519) {
+  base::FilePath data_file;
+  ASSERT_TRUE(BoringSSLPath(&data_file));
+  data_file = data_file.Append(FILE_PATH_LITERAL("crypto"));
+  data_file = data_file.Append(FILE_PATH_LITERAL("curve25519"));
+  data_file = data_file.Append(FILE_PATH_LITERAL("ed25519_tests.txt"));
+
+  std::vector<base::CommandLine::StringType> args;
+  args.push_back(data_file.value());
+
+  TestProcess("ed25519_test", args);
+}
+
 TEST(BoringSSL, ERR) {
   TestSimple("err_test");
 }
@@ -206,20 +223,6 @@ TEST(BoringSSL, EVP) {
   data_file = data_file.Append(FILE_PATH_LITERAL("crypto"));
   data_file = data_file.Append(FILE_PATH_LITERAL("evp"));
   data_file = data_file.Append(FILE_PATH_LITERAL("evp_tests.txt"));
-
-  std::vector<base::CommandLine::StringType> args;
-  args.push_back(data_file.value());
-
-  TestProcess("evp_test", args);
-}
-
-// evp_test is also run on hmac_test's input.
-TEST(BoringSSL, EVPHMAC) {
-  base::FilePath data_file;
-  ASSERT_TRUE(BoringSSLPath(&data_file));
-  data_file = data_file.Append(FILE_PATH_LITERAL("crypto"));
-  data_file = data_file.Append(FILE_PATH_LITERAL("hmac"));
-  data_file = data_file.Append(FILE_PATH_LITERAL("hmac_tests.txt"));
 
   std::vector<base::CommandLine::StringType> args;
   args.push_back(data_file.value());
@@ -264,8 +267,25 @@ TEST(BoringSSL, PBKDF) {
   TestSimple("pbkdf_test");
 }
 
+TEST(BoringSSL, Poly1305) {
+  base::FilePath data_file;
+  ASSERT_TRUE(BoringSSLPath(&data_file));
+  data_file = data_file.Append(FILE_PATH_LITERAL("crypto"));
+  data_file = data_file.Append(FILE_PATH_LITERAL("poly1305"));
+  data_file = data_file.Append(FILE_PATH_LITERAL("poly1305_test.txt"));
+
+  std::vector<base::CommandLine::StringType> args;
+  args.push_back(data_file.value());
+
+  TestProcess("poly1305_test", args);
+}
+
 TEST(BoringSSL, PKCS7) {
   TestSimple("pkcs7_test");
+}
+
+TEST(BoringSSL, PKCS8) {
+  TestSimple("pkcs8_test");
 }
 
 TEST(BoringSSL, PKCS12) {
@@ -298,4 +318,8 @@ TEST(BoringSSL, Thread) {
 
 TEST(BoringSSL, V3NameTest) {
   TestSimple("v3name_test");
+}
+
+TEST(BoringSSL, X25519) {
+  TestSimple("x25519_test");
 }

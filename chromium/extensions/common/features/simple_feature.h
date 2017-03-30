@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_COMMON_FEATURES_SIMPLE_FEATURE_H_
 #define EXTENSIONS_COMMON_FEATURES_SIMPLE_FEATURE_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <vector>
@@ -12,8 +14,8 @@
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/values.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature.h"
@@ -205,7 +207,7 @@ class SimpleFeature : public Feature {
   std::string command_line_switch_;
   bool is_vivaldi_feature_;
 
-  ScopedVector<SimpleFeatureFilter> filters_;;
+  std::vector<scoped_ptr<SimpleFeatureFilter>> filters_;
 
   DISALLOW_COPY_AND_ASSIGN(SimpleFeature);
 };

@@ -5,19 +5,17 @@
 package org.chromium.android_webview.test;
 
 import android.content.Context;
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.view.View;
-import android.widget.OverScroller;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwScrollOffsetManager;
 import org.chromium.android_webview.test.util.AwTestTouchUtils;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.JavascriptEventObserver;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.net.test.util.TestWebServer;
@@ -27,11 +25,12 @@ import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Integration tests for synchronous scrolling.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 @SuppressFBWarnings("DLS_DEAD_LOCAL_STORE")
 public class AndroidScrollIntegrationTest extends AwTestBase {
     private TestWebServer mWebServer;
@@ -129,8 +128,8 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
         return new TestDependencyFactory() {
             @Override
             public AwScrollOffsetManager createScrollOffsetManager(
-                    AwScrollOffsetManager.Delegate delegate, OverScroller overScroller) {
-                return new AwScrollOffsetManager(delegate, overScroller);
+                    AwScrollOffsetManager.Delegate delegate) {
+                return new AwScrollOffsetManager(delegate);
             }
             @Override
             public AwTestContainerView createAwTestContainerView(AwTestRunnerActivity activity,
@@ -148,7 +147,7 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
             + "      margin: 0px; "
             + "   } "
             + "   div { "
-            + "      width:1000px; "
+            + "      width:10000px; "
             + "      height:10000px; "
             + "      background-color: blue; "
             + "   } "
@@ -204,26 +203,56 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
 
     private boolean checkScrollOnMainSync(final ScrollTestContainerView testContainerView,
             final int scrollXPix, final int scrollYPix) {
-        final AtomicBoolean equal = new AtomicBoolean(false);
-        getInstrumentation().runOnMainSync(new Runnable() {
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
             @Override
-            public void run() {
-                equal.set((scrollXPix == testContainerView.getScrollX())
-                        && (scrollYPix == testContainerView.getScrollY()));
+            public Boolean call() {
+                return scrollXPix == testContainerView.getScrollX()
+                        && scrollYPix == testContainerView.getScrollY();
             }
         });
-        return equal.get();
     }
 
     private void assertScrollOnMainSync(final ScrollTestContainerView testContainerView,
             final int scrollXPix, final int scrollYPix) {
+        final AtomicInteger scrolledXPix = new AtomicInteger();
+        final AtomicInteger scrolledYPix = new AtomicInteger();
         getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                assertEquals(scrollXPix, testContainerView.getScrollX());
-                assertEquals(scrollYPix, testContainerView.getScrollY());
+                scrolledXPix.set(testContainerView.getScrollX());
+                scrolledYPix.set(testContainerView.getScrollY());
             }
         });
+        // Actual scrolling is done using this formula:
+        // floor (scroll_offset_dip * max_offset) / max_scroll_offset_dip
+        // where max_offset is calculated using a ceil operation.
+        // This combination of ceiling and flooring can lead to a deviation from the test
+        // calculation, which simply uses the more direct:
+        // floor (scroll_offset_dip * dip_scale)
+        //
+        // While the math used in the functional code is correct (See crbug.com/261239), it can't
+        // be verified down to the pixel in this test which doesn't have all internal values.
+        // In non-rational cases, this can lead to a deviation of up to one pixel when using
+        // the floor directly. To accomodate this scenario, the test allows a -1 px deviation.
+        //
+        // For example, imagine the following valid values:
+        // scroll_offset_dip = 132
+        // max_offset = 532
+        // max_scroll_offset_dip = 399
+        // dip_scale = 1.33125
+        //
+        // The functional code will return
+        // floor (132 * 532 / 399) = 176
+        // The test code will return
+        // floor (132 * 1.33125) = 175
+        //
+        // For more information, see crbug.com/537343
+        assertTrue("Actual and expected x-scroll offsets do not match. Expected " + scrollXPix
+                + ", actual " + scrolledXPix.get(),
+                scrollXPix == scrolledXPix.get() || scrollXPix == scrolledXPix.get() - 1);
+        assertTrue("Actual and expected y-scroll offsets do not match. Expected " + scrollYPix
+                + ", actual " + scrolledYPix.get(),
+                scrollYPix == scrolledYPix.get() || scrollYPix == scrolledYPix.get() - 1);
     }
 
     private void assertScrollInJs(final AwContents awContents,
@@ -733,10 +762,6 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
         }
 
         @Override
-        public void onFlingCancelGesture() {
-        }
-
-        @Override
         public void onScrollUpdateGestureConsumed() {
             mOnScrollUpdateGestureConsumedHelper.notifyCalled();
         }
@@ -795,35 +820,51 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
 
         loadTestPageAndWaitForFirstFrame(testContainerView, contentsClient, null, "");
 
+        // Containers to execute asserts on the test thread
+        final AtomicBoolean canZoomIn = new AtomicBoolean(false);
+        final AtomicReference<Float> atomicOldScale = new AtomicReference<Float>();
+        final AtomicReference<Float> atomicNewScale = new AtomicReference<Float>();
+        final AtomicInteger atomicOldScrollRange = new AtomicInteger();
+        final AtomicInteger atomicNewScrollRange = new AtomicInteger();
+        final AtomicInteger atomicContentHeight = new AtomicInteger();
+        final AtomicInteger atomicOldContentHeightApproximation = new AtomicInteger();
+        final AtomicInteger atomicNewContentHeightApproximation = new AtomicInteger();
         getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                assertTrue(awContents.canZoomIn());
+                canZoomIn.set(awContents.canZoomIn());
 
                 int oldScrollRange =
                         awContents.computeVerticalScrollRange() - testContainerView.getHeight();
                 float oldScale = awContents.getScale();
-                int oldContentHeightApproximation =
-                        (int) Math.ceil(awContents.computeVerticalScrollRange() / oldScale);
+                atomicOldContentHeightApproximation.set(
+                        (int) Math.ceil(awContents.computeVerticalScrollRange() / oldScale));
 
                 awContents.zoomIn();
 
                 int newScrollRange =
                         awContents.computeVerticalScrollRange() - testContainerView.getHeight();
                 float newScale = awContents.getScale();
-                int newContentHeightApproximation =
-                        (int) Math.ceil(awContents.computeVerticalScrollRange() / newScale);
+                atomicNewContentHeightApproximation.set(
+                        (int) Math.ceil(awContents.computeVerticalScrollRange() / newScale));
 
-                assertTrue(String.format(Locale.ENGLISH,
-                        "Scale range should increase after zoom (%f) > (%f)",
-                        newScale, oldScale), newScale > oldScale);
-                assertTrue(String.format(Locale.ENGLISH,
-                        "Scroll range should increase after zoom (%d) > (%d)",
-                        newScrollRange, oldScrollRange), newScrollRange > oldScrollRange);
-                assertEquals(awContents.getContentHeightCss(), oldContentHeightApproximation);
-                assertEquals(awContents.getContentHeightCss(), newContentHeightApproximation);
+                atomicOldScale.set(oldScale);
+                atomicNewScale.set(newScale);
+                atomicOldScrollRange.set(oldScrollRange);
+                atomicNewScrollRange.set(newScrollRange);
+                atomicContentHeight.set(awContents.getContentHeightCss());
             }
         });
-
+        assertTrue(canZoomIn.get());
+        assertTrue(String.format(Locale.ENGLISH,
+                "Scale range should increase after zoom (%f) > (%f)",
+                atomicNewScale.get(), atomicOldScale.get()),
+                atomicNewScale.get() > atomicOldScale.get());
+        assertTrue(String.format(Locale.ENGLISH,
+                "Scroll range should increase after zoom (%d) > (%d)",
+                atomicNewScrollRange.get(), atomicOldScrollRange.get()),
+                atomicNewScrollRange.get() > atomicOldScrollRange.get());
+        assertEquals(atomicContentHeight.get(), atomicOldContentHeightApproximation.get());
+        assertEquals(atomicContentHeight.get(), atomicNewContentHeightApproximation.get());
     }
 }

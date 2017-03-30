@@ -5,11 +5,11 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_ZOOM_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_ZOOM_BUBBLE_VIEW_H_
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
-#include "chrome/browser/ui/views/managed_full_screen_bubble_delegate_view.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/extension_icon_image.h"
@@ -30,15 +30,15 @@ class ImageButton;
 }  // namespace views
 
 // View used to display the zoom percentage when it has changed.
-class ZoomBubbleView : public ManagedFullScreenBubbleDelegateView,
+class ZoomBubbleView : public LocationBarBubbleDelegateView,
                        public views::ButtonListener,
                        public ImmersiveModeController::Observer,
                        public extensions::IconImage::Observer {
  public:
   // Shows the bubble and automatically closes it after a short time period if
-  // |auto_close| is true.
+  // |reason| is AUTOMATIC.
   static void ShowBubble(content::WebContents* web_contents,
-                         bool auto_close);
+                         DisplayReason reason);
 
   // Closes the showing bubble (if one exists).
   static void CloseBubble();
@@ -71,11 +71,11 @@ class ZoomBubbleView : public ManagedFullScreenBubbleDelegateView,
 
   ZoomBubbleView(views::View* anchor_view,
                  content::WebContents* web_contents,
-                 bool auto_close,
+                 DisplayReason reason,
                  ImmersiveModeController* immersive_mode_controller);
   ~ZoomBubbleView() override;
 
-  // ManagedFullScreenBubbleDelegateView:
+  // LocationBarBubbleDelegateView:
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
@@ -115,8 +115,8 @@ class ZoomBubbleView : public ManagedFullScreenBubbleDelegateView,
   // twice at the same time.
   static ZoomBubbleView* zoom_bubble_;
 
-  // Timer used to close the bubble when |auto_close_| is true.
-  base::OneShotTimer<ZoomBubbleView> timer_;
+  // Timer used to auto close the bubble.
+  base::OneShotTimer timer_;
 
   // Image button in the zoom bubble that will show the |extension_icon_| image
   // if an extension initiated the zoom change, and links to that extension at

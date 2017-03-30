@@ -7,27 +7,27 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "components/sync_driver/data_type_controller.h"
+#include "components/sync_driver/directory_data_type_controller.h"
 #include "components/sync_driver/shared_change_processor.h"
 
 namespace syncer {
 class SyncableService;
+struct UserShare;
 }
 
 namespace sync_driver {
 
-class SyncApiComponentFactory;
+class SyncClient;
 
-class NonUIDataTypeController : public DataTypeController {
+class NonUIDataTypeController : public DirectoryDataTypeController {
  public:
   NonUIDataTypeController(
-      scoped_refptr<base::SingleThreadTaskRunner> ui_thread,
+      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       const base::Closure& error_callback,
-      SyncApiComponentFactory* sync_factory);
+      SyncClient* sync_client);
 
   // DataTypeController interface.
   void LoadModels(const ModelLoadCallback& model_load_callback) override;
@@ -46,9 +46,6 @@ class NonUIDataTypeController : public DataTypeController {
   NonUIDataTypeController();
   // DataTypeController is RefCounted.
   ~NonUIDataTypeController() override;
-
-  // DataTypeController interface.
-  void OnModelLoaded() override;
 
   // Start any dependent services that need to be running before we can
   // associate models. The default implementation is a no-op.
@@ -98,8 +95,12 @@ class NonUIDataTypeController : public DataTypeController {
   // and shutdown, use a factory method to create the SharedChangeProcessor.
   virtual SharedChangeProcessor* CreateSharedChangeProcessor();
 
- private:
+  // If the DTC is waiting for models to load, once the models are
+  // loaded the datatype service will call this function on DTC to let
+  // us know that it is safe to start associating.
+  void OnModelLoaded();
 
+ private:
   // Posted on the backend thread by StartAssociationAsync().
   void StartAssociationWithSharedChangeProcessor(
       const scoped_refptr<SharedChangeProcessor>& shared_change_processor);
@@ -124,7 +125,11 @@ class NonUIDataTypeController : public DataTypeController {
   // Note: this is performed on the UI thread.
   void DisableImpl(const syncer::SyncError& error);
 
-  SyncApiComponentFactory* const sync_factory_;
+  SyncClient* const sync_client_;
+
+  // UserShare is stored in StartAssociating while on UI thread and
+  // passed to SharedChangeProcessor::Connect on the model thread.
+  syncer::UserShare* user_share_;
 
   // State of this datatype controller.
   State state_;

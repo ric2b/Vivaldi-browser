@@ -3,25 +3,32 @@
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
-//
+
 #include "media/filters/at_audio_decoder.h"
 
-#include <AudioToolbox/AudioFileStream.h>
-#include <AudioToolbox/AudioFormat.h>
-
-#include <deque>
+#include <algorithm>
+#include <AudioToolbox/AudioToolbox.h>
 
 #include "base/bind.h"
+#include "base/features/features.h"
 #include "base/location.h"
 #include "base/mac/mac_logging.h"
+#include "base/mac/mac_util.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/audio_buffer.h"
+#include "media/base/audio_discard_helper.h"
 #include "media/base/mac/framework_type_conversions.h"
-#include "media/formats/mpeg/adts_constants.h"
+#include "media/base/pipeline_stats.h"
+#include "media/base/platform_mime_util.h"
+#include "media/filters/at_aac_helper.h"
+#include "media/filters/at_mp3_helper.h"
 
 namespace media {
 
 namespace {
+
+const SampleFormat kOutputSampleFormat = kSampleFormatF32;
 
 // Custom error codes returned from ProvideData() and passed on to the caller
 // of AudioConverterFillComplexBuffer().
@@ -29,12 +36,14 @@ const OSStatus kDataConsumed = 'CNSM';   // No more input data currently.
 const OSStatus kInvalidArgs = 'IVLD';    // Unexpected callback arguments.
 
 struct ScopedAudioFileStreamIDTraits {
-  static void Retain(AudioFileStreamID /* stream_id */) {
+  static AudioFileStreamID Retain(AudioFileStreamID stream_id) {
     NOTREACHED() << "Only compatible with ASSUME policy";
+    return stream_id;
   }
   static void Release(AudioFileStreamID stream_id) {
     AudioFileStreamClose(stream_id);
   }
+  static AudioFileStreamID InvalidValue() { return nullptr; }
 };
 
 using ScopedAudioFileStreamID =
@@ -46,16 +55,23 @@ using ScopedAudioFileStreamID =
 struct InputData {
   // Strip the ADTS header from the buffer.  Required for AudioConverter to
   // accept the input data.
-  InputData(const DecoderBuffer& buffer, int channel_count)
-      : data(buffer.data() + kADTSHeaderMinSize),
-        data_size(buffer.data_size() - kADTSHeaderMinSize),
+  InputData(const DecoderBuffer& buffer, int channel_count, size_t header_size)
+      : data(buffer.data() + header_size),
+        data_size(buffer.data_size() - header_size),
         channel_count(channel_count),
         packet_description({0}),
         consumed(false) {
-    DCHECK_GE(buffer.data_size(), kADTSHeaderMinSize)
-        << "We assume the input buffers contain ADTS headers";
+    DCHECK_GE((int) buffer.data_size(), base::checked_cast<int>(header_size));
     packet_description.mDataByteSize = data_size;
   }
+
+  // Constructs an InputData object representing "no data".
+  InputData()
+      : data(nullptr),
+        data_size(0),
+        channel_count(0),
+        packet_description({0}),
+        consumed(false) {}
 
   const void* data;
   size_t data_size;
@@ -99,13 +115,17 @@ OSStatus ProvideData(AudioConverterRef inAudioConverter,
   return noErr;
 }
 
-std::string FourCCToString(uint32_t fourcc) {
-  char buffer[4];
-  buffer[0] = (fourcc >> 24) & 0xff;
-  buffer[1] = (fourcc >> 16) & 0xff;
-  buffer[2] = (fourcc >> 8) & 0xff;
-  buffer[3] = fourcc & 0xff;
-  return std::string(buffer, arraysize(buffer));
+scoped_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
+  switch (codec) {
+    case kCodecAAC:
+      return make_scoped_ptr(new ATAACHelper);
+    case kCodecMP3:
+      return base::IsFeatureEnabled(base::kFeatureMseAudioMpegAac)
+                 ? make_scoped_ptr(new ATMP3Helper)
+                 : nullptr;
+    default:
+      return nullptr;
+  }
 }
 
 // Fills out the output format to meet Chrome pipeline requirements.
@@ -125,176 +145,46 @@ void GetOutputFormat(const AudioStreamBasicDescription& input_format,
   output_format->mBytesPerPacket = output_format->mBytesPerFrame;
 }
 
-}  // namespace
-
-// A helper class for reading audio format information from a sequence of audio
-// buffers by feeding them into an AudioFileStream.
-class ATAudioDecoder::AudioFormatReader {
- public:
-  AudioFormatReader() { memset(&format_, 0, sizeof(format_)); }
-
-  // Feeds data from |buffer| into |stream_| in order to let AudioToolbox
-  // determine the input format for us.  The input format arrives via the
-  // property-listener OnAudioFileStreamProperty().
-  bool ParseAndQueueBuffer(const scoped_refptr<DecoderBuffer>& buffer);
-
-  bool is_finished() const { return format_.mFormatID != 0; }
-
-  AudioStreamBasicDescription audio_format() const {
-    DCHECK(is_finished());
-    return format_;
-  }
-
-  bool has_queued_buffers() const { return !buffers_.empty(); }
-  scoped_refptr<DecoderBuffer> ReclaimQueuedBuffer();
-
- private:
-  // Used as the property-listener callback for AudioFileStreamOpen().  Upon
-  // encountering the format list property, picks the most appropriate format
-  // and stores it in |format_|.
-  static void OnAudioFileStreamProperty(void* inClientData,
-                                        AudioFileStreamID inAudioFileStream,
-                                        AudioFileStreamPropertyID inPropertyID,
-                                        UInt32* ioFlags);
-  // Used as the audio-data callback for AudioFileStreamOpen().
-  static void OnAudioFileStreamData(
-      void* inClientData,
-      UInt32 inNumberBytes,
-      UInt32 inNumberPackets,
-      const void* inInputData,
-      AudioStreamPacketDescription* inPacketDescriptions);
-
-  bool ReadFormatList();
-  bool error() const { return !stream_; }
-
-  ScopedAudioFileStreamID stream_;
-  AudioStreamBasicDescription format_;
-  std::deque<scoped_refptr<DecoderBuffer>> buffers_;
-
-  DISALLOW_COPY_AND_ASSIGN(AudioFormatReader);
-};
-
-bool ATAudioDecoder::AudioFormatReader::ParseAndQueueBuffer(
-    const scoped_refptr<DecoderBuffer>& buffer) {
+// Adds |padding_frame_count| frames of silence to the front of |buffer| and
+// returns the resulting buffer.  This is used when we need to "fix" the
+// behavior of AudioConverter wrt codec delay handling.  If AudioConverter
+// strips the codec delay internally, it's all fine unless we are decoding
+// audio appended via MSE.  In this case, only the initial delay gets stripped,
+// and the one after the append is not.  AudioDiscardHelper can do the
+// stripping for us, using discard information from FrameProcessor, but then
+// the codec delay must be present in the initial output buffer too, hence the
+// padding that we're adding.
+scoped_refptr<AudioBuffer> AddFrontPadding(
+    const scoped_refptr<AudioBuffer>& buffer,
+    size_t padding_frame_count) {
   DVLOG(1) << __func__;
 
-  buffers_.push_back(buffer);
+  const scoped_refptr<AudioBuffer> result = AudioBuffer::CreateBuffer(
+      kOutputSampleFormat, buffer->channel_layout(), buffer->channel_count(),
+      buffer->sample_rate(), padding_frame_count + buffer->frame_count());
 
-  if (!stream_) {
-    const OSStatus status = AudioFileStreamOpen(
-        this, &OnAudioFileStreamProperty, &OnAudioFileStreamData,
-        kAudioFileAAC_ADTSType, stream_.InitializeInto());
-    if (status != noErr) {
-      OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                                << ": Failed to open audio file stream";
-      return false;
-    }
-  }
+  const size_t padding_size =
+      padding_frame_count * buffer->channel_count() *
+      SampleFormatToBytesPerChannel(kOutputSampleFormat);
+  uint8_t* const result_data = result->channel_data()[0];
+  std::fill(result_data, result_data + padding_size, 0);
 
-  DCHECK(stream_);
-  const OSStatus status = AudioFileStreamParseBytes(
-      stream_, buffer->data_size(), buffer->data(), 0);
-  if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to parse audio file stream";
-    return false;
-  }
+  uint8_t* const buffer_data = buffer->channel_data()[0];
+  const size_t buffer_size = buffer->frame_count() * buffer->channel_count() *
+                             SampleFormatToBytesPerChannel(kOutputSampleFormat);
+  std::copy(buffer_data, buffer_data + buffer_size, result_data + padding_size);
 
-  return !error();
-}
-
-scoped_refptr<DecoderBuffer>
-ATAudioDecoder::AudioFormatReader::ReclaimQueuedBuffer() {
-  DVLOG(1) << __func__;
-  DCHECK(!buffers_.empty());
-
-  auto result = buffers_.front();
-  buffers_.pop_front();
   return result;
 }
 
-// static
-void ATAudioDecoder::AudioFormatReader::OnAudioFileStreamProperty(
-    void* inClientData,
-    AudioFileStreamID inAudioFileStream,
-    AudioFileStreamPropertyID inPropertyID,
-    UInt32* ioFlags) {
-  DVLOG(1) << __func__ << "(" << FourCCToString(inPropertyID) << ")";
+}  // namespace
 
-  if (inPropertyID != kAudioFileStreamProperty_FormatList)
-    return;
-
-  auto* format_reader = static_cast<AudioFormatReader*>(inClientData);
-  DCHECK_EQ(inAudioFileStream, format_reader->stream_.get());
-
-  if (!format_reader->ReadFormatList())
-    format_reader->stream_.reset();
-}
 
 // static
-void ATAudioDecoder::AudioFormatReader::OnAudioFileStreamData(
-    void* inClientData,
-    UInt32 inNumberBytes,
-    UInt32 inNumberPackets,
-    const void* inInputData,
-    AudioStreamPacketDescription* inPacketDescriptions) {
-  DVLOG(1) << __func__ << ", ignoring";
-}
-
-bool ATAudioDecoder::AudioFormatReader::ReadFormatList() {
-  DVLOG(1) << __func__;
-
-  UInt32 format_list_size = 0;
-  OSStatus status = AudioFileStreamGetPropertyInfo(
-      stream_, kAudioFileStreamProperty_FormatList, &format_list_size, nullptr);
-  if (status != noErr || format_list_size % sizeof(AudioFormatListItem) != 0) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get format list count";
-    return false;
-  }
-
-  const size_t format_count = format_list_size / sizeof(AudioFormatListItem);
-  DVLOG(1) << "Found " << format_count << " formats";
-
-  scoped_ptr<AudioFormatListItem[]> format_list(
-      new AudioFormatListItem[format_count]);
-  status =
-      AudioFileStreamGetProperty(stream_, kAudioFileStreamProperty_FormatList,
-                                 &format_list_size, format_list.get());
-  if (status != noErr ||
-      format_list_size != format_count * sizeof(AudioFormatListItem)) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get format list";
-    return false;
-  }
-
-  UInt32 format_index = 0;
-  UInt32 format_index_size = sizeof(format_index);
-  status = AudioFormatGetProperty(
-      kAudioFormatProperty_FirstPlayableFormatFromList, format_list_size,
-      format_list.get(), &format_index_size, &format_index);
-  if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get format from list";
-    return false;
-  }
-
-  format_ = format_list[format_index].mASBD;
-
-  if (format_.mFormatID != 0) {
-    DVLOG(1) << "mSampleRate = " << format_.mSampleRate;
-    DVLOG(1) << "mFormatID = " << FourCCToString(format_.mFormatID);
-    DVLOG(1) << "mFormatFlags = " << format_.mFormatFlags;
-    DVLOG(1) << "mChannelsPerFrame = " << format_.mChannelsPerFrame;
-  }
-
-  return true;
-}
-
-// static
-void ATAudioDecoder::ScopedAudioConverterRefTraits::Retain(
-    AudioConverterRef /* converter */) {
+AudioConverterRef ATAudioDecoder::ScopedAudioConverterRefTraits::Retain(
+    AudioConverterRef converter) {
   NOTREACHED() << "Only compatible with ASSUME policy";
+  return converter;
 }
 
 // static
@@ -306,10 +196,14 @@ void ATAudioDecoder::ScopedAudioConverterRefTraits::Release(
                               << ": Failed to dispose of AudioConverter";
 }
 
+AudioConverterRef ATAudioDecoder::ScopedAudioConverterRefTraits::InvalidValue() {
+  return nullptr;
+}
+
 ATAudioDecoder::ATAudioDecoder(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : task_runner_(task_runner) {
-}
+    : task_runner_(task_runner),
+      needs_eos_workaround_(base::mac::IsOSMavericksOrEarlier()) {}
 
 ATAudioDecoder::~ATAudioDecoder() = default;
 
@@ -318,30 +212,24 @@ std::string ATAudioDecoder::GetDisplayName() const {
 }
 
 void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
+                                const SetCdmReadyCB& set_cdm_ready_cb,
                                 const InitCB& init_cb,
                                 const OutputCB& output_cb) {
   DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(config.IsValidConfig());
 
-  if (config.codec() != kCodecAAC) {
-    DVLOG(1) << "Codec is " << config.codec() << ", but we only support AAC ("
-             << kCodecAAC << ")";
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(init_cb, false));
+  pipeline_stats::AddDecoderClass(GetDisplayName());
+
+  codec_helper_ = CreateCodecHelper(config.codec());
+  if (!codec_helper_) {
+    DVLOG(1) << "Unsupported codec: " << config.codec();
+    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
     return;
   }
 
-  if (config.codec_delay() > 0) {
-    DVLOG(1) << "Can't handle codec delay yet";
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(init_cb, false));
-    return;
-  }
-
-  if (!ReadInputChannelLayoutFromEsds(config)) {
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(init_cb, false));
+  if (!IsPlatformAudioDecoderAvailable(config.codec())) {
+    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
     return;
   }
 
@@ -351,11 +239,20 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
   config_ = config;
   output_cb_ = output_cb;
 
-  // Tell the pipeline this decoder is ready so that we start receiving input
-  // samples via Decode().  To initialize |converter_|, we need to parse a bit
-  // of the audio stream to let AutioToolbox figure out the audio format
-  // specifics from the magic cookie, etc.  See InitializeConverter().
+  ResetTimestampState();
 
+  // Unretained() is safe, because ATCodecHelper is required to invoke the
+  // callbacks synchronously.
+  if (!codec_helper_->Initialize(
+          config, base::Bind(&ATAudioDecoder::InitializeConverter,
+                             base::Unretained(this)),
+          base::Bind(&ATAudioDecoder::ConvertAudio, base::Unretained(this)))) {
+    pipeline_stats::ReportAudioDecoderInitResult(false);
+    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
+    return;
+  }
+
+  pipeline_stats::ReportAudioDecoderInitResult(true);
   task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, true));
 }
 
@@ -363,23 +260,14 @@ void ATAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
                             const DecodeCB& decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  Status status = kOk;
-
-  if (!buffer->end_of_stream()) {
-    if (!converter_) {
-      if (!MaybeInitializeConverter(buffer))
-        status = kDecodeError;
-    } else {
-      // Will call the OutputCB as appropriate.
-      if (!ConvertAudio(buffer))
-        status = kDecodeError;
-    }
-  }
+  const Status status =
+      codec_helper_->ProcessBuffer(buffer) ? kOk : kDecodeError;
 
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
 }
 
 void ATAudioDecoder::Reset(const base::Closure& closure) {
+  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   // There is no |converter_| if Reset() is called before Decode(), which is
@@ -391,55 +279,16 @@ void ATAudioDecoder::Reset(const base::Closure& closure) {
                                 << ": Failed to reset AudioConverter";
   }
 
+  ResetTimestampState();
+
   task_runner_->PostTask(FROM_HERE, closure);
 }
 
-bool ATAudioDecoder::ReadInputChannelLayoutFromEsds(
-    const AudioDecoderConfig& config) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-
-  UInt32 channel_layout_size = 0;
-  OSStatus status = AudioFormatGetPropertyInfo(
-      kAudioFormatProperty_ChannelLayoutFromESDS, config.extra_data_size(),
-      config.extra_data(), &channel_layout_size);
-  if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get channel layout info";
-    return false;
-  }
-
-  input_channel_layout_.reset(
-      static_cast<AudioChannelLayout*>(malloc(channel_layout_size)));
-  status = AudioFormatGetProperty(
-      kAudioFormatProperty_ChannelLayoutFromESDS, config.extra_data_size(),
-      config.extra_data(), &channel_layout_size, input_channel_layout_.get());
-  if (status != noErr) {
-    OSSTATUS_DVLOG(1, status) << FourCCToString(status)
-                              << ": Failed to get channel layout";
-    return false;
-  }
-
-  return true;
-}
-
-bool ATAudioDecoder::MaybeInitializeConverter(
-    const scoped_refptr<DecoderBuffer>& buffer) {
+bool ATAudioDecoder::InitializeConverter(
+    const AudioStreamBasicDescription& input_format,
+    ScopedAudioChannelLayoutPtr input_channel_layout) {
   DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-
-  if (!input_format_reader_)
-    input_format_reader_.reset(new AudioFormatReader);
-
-  if (!input_format_reader_->ParseAndQueueBuffer(buffer))
-    return false;
-
-  if (!input_format_reader_->is_finished())
-    // Must parse more audio stream bytes.  Try again with the next call to
-    // Decode().
-    return true;
-
-  AudioStreamBasicDescription input_format =
-      input_format_reader_->audio_format();
 
   AudioStreamBasicDescription output_format;
   GetOutputFormat(input_format, &output_format);
@@ -454,7 +303,7 @@ bool ATAudioDecoder::MaybeInitializeConverter(
 
   status = AudioConverterSetProperty(
       converter_, kAudioConverterInputChannelLayout,
-      sizeof(*input_channel_layout_), input_channel_layout_.get());
+      sizeof(*input_channel_layout), input_channel_layout.get());
   if (status != noErr) {
     OSSTATUS_DVLOG(1, status) << FourCCToString(status)
                               << ": Failed to set input channel layout";
@@ -473,40 +322,31 @@ bool ATAudioDecoder::MaybeInitializeConverter(
     return false;
   }
 
-  // Consume any input buffers queued in |input_format_reader_|.
-  while (input_format_reader_->has_queued_buffers()) {
-    const auto& queued_buffer = input_format_reader_->ReclaimQueuedBuffer();
-    // Will call the OutputCB as appropriate.
-    if (!ConvertAudio(queued_buffer))
-      return false;
-  }
-
-  input_format_reader_.reset();
   return true;
 }
 
-bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input) {
+bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
+                                  size_t header_size,
+                                  size_t max_output_frame_count) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(converter_);
 
-  const SampleFormat kOutputSampleFormat = kSampleFormatF32;
-  // The actual frame count is supposed to be 1024, or 960 in rare cases.
-  // Prepare for twice as much to allow for SBR: With Spectral Band
-  // Replication, the output sampling rate is twice the input sapmling rate,
-  // leading to twice as much output data.
-  const uint32_t kMaxOutputFrameCount = kSamplesPerAACFrame * 2;
-
-  UInt32 output_frame_count = kMaxOutputFrameCount;
+  UInt32 output_frame_count = max_output_frame_count;
 
   // Pre-allocate a buffer for the maximum expected frame count.  We will let
   // the AudioConverter fill it with decoded audio, through |output_buffers|
   // defined below.
-  const scoped_refptr<AudioBuffer> output = AudioBuffer::CreateBuffer(
+  scoped_refptr<AudioBuffer> output = AudioBuffer::CreateBuffer(
       kOutputSampleFormat, config_.channel_layout(),
       ChannelLayoutToChannelCount(config_.channel_layout()),
       config_.samples_per_second(), output_frame_count);
 
-  InputData input_data(*input, output->channel_count());
+  InputData input_data =
+      input->end_of_stream()
+          // No more input data, but we must flush AudioConverter.
+          ? InputData()
+          // Will provide data from |input| to AudioConverter in ProvideData().
+          : InputData(*input, output->channel_count(), header_size);
 
   AudioBufferList output_buffers;
   output_buffers.mNumberBuffers = 1;
@@ -517,34 +357,78 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input) {
   // Will put decoded data in the |output| media::AudioBuffer directly.
   output_buffers.mBuffers[0].mData = output->channel_data()[0];
 
-  AudioStreamPacketDescription output_packet_descriptions[kMaxOutputFrameCount];
+  AudioStreamPacketDescription
+      output_packet_descriptions[max_output_frame_count];
 
-  const OSStatus status = AudioConverterFillComplexBuffer(
-      converter_, &ProvideData, &input_data, &output_frame_count,
-      &output_buffers, output_packet_descriptions);
+  OSStatus status = noErr;
+  if (ApplyEOSWorkaround(input, &output_buffers)) {
+    DVLOG(1)
+        << "Couldn't flush AudioConverter properly on this system. Faking it";
+  } else {
+    status = AudioConverterFillComplexBuffer(
+        converter_, &ProvideData, &input_data, &output_frame_count,
+        &output_buffers, output_packet_descriptions);
+  }
 
   if (status != noErr && status != kDataConsumed) {
     OSSTATUS_DVLOG(1, status) << FourCCToString(status)
                               << ": Failed to convert audio";
     return false;
   }
-  DCHECK(input_data.consumed);
 
-  DVLOG(5) << "Decoded " << output_frame_count << " frames @"
-           << input->timestamp();
-
-  if (output_frame_count > kMaxOutputFrameCount) {
+  if (output_frame_count > max_output_frame_count) {
     DVLOG(1) << "Unexpected output sample count: " << output_frame_count;
     return false;
   }
 
-  if (output_frame_count > 0) {
-    output->TrimEnd(kMaxOutputFrameCount - output_frame_count);
-    output->set_timestamp(input->timestamp());
-    task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
+  if (!input->end_of_stream())
+    queued_input_.push_back(input);
+
+  if (output_frame_count > 0 && !queued_input_.empty()) {
+    output->TrimEnd(max_output_frame_count - output_frame_count);
+
+    const scoped_refptr<DecoderBuffer> dequeued_input = queued_input_.front();
+    queued_input_.pop_front();
+
+    const bool first_output_buffer = !discard_helper_->initialized();
+    if (first_output_buffer)
+      output = AddFrontPadding(output, config_.codec_delay());
+
+    DVLOG(5) << "Decoded " << output_frame_count << " frames @"
+             << dequeued_input->timestamp();
+
+    // ProcessBuffers() computes and sets the timestamp on |output|.
+    if (discard_helper_->ProcessBuffers(dequeued_input, output))
+      task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
   }
 
   return true;
+}
+
+bool ATAudioDecoder::ApplyEOSWorkaround(
+    const scoped_refptr<DecoderBuffer>& input,
+    AudioBufferList* output_buffers) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+
+  if (!needs_eos_workaround_ || !input->end_of_stream())
+    return false;
+
+  uint8_t* const data =
+      reinterpret_cast<uint8_t*>(output_buffers->mBuffers[0].mData);
+  const size_t data_size = output_buffers->mBuffers[0].mDataByteSize;
+  std::fill(data, data + data_size, 0);
+
+  return true;
+}
+
+void ATAudioDecoder::ResetTimestampState() {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+
+  discard_helper_.reset(new AudioDiscardHelper(config_.samples_per_second(),
+                                               config_.codec_delay()));
+  discard_helper_->Reset(config_.codec_delay());
+
+  queued_input_.clear();
 }
 
 }  // namespace media

@@ -29,11 +29,12 @@
           '../../../../ui/webui/resources/js/event_tracker.js',
           '../../../../ui/webui/resources/js/load_time_data.js',
           '../../../../ui/webui/resources/js/util.js',
+          'focus_row.js',
         ],
         'externs': [
-          '<(EXTERNS_DIR)/chrome_extensions.js',
           '<(EXTERNS_DIR)/chrome_send.js',
           '<(EXTERNS_DIR)/developer_private.js',
+          '<(EXTERNS_DIR)/management.js',
         ],
       },
       'includes': ['../../../../third_party/closure_compiler/compile_js.gypi'],

@@ -5,7 +5,6 @@
 #include "net/dns/record_rdata.h"
 
 #include "base/big_endian.h"
-#include "net/base/dns_util.h"
 #include "net/base/ip_address_number.h"
 #include "net/dns/dns_protocol.h"
 #include "net/dns/dns_response.h"
@@ -40,10 +39,10 @@ scoped_ptr<SrvRecordRdata> SrvRecordRdata::Create(
                        &rdata->target_))
     return scoped_ptr<SrvRecordRdata>();
 
-  return rdata.Pass();
+  return rdata;
 }
 
-uint16 SrvRecordRdata::Type() const {
+uint16_t SrvRecordRdata::Type() const {
   return SrvRecordRdata::kType;
 }
 
@@ -76,10 +75,10 @@ scoped_ptr<ARecordRdata> ARecordRdata::Create(
     rdata->address_[i] = data[i];
   }
 
-  return rdata.Pass();
+  return rdata;
 }
 
-uint16 ARecordRdata::Type() const {
+uint16_t ARecordRdata::Type() const {
   return ARecordRdata::kType;
 }
 
@@ -109,10 +108,10 @@ scoped_ptr<AAAARecordRdata> AAAARecordRdata::Create(
     rdata->address_[i] = data[i];
   }
 
-  return rdata.Pass();
+  return rdata;
 }
 
-uint16 AAAARecordRdata::Type() const {
+uint16_t AAAARecordRdata::Type() const {
   return AAAARecordRdata::kType;
 }
 
@@ -137,10 +136,10 @@ scoped_ptr<CnameRecordRdata> CnameRecordRdata::Create(
   if (!parser.ReadName(data.begin(), &rdata->cname_))
     return scoped_ptr<CnameRecordRdata>();
 
-  return rdata.Pass();
+  return rdata;
 }
 
-uint16 CnameRecordRdata::Type() const {
+uint16_t CnameRecordRdata::Type() const {
   return CnameRecordRdata::kType;
 }
 
@@ -166,10 +165,10 @@ scoped_ptr<PtrRecordRdata> PtrRecordRdata::Create(
   if (!parser.ReadName(data.begin(), &rdata->ptrdomain_))
     return scoped_ptr<PtrRecordRdata>();
 
-  return rdata.Pass();
+  return rdata;
 }
 
-uint16 PtrRecordRdata::Type() const {
+uint16_t PtrRecordRdata::Type() const {
   return PtrRecordRdata::kType;
 }
 
@@ -192,7 +191,7 @@ scoped_ptr<TxtRecordRdata> TxtRecordRdata::Create(
   scoped_ptr<TxtRecordRdata> rdata(new TxtRecordRdata);
 
   for (size_t i = 0; i < data.size(); ) {
-    uint8 length = data[i];
+    uint8_t length = data[i];
 
     if (i + length >= data.size())
       return scoped_ptr<TxtRecordRdata>();
@@ -203,10 +202,10 @@ scoped_ptr<TxtRecordRdata> TxtRecordRdata::Create(
     i += length + 1;
   }
 
-  return rdata.Pass();
+  return rdata;
 }
 
-uint16 TxtRecordRdata::Type() const {
+uint16_t TxtRecordRdata::Type() const {
   return TxtRecordRdata::kType;
 }
 
@@ -238,8 +237,8 @@ scoped_ptr<NsecRecordRdata> NsecRecordRdata::Create(
     return scoped_ptr<NsecRecordRdata>();
 
   struct BitmapHeader {
-    uint8 block_number;  // The block number should be zero.
-    uint8 length;  // Bitmap length in bytes. Between 1 and 32.
+    uint8_t block_number;  // The block number should be zero.
+    uint8_t length;        // Bitmap length in bytes. Between 1 and 32.
   };
 
   const BitmapHeader* header = reinterpret_cast<const BitmapHeader*>(
@@ -261,10 +260,10 @@ scoped_ptr<NsecRecordRdata> NsecRecordRdata::Create(
                         bitmap_data.begin(),
                         bitmap_data.end());
 
-  return rdata.Pass();
+  return rdata;
 }
 
-uint16 NsecRecordRdata::Type() const {
+uint16_t NsecRecordRdata::Type() const {
   return NsecRecordRdata::kType;
 }
 

@@ -4,11 +4,15 @@
 
 #include "content/browser/utility_process_host_impl.h"
 
+#include <utility>
+
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/files/file_path.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
@@ -16,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/mojo/mojo_application_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -32,6 +37,12 @@
 #include "ipc/ipc_switches.h"
 #include "ui/base/ui_base_switches.h"
 
+#if defined(OS_WIN)
+#include "sandbox/win/src/sandbox_policy.h"
+#include "sandbox/win/src/sandbox_types.h"
+#endif
+
+#include "app/vivaldi_apptools.h"
 #include "base/vivaldi_switches.h"
 
 namespace content {
@@ -59,17 +70,32 @@ class UtilitySandboxedProcessLauncherDelegate
 
 #if defined(OS_WIN)
   bool ShouldLaunchElevated() override { return launch_elevated_; }
-  void PreSandbox(bool* disable_default_policy,
-                  base::FilePath* exposed_dir) override {
-    *exposed_dir = exposed_dir_;
+
+  bool PreSpawnTarget(sandbox::TargetPolicy* policy) override {
+    if (exposed_dir_.empty())
+      return true;
+
+    sandbox::ResultCode result;
+    result = policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                             sandbox::TargetPolicy::FILES_ALLOW_ANY,
+                             exposed_dir_.value().c_str());
+    if (result != sandbox::SBOX_ALL_OK)
+      return false;
+
+    base::FilePath exposed_files = exposed_dir_.AppendASCII("*");
+    result = policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                             sandbox::TargetPolicy::FILES_ALLOW_ANY,
+                             exposed_files.value().c_str());
+    return result == sandbox::SBOX_ALL_OK;
   }
+
 #elif defined(OS_POSIX)
 
   bool ShouldUseZygote() override {
     return !no_sandbox_ && exposed_dir_.empty();
   }
   base::EnvironmentMap GetEnvironment() override { return env_; }
-  base::ScopedFD TakeIpcFd() override { return ipc_fd_.Pass(); }
+  base::ScopedFD TakeIpcFd() override { return std::move(ipc_fd_); }
 #endif  // OS_WIN
 
   SandboxType GetSandboxType() override {
@@ -107,7 +133,6 @@ UtilityProcessHostImpl::UtilityProcessHostImpl(
     : client_(client),
       client_task_runner_(client_task_runner),
       is_batch_mode_(false),
-      is_mdns_enabled_(false),
       no_sandbox_(false),
       run_elevated_(false),
 #if defined(OS_LINUX)
@@ -116,20 +141,18 @@ UtilityProcessHostImpl::UtilityProcessHostImpl(
       child_flags_(ChildProcessHost::CHILD_NORMAL),
 #endif
       started_(false),
-      name_(base::ASCIIToUTF16("utility process")) {
+      name_(base::ASCIIToUTF16("utility process")),
+      weak_ptr_factory_(this) {
 }
 
 UtilityProcessHostImpl::~UtilityProcessHostImpl() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (is_batch_mode_)
     EndBatchMode();
+}
 
-  // We could be destroyed as a result of Chrome shutdown. When that happens,
-  // the Mojo channel doesn't get the opportunity to shut down cleanly because
-  // it posts to the IO thread (the current thread) which is being destroyed.
-  // To guarantee proper shutdown of the Mojo channel, do it explicitly here.
-  if (mojo_application_host_)
-    mojo_application_host_->ShutdownOnIOThread();
+base::WeakPtr<UtilityProcessHost> UtilityProcessHostImpl::AsWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 bool UtilityProcessHostImpl::Send(IPC::Message* message) {
@@ -154,10 +177,6 @@ void UtilityProcessHostImpl::EndBatchMode()  {
 
 void UtilityProcessHostImpl::SetExposedDir(const base::FilePath& dir) {
   exposed_dir_ = dir;
-}
-
-void UtilityProcessHostImpl::EnableMDns() {
-  is_mdns_enabled_ = true;
 }
 
 void UtilityProcessHostImpl::DisableSandbox() {
@@ -234,38 +253,53 @@ bool UtilityProcessHostImpl::StartProcess() {
   } else {
     const base::CommandLine& browser_command_line =
         *base::CommandLine::ForCurrentProcess();
-    int child_flags = child_flags_;
 
     bool has_cmd_prefix = browser_command_line.HasSwitch(
         switches::kUtilityCmdPrefix);
 
-    // When running under gdb, forking /proc/self/exe ends up forking the gdb
-    // executable instead of Chromium. It is almost safe to assume that no
-    // updates will happen while a developer is running with
-    // |switches::kUtilityCmdPrefix|. See ChildProcessHost::GetChildPath() for
-    // a similar case with Valgrind.
-    if (has_cmd_prefix)
-      child_flags = ChildProcessHost::CHILD_NORMAL;
+    #if defined(OS_ANDROID)
+      // readlink("/prof/self/exe") sometimes fails on Android at startup.
+      // As a workaround skip calling it here, since the executable name is
+      // not needed on Android anyway. See crbug.com/500854.
+      base::CommandLine* cmd_line =
+          new base::CommandLine(base::CommandLine::NO_PROGRAM);
+    #else
+      int child_flags = child_flags_;
 
-    base::FilePath exe_path = ChildProcessHost::GetChildPath(child_flags);
-    if (exe_path.empty()) {
-      NOTREACHED() << "Unable to get utility process binary name.";
-      return false;
-    }
+      // When running under gdb, forking /proc/self/exe ends up forking the gdb
+      // executable instead of Chromium. It is almost safe to assume that no
+      // updates will happen while a developer is running with
+      // |switches::kUtilityCmdPrefix|. See ChildProcessHost::GetChildPath() for
+      // a similar case with Valgrind.
+      if (has_cmd_prefix)
+        child_flags = ChildProcessHost::CHILD_NORMAL;
 
-    base::CommandLine* cmd_line = new base::CommandLine(exe_path);
+      base::FilePath exe_path = ChildProcessHost::GetChildPath(child_flags);
+      if (exe_path.empty()) {
+        NOTREACHED() << "Unable to get utility process binary name.";
+        return false;
+      }
+
+      base::CommandLine* cmd_line = new base::CommandLine(exe_path);
+    #endif
+
     cmd_line->AppendSwitchASCII(switches::kProcessType,
                                 switches::kUtilityProcess);
     cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
     std::string locale = GetContentClient()->browser()->GetApplicationLocale();
     cmd_line->AppendSwitchASCII(switches::kLang, locale);
 
-    if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
-	  cmd_line->AppendSwitchNoDup(switches::kRunningVivaldi);
+#if defined(OS_WIN)
+    if (GetContentClient()->browser()->ShouldUseWindowsPrefetchArgument())
+      cmd_line->AppendArg(switches::kPrefetchArgumentOther);
+#endif  // defined(OS_WIN)
+
+    if (vivaldi::IsVivaldiRunning())
+      cmd_line->AppendSwitchNoDup(switches::kRunningVivaldi);
     else
-	  cmd_line->AppendSwitchNoDup(switches::kDisableVivaldi);
-    if (base::CommandLine::ForCurrentProcess()->IsDebuggingVivaldi())
-	  cmd_line->AppendSwitchNoDup(switches::kDebugVivaldi);
+      cmd_line->AppendSwitchNoDup(switches::kDisableVivaldi);
+    if (vivaldi::IsDebuggingVivaldi())
+      cmd_line->AppendSwitchNoDup(switches::kDebugVivaldi);
 
     if (no_sandbox_)
       cmd_line->AppendSwitch(switches::kNoSandbox);
@@ -293,9 +327,6 @@ bool UtilityProcessHostImpl::StartProcess() {
       cmd_line->AppendSwitchPath(switches::kUtilityProcessAllowedDir,
                                  exposed_dir_);
     }
-
-    if (is_mdns_enabled_)
-      cmd_line->AppendSwitch(switches::kUtilityProcessEnableMDns);
 
 #if defined(OS_WIN)
     // Let the utility process know if it is intended to be elevated.

@@ -4,12 +4,14 @@
 
 #include "chrome/browser/policy/device_management_service_configuration.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "chrome/common/chrome_version_info.h"
+#include "build/build_config.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/version_info/version_info.h"
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/system/statistics_provider.h"
@@ -30,11 +32,10 @@ std::string DeviceManagementServiceConfiguration::GetServerUrl() {
 }
 
 std::string DeviceManagementServiceConfiguration::GetAgentParameter() {
-  chrome::VersionInfo version_info;
   return base::StringPrintf("%s %s(%s)",
-                            version_info.Name().c_str(),
-                            version_info.Version().c_str(),
-                            version_info.LastChange().c_str());
+                            version_info::GetProductName().c_str(),
+                            version_info::GetVersionNumber().c_str(),
+                            version_info::GetLastChange().c_str());
 }
 
 std::string DeviceManagementServiceConfiguration::GetPlatformParameter() {
@@ -56,9 +57,9 @@ std::string DeviceManagementServiceConfiguration::GetPlatformParameter() {
 
   std::string os_version("-");
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-  int32 os_major_version = 0;
-  int32 os_minor_version = 0;
-  int32 os_bugfix_version = 0;
+  int32_t os_major_version = 0;
+  int32_t os_minor_version = 0;
+  int32_t os_bugfix_version = 0;
   base::SysInfo::OperatingSystemVersionNumbers(&os_major_version,
                                                &os_minor_version,
                                                &os_bugfix_version);

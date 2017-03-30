@@ -9,6 +9,7 @@
 <include src="extension_commands_overlay.js">
 <include src="extension_error_overlay.js">
 <include src="extension_focus_manager.js">
+<include src="focus_row.js">
 <include src="extension_list.js">
 <include src="pack_extension_overlay.js">
 <include src="extension_loader.js">
@@ -125,6 +126,12 @@ cr.define('extensions', function() {
     dragEnabled_: false,
 
     /**
+     * True if the page has finished the initial load.
+     * @private {boolean}
+     */
+    hasLoaded_: false,
+
+    /**
      * Perform initial setup.
      */
     initialize: function() {
@@ -152,7 +159,6 @@ cr.define('extensions', function() {
 
       $('toggle-dev-on').addEventListener('change', function(e) {
         this.updateDevControlsVisibility_(true);
-        extensionList.updateFocusableElements();
         chrome.developerPrivate.updateProfileConfiguration(
             {inDeveloperMode: e.target.checked});
         var suffix = $('toggle-dev-on').checked ? 'Enabled' : 'Disabled';
@@ -237,11 +243,15 @@ cr.define('extensions', function() {
     /**
      * [Re]-Populates the page with data representing the current state of
      * installed extensions.
-     * @param {ProfileInfo} profileInfo
+     * @param {chrome.developerPrivate.ProfileInfo} profileInfo
      * @private
      */
     update_: function(profileInfo) {
-      this.setLoading_(true);
+      // We only set the page to be loading if we haven't already finished an
+      // initial load, because otherwise the updates are all incremental and
+      // don't need to display the interstitial spinner.
+      if (!this.hasLoaded_)
+        this.setLoading_(true);
       webuiResponded = true;
 
       /** @const */
@@ -260,7 +270,10 @@ cr.define('extensions', function() {
       extensionList.updateExtensionsData(
           profileInfo.isIncognitoAvailable,
           profileInfo.appInfoDialogEnabled).then(function() {
-        this.setLoading_(false);
+        if (!this.hasLoaded_) {
+          this.hasLoaded_ = true;
+          this.setLoading_(false);
+        }
         this.onExtensionCountChanged();
       }.bind(this));
     },
@@ -392,13 +405,11 @@ cr.define('extensions', function() {
         lastFocused = document.activeElement;
 
       $('overlay').addEventListener('cancelOverlay', function f() {
-        console.log('cancelOverlay');
-        console.log('lastFocused', lastFocused);
-        console.log('focusOutlineManager.visible', focusOutlineManager.visible);
         if (lastFocused && focusOutlineManager.visible)
           lastFocused.focus();
 
         $('overlay').removeEventListener('cancelOverlay', f);
+        uber.replaceState({}, '');
       });
       node.classList.add('showing');
     }

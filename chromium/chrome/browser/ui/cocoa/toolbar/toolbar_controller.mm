@@ -9,6 +9,8 @@
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
+#include "base/mac/sdk_forward_declarations.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
@@ -21,10 +23,12 @@
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/sync/sync_global_error_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
+#import "chrome/browser/ui/cocoa/app_menu/app_menu_controller.h"
 #import "chrome/browser/ui/cocoa/background_gradient_view.h"
 #include "chrome/browser/ui/cocoa/drag_util.h"
 #import "chrome/browser/ui/cocoa/extensions/browser_action_button.h"
@@ -35,26 +39,26 @@
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/menu_button.h"
+#import "chrome/browser/ui/cocoa/toolbar/app_toolbar_button_cell.h"
 #import "chrome/browser/ui/cocoa/toolbar/back_forward_menu_controller.h"
 #import "chrome/browser/ui/cocoa/toolbar/reload_button_cocoa.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_button_cocoa.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_view_cocoa.h"
-#import "chrome/browser/ui/cocoa/toolbar/wrench_toolbar_button_cell.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
-#import "chrome/browser/ui/cocoa/wrench_menu/wrench_menu_controller.h"
-#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/toolbar/wrench_menu_badge_controller.h"
-#include "chrome/browser/ui/toolbar/wrench_menu_model.h"
+#include "chrome/browser/ui/toolbar/app_menu_badge_controller.h"
+#include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/omnibox_view.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/web_contents.h"
+#include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -68,8 +72,15 @@ using content::WebContents;
 
 namespace {
 
+// Duration of the toolbar animation.
+const NSTimeInterval kToolBarAnimationDuration = 0.12;
+
 // Height of the toolbar in pixels when the bookmark bar is closed.
 const CGFloat kBaseToolbarHeightNormal = 35.0;
+
+// Height of the location bar. Used for animating the toolbar in and out when
+// the location bar is displayed stand-alone for bookmark apps.
+const CGFloat kLocationBarHeight = 29.0;
 
 // The padding above the toolbar elements. This is calculated from the values
 // in Toolbar.xib: the height of the toolbar (35) minus the height of the child
@@ -79,8 +90,8 @@ const CGFloat kToolbarElementTopPadding = 2.0;
 // The minimum width of the location bar in pixels.
 const CGFloat kMinimumLocationBarWidth = 100.0;
 
-// The amount of left padding that the wrench menu should have.
-const CGFloat kWrenchMenuLeftPadding = 3.0;
+// The amount of left padding that the app menu should have.
+const CGFloat kAppMenuLeftPadding = 3.0;
 
 class BrowserActionsContainerDelegate :
     public BrowserActionsContainerViewSizeDelegate {
@@ -126,8 +137,9 @@ CGFloat BrowserActionsContainerDelegate::GetMaxAllowedWidth() {
 - (void)addAccessibilityDescriptions;
 - (void)initCommandStatus:(CommandUpdater*)commands;
 - (void)prefChanged:(const std::string&)prefName;
-- (BackgroundGradientView*)backgroundGradientView;
+- (ToolbarView*)toolbarView;
 - (void)toolbarFrameChanged;
+- (void)showLocationBarOnly;
 - (void)pinLocationBarToLeftOfBrowserActionsContainerAndAnimate:(BOOL)animate;
 - (void)maintainMinimumLocationBarWidth;
 - (void)adjustBrowserActionsContainerForNewWindow:(NSNotification*)notification;
@@ -135,8 +147,8 @@ CGFloat BrowserActionsContainerDelegate::GetMaxAllowedWidth() {
 - (void)browserActionsVisibilityChanged:(NSNotification*)notification;
 - (void)browserActionsContainerWillAnimate:(NSNotification*)notification;
 - (void)adjustLocationSizeBy:(CGFloat)dX animate:(BOOL)animate;
-- (void)updateWrenchButtonSeverity:(WrenchIconPainter::Severity)severity
-                           animate:(BOOL)animate;
+- (void)updateAppMenuButtonSeverity:(AppMenuIconPainter::Severity)severity
+                            animate:(BOOL)animate;
 @end
 
 namespace ToolbarControllerInternal {
@@ -168,7 +180,7 @@ class CommandObserverBridge : public CommandObserver {
 // A class registered for C++ notifications. This is used to detect changes in
 // preferences and upgrade available notifications. Bridges the notification
 // back to the ToolbarController.
-class NotificationBridge : public WrenchMenuBadgeController::Delegate {
+class NotificationBridge : public AppMenuBadgeController::Delegate {
  public:
   explicit NotificationBridge(ToolbarController* controller)
       : controller_(controller),
@@ -180,10 +192,10 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
     badge_controller_.UpdateDelegate();
   }
 
-  void UpdateBadgeSeverity(WrenchMenuBadgeController::BadgeType type,
-                           WrenchIconPainter::Severity severity,
+  void UpdateBadgeSeverity(AppMenuBadgeController::BadgeType type,
+                           AppMenuIconPainter::Severity severity,
                            bool animate) override {
-    [controller_ updateWrenchButtonSeverity:severity animate:animate];
+    [controller_ updateAppMenuButtonSeverity:severity animate:animate];
   }
 
   void OnPreferenceChanged(const std::string& pref_name) {
@@ -193,7 +205,7 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
  private:
   ToolbarController* controller_;  // weak, owns us
 
-  WrenchMenuBadgeController badge_controller_;
+  AppMenuBadgeController badge_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationBridge);
 };
@@ -207,9 +219,9 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
 - (id)initWithCommands:(CommandUpdater*)commands
                profile:(Profile*)profile
                browser:(Browser*)browser
-          nibFileNamed:(NSString*)nibName {
-  DCHECK(commands && profile && [nibName length]);
-  if ((self = [super initWithNibName:nibName
+        resizeDelegate:(id<ViewResizer>)resizeDelegate {
+  DCHECK(commands && profile);
+  if ((self = [super initWithNibName:@"Toolbar"
                               bundle:base::mac::FrameworkBundle()])) {
     commands_ = commands;
     profile_ = profile;
@@ -229,25 +241,33 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
     // NOTE: Don't remove the command observers. ToolbarController is
     // autoreleased at about the same time as the CommandUpdater (owned by the
     // Browser), so |commands_| may not be valid any more.
-  }
-  return self;
-}
 
-- (id)initWithCommands:(CommandUpdater*)commands
-               profile:(Profile*)profile
-               browser:(Browser*)browser {
-  if ((self = [self initWithCommands:commands
-                             profile:profile
-                             browser:browser
-                        nibFileNamed:@"Toolbar"])) {
+    [[self toolbarView] setResizeDelegate:resizeDelegate];
+
+    // Start global error services now so we badge the menu correctly.
+    SyncGlobalErrorFactory::GetForProfile(profile);
   }
   return self;
 }
 
 // Called after the view is done loading and the outlets have been hooked up.
-// Now we can hook up bridges that rely on UI objects such as the location
-// bar and button state.
+// Now we can hook up bridges that rely on UI objects such as the location bar
+// and button state. -viewDidLoad is the recommended way to do this in 10.10
+// SDK. When running on 10.10 or above -awakeFromNib still works but for some
+// reason is not guaranteed to be called (http://crbug.com/526276), so implement
+// both.
 - (void)awakeFromNib {
+  [self viewDidLoad];
+}
+
+- (void)viewDidLoad {
+  // When linking and running on 10.10+, both -awakeFromNib and -viewDidLoad may
+  // be called, don't initialize twice.
+  if (locationBarView_) {
+    DCHECK(base::mac::IsOSYosemiteOrLater());
+    return;
+  }
+
   [[backButton_ cell] setImageID:IDR_BACK
                   forButtonState:image_button_cell::kDefaultState];
   [[backButton_ cell] setImageID:IDR_BACK_H
@@ -280,18 +300,18 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   [[homeButton_ cell] setImageID:IDR_HOME_P
                   forButtonState:image_button_cell::kPressedState];
 
-  [[wrenchButton_ cell] setImageID:IDR_TOOLS
-                    forButtonState:image_button_cell::kDefaultState];
-  [[wrenchButton_ cell] setImageID:IDR_TOOLS_H
-                    forButtonState:image_button_cell::kHoverState];
-  [[wrenchButton_ cell] setImageID:IDR_TOOLS_P
-                    forButtonState:image_button_cell::kPressedState];
+  [[appMenuButton_ cell] setImageID:IDR_TOOLS
+                     forButtonState:image_button_cell::kDefaultState];
+  [[appMenuButton_ cell] setImageID:IDR_TOOLS_H
+                     forButtonState:image_button_cell::kHoverState];
+  [[appMenuButton_ cell] setImageID:IDR_TOOLS_P
+                     forButtonState:image_button_cell::kPressedState];
 
   notificationBridge_.reset(
       new ToolbarControllerInternal::NotificationBridge(self));
   notificationBridge_->UpdateBadgeSeverity();
 
-  [wrenchButton_ setOpenMenuOnClick:YES];
+  [appMenuButton_ setOpenMenuOnClick:YES];
 
   [backButton_ setOpenMenuOnRightClick:YES];
   [forwardButton_ setOpenMenuOnRightClick:YES];
@@ -317,7 +337,7 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
           &ToolbarControllerInternal::NotificationBridge::OnPreferenceChanged,
           base::Unretained(notificationBridge_.get())));
   [self showOptionalHomeButton];
-  [self installWrenchMenu];
+  [self installAppMenu];
 
   [self pinLocationBarToLeftOfBrowserActionsContainerAndAnimate:NO];
 
@@ -331,15 +351,6 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
                 modelType:BACK_FORWARD_MENU_TYPE_FORWARD
                    button:forwardButton_]);
 
-  // For a popup window, the toolbar is really just a location bar
-  // (see override for [ToolbarController view], below).  When going
-  // fullscreen, we remove the toolbar controller's view from the view
-  // hierarchy.  Calling [locationBar_ removeFromSuperview] when going
-  // fullscreen causes it to get released, making us unhappy
-  // (http://crbug.com/18551).  We avoid the problem by incrementing
-  // the retain count of the location bar; use of the scoped object
-  // helps us remember to release it.
-  locationBarRetainer_.reset([locationBar_ retain]);
   trackingArea_.reset(
       [[CrTrackingArea alloc] initWithRect:NSZeroRect // Ignored
                                    options:NSTrackingMouseMoved |
@@ -366,7 +377,7 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   view_id_util::SetID(backButton_, VIEW_ID_BACK_BUTTON);
   view_id_util::SetID(forwardButton_, VIEW_ID_FORWARD_BUTTON);
   view_id_util::SetID(homeButton_, VIEW_ID_HOME_BUTTON);
-  view_id_util::SetID(wrenchButton_, VIEW_ID_APP_MENU);
+  view_id_util::SetID(appMenuButton_, VIEW_ID_APP_MENU);
 
   [self addAccessibilityDescriptions];
 }
@@ -377,11 +388,16 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
 }
 
 - (void)browserWillBeDestroyed {
+  // Clear resize delegate so it doesn't get called during stopAnimation, and
+  // stop any in-flight animation.
+  [[self toolbarView] setResizeDelegate:nil];
+  [[self toolbarView] stopAnimation];
+
   // Pass this call onto other reference counted objects.
   [backMenuController_ browserWillBeDestroyed];
   [forwardMenuController_ browserWillBeDestroyed];
   [browserActionsController_ browserWillBeDestroyed];
-  [wrenchMenuController_ browserWillBeDestroyed];
+  [appMenuController_ browserWillBeDestroyed];
 
   [self cleanUp];
 }
@@ -393,7 +409,7 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   view_id_util::UnsetID(backButton_);
   view_id_util::UnsetID(forwardButton_);
   view_id_util::UnsetID(homeButton_);
-  view_id_util::UnsetID(wrenchButton_);
+  view_id_util::UnsetID(appMenuButton_);
 
   // Make sure any code in the base class which assumes [self view] is
   // the "parent" view continues to work.
@@ -420,10 +436,20 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   [[backButton_ cell]
       accessibilitySetOverrideValue:description
                        forAttribute:NSAccessibilityDescriptionAttribute];
+  NSString* helpTag = l10n_util::GetNSStringWithFixup(IDS_ACCNAME_TOOLTIP_BACK);
+  [[backButton_ cell]
+      accessibilitySetOverrideValue:helpTag
+                       forAttribute:NSAccessibilityHelpAttribute];
+
   description = l10n_util::GetNSStringWithFixup(IDS_ACCNAME_FORWARD);
   [[forwardButton_ cell]
       accessibilitySetOverrideValue:description
                        forAttribute:NSAccessibilityDescriptionAttribute];
+  helpTag = l10n_util::GetNSStringWithFixup(IDS_ACCNAME_TOOLTIP_FORWARD);
+  [[forwardButton_ cell]
+      accessibilitySetOverrideValue:helpTag
+                       forAttribute:NSAccessibilityHelpAttribute];
+
   description = l10n_util::GetNSStringWithFixup(IDS_ACCNAME_RELOAD);
   [[reloadButton_ cell]
       accessibilitySetOverrideValue:description
@@ -437,7 +463,7 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
       accessibilitySetOverrideValue:description
                        forAttribute:NSAccessibilityDescriptionAttribute];
   description = l10n_util::GetNSStringWithFixup(IDS_ACCNAME_APP);
-  [[wrenchButton_ cell]
+  [[appMenuButton_ cell]
       accessibilitySetOverrideValue:description
                        forAttribute:NSAccessibilityDescriptionAttribute];
 }
@@ -538,15 +564,9 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   locationBarView_->SetTranslateIconLit(on);
 }
 
-- (void)setOverflowedToolbarActionWantsToRun:(BOOL)overflowedActionWantsToRun {
-  WrenchToolbarButtonCell* cell =
-      base::mac::ObjCCastStrict<WrenchToolbarButtonCell>([wrenchButton_ cell]);
-  [cell setOverflowedToolbarActionWantsToRun:overflowedActionWantsToRun];
-}
-
 - (void)zoomChangedForActiveTab:(BOOL)canShowBubble {
   locationBarView_->ZoomChangedForActiveTab(
-      canShowBubble && ![wrenchMenuController_ isMenuOpen]);
+      canShowBubble && ![appMenuController_ isMenuOpen]);
 }
 
 - (void)setIsLoading:(BOOL)isLoading force:(BOOL)force {
@@ -565,21 +585,18 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   // Decide whether to hide/show based on whether there's a location bar.
   [[self view] setHidden:!hasLocationBar_];
 
-  // Make location bar not editable when in a pop-up.
+  // Make location bar not editable when in a pop-up or an app window.
   locationBarView_->SetEditable(toolbar);
+
+  // If necessary, resize the location bar and hide the toolbar icons to display
+  // the toolbar with only the location bar inside it.
+  if (!hasToolbar_ && hasLocationBar_)
+    [self showLocationBarOnly];
 }
 
-- (NSView*)view {
-  if (hasToolbar_)
-    return [super view];
-  return locationBar_;
-}
-
-// (Private) Returns the backdrop to the toolbar.
-- (BackgroundGradientView*)backgroundGradientView {
-  // We really do mean |[super view]|; see our override of |-view|.
-  DCHECK([[super view] isKindOfClass:[BackgroundGradientView class]]);
-  return (BackgroundGradientView*)[super view];
+// (Private) Returns the backdrop to the toolbar as a ToolbarView.
+- (ToolbarView*)toolbarView{
+  return base::mac::ObjCCastStrict<ToolbarView>([self view]);
 }
 
 - (id)customFieldEditorForObject:(id)obj {
@@ -611,8 +628,8 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
 // Returns an array of views in the order of the outlets above.
 - (NSArray*)toolbarViews {
   return [NSArray arrayWithObjects:backButton_, forwardButton_, reloadButton_,
-             homeButton_, wrenchButton_, locationBar_,
-             browserActionsContainerView_, nil];
+                                   homeButton_, appMenuButton_, locationBar_,
+                                   browserActionsContainerView_, nil];
 }
 
 // Moves |rect| to the right by |delta|, keeping the right side fixed by
@@ -645,22 +662,22 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   [homeButton_ setHidden:hide];
 }
 
-// Install the menu wrench buttons. Calling this repeatedly is inexpensive so it
+// Install the app menu buttons. Calling this repeatedly is inexpensive so it
 // can be done every time the buttons are shown.
-- (void)installWrenchMenu {
-  if (wrenchMenuController_.get())
+- (void)installAppMenu {
+  if (appMenuController_.get())
     return;
 
-  wrenchMenuController_.reset(
-      [[WrenchMenuController alloc] initWithBrowser:browser_]);
-  [wrenchMenuController_ setUseWithPopUpButtonCell:YES];
-  [wrenchButton_ setAttachedMenu:[wrenchMenuController_ menu]];
+  appMenuController_.reset(
+      [[AppMenuController alloc] initWithBrowser:browser_]);
+  [appMenuController_ setUseWithPopUpButtonCell:YES];
+  [appMenuButton_ setAttachedMenu:[appMenuController_ menu]];
 }
 
-- (void)updateWrenchButtonSeverity:(WrenchIconPainter::Severity)severity
-                           animate:(BOOL)animate {
-  WrenchToolbarButtonCell* cell =
-      base::mac::ObjCCastStrict<WrenchToolbarButtonCell>([wrenchButton_ cell]);
+- (void)updateAppMenuButtonSeverity:(AppMenuIconPainter::Severity)severity
+                            animate:(BOOL)animate {
+  AppToolbarButtonCell* cell =
+      base::mac::ObjCCastStrict<AppToolbarButtonCell>([appMenuButton_ cell]);
   [cell setSeverity:severity shouldAnimate:animate];
 }
 
@@ -704,6 +721,19 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
     [self pinLocationBarToLeftOfBrowserActionsContainerAndAnimate:NO];
 }
 
+- (void)updateVisibility:(BOOL)visible withAnimation:(BOOL)animate {
+  CGFloat newHeight = visible ? kLocationBarHeight : 0;
+
+  // Perform the animation, which will cause the BrowserWindowController to
+  // resize this view in the browser layout as required.
+  if (animate) {
+    [[self toolbarView] animateToNewHeight:newHeight
+                                  duration:kToolBarAnimationDuration];
+  } else {
+    [[self toolbarView] setHeight:newHeight];
+  }
+}
+
 - (void)adjustBrowserActionsContainerForNewWindow:
     (NSNotification*)notification {
   [self toolbarFrameChanged];
@@ -730,8 +760,8 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   CGFloat leftDistance = 0.0;
 
   if ([browserActionsContainerView_ isHidden]) {
-    CGFloat edgeXPos = [wrenchButton_ frame].origin.x;
-    leftDistance = edgeXPos - locationBarXPos - kWrenchMenuLeftPadding;
+    CGFloat edgeXPos = [appMenuButton_ frame].origin.x;
+    leftDistance = edgeXPos - locationBarXPos - kAppMenuLeftPadding;
   } else {
     leftDistance = NSMinX([browserActionsContainerView_ animationEndFrame]) -
         locationBarXPos;
@@ -807,6 +837,32 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
   }
 }
 
+// Hide the back, forward, reload, home, and app menu buttons of the toolbar.
+// This allows the location bar to occupy the entire width. There is no way to
+// undo this operation, and once it is called, no other programmatic changes
+// to the toolbar or location bar width should be made. This message is
+// invalid if the toolbar is shown or the location bar is hidden.
+- (void)showLocationBarOnly {
+  // -showLocationBarOnly is only ever called once, shortly after
+  // initialization, so the regular buttons should all be visible.
+  DCHECK(!hasToolbar_ && hasLocationBar_);
+  DCHECK(![backButton_ isHidden]);
+
+  // Ensure the location bar fills the toolbar.
+  NSRect toolbarFrame = [[self view] frame];
+  toolbarFrame.size.height = kLocationBarHeight;
+  [[self view] setFrame:toolbarFrame];
+
+  [locationBar_ setFrame:NSMakeRect(0, 0, NSWidth([[self view] frame]),
+                                    kLocationBarHeight)];
+
+  [backButton_ setHidden:YES];
+  [forwardButton_ setHidden:YES];
+  [reloadButton_ setHidden:YES];
+  [appMenuButton_ setHidden:YES];
+  [homeButton_ setHidden:YES];
+}
+
 - (void)adjustLocationSizeBy:(CGFloat)dX animate:(BOOL)animate {
   // Ensure that the location bar is in its proper place.
   NSRect locationFrame = [locationBar_ frame];
@@ -825,15 +881,19 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
     return locationBarView_->GetBookmarkBubblePoint();
 
   // Grab bottom middle of hotdogs.
-  NSRect frame = wrenchButton_.frame;
+  NSRect frame = appMenuButton_.frame;
   NSPoint point = NSMakePoint(NSMidX(frame), NSMinY(frame));
   // Inset to account for the whitespace around the hotdogs.
-  point.y += wrench_menu_controller::kWrenchBubblePointOffsetY;
+  point.y += app_menu_controller::kAppMenuBubblePointOffsetY;
   return [self.view convertPoint:point toView:nil];
 }
 
 - (NSPoint)managePasswordsBubblePoint {
   return locationBarView_->GetManagePasswordsBubblePoint();
+}
+
+- (NSPoint)saveCreditCardBubblePoint {
+  return locationBarView_->GetSaveCreditCardBubblePoint();
 }
 
 - (NSPoint)translateBubblePoint {
@@ -849,29 +909,22 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
 }
 
 - (void)setDividerOpacity:(CGFloat)opacity {
-  BackgroundGradientView* view = [self backgroundGradientView];
-  [view setShowsDivider:(opacity > 0 ? YES : NO)];
-
-  // We may not have a toolbar view (e.g., popup windows only have a location
-  // bar).
-  if ([view isKindOfClass:[ToolbarView class]]) {
-    ToolbarView* toolbarView = (ToolbarView*)view;
-    [toolbarView setDividerOpacity:opacity];
-  }
-
-  [view setNeedsDisplay:YES];
+  ToolbarView* toolbarView = [self toolbarView];
+  [toolbarView setShowsDivider:(opacity > 0 ? YES : NO)];
+  [toolbarView setDividerOpacity:opacity];
+  [toolbarView setNeedsDisplay:YES];
 }
 
 - (BrowserActionsController*)browserActionsController {
   return browserActionsController_.get();
 }
 
-- (NSView*)wrenchButton {
-  return wrenchButton_;
+- (NSView*)appMenuButton {
+  return appMenuButton_;
 }
 
-- (WrenchMenuController*)wrenchMenuController {
-  return wrenchMenuController_.get();
+- (AppMenuController*)appMenuController {
+  return appMenuController_.get();
 }
 
 // (URLDropTargetController protocol)
@@ -889,8 +942,8 @@ class NotificationBridge : public WrenchMenuBadgeController::Delegate {
     NOTIMPLEMENTED();
 
   // Get the first URL and fix it up.
-  GURL url(url_fixer::FixupURL(base::SysNSStringToUTF8([urls objectAtIndex:0]),
-                               std::string()));
+  GURL url(url_formatter::FixupURL(
+      base::SysNSStringToUTF8([urls objectAtIndex:0]), std::string()));
 
   if (url.SchemeIs(url::kJavaScriptScheme)) {
     browser_->window()->GetLocationBar()->GetOmniboxView()->SetUserText(

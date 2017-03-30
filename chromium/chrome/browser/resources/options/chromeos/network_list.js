@@ -8,20 +8,26 @@
  * once that is fully speced.
  * @typedef {{
  *   ConnectionState: string,
- *   Cellular: {
+ *   Cellular: ?{
  *     Family: ?string,
  *     SIMPresent: ?boolean,
- *     SIMLockStatus: { LockType: ?string },
+ *     SIMLockStatus: ?{ LockType: ?string },
  *     SupportNetworkScan: ?boolean
  *   },
  *   GUID: string,
  *   Name: string,
  *   Source: string,
- *   Type: string
+ *   Type: string,
+ *   VPN: ?{
+ *     Type: string,
+ *     ThirdPartyVPN: chrome.networkingPrivate.ThirdPartyVPNProperties
+ *   }
  * }}
  * @see extensions/common/api/networking_private.idl
  */
 var NetworkProperties;
+
+/** @typedef {chrome.management.ExtensionInfo} */ var ExtensionInfo;
 
 cr.define('options.network', function() {
   var ArrayDataModel = cr.ui.ArrayDataModel;
@@ -71,10 +77,10 @@ cr.define('options.network', function() {
 
   /**
    * The state of the cellular device or undefined if not available.
-   * @type {string|undefined}
+   * @type {?chrome.networkingPrivate.DeviceStateProperties}
    * @private
    */
-  var cellularDeviceState_ = undefined;
+  var cellularDevice_ = null;
 
   /**
    * The active cellular network or null if none.
@@ -105,6 +111,13 @@ cr.define('options.network', function() {
   var wimaxDeviceState_ = undefined;
 
   /**
+   * The current list of third-party VPN providers.
+   * @type {!Array<!chrome.networkingPrivate.ThirdPartyVPNProperties>}}
+   * @private
+   */
+  var vpnProviders_ = [];
+
+  /**
    * Indicates if mobile data roaming is enabled.
    * @type {boolean}
    * @private
@@ -118,9 +131,14 @@ cr.define('options.network', function() {
   function getNetworkName(data) {
     if (data.Type == 'Ethernet')
       return loadTimeData.getString('ethernetName');
-    if (data.Type == 'VPN')
-      return options.VPNProviders.formatNetworkName(new cr.onc.OncData(data));
-    return data.Name;
+    var name = data.Name;
+    if (data.Type == 'VPN' && data.VPN && data.VPN.Type == 'ThirdPartyVPN' &&
+        data.VPN.ThirdPartyVPN) {
+      var providerName = data.VPN.ThirdPartyVPN.ProviderName;
+      if (providerName)
+        return loadTimeData.getStringF('vpnNameTemplate', providerName, name);
+    }
+    return name;
   }
 
   /**
@@ -467,25 +485,20 @@ cr.define('options.network', function() {
 
   /**
    * Returns true if |cellular| is a GSM network with no sim present.
-   * @param {?NetworkProperties} cellular The network state properties.
+   * @param {?chrome.networkingPrivate.DeviceStateProperties} cellularDevice
    * @return {boolean} Whether |network| is missing a SIM card.
    */
-  function isCellularSimAbsent(cellular) {
-    if (!cellular || !cellular.Cellular)
-      return false;
-    return cellular.Cellular.Family == 'GSM' && !cellular.Cellular.SIMPresent;
+  function isCellularSimAbsent(cellularDevice) {
+    return !!cellularDevice && cellularDevice.SimPresent === false;
   }
 
   /**
    * Returns true if |cellular| has a locked SIM card.
-   * @param {?NetworkProperties} cellular The network state properties.
+   * @param {?chrome.networkingPrivate.DeviceStateProperties} cellularDevice
    * @return {boolean} Whether |network| has a locked SIM card.
    */
-  function isCellularSimLocked(cellular) {
-    if (!cellular || !cellular.Cellular)
-      return false;
-    var simLockStatus = cellular.Cellular.SIMLockStatus;
-    return !!(simLockStatus && simLockStatus.LockType);
+  function isCellularSimLocked(cellularDevice) {
+    return !!cellularDevice && !!cellularDevice.SimLockType;
   }
 
   NetworkSelectorItem.prototype = {
@@ -545,13 +558,19 @@ cr.define('options.network', function() {
       menu.menuItemSelector = '.network-menu-item';
       var addendum = [];
       if (this.data_.key == 'WiFi') {
-        addendum.push({
+        var item = {
           label: loadTimeData.getString('joinOtherNetwork'),
-          command: createAddNonVPNConnectionCallback_('WiFi'),
           data: {}
-        });
+        };
+        if (allowUnmanagedNetworks_()) {
+          item.command = createAddNonVPNConnectionCallback_('WiFi');
+        } else {
+          item.command = null;
+          item.tooltip = loadTimeData.getString('prohibitedNetworkOther');
+        }
+        addendum.push(item);
       } else if (this.data_.key == 'Cellular') {
-        if (cellularDeviceState_ == 'Enabled' &&
+        if (cellularDevice_.State == 'Enabled' &&
             cellularNetwork_ && cellularNetwork_.Cellular &&
             cellularNetwork_.Cellular.SupportNetworkScan) {
           addendum.push({
@@ -636,21 +655,24 @@ cr.define('options.network', function() {
             label: loadTimeData.getString('turnOffWifi'),
             command: function() {
               sendChromeMetricsAction('Options_NetworkWifiToggle');
-              chrome.networkingPrivate.disableNetworkType('WiFi');
+              chrome.networkingPrivate.disableNetworkType(
+                  chrome.networkingPrivate.NetworkType.WI_FI);
             },
             data: {}});
         } else if (this.data_.key == 'WiMAX') {
           addendum.push({
             label: loadTimeData.getString('turnOffWimax'),
             command: function() {
-              chrome.networkingPrivate.disableNetworkType('WiMAX');
+              chrome.networkingPrivate.disableNetworkType(
+                  chrome.networkingPrivate.NetworkType.WI_MAX);
             },
             data: {}});
         } else if (this.data_.key == 'Cellular') {
           addendum.push({
             label: loadTimeData.getString('turnOffCellular'),
             command: function() {
-              chrome.networkingPrivate.disableNetworkType('Cellular');
+              chrome.networkingPrivate.disableNetworkType(
+                  chrome.networkingPrivate.NetworkType.CELLULAR);
             },
             data: {}});
         }
@@ -758,10 +780,20 @@ cr.define('options.network', function() {
      * @private
      */
     createNetworkOptionsCallback_: function(parent, data) {
-      var menuItem = createCallback_(parent,
-                                     data,
-                                     getNetworkName(data),
-                                     showDetails.bind(null, data.GUID));
+      var menuItem = null;
+      if (data.Type == 'WiFi' && !allowUnmanagedNetworks_() &&
+          !isManaged(data.Source)) {
+        menuItem = createCallback_(parent,
+                                   data,
+                                   getNetworkName(data),
+                                   null);
+        menuItem.title = loadTimeData.getString('prohibitedNetwork');
+      } else {
+        menuItem = createCallback_(parent,
+                                   data,
+                                   getNetworkName(data),
+                                   showDetails.bind(null, data.GUID));
+      }
       if (isManaged(data.Source))
         menuItem.appendChild(new ManagedNetworkIndicator());
       if (data.ConnectionState == 'Connected' ||
@@ -812,7 +844,7 @@ cr.define('options.network', function() {
    * @param {!Element} menu Parent menu.
    * @param {?NetworkProperties} data Description of the network.
    * @param {!string} label Display name for the menu item.
-   * @param {!Function} command Callback function.
+   * @param {Function} command Callback function.
    * @return {!Element} The created menu item.
    * @private
    */
@@ -901,9 +933,18 @@ cr.define('options.network', function() {
       chrome.networkingPrivate.onDeviceStateListChanged.addListener(
           this.onNetworkListChanged_.bind(this));
 
-      chrome.networkingPrivate.requestNetworkScan();
+      chrome.management.onInstalled.addListener(
+          this.onExtensionAdded_.bind(this));
+      chrome.management.onEnabled.addListener(
+          this.onExtensionAdded_.bind(this));
+      chrome.management.onUninstalled.addListener(
+          this.onExtensionRemoved_.bind(this));
+      chrome.management.onDisabled.addListener(function(extension) {
+        this.onExtensionRemoved_(extension.id);
+      }.bind(this));
 
-      options.VPNProviders.addObserver(this.onVPNProvidersChanged_.bind(this));
+      chrome.management.getAll(this.onGetAllExtensions_.bind(this));
+      chrome.networkingPrivate.requestNetworkScan();
     },
 
     /**
@@ -912,7 +953,9 @@ cr.define('options.network', function() {
     onNetworkListChanged_: function() {
       var networkList = this;
       chrome.networkingPrivate.getDeviceStates(function(deviceStates) {
-        var filter = { networkType: 'All' };
+        var filter = {
+          networkType: chrome.networkingPrivate.NetworkType.ALL
+        };
         chrome.networkingPrivate.getNetworks(filter, function(networkStates) {
           networkList.updateNetworkStates(deviceStates, networkStates);
         });
@@ -920,11 +963,71 @@ cr.define('options.network', function() {
     },
 
     /**
-     * Called when the list of VPN providers changes. Refreshes the contents of
-     * menus that list VPN providers.
+     * chrome.management.getAll callback.
+     * @param {!Array<!ExtensionInfo>} extensions
      * @private
      */
-    onVPNProvidersChanged_: function() {
+    onGetAllExtensions_: function(extensions) {
+      vpnProviders_ = [];
+      for (var extension of extensions)
+        this.addVpnProvider_(extension);
+    },
+
+    /**
+     * If |extension| is a third-party VPN provider, add it to vpnProviders_.
+     * @param {!ExtensionInfo} extension
+     * @private
+     */
+    addVpnProvider_: function(extension) {
+      if (!extension.enabled ||
+          extension.permissions.indexOf('vpnProvider') == -1) {
+        return;
+      }
+      // Ensure that we haven't already added this provider, e.g. if
+      // the onExtensionAdded_ callback gets invoked after onGetAllExtensions_
+      // for an extension in the returned list.
+      for (var provider of vpnProviders_) {
+        if (provider.ExtensionID == extension.id)
+          return;
+      }
+      var newProvider = {
+        ExtensionID: extension.id,
+        ProviderName: extension.name
+      };
+      vpnProviders_.push(newProvider);
+      this.refreshVpnProviders_();
+    },
+
+    /**
+     * chrome.management.onInstalled or onEnabled event.
+     * @param {!ExtensionInfo} extension
+     * @private
+     */
+    onExtensionAdded_: function(extension) {
+      this.addVpnProvider_(extension);
+    },
+
+    /**
+     * chrome.management.onUninstalled or onDisabled event.
+     * @param {string} extensionId
+     * @private
+     */
+    onExtensionRemoved_: function(extensionId) {
+      for (var i = 0; i < vpnProviders_.length; ++i) {
+        var provider = vpnProviders_[i];
+        if (provider.ExtensionID == extensionId) {
+          vpnProviders_.splice(i, 1);
+          this.refreshVpnProviders_();
+          break;
+        }
+      }
+    },
+
+    /**
+     * Rebuilds the list of VPN providers.
+     * @private
+     */
+    refreshVpnProviders_: function() {
       // Refresh the contents of the VPN menu.
       var index = this.indexOf('VPN');
       if (index != undefined)
@@ -939,7 +1042,7 @@ cr.define('options.network', function() {
 
     /**
      * Updates the entries in the "add connection" menu, based on the VPN
-     * providers currently enabled in the primary user's profile.
+     * providers currently enabled in the user's profile.
      * @private
      */
     updateAddConnectionMenuEntries_: function() {
@@ -1105,29 +1208,15 @@ cr.define('options.network', function() {
     },
 
     /**
-     * Updates the state of a toggle button.
-     * @param {string} key Unique identifier for the element.
-     * @param {boolean} active Whether the control is active.
-     */
-    updateToggleControl: function(key, active) {
-      var index = this.indexOf(key);
-      if (index != undefined) {
-        var entry = this.dataModel.item(index);
-        entry.iconType = active ? 'control-active' : 'control-inactive';
-        this.update(entry);
-      }
-    },
-
-    /**
      * Updates the state of network devices and services.
-     * @param {!Array<{State: string, Type: string}>} deviceStates The result
-     *     from networkingPrivate.getDeviceStates.
+     * @param {!Array<!chrome.networkingPrivate.DeviceStateProperties>}
+     *     deviceStates The result from networkingPrivate.getDeviceStates.
      * @param {!Array<!chrome.networkingPrivate.NetworkStateProperties>}
      *     networkStates The result from networkingPrivate.getNetworks.
      */
     updateNetworkStates: function(deviceStates, networkStates) {
       // Update device states.
-      cellularDeviceState_ = undefined;
+      cellularDevice_ = null;
       wifiDeviceState_ = undefined;
       wimaxDeviceState_ = undefined;
       for (var i = 0; i < deviceStates.length; ++i) {
@@ -1135,7 +1224,7 @@ cr.define('options.network', function() {
         var type = device.Type;
         var state = device.State;
         if (type == 'Cellular')
-          cellularDeviceState_ = cellularDeviceState_ || state;
+          cellularDevice_ = cellularDevice_ || device;
         else if (type == 'WiFi')
           wifiDeviceState_ = wifiDeviceState_ || state;
         else if (type == 'WiMAX')
@@ -1210,17 +1299,25 @@ cr.define('options.network', function() {
 
       if (wifiDeviceState_ == 'Enabled')
         loadData_('WiFi', networkStates);
+      else if (wifiDeviceState_ ==
+          chrome.networkingPrivate.DeviceStateType.PROHIBITED)
+        setTechnologiesProhibited_(chrome.networkingPrivate.NetworkType.WI_FI);
       else
-        addEnableNetworkButton_('WiFi');
+        addEnableNetworkButton_(chrome.networkingPrivate.NetworkType.WI_FI);
 
       // Only show cellular control if available.
-      if (cellularDeviceState_) {
-        if (cellularDeviceState_ == 'Enabled' &&
-            !isCellularSimLocked(cellularNetwork_) &&
-            !isCellularSimAbsent(cellularNetwork_)) {
+      if (cellularDevice_) {
+        if (cellularDevice_.State == 'Enabled' &&
+            !isCellularSimAbsent(cellularDevice_) &&
+            !isCellularSimLocked(cellularDevice_)) {
           loadData_('Cellular', networkStates);
+        } else if (cellularDevice_.State ==
+            chrome.networkingPrivate.DeviceStateType.PROHIBITED) {
+          setTechnologiesProhibited_(
+              chrome.networkingPrivate.NetworkType.CELLULAR);
         } else {
-          addEnableNetworkButton_('Cellular');
+          addEnableNetworkButton_(
+              chrome.networkingPrivate.NetworkType.CELLULAR);
         }
       } else {
         this.deleteItem('Cellular');
@@ -1228,10 +1325,15 @@ cr.define('options.network', function() {
 
       // Only show wimax control if available. Uses cellular icons.
       if (wimaxDeviceState_) {
-        if (wimaxDeviceState_ == 'Enabled')
+        if (wimaxDeviceState_ == 'Enabled') {
           loadData_('WiMAX', networkStates);
-        else
-          addEnableNetworkButton_('WiMAX');
+        } else if (wimaxDeviceState_ ==
+            chrome.networkingPrivate.DeviceStateType.PROHIBITED) {
+          setTechnologiesProhibited_(
+              chrome.networkingPrivate.NetworkType.WI_MAX);
+        } else {
+          addEnableNetworkButton_(chrome.networkingPrivate.NetworkType.WI_MAX);
+        }
       } else {
         this.deleteItem('WiMAX');
       }
@@ -1246,19 +1348,19 @@ cr.define('options.network', function() {
 
   /**
    * Replaces a network menu with a button for enabling the network type.
-   * @param {string} type The type of network (WiFi, Cellular or Wimax).
+   * @param {chrome.networkingPrivate.NetworkType} type
    * @private
    */
   function addEnableNetworkButton_(type) {
     var subtitle = loadTimeData.getString('networkDisabled');
     var enableNetwork = function() {
-      if (type == 'WiFi')
+      if (type == chrome.networkingPrivate.NetworkType.WI_FI)
         sendChromeMetricsAction('Options_NetworkWifiToggle');
-      if (type == 'Cellular') {
-        if (isCellularSimLocked(cellularNetwork_)) {
+      if (type == chrome.networkingPrivate.NetworkType.CELLULAR) {
+        if (isCellularSimLocked(cellularDevice_)) {
           chrome.send('simOperation', ['unlock']);
           return;
-        } else if (isCellularSimAbsent(cellularNetwork_)) {
+        } else if (isCellularSimAbsent(cellularDevice_)) {
           chrome.send('simOperation', ['configure']);
           return;
         }
@@ -1269,6 +1371,24 @@ cr.define('options.network', function() {
                               subtitle: subtitle,
                               iconType: type,
                               command: enableNetwork});
+  }
+
+  /**
+   * Replaces a network menu with a button with nothing to do.
+   * @param {!chrome.networkingPrivate.NetworkType} type
+   * @private
+   */
+  function setTechnologiesProhibited_(type) {
+    var subtitle = loadTimeData.getString('networkProhibited');
+    var doNothingButRemoveClickShadow = function() {
+      this.removeAttribute('lead');
+      this.removeAttribute('selected');
+      this.parentNode.removeAttribute('has-element-focus');
+    };
+    $('network-list').update({key: type,
+                              subtitle: subtitle,
+                              iconType: type,
+                              command: doNothingButRemoveClickShadow});
   }
 
   /**
@@ -1412,24 +1532,41 @@ cr.define('options.network', function() {
 
   /**
    * Generates an "add network" entry for each VPN provider currently enabled in
-   * the primary user's profile.
+   * the user's profile.
    * @return {!Array<{label: string, command: function(), data: !Object}>} The
    *     list of entries.
    * @private
    */
   function createAddVPNConnectionEntries_() {
     var entries = [];
-    var providers = options.VPNProviders.getProviders();
-    for (var i = 0; i < providers.length; ++i) {
+    for (var i = 0; i < vpnProviders_.length; ++i) {
+      var provider = vpnProviders_[i];
       entries.push({
         label: loadTimeData.getStringF('addConnectionVPNTemplate',
-                                       providers[i].name),
-        command: createVPNConnectionCallback_(
-            providers[i].extensionID || undefined),
+                                       provider.ProviderName),
+        command: createVPNConnectionCallback_(provider.ExtensionID),
         data: {}
       });
     }
+    // Add an entry for the built-in OpenVPN/L2TP provider.
+    entries.push({
+      label: loadTimeData.getString('vpnBuiltInProvider'),
+      command: createVPNConnectionCallback_(),
+      data: {}
+    });
     return entries;
+  }
+
+  /**
+   * Return whether connecting to or viewing unmanaged networks is allowed.
+   * @private
+   */
+  function allowUnmanagedNetworks_() {
+    if (loadTimeData.valueExists('allowOnlyPolicyNetworksToConnect') &&
+        loadTimeData.getBoolean('allowOnlyPolicyNetworksToConnect')) {
+      return false;
+    }
+    return true;
   }
 
   /**

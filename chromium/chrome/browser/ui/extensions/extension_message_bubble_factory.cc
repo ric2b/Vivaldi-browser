@@ -4,19 +4,22 @@
 
 #include "chrome/browser/ui/extensions/extension_message_bubble_factory.h"
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/field_trial.h"
-#include "chrome/browser/extensions/dev_mode_bubble_controller.h"
+#include "build/build_config.h"
+#include "chrome/browser/extensions/dev_mode_bubble_delegate.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/extensions/install_verifier.h"
-#include "chrome/browser/extensions/proxy_overridden_bubble_controller.h"
-#include "chrome/browser/extensions/settings_api_bubble_controller.h"
+#include "chrome/browser/extensions/proxy_overridden_bubble_delegate.h"
+#include "chrome/browser/extensions/settings_api_bubble_delegate.h"
 #include "chrome/browser/extensions/settings_api_helpers.h"
-#include "chrome/browser/extensions/suspicious_extension_bubble_controller.h"
+#include "chrome/browser/extensions/suspicious_extension_bubble_delegate.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/common/channel_info.h"
+#include "components/version_info/version_info.h"
 #include "extensions/common/feature_switch.h"
 
 namespace {
@@ -27,8 +30,10 @@ namespace {
 base::LazyInstance<std::set<Profile*> > g_profiles_evaluated =
     LAZY_INSTANCE_INITIALIZER;
 
-// This is used to turn on all bubbles for testing.
-bool g_enabled_for_tests = false;
+// This is used to turn on override whether bubbles are enabled or disabled for
+// testing.
+ExtensionMessageBubbleFactory::OverrideForTesting g_override_for_testing =
+    ExtensionMessageBubbleFactory::NO_OVERRIDE;
 
 const char kEnableDevModeWarningExperimentName[] =
     "ExtensionDeveloperModeWarning";
@@ -50,14 +55,17 @@ bool IsExperimentEnabled(const char* experiment_name) {
 }
 
 bool EnableSuspiciousExtensionsBubble() {
-  return g_enabled_for_tests || extensions::InstallVerifier::ShouldEnforce();
+  return g_override_for_testing ==
+             ExtensionMessageBubbleFactory::OVERRIDE_ENABLED ||
+         extensions::InstallVerifier::ShouldEnforce();
 }
 
 bool EnableSettingsApiBubble() {
 #if defined(OS_WIN)
   return true;
 #else
-  return g_enabled_for_tests;
+  return g_override_for_testing ==
+         ExtensionMessageBubbleFactory::OVERRIDE_ENABLED;
 #endif
 }
 
@@ -65,7 +73,8 @@ bool EnableProxyOverrideBubble() {
 #if defined(OS_WIN)
   return true;
 #else
-  return g_enabled_for_tests ||
+  return g_override_for_testing ==
+             ExtensionMessageBubbleFactory::OVERRIDE_ENABLED ||
          IsExperimentEnabled(kEnableProxyWarningExperimentName);
 #endif
 }
@@ -75,18 +84,19 @@ bool EnableDevModeBubble() {
     return true;
 
 #if defined(OS_WIN)
-  if (chrome::VersionInfo::GetChannel() >= chrome::VersionInfo::CHANNEL_BETA)
+  if (chrome::GetChannel() >= version_info::Channel::BETA)
     return true;
 #endif
 
-  return g_enabled_for_tests ||
+  return g_override_for_testing ==
+             ExtensionMessageBubbleFactory::OVERRIDE_ENABLED ||
          IsExperimentEnabled(kEnableDevModeWarningExperimentName);
 }
 
 }  // namespace
 
-ExtensionMessageBubbleFactory::ExtensionMessageBubbleFactory(Profile* profile)
-    : profile_(profile) {
+ExtensionMessageBubbleFactory::ExtensionMessageBubbleFactory(Browser* browser)
+    : browser_(browser) {
 }
 
 ExtensionMessageBubbleFactory::~ExtensionMessageBubbleFactory() {
@@ -94,10 +104,15 @@ ExtensionMessageBubbleFactory::~ExtensionMessageBubbleFactory() {
 
 scoped_ptr<extensions::ExtensionMessageBubbleController>
 ExtensionMessageBubbleFactory::GetController() {
-  Profile* original_profile = profile_->GetOriginalProfile();
+  Profile* original_profile = browser_->profile()->GetOriginalProfile();
   std::set<Profile*>& profiles_evaluated = g_profiles_evaluated.Get();
   bool is_initial_check = profiles_evaluated.count(original_profile) == 0;
   profiles_evaluated.insert(original_profile);
+
+  scoped_ptr<extensions::ExtensionMessageBubbleController> controller;
+
+  if (g_override_for_testing == OVERRIDE_DISABLED)
+    return controller;
 
   // The list of suspicious extensions takes priority over the dev mode bubble
   // and the settings API bubble, since that needs to be shown as soon as we
@@ -108,47 +123,53 @@ ExtensionMessageBubbleFactory::GetController() {
   // the dev mode extensions on the next startup/next window that opens. That
   // way, we're not too spammy with the bubbles.
   if (EnableSuspiciousExtensionsBubble()) {
-    scoped_ptr<extensions::SuspiciousExtensionBubbleController> controller(
-        new extensions::SuspiciousExtensionBubbleController(profile_));
+    controller.reset(
+        new extensions::ExtensionMessageBubbleController(
+            new extensions::SuspiciousExtensionBubbleDelegate(
+                browser_->profile()),
+            browser_));
     if (controller->ShouldShow())
-      return controller.Pass();
+      return controller;
   }
 
   if (EnableSettingsApiBubble()) {
     // No use showing this if it's not the startup of the profile.
     if (is_initial_check) {
-      scoped_ptr<extensions::SettingsApiBubbleController> controller(
-          new extensions::SettingsApiBubbleController(
-              profile_, extensions::BUBBLE_TYPE_STARTUP_PAGES));
+      controller.reset(new extensions::ExtensionMessageBubbleController(
+              new extensions::SettingsApiBubbleDelegate(
+                  browser_->profile(), extensions::BUBBLE_TYPE_STARTUP_PAGES),
+                  browser_));
       if (controller->ShouldShow())
-        return controller.Pass();
+        return controller;
     }
   }
 
   if (EnableProxyOverrideBubble()) {
-    // TODO(devlin): Move the "GetExtensionOverridingProxy" part into the
-    // proxy bubble controller.
-    const extensions::Extension* extension =
-        extensions::GetExtensionOverridingProxy(profile_);
-    if (extension) {
-      scoped_ptr<extensions::ProxyOverriddenBubbleController> controller(
-         new extensions::ProxyOverriddenBubbleController(profile_));
-      if (controller->ShouldShow(extension->id()))
-        return controller.Pass();
-    }
+    controller.reset(
+        new extensions::ExtensionMessageBubbleController(
+            new extensions::ProxyOverriddenBubbleDelegate(
+                browser_->profile()),
+            browser_));
+    if (controller->ShouldShow())
+      return controller;
   }
 
   if (EnableDevModeBubble()) {
-    scoped_ptr<extensions::DevModeBubbleController> controller(
-        new extensions::DevModeBubbleController(profile_));
+    controller.reset(
+        new extensions::ExtensionMessageBubbleController(
+            new extensions::DevModeBubbleDelegate(
+                browser_->profile()),
+            browser_));
     if (controller->ShouldShow())
-      return controller.Pass();
+      return controller;
   }
 
-  return scoped_ptr<extensions::ExtensionMessageBubbleController>();
+  controller.reset();
+  return controller;
 }
 
 // static
-void ExtensionMessageBubbleFactory::set_enabled_for_tests(bool enabled) {
-  g_enabled_for_tests = enabled;
+void ExtensionMessageBubbleFactory::set_override_for_tests(
+    OverrideForTesting override) {
+  g_override_for_testing = override;
 }

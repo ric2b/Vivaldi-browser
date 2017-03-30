@@ -13,11 +13,12 @@
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/net/url_scheme_util.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#include "net/url_request/url_request.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 bool UrlIsExternalFileReference(const GURL& url) {
-  return url.SchemeIs(ios::GetChromeBrowserProvider()->GetChromeUIScheme()) &&
+  return url.SchemeIs(kChromeUIScheme) &&
          base::LowerCaseEqualsASCII(url.host(), kChromeUIExternalFileHost);
 }
 
@@ -35,13 +36,22 @@ NSURL* UrlOfChromeAppIcon(int width, int height) {
 }
 
 bool UrlHasChromeScheme(const GURL& url) {
-  return url.SchemeIs(ios::GetChromeBrowserProvider()->GetChromeUIScheme());
+  return url.SchemeIs(kChromeUIScheme);
 }
 
 bool UrlHasChromeScheme(NSURL* url) {
-  return net::UrlSchemeIs(
-      url, base::SysUTF8ToNSString(
-               ios::GetChromeBrowserProvider()->GetChromeUIScheme()));
+  return net::UrlSchemeIs(url, base::SysUTF8ToNSString(kChromeUIScheme));
+}
+
+bool IsHandledProtocol(const std::string& scheme) {
+  DCHECK_EQ(scheme, base::ToLowerASCII(scheme));
+  if (scheme == url::kAboutScheme)
+    return true;
+  if (scheme == url::kDataScheme)
+    return true;
+  if (scheme == kChromeUIScheme)
+    return true;
+  return net::URLRequest::IsHandledProtocol(scheme);
 }
 
 @implementation ChromeAppConstants {

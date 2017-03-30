@@ -6,10 +6,23 @@
 
 #include "chrome/browser/task_management/providers/web_contents/background_contents_tag.h"
 #include "chrome/browser/task_management/providers/web_contents/devtools_tag.h"
+#include "chrome/browser/task_management/providers/web_contents/extension_tag.h"
+#include "chrome/browser/task_management/providers/web_contents/guest_tag.h"
+#include "chrome/browser/task_management/providers/web_contents/panel_tag.h"
 #include "chrome/browser/task_management/providers/web_contents/prerender_tag.h"
+#include "chrome/browser/task_management/providers/web_contents/printing_tag.h"
 #include "chrome/browser/task_management/providers/web_contents/tab_contents_tag.h"
 #include "chrome/browser/task_management/providers/web_contents/web_contents_tags_manager.h"
+#include "components/guest_view/browser/guest_view_base.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/view_type_utils.h"
+
+#if defined(ENABLE_EXTENSIONS)
+#include "chrome/browser/ui/panels/panel.h"
+#include "extensions/browser/process_manager.h"
+#endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace task_management {
 
@@ -24,10 +37,30 @@ void TagWebContents(content::WebContents* contents,
                     void* tag_key) {
   DCHECK(contents);
   DCHECK(tag);
-  CHECK(WebContentsTag::FromWebContents(contents) == nullptr);
+  DCHECK(WebContentsTag::FromWebContents(contents) == nullptr);
   contents->SetUserData(tag_key, tag);
   WebContentsTagsManager::GetInstance()->AddTag(tag);
 }
+
+#if defined(ENABLE_EXTENSIONS)
+
+bool IsExtensionWebContents(content::WebContents* contents) {
+  DCHECK(contents);
+
+  // Note(andre@vivaldi.com): We use webviews as ExtensionHost for extension
+  //                          popups.
+  if (!vivaldi::IsVivaldiRunning() &&
+      guest_view::GuestViewBase::IsGuest(contents))
+    return false;
+
+  extensions::ViewType view_type = extensions::GetViewType(contents);
+  return (view_type != extensions::VIEW_TYPE_INVALID &&
+          view_type != extensions::VIEW_TYPE_TAB_CONTENTS &&
+          view_type != extensions::VIEW_TYPE_BACKGROUND_CONTENTS &&
+          view_type != extensions::VIEW_TYPE_PANEL);
+}
+
+#endif  // defined(ENABLE_EXTENSIONS)
 
 }  // namespace
 #endif  // defined(ENABLE_TASK_MANAGER)
@@ -79,6 +112,60 @@ void WebContentsTags::CreateForTabContents(content::WebContents* web_contents) {
                    WebContentsTag::kTagKey);
   }
 #endif  // defined(ENABLE_TASK_MANAGER)
+}
+
+// static
+void WebContentsTags::CreateForPanel(content::WebContents* web_contents,
+                                     Panel* panel) {
+#if defined(ENABLE_TASK_MANAGER) && defined(ENABLE_EXTENSIONS)
+  DCHECK(panel);
+  DCHECK_EQ(web_contents, panel->GetWebContents());
+
+  if (!WebContentsTag::FromWebContents(web_contents)) {
+    TagWebContents(web_contents,
+                   new PanelTag(web_contents, panel),
+                   WebContentsTag::kTagKey);
+  }
+#endif  // defined(ENABLE_TASK_MANAGER) && defined(ENABLE_EXTENSIONS)
+}
+
+// static
+void WebContentsTags::CreateForPrintingContents(
+    content::WebContents* web_contents) {
+#if defined(ENABLE_TASK_MANAGER) && defined(ENABLE_PRINT_PREVIEW)
+  if (!WebContentsTag::FromWebContents(web_contents)) {
+    TagWebContents(web_contents,
+                   new PrintingTag(web_contents),
+                   WebContentsTag::kTagKey);
+  }
+#endif  // defined(ENABLE_TASK_MANAGER) && defined(ENABLE_PRINT_PREVIEW)
+}
+
+// static
+void WebContentsTags::CreateForGuestContents(
+    content::WebContents* web_contents) {
+#if defined(ENABLE_TASK_MANAGER)
+  DCHECK(guest_view::GuestViewBase::IsGuest(web_contents));
+  if (!WebContentsTag::FromWebContents(web_contents)) {
+    TagWebContents(web_contents,
+                   new GuestTag(web_contents),
+                   WebContentsTag::kTagKey);
+  }
+#endif  // defined(ENABLE_TASK_MANAGER)
+}
+
+// static
+void WebContentsTags::CreateForExtension(content::WebContents* web_contents,
+                                         extensions::ViewType view_type) {
+#if defined(ENABLE_TASK_MANAGER) && defined(ENABLE_EXTENSIONS)
+  DCHECK(IsExtensionWebContents(web_contents));
+
+  if (!WebContentsTag::FromWebContents(web_contents)) {
+    TagWebContents(web_contents,
+                   new ExtensionTag(web_contents, view_type),
+                   WebContentsTag::kTagKey);
+  }
+#endif  // defined(ENABLE_TASK_MANAGER) && defined(ENABLE_EXTENSIONS)
 }
 
 // static

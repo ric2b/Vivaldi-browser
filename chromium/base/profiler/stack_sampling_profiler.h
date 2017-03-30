@@ -5,12 +5,15 @@
 #ifndef BASE_PROFILER_STACK_SAMPLING_PROFILER_H_
 #define BASE_PROFILER_STACK_SAMPLING_PROFILER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/base_export.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
@@ -20,6 +23,7 @@
 namespace base {
 
 class NativeStackSampler;
+class NativeStackSamplerTestDelegate;
 
 // StackSamplingProfiler periodically stops a thread to sample its stack, for
 // the purpose of collecting information about which code paths are
@@ -49,14 +53,9 @@ class NativeStackSampler;
 // a 10Hz interval for a total of 30 seconds. All of these parameters may be
 // altered as desired.
 //
-// When all call stack profiles are complete or the profiler is stopped, if the
-// custom completed callback was set it is called from a thread created by the
-// profiler with the completed profiles. A profile is considered complete if all
-// requested samples were recorded for the profile (i.e. it was not stopped
-// prematurely).  If no callback was set, the default completed callback will be
-// called with the profiles. It is expected that the the default completed
-// callback is set by the metrics system to allow profiles to be provided via
-// UMA.
+// When all call stack profiles are complete, or the profiler is stopped, the
+// completed callback is called from a thread created by the profiler with the
+// collected profiles.
 //
 // The results of the profiling are passed to the completed callback and consist
 // of a vector of CallStackProfiles. Each CallStackProfile corresponds to a
@@ -68,12 +67,13 @@ class BASE_EXPORT StackSamplingProfiler {
   // Module represents the module (DLL or exe) corresponding to a stack frame.
   struct BASE_EXPORT Module {
     Module();
-    Module(const void* base_address, const std::string& id,
+    Module(uintptr_t base_address,
+           const std::string& id,
            const FilePath& filename);
     ~Module();
 
     // Points to the base address of the module.
-    const void* base_address;
+    uintptr_t base_address;
 
     // An opaque binary string that uniquely identifies a particular program
     // version with high probability. This is parsed from headers of the loaded
@@ -93,11 +93,14 @@ class BASE_EXPORT StackSamplingProfiler {
     // Identifies an unknown module.
     static const size_t kUnknownModuleIndex = static_cast<size_t>(-1);
 
-    Frame(const void* instruction_pointer, size_t module_index);
+    Frame(uintptr_t instruction_pointer, size_t module_index);
     ~Frame();
 
+    // Default constructor to satisfy IPC macros. Do not use explicitly.
+    Frame();
+
     // The sampled instruction pointer within the function.
-    const void* instruction_pointer;
+    uintptr_t instruction_pointer;
 
     // Index of the module in CallStackProfile::modules. We don't represent
     // module state directly here to save space.
@@ -120,13 +123,6 @@ class BASE_EXPORT StackSamplingProfiler {
 
     // Time between samples.
     TimeDelta sampling_period;
-
-    // True if sample ordering is important and should be preserved if and when
-    // this profile is compressed and processed.
-    bool preserve_sample_ordering;
-
-    // User data associated with this profile.
-    uintptr_t user_data;
   };
 
   using CallStackProfiles = std::vector<CallStackProfile>;
@@ -152,13 +148,6 @@ class BASE_EXPORT StackSamplingProfiler {
     // duration from the start of one sample to the start of the next
     // sample. Defaults to 100ms.
     TimeDelta sampling_interval;
-
-    // True if sample ordering is important and should be preserved if and when
-    // this profile is compressed and processed. Defaults to false.
-    bool preserve_sample_ordering;
-
-    // User data associated with this profile.
-    uintptr_t user_data;
   };
 
   // The callback type used to collect completed profiles.
@@ -171,32 +160,33 @@ class BASE_EXPORT StackSamplingProfiler {
   // thread-safe callback implementation.
   using CompletedCallback = Callback<void(const CallStackProfiles&)>;
 
-  // Creates a profiler that sends completed profiles to the default completed
-  // callback.
-  StackSamplingProfiler(PlatformThreadId thread_id,
-                        const SamplingParams& params);
-  // Creates a profiler that sends completed profiles to |completed_callback|.
+  // Creates a profiler that sends completed profiles to |callback|. The second
+  // constructor is for test purposes.
   StackSamplingProfiler(PlatformThreadId thread_id,
                         const SamplingParams& params,
-                        CompletedCallback callback);
+                        const CompletedCallback& callback);
+  StackSamplingProfiler(PlatformThreadId thread_id,
+                        const SamplingParams& params,
+                        const CompletedCallback& callback,
+                        NativeStackSamplerTestDelegate* test_delegate);
+  // Stops any profiling currently taking place before destroying the profiler.
   ~StackSamplingProfiler();
+
+  // The fire-and-forget interface: starts a profiler and allows it to complete
+  // without the caller needing to manage the profiler lifetime. May be invoked
+  // from any thread, but requires that the calling thread has a message loop.
+  static void StartAndRunAsync(PlatformThreadId thread_id,
+                               const SamplingParams& params,
+                               const CompletedCallback& callback);
 
   // Initializes the profiler and starts sampling.
   void Start();
 
   // Stops the profiler and any ongoing sampling. Calling this function is
   // optional; if not invoked profiling terminates when all the profiling bursts
-  // specified in the SamplingParams are completed.
+  // specified in the SamplingParams are completed or the profiler is destroyed,
+  // whichever occurs first.
   void Stop();
-
-  // Sets a callback to process profiles collected by profiler instances without
-  // a completed callback. Profiles are queued internally until a non-null
-  // callback is provided to this function,
-  //
-  // The callback is typically called on a thread created by the profiler.  If
-  // completed profiles are queued when set, however, it will also be called
-  // immediately on the calling thread.
-  static void SetDefaultCompletedCallback(CompletedCallback callback);
 
  private:
   // SamplingThread is a separate thread used to suspend and sample stacks from
@@ -208,7 +198,7 @@ class BASE_EXPORT StackSamplingProfiler {
     // |completed_callback| must be callable on any thread.
     SamplingThread(scoped_ptr<NativeStackSampler> native_sampler,
                    const SamplingParams& params,
-                   CompletedCallback completed_callback);
+                   const CompletedCallback& completed_callback);
     ~SamplingThread() override;
 
     // PlatformThread::Delegate:
@@ -217,14 +207,15 @@ class BASE_EXPORT StackSamplingProfiler {
     void Stop();
 
    private:
-    // Collects a call stack profile from a single burst. Returns true if the
-    // profile was collected, or false if collection was stopped before it
-    // completed.
-    bool CollectProfile(CallStackProfile* profile, TimeDelta* elapsed_time);
+    // Collects |profile| from a single burst. If the profiler was stopped
+    // during collection, sets |was_stopped| and provides the set of samples
+    // collected up to that point.
+    void CollectProfile(CallStackProfile* profile, TimeDelta* elapsed_time,
+                        bool* was_stopped);
 
     // Collects call stack profiles from all bursts, or until the sampling is
-    // stopped. If stopped before complete, |call_stack_profiles| will contain
-    // only full bursts.
+    // stopped. If stopped before complete, the last profile in
+    // |call_stack_profiles| may contain a partial burst.
     void CollectProfiles(CallStackProfiles* profiles);
 
     scoped_ptr<NativeStackSampler> native_sampler_;
@@ -248,6 +239,9 @@ class BASE_EXPORT StackSamplingProfiler {
   PlatformThreadHandle sampling_thread_handle_;
 
   const CompletedCallback completed_callback_;
+
+  // Stored until it can be passed to the NativeStackSampler created in Start().
+  NativeStackSamplerTestDelegate* const test_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(StackSamplingProfiler);
 };

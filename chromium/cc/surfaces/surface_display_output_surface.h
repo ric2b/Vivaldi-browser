@@ -5,6 +5,7 @@
 #ifndef CC_SURFACES_SURFACE_DISPLAY_OUTPUT_SURFACE_H_
 #define CC_SURFACES_SURFACE_DISPLAY_OUTPUT_SURFACE_H_
 
+#include "base/macros.h"
 #include "cc/output/output_surface.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_factory_client.h"
@@ -27,7 +28,8 @@ class CC_SURFACES_EXPORT SurfaceDisplayOutputSurface
   SurfaceDisplayOutputSurface(
       SurfaceManager* surface_manager,
       SurfaceIdAllocator* allocator,
-      const scoped_refptr<ContextProvider>& context_provider);
+      const scoped_refptr<ContextProvider>& context_provider,
+      const scoped_refptr<ContextProvider>& worker_context_provider);
   ~SurfaceDisplayOutputSurface() override;
 
   void set_display_client(OnscreenDisplayClient* display_client) {
@@ -44,6 +46,8 @@ class CC_SURFACES_EXPORT SurfaceDisplayOutputSurface
 
   // SurfaceFactoryClient implementation.
   void ReturnResources(const ReturnedResourceArray& resources) override;
+  void SetBeginFrameSource(SurfaceId surface_id,
+                           BeginFrameSource* begin_frame_source) override;
 
  private:
   void SwapBuffersComplete(SurfaceDrawStatus drawn);

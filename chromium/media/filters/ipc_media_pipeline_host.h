@@ -17,8 +17,8 @@
 #include "media/filters/platform_media_pipeline_types.h"
 
 namespace base {
-class SingleThreadTaskRunner;
-}  // namespace base
+class SequencedTaskRunner;
+}
 
 namespace media {
 
@@ -34,7 +34,7 @@ class GpuVideoAcceleratorFactories;
 class IPCMediaPipelineHost {
  public:
   using Creator = base::Callback<scoped_ptr<IPCMediaPipelineHost>(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       media::DataSource* data_source)>;
 
   using InitializeCB =

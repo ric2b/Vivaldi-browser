@@ -4,17 +4,19 @@
 
 #include "components/metrics/metrics_service.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/prefs/testing_pref_service.h"
 #include "base/threading/platform_thread.h"
 #include "components/metrics/client_info.h"
-#include "components/metrics/compression_utils.h"
-#include "components/metrics/metrics_hashes.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_state_manager.h"
@@ -22,6 +24,7 @@
 #include "components/metrics/test_metrics_service_client.h"
 #include "components/variations/metrics_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/zlib/google/compression_utils.h"
 
 namespace metrics {
 
@@ -108,8 +111,8 @@ class MetricsServiceTest : public testing::Test {
       const std::vector<variations::ActiveGroupId>& synthetic_trials,
       const std::string& trial_name,
       const std::string& trial_group) {
-    uint32 trial_name_hash = HashName(trial_name);
-    uint32 trial_group_hash = HashName(trial_group);
+    uint32_t trial_name_hash = HashName(trial_name);
+    uint32_t trial_group_hash = HashName(trial_group);
     for (const variations::ActiveGroupId& trial : synthetic_trials) {
       if (trial.name == trial_name_hash && trial.group == trial_group_hash)
         return true;
@@ -120,9 +123,9 @@ class MetricsServiceTest : public testing::Test {
   // Finds a histogram with the specified |name_hash| in |histograms|.
   const base::HistogramBase* FindHistogram(
       const base::StatisticsRecorder::Histograms& histograms,
-      uint64 name_hash) {
+      uint64_t name_hash) {
     for (const base::HistogramBase* histogram : histograms) {
-      if (name_hash == HashMetricName(histogram->histogram_name()))
+      if (name_hash == base::HashMetricName(histogram->histogram_name()))
         return histogram;
     }
     return nullptr;
@@ -137,7 +140,7 @@ class MetricsServiceTest : public testing::Test {
     base::StatisticsRecorder::Histograms histograms;
     base::StatisticsRecorder::GetHistograms(&histograms);
     for (int i = 0; i < uma_log.histogram_event_size(); ++i) {
-      const uint64 hash = uma_log.histogram_event(i).name_hash();
+      const uint64_t hash = uma_log.histogram_event(i).name_hash();
 
       const base::HistogramBase* histogram = FindHistogram(histograms, hash);
       EXPECT_TRUE(histogram) << hash;
@@ -229,7 +232,8 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAtProviderRequest) {
   EXPECT_TRUE(log_manager->has_staged_log());
 
   std::string uncompressed_log;
-  EXPECT_TRUE(GzipUncompress(log_manager->staged_log(), &uncompressed_log));
+  EXPECT_TRUE(compression::GzipUncompress(log_manager->staged_log(),
+                                          &uncompressed_log));
 
   ChromeUserMetricsExtension uma_log;
   EXPECT_TRUE(uma_log.ParseFromString(uncompressed_log));
@@ -291,7 +295,8 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAfterCrash) {
   EXPECT_TRUE(log_manager->has_staged_log());
 
   std::string uncompressed_log;
-  EXPECT_TRUE(GzipUncompress(log_manager->staged_log(), &uncompressed_log));
+  EXPECT_TRUE(compression::GzipUncompress(log_manager->staged_log(),
+                                          &uncompressed_log));
 
   ChromeUserMetricsExtension uma_log;
   EXPECT_TRUE(uma_log.ParseFromString(uncompressed_log));
@@ -313,10 +318,12 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   MetricsService service(GetMetricsStateManager(), &client, GetLocalState());
 
   // Add two synthetic trials and confirm that they show up in the list.
-  SyntheticTrialGroup trial1(HashName("TestTrial1"), HashName("Group1"));
+  variations::SyntheticTrialGroup trial1(HashName("TestTrial1"),
+                                         HashName("Group1"));
   service.RegisterSyntheticFieldTrial(trial1);
 
-  SyntheticTrialGroup trial2(HashName("TestTrial2"), HashName("Group2"));
+  variations::SyntheticTrialGroup trial2(HashName("TestTrial2"),
+                                         HashName("Group2"));
   service.RegisterSyntheticFieldTrial(trial2);
   // Ensure that time has advanced by at least a tick before proceeding.
   WaitUntilTimeChanges(base::TimeTicks::Now());
@@ -333,7 +340,8 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   const base::TimeTicks begin_log_time = base::TimeTicks::Now();
 
   std::vector<variations::ActiveGroupId> synthetic_trials;
-  service.GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  service.GetSyntheticFieldTrialsOlderThan(base::TimeTicks::Now(),
+                                           &synthetic_trials);
   EXPECT_EQ(2U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial1", "Group1"));
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
@@ -342,16 +350,18 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   WaitUntilTimeChanges(begin_log_time);
 
   // Change the group for the first trial after the log started.
-  SyntheticTrialGroup trial3(HashName("TestTrial1"), HashName("Group2"));
+  variations::SyntheticTrialGroup trial3(HashName("TestTrial1"),
+                                         HashName("Group2"));
   service.RegisterSyntheticFieldTrial(trial3);
-  service.GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  service.GetSyntheticFieldTrialsOlderThan(begin_log_time, &synthetic_trials);
   EXPECT_EQ(1U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
 
   // Add a new trial after the log started and confirm that it doesn't show up.
-  SyntheticTrialGroup trial4(HashName("TestTrial3"), HashName("Group3"));
+  variations::SyntheticTrialGroup trial4(HashName("TestTrial3"),
+                                         HashName("Group3"));
   service.RegisterSyntheticFieldTrial(trial4);
-  service.GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  service.GetSyntheticFieldTrialsOlderThan(begin_log_time, &synthetic_trials);
   EXPECT_EQ(1U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
 
@@ -363,12 +373,28 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   service.log_manager_.BeginLoggingWithLog(
       scoped_ptr<MetricsLog>(new MetricsLog(
           "clientID", 1, MetricsLog::ONGOING_LOG, &client, GetLocalState())));
-  service.GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  service.GetSyntheticFieldTrialsOlderThan(
+      service.log_manager_.current_log()->creation_time(), &synthetic_trials);
   EXPECT_EQ(3U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial1", "Group2"));
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial3", "Group3"));
   service.log_manager_.FinishCurrentLog();
+}
+
+TEST_F(MetricsServiceTest,
+       MetricsProviderOnRecordingDisabledCalledOnInitialStop) {
+  TestMetricsServiceClient client;
+  TestMetricsService service(
+      GetMetricsStateManager(), &client, GetLocalState());
+
+  TestMetricsProvider* test_provider = new TestMetricsProvider();
+  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+
+  service.InitializeMetricsRecordingState();
+  service.Stop();
+
+  EXPECT_TRUE(test_provider->on_recording_disabled_called());
 }
 
 }  // namespace metrics

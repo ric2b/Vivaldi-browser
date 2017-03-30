@@ -5,11 +5,15 @@
 #ifndef ASH_WM_OVERVIEW_WINDOW_SELECTOR_H_
 #define ASH_WM_OVERVIEW_WINDOW_SELECTOR_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <vector>
 
 #include "ash/ash_export.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
@@ -123,6 +127,10 @@ class ASH_EXPORT WindowSelector
 
   // Position all of the windows in the overview.
   void PositionWindows(bool animate);
+
+  // Repositions and resizes |text_filter_widget_| on
+  // DisplayMetricsChanged event.
+  void RepositionTextFilterOnDisplayMetricsChange();
 
   // |focus|, restores focus to the stored window.
   void ResetFocusRestoreWindow(bool focus);

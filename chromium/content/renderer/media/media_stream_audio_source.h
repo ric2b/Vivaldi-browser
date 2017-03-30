@@ -6,6 +6,7 @@
 #define CONTENT_RENDERER_MEDIA_MEDIA_STREAM_AUDIO_SOURCE_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/common/content_export.h"
 #include "content/renderer/media/media_stream_source.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
@@ -22,7 +23,7 @@ class CONTENT_EXPORT MediaStreamAudioSource
                          const SourceStoppedCallback& stop_callback,
                          PeerConnectionDependencyFactory* factory);
   MediaStreamAudioSource();
-  virtual ~MediaStreamAudioSource();
+  ~MediaStreamAudioSource() override;
 
   void AddTrack(const blink::WebMediaStreamTrack& track,
                 const blink::WebMediaConstraints& constraints,

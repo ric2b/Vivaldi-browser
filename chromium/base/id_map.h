@@ -5,12 +5,14 @@
 #ifndef BASE_ID_MAP_H_
 #define BASE_ID_MAP_H_
 
+#include <stddef.h>
+#include <stdint.h>
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/macros.h"
+#include "base/sequence_checker.h"
 
 // Ownership semantics - own pointer means the pointer is deleted in Remove()
 // & during destruction
@@ -30,26 +32,30 @@ enum IDMapOwnershipSemantics {
 //
 // This class does not have a virtual destructor, do not inherit from it when
 // ownership semantics are set to own because pointers will leak.
-template<typename T, IDMapOwnershipSemantics OS = IDMapExternalPointer>
-class IDMap : public base::NonThreadSafe {
+template <typename T,
+          IDMapOwnershipSemantics OS = IDMapExternalPointer,
+          typename K = int32_t>
+class IDMap {
  public:
-  typedef int32 KeyType;
+  using KeyType = K;
 
  private:
   typedef base::hash_map<KeyType, T*> HashTable;
 
  public:
   IDMap() : iteration_depth_(0), next_id_(1), check_on_null_data_(false) {
-    // A number of consumers of IDMap create it on one thread but always access
-    // it from a different, but consitent, thread post-construction.
-    DetachFromThread();
+    // A number of consumers of IDMap create it on one thread but always
+    // access it from a different, but consistent, thread (or sequence)
+    // post-construction. The first call to CalledOnValidSequencedThread()
+    // will re-bind it.
+    sequence_checker_.DetachFromSequence();
   }
 
   ~IDMap() {
-    // Many IDMap's are static, and hence will be destroyed on the main thread.
-    // However, all the accesses may take place on another thread, such as the
-    // IO thread. Detaching again to clean this up.
-    DetachFromThread();
+    // Many IDMap's are static, and hence will be destroyed on the main
+    // thread. However, all the accesses may take place on another thread (or
+    // sequence), such as the IO thread. Detaching again to clean this up.
+    sequence_checker_.DetachFromSequence();
     Releaser<OS, 0>::release_all(&data_);
   }
 
@@ -59,7 +65,7 @@ class IDMap : public base::NonThreadSafe {
 
   // Adds a view with an automatically generated unique ID. See AddWithID.
   KeyType Add(T* data) {
-    DCHECK(CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequencedThread());
     DCHECK(!check_on_null_data_ || data);
     KeyType this_id = next_id_;
     DCHECK(data_.find(this_id) == data_.end()) << "Inserting duplicate item";
@@ -73,14 +79,14 @@ class IDMap : public base::NonThreadSafe {
   // this function, or allow this object to generate IDs and call Add. These
   // two methods may not be mixed, or duplicate IDs may be generated
   void AddWithID(T* data, KeyType id) {
-    DCHECK(CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequencedThread());
     DCHECK(!check_on_null_data_ || data);
     DCHECK(data_.find(id) == data_.end()) << "Inserting duplicate item";
     data_[id] = data;
   }
 
   void Remove(KeyType id) {
-    DCHECK(CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequencedThread());
     typename HashTable::iterator i = data_.find(id);
     if (i == data_.end()) {
       NOTREACHED() << "Attempting to remove an item not in the list";
@@ -101,7 +107,7 @@ class IDMap : public base::NonThreadSafe {
   // how the existing value is treated, the IDMap does not delete the existing
   // value being replaced.
   T* Replace(KeyType id, T* new_data) {
-    DCHECK(CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequencedThread());
     DCHECK(!check_on_null_data_ || new_data);
     typename HashTable::iterator i = data_.find(id);
     if (i == data_.end()) {
@@ -115,7 +121,7 @@ class IDMap : public base::NonThreadSafe {
   }
 
   void Clear() {
-    DCHECK(CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequencedThread());
     if (iteration_depth_ == 0) {
       Releaser<OS, 0>::release_all(&data_);
     } else {
@@ -126,12 +132,12 @@ class IDMap : public base::NonThreadSafe {
   }
 
   bool IsEmpty() const {
-    DCHECK(CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequencedThread());
     return size() == 0u;
   }
 
   T* Lookup(KeyType id) const {
-    DCHECK(CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequencedThread());
     typename HashTable::const_iterator i = data_.find(id);
     if (i == data_.end())
       return NULL;
@@ -139,7 +145,7 @@ class IDMap : public base::NonThreadSafe {
   }
 
   size_t size() const {
-    DCHECK(CalledOnValidThread());
+    DCHECK(sequence_checker_.CalledOnValidSequencedThread());
     return data_.size() - removed_ids_.size();
   }
 
@@ -174,7 +180,7 @@ class IDMap : public base::NonThreadSafe {
     }
 
     ~Iterator() {
-      DCHECK(map_->CalledOnValidThread());
+      DCHECK(map_->sequence_checker_.CalledOnValidSequencedThread());
 
       // We're going to decrement iteration depth. Make sure it's greater than
       // zero so that it doesn't become negative.
@@ -185,29 +191,29 @@ class IDMap : public base::NonThreadSafe {
     }
 
     bool IsAtEnd() const {
-      DCHECK(map_->CalledOnValidThread());
+      DCHECK(map_->sequence_checker_.CalledOnValidSequencedThread());
       return iter_ == map_->data_.end();
     }
 
     KeyType GetCurrentKey() const {
-      DCHECK(map_->CalledOnValidThread());
+      DCHECK(map_->sequence_checker_.CalledOnValidSequencedThread());
       return iter_->first;
     }
 
     ReturnType* GetCurrentValue() const {
-      DCHECK(map_->CalledOnValidThread());
+      DCHECK(map_->sequence_checker_.CalledOnValidSequencedThread());
       return iter_->second;
     }
 
     void Advance() {
-      DCHECK(map_->CalledOnValidThread());
+      DCHECK(map_->sequence_checker_.CalledOnValidSequencedThread());
       ++iter_;
       SkipRemovedEntries();
     }
 
    private:
     void Init() {
-      DCHECK(map_->CalledOnValidThread());
+      DCHECK(map_->sequence_checker_.CalledOnValidSequencedThread());
       ++map_->iteration_depth_;
       SkipRemovedEntries();
     }
@@ -249,10 +255,8 @@ class IDMap : public base::NonThreadSafe {
 
   void Compact() {
     DCHECK_EQ(0, iteration_depth_);
-    for (std::set<KeyType>::const_iterator i = removed_ids_.begin();
-         i != removed_ids_.end(); ++i) {
-      Remove(*i);
-    }
+    for (const auto& i : removed_ids_)
+      Remove(i);
     removed_ids_.clear();
   }
 
@@ -272,6 +276,8 @@ class IDMap : public base::NonThreadSafe {
 
   // See description above setter.
   bool check_on_null_data_;
+
+  base::SequenceChecker sequence_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(IDMap);
 };

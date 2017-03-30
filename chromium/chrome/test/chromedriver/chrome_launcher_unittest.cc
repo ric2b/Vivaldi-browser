@@ -124,8 +124,9 @@ TEST(ProcessExtensions, MultipleExtensionsNoBgPages) {
   ASSERT_TRUE(switches.HasSwitch("load-extension"));
   base::CommandLine::StringType ext_paths =
       switches.GetSwitchValueNative("load-extension");
-  std::vector<base::CommandLine::StringType> ext_path_list;
-  base::SplitString(ext_paths, FILE_PATH_LITERAL(','), &ext_path_list);
+  std::vector<base::CommandLine::StringType> ext_path_list =
+      base::SplitString(ext_paths, base::CommandLine::StringType(1, ','),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   ASSERT_EQ(2u, ext_path_list.size());
   ASSERT_TRUE(base::PathExists(base::FilePath(ext_path_list[0])));
   ASSERT_TRUE(base::PathExists(base::FilePath(ext_path_list[1])));
@@ -190,8 +191,8 @@ TEST(PrepareUserDataDir, CustomPrefs) {
       temp_dir.path().Append(chrome::kLocalStateFilename);
   std::string local_state_str;
   ASSERT_TRUE(base::ReadFileToString(local_state_file, &local_state_str));
-  scoped_ptr<base::Value> local_state_value(
-      base::JSONReader::DeprecatedRead(local_state_str));
+  scoped_ptr<base::Value> local_state_value =
+      base::JSONReader::Read(local_state_str);
   const base::DictionaryValue* local_state_dict = NULL;
   ASSERT_TRUE(local_state_value->GetAsDictionary(&local_state_dict));
   AssertEQ(*local_state_dict, "myLocalKey", "ok");

@@ -4,6 +4,10 @@
 
 #include "ppapi/shared_impl/media_stream_buffer_manager.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/logging.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/shared_impl/media_stream_buffer.h"
@@ -35,7 +39,7 @@ bool MediaStreamBufferManager::SetBuffers(int32_t number_of_buffers,
   buffer_size_ = buffer_size;
 
   size_t size = number_of_buffers_ * buffer_size;
-  shm_ = shm.Pass();
+  shm_ = std::move(shm);
   if (!shm_->Map(size))
     return false;
 
@@ -70,6 +74,10 @@ void MediaStreamBufferManager::EnqueueBuffer(int32_t index) {
   CHECK_LT(index, number_of_buffers_) << "Invalid buffer index";
   buffer_queue_.push_back(index);
   delegate_->OnNewBufferEnqueued();
+}
+
+bool MediaStreamBufferManager::HasAvailableBuffer() {
+  return !buffer_queue_.empty();
 }
 
 MediaStreamBuffer* MediaStreamBufferManager::GetBufferPointer(int32_t index) {

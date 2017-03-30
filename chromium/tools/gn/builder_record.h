@@ -6,8 +6,9 @@
 #define TOOLS_GN_BUILDER_RECORD_H_
 
 #include <set>
+#include <utility>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "tools/gn/item.h"
 #include "tools/gn/location.h"
@@ -54,7 +55,7 @@ class BuilderRecord {
 
   Item* item() { return item_.get(); }
   const Item* item() const { return item_.get(); }
-  void set_item(scoped_ptr<Item> item) { item_ = item.Pass(); }
+  void set_item(scoped_ptr<Item> item) { item_ = std::move(item); }
 
   // Indicates from where this item was originally referenced from that caused
   // it to be loaded. For targets for which we encountered the declaration

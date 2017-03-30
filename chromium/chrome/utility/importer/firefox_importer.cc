@@ -9,11 +9,13 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/common/importer/firefox_importer_utils.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_autofill_form_data_entry.h"
@@ -87,7 +89,7 @@ struct FirefoxImporter::BookmarkItem {
   BookmarkItemType type;
   std::string keyword;
   base::Time date_added;
-  int64 favicon;
+  int64_t favicon;
   bool empty_folder;
 };
 
@@ -97,10 +99,9 @@ FirefoxImporter::FirefoxImporter() {
 FirefoxImporter::~FirefoxImporter() {
 }
 
-void FirefoxImporter::StartImport(
-    const importer::SourceProfile& source_profile,
-    uint16 items,
-    ImporterBridge* bridge) {
+void FirefoxImporter::StartImport(const importer::SourceProfile& source_profile,
+                                  uint16_t items,
+                                  ImporterBridge* bridge) {
   bridge_ = bridge;
   source_path_ = source_profile.source_path;
   app_path_ = source_profile.app_path;
@@ -360,19 +361,21 @@ void FirefoxImporter::ImportPasswords() {
 
   std::vector<autofill::PasswordForm> forms;
   base::FilePath source_path = source_path_;
-  base::FilePath file = source_path.AppendASCII("signons.sqlite");
-  if (base::PathExists(file)) {
+  const base::FilePath sqlite_file = source_path.AppendASCII("signons.sqlite");
+  const base::FilePath json_file = source_path.AppendASCII("logins.json");
+  const base::FilePath signon3_file = source_path.AppendASCII("signons3.txt");
+  const base::FilePath signon2_file = source_path.AppendASCII("signons2.txt");
+  if (base::PathExists(json_file)) {
+    // Since Firefox 32, passwords are in logins.json.
+    decryptor.ReadAndParseLogins(json_file, &forms);
+  } else if (base::PathExists(sqlite_file)) {
     // Since Firefox 3.1, passwords are in signons.sqlite db.
-    decryptor.ReadAndParseSignons(file, &forms);
-  } else {
+    decryptor.ReadAndParseSignons(sqlite_file, &forms);
+  } else if (base::PathExists(signon3_file)) {
     // Firefox 3.0 uses signons3.txt to store the passwords.
-    file = source_path.AppendASCII("signons3.txt");
-    if (!base::PathExists(file))
-      file = source_path.AppendASCII("signons2.txt");
-
-    std::string content;
-    base::ReadFileToString(file, &content);
-    decryptor.ParseSignons(content, &forms);
+    decryptor.ParseSignons(signon3_file, &forms);
+  } else {
+    decryptor.ParseSignons(signon2_file, &forms);
   }
 
   if (!cancelled()) {
@@ -539,8 +542,8 @@ void FirefoxImporter::GetSearchEnginesXMLDataFromJSON(
   base::FilePath search_metadata_json_file =
       source_path_.AppendASCII("search-metadata.json");
   JSONFileValueDeserializer metadata_deserializer(search_metadata_json_file);
-  scoped_ptr<base::Value> metadata_root(
-      metadata_deserializer.Deserialize(NULL, NULL));
+  scoped_ptr<base::Value> metadata_root =
+      metadata_deserializer.Deserialize(NULL, NULL);
   const base::DictionaryValue* search_metadata_root = NULL;
   if (metadata_root)
     metadata_root->GetAsDictionary(&search_metadata_root);
@@ -551,7 +554,7 @@ void FirefoxImporter::GetSearchEnginesXMLDataFromJSON(
     return;
 
   JSONFileValueDeserializer deserializer(search_json_file);
-  scoped_ptr<base::Value> root(deserializer.Deserialize(NULL, NULL));
+  scoped_ptr<base::Value> root = deserializer.Deserialize(NULL, NULL);
   const base::DictionaryValue* search_root = NULL;
   if (!root || !root->GetAsDictionary(&search_root))
     return;

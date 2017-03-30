@@ -4,10 +4,13 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/leveldb_wrapper.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
@@ -45,7 +48,7 @@ class LevelDBWrapperTest : public testing::Test {
     const char* keys[] = {"ab", "a", "d", "bb", "d"};
     for (size_t i = 0; i < arraysize(keys); ++i) {
       leveldb::Status status =
-          db->Put(leveldb::WriteOptions(), keys[i], base::Int64ToString(i));
+          db->Put(leveldb::WriteOptions(), keys[i], base::SizeTToString(i));
       ASSERT_TRUE(status.ok());
     }
   }

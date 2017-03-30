@@ -27,8 +27,7 @@ using extensions::PlatformAppBrowserTest;
 namespace apps {
 
 // Tests that a running app is recorded in the preferences as such.
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, DISABLED_RunningAppsAreRecorded) {
+IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, RunningAppsAreRecorded) {
   content::WindowedNotificationObserver extension_suspended(
       extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED,
       content::NotificationService::AllSources());
@@ -110,8 +109,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, ActiveAppsAreRecorded) {
   ready_listener.Reply("exit");
 }
 
-// TODO reenable test for Vivaldi
-IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, DISABLED_FileAccessIsSavedToPrefs) {
+IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, FileAccessIsSavedToPrefs) {
   content::WindowedNotificationObserver extension_suspended(
       extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED,
       content::NotificationService::AllSources());

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
@@ -17,20 +18,17 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/browser_feature_extractor.h"
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
-#include "chrome/browser/safe_browsing/database_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/common/safe_browsing/safebrowsing_messages.h"
+#include "components/safe_browsing_db/database_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_source.h"
-#include "content/public/browser/notification_types.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/resource_request_details.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/frame_navigate_params.h"
@@ -47,8 +45,6 @@ namespace safe_browsing {
 
 const size_t ClientSideDetectionHost::kMaxUrlsPerIP = 20;
 const size_t ClientSideDetectionHost::kMaxIPsPerBrowse = 200;
-
-const char kSafeBrowsingMatchKey[] = "safe_browsing_match";
 
 typedef base::Callback<void(bool)> ShouldClassifyUrlCallback;
 
@@ -329,8 +325,6 @@ ClientSideDetectionHost::ClientSideDetectionHost(WebContents* tab)
   // Note: csd_service_ and sb_service will be NULL here in testing.
   csd_service_ = g_browser_process->safe_browsing_detection_service();
   feature_extractor_.reset(new BrowserFeatureExtractor(tab, this));
-  registrar_.Add(this, content::NOTIFICATION_RESOURCE_RESPONSE_STARTED,
-                 content::Source<WebContents>(tab));
 
   scoped_refptr<SafeBrowsingService> sb_service =
       g_browser_process->safe_browsing_service();
@@ -346,7 +340,9 @@ ClientSideDetectionHost::~ClientSideDetectionHost() {
     ui_manager_->RemoveObserver(this);
 }
 
-bool ClientSideDetectionHost::OnMessageReceived(const IPC::Message& message) {
+bool ClientSideDetectionHost::OnMessageReceived(
+    const IPC::Message& message,
+    content::RenderFrameHost* render_frame_host) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ClientSideDetectionHost, message)
     IPC_MESSAGE_HANDLER(SafeBrowsingHostMsg_PhishingDetectionDone,
@@ -361,7 +357,7 @@ void ClientSideDetectionHost::DidNavigateMainFrame(
     const content::FrameNavigateParams& params) {
   // TODO(noelutz): move this DCHECK to WebContents and fix all the unit tests
   // that don't call this method on the UI thread.
-  // DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  // DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (details.is_in_page) {
     // If the navigation is within the same page, the user isn't really
     // navigating away.  We don't need to cancel a pending callback or
@@ -412,7 +408,7 @@ void ClientSideDetectionHost::DidNavigateMainFrame(
 
 void ClientSideDetectionHost::OnSafeBrowsingHit(
     const SafeBrowsingUIManager::UnsafeResource& resource) {
-  if (!web_contents() || !web_contents()->GetController().GetActiveEntry())
+  if (!web_contents())
     return;
 
   // Check that the hit is either malware or phishing.
@@ -421,15 +417,18 @@ void ClientSideDetectionHost::OnSafeBrowsingHit(
     return;
 
   // Check that this notification is really for us.
-  content::RenderViewHost* hit_rvh = content::RenderViewHost::FromID(
-      resource.render_process_host_id, resource.render_view_id);
-  if (!hit_rvh ||
-      web_contents() != content::WebContents::FromRenderViewHost(hit_rvh))
+  content::RenderFrameHost* hit_rfh = content::RenderFrameHost::FromID(
+      resource.render_process_host_id, resource.render_frame_id);
+  if (!hit_rfh ||
+      web_contents() != content::WebContents::FromRenderFrameHost(hit_rfh))
+    return;
+
+  NavigationEntry *entry = resource.GetNavigationEntryForResource();
+  if (!entry)
     return;
 
   // Store the unique page ID for later.
-  unsafe_unique_page_id_ =
-      web_contents()->GetController().GetActiveEntry()->GetUniqueID();
+  unsafe_unique_page_id_ = entry->GetUniqueID();
 
   // We also keep the resource around in order to be able to send the
   // malicious URL to the server.
@@ -437,46 +436,9 @@ void ClientSideDetectionHost::OnSafeBrowsingHit(
   unsafe_resource_->callback.Reset();  // Don't do anything stupid.
 }
 
-void ClientSideDetectionHost::OnSafeBrowsingMatch(
-    const SafeBrowsingUIManager::UnsafeResource& resource) {
-  if (!web_contents() || !web_contents()->GetController().GetActiveEntry())
-    return;
-
-  // Check that this notification is really for us.
-  content::RenderViewHost* hit_rvh = content::RenderViewHost::FromID(
-      resource.render_process_host_id, resource.render_view_id);
-  if (!hit_rvh ||
-      web_contents() != content::WebContents::FromRenderViewHost(hit_rvh))
-    return;
-
-  web_contents()->GetController().GetActiveEntry()->SetExtraData(
-      kSafeBrowsingMatchKey, base::ASCIIToUTF16("1"));
-}
-
 scoped_refptr<SafeBrowsingDatabaseManager>
 ClientSideDetectionHost::database_manager() {
   return database_manager_;
-}
-
-bool ClientSideDetectionHost::DidPageReceiveSafeBrowsingMatch() const {
-  if (!web_contents() || !web_contents()->GetController().GetVisibleEntry())
-    return false;
-
-  // If an interstitial page is showing, GetVisibleEntry will return the
-  // transient NavigationEntry for the interstitial. The transient entry
-  // will not have the flag set, so use the pending entry instead if there
-  // is one.
-  NavigationEntry* entry = web_contents()->GetController().GetPendingEntry();
-  if (!entry) {
-    entry = web_contents()->GetController().GetVisibleEntry();
-    if (entry->GetPageType() == content::PAGE_TYPE_INTERSTITIAL)
-      entry = web_contents()->GetController().GetLastCommittedEntry();
-    if (!entry)
-      return false;
-  }
-
-  base::string16 value;
-  return entry->GetExtraData(kSafeBrowsingMatchKey, &value);
 }
 
 void ClientSideDetectionHost::WebContentsDestroyed() {
@@ -494,9 +456,9 @@ void ClientSideDetectionHost::OnPhishingPreClassificationDone(
   if (browse_info_.get() && should_classify) {
     DVLOG(1) << "Instruct renderer to start phishing detection for URL: "
              << browse_info_->url;
-    content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
-    rvh->Send(new SafeBrowsingMsg_StartPhishingDetection(
-        rvh->GetRoutingID(), browse_info_->url));
+    content::RenderFrameHost* rfh = web_contents()->GetMainFrame();
+    rfh->Send(new SafeBrowsingMsg_StartPhishingDetection(rfh->GetRoutingID(),
+                                                         browse_info_->url));
   }
 }
 
@@ -593,10 +555,11 @@ void ClientSideDetectionHost::MaybeShowPhishingWarning(GURL phishing_url,
       resource.original_url = phishing_url;
       resource.is_subresource = false;
       resource.threat_type = SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL;
+      resource.threat_source =
+          safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION;
       resource.render_process_host_id =
           web_contents()->GetRenderProcessHost()->GetID();
-      resource.render_view_id =
-          web_contents()->GetRenderViewHost()->GetRoutingID();
+      resource.render_frame_id = web_contents()->GetMainFrame()->GetRoutingID();
       if (!ui_manager_->IsWhitelisted(resource)) {
         // We need to stop any pending navigations, otherwise the interstital
         // might not get created properly.
@@ -624,10 +587,12 @@ void ClientSideDetectionHost::MaybeShowMalwareWarning(GURL original_url,
       resource.original_url = original_url;
       resource.is_subresource = (malware_url.host() != original_url.host());
       resource.threat_type = SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL;
+      resource.threat_source =
+          safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION;
       resource.render_process_host_id =
           web_contents()->GetRenderProcessHost()->GetID();
-      resource.render_view_id =
-          web_contents()->GetRenderViewHost()->GetRoutingID();
+      resource.render_frame_id = web_contents()->GetMainFrame()->GetRoutingID();
+
       if (!ui_manager_->IsWhitelisted(resource)) {
         // We need to stop any pending navigations, otherwise the interstital
         // might not get created properly.
@@ -701,21 +666,15 @@ void ClientSideDetectionHost::UpdateIPUrlMap(const std::string& ip,
   }
 }
 
-void ClientSideDetectionHost::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_EQ(type, content::NOTIFICATION_RESOURCE_RESPONSE_STARTED);
-  const ResourceRequestDetails* req = content::Details<ResourceRequestDetails>(
-      details).ptr();
-  if (req && browse_info_.get() &&
-      should_extract_malware_features_ && req->url.is_valid()) {
-    UpdateIPUrlMap(req->socket_address.host() /* ip */,
-                   req->url.spec()  /* url */,
-                   req->method,
-                   req->referrer,
-                   req->resource_type);
+void ClientSideDetectionHost::DidGetResourceResponseStart(
+    const content::ResourceRequestDetails& details) {
+  if (browse_info_.get() && should_extract_malware_features_ &&
+      details.url.is_valid()) {
+    UpdateIPUrlMap(details.socket_address.host() /* ip */,
+                   details.url.spec() /* url */,
+                   details.method,
+                   details.referrer,
+                   details.resource_type);
   }
 }
 
@@ -723,8 +682,14 @@ bool ClientSideDetectionHost::DidShowSBInterstitial() const {
   if (unsafe_unique_page_id_ <= 0 || !web_contents()) {
     return false;
   }
+  // DidShowSBInterstitial is called after client side detection is finished to
+  // see if a SB interstitial was shown on the same page. Client Side Detection
+  // only runs on the currently committed page, so an unconditional
+  // GetLastCommittedEntry is correct here. GetNavigationEntryForResource cannot
+  // be used since it may no longer be valid (eg, if the UnsafeResource was for
+  // a blocking main page load which was then proceeded through).
   const NavigationEntry* nav_entry =
-      web_contents()->GetController().GetActiveEntry();
+      web_contents()->GetController().GetLastCommittedEntry();
   return (nav_entry && nav_entry->GetUniqueID() == unsafe_unique_page_id_);
 }
 

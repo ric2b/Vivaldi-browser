@@ -5,10 +5,11 @@
 #ifndef CONTENT_BROWSER_BROWSER_URL_HANDLER_IMPL_H_
 #define CONTENT_BROWSER_BROWSER_URL_HANDLER_IMPL_H_
 
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/browser_url_handler.h"
 
@@ -41,7 +42,7 @@ class CONTENT_EXPORT BrowserURLHandlerImpl : public BrowserURLHandler {
   // This object is a singleton:
   BrowserURLHandlerImpl();
   ~BrowserURLHandlerImpl() override;
-  friend struct DefaultSingletonTraits<BrowserURLHandlerImpl>;
+  friend struct base::DefaultSingletonTraits<BrowserURLHandlerImpl>;
 
   // A URLHandler to run in a preliminary phase, before rewriting is done.
   URLHandler fixup_handler_;

@@ -25,12 +25,14 @@ MediaRouterElementsBrowserTest.prototype = {
   browsePreload: 'chrome://media-router/',
 
   commandLineSwitches: [{
-    switchName: 'enable-media-router',
+    switchName: 'media-router', switchValue: '1'
   }],
 
   // List tests for individual elements.
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
     'issue_banner_tests.js',
+    'media_router_container_tests.js',
+    'media_router_header_tests.js',
     'route_details_tests.js',
   ]),
 };
@@ -39,6 +41,8 @@ MediaRouterElementsBrowserTest.prototype = {
 TEST_F('MediaRouterElementsBrowserTest', 'MediaRouterElementsTest', function() {
   // Register mocha tests for each element.
   issue_banner.registerTests();
+  media_router_container.registerTests();
+  media_router_header.registerTests();
   route_details.registerTests();
 
   // Run all registered tests.

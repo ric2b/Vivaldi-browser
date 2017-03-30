@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -59,7 +60,7 @@ class MotionEventBufferTest : public testing::Test,
   ScopedVector<MotionEvent> GetAndResetForwardedEvents() {
     ScopedVector<MotionEvent> forwarded_events;
     forwarded_events.swap(forwarded_events_);
-    return forwarded_events.Pass();
+    return forwarded_events;
   }
 
   const MotionEvent* GetLastEvent() const {
@@ -101,6 +102,7 @@ class MotionEventBufferTest : public testing::Test,
       EXPECT_EQ(a.GetTouchMinor(i), b.GetTouchMinor(bi));
       EXPECT_EQ(a.GetOrientation(i), b.GetOrientation(bi));
       EXPECT_EQ(a.GetPressure(i), b.GetPressure(bi));
+      EXPECT_EQ(a.GetTilt(i), b.GetTilt(bi));
       EXPECT_EQ(a.GetToolType(i), b.GetToolType(bi));
     }
 

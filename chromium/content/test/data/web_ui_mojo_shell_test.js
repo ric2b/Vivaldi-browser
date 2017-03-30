@@ -11,13 +11,13 @@ var TEST_APP_URL = 'system:content_mojo_test';
 
 
 define('main', [
-  'mojo/application/public/interfaces/shell.mojom',
   'mojo/public/js/core',
   'mojo/public/js/router',
   'mojo/services/network/public/interfaces/url_loader.mojom',
+  'mojo/shell/public/interfaces/shell.mojom',
   'content/public/renderer/service_provider',
   'content/public/test/test_mojo_service.mojom',
-], function(shellMojom, core, router, urlMojom, serviceRegistry, testMojom) {
+], function (core, router, urlMojom, shellMojom, serviceRegistry, testMojom) {
 
   var connectToService = function(serviceProvider, iface) {
     var pipe = core.createMessagePipe();
@@ -35,11 +35,11 @@ define('main', [
         function (services) {
           var test = connectToService(services, testMojom.TestMojoService);
           test.getRequestorURL().then(function(response) {
-            // The requestor URL seen by the app should be localhost because the
-            // connection comes from this script hosted on the test server.
-            domAutomationController.send(response.url == 'http://127.0.0.1/');
+            domAutomationController.send(
+                response.url == 'chrome://mojo-web-ui/');
           });
         },
-        function (exposedServices) {});
+        function (exposedServices) {},
+        new shellMojom.CapabilityFilter({ filter: new Map([["*", ["*"]]]) }));
   };
 });

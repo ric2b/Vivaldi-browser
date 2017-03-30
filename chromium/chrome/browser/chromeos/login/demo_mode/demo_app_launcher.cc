@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "chrome/browser/chromeos/app_mode/app_session_lifetime.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/extensions/component_loader.h"
@@ -19,8 +18,10 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/browser_resources.h"
+#include "chromeos/login/user_names.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
@@ -29,7 +30,6 @@
 
 namespace chromeos {
 
-const char DemoAppLauncher::kDemoUserName[] = "demouser@demo.app.local";
 const char DemoAppLauncher::kDemoAppId[] = "klimoghijjogocdbaikffefjfcfheiel";
 const base::FilePath::CharType kDefaultDemoAppPath[] =
     FILE_PATH_LITERAL("/usr/share/chromeos-assets/demo_app");
@@ -49,14 +49,14 @@ DemoAppLauncher::~DemoAppLauncher() {
 void DemoAppLauncher::StartDemoAppLaunch() {
   DVLOG(1) << "Launching demo app...";
   // user_id = DemoAppUserId, force_emphemeral = true, delegate = this.
-  kiosk_profile_loader_.reset(
-      new KioskProfileLoader(kDemoUserName, true, this));
+  kiosk_profile_loader_.reset(new KioskProfileLoader(
+      login::DemoAccountId().GetUserEmail(), true, this));
   kiosk_profile_loader_->Start();
 }
 
 // static
 bool DemoAppLauncher::IsDemoAppSession(const std::string& user_id) {
-  return user_id == kDemoUserName;
+  return user_id == login::DemoAccountId().GetUserEmail();
 }
 
 // static
@@ -97,7 +97,7 @@ void DemoAppLauncher::OnProfileLoaded(Profile* profile) {
   OpenApplication(
       AppLaunchParams(profile, extension, extensions::LAUNCH_CONTAINER_WINDOW,
                       NEW_WINDOW, extensions::SOURCE_CHROME_INTERNAL));
-  InitAppSession(profile, extension_id);
+  KioskAppManager::Get()->InitSession(profile, extension_id);
 
   user_manager::UserManager::Get()->SessionStarted();
 

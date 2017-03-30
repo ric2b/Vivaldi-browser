@@ -32,27 +32,26 @@ android_library("content_java") {
   deps = [
     ":content_java_resources",
     "//base:base_java",
-    "//device/battery/android:battery_monitor_android",
     "//device/battery:mojo_bindings_java",
+    "//device/battery/android:battery_monitor_android",
     "//device/bluetooth:java",
+    "//device/usb:java",
+    "//device/vibration:mojo_bindings_java",
+    "//device/vibration/android:vibration_manager_android",
     "//media/base/android:media_java",
     "//media/midi:midi_java",
     "//mojo/android:system_java",
+    "//mojo/public/java:bindings",
+    "//mojo/public/java:system",
     "//net/android:net_java",
+    "//third_party/WebKit/public:blink_headers_java",
     "//third_party/android_tools:android_support_v13_java",
-    "//third_party/mojo/src/mojo/public/java:bindings",
-    "//third_party/mojo/src/mojo/public/java:system",
+    "//third_party/jsr-305:jsr_305_javalib",
     "//ui/accessibility:ui_accessibility_java",
     "//ui/android:ui_java",
-    "//third_party/jsr-305:jsr_305_javalib",
-    "//third_party/WebKit/public:blink_headers_java",
 
     #"//content:content_common",
   ]
-
-  if (android_sdk_version != "M") {
-    deps += [ "//third_party/android_tools:preview_java_sources" ]
-  }
 
   srcjar_deps = [
     ":common_aidl",
@@ -63,6 +62,10 @@ android_library("content_java") {
   ]
 
   DEPRECATED_java_in_dir = "java/src"
+
+  if (enable_webvr) {
+    deps += [ "//third_party/cardboard-java:cardboard-java" ]
+  }
 }
 
 java_strings_grd("content_strings_grd") {
@@ -119,6 +122,8 @@ java_cpp_enum("content_public_android_java_enums_srcjar") {
   sources = [
     "//content/browser/android/content_view_core_impl.cc",
     "//content/browser/android/gesture_event_type.h",
+    "//content/browser/device_sensors/device_sensors_consts.h",
+    "//content/browser/device_sensors/sensor_manager_android.h",
     "//content/browser/gamepad/gamepad_standard_mappings.h",
     "//content/public/browser/invalidate_type.h",
     "//content/public/browser/navigation_controller.h",
@@ -128,21 +133,6 @@ java_cpp_enum("content_public_android_java_enums_srcjar") {
     "//content/public/common/screen_orientation_values.h",
     "//content/public/common/speech_recognition_error.h",
     "//content/public/common/top_controls_state.h",
-  ]
-  outputs = [
-    "org/chromium/content/browser/GestureEventType.java",
-    "org/chromium/content/browser/input/CanonicalAxisIndex.java",
-    "org/chromium/content/browser/input/CanonicalButtonIndex.java",
-    "org/chromium/content/browser/input/PopupItemType.java",
-    "org/chromium/content_public/browser/InvalidateTypes.java",
-    "org/chromium/content_public/browser/navigation_controller/LoadURLType.java",
-    "org/chromium/content_public/browser/navigation_controller/UserAgentOverrideOption.java",
-    "org/chromium/content_public/browser/readback_types/ReadbackResponse.java",
-    "org/chromium/content_public/common/ConsoleMessageLevel.java",
-    "org/chromium/content_public/common/ResultCode.java",
-    "org/chromium/content_public/common/ScreenOrientationValues.java",
-    "org/chromium/content_public/common/SpeechRecognitionErrorCode.java",
-    "org/chromium/content_public/common/TopControlsState.java",
   ]
 }
 
@@ -157,10 +147,17 @@ generate_jar_jni("jar_jni") {
 generate_jni("content_jni_headers") {
   sources = rebase_path(content_jni_gypi_values.sources, "", "../..")
   jni_package = "content"
+
+  if (enable_webvr) {
+    sources += [ "//content/public/android/java/src/org/chromium/content/browser/input/CardboardVRDevice.java" ]
+    public_deps = [
+      "//third_party/cardboard-java:cardboard-java",
+    ]
+  }
 }
 
 group("jni") {
-  deps = [
+  public_deps = [
     ":content_jni_headers",
     ":jar_jni",
   ]
@@ -169,24 +166,26 @@ group("jni") {
 android_library("content_javatests") {
   testonly = true
   deps = [
+    ":content_java",
     "//base:base_java",
     "//base:base_java_test_support",
     "//content/public/test/android:content_java_test_support",
+    "//content/shell/android:content_shell_apk_java",
     "//content/shell/android:content_shell_java",
     "//content/shell/android:content_shell_java_resources",
-    "//content/shell/android:content_shell_apk_java",
     "//content/shell/android:content_shell_test_java",
+    "//device/vibration:mojo_bindings_java",
+    "//device/vibration/android:vibration_manager_android",
     "//media/base/android:media_java",
     "//mojo/android:system_java",
+    "//mojo/public/interfaces/bindings/tests:test_interfaces_java",
+    "//mojo/public/java:bindings",
+    "//mojo/public/java:system",
     "//net/android:net_java",
     "//net/android:net_java_test_support",
     "//third_party/android_tools:android_support_v13_java",
     "//third_party/android_tools:legacy_http_javalib",
-    "//third_party/mojo/src/mojo/public/interfaces/bindings/tests:test_interfaces_java",
-    "//third_party/mojo/src/mojo/public/java:bindings",
-    "//third_party/mojo/src/mojo/public/java:system",
     "//ui/android:ui_java",
-    ":content_java",
   ]
 
   DEPRECATED_java_in_dir = "javatests/src"
@@ -201,4 +200,3 @@ junit_binary("content_junit_tests") {
     "//base:base_java_test_support",
   ]
 }
-# TODO(GYP): content_icudata

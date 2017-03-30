@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_CAPTIVE_PORTAL_CAPTIVE_PORTAL_TAB_RELOADER_H_
 #define CHROME_BROWSER_CAPTIVE_PORTAL_CAPTIVE_PORTAL_TAB_RELOADER_H_
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -126,7 +126,7 @@ class CaptivePortalTabReloader {
   // STATE_TIMER_RUNNING.  Stopped on any state change, including when a page
   // commits or there's an error.  If the timer triggers, the state switches to
   // STATE_MAYBE_BROKEN_BY_PORTAL and |this| kicks off a captive portal check.
-  base::OneShotTimer<CaptivePortalTabReloader> slow_ssl_load_timer_;
+  base::OneShotTimer slow_ssl_load_timer_;
 
  private:
   friend class CaptivePortalBrowserTest;

@@ -25,13 +25,11 @@
   ],
 
   'sources': [
-    # this should likely be moved into src/utils in skia
-    '../third_party/skia/src/core/SkFlate.cpp',
-
     '../third_party/skia/src/ports/SkImageDecoder_empty.cpp',
     '../third_party/skia/src/images/SkScaledBitmapSampler.cpp',
 
     '../third_party/skia/src/ports/SkFontConfigInterface_direct.cpp',
+    '../third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp',
 
     '../third_party/skia/src/fonts/SkFontMgr_fontconfig.cpp',
     '../third_party/skia/src/ports/SkFontHost_fontconfig.cpp',
@@ -50,7 +48,7 @@
     "../third_party/skia/src/ports/SkFontMgr_android_factory.cpp",
     '../third_party/skia/src/ports/SkFontMgr_android_parser.cpp',
     '../third_party/skia/src/ports/SkFontMgr_win_dw.cpp',
-    '../third_party/skia/src/ports/SkGlobalInitialization_chromium.cpp',
+    '../third_party/skia/src/ports/SkGlobalInitialization_default.cpp',
     '../third_party/skia/src/ports/SkOSFile_posix.cpp',
     '../third_party/skia/src/ports/SkOSFile_stdio.cpp',
     '../third_party/skia/src/ports/SkOSFile_win.cpp',
@@ -70,8 +68,6 @@
   '../third_party/skia/src/utils/SkBoundaryPatch.cpp',
   '../third_party/skia/src/utils/SkFrontBufferedStream.cpp',
   '../third_party/skia/src/utils/SkCamera.cpp',
-  '../third_party/skia/src/utils/SkCubicInterval.cpp',
-  '../third_party/skia/src/utils/SkCullPoints.cpp',
   '../third_party/skia/src/utils/SkDumpCanvas.cpp',
   '../third_party/skia/src/utils/SkInterpolator.cpp',
   '../third_party/skia/src/utils/SkLayer.cpp',
@@ -81,10 +77,6 @@
   '../third_party/skia/src/utils/SkOSFile.cpp',
   '../third_party/skia/src/utils/SkParsePath.cpp',
   '../third_party/skia/src/utils/SkSHA1.cpp',
-
-  # We don't currently need to change thread affinity, so leave out this complexity for now.
-  "../third_party/skia/src/utils/SkThreadUtils_pthread_mach.cpp",
-  "../third_party/skia/src/utils/SkThreadUtils_pthread_linux.cpp",
 
 #windows
   '../third_party/skia/src/utils/win/SkAutoCoInitialize.cpp',
@@ -146,11 +138,10 @@
       'sources!': [
         # Keeping _win.cpp
         "../third_party/skia/src/utils/SkThreadUtils_pthread.cpp",
-        "../third_party/skia/src/utils/SkThreadUtils_pthread_other.cpp",
       ],
     },{
       'sources!': [
-        # Keeping _pthread.cpp and _pthread_other.cpp
+        # Keeping _pthread.cpp
         "../third_party/skia/src/utils/SkThreadUtils_win.cpp",
       ],
     }],
@@ -187,6 +178,7 @@
     [ 'OS=="win" or OS=="mac" or OS=="ios" or OS=="android"', {
       'sources!': [
         '../third_party/skia/src/ports/SkFontConfigInterface_direct.cpp',
+        '../third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp',
         '../third_party/skia/src/ports/SkFontHost_fontconfig.cpp',
         '../third_party/skia/src/fonts/SkFontMgr_fontconfig.cpp',
       ],

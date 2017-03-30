@@ -1,8 +1,8 @@
 include_rules = [
   "+remoting/protocol",
+  "+media/base",
 
   "+google/protobuf",
   "+third_party/opus",
-  "+third_party/speex",
   "+third_party/webrtc",
 ]

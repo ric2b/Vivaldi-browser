@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grit base_dir="." latest_public_release="0" current_release="1"
+      source_lang_id="en" enc_check="möl">
+  <release seq="1" allow_pseudo="false">
+    <structures>
+      <structure type="chrome_scaled_image" name="IDR_LOCATION_BAR_HTTP" file="vivaldi/location_bar_http.png" />
+    </structures>
+  </release>
+</grit>

@@ -16,8 +16,9 @@ executable("alternate_version_generator") {
     ":alternate_version_generator_lib",
     "//base",
     "//base/test:test_support",
+    "//build/config/sanitizers:deps",
     "//chrome/common:constants",
-    "//chrome/installer/util",
+    "//chrome/installer/util:with_rc_strings",
     "//testing/gtest",
   ]
 }
@@ -37,8 +38,8 @@ source_set("alternate_version_generator_lib") {
   deps = [
     "//base",
     "//base:base_static",
-    "//chrome/installer/util",
     "//chrome/common:constants",
+    "//chrome/installer/util:with_rc_strings",
   ]
 }
 
@@ -52,7 +53,7 @@ test("upgrade_test") {
     "//base",
     "//base/test:test_support",
     "//chrome/common:constants",
-    "//chrome/installer/util",
+    "//chrome/installer/util:with_rc_strings",
     "//testing/gtest",
   ]
   data_deps = [
